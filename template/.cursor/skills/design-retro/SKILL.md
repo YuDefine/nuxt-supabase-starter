@@ -1,6 +1,6 @@
 ---
 name: design-retro
-description: "Design review findings 的跨 spec 回顧。Use when spectra-archive 完成、`docs/design-review-findings.md` 累積到 5 的倍數，或使用者要檢討重複出現的 UI 問題。NOT for 單一 spec 的 design review（走 /design）。"
+description: "Design review findings 的跨 spec 回顧。Use when 一件含 UI 的工作收尾完成、`docs/design-review-findings.md` 累積到 5 的倍數，或使用者要檢討重複出現的 UI 問題。NOT for 單一 spec 的 design review（走 /design）。"
 metadata:
   clade:
     permission_tier: read-only
@@ -21,7 +21,7 @@ metadata:
 
 ### 自動觸發（由 proactive-skills.md 規則驅動）
 
-1. **Archive 後觸發** — `spectra-archive` 完成且該 change 有 design review findings 時
+1. **收尾後觸發** — 一件工作標 `work.done` 且它有 design review findings 時
 2. **累積門檻觸發** — `docs/design-review-findings.md` 新增記錄後，總 change 數達 5 的倍數（5、10、15…）
 
 ### 手動觸發
@@ -109,7 +109,7 @@ metadata:
 - 同類別問題在 ≥ 3 個 change 中重複出現
 - 問題屬於可預測類型（spacing、layout、typography、consistency）
 
-**改善方向**：在 `spectra-propose` 的 design artifact 加入 checklist
+**改善方向**：在 `/specify` 產出的規格模板加入 design checklist
 
 #### 層級 B：實作期缺陷（Apply 階段該攔住）
 
@@ -161,7 +161,7 @@ metadata:
 - **證據**: 在 [change-x], [change-y], [change-z] 中出現
 - **根因**: [為什麼重複發生]
 - **建議動作**:
-  - [ ] [具體的改善行動，例如「在 spectra-propose 的 design artifact template 加入 spacing checklist」]
+  - [ ] [具體的改善行動，例如「在 `/specify` 的規格模板加入 spacing checklist」]
   - [ ] [第二個行動，若需要]
 - **預期效果**: [實施後預期減少的問題量]
 
@@ -198,7 +198,7 @@ metadata:
 
 | #   | 建議                         | 決策   | 備註                            |
 | --- | ---------------------------- | ------ | ------------------------------- |
-| 1   | propose 加 spacing checklist | 同意   | 已更新 spectra-propose template |
+| 1   | 規格模板加 spacing checklist | 同意   | 已更新 `/specify` 規格模板 |
 | 2   | 強制觸發 /impeccable harden             | 延後   | 等累積更多數據                  |
 | 3   | 新增 a11y rule               | 不同意 | 現有 /impeccable audit 已足夠              |
 ```

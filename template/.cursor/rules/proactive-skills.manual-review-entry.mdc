@@ -1,6 +1,6 @@
 ---
 description: "進入 tasks.md `## 人工檢查` 階段的入口規約——auto-triage 三類 pending item 的推進路徑、mechanical readiness gate 的 exit code 判讀、交付入口前置查詢（先問服務不問 config）、review-gui 引導與 fallback、`[discuss]` item 的歸屬"
-globs: ["openspec/changes/**"]
+globs: ["tasks/**", "specs/plans/**", "screenshots/**"]
 alwaysApply: false
 ---
 <!--
@@ -32,7 +32,7 @@ Local edits will be reverted by the next sync.
 
    ```bash
    node ~/offline/clade/vendor/scripts/check-review-readiness.ts \
-     --repo . --change <change-name>
+     --repo . --change <work-slug>
    ```
 
    - **exit 0** → 可引導 user 到 review-gui
@@ -60,14 +60,14 @@ Local edits will be reverted by the next sync.
 
 ## 交付入口前置查詢（MUST）
 
-**誰要讀本節**：交付驗收入口給人的那個角色，**不是**動 `openspec/changes/**` 的那個角色。本檔 frontmatter 的 `paths` 是 path-scoped 觸發，而在 `/wt` 親子拆分下，開那些檔的是 worktree subagent、交付 URL 的是主線 orchestrator——主線整段 session 可能一個 `openspec/changes/**` 檔都沒開，規約於是對**唯一會犯這個錯的角色**不載入。因此：**要交付人工檢查入口時，MUST 主動載入本檔**，NEVER 等 path 觸發（2026-08-24 <consumer-a> `employee-backpay-request` 實證：主線未載入本檔，跳過下方兩條指令直接自建平行 GUI）。
+**誰要讀本節**：交付驗收入口給人的那個角色，**不是**動 carrier 檔的那個角色。本檔 frontmatter 的 `paths` 是 path-scoped 觸發，而在 `/wt` 親子拆分下，開那些檔的是 worktree subagent、交付 URL 的是主線 orchestrator——主線整段 session 可能一個 `tasks/**` 檔都沒開，規約於是對**唯一會犯這個錯的角色**不載入。因此：**要交付人工檢查入口時，MUST 主動載入本檔**，NEVER 等 path 觸發（2026-08-24 <consumer-a> `employee-backpay-request` 實證：主線未載入本檔，跳過下方兩條指令直接自建平行 GUI）。
 
 把人工檢查入口交給人之前，**MUST 先問「現在有沒有服務在提供入口」**，再問「PWA inbox 有沒有這條、人點下去會不會落到這條」。這是查表不是推理，兩條指令逐字：
 
 ```bash
 bash ~/offline/clade/ops/review-gui-service.sh status          # 判 exit code，不要逐行比對字串
 node ~/offline/clade/vendor/scripts/review-handoff-url.ts resolve \
-  --change <change-name> [--item '#N']
+  --change <work-slug> [--item '#N']
 ```
 
 **第 1 條 MUST 判 exit code，NEVER 拿單一行字串當結論**：它的輸出是多行（`enabled` / GUI unit 的 `active` / dispatch-pickup 的 `not-found` 與 `inactive` / `ss` 表 / 健康 JSON），裡面本來就同時出現 `active` 與 `inactive`。**exit 0 就是服務健全**（末行為 `{"ok":true,"authRequired":false}`）。
@@ -141,15 +141,15 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 5  http://127.0.0.1:5174/__p
 
 ```text
 目前給不出可直接開啟的驗收連結：review-gui 服務 <status 逐字輸出>，本 consumer 也無自有 HTTPS 入口
-（無 tunnel、無 tailnet cert）。待驗的是 <change-name> 的 <N> 條 [review:ui]，已 bucket=ready。
+（無 tunnel、無 tailnet cert）。待驗的是 <work-slug> 的 <N> 條 [review:ui]，已 bucket=ready。
 入口能力補齊方式見 pitfall-review-entry-degraded-to-local-shell-command § Fix Recipe。
 ```
 
 ## `[discuss]` items 不在 review:ui 主流程
 
-`[discuss]` items（production 授權 / 商業判斷 / production 觀察類）**MUST** 由 `/spectra-archive` Step 2.5 walkthrough 接管，**NEVER** 在 review:ui 引導流程內處理——trigger 是外部 signal，提前分析只會讓 change 永遠卡在 review:ui pending state。
+`[discuss]` items（production 授權 / 商業判斷 / production 觀察類）**MUST** 由交付前收尾 walkthrough 接管（[[manual-review]] § `[discuss]` walkthrough），**NEVER** 在 review:ui 引導流程內處理——trigger 是外部 signal，提前分析只會讓工作永遠卡在 review:ui pending state。
 
-review-gui 對純 D-only pending 的 change 自動歸「🗓 等 archive walkthrough」群（無接手 prompt）→ 告知 user「跑 `/spectra-archive <change>` 觸發 Step 2.5 walkthrough」；落「🤖 等 orchestrator 接手」群（仍含 I / V）→ 接手 prompt 對 (D) 只列 walkthrough trigger，不分析、不寫 (claude-discussed:) annotation。
+review-gui 對純 D-only pending 的工作自動歸「🗓 等收尾 walkthrough」群（無接手 prompt）→ 告知 user 該工作等的是收尾 walkthrough；落「🤖 等 orchestrator 接手」群（仍含 I / V）→ 接手 prompt 對 (D) 只列 walkthrough trigger，不分析、不寫 (claude-discussed:) annotation。
 
 詳細 scope rule 見 [`manual-review.md`](./manual-review.md) § Item Kind Marker `[discuss]` 段。
 

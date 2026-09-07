@@ -18,7 +18,7 @@ metadata:
 
 Ready sources remain recoverable while a batch waits or fails review. Main receives formally reviewed commits; worker checkpoint creation is not formal review.
 
-The user's only follow-up action is the actual 人工檢查 decision（GUI 的 OK / Issue / Skip）。After that decision, the coordinator invokes `OPSX archive` and `/commit` itself. If either workflow step requires a separate clean session, use [[session-tasks.operations]] § Herdr session transport and return the dispatch receipt; **NEVER** ask the user to open main or type either invocation.
+The user's only follow-up action is the actual 人工檢查 decision（GUI 的 OK / Issue / Skip）。After that decision, the coordinator marks the work done and invokes `/commit` itself. If either workflow step requires a separate clean session, use [[session-tasks.operations]] § Herdr session transport and return the dispatch receipt; **NEVER** ask the user to open main or type either invocation.
 
 ## When to invoke
 
@@ -30,7 +30,7 @@ Non-UI tasks are automatically routed to Pi (cheaper, doesn't consume Claude con
 
 - The work is read-only AND trivial (quick grep, log inspection, code explanation that writes nothing and doesn't need structured evidence collection).
 - The operation is main-bound by design (clade publish / propagate).
-- OPSX archive already owns an existing implementation checkout; resolve that source instead of creating a second implementation tree.
+- The work item already owns an existing implementation checkout; resolve that source instead of creating a second implementation tree.
 - cwd is already inside a session worktree (`git rev-parse --git-dir` contains `/worktrees/`). The current worktree is the workspace; do not nest.
 
 ## Invocation forms
@@ -75,8 +75,8 @@ Labels are arbitrary identifiers (A/B/C/feat-x/test-y). The skill normalizes the
 Example:
 
 ```
-/wt fix-auth: /opsx 繼續實作已確認的 change ID
-/wt evlog-dpattern: /opsx 修訂已確認的 change ID
+/wt fix-auth: /implement 繼續 tasks/2026-09-07-fix-auth.md 的下一個未勾 phase
+/wt evlog-dpattern: /implement 繼續 specs/plans/012-evlog-dpattern/tasks.md
 ```
 
 This form is invoked by `/handoff` Mode B (per [[worktree-default]] §1 and [[handoff]] §2B.5) when the user has selected a worktree-requiring change from the outstanding-work list. The subagent inside the worktree runs `<next-skill>` as its first action.
@@ -214,7 +214,7 @@ Classify the task to choose the executor. The default routing is automatic; user
 
 3. **Non-UI coding work** → **Pi via the Pi dispatcher** (Step 2-pi)
    - Everything else: refactoring, adding tests, implementing features, fixing bugs, migrations, config changes, etc.
-   - Rationale: non-UI coding is the sweet spot for Pi — cheaper, doesn't consume Claude context, follows the same pi-watch-protocol already proven in `/commit` and OPSX execution.
+   - Rationale: non-UI coding is the sweet spot for Pi — cheaper, doesn't consume Claude context, follows the same pi-watch-protocol already proven in `/commit` and `/implement`.
 
 **Form-specific overrides**:
 - Form 3 (`/wt <slug>: /<next-skill>`): always Claude subagent — the subagent needs Skill tool access to invoke the next skill
@@ -296,7 +296,7 @@ The `[pi]` / `[claude]` / `[pi:analyze]` / `[pi:debug]` tag indicates which exec
 
 **Batch handover**: after harvesting verified checkpoints, register readiness and run `wt-helper batch status --trigger auto`. At 4 distinct work ids, invoke one full `/commit` for the batch. User `/commit` or merge back has no minimum; dependency/drained/stop can flush early. Archive runs its gates and bookkeeping in the source tree before readiness. Cleanup belongs to the final commit workflow after verified landing.
 
-Non-OPSX Form 1 uses the same queue; the coordinator handles authorized landing without asking the user to type commands.
+Form 1 work uses the same queue; the coordinator handles authorized landing without asking the user to type commands.
 
 ## Failure handling
 
@@ -331,7 +331,7 @@ Worktree(s) hold committed work on their session branches. Main's working tree i
 
 The coordinator's next actions:
 
-1. For OPSX, complete archive gates and bookkeeping in the source worktree, then checkpoint the result.
+1. Complete the work item's acceptance gates and carrier bookkeeping in the source worktree, then checkpoint the result.
 2. Verify scope, evidence and writer handover; register all authorized ready sources via `wt-helper batch ready`.
 3. Evaluate the batch trigger and invoke `/commit` when due; preserve the queue across session handover.
 
@@ -369,7 +369,7 @@ A completion report is a claim to verify. Inspect the checkpoint scope and accep
 - [[agent-routing.pi-watch-protocol]] — Pi dispatch standard, Watch Protocol, Plan-first / Git baseline / Commit Authorization hard rules.
 - [[handoff]] — Mode B dispatch path that invokes `/wt <slug>: /<next-skill>`.
 - [[session-tasks]] — shared `<YYYY-MM-DD-HHMM>-<slug>` naming convention.
-- [[scope-discipline]] — when a `/wt` task drifts beyond its slug's scope, open a separate `/wt` task or return to OPSX intent for an authorized scope revision.
+- [[scope-discipline]] — when a `/wt` task drifts beyond its slug's scope, open a separate `/wt` task or return to `/specify` for an authorized scope revision.
 - [[pi-offload]] — template registry for analysis/debug dispatch (`~/offline/clade/vendor/snippets/pi-offload/`).
 
 ## Maintenance commands

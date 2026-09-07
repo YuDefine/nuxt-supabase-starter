@@ -136,7 +136,7 @@ Local edits will be reverted by the next sync.
 | `vendor/snippets/dev-auth/` cookbook 是否該推薦 | `auth.devSigninEnabled === false && auth.portPinned === true` |
 | `audit-ux-drift.ts` 截圖驗證 | `dev.ports[].port` + `verification.smokePaths` |
 | review-gui 常駐狀態列 / 起 review slot | `dev.ports[].role` + `dev.ports[].host`（`role: 'review'` 的那支是人工檢查專用，與開發用的 primary 各持自己的 lease，見 [[verification-lease]]） |
-| `spectra-notion-coupling.md` 判斷 change 生命週期該不該推 Notion ticket 狀態 | `notion.ticketWorkflow` + `notion.dataSourceId` + `notion.referenceSkill` |
+| `notion-work-coupling.md` 判斷 work item 生命週期該不該推 Notion ticket 狀態 | `notion.ticketWorkflow` + `notion.dataSourceId` + `notion.referenceSkill` |
 
 讀者**MUST** 從 `registry/consumers-meta.json` snapshot 讀，**NEVER** 直接讀 consumer repo 的 `.claude/consumer-meta.json`（避免每個工具都 path-resolve consumer absolute path）。
 

@@ -1,11 +1,11 @@
 ---
-description: "consumer 採用 Notion 制度時（consumer-meta 的 notion.ticketWorkflow 或 notion.projectWorkflow）適用。症狀：change 做完或發版了但 Notion 狀態還停在舊值、不知道某個 change 對應哪張 ticket 或哪個 User Story、Notion 現況與 git 實況對不上、拿不準該不該去碰 Notion。狀態轉移授權沿用全域 _notion-<consumer-b>-board/REFERENCE.md §3 表，不另造 state machine"
-globs: ["openspec/changes/**", ".claude/consumer-meta.json"]
+description: "consumer 採用 Notion 制度時（consumer-meta 的 notion.ticketWorkflow 或 notion.projectWorkflow）適用。症狀：工作做完或發版了但 Notion 狀態還停在舊值、不知道某個 work item 對應哪張 ticket 或哪個 User Story、Notion 現況與 git 實況對不上、拿不準該不該去碰 Notion。狀態轉移授權沿用全域 _notion-<consumer-b>-board/REFERENCE.md §3 表，不另造 state machine"
+globs: ["tasks/**", "specs/plans/**", ".claude/consumer-meta.json"]
 alwaysApply: false
 ---
 <!--
 🔒 LOCKED — managed by clade
-Source: rules/core/spectra-notion-coupling.md
+Source: rules/core/notion-work-coupling.md
 Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
@@ -13,55 +13,66 @@ Local edits will be reverted by the next sync.
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
 
-# Spectra Change ↔ Notion Ticket 狀態耦合
+# Work Item ↔ Notion Ticket 狀態耦合
 
-**核心命題**：consumer 若有 Notion ticket 制度，change 的 Notion ticket 狀態**不能跟 spectra 生命週期脫鉤**。最常見的漏洞是「apply 做完 / 發版了，但對應 ticket 還停在『進行中』甚至『需確認』」——客戶看 board 以為沒人動。本規則把「change 生命週期事件 → ticket 狀態轉移」綁成**明文 workflow 步驟**，由 spectra-apply / spectra-archive 收尾主動推進，**不靠事後想起來**。
+**核心命題**：consumer 若有 Notion ticket 制度，工作的 Notion ticket 狀態**不能跟 work item 生命週期脫鉤**。最常見的漏洞是「做完了 / 發版了，但對應 ticket 還停在『進行中』甚至『需確認』」——客戶看 board 以為沒人動。本規則把「work item 生命週期事件 → ticket 狀態轉移」綁成**明文步驟**，由 `flow open` 與發版收尾主動推進，**不靠事後想起來**。
 
 此規則優先於個別 skill 的 ad-hoc Notion 描述。狀態轉移授權**一律**沿用 consumer 所採用的 Notion reference skill §3 轉移表（單一真相層），本檔**不**重述 state machine、**不**新增 status 值。
+
+## 什麼是這裡說的 work item
+
+clade 的工作單位是 `flow` work item，它的 carrier 有兩種（見 [[flow-work-tracking]] 與 [[session-tasks]]）：
+
+| carrier | 什麼時候用 |
+| --- | --- |
+| `tasks/<date>-<slug>.md` | 一般 session 工作清單 |
+| `specs/plans/NNN-<slug>/`（含它的 `tasks.md`） | 走 aixbdd 的需求迭代，見 [[aixbdd-workflow]] |
+
+兩種都用 `node vendor/scripts/flow/flow.ts open <slug> --origin tasks:<path>` 開卡。本檔說的「work item」指那張卡與它的 carrier，**NEVER** 讀成別的東西。
 
 ---
 
 ## 觸發條件（兩者皆成立才生效）
 
-1. **Consumer 採用**：consumer metadata 宣告 `notion.ticketWorkflow: true`（schema 見 `registry/consumer-meta.schema.json` 的 `notion` block；判讀經 [[consumer-meta]] snapshot，**NEVER** 直接 path-resolve consumer repo）。未宣告 / `false` → 本規則**完全不生效**，spectra 流程照常跑、不碰 Notion。
-2. **該 change 連結到一張 ticket**：change 的 `proposal.md` 頂部有 ticket 連結（見下方「連結存放」）。沒有連結的 change（典型：來自 ROADMAP / 內部技術債、非客戶 ticket）→ 本規則**不生效**，不要硬湊一張 ticket。
+1. **Consumer 採用**：consumer metadata 宣告 `notion.ticketWorkflow: true`（schema 見 `registry/consumer-meta.schema.json` 的 `notion` block；判讀經 [[consumer-meta]] snapshot，**NEVER** 直接 path-resolve consumer repo）。未宣告 / `false` → 本規則**完全不生效**，工作照常跑、不碰 Notion。
+2. **該 work item 連結到一張 ticket**：carrier 檔頂部有 ticket 連結（見下方「連結存放」）。沒有連結的工作（典型：來自 `ROADMAP.md` / 內部技術債、非客戶 ticket）→ 本規則**不生效**，不要硬湊一張 ticket。
 
 兩條都成立才推進 ticket 狀態。任一不成立 → silent skip，**NEVER** 因為「想更新點什麼」就去碰 board。
 
 ---
 
-## Change ↔ Ticket 連結存放（single source）
+## Work item ↔ Ticket 連結存放（single source）
 
-連結寫在 change 的 `proposal.md` **最上方**（`## Why` / `## Problem` 之前）一行 blockquote：
+連結寫在 carrier 檔的**最上方**（第一個 `## ` 標題之前）一行 blockquote：
 
 ```markdown
 > **Notion ticket**: <ticket-url>（page_id: <page-id>）
 ```
 
-- git-tracked + 人可讀，跟著 change 走、不依賴 SQLite blob
-- **由誰寫**：change 若是從 outbound ticket flow 或 inbound board triage 轉成 spectra change 時，**MUST** 在 propose 階段把 page_id 寫進這行。日後反查只認這行。
-- **NEVER** 把連結塞進 `.spectra/`（會被 `spectra unpark` 覆蓋）或只留在 `HANDOFF.md`（HANDOFF 是 session-scoped，archive 後會清）。
+- git-tracked + 人可讀，跟著 carrier 走、不依賴任何 blob store
+- **由誰寫**：工作若是從 outbound ticket flow 或 inbound board triage 轉來，**MUST** 在建 carrier 的當下（`flow open` 之前或同一步）把 page_id 寫進這行。日後反查只認這行。
+- **NEVER** 只把連結留在 `HANDOFF.md`（HANDOFF 是 session-scoped，交接後會清），也 **NEVER** 只留在 flow 卡的 payload（那是機器狀態，人讀不到）。
 
 ---
 
 ## 生命週期 → ticket 狀態映射（沿用 REFERENCE.md §3 授權表）
 
-| spectra 生命週期事件 | ticket 轉移 | 需要的 evidence | MUST-step 位置 |
+| work item 生命週期事件 | ticket 轉移 | 需要的 evidence | MUST-step 位置 |
 | --- | --- | --- | --- |
-| **apply 真的開工**（`/spectra-apply` 動 code） | `未開始`\|`需確認` → **`進行中`** | active claim 存在 | spectra-apply 收尾（Step 8b handoff 前） |
-| **發版**（change 已 archive + `/commit` 出 git tag + push 觸發 deploy） | `進行中` → **`驗收中`** + 填 `修復版本 >= <tag>` | `git describe --tags` 拿得到本次發版 tag | spectra-archive 收尾（Step 8 summary 明文指示，緊接的 `/commit` 發版後由同一主線完成；見下「驗收中 的 tag 依賴」） |
+| **真的開工**（`flow open <slug>` 成功並拿到 work id） | `未開始`\|`需確認` → **`進行中`** | active claim 存在（per [[session-claims]]） | 開卡後、動第一個檔之前 |
+| **發版**（`work.done` + `/commit` 出 git tag + push 觸發 deploy） | `進行中` → **`驗收中`** + 填 `修復版本 >= <tag>` | `git describe --tags` 拿得到本次發版 tag | `/commit` 發版完成的當下（見下「驗收中 的 tag 依賴」） |
 | 客戶驗收 OK | `驗收中` → `完成` | — | ❌ **客戶側，Claude NEVER** |
 | 人工歸檔 | `完成` → `封存` | — | ❌ **客戶側，Claude NEVER** |
 
 **Hard rule（重申 REFERENCE.md §3）**：寫 `狀態` 前 **MUST** 確認該轉移在 §3 表是 ✅ Claude 可推。要碰 ❌（客戶側 `驗收中→完成` / `完成→封存`）→ **STOP**，改成「回報 user + 建議」，由 user 自己在 Notion 點。
 
-### 「驗收中」的 tag 依賴（為什麼不在 archive 當下就轉）
+### 「驗收中」的 tag 依賴（為什麼不在工作做完的當下就轉）
 
-`進行中 → 驗收中` 在 REFERENCE.md §3 要求**拿得到對應 git tag**（`修復版本 >=` 必須是真 tag）。但標準收尾順序是 **「先 archive 再 `/commit`」**（archive 是 bookkeeping、`/commit` Step 5 才 bump 版本 + 打 tag + push 發版）——所以 **archive 當下還沒有本次發版 tag**，`git describe --tags` 只會拿到上一版。
+`進行中 → 驗收中` 在 REFERENCE.md §3 要求**拿得到對應 git tag**（`修復版本 >=` 必須是真 tag）。而 tag 是 `/commit` Step 5 才 bump 版本 + 打 tag + push——所以**把 work item 標 done 的當下還沒有本次發版 tag**，`git describe --tags` 只會拿到上一版。
 
 因此：
 
-- **archive 收尾 MUST**：(a) 確保 ticket 已是 `進行中`（若還停在 `未開始`/`需確認` 先補轉）；(b) 在 Step 8 summary **明文列出 pending 動作**：「📌 Notion ticket `<page_id>`：本 change 已 archive，待 `/commit` 發版產 git tag 後 → 轉 `驗收中` + 填 `修復版本 >= <tag>`」。
+- **標 done 的當下 MUST**：(a) 確保 ticket 已是 `進行中`（若還停在 `未開始`/`需確認` 先補轉）；(b) 在收尾訊息**明文列出 pending 動作**：「📌 Notion ticket `<page_id>`：本工作已完成，待 `/commit` 發版產 git tag 後 → 轉 `驗收中` + 填 `修復版本 >= <tag>`」。
 - **發版完成後 MUST**：同一主線跑完 `/commit`（tag 已存在、push 已觸發 deploy）後，**立即** `git describe --tags --abbrev=0` 抓 tag，執行 `進行中 → 驗收中` + 寫 `修復版本 >= <tag>`。**NEVER** 把這步丟給「下次想起來」。
 
 > consumer 若有 deploy 後 CI 綠燈確認流程（如 <consumer-b> Post-Push CI Watcher），`驗收中` 轉移 SHOULD 等 CI 綠燈（deploy 真的成功）再推，避免 tag 出去但 deploy 紅燈卻已標驗收中。
@@ -98,34 +109,34 @@ consumer 在自家 metadata 加（schema 見 `registry/consumer-meta.schema.json
 
 ## 與「對外輸出需 user 授權」的關係
 
-clade / 全域行為準則：對外發訊息 / 改工單屬 outbound，預設要 user 明確指示才做。**本規則本身就是那道 standing direction**——user 採用 `notion.ticketWorkflow:true` + 把 ticket 連進 change，即等同授權 spectra 流程在**授權轉移範圍內**（REFERENCE.md §3 的 ✅ 列）自動推進狀態。但：
+clade / 全域行為準則：對外發訊息 / 改工單屬 outbound，預設要 user 明確指示才做。**本規則本身就是那道 standing direction**——user 採用 `notion.ticketWorkflow:true` + 把 ticket 連進 carrier，即等同授權流程在**授權轉移範圍內**（REFERENCE.md §3 的 ✅ 列）自動推進狀態。但：
 
 - 授權**僅限** §3 的 ✅ 開發側轉移；客戶側（`驗收中→完成` 等）仍 **NEVER** 自動碰。
-- 採用是 opt-in（consumer-meta flag）+ per-change（要有連結），不是全域預設。
+- 採用是 opt-in（consumer-meta flag）+ per-work-item（要有連結），不是全域預設。
 
 ---
 
 ## MUST
 
-- consumer 採用 + change 有連結時，**MUST** 在 spectra-apply 收尾把 ticket 推到 `進行中`、在 archive 收尾 surface pending `驗收中` 並於發版後完成。
+- consumer 採用 + work item 有連結時，**每一個**這樣的 work item 都 **MUST** 在 `flow open` 之後把 ticket 推到 `進行中`、在標 done 時 surface pending `驗收中` 並於發版後完成。不是只處理最後一個。
 - 寫 Notion 前 **MUST** 重新抓取 data source schema 校對 property key。
 - `驗收中` **MUST** 帶真 git tag 填 `修復版本 >=`。
-- 推任何狀態前 **MUST** 確認該 change 有 active claim（per [[work-claims]] / [[session-claims]]）——無主 WIP 不代表 board 該動。
+- 推任何狀態前 **MUST** 確認該工作有 active claim（per [[session-claims]]）——無主 WIP 不代表 board 該動。
 
 ## NEVER
 
-- **NEVER** 對 `notion.ticketWorkflow` 未啟用 / change 無連結的情況硬湊 ticket 更新。
+- **NEVER** 對 `notion.ticketWorkflow` 未啟用 / work item 無連結的情況硬湊 ticket 更新。
 - **NEVER** 碰 §3 客戶側轉移（`驗收中→完成` / `完成→封存` / 跳過驗收直接封存）。
 - **NEVER** 覆寫 `發布日期`（客戶提報日）、`驗收日期`、`名稱`、`驗收完成`。
 - **NEVER** 無 git tag 就標 `驗收中` 或亂填 `修復版本 >=`。
-- **NEVER** 把連結存進 `.spectra/`（unpark 覆蓋）或只存 HANDOFF.md（session-scoped）。
+- **NEVER** 把連結只存 `HANDOFF.md`（session-scoped）或只存 flow 卡 payload（人讀不到）。
 - **NEVER** 憑記憶拼 Notion property key（中文 + 全形空格 + `>=`，憑記憶必錯）。
 
 ---
 
 # 專案層（Milestone / Epic / User Story / Task）
 
-**與上面 Issue Ticket 層的預設相反。** Ticket 層「無連結 → silent skip」是對的：客戶工單本來就不是每個 change 都有。專案層不同——**每一個** change 都對應到某個 User Story，所以「找不到對應」不是正常狀態，是需要處理的訊號。
+**與上面 Issue Ticket 層的預設相反。** Ticket 層「無連結 → silent skip」是對的：客戶工單本來就不是每個工作都有。專案層不同——**每一個** work item 都對應到某個 User Story，所以「找不到對應」不是正常狀態，是需要處理的訊號。
 
 > **本層預設**：判定不了 → **問**（runtime question interface）。**NEVER** silent skip，**NEVER** 用猜的值寫入。
 
@@ -139,11 +150,11 @@ consumer metadata 宣告 `notion.projectWorkflow: true` 且 `notion.databases.st
 
 | Notion | git | 基數 |
 | --- | --- | --- |
-| User Story | `openspec/changes/<slug>/` 的 proposal.md **每一條** Capability | **N:1** — 一個 change 常對應多個客戶語言的 Story |
-| Task | tasks.md 的 `## N. <phase>` | 1:1 per phase |
-| — | tasks.md 的 `- [ ] N.M` | **不上 Notion**（那是 agent 執行單位，不是溝通單位）|
+| User Story | carrier 的**每一條**驗收能力：`specs/plans/NNN-<slug>/spec.md` 的每條驗收標準，或 `tasks/<date>-<slug>.md` 的每條交付目標 | **N:1** — 一個 work item 常對應多個客戶語言的 Story |
+| Task | carrier 的 `## N. <phase>` | 1:1 per phase |
+| — | carrier 的 `- [ ] N.M` | **不上 Notion**（那是 agent 執行單位，不是溝通單位）|
 
-Story 的 idempotent key 是 **(`Change`, `Capability`) 兩個欄位的組合**，不是標題——標題是客戶語言的中文描述，拿 capability slug 去比對永遠比不中。
+Story 的 idempotent key 是 **(`Work`, `Capability`) 兩個欄位的組合**，不是標題——標題是客戶語言的中文描述，拿 slug 去比對永遠比不中。
 
 ## 三級判定式
 
@@ -155,7 +166,7 @@ Story 的 idempotent key 是 **(`Change`, `Capability`) 兩個欄位的組合**�
 | --- | --- | --- |
 | **(a)** | Milestone 的 Story 完成率達 100% **且** 該 Milestone 有連結報價單 | 財務／請款後果 |
 | **(b)** | Story `待驗收 → 已完成`、Ticket `驗收中 → 完成`、Ticket `完成 → 封存` | 客戶／你的驗收側轉移（沿用 §3 授權表的 ❌ 列）|
-| **(c)** | proposal.md 的 Impact 同時命中兩個 client 路徑，或指名某個尚未上線的租戶 | 目標頁面歧義 |
+| **(c)** | carrier 描述的影響範圍同時命中兩個 client 路徑，或指名某個尚未上線的租戶 | 目標頁面歧義 |
 | **(d)** | 新 Story 找不到**唯一**相符的 Epic（0 個或 ≥2 個候選）| 自動猜會生出重複／垃圾 Epic |
 | **(e)** | Notion 現況的狀態在生命週期順序中**晚於**即將寫入的值 | 有人手動動過，意圖不明——不靜默覆寫也不靜默放棄 |
 | **(f)** | 目標 track 的 Notion 結構尚未建立 | 「現在要不要生出這套結構」是商業決策 |
@@ -164,25 +175,25 @@ Story 的 idempotent key 是 **(`Change`, `Capability`) 兩個欄位的組合**�
 
 ### Class 2 — 自動寫，但輸出標記待覆核（不阻塞）
 
-有損翻譯或推論，且猜錯成本低、不擋任何不可逆動作。目前只有一條：**Story 標題**從 proposal.md 的 Capability 描述草擬成客戶語言。
+有損翻譯或推論，且猜錯成本低、不擋任何不可逆動作。目前只有一條：**Story 標題**從 carrier 的驗收能力描述草擬成客戶語言。
 
 ### Class 1 — 自動寫，不打擾
 
-其餘全部。來源事實是二元可查的（`git describe --tags` 有沒有值、active claim 存不存在、tasks.md 子項是否全勾），且轉移在 §3 授權表的 ✅ 列。
+其餘全部。來源事實是二元可查的（`git describe --tags` 有沒有值、active claim 存不存在、carrier 子項是否全勾），且轉移在 §3 授權表的 ✅ 列。
 
 ## 生命週期觸發點
 
-**每一個** 走 spectra 流程的 change 都適用，不是只有「看起來跟客戶有關」的那些。
+**每一個**有 carrier 的 work item 都適用，不是只有「看起來跟客戶有關」的那些。
 
 | 事件 | 掛載點 | 寫入 |
 | --- | --- | --- |
-| propose 完成 | `/spectra-propose` 收尾 | 建 Story（每個 Capability 一則）+ Task（每個 phase 一則）|
-| apply 真開工 | `/spectra-apply` 開工判定點 | Story → `開發中` + `拍板日` |
-| manual review handoff | `/spectra-apply` Step 8b | Story → `待驗收`；依 tasks.md 現況**補正全部** Task 狀態 |
-| archive | `/spectra-archive` Step 8 | Story → `待驗收` |
+| carrier 建立完成 | 建 carrier 檔的收尾 | 建 Story（每條驗收能力一則）+ Task（每個 phase 一則）|
+| `flow open` 真開工 | 拿到 work id 之後、動第一個檔之前 | Story → `開發中` + `拍板日` |
+| manual review handoff | 交付驗收清單給 review-gui 時 | Story → `待驗收`；依 carrier 現況**補正全部** Task 狀態 |
+| `work.done` | 標 done 的收尾 | Story → `待驗收` |
 | 發版（版本 bump + tag） | `/commit` **Step 6-A**（或 6-B 選「現在發版」後） | Story `上線日`；重算所屬 Milestone 進度；100% 時觸發 Class 3 (a) |
 
-執行一律透過同一個 consumer Notion synchronization implementation，**NEVER** 在各 skill 各寫一份寫入邏輯——四個掛載點呼叫同一支，避免四份實作彼此漂移。
+執行一律透過同一個 consumer Notion synchronization implementation，**NEVER** 在各 skill 各寫一份寫入邏輯——五個掛載點呼叫同一支，避免五份實作彼此漂移。
 
 ## Milestone 進度為什麼由 script 算而不是 rollup
 
@@ -196,7 +207,7 @@ Notion **不支援 rollup of rollup**：`Epic.進度` 已經是 rollup(Story)，
 
 - **所有寫入 MUST 是絕對值 SET**（狀態＝X、欄位＝Y），**NEVER** 用 delta／increment。這讓任何重試都 idempotent，是下面兩條得以成立的前提。
 - **讀失敗**（抓不到 schema 或現況）→ **中止整個寫入**，**NEVER** 用猜的值硬寫。
-- **寫入 timeout**（不確定有沒有落地）→ 一律當失敗、留 pending marker，**NEVER** 自動重試（已經等了 45s，疊上去只是把單次延遲變兩倍）。marker 落在 `<consumer>/.spectra/notion-sync-pending/`，下一個自然觸發點或人工 reconcile 處理。
+- **寫入 timeout**（不確定有沒有落地）→ 一律當失敗、留 pending marker，**NEVER** 自動重試（已經等了 45s，疊上去只是把單次延遲變兩倍）。marker 落在 `<consumer>/.clade/notion-sync-pending/`，下一個自然觸發點或人工 reconcile 處理。
 - **找不到目標 property** → 訊息 MUST 標「疑似 schema drift」，不可回報成泛用的「寫入失敗」——讓人一眼看出不是網路問題。
 
 ## 本層的 NEVER
@@ -215,15 +226,16 @@ Notion **不支援 rollup of rollup**：`Epic.進度` 已經是 rollup(Story)，
 | inbound ticket 全生命週期（scan / triage / sync / report） | runtime 的 inbound Notion board skill |
 | outbound 決策題建立 ticket | runtime 的 outbound Notion ticket skill |
 | consumer 能力宣告 / aggregator | [[consumer-meta]] |
-| change ownership / claim | [[work-claims]]、[[session-claims]] |
+| work item 開卡 / carrier / origin | [[flow-work-tracking]]、[[session-tasks]] |
+| ownership / claim | [[session-claims]] |
 | 發版 / git tag 產生點 | [[commit]] Step 5（版本號升級 + tag push） |
 
 ## 違反時的回報方式
 
 ```
-[spectra-notion-coupling] ticket 狀態漏同步
+[notion-work-coupling] ticket 狀態漏同步
 
-問題：change <name> 連結 ticket <page_id>，但 <生命週期事件> 後 ticket 狀態未推進
+問題：work item <slug> 連結 ticket <page_id>，但 <生命週期事件> 後 ticket 狀態未推進
 
 修正：
   - 重新抓取 schema → 依 §3 授權表推 <正確轉移>
@@ -231,5 +243,5 @@ Notion **不支援 rollup of rollup**：`Epic.進度` 已經是 rollup(Story)，
 
 繞過：
   - consumer 未採用 → 在 consumer metadata 設 notion.ticketWorkflow=false（或留空）
-  - 該 change 不對應任何客戶 ticket → proposal.md 不放連結即 silent skip
+  - 該工作不對應任何客戶 ticket → carrier 不放連結即 silent skip
 ```

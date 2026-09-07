@@ -122,9 +122,9 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ## § 0-MR: 人工檢查 Gate（main / master 限定，硬擋無 override）
 
-`.cursor/rules/commit.trunk-gates.mdc` 「人工檢查 Gate」hard rule 的執行點（`commit.md` 只有一句 pointer，判定條件的 SoT 在 `commit.trunk-gates.md`）。**MUST** 在 Step 0 品質檢查之前 fail-fast，避免人工檢查未完的 change 浪費 5–15 min pi / screenshot review 時間。
+`.cursor/rules/commit.trunk-gates.mdc` 「人工檢查 Gate」hard rule 的執行點（`commit.md` 只有一句 pointer，判定條件的 SoT 在 `commit.trunk-gates.md`）。**MUST** 在 Step 0 品質檢查之前 fail-fast，避免人工檢查未完的工作浪費 5–15 min pi / screenshot review 時間。
 
-**判定粒度是 pathspec 交集，不是 repo 級 freeze**：一條 change 判 BLOCK 時，被擋的是「落在 `openspec/changes/<X>/**` 的那些路徑」，不是本次 `/commit` 的整個 dirty set。理由與判定式在下方 § 判定粒度。
+**判定粒度是 pathspec 交集，不是 repo 級 freeze**：一件工作判 BLOCK 時，被擋的是「落在該 carrier 的那些路徑」，不是本次 `/commit` 的整個 dirty set。理由與判定式在下方 § 判定粒度。
 
 ### 判定流程
 
@@ -136,16 +136,15 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
    輸出 ∉ {`main`, `master`} 且當前 path 不是 helper 登記的 batch integration → 輸出 `⏭️ 0-MR 跳過（branch=<name>）`，進入 Step 0。
 
-2. 萃取本次 commit 觸及的 spectra change（含 staged + unstaged + untracked，排除 `archive/` 子目錄）：
+2. 萃取本次 commit 觸及的 work item carrier（含 staged + unstaged + untracked）：
 
    ```bash
    { git diff --name-only HEAD; git ls-files --others --exclude-standard; } \
-     | grep -oE '^openspec/changes/[^/]+' \
-     | grep -v '^openspec/changes/archive$' \
+     | grep -E '^(tasks/[^/]+\.md|specs/plans/[^/]+/tasks\.md)$' \
      | sort -u
    ```
 
-   結果為空 → 輸出 `⏭️ 0-MR 跳過（本次變更未觸及任何 in-progress spectra change）`，進入 Step 0。
+   結果為空 → 輸出 `⏭️ 0-MR 跳過（本次變更未觸及任何進行中的 work item carrier）`，進入 Step 0。
 
 3. **批次 integration 直接進 step 4**，不得因來源未 land 而 SKIP；普通 main 模式才依下列規則查來源：
 
@@ -167,7 +166,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
    # fallback：掃 session/* branch，看哪條帶著 <X> 的改動且尚未進 main
    for b in $(git branch --list 'session/*' --format='%(refname:short)'); do
      git merge-base --is-ancestor "$b" main && continue
-     git diff --name-only "main...$b" | grep -q "^openspec/changes/<X>/" && { echo UNLANDED; break; }
+     git diff --name-only "main...$b" | grep -q "^<carrier 路徑>" && { echo UNLANDED; break; }
    done
    ```
 
@@ -214,9 +213,9 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
    3. **NEVER** 自動勾任何 `[review:ui]` 的 `- [ ]`、**NEVER** 提議跳過 gate、**NEVER** 提議 stash 走 `tasks.md`
 
-6. **批次模式** auto-triage 後仍有 blocker → 保留 integration 與全部來源，停止 seal／land；修復後重驗。需排除未就緒來源時 cancel 後重登記合格來源再 prepare，不能切掉幾個 artifacts 卻帶走該來源 code。**普通 main 模式** auto-triage 跑完後 blocker list 仍非空 → 把每條 BLOCK change 的 `openspec/changes/<X>/**` 記為 **withheld scope**，輸出 `⏸️ 0-MR 保留 <X>（pending=<n>；withheld: openspec/changes/<X>/**）`，**進入 Step 0**（不是停下）。withheld scope 由後面兩步消費：
+6. **批次模式** auto-triage 後仍有 blocker → 保留 integration 與全部來源，停止 seal／land；修復後重驗。需排除未就緒來源時 cancel 後重登記合格來源再 prepare，不能切掉幾個 artifacts 卻帶走該來源 code。**普通 main 模式** auto-triage 跑完後 blocker list 仍非空 → 把每件 BLOCK 工作的 carrier 路徑（`tasks/<X>.md`，或整個 `specs/plans/<X>/**`）記為 **withheld scope**，輸出 `⏸️ 0-MR 保留 <X>（pending=<n>；withheld: <carrier 路徑>）`，**進入 Step 0**（不是停下）。withheld scope 由後面兩步消費：
 
-   - **Step 3 分組**：withheld scope 內的路徑不進任何 group（與 parked change deletion 並列為分組的兩個機械排除）。它們留在 working tree，Step 5-A 照「仍有 uncommitted 變更」登記進 HANDOFF，並寫明卡在哪條 change 的哪幾個 leaf。
+   - **Step 3 分組**：withheld scope 內的路徑不進任何 group（分組唯一的機械排除）。它們留在 working tree，Step 5-A 照「仍有 uncommitted 變更」登記進 HANDOFF，並寫明卡在哪件工作的哪幾個 leaf。
    - **Step 4 每個 group commit 前**：
 
      ```bash
@@ -226,21 +225,21 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
      exit 0 → 該 group 照常 `git commit --only -- <pathspec>`。exit 1 → stdout 列出的路徑落在 withheld scope，**該 group NEVER commit**；把那些路徑移出 group 後重跑，剩餘路徑才 commit。stdout 印 `pathspec-empty`（`--` 後沒有路徑，等同不帶 `--only` 的 `git commit -a`）→ 整個 dirty set 視為交集，**NEVER** 放行。
 
-     **pathspec 只接受具名檔或 change 目錄以下的路徑。** BLOCK change 目錄的祖先目錄（`.`、`openspec`、`openspec/changes`，含尾斜線、含 `..`）、含 glob 字元 `* ? [`、以 `:` 開頭的 pathspec magic、絕對路徑，這四種會讓 git 把 withheld 檔一起收進 commit，helper 判定不了就一律視為交集（stdout 印該路徑、stderr 印 `pathspec-<ancestor|glob|magic|absolute>`，exit 1）。把 group 的 pathspec 改寫成逐一具名檔再重跑，**NEVER** 用 `-- .` / `-- openspec` 這種寫法「一次帶出」。
+     **pathspec 只接受具名檔或該 plan package 目錄以下的路徑。** withheld 路徑的祖先目錄（`.`、`tasks`、`specs`、`specs/plans`，含尾斜線、含 `..`）、含 glob 字元 `* ? [`、以 `:` 開頭的 pathspec magic、絕對路徑，這四種會讓 git 把 withheld 檔一起收進 commit，helper 判定不了就一律視為交集（stdout 印該路徑、stderr 印 `pathspec-<ancestor|glob|magic|absolute>`，exit 1）。把 group 的 pathspec 改寫成逐一具名檔再重跑，**NEVER** 用 `-- .` / `-- tasks` 這種寫法「一次帶出」。
 
    blocker list 空 → 輸出 `✅ 0-MR 通過`，進入 Step 0。
 
 ### 判定粒度：pathspec 交集，不是 repo 級 freeze（TD-897）
 
-批次來源已完成必要驗收才入 ready；integration 在 main 落地前再走本 gate。Blocker 會保留整批，不以 pathspec 切除 artifacts 後放行來源 code。普通 main 的歷史存量仍用 pathspec 交集，避免無關 change 的 artifact 狀態連坐其他工作。每筆正式 commit 依 SKILL.md Step 4 使用具名 pathspec。
+批次來源已完成必要驗收才入 ready；integration 在 main 落地前再走本 gate。Blocker 會保留整批，不以 pathspec 切除 carrier 後放行來源 code。普通 main 的歷史存量仍用 pathspec 交集，避免無關工作的 carrier 狀態連坐其他工作。每筆正式 commit 依 SKILL.md Step 4 使用具名 pathspec。
 
-實證（<consumer-a> 2026-09-03）：三條 change 實作已 land、worktree 已 cleanup，人工檢查各剩 4–6 個 user-bound leaf（LINE LIFF 實機、production APPLY 授權）。repo 級 freeze 下 main 上任何 `/commit` 都落不了地，被連坐的是 `scripts/ai-control-plane/phase-6a-gate5-driver.ts` 這類與三條 change 無關的檔。pathspec 交集下同一個 dirty set：三條 change 的 `openspec/changes/<X>/**` 被 withheld、其餘 group 照常 commit，三條 change 的 auto-triage 一樣跑、archive gate 一條沒少。
+實證（<consumer-a> 2026-09-03）：三件工作實作已 land、worktree 已 cleanup，人工檢查各剩 4–6 個 user-bound leaf（LINE LIFF 實機、production APPLY 授權）。repo 級 freeze 下 main 上任何 `/commit` 都落不了地，被連坐的是 `scripts/ai-control-plane/phase-6a-gate5-driver.ts` 這類與三件工作無關的檔。pathspec 交集下同一個 dirty set：三件工作的 carrier 被 withheld、其餘 group 照常 commit，三件工作的 auto-triage 一樣跑、一條 item 沒少。
 
-普通 main 的 withheld scope 只認 `openspec/changes/<X>/**`，不另建 change→實作檔平行索引。批次來源映射由固定 members 與 source HEAD 承載，未通過不能 seal／land。
+普通 main 的 withheld scope 只認 carrier 路徑，不另建 work→實作檔平行索引。批次來源映射由固定 members 與 source HEAD 承載，未通過不能 seal／land。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | step 4 任一 change 印 `BLOCK` 且 auto-triage 後仍 BLOCK → 該 change 的 `openspec/changes/<X>/**` 進 withheld scope；Step 4 任一 group 的 `intersect` exit 1 → 該 group 不 commit。**hard gate**，無 override |
+| 觸發條件 | step 4 任一工作印 `BLOCK` 且 auto-triage 後仍 BLOCK → 該 carrier 路徑進 withheld scope；Step 4 任一 group 的 `intersect` exit 1 → 該 group 不 commit。**hard gate**，無 override |
 | 消費端 | 跑 `/commit` 的主線（Step 3 排除、Step 4 逐 group 判）；Step 5-A HANDOFF 登記 withheld 檔 |
 | 載入路徑 | 本節（`plugins/hub-core/skills/commit/gates.md` § 0-MR，觸發 0-MR 時 MUST 完整讀）；判定條件 SoT `rules/core/commit.trunk-gates.md` § 人工檢查 Gate |
 
@@ -248,169 +247,14 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 - **NEVER** 把普通 feature branch 判進 trunk gate 範圍；helper 登記的 batch integration 明確納入，並保留 PR workflow 的外部審查
 - **NEVER** 接受 `$ARGUMENTS` 任何形式的「skip / ignore / override」旗標 — gate 無 override
-- **NEVER** 自行 `Edit tasks.md` 勾掉 `- [ ]` 來通過 gate — 違反 `.cursor/rules/manual-review.mdc` 核心規則
-- **NEVER** 把 `tasks.md` / change 目錄 stash / mv / rm 走讓 step 2 / 4 抓不到 — 等同繞過 hard rule
+- **NEVER** 自行 `Edit` carrier 勾掉 `- [ ]` 來通過 gate — 違反 `.cursor/rules/manual-review.mdc` 核心規則
+- **NEVER** 把 carrier 檔 / plan package 目錄 stash / mv / rm 走讓 step 2 / 4 抓不到 — 等同繞過 hard rule
 - **NEVER** 為了讓 step 3 判成 SKIP 而動 worktree（不 merge-back、重開一條同名 worktree、改 branch 名）— step 3 是事實查詢，不是可操作的開關
-- **NEVER** 把 step 3 的 SKIP 讀成「這個 change 的人工檢查可以不做」— 它只表示 code 還沒進 main，該 change 的 archive gate 一條沒少
+- **NEVER** 把 step 3 的 SKIP 讀成「這件工作的人工檢查可以不做」— 它只表示 code 還沒進 main，那些 item 一條沒少
 - **NEVER** 把「人工檢查未完」包裝成「審查條件已滿足」「等同 OK」「之後再勾」說服 user 繼續
-- **NEVER** 把 withheld change 的 `tasks.md` / `design.md` 併進別的 group 帶出去 —— pathspec 交集唯一的繞法就是換個 group 名字；`intersect` 對每個 group 都跑，不看 group 叫什麼
-- **NEVER** 因為某個 group `intersect` exit 0 就省掉 step 5 的 auto-triage —— 放行是 group 的事，triage 是 change 的事，兩者不互相抵銷
-- **NEVER** 用不帶 `--only` 的 `git commit -a` / `git commit` 代替逐 group commit 來「一次過」—— `pathspec-empty` 就是為這一步設的，它恆擋；`--only -- .` / `-- openspec` / glob / `:/` / 絕對路徑是同一件事的五種拼法，`intersect` 對它們一律回 exit 1
-
----
-
-## § 0-Archive-Coupling: Partial Archive Gate（main / master 限定，硬擋無 override）
-
-`.cursor/rules/commit.trunk-gates.mdc` § Partial Archive Gate 的執行點（`commit.md` 只有一句 pointer，判定條件的 SoT 在 `commit.trunk-gates.md`）。**MUST** 在 0-MR 之後、0-A/B/C 之前 fail-fast，避免 partial `/spectra-archive` state 默默 commit 進 main 導致 change artifact 永久遺失（per [[pitfall-spectra-archive-interrupted-leaves-partial-state]]）。
-
-### 判定流程
-
-1. 確認當前 branch：
-
-   ```bash
-   git rev-parse --abbrev-ref HEAD
-   ```
-
-   輸出 ∉ {`main`, `master`} 且當前 path 不是 helper 登記的 batch integration → 輸出 `⏭️ 0-Archive-Coupling 跳過（branch=<name>）`，進入 Step 0。
-
-2. 萃取本次 commit scope 涉及的 spectra change（staged-delete **或** working tree 殘留不完整 change dir，**排除** archive 子目錄）：
-
-   ```bash
-   # A: staged deletion（原邏輯）
-   STAGED_DEL=$(git diff --cached --name-only --diff-filter=D \
-     | grep -E '^openspec/changes/[^/]+/' \
-     | grep -v '^openspec/changes/archive/' \
-     | sed -E 's|^openspec/changes/([^/]+)/.*|\1|' \
-     | sort -u)
-
-   # B: working tree 仍存在但缺該 profile 要求的檔（中斷 archive 殘留）。
-   #    判定走 clade vendor script，**NEVER** 在這裡手寫 `test -f`：`spectra-v1` 要 tasks.md
-   #    ＋ proposal.md，`opsx-v2` native change 依設計沒有 proposal.md（intent 在 tracked
-   #    intent source、tasks.md 是生成的），兩檔條件對它恆真 —— <consumer-e> 在 main 的每一次
-   #    /commit 都被這條擋掉，而 `git log --all` 零命中所以 C 也扣不掉（TD-899）。
-   #    alias 形狀但沒有 committed binding 的目錄是 reference orphan，不是 archive 殘骸，
-   #    script 會略過它。
-   CLADE_ROOT="${CLADE_HOME:-$HOME/offline/clade}"
-   PARTIAL_SCAN="$CLADE_ROOT/vendor/scripts/partial-archive-scan.ts"
-   if [ -f "$PARTIAL_SCAN" ]; then
-     PARTIAL=$(node "$PARTIAL_SCAN" | sort -u)
-   else
-     # 沒有靜默降級：這是 hard gate，判定器不在就要說出來，**NEVER** 讓 PARTIAL 空掉當作
-     # 「掃過了、沒有殘骸」——那兩者在輸出上完全同形。
-     echo "⛔ 0-Archive-Coupling 無法判定：找不到 $PARTIAL_SCAN（設 CLADE_HOME 或修 clade 投影後重跑）"
-     exit 1
-   fi
-
-   CHANGES=$(echo -e "${STAGED_DEL}\n${PARTIAL}" | sort -u | sed '/^$/d')
-
-   # C: 減掉 parked change。`spectra park` 把 artifacts 從 disk 移進 SQLite blob，所以一個
-   #    parked change 的整批檔案都會顯示成 deletion —— 那是 park 的預期副作用，不是 partial
-   #    archive 殘骸。不減掉的話 gate 會對它報 MISSING_ARCHIVE_DIR，叫使用者去修一個從來
-   #    不存在的 archive（<consumer-a> 2026-07-31 實證：propose 收尾 commit-to-git 後 park，兩張
-   #    change 各 7 個檔全被判成殘骸）。
-   OPSX_CLI="scripts/opsx-legacy-store.ts"
-   [ -f vendor/scripts/opsx-legacy-store.ts ] && OPSX_CLI="vendor/scripts/opsx-legacy-store.ts"
-   OPSX_LIST=$(node "$OPSX_CLI" --repo-root "$PWD") || exit 1
-   PARKED=$(printf '%s' "$OPSX_LIST" | node -e '
-     let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
-       const store=JSON.parse(s);
-       if(!store || !["available","missing"].includes(store.status)){
-         console.error("Legacy inventory incomplete: "+(store?.status??"unknown"));process.exit(1);
-       }
-       console.log(store.parked.map(x=>x.change_id).sort().join("\n"));
-     });
-   ') || exit 1
-   if [ -n "$PARKED" ]; then
-     EXCLUDED=$(comm -12 <(echo "$CHANGES") <(echo "$PARKED"))
-     CHANGES=$(comm -23 <(echo "$CHANGES") <(echo "$PARKED"))
-     [ -n "$EXCLUDED" ] && echo "⏭️ 0-Archive-Coupling 排除 parked change：$(echo "$EXCLUDED" | tr '\n' ' ')（deletion 是 spectra park 副作用）"
-   fi
-   ```
-
-   結果為空 → 輸出 `⏭️ 0-Archive-Coupling 跳過（無 spectra change staged-delete 或殘留）`，進入 Step 0。
-
-   > **parked ≠ 殘骸（hard rule）**：本 gate 只抓 partial `/spectra-archive` state。一個 change
-   > 同時出現在 deletion 清單與中立 reader 的 `legacy_store.parked` 時，**MUST** 判為 park 副作用並排除，
-   > **NEVER** 對它報 `MISSING_ARCHIVE_DIR` —— parked change 本來就不該有 archive dir。
-
-3. 對每個 change `<X>` 驗證**兩條件**：
-
-   **條件 A — Archive directory 存在**：
-   ```bash
-   ARCH=$(find openspec/changes/archive -maxdepth 1 -type d -name "*${X}" 2>/dev/null | head -1)
-   # 要求哪幾個檔同樣依 profile 判（同 B 的 script，同一張表）：`opsx-v2` 的 archive 目錄
-   # 一樣沒有 proposal.md，寫死兩檔會在 B 修好之後、於第一次 opsx-v2 archive 原樣再犯一次。
-   [ -n "$ARCH" ] && node "$PARTIAL_SCAN" --check "$X" "$ARCH"
-   ```
-   失敗 → blocker `MISSING_ARCHIVE_DIR`，記下 `<X>`。
-
-   **條件 B — Spec delta-sync 完整**（僅對 HEAD 內 `changes/<X>/specs/<cap>/` 存在的 cap 套用）：
-   ```bash
-   # 注意 trailing / — 沒加會回該目錄本身（一個 entry "specs"），加了才列子目錄
-   for cap_path in $(git ls-tree -d --name-only HEAD "openspec/changes/<X>/specs/" 2>/dev/null); do
-     cap=$(basename "$cap_path")
-     # 該 cap 的 spec.md 在 openspec/specs/ 必須有 staged modification
-     if ! git diff --cached --name-only -- "openspec/specs/$cap/spec.md" | grep -q . ; then
-       # 例外：若 openspec/specs/$cap/ 不存在於 HEAD（純新 cap），untracked staging 也算（git status --porcelain）
-       if ! git status --porcelain "openspec/specs/$cap/spec.md" 2>/dev/null | grep -qE '^A |^M |^\?\?'; then
-         echo "BLOCKER: $X cap=$cap spec delta-sync missing"
-       fi
-     fi
-   done
-   ```
-   任一 cap 失敗 → blocker `MISSING_SPEC_DELTA`，記下 `<X>` + cap list。
-
-   **trailing slash hard rule**：`git ls-tree -d --name-only HEAD <dir-path>` 不加 trailing `/` 時返回該 dir 本身（一個 entry，等同 `ls -ld`）；加 `/` 才會列出子目錄（等同 `ls -d <dir>/*`）。沒加 → `cap_path="openspec/changes/<X>/specs"` → `cap="specs"` → 查 `openspec/specs/specs/spec.md` 永遠 missing → 任何 change 永遠 BLOCK（false positive）。詳見 `docs/pitfalls/2026-05-24-spectra-archive-interrupted-leaves-partial-state.md` § Why slipped past tests。
-
-4. **blocker list 非空時**：
-
-   1. **MUST** 依 [runtime-lifecycle.md](runtime-lifecycle.md)「背景工作與退出」收回本 ceremony 的工作，帶原 tuple 與 owner token 執行 release；無法確認停止的寫入工作須保留鎖與 handle。
-
-   2. 印出 blocker 報告（每條 change 列 `MISSING_ARCHIVE_DIR` / `MISSING_SPEC_DELTA <cap list>`）+ recovery hint：
-
-      ```text
-      ⛔ 0-Archive-Coupling 失敗 — partial /spectra-archive state detected
-
-        <X>: MISSING_ARCHIVE_DIR (archive/YYYY-MM-DD-<X>/ 不存在)
-        <Y>: MISSING_SPEC_DELTA (caps: burr-removal-workflow, focused-measurement-ui)
-
-      可能成因：
-        - /spectra-archive 跑到一半中斷（context out / shell bomb / user 切到別 task）
-        - wt-helper merge-back stash 把 spec delta 收進 wt-merge-block/* stash 後沒人 reconcile
-
-      Recovery（對每個失敗 change <X>）：
-        DATE=$(date +%Y-%m-%d)
-        SRC="openspec/changes/<X>"
-        DEST="openspec/changes/archive/${DATE}-<X>"
-        mkdir -p "$DEST/specs"
-        git ls-tree -d --name-only HEAD "$SRC/specs/" 2>/dev/null \
-          | xargs -n1 basename \
-          | xargs -I{} mkdir -p "$DEST/specs/{}"
-        for f in $(git ls-tree -r --name-only HEAD "$SRC" | sed "s|^$SRC/||"); do
-          git show "HEAD:$SRC/$f" > "$DEST/$f"
-        done
-
-      若 spec delta 在 stash 內：
-        git stash list | grep wt-merge-block
-        git stash show 'stash@{N}' --name-only | grep '^openspec/specs/'
-        git checkout 'stash@{N}' -- openspec/specs/<cap>/spec.md
-        # 確認後 git stash drop 'stash@{N}'
-
-      Recovery 完成後重跑 /commit。
-      ```
-
-   3. **NEVER** 自動修補（任何 mkdir / git show / stash extract 操作）— recovery 必須由 user 看完訊息決定（避免主線誤判 partial state、做出錯誤恢復）
-
-5. blocker list 空 → 輸出 `✅ 0-Archive-Coupling 通過`，進入 Step 0。
-
-### 禁止項
-
-- **NEVER** 把 `main` / `master` 以外的 branch 判進 gate 範圍
-- **NEVER** 接受 `$ARGUMENTS` skip / ignore / override 旗標
-- **NEVER** 自行 `git restore --staged` 把 staged-deletes 退掉「敷衍 gate」— 那會掩蓋 in-flight archive state
-- **NEVER** 自行 `mkdir + git show > file` 補建 archive dir — recovery 必由 user 決定（archive dir naming 含日期、是否該補 / partial 是否該 abort 都是判斷題）
-- **NEVER** 把缺 archive dir 包裝成「user 早就 archive 過了，只是 archive dir 被別 session 清掉」— 沒 evidence 不要編造解釋
-- **NEVER** 把整批 `openspec/changes/<X>/**` staged-deletes 用 `git rm` 重來 — 不解決問題，且會多一輪 staging churn
+- **NEVER** 把 withheld 工作的 carrier 併進別的 group 帶出去 —— pathspec 交集唯一的繞法就是換個 group 名字；`intersect` 對每個 group 都跑，不看 group 叫什麼
+- **NEVER** 因為某個 group `intersect` exit 0 就省掉 step 5 的 auto-triage —— 放行是 group 的事，triage 是工作的事，兩者不互相抵銷
+- **NEVER** 用不帶 `--only` 的 `git commit -a` / `git commit` 代替逐 group commit 來「一次過」—— `pathspec-empty` 就是為這一步設的，它恆擋；`--only -- .` / `-- tasks` / glob / `:/` / 絕對路徑是同一件事的五種拼法，`intersect` 對它們一律回 exit 1
 
 ---
 
@@ -662,7 +506,7 @@ pnpm run doctor
 
 Doctor health score < 100 或 exit code ≠ 0 → **MUST block commit**，修復後重跑直到 health score 100/100 + 0 warnings + exit 0。**即使 warning 是既有、非本次 diff 引入**也必須修——每次 /commit 順手把既有 doctor warning 修掉，保持零警告 baseline。典型修法：移除 dead imports、修正 re-export 路徑、打斷 import cycles、套用 `readValidatedBody` 取代 raw body read。**NEVER** 以「非我引入」「既有 debt」為由跳過 doctor warning — 0-C gate 不區分新舊，一律全綠。
 
-> **oxfmt batched false-positive**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅但 single-file `vp fmt --check <path>` 通過，是 batched bug 不是 format issue — **先**跑一次 `pnpm format`（vp fmt --write）再重跑 check 通常就過。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（`.cursor/rules/` / `AGENTS.md` / `AGENTS.md` / spectra change markdown）試圖讓 oxfmt 滿意 — 那是 governance violation。clade 中央倉 release flow 已在 `scripts/publish.ts` 主流程加 stable fmt pre-stage（兩輪 `vp fmt --write` + `vp fmt --check`），consumer 端 commit 流程不需再背 workaround SOP。詳見 `docs/pitfalls/2026-05-18-oxfmt-batched-check-false-positive.md`。
+> **oxfmt batched false-positive**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅但 single-file `vp fmt --check <path>` 通過，是 batched bug 不是 format issue — **先**跑一次 `pnpm format`（vp fmt --write）再重跑 check 通常就過。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（`.cursor/rules/` / `AGENTS.md` / `AGENTS.md` / `.clade/vendor/**`）試圖讓 oxfmt 滿意 — 那是 governance violation。clade 中央倉 release flow 已在 `scripts/publish.ts` 主流程加 stable fmt pre-stage（兩輪 `vp fmt --write` + `vp fmt --check`），consumer 端 commit 流程不需再背 workaround SOP。詳見 `docs/pitfalls/2026-05-18-oxfmt-batched-check-false-positive.md`。
 
 失敗時進入 loop：修復 → `pnpm format`（裸打 `vp fmt` 必須加 `--ignore-path .oxfmtignore`） → 重跑上述步驟 → 直到全綠。loop 的執行者依下方「fix loop 的 pi offload」規則決定（**預設背景 pi**；例外才主線直修）。
 

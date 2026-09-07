@@ -3,7 +3,7 @@
 
 <!-- clade-targets: claude,codex,cursor -->
 
-`/design health [scope]` 的權威方法論。此模式退一步做**整個 consumer / 子系統尺度**的全棧體檢，產出排序後的重構 roadmap，把最高優先 wave funnel 進 `/spectra-propose`。**只診斷 + 提計畫 + propose，不自動改 code**（落地走 spectra-apply）。
+`/design health [scope]` 的權威方法論。此模式退一步做**整個 consumer / 子系統尺度**的全棧體檢，產出排序後的重構 roadmap，把最高優先 wave funnel 進 `/specify`。**只診斷 + 提計畫 + 開 plan package，不自動改 code**（落地走 `/implement`）。
 
 此模式在 **consumer session 內**跑（clade 只 own 方法論並散播；不由 clade 主線代 consumer 執行）。
 
@@ -102,7 +102,7 @@ Trigger 用語：「健康檢查 / 體檢 / 重構評估 / 技術債盤點 / 全
 - Raise：N+1 前端 fetch、巨大 bundle、阻塞 render、無 image/font 優化、animation jank。
 
 ### D7 — 安全
-- **工具**：`/security-review` / `spectra-audit` 角度掃 dangerous default / type confusion / silent failure。
+- **工具**：`/security-review` 角度掃 dangerous default / type confusion / silent failure。
 - **及格**：有登入、沒明顯洞。**卓越**：無 dangerous default、input validation 在邊界、無 secret 外洩（查 Notion 取 token，非 hardcode）、CSP/headers 到位、授權在資料層。
 - Raise：secret 進 repo、缺 input validation、RLS/授權只靠 UI、silent failure 吞安全錯、CSP 缺或過寬。
 
@@ -126,9 +126,9 @@ Trigger 用語：「健康檢查 / 體檢 / 重構評估 / 技術債盤點 / 全
 
 1. 呈報 **Deep Health Report + 重構 roadmap** 給 user。
 2. **讓 user 挑**最高優先 wave——開 Health wave 決策頁（[decision-page.md](../decision-page.md) § Health wave）。**NEVER** 「用 harness 內建的問答工具或直接問」。
-3. 對選定 wave 跑 **`/spectra-propose`** → 產生 `openspec/changes/<name>/`（proposal + tasks + specs）。brief 帶入該 wave 的 findings + file:line 證據 + 「卓越 delta」驗收標準。
+3. 對選定 wave 跑 **`/specify`** → 產生 `specs/plans/NNN-<slug>/`（spec + checklists + truth-delta）。brief 帶入該 wave 的 findings + file:line 證據 + 「卓越 delta」驗收標準。
 4. **多 wave**：propose 第一個；其餘 wave 登 `ROADMAP.md`（Next Moves）或 `docs/tech-debt.md`（TD-NNN），不一次開一堆 change。
-5. **Persist report**：寫 `docs/health-audit-<YYYY-MM-DD>.md`（consumer 端）。與 Step 6 spectra `design-review.md` 邊界分清：health report 是全棧體檢快照；design-review.md 是單一 change 的 UI deliverable — 兩者並存，health report 可被 propose 出來的 change 引用。
+5. **Persist report**：寫 `docs/health-audit-<YYYY-MM-DD>.md`（consumer 端）。與 Step 6 的 `design-review.md` 邊界分清：health report 是全棧體檢快照；design-review.md 是單一 work item 的 UI deliverable — 兩者並存，health report 可被 propose 出來的 change 引用。
 
 ---
 
@@ -159,7 +159,7 @@ Date: YYYY-MM-DD ｜ Register: brand | product ｜ Bar: staff-level（苛刻）
 **Wave 3 — <主題>**｜...
 
 ### Propose
-- 建議先 propose：**Wave 1**（跑 `/spectra-propose`）
+- 建議先開需求：**Wave 1**（跑 `/specify`）
 - 其餘：Wave 2/3 登 ROADMAP / tech-debt
 
 ### 已納入既有真相層
@@ -171,7 +171,7 @@ Date: YYYY-MM-DD ｜ Register: brand | product ｜ Bar: staff-level（苛刻）
 ## 7. Guardrails
 
 - **深但不 boil-the-ocean**：每維度 cap top findings（依 Impact 排序），長尾登 tech-debt，不在 report 傾倒全部。
-- **只診斷 + propose，不改 code**：與 /design 其他模式一致；重構落地一律走 `/spectra-propose` → `/spectra-apply`。
+- **只診斷 + 開需求，不改 code**：與 /design 其他模式一致；重構落地一律走 `/specify` → `/tasks` → `/implement`。
 - **codebase-memory-mcp 優先**：深度來自 graph query，不是 grep 整個 repo。graph 未建先 `index_repository`。
 - **consumer 自治**：此模式在 consumer 自家 session 跑；若 user 在 clade home，clade 主線**不**代 consumer 執行體檢（除非 user 明確指名授權，per `clade-role-and-todo-discipline` § cross-boundary authorization）。
 - **苛刻但可執行**：每個 finding 必帶 file:line 證據 + 修法方向，不做無法落地的空泛批評。

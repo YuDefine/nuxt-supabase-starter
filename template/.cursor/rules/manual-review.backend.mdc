@@ -33,9 +33,9 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 
 依 item 的 kind marker 走不同 flow。**MUST** 覆蓋 verify channels、`[review:ui]`、`[discuss]` — 一個 change 的 `## 人工檢查` 區塊可同時包含多種 kind 的 items。
 
-### `[verify:*]` flow（spectra-apply Step 8a Verify Channel Pass）
+### `[verify:*]` flow（`/implement` 收尾的 Verify Channel Pass）
 
-tasks.md 有未勾 `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / multi-marker items 時，spectra-apply Step 8a **MUST** 依 channel 分流處理。Cookbook 與範本見 `vendor/snippets/verify-channels/README.md`。
+tasks 檔有未勾 `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / multi-marker items 時，`/implement` 收尾 **MUST** 依 channel 分流處理**每一條**，不是只跑最後一條。Cookbook 與範本見 `vendor/snippets/verify-channels/README.md`。
 
 #### `[verify:e2e]` channel
 
@@ -104,7 +104,7 @@ Verify channel baseline 是 consumer 端**已預先 ready** 的 codebase 層長�
 | `verify:api` | `__test-login` 或等價 session bypass route，可讓 curl / ofetch 建立 role session |
 | `verify:ui` | canonical seed data 覆蓋 final-state URL 所需 entity，**且該 fixture 在 verify 連的 dev DB 實際可查得到**——remote db-runtime（非 `supabase-local`）的 `seed.sql` 檔有 ≠ dev DB 有，見下方 § Seed-file ≠ dev-DB |
 
-**Why**：baseline 維護不是任何單一 spectra change 的臨時工作。每次 verify dispatch 才問 user 或讓 agent 補 seed，會把長期 codebase baseline 拖進錯誤時機，且會製造 seed.sql source-of-truth 漂移。
+**Why**：baseline 維護不是任何單一 work item 的臨時工作。每次 verify dispatch 才問 user 或讓 agent 補 seed，會把長期 codebase baseline 拖進錯誤時機，且會製造 seed.sql source-of-truth 漂移。
 
 **Agent 端對應行為**：target visual verifier verify mode 撞 baseline 缺（dev-login route 不存在 / seed 缺 entity / known URL 只能呈現空資料）屬 Fail-Fast UNCERTAIN；agent **NEVER** 補 seed、patch auth、或升級成 mutation runner。
 
@@ -219,10 +219,10 @@ tasks.md 仍有未勾 `[review:ui]` 項時，第一動作 **MUST** 是引導使�
 
 #### review-gui pre-flight warning
 
-`pnpm review:ui` 渲染 `[review:ui]` / `[verify:ui]` item 前會 client-side 偵測 Pre-Review Data Readiness hard rule 違反（模糊指代 / 缺 UID / 缺 URL / multi-step 未拆）。Patterns 來自 `vendor/snippets/manual-review-enforcement/patterns.json`（與 `scripts/spectra-advanced/post-propose-manual-review-check.sh` 共用 single source-of-truth）。
+`pnpm review:ui` 渲染 `[review:ui]` / `[verify:ui]` item 前會 client-side 偵測 Pre-Review Data Readiness hard rule 違反（模糊指代 / 缺 UID / 缺 URL / multi-step 未拆）。Patterns 來自 `vendor/snippets/manual-review-enforcement/patterns.json`（與 `vendor/scripts/manual-review-check.sh` 共用 single source-of-truth）。
 
-- 看到 amber warning banner → 該 item 在 propose 階段沒被 hook 攔到（hook 漏網或被 bypass），建議跑 `/spectra-ingest` 補上 inline sample / scoped sub-items
-- Banner 列出 hit pattern 與 manual-review.md sub-section anchor，並提示「建議跑 /spectra-ingest 補上」
+- 看到 amber warning banner → 該 item 寫入時沒被 pattern check 攔到（漏網或被 bypass），直接改 tasks 檔補上 inline sample / scoped sub-items，改完重跑 `manual-review-check.sh`
+- Banner 列出 hit pattern 與 manual-review.md sub-section anchor，並提示要補什麼
 - Banner **non-blocking**：user 仍可 OK / Issue / SKIP（warning 不擋住操作）
 - Banner 用 amber 色，跟 verify channel evidence missing 的 red banner 區分
 
@@ -232,6 +232,6 @@ tasks.md 仍有未勾 `[review:ui]` 項時，第一動作 **MUST** 是引導使�
 
 ### `[discuss]` flow
 
-`[discuss]` items 由 `/spectra-archive` Step 2.5 Walkthrough 觸發；主線 session owner 主動準備 evidence（含 backend grep / query / SSH / curl / migration check 結果）→ 使用者明確 OK / Issue / Skip / Defer。
+`[discuss]` items 由交付前收尾 walkthrough 觸發（[[manual-review]] § `[discuss]` walkthrough）；主線 session owner 主動準備 evidence（含 backend grep / query / SSH / curl / migration check 結果）→ 使用者明確 OK / Issue / Skip / Defer。
 
-完整 spec（Defer-to-HANDOFF schema、Resume mode、HANDOFF.md `## Deferred discuss items` HTML marker schema、混合 kind change 順序）：詳見 [[manual-review.discuss]]。
+完整 spec（七步 walkthrough、Defer-to-HANDOFF schema、`## Deferred discuss items` HTML marker schema、混合 kind 的執行順序）：詳見 [[manual-review]] § `[discuss]` walkthrough。

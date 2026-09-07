@@ -1,6 +1,6 @@
 ---
 name: work-loop
-description: "Use when 使用者要把待辦自主推進（「自動推」「把待辦跑完」「無人值守推進」）——spectra change、HANDOFF、tech-debt、ROADMAP 全在 scope 內，或 runner.sh --unattended fire。NOT for 單次盤點交接（用 /handoff）、逐項拍板（用 /goal）、interval 盲跑（用 /loop）。"
+description: "Use when 使用者要把待辦自主推進（「自動推」「把待辦跑完」「無人值守推進」）——plan package、tasks 檔、HANDOFF、tech-debt、ROADMAP 全在 scope 內，或 runner.sh --unattended fire。NOT for 單次盤點交接（用 /handoff）、逐項拍板（用 /goal）、interval 盲跑（用 /loop）。"
 metadata:
   author: clade
   version: "3.1"
@@ -24,7 +24,7 @@ Local edits will be reverted by the next sync.
 
 本 skill 是 loop 四型分類中的 **proactive loop**——trigger 交給 `runner.sh` 或 `/loop`，工作清單交給 scan 自己找。四型分類與通用方法論見 cookbook `vendor/snippets/loop-engineering/`。
 
-**沒有「走哪一支」的判定。** repo 有沒有 `openspec/`、待辦是 spectra change 還是 tech-debt 條目，都由 Step 2 的 scan 結果決定路由——無 `openspec/` 的 repo 掃出來的 spectra 段就是空的，**這是正常的，不是 scan 失敗**。
+**沒有「走哪一支」的判定。** repo 有沒有 `specs/plans/`、待辦是 plan package 還是 tech-debt 條目，都由 Step 2 的 scan 結果決定路由——沒有 `specs/plans/` 的 repo 掃出來的 `plans` 段就是空的，**這是正常的，不是 scan 失敗**。
 
 核心 contract：**每次被叫起來，把待辦盡可能推到「已完成」「可驗收」或「已備妥決策選項」狀態。能自主決策的自主完成；必須人拍板的 NEVER 直接 skip——MUST 走 § Decision packaging 推進到「一句話就能答」的狀態。**
 
@@ -54,7 +54,7 @@ $ARGUMENTS
 - `--min-wakeup-seconds <n>`（`runner.sh` 每輪固定帶，預設 1200；`WORK_LOOP_MIN_WAKEUP_SECONDS` 是機械補強）：本輪**每一個** `ScheduleWakeup` / `Monitor` 的 interval **MUST ≥ n**。帶了它就以它為準，**NEVER** 因為「這次只等一下下」用更短的值——短輪詢買不到 notification 沒給的東西（Step 0 § (d) 已逐字禁止輪詢進度）。不帶時各處原有的 interval 建議照舊。
 - 使用者說「自動推」「把待辦跑完」「持續做」「不要停」「無人值守」→ 等同要求 continuous（見下）。
 
-**沒有 `--turbo`。** 非 spectra 待辦（HANDOFF / tech-debt / ROADMAP）是**預設 scope**，不需要任何 flag 開啟。
+**沒有 `--turbo`。** 非 plan package 的待辦（HANDOFF / tech-debt / ROADMAP）是**預設 scope**，不需要任何 flag 開啟。
 
 ### Iron Law：runner child 永遠只執行單輪
 
@@ -411,7 +411,7 @@ Foreground 路徑**不**寫 `inFlight`、不建 background task、也不 arm kee
 # runner.sh --allowedTools 放行的 Bash invocation（scan helper；closedBloat 另放行 rotate-closed-bloat.ts）。命令以 cwd 推導 repo，故不得把 repo
 # path（尤其含空白、引號或換行）插進 prompt / allowance。非 runner child 才用下列等價形狀。
 node "$HOME/offline/clade/vendor/scripts/work-loop-scan.ts"
-# 需求與 legacy 暫存來源由下方 OPSX history list 讀取。
+# 需求來源由下方 § 需求來源查詢 的 carrier 掃描與 flow status 讀取。
 ```
 
 helper 在單一 Node process 內完成 handoff-scan → repo-local 同目錄 temp → JSON parse → git common dir owner
@@ -426,16 +426,16 @@ helper 在單一 Node process 內完成 handoff-scan → repo-local 同目錄 te
 
 ### 需求來源查詢
 
-本輪 `scan-latest.json` 的 `opsx` 欄位已由 scan helper 呼叫共同 `listOpsxHistory` 取得，後續沿用這份 inventory。runner child 不另起 Bash list 命令。互動模式單獨查詢時可執行 `node <opsx-cli> list --repo-root <repo> --json`；clade CLI 是 `vendor/scripts/opsx-control.ts`，consumer 是 `.clade/vendor/scripts/opsx-control.ts`。
+本輪 `scan-latest.json` 的 `plans` 欄位已由 scan helper 取得（掃 `specs/plans/*/tasks.md` 與 `tasks/*.md` 的未勾項，並對照 `flow status --json` 的卡片狀態），後續沿用這份 inventory。runner child 不另起 Bash list 命令。互動模式單獨查詢時可執行 `node vendor/scripts/flow/flow.ts status --json`（consumer 是 `.clade/vendor/scripts/flow/flow.ts`）。
 
-`entries`／`sources` 提供目前需求與明確 binding；`legacy_changes` 提供 SQLite 暫存來源。`legacy_store.status=missing` 表示此 repo 沒有該 store；`unsupported`／`corrupt` 表示來源讀取失敗，記錄具體錯誤並走補件，不能當作空清單。`truncated=true` 表示清單未完整，先處理可讀範圍與讀取缺口，不能宣告存量清零。
+`plans` 提供 carrier 路徑、slug 與對應 work id；`flow` 卡提供 outcome 與 stall 狀態。掃不到任何 carrier 表示此 repo 沒有進行中的結構化工作；讀取失敗（JSON 解析不了、路徑權限）**MUST** 記錄具體錯誤並走補件，**NEVER** 當作空清單。
 
 ### 單一 candidate list，兩種 source
 
 | source | 來自 | 進 Step 3 走哪條 |
 | --- | --- | --- |
-| `spectra` | OPSX list 的 `entries`／`sources`／`legacy_changes`（同一來源依明確 ID 去重）；review readiness 只補驗收資訊 | § 3.1a bucket 路由 |
-| `handoff` / `techdebt` / `roadmap` | `HANDOFF.md` 待辦段、`techDebtHygiene.raw`、`openspec/ROADMAP.md` | § 3.1b 分類表 |
+| `plans` | `specs/plans/*/tasks.md` 與 `tasks/*.md` 的未勾項（依 carrier 路徑去重）；review readiness 只補驗收資訊 | § 3.1a bucket 路由 |
+| `handoff` / `techdebt` / `roadmap` | `HANDOFF.md` 待辦段、`techDebtHygiene.raw`、repo 根目錄 `ROADMAP.md` | § 3.1b 分類表 |
 
 - **`HANDOFF.md`** —— 掃 `## In Progress` / `## Blocked` / `## Next Steps` / `## Outstanding` / `## Follow-up`（heading 名因 consumer 而異，靠 `##` / `###` 辨識）。`- [ ]` 未勾項 = 一個 candidate；`- [x]` 跳過；純文字段落視為單一 candidate
 - **`docs/tech-debt.md`** —— **NEVER 整讀主檔**（fleet 各家主檔已在數百 KB 量級，整讀一次吃掉大半預算；當前值跑下方 `wc -c`）。從 `techDebtHygiene.raw` 取，優先序**四層**：`landed-pending-verification`（驗收）→ `stale`（>60d）→ `aging`（>14d）→ 其他 `open`。需要細節時用 `raw` 的 `lineNo` **定點 Read**（`offset` + `limit`）
@@ -455,10 +455,10 @@ helper 在單一 Node process 內完成 handoff-scan → repo-local 同目錄 te
   ```bash
   wc -c docs/tech-debt.md   # 上面兩個數字的來源。主檔隨 rotate / 新增增減，複跑取當前值
   ```
-- **`openspec/ROADMAP.md`** `## Next Moves` 的 `###` 子段（存在時）
+- **repo 根目錄 `ROADMAP.md`** `## Next Moves` 的 `###` 子段（存在時）
 - **`worktreeStash`** —— `mergedToMain: false` 的 wt 與每一筆 stash
 
-**Consumer filter**：只處理 `consumerId` = 當前 repo 的 entries。**Spectra change association**：非 spectra source 的 candidate 若文字命中 active change name（word boundary match，非 substring）→ 改判為 `spectra` source 走 3.1a，避免降級成 ad-hoc brief 而丟失 phase 結構與 evidence 收集。細節見 [reference/non-spectra-dispatch.md](reference/non-spectra-dispatch.md) § Spectra change association。
+**Consumer filter**：只處理 `consumerId` = 當前 repo 的 entries。**Carrier association**：非 `plans` source 的 candidate 若文字命中某個 active carrier 的 slug（word boundary match，非 substring）→ 改判為 `plans` source 走 3.1a，避免降級成 ad-hoc brief 而丟失 phase 結構與 evidence 收集。細節見 [reference/non-plan-dispatch.md](reference/non-plan-dispatch.md) § Carrier association。
 
 **In-flight filter（防單 item 雙派）**：已有對應 worktree 的 item **不一定跳過**，先查 `.clade/claims/` 的 session claim 鮮度——active claim < 30min 才跳過；claim > 2h 或無 claim 視為可接手。**每一個** dispatch 前都要對照，不是只在開場檢查一次。
 
@@ -481,7 +481,7 @@ launcher 早就死了。分類之前先實跑一次，死掉的組直接標不�
 | dev-port | `node scripts/dev-session.ts status`（無此檔改 `dev-singleton.ts`） | exit 0 |
 | main | `node scripts/wt-helper.ts list`（**產地 clade home 在 `vendor/scripts/wt-helper.ts`** —— `scripts/` 是投影側路徑） | exit 0 |
 | 扇出 | 同上（`/wt` 靠 wt-helper 建 worktree） | exit 0 |
-| 需求 item 存在時 | `node <opsx-cli> list --repo-root <repo> --json` | exit 0、JSON 可解析；來源狀態依 Step 2 判讀 |
+| 需求 item 存在時 | `node vendor/scripts/flow/flow.ts status --json` | exit 0、JSON 可解析；來源狀態依 Step 2 判讀 |
 
 **非 0 的處置**（四步，缺一不可）：
 
@@ -531,26 +531,26 @@ launcher 早就死了。分類之前先實跑一次，死掉的組直接標不�
 
 **每一個** candidate 都 MUST 走完三步（3.1 分類 → 3.2 自主判定 → 3.3 分組），不是只對前幾條。
 
-### 3.1a 需求 source — OPSX 接續
+### 3.1a 需求 source — carrier 接續
 
-掃描的 `spectra` source 名稱是既有 scan 的分類鍵。每一筆需求依本表接續，執行入口統一為 `/opsx`。
+掃描的 `plans` source 名稱是既有 scan 的分類鍵。每一筆需求依本表接續，執行入口統一為 `/wt <slug>: /implement`。
 
 | 可觀察狀態 | 動作與出口 |
 | --- | --- |
-| canonical OPSX source 與 binding 完整 | `/opsx <change-id>`：inspect → 當前 instructions → materialize → 執行／證據 → project → inspect。依原本風險政策完成 BDD 與獨立審查。 |
-| legacy active／parked／stashed，尚無 supersedes 映射 | 先用 history 讀原件：磁碟來源帶 `--path <path>`；store 來源帶 `--legacy-change-id <id>`。依 `/opsx` 的 intent 流程保留 provenance、digest 與未完驗收，建立承接 source 後接續同一目標。讀不到原件則保留具體 blocker。 |
+| carrier 與 flow 卡都在、`tasks.md` 有未勾 phase | `/wt <slug>: /implement`：讀 carrier → 執行下一個未勾 phase → 收 evidence → 回寫 checkbox。依原本風險政策完成 BDD 與獨立審查。 |
+| carrier 在但沒有 flow 卡（開樹時沒帶 `--origin`） | 先 `flow open <slug> --origin tasks:<carrier 路徑>` 補卡並 `export CLADE_WORK_ID`，再照上一列接續。**NEVER** 為同一個 carrier 開第二張卡。 |
 | 有 feedback／stale evidence／待 agent 驗證或討論 | 先處理每一項 agent 可做的工作、提交當前 revision 收據並重新 project；全部清除後才能呈現待人驗收。 |
-| 當前 evidence 與人的 gate 全通過，任務包含歸檔 | 走 `/opsx` archive 判定；歸檔成功後依 checkout workflow 合回並走 `/commit`，產品碼與 metadata 一起落地，再回讀證據。 |
+| 當前 evidence 與人的 gate 全通過，任務包含收尾 | 標 `work.done`；依 checkout workflow 合回並走 `/commit`，產品碼與 carrier 一起落地，再回讀證據。 |
 | 實作或驗收受阻 | 先讀 [blocker-ledger.md](reference/blocker-ledger.md) 查表，再診斷並補件；需人裁決才走 Decision packaging。 |
-| 生成投影過期或格式錯誤 | 先讀 canonical source／validator 錯誤，以 OPSX project 重建；修正來源後重驗，不直接勾寫生成 tasks。 |
+| carrier 的 `## 人工檢查` 區格式錯誤 | 先跑 `manual-review-check.sh <slug>` 讀 violation，修 carrier 後重驗，**NEVER** 直接勾寫繞過。 |
 
 **MUST** 保留每一筆 legacy 未完需求，直到有可回讀的承接關係或明確處置。**NEVER** 呼叫 Spectra writer、unpark 或用修改歷史 checkbox 代替接續；歷史保存與需求完成是兩種結果。
 
-`ready` 只是聚合提示。仍有 feedback、stale evidence 或 agent 可處理項時，先修復並重驗，不能因 ready badge 把工作交回給人。`applyInProgress` 的大小或進度不構成略過理由，依 `/opsx` instructions 推進可執行步驟。
+`ready` 只是聚合提示。仍有 feedback、stale evidence 或 agent 可處理項時，先修復並重驗，不能因 ready badge 把工作交回給人。`applyInProgress` 的大小或進度不構成略過理由，依 carrier 的下一個未勾 phase 推進可執行步驟。
 
-### 3.1b 非 spectra source — 分類表
+### 3.1b 非 plan source — 分類表
 
-**MUST Read [reference/non-spectra-dispatch.md](reference/non-spectra-dispatch.md)** 取分類表（code task / investigation / blocked / 模糊）與 **skip 合法理由窮舉 3 條 + 7 條不合法藉口逐字實錄**。**NEVER** 自創第 4 條 skip 理由。
+**MUST Read [reference/non-plan-dispatch.md](reference/non-plan-dispatch.md)** 取分類表（code task / investigation / blocked / 模糊）與 **skip 合法理由窮舉 3 條 + 7 條不合法藉口逐字實錄**。**NEVER** 自創第 4 條 skip 理由。
 
 分類為 blocked 的 candidate 與 3.1a 的受阻需求走同一條路：**先過 [blocker-ledger.md](reference/blocker-ledger.md) 三步查表**，沒命中才逐條診斷。
 
@@ -562,7 +562,7 @@ launcher 早就死了。分類之前先實跑一次，死掉的組直接標不�
 
 ### 3.3 分組
 
-**MUST Read [reference/dispatch-topology.md](reference/dispatch-topology.md)**。四組併發契約（扇出 ≤4 / dev-port 1 / main 1 / 主線即時）對**兩種 source 一視同仁**，**每一個** item 都要落進其中一組。spectra item 與非 spectra item 共用同一個扇出上限，不是各自一套。
+**MUST Read [reference/dispatch-topology.md](reference/dispatch-topology.md)**。四組併發契約（扇出 ≤4 / dev-port 1 / main 1 / 主線即時）對**兩種 source 一視同仁**，**每一個** item 都要落進其中一組。`plans` item 與非 `plans` item 共用同一個扇出上限，不是各自一套。
 
 ---
 
@@ -599,7 +599,7 @@ runner.sh 另有 mechanical fail-closed：起跑前、每次 child launch 前，
 - 要改 tracked code → `/wt <slug>: <brief>`（扇出組，**≤4 in-flight**）
   - 這個 4 綁的 predicate 是「**每個 worker 各自 worktree**」——`/wt` 保證這件事，所以彼此不搶同一棵樹。
     **NEVER** 把 4 套到共享 working tree 的 dispatch 上（那條上限是 2，見 § dispatch 的三個不准）。
-- spectra change 的實作 → `/wt <change-name>: /opsx <change-id>`
+- plan package 的實作 → `/wt <slug>: /implement`
 - 純唯讀調查 / 單檔文字改動 → 主線即時組（read-heavy 者先過 [dispatch-topology.md](reference/dispatch-topology.md) § 主線即時組的 pre-scan 前置判定派 pi，主線消費 report）
 - 記進 state 的 `inFlight`，`subagentsSpawned` +1
 
@@ -614,7 +614,7 @@ runner.sh 另有 mechanical fail-closed：起跑前、每次 child launch 前，
 
 **每一個** `/wt` brief **MUST 逐字內嵌** [guardrails.md](reference/guardrails.md) § C 的護欄區塊。subagent 是 fresh context，天然免疫主線 compaction——把安全執行面下沉到 subagent 是本設計對 governance decay 最可靠的一道。**NEVER** 只寫「照護欄做」這種 by-reference 指示。
 
-**NEVER 因 size / progress 跳過 dispatch**：`applyInProgress` 不管進度 0% 或 change 看起來多大，MUST dispatch——`/opsx` 依當前 instructions 管理步驟、pause 與 blocker。「需要完整 session」「不適合 loop」都是違規。
+**NEVER 因 size / progress 跳過 dispatch**：`applyInProgress` 不管進度 0% 或工作看起來多大，MUST dispatch——`/implement` 依 carrier 的 phase 結構管理步驟、pause 與 blocker。「需要完整 session」「不適合 loop」都是違規。
 
 ### 4b. 本輪承載不了的 item → 出口分流（dispatch 是 default，登記是付費 fallback）
 
@@ -717,7 +717,7 @@ node ~/offline/clade/vendor/scripts/work-loop-verdict.ts \
 **NEVER 自己算 sha256。** 手算的 fingerprint 每一輪的輸入集合都由當輪的模型現場決定，
 於是「這一輪沒進度」與「這一輪算法跟上一輪不一樣」事後不可區分——而 no-progress 停止條件
 正是讀它。輸入集合（td token、handoff heading slug、task 勾選狀態、scan check 狀態、
-spectra bucket、per-item failStreak）的 SoT 是 `computeFingerprint()`，**NEVER** 在這裡另列一份。
+`plans` bucket、per-item failStreak）的 SoT 是 `computeFingerprint()`，**NEVER** 在這裡另列一份。
 
 ### 6.2 停止條件（任一成立即停；**每一條**都 MUST 跑 `work-loop-lock.ts release --session <id>`）
 
@@ -788,7 +788,7 @@ node ~/offline/clade/vendor/scripts/work-loop-verdict.ts \
 
 ### 7.1 路徑 invariant
 
-`HANDOFF.md` / `docs/tech-debt.md` / `openspec/ROADMAP.md` **MUST** 寫到 main worktree absolute path——用 `dirname "$(git rev-parse --path-format=absolute --git-common-dir)"` 解。**禁止**用 cwd-相對路徑寫這幾個檔（在 linked worktree 內跑會寫進 worktree 副本，下一輪讀到舊版）。
+`HANDOFF.md` / `docs/tech-debt.md` / `ROADMAP.md` **MUST** 寫到 main worktree absolute path——用 `dirname "$(git rev-parse --path-format=absolute --git-common-dir)"` 解。**禁止**用 cwd-相對路徑寫這幾個檔（在 linked worktree 內跑會寫進 worktree 副本，下一輪讀到舊版）。
 
 ### 7.2 HANDOFF 的一個段
 
@@ -901,7 +901,7 @@ git show --stat HEAD | tail -3   # 驗 scope；出現 .ts/.vue/.sql 等 → STOP
 | [decision-drain.md](reference/decision-drain.md) | **每一輪**（Step 2.7，hard rule） |
 | [blocker-evaluation.md](reference/blocker-evaluation.md) | 需求或文件待辦的 blocker 需要診斷（Step 3.1a） |
 | [blocker-ledger.md](reference/blocker-ledger.md) | **任一** blocked item 進評估之前（Step 3.1a 的**每一個** bucket／3.1b，不限 `applyBlocked`・`awaitingUserDecision` 兩列）、以及寫 `stoppedReason` 之前（Step 6.2） |
-| [non-spectra-dispatch.md](reference/non-spectra-dispatch.md) | 分類非 spectra candidate（Step 3.1b） |
+| [non-plan-dispatch.md](reference/non-plan-dispatch.md) | 分類非 plan candidate（Step 3.1b） |
 | [autonomy-predicate.md](reference/autonomy-predicate.md) | 判自主 / 做 packaging（Step 3.2 / 4b） |
 | [dispatch-topology.md](reference/dispatch-topology.md) | 分組（Step 3.3） |
 | [harvest.md](reference/harvest.md) | 每個 notification 到達時（Step 5） |
@@ -913,6 +913,6 @@ git show --stat HEAD | tail -3   # 驗 scope；出現 .ts/.vue/.sql 等 → STOP
 
 - `/handoff` —— 本 skill 不取代它。`park`（登記）仍由 `/handoff` 做；本 skill 自動化的是 `next` 的「盤點 → 推薦 → 執行」，並在 unattended 下把 `AskUserQuestion` 換成 packaging
 - `/goal` —— attended 姊妹：user 在場、要逐項拍板 dispatch 優先序時用它
-- `/opsx` —— 需求實作、驗證與歸檔入口，本 skill 只編排不介入其內部流程
+- `/implement` —— 需求實作與驗證入口，本 skill 只編排不介入其內部流程
 - `/wt` —— 所有 tracked code 改動的 dispatch 入口
 - `/loop`（內建）—— interval 盲跑某 prompt、stateless 無 verifier。「每 N 分鐘重跑 X」用它；「狀態驅動推進待辦」用本 skill

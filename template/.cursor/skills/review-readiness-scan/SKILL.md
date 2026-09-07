@@ -61,11 +61,11 @@ node vendor/scripts/review-gui.ts --scan
                                           "kinds": ["e2e", "api", "ui"] } ] } ],
   "buckets": {
     "ready": [ /* 可直接開 reviewUrl 給 user 做 GUI review */ ],
-    "readyForEvidence": [ /* apply 已接近完成，先跑 /spectra-apply Step 8a 補 evidence */ ],
+    "readyForEvidence": [ /* 實作已接近完成，先跑 Verify Channel Pass 補 evidence */ ],
     "applyInProgress": [ /* implementation 還沒完成，不該補 evidence */ ],
     "applyBlocked": [ /* impl 卡外部 blocker（@apply-blocked marker），交還 user，不要硬推 */ ],
     "healthCheckNeeded": [ /* manual-review pattern hits，先 ingest/fix tasks.md */ ],
-    "awaitArchiveWalkthrough": [ /* 只剩 [discuss]，跑 /spectra-archive Step 2.5 */ ],
+    "awaitArchiveWalkthrough": [ /* 只剩 [discuss]，走交付前收尾 walkthrough */ ],
     "awaitingUserDecision": [ /* Claude 已標 (awaiting-user-decision:)，等 user 商業拍板，不要硬推 */ ],
     "feedbackGiven": [ /* user 已標 issue 或 verify pending，交回 Claude 處理 */ ]
   }
@@ -100,18 +100,18 @@ HANDOFF.md 用 marker 包夾，每次重跑**覆蓋同一段**（不累積垃圾
 - `<changeKey>` — pending N · ⚠ N hits: UI_ITEM_NO_URL ×2, REVIEW_UI_BACKEND_ROUNDTRIP ×1 — `<reviewUrl>`
 - ...
 
-**(B) Verify-channel evidence missing** — `evidenceMissing.length > 0`，**跑 `/spectra-apply` Step 8a 補 evidence**：
+**(B) Verify-channel evidence missing** — `evidenceMissing.length > 0`，**跑 Verify Channel Pass 補 evidence**（[[manual-review.backend]] § `[verify:*]` flow）：
 
 - `<changeKey>` — pending N · ⚠ N item 缺 evidence (e2e ×2, api ×1, ui ×1) — `<reviewUrl>`
 - ...
 
 **(C) Apply 尚未完成 / feedback / archive walkthrough** — 依 `bucket` 分組列在同一 section 下，不要把這些 change 放進「可以開始檢查」：
 
-- `applyInProgress` → 繼續 `/spectra-apply <change>`，不要補 Step 8a evidence
+- `applyInProgress` → 繼續 `/wt <slug>: /implement`，不要先補 evidence
 - `applyBlocked` → impl 卡外部 blocker（`@apply-blocked` marker），ball in user，**不要**硬推；解 blocker 後移除 marker 回 applyInProgress
 - `feedbackGiven` → user 已在 GUI 留 issue 或 verify pending，交回 Claude 針對 issue 處理
 - `awaitingUserDecision` → Claude 已標 `(awaiting-user-decision:)`，等 user 商業拍板，ball in user，**不要**硬推
-- `awaitArchiveWalkthrough` → 跑 `/spectra-archive <change>` 觸發 Step 2.5 discuss walkthrough
+- `awaitArchiveWalkthrough` → 走交付前收尾 walkthrough（[[manual-review]] § `[discuss]` walkthrough）
 - `crossWtDirty` / `malformed` → 先修 worktree routing 或 tasks.md 格式
 <!-- END: review-readiness-scan -->
 ```
@@ -127,7 +127,7 @@ HANDOFF.md 用 marker 包夾，每次重跑**覆蓋同一段**（不累積垃圾
 
 - ❌ 不要刪 HANDOFF.md 其他段落（即使看起來過時）
 - ❌ 不要在 ready 段落 append 額外備註、推測 user 接下來該做什麼 — section 是純資料，主線判讀
-- ❌ 不要因為 hitsByCode 命中某個 code 就**自動修 tasks.md**（修法走 `/spectra-ingest`，由 user 拍板）
+- ❌ 不要因為 hitsByCode 命中某個 code 就**自動修 carrier**（修法由 user 拍板；動到規格回交 truth owner skill）
 
 ## Step 3 — 主線報告
 
@@ -142,16 +142,16 @@ HANDOFF.md updated（section: Manual Review Readiness）。
 Ready deep-links 已寫入 HANDOFF.md；需要 fix 的先看 bucket / hitsByCode 處理後再 rescan。
 ```
 
-**不要**主動跑 `/spectra-ingest`、不要主動修 tasks.md、不要推薦 schedule。User 拍板下一步。
+**不要**主動改規格、不要主動修 carrier、不要推薦 schedule。User 拍板下一步。
 
 ## 何時 NOT 觸發
 
 - 使用者只想跑單一 change 的人工檢查 → 主線自行從 clade home 啟動 `pnpm review`、確認 URL 可連線後給 deep-link，不需要 scan
-- 使用者問「現在有哪些 active change」這類純列表 → 用 `spectra list`，scan 是 readiness 評估不是 change 列表
-- consumer 沒有 `openspec/changes/` 目錄（非 spectra 專案）→ scan 會輸出空，回 user 「此專案沒有 openspec/changes/，跳過」
+- 使用者問「現在有哪些進行中的工作」這類純列表 → 用 `flow status --json`，scan 是 readiness 評估不是工作列表
+- consumer 沒有 `tasks/` 也沒有 `specs/plans/` → scan 會輸出空，回 user 「此專案沒有 work item carrier，跳過」
 
 ## 邊界與已知限制
 
-- Scan 只看 `openspec/changes/<name>/tasks.md` 的 `## 人工檢查` section，**不**讀 parked changes（spectra parked 那群會被排除）— 因為 parked 通常是暫存不在動的，readiness 評估無意義
+- Scan 只看 carrier（`tasks/<date>-<slug>.md` 或 `specs/plans/NNN-<slug>/tasks.md`）的 `## 人工檢查` section
 - hitsByCode 用的 pattern 規格存在 `vendor/snippets/manual-review-enforcement/patterns.json`，與 review-gui banner、`post-propose-manual-review-check.sh` 共用同一份 source-of-truth
 - 截圖資料夾數（screenshotTopicCount）**不**影響 readiness 判斷 — 截圖缺失屬於 GUI 內 banner（red verify-channel evidence-missing），不在 Pre-Review Data Readiness 範疇

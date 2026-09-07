@@ -69,12 +69,11 @@ WIP 確實阻礙本次工作時，使用 `commit.detail` 的三項 stash predica
 
 完成前置判定後，已觸發的 ceremony 直接繼續分組與品質檢查，不再請使用者重複觸發 `/commit`。
 
-## Step 0-MR / 0-Archive-Coupling: Branch Gates（main / master 限定，硬擋無 override）
+## Step 0-MR: Branch Gate（main / master 限定，硬擋無 override）
 
-兩道 gate 適用 `main` / `master` 與 helper 登記的 batch integration；其他 feature branch 才 skip。批次 scope 用 base→candidate（已正式 commit 的部分也包含），不能因 branch 名稱或 status 乾淨跳過：
+本 gate 適用 `main` / `master` 與 helper 登記的 batch integration；其他 feature branch 才 skip。批次 scope 用 base→candidate（已正式 commit 的部分也包含），不能因 branch 名稱或 status 乾淨跳過：
 
-- **0-MR 人工檢查 Gate**：本次 commit 觸及 in-progress spectra change 時觸發。觸發時 **MUST** 先完整讀 [gates.md](gates.md) § 0-MR 的判定流程、auto-triage 路由表與禁止項再繼續。判定粒度是 **pathspec 交集**：BLOCK change 只 withheld 自己的 `openspec/changes/<X>/**`，其餘 group 照常走 Step 3 / Step 4（gates.md § 0-MR step 6）。
-- **0-Archive-Coupling Partial Archive Gate**：本次 commit 有 spectra change staged-delete 時觸發。觸發時 **MUST** 先完整讀 [gates.md](gates.md) § 0-Archive-Coupling 的驗證流程、trailing slash hard rule 與禁止項再繼續。
+- **0-MR 人工檢查 Gate**：本次 commit 觸及進行中的 work item carrier（`tasks/<date>-<slug>.md` 或 `specs/plans/NNN-<slug>/tasks.md`）時觸發。觸發時 **MUST** 先完整讀 [gates.md](gates.md) § 0-MR 的判定流程、auto-triage 路由表與禁止項再繼續。判定粒度是 **pathspec 交集**：BLOCK 的工作只 withheld 自己 carrier 的路徑，其餘 group 照常走 Step 3 / Step 4（gates.md § 0-MR step 6）。
 
 ## Step 0: 品質檢查
 
@@ -100,7 +99,7 @@ simplify → fast-path 判定
 **Fast-path 判定**（同時滿足下列三條件才能跳過 pi review，任一不滿足都跑）：
 
 1. 整個 diff 行數（additions + deletions）< 20 行
-2. 改動限於 doc / config 類檔案：`*.md`、`*.json`（**除** `package.json` 的 `dependencies` / `devDependencies`）、`*.yml`、`*.yaml`、`.gitignore`、`HANDOFF.md`、`openspec/ROADMAP.md`
+2. 改動限於 doc / config 類檔案：`*.md`、`*.json`（**除** `package.json` 的 `dependencies` / `devDependencies`）、`*.yml`、`*.yaml`、`.gitignore`、`HANDOFF.md`、`ROADMAP.md`
 3. 無 sensitive 路徑（依 [`review-tiers.md`](references/review-tiers.md) Tier 3）：`**/migrations/**`、`**/auth/**`、`**/permission*`、`**/rls*`、`*.sql`、`**/*security*`
 
 任何 `.ts` / `.tsx` / `.vue` / `.mjs` / `.js` / `.sh` 變更（即使單行）都**不適用** fast-path —— 邏輯 bug 在小 diff 很常見，跨模型 review 仍有價值。
@@ -187,32 +186,7 @@ git diff --stat                 # 僅輔助看 tracked 改動規模；NEVER 當�
 
 - **Untracked 非 ignored 檔（`??`）一律納入分組**，通常自成獨立 `chore` group（除非語義明確屬於某 feat / fix group）
 - 看到 `??` 開頭的檔想加 `.gitignore` 消掉時 **STOP**：先問「這本來就該 ignore（build artifact / runtime state），還是我在逃避 commit？」逃避 commit 而 gitignore = 把該入庫的東西藏掉，方向反了（詳見 [[wip-orphan-recovery]] § 反射性 gitignore 禁令）
-- **0-MR withheld scope 內的路徑不進任何 group**（gates.md § 0-MR step 6 印出的 `openspec/changes/<X>/**`）：它們留在 working tree，Step 5-A 登記進 HANDOFF。這與下一條並列為「全部變更都要入庫」的兩個機械例外
-- **parked change 的 deletion 一律排除，不進任何 group**：
-
-  ```bash
-  OPSX_CLI="scripts/opsx-legacy-store.ts"
-  [ -f vendor/scripts/opsx-legacy-store.ts ] && OPSX_CLI="vendor/scripts/opsx-legacy-store.ts"
-  OPSX_LIST=$(node "$OPSX_CLI" --repo-root "$PWD") || exit 1
-  PARKED=$(printf '%s' "$OPSX_LIST" | node -e '
-    let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
-      const store=JSON.parse(s);
-      if(!store || !["available","missing"].includes(store.status)){
-        console.error("Legacy inventory incomplete: "+(store?.status??"unknown"));process.exit(1);
-      }
-      console.log(store.parked.map(x=>x.change_id).sort().join("\n"));
-    });
-  ') || exit 1
-  # 分組時對每個 parked <name>，跳過所有 `openspec/changes/<name>/` 底下的 D 條目
-  ```
-
-  `spectra park` 把 artifacts 從 disk 移進 `.git/spectra-app/spectra.db` blob，所以整批檔案會顯示成
-  deletion。那些檔**已經在 git 裡**（propose 收尾先 commit 才 park），把 deletion commit 出去等於
-  把剛落庫的 artifacts 從版本庫移除。接續由 `/opsx` 讀取原件並建立承接關係，原始暫存資料維持唯讀。
-
-  **NEVER** 把 parked change 的 deletion 當成「使用者刪掉了不要的檔」納入 group；**NEVER** 拿
-  「全部變更都要入庫」當理由收它們 —— 那條規則的目的是不遺漏 user WIP，而這批不是 WIP，是
-  工具的暫存搬移。判別方式是機械的：ID 在中立 reader 的 `legacy_store.parked` 裡就是。
+- **0-MR withheld scope 內的路徑不進任何 group**（gates.md § 0-MR step 6 印出的 carrier 路徑）：它們留在 working tree，Step 5-A 登記進 HANDOFF。這是「全部變更都要入庫」的機械例外
 
 ## Step 4: 逐一執行 Commit
 
@@ -245,7 +219,7 @@ exit 1 → stdout 列的路徑落在 withheld scope，該 group **NEVER** commit
 
 依 `follow-up-register.md` § 主動消化，同步驗證並關閉本次完成的 TD，回讀 flow 關卡後移出主清單；HANDOFF 移除完成流水帳，已有 TD 的未完項只保留指針。等待訊號、部分完成及未驗收工作保留具體接手入口。
 
-遵守當前 runtime 已投影的 `handoff`：Step 4 分組 commit 完成後**必須**更新 `HANDOFF.md`，把**所有可延續且尚未被接手的後續工作**寫入 —— 不限於 spectra change。已使用 Spectra 的 repo 同時同步 Spectra ROADMAP；判定與缺能力處置見 handoff-steps.md。
+遵守當前 runtime 已投影的 `handoff`：Step 4 分組 commit 完成後**必須**更新 `HANDOFF.md`，把**所有可延續且尚未被接手的後續工作**寫入 —— 不限於當前這件。同時同步 repo 根目錄 `ROADMAP.md` 的 `## Next Moves`；判定與缺能力處置見 handoff-steps.md。
 
 > 本步驟在 Step 6 **之前**執行——HANDOFF/ROADMAP 的 commit 會跟 Step 6-A 的 bump/deploy commit 一起，在同一次 `git push origin main` 送出。若該 repo 的 staging workflow 掛了 `push: branches: [main]` 且帶 `cancel-in-progress`，二次 main push 會觸發新的 staging run 把發版 commit 的 run 取消（見 `~/offline/clade/vendor/snippets/deploy-gate/README.md`）；沒有 main-push 觸發的 repo 則單純少一次無謂 push。本步驟收集的內容不依賴版本號或 push 結果，版本號在 Step 6-A 才產生（走 6-B 時不產生版本號）。
 
@@ -253,10 +227,10 @@ exit 1 → stdout 列的路徑落在 withheld scope，該 group **NEVER** commit
 
 檢查以下任一條件成立 → 需要 handoff：
 
-- `openspec/changes/` 仍有非 archive 目錄（in-progress spectra change）
+- `flow status` 仍有未 `done` 的 work item，或 `tasks/` 有本 session 未收尾的 carrier
 - `git status` 仍有 uncommitted 變更（刻意未入本次 commit 的 WIP）
 - 本次 session 中提及但未做的後續工作（例：refactor 機會、文件更新、測試補強、效能優化）
-- 本次 commit 揭露的新 follow-up（`@followup[TD-NNN]` marker、TODO 註解、scope 外發現）
+- 本次 commit 揭露的新 follow-up（TD 引用、TODO 註解、scope 外發現）
 - commit 後必要的驗證 / 部署步驟（人工檢查、deploy smoke test、DB migration 套用）
 - 使用者曾提過但還沒做的事（在本 session 或前 session 出現過的 backlog）
 - 使用者明確表達接下來要交接 / 暫停
@@ -537,7 +511,7 @@ git push origin main
 
 ## Step 6b: Notion 專案層同步（條件觸發）
 
-per [[spectra-notion-coupling]] § 專案層。consumer 的 `.claude/consumer-meta.json` 若有 `notion.projectWorkflow: true`，Step 6-A（或 6-B 選 `[1]` 後）的 tag 已推出後 **MUST** 執行：
+per [[notion-work-coupling]] § 專案層。consumer 的 `.claude/consumer-meta.json` 若有 `notion.projectWorkflow: true`，Step 6-A（或 6-B 選 `[1]` 後）的 tag 已推出後 **MUST** 執行：
 
 ```bash
 node ~/offline/clade/vendor/scripts/notion-sync.ts release \

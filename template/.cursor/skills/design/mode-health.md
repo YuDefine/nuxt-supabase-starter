@@ -3,7 +3,7 @@
 
 <!-- clade-targets: claude,codex,cursor -->
 
-**Goal:** 退一步做**整個 consumer / 子系統尺度**的全棧深度體檢，產出排序後的重構 roadmap，把最高優先 wave funnel 進 `/spectra-propose`。**只診斷 + 提計畫 + propose，不自動改 code**（落地走 spectra-apply）。
+**Goal:** 退一步做**整個 consumer / 子系統尺度**的全棧深度體檢，產出排序後的重構 roadmap，把最高優先 wave funnel 進 `/specify`。**只診斷 + 提計畫 + 開 plan package，不自動改 code**（落地走 `/implement`）。
 
 **與其他模式的差別**：`new` / `improve` / `iterate` 是「UI target 尺度」；`health` 是「整個 consumer 尺度 + 全棧」——UI 只是 8 個維度之一。此模式在 **consumer session 內**跑；clade 主線**不**代 consumer 執行。
 
@@ -25,7 +25,7 @@
 4. **資料 & 契約** — schema/migration、contract 單一真相源、N+1、RLS / D1
 5. **Dependencies** — `pnpm outdated`（`/dep-upgrade` signal）、unused、catalog drift
 6. **效能** — `GoogleChrome/modern-web-guidance`（LCP/INP/CLS）；**chrome-devtools-mcp 實測是 clade-central-only**，consumer session 標「需切 clade home 量」或 defer
-7. **安全** — `/security-review` / `spectra-audit`：dangerous default、input validation、secret 外洩、CSP/RLS
+7. **安全** — `/security-review`：dangerous default、input validation、secret 外洩、CSP/RLS
 8. **測試 & DX** — 關鍵路徑 test、CI、typecheck/lint、錯誤處理 pattern
 
 **工具紀律**：code discovery **一律先 codebase-memory-mcp**（graph 未建先 `index_repository` fast 模式）；Grep/Read 只用於 config/.md/.env。
@@ -36,7 +36,7 @@
 2. **八維度掃描**：逐維度苛刻評分，findings 帶 file:line + 「卓越 delta」
 3. **綜合**：findings 打 **Impact × Effort × Risk** → 排成獨立可出貨的 **refactor waves**（含 wave 間依賴序；★☆☆☆☆ 危險永遠 Wave 1）
 4. **輸出** Deep Health Report + roadmap（模板見 reference §6），寫 `docs/health-audit-<date>.md`
-5. **Propose funnel**：開 Health wave 決策頁讓 user 挑最高優先 wave（[decision-page.md](decision-page.md) § Health wave；**NEVER** 「用 harness 內建的問答工具或直接問」）→ 跑 **`/spectra-propose`**（brief 帶 findings + file:line + 卓越 delta 驗收）；其餘 wave 登 ROADMAP / tech-debt
+5. **Propose funnel**：開 Health wave 決策頁讓 user 挑最高優先 wave（[decision-page.md](decision-page.md) § Health wave；**NEVER** 「用 harness 內建的問答工具或直接問」）→ 跑 **`/specify`**（brief 帶 findings + file:line + 卓越 delta 驗收）；其餘 wave 登 ROADMAP / tech-debt
 
 ## Exit Criteria (`health` mode)
 
@@ -44,5 +44,5 @@
 - [ ] 每個 ≤ ★★★☆☆ 維度有「及格現況 → 卓越 delta」
 - [ ] Findings 排成 refactor waves（Impact × Effort × Risk + 依賴序）
 - [ ] Deep Health Report 寫入 `docs/health-audit-<date>.md`
-- [ ] 最高優先 wave 已 `/spectra-propose`；其餘 wave 登 ROADMAP / tech-debt
+- [ ] 最高優先 wave 已 `/specify`；其餘 wave 登 ROADMAP / tech-debt
 - [ ] codebase-memory-mcp 用於架構/程式碼維度（非 grep 整 repo）

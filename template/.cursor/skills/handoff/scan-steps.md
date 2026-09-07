@@ -125,7 +125,7 @@ Fable 顧問檢討成長結構，**NEVER** 自行再壓一次。
 | 重複條目（同一事在 HANDOFF / tech-debt / ROADMAP 都有） | 留最該的位置，其他刪 |
 | 寫法違反當前專案規則（如 clade 自治區內 `consumer 自治區工作` violation） | 依規則重寫或刪除 |
 | 仍 valid 的稽核 baseline 表 / outstanding follow-up | 保留 |
-| `## Deferred discuss items` 段（含 `<!-- deferred-begin:...:... -->` markers） | **保留、禁動**：歷史來源待 OPSX 接續映射；處置由對應需求 owner 執行，`/handoff` 不可改寫、reorder、合併或刪除任何 entry |
+| `## Deferred discuss items` 段（含 `<!-- deferred-begin:...:... -->` markers） | **保留、禁動**：由 [[manual-review]] § `[discuss]` walkthrough 的 resume 路徑處置，`/handoff` 不可改寫、reorder、合併或刪除任何 entry |
 
 **MUST** 載入 `.cursor/rules/local/*.md` 內所有自治區規則。若有 `clade-role-and-todo-discipline.md` 之類 local rule 限定 HANDOFF 寫法，整理時必須遵守。
 
@@ -193,7 +193,7 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff next — clade <version> scan_
 - `<changeKey>` | bucket=`<bucket>` | pending=N/total | userActionPending=K
   - bucket meaning hint：
     - `feedbackGiven` → 有 verify pending / issued feedback，需 agent 處理 evidence
-    - `awaitArchiveWalkthrough` → 仍缺討論／驗收證據，待 `/opsx` 依目前 instructions 補齊
+    - `awaitArchiveWalkthrough` → 仍缺討論／驗收證據，待收尾 walkthrough（[[manual-review]] § `[discuss]` walkthrough）補齊
     - `readyForEvidence` → apply 已完成但 evidence missing
     - `applyInProgress` → impl 未達 APPLY_COMPLETE_THRESHOLD
     - `applyBlocked` → impl 卡 `@apply-blocked` 外部 blocker（master 統計排除，但 **MUST 走 §2B.2.5 主動 triage**，不可 silently drop）
@@ -206,7 +206,7 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff next — clade <version> scan_
 
 每跑一次 audit **整段覆寫**（不是 append）— scan 是 snapshot，stale audit content 應該被新 snapshot 替換。
 
-**判定 review-gui readiness 的 SoT**：handoff-scan 輸出 `reviewGuiReadiness.raw`（`counts` + `entries[].bucket`；底層即 review-gui `--scan` 的 `ready` / `notReady` / `buckets`）。tasks.md leaf count / spectra DB `<done>/<total>` 數字 / HANDOFF.md 既有 narrative 都**不是** SoT — 它們是不同維度的真相（leaf count 不解析 evidence annotation / kind marker；spectra DB 不考慮 cross-wt 與 evidence；既有 narrative 是上次 session 的 stale snapshot）。
+**判定 review-gui readiness 的 SoT**：handoff-scan 輸出 `reviewGuiReadiness.raw`（`counts` + `entries[].bucket`；底層即 review-gui `--scan` 的 `ready` / `notReady` / `buckets`）。tasks 檔的 leaf count / flow 卡的進度 / HANDOFF.md 既有 narrative 都**不是** SoT — 它們是不同維度的真相（leaf count 不解析 evidence annotation / kind marker；flow 卡不考慮 cross-wt 與 evidence；既有 narrative 是上次 session 的 stale snapshot）。
 
 **`park` 跑時不執行本 sub-step** — `park` 是「靜默寫入交接」，scan 為 outstanding 推薦服務，`park` 沒推薦階段。
 

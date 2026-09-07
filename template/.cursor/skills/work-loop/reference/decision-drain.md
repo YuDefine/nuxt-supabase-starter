@@ -51,7 +51,7 @@ Charles 2026-08-06 逐字：「work-loop 會累積很多 waiting user 的事件�
 就不用特別阻擋 就做那些不受影響的」。無人值守期間累積是**被允許的**，清算由下一次 attended
 開場承擔——**NEVER** 因佇列非空寫 `stoppedReason`、**NEVER** 因此跳過與該佇列無關的 item。
 
-**佇列裡的 item 本輪排除，不是 skip。** 它不進 `non-spectra-dispatch.md` § skip 合法理由窮舉，
+**佇列裡的 item 本輪排除，不是 skip。** 它不進 `non-plan-dispatch.md` § skip 合法理由窮舉，
 也 **NEVER** 被拿來當第 4 條 skip 理由用在其他 item 上——排除的對象只有「佇列裡那幾條」本身。
 
 ---

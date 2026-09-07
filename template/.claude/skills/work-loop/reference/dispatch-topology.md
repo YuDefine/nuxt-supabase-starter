@@ -25,14 +25,14 @@ Step 2 產出的**不是**一條佇列，是**四組**併發特性不同的工�
 
 | 組 | 成員 | 併發 | 獨占的資源 |
 | --- | --- | --- | --- |
-| **扇出組** | OPSX 當前 revision 的實作／證據補件、非 OPSX code task（均不需要 dev server） | **同時 in-flight ≤ 4** | 無（各自 worktree） |
-| **dev-port 組** | OPSX 證據補件中**需要起 dev server** 的 item、Design Review 截圖 | **1** | consumer 的 dev port（SoT：`registry/consumers.json` 的 `dev_ports`） |
-| **main 組** | OPSX 歸檔與已驗證改動落地 | **1** | 批次 coordinator（source archive → ready → integration commit → main landing／push） |
-| **主線即時組** | 3g healthCheckNeeded、3e ready(userActionPending>0) 的 Claude-actionable 檢查、3i applyBlocked 評估、3j awaitingUserDecision 評估、非 spectra investigation | 主線自己做，不 dispatch（read-heavy 者先過 § 主線即時組的 pre-scan 前置判定） | 無 |
+| **扇出組** | plan package 的實作／證據補件、非 plan code task（均不需要 dev server） | **同時 in-flight ≤ 4** | 無（各自 worktree） |
+| **dev-port 組** | 證據補件中**需要起 dev server** 的 item、Design Review 截圖 | **1** | consumer 的 dev port（SoT：`registry/consumers.json` 的 `dev_ports`） |
+| **main 組** | 收尾與已驗證改動落地 | **1** | 批次 coordinator（source archive → ready → integration commit → main landing／push） |
+| **主線即時組** | 3g healthCheckNeeded、3e ready(userActionPending>0) 的 Claude-actionable 檢查、3i applyBlocked 評估、3j awaitingUserDecision 評估、非 plan investigation | 主線自己做，不 dispatch（read-heavy 者先過 § 主線即時組的 pre-scan 前置判定） | 無 |
 
 **每一個** priority item 在 dispatch 前都要落進上表某一組，不是只對前幾個分類。
 
-OPSX 實作／補件落哪一組看**這個 item 要不要起頁面**：要截圖 / 要看畫面 → dev-port 組；純 backend code fix 或純 annotation 補寫 → 扇出組。需求評估完成後若轉成實作 dispatch，該 item 改列**扇出組**。
+plan package 實作／補件落哪一組看**這個 item 要不要起頁面**：要截圖 / 要看畫面 → dev-port 組；純 backend code fix 或純 annotation 補寫 → 扇出組。需求評估完成後若轉成實作 dispatch，該 item 改列**扇出組**。
 
 分組判定順序（先命中先算）：
 
@@ -78,7 +78,7 @@ Archive 在各自來源完成；main 組統一協調就緒登記與批次提交�
 
 ## 主線即時組的 pre-scan 前置判定
 
-**每一個**落進主線即時組的 item（3g / 3i / 3j 評估、非 spectra investigation、packaging 蒐證、唯讀補事實），主線在讀**第一個**來源檔之前，MUST 先列出「完成判讀所需的必讀來源清單」，再按下表判定：
+**每一個**落進主線即時組的 item（3g / 3i / 3j 評估、非 plan investigation、packaging 蒐證、唯讀補事實），主線在讀**第一個**來源檔之前，MUST 先列出「完成判讀所需的必讀來源清單」，再按下表判定：
 
 | 可觀察 predicate | 動作 |
 | --- | --- |

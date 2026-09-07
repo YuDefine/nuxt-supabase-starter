@@ -1,6 +1,6 @@
 ---
 description: UX 完整性規則——定義 "feature complete"、強制列舉 user-facing surface、防止 DB+API 完成但 UI 缺失
-paths: ['openspec/changes/**', 'app/**/*.vue', 'packages/*/app/**/*.vue', 'shared/types/**/*.ts', 'packages/*/shared/types/**/*.ts', 'supabase/migrations/**']
+paths: ['tasks/**', 'specs/plans/**', 'app/**/*.vue', 'packages/*/app/**/*.vue', 'shared/types/**/*.ts', 'packages/*/shared/types/**/*.ts', 'supabase/migrations/**']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -16,7 +16,7 @@ Local edits will be reverted by the next sync.
 
 **核心命題**：feature 的完成度由**使用者結果**定義，不由「tasks 打勾 + tests 綠」定義。DB allow ≠ feature ready；tests pass ≠ UX done。
 
-此規則優先於 spectra skill 內嵌說明與其他規則。
+此規則優先於個別 SDD skill 內嵌說明與其他規則。
 
 ## Definition of Done
 
@@ -31,9 +31,9 @@ Local edits will be reverted by the next sync.
 
 **完成不是「我改完了」，是「使用者可以做事了」**。
 
-## 必填 Propose 區塊
+## 必填規格區塊
 
-spectra-propose 階段，`proposal.md` 必須包含以下三個區塊（或明確的 Non-UI 宣告）：
+`/specify` 產出的 `specs/plans/NNN-<slug>/spec.md`（或 ad-hoc 工作的 `tasks/<date>-<slug>.md` 開頭）必須包含以下三個區塊（或明確的 Non-UI 宣告）。**每一次**開新 plan package / tasks 檔都適用，不是只有大功能：
 
 ### `## Affected Entity Matrix`
 
@@ -231,7 +231,7 @@ backend-only change 的 `## 人工檢查` **MUST** 只保留 `[discuss]` kind �
 2. **商業判斷型**：Claude 無法自動判斷「結果是否合理」的觀察項，例如「drift 統計分布是否符合業務預期」「異常頻率是否在容忍範圍」「告警閾值需要調整嗎」
 3. **Production 觀察型**：deploy 後 N 小時 / N 天的 production-only soak window 觀察，無法在 dev / staging 提前完成
 
-上述三類 **MUST** 標 `[discuss]` marker；spectra-archive Step 2.5 walkthrough 流程下由 Claude 主動準備 evidence 與使用者討論。**user-facing change 也可對個別 item 標 `[discuss]`**（例：純資料修復 task 雖屬於含 UI 的 change，但實際驗證仰賴 evidence 而非 round-trip）— 此時不需 `**No user-facing journey**` 宣告，逐項標 marker 即可。
+上述三類 **MUST** 標 `[discuss]` marker；由交付前收尾 walkthrough（[[manual-review]] § `[discuss]` walkthrough）中 Claude 主動準備 evidence 與使用者討論。**user-facing 的工作也可對個別 item 標 `[discuss]`**（例：純資料修復 task 雖屬於含 UI 的工作，但實際驗證仰賴 evidence 而非 round-trip）— 此時不需 `**No user-facing journey**` 宣告，逐項標 marker 即可。
 
 **user-facing change 的主流 marker 是 `[verify:e2e]` / `[verify:api]` / `[verify:ui]`（agent 自跑，channel 由能不能用 spec / curl / final-state screenshot 重現決定）跟 `[review:ui]`（真的需要人）**。`[verify:auto]` 已 DEPRECATED，新項目 NEVER 使用（見 [[manual-review]] § Item Kind Marker）。三 kind 完整定義 + 「真的需要人」白名單 + 「agent 可自跑」白名單見 `manual-review.md`「Item Kind Marker」+「Kind 分類指引」。本檔的 backend-only 規約屬於 `[discuss]` 子集，不影響 user-facing change 的 kind 分流。
 
@@ -302,7 +302,7 @@ _本 change 為 backend-only，所有驗證由 apply 階段 Claude 自跑（見 
 ### 與其他規則的關係
 
 - `manual-review.md`：定義 `## 人工檢查` checkbox 不可由 agent 自行勾選；本規則補上 backend-only case 該放什麼進區塊。
-- `proactive-skills.md`：spectra-propose Phase 0a prompt 與 Phase 0b cross-check 必須執行此規約；違反 → propose Final Verification Check 8 不過。
+- `proactive-skills.md`：`/specify` 與 `/spec-by-example` 產出規格時必須執行此規約；三個區塊缺一即視為規格未完成。
 - `screenshot-strategy.md`：本規則排除的 evidence collection 不需要截圖；保留的三類項目通常也不需要截圖（用 `@no-screenshot` marker）。
 
 ### 違反時的回報方式
@@ -403,20 +403,25 @@ function getBindingIcon(cardType: NfcCardType): string {
 
 ## Workflow Integration
 
-| Spectra phase                       | Gate script                                              | When to run                                                     |
-| ----------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------- |
-| Before OPSX execution (handoff) | 按目前授權與 routing policy 確認 runtime/model；缺少會改變方案的使用者決策時，使用該 runtime 可用的原生提問介面 | |
-| Before `spectra-propose`            | `bash scripts/spectra-advanced/pre-propose-scan.sh`            | 注入 blast radius 要求，提醒必填區塊                            |
-| After `spectra-propose`             | `bash scripts/spectra-advanced/post-propose-check.sh <change>` | 驗證 proposal 完整性                                            |
-| After `spectra-propose`             | `bash scripts/spectra-advanced/design-inject.sh <change>`      | 若有 UI scope，提醒補上 `## Design Review` 區塊                 |
-| Before `spectra-apply`              | `bash scripts/spectra-advanced/pre-apply-brief.sh <change>`    | 簡報 user journeys                                              |
-| During UI edits                     | `bash scripts/spectra-advanced/ui-qa-reminder.sh <file>`       | 中途提醒 design / screenshot review，不要等到 archive 才檢查    |
-| Before `spectra-archive`            | `bash scripts/spectra-advanced/design-gate.sh <change>`        | 阻擋未完成人工檢查或缺設計審查證據的 UI change                  |
-| Before `spectra-archive`            | `bash scripts/spectra-advanced/archive-gate.sh <change>`       | 驗證 journey URL touch、schema drift、exhaustiveness            |
-| Before `spectra-archive` (v1.5+)    | `bash scripts/spectra-advanced/followup-gate.sh <change>`      | 驗證 tasks.md 的 `@followup[TD-NNN]` 都在 `docs/tech-debt.md` 登記 |
-| **Session start / 外部 runtime 跑完 spectra 後** | `pnpm spectra:roadmap` && `pnpm spectra:claims` && `pnpm spectra:followups` | 重算 ROADMAP、查看 active claims、摘要 follow-up 狀態 |
+| SDD 階段 | Gate | When to run |
+| --- | --- | --- |
+| 交付人工檢查之前（handoff） | 按目前授權與 routing policy 確認 runtime/model；缺少會改變方案的使用者決策時，使用該 runtime 可用的原生提問介面 | |
+| `/specify` 寫 `spec.md` 時 | 本檔 § 必填規格區塊（三個區塊或明確 Non-UI 宣告） | 寫規格的當下自檢 |
+| `/spec-by-example` 產驗收 Gherkin 時 | User Journeys 的每一條都要有對應 scenario | 產 `features/acceptance/**` 的當下 |
+| `/tasks` 產 `tasks.md` 時 | 有 UI scope 就加 `## Design Review` 區塊（[[proactive-skills.design-checkpoint]]） | 產 tasks 的當下 |
+| UI 檔編輯期間 | `plugins/hub-core/hooks/post-edit-ui-qa.sh`（PostToolUse） | 中途提醒 design / screenshot review，不要等到收尾才檢查 |
+| 交付人工檢查之前 | Design Gate（[[proactive-skills.design-checkpoint]] § Design Gate） | 缺設計審查證據的 UI 工作不得交付 |
+| 交付人工檢查之前 | `node ~/offline/clade/vendor/scripts/check-review-readiness.ts --repo . --change <work-slug>` | exit 0 才可引導 user 到 review-gui |
+| 寫下任何 follow-up 註記的當下 | 在 `docs/tech-debt.md` 開 `TD-NNN` entry（[[follow-up-register]]） | 同一次編輯內完成 |
+| Session start | `node vendor/scripts/flow/flow.ts status --stalled` | 列出停滯的 work item 與待拍板 |
 
-**Runtime integration**：上述 gate 可由自動 hook 或手動 project command 觸發；session 開始時必須跑 roadmap、claims、followups。自動觸發、手動命令與 capability gap 由 adapter fragment 宣告。
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 混合：`post-edit-ui-qa.sh` 與 `flow status --stalled` 是自動 hook；其餘各列是**自檢**——原本的 `pre-propose-scan.sh` / `post-propose-check.sh` / `design-inject.sh` / `pre-apply-brief.sh` / `design-gate.sh` / `archive-gate.sh` / `followup-gate.sh` 全隨 spectra 生命週期退場（2026-09-07），**沒有機器替你跑那幾列** |
+| 消費端 | 走 SDD 流程的 agent（本節）；`/commit` Step 0-MR 讀 `check-review-readiness.ts` |
+| 載入路徑 | 本節（`rules/core/ux-completeness.md`，paths-gated 於 `tasks/**`、`specs/plans/**` 與 UI 檔） |
+
+**Runtime integration**：自動觸發的兩列由 hook 提供；其餘各列由讀到本節的 agent 自己執行。自動觸發、手動命令與 capability gap 由 adapter fragment 宣告。
 
 ## 必禁事項
 
@@ -425,9 +430,9 @@ function getBindingIcon(cardType: NfcCardType): string {
 - **NEVER** 把 `if/else if/else` 用在 enum 分支
 - **NEVER** 新增 route 但不在 navigation 加入口（除非明確宣告 internal-only）
 - **NEVER** 把「tasks 全勾 + tests 綠」當作 feature complete 的充分條件
-- **NEVER** 手編 `openspec/ROADMAP.md` 的 `<!-- SPECTRA-UX:ROADMAP-AUTO:* -->` 區塊
-- **NEVER** 未 claim 就開始做 active spectra change
-- **NEVER** 把 backend evidence collection（SSH / psql / `\d <table>` / `SELECT FROM` / 觸發 cron / 受控 drift 製造 / migration 存在性驗證）放進 backend-only change 的 `## 人工檢查`；改寫進 `## N. Backend Verification Evidence` 由 apply Claude 自跑自貼（見「必填 Backend-only Manual Review 規約」）
+- **NEVER** 因為「沒有 hook 擋我」就跳過 § Workflow Integration 的自檢列
+- **NEVER** 未 claim 就接手別人留下的工作（per [[session-claims]] § 3.5）
+- **NEVER** 把 backend evidence collection（SSH / psql / `\d <table>` / `SELECT FROM` / 觸發 cron / 受控 drift 製造 / migration 存在性驗證）放進 backend-only change 的 `## 人工檢查`；改寫進 `## N. Backend Verification Evidence` 由實作 Claude 自跑自貼（見「必填 Backend-only Manual Review 規約」）
 ## 與既有規則的關係
 
 - **`proactive-skills.md` Design Gate**：本規則**擴充**而非取代。Design Gate 檢查 UI 視覺品質；UX Completeness 檢查 UI 功能覆蓋

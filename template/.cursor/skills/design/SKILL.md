@@ -80,10 +80,10 @@ Auto-detection logic:
 
 ## Step 0.5: 需求 Context Detection
 
-診斷前以 OPSX 查詢目前需求。clade 用 `vendor/scripts/opsx-control.ts`，consumer 用 `.clade/vendor/scripts/opsx-control.ts`。
+診斷前先定位目前的 work item carrier。clade 用 `vendor/scripts/flow/flow.ts`，consumer 用 `.clade/vendor/scripts/flow/flow.ts`。
 
-1. 執行 `node <opsx-cli> list --repo-root <repo> --json`，沿使用者指定的 source／change ID 定位目前需求。
-2. 對已 bound 的 OPSX change 執行 inspect／instructions，從當前 work plan 找 UI 目標與驗收。legacy 原件由 history 讀取，只作來源背景。
+1. 執行 `node <flow-cli> status --json`，沿使用者指定的 slug 定位目前的 work item。
+2. 讀該 work 的 carrier（`tasks/<date>-<slug>.md` 或 `specs/plans/NNN-<slug>/tasks.md`）與它的 `spec.md`，找 UI 目標與驗收。
 3. 診斷輸出附 change/work 與 revision。無可用需求時由專案文件及使用者目標定位頁面；查詢失敗說明具體錯誤，不把它當成沒有需求。
 
 ## Step 1: Check Foundation (ALL modes)
@@ -297,7 +297,7 @@ Three standalone diagnostic / iteration tools sit **outside** the production pip
 > **v3.1 critique snapshot vs clade design-review.md 邊界**：
 >
 > - `.impeccable/critique/<ts>__<slug>.md`（impeccable 自管）= impeccable runtime 內部 state；給 `/impeccable polish` 讀回 P0/P1 backlog 用，user 一般不直接看
-> - `openspec/changes/<name>/design-review.md`（clade Step 6 寫）= spectra change deliverable；給 archive gate / reviewer / spectra-ingest 用，會 commit
+> - `specs/plans/NNN-<slug>/design-review.md`（clade Step 6 寫）= 該 work item 的 deliverable；給 Design Gate / reviewer 用，會 commit
 >
 > 兩者並存不衝突。clade Step 6 寫 design-review.md 時可在 「Planned Skills」 段提一句「v3.1 critique snapshot 位於 `.impeccable/critique/`，包含本輪 P0/P1 細節」當 cross-reference，但不要把 critique 快照內容塞進 design-review.md（會重複、且 critique 自己會 supersede）。
 
@@ -337,7 +337,7 @@ new-work build                  ← 描述目標介面，走 impeccable new-work
 
 ## Step 6: Persist Evidence（Spectra 整合）
 
-若偵測到 active Spectra change（Step 0.5），完成診斷和計劃輸出後 **MUST Read [persist-evidence.md](persist-evidence.md) § design-review.md template** 並寫入 `openspec/changes/<name>/design-review.md`。此檔案是 `pre-archive-design-gate.sh` hook 的主要檢查依據。
+若偵測到 active work item（Step 0.5），完成診斷和計劃輸出後 **MUST Read [persist-evidence.md](persist-evidence.md) § design-review.md template** 並寫入該 carrier 旁的 `design-review.md`（plan package 放 `specs/plans/NNN-<slug>/design-review.md`；ad-hoc 工作放 `docs/design-review/<slug>.md`）。此檔案是 [[proactive-skills.design-checkpoint]] § Design Gate 的主要檢查依據。
 
 ## Reference Resources
 

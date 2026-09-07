@@ -1,6 +1,6 @@
 ---
 description: 自主迴圈的驗證閘門鏈與停止條件——每個 iterate-until-green 迴圈 MUST 跑 gate chain、宣告 max_iterations、定義 escalation action
-paths: ['**/*.ts', '**/*.vue', '**/*.tsx', 'openspec/**', 'tasks/**']
+paths: ['**/*.ts', '**/*.vue', '**/*.tsx', 'tasks/**', 'specs/**']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -61,7 +61,7 @@ agent 執行修改後跑 gate chain，FAIL 時**解析 error output → 修正 �
 
 ### MUST 宣告迴圈參數
 
-**每個**自主迴圈（spectra-apply phase 實作、bug fix、lint fix、dep update）開始前 MUST 確認以下兩個參數：
+**每個**自主迴圈（`/implement` phase 實作、bug fix、lint fix、dep update）開始前 MUST 確認以下兩個參數：
 
 | 參數 | 預設值 | 說明 |
 | --- | --- | --- |
@@ -97,7 +97,7 @@ Gate chain FAIL 時，agent MUST：
    - **確定性 error**（type error, syntax error, import 缺失, test assertion fail）→ 可自動修正，繼續 iterate
    - **環境 error**（port 占用, DB 未啟, 缺 env var）→ 嘗試 self-fix（kill port / 起 DB / 讀 .env.local），若不可 fix 則 escalation
    - **不確定 error**（test 紅但 root cause 不明）→ 若已 iterate ≥ 2 輪同一 error 不收斂 → 提前 escalation，不燒剩餘輪數
-   - **specification error**（命中任一即是：驗收條件互相矛盾；要讓 gate 綠必須改 spec 宣告的行為、刪需求或改資料定義；test 斷言與 spec 文字直接衝突）→ **不是 iterate 對象**——再多輪修 code 都是在錯的設計圖上補破網，更高的 reasoning 也修不了錯的 spec。**立刻**執行 `ROLLBACK:<artifact>`，不等 `max_iterations`：spectra change 退回 spec 修正層（tasks.md phase 結構歸 `/spectra-ingest`、需求內容歸 propose 層——執行層 **NEVER** 自己改「做什麼」）；ad-hoc 工作退回 `tasks/<date>-<slug>.md` 改寫驗收段後再重進迴圈。退回時 **MUST** 保留證據：error output、互相衝突的 spec 條目原文、已試過的修法
+   - **specification error**（命中任一即是：驗收條件互相矛盾；要讓 gate 綠必須改 spec 宣告的行為、刪需求或改資料定義；test 斷言與 spec 文字直接衝突）→ **不是 iterate 對象**——再多輪修 code 都是在錯的設計圖上補破網，更高的 reasoning 也修不了錯的 spec。**立刻**執行 `ROLLBACK:<artifact>`，不等 `max_iterations`：走 aixbdd 的工作退回規格層（feature／DSL 歸 `/dsl-refine`、`tasks.md` 結構歸 `/tasks`、需求內容歸 `/specify`——執行層 **NEVER** 自己改「做什麼」）；ad-hoc 工作退回 `tasks/<date>-<slug>.md` 改寫驗收段後再重進迴圈。退回時 **MUST** 保留證據：error output、互相衝突的 spec 條目原文、已試過的修法
 3. **同一 error 連續 2 輪不收斂 = 提前 escalation**——避免同一個修法來回震盪
 
 ### Red Flags
@@ -118,7 +118,7 @@ Gate chain FAIL 時，agent MUST：
 | --- | --- |
 | 已觀測執行的 PostToolUse／runtime 驗證 hook | 提供它實際執行之命令的即時回饋。本規約的 gate chain 是 phase 完成後的**完整**驗證 |
 | `vp check` / publish gate | publish gate 是最終發布門。本規約在**開發過程中**提供相同等級的驗證 |
-| spectra-apply Step 8 Final check | Step 8 確認 `state: "all_done"`。本規約在**每個 phase 結束後**就跑，不等到最後 |
+| `/implement` 的最終 check | 收尾才確認全部完成。本規約在**每個 phase 結束後**就跑，不等到最後 |
 | [[checker-contract]] | checker-contract 定義 checker 的 output 格式。本規約定義**何時跑**和**跑完怎麼辦** |
 | [[agent-self-verification]] | self-verification 禁止把可自動化的驗證踢回 user。本規約提供具體的「自動化驗證」清單 |
 
@@ -126,7 +126,7 @@ Gate chain FAIL 時，agent MUST：
 
 ## 為什麼
 
-- spectra-apply 目前的 iterate 靠 agent 自由判斷「改完沒」——沒有形式化 gate，agent 傾向過早宣告 done（per [[pitfall-review-gui-detail-page-no-impl-gate]] 類似根因）
+- `/implement` 的 iterate 靠 agent 自由判斷「改完沒」——沒有形式化 gate，agent 傾向過早宣告 done（per [[pitfall-review-gui-detail-page-no-impl-gate]] 類似根因）
 - PostToolUse typecheck hook 是 advisory（exit 0 不阻擋）——agent 看到 warning 但不一定修
 - 沒有 `max_iterations` → token 和時間可能無限消耗，或反過來一輪就放棄
 - Loop Engineering 的核心觀點：「A good loop always knows two things: What success looks like. When to give up.」本規約是這句話的 clade 落地

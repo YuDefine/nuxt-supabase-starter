@@ -3407,15 +3407,51 @@ async function cmdCleanup(slug, opts) {
     const paths = git(['diff', '--name-only', '-z', base, branchName], { cwd: consumerRoot })
       .split('\0')
       .filter(Boolean)
-    try {
-      if (paths.length) {
+    if (paths.length) {
+      try {
         git(['diff', '--quiet', '--cached', '--', ...paths], { cwd: consumerRoot })
-        git(['diff', '--quiet', 'main', branchName, '--', ...paths], { cwd: consumerRoot })
+      } catch {
+        throw new Error(
+          'cleanup: legacy squash content is still staged in main; commit or reset it before removing the source',
+        )
       }
-    } catch {
-      throw new Error(
-        'cleanup: legacy squash content is staged or differs from main HEAD; retain the source until formal landing is verified',
-      )
+      // NO content comparison follows, deliberately. Everything below is the derivation, because
+      // the shape of this gate is inviting enough that it was written twice (TD-992 first cut) and
+      // the reason it cannot work is not visible from the call site.
+      //
+      // What is left to ask, once the marker matches and the index is clean, is exactly one thing:
+      // merge-back staged the squash and told the caller to finish with a formal /commit — did that
+      // commit happen, or did someone discard the staged content instead? Content cannot answer it.
+      // `isSquashLanded`'s own derivation says so in full: a squash throws the ancestry away, so
+      // "already landed" is NOT recoverable from the trees. Three measurements on the one branch
+      // this gate was written for (2026-09-07, `session/...-herdr-closure-paths`, verified landed):
+      //
+      //   `git diff --numstat <branch> main`  → 3 of 4 paths report deletions. One is another
+      //                                         session editing an unrelated entry; two are oxfmt
+      //                                         reflowing this branch's OWN lines. merge-back
+      //                                         auto-commits fmt drift and `vp check --fix` runs
+      //                                         before publish, so the normal path manufactures
+      //                                         deletions on its own.
+      //   `summarizeAddedLinesPresence`       → 67 of this branch's added lines "missing" from
+      //                                         `docs/tech-debt.md`, because later commits
+      //                                         legitimately rewrote those TD entries.
+      //   reverse-applying the patch          → a reformatted line does not reverse-apply either;
+      //                                         same false positive in a different spelling.
+      //
+      // The instrument that DOES answer it exists, in `wt-batch.ts`: record the landing commit and
+      // check `merge-base --is-ancestor <landedHead> refs/heads/main`. Pure history, no content.
+      // This path has no landing sha to check — the marker is written at squash time, before the
+      // commit exists — so it cannot run that check and must not fake one out of content.
+      //
+      // Refusing anyway is worse than not asking. `cleanup` on a squash-landed branch deletes the
+      // worktree DIRECTORY; the branch ref survives (see the `-d` below), so nothing is lost and
+      // the checkpoint stays reachable. The refusal's only exit was `--force`, which is what turns
+      // `-d` into `-D` and actually destroys the branch — the gate's failure mode pushed people
+      // toward the single action that made the loss real.
+      //
+      // NEVER re-add a tree/patch/line comparison here in any spelling. The uncommitted-worktree
+      // gate below is what caught the <consumer-b> 2026-05-17 evaporation; this block was born 2026-09-06
+      // in 22da082ca, months later, and never had that job.
     }
   }
   const branchMerged = squashLanded || mergedBranches(consumerRoot).has(branchName)
@@ -3588,10 +3624,21 @@ async function cmdCleanup(slug, opts) {
     }
   }
   cleanupCodebaseMemoryIndex(target.path)
+  // `-D` only where the caller is knowingly discarding unlanded work. A squash-landed branch is
+  // never that case: it is not an ancestor of main, so `-d` refuses and the ref survives — and
+  // that surviving ref is the last reachable copy of the checkpoint once the worktree is gone.
+  // Honouring `--force` here would delete it, which is precisely the loss the removed content
+  // gate above was trying (and failing) to prevent. Deleting it stays available as a deliberate,
+  // separate `git branch -D`.
+  const deleteFlag = opts.force && !squashLanded ? '-D' : '-d'
   try {
-    git(['branch', opts.force ? '-D' : '-d', branchName], { cwd: consumerRoot })
+    git(['branch', deleteFlag, branchName], { cwd: consumerRoot })
   } catch {
-    console.error(`warn: branch ${branchName} could not be deleted; keep manually`)
+    console.error(
+      squashLanded
+        ? `note: branch ${branchName} kept — squash landing leaves it un-mergeable to git, and it is the last copy of the checkpoint. Discard with: git branch -D ${branchName}`
+        : `warn: branch ${branchName} could not be deleted; keep manually`,
+    )
   }
   try {
     const claim = findClaimByWorktree(consumerRoot, target.path)

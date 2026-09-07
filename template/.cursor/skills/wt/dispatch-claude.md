@@ -70,9 +70,9 @@ Contract:
    `subject-empty` rather than naming the emoji. Some repos (clade itself) also
    require the subject to contain Chinese — check `commitlint.config.ts`.
 2. Do NOT run `git push` from the worktree. The session branch is short-lived.
-3. Do NOT run the full `/commit`, `/spectra-commit`, batch landing, legacy
+3. Do NOT run the full `/commit`, batch landing, legacy
    merge-back or any operation outside the assigned source. The coordinator
-   owns formal batch review and landing. Run `OPSX archive` in this source
+   owns formal batch review and landing. Mark the work item done in this source
    only when the brief explicitly assigns archive and its gates are satisfied;
    implementation completion alone does not assign archive. Report and stop.
 4. When done, report back with:
@@ -120,6 +120,6 @@ Update WORKTREE-BRIEF.md Progress as you work (check off items, add new ones).
 On completion: set frontmatter `status: done`.
 
 Contract: same as a fresh task — selective `git add`, no `git add -A`,
-no `git push`, no `/commit`, no `merge-back`; OPSX archive only if explicitly scoped. Report
+no `git push`, no `/commit`, no `merge-back`; marking the work done only if explicitly scoped. Report
 back with done/fail per the standard contract above.
 ```

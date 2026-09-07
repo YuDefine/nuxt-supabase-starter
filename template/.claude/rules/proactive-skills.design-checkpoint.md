@@ -1,6 +1,6 @@
 ---
 description: UI / design 工作的 Design Checkpoint、design skill 觸發順序、Design Review template、Design Gate、Cross-Change holistic review 與非 UI exception；動 UI 檔或寫 design artifact 時 path-scoped 載入
-paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'app/**/*.ts', 'packages/*/app/**/*.ts', 'components/**', 'packages/*/components/**', 'pages/**', 'packages/*/pages/**', 'layouts/**', 'packages/*/layouts/**', 'openspec/changes/**/design.md', 'docs/specs/**/spec.md']
+paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'app/**/*.ts', 'packages/*/app/**/*.ts', 'components/**', 'packages/*/components/**', 'pages/**', 'packages/*/pages/**', 'layouts/**', 'packages/*/layouts/**', 'specs/plans/**', 'docs/specs/**/spec.md']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -14,13 +14,13 @@ Local edits will be reverted by the next sync.
 
 # Proactive Skills — Design Checkpoint
 
-> Reference 檔。核心規約見 [`proactive-skills.md`](./proactive-skills.md)。本檔聚焦動 UI 檔（pages / components / layouts / `.vue` / `.ts`）或寫 `design.md` / `spec.md` 時主動觸發的 design skill orchestrator、Design Review task block 模板、Design Gate 阻擋條件、跨 change 整體性審查與非 UI exception。
+> Reference 檔。核心規約見 [`proactive-skills.md`](./proactive-skills.md)。本檔聚焦動 UI 檔（pages / components / layouts / `.vue` / `.ts`）或寫 `design.md` / `spec.md` 時主動觸發的 design skill orchestrator、Design Review task block 模板、Design Gate 阻擋條件、跨 work item 整體性審查與非 UI exception。
 
 ## Design Skill 自主觸發
 
 ### 觸發條件
 
-**任何 spectra-apply task 碰到 UI 工作**（建立/修改 `.vue` 檔案、pages、components、layouts）時，自動進入 Design Checkpoint。
+**任何 `/implement` task 碰到 UI 工作**（建立/修改 `.vue` 檔案、pages、components、layouts）時，自動進入 Design Checkpoint。**每一個**這樣的 task 都適用，不是只有整包工作的最後一個。
 
 ### Design Checkpoint 流程
 
@@ -101,7 +101,7 @@ new-work build          ← 描述目標介面（Direction Gate 之後；NEVER �
 
 ## Design Review Task Template
 
-**執行 `spectra-propose` 時**，若 change 涉及 UI（tasks 中提及 `.vue`、`pages/`、`components/`、`layouts/`），**必須**在 tasks artifact 中加入 Design Review 區塊。
+**執行 `/tasks`（或手寫 `tasks/<date>-<slug>.md`）時**，若這次工作涉及 UI（清單中提及 `.vue`、`pages/`、`components/`、`layouts/`），**必須**在該 tasks 檔中加入 Design Review 區塊。
 
 位置：最後一個功能區塊之後、`## 人工檢查`之前。
 編號：N = 上一個功能區塊的序號 + 1。
@@ -120,7 +120,7 @@ new-work build          ← 描述目標介面（Direction Gate 之後；NEVER �
 
 `[affected pages/components]` 替換為此 change 實際涉及的 UI 檔案/頁面。
 
-**效果**：spectra-apply 會依序執行到 Design Review 區塊，自然觸發 design 工作。Design tasks 是一等公民，不是附加步驟。
+**效果**：`/implement` 會依序執行到 Design Review 區塊，自然觸發 design 工作。Design tasks 是一等公民，不是附加步驟。
 
 ## Design Review 中斷與續跑
 
@@ -137,7 +137,7 @@ Design Review 過程中若發現問題過多（例如需要列修正計劃讓使
 ### 記錄格式
 
 ```markdown
-## [CHANGE-ID] — YYYY-MM-DD
+## [WORK-SLUG] — YYYY-MM-DD
 
 **影響範圍**: [affected pages/components]
 
@@ -168,54 +168,62 @@ Design Review 過程中若發現問題過多（例如需要列修正計劃讓使
 
 Findings log 的分析由 `/design-retro` skill 負責（見 `.claude/skills/design-retro/SKILL.md`）。記錄本身只負責結構化紀錄，分析與改善建議交由 skill 在適當時機執行。
 
-## Design → Spectra 回饋迴路
+## Design → 規格回饋迴路
 
-Design 工作可能發現 spec 未涵蓋的問題。發現時不停下，按以下規則回饋：
+Design 工作可能發現 spec 未涵蓋的問題。**每一次**發現都按下表回饋，不是等收尾一起處理：
 
 | 情境                                                                    | 動作                                        |
 | ----------------------------------------------------------------------- | ------------------------------------------- |
-| /design 發現 spec 未涵蓋的 UX 需求（如缺 empty state、缺 loading 狀態） | `spectra-ingest` 更新 design artifact       |
-| /impeccable audit 發現需要新元件或新 API endpoint                                  | `spectra-ingest` 更新 tasks（加新 task）    |
-| Design 決策影響資料模型或 API schema                                    | `spectra-discuss` → 決定後 `spectra-ingest` |
-| /design 改動範圍超出原 change scope                                     | 停下，通知使用者，可能需要拆 change         |
+| /design 發現 spec 未涵蓋的 UX 需求（如缺 empty state、缺 loading 狀態） | 回交 `/dsl-refine` 更新 truth feature；**NEVER** 就地改 `specs/truth/**` |
+| /impeccable audit 發現需要新元件或新 API endpoint                       | 在當前 tasks 檔加一條 task；動到 API 契約時先改 `specs/api/**`（per [[specformula]] spec-first） |
+| Design 決策影響資料模型或 API schema                                    | 記進 `docs/decisions/**` → 由 owner skill 落 `specs/data/**` / `specs/truth/**` |
+| /design 改動範圍超出原工作 scope                                        | 停下，通知使用者，可能需要另開一個 work item |
 
-## Design Gate（Archive 前硬門檻）
+## Design Gate（交付人工檢查前的硬門檻）
 
-**在 `spectra-archive` 前**，若 change 包含任何 `.vue` 檔案變更，hook `pre-archive-design-gate.sh` 檢查兩個信號：
+**把一件含 `.vue` 變更的工作交付人工檢查（或標 `work.done`）之前**，MUST 自己核對兩個信號：
 
-1. **`design-review.md` 存在且含 fidelity 證據**——change 目錄中有 `/design improve` 產出的設計審查記錄，**且**包含「Design Fidelity Report」段落，**且**無未修復的 DRIFT 項目（表格中無 `| DRIFT |` 行）
-2. **Design Review tasks 全部完成**——tasks.md 的 `## Design Review` 區塊中所有 checkbox 為 `[x]`
+1. **`design-review.md` 存在且含 fidelity 證據**——有 `/design improve` 產出的設計審查記錄，**且**包含「Design Fidelity Report」段落，**且**無未修復的 DRIFT 項目（表格中無 `| DRIFT |` 行）
+2. **Design Review tasks 全部完成**——tasks 檔的 `## Design Review` 區塊中所有 checkbox 為 `[x]`
 
-兩個信號至少一個成立才放行。都不成立 → `exit 2` 阻擋 archive。
+兩個信號至少一個成立才可交付。都不成立 → **STOP**，回去補完再交付。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | informational — **不觸發任何東西**。原本的機械閘 `pre-archive-design-gate.sh` 隨 spectra 生命週期一起退場（2026-09-07），目前沒有 detector 掛在「交付人工檢查」這個事件上 |
+| 消費端 | 正要把含 UI 變更的工作交付人工檢查、或標 `work.done` 的那個 agent（本節） |
+| 載入路徑 | 本節（`rules/core/proactive-skills.design-checkpoint.md`，path-scoped 於 UI 檔與 `specs/plans/**`） |
+
+**NEVER** 把「沒有 hook 擋我」讀成這道門檻已經不存在——它現在唯一的執行者是讀到本節的那個 agent。
 
 ## Cross-Change Holistic Review（跨 change 整體性審查）
 
 **觸發條件**（任一）：
 
-- 專案已有 2+ archived UI changes（`openspec/changes/archive/` 中含 `.vue` 相關 tasks 的 change）
-- 當前 change 的 UI 頁面與已完成頁面共用 layout（如 `desktop.vue`、`default.vue`）
+- 專案已有 2+ 件完成的 UI 工作（`tasks/` 或 `specs/plans/**` 中含 `.vue` 相關 task 且已標 done）
+- 當前工作的 UI 頁面與已完成頁面共用 layout（如 `desktop.vue`、`default.vue`）
 
 **行為**：
 
 - `/design improve` 的 Fidelity Check 擴大範圍，額外抽樣 2-3 個**同 layout 已上線頁面**
-- 既有頁面的偏差標記為 **Cross-Change DRIFT**（建議修復，不阻擋 archive）
-- Cross-Change DRIFT 記錄在 `design-review.md` 的獨立段落，便於後續 change 處理
+- 既有頁面的偏差標記為 **Cross-Work DRIFT**（建議修復，不阻擋交付）
+- Cross-Work DRIFT 記錄在 `design-review.md` 的獨立段落，便於後續工作處理
 
-**效果**：防止第一個 change 設壞模板後，後續 change 複製偏差。跨 change 審查是建議性的——不阻擋當前 change archive，但留下明確記錄。
+**效果**：防止第一件工作設壞模板後，後續工作複製偏差。跨 work item 審查是建議性的——不阻擋當前工作交付，但留下明確記錄。
 
-## 非 UI Change 的例外
+## 純後端工作的例外
 
-若 change 純後端（migration、API、RLS、config），不觸發 Design Checkpoint，直接走 Spectra 標準流程。判斷依據：change 的 tasks artifact 中是否有任何 task 涉及 `.vue` / `pages/` / `components/` / `layouts/` 檔案，且 git diff 中無 `.vue` 檔案。
+若工作純後端（migration、API、RLS、config），不觸發 Design Checkpoint，直接走 [[aixbdd-workflow]] 的標準入口順序。判斷依據：tasks 檔中是否有任何 task 涉及 `.vue` / `pages/` / `components/` / `layouts/` 檔案，且 git diff 中無 `.vue` 檔案。
 
 ## Design Review Orchestration（snippet 補充）
 
-當 `spectra-apply` 任務碰到 UI 工作（頁面、元件、layout、互動流程），Design Review 是**一等公民**，不是收尾裝飾。
+當 `/implement` 任務碰到 UI 工作（頁面、元件、layout、互動流程），Design Review 是**一等公民**，不是收尾裝飾。
 
 ### 觸發時機
 
-- tasks.md 涉及 UI 檔案或頁面路徑
+- tasks 檔涉及 UI 檔案或頁面路徑
 - 實作中第一次開始編輯 UI 檔案
-- `spectra-propose` 結束時已可判定 change 有 UI scope
+- `/tasks` 結束時已可判定這次工作有 UI scope
 
 ### 必要流程
 
@@ -224,13 +232,13 @@ Design 工作可能發現 spec 未涵蓋的問題。發現時不停下，按以�
 3. 依計劃按 canonical order 執行 targeted design skills
 4. 執行 `/impeccable audit`，確認 Critical = 0
 5. 執行 screenshot review，將證據補到 `design-review.md`
-6. 對 UI change，archive 前必須通過 Design Gate
+6. 對含 UI 的工作，交付人工檢查前必須通過 Design Gate
 
-### Design Gate（archive 前硬門檻 — 補充版）
+### Design Gate（交付前硬門檻 — 補充版）
 
-UI change 在 archive 前，至少要有以下其中一種完整證據，且**人工檢查不能留白**：
+含 UI 的工作在交付人工檢查前，至少要有以下其中一種完整證據，且**人工檢查不能留白**：
 
 - `design-review.md` 有實質內容（截圖、Fidelity Report、無未修復 DRIFT）
-- tasks.md 的 `## Design Review` 區塊全部完成
+- tasks 檔的 `## Design Review` 區塊全部完成
 
-缺一不可時，`pre-archive-design-gate.sh` 會擋下 archive。
+兩者皆無時 **STOP**，回去補完再交付。執行者是讀到這裡的 agent，沒有 hook 代勞（見上方 § Design Gate 的 REQUIRED 欄位表）。

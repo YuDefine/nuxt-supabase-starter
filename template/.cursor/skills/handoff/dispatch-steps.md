@@ -7,7 +7,7 @@ SKILL.md § 2B.3 / 2B.4 / 2B.4.5 / 2B.5 的完整規約：outstanding 的 serial
 
 **`next` 也收工。** 本檔的表格決定的是「下一步該用哪一支 skill、要不要 worktree」，**不是**「在本 session 內把它跑完」——盤點完、user 選定後，選中的工作寫進 durable brief 交給 pane 執行，本 session 隨即收工（1 件走 [relay-steps.md](relay-steps.md)、N 件可平行走 [fanout-steps.md](fanout-steps.md)）。
 
-唯一的例外是**當場做得完的單一 bounded action**（改一行 typo、補一條 pointer、勾一個 checkbox）：直接做掉再收工，不值得為它開一個 pane。**NEVER** 拿這個例外去涵蓋「反正我順手跑完 `/spectra-apply` 比較快」——那是完整的一件工作，該派出去。
+唯一的例外是**當場做得完的單一 bounded action**（改一行 typo、補一條 pointer、勾一個 checkbox）：直接做掉再收工，不值得為它開一個 pane。**NEVER** 拿這個例外去涵蓋「反正我順手跑完 `/implement` 比較快」——那是完整的一件工作，該派出去。
 
 ### 2B.3 Serial vs Parallel 評估
 
@@ -15,7 +15,7 @@ SKILL.md § 2B.3 / 2B.4 / 2B.4.5 / 2B.5 的完整規約：outstanding 的 serial
 
 **Serial 訊號**（任一成立 → serial）：
 - 同檔 / 同 module 內順序改動
-- 同一 spectra change 內 phase 間有依賴（phase B 依賴 phase A 落地）
+- 同一件工作的 phase 間有依賴（phase B 依賴 phase A 落地）
 - 共享 mutex 資源：DB migration、單一 config 檔、單一 secret rotation、同一 `package.json` / lockfile 的 dep upgrades
 - 後一步的設計需要前一步的結果（探索結論決定後續方向）
 
@@ -57,8 +57,8 @@ Outstanding（N 條）：
 - 推薦的 Option 1 不該是「都不做」（除非真的盤點為空）
 - **`mergeBackSafety: ptb-unsafe` wt 不可列為 Option 1 (Recommended)**；可列為 Option 但 label 強制標 `⚠ PTB unsafe`、描述明列 PTB 風險，**禁止**包裝為「最快 deliverable」「safe to land」「ready to merge」這類沒 signal 支撐的斷言
 - 對任何 wt 推薦 next move 時，描述 **MUST** 含 safety signal（blocker / uncommitted / baseline ref）— Step 3.1 audit（handoff-scan `worktreeStash`）已記錄，照搬即可
-- **NEVER** 推薦「review:ui」/「ready 區可點 OK」/「最快 deliverable 用 review:ui 收尾」相關 next move 而未先跑 §2B.1.7 readiness scan（handoff-scan 內含 review-gui `--scan`）+ 引用 `## Review-gui Readiness` 段的 scan 結果。Scan 後 change 落 `feedbackGiven` / `awaitArchiveWalkthrough` / `readyForEvidence` 等 bucket 時，描述 **MUST** 反映該 bucket 的真實 user action（不是「點 OK 收尾」） — 例：`feedbackGiven` 推薦語應為「補 evidence annotation 後 user 在 review GUI 點 OK」、`awaitArchiveWalkthrough` 推薦語應為「以 `/opsx <change-id>` 讀當前缺口並補討論／驗收證據」
-- **NEVER** 從 `HANDOFF.md` 既有「Outstanding」段、`tasks.md` leaf `[x]` / `[ ]` count、或 `spectra list` CLI 進度數字推測 review-gui bucket 或 ready 狀態 — 三類資料維度都跟 `reviewBucketForChange()` 不同，scan output 才是 SoT
+- **NEVER** 推薦「review:ui」/「ready 區可點 OK」/「最快 deliverable 用 review:ui 收尾」相關 next move 而未先跑 §2B.1.7 readiness scan（handoff-scan 內含 review-gui `--scan`）+ 引用 `## Review-gui Readiness` 段的 scan 結果。Scan 後 change 落 `feedbackGiven` / `awaitArchiveWalkthrough` / `readyForEvidence` 等 bucket 時，描述 **MUST** 反映該 bucket 的真實 user action（不是「點 OK 收尾」） — 例：`feedbackGiven` 推薦語應為「補 evidence annotation 後 user 在 review GUI 點 OK」、`awaitArchiveWalkthrough` 推薦語應為「讀 carrier 的未勾 `[discuss]` 項並走收尾 walkthrough 補討論／驗收證據」
+- **NEVER** 從 `HANDOFF.md` 既有「Outstanding」段、carrier 的 leaf `[x]` / `[ ]` count、或 flow 卡的進度推測 review-gui bucket 或 ready 狀態 — 三類資料維度都跟 `reviewBucketForChange()` 不同，scan output 才是 SoT
 
 ### 2B.4.5 PTB-unsafe wt 的快速分流（v1.14+）
 
@@ -82,9 +82,9 @@ User 透過 `AskUserQuestion` 選定下一步 outstanding（含明確的 next-sk
 
 | Next-skill 類型 | brief 要寫的入口 |
 | --- | --- |
-| `/opsx` 實作／修訂（會寫 tracked file） | `/wt <slug>: /opsx <change-id 或來源 reference>`；由接手者讀當前 instructions，保留原 work/revision 與驗收政策 |
-| `/opsx` 驗證／歸檔 | 先驗 current revision evidence、人工 gate 及活 owner；依 checkout workflow 合回與 commit，最後回讀 archive 結果 |
-| `/opsx` history／inspect 與其他唯讀 skill | 直接讀指定 repo/change；legacy 原件維持唯讀 |
+| 實作／修訂（會寫 tracked file） | `/wt <slug>: /implement`；brief 指名 carrier 路徑與剩下的 phase，保留原驗收政策 |
+| 驗證／收尾 | 先驗 carrier 的 evidence annotation、人工 gate 及活 owner；依 checkout workflow 合回與 commit，最後回讀結果 |
+| 唯讀查詢（讀規格、盤點） | 直接讀 `specs/**` 與 carrier；`specs/truth/**` 對非 owner skill 維持唯讀 |
 | 不在表上的 skill | 評估後決定：若不寫 tracked file 直接 dispatch；若會寫則包進 `/wt <slug>: /<next-skill>` 走 worktree |
 
 **判定條件**：
@@ -103,8 +103,8 @@ User 透過 `AskUserQuestion` 選定下一步 outstanding（含明確的 next-sk
 | --- | --- | --- |
 | `ready` | 主線自行從 clade home 啟動 review GUI；user 只在 GUI 點 OK / Issue / Skip | 主線啟動 `pnpm review`、確認 URL 可連線後給 deep-link |
 | `feedbackGiven` | agent 先補 verify-* annotation evidence；user 後續在 review GUI 點 OK | 主線跑 verify channel（per `manual-review.md` Step 8a），補 annotation 後 → review GUI |
-| `awaitArchiveWalkthrough` | 先處理討論與缺失證據；人的 gate 仍經共同 decision command | `/opsx <change-id>` |
+| `awaitArchiveWalkthrough` | 先處理討論與缺失證據；人的 gate 仍經共同 decision command | 收尾 walkthrough（[[manual-review]] § `[discuss]` walkthrough） |
 | `readyForEvidence` | agent 補 verify-* annotation（同 `feedbackGiven`）；scan 顯示 evidenceMissing list 含具體 item | 主線跑 verify channel |
-| `applyInProgress` | 依目前 instructions 繼續實作 | `/opsx <change-id>`（依 §2B.5 隔離 worktree） |
-| `healthCheckNeeded` | 修 canonical source 的缺項，再 project／重驗 | `/opsx <change-id>` |
-| `malformed` | 讀 validator 錯誤並修 source，重建生成投影；legacy 原件維持唯讀 | `/opsx <change-id>` |
+| `applyInProgress` | 依 carrier 繼續實作 | `/wt <slug>: /implement`（依 §2B.5 隔離 worktree） |
+| `healthCheckNeeded` | 修 canonical source 的缺項，再 project／重驗 | `/wt <slug>` |
+| `malformed` | 讀 validator 錯誤並修 carrier 的 `

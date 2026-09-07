@@ -150,5 +150,5 @@ N. `/impeccable polish [target]` — final pass
 - [ ] `/impeccable audit [target]` passed with Critical = 0
 - [ ] `/impeccable polish [target]` passed — no remaining Medium issues on the scope
 - [ ] **Copy Tone Check passed** — target 內所有 user-facing string 通過 `references/copy-tone.md` 規則檢驗（無 engineering jargon、保留的英文屬該行業共識、無中英混用工程詞、縮寫對非技術使用者已展開）
-- [ ] Follow-Up items logged (to `openspec/changes/` or `docs/`) if deferred
+- [ ] Follow-Up items logged (to `docs/tech-debt.md` as a `TD-NNN` entry) if deferred
 - [ ] Excluded skills documented with rationale
