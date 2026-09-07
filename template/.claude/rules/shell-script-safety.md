@@ -98,4 +98,51 @@ NEVER 讓它成為「變數拿不到值也沒關係」的理由。
 | 消費端 | 編輯適用腳本的 agent ＋ 該腳本自己的回歸測試 |
 | 載入路徑 | 本檔 frontmatter 的 paths，由各 runtime adapter 交付；本節沒有文字掃描 detector |
 
+## 3. `pkill -f` / `pgrep -f` 的 pattern MUST 不會命中發出它的那個 shell
+
+`pkill -f` 比對的是**完整 command line**，而發出這條指令的 shell，其
+`/proc/<pid>/cmdline` 裡就含有 pattern 字串（pattern 是指令內容的一部分）——
+於是 shell 把自己列入命中、殺掉自己。`pgrep -f | head -1` 同理，還特別容易挑中發出者。
+
+```bash
+pkill -f "nuxt dev"; sleep 3; pnpm test:bdd > bdd.log 2>&1   # exit 144，bdd.log 連建都沒建
+```
+
+**症狀是 silent-misdirection**：exit 143 / 144（SIGTERM）＋ 零輸出，看起來像 timeout 或
+工具環境不穩，不像自己寫的指令有問題。agent 情境下最容易原樣重試、再死一次。
+
+**MUST 依身分定位，NEVER 依字串比對**——三選一：
+
+```bash
+P=$(ss -lptn 'sport = :3090' | grep -oP 'pid=\K[0-9]+' | head -1); [ -n "$P" ] && kill "$P"
+[ -f .nuxt/dev.pid ] && kill "$(cat .nuxt/dev.pid)"
+pgrep -f "nuxt dev" | grep -vx "$$" | grep -vx "$PPID" | xargs -r kill   # 真的要 pattern 才用
+```
+
+腳本檔內的 `pkill -f "foo"` 通常安全（腳本自己的 cmdline 只有腳本路徑）；**危險的是行內
+組合指令與 agent 直接下的一次性指令**。因此「先停某個 process、再做別的事」這個形狀
+**MUST 收斂成腳本檔**（`scripts/dev-stop.sh`）而不是行內展開——順帶讓定位方式只寫一次。
+
+**Agent 側反射**：看到 exit 143 / 144 且沒有任何輸出，先查這條指令有沒有 `pkill -f` /
+`pgrep -f`，再考慮 harness 問題。
+
+**與 `vendor/snippets/wait-loop/` 的分工**：同一個根因（`-f` 比對完整 cmdline，呼叫端
+自己命中）有兩個外顯場景，兩邊處置不同：
+
+| 場景 | 處置 | 出處 |
+| --- | --- | --- |
+| **等**某個行程結束（`until ! pgrep -f …`） | `[v]itest` 這類字元類讓 pattern 本身不等於它要找的字串，再加空匹配防護與 timeout | `vendor/snippets/wait-loop/` 形狀 1 |
+| **殺**某個行程（本節） | 依 port / pidfile 定位；真的要 pattern 才排除 `$$` / `$PPID` | 本節 |
+
+字元類技巧在殺的場景也管用，但**不夠**——`pkill` 命中的是別人也可能同名的行程，
+按 port 或 pidfile 定位才是「殺對那一個」，字元類只解決「不殺到自己」。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | **informational — 不觸發任何東西**。`rg -n 'p(kill\|grep) -f'` 只能列出候選，判準（pattern 會不會出現在呼叫端自己的 cmdline）沒有文字形狀 |
+| 消費端 | 下複合 shell 指令的 agent；撰寫 dev/test 腳本的人 |
+| 載入路徑 | 本檔 frontmatter 的 paths；agent 直接下的一次性指令由本節正文承接，不經 paths |
+
+> Pitfall：`docs/pitfalls/2026-09-07-pkill-f-pattern-kills-issuing-shell.md`
+
 > Cookbook 範本：`~/offline/clade/vendor/snippets/shell-script-safety/`。

@@ -9,7 +9,10 @@ Local edits will be reverted by the next sync.
 
 # 0-S Codex Security — 放行條件與額度配置
 
-`gates.md` § 0-S 的延伸檔。準備 Tier 3 掃描、選定提交批次或判讀掃描失敗時讀取。
+`gates.md` § **0-S.3** 的延伸檔。準備 `baseline` 或 `path` 掃描、或判讀掃描失敗時讀取。
+
+**本檔不服務 pre-commit。** commit 路徑上的安全 gate 是 0-S.1（`security-precommit.ts`）
+與 0-S.2（`/security-review`），兩者都不經過本檔描述的任何模式。
 退出碼與 `failure_class` 維持既有放行契約；`failure_reason` 與 `failure_phase` 提供診斷，沒有新增自動放行路徑。
 
 ## 掃描模型
@@ -41,7 +44,12 @@ refresh 是否成功仍以新一次真實掃描為準。直接執行未帶 state
 
 ## 工具故障放行（僅 `tool-failure-no-artifacts` / `tool-timeout`）
 
-先依實際 `(exit, failure_class)` 分流；只有 `(2, tool-failure-no-artifacts)` 或 `(2, tool-timeout)` 進入本節。缺欄、未列名或互相矛盾時保留原始輸出並調查工具契約，不提供未掃描放行。修復後以新一次實跑結果重新判定。
+先依實際 `(exit, failure_class)` 分流；只有 `(2, tool-failure-no-artifacts)` 或 `(2, tool-timeout)` 進入本節。
+
+**`(2, scope-abort)` NEVER 進入本節。** 它代表 watchdog 在第一個分母行判定範圍沒收斂並中止了掃描
+（stderr 有 `[security-scan] scope abort:` 那行）——處置是**修範圍**：改用
+`path --path <relative>`，或縮小批次讓 scanner 推導得出來。**NEVER** 對它請求未掃描放行，
+也 **NEVER** 提高 `--max-cost` 重試：那趟本來就不會在任何預算內跑完。缺欄、未列名或互相矛盾時保留原始輸出並調查工具契約，不提供未掃描放行。修復後以新一次實跑結果重新判定。
 
 未掃描放行是人的決定。使用當前 runtime 可用的提問介面；沒有工具就在對話提問並等待本批明確回答，**NEVER** 自行決定放行：
 
@@ -73,10 +81,11 @@ Files 進度分母隨 scanner 版本、模式與範圍改變；單次分母不�
 
 | failure_reason | 當次處置 |
 | --- | --- |
-| `quota-exhausted` | 停止該帳號的後續掃描；保留額度訊息與重設時間原文，不提高美元停止線重試 |
+| `quota-exhausted` | 停止該帳號的後續掃描；保留額度訊息與重設時間原文，不提高美元停止線重試。額度耗盡是**帳號層**狀態，換模式、換 repo、換停止線都不會繞過它（2026-09-07 實測：`You've hit your usage limit… try again at Sep 13th`，六天不可用）|
 | `auth-failure` | 修復既有認證；不自動切 API 計費或購買 credits |
 | `output-dir-not-empty` | 使用新的私有 output directory；不刪既有證據 |
 | `cost-limit-reached` | 記錄已完成單位、模型估算成本與剩餘範圍，再決定新一輪停止線 |
+| `scope-abort` | watchdog 判定分母 > 請求檔數並中止。改用 `path` 模式或縮小批次，**NEVER** 提高停止線重試 |
 | 其他或 `unknown` | 依 failure_phase、stderr 與 artifacts 查證；不從缺產物推定成本原因 |
 
 scanner stderr 在 `<output_dir>.stderr.log`，與 output directory 同層；scanner 起跑前 output directory 保持空白。
@@ -84,8 +93,16 @@ scanner stderr 在 `<output_dir>.stderr.log`，與 output directory 同層；sca
 
 ## 提交內容與歷史覆蓋
 
-日常 0-S 使用 `working-tree --paths-file <批次清單>`：固定 HEAD 後在私有 Git 快照加入選定內容，
-原 repo index、WIP 與未追蹤檔保持原樣。清單是一行一個 repo-relative 檔案；rename 列出兩端。
+**啟動任何真掃描之前 MUST 先確認範圍會收斂。** scanner 在第一秒就印出分母
+（`[00:01] Scan phase: preflight (0/<M> files)`，首次成本計量在 `[00:18]` 之後），
+`<M>` 不等於你請求的檔數就 **MUST 立刻中止**，不要等 `--max-cost` 把錢燒完才停——
+它停得住花費，停不住那趟已經注定跑不完的作業。
+
+`path --path <relative>` 是唯一把範圍交給呼叫端的模式（直接傳 `--path`，不建快照）。
+2026-09-07 實跑分母 `0/2`，等於請求檔數。
+
+`working-tree --paths-file <批次清單>` 的範圍由 scanner 自己推導：固定 HEAD 後在私有 Git
+快照加入選定內容，原 repo index、WIP 與未追蹤檔保持原樣，清單是一行一個 repo-relative 檔案；rename 列出兩端。
 同一檔混有其他工作的變更時，使用精確 patch 選定本批 hunks；**NEVER** 擅自把整檔納入本批。
 掃描後、commit 前重新比對批次內容；內容變了即重掃，不能把舊快照結果套到新內容。
 

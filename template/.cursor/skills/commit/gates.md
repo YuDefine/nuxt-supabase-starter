@@ -258,56 +258,87 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ---
 
-## § 0-S: Codex Security 敏感路徑掃描（條件觸發、attended hard gate）
+## § 0-S: 敏感路徑安全掃描（條件觸發、attended hard gate）
 
 Step 0-Scope 確認本次 WIP 後，依 [`review-tiers.md`](references/review-tiers.md)
 Tier 3 判定：migration / schema / auth / permission / RLS / raw SQL / billing / security-critical
 任一類別命中就觸發；純 docs、一般業務邏輯與非敏感重構跳過。本判定涵蓋本次 `/commit` 的
 **每一個** changed path，不只主線 agent 自己改的檔。
 
-觸發時把本次批次的 repo-relative 檔案寫入 paths file（一行一個，rename 列兩端），
-使用固定 HEAD 加選定內容的私有快照掃描；刪除保留在 diff。選定內容與原 repo 的其他 WIP
-分開，原 index 不變。同檔混有其他工作時使用精確 patch，詳見 [security-scan.md](security-scan.md)。
+觸發後依序跑 **0-S.1 → 0-S.2**，兩層都在本機十秒級內結束。
+**NEVER** 在 pre-commit 啟動 Codex Security——理由、實證與它的兩個合法用法在 § 0-S.3。
+
+### 0-S.1 確定性掃描（秒級，缺工具不擋）
+
+把本次批次的 repo-relative 檔案寫入 paths file（一行一個，rename 列兩端），然後：
 
 ```bash
 CLADE_ROOT="${CLADE_HOME:-$HOME/offline/clade}"
-node "$CLADE_ROOT/scripts/security-scan.ts" working-tree \
+node --experimental-strip-types "$CLADE_ROOT/vendor/scripts/security-precommit.ts" \
   --target "$(git rev-parse --show-toplevel)" \
-  --model gpt-5.6-sol \
-  --effort xhigh \
-  --max-cost <本次診斷或掃描停止線> \
   --paths-file <本次批次清單>
 ```
 
-wrapper 在 target 有 `SECURITY.md`（安全憲法，[`security-policy.md`](references/security-policy.md)）
-時自動加 `--knowledge-base`，ledger 落在 target 自家 `docs/evidence/security-scan-ledger.jsonl`
-——**那個 ledger 檔併入本次 commit 的 selective stage**，不留成 dirty。target 沒有 `SECURITY.md`
-時 wrapper 印一行 pointer 後照掃（warn，不擋）；本次 Tier 3 path 含 `SECURITY.md` 本身時，
-掃完 MUST 重跑 `baseline`（憲法改了、舊 baseline 即過期）。
-
-固定版尚未安裝時，先跑一次 `node "$CLADE_ROOT/scripts/security-scan.ts" setup`，再重跑同一個
-批次掃描。這個 setup 是 idempotent operator setup，不把 scanner 加進 consumer dependency graph。
-掃描結果只涵蓋 ledger 所記的固定快照；commit 前批次內容改變時重掃。
-
-### Exit 分流
-
-exit 與 `failure_class` 是既有 fail-closed 放行判定；新增的 `failure_reason`、`failure_phase`
-用於診斷，不產生自動放行。三者連同 stderr path 一起讀。
-放行條件與 `--max-cost` 怎麼給，見 [security-scan.md](security-scan.md)。
-
-| exit | failure_class | 處置 |
+| exit | 意義 | 處置 |
 | --- | --- | --- |
-| `0` | `none` | coverage complete 且無 High / Critical finding；輸出 `✅ 0-S 通過`，進 0-A。 |
-| `1` | `findings-at-or-above-threshold` | 有 High / Critical finding；停止本次 commit，列出 report path 與 findings，修正後重跑 0-S。 |
-| `2` | `coverage-incomplete` | 掃描跑了但沒掃完；停止本次 commit 並如實回報，**NEVER** 宣稱掃描乾淨。 |
-| `2` | `tool-failure-no-artifacts` / `tool-timeout` | 工具故障，本次掃描等於沒發生；**MUST** 走 security-scan.md § 工具故障放行 的當前原生詢問／對話授權流程，**NEVER** 自行放行或宣稱掃過。 |
-| 其他、缺欄或互相矛盾 | 含未列名的類別 | 保留原始輸出並停止本批，調查 wrapper 契約；不轉成上列工具故障放行選項。 |
+| `0` | 兩支都 clean，或未安裝的那支記 `skipped` | 進 0-S.2 |
+| `1` | 有 secret / SAST 命中 | 停止本次 commit，修正後重跑 0-S.1 |
+| `2` | 某支跑了但沒跑完（`error`） | 停止本次 commit；掃描沒跑完等於沒掃，**NEVER** 讀成乾淨 |
 
-exit `1` 的每一條 High / Critical finding **MUST** 先走 `security-evidence finding`（Severity / Confidence / Coverage / Proof Gap 判讀），verdict 是 `accept` 或 `needs more validation` 才登 TD 並修；`unsupported` 記進 report 不修。**NEVER** 看到 High 標籤就直接改 code。
+工具未安裝時該支記 `skipped` 並印安裝指令，**NEVER** 因此跳過整個 0-S——
+0-S.2 不依賴任何本機安裝，它照跑。
 
-Git pre-commit hook 只跑快速 LOCKED drift check。完整 repository 掃描另由 operator 明確執行
-`node "$CLADE_ROOT/scripts/security-scan.ts" baseline --target <repo> --max-cost <見 security-scan.md>`；
-它不會因一般 commit 自動啟動，也不由 path scan 冒充。
+### 0-S.2 `/security-review`（分鐘級，本 gate 的 hard 層）
+
+對本批 diff invoke AI Agent 內建 `/security-review`。它讀得到完整變更語境，
+走本 session 既有額度，**沒有**外部配額或美元停止線。
+
+High / Critical finding → 停止本次 commit。每一條 **MUST** 先走 `security-evidence finding`
+（Severity / Confidence / Coverage / Proof Gap 判讀），verdict 是 `accept` 或
+`needs more validation` 才登 TD 並修；`unsupported` 記進 report 不修。
+**NEVER** 看到 High 標籤就直接改 code。
+
+### 0-S.3 Codex Security：**NEVER** 在 pre-commit
+
+它的範圍不由呼叫端決定。`working-tree` 模式的 `--paths-file` 只用來建私有快照
+（`scripts/security-scan.ts:310`），傳給 scanner 的參數只有 `--working-tree`（`:657`），
+範圍靠 scanner 自己去 diff 那個快照。推導成功就跑得完，失敗就是整個 repo，
+而 `--max-cost` 只能讓它在燒完錢時停下、不能讓它少做事。
+
+2026-09-07 fleet ledger 實測，41 次掃描成功 2 次：
+
+| 觀察 | 數字 |
+| --- | --- |
+| clade 唯一成功（分母收斂到 5） | 37m05s / $24.58 / 31.4M input token / 0 findings |
+| <consumer-a>（分母沒收斂：14 檔請求 → 6,330） | $15 只推進 22/6,330，線性外推整個 repo ≈ $4,300 USD |
+| <consumer-b> / <consumer-a> 合計 | 16 次，0 次成功 |
+
+**NEVER** 用「拉高 `--max-cost`」或「改排在 nightly」處理跑不完——兩者都建立在
+「成本可預估」的前提上，而分母沒收斂時那個前提不成立。
+
+它剩下兩個合法用法，**都不在 commit 路徑上**：
+
+- `path --path <relative> [--path ...]`：唯一真的把範圍交給呼叫端的模式
+  （`:645-647` 直接傳 `--path`，不建快照）。2026-09-07 實跑 `preflight (0/2 files)`，
+  分母就是請求的檔數。
+- `baseline`：由 operator 明確執行的完整 repository 掃描，
+  `node "$CLADE_ROOT/scripts/security-scan.ts" baseline --target <repo> --max-cost <見 security-scan.md>`。
+  它不會因一般 commit 自動啟動，也不由 path scan 冒充。
+
+兩者的 exit 分流、`failure_class` 放行契約與 `--max-cost` 怎麼給，見
+[security-scan.md](security-scan.md)。
+
+Git pre-commit hook 只跑快速 LOCKED drift check。
+
+gate 自己的可用度跑 `node scripts/audit-security-gate-readiness.ts`（warn-only）：
+它量 0-S.1 兩支工具在不在，以及各 consumer ledger 有沒有撞頂未收斂的 run。
+**NEVER** 把它綠燈讀成「0-S 掃過了」——它量的是 gate 有沒有能力跑，不是誰跑過。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | Tier 3 命中 → 0-S.1 exit 1 / 2 或 0-S.2 有 High / Critical 就**擋住本次 commit**。0-S.1 的 `skipped` 不擋 |
+| 消費端 | 跑 `/commit` 的 attended agent（本節）；`security-precommit.ts` 自己判 exit |
+| 載入路徑 | 本節（`plugins/hub-core/skills/commit/gates.md`，`/commit` 必經） |
 
 ---
 
