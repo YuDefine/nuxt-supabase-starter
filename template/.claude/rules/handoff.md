@@ -9,6 +9,8 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
 
 # Handoff
 
@@ -68,6 +70,8 @@ Local edits will be reverted by the next sync.
 
 **不是「讀了就刪」**，而是**「claim 已成立後再刪」**。
 
+跨 session successor 交接 **MUST** 走 durable handoff transport：單件工作用 `relay`，可獨立平行的工作用 `fanout`，由 `vendor/scripts/herdr-session-handoff.ts` 建立 successor、傳遞 durable task 並記錄 receipt。runtime 原生 bounded delegation 只處理 phase work，不取代 successor transport。
+
 ## 與長期知識的分工
 
 | 文件 | 用途 | 生命週期 |
@@ -96,7 +100,7 @@ Local edits will be reverted by the next sync.
 
 > **baseline 過度累積**：若 `HANDOFF.md` 大多為 baseline section 但仍超 size / lines threshold（clade 自家常見情境），表示 baseline 已過度膨脹，**MUST** 評估是否該把某些 baseline 段拆出成 `docs/archives/<YYYY-MM>-<topic>.md` 或 `docs/solutions/<topic>.md`、`docs/decisions/<topic>.md`。HANDOFF 不是長期 KB。
 
-審計訊號（`vendor/scripts/handoff-drift-scan.ts`）對應的觸發點：
+審計訊號（handoff drift scan）對應的觸發點：
 
 - `handoff-size-exceeded` / `handoff-lines-exceeded`：HANDOFF.md 超過 size / lines threshold（default 30 KB / 400 lines；env / registry override 可調）
 - `narrative-section-stale`：completed-narrative dated section 超過 narrative_age_days（default 3 天）
@@ -240,7 +244,7 @@ Root cause = HANDOFF writer（包含 `next` § 2B.4 推薦階段）把 audit doc
 
 ## Drift detection (v1.13+)
 
-每次 session start 時，`session-start-roadmap-sync.sh` hook 會跑 `scripts/handoff-drift-scan.ts`，自動掃所有 `session/*` worktree 跟 `HANDOFF.md` 內容比對，把 drift 寫到 stderr：
+每次 session start 時，若所用 runtime 有已驗證的 session-start integration，該 integration 會跑 handoff drift scan，自動掃所有 `session/*` worktree 跟 `HANDOFF.md` 內容比對，把 drift 寫到 stderr；沒有此 integration 時，MUST 執行等價的 entry check。各 runtime 的能力與觸發方式由 adapter fragment 宣告。
 
 - **unmentioned-progress** — branch HEAD 已 commit 但 slug 沒在 HANDOFF 出現 → 下個 session 看不到這個工作
 - **mention-stale** — branch 最新 commit 時間晚於 HANDOFF mtime → HANDOFF 描述可能過時

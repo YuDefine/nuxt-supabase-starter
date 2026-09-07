@@ -10,6 +10,8 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
 
 # Dev Server Auto-Spawn（agent 自起，不要叫 user cd）
 
@@ -24,10 +26,10 @@ Local edits will be reverted by the next sync.
 | 你要做的事 | 走哪 |
 | --- | --- |
 | 起長駐 dev server | `node scripts/dev-session.ts`（durability = herdr Tab） |
-| 另開一個 AI Agent session | `vendor/scripts/herdr-session-handoff.ts`（見 `vendor/snippets/herdr-session-handoff/README.md`） |
+| 另開一個 runtime session | `vendor/scripts/herdr-session-handoff.ts`（見 `vendor/snippets/herdr-session-handoff/README.md`） |
 | 其他要活過 tool-call 的 process | `herdr tab create --no-focus` + `herdr pane run`，或包成 dev-session 那樣的入口 |
 
-`tmux` / `zellij` 在 user 層 `~/.claude/settings.json` 的 `permissions.deny` 已被擋（`Bash(tmux:*)` / `Bash(zellij:*)`），打了會被拒。**NEVER** 繞過它——不要用 `sh -c 'tmux …'`、絕對路徑、alias、`env` 包裝或任何等價寫法把命令送出去。deny 擋不到的寫法不等於這條規約放行；規約管的是意圖，不是字串。
+`tmux` / `zellij` 在 user 層 target runtime deny policy 已被擋（`Bash(tmux:*)` / `Bash(zellij:*)`），打了會被拒。**NEVER** 繞過它——不要用 `sh -c 'tmux …'`、絕對路徑、alias、`env` 包裝或任何等價寫法把命令送出去。deny 擋不到的寫法不等於這條規約放行；規約管的是意圖，不是字串。
 
 當 review-gui 顯示某 item 的 screenshot 不存在 / outdated，或 user 想開瀏覽器親自操作 sanity check 時，**agent 自己起 dev server**，禁止叫使用者「請 cd 到 worktree 跑 `pnpm dev`」。完整 recipe（命令、fallback 步驟、回報訊息 template、env bootstrap）：`~/offline/clade/vendor/snippets/dev-session/README.md`。
 

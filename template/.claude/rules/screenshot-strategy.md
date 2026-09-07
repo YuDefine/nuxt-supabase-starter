@@ -1,5 +1,5 @@
 ---
-description: Screenshot strategy 規則——根據互動深度、跨裝置、跨瀏覽器與是否要沉澱成回歸測試，選擇 agent-browser 或 Playwright CLI
+description: Screenshot strategy 規則——根據互動深度、跨裝置、跨瀏覽器與是否要沉澱成回歸測試，選擇 target adapter carrier 或 reproducible runner CLI
 paths: ['screenshots/**', 'tests/e2e/**', 'packages/*/tests/e2e/**', 'openspec/changes/**/design-review.md']
 ---
 <!--
@@ -9,6 +9,14 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
+
+## Runtime adapter boundary
+
+The obligations, predicates, evidence schema, failure handling, and review timing in this source are shared. Concrete browser, dispatch, question, filesystem, and command mechanics are target-native and MUST come from the selected runtime fragment at the matching adapter path. A fragment declares only the capability it can prove; an absent or unverified capability remains blocked and MUST NOT be silently replaced by a neighbouring runtime.
+
+
 
 # Screenshot Strategy
 
@@ -16,113 +24,29 @@ Local edits will be reverted by the next sync.
 
 ## 工具選擇
 
-Cursor 環境（見 [[agent-routing]] § Cursor 環境的 browser 載體）**MUST** 用 `cursor-ide-browser`，本表的 `agent-browser` / Playwright 列只適用非 Cursor。**NEVER** 在 Cursor 主線把本表讀成「必須 agent-browser」。
+先判斷一次性探索、人工驗收、可重現回歸、多 viewport、跨瀏覽器與量測需求，再由 target adapter 選擇已驗證的 browser carrier、reproducible runner 或 measurement surface。共通判準如下：
 
-| 工具 | 何時優先使用 | 特性 |
-| --- | --- | --- |
-| `cursor-ide-browser` | **Cursor 主線**開頁、登入、截圖 | IDE 可控 Chromium；Google 不會 `signin/rejected` |
-| `agent-browser`（自管 persistent-profile Chromium，CDP） | 非 Cursor 的一次性驗收、探索、debug、人工檢查 | 快、互動成本低、persistent profile 繼承登入 cookie、平行 `--session` 原生隔離、CLI + MCP 雙模 |
-| Playwright CLI / spec | 響應式、多 viewport、跨瀏覽器、多分頁、CI 回歸 | 可重現、可沉澱 |
+| 需求 | 共通選擇規則 |
+| --- | --- |
+| 一次性互動與人工驗收 | target adapter 的 interactive browser carrier |
+| 多 viewport、跨瀏覽器、多分頁或需重拍的回歸 | target adapter 的 reproducible browser runner |
+| LCP/CLS/INP breakdown 或 heap measurement | target adapter 的 measurement-only surface |
+| 不需要的上層 runtime / QA 平台 | MUST NOT 取代已批准的 target carrier |
 
-## Browser automation 工具路由（三條線別混）
+## Cloud / clean-browser fallback
 
-「截圖 / 瀏覽器自動化」有三條獨立的線，**MUST** 先確定自己在哪條，再往下走細部決策（見「決策樹」）。混淆會導致拿 measurement 工具做日常互動、或把表層 vitals 數字當成 performance breakdown。
+遠端 provider、proxy、clean profile 與 CAPTCHA 能力都是 opt-in target capability。只有本機 carrier 確實不可用、目標允許公開資料且不需要私有登入態時，才可依 target adapter 的 consent flow 啟用；provider credential NEVER 寫入 repo。
 
-| 線 | 是什麼 | 角色 | 注意 |
-| --- | --- | --- | --- |
-| **① `agent-browser`** | 自管 persistent-profile Chromium（不 CDP-attach 既有 Chrome，從根本無 remote-debugging popup），CLI + MCP 雙模 | **primary** — screenshot-review / verify / design review 預設走這條 | 連線/profile/session 設定見 `screenshot-review` agent §0；本檔下方所有 agent-browser 規範都指這條 |
-| **② `chrome-devtools-mcp`** | 純量測 MCP：`lighthouse_audit` / `performance_start_trace` + `performance_analyze_insight`（LCP/CLS/INP breakdown + culprit）/ `take_heapsnapshot` | **measurement only** | **NEVER** 拿來做日常截圖 / 互動 — 那是線 ①；agent-browser `vitals` 只給表層數字，要 breakdown / culprit 才走這條（見 `modern-web-mcp` § 實測閉環） |
-| **③ Playwright CLI / spec** | 可重現、可沉澱的 spec | responsive / 多 viewport / 跨瀏覽器 / 多分頁 / CI 回歸 | 見下方「決策樹」「場景對照」 |
+## 給 user 開瀏覽器看頁面
 
-- workflow-use / `terminal` / `desktop` / `browsercode` / `qa-use` / `vibetest-use` 等上層 runtime / app / QA 平台**都不採用**（會與 Claude Code + Codex runtime 競爭）；採用 agent-browser 的決策紀錄見 `docs/discussions/2026-06-24-agent-browser-adoption.md`。
-
-## Cloud / clean-browser fallback（disabled-by-default）
-
-本機 agent-browser（線 ①）掛掉、或目標本質需要 clean browser / anti-bot / CAPTCHA / proxy / 並發多 browser 時，可走 agent-browser 的遠端 provider（`-p browserbase` / `-p kernel`）或 `--proxy` 作 **opt-in fallback**。預設關閉，agent 啟用前 **MUST** 先回報 user。
-
-### 啟用條件（全部滿足才走）
-
-- local 線 ① 確實不可用（`agent-browser doctor` 報 fail 且 `--fix` 無效），**或** 目標明確需要 provider 專屬能力（anti-bot / CAPTCHA / proxy / clean profile / 並發）
-- 目標是 public URL（暴露 localhost 時用 `cloudflared tunnel --url http://localhost:<port>`）
-- **不需要**使用者私有登入狀態（遠端 provider browser 不繼承本機 profile cookie）
-
-### Hard rule
-
-- **NEVER** 把本機 profile cookie / private state 上傳遠端 provider — 這是隱私 / 安全決策，只在 user 明確 opt-in 才做
-- **NEVER** 把遠端 provider 的截圖當成「使用者已登入本機」的 review evidence — 兩者不等價
-- **NEVER** 把 provider API key（`BROWSERBASE_API_KEY` / `KERNEL_API_KEY` 等）寫進 repo / clade source — 留 user-level env
-- **MUST** 啟用前回報 user「本機 agent-browser 不可用，建議改走遠端 provider fallback（限非私有登入頁）」，等 user 同意才繼續
-
-## 給 user 開瀏覽器看頁面（hard rule）
-
-兩條線分工明確：
-
-| 用途 | 工具 | 模式 |
-| --- | --- | --- |
-| **Agent 自己驗證** | agent-browser（線 ①） | headless 截圖，inline 顯示在對話 |
-| **給 user 看可見 Chrome** | chrome-devtools-mcp（線 ②） | headed Chrome，user 螢幕可見 |
-
-### agent-browser = 永遠 headless
-
-MCP daemon 在 session 啟動時以 `--headless=new` 開 Chrome。`headed: true`（MCP flag）和 CLI `--headed` 都不可靠（daemon auto-reconnect 搶回 headless → Chrome 閃退）。agent-browser **只**用於 headless 截圖 / snapshot / DOM 檢查。
-
-### 給 user 看頁面：chrome-devtools-mcp `navigate_page`
-
-chrome-devtools-mcp 會開一個 **headed Chrome** 並導航到指定 URL，user 可在螢幕上看到（headed 導航給 user 看頁面是明文例外，見 §「給 user 看」hard rule）。
-
-```
-# 1. 先登入（dev-login 設 cookie）
-mcp__chrome-devtools-mcp__navigate_page({
-  url: "http://127.0.0.1:<port>/auth/<dev-login-route>?role=admin"
-})
-
-# 2. 再導到目標頁
-mcp__chrome-devtools-mcp__navigate_page({
-  url: "http://127.0.0.1:<port>/reports/vending-dispatch"
-})
-```
-
-或用 dev-login 的 `redirect` 參數一步到位：
-
-```
-mcp__chrome-devtools-mcp__navigate_page({
-  url: "http://127.0.0.1:<port>/auth/<dev-login-route>?role=admin&redirect=/reports/vending-dispatch"
-})
-```
-
-**前提**：每個 consumer 的 `.mcp.json` **MUST** 含 `chrome-devtools-mcp` entry（clade propagate 已涵蓋）。
-
-### Fallback（chrome-devtools-mcp 不可用時）
-
-回報 user 說明卡點（chrome-devtools-mcp page closed / timeout / 連線失敗），由 user 自行決定開瀏覽器。**NEVER** 用 `open` / `xdg-open` 替 user 開瀏覽器。
-
-### NEVER
-
-- **NEVER** 用 `open` / `xdg-open` 開 URL — agent 完全無法控制預設瀏覽器（無 CDP），等於把工作踢回 user（per [[pitfall-open-command-launches-uncontrolled-browser]]）
-- **NEVER** 用 agent-browser MCP `headed: true` — daemon 忽略
-- **NEVER** 用 agent-browser CLI `--headed` — daemon auto-reconnect 搶回 headless
-- **NEVER** `close --all` / `pkill` agent-browser 再重開 — 殺 MCP daemon
-- **NEVER** 反覆 open → 黑畫面 → close → open 試錯迴圈
-
----
+agent 自驗、user 可見 headed navigation 與 measurement 是三種不同用途，必須使用 target adapter 明確聲明的 surface。任何 unavailable surface 都保持 blocked；NEVER 用 uncontrolled default browser 代替。
 
 ## 決策樹
 
-1. 需要多 viewport / responsive？→ Playwright
-2. 需要跨瀏覽器？→ Playwright
-3. 需要多分頁 / 多 session？→ 平行獨立作業用 agent-browser `--session <name>`（原生隔離，各 session 自己的 tab，互不搶）；需要可重現回歸才升 Playwright
-4. 這組截圖之後還要重拍？→ Playwright
-5. 其他一次性檢查 → `agent-browser`
-
-## 場景對照
-
-| 場景 | 建議工具 |
-| --- | --- |
-| 人工檢查逐項驗收 | `agent-browser` |
-| Design Review 視覺 QA | `agent-browser` 起步，必要時升級 Playwright |
-| Mobile / tablet / desktop 對照 | Playwright |
-| Safari / Firefox 驗證 | Playwright |
-| 重複第 3 次以上的截圖回歸 | Playwright spec |
+1. 需要多 viewport / responsive？→ reproducible browser runner
+2. 需要跨瀏覽器或可重拍回歸？→ reproducible browser runner
+3. 需要一次性互動？→ target adapter 的 interactive browser carrier
+4. 純 performance / heap measurement？→ target adapter 的 measurement-only surface
 
 ## 存放方式
 
@@ -167,8 +91,8 @@ screenshots/<env>/<change-name>/_exploration/
 
 凡是給人工檢查、design review、debug 給 user 看的截圖：
 
-- **MUST** 用 explicit path 落在 `screenshots/<env>/<topic>/` 下：`agent-browser screenshot screenshots/<env>/<topic>/#N-....png`
-- **NEVER** 讓 `agent-browser screenshot` 不帶 path 參數 — 預設落點 user 找不到
+- **MUST** 用 explicit path 落在 `screenshots/<env>/<topic>/` 下：`<target-capture> screenshots/<env>/<topic>/#N-....png`
+- **NEVER** 讓 `<target-capture>` 不帶 path 參數 — 預設落點 user 找不到
 - `/tmp` 只允許 agent 內部 sanity check（拍完當場 `Read` 自己看，不交付給 user）
 
 換句話說：任何要交付給 user 的截圖路徑必須是 `screenshots/<env>/<topic>/...`，不能漂走。
@@ -230,33 +154,13 @@ manual-review.md 規定 item id 一律 `#N` / `#N.M`；本檔規定截圖檔名�
   - 同 item 多角度截圖用 a/b/c... 變體後綴，descriptor 區分情境
 ```
 
-## 截圖落檔（agent-browser）
+## 截圖落檔（target adapter operation）
 
-`agent-browser screenshot <path>` 是 CLI，直接把 PNG 寫到 `<path>` 並印出確認字串（不回傳 base64、不需要任何後處理）。
-
-- **MUST** 顯式傳 path：`agent-browser screenshot screenshots/<env>/<topic>/#N-....png`
-- **NEVER** 對 CLI 印出的確認字串做任何 decode / re-write — 檔案已經寫好了
-- 全頁截圖 `--full`；JPEG 品質 `--screenshot-quality <n>`；vision model 標號版 `--annotate`
-- 預設輸出目錄可用 `--screenshot-dir <path>` 或 `AGENT_BROWSER_SCREENSHOT_DIR` 固定
+MUST 以 target adapter 宣告的 capture command 寫入 explicit path `screenshots/<env>/<topic>/#N-....png`。NEVER 省略 path、把 temporary capture 當 canonical evidence，或在驗證前覆蓋既有 canonical 檔。
 
 ### Review evidence：`safe-screenshot.ts`（非破壞性，review/verify:ui 推薦入口）
 
-`screenshots/local/**` 是 **gitignored、無 git 歷史 / 無備份**。直接 `agent-browser screenshot <canonical>` 若拍出 blank / 錯頁，會**覆蓋掉**先前有效截圖且**永久遺失**（2026-06-24 <consumer-a> ehr-salary：一張空白 re-capture 砍掉有效 `#2` admin-list，無從還原）。加上 agent-browser daemon 會被 agent harness 在 tool-call 之間 reap → 跨 call 的 capture 各自 spawn 競爭 Chromium、撞 profile `SingletonLock` → Chrome abort → 整頁 blank。
-
-因此 **review / verify:ui 的 canonical 截圖 MUST 走 `scripts/safe-screenshot.ts`（clade source `vendor/scripts/safe-screenshot.ts`），NEVER 對 canonical 路徑裸跑 `agent-browser screenshot`**：
-
-```bash
-node scripts/safe-screenshot.ts \
-  --url "http://localhost:3040/admin/salary" \
-  --out "screenshots/local/<change>/#2-admin-list-final.png" \
-  --login-url "http://localhost:3040/auth/_dev-login?email=<admin>" \
-  --expect-text "<必出現於頁面的字串>"
-```
-
-它保證：(1) 啟動前清 stale `Singleton*` lock；(2) 全程在單一 process 內（daemon 不被跨-call reap）；(3) 拍到 **temp** 檔、驗證 `--expect-text` 真的在頁面 + size ≥ `--min-bytes`（預設 8000，擋 blank）**才** atomic 取代 canonical；(4) 取代前把舊檔備份成 `<name>.prev`；(5) 任一驗證失敗 → canonical **原封不動** + exit≠0。拍壞不再致命。
-
-- 裸 `agent-browser screenshot <path>` 仍可用於**探索 / 一次性**截圖（非 canonical evidence、可隨意覆蓋）
-- `--expect-text` 是擋 blank 的關鍵 anti-pattern guard，review evidence capture **SHOULD** 帶
+Canonical review evidence MUST use `vendor/scripts/safe-screenshot.ts` or the equivalent atomic helper declared by the target adapter. The helper MUST capture to a temporary path, verify expected content and artifact size, preserve the previous canonical file on failure, and replace it only after all checks pass. A raw carrier confirmation string is never evidence by itself.
 
 ### Before／after ad-hoc comparison
 
@@ -273,25 +177,11 @@ node scripts/before-after-screenshot.ts \
 
 預設落在 `screenshots/local/ad-hoc/before-after/<name>-<timestamp>/` 且 `publication=local-only`。只有 manifest `status=complete` 的輸出才是有效 comparison；`failed` / `partial` 的 `review.md` 不產生雙欄表，避免把單邊成功誤讀成完整比較。
 
-這個 helper 是 ad-hoc comparison，不會寫 `(verified-ui:)` 或 evidence sidecar。要納入正式 review-gui 驗收，仍依 item／sub-item 分別走 `vendor/snippets/verify-channels/annotation-cheatsheet.md` 的 `evidence-store.ts` 寫入契約；多 viewport、跨瀏覽器或重複 regression 仍走本檔決策樹指定的 Playwright。
+這個 helper 是 ad-hoc comparison，不會寫 `(verified-ui:)` 或 evidence sidecar。要納入正式 review-gui 驗收，仍依 item／sub-item 分別走 `vendor/snippets/verify-channels/annotation-cheatsheet.md` 的 `evidence-store.ts` 寫入契約；多 viewport、跨瀏覽器或重複 regression 仍走本檔決策樹指定的 target adapter runner。
 
-## 平行 session 隔離（agent-browser）
+## 平行 session 隔離（target adapter operation）
 
-agent-browser 的 `--session <name>` 是**原生**隔離——每個 session 各自的 daemon + 各自的 tab，互不搶（已實證：兩條平行 session 各守自己的 URL），不需要手動重綁 tab。
-
-### 隔離規則
-
-- **MUST** 平行 sub-agent / 多分頁作業各給不同 `--session <name>`（如 `--session bh-<task>`）；同一 session 內的命令共用同一 tab
-- **MUST** 任何會改變頁面的動作（click 導航、submit、SPA re-render）後**重新 `snapshot -i`** — `@eN` ref 在頁面變動後即 stale
-- agent-browser 用**自管 profile Chromium**，不碰 user 的 daily Chrome tab，所以不存在「誤切到 user 業務 tab」的問題；user 並行業務不受干擾
-- 操作前要確認當前頁面用 `agent-browser --session <name> get url`
-
-### 診斷與救援
-
-- 拍出來不是預期頁面 → `agent-browser --session <name> get url` + `snapshot -i` 對比；多半是漏了 re-snapshot 用了 stale ref
-- session 壞掉：`agent-browser --session <name> close` 後重開
-- **整頁 blank + log 出現 `Failed to create ... SingletonLock: File exists` / `ProcessSingleton ... Aborting`** → daemon 被 harness reap 後留下 orphan profile lock，新 launch 撞鎖 abort。救援：`agent-browser close --all` → `rm -f ~/.agent-browser/profile-default/Singleton*` → 重試。`doctor --fix` **不**清這些 orphan lock（已實證）；review evidence 走 `safe-screenshot.ts` 內建此清理，免手動
-- 整體診斷：`agent-browser doctor`（`--fix` 自動清 stale daemon / socket，但**不**含 profile `Singleton*` orphan lock）
+平行 agent / 多分頁作業 MUST 使用 target adapter 宣告的原生 session isolation。任何會改變頁面的 action 後 MUST 重新取得 snapshot/ref；無法證明隔離時保持 blocked。
 
 ## 歸檔機制
 
@@ -315,7 +205,7 @@ screenshots/local/
 
 ## 沉澱規則
 
-同一組截圖被重複拍第 3 次，**SHOULD** 轉成 Playwright spec，避免每次重述操作步驟。
+同一組截圖被重複拍第 3 次，**SHOULD** 轉成 reproducible runner spec，避免每次重述操作步驟。
 
 ## round-trip-only manual-review item
 
@@ -343,7 +233,7 @@ screenshots/local/
 
 ### 2. Review 階段兜底
 
-`screenshot-review` agent 拍前 **MUST** 跑 emptiness heuristic（DOM empty-state 文字 / list row 計數 / main innerText 長度）。命中時依 host 分支：
+target visual verifier 拍前 **MUST** 跑 emptiness heuristic（DOM empty-state 文字 / list row 計數 / main innerText 長度）。命中時依 host 分支：
 
 | Host | 行為 |
 | --- | --- |
@@ -351,6 +241,6 @@ screenshots/local/
 | staging（含 `staging`） | **MUST** 停下回報主 session 詢問授權，**NEVER** 直接寫 staging DB |
 | production / 真實 host | 拒絕，回報應改用 dev |
 
-完整流程見 `screenshot-review` agent 的「拍前 Emptiness Preflight」與「空資料解決流程」段落。
+完整流程見 target visual verifier 的「拍前 Emptiness Preflight」與「空資料解決流程」段落。
 
 **NEVER 改 component 加 fallback 假資料來填空 UI** — 空狀態的成因是資料沒進 seed，改 component 讓畫面看起來有東西是把 review 的判斷依據換成假的。三條解法都在上面：dev 補 seed 檔、staging 停下問授權、production 改用 dev。

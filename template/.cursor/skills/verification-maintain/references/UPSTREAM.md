@@ -7,6 +7,8 @@ Local edits will be reverted by the next sync.
 
 # Upstream attribution
 
+<!-- clade-targets: claude,codex,cursor -->
+
 - Source: `cursor/plugins`
 - Upstream skill: `pstack/skills/maintain-verification-skill`
 - Pinned revision: `b9ddc83c32972210b8a94d389130713e8eed346e`

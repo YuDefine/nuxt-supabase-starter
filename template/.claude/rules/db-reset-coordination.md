@@ -5,6 +5,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 # DB Reset Coordination
 
 **每一次**從 primary checkout reset dev DB 前，MUST 先跑：

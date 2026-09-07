@@ -7,6 +7,8 @@ Local edits will be reverted by the next sync.
 
 # /commit Step 5-B~5-F 與 Step 8 執行細節
 
+<!-- clade-targets: claude,codex,cursor -->
+
 > 本檔是 `SKILL.md` 的 branch 分頁。**Step 5-A 判定「需要 handoff」時 MUST 讀 § 5-B~5-F 並逐步執行**；**Step 8 觸發條件成立（不在 main/master 且 consumer 有 `/ship`）時 MUST 讀 § Step 8**。兩個 branch 都沒命中就不需要讀本檔。
 
 ## 5-B. 收集下一步資訊
@@ -24,7 +26,7 @@ Local edits will be reverted by the next sync.
 
 ## 5-C. 寫入 `HANDOFF.md`
 
-依 `.cursor/rules/handoff.mdc` 格式覆寫：
+依當前 runtime 已投影的 `handoff` 與共享檔規約更新。先核對現有內容與寫入者，保留其他工作的有效條目，再同步本次已變動的狀態；下列是內容格式，不是整檔覆寫授權：
 
 ```markdown
 # Handoff
@@ -51,13 +53,15 @@ Local edits will be reverted by the next sync.
 
 ## 5-D. 同步 Spectra ROADMAP
 
+先依 canonical manifest 與實際 script 判定本 repo 是否使用 Spectra。已選用且有 ROADMAP 時執行下列同步；已選用卻缺命令時回報實際缺口，不宣稱同步完成。未選用 Spectra 的 repo 更新其既有待辦 carrier，記錄本步的 Spectra 分支未觸發。
+
 ```bash
 pnpm spectra:roadmap
 ```
 
 重算 `openspec/ROADMAP.md` 的 AUTO 區塊（Active Changes / Active Claims / Parallel Tracks / Parked Changes）。AUTO 區塊由此命令生成，手動編輯會被下次 sync 覆寫。
 
-若 5-B 收集到的 **Next Steps** 中包含跨 session backlog（不只是「commit 後立刻要做」的驗證動作），依 `.cursor/rules/proactive-skills.mdc` 的「Spectra Roadmap Maintenance」**手動**更新 MANUAL 區塊的 `## Next Moves`，格式：
+若 5-B 收集到的 **Next Steps** 中包含跨 session backlog（不只是「commit 後立刻要做」的驗證動作），依當前 runtime 已投影的 `proactive-skills`「Spectra Roadmap Maintenance」**手動**更新 MANUAL 區塊的 `## Next Moves`，格式：
 
 ```text
 - [priority] 描述 — 依賴：xxx / 獨立 / 互斥：yyy
@@ -65,22 +69,21 @@ pnpm spectra:roadmap
 
 ## 5-E. 把 HANDOFF/ROADMAP 變更納入 commit（不 push）
 
-5-C/5-D 修改的是 tracked 檔（`HANDOFF.md`、`openspec/ROADMAP.md`），**MUST** 在此處 commit 進去，否則 working tree 會 dirty、Step 6-A 的 deploy commit 也不含這次的交接狀態。
+5-C/5-D 實際修改或建立的 carrier，**MUST** 在此處以已授權的精確 paths commit 進去，否則 Step 6-A 的 deploy commit 不含這次的交接狀態。沿 Step 0-Scope 核對歸屬；新建 carrier 先以具名 path 加入 index，再用 `--only`，不漏掉 untracked 文件。署名沿 SKILL.md Step 4 的實際身份政策。
 
 ```bash
 # 只收 5-C/5-D 動到的檔。git add ＋ 裸 git commit 會把 index 裡別的東西一起帶走（含別
 # session 預 stage 的），所以這裡走 --only —— 同 rules/core/commit.detail.md § Ad-hoc commit。
-paths=()
-for f in HANDOFF.md openspec/ROADMAP.md; do
-  git ls-files --error-unmatch "$f" >/dev/null 2>&1 && paths+=("$f")
-done
+# paths 只填 5-C/5-D 本次確實修改、已核對授權與歸屬的 carrier。
+# 新建檔先 git add -- <該新檔>；既有其他 session staged 維持原狀。
+paths=(<本次已確認的 carrier paths>)
 
 # 若沒實際變動（HANDOFF 不需更新、ROADMAP 已 current），跳過 commit
-if [ ${#paths[@]} -gt 0 ] && ! git diff --quiet -- "${paths[@]}"; then
+if [ ${#paths[@]} -gt 0 ] && [ -n "$(git status --porcelain -- "${paths[@]}")" ]; then
   git commit --only -m "$(cat <<'EOF'
 📝 docs(handoff): 更新 commit 後交接狀態
 
-Co-Authored-By: Claude <noreply@anthropic.com>
+Via: /commit
 EOF
 )" -- "${paths[@]}"
   git log -1 --oneline
@@ -103,7 +106,9 @@ fi
 git branch --show-current
 ```
 
-**觸發條件**：當前**不在 main / master 分支**，且 consumer 提供 `/ship` skill（會 push branch 並開 PR）。
+**觸發條件**：當前**不在 main / master 分支**，且當前 runtime 實際載入的 consumer 能力提供 `ship` skill（會 push branch 並開 PR）。存在另一端的 `.cursor/skills/ship` 不能證明本入口已提供。
+
+本任務已有對應 branch push／PR 的明確授權時直接依該 scope 執行；缺授權才用當前可用詢問工具或對話提出下列問題，沒有回答不執行。
 
 ```text
 Commit 完成！要繼續執行 /ship 推送並建立 PR 嗎？

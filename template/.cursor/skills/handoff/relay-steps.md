@@ -65,6 +65,7 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts done "$CLADE_WORK_ID" \
 
 ```bash
 node /home/charles/offline/clade/vendor/scripts/herdr-session-handoff.ts \
+  --route <routing-policy> --tier-basis <routing-conclusion> \
   --cwd <absolute-main-checkout> \
   --model <routing-model> --effort <routing-effort> \
   --label <short-task-label> \

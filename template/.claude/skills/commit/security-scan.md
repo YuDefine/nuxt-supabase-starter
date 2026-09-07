@@ -5,6 +5,8 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+
 # 0-S Codex Security — 放行條件與額度配置
 
 `gates.md` § 0-S 的延伸檔。準備 Tier 3 掃描、選定提交批次或判讀掃描失敗時讀取。
@@ -39,9 +41,11 @@ refresh 是否成功仍以新一次真實掃描為準。直接執行未帶 state
 
 ## 工具故障放行（僅 `tool-failure-no-artifacts` / `tool-timeout`）
 
-工具故障時，未掃描放行是人的決定。MUST 用 `AskUserQuestion` 二選一，**NEVER** 自行決定放行：
+先依實際 `(exit, failure_class)` 分流；只有 `(2, tool-failure-no-artifacts)` 或 `(2, tool-timeout)` 進入本節。缺欄、未列名或互相矛盾時保留原始輸出並調查工具契約，不提供未掃描放行。修復後以新一次實跑結果重新判定。
 
-- **`[1] 停下修工具`**（推薦）：釋放 commit-lock，回報 failure_class、failure_reason、failure_phase、output_dir，本批不 commit。
+未掃描放行是人的決定。使用當前 runtime 可用的提問介面；沒有工具就在對話提問並等待本批明確回答，**NEVER** 自行決定放行：
+
+- **`[1] 停下修工具`**（推薦）：依 [runtime-lifecycle.md](runtime-lifecycle.md) 收回背景工作並釋放自己的 commit-lock，回報 failure_class、failure_reason、failure_phase、output_dir，本批不 commit。
 - **`[2] 授權未掃描落地`**：user 明確承擔風險。放行時 **MUST 同時**做到兩件事，缺一不可：
   1. `HANDOFF.md` 追加 `0-S UNSCANNED` 條目：日期、failure_class、診斷原因、output_dir，以及本批命中 Tier 3 的**每一個 path**。
   2. 本批**每一個** commit message 帶 trailer `Security-Scan: unscanned (<failure_class>)`。
@@ -49,7 +53,7 @@ refresh 是否成功仍以新一次真實掃描為準。直接執行未帶 state
 HANDOFF 承載補掃範圍；commit trailer 承載歷史 parent/head 的對帳入口。
 
 - **NEVER** 把 `[2]` 讀成掃過；完成報告寫 `0-S 未執行（<failure_class>）`。
-- **NEVER** 把使用者沒有回應讀成 `[2]`，也不得沿用上一批的工具故障授權。
+- **NEVER** 把使用者沒有回應讀成 `[2]`，不得沿用另一批的工具故障授權；本批相同 paths／failure 的既有明確授權仍有效，範圍或故障狀態改變須取得對應授權。
 - **NEVER** 對 `coverage-incomplete` 使用這條放行路徑；部分掃描仍未完成。
 
 ## 先檢查輸入，再執行有停止線的掃描

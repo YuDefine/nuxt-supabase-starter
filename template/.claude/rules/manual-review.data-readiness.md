@@ -9,6 +9,14 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
+
+## Runtime adapter boundary
+
+The obligations, predicates, evidence schema, failure handling, and review timing in this source are shared. Concrete browser, dispatch, question, filesystem, and command mechanics are target-native and MUST come from the selected runtime fragment at the matching adapter path. A fragment declares only the capability it can prove; an absent or unverified capability remains blocked and MUST NOT be silently replaced by a neighbouring runtime.
+
+
 
 # Manual Review — Data Readiness & Actionability
 
@@ -61,7 +69,7 @@ propose / ingest 階段命中即視為違反，**MUST** 改寫。
 
 ### `[verify:ui]` ready_signal 契約（分階段強制）
 
-assertion-bearing `[verify:ui]` item（要驗「某具體內容有出現」而非純主觀視覺）**MUST** 能對應到一個**機械可判的 `ready_signal`**——screenshot agent capture 前 poll 它命中才拍、拍後 cross-check 它仍在才算 PASS（執行細節見 screenshot-review agent Verify Mode「必做動作」step 2-4 + `vendor/snippets/verify-channels/ui-final-state-brief*.template.md`）。
+assertion-bearing `[verify:ui]` item（要驗「某具體內容有出現」而非純主觀視覺）**MUST** 能對應到一個**機械可判的 `ready_signal`**——screenshot agent capture 前 poll 它命中才拍、拍後 cross-check 它仍在才算 PASS（執行細節見 visual verifier agent Verify Mode「必做動作」step 2-4 + `vendor/snippets/verify-channels/ui-final-state-brief*.template.md`）。
 
 `ready_signal` 來源：主線在 `spectra-apply` Step 8a dispatch verify:ui 時，從 item 描述的**具體可斷言短語**建 structured signal（`text` / `text_all` / `text_any` / `selector` / `regex` / `min_rows`）。因此 item 描述本身 **MUST** 含一個具體、唯一、會出現在畫面上的斷言點（例「建議刀位壽命 143 秒」「逾期 badge」「`data-testid=suggested-baseline-row-T990201` 這列」），**NEVER** 只寫「畫面正常」「顯示資料」「狀態正確」這類無法 poll 的模糊語。
 
@@ -81,8 +89,8 @@ assertion-bearing `[verify:ui]` item（要驗「某具體內容有出現」而�
 
 - **適用**：所有 `[review:ui]` / `[verify:ui]` items
 - **不適用**：
-  - `[discuss]` items（屬 Claude evidence-based 討論，sample 由 Claude 在 walkthrough 時準備）
-  - `[verify:e2e]` items（Playwright spec 內自帶 fixture / factory，不靠 review GUI 互動）
+  - `[discuss]` items（屬 session owner evidence-based 討論，sample 由 session owner 在 walkthrough 時準備）
+  - `[verify:e2e]` items（reproducible browser runner spec 內自帶 fixture / factory，不靠 review GUI 互動）
   - `[verify:api]` items（curl / ofetch 自帶 request body，主線跑完寫 annotation）
 
 ### 為什麼這條 hard rule 存在
@@ -97,7 +105,7 @@ assertion-bearing `[verify:ui]` item（要驗「某具體內容有出現」而�
 
 ## `[review:ui]` 純功能驗證 step actionability（hard rule）
 
-`[review:ui]` items 屬「真的需要人」白名單（email / webhook / 實體裝置 / 視覺主觀 / 真機 / SMS），但「需要人」≠「user 該自己摸索」。review GUI 開頁瞬間 user **MUST** 能照 step 逐步操作，不需要回頭問 Claude「要刷哪張卡」「URL 是什麼」「該看到什麼」。
+`[review:ui]` items 屬「真的需要人」白名單（email / webhook / 實體裝置 / 視覺主觀 / 真機 / SMS），但「需要人」≠「user 該自己摸索」。review GUI 開頁瞬間 user **MUST** 能照 step 逐步操作，不需要回頭問 session owner「要刷哪張卡」「URL 是什麼」「該看到什麼」。
 
 ### 通則
 

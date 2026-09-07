@@ -10,6 +10,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # Scope Discipline
 
@@ -27,7 +28,7 @@ Local edits will be reverted by the next sync.
 | --- | --- | --- |
 | **不擴散** | 當前 task 範圍外的檔案 / 模組，不順手改 | 改 A 檔順便重構 B 檔 |
 | **必登記** | 途中發現的問題、技術債、改進點一律登記 | 「這不在 scope，先不管」然後永遠消失 |
-| **不擅改他人成果** | 看到未知 / 未提交 / 跨 session 變更先問 | `git reset --hard`、`git checkout --` 直接清場 |
+| **不擅改他人成果** | 保留未知 / 未提交 / 跨 session 變更，先查歸屬與授權 | `git reset --hard`、`git checkout --` 直接清場 |
 
 ## 意外發現的登記路徑（強制）
 
@@ -45,7 +46,7 @@ Local edits will be reverted by the next sync.
 
 ## 未知變更的處理方式
 
-看到以下任一狀態時，視為**未知成果**，必須先回報、再行動：
+看到以下任一狀態時，先保留內容並執行下方歸屬探測。判斷依據是實際所有權與本任務授權，不能只因路徑陌生就交由使用者調查：
 
 - `git status` 有你不認得的 modified / untracked 檔案
 - 有不屬於當前 scope 的 active change / worktree / stash
@@ -59,11 +60,11 @@ Local edits will be reverted by the next sync.
 
 正確流程：
 
-1. 列出未知狀態並告知使用者
-2. 問清楚是否為其他 session / 使用者 / subagent / hook / automation 的產出
-3. 在取得明確指示前，**不清理、不覆寫、不 revert、不還原、不修正**
+1. 逐路徑記錄現況，唯讀查證 session / 使用者 / subagent / hook / automation 的來源
+2. 依下方歸屬探測判定本次可操作的精確範圍；需要協調時使用已授權、當前可用的通道
+3. 無法查明或缺少處置授權的內容保持不動，向使用者呈現具體待決事項
 
-**自動產出 = 跨 session 成果**：hook / sync-vendor / spectra-archive 等 automation 在 commit / archive / propagate 流程中自動建立的東西，**MUST** 視同其他 session 或使用者本人的 WIP。看到時 **MUST** AskUserQuestion，**禁止**以「這違反 X rule 應該還原」的理由自行處置 — automation 是使用者環境的一部分，行為對錯由使用者判斷，不是當前 session 判斷。
+**自動產出具有 WIP 的所有權保護**：hook / sync-vendor / spectra-archive 的內容同樣需要查明來源。已驗證為本次 hook 的 index 殘留時，走 [[commit]] 的 `MM` recipe；其他 automation 產物依歸屬與既有授權處理。**禁止**只因「這違反 X rule 應該還原」就處置；無法確認的內容保留，不自行判成可丟棄。
 
 ## Rule 衝突解法（preserve > revert）
 
@@ -71,26 +72,26 @@ Local edits will be reverted by the next sync.
 
 1. **保留現狀**（preserve）— **NEVER** 動手「修正」目前狀態以對齊另一條 rule
 2. **歸屬探測**（見下方 § 歸屬探測前置）— 先判到底有沒有歧義存在
-3. **AskUserQuestion** — 探測後仍有真歧義時才走：列出觀察、可能成因、可選處理路徑，讓使用者拍板
-4. 取得使用者明確指示後才行動
+3. **使用者決策** — 探測後仍有真歧義時，使用當前 runtime 實際提供的提問介面，列出觀察、可能成因與可選處理路徑；沒有專用工具就以對話提問
+4. 依本任務已取得或本次回答的明確指示行動，只操作授權範圍
 
-### 歸屬探測前置（MUST，先於 AskUserQuestion）
+### 歸屬探測前置（MUST，先於使用者決策）
 
 衝突狀態涉及**檔案歸屬**（別 session / worktree / hook / automation 的 staged 或 untracked 變更）時，
-**每一次**都 MUST 先跑歸屬探測，才准考慮 `AskUserQuestion`。**每一條**路徑各跑一次，**NEVER** 抽驗
+**每一次**都 MUST 先跑歸屬探測，才准考慮把問題交給使用者。**每一條**路徑各跑一次，**NEVER** 抽驗
 一條代表全部：
 
 | 要判的事 | 可觀察 predicate |
 | --- | --- |
-| 這條路徑會不會進我的 commit | `git cat-file -e HEAD:<path>` 給得出 in-HEAD／staged-only |
-| 那批是不是別人的 in-flight | `git worktree list` 有對應 worktree、`.git/index` mtime 在分鐘級內 |
-| gate 紅燈是不是我造成的 | 失敗檔逐條跑上一列，全部 staged-only ⇒ 不在我的 tree、CI 看不到 |
-| 我的產物有沒有被污染 | 產物型檔案（baseline／lockfile／生成 JSON）逐條比對條目是否 in HEAD |
+| 這條路徑會不會進我的 commit | 比對本次明確 pathspec、HEAD、index 與 working tree；新檔也要檢查是否在預定 commit tree 中 |
+| 那批是不是別人的 in-flight | 對應 claim / journal / dispatch receipt 的 work、runtime/session 與路徑，核對可觀察的寫入者或持有者回覆；mtime 只能當線索 |
+| gate 紅燈是不是本次改動造成的 | 以本次預定 commit tree 與相同 gate 的基線比對；只有檔案不在 HEAD，不能推論它不會被提交或 CI 看不到 |
+| 我的產物有沒有被污染 | 比對本次操作前後快照、來源與內容，確認變更可歸因且沒有未授權內容混入；檔名相同不足以判定 |
 
 命令塊在 `vendor/snippets/git-recovery/` § 並行 staged 的歸屬探測（**NEVER** 在本檔複製一份，會漂）。
 
-**四條全部給得出答案 ⇒ 不算衝突。** 主線 MUST 自行以 `git commit --only -- <自己的 paths>` 隔離，
-並在收尾一句話說明歸屬與隔離方式，**NEVER** 為此走 `AskUserQuestion`。任一條答不出來、或探測顯示
+四條答案證明預定路徑與內容均屬本次授權、且與其他寫入者可隔離時：**四條全部給得出答案 ⇒ 不算衝突。** 主線依既有 commit ceremony，以 `git commit --only -- <自己的 paths>` 隔離，
+並在收尾一句話說明歸屬與隔離方式，**NEVER** 為此重新詢問使用者。本節不授予新的提交權；任一條答不出來、或探測顯示
 雙方改到**同一檔的同一段**（`--only` 隔離不掉）才走上面第 3 步。
 
 **逐字反開脫**（想到這幾句就是探測還沒跑）：
@@ -98,8 +99,8 @@ Local edits will be reverted by the next sync.
 | 開脫 | 現實 |
 | --- | --- |
 | 「這批是別 session 的東西，依 scope-discipline 應該交還 user」 | 本節攔的是**無法用證據判定**該不該動的推理鏈，不是「只要涉及別 session 就交還 user」 |
-| 「這是未知變更 / 我不認得這些檔」 | 「未知」「不認得」是形容詞不是判準；`git cat-file -e HEAD:<path>` 對每一條都給得出答案 |
-| 「gate 紅了，這次 commit 過不了」 | 先問失敗檔在不在 HEAD——staged-only 的檔不在你的 commit tree |
+| 「這是未知變更 / 我不認得這些檔」 | 先查上表四項；HEAD 是否有該路徑只回答存在性，不回答所有權 |
+| 「gate 紅了，這次 commit 過不了」 | 先對預定 commit tree 與 gate 基線查因；新檔或 staged-only 不能直接排除 |
 | 「問一下比較安全」 | 過度 escalate 與正確 escalate 在 transcript 上長得一模一樣，差別只在當時有沒有可跑而沒跑的探測 |
 
 > 2026-08-08 <consumer-b>：主線引本節停下來問 user，user 回「你自己探測，未來這種情況你必須總是自己
@@ -115,23 +116,23 @@ Local edits will be reverted by the next sync.
 - 即使真衝突，當前 session 沒有「rule 仲裁權」— 仲裁權在使用者
 - 拿 rule A 當理由 revert rule B 的產出，是把限制變武器 — 本 rule 明文禁止
 
-**唯一例外**：使用者在 AskUserQuestion 後明確說「請 revert / 還原 / 對齊 rule A」。
+**授權來源是使用者對具體對象與動作的明確指示**，例如「請還原這個檔的這段修改」。本任務已有的同範圍授權持續有效；不因換了 runtime、提問工具或出現關鍵詞而重問。沒有具體授權時維持 preserve。
 
 ### 具體分支模板：當前 flow 規約要求「必修」撞別 session WIP
 
 最常見情境：`/commit` 跑 review / lint / typecheck / test 發現問題 → `commit.md` 規約「MUST 修，NEVER 以建議性質 / 不在本次範圍為由跳過」→ 但修法會動到別 session in-flight WIP（典型：`HANDOFF.md`、別 session 的 `tasks/<...>.md`、其他 active change 的 artifact）→ 撞上「不擅改他人成果」。
 
-此時 **MUST** 先跑 [[session-tasks]] § 並行爭用 的 Step 0 判出持有者性質，再依下列**三個固定選項**處置。順序是規約的一部分：**A0 排在 A / B 之前**，A / B 只在 A0 判定不適用、或 A0 已送出而爭用未解時才輪到。
+此時 **MUST** 先跑 [[session-tasks]] § 並行爭用 的 Step 0 判出持有者性質，再依下列**三個固定選項**處置。順序是規約的一部分：**A0 排在 A / B 之前**，A / B 只在 A0 判定不適用、或 A0 已送出而爭用未解時才輪到。查不到持有者時保留 WIP；沒有通道或本次訊息授權時，回報這個具體缺口，不假裝已經協調。
 
-- **A0. 先跟持有者對話**（Step 0 判出持有者是**前景 agent session** 時 MUST 先走這一支）— 送 `herdr agent prompt <對方 pane_id> "<四項>"`，四項內容與逐字範本見 [[concurrent-session-probe]] § 探測之後：協商（negotiate）。依對方回覆分流：對方說它正要 land → 等它落地再重跑當前 flow；對方說那批無主 → 進 A；對方說它要接手 → 進 B，且 TD 內文 MUST 寫明接手者是誰。送出後 MUST 指名等到哪一個可觀察事件（對方回覆、或那幾個檔不再 dirty），上限 5 分鐘，逾時升級路徑同該 cookbook。Step 0 判出持有者是 **unattended runner**（那個 pane 的 idle 是在等人類，寫檔的是背景 process）、或判不出持有者時，A0 不適用，直接看 A / B
+- **A0. 先跟持有者對話**（持有者是**前景 agent session**，且已取得協調授權並有可用通道時 MUST 先走）— 以當前通道送達精確 session；Herdr 通道已驗證可用時使用 `herdr agent prompt <對方 pane_id> "<四項>"`，不把它當所有 runtime 都有的 API。四項內容與逐字範本見 [[concurrent-session-probe]] § 探測之後：協商（negotiate）。依對方回覆分流：對方說它正要 land → 等它落地再重跑當前 flow；對方說那批無主 → 進 A；對方說它要接手 → 進 B，且 TD 內文 MUST 寫明接手者是誰。送出後 MUST 指名等到哪一個可觀察事件（對方回覆、或那幾個檔不再 dirty），上限 5 分鐘，逾時升級路徑同該 cookbook。持有者是 **unattended runner**、判不出持有者、缺通道或缺本次協調授權時，A0 不執行，保留具體原因再看 A / B
 - **A. 馬上修，回 flow 繼續** — 在當前 session 直接編輯該 WIP 檔，原 flow（`/commit` / `/spectra-archive` / 等）繼續走完。前提：A0 已送出且對方不反對（或 A0 不適用），且 user 確認該編輯不會跟別 session 的修改互踩（或別 session 已結束）
 - **B. 登 TD，放棄當前 flow** — 把問題寫進 `docs/tech-debt.md`（編號 `TD-NNN`），當前 flow **立即中止**（commit 不繼續、archive 不繼續），等別 session 結束後由 user 決定何時處理；已成功 commit 的 group 保留不動
 
-**A 與 B 之間的二選一 MUST 用 `AskUserQuestion` 交給 user；A0 不進 `AskUserQuestion`**——它是本 session 自己送得出去的動作，不是要 user 拍板的選項。
+**A 與 B 之間的二選一 MUST 交給使用者決定**，透過當前 runtime 的提問介面或對話，已有對該具體處置的答案就沿用。A0 是已授權的協調動作，不能用一個替代問題跳過它。
 
 **選 B 之前 MUST 先跑 [[session-tasks]] § 並行爭用 的 Step 0 確認「別 session」真的會結束。** 對方是 unattended runner 時它不會在可預期時間內停，「等它結束」等於把 flow 無限期掛起——判出是 runner 就直接登 TD 並讓位，**NEVER** 把中止理由寫成「等對方結束」。
 
-**NEVER** 在 A0 尚未發生時就開 `AskUserQuestion` — 持有者是前景 agent session 時，跳過 `herdr agent prompt` 直接把 A / B 丟給 user，就是這條要擋的。「我不動別人的檔」**NEVER** 讀成「我什麼都不做」：不動檔與不溝通是兩件事，本節要求的只有前者。
+**NEVER** 在可執行的 A0 尚未發生時就把 A / B 丟給使用者 — 持有者是前景 agent session，且本次已有協調授權與可用通道時，先聯絡持有者。「我不動別人的檔」**NEVER** 讀成「我什麼都不做」：不動檔與不溝通是兩件事。
 
 **NEVER** 自行在 A 與 B 之間二選一、自行 commit 略過該檔、自行用「不在 scope」當理由跳過 — A0 解鎖的是**對話**，不是**代替 user 拍板**。
 
@@ -139,15 +140,15 @@ Local edits will be reverted by the next sync.
 
 ## 破壞性指令的 guardrails
 
-以下指令 **MUST** 先經使用者明確同意，且不得在 subagent 內自主執行：
+下列工作檔丟棄／覆寫操作 **MUST** 有使用者對具體範圍的明確同意。Subagent 的 brief 未包含該授權時，只回報現況；已授權的例行編輯與 [[commit]] 的 index-only recipe 分別按其副作用及所有權判定，不由命令名稱推導丟棄權。
 
 ### Git 命令
 
 - `git reset --hard`
-- `git checkout -- <paths>` / `git restore <paths>`
+- 會覆寫工作檔的 `git checkout -- <paths>` / `git restore <paths>`（含 `--worktree`）
 - `git clean -fd` / `git clean -fdx`
 - `git revert <commit>`
-- `git stash drop` / `git stash clear`
+- `git stash drop` 依 [[commit.detail]] 的精確 stash ownership／處置 gate；`git stash clear` 不作為逐條處置替代
 
 ### 檔案系統等效動作（同樣 destructive，但容易誤以為「不是 git 命令所以 OK」）
 
@@ -156,22 +157,23 @@ Local edits will be reverted by the next sync.
 - `mv <git-tracked-path> <elsewhere>` / `mv <elsewhere> <git-tracked-path>` — 把 hook 自動建立的 archive directory 搬回原位（等同 revert hook 工作）；把目錄反向搬等同 `git checkout --` 對 directory layout 操作
 - `rm -rf <openspec/changes/**>` / `rm -rf <openspec/changes/archive/**>` / `rm -rf <screenshots/**>` 等批次刪除 user-authored 或 hook-authored 內容
 - `cp --remove-destination` / `cp -f <source> <git-tracked-path>` — 覆蓋掉現有 working tree 內容
-- `sed -i` / `awk -i inplace` / `perl -i` 等 in-place 文字替換在 git-tracked 檔案上**無 explicit Edit/Write tool 走的修改**
+- `sed -i` / `awk -i inplace` / `perl -i` 等在 git-tracked 檔案上覆寫未授權內容；合法編輯依 [[commit]] 的範圍、原內容與可審查 diff 契約
 - 用 `echo > <git-tracked-path>` / `cat > <git-tracked-path>` / `tee <git-tracked-path>` 等覆蓋 git-tracked 檔案內容
 - 任何 shell script / Python script 中包含上述動作的批次操作
 
 ### 總原則
 
-**任何讓 working tree / git index 從現狀（含 hook 自動產出、其他 session WIP、第三方 automation 結果）回到「先前狀態」、「乾淨狀態」、「對齊 rule X 的狀態」的動作**，不論使用 git、shell、檔案系統、editor in-place 寫入、subprocess script — 都列為破壞性指令，**MUST** 先 AskUserQuestion。
+工作檔丟棄／覆寫與 index-only 操作分別依 [[commit]] 的 WIP 與 staged 所有權判準處理；Git、shell、editor 與 subprocess 使用同一個副作用判準。操作會丟棄或覆寫未獲本任務明確授權處置的內容時，**MUST** 保留現況並向使用者確認。Index-only 不代表可任意改他人的 staged 選擇；hook `MM` 的完整處置條件與既有授權的邊界均以 [[commit]] 為準。
 
 判別測試（self-check）：
 
-- 「這個動作執行後，是否會讓某個檔案 / 目錄消失、被覆蓋、被移到別處？」 → 是 → 破壞性
-- 「執行後 user 想 undo，是否容易（git stash pop 可恢復 / 該檔在 git history 內）？」 → 否（檔案是 untracked / 已被 mv 走 / 已被 in-place 覆蓋）→ 高破壞性，絕對停手
+- 操作會動哪些 working tree、index、ref 或外部狀態？具體內容是否已在本任務授權內？
+- 現有內容的所有權與操作前快照能否確認？不在 Git 中的內容同樣需要保護；存在於 history 不等於目前 WIP 已被保存。
+- 對象、範圍或授權不明時停手；命令可逆不等於已獲授權，正常授權編輯也不因寫入工作檔就變成丟棄 WIP。
 
 ## 話術關鍵詞 = 立即停手訊號
 
-當前 session 的 chat 輸出、內部 thinking、tool call description 中出現以下任一**話術關鍵詞**時，**MUST** 立即停手：
+準備執行或提議現況修改時，依 [[commit]] § 話術關鍵詞的動作表核對副作用、所有權與既有授權；對象或授權不明時 **MUST** 停手。只讀調查、指令引用與已授權文件編寫依同表處理，不把詞彙命中當成修改或丟棄內容的授權。
 
 ### 關鍵詞清單
 
@@ -183,14 +185,14 @@ Local edits will be reverted by the next sync.
 
 「停手」意指：
 
-1. **NEVER** 下任何破壞性指令（含 git、shell、檔案系統、script）— **包含 dry run**
-2. **NEVER** 在 chat 中向使用者建議 / 暗示這些動作
-3. **MUST** 立即用 `AskUserQuestion` 給使用者看：當前狀態 / 觀察到的衝突 / 可能成因 / 兩個以上選項（含「保留現狀不動」）
+1. **NEVER** 執行未獲授權的丟棄／覆寫；工具所謂的試跑若仍有寫入副作用，**包含 dry run**，同樣保持不執行
+2. 不把未知成果包裝成可丟棄的清理工作；可先唯讀查證，真正唯讀的預覽不改變授權狀態
+3. 唯讀釐清後仍需要使用者決定時，**MUST** 透過當前 runtime 可用的提問介面呈現當前狀態、具體衝突與選項（含「保留現狀不動」）
 4. 取得使用者明確指示後才繼續
 
 ### 為什麼是「話術 = 思考表徵」
 
-關鍵詞出現代表 Claude 內部已經把「現狀 → 應該還原」的推理鏈走完一半 — **這個推理鏈本身是錯**（見上「Rule 衝突解法」）。攔住話術 = 攔住錯誤推理鏈。
+把「現況不合預期」推導成「可自行丟棄現況」缺少了所有權與授權。關鍵詞提醒 agent 檢查這一跳；是否停手依動作表判定，不從模型或 runtime 名稱推論。
 
 **特別注意**：把破壞性動作包裝成「**清理**」「**重置**」「**回到乾淨狀態**」「**對齊規約**」「**修正一下**」等委婉說法繞過本節，**同樣違反本 rule**。委婉說法仍是話術關鍵詞，仍觸發停手訊號。
 
@@ -204,15 +206,13 @@ Local edits will be reverted by the next sync.
 - 範圍外檔案不要順手改
 - 意外發現其他問題：不修，但必登記
 - 看到不認識的 uncommitted 變更 / hook 自動產出 / archive directory：停下並回報
-- 禁止跑 git reset / git checkout -- / git restore / git clean / git revert
+- 未含具體授權時不丟棄工作檔、不改他人 staged 選擇；index-only 依 commit 的完整判準
 - 禁止用 mv / rm -rf / cp -f / sed -i / 覆蓋 redirect 反向 hook 工作或丟棄 working tree 內容
-- 看到 rule A 被 rule B / hook 違反：保留現狀 + AskUserQuestion，不准自行對齊
-- 話術出現 revert / 還原 / 清掉 / 重置 / undo / rollback 等關鍵詞：立即停手 + AskUserQuestion
+- 看到 rule A 被 rule B / hook 違反：保留現狀，先查歸屬；未解歧義以當前提問介面回報，不自行對齊
+- 準備丟棄／覆寫內容且對象或授權不明：依 commit 動作表停手，保留現況並釐清
 ```
 
-上面是 **brief 內容**的最低要求。**派工參數**另有一項：執行者（Claude 檔位 or 轉派 codex）
-依 [[agent-routing]] § Claude 委派的 model 檔位 判定後**顯式帶上**——省略 `model` 是靜默繼承
-主線 Opus，不是「沒指定」。判定結果本身可以是「刻意繼承主線」（例如 checker），那時**寫出來**。
+上面是 **brief 內容**的最低要求。派工另記 runtime、model／effort 與獨立上下文要求，依 [[agent-routing]] 的共同政策及當前 adapter 選擇實際參數。繼承主線模型是明確選擇，不代表新上下文或跨模型已成立；需要 fresh checker 時仍依 [[checker-subagent]] 建立不繼承 maker 對話的入口。缺必要能力時回報未達成，不填另一 runtime 的工具參數。
 
 ## 與其他規則的關係
 
@@ -234,7 +234,7 @@ Local edits will be reverted by the next sync.
 User 要求報告、分析、比較、盤點等輸出時，交付物 **MUST** 是一個有路徑的檔案（`.md` / `.json` / `.csv`），**NEVER** 是 chat 訊息裡的 inline 文字。
 
 正確 recipe：
-1. 寫檔（`Write` tool）到 `docs/` 或 `tasks/` 或 user 指定位置
+1. 以當前可用的檔案編輯工具寫到 `docs/` 或 `tasks/` 或 user 指定位置
 2. 在 chat 回報路徑 + 一句話摘要
 3. 需要跨 repo 共享時，指定單一 owner repo + 用 diff 或 snapshot 機械比對
 
@@ -252,9 +252,9 @@ User 提出**跨產品、商業模式、系統邊界**的大範圍策略題時�
 
 - **NEVER** 把「超出 scope」當成忽略發現的理由
 - **NEVER** 把未知變更當作「上次沒清乾淨」直接清掉
-- **NEVER** 在 subagent 內執行 `git reset` / `git checkout --` / `git restore` / `git clean` / `git revert`
+- **NEVER** 讓 subagent 把一般實作 brief 當成丟棄工作檔或改他人 staged 選擇的授權
 - **NEVER** 用 `mv` / `rm -rf` / `cp -f` / `sed -i` / `echo >` / `tee` 等檔案系統等效動作反向 hook 工作、刪除 archive directory、覆蓋 working tree 內容（同樣受破壞性指令 guardrails 限制）
-- **NEVER** 看到 hook / automation 自動產出時，自行判定「該保留 / 該還原 / 該修正」— **MUST** AskUserQuestion
-- **NEVER** 拿 rule A 當理由 revert rule B 的產出（含 hook 自動產出）— rule 衝突一律保留現狀 + AskUserQuestion
-- **NEVER** 在出現話術關鍵詞後繼續動手，含把破壞性動作包裝成委婉說法規避 — 關鍵詞全表與停手定義見本檔 § 話術關鍵詞 = 立即停手訊號（單一 SoT，不在他處複製）
+- **NEVER** 把 hook / automation 的產出默認為可丟棄；依歸屬探測及 commit 動作表處理
+- **NEVER** 拿 rule A 當理由 revert rule B 的產出（含 hook 自動產出）— 未解衝突保留現狀並請使用者決定
+- **NEVER** 用委婉詞規避副作用、所有權與授權判定 — 關鍵詞全表在 [[commit]]，停手定義在本檔
 - **NEVER** 寫只有「不擴散」沒有「必登記」的 brief

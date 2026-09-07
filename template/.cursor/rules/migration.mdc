@@ -10,6 +10,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # Migration
 
@@ -25,13 +26,19 @@ Local edits will be reverted by the next sync.
 - **MUST** run `supabase db advisors`（CLI v2.81.3+；版本不足退 MCP `get_advisors`）並**逐條**處置 security 類 finding — 見下方 § Lint 與 advisors 的處置義務
 
 
-> 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.cursor/rules/local/`；要改本檔請回 clade 源檔並 propagate。
+> 各 runtime 中載入的本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.clade/rules/`；既有 `.cursor/rules/local/` 經顯式 local rule migration 接管前保留。要改共同義務請回 clade 源檔並 propagate。
 
 ## Lint 與 advisors 的處置義務
 
 上面兩條的機械執行點是 `/commit` **Step 1.4 / 1.5**（`plugins/hub-core/skills/commit/schema-sync.md`）——
 它在 Step 1.3 的 reset 之後跑，那是 DB 剛好處於「migrations 全部重放一次」狀態的唯一時刻。
 本節定義**義務**，執行流程不在這裡複述。
+
+`/commit` 在此指共同 commit 流程；入口沒有原生 slash command 時，載入該流程的完整 skill
+正文並透過已驗證的 runtime 執行能力完成同一組 gates。沒有流程或所需工具就回報 gate 未完成，
+不改用另一套檢查。這裡的 db-runtime variant 指應用資料庫部署方式，與 Claude／Codex／Cursor
+無關；選擇 AI runtime 不改變 self-hosted 與 local 的命令路由。下方 pre-commit 為 Git hook，
+其已安裝與實跑證據不由原生 agent hook 的設定推論。
 
 ### `supabase db lint` — hard block，零容忍
 

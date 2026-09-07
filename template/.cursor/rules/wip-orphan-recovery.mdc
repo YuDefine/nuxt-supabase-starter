@@ -1,5 +1,5 @@
 ---
-description: "Orphan WIP（worktree dirty + claim 無效/過期）接手 SOP——session 死後 working tree 未 commit 改動的完成度判斷與 land/discard 流程；處理 HANDOFF / session 交接 / 別 session 遺留時 path-scoped 載入"
+description: "接手 interrupted session 或收到 dirty worktree 與失效 claim 訊號時使用；區分 ownership 未明與已確認無主的 WIP"
 globs: ["HANDOFF.md", "tasks/**"]
 alwaysApply: false
 ---
@@ -10,6 +10,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # WIP Orphan Recovery
 
@@ -17,7 +18,15 @@ Local edits will be reverted by the next sync.
 
 ## 什麼是 orphan WIP
 
-worktree working tree 有**未 commit 的 user 改動**（`git status --porcelain` 非空、且過濾掉 clade projection 後仍有檔）**且**該 worktree 對應 claim 不存在或已過期（session 已死 / 結束沒收尾）。
+worktree 有未 commit 的 user 改動，且原工作已確認結束、沒有其他活躍 owner 接手時，才是可評估接手的 orphan WIP。`git status --porcelain` 非空且過濾投影後仍有檔，加上 claim 不存在或過期，只是偵測候選；它沒有證明 session 已死。
+
+| Ownership 證據 | 分類與下一步 |
+|---|---|
+| 有活躍 owner | other-live：協調持有者，不進接手 SOP |
+| 原工作已確認結束，沒有其他 owner，且本次接手在授權範圍內 | orphan：進下方 SOP 判完成度與收尾 |
+| 只有過期／缺席 claim、startup event、舊 task 自報或查不到 presence | unknown：只讀 Git／task／ownership 證據並記錄待確認事項；保留 WIP，不 commit、restore、discard 或自行接管 |
+
+Native startup event 與 `project-context` 之類的 context handler 不承載 owner 已結束的證据。**NEVER** 先把 unknown 命名為 orphan，再以測試全綠補成接管授權；品質驗證與所有權是兩個 gate。
 
 **核心問題**：commit 是唯一的完成度標記，但 orphan WIP 定義就是「還沒 commit」。session 一死，這批改動成黑箱——新 session 無從得知「做到哪、做完沒、為什麼這樣改、是不是半成品被打斷」。只能靠下方 SOP 逐一考古推斷。
 
@@ -26,11 +35,15 @@ worktree working tree 有**未 commit 的 user 改動**（`git status --porcelai
 | 層 | 機制 | 時機 |
 | --- | --- | --- |
 | 提醒（Layer 0） | Stop hook `stop-wip-guard.sh` | session 結束前 working tree 有 user WIP → **warn**（不阻擋），提醒有未 commit 改動。多 session 並行共用 working tree 是常態，dirty file 可能屬於別的 active session，不應 block |
-| 事後（Layer 2） | `handoff-drift-scan.ts` Trigger 5 `orphan-uncommitted-wip` | session-start drift scan 偵測「worktree dirty + claim 無效/過期」→ 列出待接手。**有 active claim 的 dirty worktree 不報**（不擾動 live session） |
+| 事後（Layer 2） | `handoff-drift-scan.ts` Trigger 5 `orphan-uncommitted-wip` | session-start drift scan 偵測「worktree dirty + claim 無效/過期」→ 列出待判 ownership 的候選；訊號名稱不等於 orphan 裁決。**有 active claim 的 dirty worktree 不報**（不擾動 live session） |
 
 兩層共用 `wip-dirty.ts` 的 `userDirtyPaths()`（single-source projection filter，與 `wt-helper merge-back` 同源，避免重刻 `LOCKED_PROJECTION_RE` 漂移）。
 
+表中的自動觸發描述適用於已安裝、啟用並觀測到具名 handler 執行的產品入口；現有 Claude Stop／SessionStart 接線不代表 Codex／Cursor 已有相同接線。沒有該證據的入口，在收尾時從目標 repo 執行 `node scripts/wip-dirty.ts`，接手時執行 `node scripts/handoff-drift-scan.ts --json` 並讀取結果；clade 自身的兩支路徑為 `vendor/scripts/`。前者 exit 1 表示有 user WIP，後者為 informational、exit 0 不代表沒有 finding。helper 缺席或執行失敗時保留「未驗證」狀態，再以本節接手 SOP 的 Git 與 claim 即時證據判斷。
+
 ## 接手 SOP（碰到 orphan WIP 時逐步跑）
+
+前置：依上表確認為 orphan 且有接手授權後才進本 SOP；unknown 保持只讀調查。
 
 1. **git status 攤平**：`git -C <worktree> status --short` 看全部 dirty + `git -C <worktree> log --oneline -6` 看最近 commit。**禁止**憑印象，拿 git 即時真相。
 2. **半成品痕跡掃描**：`git diff` grep `TODO|FIXME|XXX|debugger|console\.(log|debug)|\bWIP\b`。命中 = 高機率半成品被打斷 → 偏向回報 user，不輕易 commit。

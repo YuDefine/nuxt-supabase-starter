@@ -9,7 +9,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
-
+<!-- clade-targets: claude,codex,cursor -->
 # Knowledge Accumulation & Decision Records
 
 ## 知識萃取（任務結束時）
@@ -80,6 +80,6 @@ Local edits will be reverted by the next sync.
 
 ## 規則生命週期
 
-- `docs/solutions/` 中反覆出現的 pattern（3 次以上）→ 可提議升級為 `.claude/rules/`
+- `docs/solutions/` 中反覆出現的 pattern（3 次以上）→ 可提議升級為 clade 共用源檔（`rules/core/` 等）或 consumer 自有共同源檔（`.clade/rules/`），再按選用 targets 產生原生規約
 - 既有規則被新事證推翻 → 可提議降級或移除
 - **不自動晉升 / 降級**，一律先提議，再由使用者決定

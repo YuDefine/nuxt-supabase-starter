@@ -10,13 +10,17 @@ Local edits will be reverted by the next sync.
 -->
 
 
+<!-- clade-targets: claude,codex,cursor -->
+
 # Create project verification infrastructure
+
+> **本檔的 `<skills-root>`** 指該 runtime 的 skill 投影根目錄：Claude `.claude/skills/`、Codex `.agents/skills/`、Cursor `.cursor/skills/`。**NEVER** 在別的 runtime 上照抄 Claude 的字面路徑；找不到該目錄就回報標準未送達，不猜一個。
 
 把 pstack 的 `create-verification-skill` 內化成 clade 的跨 runtime 版本。產物寫給下一個冷啟動 agent 使用，不是寫給本次 session 自己看的說明。
 
 ## Decision boundary
 
-- 已存在 `.claude/skills/verify-*/features/README.md`，需求是更新或重跑 → invoke `/verification-maintain`。
+- 已存在 `<skills-root>/verify-*/features/README.md`，需求是更新或重跑 → invoke `/verification-maintain`。
 - 需求只是替目前 change 收集 UI 截圖 → invoke `/review-screenshot`。
 - 需求是 implementation 與 change artifacts 對帳 → invoke `/spectra-verify`〔openspec〕。
 - 本 skill 只建立 verification infrastructure；不替某個產品 change 宣告驗收通過。
@@ -26,7 +30,7 @@ Local edits will be reverted by the next sync.
 建立一個 consumer-owned、tracked 的 canonical skill：
 
 ```text
-.claude/skills/verify-<app>/
+<skills-root>/verify-<app>/
 ├── SKILL.md
 ├── features/
 │   ├── README.md
@@ -73,8 +77,8 @@ Local edits will be reverted by the next sync.
 ### 4. Validate structure
 
 ```bash
-node .claude/skills/verification-maintain/scripts/check-feature-map.mjs \
-  .claude/skills/verify-<app>
+node <skills-root>/verification-maintain/scripts/check-feature-map.mjs \
+  <skills-root>/verify-<app>
 ```
 
 exit 0 才能進 live proof。結構紅時只修 verification skill，不改產品 code 來迎合文件。

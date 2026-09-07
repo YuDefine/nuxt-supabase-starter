@@ -13,6 +13,13 @@ Local edits will be reverted by the next sync.
 
 > Path-scoped detail of [[worktree-default]] §7–§11。核心 always-load 規約在母檔 worktree-default.md。
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
+
+## Runtime boundary
+
+This troubleshooting source keeps common recovery predicates and exact WIP/stash/landing safety. Runtime adapters own the native catalog, authorized transport, interactive question surface, and completion receipt; target-specific names below are historical or tool evidence until an adapter records current support.
+
 
 ## §7 升級路徑與 grandfathered worktree
 
@@ -41,7 +48,7 @@ Session 開頭判定要動 code 就 **SHOULD** 立刻打 `/wt <task>`，不要�
 - 偵測「zombie」前 **MUST** 先 `git worktree list` + `find ~/offline/<consumer>-wt` + `mdfind "<name>"`
 - 啟動 active / parked change `apply` 前 **MUST** `git worktree list` 確認別 session 沒在同 change 做
 
-碰到看似 zombie 一律 **STOP + AskUserQuestion**。誤動 DB 後從 `/tmp/spectra-db-backup-*.db` restore。
+碰到看似 zombie 一律 **STOP + target adapter 的 authorized interactive question surface**。誤動 DB 後從 `/tmp/spectra-db-backup-*.db` restore。
 
 ## §9.5 需求 artifacts 與證據持久性
 

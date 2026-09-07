@@ -12,7 +12,14 @@ Local edits will be reverted by the next sync.
 
 # Worktree Default（全文）
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
+
 > 本檔是 [[worktree-default]] 的下推全文。[[worktree-default]] 常駐 §1 判定、§2 禁止 silent branch、§5.1 停手信號，其餘全部在這裡。
+
+## Runtime boundary
+
+The common detail owns worktree, WIP, stash, landing, and recovery predicates. Runtime adapters own the native catalog operation, transport authorization, interactive question surface, and completion receipt used to execute those predicates. A helper name or projected hook does not establish that a target can invoke it.
 
 ## §1 細則
 
@@ -90,7 +97,7 @@ Worker 完成實作與必要驗收後 checkpoint，主線確認 scope 與寫入�
 ### §5.5.1 Pre-archive gate 掃的是 change 所在的 worktree，NEVER 是 cwd
 
 四道 pre-archive gate（`pre-archive-ux-gate.sh` / `-evidence-` / `-design-` / `-followup-`）是
-legacy `PreToolUse:Skill` adapter；OPSX archive 由 `opsx-control` 直接呼叫既有 gate。兩條路徑都先驗實作樹，再進批次落地流程。
+legacy archive adapter；OPSX archive 由 `opsx-control` 直接呼叫既有 gate。兩條路徑都先驗實作樹，再進批次落地流程。
 來源尚未正式落地時，main 不含 worktree 的最新驗收內容：main 的
 `tasks.md` 還是 propose 當時那份（零 annotation），screenshots 一張都不在。
 
@@ -99,7 +106,7 @@ legacy `PreToolUse:Skill` adapter；OPSX archive 由 `opsx-control` 直接呼叫
 worktree —— 這不是邊角，是**每次第一次 archive 的必然結果**。
 
 **MUST**：gate 先解析 change 所在的 worktree，把那棵樹當掃描根目錄。實作是共用 helper
-`plugins/hub-core/hooks/_change-source-root.sh`（consumer 端投影為 `.claude/hooks/`），
+`plugins/hub-core/hooks/_change-source-root.sh`（consumer 端由 target adapter 投影），
 它呼叫 `wt-helper resolve <slug>`。
 
 **NEVER 在別處重寫那個 find。** `wt-helper resolve` 與 `merge-back` 共用
@@ -143,7 +150,7 @@ merge-back 清掉、consumer 尚未散播到 `wt-helper resolve`）一律回退 
 
 ## §9 spectra DB 跨 worktree 共享心智模型
 
-`.git/spectra-app/spectra.db` 是**跨所有 worktree 共享的單一 SQLite**。**NEVER** 對它跑 `DELETE` / `UPDATE` / `INSERT`；「main 無 directory + `spectra list` 顯示 active + park/unpark 失敗」**不**等於 zombie（多半別 session 在 sibling worktree 物化）。偵測 zombie 前 **MUST** 先 `git worktree list` + `find` + `mdfind`，看似 zombie 一律 **STOP + AskUserQuestion**。
+`.git/spectra-app/spectra.db` 是**跨所有 worktree 共享的單一 SQLite**。**NEVER** 對它跑 `DELETE` / `UPDATE` / `INSERT`；「main 無 directory + `spectra list` 顯示 active + park/unpark 失敗」**不**等於 zombie（多半別 session 在 sibling worktree 物化）。偵測 zombie 前 **MUST** 先 `git worktree list` + `find` + `mdfind`，看似 zombie 一律 **STOP + target adapter 的 authorized interactive question surface**。
 
 > 詳見 [[worktree-default.troubleshooting]] § spectra DB 跨 worktree。
 

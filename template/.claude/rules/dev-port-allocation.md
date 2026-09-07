@@ -9,6 +9,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # Dev Port 中央分配
 
@@ -43,7 +44,7 @@ Local edits will be reverted by the next sync.
 
 凡 consumer 用 `vite-plugin-cloudflare-tunnel` 開 dev tunnel：
 
-- **MUST** Hostname 走 `<consumer-id>-dev.<maintainer-domain>`（org convention；既有對齊：`<consumer-j>-dev` / `<consumer-b>-dev` / `<consumer-a>-shared-dev` / `co-purchase-dev`）
+- **MUST** Hostname 走 `<consumer-id>-dev.<maintainer-domain>`（org convention；既有對齊：`<consumer-i>-dev` / `<consumer-b>-dev` / `<consumer-a>-shared-dev` / `co-purchase-dev`）
 - **NEVER** 自由發揮挑其他 zone（如 `bigbyteedu.com` / 個人域名）— 即使 DNS / tunnel 建得起來，plugin 仍會因 token-zone account 不匹配 403 crash Nuxt
 - **MUST** `.env.local` 設三件套：
 
@@ -54,7 +55,7 @@ Local edits will be reverted by the next sync.
   ```
 
 - **MUST** Token 用 `cfat_*` account API token，**絕非** `cfut_*`（Worker token）或 `r_*`（cert.pem 簽發的 tunnel-scoped token）
-  - 來源 1：<consumer-j> `.env.local` 的 `CLOUDFLARE_API_KEY`（既有可用）
+  - 來源 1：<consumer-i> `.env.local` 的 `CLOUDFLARE_API_KEY`（既有可用）
   - 來源 2：Notion `Scrects` → Cloudflare → YuDefine（待補；目前只列 cfut_）
   - 必備權限：`Cloudflare Tunnel:Edit`（account）+ `SSL and Certificates:Edit`（zone）+ `DNS:Edit`（zone）
   - **必要**：`SSL and Certificates:Edit` — plugin `dist/index.mjs:617` 必跑 `/zones/<id>/ssl/certificate_packs` GET 確認 edge cert，403 會 re-throw crash Nuxt（即使 Cloudflare Universal SSL 已涵蓋）
@@ -184,13 +185,13 @@ Tunnel hostname 是 **per-consumer 單一資源**（§2.5 的 `<consumer-id>-dev
 | <consumer-c> | 3010 | 4300–4349 |
 | <consumer-d> | 3060 | 4350–4399 |
 | <consumer-b> | 3000 | 4400–4449 |
-| <consumer-j> | 3050 | 4450–4499 |
+| <consumer-i> | 3050 | 4450–4499 |
 | co-purchase | 3070 | 4500–4549 |
-| <consumer-k> | 3080 | 4550–4599 |
-| <consumer-e> | 3090 | 4650–4699 |
-| <consumer-g> | 3100 | 4600–4649 |
-| <consumer-i> | 3110 | 4700–4749 |
-| <consumer-f> | 3030 | 4750–4799 |
+| <consumer-j> | 3080 | 4550–4599 |
+| CPMS | 3090 | 4650–4699 |
+| <consumer-f> | 3100 | 4600–4649 |
+| <consumer-h> | 3110 | 4700–4749 |
+| <consumer-e> | 3030 | 4750–4799 |
 | clade | — (source-of-truth，非 Nuxt consumer) | — |
 
 下一個可用 base / band 一律現算：讀 `registry/consumers.json` 的 `dev_ports`，取最大 base +10、最大 band 上界 +1 起算 50 個。

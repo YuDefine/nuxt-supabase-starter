@@ -10,6 +10,14 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
+
+## Runtime adapter boundary
+
+The obligations, predicates, evidence schema, failure handling, and review timing in this source are shared. Concrete browser, dispatch, question, filesystem, and command mechanics are target-native and MUST come from the selected runtime fragment at the matching adapter path. A fragment declares only the capability it can prove; an absent or unverified capability remains blocked and MUST NOT be silently replaced by a neighbouring runtime.
+
+
 
 # Manual Review — Backend Verification Flow
 
@@ -17,7 +25,7 @@ Local edits will be reverted by the next sync.
 
 ## Backend-only change 的特別規約
 
-當 `proposal.md` 宣告 `**No user-facing journey (backend-only)**` 時，`## 人工檢查` 區塊適用更嚴的規約 — **只**允許三類項目（production 授權 / 商業判斷 / production 觀察），其餘 SSH / psql / curl / schema 驗證等 evidence collection **MUST** 寫進新的 `## N. Backend Verification Evidence` section 由 apply 階段 Claude 自跑自貼，**禁止**塞進 `## 人工檢查` 讓使用者扛。
+當 `proposal.md` 宣告 `**No user-facing journey (backend-only)**` 時，`## 人工檢查` 區塊適用更嚴的規約 — **只**允許三類項目（production 授權 / 商業判斷 / production 觀察），其餘 SSH / psql / curl / schema 驗證等 evidence collection **MUST** 寫進新的 `## N. Backend Verification Evidence` section 由 apply 階段 session owner 自跑自貼，**禁止**塞進 `## 人工檢查` 讓使用者扛。
 
 完整規約（含三類定義、`## N. Backend Verification Evidence` 模板、例外宣告固定文字、反面範例）見 `ux-completeness.md` 的「必填 Backend-only Manual Review 規約」。`manual-review.evidence.md` 的「動詞 → 結果」格式只適用於有 user-facing journey 的 change。
 
@@ -31,7 +39,7 @@ tasks.md 有未勾 `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / multi-marke
 
 #### `[verify:e2e]` channel
 
-**Dispatch**：主線 Claude **自己寫** Playwright spec 到 `e2e/verify/<change>/<topic>.spec.ts`（參考 `vendor/snippets/verify-channels/e2e-spec.template.ts`），跑：
+**Dispatch**：主線 session owner **自己寫** reproducible browser runner spec 到 `e2e/verify/<change>/<topic>.spec.ts`（參考 `vendor/snippets/verify-channels/e2e-spec.template.ts`），跑：
 
 ```bash
 pnpm test:e2e:verify <change>
@@ -43,7 +51,7 @@ pnpm test:e2e:verify <change>
 
 #### `[verify:api]` channel
 
-**Dispatch**：主線 Claude **自己跑** curl / ofetch HTTP round-trip（參考 `vendor/snippets/verify-channels/api-roundtrip.template.sh`），不得派 screenshot-review agent 代跑 API mutation。
+**Dispatch**：主線 session owner **自己跑** curl / ofetch HTTP round-trip（參考 `vendor/snippets/verify-channels/api-roundtrip.template.sh`），不得派 target adapter visual verifier 代跑 API mutation。
 
 **Evidence trail**：request 通過後，主線跑 `evidence-store.mjs --write --kind verified-api --method <M> --url <U> --status <S> [--body <sha256-12chars>]`，把印出的 `(verified-api: <ISO-8601>)` 貼到 item line 末尾。
 
@@ -51,7 +59,7 @@ pnpm test:e2e:verify <change>
 
 #### `[verify:ui]` channel
 
-**Dispatch**：主線 Claude 派 screenshot-review agent `mode: verify`，但 scope **只限** open known URL + wait for load + capture final-state screenshot + DOM observation（參考 `vendor/snippets/verify-channels/ui-final-state-brief.template.md`）。agent **NEVER** 負責 mutation / form fill / multi-role login；那些屬於 `verify:api` 或 `verify:e2e` channel。
+**Dispatch**：主線 session owner 派 target adapter visual verifier `mode: verify`，但 scope **只限** open known URL + wait for load + capture final-state screenshot + DOM observation（參考 `vendor/snippets/verify-channels/ui-final-state-brief.template.md`）。agent **NEVER** 負責 mutation / form fill / multi-role login；那些屬於 `verify:api` 或 `verify:e2e` channel。
 
 **Evidence trail**：agent 回報 final-state screenshot 與 DOM 觀察後，主線跑 `evidence-store.mjs --write --kind verified-ui --screenshot <path> [--dom <obs>]`，把印出的 `(verified-ui: <ISO-8601>)` 貼到 item line 末尾。
 
@@ -92,17 +100,17 @@ Verify channel baseline 是 consumer 端**已預先 ready** 的 codebase 層長�
 | Channel | Baseline |
 | --- | --- |
 | all `verify:*` | env-gated dev-login route 已就緒（用 audit script / detection helper 偵測，詳見下方 § Dev-login route missing → scaffold-first hard rule） |
-| `verify:e2e` | Playwright config + `e2e/fixtures/index.ts` style three-role fixture（`adminPage` / `managerPage` / `staffPage`） |
+| `verify:e2e` | reproducible browser runner config + `e2e/fixtures/index.ts` style three-role fixture（`adminPage` / `managerPage` / `staffPage`） |
 | `verify:api` | `__test-login` 或等價 session bypass route，可讓 curl / ofetch 建立 role session |
 | `verify:ui` | canonical seed data 覆蓋 final-state URL 所需 entity，**且該 fixture 在 verify 連的 dev DB 實際可查得到**——remote db-runtime（非 `supabase-local`）的 `seed.sql` 檔有 ≠ dev DB 有，見下方 § Seed-file ≠ dev-DB |
 
 **Why**：baseline 維護不是任何單一 spectra change 的臨時工作。每次 verify dispatch 才問 user 或讓 agent 補 seed，會把長期 codebase baseline 拖進錯誤時機，且會製造 seed.sql source-of-truth 漂移。
 
-**Agent 端對應行為**：`screenshot-review` verify mode 撞 baseline 缺（dev-login route 不存在 / seed 缺 entity / known URL 只能呈現空資料）屬 Fail-Fast UNCERTAIN；agent **NEVER** 補 seed、patch auth、或升級成 mutation runner。
+**Agent 端對應行為**：target visual verifier verify mode 撞 baseline 缺（dev-login route 不存在 / seed 缺 entity / known URL 只能呈現空資料）屬 Fail-Fast UNCERTAIN；agent **NEVER** 補 seed、patch auth、或升級成 mutation runner。
 
 **主線端對應行為**：
 
-- Dispatch `verify:e2e` 前 **MUST** 確認 Playwright config、dev-login / `__test-login`、three-role fixture 存在。
+- Dispatch `verify:e2e` 前 **MUST** 確認 reproducible browser runner config、dev-login / `__test-login`、three-role fixture 存在。
 - Dispatch `verify:api` 前 **MUST** 確認可用 session bypass route。
 - Dispatch `verify:ui` 前 **MUST** 確認 dev-login route + seed file 存在。
 - Baseline 不完整時，將缺口登記到 consumer 的 `ROADMAP.md` / `docs/tech-debt.md` / dedicated infra change，而不是降低 verification channel。
@@ -182,7 +190,7 @@ Helper 掃描 priority：**repo root canonical → repo root legacy → repo roo
 | <consumer-a> | ✅ `packages/core/server/routes/auth/_dev-login.get.ts` (monorepo) | ❌ false-negative |
 | <consumer-d> | ✅ `server/routes/auth/_dev-login.get.ts` | ✅ |
 | <consumer-c> | ✅ `server/api/_dev/login.post.ts` (better-auth POST) | ❌ false-negative |
-| <consumer-j> | ❌ MISSING (nuxt-auth-utils + libsql-drizzle, no cookbook template) | ✅ |
+| <consumer-i> | ❌ MISSING (nuxt-auth-utils + libsql-drizzle, no cookbook template) | ✅ |
 | co-purchase | ❌ MISSING (同上) | ✅ |
 
 **真實 adoption 4/6 + 1 monorepo misdetected + 2 真缺**（不是 1/6）。修法源頭 clade 2026-05-24 land：audit script + helper module + dispatcher fix（`scripts/audit-dev-login-adoption.ts` + `vendor/snippets/dev-auth/lib/detect-dev-login-route.ts` + `vendor/scripts/pi-dispatch-screenshot-verify.ts` 對齊）。下次 agent / 主線撞「is dev-login present？」即走上述 detection 路徑，**NEVER** 再 lazy grep。
@@ -200,7 +208,7 @@ Cookbook template 不存在的情境（如 nuxt-auth-utils + libsql-drizzle，�
 
 tasks.md 仍有未勾 `[review:ui]` 項時，第一動作 **MUST** 是引導使用者跑 `pnpm review:ui` — 本地 GUI 自動依 `#N` / `#N.M` schema 配對截圖、可鍵盤完成 OK / Issue / SKIP、conflict-aware 寫回 tasks.md，不在 chat 內燒 token。完整工具行為見 `vendor/scripts/review-gui.ts`。
 
-**NEVER** 預設用 `AskUserQuestion` 在 chat 內逐項彈對話框 — 那是 fallback，不是 default path。
+**NEVER** 預設用 `target-native question surface` 在 chat 內逐項彈對話框 — 那是 fallback，不是 default path。
 
 **Fallback**（`pnpm review:ui` 不可用時 — consumer 沒有該 script、使用者明確拒絕 GUI、或 pure backend 完全無 UI 證據需求）：
 
@@ -224,6 +232,6 @@ tasks.md 仍有未勾 `[review:ui]` 項時，第一動作 **MUST** 是引導使�
 
 ### `[discuss]` flow
 
-`[discuss]` items 由 `/spectra-archive` Step 2.5 Walkthrough 觸發；主線 Claude 主動準備 evidence（含 backend grep / query / SSH / curl / migration check 結果）→ 使用者明確 OK / Issue / Skip / Defer。
+`[discuss]` items 由 `/spectra-archive` Step 2.5 Walkthrough 觸發；主線 session owner 主動準備 evidence（含 backend grep / query / SSH / curl / migration check 結果）→ 使用者明確 OK / Issue / Skip / Defer。
 
 完整 spec（Defer-to-HANDOFF schema、Resume mode、HANDOFF.md `## Deferred discuss items` HTML marker schema、混合 kind change 順序）：詳見 [[manual-review.discuss]]。

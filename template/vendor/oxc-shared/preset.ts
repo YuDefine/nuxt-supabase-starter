@@ -69,7 +69,7 @@
  *
  * 2026-07-28: that is exactly how `nuxt-supabase-starter` Template CI broke on
  * `vp fmt --check` over `vendor/snippets/manual-review-enforcement/patterns.json`
- * — <consumer-j> and co-purchase had each independently patched `vendor/**`
+ * — <consumer-i> and co-purchase had each independently patched `vendor/**`
  * into their own vite.config.ts, which hid the gap instead of closing it.
  * `scripts/audit-governance-drift.ts` check 10 now fails on any config that
  * re-inlines one of these, so the next gap surfaces before a consumer does.
@@ -107,7 +107,36 @@ export const PROJECTION_EXCLUDES = [
 // review-gui 本體與其 sibling 全部排除：SPA 的 HTML/CSS/前端 JS 是一整個 template
 // string，oxfmt 會重排字串內容、oxlint 會對字串裡的 client-side JS 誤報。用 glob 而非
 // 逐一列名 —— 拆檔後新增 sibling 若忘了加，格式化會直接改壞 embedded template。
-export const CLADE_VENDOR_EXCLUDES = ['vendor/snippets/**', 'vendor/scripts/review-gui*.ts']
+export const CLADE_VENDOR_EXCLUDES = [
+  'vendor/snippets/**',
+  'vendor/scripts/review-gui*.ts',
+  // SpecFormula：`vendor/specformula/` 是 git submodule（上游 repo 全文），
+  // `vendor/specformula-ts/` 是 scripts/sync-upstream-mirrors.ts 生成的 mirror。
+  // 兩者都不是 clade 手寫源碼 —— 上游用自己的 eslint/prettier baseline，在這裡 lint 它
+  // 只會產生一批沒有人能修的 finding（修法在上游 repo，不在 clade）。
+  'vendor/specformula/**',
+  'vendor/specformula-ts/**',
+  // aixbdd 同理：`vendor/aixbdd/` 是 git submodule（上游 repo 全文），mirror 只有 markdown
+  // 與 template，落在 plugins/ 底下不進 lint 面。
+  'vendor/aixbdd/**',
+]
+
+/**
+ * 上游 mirror 的落點（`registry/upstream-submodules.json` 的 `mirror.skillsTo` 與其 plugin 根）。
+ *
+ * 這些目錄的內容是 `scripts/sync-upstream-mirrors.ts` 逐字複製上游的產物 —— 上游用自己的
+ * lint / fmt baseline，這裡報出來的每一個 finding 都**沒有人能在 clade 修**（修法在上游 repo），
+ * 而 oxfmt 一旦改寫它們，`--check` 就永遠紅。實證：aixbdd 的
+ * `api-plan/templates/openapi.yaml` 是帶 `{{PLACEHOLDER}}` 的模板，YAML parser 直接 SyntaxError。
+ *
+ * 代價是 clade 自己寫的補充文件（`specformula-config/nuxt.md`）也一起不進 fmt 面。
+ * 這是刻意的：把 mirror 目錄切成「這幾個檔要檢查、那幾個不要」需要一份與 registry 平行
+ * 維護的清單，而那份清單會漂開。
+ */
+export const CLADE_MIRROR_EXCLUDES = [
+  'plugins/hub-capabilities-aixbdd/**',
+  'plugins/hub-capabilities-specformula/skills/**',
+]
 
 /**
  * `PROJECTION_EXCLUDES` 的目錄前綴形式（`'.clade/**'` → `'.clade/'`），給逐檔比對用。

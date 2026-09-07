@@ -10,6 +10,8 @@ Local edits will be reverted by the next sync.
 
 # Output Hygiene — 別把內部過程變成讀者的負擔
 
+<!-- clade-targets: claude,codex,cursor -->
+
 對外輸出（PR / commit message / code comment / Slack / 文件 / 跨團隊訊息）只該讓讀者最快理解「**現況 + 為什麼**」。
 
 **不**是回放思考歷史、退回來的選項、被糾正的修補軌跡、或事後辯解。
@@ -132,4 +134,3 @@ MCP 規約（[[nuxt-ui-mcp]] 等）擋「亂湊 API surface」，但沒擋「拿
 | 「一個值得轉的旋鈕」 | 「一個值得調的參數」 |
 
 判別：那個詞是在**傳達**判準，還是在**表現**寫的人？後者讓讀者多做一次翻譯，而且翻出來的往往不是你的原意。沒有 detector——消費端只有正在寫字的自己。
-

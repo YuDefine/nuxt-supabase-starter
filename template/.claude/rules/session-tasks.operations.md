@@ -9,6 +9,8 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
 
 # Session Tasks — 操作細節
 
@@ -53,10 +55,12 @@ tasks/
 
 ```bash
 node ~/offline/clade/vendor/scripts/flow/flow.ts open <slug> \
-  --actor claude-code --origin 'tasks:tasks/<檔名>' --title '<一句話：這件事是什麼>'
+  --actor '<本 session 的 runtime actor>' --origin 'tasks:tasks/<檔名>' --title '<一句話：這件事是什麼>'
 # stderr 印出 export CLADE_WORK_ID=W-<date>-<slug>；本 session 後續的 dispatch 沿用它，
 # relay / fanout 的 successor 也會繼承，整條接力鏈算同一件事。
 ```
+
+`--actor` 填實際執行本命令的 runtime：Claude Code 為 `claude-code`、Codex 為 `codex`、Cursor 為 `cursor`。以當前 runtime identity 證據判定，不從所讀文件、工作模型或父 process 留下的單一環境變數猜測；證據不足填 `unknown` 並保留未歸因狀態，不能借用另一端的名稱。此欄是 actor 類別，不代替 session id 或 work id。
 
 **每一個**新建的 tasks 檔都鑄，不是只有覺得會做很久的那次——「這件事夠不夠大」這個判斷本身
 正是 79% 事件掛在 `orphan-` 名下的成因（clade 2026-08-27 實測）。
@@ -77,7 +81,7 @@ slug 的重述，那正是這條規約要修的東西（一個不指涉任何東
 | --- | --- |
 | 觸發條件 | 新建 / 編輯 `tasks/*.md`（`archive/` 與 `lessons.md` 除外）且三個靜默訊號都不成立 → 印出鑄名指令。**warn-only，不 block**——擋一次 tasks 檔寫入來換一筆遙測，正好把整條脊椎的優先序顛倒過來（工作大於工作的紀錄，emit 全線 fail-open 同一個理由） |
 | 消費端 | 剛寫完 tasks 檔的那個 agent（照著跑那條指令）；成效由既有的 R3 orphan 佔比訊號量測，不另建 metric |
-| 載入路徑 | 本節（散播到 consumer `.claude/rules/session-tasks.operations.md`）＋ hook 本身（`plugins/hub-core/hooks/hooks.json`，consumer 端隨 plugin 生效） |
+| 載入路徑 | 本節（散播到 consumer runtime rules/session-tasks.operations.md）＋ hook 本身（`plugins/hub-core/hooks/hooks.json`，consumer 端隨 plugin 生效） |
 
 權威的對應由 `work.open` 的 `origin_ref: tasks:<路徑>` 承載——spine 指向 tasks 檔，這個方向由
 工具在 emit 當下寫入、append-only。反方向的檔頭 `work_id:` 是**選填索引**，維持選填的理由與
@@ -242,13 +246,13 @@ slug 的重述，那正是這條規約要修的東西（一個不指涉任何東
 | **跨 consumer** 共享的根因分析 | clade `docs/pitfalls/`（走 `/oops` Mode B） | root cause + detection + fix + prevention 四項齊備 |
 | **跨 conversation / 跨 project** 個人偏好或行為更正 | auto-memory `feedback` type | user 糾正且該 lesson 在任何 project 都適用 |
 | **跨 session 但只對當前 consumer** 的 lesson | `tasks/lessons.md`（本檔） | 只對當前 repo 有效；不夠成熟升 pitfall；不適合 auto-memory（換 project 不適用） |
-| **consumer 自家業務規約**（演進成穩定規約） | `.claude/rules/local/<topic>.md` | 從 lessons.md 升級；override clade core 須加 [[local-rule-override]] 宣告 |
+| **consumer 自家業務規約**（演進成穩定規約） | runtime local rules/<topic>.md | 從 lessons.md 升級；override clade core 須加 [[local-rule-override]] 宣告 |
 | **跨 consumer 適用的正向規約**（pitfall 四項不齊備） | clade 標準層，落點走 `/bp` 判 | 同型 lesson 在 ≥2 個 consumer 出現；**或**該 lesson 描述的是 agent 行為模式（scope 誤判 / 交付格式錯 / 工具路由錯 — 不依賴業務邏輯就能描述），即使只在 1 個 consumer 觀察到也算命中 |
 
 ### 升級路徑（lessons.md → 其他 SoT）
 
 - **熟了升 pitfall**：四項齊備 → `/oops` Mode B → 從 lessons.md 移除
-- **熟了升 rules/local/**：演進成穩定 consumer 規約 → 寫 `.claude/rules/local/<topic>.md` → 從 lessons.md 移除
+- **熟了升 rules/local/**：演進成穩定 consumer 規約 → 寫 runtime local rules/<topic>.md → 從 lessons.md 移除
 - **發現跨 project 適用 → 升 auto-memory**：改寫成 auto-memory `feedback` type → 從 lessons.md 移除
 - **發現跨 consumer 適用 → 走 `/bp`**：clade 標準層有 7 種落點，由 `/bp` record mode 判、回報、等確認 → rule 落地 + propagate 後才從 lessons.md 移除。**NEVER** 自己直接改 clade 源檔（落點判斷要可被當場推翻）；**NEVER** 因為「還沒到 pitfall 四項齊備」就把跨 consumer 的 lesson 留在 lessons.md 不處理 —— pitfall 不是唯一出口，`/bp` 收的正是四項不齊備的那些
 - **過時**：直接刪行（git history 留證）
@@ -332,32 +336,11 @@ marker 是它區分「合法登記」與「該派沒派」的唯一輸入。不�
 「需要人判斷」「要謹慎」「這個比較複雜」「要 attended」**都不是**外部條件。講不出具體外部條件
 ＝ 派得出去。
 
-### 成本模型（2026-08-07 納入 prompt caching 修正）
+### 成本模型與交接成本
 
-**真正的成本殺手不是長 session，是 cache miss。** 單次 miss 在 300k context ≈ +0.9M effective——
-比整場 warm 讀取的一半還多。已知的 miss 觸發源（**MUST** 全部避免）：
+讀取量、當前 context 佔用、cache hit/miss 與計價成本分開記錄。MUST 使用本 runtime 的實際用量來源與已查證的計價口徑；其他 provider 的 cache TTL、倍率或原生命令不構成本 session 的成本證據。模型／effort 切換依 routing 與當次授權，不能只用 token 總量推斷切換一定較省。
 
-- session 中途切 `/model`、`/effort`、首次開 fast mode
-- MCP server 增減、連線斷掉
-- 休息超過 cache TTL（訂閱 1h；吃 usage credits 時降到 5m）後才續跑
-- Claude Code 升級後 `--resume` 舊 session
-
-**推論：session 開頭定好 model 與 effort，中途 NEVER 切。** 一次切換的代價比省下的多得多。
-
-**讀取量 ≠ 成本**：**NEVER** 拿讀取量佔比論證「長 session 很貴」——它論證的是「長 session 讀很多」，
-兩者差一個數量級的權重。長 session 真正的代價在**品質**（context rot）與 **cache miss 風險敞口**。
-公式、`Cost ≈ 0.1 × (N × C / 2) + 2C` 的代入、舊模型為何高估 5–10 倍、量測出處與 cache 權重的
-查證邊界，全文見 rationale § 成本模型的量測依據。
-
-### 收工前的自我開脫（看到自己這樣說就停下登記）
-
-| 開脫 | 實際 |
-| --- | --- |
-| 「context 還夠，沒有觸發壓縮」 | 沒觸發壓縮不代表便宜。613k 的 session 每跑 100 turn 就是額外 61M token，壓縮與否無關 |
-| 「只差最後一步了」 | 1,463 turn 的那個 session 每一輪都是這樣想的 |
-| 「切了要重建 context，反而更貴」 | 重建成本是**一次**冷載；續跑成本是 context 大小 **× 剩餘 turn 數**。除非剩不到幾輪，續跑必然更貴 |
-| 「這件事登記起來比做完還久」 | 那就是可以現在做完的小事，做完再切——本表擋的是「登記得起來卻不登記」 |
-| 「下個 session 還要重新理解一次」 | 那是 `tasks/<date>-<slug>.md` 沒寫夠，不是切點錯。補齊該檔就是收工動作本身 |
+交接前保存目標、授權、已驗證結果、未完項及 artifact 位置，讓 successor 能從 durable brief 接續。缺少這些資料就補齊，不能把使用者重述當作交接步驟。適用 hard-tier 義務仍由 [[session-tasks]] 與 target adapter 判定。
 
 ### 收工訊息契約（MUST，每一次收工都適用）
 
@@ -365,7 +348,7 @@ marker 是它區分「合法登記」與「該派沒派」的唯一輸入。不�
 
 **寫收工訊息之前先判：這次真的需要重開嗎？**
 
-**先過門檻閘（MUST，先於下表）：已越過該 launcher 的 hard tier 時，下表第 1 列（`/compact` 續同一個 session）整列不適用**——那一級只有一條出口：
+**先過門檻閘（MUST，先於下表）：已越過該 launcher 的 hard tier 時，下表第 1 列（壓縮／checkpoint 後續同一個 session）整列不適用**——那一級只有一條出口：
 把殘工派出去（`relay`／`fanout`）、派不出去的登記、收工（§ 收工三步）。**NEVER** 用「還在
 同一個任務裡」「只是跨了 phase 斷點」「compact 走 cache 比較便宜」「compact 完 user 零重述」
 把第 1 列讀回來——這幾句在 hard tier 之後**全部仍為真**，它們正是本閘要擋的東西。
@@ -376,12 +359,12 @@ compact 壓掉的是敘事，**壓完之後每一 turn 仍重讀壓縮後的整�
 
 | 可觀察 predicate | 動作 |
 | --- | --- |
-| 還在**同一個**任務裡（只是做久了、或跨了 phase 斷點），**且未越過該 launcher 的 hard tier** | **`/compact` 續同一個 session。NEVER 收工開新 session。** warm 時 compact 讀舊 prefix 走 cache，官方文檔逐字：`costs a fraction of what the context size suggests`；而且 user 零重述 |
+| 還在**同一個**任務裡（只是做久了、或跨了 phase 斷點），**且未越過該 launcher 的 hard tier** | **使用當前 runtime 支援的壓縮／checkpoint 續同一個 session。NEVER 僅因 phase 斷點收工開新 session。** 狀態保存後依 harness 的實際 context-transition 機制接續，不要求 user 重述 |
 | 換 repo / 換不相關主題 / 已登記的中大型工作確實需要乾淨 session | invoke `/handoff relay <task pointer>`（N 件可平行則 `/handoff fanout`），由主線依下一節自行完成 Herdr transport，收工訊息走下面的 **A** |
 | 這批工作真的結束、沒有未完項 | 直接收工走下面的 **B**，**NEVER** 建立空的接手 session |
 | 剩餘工作可無人值守跑完 | 主線直接啟動該 repo 的 runner，**優先於**開新 session；回報 runner receipt，不把指令交給 user |
 
-第 2 列的「換不相關主題」**每一次**都跑這三條，**三條全中才算不相關**：(1) thin brief 只引 durable 檔就寫得完，不需引「只存在於本對話」的結論；(2) 不共享當前任務**未 commit** 的 working tree 狀態；(3) 已有、或當場先登一條屬於它自己的 durable 條目。**任一條不中＝仍是同一任務，走第 1 列 `/compact`**——但這條 fallback 同受上面的門檻閘管：已越過該 launcher 的 hard tier 時第 1 列不存在，仍走第 2 列 `relay`／`fanout`。
+第 2 列的「換不相關主題」**每一次**都跑這三條，**三條全中才算不相關**：(1) thin brief 只引 durable 檔就寫得完，不需引「只存在於本對話」的結論；(2) 不共享當前任務**未 commit** 的 working tree 狀態；(3) 已有、或當場先登一條屬於它自己的 durable 條目。**任一條不中＝仍是同一任務，走第 1 列原生壓縮／checkpoint**——但這條 fallback 同受上面的門檻閘管：已越過該 launcher 的 hard tier 時第 1 列不存在，仍走第 2 列 `relay`／`fanout`。
 
 **門檻未過時，NEVER 把「context 大了」直接讀成「該收工開新 session」。** 該區間的判定走上面
 三條，**context 大小本身不是其中任何一條**。越過該 launcher 的 hard tier 之後這句不再適用——那一級的門檻
@@ -395,7 +378,7 @@ compact 壓掉的是敘事，**壓完之後每一 turn 仍重讀壓縮後的整�
 | --- | --- |
 | workflow明定 worktree要 parked | `retained`，指名 owner與 next landing event |
 | clean + fully merged + 無 unique commit／WIP + 無 parking contract，且已有該 worktree的明確 remove授權 | 實際移除 worktree與branch，receipt寫 `removed` |
-| 同上但沒有明確 remove授權 | 先用 `AskUserQuestion`問 `remove`／`retain`；回答前**不得**輸出「目前這裡收工」或等價完整 closure |
+| 同上但沒有明確 remove授權 | 先用 structured user-input surface問 `remove`／`retain`；回答前**不得**輸出「目前這裡收工」或等價完整 closure |
 | dirty、未 fully merged、ownership不明 | fail closed列 blocker；**NEVER**用 `--force`把不確定性刪掉 |
 
 Herdr／subagent receipt中的 `retained:false`只描述該 child runtime，**NEVER**拿它代替 parent cwd的 Worktree lifecycle receipt。
@@ -411,7 +394,7 @@ Herdr／subagent receipt中的 `retained:false`只描述該 child runtime，**NE
 | 部件 | 契約 |
 | --- | --- |
 | 首行 | 逐字包含：`目前這裡收工；位置已交給 successor。` |
-| Relay receipt | successor workspace／tab／pane／Claude session、本 pane id、`predecessor_dispatch_id`、`relayed_dispatch_ids`（沒有就明寫「無」） |
+| Relay receipt | successor workspace／tab／pane／successor session、本 pane id、`predecessor_dispatch_id`、`relayed_dispatch_ids`（沒有就明寫「無」） |
 | Worker receipt | **只有 `fanout`**：逐筆列 dispatch_id、label、pane、在做什麼 |
 | 工作摘要 | durable brief 路徑與一句主題 |
 | Runtime cleanup | 已停止的不必要 background／agent／shell；仍保留者逐一列用途與對應 pane |
@@ -439,9 +422,9 @@ receipt 送出後，本 session **NEVER** 再開新工作段、輪詢接手 pane
 
 **Pane 是 dispatch 的投影，不是 dispatch 的理由。** Transport 預設分割當前 Tab，只改變已決定要派的工作長什麼樣。反方向同樣不承載資訊：**NEVER** 從「Tab 沒有分割」推論沒有工作在跑——in-process subagent 沒有 terminal。要看現況跑 `vendor/scripts/herdr-patrol.ts`。
 
-每一個符合的跨 cwd / 新 Claude Code session handoff 都保留原有 worktree、scope、approval、verification 與 clade / consumer 邊界。Transport 失敗也不改變 routing 結論，且 **NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt。
+每一個符合的跨 cwd / 新 interactive runtime session handoff 都保留原有 worktree、scope、approval、verification 與 clade / consumer 邊界。Transport 失敗也不改變 routing 結論，且 **NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt。
 
-**每一個**原本會要求 user 切換資料夾、開另一個 Claude Code session、再貼 prompt 或指令的 handoff，
+**每一個**原本會要求 user 切換資料夾、開另一個 interactive runtime session、再貼 prompt 或指令的 handoff，
 都由主線自行走 Herdr transport；本節是使用者對這項 transport 的 standing explicit authorization，不必逐次再問。
 
 先判邊界：當前 session 能在既有授權與 scope 內直接對目標 cwd 執行，就直接執行；只有既有 routing、
@@ -449,7 +432,7 @@ session boundary 或跨 repo 決策已判定確實需要另一個互動 session�
 **不**新增外派理由、跨界授權、worktree 例外或 approval bypass。
 
 **`attended` 的要求是「過人眼」，NEVER 讀成「必須在當前這個對話裡做」。** 派出去的是**互動式** session，
-user 看得到那個 pane，接手 agent 可以用 `AskUserQuestion` 讓 user 在那個 pane 裡逐批拍板。需要拍板
+user 看得到那個 pane，接手 agent 可以用 structured user-input surface 讓 user 在那個 pane 裡逐批拍板。需要拍板
 **不構成**不派的理由，只構成 brief 裡要寫明「你是互動式 session，需要拍板的直接問 user」。逐字反開脫：
 「這項要 attended，所以不能派」「要 user 逐批拍板，留在本 session 比較快」。本段適用**每一項**判為需要
 人拍板的殘工，不是只有其中比較單純的那幾項。
@@ -501,10 +484,25 @@ user 看得到那個 pane，接手 agent 可以用 `AskUserQuestion` 讓 user �
 命中時 **MUST** invoke `herdr` skill 並先讀 `herdr-session-handoff/README.md`；每一個
 `/handoff relay`／`/handoff fanout` 都只走 `vendor/scripts/herdr-session-handoff.ts` 的 canonical
 helper（`relay` 用 `--relay`；`fanout` 先對每件工作跑一次裸 dispatch，**全部派完**才跑 `--relay`），
-由 helper 統一 provision、fresh Claude session identity、prompt delivery、in-flight dispatch 的
+由 helper 統一 provision、fresh successor session identity、prompt delivery、in-flight dispatch 的
 coordinator 身分轉移，以及寫出讓 successor 回收本 pane 的 predecessor record。
 
-**每次新建或恢復 child 都 MUST 按 [[agent-routing]] 選定具體 model 與 effort，並傳入 `--model <slug> --effort <level>`。** 裸 dispatch、relay、recovery 重派與固定 bridge 都適用；`inherit`／缺欄／runtime 不相容在建 pane 前拒絕。帳號設定、主線模型與 brief 正文不能代選。收據的 requested 欄位證明傳入值，observed 才是實跑證據；Herdr 回 `model_verification: unverified` 時 **NEVER** 宣稱已核實模型。
+**每次新建或恢復 child 都 MUST 按 [[agent-routing]] 選定具體 model 與 effort，並傳入 `--model <slug> --effort <level> --route <policy> --tier-basis <conclusion>`。** 裸 dispatch、relay、recovery 重派與固定 bridge 都適用；`inherit`／缺欄／runtime 不相容／缺歸因欄在建 pane 前拒絕。
+
+`--route` 與 `--tier-basis` 的值域與語義**與 `pi-dispatch.ts` 逐字相同**（`--route` 記走哪條政策，`--tier-basis` 記那條政策對檔位的**結論**，兩者不可互相推導）——這條對稱是 2026-09-07 補上的：在那之前 Pi 派工必須講出理由、Claude Code 派工不必，於是一句手打的 `--model claude-opus-5 --effort max` 通過了每一道 gate，事後沒有任何欄位講得出是誰依什麼授權的。**NEVER 給這兩欄 default**：default 會讓「真的判過」與「呼叫者從沒判」事後不可區分。
+
+**Claude child 的 effort 值域是 `low` / `medium` / `high`。** `max` **NEVER** 是 routed 檔位——政策表（`SESSION_TRANSPORT_POLICY`）對 Claude Code 只給一個檔位 `medium`，而 `max` 在整份 routing 規約裡只出現在 Fable subagent 的配額 fallback 與 Pi `sol` 的 gate row，兩者都不是這條路徑。真的需要升到 `max` 就 **MUST** 顯式帶 `--tier-basis adjudication`，那句宣告會落在 receipt 與 durable record 的 `tier_basis` 上，下一個讀的人看得到是誰主張的。**NEVER** 把它讀成「max 被禁掉了」——被禁掉的是**不具名地**用它。帳號設定、主線模型與 brief 正文不能代選。收據的 requested 欄位證明傳入值，observed 才是實跑證據；Herdr 回 `model_verification: unverified` 時 **NEVER** 宣稱已核實模型。
+
+`model_verification` 是三值，三值各自對應一個不同的動作：
+
+| 值 | 意思 | 你現在做什麼 |
+| --- | --- | --- |
+| `verified` | child 自己的 transcript 答出的 model 滿足 `requested_model` | 照常用這個 pane |
+| `mismatch` | transcript 答的是**另一個** model | 這是 `transport_error`（exit 16），**NEVER** 讀成可續用。pane 刻意保留（它正在跑某個東西，關掉就毀掉唯一證據）——先讀 `observed_model` 判它實際跑什麼，再決定重派或回收 |
+| `unverified` | **沒有做比對**，理由在 `model_verification_reason` | 缺證據不等於不符：`transcript-timeout` 代表沒等到第一輪回答，gateway launcher（`ccg` / `ccagy` / `ccx`）代表它的 alias 由 gateway 展開、clade 無權當比對基準。兩者都 **NEVER** 當成「已核實」，也 **NEVER** 當成「不符」 |
+
+**`observed_model` 在三個值底下都會寫。** gateway 那格尤其重要：`--model opus` 到 proxy 會變成
+`ccg-opus`、回來是 `grok-4.6-build`，在此之前 record 上完全沒有「實際跑了什麼」的載體。
 
 **`fanout` 的順序是硬約束**：`--relay` 轉移的是它**執行那一刻**掃到的 in-flight dispatch。relay 之後
 才派的 worker 不會被任何人繼承，而本 pane 隨即被 successor 回收——那筆 worker 直接變成 orphan。
@@ -517,7 +515,7 @@ coordinator 身分轉移，以及寫出讓 successor 回收本 pane 的 predeces
 拿它繞過一道針對「parent 還活著」設計的 guard 是偽造前提。
 
 每一個被派出去的 **worker** 都 **MUST** 在正常 final response 前透過 helper 回報與 dispatch／pane／
-Claude session identity 相關聯的 `success | blocked | failed | unknown` outcome；`blocked` 必須帶一個
+successor session identity 相關聯的 `success | blocked | failed | unknown` outcome；`blocked` 必須帶一個
 具體 decision。**NEVER** 把 secret 寫進 Herdr argv、prompt metadata、receipt、summary、decision、
 log、rule 或 fixture。
 
@@ -632,4 +630,4 @@ Step 1–9 屬 `clade-publish` skill。
 permission classifier／harness 拒絕某載體時，**NEVER** 改用其他工具暗渡同一動作；目前 session 能在既有授權與 scope 內合法執行就直接執行，否則回具體 blocker。
 
 `\nx`（Charles 個人縮寫，判為收工時）同樣受本契約約束：「收工 ＋ 一句已登記在哪」只是下限；
-判需要乾淨 session 時：在 Herdr pane 內 invoke `/handoff relay`（N 件可平行則 `fanout`），取得 `relay_dispatched` 後套用 **A**；**不在 Herdr**（Cursor 等）改走 create-only dispatch（不要 `--relay`），取得 `dispatched` 後套用 **A** 的外部首行。不套用 B。
+判需要乾淨 session 時：在 Herdr pane 內 invoke `/handoff relay`（N 件可平行則 `fanout`），取得 `relay_dispatched` 後套用 **A**；**不在 Herdr**（other runtime 等）改走 create-only dispatch（不要 `--relay`），取得 `dispatched` 後套用 **A** 的外部首行。不套用 B。

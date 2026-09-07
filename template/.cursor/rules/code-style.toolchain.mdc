@@ -9,20 +9,22 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # Code Style — 工具鏈治理
 
 **本檔是 [[code-style]] 的工具鏈半邊。** 主檔留「寫 code 當下」適用的部分（新增腳本一律
 TypeScript 的三條語法限制、用 `vp` 命令驗證），本檔收所有**只可能在編輯設定檔時被違反**的條文。
 
-**為什麼拆**（2026-08-02，實測）：`code-style.md` 原本 27.3 KB、`paths:` 吃全 repo 的
+**為什麼拆**（2026-08-02，AI Agent 實測）：`code-style.md` 原本 27.3 KB、`paths:` 吃全 repo 的
 `.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts,json}`——**任何一次原始碼編輯**都讓整份進場，進場後被該
 session 後續每個 request 重讀。7 天全 fleet 注入 **83 次**，約 **1.03M tokens**，佔 nested_memory
 總量 12%，是所有條件式規約的第一名。
 
 而本檔這 23 KB 的每一條，違規都**只可能發生在上面 `paths:` 列的那些檔**：`NEVER 建立
 .eslintrc` 只能在寫 `.eslintrc*` 時違反、`CI workflow 禁止跑 vp check` 只能在寫
-`.github/workflows/**` 時違反。**規約會在違規動作發生的那一刻在場**，這是拆得掉的原因——
+`.github/workflows/**` 時違反。這些路徑界定正文的適用範圍，各 runtime adapter 依實際載入契約交付；
+上述注入次數與 cache-read 是當次 AI Agent 的量測，不外推其他產品。這個對應關係是拆分的依據——
 與 `docs/tech-debt.md` TD-328 那次失敗的分層不同型（那次搬走的是「說服力」，沒有這種對應關係）。
 
 **改本檔 `paths:` 前先確認新增的副檔名 / 路徑在本檔內真的有對應條文。** 2026-08-02 曾因為
@@ -173,8 +175,8 @@ starter 命中的意義與另外兩台不同：**每個從它 scaffold 出來的
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 命令位置出現 prettier × 目標 repo 有 `.oxfmtignore` / `.claude/hub.json` / `package.json` 依賴 `vite-plus` → **exit 2 擋下**。逃生門 `CLADE_ALLOW_PRETTIER=1`（給「只是要在文件裡寫下這個字串」用） |
-| 消費端 | 每一次 Bash tool call（fleet 全 consumer + clade home，隨 `hooks.json` 散播）；回歸測試 `test/pre-bash-prettier-invocation-gate.test.ts` |
-| 載入路徑 | 本節（`rules/core/code-style.toolchain.md`，consumer 端投影為 `.cursor/rules/code-style.toolchain.mdc`）；成因與 fleet 掃描見 `docs/pitfalls/2026-08-28-banned-tool-binary-still-on-path.md` |
+| 消費端 | 已安裝該 Claude hook 的 Bash tool call（consumer 與 clade home）；回歸測試 `test/pre-bash-prettier-invocation-gate.test.ts`。Codex／Cursor 的原生攔截接線另行驗證，規約投影本身不代表已安裝 hook |
+| 載入路徑 | 本節 `rules/core/code-style.toolchain.md`，依 frontmatter paths 由各 runtime adapter 交付；成因與 fleet 掃描見 `docs/pitfalls/2026-08-28-banned-tool-binary-still-on-path.md` |
 
 ### 禁止依賴全域 vite-plus（hard rule）
 
@@ -402,7 +404,7 @@ bash scripts/pre-commit/runner.sh
 
 `vp` 內部呼叫 oxc，行為一致。
 
-> `--ignore-path .oxfmtignore` 對投影層而言已是**歷史包袱** —— preset 的 `PROJECTION_EXCLUDES` 已經排除 `vendor/**` / `.claude/**` / `.clade/**` / `.spectra/**`，裸打 `vp fmt` 不會再掃到 LOCKED 檔（per § 投影層排除清單集中在 preset）。`.oxfmtignore` 只保留給該 consumer 自家、與投影層無關的路徑；沒有這種路徑就不必有這個檔。
+> 投影排除由 preset 的 `PROJECTION_EXCLUDES` 集中定義；`.oxfmtignore` 仍是 `ensureCladeOxfmtIgnore` 維護的相容入口，依本檔 § `.oxfmtignore` 保留 clade-managed 條目。Consumer 自家排除寫在 `vite.config.ts` 的 override，不能因 preset 已排除投影就刪除 `.oxfmtignore` 或把它改作業務排除清單。
 
 ### staged 配置：一行 re-export，NEVER 手寫排除陣列
 
@@ -484,7 +486,7 @@ fmt: {
 
 `.cursor/rules/`、`.cursor/skills/`、`.cursor/hooks/`、`.cursor/agents/`、`.cursor/commands/`、`.agents/`、`.codex/` 這些 clade 投影目錄是 chmod 444，oxfmt 不能寫入但會走訪到，會被報 format issue。clade 透過 `scripts/lib/oxfmtignore-governance.ts` 在 `pnpm hub:bootstrap` 時自動寫 `.oxfmtignore`，並由 clade 散播的 `package.json` `format` / `format:check` script 預埋 `--ignore-path .oxfmtignore` flag。
 
-**consumer 不要手動編輯 `.oxfmtignore`**（內容由 governance 治理；可以加自家條目，但 LOCKED 那幾條由 governance 維持）。
+Consumer 的 `.oxfmtignore` 保留 governance 管理的投影排除；自家排除依本檔的 `vite.config.ts` override 契約配置。同步保留既有行的行為不代表允許新增業務條目。
 
 oxlint 的 ignore 走另一條路徑（`vite.config.ts` 內 `lint.ignorePatterns` 或 `.oxlintrc.json` `ignorePatterns`，**lint 的 `ignorePatterns` 是 work 的**），跟 fmt 不共用 `.oxfmtignore`：
 
@@ -517,7 +519,7 @@ pnpm exec vp fmt --migrate=prettier  # 從既有 prettier config 遷移（若有
   2. **inlineDrift** — 未 import preset 時，inline 寫死的 fmt baseline 欄位（`trailingComma`、`semi`、`singleQuote`、`printWidth` 等 11 項）與 baseline 不一致的 entries
   - 用法：`node scripts/audit-tooling-drift.ts [--markdown|--json]`；diagnostic-only，exit code 永遠 0；HANDOFF §4 baseline 由此 script 維護
   - 後續擴充至 7 個 signal（`structuralDrift` / `strayDotfiles` / `viteplusLocal` / `pnpmOrphans` / `eslintDeps`）
-- `scripts/audit-tooling-drift.ts` `eslintDeps` signal：掃每個 consumer `package.json` deps/devDeps 是否含本節禁用的 eslint / prettier 套件（`eslint` / `@nuxt/eslint*` / `@typescript-eslint/*` / `eslint-config-*` / `eslint-plugin-*` / `prettier` / `prettier-plugin-*`）→ 列為 `forbidden-deps-present`。warn-only，源於 <consumer-j> + co-purchase 採 Vite+ 後移除 `@nuxt/eslint`
+- `scripts/audit-tooling-drift.ts` `eslintDeps` signal：掃每個 consumer `package.json` deps/devDeps 是否含本節禁用的 eslint / prettier 套件（`eslint` / `@nuxt/eslint*` / `@typescript-eslint/*` / `eslint-config-*` / `eslint-plugin-*` / `prettier` / `prettier-plugin-*`）→ 列為 `forbidden-deps-present`。warn-only，源於 <consumer-i> + co-purchase 採 Vite+ 後移除 `@nuxt/eslint`
 
 ### 建議擴充（尚未實作）
 
@@ -565,7 +567,7 @@ pnpm exec vp fmt --migrate=prettier  # 從既有 prettier config 遷移（若有
 **這個壞形狀的訊號極弱，所以要靠稽核而不是靠人看出來**：`pnpm test` 單獨跑正常、CI 綠、
 `--stat` 正常，只有 `pnpm test <檔名>` 這種用法才炸，而錯誤訊息 `sh: 1: Syntax error: word
 unexpected` 指向 shell、完全看不出真因。2026-08-29 TD-685 relay 實測：**5 個 consumer 的
-session 各自獨立寫出同一個壞形狀**，只有一個（<consumer-i>）在 review 階段實跑帶參數的形式
+session 各自獨立寫出同一個壞形狀**，只有一個（<consumer-h>）在 review 階段實跑帶參數的形式
 才抓到。§ 3b 的 `⚠ 吃不掉參數` 就是這一格。
 
 **這一格有稽核**：`node scripts/audit-gate-coverage.ts` § 3b 逐 consumer 印出上表四條 script
@@ -576,7 +578,7 @@ session 各自獨立寫出同一個壞形狀**，只有一個（<consumer-i>）�
 | --- | --- |
 | 觸發條件 | 任一 consumer 的 heavy script 已定義但未經 `clade-gate run <label>`（表格 `✗ 未受閘`），或有受閘但 guard 是裸 `if … fi`（表格 `⚠ 吃不掉參數`）→ 進該 audit 的 Warnings 段。**warn-only，不 block**：改 script 是 consumer 自治區的動作，擋 clade 自己的 publish 是錯的施力點（同 `audit-lockfile-staleness`） |
 | 消費端 | `/clade-health enforcement`（每輪跑 `node scripts/audit-gate-coverage.ts`）；findings 進 HANDOFF 稽核段並 relay 給對應 consumer 的 session |
-| 載入路徑 | 本節（`rules/core/code-style.toolchain.md`，consumer 端投影為 `.cursor/rules/code-style.toolchain.mdc`） |
+| 載入路徑 | 本節 `rules/core/code-style.toolchain.md`，依 frontmatter paths 由各 runtime adapter 交付 |
 
 **單檔測試 / 小範圍 lint NEVER 包進 heavy label**。`test:file` / `test:unit` / `lint` /
 `format:check` 直呼工具即可 —— heavy 與 light 的區分**就是** label 有沒有進
@@ -597,8 +599,8 @@ session 各自獨立寫出同一個壞形狀**，只有一個（<consumer-i>）�
 ### 機器層調參 NEVER 寫死進 script 預設
 
 同一份 script 散播到全 fleet，每台機器的核心數、同時 session 數、CI 硬體都不同。
-所有上限一律走 env，由機器自己設（desk 放
-`~/.config/environment.d/60-clade-heavy-job-admission.conf` ＋ `~/.zshrc`，兩份要一起改）：
+所有上限一律走 env，由機器自己設。以下是 desk 的 zsh／systemd host 設定，與主線使用的 AI runtime 無關：
+`~/.config/environment.d/60-clade-heavy-job-admission.conf` ＋ `~/.zshenv`，兩份要一起改，並依下方自驗確認實際執行環境拿得到值。
 
 | env | desk 值 | 沒設時 |
 | --- | --- | --- |
@@ -608,7 +610,7 @@ session 各自獨立寫出同一個壞形狀**，只有一個（<consumer-i>）�
 | `CLADE_GATE_WAIT_TIMEOUT` | 預設 | 3600s |
 | `CLADE_HEAVY_GATE_MAX_RUNTIME` | 預設 | 3600s（`0` 關閉） |
 
-後兩個 env 的注入在 `bin/vp` shim，三條件全中才動：env 有設且是正整數、子命令是
+`CLADE_OXC_THREADS` 與 `CLADE_VITEST_MAX_WORKERS` 的注入在 `bin/vp` shim，三條件全中才動：env 有設且是正整數、子命令是
 `lint`/`fmt`/`test`、**使用者沒有自己帶那個旗標**。`--threads` 實測穿透到 oxc 底層
 （`vp fmt` 預設 403% CPU、`--threads=2` 為 198%，thread 數差正好 nproc−2），
 **NEVER** 只看 argv 有那個字串就當它生效。
@@ -635,8 +637,8 @@ session 各自獨立寫出同一個壞形狀**，只有一個（<consumer-i>）�
 
 處置走 `vendor/snippets/scoped-dev-server/`（host-specific，貼進 **`~/.zshenv`**）。
 
-**MUST 是 `.zshenv`，NEVER 是 `.zshrc`。** `.zshrc` 只在互動 shell 執行，而 agent 執行指令走的是
-**非互動** shell —— 放 `.zshrc` 的東西 agent 一個都拿不到，**而 `cat ~/.zshrc` 看起來完全正常**。
+**MUST 是 `.zshenv`，NEVER 是 `.zshrc`。** 這裡配置的是非互動 zsh 的載入入口；`.zshrc` 只在互動
+shell 執行，放在那裡的設定不會被 `zsh -c` 載入，**而 `cat ~/.zshrc` 看起來完全正常**。
 這條對 env 與函式同樣成立：2026-08-29 實測三個 `CLADE_*` 上限「設了但沒生效」，
 `~/.config/environment.d/` 那份也沒有（它要 manager 重載，且只影響之後起的 unit）。
 **NEVER 用「設定檔裡有這一行」推論它生效**，MUST 實跑 `zsh -c 'printenv <VAR>'` 驗一次。
@@ -657,4 +659,4 @@ scope 的 `MemoryMax`），不是 slot 數。想讓「便宜的 heavy 可以併�
 | --- | --- |
 | 觸發條件 | 取不到 slot → 排隊（`wait`）或 exit 75（`try`）。**排隊不失敗**：硬 block 會逼人加逃生口，而逃生口常設等於閘門失效 |
 | 消費端 | 每一次 `pnpm typecheck` / `test` / `build`（經 `clade-gate` 的必經點，全 fleet 已投影）；孤兒 holder 的判讀由逾時診斷輸出交給人 |
-| 載入路徑 | 本節（`rules/core/code-style.toolchain.md`，paths-gated 於 `package.json` / `vite.config.*` / `tsconfig*.json` —— 接 heavy gate 的 script 就寫在那些檔裡） |
+| 載入路徑 | 本節 frontmatter paths 包含 `package.json` / `vite.config.*` / `tsconfig*.json`，接 heavy gate 的 script 就寫在那些檔裡；各 runtime adapter 交付相同義務 |

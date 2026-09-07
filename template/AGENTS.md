@@ -11,9 +11,10 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 # CI Watch 反射
 
-`git push` 成功後，若 repo 含 `.github/workflows/`，**MUST** 立刻 invoke `/gh-ci-watch` skill 派出 CI watcher。
+`git push` 成功後，若 repo 含 `.github/workflows/`，**MUST** 立刻透過目前 runtime 的 `gh-ci-watch` skill 入口派出 CI watcher。支援 slash invocation 的入口使用 `/gh-ci-watch`；其餘入口依 adapter 提供的 skill 呼叫方式執行同一協定。
 
 協定、指令樣板、exit code 對照表：`plugins/hub-core/skills/gh-ci-watch/SKILL.md`。
 
@@ -26,6 +27,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 # DB Reset Coordination
 
 **每一次**從 primary checkout reset dev DB 前，MUST 先跑：
@@ -49,33 +51,12 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 # Prod 症狀 → 先查 evlog
 
-repo 有 evlog 投影（`.claude/rules/evlog-investigate.md`）時，prod / staging runtime 症狀的**第一個證據動作 MUST 是查 evlog wide event**，先於 grep code。
+repo 的 resolved manifest `modules.capabilities` 含 `evlog` 時，prod / staging runtime 症狀的**第一個證據動作 MUST 是查 evlog wide event**，先於 grep code。各 runtime adapter 交付同一份 investigate 規約；Claude 的投影位置是 `.claude/rules/evlog-investigate.md`，其他 runtime 不以該檔是否存在判定能力。
 
 協定與 recipe：`rules/modules/capabilities/evlog/evlog-investigate.md`。
-
----
-
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/prod-mcp-safety.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
-
-# Prod MCP Safety
-
-## Prod Supabase MCP Permission
-
-**MUST**：`mcp__prod-supabase__execute_sql` 和 `mcp__prod-supabase__apply_migration` 在 AI Agent settings（`.claude/settings.json` / `.claude/settings.local.json`）**只能**放 `deny`。
-
-**NEVER** 放 `allow` 或 `ask` — `allow` = Claude 不經確認即可對 prod DB 執行任意 SQL；`ask` = 一次 approve 後同 session 不再問。
-
-違反後果：<consumer-d> prod DB 被建立孤兒表 `public.sutekh`（2026-06-22）。
-
-偵測：`scripts/audit-tooling-drift.ts` `prodMcpPermission` signal。
 
 ---
 
@@ -86,6 +67,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 # UI Invariants 反射
 
 UI 改動 MUST 遵守 5 條 universal invariant（整欄塌縮 / lookup 解析率 / page load 4xx-5xx / row count vs seed / 不可逆操作確認框）。
@@ -97,11 +79,12 @@ baseline template 與 consumer 擴充方式：`claude-md/core-snippets/ui-invari
 ## Additional rules (pointer only — too large for inline)
 
 - `rules/agent-routing.md` — Agent Routing
-- `rules/agent-self-verification.md` — Agent Self-Verification
+- `rules/agent-self-verification.md` — Runtime adapter boundary
 - `rules/codebase-memory-index.md` — codebase-memory index
 - `rules/commit.md` — Commit
 - `rules/output-hygiene.md` — Output Hygiene — 別把內部過程變成讀者的負擔
 - `rules/proactive-skills.md` — Proactive Skill Orchestra
+- `rules/prod-mcp-safety.md` — Prod MCP Safety
 - `rules/secret-custody.md` — Secret Custody（secret 值到手時的既定動作）
 - `rules/session-tasks.md` — Session Tasks
 - `rules/threshold-remediation.md` — Threshold Remediation（門檻處置的幅度紀律）

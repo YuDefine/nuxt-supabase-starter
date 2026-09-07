@@ -99,6 +99,9 @@ if (action === '--hook') {
   requested =
     payload.cwd ||
     payload.working_directory ||
+    // Cursor gives neither of the above — its payload carries only workspace_roots (TD-924).
+    // multi-root picks [0] for now; without this the chain fell through to process.cwd().
+    (Array.isArray(payload.workspace_roots) ? payload.workspace_roots[0] : null) ||
     process.env.CURSOR_PROJECT_DIR ||
     process.env.CLAUDE_PROJECT_DIR ||
     process.cwd()

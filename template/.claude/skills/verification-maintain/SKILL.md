@@ -10,7 +10,11 @@ Local edits will be reverted by the next sync.
 -->
 
 
+<!-- clade-targets: claude,codex,cursor -->
+
 # Maintain project verification infrastructure
+
+> **本檔的 `<skills-root>`** 指該 runtime 的 skill 投影根目錄：Claude `.claude/skills/`、Codex `.agents/skills/`、Cursor `.cursor/skills/`。**NEVER** 在別的 runtime 上照抄 Claude 的字面路徑；找不到該目錄就回報標準未送達，不猜一個。
 
 Feature map 會隨產品改動而腐化。本 skill 對每一個 feature 做 source reconciliation 與 live drive，但只維護 verification infrastructure，NEVER 在同一輪修產品 code。
 
@@ -28,7 +32,7 @@ Feature map 會隨產品改動而腐化。本 skill 對每一個 feature 做 sou
 
 ## Edit scope
 
-只可修改被維護的 `.claude/skills/verify-<app>/`：`SKILL.md`、`features/` 與它自己擁有的 harness scripts。
+只可修改被維護的 `<skills-root>/verify-<app>/`：`SKILL.md`、`features/` 與它自己擁有的 harness scripts。
 
 - map 描述錯誤 → doc drift，修 map。
 - app 正常但 harness 無法 drive → harness gap，修 owned harness 並 live re-prove。
@@ -38,13 +42,13 @@ Feature map 會隨產品改動而腐化。本 skill 對每一個 feature 做 sou
 
 ### 0. Locate the target
 
-找 `.claude/skills/verify-*/SKILL.md`。零個 → 停止並 invoke `/verification-create`；多個 → 讓使用者指定，不靠名稱相似度猜。
+找 `<skills-root>/verify-*/SKILL.md`。零個 → 停止並 invoke `/verification-create`；多個 → 讓使用者指定，不靠名稱相似度猜。
 
 ### 1. Validate index hygiene
 
 ```bash
-node .claude/skills/verification-maintain/scripts/check-feature-map.mjs \
-  .claude/skills/verify-<app>
+node <skills-root>/verification-maintain/scripts/check-feature-map.mjs \
+  <skills-root>/verify-<app>
 ```
 
 修 missing／extra／duplicate／dead index entry。若修正只改結構，仍必須進 live pass 才能成為 `changed`。
@@ -103,7 +107,7 @@ stdout 結尾輸出：
 {
   "schema": "verification-maintenance/v1",
   "outcome": "clean|changed|blocked",
-  "target": ".claude/skills/verify-<app>",
+  "target": "<skills-root>/verify-<app>",
   "source_coverage": { "covered": 0, "total": 0 },
   "live_coverage": { "covered": 0, "total": 0 },
   "changed_paths": [],

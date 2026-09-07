@@ -9,12 +9,13 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # Nuxt Review Bans（實作階段強制）
 
 **核心命題**：`vendor/review-rules/patterns.json` 定義了跨 consumer 統一的機械可檢 ban 規則，由 pre-commit hook + code-review agent 消費。但這些規則過去**只在 review 階段可見**（`plugins/hub-core/agents/references/clade-review-rules.md`），實作階段的 Claude 完全看不到 → 反覆寫出違規 → 事後才被抓。
 
-本 rule 把 `patterns.json` 的 ban 清單提升到 **path-scoped implementation rule**，讓 Claude 在動 `.vue` / `app.config.ts` 的**當下**就讀到。
+本 rule 把 `patterns.json` 的 ban 清單提升到 **path-scoped implementation rule**，由當前 runtime 的 scoped delivery 送達全文；agent 在首次修改符合範圍的 `.vue` / `app.config.ts` 之前讀取並套用。
 
 > SoT 是 `vendor/review-rules/patterns.json`；本檔是它的實作階段投影。patterns.json 新增 / 修改 entry 時，本檔 **MUST** 同步更新。
 

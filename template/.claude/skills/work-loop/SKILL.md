@@ -1,11 +1,11 @@
 ---
 name: work-loop
 description: "Use when 使用者要把待辦自主推進（「自動推」「把待辦跑完」「無人值守推進」）——spectra change、HANDOFF、tech-debt、ROADMAP 全在 scope 內，或 runner.sh --unattended fire。NOT for 單次盤點交接（用 /handoff）、逐項拍板（用 /goal）、interval 盲跑（用 /loop）。"
-effort: xhigh
 metadata:
   author: clade
   version: "3.1"
-permission_tier: action
+  clade:
+    permission_tier: action
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -14,6 +14,9 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+
+<!-- clade-targets: claude -->
+<!-- clade-adapters: claude -->
 
 # /work-loop — 待辦自主推進迴圈
 
@@ -622,7 +625,7 @@ runner.sh 另有 mechanical fail-closed：起跑前、每次 child launch 前，
 | 殘工 <15 分鐘 | 本輪做完，不落任何檔（turn cap 為此 +0 不 +1） |
 | 需要 Charles 拍板（過不了自主判定七條 AND） | **packaging**——照下方既有 Packaging SOP 全文執行（唯一免費的登記） |
 | 需要 attended / permission gate（publish、`.claude/**`） | attended 佇列（`tasks/` 既有形狀，一檔一條） |
-| 可執行，且 context 可 durable 化成 ≤5K thin brief | **裸 dispatch**（default 出口）：`herdr-session-handoff.ts --cwd <main-checkout> --label <描述性 label> --prompt-file <brief> --model <slug> --effort <level>`，**不帶 `--relay`、不帶 `--coordinate`**。brief 紀律照 [[session-tasks.operations]] § Herdr session transport |
+| 可執行，且 context 可 durable 化成 ≤5K thin brief | **裸 dispatch**（default 出口）：`herdr-session-handoff.ts --cwd <main-checkout> --label <描述性 label> --prompt-file <brief> --model <slug> --effort <level> --route <policy> --tier-basis <conclusion>`，**不帶 `--relay`、不帶 `--coordinate`**。brief 紀律照 [[session-tasks.operations]] § Herdr session transport |
 | 等具體外部 signal | TD ＋ `wontfix-until-signal` ＋ **可觀察 signal predicate**。寫不出 predicate 就不准用本格——那是等待區，不是掩埋場 |
 | 以上皆非（context 無法 durable 化） | TD 登記，**MUST 同 commit 附 `### Restart brief` 段**：檔案路徑、指令、驗收 predicate、已排除方案。heading 逐字 `### Restart brief`（`####` 亦可），**NEVER** 寫成 `**Restart brief**` 粗體或 `## `（前者不是 heading、後者被 TD parser 當成新 entry 的起點）。缺 = `audit-tech-debt-hygiene` violation（`restart-brief-missing`，紅線 >0） |
 
@@ -780,6 +783,8 @@ node ~/offline/clade/vendor/scripts/work-loop-verdict.ts \
 ---
 
 ## Step 7 — 寫 HANDOFF + state
+
+依 `follow-up-register.md` § 主動消化，同步驗證並關閉本次完成的 TD，回讀 flow 關卡後移出主清單；HANDOFF 移除完成流水帳，已有 TD 的未完項只保留指針。等待訊號、部分完成及未驗收工作保留具體接手入口。
 
 ### 7.1 路徑 invariant
 

@@ -10,6 +10,8 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
 
 # Proactive Skills — Ingest, UX Gate, Roadmap & Follow-up Triggers
 
@@ -19,7 +21,7 @@ Local edits will be reverted by the next sync.
 
 ## Ingest Triggers
 
-`spectra-ingest` 是 apply 階段的「需求漂移補丁」。當 proposal / tasks / design artifact 與實際需求或實作現況出現結構性落差時，**Claude MUST 主動引導使用者**（不是等使用者自己想起）。
+`spectra-ingest` 是 apply 階段的「需求漂移補丁」。當 proposal / tasks / design artifact 與實際需求或實作現況出現結構性落差時，**orchestrator MUST 主動引導使用者**（不是等使用者自己想起）。
 
 ### 主動觸發信號
 
@@ -32,13 +34,13 @@ Apply 階段中偵測到以下任一信號 → 必須立即處理：
 5. **Schema 漂移** — migration 新增 enum / column 但 `Affected Entity Matrix` 沒對應紀錄
 6. **Risk plan 前提變動** — 實作中發現 `Implementation Risk Plan` 的 truth layer / contract / test plan 需要更新
 
-`post-edit-drift-check.sh`（hook）會自動偵測 5、4、2 的部分靜默漂移，寫 stderr 提示 Claude 考慮 ingest。LLM 判斷層面則需要主動感知 1、3、6。
+`post-edit-drift-check.sh`（hook）會自動偵測 5、4、2 的部分靜默漂移，寫 stderr 提示 orchestrator 考慮 ingest。LLM 判斷層面則需要主動感知 1、3、6。
 
 ### 決策規則（明確直接做、模糊再詢問）
 
 | 情況 | 動作 |
 | --- | --- |
-| 信號明確（migration 新增未紀錄欄位、使用者直白改需求、journey 遺漏具體 URL） | Claude **直接跑** `spectra-ingest`，口頭告知「偵測到 X，已觸發 ingest 更新 Y」 |
+| 信號明確（migration 新增未紀錄欄位、使用者直白改需求、journey 遺漏具體 URL） | orchestrator **直接跑** `spectra-ingest`，口頭告知「偵測到 X，已觸發 ingest 更新 Y」 |
 | 信號模糊（不確定是否達結構性落差門檻、可能只是 task 字句微調） | 先口頭詢問使用者，描述信號並列出選項（ingest vs. 在當前 tasks 微調）讓使用者選 |
 
 **NEVER** 偵測到信號卻靜默繼續實作 — 會導致 proposal / tasks 與實作永久不同步。
@@ -63,7 +65,7 @@ Apply 階段中偵測到以下任一信號 → 必須立即處理：
 
 當 review:ui round N 留下的 issue triage 路由到 (C) Spec gap → `/spectra-ingest`，**MUST** 完成 ingest **與**後續 `/spectra-apply` 落 code（含新增 verify item 的 evidence collection）全部之後，才回到 review-gui 做最終 OK/Issue/Skip 人工檢查。**禁止**在 ingest 完、apply 還沒跑、就引導 user 中段評估，**禁止**「fix → commit → ingest → apply → commit」分兩段 commit ceremony 跑。
 
-理由：ingest 會新增 verify items，這些 item 在 apply 落地前無 evidence；user 對中間態評估會誤判「change 全完成」、Claude 接 archive trigger 提前歸檔；兩段 commit 也讓 spec 跟 code 暫時不同步。詳見 [[manual-review]] § 人工檢查時機。
+理由：ingest 會新增 verify items，這些 item 在 apply 落地前無 evidence；user 對中間態評估會誤判「change 全完成」、主線 orchestrator 接 archive trigger 提前歸檔；兩段 commit 也讓 spec 跟 code 暫時不同步。詳見 [[manual-review]] § 人工檢查時機。
 
 ### verify:ui / verify:api 前缺 session cookie → 先 scaffold dev-login，NEVER 問 user 貼 cookie
 
@@ -71,9 +73,9 @@ Apply 階段中偵測到以下任一信號 → 必須立即處理：
 
 - **NEVER** 直接打字要 user 手動取 cookie（「請取 ADMIN_COOKIE / 開 Chrome → Google OAuth → DevTools 翻 Cookies → 複製 `nuxt-session=...` 貼回給我」）— 這把 baseline 缺誤翻成「user 自己手動 OAuth」，消耗 user 30+ min 介入、且對 fixture 第二位 admin（非真 Google 帳號）這條路完全無解
 - **MUST** 第一動作走 scaffold-first：辨識 consumer auth module（`nuxt-auth-utils` / `supabase-self-hosted` / `better-auth`）→ 依 clade cookbook（`~/offline/clade/rules/modules/auth/<auth-module>/dev-login.md` + `~/offline/clade/vendor/snippets/dev-auth/templates/`）scaffold `_dev-login.get.ts`（gated by `import.meta.dev` + loopback）→ typecheck + smoke curl 自驗 → 才進 evidence collection
-- reference impl：<consumer-a> / <consumer-b> / <consumer-d> / <consumer-j> 既有 dev-login route
+- reference impl：<consumer-a> / <consumer-b> / <consumer-d> / <consumer-i> 既有 dev-login route
 
-完整 hard rule（含 scaffold gate template、AskUserQuestion 兩選項）見 [[manual-review]] § Pre-verify baseline 假設 + Dev-login route missing → scaffold-first。對應 [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]。
+完整 hard rule（含 scaffold gate template、runtime-supported input surface 或直接對話的兩選項）見 [[manual-review]] § Pre-verify baseline 假設 + Dev-login route missing → scaffold-first。對應 [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]。
 
 ## UX Completeness Gate（補充 Design Gate）
 
@@ -159,7 +161,7 @@ flag）。park / unpark 後直接跑 `pnpm spectra:roadmap` 即可。
 | `td-status-mismatch` | MANUAL 提到 `TD-NNN` + active 語意詞，但 register 標 done/wontfix | `docs/tech-debt.md` Status |
 | `version-mismatch` | MANUAL 以「Production 跑 vX.Y.Z」/「目前 vX.Y.Z」敘述版本 | `package.json` `version` |
 
-**Drift 不自動改寫 MANUAL**（避免誤刪人寫內容），以 stderr 警告提示。Claude 看到
+**Drift 不自動改寫 MANUAL**（避免誤刪人寫內容），以 stderr 警告提示。orchestrator 看到
 drift warning 時**必須**主動更新 MANUAL 區塊（Current State / Next Moves），
 並在回應中告知使用者已修正哪些過時敘述。
 
@@ -170,7 +172,7 @@ drift warning 時**必須**主動更新 MANUAL 區塊（Current State / Next Mov
 | 新 session 開始 | `session-start-roadmap-sync.sh` | 永遠對齊 roadmap + claims |
 | Edit/Write | `post-edit-roadmap-sync.sh` | 有 claim heartbeat 或改到 `openspec/changes/**` 時即時反映 |
 | `spectra park` / `spectra unpark` 之後 | **你必須手動** `pnpm spectra:roadmap` | hook 沒監聽 `.spectra/spectra.db` |
-| 在外部 runtime（背景 codex / 非 AI Agent session）跑 spectra command 之後 | **你必須手動** `pnpm spectra:roadmap && pnpm spectra:claims` | 外部 runtime 不觸發 PostToolUse hook |
+| 在外部 runtime（背景 codex / 非 另一個 runtime session）跑 spectra command 之後 | **你必須手動** `pnpm spectra:roadmap && pnpm spectra:claims` | 外部 runtime 不觸發 PostToolUse hook |
 
 ### Work Claim 規則（v1.10+）
 
@@ -185,9 +187,9 @@ drift warning 時**必須**主動更新 MANUAL 區塊（Current State / Next Mov
 
 **`HANDOFF.md` 只保留尚未被接手的項目。**
 
-### Claude 主動維護的時機
+### orchestrator 主動維護的時機
 
-Claude **必須**在以下時機更新 `## Next Moves` 區塊（MANUAL block）：
+orchestrator **必須**在以下時機更新 `## Next Moves` 區塊（MANUAL block）：
 
 1. `spectra-discuss` workflow 收斂出「未來要做的事」→ 寫入 `### 近期` / `### 中期` / `### 長期`
 2. `spectra-propose` workflow 結束時，若對話提到其他尚未 propose 的未來工作 → 寫入
@@ -258,7 +260,7 @@ tasks.md 內未解決或延後項目 **MUST** 用 `@followup[TD-NNN]` 標註，�
 | `spectra-archive` 前 | `pre-archive-followup-gate.sh` | marker 未登記 register → `exit 2` 阻擋 |
 | 手動 | `pnpm spectra:followups` | 詳細報告；`--fail-on-drift` 給 CI |
 
-### Claude 主動維護的時機
+### orchestrator 主動維護的時機
 
 - 人工檢查發現 deferred / local blocked 項 → 加 marker + 新增 register entry 一次到位
 - Archive 前主動跑 `pnpm spectra:followups`，確認無 unregistered marker

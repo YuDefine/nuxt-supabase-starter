@@ -10,6 +10,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # Dev Tunnel Convention（索引）
 
@@ -26,7 +27,7 @@ Local edits will be reverted by the next sync.
 **為什麼**：`cloudflared tunnel route dns` 在多 Cloudflare account 環境下，若 hostname 對應 zone 不在當前 `~/.cloudflared/cert.pem` 綁定的 account 內，**不會 fail-loud**，而是 silently 把整段 hostname 當 subdomain prefix 附加到該 account 第一個 zone（如寫成 `<host>.<maintainer-domain>.bigbyteedu.com`），外部 DNS 永遠 resolve 不到，但 CLI exit 0。
 
 **權威來源**：
-- vite-tunnel skill cookbook `~/offline/clade/vendor/snippets/vite-tunnel/bin/dev-tunnel-setup.sh`（pre-flight zone check：用 CF API 驗 zone 在當前 token account 內，不在則 fail-loud + 列三條切 account 出路）+ 同目錄 README § 多 Cloudflare account 使用情境
+- vite-tunnel skill cookbook `~/offline/clade/vendor/snippets/vite-tunnel/bin/dev-tunnel-setup.sh`（以顯式 account／zone 比對 API 回應與 cloudflared certificate 身分；建立前檢查 tunnel／DNS，route 後回讀 DNS）+ 同目錄 README § 多 Cloudflare account 使用情境
 - hostname convention 規約：[[dev-port-allocation]] § 2.5
 
 **Pitfall**：[[pitfall-cloudflared-multi-account-cname-misdirection]]
@@ -39,7 +40,7 @@ Local edits will be reverted by the next sync.
 
 **權威來源**：
 - 規約 + 三種錯誤 token 來源對照表：[[dev-port-allocation]] § 2.5（含 `.env.local` 三件套範本）
-- Token 來源：<consumer-j> `.env.local` 的 `CLOUDFLARE_API_KEY`（既有可用）/ Notion `Scrects`（待補 cfat_）
+- Token 來源：<consumer-i> `.env.local` 的 `CLOUDFLARE_API_KEY`（既有可用）/ Notion `Scrects`（待補 cfat_）
 
 **Pitfall**：[[pitfall-vite-plugin-cloudflare-tunnel-token-scope]]
 

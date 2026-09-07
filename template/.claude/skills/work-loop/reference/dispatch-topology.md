@@ -7,6 +7,8 @@ Local edits will be reverted by the next sync.
 
 # Dispatch Topology（Step 2 分組 + Step 3 併發契約）
 
+<!-- clade-targets: claude -->
+
 > 主檔 pointer：「Step 3 dispatch 前 MUST 先完整讀本檔」。
 
 ## 核心命題

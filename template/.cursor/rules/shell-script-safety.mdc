@@ -1,5 +1,5 @@
 ---
-description: "shell script 的兩條身分／生命週期紀律——(1) 自己會 sudo 的腳本 MUST 有 EUID guard，否則被 sudo 前綴時 user-level toolchain 以 root 讀設定而失敗、錯誤訊息指不到真因；(2) trap body 引用的變數 MUST 在 trap 執行當下真的拿得到值，否則清理與回滾靜默變 no-op。兩條都在「寫完一支 .sh」的當下由 PostToolUse hook 觸發"
+description: "shell script 的身分與清理生命週期——自己呼叫 sudo 且使用 user-level toolchain 的腳本、trap 引用函式區域變數、清理或回滾靜默未執行"
 globs: ["**/*.sh", "ops/**", "deploy/**", "scripts/**"]
 alwaysApply: false
 ---
@@ -10,6 +10,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # Shell script safety
 
@@ -53,8 +54,8 @@ node scripts/shell-safety-check.ts <你剛寫的檔>     # 命中 exit 1，乾�
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 三條件全中（內部 `sudo` × user-level toolchain × 缺 guard）。**warn-only，不 block** —— 命中的多半是既有腳本被順手改了一行，擋下編輯治不了它，只會逼人繞過 hook |
-| 消費端 | `plugins/hub-core/hooks/post-edit-shell-safety.sh`（PostToolUse `Edit|Write`，命中 `*.sh` 時就地判該單檔）＋ clade 的 `scripts/audit-sudo-euid-guard.ts` fleet 掃描（`/clade-health enforcement`／`full`）。兩者 import **同一份** `scripts/shell-safety-check.ts` 判定 |
-| 載入路徑 | 本檔（paths-gated `**/*.sh`——編輯任何 shell script 即載入） |
+| 消費端 | 執行上方自驗的 agent；Claude hook `plugins/hub-core/hooks/post-edit-shell-safety.sh`（PostToolUse `Edit|Write`，命中 `*.sh` 時就地判該單檔）；clade 的 `scripts/audit-sudo-euid-guard.ts` fleet 掃描（`/clade-health enforcement`／`full`）。Hook 與 audit 使用同一份 checker：clade source 為 `vendor/scripts/shell-safety-check.ts`，consumer 投影為 `scripts/shell-safety-check.ts`。Codex／Cursor 的原生事件接線須另有實測證據，本規約的投影不代表已安裝該 hook |
+| 載入路徑 | 本檔 frontmatter 的 paths 宣告適用範圍；Claude／Codex／Cursor adapter 依各自載入契約交付完整正文，適用範圍不等同各產品的自動事件能力 |
 
 ## 2. `trap` body 引用的變數 MUST 在 trap 執行當下真的拿得到值
 
@@ -95,7 +96,7 @@ NEVER 讓它成為「變數拿不到值也沒關係」的理由。
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | **informational — 不觸發任何東西**。刻意沒有 detector，理由見上方自驗段 |
-| 消費端 | 讀到本節的人（paths-gated 載入）＋ 該腳本自己的回歸測試 |
-| 載入路徑 | 本檔（paths-gated `**/*.sh`） |
+| 消費端 | 編輯適用腳本的 agent ＋ 該腳本自己的回歸測試 |
+| 載入路徑 | 本檔 frontmatter 的 paths，由各 runtime adapter 交付；本節沒有文字掃描 detector |
 
 > Cookbook 範本：`~/offline/clade/vendor/snippets/shell-script-safety/`。

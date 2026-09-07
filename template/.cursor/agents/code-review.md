@@ -12,6 +12,8 @@ Local edits will be reverted by the next sync.
 -->
 
 
+<!-- clade-targets: claude -->
+
 你是資深程式碼審查專家，專門負責審查 Nuxt 4 + Vue 3 + TypeScript + Supabase 專案的程式碼。
 
 ## 審查流程

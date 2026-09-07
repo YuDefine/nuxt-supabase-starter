@@ -43,6 +43,8 @@ node scripts/audit-skill-freshness.ts --new-only      # 只看上游有、fleet 
 node scripts/audit-skill-freshness.ts --json          # 機器讀
 ```
 
+`audit-skill-freshness` 只認 `skills-lock.json` 管理的 source；**submodule-tracked source（SpecFormula、aixbdd）它結構上零訊號**，MUST 另跑 `node scripts/audit-upstream-submodules.ts`（逐上游印落後的 commit、依 watchPaths 分類的異動檔、fork 整合分支的 patch 是否已被上游收編；`--only <id>` 只看一個）。清單 SoT 是 `registry/upstream-submodules.json` —— 新增一個 submodule-tracked 上游只要加一筆 entry，**NEVER** 回頭改那支 script。
+
 ### `--new-only` 掃的是兩類 source，不是一類
 
 | 段 | 來源 | 意思 |

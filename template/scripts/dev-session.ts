@@ -751,9 +751,9 @@ export function ownsPort(territory, port) {
 }
 
 /**
- * 這個 cwd 落在哪個 consumer 的地盤。取**最長**匹配 root：`~/offline/<consumer-h>` 與
- * `~/offline/<consumer-h>` 兩個 root 都是 registry 成員，短的先命中就會把
- * platform 的 worktree 判成 <consumer-h> 的。
+ * 這個 cwd 落在哪個 consumer 的地盤。取**最長**匹配 root：`~/offline/<consumer-g>` 與
+ * `~/offline/<consumer-g>` 兩個 root 都是 registry 成員，短的先命中就會把
+ * platform 的 worktree 判成 <consumer-g> 的。
  */
 export function territoryForCwd(territories, cwd) {
   if (!cwd) return null
@@ -1121,9 +1121,10 @@ function holderKind(o) {
 }
 
 function holderSessionId(o) {
-  const id = detectSessionId()
+  const kind = holderKind(o)
+  const id = detectSessionId(process.env, kind)
   if (id) return id
-  if (holderKind(o) === 'human') return 'human'
+  if (kind === 'human') return 'human'
   return createHash('sha1').update(o.cwd).digest('hex').slice(0, 12)
 }
 

@@ -9,6 +9,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # 拖曳互動：視覺先行，drop 才 commit
 

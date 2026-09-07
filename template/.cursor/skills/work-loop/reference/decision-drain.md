@@ -7,6 +7,8 @@ Local edits will be reverted by the next sync.
 
 # 開場決策清算（Step 2.7）
 
+<!-- clade-targets: claude -->
+
 > 主檔 pointer：Step 2.7 MUST 先完整讀本檔再執行。**每一輪都讀**——本檔管的是「開工前」，
 > 而 compaction 抹掉的正是「上一輪剛讀過」那份 context。
 

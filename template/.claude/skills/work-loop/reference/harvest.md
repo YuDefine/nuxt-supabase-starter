@@ -7,6 +7,8 @@ Local edits will be reverted by the next sync.
 
 # 收割（每個 notification 到達時做）
 
+<!-- clade-targets: claude -->
+
 > 主檔 pointer：「每一個 `<task-notification>` 到達時立即走收割 SOP，MUST 先完整讀本檔」。
 
 ## 收割不是階段，是 pipeline 的一段

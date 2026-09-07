@@ -5,6 +5,8 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
 # Proactive Skill Orchestra
 
 所有 Spectra sub-skill 與 Design skill 應在適當情境下**主動調用**，不需使用者手動指定。此規則優先於個別 SKILL.md 的指示。
@@ -58,7 +60,7 @@ Local edits will be reverted by the next sync.
 |---|---|---|
 | `spectra-commit` | **NEVER** 主動觸發（clade 已不再散播這支；consumer 若由 `spectra init` 帶入上游版仍適用） | 走 `rules/core/commit.md` 規範的標準 commit 工序（含 hooks / 訊息格式） |
 
-**原因**：spectra-commit 是 spectra CLI 上游帶來的薄殼，本治理範圍下 commit 必須統一走 `rules/core/commit.md`。Claude 偵測到使用者要 commit Spectra change 的相關檔案時，**MUST** 直接走標準 git / `/commit` 流程，**NEVER** 改派 spectra-commit。
+**原因**：spectra-commit 是 spectra CLI 上游帶來的薄殼，本治理範圍下 commit 必須統一走 `rules/core/commit.md`。目前 runtime 偵測到使用者要 commit Spectra change 的相關檔案時，**MUST** 直接走標準 git / `/commit` 流程，**NEVER** 改派 spectra-commit。
 
 #### 禁用不只管「不觸發」，也管「不引導」
 
@@ -84,7 +86,7 @@ Local edits will be reverted by the next sync.
 | --- | --- |
 | 觸發條件 | 非禁止語境下出現禁用 skill 名 → `scripts/audit-disabled-skill-guidance.ts` 報 offender、exit 1。**warn-only，不接 publish gate**：它靠語境啟發式判定，會有誤報，放在擋路的位置會逼人加逃生口 |
 | 消費端 | 正在寫 / 改 skill、rule、snippet、script 輸出文案的 agent（本節）；`/clade-health` 每輪跑一次 |
-| 載入路徑 | 本節（`rules/core/proactive-skills.md`，consumer 端投影為 `.claude/rules/proactive-skills.md`） |
+| 載入路徑 | 本節（`rules/core/proactive-skills.md`，consumer 端投影為 runtime rules 目錄） |
 
 ## Scope Discipline
 
@@ -113,14 +115,14 @@ Local edits will be reverted by the next sync.
 
 1. 進入人工檢查階段（implementation tasks 完成、剩 `## 人工檢查` 區塊）時，**第一動作是 auto-triage**（per [[review-gui-surface]] MUST 9），不是直接引導使用者跑 `pnpm review:ui`
 2. 推進完畢後 **MUST** 跑 `node ~/offline/clade/vendor/scripts/check-review-readiness.ts --repo . --change <change-name>` 確認 bucket；**exit 0 才可引導 user 到 review-gui**
-3. **NEVER** 自判 bucket、**NEVER** 跳過 script、**NEVER** 在 exit ≠ 0 時引導 user 到 review-gui —— Claude 自判已多次證明不可靠
+3. **NEVER** 自判 bucket、**NEVER** 跳過 script、**NEVER** 在 exit ≠ 0 時引導 user 到 review-gui —— runtime 自判已多次證明不可靠
 4. **給人的 URL = scan 的 `reviewUrl`（永遠 `https://review-gui.<maintainer-domain>` + `reviewPath`）**。違反字面就是違反精神。`127.0.0.1` / Tailscale IPv4 / `*.ts.net` 只准 agent 探測。交付前 MUST 讀 [[proactive-skills.manual-review-entry]] § 交付入口前置查詢
 
 Auto-triage 的三類 pending item 路由、`[discuss]` item 的歸屬、review-gui deep-link 格式與 fallback 模式見 [[proactive-skills.manual-review-entry]]（path-scoped：碰 `openspec/changes/**` 時載入）。
 
 ### Dev Server Auto-Spawn（agent 自起，不要叫 user cd）
 
-詳見 [[proactive-skills.dev-server-spawn]]（path-scoped，碰 `scripts/dev-session*` / `consumer-meta.json` / `nuxt.config.*` 時載入）。核心 one-liner：agent 自己起 dev server，**MUST** 經 `vendor/scripts/dev-session.ts`（durability=herdr），**NEVER** 裸 `nuxt dev` / `pnpm dev` / `run_in_background`。
+詳見 [[proactive-skills.dev-server-spawn]]（path-scoped，碰 `scripts/dev-session*` / `consumer-meta.json` / `nuxt.config.*` 時載入）。核心 one-liner：agent 自己起 dev server，**MUST** 經 `vendor/scripts/dev-session.ts`（durability=herdr），**NEVER** 裸 `nuxt dev` / `pnpm dev` / background execution。
 
 **Dev-port 池滿時**：先跑 `wt-helper reclaim-stale` 釋放 stale slot（三層判定見 [[worktree-default]] §6），**NEVER** 把池滿當 blocker 退回 user。reclaim 後仍滿才問（attended）或 packaging（unattended）。
 
@@ -138,7 +140,7 @@ Auto-triage 的三類 pending item 路由、`[discuss]` item 的歸屬、review-
 
 開 auth-protected URL 前 **MUST** 完成 pre-auth（port 3000 singleton + `__test-login?role=admin&email=...`），**NEVER** 截到空白頁後才開始診斷 auth。
 
-**載體**：Cursor 環境用 `cursor-ide-browser` 開同一個 `__test-login` URL；非 Cursor 才 `agent-browser`。完整 cookbook 見 `~/offline/clade/vendor/snippets/agent-browser-auth/README.md`（開頭有 Cursor 分流）。Pitfall ref: `docs/pitfalls/2026-06-24-agent-browser-auth-blank-page-on-alt-port.md`。
+**載體**：由 selected runtime 的 browser adapter 開同一個 `__test-login` URL；若沒有已驗證的 browser adapter，保持 blocked。完整 cookbook 見對應 runtime adapter 的 auth reference。Pitfall ref: `docs/pitfalls/2026-06-24-browser-auth-blank-page-on-alt-port.md`。
 
 ## Knowledge And Decisions
 

@@ -10,6 +10,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # 禁止原生 / 第三方 Date / Time Picker（實作階段強制）
 
@@ -19,12 +20,12 @@ Local edits will be reverted by the next sync.
 
 | 層 | scope | 何時跑 | 觸發成本 |
 | --- | --- | --- | --- |
-| **impl-time rule** | 當次 session 寫的 `.vue`（path-scoped 自動 load） | 寫 code 當下 | 零延遲，最接近犯錯時點 |
+| **impl-time rule** | 當次 session 寫的 `.vue`（依當前 runtime 的 scoped delivery 取得完整規約） | 首次符合範圍的實作之前 | 寫入前取得全文 |
 | **pre-commit gate** | staged `.vue` | `git commit` | 秒級，擋住增量違規 |
 | **pre-push gate** | **每個** Nuxt consumer 的**全 repo** `.vue`（含歷史既有檔，不只當次 staged） | `git push` | 秒級，擋住既有違規與 `--no-verify` 繞過 |
 | **review 層** | PR diff | code-review agent / `/commit` 0-A | 最後一道網 |
 
-前三層是 mechanical gate（自動擋），review 層是人類 / agent semantic check。**MUST** 把 pre-push gate 視為「全站事實檢查」——`grep -rEn 'type="(date|...)"' --include='*.vue' .` 永遠應該回傳 0 hit，pre-push 失敗就是有違規進入 codebase。
+pre-commit／pre-push 是 Git mechanical gate（自動擋）；實作層依已送達的規約執行，review 層由人類／agent 做 semantic check。**MUST** 把 pre-push gate 視為「全站事實檢查」——`grep -rEn 'type="(date|...)"' --include='*.vue' .` 永遠應該回傳 0 hit，pre-push 失敗就是有違規進入 codebase。
 
 > **為何四層**：review-time 是最後一道網，但「寫完整批才被 review 退回」成本高、context 已散。再加上 review 只看 diff、pre-commit 只看 staged——歷史檔的違規會默默累積成債（規則上線前的 code、繞過 pre-commit 進來的 code）。pre-push 全站掃描是「回溯型」gate，補上前三層的盲區，讓**每個** Nuxt consumer 在 push 前都做一次事實校對。這跟 [[nuxt-ui-conventions]]（慣例一致性同樣 impl-time 強制）是同一個 spirit。
 

@@ -8,15 +8,30 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
-
+<!-- clade-targets: claude,codex,cursor -->
 # Prod MCP Safety
 
 ## Prod Supabase MCP Permission
 
-**MUST**：`mcp__prod-supabase__execute_sql` 和 `mcp__prod-supabase__apply_migration` 在 Claude Code settings（`.claude/settings.json` / `.claude/settings.local.json`）**只能**放 `deny`。
+**每一個** consumer、**每一個** agent runtime 的 `prod-supabase` 連線，都 **MUST** 封鎖 `execute_sql` 與 `apply_migration`。新增、啟用或同步該連線前，核對當前產品入口的原生封鎖設定；缺少可驗證的封鎖機制時，不啟用該連線並回報能力缺口。
 
-**NEVER** 放 `allow` 或 `ask` — `allow` = Claude 不經確認即可對 prod DB 執行任意 SQL；`ask` = 一次 approve 後同 session 不再問。
+| 產品入口 | 封鎖設定 |
+| --- | --- |
+| Claude Code | `.claude/settings.json` 的 `permissions.deny`：`mcp__prod-supabase__execute_sql`、`mcp__prod-supabase__apply_migration`；同時檢查 `.claude/settings.local.json` |
+| Codex | `.codex/config.toml` 的 `[mcp_servers.prod-supabase]`：`disabled_tools = ["execute_sql", "apply_migration"]`；保留其他既有封鎖項 |
+| Cursor CLI | `.cursor/cli.json` 的 `permissions.deny`：`Mcp(prod-supabase:execute_sql)`、`Mcp(prod-supabase:apply_migration)` |
+| 其他入口，含尚未驗證封鎖機制的 Cursor IDE | 保持連線未啟用，先取得該入口的原生封鎖證據；CLI 設定檔存在不代表 IDE 已套用 |
+
+Claude settings 中這兩個工具 **只能**放 `deny`，**NEVER** 放 `allow` 或 `ask`。`allow` 允許執行；`ask` 仍可經批准執行，都不等於封鎖。其他 runtime 同樣 **NEVER** 以 approval prompt 或一次人工同意代替工具封鎖。
+
+中立 MCP 來源用 server 的 `requiredDeniedTools` 聲明必須封鎖的工具。來源聲明、投影成功與產品實際封鎖是三層證據。每次同步以**全部選定端**為一個交易：任何一端無法表示必要封鎖，**所有選定端的設定與 ownership receipt 均保持原狀，整批零寫入**。例如同批選 Codex 與 Cursor IDE，而 IDE 封鎖未證實，Codex 也不寫入；要變更選定範圍，先明確重定範圍再另建完整計畫。**NEVER** 為了通過投影而刪掉必要封鎖，也不改寫 consumer 自有權限來消除 conflict。
 
 違反後果：<consumer-d> prod DB 被建立孤兒表 `public.sutekh`（2026-06-22）。
 
-偵測：`scripts/audit-tooling-drift.ts` `prodMcpPermission` signal。
+偵測：`scripts/audit-tooling-drift.ts` 的 `prodMcpPermission` 目前只檢查 Claude `allow`／`ask`，不是三端封鎖有效性的驗收。原生 MCP 的作者操作與支援範圍見 clade 中央倉的 `docs/runtime-mcp.md`。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 具名 production 來源缺必要聲明，或選定端無法完整封鎖 → 原生 MCP planner 拒絕，整批不寫入 |
+| 消費端 | 啟用／同步 MCP 的 agent 與原生 MCP CLI；依 diagnostic 修正來源或回報該產品的能力缺口 |
+| 載入路徑 | 本共同規約，經選用 runtime 的原生 rules 交付；設定轉換不取代入口的封鎖驗證 |

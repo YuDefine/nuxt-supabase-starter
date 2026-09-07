@@ -9,6 +9,8 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
 
 # Agent Routing — Codex Input Intercept Protocol
 
@@ -16,7 +18,7 @@ Local edits will be reverted by the next sync.
 
 Pi machine dispatch 使用ephemeral `--no-session` JSON mode，沒有Codex CLI `exec resume`語意。Codex模型需要釐清時，prompt要求它在final response輸出`## Question`；主線收割dispatcher結果後先判斷能否代答，再把「原brief＋已確認答案」組成一份新brief重新dispatch。
 
-**主線 Claude 是攔截層**：答案可由既有證據直接推導就代答；需要產品、業務、架構或風險拍板才升級給user。重派是新的Pi session，routing metadata與`--retry-of`仍完整落ledger。
+**持有該 dispatch 的主線是攔截層**：答案可由既有證據直接推導就代答；需要產品、業務、架構或風險拍板才升級給user。重派是新的Pi session，routing metadata與`--retry-of`仍完整落ledger。
 
 ## Prompt附加段（每一個寫code派工 MUST加）
 
@@ -87,7 +89,7 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
 
 ## 升級給user
 
-用`AskUserQuestion`呈現已消化的問題與2–4個排序選項；每個選項一句「這樣做會怎樣」。若問題要填值而不是選案，明說要填哪些值。收到答案後寫入Q&A log，再走重派契約。
+用本次可用且模式受支援的人類詢問工具（缺工具時用對話）呈現已消化的問題與2–4個排序選項；每個選項一句「這樣做會怎樣」。若問題要填值而不是選案，明說要填哪些值。收到答案後寫入Q&A log，再走重派契約。
 
 ## Q&A Log
 

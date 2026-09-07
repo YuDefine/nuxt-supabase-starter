@@ -7,6 +7,8 @@ Local edits will be reverted by the next sync.
 
 # 兩種跑法：runner process vs in-session turn
 
+<!-- clade-targets: claude -->
+
 > 主檔 pointer：Step 0 決定怎麼起這個 loop 時 MUST 讀本檔。**已經在跑的輪次不必再讀**——
 > 本檔管的是「怎麼起」，不是「怎麼跑」。
 
@@ -70,7 +72,7 @@ preflight 與每輪 child 都經 `project-unattended.ts` 檢查專案授權、�
 `ccg`、`ccagy`、`ccx` 入口已退役，會拒絕起跑；GPT／Codex 工作經 Pi dispatcher。
 
 第一次起跑需在 `/overview` 開啟該專案的自動開發，並確保 consumer 已接收 flow 投影、位於
-`consumers.local`、官方帳號已登入且 <consumer-f> 快照仍有效。缺少前置時錯誤會指出原因；
+`consumers.local`、官方帳號已登入且 <consumer-e> 快照仍有效。缺少前置時錯誤會指出原因；
 `--skip-preflight` 只略過 headless 工具探針，不略過訂閱、版本或專案授權。
 `--dry-run` 只印完整控制入口與 child 指令，不要求 consumer 已安裝 helper。
 

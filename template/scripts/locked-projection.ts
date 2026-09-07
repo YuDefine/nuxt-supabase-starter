@@ -75,7 +75,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // Improvement-loop infra (.clade/)
       // `scripts` / `registry` 於 2026-08-24 補上（TD-639）：兩者都是 improvement-loop
       // 投影的整目錄（`.clade/scripts/` 五支 + `.clade/registry/consumers.json`），
-      // 抽查 <consumer-a> / <consumer-b> / <consumer-f> / <consumer-j> 四台，目錄內**沒有**任何 consumer
+      // 抽查 <consumer-a> / <consumer-b> / <consumer-e> / <consumer-i> 四台，目錄內**沒有**任何 consumer
       // 自家檔——與 `scripts/lib/` 那種混住的目錄不同，可以整目錄匹配。
       String.raw`\.clade/(bin|signals|vendor|scripts|registry)/`,
       // Vendored script entry points (scripts/)
@@ -86,6 +86,8 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       String.raw`scripts/cbm-(index|project)\.sh$`,
       // Recursive vendored script trees
       String.raw`scripts/(spectra-advanced|pre-commit|pre-push|checks)/`,
+      // Dependencies installed beside the follow-up collector.
+      String.raw`scripts/(tech-debt-status|flow/tech-debt-status|flow/nodes/lib/td-parse|flow/nodes/lib/contract)\.ts$`,
       // Vendored helpers under scripts/lib/ — MUST stay an explicit filename list.
       // NEVER widen to `scripts/lib/`: consumers author their own files there
       // (<consumer-a> `common.sh` / `read-infra-manifest.mjs`, <consumer-d> `vue-component-resolution.ts`),
@@ -98,6 +100,9 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // per-worktree dev DB 實作整目錄。只散給宣告 capability `worktree-db` 的 consumer，
       // 但 LOCKED 判定與 gate 無關 —— 覆蓋率交叉檢查看的是聯集（projection-universe）。
       String.raw`vendor/scripts/worktree-db/`,
+      // SpecFormula curated mirror 整目錄。只散給宣告 capability `specformula` 的 consumer；
+      // 內容 100% 由 scripts/sync-upstream-mirrors.ts 生成，consumer 端沒有任何手寫檔。
+      String.raw`vendor/specformula-ts/`,
       // Snippets / shared presets
       String.raw`vendor/(snippets|oxc-shared|doctor-shared|review-rules|husky)/`,
       // prepare-commit-msg 掛載點 —— 逐檔列出，**NEVER** 放寬成 `\.husky/`：

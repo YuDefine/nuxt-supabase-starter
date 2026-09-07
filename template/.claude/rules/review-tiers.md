@@ -1,6 +1,6 @@
 ---
 description: Review tiers 規則——依變更規模與風險決定 self-review、spectra-audit、code-review 的最低要求
-paths: ['openspec/changes/**', '.claude/agents/**', 'supabase/migrations/**/*.sql', 'server/database/migrations/**/*.sql', 'packages/*/supabase/migrations/**/*.sql', 'packages/*/server/database/migrations/**/*.sql']
+paths: ['openspec/changes/**', '.claude/agents/**', '.codex/agents/**', '.cursor/agents/**', 'supabase/migrations/**/*.sql', 'server/database/migrations/**/*.sql', 'packages/*/supabase/migrations/**/*.sql', 'packages/*/server/database/migrations/**/*.sql']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -9,6 +9,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # Review Tiers
 

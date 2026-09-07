@@ -1,5 +1,5 @@
 ---
-description: Nuxt dev server chokidar watch baseline ignore（clade 4 套投影導致 fd 爆衝 → nitropack esbuild worker EBADF cascade）；動 nuxt / vite config 或起 dev server 時 path-scoped 載入
+description: Nuxt / Vite config 或 dev server 啟動時的 chokidar watch 排除基線，防止治理目錄造成 fd 壓力與 EBADF
 paths:
   - 'nuxt.config.*'
   - 'vite.config.*'
@@ -14,10 +14,11 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # Nuxt Dev Watch
 
-**核心命題**：clade governance 散播 4 套投影（`.claude/` / `.agents/` / `.codex/` / `.clade/`）到每個 consumer 倉，含大量檔案。chokidar 預設 watch consumer cwd 全部 → nuxt main process fd 用量爆衝 → libuv `uv_spawn` 對 nitropack `handlersMeta` 的 esbuild worker spawn 撞 `EBADF` cascade，dev server 完全 paralyze。clade 必須提供 baseline ignore，consumer 對齊即可。
+**核心命題**：clade governance 依 consumer 設定產生治理目錄（`.claude/` / `.agents/` / `.codex/` / `.cursor/` / `.clade/` / `.spectra/`），含大量檔案。chokidar 預設 watch consumer cwd 全部 → nuxt main process fd 用量爆衝 → libuv `uv_spawn` 對 nitropack `handlersMeta` 的 esbuild worker spawn 撞 `EBADF` cascade，dev server 完全 paralyze。clade 必須提供 baseline ignore，consumer 對齊即可。
 
 > Cookbook 範本：`vendor/snippets/nuxt-dev-watch/`。
 >
@@ -38,15 +39,16 @@ Local edits will be reverted by the next sync.
 
 ### 2. clade-managed baseline patterns（**MUST** 全留）
 
-兩處 ignore list **MUST** 含以下 5 條 clade 投影層排除（前綴 `**/` 用於 vite，`./` prefix 用於頂層 `ignore`）：
+兩處 ignore list **MUST** 含以下全部 clade 投影層排除（前綴 `**/` 用於 vite，`./` prefix 用於頂層 `ignore`）：
 
 - `.claude/**`
 - `.agents/**`
 - `.codex/**`
+- `.cursor/**`
 - `.clade/**`
 - `.spectra/**`
 
-**NEVER** 刪這 5 條 — clade 散播後這些 dir 必存在，沒排除 = fd 爆衝。Audit `nuxtDevWatchIgnore` block。
+**NEVER** 刪上述任何 baseline pattern；尚未產生的目錄也保留排除，後續啟用對應 runtime 時即有保護。Audit 對缺漏回報 `DRIFT`／`MISSING`，維持 diagnostic-only。
 
 ### 3. vite default 不會自動 merge
 
@@ -67,7 +69,7 @@ Local edits will be reverted by the next sync.
 ## NEVER
 
 - **NEVER** 缺頂層 `ignore` 或 `vite.server.watch.ignored` 任一
-- **NEVER** 刪 clade-managed baseline 5 條（投影層必排）
+- **NEVER** 刪 任一 clade-managed baseline pattern（投影層必排）
 - **NEVER** `vite.server.watch.ignored` 設值卻沒含 vite default 3 條
 - **NEVER** 在 consumer 自家追加自家 patterns 時刪 / 改 baseline section（自家加段 `// consumer-specific:` 之後追加，不動 baseline）
 - **NEVER** 假設 `nuxt --no-fork` / `concurrently` 包裝有關（已驗證跟 fd 用量正交，per 2026-05-28 <consumer-a> session）
@@ -86,7 +88,7 @@ Local edits will be reverted by the next sync.
 
 | Signal | 條件 |
 | --- | --- |
-| `OK` | 兩處 ignore 都含 5 條 clade-managed baseline + vite default（vite section） |
+| `OK` | 兩處 ignore 都含全部 clade-managed baseline + vite default（vite section） |
 | `DRIFT` | 一處 ignore 含部分 baseline、另一處缺 |
 | `MISSING` | `nuxt.config.ts` 完全沒設 `ignore` 或 `vite.server.watch.ignored` |
 | `N/A` | consumer 沒 `nuxt.config.ts`（非 Nuxt consumer） |

@@ -10,10 +10,18 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
+
+## Runtime adapter boundary
+
+The obligations, predicates, evidence schema, failure handling, and review timing in this source are shared. Concrete browser, dispatch, question, filesystem, and command mechanics are target-native and MUST come from the selected runtime fragment at the matching adapter path. A fragment declares only the capability it can prove; an absent or unverified capability remains blocked and MUST NOT be silently replaced by a neighbouring runtime.
+
+
 
 # 人工檢查（Manual Review）
 
-> **本檔是 path-scoped 主檔**（2026-07-05 起：綁 `openspec/changes/**`——manual-review 內容只在有 active spectra change 時才用得到；原 always-load 佔 30KB 為預算最大單檔），列核心 invariant、Item Kind Marker 一覽、claude-analyzed annotation、@evidence-via-marker、Parent State Derivation、Post-Edit Gate、禁止事項。  
+> **本檔是 path-scoped 主檔**（2026-07-05 起：綁 `openspec/changes/**`——manual-review 內容只在有 active spectra change 時才用得到；原 always-load 佔 30KB 為預算最大單檔），列核心 invariant、Item Kind Marker 一覽、claude-analyzed annotation、@evidence-via-marker、Parent State Derivation、Post-Edit Gate、禁止事項。
 > 詳細規約依場景 path-scoped 載入：
 >
 > | Sub-file | Path-scoped 觸發 | 內容 |
@@ -44,7 +52,7 @@ Local edits will be reverted by the next sync.
 
 **NEVER** 自行標記 `## 人工檢查` 區塊中**屬於 `[review:ui]` kind** 的 `- [ ]` 為 `- [x]`。
 
-**既有 `[x]` ≠ 已驗收**：archive / 收尾前遇到 `[review:ui]` 已是 `[x]` 但無對應 agent 自拍 screenshot evidence（`screenshots/local/<change>/#<id>-*.png`）時，一律視為 **false-green**，主線 **MUST** 無視 checkbox 自起 dev server + 依環境自拍自驗（Cursor → `cursor-ide-browser`；非 Cursor → `agent-browser`；跨 session 也自足），**NEVER** 假設 user 有截圖或信任前 session 代勾 — 自拍動作本身會撞出被 checkbox 掩蓋的 bug。詳見 [[agent-self-verification.screenshot-evidence]] MUST 8 + [[pitfall-review-ui-checkbox-without-agent-evidence-masks-bug]]。
+**既有 `[x]` ≠ 已驗收**：archive / 收尾前遇到 `[review:ui]` 已是 `[x]` 但無對應 agent 自拍 screenshot evidence（`screenshots/local/<change>/#<id>-*.png`）時，一律視為 **false-green**，主線 **MUST** 無視 checkbox 自起 dev server + 依環境自拍自驗（依 target adapter 的 browser carrier；跨 session 也自足），**NEVER** 假設 user 有截圖或信任前 session 代勾 — 自拍動作本身會撞出被 checkbox 掩蓋的 bug。詳見 [[agent-self-verification.screenshot-evidence]] MUST 8 + [[pitfall-review-ui-checkbox-without-agent-evidence-masks-bug]]。
 
 `[review:ui]` items 的 checkbox 只能在以下流程中勾選：
 
@@ -55,19 +63,19 @@ Local edits will be reverted by the next sync.
 5. 使用者回覆 skip → 標記 `[x]` 並加註 `（skip）`
 6. 使用者回覆 skip all → 全部標記 `[x]` 並註記
 
-**`[discuss]` items 例外**：spectra-archive Step 2.5 walkthrough 中，主線 Claude 主動準備 evidence、向使用者展示後取得明確 OK，可由 Claude 勾選 `[x]` + 插入 `(claude-discussed: <ISO-8601-timestamp>)` annotation。詳見下方「Item Kind Marker」與「標準流程」章節。
+**`[discuss]` items 例外**：spectra-archive Step 2.5 walkthrough 中，主線 session owner 主動準備 evidence、向使用者展示後取得明確 OK，可由 session owner 勾選 `[x]` + 插入 `(claude-discussed: <ISO-8601-timestamp>)` annotation。詳見下方「Item Kind Marker」與「標準流程」章節。
 
 **`[verify:e2e]` / `[verify:api]` automatic channel 例外**：spectra-apply Step 8a 寫入對應 `(verified-e2e/api: ...)` annotation 後，review-gui auto-check helper 可自動勾 `[x]`，不需使用者在 GUI 再確認；`[verify:ui]` 仍需使用者在 GUI 確認 visual evidence。
 
-**前提不成立直接 skip 例外**：item 前提**可由程式碼 / 架構事實驗證為不成立**時（例：route 不存在、column 被 migration 移除、feature flag 永久關閉），Claude **MAY** 直接標 `[x]` + `（skip: <一行事實原因>）`，不走 `(awaiting-user-decision:)` 也不走 review-gui 迴圈。判定條件（**全部**成立才適用）：
+**前提不成立直接 skip 例外**：item 前提**可由程式碼 / 架構事實驗證為不成立**時（例：route 不存在、column 被 migration 移除、feature flag 永久關閉），session owner **MAY** 直接標 `[x]` + `（skip: <一行事實原因>）`，不走 `(awaiting-user-decision:)` 也不走 review-gui 迴圈。判定條件（**全部**成立才適用）：
 
 - 前提不成立是**可程式碼驗證的事實**（grep auth middleware / route config / schema / feature flag），不是主觀商業判斷
-- Claude 已實際跑驗證（grep / read / curl）確認事實成立
+- session owner 已實際跑驗證（grep / read / curl）確認事實成立
 - annotation 內寫明事實根據（哪個檔 / 哪行 / 什麼機制）
 
-**不適用**：「要不要改 auth 讓 staff 進」「要不要加這功能」等涉及商業取捨的判斷 — 仍走 `(awaiting-user-decision:)` 或 AskUserQuestion。
+**不適用**：「要不要改 auth 讓 staff 進」「要不要加這功能」等涉及商業取捨的判斷 — 仍走 `(awaiting-user-decision:)` 或 target-native question surface。
 
-**`(claude-analyzed: route=E)` annotation 不勾 checkbox**：review-gui「接手分析」prompt 路由結論為 **(E) false positive / 等 user 重新評估** 時，Claude 可在帶 `（issue:）` 的 item 同行寫入 `(claude-analyzed: <ISO> route=E[ note=<...>])` annotation（語意：「已分析、ball in user's court」），但 **NEVER** 翻 checkbox。詳見下方「`(claude-analyzed: ...)` annotation」段。
+**`(claude-analyzed: route=E)` annotation 不勾 checkbox**：review-gui「接手分析」prompt 路由結論為 **(E) false positive / 等 user 重新評估** 時，session owner 可在帶 `（issue:）` 的 item 同行寫入 `(claude-analyzed: <ISO> route=E[ note=<...>])` annotation（語意：「已分析、ball in user's court」），但 **NEVER** 翻 checkbox。詳見下方「`(claude-analyzed: ...)` annotation」段。
 
 ## 人工檢查時機（Hard rule）
 
@@ -79,7 +87,7 @@ Local edits will be reverted by the next sync.
 
 ### Auto-triage 前置條件（per [[review-gui-surface]] MUST 9）
 
-**NEVER** 在 `bucket ≠ ready` 時引導 user 到 review-gui。引導前 **MUST** auto-triage 所有 pending leaf items：`（fix-requested）` → Claude 修 code；evidence missing → Claude self-collect；`（issue:）` 無分析 → Claude triage。只有 Claude 可處理的項目全部推進完畢、剩下純 `[review:ui]` user 驗收項、`bucket=ready` 時，才引導 user。
+**NEVER** 在 `bucket ≠ ready` 時引導 user 到 review-gui。引導前 **MUST** auto-triage 所有 pending leaf items：`（fix-requested）` → session owner 修 code；evidence missing → session owner self-collect；`（issue:）` 無分析 → session owner triage。只有 session owner 可處理的項目全部推進完畢、剩下純 `[review:ui]` user 驗收項、`bucket=ready` 時，才引導 user。
 
 ### 禁止事項
 
@@ -136,7 +144,7 @@ Screenshot review **只覆蓋視覺層**，**不**覆蓋功能 round-trip。下�
 
 ### Backend-only change 的特別規約
 
-當 `proposal.md` 宣告 `**No user-facing journey (backend-only)**` 時，`## 人工檢查` 區塊適用更嚴的規約 — 只允許三類項目（production 授權 / 商業判斷 / production 觀察）。其餘 SSH / psql / curl / schema 驗證 evidence collection **MUST** 寫進 `## N. Backend Verification Evidence` section 由 apply 階段 Claude 自跑自貼。
+當 `proposal.md` 宣告 `**No user-facing journey (backend-only)**` 時，`## 人工檢查` 區塊適用更嚴的規約 — 只允許三類項目（production 授權 / 商業判斷 / production 觀察）。其餘 SSH / psql / curl / schema 驗證 evidence collection **MUST** 寫進 `## N. Backend Verification Evidence` section 由 apply 階段 session owner 自跑自貼。
 
 完整三類定義、模板、例外宣告固定文字、反面範例：詳見 [[manual-review.backend]] § Backend-only change 的特別規約 + [[ux-completeness]] § 必填 Backend-only Manual Review 規約。
 
@@ -166,10 +174,10 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 每條 `## 人工檢查` checkbox 行 **MUST** 在 `#N` / `#N.M` 後緊接一個 leading kind marker。合法 marker：
 
 - `[review:ui]` — 需要使用者親自確認的 UI / UX 驗收。例：收 email / 收 webhook / 實體裝置 / 視覺主觀美感 / 真機跨機器。**MUST** 由使用者完成，agent 禁止代勾。
-- `[discuss]` — Claude 主導的 evidence-based 討論項目。例：production 授權、商業判斷、production 觀察、後端 evidence 查驗。spectra-archive Step 2.5 walkthrough 流程下，Claude 主動準備證據與使用者討論、取得 OK 後可代勾並寫入 `(claude-discussed: <ISO-8601-timestamp>)` annotation。**`[discuss]` items MUST 由 `/spectra-archive` Step 2.5 walkthrough 觸發推進，NEVER 由 review:ui home page handoff prompt（含「等 Claude 接手」群「接手分析 prompt」按鈕）dispatch 給接手 Claude**。理由：production-observation / production 授權 / 商業判斷類 item 的勾選 trigger 是外部 signal（deploy / soak / 商業決策），Claude 提前分析只會回「等外部 signal」、tasks.md 無更新、change 永遠卡在 review:ui pending state、archive 不了。對應 review-gui 行為：純 D-only pending（I=0、V=0、evidenceMissing=0）的 change MUST 進「🗓 等 archive walkthrough」群、無接手 prompt 按鈕。
-- `[verify:e2e]` — Playwright spec-based automated round-trip。主線在 `e2e/verify/<change>/<topic>.spec.ts` 寫 spec、跑 `pnpm test:e2e:verify <change>`，通過後寫 `(verified-e2e: <ISO>)` annotation（`spec` / `trace` payload 進 sidecar，見下方 § Evidence payload 走 sidecar）。
+- `[discuss]` — session owner 主導的 evidence-based 討論項目。例：production 授權、商業判斷、production 觀察、後端 evidence 查驗。spectra-archive Step 2.5 walkthrough 流程下，session owner 主動準備證據與使用者討論、取得 OK 後可代勾並寫入 `(claude-discussed: <ISO-8601-timestamp>)` annotation。**`[discuss]` items MUST 由 `/spectra-archive` Step 2.5 walkthrough 觸發推進，NEVER 由 review:ui home page handoff prompt（含「等 session owner 接手」群「接手分析 prompt」按鈕）dispatch 給接手 session owner**。理由：production-observation / production 授權 / 商業判斷類 item 的勾選 trigger 是外部 signal（deploy / soak / 商業決策），session owner 提前分析只會回「等外部 signal」、tasks.md 無更新、change 永遠卡在 review:ui pending state、archive 不了。對應 review-gui 行為：純 D-only pending（I=0、V=0、evidenceMissing=0）的 change MUST 進「🗓 等 archive walkthrough」群、無接手 prompt 按鈕。
+- `[verify:e2e]` — reproducible runner spec-based automated round-trip。主線在 `e2e/verify/<change>/<topic>.spec.ts` 寫 spec、跑 `pnpm test:e2e:verify <change>`，通過後寫 `(verified-e2e: <ISO>)` annotation（`spec` / `trace` payload 進 sidecar，見下方 § Evidence payload 走 sidecar）。
 - `[verify:api]` — 純 HTTP round-trip（curl / ofetch / fetch）。主線跑 request，通過後寫 `(verified-api: <ISO>)` annotation（`method` / `url` / `status` payload 進 sidecar）。**裝 `nuxt-csurf` 的 consumer** MUST 走 dual-token recipe（否則 POST 第一次就撞 403）— 見 `~/offline/clade/vendor/snippets/verify-channels/api-roundtrip.template.sh`。
-- `[verify:ui]` — final-state screenshot + DOM observation。主線派 screenshot-review agent `mode: verify` 只開已知 URL、等待載入、截 final-state screenshot、記錄 DOM 觀察，回來後寫 `(verified-ui: <ISO>)` annotation（`screenshot` / `dom` payload 進 sidecar）；使用者仍需在 review GUI 點 OK 才勾 `[x]`。
+- `[verify:ui]` — final-state screenshot + DOM observation。主線派 target adapter 的 visual verifier `mode: verify` 只開已知 URL、等待載入、截 final-state screenshot、記錄 DOM 觀察，回來後寫 `(verified-ui: <ISO>)` annotation（`screenshot` / `dom` payload 進 sidecar）；使用者仍需在 review GUI 點 OK 才勾 `[x]`。
 - `[verify:<a>+<b>]` / `[verify:<a>+<b>+<c>]` — multi-marker，僅允許組合 `e2e` / `api` / `ui` verify channels，例如 `[verify:api+ui]` 或 `[verify:e2e+ui]`。
 - `[verify:auto]` — **DEPRECATED alias**，僅為既有 consumer tasks.md 相容保留；解析時視為 synthetic `[verify:api+ui]` 並 emit deprecation warning。新項目 **NEVER** 使用 `[verify:auto]`。
 
@@ -192,27 +200,27 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 
 完整 flag 對照表、parser 對短 marker 的接受條件、以及「既有行內 payload annotation 一律不動」的理由：見 [[review-gui-surface]] § Annotation Format Contract § Evidence 寫入路徑。
 
-### `(claude-analyzed: ...)` annotation（Claude-writable）
+### `(claude-analyzed: ...)` annotation（session-owner-writable）
 
-當 review-gui 「🤖 等 Claude 接手」群 → 「接手分析」prompt 走完後，Claude 路由結論為 **(E) false positive / item 應改回 OK 或翻 [x] / 需 user 重新評估** 時，**MAY** 在帶 `（issue:）` 的 item 同行寫入此 annotation 作為 evidence trail，告訴 GUI「我已分析過、ball in user's court」。
+當 review-gui 「🤖 等 session owner 接手」群 → 「接手分析」prompt 走完後，session owner 路由結論為 **(E) false positive / item 應改回 OK 或翻 [x] / 需 user 重新評估** 時，**MAY** 在帶 `（issue:）` 的 item 同行寫入此 annotation 作為 evidence trail，告訴 GUI「我已分析過、ball in user's court」。
 
-#### Schema / Claude 可寫條件（hard rule）
+#### Schema / session owner 可寫條件（hard rule）
 
 ```text
 (claude-analyzed: <ISO-8601>)          ← 行內；route / note 走 sidecar --route / --note
 ```
 
-核心可寫條件：**MUST** 路由 **(E)** 結論 + item 已帶 `（issue:）` 時才寫；**MUST NOT** 翻 checkbox、**MUST NOT** strip 既有 `（issue:）`、**MUST NOT** 在路由 (A)–(D) 結論時寫（那些情境 user 仍需要 Claude 動作）。
+核心可寫條件：**MUST** 路由 **(E)** 結論 + item 已帶 `（issue:）` 時才寫；**MUST NOT** 翻 checkbox、**MUST NOT** strip 既有 `（issue:）`、**MUST NOT** 在路由 (A)–(D) 結論時寫（那些情境 user 仍需要 session owner 動作）。
 
 #### 欄位細節 / Strip semantics / 與 `(claude-discussed:)` 的差異 / Home page 影響 / 範例
 
 見 [[manual-review.evidence]] § `(claude-analyzed:)` / `(awaiting-user-decision:)` Schema 欄位與可寫條件、§ `(claude-analyzed: ...)` annotation 細節。
 
-### `(awaiting-user-decision: ...)` annotation（Claude-writable）
+### `(awaiting-user-decision: ...)` annotation（session-owner-writable）
 
-當 Claude 判定某 pending item 是**純 user 商業決策**（production 授權 / 商業判斷），自己推不動、已準備好 decision packet 呈 user 時，**MAY** 在該 item 同行寫入此 annotation 把球交還 user。與 `(claude-analyzed:)` 對稱，但語意是「等 user 商業拍板」而非「等 user 重新評估 UI」。寫入後 change 落 **`awaitingUserDecision`** bucket（review-gui home page「🧑‍⚖️ 等 user 決策」群），master button 排除、不再抓回硬做。
+當 session owner 判定某 pending item 是**純 user 商業決策**（production 授權 / 商業判斷），自己推不動、已準備好 decision packet 呈 user 時，**MAY** 在該 item 同行寫入此 annotation 把球交還 user。與 `(claude-analyzed:)` 對稱，但語意是「等 user 商業拍板」而非「等 user 重新評估 UI」。寫入後 change 落 **`awaitingUserDecision`** bucket（review-gui home page「🧑‍⚖️ 等 user 決策」群），master button 排除、不再抓回硬做。
 
-#### Schema / Claude 可寫條件（hard rule）
+#### Schema / session owner 可寫條件（hard rule）
 
 ```text
 (awaiting-user-decision: <ISO-8601>)   ← 行內；packet 走 sidecar --packet
@@ -226,7 +234,7 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 
 ### `@apply-blocked[<reason>]` marker（impl 卡外部 blocker）
 
-當 change 的 implementation 卡在**外部 blocker**（等決策 / 等別 change / 缺資源），Claude 推不動、不該被 master button 反覆抓回硬做時，在 **tasks.md 任意處獨立一行**加 `@apply-blocked[<reason>]`（檔層級 marker，非 `## 人工檢查` item 行）。bearing change 分到 `applyBlocked` bucket、master button 排除；解 blocker 後 **MUST** 移除 marker 讓 change 回 `applyInProgress`。bucket 條件、`<reason>` 寫法、HANDOFF paper-trail SHOULD：見 [[manual-review.evidence]] § `@apply-blocked[<reason>]` marker 細節。
+當 change 的 implementation 卡在**外部 blocker**（等決策 / 等別 change / 缺資源），session owner 推不動、不該被 master button 反覆抓回硬做時，在 **tasks.md 任意處獨立一行**加 `@apply-blocked[<reason>]`（檔層級 marker，非 `## 人工檢查` item 行）。bearing change 分到 `applyBlocked` bucket、master button 排除；解 blocker 後 **MUST** 移除 marker 讓 change 回 `applyInProgress`。bucket 條件、`<reason>` 寫法、HANDOFF paper-trail SHOULD：見 [[manual-review.evidence]] § `@apply-blocked[<reason>]` marker 細節。
 
 ### Default Kind Derivation Rule（fallback）
 
@@ -247,7 +255,7 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 
 ### Kind 分類指引（摘要）
 
-寫 `## 人工檢查` 時的判定原則：主線能用 Playwright spec 重現 journey / persistence → `[verify:e2e]`；能用 curl / ofetch 重現 HTTP round-trip → `[verify:api]`；只需 final-state screenshot + DOM observation → `[verify:ui]`；同一 business assertion 需多種 evidence → `[verify:<a>+<b>]`；需 SSH / psql / cron 等不可由 HTTP 重現的 walkthrough → `[discuss]`；真的需要人（email / webhook / 實體裝置 / 視覺主觀 / 真機 / SMS）→ `[review:ui]`。
+寫 `## 人工檢查` 時的判定原則：主線能用 reproducible runner spec 重現 journey / persistence → `[verify:e2e]`；能用 curl / ofetch 重現 HTTP round-trip → `[verify:api]`；只需 final-state screenshot + DOM observation → `[verify:ui]`；同一 business assertion 需多種 evidence → `[verify:<a>+<b>]`；需 SSH / psql / cron 等不可由 HTTP 重現的 walkthrough → `[discuss]`；真的需要人（email / webhook / 實體裝置 / 視覺主觀 / 真機 / SMS）→ `[review:ui]`。
 
 完整 kind by-kind 詳細描述、反面範例（「按鈕應隱藏」「authz status matrix」「persistence」常見誤標）、`[review:ui]` 收斂原則 hard rule：詳見 [[manual-review.evidence]] § Kind 分類指引。
 
@@ -294,9 +302,9 @@ review-gui 主頁卡片上的「📋 補 evidence prompt」按鈕是 **fallback*
 
 **Fallback flow**（user 主動觸發才合用）：跨 session 補拍（已 archive 後補 visual / journey evidence）、主線 self-collect fail 後 user 想 ad-hoc 拍（瀏覽器手拍 / 條碼槍真機 / kiosk 平板等 agent 不能達的工具）、user 主動加 extra evidence。
 
-**NEVER** 把「補 evidence prompt」當 default 入口 — 那等於把 self-automatable evidence collection 變成 user 手動儀式（per [[pitfall-verify-evidence-handoff-instead-of-self-collect]]）；**NEVER** 設計上預期 user 必須點按鈕才能由 Claude 接手 — Claude 在 Step 8b 就該已經跑過一輪。
+**NEVER** 把「補 evidence prompt」當 default 入口 — 那等於把 self-automatable evidence collection 變成 user 手動儀式（per [[pitfall-verify-evidence-handoff-instead-of-self-collect]]）；**NEVER** 設計上預期 user 必須點按鈕才能由 session owner 接手 — session owner 在 Step 8b 就該已經跑過一輪。
 
-判別測試：「user 打開 review-gui 看到 evidence missing 時，是否還需要點按鈕才能 Claude 接手？」是 → 規約缺；否 → 正確路徑。
+判別測試：「user 打開 review-gui 看到 evidence missing 時，是否還需要點按鈕才能 session owner 接手？」是 → 規約缺；否 → 正確路徑。
 
 ## 標準流程（依 kind 分流）
 

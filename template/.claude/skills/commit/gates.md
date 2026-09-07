@@ -7,6 +7,9 @@ Local edits will be reverted by the next sync.
 
 # Commit Quality Gates — Reference
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
+
 > 本檔是 commit skill 品質閘門的完整執行細節。主檔（SKILL.md）含流程概覽與 pointer；觸發特定 gate 時 MUST 先完整讀本檔對應 § 再繼續。
 
 ## 受控交付的 evidence binding
@@ -20,7 +23,7 @@ Critical／Major 裁決仍逐步執行。換 pane 保留同一 model family，�
 
 ## § 0-Coord: Cross-Session Staged Pollution Detection
 
-`commit-lock` 只擋同時兩個 `/commit`；**不**擋「commit 跑時別 session 在跑 publish / propagate / wt-helper add / rescue-consumer」造成 staged 區意外污染（已實證 3 條 incident，見 `docs/pitfalls/2026-05-{14,18,22}-*.md`）。Step 0-Coord 跑 3 個 detection signal **warn-only**，命中再用 `AskUserQuestion` 讓 user 決定等候還是強制繼續。
+`commit-lock` 只擋同時兩個 `/commit`；**不**擋「commit 跑時別 session 在跑 publish / propagate / wt-helper add / rescue-consumer」造成 staged 區意外污染（已實證 3 條 incident，見 `docs/pitfalls/2026-05-{14,18,22}-*.md`）。Step 0-Coord 跑 3 個 detection signal **warn-only**，命中先探測具體持有者、確認範圍與當前可用的協調通道；未解的決策才交給使用者。
 
 ### Signal 1: `.git/index.lock` mtime < 60 秒
 
@@ -39,7 +42,7 @@ if [[ -f "$LOCK" ]]; then
 fi
 ```
 
-**解讀**：`AGE < 60` → 別 session 大機率仍活著正在 staging；`AGE >= 60` → stale lock（崩潰殘留，建議手動 `rm "$LOCK"` 但不在 Step 0-Coord 處理，留給 user 自決）。
+**解讀**：年齡只提供活動線索；任何年齡都不能單獨證明原 owner 已結束，也不授權刪除 index.lock。命中後查實際行程與 checkout，保留鎖原狀。
 
 ### Signal 2: publish.ts untracked stash sidecar
 
@@ -97,30 +100,21 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
   3. 確認別 session 沒在跑後再繼續
 ```
 
-接著 **MUST 先跑 [[session-tasks]] § 並行爭用 的 Step 0** 判出持有者性質（`herdr agent list` 過濾 cwd → `herdr agent read` → `pgrep -af 'work-loop/[r]unner\.sh'`），再依下表決定動作。**NEVER** 從 warn block 直接跳到 `AskUserQuestion`：
+接著依 `scope-discipline` 的歸屬探測契約查實際 work／session／checkout、預定內容與 gate baseline。前三個 signal 全靜默只表示未命中這三種線索，不證明沒有其他寫入者。
 
-| Step 0 判出持有者是 | 這裡做什麼 |
+| 持有者與能力 | 動作 |
 | --- | --- |
-| **前景 agent session** | **① 先 `herdr agent prompt <pane_id> "<四項>"` 通知對方**——這一步排在等候重試 / 強制繼續 / 問 user **之前**。訊息 MUST 含的四項與逐字範本見 [[concurrent-session-probe]] § 探測之後：協商（negotiate）。**② 依對方回覆分流**：對方說它正要 land → 等到它 commit 落地再重跑 0-Coord；對方說那批無主 → 直接進 Step 0-Scope；對方說它要接手 → 釋放 commit-lock 後 STOP。**③ 對方沒回應，才落到下面的 `AskUserQuestion`** |
-| **unattended runner**（`pgrep` 命中且 `/proc/<pid>/cwd` 是本 repo） | 對話不適用——runner child 是 `claude --print`，沒有 pane 也不讀訊息，那個 idle pane 收到訊息不會轉達給背景 process。退出 /commit 並登記本輪需求，**NEVER** 對它 prompt、**NEVER** 搶 |
-| **人類正在編輯**，或 Step 0 判不出持有者 | 才走下面的 `AskUserQuestion` |
+| 已確認前景 session，且有可用並已授權的具名通道 | 先協調 scope、交接與完成事件。對方即將 land 時等該事件並重驗；交接已完成則進 0-Scope；對方接手本 ceremony 則收回 writer、釋放本 owner lock 後退出 |
+| 已確認背景 runner 沒有互動通道 | 不把訊息送到無法轉達的 idle pane；保留本輪需求，按 runtime-lifecycle 收尾，不接管仍在寫入的內容 |
+| 人類編輯、持有者未明、缺通道或具名協調逾時 | 完成可行的唯讀探測後，向使用者呈現具體未解處與候選動作；既有同範圍決定仍有效 |
 
-送出 `herdr agent prompt` 之後 **MUST 指名等到哪一個可觀察事件**（對方回覆、或 `git status` 那幾個檔消失），**NEVER** 只寫「等對方回」就無限期掛著；等待上限與逾時升級路徑見 [[concurrent-session-probe]] § 探測之後：協商（negotiate）。
-
-落到上表第三列（或第一列的 ③）時，用 **AskUserQuestion** 二擇一：
-
-- **選項 A**：`label: "等候重試"`, `description: "退出 /commit，等 60 秒後重跑（推薦：避開 staged 污染風險）"`
-- **選項 B**：`label: "強制繼續"`, `description: "接受 staged 污染風險繼續跑 Step 0-Scope（user 確認別 session 已結束時用）"`
-
-選 A → 釋放 commit-lock 後 STOP；選 B → 輸出 `⚠️ 0-Coord 強制繼續（user 接受風險）`，進入 Step 0-Scope。
+需要新決定時提供「退出本次並保留工作」與「確認具體交接／風險後繼續」；使用當前入口可用的詢問工具或直接對話。使用者選擇繼續不免除 WIP 所有權與後續品質 gate；未授權外送訊息時不執行協調工具。等待綁具名事件與既有 timeout 契約，逾時回報，不無限輪詢。
 
 ### 禁止項
 
-- **NEVER** 把 Step 0-Coord 升級為 hard block；偽陽性 / 別 session 剛好結束的場景太多，warn-and-ask 是當前正解
-- **NEVER** 嘗試自動 `rm .git/index.lock` 或清掉 sidecar — 那是別 session 的 SoT，誤刪比繼續跑風險更高
-- **NEVER** 在**未經對話**的情況下自行決定繼續 — 持有者是前景 agent session 時，跳過 `herdr agent prompt` 直接選 A 或 B 都算違反
-- **NEVER** 在對話**尚未發生**時就開 `AskUserQuestion` — 「我不動別人的檔」**NEVER** 讀成「我什麼都不做」，不動檔與不溝通是兩件事，而本 gate 要求的只有前者
-- 落到上表第三列（人類編輯 / 判不出持有者）之後，**NEVER** 跳過 AskUserQuestion 自行決定繼續 — 該情況下 user 必須親自選 A/B
+- **NEVER** 因 warn 自動刪除 `.git/index.lock`、sidecar 或其他 session 的狀態。
+- **NEVER** 把 signal 命中升級成不可解除的 hard gate；先驗實際狀態，偽陽性與已完成的活動可以收口。
+- **NEVER** 略過可執行的歸屬探測與已授權協調，直接把未消化的 A／B 交給使用者；缺通道時則明示缺口，不虛構對話。
 
 > 同類 race 也存在於 **ad-hoc commit**（不走本 skill 的單檔 commit、HANDOFF 補一行就 commit、修 typo 就 commit 等）。預防規約見 `rules/core/commit.md` § Ad-hoc commit 必走 `git commit --only -- <paths>`。
 
@@ -193,11 +187,11 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 5. **blocker list 非空時 → auto-triage（per [[review-gui-surface]] MUST 9）**：
 
-   **MUST NOT** 直接停下叫 user 去 review-gui。改走 auto-triage：逐條讀 pending leaf item 的 annotation，判斷阻塞原因並自行推進 Claude 可處理的項目。
+   **MUST NOT** 直接停下叫 user 去 review-gui。改走 auto-triage：逐條讀 pending leaf item 的 annotation，判斷阻塞原因並自行推進主線可處理的項目。
 
    1. 對每個 blocked change 的每個 pending leaf item，讀 tasks.md 該行判斷：
 
-      | Item 狀態 | 判斷方式 | Claude 動作 |
+      | Item 狀態 | 判斷方式 | 主線動作 |
       | --- | --- | --- |
       | `（fix-requested）` | 行內含 `（fix-requested）` | 在既有來源修 code → 在該來源重拍截圖 → strip `（fix-requested）` + `(claude-analyzed:)` → 更新 `(verified-*:)` annotation |
       | evidence missing | `[verify:ui]` / `[verify:api]` / `[verify:e2e]` 但無對應 `(verified-*:)` annotation | 走 [[agent-self-verification]] fallback chain 收 evidence |
@@ -205,7 +199,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
       | 純 `[review:ui]` user 驗收 | 上述都不符，item 是 `[review:ui]` | **只有這類**才引導 user 到 review-gui |
       | 純 `[discuss]` | 上述都不符，item 是 `[discuss]` | 不在此處處理（archive walkthrough） |
 
-   2. **Claude 可處理的項目全部推進完畢後**，跑 mechanical readiness gate：
+   2. **主線可處理的項目全部推進完畢後**，跑 mechanical readiness gate：
 
       ```bash
       node ~/offline/clade/vendor/scripts/check-review-readiness.ts \
@@ -292,7 +286,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
    # B: working tree 仍存在但缺該 profile 要求的檔（中斷 archive 殘留）。
    #    判定走 clade vendor script，**NEVER** 在這裡手寫 `test -f`：`spectra-v1` 要 tasks.md
    #    ＋ proposal.md，`opsx-v2` native change 依設計沒有 proposal.md（intent 在 tracked
-   #    intent source、tasks.md 是生成的），兩檔條件對它恆真 —— <consumer-f> 在 main 的每一次
+   #    intent source、tasks.md 是生成的），兩檔條件對它恆真 —— <consumer-e> 在 main 的每一次
    #    /commit 都被這條擋掉，而 `git log --all` 零命中所以 C 也扣不掉（TD-899）。
    #    alias 形狀但沒有 committed binding 的目錄是 reference orphan，不是 archive 殘骸，
    #    script 會略過它。
@@ -370,10 +364,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 4. **blocker list 非空時**：
 
-   1. **MUST** 立即釋放 lock：
-      ```bash
-      CLAUDE_PROJECT_DIR="$COMMIT_TARGET_ROOT" node "$COMMIT_LOCK_SCRIPT" release
-      ```
+   1. **MUST** 依 [runtime-lifecycle.md](runtime-lifecycle.md)「背景工作與退出」收回本 ceremony 的工作，帶原 tuple 與 owner token 執行 release；無法確認停止的寫入工作須保留鎖與 handle。
 
    2. 印出 blocker 報告（每條 change 列 `MISSING_ARCHIVE_DIR` / `MISSING_SPEC_DELTA <cap list>`）+ recovery hint：
 
@@ -425,7 +416,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ## § 0-S: Codex Security 敏感路徑掃描（條件觸發、attended hard gate）
 
-Step 0-Scope 確認本次 WIP 後，依 [`review-tiers.md`](../../../../rules/core/review-tiers.md)
+Step 0-Scope 確認本次 WIP 後，依 [`review-tiers.md`](references/review-tiers.md)
 Tier 3 判定：migration / schema / auth / permission / RLS / raw SQL / billing / security-critical
 任一類別命中就觸發；純 docs、一般業務邏輯與非敏感重構跳過。本判定涵蓋本次 `/commit` 的
 **每一個** changed path，不只主線 agent 自己改的檔。
@@ -444,7 +435,7 @@ node "$CLADE_ROOT/scripts/security-scan.ts" working-tree \
   --paths-file <本次批次清單>
 ```
 
-wrapper 在 target 有 `SECURITY.md`（安全憲法，[`security-policy.md`](../../../../rules/core/security-policy.md)）
+wrapper 在 target 有 `SECURITY.md`（安全憲法，[`security-policy.md`](references/security-policy.md)）
 時自動加 `--knowledge-base`，ledger 落在 target 自家 `docs/evidence/security-scan-ledger.jsonl`
 ——**那個 ledger 檔併入本次 commit 的 selective stage**，不留成 dirty。target 沒有 `SECURITY.md`
 時 wrapper 印一行 pointer 後照掃（warn，不擋）；本次 Tier 3 path 含 `SECURITY.md` 本身時，
@@ -465,7 +456,8 @@ exit 與 `failure_class` 是既有 fail-closed 放行判定；新增的 `failure
 | `0` | `none` | coverage complete 且無 High / Critical finding；輸出 `✅ 0-S 通過`，進 0-A。 |
 | `1` | `findings-at-or-above-threshold` | 有 High / Critical finding；停止本次 commit，列出 report path 與 findings，修正後重跑 0-S。 |
 | `2` | `coverage-incomplete` | 掃描跑了但沒掃完；停止本次 commit 並如實回報，**NEVER** 宣稱掃描乾淨。 |
-| `2` | `tool-failure-no-artifacts` / `tool-timeout` | 工具故障，本次掃描等於沒發生；**MUST** 走 security-scan.md § 工具故障放行 的 `AskUserQuestion`，**NEVER** 自行放行或宣稱掃過。 |
+| `2` | `tool-failure-no-artifacts` / `tool-timeout` | 工具故障，本次掃描等於沒發生；**MUST** 走 security-scan.md § 工具故障放行 的當前原生詢問／對話授權流程，**NEVER** 自行放行或宣稱掃過。 |
+| 其他、缺欄或互相矛盾 | 含未列名的類別 | 保留原始輸出並停止本批，調查 wrapper 契約；不轉成上列工具故障放行選項。 |
 
 exit `1` 的每一條 High / Critical finding **MUST** 先走 `security-evidence finding`（Severity / Confidence / Coverage / Proof Gap 判讀），verdict 是 `accept` 或 `needs more validation` 才登 TD 並修；`unsupported` 記進 report 不修。**NEVER** 看到 High 標籤就直接改 code。
 
@@ -477,192 +469,58 @@ Git pre-commit hook 只跑快速 LOCKED drift check。完整 repository 掃描�
 
 ## § 0-A: 程式碼審查（simplify → 0-A.1 → 條件式 0-A.2）
 
-**審查策略**：
+**每次 dispatch 或 fallback 前 MUST 完整讀 [review-policy.md](review-policy.md)**，分開驗證 scope、fresh context、實際模型差異、品質與唯讀載體。以下角色不固定由哪個 runtime 執行；原生呼叫方式見本檔末尾投影的 runtime 操作段。
 
-1. 主線先跑 `simplify` skill —— 它看 reuse / 精簡 / 過度設計 / altitude 這條軸，Pi review 不會抓。先處理掉避免後續 pi 重複指出
-2. 接著（若 fast-path 不命中）以背景方式跑 GPT-6-astra via Pi（effort: medium）執行 review—— 跨模型抓 bug / 邏輯 / 安全，盲點與 simplify / Claude 主線不同。**啟動後立即進入並行階段（見主檔「0-A/B/C 並行策略」）**，主線同步推進 0-C 並派 0-B subagent
-3. 0-A.1 出現 Critical / Major → 進入 0-A.2 兩步驟：先派 GPT-6-astra via Pi（effort: medium）做深度 review，再由 Claude Fable 5.1（`claude-fable-5-1`，effort: max）跑 `code-review` agent，拿著 pi 的回饋做最終決策
-4. 修正一律由 Claude Code 主線執行；所有並行軸的 finding 匯合後一次性修正
+1. 主線先完成 0-A.0；修完的 snapshot 才交給 reviewer。
+2. Fast-path 不成立時啟動 0-A.1 獨立跨模型 review，並行 0-B 與 0-C。每個背景工作綁 owner、實際 handle、deadline 與收回方法；不把另一個 runtime 的參數交給本端工具。
+3. 0-A.1 出 Critical／Major 時，修正後進 0-A.2 深度 review 與跨模型裁決。兩個步驟缺一仍未完成。
+4. Findings 由主線匯合、查證與修正；各軸的背景 reviewer 不同時寫受審檔。
 
-**模型分工**：
+### 0-A.0 — simplify（主線，永遠先跑）
 
-| 步驟 | 模型 | Effort | 職責 |
-| --- | --- | --- | --- |
-| 0-A.1 | GPT-6-astra via Pi | medium | 跨模型盲點互補，抓 bug / 邏輯 / 安全 |
-| 0-A.2 Step 1 | GPT-6-astra via Pi | medium | 深度搜尋所有可能問題 |
-| 0-A.2 Step 2 | Claude Fable 5.1 (`claude-fable-5-1`) | max | 拿 pi finding 做最終裁決 |
+對本次變更檢查 reuse、精簡、效率與抽象層次，完成必要修正後再凍結 review snapshot。當前入口提供已安裝 `simplify` skill 時由主線直接呼叫；缺少原生 invocation API 時讀取可用技能全文依其契約執行，沒有技能時由主線明確覆核上述四軸並記錄結果。不虛構 `Skill` 工具或宣稱呼叫過未執行的技能。
 
-### 0-A dispatch 禁令（2026-08-22 從 [[agent-routing]] § 必禁事項 下推，TD-590）
+技能內部的委派仍受當前 routing 與授權約束；主線不外包一層只為重新呼叫同一技能，也不手抄其 fan-out 結構。收到結果後只摘要修正與 deferred 項，deferred 依來源 repo 的 HANDOFF 契約登記，立即判 fast-path／啟動下一步，不等使用者重複授權。不轉貼整份中間報告。
 
-| NEVER | 說明 |
-| --- | --- |
-| **NEVER** 在 commit 0-A 把 `simplify` 跟 pi 並行 | simplify 修完才是 pi 該看的版本 |
-| **NEVER** 在 commit 0-A 啟用已棄用的 `code-review` agent（Opus subagent） | 與 pi review 重疊且同為 Anthropic 模型盲點 |
-| **NEVER** 在 commit 0-A 跑第 3 輪 pi | 2 輪內處理不完先 split；0-A.2 由 0-A.1 Critical / Major 條件觸發，不可無條件升級也不可跳過 |
-| **NEVER** 在 commit 0-A.0 用 `Agent` 包一層跑 simplify，也 **NEVER** 在 prompt 裡叫 agent 自行 launch N 個平行 review 子 agent | 主線直接 `Skill(simplify)`；四軸分工是 `simplify` skill 本體的內部實作。依據見 rationale，詳見 commit `gates.md` § 0-A.0 |
+Fast-path 的三條件以 SKILL.md 的同一份定義為準：diff <20 行、只含允許的 doc/config、無敏感路徑，三條全中才能跳過 0-A.1／0-A.2；0-A.0、0-B 的觸發判定與 0-C 仍執行。
 
-### 0-A.0 — simplify（主線，永遠跑、永遠先跑）
+### 0-A.1 — 獨立跨模型 review（並行軸 A）
 
-對本次 working tree 變更跑 simplify review + 自動修 —— 聚焦 reuse / 精簡 / efficiency / altitude，Pi review 不會抓這條軸。simplify 修完的版本才是下一步 Pi review 應該看的對象。
-
-**執行方式：主線直接 `Skill(simplify)` 序跑**（`skill: "simplify"`）。
-
-- **NEVER** 用 `Agent` 包一層再叫它做 simplify
-- **NEVER** 在任何 prompt 裡叫 agent「launch N parallel review agents」之類自行 fan-out —— 四軸分工（Reuse / Simplification / Efficiency / Altitude）是 `simplify` skill 本體的內部實作，由它自己決定，抄出來的副本沒有更新通道
-- **`simplify` 內文叫起的每一個 `Agent`，一樣要過 `agent-routing` 的 PreToolUse:Agent gate**（[[agent-routing]] § Routing Table）。上一條不放寬這一條：它禁的是主線覆寫 `simplify` 的 fan-out **形狀**，不是免除那些委派的 routing 判定。內建 skill 不知道 clade Routing Table 存在，它省略 `model` 時 subagent 繼承主線 Opus——那正是 gate 現在 default-deny 攔的形狀（TD-513）。gate 攔下來時 **MUST** 照 block message 走 dispatch／waive／fallback 三選一，**NEVER** 因為「這是 skill 內部行為」就當它不適用、也 **NEVER** 改寫 `simplify` 的 fan-out 來規避
-
-> **本段捨棄了哪一條防護（2026-08-04 TD-362 拍板，pilot 中）**：2026-06-04 起本段曾要求用 foreground `Agent`（`general-purpose`）跑手抄的四軸 prompt，為的是把 simplify 隔離在 subagent context，避免 `Skill(simplify)` 的 inline output 把 commit flow 的 continuation 指令推出 working memory（[[pitfall-commit-simplify-skill-nesting-stalls-flow]]）。
->
-> 2026-08-04 反證該隔離**從未達成**（[[pitfall-commit-0a0-nested-fanout]]）：子 agent 完整報告仍以 agent-message 灌回主線（實測 ↓59.1k tokens），同時付出中間層空轉 4m41s、子 agent 互斥建議無仲裁者、prompt 範本與 skill 本體雙 SoT 漂移三項成本。既然包一層擋不住 context 灌入，「移除它會讓停頓回來」的隱含前提（現狀擋住了停頓）不成立——那個風險兩邊共有。
->
-> 另一層理由：主線 Step 3 要把 simplify 的修正**分組 commit**，本來就必須知道改了什麼，隔離擋掉的是主線自己需要的東西。
->
-> **停頓風險仍在**，由下面兩條防線承接（它們是 2026-06-04 當時不存在的，**NEVER** 隨 Agent-wrapping 一起刪）。pilot 期間若停頓復發，fallback **不是**回到手抄 fan-out prompt，而是 TD-362 登記的 designated fallback（單一 agent 自跑四軸、明文禁再 fan-out）。
-
-主線收到 simplify 結果後：
-
-- **有修正** → 一句話摘要（「simplify 修了 N 處：<列舉>」），deferred items 寫 `HANDOFF.md`（`[simplify]` prefix），**立即** fast-path 判斷
-- **無修正** → 輸出 `✅ 0-A.0 完成（simplify 無修正）`，**立即** fast-path 判斷
-- **NEVER** 把 simplify 的完整報告原文轉貼給 user —— 那是 context 膨脹 + 停頓的根因輸入端，轉貼等於自己把它二次放大
-
-**Deferred items → HANDOFF（自動，不停住）**：simplify 指出「現在不做但值得做」的改善項 **MUST** 自動寫入 `HANDOFF.md` 的 `Next Steps` 區塊（一行一項，前綴 `[simplify]`），然後**立即繼續** fast-path 判斷。**NEVER** 停住等使用者確認。
-
-**0-A.0 完成 ≠ 停頓點（hard rule）**：`Skill(simplify)` 完成後，主線 **MUST 在同一個 assistant turn 內** 輸出一行摘要 → 判斷 fast-path → 啟動 0-A.1/0-B/0-C。**NEVER** 在 simplify 完成後等 user 回應 — commit 流程是單一連續執行，中間不停。
-
-跑完輸出 `✅ 0-A.0 完成（simplify 已 review + 修正{，N 項 deferred → HANDOFF}）` 後判斷 fast-path：
-
-- **命中** → 輸出 `⏭️ 0-A.1/0-A.2 跳過（fast-path: diff <20 行、限 doc/config、無敏感路徑）`，進入 0-B/0-C 並行
-- **不命中** → 進入 0-A.1
-
-### 0-A.1 — GPT-6-astra via Pi（effort: medium），背景（並行軸 A）
-
-**Watch contract**：背景啟動（`run_in_background: true`）取得 `<task-id>` 後，同一 turn 記錄 owner / deadline（deadline 取值依 [[agent-routing]] § deadline 怎麼取） 並排 180s（[[agent-routing.pi-watch-protocol]] § ScheduleWakeup 用法守則 的具名例外）canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=commit:codex-review deadline=<ISO>...` inert control wakeup；控制 turn 只准 `TaskOutput(block=false)`、重排同一訊息或排 lifecycle intervention，**NEVER** 讀 review output、重播 review 指令或做 mutation。實際 findings 只在 terminal notification + task-id claim 後讀取。啟動背景 process 後 MUST 立即進入並行階段，啟動 0-B（條件觸發）與 0-C。
+Reviewer 看完整 frozen changeset 與驗收契約，以一般 review 的已核准推理深度查邏輯、安全、跨檔影響及適用 semantic patterns。共用 CLI 載體可使用：
 
 ```bash
-.claude/scripts/codex-review-safe.sh medium
+bash "$COMMIT_SKILL_DIR/scripts/codex-review-safe.sh" medium
 ```
 
-> codex-review-safe.sh 先凍結changeset，再呼叫Pi `openai-codex` review runner。Runner只允許`read,grep,find,ls`，沒有bash、write、edit或MCP；prompt injection無法取得mutation tool。這支script只review自家fleet diff，NEVER拿去review不可信第三方code。
->
-> **changeset 由 script 自己收集後嵌進 prompt**（TD-320），pi 不再自行跑 `git diff`。兩個要判讀的 stderr 訊號：超出 `CODEX_REVIEW_MAX_DIFF_LINES`（預設 6000 行）的檔案會被整塊剔除並具名，**MUST** 當成該檔未被 review、NEVER 當作它通過；**exit 3** ＝ 收不到任何未提交變更（pi 未被呼叫），照 collection bug 處理，NEVER 當作 0-A.1 通過。
+**使用該 CLI 前 MUST 完整讀 [runner-safety.md](runner-safety.md)**；`COMMIT_SKILL_DIR` 的取得方式與依賴檢查見 runtime-lifecycle。其他載體同樣要提供完整 snapshot、唯讀／隔離、真實 identity、完整 verdict 與對應來源。工具白名單不受底層 runtime 執行時，必須由核准的 OS 隔離承接，不能只相信參數名字。
 
-#### exit 4（配額耗盡）→ Fable 終端契約
-
-**這條與 0-C 的 exit 4 處置相反，NEVER 類比。** 0-C 的 exit 4 可以「主線 foreground 自跑」，因為修 code 誰修都行；0-A.1 不行 —— 這道 gate 的**存在理由**就是不能由主線同池模型自審。實證（2026-08-19）：一個 session 在 0-A.1 撞額度後改派同池同模型的 Claude subagent 當 reviewer，形式上補了位、實質上 gate 是空的；當時換池後 Cursor 池的 gpt-5.6-sol 立刻多抓到兩條該 Claude reviewer 完全沒看到的 finding。
-
-Astra 目前沒有已驗證的 Cursor model，`--pool cursor` 會拒跑。Astra 配額耗盡後直接採用既有 gate 終端契約：
-
-1. **派 fresh Fable（`claude-fable-5-1`，effort: max）`code-review` agent 接手**，保留同一份待審 changeset 與 verdict 契約；它是 Astra `code-review` 鏈的終點（見 [[agent-routing]] § 配額耗盡時的 fallback 紀律）。
-2. Fable 也不可用 → **明示「跨模型 gate 未達成」**，在 `HANDOFF.md` 登記待補範圍（`git diff <base>..<head>`）。主線 foreground 自 review 不算 0-A.1 通過。
-
-**NEVER 改派同池 Claude subagent 充當跨模型 review。** 那是同池同模型，gate 實質為空 —— 主線自己 review 至少誠實，派一個同款模型只是把「未達成」偽裝成「達成」。**NEVER 降檔到 luna / haiku**（配額按 model 記，降檔換不到額度，只換到更差的 reviewer）。Fable 不在這條禁令內：它換的是**家族**，不是檔位。
-
-> 以下為退役 Sol Cursor 路徑的隔離紀錄，不構成 Astra Cursor 准入。
->
-> **Cursor 池的隔離已經到位（TD-524 / TD-533 / TD-534）**：本節一度寫著「在拿到 OS 層隔離之前，`--pool cursor` NEVER 用於 0-A.1」，依據是 TD-520 的「同 UID 執行 + unrestricted Shell」。那個前提已被解除 —— TD-524 起 cursor 池一律跑在 bubblewrap 內（受審 repo 唯讀綁入、`$HOME` 換成 tmpfs、憑證只掛 cursor 一把，mutation 由核心拒絕而非事後偵測）；TD-533 再加上 network namespace（DNS 與 TLS SNI 都鎖在 Cursor API）；TD-534 把准入綁在待審材料的來源。任一道未就緒即拒跑，不降級。
-
-> **cursor 池沒有工具面 enforcement — 已確認，非未決（TD-520）**。這條事實沒有過期，過期的是它曾經導出的禁令：工具面補不起來，所以 TD-524 / TD-533 把 enforcement 整個移到 OS 層（見上一段），下面這些觀察仍是判斷殘餘風險的依據。pi 的 `--tools read,grep,find,ls` 只是 pi 層 flag，cursor provider 下模型的執行**全部**走 Cursor SDK 原生工具，該 flag 對它們無效。2026-08-19 授權 probe 實測：模型自報可用工具含 `Shell` / `Delete` / `ApplyPatch` / `CallMcpTool` / `WebFetch` / `Subagent`，並**實際寫出了檔案**。三條 enforcement 路徑逐一查證全部不存在（SDK `LocalAgentOptions` 無工具面欄位、`--cursor-mode plan` 是 prompt guidance、`PI_CURSOR_SANDBOX=1` 本環境拒跑）。
->
-> `--tools` 唯一還有的作用是**決定哪些原生執行會被回放進 events log**（回放條件 = builtin 七種 ∩ pi active tools）。推論反直覺但重要：**白名單越窄，稽核越盲** —— events log 能證明「有用 X」，永遠不能證明「沒用 Y」。
->
-> 因此 `--pool cursor` **NEVER** 用來 review 不可信的第三方 code，也 **NEVER** 用於會接觸 secrets / prod 憑證的 changeset。自家 fleet diff 走這條的殘餘風險由 exit 6 接住其中一類（見下），其餘明列為不覆蓋。
-
-#### exit 5（workspace 綁定不符）→ verdict 作廢
-
-runner 比對 pi session 事件的 cwd 與 `--cwd`，realpath 不符即 exit 5。此時模型的檔案探索打在別的 repo 上，**verdict 作廢、NEVER 當作 0-A.1 通過**，照環境問題排查後重跑。
-
-**缺 session 事件同樣 exit 5**（fail-closed）。這道 guard 的用途是「證明」綁定正確，拿不到證據就是證明不了 —— 放行等於 gate 只在 pi 願意提供證據時才存在，而攻擊面（prompt 內嵌的不可信 changeset）恰恰有動機讓它不提供。真 pi 每次 run 都吐 session 事件，所以這條在正常路徑上不會誤觸。
-
-> 查 events log **MUST 用 runner 自己印的 `pi-review: events log: <path>`**（出現在輸出頂端），**NEVER** 用 `ls -t /tmp/pi-review-*` 撈「最新那個」—— `/tmp` 是全 session 共用、檔名只有 pid+ts，並行 session 下會撈到別人的 run。2026-08-19 就是這樣把另一個 repo 的 review log 誤讀成自己的，得出「跑錯 workspace」的錯誤結論，連帶用那份 log 錯誤地否證了一條真實的 Critical。
-
-#### exit 6（review 期間 working tree 被改動）→ verdict 不可信 + 人工檢視
-
-script 在 runner 前後各拍一次 worktree snapshot（HEAD + 暫存 index 的 `git write-tree` 單一 tree hash——原生涵蓋內容、executable bit、symlink target、binary，純 git 可攜——+ `git status --porcelain=v2`），不一致即 exit 6 並在 stderr 印出 `git diff-tree` 的逐檔明細。runner 的 verdict 先落檔、**通過 after-check 才放行到 stdout**——exit 6 時 verdict 被扣住不輸出，只認 heading / 表格的機械檢查不會誤判通過。baseline 拍在 changeset 收集**之前**（拍在之後的話，收集期間的並行修改會被寫進 baseline，review 過的是一份 stale changeset 而檢查靜默）。snapshot 本身 fail-closed：任一步 git 失敗即 exit 6（unborn HEAD 是合法狀態、不觸發），NEVER 留下「前後同樣殘缺所以比對通過」的假綠。
-
-##### 處置：歸因先，重跑前先換場地
-
-exit 6 的 stderr 已經把改動**歸因**成兩類（受審 changeset 內的路徑 / changeset 外的路徑）。
-**MUST** 先讀那份明細定性，**NEVER** 直接重跑 —— 蓄意 mutation 與並行 session 的正當編輯在
-exit code 上長得一樣，而前者要停下來查，後者只是場地選錯了。
-
-定性為**並行 session 的正當編輯**時，原樣重跑會撞同一件事：多人同時在 main 上工作，
-review 期間沒有人改檔的機率隨 session 數遞減。改在**隔離的 detached worktree** 內跑，
-changeset 就只含自己這批：
-
-```bash
-git worktree add --detach /tmp/<repo>-<slug>-review HEAD
-cd /tmp/<repo>-<slug>-review && git apply <自己這批的 patch>
-cd /tmp/<repo>-<slug>-review && bash <repo>/.claude/scripts/codex-review-safe.sh medium
-```
-
-patch 取自 `git diff --cached -- <自己的路徑>`（或 `git diff`），**MUST** 用路徑限定 ——
-那同時解掉第二個問題：在 main 直接跑，changeset 會含**所有** session 的 dirty 檔，
-pi 讀的是一份混雜的 diff，findings 也會混進別人的檔。
-
-2026-08-27 <consumer-b> 實測（main 上 4 個 session 並行）：在 main 跑是 49 檔 / 5307 行且連續兩次
-被扣住；同一批改動移到 detached worktree 後是 4 檔 / 593 行，跑三輪都沒再觸發。
-
-三件事別搞混：
-
-- 這**不是**繞過 exit 6。隔離 worktree 內的 snapshot 檢查照跑，只是沒有別人會去動它
-- 這**不放寬**任何判準。定性為蓄意 mutation 或定不出性時，仍是停下來查，**NEVER** 換場地重跑當作解決
-- worktree 用完 **MUST** `git worktree remove`，**NEVER** 留著累積（它會進下一次 `/handoff` 的 audit）
-
-**write-tree 換法解的是可攜性與覆蓋率，不是安全性。** 它移除了 GNU coreutils 依賴、把 executable bit 與 symlink target 收進覆蓋範圍，但 `git write-tree` 一樣走 PATH 上的 `git` —— 「同 UID 對手可劫持度量工具本身」的問題，換 tree hash **一點都沒解**。**NEVER** 把 snapshot 實作的改良讀成安全等級提升；封口的是 bwrap（TD-524，已落地，見下）。
-
-**這是偵測控制，不是安全邊界 —— 別讓下一個人把它當 sandbox 用。** 它為什麼結構性無效的原論證是：同 UID 的對手可以竄改 `$WORK_DIR` baseline、劫持 PATH 上的 `git` 本身，任何 script 內的事後比對都騙得過（0-A.2 review 2026-08-19 定案）。**那條論證對 cursor 池自 TD-524 起不再成立**——它已經不在呼叫者的 UID 檔案空間裡（見下）。但本檢查的定位**不變**：它從來就不是靠對抗性強度存在的，改變的是它不再是 cursor 池唯一的那道。它可靠接住的是**非對抗**的三類：並行 session 在 review 期間的編輯 / commit（實測發生率最高）、模型無惡意的誤寫事故、default 池 pi 層 enforcement 的回歸。它擋不住的包括：蓄意 mutation 後湮滅痕跡、資料外洩（WebFetch / MCP 送出去）、對其他 repo 或 `$HOME` 的破壞、以及**先改再還原**。
-
-**sdk 層**事前 enforcement 三條路已查證皆不存在（`LocalAgentOptions` 無工具面欄位、`--cursor-mode plan` 只是 guidance、`PI_CURSOR_SANDBOX=1` 本環境拒跑，TD-520）。**OS 層的真修已落地（TD-524）**：cursor 池的 pi 一律跑在 bubblewrap 內 —— 受審 repo 唯讀綁入、`$HOME` 換成 tmpfs、`auth.json` 濾到只剩 cursor 一把、`/tmp` 是拋棄式 tmpfs。所以在 cursor 池上：
-
-| 這件事 | 現況 |
+| 實際結果 | 動作 |
 | --- | --- |
-| 寫進受審 repo | **核心拒絕**（`EROFS`），不是事後偵測 |
-| 讀 `~/.ssh` / 其他 repo / codex 與 xai 的 refresh token | **不在 namespace 裡**，讀不到 |
-| bwrap 不可用 | **整個 run 拒跑**（`errorClass: sandbox-unavailable`），**NEVER** 降級成裸跑 |
-| 外洩（WebFetch / MCP / 網路） | **出口白名單**（TD-533）—— run 跑在只連得到 Cursor API 的 network namespace 裡；DNS 只答 cursor 兩個 host，TLS 依 ClientHello 的 SNI 過濾，其餘一律斷 |
-| netns 未就緒 | **整個 run 拒跑**（`errorClass: egress-unavailable`），**NEVER** 降級成開放網路。修法：`node vendor/scripts/cursor-netns.ts setup`（需 sudo，一次性） |
+| 啟動／等待中 | 記錄 handle 與 owner，透過本端完成事件或 bounded wait 收回同一工作；並行推進其他軸，不能重播命令代替等待 |
+| 配額耗盡 | 依 review-policy 另選仍合格且已授權的候選；CLI 可依自身 NEXT 換池，但仍須驗模型差異。無候選則 gate 未完成 |
+| Scope 缺檔／截斷、缺 verdict／Semantic Verdict id、workspace 綁定失敗 | 對應範圍未被完整 review；修復取證後再執行，不能記 PASS |
+| Snapshot 漂移／不明 mutation | 先查具體 diff 與歸屬；已確認為合法並行工作可移至隔離 fixture 後重跑，不明或非預期 mutation 保留現場並處理授權，不自動覆寫 |
+| 完整結果，無 issue | 0-A.1 通過，0-A.2 不觸發 |
+| 只有 Minor／Info | 逐項修復並驗證，0-A.2 不觸發 |
+| 含 Critical／Major | 逐項修復後進 0-A.2；修法本身是新的受審範圍 |
 
-2026-08-19 實測是讓 cursor 池的模型自己在 sandbox 內跑 probe 回報的（**NEVER** 只從外面推論）。TD-524 那五條：`touch` 回 `Read-only file system`、`~/.ssh` 回 `No such file or directory`、`ls ~/offline` 只剩 bind skeleton、`auth.json` 只剩 cursor 一個 key。TD-533 四條，模型逐字回 `1=exit 6, code 000 2=exit 6, code 000 3=exit 0, code 200 4=cursor` —— example.com 斷、api.github.com 斷、api.cursor.com 通、憑證只剩 cursor。host 端 proxy log 獨立佐證同一輪 `deny dns example.com` / `deny dns api.github.com`。
+**Severity 以 reviewer 的輸出為準，NEVER 由主線自行降級來避開 0-A.2。** 缺少完整 `## Semantic Verdict` 表或適用 id 時，review 未完成。宣告通過須附實際 reviewer 與 snapshot／結果指標，不用預設模型名字填模板。
 
-> 問 `auth.json` 時 **MUST 只要 key 的名稱**（`Object.keys`）。2026-08-19 有一次 probe 讓模型把檔案內容原文回報，live cursor key 因此進了 transcript。
-
-**「接受風險」的前提因此再收窄**：出口已鎖到 Cursor API，剩下的判斷是**你願不願意讓 Cursor 看到這批材料**——那是無法用沙箱解決的部分（模型的 prompt 依定義會送到 Cursor 伺服器）。default 池照跑本檢查（防 pi 層 enforcement 回歸）。
-
-處置：**verdict 不可信、NEVER 當作 0-A.1 通過**。先人工檢視 stderr 的 snapshot diff 定性 —— 可能是 cursor 池被 prompt injection 帶去 mutation（此時被動到的檔 **NEVER 自動還原**，依 [[commit]] WIP 處置禁令交使用者拍板），也可能是並行 session 在 review 期間的正當編輯（此時 verdict 審的不是最終狀態，處置完重跑即可）。
-
-**覆蓋邊界**：只偵測本 repo worktree 的 tracked + untracked 內容。**gitignored 檔（`.env`、`node_modules/` 等）、**/tmp、`$HOME`、其他 repo、MCP / 網路副作用在 cursor 池下**查不到也偵測不到** —— NEVER 把 exit 6 沒觸發講成「cursor 池 review 確認無副作用」。
-
-- **NEVER** 就乾等到 pi 自己結束才看一眼 — 中途卡住（codex auth 過期、context 超量、模型拒答）會白等
-- 結束條件：背景 process 結束、輸出含完成標記、或使用者叫停 — 才進入後續判斷
-
-讀完 pi 輸出後依 **pi 自己輸出的 severity 標記**分情境處理（**此時 0-B / 0-C 應已並行完成或在收尾**）：
-
-- **MUST** 檢查輸出含完整 `## Semantic Verdict` 表且覆蓋 patterns.json semantic 全部 id——缺表或缺列＝review 不完整，重跑 0-A.1，NEVER 當作通過
-- **無 issue** → 輸出 `✅ 0-A.1 通過（GPT-6-astra via Pi（effort: medium）無 issue）`，**跳過 0-A.2**，進入「並行匯合」
-- **僅 Minor / Info 級 issue** → 主線逐一修完，輸出 `✅ 0-A.1 通過（GPT-6-astra via Pi（effort: medium）僅 Minor/Info 已修）`，**跳過 0-A.2**，進入「並行匯合」
-- **出現 Critical / Major 級 issue** → 主線逐一修完，**MUST** 進入 0-A.2
-
-> **0-A.2 審的是「修正本身」，不是「還沒修的 finding」。** 修完 Critical / Major 之後 0-A.2 **仍然 MUST 跑**——0-A.1 的修法是全新、未經任何跨模型審查的 code，**NEVER** 假設它比原本的版本安全。
->
-> | 開脫 | 現實 |
-> | --- | --- |
-> | 「finding 都修完了，0-A.2 沒東西可看」 | 0-A.2 要看的正是那批修法。修完才是它的輸入齊備，不是它失去對象 |
-> | 「修法很小，不值得再跑一輪」 | 引入 regression 的修法通常都很小——大改動反而會被自己重讀 |
->
-> 實證（<consumer-a> 2026-07-26）：0-A.1 的修法引入了一條 quota regression，正常使用者累積滿額後永久 429，由 0-A.2 的 Fable 裁決抓到。當時若因「finding 都修完了」跳過 0-A.2，會直接把功能壞掉的版本推上 production。
-
-**Severity 來源**：以 pi 自己輸出的 severity 標記為準（Critical / Major / Minor / Info）。**NEVER** 由主線自行判定降級「這個其實沒那麼嚴重」—— pi 標 Major 就照 Major 處理，否則 0-A.2 條件觸發機制等於形同虛設。
+| 開脫 | 現實 |
+| --- | --- |
+| 「finding 都修完了，0-A.2 沒東西可看」 | 0-A.2 要看的正是修法及其 regression |
+| 「修法很小，不值得再跑一輪」 | Critical／Major 是觸發條件，不以修法行數取消 |
 
 #### finding 的三類分流
 
-pi 看的是 working tree diff，但它讀得到整個 repo，因此會評論到**本次沒改的舊碼**。「一律修」對這類 finding 會把 unrelated fix 帶進本次 commit（違反 § Step 3 的分組紀律）；「不在本次範圍」則是本檔明文禁止的跳過藉口。出路是分流，不是二選一。
+reviewer 看的是 working tree diff，但它讀得到整個 repo，因此會評論到**本次沒改的舊碼**。「一律修」對這類 finding 會把 unrelated fix 帶進本次 commit（違反 § Step 3 的分組紀律）；「不在本次範圍」則是本檔明文禁止的跳過藉口。出路是分流，不是二選一。
 
 **每一個** finding **MUST** 落在下表三類之一，依序判定，第一個命中的為準：
 
 | 可觀察 predicate | 類別 | 處置 |
 | --- | --- | --- |
-| finding 指涉的 code 出現在本次 diff 的 `+` 行 | **缺失類** | 照 pi 標的 severity 一律修。**位置無關**——修法要動到同檔別處、別的檔、或 diff 外的呼叫端，照修不誤 |
-| 問題成立，但 finding 給的 `<file>:<line>` 指到本次 diff 以外（pi 的行號對不上 working tree） | **行號漂移** | 先定位到真正的位置，再照 severity 修。**NEVER** 因為「行號指到沒改的地方」就歸純舊碼 |
+| finding 指涉的 code 出現在本次 diff 的 `+` 行 | **缺失類** | 照 reviewer 標的 severity 一律修。**位置無關**——修法要動到同檔別處、別的檔、或 diff 外的呼叫端，照修不誤 |
+| 問題成立，但 finding 給的 `<file>:<line>` 指到本次 diff 以外（reviewer 的行號對不上 working tree） | **行號漂移** | 先定位到真正的位置，再照 severity 修。**NEVER** 因為「行號指到沒改的地方」就歸純舊碼 |
 | 上兩類都不成立 | **純舊碼** | 不進本次 commit，但 **MUST** 當場登記 + 回報（見下）。**NEVER** silent drop |
 
 判為**純舊碼**的 finding，**MUST** 在給 user 的回報中逐條輸出下列三行，**任一行留白或寫不出來就照 severity 修**：
@@ -679,123 +537,49 @@ PRE-EXISTING — 未觸碰：<file>:<line>（舉證本次 diff 不含此檔／�
 
 ### 0-A.2 — 深度 review + 跨模型裁決（兩步驟，條件觸發）
 
-**僅在 0-A.1 出現 Critical / Major 級 issue 時執行**，其他情況一律跳過。
+只在 0-A.1 出 Critical／Major 時執行；修復後的完整 snapshot 是輸入。
 
-0-A.2 分兩步驟，先用 Pi 深度 review，再用 Fable 拿 pi 回饋做最終裁決：
+1. 合格深度 reviewer 以已核准的深度檔檢查修法與連帶影響。使用共用 CLI 時為 `codex-review-safe.sh medium`，完整限制同 runner-safety。保存完整輸出，不只摘錄結論。
+2. 與深度 reviewer 不同模型族的合格裁決者取得該 snapshot、原始 0-A.1 findings 與深度結果，逐條確認 real issue、附反證 dismiss 或重標 severity，另查漏項。裁決者唯讀，主線負責修復。
 
-**Step 1 — GPT-6-astra via Pi（effort: medium）**：
+深度輸出缺 `## Review Verdict`（含截斷／context exhaustion）時，明示深度階段未完整；不盲重跑相同耗盡命令。保留已有 findings，由合格裁決者以完整最新 diff、原始 0-A.1 輸出與相同完整性契約接手。只有它實際覆蓋缺失範圍並產出完整 verdict 才可收口；否則 0-A.2 保持未完成。
 
-```bash
-.claude/scripts/codex-review-safe.sh medium
+裁決輸出對**每一條** dismissed finding 提供：
+
+```text
+DISMISSED — 反證：<file>:<line> ／ <契約或規則條文的具體出處>
+說明：<一句話>
 ```
 
-Pi 完成後，**把完整輸出存到變數**（後續餵給 Fable）。
+先驗每條反證再判通過。無反證的 dismissal 保留為 real issue，沿原 severity 處理；模型／effort 的名稱不能代替查證。有 real issue 時主線修復並跑相關驗證；無 real issue 或全部有反證時完成該階段。
 
-**Verdict-presence check**（TD-246 — 防 context exhaustion 靜默跳過 review）：
-
-GPT-6-astra via Pi（effort: medium）完成後 **MUST** 檢查輸出是否含 `## Review Verdict` heading。兩條路：
-
-- **含 `## Review Verdict`** → 正常進 Step 2（Fable 裁決）
-- **缺 `## Review Verdict`**（context exhaustion / 輸出截斷 / 任何非正常完成）→ **MUST** 向 user 報 warning「⚠ GPT-6-astra via Pi（effort: medium）context exhaustion — 未產出 Review Verdict，fallback to 0-A.1 findings」，然後 **fallback**：跳過 Step 2 的 Pi 輸出，改用 0-A.1 medium findings 直接餵 Fable code-review agent 做裁決（prompt 改為「你收到 GPT-6-astra via Pi（effort: medium）對本次 diff 的 review 結果」+ 0-A.1 輸出）。**NEVER** 重跑 `codex-review-safe.sh medium`（context exhaustion 大概率重現）、**NEVER** 靜默跳過 0-A.2 當作通過。
-
-**Step 2 — Claude Fable 5.1（effort: max）— `code-review` agent**：
-
-派 `code-review` agent（`subagent_type: "code-review"`、`model: "fable"`），prompt 包含：
-
-1. 本次 working tree diff（`git diff HEAD` 摘要）
-2. **0-A.2 Step 1 Pi 的完整 review 輸出**
-3. 明確指示：「你的職責是**裁決**——對 pi 列出的每個 finding 判定：(a) real issue → 標 severity + 建議修法；(b) false positive → 標 dismissed **並附具體反證**；(c) severity 不準確 → 重標。同時掃一遍 diff 找 pi 漏掉的問題。輸出格式照 code-review agent 標準報告。」
-
-Agent prompt 範本：
-
-```
-你收到 GPT-6-astra via Pi（effort: medium）對本次 working tree diff 的 review 結果。你的職責是做最終裁決。
-
-## Pi Review 結果
-
-<貼入 Pi Step 1 完整輸出>
-
-## 你的任務
-
-1. 對 pi 列出的**每一個** finding 逐一判定：
-   - real issue → 保留，確認或重標 severity（Critical/Major/Minor/Info），給具體修法建議
-   - false positive → 標 `DISMISSED`，**MUST** 照下列格式輸出，`反證：` 欄不得留白：
-
-     ```
-     DISMISSED — 反證：<file>:<line> ／ <契約或規則條文的具體出處>
-     說明：<一句話>
-     ```
-
-   - severity 不準確 → 重標並說明
-2. **反證立不出來就不是 DISMISSED**：查證之後仍無法指出具體反證位置的 finding，**一律保留為 real issue**。你有完整 repo 讀取權，「判不出來」是查證還沒做完的訊號，不是終局狀態——先去讀 code、追呼叫端、必要時跑 test，讀完仍立不出反證就保留。
-3. 獨立掃一遍 diff，找 pi 漏掉的問題（pi 跨模型盲點互補是你存在的原因）
-4. 輸出標準 code-review 報告格式（含 Semantic Verdict 表）
-
-對 real issue 不做修正——只判定 + 建議修法，修正由主線執行。
-```
-
-> **為什麼 dismiss 要舉證，而不是「判不出就放行」**：「無法確認為錯就放行」是給**只看得到 diff** 的裁決者的規則——那種裁決者對 repo 無知，放行是它誠實的預設。Fable 有完整 repo 讀取權，同一句話套到它身上就變成偷懶的授權。0-A 是 recall-first 設計，§ 0-A.1 的「NEVER 由主線自行降級 severity」是同一條軸的另一端：主線那邊已經堵住降級，裁決層這邊若沒有舉證門檻，洞只是從主線移到 Fable 身上。
-
-讀完 Fable 輸出後，**先驗收 DISMISSED 的舉證，再判斷通過與否**：
-
-**舉證驗收**：對 Fable 標 `DISMISSED` 的**每一條** finding，檢查它有沒有附具體反證（`<file>:<line>` 的 code、契約、或文件/規則條文）。**沒附反證的 DISMISSED 一律視同 real issue 處理**，照 pi 原本標的 severity 走——**NEVER** 因為「Fable 是 max effort，它說 dismiss 應該有它的道理」就放行。裁決者省略舉證跟主線自行降級 severity 是同一種失效，`gates.md` § 0-A.1 已禁止後者。
-
-驗收完才判斷：
-
-- **無 real issue**（全部 dismissed **且逐條附反證**，或無新發現）→ 輸出 `✅ 0-A.2 通過（GPT-6-astra via Pi（effort: medium）+ Claude Fable 5.1（effort: max）無 real issue）`，進入「並行匯合」
-- **有 real issue** → 主線依 Fable 的裁決逐一修正，修完**直接進入「並行匯合」**（最多到 0-A.2，不做第 3 輪）
-
-**為什麼兩步驟**：GPT-6-astra 與 Claude Fable 5.1（`claude-fable-5-1`）的模型盲點不同。GPT-6-astra via Pi（effort: medium）負責深度搜尋——依第一輪 findings 與反證做第二次獨立檢查；Claude Fable 5.1（effort: max）負責裁決——以不同模型族的視角判定哪些是 real issue，過濾 false positive，並找 pi 漏掉的問題。這比同一模型跑兩輪更有效。
+**最多兩輪 discovery review（0-A.1／0-A.2）**。兩輪後仍無法收斂，拆成可獨立驗收的範圍或依具體 blocker 升級，不能無限重派相同 brief。此上限不取消修復後必要的 verify-only 與下方大改動 snapshot 回扣。
 
 ### 0-A/B/C/D 並行匯合（收口檢查）
 
-三軸完成後合併狀態檢查 + 條件觸發 0-D：
+收回每個實際工作結果後核對：0-A 通過或合法 fast-path；0-B 通過或未觸發；0-C 全綠。接著條件執行 0-D，再做大改動回扣；0-E／0-F 依自己的觸發與阻擋契約處理。
 
-1. 0-A（GPT-6-astra via Pi（effort: medium），or 條件升 GPT-6-astra via Pi（effort: medium）+ Claude Fable 5.1（effort: max），or fast-path skipped）：通過
-2. 0-B（screenshot review）：通過或跳過
-3. 0-C（pnpm check + pnpm test + pnpm run doctor）：全綠
-4. 0-D（doc alignment）：通過或跳過
+**大改動回扣**：0-A／0-B／0-C／0-D 匯合後累計修正**超過 50 行或跨 5 檔以上**時，MUST 讓合格 reviewer 對新 snapshot 再驗，確認新內容也被覆蓋。未到門檻仍跑修法相應的驗證；不能把舊 snapshot 的 PASS 當成新內容的 review。
 
-**0-D 執行時機**：三軸匯合後、大改動回扣之前。0-D 條件觸發（見下方 § 0-D），觸發時在主線 foreground 跑，修完再評估大改動回扣。
-
-**大改動回扣**：若 0-A / 0-B / 0-C / 0-D 累計的修正**超過 50 行或跨 5 檔以上**，**MUST** 在此處重跑一次 `codex-review-safe.sh medium` 確認新引入的程式碼也過 pi 眼睛（pi 看的是啟動時 snapshot，後續大改動不在它覆蓋範圍）。小改動（< 50 行 / < 5 檔）視同安全跳過。
-
-完成匯合後 **MUST** 用 metrics recorder 產生匯合行，**NEVER** 自己手打那行：
+實際匯合完成後使用 metrics recorder，記錄真實結果與身份：
 
 ```bash
-node .claude/scripts/0a-metrics.mjs record \
-  --diff-lines <本次 diff 總行數> --diff-files <檔數> \
-  --codex <astra-medium|astra-medium+fable|fast-path-skip> \
+node "$COMMIT_SKILL_DIR/scripts/0a-metrics.mjs" record \
+  --review-mode <independent|escalated|fast-path-skip> \
+  --reviewer <實際runtime/model> [--adjudicator <實際runtime/model>] \
+  --diff-lines <行數> --diff-files <檔數> \
   --critical N --major N --minor N --info N \
   --a2 <true|false> --dismissed N --dismissed-unsubstantiated N \
-  --screenshot <pass|skip> --doc <aligned|skip> \
-  [--anomaly <td246-fallback|verdict-missing|large-change-rerun>]
+  --screenshot <pass|skip> --doc <aligned|skip>
 ```
 
-它落一筆進 `.clade/0a-metrics.jsonl`（gitignored 的本地 telemetry）並印出匯合行：
+Fast-path 不填未執行的 reviewer；escalated 記實際裁決者。`--dismissed-unsubstantiated` 是反證不足被保留為 real issue 的條數。Recorder 的參數檢查不證明 review 真有執行，須同時保留各軸原始 receipt；參數矛盾時修正流程或記錄，不能填假值讓它通過。舊 `--codex` CLI／歷史記錄是相容資料，不要求新入口冒充該模型組合。
 
-```text
-✅ 0-A/B/C/D 並行匯合通過（GPT-6-astra via Pi（effort: medium）、screenshot skip、check 全綠、doc skip）
-```
+本地 `.clade/0a-metrics.jsonl` 是閾值評估依據；`summary` 的歷史數據與本次結果分開。Fast-path 與大改動門檻的變更需據分佈判定，不憑單次觀感調整。
 
-**匯合行只能由本 script 產出**是刻意的結構耦合——漏跑就沒有那行輸出，比規約寫「MUST 記錄」更難靜默漏掉。
+**未完成的 gate 不產生通過匯合行，也不進 commit。** Reviewer 不可用、配額不足、缺隔離／身份／完整輸出都不能以主線自審補位。發現自己正用「另一個 fresh agent」代替模型差異、或用啟動成功代替完成，就是回上表補證據的時刻。
 
-- `--dismissed-unsubstantiated` 填 § 0-A.2「舉證驗收」翻回 real issue 的條數（沒有就填 0）
-- script 對流程矛盾會 exit 2 擋下（如 critical/major 非 0 卻 `--a2 false`）。那代表 0-A.2 該跑沒跑，**NEVER** 改參數繞過——回去補跑 0-A.2
-- 累積後 `node .claude/scripts/0a-metrics.mjs summary` 看分佈。**這是 0-A 唯一的閾值調參依據**：fast-path 三條件、「大改動回扣」的 50 行／5 檔、pre-flight 規模 gate 要不要升 hard gate，都等這份分佈說話，NEVER 憑單次觀感調
-
-**紀律禁止項**（每條皆對應壓力下違規模式或已知 rationalization）：
-
-- **NEVER** 跳過 0-A.0（simplify 是常駐第一步，不視變更大小例外）
-- **NEVER** 改用其他模型（Pi 席位必須 `gpt-6-astra`、Fable 必須 `claude-fable-5-1`）
-- **NEVER** 把 pi 列出的問題判定為「建議性質」而跳過 —— 一律修
-- **NEVER** 用「不在本次範圍」跳過 finding —— 該判定只有走 § 0-A.1「finding 的三類分流」判為**純舊碼**、且三行舉證逐行寫齊才成立；缺任一行照 severity 修
-- **NEVER** 在 fast-path 條件未完全滿足時提早跳過 pi review —— 三條件 AND，任一不滿足都跑
-- **NEVER** 做第 3 輪 review（會無限拖長 commit 流程；0-A.1 + 0-A.2 兩輪處理不完代表變更太大，應先 split）
-- **NEVER** 因 0-A.1 抓到 Critical/Major 後跳過 0-A.2 —— 一律進入 GPT-6-astra via Pi（effort: medium）+ Claude Fable 5.1（effort: max）驗證
-- **NEVER** 用主線自判把 pi 標的 Major / Critical 降級成 Minor 來跳過 0-A.2 —— severity 以 pi 輸出為準
-- **NEVER** 跳過 0-A.2 的 Claude Fable 5.1 步驟、只跑 GPT-6-astra via Pi（effort: medium）——兩步驟綁定，缺 Fable 裁決 = 0-A.2 未完成
-- **NEVER** 把 heavy gate 的 `exit 75` 讀成 gate 本身失敗（typecheck 掛了 / OOM / 該調 heap） —— 75 是 `gate-slot.sh` 的 `EX_TEMPFAIL`，代表等不到 slot、inner command 從未執行。判準是 `grep -c "error TS"` 回 0；接著查 lock holder 並比 CPU time vs elapsed。三步診斷與逃生口見 [[pitfall-heavy-gate-exit-75-reads-as-typecheck-failure]]。**NEVER** 用調大 `--max-old-space-size` 或 `CLADE_GATE_WAIT_TIMEOUT` 回應它 —— 兩者都是對著錯誤的層施力
+Heavy gate 的 `exit 75` 代表 `gate-slot.sh` 等不到 slot、inner command 尚未執行；不是 typecheck／OOM 的證據。依 [[pitfall-heavy-gate-exit-75-reads-as-typecheck-failure]] 查實際 holder 與執行輸出，不能用增大 heap 或等待參數修錯層。
 
 ---
 
@@ -813,9 +597,9 @@ node .claude/scripts/0a-metrics.mjs record \
 
 **不觸發**：純 `<script>` / `<style>` 微調、composable / store / API 純邏輯、測試、文件、設定檔、單純重構不影響視覺輸出。
 
-**Dispatch 方式**：`Agent` tool，`subagent_type: screenshot-review`（Claude subagent），brief 素材見 [[review-screenshot]] § 派遣方式。**NEVER** 派 Pi 任一 model——per `agent-routing.md` Routing Table 該列，本 channel 四個模式（含 0-B）一律 Claude-only，`pi-routing-policy.ts` 會對 `--table-row screenshot-review-verify` 直接 throw。
+**Dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，確認真實圖片存取、視覺品質資格、fresh context 與可用載體；brief 帶完整 item、截圖與互動證據，依本檔 native 操作段執行。既有 Pi screenshot-review-verify row 會拒絕派遣，不能繞過它來宣稱新載體有資格；缺合格載體時保留 0-B 未完成。
 
-**並行啟動**：觸發時 MUST 在 0-A.1 pi 背景 process 啟動的**同一個 assistant 回合**內送出 0-B dispatch —— **NEVER** 等 0-A.1 跑完才派（會浪費 3–5 min 的並行收益）。0-B 跑完回收 finding，與 0-A.1 / 0-C 的 finding 一起匯合修正。
+**並行啟動**：有真實並行載體時，0-A.1 啟動後同回合啟動已觸發的 0-B；收回 findings 後與 0-A.1／0-C 匯合修正。缺並行能力時依 review-policy 記錄同步載體限制，不略過視覺 gate。
 
 問題修正後輸出 `✅ 0-B 通過`；不觸發則直接輸出 `⏭️ 0-B 跳過（無 UI 變更）`。
 
@@ -823,7 +607,7 @@ node .claude/scripts/0a-metrics.mjs record \
 
 ## § 0-C: CI 等效檢查（Fix-Verify Loop、並行軸 C）
 
-**並行啟動**：MUST 在 0-A.1 pi 背景 process 啟動的**同一個 assistant 回合**內，主線 foreground 開跑 `pnpm check` —— 跟 pi 並行不阻塞。0-C 完成（含 fix loop 通過）後再 poll 0-A.1 與回收 0-B dispatch。
+**並行啟動**：0-A.1 的 snapshot 已凍結且有可收回的背景 handle 時，同回合啟動 0-C；各軸回報後匯合。缺非同步能力時依 review-policy 的同步執行契約，所有檢查仍要完成。
 
 跑下列指令確保 **format / lint / typecheck / test / doctor 全部 0 errors + 0 warnings + 0 test failures**：
 
@@ -868,7 +652,7 @@ vite-doctor 是 commit 品質閘門的必要組件（import graph 健康度：cy
 詳見 .claude/rules/vite-doctor.md
 ```
 
-隨後 **MUST** 釋放 commit-lock（`CLAUDE_PROJECT_DIR="$COMMIT_TARGET_ROOT" node "$COMMIT_LOCK_SCRIPT" release`）並 STOP。**NEVER** 跳過此 gate 繼續跑後續步驟。
+隨後 **MUST** 釋放 commit-lock（依 [runtime-lifecycle.md](runtime-lifecycle.md)「背景工作與退出」，帶原 tuple 與 owner token）並 STOP。**NEVER** 跳過此 gate 繼續跑後續步驟。
 
 若輸出 `has-doctor`，**必須**額外跑（**MUST** `pnpm run doctor`，**NEVER** 裸打 `pnpm doctor` — `doctor` 撞 pnpm 內建子命令，裸打跑的是 pnpm 自家 doctor 並 silent exit 0，`scripts.doctor` 的 vite-doctor scan 永遠不執行）：
 
@@ -901,45 +685,46 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
 ＋ `--table-row commit-0c-fix-verify`。`--var max_iterations=2` 是本列的次數上限：同一 dispatch
 內最多 2 輪 check→fix，到上限仍紅 MUST 報 `fail` 而非 `pass`。）
 
-**升級到 astra（同一輪 0-C，不是新的 commit）**——命中任一即派，**NEVER** 再給 grok 同一份 brief：
+**升級到 Sol（同一輪 0-C，不是新的 commit）**——命中任一即派，**NEVER** 再給 grok 同一份 brief：
 
 1. grok dispatch 回 `fail` / `uncertain` / exit 2（2 輪用盡或自報修不到）
 2. grok 報 `pass` 但主線重跑 `pnpm check`（+ test / doctor）仍紅
-3. grok-xai exit 4（本列是 mutation，dispatcher payload 跳過 grok-cursor 並指向 astra 升級列；**NEVER** 退回 Claude）
+3. grok-xai exit 4（本列是 mutation，dispatcher payload 跳過 grok-cursor 並指向 Sol 升級列；**NEVER** 跳過升級列，**NEVER** 退回 Claude 或 native `cx`）
 
 ```bash
 node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --template ~/offline/clade/vendor/snippets/pi-offload/templates/fix-verify-loop.template.md \
   --var <key>=<value> ...（帶 grok 留下的 remaining_failures） \
   --var max_iterations=none \
-  --label commit-0c-<slug>-astra --model astra --effort medium \
+  --label commit-0c-<slug>-sol --model sol --effort high \
   --workspace-access mutation \
   --route routing-table --tier-basis table-row --table-row commit-0c-fix-verify-escalate \
   --retry-of commit-0c-<grok-slug>
 ```
 
-（升級列已列明 `astra medium`。`--retry-of` 指 grok 那一發，**NEVER** 改用 `<slug>2` 表達重試。
+（升級列已列明 `sol high`。`--retry-of` 指 grok 那一發，**NEVER** 改用 `<slug>2` 表達重試。
 `max_iterations=none` 只受 template「同一 error 連續 3 輪沒收斂」約束。）
 
 （背景跑、stdout 單一 JSON；exit 0=全綠 / 2=修不到全綠（業務 fail）/ 3=機械故障 / 4=quota。
-exit 3 → 機械故障，主線 fallback foreground 自跑 fix loop，**不分 grok / astra**；
-exit 4 在 grok 第一手 → 逐字採用dispatcher payload，跳過`grok-cursor`並走上方Astra 升級列，**NEVER**當成機械故障；
-exit 4 在 astra 升級列 → 照 payload 由 Opus 主線接手 fix loop；
-exit 2 在 grok 第一手 → 走升級列；exit 2 在 astra 升級列 → 失敗摘要回主線判斷，**不**重派同一 brief。）
+exit 3 → 機械故障，依 dispatcher/watch protocol 處理，**不**冒充品質失敗；
+exit 4 在 grok 第一手 → 逐字採用 dispatcher payload，跳過 `grok-cursor` 並走上方 Sol 升級列，**NEVER**當成機械故障；
+exit 4 在 Sol 升級列 → 明示 provider/quota blocker，**NEVER** 改派 Astra implementation、Claude-hosted GPT 或 native `cx`；
+exit 2 在 grok 第一手 → 走升級列；exit 2 在 Sol 升級列 → 依 payload 走 Astra `implementation-decision` readonly，patch 回 Sol，**不**讓 Astra 修 code。）
 
-**4.8-aware 範圍明寫**：**每一輪** 0-C 失敗都先做 dispatch 評估（含匯合修正 / 大改動回扣後重跑 0-C 又紅的輪次），不是只有第一輪。
+修改範圍與前置授權持續適用；未知或活躍他人 WIP 不因修 gate 就可覆寫。
 
-**例外（主線直修，不派）**：
+**每一輪需要修復時先判執行者**：單檔 ≤5 行的 typo／import 級修正、或根因涉及本次設計判斷時由主線處理；其他可獨立驗證的機械修復依目前已核准 routing／使用者模型指定選 worker。可用本 runtime 的原生載體，不要求所有主線先換到 Pi。沒有可用 worker 或機械 transport 故障時主線接手，品質標準不變；這不構成 0-A 獨立 reviewer 的替代。
 
-1. trivial 單點修 — 單檔 ≤5 行、typo / import 級
-2. 失敗根因明顯涉及本次 commit 的設計判斷（修法本身要決策）— pi 只能猜，主線自修
+Worker brief 帶具體 failures、命令、允許檔案、禁止修改的主線範圍與回報格式。第一位 worker 最多兩輪 check→fix；仍 fail／uncertain，或主線複跑仍紅時，升級有能力處理剩餘根因的合格執行者，不重派同一 brief。相同 error 連續三輪無收斂時停止盲修、回到根因與 scope 決策。
 
-**pi 完工後主線 MUST**：
+使用 Pi CLI 的既有載體時，沿當前 `commit-0c-fix-verify`／`commit-0c-fix-verify-escalate` row、`--route`／`--tier-basis`／`--table-row` 與 `--retry-of` 契約。Exit 2 是業務未收斂、3 是機械故障、4 是 quota；按實際結果判定，不能拿 quota 當故障來繞過 candidate admission。其他 native adapter 回報等價的 pass／finding／infrastructure-error／quota 狀態，不捏造 Pi exit code。
 
-1. 重跑 `pnpm check`（+ 條件觸發的 `pnpm test` / `pnpm run doctor`）確認全綠 — **不信 pi 自報**
-2. `git diff` 確認 pi 改動 scope 只在修錯相關檔；scope 外 substantive change → revert 該段改動 + 主線自修（注意 working tree 含本次 commit 的 uncommitted 變更，**NEVER** `git checkout HEAD -- <file>` 整檔回退 — 會把本次 commit 的原始變更一起砍掉；用 Edit 撤掉 pi 引入的段落即可）
+**Worker 完工後主線 MUST**：
 
-**禁止**用 `npx vitest run` / `npx eslint` 等個別工具替代 `pnpm check` / `pnpm test` / `pnpm run doctor`。若 `.claude/worktrees/` 干擾結果，先清理再跑。
+1. 重新執行 `pnpm check`、明確 test command 與 `pnpm run doctor`，取得真實 exit／完整結果；worker 自報不算通過。
+2. 比對開始前的 diff／內容與 worker 實際修改，確認 scope。需要撤掉 worker 越界變更時先停止仍在寫入的 worker，再只撤其新增的段落；不能整檔還原 HEAD 丟掉原本 WIP，也不能覆寫其他人的並行修改。
+
+**禁止**用 `npx vitest run` / `npx eslint` 等個別工具替代 `pnpm check` / `pnpm test` / `pnpm run doctor`。若工作樹路徑干擾結果，先按所有權及 lifecycle 契約處理，再跑正式命令；不能藉修 gate 任意清理其他工作。
 
 通過後輸出 `✅ 0-C 通過（format/lint/typecheck/test/doctor 全綠）`。
 
@@ -1146,7 +931,7 @@ structured-errors、audit、error-handling 五類 check）。本次 diff 動到 
      與 ~/offline/clade/vendor/snippets/evlog-map/README.md
 ```
 
-隨後 **MUST** 釋放 commit-lock（`CLAUDE_PROJECT_DIR="$COMMIT_TARGET_ROOT" node "$COMMIT_LOCK_SCRIPT" release`）並 STOP。**NEVER** 跳過此 gate 繼續跑後續步驟。
+隨後 **MUST** 釋放 commit-lock（依 [runtime-lifecycle.md](runtime-lifecycle.md)「背景工作與退出」，帶原 tuple 與 owner token）並 STOP。**NEVER** 跳過此 gate 繼續跑後續步驟。
 
 ### Step 3 — 跑 gate（預設 strict）
 

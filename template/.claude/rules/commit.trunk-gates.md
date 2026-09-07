@@ -10,6 +10,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # Commit — Trunk Gates（[[commit]] detail）
 
@@ -66,13 +67,13 @@ Local edits will be reverted by the next sync.
 
 ## 人工檢查 Gate（main / master 限定，**hard rule**）
 
-當前 branch 為 `main` / `master` 且本次 `/commit` 觸及的 spectra change（`openspec/changes/<name>/**` 路徑，archive 子目錄除外）滿足下列**兩條件同時成立**時，未 ready 時 MUST 擋下 commit——但不是直接停下，走 /commit skill Step 0-MR 的 auto-triage：先推進 Claude 可自行處理項，再以 `check-review-readiness.ts` gate 判定放行與否：
+當前 branch 為 `main` / `master` 且本次 `/commit` 觸及的 spectra change（`openspec/changes/<name>/**` 路徑，archive 子目錄除外）滿足下列**兩條件同時成立**時，未 ready 時 MUST 擋下 commit——但不是直接停下，走 /commit skill Step 0-MR 的 auto-triage：先推進主線可自行處理項，再以 `check-review-readiness.ts` gate 判定放行與否：
 
 0. **該 change 的實作 code 已 land 進 main** → 對應 worktree 已 merge-back（`wt-helper list --json` 的 `mergedToMain:true`）或已 cleanup。仍有未 land 的 worktree 帶著該 change 的改動時，本 gate 對該 change 判 **SKIP**
 1. 該 change 的 `tasks.md` **非** `## 人工檢查` 段落含任一 `- [x]` → 已開始 / 完成實作
 2. 該 change 的 `## 人工檢查` 段落含任一 `- [ ]` → 人工檢查未完成
 
-只滿足其一不擋（純 propose 未動工、或實作完且人工檢查全綠，都允許 commit）。判定流程、fail-fast 位置見 `.claude/skills/commit/SKILL.md` Step 0-MR。
+只滿足其一不擋（純 propose 未動工、或實作完且人工檢查全綠，都允許 commit）。判定流程、fail-fast 位置見當前 runtime 已投影的 commit skill Step 0-MR；`.claude/skills/commit/SKILL.md` 是 Claude 的交付位置。
 
 **擋的粒度是 pathspec 交集，不是 repo 級 freeze**（TD-897）：一條 change 判 BLOCK，被 withheld 的是落在 `openspec/changes/<X>/**` 的路徑；同一次 `/commit` 其餘 group 的 `git commit --only -- <pathspec>` 照常落地。pathspec 只接受具名檔或 change 目錄以下的路徑——祖先目錄（`.`、`openspec`、`openspec/changes`）、glob、`:` magic、絕對路徑一律視為交集擋下，空 pathspec 恆擋。判定式與理由在 `plugins/hub-core/skills/commit/gates.md` § 0-MR「判定粒度」；其他 group 放行 **NEVER** 讀成該 change 已驗收，auto-triage 與 archive gate 一條沒少。
 

@@ -9,6 +9,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # Verify Gate Chain（自主迴圈驗證標準）
 
@@ -18,22 +19,24 @@ Local edits will be reverted by the next sync.
 
 Gate chain 是一組**有序、確定性、機器可判定**的驗證指令。每條指令的 exit code 是唯一判定依據：exit 0 = PASS，non-zero = FAIL。
 
-**每個 consumer MUST 在 `.claude/rules/local/verify-commands.md` 定義自己的 gate chain。** clade 定義標準（本規約），consumer 定義內容（各自的 test runner、port、health endpoint）。
+**每個 consumer MUST 在自己的 local rule source 定義 gate chain。** 新來源位於 `.clade/rules/verify-commands.md`，並宣告經審閱的 runtime audience；既有 `.claude/rules/local/verify-commands.md` 在明確 adoption 前仍保留原內容與所有權。clade 定義標準（本規約），consumer 定義內容（各自的 test runner、port、health endpoint）；adoption 走 [[local-rule-override]] 的來源 hash 與投影所有權檢查。
 
 ### Gate chain 層級
 
 | 層級 | 指令類型 | 範例 | 何時跑 |
 | --- | --- | --- | --- |
-| L0 — 格式 | lint + fmt | `vp check` | 每次 Edit/Write 後（PostToolUse hook 已覆蓋） |
+| L0 — 格式 | lint + fmt | `vp check` | 每次修改後；具名 hook 的執行與成功證據可承載該次檢查 |
 | L1 — 型別 | typecheck | `pnpm typecheck` | 每個 phase 完成後 |
 | L2 — 單元 | test suite | `pnpm test --run` | 每個 phase 完成後 |
 | L3 — 整合 | smoke / health | `curl -sf http://localhost:<port>/api/health` | change 全部 phase 完成後 |
 
 **PASS = L0–L2 全 exit 0。** L3 為 SHOULD（dev server 未起時 skip，不算 FAIL）。
 
+Claude Code／Codex／Cursor 每個產品入口分別確認具名驗證 handler 是否安裝、啟用並實際執行。只有 generic hook adapter 或設定檔時，修改後顯式執行 consumer 定義的 L0；phase 結束仍執行完整 L0–L2。沒有命令執行能力或拿不到 exit/result 證據時，該 gate 保持未驗證。
+
 ### Consumer verify-commands.md 範本
 
-Consumer 端 `.claude/rules/local/verify-commands.md` MUST 至少定義 L0–L2：
+Consumer 的 verify-commands source MUST 至少定義 L0–L2：
 
 ```markdown
 # Verify Commands
@@ -46,13 +49,15 @@ Consumer 端 `.claude/rules/local/verify-commands.md` MUST 至少定義 L0–L2�
 - L3: `curl -sf http://localhost:3040/api/health` (optional, skip if dev server not running)
 ```
 
-clade 不散播此檔——各 consumer 自管。`vendor/snippets/verify-gate-chain/` 提供 scaffold 模板。
+此檔的來源內容由各 consumer 自管，runtime adapter 依其 audience 產生各端投影；`vendor/snippets/verify-gate-chain/` 提供 scaffold 模板。修訂 source 後重新投影，三端沿用同一組驗證命令。
 
 ---
 
 ## Iterate-until-green 迴圈語義
 
 agent 執行修改後跑 gate chain，FAIL 時**解析 error output → 修正 → 重跑 gate chain**，直到全 PASS 或達到 `max_iterations`。
+
+每次重試從 L0 開始，依序跑 L0 → L1 → L2 並保留同一輪的結果；timeout 或缺結果的輪次不完整，不能把該輪的 L0 綠燈與下一輪的 L1／L2 拼成完整 PASS。只有 formatting 的 phase 也使用這條完成判準。
 
 ### MUST 宣告迴圈參數
 
@@ -111,7 +116,7 @@ Gate chain FAIL 時，agent MUST：
 
 | 機制 | 本規約的角色 |
 | --- | --- |
-| PostToolUse typecheck hook | L0 即時回饋。本規約的 gate chain 是 phase 完成後的**完整**驗證 |
+| 已觀測執行的 PostToolUse／runtime 驗證 hook | 提供它實際執行之命令的即時回饋。本規約的 gate chain 是 phase 完成後的**完整**驗證 |
 | `vp check` / publish gate | publish gate 是最終發布門。本規約在**開發過程中**提供相同等級的驗證 |
 | spectra-apply Step 8 Final check | Step 8 確認 `state: "all_done"`。本規約在**每個 phase 結束後**就跑，不等到最後 |
 | [[checker-contract]] | checker-contract 定義 checker 的 output 格式。本規約定義**何時跑**和**跑完怎麼辦** |
