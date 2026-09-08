@@ -192,11 +192,11 @@ Helper 掃描 priority：**repo root canonical → repo root legacy → repo roo
 | <consumer-i> | ❌ MISSING (nuxt-auth-utils + libsql-drizzle, no cookbook template) | ✅ |
 | co-purchase | ❌ MISSING (同上) | ✅ |
 
-**真實 adoption 4/6 + 1 monorepo misdetected + 2 真缺**（不是 1/6）。修法源頭 clade 2026-05-24 land：audit script + helper module + dispatcher fix（`scripts/audit-dev-login-adoption.ts` + `vendor/snippets/dev-auth/lib/detect-dev-login-route.ts` + `vendor/scripts/pi-dispatch-screenshot-verify.ts` 對齊）。下次 agent / 主線撞「is dev-login present？」即走上述 detection 路徑，**NEVER** 再 lazy grep。
+**真實 adoption 4/6 + 1 monorepo misdetected + 2 真缺**（不是 1/6）。修法源頭 clade 2026-05-24 land：audit script + helper module（`scripts/audit-dev-login-adoption.ts` + `vendor/snippets/dev-auth/lib/detect-dev-login-route.ts`）。下次 agent / 主線撞「is dev-login present？」即走上述 detection 路徑，**NEVER** 再 lazy grep。
 
 ##### Scaffold 行為
 
-Detection 確認 missing **且** consumer 對應 auth-module 有 cookbook template 時，agent **MUST** scaffold（per `agent-routing.md` Routing Table § Dev/test admin session cookie 取得 row）— **NEVER** 要求 user 走 Google OAuth + DevTools 複製 cookie。
+Detection 確認 missing **且** consumer 對應 auth-module 有 cookbook template 時，agent **MUST** scaffold（依本節的 auth-module 與 cookbook 判定）— **NEVER** 要求 user 走 Google OAuth + DevTools 複製 cookie。
 
 Cookbook template 不存在的情境（如 nuxt-auth-utils + libsql-drizzle，當前 cookbook 只有 supabase-flavored template）：**relay 給對應 consumer 的 session 決定 opt-in**（per `clade-role-and-todo-discipline.md`
 § Consumer 工作命中時 MUST relay），**不**機械 scaffold。**NEVER** 改用「登記到 `docs/tech-debt.md`

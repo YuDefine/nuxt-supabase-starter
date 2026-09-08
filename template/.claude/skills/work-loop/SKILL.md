@@ -378,7 +378,7 @@ predicate）、代號 NEVER 回收再用的理由、以及 runner child 為什�
 三條在 loop 路徑上最常滑掉的：
 
 - **主線自己動手也要過 Routing Table**。mechanical fan-out 與 read-heavy 兩列的觸發條件**不限於委派**：
-  準備自己跑 ≥3 條唯讀指令、或自己讀 ≥5 個檔／>500 行長文件，就已經命中 → 派 `--model gemini --effort low`。
+  準備自己跑 ≥3 條唯讀指令、或自己讀 ≥5 個檔／>500 行長文件，就已經命中 → 派 `--model gemini --effort high`。
   **NEVER** 因「順手跑掉比較快」略過查表
 - **原判 Claude `sonnet`／`haiku` 的委派 MUST 先判 pi 可用性**，可用就轉派 `--model gemini`
   （`sonnet` → `--effort high`、`haiku` → `--effort low`），准入判準見該 §

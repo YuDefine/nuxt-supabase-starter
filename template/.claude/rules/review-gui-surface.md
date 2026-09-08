@@ -39,7 +39,7 @@ Local edits will be reverted by the next sync.
 | `/commit` 0-MR gate block | `plugins/hub-core/skills/commit/SKILL.md` Step 0-MR | block 後 **MUST** auto-triage pending items（MUST 9）；active runtime 可處理的先自行推進，只有 `bucket=ready` 才引導 user 到 review-gui |
 | `/handoff` Mode B 2B.0 | `plugins/hub-core/skills/handoff/SKILL.md` Step 2B.0/2B.1.7 | 推薦 user 跑 review:ui **前** MUST 先跑 `review-gui.ts --scan` 寫入 HANDOFF.md |
 | `screenshot-review` verify mode | 主線派 reviewed visual-evidence worker（per [[agent-routing]]） | item 含 compound visual state → 分成 scoped sub-items 或 multi-screenshot annotation |
-| `verified-ui` evidence collection（spectra-apply Step 8a） | `vendor/snippets/verify-channels/ui-final-state-brief*.template.md` | compound state evidence 必拆 / 必標多 screenshot |
+| `verified-ui` evidence collection | `vendor/snippets/verify-channels/ui-final-state-brief*.template.md` | compound state evidence 必拆 / 必標多 screenshot |
 | `screenshot-review` subagent 的 CLI 呼叫 | agent body 內的 runtime-approved browser CLI | invoke 前 verify CLI contract（per [[agent-self-verification]] § MUST 4） |
 | review-gui detail page 互動 | `vendor/scripts/review-gui.ts` server-side handlers | impl 完成率 < threshold → manual review block readonly + amber banner（已 implemented v1.4.30+） |
 
@@ -74,7 +74,7 @@ Local edits will be reverted by the next sync.
 
 8. **Post-work scan 回報 MUST 逐條標 bucket（hard rule）**：完成 evidence collection / annotation 修正 / issue triage 等批次工作後向 user 回報 scan 結果時，**MUST** 對每條 change 個別標示實際 `bucket`。只有 `bucket=ready` 的 change 才能寫「可以在 review-gui 驗收」或列 review-gui URL 引導 user 開始檢查。非 `ready` 的 change **MUST** 如實報告實際 bucket + 卡住原因（例：「`readyForEvidence` — evidence 已收齊但有 2 條 `（issue:）` 待 user 重評」），**NEVER** 混入「可以驗收」的清單。反模式：3 條 change 中 1 條 `ready`、2 條 `readyForEvidence`，結尾寫「三條都可以在 review-gui 做最後驗收」— 這直接誤導 user。
 
-9. **引導 user 到 review-gui 前 MUST 跑 mechanical gate + 自行推進到 ready（hard rule）**：**任何**要把 user 導向 review-gui 的場景（`/commit` 0-MR block、handoff、spectra-apply Step 8b、session 結尾回報），session owner **MUST** 先跑 mechanical gate script **取得 exit 0** 才能引導：
+9. **引導 user 到 review-gui 前 MUST 跑 mechanical gate + 自行推進到 ready（hard rule）**：**任何**要把 user 導向 review-gui 的場景（`/commit` 0-MR block、handoff、實作後驗收、session 結尾回報），session owner **MUST** 先跑 mechanical gate script **取得 exit 0** 才能引導：
 
    ```bash
    node ~/offline/clade/vendor/scripts/check-review-readiness.ts \
@@ -324,7 +324,7 @@ node ~/offline/clade/vendor/scripts/lib/evidence-store.ts \
 - [[pitfall-verified-ui-annotation-format-drift]] — plural key + sub-item ID mismatch
 - [[pitfall-deferred-vs-issue-annotation-contract-conflict-review-gui]] — `(deferred:)` vs `(issue:)` 辭典衝突
 
-## 截圖 evidence 一律走 reviewed visual-evidence worker（MUST）
+## 截圖 evidence 與符合性判定（MUST）
 
 **Iron Law：`[verify:ui]` / `[review:ui]` 的 evidence 一律由 〔`screenshot-review-verify`〕 worker
 收（Pi `--model gemini --effort high`），主線只消費它回的 JSON 摘要。主線 `Read` 截圖是例外路徑，只在下表命中時開放。**
@@ -338,15 +338,12 @@ node ~/offline/clade/vendor/scripts/lib/evidence-store.ts \
 
 | 可觀察 predicate | MUST |
 | --- | --- |
-| 要對 `[verify:ui]` / `[review:ui]` item 收 evidence | 派 Pi `--table-row screenshot-review-verify`（`--model gemini --effort high`），主線只消費 JSON 摘要 |
-| 已經拿到 worker 的 JSON 且某 item 判 FAIL / UNCERTAIN | 才准 `Read` **那一張**。**NEVER** 為了「順便看一下其他張」連讀 |
-| 想確認一批截圖是否都拍到東西 | 跑 `audit-screenshot-quality.ts` 或 emptiness preflight，**NEVER** 逐張 Read 目視 |
+| 收集 `[verify:ui]`／`[review:ui]` evidence | `screenshot-review-verify`，Gemini 3.8 Flash high，依 evidence contract 收集與回報 |
+| 判定截圖是否符合 item | `screenshot-match-analysis`，Opus 5（effort: medium）；逐張讀指定圖片，不能只憑收集摘要給 PASS |
+| 主持者收回符合性判定結果 | 消費結構化結果；FAIL／UNCERTAIN 時可讀該張圖診斷，不代簽 gate |
+| 確認截圖是否空白 | 既有 `audit-screenshot-quality.ts` 或 worker emptiness preflight；結果不代替符合性 gate |
 
-### 為什麼第一手是 Pi `--model gemini --effort high`（2026-09-08）
-
-2026-08-22 曾把本列收回 Claude subagent，理由是 grok 兩條交付路徑（無沙箱 xai／需 RFC1918 的 cursor seat）代價不對稱。2026-09-08 Charles 改回 **Pi `--model gemini --effort high`**：機械取證走 Gemini；Design Review／視覺判讀不走本列。**NEVER** 把這次改回讀成「恢復 subagent 路由器」——[[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]] 仍禁止 wrapper 再轉派。
-
-**NEVER** 恢復任何「subagent 收到 brief 後再轉派給別的 carrier」的形狀——那正是踩坑的形狀。
+**NEVER** 讓收集 worker 再轉派或代簽判定；Opus 5 無法執行時沿 `screenshot-match-analysis` 原列交 GPT-5.6 Sol（effort: high）；圖片／browser 或其餘指定模型不可用時保留未完成項。Pi Cursor pool 的 mutation 與 egress 邊界維持，不為截圖擴權。完整派工方法見 `review-screenshot` skill。
 
 ### 實測（2026-08-06 更正：截圖成本遠小於本節初版所稱）
 

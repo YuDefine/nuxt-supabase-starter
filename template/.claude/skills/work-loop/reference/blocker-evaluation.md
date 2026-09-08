@@ -51,7 +51,7 @@ Local edits will be reverted by the next sync.
 ### 視覺 blocker 的 capability probe（unattended 一樣要跑）
 
 「需要看畫面」**不是**一個 blocker 類型，它是一個**尚未量測的假設**。fleet 已經有把它自動化的整條
-路徑（dev-login route → dev server → `screenshot-review` Claude subagent），所以在跑完下面三條之前
+路徑（dev-login route → dev server → Gemini 3.8 Flash screenshot worker），所以在跑完下面三條之前
 **NEVER** 把這種 item 判成 `blocked-attended-only`、**NEVER** 寫「需 attended 視覺工作階段」進
 HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
 
@@ -61,16 +61,16 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
 | 2 | dev server 起得來 | 依 [[proactive-skills.dev-server-spawn]] 起，拿到 `http://localhost:<port>` | 起不來 → 記實際 stderr 當 blocker，那通常是環境債不是視覺債 |
 | 3 | **items 組得出來** | 對每個 item 都要有 `id` / `known_url` / `expected_dom` / `screenshot_path`，assertion-bearing 的還要 `ready_signal` | 組不出來 → item 描述沒有機械可判的斷言，那是 **item 品質缺口**（回去補 tasks.md 的斷言），不是視覺 blocker |
 
-三條全綠 → 照 [[review-gui-surface]] § 收 evidence 派 Pi `--table-row screenshot-review-verify`
-（`--model gemini --effort high`），主線只消費它回的 JSON 摘要，
+三條全綠 → 照 [[review-gui-surface]] § 收 evidence 派 Gemini 3.8 Flash screenshot worker
+（`review-screenshot` skill，Pi `screenshot-review-verify`，`gemini high`），主線只消費它回的 JSON 摘要，
 再跑 `node ~/offline/clade/vendor/scripts/verify-ui-receipt.ts --change <name> --items '<id,id>' --consumer-path .`
-落 receipt。**這條路徑是無人值守的機械取證**——第一手是 Pi `--model gemini --effort high`，不是 Claude subagent 路由器。
+落 receipt；項目符合性再交 Opus 5（effort: medium）。實際 dispatch 還要核對 Gemini provider 與 Opus 載體能否完成；模型／配額／工具失敗以真實輸出作 blocker，不能由 binary 存在推論可用。
 
 任一條紅 → packaging 的 blocker 欄 **MUST 逐字寫那一條 probe 的失敗輸出**（哪一條、跑了什麼、回了什麼）。
 **NEVER** 寫「需 attended」這種形容詞——形容詞每一輪都會被重新「發現」一次，而 predicate 有解除條件、
 可以進 [blocker-ledger.md](blocker-ledger.md) 查表，下一輪不必重判。
 
-#### 2026-08-22 端到端實測（<consumer-i>）——為什麼現在只剩三條
+#### 2026-08-22 端到端實測（<consumer-i>，歷史載體）
 
 首版有 probe 1–3（第 3 條量 dispatcher binary），2026-08-22 在 <consumer-i>
 （`shape: canonical`、`emailRequired: false`、`stackHint: libsql-drizzle`）跑完整鏈路：
@@ -81,7 +81,7 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
 - **當時的擋點在 seat**：`xai/grok-4.6` 回 `403 "You have run out of credits or need a Grok
   subscription."`，整趟 9.5 秒死掉。那一輪為此加了「seat 進得去」的 probe。
 - **同日該 probe 連同整個 seat 一起消失**：Charles 拍板本 channel 收回成 Claude-only
-  （理由見 [[review-gui-surface]] § 為什麼只准 Claude subagent）。沒有第三方 seat，就沒有
+  （此為當時決議，2026-09-08 改由 Gemini 取證、Opus 判定）。沒有第三方 seat，就沒有
   seat 進不進得去這一題，也沒有配額降級鏈這一題。
 
 **留下這段紀錄的用途**：`command -v <binary>` 這種 probe 量的是**載具在不在**，不是

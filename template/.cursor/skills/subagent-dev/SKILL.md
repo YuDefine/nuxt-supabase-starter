@@ -65,7 +65,7 @@ Dispatch Task 1 前掃一次 plan：task 間互相矛盾、task 與 Global Const
 
 | 角色 | 檔位 | 判準 |
 | --- | --- | --- |
-| Implementer（brief 內含完整 code，純轉錄＋測試） | Pi `--model gemini --effort low` | 1-2 檔、plan 已寫死 code；既有 delegate-sub 轉派 |
+| Implementer（brief 內含完整 code，純轉錄＋測試） | Pi `--model gemini --effort high` | 1-2 檔、plan 已寫死 code；既有 delegate-sub 轉派 |
 | Implementer（一般非 UI prose spec、多檔整合） | Pi `--model luna --effort medium --table-row non-ui-implementation` | ordinary implementation |
 | Implementer（複雜 schema/API/backend、架構落地、repair escalation） | Pi `--model sol --effort high --table-row non-ui-implementation-escalate` | complex non-UI implementation；Astra 不寫 patch |
 | Implementation decision（只有診斷／決策） | Pi `--model astra --effort medium --table-row implementation-decision --workspace-access readonly` | decision output only；patch 回 Sol implementer |

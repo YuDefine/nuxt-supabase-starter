@@ -27,13 +27,13 @@ Local edits will be reverted by the next sync.
 
 ## 既有資格與新組合
 
-最新 main 的 code-review 基準是 GPT-6-astra via Pi（effort: medium）（一般與深度）與 Claude Fable 5.1（effort: max）（裁決及一般 review fallback）。原 Sol low 對應 Astra low，其餘原 Sol effort 對應 Astra medium。Astra 目前沒有已驗證的 Cursor model，不走 Cursor 換池。Astra 配額不足時，只有 fresh Fable 仍通過下表模型差異與資格判定才可接手；不符合或不可用就保留 gate 未達成。
+最新 main 的 code-review 基準是 GPT-6-astra via Pi（effort: medium）（一般與深度）與 Claude Fable 5.1（effort: medium）（一般 review fallback）；跨模型裁決依各階段契約。原 Sol low 對應 Astra low，其餘原 Sol effort 對應 Astra medium。Astra 目前沒有已驗證的 Cursor model，不走 Cursor 換池。Astra 配額不足時，只有 fresh Fable 仍通過下表模型差異與資格判定才可接手；不符合或不可用就保留 gate 未達成。
 
 這是已使用組合的基準，不指定哪個 runtime 必須當主線，也不保證當前 catalog 可用。實際派遣仍逐欄通過上表；例如 maker 已屬 GPT 系列，另一個 GPT 席位不因名字不同就自動達成跨模型。
 
 新模型／載體採同一組有已知答案的案例比較：邏輯與安全缺陷召回、誤報反證、跨檔影響、修法 regression、完整 verdict／semantic coverage、唯讀及 snapshot 約束。保留逐例原始輸入輸出、版本與實際工具事件，明示哪些是合成案例、哪些是真實產品觀察。資格變更由對照證據與明確採用決定承載；只有可啟動、一次 PASS 或純文字壓力測試不足以改門檻。
 
-UI reviewer 另須能實際取得及檢視指定圖片、對照 item 與互動證據。既有 `screenshot-review` 的視覺品質資格不會隨檔案投影自動轉移到另一載體。沒有合格且可用的組合時，0-B 保持未完成，不以一般 code reviewer、文字摘要或自行宣稱「看過」補位。
+UI Design Review 與截圖符合性 reviewer 使用 fresh Claude Opus 5（effort: medium），須實際取得及檢視指定圖片、對照 item 與互動證據。Opus 5 無法執行時由對應 GPT-5.6 Sol（effort: high）fallback 接手，仍逐欄符合上表。Screenshot evidence 由另一個 Gemini 3.8 Flash high worker 收集，收集 PASS 不代替 0-B 判定。沒有合格且可用的組合時，0-B 保持未完成，不以一般 code reviewer、文字摘要或自行宣稱「看過」補位。
 
 ## 執行與缺能力
 

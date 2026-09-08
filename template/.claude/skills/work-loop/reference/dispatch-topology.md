@@ -82,8 +82,8 @@ Archive 在各自來源完成；main 組統一協調就緒登記與批次提交�
 
 | 可觀察 predicate | 動作 |
 | --- | --- |
-| 清單 ≥4 個 source file（scan JSON 與 state 檔不計；同檔多段算 1 檔） | **先派 pi pre-scan**；接著依下方 extraction / reconciliation predicate 選 `read-heavy-scan` 或 `exploration-prescan`，主線只消費 report 做判讀 |
-| 本輪 3i + 3j 合計 ≥4 條 | **批次派一個 pre-scan** 收齊全部 blocker / 決策描述事實表（見 [blocker-evaluation.md](blocker-evaluation.md) § 批次蒐證）；涉及 blocker/status 對帳時固定走 `exploration-prescan` |
+| 清單 ≥4 個 source file（scan JSON 與 state 檔不計；同檔多段算 1 檔） | **先派 pi pre-scan**；接著依下方 extraction / reconciliation predicate 選 `read-heavy-scan` 或 `implementation-decision`，主線只消費 report 做判讀 |
+| 本輪 3i + 3j 合計 ≥4 條 | **批次派一個 pre-scan** 收齊全部 blocker / 決策描述事實表（見 [blocker-evaluation.md](blocker-evaluation.md) § 批次蒐證）；涉及 blocker/status 對帳時固定走 `implementation-decision` |
 | 兩者皆未命中 | 主線直接定點 Read——≤3 檔本來就是本組的正常形狀，**NEVER** 為湊派工而擴清單 |
 
 本判定實作 [[agent-routing]] § 必禁事項「**NEVER** 在 exploration / research 型 session 自己逐檔 Read + scan 多個 source 超過 3 個 source file」——本組過去把 investigation 整組寫死在主線，結構上恆違反該條。
@@ -96,14 +96,14 @@ Archive 在各自來源完成；main 組統一協調就緒登記與批次提交�
 
 | 可觀察 predicate | Routing Table row |
 | --- | --- |
-| 下列五項**全部**成立：source list 已封閉並逐條列出；回傳欄位固定；每個 fact 都要求 `source path + line/JSON pointer + raw value`；不需 identity matching、status 推斷或 evidence relevance 判斷；來源矛盾時只回 `needs-reconciliation`、不自行裁決 | `read-heavy-scan` → Luna low |
-| 上列任一不成立，或任一命中：未知路徑探索、來源矛盾、跨來源 identity matching、partial completion／status 推斷、evidence relevance 判斷、git/history/state 對帳 | `exploration-prescan` → Grok low |
+| 下列五項**全部**成立：source list 已封閉並逐條列出；回傳欄位固定；每個 fact 都要求 `source path + line/JSON pointer + raw value`；不需 identity matching、status 推斷或 evidence relevance 判斷；來源矛盾時只回 `needs-reconciliation`、不自行裁決 | `read-heavy-scan` → Gemini 3.8 Flash high |
+| 上列任一不成立，或任一命中：未知路徑探索、來源矛盾、跨來源 identity matching、partial completion／status 推斷、evidence relevance 判斷、git/history/state 對帳 | `implementation-decision` → GPT-6 Astra medium |
 
-Luna report 若回 `needs-reconciliation`，主線用同一份 sources + facts 建 Grok brief，帶 `--retry-of <luna-label>` 派 `exploration-prescan`；**NEVER** 要 Luna 自行裁決，也 NEVER 以提高 Luna effort 取代 Grok。
+Gemini 3.8 Flash report 若回 `needs-reconciliation`，主線以同一份 sources + facts 建立 `implementation-decision` brief，交 GPT-6 Astra（effort: medium）判讀；保留原工作的來源與結果關聯。
 
 ### pre-scan 的 dispatch 形狀
 
-model / effort / template 的 SoT：[[agent-routing]] § Routing Table 對應列 + cookbook `~/offline/clade/vendor/snippets/pi-offload/README.md`。brief 的 `task` **MUST** 逐條列出來源清單與要回的欄位（檔名 / 行號 / 現值 / 判準命中與否）；`allowed_paths` 填「（只讀，無寫入授權）」。每一筆 dispatch 都帶 `--origin work-loop --origin-id wl-r<本輪 round>`；`read-heavy-scan` 另帶 `--cohort fact-extraction`，`exploration-prescan` 另帶 `--cohort reconciliation`。runner child 已由 env 注入 origin pair，CLI 仍顯式帶以便 attended 與 dry-run 形狀一致。
+model / effort / template 的 SoT：[[agent-routing]] § Routing Table 對應列 + cookbook `~/offline/clade/vendor/snippets/pi-offload/README.md`。brief 的 `task` **MUST** 逐條列出來源清單與要回的欄位（檔名 / 行號 / 現值 / 判準命中與否）；`allowed_paths` 填「（只讀，無寫入授權）」。每一筆 dispatch 都帶 `--origin work-loop --origin-id wl-r<本輪 round>`；`read-heavy-scan` 另帶 `--cohort fact-extraction`，`implementation-decision` 另帶 `--cohort reconciliation`。runner child 已由 env 注入 origin pair，CLI 仍顯式帶以便 attended 與 dry-run 形狀一致。
 
 執行形狀依 process 身分 first-match：
 
