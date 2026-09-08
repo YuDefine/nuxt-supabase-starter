@@ -136,6 +136,12 @@ export const CLADE_VENDOR_EXCLUDES = [
 export const CLADE_MIRROR_EXCLUDES = [
   'plugins/hub-capabilities-aixbdd/**',
   'plugins/hub-capabilities-specformula/skills/**',
+  // `reference/**` 是 mirror.extraDirs 的落點（specformula-docs 的 Gherkin/ISA .mdx）。
+  // **NEVER 把這一列併回上面那列的 `skills/**` 去猜一個共同前綴**：plugin 根底下還有
+  // clade 自己寫的 README / PIN.json，整個 plugin 排除掉會連它們一起放生。
+  // 2026-09-08 實證：本目錄第一次落地當天就被一次 `vp fmt` 改寫（markdown 表格對齊 ＋
+  // frontmatter 後補空行），22 個檔全數 drift，`sync-upstream-mirrors --check` 從 0 變 2。
+  'plugins/hub-capabilities-specformula/reference/**',
 ]
 
 /**

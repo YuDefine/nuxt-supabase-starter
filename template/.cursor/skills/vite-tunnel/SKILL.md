@@ -25,6 +25,7 @@ metadata:
 - 單機開發 + agent 並行驗證 → 用 `vendor/snippets/dev-auth/` cookbook 繞 OAuth（更快、不依賴外部網路）
 - 不需固定 callback 的臨時 webhook 測試 → `cloudflared tunnel --url http://localhost:<實際-port>` 拿 quick tunnel；需要預先註冊固定 URL 時使用下方 named tunnel
 - 多 worktree 並行 dev server → dev-auth + cookie namespace 比 tunnel 簡單
+- 給產品加**公開** hostname（例 `cpms.fcoem.tw`）到 **remotely-managed** tunnel（`cloudflared tunnel run --token`）→ **不是本 skill**。走 `~/offline/clade/vendor/snippets/cloudflare-tunnel-hostname/`（API／CLI；dashboard 404 不是停工理由）
 
 ## Step 1: 偵測專案部署 target
 

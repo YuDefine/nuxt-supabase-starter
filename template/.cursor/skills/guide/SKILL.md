@@ -50,7 +50,7 @@ skill 由 consumer manifest 的 `modules` 決定裝哪些（canonical `.clade/ma
 ## On-ramps（從症狀進入）
 
 - **遇到 bug / 異常行為** → 先查根因（`/wt` 隔離後調查）；動到規格才回 `/specify`〔aixbdd〕
-- **要看 UI 畫面 / 截圖驗證** → `/review-screenshot`（統一截圖入口；目前只有 Claude 有經驗證的 screenshot-review 載體，見該 skill 的 audience 宣告）
+- **要看 UI 畫面 / 截圖驗證** → `/review-screenshot`（統一截圖入口；第一手是 Pi `--model gemini --effort high`，見該 skill）
 - **專案還沒有可重跑的 app control／feature map** → `/verification-create`（建立 consumer-owned `verify-<app>` skill）
 - **既有 verification skill／feature map 要對帳 source 與 live behavior** → `/verification-maintain`（`clean` 是零 branch／零 commit／零 PR 的成功結果）
 - **要動 code 而還在 main working tree** → `/wt`（開 worktree 隔離；`/wt A: ... B: ...` 可並行多條 task）

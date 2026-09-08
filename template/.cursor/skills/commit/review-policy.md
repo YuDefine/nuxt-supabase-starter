@@ -38,8 +38,8 @@ UI reviewer 另須能實際取得及檢視指定圖片、對照 item 與互動�
 ## 執行與缺能力
 
 1. 依當前 catalog 與已驗證 adapter 取得實際候選，逐欄記錄判定。支援 CLI 的入口可呼叫共同 wrapper；呼叫者不因 wrapper 名含 codex 或相容路徑 `.claude/` 就改變 runtime。
-2. 使用該入口原生背景 handle、等待／取消及完成事件；先確保 owner 能收回結果，再並行其他軸。沒有非同步能力時可使用已授權的同步載體，保留全部 gate 與 snapshot 條件並明示並行不可用。沒有可用載體則保持未完成。
-3. 配額耗盡只改已核准的候選／供應池，重新驗模型差異與品質；更換 runtime 需既有授權。候選全不可用時記錄未達 gate、snapshot 及原因，停止 commit。主線自審可以協助修復，不能產生缺席 reviewer 的 PASS。
+2. 使用該入口原生背景 handle、等待／取消及完成事件；先確保 owner 能收回結果，再並行其他軸。沒有非同步能力時可使用已授權的同步載體，保留全部 gate 與 snapshot 條件並明示並行不可用。Cursor 缺 Herdr pane 時 MUST 先開 pane，不能把「沒有 pane」讀成沒有可用載體。
+3. 配額耗盡只改已核准的候選／供應池，重新驗模型差異與品質；更換 runtime 需既有授權。Cursor 的 Fable 路徑：先 `ccw` 再開 `cc`，兩次都留下 receipt。兩個 launcher 都用盡才准記錄未達 gate 並停止 commit。主線自審可以協助修復，不能產生缺席 reviewer 的 PASS，也不能用「無 pane」略過 0-A.2。
 
 **NEVER** 用假 model、假 family、假完成事件或另一入口的 tool 參數填滿表格。每一個 gate receipt 都描述實際執行；完整輸出與可核對的 snapshot 是完成證據，背景啟動成功不是。
 

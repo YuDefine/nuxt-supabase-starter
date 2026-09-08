@@ -184,6 +184,8 @@ CI workflow / chat invocation 一律走 `pnpm run void:deploy` 或 `npx void dep
 
 ## A.4 yudefine.com.tw 自訂網域 DNS
 
+本節是 **void 自訂網域**（CNAME → `cname.void.app`）。**不是** Cloudflare Tunnel 公開 hostname。產品要掛到 remotely-managed tunnel（`cloudflared tunnel run --token`）走 `~/offline/clade/vendor/snippets/cloudflare-tunnel-hostname/`，用 API／CLI；Zero Trust dashboard 404 不是停工理由。
+
 ```bash
 void domain add <hostname> --project <project>   # 印出要設的 DNS 記錄
 ```

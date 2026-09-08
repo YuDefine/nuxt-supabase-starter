@@ -21,7 +21,7 @@ Local edits will be reverted by the next sync.
 | 人類決策 | 可用詢問工具；缺席時在對話中等待回答 | 可用詢問工具；缺席時在對話中等待回答 | 可用詢問工具；缺席時在對話中等待回答 |
 | 瀏覽與通知 | 已連接且本次已授權的工具 | 已連接且本次已授權的工具 | 已連接且本次已授權的工具，遵守本入口 browser 政策 |
 
-以上列的是能力角色，工具名稱與參數取自本次 catalog；不是對產品功能的存在性宣告。每個 CLI 先解析成實際存在的絕對路徑並確認依賴可執行。本 skill 宣告的隨附資源與 `COMMIT_SKILL_DIR` 見 runtime-lifecycle；中央 helper 另驗實際安裝，不由 Markdown 已送達推論依賴也已安裝。需要的載體不可用時，依該 gate 已定義的替代路徑處置；無替代就留下未完成結果。
+以上列的是能力角色，工具名稱與參數取自本次 catalog；不是對產品功能的存在性宣告。每個 CLI 先解析成實際存在的絕對路徑並確認依賴可執行。本 skill 宣告的隨附資源與 `COMMIT_SKILL_DIR` 見 runtime-lifecycle；中央 helper 另驗實際安裝，不由 Markdown 已送達推論依賴也已安裝。需要的載體不可用時，依該 gate 已定義的替代路徑處置；無替代就留下未完成結果。Cursor 的 0-A.2 Fable：**缺 pane 先開 pane**（`herdr-session-handoff.ts --launcher ccw --new-tab --coordinate`，失敗再 `cc`），不是略過 gate。第一次沒嘗試開 pane 就寫未完成／BLOCKED = 違規。
 
 ## 每道 gate 的共同記錄
 
@@ -35,7 +35,7 @@ Local edits will be reverted by the next sync.
 | 0-S | 主線對敏感 paths 呼叫已安裝的 security scanner | 讀 exit 與 failure_class；工具故障只能走 security-scan.md 的明確授權分支 | report、coverage、ledger；未掃描授權時保留該文件要求的兩種記號 |
 | 0-A.0 | 主線先執行 simplify | 完成修正才凍結 review snapshot | simplify 結果、變更後 snapshot |
 | 0-A.1 | 合格獨立跨模型 reviewer；主線核對資格與結果 | 完整 verdict 與全部 finding；缺資格、缺覆蓋或 snapshot 漂移時未通過 | review-policy 各欄、真實 dispatch／session、完整輸出 |
-| 0-A.2 | Critical／Major 觸發時由深度 reviewer 與不同模型族裁決者執行 | 深度 review 和裁決都完成；其中之一缺席仍未通過 | 兩位身份、各自 snapshot／verdict、裁決與修正依據 |
+| 0-A.2 | Critical／Major 觸發時由深度 reviewer 與不同模型族裁決者執行。Cursor 的 Fable 裁決缺 pane 時主線 MUST 先開 Herdr pane | 深度 review 和裁決都完成；其中之一缺席仍未通過。無 pane 不是合法 skip | 兩位身份、各自 snapshot／verdict、裁決與修正依據；開 pane 失敗時還要 launcher／exit／evidence receipt |
 | 0-B | 已觸發視覺改動由符合 UI 政策的執行者取得真實畫面並判讀 | 依 UI gate 收斂；無 browser／截圖／合格判讀載體時保留缺口 | 頁面、viewport、截圖、判讀與修正後證據 |
 | 0-C | 可派 runner 執行；主線依 gates.md 複驗 check、明確 test 與 doctor | 全部完成且符合各自判準；worker PASS、doctor exit 0 或仍在跑均不足 | 每支命令的終態與原始輸出、doctor 分數／warnings |
 | 0-D | 主線比對 diff 與文件、規約、snippet、audit 契約 | 同步必要文件；匯合後依大改動回扣重驗受影響 snapshot | 文件對照、修正 diff、回扣結果 |

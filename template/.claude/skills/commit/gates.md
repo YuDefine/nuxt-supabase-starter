@@ -415,7 +415,7 @@ PRE-EXISTING — 未觸碰：<file>:<line>（舉證本次 diff 不含此檔／�
 只在 0-A.1 出 Critical／Major 時執行；修復後的完整 snapshot 是輸入。
 
 1. 合格深度 reviewer 以已核准的深度檔檢查修法與連帶影響。使用共用 CLI 時為 `codex-review-safe.sh medium`，完整限制同 runner-safety。保存完整輸出，不只摘錄結論。
-2. 與深度 reviewer 不同模型族的合格裁決者取得該 snapshot、原始 0-A.1 findings 與深度結果，逐條確認 real issue、附反證 dismiss 或重標 severity，另查漏項。裁決者唯讀，主線負責修復。
+2. 與深度 reviewer 不同模型族的合格裁決者取得該 snapshot、原始 0-A.1 findings 與深度結果，逐條確認 real issue、附反證 dismiss 或重標 severity，另查漏項。裁決者唯讀，主線負責修復。Cursor 主線的 Fable 裁決走 Herdr create-only：缺 pane 時 **MUST** 主動 `herdr-session-handoff.ts --launcher ccw --new-tab --coordinate`（quota／`account_unavailable` 再 `cc`）。**NEVER** 把「無 Herdr pane／Herdr 不可用」當成可跳過 0-A.2 或整場 `/commit` 的出口。`idle`／`done` 不是完成。兩個 launcher 都用盡才准留下 launcher／exit／evidence dir 的 receipt，再寫 durable follow-up。**NEVER** `--relay`，**NEVER** 叫 user 開 Claude 或貼 prompt。
 
 深度輸出缺 `## Review Verdict`（含截斷／context exhaustion）時，明示深度階段未完整；不盲重跑相同耗盡命令。保留已有 findings，由合格裁決者以完整最新 diff、原始 0-A.1 輸出與相同完整性契約接手。只有它實際覆蓋缺失範圍並產出完整 verdict 才可收口；否則 0-A.2 保持未完成。
 
@@ -472,7 +472,7 @@ Heavy gate 的 `exit 75` 代表 `gate-slot.sh` 等不到 slot、inner command �
 
 **不觸發**：純 `<script>` / `<style>` 微調、composable / store / API 純邏輯、測試、文件、設定檔、單純重構不影響視覺輸出。
 
-**Dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，確認真實圖片存取、視覺品質資格、fresh context 與可用載體；brief 帶完整 item、截圖與互動證據，依本檔 native 操作段執行。既有 Pi screenshot-review-verify row 會拒絕派遣，不能繞過它來宣稱新載體有資格；缺合格載體時保留 0-B 未完成。
+**Dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，確認真實圖片存取、視覺品質資格、fresh context 與可用載體。0-B 視覺判定在 Cursor 走主線 Grok + `cursor-ide-browser`；機械截圖收集走 Pi `--table-row screenshot-review-verify`（gemini high）。**NEVER** 用 Cursor Task `model=claude-*` 假裝本列。缺合格載體時保留 0-B 未完成。
 
 **並行啟動**：有真實並行載體時，0-A.1 啟動後同回合啟動已觸發的 0-B；收回 findings 後與 0-A.1／0-C 匯合修正。缺並行能力時依 review-policy 記錄同步載體限制，不略過視覺 gate。
 

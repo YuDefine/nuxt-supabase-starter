@@ -61,11 +61,10 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
 | 2 | dev server 起得來 | 依 [[proactive-skills.dev-server-spawn]] 起，拿到 `http://localhost:<port>` | 起不來 → 記實際 stderr 當 blocker，那通常是環境債不是視覺債 |
 | 3 | **items 組得出來** | 對每個 item 都要有 `id` / `known_url` / `expected_dom` / `screenshot_path`，assertion-bearing 的還要 `ready_signal` | 組不出來 → item 描述沒有機械可判的斷言，那是 **item 品質缺口**（回去補 tasks.md 的斷言），不是視覺 blocker |
 
-三條全綠 → 照 [[review-gui-surface]] § 收 evidence 派 `screenshot-review` Claude subagent
-（`Agent` tool，`subagent_type: screenshot-review`），主線只消費它回的 JSON 摘要，
+三條全綠 → 照 [[review-gui-surface]] § 收 evidence 派 Pi `--table-row screenshot-review-verify`
+（`--model gemini --effort high`），主線只消費它回的 JSON 摘要，
 再跑 `node ~/offline/clade/vendor/scripts/verify-ui-receipt.ts --change <name> --items '<id,id>' --consumer-path .`
-落 receipt。**這條路徑本來就是無人值守設計的**——carrier 是 in-process Claude subagent，
-沒有第三方 seat、沒有另一份配額、也沒有需要人補的帳務。
+落 receipt。**這條路徑是無人值守的機械取證**——第一手是 Pi `--model gemini --effort high`，不是 Claude subagent 路由器。
 
 任一條紅 → packaging 的 blocker 欄 **MUST 逐字寫那一條 probe 的失敗輸出**（哪一條、跑了什麼、回了什麼）。
 **NEVER** 寫「需 attended」這種形容詞——形容詞每一輪都會被重新「發現」一次，而 predicate 有解除條件、

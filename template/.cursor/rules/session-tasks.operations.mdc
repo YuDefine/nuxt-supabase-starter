@@ -423,7 +423,7 @@ receipt 送出後，本 session **NEVER** 再開新工作段、輪詢接手 pane
 
 **Pane 是 dispatch 的投影，不是 dispatch 的理由。** Transport 預設分割當前 Tab，只改變已決定要派的工作長什麼樣。反方向同樣不承載資訊：**NEVER** 從「Tab 沒有分割」推論沒有工作在跑——in-process subagent 沒有 terminal。要看現況跑 `vendor/scripts/herdr-patrol.ts`。
 
-每一個符合的跨 cwd / 新 interactive runtime session handoff 都保留原有 worktree、scope、approval、verification 與 clade / consumer 邊界。Transport 失敗也不改變 routing 結論，且 **NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt。
+每一個符合的跨 cwd / 新 interactive runtime session handoff 都保留原有 worktree、scope、approval、verification 與 clade / consumer 邊界。Transport 失敗也不改變 routing 結論，且 **NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt。Cursor 主線看到「無 Herdr pane」時 MUST 自己 `herdr-session-handoff.ts --new-tab --coordinate` 開一個（`ccw` 再 `cc`）；那不是 0-A.2／`/commit` 的合法停點。
 
 **每一個**原本會要求 user 切換資料夾、開另一個 interactive runtime session、再貼 prompt 或指令的 handoff，
 都由主線自行走 Herdr transport；本節是使用者對這項 transport 的 standing explicit authorization，不必逐次再問。

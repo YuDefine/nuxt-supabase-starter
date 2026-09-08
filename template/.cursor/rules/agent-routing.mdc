@@ -184,7 +184,7 @@ redaction（`vendor/signals/redact.mjs`）只作用在 signal payload、**dispat
 | `--model gemini`（Routing Table 類別內降檔） | **NEVER** 靜默改用舊 Flash model。 |
 | 〔`web-search`〕 | 查不到就回「查不到」，**NEVER** 拿二手彙整頁充數。 |
 | 〔`spectra-phase-implementation`〕 | **NEVER 轉 grok**（見 reference § Spectra Routing Table）。 |
-| 〔`screenshot-review-verify`〕 | **本列 NEVER 派 Pi 任一 model**——`grok-xai` / `grok-cursor` / `astra` / `gemini` / `luna` 一律不准，`pi-dispatch-screenshot-verify.ts` 已 fail-closed 拒跑。**Cursor runtime 例外**：NEVER 用 target-native task catalog 的 `model=claude-*` 假裝本列；改走 § Runtime residency and native transport 的 Herdr create-only `cc`／`ccw`。**NEVER 恢復「subagent 再轉派」**的形狀。 |
+| 〔`screenshot-review-verify`〕 | **本列走 Pi `--model gemini --effort high`**。**NEVER** 用 Cursor Task `model=claude-*` 假裝本列。**NEVER 恢復「subagent 再轉派」**的形狀。`pi-dispatch-screenshot-verify.ts` 只是轉向泛用 dispatcher 的相容入口。 |
 | 〔`screenshot-match-analysis`〕 | 收集與判定是兩個角色，**NEVER** 併成同一次 dispatch。 |
 | 〔`mechanical-fanout`〕 | **NEVER** 以「我自己順手跑掉比較快」略過本列（成因見 rationale）。 |
 | 〔`copywriting-draft`〕 | 本列 **NEVER** 進全域配額降級鏈（exit 2／3／4 一律直接回本 task 主線自己寫）。**主線 MUST 收斂重寫每一條採用的文案，NEVER 原樣貼進交付物**——Pi 回的是素材不是成稿。本列只涵蓋行銷／產品對外文案，**NEVER** 從本列外推到規約措辭／commit message／技術文件／PR 描述／對外報告。 |
@@ -254,7 +254,7 @@ carrier 與 phase executor；兩者是獨立 predicate。
 
 **違反字面就是違反精神：每一次 `WebSearch` 與 `WebFetch` 都先走 external-web decision gate。**
 
-1. **NEVER** 直接呼叫 AI Agent 內建的 `WebSearch` 或 `WebFetch`；照 gate 印出的 decision-linked 指令依序走 bare `gemini low` → bare `luna low` → matching receipt 才放行原tool kind與candidate。完整旗標、exit transition與receipt契約見 [[agent-routing.pi-watch-protocol]] § External web retrieval。
+1. **NEVER** 直接呼叫 AI Agent 內建的 `WebSearch` 或 `WebFetch`；照 gate 印出的 decision-linked 指令依序走 bare `gemini high` → bare `luna high` → matching receipt 才放行原tool kind與candidate。完整旗標、exit transition與receipt契約見 [[agent-routing.pi-watch-protocol]] § External web retrieval。
 2. query／公開URL／fetch prompt只以hash進state／receipt；含credential、signed token、private-network或secret material時fail closed，Pi與direct built-in都不放行，改用authenticated first-party connector或本機redacted source。
 
 **例外清單是窮舉的**：**唯一的一般 waiver** 是使用者明確要求direct built-in web tooling，且`user-explicit-mainline` receipt綁定原tool kind與candidate。「單一已知URL」不是例外。
