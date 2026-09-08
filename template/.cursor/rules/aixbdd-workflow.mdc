@@ -38,17 +38,17 @@ aixbdd 產出可執行規格（`.feature` ＋ DSL），SpecFormula 執行它—�
 
 ## 入口順序
 
-照上游 README 的快速開始九步，**MUST 依序**，不可跳步：
+照上游 README 的快速開始九步，**MUST 依序**，不可跳步。統一入口先做 constitution gate；只有規則 artifact 已確認不需變更，或 constitution 已完成，才建立／續跑 package：
 
 | # | 入口 | 誰執行 | 產出落點 |
 | --- | --- | --- | --- |
-| 1 | `/constitution` | 共同 | `.agents/constitution/**`（只在要新增或調整 artifact 規則時） |
-| 2 | `/specify` | PM | `specs/plans/NNN-<slug>/{spec.md,checklists/requirements.md,truth-delta.md}` |
+| 1 | `/constitution` | 共同 | `.agents/constitution/**`（需要新增或調整規則時；此 gate 在 package 判定前執行） |
+| 2 | `/specify` | PM | `specs/plans/NNN-<slug>/{spec.md,checklists/requirements.md,truth-delta.md}`；新需求永遠開新 package |
 | 3 | `/clarify-over-specs` | PM | 更新 `spec.md`（選用） |
-| 4a | `/spec-by-example` → `/ui-plan` | PM | plan package 的 `features/acceptance/**` 與 `ui-plan.md` ＋ 靜態雛形 |
+| 4a | `/spec-by-example` → `/ui-plan` | PM | plan package 的 `features/acceptance/**`；UI 需求另產 `ui-plan.md` ＋靜態雛形 |
 | 4b | `/technical-research` | RD | plan `research.md` ＋ truth `specs/truth/techstack.md` |
-| 5 | PM 確認 Gherkin 與雛形後 handoff | PM → RD | — |
-| 6 | `/system-analysis`（委派 `/api-plan`、`/data-plan`） | RD | plan `plan.md` |
+| 5 | PM 確認 Gherkin 與適用的 UI 雛形／review 後 handoff | PM → RD | —；UI 需求缺雛形或 review 才停在 PM confirmation gate，API-only 不建立 UI gate |
+| 6 | `/system-analysis`（委派 `/api-plan`、`/data-plan`） | RD | plan `plan.md`；只有 PM gate 通過後可進入 |
 | 7 | `/dsl-refine` | RD | truth `specs/truth/features/{backend,frontend}/**` 的 feature 與 `dsl.md` |
 | 8 | `/tasks` | RD | plan `tasks.md` |
 | 9 | `/implement`（`[BDD-GREEN]` / `[BDD-REFACTOR]` 委派 `/bdd`） | RD | 產品碼與測試 |
