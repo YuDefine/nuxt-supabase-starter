@@ -383,6 +383,16 @@ curl https://your-app.workers.dev/api/v1/profiles/me
 
 ---
 
+## Node.js + Cloudflare Tunnel 公開 hostname
+
+Self-hosted Node（`node-server`）要掛 `https://app.example.com` 到既有 remotely-managed tunnel 時，**不要**開 Zero Trust dashboard。用 Cloudflare API／`cloudflared` CLI，先 GET ingress 再 merge，以免蓋掉同 tunnel 上的其他產品。
+
+短指針與 10 行 CLI：[`guide/cloudflare-tunnel-hostname.md`](guide/cloudflare-tunnel-hostname.md)。完整 cookbook：`~/offline/clade/vendor/snippets/cloudflare-tunnel-hostname/`。
+
+void／Workers 自訂網域仍走本檔上方與 `yudefine-deploy` skill，不是 tunnel ingress。
+
+---
+
 ## 回滾策略
 
 ### Cloudflare Workers

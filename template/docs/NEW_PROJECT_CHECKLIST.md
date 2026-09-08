@@ -112,6 +112,14 @@ ls .claude/skills/ | sort
 | `pnpm check` 通過 | `pnpm check`（含 format → lint → typecheck → test） | 修出錯項目               |
 | `pnpm test` 通過  | `pnpm test`                                         | 修失敗測試               |
 
+## ✅ 公開 hostname（選用）
+
+產品要掛 Cloudflare Tunnel 公開 hostname（不是 Workers／void 自訂網域）時：
+
+| 項目 | Verify | Fix |
+| --- | --- | --- |
+| 用 CLI／API 加 hostname，不點 Zero Trust dashboard | 操作走 `docs/guide/cloudflare-tunnel-hostname.md` | 完整步驟：`~/offline/clade/vendor/snippets/cloudflare-tunnel-hostname/`。dashboard 404 不是停工理由 |
+
 ## ✅ Git 設定（選用）
 
 | 項目        | Verify                           | Fix                           |
