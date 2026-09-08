@@ -75,9 +75,11 @@ When Step 1.8 routes to Pi for coding work, use `Bash run_in_background=true` to
    | 可觀察 predicate | model / effort | `--route` / `--tier-basis` |
    | --- | --- | --- |
    | 命中 [[agent-routing.routing-table]] 某列 | 照該列逐字（含 `grok-xai` 的列） | `routing-table` / `table-row` ＋ `--table-row <row>` |
-   | Step 1.8 判為 **UI view implementation** | **不派**——回 Step 1.8，主線自己在 worktree 內做 | 本表沒有這一格 |
+   | Nuxt UI／Content 實作 | Cursor 原生 Composer 2.5 | `ui-implementation`；依原生載體，不使用 Pi mutation 池 |
+   | Nuxt 本體實作 | `--model sol --effort xhigh` | `routing-table` / `table-row` ＋ `--table-row nuxt-core-implementation` |
+   | 其餘 UI view 實作 | Claude Opus 5（effort: medium） | `ui-view-implementation`；AI Agent 原生／Herdr 載體 |
    | 本次工作**原本會派 Claude subagent**（原判 `sonnet`） | `--model gemini --effort high` | `claude-delegate-sub` / `delegate-sub` |
-   | 本次工作**原本會派 Claude subagent**（原判 `haiku`） | `--model gemini --effort low` | `claude-delegate-sub` / `delegate-sub` |
+   | 本次工作**原本會派 Claude subagent**（原判 `haiku`） | `--model gemini --effort high` | `claude-delegate-sub` / `delegate-sub` |
    | 一般非 UI implementation | `--model luna --effort medium` | `routing-table` / `table-row` ＋ `--table-row non-ui-implementation` |
    | 複雜 schema/API/backend 或 repair escalation | `--model sol --effort high` | `routing-table` / `table-row` ＋ `--table-row non-ui-implementation-escalate` |
    | 需要先做 implementation decision | `--model astra --effort medium --workspace-access readonly` | `routing-table` / `table-row` ＋ `--table-row implementation-decision`；只回診斷／決策，patch 回 Sol |
@@ -132,12 +134,12 @@ When Step 1.8 routes to Pi for coding work, use `Bash run_in_background=true` to
 When Step 1.8 routes to analysis/debug, use `pi-dispatch.ts` with the appropriate pi-offload template. These tasks produce structured JSON evidence — typically no commits needed.
 
 1. **Classify the investigation type**:
-   - **Debug** (error/bug/crash/failure/unexpected behavior/timeout/leak/exception/500) → `debug-evidence.template.md`, row `debug-evidence`, Luna medium
+   - **Debug** (error/bug/crash/failure/unexpected behavior/timeout/leak/exception/500) → `debug-evidence.template.md`, row `non-ui-implementation`, GPT-5.6 Luna medium
    - **Analysis** (everything else: scan/audit/compare/survey/impact/coverage/why) → choose:
      - grep/command-collect/verify-matrix → can the full command list be written out **before** dispatch (no command's target depends on a prior command's output)?
-       - **Yes** → run the commands yourself, redirect each output to `/tmp/`, then dispatch `fanout-analyze.template.md` with `--var evidence=...`, effort default `medium`
-       - **No** → `fanout-collect.template.md`, effort default `medium`
-     - long-doc/cross-repo/release-notes/architecture → `read-heavy-scan.template.md`, effort default `medium`
+       - **Yes** → run the commands yourself, redirect each output to `/tmp/`, then dispatch `fanout-analyze.template.md` with `--var evidence=...`, effort `high`
+       - **No** → `fanout-collect.template.md`, effort `high`
+     - long-doc/cross-repo/release-notes/architecture → `read-heavy-scan.template.md`, effort `high`
 
 2. **Assemble `--var` parameters**:
    - `task`: user's task description + mainline-added context (file paths, hypothesis list for debug)
@@ -159,7 +161,7 @@ When Step 1.8 routes to analysis/debug, use `pi-dispatch.ts` with the appropriat
      --workspace-access <readonly|mutation> \
      --route routing-table \
      --tier-basis table-row \
-     --table-row <debug-evidence|exploration-prescan|…> \
+     --table-row <non-ui-implementation|read-heavy-scan|implementation-decision|mechanical-fanout> \
      --cwd <worktree-absolute-path>
    ```
 

@@ -24,7 +24,7 @@ Local edits will be reverted by the next sync.
 
 - **0-A** 程式碼審查：simplify 序跑第一，再執行獨立 review；Critical／Major 條件觸發深度 review 與裁決，修正由主線匯合後執行。Reviewer 品質、模型差異、transport／隔離與配額分流依 commit skill `gates.md` § 0-A 的同一份政策；fresh context 與跨模型分開驗證。必要 reviewer 或隔離能力不可用時，保留未達成及待補範圍，主線自審不算該 gate 通過。
   **NEVER** 以「既有問題」「不在本次 scope」「建議性質」靜默跳過 review finding；依同一份 0-A 政策逐條處置、記錄裁決與未達 gate。
-- **0-B** UI Design Review（條件觸發）：`.vue` 模板 + 頁面/元件/佈局/互動/樣式變更時派 screenshot-review
+- **0-B** UI Design Review（條件觸發）：`.vue` 模板 + 頁面/元件/佈局/互動/樣式變更時由 Gemini 3.8 Flash 收截圖，再由 Opus 5 做 Design Review
 - **0-C** format / lint / typecheck / test / doctor 全綠：執行 check 後無條件跑明確的 test command，不由 script 名稱猜測覆蓋；`scripts.doctor` **必裝**（缺裝 = block commit）。命令與格式檢查的處置依 skill `gates.md` § 0-C。
 - **0-D** Doc Alignment（條件觸發）：diff 觸及 docs / rules / snippets / audit script / 業務碼 / bug fix 時，檢查 cross-ref / 路徑引用 / pitfall status / 三方受眾文件忠實度（含 VitePress sidebar）四面向
 - **0-E** evlog map 覆蓋率（條件觸發）：diff 觸及 entry point（`server/{api,routes,middleware,tasks}/` / pages / Next route handler）時跑 gate；`@evlog/cli` **必裝**（缺裝 = block commit，比照 doctor）。判定是 **strict：整個 repo 的每一個 entry point 零失敗 check、零 suppression**，**不是**只看本次 diff 觸及的那幾個 —— 既有 gap 一律要補

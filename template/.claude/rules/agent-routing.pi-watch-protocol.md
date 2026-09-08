@@ -1,5 +1,5 @@
 ---
-description: Pi 派工的標準流程模板、Pi Watch Protocol、Plan-first / Git baseline declaration、$spectra-apply Runtime Gate、screenshot-review verify mode 派工與監看、配額耗盡的 fallback 鏈全文、Spectra Propose / Apply 的 dispatch 契約、Orchestration Residency 的四步做法、Routing Table 下推列（spectra 三列 + screenshot 兩列）的取證全文；apply 階段 / 觸及 spectra change 時 path-scoped 載入——單純「要派 pi」不會自動載入本檔，MUST 依 [[agent-routing]] 的強制指針主動 Read
+description: Pi dispatch、bounded phase、截圖取證與符合性判定的載體、brief、監看、receipt 與配額契約；派工前依 agent-routing 指針載入
 paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', '.claude/agents/**', 'screenshots/**/progress.json']
 ---
 <!--
@@ -14,7 +14,7 @@ Local edits will be reverted by the next sync.
 
 # Agent Routing — Pi / screenshot-review Dispatch & Watch Protocol
 
-> Reference 檔。核心 routing 規則見 [`agent-routing.md`](./agent-routing.md)。本檔聚焦實際派 Pi / screenshot-review agent 出去時的標準流程模板、watch protocol、Plan-first / Git baseline declaration 硬指令、`$spectra-apply` Runtime Gate marker 機制。
+> Reference 檔。核心 routing 規則見 [`agent-routing.md`](./agent-routing.md)。本檔聚焦實際派 Pi / screenshot-review agent 出去時的標準流程模板、watch protocol、Plan-first / Git baseline declaration 硬指令與 bounded phase 執行契約。
 
 ## Pi 派工的標準流程（所有 routing 共用）
 
@@ -59,9 +59,7 @@ Local edits will be reverted by the next sync.
 
 | Routing | `<topic>` | `<cwd>` | reasoning effort | 預期動作 | Plan-first | Commit Prohibition |
 | --- | --- | --- | --- | --- | --- | --- |
-| External web retrieval（WebSearch／WebFetch） | `external-web` | `/tmp` | `low` | 純讀（搜尋網頁／抓公開 URL／查外部文件）；第一跳 Gemini，第二跳 Luna | 否 | N/A（不寫檔） |
-| Spectra propose（draft） | `spectra-propose` | consumer repo root | `xhigh` | 寫 spec/proposal 到 `openspec/changes/<change>/`（主線之後 cross-check） | **是** | **是** |
-| Spectra apply phase（非 Design Review、非 UI view） | `spectra-apply-<phase-id>` | consumer repo root | `high` | 完成單一 phase 內所有 tasks，回報 tasks.md checkbox 狀態 | **是** | **是** |
+| External web retrieval（WebSearch／WebFetch） | `external-web` | `/tmp` | Gemini `high`／Luna fallback `low` | 純讀（搜尋網頁／抓公開 URL／查外部文件）；第一跳 Gemini，第二跳 Luna | 否 | N/A（不寫檔） |
 
 > sandbox flag 統一使用 `--dangerously-bypass-approvals-and-sandbox`，不再分 `-s read-only` / `-s workspace-write`（在背景 codex 會擋 MCP）。「預期動作」由主線在 prompt 內陳述，靠 pi 自律。
 
@@ -97,7 +95,7 @@ reasoning effort由第一個參數指定；wrapper不接受額外runtime flags�
 
 ### Plan-first（寫 code 的派工必加）
 
-派 Pi **寫 code / 改檔**（spectra-propose draft、spectra-apply phase）的 prompt **MUST** 內含以下硬指令（**WebSearch / review wrapper（codex-review-safe.sh）不需要** — 它們純讀不寫）：
+派 Pi **寫 code / 改檔**（依既定規格的非 UI 實作）的 prompt **MUST** 內含以下硬指令（**WebSearch / review wrapper（codex-review-safe.sh）不需要** — 它們純讀不寫）：
 
 ```
 Plan-first（**MUST**）：
@@ -126,7 +124,7 @@ GPT-5.6 與 Claude 4.8 都**字面遵守指令、不外推**（Anthropic prompt 
 
 Dirty working tree 有兩種來源，**兩種都要列進 baseline**：
 
-1. **主線操作型**：主線剛跑 `/spectra-ingest` 完成的 artifacts、剛寫進 `docs/tech-debt.md` 的 TD-NNN entry、未 commit 的 ROADMAP/HANDOFF 更新
+1. **主線操作型**：主線剛跑 OPSX intent 完成的 artifacts、剛寫進 `docs/tech-debt.md` 的 TD-NNN entry、未 commit 的 ROADMAP/HANDOFF 更新
 2. **自動 hook 型**：`pnpm install` postinstall hook 觸發 `hub:bootstrap` → `sync-to-codex` 自動把 main branch 的 clade 更新同步進 worktree，產生 LOCKED projection diff（`.claude/` / `.agents/` / `AGENTS.md` / `CLAUDE.md` / `.claude/scripts/`，檔頭有 `🔒 LOCKED — managed by clade` banner）。主線沒主動操作但 working tree 仍 dirty
 
 派工前**MUST 跑**：
@@ -147,7 +145,7 @@ cat .claude/.hub-state.json | grep syncedAt     # 若新近時間戳 → 自動 
 
 主線操作產生：
 - `docs/tech-debt.md` (modify) — 主線剛新增 TD-064 entry
-- `openspec/changes/<change-name>/` (untracked) — 主線剛跑 `/spectra-ingest` 完成的 artifacts
+- `openspec/changes/<change-name>/` (untracked) — 主線剛跑 OPSX intent 完成的 artifacts
 
 hub:bootstrap 自動同步產生（請完全忽略，與本次工作無關）：
 - `.claude/` `.agents/` `AGENTS.md` `CLAUDE.md` `.claude/scripts/` — 投影層由 clade 中央倉自動同步，檔頭有 🔒 LOCKED banner
@@ -189,7 +187,7 @@ hub:bootstrap 自動同步產生（請完全忽略，與本次工作無關）：
 - `git push` / `git push --force`
 - `git stash` / `git stash push` / `git stash pop`（中途 stash 抹掉 working tree 會繞過主線監看）
 - `git commit --amend`（一 phase 一 commit、不要 amend 修飾）
-- `/commit` / `/spectra-commit`（worker 只做 checkpoint；正式 ceremony 由 coordinator 在登記的 batch integration 跑）
+- `/commit`（worker 只做 checkpoint；正式 ceremony 由 coordinator 在登記的 batch integration 跑）
 
 **Commit 前 self-check（MUST，任一條命中即 abort、NEVER commit）**：
 
@@ -221,7 +219,7 @@ Commit 完直接停手回報，**NEVER** 自己跑下一 phase。主線會在 co
 例外：
 
 - review wrapper（codex-review-safe.sh）與 WebSearch 不寫檔，本節不適用
-- 對 `claude` type subagent（如 `/spectra-ingest` 在 /wt 內派出的 wt subagent）規約相同（`🧹 chore: wt …` 前綴 + selective stage + self-check + hook 必跑），per worktree-default.md §5
+- 對 `claude` type subagent（如 OPSX intent 在 /wt 內派出的 wt subagent）規約相同（`🧹 chore: wt …` 前綴 + selective stage + self-check + hook 必跑），per worktree-default.md §5
 
 ## 泛用 Dispatcher（pi-dispatch.ts）
 
@@ -250,14 +248,14 @@ Pending decision 只接受下列三種 standalone resolution；一般 Bash／Rea
 ```bash
 # 工作仍是 threshold trigger 本身：照 trigger 填 mechanical-fanout 或 read-heavy-scan
 node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
-  --decision-id <rgd_...> --model gemini --effort low \
+  --decision-id <rgd_...> --model gemini --effort high \
   --route routing-table --tier-basis table-row --table-row <trigger> \
   --template <template.md> --var task='...' --var acceptance='...' \
   --var allowed_paths='...' --label <topic-slug>
 
-# claude-agent-dispatch：原判 Haiku 用 low；原判 Sonnet 用 high
+# claude-agent-dispatch：Gemini 3.8 Flash 一律 high
 node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
-  --decision-id <rgd_...> --model gemini --effort <low|high> \
+  --decision-id <rgd_...> --model gemini --effort high \
   --route claude-delegate-sub --tier-basis delegate-sub \
   --template <template.md> --var task='...' --var acceptance='...' \
   --var allowed_paths='...' --label <topic-slug>
@@ -273,9 +271,9 @@ node ~/offline/clade/vendor/scripts/pi-routing-gate.ts fallback \
   --reason <dispatcher-mechanical-failure|quota-exhausted|delegate-escalation-failed>
 ```
 
-工作若已收斂成另一個**更具體**的 Routing Table row，可把 dispatch 的 `--table-row`、`--model` 與 `--effort` 改成該列的值；gate 只接受共用 policy 中已知且有單一 concrete Pi model 的 row。`spectra` 這類 conditional row沒有單一 model，不能拿來結案。Exact trigger仍固定 `luna low`，**NEVER** 以 specific-row 出口改名繞過同一份工作。
+工作若已收斂成另一個**更具體**的 Routing Table row，可把 dispatch 的 `--table-row`、`--model` 與 `--effort` 改成該列的值；gate 只接受共用 policy 中已知且有單一 concrete Pi model 的 row。無單一執行模型的 native/session row沒有單一 model，不能拿來結案。Exact trigger 依 `mechanical-fanout`／`read-heavy-scan` 固定 Gemini 3.8 Flash high，**NEVER** 以 specific-row 出口改名繞過同一份工作。
 
-Waiver enum 固定為 `claude-mcp-required`、`parent-context-required`、`governance-adjudication`、`ui-view-implementation`、`user-explicit-claude-agent`、`user-explicit-mainline`、`wording-contract-output`、`visual-design-review`、`safety-or-irreversible`、`self-verification`、`gate-output-review`、`plan-mode-readonly`、`in-flight-edit-context`；沒有 `other` 或 free-text bypass。`claude-agent-dispatch` decision 只接受其中 `claude-mcp-required`、`parent-context-required`、`ui-view-implementation`、`user-explicit-claude-agent`、`gate-output-review`、`plan-mode-readonly` 六種，避免拿治理／措辭／複驗理由替普通掃描開洞。`gate-output-review` 是 `agent-routing.md` § NEVER 降檔的形狀 的結案路徑：委派的**輸出本身就是 gate**（review／裁決／安全判定）時，該節要求照原判派 Claude、不得降檔，而在此之前 gate 上唯一貼上就能跑的出口是 `--model gemini`——**NEVER** 因為找不到合規出口就改貼那行，也 **NEVER** 拿其他不符事實的 reason 頂替；`--note` MUST 寫明命中哪一條形狀。2026-09-01 `/simplify` 的四個 review 角度就是在這個 reason 存在之前整批跑到 Gemini 上的。`subagent_type` 本身已是具名 gate（`GATE_OUTPUT_ROWS`：`code-review`／`security-review`／`spectra-artifact-review`／`spectra-prehandoff-judge`）時**不走本條**——那些 row 由 gate 自動轉 Pi `astra --effort medium`，本 reason 專門接「gate 形狀的輸出經由 callsite 改不了的泛用 `subagent_type` 送進來」的情形。`parent-context-required` 專給必須繼承主線 context 的 `subagent_type: fork`——它照樣 arm，只是結案理由是這一條，**NEVER** 讓它靜默略過 gate；gate 機械擋它出現在任何非 fork 的 decision 上。**三個 reason 帶 predicate（TD-878；改前 7 天兩個 threshold gate armed 605、waived 538，前兩名理由合計 62% 都是查驗不了的）**：`parent-context-required` 只收 `claude-agent-dispatch` × `fork:`；`self-verification` 只收本 session 已有 Edit／Write 記錄的（gate 從 PreToolUse `Edit|Write|MultiEdit|NotebookEdit` 記 `editedPaths`，跨 segment 累積）——沒改過東西就沒有東西可驗，那是 scan，走 `[dispatch]`；`in-flight-edit-context` 只准 threshold gate（`mechanical-fanout`／`read-heavy-scan`），意思是「讀的是我接下來要親手改的檔」——它**暫准**放行，下一個 UserPromptSubmit 才判：read-heavy-scan 要有 Edit 落在那批讀過的檔上、mechanical-fanout 要在 waive 之後有任一 Edit，判定寫成 `waiver-fulfilment` receipt（`metadata.fulfilled`），`audit-routing-waiver-rate` 數 unfulfilled。逐字反開脫：「讀我接下來要改的檔」貼的是 `in-flight-edit-context`，**NEVER** 貼 `parent-context-required`——那條只描述 fork，貼錯的 195 次正是本 predicate 的成因。threshold gate 上的每一個 waive **MUST** 帶 `--note`（缺就拒收），`claude-agent-dispatch` 不強制。一般 threshold decision 的 dispatcher exit `0`／`2` 會留下 terminal receipt 並 release；`claude-agent-dispatch` 的 Gemini／Luna exit `2` 留 pending 並把下一次 model 鎖成 Sol high，Sol 再 exit `2` 後才接受 `delegate-escalation-failed` fallback receipt。exit `3`／`4` 都留 pending，分別只配 `dispatcher-mechanical-failure`／`quota-exhausted`。`fallback` 命令寫入的事件是 `fallback-authorized`：它只表示 runtime不可用後**允許** Claude接手，不宣稱 fallback工作已完成。Dry-run／exit `1` 不消費 decision。下一個 UserPromptSubmit 會把未結案 decision 記為 orphan，再開始新 segment。
+Waiver enum 固定為 `claude-mcp-required`、`parent-context-required`、`governance-adjudication`、`ui-view-implementation`、`user-explicit-claude-agent`、`user-explicit-mainline`、`wording-contract-output`、`visual-design-review`、`safety-or-irreversible`、`self-verification`、`gate-output-review`、`plan-mode-readonly`、`in-flight-edit-context`；沒有 `other` 或 free-text bypass。`claude-agent-dispatch` decision 只接受其中 `claude-mcp-required`、`parent-context-required`、`ui-view-implementation`、`user-explicit-claude-agent`、`gate-output-review`、`plan-mode-readonly` 六種，避免拿治理／措辭／複驗理由替普通掃描開洞。`gate-output-review` 是 `agent-routing.md` § NEVER 降檔的形狀 的結案路徑：委派的**輸出本身就是 gate**（review／裁決／安全判定）時，該節要求照原判派 Claude、不得降檔，而在此之前 gate 上唯一貼上就能跑的出口是 `--model gemini`——**NEVER** 因為找不到合規出口就改貼那行，也 **NEVER** 拿其他不符事實的 reason 頂替；`--note` MUST 寫明命中哪一條形狀。2026-09-01 `/simplify` 的四個 review 角度就是在這個 reason 存在之前整批跑到 Gemini 上的。`subagent_type` 本身已是具名 gate（`GATE_OUTPUT_ROWS`：`code-review`）時**不走本條**——那些 row 由 gate 自動轉 Pi `astra --effort medium`，本 reason 專門接「gate 形狀的輸出經由 callsite 改不了的泛用 `subagent_type` 送進來」的情形。`parent-context-required` 專給必須繼承主線 context 的 `subagent_type: fork`——它照樣 arm，只是結案理由是這一條，**NEVER** 讓它靜默略過 gate；gate 機械擋它出現在任何非 fork 的 decision 上。**三個 reason 帶 predicate（TD-878；改前 7 天兩個 threshold gate armed 605、waived 538，前兩名理由合計 62% 都是查驗不了的）**：`parent-context-required` 只收 `claude-agent-dispatch` × `fork:`；`self-verification` 只收本 session 已有 Edit／Write 記錄的（gate 從 PreToolUse `Edit|Write|MultiEdit|NotebookEdit` 記 `editedPaths`，跨 segment 累積）——沒改過東西就沒有東西可驗，那是 scan，走 `[dispatch]`；`in-flight-edit-context` 只准 threshold gate（`mechanical-fanout`／`read-heavy-scan`），意思是「讀的是我接下來要親手改的檔」——它**暫准**放行，下一個 UserPromptSubmit 才判：read-heavy-scan 要有 Edit 落在那批讀過的檔上、mechanical-fanout 要在 waive 之後有任一 Edit，判定寫成 `waiver-fulfilment` receipt（`metadata.fulfilled`），`audit-routing-waiver-rate` 數 unfulfilled。逐字反開脫：「讀我接下來要改的檔」貼的是 `in-flight-edit-context`，**NEVER** 貼 `parent-context-required`——那條只描述 fork，貼錯的 195 次正是本 predicate 的成因。threshold gate 上的每一個 waive **MUST** 帶 `--note`（缺就拒收），`claude-agent-dispatch` 不強制。一般 threshold decision 的 dispatcher exit `0`／`2` 會留下 terminal receipt 並 release；`claude-agent-dispatch` 的 Gemini／Luna exit `2` 留 pending 並把下一次 model 鎖成 Sol high，Sol 再 exit `2` 後才接受 `delegate-escalation-failed` fallback receipt。exit `3`／`4` 都留 pending，分別只配 `dispatcher-mechanical-failure`／`quota-exhausted`。`fallback` 命令寫入的事件是 `fallback-authorized`：它只表示 runtime不可用後**允許** Claude接手，不宣稱 fallback工作已完成。Dry-run／exit `1` 不消費 decision。下一個 UserPromptSubmit 會把未結案 decision 記為 orphan，再開始新 segment。
 
 Enforcement authority 是 `~/.claude/clade-routing-gate/receipts.jsonl`；`~/.pi/agent/clade/dispatch-ledger.jsonl` 是現行 fail-open usage／observability telemetry，legacy `~/.codex/dispatch-ledger.jsonl` 只供歷史報表，**NEVER** 用 telemetry 缺列推翻已成功落盤的 receipt。每次 live判定會先用 unique receipt重建 `latestAttempt`，並把單一 terminal receipt materialize回 stale state；同 `eventId`重播是 benign，兩個不同 terminal resolution與未完成的 orphan segment transition會 fail-closed。這使 receipt-first／state-second 的 crash window可恢復，不會重跑已成功的 Pi dispatch。
 
@@ -319,12 +317,12 @@ basis，**NEVER** 隨手挑一個列名湊過去。
 
 | Template | 場景 | 建議 effort |
 | --- | --- | --- |
-| `fanout-analyze` | 蒐集命令清單派工前能列全時的 fan-out：主線跑完命令，只派分析（必填 `evidence`） | low |
-| `fanout-collect` | 蒐集命令清單派工前**無法**列全（命令 N 的對象取決於 N-1 輸出）的掃描 / 驗證型 fan-out | low |
-| `read-heavy-scan` | 長文件 / fleet 多 repo 掃描摘要 | low |
+| `fanout-analyze` | 蒐集命令清單派工前能列全時的 fan-out：主線跑完命令，只派分析（必填 `evidence`） | high |
+| `fanout-collect` | 蒐集命令清單派工前**無法**列全（命令 N 的對象取決於 N-1 輸出）的掃描 / 驗證型 fan-out | high |
+| `read-heavy-scan` | 長文件 / fleet 多 repo 掃描摘要 | high |
 | `debug-evidence` | debug 拆段：log capture / repro / hypothesis 驗證矩陣 | high |
 | `fix-verify-loop` | commit 0-C：跑 check → 機械修 → loop 到全綠 | high |
-| `self-collect-evidence` | spectra-apply Step 8a (a)(b)：dev-login allow-list + DB query evidence | medium |
+| `self-collect-evidence` | dev-login allow-list + DB query evidence | medium |
 
 **Exit code 契約**（caller 必須分流，不可一律 fallback）：
 
@@ -336,7 +334,7 @@ basis，**NEVER** 隨手挑一個列名湊過去。
 
 **內建行為**：Pi `--no-session --no-extensions` machine mode、explicit MCP extension、token discipline system prompt、routing metadata validation、telemetry append 到 `~/.pi/agent/clade/dispatch-ledger.jsonl`（fail-open；`scripts/audit-pi-adoption.ts` 靠它量 adoption）。Pi目前沒有authoritative pre-dispatch quota snapshot，因此precheck明示unavailable並fail-open；runtime quota仍固定映射exit 4。
 
-**Token discipline 是 runtime 內建，template / brief NEVER 各自重寫一份**：`vendor/pi/system/token-discipline.md`（codebase-memory 優先於 grep ＋ rtk 包裹重輸出指令）由 `runPi()` 以 `--append-system-prompt` 附掛到**每一發**有工具的 dispatch，四個入口（`pi-dispatch.ts` / `pi-dispatch-screenshot-verify.ts` / `pi-dispatch-pre-handoff-check.ts` / `pi-review.ts`）一致生效，`toolProfile: 'none'` 除外。主線 Claude 是靠 harness 的 SessionStart hook 與 Bash 改寫 hook 拿到這兩條，**Pi 上沒有等價機制**——2026-08-19 實測：全歷史 dispatch 3415 次 bash 只有 460 次走 rtk，同時仍有 raw `git` 657、`ls` 229、`pnpm` 143。
+**Token discipline 是 runtime 內建，template / brief NEVER 各自重寫一份**：`vendor/pi/system/token-discipline.md`（codebase-memory 優先於 grep ＋ rtk 包裹重輸出指令）由 `runPi()` 以 `--append-system-prompt` 附掛到**每一發**有工具的 dispatch，現行 Pi dispatcher 與 review 入口一致生效，`toolProfile: 'none'` 除外。主線 Claude 是靠 harness 的 SessionStart hook 與 Bash 改寫 hook 拿到這兩條，**Pi 上沒有等價機制**——2026-08-19 實測：全歷史 dispatch 3415 次 bash 只有 460 次走 rtk，同時仍有 raw `git` 657、`ls` 229、`pnpm` 143。
 
 **readonly profile 的 `--tools` allowlist MUST 含 codebase-memory 工具名**：pi 的 allowlist 同時作用於 built-in、extension 與 MCP 工具，所以 `review-readonly` / `analysis-readonly` 少列 `mcp_codebase_memory_*` = MCP extension 載了也一次都叫不到（2026-08-19 實測：`commit-0a1-review-r61` 整輪只有 `read`）。清單在 `CODEBASE_MEMORY_READONLY_TOOLS`（`vendor/scripts/lib/pi-runtime.ts`），`index_repository` 刻意不在列。
 
@@ -432,129 +430,63 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`native wakeu
 - **NEVER** 在 watch 中途自行決定殺掉 / 重派 pi — completed result 顯示 blocker 後必須先 structured user-input surface
 - **MUST** 收到 `<task-notification>` 或收割到 completed result 後停止 native wakeup scheduler（否則 wakeup 會在 pi 已結束後重複觸發）
 
-## Spectra Routing Table
-
-從 [[agent-routing]] § Routing Table 移出（2026-07-31）——這六列只在 spectra flow 內成立，主檔留一列 stub 指這裡。**UI view phase 與 Design Review 依主規則的視覺品質資格与 bounded phase transport 執行**、**propose 的 cross-check / final check 一律主線跑**這兩條契約主檔仍帶著。
-
-**派工時 `--table-row` 要填哪一列**：本節的類別名不是 row 名。裸 `--table-row spectra` 在 `TABLE_ROW_POLICIES` 是 `model: null`（因為下表六列檔位各異，一個 row 表達不了），dispatcher 一律拒絕。對照表：
-
-| 本表類別 | `--table-row` |
-| --- | --- |
-| propose draft（選項 A 的 Pi 段）、ingest draft | `spectra-artifact-draft`（astra medium；workspace mutation） |
-| propose review（選項 B 的 Pi findings gate） | `spectra-artifact-review`（astra medium；workspace readonly） |
-| apply 非 view phase | `spectra-phase-implementation`（sol high） |
-| apply 已封閉 phase 的 read-only 抽取 | `spectra-phase-prescan`（gemini low） |
-| pre-handoff E.1 收集 | `spectra-prehandoff-collect`（grok-xai medium） |
-| pre-handoff E.1 判定 | `spectra-prehandoff-judge`（astra medium） |
-
-主線 cross-check / final check / Design Review **不派 pi**，沒有對應 row。`test/table-row-recipe-audit.test.ts` 機械驗證 clade 內所有 recipe 與本表一致。
-
-| 工作類別 | 由誰執行 | 為什麼 |
-| --- | --- | --- |
-| **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A GPT-6-astra via Pi（effort: medium）負責 draft（預設/推薦）／ B 三模型交叉：Claude Fable 5.1（effort: xhigh）負責 draft ＋ GPT-6-astra via Pi（effort: medium）負責 review／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |
-| **Spectra `propose` cross-check / final check** | **主線 Claude Fable 5.1（effort: xhigh）** | 主線 = quality gate（A 的 cross-check、B 的 final check 都由主線跑），不只是 dispatcher。 |
-| **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **GPT-5.6-sol via Pi（effort: high）** | 以完整 phase 為單位執行，並由 schema 與 L0–L2 gate 驗證。 |
-| **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **合格視覺 executor，不走 Pi 機械實作列**（資格與 bounded phase transport 見主規則；既有 Claude Opus 5（effort: xhigh） 是已用基準。實作完 carrier 照跑 Step 6c / 6d 與 Design Review gate） | 視覺 / 互動 / a11y 與 Design skill 緊耦合，實作與品質判定分不開。非 view 的 frontend 不在此範圍，仍走 sol（範圍同 § Spectra Apply Phase Dispatch C 類）。 |
-| **spectra-apply Step 8a self-collect (a)(b)**（dev-login allow-list 小 mod + service_role DB query 證 data shape） | **Pi `--model luna --effort low` via 泛用 dispatcher** | PoC 已實證 pi 能跑完整 evidence chain；annotation 寫回 tasks.md 維持主線。詳見 spectra-apply SKILL Step 8a。 |
-
 ## Orchestration Residency — 機械 Enforcement（residency-classify）
 
-從 [[agent-routing]] § Orchestration Residency 移出（2026-07-31；四步做法於 2026-08-22 一併下推，TD-590）。Residency 的**判定條件**（Codex-primary A/B 進入條件、Claude-primary 五條）留在主檔；本節是它的執行步驟與機械強制點，只在 spectra-apply 開工時用得到。
+Change carrier 保持原 session，bounded phase 依 [[agent-routing.routing-table]] 選模型。每次交接帶 canonical work／revision、scope、驗收與結果路徑；交回後核對 diff scope、實跑證據與當前 work 狀態。
 
-**Codex-primary 的四步做法（change 粒度 residency；phase 粒度 executor）**：
+Nuxt UI／Content 實作交 Cursor Composer 2.5，Nuxt 本體交 GPT-5.6 Sol xhigh，其餘 UI view 實作交 Opus 5（effort: medium）；Design Review 與 UI 詳細計畫交 Opus 5；截圖收集交 Gemini 3.8 Flash，項目符合性再交 Opus 5。Opus 5 無法執行上述 Design Review、UI 計畫或截圖符合性時，沿原工作列交 GPT-5.6 Sol（effort: high）；其他指定模型或實際工具不可用時保留該 phase 未完成。非 UI 實作與計畫沿各自具名列。
 
-1. 若 apply 從 Claude Code 起手，主線**一次** dispatch 整條 change 給單一 background Pi carrier（prompt 列全部 phase + acceptance + Plan-first + Commit Authorization；模板見 § Pi 派工的標準流程）。若本身已在符合角色的 Pi carrier，直接持有 carrier，**NEVER** recursive dispatch 自己。
-2. Carrier 依 phase class 與主規則的視覺品質資格選 executor：非 view phase 沿既有實作 route；UI view／Design Review 在合格且具實際工具存取的主線執行，否則由 target adapter 的已授權 bounded phase transport 交合格 executor，收回結構化結果後繼續。既有 Claude executor 可經 Herdr create-only `--launcher cc`／`ccw` + `--coordinate` 接收。**ccg 保持可用**：從 ccg 起手時只把 apply carrier交 Pi，不停用 ccg launcher。
-3. 外部 phase 執行期間只做 notification-only coordination；收回後在 carrier 做 phase boundary check，全部完成再做一次 change 粒度 cross-check：commit 數 / format、view-layer drift + scope discipline（§ Spectra Apply Phase Dispatch Step 5）、typecheck + test。
-4. Section 7 Design Review 由主規則所定的合格視覺 executor 完成，carrier 收驗後才進 `/commit` 0-A gate；不可用時該 phase 保持未完成。Pi 的 `--session` 是選既有 session，與 Claude 的 `--session-id` 不同；NEVER 把 `cx` 塞進 Herdr helper 的 Claude launcher slot。
+## 截圖 routing
 
-把關移到 phase 與 change 邊界：`/commit` 0-A + archive Design Review 作用在最終 diff 上。
-
-**為什麼**：resident carrier 與 phase capability 是兩個維度。用「含 UI」把整條 apply 留在 Claude Code，會讓大 change 的全歷史一直支付 Claude Code resident floor；ccx 的 272k window 已把這個失敗放大到無法完成工作。
-
-- spectra-apply 開工後、任何 dispatch 決策前，**MUST** 跑 `node ~/offline/clade/vendor/scripts/residency-classify.ts classify --change openspec/changes/<change>` 拿機械 verdict
-- **MUST** 立刻 record decision：`node ~/offline/clade/vendor/scripts/residency-classify.ts record --consumer-path . --change <change> --verdict <v> --executor <codex|claude> [--reason ...]` → 落 `.spectra/residency-ledger.jsonl`
-- verdict=`codex-primary` 而決定 executor=`claude` → `--reason` 必填（record 入口會擋）
-- **沒有機器驗 record 存在**——原本的 archive-gate **Check 8** 隨 spectra 生命週期退役（2026-09-07）。缺 record 現在不會擋下任何東西，唯一的訊號是下一列的 adoption 量測（事後、非阻擋）。**NEVER** 把「沒有 gate 擋我」讀成 record 可以不寫
-- adoption 量測：`node ~/offline/clade/scripts/audit-pi-adoption.ts`（clade home 稽核：verdict × executor 表 + dispatch ledger 分桶）
-
-## Routing Table 下推列的全文（2026-08-22 從 [[agent-routing]] § Routing Table 下推，TD-590）
-
-主檔留短列（類別 ＋ model／effort ＋ 硬 NEVER），本節是那幾列的取證與範圍全文。**派這幾列之前 MUST 先讀對應那一列**，主檔的短列不足以判邊界。
-
-| 工作類別 | 由誰執行 | 為什麼（全文） |
+| 階段 | 模型與載體 | 交付 |
 | --- | --- | --- |
-| 〔`spectra-phase-implementation`〕 **Spectra Apply Class C phase 語意實作** | **Pi `--model sol --effort high` via 泛用 dispatcher** | schema／migration／API／backend／非 view frontend 等 phase 的預設 carrier。Plan-first、task→file、view guard、scope、one-phase-one-commit 與 L0–L2 gate 不因 carrier 統一而放寬。**NEVER 轉 grok**——前置契約未滿足時 grok 自報 `status: pass` ＋ `tasks_completed` 非空，當時 Sol／Luna 都 fail-closed（取證見 rationale § `spectra-phase-implementation` NEVER 轉 grok）。**NEVER** 反過來讀成「反正下游 check 接得住所以可以轉」：`pi-phase-dispatch.md` § 6 的 check 6 只驗 `result.status` 精確為 `pass`，對「報 pass 但沒做」零訊號。 |
-| 〔`spectra-phase-prescan`〕 **Spectra Apply 已封閉 phase 的 read-only fact extraction** | **Pi `--model gemini --effort low` via 泛用 dispatcher** | 只抽 task→file、既有 symbol、exact gate command 與 source location；不得做 status／identity／relevance／實作裁決。矛盾回 `needs_reconciliation`，後續實作仍走 `spectra-phase-implementation`。exit 4 → luna。 |
-| 〔`spectra-mechanical-substep`〕 **Spectra Apply machine-readable pilot marker 指定的 deterministic mutation** | **Pi `--model gemini --effort low` via 泛用 dispatcher** | 只有 execution classifier 的完整低風險 predicate 全中才 eligible；rollout stage 未開或樣本 gate 未達時只記 shadow candidate，effective route 仍是 `spectra-phase-implementation` Sol high。exit 4 → luna。 |
-| 〔`screenshot-match-analysis`〕 **截圖 vs item 要求的匹配判定**（`[verify:ui]` 收集完成後的 gate） | **Pi `--model astra --effort medium` via 泛用 dispatcher** | 收集與判定是兩個角色：收集走 `screenshot-review-verify`（Pi `--model gemini --effort high`），判定是 gate。**NEVER** 把兩者併成同一次 dispatch。 |
-| 〔`screenshot-review-verify`〕 **`screenshot-review` 全部模式**（`[verify:ui]` channel / archive 前視覺 QA / commit 0-B / ad-hoc 截圖） | **Pi `--model gemini --effort high` via 泛用 dispatcher**。exit 4 → luna 同 effort。**NEVER** Cursor Task `model=claude-*`；**NEVER** 恢復「subagent 再轉派」 | 2026-09-08 Charles 改回 Pi Gemini 3.8 Flash high。機械取證走本列；Design Review／視覺判讀不是本列。**NEVER** 把 [[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]] 讀成「應該再加一層 Claude 路由器」——那次成因是 wrapper 被設計成路由器卻決定當執行體。 |
+| 四個模式的 screenshot review | Pi `gemini high`，`screenshot-review-verify` | 實際 browser 操作、圖片、DOM／network evidence、逐 item 摘要與 progress.json |
+| 截圖 vs item 符合性 gate | Claude Code Opus 5（effort: medium），`screenshot-match-analysis` | 讀取每張指定圖片與完整 item，給 PASS／FAIL／UNCERTAIN 及理由 |
+
+收集與判定分兩次 dispatch。Gemini 不代簽 Opus gate；Opus 不以 Gemini 的文字摘要代替實際圖片。Opus 5 無法執行時帶實際失敗原因沿 `screenshot-match-analysis` 原列交 GPT-5.6 Sol（effort: high）；Gemini 或 Sol 不可用就回報 blocker，不沿 generic 配額鏈換模型。執行方式與 evidence contract 見 `review-screenshot` skill。
+
+### Opus 工作的 Pi fallback 憑證
+
+`design-review`、`ui-detailed-planning`、`screenshot-match-analysis` 的 Pi Sol 接替使用原列。Herdr 首派帶該列、`--model claude-opus-5 --effort medium`，由 correlated `--complete failed` 產生 canonical completion；在同一 repo 執行：
+
+```bash
+node vendor/scripts/pi-dispatch.ts \
+  --brief <brief.md> --label <new-sol-label> --model sol --effort high \
+  --route routing-table --tier-basis table-row --table-row <原工作列> \
+  --workspace-access readonly --work-id <receipt.flow_work_id> \
+  --retry-of <receipt.dispatch_id> \
+  --native-failure-receipt <dispatch-state-dir>/completion/<receipt.dispatch_id>.json
+```
+
+Pi CLI 驗 receipt 的 `herdr-native-completion/v1` schema、failed outcome、requested／observed Opus 5、medium、verified model，以及相同 canonical cwd、work、row、readonly access；`retry-of` 等於原 dispatch id。缺少或不符時保留 blocker，不手寫 receipt 代替原執行結果。
+
+Claude 原生 Agent 的失敗目前沒有這種 durable completion，不能直接作為 Pi CLI 自動接替憑證。受控 controller 另可依原 primary candidate 的 attempted receipt，或該 primary pool 的 fresh exhausted quota observation 選擇同列 Sol；這條能力不外推到一般 CLI。
+
+### Opus 啟動前失敗的受控接替
+
+Controlled execution 在 Herdr owner 尚未綁定、且沒有已確認停止的 completion receipt 時維持 `owner-unresolved`。現有 launcher failure 回覆仍保留 pane，不能據此宣稱已停止或進入 fallback；先收回並核對該次執行的真實結果。
 
 ## OPSX intent handoff
 
 需求建立與修訂經 `opsx` skill 的 `references/intent.md`；先查已有 change/work 身分，再形成有來源、驗收、impact 與 work plan 的 canonical intent。已授權的需求直接執行，缺少產品決議才送既有 decision queue。
 
-派工沿 Routing Table 的 draft／cross-check 分工；主線持有 quality gate，讀 draft、核對來源及驗收後自行修正。**NEVER** 把 cross-check / final check 的修補丟回 pi。每次 mutation 明確帶 repo、change_id 與預期 revision，create／revise 後回讀 binding 及 canonical source。UI scope 的設計與體驗驗收沿用既有 gate。
+UI 詳細計畫走 `ui-detailed-planning` Opus 5，非 UI 計畫走 `detailed-planning` Astra；主線持有 quality gate，讀 draft、核對來源及驗收後自行修正。**NEVER** 把 cross-check / final check 的修補丟回 pi。每次 mutation 明確帶 repo、change_id 與預期 revision，create／revise 後回讀 binding 及 canonical source。UI scope 的設計與體驗驗收沿用既有 gate。
 
-每一個 Spectra writer 已退役；NEVER 以 park／analyze／直接編輯生成 tasks.md 替代 OPSX command。歷史需求以中性 history 讀取並保留 provenance。
+Canonical intent 的修改只走 OPSX command；生成 tasks.md 保持唯讀。
 
 ## OPSX work execution dispatch（具體做法）
 
-### 決策層契約（2026-08-19 從 [[agent-routing]] 下推，TD-540）
-
-
-> **先判 residency**（§ Orchestration Residency）：canonical work plan 已定稿的實作 由 Codex-primary 持有 change-level orchestration；以下 phase 規則只決定 bounded executor，**不改 residency**。從 Claude Code 起手時依既有 routing 判定單次 dispatch 整條 change 給 Pi carrier；已在符合角色的 Pi carrier 時直接續跑，NEVER recursive dispatch。
-
-依 OPSX work plan 執行時按 phase 選 executor。**三條契約**：
-
-1. **Design Review phase 與 UI view phase 由已具該項視覺品質資格的 executor 執行**——carrier 具資格時自己做；否則依 target adapter 的已授權 bounded phase transport 交付。既有 Claude Opus 5（effort: xhigh） 基準不因 runtime 分層自動轉移到其他模型。**NEVER** 由 Pi 實作、**NEVER** 因為 phase 大或管線現成就改變 executor。其他 phase（schema / migration / API server / CLI / 純 backend / 非 view frontend / unit test / docs）由同一 Pi carrier 直接實作；只有帶 user override 的 Claude carrier 才以泛用 dispatcher 的 `spectra-phase-implementation` row 派 GPT-5.6-sol via Pi（effort: high）。符合封閉來源 extraction predicate 的 prescan 才可另走 `spectra-phase-prescan` Gemini via Pi（effort: low），且不得取代 Sol phase 實作
-2. **混雜 phase**（同一 phase 摻了 view 與非 view）：**已開工** → 整個 phase 交給 Claude Opus executor，不重切、不由 Pi 實作；**未開工** → 停止該 phase 的執行，依 OPSX revise 調整 canonical work plan 的能力邊界，再重新 inspect
-3. **禁止**carrier 直接修改生成 tasks.md；結構調整經 digest-guarded OPSX revise 保留修訂紀錄
-
-A/B/C 三類的完整判定條件（含 view 層檔案路徑清單）與 C 類派工細節（共用 template／schema、dispatcher metadata、watch、drift 檢查、收尾驗證）見本節的具體步驟。
-
-依 OPSX work plan 執行時，carrier 按 phase capability 選 executor 的具體步驟：
-
-1. 以 OPSX inspect／instructions 讀當前 canonical work plan、work_spec_id、依賴、revision 及驗收政策；tasks.md 僅供閱讀投影
-2. **每個 phase 三類分類**（依序判定，命中即停）：
-   - **A. Design Review phase**：標題含 "Design Review" 或內容含 `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot`
-     → **Claude Opus 5（effort: xhigh）executor 自己做，永不由 Pi 實作**。Claude carrier 直接做；Pi carrier 用 Herdr create-only `--launcher cc`／`ccw` + `--coordinate` 派 bounded phase並收回結果
-   - **B. UI view phase**：phase 內任一 task 描述/路徑指涉 view 層檔案——`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且該 phase 沒有摻入非 view 的 frontend / backend 工作**（store / hook / API client / type / util / migration / API server）
-     → **Claude Opus 5（effort: xhigh）executor 自己做，永不由 Pi 實作**。Claude carrier 直接做；Pi carrier用同一條 bounded Herdr transport。實作完、該 phase commit / 標 done 之前，照跑原 invariant／review-rules 檢查與 Design Review gate
-   - **C. 其他 phase**：上述兩類以外（schema、migration、API server、CLI、純 backend、frontend 但非 view 的 store / hook / API client / type / util、unit test、docs）
-     → **Pi carrier 以 GPT-5.6-sol（effort: high）做完整 phase**；只有 user override 讓 Claude 持有 carrier 時才派 Pi
-3. **混雜 phase fallback**（A、B 都不是純 view、又混雜 view 與非 view 工作）：
-   - **看該 phase 是否已開工**（canonical attempt 已開始或 git history 顯示 phase 內檔案已被改）：
-     - **已開工** → **整個 phase 由 Claude Opus executor 做**（safety fallback；不重切，不由 Pi 實作）
-     - **未開工** → 停止該 phase 的執行，經 OPSX revise 把 UI view 與非 view work spec 分開，再依新 revision 重讀 instructions。產品範圍未改時沿既有授權處理；需要新產品決議時送既有 decision queue。生成 tasks.md 保持唯讀。
-
-4. C 類只有在 Claude carrier override 下才派 Pi；Pi carrier 直接做。需要派工時：
-   - prompt **第一行 MUST** 是 `[DELEGATED-BY-CLAUDE-CODE]` marker（Codex 端 Runtime Gate 會驗，缺 marker 會被擋掉，見下節）
-   - prompt 內容：phase 標題、該 phase 全部 tasks、相關 design.md / specs / tasks 段落、acceptance criteria、canonical change/work/attempt 身分、當前 revision、evidence 政策與 OPSX project／inspect 回讀方式
-   - prompt 內**MUST**附帶硬指令：「**禁止**修改 view 層檔案（`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss`）；若 task 需要 view 層改動，回報 'view layer change required, defer to main thread' 並跳過該 task」
-   - `<topic>=spectra-apply-<phase-id>`、`<cwd>=consumer repo root`、`-c model_reasoning_effort=high`
-5. 外派 phase 收到 completion 後，carrier **MUST**（executor 已在 worktree 自 commit per § Commit Authorization）：
-   - Read executor stdout 的 `PHASE_X_RESULT` + Plan section（事前公開的思路）
-   - 以 OPSX inspect 確認該 phase 每個 work 的當前 revision 證據與完成狀態；NEVER 把 checkbox 或 process exit 0 當作完成憑證
-   - **Phase boundary 對齊**：`git -C <wt> log main..HEAD --oneline` — confirm exactly one new commit per dispatched phase, format `🧹 chore: wt <change>-phase-<N> — ...`。多 commit / missing commit / format 不符 → **當前 runtime 可用的提問介面**：[1] 主線 squash pi 的多 commits / [2] `git -C <wt> reset --soft main` 退 staging 重派 / [3] 中止
-   - **View-layer drift double-check**：pi 端 self-check 命中時應已 abort，主線此處再驗一次保險：
-     ```bash
-     git -C <wt> diff main..HEAD --name-only \
-       -- '*.vue' '*.tsx' '*.jsx' '*.css' '*.scss' \
-          'app/pages/**' 'app/components/**' 'app/layouts/**' \
-          'pages/**' 'components/**' 'layouts/**' 'views/**'
-     ```
-     有任何 view 層 file 被 pi 動過 → **structured user-input surface**：[1] `git -C <wt> reset --soft main` 退 staging + 主線剔除 view 改動 + 重派 pi / [2] 接受並依 § Spectra Apply Phase Dispatch B 類形狀由主線重跑該 view 改動 / [3] 中止
-   - **Scope discipline cross-check**：`git -C <wt> diff main..HEAD --name-only` 對比 prompt 內 scope 宣告；超出範圍 → structured user-input surface 處理
-   - **Sanity check**（typecheck、相關 test）
-   - 若有遺漏 → **當前 runtime 可用的提問介面**：[1] 主線在 worktree 內 commit 補丁 / [2] reset 重派 pi / [3] 中止
-6. 全部 phases 完成後，以 Claude Opus executor 跑 Design Review 並收取真實體驗驗收決議；Pi carrier 經 bounded Herdr transport 收回結果，仍由同一 carrier 完成 change 收尾
+1. 以 OPSX inspect／instructions 讀 canonical work plan、work_spec_id、依賴、revision 與驗收政策；生成 tasks.md 保持唯讀。
+2. 按工作角色選 bounded executor：Nuxt UI／Content 走 `ui-implementation` Composer 2.5；Nuxt 本體走 `nuxt-core-implementation` Sol xhigh；其餘 UI view 走 `ui-view-implementation` Opus 5（effort: medium）；Design Review 走 `design-review` Opus 5；UI 計畫走 `ui-detailed-planning` Opus 5；非 UI 實作按一般／複雜列分 Luna／Sol。Screenshot review 與項目符合性各走上表。
+3. 混合 UI／非 UI phase 先保存已做的 scoped checkpoint，再以 OPSX revise 明列各模型的檔案所有權與依賴，依新 revision 續跑。產品範圍未變沿既有授權處理；需要新產品決議時送既有 decision queue。
+4. 派工 brief 帶全部 scoped tasks、Plan-first、Commit Authorization、canonical change/work/attempt、revision 與 evidence 政策。非 UI worker 的 brief 明寫「禁止修改 view 層檔案；需要 view 改動時回報，由主持者依 Nuxt UI／Content、Nuxt 本體、其餘 UI view 三類派工」。
+5. 收回後核對 scoped diff、checkpoint、每項工作的 evidence 與 current revision，執行 typecheck／相關測試；checkbox 或 process exit 0 不代替完成憑證。Design Review 與符合性 gate 由 Opus 5 完成後，carrier 才進後續既有收尾流程。
 
 ## screenshot-review Verify Mode Dispatch & Watch Protocol
 
 **核心命題**：派出 〔`screenshot-review-verify`〕（Pi `--model gemini --effort high`）後**主線不能單純等回報**。worker 在 browser 內可能：撞 emptiness preflight、卡 selector、無限 retry。歷史案例（add-pass-fail-inspection-type）verify 跑 7 小時無回報 — 「乾等盲區」對 verify mode 跟對其他 pi 一樣致命。
 
-native delegation 端的對應規範（hard budget、checkpoint、fail-fast、progress.json schema）寫在 `plugins/hub-core/agents/screenshot-review.md` § Verify Mode；本節定義**主線派工 + 監看**規範。
+Gemini worker 的對應規範（hard budget、checkpoint、fail-fast、progress.json schema）寫在 `plugins/hub-core/skills/review-screenshot/references/evidence-contract.md` § Verify Mode；本節定義**主線派工 + 監看**規範。
 
 ### 派工 Brief 必含項（hard rule）
 
@@ -566,8 +498,8 @@ native delegation 端的對應規範（hard budget、checkpoint、fail-fast、pr
 4. 對應實作檔案路徑（主線預消化過的）— **NEVER** 只丟 change name 讓 agent 自己 grep
 5. **Hard budget: 60 min**（明示寫進 brief，agent 端 SKILL.md 也有但 brief 仍須提醒）
 6. **Checkpoint cadence**：每完成 item 或每 15 min（取較短者）寫 `progress.json` + 跑一個 cheap tool call return main loop
-7. **Fail-fast 條件**：登入失敗 / fixture 缺且無 plan / DOM selector 3 次找不到 / 單 item > 5min / click 後 DOM 連續 2 次無預期變化（詳見 `screenshot-review.md` § Fail-Fast 條件）
-8. **單 Bash call ≤ 1 語義動作**（詳見 `screenshot-review.md` § 為什麼單一 long Bash call 會 break SendMessage）
+7. **Fail-fast 條件**：登入失敗 / fixture 缺且無 plan / DOM selector 3 次找不到 / 單 item > 5min / click 後 DOM 連續 2 次無預期變化（詳見 `review-screenshot/references/evidence-contract.md` § Fail-Fast 條件）
+8. **單 Bash call ≤ 1 語義動作**（詳見 `review-screenshot/references/evidence-contract.md` § 為什麼單一 long Bash call 會 break SendMessage）
 9. **progress.json 路徑**：`screenshots/<env>/<change-name>/progress.json`
 10. **回報格式**：每 item PASS / FAIL / UNCERTAIN + evidence（network / dom / screenshot path）
 
@@ -613,57 +545,22 @@ native delegation 端的對應規範（hard budget、checkpoint、fail-fast、pr
 
 ### Dispatcher provenance 機械 backstop（2026-08-11 起）
 
-主線消費完 `screenshot-review` subagent 回的 JSON 摘要後 **MUST** 跑 `node <clade-vendor>/scripts/verify-ui-receipt.ts --change <name> --items <id,id> --consumer-path <consumer>` 落一筆 receipt 到 `<consumer>/.spectra/verify-ui-dispatch-ledger.jsonl`（2026-08-22 起寫入責任在主線；此前由已退役的 dispatcher 寫）（`change` → `itemIds` → `ts` → `exit` → `ok`，**欄位順序固定**——ledger 的讀取端靠有序 literal 比對，改順序等於讓既有紀錄解析失敗）。**驗這筆 receipt 的那道 gate 已經不在了**——archive-gate Check 9 隨 spectra 生命週期退役（2026-09-07）。receipt 仍 MUST 寫（理由見下一條：它 fail-closed 在**寫入**當下，不依賴任何 archive 時的複驗）。
+主線消費完 Gemini screenshot-review worker 回的 JSON 摘要後 **MUST** 跑 `node <clade-vendor>/scripts/verify-ui-receipt.ts --change <name> --items <id,id> --consumer-path <consumer>` 落一筆 receipt 到 `<consumer>/.spectra/verify-ui-dispatch-ledger.jsonl`（`change` → `itemIds` → `ts` → `exit` → `ok`，**欄位順序固定**——ledger 的讀取端靠有序 literal 比對，改順序等於讓既有紀錄解析失敗）。寫入當下採 fail-closed，結果交由主持者核對。
 
 - receipt 寫入是 **fail-closed**：寫不進去就吐 `UNCERTAIN(dispatcher-error)` 並 exit 1。**NEVER** 照 `appendDispatchLedger` 那條 telemetry ledger 的 fail-open 寫法——那會產生沒有人知道成因的 false negative
-- 這個機制要抓的失敗模式是「dispatcher 從未被呼叫」，而那個世界裡 receipt 檔**永遠不存在**——所以攔截點 MUST 在寫入當下 fail-closed，**NEVER** 改成任何形式的「receipt 檔存在才驗」。Check 9 退役後這是唯一剩下的攔截點，寫不進去就 exit 1 這件事不可放寬
-- **邊界**：receipt 是主線可 append 的明文 jsonl。Check 9 擋的是 **drift**（忘了走 dispatcher），**NEVER** 是對抗性偽造。**NEVER** 拿 gate 通過宣稱 evidence 來源已被證實
-
-## Codex `$spectra-apply` Runtime Gate
-
-**核心命題**：`$spectra-apply` 在 Codex 端不允許由使用者直接觸發。Codex 進入 spectra-apply 流程**必須**是 Claude Code 主線派工的結果——Codex 是執行手，不是 quality gate。
-
-### 為什麼擋
-
-| 風險 | 說明 |
-| --- | --- |
-| 跳過 claim | Codex 直接跑容易略過 `work-claims.md` 規定的「先 claim 再做 active change」流程 |
-| 跳過 Design Review 回收 | spectra-apply 的 Design Review phase 必須由合格視覺 executor 完成（見主規則的 UI 資格判定）；carrier 不能因持有整條 change 就自動取得該資格 |
-| 失去 cross-check | 主線是 quality gate（typecheck / git diff / tasks.md checkbox 確認）；Codex 直接跑沒人 cross-check |
-
-### Marker 機制
-
-主線派 Pi 跑 spectra apply phase 時，prompt **第一行 MUST 是 `[DELEGATED-BY-CLAUDE-CODE]`**（見上節 Spectra Apply Phase Dispatch Step 4）。
-
-Codex session 收到 `$spectra-apply`（或任何要它執行 spectra-apply 流程的請求）時，**MUST** 第一件事檢查 prompt body 是否含 `[DELEGATED-BY-CLAUDE-CODE]` marker：
-
-- **有 marker** → 正常執行 spectra-apply skill
-- **沒 marker** → 立即 STOP、**不執行任何 `spectra` 命令**、不修改任何檔案，回覆使用者：
-
-  > `$spectra-apply` 只能由 Claude Code 主線派工執行。請改在 Claude Code 跑 `/spectra-apply`(主線會自動把非 Design Review phase 派給 Codex 處理，並在 prompt 內加 `[DELEGATED-BY-CLAUDE-CODE]` marker)。
-
-### 設計限制
-
-純 prompt-level 自律 gate，不是硬鎖：
-
-- 設計目標是擋「使用者沒想清楚就在 Codex 喊 `$spectra-apply`」這種非預期觸發
-- 使用者本人若刻意把 marker 貼進 prompt 強行 bypass 是有意行為，不在這個 gate 設計範圍
-- 真正的 hard enforce 需要動 spectra CLI 本身（驗 stdin/env），但 spectra 不在 clade 治理範圍
-
-### 與其他 spectra 入口的關係
-
-本 gate **只**作用於 `$spectra-apply`(最容易踩到 claim / Design Review 跳過坑的入口)。其他 `$spectra-*` 在 Pi 端的限制策略不在本節範圍——若未來發現類似問題，比照本節設計獨立加 gate。
+- 這個機制要抓的失敗模式是「dispatcher 從未被呼叫」，而那個世界裡 receipt 檔**永遠不存在**——所以攔截點 MUST 在寫入當下 fail-closed，**NEVER** 改成任何形式的「receipt 檔存在才驗」。寫不進去就 exit 1 這件事不可放寬
+- **邊界**：receipt 是主線可 append 的明文 jsonl。receipt 記錄執行路徑，不能抵禦對抗性偽造。**NEVER** 拿 receipt 寫入成功宣稱 evidence 來源已被證實
 
 ## 配額耗盡時的 fallback 紀律（全文）
 
 > 從 [[agent-routing]] 同名 § 下推（2026-08-19，TD-540）。always-load 側留 thin pointer ＋ payload
 > 算不出來的三條 NEVER；**要新增或改動任何一跳 MUST 讀完本節**。
 
-配額耗盡（exit 4）**MUST** 依工作原本的檔位與 `workspace_access` 走 dispatcher payload，命中即停。**NEVER** 把 Astra 的活降成 Luna——planning／decision／review 的責任不因配額變成一般實作。下列完整鏈是 `readonly` 形狀；`mutation` 形狀由 dispatcher 機械略過其中每一個 `*-cursor`，caller **NEVER** 自己重建下一跳。
+配額耗盡（exit 4）**MUST** 依工作原本的檔位與 `workspace_access` 走 dispatcher payload，命中即停。**NEVER** 把 Astra 的活降成 Luna——planning／decision／review 的責任不因配額變成一般實作。下列完整鏈是 `readonly` 形狀；`mutation` 形狀由 dispatcher 機械略過其中每一個 `*-cursor`，caller **NEVER** 自己重建下一跳。每個 xAI Grok 4.6 fallback 都先檢查 Cursor Grok 4.6 candidate；mutation 不啟動 Cursor，authoritative payload／ledger 記錄 `skipped_tiers` 與 capability 原因後才交後續模型。
 
 **適用範圍是所有 pi 呼叫點，不只 dispatcher 派工**——含 `/commit` 0-A.1 的跨模型 review gate（該 gate 的具體分支見 commit skill 的 gates.md § 0-A.1）。review gate 尤其吃這條：它的**存在理由**就是不能由主線同池模型自審，所以「撞額度就改派 Claude subagent 補位」形式上補了位、實質上讓 gate 變空。
 
-**Astra 沒有已驗證的 Cursor pool。** 配額耗盡直接走具名終端契約；`spectra-artifact-review` 維持 gate 未達成並登記待補。`luna-cursor` 與 `grok-cursor` 仍只供各自既有鏈使用。
+**Astra 沒有已驗證的 Cursor pool。** 配額耗盡直接走具名終端契約；必要獨立 reviewer 不可用時 gate 維持未達成並登記待補。`luna-cursor` 與 `grok-cursor` 仍只供各自既有鏈使用。
 
 ```text
 readonly:
@@ -680,7 +577,7 @@ mutation:
   Grok-xai → Claude Sonnet
 ```
 
-**dep-upgrade 專用 mutation 路徑**（`dep-upgrade-first-pass`／`dep-upgrade-research`）：Grok → bare `gemini`（Gemini 3.8 Flash，同 effort）→ 停止並回報 blocker。Gemini quota／provider 不可用／catalog miss 都在此結束，不接 Sonnet、不續走 generic Gemini 鏈。`--retry-of` 繼承 originating row 與 mutation capability，下一步以 dispatcher payload 為準。
+**dep-upgrade 專用 mutation 路徑**（`dep-upgrade-first-pass`／`dep-upgrade-research`）：xAI Grok 4.6 → Cursor Grok 4.6（同 Grok effort，先檢查 mutation 能力）→ bare `gemini`（Gemini 3.8 Flash，high）→ 停止並回報 blocker。Gemini quota／provider 不可用／catalog miss 都在此結束，不接 Sonnet、不續走 generic Gemini 鏈。`--retry-of` 繼承 originating row 與 mutation capability，下一步以 dispatcher payload 為準。
 
 `workspace_access` 的來源只有三條：concrete table row 由 `pi-routing-policy.ts` 推導；manual caller 顯式帶 `--workspace-access readonly|mutation`；fallback 以 `--retry-of` 從 ledger 繼承。Dispatcher 把 effective value 寫進 ledger／flow／exit payload，`next_step` 也帶回 capability。**每一個**會修改 working tree、lockfile、Git index 或建立 commit 的 caller都 **MUST** 宣告 `mutation`；無法判定時，Cursor admission與指向 Cursor 的下一跳都 fail closed。
 
@@ -709,7 +606,7 @@ mutation:
 
 **跨 model 家族的跳是具名例外，不是通則**：luna 鏈與上述 dep-upgrade 專用鏈各有自己的終點。 新增跨家族跳 MUST Charles 逐鏈拍板，
 准入三條連言是**申請門檻**，**NEVER** 由它自動導出（必要條件不是充分條件）；逐條判準與取證見
-rationale § luna 鏈的跨家族跳。Astra 的 planning／decision／review 角色，以及 Sol 的 `spectra-phase-implementation`
+rationale § luna 鏈的跨家族跳。Astra 的 planning／decision／review 角色，以及 Sol 的 `non-ui-implementation-escalate`
 各自遵守具名列限制；NEVER 轉 grok 的限制**含 fallback 路徑，配額耗盡不是豁免條件**。
 astra 鏈直接到既有終點，**NEVER** 跨去 grok、**更 NEVER** 降成 luna——「luna 鏈都插了」不是理由。
 
@@ -719,7 +616,7 @@ dispatcher 對 `grok-xai` 這格 required `--chain-origin`（**起點決定的�
 起點不可解時 `next_tier` 回 null 並明說 unresolved 而**不猜**。
 
 **grok 接手 luna 鏈時的補償控制**：grok 有已取證的 fail-open（前置契約未滿足時自報 `status: pass`，
-見 § Routing Table 的 `spectra-phase-implementation` 列）。dispatcher 對 `--route fallback-chain` 的 grok
+見 § Routing Table 的 `non-ui-implementation-escalate` 列）。dispatcher 對 `--route fallback-chain` 的 grok
 dispatch 注入 fail-closed 段，要求回覆帶一行 `PRECONDITIONS_VERIFIED:`，**並機械檢查它在不在**——
 自報 pass 但缺 attestation 一律改判 exit 2。prompt 側只是第一層（用 prompt 修「不遵守 prompt」是同構的），
 機械檢查才是控制；主線收回時仍 MUST 實核 diff。**NEVER** 拿這條 fail-open 當「所以該退回 Claude」的理由，
@@ -728,13 +625,12 @@ dispatch 注入 fail-closed 段，要求回覆帶一行 `PRECONDITIONS_VERIFIED:
 **降 effort 不是降級鏈的一步**：配額按 **model** 記，Astra 撞 usage limit 時 `--effort low` 重試撞的是**同一個** limit。effort 分級是品質 / 成本維度，**NEVER** 拿它當配額耗盡的應對。
 
 1. **Astra exit 4**：readonly 與 mutation 都直接回該鏈終點（計畫／決策是 Opus，gate-output row 是 Fable）。Astra Cursor model 尚未驗證，不能回退 Sol。
-   - **具名例外 `spectra-artifact-review`**：Astra 配額耗盡時 dispatcher payload MUST 帶 `gate_met:false` 與 `durable_follow_up_required:true`。產出 draft 的 Fable family與 Opus main line都不是獨立 review carrier，caller MUST 明示 gate未達成並建立 durable follow-up，**NEVER** 以任何 Claude review、Luna或Grok補位。
 2. **Gemini exit 4／catalog miss／OAuth未就緒**：先到`luna`，兩種capability相同；帶`--retry-of <gemini-label>`，Gemini origin視為luna-class。
 3. **Luna exit 4**：`readonly` payload到`luna-cursor`；`mutation` payload跳過它到`grok-xai --chain-origin luna`。Caller **MUST**照`next_step`，NEVER因為同base tier自行補回Cursor。
 4. **luna-cursor exit 4**（只可能是readonly鏈）→ `grok-xai --chain-origin luna`同effort重派；`--chain-origin`在共享格MUST帶。
 5. **grok-xai exit 4（luna鏈）**：`readonly` payload續到`grok-cursor`，該格耗盡才接Claude `haiku`；`mutation` payload直接跳過`grok-cursor`接`haiku`。兩者終點都 **NEVER** 升`sonnet`。
 6. **Grok鏈自己的路徑**：`readonly` 的`grok-xai` exit 4 → `grok-cursor --chain-origin grok-xai`，再耗盡接Claude `sonnet`；`mutation`直接跳過`grok-cursor`接`sonnet`，**NEVER**降`haiku`。具名例外`commit-0c-fix-verify`由policy payload改接Sol 升級列。
-7. **External-web row是具名二跳例外，NEVER 進上面的generic Gemini／Luna鏈**：第一跳是`--model gemini --effort high --route routing-table --tier-basis table-row --table-row web-search --decision-id <id>`；exit 2／3／4且無usable final text時，第二跳是同decision的`--model luna --effort high --route fallback-chain --tier-basis quota-fallback --retry-of <gemini-label>`。Luna usable就使用結果；Luna exit 3／4後，matching built-in `WebSearch`／`WebFetch`只憑同reason authoritative receipt放行。NEVER續到`luna-cursor`／Grok／Claude subagent。
+7. **External-web row是具名二跳例外，NEVER 進上面的generic Gemini／Luna鏈**：第一跳是`--model gemini --effort high --route routing-table --tier-basis table-row --table-row web-search --decision-id <id>`；exit 2／3／4且無usable final text時，第二跳是同decision的`--model luna --effort low --route fallback-chain --tier-basis quota-fallback --retry-of <gemini-label>`。Luna usable就使用結果；Luna exit 3／4後，matching built-in `WebSearch`／`WebFetch`只憑同reason authoritative receipt放行。NEVER續到`luna-cursor`／Grok／Claude subagent。
 8. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡，由 Claude 執行 N 個本應外派的 change」；有 runtime reset 資訊再附上，沒有就明說 unavailable。
 
 ## Dispatch 資料邊界（全文）
@@ -777,21 +673,19 @@ redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**d
 | **NEVER** 派出 pi 後不啟動 Pi Watch Protocol | 「乾等盲區」是已驗證根因 |
 | **NEVER** 偵測到 `fetch failed` / sandbox 拒絕 / 互動 prompt 還繼續 wakeup | 必須立刻 `structured user-input surface` 介入 |
 | **NEVER** 在 watch loop 中跑與監看無關的工作（grep、Read、subagent） | 監看純粹只看進度 |
-| **NEVER** 派 pi propose 後不跑 cross-check（主線補 Design Review 7 步 + spectra analyze；原本的 `post-propose-check.sh` / `design-inject.sh` 已於 2026-09-07 隨 spectra 生命週期退役，那兩段現在**沒有機器替你跑**） | 主線 = quality gate |
 | **NEVER** 收到 pi 完工通知後跳過 view-layer drift 檢查（`git diff --name-only` 過濾 view 路徑） | 主要的回收 quality gate |
 | **NEVER** 對主線直接 Bash 派的 pi 啟動每 3 分鐘強制 poll | 直接派預設 **notification-only** + 單一 ~1500s 安全網 fallback。subagent 中介 dispatch 已全面禁止（§ Dispatch 入口） |
 | **NEVER** 現場自組 `pgrep` / `ps \| grep` 當進度探針 | 要回報「派出去的長任務做到哪」時，**MUST** 貼 cookbook `~/offline/clade/vendor/snippets/subagent-progress-probe/` 的 artifact 探針（worktree commit 對 **merge-base**、tasks.md tick count 附分母、輸出檔 mtime + size）。process 列表沒有租戶邊界，兩個方向都會給錯答案（成因見 rationale） |
 
 ## Dispatch 入口禁令（下推四列）
 
-> 本節是 [[agent-routing]] § 必禁事項 § Dispatch 入口 下推的四列，觸發時機是「派 pi 寫 code、派 spectra-apply phase、或收 `verify:ui` evidence 之前」。母檔保留其餘各列與具名時機指針。
+> 本節是 [[agent-routing]] § 必禁事項 § Dispatch 入口 下推的四列，觸發時機是「派 pi 寫 code、或收 `verify:ui` evidence 之前」。母檔保留其餘各列與具名時機指針。
 
 | NEVER | 說明 |
 | --- | --- |
-| **NEVER** 派 pi 跑 spectra-apply phase 而 prompt 內漏 Commit Authorization 段（一 phase 一 commit / `🧹 chore: wt <change>-phase-<N>` format / hook 必跑禁 `--no-verify` / commit 前自驗 view-layer + scope） | 缺這段 pi 會混 commit、撞 commitlint hook |
-| **NEVER** 派 Pi 寫 code（spectra-propose draft / spectra-apply phase）而 prompt 漏掉 Plan-first 硬指令 | 沒 plan 主線只能從 diff 反推；pi 寫完 plan 必須立刻續跑 |
-| **NEVER** 派 general-purpose / worktree / 臨時 session 自跑 playwright / agent-browser 收 verify:ui evidence | 唯一入口是 `screenshot-review` 這支具名 review carrier（2026-08-22 起本 channel 保留既有 review gate）。本列擋的是繞過具名 carrier；瀏覽器與互動登入由 target adapter 的 native surface 處理，缺少該 surface 就維持 blocked。 |
-| pi **MUST** 由**該層編排者**在其自身 sandbox 內直接 Bash background process launcher 派出（含泛用 dispatcher）：主線是編排者時由主線派；`/wt` Form 3 / Form 4 的 worktree subagent 執行它被指派的 next-skill 時（`/spectra-apply` 的 Step 6b Class C、Step 8a verify channel、pre-handoff checks；`/spectra-debug` 的診斷 / repro dispatch；以及 next-skill `references/` 各層的每一處 pi 派工）由**該 subagent** 派 | 例外的**准入條件**是該編排者自跑完整 Pi Watch Protocol（notification-only + 安全網 fallback，per [[agent-routing.pi-watch-protocol]] § 監看排程）——做不到就退回上一列的薄中介禁令。編排者**以外**的任何一層對這些 pi **零探針**（per 同檔 § 跨 sandbox 可見度約束 v2）。**本列的範圍只及 `/wt` Form 3 / Form 4 開出的 worktree subagent**，**NEVER** 外推成「任意 native delegation subagent 都可以派 pi」 |
+| **NEVER** 派 Pi 寫 code（非 UI 實作）而 prompt 漏掉 Plan-first 硬指令 | 沒 plan 主線只能從 diff 反推；pi 寫完 plan 必須立刻續跑 |
+| **NEVER** 派 general-purpose / worktree / 臨時 session 自跑 playwright / agent-browser 收 verify:ui evidence | 唯一入口是 `review-screenshot` skill 直派 `screenshot-review-verify` Gemini 3.8 Flash worker。本列擋的是繞過具名 carrier；瀏覽器與互動登入由 target adapter 的 native surface 處理，缺少該 surface 就維持 blocked。 |
+| pi **MUST** 由**該層編排者**在其自身 sandbox 內直接 Bash background process launcher 派出（含泛用 dispatcher）：主線是編排者時由主線派；`/wt` Form 3 / Form 4 的 worktree subagent 執行它被指派的 next-skill 時（next-skill 的診斷、repro 與其他具名 Pi 工作）由**該 subagent** 派 | 例外的**准入條件**是該編排者自跑完整 Pi Watch Protocol（notification-only + 安全網 fallback，per [[agent-routing.pi-watch-protocol]] § 監看排程）——做不到就退回上一列的薄中介禁令。編排者**以外**的任何一層對這些 pi **零探針**（per 同檔 § 跨 sandbox 可見度約束 v2）。**本列的範圍只及 `/wt` Form 3 / Form 4 開出的 worktree subagent**，**NEVER** 外推成「任意 native delegation subagent 都可以派 pi」 |
 
 ## 配額與 residency 的下推兩段
 

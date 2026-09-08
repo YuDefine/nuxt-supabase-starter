@@ -3,8 +3,8 @@
 
 Use this template when dispatching an implementer subagent.
 
-**預設 carrier 是 Pi，不是 Agent tool**：依 SKILL.md § Model Selection，implementer 的兩個
-一般檔位是 `--model gemini --effort low|high`，經泛用 dispatcher 送出（`--route claude-delegate-sub
+**預設 carrier 是 Pi，不是 Agent tool**：依 SKILL.md § Model Selection，implementer 的 Gemini 3.8 Flash
+檔位是 `--model gemini --effort high`，經泛用 dispatcher 送出（`--route claude-delegate-sub
 --tier-basis delegate-sub`）。下面的 prompt 本體就是 dispatcher 的 brief 素材，逐段照用。
 
 Agent tool 形式**僅**在兩種情況出現：架構判斷型 task（`opus`），或 Pi runtime／配額不可用後

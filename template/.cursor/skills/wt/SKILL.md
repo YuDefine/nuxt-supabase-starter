@@ -24,7 +24,7 @@ The user's only follow-up action is the actual 人工檢查 decision（GUI 的 O
 
 Whenever a coding task (write, edit, refactor, migration prep) or investigation task (analysis, debugging, auditing) is about to start from the main worktree. `/wt` makes per-task worktree isolation cheap; the previous "type a slug, copy a oneliner, open a new session" choreography is gone.
 
-Non-UI tasks are automatically routed to Pi (cheaper, doesn't consume Claude context); UI tasks stay with Claude subagent. Use `--claude` or `--pi` (the older `--codex` spelling is still accepted) to override.
+Step 1.8 selects the executor from the shared routing table and uses that model’s supported transport. Nuxt UI／Content, Nuxt core and other UI views have separate implementation rows.
 
 **Do not invoke `/wt`** in these cases:
 
@@ -191,7 +191,7 @@ If you are a new session resuming this worktree:
 
 ### Step 1.8 — Executor routing
 
-Classify the task to choose the executor. The default routing is automatic; users can override with `--claude` or `--pi` (the older `--codex` spelling is still accepted).
+Classify the work using the shared routing table, then select its supported transport. Explicit invocation flags select a carrier within that row’s model and capability requirements.
 
 **Invocation override flags** (parsed from args before slug/task extraction):
 
@@ -201,12 +201,12 @@ Classify the task to choose the executor. The default routing is automatic; user
 
 **Auto-classification** (check in order, first match wins):
 
-1. **UI view implementation** → **NOT dispatched. The Opus main line does it** (no Step 2 at all — build the worktree, then implement in it directly)
-   - Task description contains UI keywords: `vue`, `css`, `scss`, `component`, `page`, `layout`, `styling`, `design`, `template`, `responsive`, `animation`, `UI`, `UX`, `視覺`, `畫面`, `樣式`, `介面`
-   - OR thin brief lists files matching: `*.vue`, `*.tsx`, `*.jsx`, `*.css`, `*.scss`, `pages/`, `components/`, `layouts/`, `views/`
-   - **NEVER** hand this to Pi (any model) or to a Claude subagent. There is no legal tier for this row — implementation and visual judgement both stay on the main line.
-   - **NEVER** reroute because the task is large, the hour is late, or a Pi pipeline is already warm for the non-view phases — that pipeline is for non-view work only.
-   - SoT: [[agent-routing]] § 派不派 不外派清單. This step **NEVER** overrides it.
+1. **UI or Nuxt implementation** → select the matching shared table row by the work being implemented:
+   - Nuxt UI component assembly／Nuxt Content → `ui-implementation`: native Cursor Composer 2.5 from the current catalog.
+   - Nuxt framework, modules and runtime logic → `nuxt-core-implementation`: GPT-5.6 Sol xhigh via the GPT transport for the current runtime.
+   - Other UI views → `ui-view-implementation`: Claude Opus 5（effort: medium） via native AI Agent／Herdr.
+   - A main line that meets the selected row’s model and tool requirements implements directly. Otherwise use the bounded phase transport in [[agent-routing]]; preserve the worktree and work identity.
+   - Design review, UI planning and screenshot work use their own named rows. File extensions and UI keywords help locate the work but do not select its model.
 
 2. **Analysis/debug work** → **Pi via pi-dispatch.ts** (Step 2-pi-investigate)
    - Task description contains investigation keywords: `analyze`, `analysis`, `debug`, `investigate`, `audit`, `scan`, `trace`, `why`, `root cause`, `分析`, `除錯`, `調查`, `掃描`, `追蹤`, `為什麼`
@@ -217,14 +217,14 @@ Classify the task to choose the executor. The default routing is automatic; user
    - Rationale: non-UI coding is the sweet spot for Pi — cheaper, doesn't consume Claude context, follows the same pi-watch-protocol already proven in `/commit` and `/implement`.
 
 **Form-specific overrides**:
-- Form 3 (`/wt <slug>: /<next-skill>`): always Claude subagent — the subagent needs Skill tool access to invoke the next skill
-- Form 4 (`/wt resume <slug>`): always Claude subagent — resume requires judgment to pick up from WORKTREE-BRIEF.md
+- Form 3 (`/wt <slug>: /<next-skill>`): use a carrier that can invoke the next skill; each implementation phase still follows its named routing row.
+- Form 4 (`/wt resume <slug>`): read WORKTREE-BRIEF.md and route the remaining work by its current role.
 - Form 2 (parallel multi-task): each task independently classified; mixed executors in the same invocation is fine
 
 After classification, report the routing decision to the user before dispatching:
 
 ```
-Routing: <task> → [pi|claude|pi:analyze|pi:debug] (<reason>)
+Routing: <task> → <table-row> / <model> / <effort> / <transport> (<reason>)
 ```
 
 ### Step 2 — Dispatch a Claude subagent into the worktree
