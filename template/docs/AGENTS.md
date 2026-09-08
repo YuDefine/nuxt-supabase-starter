@@ -170,5 +170,6 @@ rm .claude/.first-run
 | Troubleshooting  | [TROUBLESHOOTING.md](TROUBLESHOOTING.md)                  |
 | FAQ              | [FAQ.md](FAQ.md)                                          |
 | 部署             | [DEPLOYMENT.md](DEPLOYMENT.md)                            |
+| Tunnel 公開 hostname | [guide/cloudflare-tunnel-hostname.md](guide/cloudflare-tunnel-hostname.md)（CLI／API；完整步驟在 clade snippet） |
 | 架構決策         | [decisions/](decisions/) / [architecture/](architecture/) |
 | 既有問題解法     | [solutions/](solutions/) / [gotchas/](gotchas/)           |
