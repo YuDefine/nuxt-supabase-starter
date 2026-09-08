@@ -18,12 +18,12 @@ Local edits will be reverted by the next sync.
 
 **收到 brief 就直接做下方的工作。** 不判身份、不偵測任何 runtime、不轉派給任何人。
 
+**第一手不是本 agent。** 〔`screenshot-review-verify`〕列走 Pi `--model gemini --effort high`。
+若你仍被派到：直接做截圖工作，**NEVER** 再轉派（含再呼叫 Pi）。那是
+[[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]] 的形狀。
+
 **NEVER** 從本 agent 內部呼叫 Pi runtime（`pi` / `pi-dispatch.ts` / 任何 `pi-dispatch-*`）、
 **NEVER** 呼叫 `codex` 任何命令、**NEVER** 把收到的 brief 再包一層派給別的 subagent。
-本 agent 是這個 channel 的**唯一**執行體（per [[agent-routing]] 〔`screenshot-review-verify`〕列
-與 [[review-gui-surface]] § 截圖 evidence 一律走 Claude subagent）。
-
-四個模式一律走本 agent：`[verify:ui]` channel、archive 前視覺 QA、commit 0-B、ad-hoc 截圖。
 
 ### 為什麼這一段長這樣（讀了再改）
 
@@ -33,8 +33,9 @@ Local edits will be reverted by the next sync.
 執行體」，跳過身份判定、也不轉派，自己跑了 127 個 tool call / 116K token / 26 分鐘，
 然後回報 UNCERTAIN。文字級規約擋不住那個推斷。
 
-2026-08-22 Charles 拍板把這個 channel 收回、只准 Claude subagent，路由層因此整個拆掉。
-**矛盾消失的原因是 agent 現在真的就是執行體**，不是因為多加了一條禁令。
+2026-09-08 Charles 把 〔`screenshot-review-verify`〕第一手改回 Pi `--model gemini --effort high`。
+本 agent 不是第一手。若你仍被派到：你仍是**執行體**，**NEVER** 再轉派。
+2026-08-22 收回外派是為了拆掉「wrapper 當路由器」；那條禁令仍在。
 
 所以：**NEVER** 以任何形式把身份判定、runtime 偵測、或「先轉派再說」加回本檔——
 那是把踩過的形狀重建起來。要改政策先改 `rules/core/agent-routing.md` 的

@@ -11,32 +11,25 @@ metadata:
 
 # 截圖（統一入口）
 
-所有截圖工作一律派 `screenshot-review` **Claude subagent**（`Agent` tool，四模式共用；見 § Runtime 分流）。**NEVER** 在主 session 直接跑 `agent-browser` / `curl dev server` / `mkdir screenshots/` 等截圖命令。
+所有截圖工作一律走 Routing Table 〔`screenshot-review-verify`〕：Pi `--model gemini --effort high` via `pi-dispatch.ts`。**NEVER** 在主 session 直接跑 `agent-browser` / `curl dev server` / `mkdir screenshots/` 等截圖命令。**NEVER** 用 Cursor Task `model=claude-*` 假裝本列。
 
-工具選擇規則見 `.cursor/rules/screenshot-strategy.mdc` — agent 會自行判斷，主 session 不需指定。
+工具選擇規則見 `.cursor/rules/screenshot-strategy.mdc` — worker 會自行判斷，主 session 不需指定。
 
 ## Runtime 分流
 
 **四個模式共用同一條路徑**：`[verify:ui]` channel、archive 前 QA、commit 0-B、ad-hoc 截圖，
-一律派 `screenshot-review` **Claude subagent**（`Agent` tool，`subagent_type: screenshot-review`）。
+一律 Pi `--model gemini --effort high --route routing-table --tier-basis table-row --table-row screenshot-review-verify`。
 
-**Cursor runtime**：本 channel 的 Claude subagent 是 AI Agent `Agent` tool，**NEVER** 改用 Cursor Task 的 `model=claude-*`。Pi 已 fail-closed。改走 [[agent-routing]] § Cursor runtime 主線 residency 的 Herdr create-only `--launcher cc`／`ccw`。
+**Cursor runtime**：本列走 Pi `--model gemini --effort high`，**NEVER** 改用 Cursor Task 的 `model=claude-*`。開頁給人看的 Design Review 才走主線 `cursor-ide-browser`。
 
-**本 channel NEVER 外派給 Pi 任一 model**——`grok-xai` / `grok-cursor` / `astra` / `gemini` / `luna`
-一律不准，`pi-dispatch-screenshot-verify.ts` 已 fail-closed 拒跑，
-`pi-routing-policy.ts` 對 `--table-row screenshot-review-verify` 直接 throw。
-2026-08-22 Charles 拍板，理由見 [[review-gui-surface]] § 為什麼只准 Claude subagent。
+**NEVER 恢復「subagent 再轉派」**——若 Claude `screenshot-review` agent 被誤派到，它必須自己做完，不得再呼叫 Pi。
 
 **NEVER** 因為「這次只是 ad-hoc、輸出不是 gate」而改派——carrier 是同一個，模式差別只在
 輸出是不是 gate（verify / archive / 0-B 三個是，ad-hoc 不是）。
 
-**警訊**（subagent 沒在做自己的工作）：subagent 的 tool call 出現 `pi` / `pi-dispatch` /
-`codex` → 它把自己當成路由器了，**MUST** 立刻打斷。本 agent 是執行體，不轉派給任何人
-（成因見 [[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]）。
-
 ## Brief 注意事項
 
-- Brief **NEVER** 寫 `[DELEGATED-BY-CLAUDE-CODE]`——那是 Pi 派工的 marker，本 channel 不派 Pi。
+- Brief **MUST** 寫 Pi 派工契約（`--table-row screenshot-review-verify`）；本列就是 Pi。
 - Brief 結構（Setup / Items / Output format）跟誰執行**無關**。
 
 ## 觸發時機
@@ -48,13 +41,11 @@ metadata:
 
 ## 派遣方式
 
-四個模式共用同一條：`Agent` tool，`subagent_type: screenshot-review`，brief 直接放在
-`prompt` 參數（不落檔——in-process subagent 的 brief 是 prompt 字串，per
-[[agent-routing]] § Dispatch 資料邊界）。
+四個模式共用同一條：`node vendor/scripts/pi-dispatch.ts --model gemini --effort high --route routing-table --tier-basis table-row --table-row screenshot-review-verify`。**NEVER** Cursor Task `model=claude-*`。**NEVER** 恢復「subagent 再轉派」。
 
-主線收到 subagent 回報後只消費它的 JSON 摘要，**NEVER** 逐張 `Read` 截圖
-（例外路徑見 [[review-gui-surface]] § 截圖 evidence 一律走 Claude subagent 的表）。
-下面三段是 brief 的 prompt 本體素材。
+主線收到 worker 回報後只消費 JSON 摘要，**NEVER** 逐張 `Read` 截圖
+（例外路徑見 [[review-gui-surface]] § 截圖 evidence）。
+下面三段是 brief 本體素材。
 
 ### Ad-hoc 截圖
 
@@ -113,6 +104,6 @@ agent 交回的 manifest 已含 `discriminating` 欄，但**主線 MUST 自行�
 
 ## 注意事項
 
-- **四個模式**（verify / archive QA / commit 0-B / ad-hoc）一律由主線直派 `screenshot-review` Claude subagent（`Agent` tool，`subagent_type: screenshot-review`）；**NEVER** 派 Pi 任一 model，也 **NEVER** 讓 subagent 再轉派
+- **四個模式**（verify / archive QA / commit 0-B / ad-hoc）一律 Pi `--model gemini --effort high`（`--table-row screenshot-review-verify`）；**NEVER** Cursor Task 換 model，也 **NEVER** 讓任何 subagent 再轉派
 - 主 session **不需要**自己跑截圖命令
 - 主 session **不需要**決定用哪個工具 — agent 依 rule 判斷

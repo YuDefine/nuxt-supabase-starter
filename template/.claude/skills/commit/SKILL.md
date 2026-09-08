@@ -110,7 +110,7 @@ simplify → fast-path 判定
 
 每個 gate 的完整執行流程（bash scripts、trigger 條件、fix loop、pi offload）見 [gates.md](gates.md)。執行任一 gate 前 **MUST** 先讀對應 §。
 
-- **0-A 程式碼審查**：simplify（0-A.0）→ 合格獨立跨模型 review（0-A.1）→ Critical／Major 條件觸發深度 review 與不同模型族裁決（0-A.2）。詳見 [gates.md](gates.md) § 0-A。
+- **0-A 程式碼審查**：simplify（0-A.0）→ 合格獨立跨模型 review（0-A.1）→ Critical／Major 條件觸發深度 review 與不同模型族裁決（0-A.2）。Cursor 的 0-A.2 Fable 缺 pane 時主線 MUST 先開 Herdr pane，不能把「無 pane」當 skip。詳見 [gates.md](gates.md) § 0-A。
 - **0-B UI Design Review**：條件觸發（`.vue` template 變更 + 視覺影響）。詳見 [gates.md](gates.md) § 0-B。
 - **0-C CI 等效檢查**：`pnpm check` + `pnpm test` + `pnpm run doctor`，全綠才過。詳見 [gates.md](gates.md) § 0-C。
 - **0-D Doc Alignment**：條件觸發（diff 觸及 docs / rules / snippets / audit / 業務碼 / pitfall）。詳見 [gates.md](gates.md) § 0-D。
