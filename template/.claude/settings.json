@@ -99,6 +99,8 @@
     "hub-db-runtime-cf-workers@clade": true,
     "hub-runtime-cf-workers@clade": true,
     "hub-framework-nuxt@clade": true,
-    "hub-ecosystem-node@clade": true
+    "hub-ecosystem-node@clade": true,
+    "hub-capabilities-aixbdd@clade": true,
+    "hub-capabilities-specformula@clade": true
   }
 }
