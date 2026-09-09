@@ -9,7 +9,7 @@
 
 ### 2B.1a Audit
 
-**MUST 落檔再 jq 取段，NEVER 讓 JSON 全文進 context**（TDMS 實測 96 KB ≈ 27k tokens，其中 status=pass 的項目佔大半而它們本來就不需要判讀）：
+**MUST 落檔再 jq 取段，NEVER 讓 JSON 全文進 context**（<consumer-b> 實測 96 KB ≈ 27k tokens，其中 status=pass 的項目佔大半而它們本來就不需要判讀）：
 
 ```bash
 # MUST mktemp 唯一路徑 + 落檔後驗 consumerId（成因見下方「$SCAN 路徑與歸屬」）
@@ -27,7 +27,7 @@ jq -r '.. | objects | select(.status? and .name? and .status != "pass")
 
 #### $SCAN 路徑與歸屬（hard rule，park / next 共用）
 
-- **NEVER 用固定路徑**（`${TMPDIR:-/tmp}/handoff-scan.json` 或任何不含隨機段的名字）。`TMPDIR` 在本機未設 → 固定路徑等於**全機器所有 consumer 的所有 session 共用同一個檔**。2026-08-05 實證：yuntech session 寫入後 48 秒被別 session 覆寫成 `clade`，第一次讀到的是 `perno`，同時段 `/tmp/handoff-scan*.json` 還有 TDMS 的產物。
+- **NEVER 用固定路徑**（`${TMPDIR:-/tmp}/handoff-scan.json` 或任何不含隨機段的名字）。`TMPDIR` 在本機未設 → 固定路徑等於**全機器所有 consumer 的所有 session 共用同一個檔**。2026-08-05 實證：<consumer-d> session 寫入後 48 秒被別 session 覆寫成 `clade`，第一次讀到的是 `<consumer-a>`，同時段 `/tmp/handoff-scan*.json` 還有 <consumer-b> 的產物。
 - **MUST 在讀任何一段之前先驗 `.consumerId`**，`SCAN-MISMATCH` 或 `MISSING` → **STOP**：整份 `$SCAN` 作廢，重跑上面的 block（**NEVER** 把它當「大致對」繼續判讀，也 NEVER 只重跑受影響的那一段）。
 - 危害不是「讀到舊資料」而是**拿別 repo 的事實對本 repo 下判斷**：health gate、review-gui bucket、tech-debt hygiene、worktree & stash audit 四段全部受影響，然後寫進本 repo 的 `HANDOFF.md`。最危險的是 **Step 3.2a 的 stash drop gate 是 MUST 主動 drop** —— 拿別 repo 的 stash 清單做本 repo 的刪除判定。
 - `handoff-scan.ts` 自身的 consumer 解析（`basename(dirname(git-common-dir))`，worktree 內也回主 repo）**無誤**，上面的 `EXPECT` 就是同一個算式 —— 壞的只有暫存檔路徑。
@@ -233,7 +233,7 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff next — clade <version> scan_
 | **evidenceStale** | `tech-debt-evidence-stale:<TD-NNN>`（warn） | open TD 的 `Location` 路徑在 `Discovered` 之後被 commit 過 — 「敘述可能已不成立」候選。與 staleOpen 正交：staleOpen 問「放多久了」，本條問「還成不成立」 | **MUST 逐條讀該 entry 對照現況後才列 outstanding**，NEVER 直接把它當成待辦推給 user。三種結果：① 事情已做完 → 補 `### Resolution` + 改 `Status`，**不**列 outstanding；② 敘述過期但問題還在 → 更正敘述（保留原文供追溯），再列 outstanding；③ 確認仍成立 → 加 `**Last reviewed**: <today>`，照常列。**這是啟發式不是判決** — 路徑被動過也可能與該 TD 主題無關 |
 | **archivedRetained** | `tech-debt-archived-retained`（fail） | `docs/archives/tech-debt-closed-*.md` 內出現帶 re-activation 契約的 TD；trigger 留在 archive 裡，後續盤點看不見 | 依 §2B.1a 的 fail 契約停止；按 detail 的 TD id／archive path 搬回 `docs/tech-debt.md`。判準與 rotation 共用：`*-until-*`、`### 重訪條件` / `### Defer 條件`、`**Signal**:` 任一命中 |
 | **closedBloat** | `tech-debt-closed-bloat`（warn，closed TD ≥ 門檻時觸發） | done/resolved/wontfix 的 closed TD 仍躺 `docs/tech-debt.md` 主檔 | **MUST** 跑 `node "$HOME/offline/clade/vendor/scripts/rotate-closed-bloat.ts"`（搬全部 rotatable，不是啃到門檻下；noop 時 stdout 是 `noop`）。**NEVER** `AskUserQuestion`。retained（`*-until-*`、`### 重訪條件` / `### Defer 條件`、`**Signal**:`）由 script 排除，訊息的 `retained` 欄列出。Park 不執行 |
-| **entryOversize** | `tech-debt-entry-oversize`（warn，任一 open TD > `raw.oversizeThreshold` 行時觸發） | **open** TD 單條正文過長。rotate 只吃 closed，對 open 零覆蓋 — TDMS 實測 4986 行主檔裡 4807 行是 open，主檔體積的長期成長全在這裡 | 產出**下推**建議（**不是砍字**）：把長篇 root-cause 敘事搬到 `$MAIN_WT_PATH/docs/archives/tech-debt-bodies.md`，主檔留 metadata block（`Status` / `Discovered` / `Class` / `Location`）+ 摘要一段 + pointer。逐條見 `raw.oversize[]`（含 `lines` / `overBy` / `lineNo`）。**用 `AskUserQuestion` 讓 user 拍板**（同 §2B.1b rotate plan 模式：A 套用 / B 跳過 / C 手動），user 選 A 才動檔。**MUST 保留 metadata block 原封不動** — `audit-tech-debt-hygiene.ts` 的 Invariant 2 / 3 / 6 全靠它，搬走 `Location` 會讓那三條同時失效 |
+| **entryOversize** | `tech-debt-entry-oversize`（warn，任一 open TD > `raw.oversizeThreshold` 行時觸發） | **open** TD 單條正文過長。rotate 只吃 closed，對 open 零覆蓋 — <consumer-b> 實測 4986 行主檔裡 4807 行是 open，主檔體積的長期成長全在這裡 | 產出**下推**建議（**不是砍字**）：把長篇 root-cause 敘事搬到 `$MAIN_WT_PATH/docs/archives/tech-debt-bodies.md`，主檔留 metadata block（`Status` / `Discovered` / `Class` / `Location`）+ 摘要一段 + pointer。逐條見 `raw.oversize[]`（含 `lines` / `overBy` / `lineNo`）。**用 `AskUserQuestion` 讓 user 拍板**（同 §2B.1b rotate plan 模式：A 套用 / B 跳過 / C 手動），user 選 A 才動檔。**MUST 保留 metadata block 原封不動** — `audit-tech-debt-hygiene.ts` 的 Invariant 2 / 3 / 6 全靠它，搬走 `Location` 會讓那三條同時失效 |
 
 **closedBloat 的幅度由 script 一次搬完全部 rotatable 承載**，不再走 (A) 選項。
 
@@ -270,7 +270,7 @@ closedBloat 的 retained 例外與 entryOversize 兩者的正文都落**同一�
 VPN／Tailscale 內網），CI 沒有那些東西。這類 script 因此進不了 `pnpm check`、進不了 workflow ——
 於是它們**寫好了、判定準確、卻沒有任何時刻會去跑它**。
 
-> 2026-08-28 實證（perno）：`scripts/audit-notion-secrets.mjs` 已能抓出兩條 secret 明文只剩截斷值、
+> 2026-08-28 實證（<consumer-a>）：`scripts/audit-notion-secrets.mjs` 已能抓出兩條 secret 明文只剩截斷值、
 > exit 1、檔頭註解逐字寫過這個情境；`grep -rn "audit:notion-secrets"` 卻只命中 `package.json` 的
 > script entry —— 不在任何 gate、任何 workflow、任何 skill。規則有、偵測有、判定準，
 > 唯獨沒有觸發點，於是兩條 secret 的明文在世界上消失了一整天沒有人知道。

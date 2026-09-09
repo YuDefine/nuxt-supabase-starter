@@ -65,7 +65,7 @@ exit 0 才可繼續。exit 2（cwd 在 main working tree）**MUST** 停下開 wo
 **NEVER** 加 `|| true`、**NEVER** 改判成 warning、**NEVER** 因為「這次只改兩個檔」跳過。
 gate 沒有 `--allow-main` escape hatch，這是刻意的。
 
-> 這條在 2026-07-29 之前只是文字規約，實測擋不住：TDMS 的 sweep 在 main 生出 per-package
+> 這條在 2026-07-29 之前只是文字規約，實測擋不住：<consumer-b> 的 sweep 在 main 生出 per-package
 > 迴圈跑起來，`git add package.json` 撈走另一個 session 未 commit 的 `pnpm version patch`，
 > 同時 `.git/index.lock` 讓對方的 `git commit` 直接失敗（TD-277）。commit message 的
 > `wt ` 前綴當時**不**保證真的在 worktree——接上 gate 之後才保證。

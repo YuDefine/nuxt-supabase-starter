@@ -64,7 +64,7 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts done "$CLADE_WORK_ID" \
 ⛔ **先過 [dispatch-common.md](dispatch-common.md) § 1 的 `--cwd` 佔用探測**——successor 的 `--cwd` 指向既存工作區時，與 fanout worker 適用同一道 gate。
 
 ```bash
-node /home/charles/offline/clade/vendor/scripts/herdr-session-handoff.ts \
+node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \
   --route <routing-policy> --tier-basis <routing-conclusion> \
   --cwd <absolute-main-checkout> \
   --model <routing-model> --effort <routing-effort> \

@@ -55,7 +55,7 @@ squash-merge repo，那裡的 branch 在內容進 main 之後 `main..<branch>` �
 **粒度是行，NEVER 是 commit。** unmanaged 那半的 `trueUnlandedCommits` 是 per-commit 全稱判定
 （commit 內任一檔命中率 < 0.8 → 整個 commit 判未落地），拿來當 managed worktree 的三分依據會
 塌回兩分：一條 branch 只要有一個本來就不會進 main 的檔（worktree-local 的暫存產物
-這種 change metadata），整條就報 `no`。2026-08-29 perno 實測 `v1-migration-status-fix`：
+這種 change metadata），整條就報 `no`。2026-08-29 <consumer-a> 實測 `v1-migration-status-fix`：
 per-commit 判 `no`，行粒度判 **87.6%（367/419 行）= `partial`** —— 而 `partial` 是那條唯一正確
 的處置。
 
@@ -64,7 +64,7 @@ branch 的舊版覆蓋 main 上已經更新過的內容。`unknown`（取不到 
 讀成 `no` —— 取值失敗與真的沒落地事後不可區分，把它讀成 `no` 是把靜默變成一個看起來像發現的斷言。
 
 **低端門檻是 0.10 而不是 0，這是刻意的。** 長度 ≥ 12 的 import 行、boilerplate、共用字串會在任何
-兩個檔之間偶然命中：perno `td275-audit-log-entity-id-filter` 18 行裡有 1 行（5.6%）是這種命中，
+兩個檔之間偶然命中：<consumer-a> `td275-audit-log-entity-id-filter` 18 行裡有 1 行（5.6%）是這種命中，
 而它實際完全未落地。門檻設 0 會把它報成 `partial`，而 `partial` 的處置是逐檔人工比對 ——
 用一個雜訊換走一個人的十分鐘。高端是 0.98：門檻不對稱地貼近兩端，寧可把「幾乎全落地」丟進
 `partial`，**NEVER** 反過來把 `partial` 讀成 `yes`。

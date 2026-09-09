@@ -247,7 +247,7 @@ helper receipt 中的 `retained: false` 只描述 child pane，**NEVER** 拿它�
 剩餘步驟、檔案所有權），再帶進 completion：
 
 ```bash
-node /home/charles/offline/clade/vendor/scripts/herdr-session-handoff.ts \
+node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \
   --complete success --summary '<已完成與驗證>' --followup-brief <absolute-brief-path>
 ```
 
@@ -258,7 +258,7 @@ node /home/charles/offline/clade/vendor/scripts/herdr-session-handoff.ts \
 
 殘工 brief 天生長成「已完成 ＋ 剩餘」兩段——那正是收工盤點的形狀，所以下一棒會把它讀成一題
 「現在該做什麼」而不是一份工作指令，然後零工作就把上一棒的 summary 原樣回報成 success
-（perno 2026-09-03 同一輪兩次命中）。dispatch 時 helper 會在 prompt 最前面注入同一句，但
+（<consumer-a> 2026-09-03 同一輪兩次命中）。dispatch 時 helper 會在 prompt 最前面注入同一句，但
 **brief 檔本身也要有**：它會被獨立讀（relay successor 逐字帶路徑、收割者自己開檔看），
 那些場合沒有 helper 的注入。
 

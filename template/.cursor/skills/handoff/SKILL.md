@@ -316,7 +316,7 @@ heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消�
 ```markdown
 <!-- ✅ 判定成立 -->
 **驗收入口**（2026-08-26 實查 `review-handoff-url.ts resolve --change <name>` exit 0）：
-https://review-gui.yudefine.com.tw/review/<consumer-id>:<change-name>
+https://review-gui.<maintainer-domain>/review/<consumer-id>:<change-name>
 
 <!-- ✅ 判定不成立 —— 誠實寫缺口，NEVER 省略不提 -->
 **驗收入口：無。** `resolve` 回 `not-in-inbox`（`verifyUiUserPendingCount:0`）——
@@ -327,7 +327,7 @@ https://review-gui.yudefine.com.tw/review/<consumer-id>:<change-name>
 ```
 
 **下游後果**：這兩種句子在檔案裡長得一樣，所以接手者沒有任何辦法分辨。它會原樣轉述給 user，
-而 user 是最沒有能力驗證它的那一方。2026-08-26 perno `manager-my-approval-inbox` 實測：
+而 user 是最沒有能力驗證它的那一方。2026-08-26 <consumer-a> `manager-my-approval-inbox` 實測：
 三項宣稱（evidence 已備妥 / 截圖已依 item-id 命名 / 球在 user 手上）**全與磁碟不符**，
 接手 session 轉述兩次才被 user 反彈揪出（[[pitfall-handoff-claim-without-verification-receipt]]）。
 
@@ -451,7 +451,7 @@ triage 結果併入 §2B.2 outstanding 清單（與 HANDOFF / tech-debt / ROADMA
 - ❌ 只寫「等 owner 拍板 / 卡外部」而不端出**具體**決策題或**具體**等待 signal
 - ❌ 因 master 統計排除就把這兩類 bucket 從 outstanding / AskUserQuestion 選項中省略
 
-**為什麼這條 rule 存在**（2026-07-06 TDMS 實證）：/handoff next 對 3 條 applyBlocked 的 `ai-*` change 只寫進 notReady 段就結束，未抽 blocker 原因、未辨識 `ai-mcp-server` 其實 Phase 1-7.2 已解封可現在開工、未端出唯一需 user 拍板的 work-order grain 決策。user 被迫主動追問才拿到這些資訊 — 主動 triage 本應是 next 內建職責。
+**為什麼這條 rule 存在**（2026-07-06 <consumer-b> 實證）：/handoff next 對 3 條 applyBlocked 的 `ai-*` change 只寫進 notReady 段就結束，未抽 blocker 原因、未辨識 `ai-mcp-server` 其實 Phase 1-7.2 已解封可現在開工、未端出唯一需 user 拍板的 work-order grain 決策。user 被迫主動追問才拿到這些資訊 — 主動 triage 本應是 next 內建職責。
 
 ### 2B.3 Serial vs Parallel 評估
 

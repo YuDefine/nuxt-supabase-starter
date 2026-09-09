@@ -39,7 +39,7 @@
 
 preset 已經決定的事（部署平台、DB 種類、CI、evlog）不要再問一遍。catalog 題**不是** preset 能代替的：「只有無法安全推導的才問」**不適用**這些 id。
 
-選項文案用 catalog 的 `label`。**NEVER** 把選項寫成 LXC、CT、TDMS、playbook 編號——那些是後續文件，不是給新人的第一個問題。
+選項文案用 catalog 的 `label`。**NEVER** 把選項寫成 LXC、CT、<consumer-b>、playbook 編號——那些是後續文件，不是給新人的第一個問題。
 
 ## Starter preset mapping
 

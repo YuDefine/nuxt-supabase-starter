@@ -37,7 +37,7 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 對每件工作跑一次；`--new-tab` 讓不同主題各自形成可辨識的 Tab，且**不帶** `--coordinate`、**不帶** `--relay`：
 
 ```bash
-node /home/charles/offline/clade/vendor/scripts/herdr-session-handoff.ts \
+node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \
   --route <routing-policy> --tier-basis <routing-conclusion> \
   --new-tab \
   --cwd <absolute-main-checkout> \
@@ -61,7 +61,7 @@ node /home/charles/offline/clade/vendor/scripts/herdr-session-handoff.ts \
 ## 4. relay 收尾
 
 ```bash
-node /home/charles/offline/clade/vendor/scripts/herdr-session-handoff.ts \
+node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \
   --route <routing-policy> --tier-basis <routing-conclusion> \
   --new-tab \
   --cwd <absolute-main-checkout> \

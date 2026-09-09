@@ -1,6 +1,6 @@
 ---
 name: blog-scout
-description: 掃描內部知識資產（clade pitfalls / conventions / bp 沉澱），對照 yudefine-blog 已發表文章去重後，產出一份排序過的部落格選題建議報告。Use when 使用者說「掃一下有什麼可以寫成文章」「部落格選題」「blog scout」「下一篇要寫什麼」「盤點部落格素材」。只做選題建議，NOT for 寫文章成稿（成稿一律主線自己寫，per agent-routing § 派不派），NOT for 直接改 yudefine-blog 任何檔案（產出是給人看的建議，落地是另一步）。
+description: 掃描內部知識資產（clade pitfalls / conventions / bp 沉澱），對照 <consumer-j> 已發表文章去重後，產出一份排序過的部落格選題建議報告。Use when 使用者說「掃一下有什麼可以寫成文章」「部落格選題」「blog scout」「下一篇要寫什麼」「盤點部落格素材」。只做選題建議，NOT for 寫文章成稿（成稿一律主線自己寫，per agent-routing § 派不派），NOT for 直接改 <consumer-j> 任何檔案（產出是給人看的建議，落地是另一步）。
 license: MIT
 metadata:
   author: clade
@@ -16,14 +16,14 @@ permission_tier: draft
 ## 兩條硬邊界（先讀）
 
 1. **只選題，NEVER 寫成稿**。文章成稿一律主線 Opus 自己寫（`rules/core/agent-routing.md` § 派不派：對外文件的定稿措辭外包不了）。本 skill 的輸出止於「建議題目 + 素材清單 + 敏感度標記」。
-2. **NEVER 寫入 yudefine-blog**。本 skill 對 `~/offline/yudefine-blog/` 只讀不寫；建議被採納後的落地（開稿、frontmatter、category）由使用者與主線另行處理。
+2. **NEVER 寫入 <consumer-j>**。本 skill 對 `~/offline/<consumer-j>/` 只讀不寫；建議被採納後的落地（開稿、frontmatter、category）由使用者與主線另行處理。
 
 ## 判準來源（Step 1 必讀，NEVER 信本檔的轉述）
 
 | 判準 | SoT | 用在哪 |
 | --- | --- | --- |
-| 寫什麼 / 不寫什麼、藏招準則、禁詞清單 | `~/offline/yudefine-blog/AGENTS.md` § 部落格內容主軸 | 敏感度分級、候選准入 |
-| 讀者輪廓與品牌定位 | `~/offline/yudefine-blog/PRODUCT.md` | 每題「讀者是誰 / 為什麼值得讀」 |
+| 寫什麼 / 不寫什麼、藏招準則、禁詞清單 | `~/offline/<consumer-j>/AGENTS.md` § 部落格內容主軸 | 敏感度分級、候選准入 |
+| 讀者輪廓與品牌定位 | `~/offline/<consumer-j>/PRODUCT.md` | 每題「讀者是誰 / 為什麼值得讀」 |
 | pitfall frontmatter 契約與合格標準 | `~/offline/clade/docs/pitfalls/README.md` | 素材解析 |
 | tag controlled vocabulary | `~/offline/clade/docs/pitfalls/tags.yml` | 聚類與內部 tag 判定 |
 
@@ -81,7 +81,7 @@ jq -r '.conventions[] | select((.variants|length)>=2) |
 **(a) 建已發表索引**——列出全部已發表文章的路徑、標題、draft 狀態：
 
 ```bash
-for f in $(find ~/offline/yudefine-blog/content/blog -name '*.md' | sort); do
+for f in $(find ~/offline/<consumer-j>/content/blog -name '*.md' | sort); do
   echo "$(sed -n 's/^draft: *//p' "$f" | head -1 || true)|${f#*content/blog/}|$(sed -n 's/^title: *//p' "$f" | head -1)"
 done
 ```
@@ -89,7 +89,7 @@ done
 **(b) 逐候選 token 比對**——對每個候選題目，取其素材的 2–3 個決定性 token（錯誤碼、套件 API 名、症狀關鍵詞——不是泛稱），掃已發表內文：
 
 ```bash
-rg -il '<token1>|<token2>' ~/offline/yudefine-blog/content/blog/
+rg -il '<token1>|<token2>' ~/offline/<consumer-j>/content/blog/
 ```
 
 實跑驗證例（2026-08-25）：`SIGPIPE|pipefail` → 命中 `devops/fake-green-gates`（該 pitfall 已用過）；`schema cache|PGRST` → 命中 `supabase/postgrest-phantom-failures`；`defineProps` → 命中 2 篇，需人工判是否同一坑。
@@ -147,7 +147,7 @@ script 已給機械初判（高 = 內部工具 tag 命中；中 = body 含禁詞
 ## 守則
 
 1. **NEVER 寫成稿**、NEVER 產出文章草稿片段——連「示範開頭」都不要，那是主線的工作。
-2. **NEVER 寫入 yudefine-blog / docs/pitfalls / 任何素材源**。本 skill 全程唯讀。
+2. **NEVER 寫入 <consumer-j> / docs/pitfalls / 任何素材源**。本 skill 全程唯讀。
 3. **NEVER hard-code pitfall 篇數或檔名清單**——掃目錄，數字每天在變。
 4. **NEVER 跳過 Step 4 去重**就出報告。重複選題是本 skill 最該防的失效。
 5. 敏感度 `高` 的素材 **NEVER** 因為「內容很精彩」出現在候選表——只能出現在「已用過 / 排除」之外的一行統計裡。

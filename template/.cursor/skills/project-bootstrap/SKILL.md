@@ -57,7 +57,7 @@ metadata:
 
 （沒設環境變數就 `$HOME/offline/nuxt-supabase-starter/template/packages/create-nuxt-starter/src/question-catalog.ts`）
 
-AI 不經 CLI、改用對話引導時，MUST 用該檔的 `prompt` 與 `options[].label` 問每一題 `when` 為真的 id。使用者訊息裡已經答過的可以跳過。**NEVER** 另寫 LXC / TDMS / CT 選項標籤。catalog 題**不是**「只有無法安全推導的才問」——那句只適用 catalog 以外的 business variant。
+AI 不經 CLI、改用對話引導時，MUST 用該檔的 `prompt` 與 `options[].label` 問每一題 `when` 為真的 id。使用者訊息裡已經答過的可以跳過。**NEVER** 另寫 LXC / <consumer-b> / CT 選項標籤。catalog 題**不是**「只有無法安全推導的才問」——那句只適用 catalog 以外的 business variant。
 
 `--yes` **只能**在適用的 catalog 題都有答案之後組 flags。缺 `--db-host`（Supabase 軌）就不要跑 CLI；CLI 會 fail-loud。
 

@@ -12,7 +12,7 @@
 
 ## F1 — 完整報告的形狀
 
-- **Given** `docs/pitfalls/` 有可解析條目，`yudefine-blog/content/blog/` 有已發表文章
+- **Given** `docs/pitfalls/` 有可解析條目，`<consumer-j>/content/blog/` 有已發表文章
 - **When** 使用者要求部落格選題
 - **Then**
   - 輸出三段且順序不可換：候選選題（排序表）→ 已用過的素材 → 掃描現況
@@ -53,7 +53,7 @@
 
 - **Given** 任一次完整執行
 - **When** skill 跑完
-- **Then** `yudefine-blog` 與 clade `docs/` 無任何檔案被建立或修改；唯一產物是對話中的報告文字
+- **Then** `<consumer-j>` 與 clade `docs/` 無任何檔案被建立或修改；唯一產物是對話中的報告文字
 
 > 這一條在 harness 有對應斷言（`readonly-no-write-tools` case 的 `toolsForbidden`），
 > 是本檔唯一機械擋得住的一條。其餘四條靠人工驗收。

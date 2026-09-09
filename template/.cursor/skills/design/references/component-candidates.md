@@ -44,7 +44,7 @@ Query 來源：nuxt-ui-remote `search-components: select`, `get-component: UComm
 
 live 的 prerequisite 是「dev server with HMR **或一個靜態 HTML 檔**」。**Nuxt 專案走靜態 HTML 那條**，理由是硬的：live 注入的是 `<script src="http://localhost:PORT/live.js">`，而 Nuxt 4 的 `app/app.vue` 是 Vue SFC——template 內沒有 `</body>` 可當 anchor，也不接受 `<script>` 標籤。改寫 HTML shell 只為了掛 live，是拿 SSR 輸出去換一個設計階段工具，不划算。
 
-讓 live 作用在 mockup 目錄，實測可行（TDMS 2026-07-29）：
+讓 live 作用在 mockup 目錄，實測可行（<consumer-b> 2026-07-29）：
 
 ```jsonc
 // .impeccable/live/config.json

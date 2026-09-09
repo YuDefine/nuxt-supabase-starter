@@ -24,7 +24,7 @@ Script 位置：
 
 > 這段是本 skill 存在的理由。**NEVER** 退回用 Agent subagent 監看 CI——那正是本 skill 要根治的事故根因。
 
-**事故實證（2026-07-25，perno v0.99.7 發版）**：依當時規約派兩個 `Agent(run_in_background=true)` watcher subagent 監看 Deploy Staging / Production，實際發生四件事：(1) brief 明寫「completed 才回報」，agent 仍反覆中途回報「持續監看中…」，每次回報都是一次 LLM turn，累計 **235k+ tokens 且沒有產出最終結果**；(2) 監看的 staging run 被 concurrency `cancel-in-progress` 取消後，agent 繼續空等已死的 run；(3) SendMessage 改派新 run id，agent 口頭答應卻仍回報舊 run 結論；(4) 同一份 brief、同一個 model，兩個 watcher 行為不一致。
+**事故實證（2026-07-25，<consumer-a> v0.99.7 發版）**：依當時規約派兩個 `Agent(run_in_background=true)` watcher subagent 監看 Deploy Staging / Production，實際發生四件事：(1) brief 明寫「completed 才回報」，agent 仍反覆中途回報「持續監看中…」，每次回報都是一次 LLM turn，累計 **235k+ tokens 且沒有產出最終結果**；(2) 監看的 staging run 被 concurrency `cancel-in-progress` 取消後，agent 繼續空等已死的 run；(3) SendMessage 改派新 run id，agent 口頭答應卻仍回報舊 run 結論；(4) 同一份 brief、同一個 model，兩個 watcher 行為不一致。
 
 | 機制 | 判定 | 理由 |
 | --- | --- | --- |
@@ -50,7 +50,7 @@ bash .cursor/scripts/gh-ci-watch.sh run <run-id>
 display name 是自由文字、跟檔名無關（`ci.yml` 的 name 常是 `CI / Deploy`），而且隨時可被編輯 ——
 檔名要改得動 git。傳錯時 script 自 2026-08-28 起在進輪詢前就 fail fast：exit 2 並把該 repo
 實際的 workflow 清單印進 `RESULT:` 行；先前是被當成 API 抖動重試 3 次後回通用 `UNAVAILABLE`，
-訊息與「gh 掛了 / 沒授權」同形（TDMS v1.272.0 實證，見
+訊息與「gh 掛了 / 沒授權」同形（<consumer-b> v1.272.0 實證，見
 [[pitfall-gh-ci-watch-workflow-display-name-guess-fails-opaquely]]）。名字拿不準就先跑
 `gh workflow list`，或直接用場景 A 的 `run <run-id>`。
 
@@ -61,7 +61,7 @@ bash .cursor/scripts/gh-ci-watch.sh workflow deploy-staging.yml --branch main
 
 - **run 尚未建立也可以直接派**：run 在 push 送達後才被建立，watcher 起跑時它可能還不存在；`/commit` 的發版序列是 `git push origin main` 先、具名 tag 後（2026-09-04 起無條件，見 `plugins/hub-core/skills/commit/SKILL.md` § Step 6-A），所以 tag 觸發的 production run 更是要等第二趟 push 才出現——script 把「查無 run」視為 pending 繼續等（預設只認腳本啟動前 120s 之後建立的 run，可用 `--since <ISO8601>` 調整）
 - run 被 concurrency `cancel-in-progress` 取代 → script 自動改追 superseding run（同 workflow + 同 branch、createdAt 較新者）
-- **tag 觸發的 workflow MUST 用 `--tag v<version>`，NEVER 用 `--branch main`**（例外：**同一支** workflow 同時由 main push 與 tag push 觸發時，`--tag` 解析成 SHA 之後兩條 run 在同一個 SHA 上、分不開，要判「這個 tag 有沒有觸發」得改用 `headBranch` 過濾——見 `plugins/hub-core/skills/commit/SKILL.md` § Step 6-A）：tag 觸發的 run 其 `headBranch` 是 **tag 名**不是 `main`，`--branch main` 對它永遠篩不到 run → watcher 一路 pending 到 `WATCH_TIMEOUT` exit 3，即使該 run 其實是綠的（2026-07-25 TDMS v1.250.0 實證）
+- **tag 觸發的 workflow MUST 用 `--tag v<version>`，NEVER 用 `--branch main`**（例外：**同一支** workflow 同時由 main push 與 tag push 觸發時，`--tag` 解析成 SHA 之後兩條 run 在同一個 SHA 上、分不開，要判「這個 tag 有沒有觸發」得改用 `headBranch` 過濾——見 `plugins/hub-core/skills/commit/SKILL.md` § Step 6-A）：tag 觸發的 run 其 `headBranch` 是 **tag 名**不是 `main`，`--branch main` 對它永遠篩不到 run → watcher 一路 pending 到 `WATCH_TIMEOUT` exit 3，即使該 run 其實是綠的（2026-07-25 <consumer-b> v1.250.0 實證）
 
 ```bash
 bash .cursor/scripts/gh-ci-watch.sh workflow ci.yml --tag "v$(node -p 'require("./package.json").version')"
@@ -69,7 +69,7 @@ bash .cursor/scripts/gh-ci-watch.sh workflow ci.yml --tag "v$(node -p 'require("
 
 ### 目標 ref MUST pin 在你剛推的那一個（hard rule）
 
-**NEVER 在 dispatch 當下才 `--commit "$(git rev-parse HEAD)"`。** `HEAD` 是活的：多 session 共用同一條 main 是常態，`git push` 與派 watcher 之間別的 session 可能已經推了新 commit，`$(git rev-parse HEAD)` 於是解析成**不是你發版的那個 commit**。那個 SHA 通常沒有任何 run，`gh run list -c` 回空陣列，而 script 把「查無 run」當成「run 尚未建立」——失敗形狀是**一路 pending 到 `WATCH_TIMEOUT`**，跟「run 還在排隊」外觀完全一樣，一小時後才發現盯錯目標（2026-08-02 TDMS v1.258.0 實證：HEAD 已被別 session 推進 2 個 commit）。
+**NEVER 在 dispatch 當下才 `--commit "$(git rev-parse HEAD)"`。** `HEAD` 是活的：多 session 共用同一條 main 是常態，`git push` 與派 watcher 之間別的 session 可能已經推了新 commit，`$(git rev-parse HEAD)` 於是解析成**不是你發版的那個 commit**。那個 SHA 通常沒有任何 run，`gh run list -c` 回空陣列，而 script 把「查無 run」當成「run 尚未建立」——失敗形狀是**一路 pending 到 `WATCH_TIMEOUT`**，跟「run 還在排隊」外觀完全一樣，一小時後才發現盯錯目標（2026-08-02 <consumer-b> v1.258.0 實證：HEAD 已被別 session 推進 2 個 commit）。
 
 用不可變的 ref 取代活的 `HEAD`，三選一：
 

@@ -204,8 +204,8 @@ node vendor/scripts/dep-fleet-scan.ts --toolchain "<name>" --target "<target_ver
 **前綴隨平台而異**——它是從 home 目錄的真實絕對路徑推導的，**NEVER** 寫死：
 
 ```
-Linux   /home/charles/offline/perno  → home-charles-offline-perno
-macOS   /Users/charles/offline/perno → Users-charles-offline-perno
+Linux   <home>/offline/<consumer-a>  → home-charles-offline-<consumer-a>
+macOS   <home>/offline/<consumer-a> → Users-charles-offline-<consumer-a>
 ```
 
 因此本節一律以 `<project>` 代表該 consumer 正規化後的名稱。取得方式（**MUST** 實查，不要憑前綴猜）：
@@ -249,7 +249,7 @@ mcp__codebase-memory-mcp__search_code(pattern=<symbol>, project="<project>", pat
   "from_version": "^4.7.1",
   "to_version": "4.8.0",
   "consumer_path": "<consumer 絕對路徑，取自 clade 的 consumers.local>",
-  "consumer_id": "perno",
+  "consumer_id": "<consumer-a>",
   "workflow_model": "trunk-based",
   "release_url": "https://github.com/nuxt/ui/releases/tag/v4.8.0",
   "field": "dependencies",
@@ -340,7 +340,7 @@ Brief JSON：`/tmp/dep-fleet-brief-<pkg-slug>-<consumer-id>.json`
    - 先 read consumer 的 commitlint 設定（`commitlint.config.{js,ts,mjs,cjs}` / `.commitlintrc.*` / `package.json` 內 `commitlint`）
    - 偵測限制：`type-enum` 允許清單、自定 `subject-has-chinese` plugin、`body-max-line-length` / `header-max-length`
    - 生 commit msg 必 **同時通過** worktree branch 跟 consumer main 的 commit-msg hook
-   - 範例：agentic-rag 用 `🧹 chore: 升級 @nuxt/ui ^4.7.0 → 4.8.0`；perno 可用 `⬆️ chore: upgrade @nuxt/ui ^4.7.1 → 4.8.0`
+   - 範例：<consumer-c> 用 `🧹 chore: 升級 @nuxt/ui ^4.7.0 → 4.8.0`；<consumer-a> 可用 `⬆️ chore: upgrade @nuxt/ui ^4.7.1 → 4.8.0`
 7. 回報 stdout 結尾：
    \`\`\`
    FLEET_SUBAGENT_RESULT: SUCCESS | PARTIAL | FAILURE

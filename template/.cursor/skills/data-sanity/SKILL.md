@@ -16,7 +16,7 @@ metadata:
 
 本 skill 執行唯讀稽核與回報；發現問題後，修正依本次任務既有授權處理。`metadata.clade.permission_tier` 記錄這項政策，不是原生權限控制。
 
-Born from perno `app-status-badge-extraction`（2026-05-24）: `attendance/amendments.vue` 用 `useEmployeeListQuery({ perPage: 200 })`，但 server schema 是 `perPage: z....max(100)` → API 400 → `employeeNameMap` empty → 員工 column 整列「-」。typecheck / lint / design review / verify:ui 全沒抓到，因為它是**資料形狀**問題，不是型別或視覺問題。
+Born from <consumer-a> `app-status-badge-extraction`（2026-05-24）: `attendance/amendments.vue` 用 `useEmployeeListQuery({ perPage: 200 })`，但 server schema 是 `perPage: z....max(100)` → API 400 → `employeeNameMap` empty → 員工 column 整列「-」。typecheck / lint / design review / verify:ui 全沒抓到，因為它是**資料形狀**問題，不是型別或視覺問題。
 
 這是 clade 自有 skill（**不是** `/impeccable` 的 sub-command — impeccable 是第三方 npx-managed skill，clade 不擁有）。
 

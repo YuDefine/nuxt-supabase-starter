@@ -10,7 +10,11 @@
     "ecosystem": [
       "node"
     ],
-    "domain": []
+    "domain": [],
+    "capabilities": [
+      "aixbdd",
+      "specformula"
+    ]
   },
   "localHooks": [
     "post-migration-gen-types.sh"

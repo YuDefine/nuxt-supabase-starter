@@ -50,7 +50,7 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts ask \
   --question-page '.impeccable/questions/<gate>.json' \
   --question-page-label '<卡片標題，例如 Register>' \
   --category ruling
-# 3. 告訴 user：https://review-gui.yudefine.com.tw/decisions
+# 3. 告訴 user：https://review-gui.<maintainer-domain>/decisions
 ```
 
 `--question-page` **MUST** 是 repo-relative 且落在 `.impeccable/questions/` 底下的 `.json`
@@ -113,7 +113,7 @@ ls -t .impeccable/questions/*.answer.json 2>/dev/null | head -1
 | NEVER 開完頁還問「要進入 Plan Mode 逐步執行這些改進嗎？」 | Skill sequence 頁的 ANSWER 就是執行授權 |
 | NEVER 把 `serve-question.mjs` / `concept-seed.mjs` 複製進 `vendor/` 或 `design/scripts/` | 第三方 skill 的 script，跟 catalog / roll API 綁在一起 |
 | NEVER 自己 `serve-question --start` 或架 tailnet proxy 把 URL 給 user | server 活不到人來點；且那是 `/decisions` 之外的第二條通道 |
-| NEVER 把任何 `http://<host>:<port>/` 當成給人的決策頁網址 | 決策頁的 user-facing 入口只有一個：`https://review-gui.yudefine.com.tw/decisions` |
+| NEVER 把任何 `http://<host>:<port>/` 當成給人的決策頁網址 | 決策頁的 user-facing 入口只有一個：`https://review-gui.<maintainer-domain>/decisions` |
 | NEVER 自己產 key 再 `--wait --key` | key 由 review-gui 在 spawn 那刻產生；自產的那把永遠等不到答案 |
 | NEVER 因為 user 一時沒答就停在原地 | 不依賴該答案的工作照做；答案沒到就用 unattended default 並註記 |
 

@@ -38,12 +38,12 @@ echo ""
 
 `/design` 決策頁直接呼叫 `scripts/concept-seed.mjs` 與 `scripts/serve-question.mjs`。路徑解析（skill-base-dir → `.claude/` → `.agents/` → `.cursor/skills/impeccable`）見 [decision-page.md](../decision-page.md)。Cursor 安裝後實際用到的常常是 `.cursor/skills/impeccable`，四條都要試。
 
-> 2026-08-02 實證：對 symlink mode 的 repo 跑 `--copy` 會把 tracked 的 symlink（git 物件 `120000`）換成 59 個真實檔案，diff 看起來像整包新增，而該 repo 其餘 skill 仍是 symlink——單方面破壞了它的 skill 管理慣例。當時是 yudefine-blog，已還原。
+> 2026-08-02 實證：對 symlink mode 的 repo 跑 `--copy` 會把 tracked 的 symlink（git 物件 `120000`）換成 59 個真實檔案，diff 看起來像整包新增，而該 repo 其餘 skill 仍是 symlink——單方面破壞了它的 skill 管理慣例。當時是 <consumer-j>，已還原。
 
 當前各處配置（2026-08-25 實查，鎖定 v4.1.1）：
 
-- **copy mode**: perno、nuxt-supabase-starter/template、nuxt-edge-agentic-rag、yuntech-usr-sroi、TDMS、rental-scout、co-purchase、cnc-link-platform、cnc-link-dashboard、CPMS
-- **symlink mode**: yudefine-blog（`.cursor/skills/*` → `.agents/skills/*`）
+- **copy mode**: <consumer-a>、nuxt-supabase-starter/template、<consumer-c>、<consumer-d>、<consumer-b>、<consumer-i>、co-purchase、<consumer-g>、<consumer-f>、CPMS
+- **symlink mode**: <consumer-j>（`.cursor/skills/*` → `.agents/skills/*`）
 - **clade home**（clade home 是 Claude session）: copy mode，但 `.claude/*` 被 `.gitignore` 排除且白名單只放行自治區 skill 與 hub symlink → 靠 `scripts/install-skills.sh`（`pnpm skills:install`）重現，不進版控
 - **global**（各 runtime 的 user-level skills 目錄；Claude 是 `~/.cursor/skills/`，其他 runtime 依自身落點）: copy mode，手動安裝
 
@@ -101,10 +101,10 @@ vp 0.1.20 仍有此 bug（驗證過）。**繞法**：transform function 0 targe
 
 ## 參考實作
 
-- `perno/scripts/install-skills.sh` — copy mode 標準範本
-- `nuxt-edge-agentic-rag/scripts/install-skills.sh` — copy mode + simple `*.md` lint-staged
+- `<consumer-a>/scripts/install-skills.sh` — copy mode 標準範本
+- `<consumer-c>/scripts/install-skills.sh` — copy mode + simple `*.md` lint-staged
 - `nuxt-supabase-starter/template/scripts/install-skills.sh` — copy mode + transform `*.md` + noop fallback
-- `yuntech-usr-sroi/scripts/install-skills.sh` — copy mode（同 perno；目前無 symlink-mode consumer 可當範本，需 symlink 時用標準 snippet 的 `--agent claude-code -y` 變體）
+- `<consumer-d>/scripts/install-skills.sh` — copy mode（同 <consumer-a>；目前無 symlink-mode consumer 可當範本，需 symlink 時用標準 snippet 的 `--agent claude-code -y` 變體）
 
 ## v3.1.0 → v3.9.1 累積 user-facing 行為（orchestrator 對齊項）
 

@@ -85,7 +85,7 @@ Dependabot 唯一的更新途徑是**開 PR**。不走 PR 流程的 consumer（�
    "
    ```
 
-   後續 prompt builder 依此結果決定 `pnpm add <pkg>` 還是 `pnpm add -D <pkg>` — **NEVER** 預設 `-D`，否則會把 dependencies 套件靜默搬到 devDependencies（實證踩坑：TDMS 第一次 run wrangler 被誤搬，commit 後才發現）。
+   後續 prompt builder 依此結果決定 `pnpm add <pkg>` 還是 `pnpm add -D <pkg>` — **NEVER** 預設 `-D`，否則會把 dependencies 套件靜默搬到 devDependencies（實證踩坑：<consumer-b> 第一次 run wrangler 被誤搬，commit 後才發現）。
 
 4. **分類版號差距**（從低風險到高風險升）：
    - **patch**（`1.2.3 → 1.2.4`）：通常安全

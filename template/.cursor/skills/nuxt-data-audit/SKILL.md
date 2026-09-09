@@ -30,7 +30,7 @@ Cookbook：`~/offline/clade/vendor/snippets/nuxt-data-perf/`
 
 ```
 /nuxt-data-audit                          # 掃當前 cwd 的 consumer
-/nuxt-data-audit ~/offline/TDMS           # 掃指定 consumer
+/nuxt-data-audit ~/offline/<consumer-b>           # 掃指定 consumer
 /nuxt-data-audit --fleet                  # 掃全 fleet（從 clade home 用 registry/consumers.json）
 ```
 

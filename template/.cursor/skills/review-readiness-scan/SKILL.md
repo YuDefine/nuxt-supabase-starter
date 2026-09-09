@@ -27,7 +27,7 @@ node vendor/scripts/review-gui.ts --scan
 
 預設從 clade home 掃，輸出會聚合 `consumers.local` 內所有 consumer + worktree。若是 CI / debug 要只掃單一 consumer，才改用 `node vendor/scripts/review-gui.ts --repo <consumer-path> --scan`。
 
-`reviewPort` 是 loopback probe port。後續 handoff **MUST** 原樣複製 entry 的 `reviewUrl`（永遠 `https://review-gui.yudefine.com.tw` + `reviewPath`），不要硬寫 5174，也不要把 `probeUrl` 交給人。
+`reviewPort` 是 loopback probe port。後續 handoff **MUST** 原樣複製 entry 的 `reviewUrl`（永遠 `https://review-gui.<maintainer-domain>` + `reviewPath`），不要硬寫 5174，也不要把 `probeUrl` 交給人。
 
 輸出 JSON（schema: `review-readiness-scan/v2`）到 stdout，結構：
 
@@ -37,21 +37,21 @@ node vendor/scripts/review-gui.ts --scan
   "generatedAt": "<ISO8601>",
   "repoRoot": "<abs>",
   "reviewHost": "127.0.0.1",
-  "canonicalHost": "review-gui.yudefine.com.tw",
+  "canonicalHost": "review-gui.<maintainer-domain>",
   "reviewPort": 5174,
   "counts": {
     "ready": N,
     "notReady": M,
     "buckets": { "ready": N, "readyForEvidence": N, "applyInProgress": N }
   },
-  "ready":    [ { "name": "<change>", "consumerId": "perno",
-                  "changeKey": "perno:<change>",
-                  "reviewUrl": "https://review-gui.yudefine.com.tw/review/perno:<change>",
-                  "probeUrl": "http://127.0.0.1:5174/review/perno:<change>",
+  "ready":    [ { "name": "<change>", "consumerId": "<consumer-a>",
+                  "changeKey": "<consumer-a>:<change>",
+                  "reviewUrl": "https://review-gui.<maintainer-domain>/review/<consumer-a>:<change>",
+                  "probeUrl": "http://127.0.0.1:5174/review/<consumer-a>:<change>",
                   "bucket": "ready", "pending": N, "issued": N, "total": N } ],
-  "notReady": [ { "name": "<change>", "consumerId": "perno",
-                  "changeKey": "perno:<change>",
-                  "reviewUrl": "https://review-gui.yudefine.com.tw/review/perno:<change>",
+  "notReady": [ { "name": "<change>", "consumerId": "<consumer-a>",
+                  "changeKey": "<consumer-a>:<change>",
+                  "reviewUrl": "https://review-gui.<maintainer-domain>/review/<consumer-a>:<change>",
                   "bucket": "readyForEvidence", "pending": N, "issued": N, "total": N,
                   "readinessHits": N, "malformed": N,
                   "hitsByCode": { "UI_ITEM_NO_URL": 2, "REVIEW_UI_BACKEND_ROUNDTRIP": 1 },
@@ -82,7 +82,7 @@ HANDOFF.md 用 marker 包夾，每次重跑**覆蓋同一段**（不累積垃圾
 <!-- BEGIN: review-readiness-scan -->
 ## Manual Review Readiness（auto-scan）
 
-> 最後掃描：<generatedAt>　|　ready: N　not-ready: M　|　review: https://review-gui.yudefine.com.tw
+> 最後掃描：<generatedAt>　|　ready: N　not-ready: M　|　review: https://review-gui.<maintainer-domain>
 
 ### ✅ 可以開始檢查（N changes）
 

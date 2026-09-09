@@ -86,7 +86,7 @@ Trigger 用語：「健康檢查 / 體檢 / 重構評估 / 技術債盤點 / 全
 - Raise：god function、複製貼上重複、`any` 逃生、命名要猜、缺該有的抽象或過度抽象。
 
 ### D4 — 資料 & 契約
-- **工具**：consumer schema / migration 檔；契約一致性（如 perno/CPMS 的 `shared/schemas` vs `shared/types` — 從 schema 匯出型別、非兩套各寫）；`trace_path` 找 query 熱點抓 N+1；RLS（Supabase）/ D1 binding。
+- **工具**：consumer schema / migration 檔；契約一致性（如 <consumer-a>/CPMS 的 `shared/schemas` vs `shared/types` — 從 schema 匯出型別、非兩套各寫）；`trace_path` 找 query 熱點抓 N+1；RLS（Supabase）/ D1 binding。
 - **及格**：資料存得進讀得出。**卓越**：contract 單一真相源、migration 可逆且有序、無 N+1、RLS/授權在資料層而非只靠 UI 藏。
 - Raise：型別與 runtime schema 各自為政、fallback 回傳原始 code/error、migration 不可逆、N+1、RLS 缺漏。
 

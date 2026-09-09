@@ -62,7 +62,7 @@ node scripts/audit-skill-freshness.ts --json          # 機器讀
 
 ### 加一條候選 entry 的紀律
 
-`reason` **MUST 是依賴證據**——指名哪個 consumer、哪個 dep 或 config 成立這條，例如「nuxt-edge-agentic-rag / template 有 better-auth dep」。**NEVER** 寫「看起來有用」「社群風評好」這類無法反查的理由。
+`reason` **MUST 是依賴證據**——指名哪個 consumer、哪個 dep 或 config 成立這條，例如「<consumer-c> / template 有 better-auth dep」。**NEVER** 寫「看起來有用」「社群風評好」這類無法反查的理由。
 
 這條不是格式要求，是這份清單的品質上限所在：`reason` 預答了 Step S.4 三條件的第一條（該技術是否真的在用），把 triage 成本前移到加 entry 的那一刻；依賴哪天從 fleet 消失，entry 的可移除性也才是可稽核的。
 
@@ -130,8 +130,8 @@ Script 的「上游有、fleet 未安裝」段列出上游新增的 skill。對*
    不必逐支開檔。通過初篩的才需要讀全文（`gh api repos/<r>/contents/<path> --jq .content | base64 -d`）
 2. **裝不裝要有依賴證據，NEVER 憑名字判斷**。三條依序全過才裝：
    - **該技術是否真的在用** —— 到 consumer 的 `package.json` 查，不是憑印象。實證（2026-08-02）：
-     38 支未裝的上游 skill 裡只有 3 支對得上真實依賴（`@nuxtjs/i18n` → perno / TDMS、
-     `@nuxtjs/seo` → yudefine-blog），其餘 35 支全是「上游有但我們用不到」
+     38 支未裝的上游 skill 裡只有 3 支對得上真實依賴（`@nuxtjs/i18n` → <consumer-a> / <consumer-b>、
+     `@nuxtjs/seo` → <consumer-j>），其餘 35 支全是「上游有但我們用不到」
    - **已裝的 skill 是否已覆蓋同主題** —— 同主題兩支互相稀釋（例：已裝 `antfu/skills@vue`
      就不再裝 `onmax/nuxt-skills@vue`）
    - **是否與自家規約打架** —— 工作流類 skill（plan / commit / code review / worktree / 完成前驗證）
@@ -177,7 +177,7 @@ npx skills add https://www.<domain> --agent claude-code --copy -y
 | `pnpm skills:install` / `npx skills add <repo>@<name>`（目錄還在時） | 判定已安裝，**整支跳過**，檔案一個字都不會變 |
 | `npx skills update -p -y` | 回報「✓ Updated N skill(s)」但**只改 `skills-lock.json` 的 hash、不換檔案**，反而讓 lock 對不上磁碟內容 |
 
-實證：perno 跑完 `pnpm skills:install` 後 `supabase-postgres-best-practices/SKILL.md` 的 sha256 仍是舊值 `ccd6e459…`，上游是 `ad65e776…`；接著跑 `skills update` 回報 updated 18 skills，sha256 依然不動。刪目錄後重 add 才變成上游值。
+實證：<consumer-a> 跑完 `pnpm skills:install` 後 `supabase-postgres-best-practices/SKILL.md` 的 sha256 仍是舊值 `ccd6e459…`，上游是 `ad65e776…`；接著跑 `skills update` 回報 updated 18 skills，sha256 依然不動。刪目錄後重 add 才變成上游值。
 
 本證據決定：怎麼更新（先刪目錄再 add）。
 本證據不決定：要不要更新——**NEVER** 拿「更新機制很麻煩」當跳過更新的理由。

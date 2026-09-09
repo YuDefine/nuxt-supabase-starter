@@ -25,7 +25,7 @@ metadata:
 - 單機開發 + agent 並行驗證 → 用 `vendor/snippets/dev-auth/` cookbook 繞 OAuth（更快、不依賴外部網路）
 - 不需固定 callback 的臨時 webhook 測試 → `cloudflared tunnel --url http://localhost:<實際-port>` 拿 quick tunnel；需要預先註冊固定 URL 時使用下方 named tunnel
 - 多 worktree 並行 dev server → dev-auth + cookie namespace 比 tunnel 簡單
-- 給產品加**公開** hostname（例 `cpms.fcoem.tw`）到 **remotely-managed** tunnel（`cloudflared tunnel run --token`）→ **不是本 skill**。走 `~/offline/clade/vendor/snippets/cloudflare-tunnel-hostname/`（API／CLI；dashboard 404 不是停工理由）
+- 給產品加**公開** hostname（例 `cpms.<client-b>.tw`）到 **remotely-managed** tunnel（`cloudflared tunnel run --token`）→ **不是本 skill**。走 `~/offline/clade/vendor/snippets/cloudflare-tunnel-hostname/`（API／CLI；dashboard 404 不是停工理由）
 
 ## Step 1: 偵測專案部署 target
 
@@ -133,7 +133,7 @@ curl -I https://<hostname>   # 預期 200 / 301
 ## 共用 tunnel 模型
 
 **每專案各建一條 tunnel**（不要把多專案 hostname route 到同一 tunnel）：
-- tunnel-name 跟專案 name 綁定（`perno-dev` / `tdms-dev`）
+- tunnel-name 跟專案 name 綁定（`<consumer-a>-dev` / `<consumer-b>-dev`）
 - A 專案 dev 關閉時 B 不會被牽連 502
 - `cloudflared tunnel list` 一目了然
 
