@@ -179,6 +179,81 @@ lint 因原工作 scope 刻意留下。
 - `pnpm lint` 不帶參數仍 exit 0。
 - 刻意造成 lint failure 時 exit code 為非零，證明 `exec` 穿透。
 
+## TD-013 — scaffolder ↔ clade registry seam test 撞 manifest schema 收緊
+
+**Status**: open
+**Priority**: mid
+**Discovered**: 2026-09-09 — P7 capability 宣告的 `/commit` 0-C 跑出來
+**Location**: `template/packages/create-nuxt-starter/test/clade-registry-seam.test.ts:44`
+
+### Problem
+
+該測試的 fixture 寫死 `.claude/hub.json` 為 `{"version":"0.0.0","modules":{},"localHooks":[]}`，
+clade `scripts/register-consumer.ts` 現在拒收：`invalid consumer manifest: $.modules: no anyOf schema branch matched`。
+2 個 test case 失敗（`pnpm test` 2 failed / 343 passed），與本 repo 的產品碼無關 —— fixture 建在 `/tmp`，
+不讀本 repo 的 manifest。clade 的 `manifest.schema.json` 對 `modules` 的 anyOf 分支已收緊到空物件不合法。
+
+### Fix approach
+
+把 fixture 的 `modules` 補成能通過現行 schema 的最小合法組合（照 `manifest.schema.json` 的 anyOf 分支選一條），
+或改由 scaffolder 自己產生 manifest 再餵給 register-consumer，讓測試跟著 schema 走而不是寫死。
+**NEVER** 為了讓測試綠而放寬 clade 的 schema。
+
+### Acceptance
+
+- `pnpm test --filter scaffolder` 對 `clade-registry-seam.test.ts` 5 個 case 全綠（目前 2 failed / 1 skipped）。
+- 修法不動 clade `manifest.schema.json`。
+
+## TD-014 — clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約
+
+**Status**: open
+**Priority**: mid
+**Discovered**: 2026-09-09 — P7 宣告 `specformula` + `aixbdd` capability 後
+**Location**: clade `plugins/hub-capabilities-{aixbdd,specformula}/skills/**`、`plugins/hub-core/scripts/{codex-review-safe,gh-ci-watch}.sh`、`plugins/hub-core/skills/subagent-dev/SKILL.md`
+
+### Problem
+
+宣告雙 capability 後，canonical 投影入口對本 repo 回 blocked：
+
+```bash
+node ~/offline/clade/scripts/project-runtime-capabilities.ts \
+  --clade-root ~/offline/clade --targets claude,codex,cursor --visibility public --dry-run
+# status=blocked appliedChanges=0
+```
+
+24 條 error，分三類：
+
+1. **21 支 capability skill 缺 `clade-targets` 宣告** → `native delivery is unavailable`
+   （`aixbdd` 17 支、`specformula` 4 支）。其中 `sdd-start/SKILL.md` 另有
+   `common skill frontmatter key homepage is runtime-specific`。
+2. **`hub-core/scripts/{codex-review-safe,gh-ci-watch}.sh`** → `Resource source is not safe for
+   this visibility profile`（PUBLIC）。此二條與 capability 無關，宣告前即存在。
+3. **`hub-core/skills/subagent-dev/SKILL.md`** → `permission_tier` 放錯層。
+
+實際投影仍由較舊的 `sync-rules` + `sync-to-{codex,cursor}` 路徑完成，Claude 端 skill 可被發現
+（`sdd-start` / `specformula-*` 已出現在 skill 清單）；Codex / Cursor 的 native delivery 未驗證。
+
+另兩條同源的 PUBLIC 洩漏面（由 0-A.2 裁決者指出，皆 HEAD 既存、非本次引入）：
+
+- clade `hub-core/skills/design/SKILL.md` 硬寫維護者網域；投影去識別化成
+  `https://review-gui.<maintainer-domain>/decisions` 後，scaffold 出去的使用者沒有解析步驟。
+  同形問題在本 repo HEAD 已有 7 個 tracked rule 檔 / 14 處。
+- clade `hub-core/skills/yudefine-deploy/SKILL.md:216-217` 的 `CLOUDFLARE_ACCOUNT_ID` /
+  `CLOUDFLARE_ZONE_ID` 是可反查的真實 identifier，`audit-template-hygiene.sh` 目前不抓 32-hex。
+
+### Fix approach
+
+全部三類都是 clade 標準層，**本 repo 不修**。在 clade 補 `clade-targets` 宣告、把
+runtime-specific frontmatter 移進 adapter fragment、處理 PUBLIC visibility 的 resource 安全宣告，
+再 propagate。`<maintainer-domain>` 需要在 clade 源檔給出解析說明（或改成 consumer 可設定的值）；
+CF identifier 需去識別化並補 32-hex 掃描規則。**NEVER** 為了讓本 repo 綠而還原真實網域或 identifier。
+
+### Acceptance
+
+- 上述 `project-runtime-capabilities … --visibility public --dry-run` 對本 repo 回非 blocked。
+- `node scripts/audit-public-hygiene.mjs` 與 `bash scripts/audit-template-hygiene.sh` 維持 0 violation。
+- scaffold 出去的專案讀得懂 `<maintainer-domain>` 該填什麼。
+
 ## Cross-repo pointers
 
 - `nuxt-edge-agentic-rag` `docs/tech-debt.md` **TD-069** 是本 repo scaffolder gap 的 consumer-side 鏡像（該專案手動切完 NuxtHub 但沒跑 `migrations:create`）。本條在該 repo 追蹤，此處只保留入口。
