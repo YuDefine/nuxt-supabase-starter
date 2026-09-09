@@ -89,6 +89,8 @@ _No parked changes._
 
 ### 近期
 
+- [high] **TD-014** clade capability plugin 未通過 PUBLIC consumer 的 runtime projection 契約 — 2026-09-09 宣告 `specformula` + `aixbdd` 後 `project-runtime-capabilities --visibility public` 回 blocked（24 error，全在 clade 標準層）。修在 clade，本 repo 只驗收投影 — 依賴：clade 側修正 + propagate
+- [mid] **TD-013** scaffolder ↔ clade registry seam test fixture 撞 manifest schema 收緊（`pnpm test` 2 failed）— 獨立
 - [high] **Change 1** `starter-hygiene-boundary-rules`（meta vs template 邊界治理）— 新增 `.claude/rules/starter-hygiene.md`（meta 維護用）+ pre-commit hook 擋 `.env` / dogfood 進 `template/` + root CLAUDE.md 補邊界指引；Tier 1，獨立
 - [high] **Change 3** unpark + apply `nuxthub-d1-stack-as-first-class-scaffold`（已 parked，proposal 完整、32 tasks 寫好）— 獨立於 Change 1，可並行
 - [mid] **Change 2** `scaffolder-strip-manifest-and-validation-gate`（防線 B/C — 投影+驗證）— 抽 `presets/_base/strip-manifest.json` 為 SoT；create-clean.sh 與 scaffolder 共用；validate-starter 補 4 條 audit regression（baseline / d-pattern-audit / nuxthub-ai / none）+ CI gate；Tier 2，依賴：Change 1 已合（先有 rule 才知 strip 什麼）+ Change 3 已合（避免中途改變 strip 清單）
