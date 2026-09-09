@@ -9,6 +9,8 @@ reports/
 archive.jsonl
 evidence.jsonl
 *-events.jsonl
+runtime-events.archive-*.jsonl
+runtime-snapshot.json
 *.lock
 !intent/
 !human-decisions.jsonl
