@@ -73,6 +73,7 @@ yarn-error.log*
 
 # Claude Code harness runtime state
 .claude/.commit.lock
+.claude/.commit.lock.history/
 
 # Clade local runtime state
 openspec/.vector-search.db*
