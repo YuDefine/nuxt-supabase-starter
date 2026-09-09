@@ -42,12 +42,12 @@ Step 0 的提問 **MUST** 滿足三條，與用什麼機制問無關：
 **Fleet 現況**（只是 reference，**不**是限制；2026-07-14 更新）：
 
 - void.cloud（active）：
-  - `<consumer-l>`（apex `<maintainer-domain>`）— current `void@0.10.x`、GitHub OIDC、無 legacy deploy patch
+  - `<consumer-j>`（apex `<maintainer-domain>`）— current `void@0.10.x`、GitHub OIDC、無 legacy deploy patch
   - `co-purchase`（`co-purchase.void.app`，未設自訂網域）— legacy `void@0.8.x`；升 current 後必須退役 patch 與長效 token
   - `quotation-generator`（`quotation.<maintainer-domain>`）— legacy `@void-sdk/void@0.6.x`，待獨立 migration
 - 自有 CF（wrangler-action）：
   - `<consumer-a>` / `<consumer-c>` / `<consumer-d>` / `<consumer-b>` / `nuxt-supabase-starter`
-  - **`<consumer-k>`**（@nuxthub/core + wrangler-action；2026-05-27 仍未遷 void）
+  - **`<consumer-i>`**（@nuxthub/core + wrangler-action；2026-05-27 仍未遷 void）
 
 > 同一個 YuDefine 專案**可以**從 (B) 遷到 (A) 或反向 — 走 § 遷移 段。
 
@@ -98,7 +98,7 @@ npx void init --agents
 Current void 的 compatibility settings **MUST** 先查 official Nuxt integration，並與 `cloudflare-workers.md` § 3.2 對齊。以下配置 1/2/3 規則只適用 legacy `void@0.8.x`：
 
 - **`appType: "framework"` (Nuxt / SvelteKit / Astro 等 — fleet 多數)**：**MUST** 配置 3（`["nodejs_compat", "nodejs_als", "no_nodejs_compat_v2"]`）
-  - 配置 2（純 v2）對 Nitro `cloudflare-module` preset **不可用** — Nitro build 主動 warn「`Please consider replacing nodejs_compat_v2 with nodejs_compat ... or USE IT AT YOUR OWN RISK as it can cause issues with nitro`」+ 撞 `Cannot read private member #t in get stdout`（<consumer-l> 2026-05-27 first-ever CI deploy 實證；blog 之前 prod live 是 user 本機 manual deploy 沒踩到）
+  - 配置 2（純 v2）對 Nitro `cloudflare-module` preset **不可用** — Nitro build 主動 warn「`Please consider replacing nodejs_compat_v2 with nodejs_compat ... or USE IT AT YOUR OWN RISK as it can cause issues with nitro`」+ 撞 `Cannot read private member #t in get stdout`（<consumer-j> 2026-05-27 first-ever CI deploy 實證；blog 之前 prod live 是 user 本機 manual deploy 沒踩到）
 - **`appType: "void"` (pure Vite+ void app，fleet 少見)**：配置 2 可用（無 Nitro 中間層、可直吃 workerd 原生 v2）；配置 3 也行
 - **禁配置 1**（`["nodejs_compat", "nodejs_als"]` 不含 no_v2）— 必撞 err 10021 `Cannot read private member #t ... in get stdout`
 

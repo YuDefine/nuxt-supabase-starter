@@ -38,12 +38,12 @@ echo ""
 
 `/design` 決策頁直接呼叫 `scripts/concept-seed.mjs` 與 `scripts/serve-question.mjs`。路徑解析（skill-base-dir → `.claude/` → `.agents/` → `.cursor/skills/impeccable`）見 [decision-page.md](../decision-page.md)。Cursor 安裝後實際用到的常常是 `.cursor/skills/impeccable`，四條都要試。
 
-> 2026-08-02 實證：對 symlink mode 的 repo 跑 `--copy` 會把 tracked 的 symlink（git 物件 `120000`）換成 59 個真實檔案，diff 看起來像整包新增，而該 repo 其餘 skill 仍是 symlink——單方面破壞了它的 skill 管理慣例。當時是 <consumer-l>，已還原。
+> 2026-08-02 實證：對 symlink mode 的 repo 跑 `--copy` 會把 tracked 的 symlink（git 物件 `120000`）換成 59 個真實檔案，diff 看起來像整包新增，而該 repo 其餘 skill 仍是 symlink——單方面破壞了它的 skill 管理慣例。當時是 <consumer-j>，已還原。
 
 當前各處配置（2026-08-25 實查，鎖定 v4.1.1）：
 
-- **copy mode**: <consumer-a>、nuxt-supabase-starter/template、<consumer-c>、<consumer-d>、<consumer-b>、<consumer-k>、co-purchase、<consumer-h>、<consumer-g>、<consumer-e>
-- **symlink mode**: <consumer-l>（`.cursor/skills/*` → `.agents/skills/*`）
+- **copy mode**: <consumer-a>、nuxt-supabase-starter/template、<consumer-c>、<consumer-d>、<consumer-b>、<consumer-i>、co-purchase、<consumer-g>、<consumer-f>、<consumer-e>
+- **symlink mode**: <consumer-j>（`.cursor/skills/*` → `.agents/skills/*`）
 - **clade home**（clade home 是 Claude session）: copy mode，但 `.claude/*` 被 `.gitignore` 排除且白名單只放行自治區 skill 與 hub symlink → 靠 `scripts/install-skills.sh`（`pnpm skills:install`）重現，不進版控
 - **global**（各 runtime 的 user-level skills 目錄；Claude 是 `~/.cursor/skills/`，其他 runtime 依自身落點）: copy mode，手動安裝
 

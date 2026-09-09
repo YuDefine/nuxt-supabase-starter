@@ -131,7 +131,7 @@ Script 的「上游有、fleet 未安裝」段列出上游新增的 skill。對*
 2. **裝不裝要有依賴證據，NEVER 憑名字判斷**。三條依序全過才裝：
    - **該技術是否真的在用** —— 到 consumer 的 `package.json` 查，不是憑印象。實證（2026-08-02）：
      38 支未裝的上游 skill 裡只有 3 支對得上真實依賴（`@nuxtjs/i18n` → <consumer-a> / <consumer-b>、
-     `@nuxtjs/seo` → <consumer-l>），其餘 35 支全是「上游有但我們用不到」
+     `@nuxtjs/seo` → <consumer-j>），其餘 35 支全是「上游有但我們用不到」
    - **已裝的 skill 是否已覆蓋同主題** —— 同主題兩支互相稀釋（例：已裝 `antfu/skills@vue`
      就不再裝 `onmax/nuxt-skills@vue`）
    - **是否與自家規約打架** —— 工作流類 skill（plan / commit / code review / worktree / 完成前驗證）

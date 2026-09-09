@@ -38,7 +38,7 @@ Fork 出 worktree 之前，`wt-helper add` **MUST** 先跑 `detect-main-dirty` �
 
 `--include-unrelated-dirty`（stash strategy 專用）語意是 **bulk-capture main 上全部 dirty**——不分主題、不分歸屬、不管是不是別 session 的 WIP，一律搬進新 worktree，main 端變乾淨。
 
-**NEVER** 在傳了這個 flag 之後，對 user 宣稱「main working tree 不變」/「main 沒被動到」/「你的 WIP 還在 main」。傳了它，那三句話**必然**是假的。記得「wt-helper 預設不碰 main dirty」這條結論、卻沒把「我這次傳了 flag」納入判斷，正是 [[pitfall-include-unrelated-dirty-claimed-main-untouched]] 的實證失敗路徑（<consumer-l> 2026-07-15）。
+**NEVER** 在傳了這個 flag 之後，對 user 宣稱「main working tree 不變」/「main 沒被動到」/「你的 WIP 還在 main」。傳了它，那三句話**必然**是假的。記得「wt-helper 預設不碰 main dirty」這條結論、卻沒把「我這次傳了 flag」納入判斷，正是 [[pitfall-include-unrelated-dirty-claimed-main-untouched]] 的實證失敗路徑（<consumer-j> 2026-07-15）。
 
 **MUST** 在傳了它之後，明確告訴 user：main 上原有的 N 個 dirty 檔已搬進 worktree `<path>`，main 端現在是乾淨的。
 
