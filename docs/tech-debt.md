@@ -22,6 +22,7 @@
 | TD-017 | `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅 | low | open | 2026-09-11 |
 | TD-018 | auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict | high | open | 2026-09-11 |
 | TD-019 | `scaffold-smoke` 自 2026-08-24 起持續紅，剩餘 blocker 是 clade 投影未去識別化 | mid | open | 2026-09-11 |
+| TD-020 | 選了 codex 的 scaffold 輸出靜默少掉 `.codex/` 與 `.agents/` | high | open | 2026-09-11 |
 
 ## TD-004 — Spectra roadmap drift check 在 CI 的 structural diff
 
@@ -462,7 +463,7 @@ commit → 跑 `hub-sync` 確認綠。
 
 `scaffold-smoke` 最後一次綠是 2026-08-18（`383e2408`），之後每一趟都紅。堆了兩層：
 
-**第一層（已修，commit 見本次）**：`scripts/smoke-scaffold.sh` 的必備資產清單還在斷言
+**第一層（已修，`50f001cd`；CI 實測已越過此關，改停在第二層）**：`scripts/smoke-scaffold.sh` 的必備資產清單還在斷言
 scaffold 輸出要有 `.claude/commands/validate-starter.md`，但 `17f080cf` 依 L3 commands hygiene
 把它判成 `starter-owned-relocate` 並移出 `template/`。斷言沒跟著改，gate 就永遠停在這裡，
 **後面每一關都沒被執行過** —— 包含下面這層。
@@ -502,6 +503,75 @@ scaffold 輸出要有 `.claude/commands/validate-starter.md`，但 `17f080cf` �
 
 - `bash scripts/smoke-scaffold.sh temp/<name>` 跑到 `[PASS] placeholder scan clean` 之後才停。
 - `scaffold-smoke` workflow 在 main 上轉綠。
+
+## TD-020 — 選了 codex 的 scaffold 輸出靜默少掉 `.codex/` 與 `.agents/`
+
+**Status**: open — 根因已驗證，但修法牽涉 hygiene 治理決定，需要拍板才動
+**Priority**: high — 使用者選了 codex 卻拿到不完整的專案，而且沒有任何錯誤訊息
+**Discovered**: 2026-09-11 — 修好 setup-vp 之後 Template CI 第一次跑到 Unit tests 才露出來
+**Location**: `template/packages/create-nuxt-starter/src/assemble.ts:251-262`、
+`template/packages/create-nuxt-starter/test/scaffold.test.ts:255-256`、`template/.gitignore:81,87`
+
+### Problem
+
+`copyTemplateCodexAssets()` 用 `existsSync` 守著兩個來源目錄再 copy：
+
+```ts
+const codexDir = join(STARTER_ROOT, '.codex')
+if (existsSync(codexDir)) {
+  copyDirectory(codexDir, join(targetDir, '.codex'))
+}
+const agentsDir = join(STARTER_ROOT, '.agents')
+if (existsSync(agentsDir)) {
+  copyDirectory(agentsDir, join(targetDir, '.agents'))
+}
+```
+
+但 `template/.codex/` 與 `template/.agents/` 都在 `template/.gitignore` 內（第 81、87 行）——
+它們是 `sync-to-codex` 從 `.claude/` 產生的可重生投影，**不進版控**。
+
+後果：在**乾淨 clone 或 degit** 出來的樹上，兩個來源都不存在，`existsSync` 直接讓兩個 copy
+變 no-op。使用者選了 codex，拿到的專案只有 `AGENTS.md`，沒有 `.codex/`、沒有 `.agents/`，
+**而且沒有任何 warning 或 error**。在跑過 `sync-to-codex` 的開發機上則一切正常——這就是為什麼
+`scaffold.test.ts:255` 在本機綠、在 CI 紅。
+
+CI 實測（`50f001cd`，343 passed / 1 failed）：
+
+```
+❯ test/scaffold.test.ts:255:66
+  expect(existsSync(join(targetDir, '.codex', 'config.toml'))).toBe(true)
+  AssertionError: expected false to be true
+```
+
+第 256 行的 `.agents/skills/commit/SKILL.md` 是同一個成因，只是斷言在 255 就先掛了所以沒顯示。
+`assemble.ts:1195` 的 `.agents/commands/spectra` 也屬同一類。
+
+**這不只是測試過期**。測試斷言的是這個 case 自己宣告的行為（`supports codex + cursor
+multi-select while keeping claude source assets`），實作則把「來源不存在」靜默降級成部分輸出。
+先前 Template CI 死在 setup 那格，所以這條從來沒被執行到。
+
+### Fix approach
+
+三條路，**各有真實 trade-off，需要拍板**，不要隨手挑一條：
+
+1. **scaffold 時現場生成** —— 由 scaffolder 自己跑一次 `.claude/` → `.codex/` / `.agents/`
+   的轉換。問題：那個轉換目前住在 clade 的 `sync-to-codex`，而 scaffold 必須能在
+   degit 出來、沒有 clade 的環境獨立跑完。要走這條得先把轉換邏輯搬進 starter seed。
+2. **把 `template/.codex/` 與 `template/.agents/` 收進版控** —— 最直接，但直接牴觸
+   `.claude/rules/starter-hygiene.md` § 掃描範圍寫下的前提：「兩者都在 `template/.gitignore`
+   內…**不進版控 = 不會被 scaffold 帶走**」，而 `audit-public-hygiene.mjs` 正是**因為**這個前提
+   才不掃這兩個目錄。改成 tracked 就必須同時把它們納入 L3 掃描範圍，否則等於開一個沒人守的洞。
+3. **把靜默降級改成大聲失敗** —— `existsSync` 為 false 時 throw 或明確 warn，並讓測試斷言
+   實際契約。這條不修復功能，只是讓「拿到不完整專案」變成當場看得見，成本最低。
+
+**NEVER** 直接把 `scaffold.test.ts:255-256` 那兩行刪掉讓 CI 轉綠 —— 那是把唯一一個抓到這個
+bug 的東西拆掉。
+
+### Acceptance
+
+- 在乾淨 clone（沒跑過 `sync-to-codex`）上以 `--agents codex,cursor` scaffold，輸出要嘛含
+  `.codex/config.toml` 與 `.agents/skills/commit/SKILL.md`，要嘛當場失敗並說明原因。
+- `Template CI` 的 Unit tests 在 main 上轉綠。
 
 ## Cross-repo pointers
 
