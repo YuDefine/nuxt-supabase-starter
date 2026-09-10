@@ -5,9 +5,10 @@ import { join } from 'node:path'
 import { consola } from 'consola'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  formatGeneratedProject,
+  buildInitConsumerArgs,
   buildMintGatePlaybooksArgs,
   buildRegisterConsumerArgs,
+  formatGeneratedProject,
   maybeRegisterConsumer,
   maybeSyncVendor,
   maybeWriteConsumerMeta,
@@ -50,6 +51,48 @@ describe('Clade script resolution', () => {
     writeFileSync(mjsScript, '')
 
     expect(resolveCladeInitScript(TEST_DIR)).toBe(mjsScript)
+  })
+})
+
+describe('Clade consumer initialization', () => {
+  it('passes the five module axes and omits --local-hooks when there are none', () => {
+    expect(
+      buildInitConsumerArgs('/clade/scripts/init-consumer.ts', {
+        auth: 'better-auth',
+        dbSchema: 'supabase',
+        dbRuntime: 'cf-workers',
+        runtime: 'cf-workers',
+        framework: 'nuxt',
+        localHooks: [],
+      }),
+    ).toEqual([
+      '/clade/scripts/init-consumer.ts',
+      '--force',
+      '--no-bootstrap',
+      '--auth',
+      'better-auth',
+      '--db-schema',
+      'supabase',
+      '--db-runtime',
+      'cf-workers',
+      '--runtime',
+      'cf-workers',
+      '--framework',
+      'nuxt',
+    ])
+  })
+
+  it('joins local hooks into one comma-separated argv element', () => {
+    const args = buildInitConsumerArgs('/clade/scripts/init-consumer.ts', {
+      auth: 'supabase-self-hosted',
+      dbSchema: 'supabase-self-hosted',
+      dbRuntime: 'supabase-self-hosted',
+      runtime: 'nitro-self-hosted',
+      framework: 'nuxt',
+      localHooks: ['post-migration-gen-types.sh', 'another.sh'],
+    })
+
+    expect(args.slice(-2)).toEqual(['--local-hooks', 'post-migration-gen-types.sh,another.sh'])
   })
 })
 

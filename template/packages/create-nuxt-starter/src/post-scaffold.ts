@@ -1076,6 +1076,35 @@ export async function postScaffold(
   }
 }
 
+/**
+ * clade `scripts/init-consumer.ts` 的 argv。抽成純函式的理由與下面的
+ * `buildRegisterConsumerArgs` 相同：這兩支是同一條跨 repo seam 的兩半 —— init 產 manifest、
+ * register 讀 manifest，都只靠 argv 溝通，任一側改 flag 名稱都要真人跑完整個 scaffold
+ * 才看得到。argv 一旦是純函式，`clade-registry-seam.test.ts` 就能用同一組值建 fixture，
+ * 把兩半都釘進那個 gate。
+ */
+export function buildInitConsumerArgs(script: string, mods: CladeModules): string[] {
+  const args = [
+    script,
+    '--force',
+    '--no-bootstrap',
+    '--auth',
+    mods.auth,
+    '--db-schema',
+    mods.dbSchema,
+    '--db-runtime',
+    mods.dbRuntime,
+    '--runtime',
+    mods.runtime,
+    '--framework',
+    mods.framework,
+  ]
+  if (mods.localHooks.length > 0) {
+    args.push('--local-hooks', mods.localHooks.join(','))
+  }
+  return args
+}
+
 export function buildRegisterConsumerArgs(
   script: string,
   targetDir: string,
@@ -1598,24 +1627,7 @@ async function runInitConsumer(
   }
 
   consola.start('註冊 clade consumer（hub.json + postinstall + hub:* scripts）')
-  const args = [
-    script,
-    '--force',
-    '--no-bootstrap',
-    '--auth',
-    mods.auth,
-    '--db-schema',
-    mods.dbSchema,
-    '--db-runtime',
-    mods.dbRuntime,
-    '--runtime',
-    mods.runtime,
-    '--framework',
-    mods.framework,
-  ]
-  if (mods.localHooks.length > 0) {
-    args.push('--local-hooks', mods.localHooks.join(','))
-  }
+  const args = buildInitConsumerArgs(script, mods)
 
   try {
     execFileSync('node', args, { cwd: targetDir, stdio: 'pipe' })
