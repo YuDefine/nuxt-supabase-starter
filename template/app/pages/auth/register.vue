@@ -103,9 +103,7 @@
         <p v-if="passwordMismatch" class="mt-1 text-sm text-red-500">Passwords do not match</p>
       </UFormField>
 
-      <UButton type="submit" block :loading="loading" :disabled="!canSubmit">
-        Create Account
-      </UButton>
+      <UButton type="submit" block :loading :disabled="!canSubmit"> Create Account </UButton>
     </form>
 
     <!-- OAuth providers -->

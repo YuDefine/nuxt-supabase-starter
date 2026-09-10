@@ -42,7 +42,7 @@
       <UFormField label="Email">
         <UInput v-model="email" type="email" required placeholder="you@example.com" />
       </UFormField>
-      <UButton block size="lg" type="submit" :loading="loading"> 送出重設連結 </UButton>
+      <UButton block size="lg" type="submit" :loading> 送出重設連結 </UButton>
     </form>
 
     <p class="text-center text-sm">

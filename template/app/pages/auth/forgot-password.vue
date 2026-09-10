@@ -78,9 +78,7 @@
           />
         </UFormField>
 
-        <UButton type="submit" block :loading="loading" :disabled="!email">
-          Send Reset Link
-        </UButton>
+        <UButton type="submit" block :loading :disabled="!email"> Send Reset Link </UButton>
       </form>
 
       <p class="text-center text-sm text-(--ui-text-muted)">
