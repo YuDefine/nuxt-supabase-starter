@@ -59,6 +59,11 @@ export default defineConfig(async () => ({
             '.nuxt/**',
             '.output/**',
             'temp/**',
+            // `.pi/` 是 gitignore 的執行期快取，底下躺著一份完整的 clade checkout。
+            // 不排掉的話 `pnpm test` 會把那個 repo 的 571 個 test 檔一起收進來，
+            // 它們的相對 import 在這裡一律解析失敗 —— 於是 gate 紅得跟自家測試無關，
+            // 而 CI 上沒有 `.pi/`，本機與 CI 的結果就永遠對不起來。
+            '.pi/**',
             '**/*.nuxt.test.ts',
           ],
           setupFiles: ['./test/setup-env.ts'],
