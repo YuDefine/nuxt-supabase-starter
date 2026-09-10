@@ -3,8 +3,9 @@
 > 本檔追蹤 **starter 維護倉本身** 的技術債（CI workflow、scaffolder、meta scripts），不會被 scaffold 帶到新建專案。
 > 新建專案使用的 follow-up register 在 `template/docs/tech-debt.md`；兩者不要混。
 >
-> 本輪清理（2026-09-06）：仍需行動的 6 條留在本檔；已由原始記錄與實際驗收證實結案的 6 條移至
-> `docs/archives/tech-debt-closed-2026-09.md`。編號不重用。
+> 2026-09-06 那輪清理把當時已結案的 6 條移到 `docs/archives/tech-debt-closed-2026-09.md`，
+> 留下當時仍需行動的 6 條。**這兩個數字是那一天的快照，之後有增有減**——現況一律以下方 Index
+> 為準，不要拿這行對帳。編號不重用。
 
 ## Index
 
@@ -16,6 +17,9 @@
 | TD-010 | 參考 app email 登入被 nuxt-security CSRF 擋下 | mid | open | 2026-08-24 |
 | TD-011 | clade 投影 auth 文件仍寫舊套件名 | low | open | 2026-08-24 |
 | TD-012 | `lint` script guard 吃不掉 pnpm 附加參數 | mid | open | 2026-08-29 |
+| TD-014 | clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約 | low | open | 2026-09-09 |
+| TD-016 | Cloudflare 上 `useRuntimeConfig()` 的 module-eval snapshot 是否讀得到注入的 `NUXT_APP_ENV` | mid | open | 2026-09-11 |
+| TD-017 | `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅 | low | open | 2026-09-11 |
 
 ## TD-004 — Spectra roadmap drift check 在 CI 的 structural diff
 
@@ -179,31 +183,6 @@ lint 因原工作 scope 刻意留下。
 - `pnpm lint` 不帶參數仍 exit 0。
 - 刻意造成 lint failure 時 exit code 為非零，證明 `exec` 穿透。
 
-## TD-013 — scaffolder ↔ clade registry seam test 撞 manifest schema 收緊
-
-**Status**: open
-**Priority**: mid
-**Discovered**: 2026-09-09 — P7 capability 宣告的 `/commit` 0-C 跑出來
-**Location**: `template/packages/create-nuxt-starter/test/clade-registry-seam.test.ts:44`
-
-### Problem
-
-該測試的 fixture 寫死 `.claude/hub.json` 為 `{"version":"0.0.0","modules":{},"localHooks":[]}`，
-clade `scripts/register-consumer.ts` 現在拒收：`invalid consumer manifest: $.modules: no anyOf schema branch matched`。
-2 個 test case 失敗（`pnpm test` 2 failed / 343 passed），與本 repo 的產品碼無關 —— fixture 建在 `/tmp`，
-不讀本 repo 的 manifest。clade 的 `manifest.schema.json` 對 `modules` 的 anyOf 分支已收緊到空物件不合法。
-
-### Fix approach
-
-把 fixture 的 `modules` 補成能通過現行 schema 的最小合法組合（照 `manifest.schema.json` 的 anyOf 分支選一條），
-或改由 scaffolder 自己產生 manifest 再餵給 register-consumer，讓測試跟著 schema 走而不是寫死。
-**NEVER** 為了讓測試綠而放寬 clade 的 schema。
-
-### Acceptance
-
-- `pnpm test --filter scaffolder` 對 `clade-registry-seam.test.ts` 5 個 case 全綠（目前 2 failed / 1 skipped）。
-- 修法不動 clade `manifest.schema.json`。
-
 ## TD-014 — clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約
 
 **Status**: open — **範圍已收斂到只剩 `<maintainer-domain>` 佔位符無解析說明**（2026-09-11）
@@ -289,6 +268,91 @@ secrets 存放處、新增 skill 級 `<!-- clade-visibility: private -->` 讓投
 `<maintainer-domain>` 佔位符在 `template/.claude/` + `template/.cursor/` 的 **22 個檔、58 處**
 出現，且**沒有任何一處說明該填什麼**（實測 grep 無命中）。scaffold 出去的使用者會看到一個
 自己解不開的佔位符。修在 clade 源檔（給解析說明，或改成 consumer 可設定的值），本 repo 只驗收。
+
+## TD-016 — Cloudflare 上 `useRuntimeConfig()` 的 module-eval snapshot 是否讀得到注入的 `NUXT_APP_ENV`
+
+**Status**: open — 機制已釘死，**實際後果未實測**（需要一次真實 Cloudflare 部署才判得出來）
+**Priority**: mid — 若成立，Sentry 與 evlog 的 `environment` 在所有 Cloudflare 部署上恆為 `'unknown'`
+**Discovered**: 2026-09-11 — TD-015 的 delta review 順出來的
+**Location**: `template/server/plugins/sentry-cloudflare.ts`、`template/server/plugins/evlog-drain.ts`、`template/server/plugins/evlog-sentry-drain.ts`（後兩者為 clade-LOCKED 投影）
+
+### Problem
+
+`deploy-env-identity` 規約指名 server / nitro plugin 讀 runtime config 的 `config.appEnv`，理由是
+「runtime 注入，改值不必重 build」。但 nitro 2.13.3 的 `runtime/internal/config.mjs` 裡：
+
+```js
+const _sharedRuntimeConfig = _deepFreeze(applyEnv(klona(_inlineRuntimeConfig), envOptions))
+export function useRuntimeConfig(event) {
+  if (!event) return _sharedRuntimeConfig      // ← module 載入當下就凍結的 snapshot
+  ...                                          // 帶 event 才會 per-request 重跑 applyEnv
+}
+```
+
+零引數版本回傳的是 **module evaluation 當下**算好的值。而 Cloudflare preset 是在每次 invocation
+才把 env 掛上 `globalThis.__env__`（nitropack 的 `presets/cloudflare/runtime/_module-handler.mjs`，就在呼叫
+`nitroApp.localFetch` 之前）。若 workerd 在 module 頂層還沒有 populate 原生 `process.env`，
+那 `applyEnv` 在那個時點就看不到 wrangler 注入的 `NUXT_APP_ENV`，`config.appEnv` 會恆為
+build 期的值 → 落到 `'unknown'`。
+
+三件已釘死的事實：
+
+- Sentry 的 options callback **每個 request 都跑**（包在 `nitroApp.localFetch` 的 Proxy `apply` 內），
+  所以呼叫時 `__env__` 一定已經在了 —— 時機不對的是 `useRuntimeConfig()` 那一半，不是 callback。
+- `wrangler.jsonc` 是 `compatibility_date: 2025-05-15` + `nodejs_compat`，理論上會 populate
+  原生 `process.env`；**但「在 module 頂層就 populate」還是「只在 handler scope 內」沒有實測**。
+- 同一個 repo 內另外兩支 evlog plugin 做一樣的零引數呼叫，只是因為檔頭帶 generated header
+  被 vite-doctor 跳過，所以沒被這條規則打到 —— 它們有同樣的曝險。
+
+### Fix approach
+
+**NEVER** 為了繞過這條就把 `config.appEnv` 換成 `process.env.NUXT_APP_ENV` —— `deploy-env-identity`
+指名了 runtime config 那條路徑，這是 clade 標準層的接線，consumer 不能自行偏離。
+
+1. 先實測：部署一次到 Cloudflare，讀回 Sentry 事件的 `environment` 標籤。恆為 `'unknown'` 即成立。
+2. 成立的話，這是 **clade 標準層的問題**（`deploy-env-identity` 的「server / nitro plugin →
+   `config.appEnv`」那一列在 Cloudflare preset 上不成立），MUST 回報 clade 並在那裡決定接線，
+   不在本 repo 端各修各的。
+3. 規約自己要求「MUST 有機械 gate 釘住整條接線」；那個 gate 目前抓不到這一類（值讀得到、
+   只是讀到舊的），gate 的形狀也要一起看。
+
+### Acceptance
+
+- 有一次真實 Cloudflare 部署的 `environment` 標籤讀數作為證據。
+- 若成立：clade `deploy-env-identity` 的接線表對 Cloudflare preset 有明確答案，三支 plugin 一致。
+
+## TD-017 — `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅
+
+**Status**: open
+**Priority**: low — 有明確的手動解法（刪掉 `template/temp/`），但會浪費下一個人一輪除錯
+**Discovered**: 2026-09-11 — TD-015 收尾時實際踩到
+**Location**: `template/scripts/validate-starter.mjs`、`template/vendor/doctor-shared/run.mjs`（clade-LOCKED）
+
+### Problem
+
+`node scripts/validate-starter.mjs` 會在 `template/temp/validate-starter/` 下產出 4 份完整的
+scaffold 專案並**保留**（`temp/` 在 `.gitignore` 內）。vite-doctor 不跳過它，於是接著跑
+`pnpm run doctor` 會多出 3 條 `NUXT0054 no-secret-in-public-config` error（來自 generated
+`nuxt.config.ts` 的 `runtimeConfig.public.key`），doctor 從 exit 0 變 exit 1。
+
+實測序列：`doctor` clean → 跑 `validate-starter` → `doctor` 3 errors → `rm -rf temp/validate-starter`
+→ `doctor` clean。
+
+因為錯誤訊息指向的是 generated 檔的路徑，第一眼很容易誤讀成「我剛才改壞了 scaffold 輸出」。
+這與 TD-013 順手修掉的 `.pi/**` 是同一類：gate 掃到了不屬於本 repo 原始碼的產物。
+
+### Fix approach
+
+兩條路擇一（或都做）：
+
+1. `scripts/validate-starter.mjs` 收尾時清掉 `temp/validate-starter/`（或改用 mkdtemp 到系統暫存區）。
+   保留產物對除錯有用，那就加一個 `--keep` 旗標，預設清掉。
+2. 讓 doctor 跳過 `temp/**`。落點是 consumer 自有的 doctor.config.json 宣告檔，
+   **NOT** clade-LOCKED 的 `vendor/doctor-shared/`。
+
+### Acceptance
+
+- 跑完 `validate-starter` 之後，`pnpm run doctor` 仍是 exit 0。
 
 ## Cross-repo pointers
 

@@ -89,8 +89,9 @@ _No parked changes._
 
 ### 近期
 
+- [mid] **TD-016** Cloudflare 上零引數 `useRuntimeConfig()` 回的是 module-eval snapshot，而 env 是每次 invocation 才注入 —— `config.appEnv` 可能恆為 `unknown`；機制已釘死，待一次真實部署實測。成立的話根因在 clade `deploy-env-identity` 的接線表 — 獨立
+- [low] **TD-017** `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 從 exit 0 變 exit 1 — 獨立
 - [low] **TD-014** 範圍已收斂：24 條 blocked error 於 2026-09-11 全數清除（clade TD-1019 / TD-1066 + v1.12.46），`--visibility public --dry-run` 回 `diagnostics: []`。**剩下只有 `<maintainer-domain>` 佔位符無解析說明**（22 檔 58 處），不擋任何 gate — 修在 clade 源檔，本 repo 只驗收
-- [mid] **TD-013** scaffolder ↔ clade registry seam test fixture 撞 manifest schema 收緊（`pnpm test` 2 failed）— 獨立
 - [high] **Change 1** `starter-hygiene-boundary-rules`（meta vs template 邊界治理）— 新增 `.claude/rules/starter-hygiene.md`（meta 維護用）+ pre-commit hook 擋 `.env` / dogfood 進 `template/` + root CLAUDE.md 補邊界指引；Tier 1，獨立
 - [high] **Change 3** unpark + apply `nuxthub-d1-stack-as-first-class-scaffold`（已 parked，proposal 完整、32 tasks 寫好）— 獨立於 Change 1，可並行
 - [mid] **Change 2** `scaffolder-strip-manifest-and-validation-gate`（防線 B/C — 投影+驗證）— 抽 `presets/_base/strip-manifest.json` 為 SoT；create-clean.sh 與 scaffolder 共用；validate-starter 補 4 條 audit regression（baseline / d-pattern-audit / nuxthub-ai / none）+ CI gate；Tier 2，依賴：Change 1 已合（先有 rule 才知 strip 什麼）+ Change 3 已合（避免中途改變 strip 清單）
