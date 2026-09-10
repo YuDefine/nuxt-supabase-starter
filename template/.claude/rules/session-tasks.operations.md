@@ -485,7 +485,11 @@ coordinator 身分轉移，以及寫出讓 successor 回收本 pane 的 predeces
 
 `--route` 與 `--tier-basis` 的值域與語義**與 `pi-dispatch.ts` 逐字相同**（`--route` 記走哪條政策，`--tier-basis` 記那條政策對檔位的**結論**，兩者不可互相推導）——這條對稱是 2026-09-07 補上的：在那之前 Pi 派工必須講出理由、Claude Code 派工不必，於是一句手打的 `--model claude-opus-5 --effort max` 通過了每一道 gate，事後沒有任何欄位講得出是誰依什麼授權的。**NEVER 給這兩欄 default**：default 會讓「真的判過」與「呼叫者從沒判」事後不可區分。
 
-**Claude child 的 effort 值域是 `low` / `medium` / `high`。** `max` **NEVER** 是 routed 檔位——政策表（`SESSION_TRANSPORT_POLICY`）對 Claude Code 只給一個檔位 `medium`，而 `max` 在整份 routing 規約裡只出現在 Fable subagent 的配額 fallback 與 Pi `sol` 的 gate row，兩者都不是這條路徑。真的需要升到 `max` 就 **MUST** 顯式帶 `--tier-basis adjudication`，那句宣告會落在 receipt 與 durable record 的 `tier_basis` 上，下一個讀的人看得到是誰主張的。**NEVER** 把它讀成「max 被禁掉了」——被禁掉的是**不具名地**用它。帳號設定、主線模型與 brief 正文不能代選。收據的 requested 欄位證明傳入值，observed 才是實跑證據；Herdr 回 `model_verification: unverified` 時 **NEVER** 宣稱已核實模型。
+**Claude child 的 effort 值域是 `low` / `medium` / `high`，並且按 model family 再設天花板：Fable ≤ `medium`、Opus ≤ `high`、其餘 ≤ `high`（Charles 2026-09-10 拍板）。** `max` **對 Claude child 完全不可達**，建 pane 之前就被拒，**沒有任何 `--tier-basis` 開得了它**。
+
+2026-09-06 這條路徑第一次出事時，補的是**歸因**而不是**上限**：`max` 留著，只要顯式帶 `--tier-basis adjudication`，「宣告就會落在 receipt 與 durable record 上」。2026-09-10 量到那個承諾值多少——當天 5 個 pane 以 `max` 起跑（4 個 Fable 顧問、1 個 Opus），而整個 state dir 裡 `requested_effort` 只有 14 筆命中，**全部是 `table-row` / `medium`**，`max` 一筆都沒有。成因是 completion record 的歸屬區塊被寫成「`table_row` 存在才複製」，於是**唯一能抬高檔位的那條基底，正好是唯一不留紀錄的那條**。
+
+所以現在拿掉的是後門本身，不是再補一層儀表：**每一份顧問 / reviewer / 裁決者 brief 讀起來都合法地像 adjudication**，一個永遠命中的自我宣告不是 admission control，它只是 `max` 的另一種拼法。**NEVER** 把「這次是裁決／這次比較重要」讀成可以抬高檔位——那個讀法就是 2026-09-10 那 4 個 Fable pane 的成因。帳號設定、主線模型與 brief 正文不能代選。收據的 requested 欄位證明傳入值，observed 才是實跑證據；Herdr 回 `model_verification: unverified` 時 **NEVER** 宣稱已核實模型。
 
 `model_verification` 是三值，三值各自對應一個不同的動作：
 
