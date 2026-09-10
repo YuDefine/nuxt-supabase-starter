@@ -102,3 +102,6 @@ openspec/.vector-search.db*
 !.clade/ai-control-plane/human-decisions.jsonl
 
 !.clade/manifest.json
+
+.pi/*
+!.pi/settings.json
