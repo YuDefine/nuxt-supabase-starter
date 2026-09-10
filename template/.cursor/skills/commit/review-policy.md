@@ -19,7 +19,7 @@
 
 ## 既有資格與新組合
 
-最新 main 的 code-review 基準是 GPT-6-astra via Pi（effort: medium）（一般與深度）與 Claude Fable 5.1（effort: medium）（一般 review fallback）；跨模型裁決依各階段契約。原 Sol low 對應 Astra low，其餘原 Sol effort 對應 Astra medium。Astra 目前沒有已驗證的 Cursor model，不走 Cursor 換池。Astra 配額不足時，只有 fresh Fable 仍通過下表模型差異與資格判定才可接手；不符合或不可用就保留 gate 未達成。
+最新 main 的 code-review 基準是 GPT-6-astra via Pi（effort: medium）（一般與深度）與 Claude Fable 5.1（effort: medium）（一般 review fallback **與 0-A.2 跨模型裁決**，兩者同一格）；跨模型裁決依各階段契約。**裁決 / 顧問角色 NEVER 自帶更高檔位**：Claude child 的天花板是 Fable ≤ medium、Opus ≤ high，`max` 不可達。原 Sol low 對應 Astra low，其餘原 Sol effort 對應 Astra medium。Astra 目前沒有已驗證的 Cursor model，不走 Cursor 換池。Astra 配額不足時，只有 fresh Fable 仍通過下表模型差異與資格判定才可接手；不符合或不可用就保留 gate 未達成。
 
 這是已使用組合的基準，不指定哪個 runtime 必須當主線，也不保證當前 catalog 可用。實際派遣仍逐欄通過上表；例如 maker 已屬 GPT 系列，另一個 GPT 席位不因名字不同就自動達成跨模型。
 
