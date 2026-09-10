@@ -50,7 +50,11 @@ run_step() {
 
 scan_placeholders() {
   local target="$1"
-  local pattern='nuxt[- ]supabase starter|nuxt-supabase-starter|demo|\{\{projectName\}\}|TODO: 替換|my-project'
+  # demo MUST 帶詞界：沒有詞界時 demonstrate / demonstrably 也會中，實測誤判
+  # scripts/claim-helper.ts:500 與 vendor/oxc-shared/preset.ts:107 兩處。誤判混在真訊號
+  # 裡會讓人以為這條 gate 在亂報，進而整條略過——真訊號（clade 投影未去識別化，TD-019）
+  # 就跟著被略過。
+  local pattern='nuxt[- ]supabase starter|nuxt-supabase-starter|\bdemo\b|\{\{projectName\}\}|TODO: 替換|my-project'
 
   if command -v rg >/dev/null 2>&1; then
     rg -n "$pattern" "$target" \
