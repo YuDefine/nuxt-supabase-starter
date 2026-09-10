@@ -21,6 +21,7 @@
 | TD-016 | Cloudflare 上 `useRuntimeConfig()` 的 module-eval snapshot 是否讀得到注入的 `NUXT_APP_ENV` | mid | open | 2026-09-11 |
 | TD-017 | `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅 | low | open | 2026-09-11 |
 | TD-018 | auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict | high | open | 2026-09-11 |
+| TD-019 | `scaffold-smoke` 自 2026-08-24 起持續紅，剩餘 blocker 是 clade 投影未去識別化 | mid | open | 2026-09-11 |
 
 ## TD-004 — Spectra roadmap drift check 在 CI 的 structural diff
 
@@ -449,6 +450,58 @@ commit → 跑 `hub-sync` 確認綠。
 - clade 端：任一 consumer 的 auto-commit commit 失敗後，下一趟 propagate **不再**出現
   `local or modified file conflict`（而是重投影成功，或給出指名半套用狀態的訊息）。
 - 本 repo：連續兩趟 propagate 對 `nuxt-supabase-starter/template` 不是 `failed`。
+
+## TD-019 — `scaffold-smoke` 自 2026-08-24 起持續紅，剩餘 blocker 是 clade 投影未去識別化
+
+**Status**: open — 兩層 blocker，第一層已修，第二層落點在 clade
+**Priority**: mid — gate 紅了三週，實質上沒有人在讀它的結果
+**Discovered**: 2026-09-11 — 修 setup-vp 那兩支時順帶查出來
+**Location**: `scripts/smoke-scaffold.sh`（`scan_placeholders()`）、`template/vendor/**`、`template/scripts/**`
+
+### Problem
+
+`scaffold-smoke` 最後一次綠是 2026-08-18（`383e2408`），之後每一趟都紅。堆了兩層：
+
+**第一層（已修，commit 見本次）**：`scripts/smoke-scaffold.sh` 的必備資產清單還在斷言
+scaffold 輸出要有 `.claude/commands/validate-starter.md`，但 `17f080cf` 依 L3 commands hygiene
+把它判成 `starter-owned-relocate` 並移出 `template/`。斷言沒跟著改，gate 就永遠停在這裡，
+**後面每一關都沒被執行過** —— 包含下面這層。
+
+**第二層（未修）**：拿掉第一層之後，`placeholder scan` 接著紅。本機實跑 25 個命中，
+**全部**落在 clade 投影出來的 `vendor/**` 與 `scripts/**`，app 程式碼零命中：
+
+| 命中 | 數量 | 例子 |
+| --- | --- | --- |
+| 字面 `nuxt-supabase-starter` | 18 | `vendor/snippets/pitfalls/TEMPLATE.md`、`vendor/oxc-shared/preset.ts`、`scripts/pre-push/checks/*.sh` |
+| `demo` | 7 | 其中數個是子字串誤判：`demonstrably`、`demonstrate` 也會中 |
+
+兩個成因要分開看：
+
+1. **真訊號** —— clade 投影把 starter 自己的 consumer id 寫進了會被 scaffold 帶走的
+   `vendor/**`。這就是 `clade-starter-sanitization` / TD-006 的存量去識別化，
+   落點在 clade（bootstrap 把 starter 自己當 consumer 投影）。
+2. **scanner 缺陷** —— `scan_placeholders()` 的 pattern 裡 `demo` 沒有詞界，
+   `demonstrate` / `demonstrably` 一律誤判。另外它 exclude 了 `.claude/**` 卻沒 exclude
+   `vendor/**` 與 `scripts/**`，而這三者同樣都是 clade 投影面 —— 這個不對稱沒有寫下理由。
+
+### Fix approach
+
+**NEVER** 把 `vendor/**` / `scripts/**` 加進 exclude 名單來讓 CI 轉綠 —— 第 1 點是真訊號，
+遮掉它等於用暫時修法繞過 root cause，而且遮掉的正好是唯一會被 scaffold 帶走的那半。
+
+順序應該是：
+
+1. `demo` 改成有詞界的 pattern（`\bdemo\b`），先把誤判從真訊號裡分離出來。分完之後
+   剩下的命中數才是這條債的真實大小。
+2. 等 `clade-starter-sanitization` 把 `vendor/**` 的存量去識別化做完（clade 側）。
+3. 若確認 `.claude/**` 被 exclude 是有意的治理決定（那層由 audit-template-hygiene 與
+   public-hygiene 各自守），就把同樣的理由寫進 `scan_placeholders()` 上方，讓下一個人
+   看得出 exclude 名單的判準是什麼，而不是逐案累加。
+
+### Acceptance
+
+- `bash scripts/smoke-scaffold.sh temp/<name>` 跑到 `[PASS] placeholder scan clean` 之後才停。
+- `scaffold-smoke` workflow 在 main 上轉綠。
 
 ## Cross-repo pointers
 

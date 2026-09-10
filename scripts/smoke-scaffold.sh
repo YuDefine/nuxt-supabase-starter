@@ -108,10 +108,14 @@ if [[ ! -f "$TARGET_DIR/package.json" ]]; then
   fail "missing package.json in scaffolded project"
 fi
 
+# NEVER 把 .claude/commands/validate-starter.md 加回這份清單：17f080cf 依 L3 commands
+# hygiene 把它判成 starter-owned-relocate，維護者版本在 root .claude/commands/，
+# 刻意不進 template/ 也就不會出現在 scaffold 輸出。它留在這裡的期間（2026-09-05 起）
+# 這支 gate 每一趟都紅。反向約束由 audit-public-hygiene.mjs 的
+# public-hygiene-relocated-artifact 顧，不需要在這裡再擋一次。
 for required_path in \
   "$TARGET_DIR/.claude/settings.json" \
   "$TARGET_DIR/.claude/versions.json" \
-  "$TARGET_DIR/.claude/commands/validate-starter.md" \
   "$TARGET_DIR/scripts/compress-skill-descriptions.sh" \
   "$TARGET_DIR/scripts/templates/clean/README.md"; do
   if [[ ! -e "$required_path" ]]; then

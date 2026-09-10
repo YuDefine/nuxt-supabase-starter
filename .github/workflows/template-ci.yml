@@ -69,10 +69,17 @@ jobs:
         run: sudo apt-get install -y ripgrep
 
       - name: Setup Vite+ (vp)
+        # composite action 不吃 job 的 defaults.working-directory，它跑在 workspace 根，
+        # 而這個 meta monorepo 的根沒有 package.json。setup-vp 的 run-install 預設是
+        # true，於是它會在根跑 `vp install` 並以 ENOENT / code 254 掛掉（浮動 v1 tag
+        # 在 2026-09-08 前後移動後開始發生）。working-directory 同時修好 lockfile 與
+        # cache key 的自動偵測；install 維持由下面那個顯式步驟負責，只留一個安裝點。
         uses: voidzero-dev/setup-vp@v1
         with:
           node-version: '24'
           cache: true
+          working-directory: template
+          run-install: false
 
       - name: Install dependencies
         run: vp install
