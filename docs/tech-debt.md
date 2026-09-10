@@ -20,6 +20,7 @@
 | TD-014 | clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約 | low | open | 2026-09-09 |
 | TD-016 | Cloudflare 上 `useRuntimeConfig()` 的 module-eval snapshot 是否讀得到注入的 `NUXT_APP_ENV` | mid | open | 2026-09-11 |
 | TD-017 | `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅 | low | open | 2026-09-11 |
+| TD-018 | auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict | high | open | 2026-09-11 |
 
 ## TD-004 — Spectra roadmap drift check 在 CI 的 structural diff
 
@@ -353,6 +354,101 @@ scaffold 專案並**保留**（`temp/` 在 `.gitignore` 內）。vite-doctor 不
 ### Acceptance
 
 - 跑完 `validate-starter` 之後，`pnpm run doctor` 仍是 exit 0。
+
+## TD-018 — auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict
+
+**Status**: open — 落點在 clade（`~/offline/clade`），本 repo 只是受害面，這裡登記入口與復原程序
+**Priority**: high — 一次 pre-commit 失敗就讓這台**永久**掉出 fleet，且錯誤訊息指向錯的方向
+**Discovered**: 2026-09-11 — v1.12.47 propagate 對本 consumer failed 時追出來
+**Location**: clade `scripts/lib/runtime-artifact-apply.ts`（conflict 判定）、clade auto-commit flow 的 rescue/revert 路徑
+
+### Problem
+
+clade 的 projection state 分兩層存放，而且**歸屬不同**：
+
+| 層 | 路徑 | git |
+| --- | --- | --- |
+| runtime projection state（conflict 判定實際讀的那份） | `template/.clade/projections/*.json` | untracked |
+| 投影出來的內容檔 | `template/.claude/**`、`template/.cursor/**` | tracked |
+
+`applyRuntimeArtifactPlan()` 把兩者放在同一個 manifest transaction 裡寫，所以 apply 本身是原子的。
+問題出在**之後**：auto-commit flow 的 `git commit` 若失敗，rescue 路徑會存下 patch
+（`template/.clade/rescue/auto-commit-<ts>.patch`）並回捲 worktree。回捲是 git 層的，
+**只還原 tracked 檔**——`.clade/projections/*.json` 是 untracked，原地留在新版 hash。
+
+於是 state 記著新內容、磁碟是舊內容，下一趟 `hub-sync` 走到
+
+```js
+} else if (!previousHash || hashContent(before) !== previousHash) {
+  throw new Error(`local or modified file conflict: ${rel}`)
+}
+```
+
+就報 `local or modified file conflict`。這個標籤是錯的：沒有人在 consumer 端改過那個檔，
+它就是 HEAD 的內容。訊息把人導向「找誰覆寫了投影」，而真正的狀態是「state 跑到磁碟前面了」。
+
+實測（2026-09-11，v1.12.47）：
+- `.claude/rules/session-tasks.operations.md` 磁碟 `70896178…`（= HEAD）
+- `.clade/projections/claude.rules.json` 記 `b94a2f96…`
+- 用 clade **新** source 重跑投影轉換（插 native-rule 註解 → `TDMS`→`<consumer-b>` → clade 絕對路徑→`<clade-central-repo>`）得到的 sha 逐位等於 `b94a2f96…`，證明 state 是 v1.12.47 的預期輸出，不是 consumer 改動。
+- 同一趟共 4 個檔卡住（claude.rules 1、claude.capabilities 2、cursor.rules 1；codex 兩份 0，因為 codex 投影 gitignored 所以沒被回捲）。
+
+**這不是單次意外**。本 consumer 從 v1.12.38 到 v1.12.45 連續 8 趟 propagate 都是同一形狀的
+`projection unavailable`，中間只有 v1.12.46 綠過一次。觸發 `git commit` 失敗的原因每次不同——
+
+| run | 觸發 commit 失敗的原因 |
+| --- | --- |
+| v1.12.45 16:05Z | root `.husky/pre-commit` 的 `[Starter Hygiene] real-tenant-identifier` 擋下 clade 自己未去識別化的投影（TD-006 ratchet） |
+| v1.12.47 19:24Z | pre-commit 以 **134 / SIGABRT** 結束（見下） |
+
+——但**後果永遠相同**：wedge 住，而且要人手動復原。
+
+### 134 那一格
+
+`✘ commit failed: Aborted (core dumped) | VITE+ - pre-commit script failed (code 134)`
+是 `template/.vite-hooks/_/h` 這支 dispatcher 印的，代表 `template/.vite-hooks/pre-commit`
+本身被 SIGABRT 打死。**沒有重現**：事後用同一組 staged 檔（7 個 .md/.json）手跑
+`sh -e template/.vite-hooks/pre-commit`、真跑 `git commit`、以及 propagate `--resume`
+的那趟 commit，三次都 rc=0（`commit_ms` 1.8s）。
+
+沒有留下 core：apport 對同一個 `ExecutablePath` 只保留一份報告，`/var/crash` 現存三份都不是這次。
+兩條**未證實**但值得下次帶著看的線索：
+
+- `/usr/bin/timeout` 在這台是 uutils `rust-coreutils 0.8.0`，`/var/crash` 有它的
+  `Signal: 6 / SIGABRT` 實例（2026-09-06，`timeout … vp check`）。目前查不到 pre-commit 路徑上有用到它。
+- `NODE_COMPILE_CACHE=/home/charles/.cache/node-compile-cache` 是**全域單一目錄**，而
+  `vp` 的 shim 明確呼叫 `module.enableCompileCache()`；propagate 跑 `concurrency: 4`，
+  等於 4 個 consumer 的 node 併發讀寫同一份 V8 compile cache。
+
+所以 134 目前只能當**間歇性 trigger**看，不是本條的 root cause——root cause 是「任何一次
+commit 失敗都會 wedge」。修好 wedge，134 再發生也只會浪費一趟 propagate，不會擋住 fleet。
+
+### Fix approach
+
+落點在 clade，本 repo 不自行實作。三條擇一：
+
+1. rescue/revert 路徑一起回捲 `.clade/projections/*.json`（存 patch 前先備份該目錄，回捲時一併還原）。
+   最貼近「transaction 要嘛全成要嘛全退」的語義。
+2. `applyRuntimeArtifactPlan()` 在 `hashContent(before) !== previousHash` 時多問一句：
+   磁碟內容是否等於 `git show HEAD:<path>`。是 → 這是 state 跑在前面，改成重新投影而不是 throw；
+   否 → 才是真的 consumer 覆寫，維持現在的訊息。
+3. 至少把訊息分成兩種 —— `local or modified file conflict`（真覆寫）與
+   `projection state ahead of worktree`（半套用），後者附上復原指令。
+
+順帶：`--resume` 目前**不會**重試 `status: "failed"` 的 consumer 以外的東西，這點是對的；
+但 failed 的 journal entry 留著不會自己好，所以 wedge 一旦形成就一定要人介入。
+
+### 本 repo 的復原程序（已驗證）
+
+已寫進 [`HUB_DRIFT_RUNBOOK.md`](HUB_DRIFT_RUNBOOK.md) 場景 F。摘要：找最新的
+`template/.clade/rescue/auto-commit-*.patch` → `git apply` → 驗 projections 與磁碟 0 mismatch →
+commit → 跑 `hub-sync` 確認綠。
+
+### Acceptance
+
+- clade 端：任一 consumer 的 auto-commit commit 失敗後，下一趟 propagate **不再**出現
+  `local or modified file conflict`（而是重投影成功，或給出指名半套用狀態的訊息）。
+- 本 repo：連續兩趟 propagate 對 `nuxt-supabase-starter/template` 不是 `failed`。
 
 ## Cross-repo pointers
 
