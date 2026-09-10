@@ -552,20 +552,80 @@ multi-select while keeping claude source assets`），實作則把「來源不�
 
 ### Fix approach
 
-三條路，**各有真實 trade-off，需要拍板**，不要隨手挑一條：
+**已收斂（2026-09-11，grok-4.6 / xai high 唯讀顧問，label `td020-codex-scaffold`，主線逐條核實過）。**
+原本列的三條**全部否決**，採第四條。
 
-1. **scaffold 時現場生成** —— 由 scaffolder 自己跑一次 `.claude/` → `.codex/` / `.agents/`
-   的轉換。問題：那個轉換目前住在 clade 的 `sync-to-codex`，而 scaffold 必須能在
-   degit 出來、沒有 clade 的環境獨立跑完。要走這條得先把轉換邏輯搬進 starter seed。
-2. **把 `template/.codex/` 與 `template/.agents/` 收進版控** —— 最直接，但直接牴觸
-   `.claude/rules/starter-hygiene.md` § 掃描範圍寫下的前提：「兩者都在 `template/.gitignore`
-   內…**不進版控 = 不會被 scaffold 帶走**」，而 `audit-public-hygiene.mjs` 正是**因為**這個前提
-   才不掃這兩個目錄。改成 tracked 就必須同時把它們納入 L3 掃描範圍，否則等於開一個沒人守的洞。
-3. **把靜默降級改成大聲失敗** —— `existsSync` 為 false 時 throw 或明確 warn，並讓測試斷言
-   實際契約。這條不修復功能，只是讓「拿到不完整專案」變成當場看得見，成本最低。
+#### 採用：從 target 的 `.claude/` 做薄投影
 
-**NEVER** 直接把 `scaffold.test.ts:255-256` 那兩行刪掉讓 CI 轉綠 —— 那是把唯一一個抓到這個
-bug 的東西拆掉。
+`assemble` 不再抄 starter 的 gitignore 快照，改成在 prune + `generateSettings` **之後**，
+從**已經拷進 target** 的 `.claude/` 生成 `.agents/skills/` 與 `.codex/config.toml`。
+不搬 clade 的 converter，也不把那兩棵樹收進版控。選了 `codex` 而源 `.claude/skills` 不存在 → throw。
+
+決定性的證據是**同一支檔裡的不對稱**（已核實）：
+
+| 函式 | 行 | 寫法 |
+| --- | --- | --- |
+| `copyTemplateClaudeAssets` | `assemble.ts:207-209` | 直接 `copyDirectory`，**沒有** `existsSync` —— 「這個源是契約」 |
+| `copyTemplateCodexAssets` | `assemble.ts:251-263` | 兩個 `existsSync` 守門 —— 「有就拷、沒有算了」 |
+
+使用者顯式 `--agents codex` 時，optional 模式就是錯的模式。而且 `.agents/skills/` 的內容
+**本來就推導得出來**：`template/.claude/skills/` 的 83 個目錄全部出現在 `.agents/skills/` 內，
+測試第 256 行要的 `template/.claude/skills/commit/SKILL.md` 是 **tracked**（已 `git ls-files` 核實）。
+`.codex/config.toml` 則是 `.claude/settings.json` 那組欄位的 TOML 視圖，不是獨立的源。
+
+順帶修正本 TD 原文三處不精準（顧問指出、主線核實）：
+`copyTemplateCodexAssets` 是 **251-263** 不是 251-262；`.gitignore` 的「可重生投影」註解在
+**第 86 行、只屬 `.agents/`**，`.codex/` 在第 81 行夾在 `.clade/runtime/` 旁邊、沒有那句註解；
+`assemble.ts:1195` 的 `.agents/commands/spectra` 是 **prune（`rmSync`）不是 copy**，同一棵樹、方向相反。
+
+#### 三條原文為什麼都輸
+
+- **原文 1（搬 converter 進 seed）**：要搬的不是一支檔。clade `scripts/sync-to-codex.ts` 是
+  **2506 行**、還 import 一串 `project-runtime-*` 內部模組（已核實）；`~/.claude/scripts/sync-to-codex.ts`
+  那支 45 行 shim 自己就寫明它只負責定位 clade，理由是「避免 user-level 放一份會漂移、且無版控的副本」。
+- **原文 2（收進版控）**：本機實測 `.agents/` 1111 檔 / 12M、`.codex/` 167 檔 / 2.1M，等於 `.claude/`
+  的第三份副本；直接打臉 hygiene 前提且必須擴大 L3 掃描範圍，不擴大就是開洞。更糟的是抄出去的仍是
+  **starter 快照**，會把還沒剝掉的 `local-supabase` MCP 烤進沒選 database 的專案——正是
+  `post-scaffold.ts:879-881` 註解在防的那件事。
+- **原文 3（改成大聲失敗）**：`post-scaffold.ts:1589-1593` **已經**在 warn 了，問題是文案寫
+  「這代表專案不會有 Codex / Cursor 的投影檔。**只用 Claude Code 的話可以忽略。**」——對剛選了
+  codex 的人這句是錯的。而且測試第 255-256 行斷的是**檔在**、不是 throw，改成 throw 不會讓 CI 綠。
+  這是診斷，不是修法。
+
+#### 真正的生成點綁錯機器（新發現）
+
+`post-scaffold.ts` 的 `runSyncToAgents()`（1585-1604）找 `~/.claude/scripts/` 的 shim，
+找不到就 warn 然後 return；`post-scaffold.ts:882-888` 在 pnpm 沒裝好時同樣直接略過。
+也就是說**現有生成路徑預設使用者有 Claude Code ＋ clade**——而「選了 Codex、機器上沒有 clade」
+的人正是這個選項的目標使用者。這條路對他們本來就過不去。
+
+### 需要拍板：Codex 開箱契約要到哪裡
+
+**這是產品格不是技術格**，落地形狀完全不同：
+
+| | 意思 | 後果 |
+| --- | --- | --- |
+| **A**（顧問預設） | assemble 保證 `.codex/config.toml` + `.agents/skills/**`（含 `commit/SKILL.md`）+ tracked `AGENTS.md`；`.codex/rules` 等完整語義轉換有 clade 才升級 | 不改 hygiene 掃描範圍、不搬 converter、CI 單測可綠 |
+| **B** | 選了 `codex` 就必須等同開發機跑過 `sync-to-codex`（含 `.codex/rules` 全部） | `runSyncToAgents` 在缺 shim/clade 時 **throw**；等於宣告「Codex scaffold 需要本機 clade」。**仍然不走原文 2** |
+
+**未驗證的那一格**：沒有人驗過 Codex CLI 在只有 `AGENTS.md` + `.codex/config.toml` + `.agents/skills`、
+**沒有** `.codex/rules` 時算不算可用專案。A 若在這格是假的，交付出去的會是「看起來有、實際不能用」的
+codex 專案——比現在這個 bug 更安靜。**拍板前不實作。**
+
+落地 A 之後要順帶改的一句話：`.claude/rules/starter-hygiene.md` § 掃描範圍 的
+「不進版控 = **不會被 scaffold 帶走**」會半真半假——「不進版控」仍真，「不會被帶走」變假
+（輸出裡會有，但是 scaffolder 生成的，不是 template 樹帶走的）。意思要改成「template git 樹仍不掃；
+scaffold 輸出由 assemble 生成，不屬 L3 掃 template 的範圍」。**NEVER** 因此擴大 `SCAN_TARGETS`。
+
+### 顧問 concerns 的處置
+
+顧問以 `DONE_WITH_CONCERNS` 收尾，三條 concerns：
+
+1. 「未獨立重跑 Template CI `50f001cd`」→ **已由主線的 CI log 消化**（343 passed / 1 failed，
+   失敗行就是 `scaffold.test.ts:255`）。
+2. 「未在乾淨 worktree 實跑 `assembleProject`，靜默 no-op 是從原始碼推的」→ **已由同一份 CI log 消化**：
+   CI 的乾淨 clone 就是那個乾淨 worktree，實測結果與推論一致。
+3. 「未驗證 Codex CLI 缺 `.codex/rules` 時可用與否」→ **仍然開著**，就是上面 A/B 那一格。
 
 ### Acceptance
 
