@@ -5,16 +5,7 @@ metadata:
   clade:
     permission_tier: read
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/security-evidence/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
 
-
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude -->
 
 # security-evidence
 

@@ -1,13 +1,8 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/work-loop/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Dispatch Topology（Step 2 分組 + Step 3 併發契約）
 
-<!-- clade-targets: claude -->
+
+> Runtime split: state, ownership, approval, and completion obligations are shared. Literal Claude tool names or runner commands in this reference are Claude host bindings; other hosts MUST use their adapter fragment or retain the dependent operation blocked.
+
 
 > 主檔 pointer：「Step 3 dispatch 前 MUST 先完整讀本檔」。
 
@@ -127,7 +122,7 @@ exit code 契約的 SoT 是 [[agent-routing.pi-watch-protocol]] § 泛用 Dispat
 | `0` | 讀 stdout JSON 的 `result` → 輕量收割 → 該 item 回 Step 3 續判 |
 | `2` 業務 fail | `result` 的 fail 原因本身是事實（例：來源檔不存在）——消費它，缺口由主線定點 Read 補。**NEVER** 原樣重派、**NEVER** 換 Claude 重做同 brief |
 | `3` 機械故障 | 主線 fallback 自讀（唯一允許的 Claude fallback），state `notes` 留 `pi-prescan-fallback(exit3): <stderr 首行>`；**本輪剩餘 pre-scan 不再嘗試 pi** |
-| `4` quota 擋 | `resets_at` 落 state `notes`；本輪剩餘 pre-scan 直接走 fallback（不重複撞）。fallback 依 [[agent-routing]] § 配額耗盡時的 fallback 紀律；主線接走時 `notes` 留 `self-read(quota)` |
+| `4` quota 擋 | `resets_at` 落 state `notes`；本輪剩餘 pre-scan 直接走 fallback（不重複撞）。fallback 依 [[agent-routing.dispatch-execution]] § 配額耗盡時的 fallback 紀律；主線接走時 `notes` 留 `self-read(quota)` |
 
 **exit `2` / `3` / `4` 都 NEVER 記入 `failStreak` / `consecutiveDispatchFailures`**——那兩個計數器管的是 **item 的工作 dispatch**，pre-scan 只是它的蒐證段。quota 擋被記成失敗時，`consecutiveDispatchFailures >= 2` 會在無人值守下把整個 loop 停掉一整夜。
 
@@ -178,3 +173,6 @@ exit code 契約的 SoT 是 [[agent-routing.pi-watch-protocol]] § 泛用 Dispat
 6. 補件也空且 in-flight > 0 → 等 notification（此時等待是收斂，不是閒置）
 
 四組皆空、補件也空、**且** in-flight ledger = 0 才是本輪結束。
+
+
+Claude binding for this reference: run the explicitly described background dispatcher through `Bash(run_in_background=true)`, track its returned task id, consume terminal results with `TaskOutput`, and use the single `ScheduleWakeup` safety net. Preserve owner, deadline, in-flight state, and notification harvest.

@@ -1,13 +1,6 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/work-loop/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Decay 偵測 —— D4–D6 的成因與 D4 的部分寫入白名單
 
-<!-- clade-targets: claude -->
+
 <!-- carrier-independent candidate: 本檔的義務不經任何 runtime 專屬工具契約表達，是 [[TD-445]] 抽共用核心時最先可搬的一批。**這是候選標記，不是 audience**——真正的 audience 是上面那行 `clade-targets`，NEVER 因為看到本行就把 targets 放寬。放寬 reference 而不放寬 SKILL.md 會投出沒有 skill 入口指向的孤兒檔。 -->
 
 D4–D6 的分流表**留在 SKILL.md Step 1**：那張表每一輪都要判，搬過來等於每一輪都得開這個檔。

@@ -1,20 +1,15 @@
 ---
-description: "Supabase Storage 使用規範（上傳、signed URL、policy、清理）"
-globs: ["server/api/**/*.ts", "packages/*/server/api/**/*.ts", "supabase/migrations/**/*.sql"]
+description: "storage"
 alwaysApply: false
+globs: ["server/api/**/*.ts","packages/*/server/api/**/*.ts","supabase/migrations/**/*.sql"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/db-runtime/cf-workers/storage.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/modules/db-runtime/cf-workers/storage.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 
 # Storage
 
-> 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.cursor/rules/local/`；要改本檔請回 clade 源檔並 propagate。
+> 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.claude/rules/local/`；要改本檔請回 clade 源檔並 propagate。
 
 Template 預設**未使用** Supabase Storage。若專案要引入檔案上傳功能，先評估：
 

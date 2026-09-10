@@ -2,13 +2,7 @@
 description: 新增或修改 mechanical checker、CI gate、contract checker、allowlist 時套用；防止 scope 不透明、依賴缺失誤判綠燈與 canonical check 漂移
 paths: ['scripts/**/*', 'vendor/scripts/**/*', '.github/workflows/**/*', 'package.json', 'pnpm-workspace.yaml']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/checker-contract.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/checker-contract.md; edit canonical source -->
 
 # Checker Contract
 

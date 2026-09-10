@@ -2,13 +2,7 @@
 description: Cloudflare Workers secret 管理規約 — single source of truth = GitHub Secret
 paths: [".github/workflows/**/*.yml", "wrangler.toml", "wrangler.jsonc"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/runtime/cf-workers/secrets.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/modules/runtime/cf-workers/secrets.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Cloudflare Workers Secrets

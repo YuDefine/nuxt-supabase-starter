@@ -1,13 +1,8 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/work-loop/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Guardrails（每輪 re-read，Step 1.5 hard rule）
 
-<!-- clade-targets: claude -->
+
+> Runtime split: state, ownership, approval, and completion obligations are shared. Literal Claude tool names or runner commands in this reference are Claude host bindings; other hosts MUST use their adapter fragment or retain the dependent operation blocked.
+
 
 > 本檔存在的理由：長時間跑的 loop 會被 auto-compaction 壓縮 context，**壓掉的東西裡就包含安全約束，而且壓掉時不會通知你**。所以護欄不能只靠「主線記得」——它必須是每一輪重新讀進最近 context 的檔案。
 >
@@ -162,3 +157,6 @@ Local edits will be reverted by the next sync.
 - state 檔的 `awaiting[]` 非空、本輪是 attended，而你正要進 Step 3 分類
 - 已收到 Charles 的答案，但還沒寫進 `decisions` 就開始 dispatch
 - 這輪還沒 Read 過本檔
+
+
+Claude binding for this reference: `AskUserQuestion` is available only in attended mode. Use it for specific shared-action consent with the complete scope in the recommended option; never call it from `--unattended` or a `claude --print` runner child.

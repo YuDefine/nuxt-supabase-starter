@@ -1,0 +1,13 @@
+---
+description: "runtime/agent-self-verification"
+alwaysApply: true
+---
+<!-- Clade native rule; source: adapters/cursor/instructions/rules/core/agent-self-verification.md; edit canonical source -->
+
+<!-- clade-targets: cursor -->
+
+# Cursor native evidence carrier
+
+Cursor performs browser evidence with `cursor-ide-browser` and `browser_cdp` evaluation in the same interaction round. Native IDE interaction and the verified browser session provide the URL, DOM, and screenshot receipt; a status message alone is not evidence.
+
+Cursor uses its native `Task` surface for separated work only when routing permits it. If a required browser, authenticated session, or command capability is unavailable in the current IDE session, keep the item blocked and preserve the fallback trail.

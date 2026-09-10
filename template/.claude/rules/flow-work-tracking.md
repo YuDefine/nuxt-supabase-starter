@@ -5,13 +5,7 @@ paths:
   - '.clade/flow/**'
   - 'vendor/review-gui-web/pages/board.vue'
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/flow-work-tracking.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/flow-work-tracking.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->

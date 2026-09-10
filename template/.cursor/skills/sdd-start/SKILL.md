@@ -1,19 +1,10 @@
 ---
 name: sdd-start
 description: Use when user asks to start or continue product work after clade-onboard confirms an onboard repo. Do not use for onboard status/readiness or registry drift.
-homepage: "https://github.com/YuDefine/clade"
 license: MIT
 metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}}
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/sdd-start/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
 
-
-<!-- clade-targets: claude,codex,cursor -->
 
 # sdd-start（統一新工作入口）
 
@@ -69,7 +60,7 @@ Local edits will be reverted by the next sync.
 
 UI checkpoint 是路由與驗收前提。先完成 PRODUCT／design context、雛形與 review，再把結果交 PM；本 skill 不代替下游執行。
 
-本入口的共同 SKILL.md 可由既有投影流程嘗試交付到 `.cursor/skills/`、`.agents/skills/`、`.cursor/skills/`；這不是三端已驗證的 receipt，也不是 `clade-adapters` 宣告。若所選 runtime 沒有該目錄或入口，輸出 `缺少的前提` 具體列出 runtime 與缺失路徑，停止並回報。
+本入口的共同 SKILL.md 可由既有投影流程嘗試交付到 `.claude/skills/`、`.agents/skills/`、`.cursor/skills/`；這不是三端已驗證的 receipt，也不是 `clade-adapters` 宣告。若所選 runtime 沒有該目錄或入口，輸出 `缺少的前提` 具體列出 runtime 與缺失路徑，停止並回報。
 
 </workflow>
 

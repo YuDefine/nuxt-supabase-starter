@@ -2,13 +2,7 @@
 description: Manual Review evidence 規約——寫 / 審 tasks.md 的 ## 人工檢查 區塊時 path-scoped 載入
 paths: ['tasks/**', 'specs/plans/**', 'docs/manual-review-archive.md']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/manual-review.evidence.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/manual-review.evidence.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
 

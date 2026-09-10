@@ -1,10 +1,4 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/secret-custody.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/secret-custody.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Secret Custody（secret 值到手時的既定動作）

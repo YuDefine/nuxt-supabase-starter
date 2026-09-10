@@ -8,13 +8,7 @@ paths:
     '.github/workflows/**',
   ]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/testing-anti-patterns.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/testing-anti-patterns.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Testing Anti-Patterns

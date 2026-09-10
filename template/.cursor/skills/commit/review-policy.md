@@ -1,13 +1,5 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/commit/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Commit reviewer qualification
 
-<!-- clade-targets: claude,codex,cursor -->
 
 本檔是每一個 runtime 的 commit review 共用政策。`gates.md` 定義觸發與完成條件；本檔決定 reviewer 是否合格。Runtime adapter 只選可執行載體，不降低資格。
 
@@ -40,6 +32,17 @@ UI Design Review 與截圖符合性 reviewer 使用 fresh Claude Opus 5（effort
 1. 依當前 catalog 與已驗證 adapter 取得實際候選，逐欄記錄判定。支援 CLI 的入口可呼叫共同 wrapper；呼叫者不因 wrapper 名含 codex 或相容路徑 `.claude/` 就改變 runtime。
 2. 使用該入口原生背景 handle、等待／取消及完成事件；先確保 owner 能收回結果，再並行其他軸。沒有非同步能力時可使用已授權的同步載體，保留全部 gate 與 snapshot 條件並明示並行不可用。Cursor 缺 Herdr pane 時 MUST 先開 pane，不能把「沒有 pane」讀成沒有可用載體。
 3. 配額耗盡只改已核准的候選／供應池，重新驗模型差異與品質；更換 runtime 需既有授權。Cursor 的 Fable 路徑：先 `ccw` 再開 `cc`，兩次都留下 receipt。兩個 launcher 都用盡才准記錄未達 gate 並停止 commit。主線自審可以協助修復，不能產生缺席 reviewer 的 PASS，也不能用「無 pane」略過 0-A.2。
+
+**裁決者一個都不存在時走 `gates.md` § 0-A.2 的延後路徑，NEVER 放寬本檔的資格表。**
+TD-1052 (c)（Charles 2026-09-10 拍板）處理的是「與深度 reviewer 不同模型族的合格裁決者
+**全部**不可得」——2026-09-09 起 Astra 配額耗盡即為此形態，因為 routing-table 的
+`code-review` 列裡唯一具名的非 Claude 合格 reviewer 就是 Astra 本人。該路徑讓 changeset
+可以 land，但在 `0a-metrics` 留下 `escalated-a2-deferred` 的未裁決紀錄與一張補跑卡，
+阻塞解除後以同一份 snapshot 補走第 2 步。
+
+**它改變的是「什麼時候裁決」，不是「誰有資格裁決」。** 本檔的判定表七欄一格未動，
+補跑時仍逐欄通過。**NEVER** 把「延後過一次」讀成該組合已獲資格，也 **NEVER** 因為
+延後路徑存在就少跑一次候選探測——條件 2 要求逐個實跑並留下輸出。
 
 **NEVER** 用假 model、假 family、假完成事件或另一入口的 tool 參數填滿表格。每一個 gate receipt 都描述實際執行；完整輸出與可核對的 snapshot 是完成證據，背景啟動成功不是。
 

@@ -1,14 +1,9 @@
 ---
-description: "Nuxt / Vite config 或 dev server 啟動時的 chokidar watch 排除基線，防止治理目錄造成 fd 壓力與 EBADF"
-globs: ["nuxt.config.*", "vite.config.*", "package.json", "scripts/dev-session*", "vendor/scripts/dev-session*"]
+description: "nuxt-dev-watch"
 alwaysApply: false
+globs: ["nuxt.config.*","vite.config.*","package.json","scripts/dev-session*","vendor/scripts/dev-session*"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/framework/nuxt/nuxt-dev-watch.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-dev-watch.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 

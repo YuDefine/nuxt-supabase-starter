@@ -2,13 +2,7 @@
 description: Manual Review data-readiness 規約——propose 階段準備驗收資料的 hard rule、[review:ui] 純功能驗證 step actionability、`@no-manual-review-check` marker schema、截圖檔名配對；寫 proposal.md / tasks.md 時 path-scoped 載入
 paths: ['tasks/**', 'specs/plans/**', 'screenshots/**']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/manual-review.data-readiness.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/manual-review.data-readiness.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
 

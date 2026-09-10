@@ -1,10 +1,3 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/commit/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Worktree 批次提交
 
 本分支適用每個 runtime 的 `/commit`、手動 merge back 與自動收割。Helper 在 clade 為 `vendor/scripts/wt-helper.ts`，consumer 為 `scripts/wt-helper.ts`；以下命令以 consumer 路徑表示。用工作目錄參數在指定 tree 執行，不要求使用者切換 task。
@@ -73,5 +66,10 @@ node scripts/wt-helper.ts batch cleanup
 ```
 
 每個來源都需正式落地、HEAD 未變、無未保存工作／活 claim／lock／保留契約才移除；有不能安全刪的 ignored 內容也保留。**NEVER** 用 `--force` 補掉不成立的 predicate。報告逐來源列 `path`、`branch`、`dirty`、`merged_to_main`、`locked` 與 removed／retained 原因，integration 最後回收。
+
+Cleanup 前，每一棵樹的 ignored 內容先被存進 common Git 目錄下的 archive（回收報告的 `excluded` 逐筆記錄被排除的東西與排除依據）。兩件事讀報告時要知道：
+
+- **Teardown 跑的是 main checkout 的 `scripts/wt-env-bootstrap.ts`，不是被刪那棵樹自己的那一份。** 一棵樹帶著的是它 fork 當天的 shim，於是 fork 早於某個 branch 命名形式的樹認不得自己的 branch（`E_BRANCH_SLUG`），結構上永遠刪不掉自己。Provisioning 仍用該樹自己的 shim，只有 teardown 換根。目標身分一律由 `--worktree` 決定，換根只換 config 與 script 的來源。**副作用**：provisioning 讀該樹的 config、teardown 讀 main 的 config，所以 `.claude/worktree-db.json` 的 prefix 在 fork 之後改過時，destroy 會算出不同的 dbName 而找不到 clone，留下 orphan。真的改過 prefix 時 MUST 先確認在途的樹已回收。
+- **Nested repository（典型：Pi dispatch clone 進 `.pi/git/**` 的那一份）只在拿得出可復原證明時才排除其 tracked 內容**：有一個含有 HEAD 的 remote-tracking ref，且沒有任何 local-only commit（tag、stash、detached HEAD 都算）。證明另有兩個作廢條件，命中任一就整棵保存：index 裡有既不等於 HEAD 也不等於磁碟的內容（stage 後又改、或 stage 新檔後又刪掉——後者不出現在任何一張清單上），以及存在 dirty submodule（它的 objects 在被排除的 `.git/modules/**` 裡）。證明成立時仍保存 remote 交還不了的部分 —— 修改過的 tracked 檔、untracked 檔、ignored 檔；已刪除的 tracked 路徑無法打包，改記進 receipt 的 `deleted`。證明不成立就整棵保存。receipt 記 `repository` 與 `head`，復原方式是照那兩個值重新 clone／fetch 再套回 archive 內的殘餘。該證明讀的是本地 remote-tracking ref，遠端 force-push 後不會反映在這裡，所以它是可稽核的依據、不是保證。
 
 清理重試只跑 cleanup，不重跑完整品質鏈。下一次 `/commit` 或接手先檢查已落地待清理批次；使用原 integration 路徑取得的 commit lock，於刪 integration 之前釋放，或以原 canonical lock path 釋放。發布未授權不妨礙已正式落地的本地來源安全清理；PR 未合併則不能清理。

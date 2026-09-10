@@ -1,14 +1,9 @@
 ---
-description: "Commit 全文規約（gate 清單、Single Session Lock、WIP 處置決策樹、main worktree 預設位置、ad-hoc `git commit --only` 紀律與 Verify / Recovery、路徑白名單、trunk hard gate、Stash 自動處置 gate、分組與訊息規範、Tag 位置 release hard gate）；always-load 的薄 pointer 在 [[commit]]，觸發時機是「下任何 git commit / git add / git stash / git tag / git push --tags / git push origin v<版本> / /commit 之前」，由 [[commit]] 的 MUST-Read 指針叫醒"
-globs: ["HANDOFF.md", "tasks/**", ".clade/claims/**", ".clade/work-loop/**"]
+description: "commit.detail"
 alwaysApply: false
+globs: ["HANDOFF.md","tasks/**",".clade/claims/**",".clade/work-loop/**"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/commit.detail.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/commit.detail.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 
@@ -156,7 +151,7 @@ working tree / git index 是 **process-wide shared state**——多 session 並�
 
 ### `--only` 限的是路徑，不是內容（hard rule）
 
-`--only` 重建 staged 時，對每個列出的路徑是從 **worktree** 拿該檔**完整**的當前內容——包含別 session 寫在同一個檔案裡、還沒 commit 的部分。共用檔（`docs/tech-debt.md` / `HANDOFF.md` / `ROADMAP.md` / `AGENTS.md` / i18n locale）正是最常被多 session 同時寫的那幾個。
+`--only` 重建 staged 時，對每個列出的路徑是從 **worktree** 拿該檔**完整**的當前內容——包含別 session 寫在同一個檔案裡、還沒 commit 的部分。共用檔（`docs/tech-debt.md` / `HANDOFF.md` / `ROADMAP.md` / `CLAUDE.md` / i18n locale）正是最常被多 session 同時寫的那幾個。
 
 - **MUST** commit 前跑 `git diff -- <paths>` 看實際會帶走什麼；出現不是自己寫的段落 → 依 § Recovery from mixed commit 處置，**NEVER** 直接 commit 下去
 - **NEVER** 用裸 `git commit --amend` 改 message——`--amend` 重新 commit **當前 staged index**，等於把 `--only` 的保護整個放掉（實測：同一情境下 commit 從 1 檔變 26 檔）。要改 message **MUST** 帶 `--only`：
@@ -311,7 +306,7 @@ user 不成立**，結果是 stash 單調遞增、owner 資訊隨時間流失，
 ### 放行判準（三條全中才可 drop）
 
 1. **內容可重生**：`git stash show --stat <ref>` 列出的**每一個**檔都落在可重生投影層 ——
-   `.claude/**`、`.codex/**`、`.clade/**`、`AGENTS.md`、`AGENTS.md`、`.npmrc`、`skills-lock.json`
+   `.claude/**`、`.codex/**`、`.clade/**`、`AGENTS.md`、`CLAUDE.md`、`.npmrc`、`skills-lock.json`
    （這些由 `pnpm hub:bootstrap` 重生）。**有任何一個檔不在此清單就不算命中**
 2. **來源已消失**：stash message 內的 slug 對應的 worktree **已不存在**（`git worktree list` 查不到）。
    slug 解析不出來時，退回時間門檻：**建立逾 24 小時**
@@ -449,4 +444,4 @@ git fetch origin main --tags && git rev-list --count <tag>..origin/main
 
 ## 搭配
 
-當前 runtime 已投影的 commit skill 定義「怎麼做」（procedure）；本規則定義「要不要做」（政策、閘門、強制入口）。`.cursor/skills/commit/SKILL.md` 是 Claude 的交付位置，其他入口使用各自原生投影，讀同一套共通契約。
+當前 runtime 已投影的 commit skill 定義「怎麼做」（procedure）；本規則定義「要不要做」（政策、閘門、強制入口）。`.claude/skills/commit/SKILL.md` 是 Claude 的交付位置，其他入口使用各自原生投影，讀同一套共通契約。

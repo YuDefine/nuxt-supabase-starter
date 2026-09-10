@@ -1,15 +1,14 @@
 ---
 name: ui-plan
-description: 根據 plan package、system-analysis handoff、truth-delta 與現有 truth，產出 plan-side `ui/**` 設計與靜態雛形。`ui-plan` 不是 truth owner，不寫入 `specs/truth/**`，但必須讀 truth-delta 以對齊本輪 API/data/feature truth 變更。
+description: >-
+  根據 plan package、system-analysis handoff、truth-delta 與現有 truth，產出 plan-side
+  `ui/**` 設計與靜態雛形。`ui-plan` 不是 truth owner，不寫入 `specs/truth/**`，但必須讀 truth-delta
+  以對齊本輪 API/data/feature truth 變更。
+metadata:
+  clade:
+    invocation: explicit
 disable-model-invocation: true
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/ui-plan/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@db46b1ddf59c47c9aab52a7d66d15668811fa501 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 
 # UI Plan

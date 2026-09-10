@@ -1,17 +1,10 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/specformula-config/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- clade-owned: not mirrored from upstream; see vendor/snippets/specformula/README.md -->
 
 # SpecFormula Nuxt 配置指南
 
 Nuxt 4 + Supabase（PostgreSQL）consumer 的安裝指南。角色對應上游的 `java.md`，內容由 clade 維護。
 
-規約：`.cursor/rules/specformula.mdc`（clade 源檔 `rules/core/specformula.md`）
+規約：`.claude/rules/specformula.md`（clade 源檔 `rules/core/specformula.md`）
 範本組：`~/offline/clade/vendor/snippets/specformula/`
 
 ## 依賴

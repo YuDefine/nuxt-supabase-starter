@@ -1,13 +1,5 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/commit/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # /commit Step 5-B~5-F 與 Step 8 執行細節
 
-<!-- clade-targets: claude,codex,cursor -->
 
 > 本檔是 `SKILL.md` 的 branch 分頁。**Step 5-A 判定「需要 handoff」時 MUST 讀 § 5-B~5-F 並逐步執行**；**Step 8 觸發條件成立（不在 main/master 且 consumer 有 `/ship`）時 MUST 讀 § Step 8**。兩個 branch 都沒命中就不需要讀本檔。
 

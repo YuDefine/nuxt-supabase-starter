@@ -1,0 +1,15 @@
+---
+description: "runtime/checker-subagent"
+alwaysApply: false
+globs: ["rules/core/**","vendor/scripts/**","plugins/hub-core/**","claude-md/**",".claude/rules/**",".claude/skills/**","**/migrations/**","shared/**","packages/*/shared/**","server/utils/**","packages/*/server/utils/**"]
+---
+<!-- Clade native rule; source: adapters/cursor/instructions/rules/core/checker-subagent.md; edit canonical source -->
+
+
+<!-- clade-targets: cursor -->
+<!-- extracted-from: rules/core/checker-subagent.md -->
+
+# Cursor checker transport
+
+**Cursor runtime**：本節的 `Agent` tool 是 Claude Code 的 Agent，**NEVER** 改用 Cursor Task 的非 grok-4.6 `model` 充當 checker。改走 [[agent-routing]] § Cursor runtime 主線 residency 的 Herdr create-only `--launcher cc`／`ccw`。
+

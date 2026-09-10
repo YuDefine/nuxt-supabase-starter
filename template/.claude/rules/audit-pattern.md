@@ -2,13 +2,7 @@
 description: D-pattern audit 規範（DB outbox canonical + evlog derived stream + hash anchor）
 paths: ['server/api/**/*.ts', 'packages/*/server/api/**/*.ts', 'server/utils/audit.ts', 'packages/*/server/utils/audit.ts', 'supabase/migrations/**/*.sql']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/audit-pattern.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/audit-pattern.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Audit Pattern

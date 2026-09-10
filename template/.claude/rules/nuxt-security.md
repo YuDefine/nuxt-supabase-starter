@@ -2,13 +2,7 @@
 description: nuxt-security 模組設定 baseline — CSP、headers、CSRF 共用值與 per-consumer 擴充規範
 paths: ['nuxt.config.ts']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/framework/nuxt/nuxt-security.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-security.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Nuxt Security Baseline

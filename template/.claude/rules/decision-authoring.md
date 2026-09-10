@@ -7,13 +7,7 @@ paths:
   - 'packages/*/docs/tech-debt.md'
   - '.clade/work-loop/state.json'
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/decision-authoring.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/decision-authoring.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # 待拍板條目的寫法
@@ -175,11 +169,7 @@ NEVER 是佇列的題。** 掃描端會偵測到並掛 `belongs-on-review`，且
 佇列外會讓做完的工作徹底隱形，同上一節的理由），但它渲染成沒有選項的條目，lint 說明那條
 的 verdict 在哪裡。
 
-**偵測讀的是 checkbox，NEVER 是散文。** 舊版只認「條目本文同時出現『人工檢查』四個字 ＋
-change 名字」——那問的是**作者有沒有打那三個字**，而上面四條全部沒打、全部逃掉。判準
-MUST 是 `openspec/changes/<name>/tasks.md` 裡還有幾項未勾的 `[review:ui]`：那是「這件事
-驗了沒」本身，不是它的代理。判定器 `changesWithOpenManualReview()`
-（`vendor/scripts/flow/decision-sources.ts`）。
+**偵測讀的是 live work 的未勾 checkbox，也保留文字 fallback。** 條目提到尚有未勾 `[review:ui]` 的 live work；或同時含 `人工檢查` 與 live work slug。前者是「這件事驗了沒」本身，不是它的代理；後者保留對尚未進入 open-checkbox map 的 live work 的相容偵測。判定器 `restatesManualReview()`（`vendor/scripts/flow/decision-sources.ts`）先查 `openManualReview`，再查 `人工檢查` 與 live work slug；兩者都以 `tasks/` 直下工作檔導出的 live work 為準，子目錄不列入。
 
 **NEVER 把未勾的 `[review:ui]` 各開一條進佇列。** 一條 change 的 17 項瀏覽器驗收是**一趟**
 差事，拆成 17 列就是 17 則推播問同一件事——同 `scanTasks` 對 deferred 子步驟已經寫明的理由。
@@ -388,7 +378,7 @@ spine 上 `options: []`，手機上是一個空白輸入框。**寫的人看得�
 對不回是哪一個字母。兩個入口都會擋（問句本文有「從 A 起連續」的字母、卻沒帶任何選項時直接
 拒絕）；擋不到的變體同樣禁止——**選項的載體是旗標，不是句子**。
 
-> 2026-08-27 <consumer-a> 實測：一題 A/B 的 dep-upgrade 爭用題以空白輸入框出現在手機上。成因不是
+> 2026-08-27 <consumer-a> 實測：一題 A/B 的 version-upgrade 爭用題以空白輸入框出現在手機上。成因不是
 > 寫的人偷懶——當時 `--complete blocked` **根本沒有**帶選項的通道，而本節的 `flow ask` 範例寫的是
 > 一個 CLI 不接受的形狀（positional 問句 ＋ 未宣告的 `--option`），照抄會靜默掉光選項。
 
@@ -425,9 +415,7 @@ for (const c of await m.listPendingChanges('<repo>'))
 **NEVER 代勾 `## 人工檢查` 的 checkbox 讓這條消失**——沒有人確認的 `[x]` 一律是 false-green
 （per `agent-self-verification` MUST 8）。那是唯一比繞道更糟的收法：繞道至少還看得見。
 
-**已封存的 change 不在此列。** `openspec/changes/archive/**` 的 `## 人工檢查` 在 `/review` 上
-沒有 surface，它進 `/decisions` 是正確路由——那條路由由 `tasks.md` 上的 `(deferred-user-only:)`
-標記承載（見 [[review-gui-surface]]），**NEVER** 改用登記簿 bullet 去補一條它漏掉的。
+**已封存的 change 不在此列。** manual-review scan 與 `scanTasks()` 都只讀 `tasks/` 直下的 `.md`；日期前綴是目前命名慣例，不是掃描器的額外語義。`tasks/` 子目錄與舊 `openspec/changes/archive/**` 都不會成為佇列輸入。尚有人工動作的 live work 仍沿既有 live work carrier 與 `deferred-user-only:` 路徑進 `human-action`；archive 文字本身不自動進佇列，也不應用登記簿 bullet 捏造答案。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
@@ -435,7 +423,7 @@ for (const c of await m.listPendingChanges('<repo>'))
 | 消費端 | 寫該條目的 agent（在 `/decisions` 與 `flow pending` 的 `✎` 評語上看到，照上表處置）＋ Charles（看到那一行可以跳過不讀）。**2026-09-03 起不再對它注入任何文字**（TD-904）：該說的話由 `LINT_NOTES['belongs-on-review']` 在兩個渲染端說，NEVER 由 agent 寫一段話進人的佇列 |
 | 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`——寫那條 bullet 正是在編輯這兩個檔） |
 
-> 2026-08-28 成因：<consumer-h> 的 `product-save-hardening` 四條 `## 人工檢查` 都宣告
+> 2026-08-28 成因：<consumer-i> 的 `product-save-hardening` 四條 `## 人工檢查` 都宣告
 > `[verify:api+ui]`，實際每條只寫了一種 evidence，於是 change 停在 `readyForEvidence`
 > （`changeBelongsOnReviewInbox` 回 false，那是**Claude 球**的桶，刻意不畫進 inbox）。
 > 作者拿不到 `/review` 的票，就把「五條逐項確認」寫成 `## 需要 Charles 執行` 的 bullet——

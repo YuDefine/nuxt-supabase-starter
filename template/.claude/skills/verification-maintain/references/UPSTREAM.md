@@ -1,13 +1,5 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/verification-maintain/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Upstream attribution
 
-<!-- clade-targets: claude,codex,cursor -->
 
 - Source: `cursor/plugins`
 - Upstream skill: `pstack/skills/maintain-verification-skill`

@@ -1,0 +1,13 @@
+---
+description: "runtime/agent-routing.routing-table-rationale"
+alwaysApply: false
+globs: [".claude/rules/agent-routing.md","rules/core/agent-routing.md","vendor/scripts/pi-routing-policy.ts","vendor/scripts/pi-routing-gate.ts","vendor/scripts/pi-dispatch.ts"]
+---
+<!-- Clade native rule; source: adapters/cursor/instructions/rules/core/agent-routing.routing-table-rationale.md; edit canonical source -->
+
+
+<!-- clade-targets: cursor -->
+
+# Cursor native evidence boundary
+
+Cursor's readonly sandbox, Task catalog, and `cursor-ide-browser` observations are target-specific evidence. Keep the mutation admission rule, historical sandbox findings, and unresolved native capability claims explicit; do not generalize a Cursor observation to another runtime.

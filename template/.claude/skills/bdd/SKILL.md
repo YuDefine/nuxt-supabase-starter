@@ -1,15 +1,14 @@
 ---
 name: bdd
-description: 承接 /dsl-refine 之後已存在的介面 feature files 與 dsl.md，在使用者指定的單一介面 feature file 或其明確區塊內，以 red、green、refactor 三個入口推進 BDD/TDD 實作。它不負責產 feature files；若規格缺口影響驗收意圖或 DSL 邊界，必須停止並回交上游。
+description: >-
+  承接 /dsl-refine 之後已存在的介面 feature files 與 dsl.md，在使用者指定的單一介面 feature file
+  或其明確區塊內，以 red、green、refactor 三個入口推進 BDD/TDD 實作。它不負責產 feature
+  files；若規格缺口影響驗收意圖或 DSL 邊界，必須停止並回交上游。
+metadata:
+  clade:
+    invocation: explicit
 disable-model-invocation: true
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/bdd/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@db46b1ddf59c47c9aab52a7d66d15668811fa501 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 
 # BDD

@@ -1,14 +1,5 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/commit/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Commit Quality Gates — Reference
 
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
 
 > 本檔是 commit skill 品質閘門的完整執行細節。主檔（SKILL.md）含流程概覽與 pointer；觸發特定 gate 時 MUST 先完整讀本檔對應 § 再繼續。
 
@@ -122,7 +113,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ## § 0-MR: 人工檢查 Gate（main / master 限定，硬擋無 override）
 
-`.cursor/rules/commit.trunk-gates.mdc` 「人工檢查 Gate」hard rule 的執行點（`commit.md` 只有一句 pointer，判定條件的 SoT 在 `commit.trunk-gates.md`）。**MUST** 在 Step 0 品質檢查之前 fail-fast，避免人工檢查未完的工作浪費 5–15 min pi / screenshot review 時間。
+`.claude/rules/commit.trunk-gates.md` 「人工檢查 Gate」hard rule 的執行點（`commit.md` 只有一句 pointer，判定條件的 SoT 在 `commit.trunk-gates.md`）。**MUST** 在 Step 0 品質檢查之前 fail-fast，避免人工檢查未完的工作浪費 5–15 min pi / screenshot review 時間。
 
 **判定粒度是 pathspec 交集，不是 repo 級 freeze**：一件工作判 BLOCK 時，被擋的是「落在該 carrier 的那些路徑」，不是本次 `/commit` 的整個 dirty set。理由與判定式在下方 § 判定粒度。
 
@@ -174,7 +165,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
    > 來源 archive gate 與批次 commit gate 都保留；來源未驗收不進 ready，batch 審查發現驗收失效時保留整批，不以普通 main 的 SKIP 放行。
 
-4. 對每個 change 跑機械判定（「非 `## 人工檢查` 段有 `- [x]`」與「`## 人工檢查` 段有 **leaf** `- [ ]`」同時成立 → BLOCK；parent `#N` 有 scoped `#N.M` 子項時由子項 derive，leaf-only 計，見 `.cursor/rules/manual-review.mdc` 「Parent State Derivation」段）：
+4. 對每個 change 跑機械判定（「非 `## 人工檢查` 段有 `- [x]`」與「`## 人工檢查` 段有 **leaf** `- [ ]`」同時成立 → BLOCK；parent `#N` 有 scoped `#N.M` 子項時由子項 derive，leaf-only 計，見 `.claude/rules/manual-review.md` 「Parent State Derivation」段）：
 
    ```bash
    node ~/offline/clade/vendor/scripts/commit-mr-gate.ts judge "<path>/tasks.md"
@@ -247,7 +238,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 - **NEVER** 把普通 feature branch 判進 trunk gate 範圍；helper 登記的 batch integration 明確納入，並保留 PR workflow 的外部審查
 - **NEVER** 接受 `$ARGUMENTS` 任何形式的「skip / ignore / override」旗標 — gate 無 override
-- **NEVER** 自行 `Edit` carrier 勾掉 `- [ ]` 來通過 gate — 違反 `.cursor/rules/manual-review.mdc` 核心規則
+- **NEVER** 自行 `Edit` carrier 勾掉 `- [ ]` 來通過 gate — 違反 `.claude/rules/manual-review.md` 核心規則
 - **NEVER** 把 carrier 檔 / plan package 目錄 stash / mv / rm 走讓 step 2 / 4 抓不到 — 等同繞過 hard rule
 - **NEVER** 為了讓 step 3 判成 SKIP 而動 worktree（不 merge-back、重開一條同名 worktree、改 branch 名）— step 3 是事實查詢，不是可操作的開關
 - **NEVER** 把 step 3 的 SKIP 讀成「這件工作的人工檢查可以不做」— 它只表示 code 還沒進 main，那些 item 一條沒少
@@ -290,7 +281,7 @@ node --experimental-strip-types "$CLADE_ROOT/vendor/scripts/security-precommit.t
 
 ### 0-S.2 `/security-review`（分鐘級，本 gate 的 hard 層）
 
-對本批 diff invoke AI Agent 內建 `/security-review`。它讀得到完整變更語境，
+對本批 diff invoke Claude Code 內建 `/security-review`。它讀得到完整變更語境，
 走本 session 既有額度，**沒有**外部配額或美元停止線。
 
 High / Critical finding → 停止本次 commit。每一條 **MUST** 先走 `security-evidence finding`
@@ -417,6 +408,53 @@ PRE-EXISTING — 未觸碰：<file>:<line>（舉證本次 diff 不含此檔／�
 1. 合格深度 reviewer 以已核准的深度檔檢查修法與連帶影響。使用共用 CLI 時為 `codex-review-safe.sh medium`，完整限制同 runner-safety。保存完整輸出，不只摘錄結論。
 2. 與深度 reviewer 不同模型族的合格裁決者取得該 snapshot、原始 0-A.1 findings 與深度結果，逐條確認 real issue、附反證 dismiss 或重標 severity，另查漏項。裁決者唯讀，主線負責修復。Cursor 主線的 Fable 裁決走 Herdr create-only：缺 pane 時 **MUST** 主動 `herdr-session-handoff.ts --launcher ccw --new-tab --coordinate`（quota／`account_unavailable` 再 `cc`）。**NEVER** 把「無 Herdr pane／Herdr 不可用」當成可跳過 0-A.2 或整場 `/commit` 的出口。`idle`／`done` 不是完成。兩個 launcher 都用盡才准留下 launcher／exit／evidence dir 的 receipt，再寫 durable follow-up。**NEVER** `--relay`，**NEVER** 叫 user 開 Claude 或貼 prompt。
 
+#### 裁決者結構性缺席時的延後路徑（TD-1052 (c)，Charles 2026-09-10 拍板）
+
+**這條解的是「合格裁決者一個都不存在」，NEVER 是「我沒找到人」或「開 pane 失敗」。**
+後兩者的處置在上一段（MUST 先開 pane，兩個 launcher 都用盡才准留 receipt），本路徑不取代它。
+
+**四個條件全中才成立，缺一條就回到「0-A.2 保持未完成」**：
+
+| # | 條件 | 怎麼算數 |
+| --- | --- | --- |
+| 1 | 0-A.2 **第 1 步（深度 review）已經跑完**且有完整輸出 | 延後的只有裁決那一步。深度 review 沒跑完 = 整個 0-A.2 未完成，與本路徑無關 |
+| 2 | `review-policy.md` 認可的合格裁決者中，**與深度 reviewer 不同模型族的那些全部不可得** | **MUST 逐個實跑過**並留下輸出。routing-table `code-review` 列的具名候選一個都不能只憑印象跳過 |
+| 3 | 有一份**實跑憑證檔**，內容是條件 2 那次失敗的原始輸出，且是**本次 `/commit` 內**跑出來的 | `0a-metrics.mjs` 機械檢查三件：檔存在、非空、**內容含 `RESULT: quota-blocked`**（`codex-review-safe.sh` 的穩定輸出契約）。**開 pane 失敗留下的 launcher／exit receipt 不是這個**——那條路的處置在本節上方，機械層現在也擋得住冒充。「本次跑出來的」目前**只由本行紀律承載**，CLI 不驗新鮮度：**NEVER** 沿用前一次 `/commit` 的憑證 |
+| 4 | 有一張**承載補跑的 flow work item**，且它**真的在 spine 上** | `node ~/offline/clade/vendor/scripts/flow/flow.ts open <slug> --origin td:TD-1052 --title '<snapshot dir> @ <base sha>'` 先開卡（consumer 端沒有自己的 `vendor/scripts/flow/`，走全路徑；`--origin td:` scheme 合法；`--title` 是 `flow.ts` 既有 flag）。`0a-metrics.mjs` 會在 `<repo>/.clade/flow/events.jsonl` 逐行找那個 `work_id`，查無、格式不對、或該 repo 根本沒有 spine，**都拒收**——沒有 spine 就沒有「之後會被叫回來」。**卡的 `--title` MUST 含這次 review 的 snapshot dir 與 base sha**——補跑要的是「同一份 snapshot ＋ 原始 0-A.1 findings ＋ 深度結果」，而 ledger 只留得住 receipt 路徑與 work id，這兩樣可能已被清。`<snapshot dir>` 是本次 review 報告落腳的目錄，慣例 `~/.cache/clade/review-snapshots/<date>-<slug>/`——它不是 commit skill 自己的產物，是 dispatch 那次自訂的落點，**MUST** 寫實際路徑，不是這個慣例字面 |
+
+記錄用 `escalated-a2-deferred`，**NEVER** 用 `escalated` 加一個編出來的 adjudicator：
+
+```bash
+node .claude/scripts/0a-metrics.mjs record \
+  --review-mode escalated-a2-deferred \
+  --reviewer '<實際跑深度 review 的 runtime/model>' \
+  --a2 true --critical <n> --major <n> --minor <n> --info <n> \
+  --a2-deferral-receipt '<條件 3 的憑證檔絕對路徑>' \
+  --a2-deferral-work-id '<條件 4 的 work id>' \
+  --diff-lines <n> --diff-files <n> --dismissed <n> --dismissed-unsubstantiated <n> \
+  --screenshot <pass|skip> --doc <aligned|skip>
+```
+
+上表的每一條都在 CLI 層擋，**不是留給紀律**——只有條件 3 的「本次跑出來的」除外，該格逐字標在表裡。
+這是刻意的：延後裁決與跳過裁決事後看起來完全一樣，差別只在有沒有東西會把它叫回來，
+而**註解與規約 NEVER 該承諾程式碼沒做的事**（2026-09-10 的 0-A.1 review 就是抓到本路徑第一版
+犯了這個——`--a2-deferral-work-id` 當時只驗非空，填一個不存在的卡號一樣通過）。
+
+同時提供 `--adjudicator` 會被**拒收**：有裁決者就不叫延後。該組合唯一的用途是把一次真的
+裁決記成延後、或把一次延後粉飾成有人看過，所以它在 CLI 層就擋掉，不留給紀律。
+
+**本路徑放行的是 land，NEVER 是 finding。** 0-A.1 與深度 review 判出的每一條缺失類 finding
+**仍然 MUST 修完**才 land——延後的只有「第三方逐條覆核 dismiss 與漏項」那一步。
+逐字反開脫：「反正沒有裁決者會來看，那幾條 Minor 就先留著」——那不在本裁決的射程內。
+
+**補跑是義務不是提醒。** 條件 2 的阻塞解除後（典型是配額回復），MUST 以**同一份 snapshot**
+＋ 原始 0-A.1 findings ＋ 深度結果交給合格裁決者走完第 2 步，並在該 work item 上收口。
+`--a2-deferral-work-id` 之所以是必填，就是為了讓這件事有一個會浮出來的載體——
+**NEVER** 把它當成一個備註欄位隨手填一個不存在的 id。
+
+**匯合行印 ✅ 之後會另外印一行「0-A.2 裁決已延後，NEVER 讀成完成」**。看到那一行仍然收工，
+與沒有跑 0-A.2 的差別只有 ledger 裡一個 boolean。
+
 深度輸出缺 `## Review Verdict`（含截斷／context exhaustion）時，明示深度階段未完整；不盲重跑相同耗盡命令。保留已有 findings，由合格裁決者以完整最新 diff、原始 0-A.1 輸出與相同完整性契約接手。只有它實際覆蓋缺失範圍並產出完整 verdict 才可收口；否則 0-A.2 保持未完成。
 
 裁決輸出對**每一條** dismissed finding 提供：
@@ -440,7 +478,7 @@ DISMISSED — 反證：<file>:<line> ／ <契約或規則條文的具體出處>
 
 ```bash
 node "$COMMIT_SKILL_DIR/scripts/0a-metrics.mjs" record \
-  --review-mode <independent|escalated|fast-path-skip> \
+  --review-mode <independent|escalated|escalated-a2-deferred|fast-path-skip> \
   --reviewer <實際runtime/model> [--adjudicator <實際runtime/model>] \
   --diff-lines <行數> --diff-files <檔數> \
   --critical N --major N --minor N --info N \
@@ -448,7 +486,9 @@ node "$COMMIT_SKILL_DIR/scripts/0a-metrics.mjs" record \
   --screenshot <pass|skip> --doc <aligned|skip>
 ```
 
-Fast-path 不填未執行的 reviewer；escalated 記實際裁決者。`--dismissed-unsubstantiated` 是反證不足被保留為 real issue 的條數。Recorder 的參數檢查不證明 review 真有執行，須同時保留各軸原始 receipt；參數矛盾時修正流程或記錄，不能填假值讓它通過。舊 `--codex` CLI／歷史記錄是相容資料，不要求新入口冒充該模型組合。
+Fast-path 不填未執行的 reviewer；escalated 記實際裁決者；`escalated-a2-deferred` 依上方
+§ 0-A.2「裁決者結構性缺席時的延後路徑」多帶 `--a2-deferral-receipt` 與 `--a2-deferral-work-id`，
+**NEVER** 同時帶 `--adjudicator`（有裁決者就不叫延後，CLI 會拒收）。`--dismissed-unsubstantiated` 是反證不足被保留為 real issue 的條數。Recorder 的參數檢查不證明 review 真有執行，須同時保留各軸原始 receipt；參數矛盾時修正流程或記錄，不能填假值讓它通過。舊 `--codex` CLI／歷史記錄是相容資料，不要求新入口冒充該模型組合。
 
 本地 `.clade/0a-metrics.jsonl` 是閾值評估依據；`summary` 的歷史數據與本次結果分開。Fast-path 與大改動門檻的變更需據分佈判定，不憑單次觀感調整。
 
@@ -524,7 +564,7 @@ vite-doctor 是 commit 品質閘門的必要組件（import graph 健康度：cy
        modules: [['vite-doctor/nuxt', doctorConfig]]
   4. 安裝完成後重跑 /commit
 
-詳見 .cursor/rules/vite-doctor.mdc
+詳見 .claude/rules/vite-doctor.md
 ```
 
 隨後 **MUST** 釋放 commit-lock（依 [runtime-lifecycle.md](runtime-lifecycle.md)「背景工作與退出」，帶原 tuple 與 owner token）並 STOP。**NEVER** 跳過此 gate 繼續跑後續步驟。
@@ -537,7 +577,7 @@ pnpm run doctor
 
 Doctor health score < 100 或 exit code ≠ 0 → **MUST block commit**，修復後重跑直到 health score 100/100 + 0 warnings + exit 0。**即使 warning 是既有、非本次 diff 引入**也必須修——每次 /commit 順手把既有 doctor warning 修掉，保持零警告 baseline。典型修法：移除 dead imports、修正 re-export 路徑、打斷 import cycles、套用 `readValidatedBody` 取代 raw body read。**NEVER** 以「非我引入」「既有 debt」為由跳過 doctor warning — 0-C gate 不區分新舊，一律全綠。
 
-> **oxfmt batched false-positive**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅但 single-file `vp fmt --check <path>` 通過，是 batched bug 不是 format issue — **先**跑一次 `pnpm format`（vp fmt --write）再重跑 check 通常就過。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（`.cursor/rules/` / `AGENTS.md` / `AGENTS.md` / `.clade/vendor/**`）試圖讓 oxfmt 滿意 — 那是 governance violation。clade 中央倉 release flow 已在 `scripts/publish.ts` 主流程加 stable fmt pre-stage（兩輪 `vp fmt --write` + `vp fmt --check`），consumer 端 commit 流程不需再背 workaround SOP。詳見 `docs/pitfalls/2026-05-18-oxfmt-batched-check-false-positive.md`。
+> **oxfmt batched false-positive**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅但 single-file `vp fmt --check <path>` 通過，是 batched bug 不是 format issue — **先**跑一次 `pnpm format`（vp fmt --write）再重跑 check 通常就過。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（`.claude/rules/` / `AGENTS.md` / `CLAUDE.md` / `.clade/vendor/**`）試圖讓 oxfmt 滿意 — 那是 governance violation。clade 中央倉 release flow 已在 `scripts/publish.ts` 主流程加 stable fmt pre-stage（兩輪 `vp fmt --write` + `vp fmt --check`），consumer 端 commit 流程不需再背 workaround SOP。詳見 `docs/pitfalls/2026-05-18-oxfmt-batched-check-false-positive.md`。
 
 失敗時進入 loop：修復 → `pnpm format`（裸打 `vp fmt` 必須加 `--ignore-path .oxfmtignore`） → 重跑上述步驟 → 直到全綠。loop 的執行者依下方「fix loop 的 pi offload」規則決定（**預設背景 pi**；例外才主線直修）。
 
@@ -802,7 +842,7 @@ structured-errors、audit、error-handling 五類 check）。本次 diff 動到 
        git add evlog.map.json
   3. 安裝完成後重跑 /commit
 
-詳見 .cursor/rules/evlog-adoption.mdc § Coverage 維度（evlog map）
+詳見 .claude/rules/evlog-adoption.md § Coverage 維度（evlog map）
      與 ~/offline/clade/vendor/snippets/evlog-map/README.md
 ```
 
@@ -892,3 +932,17 @@ script 抓不到「這是一條新的最佳實踐」——那是語意判斷。�
 0-F 是 **advisory**：`bp-scan.ts` 永遠 exit 0，不擋 commit。A 類有命中卻選擇不處理時，完成報告 MUST 寫明哪一條、為什麼。
 
 通過後輸出 `✅ 0-F 通過（A 類 N 條已處理／B 類 M 條已判讀）`。
+
+
+## Cursor commit operations
+
+每次先核對本入口實際 catalog；IDE 原生工具、Cursor CLI 與經 Pi 的 Cursor provider 是不同載體，分別記錄證據。
+
+- Simplify：使用本入口可讀取的技能及共同四軸契約；不把 Claude Skill API 當成本端工具。
+- Review：符合共用資格的 CLI runner 可由本端 shell 執行。背景／等待／取消只帶當前 schema 支持的參數，保存真實返回 handle 並收回同一工作。沒有背景能力但有已授權的同步載體時同步執行，保留全部 gate 與 snapshot 條件並明示限制。0-A.2 Fable：缺 pane 就主動 `herdr-session-handoff.ts --launcher ccw --new-tab --coordinate`（失敗再 `cc`）。無 pane 不是 skip。`idle`／`done` 不是完成。**NEVER** `--relay`，**NEVER** 叫 user 開 Claude。
+- Fresh agent：只用 catalog 真實提供的獨立上下文工具及合法模型值；模型僅能 inherit 時記錄實際繼承結果。它未滿足模型差異時，不能作跨模型 gate；需要換 runtime 時先查本任務既有授權與可用 transport，不暗換 Claude launcher。
+- UI：依本入口實際圖片／瀏覽器能力取得證據，再選具核准視覺資格的 reviewer。Pi Cursor provider 的 tools flag 不限制 SDK 原生工具，使用該 provider 前完整套用 runner-safety 的 OS／網路隔離契約。
+- 協調／詢問：使用本入口可用且已授權的具名通道；缺通道時回報具體缺口。需要使用者資訊可直接對話，不要求補裝另一 runtime 的詢問工具。
+- Exit：核對 writer 的 terminal 結果後依 runtime-lifecycle 釋放原 owner 鎖。沒有原生完成事件或 wakeup 時使用現有 handle 的 bounded wait，不創造 ScheduleWakeup／TaskOutput API。
+
+每次 receipt 記實際 runtime、model 與隔離方式；本段不把 Cursor 主線視為固定模型，也不代替共用跨模型判定。

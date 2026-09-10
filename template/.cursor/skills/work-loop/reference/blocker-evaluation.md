@@ -1,13 +1,8 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/work-loop/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Blocker & Decision Evaluation
 
-<!-- clade-targets: claude -->
+
+> Runtime split: state, ownership, approval, and completion obligations are shared. Literal Claude tool names or runner commands in this reference are Claude host bindings; other hosts MUST use their adapter fragment or retain the dependent operation blocked.
+
 
 > 本檔從 SKILL.md § 3i / § 3j 搬移，原文逐字保留。主檔 pointer：「bucket 為 `applyBlocked` 時 MUST 先完整讀本檔 § 3i；bucket 為 `awaitingUserDecision` 時 MUST 先完整讀本檔 § 3j」。
 
@@ -70,9 +65,9 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
 **NEVER** 寫「需 attended」這種形容詞——形容詞每一輪都會被重新「發現」一次，而 predicate 有解除條件、
 可以進 [blocker-ledger.md](blocker-ledger.md) 查表，下一輪不必重判。
 
-#### 2026-08-22 端到端實測（<consumer-i>，歷史載體）
+#### 2026-08-22 端到端實測（<consumer-j>，歷史載體）
 
-首版有 probe 1–3（第 3 條量 dispatcher binary），2026-08-22 在 <consumer-i>
+首版有 probe 1–3（第 3 條量 dispatcher binary），2026-08-22 在 <consumer-j>
 （`shape: canonical`、`emailRequired: false`、`stackHint: libsql-drizzle`）跑完整鏈路：
 
 - **鏈路本身是通的**：dev-session 起 3050 → 手組 items（2 個真 `[verify:ui]` item）→ collector
@@ -129,3 +124,6 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
 **核心原則**：work-loop 的自主模式承諾「能自主決策的自主完成」。未實作的 phase、技術 findings、標準 phase（Design Review / evidence collection）**全部屬於自主範疇**，NEVER 因為被標記 `awaitingUserDecision` 就當真 — 先判斷是否真的需要 user、還是上一輪實作過度保守地標記了。
 
 **反例（<consumer-b> 2026-07-21 `/change-loop turbo`）**：(1) 未實作的 phase 被標為 awaiting-user-decision → 應直接 dispatch apply；(2) 技術 findings（seed 歸屬 + UI wiring）被標為 blocker → 應自行修或登 TD；(3) Design Review 被標為「需排程」→ 應直接跑。三項全部可自主解決，loop 不應停下。
+
+
+Cursor binding for this reference: discover the current attended question surface and schema before presenting blocker options; use ordinary conversation when no compatible structured surface exists. In unattended execution, retain the blocker without asking. Persist any answer before evaluation or dispatch.

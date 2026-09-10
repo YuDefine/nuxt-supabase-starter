@@ -2,19 +2,11 @@
 name: verification-create
 description: Use when user requests verification setup. NOT for maintenance.
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/verification-create/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
 
-
-<!-- clade-targets: claude,codex,cursor -->
 
 # Create project verification infrastructure
 
-> **本檔的 `<skills-root>`** 指該 runtime 的 skill 投影根目錄：Claude `.cursor/skills/`、Codex `.agents/skills/`、Cursor `.cursor/skills/`。**NEVER** 在別的 runtime 上照抄 Claude 的字面路徑；找不到該目錄就回報標準未送達，不猜一個。
+> **本檔的 `<skills-root>`** 指該 runtime 的 skill 投影根目錄：Claude `.claude/skills/`、Codex `.agents/skills/`、Cursor `.cursor/skills/`。**NEVER** 在別的 runtime 上照抄 Claude 的字面路徑；找不到該目錄就回報標準未送達，不猜一個。
 
 把 pstack 的 `create-verification-skill` 內化成 clade 的跨 runtime 版本。產物寫給下一個冷啟動 agent 使用，不是寫給本次 session 自己看的說明。
 

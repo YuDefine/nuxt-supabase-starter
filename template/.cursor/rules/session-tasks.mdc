@@ -1,13 +1,8 @@
 ---
-description: "ad-hoc 工作的追蹤載體、唯讀與指定產物邊界、共享單檔紀律、session context 預算門檻"
+description: "session-tasks"
 alwaysApply: true
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/session-tasks.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/session-tasks.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
@@ -42,23 +37,9 @@ session 結束時對每個未完項**升級或刪，二擇一**，不留著。
 
 本節適用每一個 session、所有 consumer。先確認目前 runtime 與 launcher 的實際 context 控制、計量來源及適用的已核准 profile；數值、原生命令、hook 與身分 marker 由對應 adapter 承載。
 
-### 主判準是可觀察 predicate
+**Iron Law：適用 hard tier 是收工線；soft tier 是限制新大工作段。** 超過 soft tier 後，MUST 不開新的 tasks 檔、多檔重構、新的實作 phase 或尚未載入的 skill；手上驗收與小 item 仍可完成。超過 hard tier 後，MUST 保存狀態並按下節交接。壓縮不重設 hard-tier 義務。
 
-| 可觀察 predicate | 動作 |
-| --- | --- |
-| 換到不相關的任務、repo 或主題 | 先保存本工作狀態，再用該 runtime 支援且當次獲授權的 fresh-context 或 session transport |
-| 同一問題已糾正 ≥2 次 | 把已驗證教訓與未決問題整理成可接手的狀態，使用可用的 fresh-context 機制重新開始該問題 |
-| phase 完成的自然斷點，尚未超過適用 hard tier | 保存狀態並使用實際可用的 context 壓縮／checkpoint；原生壓縮不等於工作已完成 |
-| 忘記早前指令、重複錯誤或品質退化 | 保存目前授權、成果與未完項，依 runtime 可用能力壓縮或交接 |
-| 深在同一個複雜問題，history 仍有價值，且未命中適用 hard tier | 繼續推進，不以其他 runtime 的數值切斷工作 |
-
-### 已核准 profile 的兩級語義
-
-**Iron Law：適用 hard tier 是收工線；soft tier 是限制新大工作段。** 超過 soft tier 後，MUST 不開新的 tasks 檔、多檔重構、新的實作 phase 或尚未載入的 skill；手上驗收與小 item 仍可完成。超過 hard tier 後，MUST 保存狀態並按下節交接；不可分割的單一驗證迴圈先跑完，不延伸成下一段。壓縮不重設該 profile 定義的 hard-tier 義務。
-
-**MUST 用該 profile 定義的量測口徑判門檻**：累計用量、當前 context 佔用與壓縮後剩餘量不是同一個值。缺少 profile 或量測能力時，明列該缺口，使用上述可觀察 predicate 與 harness 的實際限制；**NEVER** 借另一個 runtime 的門檻、hook payload 或 model 名稱宣稱已適用、未超標或取得豁免。
-
-門檻只能依已核准政策調整，**NEVER** 自行以 env／flag 放寬。Runner 與顧問身分須由該 runtime 的真實入口／session 證據判定，工作內容像顧問或無人值守不構成身分證據。
+**主判準的可觀察 predicate 表、已核准 profile 的兩級語義全文、以及量測口徑紀律（累計用量／當前佔用／壓縮後剩餘不是同一個值；**NEVER** 借另一個 runtime 的門檻或 model 名稱宣稱豁免；門檻 **NEVER** 自行以 env／flag 放寬）在 [[session-tasks.context-budget]]**——由 `session-context-budget-warn.sh` 越過門檻時的提示指過來。
 
 ### 收工正文在 [[session-tasks.operations]]（具名時機 MUST-Read）
 
@@ -75,7 +56,6 @@ session 結束時對每個未完項**升級或刪，二擇一**，不留著。
 | 收工前的自我開脫對照表 | § 收工前的自我開脫 |
 | 收工訊息契約 A／B ＋ Worktree lifecycle close gate | § 收工訊息契約 |
 | Herdr session transport ／ 派幾個 pane ／ successor 收割 ／ 已列明 gate 短答 | § Herdr session transport 起四節 |
-
 
 ## 並行爭用：檔案層之後 MUST 再問 session 層
 

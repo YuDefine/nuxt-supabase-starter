@@ -1,14 +1,9 @@
 ---
-description: "Codex 模型經 Pi machine dispatch 提出問題時的攔截、評估、代答或升級 protocol；觸及工作計畫 / screenshot 情境時 path-scoped 載入"
-globs: ["openspec/changes/**/tasks.md", "openspec/changes/**/design.md", ".claude/agents/**", "screenshots/**/progress.json"]
+description: "agent-routing.pi-input-intercept"
 alwaysApply: false
+globs: ["openspec/changes/**/tasks.md","openspec/changes/**/design.md",".claude/agents/**","screenshots/**/progress.json"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/agent-routing.pi-input-intercept.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/agent-routing.pi-input-intercept.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
@@ -55,7 +50,7 @@ dispatcher stdout是單一JSON。依序讀：
 答案可直接引用以下任一來源，且不存在合理第二解：
 
 - 原brief已提供但model漏讀的資訊。
-- `rules/core/`或consumer `.cursor/rules/`的明確規約。
+- `rules/core/`或consumer `.claude/rules/`的明確規約。
 - 現有code、config、schema的可驗事實。
 - 上游官方文件的明確定義。
 

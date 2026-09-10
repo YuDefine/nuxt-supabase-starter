@@ -1,0 +1,9 @@
+# 🔒 LOCKED — managed by clade · Source: vendor/specformula-ts/pnpm-workspace.yaml · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/specformula-ts/pnpm-workspace.yaml
+packages:
+  - packages/*
+onlyBuiltDependencies:
+  - better-sqlite3
+  - cpu-features
+  - esbuild
+  - protobufjs
+  - ssh2

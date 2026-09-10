@@ -1,13 +1,5 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/work-loop/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # 非 plan candidate 的分類與 dispatch
 
-<!-- clade-targets: claude -->
 
 > 前身是 `change-loop/reference/turbo-dispatch.md`（`--turbo` 專屬）。合併成 `/work-loop` 後
 > `--turbo` flag 消失、非 plan package 的待辦成為預設 scope，本檔改為 **Step 3.1b 的分類依據**。

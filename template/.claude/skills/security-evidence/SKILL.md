@@ -1,20 +1,14 @@
 ---
 name: security-evidence
-description: Use when 要判一則 Codex Security finding 是真漏洞還是假警報（finding mode），或上線前要分清 repo / staging / production 各層還缺哪些安全證據（map mode）。NOT for 修 code、跑掃描、寫 SECURITY.md。
+description: >-
+  Use when 要判一則 Codex Security finding 是真漏洞還是假警報（finding mode），或上線前要分清 repo /
+  staging / production 各層還缺哪些安全證據（map mode）。NOT for 修 code、跑掃描、寫 SECURITY.md。
 metadata:
   clade:
     permission_tier: read
+effort: high
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/security-evidence/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
 
-
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude -->
 
 # security-evidence
 
@@ -43,3 +37,5 @@ Local edits will be reverted by the next sync.
 - NEVER 因為 `No findings` 就給 READY 或「安全」
 - NEVER 要 secret 值或真實客戶資料；要 key 名與遮蔽片段
 - NEVER 對 production 發測試流量或改設定；本 skill 只產出判讀與驗證計畫
+
+

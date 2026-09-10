@@ -1,0 +1,77 @@
+# 🔒 LOCKED — managed by clade · Source: vendor/specformula-errors/zh-TW/assert.yml · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/specformula-errors/zh-TW/assert.yml
+# LOCKED: mirrored from SpecFormula/specformula-dev-framework@e5568250a2c0599983bce90fb08d548da35e1d64 via scripts/sync-upstream-mirrors.ts — edit upstream, never here
+# 訊息模板 registry — ASSERT SUBSYSTEM
+# 本檔僅放 code prefix 為 `ASSERT_` 之 entry。
+
+ASSERT_RESPONSE_STATUS_MISMATCH:
+  category: assertion
+  template: "預期 HTTP 狀態 {expected}，實際為 {actual}"
+  fixtures:
+    - details: { expected: 200, actual: 500 }
+
+ASSERT_RESPONSE_FIELD_MISMATCH:
+  category: assertion
+  template: "回應欄位 '{field}' 不符預期值 '{expected}'，實際為 '{actual}'"
+  fixtures:
+    - details: { field: "status", expected: "active", actual: "pending" }
+
+ASSERT_RESPONSE_ROW_MISMATCH:
+  category: assertion
+  template: "回應第 {row_index} 列不符預期"
+  fixtures:
+    - details: { row_index: 0 }
+
+ASSERT_RESPONSE_SCHEMA_DEFINED_BUT_EMPTY:
+  category: assertion
+  template: "API '{summary}' 定義 HTTP {status} 之 response schema，但實際回應內容為空"
+  fixtures:
+    - details: { summary: "GetUser", status: 200 }
+
+ASSERT_ENTITY_SHOULD_EXIST:
+  category: assertion
+  template: "entity '{name}' 應存在但未發現，查詢條件：{conditions}"
+  fixtures:
+    - details: { name: "User", conditions: "id=1" }
+
+ASSERT_ENTITY_SHOULD_NOT_EXIST:
+  category: assertion
+  template: "entity '{name}' 應不存在但已發現，查詢條件：{conditions}"
+  fixtures:
+    - details: { name: "User", conditions: "id=1" }
+
+ASSERT_ENTITY_AMBIGUOUS:
+  category: assertion
+  template: "找到多筆 '{name}'，請提供更多欄位以唯一識別（查詢條件：{conditions}）"
+  fixtures:
+    - details: { name: "User", conditions: "status=active" }
+
+ASSERT_CAS_CONSTRAINT_FAILED:
+  category: assertion
+  template: "JSON Path '{json_path}' 之約束 '{constraint}' 驗證失敗（實際值：{actual_value}）"
+  fixtures:
+    - details:
+        {
+          json_path: "$.user.age",
+          constraint: "&between(0,120)",
+          actual_value: "150",
+        }
+
+ASSERT_ENTITY_FIELD_MISMATCH:
+  category: assertion
+  template: "entity '{entity}' 欄位 '{field}' 不符預期值 '{expected}'，實際為 '{actual}'"
+  fixtures:
+    - details:
+        { entity: "員工", field: "name", expected: "Bob", actual: "Alice" }
+
+ASSERT_ENTITY_UNKNOWN_FIELD:
+  category: assertion
+  template: "entity '{entity}' 的期望欄位 '{field}' 不存在於對應資料表"
+  fixtures:
+    - details: { entity: "員工", field: "colour" }
+    - details: { entity: "訂單", field: "spec.colour" }
+
+ASSERT_RESPONSE_TYPE_MISMATCH:
+  category: assertion
+  template: "回應欄位 '{field}' 型別不符：預期 {expected_type}，實際為 {actual_type}"
+  fixtures:
+    - details: { field: "id", expected_type: "integer", actual_type: "string" }

@@ -1,0 +1,26 @@
+{
+  "name": "@specformula/testcontainer",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@specformula/node": "workspace:*",
+    "testcontainers": "^10.0.0"
+  },
+  "peerDependencies": {
+    "pg": "^8.0.0",
+    "mysql2": "^3.0.0",
+    "mssql": "^11.0.0"
+  },
+  "peerDependenciesMeta": {
+    "pg": { "optional": true },
+    "mysql2": { "optional": true },
+    "mssql": { "optional": true }
+  }
+}

@@ -17,13 +17,7 @@ paths:
     '.prettierignore',
   ]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/code-style.toolchain.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/code-style.toolchain.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Code Style — 工具鏈治理
@@ -223,7 +217,7 @@ catalog:
 
 - 全域版本是 user 機器狀態，跨機器、跨 CI runner 不一致 → `vp lint` / `vp fmt` 行為漂移。CI 跟 dev 抓到不同 lint violation 是常見實證踩坑（user 升全域 → 突然某條 rule 變嚴 → dev 過 / CI 紅）。
 - vp bundle 的 oxlint / oxfmt 版本由 vp `dependencies` 嚴格 pin（`=1.63.0` / `=0.48.0` 之類），等同 vp 版本 = 工具鏈確定版本。vp 沒釘 = 工具鏈沒釘。
-- consumer 端升 vp **MUST** 走 [`dep-upgrade`](../../plugins/hub-ecosystem-node/skills/dep-upgrade/SKILL.md) skill 的 § Outdated mode（per-package commit + bisect-friendly + 走品質閘門），不是 user 跑 `pnpm add -g vite-plus@latest` 偷偷升所有 consumer。
+- consumer 端升 vp **MUST** 走 [`version-upgrade`](../../plugins/hub-ecosystem-node/skills/version-upgrade/SKILL.md) skill 的 § Outdated mode（per-package commit + bisect-friendly + 走品質閘門），不是 user 跑 `pnpm add -g vite-plus@latest` 偷偷升所有 consumer。
 - 跨 consumer 工具鏈 lockstep 是 clade governance 的前提（[`code-style.md`](./code-style.md) § Governance），全域裝法繞過了這層治理。
 
 #### MUST
@@ -270,6 +264,57 @@ code 產生新 finding；pnpm 的 `minimumReleaseAge` 會擋當天發布的版�
 
 #### 真實事故參考
 
+
+### Node runtime 全 fleet 釘 major 24（hard rule）
+
+上一節講 vp 的兩層版本。**node 是它們共同的第三層**——vp CLI 與 local `vite-plus` 都跑在 node 上，
+node 不一致時前兩層釘得再準也沒用。
+
+**適用條件（可觀察 predicate）**：repo root 有 `package.json`。沒有的（例：Go repo）本節不適用，
+稽核也標 `n/a`，**NEVER** 標成已對齊——打勾的語義是「量過且相符」，而它沒有這個維度。
+
+#### MUST：三個來源全部釘，缺一個就是沒釘
+
+三個來源各自防不同的失敗，**NEVER** 只做其中一個就宣稱已對齊：
+
+| 來源 | 寫什麼 | 沒釘的後果 |
+| --- | --- | --- |
+| `package.json` 的 `engines.node` | `"^24"` | 本機仍裝得起來，但宣告變成謊話；`pnpm install` 不會擋 |
+| `.nvmrc`（或 `.node-version`） | `24` | 開發者本機 `nvm use` / `fnm use` 切到別的 major |
+| **每一個** workflow 的**每一處** `node-version` | `'24'` | **CI 當場紅**，且 matrix 只有一格紅時很像 flaky |
+
+第三列是全稱量詞：**每一個** `.github/workflows/*.yml` 的**每一處** `node-version:`，
+不是只改 `ci.yml`、也不是只改每個檔的第一處。<consumer-i> 單一 repo 就有 7 處分散在 5 個檔，
+其中 `clade-check.yml` 停在已 EOL 的 node 20——只改 `ci.yml` 的人會看到 CI 綠而那一格仍在 20。
+
+#### NEVER
+
+- **NEVER** 用 `lts/*` / `node-version-file` 以外的浮動寫法當作「已釘」——`lts/*` 的解析結果隨
+  上游 LTS 輪替改變，而改變的那天沒有任何 commit 指向它
+- **NEVER** 用單值 matrix（`matrix: node: [22]`）表達釘版——它讀起來像「這裡刻意測多版本」，
+  下一個人不敢動它，而它其實只是一個被 matrix 包起來的常數
+- **NEVER** 因為 `engines.node` 已經是 `^24` 就跳過 CI 那一格：`engines` 不參與 runner 的
+  node 選版，兩者之間沒有任何機制互相強制
+
+#### MUST：toolchain 入口 action 釘 SHA
+
+`voidzero-dev/setup-vp` / `pnpm/action-setup` / `actions/setup-node` **MUST** 釘 40 碼 commit SHA
+並在行尾註記人讀版號（`@250f29ce…396baf5e8f24498e17c0dfdebabc26eb # v1`）。**NEVER** 用
+`@v1` / `@v5` 這種浮動 tag——tag 可被上游移動，於是「同一份 workflow 在不同日子跑出不同工具鏈」
+這件事在 diff 上完全不可見。
+
+#### 對應偵測
+
+```bash
+node scripts/audit-ci-toolchain-parity.ts          # 人讀表格；--json 給機器；--strict 有 drift 回 1
+node scripts/audit-ci-toolchain-parity.ts --target-node 24
+```
+
+目標 major 的 SoT 是該 script 的 `TARGET_NODE_MAJOR`；要換 fleet 標準就改那個常數並同步改本節，
+**NEVER** 只改其中一邊。各 consumer 的當前狀態一律以實跑輸出為準，**本節不寫死快照**。
+
+操作模板見 `vendor/snippets/ci-parity/`。落地是各 consumer 自家 session 的事（consumer 自治區），
+clade 這邊出訊號並 relay。
 
 ### 禁止在 lint-staged / pre-commit / CI 命令中呼叫 eslint / prettier
 
@@ -459,7 +504,7 @@ export default defineConfig({
 
 ### Nuxt app 不要照抄官方 `vp migrate` 全文
 
-`vp migrate` 的 README 範例是給純 Vite 專案。Nuxt 4 有三條硬例外，2026-09-07 在 CPMS 升 `vite-plus@0.3.0` 時重驗：
+`vp migrate` 的 README 範例是給純 Vite 專案。Nuxt 4 有三條硬例外，2026-09-07 在 <consumer-e> 升 `vite-plus@0.3.0` 時重驗：
 
 1. **`dev` / `build` / `typecheck` 維持 `nuxt` CLI。** `vp check` 內建的 typecheck 不是 `nuxt typecheck`；`vp dev` / `vp build` 也不走 Nitro / Nuxt module graph。
 2. **測試設定留在 `vitest.config.ts`。** 用 `@nuxt/test-utils` 的 `defineVitestConfig` 或 `defineVitestProject`。`vp test` 優先讀 `vitest.config.*`，這是刻意的第二份設定，不是沒 migrate 完。
@@ -546,7 +591,7 @@ pnpm exec vp fmt --migrate=prettier  # 從既有 prettier config 遷移（若有
   2. **inlineDrift** — 未 import preset 時，inline 寫死的 fmt baseline 欄位（`trailingComma`、`semi`、`singleQuote`、`printWidth` 等 11 項）與 baseline 不一致的 entries
   - 用法：`node scripts/audit-tooling-drift.ts [--markdown|--json]`；diagnostic-only，exit code 永遠 0；HANDOFF §4 baseline 由此 script 維護
   - 後續擴充至 7 個 signal（`structuralDrift` / `strayDotfiles` / `viteplusLocal` / `pnpmOrphans` / `eslintDeps`）
-- `scripts/audit-tooling-drift.ts` `eslintDeps` signal：掃每個 consumer `package.json` deps/devDeps 是否含本節禁用的 eslint / prettier 套件（`eslint` / `@nuxt/eslint*` / `@typescript-eslint/*` / `eslint-config-*` / `eslint-plugin-*` / `prettier` / `prettier-plugin-*`）→ 列為 `forbidden-deps-present`。warn-only，源於 <consumer-i> + co-purchase 採 Vite+ 後移除 `@nuxt/eslint`
+- `scripts/audit-tooling-drift.ts` `eslintDeps` signal：掃每個 consumer `package.json` deps/devDeps 是否含本節禁用的 eslint / prettier 套件（`eslint` / `@nuxt/eslint*` / `@typescript-eslint/*` / `eslint-config-*` / `eslint-plugin-*` / `prettier` / `prettier-plugin-*`）→ 列為 `forbidden-deps-present`。warn-only，源於 <consumer-j> + co-purchase 採 Vite+ 後移除 `@nuxt/eslint`
 
 ### 建議擴充（尚未實作）
 
@@ -594,7 +639,7 @@ pnpm exec vp fmt --migrate=prettier  # 從既有 prettier config 遷移（若有
 **這個壞形狀的訊號極弱，所以要靠稽核而不是靠人看出來**：`pnpm test` 單獨跑正常、CI 綠、
 `--stat` 正常，只有 `pnpm test <檔名>` 這種用法才炸，而錯誤訊息 `sh: 1: Syntax error: word
 unexpected` 指向 shell、完全看不出真因。2026-08-29 TD-685 relay 實測：**5 個 consumer 的
-session 各自獨立寫出同一個壞形狀**，只有一個（<consumer-h>）在 review 階段實跑帶參數的形式
+session 各自獨立寫出同一個壞形狀**，只有一個（<consumer-i>）在 review 階段實跑帶參數的形式
 才抓到。§ 3b 的 `⚠ 吃不掉參數` 就是這一格。
 
 **這一格有稽核**：`node scripts/audit-gate-coverage.ts` § 3b 逐 consumer 印出上表四條 script

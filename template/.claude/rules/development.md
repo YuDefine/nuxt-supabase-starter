@@ -2,13 +2,7 @@
 description: 開發規範（TDD, coding style, UI reuse）
 paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'test/**/*.ts', 'packages/*/test/**/*.ts', 'shared/**/*.ts', 'packages/*/shared/**/*.ts', 'package.json']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/framework/nuxt/development.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/modules/framework/nuxt/development.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # UI Reuse

@@ -1,14 +1,9 @@
 ---
-description: "Worktree 升級路徑 / Stop hook 死鎖 / spectra DB 跨 wt 共享 / artifact git / phase-tick commit / main 端 tasks.md 打勾方向判定 / review-gui 坑 / WORKTREE-BRIEF（worktree-default §7–§12 detail）"
-globs: ["openspec/changes/**", "vendor/scripts/wt-helper.ts", "vendor/scripts/stash-reconcile.ts", "vendor/scripts/review-gui.ts", "scripts/wt-helper.ts", "scripts/review-gui.ts"]
+description: "worktree-default.troubleshooting"
 alwaysApply: false
+globs: ["openspec/changes/**","vendor/scripts/wt-helper.ts","vendor/scripts/stash-reconcile.ts","vendor/scripts/review-gui.ts","scripts/wt-helper.ts","scripts/review-gui.ts"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/worktree-default.troubleshooting.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/worktree-default.troubleshooting.md; edit canonical source -->
 
 
 > Path-scoped detail of [[worktree-default]] §7–§11。核心 always-load 規約在母檔 worktree-default.md。

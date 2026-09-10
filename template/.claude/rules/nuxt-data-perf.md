@@ -2,13 +2,7 @@
 description: Nuxt data fetching 選用決策、Pinia Colada 最佳實踐、dedupe/cache/payload 效能規約；涵蓋 useFetch / useAsyncData / $fetch / useQuery / useMutation 全棧
 paths: ['**/*.vue', 'app/**/*.ts', 'packages/*/app/**/*.ts', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'composables/**', 'packages/*/composables/**', 'queries/**', 'packages/*/queries/**', 'stores/**', 'packages/*/stores/**', 'nuxt.config.*', 'app.config.*']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/nuxt-data-perf.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/nuxt-data-perf.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Nuxt Data Fetching & Performance
@@ -185,7 +179,7 @@ SFC 裡的 `$fetch` **不讀 `globalThis`**。unimport 會把它轉成
 | 做法 | 代價 | 適用 |
 | --- | --- | --- |
 | **A**：`app:templates` hook 覆寫 `fetch.mjs` template，讓被 export 的 const 在 `create()` 當下就掛好 interceptor | 整份覆寫、與 Nuxt 版本耦合——升版 MUST 比對上游 `dollarFetchTemplate` 的 import / `baseURL` / export 形狀，並用單元測試執行產出的字串驗行為 | 既有呼叫點多、不想逐一改（<consumer-a> / <consumer-d> 走這條） |
-| **B**：`export function useApi() { return useNuxtApp().$csrfFetch }`，呼叫端 setup 頂層 `const api = useApi()`，之後一律 `api(...)` | 呼叫點要逐一改，且需要下方的掃描測試擋住「未來忘記用」 | 呼叫點少、不想與 Nuxt 內部 template 耦合（CPMS 走這條） |
+| **B**：`export function useApi() { return useNuxtApp().$csrfFetch }`，呼叫端 setup 頂層 `const api = useApi()`，之後一律 `api(...)` | 呼叫點要逐一改，且需要下方的掃描測試擋住「未來忘記用」 | 呼叫點少、不想與 Nuxt 內部 template 耦合（<consumer-e> 走這條） |
 
 走 A 時兩個容易漏的點（兩個 repo 都踩過）：**method 可能只在 Request 物件上**
 （`$fetch(new Request(url, { method }))`，只看 `options.method` 會當成 GET 而漏附
@@ -444,7 +438,7 @@ async function handleSubmit() {
 2026-06-23 跨 8 consumer 稽核發現：
 - `dedupe` 全 fleet = 0（MasteringNuxt tip 指出的盲區）
 - `getCachedData` 全 fleet = 0
-- 未安裝 Colada 的 consumer（<consumer-i> / co-purchase / blog）全面 D 級
+- 未安裝 Colada 的 consumer（<consumer-j> / co-purchase / blog）全面 D 級
 - 已安裝 Colada 的 consumer（<consumer-a> / <consumer-b> / <consumer-d> / <consumer-c>）全部 B+ 以上，但 key management 和 dedupe 仍有缺口
 - <consumer-a> 的 pattern（STALE_TIME 三級 + key factory + 100% mutation invalidation）是 gold standard，需推廣
 

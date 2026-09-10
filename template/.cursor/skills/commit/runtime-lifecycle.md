@@ -1,13 +1,5 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/commit/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Commit lock 生命週期
 
-<!-- clade-targets: claude,codex,cursor -->
 
 每次進入 `/commit` 的 Step 0-Lock，以及中斷後重入、切換 session、處理持鎖衝突或離開流程前，**MUST 完整讀本檔**。三種 runtime 使用同一個鎖協定；原生工具、背景工作與通知能力以當前入口實際提供的能力為準。
 
@@ -16,9 +8,9 @@ Local edits will be reverted by the next sync.
 | REQUIRED 值 | 來源 |
 |---|---|
 | `COMMIT_SKILL_DIR` | 本次實際載入的原生 commit skill 目錄絕對路徑，由載入來源取得；不要由模型名或其他 runtime 的目錄猜測 |
-| `COMMIT_REPO` | 本次 ceremony 操作的 checkout 絕對路徑；不沿用其他 checkout 的 `PROJECT_DIR` |
+| `COMMIT_REPO` | 本次 ceremony 操作的 checkout 絕對路徑；不沿用其他 checkout 的 `CLAUDE_PROJECT_DIR` |
 | `CLADE_WORK_ID` | 這件工作的既有 flow work id，沿用 [[flow-work-tracking]] 的工作歸屬；不為每個 gate 另開一件工作 |
-| `COMMIT_RUNTIME` | 當前執行入口：`claude`、`codex` 或 `cursor`，不是模型名稱 |
+| `COMMIT_RUNTIME` | 當前執行入口：`claude`、`codex`、`cursor` 或 `grok`，不是模型名稱 |
 | `COMMIT_SESSION_ID` | 當前原生 session 的確切識別；由該 runtime 的 session context／receipt 取得，不拿父 session、pane title 或模型名稱代填 |
 | `COMMIT_OWNER_TOKEN` | 本次成功 acquire receipt 的 owner token；首次 acquire 前尚無此值 |
 

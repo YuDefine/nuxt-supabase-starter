@@ -1,15 +1,14 @@
 ---
 name: technical-research
-description: "承接 plan package 的 `spec.md`，產出 plan-side `research.md`，並作為 truth owner 更新 `specs/truth/techstack.md`。每次執行都必須盤點 techstack truth 的 ADD / MODIFY / DELETE / NOOP，完成後委派 `/truth-delta` 更新本 plan 的 `truth-delta.md`。"
+description: >-
+  承接 plan package 的 `spec.md`，產出 plan-side `research.md`，並作為 truth owner 更新
+  `specs/truth/techstack.md`。每次執行都必須盤點 techstack truth 的 ADD / MODIFY / DELETE /
+  NOOP，完成後委派 `/truth-delta` 更新本 plan 的 `truth-delta.md`。
+metadata:
+  clade:
+    invocation: explicit
 disable-model-invocation: true
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/technical-research/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@db46b1ddf59c47c9aab52a7d66d15668811fa501 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 
 # Technical Research

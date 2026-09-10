@@ -2,13 +2,7 @@
 description: 多欄位表單必用 UForm + Zod；input/textarea 必設 maxlength；placeholder 不代 label
 paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/framework/nuxt/nuxt-form-validation.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-form-validation.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Form 驗證規約

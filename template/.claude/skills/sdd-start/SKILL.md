@@ -1,19 +1,10 @@
 ---
 name: sdd-start
 description: Use when user asks to start or continue product work after clade-onboard confirms an onboard repo. Do not use for onboard status/readiness or registry drift.
-homepage: https://github.com/YuDefine/clade
 license: MIT
 metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}}
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/sdd-start/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
 
-
-<!-- clade-targets: claude,codex,cursor -->
 
 # sdd-start（統一新工作入口）
 

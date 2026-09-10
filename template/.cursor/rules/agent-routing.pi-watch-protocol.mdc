@@ -1,14 +1,9 @@
 ---
-description: "Pi dispatch、bounded phase、截圖取證與符合性判定的載體、brief、監看、receipt 與配額契約；派工前依 agent-routing 指針載入"
-globs: ["openspec/changes/**/tasks.md", "openspec/changes/**/design.md", ".claude/agents/**", "screenshots/**/progress.json"]
+description: "agent-routing.pi-watch-protocol"
 alwaysApply: false
+globs: ["openspec/changes/**/tasks.md","openspec/changes/**/design.md",".claude/agents/**","screenshots/**/progress.json"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/agent-routing.pi-watch-protocol.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/agent-routing.pi-watch-protocol.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
@@ -32,7 +27,7 @@ Local edits will be reverted by the next sync.
 1. 用 **Write** 把指示寫到 `/tmp/pi-<topic>-<slug>-prompt.md`（prompt 太長不要 inline）
 2. **Bash** tool（background process launcher (enabled)）：
 
-`<model-slug>` 選檔：先查 [[agent-routing.routing-table]] 的具名列。一般非 UI 實作用 `luna medium`，複雜實作與修復升級用 `sol high`；已列明 Gemini／Grok 的工作沿用該列。Astra 只承接 planning／decision／review，未知工作先分類，不用 Astra 當預設。本節的 Pi 派工不改走 cx 或 AI Agent＋GPT；Codex 主線 → 任一 GPT 可用原生 agent 的獨立分支見 [[agent-routing]] § Session transport boundary。
+`<model-slug>` 選檔：先查 [[agent-routing.routing-table]] 的具名列。一般非 UI 實作用 `luna medium`，複雜實作與修復升級用 `sol high`；已列明 Gemini／Grok 的工作沿用該列。Astra 只承接 planning／decision／review，未知工作先分類，不用 Astra 當預設。本節的 Pi 派工不改走 cx 或 Claude Code＋GPT；Codex 主線 → 任一 GPT 可用原生 agent 的獨立分支見 [[agent-routing]] § Session transport boundary。
 
    ```bash
    node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
@@ -89,7 +84,7 @@ simplify、review、checks 的既有入口；正式 review row 由原本的專�
 commit 0-A 的標準入口是 `plugins/hub-core/scripts/codex-review-safe.sh`。它由 caller凍結完整working-tree changeset，再呼叫Pi review runner；runner只開`read,grep,find,ls`，沒有bash、write、edit或MCP，因此read-only是tool allowlist契約，不靠prompt自律。
 
 ```bash
-.cursor/scripts/codex-review-safe.sh medium
+.claude/scripts/codex-review-safe.sh medium
 ```
 
 reasoning effort由第一個參數指定；wrapper不接受額外runtime flags。所有consumer與clade自身都走這個入口。
@@ -126,7 +121,7 @@ GPT-5.6 與 Claude 4.8 都**字面遵守指令、不外推**（Anthropic prompt 
 Dirty working tree 有兩種來源，**兩種都要列進 baseline**：
 
 1. **主線操作型**：主線剛跑 OPSX intent 完成的 artifacts、剛寫進 `docs/tech-debt.md` 的 TD-NNN entry、未 commit 的 ROADMAP/HANDOFF 更新
-2. **自動 hook 型**：`pnpm install` postinstall hook 觸發 `hub:bootstrap` → `sync-to-codex` 自動把 main branch 的 clade 更新同步進 worktree，產生 LOCKED projection diff（`.claude/` / `.agents/` / `AGENTS.md` / `AGENTS.md` / `.cursor/scripts/`，檔頭有 `🔒 LOCKED — managed by clade` banner）。主線沒主動操作但 working tree 仍 dirty
+2. **自動 hook 型**：`pnpm install` postinstall hook 觸發 `hub:bootstrap` → `sync-to-codex` 自動把 main branch 的 clade 更新同步進 worktree，產生 LOCKED projection diff（`.claude/` / `.agents/` / `AGENTS.md` / `CLAUDE.md` / `.claude/scripts/`，檔頭有 `🔒 LOCKED — managed by clade` banner）。主線沒主動操作但 working tree 仍 dirty
 
 派工前**MUST 跑**：
 
@@ -149,7 +144,7 @@ cat .claude/.hub-state.json | grep syncedAt     # 若新近時間戳 → 自動 
 - `openspec/changes/<change-name>/` (untracked) — 主線剛跑 OPSX intent 完成的 artifacts
 
 hub:bootstrap 自動同步產生（請完全忽略，與本次工作無關）：
-- `.claude/` `.agents/` `AGENTS.md` `AGENTS.md` `.cursor/scripts/` — 投影層由 clade 中央倉自動同步，檔頭有 🔒 LOCKED banner
+- `.claude/` `.agents/` `AGENTS.md` `CLAUDE.md` `.claude/scripts/` — 投影層由 clade 中央倉自動同步，檔頭有 🔒 LOCKED banner
 
 你的工作範圍**只動**：<列出本次 phase 真正要動的檔案 / 目錄>
 若本次工作要動的範圍與上述 baseline 有交集，以下列規則為準：<填衝突處理>
@@ -278,7 +273,7 @@ Waiver enum 固定為 `claude-mcp-required`、`parent-context-required`、`gover
 
 Enforcement authority 是 `~/.claude/clade-routing-gate/receipts.jsonl`；`~/.pi/agent/clade/dispatch-ledger.jsonl` 是現行 fail-open usage／observability telemetry，legacy `~/.codex/dispatch-ledger.jsonl` 只供歷史報表，**NEVER** 用 telemetry 缺列推翻已成功落盤的 receipt。每次 live判定會先用 unique receipt重建 `latestAttempt`，並把單一 terminal receipt materialize回 stale state；同 `eventId`重播是 benign，兩個不同 terminal resolution與未完成的 orphan segment transition會 fail-closed。這使 receipt-first／state-second 的 crash window可恢復，不會重跑已成功的 Pi dispatch。
 
-Fail-open／fail-closed 邊界以 helper是否在 AI Agent外層 deadline內回傳為準：segment identity 尚未初始化、中央 helper缺件時 diagnostic fail-open；state 一旦建立，helper回傳的 corrupt state、lock／atomic write／receipt failure、session／row／model／effort mismatch一律 fail-closed。AI Agent外層 command hook timeout或 helper根本無法啟動時，hook output會被丟棄並回到正常 permission flow，仍是 residual fail-open；正常 permission flow **不等於**無條件 auto-allow。事後結案跑 `node scripts/audit-pi-adoption.ts`；usage report不讀 receipt。
+Fail-open／fail-closed 邊界以 helper是否在 Claude Code外層 deadline內回傳為準：segment identity 尚未初始化、中央 helper缺件時 diagnostic fail-open；state 一旦建立，helper回傳的 corrupt state、lock／atomic write／receipt failure、session／row／model／effort mismatch一律 fail-closed。Claude Code外層 command hook timeout或 helper根本無法啟動時，hook output會被丟棄並回到正常 permission flow，仍是 residual fail-open；正常 permission flow **不等於**無條件 auto-allow。事後結案跑 `node scripts/audit-pi-adoption.ts`；usage report不讀 receipt。
 
 **`--route` 必填**（缺就 exit 1，2026-08-12 起）。它是成功指標的分母——`route=claude-delegate-sub`
 的 dispatch 中 luna 佔比。填法：走本檔 § Routing Table 某一列 → `routing-table`；走 § Native delegation model boundary 轉派 → `claude-delegate-sub`；走 § 配額耗盡時的 fallback 紀律 → `fallback-chain`；
@@ -410,7 +405,7 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`native wakeu
 | **安全網 fallback（預設）** | **`1200`–`1800`**，prompt = canonical inert control message |
 | harness task 仍 running | 以完全相同的 interval 與 inert prompt 重排 |
 
-**180s 的具名例外（窮舉，其餘一律禁止）**：`commit` gate 0-A.1 的 Pi review、`dep-upgrade` outdated-mode 的 low-risk 升版 review。兩者的共同 predicate 是**主線在同一段時間跑並行軸、且結果一到就要接著用**——短 interval 買的是並行軸的銜接，不是 progress telemetry；prompt 仍 **MUST** 是 canonical inert control message，控制 turn 一樣不得讀 output。不在這份清單上的路徑用 `1200`–`1800`。
+**180s 的具名例外（窮舉，其餘一律禁止）**：`commit` gate 0-A.1 的 Pi review、`version-upgrade` outdated-mode 的 low-risk 升版 review。兩者的共同 predicate 是**主線在同一段時間跑並行軸、且結果一到就要接著用**——短 interval 買的是並行軸的銜接，不是 progress telemetry；prompt 仍 **MUST** 是 canonical inert control message，控制 turn 一樣不得讀 output。不在這份清單上的路徑用 `1200`–`1800`。
 
 **禁止** `< 60`（runtime clamp 也會擋）。**上限 `3300`（MUST）**：這個 fallback 同時承擔 [[agent-routing]] § 主線靜默上限 的 cache-keepalive 職責，所以 pi 路徑**不**另外排第二個 wakeup，也 **NEVER** 拉長到 3300 以上。
 
@@ -418,7 +413,7 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`native wakeu
 
 ### 與「不要把工作往後放」禁令的關係
 
-全域 AGENTS.md 規定**禁止**把工作排到未來（不主動推薦 `/schedule`、`/loop`、「N 週後再做」）。本 protocol 的 `native wakeup scheduler` 屬於**主動監看**，不是延後工作 — 它存在的目的是**縮短**「主線發現問題的時間」，不是把責任往後推。兩者方向相反，**不衝突**。
+全域 CLAUDE.md 規定**禁止**把工作排到未來（不主動推薦 `/schedule`、`/loop`、「N 週後再做」）。本 protocol 的 `native wakeup scheduler` 屬於**主動監看**，不是延後工作 — 它存在的目的是**縮短**「主線發現問題的時間」，不是把責任往後推。兩者方向相反，**不衝突**。
 
 判別準則：
 
@@ -442,7 +437,7 @@ Nuxt UI／Content 實作交 Cursor Composer 2.5，Nuxt 本體交 GPT-5.6 Sol xhi
 | 階段 | 模型與載體 | 交付 |
 | --- | --- | --- |
 | 四個模式的 screenshot review | Pi `gemini high`，`screenshot-review-verify` | 實際 browser 操作、圖片、DOM／network evidence、逐 item 摘要與 progress.json |
-| 截圖 vs item 符合性 gate | AI Agent Opus 5（effort: medium），`screenshot-match-analysis` | 讀取每張指定圖片與完整 item，給 PASS／FAIL／UNCERTAIN 及理由 |
+| 截圖 vs item 符合性 gate | Claude Code Opus 5（effort: medium），`screenshot-match-analysis` | 讀取每張指定圖片與完整 item，給 PASS／FAIL／UNCERTAIN 及理由 |
 
 收集與判定分兩次 dispatch。Gemini 不代簽 Opus gate；Opus 不以 Gemini 的文字摘要代替實際圖片。Opus 5 無法執行時帶實際失敗原因沿 `screenshot-match-analysis` 原列交 GPT-5.6 Sol（effort: high）；Gemini 或 Sol 不可用就回報 blocker，不沿 generic 配額鏈換模型。執行方式與 evidence contract 見 `review-screenshot` skill。
 
@@ -578,7 +573,7 @@ mutation:
   Grok-xai → Claude Sonnet
 ```
 
-**dep-upgrade 專用 mutation 路徑**（`dep-upgrade-first-pass`／`dep-upgrade-research`）：xAI Grok 4.6 → Cursor Grok 4.6（同 Grok effort，先檢查 mutation 能力）→ bare `gemini`（Gemini 3.8 Flash，high）→ 停止並回報 blocker。Gemini quota／provider 不可用／catalog miss 都在此結束，不接 Sonnet、不續走 generic Gemini 鏈。`--retry-of` 繼承 originating row 與 mutation capability，下一步以 dispatcher payload 為準。
+**version-upgrade 專用 mutation 路徑**（`version-upgrade-first-pass`／`version-upgrade-research`）：xAI Grok 4.6 → Cursor Grok 4.6（同 Grok effort，先檢查 mutation 能力）→ bare `gemini`（Gemini 3.8 Flash，high）→ 停止並回報 blocker。Gemini quota／provider 不可用／catalog miss 都在此結束，不接 Sonnet、不續走 generic Gemini 鏈。`--retry-of` 繼承 originating row 與 mutation capability，下一步以 dispatcher payload 為準。
 
 `workspace_access` 的來源只有三條：concrete table row 由 `pi-routing-policy.ts` 推導；manual caller 顯式帶 `--workspace-access readonly|mutation`；fallback 以 `--retry-of` 從 ledger 繼承。Dispatcher 把 effective value 寫進 ledger／flow／exit payload，`next_step` 也帶回 capability。**每一個**會修改 working tree、lockfile、Git index 或建立 commit 的 caller都 **MUST** 宣告 `mutation`；無法判定時，Cursor admission與指向 Cursor 的下一跳都 fail closed。
 
@@ -605,7 +600,7 @@ mutation:
 舊鏈的 gemini／luna 耗盡等於**直落 Claude Haiku**，`sol-cursor` 同死則讓 sol exit 4 **直回 Opus 主線**——
 降級鏈的存在意義正是不要在這種時候把工作推回最貴的那一格。
 
-**跨 model 家族的跳是具名例外，不是通則**：luna 鏈與上述 dep-upgrade 專用鏈各有自己的終點。 新增跨家族跳 MUST Charles 逐鏈拍板，
+**跨 model 家族的跳是具名例外，不是通則**：luna 鏈與上述 version-upgrade 專用鏈各有自己的終點。 新增跨家族跳 MUST Charles 逐鏈拍板，
 准入三條連言是**申請門檻**，**NEVER** 由它自動導出（必要條件不是充分條件）；逐條判準與取證見
 rationale § luna 鏈的跨家族跳。Astra 的 planning／decision／review 角色，以及 Sol 的 `non-ui-implementation-escalate`
 各自遵守具名列限制；NEVER 轉 grok 的限制**含 fallback 路徑，配額耗盡不是豁免條件**。
@@ -690,7 +685,7 @@ redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**d
 
 ## 配額與 residency 的下推兩段
 
-> 本節是 [[agent-routing]] § 配額邊界 下推的兩段。**判「這個 codex-primary verdict 要不要真的 dispatch」之前，以及要動配額鏈 `-cursor` 那一跳之前，MUST 先讀本節。**
+> 本節是 [[agent-routing.dispatch-execution]] § 配額邊界 下推的兩段。**判「這個 codex-primary verdict 要不要真的 dispatch」之前，以及要動配額鏈 `-cursor` 那一跳之前，MUST 先讀本節。**
 
 ### `-cursor` 那一跳的准入（workspace capability ＋材料來源）
 
@@ -704,7 +699,7 @@ codex-primary verdict 但 ≤2 個 file 的瑣碎 fix（typo / 單行 bug / conf
 
 **判定標準**：`git diff --stat` ≤2 files **且** 預估 ≤20 行 **且** 不涉及 migration / auth / RLS / permission。超過任一門檻 → 照原 routing 走 Pi。
 
-GPT worker 的 transport 與 AI Agent effective-model 邊界見 [[agent-routing]] § Session transport boundary；每一個 fallback 與 inherited launcher 同樣受該節約束。
+GPT worker 的 transport 與 Claude Code effective-model 邊界見 [[agent-routing]] § Session transport boundary；每一個 fallback 與 inherited launcher 同樣受該節約束。
 
 ## GPT worker transport
 
@@ -727,7 +722,7 @@ node vendor/scripts/pi-dispatch.ts --brief /tmp/repair.md --cwd /tmp/repair-repo
 
 **NEVER 用 cx 或 codex CLI 當 GPT worker 的替代載體；Codex 主線的 GPT worker 可用原生 agent，其他主線的 GPT worker 一律走 Pi。** `inherit` 不會把現有主線模型變成目標 GPT；Pi 失敗時先分辨 runtime／配額／工作失敗，依本檔處置。使用者自己開啟的互動工作環境與 agent 建立的 worker 是兩種動作。
 
-**每一個 AI Agent launcher 的 effective model 都必須符合 Claude 工作流。NEVER 以 cc／ccw／代理 launcher 的名稱包裝 GPT model（含 Luna、Sol、Astra 與 ccx alias）。** 派工前同時核對 explicit model、inherit 的 settings 與有效環境 model；命中 GPT 就拒絕並指向 Pi，不建立 pane。舊 ccx 僅供辨識歷史與拒絕新啟動，不能成為 fallback。
+**每一個 Claude Code launcher 的 effective model 都必須符合 Claude 工作流。NEVER 以 cc／ccw／代理 launcher 的名稱包裝 GPT model（含 Luna、Sol、Astra 與 ccx alias）。** 派工前同時核對 explicit model、inherit 的 settings 與有效環境 model；命中 GPT 就拒絕並指向 Pi，不建立 pane。舊 ccx 僅供辨識歷史與拒絕新啟動，不能成為 fallback。
 
 
 ## Herdr transport 邊界
@@ -736,9 +731,9 @@ node vendor/scripts/pi-dispatch.ts --brief /tmp/repair.md --cwd /tmp/repair-repo
 
 **Pane 是 dispatch 的投影，不是 dispatch 的理由。** Transport 預設分割當前 Tab，只改變已決定要派的工作長什麼樣。反方向同樣不承載資訊：**NEVER** 從「Tab 沒有分割」推論沒有工作在跑——in-process subagent 沒有 terminal。要看現況跑 `vendor/scripts/herdr-patrol.ts`。
 
-每一個符合的跨 cwd / 新 AI Agent session handoff 都保留原有 worktree、scope、approval、verification 與 clade / consumer 邊界。Transport 失敗也不改變 routing 結論，且 **NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt。
+每一個符合的跨 cwd / 新 Claude Code session handoff 都保留原有 worktree、scope、approval、verification 與 clade / consumer 邊界。Transport 失敗也不改變 routing 結論，且 **NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt。
 
 
 ## 串行鏈的既有實例
 
-> 既有的三處特例是[[agent-routing]] § 派多少的實例，不取代[[agent-routing]] § 派多少：`handoff/relay-steps.md` §0 與 `session-tasks.operations.md` § 派幾個 pane（兩者都框在「serial 工作 NEVER 拆給 N 個 worker」），以及 `handoff/dispatch-common.md` § 2 的 brief 範圍檢查點。**它們防的是「拆給 N 個 worker」，[[agent-routing]] § 派多少多防一種形狀：切成「worker ＋ 主線自己」**——那種切法在既有條文的字面下不會 fire，因為沒有第二個 worker。
+> 既有的三處特例是[[agent-routing.dispatch-execution]] § 派多少的實例，不取代[[agent-routing.dispatch-execution]] § 派多少：`handoff/relay-steps.md` §0 與 `session-tasks.operations.md` § 派幾個 pane（兩者都框在「serial 工作 NEVER 拆給 N 個 worker」），以及 `handoff/dispatch-common.md` § 2 的 brief 範圍檢查點。**它們防的是「拆給 N 個 worker」，[[agent-routing.dispatch-execution]] § 派多少多防一種形狀：切成「worker ＋ 主線自己」**——那種切法在既有條文的字面下不會 fire，因為沒有第二個 worker。

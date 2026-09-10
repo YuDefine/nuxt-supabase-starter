@@ -1,14 +1,9 @@
 ---
-description: "決定「這份執行中的程式跑在哪個部署目標」時——標 Sentry / evlog 的 environment、選告警路由、開關環境專屬 feature、擋 destructive endpoint——判斷該讀哪個值；症狀是 staging 的事件混進 production 的判讀"
-globs: ["sentry*.config.*", "**/sentry*.ts", "nuxt.config.*", "Dockerfile", "**/Dockerfile", "wrangler.toml", "wrangler.jsonc", ".github/workflows/**", "server/plugins/**", "packages/*/server/plugins/**", "packages/**/server/plugins/**"]
+description: "deploy-env-identity"
 alwaysApply: false
+globs: ["sentry*.config.*","**/sentry*.ts","nuxt.config.*","Dockerfile","**/Dockerfile","wrangler.toml","wrangler.jsonc",".github/workflows/**","server/plugins/**","packages/*/server/plugins/**","packages/**/server/plugins/**"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/deploy-env-identity.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/deploy-env-identity.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 

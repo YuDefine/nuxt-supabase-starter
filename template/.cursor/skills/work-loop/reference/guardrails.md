@@ -1,13 +1,8 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/work-loop/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Guardrails（每輪 re-read，Step 1.5 hard rule）
 
-<!-- clade-targets: claude -->
+
+> Runtime split: state, ownership, approval, and completion obligations are shared. Literal Claude tool names or runner commands in this reference are Claude host bindings; other hosts MUST use their adapter fragment or retain the dependent operation blocked.
+
 
 > 本檔存在的理由：長時間跑的 loop 會被 auto-compaction 壓縮 context，**壓掉的東西裡就包含安全約束，而且壓掉時不會通知你**。所以護欄不能只靠「主線記得」——它必須是每一輪重新讀進最近 context 的檔案。
 >
@@ -21,7 +16,7 @@ Local edits will be reverted by the next sync.
 2. **落地 main 的 commit 看路徑，不是一律 `--only`** —— 路徑全在 `rules/core/commit.detail.md` § `--only` 適用範圍白名單（HANDOFF / tech-debt / tasks / artifact-tick 等）→ `git commit --only -m "…" -- <paths>`。任一路徑不在白名單（source / migration / plugin / 任何程式碼）→ **MUST** invoke `/commit`。兩種都 **NEVER** `git add` + `git commit` 兩段式（會吞掉別 session 預 stage 的內容）。work-loop / unattended / 「護欄寫過一律 `--only`」**NEVER** 是跳過 `/commit` 的理由；卡人工檢查 → packaging，**NEVER** 用 `--only` 繞 0-A
 3. **每個 item 獨立 commit** —— 不把多個 item 的改動混進同一 commit
 4. **不 force push** —— 所有 git 操作 safe，無 `--force`
-5. **動標準層 MUST 散播完畢** —— `rules/`、`plugins/hub-core/`、`AGENTS.md`、`vendor/`。**可以改**（2026-08-05 Charles 授權），但改完 **MUST** 走 `/clade-publish` Step 1–9 把它推到 consumer，**NEVER** 改完擱著等人來散。做不到就別動它
+5. **動標準層 MUST 散播完畢** —— `rules/`、`plugins/hub-core/`、`CLAUDE.md`、`vendor/`。**可以改**（2026-08-05 Charles 授權），但改完 **MUST** 走 `/clade-publish` Step 1–9 把它推到 consumer，**NEVER** 改完擱著等人來散。做不到就別動它
 6. **不跨 consumer** —— loop 只操作當前 repo
 7. **需求建立有來源授權** —— 每一筆新 plan package（`/specify`）都依下方 § 護欄 7 的來源授權判定；未授權的新目標先 packaging，已授權需求依原身分與驗收接續。
 8. **不碰 user 的 stash** —— worktree / stash audit 只讀不寫
@@ -77,7 +72,7 @@ Local edits will be reverted by the next sync.
 - 在 worktree 內 commit 用 `git commit --only -m "…" -- <你改的檔案路徑>`；NEVER `git add` + `git commit` 兩段式
 - NEVER 在 worktree 內跑 `/commit` 或 `git push origin main`——落地 main 是主線 harvest / archive 之後的 `/commit`
 - NEVER `git push --force` / `--force-with-lease`
-- 標準層（rules/、plugins/hub-core/、AGENTS.md）只改**本 brief 所有權清單逐條列出的**那幾個檔；
+- 標準層（rules/、plugins/hub-core/、CLAUDE.md）只改**本 brief 所有權清單逐條列出的**那幾個檔；
   清單沒列的標準層檔 NEVER 改。帶 `🔒 LOCKED — managed by clade` banner 的檔一律 NEVER 改，
   清單列了也不例外（那是投影不是源）
 - NEVER 操作本 repo 以外的目錄
@@ -162,3 +157,6 @@ Local edits will be reverted by the next sync.
 - state 檔的 `awaiting[]` 非空、本輪是 attended，而你正要進 Step 3 分類
 - 已收到 Charles 的答案，但還沒寫進 `decisions` 就開始 dispatch
 - 這輪還沒 Read 過本檔
+
+
+Cursor binding for this reference: discover a compatible attended structured question surface before presenting specific consent; otherwise use ordinary conversation. Never infer consent in unattended mode, and persist the complete selected scope before dispatch.

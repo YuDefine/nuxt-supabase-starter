@@ -1,12 +1,8 @@
 ---
+description: "agent-self-verification"
 alwaysApply: true
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/agent-self-verification.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/agent-self-verification.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
@@ -28,7 +24,7 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 
 ## 證據鑑別力（先於下方每一條 NEVER / MUST）
 
-驗收引用的證據 E，MUST 能回答「若被驗命題為假，E 會長什麼不一樣？」——答不出或答案是「一樣」→ E 不是證據，換一個在兩個世界會分岔的觀測。**status code、exit code、「檔案存在」、工具自我宣告、來自常數宣告而非量測的數字，預設視為未分岔訊號**。MUST 11 / 16 / 19 是本條的三個實例；新形態回到上面那句自判。降級路徑觸發時 MUST loud（warning / health degraded），讓假世界主動分岔。實證三例見 [[pitfall-empty-state-screenshot-has-no-discriminating-power]]。
+驗收引用的證據 E，MUST 能回答「若被驗命題為假，E 會長什麼不一樣？」——答不出或答案是「一樣」→ E 不是證據，換一個在兩個世界會分岔的觀測。**status code、exit code、「檔案存在」、工具自我宣告、來自常數宣告而非量測的數字，預設視為未分岔訊號**。MUST 11 / 16 / 19 / 20 是本條的四個實例；新形態回到上面那句自判。降級路徑觸發時 MUST loud（warning / health degraded），讓假世界主動分岔。實證三例見 [[pitfall-empty-state-screenshot-has-no-discriminating-power]]。
 
 **摘要值（hash / 行數 / 檔案數 / diff 大小）同屬未分岔訊號**：`sha256sum` / `md5sum` / `wc -l` 這類全域函式對空輸入不報錯、照樣回一個外觀正常的值，於是「上游命令死掉」與「內容真的是空的」在它的輸出裡完全相同。**每一次**拿 hash 或 count 當證據，MUST 先驗產生它的那條 pipeline 的 exit code 與非空性；**NEVER** 從摘要值反推成因。逐字反開脫：「hash 有值代表命令成功了」——`[ -n "$(printf '' | sha256sum)" ]` 恆真（空輸入的 sha256 就是 `e3b0c442…`），那道 guard 讀起來在防空值、實際永遠通過。實證見 [[pitfall-hash-of-empty-stdout-collapses-distinct-causes]]。
 
@@ -76,71 +72,54 @@ baseline 只存在於某次 session 記憶裡時，下一個讀 gate 的人算�
 
 對下列場景**禁止**直接 handoff user：
 
-1. **缺 session cookie** → 走 [[manual-review.backend]] § Dev-login route missing → scaffold-first hard rule 的 detection 路徑與 scaffold 流程（**不**問 user 取 cookie / Google OAuth + DevTools 複製）
-2. **缺 visual evidence** → 走 [[manual-review.backend]] § `[verify:ui]` channel 的 dispatch path；具體 dispatch carrier、model 與 capability check 由所選 target adapter 提供，未驗證時保持 blocked。
-3. **撞 baseline functional gap**（route 存在但 allow-list 不收 fixture user / role 不符 / seed identifier 對不上）→ 走 [[main-self-collect-fallback-chain]] (a)(b)(c)(d) 四層，**全失敗**才寫 `deferred` annotation
+> **場景 1–3（缺 session cookie／缺 visual evidence／撞 baseline functional gap）的處置路徑全文在
+> [[agent-self-verification.screenshot-evidence]] § NEVER — 禁止直接 handoff user 的三個
+> verify-channel 場景**——**收任何 verify evidence 之前 MUST 先讀那一節**，此處不複述。
+
 4. **工具呼叫 error**（CLI flag 錯、env 缺、process exit non-zero）→ 先 read source code 確認 CLI contract，**不**把 error message 原文 forward 給 user（往往誤導）
 
 ### NEVER（句型黑名單）
 
 下列句型出現在 output 即違反本 rule，必須改寫：
 
-- 「我現在缺 X，請你...」（X 可 mint / scaffold / approved browser carrier 取得時）
-- 「請取 ADMIN_COOKIE」「請手動 OAuth」「DevTools 複製 cookie」「請貼回 cookie」
-- 「截圖無法驗證 X，所以跳過 / 標 deferred」（未走 fallback chain）
-- 原文 forward 瀏覽器工具的 error message 當待辦（未先驗 CLI contract / 未跑 `approved browser carrier doctor --fix` 自救）
-- 「blocked on `<ENV_VAR>` — dev 環境未配」（未 grep .env.local 確認就假設缺失）
-- 「截圖已拍 / evidence 已補」但未驗證截圖內容是否為預期頁面（拍到登入頁 / 白畫面即違反）
-- 「review:ui 項已勾 `[x]`，視為已驗收」但無對應 agent 自拍 evidence 佐證（既有 `[x]` ≠ evidence — 假設 user 有截圖、信任前 session 代勾都算違反；per [[pitfall-review-ui-checkbox-without-agent-evidence-masks-bug]]）
+> **verify-channel 那一半的句型（缺 X 請你…／請取 ADMIN_COOKIE／截圖無法驗證所以跳過／原文 forward
+> 瀏覽器工具 error／`blocked on <ENV_VAR>`／「截圖已拍」未驗內容／`[x]` 視為已驗收）全文在
+> [[agent-self-verification.screenshot-evidence]] § NEVER（句型黑名單 — verify-channel 那一半）。**
+> 下面留的三條在**完全沒有 UI** 的 session 也會發作，所以不下推：
+
 - 「grep 不到 X，所以 X 不存在」「零命中，確認沒有」「只有 N 個」「無任何 / 沒有任何 X」（未附 known-positive control 就把 negative search 當證據；per 下方 MUST 11）
 - 「curl 打過了，302 / 200，登入流程正常」「cookie jar 有存到，session 沒問題」（對**帶登入態**的流程，curl 的狀態碼不是證據；per 下方 MUST 16）
 - 「連結已產生 / `href` 對了，所以點下去會登入成功」（讀 artifact 的形狀不等於驗它的行為；per 下方 MUST 16）
 
 ### MUST
 
-1. **派 subagent 收 evidence 前**：主線先**嘗試自己跑**。Subagent 只在主線資源會被大量消耗時派；single-shot collection（一張截圖 / 一次 curl）**default** 主線自跑。
-2. **撞 baseline functional gap** → 走 [[main-self-collect-fallback-chain]] 四層：
-   - (a) 擴 dev-login route allow-list
-   - (b) service_role direct DB query 證 data shape（annotation 標 `direct-db-shape`）
-   - (c) 主線自起 dev server + 依環境使用已驗證的 browser carrier 完成 self-login
-   - (d) 依 target adapter 的 verified visual-verifier path 執行 `mode: verify`
-3. **寫 `(deferred: ...)` annotation MUST 含 failure trail**：逐層列出 (a)(b)(c)(d) 的嘗試結果，缺任一層就不是合格 annotation。逐字範例見 [[agent-self-verification.screenshot-evidence]] MUST 3。
-4. **工具呼叫前 verify CLI contract**：對 vendor script / external CLI，呼叫前 grep `Usage:` / `--help` / source 確認 flag / stdin / env var。`Usage:` 出現在 stderr = argv 錯，root cause 在 dispatcher source，**不**是 user 端設定。
+> **MUST 1 / 4 / 10 / 12 / 13 / 14 全文在 [[agent-self-verification.claim-cross-check]]**（path-scoped：碰 deploy config／auth 路徑／工具定義檔／`.claude/agents/**` 時載入）——派 subagent 前主線先自跑、呼叫外部 CLI 前驗 contract、部署宣稱三方交叉核對、帳號可用性五層、改工具定義前反查 source、daemon 存活對齊自己這條連線。**MUST 16**（登入態 MUST 用真瀏覽器斷言）在 [[agent-self-verification.screenshot-evidence]]。
+>
+> 下面留常駐的五條，觸發都是「任何一次下結論、任何一次跑診斷指令」——綁不到任何檔案，**NEVER 下推**。
 
-   **`--help` 不是天生安全的探測手段。** 對**沒有**解析 `--help`、也**沒有** unknown-flag 檢查的 script，`--help` 等同無參數執行 —— 探測動作本身就是那個危險動作。因此 **MUST 先讀 source 確認它對 unknown flag 的處置**（報錯退出？忽略照跑？）再決定怎麼探測；shim 檔要一路追到實作端（45 行的轉呼叫 shim 看起來人畜無害，危險的是它背後那支實作）。**NEVER** 對這類 script 用 `| head -N` 限制輸出量 —— 那會把它腰斬在中途（per [[checker-contract]] § 上游具副作用時，提前退出命令會把它腰斬）。
-5. **verify:ui / verify:e2e evidence 的 fixture MUST 在 seed.sql**：fixture 缺就先寫進 `seed.sql` → `pnpm supabase:sync` → `pnpm db:reset` 再拍。**NEVER** 用 `curl POST` / `$fetch` / form submit 臨時建 ephemeral data 拍截圖。理由與流程見 [[agent-self-verification.screenshot-evidence]] MUST 5。
-6. **Worktree .env 驗證（hard rule）**：在 worktree 做 verify channel evidence collection 時，item 依賴的 env var **MUST** 先 `grep -i '<VAR_NAME>' .env.local` 確認存在且有值，**NEVER** 假設 worktree env 缺失而寫 `blocked on <VAR>`。繼承機制與成本對比見 [[agent-self-verification.screenshot-evidence]] MUST 6。
-7. **截圖 + 驗證不可分割（atomic screenshot-then-verify，hard rule）**：所選 target adapter 的 capture 與 verification **MUST** 在同一個 operation round 內完成；驗證失敗 = 截圖作廢，MUST 修根因後重拍。**(a)–(e) 五層 canonical contract、逐項驗法與 auth 非 200 立即停手，見 [[agent-self-verification.screenshot-evidence]] MUST 7。****
 
-8. **review:ui 既有 `[x]` 需 agent 自拍 evidence 佐證（hard rule）**：archive / 收尾前，任何 `[review:ui]` 的既有 `[x]` 若無對應 agent 自拍 screenshot evidence → 一律視為 **false-green**。主線 **MUST** 無視 checkbox state 自拍自驗，**NEVER** 假設 user 手上有截圖、**NEVER** 信任前 session 代勾。evidence 路徑格式、「自拍是 bug-catcher」與 route mapping 延伸規約見 [[agent-self-verification.screenshot-evidence]] MUST 8。
-
-9. **UI 改動後 MUST 重拍所有受影響的 verify:ui 截圖（hard rule）**：commit 觸及 `.vue` / `.tsx` / `.jsx` / `.css` / `.scss` 檔後，該 change 的**全部** `[verify:ui]` / `[review:ui]` items 截圖視為 stale（**不只**被標 issue 的那張）。**MUST** 跑 `audit-screenshot-staleness.ts` 確認 0 stale 才能 hand back user 或推 bucket 到 `ready`。此規則**不限 spectra-apply 流程**。五步重拍流程見 [[agent-self-verification.screenshot-evidence]] MUST 9。
-
-10. **部署宣稱需交叉核對**：宣稱部署平台 / runtime 時，**MUST** 核對 `.github/workflows/` deploy job + deploy config（`wrangler.toml` / `Dockerfile`）+ `package.json` scripts。**NEVER** 只引單一 `docs/` 文件。
-
-    **開始調查 production 之前先釘 canonical tuple**：讀任何設定 / 查任何 log / 提任何修正**之前**，**MUST** 先確認四項並寫出來——repo、framework、hosting platform、domain。**NEVER** 從當前工作目錄推斷是哪個 production 專案：cwd 只說明你在哪個 checkout 裡，不說明它部署到哪、甚至不說明它有沒有部署。四項有任一項答不出來，就還沒到可以動手的階段。（<consumer-j> 2026-07-14 實證）
+> **MUST 2 / 3 / 5 / 6 / 7 / 8 / 9 / 15 的全文已下推 [[agent-self-verification.screenshot-evidence]]**
+> ——缺號是刻意的：編號跨 fleet 被逐字引用，**NEVER** 為了連號重排。
+>
+> **收任何 `verify:ui` / `review:ui` / `verify:e2e` evidence 之前、撞 baseline functional gap 的
+> 那一刻、以及收尾／archive／hand back user 之前 MUST 先讀那一份**——下表只有一句話契約，執行細節
+> （(a)–(e) 五層順序、五步重拍流程、failure trail 逐字格式、canonical 指令）不在這裡，
+> **NEVER** 憑「我記得那條大概是這樣」跳過那次 Read。
+>
+> | MUST | 一句話契約（全文在該檔同名 §） |
+> | --- | --- |
+> | 2 | 撞 baseline functional gap → 走 [[main-self-collect-fallback-chain]] (a)(b)(c)(d) 四層，**全失敗**才寫 `deferred` |
+> | 3 | `(deferred: ...)` annotation **MUST** 含逐層 (a)(b)(c)(d) failure trail，缺任一層就不是合格 annotation |
+> | 5 | verify:ui / verify:e2e 的 fixture **MUST** 進 `seed.sql`，**NEVER** 用 `curl POST` / `$fetch` / form submit 臨時建 ephemeral data 拍截圖 |
+> | 6 | worktree 內 **MUST** 先 `grep -i '<VAR>' .env.local` 確認，**NEVER** 假設缺失就寫 `blocked on <VAR>` |
+> | 7 | capture 與 verification **MUST** 在同一個 operation round；驗證失敗 = 截圖作廢，修根因後重拍 |
+> | 8 | `[review:ui]` 既有 `[x]` 無 agent 自拍 evidence 一律視為 **false-green**，**MUST** 無視 checkbox 自拍自驗 |
+> | 9 | commit 觸及 `.vue` / `.tsx` / `.jsx` / `.css` / `.scss` 後該 change **全部** UI 截圖視為 stale，**MUST** 跑 `audit-screenshot-staleness.ts` 到 0 stale |
+> | 15 | 收尾前 **MUST** 跑 `audit-evidence-completeness.ts` 取得 exit 0，**NEVER** 逐項 `--has-evidence` 查過就當齊全，**NEVER** 為了變綠改 checkbox |
 
 11. **Negative search 不成立為證據（hard rule）**：下「零命中 / 不存在 / 只有 N 個」的結論前，**MUST** 先用一個已知會命中的樣本驗過 pattern（known-positive control），並在結論裡寫出「此 pattern 對 `<已知樣本>` 命中」——寫不出來，零命中就不是證據。**NEVER** 把「我 grep 過了」當成 absence 的證明：pattern 寫錯、資料形狀誤判（表格儲存格繼承 / 多種寫法 / 跨行屬性 / 別名 import）、未言明的假設偷偷收窄範圍，三者的輸出**都是零命中**，跟真的不存在外觀完全相同，而換一個工具重跑同一個 pattern 驗不到任何一項。有 structured output（`--json` / `--format json`）時優先用它取代文字 grep；更前一步是先問「有沒有不需要數的判準」（例：gate 已設 `severity: CRITICAL,HIGH`，則輸出的每一條依定義都是 HIGH，根本不必數）。（per [[pitfall-narrow-grep-absence-treated-as-proof]]）
 
     **時間窗查詢**（`docker logs` / `docker events` / `journalctl` 的 `--since` / `--until`）是本條最常被違反的形態——裸 wall clock 字串以**主機本地時區**解讀，exit code 恆 0、無 warning。每次 MUST：(a) 先用寬鬆窗撈一筆 known-positive control 再收窄；(b) 絕對時間帶時區後綴（`2026-08-05T10:00:00Z`），寫不出時區就用相對時間（`--since 30m`）。空輸出為何與「真的沒發生」同形，見 § 證據鑑別力。（機制與實錄見 [[pitfall-docker-logs-absolute-time-parsed-as-host-local-timezone]]）
-
-12. **「這個帳號能不能登入 / 能不能管理」MUST 逐層驗，不從單層外推**：回答任何帳號可用性問題前，**MUST** 分別驗證五層並逐層寫出結論——(a) 該人在該環境是 active（未離職 / 未停用）、(b) 登入 provider 與 route 對該帳號開放、(c) platform role 是 active、(d) session 真的建得起來、(e) 登入後的 UI 與 API permission 確實放行。**NEVER** 因為 DB 有一筆 employee row、或某份文件列了那個 email，就宣稱帳號可用——這兩者都只證明 (a) 的一部分，跟 (b)–(e) 沒有任何蘊含關係。（<consumer-a> 2026-07-19 實證）
-
-13. **改工具定義前 MUST 從實際生效的命令反查 source**：要改一個 skill / script / hook 的行為時，**MUST** 先確認「執行時真正被讀到的是哪個檔」——從實際跑的命令、程序的 argv、或該工具自己印出的路徑往回查。**NEVER** 從執行環境推定 source：工具跑在哪台主機、哪個容器、哪個 VM，跟它的定義檔放在哪是兩件無關的事。改錯檔的輸出跟改對檔一樣是「已修改」，只有下次執行才會發現沒生效。（實錄見 rationale）
-
-14. **判定外部 server / daemon 是否存活 MUST 對齊自己這條連線**：MCP server、dev server、tunnel 這類長駐程序報連線錯誤（`Transport closed` 等）時，**MUST** 用 process tree 確認「當前 session 的 PID 與它的直接子程序」，**NEVER** 因為看到**同名**程序還活著就判定 server 正常——別的 session 開的同名程序跟你這條連線沒有關係。修復時同樣 **MUST** 用不終止其他 session 的方式（版本化安裝 + 隔離 cache dir）。同一個 stdio MCP 的查詢**預設串行**，不要開沒必要的並行 outstanding call。（<consumer-b> 實證）
-
-15. **收尾前 MUST 核對 receipt 齊全，不是逐項查（hard rule）**：change 收尾 / archive / hand back user 前 **MUST** 跑 `audit-evidence-completeness.ts` 並取得 exit 0，**NEVER** 用逐項 `evidence-store --has-evidence` 查過就當全項齊全（逐項查回答不了「哪些項還缺」），**NEVER** 為了讓它變綠去改 checkbox。完整命令、exit 1 的兩條處置與本條和 MUST 8 的分工，見 [[agent-self-verification.screenshot-evidence]] MUST 15 —— 收尾前 MUST 先讀那一節。
-
-16. **驗收對象需要登入態時，MUST 用真瀏覽器走到底並斷言登入後狀態（hard rule）**：只要被驗的流程**需要 session 才會顯示正確結果**（登入後頁面、帶權限的 API 經瀏覽器呼叫、任何「登入 → 跳轉 → 落地頁」鏈路），**MUST** 用真瀏覽器點完整條鏈路，並斷言**登入後**的 DOM 狀態——不是斷言狀態碼、不是斷言 `href` 字串。可觀察的最小斷言組：落地頁 `location.href` 是預期路徑、`document.querySelector('input[type=password]')` 為 `null`、以及一個只有登入後才存在的元素。
-
- Target adapter MUST provide the native browser operation for the authenticated flow and evaluate the post-login URL, login-form absence, and a logged-in-only element. **NEVER** infer authenticated behavior from a status code or artifact shape.
-
-**NEVER** 拿 curl 的狀態碼當帶認證流程的證據：curl 完全不理會 cookie 的 `Secure` 屬性，所以經 plain-HTTP origin 登入時「302 → redirect target → 落地頁 200」三個訊號**全部正常**，而瀏覽器早已把 cookie 靜默丟棄。`SameSite` 與 secure-context-only 的 Web API 同型（機制全文見 rationale）。
-
-    **NEVER** 用「開過瀏覽器」抵這條：同一輪實測開了瀏覽器但只讀 `href` 字串沒點下去，一樣沒驗到。**檢查 artifact 的形狀不等於檢查它的行為。**
-
-    非 localhost origin 要能登入，該 origin 自己**必須**是真 HTTPS（例：tailnet 的 `tailscale cert` + MagicDNS）。兩者皆無時 **NEVER** 退回 plain-HTTP proxy 產生登入連結——改回報「需 HTTPS 才能登入」並說明原因。（per [[pitfall-plain-http-proxy-cannot-carry-secure-session]]）
 
 17. **診斷型指令 NEVER 串接後截斷（hard rule）**：判準是**失敗訊息會不會被截掉**，不是輸出長不長。publish / audit / gate / lock acquire 這類「失敗時我要讀原因」的指令，**MUST** 全量落檔再挑著看，前置檢查與主指令分開跑。**違反字面就是違反精神。**
 
@@ -199,41 +178,33 @@ baseline 只存在於某次 session 記憶裡時，下一個讀 gate 的人算�
     （被 auth 攔到登入頁即是），body 的 grep 與計數**零訊號**，**NEVER** 當任何動作的前提，
     尤其 **NEVER** 當重跑 deploy、切 symlink、重啟服務的理由。全文見 [[TD-783]]。
 
-## 派工前的主線預檢責任
+20. **exit code／fatal 構成驗收結論時 MUST 取 run-evidence receipt（hard rule）**：只要一個命令的
+    **exit code 或錯誤字串**是你宣告「過了／沒過」的依據——deploy、migrate、publish gate、typecheck、
+    test run——就 **MUST** 經 `node vendor/scripts/run-evidence.ts -- <命令>` 取得 receipt
+    （它先抓原始 bytes 再落檔，receipt 帶 `code`、`signal`、`timedOut` 與兩條 stream 的 sha256）。
+    **NEVER** 拿任何展示層過濾器摘要出來的「無錯誤」當證據。
 
-Reviewer 的 model 選擇依 [[agent-routing]] 當前 Routing Table 與對應 adapter。**NEVER 在本檔複寫該列的 model 選擇**；缺合格執行者時保持驗收未完成。
+    **展示層不只會省略，還會替換。** 2026-09-10 實測（rtk 0.48.0）：`rtk err node -e 'console.error("boom")'`
+    回 `sh: 1: Syntax error: "(" unexpected` 與 **exit 2**——被測命令**根本沒有執行**，而它真正的
+    exit code 是 7。那一行讀起來像「我的命令寫錯了」，所以最自然的反應是去改命令，不是懷疑 wrapper。
+    同一支 filter 對無 metachar 的命令**正確**保留 fatal 與 exit code，所以**NEVER** 靠「我上次用它沒問題」
+    推論這次也沒問題：差別在被測命令有沒有 shell metachar，而那不是你在讀輸出時會注意的事。
+    機制、三組對照與上游 issue 見 [[TD-1059]]。
 
-派 subagent / codex / visual verifier 前，主線 **MUST**：
+    **這條與 hook 層的防守不重疊，兩者都要。** `vendor/scripts/evidence-hook.ts` 是 fleet 的
+    **唯一 rewrite owner**：它自己 spawn `rtk hook claude` 取 permission decision，但包進 run-evidence 的是
+    **原始**命令。所以經 Bash tool 的命令已經是防守後的——本條管的是**你自己在命令列裡手打**
+    filter 的那些時刻（`rtk err` / `rtk test` / 任何 `| tail` 式截斷），那條路徑沒有任何 hook 接得到。
+    **NEVER** 因為「反正 hook 有接」就略過本條。另見 MUST 17（診斷型指令 NEVER 串接後截斷）——
+    那條管截斷，本條管替換，同一個判準的兩面。實證全文見 [[agent-self-verification.structural-and-exit-evidence]]。
 
-1. **Read tasks / brief 抽具體 path**（檔案 / URL / DOM）
-2. **Pre-verify baseline**：依 [[manual-review.backend]] § Pre-verify baseline 假設確認 dev-login route / fixture / seed 存在
-3. **若 baseline functional gap**：先跑 [[main-self-collect-fallback-chain]] 至少 (a) 一輪驗 mint 成功，**再**派 subagent
-4. **失敗模式預設**：subagent 回報 `deferred` 不代表終局；主線 **MUST** 再跑一輪 fallback chain，仍失敗才 handoff user
+## 派工前的主線預檢責任在 [[agent-self-verification.screenshot-evidence]]（具名時機 MUST-Read）
 
-## 為什麼派 subagent 不是 default
-
-- 無主線 working context，cold start 易 lazy decision
-- 對「自己合理化跳過」無自律（per [[agent-self-verification]]）
-- 主線自跑可即時觀察並調整；subagent 是 batch 模式
-
-→ 派 subagent =**主線確定無法獨自完成**時才用，不是 default。
-
-## Cross-ref
-
-| 主題 | 真相層 |
-| --- | --- |
-| Verify channel baseline / Dev-login scaffold | [[manual-review.backend]] § Pre-verify baseline 假設 + § Dev-login route missing → scaffold-first |
-| Screenshot-review verify mode dispatch | [[agent-routing]] § Routing Table `visual verifier verify mode` + [[agent-routing.pi-watch-protocol]] § visual verifier Verify Mode Dispatch |
-| `[verify:e2e]` / `[verify:api]` / `[verify:ui]` annotation 格式 | [[manual-review.backend]] § 標準流程 |
-| Self-collect fallback chain (a)(b)(c)(d) | [[main-self-collect-fallback-chain]]（cookbook） |
-| review-gui 補 evidence prompt 是 fallback 不是 default | [[manual-review]] § review-gui 補 evidence prompt 路徑分類（pending TD-161） |
-| Review-gui surface SoP（呼叫 review-gui 的 agent / wrapper） | [[review-gui-surface]] |
-
-## Audit signal
-
-`verify-evidence-deferred-without-self-collect-attempt` — TD-161 Resolution 留作 first incident 後再評估，script 未建。
-
-`audit-evidence-completeness`（MUST 15 的機械層）：`vendor/scripts/audit-evidence-completeness.ts`，遵守 [[checker-contract]] § REQUIRED output contract 與 § Exit code 契約——`0` = 全齊或無已勾 item、`1` = 有缺口、`2` = repo / change / tasks.md 讀不到。它只核對**已勾** item；未勾的計入 `skipped`，不算缺口。
+**派 subagent / pi / visual verifier 收 evidence 之前，MUST 先讀
+[[agent-self-verification.screenshot-evidence]] § 派工前的主線預檢責任**——抽具體 path、
+pre-verify baseline、baseline gap 時先自跑一輪 fallback 再派、以及「subagent 回報 `deferred`
+不是終局」四條都在那裡。Reviewer 的 model 選擇依 [[agent-routing]] 當前 Routing Table 與對應
+adapter，**NEVER 在本檔複寫該列的 model 選擇**；缺合格執行者時保持驗收未完成。
 
 ## 違反時的回報方式
 

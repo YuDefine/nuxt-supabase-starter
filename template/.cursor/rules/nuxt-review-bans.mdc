@@ -1,14 +1,9 @@
 ---
-description: "patterns.json 機械 ban 清單的實作階段投影 — 寫 .vue / app.config.ts 前必讀；不等 /commit review 才抓"
-globs: ["app/**/*.vue", "packages/*/app/**/*.vue", "pages/**/*.vue", "packages/*/pages/**/*.vue", "components/**/*.vue", "packages/*/components/**/*.vue", "layouts/**/*.vue", "packages/*/layouts/**/*.vue", "app.config.ts", "packages/*/app.config.ts", "app/app.config.ts", "packages/*/app/app.config.ts", "vendor/review-gui-web/**/*.vue"]
+description: "nuxt-review-bans"
 alwaysApply: false
+globs: ["app/**/*.vue","packages/*/app/**/*.vue","pages/**/*.vue","packages/*/pages/**/*.vue","components/**/*.vue","packages/*/components/**/*.vue","layouts/**/*.vue","packages/*/layouts/**/*.vue","app.config.ts","packages/*/app.config.ts","app/app.config.ts","packages/*/app/app.config.ts","vendor/review-gui-web/**/*.vue"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/framework/nuxt/nuxt-review-bans.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-review-bans.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 
@@ -124,7 +119,7 @@ Local edits will be reverted by the next sync.
 
 2026-06-28 實證：`patterns.json` 的 `ubadge-size-ban` 存在且 pre-commit hook 生效，但實作階段 Claude 完全不知道此 ban → 在 `app.config.ts` 設 `badge.defaultVariants.size: 'sm'` 繞過機械層。使用者反映已 10+ 次遇到 review rules 不被遵守的情況。
 
-根因：review rules 放在 `plugins/hub-core/agents/references/clade-review-rules.md`（只有 code-review agent 讀），不在 `.cursor/rules/` path-scoped 層（實作 Claude 讀）。本 rule 補上這個可見性斷層。
+根因：review rules 放在 `plugins/hub-core/agents/references/clade-review-rules.md`（只有 code-review agent 讀），不在 `.claude/rules/` path-scoped 層（實作 Claude 讀）。本 rule 補上這個可見性斷層。
 
 ## 與其他 rule 的關係
 

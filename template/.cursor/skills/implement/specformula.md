@@ -1,10 +1,3 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/implement/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- clade-owned: not mirrored from upstream; see vendor/snippets/specformula/README.md -->
 
 # `/implement` on SpecFormula
@@ -27,7 +20,7 @@ Local edits will be reverted by the next sync.
 1. `[BDD-ALIGN]` 的轉換 MUST 照 `~/offline/clade/vendor/snippets/aixbdd/README.md` § dsl.md → dsl.yml 轉換規則。**每一個** Then 句型的 `StepDef 實作語意` 只要出現 `權威狀態` 或 `再讀確認`，就 MUST 展開成 `response_validate` **加** `entity_validate` 兩個 `isa_steps`，不是只有前者。漏掉第二個不會報錯，只會讓那條 Then 比 `dsl.md` 弱。
 2. Phase 3 的三個 marker 全部完成、review 通過之前，**NEVER** 進 Feature Green —— 這條在 SpecFormula 上更要緊：`dsl.yml` 沒對齊時 `.feature` 會以 `DSL_ISA_INSTRUCTION_NOT_FOUND` 失敗，而那個紅看起來跟「功能還沒做」一模一樣。
 3. 驗證 MUST 是實跑 `pnpm test:bdd`（需要 `supabase start` 與 `SPECFORMULA_TEST=1 pnpm dev` 都在跑）。**NEVER** 用「規格改好了」當 task 的完成證據。
-4. plan package 的 work 卡在動工前建好（`.cursor/rules/aixbdd-workflow.mdc` § MUST 3）。`Parallel Hint` 批次派 subagent 時 **NEVER** 為每個 `[P]` 另開 root 卡 —— worker 自動鑄子卡並掛到 ambient。
+4. plan package 的 work 卡在動工前建好（`.claude/rules/aixbdd-workflow.md` § MUST 3）。`Parallel Hint` 批次派 subagent 時 **NEVER** 為每個 `[P]` 另開 root 卡 —— worker 自動鑄子卡並掛到 ambient。
 
 ## Anti-pattern
 

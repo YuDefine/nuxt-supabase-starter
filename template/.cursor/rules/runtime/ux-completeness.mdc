@@ -1,0 +1,12 @@
+---
+description: "runtime/ux-completeness"
+alwaysApply: false
+globs: ["tasks/**","specs/plans/**","app/**/*.vue","packages/*/app/**/*.vue","shared/types/**/*.ts","packages/*/shared/types/**/*.ts","supabase/migrations/**"]
+---
+<!-- Clade native rule; source: adapters/cursor/instructions/rules/core/ux-completeness.md; edit canonical source -->
+
+<!-- clade-targets: cursor -->
+
+# Runtime adapter: Cursor
+
+Cursor has no automatic `.claude/hooks/` trigger, so the one gate that still exists must be run explicitly: `bash plugins/hub-core/hooks/post-edit-ui-qa.sh` after UI edits (or the script it wraps, `vendor/scripts/ui-qa-reminder.sh <file>`). The spectra lifecycle gates it used to sit beside were retired with the spectra change lifecycle on 2026-09-07; the remaining rows of the base rule are self-checks with no machine behind them. Use the Cursor workspace’s native question surface when it is present; otherwise ask the user in the current conversation. Do not begin a dependent action until the actual answer is received; an unavailable task, execution, or review carrier remains blocked and must report its concrete capability gap.

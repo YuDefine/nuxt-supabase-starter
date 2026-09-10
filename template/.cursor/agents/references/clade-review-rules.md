@@ -1,13 +1,5 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/agents/references/clade-review-rules.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # 專案風格審查規則
 
-<!-- clade-targets: claude -->
 
 本檔是 review 規則的**定義 SoT＋reviewer 語意兜底參考**。機械可檢段的 enforcement 由 `vendor/review-rules/patterns.json`（pre-commit / pre-push / CI 三層自動執行）承擔，**不靠 agent 讀本檔自律**；語意段由 commit 0-A review prompt 的 Semantic Verdict 契約承擔。新增規則 **MUST** 先分類機械或語意（見 [[pitfall-clade-review-rules-not-enforced-at-consumer]]）。
 
@@ -114,7 +106,7 @@ node vendor/scripts/checks/mutation-loading-detect.ts $(git diff --name-only <ba
 
 > enforcement: audit(audit-coupling-cohesion.ts)（gate 由 `vp lint` 的兩條 oxlint 規則承擔，皆 error 級，不經 patterns.json；shotgun surgery 是 reviewer 語意判斷，無對應 patterns.json semantic id）
 
-規約見 `.cursor/rules/coupling-cohesion.mdc`。機械層擋 cycle 與 barrel，本段是 reviewer 補三項機械層抓不到或不該擋的判斷。
+規約見 `.claude/rules/coupling-cohesion.md`。機械層擋 cycle 與 barrel，本段是 reviewer 補三項機械層抓不到或不該擋的判斷。
 
 | 禁止使用 / 必查項 | 位置 | 說明 |
 | --- | --- | --- |

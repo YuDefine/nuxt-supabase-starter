@@ -1,20 +1,15 @@
 ---
-description: "Postgres Trigger 撰寫規範"
-globs: ["supabase/migrations/**/*.sql"]
+description: "trigger"
 alwaysApply: false
+globs: ["supabase/migrations/**/*.sql"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/db-schema/supabase/trigger.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/modules/db-schema/supabase/trigger.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 
 # Trigger
 
-> 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.cursor/rules/local/`；要改本檔請回 clade 源檔並 propagate。
+> 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.claude/rules/local/`；要改本檔請回 clade 源檔並 propagate。
 
 新增 trigger 前先問：**真的需要 trigger 嗎？**
 

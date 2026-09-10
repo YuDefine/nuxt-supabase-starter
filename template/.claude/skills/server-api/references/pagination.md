@@ -11,11 +11,13 @@ let dbQuery = db.from('resources').select('*', { count: 'exact' }).is('deleted_a
 // 搜尋
 if (query.search) {
   const searchStr = `%${query.search}%`
-  dbQuery = dbQuery.or(`name.ilike.${searchStr},code.ilike.${searchStr}`)
+  dbQuery = dbQuery.ilike('name', searchStr)
 }
 
 // 排序
-dbQuery = dbQuery.order(query.sortBy || 'id', { ascending: query.sortDir === 'asc' })
+const sortBy = query.sortBy ?? 'id' // request schema 列舉允許的欄位
+dbQuery = dbQuery.order(sortBy, { ascending: query.sortDir === 'asc' })
+if (sortBy !== 'id') dbQuery = dbQuery.order('id', { ascending: true })
 
 // 分頁
 const { data, count, error } = await dbQuery.range(from, to)

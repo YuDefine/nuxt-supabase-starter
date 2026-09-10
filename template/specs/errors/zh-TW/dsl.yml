@@ -1,0 +1,206 @@
+# 🔒 LOCKED — managed by clade · Source: vendor/specformula-errors/zh-TW/dsl.yml · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/specformula-errors/zh-TW/dsl.yml
+# LOCKED: mirrored from SpecFormula/specformula-dev-framework@e5568250a2c0599983bce90fb08d548da35e1d64 via scripts/sync-upstream-mirrors.ts — edit upstream, never here
+# 訊息模板 registry — DSL SUBSYSTEM
+# 本檔僅放 code prefix 為 `DSL_` 之 entry。
+
+DSL_FORMAT_ANCHOR_MISSING:
+  category: argument
+  template: "DSL 步驟 '{name}' 的 format 缺少 anchor (檔案: {spec_path})"
+  fixtures:
+    - details: { name: "BadStep", spec_path: "dsl.yml" }
+    - details: { name: "Buyer", spec_path: "登入/dsl.yml" }
+
+DSL_FORMAT_REGEX_INVALID:
+  category: argument
+  template: "DSL 定義 '{name}' 的 format 正規表達式無效"
+  fixtures:
+    - details: { name: "BadRegex" }
+
+DSL_FORMAT_PARAM_COLLIDE_CAPTURE:
+  category: argument
+  template: "DSL 定義 '{name}' 的 format 命名捕獲群組 '{group_name}' 與 params 鍵衝突"
+  fixtures:
+    - details: { name: "Buyer", group_name: "alias" }
+
+DSL_FORMAT_GROUP_NAME_COLLISION:
+  category: argument
+  template: "DSL 定義 '{name}' 的命名捕獲群組移除底線後產生衝突：{group_names}"
+  fixtures:
+    - details: { name: "Step1", group_names: "user_id, userid" }
+
+DSL_TEMPLATE_REF_DANGLING:
+  category: argument
+  template: "DSL 定義 '{name}' 第 {step_index} 個 isa_step 參考未定義的模板變數 '{var_name}'"
+  fixtures:
+    - details: { name: "Buyer", step_index: 0, var_name: "alias" }
+
+DSL_EXPAND_PARAM_UNKNOWN:
+  category: argument
+  template: "DSL 展開遇到未知參數：{param_name}"
+  fixtures:
+    - details: { param_name: "extra" }
+
+DSL_EXPAND_PARAM_MISSING:
+  category: argument
+  template: "DSL 展開缺少必要參數：{param_name}"
+  fixtures:
+    - details: { param_name: "alias" }
+
+DSL_CONFIG_EMPTY:
+  category: argument
+  template: "dsl.yml 必須至少包含一個 DSL 定義（檔案：{path}）"
+  fixtures:
+    - details: { path: "dsl.yml" }
+
+DSL_DEFINITION_DUPLICATE_NAME:
+  category: argument
+  template: "DSL 定義名稱重複：{name}"
+  fixtures:
+    - details: { name: "Buyer" }
+
+DSL_STEP_AMBIGUOUS_MATCH:
+  category: argument
+  template: "DSL 步驟 '{step_text}' 同時符合多個定義"
+  fixtures:
+    - details: { step_text: "買家 Alice 進入登入頁面" }
+
+DSL_SPEC_FILE_NOT_FOUND:
+  category: lookup
+  template: "找不到 dsl.yml 檔案：{path}"
+  fixtures:
+    - details: { path: "/missing/dsl.yml" }
+
+DSL_SPEC_FILE_PARSE_ERROR:
+  category: argument
+  template: "無法解析 DSL spec 檔案：{path}"
+  fixtures:
+    - details: { path: "dsl.yml" }
+
+DSL_PARAMS_DEFAULT_REF_DANGLING:
+  category: argument
+  template: "DSL 定義 '{name}' 之 params default '{param_name}' 參考未定義的模板變數 '{var_name}'"
+  fixtures:
+    - details:
+        { name: "BadDefaultRef", param_name: "email", var_name: "missing" }
+
+DSL_DATATABLE_MULTIPLE_ROWS:
+  category: argument
+  template: "DSL 定義 '{name}' 的 DataTable 至多只能有 1 列資料"
+  fixtures:
+    - details: { name: "Buyer" }
+
+DSL_JSON_INPUT_NOT_OBJECT:
+  category: argument
+  template: "DSL 定義 '{name}' 的 JSON 輸入必須為單一 object，實際為 {actual_type}"
+  fixtures:
+    - details: { name: "Buyer", actual_type: "array" }
+    - details: { name: "Greeter", actual_type: "string" }
+    - details: { name: "Counter", actual_type: "number" }
+
+DSL_ISA_STEPS_EMPTY:
+  category: argument
+  template: "DSL 定義 '{name}' 的 isa_steps 至少必須有一個 step"
+  fixtures:
+    - details: { name: "Empty" }
+
+DSL_ISA_STEP_NO_MATCH:
+  category: argument
+  template: "DSL 定義 '{name}' 之 isa_step 不符合任何 isa.yml pattern：{instruction}"
+  fixtures:
+    - details:
+        { name: "Ghost", instruction: '不存在的指令 "Test", with table:' }
+
+DSL_DATA_FORMAT_PAYLOAD_FORBIDDEN:
+  category: argument
+  template: "DSL 定義 '{name}' 之 instruction '{instruction_name}' 之 data_format 為 none，但 DSL step 提供了 '{payload_field}' payload"
+  fixtures:
+    - details:
+        {
+          name: "BadNone",
+          instruction_name: "Clear cache",
+          payload_field: "table",
+        }
+    - details:
+        {
+          name: "BadNoneText",
+          instruction_name: "Clear cache",
+          payload_field: "text",
+        }
+
+DSL_DATA_FORMAT_FIELD_MISMATCH:
+  category: argument
+  template: "DSL 定義 '{name}' 之 instruction '{instruction_name}' 之 data_format 為 '{expected}'，但 DSL step 使用了 '{provided}' 欄位"
+  fixtures:
+    - details:
+        {
+          name: "BadText",
+          instruction_name: "Execute SQL",
+          expected: "text",
+          provided: "table",
+        }
+    - details:
+        {
+          name: "BadDataTable",
+          instruction_name: "Batch import",
+          expected: "data_table",
+          provided: "text",
+        }
+    - details:
+        {
+          name: "BadJson",
+          instruction_name: "Send event",
+          expected: "json",
+          provided: "text",
+        }
+
+DSL_CUSTOM_CAPTURE_NOT_SUPPORTED:
+  category: argument
+  template: "DSL 定義 '{name}' 之 custom instruction '{instruction_name}' 不支援 capture/export 語法：{capture_key}"
+  fixtures:
+    - details:
+        {
+          name: "BadCapture",
+          instruction_name: "Batch import",
+          capture_key: ">Product1.id",
+        }
+    - details:
+        {
+          name: "BadExport",
+          instruction_name: "Batch import",
+          capture_key: "<productId",
+        }
+
+DSL_DEFINITION_NAME_MISSING:
+  category: argument
+  template: "dsl.yml 之 DSL 定義缺少必填 name 欄位（檔案：{spec_path}）"
+  fixtures:
+    - details: { spec_path: "dsl.yml" }
+
+DSL_DEFINITION_FORMAT_MISSING:
+  category: argument
+  template: "DSL 定義 '{name}' 缺少必填 format 欄位"
+  fixtures:
+    - details: { name: "NoFormat" }
+
+DSL_ISA_STEP_INSTRUCTION_MISSING:
+  category: argument
+  template: "DSL 定義 '{name}' 第 {step_index} 個 isa_step 缺少必填 instruction 欄位"
+  fixtures:
+    - details: { name: "Buyer", step_index: 0 }
+
+DSL_JSON_PARSE_ERROR:
+  category: argument
+  template: "DSL step '{step_text}' 之 JSON DocString 解析失敗：{parse_error}"
+  fixtures:
+    - details: { step_text: "建立資料", parse_error: "Unexpected character" }
+
+DSL_ISA_STEP_MULTIPLE_MATCH:
+  category: argument
+  template: "DSL 定義 '{name}' 之 isa_step 同時匹配多個 isa.yml pattern：{instruction}（matched: {matched_names}）"
+  fixtures:
+    - details:
+        {
+          name: "Ambig",
+          instruction: "建立資料表",
+          matched_names: "CreateA, CreateB",
+        }

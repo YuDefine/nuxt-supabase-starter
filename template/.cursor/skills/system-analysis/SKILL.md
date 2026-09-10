@@ -1,15 +1,14 @@
 ---
 name: system-analysis
-description: "在 plan package 的 `spec.md`、`research.md`、`truth-delta.md` 與 `specs/truth/**` 基礎上，盤點本次需求涉及的系統介面與分析 wave，產出 plan-side `plan.md`，並把 plan package、truth root、truth-delta path 傳給 `/api-plan`、`/data-plan`、`/ui-plan`。"
+description: >-
+  在 plan package 的 `spec.md`、`research.md`、`truth-delta.md` 與 `specs/truth/**`
+  基礎上，盤點本次需求涉及的系統介面與分析 wave，產出 plan-side `plan.md`，並把 plan package、truth
+  root、truth-delta path 傳給 `/api-plan`、`/data-plan`、`/ui-plan`。
+metadata:
+  clade:
+    invocation: explicit
 disable-model-invocation: true
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/system-analysis/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@db46b1ddf59c47c9aab52a7d66d15668811fa501 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 
 # System Analysis

@@ -1,13 +1,8 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/work-loop/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # 開場決策清算（Step 2.7）
 
-<!-- clade-targets: claude -->
+
+> Runtime split: state, ownership, approval, and completion obligations are shared. Literal Claude tool names or runner commands in this reference are Claude host bindings; other hosts MUST use their adapter fragment or retain the dependent operation blocked.
+
 
 > 主檔 pointer：Step 2.7 MUST 先完整讀本檔再執行。**每一輪都讀**——本檔管的是「開工前」，
 > 而 compaction 抹掉的正是「上一輪剛讀過」那份 context。
@@ -25,16 +20,18 @@ Charles 2026-08-06 逐字：「work-loop 會累積很多 waiting user 的事件�
 
 ---
 
-## Iron Law：attended 下佇列非空 NEVER 開工
+## Iron Law：attended 先送達待答題，再依依賴範圍開工
 
-**unresolved `awaiting[]` 非空時 NEVER 進 Step 3 分類、NEVER 進 Step 4 dispatch。** `refused` 已移到獨立 ledger，不計入 unresolved queue，也不阻塞其他 item。先把 unresolved 佇列清空，再開工。
+**每一輪 attended MUST 在新工作 dispatch 前送達全部 unresolved `awaiting[]` 待答題。** `refused` 已移到獨立 ledger，不計入 unresolved queue，也不阻塞其他 item。同步詢問若仍在等待，遵守 host 實際阻塞語義；非阻塞詢問或普通對話回報 pending／尚未取得答案時，保留 unresolved item 且不發 grant，只阻擋依賴該答案的 item。詢問已送達且當前介面允許繼續時，獨立且已授權的有界工作可進 Step 3／4。
+
+**NEVER** 從經過時間、沒有工具、delivery receipt、或缺少 `awaiting[]` 條目推導答案；已送達但尚未回答的題目保持 pending，NEVER 重複發問。
 
 順序是「**先清算，後開工**」，不是「邊做邊找機會問」。理由是機制事實而非禮貌：Charles 在場的
 時間是這個 loop 最稀缺的資源，而他在場的那一段**正是**他準備離開座位去做別的事的那一段。把
 問題留到「做完手上這件再問」，多數時候等同留到他已經走了。
 
 **這條的判準是 mode，不是題數、不是急迫性。** 佇列剩 1 題和剩 9 題適用同一條規則；「這幾條都
-不急」不構成延後問的理由——不急的題目照樣佔著佇列，而佇列非空就不開工。
+不急」不構成延後送達的理由——不急的題目也要在新工作 dispatch 前送達；答案未到時只阻擋依賴該答案的 item，獨立且已授權的有界工作照常判定。
 
 ---
 
@@ -42,7 +39,7 @@ Charles 2026-08-06 逐字：「work-loop 會累積很多 waiting user 的事件�
 
 | 可觀察 predicate | 本步怎麼跑 |
 | --- | --- |
-| **attended**：非 `--unattended`、且本輪非 `claude --print` 起 | 跑完整 (a)(b)(c)。佇列清空才進 Step 3 |
+| **attended**：非 `--unattended`、且本輪非 `claude --print` 起 | 跑完整 (a)(b)(c)，先送達全部待答題；實際取得的答案立即落 state。未取得答案時只阻擋依賴 item；獨立且已授權的有界 item 可在詢問送達後進 Step 3／4 |
 | **unattended / runner** | **只跑 (a) prune**，(b)(c) 跳過。佇列剩下的 item 本輪照舊排除，**其餘工作全部照跑** |
 
 判不出自己在哪個 mode → **當作 unattended**（沿用 Step 0 既有規則，保守側是不打斷不在場的人）。
@@ -101,16 +98,16 @@ attended 開場 MUST 把這批跟 `awaiting[]` 一起過 (a) 的 prune：能自�
 1. 本輪 candidate list 會用到的（答案一落地就有下游工作可推）
 2. 其餘依 `packagedAt` 由舊到新
 
-**發問形狀**：`AskUserQuestion` 一次 ≤4 題，**連續發到佇列清空**。每題的選項直接取該條目的
+**發問形狀**：attended mode 逐批向使用者提問；每批數量遵守當前 host 工具 schema。沒有結構化工具時，使用當前對話逐批提問。已送達但尚未回答的題目保持 pending，不重複發問。每題的選項直接取該條目的
 `options`：`recommended: true` 那項排第一、label 後綴 `(推薦)`，`effect` 進 description。
-問題文字 = 條目的 `title` + 一句 `blocker`。
+問題文字 = 條目的 `title` + 一句 `blocker`。每批若實際收到答案，MUST 先把答案落入 state，確認寫入成功後才進依賴該答案的下一批或下一步；若 host 回報 pending／尚未取得答案，保留 unresolved item 與未發 grant，當介面允許繼續時可送達下一批或進行獨立下一步，但不得執行依賴動作。
 
-permission classifier 要求 **specific shared-action consent** 的題目一律遵守 [[agent-routing.keepalive-wake]] § Shared-action specific consent UX；本檔只補 work-loop 狀態約束：packaging MUST 設 `requiresSpecificConsent=true`，unattended / runner 不呼叫 `AskUserQuestion`，並保留該 SoT 要求的完整範圍，等下一次 attended 開場顯示。
+permission classifier 要求 **specific shared-action consent** 的題目一律遵守 [[agent-routing.keepalive-wake]] § Shared-action specific consent UX；本檔只補 work-loop 狀態約束：packaging MUST 設 `requiresSpecificConsent=true`，unattended / runner 不呼叫 `host question surface`，並保留該 SoT 要求的完整範圍，等下一次 attended 開場顯示。
 
 **NEVER 在這一步做這三件事**：
 
 - ❌ **自己設上限**（「先問最急的 4 題，其餘下次」）——沒有題數上限。剩下的就是還沒清空
-- ❌ **問完一批就先開工**——(b) 沒跑完就不是清空，Iron Law 照舊擋住 Step 3
+- ❌ **答案尚未取得就執行依賴該答案的 item**——grant 尚未發出；獨立且已授權的有界 item 仍依 Mode 分岔推進
 - ❌ **把 (a) 該 prune 掉的丟進來湊題**——那是把自己的工作退回去
 
 ---
@@ -156,8 +153,11 @@ permission classifier 要求 **specific shared-action consent** 的題目一律�
 
 ## Red Flags（出現任一 → 停手，重讀本檔）
 
-- 正要進 Step 3 分類，而 state 的 `awaiting[]` 非空、且本輪是 attended
-- 正要呼叫 `AskUserQuestion` 問一條你寫得出 `(推薦)` 的 item（(a) 沒跑或沒跑完）
+- 正要進 Step 3 分類，而 state 的 `awaiting[]` 有題目尚未送達、已有實際答案卻尚未寫入 `decisions`，或依賴該答案的動作沒有對應 grant（已送達但 pending 且獨立工作不屬此列）
+- 正要呼叫 `host question surface` 問一條你寫得出 `(推薦)` 的 item（(a) 沒跑或沒跑完）
 - 已經收到 Charles 的答案，但還沒寫 `decisions` 就開始 dispatch
 - 本輪是 `--unattended`，而你正要因為佇列非空寫 `stoppedReason`
 - 佇列裡的某條被你拿來當「其他 item 也可以 skip」的理由
+
+
+Claude binding for this reference: in attended mode use `AskUserQuestion`, at most 4 questions per call. Map each source item’s `options` to the tool’s options field, put `recommended: true` first with `(推薦)` in its label, and put the item’s `effect` in the option description. Send all unresolved questions early before new-work dispatch. A blocking question call obeys its actual wait semantics; a pending result leaves the question unresolved and grant unissued, blocking only dependent items while independent authorized bounded work may continue. Persist only a real answer to state before dependent actions or the next batch.

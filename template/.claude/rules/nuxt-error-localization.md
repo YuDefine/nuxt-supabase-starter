@@ -2,13 +2,7 @@
 description: UI 錯誤訊息必須本地化（繁體中文），禁止直接顯示原始英文 error code 或 message
 paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/framework/nuxt/nuxt-error-localization.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-error-localization.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # UI 錯誤訊息本地化

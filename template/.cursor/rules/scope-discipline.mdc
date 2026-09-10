@@ -1,14 +1,9 @@
 ---
-description: "Scope discipline 規則——不擴散、必登記、不擅改他人成果，避免 AI 工作流吞掉 WIP 或把範圍外問題靜默遺失"
-globs: ["tasks/**", "specs/**", "ROADMAP.md", "docs/tech-debt.md", "docs/decisions/**", "HANDOFF.md"]
+description: "scope-discipline"
 alwaysApply: false
+globs: ["tasks/**","specs/**","ROADMAP.md","docs/tech-debt.md","docs/decisions/**","HANDOFF.md"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/scope-discipline.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/scope-discipline.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 

@@ -1,14 +1,9 @@
 ---
-description: "Follow-up Register 規則——tasks 檔的每一個未解決項目在發現的當下就在 docs/tech-debt.md 開一條 TD entry；register 結構、Status / Priority 語意、主動消化節奏"
-globs: ["tasks/**", "specs/plans/**", "docs/tech-debt.md"]
+description: "follow-up-register"
 alwaysApply: false
+globs: ["tasks/**","specs/plans/**","docs/tech-debt.md"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/follow-up-register.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/follow-up-register.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 

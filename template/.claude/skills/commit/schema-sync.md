@@ -1,10 +1,3 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/commit/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Schema 同步檢查 — Reference
 
 > 本檔是 commit skill Step 1（schema 同步檢查）的完整執行細節。主檔（SKILL.md）只留觸發判定；

@@ -1,14 +1,9 @@
 ---
-description: "UI / design 工作的 Design Checkpoint、design skill 觸發順序、Design Review template、Design Gate、Cross-Change holistic review 與非 UI exception；動 UI 檔或寫 design artifact 時 path-scoped 載入"
-globs: ["app/**/*.vue", "packages/*/app/**/*.vue", "app/**/*.ts", "packages/*/app/**/*.ts", "components/**", "packages/*/components/**", "pages/**", "packages/*/pages/**", "layouts/**", "packages/*/layouts/**", "specs/plans/**", "docs/specs/**/spec.md"]
+description: "proactive-skills.design-checkpoint"
 alwaysApply: false
+globs: ["app/**/*.vue","packages/*/app/**/*.vue","app/**/*.ts","packages/*/app/**/*.ts","components/**","packages/*/components/**","pages/**","packages/*/pages/**","layouts/**","packages/*/layouts/**","specs/plans/**","docs/specs/**/spec.md"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/proactive-skills.design-checkpoint.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/proactive-skills.design-checkpoint.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
@@ -167,7 +162,7 @@ Design Review 過程中若發現問題過多（例如需要列修正計劃讓使
 
 ### 週期性分析 → `/design-retro`
 
-Findings log 的分析由 `/design-retro` skill 負責（見 `.cursor/skills/design-retro/SKILL.md`）。記錄本身只負責結構化紀錄，分析與改善建議交由 skill 在適當時機執行。
+Findings log 的分析由 `/design-retro` skill 負責（見 `.claude/skills/design-retro/SKILL.md`）。記錄本身只負責結構化紀錄，分析與改善建議交由 skill 在適當時機執行。
 
 ## Design → 規格回饋迴路
 

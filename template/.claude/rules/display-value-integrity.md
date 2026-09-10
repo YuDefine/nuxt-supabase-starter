@@ -2,13 +2,7 @@
 description: 顯示值完整性——統計 / metric / aggregate 顯示給使用者的數字必須等於它宣稱的東西
 paths: ['server/**/*.ts', 'packages/*/server/**/*.ts', 'app/composables/**/*.ts', 'packages/*/app/composables/**/*.ts']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/display-value-integrity.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/display-value-integrity.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Display Value Integrity

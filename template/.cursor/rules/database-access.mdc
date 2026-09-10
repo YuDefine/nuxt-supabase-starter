@@ -1,14 +1,9 @@
 ---
-description: "資料庫存取模式（Supabase client/server 分工）"
-globs: ["app/**/*.{vue,ts}", "packages/*/app/**/*.{vue,ts}", "server/**/*.ts", "packages/*/server/**/*.ts"]
+description: "database-access"
 alwaysApply: false
+globs: ["app/**/*.{vue,ts}","packages/*/app/**/*.{vue,ts}","server/**/*.ts","packages/*/server/**/*.ts"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/db-runtime/cf-workers/database-access.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/modules/db-runtime/cf-workers/database-access.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 
@@ -38,7 +33,7 @@ Local edits will be reverted by the next sync.
 
 seed.sql 使用 INSERT 格式（非 COPY FROM stdin），加 `SET session_replication_role = replica;` 和 `TRUNCATE CASCADE`。
 
-> 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.cursor/rules/local/`；要改本檔請回 clade 源檔並 propagate。
+> 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.claude/rules/local/`；要改本檔請回 clade 源檔並 propagate。
 
 ## Client 查詢效能
 

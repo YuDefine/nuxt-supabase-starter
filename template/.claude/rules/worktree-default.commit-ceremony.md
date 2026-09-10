@@ -8,13 +8,7 @@ paths:
   - 'scripts/wt-helper.ts'
   - 'scripts/stash-reconcile.ts'
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/worktree-default.commit-ceremony.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/worktree-default.commit-ceremony.md; edit canonical source -->
 
 > Path-scoped detail of [[worktree-default]] §5 / §5.5 / §6。核心 always-load 規約在母檔 worktree-default.md。
 
@@ -45,7 +39,7 @@ The commit, stash, landing, and cleanup predicates below are common Git/worktree
 
 Spectra archive gates 與 bookkeeping 在持有該 change 實作的 worktree 執行，完成後連同成果 checkpoint，再進就緒池。**NEVER** 在看不到實作的 main 跑 archive gates，也不在 archive Step 0 刪來源。人工檢查、spec sync、sidecar 與 evidence 義務保留。
 
-Ad-hoc Form-1、`/dep-upgrade` 等 skill-owned wt 同樣在完成點登記就緒並評估批次條件。已授權的自動落地由主線執行；使用者明示保留的 wt 不納入自動回收。Worker 不因批次契約取得 push／publish／刪除來源的權限。
+Ad-hoc Form-1、`/version-upgrade` 等 skill-owned wt 同樣在完成點登記就緒並評估批次條件。已授權的自動落地由主線執行；使用者明示保留的 wt 不納入自動回收。Worker 不因批次契約取得 push／publish／刪除來源的權限。
 
 ### 安全邊界
 

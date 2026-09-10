@@ -2,13 +2,7 @@
 description: 進入 tasks.md `## 人工檢查` 階段的入口規約——auto-triage 三類 pending item 的推進路徑、mechanical readiness gate 的 exit code 判讀、交付入口前置查詢（先問服務不問 config）、review-gui 引導與 fallback、`[discuss]` item 的歸屬
 paths: ['tasks/**', 'specs/plans/**', 'screenshots/**']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/proactive-skills.manual-review-entry.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/proactive-skills.manual-review-entry.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
 
@@ -84,7 +78,7 @@ node ~/offline/clade/vendor/scripts/review-handoff-url.ts resolve \
 
 **NEVER 從 consumer 自己的 config 推論入口不存在。** `nuxt.config.ts` 沒掛 tunnel plugin、`consumer-meta.json` 的 `deploy.prodUrl` 是 null——這兩件事跟 review-gui 有沒有在跑**無關**：它是跨 consumer 共用服務，consumer 清單來自 clade 的 `consumers.local`，不由任何 consumer 的 config 描述。這類 negative search 不成立為 absence 證據（[[agent-self-verification]] MUST 11）。
 
-**NEVER 交付 `cd <path> && <cmd>`。** 逐字實錄：「`cd ~/offline/<consumer-h>-wt/kiosk-google-allowlist && pnpm review:ui`」——那是指令不是位址（要 user 自己執行才生得出畫面）、`127.0.0.1` 只在跑 dev server 的那台機器上有意義、且綁在會過期的 agent lease 上。同理 **NEVER 交付 `https://review-gui.<tailnet>.ts.net/`**：pairing token 已停用（`ops/review-gui-service.sh` 的 `pairing_retired()`），那條會停在配對畫面。
+**NEVER 交付 `cd <path> && <cmd>`。** 逐字實錄：「`cd ~/offline/<consumer-i>-wt/kiosk-google-allowlist && pnpm review:ui`」——那是指令不是位址（要 user 自己執行才生得出畫面）、`127.0.0.1` 只在跑 dev server 的那台機器上有意義、且綁在會過期的 agent lease 上。同理 **NEVER 交付 `https://review-gui.<tailnet>.ts.net/`**：pairing token 已停用（`ops/review-gui-service.sh` 的 `pairing_retired()`），那條會停在配對畫面。
 
 **Iron Law：給人的驗收入口永遠是 `review-handoff-url.ts resolve` exit 0 的 `review_url`。違反字面就是違反精神。**
 
@@ -157,3 +151,12 @@ review-gui 對純 D-only pending 的工作自動歸「🗓 等收尾 walkthrough
 核心 one-liner：引導使用者到 review-gui 時，**MUST** 在 chat 訊息中給出**指到該條 change 的** deep-link，**NEVER** 給裸 `/review` 或根路徑 `/`。
 
 deep-link 怎麼組（host ＋ `/api/changes` 回的 `reviewPath`）以本檔 § 交付入口前置查詢為準，**NEVER** 憑 `<consumer-id>:<change-name>` 樣式自己拼。URL 三層格式、cross-consumer prefix、itemId encode、NEVER 清單見 [[review-gui-surface]] § Inline Review-GUI Deep-Link；service 判定與交付路徑仍以本檔 § 交付入口前置查詢為準（該檔已於 2026-08-24 對齊）。
+
+
+
+## 人工檢查推進的四條契約（自 [[proactive-skills]] § Manual Review 下推）
+
+1. 進入人工檢查階段（implementation tasks 完成、剩 `## 人工檢查` 區塊）時，**第一動作是 auto-triage**（per [[review-gui-surface]] MUST 9），不是直接引導使用者跑 `pnpm review:ui`
+2. 推進完畢後 **MUST** 跑 `node ~/offline/clade/vendor/scripts/check-review-readiness.ts --repo . --change <work-slug>` 確認 bucket；**exit 0 才可引導 user 到 review-gui**
+3. **NEVER** 自判 bucket、**NEVER** 跳過 script、**NEVER** 在 exit ≠ 0 時引導 user 到 review-gui —— runtime 自判已多次證明不可靠
+4. **給人的 URL = scan 的 `reviewUrl`（永遠 `https://review-gui.<maintainer-domain>` + `reviewPath`）**。違反字面就是違反精神。`127.0.0.1` / Tailscale IPv4 / `*.ts.net` 只准 agent 探測。交付前 MUST 讀 [[proactive-skills.manual-review-entry]] § 交付入口前置查詢

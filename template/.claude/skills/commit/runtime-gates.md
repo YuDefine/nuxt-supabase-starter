@@ -1,13 +1,5 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/commit/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Commit gate 執行與證據契約
 
-<!-- clade-targets: claude,codex,cursor -->
 
 進入 ceremony 的 Step 0-Transport 時讀本檔。每一道 gate 的觸發與判準仍由 SKILL.md、gates.md 及其引用的共通政策決定；下表定義三端如何交付可核對的執行結果。
 

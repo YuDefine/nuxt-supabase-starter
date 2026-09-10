@@ -1,14 +1,9 @@
 ---
-description: "Session tasks 的操作細節——何時用 / 不用、模板、升級路徑、與其他真相層的分工、lessons.md 邊界；另含**收工正文**（收工三步 / 收工訊息契約 / Herdr session transport / 派幾個 pane / successor 收割），由 [[session-tasks]] 的具名時機指針與 session-context-budget-warn hook 叫醒"
-globs: ["tasks/**", "HANDOFF.md"]
+description: "session-tasks.operations"
 alwaysApply: false
+globs: ["tasks/**","HANDOFF.md"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/session-tasks.operations.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/session-tasks.operations.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
@@ -61,7 +56,7 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts open <slug> \
 # relay / fanout 的 successor 也會繼承，整條接力鏈算同一件事。
 ```
 
-`--actor` 填實際執行本命令的 runtime：AI Agent 為 `claude-code`、Codex 為 `codex`、Cursor 為 `cursor`。以當前 runtime identity 證據判定，不從所讀文件、工作模型或父 process 留下的單一環境變數猜測；證據不足填 `unknown` 並保留未歸因狀態，不能借用另一端的名稱。此欄是 actor 類別，不代替 session id 或 work id。
+`--actor` 填實際執行本命令的 runtime：Claude Code 為 `claude-code`、Codex 為 `codex`、Cursor 為 `cursor`。以當前 runtime identity 證據判定，不從所讀文件、工作模型或父 process 留下的單一環境變數猜測；證據不足填 `unknown` 並保留未歸因狀態，不能借用另一端的名稱。此欄是 actor 類別，不代替 session id 或 work id。
 
 **每一個**新建的 tasks 檔都鑄，不是只有覺得會做很久的那次——「這件事夠不夠大」這個判斷本身
 正是 79% 事件掛在 `orphan-` 名下的成因（clade 2026-08-27 實測）。
@@ -472,7 +467,7 @@ user 看得到那個 pane，接手 agent 可以用 structured user-input surface
 | 還不知道有幾件——要先跑 health gate／worktree／TD hygiene 盤點 | `/handoff next` | 盤點後落到上面三者之一 |
 
 **NEVER 因為「一件一個 pane 比較整齊」把 serial 工作拆成 N 個 worker**——它們會同時改同一批檔。
-**NEVER** 把 serial 鏈切成「worker 拿前半段、主線自己留後半段」——本表只數 pane，那種切法在這裡不會 fire，判準在 [[agent-routing]] § 派多少。
+**NEVER** 把 serial 鏈切成「worker 拿前半段、主線自己留後半段」——本表只數 pane，那種切法在這裡不會 fire，判準在 [[agent-routing.dispatch-execution]] § 派多少。
 **NEVER 因為「合成一份 brief 比較省事」把 N 件真正獨立的工作塞給單一 successor 依序做**——那放棄了
 平行性，而 fanout 的 topology 本來就是每個不同主題各佔一個 Tab。
 
@@ -490,9 +485,9 @@ coordinator 身分轉移，以及寫出讓 successor 回收本 pane 的 predeces
 
 **每次新建或恢復 child 都 MUST 按 [[agent-routing]] 選定具體 model 與 effort，並傳入 `--model <slug> --effort <level> --route <policy> --tier-basis <conclusion>`。** 裸 dispatch、relay、recovery 重派與固定 bridge 都適用；`inherit`／缺欄／runtime 不相容／缺歸因欄在建 pane 前拒絕。
 
-`--route` 與 `--tier-basis` 的值域與語義**與 `pi-dispatch.ts` 逐字相同**（`--route` 記走哪條政策，`--tier-basis` 記那條政策對檔位的**結論**，兩者不可互相推導）——這條對稱是 2026-09-07 補上的：在那之前 Pi 派工必須講出理由、AI Agent 派工不必，於是一句手打的 `--model claude-opus-5 --effort max` 通過了每一道 gate，事後沒有任何欄位講得出是誰依什麼授權的。**NEVER 給這兩欄 default**：default 會讓「真的判過」與「呼叫者從沒判」事後不可區分。
+`--route` 與 `--tier-basis` 的值域與語義**與 `pi-dispatch.ts` 逐字相同**（`--route` 記走哪條政策，`--tier-basis` 記那條政策對檔位的**結論**，兩者不可互相推導）——這條對稱是 2026-09-07 補上的：在那之前 Pi 派工必須講出理由、Claude Code 派工不必，於是一句手打的 `--model claude-opus-5 --effort max` 通過了每一道 gate，事後沒有任何欄位講得出是誰依什麼授權的。**NEVER 給這兩欄 default**：default 會讓「真的判過」與「呼叫者從沒判」事後不可區分。
 
-**Claude child 的 effort 值域是 `low` / `medium` / `high`。** `max` **NEVER** 是 routed 檔位——政策表（`SESSION_TRANSPORT_POLICY`）對 AI Agent 只給一個檔位 `medium`，而 `max` 在整份 routing 規約裡只出現在 Fable subagent 的配額 fallback 與 Pi `sol` 的 gate row，兩者都不是這條路徑。真的需要升到 `max` 就 **MUST** 顯式帶 `--tier-basis adjudication`，那句宣告會落在 receipt 與 durable record 的 `tier_basis` 上，下一個讀的人看得到是誰主張的。**NEVER** 把它讀成「max 被禁掉了」——被禁掉的是**不具名地**用它。帳號設定、主線模型與 brief 正文不能代選。收據的 requested 欄位證明傳入值，observed 才是實跑證據；Herdr 回 `model_verification: unverified` 時 **NEVER** 宣稱已核實模型。
+**Claude child 的 effort 值域是 `low` / `medium` / `high`。** `max` **NEVER** 是 routed 檔位——政策表（`SESSION_TRANSPORT_POLICY`）對 Claude Code 只給一個檔位 `medium`，而 `max` 在整份 routing 規約裡只出現在 Fable subagent 的配額 fallback 與 Pi `sol` 的 gate row，兩者都不是這條路徑。真的需要升到 `max` 就 **MUST** 顯式帶 `--tier-basis adjudication`，那句宣告會落在 receipt 與 durable record 的 `tier_basis` 上，下一個讀的人看得到是誰主張的。**NEVER** 把它讀成「max 被禁掉了」——被禁掉的是**不具名地**用它。帳號設定、主線模型與 brief 正文不能代選。收據的 requested 欄位證明傳入值，observed 才是實跑證據；Herdr 回 `model_verification: unverified` 時 **NEVER** 宣稱已核實模型。
 
 `model_verification` 是三值，三值各自對應一個不同的動作：
 

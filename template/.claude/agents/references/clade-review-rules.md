@@ -1,13 +1,5 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/agents/references/clade-review-rules.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # 專案風格審查規則
 
-<!-- clade-targets: claude -->
 
 本檔是 review 規則的**定義 SoT＋reviewer 語意兜底參考**。機械可檢段的 enforcement 由 `vendor/review-rules/patterns.json`（pre-commit / pre-push / CI 三層自動執行）承擔，**不靠 agent 讀本檔自律**；語意段由 commit 0-A review prompt 的 Semantic Verdict 契約承擔。新增規則 **MUST** 先分類機械或語意（見 [[pitfall-clade-review-rules-not-enforced-at-consumer]]）。
 

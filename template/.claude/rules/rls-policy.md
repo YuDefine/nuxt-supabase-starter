@@ -2,13 +2,7 @@
 description: RLS Policy 撰寫規範
 paths: ['supabase/migrations/**/*.sql']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/db-schema/supabase/rls-policy.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/modules/db-schema/supabase/rls-policy.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # RLS Policy

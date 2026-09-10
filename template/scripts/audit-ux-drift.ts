@@ -222,13 +222,16 @@ function gitList(dir: string, exts: string[]): string[] {
   // If `dir` contains `*`, use git's :(glob) pathspec magic + /** suffix
   // to expand wildcard segments. Plain dirs pass through unchanged.
   const pathspec = dir.includes('*') ? `:(glob)${dir}/**` : dir
-  const result = spawnSync('git', ['ls-files', '--', pathspec], {
+  // `-z` is mandatory: with the default `core.quotePath=true`, git C-escapes
+  // non-ASCII paths and wraps them in double quotes, so `p.endsWith(ext)` below
+  // returns false and the file silently drops out of the audit's candidate set.
+  const result = spawnSync('git', ['ls-files', '-z', '--', pathspec], {
     cwd: repoRoot,
     encoding: 'utf-8',
   })
   if (result.status !== 0 || !result.stdout) return []
   return result.stdout
-    .split('\n')
+    .split('\0')
     .filter(Boolean)
     .filter((p) => exts.some((e) => p.endsWith(e)))
     .map((p) => resolve(repoRoot, p))

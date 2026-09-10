@@ -1,15 +1,14 @@
 ---
 name: specify
-description: 將自然語言功能需求轉成新的 plan package。每次執行都建立下一個 `specs/plans/NNN-<slug>/`，產出 `spec.md`、`checklists/requirements.md` 與初始化 `truth-delta.md`；不得改寫舊 plan package，也不得寫入 `specs/truth/**`。
+description: >-
+  將自然語言功能需求轉成新的 plan package。每次執行都建立下一個 `specs/plans/NNN-<slug>/`，產出
+  `spec.md`、`checklists/requirements.md` 與初始化 `truth-delta.md`；不得改寫舊 plan
+  package，也不得寫入 `specs/truth/**`。
+metadata:
+  clade:
+    invocation: explicit
 disable-model-invocation: true
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/specify/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@db46b1ddf59c47c9aab52a7d66d15668811fa501 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 
 # Specify

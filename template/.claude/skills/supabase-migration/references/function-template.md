@@ -1,5 +1,6 @@
 # 函式模板
 
+
 ## SECURITY DEFINER（需要繞過 RLS）
 
 **必須放在 private schema（非 `public`）**，透過 GRANT 開放。

@@ -2,19 +2,11 @@
 name: verification-maintain
 description: Use when user requests verification maintenance. NOT for setup.
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/verification-maintain/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
 
-
-<!-- clade-targets: claude,codex,cursor -->
 
 # Maintain project verification infrastructure
 
-> **本檔的 `<skills-root>`** 指該 runtime 的 skill 投影根目錄：Claude `.cursor/skills/`、Codex `.agents/skills/`、Cursor `.cursor/skills/`。**NEVER** 在別的 runtime 上照抄 Claude 的字面路徑；找不到該目錄就回報標準未送達，不猜一個。
+> **本檔的 `<skills-root>`** 指該 runtime 的 skill 投影根目錄：Claude `.claude/skills/`、Codex `.agents/skills/`、Cursor `.cursor/skills/`。**NEVER** 在別的 runtime 上照抄 Claude 的字面路徑；找不到該目錄就回報標準未送達，不猜一個。
 
 Feature map 會隨產品改動而腐化。本 skill 對每一個 feature 做 source reconciliation 與 live drive，但只維護 verification infrastructure，NEVER 在同一輪修產品 code。
 

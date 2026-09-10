@@ -1,20 +1,15 @@
 ---
-description: "查詢優化、EXPLAIN、index 設計與 RLS 效能測量"
-globs: ["supabase/migrations/**/*.sql", "server/api/**/*.ts", "packages/*/server/api/**/*.ts"]
+description: "query-optimization"
 alwaysApply: false
+globs: ["supabase/migrations/**/*.sql","server/api/**/*.ts","packages/*/server/api/**/*.ts"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/db-schema/supabase/query-optimization.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/modules/db-schema/supabase/query-optimization.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 
 # Query Optimization
 
-> 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.cursor/rules/local/`；要改本檔請回 clade 源檔並 propagate。
+> 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.claude/rules/local/`；要改本檔請回 clade 源檔並 propagate。
 
 RLS 會放大任何 N+1 或 full scan。**MUST** 在以下情境先跑 `EXPLAIN ANALYZE` 再合併：
 
