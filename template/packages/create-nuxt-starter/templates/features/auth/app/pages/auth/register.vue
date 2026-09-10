@@ -41,7 +41,7 @@
       <UFormField label="密碼">
         <UInput v-model="password" type="password" required placeholder="••••••••" />
       </UFormField>
-      <UButton block size="lg" type="submit" :loading="loading"> 註冊 </UButton>
+      <UButton block size="lg" type="submit" :loading> 註冊 </UButton>
     </form>
 
     <p class="text-center text-sm">
