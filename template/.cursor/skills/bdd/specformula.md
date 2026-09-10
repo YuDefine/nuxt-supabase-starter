@@ -1,10 +1,3 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/bdd/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- clade-owned: not mirrored from upstream; see vendor/snippets/specformula/README.md -->
 
 # `/bdd` on SpecFormula
@@ -31,7 +24,7 @@ Local edits will be reverted by the next sync.
 
 ## MUST
 
-1. **NEVER 手寫 step definition 去接 `isa.yml` 已涵蓋的六個內建指令**。要新句型就加 `isa.yml` 的 `instructions[]` regex；框架真的做不到的行為才用 `instruction_type: custom`。理由與症狀（ambiguous step，而訊息指向你的檔）在 `.cursor/rules/specformula.mdc` § NEVER 1。
+1. **NEVER 手寫 step definition 去接 `isa.yml` 已涵蓋的六個內建指令**。要新句型就加 `isa.yml` 的 `instructions[]` regex；框架真的做不到的行為才用 `instruction_type: custom`。理由與症狀（ambiguous step，而訊息指向你的檔）在 `.claude/rules/specformula.md` § NEVER 1。
 2. **`red` 的紅 MUST 是斷言紅。** undefined step 與 `DSL_ISA_INSTRUCTION_NOT_FOUND` 都是**接線沒接上**，不是有效失敗訊號——照它去寫 green，補出來的是一個沒有被任何斷言保護的實作。逐字反開脫：「反正它是紅的，可以進 green 了」。
 3. 動到 `dsl.yml` 或 `isa.yml` 時 MUST 同時確認 `specs/truth/features/**` 的 `dsl.md` 仍是同一份語意。**兩份都要改**，`dsl.md` 是 truth、`dsl.yml` 是它給框架的形式。只改後者的話下一輪 `/dsl-refine` 會把它蓋掉。
 4. 業務時間一律走 `server/utils/time-service.ts`；`green` 補碼時 **NEVER** 寫 `new Date()`。

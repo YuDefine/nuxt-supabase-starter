@@ -2,13 +2,7 @@
 description: 自主迴圈的驗證閘門鏈與停止條件——每個 iterate-until-green 迴圈 MUST 跑 gate chain、宣告 max_iterations、定義 escalation action
 paths: ['**/*.ts', '**/*.vue', '**/*.tsx', 'tasks/**', 'specs/**']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/verify-gate-chain.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/verify-gate-chain.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Verify Gate Chain（自主迴圈驗證標準）

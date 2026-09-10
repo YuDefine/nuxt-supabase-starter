@@ -1,13 +1,6 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/work-loop/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Skill 關係 / Scope 排除
 
-<!-- clade-targets: claude -->
+
 
 ## 無人值守只有一條路：runner
 

@@ -1,0 +1,12 @@
+---
+description: "runtime/session-tasks.operations"
+alwaysApply: false
+globs: ["tasks/**","HANDOFF.md"]
+---
+<!-- Clade native rule; source: adapters/cursor/instructions/rules/core/session-tasks.operations.md; edit canonical source -->
+
+<!-- clade-targets: cursor -->
+
+# Cursor close-out and handoff carrier
+
+Cursor close-out may use native `Task` events and `cursor-ide-browser` only for their observed operations. Canonical Herdr transport remains portable CLI work; an idle/done Task pane is not a correlated completion outcome. If the native surface cannot perform a required action, keep the action blocked.

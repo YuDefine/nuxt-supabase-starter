@@ -39,6 +39,9 @@ CLADE_MANAGED_PREFIXES=(
   'vendor/'
   'scripts/'
   '.clade/'
+  # specformula capability 的訊息 catalog 投影，唯一落在 consumer repo root 的 mirror
+  # （不在 vendor/ 底下）——同上，clade 產生的內容，consumer 端 lint/fmt 改不了源頭。
+  'specs/errors/'
 )
 
 is_clade_managed() {

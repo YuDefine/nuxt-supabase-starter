@@ -7,13 +7,7 @@ paths:
   - 'scripts/dev-session*'
   - 'vendor/scripts/dev-session*'
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/framework/nuxt/nuxt-dev-watch.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-dev-watch.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Nuxt Dev Watch

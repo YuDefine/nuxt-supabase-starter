@@ -2,13 +2,7 @@
 description: Handoff 規則——當 session 尚有未完成的 work item、blocker 或跨 agent 交接時，必須留下可執行的交接文件
 paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/handoff.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/handoff.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
 
@@ -98,37 +92,38 @@ Local edits will be reverted by the next sync.
 | **completed-narrative** | `## YYYY-MM-DD ...` 且**不**符 active / baseline 條件（純已完成 prose + checked checkbox） | rotate 到 `docs/archives/<YYYY-MM>-handoff-narrative.md`（month-bucket，append-only） |
 | **ambiguous** | 介於上述之間、無法穩定判定 | 保守保留 `HANDOFF.md` + 標 review-pending（等下次 `next` 重判） |
 
-> **baseline 過度累積**：若 `HANDOFF.md` 大多為 baseline section 但仍超 size / lines threshold（clade 自家常見情境），表示 baseline 已過度膨脹，**MUST** 評估是否該把某些 baseline 段拆出成 `docs/archives/<YYYY-MM>-<topic>.md` 或 `docs/solutions/<topic>.md`、`docs/decisions/<topic>.md`。HANDOFF 不是長期 KB。
+> **baseline 過度累積**：若活的 baseline 段超過 `section_max_kb`（default 6 KB），表示那段該換載體——拆出成 `docs/archives/<YYYY-MM>-<topic>.md` 或 `docs/solutions/<topic>.md`、`docs/decisions/<topic>.md`，主檔只留 pointer。HANDOFF 不是長期 KB。整檔 KB／行數門檻已廢（它存在的唯一理由是逼 rotate，現在每次 `next` 先 100% rotate）。
 
 審計訊號（handoff drift scan）對應的觸發點：
 
-- `handoff-size-exceeded` / `handoff-lines-exceeded`：HANDOFF.md 超過 size / lines threshold（default 30 KB / 400 lines；env / registry override 可調）
-- `narrative-section-stale`：completed-narrative dated section 超過 narrative_age_days（default 3 天）
+- `narrative-section-stale`：completed-narrative dated section 超過 narrative_age_days（default 3 天）——正常應已被 2B.1b 100% rotate 搬走。還在且 rotate leftover=0 時，是段內含防重做 marker / deferred（依法不搬），處置是把 protect 內容拆出去，不是重跑 rotate
 - `active-section-stale`：active dated section 超過 active_age_days（default 14 天）→ 提醒「outstanding work 可能 silently 卡住」
+- `handoff-section-oversize` / `handoff-entry-oversize`：單一 `##` / `###` 超過 `section_max_kb` / `entry_max_lines` → 換載體，不是 rotate 觸發
 
 > **14 天是 escalation threshold，不是 grace period**。所有 active item 預設都應儘速處理；`next` 盤點時**一律列入 outstanding 並推薦處理**，不因 age < 14d 而降低優先序或省略。14d threshold 的作用僅是「超過時語氣升級為 warn — 可能 silently 卡住」，不代表「未超過 = 不需關注」。
 
 審計只 warn 不阻擋；實際 rotate 由 `/handoff next` Health Gate 執行（per `plugins/hub-core/skills/handoff/SKILL.md § 2B.1`）。
 
-### rotate 的完成判準是「搬完」，不是「搬到不 warn」
+### rotate 是每次 `/handoff next` 的第一個寫入，100%，無門檻
 
-threshold 與完成判準測的是**不同東西**：threshold 測體積，完成判準測**內容狀態**。
+`rotate-handoff-done.ts` 在 2B.1a scan **之前**跑。可 rotate 的紀錄每次全搬，
+**NEVER** 問 A／B／C，**NEVER** 啃到某個 KB 數字下就停。整檔 size／lines 門檻已廢。
 
-**完成判準**：主檔不留**任何**已結束的段落——每一個「已結案 / 已散播 / 已拍板且執行完畢 /
-驗收已達成」的 section，不論當下 size 是多少，都該在這一輪搬走。逐段問一句「這段描述的事情
-做完了嗎？」，答「做完了」就搬。
+**可 rotate**：heading 標了結案（`✅` / 已完成 / 已落地 / 已發版 / 已處置 / dismissed / 已 supersede）
+且 body 沒有 `- [ ]`；dated `##` 無 live checkbox；混合段裡的 `- [x]`。
+**不 rotate**：防重做 marker、`<!-- deferred-begin -->` 段、`## Review-gui Readiness` /
+`## Worktree & Stash Audit` 覆寫 snapshot。
 
-- **size 降到 threshold 以下 NEVER 是停止 rotate 的理由**，也 NEVER 是「rotate 做完了」的證據。
-  兩者同時為真是常態，但前者為真不蘊含後者
-- 反向同樣成立：**全部搬完後 size 仍超 threshold** → 那是 active 內容真的太多，**MUST** 據實登記，
-  **NEVER** 砍驗收 pointer / 選項內容 / 自驗指令湊門檻
-- 搬走的每一段 **MUST** 逐字進 archive 並驗零遺失（`grep -c -F '<獨特字串>'` 在 archive 回 ≥1、
-  主檔回 0）。行數下降不是零遺失的證據——內容被截斷時行數同樣下降
+**完成判準**：主檔不留任何可 rotate 的紀錄。scan 的 `rotate-plan` 若仍 warn，是 script 漏搬，
+重跑或報卡點，不是拍板題。搬完後活段仍超 `section_max_kb`／`entry_max_lines` → 換載體，
+**NEVER** 砍驗收 pointer / 選項內容 / 自驗指令湊數字。
 
-> **實證（2026-08-11，clade home）**：一次 rotate 搬掉兩條已結 awaiting 的選項表，38.2 → 34.4 KB
-> （threshold 35）就收手。同一份檔案裡 `## Orphan Stashes` 整段 5.1 KB、兩筆 stash 都已結案、
-> `git stash list` 為空——**沒搬，理由是「已經不 warn 了」**。那 0.6 KB 的餘裕撐不過下一輪
-> loop 寫一次 status 段，等於這次 rotate 白做。補搬後 29.8 KB，餘裕才是真的。
+搬走的每一段 **MUST** 逐字進 `docs/archives/<YYYY-MM>-handoff-narrative.md` 並驗零遺失
+（`grep -c -F '<獨特字串>'` 在 archive 回 ≥1、主檔回 0）。
+
+> **實證（2026-09-10，<consumer-a>）**：HANDOFF 堆到 235.6 KB / 2643 行才有人做一次手動 rotate A。
+> In Progress 60 條裡 41 條是已完成項。根因就是「等破 35 KB 才 rotate、而且只搬到門檻下」。
+> 改成每次 `next` 先 100% 搬走後，主檔 17.9 KB / 232 行，剩下的是活工作。
 
 ## Outstanding writing hygiene (v1.14+)
 

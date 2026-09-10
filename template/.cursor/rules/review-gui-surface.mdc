@@ -1,14 +1,9 @@
 ---
-description: "所有呼叫 review-gui 的外圍 agent surface 統一 SoP——入口 scan、compound item 拆解、multi-screenshot annotation、self-rationalize 禁令、annotation format contract；觸及 screenshots / spectra change / HANDOFF 時 path-scoped 載入"
-globs: ["screenshots/**", "openspec/changes/**", "HANDOFF.md", ".claude/agents/**"]
+description: "review-gui-surface"
 alwaysApply: false
+globs: ["screenshots/**","openspec/changes/**","HANDOFF.md",".claude/agents/**"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/review-gui-surface.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/review-gui-surface.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->

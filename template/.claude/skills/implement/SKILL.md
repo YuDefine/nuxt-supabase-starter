@@ -1,15 +1,13 @@
 ---
 name: implement
-description: 根據 plan package 的 `tasks.md`，以 don't stop until deliver / One-Shot 執行已解鎖 task。一輪恰好 1 個 task 或 Parallel Hint 批次；驗證後立刻回寫 `[X]` 再繼續，直到交付。不能跳步驟。
+description: >-
+  根據 plan package 的 `tasks.md`，以 don't stop until deliver / One-Shot 執行已解鎖
+  task。一輪恰好 1 個 task 或 Parallel Hint 批次；驗證後立刻回寫 `[X]` 再繼續，直到交付。不能跳步驟。
+metadata:
+  clade:
+    invocation: explicit
 disable-model-invocation: true
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/implement/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@db46b1ddf59c47c9aab52a7d66d15668811fa501 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 
 # Implement

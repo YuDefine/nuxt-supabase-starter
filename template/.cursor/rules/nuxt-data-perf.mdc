@@ -1,14 +1,9 @@
 ---
-description: "Nuxt data fetching 選用決策、Pinia Colada 最佳實踐、dedupe/cache/payload 效能規約；涵蓋 useFetch / useAsyncData / $fetch / useQuery / useMutation 全棧"
-globs: ["**/*.vue", "app/**/*.ts", "packages/*/app/**/*.ts", "server/**/*.ts", "packages/*/server/**/*.ts", "composables/**", "packages/*/composables/**", "queries/**", "packages/*/queries/**", "stores/**", "packages/*/stores/**", "nuxt.config.*", "app.config.*"]
+description: "nuxt-data-perf"
 alwaysApply: false
+globs: ["**/*.vue","app/**/*.ts","packages/*/app/**/*.ts","server/**/*.ts","packages/*/server/**/*.ts","composables/**","packages/*/composables/**","queries/**","packages/*/queries/**","stores/**","packages/*/stores/**","nuxt.config.*","app.config.*"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/nuxt-data-perf.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/nuxt-data-perf.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 
@@ -445,7 +440,7 @@ async function handleSubmit() {
 2026-06-23 跨 8 consumer 稽核發現：
 - `dedupe` 全 fleet = 0（MasteringNuxt tip 指出的盲區）
 - `getCachedData` 全 fleet = 0
-- 未安裝 Colada 的 consumer（<consumer-i> / co-purchase / blog）全面 D 級
+- 未安裝 Colada 的 consumer（<consumer-j> / co-purchase / blog）全面 D 級
 - 已安裝 Colada 的 consumer（<consumer-a> / <consumer-b> / <consumer-d> / <consumer-c>）全部 B+ 以上，但 key management 和 dedupe 仍有缺口
 - <consumer-a> 的 pattern（STALE_TIME 三級 + key factory + 100% mutation invalidation）是 gold standard，需推廣
 

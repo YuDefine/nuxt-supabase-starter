@@ -1,14 +1,9 @@
 ---
-description: "Nuxt 導航 loading 回饋 golden path — app.vue 必掛 NuxtLoadingIndicator、主資料用非阻塞 fetch + in-content skeleton、重頁可選全域 overlay + 逾時 toast；禁止頂層 blocking await useFetch 抓主資料"
-globs: ["app/app.vue", "packages/*/app/app.vue", "app/pages/**/*.vue", "packages/*/app/pages/**/*.vue", "pages/**/*.vue", "packages/*/pages/**/*.vue", "app/plugins/**/*.ts", "packages/*/app/plugins/**/*.ts", "app/composables/use*Loading*.ts", "packages/*/app/composables/use*Loading*.ts", "app/stores/ui.ts", "packages/*/app/stores/ui.ts"]
+description: "page-loading-golden-path"
 alwaysApply: false
+globs: ["app/app.vue","packages/*/app/app.vue","app/pages/**/*.vue","packages/*/app/pages/**/*.vue","pages/**/*.vue","packages/*/pages/**/*.vue","app/plugins/**/*.ts","packages/*/app/plugins/**/*.ts","app/composables/use*Loading*.ts","packages/*/app/composables/use*Loading*.ts","app/stores/ui.ts","packages/*/app/stores/ui.ts"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/framework/nuxt/page-loading-golden-path.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/modules/framework/nuxt/page-loading-golden-path.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 
@@ -148,6 +143,6 @@ pre-commit／pre-push 的機械檢查共用同一偵測器 `vendor/scripts/check
 
 ## 為什麼這條 rule 存在
 
-- 導航 loading 是每個 Nuxt consumer 都會遇到的 cross-cutting concern，散規範必漂移：盤點顯示 <consumer-b> 有完整 pattern、<consumer-a>/starter 有分歧半套、<consumer-d> / <consumer-c> / <consumer-i> / co-purchase 全缺。
+- 導航 loading 是每個 Nuxt consumer 都會遇到的 cross-cutting concern，散規範必漂移：盤點顯示 <consumer-b> 有完整 pattern、<consumer-a>/starter 有分歧半套、<consumer-d> / <consumer-c> / <consumer-j> / co-purchase 全缺。
 - `await useFetch` 的 blocking 行為是 Nuxt 新手最常踩的 perceived-performance 坑，typecheck / lint 抓不到，只有使用者抱怨「卡」才暴露 → 需要 impl-time 規約在最接近犯錯時點對齊。
 - skeleton 的色彩硬編碼會同時違反本 rule 與 color-mode rule；統一走 `<USkeleton>` 才 theme-safe。

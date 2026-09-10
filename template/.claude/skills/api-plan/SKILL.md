@@ -1,15 +1,14 @@
 ---
 name: api-plan
-description: Truth owner skill。根據 plan package、system-analysis handoff 與現有 API truth，更新 `specs/truth/contracts/**`，支援 ADD / MODIFY / DELETE / NOOP API 語意單元，並委派 `/truth-delta` 記錄本輪 API truth 改動。
+description: >-
+  Truth owner skill。根據 plan package、system-analysis handoff 與現有 API truth，更新
+  `specs/truth/contracts/**`，支援 ADD / MODIFY / DELETE / NOOP API 語意單元，並委派
+  `/truth-delta` 記錄本輪 API truth 改動。
+metadata:
+  clade:
+    invocation: explicit
 disable-model-invocation: true
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/api-plan/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@db46b1ddf59c47c9aab52a7d66d15668811fa501 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 
 # API Plan

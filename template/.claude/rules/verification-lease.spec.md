@@ -2,13 +2,7 @@
 description: verification lease 的機制規格——五元組欄位、lease 檔位置與 schema、claim / release / force-takeover 的行為、holder identity 解析、哪些工具必須讀寫 lease、與 consumer-meta leaseMode 的關係
 paths: ['.claude/consumer-meta.json', 'scripts/dev-session*', 'scripts/dev-singleton*', 'nuxt.config.*', 'packages/**/nuxt.config.*']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/verification-lease.spec.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/verification-lease.spec.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
 
@@ -224,3 +218,23 @@ Lease 的「該不該強制走 singleton wrapper」由 consumer 自宣告：
 2026-05 之前 dev server port / browser profile / cookie namespace / env file 四個資源散規範散實作，但實際是綁定的。
 兩個 session 同時驗證 → 不同層各自 hold 對方資源 → inconsistent state。
 收成一等概念後：claim 一次拿一組、release 一次釋一組，atomicity 由 lease 檔保證。
+
+
+## Agent 行為契約（自 [[verification-lease]] 常駐層下推）
+
+每一個 runtime 的 agent 均遵守以下契約：
+
+- **NEVER** 用 raw `nuxt dev` / `node server.mjs` / `playwright start` 之類 bypass lease 的方式啟動 dev server
+- **NEVER** 直接 `lsof + kill` 別 holder 的 PID（即使它是另一個自己的 session）；要殺一律走 `dev-session.ts stop` / `wait` / `--takeover` 的 op
+- **MUST** 在 claim 時帶 `--task "<這次要做什麼>"` 與 `--ttl`（未給 TTL 的 agent 租約自動套 10m）
+- **MUST** 長任務期間定期 `dev-session.ts heartbeat` 續租；task 結束 / session 收尾 / kill subagent 前主動 `release`，**NEVER** 讓下一個 agent 等到 TTL 自然到期
+
+衝突時依**可觀察 predicate** 分流（`dev-session.ts status` 讀得到全部三項）：
+
+| 可觀察 predicate | 動作 |
+| --- | --- |
+| lease 不存在，或持有者是 **agent 且已過期 / 心跳斷（>180s）** | 直接 `start` 自動接管，**不問 user** |
+| lease 由 **agent** 持有且仍存活 | `dev-session.ts wait --task "…" -- <cmd>` 排隊，**不問 user**；逾時才回報 |
+| lease 由 **人類** 持有（`holder.kind = human`） | **NEVER** 自動接管、**NEVER** `--takeover` —— refuse 並把訊息原樣呈給 user |
+
+最後一列在 autonomous mode（background subagent、scheduled task、/loop）同樣成立且無例外。

@@ -1,10 +1,3 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/dsl-refine/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@db46b1ddf59c47c9aab52a7d66d15668811fa501 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 # Rule 1 - Acceptance Journey 必須拆成介面層原子規則
 

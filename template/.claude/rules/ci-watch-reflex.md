@@ -1,10 +1,4 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/ci-watch-reflex.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/ci-watch-reflex.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 # CI Watch 反射
 

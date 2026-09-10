@@ -2,13 +2,7 @@
 description: 接手 interrupted session 或收到 dirty worktree 與失效 claim 訊號時使用；區分 ownership 未明與已確認無主的 WIP
 paths: ['HANDOFF.md', 'tasks/**']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/wip-orphan-recovery.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/wip-orphan-recovery.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # WIP Orphan Recovery

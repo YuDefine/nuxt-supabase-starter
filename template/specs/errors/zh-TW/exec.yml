@@ -1,0 +1,122 @@
+# 🔒 LOCKED — managed by clade · Source: vendor/specformula-errors/zh-TW/exec.yml · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/specformula-errors/zh-TW/exec.yml
+# LOCKED: mirrored from SpecFormula/specformula-dev-framework@e5568250a2c0599983bce90fb08d548da35e1d64 via scripts/sync-upstream-mirrors.ts — edit upstream, never here
+# 訊息模板 registry — EXEC SUBSYSTEM
+# 本檔僅放 code prefix 為 `EXEC_` 之 entry。
+
+EXEC_API_SUMMARY_MISSING:
+  category: argument
+  template: "[ApiCall] 缺少 API summary"
+  fixtures:
+    - details: {}
+
+EXEC_API_METHOD_MISSING:
+  category: argument
+  template: "[ApiCall] API 操作 '{summary}' 缺少 method"
+  fixtures:
+    - details: { summary: "GetUser" }
+
+EXEC_API_BODY_HEADER_CONFLICT:
+  category: argument
+  template: "[ApiCall] 顯式 body 不得與非前綴的一般 header 共存"
+  fixtures:
+    - details: {}
+
+EXEC_API_TIME_FORMAT_UNSUPPORTED:
+  category: argument
+  template: "[ApiCall] 不支援的時間格式：{format}（支援：{allowed}）"
+  fixtures:
+    - details:
+        {
+          format: "RFC822",
+          allowed: "ISO, TIMESTAMP, EPOCH, DATE_ONLY, TIME_ONLY",
+        }
+
+EXEC_ENTITY_NAME_MISSING:
+  category: argument
+  template: "[EntitySetup] 缺少 entity 名稱"
+  fixtures:
+    - details: {}
+
+EXEC_ENTITY_DATATABLE_MISSING:
+  category: argument
+  template: "[EntitySetup] 缺少 DataTable"
+  fixtures:
+    - details: {}
+
+EXEC_ENTITY_TYPE_CONVERSION_FAILED:
+  category: argument
+  template: "[EntitySetup] 無法將值 '{value}' 轉換為型別 {type}"
+  fixtures:
+    - details: { value: "abc", type: "INTEGER" }
+
+EXEC_ENTITY_JSONB_INVALID:
+  category: argument
+  template: "[EntityValidate] 欄位 '{field}' 之 jsonb 值非合法 JSON：{value}"
+  fixtures:
+    - details: { field: "metadata", value: "{not-json}" }
+
+EXEC_ENTITY_UNKNOWN_COLUMN:
+  category: argument
+  template: "[EntitySetup] 資料表 '{table}' 不存在欄位 '{column}'，可用欄位：{available}"
+  fixtures:
+    - details: { table: "tb_Event", column: "colour", available: "id, name, created_at" }
+
+EXEC_ENTITY_NOT_NULL_VIOLATION:
+  category: argument
+  template: "[EntitySetup] 資料表 '{table}' 欄位 '{column}' 為 NOT NULL 且無預設值，但未提供值"
+  fixtures:
+    - details: { table: "tb_Event", column: "name" }
+
+EXEC_ENTITY_FK_VIOLATION:
+  category: argument
+  template: "[EntitySetup] 資料表 '{table}' 欄位 '{column}' 的外鍵參照失敗：值 '{value}' 不存在於 {reference}"
+  fixtures:
+    - details:
+        {
+          table: "tb_OrderItem",
+          column: "order_id",
+          value: "999",
+          reference: "tb_Order.id",
+        }
+
+EXEC_TIME_PARAM_MISSING:
+  category: argument
+  template: "[TimeControl] 缺少時間參數"
+  fixtures:
+    - details: {}
+
+EXEC_RESPONSE_NOT_AVAILABLE:
+  category: state
+  template: "[ResponseValidate] 無可用之 HTTP 回應內容（必須先執行對應 ApiCall）"
+  fixtures:
+    - details: {}
+
+EXEC_API_OPERATION_NOT_FOUND:
+  category: lookup
+  template: "ApiSpec 中找不到 operation summary '{summary}'"
+  fixtures:
+    - details: { summary: "Unknown API" }
+
+EXEC_ENTITY_NOT_FOUND:
+  category: lookup
+  template: "[EntitySetup] 找不到 entity '{name}'，可用：{available}"
+  fixtures:
+    - details: { name: "UnknownEntity", available: "User, Order, Product" }
+
+EXEC_ENTITY_DEFINITION_NOT_FOUND:
+  category: lookup
+  template: "[EntityValidate] 找不到 entity '{name}' 之定義，請確認 entity_to_table_mapping 設定"
+  fixtures:
+    - details: { name: "MissingEntity" }
+
+EXEC_ENTITY_VALIDATE_DATATABLE_EMPTY:
+  category: argument
+  template: "[EntityValidate] DataTable 必須至少有一列資料"
+  fixtures:
+    - details: {}
+
+EXEC_ENTITY_CONDITIONS_MISSING:
+  category: argument
+  template: "缺少查詢條件：請提供至少一個欄位"
+  fixtures:
+    - details: {}

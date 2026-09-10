@@ -13,13 +13,7 @@ paths:
   - 'packages/*/server/plugins/**'
   - 'packages/**/server/plugins/**'
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/deploy-env-identity.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/deploy-env-identity.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Deploy Env Identity（部署身分取自注入，不取自 build mode）

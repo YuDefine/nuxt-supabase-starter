@@ -1,10 +1,4 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/commit.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/commit.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Commit

@@ -2,13 +2,7 @@
 description: Optional truth-layers 規則——適用於有明確 persistence / contract / API / UI 分層的專案，定義每一層的真相來源
 paths: ['specs/**', 'tasks/**', 'ROADMAP.md', 'docs/decisions/**', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'shared/**/*.ts', 'packages/*/shared/**/*.ts', 'src/**/*.ts', 'app/**/*.vue', 'packages/*/app/**/*.vue']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/truth-layers.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/truth-layers.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Truth Layers

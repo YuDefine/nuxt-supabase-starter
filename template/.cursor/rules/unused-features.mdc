@@ -1,20 +1,15 @@
 ---
-description: "專案目前未使用的 Supabase 功能 — 引入前的決策與規約"
-globs: ["supabase/migrations/**/*.sql", "server/**/*.ts", "packages/*/server/**/*.ts", "app/**/*.{ts,vue}", "packages/*/app/**/*.{ts,vue}"]
+description: "unused-features"
 alwaysApply: false
+globs: ["supabase/migrations/**/*.sql","server/**/*.ts","packages/*/server/**/*.ts","app/**/*.{ts,vue}","packages/*/app/**/*.{ts,vue}"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/db-runtime/cf-workers/unused-features.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/modules/db-runtime/cf-workers/unused-features.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 
 # Unused Features Guardrails
 
-> 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.cursor/rules/local/`；要改本檔請回 clade 源檔並 propagate。
+> 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.claude/rules/local/`；要改本檔請回 clade 源檔並 propagate。
 
 Template 預設**不啟用**以下 Supabase feature。從 template 衍生出的新專案應保持保守，引入前先通過決策點。
 

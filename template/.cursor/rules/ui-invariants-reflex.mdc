@@ -1,12 +1,8 @@
 ---
+description: "ui-invariants-reflex"
 alwaysApply: true
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/ui-invariants-reflex.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/ui-invariants-reflex.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 # UI Invariants 反射

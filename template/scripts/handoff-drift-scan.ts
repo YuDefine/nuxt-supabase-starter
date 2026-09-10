@@ -36,10 +36,9 @@
  * (<consumer-b> 2026-05-24 warehouse-items-tool-aggregation incident).
  *
  * HANDOFF.md health triggers (independent of worktrees):
- *   5. handoff-size-exceeded — HANDOFF.md > max_kb threshold (default 35 KB,
- *      env CLADE_HANDOFF_MAX_KB)
- *   6. handoff-lines-exceeded — HANDOFF.md > max_lines threshold (default 400,
- *      env CLADE_HANDOFF_MAX_LINES)
+ *   5. （廢）handoff-size-exceeded / handoff-lines-exceeded — 整檔 KB/行數門檻
+ *      已移除。`/handoff next` 每次先 100% rotate 可 rotate 的紀錄，不再用
+ *      體積當觸發。sizeKb / lines 仍在 raw 裡供人讀。
  *   7. narrative-section-stale — completed-narrative dated section is older
  *      than narrative_age_days (default 3, env CLADE_HANDOFF_NARRATIVE_AGE_DAYS).
  *      "completed-narrative" = dated `## YYYY-MM-DD ...` section with no active
@@ -52,10 +51,9 @@
  *      (default 6 KB, env CLADE_HANDOFF_SECTION_MAX_KB).
  *  10. handoff-entry-oversize — a single `### ` entry exceeds entry_max_lines
  *      (default 15, env CLADE_HANDOFF_ENTRY_MAX_LINES).
- *      9/10 are TD-476 步驟二: the whole-file thresholds (35 KB / 400 lines) stay
- *      untouched; these push the same standard down to section granularity so an
- *      oversize lands as a warning in the round that writes it, instead of only
- *      surfacing when the whole file breaks. Opt out by putting the literal
+ *      9/10 are TD-476 步驟二: 整檔 size/lines 門檻已廢（rotate 改成每次 next
+ *      100% 搬走可 rotate 的紀錄）。這兩條把「活段太肥」下探到 section 粒度，
+ *      逼換載體，不是逼 rotate。Opt out by putting the literal
  *      `handoff-budget-exempt` anywhere in the section/entry body (e.g. inside an
  *      HTML comment) — an un-silenceable warning trains readers to skip the section.
  *
@@ -85,17 +83,15 @@
  */
 
 const COMMIT_DISTANCE_THRESHOLD_DEFAULT = 50
-// 35 = 30（原意：人寫的內容上限）+ 5（機械段實測 4.8 KB 無條件進位）。
-// HANDOFF 現有三段是機械產生、不是 rotate 的對象（rotate 只搬 narrative，機械段搬走下輪
-// 又重寫）：work-loop-status ~2.4 KB、worktree/stash ~1.0 KB、review-gui ~1.5 KB。門檻訂
-// 30 時這些段還不存在，它們是後來悄悄吃掉那個額度的。調到 35 把原意還原，且報告的 KB 數
-// 仍等於讀者實際要讀的量 —— 這是 `handoff-size` 這個 check 唯一的用途（TD-386）。
+// 整檔 size/lines 門檻已廢（2026-09-10）：不再當 rotate 觸發。常數仍填進
+// raw.thresholds 以免舊 registry `handoff_audit_thresholds.max_kb` 讀不到，
+// 但 drift-scan **不再 emit** `handoff-size-exceeded` / `handoff-lines-exceeded`。
 const HANDOFF_MAX_KB_DEFAULT = 35
 const HANDOFF_MAX_LINES_DEFAULT = 400
 const HANDOFF_NARRATIVE_AGE_DAYS_DEFAULT = 3
 const HANDOFF_ACTIVE_AGE_DAYS_DEFAULT = 14
-// TD-476 步驟二：段粒度預算。整檔門檻（35 KB / 400 行）刻意不動 —— 本組是把同一標準
-// 下探到 `##` / `###` 粒度，讓超額在**寫入當輪**可見，而不是等整檔破表才第四次全檔壓縮。
+// TD-476 步驟二：段粒度預算。整檔門檻已廢；本組把「活段太肥」下探到 `##` / `###`，
+// 超額在寫入當輪可見，處置是換載體不是 rotate。
 const HANDOFF_SECTION_MAX_KB_DEFAULT = 6
 const HANDOFF_ENTRY_MAX_LINES_DEFAULT = 15
 // 豁免註記：段 / 條目本文任一行含此字串即整段跳過預算檢查。
@@ -103,55 +99,12 @@ const HANDOFF_ENTRY_MAX_LINES_DEFAULT = 15
 // 決策憑證索引）MUST 有 opt-out，否則訊號會被整體無視。
 const HANDOFF_BUDGET_EXEMPT_MARKER = 'handoff-budget-exempt'
 
-// Conservative keyword list — any one occurrence in a dated section's title
-// or body marks it active. False-positive risk on completed sections is OK
-// because the Mode B rotate plan presents results to user via AskUserQuestion.
-const ACTIVE_SIGNAL_KEYWORDS = [
-  '- [ ]',
-  'Outstanding',
-  'outstanding',
-  'Next session',
-  'next session',
-  'Next Steps',
-  '下次 session',
-  '待後續',
-  '待接手',
-  '待補',
-  '待 user',
-  '待客戶',
-  '等客戶',
-  '等 user',
-  '等 prod',
-  '等 deploy',
-  'awaiting',
-  '[discuss]',
-  '尚未',
-  '未完',
-  'TODO',
-  'TBD',
-]
-
-// Section title substring match (case-insensitive) → classified as baseline
-// snapshot (legitimate to keep in HANDOFF as overwriting block, not narrative).
-const BASELINE_TITLE_KEYWORDS = [
-  'worktree audit',
-  'worktree & stash audit',
-  'stash audit',
-  'review-gui readiness',
-  'parked',
-  'deferred discuss',
-  '跨 repo',
-  '並行 session',
-  'in progress',
-  'blocked',
-  'next steps',
-]
-
 import { execFileSync } from 'node:child_process'
 import { existsSync, statSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve, basename } from 'node:path'
 import { userDirtyPaths } from './wip-dirty.ts'
 import { findClaimByWorktree, isExpired } from './claim-helper.ts'
+import { classifySection, parseDatedTitleDate } from './lib/handoff-section-classify.ts'
 
 function gitRaw(args, opts = {}) {
   return execFileSync('git', args, {
@@ -316,13 +269,6 @@ function loadConsumerThresholds(consumerRoot) {
   return defaults
 }
 
-function parseDatedTitleDate(title) {
-  const m = title.match(/^(\d{4})-(\d{2})-(\d{2})\b/)
-  if (!m) return null
-  const d = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`)
-  return Number.isNaN(d.getTime()) ? null : d
-}
-
 function parseHandoffSections(text) {
   const sections = []
   const lines = text.split('\n')
@@ -379,19 +325,6 @@ function isBudgetExempt(body) {
   return body.includes(HANDOFF_BUDGET_EXEMPT_MARKER)
 }
 
-function classifySection(title, body) {
-  const titleLower = title.toLowerCase()
-  for (const kw of BASELINE_TITLE_KEYWORDS) {
-    if (titleLower.includes(kw)) return 'baseline'
-  }
-  if (!parseDatedTitleDate(title)) return 'baseline'
-  const combined = `${title}\n${body}`
-  for (const kw of ACTIVE_SIGNAL_KEYWORDS) {
-    if (combined.includes(kw)) return 'active'
-  }
-  return 'narrative'
-}
-
 function daysBetween(fromMs, toMs) {
   return Math.floor((toMs - fromMs) / 86400000)
 }
@@ -433,24 +366,12 @@ function checkHandoffHealth(consumerRoot, thresholds, now = Date.now()) {
   })
 
   const warnings = []
-  if (sizeKb > thresholds.max_kb) {
-    warnings.push({
-      drift: 'handoff-size-exceeded',
-      message: `HANDOFF.md is ${sizeKb.toFixed(1)} KB (threshold ${thresholds.max_kb} KB) — run \`/handoff\` Mode B to rotate completed narrative`,
-    })
-  }
-  if (lineCount > thresholds.max_lines) {
-    warnings.push({
-      drift: 'handoff-lines-exceeded',
-      message: `HANDOFF.md is ${lineCount} lines (threshold ${thresholds.max_lines}) — run \`/handoff\` Mode B to rotate`,
-    })
-  }
   for (const s of sectionStats) {
     if (s.kind === 'narrative' && s.ageDays !== null && s.ageDays > thresholds.narrative_age_days) {
       const month = s.date.slice(0, 7)
       warnings.push({
         drift: 'narrative-section-stale',
-        message: `"## ${s.title}" is completed narrative ${s.ageDays}d old (threshold ${thresholds.narrative_age_days}d) — rotate to docs/archives/${month}-handoff-narrative.md`,
+        message: `"## ${s.title}" is completed narrative ${s.ageDays}d old (threshold ${thresholds.narrative_age_days}d) — rotate to docs/archives/${month}-handoff-narrative.md unless the section contains a never-rotate marker (anti-redo / deferred)`,
       })
     } else if (
       s.kind === 'active' &&
@@ -464,7 +385,7 @@ function checkHandoffHealth(consumerRoot, thresholds, now = Date.now()) {
     }
   }
 
-  // TD-476 步驟二：段粒度預算。整檔門檻不動，這兩條讓超額在寫入當輪就可見。
+  // TD-476 步驟二：段粒度預算。整檔門檻已廢；這兩條讓活段超額在寫入當輪可見。
   for (const s of sectionStats) {
     if (s.exempt || s.sizeKb <= thresholds.section_max_kb) continue
     warnings.push({

@@ -1,19 +1,11 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/commit/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Commit gate 執行與證據契約
 
-<!-- clade-targets: claude,codex,cursor -->
 
 進入 ceremony 的 Step 0-Transport 時讀本檔。每一道 gate 的觸發與判準仍由 SKILL.md、gates.md 及其引用的共通政策決定；下表定義三端如何交付可核對的執行結果。
 
 ## 三端載體
 
-| 操作 | AI Agent | Codex | Cursor |
+| 操作 | Claude Code | Codex | Cursor |
 | --- | --- | --- | --- |
 | 讀檔、取得 diff、執行 CLI | 當前 catalog 的讀檔與 shell 工具 | 當前 catalog 的讀檔與 exec 工具 | 當前 catalog 的讀檔與 terminal 工具 |
 | 獨立 reviewer | 實際可派且通過 review-policy 的原生 agent 或已授權 CLI | 實際可派且通過 review-policy 的原生 agent 或已授權 CLI | 實際可派且通過 review-policy 的原生 agent 或已授權 CLI，另遵守本入口 residency 政策 |

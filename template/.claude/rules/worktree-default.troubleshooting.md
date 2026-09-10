@@ -8,13 +8,7 @@ paths:
   - 'scripts/wt-helper.ts'
   - 'scripts/review-gui.ts'
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/worktree-default.troubleshooting.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/worktree-default.troubleshooting.md; edit canonical source -->
 
 > Path-scoped detail of [[worktree-default]] §7–§11。核心 always-load 規約在母檔 worktree-default.md。
 

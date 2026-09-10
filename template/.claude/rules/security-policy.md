@@ -2,13 +2,7 @@
 description: SECURITY.md 安全憲法的形狀契約（五段固定、不變量標執行層）
 paths: ['SECURITY.md', 'packages/*/SECURITY.md', 'server/middleware/**', 'packages/*/server/middleware/**', 'supabase/migrations/**/*.sql', 'server/database/migrations/**/*.sql', 'packages/*/supabase/migrations/**/*.sql', 'packages/*/server/database/migrations/**/*.sql']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/security-policy.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/security-policy.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Security policy（SECURITY.md 安全憲法）

@@ -1,15 +1,16 @@
 ---
 name: gherkin-and-dsl
-description: Evaluate and refactor Gherkin feature files and DSL vocabularies so they can be implemented as test code with minimal inference. Use when converting test plans into Gherkin, reviewing or tightening Given/When/Then sentences, deciding Rule/Background/Scenario Outline/DataTable structure, or checking whether Gherkin and DSL fully cover the intended test cases.
+description: >-
+  Evaluate and refactor Gherkin feature files and DSL vocabularies so they can
+  be implemented as test code with minimal inference. Use when converting test
+  plans into Gherkin, reviewing or tightening Given/When/Then sentences,
+  deciding Rule/Background/Scenario Outline/DataTable structure, or checking
+  whether Gherkin and DSL fully cover the intended test cases.
+metadata:
+  clade:
+    invocation: explicit
 disable-model-invocation: true
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/gherkin-and-dsl/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@db46b1ddf59c47c9aab52a7d66d15668811fa501 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 
 # Gherkin And DSL

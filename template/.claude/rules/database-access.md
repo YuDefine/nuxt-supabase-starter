@@ -2,13 +2,7 @@
 description: 資料庫存取模式（Supabase client/server 分工）
 paths: ["app/**/*.{vue,ts}", "packages/*/app/**/*.{vue,ts}", "server/**/*.ts", "packages/*/server/**/*.ts"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/db-runtime/cf-workers/database-access.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/modules/db-runtime/cf-workers/database-access.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Database Access Pattern

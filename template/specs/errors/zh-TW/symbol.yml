@@ -1,0 +1,117 @@
+# 🔒 LOCKED — managed by clade · Source: vendor/specformula-errors/zh-TW/symbol.yml · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/specformula-errors/zh-TW/symbol.yml
+# LOCKED: mirrored from SpecFormula/specformula-dev-framework@e5568250a2c0599983bce90fb08d548da35e1d64 via scripts/sync-upstream-mirrors.ts — edit upstream, never here
+# 訊息模板 registry — SYMBOL SUBSYSTEM
+# 本檔僅放 code prefix 為 `SYMBOL_` 之 entry。
+
+SYMBOL_VAR_HEADER_MISSING_NAME:
+  category: argument
+  template: "VAR-System 錯誤：header 第 {column_index} 欄使用了 '>' 符號但未提供 context key 名稱"
+  fixtures:
+    - details: { column_index: 2 }
+
+SYMBOL_VAR_RESERVED_NAME:
+  category: argument
+  template: "'{name}' 為保留變數名稱，不可作為 context key"
+  fixtures:
+    - details: { name: "now" }
+
+SYMBOL_VAR_EXECUTION_KEY_EMPTY:
+  category: argument
+  template: "execution key 不可為空（位置：第 {column_index} 欄）"
+  fixtures:
+    - details: { column_index: 1 }
+
+SYMBOL_VAR_BINDINGS_MISMATCH:
+  category: argument
+  template: "'>contextKey' 與 '<executionKey' 必須成對出現"
+  fixtures:
+    - details: {}
+
+SYMBOL_VAR_EXECUTION_VARIABLE_NULL:
+  category: state
+  template: "execution variable 為 null，無法提取 contextKey 對應之值"
+  fixtures:
+    - details: {}
+
+SYMBOL_VAR_PATH_FORMAT_INVALID:
+  category: argument
+  template: "execution key 路徑格式不正確：{path}"
+  fixtures:
+    - details: { path: "user..name" }
+
+SYMBOL_VAR_ARRAY_INDEX_FORMAT_INVALID:
+  category: argument
+  template: "execution key 陣列索引格式不正確：{path}"
+  fixtures:
+    - details: { path: "items[abc]" }
+
+SYMBOL_TIME_EXPR_UNSUPPORTED:
+  category: argument
+  template: "不支援的時間表達式：{expression}"
+  fixtures:
+    - details: { expression: "now-1eon" }
+
+SYMBOL_TIME_DATE_PARSE_FAILED:
+  category: argument
+  template: "無法解析日期：{value}"
+  fixtures:
+    - details: { value: "2026-13-45" }
+
+SYMBOL_TIME_CLOCK_PARSE_FAILED:
+  category: argument
+  template: "無法解析時間：{value}"
+  fixtures:
+    - details: { value: "25:99:99" }
+
+SYMBOL_CAS_CONSTRAINT_UNKNOWN:
+  category: argument
+  template: "未知的約束條件：&{name}"
+  fixtures:
+    - details: { name: "unknownConstraint" }
+
+SYMBOL_CAS_PARAMETER_INVALID:
+  category: argument
+  template: "約束 '&{name}' 參數不合法：{error_message}"
+  fixtures:
+    - details: { name: "length", error_message: "需要兩個參數 min,max" }
+    - details: { name: "between", error_message: "需要兩個參數 min,max" }
+    - details: { name: "timeRange", error_message: "需要兩個參數 start,end" }
+
+SYMBOL_CAS_VALUE_NOT_NUMERIC:
+  category: argument
+  template: "無法將值轉為數字：{value}"
+  fixtures:
+    - details: { value: "N/A" }
+
+SYMBOL_VAR_KEY_NOT_FOUND:
+  category: lookup
+  template: "ScenarioContext 中找不到變數 '{key}'"
+  fixtures:
+    - details: { key: "userId" }
+
+SYMBOL_VAR_EXECUTION_KEY_NOT_FOUND:
+  category: lookup
+  template: "找不到 execution key '{key}'，請確認資料表格列名稱"
+  fixtures:
+    - details: { key: "user_id" }
+
+SYMBOL_VAR_PATH_FIELD_NOT_FOUND:
+  category: lookup
+  template: "execution 變數路徑 '{path}' 找不到欄位 '{segment}'"
+  fixtures:
+    - details: { path: "user.profile.nickname", segment: "nickname" }
+
+SYMBOL_VAR_PATH_TYPE_MISMATCH:
+  category: lookup
+  template: "execution 變數路徑 '{path}' 之 '{parent}' 非預期型別 {expected_type}"
+  fixtures:
+    - details:
+        { path: "user.profile.tags[0]", parent: "tags", expected_type: "List" }
+    - details:
+        { path: "user.profile.name", parent: "profile", expected_type: "Map" }
+
+SYMBOL_VAR_PATH_INDEX_OUT_OF_BOUNDS:
+  category: lookup
+  template: "execution 變數路徑 '{path}' 索引 {index} 超出範圍（長度 {length}）"
+  fixtures:
+    - details: { path: "items[5]", index: 5, length: 3 }

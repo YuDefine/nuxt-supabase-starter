@@ -2,13 +2,7 @@
 description: 新專案（scaffold / init / 從 starter 灌進既有 repo）期間撞到的每一個報錯、阻礙、體驗不佳處，MUST 修在 clade / starter 源頭並長出機械檢查，NEVER 只修當前 repo。放行 gate 是 scripts/audit-new-project-readiness.ts。
 paths: ['.claude/consumer-meta.json', '.clade/manifest.json', '.claude/hub.json', 'wrangler.{toml,jsonc}', '.gitignore', 'package.json', 'nuxt.config.*']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/new-project-readiness.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/new-project-readiness.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 # New Project Readiness
 

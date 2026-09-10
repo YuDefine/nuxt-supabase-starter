@@ -1,15 +1,15 @@
 ---
 name: truth-delta
-description: 維護每次 plan package 內的 `truth-delta.md`，讓 truth owner skill 以共同格式記錄本輪對 `specs/truth/**` 的 ADD / MODIFY / DELETE / NOOP 語意單元變更。Use when a truth owner skill has inspected or changed truth specs and must initialize, append, update, or validate the current plan package truth delta handoff.
+description: >-
+  維護每次 plan package 內的 `truth-delta.md`，讓 truth owner skill 以共同格式記錄本輪對
+  `specs/truth/**` 的 ADD / MODIFY / DELETE / NOOP 語意單元變更。Use when a truth owner
+  skill has inspected or changed truth specs and must initialize, append,
+  update, or validate the current plan package truth delta handoff.
+metadata:
+  clade:
+    invocation: explicit
 disable-model-invocation: true
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/truth-delta/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@db46b1ddf59c47c9aab52a7d66d15668811fa501 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 
 # Truth Delta

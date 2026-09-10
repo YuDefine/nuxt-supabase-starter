@@ -2,13 +2,7 @@
 description: aixbdd 需求到實作的 workflow 契約——plan package 是唯一迭代單位、truth 只由 truth owner skill 改、PM/RD 兩側入口順序、與 SpecFormula 的分工
 paths: ['specs/plans/**', 'specs/truth/**', '.agents/constitution/**']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/aixbdd-workflow.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/aixbdd-workflow.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 
@@ -30,10 +24,12 @@ aixbdd 產出可執行規格（`.feature` ＋ DSL），SpecFormula 執行它—�
 
 | 可觀察 predicate | 採用 |
 | --- | --- |
-| consumer 的 `.claude/hub.json` 宣告 `capabilities: ["specformula","aixbdd"]` | ✅ 本檔全部條款生效 |
+| consumer 的 resolved manifest 宣告 `modules.capabilities` 同時包含 `specformula` 與 `aixbdd` | ✅ 本檔全部條款生效 |
 | 只宣告 `specformula`，沒有 `aixbdd` | 執行層照 `specformula.md`；本檔不生效（自己手寫 `isa.yml` 與 `.feature` 是合法路徑） |
 | 只宣告 `aixbdd`，沒有 `specformula` | 合法——aixbdd 對 BDD techstack 不預設答案（`/technical-research` 三題必問的第一題就是它）。此時本檔生效、`specformula.md` 不生效 |
 | 一次性 hotfix、純設定調整、無驗收標準可寫的工作 | ❌ 不用——九步走完的成本遠大於改動本身 |
+
+Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.clade/manifest.json` 優先，只有 canonical 缺席時才使用相容的 `.claude/hub.json`；兩份同時存在但內容衝突時 fail closed。判定一律使用 reader 的 `resolved` capabilities，NEVER 直接讀任一 runtime 的設定檔。
 
 ## 入口順序
 

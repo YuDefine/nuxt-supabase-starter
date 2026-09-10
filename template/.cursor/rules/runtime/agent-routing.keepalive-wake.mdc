@@ -1,0 +1,13 @@
+---
+description: "runtime/agent-routing.keepalive-wake"
+alwaysApply: false
+globs: [".clade/work-loop/**"]
+---
+<!-- Clade native rule; source: adapters/cursor/instructions/rules/core/agent-routing.keepalive-wake.md; edit canonical source -->
+
+
+<!-- clade-targets: cursor -->
+
+# Cursor native keepalive boundary
+
+Cursor's native Task notification and available session-control surface provide liveness for this target. Apply the shared inert keepalive and claim state machine; do not assume a control surface absent from the current catalog. Missing controls leave the action blocked until a verified equivalent is available.

@@ -2,13 +2,7 @@
 description: 多個 session 同時寫同一個拆不開的登記簿檔（HANDOFF / tech-debt / pitfalls / ROADMAP）時的寫入紀律——什麼時候可以寫、寫之前要探測什麼、寫完要驗什麼
 paths: ['HANDOFF.md', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/pitfalls/**', 'packages/*/HANDOFF.md', 'packages/*/ROADMAP.md', 'packages/*/docs/tech-debt.md', 'packages/*/docs/pitfalls/**']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/shared-file-concurrent-write.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/shared-file-concurrent-write.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # 共享單檔的並行寫入

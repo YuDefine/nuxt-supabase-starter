@@ -1,10 +1,3 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/technical-research/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- clade-owned: not mirrored from upstream; see vendor/snippets/specformula/README.md -->
 
 # `/technical-research` on a clade consumer
@@ -33,4 +26,4 @@ Local edits will be reverted by the next sync.
 - **NEVER** 因為「fleet 已經有預設」就跳過 `/clarify`。那正是上游 Rule 2 Bad Example 的形狀（把範例堆疊當成已拍板）。
 - **NEVER** 把後端測試策略收成單元測。上游 Rule 4 的預設是 E2E，而 SpecFormula 的 `entity_validate` 本來就要求驗到 DB 權威狀態，收成單元測會讓那半邊契約整個消失。
 
-規約全文：`.cursor/rules/specformula.mdc`、`.cursor/rules/aixbdd-workflow.mdc`。
+規約全文：`.claude/rules/specformula.md`、`.claude/rules/aixbdd-workflow.md`。

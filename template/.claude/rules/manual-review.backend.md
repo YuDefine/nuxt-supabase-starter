@@ -2,13 +2,7 @@
 description: Manual Review backend 規約——backend-only change 特別規約 + 標準流程（含 verify channel baseline）；動 server / test / e2e / supabase 時 path-scoped 載入
 paths: ['server/**/*.ts', 'packages/*/server/**/*.ts', 'test/**/*.ts', 'packages/*/test/**/*.ts', 'e2e/**/*.ts', 'packages/*/e2e/**/*.ts', 'supabase/**']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/manual-review.backend.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/manual-review.backend.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
 
@@ -189,7 +183,7 @@ Helper 掃描 priority：**repo root canonical → repo root legacy → repo roo
 | <consumer-a> | ✅ `packages/core/server/routes/auth/_dev-login.get.ts` (monorepo) | ❌ false-negative |
 | <consumer-d> | ✅ `server/routes/auth/_dev-login.get.ts` | ✅ |
 | <consumer-c> | ✅ `server/api/_dev/login.post.ts` (better-auth POST) | ❌ false-negative |
-| <consumer-i> | ❌ MISSING (nuxt-auth-utils + libsql-drizzle, no cookbook template) | ✅ |
+| <consumer-j> | ❌ MISSING (nuxt-auth-utils + libsql-drizzle, no cookbook template) | ✅ |
 | co-purchase | ❌ MISSING (同上) | ✅ |
 
 **真實 adoption 4/6 + 1 monorepo misdetected + 2 真缺**（不是 1/6）。修法源頭 clade 2026-05-24 land：audit script + helper module（`scripts/audit-dev-login-adoption.ts` + `vendor/snippets/dev-auth/lib/detect-dev-login-route.ts`）。下次 agent / 主線撞「is dev-login present？」即走上述 detection 路徑，**NEVER** 再 lazy grep。

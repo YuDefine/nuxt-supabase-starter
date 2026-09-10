@@ -1,14 +1,5 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/commit/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Commit Quality Gates — Reference
 
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
 
 > 本檔是 commit skill 品質閘門的完整執行細節。主檔（SKILL.md）含流程概覽與 pointer；觸發特定 gate 時 MUST 先完整讀本檔對應 § 再繼續。
 
@@ -417,6 +408,53 @@ PRE-EXISTING — 未觸碰：<file>:<line>（舉證本次 diff 不含此檔／�
 1. 合格深度 reviewer 以已核准的深度檔檢查修法與連帶影響。使用共用 CLI 時為 `codex-review-safe.sh medium`，完整限制同 runner-safety。保存完整輸出，不只摘錄結論。
 2. 與深度 reviewer 不同模型族的合格裁決者取得該 snapshot、原始 0-A.1 findings 與深度結果，逐條確認 real issue、附反證 dismiss 或重標 severity，另查漏項。裁決者唯讀，主線負責修復。Cursor 主線的 Fable 裁決走 Herdr create-only：缺 pane 時 **MUST** 主動 `herdr-session-handoff.ts --launcher ccw --new-tab --coordinate`（quota／`account_unavailable` 再 `cc`）。**NEVER** 把「無 Herdr pane／Herdr 不可用」當成可跳過 0-A.2 或整場 `/commit` 的出口。`idle`／`done` 不是完成。兩個 launcher 都用盡才准留下 launcher／exit／evidence dir 的 receipt，再寫 durable follow-up。**NEVER** `--relay`，**NEVER** 叫 user 開 Claude 或貼 prompt。
 
+#### 裁決者結構性缺席時的延後路徑（TD-1052 (c)，Charles 2026-09-10 拍板）
+
+**這條解的是「合格裁決者一個都不存在」，NEVER 是「我沒找到人」或「開 pane 失敗」。**
+後兩者的處置在上一段（MUST 先開 pane，兩個 launcher 都用盡才准留 receipt），本路徑不取代它。
+
+**四個條件全中才成立，缺一條就回到「0-A.2 保持未完成」**：
+
+| # | 條件 | 怎麼算數 |
+| --- | --- | --- |
+| 1 | 0-A.2 **第 1 步（深度 review）已經跑完**且有完整輸出 | 延後的只有裁決那一步。深度 review 沒跑完 = 整個 0-A.2 未完成，與本路徑無關 |
+| 2 | `review-policy.md` 認可的合格裁決者中，**與深度 reviewer 不同模型族的那些全部不可得** | **MUST 逐個實跑過**並留下輸出。routing-table `code-review` 列的具名候選一個都不能只憑印象跳過 |
+| 3 | 有一份**實跑憑證檔**，內容是條件 2 那次失敗的原始輸出，且是**本次 `/commit` 內**跑出來的 | `0a-metrics.mjs` 機械檢查三件：檔存在、非空、**內容含 `RESULT: quota-blocked`**（`codex-review-safe.sh` 的穩定輸出契約）。**開 pane 失敗留下的 launcher／exit receipt 不是這個**——那條路的處置在本節上方，機械層現在也擋得住冒充。「本次跑出來的」目前**只由本行紀律承載**，CLI 不驗新鮮度：**NEVER** 沿用前一次 `/commit` 的憑證 |
+| 4 | 有一張**承載補跑的 flow work item**，且它**真的在 spine 上** | `node ~/offline/clade/vendor/scripts/flow/flow.ts open <slug> --origin td:TD-1052 --title '<snapshot dir> @ <base sha>'` 先開卡（consumer 端沒有自己的 `vendor/scripts/flow/`，走全路徑；`--origin td:` scheme 合法；`--title` 是 `flow.ts` 既有 flag）。`0a-metrics.mjs` 會在 `<repo>/.clade/flow/events.jsonl` 逐行找那個 `work_id`，查無、格式不對、或該 repo 根本沒有 spine，**都拒收**——沒有 spine 就沒有「之後會被叫回來」。**卡的 `--title` MUST 含這次 review 的 snapshot dir 與 base sha**——補跑要的是「同一份 snapshot ＋ 原始 0-A.1 findings ＋ 深度結果」，而 ledger 只留得住 receipt 路徑與 work id，這兩樣可能已被清。`<snapshot dir>` 是本次 review 報告落腳的目錄，慣例 `~/.cache/clade/review-snapshots/<date>-<slug>/`——它不是 commit skill 自己的產物，是 dispatch 那次自訂的落點，**MUST** 寫實際路徑，不是這個慣例字面 |
+
+記錄用 `escalated-a2-deferred`，**NEVER** 用 `escalated` 加一個編出來的 adjudicator：
+
+```bash
+node .claude/scripts/0a-metrics.mjs record \
+  --review-mode escalated-a2-deferred \
+  --reviewer '<實際跑深度 review 的 runtime/model>' \
+  --a2 true --critical <n> --major <n> --minor <n> --info <n> \
+  --a2-deferral-receipt '<條件 3 的憑證檔絕對路徑>' \
+  --a2-deferral-work-id '<條件 4 的 work id>' \
+  --diff-lines <n> --diff-files <n> --dismissed <n> --dismissed-unsubstantiated <n> \
+  --screenshot <pass|skip> --doc <aligned|skip>
+```
+
+上表的每一條都在 CLI 層擋，**不是留給紀律**——只有條件 3 的「本次跑出來的」除外，該格逐字標在表裡。
+這是刻意的：延後裁決與跳過裁決事後看起來完全一樣，差別只在有沒有東西會把它叫回來，
+而**註解與規約 NEVER 該承諾程式碼沒做的事**（2026-09-10 的 0-A.1 review 就是抓到本路徑第一版
+犯了這個——`--a2-deferral-work-id` 當時只驗非空，填一個不存在的卡號一樣通過）。
+
+同時提供 `--adjudicator` 會被**拒收**：有裁決者就不叫延後。該組合唯一的用途是把一次真的
+裁決記成延後、或把一次延後粉飾成有人看過，所以它在 CLI 層就擋掉，不留給紀律。
+
+**本路徑放行的是 land，NEVER 是 finding。** 0-A.1 與深度 review 判出的每一條缺失類 finding
+**仍然 MUST 修完**才 land——延後的只有「第三方逐條覆核 dismiss 與漏項」那一步。
+逐字反開脫：「反正沒有裁決者會來看，那幾條 Minor 就先留著」——那不在本裁決的射程內。
+
+**補跑是義務不是提醒。** 條件 2 的阻塞解除後（典型是配額回復），MUST 以**同一份 snapshot**
+＋ 原始 0-A.1 findings ＋ 深度結果交給合格裁決者走完第 2 步，並在該 work item 上收口。
+`--a2-deferral-work-id` 之所以是必填，就是為了讓這件事有一個會浮出來的載體——
+**NEVER** 把它當成一個備註欄位隨手填一個不存在的 id。
+
+**匯合行印 ✅ 之後會另外印一行「0-A.2 裁決已延後，NEVER 讀成完成」**。看到那一行仍然收工，
+與沒有跑 0-A.2 的差別只有 ledger 裡一個 boolean。
+
 深度輸出缺 `## Review Verdict`（含截斷／context exhaustion）時，明示深度階段未完整；不盲重跑相同耗盡命令。保留已有 findings，由合格裁決者以完整最新 diff、原始 0-A.1 輸出與相同完整性契約接手。只有它實際覆蓋缺失範圍並產出完整 verdict 才可收口；否則 0-A.2 保持未完成。
 
 裁決輸出對**每一條** dismissed finding 提供：
@@ -440,7 +478,7 @@ DISMISSED — 反證：<file>:<line> ／ <契約或規則條文的具體出處>
 
 ```bash
 node "$COMMIT_SKILL_DIR/scripts/0a-metrics.mjs" record \
-  --review-mode <independent|escalated|fast-path-skip> \
+  --review-mode <independent|escalated|escalated-a2-deferred|fast-path-skip> \
   --reviewer <實際runtime/model> [--adjudicator <實際runtime/model>] \
   --diff-lines <行數> --diff-files <檔數> \
   --critical N --major N --minor N --info N \
@@ -448,7 +486,9 @@ node "$COMMIT_SKILL_DIR/scripts/0a-metrics.mjs" record \
   --screenshot <pass|skip> --doc <aligned|skip>
 ```
 
-Fast-path 不填未執行的 reviewer；escalated 記實際裁決者。`--dismissed-unsubstantiated` 是反證不足被保留為 real issue 的條數。Recorder 的參數檢查不證明 review 真有執行，須同時保留各軸原始 receipt；參數矛盾時修正流程或記錄，不能填假值讓它通過。舊 `--codex` CLI／歷史記錄是相容資料，不要求新入口冒充該模型組合。
+Fast-path 不填未執行的 reviewer；escalated 記實際裁決者；`escalated-a2-deferred` 依上方
+§ 0-A.2「裁決者結構性缺席時的延後路徑」多帶 `--a2-deferral-receipt` 與 `--a2-deferral-work-id`，
+**NEVER** 同時帶 `--adjudicator`（有裁決者就不叫延後，CLI 會拒收）。`--dismissed-unsubstantiated` 是反證不足被保留為 real issue 的條數。Recorder 的參數檢查不證明 review 真有執行，須同時保留各軸原始 receipt；參數矛盾時修正流程或記錄，不能填假值讓它通過。舊 `--codex` CLI／歷史記錄是相容資料，不要求新入口冒充該模型組合。
 
 本地 `.clade/0a-metrics.jsonl` 是閾值評估依據；`summary` 的歷史數據與本次結果分開。Fast-path 與大改動門檻的變更需據分佈判定，不憑單次觀感調整。
 
@@ -892,3 +932,17 @@ script 抓不到「這是一條新的最佳實踐」——那是語意判斷。�
 0-F 是 **advisory**：`bp-scan.ts` 永遠 exit 0，不擋 commit。A 類有命中卻選擇不處理時，完成報告 MUST 寫明哪一條、為什麼。
 
 通過後輸出 `✅ 0-F 通過（A 類 N 條已處理／B 類 M 條已判讀）`。
+
+
+## Claude commit operations
+
+每次先核對本入口實際 catalog，以下是 Claude Code 的操作映射，不外推 Claude Web／Desktop 已有相同工具。
+
+- Simplify：有 `Skill` 且技能已安裝時直接呼叫 `simplify`；其內部委派照當前 routing。結果回來後立即繼續 ceremony。
+- Review：符合共用資格的 CLI runner 由 Bash 執行；工具實際支持 `run_in_background` 才帶此參數。保存返回 task id；以對應 TaskOutput／完成通知收回同一工作，核對 terminal exit 與完整輸出。使用 Agent 時從本次 catalog 取真實名稱與 model 值，以不帶 maker history 的 fresh context 派遣。
+- Watch：有 ScheduleWakeup 才使用目前已安裝 keepalive 契約；喚醒只處理該 id 的控制面，不重播 review 命令。沒有喚醒 API 時用已有背景 handle 的 bounded wait。Timeout 不取消工作、不代表 PASS。
+- UI：`screenshot-review` 只有在實際可用且符合 review-policy 的視覺資格時派遣，附完整 item、截圖及互動證據；不是有同名檔就算能看圖。
+- 協調／詢問：有已授權的具名 agent 通道時先協調；需要使用者資訊時用本入口實際可用的詢問工具或直接對話。AskUserQuestion 不是授權的唯一載體，既有同範圍回答不重問。
+- Exit：先收回或安全停止本次會寫入的背景工作，再依 runtime-lifecycle 以原 work/runtime/session/token 釋放鎖。完成事件缺席時保留 gate 未完成與具體 handle，不宣稱已退出。
+
+每次 receipt 記實際 runtime、model 與隔離方式；本段不把 Claude 主線視為固定模型，也不代替共用跨模型判定。

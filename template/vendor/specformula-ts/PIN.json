@@ -1,0 +1,15 @@
+{
+  "id": "specformula",
+  "upstreamRepo": "SpecFormula/specformula-dev-framework",
+  "sha": "e5568250a2c0599983bce90fb08d548da35e1d64",
+  "upstreamSha": "e5568250a2c0599983bce90fb08d548da35e1d64",
+  "syncedAt": "2026-09-10T03:10:22.060Z",
+  "packages": [
+    "core",
+    "node",
+    "cucumber",
+    "dsl",
+    "plugin-api",
+    "testcontainer"
+  ]
+}

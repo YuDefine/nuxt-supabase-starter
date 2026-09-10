@@ -2,13 +2,7 @@
 description: SpecFormula BDD/SDD 框架的 fleet 採用契約——spec-first 順序、embedded／PostgreSQL 資料源判定、framework-neutral HTTP／test-control seam、業務時鐘單一來源、hosted Supabase 的 SSL 阻斷
 paths: ['features/**', 'specs/api/**', 'specs/data/**', 'isa.yml', 'cucumber.cjs', 'server/routes/test/**', 'server/utils/time-service.ts', 'packages/*/server/routes/test/**', 'packages/*/server/utils/time-service.ts']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/specformula.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/specformula.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 

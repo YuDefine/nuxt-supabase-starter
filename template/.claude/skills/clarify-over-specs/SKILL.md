@@ -1,15 +1,15 @@
 ---
 name: clarify-over-specs
-description: 在 `/specify` 產出 `spec.md` 後，主動掃描整份 spec 的高影響需求缺口；若仍有會影響規格正確性、驗收標準或 readiness 的問題，先委派 `/clarify` 訪談使用者，再把答案回寫到 spec、清理矛盾並回刷 checklist。Use when the user asks for post-spec requirement clarification, wants a generated spec professionally reviewed before `/plan`, or needs a spec-level clarify pass after `/specify`.
+description: >-
+  在 `/specify` 產出 `spec.md` 後，主動掃描整份 spec 的高影響需求缺口；若仍有會影響規格正確性、驗收標準或 readiness
+  的問題，先委派 `/clarify` 訪談使用者，再把答案回寫到 spec、清理矛盾並回刷 checklist。Use when the user asks
+  for post-spec requirement clarification, wants a generated spec professionally
+  reviewed before `/plan`, or needs a spec-level clarify pass after `/specify`.
+metadata:
+  clade:
+    invocation: explicit
 disable-model-invocation: true
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/clarify-over-specs/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@db46b1ddf59c47c9aab52a7d66d15668811fa501 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 
 # Clarify Over Specs

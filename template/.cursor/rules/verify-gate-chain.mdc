@@ -1,14 +1,9 @@
 ---
-description: "自主迴圈的驗證閘門鏈與停止條件——每個 iterate-until-green 迴圈 MUST 跑 gate chain、宣告 max_iterations、定義 escalation action"
-globs: ["**/*.ts", "**/*.vue", "**/*.tsx", "tasks/**", "specs/**"]
+description: "verify-gate-chain"
 alwaysApply: false
+globs: ["**/*.ts","**/*.vue","**/*.tsx","tasks/**","specs/**"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/verify-gate-chain.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/verify-gate-chain.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 
@@ -20,7 +15,7 @@ Local edits will be reverted by the next sync.
 
 Gate chain 是一組**有序、確定性、機器可判定**的驗證指令。每條指令的 exit code 是唯一判定依據：exit 0 = PASS，non-zero = FAIL。
 
-**每個 consumer MUST 在自己的 local rule source 定義 gate chain。** 新來源位於 `.clade/rules/verify-commands.md`，並宣告經審閱的 runtime audience；既有 `.cursor/rules/local/verify-commands.mdc` 在明確 adoption 前仍保留原內容與所有權。clade 定義標準（本規約），consumer 定義內容（各自的 test runner、port、health endpoint）；adoption 走 [[local-rule-override]] 的來源 hash 與投影所有權檢查。
+**每個 consumer MUST 在自己的 local rule source 定義 gate chain。** 新來源位於 `.clade/rules/verify-commands.md`，並宣告經審閱的 runtime audience；既有 `.claude/rules/local/verify-commands.md` 在明確 adoption 前仍保留原內容與所有權。clade 定義標準（本規約），consumer 定義內容（各自的 test runner、port、health endpoint）；adoption 走 [[local-rule-override]] 的來源 hash 與投影所有權檢查。
 
 ### Gate chain 層級
 
@@ -33,7 +28,7 @@ Gate chain 是一組**有序、確定性、機器可判定**的驗證指令。�
 
 **PASS = L0–L2 全 exit 0。** L3 為 SHOULD（dev server 未起時 skip，不算 FAIL）。
 
-AI Agent／Codex／Cursor 每個產品入口分別確認具名驗證 handler 是否安裝、啟用並實際執行。只有 generic hook adapter 或設定檔時，修改後顯式執行 consumer 定義的 L0；phase 結束仍執行完整 L0–L2。沒有命令執行能力或拿不到 exit/result 證據時，該 gate 保持未驗證。
+Claude Code／Codex／Cursor 每個產品入口分別確認具名驗證 handler 是否安裝、啟用並實際執行。只有 generic hook adapter 或設定檔時，修改後顯式執行 consumer 定義的 L0；phase 結束仍執行完整 L0–L2。沒有命令執行能力或拿不到 exit/result 證據時，該 gate 保持未驗證。
 
 ### Consumer verify-commands.md 範本
 

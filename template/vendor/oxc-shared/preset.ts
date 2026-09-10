@@ -69,7 +69,7 @@
  *
  * 2026-07-28: that is exactly how `nuxt-supabase-starter` Template CI broke on
  * `vp fmt --check` over `vendor/snippets/manual-review-enforcement/patterns.json`
- * — <consumer-i> and co-purchase had each independently patched `vendor/**`
+ * — <consumer-j> and co-purchase had each independently patched `vendor/**`
  * into their own vite.config.ts, which hid the gap instead of closing it.
  * `scripts/audit-governance-drift.ts` check 10 now fails on any config that
  * re-inlines one of these, so the next gap surfaces before a consumer does.
@@ -87,6 +87,10 @@ export const PROJECTION_EXCLUDES = [
   '.clade/**',
   '.spectra/**',
   'vendor/**',
+  // specformula 訊息 catalog 是唯一落在 consumer repo root（不在 vendor/ 底下）的 clade
+  // mirror，理由同 vendor/**：staged filter 得看得到它才不會把上游 mirror 誤判成 consumer
+  // 自己的檔案去 lint/fmt。
+  'specs/errors/**',
   // Agent 投影面：`.agents/` `.codex/` 由 scripts/sync-to-codex.ts 生成，`.cursor/` 由
   // scripts/sync-to-cursor.ts 生成（2026-08-24 起，先前是人工快照）。三者與上面四條同性質
   // —— consumer 端是產生物，裡面的 lint / fmt 違規只能回 clade 修。先前它們只躺在下面的
@@ -116,6 +120,7 @@ export const CLADE_VENDOR_EXCLUDES = [
   // 只會產生一批沒有人能修的 finding（修法在上游 repo，不在 clade）。
   'vendor/specformula/**',
   'vendor/specformula-ts/**',
+  'vendor/specformula-errors/**',
   // aixbdd 同理：`vendor/aixbdd/` 是 git submodule（上游 repo 全文），mirror 只有 markdown
   // 與 template，落在 plugins/ 底下不進 lint 面。
   'vendor/aixbdd/**',
@@ -373,4 +378,87 @@ export const fmtBase = {
     // 一律由 PROJECTION_EXCLUDES 帶入 —— consumer 不必在自己的 fmt.ignorePatterns 再列一次。
     ...PROJECTION_EXCLUDES,
   ],
+}
+
+/**
+ * Vitest 的 `defaultExclude` 逐字複本（v4.1.11 實測）。
+ *
+ * **為什麼是複本而不是 `import { defaultExclude } from 'vite-plus'`**：本檔目前**零 import**，
+ * 而它的消費端不只有 `vite.config.ts` —— 實際會 import 本檔的純 node 腳本包括
+ * `scripts/audit-typecheck-projection-face.ts`；`vendor/review-gui-web/{nuxt,vite}.config.ts`
+ * 也在建置期載入。頂層 import vite-plus 會讓這些非 vite 執行路徑（尤其是 audit script
+ * 這類會在 vite-plus 尚未安裝的新 consumer onboarding 途中被跑到的腳本）連帶付出載入成本。
+ *
+ * 複本的代價是會與上游漂開，**所以它由測試釘住**：`test/preset-test-base.test.ts` 直接
+ * export 本陣列，與 `vite-plus` 實際 re-export 的 `defaultExclude` 逐項 `deepEqual`，
+ * 不一致就紅。**NEVER** 手動增刪本陣列來「修好」那個測試 —— 它紅代表上游改了預設，
+ * 該做的是同步複本並重新判斷 `AGENT_CACHE_TEST_EXCLUDES` 有沒有哪一條變成多餘。
+ */
+export const VITEST_DEFAULT_EXCLUDE = ['**/node_modules/**', '**/.git/**']
+
+/**
+ * Agent runtime 在 consumer working tree 留下的 cache／投影目錄。
+ *
+ * 這裡面的「測試檔」**不是這個 repo 的測試** —— `.pi/git/` 底下是 Pi 為了做 code review
+ * 而 clone 的**外部 repo 全文**（實測 2026-09-10：<consumer-g> 的 `.pi/git/` 有 114 MB、
+ * 578 支測試檔，全部屬於 `github.com/YuDefine/clade`，而該 repo 自有測試檔為 **0**）。
+ * 跑它們的結果是 107 失敗 → `vp test` exit 1，而紅綠取決於「這棵樹有沒有被 Pi clone 過」。
+ *
+ * **Vitest 的預設 exclude 擋不住，而且原因不直觀**：v4 的 `defaultExclude` 逐字只有
+ * `['**\/node_modules/**', '**\/.git/**']`。Pi 的 clone 落在 `.pi/git/`，那個 segment 是
+ * `git` 不是 `.git` —— 差一個點，`**\/.git/**` 完全不命中。**NEVER** 以為「vitest 本來就會
+ * 跳過 git 目錄」。
+ *
+ * **NEVER 期待 `.gitignore` 會順便解掉它**：vitest 不讀 `.gitignore`。TD-1053 的 review 那一面
+ * 是靠治理層的 gitignore 條目解的（`git ls-files --others --exclude-standard` 吃 gitignore），
+ * test 這一面**沒有**共用機制，它要的是 `test.exclude`。兩面同根因、不同修法。
+ *
+ * 逐台實測的命中面（2026-09-10，`*.{test,spec}.{ts,js}` 計數）：
+ * `.pi/` 五台全中（408–592 支）、`.clade/` <consumer-a> 4 支、`.claude/` <consumer-b> 60 支。
+ * `vendor/` 三台皆 0，**刻意不列** —— clade 自己的 `vendor/` 是真源碼不是投影，
+ * 列進去會把 clade 本身的測試面挖掉一塊。
+ */
+export const AGENT_CACHE_TEST_EXCLUDES = [
+  // Pi 的 repo cache（TD-1053 的主因）。用 `.pi/**` 而非 `.pi/git/**`：cache 佈局是 Pi 的
+  // 實作細節，釘死子路徑等於把別人的內部結構寫進我們的 gate。
+  '**/.pi/**',
+  // 以下與 PROJECTION_EXCLUDES 同一批投影面。裡面若有測試，那是**產生它的那個 repo** 的測試，
+  // 修法在源頭不在這裡 —— 與 lint/fmt 對投影面的處置同一個理由。
+  '**/.clade/**',
+  '**/.claude/**',
+  '**/.agents/**',
+  '**/.codex/**',
+  '**/.cursor/**',
+  '**/.spectra/**',
+]
+
+/**
+ * Consumer `vite.config.ts` 的共用 `test` 設定。
+ *
+ * **`test.exclude` 是覆蓋語義，不是合併** —— 直接寫 `exclude: ['**\/.pi/**']` 會把 vitest
+ * 自己的 `node_modules` / `.git` 排除一起清掉，於是 `node_modules` 底下數以萬計的測試全部
+ * 進掃描面。所以本 base 自己就把 vitest 的預設展開進去（見 `VITEST_DEFAULT_EXCLUDE`）。
+ *
+ * Consumer 用法（`test` 是 consumer 自有 `vite.config.ts` 的欄位，clade 只出這個 base）：
+ *
+ *   import { testBase } from './vendor/oxc-shared/preset.ts'
+ *
+ *   export default defineConfig({
+ *     test: {
+ *       ...testBase,
+ *       exclude: [...testBase.exclude, 'e2e/**'],   // 要加自己的就展開，NEVER 直接覆寫
+ *     },
+ *   })
+ *
+ * clade 自己**不消費本 base**：它的 `test.include` 收窄成 `vp-tests/**\/*.vp.ts`，
+ * 掃描面本來就進不到 `.pi/`。**NEVER** 拿「clade 沒事」推論 consumer 也沒事 ——
+ * fleet 現況不齊一：<consumer-f>／<consumer-i>／<consumer-k> 已收窄 `test.include`（同樣免疫，
+ * 但理由跟 clade 一樣是 include 收窄，不是本 base）；<consumer-b>／<consumer-c> 則是
+ * consumer 自己手寫 `test.exclude`（如 `['e2e/**', 'node_modules/**', '.nuxt/**', '.output/**']`），
+ * 這正是本檔開頭警告的覆蓋語義事故現場 —— 手寫版把 `**\/.git/**` 弄丟了、`node_modules/**`
+ * 也沒有 `**\/` 前綴。這兩台是 `testBase` 目前最需要落地的目標，接手要先確認它們真的換成
+ * `...testBase.exclude` 展開，而不是自己再補幾條。
+ */
+export const testBase = {
+  exclude: [...VITEST_DEFAULT_EXCLUDE, ...AGENT_CACHE_TEST_EXCLUDES],
 }

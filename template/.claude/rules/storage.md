@@ -2,13 +2,7 @@
 description: Supabase Storage 使用規範（上傳、signed URL、policy、清理）
 paths: ['server/api/**/*.ts', 'packages/*/server/api/**/*.ts', 'supabase/migrations/**/*.sql']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/db-runtime/cf-workers/storage.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/modules/db-runtime/cf-workers/storage.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Storage

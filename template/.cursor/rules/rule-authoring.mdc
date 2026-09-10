@@ -1,14 +1,9 @@
 ---
-description: "撰寫或修改 rule / SKILL.md / subagent brief / snippet / 落盤文件（pitfall、HANDOFF、TD、digest）的措辭工程——先分類失敗型態再選形式、觸發條件不寫流程、高違規規約配反開脫三件套、長度配讀者要做的決定、發佈前驗證"
-globs: [".clade/rules/**/*.md", ".claude/rules/**/*.md", ".claude/skills/**/*.md", "tasks/lessons.md", "rules/**/*.md", "plugins/hub-core/skills/**/*.md", "claude-md/**/*.md", "vendor/snippets/**/*.md", "docs/pitfalls/**/*.md", "docs/digests/**/*.md", "docs/tech-debt.md", "HANDOFF.md"]
+description: "rule-authoring"
 alwaysApply: false
+globs: [".clade/rules/**/*.md",".claude/rules/**/*.md",".claude/skills/**/*.md","tasks/lessons.md","rules/**/*.md","plugins/hub-core/skills/**/*.md","claude-md/**/*.md","vendor/snippets/**/*.md","docs/pitfalls/**/*.md","docs/digests/**/*.md","docs/tech-debt.md","HANDOFF.md"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/rule-authoring.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/rule-authoring.md; edit canonical source -->
 
 
 <!-- clade-targets: claude,codex,cursor -->
@@ -18,7 +13,7 @@ Local edits will be reverted by the next sync.
 
 ## Canonical source and native delivery boundary
 
-Central rules are authored in `rules/**/*.md`; consumer-local rules are authored in `.clade/rules/**/*.md`. `.cursor/rules/**/*.md`, `.codex/rules/**/*.md`, and `.cursor/rules/**/*.md` are runtime delivery surfaces generated or adopted by their respective adapters, so editing one of those paths does not silently change the canonical source. A hook, skill, or native loader is an actual delivery mechanism only when the target adapter and its configured entry provide evidence for that path; a shared rule must keep its obligation in the common source and record target-specific mechanics in the matching adapter fragment.
+Central rules are authored in `rules/**/*.md`; consumer-local rules are authored in `.clade/rules/**/*.md`. `.claude/rules/**/*.md`, `.codex/rules/**/*.md`, and `.cursor/rules/**/*.md` are runtime delivery surfaces generated or adopted by their respective adapters, so editing one of those paths does not silently change the canonical source. A hook, skill, or native loader is an actual delivery mechanism only when the target adapter and its configured entry provide evidence for that path; a shared rule must keep its obligation in the common source and record target-specific mechanics in the matching adapter fragment.
 
 **核心命題**：規約文字是塑形 agent 行為的 code，不是散文。形式選錯的規約看起來嚴謹、實測反效果——對「輸出形狀」問題用禁止句，違規率比不寫指引還高。本規則對**每一次** rule / SKILL.md / brief / snippet 的撰寫與修改生效，不是只有大改版才適用。
 
@@ -67,7 +62,7 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 2. **Rationalization table**：一列一組「藉口 → 現實」。藉口**必須是逐字實錄**（從 pitfall 檔、session transcript、baseline 測試抽），不虛構假想藉口——虛構的堵不到真的洞。
 3. **Red Flags**：「發現自己在想 X = 停」清單，收錄違規**前兆**句式（「就這一次」「這個情況不一樣」「先做了再補」）。
 
-三件套的既有範本：[[testing-anti-patterns]]、`~/.cursor/skills/receiving-code-review`。
+三件套的既有範本：[[testing-anti-patterns]]、`~/.claude/skills/receiving-code-review`。
 
 **可選第四件——completion checkbox＋證據 gate**：兩條**同時**成立才加——(1) 完成宣告本身是高違規點的流程型 skill（apply / verify / commit 類），且 (2) 該步驟的完成**有外部可取事實可查**（實跑輸出 / 截圖 / API 回應 / DB 狀態 / exit code）。兩條都中，把 completion criterion 寫成 checkbox 清單，每格綁「貼出實跑 invocation 與 output」——宣告完成前逐格附證據，只宣稱 done 不算完成。這是 § 資訊架構與拆分 sequence-cut 順序裡「先 sharpen criterion」的實作形式（便宜且局部，先於拆步驟）。出處：mattpocock/skills `diagnosing-bugs` completion checklist。落地實例：commit Step 6、[[proactive-skills.design-checkpoint]] § Design Gate。
 
@@ -104,7 +99,7 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 
 `paths:` 的 glob 錨在 target adapter 的 **projectRoot**（也就是該 runtime instruction root 所在的專案層），不是任意 git repo root。這對**每一支**帶 `paths:` 的 rule 生效，不是只有動到 monorepo 的那幾支。三條硬規約：
 
-1. **NEVER 寫 `template/` 前綴**。template-based consumer（`nuxt-supabase-starter`）的投影落點是 `template/.cursor/rules/`，它的 project root 就是 `template/` —— 寫 `server/**` 才命中，`template/server/**` 永不命中。
+1. **NEVER 寫 `template/` 前綴**。template-based consumer（`nuxt-supabase-starter`）的投影落點是 `template/.claude/rules/`，它的 project root 就是 `template/` —— 寫 `server/**` 才命中，`template/server/**` 永不命中。
 2. **MUST 為每一條 source-tree top-level entry 配 `packages/*/<entry>` 變體**。monorepo consumer（<consumer-a> 等）的 `.claude/` 在 repo root，nested package 的檔案只有這個變體抓得到。source-tree top-level 的判定清單是 `scripts/audit-rule-paths-monorepo.ts` 的 `SOURCE_TREE_DIRS`。
 3. **NEVER 靠肉眼判這兩條**。`node scripts/audit-rule-paths-monorepo.ts` 是 SoT，`WARN` = 缺 monorepo 變體、`DEAD` = 寫了 `template/` 前綴。它已是 publish blocking gate。
 

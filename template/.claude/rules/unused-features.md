@@ -2,13 +2,7 @@
 description: 專案目前未使用的 Supabase 功能 — 引入前的決策與規約
 paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'app/**/*.{ts,vue}', 'packages/*/app/**/*.{ts,vue}']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/db-runtime/cf-workers/unused-features.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/modules/db-runtime/cf-workers/unused-features.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Unused Features Guardrails

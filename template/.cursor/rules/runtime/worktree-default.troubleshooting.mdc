@@ -1,0 +1,14 @@
+---
+description: "runtime/worktree-default.troubleshooting"
+alwaysApply: false
+globs: ["openspec/changes/**","vendor/scripts/wt-helper.ts","vendor/scripts/stash-reconcile.ts","vendor/scripts/review-gui.ts","scripts/wt-helper.ts","scripts/review-gui.ts"]
+---
+<!-- Clade native rule; source: adapters/cursor/instructions/rules/core/worktree-default.troubleshooting.md; edit canonical source -->
+
+
+
+<!-- clade-targets: cursor -->
+
+# Cursor worktree troubleshooting transport
+
+Cursor Desktop, IDE, Web, and CLI troubleshooting surfaces remain separate capability claims. Use only the configured native entry and its receipt for conflict, review-gui, or cleanup actions; unresolved capability stays unresolved.

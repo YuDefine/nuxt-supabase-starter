@@ -2,13 +2,7 @@
 description: PR-isolated DB preview environment capability + safety contract（不限工具、不限 topology）
 paths: ['supabase/migrations/**/*.sql', '.github/workflows/**/*.yml', 'docker-compose*.yml', 'infra/**/*', 'scripts/dev-session*', 'scripts/worktree-*', 'scripts/singleton*', '.claude/consumer-meta.json']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/db-preview-env.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/db-preview-env.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # DB Preview Environment（capability + safety contract）

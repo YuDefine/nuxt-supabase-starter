@@ -1,10 +1,4 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/output-hygiene.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/output-hygiene.md; edit canonical source -->
 # Output Hygiene — 別把內部過程變成讀者的負擔
 
 <!-- clade-targets: claude,codex,cursor -->

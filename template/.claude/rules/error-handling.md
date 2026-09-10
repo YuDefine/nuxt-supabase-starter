@@ -2,13 +2,7 @@
 description: 錯誤處理規範（Server 驗證 + Client 顯示）
 paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'server/**/*.ts', 'packages/*/server/**/*.ts']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/error-handling.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/error-handling.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Error Handling

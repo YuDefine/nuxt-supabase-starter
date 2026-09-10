@@ -1,14 +1,9 @@
 ---
-description: "Supabase Migration 操作規範"
-globs: ["supabase/migrations/**/*.sql", "server/**/*.ts", "packages/*/server/**/*.ts"]
+description: "migration"
 alwaysApply: false
+globs: ["supabase/migrations/**/*.sql","server/**/*.ts","packages/*/server/**/*.ts"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/db-schema/supabase/migration.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/modules/db-schema/supabase/migration.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 
@@ -26,7 +21,7 @@ Local edits will be reverted by the next sync.
 - **MUST** run `supabase db advisors`（CLI v2.81.3+；版本不足退 MCP `get_advisors`）並**逐條**處置 security 類 finding — 見下方 § Lint 與 advisors 的處置義務
 
 
-> 各 runtime 中載入的本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.clade/rules/`；既有 `.cursor/rules/local/` 經顯式 local rule migration 接管前保留。要改共同義務請回 clade 源檔並 propagate。
+> 各 runtime 中載入的本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.clade/rules/`；既有 `.claude/rules/local/` 經顯式 local rule migration 接管前保留。要改共同義務請回 clade 源檔並 propagate。
 
 ## Lint 與 advisors 的處置義務
 

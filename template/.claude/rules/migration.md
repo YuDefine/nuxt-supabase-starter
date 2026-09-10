@@ -2,13 +2,7 @@
 description: Supabase Migration 操作規範
 paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'packages/*/server/**/*.ts']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/db-schema/supabase/migration.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/modules/db-schema/supabase/migration.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Migration

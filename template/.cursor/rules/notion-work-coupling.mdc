@@ -1,14 +1,9 @@
 ---
-description: "consumer 採用 Notion 制度時（consumer-meta 的 notion.ticketWorkflow 或 notion.projectWorkflow）適用。症狀：工作做完或發版了但 Notion 狀態還停在舊值、不知道某個 work item 對應哪張 ticket 或哪個 User Story、Notion 現況與 git 實況對不上、拿不準該不該去碰 Notion。狀態轉移授權沿用全域 _notion-<consumer-b>-board/REFERENCE.md §3 表，不另造 state machine"
-globs: ["tasks/**", "specs/plans/**", ".claude/consumer-meta.json"]
+description: "notion-work-coupling"
 alwaysApply: false
+globs: ["tasks/**","specs/plans/**",".claude/consumer-meta.json"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/notion-work-coupling.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/notion-work-coupling.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->

@@ -2,13 +2,7 @@
 description: Session tasks 的操作細節——何時用 / 不用、模板、升級路徑、與其他真相層的分工、lessons.md 邊界；另含**收工正文**（收工三步 / 收工訊息契約 / Herdr session transport / 派幾個 pane / successor 收割），由 [[session-tasks]] 的具名時機指針與 session-context-budget-warn hook 叫醒
 paths: ['tasks/**', 'HANDOFF.md']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/session-tasks.operations.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/session-tasks.operations.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
 
@@ -471,7 +465,7 @@ user 看得到那個 pane，接手 agent 可以用 structured user-input surface
 | 還不知道有幾件——要先跑 health gate／worktree／TD hygiene 盤點 | `/handoff next` | 盤點後落到上面三者之一 |
 
 **NEVER 因為「一件一個 pane 比較整齊」把 serial 工作拆成 N 個 worker**——它們會同時改同一批檔。
-**NEVER** 把 serial 鏈切成「worker 拿前半段、主線自己留後半段」——本表只數 pane，那種切法在這裡不會 fire，判準在 [[agent-routing]] § 派多少。
+**NEVER** 把 serial 鏈切成「worker 拿前半段、主線自己留後半段」——本表只數 pane，那種切法在這裡不會 fire，判準在 [[agent-routing.dispatch-execution]] § 派多少。
 **NEVER 因為「合成一份 brief 比較省事」把 N 件真正獨立的工作塞給單一 successor 依序做**——那放棄了
 平行性，而 fanout 的 topology 本來就是每個不同主題各佔一個 Tab。
 

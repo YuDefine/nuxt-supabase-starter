@@ -2,13 +2,7 @@
 description: 寫 code 當下的 TypeScript 語法限制（type stripping 擋不掉的三條）、副檔名與 import specifier 規則、命名與註解（機器擋不住的那一半）、用 vp 命令驗證；工具鏈設定治理在 code-style.toolchain
 paths: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts}']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/code-style.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/code-style.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 > **工具鏈治理已拆到 [[code-style.toolchain]]**（動 `vite.config.*` / `package.json` /

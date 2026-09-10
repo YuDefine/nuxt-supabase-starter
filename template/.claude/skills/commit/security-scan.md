@@ -1,11 +1,3 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/commit/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
-<!-- clade-targets: claude,codex,cursor -->
 
 # 0-S Codex Security — 放行條件與額度配置
 

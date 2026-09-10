@@ -281,7 +281,11 @@ const HOME_PATH_RE = /\/(?:Users|home)\/([^/\s"']+)/g
 // rules/manual-review.backend.md 與 rules/session-claims.md。
 const PLACEHOLDER_USER_RE = /^(?:<|\.{2,}|\$|\{|%|YOUR|your\b)/
 
-const MAINTAINER_ONLY_SKILLS = ['oops', 'improvement-loop', 'review-rules']
+// yudefine-deploy 綁 maintainer 的 Cloudflare 帳號與 Notion secrets 頁（TD-1066）。它與前三支
+// 不同：前三支靠 propagate 對 PUBLIC repo 移除整個 modules.maintenance 就能擋，而它住在
+// hub-runtime-cf-workers —— 公開 consumer 真的需要那個 plugin。所以真正的排除在
+// runtime-capability-plan.ts 的 `clade-visibility: private` 標記，本名單只是第二層對帳。
+const MAINTAINER_ONLY_SKILLS = ['oops', 'improvement-loop', 'review-rules', 'yudefine-deploy']
 
 // 已退役 generator 留下的 metadata 檔。`sync-to-agents` 於 v1.4.315 更名為
 // `sync-to-codex`（commit b05efa9a）時 writer 被一併移除但沒人發現，而
@@ -401,9 +405,9 @@ export async function resolvePublicConsumers(
   return { roots, errors }
 }
 
-// 路徑 → consumer：比對**路徑區段**而非 substring。substring 會讓 `<consumer-g>` 命中
-// `<consumer-f>`，而選錯 consumer 就是選錯 repo_id、選錯 visibility。
-// 多個區段都命中時取最長的 id（`<consumer-f>` 勝過 `<consumer-g>`）。
+// 路徑 → consumer：比對**路徑區段**而非 substring。substring 會讓 `<consumer-h>` 命中
+// `<consumer-g>`，而選錯 consumer 就是選錯 repo_id、選錯 visibility。
+// 多個區段都命中時取最長的 id（`<consumer-g>` 勝過 `<consumer-h>`）。
 function matchConsumerEntry(path, entries) {
   const segments = new Set(path.split('/').filter(Boolean))
   let best = null

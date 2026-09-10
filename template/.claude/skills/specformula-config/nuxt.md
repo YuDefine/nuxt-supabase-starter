@@ -1,10 +1,3 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/specformula-config/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- clade-owned: not mirrored from upstream; see vendor/snippets/specformula/README.md -->
 
 # SpecFormula Nuxt 配置指南

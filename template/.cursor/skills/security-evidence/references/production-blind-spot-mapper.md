@@ -1,10 +1,3 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/security-evidence/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Production Blind-Spot Mapper（mode `map`，逐字 prompt）
 
 來源：Codex Security Bridge Kit Prompt 2。照 `<context-gathering>` 一層一批問、等答案；輸出用 `<output-format>` 的結構。

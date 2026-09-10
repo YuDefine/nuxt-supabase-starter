@@ -2,13 +2,7 @@
 description: Pi dispatch、bounded phase、截圖取證與符合性判定的載體、brief、監看、receipt 與配額契約；派工前依 agent-routing 指針載入
 paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', '.claude/agents/**', 'screenshots/**/progress.json']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/agent-routing.pi-watch-protocol.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/agent-routing.pi-watch-protocol.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
 
@@ -409,7 +403,7 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`native wakeu
 | **安全網 fallback（預設）** | **`1200`–`1800`**，prompt = canonical inert control message |
 | harness task 仍 running | 以完全相同的 interval 與 inert prompt 重排 |
 
-**180s 的具名例外（窮舉，其餘一律禁止）**：`commit` gate 0-A.1 的 Pi review、`dep-upgrade` outdated-mode 的 low-risk 升版 review。兩者的共同 predicate 是**主線在同一段時間跑並行軸、且結果一到就要接著用**——短 interval 買的是並行軸的銜接，不是 progress telemetry；prompt 仍 **MUST** 是 canonical inert control message，控制 turn 一樣不得讀 output。不在這份清單上的路徑用 `1200`–`1800`。
+**180s 的具名例外（窮舉，其餘一律禁止）**：`commit` gate 0-A.1 的 Pi review、`version-upgrade` outdated-mode 的 low-risk 升版 review。兩者的共同 predicate 是**主線在同一段時間跑並行軸、且結果一到就要接著用**——短 interval 買的是並行軸的銜接，不是 progress telemetry；prompt 仍 **MUST** 是 canonical inert control message，控制 turn 一樣不得讀 output。不在這份清單上的路徑用 `1200`–`1800`。
 
 **禁止** `< 60`（runtime clamp 也會擋）。**上限 `3300`（MUST）**：這個 fallback 同時承擔 [[agent-routing]] § 主線靜默上限 的 cache-keepalive 職責，所以 pi 路徑**不**另外排第二個 wakeup，也 **NEVER** 拉長到 3300 以上。
 
@@ -577,7 +571,7 @@ mutation:
   Grok-xai → Claude Sonnet
 ```
 
-**dep-upgrade 專用 mutation 路徑**（`dep-upgrade-first-pass`／`dep-upgrade-research`）：xAI Grok 4.6 → Cursor Grok 4.6（同 Grok effort，先檢查 mutation 能力）→ bare `gemini`（Gemini 3.8 Flash，high）→ 停止並回報 blocker。Gemini quota／provider 不可用／catalog miss 都在此結束，不接 Sonnet、不續走 generic Gemini 鏈。`--retry-of` 繼承 originating row 與 mutation capability，下一步以 dispatcher payload 為準。
+**version-upgrade 專用 mutation 路徑**（`version-upgrade-first-pass`／`version-upgrade-research`）：xAI Grok 4.6 → Cursor Grok 4.6（同 Grok effort，先檢查 mutation 能力）→ bare `gemini`（Gemini 3.8 Flash，high）→ 停止並回報 blocker。Gemini quota／provider 不可用／catalog miss 都在此結束，不接 Sonnet、不續走 generic Gemini 鏈。`--retry-of` 繼承 originating row 與 mutation capability，下一步以 dispatcher payload 為準。
 
 `workspace_access` 的來源只有三條：concrete table row 由 `pi-routing-policy.ts` 推導；manual caller 顯式帶 `--workspace-access readonly|mutation`；fallback 以 `--retry-of` 從 ledger 繼承。Dispatcher 把 effective value 寫進 ledger／flow／exit payload，`next_step` 也帶回 capability。**每一個**會修改 working tree、lockfile、Git index 或建立 commit 的 caller都 **MUST** 宣告 `mutation`；無法判定時，Cursor admission與指向 Cursor 的下一跳都 fail closed。
 
@@ -604,7 +598,7 @@ mutation:
 舊鏈的 gemini／luna 耗盡等於**直落 Claude Haiku**，`sol-cursor` 同死則讓 sol exit 4 **直回 Opus 主線**——
 降級鏈的存在意義正是不要在這種時候把工作推回最貴的那一格。
 
-**跨 model 家族的跳是具名例外，不是通則**：luna 鏈與上述 dep-upgrade 專用鏈各有自己的終點。 新增跨家族跳 MUST Charles 逐鏈拍板，
+**跨 model 家族的跳是具名例外，不是通則**：luna 鏈與上述 version-upgrade 專用鏈各有自己的終點。 新增跨家族跳 MUST Charles 逐鏈拍板，
 准入三條連言是**申請門檻**，**NEVER** 由它自動導出（必要條件不是充分條件）；逐條判準與取證見
 rationale § luna 鏈的跨家族跳。Astra 的 planning／decision／review 角色，以及 Sol 的 `non-ui-implementation-escalate`
 各自遵守具名列限制；NEVER 轉 grok 的限制**含 fallback 路徑，配額耗盡不是豁免條件**。
@@ -689,7 +683,7 @@ redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**d
 
 ## 配額與 residency 的下推兩段
 
-> 本節是 [[agent-routing]] § 配額邊界 下推的兩段。**判「這個 codex-primary verdict 要不要真的 dispatch」之前，以及要動配額鏈 `-cursor` 那一跳之前，MUST 先讀本節。**
+> 本節是 [[agent-routing.dispatch-execution]] § 配額邊界 下推的兩段。**判「這個 codex-primary verdict 要不要真的 dispatch」之前，以及要動配額鏈 `-cursor` 那一跳之前，MUST 先讀本節。**
 
 ### `-cursor` 那一跳的准入（workspace capability ＋材料來源）
 
@@ -740,4 +734,4 @@ node vendor/scripts/pi-dispatch.ts --brief /tmp/repair.md --cwd /tmp/repair-repo
 
 ## 串行鏈的既有實例
 
-> 既有的三處特例是[[agent-routing]] § 派多少的實例，不取代[[agent-routing]] § 派多少：`handoff/relay-steps.md` §0 與 `session-tasks.operations.md` § 派幾個 pane（兩者都框在「serial 工作 NEVER 拆給 N 個 worker」），以及 `handoff/dispatch-common.md` § 2 的 brief 範圍檢查點。**它們防的是「拆給 N 個 worker」，[[agent-routing]] § 派多少多防一種形狀：切成「worker ＋ 主線自己」**——那種切法在既有條文的字面下不會 fire，因為沒有第二個 worker。
+> 既有的三處特例是[[agent-routing.dispatch-execution]] § 派多少的實例，不取代[[agent-routing.dispatch-execution]] § 派多少：`handoff/relay-steps.md` §0 與 `session-tasks.operations.md` § 派幾個 pane（兩者都框在「serial 工作 NEVER 拆給 N 個 worker」），以及 `handoff/dispatch-common.md` § 2 的 brief 範圍檢查點。**它們防的是「拆給 N 個 worker」，[[agent-routing.dispatch-execution]] § 派多少多防一種形狀：切成「worker ＋ 主線自己」**——那種切法在既有條文的字面下不會 fire，因為沒有第二個 worker。

@@ -2,15 +2,7 @@
 name: verification-create
 description: Use when user requests verification setup. NOT for maintenance.
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/verification-create/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
 
-
-<!-- clade-targets: claude,codex,cursor -->
 
 # Create project verification infrastructure
 

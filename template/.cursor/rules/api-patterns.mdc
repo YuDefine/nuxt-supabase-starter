@@ -1,14 +1,9 @@
 ---
-description: "Server API 設計規範"
-globs: ["server/api/**/*.ts", "packages/*/server/api/**/*.ts"]
+description: "api-patterns"
 alwaysApply: false
+globs: ["server/api/**/*.ts","packages/*/server/api/**/*.ts"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/runtime/cf-workers/api-patterns.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/modules/runtime/cf-workers/api-patterns.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 
@@ -28,7 +23,7 @@ Local edits will be reverted by the next sync.
 
 Reference: `docs/api/API_DESIGN_GUIDE.md` — 完整 API 設計指南含進階模式
 
-> 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.cursor/rules/local/`；要改本檔請回 clade 源檔並 propagate。
+> 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.claude/rules/local/`；要改本檔請回 clade 源檔並 propagate。
 
 ## OWASP API Authorization
 

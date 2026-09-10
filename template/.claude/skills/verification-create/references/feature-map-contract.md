@@ -1,13 +1,5 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/verification-create/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Feature map contract
 
-<!-- clade-targets: claude,codex,cursor -->
 
 Feature map 是產品使用者視角的驗證導航，不是 source tree inventory。它回答「使用者怎麼到達、怎麼操作、什麼外部可觀察結果算成功」。
 

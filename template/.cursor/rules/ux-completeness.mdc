@@ -1,14 +1,9 @@
 ---
-description: "UX 完整性規則——定義 \"feature complete\"、強制列舉 user-facing surface、防止 DB+API 完成但 UI 缺失"
-globs: ["tasks/**", "specs/plans/**", "app/**/*.vue", "packages/*/app/**/*.vue", "shared/types/**/*.ts", "packages/*/shared/types/**/*.ts", "supabase/migrations/**"]
+description: "ux-completeness"
 alwaysApply: false
+globs: ["tasks/**","specs/plans/**","app/**/*.vue","packages/*/app/**/*.vue","shared/types/**/*.ts","packages/*/shared/types/**/*.ts","supabase/migrations/**"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/ux-completeness.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/ux-completeness.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->

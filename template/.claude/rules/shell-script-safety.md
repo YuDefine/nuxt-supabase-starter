@@ -2,13 +2,7 @@
 description: shell script 的身分與清理生命週期——自己呼叫 sudo 且使用 user-level toolchain 的腳本、trap 引用函式區域變數、清理或回滾靜默未執行
 paths: ['**/*.sh', 'ops/**', 'deploy/**', 'scripts/**']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/shell-script-safety.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/shell-script-safety.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Shell script safety

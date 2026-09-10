@@ -35,6 +35,18 @@ export type WtEnvBootstrapRunner = (
 export interface WtEnvBootstrapOptions {
   allowOrphanRecord?: boolean
   spawnSyncImpl?: WtEnvBootstrapRunner
+  /**
+   * Checkout whose `scripts/wt-env-bootstrap.ts` implements the command, when that
+   * is not the worktree being acted on. Teardown MUST set this to the main
+   * checkout: a worktree carries the shim as it stood on its own branch, so an
+   * old tree runs an old implementation of its own removal. Observed cost
+   * (<consumer-a> 2026-09-09): `batch cleanup` on an integration worktree forked before
+   * `codex/batch-<UUID>` slugs were recognised died with `E_BRANCH_SLUG`, while
+   * the identical command run from main succeeded — the tree could not be
+   * deleted because it only knew the vocabulary of the day it was created.
+   * Defaults to `worktreePath`, preserving provisioning behaviour.
+   */
+  scriptRoot?: string
 }
 
 /**
@@ -131,7 +143,10 @@ export function runWtEnvBootstrap(
   command: string,
   opts: WtEnvBootstrapOptions = {},
 ) {
-  const script = resolveWtEnvBootstrapScript(worktreePath)
+  // `--worktree` names the target, so the implementation may live in another
+  // checkout; only the resolution root moves, never the tree being acted on.
+  const scriptRoot = opts.scriptRoot ?? worktreePath
+  const script = resolveWtEnvBootstrapScript(scriptRoot)
   if (!script) return null
 
   const args = [script, command, '--worktree', worktreePath, '--json']
@@ -139,7 +154,7 @@ export function runWtEnvBootstrap(
 
   const run = (opts.spawnSyncImpl ?? spawnSync) as WtEnvBootstrapRunner
   const result = run(process.execPath, args, {
-    cwd: worktreePath,
+    cwd: scriptRoot,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   })

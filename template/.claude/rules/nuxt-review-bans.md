@@ -2,13 +2,7 @@
 description: patterns.json 機械 ban 清單的實作階段投影 — 寫 .vue / app.config.ts 前必讀；不等 /commit review 才抓
 paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'app.config.ts', 'packages/*/app.config.ts', 'app/app.config.ts', 'packages/*/app/app.config.ts', 'vendor/review-gui-web/**/*.vue']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/framework/nuxt/nuxt-review-bans.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-review-bans.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Nuxt Review Bans（實作階段強制）

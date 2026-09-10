@@ -148,8 +148,27 @@ export const doctorRules = {
   'vue/style/prefer-props-destructure-defaults': 'warn',
 }
 
+/**
+ * 上游 mirror 與 submodule 的落點 —— doctor 掃到這裡報出來的每一個 finding **沒有人能在
+ * consumer 修**（修法在上游 repo）。與 `vendor/oxc-shared/preset.ts` 的 `CLADE_VENDOR_EXCLUDES`
+ * 同一組路徑、同一個理由：`scripts/sync-upstream-mirrors.ts` 逐字複製上游，上游用自己的
+ * lint / typecheck baseline。
+ *
+ * 實證（2026-09-09 <consumer-a>）：`vendor/specformula-ts/packages/{core,plugin-api}/src/**` 兩處
+ * `TS0004 no-caller-chosen-result-type` 讓 `pnpm doctor` exit 1。這**不是**「vite-doctor vs
+ * SpecFormula 二選一」—— 兩樣都留，掃描面把鏡像排掉即可。
+ *
+ * NEVER 把這條讀成「刪掉鏡像」：鏡像是 SpecFormula 採用的載體，刪掉會讓 P7 宣告失去實體。
+ */
+export const DOCTOR_UPSTREAM_MIRROR_EXCLUDES = [
+  'vendor/specformula/**',
+  'vendor/specformula-ts/**',
+  'vendor/aixbdd/**',
+]
+
 export const doctorConfig = {
   config: {
     rules: doctorRules,
+    exclude: DOCTOR_UPSTREAM_MIRROR_EXCLUDES,
   },
 }

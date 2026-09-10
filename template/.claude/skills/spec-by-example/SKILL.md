@@ -1,15 +1,15 @@
 ---
 name: spec-by-example
-description: 承接新的 plan package 中的 `spec.md`，把需求收斂成 plan-side `features/acceptance/*.feature`。此 skill 只寫入 `specs/plans/NNN-*/features/acceptance/**`，不修改 `specs/truth/**`，也不更新 `truth-delta.md`。
+description: >-
+  承接新的 plan package 中的 `spec.md`，把需求收斂成 plan-side
+  `features/acceptance/*.feature`。此 skill 只寫入
+  `specs/plans/NNN-*/features/acceptance/**`，不修改 `specs/truth/**`，也不更新
+  `truth-delta.md`。
+metadata:
+  clade:
+    invocation: explicit
 disable-model-invocation: true
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/spec-by-example/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@db46b1ddf59c47c9aab52a7d66d15668811fa501 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 
 # Spec By Example

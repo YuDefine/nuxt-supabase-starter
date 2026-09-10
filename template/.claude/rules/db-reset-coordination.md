@@ -1,10 +1,4 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/db-reset-coordination.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/db-reset-coordination.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 # DB Reset Coordination
 

@@ -1,0 +1,37 @@
+{
+  "name": "@specformula/core",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./spec/*": {
+      "types": "./src/spec/*.ts",
+      "default": "./src/spec/*.ts"
+    },
+    "./spec/model/*": {
+      "types": "./src/spec/model/*.ts",
+      "default": "./src/spec/model/*.ts"
+    },
+    "./dialect/*": {
+      "types": "./src/dialect/*.ts",
+      "default": "./src/dialect/*.ts"
+    },
+    "./instruction/*": {
+      "types": "./src/instruction/*.ts",
+      "default": "./src/instruction/*.ts"
+    }
+  },
+  "dependencies": {
+    "@specformula/plugin-api": "workspace:*",
+    "luxon": "^3.5.0",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/luxon": "^3.4.0",
+    "@types/js-yaml": "^4.0.9"
+  }
+}

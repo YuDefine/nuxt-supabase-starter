@@ -10,6 +10,7 @@ import {
   mkdtempSync,
   openSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -31,8 +32,8 @@ const defaultLifecycle: BatchLifecycle = {
   bootstrap: (_main, path) => {
     runWtEnvBootstrap(path, 'ensure')
   },
-  destroy: (_main, path) => {
-    const result = runWtEnvBootstrap(path, 'destroy')
+  destroy: (main, path) => {
+    const result = runWtEnvBootstrap(path, 'destroy', { scriptRoot: main })
     if (result?.status === 'orphan-recorded')
       throw new Error('Backing resources remain; retain worktree')
   },
@@ -100,6 +101,33 @@ const git = (cwd: string, args: string[], input?: string) =>
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe'],
   }).trim()
+/**
+ * `git` without the trailing `.trim()`. `-z` output MUST keep a leading blank in its first
+ * path: a filename that legitimately starts with a space is otherwise handed on in a
+ * spelling that names no file, which is the same failure `-z` was adopted to prevent.
+ */
+const gitRaw = (cwd: string, args: string[]) =>
+  execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] })
+/**
+ * Walk without following symlinked directories. `readdirSync({ recursive: true })` descends
+ * into them, which both escapes the worktree (this checkout carries
+ * `consumers.local -> <clade-central-repo>/consumers.local`) and lists the same file
+ * again under a second path (a pnpm store is a mesh of such links). `git ls-files` never
+ * follows a symlink, so the branch that stands in for it must not either. A symlink is
+ * recorded as itself; tar stores the link, not its target.
+ */
+function everyFileUnder(root: string, dir: string): string[] {
+  const found: string[] = []
+  const walk = (current: string) => {
+    for (const child of readdirSync(current, { withFileTypes: true })) {
+      const full = join(current, child.name)
+      if (child.isDirectory()) walk(full)
+      else found.push(relative(root, full))
+    }
+  }
+  walk(dir)
+  return found
+}
 const hashFile = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex')
 function gitFileList(cwd: string, args: string[]): string[] {
   // Dependency trees can exceed execFileSync's pipe buffer; retain the complete list.
@@ -264,34 +292,167 @@ function ignoredArtifacts(c: Context, path: string) {
     return !(rel === '..' || rel.startsWith('../'))
   })
 }
-function preserveIgnoredArtifacts(c: Context, b: WorktreeBatch, path: string) {
-  const ignored = ignoredArtifacts(c, path)
-  if (!ignored.length) return
-  // A package-manager install marker plus its committed lockfile identifies a
-  // reproducible dependency tree. A directory name alone never authorizes disposal.
-  const regenerable = [
-    ['node_modules/.modules.yaml', 'pnpm-lock.yaml'],
-    ['node_modules/.package-lock.json', 'package-lock.json'],
-    ['node_modules/.yarn-integrity', 'yarn.lock'],
-  ].find(([marker, lockfile]) => {
-    if (!existsSync(join(path, marker)) || !lstatSync(join(path, marker)).isFile()) return false
+/** `lstat` without following symlinks, `undefined` when the path is gone. */
+function entryType(path: string) {
+  try {
+    return lstatSync(path)
+  } catch {
+    return undefined
+  }
+}
+/**
+ * A package-manager install marker plus its committed, unmodified lockfile identifies a
+ * reproducible dependency tree. A directory name alone never authorizes disposal. Shared
+ * by the worktree itself and by any nested repository preserved below, so a vendored
+ * clone is not held to a different standard than the tree that contains it.
+ */
+function regenerableDependencyTree(dir: string) {
+  return (
+    [
+      ['node_modules/.modules.yaml', 'pnpm-lock.yaml'],
+      ['node_modules/.package-lock.json', 'package-lock.json'],
+      ['node_modules/.yarn-integrity', 'yarn.lock'],
+    ] as const
+  ).find(([marker, lockfile]) => {
+    if (!existsSync(join(dir, marker)) || !lstatSync(join(dir, marker)).isFile()) return false
     try {
-      git(path, ['cat-file', '-e', `HEAD:${lockfile}`])
-      git(path, ['diff', '--quiet', 'HEAD', '--', lockfile, 'package.json'])
+      git(dir, ['cat-file', '-e', `HEAD:${lockfile}`])
+      git(dir, ['diff', '--quiet', 'HEAD', '--', lockfile, 'package.json'])
       return true
     } catch {
       return false
     }
   })
-  const excluded = regenerable
+}
+/**
+ * `git ls-files --others --ignored` stops at a nested repository boundary and
+ * emits that directory itself with a trailing slash, so an ignored-artifact list
+ * is not always a list of files. The entry cannot be archived as-is
+ * (`tar --no-recursion` would store an empty directory) and refusing it aborts
+ * the entire cleanup — observed on every worktree where a Pi dispatch had cloned
+ * clade into `.pi/git/**` (<consumer-a> 2026-09-09: 114 MB per tree, one entry among
+ * 88901).
+ *
+ * A clone whose commits are all reachable from a remote is restorable by
+ * fetching it again — a stronger proof than the install-marker heuristic above —
+ * so its tracked content is excluded and only what no remote can restore
+ * (modified tracked files, untracked files, ignored files) is preserved. Without
+ * that proof the whole tree is preserved. A directory name still never authorizes
+ * disposal.
+ *
+ * The proof reads remote-tracking refs, which are a local cache: a force-push that
+ * dropped the commit upstream is not visible here, and confirming it would put a
+ * network call on the cleanup path. The receipt therefore records `repository` and
+ * `head` so that the exclusion stays auditable after the fact rather than being
+ * claimed as a guarantee.
+ */
+export function expandIgnoredDirectory(
+  worktree: string,
+  entry: string,
+  excluded: Record<string, unknown>[],
+): string[] {
+  const rel = entry.replace(/\/+$/, '')
+  const dir = join(worktree, rel)
+  const regenerable = regenerableDependencyTree(dir)
+  // The install-marker proof is independent of any remote, so it applies to the whole-tree
+  // branch as well; without it a vendored clone's `node_modules` would be archived in full.
+  const everyFile = () =>
+    everyFileUnder(worktree, dir).filter(
+      (file) => !regenerable || !file.startsWith(join(rel, 'node_modules') + '/'),
+    )
+  if (!existsSync(join(dir, '.git'))) return everyFile()
+  // `-z` throughout: without it Git quotes any path holding non-ASCII, a tab or a newline
+  // (`"caf\303\251.txt"`), and that quoted spelling names no file on disk — tar would fail
+  // and take the whole cleanup with it, over a filename that was never the problem.
+  const names = (args: string[]) => gitRaw(dir, args).split('\0').filter(Boolean)
+  // `--no-renames` so a rename reports both its old and its new path: folded into a single
+  // `R` the old path lands in neither the preserved list nor the deleted one.
+  const changed = (filter: string) =>
+    names(['diff', '--name-only', '-z', '--no-renames', `--diff-filter=${filter}`, 'HEAD'])
+  let proof: { repository: string; head: string } | undefined
+  try {
+    const pinned = git(dir, ['rev-parse', 'HEAD'])
+    // Name the remote from a ref that actually contains HEAD. Taking the first configured
+    // remote instead would record a repository that need not hold the commit at all, so the
+    // receipt would name a recovery source that cannot perform the recovery.
+    const containing = git(dir, ['branch', '-r', '--contains', pinned, '--format=%(refname:short)'])
+      .split('\n')
+      .map((ref) => ref.trim())
+      .filter(Boolean)
+    const remote = git(dir, ['remote'])
+      .split('\n')
+      .filter(Boolean)
+      .find((name) => containing.some((ref) => ref === name || ref.startsWith(`${name}/`)))
+    // `--all`, not `--branches`: a commit held only by a tag, a stash entry or a detached
+    // HEAD is exactly as unrecoverable once `.git` is gone as one held only by a branch.
+    // `--remotes=<remote>` and not the bare `--remotes`: the receipt names one repository,
+    // so only that one may count as the place the commits can be fetched back from.
+    if (remote && !git(dir, ['log', '--all', '--not', `--remotes=${remote}`, '--format=%H', '-1']))
+      proof = { repository: git(dir, ['remote', 'get-url', remote]), head: pinned }
+  } catch {
+    // Any git failure leaves `proof` unset, which preserves the whole tree.
+  }
+  // The archive stores the working tree, so an index blob matching neither HEAD nor the disk
+  // has no copy anywhere. Two shapes reach that state: stage a file then edit it again, and
+  // stage a new file then remove it from disk — the second appears in no listing at all.
+  // Neither is recoverable from the remote, so the proof does not hold for this tree.
+  if (proof) {
+    const staged = new Set(names(['diff', '--cached', '--name-only', '-z', 'HEAD']))
+    if (names(['diff', '--name-only', '-z']).some((file) => staged.has(file))) proof = undefined
+  }
+  // A dirty submodule's objects live in this repository's own `.git/modules/**`, which the
+  // proof excludes, so no proof can cover it. `git diff` names a directory only for a
+  // gitlink, which makes a directory here exactly that case.
+  if (proof && changed('d').some((file) => entryType(join(dir, file))?.isDirectory()))
+    proof = undefined
+  if (!proof) return everyFile()
+  const deleted = changed('D')
+  // Ignored files are preserved here for the same reason as in the worktree above: a remote
+  // hands back tracked content only, so `.env` and other ignored local state have no other copy.
+  const remainder = [
+    ...gitFileList(dir, ['--others', '--exclude-standard']),
+    ...gitFileList(dir, ['--others', '--ignored', '--exclude-standard']),
+    ...changed('d'),
+  ].filter((file) => !regenerable || !file.startsWith('node_modules/'))
+  const preserved = [...new Set(remainder)]
+  excluded.push({
+    path: `${rel}/`,
+    ...proof,
+    ...(regenerable ? { marker: regenerable[0], lockfile: regenerable[1] } : {}),
+    preserved,
+    ...(deleted.length ? { deleted } : {}),
+  })
+  // The ignored listing stops at any nested boundary below this one and marks it with a
+  // trailing slash. Handing that to tar under `--no-recursion` stores the directory entry
+  // and silently drops everything inside it, so decide on the entry type on disk rather
+  // than on how the listing happened to spell it.
+  return preserved.flatMap((file) => {
+    const nested = join(rel, file)
+    return entryType(join(worktree, nested))?.isDirectory()
+      ? expandIgnoredDirectory(worktree, nested, excluded)
+      : [nested]
+  })
+}
+function preserveIgnoredArtifacts(c: Context, b: WorktreeBatch, path: string) {
+  const ignored = ignoredArtifacts(c, path)
+  if (!ignored.length) return
+  const regenerable = regenerableDependencyTree(path)
+  const excluded: Record<string, unknown>[] = regenerable
     ? [{ path: 'node_modules/', marker: regenerable[0], lockfile: regenerable[1] }]
     : []
-  const files = regenerable ? ignored.filter((file) => !file.startsWith('node_modules/')) : ignored
-  for (const file of files) {
+  const listed = regenerable ? ignored.filter((file) => !file.startsWith('node_modules/')) : ignored
+  const files: string[] = []
+  for (const file of listed) {
+    if (file.endsWith('/')) {
+      files.push(...expandIgnoredDirectory(path, file, excluded))
+      continue
+    }
     const stat = lstatSync(join(path, file))
     if (!stat.isFile() && !stat.isSymbolicLink())
       throw new Error(`Ignored artifact has unsupported entry type: ${file}`)
+    files.push(file)
   }
+  if (!files.length && !excluded.length) return
   // Preserve ignored evidence, local config and provisioned files together. Never
   // guess whether an ignored file is disposable from its basename. The archive
   // lives in the common Git directory, outside every worktree being removed.

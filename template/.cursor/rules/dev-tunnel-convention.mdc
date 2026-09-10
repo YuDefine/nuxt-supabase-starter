@@ -1,14 +1,9 @@
 ---
-description: "Dev tunnel（vite-plugin-cloudflare-tunnel / cloudflared）跨 consumer convention 索引 — zone-in-account、token scope、restart-loop 防護、冷/熱載入量測四題彙整，各指向權威 § + cookbook + pitfall cross-link"
-globs: ["nuxt.config.*", ".env", ".env.local", "package.json"]
+description: "dev-tunnel-convention"
 alwaysApply: false
+globs: ["nuxt.config.*",".env",".env.local","package.json"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/dev-tunnel-convention.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/dev-tunnel-convention.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 
@@ -40,7 +35,7 @@ Local edits will be reverted by the next sync.
 
 **權威來源**：
 - 規約 + 三種錯誤 token 來源對照表：[[dev-port-allocation]] § 2.5（含 `.env.local` 三件套範本）
-- Token 來源：<consumer-i> `.env.local` 的 `CLOUDFLARE_API_KEY`（既有可用）/ Notion `Scrects`（待補 cfat_）
+- Token 來源：<consumer-j> `.env.local` 的 `CLOUDFLARE_API_KEY`（既有可用）/ Notion `Scrects`（待補 cfat_）
 
 **Pitfall**：[[pitfall-vite-plugin-cloudflare-tunnel-token-scope]]
 

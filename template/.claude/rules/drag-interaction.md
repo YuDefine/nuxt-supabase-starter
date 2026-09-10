@@ -2,13 +2,7 @@
 description: 拖曳／resize 類 UI 的 commit 時機——拖曳中只動視覺（CSS transform），放開才打 API，失敗 rollback + toast；NEVER 在 pointermove 期間發請求或寫 store
 paths: ['**/composables/**rag*.ts', '**/composables/**ove*.ts', '**/composables/**esize*.ts', '**/composables/**ort*.ts', '**/components/**rag*.vue', '**/composables/*schedule*/**', '**/composables/*calendar*/**']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/drag-interaction.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/drag-interaction.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # 拖曳互動：視覺先行，drop 才 commit

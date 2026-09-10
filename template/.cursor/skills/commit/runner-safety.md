@@ -1,13 +1,5 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/commit/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # Commit CLI review runner safety
 
-<!-- clade-targets: claude,codex,cursor -->
 
 本檔只描述 `codex-review-safe.sh` 及其 Pi runner 的能力與限制。任何能合法執行 CLI 的 runtime 均可使用；它不宣稱呼叫者的原生工具、模型資格或跨模型 gate 已達成。先依 [review-policy.md](review-policy.md) 判資格，再讀以下完整限制。
 

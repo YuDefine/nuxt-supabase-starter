@@ -129,6 +129,10 @@ interface WtOptions {
   origin?: string
   workDone?: boolean
   verification?: string
+  /** TD-1064 明示覆寫：知道有 publish 在飛仍要動 main。NEVER 當成預設值傳。 */
+  iKnowPublishIsRunning?: boolean
+  /** TD-1064：這次動作要寫的那棵樹。一次性 fixture repo 不在 guard 射程內。 */
+  targetRoot?: string
   expectedPaths?: string
   agent?: string
   minimalStashPaths?: string[]
@@ -267,7 +271,7 @@ function parseWorktreeList(porcelain) {
  * 「main checkout 不在 main 上」時分岔 —— 這是長命 feature branch（`feat/*`、release
  * branch、fork 的預設分支不叫 main）的常態，不是邊角。
  *
- * 實證（2026-08-22 <consumer-h>）：main checkout 在 `feat/self-host-evlog-admin`
+ * 實證（2026-08-22 <consumer-i>）：main checkout 在 `feat/self-host-evlog-admin`
  * （領先 `main` 16 個 commit），`wt-helper add` 從 stale `main` fork 出來的 worktree
  * 缺 `openspec/`、`app/`、`DESIGN.md` —— 而 merge-back 會 land 回 `feat/...`。
  * 症狀出現在 worktree 內（檔案不見了），根因在 fork 端，中間隔了整個 session。
@@ -1062,6 +1066,70 @@ export function bootstrapWorktreeRuntime(
     console.error(`note: .clade/bin copy skipped: ${e?.message ?? e}`)
   }
 
+  // TD-1037: `.clade/runtime/`、`.clade/projections/`、`.clade/rules/` 與 `.codex/` 全部在
+  // consumer .gitignore 內，而 `git worktree` fork 只帶 tracked 檔案 —— 新 worktree 因此
+  // 結構上不可能有它們。三個獨立現場（<consumer-a> / <consumer-g> / <consumer-k>）證實後果
+  // 相同：`sync-rules` 在 `.clade/runtime/hooks.json` 以 ENOENT 失敗（訊息 "canonical runtime
+  // projection unavailable" 指不到根因），繞過它之後 `.clade/projections/*.json` 缺席又讓
+  // ownership 判定把每個既有檔判成本地竄改。
+  //
+  // 複製而非重生成是安全的：這幾份都是 clade home（共享）＋ `.clade/manifest.json`（tracked）
+  // 的衍生物，worktree 與 main 的投影輸入逐位元相同，所以 main 的那份就是 worktree 該有的那份。
+  // 逐 entry 判 gitignore（比照上方 `.clade/bin`）：非 ignored 的檔複製過去會變成使用者從沒寫過
+  // 的 untracked 檔，接著 merge-back / cleanup 的 uncommitted-files gate 就擋在那上面。
+  // Warn-only：consumer 沒有該目錄就跳過，per-dir try 讓一個目錄的失敗不吃掉其餘目錄。
+  // `.clade/rules` **MUST NOT** 在沒有 `.clade/projections` 的樹上出現，所以它不在這一組。
+  for (const rel of ['.clade/runtime', '.clade/projections', '.codex']) {
+    try {
+      const src = join(consumerRoot, rel)
+      const dst = join(wtPath, rel)
+      if (!existsSync(src) || existsSync(dst)) continue
+      if (spawnSync('git', ['check-ignore', '-q', rel], { cwd: consumerRoot }).status !== 0)
+        continue
+      cpSync(src, dst, { recursive: true })
+      log(`  clade-substrate: copied ${rel} from main (gitignored, worktree cannot check it out)`)
+    } catch (e) {
+      if (strict) throw e
+      console.error(`note: ${rel} copy skipped: ${e?.message ?? e}`)
+    }
+  }
+
+  // `.clade/rules/` 單獨拉出來，因為它的前提是 `.clade/projections/` 在位，而上面那一組是
+  // 逐目錄 warn-only —— 任何一個目錄失敗都不影響其餘目錄。
+  //
+  // 「有 rules、無 state」是一個會**無聲覆寫 tracked 檔**的組合，不只是少一份資料：
+  // `runtime-rule-plan.ts` 把 `.clade/rules/<name>.md` 渲染到 `.claude/rules/local/<name>.md`
+  // ——與 legacy 檔**同一個路徑**。state 在位時，`owned[path] !== hash` 會把「兩邊內容不一致」
+  // 擋成 `local-source-migration-required`（`local-rule-migration.ts` 的 reviewed sha256 就是
+  // 為了這件事）。state 缺席時 `owned = {}`，那道 gate 失去判斷依據，而 <consumer-a> 實況證明兩邊
+  // 本來就不同（legacy hash `dd9eff…` ≠ canonical hash `c1c6de…`）。
+  //
+  // 所以：**projections 不在位就不要給 rules**。少一份 gitignored 資料的代價是那棵樹要自己
+  // 跑一次 write-mode sync-rules；給了而 gate 判不動的代價是 tracked 檔被無審核換掉。
+  try {
+    const src = join(consumerRoot, '.clade/rules')
+    const dst = join(wtPath, '.clade/rules')
+    if (existsSync(src) && !existsSync(dst)) {
+      if (
+        spawnSync('git', ['check-ignore', '-q', '.clade/rules'], { cwd: consumerRoot }).status === 0
+      ) {
+        if (existsSync(join(wtPath, '.clade/projections'))) {
+          cpSync(src, dst, { recursive: true })
+          log(
+            '  clade-substrate: copied .clade/rules from main (gitignored, worktree cannot check it out)',
+          )
+        } else {
+          console.error(
+            'note: .clade/rules copy skipped — .clade/projections is absent, and canonical local rules without their ownership state would let the next projection overwrite tracked .claude/rules/local/** unreviewed',
+          )
+        }
+      }
+    }
+  } catch (e) {
+    if (strict) throw e
+    console.error(`note: .clade/rules copy skipped: ${e?.message ?? e}`)
+  }
+
   // TD-614: link gitignored runtime files (consumers.local …) from main root.
   {
     const linked = linkGitignoredRuntimeFiles(consumerRoot, wtPath, undefined, strict)
@@ -1150,8 +1218,11 @@ export function bootstrapWorktreeRuntime(
   }
 }
 
-export function destroyWorktreeRuntime(_consumerRoot: string, wtPath: string) {
-  const result = runWtEnvBootstrap(wtPath, 'destroy')
+export function destroyWorktreeRuntime(consumerRoot: string, wtPath: string) {
+  // Teardown runs the main checkout's shim, never the removed tree's own copy —
+  // see `WtEnvBootstrapOptions.scriptRoot`. A tree forked before a slug form
+  // existed cannot recognise its own branch, so it can never release itself.
+  const result = runWtEnvBootstrap(wtPath, 'destroy', { scriptRoot: consumerRoot })
   if (result?.status === 'orphan-recorded')
     throw new Error('Worktree backing resources remain; retain and retry cleanup')
 }
@@ -1390,6 +1461,10 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
         console.log(
           `Pre-fork baseline: selective commit ${scopePaths.length} path(s) → "${message}"`,
         )
+        assertNoPublishInFlight('add --baseline-strategy commit', {
+          ...opts,
+          targetRoot: consumerRoot,
+        })
         gitSelectiveCommit(consumerRoot, scopePaths, message)
       } else if (strategy === 'stash') {
         // P1 (pitfall 2026-06-01-prefork-baseline-stash-sweeps-unclaimed-main-work, TD-181):
@@ -1450,6 +1525,10 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
           console.log(
             `Pre-fork baseline: --include-unrelated-dirty → stash ${dirtyCount} file(s) as '${stashName}'`,
           )
+          assertNoPublishInFlight('add --baseline-strategy stash', {
+            ...opts,
+            targetRoot: consumerRoot,
+          })
           git(['stash', 'push', '-u', '-m', stashName], {
             cwd: consumerRoot,
             stdio: 'inherit',
@@ -3655,10 +3734,88 @@ async function cmdCleanup(slug, opts) {
 // Atomic ceremony: stash main blockers (optional) → squash session branch
 // into main → cleanup worktree. Designed to be called from spectra-archive
 // Step 0 (auto, slug = change name) or manually (ad-hoc Form-1 worktrees).
+/**
+ * TD-1064 — 在 publish / propagate 飛行中改 main 的 working tree 或 HEAD，會打死那一趟。
+ *
+ * 成因不是 git 競爭：`scripts/sync-rules.ts` 讀的是 **working tree**、不經 git，所以檔案在
+ * transaction 中途出現／消失就得到 `transaction source precondition changed` 與
+ * `transaction final state conflict`，publish exit 1。2026-09-10 實測：17:14:39 一次 29 檔的
+ * merge-back，讓 16:55:56 起跑的另一趟 publish 在 17:18:13 全滅，錯誤清單裡一個都不是它自己的檔。
+ *
+ * **判準是「這個指令會不會改變 main 的 working tree 或 HEAD」，NEVER 是「它在不在某份入口清單裡」**
+ * —— 新增這類入口時 MUST 一併呼叫本 guard，清單只是當下的實況不是窮舉。
+ *
+ * **NEVER 降成 warn**：warn 的成本是別人一整趟 22 分鐘的 gate，等待成本是幾分鐘。
+ * **NEVER** 在 pgrep 結果後面再接對 cmdline 長相的過濾（`^[0-9]+ node ` 那型）——
+ * 過濾掉的會是真的 in-flight 行程，而失敗方向是靜默放行。
+ */
+function detectPublishInFlight() {
+  const r = spawnSync('pgrep', ['-af', 'scripts/(publish|propagate)\\.ts'], { encoding: 'utf8' })
+  // pgrep: 0 = 有命中；1 = 沒有；>1 = 自己出錯。出錯時 fail closed（當成有在飛），
+  // 因為「偵測不出來」與「沒有在飛」在後果上不對稱。
+  if (r.status === 1) return []
+  if (r.status !== 0) {
+    return [`pgrep failed (status=${r.status}); treating as in-flight (fail closed)`]
+  }
+  return r.stdout.split('\n').filter((line) => line.trim())
+}
+
+/**
+ * 哪些 in-flight publish／propagate **真的會讀到 `targetRoot` 這棵樹**。
+ *
+ * 收窄的判準是行程的 **cwd**，NEVER 是「目標路徑長得像不像暫存目錄」——後者要維護一張
+ * 暫存根目錄清單，而 `wt-helper.fixtures.test.ts` 用的是 `~/.tmp` 不是 `os.tmpdir()`，
+ * 清單型判準第一次就漏掉它（2026-09-10 v1.12.43 實測）。cwd 量的是那件事本身：
+ * publish 讀的就是它自己 cwd 那棵樹。
+ *
+ * **三種讀不出來一律 fail closed**（pid 非數字／`/proc` 讀不到／沒給 targetRoot）——
+ * 「偵測不出來」與「沒有在飛」的後果不對稱，NEVER 讓前者靜默放行。
+ */
+function inFlightHoldersFor(targetRoot, detect = detectPublishInFlight) {
+  const lines = detect()
+  if (lines.length === 0) return []
+  if (!targetRoot) return lines
+  let target
+  try {
+    target = realpathSync(resolve(targetRoot))
+  } catch {
+    return lines
+  }
+  const held = []
+  for (const line of lines) {
+    const pid = line.trim().split(/\s+/)[0]
+    if (!/^\d+$/.test(pid)) {
+      held.push(line)
+      continue
+    }
+    let cwd
+    try {
+      cwd = realpathSync(`/proc/${pid}/cwd`)
+    } catch {
+      held.push(line)
+      continue
+    }
+    if (cwd === target || cwd.startsWith(`${target}/`) || target.startsWith(`${cwd}/`))
+      held.push(line)
+  }
+  return held
+}
+
+function assertNoPublishInFlight(action, opts: WtOptions = {}, detect = detectPublishInFlight) {
+  if (opts.iKnowPublishIsRunning) return
+  const lines = inFlightHoldersFor(opts.targetRoot, detect)
+  if (lines.length === 0) return
+  throw new Error(
+    `${action}: 有 publish / propagate 在飛，這個動作會改 main 的 working tree／HEAD 並打死它。\n` +
+      `${lines.map((l) => `  ${l}`).join('\n')}\n` +
+      `等它回報完成再跑，或 --i-know-publish-is-running 明示覆寫（TD-1064）。`,
+  )
+}
+
 async function cmdMergeBack(slug, opts: WtOptions = {}) {
   if (!slug) {
     throw new Error(
-      'Usage: wt-helper merge-back <slug> [--dry-run] [--auto-stash] [--include-worktree-wip] [--no-cleanup] [--noop-if-missing] [--skip-pre-sync] [--work-done --verification <one line>]',
+      'Usage: wt-helper merge-back <slug> [--dry-run] [--auto-stash] [--include-worktree-wip] [--no-cleanup] [--noop-if-missing] [--skip-pre-sync] [--i-know-publish-is-running] [--work-done --verification <one line>]',
     )
   }
   // Refused before anything moves, not after the squash: a merge-back that lands and *then*
@@ -3680,6 +3837,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   }
   const cleanSlug = makeSlugSafe(slug)
   const consumerRoot = findConsumerRoot()
+  assertNoPublishInFlight('merge-back', { ...opts, targetRoot: consumerRoot })
   // Pre-clean stale .git/index.lock if any — see docs/tech-debt.md TD-145.
   const lockStatus = ensureNoStaleIndexLock(consumerRoot)
   if (lockStatus.cleaned) {
@@ -4892,6 +5050,7 @@ async function main() {
     expectedPaths: values['--expected-paths'],
     origin: values['--origin'],
     workDone: flags.has('--work-done'),
+    iKnowPublishIsRunning: flags.has('--i-know-publish-is-running'),
     verification: values['--verification'],
   }
 
@@ -5066,6 +5225,9 @@ export {
   cmdLandPending,
   cmdList,
   cmdMergeBack,
+  assertNoPublishInFlight,
+  detectPublishInFlight,
+  inFlightHoldersFor,
   cmdOrphanPrune,
   cmdPrune,
   cmdRescue,

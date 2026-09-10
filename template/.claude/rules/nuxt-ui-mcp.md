@@ -2,13 +2,7 @@
 description: Nuxt UI v3/v4 component / composable / theming / icon 必走 nuxt-ui-remote MCP；ban prescriptive synthesis
 paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'app.config.ts', 'nuxt.config.ts', 'specs/plans/**/spec.md', 'specs/plans/**/plan.md', 'specs/plans/**/design-review.md']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/framework/nuxt/nuxt-ui-mcp.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-ui-mcp.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Nuxt UI MCP（強制走 nuxt-ui-remote）

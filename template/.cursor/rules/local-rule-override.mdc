@@ -1,21 +1,16 @@
 ---
-description: "Consumer 自有規約 override clade core rule 時的宣告慣例。"
-globs: [".clade/rules/**/*.md", ".claude/rules/local/**/*.md"]
+description: "local-rule-override"
 alwaysApply: false
+globs: [".clade/rules/**/*.md",".claude/rules/local/**/*.md"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/local-rule-override.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/local-rule-override.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 
 # Consumer local rule override declaration
 
 
-Consumer 自有規約的中立來源是 `.clade/rules/`；既有 `.cursor/rules/local/` 是 consumer 自治區，
+Consumer 自有規約的中立來源是 `.clade/rules/`；既有 `.claude/rules/local/` 是 consumer 自治區，
 在顯式遷移前繼續保留。中立來源依聲明的 targets 產生各端規約，直接修改生成檔會形成
 ownership conflict。遷移走 local rule migration 的預覽、來源 hash 驗證與顯式 adoption，
 不以同名檔存在取得接管權。

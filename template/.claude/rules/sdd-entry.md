@@ -1,13 +1,7 @@
 ---
 description: 適用於已 onboard repo 收到新需求或續跑需求時，先由 clade-onboard 確認 manifest、readiness 與 capability，再交給 sdd-start；不適用於純 onboard 狀態、readiness 或 registry drift 查詢。
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/sdd-entry.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/sdd-entry.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 

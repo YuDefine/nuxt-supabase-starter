@@ -2,13 +2,7 @@
 description: 認證相關程式碼（login, session, user, auth）
 paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'server/**/*.ts', 'packages/*/server/**/*.ts']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/modules/auth/better-auth/auth.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/modules/auth/better-auth/auth.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Auth

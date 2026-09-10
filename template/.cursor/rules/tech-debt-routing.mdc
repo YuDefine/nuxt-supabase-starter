@@ -1,14 +1,9 @@
 ---
-description: "Tech debt 路由規則——決定發現的 TD 該登在 clade 還是當前 consumer，以散播範圍與修法歸屬為準"
-globs: ["docs/tech-debt.md", "**/docs/tech-debt.md"]
+description: "tech-debt-routing"
 alwaysApply: false
+globs: ["docs/tech-debt.md","**/docs/tech-debt.md"]
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/tech-debt-routing.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/tech-debt-routing.md; edit canonical source -->
 
 <!-- clade-targets: claude,codex,cursor -->
 
@@ -104,7 +99,7 @@ Consumer 端的 `.claude/` / `.clade/` / vendor 副本是 clade **投影**（帶
 
 ## 禁止事項
 
-- **NEVER** 在 consumer 端登 TD 描述「`.cursor/rules/X.mdc` 內容怪怪的」/「vendor 某個 helper 行為不對」/「audit script 算錯」/「propagate 沒推某條」/「sync-rules 沒對齊」/「commit hook 邏輯怪」等明顯屬於 clade 真相層的問題。**先到 clade 找 source**
+- **NEVER** 在 consumer 端登 TD 描述「`.claude/rules/X.md` 內容怪怪的」/「vendor 某個 helper 行為不對」/「audit script 算錯」/「propagate 沒推某條」/「sync-rules 沒對齊」/「commit hook 邏輯怪」等明顯屬於 clade 真相層的問題。**先到 clade 找 source**
 - **NEVER** 把同一條跨 consumer 共通問題在各 consumer 各登一條 TD（duplicate noise + 散播後消失）
 - **NEVER** 跳過判斷「下次 propagate 會不會蓋掉我的修」就直接在 consumer 改 + 登 TD
 - **MUST** 在跨層 TD 內**互相 cross-link**（clade TD 列出 consumer-side action，consumer TD 引用 clade TD ID）

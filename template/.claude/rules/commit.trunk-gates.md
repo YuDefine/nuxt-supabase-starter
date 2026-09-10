@@ -4,13 +4,7 @@ paths:
   - 'tasks/**'
   - 'specs/plans/**'
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/commit.trunk-gates.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/commit.trunk-gates.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Commit — Trunk Gates（[[commit]] detail）

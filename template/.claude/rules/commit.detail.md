@@ -2,13 +2,7 @@
 description: Commit 全文規約（gate 清單、Single Session Lock、WIP 處置決策樹、main worktree 預設位置、ad-hoc `git commit --only` 紀律與 Verify / Recovery、路徑白名單、trunk hard gate、Stash 自動處置 gate、分組與訊息規範、Tag 位置 release hard gate）；always-load 的薄 pointer 在 [[commit]]，觸發時機是「下任何 git commit / git add / git stash / git tag / git push --tags / git push origin v<版本> / /commit 之前」，由 [[commit]] 的 MUST-Read 指針叫醒
 paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**', '.clade/work-loop/**']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/commit.detail.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/commit.detail.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Commit（全文）

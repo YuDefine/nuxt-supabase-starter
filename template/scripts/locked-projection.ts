@@ -77,7 +77,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // Improvement-loop infra (.clade/)
       // `scripts` / `registry` 於 2026-08-24 補上（TD-639）：兩者都是 improvement-loop
       // 投影的整目錄（`.clade/scripts/` 五支 + `.clade/registry/consumers.json`），
-      // 抽查 <consumer-a> / <consumer-b> / <consumer-e> / <consumer-i> 四台，目錄內**沒有**任何 consumer
+      // 抽查 <consumer-a> / <consumer-b> / <consumer-f> / <consumer-j> 四台，目錄內**沒有**任何 consumer
       // 自家檔——與 `scripts/lib/` 那種混住的目錄不同，可以整目錄匹配。
       String.raw`\.clade/(bin|signals|vendor|scripts|registry)/`,
       // Vendored script entry points (scripts/)
@@ -106,6 +106,14 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // SpecFormula curated mirror 整目錄。只散給宣告 capability `specformula` 的 consumer；
       // 內容 100% 由 scripts/sync-upstream-mirrors.ts 生成，consumer 端沒有任何手寫檔。
       String.raw`vendor/specformula-ts/`,
+      // SpecFormula 訊息 catalog。**落點在 consumer repo root 的 `specs/errors/`，不在
+      // `vendor/` 底下** —— runtime 的 `resolveDefaultRegistryDir()` 從 cwd 逐層往上找
+      // `specs/errors/zh-TW`，放進 vendor 會找不到。它是目前唯一一個落在 repo root 的
+      // mirror，所以**光看前綴推論不出它是投影**，這一列因此特別容易被漏掉：
+      // 2026-09-10 首次投影時就漏了，8 台 consumer 會在每次 propagate 後多出 6 個假的
+      // 「user 未 commit 改動」（wip-dirty / handoff-scan / claim-helper / wt-helper
+      // merge-back gate 全部走 isLockedProjectionPathFor）。
+      String.raw`specs/errors/`,
       // Snippets / shared presets
       String.raw`vendor/(snippets|oxc-shared|doctor-shared|review-rules|husky)/`,
       // prepare-commit-msg 掛載點 —— 逐檔列出，**NEVER** 放寬成 `\.husky/`：
@@ -193,6 +201,13 @@ const CLADE_OWN_SOURCE_RE = new RegExp(
       // clade home 手寫的 Cursor 主線 residency，沒有 LOCKED banner。
       // `.cursor/` 整目錄在 consumer 是 sync-to-cursor 生成物，但這一檔是源。
       String.raw`\.cursor/rules/cursor-model-residency\.mdc$`,
+      // clade 自治區規約：`.claude/rules/local/**` 是**手寫源檔**，clade home 就是它的 SoT
+      // （consumer 端的 `local/` 也完全自管，per clade-source-routing § 例外）。
+      // LOCKED_PROJECTION_RE 為 consumer 的 `.claude/rules/` 投影而收整個前綴，沒有這一列
+      // clade home 會把自己的規約源檔當投影——而 merge-back 的 pre-sync auto-resolve
+      // 對命中者一律 `checkout --theirs`，於是 branch 上已 commit 的規約改動被靜默取回
+      // main 版（TD-1023：CI parity 的 35 行 clade 端 pointer 就是這樣消失的）。
+      String.raw`\.claude/rules/local/`,
     ].join('|') +
     ')',
 )

@@ -1,12 +1,8 @@
 ---
+description: "output-hygiene"
 alwaysApply: true
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/output-hygiene.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
+<!-- Clade native rule; source: rules/core/output-hygiene.md; edit canonical source -->
 
 # Output Hygiene — 別把內部過程變成讀者的負擔
 
@@ -108,12 +104,12 @@ MCP 規約（[[nuxt-ui-mcp]] 等）擋「亂湊 API surface」，但沒擋「拿
 
 | ❌ Bad | ✅ Good |
 | --- | --- |
-| 「Vue 3 規範用 `<script setup>` 不用 Options API」 | 「Vue 3 docs 兩種都示範；本 repo AGENTS.md `vue-best-practices` 要求 `<script setup>`」 |
+| 「Vue 3 規範用 `<script setup>` 不用 Options API」 | 「Vue 3 docs 兩種都示範；本 repo CLAUDE.md `vue-best-practices` 要求 `<script setup>`」 |
 | 「Better Auth 規範用 server-side session」 | 「per Better Auth getting-started example 用 server-side session；本 repo `auth.md` 對齊此 example」 |
 
 ### 何時可以寫 prescriptive
 
-- 引用**本 repo 內部規約**（AGENTS.md / `.cursor/rules/`）：「本 repo 規範 X」 ✅
+- 引用**本 repo 內部規約**（CLAUDE.md / `.claude/rules/`）：「本 repo 規範 X」 ✅
 - 引用**有 verbatim 字句 MCP / docs**：必標出處
 - 引用**業界 RFC / W3C spec / ECMAScript 規範**：必標 spec 編號或 section
 

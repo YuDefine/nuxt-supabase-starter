@@ -39,9 +39,11 @@ export function useMyFeature(config: MyConfig) {
     store.initialize(config)
   }
 
+  const { data, isLoading } = storeToRefs(store)
+
   return {
-    data: store.data,
-    isLoading: store.isLoading,
+    data,
+    isLoading,
     refresh: store.refresh,
   }
 }

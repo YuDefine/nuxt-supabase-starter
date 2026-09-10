@@ -1,0 +1,128 @@
+# 🔒 LOCKED — managed by clade · Source: vendor/specformula-errors/zh-TW/spec.yml · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/specformula-errors/zh-TW/spec.yml
+# LOCKED: mirrored from SpecFormula/specformula-dev-framework@e5568250a2c0599983bce90fb08d548da35e1d64 via scripts/sync-upstream-mirrors.ts — edit upstream, never here
+# 訊息模板 registry — SPEC SUBSYSTEM
+# 本檔僅放 code prefix 為 `SPEC_` 之 entry。
+
+SPEC_ISA_CONFIG_SECTION_MISSING:
+  category: argument
+  template: "isa.yml 必須包含 '{section}' 區段"
+  fixtures:
+    - details: { section: "config" }
+    - details: { section: "config.api" }
+    - details: { section: "config.data" }
+
+SPEC_ISA_CONFIG_FIELD_REQUIRED:
+  category: argument
+  template: "isa.yml '{path}' 欄位為必填"
+  fixtures:
+    - details: { path: "config.api.resource_path" }
+    - details: { path: "config.api.project_path" }
+    - details: { path: "config.data.source[0].name" }
+
+SPEC_ISA_CONFIG_VALUE_INVALID:
+  category: argument
+  template: "isa.yml '{path}' 值 '{value}' 不合法（允許值：{allowed}）"
+  fixtures:
+    - details:
+        {
+          path: "config.api.time_format",
+          value: "rfc3339",
+          allowed: "iso, timestamp, epoch, date_only, time_only",
+        }
+    - details:
+        {
+          path: "config.data.permission",
+          value: "rw",
+          allowed: "isolated, shared",
+        }
+SPEC_ISA_CONFIG_DATASOURCE_EMPTY:
+  category: argument
+  template: "isa.yml config.data.source 不可為空"
+  fixtures:
+    - details: {}
+
+SPEC_ISA_CONFIG_DATASOURCE_DUPLICATE:
+  category: argument
+  template: "isa.yml config.data.source[].name 必須唯一，重複：{name}"
+  fixtures:
+    - details: { name: "primary" }
+
+SPEC_ISA_INSTRUCTION_TYPE_UNKNOWN:
+  category: argument
+  template: "instruction '{name}' 之 instruction_type '{type}' 未知"
+  fixtures:
+    - details: { name: "EnterPage", type: "ui_action" }
+
+SPEC_ISA_INSTRUCTION_CAPTURE_MISSING:
+  category: argument
+  template: "instruction_type '{type}' 需 format 包含 (?P<{capture}>...)，但 instruction '{name}' 缺少"
+  fixtures:
+    - details:
+        { type: "entity_setup", capture: "entity", name: "BadEntitySetup" }
+    - details: { type: "api_call", capture: "summary", name: "BadApiCall" }
+
+SPEC_ISA_INSTRUCTION_DATA_FORMAT_INVALID:
+  category: argument
+  template: "instruction '{name}' 之 data_format '{format}' 不合法"
+  fixtures:
+    - details: { name: "ValidateUser", format: "xml" }
+
+SPEC_ISA_INSTRUCTION_DATA_FORMAT_MISSING:
+  category: argument
+  template: "instruction '{name}' 缺少必要之 data_format 欄位"
+  fixtures:
+    - details: { name: "Bad response validate" }
+
+SPEC_API_OPERATION_DUPLICATE:
+  category: argument
+  template: "重複的 API operation summary：{summary}"
+  fixtures:
+    - details: { summary: "GetUser" }
+
+SPEC_API_REF_UNRESOLVED:
+  category: argument
+  template: "API spec 無法解析 $ref：{ref}"
+  fixtures:
+    - details: { ref: "#/components/schemas/UnknownType" }
+
+SPEC_ENTITY_TABLE_DUPLICATE:
+  category: argument
+  template: "entity DDL 中資料表名稱重複：{table_name}"
+  fixtures:
+    - details: { table_name: "users" }
+
+SPEC_ENTITY_MAPPING_TABLE_MISMATCH:
+  category: argument
+  template: "entity_to_table_mapping 中表 '{table}'（entity '{entity}'）不存在於 SQL 定義"
+  fixtures:
+    - details: { table: "user_profiles", entity: "UserProfile" }
+
+SPEC_ENTITY_DDL_PARSE_ERROR:
+  category: argument
+  template: "無法解析資料表 '{name}' 之 DDL：{reason}"
+  fixtures:
+    - details: { name: "orders", reason: "缺少右括號" }
+
+SPEC_ISA_FILE_NOT_FOUND:
+  category: lookup
+  template: "找不到 isa.yml 檔案：{path}"
+  fixtures:
+    - details: { path: "/missing/isa.yml" }
+
+SPEC_API_FILES_NOT_FOUND:
+  category: lookup
+  template: "未在 '{path}' 發現 API spec 檔案"
+  fixtures:
+    - details: { path: "/missing/api/" }
+
+SPEC_ENTITY_MAPPING_NOT_FOUND:
+  category: lookup
+  template: "找不到 entity_to_table_mapping.yml 於：{directory}"
+  fixtures:
+    - details: { directory: "/missing/entity/" }
+
+SPEC_ENTITY_DDL_FILES_NOT_FOUND:
+  category: lookup
+  template: "entity DDL 目錄未發現 .sql 檔案：{directory}"
+  fixtures:
+    - details: { directory: "/empty/ddl/" }

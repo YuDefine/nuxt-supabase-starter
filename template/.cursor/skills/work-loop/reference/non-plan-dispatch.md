@@ -1,13 +1,5 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/work-loop/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # 非 plan candidate 的分類與 dispatch
 
-<!-- clade-targets: claude -->
 
 > 前身是 `change-loop/reference/turbo-dispatch.md`（`--turbo` 專屬）。合併成 `/work-loop` 後
 > `--turbo` flag 消失、非 plan package 的待辦成為預設 scope，本檔改為 **Step 3.1b 的分類依據**。
@@ -77,7 +69,7 @@ machine check 分離把這件事結構化了，非 plan 路徑沒有那個結構
 - 每筆需求建立依 [guardrails.md](guardrails.md) § 護欄 7 的來源授權判定；已授權且明確的需求走 `/specify` 或建 tasks 檔，未授權新目標或產品歧義才 packaging。
 - **NEVER** 跨 consumer 操作 —— loop 仍限當前 repo
 
-**動標準層不再是 skip 理由**：`rules/` / `plugins/hub-core/` / `AGENTS.md` / `vendor/`（clade 端）
+**動標準層不再是 skip 理由**：`rules/` / `plugins/hub-core/` / `CLAUDE.md` / `vendor/`（clade 端）
 **可以改**（2026-08-05 授權），但 MUST 改完走 `/clade-publish` Step 1–9 散播完畢，**NEVER** 改完擱著。
 做不到就 packaging。判準見 [guardrails.md](guardrails.md) 護欄 5 與 [autonomy-predicate.md](autonomy-predicate.md) predicate 2。
 

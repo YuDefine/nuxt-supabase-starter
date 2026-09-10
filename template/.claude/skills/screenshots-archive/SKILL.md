@@ -1,0 +1,164 @@
+---
+name: screenshots-archive
+description: 'Use when sweep 截圖資料夾到 _archive/ — review-archive 完成或一件工作收尾時自動觸發，或使用者要求清截圖。NOT for 產生新截圖（走 review-screenshot），NOT for 歸檔 review 結論本身（走 review-archive）。'
+metadata:
+  clade:
+    permission_tier: read-only
+---
+
+
+# 截圖歸檔（Screenshots Archive）
+
+把已完成人工檢查的截圖資料夾從 `screenshots/<env>/<topic>/` 搬到 `screenshots/<env>/_archive/YYYY-MM/<topic>/`，讓 `ls screenshots/<env>/`（排除 `_archive/`）= 目前 pending review 清單。
+
+## 觸發時機
+
+- 「歸檔截圖」「sweep screenshots」「清掉舊的截圖資料夾」
+- 「change X 的截圖歸檔」（指定）
+- `/review-archive` 完成後**自動**呼叫（指定 change 模式）
+- 一件工作標 `work.done` 後**自動**呼叫（指定 work 模式）
+
+## 輸入
+
+- 指定 work：`/screenshots-archive change <work-slug>` → 只搬該工作對應的 topic（review-archive 與收尾流程自動觸發走此模式）
+- 指定 topic：`/screenshots-archive <topic-name>` → 直接搬該 topic（跳過對齊檢查，需 user 確認）
+- 未指定：sweep 所有「在 `docs/manual-review-archive.md` 已收錄」且「`screenshots/<env>/<topic>/` 仍存在頂層」的 topic
+
+## 流程
+
+### Step 1: 列出候選 topic
+
+掃所有 environment（不只 local）：
+
+```bash
+for env in local staging production; do
+  [ -d "screenshots/$env" ] || continue
+  for d in "screenshots/$env"/*/; do
+    [ -d "$d" ] || continue
+    name=$(basename "$d")
+    [ "$name" = "_archive" ] && continue
+    echo "$env|$name"
+  done
+done
+```
+
+### Step 2: 對齊 manual-review-archive
+
+讀取 `docs/manual-review-archive.md`，抽出每個 `## YYYY-MM-DD — \`<change-name>\`` 標題的 change-name 集合。
+
+#### Mode A — 未指定範圍（sweep all aligned）
+
+對 Step 1 的候選：
+
+- candidate.name ∈ archived_changes → **可 sweep**
+- candidate.name ∉ archived_changes → **跳過**，記錄原因「未在 manual-review-archive 找到對應 change」
+
+候選有跳過項目時，回報「N 個 topic 已對齊可 sweep / M 個 topic 未對齊跳過」，列出跳過清單，**不**追問是否強制。
+
+#### Mode B — 指定 work（含 review-archive 與收尾流程自動觸發）
+
+`/screenshots-archive change <work-slug>`：
+
+1. 跨所有 environment 掃 `screenshots/<env>/<work-slug>/` 是否存在
+2. **找到對應 topic**：直接 sweep（信任 caller — 它已確認該工作結束；不再對齊 manual-review-archive，避免直接收尾的路徑被擋）
+3. **找不到對應 topic** → 先跑 **backend-only 判定**，命中就 noop、**NEVER** 追問：
+
+   ```bash
+   # carrier 有兩種形狀，兩處都探
+   carrier=$(ls -d specs/plans/*-<work-slug>/tasks.md tasks/*-<work-slug>.md 2>/dev/null | head -1)
+   spec=$(dirname "$carrier")/spec.md
+   grep -q 'No user-facing journey (backend-only)' "$spec" 2>/dev/null && echo BACKEND_ONLY
+   grep -q 'pre-handoff-verdict: intentional, reason: backend-only' "$carrier" 2>/dev/null && echo BACKEND_ONLY
+   awk '/^## 人工檢查/{mr=1} mr && /\[review:ui\]/{found=1} END{exit found}' "$carrier" 2>/dev/null && echo BACKEND_ONLY
+   ```
+
+   任一條命中 → **silent noop**，回報一行 `Screenshots: no topic — backend-only（無 UI 表面，本來就沒截圖）`，流程繼續。
+
+   純 backend 的工作沒有 UI 表面，**依定義**不會有截圖 —— 對它追問「要不要 sweep 別人的 topic」是把制度缺口變成使用者的決策負擔，且唯一正確答案永遠是「跳過」。**NEVER** 對命中 backend-only 的工作提問（見下方 § 向使用者提問）。
+
+4. **找不到對應 topic 且非 backend-only**（topic 名與 change 名不一致 / 已 sweep 過 / 該拍卻沒拍）：
+   - 列 `screenshots/<env>/` 頂層所有候選 topic（排除 `_archive/`）
+   - **向使用者提問並等答案**（見下方 § 向使用者提問）：「找不到 `<change-name>` 對應 topic，候選列表：[topic-A, topic-B, ..., 跳過]」
+   - user 選 topic → sweep 該 topic；選跳過 → noop 結束
+   - 候選列表為空（頂層完全沒 topic）→ 直接 noop 回報「目前 `screenshots/<env>/` 已無 pending topic」
+
+#### Mode C — 指定 topic
+
+`/screenshots-archive <topic-name>` → **向使用者提問並等答案**（見下方 § 向使用者提問）：「該 topic 未在 manual-review-archive 對齊，仍要 sweep 嗎？」，**MUST** 等明確 yes 才執行。
+
+### Step 3: 搬到 _archive/YYYY-MM/
+
+```bash
+year_month=$(date +%Y-%m)
+for env_topic in <to-sweep>; do
+  env=${env_topic%|*}
+  topic=${env_topic#*|}
+  src="screenshots/$env/$topic"
+  dest_dir="screenshots/$env/_archive/$year_month"
+  dest="$dest_dir/$topic"
+
+  mkdir -p "$dest_dir"
+
+  # 衝突避開（極少見：同 topic 同月已搬過）
+  if [ -e "$dest" ]; then
+    dest="$dest-$(date +%H%M%S)"
+  fi
+
+  # 優先 git mv 保留歷史；fallback mv
+  if git ls-files --error-unmatch "$src" >/dev/null 2>&1; then
+    git mv "$src" "$dest"
+  else
+    mv "$src" "$dest"
+  fi
+done
+```
+
+### Step 4: 回報
+
+```
+已歸檔 N 個 topic 到 _archive/YYYY-MM/：
+  - local/change-A → local/_archive/2026-05/change-A
+  - local/change-B → local/_archive/2026-05/change-B
+  - staging/change-C → staging/_archive/2026-05/change-C
+
+跳過 M 個（未對齊 docs/manual-review-archive.md）：
+  - local/change-pending-X
+  - local/change-pending-Y
+
+目前 pending review（screenshots/<env>/ 頂層剩餘）：
+  - local/change-pending-X
+  - local/change-pending-Y
+```
+
+## Guardrails
+
+- **NEVER** 刪除截圖檔案 — 只搬到 `_archive/`，可隨時翻回
+- **NEVER** 在沒對齊 `docs/manual-review-archive.md` 的情況下 sweep 未指定範圍（Mode A）的 topic — Mode A 才靠對齊保護；Mode B（指定 change）信任 caller，Mode C（指定 topic）追問強制
+- **NEVER** 搬 `screenshots/<env>/_archive/` 內已歸檔的東西（避免雙重歸檔）
+- **ALWAYS** 用 `git mv` 保留歷史；非 git 控制檔案才 fallback `mv`
+- **ALWAYS** 跨 environment 都掃（local / staging / production），不要只看 local
+- **ALWAYS** 回報「目前 pending review」清單，方便 user 確認結果
+- **ALWAYS** Mode B 找不到對應 topic **且非 backend-only** 時列候選 + 跳過選項向使用者提問，**NEVER** 預設靜默跳過（會讓 user 不知道 sweep 沒生效）；backend-only 命中則相反 —— **NEVER** 追問，回報一行帶過
+
+## 向使用者提問
+
+本 skill 每一次「向使用者提問並等答案」都 **MUST** 滿足三條，與用什麼機制問無關：
+
+- **MUST** 把候選列完整，含明確的「跳過」那一項——使用者要能選擇不 sweep
+- **MUST** 等到明確答案才搬檔；**NEVER** 因為沒收到答案就用預設值往下做
+- **NEVER** 靜默跳過該問的那一題——沒問而直接 noop，與問了得到「跳過」在結果上相同、在使用者知情上完全不同
+
+**這三條是義務，問法是各 runtime 自己的事。** 有原生問答工具的 runtime 用它；沒有的用該 runtime 既有的使用者互動通道。**NEVER** 因為手上沒有某個特定工具就把這三條讀成不適用。
+
+上面 backend-only 那條 **NEVER 追問**是本節的**例外而非違反**：那一格唯一正確的答案永遠是「跳過」，問它只是把制度缺口變成使用者的決策負擔。
+
+## 為什麼有這個 skill
+
+`screenshots/<env>/` 頂層長期堆積已完成 change 的資料夾，user 要找「目前要做人工檢查的是哪個」會被噪音淹沒。`/screenshots-archive` 跟 `/review-archive` 對齊：人工檢查項目歸檔 → 截圖資料夾也歸檔 → `ls screenshots/<env>/` 直接等於 pending 清單。
+
+
+## 向使用者提問 — Claude Code
+
+共同來源 § 向使用者提問 的三條義務，在 Claude Code 用 `AskUserQuestion` tool 實作：候選 topic 寫進 `options`（含「跳過」那一項），拿到回覆才搬檔。
+
+**`AskUserQuestion` 是這三條在本 runtime 的載體，NEVER 是三條本身。** 工具不可用時義務不消失——改用其他方式問，**NEVER** 讀成「問不了所以可以靜默 noop」。

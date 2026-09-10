@@ -2,13 +2,7 @@
 description: 知識沉澱與決策記錄規則——非直覺問題解法要進 docs/solutions，跨任務技術決策要進 docs/decisions
 paths: ['docs/solutions/**', 'docs/decisions/**', 'specs/**', 'tasks/**']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/knowledge-and-decisions.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/knowledge-and-decisions.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 # Knowledge Accumulation & Decision Records
 

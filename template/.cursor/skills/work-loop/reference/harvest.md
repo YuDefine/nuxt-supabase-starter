@@ -1,13 +1,8 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/work-loop/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 # 收割（每個 notification 到達時做）
 
-<!-- clade-targets: claude -->
+
+> Runtime split: state, ownership, approval, and completion obligations are shared. Literal Claude tool names or runner commands in this reference are Claude host bindings; other hosts MUST use their adapter fragment or retain the dependent operation blocked.
+
 
 > 主檔 pointer：「每一個 `<task-notification>` 到達時立即走收割 SOP，MUST 先完整讀本檔」。
 
@@ -55,7 +50,7 @@ ledger 移除照做、2h hang 上限照算。8 步 SOP 的 scope-verify / checke
 
 ### 每收到一個 notification → 立即處理（收割 SOP）
 
-1. **驗收 agent 結果**：`git -C <worktree> log --oneline` + `git -C <worktree> status --short` + 讀 `WORKTREE-BRIEF.md` 的 Progress / frontmatter status——agent 的完成宣稱是未驗證主張（per [[agent-routing]] § Subagent 回報契約），MUST 有 commit 佐證
+1. **驗收 agent 結果**：`git -C <worktree> log --oneline` + `git -C <worktree> status --short` + 讀 `WORKTREE-BRIEF.md` 的 Progress / frontmatter status——agent 的完成宣稱是未驗證主張（per [[agent-routing.dispatch-execution]] § Subagent 回報契約），MUST 有 commit 佐證
    - **主線自走 worktree 時（SKILL.md § `/wt` 不可用時的 dispatch 形狀）這一步不放寬**：commit
      照樣要有，只是由主線在 worktree 內產生。要放棄的是「讀 agent 的完成宣稱」那一半——
      沒有 agent 可讀，也沒有未驗證主張要拆穿；`git log` 與 `git status --short` 兩條照跑
@@ -80,3 +75,6 @@ ledger 移除照做、2h hang 上限照算。8 步 SOP 的 scope-verify / checke
 2. ❌ 不收割的行為：可 dispatch 的 item 都派完 → 主線寫 HANDOFF → 釋放 lock → 結束 loop
 3. Agent 陸續完成（`admin-permission-gate-alignment` Phase 1-6 done、`admin-dashboard-action-center` Phase 1-5 done、v1 migration 14/14）——但 loop 已死，沒人 re-scan，user 被迫手動下指令觸發 archive / commit
 4. ✅ 收割行為：每收到一個 agent notification 就驗收 + re-scan，`applyInProgress` 位移成可收尾 → 立即 dispatch 收尾，驗收後進就緒池並評估批次觸發；期間主線繼續做序列組與非 plan work；in-flight 歸零且四組皆空後才寫 HANDOFF + 釋放 lock
+
+
+Cursor binding for this reference: discover the host's notification, terminal readback, cancellation, and wakeup surfaces before harvesting. Use returned owner ids, preserve lifecycle and deadline ownership, and retain the dependent operation when terminal proof is unavailable.

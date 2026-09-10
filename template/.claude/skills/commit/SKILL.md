@@ -1,21 +1,15 @@
 ---
 name: commit
-description: Use when 使用者要求提交工作區變更、merge back 已完成 worktree，或 worktree 就緒佇列達到提交條件；需要拆成多筆時同樣適用。NOT for 把 clade 改動散播到 consumer（走 /clade-publish），NOT for 新建實作 worktree（走 /wt）。
+description: >-
+  Use when 使用者要求提交工作區變更、merge back 已完成 worktree，或 worktree
+  就緒佇列達到提交條件；需要拆成多筆時同樣適用。NOT for 把 clade 改動散播到 consumer（走 /clade-publish），NOT
+  for 新建實作 worktree（走 /wt）。
 metadata:
   clade:
     permission_tier: action
+effort: high
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/commit/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
 
-
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude -->
-<!-- clade-resources: [{"source":"plugins/hub-core/scripts/commit-lock.mjs","output":"scripts/commit-lock.mjs","targets":["claude","codex","cursor"]},{"source":"plugins/hub-core/scripts/0a-metrics.mjs","output":"scripts/0a-metrics.mjs","targets":["claude","codex","cursor"]},{"source":"plugins/hub-core/scripts/codex-review-safe.sh","output":"scripts/codex-review-safe.sh","targets":["claude","codex","cursor"]},{"source":"rules/core/review-tiers.md","output":"references/review-tiers.md","targets":["claude","codex","cursor"]},{"source":"rules/core/security-policy.md","output":"references/security-policy.md","targets":["claude","codex","cursor"]}] -->
 
 <!-- never-density-reviewed: 2026-09-04 — 全檔 20 條逐條覆核過（不是只看本次新增的）。**這裡刻意不寫行號**：每次編輯本檔行號就漂一次，寫了只會讓下一個覆核的人拿一組對不上的座標去找。以錨點文字定位——(a) Step 2 「丟棄 WIP 的委婉說法」那個 7-run，每一行點名一種不同的說法，合併就失去反開脫作用；(b) 「不要把 WIP 併進來」那條規則掛在兩個不同的 AskUserQuestion 上，各自在使用點才讀得到，不能只留一處；(c) 其餘 13 條各自是該禁令在全檔的唯一出處。Step 6-A 本次新增的 4 條已先收斂掉 3 條重複的「NEVER 再 bump」與 1 條重複的逃生口禁令，剩下的每一條對應一個實測過的失敗模式。-->
 
@@ -578,3 +572,5 @@ git branch --show-current
 **MUST 依 [runtime-lifecycle.md](runtime-lifecycle.md)「背景工作與退出」收回本 ceremony 的工作，再用原 work／runtime／session 與 owner token 執行 release 並保留 receipt。** 正常完成、gate 失敗與使用者中止都走同一退出路徑。
 
 若仍有會改檔／index／ref 的工作且未確認停止，或鎖的 owner 已改變，保留鎖及對應 handle／失敗證據，回報接手責任；不以 timeout 自動清鎖或宣稱已釋放。
+
+

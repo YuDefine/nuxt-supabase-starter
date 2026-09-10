@@ -2,13 +2,7 @@
 description: Dev Server Auto-Spawn 規約——agent 自起 dev server 的持久層、lease、port 分流、tunnel 規範
 paths: ['scripts/dev-session*', 'vendor/scripts/dev-session*', '.claude/consumer-meta.json', 'nuxt.config.*']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/proactive-skills.dev-server-spawn.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/proactive-skills.dev-server-spawn.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
 
@@ -75,3 +69,11 @@ grep -l 'cloudflareTunnel\|vite-plugin-cloudflare-tunnel' nuxt.config.* 2>/dev/n
 - **NEVER** 對 in-process tunnel 型套 **dev-router**（`scripts/dev-router.ts`）—— dev-router 假設 tunnel 指向一個固定公開 port、背後可切多 backend；in-process tunnel 跟 nuxt dev process 綁死，沒有「獨立公開 port 後面切 backend」的層可佔，套了不會生效
 - **NEVER** 把 worktree nuxt.config 架構級 drift（如 worktree 是舊 framework 時代 fork、main 已遷新架構，vite 回 403「host not allowed」）誤判成 tunnel 問題 —— 那是 change-level 架構 reconcile 問題，review 前先 reconcile，不要在 tunnel / dev-session 層找原因
 - **單一 named tunnel 一次一 worktree**：切 worktree 必 `dev-session.ts stop` 再從另一個 worktree cwd 起，**禁止**對 in-process tunnel 型同時開兩個指向同 hostname 的 dev-session。**除非該 consumer 開了 `dev.perWorktreeTunnel`** —— 此時 `wt-env-sync` 會把每個 worktree 的 `TUNNEL_HOSTNAME` 改寫成 `<slug>.<host>`、`TUNNEL_NAME` 加 `-<slug>` 後綴、dev port 改成該 slug 專屬 port，排他性就從 port 移到 **hostname**：兩個 worktree 各持自己的 hostname 與 lease，同時開是合法的。opt-in 的前提是該 consumer 有涵蓋 `*.<host>` 的 DNS record 與憑證 —— 那是 consumer 自己的決定，**NEVER** 代 consumer 開這個欄位
+
+
+
+## Dev-port 池滿與 backing service 缺席（自 [[proactive-skills]] 下推）
+
+**Dev-port 池滿時**：先跑 `wt-helper reclaim-stale` 釋放 stale slot（三層判定見 [[worktree-default]] §6），**NEVER** 把池滿當 blocker 退回 user。reclaim 後仍滿才問（attended）或 packaging（unattended）。
+
+**採用 per-worktree backing service（DB clone / PostgREST sidecar）的 consumer**：起 dev server **MUST** 先驗那些服務存在，缺席時 fail-loud 並點名是哪個服務、修復指令是什麼。launcher 的「port 有沒有 LISTENING」對這個問題恆為真，所以它擋不住 —— 第一個發現異常的會是瀏覽器，而它只會顯示 app 為「後端抖動」寫的 503/500，完全指不到 DB。同一條要求適用於任何預期 backing service 在的入口（integration test、收 verify evidence），不只 dev server。條款全文見 [[db-preview-env]] § 缺席側。

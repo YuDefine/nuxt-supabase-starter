@@ -2,13 +2,6 @@
 name: specformula-config
 description: 當要配置 SpecFormula 框架到專案內、修改 API Spec 存放路徑、或修改 Data Source 設定時載入此規格
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/specformula-config/
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
 <!-- LOCKED: mirrored from SpecFormula/specformula-dev-framework@e5568250a2c0599983bce90fb08d548da35e1d64 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 
 # SpecFormula isa.yml 設定檔指南

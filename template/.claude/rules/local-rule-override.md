@@ -2,13 +2,7 @@
 description: Consumer 自有規約 override clade core rule 時的宣告慣例。
 paths: ['.clade/rules/**/*.md', '.claude/rules/local/**/*.md']
 ---
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/local-rule-override.md
-Edit at: $CLADE_HOME
-Local edits will be reverted by the next sync.
--->
-
+<!-- Clade native rule; source: rules/core/local-rule-override.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Consumer local rule override declaration
