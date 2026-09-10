@@ -22,6 +22,7 @@ temp
 # 只 ignore runtime artifact，不要整個 ignore 整個目錄。
 .claude/scheduled_tasks.lock
 .claude/.commit.lock
+.claude/.commit.lock.history/
 template/.wrangler/
 
 # 本地 MCP server 設定（含個人 absolute path，不適合共享）
