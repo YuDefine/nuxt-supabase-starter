@@ -38,7 +38,11 @@ drift 來源有 4 類，**處理路徑完全不同**。先判斷類型再動手�
 │   ├─ 看 drift 路徑是否在 `.claude/skills/<antfu|onmax|pbakaus|supabase|obra|...>/`
 │   └─ 是 → 場景 D
 │
-└─ 4. 都不是 → 場景 E（未知 / 需要人工判斷）
+├─ 4. propagate 報 conflict，但 `git diff HEAD -- <該檔>` 是空的？
+│   ├─ 那不是 drift —— 是上一趟 auto-commit 失敗後 projection state 半套用
+│   └─ 是 → 場景 F
+│
+└─ 5. 都不是 → 場景 E（未知 / 需要人工判斷）
 ```
 
 ## 場景 A — clade 中央倉升級殘留
@@ -190,6 +194,73 @@ pnpm skills:install
 ```
 
 `pnpm hub:check` 不該對第三方 skills 報 drift（因為不在 clade checksum 清單）。如果報了 → checksum 清單有 bug。
+
+## 場景 F — propagate 報 conflict，但那個檔在 consumer 端根本沒被改過
+
+**徵兆**：propagate / `pnpm hub:sync` 報
+
+```text
+canonical runtime projection unavailable:
+  local or modified file conflict: .claude/rules/<file>.md
+```
+
+而 `git status` 對那個檔是乾淨的、`git diff HEAD -- <file>` 是空的。
+
+**這不是 drift**，訊息標籤是錯的。真正的狀態是 **clade projection state 跑到磁碟前面了**：
+`.clade/projections/*.json`（untracked，conflict 判定實際讀的就是這份）已經記著新版 hash，
+但投影出來的內容檔（tracked）被回捲回 HEAD。成因是上一趟 auto-commit 的 `git commit` 失敗
+（pre-commit gate 擋下、或 hook 被信號打死），rescue 路徑存了 patch 後用 git 回捲 worktree——
+git 只還原 tracked 檔，untracked 的 state 留在原地。細節見 [`tech-debt.md`](tech-debt.md) TD-018。
+
+**先確認是這個場景**（三條全中才是）：
+
+```bash
+cd template
+
+# 1. 該檔對 HEAD 乾淨
+git diff --quiet HEAD -- .claude/rules/<file>.md && echo "clean vs HEAD"
+
+# 2. state 與磁碟對不上（列出所有對不上的檔，不只訊息點名的那個）
+python3 - <<'EOF'
+import json, hashlib, os, glob
+for pj in sorted(glob.glob('.clade/projections/*.json')):
+    files = json.load(open(pj)).get('files')
+    if not isinstance(files, dict):
+        continue
+    bad = [p for p, sha in files.items()
+           if not os.path.exists(p) or hashlib.sha256(open(p, 'rb').read()).hexdigest() != sha]
+    print(pj, len(files), 'mismatch=%d' % len(bad), bad)
+EOF
+
+# 3. 有一份時間對得上的 rescue patch
+ls -lt .clade/rescue/auto-commit-*.patch | head -3
+```
+
+**復原**（2026-09-11 實測過）：
+
+```bash
+# 從 repo root 套回（patch 內是 a/template/... 的路徑）
+cd ..
+git apply --check template/.clade/rescue/auto-commit-<ts>.patch   # 先 dry-run
+git apply         template/.clade/rescue/auto-commit-<ts>.patch
+
+# 重跑上面第 2 步，MUST 全部 mismatch=0
+
+git add -A template && git commit -m "🐛 fix(clade): 復原 v<x.y.z> 投影半套用狀態"
+
+# 驗證：跑當初失敗的那道指令本身
+cd template && node ~/offline/clade/scripts/hub-sync.ts --prune --no-health-check
+```
+
+**選 patch 的判準**：挑 mtime 最接近失敗那趟 propagate 的那份，並用
+`grep '^diff --git' <patch>` 對一次檔名清單——它應該恰好蓋住第 2 步列出的 mismatch 檔，
+外加 `manifest.json` / `hub.json` / `.hub-state.json` 的版號行。對不上就**不要套**，回場景 E。
+
+**NEVER** 用 `git checkout` 或手改 `.clade/projections/*.json` 的 hash 去湊。前者會再回捲一次
+（同一個坑）；後者是在偽造投影所有權紀錄，下一趟就分不出真假覆寫了。
+
+**收尾**：clade 端重跑 `node scripts/propagate.ts --resume`（其餘 consumer 會被 verified skip，
+只重跑失敗那台）。
 
 ## 場景 E — 未知（防呆）
 
