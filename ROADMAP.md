@@ -89,7 +89,7 @@ _No parked changes._
 
 ### 近期
 
-- [high] **TD-014** clade capability plugin 未通過 PUBLIC consumer 的 runtime projection 契約 — 2026-09-09 宣告 `specformula` + `aixbdd` 後 `project-runtime-capabilities --visibility public` 回 blocked（24 error，全在 clade 標準層）。修在 clade，本 repo 只驗收投影 — 依賴：clade 側修正 + propagate
+- [low] **TD-014** 範圍已收斂：24 條 blocked error 於 2026-09-11 全數清除（clade TD-1019 / TD-1066 + v1.12.46），`--visibility public --dry-run` 回 `diagnostics: []`。**剩下只有 `<maintainer-domain>` 佔位符無解析說明**（22 檔 58 處），不擋任何 gate — 修在 clade 源檔，本 repo 只驗收
 - [mid] **TD-013** scaffolder ↔ clade registry seam test fixture 撞 manifest schema 收緊（`pnpm test` 2 failed）— 獨立
 - [high] **Change 1** `starter-hygiene-boundary-rules`（meta vs template 邊界治理）— 新增 `.claude/rules/starter-hygiene.md`（meta 維護用）+ pre-commit hook 擋 `.env` / dogfood 進 `template/` + root CLAUDE.md 補邊界指引；Tier 1，獨立
 - [high] **Change 3** unpark + apply `nuxthub-d1-stack-as-first-class-scaffold`（已 parked，proposal 完整、32 tasks 寫好）— 獨立於 Change 1，可並行

@@ -206,8 +206,8 @@ clade `scripts/register-consumer.ts` 現在拒收：`invalid consumer manifest: 
 
 ## TD-014 — clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約
 
-**Status**: open
-**Priority**: mid
+**Status**: open — **範圍已收斂到只剩 `<maintainer-domain>` 佔位符無解析說明**（2026-09-11）
+**Priority**: low — 原本的 24 條 blocked error 已全數清除，剩下的是文件可讀性，不擋任何 gate
 **Discovered**: 2026-09-09 — P7 宣告 `specformula` + `aixbdd` capability 後
 **Location**: clade `plugins/hub-capabilities-{aixbdd,specformula}/skills/**`、`plugins/hub-core/scripts/{codex-review-safe,gh-ci-watch}.sh`、`plugins/hub-core/skills/subagent-dev/SKILL.md`
 
@@ -250,9 +250,45 @@ CF identifier 需去識別化並補 32-hex 掃描規則。**NEVER** 為了讓本
 
 ### Acceptance
 
-- 上述 `project-runtime-capabilities … --visibility public --dry-run` 對本 repo 回非 blocked。
-- `node scripts/audit-public-hygiene.mjs` 與 `bash scripts/audit-template-hygiene.sh` 維持 0 violation。
-- scaffold 出去的專案讀得懂 `<maintainer-domain>` 該填什麼。
+- ~~上述 `project-runtime-capabilities … --visibility public --dry-run` 對本 repo 回非 blocked。~~ **已達成**
+- ~~`node scripts/audit-public-hygiene.mjs` 與 `bash scripts/audit-template-hygiene.sh` 維持 0 violation。~~ **已達成**
+- scaffold 出去的專案讀得懂 `<maintainer-domain>` 該填什麼。**仍未達成**
+
+### 2026-09-11 實測：三類 error 全清，CF identifier 那條已在 clade 修掉
+
+```bash
+cd template && node ~/offline/clade/scripts/project-runtime-capabilities.ts \
+  --clade-root ~/offline/clade --targets claude,codex,cursor --visibility public --dry-run
+# {"status":"dry-run","plannedArtifacts":815,"appliedChanges":0,"diagnostics":[]}
+```
+
+`status` 從 `blocked` 變 `dry-run`、**24 條 error 歸零**。兩支 audit 也都 0 violation
+（public-hygiene PASS 0 violations / 115 warnings；template-hygiene no findings）。
+
+三類的去向：
+
+| 類 | 去向 |
+| --- | --- |
+| 21 支 capability skill 缺 `clade-targets` ＋ `subagent-dev` 的 `permission_tier` | clade 已補，隨 v1.12.46 到位 |
+| `hub-core/scripts/{codex-review-safe,gh-ci-watch}.sh` 的 PUBLIC resource | clade **TD-1019** 已解：實證註解搬進 `docs/pitfalls/`、原地留 pointer，並補了一條 invariant test |
+| CF `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_ZONE_ID` 可反查 identifier | clade **TD-1066** 已解 |
+
+**CF 那條的實情比本條原本記的嚴重，值得留著**：它不只是「`audit-template-hygiene.sh` 不抓
+32-hex」，而是**已經洩漏**——`template/.cursor/skills/yudefine-deploy/SKILL.md` 自
+`efa40c4f`（2026-08-24）起在公開 repo 存在約三週。已隨 `1220f672`（523 deletions / 0 additions）
+移出 `origin/main`；依維護者裁示只移除 HEAD、不改寫歷史。clade 端修法有三層：源檔 ID 改指向
+secrets 存放處、新增 skill 級 `<!-- clade-visibility: private -->` 讓投影層對 public consumer
+整支略過、以及對 public 算繪產物的不透明 ID fail-closed 判定。
+
+**為什麼 hygiene audit 當初沒抓到**：它掃的是**具名字串**，而 32 碼 hex 不在任何名冊上。
+同一行的 `yudefine.com.tw` 被正確改寫成 `<maintainer-domain>`、緊鄰的 ID 原封不動。
+**「sanitizer 輸出乾淨」NEVER 等於「沒有 private 識別碼」。**
+
+### 剩下的唯一一項
+
+`<maintainer-domain>` 佔位符在 `template/.claude/` + `template/.cursor/` 的 **22 個檔、58 處**
+出現，且**沒有任何一處說明該填什麼**（實測 grep 無命中）。scaffold 出去的使用者會看到一個
+自己解不開的佔位符。修在 clade 源檔（給解析說明，或改成 consumer 可設定的值），本 repo 只驗收。
 
 ## Cross-repo pointers
 
