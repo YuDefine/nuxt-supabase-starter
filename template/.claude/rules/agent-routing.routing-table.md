@@ -42,7 +42,25 @@ GPT worker 的 transport 依 [[agent-routing]] § Session transport boundary：C
 
 **`sonnet` 在本檔只有一種合法出現：兩個 grok 池都耗盡之後的終端 carrier。** 它 **NEVER** 是任何工作的檔位選擇。這兩者形狀相同（欄位裡都寫著 `sonnet`）但前提相反：終端 carrier 的前提是 grok 已經不可用，所以它不可能改派 grok；而檔位選擇的前提是「這件事只值 sonnet」，那件事現在一律去 `--model grok-xai --effort high`。逐字反開脫：「反正規約裡本來就有 sonnet」——去看那個 `sonnet` 前面有沒有「耗盡」兩個字，沒有就是本節禁的那一種。
 
-**Herdr pane 拒收 `sonnet`**（`herdr-session-handoff.ts` 的 `refuseSonnetTier`，2026-09-10）：pane 的 model 值域是 Claude-only，所以每次判定落在「sonnet 等級」時 transport 給不出更便宜的座位，欄位就被填成 `sonnet`。Grok 4.6 high 只有 `pi-dispatch.ts` 到得了，所以那道拒絕訊息指的是那支指令，不是另一個可以直接替換的 slug。relay successor 是唯一例外形狀：它持有整個主線位置、當不了 Pi seat，所以判「還是主線複雜度」就 `--model opus`，判「只值 sonnet 等級」就**不要 relay**，改用上面那條 grok worker 派掉、本 session 自己留著。
+**Herdr pane 拒收 `sonnet`**（`herdr-session-handoff.ts` 的 `refuseSonnetTier`，2026-09-10）：每次判定落在「sonnet 等級」時欄位就被填成 `sonnet`，2026-09-09 實測連續五筆皆如此。被拒的是**靜默替換**，不是這個檔位本身。
+
+**Grok 4.6 有兩條 transport，都受支援，依工作需要挑**（2026-09-11 更正，見下方撤回）：
+
+| transport | 指令 | 買到什麼 | 代價 |
+| --- | --- | --- | --- |
+| Herdr pane | `--launcher grok --model grok-4.6 --effort high` | 佔一個 Tab、在 Herdr 看得到、人可以中途介入 | 不過 ledger / quota chain / workspace-access admission |
+| Pi worker | `pi-dispatch.ts --model grok-xai --effort high` | route/tier-basis、quota chain、workspace-access admission、ledger 全套 | 沒有 Tab，人只能事後讀 log |
+
+relay successor 持有整個主線位置，所以判「還是主線複雜度」就 `--model opus`；判「只值 sonnet 等級」則兩條都行：`--relay --launcher grok --model grok-4.6` 把位置交給 Grok，或本 session 留著、把那件事用上表的 Grok worker 派掉。
+
+> **已撤回（2026-09-11）：「pane 的 model 值域是 Claude-only」與「Grok 4.6 high 只有 `pi-dispatch.ts` 到得了」。**
+> 兩句都是事實錯誤。反證在 `herdr-session-handoff.ts` 自己身上：`grok` 是 `Launcher` 的合法值、
+> `agentKindForLauncher` 給它獨立的 `AgentKind`、`selectionValidForLauncher` 對它放行
+> `grok-4.6` / `grok-4.6-build`，`--help` 的 usage 字串也印著 `grok`。同日實測 `herdr api snapshot`
+> 有 `source: herdr:grok` 的 live pane。
+> 連帶更正：「relay successor 當不了 Pi seat」那條**是 Pi 的限制**（relay receipt 上
+> `launcher === 'pi'` 才標 `admission: 'relay-continuity'`），**NEVER** 讀成 grok 也不能 relay。
+> **NEVER** 因為別處還留著舊說法就複述它——看到就改掉。
 
 **NEVER 因為表上沒有你想派的模型就自己挑一個。** 對不上任一列的正解是走上面這條鏈，**NEVER** 是填 `--route manual` 去蓋掉一個從沒發生過的判定——`manual` 是政策成功指標的分母，填錯讀起來是假陰性而不是缺資料。逐字反開脫：「Herdr 要求明確 `--model`，那就在 Claude 值域裡挑一個」（2026-09-09 實測：五筆 dispatch 全部這樣填成 `sonnet` ＋ `manual`，而 `sonnet` 在本表的主模型欄位一次都沒出現過）。
 

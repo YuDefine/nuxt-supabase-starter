@@ -62,7 +62,7 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts done "$CLADE_WORK_ID" \
 
 ⛔ **先過 [dispatch-common.md](dispatch-common.md) § 1 的 `--cwd` 佔用探測**——successor 的 `--cwd` 指向既存工作區時，與 fanout worker 適用同一道 gate。
 
-⛔ **`<routing-model>` NEVER 是 `sonnet`**（依 [dispatch-common.md](dispatch-common.md) § 3.2）：successor 判「還是主線複雜度」就 `opus`，判「只值 sonnet 等級」就**不要 relay**，把那件事用 grok worker 派掉、本 session 留著。
+⛔ **`<routing-model>` NEVER 是 `sonnet`**（依 [dispatch-common.md](dispatch-common.md) § 3.2）：successor 判「還是主線複雜度」就 `opus`；判「只值 sonnet 等級」則兩條都行——`--launcher grok --model grok-4.6 --effort high` 把位置交給 Grok successor，或本 session 留著、把那件事用 Grok worker 派掉。`relay-continuity` 那道限制只綁 Pi，**NEVER** 讀成 grok 不能當 successor。
 
 ```bash
 node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \

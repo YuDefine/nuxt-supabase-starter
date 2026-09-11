@@ -175,16 +175,30 @@ user **沒**點名別的 launcher 時，successor／worker MUST 用**當前這�
 
 `--model` 走 [[agent-routing]] 查表，本節只關掉一個具名落點。
 
-**判定落在「sonnet 等級」時，pane 不是它的 transport。** Herdr pane 的 model 值域是 Claude-only，所以每次判定算出「這件事只值 sonnet」，transport 就給不出更便宜的座位，欄位於是被填成 `sonnet` —— 2026-09-09 實測連續五筆全部這樣填，而且全部配 `--route manual`，因為沒有任何政策列產得出那個 model。helper 自 2026-09-10 起直接拒收（`refuseSonnetTier`，`usage_error`）。
+**判定落在「sonnet 等級」時，那件事屬於 Grok 4.6，不是 `sonnet`。** 每次判定算出「這件事只值 sonnet」欄位就被填成 `sonnet` —— 2026-09-09 實測連續五筆全部這樣填，而且全部配 `--route manual`，因為沒有任何政策列產得出那個 model。helper 自 2026-09-10 起直接拒收（`refuseSonnetTier`，`usage_error`）。被拒的是**靜默替換**，不是這個檔位本身。
+
+**Grok 4.6 有兩條 transport，都受支援**（2026-09-11 更正，見本節末撤回）：
+
+| transport | 指令 | 買到什麼 | 代價 |
+| --- | --- | --- | --- |
+| Herdr pane | `--launcher grok --model grok-4.6 --effort high` | 佔一個 Tab、在 Herdr 看得到、人可中途介入；進 `--relay` 的 in-flight 轉移與 § 4 比對 gate | 不過 ledger / quota chain / workspace-access admission |
+| Pi worker | `pi-dispatch.ts --model grok-xai --effort high --route claude-delegate-sub --tier-basis delegate-sub --workspace-access <readonly\|mutation> --brief <brief.md> --label <slug>` | route/tier-basis、quota chain、workspace-access admission、ledger 全套 | 不佔 Tab，也不進 `--relay` 轉移；人只能事後讀 log |
 
 | 你手上這件事 | MUST |
 | --- | --- |
-| fanout worker，判定是 sonnet 等級 | **不派 pane**。改走 `node ~/offline/clade/vendor/scripts/pi-dispatch.ts --model grok-xai --effort high --route claude-delegate-sub --tier-basis delegate-sub --workspace-access <readonly\|mutation> --brief <brief.md> --label <slug>`。它不佔 Tab，也不進 `--relay` 的 in-flight 轉移——§ 4 的比對 gate 只對得上 pane dispatch，pi worker 的 outcome 走 ledger |
+| fanout worker，判定是 sonnet 等級 | 依上表挑一條。**要人看得見／可能要中途介入 → pane；要 admission 與 ledger → Pi worker。** 講不出挑哪條的理由就挑 Pi worker（預設值，帳留得下來） |
 | relay successor，判定「還是主線複雜度」 | `--model opus`。successor 接手的是整個主線位置，要 mutation 也要判斷，本來就不該降檔 |
-| relay successor，判定「只值 sonnet 等級」 | **不要 relay**。那件事用上一列的 grok worker 派掉，本 session 自己留著。交出位置的前提是「有人要接手主線」，不是「有工作沒做完」 |
+| relay successor，判定「只值 sonnet 等級」 | 兩條都行：`--relay --launcher grok --model grok-4.6 --effort high` 把位置交給 Grok；或本 session 留著、把那件事用上表的 Grok worker 派掉。交出位置的前提仍是「有人要接手主線」，不是「有工作沒做完」 |
 | 任何一格想填 `sonnet` | 回上表重判。**NEVER** 因為 helper 要求明確 `--model` 就在 Claude 值域裡挑一個 —— 那正是上述五筆的成因逐字 |
 
-**relay successor NEVER 是 Pi seat**：`--launcher pi` 只在 predecessor 本身已是已驗證 Pi runtime 時成立（`herdr-session-handoff.ts` 的 relay-continuity）。Claude 主線 relay 給 grok 這條路不存在，所以上表第三列給的是「不要 relay」，**NEVER** 讀成「想辦法讓 pi 接 pane」。
+**relay successor NEVER 是 Pi seat**：`--launcher pi` 只在 predecessor 本身已是已驗證 Pi runtime 時成立（`herdr-session-handoff.ts` 的 relay-continuity）。**這條只綁 Pi**——relay receipt 上只有 `launcher === 'pi'` 會標 `admission: 'relay-continuity'`。**NEVER** 把它讀成 grok 也不能 relay。
+
+> **已撤回（2026-09-11）：「Herdr pane 的 model 值域是 Claude-only」與「Claude 主線 relay 給 grok 這條路不存在」。**
+> 兩句都是事實錯誤，而且與本檔 § 3.1 runtime affinity 表自己列的 `grok → grok` 互相矛盾。
+> 反證：`herdr-session-handoff.ts` 的 `Launcher` 型別含 `grok`、`agentKindForLauncher` 給它獨立
+> `AgentKind`、`selectionValidForLauncher` 對它放行 `grok-4.6` / `grok-4.6-build`、`--help` 的 usage
+> 字串印著 `grok`；同日 `herdr api snapshot` 有 `source: herdr:grok` 的 live pane。
+> **NEVER** 因為別處還留著舊說法就複述它——看到就改掉。
 
 ## 4. Runtime cleanup
 

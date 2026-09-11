@@ -131,7 +131,7 @@ schema 全例見 `~/offline/clade/vendor/snippets/dev-session/lease-schema.jsonc
 | **auto-reclaim** | 任何 lease-aware 工具，**無需** flag | 現有 lease 是 agent 租約且 expired / heartbeat-dead → 直接接管、**不問 user**。人類租約永不走這條 |
 | **force-takeover** | 任何 lease-aware 工具，需顯式 flag（`--takeover`） | 不管現有 holder，覆寫 lease；prev holder 寫進 auditLog；同步 kill 對方 dev server PID（如可達）。人類租約仍**只有 user 能授權** |
 
-**Stale 偵測**：claim 時現有 lease 的 `devServer.pid` 死了（`kill -0` fail）→ 視為 stale，silent overwrite，不要求 `--takeover`。
+**Stale 偵測**：claim 時現有 lease 的 `devServer.pid` 死了（`kill -0` fail）→ 視為 stale，silent overwrite，不要求 `--takeover`。pid 還活、port 還 `LISTEN`，但 HTTP 連續兩次短逾時無狀態碼 → 不是 stale pid，是卡住；走關 Tab 重建，同樣不要求 `--takeover`。
 **並行 race**：同時 claim 靠 `fs.writeFile({ flag: 'wx' })` 檔案級 atomic check，後到者 fail → conflict → 跑 status + refuse。
 
 ### Ownership 與 served code 是兩個獨立判準
@@ -237,6 +237,18 @@ Lease 的「該不該強制走 singleton wrapper」由 consumer 自宣告：
 | --- | --- |
 | lease 不存在，或持有者是 **agent 且已過期 / 心跳斷（>180s）** | 直接 `start` 自動接管，**不問 user** |
 | lease 由 **agent** 持有且仍存活 | `dev-session.ts wait --task "…" -- <cmd>` 排隊，**不問 user**；逾時才回報 |
-| lease 由 **人類** 持有（`holder.kind = human`） | **NEVER** 自動接管、**NEVER** `--takeover` —— refuse 並把訊息原樣呈給 user |
+| port `LISTEN`，但對 `http://127.0.0.1:<port>/` **連續兩次**短逾時都拿不到 HTTP 狀態碼 | **卡住**。跑 `node scripts/dev-session.ts --consumer-meta .claude/consumer-meta.json --port <N> -- <cmd>`（或 consumer 的 `pnpm dev:agent`）。script 關 herdr Tab 再重建。**人類租約也走這條。** **NEVER** 叫 user 在 Tab 裡 Ctrl+C／重打 `pnpm dev`。**NEVER** `lsof + kill`。**NEVER** `--takeover`（那是搶健康租約） |
+| lease 由 **人類** 持有（`holder.kind = human`）且 HTTP **有回應** | **NEVER** 自動接管、**NEVER** `--takeover` —— refuse 並把訊息原樣呈給 user |
 
-最後一列在 autonomous mode（background subagent、scheduled task、/loop）同樣成立且無例外。
+「人類租約且 HTTP 有回應 → NEVER 自動接管」在 autonomous mode（background subagent、scheduled task、/loop）同樣成立。卡住那一列不是接管健康租約，是把已經不能服務的 Tab 拆掉重建。
+
+**Iron Law：LISTEN 不是活著。違反字面就是違反精神。** 能服務的判準是 HTTP 有狀態碼，不是 `lsof` 看到 LISTEN、也不是 pid 還在。
+
+| 開脫 | 現實 |
+| --- | --- |
+| 「lease 是 human:human，NEVER 殺還在聽的 server」 | 還在聽但 HTTP 000 的 server 已經不能服務持有人。關 Tab 重建不是 `--takeover` |
+| 「health 000 且 lease 已死才可重建」 | lease 無界不會自己死。用 HTTP 判卡住，不要等人類租約過期 |
+| 「請持有人在 herdr tab 重起 nuxi」 | 恢復入口是 `dev-session.ts` / `pnpm dev:agent`。叫人 Ctrl+C 是把 agent 做得到的動作推回去 |
+| 「不要自己 --takeover」 | 對。卡住走關 Tab，不走 `--takeover` |
+
+**Red Flags**：正要寫「請在 `w*:t*` 重起 nuxi」；正要把 LISTEN + pid 活著當成健康；正要用 `lsof + kill` 代替 `herdr tab close`。

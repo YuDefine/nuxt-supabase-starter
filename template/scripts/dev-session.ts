@@ -32,10 +32,13 @@
  *   解法**不是**放寬規約讓 agent 自行 takeover（那會變成 agent 互砍），是讓所有權**有界**：
  *
  *     holder 是 agent  → 必須有 TTL（預設 10m），過期或心跳斷 → 其他 agent 自動接管，不問 user
- *     holder 是人類    → 無界，**NEVER** 自動回收；agent 要用一律 refuse + 把訊息呈給 user
+ *     holder 是人類    → 無界；**HTTP 還有回應時** NEVER 自動回收，agent 要用一律 refuse
  *
- *   人類租約無界這條是整個設計的安全閥：agent 之間完全自治，而 user 自己跑的 dev server
- *   永遠不會被 agent 踢掉。
+ *   人類租約無界這條是整個設計的安全閥：agent 之間完全自治，而 user 自己跑的、
+ *   **還能回應 HTTP** 的 dev server 永遠不會被 agent 踢掉。
+ *
+ *   例外（卡住）：port LISTEN 但 HTTP 連續兩次短逾時都無狀態碼 → event loop 已死。
+ *   關 herdr Tab 再重建（killSession），不是 --takeover，也不是叫 user Ctrl+C。
  *
  * 用法：
  *   node scripts/dev-session.ts [opts] -- <cmd...>   # 起/reuse durable dev session（= start）
@@ -541,6 +544,44 @@ function portPid(port) {
   if (!port) return null
   const r = sh('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'])
   return r ? r.split('\n')[0].trim() : null
+}
+
+/**
+ * LISTEN ≠ 可服務。nuxi event loop 卡住時 port 仍 LISTEN、pid 仍活，
+ * 但 HTTP 拿不到狀態碼（curl 印 000 / 逾時）。恢復路徑是關 herdr Tab 重建。
+ *
+ * curl 不在 PATH 時 fail-open（當成活著），避免沒探針就拆掉健康 Tab。
+ */
+function curlAvailable() {
+  const r = spawnSync('curl', ['--version'], { encoding: 'utf8', stdio: 'ignore' })
+  return r.status === 0
+}
+
+function httpAliveOnce(port, timeoutSec = 5) {
+  if (!port) return false
+  if (!curlAvailable()) return true
+  const r = spawnSync(
+    'curl',
+    [
+      '-m',
+      String(timeoutSec),
+      '-sS',
+      '-o',
+      '/dev/null',
+      '-w',
+      '%{http_code}',
+      `http://127.0.0.1:${port}/`,
+    ],
+    { encoding: 'utf8' },
+  )
+  const code = String(r.stdout || '').trim()
+  return /^\d{3}$/.test(code) && code !== '000'
+}
+
+async function httpAlive(port) {
+  if (httpAliveOnce(port, 5)) return true
+  await sleep(5_000)
+  return httpAliveOnce(port, 5)
 }
 
 function spawnStatusPath(cwd, port) {
@@ -1481,11 +1522,19 @@ async function runLaunch(o, meta, port) {
       Boolean(leasePid) &&
       Number(listenerPid) !== Number(leasePid)
 
+    const listening = Boolean(port) && portListening(port)
+    const stuck = listening && !(await httpAlive(port))
+
     if (portHijacked) {
       err(`session ${sessionName} 存在，但 port ${port} 的 listener 已換人`)
       err(`  lease 記錄 PID ${leasePid}，實際在聽的是 PID ${listenerPid}`)
       err(`  不 reuse（會在外來程序上收 evidence），改重建`)
-    } else if (!port || portListening(port)) {
+    } else if (stuck) {
+      err(
+        `session ${sessionName} 存在、port ${port} LISTENING，但 HTTP 無回應 → event loop 卡住，關 Tab 重建`,
+      )
+      err(`  LISTEN ≠ 可服務。這不是對健康人類租約的 --takeover。`)
+    } else if (!port || listening) {
       // reuse 前 MUST 過 lease gate — cwd 不符時 strict 模式直接 refuse。
       // 這裡曾是靜默漏洞：直接 return 導致 --cwd 被忽略、caller 在錯的 code 上收 evidence。
       const conflict = enforceLeaseOrExit(o, meta, consumerId, lid, port)
@@ -1525,12 +1574,16 @@ async function runLaunch(o, meta, port) {
         return
       }
     }
-    // 走到這裡代表不 reuse：port 沒在聽（內部 dev 已死）、listener 換人、或 --takeover 要重建。
-    // 前兩者的原因已在上面各自印過，這裡只補「port 沒在聽」那條。
-    if (!portHijacked) {
+    // 走到這裡代表不 reuse：port 沒在聽、HTTP 卡住、listener 換人、或 --takeover 要重建。
+    // hijacked / stuck 的原因已在上面印過，這裡只補「port 沒在聽」那條。
+    if (!portHijacked && !stuck) {
       err(`session ${sessionName} 存在但 port ${port} 沒在聽 → 視為內部 dev 已死，重建`)
     }
     killSession(sessionName)
+    if (port) {
+      const until = Date.now() + 5_000
+      while (Date.now() < until && portListening(port)) await sleep(250)
+    }
   }
 
   // 2) lease（strict 衝突 refuse）— 與 reuse 路徑共用同一個 gate，避免兩處邏輯漂移
@@ -1673,7 +1726,15 @@ function cmdStatus(o) {
   out(
     `  herdr tab: ${s ? `${s.tabId}（${devProcessAlive(s.paneId) ? '有前景程序' : '只剩 shell — dev 已退出'}）` : '不存在'}`,
   )
-  if (port) out(`  port ${port}: ${portListening(port) ? `LISTENING（${urlOf(port)}）` : '沒在聽'}`)
+  const listening = Boolean(port) && portListening(port)
+  if (port) {
+    const http = listening
+      ? httpAliveOnce(port, 5)
+        ? 'HTTP 有回應'
+        : 'HTTP 無回應（卡住 → 關 Tab 重建）'
+      : null
+    out(`  port ${port}: ${listening ? `LISTENING ${http}（${urlOf(port)}）` : '沒在聽'}`)
+  }
   const lease = readLease(lid)
   if (lease) {
     out(
@@ -1681,7 +1742,13 @@ function cmdStatus(o) {
     )
     out(`  task: ${lease.task || '（未註明）'}`)
     if (!isAgentLease(lease)) {
-      out(`  租約: 人類（無界）—— agent NEVER 自動接管`)
+      if (listening && !httpAliveOnce(port, 5)) {
+        out(
+          `  租約: 人類，但 HTTP 無回應 → stuck，跑 dev-session start 關 Tab 重建（不是 --takeover）`,
+        )
+      } else {
+        out(`  租約: 人類（無界）—— HTTP 有回應時 agent NEVER 自動接管`)
+      }
     } else if (!lease.expiresAt) {
       out(`  租約: agent（舊格式，無 expiresAt）—— 不自動回收`)
     } else {
