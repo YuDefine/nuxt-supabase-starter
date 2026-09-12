@@ -33,7 +33,7 @@ paths: ['app/app.vue', 'packages/*/app/app.vue', 'app/pages/**/*.vue', 'packages
 - `useAsyncData(key, fn, { lazy: true })`
 - Pinia Colada `useQuery(...)`（內建 `state` / `asyncStatus` loading 狀態）
 
-In-content skeleton **MUST** 用 `<USkeleton>`（theme-aware）或語意色 token（`bg-elevated` / `bg-muted`），**NEVER** 硬編碼 `bg-gray-*` + `dark:` prefix（違反 [[development]] § Nuxt UI Color Mode）。skeleton 容器標 `aria-hidden="true"`，配一個 sr-only `role="status"` 告知「載入中」即可（per modern-web-guidance accessibility：別對每個 interstitial 過度播報）。
+In-content skeleton **MUST** 用 `<USkeleton>`（theme-aware）或語意色 token（`bg-elevated` / `bg-muted`），**NEVER** 硬編碼 `bg-gray-*` + `dark:` prefix（違反 [[development]] § Nuxt UI Color Mode）。skeleton 容器標 `aria-hidden="true"`，配一個 sr-only `role="status"` 告知「載入中」即可，避免對每個 interstitial 過度播報。
 
 #### Tier 2.5（MUST）— Pinia Colada loading 欄位推導（query ≠ mutation）
 

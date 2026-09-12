@@ -58,8 +58,7 @@ paths:
    git diff --name-only <base>..<head> -- '*.vue' '*.tsx' '*.jsx' '*.css' '*.scss' '*.html' \
      | xargs -r grep -lE 'fetchpriority|content-visibility|scheduler\.(yield|postTask)|requestIdleCallback|speculationrules|web-vitals|onLCP|onINP|onCLS'
    ```
-   完整 keyword 清單以 `scripts/audit-modern-web-skill.ts` `TOPIC_KEYWORDS.performance` 為真相源。
-   - **命中** → **MUST** 在 clade home 跑 approved performance inspection adapter 實測，把 LCP / INP / CLS + 關鍵 insight **inline 寫進 review report**；改善前後**各**跑一次寫前後對比。how 見 the approved performance inspection reference § Performance 主題：實測閉環 + `~/offline/clade/vendor/snippets/modern-web-guidance/README.md`。
+   - **命中** → **MUST** 跑 approved performance inspection adapter 實測，把 LCP / INP / CLS + 關鍵 insight **inline 寫進 review report**；改善前後**各**跑一次寫前後對比。adapter 不可用時明確標待測，不假裝已有數字。
    - **沒命中** → silent skip；但若改動觸及 hero image / above-the-fold layout / 字體載入，即使 keyword 未命中也 **SHOULD** 實測（keyword 偵測是下界）。
 
    approved performance inspection adapter entry 已散播至所有 consumer runtime MCP configuration 並全 fleet 啟用（enabledMcpjsonServers）；perf-trace review 建議仍在 clade home 集中跑（profile/量測環境一致）。

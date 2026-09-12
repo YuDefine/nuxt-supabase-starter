@@ -35,7 +35,7 @@ path scope 含 `specs/plans/**/{spec,plan,design-review}.md`，**不是**只有�
 
 只在實作階段載入這條規則，等於只擋住便宜的那一層。元件選擇在設計文件寫下「用 USlideover 400px」的當下就定了，到實作階段才想起要查 MCP，能修的只剩 prop 名稱——架構已經不能動。
 
-設計階段的具體要求（候選 ≥2、寫明淘汰理由）見 `design` skill § Step 1.9 Component Candidates。
+設計階段的具體要求（候選 ≥2、寫明淘汰理由）見 `design` skill § Step 1.8 Component Candidates。
 
 ---
 

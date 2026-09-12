@@ -69,7 +69,7 @@ Trigger 用語：「健康檢查 / 體檢 / 重構評估 / 技術債盤點 / 全
 每維度：**及格 baseline** vs **卓越 bar** + **工具 / query recipe** + **要 raise 的 finding**。逐維度用 §0 刻度評分。
 
 ### D1 — UI / Design fidelity
-- **複用** `improve` 模式：Step 2 八維視覺 rubric（`references/diagnosis.md`）+ Step 2.5 Design Fidelity Check + `/impeccable critique`（persona + P0/P1）+ `/impeccable audit`（41-rule detector）+ Step 1.8 Modern Web Baseline。
+- **複用** `improve` 模式：Step 2 八維視覺 rubric（`references/diagnosis.md`）+ Step 2.5 Design Fidelity Check + `/impeccable critique`（persona + P0/P1）+ `/impeccable audit`（41-rule detector）。
 - **卓越 bar**：過 impeccable audit 只是 ★★★☆☆ 起跳；卓越要無 AI-slop tell、空/載入/錯誤狀態有打磨、有 intentional motion、文案過 `copy-tone.md`。
 - Raise：任何 ordinary-tax UI（見 §0）。
 
@@ -94,8 +94,7 @@ Trigger 用語：「健康檢查 / 體檢 / 重構評估 / 技術債盤點 / 全
 - Raise：落後多個大版的核心框架、已知 advisory、unused、catalog 未對齊。
 
 ### D6 — 效能
-- **工具**：`GoogleChrome/modern-web-guidance`（LCP / INP / CLS baseline、`fetchpriority`、`content-visibility`、long-task 拆分）。
-- **⚠ chrome-devtools-mcp 實測是 clade-central-only**：consumer session **沒有**這個 MCP。需要實測前後數字時，report 標「需切 clade home session 給 URL 量」或 defer，**不**在 consumer session 假裝能跑（對應 modern-web-mcp 規約；Claude 的落點是 user-level `~/.claude/rules/modern-web-mcp.md`，其他 runtime 依各自 rules 落點）。
+- **工具**：approved performance inspection adapter（可用時量 LCP / INP / CLS、request waterfall、bundle 與 layout shift）；不可用時明確標待測。
 - **及格**：頁面會載入。**卓越**：無 request waterfall、bundle 受控、無 layout thrash、關鍵路徑 LCP/INP 達 Web Vitals good。
 - Raise：N+1 前端 fetch、巨大 bundle、阻塞 render、無 image/font 優化、animation jank。
 

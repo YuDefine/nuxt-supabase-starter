@@ -1,12 +1,12 @@
-# Step 1.9: Component Candidates（Nuxt UI stack 專用）
+# Step 1.8: Component Candidates（Nuxt UI stack 專用）
 
 
-> 來源：`design/SKILL.md` § Step 1.9（2026-08-03 拆出——只有偵測到 Nuxt UI stack 的 branch 會走這段）
+> 來源：`design/SKILL.md` § Step 1.8（2026-08-03 拆出——只有偵測到 Nuxt UI stack 的 branch 會走這段）
 
 
 對應規約：[[nuxt-ui-mcp]]（必走 `nuxt-ui-remote` MCP、ban prescriptive synthesis）。
 
-Step 1.8 管的是 platform API 基線，這一步管的是**元件選擇**。兩者都是 plan 階段的強制動作，理由相同：憑訓練記憶寫出來的東西看起來合理，實際偏離當前版本。
+這一步管的是**元件選擇**。查詢是 plan 階段的強制動作：憑訓練記憶列出的元件看起來合理，實際可能偏離當前版本。
 
 **MUST** 對 plan 內每一個 UI surface 走完以下三件事，缺一不可：
 
