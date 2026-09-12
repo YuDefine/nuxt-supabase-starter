@@ -1,10 +1,6 @@
 ---
 name: dsl-refine
-description: >-
-  Truth owner skill。承接 plan package 的 acceptance Gherkin 與 system-analysis
-  產物，將業務 Journey 拆成 interface-level executable feature files 與 DSL，並更新
-  `specs/truth/features/backend/**`、`specs/truth/features/frontend/**`。完成後委派
-  `/truth-delta` 記錄 feature/dsl truth 改動。
+description: "Use when turning acceptance Gherkin and system analysis into executable feature files and DSL truth."
 metadata:
   clade:
     invocation: explicit

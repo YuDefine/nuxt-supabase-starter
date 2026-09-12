@@ -1,6 +1,6 @@
 ---
 name: cf-crawl
-description: 'Use when 要爬整個網站、匯入文件站、抓 knowledge base、或批次擷取 web content。需 CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN。NOT for 單頁抓取或需要登入 / 點擊互動的頁面（走 agent-browser），NOT for 部署 Workers 或管理 KV/R2/D1（走 wrangler）。'
+description: "Use when crawling a website with Cloudflare Browser Rendering /crawl to ingest web content."
 ---
 
 

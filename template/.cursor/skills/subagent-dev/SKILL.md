@@ -1,6 +1,6 @@
 ---
 name: subagent-dev
-description: Use when executing implementation plans with independent tasks in the current session. NOT for 單一線性任務或 3 個 tool call 內做得完的事（主線自己做，per agent-routing § 派不派），NOT for 建立隔離工作環境本身（走 /wt）。
+description: "Use when implementing a plan through independent parallel tasks. Not for a short linear task or worktree creation."
 metadata:
   clade:
     permission_tier: read-only

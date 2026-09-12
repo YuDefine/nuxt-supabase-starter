@@ -1,9 +1,6 @@
 ---
 name: ui-plan
-description: >-
-  根據 plan package、system-analysis handoff、truth-delta 與現有 truth，產出 plan-side
-  `ui/**` 設計與靜態雛形。`ui-plan` 不是 truth owner，不寫入 `specs/truth/**`，但必須讀 truth-delta
-  以對齊本輪 API/data/feature truth 變更。
+description: "Use when producing plan-side UI artifacts and prototypes from a plan package and truth changes."
 metadata:
   clade:
     invocation: explicit

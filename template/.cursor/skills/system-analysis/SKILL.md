@@ -1,9 +1,6 @@
 ---
 name: system-analysis
-description: >-
-  在 plan package 的 `spec.md`、`research.md`、`truth-delta.md` 與 `specs/truth/**`
-  基礎上，盤點本次需求涉及的系統介面與分析 wave，產出 plan-side `plan.md`，並把 plan package、truth
-  root、truth-delta path 傳給 `/api-plan`、`/data-plan`、`/ui-plan`。
+description: "Use when producing plan-side plan.md and API, data, or UI analysis from a plan package and truth artifacts."
 metadata:
   clade:
     invocation: explicit

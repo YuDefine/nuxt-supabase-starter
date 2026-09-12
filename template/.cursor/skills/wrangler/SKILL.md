@@ -1,6 +1,6 @@
 ---
 name: wrangler
-description: Use when 使用者跑 wrangler 指令、部署 Workers、管理 KV/R2/D1/Vectorize/Queues、或操作 Cloudflare Workers 相關資源。NOT for 批次爬取網站內容（走 cf-crawl），NOT for Docker container 的 build / runtime 問題（走 docker-doctor）。
+description: "Use before running Wrangler commands for Cloudflare Workers or related resources."
 ---
 
 

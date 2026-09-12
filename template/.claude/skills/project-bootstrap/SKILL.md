@@ -1,6 +1,6 @@
 ---
 name: project-bootstrap
-description: Use when 使用者要用 nuxt-supabase-starter 新建並完整設定 Clade consumer，或把尚未入 fleet 的既有 Nuxt repo 正式 onboard；交付 registry、projection、readiness、$bp 與專案驗證。NOT for 只查標準（/bp plan）、純 starter demo、既有 consumer 功能開發。
+description: "Use when creating or onboarding a Clade consumer from nuxt-supabase-starter. Not for existing-consumer feature work."
 license: MIT
 metadata:
   author: clade

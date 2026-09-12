@@ -1,6 +1,6 @@
 ---
 name: blog-scout
-description: 掃描內部知識資產（clade pitfalls / conventions / bp 沉澱），對照 <consumer-k> 已發表文章去重後，產出一份排序過的部落格選題建議報告。Use when 使用者說「掃一下有什麼可以寫成文章」「部落格選題」「blog scout」「下一篇要寫什麼」「盤點部落格素材」。只做選題建議，NOT for 寫文章成稿（成稿一律主線自己寫，per agent-routing § 派不派），NOT for 直接改 <consumer-k> 任何檔案（產出是給人看的建議，落地是另一步）。
+description: "Use for blog topic scouting from internal knowledge. Not for drafting or publishing articles."
 license: MIT
 metadata:
   author: clade

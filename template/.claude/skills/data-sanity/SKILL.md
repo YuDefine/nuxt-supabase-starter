@@ -1,9 +1,6 @@
 ---
 name: data-sanity
-description: >-
-  Use when running Design Review, before delivering a work item for manual
-  review, or ad-hoc on changes touching paginated queries. Detects client-server
-  schema mismatch. NOT for 一般 code review（走 review-rules）。
+description: "Use for design review or paginated-query changes to detect client-server schema mismatch. Not for general code review."
 metadata:
   author: clade
   version: '1.0'

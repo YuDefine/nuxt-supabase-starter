@@ -1,11 +1,6 @@
 ---
 name: gherkin-and-dsl
-description: >-
-  Evaluate and refactor Gherkin feature files and DSL vocabularies so they can
-  be implemented as test code with minimal inference. Use when converting test
-  plans into Gherkin, reviewing or tightening Given/When/Then sentences,
-  deciding Rule/Background/Scenario Outline/DataTable structure, or checking
-  whether Gherkin and DSL fully cover the intended test cases.
+description: "Use when writing, converting, reviewing, or tightening Gherkin scenarios or DSL vocabularies for executable tests."
 metadata:
   clade:
     invocation: explicit

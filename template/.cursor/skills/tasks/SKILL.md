@@ -1,10 +1,6 @@
 ---
 name: tasks
-description: >-
-  根據 plan package 的 `spec.md`、`plan.md`、`research.md`、`ui/**`，以及
-  `truth-delta.md` 與 `specs/truth/**` 產出可直接執行的 `tasks.md`。先寫 Setup 與
-  Foundational，測試層集中在 Phase 3 `Test Alignment & Implementation`；Feature phase 只留
-  Green / Refactor 或 CODE-REMOVE / REGRESSION。
+description: "Use when generating executable tasks.md from a completed plan package and current truth artifacts."
 metadata:
   clade:
     invocation: explicit
