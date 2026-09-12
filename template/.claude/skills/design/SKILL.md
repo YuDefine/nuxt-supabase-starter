@@ -194,48 +194,11 @@ Detect the project's UI tech stack to ensure all design skills produce compatibl
 
 **Block 條件**：未通過 Copy Tone Check 的 plan **不得**進 ship phase — Exit Criteria 不算完成。例外需在 plan 顯式標註 `Copy Tone Exception` 區塊（理由必引 PRODUCT.md Users 欄位佐證），詳見 copy-tone.md「Exception 機制」。
 
-### Step 1.8: Modern Web Baseline Query（強制）
-
-對應規約：modern-web-mcp（Claude 的落點是 user-level `~/.claude/rules/modern-web-mcp.md`，其他 runtime 依各自 rules 落點）+ cookbook：`~/offline/clade/vendor/snippets/modern-web-guidance/README.md`。
-
-**所有** plan target 若涉及以下任一主題，plan 起手 **MUST** 先 query `GoogleChrome/modern-web-guidance` skill，把 query 結果 inline 寫進 plan：
-
-- **UI / Layout**：modal / dialog、popover / tooltip、dropdown / menu、tab bar、accordion、form 驗證 UX、container queries、`:has()`、scrollbar 樣式
-- **Scroll / Motion**：View Transitions、scroll-driven animations、parallax、scroll-snap
-- **Performance**：LCP / INP / CLS、`content-visibility`、`fetchpriority`、image / font 優化、long task 拆分、speculation rules
-- **Security**：CSP、WebAuthn / Passkey、Trusted Types、COOP/COEP
-- **Legacy migration**：把既有 `<div role="dialog">` / portal-tooltip / JS-driven carousel / IntersectionObserver 視差**升級到** modern API
-
-**Plan 寫入格式**：
-
-```markdown
-### Modern Web Baseline Check
-
-涉及主題：modal / popover  ← 從上面清單挑命中項目
-
-Query 結果摘要：
-- `dialog` use case：`<dialog>` element + `showModal()` / `close()`，Widely available，無需 polyfill
-- `popover` use case：Popover API (`popover` attr) + Anchor Positioning，Newly available，舊瀏覽器 fallback 用 `position-try`
-
-Baseline 決策：
-- Modal 用 `<dialog>`（Widely → 無 fallback）
-- Popover 用 Popover API + Anchor Positioning（Newly → 含 fallback positioning）
-
-若改既有 anti-pattern：
-- 既有 `<div role="dialog">` modal 同步升級到 `<dialog>`（trade-off：略增 migration cost，但獲 native focus trap + ESC + a11y）
-```
-
-**Block 條件**：plan 涉及上述主題但缺 Modern Web Baseline Check 區塊 → **不得**進 build / ship phase。例外需在 plan 顯式標註 `Modern Web Exception` 區塊（理由：例如「目標瀏覽器矩陣含 IE11，必須降級」），但極少數情況才會用到。
-
-**為什麼是強制 step**：模型訓練資料對 modern web API 的記憶幾乎一定過時，憑記憶寫 modal / popover / animation / vitals optimization 看起來合理但 runtime 偏差或低於現代基線。query skill 是**plan 階段的強制動作**，不是「想到才查」的 advisory — 對應 user 偏好「不是想到的時候才主動調用」。
-
-cookbook 內有 4 大類典型場景 → query keyword → baseline 對照表，省去你重 derive。
-
-### Step 1.9: Component Candidates（強制，偵測到 Nuxt UI stack 時）
+### Step 1.8: Component Candidates（強制，偵測到 Nuxt UI stack 時）
 
 **MUST Read [references/component-candidates.md](references/component-candidates.md) before proceeding** —— 三件事的完整判準（query / 列 ≥2 候選 / 開 Component 決策頁讓 user 選）、plan 寫入格式、block 條件，以及 `/impeccable live` 在 Nuxt 專案的正確接法（走靜態 HTML mockup，**NEVER** 改 `app.vue` 掛 live）都在該檔。
 
-Step 1.8 管 platform API 基線，這一步管**元件選擇**。**NEVER** 憑訓練記憶列元件；**NEVER** 只列一個候選就寫進 plan；**NEVER** 代選。plan 涉及 UI surface 但缺 Component Candidates 區塊、該區塊只列一個候選、或沒開決策頁 → **不得**進 build / ship phase。
+這一步管**元件選擇**。**NEVER** 憑訓練記憶列元件；**NEVER** 只列一個候選就寫進 plan；**NEVER** 代選。plan 涉及 UI surface 但缺 Component Candidates 區塊、該區塊只列一個候選、或沒開決策頁 → **不得**進 build / ship phase。
 
 ---
 
@@ -277,7 +240,7 @@ Shape brief 在 Skill sequence ANSWER 之後、且選中序列含 `/impeccable s
 9. **Decision pages, then execute** — `/design new|improve|iterate` 的 user 授權是 Skill sequence 決策頁的 ANSWER，不是聊天問句。選完直接開始 invoke 選中序列。**NEVER** 輸出「要進入 Plan Mode 逐步執行這些改進嗎？」。meta/strategy 問題（"should we adopt X"、"what's the difference between Y and Z"）不開頁，直接答。
 10. **Cite references** — When recommending design systems or patterns, cite specific examples from `references/design-systems.md`. Include industry-specific benchmarks and maturity assessments from `references/diagnosis.md`.
 11. **Copy tone enforcement** — 任何 plan 涉及 user-facing string 時，**MUST** 套用 Step 1.7 Copy Tone Lock 規則：(a) Core Plan 排 `/impeccable clarify` 並 brief 引用 `references/copy-tone.md`；(b) Exit Criteria 必含「Copy Tone Check passed」；(c) 例外保留的開發英文必有 `Copy Tone Exception` 標註並引 PRODUCT.md Users 佐證。違反 = plan 無效。
-12. **Component candidate enforcement** — 偵測到 Nuxt UI stack 且 plan 涉及 UI surface 時，**MUST** 套用 Step 1.9：(a) 每個 surface 有 Component Candidates 區塊；(b) **候選 ≥2 個**，單一候選視同未做比較；(c) 每個候選的元件與 slot / variant 出自 `nuxt-ui-remote` query 而非記憶；(d) 開 Component 決策頁讓 user 選，agent NEVER 代選。違反 = plan 無效。
+12. **Component candidate enforcement** — 偵測到 Nuxt UI stack 且 plan 涉及 UI surface 時，**MUST** 套用 Step 1.8：(a) 每個 surface 有 Component Candidates 區塊；(b) **候選 ≥2 個**，單一候選視同未做比較；(c) 每個候選的元件與 slot / variant 出自 `nuxt-ui-remote` query 而非記憶；(d) 開 Component 決策頁讓 user 選，agent NEVER 代選。違反 = plan 無效。
 13. **Foundation hard gate** — 缺 `PRODUCT.md`（空 / placeholder 同缺）或有 UI 卻缺 `DESIGN.md` 的輸出 **不算** `/design`。必須立刻 init / document；把缺檔寫進 plan checklist、skip Fidelity、或當 health finding 過關 = 違反。
 
 ## Diagnostic Skills (assess without changing code)

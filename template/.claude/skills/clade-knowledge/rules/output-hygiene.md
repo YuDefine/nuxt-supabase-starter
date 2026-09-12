@@ -89,7 +89,7 @@ MCP 規約（[[nuxt-ui-mcp]] 等）擋「亂湊 API surface」，但沒擋「拿
 
 ### 適用範圍
 
-不限 Nuxt UI——同樣適用於 modern-web-guidance、codebase-memory-mcp、任何 MCP / docs 抓資料後的二手宣稱：
+不限 Nuxt UI——同樣適用於 codebase-memory-mcp、任何 MCP / docs 抓資料後的二手宣稱：
 
 - MCP 直接 fact（「`search_graph` 顯示 X 被 5 個 caller 呼叫」✅）vs synth + prescriptive（「X 是 hot path 應該優化」❌）
 - **Reka UI / Headless UI / shadcn-vue**：API surface fact OK，「the recommended pattern」synth 禁止

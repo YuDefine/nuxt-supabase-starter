@@ -17,12 +17,12 @@
 
 ## 八維度（每維度用苛刻刻度評分 + file:line 證據）
 
-1. **UI / Design fidelity** — 複用 `improve` Step 2 + 2.5 Fidelity + `/impeccable critique` + `/impeccable audit`（41 rules）+ Step 1.8 Modern Web Baseline
+1. **UI / Design fidelity** — 複用 `improve` Step 2 + 2.5 Fidelity + `/impeccable critique` + `/impeccable audit`（41 rules）
 2. **架構 & 分層** — **codebase-memory-mcp** `get_architecture` / `search_graph` / `trace_path` / high fan-out / dead-code
 3. **程式碼品質** — codebase-memory-mcp dead-code + 複雜度熱點；lint；type-safety（`any` / `@ts-ignore`）
 4. **資料 & 契約** — schema/migration、contract 單一真相源、N+1、RLS / D1
 5. **Dependencies** — `pnpm outdated`（`/version-upgrade` signal）、unused、catalog drift
-6. **效能** — `GoogleChrome/modern-web-guidance`（LCP/INP/CLS）；**chrome-devtools-mcp 實測是 clade-central-only**，consumer session 標「需切 clade home 量」或 defer
+6. **效能** — LCP / INP / CLS、request waterfall、bundle、layout thrash；consumer session 沒有核准的量測 adapter 時標示待測，不假裝已量
 7. **安全** — `/security-review`：dangerous default、input validation、secret 外洩、CSP/RLS
 8. **測試 & DX** — 關鍵路徑 test、CI、typecheck/lint、錯誤處理 pattern
 

@@ -36,9 +36,9 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 | 成本容忍 | 高（防作弊值得付） | 低（每輪都要付） |
 | 靜態截圖 | ✅ 剛好適合 | ❌ 完全不適合 |
 
-**美學判斷 MUST 在設計階段做完**——`design` skill § Step 1.9 Component Candidates 要求 plan 內每個 UI surface 列 ≥2 個候選組合、寫明淘汰理由，並在有 dev server 時用 `/impeccable live` 當場比較變體。等實作完才用截圖問「這樣好嗎」，是拿防偽工具做設計決策，代價是整段重寫。
+**美學判斷 MUST 在設計階段做完**——`design` skill § Step 1.8 Component Candidates 要求 plan 內每個 UI surface 列 ≥2 個候選組合、寫明淘汰理由，並在有 dev server 時用 `/impeccable live` 當場比較變體。等實作完才用截圖問「這樣好嗎」，是拿防偽工具做設計決策，代價是整段重寫。
 
-因此 `[review:ui]` 的驗收問題只有一個：**有沒有做到設計階段說好的樣子**。若 review 時才冒出「其實另一個組合更好」，那是 Step 1.9 沒做確實，回設計階段補，**NEVER** 在 review 迴圈裡迭代設計。
+因此 `[review:ui]` 的驗收問題只有一個：**有沒有做到設計階段說好的樣子**。若 review 時才冒出「其實另一個組合更好」，那是 Step 1.8 沒做確實，回設計階段補，**NEVER** 在 review 迴圈裡迭代設計。
 
 ## 核心規則
 

@@ -449,5 +449,5 @@ async function handleSubmit() {
 | D1 / Drizzle / wrangler / NuxtHub binding | `data-layer-d1.md` |
 | useFetch / useQuery / $fetch 選用 / dedupe / cache / payload | 本 rule |
 | Nuxt UI component props / theming | nuxt-ui-remote MCP 與專案的 Nuxt UI 查詢規約 |
-| CSS / Web Platform API（dialog / popover / anchor） | modern-web-guidance skill 與專案的 Web Platform 查詢規約 |
+| CSS / Web Platform API（dialog / popover / anchor） | 專案的瀏覽器支援政策與 Web Platform 官方文件 |
 | Error handling pattern（server/client） | `error-handling.md` |
