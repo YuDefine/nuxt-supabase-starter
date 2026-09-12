@@ -1,0 +1,12 @@
+---
+description: Screenshot strategy 規則——根據互動深度、跨裝置、跨瀏覽器與是否要沉澱成回歸測試，選擇 approved browser carrier 或 reproducible browser runner CLI
+paths: ['screenshots/**', 'tests/e2e/**', 'packages/*/tests/e2e/**', 'openspec/changes/**/design-review.md']
+---
+<!-- Clade native rule; source: adapters/cursor/instructions/rules/core/screenshot-strategy.md; edit canonical source -->
+<!-- clade-targets: cursor -->
+
+# Cursor native screenshot strategy
+
+Cursor uses `cursor-ide-browser` for interactive page, login, DOM, and screenshot work. Use the native browser session for one-off review and `Playwright` only when the project has a reproducible multi-viewport, cross-browser, or regression spec. Use `browser_cdp`/the approved measurement MCP for measurement-only operations exposed by the IDE.
+
+After any navigation or interaction, refresh the native snapshot before using refs. Capture and all required checks belong to the same native interaction round; an unavailable capability is blocked.

@@ -251,7 +251,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ## § 0-S: 敏感路徑安全掃描（條件觸發、attended hard gate）
 
-Step 0-Scope 確認本次 WIP 後，依 [`review-tiers.md`](references/review-tiers.md)
+Step 0-Scope 確認本次 WIP 後，依 [`review-tiers.md`](rules/review-tiers.md)
 Tier 3 判定：migration / schema / auth / permission / RLS / raw SQL / billing / security-critical
 任一類別命中就觸發；純 docs、一般業務邏輯與非敏感重構跳過。本判定涵蓋本次 `/commit` 的
 **每一個** changed path，不只主線 agent 自己改的檔。

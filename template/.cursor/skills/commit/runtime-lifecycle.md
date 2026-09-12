@@ -20,7 +20,7 @@
 
 ## 執行依賴
 
-原生投影隨本 skill 交付 `scripts/commit-lock.mjs`、`scripts/0a-metrics.mjs`、`scripts/codex-review-safe.sh` 與 `references/` 下的兩份 review 政策。執行 Node script 使用 `node`，shell wrapper 使用 `bash`；交付檔不依賴 executable bit。先確認本次載入位置與所需檔案可讀，缺檔回報投影缺口。
+原生投影隨本 skill 交付 `scripts/commit-lock.mjs`、`scripts/0a-metrics.mjs`、`scripts/codex-review-safe.sh` 與 `rules/` 下的兩份 review 政策。執行 Node script 使用 `node`，shell wrapper 使用 `bash`；交付檔不依賴 executable bit。先確認本次載入位置與所需檔案可讀，缺檔回報投影缺口。
 
 這些資源不包含整套中央工具鏈。選用 Pi review wrapper 前依 runner-safety 確認中央 runner、工具與認證；各 gate 引用的中央 security、Spectra、Notion、BP helper 則在該 gate 觸發時確認 `CLADE_HOME` 與實際 helper。資源存在只證明交付，不證明前置依賴可用或該 gate 已通過。
 

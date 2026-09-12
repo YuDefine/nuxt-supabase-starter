@@ -19,7 +19,7 @@
  *
  * Exit: 0 clean / not-applicable · 1 drift found · 2 script error
  *
- * See .claude/rules/test-scripts.md for the rule.
+ * See the `clade-verification` skill → `rules/test-scripts.md`.
  */
 
 import { existsSync, readFileSync } from 'node:fs'
@@ -195,7 +195,7 @@ if (asJson) {
     console.log('  "test:file": "vp test run"')
     console.log('')
   }
-  console.log('Fix: see .claude/rules/test-scripts.md')
+  console.log('Fix: invoke `clade-verification`, then read `rules/test-scripts.md`')
 }
 
 process.exit(findings.length > 0 || !hasEscapeHatch ? 1 : 0)

@@ -1,0 +1,12 @@
+---
+description: Manual Review data-readiness 規約——propose 階段準備驗收資料的 hard rule、[review:ui] 純功能驗證 step actionability、`@no-manual-review-check` marker schema、截圖檔名配對；寫 proposal.md / tasks.md 時 path-scoped 載入
+paths: ['tasks/**', 'specs/plans/**', 'screenshots/**']
+---
+<!-- Clade native rule; source: adapters/cursor/instructions/rules/core/manual-review.data-readiness.md; edit canonical source -->
+<!-- clade-targets: cursor -->
+
+# Cursor native data-readiness operations
+
+Cursor prepares sample identifiers, seed fixtures, URL/role details, and `ready_signal` values in the native IDE session. Before capture, poll the signal and use `cursor-ide-browser` to cross-check the final DOM and item description in the same round.
+
+A file, exit status, or URL string does not certify the requested content; preserve the blocked state when native browser capability is unavailable.

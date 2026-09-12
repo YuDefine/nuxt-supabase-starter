@@ -1,0 +1,445 @@
+---
+description: Commit 全文規約（gate 清單、Single Session Lock、WIP 處置決策樹、main worktree 預設位置、ad-hoc `git commit --only` 紀律與 Verify / Recovery、路徑白名單、trunk hard gate、Stash 自動處置 gate、分組與訊息規範、Tag 位置 release hard gate）；always-load 的薄 pointer 在 [[commit]]，觸發時機是「下任何 git commit / git add / git stash / git tag / git push --tags / git push origin v<版本> / /commit 之前」，由 [[commit]] 的 MUST-Read 指針叫醒
+paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**', '.clade/work-loop/**']
+---
+<!-- Clade native rule; source: rules/core/commit.detail.md; edit canonical source -->
+<!-- clade-targets: claude,codex,cursor -->
+
+# Commit（全文）
+
+<!-- never-density-reviewed: 2026-07-25 — 38 條列舉式 NEVER 逐條覆核過（覆核當時本文與 [[commit]] 同檔）：人工檢查 gate 7 條各封一條具體繞道路徑、檔案系統等效動作 6 條是非顯然洞察、其餘多為逐字反開脫。本檔是紀律型規約（已有多條對應 pitfall），依 rule-authoring § 紀律型規約三件套，反開脫清單就是正確形式。已刪的 3 條純複述見 git history。 -->
+
+> 本檔是 [[commit]] 的下推全文。[[commit]] 常駐「強制入口 ＋ WIP 處置禁令 / 話術關鍵詞表」，其餘全部在這裡。
+
+## 理由
+
+`/commit` 封裝了品質閘門，繞過等於讓壞 code / 壞版本號 / 壞 tag 進 repo。各 gate 一行定性如下，**MUST 全綠才能 commit**；執行細節一律讀當前 runtime 已投影的 commit skill 全文及其 `gates.md`。找不到技能或其必要能力時，該 gate 保持未完成，不改用裸 Git 略過 ceremony。
+
+- **0-A** 程式碼審查：simplify 序跑第一，再執行獨立 review；Critical／Major 條件觸發深度 review 與裁決，修正由主線匯合後執行。Reviewer 品質、模型差異、transport／隔離與配額分流依 commit skill `gates.md` § 0-A 的同一份政策；fresh context 與跨模型分開驗證。必要 reviewer 或隔離能力不可用時，保留未達成及待補範圍，主線自審不算該 gate 通過。
+  **NEVER** 以「既有問題」「不在本次 scope」「建議性質」靜默跳過 review finding；依同一份 0-A 政策逐條處置、記錄裁決與未達 gate。
+- **0-B** UI Design Review（條件觸發）：`.vue` 模板 + 頁面/元件/佈局/互動/樣式變更時由 Gemini 3.8 Flash 收截圖，再由 Opus 5 做 Design Review
+- **0-C** format / lint / typecheck / test / doctor 全綠：執行 check 後無條件跑明確的 test command，不由 script 名稱猜測覆蓋；`scripts.doctor` **必裝**（缺裝 = block commit）。命令與格式檢查的處置依 skill `gates.md` § 0-C。
+- **0-D** Doc Alignment（條件觸發）：diff 觸及 docs / rules / snippets / audit script / 業務碼 / bug fix 時，檢查 cross-ref / 路徑引用 / pitfall status / 三方受眾文件忠實度（含 VitePress sidebar）四面向
+- **0-E** evlog map 覆蓋率（條件觸發）：diff 觸及 entry point（`server/{api,routes,middleware,tasks}/` / pages / Next route handler）時跑 gate；`@evlog/cli` **必裝**（缺裝 = block commit，比照 doctor）。判定是 **strict：整個 repo 的每一個 entry point 零失敗 check、零 suppression**，**不是**只看本次 diff 觸及的那幾個 —— 既有 gap 一律要補
+- **並行**：simplify 序跑完後，已觸發的 0-A.1 / 0-B / 0-C 使用可收回結果的原生載體並行；沒有並行能力時依 skill 的已授權同步分支完成全部 gates。0-D / 0-E 在匯合後條件觸發。
+- **Step 1** Schema 同步檢查 — `database.types.ts` 與 migration 對齊
+- **Step 5** 版本號升級 + tag push — `feat` → minor、其他 → patch
+
+這些檢查**無法事後補跑**：漏跑的 commit 已在 history、壞版本號已 push 出去。
+
+## Single Session Lock
+
+**同時只能有一個 session 跑 `/commit`**。三端共用 `.claude/scripts/commit-lock.mjs` 與相容鎖路徑 `.claude/.commit.lock`；路徑不表示持有者必為 Claude。**Step 0-Lock MUST 先讀 commit skill 的 `runtime-lifecycle.md` 全文**，以明確 work／runtime／session 取得 owner token；各 gate 邊界與 Git mutation 前續持，退出時先收回會寫入的背景工作，再以原 tuple 與 token 釋放。
+
+鎖的年齡、失聯或 CLI PID 消失只供診斷，不自動授權接管。重入須匹配原 owner；恢復須確認原 ceremony 已結束、有恢復授權，並核對精確 lock snapshot。缺身分、token、能力或證據時保留現況與 blocker，**NEVER** 自行 `rm` 鎖檔。互斥不替代以下 WIP、品質或發版 gate。
+
+## WIP 處置決策樹
+
+**預設所有 `git status` 顯示的 uncommitted 變更都納入本次 `/commit` 的候選清單**，照常查歸屬、跑 0-A，並在 Step 3 依功能分組。不同主題不構成排除理由；候選清單不授權覆寫另一個仍在寫入的 session，也不替代使用者已指定的範圍。實際提交前每組均須完成下方歸屬探測與品質 gate。
+
+```text
+uncommitted 變更
+├─ 預設 → 全列候選並查歸屬；「主題不同 / 不認得來源 / 想讓 commit 乾淨 / 跟我無關」
+│    不構成排除理由 → 已授權且可安全操作的內容分組；仍在寫入或歸屬不明先協調
+├─ WIP 阻礙處理（stash，極少數例外）— 僅三條件之一（使用者明確要求視為涵蓋）：
+│    1. 品質閘門卡死且短時間修不好  2. 明確不該入庫的殘留（debug print / 假資料 / 敏感資訊）
+│    3. 使用者主動在 $ARGUMENTS 指名要 stash
+│    → 優先 stash 該檔本身（git stash push -u -- <檔>）而非整批 + MUST 在 HANDOFF.md 登記
+│      （stash 訊息對應、對齊哪條觸發條件、接手指引），寫完才繼續
+└─ worktree → main commit handoff → stash 是合法規約中介（見下節），不受上列三條件限制
+```
+
+- **排除條件（唯一）**：使用者在本任務訊息或 `$ARGUMENTS` 中**明確**指名排除（例如「排除 .env.local」「只 commit app/」）。既有同範圍授權持續有效；未解所有權衝突是尚未通過前置條件，不是默默移出候選清單
+- **NEVER** 以「這個不在我 scope」「看起來是別的 session 做的」「不確定是否該 commit」自行排除、啟動 stash、或徵詢使用者意見 — 分組是 Step 3 的工作，不是 Step 0 的判斷題
+
+### 並行 staged 的歸屬探測（MUST，先於交給使用者決定）
+
+`git status` 出現大批不屬於自己的 staged 變更時（典型：別 session 的 worktree merge-back 落進 main），
+**每一次**都 MUST 先跑歸屬探測，再決定要不要停下來問 user——四條可觀察 predicate 與命令塊見
+`vendor/snippets/git-recovery/` § 並行 staged 的歸屬探測，分流判準見 [[scope-discipline]]
+§ 歸屬探測前置（**NEVER** 在本檔複製那些命令，會漂）。
+
+- 四條答案證明預定內容均屬本次授權、可與其他寫入者隔離 ⇒ 不算衝突：已由 user 觸發的 `/commit` 繼續 Step 3 分組；尚未觸發時保持待提交狀態，不因探測成功就自行啟動。**NEVER** 把這一格讀成 ad-hoc `--only` 只收「自己的檔」。`--only` 隔離仍須符合下節白名單或當前 ceremony；merge-back / archive 收割進 main 的檔不是 ad-hoc
+- 任一條答不出來、或探測顯示雙方改到**同一檔的同一段**（分組也拆不開）⇒ 才走
+  [[scope-discipline]] § Rule 衝突解法
+
+**NEVER** 把「這批看起來是別 session 的」當成停下來問 user、或當成從 index 切開的理由——那與決策樹「不認得來源不是阻礙」是同一件事。探測沒跑就等於還沒判；確認不同檔、內容已授權且沒有相互寫入衝突時，同一輪 `/commit` 分組收取。只知道路徑不同或在 HEAD 中，不能推論另一個活躍寫入者已交接。
+
+**NEVER** 為了「不要吃到別人 staged」而 `git restore --staged` / `git reset HEAD -- <path>` / 把 squash 檔改回 untracked。那是切開，不是保護。user 觸發的 `/commit` 本來就該全包；從 index 拿掉等於取消全包。
+
+**理由**：品質閘門成本高，WIP 分次 commit = 多跑一次閘門；stash 把工作往後推，但保留可恢復 + HANDOFF paper trail，等同「延後」而非「丟棄」。工作檔覆寫可能丟棄 WIP；index-only 操作雖不改工作檔，仍會改變使用者的 staged 選擇。兩者分別依 [[commit]] 的 WIP 與 staged 所有權判準處理，不因命令名稱相同就視為同一種副作用。
+
+## Commit 預設位置：main worktree
+
+**批次 `/commit` 在已登記的隔離整合區跑一次完整品質流程**；沒有就緒 wt 或待續跑批次時，普通 `/commit` 照常處理當前工作區。
+
+**手動 `/commit` 或 merge back 無最低件數**，立即收同 repo 所有已授權、驗收完成且交出寫入權的就緒任務；未就緒工作不阻擋手動提交。自動門檻為 **4 個 distinct work id**，同任務多個 wt 不重複計數。dependency（下游需要落地）、drained（已授權開發都完成或受阻）、stop（使用者結束本輪）提前結批；換 session 只交接佇列。等待累積不佔 commit lock、繼續開發。
+
+- 每次就緒、收割、停止開發與 session 接手都 MUST 读 `wt-helper batch status`；命中條件由主線啟動 `/commit`，不請使用者代打。批次開始後的新成員留到下一批。
+- 批次 scope 是固定成員的完整 base→candidate diff，main 的其他 WIP 不自動納入；不得把 main 清空來配合整合。
+- 進入批次流程時 MUST 讀 commit skill 的 `batch.md`，由 helper 保留來源、固定整批範圍並在正式落地後回收。
+
+同一批只啟動一次完整品質鏈；每個 worktree 仍完成必要的行為驗收與測試。
+
+### 批次使用 checkpoint 保存來源
+
+所有 worker 與主線自走的實作 wt，完成必要驗收後可用 scoped `git commit --only -- <paths>` 保存 substantive change 與 evidence；新檔先逐檔 `git add -- <paths>`。Hooks 照跑，不 push session branch，不各自啟動完整 `/commit`。Checkpoint 只保存來源成果，**NEVER** 當作正式品質流程已通過。
+
+| 情境 | 保存方式 | 正式品質鏈 |
+| --- | --- | --- |
+| Worker 實作與驗收完成 | scoped checkpoint + 就緒登記 | 等本批 `/commit` |
+| 隔離整合區 | helper 釘住來源及整合 checkpoint，再對自己的 branch 以固定 base SHA 呈現整批 staged diff | 整批一次完整 `/commit` |
+
+### 禁止項
+
+- **NEVER** 在 worker 的實作階段各自跑完整 `/commit`；品質鏈由登記批次統一執行。
+- **NEVER** 用 checkpoint 直接 push main，或在只進 index、尚未正式落地時刪來源。
+
+### Artifact-tick（hard rule）
+
+只保存 work item carrier 進度的 artifact-tick，路徑限定**兩條**——該工作的 tasks 檔與它的 verify evidence sidecar `.spectra/evidence/<work-slug>.jsonl`：
+
+```bash
+git commit --only -m "📝 docs(tasks): phase N done (<work-slug>)" -- \
+  tasks/<date>-<work-slug>.md .spectra/evidence/<work-slug>.jsonl
+# plan package 版本：
+# git commit --only -m "📝 docs(tasks): phase N done (<work-slug>)" -- \
+#   specs/plans/NNN-<work-slug>/tasks.md .spectra/evidence/<work-slug>.jsonl
+```
+
+**每一個** phase-tick commit 都 **MUST** 同時帶 tasks 檔與該工作的 evidence sidecar，不是只帶其中一個、也不是只有「有跑 verify 的那一次」才帶——sidecar 檔不存在時（該工作尚未產生任何 receipt）才可以省略那條路徑。
+
+`merge-back --squash` 只帶 committed changes 回 main，未 commit 的 checkbox 留在 worktree working tree → main 的 tasks 檔永遠是 `[ ]` → impl-gate 誤判；sidecar 沒一起 commit 則 checkbox 回到 main、receipt 留在 worktree 被 GC，兩者走不同運輸機制就是 [[TD-394]] 的成因。操作細節與時機見 [[worktree-default]] §9.5.1（該節是執行面 SoT，本節是「worktree 內能不能 commit」的契約 SoT）。
+
+**NEVER** 把上述兩條路徑以外的檔搭這條例外的便車：同一個 commit 混進 tasks 檔與 `.spectra/evidence/<work-slug>.jsonl` 以外的路徑，就不再是 artifact-tick，回到上一條禁令。**NEVER** 把 `.spectra/` 底下其他子目錄（`snapshots/` / `touched/` / `stash-meta-*.json`）讀成也在白名單內——白名單只有 `.spectra/evidence/`，其餘仍被 `.spectra/*` ignore。
+- **NEVER** 用 `git stash push` 不加 `-u` — 漏掉 untracked 新檔
+- **NEVER** stash pop 撞 conflict 時用 `git checkout --` / `git restore` 「清理」 — 會永久毀掉 main 既有 WIP
+
+## Ad-hoc commit 必走 `git commit --only -- <paths>`
+
+本 § 規範 **ad-hoc commit**：不走 `/commit` 的單檔 / 少數檔 commit（`HANDOFF.md` 補一行、修 typo 等小型 git ceremony；完整 `/commit` 已有 Step 0-Lock + selective per-group commit 保護）。
+
+### Hard rule
+
+Ad-hoc commit **MUST** 用 `git commit --only -m "..." -- <paths>`，**NEVER** 用 `git add + git commit` 兩段操作。
+
+```bash
+# NEVER:
+git add scripts/my-file.sh && git commit -m "..."
+
+# ALWAYS:
+git commit --only -m "..." -- scripts/my-file.sh
+SHA=$(git rev-parse HEAD)          # MUST 當下捕捉，NEVER 事後用 HEAD
+git push
+git show --stat "$SHA" | tail -3   # MUST verify scope == expected paths
+```
+
+> **NEVER 用 `git show --stat HEAD` 驗自己剛才那一筆。** `HEAD` 是**移動中的參照**：
+> 多寫者的樹上，別 session 可以在你 commit 與你 verify 之間再 commit 一筆，
+> 於是它回的是**別人的** commit。失敗形態最惡劣的地方是**它會給你一份看起來完全合理的
+> 檔案清單，而你沒有任何訊號** —— 檔數若碰巧相符，這一格永遠不會發作。
+> 2026-08-27 clade home 實測：commit 完跑 `git show --stat HEAD`，回的是另一個 pane 的 commit。
+> **三層 verify 的意圖是驗「我剛才那一筆」，而 `HEAD` 不承載那個意思。**
+
+### Why
+
+working tree / git index 是 **process-wide shared state**——多 session 並行下，別 session **預 stage 但未 commit** 的 WIP 殘留在 index；`git add` **疊加**到既有 staged 上（不是 replace），`git commit` 把整個 staged 區一起吞並 push 出去（實證：[[pitfall-consumer-ad-hoc-commit-eats-other-session-staged]]）。
+
+`git commit --only -- <paths>` 機制：暫存原 staged → 以 `--only` paths 重建 staged（hook 只看到這些 paths）→ commit → 還原原 staged 區。**對 `<paths>` 以外的路徑副作用為零**，別 session 預 staged 在別的檔案的內容不受影響。
+
+### `--only` 限的是路徑，不是內容（hard rule）
+
+`--only` 重建 staged 時，對每個列出的路徑是從 **worktree** 拿該檔**完整**的當前內容——包含別 session 寫在同一個檔案裡、還沒 commit 的部分。共用檔（`docs/tech-debt.md` / `HANDOFF.md` / `ROADMAP.md` / `CLAUDE.md` / i18n locale）正是最常被多 session 同時寫的那幾個。
+
+- **MUST** commit 前跑 `git diff -- <paths>` 看實際會帶走什麼；出現不是自己寫的段落 → 依 § Recovery from mixed commit 處置，**NEVER** 直接 commit 下去
+- **NEVER** 用裸 `git commit --amend` 改 message——`--amend` 重新 commit **當前 staged index**，等於把 `--only` 的保護整個放掉（實測：同一情境下 commit 從 1 檔變 26 檔）。要改 message **MUST** 帶 `--only`：
+
+  ```bash
+  git commit --amend --only -m "<new message>" -- <same paths as the original commit>
+  ```
+
+實證與最小可重現：[[pitfall-consumer-ad-hoc-commit-eats-other-session-staged]] § Occurrence 4。
+
+### Untracked file 例外
+
+`--only` 不接受 untracked pathspec。新增檔須先 `git add <untracked>` 再 `git commit --only -- <both-paths>`，**scope 仍受 `--only` 過濾**，別人的 staged 不會進 commit。
+
+### Verify hard rule
+
+Commit 後 **MUST**：
+
+```bash
+SHA=$(git rev-parse HEAD)        # commit 當下就捕捉；NEVER 事後才用 HEAD 指代它
+git show --stat "$SHA" | tail -3
+```
+
+**第 1 層 MUST 驗那個捕捉下來的 SHA，NEVER 驗 `HEAD`** —— 理由與上方 § Ad-hoc commit 同一條：
+`HEAD` 是移動中的參照，別 session 在你 commit 與 verify 之間再 commit 一筆，
+它就回別人的那筆，而且清單看起來完全合理。本節下一行「HEAD 可能不是你預期的 HEAD」
+講的是同一件事，**那個懷疑同樣適用於這一行的 verify 本身**。
+
+Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery from mixed commit (multi-session safety)（**NEVER** 反射性 `git reset --soft HEAD~1` — HEAD 可能不是你預期的 HEAD，會吃掉別 session 的 commit）。
+
+**行數同樣要對**：`git show --stat` 的 insertions / deletions 與**自己實際寫入的量**明顯不符 → 一樣 STOP。檔案清單正確不代表內容是你的那一份 —— `--only` 提交的是**執行那一刻**的 worktree 內容，從你讀檔到你 commit 之間，別 session 可以整段改寫同一個檔。兩種方向都要看：
+
+| 觀察 | 實際發生的事 |
+| --- | --- |
+| 行數**遠多於**自己寫的 | 別 session 對同一檔的編輯被一起 commit 了（message 從此對不上內容） |
+| 行數**遠少於**自己寫的，或 grep 不到自己的字串 | 自己的寫入已被別 session 覆寫，commit 出去的是對方的版本 |
+
+**NEVER** 用「grep 得到自己寫的字串」當作這一層通過了 —— 那只證明**自己的內容在**，對「**別人的內容也一起進來**」零訊號。行數是唯一同時涵蓋兩個方向的可觀察量。實證（2026-08-02，寫入 7 行、`--stat` 回 `35 insertions, 15 deletions`）：grep 命中 3 處全綠，多出來的 28 行淨變動是別 session 的 HANDOFF 更新，被以「註記某事」的 message 一起 push。
+
+### Recovery from mixed commit (multi-session safety) — hard rule
+
+撞到 mixed commit / commit scope drift（`git show --stat HEAD` 含預期外 file）後，agent **MUST**：
+
+1. **STOP + 列現狀**（動 git history 前先看清楚：`git log` / `git reflog` / 活躍 session 偵測 / `git stash list`）
+2. **持有者是前景 agent session，且已授權協調並有可用通道 → MUST 先對話再拍板**：送達精確 session，詢問該筆 commit 的範圍與接手意願。Herdr 已驗證可用時使用 `herdr agent prompt <對方 pane_id> "<四項>"`。**這一步排在下一步之前**；持有者是 unattended runner、身分不明、缺通道或缺本次協調授權時，保留原因，不假裝已送達。逐字範本見 `vendor/snippets/concurrent-session-probe/README.md` § 探測之後：協商（negotiate）
+3. **以當前 runtime 的提問介面或對話給 user 拍板**，選項至少含：(A) **接受 mixed commit + 登記 cleanup**（最安全）、(B) **立即 reset/rebase 修復**（user **MUST** 對 race risk 知情同意）、(C) **等並行 session 收斂再評估**。本任務已有同一具體處置的答案就沿用，不重問
+4. **NEVER** 自行跑 `git reset --soft HEAD~N` / `git rebase -i HEAD~N`（**任何 relative reference**）— `HEAD~N` 在 race window 內可能指到別 session 的 commit（多次實證）
+5. user 選 (B) → **MUST** 用 **specific SHA reference** 且**先**建 backup tag 保險；**NEVER** 在並行 session 活躍時跑 `git rebase` split mixed commit
+6. 撞坑後亦 **MUST** 在 [`docs/pitfalls/`](../../docs/pitfalls/) 對應 entry 加 regression evidence section
+
+完整 6 步操作流程 + 命令塊 + backup tag 模板：`~/offline/clade/vendor/snippets/git-recovery/README.md`；cross-ref [[pitfall-consumer-ad-hoc-commit-eats-other-session-staged]] § Regression Evidence。
+
+### Fleet sweep 升級規約
+
+跨多檔工作（fleet sweep / dep migration / 跨檔 refactor）**SHOULD** 走 worktree（per [[worktree-default]]），main working tree 完全不動 — 從機制上避開 staged race，每 worktree 各自獨立 index。
+
+### 隔離 worktree ≠ 繞過 /commit（hard rule）
+
+普通 `/commit` 的 WIP 全包與登記批次的成員全包，各自以其工作區為範圍。批次流程須在隔離整合區跑完整 0-A/B/C，worker checkpoint 不能直接推上 main。
+
+本節禁的是用隔離 worktree + raw `git commit` + `git push origin main` 把 substantive change 繞過 0-A。隔離本身不是 review 豁免；判準是有沒有跑完登記批次的正式品質流程。
+
+- **NEVER** 以「會吃別人 staged」為由跳過 user 已要的 `/commit`，或自行把檔從 index unstage
+- **NEVER** 以「main 髒」為由自行繞過 batch 登記與正式品質流程
+- **NEVER** 用隔離 worktree + raw `git commit` + `git push origin main` 繞過 0-A
+
+判別走下節的路徑白名單，**NEVER** 靠「這批算不算小」自評；`\do-all` / 時間壓力 **NEVER** 是跳 gate 的理由。work-loop / unattended / 「護欄說一律 `--only`」同樣不是。實證：[[pitfall-isolated-worktree-raw-commit-push-bypasses-commit-gate]]
+
+### `--only` 適用範圍 = 路徑白名單（hard rule）
+
+「小型 ceremony」不是可觀察的 predicate —— 任何一批改動都能自稱小。判準改成**看路徑**：
+
+**白名單（ad-hoc `git commit --only` 一律可用）**：
+
+| 路徑 | 說明 |
+| --- | --- |
+| `HANDOFF.md`、`ROADMAP.md`、`docs/tech-debt.md` | 跨 session 狀態檔 |
+| `tasks/**`、`docs/discussions/**`、`docs/digests/**` | session-scoped 與討論紀錄 |
+| `docs/pitfalls/**`、`docs/archives/**` | 事後紀錄與 rotate 產物 |
+| `vendor/snippets/**/*.md` | cookbook / pressure scenario 散文 |
+| `tasks/**/*.md`、`specs/plans/**/tasks.md`<br>`.spectra/evidence/<work-slug>.jsonl` | worktree phase-tick 專用，**兩條一起**（見 § worktree 內唯一合法的 commit：artifact-tick） |
+
+**白名單外的一切改動 MUST 走 `/commit`**，包含但不限於：`rules/**`、`scripts/**`、`vendor/scripts/**`、`plugins/**`、`claude-md/**`、`registry/**`、任何 source code。改動落在白名單內外**混合**時，整批走 `/commit`——**NEVER** 拆成「白名單那半用 `--only` 先送」。
+
+**work-loop 不是例外。** HANDOFF / tech-debt 短更走本表 `--only`；merge-back 與收割後的產品落地走 **user 觸發的** `/commit`（全包，含當時 index 上別人已 staged 的檔）。**NEVER** 對那批跑 ad-hoc `--only` 只收「自己的」幾檔。護欄原文若寫「一律 `--only`」，以本節為準。機械層：`pre-bash-git-commit-only-whitelist.sh` 在 main 上擋白名單外的 `--only`（`/commit` 的 `Via: /commit` trailer 放行）。
+
+**「純 typo」不是跨路徑的例外**。它只在白名單路徑內成立，且僅限散文本身的錯字。**NEVER** 拿它包裝：規約措辭修正（改的是 MUST / NEVER 的語意）、程式識別字重命名、註解以外的任何程式碼改動——這三類即使一個字元也走 `/commit`。
+
+## 程式化區段編輯的定界（hard rule）
+
+**適用範圍**：**每一次**用腳本或 one-liner（python、node、`sed -n '/a/,/b/p'`、`awk '/a/,/b/'`）改寫長 markdown 的**某一段**——`docs/tech-debt.md`、`HANDOFF.md`、spec、pitfall、locale 檔全部適用，不是只有最大的那一份。手動逐段 Edit 不在此列。本節管的是**怎麼定界**，**NEVER** 讀成放寬 § 禁止事項 — WIP 處置禁令的 `sed -i` / `echo >` 條款：腳本改 git-tracked 檔仍 MUST 留下可見 diff（走 Edit/Write tool，或改完立刻 `git diff -- <file>` 給人看）。
+
+1. **區段邊界 MUST 用結構正則算**：先用該檔的 heading 形狀（`^## ` / `^### `）掃出**所有** heading 的位置，某段的終點取「**下一個** heading 的 offset」，最後一段取檔尾。
+
+   ```python
+   import re
+   heads = [(m.start(), m.group(1)) for m in re.finditer(r'^## TD-(\d+) ', s, re.M)]
+   bounds = {num: (pos, heads[k + 1][0] if k + 1 < len(heads) else len(s))
+             for k, (pos, num) in enumerate(heads)}
+   a, b = bounds['575']     # 終點是「下一個 heading」，不是「下一個我以為的 heading」
+   ```
+
+   **NEVER 拿另一個條目的標題當終點**（`s.index('## TD-574 —')`、`awk '/^## TD-575 /,/^## TD-574 /'`）——條目的相鄰關係由多個 session 各自 insert 的位置決定，**不是不變量**；把它寫進定位邏輯，等於把別人的編輯權接進自己的刪除範圍。逐字反開脫：**「剛才 grep 過，`## TD-574` 就緊接在 `## TD-575` 後面」**——那是**當時**的排列，不是**寫入那一刻**的排列，而中間別 session 可以插入任意多條。`awk` 的 range pattern 更糟：end pattern 不存在時它一路吃到檔尾。
+
+2. **一次改多段 MUST 由後往前替換**（依起點 offset 由大到小），否則前面的替換會讓後面**每一段**的 offset 全部位移。反序處理**每一段**，不是只有最後一段例外。
+
+   ```python
+   for num, new in sorted(edits, key=lambda x: -bounds[x[0]][0]):
+       a, b = bounds[num]
+       s = s[:a] + rebuild(s[a:b], new) + s[b:]
+   ```
+
+3. **寫入後、commit 前 MUST 驗區段數**：編輯前後各跑一次 `grep -c '^## ' <file>`，差額 **MUST 等於本次刻意增刪的區段數**（沒有刻意增刪就是 0）。不等 → **STOP**，用 `git diff -- <file> | grep '^-## '` 看是哪幾段消失了，還原後用結構正則重做。
+
+   **NEVER 用「grep 得到自己寫的那一段」代替本步**——那是 § Verify hard rule 的第 2 層，它問的是「**我寫的**在不在」，對「**別人的**還在不在」結構性零訊號（實證：第 1、2 層全數通過，只有第 3 層行數比對接住）。已經 commit 才發現 → `git revert <sha>`，**NEVER** 改寫已 push 的 history。
+
+實證：`git show ee56679d --stat -- docs/tech-debt.md`（誤刪三條整條 entry）→ `61ebc282`（revert）→ `46b21800`（以 heading 正則重做）。成因與 detection 指令見 [[pitfall-adjacent-heading-boundary-slice-eats-middle-entries]]。
+
+本證據決定：程式化改寫區段時怎麼定界、寫入後要驗什麼。
+本證據不決定：要不要用腳本改 markdown——**NEVER** 拿它論證「一律改用手動 Edit」，長檔多段編輯手動逐段改一樣會漏，只是漏得比較安靜。
+
+## Multi-session shared working-tree 的 git hazard
+
+多 session 並行是常態。任何**不帶 path scope** 的 git index / stash 操作（`git add -A` / `git add .` / `git stash push` 不帶 pathspec / `publish.ts --stash-untracked` / merge-back auto-stash / `git clean`）都會把別 session 未 commit 的東西捲進來 → mixed commit、WIP 永久遺失、deploy commit 內容跟 message 不符。防法統一：**path-scoped 隔離**（`git commit --only -- <paths>`）或**避開共用 index**（per-session worktree）。
+
+> 完整危害點 × 規約 × pitfall 交叉索引，見 [[commit.trunk-gates]]。
+
+## main / master 限定的 hard gate
+
+**人工檢查 Gate**（實作已開始且該 work item carrier 的 `## 人工檢查` 有未勾項時擋 commit）是 main / master 限定 hard rule，**無 override**。判定條件、fail-fast 位置、完整反開脫 NEVER 清單見 [[commit.trunk-gates]]；執行層在當前 runtime 的 commit skill Step 0-MR 與 `check-review-readiness.ts`。
+
+## 禁止事項
+
+- **NEVER** `git commit --amend` 修改已 push 的 commit — 會破壞遠端 history
+- **NEVER** `git commit --no-verify` — 繞過 pre-commit hook
+- **NEVER** 以「變更很小」「只是 typo」「趕時間」為由跳過 `/commit`
+- **NEVER** 以「dev server 需要這個 fix」「E2E 測試要通過」「unblock 驗證」為由直接 `git commit` 跳過 `/commit` — 修 main code 讓 dev server 生效是 OK 的（hot reload），但 **commit 必須等到 `/commit` 時統一走閘門**。正確做法：Edit 修好 → dev server hot reload 自動生效 → 改動留在 working tree 不 commit → 驗證完後統一 `/commit`
+- **NEVER** 讓 subagent 自主執行 `git commit` — commit **必須在主線執行**；使用者觸發 `/commit` 即代表授權整批分組，主線**不需**在分組後另行徵詢確認（commit 流程預設無互動）
+- **NEVER** 跳過 `pnpm run doctor` — import graph 問題 lint / typecheck 抓不到；**MUST** 帶 `run`，裸 `pnpm doctor` 撞 pnpm 內建子命令會 silent exit 0、根本沒跑 vite-doctor
+- **NEVER** 在 doctor health score < 100 或 exit ≠ 0 時視為通過 — 即使 warning 是既有非本次 diff 引入，每次 `/commit` **MUST** 修到 100/100 + 0 warnings 才繼續（保持零警告 baseline，避免 debt 累積）
+- **NEVER** 在 `docs/` 補新頁面但漏更新 VitePress sidebar config（0-D 觸發條件本身見 § 理由）
+
+
+## Stash 自動處置 gate
+
+**核心命題**：把 stash 的處置權完全綁在 user 身上，前提是 user 會去看。**那個前提對不會人工看 stash 的
+user 不成立**，結果是 stash 單調遞增、owner 資訊隨時間流失，最後沒有任何人有能力判斷能不能刪
+（<consumer-a> 2026-08-02 實證：一個 session 內 6 → 10 條，全由自動化流程建立，10 條裡 9 條無 sidecar metadata）。
+
+因此 `git stash drop` **不是**絕對禁令，而是**綁機械判準的條件動作**。
+
+### 放行判準（三條全中才可 drop）
+
+1. **內容可重生**：`git stash show --stat <ref>` 列出的**每一個**檔都落在可重生投影層 ——
+   `.claude/**`、`.codex/**`、`.clade/**`、`AGENTS.md`、`CLAUDE.md`、`.npmrc`、`skills-lock.json`
+   （這些由 `pnpm hub:bootstrap` 重生）。**有任何一個檔不在此清單就不算命中**
+2. **來源已消失**：stash message 內的 slug 對應的 worktree **已不存在**（`git worktree list` 查不到）。
+   slug 解析不出來時，退回時間門檻：**建立逾 24 小時**
+3. **先留痕再 drop**：把 `<ref>`、`createdAt`、`--stat` 全文、命中的判準 append 進
+   `docs/archives/stash-dropped.md`（append-only），**寫完才 drop**
+
+   ⚠️ **副檔名 MUST 是 `.md` 不是 `.log`** —— 多數 consumer 的 `.gitignore` 有 `*.log`，寫成 `.log`
+   的留痕永遠進不了 git，換機器或重新 clone 就消失，等於沒留（2026-08-02 <consumer-a> 實證）。
+
+### 否決判準（任一命中即 NEVER drop）
+
+- `--stat` 含業務碼路徑：`packages/**`、`server/**`、`app/**`、`src/**`、`supabase/migrations/**`、
+  `test/**`、`e2e/**`
+- 含 `tasks/**` 或 `specs/plans/**` 且該 work item **仍 active**（flow 卡未標 `done`）
+- 對應 worktree **仍存在**（可能正在用，pre-sync 的 stash 還要 pop 回去）
+- 判準跑不出明確結論（stat 讀不到、slug 歧義）→ **不 drop**，列進 audit 段給 user
+
+### 與話術停手信號的關係
+
+本 gate 的 drop **不觸發** § 話術關鍵詞 = 立即停手訊號。理由：那條攔的是「從模糊語氣自行解讀成該丟棄」
+的推理鏈，而本 gate 的每一條判準都是**可機械檢查的事實**，不經過那條推理鏈。
+
+**但 `git stash clear` 仍然全面禁止** —— 它一次炸掉全部，無法逐條套判準。
+
+### NEVER
+
+- **NEVER** 因為「看起來都是投影漂移」就跳過逐條 `--stat` 檢查 —— 命中率不是憑印象估的
+- **NEVER** 先 drop 再補留痕 —— drop 之後 `--stat` 就取不到了，留痕會變成憑記憶編造
+- **NEVER** 拿本 gate 當理由放寬其他 WIP 處置禁令 —— `git restore` / `reset --hard` / `clean -fd` /
+  `stash clear` 一條都沒鬆綁
+
+## 例外（極少）
+
+以下情境允許直接 `git commit`，**MUST** 在 commit message 註明理由：
+
+1. **`/commit` 入口本身壞掉** — 先依已授權修復範圍恢復入口，或從可讀的 skill 全文完成同一套 gates，再做具名提交。找不到必要來源、reviewer 不可用或 gate 未完成時停止提交；入口故障不授權略過品質檢查。
+2. **Merge commit / rebase resolution** — `git merge` / `git rebase --continue` 的自動 commit
+3. **`git revert` 既有 commit** — 還原已 push 的 commit，無需重跑品質檢查。**僅**適用於使用者**主動**指明要 revert 哪個 commit（例如 `git revert abc1234`）；**NEVER** 主線自行提議 revert，也**NEVER** 用 `git revert` 處理 uncommitted WIP（一律走「WIP 阻礙處理」的 stash + handoff）
+4. **clade propagate 的投影交付 commit** — `~/offline/clade/scripts/propagate.ts` 在每個 consumer 建的 `🧹 chore: 升級 clade 至 vX.Y.Z` / `🧹 chore: 同步 clade vendor/rules 至 vX.Y.Z`。**這是刻意設計，不是漏網**：內容全部是 clade 端已過 24 道 publish gate 的投影檔，consumer 端再跑一次 `/commit` 的 0-A review / 0-C check 只是對同一份內容重複審查；而 propagate 是一趟跨全 registry 的動作，逐台等人拍板等於這條散播管線不存在。**範圍僅限 propagate 自己寫的那一個 commit**——它的 push 由 `shouldPush()` 把關，branch 上有任何不是本趟建的未推 commit 就 `push-withheld` 並要求人工 `git push`（[[pitfall-fleet-propagate-pushes-deliberately-unpushed-commits]]）。**NEVER** 把本例外讀成「自動化工具都可以直接 commit」：它點名的是這一支 script 的這一種 subject，其他任何自動 commit 都不在內
+
+5. **Worker checkpoint 與 batch helper 的隔離整合 checkpoint** — 只保存未正式落地的來源，遵守上節 § 批次使用 checkpoint 保存來源；不代表 0-A/B/C 通過，不能藉此直推 main。
+
+例外情境外，一律走 `/commit`。
+
+## Commit 分組與訊息規範
+
+- **每個 commit 獨立且完整** — 不相關的變更**MUST**分到不同 commit
+- **Commit message 使用繁體中文**描述
+- **Header 的 emoji 與 type 是一對一綁定**，逐字只有這 12 組：`✨ feat` / `🐛 fix` / `🧹 chore` / `🔨 refactor` / `🧪 test` / `🎨 style` / `📝 docs` / `📦 build` / `👷 ci` / `⏪ revert` / `🚀 deploy` / `🎉 init`。**NEVER 憑語意挑 emoji** —— `🛡️ feat`（安全性改動）、`♻️ refactor`、`⚡ perf` 這種看起來對得上的組合全部不在清單裡。走 `/commit` 時對照表在 SKILL.md Step 3，走 ad-hoc `git commit --only` 時**沒有任何東西會在你打字的當下提醒你**，所以清單在這裡再寫一次
+- **不確定就先驗，NEVER 拿 commit 當測試**：`echo '<你要用的 header>' | npx commitlint`。理由不是「省一次重打」——header 解析失敗時 commitlint 報的是 **`subject may not be empty`**（per [[pitfall-commitlint-emoji-type-mismatch-reports-subject-empty]]），訊息指向 subject 而真因在 emoji，照著訊息改會愈改愈遠；而 `--only` 的路徑清單長時，重打整條指令本身就是漏掉某個 path 的入口
+- **所有 uncommitted 變更都納入候選盤點**，逐組依 § WIP 處置決策樹確認授權與所有權後提交。使用者指名範圍持續有效；他人的活躍 WIP 與未解歸屬先協調，不以「全包」取代交接證據，也不默默遺漏候選檔。
+- **純機械正名（識別字替換）MUST 獨立 commit，NEVER 與語意編輯混合**——正名 sweep 時看到措辭問題「順手修掉」會讓整個 commit 失去 evidence-inert 豁免資格：驗證器（`audit-tech-debt-hygiene.ts`）逐 token 比對，宣告的替換以外只要有一個 token 不同就不算 inert，該 commit 觸及的每一條 TD 都照常進覆核佇列。語意編輯另開一筆 commit 即可，兩筆可以在同一次 `/commit` 分組裡
+- **`.gitignore` 變更**：只允許保留 Clade 管理的 installation artifact / runtime state ignore 條目（例如 `.claude/.commit.lock`、`codex/`）；其他變更**MUST** `git stash push -- .gitignore` 並寫入 `HANDOFF.md`（**NEVER** `git checkout .gitignore` 直接還原）
+- **`.env` / 敏感檔案**：警告使用者但仍由使用者決定是否 commit，**NEVER** 自行跳過
+- **每一個 finding 都要處置**：review 的缺失、行號漂移與純舊碼依 skill `gates.md` § 0-A 的同一份分流。當次引入或受當次變更加劇的問題修完再驗；純舊碼須有「未觸碰／無因果／登記」三項證據，不混入本次 commit，也不靜默跳過。Lint／typecheck／test／doctor 的必要 gates 仍要求全綠，登 TD 不會使失敗 gate 變成通過。
+  - 修法碰到別 session in-flight WIP 時，先依 [[scope-discipline]] 探測、協調；只有該規則判為尚需使用者裁決的衝突才提問。既有明確授權與已驗證的隔離不重問；無法安全處理時保留 blocker，不擅自覆寫或填 PASS。
+
+## Tag 位置（release hard gate）
+
+**每一個** release tag 都 MUST 打在與 `origin/<default branch>` 同步的 commit 上——不是只有正式版、
+不是只有想起來的那次。tag-triggered workflow 檢出的是 **tag 那棵樹**，不是 default branch。
+
+打 tag 前的正確動作序列（三步，缺一不可）：
+
+```bash
+git fetch origin main && git merge --ff-only origin/main   # 1. 先同步，不是先確認
+git rev-list --left-right --count origin/main...HEAD       # 2. 必須回 `0	0`
+git tag v<x.y.z> && git push origin v<x.y.z>               # 3. 才打、才推
+```
+
+第 2 步**兩個數字都要是 0**，它們是兩個獨立的失敗模式：
+
+輸出是 `<左>	<右>`：**左** = `origin/main` 獨有的 commit 數（HEAD 落後幾個），
+**右** = HEAD 獨有的 commit 數（HEAD 超前幾個）。
+
+| 非 0 的那一邊 | 意思 | 後果 |
+| --- | --- | --- |
+| 左（等同 `git rev-list --count HEAD..origin/main`） | 本機**落後** origin/main | tag 指向舊樹，CI 紅在具名 test，與真實回歸同形 |
+| 右（等同 `git rev-list --count origin/main..HEAD`） | 本機有**還沒推上去**的 commit | tag 指向的 commit 不在 `origin/main` 的可達範圍內，main 一 rebase 就得改寫已公開的 tag |
+
+**只驗落後那一邊是不夠的**——`git merge --ff-only origin/main` 在本機超前時是 no-op、
+不報錯，於是「落後 = 0」照樣成立，而 tag 就打在了一棵還沒推上去的樹上。那時下游的
+SHA gate 擋得住部署，卻擋不住錯誤的 tag 已經推出去（tag 是不可變的對外物件，撤回代價
+遠高於部署被擋）。
+
+嫌 `--left-right` 難讀就分成兩條，語義相同：
+
+```bash
+git rev-list --count HEAD..origin/main    # 必須回 0（沒落後）
+git rev-list --count origin/main..HEAD    # 必須回 0（沒有還沒推上去的 commit）
+```
+
+任一步回非 0 就是**還沒到能打 tag 的狀態**——`git tag` 不會警告、`git push` 不會警告，
+唯一的回饋是後來 CI 那份長得像回歸的紅，或別人事後才發現 tag 指向的 commit 不在 main 的線上。
+
+### 機械 gate 與它的邊界
+
+`vendor/scripts/pre-push/checks/tag-position.sh` 在 pre-push 階段擋下**兩個方向**的錯位
+（push 不含 tag 時零成本 no-op）。它**只在 consumer 的 `.husky/pre-push` 已接線時生效**，
+且 `--no-verify` 可繞過——所以上面那三步是規約，gate 是兜底，**NEVER 反過來**。
+
+發版的推送順序 **無條件 MUST 是 main 先、tag 後**（tag 指向的 commit 得先存在於
+`origin/<default branch>`）——這是上面三步序列的直接推論，**與這個 repo 有沒有接這道 gate 無關**：
+沒接的 repo 只是少了兜底，規約本身沒有變。完整序列、失敗復原與推 tag 後的觸發確認在
+`plugins/hub-core/skills/commit/SKILL.md` § Step 6-A，**此處不複述**。
+
+`CLADE_ALLOW_STALE_TAG=1` 的唯一合法用途：**刻意**在舊 commit 上打 hotfix release tag，且已知
+該 tag 那棵樹不含 main 後續改動。**NEVER** 用它讓一個「不知道為什麼被擋」的 push 過關——
+那個「不知道為什麼」就是這條 gate 唯一要抓的東西。
+
+**它只准用在落後那一邊，NEVER 拿它放行超前那一邊**——兩者語義相反（一個是「我知道這是舊樹」，
+另一個是「這棵樹還不存在於 origin」），共用等於把逃生口變成雙向萬能鑰匙。超前被擋時的正解是
+`git push origin main` 之後再推 tag，沒有別的出路。合法的 hotfix 不會命中超前那一邊——
+舊 commit 是 `origin/main` 的祖先，反方向 count 恆為 0。
+
+**這條是政策，NEVER 讀成 script 會替你擋。** `tag-position.sh` 的逃生口判斷排在方向計算
+**之前**（`CLADE_ALLOW_STALE_TAG` 一設就直接 exit 0），所以它機械上對兩個方向一視同仁——
+2026-09-04 實測：tag 超前 origin/main 一個 commit，未設回 exit 1、設了回「已設，放行」exit 0。
+本節此前逐字寫著「它只覆蓋落後那一邊」，那是對機制的錯誤描述；結論不變，理由句已更正。
+
+### CI 紅在 tag-triggered run 時，第一件事
+
+**MUST** 先排除 tag 位置，再看任何一條 test：
+
+```bash
+git fetch origin main --tags && git rev-list --count <tag>..origin/main
+```
+
+**NEVER 用「CI 會抓到」跳過打 tag 前的同步**——CI 抓到了，抓的是**那棵舊樹**上的真實失敗：
+具名 test、具體行號、可重現。與真實回歸完全同形，所以正確的反射（去查那幾條 test）方向是錯的，
+而且愈查愈確信。（2026-08-23 <consumer-b> `v1.269.1`，tag 落後 22 個 commit，4 個 test file 紅；
+同一棵樹的 `v1.269.3` 全綠。）
+
+修法與完整成因：[[pitfall-tag-cut-from-stale-commit]]。
+
+## 搭配
+
+當前 runtime 已投影的 commit skill 定義「怎麼做」（procedure）；本規則定義「要不要做」（政策、閘門、強制入口）。`.claude/skills/commit/SKILL.md` 是 Claude 的交付位置，其他入口使用各自原生投影，讀同一套共通契約。

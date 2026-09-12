@@ -1,0 +1,7 @@
+<!-- Clade native rule; source: rules/core/ci-watch-reflex.md; edit canonical source -->
+<!-- clade-targets: claude,codex,cursor -->
+# CI Watch 反射
+
+`git push` 成功後，若 repo 含 `.github/workflows/`，**MUST** 立刻透過目前 runtime 的 `gh-ci-watch` skill 入口派出 CI watcher。支援 slash invocation 的入口使用 `/gh-ci-watch`；其餘入口依 adapter 提供的 skill 呼叫方式執行同一協定。
+
+協定、指令樣板、exit code 對照表：`plugins/hub-core/skills/gh-ci-watch/SKILL.md`。

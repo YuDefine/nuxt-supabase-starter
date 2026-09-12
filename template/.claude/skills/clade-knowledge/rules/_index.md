@@ -1,0 +1,13 @@
+{"file":"codebase-memory-index.freshness.md","source":"rules/core/codebase-memory-index.freshness.md","paths":[".mcp.json","**/cbm-index.sh","**/cbm-health.ts","plugins/hub-core/hooks/session-start-cbm-index-check.sh","plugins/hub-core/hooks/post-bash-cbm-index-refresh.sh"]}
+{"file":"codebase-memory-index.md","source":"rules/core/codebase-memory-index.md","paths":null}
+{"file":"golden-path-onboarding.md","source":"rules/core/golden-path-onboarding.md","paths":[".clade/manifest.json",".claude/hub.json",".claude/consumer-meta.json","package.json","README.md","CLAUDE.md","AGENTS.md","scripts/init-consumer.ts","scripts/register-consumer.ts"]}
+{"file":"knowledge-and-decisions.md","source":"rules/core/knowledge-and-decisions.md","paths":["docs/solutions/**","docs/decisions/**","specs/**","tasks/**"]}
+{"file":"local-rule-override.md","source":"rules/core/local-rule-override.md","paths":[".clade/rules/**/*.md",".claude/rules/local/**/*.md"]}
+{"file":"new-project-readiness.md","source":"rules/core/new-project-readiness.md","paths":[".claude/consumer-meta.json",".clade/manifest.json",".claude/hub.json","wrangler.{toml,jsonc}",".gitignore","package.json","nuxt.config.*"]}
+{"file":"notion-work-coupling.md","source":"rules/core/notion-work-coupling.md","paths":["tasks/**","specs/plans/**",".claude/consumer-meta.json"]}
+{"file":"output-hygiene.md","source":"rules/core/output-hygiene.md","paths":null}
+{"file":"rule-authoring.md","source":"rules/core/rule-authoring.md","paths":[".clade/rules/**/*.md",".claude/rules/**/*.md",".claude/skills/**/*.md","tasks/lessons.md","rules/**/*.md","plugins/hub-core/skills/**/*.md","claude-md/**/*.md","vendor/snippets/**/*.md","docs/pitfalls/**/*.md","docs/digests/**/*.md","docs/tech-debt.md","HANDOFF.md"]}
+{"file":"runtime/notion-work-coupling.md","source":"adapters/claude/instructions/rules/core/notion-work-coupling.md","paths":["tasks/**","specs/plans/**",".claude/consumer-meta.json"]}
+{"file":"runtime/rule-authoring.md","source":"adapters/claude/instructions/rules/core/rule-authoring.md","paths":[".clade/rules/**/*.md",".claude/rules/**/*.md",".claude/skills/**/*.md","tasks/lessons.md","rules/**/*.md","plugins/hub-core/skills/**/*.md","claude-md/**/*.md","vendor/snippets/**/*.md","docs/pitfalls/**/*.md","docs/digests/**/*.md","docs/tech-debt.md","HANDOFF.md"]}
+{"file":"tech-debt-routing.md","source":"rules/core/tech-debt-routing.md","paths":["docs/tech-debt.md","**/docs/tech-debt.md"]}
+{"file":"timezone.md","source":"rules/core/timezone.md","paths":["**/*.sql","supabase/**","server/**","app/**","packages/**/server/**","packages/**/app/**","scripts/**","infrastructure/**"]}
