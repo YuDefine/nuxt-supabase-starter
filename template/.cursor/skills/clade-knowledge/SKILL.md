@@ -1,6 +1,6 @@
 ---
 name: "clade-knowledge"
-description: "Documentation, project knowledge, rule authoring, onboarding, and technical-debt rules. Use when writing durable guidance, recording decisions, onboarding, or maintaining shared knowledge."
+description: "Use for durable documentation, shared knowledge, decisions, onboarding, rule authoring, or technical debt."
 ---
 
 # clade-knowledge

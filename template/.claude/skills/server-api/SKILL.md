@@ -1,9 +1,6 @@
 ---
 name: server-api
-description: >-
-  Server API 設計規範。觸發：server/api/**/*.ts、defineEventHandler、API route 與 request 驗證。
-  NOT for client 端讀取查詢——僅 `modules.auth` 為 Supabase Auth 時；其餘 auth stack 讀取也走本
-  skill。NOT for 前端全域狀態（走 pinia-store）。
+description: "Use for Nuxt or Nitro server API routes, defineEventHandler, request validation, or server-side auth data access."
 ---
 
 

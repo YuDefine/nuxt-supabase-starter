@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Session 交接管理，四個 arg 全部以本 session 收工結束。Use when user types /handoff、/handoff park、/handoff relay、/handoff fanout、/handoff next，要把進度交給下一個 session、要一次把多件可平行的工作各派一個 pane，或本 session context 撐不住需要換人接手。NOT for 單純 commit 收尾（走 /commit）。
+description: "Use on /handoff, /handoff park|relay|fanout|next, session transfer, parallel pane handoff, or context rotation. Not for commit-only closure."
 license: MIT
 metadata:
   author: clade

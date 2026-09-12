@@ -1,11 +1,6 @@
 ---
 name: clarify
-description: >-
-  當需求存在缺漏、矛盾、模糊或尚未拍板的決策時，先整理可理解的上下文、精煉問題與可比較的選項，直接訪談使用者，避免 AI 以腦補方式補完需求。可作為其他
-  skills 的下游 skill，由呼叫者指定優先提問面向與是否詳記問答紀錄。 Use when the user invokes /clarify,
-  asks the AI to interview for missing requirements, or when another skill needs
-  to resolve incomplete, ambiguous, or conflicting requirements before
-  proceeding.
+description: "Use when requirements are incomplete, ambiguous, conflicting, or require user decisions before implementation."
 metadata:
   clade:
     invocation: explicit

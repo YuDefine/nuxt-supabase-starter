@@ -1,9 +1,6 @@
 ---
 name: technical-research
-description: >-
-  承接 plan package 的 `spec.md`，產出 plan-side `research.md`，並作為 truth owner 更新
-  `specs/truth/techstack.md`。每次執行都必須盤點 techstack truth 的 ADD / MODIFY / DELETE /
-  NOOP，完成後委派 `/truth-delta` 更新本 plan 的 `truth-delta.md`。
+description: "Use when producing research.md from a plan package and updating technical-stack truth."
 metadata:
   clade:
     invocation: explicit

@@ -1,9 +1,6 @@
 ---
 name: work-loop
-description: >-
-  Use when 使用者要把待辦自主推進（「自動推」「把待辦跑完」「無人值守推進」）——plan package、tasks
-  檔、HANDOFF、tech-debt、ROADMAP 全在 scope 內，或 runner.sh --unattended fire。NOT for
-  單次盤點交接（用 /handoff）、逐項拍板（用 /goal）、interval 盲跑（用 /loop）。
+description: "Use for unattended progression of plan tasks, HANDOFF items, tech debt, or roadmaps. Not for one-time handoff or user decisions."
 metadata:
   author: clade
   version: '3.1'
