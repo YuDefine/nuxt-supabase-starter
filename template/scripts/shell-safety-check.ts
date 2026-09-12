@@ -4,8 +4,8 @@
 /**
  * shell-safety-check.ts — 單檔的 shell script 安全判定（fleet 共用 SoT）
  *
- * 對應 `rules/core/shell-script-safety.md`（consumer 端投影為
- * `.claude/rules/shell-script-safety.md`）與
+ * 對應 `rules/core/shell-script-safety.md`（consumer 端由
+ * `clade-code-quality` skill 的 `rules/shell-script-safety.md` lazy-load）與
  * `docs/pitfalls/2026-08-27-sudo-wrapping-self-elevating-script-breaks-user-toolchain.md`。
  *
  * ## 為什麼判定住在 vendor/（而不是 clade 的 scripts/）
@@ -174,7 +174,7 @@ ${GUARD_SNIPPET}
 
 \`exit 2\` 不是 1：與「腳本正常執行但失敗」區分，讓呼叫端看得出是用法錯誤。
 該腳本若確實設計成以 root 執行，檔內加 \`sudo-euid-guard-exempt: <理由>\`——理由必填。
-判準全文見 .claude/rules/shell-script-safety.md。
+判準全文見 \`clade-code-quality\` skill → \`rules/shell-script-safety.md\`。
 `)
   return 1
 }

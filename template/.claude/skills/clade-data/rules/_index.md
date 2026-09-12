@@ -1,0 +1,12 @@
+{"file":"audit-schema.md","source":"rules/modules/db-schema/supabase/audit-schema.md","paths":["supabase/migrations/**/*.sql","server/utils/audit*.ts","packages/*/server/utils/audit*.ts","server/api/**/*.ts","packages/*/server/api/**/*.ts"]}
+{"file":"database-access.md","source":"rules/modules/db-runtime/cf-workers/database-access.md","paths":["app/**/*.{vue,ts}","packages/*/app/**/*.{vue,ts}","server/**/*.ts","packages/*/server/**/*.ts"]}
+{"file":"db-preview-env.md","source":"rules/core/db-preview-env.md","paths":["supabase/migrations/**/*.sql",".github/workflows/**/*.yml","docker-compose*.yml","infra/**/*","scripts/dev-session*","scripts/worktree-*","scripts/singleton*",".claude/consumer-meta.json"]}
+{"file":"db-reset-coordination.md","source":"rules/core/db-reset-coordination.md","paths":null}
+{"file":"evlog-triage-reflex.md","source":"rules/core/evlog-triage-reflex.md","paths":null}
+{"file":"mcp-remote.md","source":"rules/modules/db-runtime/cf-workers/mcp-remote.md","paths":["supabase/migrations/**/*.sql","server/**/*.ts","packages/*/server/**/*.ts"]}
+{"file":"migration.md","source":"rules/modules/db-schema/supabase/migration.md","paths":["supabase/migrations/**/*.sql","server/**/*.ts","packages/*/server/**/*.ts"]}
+{"file":"query-optimization.md","source":"rules/modules/db-schema/supabase/query-optimization.md","paths":["supabase/migrations/**/*.sql","server/api/**/*.ts","packages/*/server/api/**/*.ts"]}
+{"file":"rls-policy.md","source":"rules/modules/db-schema/supabase/rls-policy.md","paths":["supabase/migrations/**/*.sql"]}
+{"file":"storage.md","source":"rules/modules/db-runtime/cf-workers/storage.md","paths":["server/api/**/*.ts","packages/*/server/api/**/*.ts","supabase/migrations/**/*.sql"]}
+{"file":"trigger.md","source":"rules/modules/db-schema/supabase/trigger.md","paths":["supabase/migrations/**/*.sql"]}
+{"file":"unused-features.md","source":"rules/modules/db-runtime/cf-workers/unused-features.md","paths":["supabase/migrations/**/*.sql","server/**/*.ts","packages/*/server/**/*.ts","app/**/*.{ts,vue}","packages/*/app/**/*.{ts,vue}"]}

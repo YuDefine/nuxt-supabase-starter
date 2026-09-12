@@ -1,0 +1,10 @@
+---
+description: Runtime adapter fragment for verification-lease.spec.md
+paths: ['.claude/consumer-meta.json', 'scripts/dev-session*', 'scripts/dev-singleton*', 'nuxt.config.*', 'packages/**/nuxt.config.*']
+---
+<!-- Clade native rule; source: adapters/cursor/instructions/rules/core/verification-lease.spec.md; edit canonical source -->
+<!-- clade-targets: cursor -->
+
+# Runtime adapter: Cursor
+
+Cursor uses the portable lease toolchain with `--kind cursor` when the holder kind is explicitly supplied: `node vendor/scripts/dev-session.ts [opts] -- <cmd...>`, the legacy `node vendor/scripts/dev-singleton.ts --consumer-meta <path> -- <cmd...>`, and `node vendor/scripts/db-lease.ts claim|release|status`. The launcher requires the same Herdr server for durable hosting and the same lease gate for cwd/holder conflicts. Cursor’s native browser carrier may be used for UI evidence; the portable `agent-browser --session <name>` carrier remains available when installed.

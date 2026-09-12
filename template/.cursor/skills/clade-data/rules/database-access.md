@@ -1,0 +1,115 @@
+---
+description: 資料庫存取模式（Supabase client/server 分工）
+paths: ["app/**/*.{vue,ts}", "packages/*/app/**/*.{vue,ts}", "server/**/*.ts", "packages/*/server/**/*.ts"]
+---
+<!-- Clade native rule; source: rules/modules/db-runtime/cf-workers/database-access.md; edit canonical source -->
+<!-- clade-targets: claude,codex,cursor -->
+
+# Database Access Pattern
+
+- **Client（預設）**: READ only via `useSupabaseClient<Database>()` — **僅限 RLS SELECT `TO public` 的表**
+- **Server（預設）**: request-scoped 讀寫一律經 `/api/v1/*` + `getSupabaseWithContext(event)`
+> **這條預設綁 `modules.auth`**：consumer 的 `.claude/hub.json` `modules.auth` 是 `better-auth` 或 `nuxt-auth-utils` 時，Supabase 不簽 JWT，瀏覽器的 `useSupabaseClient()` **恆以 `anon` role 存取**，登入與否都一樣 —— 要讓 client 讀得到就得把表開成 `TO public`，等於對任何持有 publishable key 的人公開。那些 auth stack 下 client 直讀**不是**預設：讀寫一律走 `/api/v1/*`，client 端 Supabase 只留 Storage（bucket policy 獨立）。見 [[auth-data-path-consistency]] § Auth 策略與資料路徑的合法組合。
+> **Helper 名依 `modules.auth` 而異**：本檔以 `getSupabaseWithContext(event)` 為 canonical 名。當 consumer 的 `.claude/hub.json` `modules.auth` 是 `better-auth` 或 `nuxt-auth-utils` 時，等價 helper 是 **`getAuthedSupabase(event)`** —— 那些 auth stack 下 Supabase 不簽 JWT，`auth.uid()` 恆 null，helper 只驗 session 不做授權，名字必須說實話。兩者回傳形狀相同（`{ client, user }`）。見 [[auth-data-path-consistency]] § Server 側：RLS policy 的前提條件。
+- **Privileged system tasks**: `getServerSupabaseClient()` 僅用於 audit logging、backfill、資料修復、背景工作
+- **Optional transactional query layer**: `server/utils/drizzle.ts` 僅用於 service 層 / 系統任務；**NEVER** 讓 Drizzle 接管 migration、RLS、trigger
+- **Client-side writes are architecture exceptions** — 只有在 proposal / ADR 明確記錄並同時滿足下列條件時，才可從 client 使用 `.insert()` / `.update()` / `.delete()` / `.upsert()`：
+  - RLS policy 能完整表達 tenant / user scope 與所有授權規則
+  - GRANT 只開必要 schema / table / operation，不給寬權限
+  - 不需要 `service_role`、server-only secret、跨表 transaction、workflow transition、audit-chain、storage upload 或外部 API
+  - 不涉及角色 / 權限、薪資、簽核、出勤、稽核、批次修復等敏感流程
+  - 有 focused tests 驗證 allow path、deny path、tenant isolation 與 RLS 失敗時的 UI/錯誤處理
+- **NEVER** client 直讀 RLS `TO authenticated` 的表 — `anon` 角色會靜默回傳 0 筆（見 `supabase-rls` skill）
+
+## MCP 存取
+
+- **Dev** 查詢用 `dev-supabase` MCP（local Supabase instance）
+- **NEVER** 使用 Kong port 8001 — Studio introspection 會觸發 PostgREST pool 重建，導致 REST API 中斷
+- **NEVER** 在上班時間 `docker restart` 任何 Supabase 容器
+
+## Seed 資料
+
+seed.sql 使用 INSERT 格式（非 COPY FROM stdin），加 `SET session_replication_role = replica;` 和 `TRUNCATE CASCADE`。
+
+> 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.claude/rules/local/`；要改本檔請回 clade 源檔並 propagate。
+
+## Client 查詢效能
+
+- **Client SELECT 要加 filter** — 不帶 `.eq()` 的 SELECT 會強制 Postgres 掃全表再套 RLS policy，加 filter 可減少 95%+ 開銷
+- 這是 RLS 效能陷阱的延伸：特權系統任務可使用 `service_role` bypass，但 request handler 的預設學習路徑仍應保留 request context 與 contract 邊界
+
+## Connection Pool 與監控
+
+Supabase 的連線結構：
+
+- **PostgREST (`authenticator` role)** 佔用 pool，所有 `/rest/v1/*` 請求共用
+- **Auth (`supabase_auth_admin`)**、**Storage (`supabase_storage_admin`)**、**Realtime (`supabase_admin`)** 各自佔用
+- **Supavisor pool** 總量不應超過 DB `max_connections` 的 **40%**（若重度使用 PostgREST）
+
+### 診斷連線問題（pg_stat_activity）
+
+當 API 變慢或出現 `PGRST003`（504 timeout，見 `error-handling.md`），跑以下 query：
+
+```sql
+-- 所有 live connection
+SELECT pid, usename, application_name, client_addr,
+       state, query_start, backend_start,
+       left(query, 80) as query
+FROM pg_stat_activity
+WHERE datname = 'postgres'
+ORDER BY backend_start DESC;
+
+-- 按角色統計
+SELECT usename, state, count(*)
+FROM pg_stat_activity
+WHERE datname = 'postgres'
+GROUP BY usename, state
+ORDER BY count DESC;
+
+-- 找 idle connection 超過 5 分鐘
+SELECT pid, usename, state, query_start, left(query, 80)
+FROM pg_stat_activity
+WHERE state = 'idle' AND state_change < now() - interval '5 minutes';
+```
+
+### 角色對照表
+
+| `usename`                | 來源                   |
+| ------------------------ | ---------------------- |
+| `authenticator`          | PostgREST（Data API）  |
+| `supabase_auth_admin`    | GoTrue                 |
+| `supabase_storage_admin` | Storage                |
+| `supabase_admin`         | Realtime / 監控        |
+| `postgres`               | Dashboard / psql / MCP |
+
+## Transaction 與批次寫入
+
+- **批次寫入 ≤500 筆/transaction** — 超過會造成 WAL bloat 與 replica lag
+- **避免 long-running transaction** — `idle in transaction` > 5 分鐘會卡 vacuum、blocking lock
+- **Server 端遇到 `40001`（serialization_failure）** — retry transaction，但需有 idempotency 保證（見 `api-patterns.md`）
+- **NEVER** 在 RLS policy 中放重型 JOIN 或外部函式 — 會被 per-row 執行
+
+## Drizzle 使用邊界
+
+- `drizzle.config.ts` 與 `server/utils/drizzle.ts` 是**選用能力**，不是預設 handler 路徑
+- **MUST** 繼續用 Supabase CLI 管 migration，**NEVER** 讓 `drizzle-kit generate/push` 成為正式 schema 變更來源
+- 若用 `postgres-js` 直連 Supavisor，**MUST** `prepare: false`
+- 遠端 / 雲端建議使用 pooler port `6543`；本地 Supabase 直連預設 `54322`
+
+## 部署目標的連線限制
+
+### Cloudflare Workers / Pages（Edge runtime）
+
+- **每個 request 都是新連線** — 無 persistent connection
+- **MUST** 用 `@supabase/supabase-js` client 走 HTTP → PostgREST
+- **NEVER** 嘗試直接 Postgres TCP 連線（`pg` / `postgres` node driver）— Edge runtime 不支援持久 socket
+- **30 秒 CPU 限制**（付費 plan）— 任何 query 超過數百 ms 都會嚴重佔用 budget
+
+### Node.js runtime（Vercel / Nuxt Hub）
+
+- 可用 persistent connection，但仍建議走 PostgREST 避免繞過 RLS
+- 若直連 Postgres，**MUST** 用連線池（`pg-pool`）並設合理 max
+
+### Local Supabase（預設）
+
+`.env.example` 指向 `127.0.0.1:54321`。開發階段用 `supabase start` 跑本地容器；部署前需切到正式 Supabase URL（Cloud 或自建）。

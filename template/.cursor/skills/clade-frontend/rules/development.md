@@ -1,0 +1,113 @@
+---
+description: 開發規範（TDD, coding style, UI reuse）
+paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'test/**/*.ts', 'packages/*/test/**/*.ts', 'shared/**/*.ts', 'packages/*/shared/**/*.ts', 'package.json']
+---
+<!-- Clade native rule; source: rules/modules/framework/nuxt/development.md; edit canonical source -->
+<!-- clade-targets: claude,codex,cursor -->
+
+# UI Reuse
+
+新增 UI 元件前，**MUST** 先搜尋 `app/components/` 和 `app/pages/` 檢查：
+
+1. 是否已有可直接複用的元件
+2. 是否有相似 UI 模式值得抽取為共用元件
+
+找到可複用元件 → 直接使用或擴展；發現相似模式 → 提議抽取共用元件後再實作。
+
+# Development
+
+- **ALWAYS** TDD（Red → Green → Refactor）：實作前透過當前 runtime 的 skill 入口讀取並遵循 `test-driven-development` 全文；缺少該 skill 時回報能力缺口，不能把其他 runtime 的安裝路徑當成已載入。
+- **NEVER** `.skip` or comment out tests
+- **ALWAYS** Tailwind classes, NEVER manual CSS or hardcoded colors
+- **ALWAYS** Nuxt UI 語意色彩（見下方 Nuxt UI Color Mode 約束）
+- **ALWAYS** named functions and named exports
+- **ALWAYS** Composition API + `<script setup>`, NEVER Options API
+- **ALWAYS** `interface` over `type`
+- **ALWAYS** `defineProps<T>()` 的 T 成員用編譯器解析得動的型別（見下方 defineProps 型別約束）— 外部套件的泛型型別會讓該 prop **靜默消失**
+- **ALWAYS** `refetch` (not `refresh`) from Pinia Colada `useQuery` for manual refresh buttons — `refresh` skips when data is within `staleTime`
+- **ALWAYS** `PAGE_SIZE_MAX` from `shared/schemas/pagination` for `pageSize` max validation — NEVER hardcode
+- **ALWAYS** UTable cell slot 命名加 `-cell` 後綴：`#actions-cell="{ row }"`，**NEVER** `#actions="{ row }"`（不加 `-cell` slot 不會生效且無報錯）
+- **ALWAYS** Nuxt UI 元件顯式寫出樣式 props（`color`, `variant`, `size`）— **NEVER** 依賴預設值。實作前先搜尋既有頁面中相同語義的用法，複製其 props 組合。詳見 `DESIGN.md` Component Convention Overview（若有）
+- **ALWAYS** `package.json` 的 `dev` / `dev:*` script 前綴 `NODE_OPTIONS=--dns-result-order=ipv4first` — Node 18+ 在 macOS 把 `localhost` 預設解到 `::1`，造成 dev server banner 印 IPv6 位址 + 瀏覽器走 IPv6 stack 訪問緩慢。Prefix 後 listhen / fetch resolve `localhost` 走 IPv4，banner 與訪問都回到 `127.0.0.1` 路徑。社群標準解（Node 官方 doc `--dns-result-order`）
+
+<!-- SPECTRA-UX:START v1.0.0 -->
+
+- **ALWAYS** `switch + assertNever` for enum / const-array / Zod-enum discrimination — **NEVER** `if/else if/else` chains on enum types。加新 enum 值時 compiler 會當場報錯，避免靜默漏 case。utility: `~/utils/assert-never`。離線稽核：`pnpm audit:ux-drift`。規則: [`docs/rules/ux-completeness.md`](docs/rules/ux-completeness.md) Exhaustiveness Rule
+<!-- SPECTRA-UX:END -->
+
+# defineProps 型別約束
+
+`<script setup>` 的 `defineProps<T>()` 是**編譯期**推導：編譯器把 T 的成員轉成 runtime props 宣告。遇到它解析不了的成員型別，**靜默略過該成員、並連帶漏掉其後的成員** — 不報錯、不警告、typecheck 照樣綠。
+
+## 判準（可觀察）
+
+**每一個** `defineProps<T>()` 都適用，不是只有表單元件：T 的成員型別**若**來自外部套件（`import type { X } from '<套件名>'`，非相對路徑），**MUST** 改寫成下列兩種之一。內建型別（`string` / `boolean` / `Record<string, unknown>` / 自家 interface）不受此限。
+
+```ts
+// ✅ 寫法 A：退成編譯器解析得動的型別 + 註解說明為何不寫原型別
+/** 型別寫 `object` 而非 `ZodType`：外部泛型 class 會讓這個 prop 連同其後成員被靜默丟棄。
+ *  實際型別由 submit handler 端的 `FormSubmitEvent<z.output<...>>` 保證。 */
+schema?: object
+
+// ✅ 寫法 B：要保住 prop 型別安全就走 runtime 宣告
+const props = defineProps({
+  schema: { type: Object as PropType<ZodType>, required: false },
+})
+
+// ❌ 這個 prop 不會存在，且其後的成員一起消失
+schema?: ZodType
+```
+
+註解是規約的一部分：沒寫的話下一個人會「順手改回」看起來更正確的型別，把坑原樣裝回去。
+
+## 改完 MUST 驗（兩步都要）
+
+1. **重啟 dev server** — props 是編譯期產物，**HMR 不重建**。不重啟會看到「修法無效」的假象。
+2. **比對 runtime props 與 interface 成員**，只看畫面看不出來：
+
+   ```js
+   const inst = document.querySelector('form').__vueParentComponent  // 換成該元件的根元素
+   console.log(inst.type?.__name, Object.keys(inst.props))
+   ```
+
+   少了誰，誰就是被丟掉的。
+
+## 為什麼值得一條規約
+
+實證（<consumer-a> `AppFormLayout.vue`）：`schema?: ZodType` 讓 `schema` 與其後的 `state` 都沒被宣告，包在外面的 `useValidatedForm` 恆為 false，整個 UForm + Zod 驗證層**從未執行過** — 而 typecheck / lint / test / 視覺四道全綠，唯一症狀是「表單留空送出什麼都沒發生」。
+
+靜態 grep 抓不到這個形狀（能篩的只有「有 `defineProps<` 且有外部 `import type`」，偽陽性極高），所以防線只能放在寫的當下。完整分析、detection 與 cross-consumer 掃描結果見 clade `docs/pitfalls/2026-08-02-vue-defineprops-external-generic-type-silently-drops-props.md`。
+
+# Nuxt UI Color Mode 約束
+
+Nuxt UI 內建 color mode 處理，**禁止**自行指定 Tailwind 硬編碼色彩，否則 light/dark 切換會失效。
+
+## 必須使用語意類別
+
+| 用途       | 語意類別           | 禁止                                       |
+| ---------- | ------------------ | ------------------------------------------ |
+| 主要文字   | `text-default`     | ❌ `text-black`, `text-neutral-900`        |
+| 次要文字   | `text-muted`       | ❌ `text-gray-500`, `text-neutral-500`     |
+| 第三層文字 | `text-toned`       | ❌ `text-gray-600`, `text-neutral-600`     |
+| 淡化文字   | `text-dimmed`      | ❌ `text-gray-400`, `text-neutral-400`     |
+| 強調文字   | `text-highlighted` | ❌ `text-black`, `text-neutral-900`        |
+| 反轉文字   | `text-inverted`    | ❌ `text-white`                            |
+| 預設背景   | `bg-default`       | ❌ `bg-white`, `bg-neutral-50`             |
+| 淡化背景   | `bg-muted`         | ❌ `bg-gray-50`, `bg-neutral-100`          |
+| 凸起背景   | `bg-elevated`      | ❌ `bg-white`                              |
+| 強調背景   | `bg-accented`      | ❌ `bg-gray-100`                           |
+| 反轉背景   | `bg-inverted`      | ❌ `bg-black`, `bg-neutral-900`            |
+| 預設邊框   | `border-default`   | ❌ `border-gray-200`, `border-neutral-200` |
+| 淡化邊框   | `border-muted`     | ❌ `border-gray-100`                       |
+
+## 禁止事項
+
+1. **禁止硬編碼色彩**：`text-gray-*`, `text-neutral-*`, `bg-gray-*`, `bg-neutral-*`
+2. **禁止 `dark:` prefix**：Nuxt UI 會自動處理，自己寫 `dark:text-white` 會衝突
+3. **禁止 CSS 變數以外的黑白**：`text-black`, `text-white`, `bg-black`, `bg-white`
+
+## 允許例外
+
+- `--ui-primary` 等 CSS 變數中可使用 `black` / `white`
+- Nuxt UI 元件的 `color` prop：`color="neutral"`, `color="error"` 等
+- 系統回饋元件（UAlert, toast）使用語意 color：`color="error"`, `color="success"`

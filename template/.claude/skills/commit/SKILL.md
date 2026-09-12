@@ -71,7 +71,7 @@ WIP 確實阻礙本次工作時，使用 `commit.detail` 的三項 stash predica
 
 ## Step 0: 品質檢查
 
-先判斷 Step 0-Scope 的本次變更是否命中 [`review-tiers.md`](references/review-tiers.md)
+先判斷 Step 0-Scope 的本次變更是否命中 [`review-tiers.md`](rules/review-tiers.md)
 Tier 3；命中才執行官方 Codex Security path scan。觸發時 **MUST** 先完整讀
 [gates.md](gates.md) § 0-S 的範圍、成本上限與 exit 分流再繼續。未命中則跳過，進入一般
 cross-model code review。完整 repository baseline 保持 operator 明確觸發，不屬於 `/commit`。
@@ -94,7 +94,7 @@ simplify → fast-path 判定
 
 1. 整個 diff 行數（additions + deletions）< 20 行
 2. 改動限於 doc / config 類檔案：`*.md`、`*.json`（**除** `package.json` 的 `dependencies` / `devDependencies`）、`*.yml`、`*.yaml`、`.gitignore`、`HANDOFF.md`、`ROADMAP.md`
-3. 無 sensitive 路徑（依 [`review-tiers.md`](references/review-tiers.md) Tier 3）：`**/migrations/**`、`**/auth/**`、`**/permission*`、`**/rls*`、`*.sql`、`**/*security*`
+3. 無 sensitive 路徑（依 [`review-tiers.md`](rules/review-tiers.md) Tier 3）：`**/migrations/**`、`**/auth/**`、`**/permission*`、`**/rls*`、`*.sql`、`**/*security*`
 
 任何 `.ts` / `.tsx` / `.vue` / `.mjs` / `.js` / `.sh` 變更（即使單行）都**不適用** fast-path —— 邏輯 bug 在小 diff 很常見，跨模型 review 仍有價值。
 

@@ -1,0 +1,10 @@
+---
+description: Dev Server Auto-Spawn 規約——agent 自起 dev server 的持久層、lease、port 分流、tunnel 規範
+paths: ['scripts/dev-session*', 'vendor/scripts/dev-session*', '.claude/consumer-meta.json', 'nuxt.config.*']
+---
+<!-- Clade native rule; source: adapters/cursor/instructions/rules/core/proactive-skills.dev-server-spawn.md; edit canonical source -->
+<!-- clade-targets: cursor -->
+
+# Cursor dev-server transport
+
+Cursor starts `node scripts/dev-session.ts` from its native Task/Agent terminal entry. The wrapper owns the durable Herdr tab, lease, port, and worktree checks; a raw background process is not a supported carrier. Browser inspection of the resulting URL uses Cursor's IDE browser when that native capability is exposed, and the wrapper receipt remains the source of server readiness.

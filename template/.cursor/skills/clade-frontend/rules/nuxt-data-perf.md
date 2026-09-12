@@ -1,0 +1,453 @@
+---
+description: Nuxt data fetching 選用決策、Pinia Colada 最佳實踐、dedupe/cache/payload 效能規約；涵蓋 useFetch / useAsyncData / $fetch / useQuery / useMutation 全棧
+paths: ['**/*.vue', 'app/**/*.ts', 'packages/*/app/**/*.ts', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'composables/**', 'packages/*/composables/**', 'queries/**', 'packages/*/queries/**', 'stores/**', 'packages/*/stores/**', 'nuxt.config.*', 'app.config.*']
+---
+<!-- Clade native rule; source: rules/core/nuxt-data-perf.md; edit canonical source -->
+<!-- clade-targets: claude,codex,cursor -->
+
+# Nuxt Data Fetching & Performance
+
+> Cookbook 範本：`~/offline/clade/vendor/snippets/nuxt-data-perf/`
+>
+> 稽核 skill：`/nuxt-data-audit`（checklist 自動掃描；項目清單以該 SKILL.md 為準）
+
+> **`paths:` 的 `**/*.ts` 已收窄為 app / server / composables / queries / stores**（2026-08-02，TD-327）。
+> 原本的 `**/*.ts` 會在編輯 `scripts/`、`test/`、`e2e/`、`vendor/` 底下的檔時也觸發，而本規約
+> 沒有任何一條在那些位置適用。`**/*.vue` **刻意保留不動** —— .vue 本來就只存在於 app 端。
+>
+> `paths:` 宣告本規約的適用範圍；實際載入由各 runtime adapter 交付。改 `paths:` 前 MUST
+> 確認新增的目錄在本規約內真的有對應條文。
+
+## Data Fetching 選用決策樹
+
+| 場景 | 用什麼 | 原因 |
+|------|--------|------|
+| Component setup 取 API data（需 SSR hydration） | `useFetch` | 自動 SSR → payload → client hydrate，防 double fetch |
+| Component setup 做複雜 async（CMS、third-party SDK） | `useAsyncData` | 同上 SSR 保護，handler 自由度更高 |
+| Event handler / form submit / mutation（不需 reactive） | `$fetch` | 不需 SSR hydration，直接 fire-and-forget |
+| 需要跨 component cache + 自動 dedup + staleTime | `useQuery`（Pinia Colada） | 內建 cache layer、hierarchical key invalidation |
+| 寫入 + optimistic update / cache invalidation | `useMutation`（Pinia Colada） | onMutate/onSettled hooks + queryCache.invalidateQueries |
+
+**每個新的 data-fetching 呼叫都 MUST 對照此表選用**，不憑慣性。已安裝 Pinia Colada 的 consumer，新 query 預設走 `useQuery`；未安裝的 consumer，`useFetch` 是預設。
+
+## Hard Rules
+
+### HR-1 禁止 setup top-level 裸 $fetch
+
+**每個** `.vue` 檔案的 `<script setup>` 區塊，**NEVER** 在 top-level 用 `$fetch` 取初始資料。
+
+- ❌ `const data = await $fetch('/api/items')` — double fetch + hydration mismatch
+- ✅ `const { data } = useFetch('/api/items')` — SSR payload hydration
+- ✅ `const { data } = useQuery({ key: ['items'], query: () => $fetch('/api/items') })` — Colada cache
+- ✅ event handler 內的 `$fetch` 不受此限（`@click="() => $fetch('/api/action', { method: 'POST' })""`）
+
+### HR-2 高頻觸發 endpoint MUST 處理重複請求
+
+**先理解機制再選 option**——`dedupe` 的 `defer` 分支只在「**同一個 key** 有 in-flight request」時才生效（Nuxt 原始碼：`if (nuxtApp._asyncDataPromises[key]) { if (dedupe === 'defer') return 既有 promise }`）。key 一變就走不到該分支。
+
+| 場景 | 正解 | 理由 |
+| --- | --- | --- |
+| 每次觸發都要**最新**結果（搜尋框、篩選、分頁） | **維持預設 `'cancel'`** | 取消舊請求發新的正是要的語意 |
+| 同一 key 的**冪等**重複觸發（連點同一個 refresh 按鈕、多元件共用同 key 同時掛載） | `dedupe: 'defer'` | 回傳既有 promise，不重複打 |
+| key 會隨輸入變動的 query | **`defer` 無效**，改用 debounce | 每次 key 不同 → `_asyncDataPromises[key]` 不存在 → 該分支永遠不執行 |
+| Pinia Colada `useQuery` | 同 key 自動 dedup（內建） | UI 端按鈕**仍 MUST** 綁 `isLoading` / `asyncStatus === 'loading'` 做 disable |
+
+**NEVER 對搜尋框加 `dedupe: 'defer'`**——使用者輸入新關鍵字時舊請求仍在飛，`defer` 會回傳**舊關鍵字**的 promise，畫面顯示錯誤結果。這是引入 bug，不是優化。
+
+**`dedupe` 用量為 0 不構成違規**：預設 `'cancel'` 對「只要最新結果」的場景本來就是正確語意。稽核時**NEVER** 把「0 處 dedupe」直接判 fail，MUST 逐個 call site 對照上表判斷。
+
+真正該防的是**請求放大**：無 debounce 的輸入框（每個 keystroke 一個請求）、迴圈內逐筆 await 的 N+1 fan-out、in-flight 不 abort 的舊請求堆積。
+
+最後一項的取消**預設就會發生**，但要真的省下頻寬還有一個前提：`signal` 必須貫通到 HTTP client，見 HR-6。
+
+### HR-3 reference data MUST 有 cache 策略
+
+下拉選單選項、category 列表、config、user profile 等**讀完很少變的資料**：
+
+- Pinia Colada：`staleTime` MUST ≥ 30 秒（推薦用 `STALE_TIME.STABLE` = 5 分鐘）
+- useFetch：`getCachedData` 搭配 `nuxtApp.payload.data[key]` 或 `nuxtApp.static.data[key]`
+
+Cookbook 範本：`~/offline/clade/vendor/snippets/nuxt-data-perf/stale-time.ts`
+
+### HR-4 Pinia Colada key MUST 用 factory pattern
+
+**每個** `useQuery` / `useMutation` 的 key **MUST** 來自集中定義的 key factory，**NEVER** 用 magic string。
+
+- ❌ `key: ['products']` 散落在 component 各處
+- ✅ `key: productKeys.list(filters)` 來自 `queries/products.ts`
+
+Key factory pattern：
+
+```ts
+export const productKeys = {
+  all: ['products'] as const,
+  list: (filters?) => [...productKeys.all, 'list', filters ?? {}] as const,
+  detail: (id: MaybeRefOrGetter<string>) => [...productKeys.all, 'detail', toValue(id)] as const,
+}
+```
+
+Cookbook 範本：`~/offline/clade/vendor/snippets/nuxt-data-perf/query-keys.ts`
+
+### HR-5 useMutation MUST 接 cache invalidation
+
+**每個** `useMutation` 的 `onSettled`（或 `onSuccess`）hook **MUST** 呼叫 `queryCache.invalidateQueries`，精準 invalidate 受影響的 query key。
+
+- ❌ mutation 後手動 `refetch()` — 只 refresh 當前 component，其他讀同 key 的 component 不會更新
+- ✅ `onSettled: () => queryCache.invalidateQueries({ key: domainKeys.all })` — 全域 cache 一致
+
+### HR-6 取消訊號 MUST 貫通到 HTTP client
+
+**每一個** query function / data-fetching handler 都 MUST 接住框架給的 `signal` 並傳進 HTTP client 的請求選項——**每一個**，不是只處理慢的或大 payload 的那幾個 endpoint。
+
+- ❌ `useQuery({ key: reportKeys.daily(), query: () => $fetch('/api/report/daily') })`
+- ✅ `useQuery({ key: reportKeys.daily(), query: ({ signal }) => $fetch('/api/report/daily', { signal }) })`
+- ✅ `useAsyncData('report', (_app, { signal }) => $fetch('/api/report', { signal }))`
+
+**取消是預設行為，沒接 signal 就是空包彈。** Pinia Colada 在兩處無條件呼叫 `abortController.abort()`：`fetch()` 每次都先砍掉前一個 pending call；最後一個 dep 移除（元件卸載、key 變更）進 gc 排程時砍掉 pending。兩處都**沒有**「query 有沒有用到 signal」的條件判斷——槍一定開，`query` 沒把 signal 傳下去就打不中任何東西，瀏覽器照樣把整個 response body 下載完。複驗（`@pinia/colada` 1.4.2 快照）：
+
+```bash
+grep -n "abortController.abort()" node_modules/@pinia/colada/dist/index.mjs
+```
+
+**共用 HTTP client 的 request interceptor NEVER 覆寫已存在的 `signal`。** 既有 signal 時 MUST 用 `AbortSignal.any([...])` 合併，或跳過注入。全域注入自己的 controller 會把框架給的 signal 蓋掉，上面兩處 abort 對該請求從此無效。
+
+- ❌ `$fetch.create({ onRequest({ options }) { options.signal = mine.signal } })`
+- ✅ `options.signal = options.signal ? AbortSignal.any([options.signal, mine.signal]) : mine.signal`
+
+**新增全域 abort manager 模組**（Map / Set 追蹤 controller ＋ interceptor 全域注入）前，MUST 在 PR 描述逐條寫出框架內建機制不涵蓋該場景的 predicate——Colada 上述兩處自動 abort、Nuxt `useAsyncData` 預設 `dedupe: 'cancel'`、handler 第二參數的 `signal`。列不出即 NEVER 新增：它是重造輪子，且必定踩上一段的覆寫問題。
+
+Cookbook 範本：`~/offline/clade/vendor/snippets/nuxt-data-perf/colada-query-signal.ts`
+
+### HR-7 NEVER 用取消當寫入的重複提交防護
+
+**每一個**非冪等寫入（POST / PUT / PATCH / DELETE、`useMutation`）**NEVER** 用 abort / cancel 當重複提交防護。取消砍掉的是**前端的等待**，server 可能已經執行完寫入——使用者看到「沒送出」，帳已經入了。
+
+防重三選一：server 依 idempotency key 去重、按鈕 `disabled` 綁 `isLoading` / `asyncStatus === 'loading'`（HR-2 已要求）、server-side dedup。
+
+- ❌ `handleSubmit() { abortKey('form/submit'); submitForm() }`
+- ❌ 提交前先 `cancelQueries` / `mutationCache.cancel` 當防重
+- ✅ 按鈕 disabled ＋ 寫入帶 idempotency key
+
+Colada 的 `useMutation` 不建 `AbortController`、也不自動取消 in-flight mutation（`useQuery` 兩者都做）。這個不對稱是刻意的，**NEVER** 自己補上。複驗（1.4.2 快照）：mutation cache 區段 `grep -c 'abort' ` 為 0。
+
+### HR-8 拿掉 composable 的 `await` MUST 同時保住呼叫端的渲染時序
+
+`useFetch` **MUST** 在任何 `await` 之前呼叫完（否則失去 Nuxt async context，
+vite-doctor `NUXT0020`）。但 `async function useX()` 裡的那個 `await` 通常**同時**綁著
+第二件事：呼叫端寫 `await useX()`，資料到齊後才渲染。直接拿掉 `async` / `await`
+只解決 context，時序那件事被靜默拆掉。
+
+外顯症狀是**頁面缺一塊**：資料沒列出來、「尚無資料」也沒出現——因為空白狀態的判定
+多半是 `status !== "pending" && length === 0`，而立刻渲染時 `status` 還是 `pending`，
+三個分支都不成立。nav 與 layout 都在，所以它不長得像「頁面沒渲染」。
+
+**MUST** 兩件事分開處理——`useFetch` 全部前置，「資料到齊」用一個 promise 交回呼叫端：
+
+```ts
+export function useMasterCatalog() {
+  const itemsFetch = useFetch("/api/v1/items");
+  const suppliersFetch = useFetch("/api/v1/suppliers");
+  const ready = Promise.all([itemsFetch, suppliersFetch]);  // AsyncData 本身是 thenable
+  return { ready, items, suppliers, isEmpty };
+}
+// 呼叫端：const { ready, items } = useMasterCatalog(); await ready;
+```
+
+**MUST** 改 composable 的 async 簽章前先 `rg -n 'await use[A-Z][A-Za-z]*\(\)' app/`
+查呼叫端；**NEVER** 只憑 typecheck 過 ＋ doctor 綠就判定修好——這兩者都不涵蓋渲染時序。
+唯一會抓到它的是**空白 / loading 狀態的驗收測試**。
+
+診斷這類「缺一塊」時 **NEVER 截斷擷取到的 body text**（`.slice(0, 600)` 之類）——
+截斷後看到的正好是 nav，會把「資料還沒到」誤導成「元件沒渲染 / Suspense 卡住」。
+
+> Pitfall：`docs/pitfalls/2026-09-07-usefetch-after-await-fix-changes-render-timing.md`
+
+### HR-9 CSRF-aware fetch MUST 走 library 官方入口，NEVER 覆寫 `globalThis.$fetch`
+
+SFC 裡的 `$fetch` **不讀 `globalThis`**。unimport 會把它轉成
+`import { $fetch } from '#build/fetch.mjs'`，而該 template 產生的是
+`export const $fetch = globalThis.$fetch` —— **import 當下就凍結 reference**，
+且 `.nuxt/entry.js` 第一行就 import 它，**早於所有 plugin 執行**。
+`useFetch` 抓的是同一個凍結 reference（除非顯式傳 `options.$fetch`）。
+
+所以「寫一支 plugin 統一掛 CSRF header」是**完全的 no-op，且沒有任何錯誤訊息**：
+
+- ❌ `defineNuxtPlugin(() => { globalThis.$fetch = ofetch.create({ ... }) })`
+
+兩條有效路徑，依「要不要動每一個呼叫點」選：
+
+| 做法 | 代價 | 適用 |
+| --- | --- | --- |
+| **A**：`app:templates` hook 覆寫 `fetch.mjs` template，讓被 export 的 const 在 `create()` 當下就掛好 interceptor | 整份覆寫、與 Nuxt 版本耦合——升版 MUST 比對上游 `dollarFetchTemplate` 的 import / `baseURL` / export 形狀，並用單元測試執行產出的字串驗行為 | 既有呼叫點多、不想逐一改（<consumer-a> / <consumer-d> 走這條） |
+| **B**：`export function useApi() { return useNuxtApp().$csrfFetch }`，呼叫端 setup 頂層 `const api = useApi()`，之後一律 `api(...)` | 呼叫點要逐一改，且需要下方的掃描測試擋住「未來忘記用」 | 呼叫點少、不想與 Nuxt 內部 template 耦合（<consumer-e> 走這條） |
+
+走 A 時兩個容易漏的點（兩個 repo 都踩過）：**method 可能只在 Request 物件上**
+（`$fetch(new Request(url, { method }))`，只看 `options.method` 會當成 GET 而漏附
+token）；**same-origin MUST 用 `new URL()` 正規化後比 origin**，NEVER 用字串前綴判斷——
+瀏覽器把反斜線正規化成斜線後，那類路徑同時滿足 `startsWith('/')` 與 `!startsWith('//')`，
+會被誤判成 same-origin 而**把 CSRF token 送去外站**。
+
+走 B 時**擋住「未來忘記用」MUST 用掃描測試而非 lint**（A 不需要）：`$fetch` 在 `.vue` 是 auto-import 的
+identifier，oxlint `no-restricted-globals` 對 `<script setup>` **實測不命中**（2026-09-07）。
+改掃 `app/**/*.{vue,ts}` 的 `/(?<![\w$.])\$fetch\s*[<(]/`，命中即 fail。
+
+同一條線上兩個**只在 production build 才炸**的點：`nuxt-csurf` 在 `NODE_ENV=production`
+改用 `__Host-csrf` 前綴 + `secure: true`（`http://ip:port` 直連全 403；測試 harness
+MUST 同時接受 `csrf=` 與 `__Host-csrf=`），以及 `encryptSecret` 未設時**每次 build 隨機**
+（部署後仍開著的 tab 第一次 POST 就 403，且無 refresh endpoint）——固定
+`NUXT_CSURF_ENCRYPT_SECRET`，或在 `onResponseError` 攔 403 `EBADCSRFTOKEN` → reload。
+
+`ssr: false` **不**影響 CSRF：token 由 Nitro `render:html` hook 注入 SPA shell，SPA 模式下
+照樣觸發。但改成 `nuxt generate` / `routeRules.prerender` 後 shell 變靜態，該機制整個失效。
+
+> Pitfall：`docs/pitfalls/2026-09-07-nuxt-global-fetch-override-is-a-noop.md`
+
+## Should Rules（非 hard，但稽核會標）
+
+### SR-1 大 payload SHOULD 用 pick/transform
+
+API 回傳欄位 > 5 個但 UI 只用 2-3 個 → useFetch 加 `pick: ['field1', 'field2']` 或 `transform`。減少 SSR payload 體積 + hydration 成本。
+
+### SR-2 Lazy prefix 限非首屏重元件，且 MUST 搭 hydration strategy
+
+`<Lazy*>` 只做 **code-split**。不搭 hydration strategy 的 `<Lazy*>` **完全不省 hydration 成本**，只多出一個 async chunk。
+
+**先確認渲染模式**——條件 ② 只對 SSR consumer 有效：
+
+> **`ssr: false`（SPA）的 consumer：hydration strategy 完全不生效。** Vue 的 `hydrateStrategy` 只在 `__asyncHydrate()` 路徑被呼叫，那是「接管 SSR 產生的 DOM」時才走的；SPA 沒有 server HTML，元件走一般 mount 路徑，strategy 連讀都不會被讀到。SPA consumer 對 `<Lazy*>` **只有條件 ①**（code-split 仍有效），**NEVER** 為了「補 strategy」而加 `hydrate-on-*`——那是無效程式碼。渲染模式以各 consumer `nuxt.config` 的 `ssr` 值為準。
+
+| 條件 | 判準 | 適用 |
+| --- | --- | --- |
+| ① 非首屏或條件渲染 | Modal、chart、editor、map、below-fold 區塊。**NEVER** 用於首屏就會渲染的輕量原子元件（`UButton` / `UBadge` / `UIcon` / `UFormField` / `UInput` / `USeparator` / `UTooltip` / `USkeleton` 等） | **全部 consumer** |
+| ② 帶 hydration strategy | `hydrate-on-visible` / `hydrate-on-idle` / `hydrate-on-interaction` / `hydrate-on-media-query` / `:hydrate-after` / `:hydrate-when` / `hydrate-never` | **僅 `ssr: true`** |
+
+> SPA 下對原子元件加 `Lazy` 的危害**更大**：連理論上的 hydration 節省都不存在，純粹多切一個必定會被下載的 chunk。
+
+```vue
+<!-- ❌ 首屏原子元件：多一個 chunk，零 hydration 收益 -->
+<LazyUBadge :label="status" />
+<LazyUSkeleton v-if="pending" />   <!-- 本末倒置：loading 指示器自己要等 chunk 下載 -->
+
+<!-- ❌ 重元件但無 strategy：只拿到 code-split -->
+<LazyRevenueChart :data="rows" />
+
+<!-- ✅ 重元件 + 進視窗才 hydrate -->
+<LazyRevenueChart :data="rows" hydrate-on-visible />
+<!-- ✅ 互動才 hydrate -->
+<LazyRichTextEditor hydrate-on-interaction="click" />
+<!-- ✅ 純展示、永不互動 -->
+<LazyStaticReport hydrate-never />
+```
+
+Nuxt 官方立場：**Avoid delayed hydration for critical, above-the-fold content.**
+
+**三個會讓 strategy 靜默失效的限制**：
+
+1. **任何 prop 變更會立即觸發 hydration**，繞過設定的 strategy——綁頻繁變動 prop 的元件等於沒設
+2. 僅在 **SFC** 內有效，且 prop **MUST 直接寫在 template 上**；`v-bind="props"` 展開物件不生效
+3. 從 `#components` 直接 import 的元件不適用
+
+Enforcement：機械層 `lazy-atomic-component`（ratchet，只擋新增）擋最明確的原子元件濫用；雙層判斷的語意部分由 review 層 `lazy-hydration-strategy` verdict 承擔。
+
+### SR-3 landing page / public page SHOULD 有 routeRules
+
+```ts
+// nuxt.config.ts
+routeRules: {
+  '/': { prerender: true },
+  '/login': { prerender: true },
+  '/blog/**': { prerender: true },  // content-driven
+}
+```
+
+### SR-4 平行獨立 request SHOULD 用 Promise.all
+
+同一 handler / setup 內多個獨立 fetch → 包在 `useAsyncData` + `Promise.all` 內平行發送。
+
+### SR-5 NuxtImg SHOULD 設 format + loading + priority + sizes
+
+- LCP hero image：`loading="eager"` + `:preload="{ fetchPriority: 'high' }"` + `format="webp"`
+- Below-fold image：`loading="lazy"` + `fetchpriority="low"` + `format="webp"`
+- **響應式圖片 MUST 設 `sizes`**：沒有 `sizes`，`@nuxt/image` 無從產生 `srcset` 候選，行動裝置會下載桌機尺寸的原圖。`sizes="sm:100vw md:50vw lg:400px"`
+
+> 部署在 Cloudflare Workers 的 consumer 另需確認 `image.provider` 有正確解析——preset 選錯會讓 provider 退化成 `none`，`<NuxtImg>` 等同裸 `<img>`，所有優化設定靜默失效。
+
+### SR-9 取消事件 MUST 與錯誤分流，且 MUST 留下訊號
+
+**每一處**錯誤處理（`catch` / HTTP client interceptor / error-reporting hook）MUST 把取消從錯誤中分流出來，**NEVER** 上報成 error——`$fetch` / ofetch 的取消是 `err.name === 'AbortError'`。不分流會讓 error rate 被正常的路由切換灌水，後端 access log 同時湧現 499 污染 success-rate SLO。
+
+反向同樣禁止：interceptor **NEVER** 把取消整個吞掉。誤砍（不該被取消的請求被取消）與正常取消在錯誤物件上同形，靜默 return 之後誤砍永遠不可見。MUST 留一個可觀測訊號（計數 metric 或 debug log），量本身就是要監控的指標。
+
+## Server 端與資源層
+
+### SR-6 Nitro 快取 MUST 先過認證邊界
+
+`defineCachedEventHandler` / `cachedEventHandler` / `defineCachedFunction` 是**安全敏感**設定，不是單純效能開關。
+
+Nitro 官方行為：**Request headers are dropped when handling cached responses**。對帶認證的 endpoint 套用 → A 使用者的回應被快取後回給 B 使用者 = **跨使用者資料外洩**。
+
+**每一個**快取 handler 都 MUST 逐條確認：
+
+| 檢查 | 不通過時 |
+| --- | --- |
+| 回應內容與呼叫者身分**完全無關**？ | 不無關就**不要快取**；真要快取則 `getKey()` MUST 把使用者識別納入快取鍵 |
+| 需要保留的 header 有列進 `varies`？ | 未列的 header 在快取回應中會消失 |
+| 部署在 Cloudflare Workers / edge？ | Nitro production 預設 **memory storage**，在 Workers 上不跨 isolate 持久＝快取實質未生效；MUST 顯式設 `storage.cache` driver（如 `cloudflare-kv-binding`） |
+
+有疑慮一律不快取——效能收益遠小於資料外洩成本。
+
+### SR-7 字型宣告 MUST 單一來源且明列 weight
+
+`@fontsource/<name>` 的 bare import **只載入 weight 400**（Fontsource 官方預設）。codebase 用了 `font-medium` / `font-semibold` / `font-bold` 卻沒載對應 weight → 瀏覽器合成粗體，CJK faux bold 筆畫糊化。這是**視覺正確性缺陷**，不只是效能問題。
+
+```css
+/* ❌ 只給 weight 400，其餘字重全部退化成合成粗體 */
+@import '@fontsource/noto-sans-tc';
+
+/* ✅ 明列實際用到的 weight */
+@import '@fontsource/noto-sans-tc/400.css';
+@import '@fontsource/noto-sans-tc/500.css';
+@import '@fontsource/noto-sans-tc/700.css';
+
+/* ✅ 可變字型單檔涵蓋全 weight，bare import 正確 */
+@import '@fontsource-variable/geist';
+```
+
+**NEVER 雙重宣告**：`nuxt.config` 的 `fonts.families` 與 CSS `@import` 同時宣告同一字型 = 兩套 `@font-face` 疊加。擇一即可。
+
+Enforcement：機械層 `fontsource-bare-import`（error）擋單行 bare import；跨檔雙重宣告由 review 層判斷。
+
+### SR-8 routeRules 依渲染需求選模式
+
+`prerender` 只是其中一種。**每一條** public route 都 MUST 對照下表選：
+
+| 內容性質 | 用什麼 |
+| --- | --- |
+| build 時即固定（landing / login / 靜態文件） | `prerender: true` |
+| 內容會變但可接受短暫過期（部落格 / 商品頁） | `isr: <秒>` |
+| 需要背景更新、先回舊值 | `swr: <秒>` |
+| API 回應可共用 | `cache: { maxAge: <秒> }` — **先過 SR-6 認證邊界** |
+| 需要即時且因人而異 | 不設 route rule |
+
+> **`experimental.payloadExtraction` 不需要手動開**：Nuxt 4 預設即為 `true`（`compatibilityVersion: 5` 時為 `'client'`），且 **`ssr: false` 時強制為 `false`**。SPA consumer 設它無效，**NEVER** 把「未設定」當成缺口。
+
+## Pinia Colada 層（已安裝 consumer 適用）
+
+### staleTime 三級制
+
+所有 Colada consumer **SHOULD** 採用集中的 `STALE_TIME` 常數：
+
+| Tier | 值 | 適用 |
+|------|-----|------|
+| REALTIME | 0 ms | 即時資料：dashboard、pending approvals、clock |
+| SHORT | 30 s | 工作階段內會變的資料：list、reports、search |
+| STABLE | 5 min | Reference/master data：settings、categories、types |
+
+Cookbook 範本：`~/offline/clade/vendor/snippets/nuxt-data-perf/stale-time.ts`
+
+### Abort 語意：Colada vs Nuxt dedupe（兩套機制、同一個前提）
+
+| | 何時開槍 | 可否關掉 | 前提 |
+| --- | --- | --- | --- |
+| Colada `useQuery` | 每次 `fetch()` 砍前一個 pending；最後一個 dep 移除進 gc 排程時砍 pending | 無 opt-out | `query` 必須把 `signal` 傳進 `$fetch`（HR-6） |
+| Nuxt `useAsyncData` / `useFetch` | 預設 `dedupe: 'cancel'`——新請求取消同 key 的舊請求 | `dedupe: 'defer'`（HR-2 的條件） | handler 第二參數的 `signal` 必須傳進 `$fetch`（HR-6） |
+| Colada `useMutation` | **不開槍**（不建 controller） | — | 寫入不該被取消，見 HR-7 |
+
+兩套的差別在**何時**與**能不能關**，前提是同一個：signal 沒貫通，兩套都只是改變 promise 的處置，網路請求照樣跑完。**NEVER** 把「已經用了 Colada / 已經是預設 `'cancel'`」讀成「頻寬已經省下來了」。
+
+### Query 檔案組織
+
+推薦 `queries/<domain>.ts` 一個 domain 一個檔，內含：
+1. Key factory（`domainKeys`）
+2. `useQuery` composable（讀）
+3. `useMutation` composable（寫 + invalidation）
+
+Cookbook 範本：`~/offline/clade/vendor/snippets/nuxt-data-perf/query-file-example.ts`
+
+## Mechanical Enforcement（4 層）
+
+此規約有**四層** enforcement，對齊 [[nuxt-ui-native-picker-ban]] 同一架構：
+
+| 層 | scope | 何時跑 | 偵測項 | 行為 |
+| --- | --- | --- | --- | --- |
+| **impl-time rule** | 當次 session 寫的 `.vue` | 寫 code 當下 | 下方 § Self-check Gate 的全部項目 | agent 自查 |
+| **pre-commit gate** | staged `.vue` | `git commit` | file-level：有 `$fetch` 但無 `use(Lazy)?(Fetch\|AsyncData)`/`useQuery`（HR-1） | **blocking** |
+| **pre-push gate** | **全 repo** `.vue` | `git push` | 同上，回溯型 | **warn-only**（既有 codebase 違規量大，暫不阻擋） |
+| **review 層** | PR diff | code-review agent / `/commit` 0-A | 全部 HR 語意 check ＋ `lazy-hydration-strategy` / `nitro-cache-auth-safety` verdict | agent review |
+
+資源層另有兩條機械 pattern（走 `vendor/review-rules/patterns.json`，pre-commit / pre-push / CI 三層）：
+
+| pattern id | 對應 | severity | 說明 |
+| --- | --- | --- | --- |
+| `fontsource-bare-import` | SR-7 | error | 命中量極低，直接 blocking |
+| `lazy-atomic-component` | SR-2 | warning + `layer: ratchet` | 既有違規量大，只擋新增；豁免標記 `lazy-atomic-ok` |
+
+偵測 heuristic（file-level）：`.vue` 檔含 `$fetch` 但**不含** `useFetch` / `useLazyFetch` / `useAsyncData` / `useLazyAsyncData` / `useQuery` → 代表所有 data-fetching 都走 raw `$fetch`。含 composable 的 `.vue` 檔有 `$fetch` 不被標記（通常是 event handler mutation）。
+
+> **`use(Lazy)?` 前綴不可省**：`useLazyFetch` / `useLazyAsyncData` 字面上不含 `useFetch` / `useAsyncData`，regex 漏掉 `Lazy` 變體會把合規檔誤判為違規，逼開發者掛全檔 `data-perf-ignore-file` 豁免——該檔此後**所有**真違規都不再被偵測，gate 等於被自己掏空。
+
+> **為何 pre-push 是 warn-only**：既有 Nuxt consumer（如 <consumer-b>）通常有 30-50 個 `.vue` 檔只用 `$fetch`。全部阻擋會讓 push 完全停擺。等主要 consumer 逐步遷移到 composable 後 promote 為 blocking。
+
+### 合法例外（file-level ignore）
+
+純 mutation component（只有 POST/PUT/DELETE、無 data-fetching 需求）在檔案內任何位置加 `data-perf-ignore-file` 標記即跳過：
+
+```vue
+<!-- data-perf-ignore-file: pure mutation component, no data fetching -->
+<script setup>
+async function handleSubmit() {
+  await $fetch('/api/items', { method: 'POST', body })
+}
+</script>
+```
+
+仍**MUST** 在 commit message 註明位置與理由，讓 review 層核實。
+
+### 規約來源
+
+- **pre-commit gate**：`vendor/scripts/pre-commit/checks/data-perf-check.sh`（掃 staged `.vue`）
+- **pre-push gate**：`vendor/scripts/pre-push/checks/data-perf-check.sh`（掃**全 repo** `.vue`，warn-only 回溯型）
+- **資源層 pattern**：`vendor/review-rules/patterns.json` 的 `fontsource-bare-import` / `lazy-atomic-component`（由 `vendor/review-rules/scan.mjs` 於 pre-commit / pre-push / CI 三層執行）
+- **review-layer**：`plugins/hub-core/agents/references/clade-review-rules.md` § Nuxt 效能規約
+
+## Self-check Gate（Enforcement Layer 1）
+
+**每次**寫完新的 `useFetch` / `useLazyFetch` / `useAsyncData` / `useLazyAsyncData` / `useQuery` / `$fetch` 呼叫後，**MUST** 暫停並逐條自查：
+
+1. ✅ 這個呼叫在 setup top-level 嗎？→ 不能用裸 `$fetch`（HR-1）
+2. ✅ 這個呼叫的 key 會隨輸入 / 篩選變動嗎？→ 會就**維持預設 `'cancel'`** 並用 debounce 控頻；只有「固定 key 的冪等重複觸發」才加 `dedupe: 'defer'`（HR-2）
+3. ✅ 這是 reference data（下拉選單、config、category）嗎？→ 需要 `staleTime` 或 `getCachedData`（HR-3）
+4. ✅ key 是 magic string 還是來自 factory？→ 必須用 factory（HR-4）
+5. ✅ 如果是 mutation，有沒有接 `invalidateQueries`？→ 必須有（HR-5）
+6. ✅ query / handler 有接住 `signal` 並傳進 `$fetch` 嗎？→ 沒接的話框架的 abort 全打空（HR-6）；如果是寫入，有沒有拿取消當防重？→ 不可以（HR-7）
+
+**不需要逐次跟 user 報告自查結果**，但如果發現自己剛寫的 code 違反任何一條，**立刻修正後再繼續**。
+
+### 資源層自查
+
+**每次**新增 `<Lazy*>` 元件、`defineCachedEventHandler` / `defineCachedFunction`、或字型 `@import` 後，**MUST** 暫停並逐條自查：
+
+1. ✅ 這個 `<Lazy*>` 是首屏就渲染的輕量元件嗎？→ 移除 `Lazy` 前綴（SR-2 ①，全部 consumer 適用）
+2. ✅ 本專案 `ssr: true` 嗎？→ 是才檢查有無 hydration strategy（SR-2 ②）；`ssr: false` 跳過此項，**NEVER** 補無效的 `hydrate-on-*`
+3. ✅ 這個快取 handler 的回應與呼叫者身分無關嗎？→ 有關就不能快取，或 `getKey()` 納入使用者識別（SR-6）
+4. ✅ 部署目標是 Workers / edge 嗎？→ MUST 顯式設 `storage.cache` driver（SR-6）
+5. ✅ 這個字型 `@import` 有明列 weight subpath 嗎？→ static 字型 bare import 只給 400（SR-7）
+
+## 為什麼這條 rule 存在
+
+2026-06-23 跨 8 consumer 稽核發現：
+- `dedupe` 全 fleet = 0（MasteringNuxt tip 指出的盲區）
+- `getCachedData` 全 fleet = 0
+- 未安裝 Colada 的 consumer（<consumer-j> / co-purchase / blog）全面 D 級
+- 已安裝 Colada 的 consumer（<consumer-a> / <consumer-b> / <consumer-d> / <consumer-c>）全部 B+ 以上，但 key management 和 dedupe 仍有缺口
+- <consumer-a> 的 pattern（STALE_TIME 三級 + key factory + 100% mutation invalidation）是 gold standard，需推廣
+
+## 與其他 rule 的分工
+
+| 主題 | 走哪個 |
+|------|--------|
+| D1 / Drizzle / wrangler / NuxtHub binding | `data-layer-d1.md` |
+| useFetch / useQuery / $fetch 選用 / dedupe / cache / payload | 本 rule |
+| Nuxt UI component props / theming | nuxt-ui-remote MCP 與專案的 Nuxt UI 查詢規約 |
+| CSS / Web Platform API（dialog / popover / anchor） | modern-web-guidance skill 與專案的 Web Platform 查詢規約 |
+| Error handling pattern（server/client） | `error-handling.md` |
