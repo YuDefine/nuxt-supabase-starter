@@ -480,7 +480,7 @@ Canonical intent 的修改只走 OPSX command；生成 tasks.md 保持唯讀。
 
 **核心命題**：派出 〔`screenshot-review-verify`〕（Pi `--model gemini --effort high`）後**主線不能單純等回報**。worker 在 browser 內可能：撞 emptiness preflight、卡 selector、無限 retry。歷史案例（add-pass-fail-inspection-type）verify 跑 7 小時無回報 — 「乾等盲區」對 verify mode 跟對其他 pi 一樣致命。
 
-Gemini worker 的對應規範（hard budget、checkpoint、fail-fast、progress.json schema）寫在 `plugins/hub-core/skills/review-screenshot/references/evidence-contract.md` § Verify Mode；本節定義**主線派工 + 監看**規範。
+Gemini worker 的對應規範（hard budget、checkpoint、fail-fast、progress.json schema）寫在 `plugins/hub-core/skills/review/references/legacy/review-screenshot/references/evidence-contract.md` § Verify Mode；本節定義**主線派工 + 監看**規範。
 
 ### 派工 Brief 必含項（hard rule）
 

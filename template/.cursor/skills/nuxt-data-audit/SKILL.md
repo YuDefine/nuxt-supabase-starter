@@ -1,6 +1,6 @@
 ---
 name: nuxt-data-audit
-description: "Use when 審計 Nuxt 專案 data-fetching 模式與效能 golden path checklist。NOT for 非 Nuxt 專案，NOT for client-server 分頁參數不一致的偵測（走 data-sanity）。"
+description: "Use when auditing Nuxt data-fetching, performance, or client-server pagination schema boundaries. NOT for 非 Nuxt 專案，NOT for general code review。"
 metadata:
   author: clade
   version: "1.0"
@@ -11,7 +11,7 @@ metadata:
 
 本流程只稽核與回報。`metadata.clade.permission_tier` 是政策標記，不是原生權限控制；修正依本次任務既有授權處理。
 
-`nuxt-data-audit` — Nuxt data-fetching & performance golden path audit。這是 skill 的檢查流程，沒有同名獨立 CLI；下方參數由執行 skill 的 agent 解讀。原生入口未載入時，讀取本文件與 reference rule 後依已授權工具執行。
+`nuxt-data-audit` — Nuxt data-fetching & performance golden path audit，含原 `data-sanity` 的 client-server schema boundary mode。這是 skill 的檢查流程，沒有同名獨立 CLI；下方參數由執行 skill 的 agent 解讀。原生入口未載入時，讀取本文件與 reference rule 後依已授權工具執行。
 
 開始評分前讀取 reference rule：clade 的 `rules/core/nuxt-data-perf.md`，或目前 runtime 已交付的同名規約。若無法取得該規約，報告標示未完成。
 Cookbook：`~/offline/clade/vendor/snippets/nuxt-data-perf/`
@@ -29,7 +29,12 @@ Cookbook：`~/offline/clade/vendor/snippets/nuxt-data-perf/`
 /nuxt-data-audit                          # 掃當前 cwd 的 consumer
 /nuxt-data-audit ~/offline/<consumer-b>           # 掃指定 consumer
 /nuxt-data-audit --fleet                  # 掃全 fleet（從 clade home 用 registry/consumers.json）
+/nuxt-data-audit schema <files>           # 查 paginated-query / lookup-map contract boundary
 ```
+
+`schema` mode 的完整偵測項、JSON schema 與 exit-code contract 保留於
+[data-sanity reference](../../references/data-sanity/SKILL.md)；需要時讀取後執行
+`node <clade-vendor>/scripts/audit-data-sanity.ts --consumer-path . --json`。
 
 ## Phase 1 — Dependency Detection
 

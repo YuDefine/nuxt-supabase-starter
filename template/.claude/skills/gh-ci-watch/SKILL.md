@@ -1,6 +1,6 @@
 ---
 name: gh-ci-watch
-description: "Use when 需要監看或查詢 GitHub Actions（push 後盯 CI / deploy 綠燈、等某 run 或某 SHA 完成、撈 run log 證據、查 runner 佇列）。NOT for 修 CI 紅燈本身（那是拿到結果後的除錯流程）。"
+description: "Use immediately after a successful git push when the repo has GitHub Actions and CI / deploy completion must be watched; also use when 查詢某 run 或某 SHA、撈 run log 證據、查 runner 佇列。NOT for 修 CI 紅燈本身（那是拿到結果後的除錯流程）。"
 metadata:
   author: clade
   version: "1.0"

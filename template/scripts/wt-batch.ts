@@ -21,6 +21,11 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isRecord, parseJsonRecord, parseJsonWith } from './lib/json-unknown.ts'
 import { runWtEnvBootstrap } from './lib/wt-env-bootstrap-runner.ts'
+import {
+  assertNoPublishInFlight,
+  detectPublishInFlight,
+  type ProcessProbe,
+} from './lib/publish-in-flight.ts'
 import { findClaimByWorktree, readActiveClaims } from './claim-helper.ts'
 
 export interface BatchLifecycle {
@@ -1006,8 +1011,16 @@ export function landBatch(cwd: string, confirmMerged = false) {
     return b
   })
 }
-export function cleanupBatches(cwd: string, lifecycle: BatchLifecycle = defaultLifecycle) {
+export function cleanupBatches(
+  cwd: string,
+  lifecycle: BatchLifecycle = defaultLifecycle,
+  detect: ProcessProbe = detectPublishInFlight,
+) {
   const c = context(cwd)
+  // Batch cleanup mutates the shared worktree/ref topology. Keep the same
+  // fail-closed publish/propagate guard as the other main-tree lifecycle
+  // operations; an in-flight projection must not observe the transition.
+  assertNoPublishInFlight('batch cleanup', c.main, false, detect)
   return mutate(c, (s) => {
     const results: {
       batch: string

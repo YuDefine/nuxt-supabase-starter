@@ -158,9 +158,9 @@ Design Review 過程中若發現問題過多（例如需要列修正計劃讓使
 | `hardening`   | 邊界情況、空狀態、loading 狀態      |
 | `performance` | 渲染效能、圖片優化問題              |
 
-### 週期性分析 → `/design-retro`
+### 週期性分析 → `/design retro`
 
-Findings log 的分析由 `/design-retro` skill 負責（見 `.claude/skills/design-retro/SKILL.md`）。記錄本身只負責結構化紀錄，分析與改善建議交由 skill 在適當時機執行。
+Findings log 的分析由 `/design retro` mode 負責（見 `plugins/hub-core/skills/design/references/legacy/design-retro/SKILL.md`）。記錄本身只負責結構化紀錄，分析與改善建議交由 design skill 在適當時機執行。
 
 ## Design → 規格回饋迴路
 

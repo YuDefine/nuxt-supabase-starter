@@ -43,7 +43,7 @@ skill 由 consumer manifest 的 `modules` 決定裝哪些（canonical `.clade/ma
 | 規格落地〔aixbdd〕 | `/dsl-refine` | 把句型寫進 `specs/truth/features/**` 與 `dsl.md` |
 | 拆任務〔aixbdd〕 | `/tasks` | 產 plan package 的 `tasks.md`；開工前 `flow open <slug> --origin tasks:<path>` |
 | 實作〔aixbdd〕 | `/implement`（`[BDD-GREEN]` 委派 `/bdd`） | 依 `tasks.md` 逐 phase 落 code 與測試 |
-| 人工檢查 | `pnpm review:ui`（GUI）；批次前先 `/review-readiness-scan` 看哪些 ready | UI / 資料類 manual review |
+| 人工檢查 | `pnpm review:ui`（GUI）；批次前先 `/review scan` 看哪些 ready | UI / 資料類 manual review |
 | 提交 | `/commit` | 依功能分組走品質閘門提交（所有 commit 的唯一入口） |
 
 不確定專案當前該走哪一站：先讀 `specs/plans/` 最新的 plan package 與它的 `tasks.md`，再按使用者目標接續。沒宣告 aixbdd 的 repo 整條主流程不適用——那裡的生命週期是「待辦來源 → `tasks/<date>-<slug>.md` → `/wt` → `/commit`」。
@@ -51,11 +51,11 @@ skill 由 consumer manifest 的 `modules` 決定裝哪些（canonical `.clade/ma
 ## On-ramps（從症狀進入）
 
 - **遇到 bug / 異常行為** → 先查根因（`/wt` 隔離後調查）；動到規格才回 `/specify`〔aixbdd〕
-- **要看 UI 畫面 / 截圖驗證** → `/review-screenshot`（統一截圖入口；第一手是 Pi `--model gemini --effort high`，見該 skill）
-- **專案還沒有可重跑的 app control／feature map** → `/verification-create`（建立 consumer-owned `verify-<app>` skill）
-- **既有 verification skill／feature map 要對帳 source 與 live behavior** → `/verification-maintain`（`clean` 是零 branch／零 commit／零 PR 的成功結果）
+- **要看 UI 畫面 / 截圖驗證** → `/review screenshot`（統一截圖入口；第一手是 Pi `--model gemini --effort high`，見該 skill）
+- **專案還沒有可重跑的 app control／feature map** → `/verification create`（建立 consumer-owned `verify-<app>` skill）
+- **既有 verification skill／feature map 要對帳 source 與 live behavior** → `/verification maintain`（`clean` 是零 branch／零 commit／零 PR 的成功結果）
 - **要動 code 而還在 main working tree** → `/wt`（開 worktree 隔離；`/wt A: ... B: ...` 可並行多條 task）
-- **implementation plan 內有多個獨立 task 想並行** → `/subagent-dev`（同 session 派 subagent；跨 change 的並行仍走 `/wt`）
+- **implementation plan 內有多個獨立 task 想並行** → 讀 `plugins/hub-core/references/implement-executor/`（同 session 派 subagent；跨 change 的並行仍走 `/wt`）
 - **session 要收尾 / 交接** → `/handoff`（有 in-progress 工作寫交接；沒有則整理 HANDOFF.md 推薦 outstanding）
 - **要把待辦無人值守推完**（plan package / tasks 檔 / HANDOFF / tech-debt / ROADMAP）→ `/work-loop`（自主推進 loop；一次性任務不適用）
 - **外部新資訊要改需求** →〔aixbdd〕`/specify` 開新的 `NNN-<slug>`；舊 plan package 是歷史，**NEVER** 回頭覆寫
@@ -64,17 +64,17 @@ skill 由 consumer manifest 的 `modules` 決定裝哪些（canonical `.clade/ma
 
 ## 歸檔兩兄弟的邊界
 
-兩個 archive skill 各管一種資產，不互相替代（plan package 本身是歷史，不搬動）：
+`/review archive` 與 `/review screenshots` 各管一種資產，不互相替代（plan package 本身是歷史，不搬動）：
 
-- `/review-archive` — 歸檔**已結束的人工檢查結果**（manual review → docs/manual-review-archive.md）；完成時同樣自動 sweep 截圖
-- `/screenshots-archive` — 只搬**截圖資料夾**到 `_archive/`；由 `/review-archive` 的既有流程呼叫或依明確清理範圍執行，手動跑用於補救 pending sweep
+- `/review archive` — 歸檔**已結束的人工檢查結果**（manual review → docs/manual-review-archive.md）；完成時同樣自動 sweep 截圖
+- `/review screenshots` — 只搬**截圖資料夾**到 `_archive/`；由 `/review archive` 的既有流程呼叫或依明確清理範圍執行，手動跑用於補救 pending sweep
 
 ## 品質 / 稽核類（standalone）
 
 - `/design` — design orchestrator（new / improve / iterate / health）
-- `/design-retro` — 分析歷史 design review findings 找重複模式
+- `/design retro` — 分析歷史 design review findings 找重複模式
 - `/nuxt-data-audit`〔nuxt〕 — 審計 Nuxt data-fetching 模式與效能 golden path
-- `/data-sanity`〔nuxt〕 — 偵測 client-server schema mismatch（review 前 / archive 前跑）
+- `/nuxt-data-audit schema`〔nuxt〕 — 偵測 client-server schema mismatch（review 前 / archive 前跑）
 
 ## User-invoked（model 不會自動觸發，要自己記得）
 

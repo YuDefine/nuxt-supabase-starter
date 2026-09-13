@@ -16,6 +16,10 @@ metadata:
 
 Session 交接管理。**四個 arg，全部以「本 session 收工」結束**；差別只在**開幾個 pane**。裸 `/handoff` 自己判該用哪一個——先判當前 session 有沒有未交辦工作，再判其中幾件派得出去。
 
+## Step 0.1 — Value-first continuation gate（四種模式共用）
+
+`park`、`relay`、`fanout`、`next` 都 MUST 先判斷是否仍值得保留 continuation。只有目前可驗證的 customer／product demand、current incident／data-security risk，或直接阻擋交付且可 bounded fix 的 blocker 至少一項成立，才可列為 continuation candidate；age、unknown、未落地、commit 數與「可能有價值」都不算。三者皆無時標記 `retired`／`cancelled`、保存 evidence、continuation candidates 固定為 0；歷史 worktree／branch 依下方 § 3.5.1 入口處理。`relay`／`fanout` 的 dispatch details 見 [dispatch-common.md](dispatch-common.md) § 0.1；`park` 也受本 gate 約束，即使不開 pane。
+
 ## Step 0 — 解析參數
 
 先解析 invocation args，**在 Step 1 之前分流**：
@@ -488,7 +492,7 @@ Step 3.1 audit **有任一條** wt 判為 `mergeBackSafety: ptb-unsafe` → **MU
 
 ## Step 3 — Worktree & Stash 稽核（共用 block，park / next 都會 invoke）
 
-目的：把所有 linked worktree + stash 的當前狀態 + 下一步建議寫進 HANDOFF.md `## Worktree & Stash Audit` 段，避免歷史包袱累積。**讀取 + 寫入摘要**，不執行 drop / cleanup / merge-back。
+目的：把所有 linked worktree + stash 的當前狀態 + 下一步建議寫進 HANDOFF.md `## Worktree & Stash Audit` 段，避免歷史包袱累積。讀取與寫入摘要後，`park` / `next` 進入共用的 lifecycle drain；drain 只會執行已由 deterministic planner 判定安全的 cleanup，landing 仍交給 `/commit`。
 
 ### 3.1 Worktree audit
 
@@ -550,9 +554,57 @@ _Updated: <YYYY-MM-DD>_
 若 0 條：`No stashes.`
 ```
 
-### 3.4 禁止行為
+### 3.5 Worktree lifecycle drain（park / next 共用）
 
-- ❌ 自動跑 `git worktree remove` / `wt-helper cleanup` / `wt-helper merge-back` —— 這三個動 worktree 的操作仍是 user 自行抉擇（可跑 `wt-helper cleanup <slug>`）
+Step 3 寫 audit 前，先把同一份 `$SCAN` 交給 deterministic planner：
+
+```bash
+node vendor/scripts/handoff-lifecycle.ts --cwd "$MAIN_WT_PATH" --json > "$LIFECYCLE"
+```
+
+Planner 的安全集合只有下列形狀：
+
+| signal | action |
+| --- | --- |
+| `merged` + `userWip=0` + 無 active claim | 執行 `wt-helper cleanup <slug>` |
+| `orphan` + `ahead=0` + `userWip=0` + 無 active claim | 執行 `wt-helper cleanup <slug>` |
+| `unlanded-content-landed` + `contentLanded=yes` + clean | 驗 content receipt 後 cleanup |
+| `done-work` + work/evidence/patch receipt 全驗證 + clean | 驗 receipt 後 cleanup |
+| `landable` + work complete + evidence + landing authorization + writer released | 登記 batch ready，呼叫 `/commit`，trigger=`drained` |
+| 已 landed batch | 執行 `wt-helper batch cleanup` |
+
+`--apply` 才執行上表的 cleanup；預設只輸出 plan。Planner 與 helper 都不生成 force flag：dirty、active claim、`partial`、`unknown`、缺 evidence、PR 未合入、submodule teardown 失敗及 unmanaged worktree 一律 `retain`／`report-only`。重跑同一份 landed batch cleanup 必須是 no-op 或逐項 retained，不能重跑品質鏈。
+
+#### 3.5.1 Historical retirement（一次性 maintenance）
+
+歷史 worktree／branch 不因 age、commit 數、未落地或 unknown 自動進 continuation。先用 value-first gate 判斷是否仍有 customer/product demand、current incident/data-security risk，或 direct delivery blocker；三者皆無才進退休流程，預設 continuation candidates 為 0。
+
+退休入口只能是：
+
+```bash
+node vendor/scripts/handoff-retire.ts --cwd "$MAIN_WT_PATH" --apply --json \
+  --value-first no-demand-no-risk-no-blocker \
+  --archive-root "$RETIRE_ARCHIVE" --manifest "$RETIRE_MANIFEST"
+```
+
+它逐筆保存 branch bundle、staged／unstaged patch、status／ignored／submodule evidence 與排除 `.git` 的完整 worktree tree，驗證 archive 後重新讀 active claim、process cwd、HEAD、branch 與 status snapshot；任一改變就 retained。worktree 移除前 MUST 先通過既有 environment／submodule destroy lifecycle；teardown 失敗就 retained。批次持有的來源先由正式 batch cleanup／cancel 處理，不能用 retirement 偽造 landing。移除只允許 exact `git worktree remove --force <path>` 與 exact `git update-ref -d <ref> <head>`，remote refs、main 與明確排除項永不碰。
+
+`docs/archives/retired-work.jsonl` 是 durable tombstone；已退休 identity 不得再由任何 handoff mode 推回 continuation 清單。重跑同一 manifest 應是 no-op／retained，並受固定 maintenance budget 限制。
+
+輸出固定包含：
+
+```text
+Landed: N
+Worktrees removed: N
+Branches removed: N
+Retained: N
+```
+
+成功移除項目不再寫回下一版 audit；retained 項目必須帶具體原因與下一個可觀察 landing signal。
+
+### 3.6 禁止行為
+
+- ❌ 自動跑裸 `git worktree remove` / `git update-ref -d` / `wt-helper merge-back` —— 這些不經 planner 的動作仍禁止；安全集合的 `wt-helper cleanup`、已 landed batch 的 `wt-helper batch cleanup` 與歷史 retirement 只能由 § 3.5／§ 3.5.1 的 canonical entrypoint 執行
 - ✅ **`git stash drop` 是例外，且是 MUST 不是 MAY**：通過 [[commit]] § Stash 自動處置 gate **全部**判準的 stash，Step 3.2 **MUST** 主動 drop + 留痕，**NEVER** 留給 user。判準未過、或跑不出明確結論的才寫進 audit 段。理由：把處置權綁在 user 身上的前提是 user 會去看 stash；對不看的 user 而言那不是保護，只是讓它無限累積直到沒人判得動
 - ❌ 把 audit 條目改寫進 `## In Progress` / `## Blocked` 段 —— audit 是「待清紀錄」，不是 in-progress 工作
 - ❌ park 跑時在 chat 訊息輸出 audit 全文或摘要 —— 完全靜默寫入 HANDOFF.md（避免雜訊干擾交接收尾）
@@ -570,7 +622,7 @@ _Updated: <YYYY-MM-DD>_
 - `/commit` — park 升級 WIP 時，commit 走此 skill 的 selective stage
 - `/specify` / `/tasks` / `/implement` — 已授權的需求建立、拆解與實作接續；brief 保留明確 carrier 路徑與剩下的 phase
 - `/oops` — next 2B.0 sweep missed lessons 時的 dispatch 目標（pitfall / memory / lessons.md 三層分流；from `hub-maintenance-full` plugin，不在 starter consumer 內安裝）
-- `subagent-dev` — next 詢問操作 user 選 parallel 後，subagent fan-out 由此 skill 執行
+- `plugins/hub-core/references/implement-executor/` — next 詢問操作 user 選 parallel 後，subagent fan-out 依此 executor reference 執行
 
 
 # Runtime adapter: Cursor

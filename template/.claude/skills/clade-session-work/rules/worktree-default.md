@@ -1,103 +1,41 @@
 <!-- Clade native rule; source: rules/core/worktree-default.md; edit canonical source -->
+# Worktree Default
+
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
 
-# Worktree Default
-
-> **無 frontmatter — unconditional always-load**。規約必須在每個會改 code 的 session Read 任何檔之前生效。
-
-
-**核心命題**：multi-session 並行開發共用單一 working tree，staged 區、branch HEAD、partial WIP 都會跨 session 滲漏。
-
-操作層面由已授權的 `/wt` workflow orchestrate — user 不需手動 add / merge / cleanup，主線 cwd 全程不動。入口的 native catalog、dispatch transport 與 interactive surface 由 target adapter 證明。
-
-此規則優先於 target runtime 的 global instruction file 中「git workflow」相關段落（若存在）。
+**核心命題**：multi-session 共用 main；staged 區、branch HEAD、partial WIP 與 ignored artifacts 都會跨 session 滲漏。凡會改 tracked code 的工作預設在隔離 worktree，先保存並驗證成果，再由批次 `/commit` 落地；main 上其他 session 的 WIP NEVER stash、覆寫或猜測清理。
 
 ## Runtime boundary
 
-Worktree isolation, branch authorization, visibility before landing, and stale-slot safety are common clade contracts. A target adapter MUST identify the actual catalog operation and authorized transport that invokes `/wt`, handles a conflict, or reports a completion receipt; a projected rule or remembered product behavior is not execution evidence.
-
----
+Worktree、branch、archive、merge-back 的具體 carrier 由 target adapter 提供；本規則只定義共通 admission、驗收與保留 predicate。缺少已驗證 carrier 時保留 blocker，不能改用另一 runtime 的命令形狀。
 
 ## §1 預設用 worktree
 
-要寫、改、刪 tracked file 的工作 **MUST** 在獨立 worktree 內執行，**NEVER** 直接在 main 改。
+請求含 implement／fix／refactor／add／edit／deployment prep／migration／config write 且目標是 tracked file → **先**開 worktree，再動 code。**MUST** 在獨立 worktree 內執行，**NEVER** 直接在 main 改。只有明示唯讀（grep、log、audit、history、解釋）可留在 main。
 
-**操作方式**：user 在 main 直接打 `/wt <task>` — `/wt` 建 worktree、dispatch subagent 進去做事（細節見 [[wt]]）。主線 chat session 全程 cwd 不動、不切 terminal、不開新 session。
+```bash
+node vendor/scripts/wt-helper.ts add <slug> --task-summary "<一句話：這棵樹要做什麼>"
+```
 
-**判定「要動 code」**：請求含 implement / fix / refactor / add / edit / 部署準備 / migration / config 寫入等動詞，且目標是 tracked file。
+`/wt` 自動使用 `session/<YYYY-MM-DD-HHMM>-<slug>` 命名；這是唯一不需另問 branch 名稱的例外。已在 worktree（`git rev-parse --git-dir` 含 `/worktrees/`）就不要疊建。parent session cwd 不動；先依 [[worktree-default.detail]] 完成 pre-fork baseline guard。
 
-**例外：read-only session**。只讀不寫檔（grep / log / audit / git history / 解釋 code），**MAY** 在 main worktree。
+## 強制載入指針
 
-**Archive 的執行根目錄**：OPSX archive 先用 `wt-helper resolve` 找持有實作的 worktree，在該處跑 gates 與 bookkeeping；已在 main 完成且無對應 wt 時可直接 archive。Archive 完成只代表可登記就緒，正式 main 落地與回收由批次 `/commit` 執行。
-
-**判定「已在 worktree」**：`git rev-parse --git-dir` 含 `/worktrees/` 子路徑即已在 worktree，**不要**疊建新 worktree。
-
-
-## 強制載入指針（thin pointer；全文在 [[worktree-default.detail]]）
-
-本檔只常駐**開工前就要生效**的三段：§1 預設用 worktree 的判定、§2 禁止 silent branch、§5.1 landing 前的話術停手信號。其餘（工具契約、命名、merge-back ceremony、troubleshooting 索引）全文在 `rules/core/worktree-default.detail.md`（path-scoped，glob 只涵蓋 `wt-helper.ts` / `stash-reconcile.ts` / `WORKTREE-BRIEF.md`——它的觸發是下一行那個具名時機，不是編輯檔案順帶載入）。
-
-**送出 `wt-helper add` / `merge-back` / 任何 worktree 操作之前，MUST 先讀 [[worktree-default.detail]]**——沒讀到就沒有 pre-fork baseline guard 的四條契約、沒有 merge-back 的 claim guard scope。
-
-| 搬走的段 | 去 [[worktree-default.detail]] 的 § |
-| --- | --- |
-| §1 archive-on-main 的 clobber 窗口 / §1 invariant / §1.x setup chore / §1 Pre-fork baseline guard / OPSX 建立需求 | § §1 細則 起 |
-| §3 Worktree 命名與位置 | § §3 |
-| §4 與 propagate 的互動 | § §4 |
-| §5 Commit 階段 | § §5 |
-| §5.5 Merge-back ceremony、§6 操作工具 | § §5.5 / § §6 |
-| §7 升級路徑、§8 Stop hook 死鎖、§9 spectra DB、§9.5 artifact、§9.7 Artifact Reading SOP、§10 review-gui、§11 WORKTREE-BRIEF | § §7 起 |
+送出 `wt-helper add`／`merge-back`／任何 worktree 操作前 MUST Read [[worktree-default.detail]]；該檔承載 baseline、命名位置、archive／propagate 互動、批次 landing、claim guard、teardown 與 troubleshooting 全文。
 
 ## §2 禁止 silent branch 建立
 
-Agent **MUST NOT** 跑 `git checkout -b`、`git branch <name>`、或任何會產生新 ref 的指令，**除非**先取得使用者明確同意。
+除 `/wt` 約定命名與 helper 內部必要 branch 外，agent 想建立 `feature/*`、`fix/*` 等 branch MUST 先取得 user 同意；**MUST NOT** 跑 `git checkout -b`；**唯一例外**：`/wt` 規約定義的命名授權。NEVER 偷建再說。helper 的 lifecycle 不得用 raw `git worktree remove`、`git branch -D` 或 force flag 繞過。
 
-**唯一例外**：`/wt` 規約定義的 `session/<YYYY-MM-DD-HHMM>-<slug>` 自動命名 — 命名完全由 convention 決定，`/wt` invocation 本身就是 user 對該 branch 的授權。
+## §5 Visibility before landing
 
-### 工具內部 branch 建立不受此規約限制
+merge-back 是驗收後的 landing ceremony，不是「先合回去比較方便」。主線尚未看到本次 revision 的必要 evidence／驗收通過前，命中「合回、收尾、完成、已解決」等落地話術 MUST 停下，切回 worktree 內的 dev-server／驗收路徑；驗收與正式 landing 分開。
 
-User 顯式呼叫的 script（如 `propagate.ts` 建 `bump/<version>`）有 documented behavior，屬於 user authorized invocation。判定原則：「branch 是不是 user 透過工具 invocation 隱含授權的？」是 → 通過；不是 → 必須先問。
+## §6 保留與回收
 
-### Agent 想自由發揮命名（如 `feature/x` / `fix-bug-y`）
-
-**ASK FIRST**。即使 agent 認為 branch 很合理，仍須先取得 user 同意。**NEVER** 偷偷建好再說。
-
-## §5.1 Visibility before landing（hard rule）
-
-
-User 報告看不到 worktree 改動（「看不到變化」「沒反映」「dev server 沒更新」）時，正確做法是**把 dev server 切到 worktree**，**NEVER** merge-back。
-
-- **MUST**：切 dev server 到 worktree cwd — 走 `dev-session.ts --cwd <worktree-path>` 或等效方式，讓 user 在 worktree 內驗收
-- **NEVER**：用 `wt-helper merge-back` / `git merge --squash` / 任何把 worktree 改動帶回 main 的動作來「讓 user 看到」— 那是繞過驗收的捷徑
-
-**話術關鍵詞停手信號**：主線 thinking / tool call description 中出現以下任一詞彙且 worktree 改動尚未經 user 驗收（目前 revision 的必要驗收尚未通過），**MUST** 立即停手，改走「切 dev server」路徑：
-
-- 中：`合進 main` / `帶回 main` / `merge-back` / `讓你看到` / `讓改動可見`
-- En：`merge back` / `squash to main` / `land on main` / `make visible`
-
-**為什麼**：merge-back 是驗收後的落地 ceremony（§5），不是「user 有需求」時的快捷鍵。Agent 把「解決 user 眼前不便」偷換成任務目標，繞過驗證流程，是反覆出現的 workflow-discipline 違反模式（pitfall ref: [[pitfall-reflexive-merge-back-before-worktree-verification]]）。
-
-> §5 commit 階段、§5.5 merge-back ceremony 的全文在 [[worktree-default.detail]]。
-
-## §6 共享資源池 stale 判定與機械 reclaim
-
-Dev-port slot 池滿時，**MUST** 跑 `wt-helper reclaim-stale` 釋放 stale slot，**NEVER** 把池滿當 blocker 退回 user 或停在「slot 仍滿」不動。
-
-三層判定（`enrichWorktree` 的 `staleness` 欄位）：
-
-| 層 | 判準 | 動作 |
-| --- | --- | --- |
-| stale | worktree 已 merged，或 brief status 為 archived/completed/done/landed/merged | `reclaim-stale` 自動刪 dev-port record，釋放 slot |
-| live | brief status 為 active/in-progress/wip/dispatched/pending **且** last commit < 30min | 不動 |
-| unknown | 以上都不是 | attended → target adapter 的 authorized interactive question surface；unattended → packaging（不略過也不殺） |
-
-`reclaim-stale` 只刪 `~/.cache/clade/dev-port/<consumer>/<slug>.json`，**不刪** worktree 目錄。worktree cleanup 是獨立步驟（`prune` / `cleanup`）。
+cleanup 只能在無 active claim／writer／lock、user WIP 已保存、source HEAD 與 receipt 相符、正式 landing 或 content receipt 可驗、ignored artifacts 可復原、teardown 成功時進行。`merged`、`clean`、`done` 或 `work.done` 單獨都不是刪除證據；不確定就 retain 並寫 owner + 下一個可觀察 landing signal。完整分類與工具步驟依 detail、[[handoff]]、[[wip-orphan-recovery]]。
 
 ## 相關規則
 
-- [[wt]] — `/wt` skill 完整使用手冊（含 Step 0 resume detection、Step 1.5 寫 brief、Form 4 resume）
-- [[session-tasks]] — 共用時間戳 + slug 慣例
-- [[commit]] — main 上的 commit ceremony
-- [[scope-discipline]] — scope 外的工作另開 `/wt` task
-- [[handoff]] — §8 fallback 升級寫入入口；Mode B dispatch 用 `/wt <slug>: /<next-skill>` form
+scope／共享檔案寫入依 [[scope-discipline]] 與 [[shared-file-concurrent-write]]；session 任務與收工依 [[session-tasks]]；正式 commit、publish、propagate 依各自 owner。worktree 本身只是隔離載體，不會改變 routing、evidence 或 user authorization gate。

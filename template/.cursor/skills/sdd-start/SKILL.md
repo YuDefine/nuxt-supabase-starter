@@ -1,6 +1,6 @@
 ---
 name: sdd-start
-description: Use when user asks to start or continue product work after clade-onboard confirms an onboard repo. Do not use for onboard status/readiness or registry drift.
+description: Use when user asks to start or continue product work; first let clade-onboard confirm the repo is onboarded, then route here. Do not use for onboard status/readiness or registry drift.
 license: MIT
 metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}}
 ---
