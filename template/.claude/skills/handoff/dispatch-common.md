@@ -1,8 +1,22 @@
 # Dispatch 共用規約（`relay` / `fanout` / `next` 派工時共用）
 
-`park` 不開任何 pane，**不走本檔**；它只做交接寫入，收工訊息用 § 5 的 **B**。
+`park` 不開任何 pane，**不走本檔的 dispatch mechanics**；它仍 MUST 先通過 [SKILL.md](SKILL.md) § Step 0.1 的 value-first gate，只做交接寫入，收工訊息用 § 5 的 **B**。
 
 本檔是 [relay-steps.md](relay-steps.md) 與 [fanout-steps.md](fanout-steps.md) 的共用底座：preflight、durable thin brief 紀律、runtime cleanup、parent worktree lifecycle、收工訊息契約。兩支只寫各自差異，**NEVER** 在自己的檔內重述本檔內容。
+
+## 0.1 Value-first dispatch gate（四種模式共用）
+
+在 `park` 登記、`relay`、`fanout`、`next` 的每一條接續路徑上，先判這件事是否仍值得開新 session。只有下列至少一條成立，才是可 dispatch 的 continuation candidate：
+
+- 有目前可驗證的 customer／product demand；
+- 有可驗證的 current incident 或 data-security risk；
+- 有直接阻擋當前交付、且能以 bounded fix 解決的 blocker。
+
+未落地、狀態 unknown、年齡、commit 數、曾經有人開過、或「看起來可能還有價值」都不是 dispatch 理由。沒有上述訊號就標為 `retired`／`cancelled`，先保存證據並從 continuation 清單移除；不要因為 age 或 unlanded 自動派工。
+
+handoff 只轉移同一個 worktree；不為同一工作建立新的平行 checkout。每次轉移都保留 owner、下一個 bounded step 與保留／退休理由；`wait` 只有在明確 event、receipt 或外部 blocker 改變時才重試，不能以時間流逝代替事件。
+
+歷史 worktree／branch 的一次性回收走 `vendor/scripts/handoff-retire.ts`：archive → bundle／tree verify → 重新讀 claim、process cwd 與 source snapshot → exact remove。batch-owned source 先走正式 batch lifecycle；失敗就 retained，**NEVER** 偽造 landing 或 force delete。生命週期維護採固定小批預算，重跑同一份 retired manifest 必須是 no-op；這條 gate 對所有 handoff mode 相同。
 
 ## 0. Host operation contract
 

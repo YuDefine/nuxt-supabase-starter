@@ -102,6 +102,11 @@ import {
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isLockedProjectionPathFor } from './locked-projection.ts'
 import { runWtEnvBootstrap } from './lib/wt-env-bootstrap-runner.ts'
+import {
+  assertNoPublishInFlight as assertNoPublishInFlightShared,
+  detectPublishInFlight as detectPublishInFlightShared,
+  inFlightHoldersFor as inFlightHoldersForShared,
+} from './lib/publish-in-flight.ts'
 import { runBatchCommand, assertLegacyAllowed } from './wt-batch.ts'
 
 interface WtOptions {
@@ -1218,13 +1223,149 @@ export function bootstrapWorktreeRuntime(
   }
 }
 
-export function destroyWorktreeRuntime(consumerRoot: string, wtPath: string) {
+export function destroyWorktreeRuntime(
+  consumerRoot: string,
+  wtPath: string,
+  beforePrivateMetadataRemoval?: () => void,
+) {
   // Teardown runs the main checkout's shim, never the removed tree's own copy —
   // see `WtEnvBootstrapOptions.scriptRoot`. A tree forked before a slug form
   // existed cannot recognise its own branch, so it can never release itself.
+  teardownWorktreeSubmodules(wtPath, beforePrivateMetadataRemoval)
   const result = runWtEnvBootstrap(wtPath, 'destroy', { scriptRoot: consumerRoot })
   if (result?.status === 'orphan-recorded')
     throw new Error('Worktree backing resources remain; retain and retry cleanup')
+}
+
+/**
+ * Detach clean submodules before removing a worktree. Git refuses to remove a
+ * worktree which contains a submodule, even when the superproject is clean.
+ * This helper deliberately omits force: a dirty or otherwise un-detachable
+ * submodule makes teardown fail closed and the caller retains the worktree.
+ */
+export function teardownWorktreeSubmodules(
+  wtPath: string,
+  beforePrivateMetadataRemoval?: () => void,
+) {
+  let before = ''
+  try {
+    before = execFileSync('git', ['submodule', 'status', '--recursive'], {
+      cwd: wtPath,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim()
+  } catch (error) {
+    throw new Error(`submodule status failed; retain worktree: ${error.message ?? error}`, {
+      cause: error,
+    })
+  }
+  const paths = before
+    .split('\n')
+    .map((line) => line.trim().replace(/^[-+U]?[0-9a-f]+\s+/, ''))
+    .filter(Boolean)
+  if (before) {
+    try {
+      execFileSync('git', ['submodule', 'deinit', '--all'], {
+        cwd: wtPath,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+    } catch (error) {
+      throw new Error(`submodule teardown refused; retain worktree: ${error.message ?? error}`, {
+        cause: error,
+      })
+    }
+  }
+
+  let after = ''
+  try {
+    after = execFileSync('git', ['submodule', 'status', '--recursive'], {
+      cwd: wtPath,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim()
+  } catch (error) {
+    throw new Error(
+      `submodule teardown verification failed; retain worktree: ${error.message ?? error}`,
+      { cause: error },
+    )
+  }
+  // `git submodule status` reports a successfully deinitialized module with a
+  // leading `-<sha>`. Only initialized (` `), dirty (`+`) or missing (`U`)
+  // entries mean teardown did not finish.
+  const remaining = after
+    .split('\n')
+    .filter(Boolean)
+    .filter((line) => !line.trim().startsWith('-'))
+  if (remaining.length)
+    throw new Error(`submodule teardown incomplete (${remaining.join(' / ')}); retain worktree`)
+  const configuredPaths = (() => {
+    try {
+      return execFileSync('git', ['config', '--file', '.gitmodules', '--get-regexp', '\\.path$'], {
+        cwd: wtPath,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => line.replace(/^\S+\s+/, ''))
+    } catch {
+      return []
+    }
+  })()
+  const allPaths = [...new Set([...paths, ...configuredPaths])]
+  for (const rel of allPaths) {
+    const directory = join(wtPath, rel)
+    if (!existsSync(directory)) continue
+    const stat = lstatSync(directory)
+    if (!stat.isDirectory() || stat.isSymbolicLink())
+      throw new Error(`submodule path is not a plain directory (${rel}); retain worktree`)
+    if (readdirSync(directory).length)
+      throw new Error(`deinitialized submodule still has local files (${rel}); retain worktree`)
+  }
+  // Recent Git versions create a private module repository below the linked
+  // worktree's administrative directory. `submodule deinit` clears the
+  // checkout but can leave that metadata behind when the module was already
+  // detached or when its nested module had a stale worktree pointer. Git then
+  // refuses a normal worktree removal even though every checkout is gone.
+  // Remove only this worktree-private metadata, after the path and emptiness
+  // checks above; the canonical modules under the main repository are kept.
+  const privateModules = resolve(
+    wtPath,
+    execFileSync('git', ['rev-parse', '--git-path', 'modules'], {
+      cwd: wtPath,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim(),
+  )
+  const privateGitDir = resolve(
+    wtPath,
+    execFileSync('git', ['rev-parse', '--git-dir'], {
+      cwd: wtPath,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim(),
+  )
+  if (existsSync(privateModules)) {
+    const stat = lstatSync(privateModules)
+    if (!stat.isDirectory() || stat.isSymbolicLink() || dirname(privateModules) !== privateGitDir)
+      throw new Error(
+        `unexpected private submodule metadata path (${privateModules}); retain worktree`,
+      )
+    beforePrivateMetadataRemoval?.()
+    try {
+      rmSync(privateModules, { recursive: true, force: false })
+    } catch (error) {
+      throw new Error(
+        `private submodule metadata teardown failed; retain worktree: ${error.message ?? error}`,
+        { cause: error },
+      )
+    }
+    if (existsSync(privateModules))
+      throw new Error('private submodule metadata remains; retain worktree')
+  }
+  return { count: allPaths.length, paths: allPaths }
 }
 
 export function cleanupRemovedWorktreeRuntime(consumerRoot: string, wtPath: string) {
@@ -1783,6 +1924,7 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   // into every consumer, `vendor/scripts/flow/` is not), so the import is dynamic and every
   // failure path is a warn. NEVER let this gate worktree creation — the tree is already on disk.
   const ambientWorkId = process.env.CLADE_WORK_ID?.trim()
+  let associatedWorkId = ambientWorkId ?? null
   if (ambientWorkId) {
     console.error(`export CLADE_WORK_ID=${ambientWorkId}`)
   } else {
@@ -1835,6 +1977,7 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
           : { worktree_slug: cleanSlug },
         cwd: consumerRoot,
       })
+      associatedWorkId = work_id
       console.log(`  Work: ${work_id}${unattributed ? '（未歸屬）' : ` (${origin})`}`)
       if (unattributed) {
         console.error(
@@ -1847,6 +1990,52 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
     } catch (e) {
       console.error(`note: flow work open skipped (fail-open): ${e?.message ?? e}`)
     }
+  }
+  // Register the carrier only after worktree creation and flow/claim receipts have
+  // succeeded. This is an annotation, never a second lifecycle authority: inventory
+  // uses it to explain why this path/branch existed after the session disappears.
+  try {
+    const { appendInventoryEvent, assetIdFor } = await import(
+      new URL('./work-inventory-store.ts', import.meta.url).href
+    )
+    const head = git(['rev-parse', 'HEAD'], { cwd: wtPath })
+    const observationKey = `worktree:${resolve(wtPath)}:${branch}`
+    appendInventoryEvent(consumerRoot, {
+      operation_id: `worktree-register:${preGenSessionId}`,
+      asset_id: assetIdFor(observationKey, head),
+      observation_key: observationKey,
+      work_id: associatedWorkId,
+      session_id: preGenSessionId,
+      kind: 'resource.registered',
+      payload: {
+        kind: 'worktree',
+        path: resolve(wtPath),
+        branch,
+        head,
+        purpose: opts.taskSummary ?? null,
+        purpose_confidence: opts.taskSummary ? 'confirmed' : 'unknown',
+      },
+      sources: [
+        {
+          source: `${consumerRoot}/.clade/claims/${preGenSessionId}.json`,
+          kind: 'claim',
+          value: opts.taskSummary ?? null,
+          confidence: opts.taskSummary ? 'confirmed' : 'unknown',
+        },
+        ...(associatedWorkId
+          ? [
+              {
+                source: `${consumerRoot}/.clade/flow/events.jsonl`,
+                kind: 'flow' as const,
+                value: associatedWorkId,
+                confidence: 'confirmed' as const,
+              },
+            ]
+          : []),
+      ],
+    })
+  } catch (e) {
+    console.error(`note: work-asset registration skipped (fail-open): ${e?.message ?? e}`)
   }
   console.log('')
   console.log(
@@ -3672,6 +3861,7 @@ async function cmdCleanup(slug, opts) {
 
   // Release per-worktree resources before the directory disappears — the
   // bootstrap script lives inside the worktree. No-op for consumers without it.
+  teardownWorktreeSubmodules(target.path)
   const envCleanup = runWtEnvBootstrap(target.path, 'destroy', {
     allowOrphanRecord: opts.allowOrphanRecord,
   })
@@ -3750,14 +3940,7 @@ async function cmdCleanup(slug, opts) {
  * 過濾掉的會是真的 in-flight 行程，而失敗方向是靜默放行。
  */
 function detectPublishInFlight() {
-  const r = spawnSync('pgrep', ['-af', 'scripts/(publish|propagate)\\.ts'], { encoding: 'utf8' })
-  // pgrep: 0 = 有命中；1 = 沒有；>1 = 自己出錯。出錯時 fail closed（當成有在飛），
-  // 因為「偵測不出來」與「沒有在飛」在後果上不對稱。
-  if (r.status === 1) return []
-  if (r.status !== 0) {
-    return [`pgrep failed (status=${r.status}); treating as in-flight (fail closed)`]
-  }
-  return r.stdout.split('\n').filter((line) => line.trim())
+  return detectPublishInFlightShared()
 }
 
 /**
@@ -3772,44 +3955,11 @@ function detectPublishInFlight() {
  * 「偵測不出來」與「沒有在飛」的後果不對稱，NEVER 讓前者靜默放行。
  */
 function inFlightHoldersFor(targetRoot, detect = detectPublishInFlight) {
-  const lines = detect()
-  if (lines.length === 0) return []
-  if (!targetRoot) return lines
-  let target
-  try {
-    target = realpathSync(resolve(targetRoot))
-  } catch {
-    return lines
-  }
-  const held = []
-  for (const line of lines) {
-    const pid = line.trim().split(/\s+/)[0]
-    if (!/^\d+$/.test(pid)) {
-      held.push(line)
-      continue
-    }
-    let cwd
-    try {
-      cwd = realpathSync(`/proc/${pid}/cwd`)
-    } catch {
-      held.push(line)
-      continue
-    }
-    if (cwd === target || cwd.startsWith(`${target}/`) || target.startsWith(`${cwd}/`))
-      held.push(line)
-  }
-  return held
+  return inFlightHoldersForShared(targetRoot, detect)
 }
 
 function assertNoPublishInFlight(action, opts: WtOptions = {}, detect = detectPublishInFlight) {
-  if (opts.iKnowPublishIsRunning) return
-  const lines = inFlightHoldersFor(opts.targetRoot, detect)
-  if (lines.length === 0) return
-  throw new Error(
-    `${action}: 有 publish / propagate 在飛，這個動作會改 main 的 working tree／HEAD 並打死它。\n` +
-      `${lines.map((l) => `  ${l}`).join('\n')}\n` +
-      `等它回報完成再跑，或 --i-know-publish-is-running 明示覆寫（TD-1064）。`,
-  )
+  assertNoPublishInFlightShared(action, opts.targetRoot, opts.iKnowPublishIsRunning, detect)
 }
 
 async function cmdMergeBack(slug, opts: WtOptions = {}) {

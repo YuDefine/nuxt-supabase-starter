@@ -192,9 +192,9 @@ screenshots/local/
         └── change-old-2/
 ```
 
-- 歸檔由 `/review-archive` 與 `/spectra-archive` 完成時**自動觸發**（指定 change 模式，無需 user 介入）；獨立呼叫 `/screenshots-archive` 用於補救 pending sweep 或跨 change 一次掃乾淨
+- 歸檔由 `/review archive` 與 `/spectra-archive` 完成時**自動觸發**（指定 change 模式，無需 user 介入）；獨立呼叫 `/review screenshots` 用於補救 pending sweep 或跨 change 一次掃乾淨
 - 對齊條件：未指定範圍模式（Mode A）只 sweep `docs/manual-review-archive.md` 已收錄的 change，避免誤搬 pending；指定 change 模式（Mode B）信任 caller，但找不到對應 topic 時會 prompt user 列候選
-- `--no-sweep` 例外旗標：user 在觸發 `/review-archive` 或 `/spectra-archive` 時若明確說「不要 sweep 截圖」，自動 sweep 步驟跳過（仍可事後手動跑 `/screenshots-archive`）
+- `--no-sweep` 例外旗標：user 在觸發 `/review archive` 或 `/spectra-archive` 時若明確說「不要 sweep 截圖」，自動 sweep 步驟跳過（仍可事後手動跑 `/review screenshots`）
 - 目的：`ls screenshots/<env>/`（排除 `_archive/`）= 目前 pending review 清單
 
 ## 沉澱規則

@@ -1,3 +1,4 @@
+{"file":"agent-routing.agent-boundary.md","source":"rules/core/agent-routing.agent-boundary.md","paths":["HANDOFF.md","tasks/**","specs/**",".clade/**"]}
 {"file":"agent-routing.dispatch-execution.md","source":"rules/core/agent-routing.dispatch-execution.md","paths":["rules/core/agent-routing.md",".claude/rules/agent-routing.md","vendor/scripts/pi-dispatch.ts","vendor/scripts/pi-routing-policy.ts","vendor/scripts/pi-routing-gate.ts",".claude/agents/**"]}
 {"file":"agent-routing.keepalive-wake.md","source":"rules/core/agent-routing.keepalive-wake.md","paths":[".clade/work-loop/**"]}
 {"file":"agent-routing.md","source":"rules/core/agent-routing.md","paths":null}
@@ -36,6 +37,7 @@
 {"file":"runtime/worktree-default.troubleshooting.md","source":"adapters/claude/instructions/rules/core/worktree-default.troubleshooting.md","paths":["openspec/changes/**","vendor/scripts/wt-helper.ts","vendor/scripts/stash-reconcile.ts","vendor/scripts/review-gui.ts","scripts/wt-helper.ts","scripts/review-gui.ts"]}
 {"file":"scope-discipline.md","source":"rules/core/scope-discipline.md","paths":["tasks/**","specs/**","ROADMAP.md","docs/tech-debt.md","docs/decisions/**","HANDOFF.md"]}
 {"file":"session-claims.md","source":"rules/core/session-claims.md","paths":[".clade/claims/**","HANDOFF.md","plugins/hub-core/hooks/pre-bash-ownership-stamp.sh","scripts/claim-helper.ts","vendor/scripts/claim-helper.ts","vendor/scripts/ownership-journal.ts","vendor/scripts/flow/who.ts",".clade/ownership/**","plugins/hub-core/hooks/post-tool-ownership-journal.sh","plugins/hub-core/hooks/pre-edit-claim-conflict.sh"]}
+{"file":"session-tasks.concurrent-writers.md","source":"rules/core/session-tasks.concurrent-writers.md","paths":["tasks/**","HANDOFF.md","ROADMAP.md","docs/tech-debt.md","docs/pitfalls/**",".clade/claims/**",".clade/flow/**"]}
 {"file":"session-tasks.context-budget.md","source":"rules/core/session-tasks.context-budget.md","paths":["tasks/**","HANDOFF.md",".clade/work-loop/**"]}
 {"file":"session-tasks.md","source":"rules/core/session-tasks.md","paths":null}
 {"file":"session-tasks.operations.md","source":"rules/core/session-tasks.operations.md","paths":["tasks/**","HANDOFF.md"]}

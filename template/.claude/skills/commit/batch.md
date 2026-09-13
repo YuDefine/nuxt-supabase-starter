@@ -61,6 +61,8 @@ PR 制不直推 main：正式批次 commits 依原有 PR／ship 流程送審，P
 
 ## 4. 完成報告前的回收
 
+`/handoff park` / `/handoff next` 的 lifecycle drain 只會把已滿足 landing authorization、writer release 與 evidence 的工作送到這裡；handoff 不自行拼 merge。`trigger=drained` 代表本輪已授權工作都完成或明確受阻，仍須依本節完整跑 prepare → review → seal → land。
+
 ```bash
 node scripts/wt-helper.ts batch cleanup
 ```
