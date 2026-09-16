@@ -57,6 +57,7 @@ C 軸刻意留在外面：升遠端 staging / prod 的 runtime 是 consumer 的 
 | 給純 pkg name（「升 @nuxt/ui」、「無腦升 X」） | clade home | **Fleet + Discovery** | § Fleet · Step F.1 |
 | 給 package manager / runtime 本身（「升 pnpm」、「fleet packageManager 統一」、「Node 版本統一」） | clade home | **Fleet · Toolchain** | § Fleet · Step F.1，**再讀 fleet-mode.md § Toolchain sweep 分支** |
 | `/version-upgrade skills`，或提到 **skill** 上游 / 落後 / 新增（「supabase skill 上游更新了我們有跟嗎」「掃一下 skill 有沒有落後」） | clade home | **Skills** | § Skills · Step S.1 |
+| 提到 **submodule-tracked 上游**（「SpecFormula / aixbdd 上游動了」「specformula pin 落後」「audit-upstream-submodules 報落後」「fork 的 patch」「vendor/specformula」） | clade home | **Skills · submodule** | § Skills · Step S.1 的 submodule 段 → `docs/dev-guide.md` § 6.5 |
 | `/version-upgrade machine`，或提到**本機裝的東西**落後（「supabase cli 該升了嗎」「rtk / codebase-memory-mcp 有新版嗎」「mise 那堆工具掃一下」「全域 npm / claude-code 自己的版本」） | 任意（本機唯一） | **Machine** | § Machine · Step M.1 |
 | 無參數但 cwd = clade home | — | STOP + 問意圖 | 見下方 § Disambiguation |
 

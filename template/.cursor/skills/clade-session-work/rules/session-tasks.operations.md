@@ -497,7 +497,7 @@ coordinator 身分轉移，以及寫出讓 successor 回收本 pane 的 predeces
 | --- | --- | --- |
 | `verified` | child 自己的 transcript 答出的 model 滿足 `requested_model` | 照常用這個 pane |
 | `mismatch` | transcript 答的是**另一個** model | 這是 `transport_error`（exit 16），**NEVER** 讀成可續用。pane 刻意保留（它正在跑某個東西，關掉就毀掉唯一證據）——先讀 `observed_model` 判它實際跑什麼，再決定重派或回收 |
-| `unverified` | **沒有做比對**，理由在 `model_verification_reason` | 缺證據不等於不符：`transcript-timeout` 代表沒等到第一輪回答，gateway launcher（`ccg` / `ccagy` / `ccx`）代表它的 alias 由 gateway 展開、clade 無權當比對基準。兩者都 **NEVER** 當成「已核實」，也 **NEVER** 當成「不符」 |
+| `unverified` | **沒有做比對**，理由在 `model_verification_reason` | 缺證據不等於不符：`transcript-timeout` 代表沒等到第一輪回答，gateway launcher（`ccg` / `ccx`）代表它的 alias 由 gateway 展開、clade 無權當比對基準。兩者都 **NEVER** 當成「已核實」，也 **NEVER** 當成「不符」 |
 
 **`observed_model` 在三個值底下都會寫。** gateway 那格尤其重要：`--model opus` 到 proxy 會變成
 `ccg-opus`、回來是 `grok-4.6-build`，在此之前 record 上完全沒有「實際跑了什麼」的載體。

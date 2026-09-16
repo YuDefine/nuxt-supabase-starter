@@ -1,9 +1,9 @@
 {
   "id": "specformula",
   "upstreamRepo": "SpecFormula/specformula-dev-framework",
-  "sha": "e5568250a2c0599983bce90fb08d548da35e1d64",
-  "upstreamSha": "e5568250a2c0599983bce90fb08d548da35e1d64",
-  "syncedAt": "2026-09-10T03:10:22.060Z",
+  "sha": "6234c444175969e7145cd41ff19f2ce0be01474f",
+  "upstreamSha": "fd51daded1571e328c573398b732d6ccb598b07a",
+  "syncedAt": "2026-09-16T08:22:15.174Z",
   "packages": [
     "core",
     "node",
