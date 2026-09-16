@@ -1103,14 +1103,37 @@ export function reconcileCopiedProjectionState(wtPath: string, consumerRoot?: st
   return { updated }
 }
 
-export function bootstrapWorktreeRuntime(
+/**
+ * Copy the gitignored clade substrate (`.agents`, `.clade/runtime`, `.clade/projections`,
+ * `.codex`, then `.clade/rules`) from the main worktree into a linked worktree,
+ * and reconcile copied projection state to the worktree checkout.
+ *
+ * Shared by `wt-helper add` (fork time) and `sync-rules` write mode (a linked
+ * worktree that was created with plain `git worktree add` and therefore never
+ * got the substrate). Existing destinations are never overwritten.
+ */
+export function seedWorktreeCladeSubstrate(
   consumerRoot: string,
   wtPath: string,
-  { strict = false } = {},
+  { strict = false, log = console.log }: { strict?: boolean; log?: (line: string) => void } = {},
 ) {
-  const log = strict ? console.error : console.log
-  setupBriefExclude(wtPath)
-
+  // TD-1037: `.clade/runtime/`、`.clade/projections/`、`.clade/rules/` 與 `.codex/` 全部在
+  // consumer .gitignore 內，而 `git worktree` fork 只帶 tracked 檔案 —— 新 worktree 因此
+  // 結構上不可能有它們。三個獨立現場（<consumer-a> / <consumer-g> / <consumer-k>）證實後果
+  // 相同：`sync-rules` 在 `.clade/runtime/hooks.json` 以 ENOENT 失敗（訊息 "canonical runtime
+  // projection unavailable" 指不到根因），繞過它之後 `.clade/projections/*.json` 缺席又讓
+  // ownership 判定把每個既有檔判成本地竄改。
+  //
+  // 複製 gitignored substrate 是必要的（worktree 帶不走 ignore 檔）。**不能**假設拷過來的
+  // `.clade/projections` hash 仍對得上 worktree：main 可能有 dirty 的 tracked 投影輸出，
+  // worktree 卻 checkout 自 HEAD。拷完後 MUST reconcile，見 reconcileCopiedProjectionState。
+  // 逐 entry 判 gitignore（比照上方 `.clade/bin`）：非 ignored 的檔複製過去會變成使用者從沒寫過
+  // 的 untracked 檔，接著 merge-back / cleanup 的 uncommitted-files gate 就擋在那上面。
+  // Warn-only：consumer 沒有該目錄就跳過，per-dir try 讓一個目錄的失敗不吃掉其餘目錄。
+  // `.clade/rules` **MUST NOT** 在沒有 `.clade/projections` 的樹上出現，所以它不在這一組。
+  const copied: string[] = []
+  // 放在 substrate 之前：`.clade/projections/codex.rules.json` 擁有 `.agents/skills/clade-*`，
+  // 下方 reconcile 會丟掉 worktree 沒拿到的檔，`.agents` 缺席就讓 Codex delivery marker 失配。
   // `.agents/` 是 Codex 與 Pi 共用的 generated skill projection，但通常不進 git；
   // `git worktree add` 因此不會帶過去。clade Pi package 本身刻意 extensions-only，
   // 若這裡漏複製，新 worktree 會在無 collision 的同時也失去 project skills。
@@ -1120,12 +1143,95 @@ export function bootstrapWorktreeRuntime(
     const agentsDst = join(wtPath, '.agents')
     if (existsSync(agentsSrc) && !existsSync(agentsDst)) {
       cpSync(agentsSrc, agentsDst, { recursive: true })
+      copied.push('.agents')
       log('  agent-projection: copied .agents from main')
     }
   } catch (e) {
     if (strict) throw e
     console.error(`note: .agents projection copy skipped: ${e?.message ?? e}`)
   }
+
+  let copiedProjections = false
+  for (const rel of ['.clade/runtime', '.clade/projections', '.codex']) {
+    try {
+      const src = join(consumerRoot, rel)
+      const dst = join(wtPath, rel)
+      if (!existsSync(src) || existsSync(dst)) continue
+      if (spawnSync('git', ['check-ignore', '-q', rel], { cwd: consumerRoot }).status !== 0)
+        continue
+      cpSync(src, dst, { recursive: true })
+      if (rel === '.clade/projections') copiedProjections = true
+      copied.push(rel)
+      log(`  clade-substrate: copied ${rel} from main (gitignored, worktree cannot check it out)`)
+    } catch (e) {
+      if (strict) throw e
+      console.error(`note: ${rel} copy skipped: ${e?.message ?? e}`)
+    }
+  }
+
+  // `.clade/rules/` 單獨拉出來，因為它的前提是 `.clade/projections/` 在位，而上面那一組是
+  // 逐目錄 warn-only —— 任何一個目錄失敗都不影響其餘目錄。
+  //
+  // 「有 rules、無 state」是一個會**無聲覆寫 tracked 檔**的組合，不只是少一份資料：
+  // `runtime-rule-plan.ts` 把 `.clade/rules/<name>.md` 渲染到 `.claude/rules/local/<name>.md`
+  // ——與 legacy 檔**同一個路徑**。state 在位時，`owned[path] !== hash` 會把「兩邊內容不一致」
+  // 擋成 `local-source-migration-required`（`local-rule-migration.ts` 的 reviewed sha256 就是
+  // 為了這件事）。state 缺席時 `owned = {}`，那道 gate 失去判斷依據，而 <consumer-a> 實況證明兩邊
+  // 本來就不同（legacy hash `dd9eff…` ≠ canonical hash `c1c6de…`）。
+  //
+  // 所以：**projections 不在位就不要給 rules**。少一份 gitignored 資料的代價是那棵樹要自己
+  // 跑一次 write-mode sync-rules；給了而 gate 判不動的代價是 tracked 檔被無審核換掉。
+  try {
+    const src = join(consumerRoot, '.clade/rules')
+    const dst = join(wtPath, '.clade/rules')
+    if (existsSync(src) && !existsSync(dst)) {
+      if (
+        spawnSync('git', ['check-ignore', '-q', '.clade/rules'], { cwd: consumerRoot }).status === 0
+      ) {
+        if (existsSync(join(wtPath, '.clade/projections'))) {
+          cpSync(src, dst, { recursive: true })
+          copied.push('.clade/rules')
+          log(
+            '  clade-substrate: copied .clade/rules from main (gitignored, worktree cannot check it out)',
+          )
+        } else {
+          console.error(
+            'note: .clade/rules copy skipped — .clade/projections is absent, and canonical local rules without their ownership state would let the next projection overwrite tracked .claude/rules/local/** unreviewed',
+          )
+        }
+      }
+    }
+  } catch (e) {
+    if (strict) throw e
+    console.error(`note: .clade/rules copy skipped: ${e?.message ?? e}`)
+  }
+
+  // Rehash only after this invocation copied projection state. A later bootstrap that
+  // skips copy would otherwise stamp subsequent local edits as owned hashes and let
+  // SessionStart auto-repair overwrite them instead of leaving a local-conflict.
+  if (copiedProjections) {
+    try {
+      const reconciled = reconcileCopiedProjectionState(wtPath, consumerRoot)
+      if (reconciled.updated > 0) {
+        log(
+          `  clade-substrate: reconciled ${reconciled.updated} projection state file(s) to worktree disk`,
+        )
+      }
+    } catch (e) {
+      if (strict) throw e
+      console.error(`note: projection-state reconcile skipped: ${e?.message ?? e}`)
+    }
+  }
+  return { copied }
+}
+
+export function bootstrapWorktreeRuntime(
+  consumerRoot: string,
+  wtPath: string,
+  { strict = false } = {},
+) {
+  const log = strict ? console.error : console.log
+  setupBriefExclude(wtPath)
 
   // TD-321: `.clade/bin/` 整個在 consumer .gitignore 內，而 `git worktree` fork 只帶
   // tracked 檔案 —— 新 worktree 因此沒有 clade-gate，`pnpm test`（直接呼叫
@@ -1167,89 +1273,7 @@ export function bootstrapWorktreeRuntime(
     console.error(`note: .clade/bin copy skipped: ${e?.message ?? e}`)
   }
 
-  // TD-1037: `.clade/runtime/`、`.clade/projections/`、`.clade/rules/` 與 `.codex/` 全部在
-  // consumer .gitignore 內，而 `git worktree` fork 只帶 tracked 檔案 —— 新 worktree 因此
-  // 結構上不可能有它們。三個獨立現場（<consumer-a> / <consumer-g> / <consumer-k>）證實後果
-  // 相同：`sync-rules` 在 `.clade/runtime/hooks.json` 以 ENOENT 失敗（訊息 "canonical runtime
-  // projection unavailable" 指不到根因），繞過它之後 `.clade/projections/*.json` 缺席又讓
-  // ownership 判定把每個既有檔判成本地竄改。
-  //
-  // 複製 gitignored substrate 是必要的（worktree 帶不走 ignore 檔）。**不能**假設拷過來的
-  // `.clade/projections` hash 仍對得上 worktree：main 可能有 dirty 的 tracked 投影輸出，
-  // worktree 卻 checkout 自 HEAD。拷完後 MUST reconcile，見 reconcileCopiedProjectionState。
-  // 逐 entry 判 gitignore（比照上方 `.clade/bin`）：非 ignored 的檔複製過去會變成使用者從沒寫過
-  // 的 untracked 檔，接著 merge-back / cleanup 的 uncommitted-files gate 就擋在那上面。
-  // Warn-only：consumer 沒有該目錄就跳過，per-dir try 讓一個目錄的失敗不吃掉其餘目錄。
-  // `.clade/rules` **MUST NOT** 在沒有 `.clade/projections` 的樹上出現，所以它不在這一組。
-  let copiedProjections = false
-  for (const rel of ['.clade/runtime', '.clade/projections', '.codex']) {
-    try {
-      const src = join(consumerRoot, rel)
-      const dst = join(wtPath, rel)
-      if (!existsSync(src) || existsSync(dst)) continue
-      if (spawnSync('git', ['check-ignore', '-q', rel], { cwd: consumerRoot }).status !== 0)
-        continue
-      cpSync(src, dst, { recursive: true })
-      if (rel === '.clade/projections') copiedProjections = true
-      log(`  clade-substrate: copied ${rel} from main (gitignored, worktree cannot check it out)`)
-    } catch (e) {
-      if (strict) throw e
-      console.error(`note: ${rel} copy skipped: ${e?.message ?? e}`)
-    }
-  }
-
-  // `.clade/rules/` 單獨拉出來，因為它的前提是 `.clade/projections/` 在位，而上面那一組是
-  // 逐目錄 warn-only —— 任何一個目錄失敗都不影響其餘目錄。
-  //
-  // 「有 rules、無 state」是一個會**無聲覆寫 tracked 檔**的組合，不只是少一份資料：
-  // `runtime-rule-plan.ts` 把 `.clade/rules/<name>.md` 渲染到 `.claude/rules/local/<name>.md`
-  // ——與 legacy 檔**同一個路徑**。state 在位時，`owned[path] !== hash` 會把「兩邊內容不一致」
-  // 擋成 `local-source-migration-required`（`local-rule-migration.ts` 的 reviewed sha256 就是
-  // 為了這件事）。state 缺席時 `owned = {}`，那道 gate 失去判斷依據，而 <consumer-a> 實況證明兩邊
-  // 本來就不同（legacy hash `dd9eff…` ≠ canonical hash `c1c6de…`）。
-  //
-  // 所以：**projections 不在位就不要給 rules**。少一份 gitignored 資料的代價是那棵樹要自己
-  // 跑一次 write-mode sync-rules；給了而 gate 判不動的代價是 tracked 檔被無審核換掉。
-  try {
-    const src = join(consumerRoot, '.clade/rules')
-    const dst = join(wtPath, '.clade/rules')
-    if (existsSync(src) && !existsSync(dst)) {
-      if (
-        spawnSync('git', ['check-ignore', '-q', '.clade/rules'], { cwd: consumerRoot }).status === 0
-      ) {
-        if (existsSync(join(wtPath, '.clade/projections'))) {
-          cpSync(src, dst, { recursive: true })
-          log(
-            '  clade-substrate: copied .clade/rules from main (gitignored, worktree cannot check it out)',
-          )
-        } else {
-          console.error(
-            'note: .clade/rules copy skipped — .clade/projections is absent, and canonical local rules without their ownership state would let the next projection overwrite tracked .claude/rules/local/** unreviewed',
-          )
-        }
-      }
-    }
-  } catch (e) {
-    if (strict) throw e
-    console.error(`note: .clade/rules copy skipped: ${e?.message ?? e}`)
-  }
-
-  // Rehash only after this invocation copied projection state. A later bootstrap that
-  // skips copy would otherwise stamp subsequent local edits as owned hashes and let
-  // SessionStart auto-repair overwrite them instead of leaving a local-conflict.
-  if (copiedProjections) {
-    try {
-      const reconciled = reconcileCopiedProjectionState(wtPath, consumerRoot)
-      if (reconciled.updated > 0) {
-        log(
-          `  clade-substrate: reconciled ${reconciled.updated} projection state file(s) to worktree disk`,
-        )
-      }
-    } catch (e) {
-      if (strict) throw e
-      console.error(`note: projection-state reconcile skipped: ${e?.message ?? e}`)
-    }
-  }
+  seedWorktreeCladeSubstrate(consumerRoot, wtPath, { strict, log })
 
   // TD-614: link gitignored runtime files (consumers.local …) from main root.
   {
@@ -5576,6 +5600,12 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
 
   // squash 前的快照：失敗時分辨「squash 動過哪些路徑」與「本來就在 main 上的別人 WIP」。
   const statusBefore = git(['status', '--porcelain'], { cwd: consumerRoot })
+  const stagedBefore = new Set(
+    git(['diff', '--cached', '--name-only'], { cwd: consumerRoot })
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean),
+  )
   let squashError = null
   try {
     git(['merge', '--squash', branchName], { cwd: consumerRoot, stdio: 'inherit' })
@@ -5969,13 +5999,41 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   // step out loud. (2026-08-04: two clade-home sessions in one afternoon each
   // read "absorbed into main + worktree cleaned" as committed; the second only
   // caught it because a rule told it to grep HEAD for its own content.)
+  //
+  // 只列**這次 merge-back 放進 index 的**路徑。squash 前就 staged 的別 session 檔 NEVER 列進
+  // 「/commit 這些檔」的指示 —— 照做會用你的名義把別人寫到一半的東西提交（2026-09-16 fixture
+  // 實測：成功訊息把 main 上他人 staged 的 tasks 檔列在 `Run the full /commit workflow for` 裡）。
+  // 仍屬本 branch changeset 的路徑例外保留：它是你的內容，只是剛好先前也被 stage 過。
   let stagedPaths = []
+  let othersStaged = []
   try {
-    stagedPaths = git(['diff', '--cached', '--name-only'], { cwd: consumerRoot })
+    const changeset = new Set(
+      git(['diff', '--name-only', 'HEAD', branchName], { cwd: consumerRoot })
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean),
+    )
+    const allStaged = git(['diff', '--cached', '--name-only'], { cwd: consumerRoot })
       .split('\n')
       .map((line) => line.trim())
       .filter(Boolean)
+    for (const p of allStaged) {
+      if (stagedBefore.has(p) && !changeset.has(p)) othersStaged.push(p)
+      else stagedPaths.push(p)
+    }
   } catch {}
+  if (othersStaged.length > 0) {
+    console.log('')
+    console.log(
+      `note: main 上另有 ${othersStaged.length} 個 merge-back 之前就 staged 的路徑，不屬於本 branch —— ` +
+        `NEVER 一起 commit（/commit 只帶下方 Staged 清單的路徑，\`git commit --only -- <paths>\`）：\n` +
+        othersStaged
+          .slice(0, 5)
+          .map((p) => `    ${p}`)
+          .join('\n') +
+        (othersStaged.length > 5 ? `\n    … 另外 ${othersStaged.length - 5} 個` : ''),
+    )
+  }
   if (stagedPaths.length > 0) {
     const shown = stagedPaths
       .slice(0, 4)
