@@ -489,6 +489,23 @@ pnpm check
 pnpm test          # 或 vp test run / pnpm test:unit，依 consumer 設定
 ```
 
+**repo 宣告了 `test:affected` 時，0-C 跑的是它，不是 `pnpm test`**（2026-09-16，W-2026-09-16-test-suite-runtime-diet）：
+
+```bash
+node -e "const s=require('./package.json').scripts; process.exit(s['test:affected']?0:1)" \
+  && pnpm test:affected -- --base="$(git merge-base HEAD origin/main 2>/dev/null || git rev-parse HEAD~1)" \
+  || pnpm test
+```
+
+`test:affected` 是 repo 在 `package.json` **明文宣告**的 lane 入口：它從 diff（staged ＋ working tree ＋ base 以來的 range）反查
+「哪些測試引用了改到的檔」，改到共用設定（runner／CI／package.json）時自動升 full。這與下一段禁止的事**不同型**——
+下一段禁的是「用字串啟發式猜 `check` 有沒有含 test」，本段靠的是宣告，沒有宣告就照原樣跑 `pnpm test`。
+
+判讀 affected 輸出時看兩行：`Affected analysis: N changed files -> M tests selected` 與逐檔的 `:: <reason>`。
+出現 `unmapped-fallback` 代表有改動對不到任何測試而退回整個 fast lane——那不是錯，但通常是新檔還沒有測試在引用它。
+**純文件 diff（只改 `.md`）也照跑**：clade 有百餘支測試讀真實 `rules/ docs/ plugins/` 內容，lane 會把它們選出來；
+選出 0 支時 runner 印 `No affected tests found`，那才是「這次沒有測試該跑」的合法結論。
+
 **NEVER 先判斷 `pnpm check` 有沒有涵蓋 test 再決定跑不跑。** 本步驟原本用 `/test|vitest/.test(scripts.check)` 做這個判斷，比對的是整條 `&&` 串接命令的字串，於是任何**名字裡帶 `test`** 的 sibling script 都會誤觸——實測 <consumer-a> 的 `check:dual-test-config` / `check:e2e-paths` 與 <consumer-c> 的 `check:test-roots` 全部中招，三者都跟跑測試無關。誤觸 → 「必須額外跑」的條件不成立 → 補跑被跳過 → 0-C 在零測試覆蓋下判綠，且因為兩個分支都不 exit non-zero，判錯跟判對外觀完全一樣（<consumer-a> v0.103.0 實際踩到：兩條既有測試已紅，0-C 沒抓到）。
 
 `check` 真的已含 test 時這裡會重跑一次；**重跑的成本遠低於靜默不跑**，且沒有啟發式就沒有判錯的可能。對應 [[pitfall-check-includes-test-substring-false-positive]]、TD-311。

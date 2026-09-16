@@ -1,6 +1,6 @@
 # 🔒 LOCKED — managed by clade · Source: vendor/actions/supabase-check/action.yml · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/actions/supabase-check/action.yml
 name: 'Supabase Schema Check'
-description: 'Cold-replay the repo migrations on a throwaway local Postgres, then assert three things: the committed database types match what the migrations produce, supabase db lint is clean at the configured level, and (when supabase/tests/ exists) the pgTAP suite passes. A fourth, advisory-only step runs pgbot lint (schema profile) against the same throwaway DB and emits ::warning:: annotations; it never affects the exit code. Never touches a dev, staging or production database — it starts its own stack on the runner, which is also what makes it verify that the migration chain replays from zero. Assumes the caller has already checked out the repo and installed the Supabase CLI (supabase/setup-cli@v1).'
+description: 'Cold-replay the repo migrations on a throwaway local Postgres, then assert three things: the committed database types match what the migrations produce, supabase db lint is clean at the configured level, and (when supabase/tests/ exists) the pgTAP suite passes. A fourth, advisory-only step runs pgbot lint (schema profile) against the same throwaway DB and emits ::warning:: annotations; it never affects the exit code. Never touches a dev, staging or production database — it starts its own stack on the runner, which is also what makes it verify that the migration chain replays from zero. Assumes the caller has already checked out the repo, installed Node.js (actions/setup-node) and installed the Supabase CLI (supabase/setup-cli@v1) pinned to the same version that generated the committed types.'
 author: 'YuDefine/clade'
 
 inputs:
@@ -59,6 +59,15 @@ runs:
         if ! command -v supabase >/dev/null 2>&1; then
           echo "::error::supabase CLI not found. Add a 'uses: supabase/setup-cli@v1' step before this action."
           echo "See vendor/snippets/supabase-ci/README.md for the full workflow template."
+          exit 1
+        fi
+
+        # types 路徑偵測、lint 輸出判讀、pgbot 結果解析都靠 node。缺了不能讓它靜默退化：
+        # 偵測失敗會變成「types drift 檢查跳過」的 warning，與「沒有 types 檔」長得一樣
+        # （<consumer-a> 2026-09-16 在 CT 102 實測）。
+        if ! command -v node >/dev/null 2>&1; then
+          echo "::error::node not found on PATH. Add a 'uses: actions/setup-node' step before this action."
+          echo "See vendor/snippets/supabase-ci/supabase-check.yml.template for the pinned step."
           exit 1
         fi
 
