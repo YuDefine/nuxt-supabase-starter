@@ -5574,6 +5574,8 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
     }
   }
 
+  // squash 前的快照：失敗時分辨「squash 動過哪些路徑」與「本來就在 main 上的別人 WIP」。
+  const statusBefore = git(['status', '--porcelain'], { cwd: consumerRoot })
   let squashError = null
   try {
     git(['merge', '--squash', branchName], { cwd: consumerRoot, stdio: 'inherit' })
@@ -5599,13 +5601,24 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
 
     // abort 對 squash merge 是 no-op（見 resetSquashResidue）—— 殘骸要自己收，
     // 否則 UU 會留在共用的 main 上，重跑也只是在殘骸上再撞一次同一組衝突。
+    // 只收 squash **改變過**的 index 列。squash 之前就 staged 的路徑（別 session 的 WIP）
+    // porcelain 列前後一字不差，NEVER 收進來 —— resetSquashResidue 對 HEAD 沒有的檔是
+    // rmSync，2026-09-16 fixture 實測：別人 staged 的新檔在 squash 被拒後被直接刪掉。
+    const linesBefore = new Set(statusBefore.split('\n'))
     const squashTouched = statusAfter
       .split('\n')
       .filter((line) => line.trim().length > 0)
       .filter((line) => line[0] !== ' ' && line[0] !== '?')
+      .filter((line) => !linesBefore.has(line))
       .map((line) => line.slice(3).trim())
       .filter(Boolean)
     resetSquashResidue(consumerRoot, squashTouched)
+
+    // git 在寫入任何東西之前就拒絕了（`Entry … not uptodate` / `would be overwritten` /
+    // `stash failed`）：沒有衝突、樹前後完全相同。成因是 main 當下的 index／working tree，
+    // 不是 branch 內容 —— absorbed 量測與 `--accept-landed` 在這裡都答錯問題，
+    // 後者還會誘導人丟掉真的未落地內容。
+    const squashRefused = conflicted.length === 0 && statusAfter === statusBefore
 
     // Pop stash and re-check — git stash pop can leave UU in index when stash
     // content conflicts with the post-abort working tree. Previously this was
@@ -5656,6 +5669,32 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
     // 使用者不必按 `cleanup --force --force-discard-unland`（那個旗標的語義是「丟棄
     // 未落地工作」，與此處的事實相反）。
     // stash pop 若自己也留下 UU，就算 absorbed 也不能往下走 —— 那是獨立的破壞訊號。
+    if (squashRefused) {
+      const preexisting = statusBefore
+        .split('\n')
+        .filter((line) => line.trim().length > 0 && !line.startsWith('??'))
+      throw new Error(
+        `merge-back: git 拒絕執行 squash，main 沒有被改動 —— 成因是 main 當下的 index／working tree，` +
+          `不是這條 branch 的內容（${squashError?.message ?? squashError}）。\n` +
+          `上方 git 的原始訊息指出是哪個路徑（常見：別 session staged 的檔 stat 過期 → ` +
+          `\`not uptodate\` / \`would be overwritten\` / \`stash failed\`）。\n` +
+          (preexisting.length > 0
+            ? `squash 前 main 上已有 ${preexisting.length} 個 tracked 變動（不屬於本 branch，未被動過）：\n` +
+              preexisting
+                .slice(0, 10)
+                .map((l) => `  ${l}`)
+                .join('\n') +
+              (preexisting.length > 10 ? `\n  … 另外 ${preexisting.length - 10} 個` : '') +
+              '\n'
+            : '') +
+          popDetail.replace(/^\n+/, '') +
+          `\n出路：讓那些路徑的擁有者 commit 或 unstage 後，原樣重跑 \`wt-helper merge-back ${cleanSlug}\`。\n` +
+          `NEVER 自己 unstage／reset 別人的 staged 檔；NEVER 用 --accept-landed —— branch 內容**沒有**落進 main。\n` +
+          `Worktree '${target.path}' + branch '${branchName}' preserved。`,
+        { cause: squashError },
+      )
+    }
+
     const absorbCheck =
       popUnmerged.length === 0 && !popExitError
         ? detectAbsorbedByOtherPath(consumerRoot, branchName)
