@@ -693,7 +693,7 @@ attended mode 且真的選不出來 → 依 Step 0 Iron Law **MUST `AskUserQuest
 
 ## Step 6 — Fingerprint 與停止判定
 
-停止判定前 MUST 跑 `wt-helper batch status` 並依 commit skill `batch.md` 處置：沒有可推進開發時以 `drained` 結批，使用者明示結束本輪用 `stop`；就緒池尚未滿 4 件也可提交。單純換 session 保留池交接。已落地待清理只重試 cleanup；`WORK_LOOP_RUNNER_CHILD` 的 publish／propagate 禁令照常生效。
+停止判定前 MUST 跑 `wt-helper batch status --workflow <workflow_model>` 並依 commit skill `batch.md` 處置：沒有可推進開發時以 `drained` 結批，使用者明示結束本輪用 `stop`；就緒池尚未滿 4 件也可提交。單純換 session 保留池交接。已落地待清理只重試 cleanup；`WORK_LOOP_RUNNER_CHILD` 的 publish／propagate 禁令照常生效。
 
 ### 6.1 算 fingerprint
 

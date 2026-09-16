@@ -292,7 +292,7 @@ Ready / blocked worktrees: <counts from batch status>; report each retained path
 
 The `[pi]` / `[claude]` / `[pi:analyze]` / `[pi:debug]` tag indicates which executor was used. This helps the user understand the execution path and cost profile.
 
-**Batch handover**: after harvesting verified checkpoints (`batch checkpoint`, no full AI ceremony), register readiness (`batch ready`) and run `wt-helper batch status --trigger auto --workflow <workflow_model>`. PR workflow prepares one independently acceptable purpose as its own PR; trunk-based still waits for 4 distinct work ids. User `/commit` or merge back has no minimum; dependency/drained/stop can flush early. Archive runs its gates and bookkeeping in the source tree before readiness. Cleanup belongs to the final commit workflow after verified landing.
+**Batch handover**: after harvesting verified checkpoints (`batch checkpoint`, no full AI ceremony), register readiness (`batch ready`) and run `wt-helper batch status --trigger auto --workflow <已解析 workflow_model>`。**NEVER** 省略 `--workflow`。PR workflow prepares one independently acceptable purpose as its own **ready** PR; trunk-based still waits for 4 distinct work ids. A draft PR is optional and only when [[github-flow]] 三條 draft predicate 全中；coordinator 依該檔發佈順序建立遠端 draft，再 `batch draft`。Worker **NEVER** `git push`、開 PR 或 merge。討論期唯一合法 push 是 coordinator 對**該** session branch 的首次 `git push -u`。seal 之後若要沿用同一張 PR，coordinator 才把 formal HEAD 交到既有 head ref（見 [[github-flow]]）。User `/commit` or merge back has no minimum; dependency/drained/stop can flush early. Archive runs its gates and bookkeeping in the source tree before readiness. Cleanup belongs to the final commit workflow after verified landing.
 
 Form 1 work uses the same queue; the coordinator handles authorized landing without asking the user to type commands.
 
@@ -333,12 +333,15 @@ The coordinator's next actions:
 2. Verify scope, evidence and writer handover; register all authorized ready sources via `wt-helper batch ready`.
 3. Evaluate the batch trigger and invoke `/commit` when due; preserve the queue across session handover.
 
-`/wt` does NOT:
+`/wt` **worker** does NOT:
 
 - Squash to main.
 - Cleanup worktrees.
 - Commit on main.
-- Push anywhere.
+- `git push` anywhere.
+- Open or merge any PR, including draft.
+
+Coordinator push 只發生在 [[github-flow]] 已列明的兩段：討論期首次推 session branch、seal 後把 formal HEAD 交到既有 PR head。這兩段都不是 `/wt` worker 的權限。
 
 These are owned by the batch commit coordinator after review and verified landing.
 
@@ -383,7 +386,7 @@ node scripts/wt-helper.ts cleanup <slug> --force --force-discard-unland  # disca
 node scripts/stash-reconcile.ts                             # plan recovery for wt-merge-block/* stashes
 ```
 
-Use `node scripts/wt-helper.ts batch status --trigger manual` and commit skill `batch.md` for requested merge back. The coordinator runs the full batch commit and cleanup; archive prepares its source first.
+Use `node scripts/wt-helper.ts batch status --trigger manual --workflow <workflow_model>` and commit skill `batch.md` for requested merge back. The coordinator runs the full batch commit and cleanup; archive prepares its source first.
 
 `cleanup --force --force-discard-unland` is for discarding unwanted worktrees (subagent fail, abandoned exploration). It permanently loses the branch's commits; use `merge-back` first to preserve the work.
 

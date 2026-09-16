@@ -7,30 +7,6 @@ export type ProcessProbe = () => string[]
 
 const SCRIPT_ARG = /(?:^|\/)scripts\/(?:publish|propagate)\.ts$/
 
-/**
- * 呼叫者自己的祖先 pid（含自身）。讀的是 `/proc/<pid>/stat` 的 ppid —— 行程樹的結構事實，
- * NEVER 是 cmdline 長什麼樣子。讀不到（非 Linux、/proc 不可讀）就停在那裡：集合變小，
- * 排除得少，方向是 fail closed。
- */
-export function ancestorPids(start = process.pid): Set<number> {
-  const seen = new Set<number>()
-  let pid = start
-  while (pid > 1 && !seen.has(pid)) {
-    seen.add(pid)
-    let stat: string
-    try {
-      stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
-    } catch {
-      break
-    }
-    // comm 可含空白與括號，ppid 一律從最後一個 ')' 之後取。
-    const ppid = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1])
-    if (!Number.isInteger(ppid)) break
-    pid = ppid
-  }
-  return seen
-}
-
 /** 這個行程是不是把 publish/propagate 腳本當成**獨立的 argv 元素**在執行。讀不到 → true。 */
 function runsPublishScript(pid: number): boolean {
   try {
@@ -43,19 +19,24 @@ function runsPublishScript(pid: number): boolean {
 }
 
 /**
- * Return publish/propagate processes without filtering on executable shape.
+ * Return publish/propagate processes: pgrep hits whose argv runs the script itself.
  *
- * 唯一的排除是**呼叫者自己的祖先鏈**：`zsh -c '…; git status -- scripts/propagate.ts'`、
- * `run-evidence.ts -- /bin/bash -c '…'` 這類 wrapper 的 cmdline 只是字串裡**提到**該路徑，
- * 而它們是這次呼叫的祖先 —— 它們若真在跑 publish，publish 本體會是另一個（非祖先）行程，
- * 照樣被看到（2026-09-16 實測：merge-back 被自己的三層 shell 祖先擋下，實際在飛 = 0）。
+ * 識別的是**被執行的腳本**，不是 launcher 長相：不論 mise 絕對路徑 node、`process.execPath`、
+ * `--experimental-strip-types`、tsx、`timeout`／`env` 前綴，執行 `scripts/publish.ts` 時該路徑
+ * 必定是獨立的 argv 元素。所以這不是 `^[0-9]+ node ` 那型「拿 launcher 長相過濾」——那型的
+ * 正例過不了，本判準的正例恆過；cmdline 讀不到一律保留（fail closed）。
  *
- * 祖先本身**就是** publish/propagate（argv 有一個元素是腳本路徑，例如 publish.ts 自己
- * spawn 了寫 main 的指令）時 NEVER 排除 —— 那正是 TD-1064 要擋的「你自己那一趟」。
- * 這道 argv 檢查只會把行程**留下**，不會多放行任何一個非祖先行程，所以它不是
- * 「pgrep 後接 cmdline 長相過濾」那型（那型的失敗方向是靜默放行）。
+ * 被濾掉的只有「路徑嵌在更大 argv 元素的字串裡」：`zsh -c '…; git status -- scripts/propagate.ts'`、
+ * heredoc `cat`、`herdr agent prompt '<訊息提到 node scripts/publish.ts>'`。它們若真的在跑
+ * publish，publish 本體是另一個有 argv 元素的行程，照樣被看到。
+ * 實測兩次：2026-09-16 merge-back 被自己的三層 shell 祖先擋下（實際在飛 = 0）；2026-09-17 真
+ * publish 期間，一個 cwd=$HOME、只在訊息字串裡提到路徑的 herdr prompt 讓 `~/.tmp`／`~/.cache`
+ * 底下所有 wt-helper／wt-batch fixture 被判在飛（重現：該形狀常駐時 3 檔紅、70 次拒跑）。
+ *
+ * 已知差集：`node -e "import('./scripts/publish.ts')"` pgrep 命中而本判準不留（repo 內無此呼叫）。
+ * 殘餘誤報：`tail -f`／`vim`／`git log --` 把路徑當獨立引數的常駐行程，方向是 fail closed。
  */
-export function detectPublishInFlight(ancestors: Set<number> = ancestorPids()): string[] {
+export function detectPublishInFlight(): string[] {
   const result = spawnSync('pgrep', ['-af', 'scripts/(publish|propagate)\\.ts'], {
     encoding: 'utf8',
   })
@@ -65,10 +46,7 @@ export function detectPublishInFlight(ancestors: Set<number> = ancestorPids()): 
   return result.stdout
     .split('\n')
     .filter((line) => line.trim())
-    .filter((line) => {
-      const pid = Number(line.trim().split(/\s+/)[0])
-      return !ancestors.has(pid) || runsPublishScript(pid)
-    })
+    .filter((line) => runsPublishScript(Number(line.trim().split(/\s+/)[0])))
 }
 
 /** Narrow process matches to processes which can read the requested tree. */
@@ -88,6 +66,7 @@ export function inFlightHoldersFor(
   }
 
   const held: string[] = []
+  const unreadable: { pid: string; line: string }[] = []
   for (const line of lines) {
     const pid = line.trim().split(/\s+/)[0]
     if (!/^\d+$/.test(pid)) {
@@ -98,11 +77,23 @@ export function inFlightHoldersFor(
     try {
       cwd = realpathSync(`/proc/${pid}/cwd`)
     } catch {
-      held.push(line)
+      unreadable.push({ pid, line })
       continue
     }
     if (cwd === target || cwd.startsWith(`${target}/`) || target.startsWith(`${cwd}/`))
       held.push(line)
+  }
+  // cwd 讀不到 → 再問同一個 detector 一次，仍被列出才 fail closed。已退出的行程在兩次探測之間
+  // 消失：pgrep 不再列出 zombie／正在退出者（cmdline 已清空），已回收者更不會出現。
+  // 判準仍是 detector 本身，NEVER 改讀 /proc 狀態自行宣告「行程已死」—— 那會讓注入的 probe
+  // 與真實 pgrep 走兩套語義。
+  //
+  // 2026-09-16 CI（run 35145389949, test-lanes 2/4）：同 shard `publish-lock-exit-code.test.ts`
+  // 的 `publish.ts --wait 2` 在 pgrep 與讀 cwd 之間退出，`wt-batch.test.ts` 的 cleanup 因此被擋。
+  // 本機探測：讀 cwd 失敗的每一筆都是 state Z／R 且 cmdline 長度 0。
+  if (unreadable.length > 0) {
+    const still = new Set(detect().map((line) => line.trim().split(/\s+/)[0]))
+    for (const { pid, line } of unreadable) if (still.has(pid)) held.push(line)
   }
   return held
 }

@@ -15,6 +15,25 @@ node scripts/wt-helper.ts batch status --trigger auto --workflow <workflow_model
 
 `batch ready` 才是 PR ready／品質入口。證據放來源外可持久讀取的檔；紀錄實跑命令、結果、受測 HEAD。`--authorize-landing` 表示既有工作授權允許正式落地及安全回收，不是由 flag 創造授權。需保留來源時加 `--retain <owner 與下一個落地事件>`。
 
+### Draft PR（不是 ready）
+
+已有可討論的獨立 diff，且具名討論者須回答會影響後續實作的具體問題時，可於實作完成前建立 draft PR。三條全中才開；缺一停在 checkpoint。來源還必須乾淨。遠端物件由 coordinator 建立；`batch draft` 只在遠端 draft 已存在後記 receipt。
+
+順序不可調換（全文在 [[github-flow]]）：本機 predicate → 查既有 PR → 只 push session branch → `gh pr create --draft` → 核對 `isDraft` → `batch draft`。
+
+```bash
+gh pr view <session-branch> --json number,isDraft,headRefName
+git push -u origin <session-branch>
+gh pr create --draft --base main --head <session-branch> --title '<討論題>' --body '<具名討論者必須回答的具體問題>'
+gh pr view <session-branch> --json number,isDraft,headRefName
+node scripts/wt-helper.ts batch draft <source-path> \
+  --work-id <work-id> --pr <number> --discussant '<具名討論者>' --question '<會改變剩餘實作的具體問題>'
+```
+
+`batch draft` 只寫 receipt。**NEVER** 把該來源放進 ready 池、**NEVER** 當 `prepare` 成員、**NEVER** 啟動完整品質鏈、**NEVER** 授予 worker push／merge。空 branch、只有 WIP、或缺具體問題 → helper 拒絕。Draft 或 PR 開啟都不是可刪來源。
+
+seal 之後同一 `workId` MUST 把受審 formal HEAD 交到**既有** draft 的 head ref，再標 ready。**NEVER** 開第二張 PR。轉換失敗就停。PR ready 仍走上面的 `batch ready`。
+
 | 事件 | trigger | 行為 |
 | --- | --- | --- |
 | 就緒／收割／session 接手 | `auto` | `pr-merge-based`：1 個 distinct work id 即準備獨立 PR；`trunk-based`：4 個才啟動。未達門檻繼續開發、不佔 commit lock。ready backlog 達 3 件時優先交付，active implementation 預設最多 3 件 |
@@ -31,7 +50,7 @@ Status 沒有就緒 wt，也沒有待續跑批次時，回普通 `/commit`。所
 node scripts/wt-helper.ts batch prepare --trigger <trigger> --workflow <workflow_model>
 ```
 
-Workflow 值來自 consumer registry：`trunk-based` 或 `pr-merge-based`；查不到用 PR 制。Trunk prepare 固定所有當下就緒成員。PR prepare 預設只收**一個** work id（一個獨立可接受目的對應一個 PR）；緊密相依合批必須顯式 `--group-work-ids <id>,<id>`，**NEVER** 把不相干的就緒來源默默塞進同一張 PR。來源 checkpoints 及整合中繼成果皆保留，main 不接收待審內容。另一位 coordinator 撞 active batch 時接續該批，**NEVER** 另開一批與它競爭。
+`status` 與 `prepare` MUST 用**同一個**已解析 `workflow_model`。registry 裡已宣告的 consumer 用它的值；解析失敗 **NEVER** 默默改成 `pr-merge-based`。clade home 不是 registry consumer，試跑才准顯式 `--workflow pr-merge-based`。Trunk prepare 固定所有當下就緒成員。PR prepare 預設只收**一個** work id（一個獨立可接受目的對應一個 PR）；緊密相依合批必須顯式 `--group-work-ids <id>,<id>`，**NEVER** 把不相干的就緒來源默默塞進同一張 PR。來源 checkpoints 及整合中繼成果皆保留，main 不接收待審內容。另一位 coordinator 撞 active batch 時接續該批，**NEVER** 另開一批與它競爭。
 
 衝突只在隔離區解，解完精確 stage 衝突檔後跑 `batch resume`；不删來源、不把未解衝突藏成就緒。中斷後先讀 `batch status`，依持久狀態續跑。main 前移用 `batch refresh` 對齊新基準並重新驗受影響範圍；來源變動則 `batch cancel --reason <原因>` 保存既有工作，重驗來源、重登記再 prepare。
 

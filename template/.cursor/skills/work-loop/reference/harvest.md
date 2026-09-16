@@ -23,7 +23,7 @@
 | plan package 需求 | 原實作 wt 的驗收 gate 完成並 checkpoint 後 | 登記就緒；達批次條件才 invoke 一次 `/commit` |
 | 非 plan / Form-1 | harvest 驗收後 | 登記就緒；達批次條件才 invoke 一次 `/commit` |
 
-每次收割與 session 接手跑 `wt-helper batch status --trigger auto`：4 件 distinct work id 自動提交；不足時繼續開發。手動 `/commit`／merge back 無最低件數，dependency／drained／stop 提前結批。單純交接不結批。批次在隔離整合區審查，落地後由 commit skill cleanup，**NEVER** 收一個 wt 就重跑一遍完整 `/commit`。
+每次收割與 session 接手跑 `wt-helper batch status --trigger auto --workflow <workflow_model>`：4 件 distinct work id 自動提交；不足時繼續開發。手動 `/commit`／merge back 無最低件數，dependency／drained／stop 提前結批。單純交接不結批。批次在隔離整合區審查，落地後由 commit skill cleanup，**NEVER** 收一個 wt 就重跑一遍完整 `/commit`。
 
 **NEVER** 用 `git commit --only` 把 source / migration / plugin 送上 main。`--only` 只給 [[commit.detail]] 白名單。卡 `/commit` 人工檢查 → packaging，**NEVER** `--only` 繞 0-A。
 

@@ -27,7 +27,7 @@ The commit, stash, landing, and cleanup predicates below are common Git/worktree
 ### 就緒與觸發契約
 
 1. 主線收割 terminal outcome、驗 scope／必要驗收並確認寫入權已交接，再用 `wt-helper batch ready` 登記來源 HEAD、work id、證據及落地授權。只有已明確就緒且允許落地的 wt 進池，**NEVER** 從「git status 乾淨」推定已驗收。
-2. 每次就緒、收割、停止開發或 session 接手，跑 `wt-helper batch status --trigger auto --workflow <workflow_model>`。`pr-merge-based` 自動門檻為 1 個 distinct work id（一獨立可接受目的一個 PR）；`trunk-based` 仍為 4 個。同任務多個 wt 不重複計數；未達門檻繼續開發，不佔 commit lock。ready backlog 達 3 件時優先交付。
+2. 每次就緒、收割、停止開發或 session 接手，跑 `wt-helper batch status --trigger auto --workflow <已解析 workflow_model>`。**NEVER** 省略 `--workflow` 讓 CLI 默認 PR 制。`pr-merge-based` 自動門檻為 1 個 distinct work id（一獨立可接受目的一個 PR）；`trunk-based` 仍為 4 個。同任務多個 wt 不重複計數；未達門檻繼續開發，不佔 commit lock。ready backlog 達 3 件時優先交付。
 3. 使用者要求 `/commit` 或 merge back → `manual`，**無最低件數**。下游必須先落地 → `dependency`；已授權開發都完成或受阻 → `drained`；使用者結束本輪 → `stop`。三者皆可提前結批。單純 session handoff 保留佇列。
 4. 觸發後主線進 `/commit`，在隔離整合區合併。`trunk-based` 固定同 repo 當下所有已就緒且允許落地的成員；`pr-merge-based` 預設只收一個 work id，緊密相依合批必須顯式 `--group-work-ids`。**NEVER** 要使用者代打已命中條件的 `/commit`。
 5. 整批跑完整 simplify、review、checks 與適用人工 gate，依功能建立多筆正式 commit。批次開始後的新成員進下一批；未就緒任務不阻擋手動提交。
@@ -50,7 +50,7 @@ Ad-hoc Form-1、`/version-upgrade` 等 skill-owned wt 同樣在完成點登記�
 | `absorbed into main` | 舊 merge-back 可能只寫 index；須有正式 commit 與落地證據才可清理 |
 | 「兩條改的檔完全不重疊」 | 共享 index 仍有競態；同 repo 只有一批持有整合權 |
 
-Red flag：正在把「checkpoint 已 commit」「squash exit 0」當成可刪來源的證據時，改查正式落地紀錄。衝突或 gate 失敗保留來源；main／source 前移、審後修改使舊證據失效，不使用 force-discard 解決。
+Red flag：正在把「checkpoint 已 commit」「draft PR 已開」「squash exit 0」當成可刪來源的證據時，改查正式落地紀錄。Draft 不是 ready，也不啟動完整品質鏈。衝突或 gate 失敗保留來源；main／source 前移、審後修改使舊證據失效，不使用 force-discard 解決。
 
 ## §5.5 Legacy merge-back 與 stash 救援
 

@@ -105,4 +105,4 @@ Commit 完成！要繼續執行 /ship 推送並建立 PR 嗎？
 - 同意 → 執行 `/ship` skill
 - 拒絕或已在 main / master → 跳過
 
-**不觸發**：在 main / master 分支，或 consumer 沒有 `/ship` skill。
+**不觸發**：在 main / master 分支，或 consumer 沒有 `/ship` skill。本步處理的是 **ready** PR。該 `workId` 已有 draft 時，MUST 重用那一張（把 formal HEAD 交到既有 head ref），**NEVER** 再開一張。討論用 draft 走 `batch.md` § Draft PR，三條 predicate 全中才開，且 **NEVER** 把 draft 當成本步已完成的 ship。
