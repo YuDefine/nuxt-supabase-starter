@@ -175,6 +175,7 @@ gh api "/repos/<owner>/<repo>/actions/runs?status=queued" --jq '.workflow_runs[]
 | 主題 | 位置 |
 | --- | --- |
 | Push 後何時觸發監看、綠燈/紅燈後主線的處置政策（target decision surface / HANDOFF 登記） | 本 skill § Push 後政策：`git push` 成功且 repo 含 `.github/workflows/*.yml` 時 MUST 立刻派 watcher；`success` → 一行報 `v<version> CI 綠燈 — <runUrl>` 後結束；失敗類 → target decision surface 二選一 `[1] 立刻 root-cause + 修` / `[2] 登記 HANDOFF.md`（`- [ ] [<date>] v<version> CI <fail|timeout> — <job>` + Run URL + 根因猜測）；`UNAVAILABLE` → 一行報略過 |
+| CI / test workflow 必須自己取消過期 run | [[ci-workflow]] § CI / test workflow MUST cancel superseded runs on the same ref。本 script 在 cancelled 時改追 successor，那是監看補救，不能代替 workflow `concurrency` |
 | Script 本體 | skill-local `scripts/gh-ci-watch.sh`（由 resource declaration 投影至本 skill） |
 | 背景派工通用回報契約 | `rules/core/agent-routing.dispatch-execution.md` § Subagent 回報契約 |
 

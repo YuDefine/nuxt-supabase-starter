@@ -1,7 +1,7 @@
 # Commit CLI review runner safety
 
 
-本檔只描述 `codex-review-safe.sh` 及其 Pi runner 的能力與限制。任何能合法執行 CLI 的 runtime 均可使用；它不宣稱呼叫者的原生工具、模型資格或跨模型 gate 已達成。先依 [review-policy.md](review-policy.md) 判資格，再讀以下完整限制。
+本檔只描述 `codex-review-safe.sh` 及其 Pi runner 的能力與限制。任何能合法執行 CLI 的 runtime 均可使用；它不宣稱呼叫者的原生工具或模型資格已達成。先依 [review-policy.md](review-policy.md) 判資格（唯一合格 review 模型是 GPT-6 Astra via Pi，effort: medium），再讀以下完整限制。
 
 > codex-review-safe.sh 先凍結changeset，再呼叫Pi `openai-codex` review runner。Runner只允許`read,grep,find,ls`，沒有bash、write、edit或MCP；prompt injection無法取得mutation tool。這支script只review自家fleet diff，NEVER拿去review不可信第三方code。
 >

@@ -14,7 +14,9 @@ paths: ['specs/plans/**', 'specs/truth/**', '.agents/constitution/**']
 >
 > 執行框架的規約：[`specformula.md`](./specformula.md)
 
-**核心命題**：aixbdd 切的是**職責**，不是階段。PM 定義「什麼結果才算通過驗收」，RD 把那份驗收標準落地成可執行的系統。所以 `specs/plans/NNN-<slug>/` 是一次迭代的完整封裝（這次要改什麼），`specs/truth/**` 是系統當下的真相（現在長什麼樣）。兩者混在一起，就沒有任何地方回答得了「目前系統到底是什麼」。
+**核心命題**：aixbdd 切的是**職責**，不是階段。PM 定義「什麼結果才算通過驗收」，RD 把那份驗收標準落地成可執行的系統。所以 plan 是一次迭代的完整封裝（這次要改什麼），`specs/truth/**` 是系統當下的真相（現在長什麼樣）。兩者混在一起，就沒有任何地方回答得了「目前系統到底是什麼」。
+
+Clade home 用精簡保存：`specs/plans/<work-id>/plan.md` 結案後刪除，truth 持續維護，歷史走 git。這是 clade 適配，不宣稱上游 aixbdd 已如此設計。產品 SDD consumer 在遷移完成前仍可走下方九步與 `NNN-<slug>` package。契約見 `specs/truth/work-lifecycle.md`。
 
 ## 與 `specformula.md` 的分工
 
@@ -52,7 +54,7 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 
 ## MUST
 
-1. **每一次**新需求都 MUST 走 `/specify` 建**新的** `specs/plans/NNN-<slug>/`，`NNN` 取現有最大編號加一。修改或刪除既有行為也一樣——舊 plan package 是歷史，**NEVER** 回頭覆寫。不是只有「大功能」才開新 package。
+1. **每一次**需要持久接續的工作都 MUST 有且僅有一個 work id 與一份 plan。Clade home：`flow plan open` 建立 `specs/plans/<work-id>/plan.md`，同一工作續跑同一份，結案刪除。產品 SDD consumer 在遷移完成前才走 `/specify` 建 `NNN-<slug>/`。**NEVER** 為同一工作開第二份 plan。
 2. `specs/truth/**` 底下**每一個**檔案 MUST 只由它的 truth owner skill 寫：`techstack.md` 歸 `/technical-research`，`features/**` 與 `dsl.md` 歸 `/dsl-refine`。**每一個**其他入口（含 `/specify`、`/tasks`、`/implement`）都 MUST 把 truth 當唯讀。
 3. **每一個** plan package 的 `tasks.md` 在開始動工之前，MUST 先 `node vendor/scripts/flow/flow.ts open <slug> --origin tasks:specs/plans/NNN-<slug>/tasks.md` 並 `export CLADE_WORK_ID=<回傳的 id>`。plan package 就是 clade `flow` 的 work carrier——**NEVER** 為同一個 plan package 開第二張卡，也 **NEVER** 因為「只是先跑個測試」跳過（那正是 `unattributed` 的來源）。
 4. `/technical-research` 的三題必問（各端的 BDD techstack、測試策略、系統有哪些端）MUST 全部拍板才可寫 `research.md` 或 `techstack.md`。**「`spec.md` 的假設」與「範例檔的堆疊」都不算已回答**，只有使用者本輪原話、本輪 `/clarify` 的答案、或既有 `techstack.md` 已寫明且本輪沒改判才算。

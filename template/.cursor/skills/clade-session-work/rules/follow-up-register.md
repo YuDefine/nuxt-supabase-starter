@@ -1,5 +1,5 @@
 ---
-description: Follow-up Register 規則——tasks 檔的每一個未解決項目在發現的當下就在 docs/tech-debt.md 開一條 TD entry；register 結構、Status / Priority 語意、主動消化節奏
+description: Follow-up Register 規則——跨 session 接續開或續跑 plan；舊 TD 結構僅給未遷移 consumer；主動消化節奏
 paths: ['tasks/**', 'specs/plans/**', 'docs/tech-debt.md']
 ---
 <!-- Clade native rule; source: rules/core/follow-up-register.md; edit canonical source -->
@@ -7,7 +7,7 @@ paths: ['tasks/**', 'specs/plans/**', 'docs/tech-debt.md']
 
 # Follow-up Register
 
-**核心命題**：tasks 檔內的「DEFERRED / LOCAL BLOCKED / follow-up」註記活不過那個 session——tasks 檔本身是短期載體，工作收尾時會被刪或歸檔，註記跟著消失，結果是「寫了註記 = 沒寫」。本規則要求**發現的當下**就把它變成 `docs/tech-debt.md` 的一條 TD entry，那是唯一活得比 session 久的載體。
+**核心命題**：tasks 檔內的「DEFERRED / LOCAL BLOCKED / follow-up」註記活不過那個 session。需要跨 session 接續的項目 **MUST** 在寫下那行的同一次編輯內開或續跑 `specs/plans/<work-id>/plan.md`（`flow plan open`），**NEVER** 再往 `docs/tech-debt.md` 雙寫。舊 TD id 只經 `specs/truth/legacy-ids.json` 解析。
 
 此規則優先於個別 skill 說明與其他規則。
 
@@ -15,30 +15,27 @@ paths: ['tasks/**', 'specs/plans/**', 'docs/tech-debt.md']
 
 ## 直接登記（強制）
 
-tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local blocked、tech debt、operation note、跨工作 follow-up）時，**MUST 在寫下那行註記的同一次編輯內**在 `docs/tech-debt.md` 開一條 `TD-NNN` entry，再用 ID 回指：
+tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local blocked、tech debt、operation note、跨工作 follow-up）時，**MUST 在寫下那行註記的同一次編輯內**開或續跑同一份 plan：
 
-```markdown
-- [x] #7 切換 `guest_policy` ... 驗證立即生效。見 TD-004：繞過 API 直接改 DB 會造成 cache drift。
+```bash
+node vendor/scripts/flow/flow.ts plan open <slug> --title '<一句話>'
 ```
 
-**規則**：
+回指 `specs/plans/<work-id>/plan.md`（或 `plan:<work-id>`）。舊 `TD-NNN` 只經 `specs/truth/legacy-ids.json` 解析，**NEVER** 再往 `docs/tech-debt.md` 雙寫。
 
-- ID 格式 `TD-NNN` —— `TD-` 前綴 + 三位以上阿拉伯數字
-- ID 在主清單與既有 closed archive 合併後全 repo 唯一，不重編、不重用
-- **每一條**這樣的註記都要有自己的 TD ID，不是只有「看起來重要」的那幾條
-- 一條 task 可指多個 ID；HANDOFF 與一般文件同樣用 TD ID 指向唯一入口
+未遷移 consumer（沒有 `specs/truth/work-lifecycle.md`）仍用既有 `TD-NNN` register，直到 consumer 遷移完成。
 
 **禁止事項**：
 
-- **NEVER** 只寫自由文字（「LOCAL BLOCKED: ...」「DEFERRED: ...」「待後續處理」）而不開 TD entry
-- **NEVER** 把登記推到「收尾時一起補」——tasks 檔的生命週期比那個「收尾」短，逐字反開脫：「等這個 phase 做完再一起登記」
-- 舊的 `@followup[TD-NNN]` marker 語法已隨 spectra 生命週期退場（2026-09-07）。既有檔案裡的 marker **不必**改寫，讀到時當成 TD ID 引用即可
+- **NEVER** 只寫自由文字（「LOCAL BLOCKED: ...」「DEFERRED: ...」「待後續處理」）而不開 plan 或（未遷移 consumer）TD entry
+- **NEVER** 把登記推到「收尾時一起補」——tasks 檔的生命週期比那個「收尾」短
+- 舊的 `@followup[TD-NNN]` marker 語法已隨 spectra 生命週期退場（2026-09-07）。既有檔案裡的 marker **不必**改寫，讀到時當成舊 id 引用即可
 
 ---
 
-## Register 結構：`docs/tech-debt.md`
+## Register 結構（未遷移 consumer）
 
-每個有效欠帳在主 register 保留一條入口；已結案 ID 由既有 `docs/archives/tech-debt-closed-*.md` 的精簡憑證承載。
+每個有效欠帳在主 register 保留一條入口；已結案 ID 由既有 `docs/archives/tech-debt-closed-*.md` 的精簡憑證承載。Clade home 與已遷移 repo 的接續載體是 `specs/plans/<work-id>/plan.md`，本節只描述未遷移 consumer 仍在用的舊形狀。
 
 ```markdown
 # Tech Debt Register
@@ -98,7 +95,7 @@ mcp-token-store 使用 D1 `$client.prepare()` raw API，local dev libsql 不相�
 
 原本擋在 archive 前的 `pre-archive-followup-gate.sh` 隨 spectra 生命週期一起退場（2026-09-07）。**它擋的東西沒有消失，只是現在沒有機器替你擋**——義務因此往前移到寫下那行註記的當下：
 
-1. 在 tasks 檔寫下任何 deferred / blocked / follow-up 註記時，**同一次編輯**內開好 `docs/tech-debt.md` 的 entry
+1. 在 tasks 檔寫下任何 deferred / blocked / follow-up 註記時，**同一次編輯**內開或續跑 `flow plan open`（未遷移 consumer 才開 `docs/tech-debt.md` entry）
 2. 每個 ID 對應主清單的有效 entry，或既有 closed archive 的唯一終態憑證；重複 ID、未知狀態、缺 Reason 的關單都是不合規
 3. 未結案 entry 保留 Problem / Fix approach / Acceptance；已結案憑證保留 ID、Status、Resolution 或 Reason，以及可核對的證據
 4. 等待外部條件、部分完成與已落地待驗收**仍是未結案工作**，保留在主清單。active 工作只從主清單產生
@@ -125,7 +122,7 @@ mcp-token-store 使用 D1 `$client.prepare()` raw API，local dev libsql 不相�
 
 1. **收工時**：commit、handoff、work-loop 完成相關工作後，核對實際驗收證據，更新對應 TD 的狀態及精簡結論；同步移除 HANDOFF 的完成流水帳與重複背景。
 2. **移出前**：執行 `node .clade/vendor/scripts/flow/flow.ts sources --apply`，回讀該 ID 的關卡結果。clade 自身使用 `vendor/scripts/flow/flow.ts`。關卡未完成就保留來源，移除文字不作為完成證據。
-3. **關單後**：執行 `node .clade/vendor/scripts/rotate-closed-bloat.ts --all-closed` 移入 closed archive（clade 自身使用 `vendor/scripts/rotate-closed-bloat.ts`）；每條只保留 ID、結論、理由及證據，ID 不重編。等待訊號與未知狀態保留，不用歸檔數宣稱實際欠帳減少。
+3. **關單後（未遷移 consumer）**：執行 `node .clade/vendor/scripts/rotate-closed-bloat.ts --all-closed` 移入 closed archive。Clade home 與已遷移 repo 該 script 回 `retired`，**NEVER** 再寫月份 closed archive 或改 `docs/tech-debt.md`。等待訊號與未知狀態保留，不用歸檔數宣稱實際欠帳減少。
 4. **開工時**：主件優先；從既有掃描挑一個不衝突、無活躍認領的同主題小批次，查證已完成／重複項或可局部回復的小修。涉及客戶承諾、安全、資料完整性、schema/API、憑證或正式部署的決策回到其既有授權流程；其餘大型工作保留具體接手入口。
 
 寫入前重取目標檔的 dirty／claim 狀態；有人正在寫就先協調，基線有變則重讀。低價值淘汰與重複整併各附理由；完成數、整併數、淘汰數與純篇幅縮減分開回報。

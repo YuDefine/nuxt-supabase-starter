@@ -17,7 +17,14 @@
  *     --screenshot skip --doc skip
  *
  *   node .claude/scripts/0a-metrics.mjs record --review-mode escalated \
- *     --reviewer '<actual runtime/model>' --adjudicator '<actual runtime/model>' ...
+ *     --reviewer '<actual runtime/model>' --a2 true ...
+ *
+ *   node .claude/scripts/0a-metrics.mjs record --review-mode blocked \
+ *     --blocked-reason 'astra quota exhausted' --diff-lines 120 --diff-files 3 \
+ *     --critical 0 --major 1 --minor 0 --info 0 --a2 true \
+ *     --screenshot skip --doc skip
+ *   （blocked：gate 觸發但沒跑完——Astra 配額耗盡等外部原因。reviewer 可省；
+ *   findings 記已觀察到的部分。）
  *
  * Legacy rows remain readable and the historical --codex interface remains supported:
  *   node .claude/scripts/0a-metrics.mjs record --diff-lines 120 --diff-files 3 \
@@ -43,24 +50,16 @@ import { dirname, isAbsolute, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 const ANOMALY_KINDS = ['td246-fallback', 'verdict-missing', 'large-change-rerun']
-const CODEX_MODES = [
-  'astra-low',
-  'astra-medium',
-  'astra-medium+fable',
-  'xhigh',
-  'xhigh+max+fable',
-  'fast-path-skip',
-]
-// `escalated-a2-deferred` 是 TD-1052 (c) 的具名例外：0-A.2 的深度 review 跑完了，但**裁決者
-// 那一格結構性無人**（唯一具名的合格跨族裁決者配額耗盡）。它與 `escalated` 的差別只有一格 ——
-// 裁決**還沒做**，不是做過了。**NEVER** 拿它記一次「找不到人所以算過」：下面 deferralConfig()
-// 要求兩樣東西同時存在，兩樣都是機械可查的，不是宣稱。
-const REVIEW_MODES = ['independent', 'escalated', 'escalated-a2-deferred', 'fast-path-skip']
+// 含 `+fable` 的舊 mode 隨跨模型裁決一起退役：歷史列仍由 summary 讀得出，
+// 但新記錄不得再宣告一個不存在的裁決者組合。
+const CODEX_MODES = ['astra-low', 'astra-medium', 'xhigh', 'fast-path-skip']
+// `blocked`：gate 觸發但因外部原因（如 Astra 配額耗盡）沒跑完——review-policy
+// 要求保留 pending review 記錄，不能讓它從遙測上消失（TD-1010）。
+const REVIEW_MODES = ['independent', 'escalated', 'fast-path-skip', 'blocked']
 
-/** `codex-review-safe.sh` 在配額耗盡時印的固定字串（該 script 的穩定輸出契約）。 */
-const QUOTA_BLOCKED_MARKER = 'RESULT: quota-blocked'
-/** `flow.ts open` 鑄出來的 work id 形狀。 */
-const WORK_ID_RE = /^W-\d{4}-\d{2}-\d{2}-[a-z0-9-]+$/
+// 跨模型裁決退役後跟著退場的參數——留在 CLI 上任何一個都能把「其實沒有
+// 裁決者」記成好像有。
+const RETIRED_ARGS = ['adjudicator', 'a2-deferral-receipt', 'a2-deferral-work-id']
 
 function parseArgs(argv) {
   const out = {}
@@ -157,131 +156,46 @@ function modeConfig(args) {
   const hasLegacy = args.codex !== undefined
   if (hasCanonical && hasLegacy) die('--review-mode 與 legacy --codex 不可同時使用')
 
+  // Retired cross-model args are rejected on BOTH invocation shapes — a
+  // legacy `--codex` call carrying `--adjudicator` is the same retired
+  // machinery, not a compatibility path.
+  for (const key of RETIRED_ARGS) {
+    if (args[key] !== undefined) {
+      die(`--${key} 已隨跨模型裁決退役——0-A.2 是同一個 Astra medium 的深度複審，沒有裁決者欄位`)
+    }
+  }
+
   if (hasCanonical) {
     const reviewMode = args['review-mode']
     if (!REVIEW_MODES.includes(reviewMode)) {
       die(`--review-mode 只接受 ${REVIEW_MODES.join(' | ')}，收到 ${JSON.stringify(reviewMode)}`)
     }
+    const blockedReason = identity(args, 'blocked-reason')
+    if (reviewMode === 'blocked' && !blockedReason) {
+      die('--review-mode blocked 必須提供非空 --blocked-reason')
+    }
+    if (reviewMode !== 'blocked' && blockedReason) {
+      die('--blocked-reason 只能搭配 --review-mode blocked')
+    }
     const reviewer = identity(args, 'reviewer')
-    const adjudicator = identity(args, 'adjudicator')
     if ((reviewMode === 'independent' || reviewMode === 'escalated') && !reviewer) {
       die(`--review-mode ${reviewMode} 必須提供非空 --reviewer`)
     }
-    if (reviewMode === 'escalated' && !adjudicator) {
-      die('--review-mode escalated 必須提供非空 --adjudicator')
-    }
-    if (reviewMode === 'escalated-a2-deferred' && !reviewer) {
-      die('--review-mode escalated-a2-deferred 必須提供非空 --reviewer（深度 review 仍要跑完）')
-    }
-    const deferral =
-      reviewMode === 'escalated-a2-deferred'
-        ? deferralConfig(args, adjudicator, projectDir(args, false))
-        : null
-    return { canonical: true, reviewMode, reviewer, adjudicator, deferral, codex: null }
+    return { canonical: true, reviewMode, reviewer, blockedReason, codex: null }
   }
 
   const codex = args.codex ?? die('record 缺 --codex 或 --review-mode')
   if (!CODEX_MODES.includes(codex)) {
     die(`--codex 只接受 ${CODEX_MODES.join(' | ')}，收到 ${JSON.stringify(codex)}`)
   }
+  if (args['blocked-reason'] !== undefined) {
+    die('--blocked-reason 只能搭配 --review-mode blocked')
+  }
   return {
     canonical: false,
     reviewMode: null,
     reviewer: null,
-    adjudicator: null,
-    deferral: null,
     codex,
-  }
-}
-
-/**
- * TD-1052 (c) 的兩個准入條件。兩個都是**機械可查**的，這是刻意的 —— 「延後裁決」與
- * 「跳過裁決」事後看起來完全一樣，唯一的差別是有沒有東西會把它叫回來。
- *
- *   1. `--a2-deferral-receipt <path>`：那次讓裁決者不可得的實跑憑證（典型是
- *      `codex-review-safe.sh` quota-blocked 的輸出）。**檢查檔案真的存在且非空**，
- *      不是收一個字串 —— 收字串等於允許「我打一句話說它不可用」。
- *   2. `--a2-deferral-work-id <W-...>`：承載補跑的 flow work item。**先有那張卡才准記這一列**，
- *      所以「之後補跑」在 ledger 落地的當下就已經有一個會浮出來的載體，不是一句承諾。
- *
- * 還有一條 NEVER 寫成程式碼：**同時給 `--adjudicator` 就拒收**。有裁決者就不叫延後，
- * 那組合唯一的用途是把一次真的裁決記成延後、或把一次延後粉飾成有人看過。
- */
-function deferralConfig(args, adjudicator, cwd) {
-  if (adjudicator) {
-    die('--review-mode escalated-a2-deferred 不可同時提供 --adjudicator——有裁決者就用 escalated')
-  }
-  const receipt = identity(args, 'a2-deferral-receipt')
-  if (!receipt) {
-    die('--review-mode escalated-a2-deferred 必須提供 --a2-deferral-receipt <實跑憑證路徑>')
-  }
-  // 相對路徑要對 --repo（沒給就是 cwd）解析，NEVER 對 process.cwd() —— 兩者在
-  // `--repo` 與呼叫端 cwd 不同時會分岔，ledger 落點卻是 `cwd`，相對憑證路徑因此可能
-  // 指向一個跟 ledger 無關的目錄。
-  const receiptPath = isAbsolute(receipt) ? receipt : resolve(cwd, receipt)
-  if (!existsSync(receiptPath)) {
-    die(`--a2-deferral-receipt 指向的檔不存在：${receiptPath}——憑證要是真的跑過留下的東西`)
-  }
-  if (statSync(receiptPath).size === 0) {
-    die(`--a2-deferral-receipt 是空檔：${receiptPath}——空檔證明不了任何一次執行`)
-  }
-  // 「存在且非空」擋不住 `touch` ＋ `echo x`，更擋不住**拿另一種 receipt 冒充**：
-  // gates.md 允許 Cursor 開 pane 失敗時留下 launcher／exit receipt，而那份檔在
-  // 「存在且非空」的眼裡與 quota receipt 完全一樣 —— 規約用文字禁止的那條路，
-  // 機械層是放行的。這裡綁到 `codex-review-safe.sh` 的穩定輸出契約上。
-  if (!readFileSync(receiptPath, 'utf-8').includes(QUOTA_BLOCKED_MARKER)) {
-    die(
-      `--a2-deferral-receipt 不含 ${JSON.stringify(QUOTA_BLOCKED_MARKER)}：${receiptPath}——` +
-        '它要是「合格裁決者因配額不可得」那次執行的原始輸出。開 pane 失敗的 launcher receipt ' +
-        '不是這個，那條路的處置在 gates.md § 0-A.2，NEVER 走延後路徑。',
-    )
-  }
-  const workId = identity(args, 'a2-deferral-work-id')
-  if (!workId) {
-    die(
-      '--review-mode escalated-a2-deferred 必須提供 --a2-deferral-work-id <承載補跑的 flow work id>',
-    )
-  }
-  if (!WORK_ID_RE.test(workId)) {
-    die(`--a2-deferral-work-id 不是 flow work id 的形狀（${WORK_ID_RE.source}）：${workId}`)
-  }
-  return { receipt: receiptPath, workId }
-}
-
-/**
- * 這條路徑的整個設計理由是「有東西會把它叫回來」，而那個東西就是那張 work item。
- * **只驗非空等於讓註解承諾程式碼沒做的事** —— 填 `W-2026-09-10-whatever` 一樣通過，
- * ledger 留一列指向不存在的卡，沒有任何對帳會發現。那正是 TD-1052 自己記下的形狀：
- * presence check 被讀成 allow-list。
- *
- * 純 fs，不引依賴：spine 固定在 `<projectDir>/.clade/flow/events.jsonl`，事件列帶 `work_id`。
- * **spine 不存在也拒收** —— 這條路徑的前提是這個 repo 有一條會浮出停滯訊號的 spine，
- * 沒有 spine 就沒有「之後會被叫回來」。
- */
-function assertDeferralWorkItemExists(workId, cwd) {
-  const spine = resolve(cwd, '.clade', 'flow', 'events.jsonl')
-  if (!existsSync(spine)) {
-    die(
-      `找不到 flow spine：${spine}——延後裁決要求補跑掛在一張真的卡上，` +
-        '而這個 repo 沒有 spine 可以承載它。',
-    )
-  }
-  const found = readFileSync(spine, 'utf-8')
-    .split('\n')
-    .some((line) => {
-      if (!line) return false
-      try {
-        return JSON.parse(line).work_id === workId
-      } catch {
-        // 壞行不代表這張卡不存在 —— 跳過它繼續找，NEVER 因為一行壞掉就判定查無。
-        return false
-      }
-    })
-  if (!found) {
-    die(
-      `--a2-deferral-work-id 在 spine 上查無此卡：${workId}——先開卡：` +
-        "node ~/offline/clade/vendor/scripts/flow/flow.ts open <slug> --origin td:TD-1052 --title '<snapshot dir> @ <base sha>'",
-    )
   }
 }
 
@@ -293,9 +207,6 @@ function die(msg) {
 function record(args) {
   const mode = modeConfig(args)
   const cwd = projectDir(args, !mode.canonical)
-  // spine 檢查放這裡而非 deferralConfig()：它需要 cwd，而 cwd 由 projectDir() 在
-  // modeConfig() **之後**才解析得出來。
-  if (mode.deferral) assertDeferralWorkItemExists(mode.deferral.workId, cwd)
   const ledger = resolve(cwd, '.clade', '0a-metrics.jsonl')
   if (args.anomaly && !ANOMALY_KINDS.includes(args.anomaly)) {
     die(`--anomaly 只接受 ${ANOMALY_KINDS.join(' | ')}，收到 ${JSON.stringify(args.anomaly)}`)
@@ -321,8 +232,8 @@ function record(args) {
     if (a2 && !hadCriticalOrMajor) {
       die('--a2 true 但 critical/major 皆為 0——0-A.2 的觸發條件不成立，檢查參數')
     }
-    if (a2 && mode.reviewMode !== 'escalated' && mode.reviewMode !== 'escalated-a2-deferred') {
-      die('--a2 true 只能記錄 review-mode escalated 或 escalated-a2-deferred')
+    if (a2 && mode.reviewMode !== 'escalated' && mode.reviewMode !== 'blocked') {
+      die('--a2 true 只能記錄 review-mode escalated 或 blocked（已觸發但沒跑完）')
     }
     if (
       mode.reviewMode === 'fast-path-skip' &&
@@ -333,21 +244,11 @@ function record(args) {
     if (mode.reviewMode === 'escalated' && !a2) {
       die('review-mode escalated 必須搭配 --a2 true')
     }
-    // 延後的前提是 0-A.2 **確實被觸發了**。「沒有 Critical/Major 卻記延後」那一格由本函式
-    // 更上面的 `a2 && !hadCriticalOrMajor` 攔（訊息指向觸發條件不成立）——**NEVER 在這裡再加
-    // 一條同義檢查**，那會是永遠跑不到的死碼。這裡只補它涵蓋不到的一格：`--a2 false`。
-    if (mode.reviewMode === 'escalated-a2-deferred' && !a2) {
-      die('review-mode escalated-a2-deferred 必須搭配 --a2 true')
-    }
     if (mode.reviewMode === 'independent' && hadCriticalOrMajor && !a2) {
-      die('Critical/Major 非 0 時須改用 review-mode escalated，並提供 --adjudicator 與 --a2 true')
+      die('Critical/Major 非 0 時須改用 review-mode escalated，並提供 --a2 true')
     }
   } else {
-    if (
-      a2 &&
-      !hadCriticalOrMajor &&
-      !['xhigh+max+fable', 'astra-medium+fable'].includes(mode.codex)
-    ) {
+    if (a2 && !hadCriticalOrMajor) {
       die('--a2 true 但 critical/major 皆為 0——0-A.2 的觸發條件不成立，檢查參數')
     }
     if (hadCriticalOrMajor && !a2 && mode.codex !== 'fast-path-skip') {
@@ -375,20 +276,7 @@ function record(args) {
     review_mode: mode.reviewMode,
     ...(mode.canonical ? {} : { codex: mode.codex }),
     reviewer: mode.reviewer,
-    adjudicator: mode.adjudicator,
-    // 三個欄位一起出現才有意義：`a2_deferred: true` 的那一列，adjudicator 必然是 null，
-    // 而 receipt / work id 說得出「憑什麼延後」與「誰會把它叫回來」。
-    //
-    // **只在 canonical row 出現**，與上面 `codex` 只在 legacy row 出現是同一個做法：
-    // legacy `--codex` 走不到延後路徑（`deferralConfig` 只由 canonical 分支呼叫），
-    // 給它補三個恆為 null/false 的欄位是在既有 row 上加噪音。
-    ...(mode.canonical
-      ? {
-          a2_deferred: mode.reviewMode === 'escalated-a2-deferred',
-          a2_deferral_receipt: mode.deferral?.receipt ?? null,
-          a2_deferral_work_id: mode.deferral?.workId ?? null,
-        }
-      : {}),
+    blocked_reason: mode.blockedReason ?? null,
     findings,
     a2_triggered: a2,
     dismissed,
@@ -402,31 +290,25 @@ function record(args) {
   appendFileSync(ledger, `${JSON.stringify(row)}\n`, 'utf-8')
 
   const codexLabel = mode.codex?.startsWith('astra-')
-    ? `${mode.codex === 'astra-low' ? 'GPT-6-astra via Pi（effort: low）' : 'GPT-6-astra via Pi（effort: medium）'}${mode.codex.endsWith('+fable') ? ' + Claude Fable 5.1（effort: max）' : ''}`
+    ? `GPT-6-astra via Pi（effort: ${mode.codex === 'astra-low' ? 'low' : 'medium'}）`
     : mode.codex === 'fast-path-skip'
       ? '獨立 review 跳過（fast-path）'
-      : mode.codex === 'xhigh+max+fable'
-        ? 'GPT-5.6-sol via Pi（effort: xhigh → max）+ Claude Fable 5.1（effort: max）'
-        : 'GPT-5.6-sol via Pi（effort: xhigh）'
+      : 'GPT-5.6-sol via Pi（effort: xhigh）'
   const canonicalLabel = [
     `review-mode ${mode.reviewMode}`,
     mode.reviewer && `reviewer ${mode.reviewer}`,
-    mode.adjudicator && `adjudicator ${mode.adjudicator}`,
-    mode.deferral && `裁決延後（憑證 ${mode.deferral.receipt}、補跑掛 ${mode.deferral.workId}）`,
   ]
     .filter(Boolean)
     .join(', ')
-  console.log(
-    `✅ 0-A/B/C/D 並行匯合通過（${mode.canonical ? canonicalLabel : codexLabel}、screenshot ${row.screenshot}、check 全綠、doc ${row.doc}）`,
-  )
-  if (row.anomaly) console.log(`⚠ 本次記錄 anomaly: ${row.anomaly}`)
-  // 匯合行本身印的是「通過」，而延後裁決**不是**通過 —— 它是「附條件放行且欠一次裁決」。
-  // 這一行刻意跟在後面，讓讀 terminal 的人不會只看到上面那個 ✅ 就收工。
-  if (row.a2_deferred) {
+  if (mode.reviewMode === 'blocked') {
+    // blocked 只記錄 pending review——印匯合通過行等於替沒跑完的 gate 造假 PASS。
+    console.log(`⏸ 0-A gate 未完成（blocked）：${mode.blockedReason}`)
+  } else {
     console.log(
-      `⚠ 0-A.2 裁決已延後，NEVER 讀成完成：補跑掛在 ${row.a2_deferral_work_id}，憑證 ${row.a2_deferral_receipt}`,
+      `✅ 0-A/B/C/D 並行匯合通過（${mode.canonical ? canonicalLabel : codexLabel}、screenshot ${row.screenshot}、check 全綠、doc ${row.doc}）`,
     )
   }
+  if (row.anomaly) console.log(`⚠ 本次記錄 anomaly: ${row.anomaly}`)
 }
 
 function readRows(ledger) {

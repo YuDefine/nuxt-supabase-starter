@@ -77,7 +77,7 @@ relay successor 持有整個主線位置，所以判「還是主線複雜度」�
 | 〔`version-upgrade-first-pass`〕version-upgrade 首輪升版 | xAI Grok 4.6 | low | Cursor Grok 4.6 low → Gemini 3.8 Flash high → blocker |
 | 〔`version-upgrade-research`〕version-upgrade 失敗後研究重試 | xAI Grok 4.6 | high | Cursor Grok 4.6 high → Gemini 3.8 Flash high → blocker |
 | 〔`web-search`〕WebSearch／WebFetch | Gemini 3.8 Flash | high | GPT-5.6 Luna low → 有對應失敗 receipt 才放行同種內建工具 |
-| 〔`code-review`〕Code review／commit 0-A | GPT-6 Astra；合格獨立跨模型 reviewer | medium | Claude Fable 5.1（effort: medium）；須符合 `review-policy.md` 的模型差異與資格。Critical／Major 觸發深度 review 與跨模型裁決 |
+| 〔`code-review`〕Code review／commit 0-A | GPT-6 Astra；合格獨立 reviewer | medium | commit 0-A 無替補——Astra 配額耗盡時 gate 保持未完成（`review-policy.md`）；Critical／Major 觸發同一 Astra medium 的 fresh-context 深度複審。非 commit 的 code-review 委派終端沿用 gate-output 鏈 |
 | 〔`ui-implementation`〕Nuxt UI 元件組裝／Nuxt Content 實作 | Cursor 原生 Composer 2.5 | 依原生能力 | 範圍限 Nuxt UI／Content；當次 catalog 必須提供 Composer 2.5，不可用時回報 blocker |
 | 〔`nuxt-core-implementation`〕Nuxt 本體實作 | GPT-5.6 Sol | xhigh | Nuxt 框架、模組與執行邏輯；GPT 依原生／Pi transport，不使用 Cursor Task |
 | 〔`ui-view-implementation`〕其餘 UI view 實作 | Claude Opus 5 | medium | 排除 Nuxt UI／Content 與 Nuxt 本體；Claude Code 原生／Herdr carrier，不可用時回報 blocker |
