@@ -371,9 +371,11 @@ compact 壓掉的是敘事，**壓完之後每一 turn 仍重讀壓縮後的整�
 | 可觀察狀態 | 動作 |
 | --- | --- |
 | workflow明定 worktree要 parked | `retained`，指名 owner與 next landing event |
-| clean + fully merged + 無 unique commit／WIP + 無 parking contract，且已有該 worktree的明確 remove授權 | 實際移除 worktree與branch，receipt寫 `removed` |
-| 同上但沒有明確 remove授權 | 先用 structured user-input surface問 `remove`／`retain`；回答前**不得**輸出「目前這裡收工」或等價完整 closure |
+| clean + 內容已在 main（ancestry merged，或 `wt-helper cleanup <slug> --dry-run` 印 `merged=Y`）+ 無 unique commit／WIP + 無 parking contract | **直接**用零 force flag 的移除指令（有 `wt-helper` 就 `wt-helper cleanup <slug>`，否則 `git worktree remove` + `git branch -d`）移除 worktree與branch，receipt寫 `removed`；**NEVER** 先問 `remove`／`retain`——條件全中就是授權 |
+| 零 force flag 的移除被擋，或上一列任一條件判不出 | fail closed列 blocker；回答前**不得**輸出「目前這裡收工」或等價完整 closure |
 | dirty、未 fully merged、ownership不明 | fail closed列 blocker；**NEVER**用 `--force`把不確定性刪掉 |
+
+`remove`／`retain` 只在 user 另有保留意圖時才是 user 的題目（它會以 parking contract 形式出現）。**條件全中卻仍寫出「要 remove 還是 retain？」＝違反本表**，即使附上「remove（推薦）」——推薦答案寫得出來，代表判斷已經完成。`locked` 本身不是 parking contract，鎖由另一個活 session 持有才算 ownership不明。
 
 Herdr／subagent receipt中的 `retained:false`只描述該 child runtime，**NEVER**拿它代替 parent cwd的 Worktree lifecycle receipt。
 
@@ -540,6 +542,7 @@ agent 回完一個 turn 後照樣繼續工作。
 的 exact child 可經 canonical `--recover-orphan` one-way claim 建立唯一 fresh successor。可觀察判準是
 durable record 的 exact `parent_claude_session_id` 在 `herdr agent list` 全域缺席——
 prompt-cache TTL與record年齡對ownership零訊號。一般 coordinated child仍禁止nested handoff，**只有**helper核准的 recovery token與 attested relay例外。
+已送出 `--complete blocked` 的 worker 若 receipt 的 `coordinator_wake` ≠ `sent*`，出口是 receipt `next_step` 指的 `/handoff relay`（pending decision 隨 brief 交棒），**NEVER** `--recover-orphan`。
 
 ### 收割的機械兜底：Stop gate（不是提醒，是擋）
 

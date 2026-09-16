@@ -249,8 +249,8 @@ successor 繼承的是整個位置，所以「接手後仍需要」的範圍比�
 | workflow 明定 parked | 保留，receipt 寫 `retained: <owner + next landing event>` |
 | 已登記批次、尚未正式落地 | 保留来源與佇列，successor 依 commit skill `batch.md` 接手；換 session 不強制結批 |
 | 已登記批次且正式落地 | 主動跑 `wt-helper batch cleanup`；登記時的落地授權含安全回收，不重問 remove／retain，依結果逐來源記 removed／retained 原因 |
-| clean + fully merged + 無 unique commit／WIP + 無 parking contract，且已有該 worktree 明確 remove 授權 | 移除 worktree 與 branch，receipt 寫 `removed` |
-| 同上但無 remove 授權 | 用 host question operation 問 `remove`／`retain`；有 structured question surface 就用它，沒有就用目前對話；答案前停止收工訊息 |
+| clean + 內容已在 main（ancestry merged，或 `wt-helper cleanup <slug> --dry-run` 印 `merged=Y`）+ 無 unique commit／WIP + 無 parking contract | **直接**以零 force flag 移除 worktree 與 branch（`wt-helper cleanup <slug>`），receipt 寫 `removed`；**NEVER** 先問 `remove`／`retain`——條件全中就是授權 |
+| 零 force flag 的移除被擋，或上一列任一條件判不出 | fail closed 列 blocker；答案前停止收工訊息 |
 | dirty、未 fully merged、ownership 不明 | fail closed 列 blocker，**NEVER** 用 `--force` 代替判斷 |
 
 worktree 若 `retained`，brief **MUST** 已寫明它由 successor 接手——否則交出去的位置少了它的工作區。

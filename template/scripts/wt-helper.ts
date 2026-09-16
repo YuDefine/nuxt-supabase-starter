@@ -4793,8 +4793,24 @@ async function cmdCleanup(slug, opts) {
       // in 22da082ca, months later, and never had that job.
     }
   }
-  const branchMerged = squashLanded || mergedBranches(consumerRoot).has(branchName)
-  const unlanded = squashLanded ? [] : detectUnlandedFiles(consumerRoot, branchName)
+  const ancestryMerged = mergedBranches(consumerRoot).has(branchName)
+  // 內容已由別條路徑進 main（例：別 session 或 publish 流程以不同 SHA 重新提交同一份改動）。
+  // 判準是 detectAbsorbedByOtherPath 的反套：branch 的每一個 hunk 都已在 main 上 ⟹ 移除
+  // worktree 與 branch 不會丟任何內容。這一道只**放行**，NEVER 拿它擋——反套失敗照舊走
+  // 下面的 unland gate，所以上方 squash 段「NEVER 以內容比對擋 cleanup」的推導不受影響。
+  const absorbed =
+    !squashLanded && !ancestryMerged
+      ? detectAbsorbedByOtherPath(consumerRoot, branchName, 'main')
+      : null
+  const absorbedLanded = absorbed?.absorbed === true
+  const branchMerged = squashLanded || ancestryMerged || absorbedLanded
+  const unlanded =
+    squashLanded || absorbedLanded ? [] : detectUnlandedFiles(consumerRoot, branchName)
+  if (absorbedLanded) {
+    console.log(
+      `cleanup: ${branchName} 的 changeset 已完整存在於 main（${absorbed.reason}）—— 略過兩道 ancestry gate`,
+    )
+  }
   if (squashLanded) {
     console.log(
       `cleanup: ${branchName} 的 tip 與 squash-landing marker '${landedMarkerRef(cleanSlug)}' 相符 —— 略過兩道 ancestry gate`,
@@ -4857,7 +4873,7 @@ async function cmdCleanup(slug, opts) {
     console.log(`  worktree           ${target.path}`)
     console.log(`  branch             ${branchName}`)
     console.log(
-      `  ancestry           merged=${branchMerged ? 'Y' : 'N'} squashLandedMarker=${squashLanded ? 'Y' : 'N'} unlandedFiles=${unlanded.length}`,
+      `  ancestry           merged=${branchMerged ? 'Y' : 'N'} squashLandedMarker=${squashLanded ? 'Y' : 'N'} absorbedByOtherPath=${absorbedLanded ? 'Y' : 'N'} unlandedFiles=${unlanded.length}`,
     )
     console.log(
       `  uncommitted        blocking=${uncommittedCount} ignored(projection/tool-managed)=${toolManagedCount}`,
@@ -4970,7 +4986,8 @@ async function cmdCleanup(slug, opts) {
   // Honouring `--force` here would delete it, which is precisely the loss the removed content
   // gate above was trying (and failing) to prevent. Deleting it stays available as a deliberate,
   // separate `git branch -D`.
-  const deleteFlag = opts.force && !squashLanded ? '-D' : '-d'
+  // absorbed 不同於 squash：內容已逐 hunk 驗證在 main 上，branch 只是重複的副本，`-D` 不丟任何東西。
+  const deleteFlag = (opts.force && !squashLanded) || absorbedLanded ? '-D' : '-d'
   try {
     git(['branch', deleteFlag, branchName], { cwd: consumerRoot })
   } catch {
