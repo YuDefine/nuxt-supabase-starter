@@ -48,7 +48,7 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 
 - `HANDOFF.md` 是 **session-scoped**
 - `HANDOFF.md` 只保留**尚未被接手**的項目，以及**當前 baseline snapshot blocks**（如 `## Worktree & Stash Audit` / `## Review-gui Readiness` / `## Parked changes` / `## Deferred discuss`）；snapshot block **MUST** 以覆寫式更新，**不**累積歷史版本
-- **不得**保留已完成 chronological session narrative（`## YYYY-MM-DD ...` 形式的 session log）；完成的 dated section **MUST** rotate 到 `docs/archives/<YYYY-MM>-handoff-narrative.md`（per § 歷史段路由）
+- **不得**保留已完成 chronological session narrative。結案工作退出目前版本；歷史由 git 追溯。Clade home **MUST NOT** 再把完成段 append 進 `docs/archives/<YYYY-MM>-handoff-narrative.md`。`rotate-handoff-done.ts` 只留給未遷移 consumer，直到 consumer 遷移完成後刪除。
 - 新 session 接手後：**先建立 claim**（per [[session-claims]] § 3.5）→ 移除已接手項目 → 繼續執行
 - 所有項目都接完後：刪除 `HANDOFF.md`
 - **允許 commit 進 git**，因為跨機器、跨 agent 交接時很有價值
@@ -70,8 +70,9 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 
 | 文件 | 用途 | 生命週期 |
 | --- | --- | --- |
-| `HANDOFF.md` | 尚未被接手的 WIP、blocker、next steps、當前 baseline snapshot blocks | 短期、用完即清 |
-| `tasks/<date>-<slug>.md`、`specs/plans/NNN-<slug>/` | work item 的 carrier | 前者短期、後者長期保留為歷史 |
+| `HANDOFF.md` | 從 flow + active plan 生成的入口 view | 短期、可重建 |
+| `tasks/<date>-<slug>.md` | 當次可完成的 ad-hoc 清單 | 短期，結案即刪 |
+| `specs/plans/<work-id>/plan.md` | 需要接續的工作 | 結案刪除；歷史在 git |
 | `.clade/claims/**` | 即時 ownership / heartbeat | 短期、機器維護 |
 | `docs/archives/<YYYY-MM>-handoff-narrative.md` | 從 HANDOFF rotate 過來的已完成 dated session narrative | 長期、month-bucket append-only |
 | `docs/archives/<YYYY-MM>-<topic>.md` | 一次性 wave / 主題盤點成果（既有用途） | 長期 |
@@ -89,7 +90,7 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 | --- | --- | --- |
 | **active** | section 含 `- [ ]` unchecked checkbox / `Outstanding` / `Next session` / `下次 session` / `待後續` / `待客戶` / `等客戶` / `等 prod` / `[discuss]` / `尚未` / `未完` / `TODO` / `awaiting` 等 keyword | 留 `HANDOFF.md` |
 | **baseline-snapshot** | section title 含 `Worktree Audit` / `Review-gui Readiness` / `Parked` / `Deferred discuss` / `跨 repo` / `並行 session` / `In Progress` / `Blocked` / `Next Steps` 等基準關鍵字；或 section title 無 `YYYY-MM-DD` 前綴 | 留 `HANDOFF.md`（**覆寫式**更新，不累積歷史版本） |
-| **completed-narrative** | `## YYYY-MM-DD ...` 且**不**符 active / baseline 條件（純已完成 prose + checked checkbox） | rotate 到 `docs/archives/<YYYY-MM>-handoff-narrative.md`（month-bucket，append-only） |
+| **completed-narrative** | `## YYYY-MM-DD ...` 且**不**符 active / baseline 條件 | 從主檔刪除；歷史由 git 追溯。未遷移 consumer 仍可暫用 `rotate-handoff-done.ts` |
 | **ambiguous** | 介於上述之間、無法穩定判定 | 保守保留 `HANDOFF.md` + 標 review-pending（等下次 `next` 重判） |
 
 > **baseline 過度累積**：若活的 baseline 段超過 `section_max_kb`（default 6 KB），表示那段該換載體——拆出成 `docs/archives/<YYYY-MM>-<topic>.md` 或 `docs/solutions/<topic>.md`、`docs/decisions/<topic>.md`，主檔只留 pointer。HANDOFF 不是長期 KB。整檔 KB／行數門檻已廢（它存在的唯一理由是逼 rotate，現在每次 `next` 先 100% rotate）。
@@ -118,8 +119,10 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 重跑或報卡點，不是拍板題。搬完後活段仍超 `section_max_kb`／`entry_max_lines` → 換載體，
 **NEVER** 砍驗收 pointer / 選項內容 / 自驗指令湊數字。
 
-搬走的每一段 **MUST** 逐字進 `docs/archives/<YYYY-MM>-handoff-narrative.md` 並驗零遺失
-（`grep -c -F '<獨特字串>'` 在 archive 回 ≥1、主檔回 0）。
+Clade home 與已遷移 repo（存在 `specs/truth/work-lifecycle.md`）：script 回 `retired`，
+完成段從主檔刪除、**不** append 月份 archive，歷史由 git 追溯。
+未遷移 consumer：搬走的每一段 **MUST** 逐字進 `docs/archives/<YYYY-MM>-handoff-narrative.md`
+並驗零遺失（`grep -c -F '<獨特字串>'` 在 archive 回 ≥1、主檔回 0）。
 
 > **實證（2026-09-10，<consumer-a>）**：HANDOFF 堆到 235.6 KB / 2643 行才有人做一次手動 rotate A。
 > In Progress 60 條裡 41 條是已完成項。根因就是「等破 35 KB 才 rotate、而且只搬到門檻下」。
@@ -254,7 +257,7 @@ Root cause = HANDOFF writer（包含 `next` § 2B.4 推薦階段）把 audit doc
 - **NEVER** 把需要交接的資訊只留在對話裡
 - **NEVER** 用含糊句子如「差不多好了」「剩下一點點」
 - **NEVER** 把 `HANDOFF.md` 當成長期知識庫，結案後不清理
-- **NEVER** 在 `HANDOFF.md` 累積 `## YYYY-MM-DD` chronological session log；已完成 dated section **MUST** rotate 到 `docs/archives/<YYYY-MM>-handoff-narrative.md`
+- **NEVER** 在 `HANDOFF.md` 累積 `## YYYY-MM-DD` chronological session log；已完成 dated section 退出目前版本，**NEVER** 在 clade home 再 append 月份 archive
 - **NEVER** 在 baseline snapshot block（Worktree Audit / Review-gui Readiness / Parked / Deferred discuss）累積歷史版本；snapshot 必須**覆寫式**更新
 - **NEVER** 在 handoff 裡省略 work slug、task 編號、關鍵檔案路徑
 - **NEVER** 接手之後還把同一項目留在 `HANDOFF.md`

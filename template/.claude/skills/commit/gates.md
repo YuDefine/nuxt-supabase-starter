@@ -9,7 +9,8 @@
 受測 artifact digest、producer family、reviewer family／session 與 evidence ID。
 `verifyCommitGateBindings()` 的 requiredGates 與 independentReviewGates 取本 skill 本次實際判定，
 包含既有 fast-path 及重審條件。主線收割只驗 plan 結果；simplify、code／UI review、checks 與
-Critical／Major 裁決仍逐步執行。換 pane 保留同一 model family，不能充當獨立 review。
+Critical／Major 深度複審仍逐步執行。換 pane／另開 session 只是同一個合格 reviewer 的另一次
+執行；啟動與 fresh context 本身不產生 verdict，不能充當獨立 review 的完成證據。
 內容或契約改變時，舊 receipt 不替新版本背書；依既有 gate 規則補驗後才接受整合。
 
 ## § 0-Coord: Cross-Session Staged Pollution Detection
@@ -335,11 +336,11 @@ gate 自己的可用度跑 `node scripts/audit-security-gate-readiness.ts`（war
 
 ## § 0-A: 程式碼審查（simplify → 0-A.1 → 條件式 0-A.2）
 
-**每次 dispatch 或 fallback 前 MUST 完整讀 [review-policy.md](review-policy.md)**，分開驗證 scope、fresh context、實際模型差異、品質與唯讀載體。以下角色不固定由哪個 runtime 執行；原生呼叫方式見本檔末尾投影的 runtime 操作段。
+**每次 dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，分開驗證 scope、fresh context、模型資格、品質與唯讀載體。commit 0-A 的唯一合格 review 模型是 GPT-6 Astra via Pi（effort: medium）；review 角色不固定由哪個 runtime 主線執行，原生呼叫方式見本檔末尾投影的 runtime 操作段。
 
 1. 主線先完成 0-A.0；修完的 snapshot 才交給 reviewer。
-2. Fast-path 不成立時啟動 0-A.1 獨立跨模型 review，並行 0-B 與 0-C。每個背景工作綁 owner、實際 handle、deadline 與收回方法；不把另一個 runtime 的參數交給本端工具。
-3. 0-A.1 出 Critical／Major 時，修正後進 0-A.2 深度 review 與跨模型裁決。兩個步驟缺一仍未完成。
+2. Fast-path 不成立時啟動 0-A.1 獨立 review，並行 0-B 與 0-C。每個背景工作綁 owner、實際 handle、deadline 與收回方法；不把另一個 runtime 的參數交給本端工具。
+3. 0-A.1 出 Critical／Major 時，修正後進 0-A.2 深度 review——同一個 Astra medium 以 fresh context 對修復後 snapshot 再審一輪。
 4. Findings 由主線匯合、查證與修正；各軸的背景 reviewer 不同時寫受審檔。
 
 ### 0-A.0 — simplify（主線，永遠先跑）
@@ -350,7 +351,7 @@ gate 自己的可用度跑 `node scripts/audit-security-gate-readiness.ts`（war
 
 Fast-path 的三條件以 SKILL.md 的同一份定義為準：diff <20 行、只含允許的 doc/config、無敏感路徑，三條全中才能跳過 0-A.1／0-A.2；0-A.0、0-B 的觸發判定與 0-C 仍執行。
 
-### 0-A.1 — 獨立跨模型 review（並行軸 A）
+### 0-A.1 — 獨立 review（並行軸 A）
 
 Reviewer 看完整 frozen changeset 與驗收契約，以一般 review 的已核准推理深度查邏輯、安全、跨檔影響及適用 semantic patterns。共用 CLI 載體可使用：
 
@@ -363,7 +364,7 @@ bash "$COMMIT_SKILL_DIR/scripts/codex-review-safe.sh" medium
 | 實際結果 | 動作 |
 | --- | --- |
 | 啟動／等待中 | 記錄 handle 與 owner，透過本端完成事件或 bounded wait 收回同一工作；並行推進其他軸，不能重播命令代替等待 |
-| 配額耗盡 | 依 review-policy 另選仍合格且已授權的候選；CLI 可依自身 NEXT 換池，但仍須驗模型差異。無候選則 gate 未完成 |
+| 配額耗盡 | Astra 是唯一合格 review 模型，沒有可換的候選：gate 保持未完成，保留 quota-blocked 的實跑證據（exit 4／`RESULT: quota-blocked`）並記錄 pending review；NEVER 用其他模型或主線自審補位 |
 | Scope 缺檔／截斷、缺 verdict／Semantic Verdict id、workspace 綁定失敗 | 對應範圍未被完整 review；修復取證後再執行，不能記 PASS |
 | Snapshot 漂移／不明 mutation | 先查具體 diff 與歸屬；已確認為合法並行工作可移至隔離 fixture 後重跑，不明或非預期 mutation 保留現場並處理授權，不自動覆寫 |
 | 完整結果，無 issue | 0-A.1 通過，0-A.2 不觸發 |
@@ -401,63 +402,15 @@ PRE-EXISTING — 未觸碰：<file>:<line>（舉證本次 diff 不含此檔／�
 
 登記走 `docs/tech-debt.md` 開 TD（跨 session 要追）或 `HANDOFF.md`（下一 session 就會碰），**NEVER** 只在 chat 講一句。「已經跟 user 說了」不算登記——chat 不是 session 之間的傳遞介面。
 
-### 0-A.2 — 深度 review + 跨模型裁決（兩步驟，條件觸發）
+### 0-A.2 — 深度 review（條件觸發）
 
 只在 0-A.1 出 Critical／Major 時執行；修復後的完整 snapshot 是輸入。
 
-1. 合格深度 reviewer 以已核准的深度檔檢查修法與連帶影響。使用共用 CLI 時為 `codex-review-safe.sh medium`，完整限制同 runner-safety。保存完整輸出，不只摘錄結論。
-2. 與深度 reviewer 不同模型族的合格裁決者取得該 snapshot、原始 0-A.1 findings 與深度結果，逐條確認 real issue、附反證 dismiss 或重標 severity，另查漏項。裁決者唯讀，主線負責修復。Cursor 主線的 Fable 裁決走 Herdr create-only：缺 pane 時 **MUST** 主動 `herdr-session-handoff.ts --launcher ccw --new-tab --coordinate --model claude-fable-5-1 --effort medium --route manual --tier-basis adjudication`（quota／`account_unavailable` 再 `cc`）。**裁決者的檔位就是 `medium`，與 0-A.1 的 Fable fallback 同一格**——`--tier-basis adjudication` 記的是「這個檔位是判出來的、不是查表查到的」，**NEVER** 讀成「裁決者所以可以升檔」：Fable 的天花板是 `medium`，`max` 對 Claude child 不可達（2026-09-10 那 4 個 Fable pane 就是這個誤讀）。**NEVER** 把「無 Herdr pane／Herdr 不可用」當成可跳過 0-A.2 或整場 `/commit` 的出口。`idle`／`done` 不是完成。兩個 launcher 都用盡才准留下 launcher／exit／evidence dir 的 receipt，再寫 durable follow-up。**NEVER** `--relay`，**NEVER** 叫 user 開 Claude 或貼 prompt。
+合格深度 reviewer 是同一個 GPT-6 Astra via Pi（effort: medium）——fresh context、不繼承 0-A.1 的對話。它取得修復後 snapshot、原始 0-A.1 findings 與修法內容，逐條確認 real issue 已修、附反證 dismiss 或重標 severity，另查修法帶來的漏項與 regression。reviewer 唯讀，主線負責修復。使用共用 CLI 時，先把 0-A.1 的 `## Review Verdict` 區段存成檔案，再以 `codex-review-safe.sh medium --findings <檔案>` 餵給 fresh reviewer——不帶 findings 的複審沒有逐條驗證的依據，只能算第二次 discovery，不滿足本節。保存完整輸出，不只摘錄結論。
 
-#### 裁決者結構性缺席時的延後路徑（TD-1052 (c)，Charles 2026-09-10 拍板）
+深度輸出缺 `## Review Verdict`（含截斷／context exhaustion）時，明示深度階段未完整；不盲重跑相同耗盡命令。查明耗盡或截斷原因後對同一 snapshot 重跑（diff 過大先縮小受審範圍），補齊完整 verdict 才可收口；Astra 配額耗盡沒有替補，0-A.2 保持未完成。
 
-**這條解的是「合格裁決者一個都不存在」，NEVER 是「我沒找到人」或「開 pane 失敗」。**
-後兩者的處置在上一段（MUST 先開 pane，兩個 launcher 都用盡才准留 receipt），本路徑不取代它。
-
-**四個條件全中才成立，缺一條就回到「0-A.2 保持未完成」**：
-
-| # | 條件 | 怎麼算數 |
-| --- | --- | --- |
-| 1 | 0-A.2 **第 1 步（深度 review）已經跑完**且有完整輸出 | 延後的只有裁決那一步。深度 review 沒跑完 = 整個 0-A.2 未完成，與本路徑無關 |
-| 2 | `review-policy.md` 認可的合格裁決者中，**與深度 reviewer 不同模型族的那些全部不可得** | **MUST 逐個實跑過**並留下輸出。routing-table `code-review` 列的具名候選一個都不能只憑印象跳過 |
-| 3 | 有一份**實跑憑證檔**，內容是條件 2 那次失敗的原始輸出，且是**本次 `/commit` 內**跑出來的 | `0a-metrics.mjs` 機械檢查三件：檔存在、非空、**內容含 `RESULT: quota-blocked`**（`codex-review-safe.sh` 的穩定輸出契約）。**開 pane 失敗留下的 launcher／exit receipt 不是這個**——那條路的處置在本節上方，機械層現在也擋得住冒充。「本次跑出來的」目前**只由本行紀律承載**，CLI 不驗新鮮度：**NEVER** 沿用前一次 `/commit` 的憑證 |
-| 4 | 有一張**承載補跑的 flow work item**，且它**真的在 spine 上** | `node ~/offline/clade/vendor/scripts/flow/flow.ts open <slug> --origin td:TD-1052 --title '<snapshot dir> @ <base sha>'` 先開卡（consumer 端沒有自己的 `vendor/scripts/flow/`，走全路徑；`--origin td:` scheme 合法；`--title` 是 `flow.ts` 既有 flag）。`0a-metrics.mjs` 會在 `<repo>/.clade/flow/events.jsonl` 逐行找那個 `work_id`，查無、格式不對、或該 repo 根本沒有 spine，**都拒收**——沒有 spine 就沒有「之後會被叫回來」。**卡的 `--title` MUST 含這次 review 的 snapshot dir 與 base sha**——補跑要的是「同一份 snapshot ＋ 原始 0-A.1 findings ＋ 深度結果」，而 ledger 只留得住 receipt 路徑與 work id，這兩樣可能已被清。`<snapshot dir>` 是本次 review 報告落腳的目錄，慣例 `~/.cache/clade/review-snapshots/<date>-<slug>/`——它不是 commit skill 自己的產物，是 dispatch 那次自訂的落點，**MUST** 寫實際路徑，不是這個慣例字面 |
-
-記錄用 `escalated-a2-deferred`，**NEVER** 用 `escalated` 加一個編出來的 adjudicator：
-
-```bash
-node .claude/scripts/0a-metrics.mjs record \
-  --review-mode escalated-a2-deferred \
-  --reviewer '<實際跑深度 review 的 runtime/model>' \
-  --a2 true --critical <n> --major <n> --minor <n> --info <n> \
-  --a2-deferral-receipt '<條件 3 的憑證檔絕對路徑>' \
-  --a2-deferral-work-id '<條件 4 的 work id>' \
-  --diff-lines <n> --diff-files <n> --dismissed <n> --dismissed-unsubstantiated <n> \
-  --screenshot <pass|skip> --doc <aligned|skip>
-```
-
-上表的每一條都在 CLI 層擋，**不是留給紀律**——只有條件 3 的「本次跑出來的」除外，該格逐字標在表裡。
-這是刻意的：延後裁決與跳過裁決事後看起來完全一樣，差別只在有沒有東西會把它叫回來，
-而**註解與規約 NEVER 該承諾程式碼沒做的事**（2026-09-10 的 0-A.1 review 就是抓到本路徑第一版
-犯了這個——`--a2-deferral-work-id` 當時只驗非空，填一個不存在的卡號一樣通過）。
-
-同時提供 `--adjudicator` 會被**拒收**：有裁決者就不叫延後。該組合唯一的用途是把一次真的
-裁決記成延後、或把一次延後粉飾成有人看過，所以它在 CLI 層就擋掉，不留給紀律。
-
-**本路徑放行的是 land，NEVER 是 finding。** 0-A.1 與深度 review 判出的每一條缺失類 finding
-**仍然 MUST 修完**才 land——延後的只有「第三方逐條覆核 dismiss 與漏項」那一步。
-逐字反開脫：「反正沒有裁決者會來看，那幾條 Minor 就先留著」——那不在本裁決的射程內。
-
-**補跑是義務不是提醒。** 條件 2 的阻塞解除後（典型是配額回復），MUST 以**同一份 snapshot**
-＋ 原始 0-A.1 findings ＋ 深度結果交給合格裁決者走完第 2 步，並在該 work item 上收口。
-`--a2-deferral-work-id` 之所以是必填，就是為了讓這件事有一個會浮出來的載體——
-**NEVER** 把它當成一個備註欄位隨手填一個不存在的 id。
-
-**匯合行印 ✅ 之後會另外印一行「0-A.2 裁決已延後，NEVER 讀成完成」**。看到那一行仍然收工，
-與沒有跑 0-A.2 的差別只有 ledger 裡一個 boolean。
-
-深度輸出缺 `## Review Verdict`（含截斷／context exhaustion）時，明示深度階段未完整；不盲重跑相同耗盡命令。保留已有 findings，由合格裁決者以完整最新 diff、原始 0-A.1 輸出與相同完整性契約接手。只有它實際覆蓋缺失範圍並產出完整 verdict 才可收口；否則 0-A.2 保持未完成。
-
-裁決輸出對**每一條** dismissed finding 提供：
+0-A.2 輸出對**每一條** dismissed finding 提供：
 
 ```text
 DISMISSED — 反證：<file>:<line> ／ <契約或規則條文的具體出處>
@@ -478,21 +431,19 @@ DISMISSED — 反證：<file>:<line> ／ <契約或規則條文的具體出處>
 
 ```bash
 node "$COMMIT_SKILL_DIR/scripts/0a-metrics.mjs" record \
-  --review-mode <independent|escalated|escalated-a2-deferred|fast-path-skip> \
-  --reviewer <實際runtime/model> [--adjudicator <實際runtime/model>] \
+  --review-mode <independent|escalated|fast-path-skip|blocked> \
+  --reviewer <實際runtime/model> \
   --diff-lines <行數> --diff-files <檔數> \
   --critical N --major N --minor N --info N \
   --a2 <true|false> --dismissed N --dismissed-unsubstantiated N \
   --screenshot <pass|skip> --doc <aligned|skip>
 ```
 
-Fast-path 不填未執行的 reviewer；escalated 記實際裁決者；`escalated-a2-deferred` 依上方
-§ 0-A.2「裁決者結構性缺席時的延後路徑」多帶 `--a2-deferral-receipt` 與 `--a2-deferral-work-id`，
-**NEVER** 同時帶 `--adjudicator`（有裁決者就不叫延後，CLI 會拒收）。`--dismissed-unsubstantiated` 是反證不足被保留為 real issue 的條數。Recorder 的參數檢查不證明 review 真有執行，須同時保留各軸原始 receipt；參數矛盾時修正流程或記錄，不能填假值讓它通過。舊 `--codex` CLI／歷史記錄是相容資料，不要求新入口冒充該模型組合。
+Fast-path 不填未執行的 reviewer；`escalated` 的 `--reviewer` 記實際跑 0-A.2 深度 review 者（仍是 Astra medium）。`--dismissed-unsubstantiated` 是反證不足被保留為 real issue 的條數。`blocked` 記「gate 觸發但因外部原因沒跑完」（如 Astra 配額耗盡）：MUST 提供非空 `--blocked-reason`，`--reviewer` 可省，findings 記已觀察到的部分——pending review 要留遙測記錄，不能整筆消失。Recorder 的參數檢查不證明 review 真有執行，須同時保留各軸原始 receipt；參數矛盾時修正流程或記錄，不能填假值讓它通過。舊 `--codex` CLI／歷史記錄是相容資料，不要求新入口冒充該模型組合；含 `+fable` 的舊 mode 與 `--adjudicator`／`--a2-deferral-*` 參數已退役，CLI 會拒收。
 
 本地 `.clade/0a-metrics.jsonl` 是閾值評估依據；`summary` 的歷史數據與本次結果分開。Fast-path 與大改動門檻的變更需據分佈判定，不憑單次觀感調整。
 
-**未完成的 gate 不產生通過匯合行，也不進 commit。** Reviewer 不可用、配額不足、缺隔離／身份／完整輸出都不能以主線自審補位。發現自己正用「另一個 fresh agent」代替模型差異、或用啟動成功代替完成，就是回上表補證據的時刻。
+**未完成的 gate 不產生通過匯合行，也不進 commit。** Reviewer 不可用、配額不足、缺隔離／身份／完整輸出都不能以主線自審或其他模型補位。發現自己正用「另一個 fresh agent」代替合格的 Astra review、或用啟動成功代替完成，就是回上表補證據的時刻。
 
 Heavy gate 的 `exit 75` 代表 `gate-slot.sh` 等不到 slot、inner command 尚未執行；不是 typecheck／OOM 的證據。依 [[pitfall-heavy-gate-exit-75-reads-as-typecheck-failure]] 查實際 holder 與執行輸出，不能用增大 heap 或等待參數修錯層。
 
@@ -945,4 +896,4 @@ script 抓不到「這是一條新的最佳實踐」——那是語意判斷。�
 - 協調／詢問：有已授權的具名 agent 通道時先協調；需要使用者資訊時用本入口實際可用的詢問工具或直接對話。AskUserQuestion 不是授權的唯一載體，既有同範圍回答不重問。
 - Exit：先收回或安全停止本次會寫入的背景工作，再依 runtime-lifecycle 以原 work/runtime/session/token 釋放鎖。完成事件缺席時保留 gate 未完成與具體 handle，不宣稱已退出。
 
-每次 receipt 記實際 runtime、model 與隔離方式；本段不把 Claude 主線視為固定模型，也不代替共用跨模型判定。
+每次 receipt 記實際 runtime、model 與隔離方式；本段不把 Claude 主線視為固定模型，也不代替共用 reviewer 資格判定（唯一合格：GPT-6 Astra via Pi medium）。

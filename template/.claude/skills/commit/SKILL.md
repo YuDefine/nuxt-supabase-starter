@@ -23,7 +23,7 @@ $ARGUMENTS
 
 ## Step 0-Batch: 提交入口與既有批次（取得 commit lock 前）
 
-**每次**進入 `/commit` 先跑 `wt-helper batch status`（consumer：`scripts/wt-helper.ts`；clade：`vendor/scripts/wt-helper.ts`）。使用者主動要求的 trigger 是 `manual`，無最低件數；自動收割用 `auto`，4 個 distinct work id 才啟動，dependency／drained／stop 可提前結批。
+**每次**進入 `/commit` 先跑 `wt-helper batch status`（consumer：`scripts/wt-helper.ts`；clade：`vendor/scripts/wt-helper.ts`）。使用者主動要求的 trigger 是 `manual`，無最低件數；自動收割用 `auto`：`pr-merge-based` 1 個 distinct work id 即準備獨立 PR，`trunk-based` 仍要 4 個才啟動。dependency／drained／stop 可提前結批。Checkpoint 不是 `/commit`，不得在 checkpoint 啟動完整品質鏈或發版。
 
 有就緒成員或待續跑／待清理批次時 **MUST 讀 [batch.md](batch.md)**，先準備或接續隔離整合區，再在該區跑本 skill 的完整 Step 0–5；Step 5 後 seal／land，正式落地才進 Step 6。已落地只欠 cleanup 的批次直接清理，不重跑品質鏈。沒有就緒成員且沒有 active batch 時走普通 `/commit`，當前 WIP 照常全包。未達自動門檻時返回開發，**不取得 commit lock**。
 
@@ -74,7 +74,7 @@ WIP 確實阻礙本次工作時，使用 `commit.detail` 的三項 stash predica
 先判斷 Step 0-Scope 的本次變更是否命中 [`review-tiers.md`](rules/review-tiers.md)
 Tier 3；命中才執行官方 Codex Security path scan。觸發時 **MUST** 先完整讀
 [gates.md](gates.md) § 0-S 的範圍、成本上限與 exit 分流再繼續。未命中則跳過，進入一般
-cross-model code review。完整 repository baseline 保持 operator 明確觸發，不屬於 `/commit`。
+獨立 code review（GPT-6 Astra via Pi，effort: medium）。完整 repository baseline 保持 operator 明確觸發，不屬於 `/commit`。
 
 ### 0-A/B/C/D 執行與匯合
 
@@ -84,7 +84,7 @@ cross-model code review。完整 repository baseline 保持 operator 明確觸�
 simplify → fast-path 判定
   → 0-A.1（或合法 skip）／0-B（條件觸發）／0-C
   → 收回結果、匯合修正
-  → 0-A.1 有 Critical/Major：0-A.2 深度 review＋跨模型裁決
+  → 0-A.1 有 Critical/Major：修正後 0-A.2 深度 review
   → 0-D → 大改動回扣 → 0-E → 0-F
 ```
 
@@ -96,7 +96,7 @@ simplify → fast-path 判定
 2. 改動限於 doc / config 類檔案：`*.md`、`*.json`（**除** `package.json` 的 `dependencies` / `devDependencies`）、`*.yml`、`*.yaml`、`.gitignore`、`HANDOFF.md`、`ROADMAP.md`
 3. 無 sensitive 路徑（依 [`review-tiers.md`](rules/review-tiers.md) Tier 3）：`**/migrations/**`、`**/auth/**`、`**/permission*`、`**/rls*`、`*.sql`、`**/*security*`
 
-任何 `.ts` / `.tsx` / `.vue` / `.mjs` / `.js` / `.sh` 變更（即使單行）都**不適用** fast-path —— 邏輯 bug 在小 diff 很常見，跨模型 review 仍有價值。
+任何 `.ts` / `.tsx` / `.vue` / `.mjs` / `.js` / `.sh` 變更（即使單行）都**不適用** fast-path —— 邏輯 bug 在小 diff 很常見，獨立 review 仍有價值。
 
 **修正後的證據**：每一個實際 gate 都要完成並綁定受測範圍；匯合修正超過 50 行或跨 5 檔以上時，依 gates.md 的大改動回扣驗新 snapshot。問題先收回、匯合一次修，避免多位 writer 同時改同一內容。
 
@@ -104,7 +104,7 @@ simplify → fast-path 判定
 
 每個 gate 的完整執行流程（bash scripts、trigger 條件、fix loop、pi offload）見 [gates.md](gates.md)。執行任一 gate 前 **MUST** 先讀對應 §。
 
-- **0-A 程式碼審查**：simplify（0-A.0）→ 合格獨立跨模型 review（0-A.1）→ Critical／Major 條件觸發深度 review 與不同模型族裁決（0-A.2）。Cursor 的 0-A.2 Fable 缺 pane 時主線 MUST 先開 Herdr pane，不能把「無 pane」當 skip。詳見 [gates.md](gates.md) § 0-A。
+- **0-A 程式碼審查**：simplify（0-A.0）→ 合格獨立 review（0-A.1）→ Critical／Major 條件觸發深度 review（0-A.2）。唯一合格 review 模型是 GPT-6 Astra via Pi（effort: medium）；配額耗盡沒有替補，gate 保持未完成，不以主線自審或其他模型補位。詳見 [gates.md](gates.md) § 0-A。
 - **0-B UI Design Review**：條件觸發（`.vue` template 變更 + 視覺影響）。詳見 [gates.md](gates.md) § 0-B。
 - **0-C CI 等效檢查**：`pnpm check` + `pnpm test` + `pnpm run doctor`，全綠才過。詳見 [gates.md](gates.md) § 0-C。
 - **0-D Doc Alignment**：條件觸發（diff 觸及 docs / rules / snippets / audit / 業務碼 / pitfall）。詳見 [gates.md](gates.md) § 0-D。

@@ -13,7 +13,8 @@ description: ad-hoc 工作的追蹤載體、唯讀與指定產物邊界、共享
 | --- | --- |
 | 明示唯讀、禁止寫檔，或只要求對話交付盤點／計畫 | 直接在對話交付，不建立 task 檔或修改 repository／spine |
 | 只允許寫指定計畫／報告文件 | 只在該文件追蹤，不另建 tasks 檔、不擴成實作或提交 |
-| 已授權本機修改的 ad-hoc 工作（debug／配置／單檔 fix） | **MUST 先**建立 `tasks/<YYYY-MM-DD-HHMM>-<slug>.md`，再修改業務檔 |
+| 已授權本機修改、當次可完成的 ad-hoc 工作 | 提交說明保存意圖與驗證即可；需要同 session 清單時才建 `tasks/<YYYY-MM-DD-HHMM>-<slug>.md` |
+| 需要跨 session 接續、決策或遷移 | **MUST** `node vendor/scripts/flow/flow.ts plan open <slug> --title '…'`，載體是 `specs/plans/<work-id>/plan.md` |
 
 任務後續取得實作授權時重新套用上表；唯讀交付不代替實作追蹤。拆得開的工作 **NEVER** 用共享單檔（例如 `tasks/todo.md`／`tasks/notes.md`）；一 session 一檔，只編輯自己的 task 檔。`HANDOFF.md`、`ROADMAP.md`、`docs/tech-debt.md`、`docs/pitfalls/**` 是本質共享登記簿，改它們前依 [[shared-file-concurrent-write]]。
 
@@ -31,4 +32,4 @@ description: ad-hoc 工作的追蹤載體、唯讀與指定產物邊界、共享
 
 ## 真相層與回報
 
-task 檔只承載當前 session 的授權、進度、證據與未完項；長期規範回 rules，技術踩坑走 docs/pitfalls 或 `/oops`，產品決策走 `docs/decisions/`，跨 session blocker 走 `HANDOFF.md`，follow-up 依 [[follow-up-register]]。**「等」是上表三個動作之一，NEVER 是「判不出來」的同義詞。** Herdr 不可用時，**降級掉的是「對方是誰」，NEVER 是「所以可以 escalate 了」**；本規則不把短期 task 註記冒充長期登記，也不因 task 檔存在就宣稱工作完成。
+task 檔只承載當前 session 的授權、進度、證據與未完項。長期契約在 `specs/truth/`（或既有唯一機器 owner）。跨 session 工作接續同一份 plan。`HANDOFF.md` 是從 flow + active plan 生成的 view。follow-up 依 [[follow-up-register]]。**「等」是上表三個動作之一，NEVER 是「判不出來」的同義詞。** Herdr 不可用時，**降級掉的是「對方是誰」，NEVER 是「所以可以 escalate 了」**；本規則不把短期 task 註記冒充長期登記，也不因 task 檔存在就宣稱工作完成。

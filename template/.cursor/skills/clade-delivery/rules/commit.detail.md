@@ -15,7 +15,7 @@ paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**', '.clade/work-loop/**']
 
 `/commit` 封裝了品質閘門，繞過等於讓壞 code / 壞版本號 / 壞 tag 進 repo。各 gate 一行定性如下，**MUST 全綠才能 commit**；執行細節一律讀當前 runtime 已投影的 commit skill 全文及其 `gates.md`。找不到技能或其必要能力時，該 gate 保持未完成，不改用裸 Git 略過 ceremony。
 
-- **0-A** 程式碼審查：simplify 序跑第一，再執行獨立 review；Critical／Major 條件觸發深度 review 與裁決，修正由主線匯合後執行。Reviewer 品質、模型差異、transport／隔離與配額分流依 commit skill `gates.md` § 0-A 的同一份政策；fresh context 與跨模型分開驗證。必要 reviewer 或隔離能力不可用時，保留未達成及待補範圍，主線自審不算該 gate 通過。
+- **0-A** 程式碼審查：simplify 序跑第一，再執行獨立 review；Critical／Major 條件觸發同一 review 模型的 fresh-context 深度複審，修正由主線匯合後執行。Reviewer 品質、模型資格、transport／隔離與配額分流依 commit skill `gates.md` § 0-A 的同一份政策；fresh context 與模型資格分開驗證。必要 reviewer 或隔離能力不可用時，保留未達成及待補範圍，主線自審或其他模型補位都不算該 gate 通過。
   **NEVER** 以「既有問題」「不在本次 scope」「建議性質」靜默跳過 review finding；依同一份 0-A 政策逐條處置、記錄裁決與未達 gate。
 - **0-B** UI Design Review（條件觸發）：`.vue` 模板 + 頁面/元件/佈局/互動/樣式變更時由 Gemini 3.8 Flash 收截圖，再由 Opus 5 做 Design Review
 - **0-C** format / lint / typecheck / test / doctor 全綠：執行 check 後無條件跑明確的 test command，不由 script 名稱猜測覆蓋；`scripts.doctor` **必裝**（缺裝 = block commit）。命令與格式檢查的處置依 skill `gates.md` § 0-C。

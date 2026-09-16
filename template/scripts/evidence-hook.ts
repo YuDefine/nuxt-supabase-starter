@@ -9,7 +9,17 @@ const runner = join(dirname(fileURLToPath(import.meta.url)), 'run-evidence.ts')
 const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'"
 
 /** One rewrite owner: query the incumbent RTK decision, then capture its raw input. */
-export function evidenceHook(payload: Record<string, any>, runtime = process.env.CLADE_RUNTIME) {
+export function evidenceHook(
+  payload: Record<string, any>,
+  runtime = process.env.CLADE_RUNTIME,
+): {
+  systemMessage?: string
+  hookSpecificOutput?: {
+    permissionDecision?: string
+    hookEventName?: string
+    updatedInput?: Record<string, any>
+  }
+} {
   const input = payload.tool_input ?? payload.input ?? {}
   const command = input.command
   if (

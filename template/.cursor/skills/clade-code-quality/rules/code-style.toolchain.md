@@ -74,7 +74,7 @@ clade 投影進 consumer 的路徑（`vendor/**`、`.claude/**`、`.clade/**`、
 
 唯一例外是 clade 自己 —— `vendor/` 在那裡是原始碼而非投影，clade 的 `vite.config.ts` 因此把 `vendor/**` 濾回來。這個例外只有一處、有註解，且由 audit 認得。
 
-機械檢查：`node scripts/audit-governance-drift.ts` check 10 掃 clade + 全 consumer 的 `vite.config.ts`，preset 未涵蓋的 inline 排除路徑會 fail。對應 [[pitfall-projection-excludes-not-in-shared-preset]]。
+機械檢查：`node scripts/audit-governance-drift.ts` check 10 掃 clade + 全 consumer 的 `vite.config.ts`，preset 未涵蓋的 inline 排除路徑會 fail。契約全文：`specs/truth/projection-ownership.md`。舊 id：[[pitfall-projection-excludes-not-in-shared-preset]]、[[TD-807]]、[[TD-670]]。
 
 #### `staged` 區塊的排除清單也 MUST 讀 `PROJECTION_EXCLUDES`
 
