@@ -1,6 +1,6 @@
 # 🔒 LOCKED — managed by clade · Source: vendor/actions/supabase-check/action.yml · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/actions/supabase-check/action.yml
 name: 'Supabase Schema Check'
-description: 'Cold-replay the repo migrations on a throwaway local Postgres, then assert three things: the committed database types match what the migrations produce, supabase db lint is clean at the configured level, and (when supabase/tests/ exists) the pgTAP suite passes. Never touches a dev, staging or production database — it starts its own stack on the runner, which is also what makes it verify that the migration chain replays from zero. Assumes the caller has already checked out the repo and installed the Supabase CLI (supabase/setup-cli@v1).'
+description: 'Cold-replay the repo migrations on a throwaway local Postgres, then assert three things: the committed database types match what the migrations produce, supabase db lint is clean at the configured level, and (when supabase/tests/ exists) the pgTAP suite passes. A fourth, advisory-only step runs pgbot lint (schema profile) against the same throwaway DB and emits ::warning:: annotations; it never affects the exit code. Never touches a dev, staging or production database — it starts its own stack on the runner, which is also what makes it verify that the migration chain replays from zero. Assumes the caller has already checked out the repo and installed the Supabase CLI (supabase/setup-cli@v1).'
 author: 'YuDefine/clade'
 
 inputs:
@@ -20,6 +20,14 @@ inputs:
     description: 'auto (default; run `supabase test db` only when supabase/tests/ contains files), always, or never.'
     required: false
     default: 'auto'
+  pgbot-version:
+    description: 'pgbot release to run `pgbot lint` (schema profile) with, ADVISORY ONLY — findings become ::warning:: annotations and never fail the job. Only versions whose sha256 is pinned inside this action are accepted; `none` skips the step. Runs against the throwaway CI database only, never a real one.'
+    required: false
+    default: '0.8.1'
+  pgbot-base-report:
+    description: 'Optional path (relative to cwd) to a pgbot JSON report produced from the base branch. When set, pgbot only annotates findings NEW relative to that report (--fail-on-new); pre-existing findings are listed in the log but not annotated.'
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -31,6 +39,8 @@ runs:
         INPUT_LINT_LEVEL: ${{ inputs.lint-level }}
         INPUT_TYPES_PATH: ${{ inputs.types-path }}
         INPUT_RUN_TESTS: ${{ inputs.run-tests }}
+        INPUT_PGBOT_VERSION: ${{ inputs.pgbot-version }}
+        INPUT_PGBOT_BASE_REPORT: ${{ inputs.pgbot-base-report }}
       run: |
         set -euo pipefail
 
@@ -144,6 +154,85 @@ runs:
           echo "::endgroup::"
         else
           echo "no supabase/tests/*.sql — pgTAP skipped (opt-in; see vendor/snippets/supabase-ci/README.md)"
+        fi
+
+        # ── 4. pgbot lint（schema profile，ADVISORY ONLY）──────────────────
+        # 規約：rules/modules/db-runtime/supabase-self-hosted/observability.md § schema / config 層健檢 的 profile 分界表。
+        # 這一步 NEVER 動 FAILED：pgbot 的 finding 需要人判業務語意（int4_identity_column 對設定表恆為誤報），
+        # 它只印 ::warning::。也 NEVER 拿到真實 DB 連線——DSN 只從 `supabase status` 取拋棄式 stack 的。
+        PGBOT_VER="$(printf '%s' "$INPUT_PGBOT_VERSION" | tr -d '[:space:]')"
+        if [ -z "$PGBOT_VER" ] || [ "$PGBOT_VER" = "none" ]; then
+          echo "pgbot lint skipped (pgbot-version=none)"
+        else
+          echo "::group::pgbot lint --profile=schema (advisory, v$PGBOT_VER)"
+          # sha256 釘死在這裡，與 vendor/snippets/pg-health-baseline/README.md Step 1 的 VER 同步升。
+          # 只列這裡有的版本才跑；沒列的版本 = 沒人驗過 checksum，warn 後跳過，NEVER 退回 curl | sh。
+          case "$(uname -m)" in x86_64|amd64) PGBOT_ARCH=amd64 ;; aarch64|arm64) PGBOT_ARCH=arm64 ;; *) PGBOT_ARCH= ;; esac
+          PGBOT_SHA=
+          case "${PGBOT_VER}_${PGBOT_ARCH}" in
+            0.8.1_amd64) PGBOT_SHA=1246abb6873267b49fcfb38b7db00cbfa77c1d7d240a43fc020be8c5f1541c20 ;;
+            0.8.1_arm64) PGBOT_SHA=8f1f5a80d274ba007969d154778bf6f8d6863b72c1e4820f84e79a0e8c09cb5d ;;
+          esac
+          if [ -z "$PGBOT_SHA" ]; then
+            echo "::warning::pgbot v$PGBOT_VER/$PGBOT_ARCH has no pinned sha256 in this action — pgbot lint skipped. Pin it in vendor/actions/supabase-check/action.yml (clade) rather than passing an arbitrary version."
+          else
+            PGBOT_DIR="${RUNNER_TEMP:-/tmp}/pgbot-$PGBOT_VER"
+            mkdir -p "$PGBOT_DIR"
+            PGBOT_TGZ="$PGBOT_DIR/pgbot_${PGBOT_VER}_linux_${PGBOT_ARCH}.tar.gz"
+            PGBOT_OK=0
+            if curl -fsSL -o "$PGBOT_TGZ" "https://github.com/pgrundev/pgbot/releases/download/v${PGBOT_VER}/pgbot_${PGBOT_VER}_linux_${PGBOT_ARCH}.tar.gz"; then
+              if echo "$PGBOT_SHA  $PGBOT_TGZ" | sha256sum --check --status; then
+                tar -xzf "$PGBOT_TGZ" -C "$PGBOT_DIR" && [ -x "$PGBOT_DIR/pgbot" ] && PGBOT_OK=1
+              else
+                echo "::warning::pgbot v$PGBOT_VER tarball sha256 MISMATCH — refusing to run it. Either the release was re-cut (re-pin in clade) or the download was tampered with."
+              fi
+            else
+              echo "::warning::pgbot v$PGBOT_VER download failed — pgbot lint skipped (advisory step; the gate above is unaffected)."
+            fi
+            if [ "$PGBOT_OK" -ne 1 ]; then
+              [ -f "$PGBOT_TGZ" ] || true
+            else
+              # 拋棄式 stack 的 DSN。`supabase status -o json` 的鍵名隨 CLI 版本漂過（DB_URL / db_url），兩個都試；
+              # 都沒有就退回 CLI 預設 54322——這個 port 只可能是 supabase db start 起的那個，不可能是真實 DB。
+              CI_DSN="$(supabase status -o json 2>/dev/null | node -e "
+                let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);process.stdout.write(j.DB_URL||j.db_url||'')}catch{process.stdout.write('')}})" 2>/dev/null || true)"
+              [ -z "$CI_DSN" ] && CI_DSN="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+              PGBOT_OUT="${RUNNER_TEMP:-/tmp}/pgbot-lint.json"
+              BASE_REPORT="$(printf '%s' "$INPUT_PGBOT_BASE_REPORT" | tr -d '[:space:]')"
+              PGBOT_ARGS=(lint "$CI_DSN" --format=json --fail-on=none)
+              if [ -n "$BASE_REPORT" ]; then
+                if [ -f "$BASE_REPORT" ]; then
+                  PGBOT_ARGS+=(--fail-on-new "$BASE_REPORT")
+                else
+                  echo "::warning::pgbot-base-report '$BASE_REPORT' not found — annotating all schema findings, not only new ones."
+                fi
+              fi
+              # `.pgbot.toml`（若 repo 有）由 pgbot 從 cwd 向上自動找到；suppressed 的 finding 留在 JSON 但不 annotate。
+              # --fail-on-new 的 preexisting 判定以「聚合 finding 的 objects 集合」為單位（0.8.1 實測）：
+              # base 有 3 張 int4 表、PR 加第 4 張 → 整條 int4_identity_column 算新的，不會只列新那張。
+              if "$PGBOT_DIR/pgbot" "${PGBOT_ARGS[@]}" > "$PGBOT_OUT" 2> "${PGBOT_OUT}.err"; then :; else
+                echo "pgbot exited non-zero (advisory; ignored). stderr:"; cat "${PGBOT_OUT}.err" || true
+              fi
+              if node -e "JSON.parse(require('fs').readFileSync('$PGBOT_OUT','utf8'))" 2>/dev/null; then
+                node -e "
+                  const r = JSON.parse(require('fs').readFileSync('$PGBOT_OUT','utf8'));
+                  const all = Array.isArray(r.findings) ? r.findings : [];
+                  const live = all.filter(f => !f.suppressed && !f.preexisting);
+                  const pre = all.filter(f => f.preexisting).length, sup = all.filter(f => f.suppressed).length;
+                  for (const f of live) {
+                    // 0.8.1 實測：schema profile 的 finding 是聚合的，object 為空、objects 列出受影響的表/索引。
+                    const objs = Array.isArray(f.objects) && f.objects.length ? f.objects : (f.object ? [f.object] : []);
+                    const shown = objs.slice(0, 5).join(', ') + (objs.length > 5 ? ' (+' + (objs.length - 5) + ' more)' : '');
+                    console.log('::warning title=pgbot ' + f.id + '::' + (f.severity||'') + ' ' + (f.title||f.id) + (shown ? ' [' + shown + ']' : '') + ' — advisory, needs human judgement; see vendor/snippets/pg-health-baseline/README.md § 判讀紀律');
+                  }
+                  console.log('pgbot lint: ' + live.length + ' finding(s) annotated, ' + pre + ' pre-existing (base report), ' + sup + ' suppressed by .pgbot.toml. schema_version=' + (r.schema_version||'?'));
+                "
+              else
+                echo "pgbot produced no parseable JSON — advisory step skipped."
+              fi
+            fi
+          fi
+          echo "::endgroup::"
         fi
 
         exit "$FAILED"
