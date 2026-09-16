@@ -20,11 +20,11 @@ paths: ['tasks/**', 'HANDOFF.md']
 | --- | --- | --- |
 | 明示唯讀／禁止寫檔，或只要對話中的盤點／計畫 | 對話中的進度與交付 | 寫 task 檔或 spine 不在任務範圍 |
 | 只允許指定計畫／報告文件 | 該指定文件 | 單一產物承載進度，不另外擴充寫入範圍 |
-| 大型結構化變更（涉及 spec、跨多檔、跨層、需要 design review） | plan package（`specs/plans/NNN-<slug>/`） | 走完整 [[aixbdd-workflow]] 九步入口 |
+| 大型結構化變更（涉及 spec、跨多檔、跨層、需要 design review）或跨 session 接續 | `specs/plans/<work-id>/plan.md` | clade home 走 `flow plan open`；產品 SDD consumer 在遷移前才走 [[aixbdd-workflow]] 九步 |
 | **已授權本機修改的 ad-hoc 小工作**（單一 debug、配置調整、單檔 fix） | **`tasks/<id>.md`** | 比 plan package 輕一個量級 |
 | 跨 session WIP 交接 | `HANDOFF.md` | session 結束時的「信件」 |
 | 中長期未來工作（不在當前工作 scope） | repo 根目錄 `ROADMAP.md` `## Next Moves` | 排優先序的未來 backlog |
-| 範圍外技術債 / 未解決項長期追蹤 | `docs/tech-debt.md`（TD-NNN） | 永續 register |
+| 範圍外技術債 / 未解決項長期追蹤 | `specs/plans/<work-id>/plan.md`（`flow plan open`） | 結案刪除；未遷移 consumer 才仍用 `docs/tech-debt.md` |
 | 不需要追蹤的單一 prompt | 都不需要 | 直接做完即可 |
 
 **判斷準則**：先按當次授權套用 [[session-tasks]] 的載體表；已允許本機修改而不確定追蹤形式時，先用 `tasks/<id>.md`。發現規模膨脹（要動 spec、要 design review、要跨多檔）時，依專案既有 workflow 升級追蹤；追蹤形式不擴大實作或發布授權。
@@ -185,7 +185,7 @@ slug 的重述，那正是這條規約要修的東西（一個不指涉任何東
 | 下一 session 要立刻接手 | `HANDOFF.md` 的 `## In Progress` | 寫進去（含 work slug、檔案路徑、卡點），符合 `handoff.md` 規約 |
 | 等待外部條件（合約、ramp 日期、第三方 API ready） | `docs/tech-debt.md`（TD-NNN） | 建 register entry，符合 `follow-up-register.md` 規約 |
 | 未來才做、可排優先序 | repo 根目錄 `ROADMAP.md` `## Next Moves` | 加 `- [priority] 描述 — 依賴：xxx` 條目 |
-| 規模膨脹了（要動 spec、design review、跨多檔） | 立新 plan package | 走 `/specify <slug>` |
+| 規模膨脹了（要動 spec、design review、跨多檔）或下一 session 仍要接 | 同一 work id 的 plan | `flow plan open`；已有 plan 則續跑，不另開 |
 | 純放棄 | 直接刪檔 | git history 留證 |
 
 **升級完成 → 自己的 tasks 檔搬 `archive/` 或直接刪。**

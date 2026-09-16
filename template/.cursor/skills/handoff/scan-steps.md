@@ -16,15 +16,16 @@
 ```bash
 node ~/offline/clade/vendor/scripts/rotate-handoff-done.ts --repo "$MAIN_WT_PATH" --json
 # noop → stdout `{"ok":true,"noop":true,...}`，繼續 2B.1a
-# 有搬 → 繼續 2B.1a（scan 讀的是搬完後的 HANDOFF.md）
+# retired → `{"ok":true,"retired":true,...}`：完成段已從主檔刪除、**沒有**月份 archive。繼續 2B.1a
+# 有搬且未 retired → 繼續 2B.1a（scan 讀的是搬完後的 HANDOFF.md）
 ```
 
 **可 rotate（100%，一次搬完）**：
 
 | 判準 | 動作 |
 | --- | --- |
-| heading 標了結案（`✅` / `已完成` / `已落地` / `已發版` / `已處置` / `dismissed` / `已 supersede` / …）且 body **沒有** `- [ ]` | 整塊搬進 `docs/archives/<YYYY-MM>-handoff-narrative.md` |
-| `##` dated section、無 active `- [ ]`（kind=`narrative`） | 同上，按 `YYYY-MM` 分桶 |
+| heading 標了結案（`✅` / `已完成` / `已落地` / `已發版` / `已處置` / `dismissed` / `已 supersede` / …）且 body **沒有** `- [ ]` | 從主檔刪除。未遷移 consumer 才搬進 `docs/archives/<YYYY-MM>-handoff-narrative.md` |
+| `##` dated section、無 active `- [ ]`（kind=`narrative`） | 同上；未遷移 consumer 才按 `YYYY-MM` 分桶 |
 | 剩餘混合段裡的 `- [x]` 項（含其縮進延續行） | 只搬走已勾項，留下 `- [ ]` |
 
 **永不 rotate**：
@@ -133,7 +134,7 @@ JSON 範例（節錄）：
 
 **MUST** 載入 `.claude/rules/local/*.md` 內所有自治區規則。若有 `clade-role-and-todo-discipline.md` 之類 local rule 限定 HANDOFF 寫法，整理時必須遵守。
 
-寫入 `HANDOFF.md` 與 archive 檔的路徑 **MUST** 用 Step 1.5 解析出的 `$MAIN_WT_PATH/HANDOFF.md` / `$MAIN_WT_PATH/docs/archives/<YYYY-MM>-handoff-narrative.md` / `$MAIN_WT_PATH/docs/archives/<YYYY-MM>-<topic>.md`，不用 cwd 相對。
+寫入 `HANDOFF.md` 的路徑 **MUST** 用 Step 1.5 解析出的 `$MAIN_WT_PATH/HANDOFF.md`，不用 cwd 相對。未遷移 consumer 才寫 `$MAIN_WT_PATH/docs/archives/<YYYY-MM>-handoff-narrative.md`。有 `specs/truth/work-lifecycle.md` 時 **NEVER** append 月份 archive。
 
 ---
 
@@ -151,7 +152,7 @@ JSON 範例（節錄）：
 | --- | --- | --- |
 | **拆條** | 段裡其實是多件事，且還有沒收的（heading 說完成但正文提到待驗 / 待散播 / 待決策） | 把未完那幾件拆到 `## In Progress` / `docs/tech-debt.md` / 新的 `tasks/<date>-<slug>.md`，剩下的走「關條」 |
 | **關條** | 已 done，且 `git log --grep '<TD-NNN 或 slug>'` 查得到 | **直接刪整段**。NEVER 寫 archive narrative —— git history 是免費且完整的知識層（同 [[tech-debt-hygiene]] Invariant 7 § 處置是三選一） |
-| **知識語態重寫** | 段裡有真教訓**且**未被任何機械 gate 承載 | 走 `/oops` 寫成 `docs/pitfalls/` 的一則（換語態，不是剪貼），原段同時刪掉 |
+| **知識語態重寫** | 段裡有真教訓**且**未被任何機械 gate 承載 | 走 `/oops`：clade home 寫 `specs/truth/`，未遷移 consumer 才寫 `docs/pitfalls/`（換語態，不是剪貼），原段同時刪掉 |
 | **不動（防重做 marker）** | heading 除了結案還明講「不要重做 / 不必重做 / 勿重做 / NEVER 重做 / 不必接續」 | **什麼都不做**。偵測器已自動豁免這一格，見下 |
 
 **防重做 marker 不算死段。** 這類段的存在目的就是擋住 fresh-context agent 重跑已完成的工作，
@@ -236,7 +237,7 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff next — clade <version> scan_
 | **aging** | `tech-debt-aging:<TD-NNN>`（warn） | open/pending TD 的 `Discovered` > 14d，含被 `Last reviewed` snooze 的 — 「正在老化」候選 | 列進 §2B.2 outstanding（排在 stale 之後、一般項目之前）。**MUST 主動追問 user 卡關原因**（見 § anti-snooze）。對 `snoozed: true` 的項目**明確指出** `Last reviewed` 不等於解決 — 「已 stamp Last reviewed 但仍無 Resolution，應推進或 wontfix」 |
 | **evidenceStale** | `tech-debt-evidence-stale:<TD-NNN>`（warn） | open TD 的 `Location` 路徑在 `Discovered` 之後被 commit 過 — 「敘述可能已不成立」候選。與 staleOpen 正交：staleOpen 問「放多久了」，本條問「還成不成立」 | **MUST 逐條讀該 entry 對照現況後才列 outstanding**，NEVER 直接把它當成待辦推給 user。三種結果：① 事情已做完 → 補 `### Resolution` + 改 `Status`，**不**列 outstanding；② 敘述過期但問題還在 → 更正敘述（保留原文供追溯），再列 outstanding；③ 確認仍成立 → 加 `**Last reviewed**: <today>`，照常列。**這是啟發式不是判決** — 路徑被動過也可能與該 TD 主題無關 |
 | **archivedRetained** | `tech-debt-archived-retained`（fail） | `docs/archives/tech-debt-closed-*.md` 內出現帶 re-activation 契約的 TD；trigger 留在 archive 裡，後續盤點看不見 | 依 §2B.1a 的 fail 契約停止；按 detail 的 TD id／archive path 搬回 `docs/tech-debt.md`。判準與 rotation 共用：`*-until-*`、`### 重訪條件` / `### Defer 條件`、`**Signal**:` 任一命中 |
-| **closedBloat** | `tech-debt-closed-bloat`（warn，closed TD ≥ 門檻時觸發） | done/resolved/wontfix 的 closed TD 仍躺 `docs/tech-debt.md` 主檔 | **MUST** 跑 `node "$HOME/offline/clade/vendor/scripts/rotate-closed-bloat.ts"`（搬全部 rotatable，不是啃到門檻下；noop 時 stdout 是 `noop`）。**NEVER** 詢問操作。retained（`*-until-*`、`### 重訪條件` / `### Defer 條件`、`**Signal**:`）由 script 排除，訊息的 `retained` 欄列出。Park 不執行 |
+| **closedBloat** | `tech-debt-closed-bloat`（warn，closed TD ≥ 門檻時觸發） | done/resolved/wontfix 的 closed TD 仍躺 `docs/tech-debt.md` 主檔 | **MUST** 跑 `node "$HOME/offline/clade/vendor/scripts/rotate-closed-bloat.ts"`。stdout `retired` = clade home／已遷移 repo，**停**，不要寫 archive 或改 register。未遷移 consumer：搬全部 rotatable（noop 時 stdout 是 `noop`）。**NEVER** 詢問操作。Park 不執行 |
 | **entryOversize** | `tech-debt-entry-oversize`（warn，任一 open TD > `raw.oversizeThreshold` 行時觸發） | **open** TD 單條正文過長。rotate 只吃 closed，對 open 零覆蓋 — <consumer-b> 實測 4986 行主檔裡 4807 行是 open，主檔體積的長期成長全在這裡 | 產出**下推**建議（**不是砍字**）：把長篇 root-cause 敘事搬到 `$MAIN_WT_PATH/docs/archives/tech-debt-bodies.md`，主檔留 metadata block（`Status` / `Discovered` / `Class` / `Location`）+ 摘要一段 + pointer。逐條見 `raw.oversize[]`（含 `lines` / `overBy` / `lineNo`）。**依詢問操作讓 user 拍板**（A 套用 / B 跳過 / C 手動），user 選 A 才動檔。**MUST 保留 metadata block 原封不動** — `audit-tech-debt-hygiene.ts` 的 Invariant 2 / 3 / 6 全靠它，搬走 `Location` 會讓那三條同時失效 |
 
 **closedBloat 的幅度由 script 一次搬完全部 rotatable 承載**，不再走 (A) 選項。

@@ -195,8 +195,10 @@ if [[ $CHECK_EXIT -eq 0 ]]; then
 fi
 
 # drift / orphan 偵測到 → 嘗試自動修復
-echo "" >&2
-echo "[clade] 偵測到 drift / orphan，自動修復中..." >&2
+# 第一行 MUST 帶上實際錯誤：Grok / 部分 harness 只展示 SessionStart stderr 的首行，
+# 只寫「自動修復中」會讓人以為 hook 卡死，真正的 conflict path 被截掉。
+FIRST_ERROR=$(printf '%s\n' "$CHECK_OUTPUT" | grep -m1 '\[clade error\]' || true)
+echo "[clade] 偵測到 drift / orphan，自動修復中${FIRST_ERROR:+: $FIRST_ERROR}" >&2
 echo "$CHECK_OUTPUT" >&2
 echo "" >&2
 

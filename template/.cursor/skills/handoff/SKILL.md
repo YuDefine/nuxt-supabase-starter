@@ -170,7 +170,7 @@ else
 fi
 ```
 
-實際操作：所有 `HANDOFF.md` / `docs/tech-debt.md` / `ROADMAP.md` / `docs/archives/<yyyy-mm>-<topic>.md` 寫入路徑都用 `$MAIN_WT_PATH/<rel>` 絕對路徑（Edit / Write tool 的 `file_path` 參數）；**禁止**用 cwd-相對路徑寫這幾個檔。其餘檔案（`.claude/rules/local/*.md` 讀取、`tasks/<date>-*.md` 清理）保持 cwd 相對行為。
+實際操作：所有 `HANDOFF.md` / `ROADMAP.md` 寫入路徑都用 `$MAIN_WT_PATH/<rel>` 絕對路徑（Edit / Write tool 的 `file_path` 參數）。未遷移 consumer 才寫 `docs/tech-debt.md` / `docs/archives/<yyyy-mm>-<topic>.md`。**禁止**用 cwd-相對路徑寫這幾個檔。其餘檔案（`.claude/rules/local/*.md` 讀取、`tasks/<date>-*.md` 清理）保持 cwd 相對行為。有 `specs/truth/work-lifecycle.md` 時 **NEVER** append 月份 handoff archive、**NEVER** 開新 TD、**NEVER** `mv` 進 `tasks/archive/`（刪完成檔，歷史由 git 追溯）。
 
 ### 當前 session 被隔離、寫不進 main 時（background job / cwd 已在 worktree）
 
@@ -208,7 +208,7 @@ fi
    | --- | --- |
    | 下一 session 要立刻接手的 in-progress 工作 | `HANDOFF.md` `## In Progress` section |
    | 被 blocker 卡住（缺權限 / 缺決策 / 等外部） | `HANDOFF.md` `## Blocked` |
-   | 等待外部 signal（合約 / ramp 日期 / 第三方 API ready） | `docs/tech-debt.md` 建 `TD-NNN` |
+   | 等待外部 signal（合約 / ramp 日期 / 第三方 API ready） | 有 `specs/truth/work-lifecycle.md` → `flow plan open`；未遷移 consumer 才建 `TD-NNN` |
    | 未來才做、可排優先序 | repo 根目錄 `ROADMAP.md` `## Next Moves` |
    | 規模膨脹（要動 spec / design review / 跨多檔） | 走 `/specify` 開 plan package（新增範圍先拍板） |
    | 純放棄 | 直接刪 |
@@ -249,7 +249,7 @@ fi
 
 4. **清理 session-tasks**：所有未完項升級完成後 → 只 `mv` / 刪「當前 session 自己開的」`tasks/<date>-*.md`（依 `rules/core/session-tasks.md`「NEVER 動別人的 tasks 檔」）。若當前 session 從頭到尾沒開 tasks 檔，跳過此步。
 
-   接著掃**無主檔**：`tasks/` 內**檔名 timestamp 與 mtime 都** >7 天的 `<date>-*.md`，其原 session 已被 auto-compact／中斷而不存在，「session 結束時清」對它永遠不會發生 → 整檔 `mv tasks/archive/`。**只 `mv`，NEVER `Edit`、NEVER 代跑升級路徑**（升級要判斷未完項該進 HANDOFF 還是 TD，那需要原 session 的 context）。判準與 7 天門檻的 SoT 在 `rules/core/session-tasks.operations.md` § 寫入規約補充——**該檔是 paths-gated，skill invoke 不會觸發它載入**（per [[pitfall-skill-invoke-does-not-trigger-paths-gate]]），所以操作句寫在這裡而不是靠引用。
+   接著掃**無主檔**：`tasks/` 內**檔名 timestamp 與 mtime 都** >7 天的 `<date>-*.md`，其原 session 已被 auto-compact／中斷而不存在，「session 結束時清」對它永遠不會發生。有 `specs/truth/work-lifecycle.md` → 只刪 **已追蹤且與 HEAD 一致** 的過期檔（`git ls-files --error-unmatch -- <file>` 成功且 `git diff --quiet HEAD -- <file>`）；untracked 或 dirty 的留下，**NEVER** `mv tasks/archive/`。未遷移 consumer 才整檔 `mv tasks/archive/`。**只 `mv` 或刪，NEVER `Edit`、NEVER 代跑升級路徑**（升級要判斷未完項該進 HANDOFF 還是 plan，那需要原 session 的 context）。判準與 7 天門檻的 SoT 在 `rules/core/session-tasks.operations.md` § 寫入規約補充——**該檔是 paths-gated，skill invoke 不會觸發它載入**（per [[pitfall-skill-invoke-does-not-trigger-paths-gate]]），所以操作句寫在這裡而不是靠引用。
 
    **MUST 兩個條件都驗**：只看 mtime 會漏掉一整批（無關的機械改名 sweep 會把真無主檔的 mtime 推到今天）；只看檔名會誤 mv 長期活躍的工作。
 
@@ -349,11 +349,11 @@ https://review-gui.<maintainer-domain>/review/<consumer-id>:<change-name>
 | 判定 | 落點 |
 | --- | --- |
 | 兩條都中 | 留在 HANDOFF |
-| 只中前者（耐久知識，不會過期） | `rules/` / `docs/pitfalls/` / `docs/rule-rationale/` |
+| 只中前者（耐久知識，不會過期） | `specs/truth/` 或既有唯一機器 owner；未遷移 consumer 才寫 `docs/pitfalls/` / `docs/rule-rationale/` |
 | 只中後者（任務級細節，接手者不必先讀） | 該任務的 TD entry body，或 `tasks/<date>-<slug>.md` |
 | 兩條都不中 | 刪 |
 
-**搬不是刪。** 敘事型內容是接手成本的主要來源，但它承載的是別人踩過的坑——綁單一任務的坑進該任務的 TD entry body，跨任務可復用的走 `/oops` 進 `docs/pitfalls/`。整段刪掉會讓下一個人重踩一次。
+**搬不是刪。** 敘事型內容是接手成本的主要來源，但它承載的是別人踩過的坑——綁單一任務的坑進該任務的 plan，跨任務可復用的走 `/oops`（clade home 寫 truth，未遷移 consumer 才進 `docs/pitfalls/`）。整段刪掉會讓下一個人重踩一次。
 
 **整檔 KB／行數門檻已廢。** 活段太肥走 `section_max_kb` / `entry_max_lines`（換載體，不是 rotate 觸發）。各 consumer 可在 `.clade/` 覆寫那兩條；在這裡再寫一套數字只會與它漂移。
 
@@ -372,7 +372,7 @@ https://review-gui.<maintainer-domain>/review/<consumer-id>:<change-name>
 
 | Candidate 等級 | 動作 |
 | --- | --- |
-| 符合 `/oops` Mode B 四條件齊備（root cause / detection / fix / prevention） | dispatch `/oops` 走完整 Mode B pipeline 寫進 `~/offline/clade/docs/pitfalls/` |
+| 符合 `/oops` Mode B 四條件齊備（root cause / detection / fix / prevention） | dispatch `/oops`。有 `specs/truth/work-lifecycle.md` 時寫入 truth／plan，**NEVER** 新 pitfall 檔；未遷移 consumer 才走 `docs/pitfalls/` |
 | 個人偏好 / 跨專案沿用的行為更正（user 糾正用詞、強調某做法） | dispatch `/oops` Mode B 輕量降級 → 寫 auto-memory `feedback` type |
 | 只給當前 repo 的 self-improvement lesson | dispatch `/oops` Mode B 輕量降級 → 寫 `<consumer>/tasks/lessons.md` |
 | 一次性 typo / 純業務邏輯 bug / 純設計問題 | 跳過（不該成為 pitfall 也不該佔 memory 槽位） |
@@ -389,7 +389,7 @@ https://review-gui.<maintainer-domain>/review/<consumer-id>:<change-name>
 
 **MUST Read [scan-steps.md](scan-steps.md) § 2B.1 before proceeding** — 含 2B.1b 100% rotate 指令、audit、JSON schema、reorganize 表、dead-section 處置表、寫入規約。
 
-摘要：先跑 `rotate-handoff-done.ts`（每次 `next` 的第一個寫入：100% 搬走可 rotate 的紀錄，不詢問、不看 KB 門檻）→ `handoff-scan.ts --json` 讀 `healthGate` → fail 回報 user → 2B.1c reorganize。整檔 size/lines 門檻已廢。三 sub-step 完才進 2B.1.5。
+摘要：先跑 `rotate-handoff-done.ts`（每次 `next` 的第一個寫入：100% 清掉可 rotate 的紀錄，不詢問、不看 KB 門檻）。JSON `retired: true` = clade home／已遷移 repo：完成段從主檔刪除、**不**寫月份 archive。未遷移 consumer 才搬進 archive。接著 `handoff-scan.ts --json` 讀 `healthGate` → fail 回報 user → 2B.1c reorganize。整檔 size/lines 門檻已廢。三 sub-step 完才進 2B.1.5。
 
 `tier-a-dead-section` warn 的處置在 [scan-steps.md](scan-steps.md) § 2B.1d dead-section 處置（Tier A）—— 拆條 / 關條 / 知識語態重寫三選一，第四格「防重做 marker」偵測器已自動豁免、**NEVER 刪**。該 sub-step 不寫任何檔，逐段判即可，處置不完不擋 2B.1.5。
 
@@ -482,7 +482,7 @@ Step 3.1 audit **有任一條** wt 判為 `mergeBackSafety: ptb-unsafe` → **MU
 
 **MUST Read [scan-steps.md](scan-steps.md) § 2B.1.8 before proceeding** — 含 staleOpen / aging / closedBloat 三訊號處置表、anti-snooze 規約、SoT 判定。
 
-摘要：從 §2B.1a 同一次 handoff-scan 輸出讀 `techDebtHygiene` 段 → stale 列 outstanding 最高優先 → aging 列第二優先並追問 blocker → closedBloat warn 時跑 `rotate-closed-bloat.ts`（**NEVER** 詢問操作）。park 不執行。
+摘要：從 §2B.1a 同一次 handoff-scan 輸出讀 `techDebtHygiene` 段 → stale 列 outstanding 最高優先 → aging 列第二優先並追問 blocker → closedBloat warn 時跑 `rotate-closed-bloat.ts`（**NEVER** 詢問操作）。stdout `retired` = clade home／已遷移 repo，**不要**寫 closed archive 或改 `docs/tech-debt.md`。park 不執行。
 
 ### 2B.1.9 Consumer-local audit scan（hard rule）
 
@@ -614,7 +614,7 @@ Retained: N
 
 - `relay` / `fanout`：成功 = durable brief 已存在 + helper 回傳 `relay_dispatched` + （fanout）`relayed_dispatch_ids` 已逐筆比對通過 + runtime cleanup 已盤點 + parent worktree lifecycle 已 `removed`／具名 `retained`；完成訊息首行逐字包含「目前這裡收工」，之後不再工作或輪詢。`relay_refused`／`transport_error` 保留 pane 且不得假裝完成（見 [dispatch-common.md](dispatch-common.md) § 5）
 - park：成功 = **進入條件已滿足**（user 顯式打 `park`，或裸 `/handoff` 已取得 user 允許）+ HANDOFF.md / tech-debt / ROADMAP 有對應寫入 + tasks 檔已清 + Step 3 audit 已靜默寫入 HANDOFF.md `## Worktree & Stash Audit` 段；訊息只含升級摘要（不含 audit）。**未取得允許就寫入 = 失敗**，即使檔案內容正確
-- next：成功 = 2B.0 pitfall sweep 已執行（dispatch `/oops` 或宣告「無 missed lesson」）+ `rotate-handoff-done.ts` 已跑（noop 或 100% 搬走可 rotate 的紀錄，不詢問）+ HANDOFF.md 已整理 + 2B.1.5 → Step 3 audit 已寫入並在訊息摘要一行 + 2B.1.7 scan 抓到的 `applyBlocked` / `awaitingUserDecision` change 已走 2B.2.5 主動 triage（抽 blocker 原因 + 辨識 startable 子集 + 端出具體 user 決策，NEVER silently drop）+ 2B.1.8 tech-debt hygiene 已讀（staleOpen 排進 outstanding 最高優先 + aging 排第二優先並主動追問 blocker + closedBloat warn 時已跑 `rotate-closed-bloat.ts`） + 2B.1.9 consumer-local audit 已跑（`.claude/rules/local/handoff-audits.md` 存在時逐條跑並分流 exit 1 / exit ≥2；不存在則明講跳過）+ 盤點訊息 + 詢問操作已發出讓 user 選 + user 選定後 2B.5 dispatch 已完成（直接 dispatch 或內呼 `/wt <slug>: /<next-skill> <change-name>`）
+- next：成功 = 2B.0 pitfall sweep 已執行（dispatch `/oops` 或宣告「無 missed lesson」）+ `rotate-handoff-done.ts` 已跑（`noop` / `retired` / 100% 清掉可 rotate 的紀錄，不詢問）+ HANDOFF.md 已整理 + 2B.1.5 → Step 3 audit 已寫入並在訊息摘要一行 + 2B.1.7 scan 抓到的 `applyBlocked` / `awaitingUserDecision` change 已走 2B.2.5 主動 triage（抽 blocker 原因 + 辨識 startable 子集 + 端出具體 user 決策，NEVER silently drop）+ 2B.1.8 tech-debt hygiene 已讀（staleOpen 排進 outstanding 最高優先 + aging 排第二優先並主動追問 blocker + closedBloat warn 時已跑 `rotate-closed-bloat.ts`，`retired` 算成功） + 2B.1.9 consumer-local audit 已跑（`.claude/rules/local/handoff-audits.md` 存在時逐條跑並分流 exit 1 / exit ≥2；不存在則明講跳過）+ 盤點訊息 + 詢問操作已發出讓 user 選 + user 選定後 2B.5 dispatch 已完成（直接 dispatch 或內呼 `/wt <slug>: /<next-skill> <change-name>`）
 - 失敗 / blocked：明確說明卡點，不假裝完成
 
 ## 與其他 skill 的銜接

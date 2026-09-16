@@ -81,7 +81,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // 自家檔——與 `scripts/lib/` 那種混住的目錄不同，可以整目錄匹配。
       String.raw`\.clade/(bin|signals|vendor|scripts|registry)/`,
       // Vendored script entry points (scripts/)
-      String.raw`scripts/(wt-helper|wt-batch|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|audit-risk-path-coverage|audit-clade-leak|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|dev-singleton|dev-router|dev-session|herdr-visible-identity|db-lease|db-reset-peer-coordination|ownership-journal|shell-safety-check|run-evidence|cbm-health|evidence-hook|install-tool-evidence|control-plane-projection-validate)\.(mjs|mts|ts)$`,
+      String.raw`scripts/(wt-helper|wt-batch|preservation-policy|preservation-profiles|preservation-inventory|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|audit-risk-path-coverage|audit-clade-leak|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|dev-singleton|dev-router|dev-session|herdr-visible-identity|db-lease|db-reset-peer-coordination|ownership-journal|shell-safety-check|run-evidence|cbm-health|evidence-hook|install-tool-evidence|control-plane-projection-validate)\.(mjs|mts|ts)$`,
       // Heavy-gate 併發閘門（bash helper，非 .mjs/.ts 家族，故單列一條）
       String.raw`scripts/gate-slot\.sh$`,
       // codebase-memory index 的 lock + MemoryMax wrapper（同上，bash helper 單列一條）
@@ -95,7 +95,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // NEVER widen to `scripts/lib/`: consumers author their own files there
       // (<consumer-a> `common.sh` / `read-infra-manifest.mjs`, <consumer-d> `vue-component-resolution.ts`),
       // and matching the whole dir would mark those clade-managed → auto-reset clobbers them.
-      String.raw`scripts/lib/(evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|json-unknown|worktree-dev-port|publish-in-flight)\.(mjs|mts|ts)$`,
+      String.raw`scripts/lib/(evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|json-unknown|safety-observation|worktree-dev-port|publish-in-flight)\.(mjs|mts|ts)$`,
       // json-unknown.ts 第二條 dest：vendor/review-rules/scan.ts 以
       // `../scripts/lib/json-unknown.ts` 解析到 vendor/scripts/lib/。
       // NEVER 放寬成 `vendor/scripts/lib/`——那個目錄在 clade home 是源。

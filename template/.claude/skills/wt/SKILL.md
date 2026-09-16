@@ -292,7 +292,7 @@ Ready / blocked worktrees: <counts from batch status>; report each retained path
 
 The `[pi]` / `[claude]` / `[pi:analyze]` / `[pi:debug]` tag indicates which executor was used. This helps the user understand the execution path and cost profile.
 
-**Batch handover**: after harvesting verified checkpoints, register readiness and run `wt-helper batch status --trigger auto`. At 4 distinct work ids, invoke one full `/commit` for the batch. User `/commit` or merge back has no minimum; dependency/drained/stop can flush early. Archive runs its gates and bookkeeping in the source tree before readiness. Cleanup belongs to the final commit workflow after verified landing.
+**Batch handover**: after harvesting verified checkpoints (`batch checkpoint`, no full AI ceremony), register readiness (`batch ready`) and run `wt-helper batch status --trigger auto --workflow <workflow_model>`. PR workflow prepares one independently acceptable purpose as its own PR; trunk-based still waits for 4 distinct work ids. User `/commit` or merge back has no minimum; dependency/drained/stop can flush early. Archive runs its gates and bookkeeping in the source tree before readiness. Cleanup belongs to the final commit workflow after verified landing.
 
 Form 1 work uses the same queue; the coordinator handles authorized landing without asking the user to type commands.
 

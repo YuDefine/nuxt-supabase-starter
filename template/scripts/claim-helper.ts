@@ -21,12 +21,19 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs'
 import { hostname } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isRecord } from './lib/json-unknown.ts'
+import {
+  errorMessage,
+  known,
+  unknown as toUnknown,
+  type Observed,
+} from './lib/safety-observation.ts'
 import { isLockedProjectionPathFor } from './locked-projection.ts'
 import {
   type Attribution,
@@ -39,7 +46,7 @@ import {
 const TTL_HOURS = 24
 const CLAIMS_DIR = '.clade/claims'
 
-interface Claim {
+export interface Claim {
   session_id: string
   agent: string
   started_at: string
@@ -59,6 +66,10 @@ interface Claim {
   expires_at: string
 }
 
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === 'string'
+}
+
 function isClaim(value: unknown): value is Claim {
   return (
     isRecord(value) &&
@@ -67,7 +78,10 @@ function isClaim(value: unknown): value is Claim {
     typeof value.started_at === 'string' &&
     typeof value.last_heartbeat === 'string' &&
     typeof value.expires_at === 'string' &&
-    Array.isArray(value.expected_paths)
+    Array.isArray(value.expected_paths) &&
+    value.expected_paths.every((path) => typeof path === 'string') &&
+    (!('worktree_path' in value) || isNullableString(value.worktree_path)) &&
+    (!('branch' in value) || isNullableString(value.branch))
   )
 }
 
@@ -208,25 +222,97 @@ export function dropClaim(consumerPath, sessionId) {
   return false
 }
 
+function claimsDirState(consumerPath): Observed<string | null> {
+  const dir = claimsDir(consumerPath)
+  try {
+    statSync(dir)
+    return known(dir)
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined
+    if (code === 'ENOENT') return known(null)
+    return toUnknown(`claims dir stat failed: ${errorMessage(error)}`)
+  }
+}
+
+function parseClaimFile(file: string, name: string): Observed<Claim> {
+  let raw: string
+  try {
+    raw = readFileSync(file, 'utf8')
+  } catch (error) {
+    return toUnknown(`claim file unreadable: ${name}: ${errorMessage(error)}`)
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch (error) {
+    return toUnknown(`claim file malformed JSON: ${name}: ${errorMessage(error)}`)
+  }
+  if (!isClaim(parsed)) return toUnknown(`claim file invalid shape: ${name}`)
+  if (Number.isNaN(Date.parse(parsed.expires_at))) {
+    return toUnknown(`claim file invalid expires_at: ${name}`)
+  }
+  return known(parsed)
+}
+
+/**
+ * Legacy list reader. Skips unreadable / malformed files so a single bad claim
+ * cannot hide every valid one from callers that have not moved to Observed.
+ * Mutation gates MUST use `readActiveClaimsObserved` — this list is not
+ * authorization.
+ */
 export function readActiveClaims(
   consumerPath,
   { includeExpired = false }: { includeExpired?: boolean } = {},
 ): Claim[] {
-  const dir = claimsDir(consumerPath)
-  if (!existsSync(dir)) return []
-  const claims = []
-  for (const name of readdirSync(dir)) {
+  const dirState = claimsDirState(consumerPath)
+  if (dirState.status === 'unknown' || dirState.value === null) return []
+  let names: string[]
+  try {
+    names = readdirSync(dirState.value)
+  } catch {
+    return []
+  }
+  const claims: Claim[] = []
+  for (const name of names) {
     if (!name.endsWith('.json') || name.startsWith('.')) continue
-    try {
-      const parsed: unknown = JSON.parse(readFileSync(join(dir, name), 'utf8'))
-      if (!isClaim(parsed)) continue
-      if (!includeExpired && isExpired(parsed)) continue
-      claims.push(parsed)
-    } catch {
-      // skip malformed claim files
-    }
+    const parsed = parseClaimFile(join(dirState.value, name), name)
+    if (parsed.status === 'unknown') continue
+    if (!includeExpired && isExpired(parsed.value)) continue
+    claims.push(parsed.value)
   }
   return claims
+}
+
+/**
+ * Fail-closed claim inventory. Directory or file read failures, malformed JSON,
+ * and invalid shapes are `unknown` — NEVER an empty list that authorizes
+ * takeover / landing / cleanup as "no claims".
+ *
+ * `readActiveClaims` skips bad files for display / unmigrated callers. Mutation
+ * gates MUST use this Observed form.
+ */
+export function readActiveClaimsObserved(
+  consumerPath,
+  { includeExpired = false }: { includeExpired?: boolean } = {},
+): Observed<Claim[]> {
+  const dirState = claimsDirState(consumerPath)
+  if (dirState.status === 'unknown') return dirState
+  if (dirState.value === null) return known([])
+  let names: string[]
+  try {
+    names = readdirSync(dirState.value)
+  } catch (error) {
+    return toUnknown(`claims dir unreadable: ${errorMessage(error)}`)
+  }
+  const claims: Claim[] = []
+  for (const name of names) {
+    if (!name.endsWith('.json') || name.startsWith('.')) continue
+    const parsed = parseClaimFile(join(dirState.value, name), name)
+    if (parsed.status === 'unknown') return parsed
+    if (!includeExpired && isExpired(parsed.value)) continue
+    claims.push(parsed.value)
+  }
+  return known(claims)
 }
 
 export function pruneExpired(consumerPath) {
@@ -250,10 +336,17 @@ export function pruneExpired(consumerPath) {
 }
 
 export function findClaimByWorktree(consumerPath, worktreePath) {
-  for (const claim of readActiveClaims(consumerPath)) {
-    if (claim.worktree_path === worktreePath) return claim
-  }
-  return null
+  return (
+    readActiveClaims(consumerPath).find((claim) => claim.worktree_path === worktreePath) ?? null
+  )
+}
+
+/** Fail-closed worktree claim lookup. Unknown is not "no claim". */
+export function findClaimByWorktreeObserved(consumerPath, worktreePath): Observed<Claim | null> {
+  const claims = readActiveClaimsObserved(consumerPath)
+  if (claims.status === 'unknown') return toUnknown(claims.reason)
+  const hit = claims.value.find((claim) => claim.worktree_path === worktreePath) ?? null
+  return known(hit)
 }
 
 export function pathsClaimedByOthers(consumerPath, mySessionId) {

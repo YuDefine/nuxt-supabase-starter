@@ -31,6 +31,30 @@ tag）——它們可被上游改寫指向，等於把 CI 的程式碼執行權�
 機械偵測：`node scripts/audit-actions-sha-pin.ts`（warn-only；掃 `.github/workflows/**/*.yml`
 與 `.github/actions/**/action.yml`，對**每一個**外部 `uses:` 檢查 ref 是否為 40 碼十六進位字串）。
 
+## CI / test workflow MUST cancel superseded runs on the same ref
+
+**適用範圍**：lint、typecheck、test、validate 這類**驗證** workflow（本 repo 的 `validate.yml` 是原型）。**不適用**：會部署 staging / production、或被另一條 workflow 用「同 SHA success」當 gate 的 workflow。
+
+單槽 self-hosted runner 上，同 ref 連續 push 若每條 run 都跑完，**最新 SHA 會排在已過期 SHA 後面**。2026-09-14 `YuDefine/clade`：`main` 先 push `e28c18898`、六分鐘後 squash `4817dc670`；`validate.yml` 沒有 `concurrency`，兩條 run 搶同一台 `gh-runner-lxc`，HEAD 等了約 30 分鐘才開始跑。過期 SHA 的結果不能當最新 candidate 的綠燈。
+
+**每一個** CI / test / validate workflow **MUST** 有：
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ (github.event_name == 'push' || github.event_name == 'pull_request') && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+```
+
+操作步驟與例外表見 `vendor/snippets/ci-workflow-concurrency/README.md`。
+
+- **MUST** `group` 含 `github.workflow` 與 `github.event_name`。`push` / `pull_request` 再加 `github.ref`，讓同 ref 的新 run 取消舊 run。`schedule` / `workflow_dispatch` / `merge_group` 改用 `github.run_id`：GitHub 會取消同一 group 裡**排隊中**的 run，即使 `cancel-in-progress: false`；用 run_id 才不會讓兩次手動 shard 或 nightly 互殺
+- **MUST** 只對 `push` 與 `pull_request` 開 `cancel-in-progress`。其餘 event 維持跑完——nightly 不得取消正在測的 HEAD，merge queue 的 landing run 也不得被下一筆 push 殺掉
+- **NEVER** 把 `cancel-in-progress: true` 抄到 staging / production deploy、或「另一條 workflow 用同 SHA success 當放行條件」的 workflow。那個組合會讓發版 gate 看到 cancelled、誤判沒過 staging。反面實證：[[pitfall-deploy-gate-vs-cancel-in-progress]]
+- **NEVER** 用同一個 concurrency group 蓋住 callee 自己也會被獨立 trigger 的 reusable workflow——會互殺。見 [[pitfall-reusable-ci-concurrency-collision]]
+- 同一條 run 裡的 matrix shard（例如 `test-lanes` 1/4…4/4）**不是**「前面步驟」，**NEVER** 為了縮短排隊取消其他 shard。它們測的是不同檔；concurrency 取消的是**過期 SHA 的整條 run**
+
+`gh-ci-watch` 在 run 被取消時會改追 superseding run（同 workflow + 同 branch、較新 `createdAt`）。那是監看側的補救，**不能**代替 workflow 自己取消過期 run。
+
 **與 `audit-ci-toolchain-parity.ts` 的分工**：那支只檢查三個 toolchain 入口 action
 （`voidzero-dev/setup-vp` / `pnpm/action-setup` / `actions/setup-node`）的 SHA-pin，是它「fleet
 toolchain 一致性」多維度稽核（node 版本一致性等）裡的其中一項——範圍是本檔的子集。本檔規約與

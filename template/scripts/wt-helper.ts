@@ -61,7 +61,7 @@
  */
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import {
   appendFileSync,
   chmodSync,
@@ -70,16 +70,22 @@ import {
   cpSync,
   copyFileSync,
   existsSync,
+  fsyncSync,
+  fstatSync,
+  ftruncateSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
   openSync,
   readFileSync,
+  readlinkSync,
   readSync,
   readdirSync,
+  renameSync,
   statSync,
   symlinkSync,
   writeFileSync,
+  writeSync,
   realpathSync,
   rmSync,
   unlinkSync,
@@ -108,6 +114,11 @@ import {
   inFlightHoldersFor as inFlightHoldersForShared,
 } from './lib/publish-in-flight.ts'
 import { runBatchCommand, assertLegacyAllowed } from './wt-batch.ts'
+import {
+  readTeardownJournal,
+  recordedModuleChain,
+  WT_TEARDOWN_JOURNAL_NAME,
+} from './preservation-policy.ts'
 
 interface WtOptions {
   json?: boolean
@@ -1007,6 +1018,91 @@ export function linkGitignoredRuntimeFiles(
 const ADD_USAGE =
   'Usage: wt-helper add <slug> --task-summary <text> [--expected-paths <comma>] [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>] [--skip-prefork-audit] [--include-unrelated-dirty]'
 
+function hashUtf8(content: string) {
+  return createHash('sha256').update(content).digest('hex')
+}
+
+/**
+ * After copying gitignored `.clade/projections` from main, rewrite `files`
+ * hashes to the worktree's actual bytes.
+ *
+ * Main's working tree can hold dirty tracked projection outputs (skills,
+ * rules). `git worktree add` checks those out from HEAD, but the copied
+ * state still records main's dirty hashes. SessionStart `sync-rules --check`
+ * then throws `local or modified file conflict` and auto-repair refuses to
+ * overwrite. Rehashing makes previousHash == currentHash so repair can do
+ * an owned update instead.
+ *
+ * Missing paths are dropped: keeping them would claim ownership of files
+ * the worktree never received (typically main-only dirty tracked files).
+ */
+export function reconcileCopiedProjectionState(wtPath: string, consumerRoot?: string) {
+  const dir = join(wtPath, '.clade', 'projections')
+  if (!existsSync(dir)) return { updated: 0 }
+  let updated = 0
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith('.json')) continue
+    const path = join(dir, name)
+    let state
+    try {
+      state = JSON.parse(readFileSync(path, 'utf8'))
+    } catch {
+      continue
+    }
+    if (!state || typeof state !== 'object' || typeof state.files !== 'object' || !state.files)
+      continue
+    const files = { ...state.files }
+    let dirty = false
+    for (const rel of Object.keys(files)) {
+      const abs = join(wtPath, rel)
+      if (!existsSync(abs) || !statSync(abs).isFile()) {
+        delete files[rel]
+        if (
+          state.sourceInputs &&
+          typeof state.sourceInputs === 'object' &&
+          rel in state.sourceInputs
+        ) {
+          const next = { ...state.sourceInputs }
+          delete next[rel]
+          state.sourceInputs = next
+        }
+        dirty = true
+        continue
+      }
+      const tracked = spawnSync('git', ['cat-file', '-e', `HEAD:${rel}`], {
+        cwd: wtPath,
+        encoding: 'utf8',
+      })
+      let hash: string | undefined
+      if (tracked.status === 0) {
+        hash = hashUtf8(
+          execFileSync('git', ['show', `HEAD:${rel}`], { cwd: wtPath, encoding: 'utf8' }),
+        )
+      } else {
+        const live = hashUtf8(readFileSync(abs, 'utf8'))
+        const mainAbs = consumerRoot ? join(consumerRoot, rel) : ''
+        if (
+          consumerRoot &&
+          existsSync(mainAbs) &&
+          statSync(mainAbs).isFile() &&
+          hashUtf8(readFileSync(mainAbs, 'utf8')) !== live
+        )
+          continue
+        hash = live
+      }
+      if (files[rel] !== hash) {
+        files[rel] = hash
+        dirty = true
+      }
+    }
+    if (!dirty) continue
+    state.files = files
+    writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`)
+    updated++
+  }
+  return { updated }
+}
+
 export function bootstrapWorktreeRuntime(
   consumerRoot: string,
   wtPath: string,
@@ -1078,12 +1174,14 @@ export function bootstrapWorktreeRuntime(
   // projection unavailable" 指不到根因），繞過它之後 `.clade/projections/*.json` 缺席又讓
   // ownership 判定把每個既有檔判成本地竄改。
   //
-  // 複製而非重生成是安全的：這幾份都是 clade home（共享）＋ `.clade/manifest.json`（tracked）
-  // 的衍生物，worktree 與 main 的投影輸入逐位元相同，所以 main 的那份就是 worktree 該有的那份。
+  // 複製 gitignored substrate 是必要的（worktree 帶不走 ignore 檔）。**不能**假設拷過來的
+  // `.clade/projections` hash 仍對得上 worktree：main 可能有 dirty 的 tracked 投影輸出，
+  // worktree 卻 checkout 自 HEAD。拷完後 MUST reconcile，見 reconcileCopiedProjectionState。
   // 逐 entry 判 gitignore（比照上方 `.clade/bin`）：非 ignored 的檔複製過去會變成使用者從沒寫過
   // 的 untracked 檔，接著 merge-back / cleanup 的 uncommitted-files gate 就擋在那上面。
   // Warn-only：consumer 沒有該目錄就跳過，per-dir try 讓一個目錄的失敗不吃掉其餘目錄。
   // `.clade/rules` **MUST NOT** 在沒有 `.clade/projections` 的樹上出現，所以它不在這一組。
+  let copiedProjections = false
   for (const rel of ['.clade/runtime', '.clade/projections', '.codex']) {
     try {
       const src = join(consumerRoot, rel)
@@ -1092,6 +1190,7 @@ export function bootstrapWorktreeRuntime(
       if (spawnSync('git', ['check-ignore', '-q', rel], { cwd: consumerRoot }).status !== 0)
         continue
       cpSync(src, dst, { recursive: true })
+      if (rel === '.clade/projections') copiedProjections = true
       log(`  clade-substrate: copied ${rel} from main (gitignored, worktree cannot check it out)`)
     } catch (e) {
       if (strict) throw e
@@ -1133,6 +1232,23 @@ export function bootstrapWorktreeRuntime(
   } catch (e) {
     if (strict) throw e
     console.error(`note: .clade/rules copy skipped: ${e?.message ?? e}`)
+  }
+
+  // Rehash only after this invocation copied projection state. A later bootstrap that
+  // skips copy would otherwise stamp subsequent local edits as owned hashes and let
+  // SessionStart auto-repair overwrite them instead of leaving a local-conflict.
+  if (copiedProjections) {
+    try {
+      const reconciled = reconcileCopiedProjectionState(wtPath, consumerRoot)
+      if (reconciled.updated > 0) {
+        log(
+          `  clade-substrate: reconciled ${reconciled.updated} projection state file(s) to worktree disk`,
+        )
+      }
+    } catch (e) {
+      if (strict) throw e
+      console.error(`note: projection-state reconcile skipped: ${e?.message ?? e}`)
+    }
   }
 
   // TD-614: link gitignored runtime files (consumers.local …) from main root.
@@ -1223,6 +1339,299 @@ export function bootstrapWorktreeRuntime(
   }
 }
 
+function processStatFields(value: string): string[] | undefined {
+  const close = value.lastIndexOf(') ')
+  if (close === -1) return undefined
+  const fields = value
+    .slice(close + 2)
+    .trim()
+    .split(/\s+/)
+  return fields.length >= 18 ? fields : undefined
+}
+
+function processStatIsKernelThread(value: string): boolean {
+  const fields = processStatFields(value)
+  if (!fields) return false
+  try {
+    return (BigInt(fields[6]) & 0x20_0000n) !== 0n
+  } catch {
+    return false
+  }
+}
+
+function processStatIsExited(value: string): boolean {
+  const fields = processStatFields(value)
+  if (!fields || !['Z', 'X', 'x'].includes(fields[0])) return false
+  return fields[17] === '1'
+}
+
+// True when any entry in the tree could be modified by a foreign-uid process:
+// group/other write bits (the group bits also reflect the POSIX ACL mask), or
+// any entry owned by a different uid — its owner can chmod it writable even
+// when the write bits are currently clear. Root is exempt from this boundary
+// by capability, not by permission bits — see probeLiveWriterCwd for the
+// resulting detection limit.
+function treeWritableByForeign(root: string, ownerUid: number): boolean {
+  const foreignWritable = (st: { uid: number; mode: number }) =>
+    (st.mode & 0o022) !== 0 || st.uid !== ownerUid
+  const stack = [root]
+  while (stack.length) {
+    const dir = stack.pop()!
+    let st
+    try {
+      st = lstatSync(dir)
+    } catch {
+      return true
+    }
+    if (foreignWritable(st)) return true
+    // A fully sealed directory cannot be traversed by any non-root UID —
+    // not even its owner — so nothing beneath it is reachable by a foreign
+    // writer regardless of the permissions recorded inside.
+    if ((st.mode & 0o777) === 0) continue
+    let entries
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return true
+    }
+    for (const e of entries) {
+      const p = join(dir, e.name)
+      try {
+        st = lstatSync(p)
+      } catch {
+        return true
+      }
+      if (st.isSymbolicLink()) continue
+      if (foreignWritable(st)) return true
+      if (st.isDirectory()) stack.push(p)
+    }
+  }
+  return false
+}
+
+// Writability is recomputed from the live tree on every probe, so permission
+// changes cannot preserve a stale answer. A directory sealed to mode 000 by
+// an interrupted run reads as non-foreign-writable by construction — no
+// non-root UID can open beneath it.
+// A maps pathname is everything after the fifth field; splitting on runs of
+// whitespace would corrupt paths that themselves contain repeated spaces.
+function mapsPathname(line: string): string {
+  const match = line.match(/^\s*(?:\S+\s+){5}(.*)$/)
+  return match ? match[1] : ''
+}
+
+function probeLiveWriterCwd(path: string) {
+  const target = resolve(path)
+  if (!existsSync(target)) return
+  if (!existsSync('/proc'))
+    throw new Error('exclusive writer ownership control unavailable; /proc is missing')
+  const ownerUid = statSync(target).uid
+  const foreignWritable = treeWritableByForeign(target, ownerUid)
+  // Classify a process whose task state we cannot read. A foreign-uid process
+  // is a writer signal only when the tree grants it write access; otherwise
+  // its state is outside the enforceable boundary. Root-owned processes can
+  // write regardless of permission bits and cannot be observed by an
+  // unprivileged prober — that residual is inherent to userspace probing, not
+  // waived by choice. Same-uid or uid-unknown processes fail closed unless
+  // positively identified as kernel threads or single-thread exits.
+  const unreadableDisposition = (pid: string): 'gone' | 'benign' | 'exempt' | 'block' => {
+    if (!existsSync(`/proc/${pid}`)) return 'gone'
+    // /proc/<pid> directory ownership reports root for non-dumpable
+    // processes, mislabeling an actual same-UID writer as foreign. The
+    // status file's filesystem UID (the credential file access checks use)
+    // stays readable for them.
+    let uid: number | undefined
+    try {
+      const uidLine = readFileSync(`/proc/${pid}/status`, 'utf8').match(
+        /^Uid:\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/m,
+      )
+      if (uidLine) uid = Number(uidLine[4])
+    } catch {
+      // Fall through to the directory owner estimate.
+    }
+    if (uid === undefined)
+      try {
+        uid = statSync(`/proc/${pid}`).uid
+      } catch {
+        // Keep uid unknown; without it the process fails closed below.
+      }
+    if (uid !== undefined && uid !== ownerUid && !foreignWritable) return 'benign'
+    let kernelThread = false
+    let exited = false
+    try {
+      const processStat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+      kernelThread = processStatIsKernelThread(processStat)
+      exited = processStatIsExited(processStat)
+    } catch {
+      // Missing or malformed process state grants neither exemption.
+    }
+    if (kernelThread || exited) return 'exempt'
+    return 'block'
+  }
+  const occupies = (p: string) => p === target || p.startsWith(`${target}/`)
+  for (const pid of readdirSync('/proc')) {
+    if (!/^\d+$/.test(pid)) continue
+    // Threads can unshare their cwd and fd tables (CLONE_FS off), so every
+    // task under the pid needs its own links inspected.
+    let tasks: string[]
+    try {
+      tasks = readdirSync(`/proc/${pid}/task`)
+    } catch {
+      const d = unreadableDisposition(pid)
+      if (d === 'block')
+        throw new Error(
+          `exclusive writer ownership control unavailable; unreadable task list for pid ${pid}`,
+        )
+      continue
+    }
+    for (const tid of tasks) {
+      const taskDir = `/proc/${pid}/task/${tid}`
+      let cwd: string
+      try {
+        cwd = readlinkSync(`${taskDir}/cwd`)
+      } catch {
+        if (!existsSync(taskDir)) continue
+        const d = unreadableDisposition(pid)
+        if (d === 'block')
+          throw new Error(
+            `exclusive writer ownership control unavailable; unreadable cwd for pid ${pid} tid ${tid}`,
+          )
+        continue
+      }
+      if (occupies(cwd)) throw new Error(`live writer cwd occupies ${path}`)
+      let fds: string[]
+      try {
+        fds = readdirSync(`${taskDir}/fd`)
+      } catch {
+        if (!existsSync(taskDir)) continue
+        const d = unreadableDisposition(pid)
+        if (d === 'block')
+          throw new Error(
+            `exclusive writer ownership control unavailable; unreadable fd table for pid ${pid} tid ${tid}`,
+          )
+        continue
+      }
+      for (const fd of fds) {
+        let dest: string
+        try {
+          dest = readlinkSync(`${taskDir}/fd/${fd}`)
+        } catch {
+          continue
+        }
+        // A deleted descriptor still occupies the tree: the holder keeps an
+        // inode alive whose bytes never entered the inventory — closing it
+        // before the post-removal scan would leave those bytes nowhere.
+        if (occupies(dest.replace(/ \(deleted\)$/, '')))
+          throw new Error(`live writer open handle occupies ${path}`)
+      }
+      // A shared writable mapping survives its descriptor being closed, so a
+      // writer that mmap'd a tree file would pass the fd scan — check maps.
+      let maps: string
+      try {
+        maps = readFileSync(`${taskDir}/maps`, 'utf8')
+      } catch {
+        if (!existsSync(taskDir)) continue
+        const d = unreadableDisposition(pid)
+        if (d === 'block')
+          throw new Error(
+            `exclusive writer ownership control unavailable; unreadable maps for pid ${pid} tid ${tid}`,
+          )
+        continue
+      }
+      for (const line of maps.split('\n')) {
+        const mapped = mapsPathname(line)
+        if (!mapped) continue
+        if (occupies(mapped.replace(/ \(deleted\)$/, '')))
+          throw new Error(`live writer shared mapping occupies ${path}`)
+      }
+    }
+  }
+}
+
+// After a successful removal the target is gone, but a process that held a
+// cwd or fd into the tree still shows it — as `<path> (deleted)` when the
+// entry was unlinked, or as the trash path when the tree was renamed rather
+// than deleted. Detecting those handles cannot restore bytes written during
+// removal; it turns silent loss into a loud retention note so the
+// preservation archive's cutoff is known to be earlier than the last write.
+// `extraRoots` carries the destinations a rename-based removal moved bytes
+// to (trash tree and trashed metadata dirs) plus their original paths, so a
+// still-open handle into any of them is reported too.
+function probeDeletedHandles(path: string, extraRoots: string[] = []) {
+  if (!existsSync('/proc'))
+    throw new Error('exclusive writer ownership control unavailable; /proc is missing')
+  const target = resolve(path)
+  const quarantinePrefix = join(dirname(target), `.clade-removing-${basename(target)}-`)
+  const held = (dest: string) => {
+    const deleted = dest.endsWith(' (deleted)')
+    const p = deleted ? dest.slice(0, -' (deleted)'.length) : dest
+    if (p === target || p.startsWith(`${target}/`)) return true
+    if (deleted && p.startsWith(quarantinePrefix)) return true
+    return extraRoots.some((pre) => p.startsWith(pre))
+  }
+  for (const pid of readdirSync('/proc')) {
+    if (!/^\d+$/.test(pid)) continue
+    let tasks: string[]
+    try {
+      tasks = readdirSync(`/proc/${pid}/task`)
+    } catch {
+      continue
+    }
+    for (const tid of tasks) {
+      const taskDir = `/proc/${pid}/task/${tid}`
+      let cwd: string | undefined
+      try {
+        cwd = readlinkSync(`${taskDir}/cwd`)
+      } catch {
+        // Unreadable or gone; post-removal detection cannot cover it.
+      }
+      if (cwd && held(cwd))
+        throw new Error(
+          `writer held cwd into removed tree ${path}; archive may predate final writes`,
+        )
+      let fds: string[]
+      try {
+        fds = readdirSync(`${taskDir}/fd`)
+      } catch {
+        continue
+      }
+      for (const fd of fds) {
+        let dest: string
+        try {
+          dest = readlinkSync(`${taskDir}/fd/${fd}`)
+        } catch {
+          continue
+        }
+        if (held(dest))
+          throw new Error(
+            `writer held open handle into removed tree ${path}; archive may predate final writes`,
+          )
+      }
+      let maps: string | undefined
+      try {
+        maps = readFileSync(`${taskDir}/maps`, 'utf8')
+      } catch {
+        // Unreadable or gone; post-removal detection cannot cover it.
+      }
+      if (maps)
+        for (const line of maps.split('\n')) {
+          const mapped = mapsPathname(line)
+          if (mapped && held(mapped))
+            throw new Error(
+              `writer held shared mapping into removed tree ${path}; archive may predate final writes`,
+            )
+        }
+    }
+  }
+}
+
+function withProbedExclusiveWriterOwnership<T>(_main: string, path: string, operation: () => T): T {
+  probeLiveWriterCwd(path)
+  const result = operation()
+  if (existsSync(path)) probeLiveWriterCwd(path)
+  return result
+}
+
 export function destroyWorktreeRuntime(
   consumerRoot: string,
   wtPath: string,
@@ -1261,7 +1670,14 @@ export function teardownWorktreeSubmodules(
   }
   const paths = before
     .split('\n')
-    .map((line) => line.trim().replace(/^[-+U]?[0-9a-f]+\s+/, ''))
+    // `submodule status` appends ` (<describe>)` for initialized modules;
+    // the path must match .gitmodules, not the decorated column.
+    .map((line) =>
+      line
+        .trim()
+        .replace(/^[-+U]?[0-9a-f]+\s+/, '')
+        .replace(/\s+\([^)]*\)$/, ''),
+    )
     .filter(Boolean)
   if (before) {
     try {
@@ -1324,13 +1740,159 @@ export function teardownWorktreeSubmodules(
     if (readdirSync(directory).length)
       throw new Error(`deinitialized submodule still has local files (${rel}); retain worktree`)
   }
-  // Recent Git versions create a private module repository below the linked
-  // worktree's administrative directory. `submodule deinit` clears the
-  // checkout but can leave that metadata behind when the module was already
-  // detached or when its nested module had a stale worktree pointer. Git then
-  // refuses a normal worktree removal even though every checkout is gone.
-  // Remove only this worktree-private metadata, after the path and emptiness
-  // checks above; the canonical modules under the main repository are kept.
+  detachWorktreeSubmodulesMetadata(wtPath, beforePrivateMetadataRemoval)
+  return { count: allPaths.length, paths: allPaths }
+}
+
+// Recent Git versions create a private module repository below the linked
+// worktree's administrative directory. `submodule deinit` clears the
+// checkout but can leave that metadata behind when the module was already
+// detached or when its nested module had a stale worktree pointer. Git then
+// refuses to move or remove the worktree even though every checkout is
+// gone. The metadata must leave the `modules` name, but unlinking it would
+// destroy a write that races teardown — rename it inside the same
+// administrative dir instead. Git's populated-submodule check must pass too:
+// a gitlink whose `.git` resolves to a live module repository still refuses
+// the move, while a *dangling* one breaks `git status` — so each checkout
+// `.git` is renamed aside (`.git.clade-detached`), keeping the submodule
+// unpopulated with every byte recoverable. The canonical modules under the
+// main repository are untouched. A prior teardown can leave a torn-down
+// generation behind when the worktree was retained and its submodules
+// reinitialized — collide once and the destination gains a suffix rather
+// than failing a clean retry.
+// The teardown journal sits inside the worktree's private Git dir —
+// operational metadata, durable with the tree and excluded from inventory
+// comparisons like `.clade-trashed-meta-*`. Every rename is recorded BEFORE
+// it executes: a crash mid-teardown leaves a journal that names exactly
+// what was detached, so restore never has to guess from filename prefixes
+// or rank torn-down generations by mtime.
+function teardownJournalPath(privateGitDir: string): string {
+  return join(privateGitDir, WT_TEARDOWN_JOURNAL_NAME)
+}
+
+// An fd whose last append could not be cut back to a clean line boundary.
+// Any further write would fuse a new record onto the torn tail, so appends
+// on a poisoned fd refuse outright — the teardown retains rather than
+// journal garbage.
+const poisonedJournalFds = new Set<number>()
+
+// A journal line is only durable once the fd is fsynced — a bare write can
+// lose the record to a machine crash while the rename it precedes still
+// persists, which is exactly the unrecorded-detach hole the journal exists
+// to close.
+function journalAppend(fd: number, line: string): void {
+  if (poisonedJournalFds.has(fd))
+    throw new Error('teardown journal fd is poisoned by an earlier torn append')
+  // writeSync may return early on a short write — a truncated record is
+  // worse than none because it still reads as a complete line after the
+  // newline of a later append. Loop until the whole line is durable. And
+  // if the append throws mid-record, the bytes already landed are a torn
+  // tail the NEXT append would fuse onto — cut the file back to the
+  // pre-append size before the error propagates. A truncate failure leaves
+  // no recoverable boundary: poison the fd so nothing appends after the
+  // tear.
+  const sizeBefore = fstatSync(fd).size
+  const buf = Buffer.from(`${line}\n`)
+  try {
+    let off = 0
+    while (off < buf.length) off += writeSync(fd, buf, off, buf.length - off)
+    fsyncSync(fd)
+  } catch (error) {
+    try {
+      ftruncateSync(fd, sizeBefore)
+    } catch {
+      poisonedJournalFds.add(fd)
+    }
+    throw error
+  }
+}
+
+// The OS reuses fd numbers — a poisoned fd that is closed and recycled
+// would wrongly refuse a later journal's appends, so closing drops the
+// poison record alongside the descriptor.
+function journalClose(fd: number): void {
+  poisonedJournalFds.delete(fd)
+  closeSync(fd)
+}
+
+// Opening for append must also repair a torn tail a crash could have left
+// mid-line — otherwise the first new record fuses onto the fragment the
+// same way a swallowed mid-session tear would. The journal is opened
+// O_NOFOLLOW and required to be a regular file: a pre-existing symlink (or
+// fifo/socket) would redirect the tail truncation and every appended
+// record into an unrelated file — the only writes this journal performs
+// are destructive-adjacent recovery records.
+function openJournalForAppend(path: string): number {
+  const fd = openSync(
+    path,
+    fsConstants.O_RDWR | fsConstants.O_APPEND | fsConstants.O_CREAT | fsConstants.O_NOFOLLOW,
+  )
+  try {
+    const stat = fstatSync(fd)
+    if (!stat.isFile()) throw new Error(`Teardown journal is not a regular file: ${path}`)
+    // A multiply-linked journal shares its inode with another name — the
+    // tail repair's ftruncate and every appended record would corrupt the
+    // file that other link names. Reject shared inodes before modifying.
+    if (stat.nlink > 1) throw new Error(`Teardown journal is multiply linked: ${path}`)
+    const size = stat.size
+    if (size === 0) return fd
+    const buf = Buffer.alloc(size)
+    let off = 0
+    while (off < size) off += readSync(fd, buf, off, size - off, off)
+    if (buf[size - 1] === 0x0a) return fd
+    const lastNl = buf.lastIndexOf(0x0a)
+    ftruncateSync(fd, lastNl + 1)
+    fsyncSync(fd)
+    return fd
+  } catch (error) {
+    try {
+      closeSync(fd)
+    } catch {
+      // The original error is the one that matters.
+    }
+    throw error
+  }
+}
+
+// A rename's durability is the parent directory's, not the file's — fsync
+// the dir so a power failure cannot persist a retirement marker while
+// losing the rename it retires.
+function fsyncDir(dir: string): void {
+  const fd = openSync(dir, 'r')
+  try {
+    fsyncSync(fd)
+  } finally {
+    closeSync(fd)
+  }
+}
+
+// A directory fsync persists entry names, not file contents — a rewritten
+// file needs its own fsync before a durable marker may retire its record.
+function fsyncFile(path: string): void {
+  const fd = openSync(path, 'r')
+  try {
+    fsyncSync(fd)
+  } finally {
+    closeSync(fd)
+  }
+}
+
+// `existsSync` follows the final symlink, so a dangling link reads as
+// absent — the wrong answer to "does this name hold an entry a rename
+// would clobber". `lstat` sees the entry itself.
+function lstatPresent(path: string): boolean {
+  try {
+    lstatSync(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function detachWorktreeSubmodulesMetadata(
+  wtPath: string,
+  beforePrivateMetadataRemoval?: () => void,
+) {
   const privateModules = resolve(
     wtPath,
     execFileSync('git', ['rev-parse', '--git-path', 'modules'], {
@@ -1347,16 +1909,65 @@ export function teardownWorktreeSubmodules(
       stdio: ['ignore', 'pipe', 'pipe'],
     }).trim(),
   )
-  if (existsSync(privateModules)) {
+  // `worktree move`/`remove` refuse a worktree whose index has a gitlink
+  // resolving to a live module repository, so the checkout's `.git` must be
+  // unresolvable for the move instant — but `git status` fails on a
+  // *dangling* pointer. Renaming the file satisfies both: the submodule is
+  // cleanly unpopulated (status stays clean) and no bytes are unlinked.
+  const realRoot = realpathSync(wtPath)
+  // The journal fd is opened before any rename so an unwritable journal
+  // fails the teardown before a single pointer is detached — an
+  // unrecorded rename must never exist. The parent dir is fsynced too: a
+  // crash must not keep a detach while losing the journal's own dirent.
+  const journalFd = openJournalForAppend(teardownJournalPath(privateGitDir))
+  try {
+    fsyncDir(privateGitDir)
+    if (!existsSync(privateModules)) {
+      // A previous attempt may have renamed `modules` after a checkout
+      // `.git` detach raced and failed: that pointer still names
+      // `modules`, so the tree's `git status` fails on the dangling gitdir
+      // forever. The journal — not the name prefix — identifies which
+      // torn-down generation owns this teardown; a foreign
+      // `.clade-torn-down-modules*` sibling's `core.worktree` must never
+      // drive a detach the journal could not restore, and no record means
+      // no generation may be scanned without guessing.
+      const detached: string[] = []
+      const recordedDir = realDirectory(
+        recordedTornDownClaim(privateGitDir, readTeardownJournal(privateGitDir).tornDown),
+      )
+      if (recordedDir) detached.push(...detachCheckoutPointers(recordedDir, realRoot, journalFd))
+      return detached
+    }
     const stat = lstatSync(privateModules)
     if (!stat.isDirectory() || stat.isSymbolicLink() || dirname(privateModules) !== privateGitDir)
       throw new Error(
         `unexpected private submodule metadata path (${privateModules}); retain worktree`,
       )
+    // A still-active `modules` record means an earlier torn-down
+    // generation is journaled as ours; a live `modules` alongside it
+    // means someone recreated the name. A fresh `modules` line would
+    // overwrite that ownership — later restores would then reattach this
+    // generation's pointers against the wrong repository. Retain before
+    // detaching anything.
+    const ownedGeneration = readTeardownJournal(privateGitDir).tornDown
+    if (ownedGeneration !== undefined)
+      throw new Error(
+        `torn-down modules generation ${ownedGeneration} is still journal-owned while a new modules exists; retain worktree`,
+      )
+    let tornDown = join(privateGitDir, '.clade-torn-down-modules')
+    // Physical occupation, not existence: a dangling symlink at the name
+    // is invisible to existsSync and would be clobbered by the rename.
+    if (lstatPresent(tornDown))
+      tornDown = join(privateGitDir, `.clade-torn-down-modules-${randomUUID().slice(0, 8)}`)
     beforePrivateMetadataRemoval?.()
+    const detached = detachCheckoutPointers(privateModules, realRoot, journalFd)
     try {
-      rmSync(privateModules, { recursive: true, force: false })
+      journalAppend(journalFd, `modules ${basename(tornDown)}`)
+      renameSync(privateModules, tornDown)
     } catch (error) {
+      // A rename failure after partial `.git` detaches leaves the worktree
+      // retained — reattach so it stays functional for the owner.
+      reattachWorktreeSubmodules(wtPath, detached)
       throw new Error(
         `private submodule metadata teardown failed; retain worktree: ${error.message ?? error}`,
         { cause: error },
@@ -1364,8 +1975,468 @@ export function teardownWorktreeSubmodules(
     }
     if (existsSync(privateModules))
       throw new Error('private submodule metadata remains; retain worktree')
+    return detached
+  } finally {
+    journalClose(journalFd)
   }
-  return { count: allPaths.length, paths: allPaths }
+}
+
+// Every module repository's config names its checkout through
+// `core.worktree`; nested module repos appear under
+// `modules/<a>/modules/<b>` and are reached by recursion. `core.worktree`
+// is operator-controlled config data, so only checkouts resolved inside the
+// worktree are returned — the filesystem path, not the lexical one, so an
+// in-tree symlink cannot route the rename outside `wtPath`, and strict
+// containment keeps a malformed `core.worktree` equal to the worktree root
+// from ever touching the worktree's own `.git`. Containment alone does not
+// make the checkout THIS module's, though — a stale or malformed config
+// can name an unrelated in-tree checkout, and detaching its `.git` would
+// strand a repository we never owned. The checkout must point back: its
+// `.git` is a `gitdir:` pointer (or symlink) resolving to this module dir;
+// a real `.git` directory there is another repository, not our checkout.
+function moduleCheckoutDirs(modulesDir: string, realRoot: string): string[] {
+  const checkouts: string[] = []
+  const scan = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      const moduleDir = join(dir, entry.name)
+      const config = join(moduleDir, 'config')
+      if (existsSync(config)) {
+        let worktree = ''
+        try {
+          worktree = execFileSync('git', ['config', '--file', config, '--get', 'core.worktree'], {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe'],
+          }).trim()
+        } catch {
+          // A module repo without core.worktree has no live checkout.
+        }
+        if (worktree) {
+          try {
+            const realCheckout = realpathSync(resolve(moduleDir, worktree))
+            if (!realCheckout.startsWith(`${realRoot}/`)) {
+              // Escapes the worktree — never ours to detach.
+            } else {
+              const pointer = join(realCheckout, '.git')
+              const st = lstatSync(pointer)
+              let target: string | undefined
+              if (st.isSymbolicLink()) target = resolve(realCheckout, readlinkSync(pointer))
+              else if (st.isFile()) {
+                const line = readFileSync(pointer, 'utf8')
+                  .split('\n')
+                  .find((l) => l.startsWith('gitdir:'))
+                if (line) target = resolve(realCheckout, line.slice(7).trim())
+              }
+              // The checkout must point back at THIS module — and at the
+              // location git recorded for it: `modules/<rel>` beside the
+              // scanned root. Comparing the recorded path, not the live
+              // one, matters when the scan runs against a renamed
+              // generation — the checkout's `.git` still names the
+              // original `modules/` location even though the dir now sits
+              // at a torn-down name, so a realpath compare would dangle.
+              // A `.git` directory or an unparseable pointer is another
+              // repository, not our checkout.
+              const recorded = join(dirname(modulesDir), 'modules', relative(modulesDir, moduleDir))
+              if (target && target === recorded) checkouts.push(realCheckout)
+            }
+          } catch {
+            // A checkout that cannot be resolved has no `.git` to detach.
+          }
+        }
+      }
+      scan(moduleDir)
+    }
+  }
+  scan(modulesDir)
+  return checkouts
+}
+
+// A journaled `modules` record is operator-adjacent on-disk data: only a
+// plain basename under our naming convention may resolve inside the
+// private Git dir. Whether the claimed path exists and is a real
+// directory is the caller's check — reattach must probe the name even
+// when absent to decide retirement.
+function recordedTornDownClaim(
+  privateGitDir: string,
+  tornDown: string | undefined,
+): string | undefined {
+  if (
+    !tornDown ||
+    basename(tornDown) !== tornDown ||
+    !tornDown.startsWith('.clade-torn-down-modules')
+  )
+    return undefined
+  return join(privateGitDir, tornDown)
+}
+
+// Only a real directory is the recorded repository — a symlink or file
+// squatting on the claimed name is foreign data no rename may promote.
+function realDirectory(path: string | undefined): string | undefined {
+  if (!path) return undefined
+  try {
+    const stat = lstatSync(path)
+    if (stat.isDirectory() && !stat.isSymbolicLink()) return path
+  } catch {
+    // Unstatable — not a usable directory.
+  }
+  return undefined
+}
+
+// Rename each listed checkout's `.git` aside so the worktree no longer
+// counts as containing populated submodules; returns the detached paths
+// relative to the worktree root so the caller can journal exactly which
+// renames to undo on restore — reattachment must never guess from filename
+// prefixes, or a pre-existing `.git.clade-detached` would be renamed over
+// a foreign checkout. A checkout that keeps its `.git` stays populated —
+// the move refuses, which retains rather than loses. Checkouts already
+// cleared by `deinit` have no `.git` left to detach.
+function detachCheckoutPointers(modulesDir: string, realRoot: string, journalFd: number): string[] {
+  const detached: string[] = []
+  for (const checkout of moduleCheckoutDirs(modulesDir, realRoot)) {
+    const pointer = join(checkout, '.git')
+    try {
+      if (lstatPresent(pointer)) {
+        let name = `${pointer}.clade-detached`
+        if (lstatPresent(name)) name = `${pointer}.clade-detached-${randomUUID().slice(0, 8)}`
+        // Record BEFORE rename, durably — and let a failed append skip the
+        // rename outright: an unjournaled detach is unrecoverable
+        // ownership, so the checkout keeps its `.git`, the tree stays
+        // populated, the move refuses — retains not loses. A pathological
+        // newline in the recorded path would corrupt the line-based
+        // journal, so the same fail-closed skip covers it.
+        const rel = relative(realRoot, name)
+        if (rel.includes('\n')) continue
+        journalAppend(journalFd, `detach ${rel}`)
+        renameSync(pointer, name)
+        detached.push(rel)
+      }
+    } catch {
+      // An unstatable or racing checkout, a failed journal append, or a
+      // failed rename all keep `.git` in place — populated means the move
+      // refuses, which retains rather than loses.
+    }
+  }
+  return detached
+}
+
+// Undo a completed or partial submodule detach. The teardown journal inside
+// the private Git dir is the source of truth: the LAST `modules` line names
+// the torn-down directory this teardown created (never a guess by mtime or
+// prefix order among retained generations), and every `detach` line names a
+// checkout `.git` rename to undo — unioned with `detached`, the caller's
+// own list. Only recorded names are restored, so a pre-existing
+// `.git.clade-detached` file is never mistaken for our own. Best-effort:
+// anything that cannot be renamed back keeps its detached name as the
+// recovery source.
+export function reattachWorktreeSubmodules(wtPath: string, detached: string[]): void {
+  try {
+    const privateGitDir = resolve(
+      wtPath,
+      execFileSync('git', ['rev-parse', '--git-dir'], {
+        cwd: wtPath,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim(),
+    )
+    const realRoot = realpathSync(wtPath)
+    const journalPath = join(privateGitDir, WT_TEARDOWN_JOURNAL_NAME)
+    // The journal fold is shared with teardown. The caller's `detached`
+    // list is merged through the same rule — an entry whose last journal
+    // record is `restored` stays retired even when a stale caller still
+    // names it, so a journaled `detachedPointers` from an older run can
+    // never reclaim an owner's own `.git.clade-detached` aside. A caller
+    // entry the journal never recorded still replays: the batch journal
+    // is the fallback when the teardown journal itself is lost.
+    const active = readTeardownJournal(privateGitDir)
+    for (const rel of detached) if (!active.retired.has(rel)) active.detached.add(rel)
+    // Markers retire ownership; they only matter while a journal exists, so
+    // the fd opens lazily on the first write and is fsynced per line.
+    let journalFd: number | undefined
+    const mark = (line: string) => {
+      try {
+        if (journalFd === undefined) {
+          if (!existsSync(journalPath)) return
+          journalFd = openJournalForAppend(journalPath)
+        }
+        journalAppend(journalFd, line)
+      } catch {
+        // A failed marker leaves the record active; replay is idempotent.
+      }
+    }
+    try {
+      const modulesName = join(privateGitDir, 'modules')
+      // Restore the recorded module repository name first so each
+      // reattached `.git` resolves immediately. Only the journaled name
+      // counts — a missing or lost journal means no generation can be
+      // picked without guessing, and an mtime-ranked pick could promote an
+      // unrelated retained generation into the live `modules` name.
+      const recorded = recordedTornDownClaim(privateGitDir, active.tornDown)
+      const recordedDir = realDirectory(recorded)
+      if (!lstatPresent(modulesName)) {
+        try {
+          if (recordedDir) renameSync(recordedDir, modulesName)
+          // The goal state now holds — `modules` is back — or the recorded
+          // generation is gone for good (trashed with its metadata root,
+          // or never created). Either way the record could only ever fire
+          // on a foreign dir later appearing at the name: retire it. The
+          // marker must not outlive the state it retires — an earlier pass
+          // may have completed the rename but died before fsyncing, so
+          // prove the directory durable first whether or not this pass
+          // renamed.
+          if (existsSync(modulesName) || !recorded || !lstatPresent(recorded)) {
+            fsyncDir(privateGitDir)
+            mark('modules-restored')
+          }
+        } catch {
+          // Raced away or durability unproven — the record stays active
+          // and a later replay is idempotent.
+        }
+      } else if (active.tornDown && !(recorded && lstatPresent(recorded))) {
+        // `modules` already back and the recorded generation gone — the
+        // recorded rename completed earlier but its marker was lost to a
+        // crash. That earlier pass may have died before fsyncing the
+        // rename's parent, so prove the present state durable BEFORE
+        // retiring the record — a marker that outlives the rename it
+        // retires drops recovery ownership over a torn-down repository.
+        fsyncDir(privateGitDir)
+        mark('modules-restored')
+      }
+      // `.git` reattachment only runs when `modules` resolves and no
+      // torn-down generation still holds the recorded repository:
+      // restoring a pointer without its module repository would dangle,
+      // and attaching one beside a live torn-down generation could wire
+      // the checkout into a foreign `modules` dir.
+      const unresolvedClaim = Boolean(recorded && lstatPresent(recorded))
+      // `modules` must be a real directory — `existsSync` follows links,
+      // so a symlink squatting on the name would resolve `modulesReal`
+      // into a foreign repository and authorize pointer reconciliation
+      // and `core.worktree` rewrites inside it.
+      let modulesIsDir = false
+      try {
+        modulesIsDir = lstatSync(modulesName).isDirectory()
+      } catch {
+        // Absent or unreadable — nothing to reconcile into.
+      }
+      if (!modulesIsDir || unresolvedClaim) return
+      // `core.worktree` inside the module repo still names the original
+      // checkout path — the tree may now sit at a quarantine or nested
+      // rollback location, so the restored `.git` pointer would wire the
+      // submodule to a stale or foreign recreation. The restored `.git`
+      // file itself names its module repo through `gitdir:` — never infer
+      // the config path from `rel`, because module repos key by submodule
+      // name and nested repos add `modules/` segments. And only rewrite
+      // when the recorded path resolves elsewhere: an unchanged value
+      // keeps the config's bytes identical to the preserved archive.
+      const modulesReal = realpathSync(modulesName)
+      // `false` means reconciliation could not finish but a later replay
+      // still might — the caller must keep the journal record live rather
+      // than retire a potentially dangling pointer. Every other exit is
+      // terminal: reconciled, or foreign data replay can never improve.
+      const reconcileWorktree = (rel: string): boolean => {
+        const checkout = dirname(join(wtPath, rel))
+        const pointer = join(checkout, '.git')
+        // A symlinked `.git` would route the rebase write outside the
+        // tree — only a plain file is ours to rewrite.
+        try {
+          const st = lstatSync(pointer)
+          if (!st.isFile() || st.isSymbolicLink()) return true
+        } catch {
+          return true
+        }
+        const gitdir = readFileSync(pointer, 'utf8')
+          .match(/^gitdir:\s*(.+)$/m)?.[1]
+          ?.trim()
+        if (!gitdir) return true
+        // The recorded gitdir is `<admin>/modules/<chain>`; the admin root
+        // is stable across tree moves — only the value's resolution from
+        // the checkout breaks — so the owning module repo comes from the
+        // recorded chain, never from re-resolving the recorded path. The
+        // chain is read off that admin anchor, not off a `/modules/`
+        // segment a parent path could also contain.
+        const chain = recordedModuleChain(gitdir, checkout, basename(privateGitDir), modulesName)
+        if (!chain) return true
+        let moduleDir: string
+        try {
+          moduleDir = realpathSync(join(modulesName, chain))
+        } catch {
+          // Chain no longer resolves — the module repository may return on
+          // a later pass, so the record stays live for retry.
+          return false
+        }
+        if (moduleDir !== modulesReal && !moduleDir.startsWith(`${modulesReal}/`)) return true
+        // The extracted chain is a hint; the module's own recorded
+        // worktree is the check — it must name this checkout's in-tree
+        // path (its tail stays stable across moves), or a coincidental
+        // chain would wire the pointer into a foreign module repo. A
+        // missing config or worktree value leaves nothing to reconcile.
+        const config = join(moduleDir, 'config')
+        let recordedWorktree = ''
+        try {
+          recordedWorktree = execFileSync(
+            'git',
+            ['config', '--file', config, '--get', 'core.worktree'],
+            {
+              encoding: 'utf8',
+              stdio: ['ignore', 'pipe', 'pipe'],
+            },
+          ).trim()
+        } catch {
+          // No recorded worktree — nothing to reconcile.
+        }
+        if (!recordedWorktree.replaceAll('\\', '/').endsWith(`/${dirname(rel)}`)) return true
+        // A nested rollback leaves the tree deeper than teardown recorded
+        // it — rebase a pointer that no longer resolves to its repo so it
+        // works from the current depth; a still-correct pointer keeps its
+        // bytes.
+        let resolved: string | undefined
+        try {
+          resolved = realpathSync(resolve(checkout, gitdir))
+        } catch {
+          // Unresolvable from here — rebase it.
+        }
+        if (resolved !== moduleDir) {
+          // The pointer is the checkout's only link to its module repo, so
+          // it may never be rewritten by truncate-then-write: an
+          // interruption between the two leaves an empty pointer the next
+          // replay cannot reconcile yet still retires. A same-directory
+          // temp file, fsynced and renamed over, is atomic — a crash keeps
+          // either the old pointer or the new one, never a torn half.
+          const tmp = `${pointer}.clade-tmp-${randomUUID().slice(0, 8)}`
+          try {
+            // The rename replaces the pointer inode, so a fresh temp file
+            // would lose the original's mode and any acl/xattrs — dropping
+            // them can broaden access and makes the relocation comparator
+            // reject cleanup's own rewrite as metadata drift. Copy the
+            // pointer onto the temp name with metadata preserved before
+            // rewriting its bytes; fall back to mode-only when the
+            // preserving copy cannot run (non-regular pointer or a
+            // filesystem without acl/xattr support).
+            const st = lstatSync(pointer)
+            let preserved = false
+            if (st.isFile()) {
+              try {
+                execFileSync('cp', ['--preserve=all', '--no-dereference', '--', pointer, tmp], {
+                  stdio: ['ignore', 'ignore', 'pipe'],
+                })
+                preserved = true
+              } catch {
+                // Preservation unsupported here — keep mode below.
+              }
+            }
+            writeFileSync(tmp, `gitdir: ${relative(checkout, moduleDir)}\n`)
+            if (!preserved) chmodSync(tmp, st.mode & 0o777)
+            fsyncFile(tmp)
+            renameSync(tmp, pointer)
+          } finally {
+            try {
+              unlinkSync(tmp)
+            } catch {
+              // Renamed away or never created — nothing to sweep.
+            }
+          }
+        }
+        // Whether the pointer was just renamed or matches because an
+        // earlier pass rewrote it and died before the fsync, the record
+        // retires only once the name on disk is durable.
+        fsyncDir(checkout)
+        const physical = realpathSync(checkout)
+        let alreadyCurrent = false
+        try {
+          alreadyCurrent = realpathSync(resolve(moduleDir, recordedWorktree)) === physical
+        } catch {
+          // The recorded path no longer resolves — reconcile it.
+        }
+        if (!alreadyCurrent) {
+          execFileSync('git', ['config', '--file', config, 'core.worktree', physical], {
+            stdio: ['ignore', 'pipe', 'pipe'],
+          })
+        }
+        // The rewrite must be durable before the record retires — a
+        // `restored` marker that outlives a rolled-back config write
+        // permanently leaves core.worktree naming the stale path — and a
+        // matching value may still be an earlier pass's unfsynced write,
+        // so the proof runs either way. A dir fsync persists the rename,
+        // not the bytes — the file too.
+        fsyncFile(config)
+        fsyncDir(moduleDir)
+        return true
+      }
+      for (const rel of active.detached) {
+        // Journaled paths are caller-supplied data: only a
+        // `.clade-detached` name whose parent resolves strictly inside the
+        // worktree is ours.
+        if (!basename(rel).startsWith('.git.clade-detached')) continue
+        const source = join(wtPath, rel)
+        let parent: string
+        try {
+          parent = realpathSync(dirname(source))
+        } catch {
+          continue
+        }
+        if (!parent.startsWith(`${realRoot}/`)) continue
+        const target = join(dirname(source), '.git')
+        try {
+          if (!lstatPresent(source)) {
+            // The recorded object is gone — restored by an earlier pass
+            // whose marker was lost, or trashed with the tree. The name
+            // can only reappear as foreign data, so the record must not
+            // stay live to claim it: retire it. Prove the absence durable
+            // first — that earlier pass may have renamed it and died
+            // before the parent fsync, and a surviving marker must never
+            // outlive a rename a power loss could still roll back. When
+            // the parent itself is gone there is nothing left to persist.
+            if (lstatPresent(dirname(source))) fsyncDir(dirname(source))
+            // A reconcile that cannot finish retires nothing — the record
+            // stays live so a later pass can still rewire the pointer.
+            if (reconcileWorktree(rel)) mark(`restored ${rel}`)
+          } else if (!lstatPresent(target)) {
+            renameSync(source, target)
+            // Same ordering as `modules-restored`: the directory fsync
+            // proves the rename durable before the marker can retire it —
+            // and an unfinished reconcile keeps the record live instead.
+            if (reconcileWorktree(rel)) {
+              fsyncDir(dirname(target))
+              mark(`restored ${rel}`)
+            }
+          }
+        } catch {
+          // One unruly record must not block the rest — the journal still
+          // owns it, so a later restore retries.
+        }
+      }
+    } finally {
+      if (journalFd !== undefined) journalClose(journalFd)
+    }
+  } catch {
+    // Reattach is a best-effort recovery step inside an error path — a
+    // failure here must never mask the original error; anything left
+    // detached keeps its `.clade-detached`/torn-down name for inspection.
+  }
+}
+
+// Batch cleanup never unlinks tree bytes: an initialized submodule checkout
+// rides into durable trash with the rest of the tree, so release only
+// detaches — each checkout `.git` is renamed aside and the private module
+// repository leaves the `modules` name, and `worktree move` then sees a
+// worktree with no populated submodules. `deinit`'s unlink of the checkout
+// is reserved for callers that still run `git worktree remove`.
+export function releaseWorktreeRuntime(
+  consumerRoot: string,
+  wtPath: string,
+  beforePrivateMetadataRemoval?: () => void,
+): string[] {
+  const detached = detachWorktreeSubmodulesMetadata(wtPath, beforePrivateMetadataRemoval)
+  try {
+    const result = runWtEnvBootstrap(wtPath, 'destroy', { scriptRoot: consumerRoot })
+    if (result?.status === 'orphan-recorded')
+      throw new Error('Worktree backing resources remain; retain and retry cleanup')
+  } catch (error) {
+    // A teardown failure after the detach leaves the worktree retained —
+    // put the submodule names back so it stays functional for the owner.
+    reattachWorktreeSubmodules(wtPath, detached)
+    throw error
+  }
+  return detached
 }
 
 export function cleanupRemovedWorktreeRuntime(consumerRoot: string, wtPath: string) {
@@ -5132,8 +6203,12 @@ async function main() {
   if (sub === 'batch') {
     const result = runBatchCommand(process.cwd(), rest, {
       bootstrap: (root, path) => bootstrapWorktreeRuntime(root, path, { strict: true }),
-      destroy: destroyWorktreeRuntime,
+      destroy: releaseWorktreeRuntime,
+      restore: (_main, path, detached) => reattachWorktreeSubmodules(path, detached),
       removed: cleanupRemovedWorktreeRuntime,
+      withExclusiveWriterOwnership: withProbedExclusiveWriterOwnership,
+      beforeRemove: (_main, quarantine) => probeLiveWriterCwd(quarantine),
+      afterRemove: (_main, path, extraRoots) => probeDeletedHandles(path, extraRoots),
     })
     console.log(JSON.stringify(result, null, 2))
     return

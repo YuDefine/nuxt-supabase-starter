@@ -1,12 +1,12 @@
 ---
-name: sdd-start
+name: work-route
 description: Use when user asks to start or continue product work; first let clade-onboard confirm the repo is onboarded, then route here. Do not use for onboard status/readiness or registry drift.
 license: MIT
 metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}}
 ---
 
 
-# sdd-start（統一新工作入口）
+# work-route（工作路由入口）
 
 <role>
 
@@ -26,7 +26,7 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}
 | 缺少會改變方案的驗收條件或決策 | `clarify`，保留未回答前提 |
 | 新需求或既有行為新增／修改／刪除 | 進新 package／續跑判定 |
 
-新需求 MUST 建新的 `NNN-<slug>` package；shared truth 檔存在、同名 slug 或舊 package 存在，都不是續跑證據。
+Clade home 與已改用精簡 plan 的 repo：同一 work id 續跑 `specs/plans/<work-id>/plan.md`，**NEVER** 為同一工作再開一份。產品 SDD 仍走 aixbdd 九步的 consumer，在遷移完成前才建新的 `NNN-<slug>` package。
 
 </decision_boundary>
 
@@ -46,7 +46,7 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}
 
 依序判定：
 
-1. spec 尚無、或需求是新行為：`specify`；新需求 MUST 建新的 `NNN-<slug>` package。
+1. spec 尚無、或需求是新行為：clade home 走 `flow plan open`；產品 SDD consumer 走 `specify` 建 `NNN-<slug>` package。同一 work 已有 plan 則續跑，不另開。
 2. spec 有待澄清：`clarify-over-specs`。
 3. acceptance 尚未完成：`spec-by-example`；需求改 UI 時再交 `ui-plan`。API-only 不建立 UI 工作。
 4. acceptance 已完成但 UI 需求缺 `ui-plan`／靜態雛形／review：`ui-plan`，補齊後再回 PM confirmation gate；API-only 不建立 UI 工作。
