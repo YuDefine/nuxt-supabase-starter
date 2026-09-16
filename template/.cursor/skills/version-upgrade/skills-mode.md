@@ -44,6 +44,22 @@ node scripts/audit-skill-freshness.ts --json --target <runtime-target> # 機器�
 
 `audit-skill-freshness` 只認 `skills-lock.json` 管理的 source；**submodule-tracked source（SpecFormula、aixbdd）它結構上零訊號**，MUST 另跑 `node scripts/audit-upstream-submodules.ts`（逐上游印落後的 commit、依 watchPaths 分類的異動檔、fork 整合分支的 patch 是否已被上游收編；`--only <id>` 只看一個）。清單 SoT 是 `registry/upstream-submodules.json` —— 新增一個 submodule-tracked 上游只要加一筆 entry，**NEVER** 回頭改那支 script。
 
+### S.1-submodule — audit 報落後之後（submodule-tracked 上游專用）
+
+`audit-upstream-submodules.ts` 只回答「落後多少、落後的是什麼」；**落地不走 S.2–S.5**（那四步是 `skills-lock` 世界的處置），走 `docs/dev-guide.md` § 6.5 的指令序列：
+
+```bash
+cd ~/offline/clade
+node scripts/sync-upstream-submodules.ts --dry-run --only <id>   # 唯讀：印落後數與會跑的五步
+node scripts/sync-upstream-submodules.ts --only <id>             # 實跑：rebase fork 整合分支 → force-with-lease push → pin → mirror；attended-only
+```
+
+三條在跑之前就要知道的事（全文與修復程序在 § 6.5）：
+
+- **兩個 repo 座標不是同一個東西**：`.gitmodules` 的 `url` 指 **fork**（pin 的 sha 要從它 fetch 得到），registry 的 `upstreamRepo` 指**真上游**（落後數對它算）。`.gitmodules` 指 fork 是刻意的——整合分支只存在於 fork。
+- **patch 只能落在 `integrationBranch`（`clade/main`）**。fork `main` 只鏡上游、不帶 patch。audit 印「pin 另有 N commit 不在上游」而 fork `clade/main` 卻等於上游舊點，就是 patch 落錯分支——先照 § 6.5 § fork 分支拓樸修復 把分支擺正，再跑 sync。
+- **實跑 MUST 在 worktree**：它會改 gitlink ＋ PIN ＋ banner 檔（一次幾十個 tracked 檔）；worktree 的 `vendor/<id>` 預設是空目錄，先 `git submodule update --init --recursive vendor/<id>`。
+
 ### `--new-only` 掃的是兩類 source，不是一類
 
 | 段 | 來源 | 意思 |

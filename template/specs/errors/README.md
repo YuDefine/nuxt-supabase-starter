@@ -1,4 +1,4 @@
-<!-- LOCKED: mirrored from SpecFormula/specformula-dev-framework@e5568250a2c0599983bce90fb08d548da35e1d64 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- LOCKED: mirrored from SpecFormula/specformula-dev-framework@6234c444175969e7145cd41ff19f2ce0be01474f via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 # SpecFormula 錯誤訊息模板 registry
 
 本目錄為跨語言錯誤訊息渲染之 source of truth，4 語言實作（Java / Python / C# / TypeScript）共用。具體 contract 見 ADR-0026《SpecFormula Framework Exception Taxonomy》§7.1 / §7.2.1 / §7.3。

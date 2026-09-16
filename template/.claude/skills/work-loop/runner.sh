@@ -70,7 +70,8 @@ NODE_PLAIN="env FORCE_COLOR=0 NO_COLOR=1 node"
 # ── headless child 的帳號入口 ────────────────────────────────────────────────
 # 每一個 preflight / round 都交給 claude-account-routing.ts 機械選 cc 或 ccw；
 # runner 不把兩個帳號當成一個池，也不沿用 gateway / Pi / API-key launcher。
-# 起源若是 ccg、ccagy 或 ccx，直接 fail-closed，不產生新的 child。
+# 起源若是 gateway／退役入口（ccg、ccx，或任何帶 ANTHROPIC_BASE_URL 的 session），
+# 直接 fail-closed，不產生新的 child。
 #
 # NEVER 改用 `env -i`：child 需要 HOME / PATH / TERM。
 # NEVER 把 task 的 model / effort 偷換成帳號路由；安全清理與選槽在共同 adapter 完成。
@@ -95,10 +96,15 @@ CHILD_ENV=(
 
 detect_origin_launcher() {
   case "${ANTHROPIC_DEFAULT_OPUS_MODEL:-}:${ANTHROPIC_DEFAULT_SONNET_MODEL:-}:${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}" in
-    *ccagy-*) echo ccagy; return ;;
     *ccg-*) echo ccg; return ;;
     *ccx-*) echo ccx; return ;;
   esac
+  # 任何帶 proxy base URL 的起源都是 gateway seat —— 含已移除入口留下的陳舊 env，
+  # 一律 fail-closed，不讓它落進下面的 cc/ccw 判定被當成訂閱槽。
+  if [ -n "${ANTHROPIC_BASE_URL:-}" ]; then
+    echo gateway
+    return
+  fi
   if [ "${CLAUDE_CONFIG_DIR:-}" = "$HOME/.claude-work" ]; then
     echo ccw
     return
