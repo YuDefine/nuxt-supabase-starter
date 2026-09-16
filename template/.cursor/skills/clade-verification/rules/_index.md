@@ -29,4 +29,4 @@
 {"file":"truth-layers.md","source":"rules/core/truth-layers.md","paths":["specs/**","tasks/**","ROADMAP.md","docs/decisions/**","server/**/*.ts","packages/*/server/**/*.ts","shared/**/*.ts","packages/*/shared/**/*.ts","src/**/*.ts","app/**/*.vue","packages/*/app/**/*.vue"]}
 {"file":"verification-lease.md","source":"rules/core/verification-lease.md","paths":null}
 {"file":"verification-lease.spec.md","source":"rules/core/verification-lease.spec.md","paths":[".claude/consumer-meta.json","scripts/dev-session*","scripts/dev-singleton*","nuxt.config.*","packages/**/nuxt.config.*"]}
-{"file":"verify-gate-chain.md","source":"rules/core/verify-gate-chain.md","paths":["**/*.ts","**/*.vue","**/*.tsx","tasks/**","specs/**"]}
+{"file":"verify-gate-chain.md","source":"rules/core/verify-gate-chain.md","paths":["**/*.ts","**/*.vue","**/*.tsx","tasks/**","specs/**","package.json","packages/*/package.json","pnpm-lock.yaml","pnpm-workspace.yaml"]}

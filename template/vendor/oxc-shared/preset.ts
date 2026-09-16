@@ -264,6 +264,11 @@ export const stagedBase = {
   },
 }
 
+// 同 oxlint 的 DummyRule：OxlintConfig rules map 的 index signature 收這個形狀，
+// overrides spread 進 defineConfig 才過型別（Record<string, unknown> 不行）。
+type LintLevel = 'allow' | 'off' | 'warn' | 'error' | 'deny' | number
+type LintRule = LintLevel | [LintLevel, ...unknown[]]
+
 /** @type {import('oxlint').OxlintConfig} */
 export const lintBase = {
   categories: {
@@ -345,6 +350,9 @@ export const lintBase = {
     // `.claude/` `.clade/` `.agents/` `.codex/` `.cursor/` 全部由 PROJECTION_EXCLUDES 帶入。
     ...PROJECTION_EXCLUDES,
   ],
+  // 上方 JSDoc @type 對 .ts 不生效、oxlint 又不是直接 dep（無法 import type），
+  // 所以 overrides 在這裡顯式宣告型別，consumer 才能 `...(lintBase.overrides ?? [])` 往後接。
+  overrides: [] as { files: string[]; rules: Record<string, LintRule> }[],
 }
 
 /** @type {import('oxfmt').OxfmtConfig} */

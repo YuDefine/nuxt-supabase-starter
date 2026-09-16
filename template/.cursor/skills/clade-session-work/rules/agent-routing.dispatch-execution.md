@@ -114,6 +114,12 @@ MUST 先讀那一節**，本 pointer 不複述。
 
 N ≥ 3 個 dispatch 的 findings 要收斂進同一個 synthesis 時，reducer 的五步形狀、group key 准入表與 guard 表在 `~/offline/clade/vendor/snippets/fan-in-reduction/`。**這不是規約**——micro-test 顯示寫成 MUST 買不到東西，見 rationale § fan-in reducer 量到什麼。
 
+## Implementation readiness gate（實作派工前）
+
+派出去的是**實作**（brief 宣告 `stage: implement`，或 dispatcher 帶 `--implementation`）且 `CLADE_WORK_ID` 綁到一個 lifecycle package 時，dispatcher **MUST** 先跑 `node vendor/scripts/flow/flow.ts plan readiness <work-id>`；`ready=false` 就拒絕建 pane，findings 逐條指名缺的契約（`spec.md`、acceptance feature、`acceptance_command`、stale `truth_baseline`、undefined／ambiguous step）。缺的東西回到對應 spec owner，**NEVER** 交給 implementer 順手補——implementer 只能改被指派的實作與配套單元測試，acceptance feature、DSL、`spec.md` 在它手上是唯讀；主線收工時跑 `flow plan spec-integrity <work-id> --since <dispatch sha>`，那三類有改動就拒收，**即使它回報的測試全綠**。
+
+**便宜模型的資格是量出來的，不是寫死的。** readiness 通過只代表 package 完整到可以被獨立 context 接手，它**不是**改走更便宜 model 的授權：model 仍照 [[agent-routing]] § Routing Table 與本檔 § 4 選檔。要宣稱某類 task 可交給低成本模型，MUST 有該 task class 的獨立試驗證據（fresh context、無場外指導、獨立 verifier 跑未改動的 acceptance、記 model／effort／attempts／rework／總成本）；試驗失敗回到契約或 routing，**NEVER** 把殘餘交給強模型補完再標成功而不記那次介入。
+
 ## 必禁事項 — Dispatch 入口（原在 `agent-routing.md` § 必禁事項）
 
 | NEVER | 說明 |

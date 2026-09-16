@@ -399,6 +399,26 @@ rm -rf node_modules && pnpm install     # 這次才會真的 resolve 並改寫 l
 與本機不同而兩邊都不出聲。fleet 層的事後偵測跑 `node scripts/audit-lockfile-staleness.ts`（clade home），
 成因與控制實驗見 [[pitfall-pnpm-up-to-date-attests-node-modules-not-lockfile]]。
 
+### packageExtensions 條目契約
+
+`pnpm-workspace.yaml` 的 `packageExtensions:` 替**別人的套件**補宣告依賴——它修的是上游漏寫，而那個漏寫從 consumer 端的 `package.json` 完全看不到。**每一個** `packageExtensions` 條目上方 **MUST** 有註解，寫兩件事：
+
+1. **存在理由**：哪個套件在哪裡用到、為什麼它自己沒宣告（例：`@specformula/node` 的 index 靜態 import `SqliteDataSource` → `better-sqlite3`，vendored tgz 沒宣告）
+2. **移除條件**：什麼事發生之後這條可以刪（例：上游改 lazy import 或宣告 optional peer 並重新 vendor——附上游 TD／issue 編號）
+
+```yaml
+# @specformula/node 的 index 靜態 import SqliteDataSource → better-sqlite3，vendored tgz 沒宣告。
+# 移除條件：上游改 lazy import 或宣告 optional peer 並重新 vendor（<consumer-e> TD-0xx）。
+packageExtensions:
+  "@specformula/node":
+    dependencies:
+      better-sqlite3: 12.11.1
+```
+
+依賴**歸屬到真正 import 它的套件**，**NEVER** 改成在 consumer 的 `devDependencies` 補一條：那一條看起來是 consumer 自己沒在用的套件，下一次「清掉未使用依賴」就會把它刪掉——2026-09 <consumer-e> 的 BDD 正是這樣紅了三天（[[pitfall-pnpm-allowbuilds-entry-removal-reddens-unrelated-scripts]] § 回歸）。沒有註解的條目在同一個動作裡同樣會被當成雜訊清掉。
+
+機械訊號：`node scripts/audit-pnpm-settings-drift.ts`（clade home，warn-only）的 `packageExtensions` 段列出上方沒有註解的條目。它只驗**註解存在**，兩件事寫齊了沒要人讀。
+
 
 ### `vite.config.ts` 必備欄位（跨 consumer 統一，避免 propagate drift）
 

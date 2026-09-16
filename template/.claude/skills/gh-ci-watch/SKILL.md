@@ -122,10 +122,22 @@ Terminal report 一律自帶：`RESULT:` 行、run URL、各 job 耗時（`--jso
 | exit | RESULT | 主線處置 |
 | --- | --- | --- |
 | 0 | `success` | 一行回報綠燈 + run URL，結束話題 |
-| 1 | `failure` / `cancelled`（無 successor）/ `timed_out` / `startup_failure` / ... | 讀同段輸出的 `--log-failed` 節錄，進失敗處置流程（post-push 場景見下表『Push 後政策』） |
+| 1 | `failure` / `cancelled`（無 successor）/ `timed_out` / `startup_failure` / ... | **先讀 `LAST_GREEN:` 與 `RANGE:` 兩行**（見 § 失敗處置第一步），再讀 `--log-failed` 節錄進失敗處置流程（post-push 場景見下表『Push 後政策』） |
 | 2 | `UNAVAILABLE (workflow '<X>' 不存在；可用：…)` | **名稱傳錯，不是環境問題。**照訊息列出的清單挑**檔名**重派一次，**NEVER** 當成「watcher 起不來」略過——那會讓這次 push 完全沒有 CI 驗證 |
 | 2 | `UNAVAILABLE (<其他原因>)` | gh 不存在 / 未登入 / API 連續失敗——一行回報略過，**NEVER** 追問 user |
 | 3 | `WATCH_TIMEOUT` | run 可能仍在跑（輸出含最後已知狀態 + run id）。可再派一輪 `run <run-id>` 續盯，或依場景處置 |
+
+### 失敗處置第一步：先比最後綠燈，再猜根因
+
+失敗報告在 failed logs 之前印兩行：`LAST_GREEN: <sha> <時間> <url>`（同 workflow 最後一條 success run；branch push 限同 branch，tag 觸發不限）與 `RANGE: git log --oneline <last-green>..<red>`。**任何**紅燈進 `[1] root-cause` 之前 **MUST** 先跑那條 `RANGE`，逐條看它涵蓋哪些 commit：
+
+| 可觀察 predicate | 判定 |
+| --- | --- |
+| 紅燈的起點（`LAST_GREEN` 之後第一條紅 run）**早於**最近一次環境變更（換 runner／image／secret） | 根因與那次環境變更無關，往 range 內的 code／依賴變更查 |
+| range 只含環境變更那一筆 | 才把環境列為第一嫌疑 |
+| `LAST_GREEN: unknown` | 用 `gh run list -w <workflow> -s success -L 1` 自己補查；查不到就明說「起點不明」，**NEVER** 預設是最近那次變更 |
+
+**NEVER** 用「剛剛才換了 runner，應該是它」當起點——那是本段要擋的那一句。2026-09-17 <consumer-e> 實證：`bdd.yml` 自 `ade3e10`（09-14，移除依賴）起就紅，到 `e634d06`（09-17）把 job 搬回 `ubuntu-latest` 才被注意到；range 一跑就看得出紅燈早於搬家。
 
 ## 查詢：canonical 命令（一次性，前景跑即可）
 
@@ -174,7 +186,7 @@ gh api "/repos/<owner>/<repo>/actions/runs?status=queued" --jq '.workflow_runs[]
 
 | 主題 | 位置 |
 | --- | --- |
-| Push 後何時觸發監看、綠燈/紅燈後主線的處置政策（target decision surface / HANDOFF 登記） | 本 skill § Push 後政策：`git push` 成功且 repo 含 `.github/workflows/*.yml` 時 MUST 立刻派 watcher；`success` → 一行報 `v<version> CI 綠燈 — <runUrl>` 後結束；失敗類 → target decision surface 二選一 `[1] 立刻 root-cause + 修` / `[2] 登記 HANDOFF.md`（`- [ ] [<date>] v<version> CI <fail|timeout> — <job>` + Run URL + 根因猜測）；`UNAVAILABLE` → 一行報略過 |
+| Push 後何時觸發監看、綠燈/紅燈後主線的處置政策（target decision surface / HANDOFF 登記） | 本 skill § Push 後政策：`git push` 成功且 repo 含 `.github/workflows/*.yml` 時 MUST 立刻派 watcher；`success` → 一行報 `v<version> CI 綠燈 — <runUrl>` 後結束；失敗類 → 先照 § 失敗處置第一步 跑 `RANGE` 比最後綠燈，再 target decision surface 二選一 `[1] 立刻 root-cause + 修` / `[2] 登記 HANDOFF.md`（`- [ ] [<date>] v<version> CI <fail|timeout> — <job>` + Run URL + 根因猜測）；`UNAVAILABLE` → 一行報略過 |
 | CI / test workflow 必須自己取消過期 run | [[ci-workflow]] § CI / test workflow MUST cancel superseded runs on the same ref。本 script 在 cancelled 時改追 successor，那是監看補救，不能代替 workflow `concurrency` |
 | Script 本體 | skill-local `scripts/gh-ci-watch.sh`（由 resource declaration 投影至本 skill） |
 | 背景派工通用回報契約 | `rules/core/agent-routing.dispatch-execution.md` § Subagent 回報契約 |

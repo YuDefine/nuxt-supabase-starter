@@ -61,6 +61,8 @@ baseline 只存在於某次 session 記憶裡時，下一個讀 gate 的人算�
 **NEVER 用「先讓它綠、之後再補」處理紅 baseline**（那是暫時修法）。正確動作是把紅 baseline 本身
 登記成獨立條目，讓它有自己的 owner，而不是掛在每一條無關 item 的驗收條件上。
 
+**反向邊界：收窄的是「哪些 finding 算本次的」，NEVER 是「跑哪些 suite」。** 本次觸及 `package.json`／`pnpm-lock.yaml`／`pnpm-workspace.yaml`／vendored tgz 時，**每一條**會載入依賴樹的 suite（unit、BDD、e2e、build）都 MUST 實跑——依賴變更沒有 `.ts` diff，影響面是整張 runtime 解析圖。2026-09-14 <consumer-e> `ade3e10` 只重生 lockfile、沒跑 BDD，BDD 紅了三天才被發現。
+
 ## Hard rule
 
 ### NEVER
