@@ -285,7 +285,7 @@ node 不一致時前兩層釘得再準也沒用。
 
 第三列是全稱量詞：**每一個** `.github/workflows/*.yml` 的**每一處** `node-version:`，
 不是只改 `ci.yml`、也不是只改每個檔的第一處。<consumer-i> 單一 repo 就有 7 處分散在 5 個檔，
-其中 `clade-check.yml` 停在已 EOL 的 node 20——只改 `ci.yml` 的人會看到 CI 綠而那一格仍在 20。
+其中 `clade-check.yml`（該 repo 已於 `9bff749` 移除）曾停在已 EOL 的 node 20——只改 `ci.yml` 的人會看到 CI 綠而那一格仍在 20。
 
 #### NEVER
 

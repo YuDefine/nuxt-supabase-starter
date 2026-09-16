@@ -12,6 +12,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -185,6 +186,7 @@ export interface RemotePrState {
   mergeSha: string
   base: string
   headSha: string
+  headRef: string
 }
 export type RemotePrProbe = (query: { repository: string; pr: number }) => RemotePrState
 export interface CheckpointReceipt {
@@ -196,6 +198,21 @@ export interface CheckpointReceipt {
   scope: string[]
   at: string
 }
+export interface DraftPrReceipt {
+  workId: string
+  source: string
+  branch: string
+  head: string
+  pr: number
+  discussant: string
+  question: string
+  at: string
+}
+export interface BatchDraftBinding {
+  workId: string
+  pr: number
+  headBranch: string
+}
 export interface WorktreeBatch {
   id: string
   base: string
@@ -204,6 +221,7 @@ export interface WorktreeBatch {
   branch: string
   workflow: 'trunk-based' | 'pr-merge-based'
   members: ReadySource[]
+  draftBindings: BatchDraftBinding[]
   cursor: number
   phase: 'integrating' | 'review' | 'sealed' | 'landed' | 'cleaned' | 'cancelled'
   bootstrapped?: boolean
@@ -506,12 +524,19 @@ function ensureStateDirectory(c: Context): void {
 function asDetachedList(result: string[] | void): string[] {
   return Array.isArray(result) ? result : []
 }
-function save(c: Context, s: State) {
-  const file = join(c.dir, `state-${randomUUID()}.json`)
-  writeFileSync(file, JSON.stringify(s, null, 2) + '\n', { flag: 'wx' })
+/** Exclusive temp write, fsync, rename, then fsync the directory chain. */
+function writeJsonDurable(dir: string, name: string, value: unknown) {
+  const file = join(dir, `${name}-${randomUUID()}.tmp`)
+  writeFileSync(file, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' })
   syncFile(file)
-  renameSync(file, join(c.dir, 'state.json'))
-  syncDirectoryAndParents(c.dir)
+  renameSync(file, join(dir, name))
+  syncDirectoryAndParents(dir)
+}
+function save(c: Context, s: State) {
+  writeJsonDurable(c.dir, 'state.json', s)
+}
+function isLiveBatch(b: WorktreeBatch): boolean {
+  return !['landed', 'cleaned', 'cancelled'].includes(b.phase)
 }
 function processStart(pid: number): string | null {
   try {
@@ -1915,12 +1940,13 @@ function eligible(c: Context, s: State) {
   }))
 }
 function active(s: State): WorktreeBatch {
-  const b = s.batches.find(
-    (candidate) =>
-      !['cleaned', 'cancelled'].includes(candidate.phase) && candidate.phase !== 'landed',
-  )
+  const b = s.batches.find(isLiveBatch)
   if (!b) throw new Error('No active batch')
   return b
+}
+/** Batch registry without ready-pool evaluation; independent of workflow model. */
+export function listBatches(cwd: string): WorktreeBatch[] {
+  return readState(context(cwd)).batches
 }
 export function batchStatus(
   cwd: string,
@@ -1952,6 +1978,7 @@ export function batchStatus(
     activeImplementationCount,
     maxActiveImplementations: MAX_ACTIVE_IMPLEMENTATIONS,
     overActiveCap: activeImplementationCount > MAX_ACTIVE_IMPLEMENTATIONS,
+    drafts: listDrafts(c),
     ready,
     invalid: rows.filter((r) => r.reason),
     batches: s.batches,
@@ -2032,13 +2059,134 @@ export function checkpointSource(
     at: new Date().toISOString(),
   }
   mkdirSync(join(c.dir, 'checkpoints'), { recursive: true })
-  const file = join(
-    c.dir,
-    'checkpoints',
-    `${options.workId.replace(/[^A-Za-z0-9._-]+/g, '_')}.json`,
-  )
+  const file = join(c.dir, 'checkpoints', workIdFile(options.workId))
   writeFileSync(file, JSON.stringify(receipt, null, 2) + '\n')
   return receipt
+}
+function workIdFile(workId: string): string {
+  return `${workId.replace(/[^A-Za-z0-9._-]+/g, '_')}.json`
+}
+function isDraftPrReceipt(value: unknown): value is DraftPrReceipt {
+  if (!isRecord(value)) return false
+  return (
+    typeof value.workId === 'string' &&
+    typeof value.source === 'string' &&
+    typeof value.branch === 'string' &&
+    typeof value.head === 'string' &&
+    typeof value.pr === 'number' &&
+    Number.isInteger(value.pr) &&
+    value.pr > 0 &&
+    typeof value.discussant === 'string' &&
+    typeof value.question === 'string' &&
+    typeof value.at === 'string'
+  )
+}
+function readDraft(file: string): DraftPrReceipt {
+  return parseJsonWith(
+    readFileSync(file, 'utf8'),
+    isDraftPrReceipt,
+    'Invalid draft receipt; preserve it for recovery',
+  )
+}
+function listDrafts(c: Context): DraftPrReceipt[] {
+  const dir = join(c.dir, 'drafts')
+  if (!existsSync(dir)) return []
+  return readdirSync(dir)
+    .filter((name) => name.endsWith('.json'))
+    .map((name) => readDraft(join(dir, name)))
+}
+function draftReceiptFor(c: Context, workId: string): DraftPrReceipt | undefined {
+  const file = join(c.dir, 'drafts', workIdFile(workId))
+  if (!existsSync(file)) return undefined
+  const receipt = readDraft(file)
+  if (receipt.workId !== workId)
+    throw new Error(
+      `Draft receipt work id ${receipt.workId} does not match requested work id ${workId}; preserve the colliding receipt for recovery`,
+    )
+  return receipt
+}
+function draftBindingFor(c: Context, workId: string): BatchDraftBinding | undefined {
+  const receipt = draftReceiptFor(c, workId)
+  if (!receipt) return undefined
+  return {
+    workId,
+    pr: receipt.pr,
+    headBranch: receipt.branch.replace(/^refs\/heads\//, ''),
+  }
+}
+function assertReceiptReusesDraft(
+  c: Context,
+  b: WorktreeBatch,
+  receipt: MergeReceipt,
+  headRef: string,
+): void {
+  // A batch prepared before the snapshot existed may already be merged; cancelling it would
+  // move its reviewed base and strand the receipt. Its only binding evidence is the side receipt.
+  const bindings = Array.isArray(b.draftBindings)
+    ? b.draftBindings
+    : b.members.flatMap((member) => {
+        const binding = draftBindingFor(c, member.workId)
+        return binding ? [binding] : []
+      })
+  for (const draft of bindings) {
+    if (draft.pr !== receipt.pr)
+      throw new Error(
+        `Draft PR #${draft.pr} already exists for ${draft.workId}; ready and merge must reuse it, receipt names #${receipt.pr}. Source and integration retained`,
+      )
+    if (draft.headBranch !== headRef)
+      throw new Error(
+        `Draft PR #${draft.pr} head is ${draft.headBranch}; merge receipt head ${headRef} is a second PR. Source and integration retained`,
+      )
+  }
+}
+export function recordDraftPr(
+  cwd: string,
+  source: string,
+  options: { workId: string; pr: number; discussant: string; question: string },
+): DraftPrReceipt {
+  const workId = options.workId.trim()
+  const discussant = options.discussant.trim()
+  const question = options.question.trim()
+  if (!workId || !discussant || !question)
+    throw new Error('Draft requires work-id, named discussant and a concrete question')
+  if (!Number.isInteger(options.pr) || options.pr <= 0)
+    throw new Error('Draft requires a positive integer PR number')
+  const c = context(cwd)
+  const path = realpathSync(resolve(cwd, source))
+  const wt = worktrees(c.main).find((w) => w.path === path)
+  if (!wt?.branch || path === c.main) throw new Error('Draft requires a source linked worktree')
+  if (git(path, ['status', '--porcelain']))
+    throw new Error('Commit scoped changes before draft; draft does not harvest WIP')
+  const changed = git(path, ['diff', '--name-only', `${head(c.main)}...HEAD`])
+    .split('\n')
+    .filter(Boolean)
+  if (changed.length === 0) throw new Error('Draft requires a discussable independent diff')
+  const receipt: DraftPrReceipt = {
+    workId,
+    source: path,
+    branch: wt.branch,
+    head: head(path),
+    pr: options.pr,
+    discussant,
+    question,
+    at: new Date().toISOString(),
+  }
+  return mutate(c, (s) => {
+    const activeBatch = s.batches.find(
+      (batch) => isLiveBatch(batch) && batch.members.some((member) => member.workId === workId),
+    )
+    if (activeBatch)
+      throw new Error(`Draft work id ${workId} already belongs to active batch ${activeBatch.id}`)
+    const existing = draftReceiptFor(c, workId)
+    if (existing && (existing.pr !== receipt.pr || existing.branch !== receipt.branch))
+      throw new Error(
+        `Draft PR #${existing.pr} on ${existing.branch} is already recorded for ${workId}; reuse it instead of rebinding to #${receipt.pr} on ${receipt.branch}`,
+      )
+    const dir = join(c.dir, 'drafts')
+    mkdirSync(dir, { recursive: true })
+    writeJsonDurable(dir, workIdFile(workId), receipt)
+    return receipt
+  })
 }
 function verifyMembers(c: Context, b: WorktreeBatch) {
   for (const m of b.members) {
@@ -2152,7 +2300,7 @@ export function prepareBatch(
   if (!['trunk-based', 'pr-merge-based'].includes(workflow)) throw new Error('Unknown workflow')
   const c = context(cwd)
   return mutate(c, (s) => {
-    const existing = s.batches.find((b) => !['landed', 'cleaned', 'cancelled'].includes(b.phase))
+    const existing = s.batches.find(isLiveBatch)
     if (existing) return existing
     const eligibleMembers = eligible(c, s)
       .filter((r) => !r.reason)
@@ -2161,6 +2309,24 @@ export function prepareBatch(
       workflow === 'pr-merge-based'
         ? selectPrMembers(eligibleMembers, options.groupWorkIds)
         : eligibleMembers
+    const draftBindings =
+      workflow === 'pr-merge-based'
+        ? members.flatMap((member) => {
+            const binding = draftBindingFor(c, member.workId)
+            return binding ? [binding] : []
+          })
+        : []
+    // Trunk batches carry no bindings, so these checks are vacuous there.
+    const draftPrs = new Set(draftBindings.map((binding) => binding.pr))
+    if (draftPrs.size > 1)
+      throw new Error(
+        `Grouped work ids are bound to different draft PRs (${[...draftPrs].map((pr) => `#${pr}`).join(', ')}); one batch lands through one PR`,
+      )
+    const draftHeads = new Set(draftBindings.map((binding) => binding.headBranch))
+    if (draftHeads.size > 1)
+      throw new Error(
+        `Grouped work ids are bound to different draft PR heads (${[...draftHeads].join(', ')}); one batch lands through one PR`,
+      )
     if (!triggerReached(trigger, members, workflow)) return null
     assertMain(c)
     const id = randomUUID(),
@@ -2173,6 +2339,7 @@ export function prepareBatch(
       path: join(dirname(c.main), `${c.main.split('/').pop()}-wt`, `batch-${id}`),
       workflow,
       members,
+      draftBindings,
       cursor: 0,
       phase: 'integrating',
       removed: [],
@@ -2463,7 +2630,7 @@ function defaultRemotePrProbe(query: { repository: string; pr: number }): Remote
         'api',
         `repos/${query.repository}/pulls/${query.pr}`,
         '--jq',
-        '{merged:.merged,mergeSha:.merge_commit_sha,base:.base.ref,repository:.base.repo.full_name,pr:.number,headSha:.head.sha}',
+        '{merged:.merged,mergeSha:.merge_commit_sha,base:.base.ref,repository:.base.repo.full_name,pr:.number,headSha:.head.sha,headRef:.head.ref}',
       ],
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
     )
@@ -2479,7 +2646,8 @@ function defaultRemotePrProbe(query: { repository: string; pr: number }): Remote
     typeof parsed.merged !== 'boolean' ||
     typeof parsed.mergeSha !== 'string' ||
     typeof parsed.base !== 'string' ||
-    typeof parsed.headSha !== 'string'
+    typeof parsed.headSha !== 'string' ||
+    typeof parsed.headRef !== 'string'
   )
     throw new Error(
       `GitHub PR ${query.repository}#${query.pr} did not return a complete merge state`,
@@ -2491,6 +2659,7 @@ function defaultRemotePrProbe(query: { repository: string; pr: number }): Remote
     mergeSha: parsed.mergeSha.toLowerCase(),
     base: parsed.base,
     headSha: parsed.headSha.toLowerCase(),
+    headRef: parsed.headRef,
   }
 }
 function githubRepositoryFromRemote(main: string): string | undefined {
@@ -2503,7 +2672,7 @@ function githubRepositoryFromRemote(main: string): string | undefined {
   const match = url.match(/github\.com[:/]([^/]+\/[^/.]+?)(?:\.git)?$/i)
   return match?.[1]
 }
-function verifyRemotePr(c: Context, receipt: MergeReceipt, remotePr: RemotePrProbe): void {
+function verifyRemotePr(c: Context, receipt: MergeReceipt, remotePr: RemotePrProbe): RemotePrState {
   const remote = remotePr({ repository: receipt.repository, pr: receipt.pr })
   if (!remote.merged) throw new Error('GitHub PR is not merged; sources are retained')
   if (remote.repository !== receipt.repository || remote.pr !== receipt.pr)
@@ -2518,6 +2687,7 @@ function verifyRemotePr(c: Context, receipt: MergeReceipt, remotePr: RemotePrPro
     throw new Error('Merge receipt repository does not match this checkout')
   if (localRepo && remote.repository !== localRepo)
     throw new Error('GitHub PR is not in this repository')
+  return remote
 }
 function verifyMergeReceipt(
   c: Context,
@@ -2562,7 +2732,8 @@ function verifyMergeReceipt(
     throw new Error('Merge receipt content patch does not match the reviewed candidate')
   if (patchId(c.main, `${receipt.merge_sha}^`, receipt.merge_sha) !== reviewedPatchId)
     throw new Error('Merged commit content patch does not match the reviewed candidate')
-  verifyRemotePr(c, receipt, remotePr)
+  const remote = verifyRemotePr(c, receipt, remotePr)
+  assertReceiptReusesDraft(c, b, receipt, remote.headRef)
   return receipt
 }
 function landSealedBatch(
@@ -3824,7 +3995,15 @@ export function runBatchCommand(
     return v
   }
   const trigger = () => (value('--trigger') ?? 'auto') as BatchTrigger
-  const workflow = () => (value('--workflow') ?? 'pr-merge-based') as WorktreeBatch['workflow']
+  const workflow = () => {
+    const v = value('--workflow')
+    if (!v || v.startsWith('--'))
+      throw new Error(
+        'Required --workflow (trunk-based or pr-merge-based); CLI must not default to PR',
+      )
+    if (!['trunk-based', 'pr-merge-based'].includes(v)) throw new Error('Unknown workflow')
+    return v as WorktreeBatch['workflow']
+  }
   switch (command) {
     case 'checkpoint':
       return checkpointSource(cwd, rest[0] ?? cwd, {
@@ -3834,6 +4013,13 @@ export function runBatchCommand(
           .split(',')
           .map((path) => path.trim())
           .filter(Boolean),
+      })
+    case 'draft':
+      return recordDraftPr(cwd, rest[0] ?? cwd, {
+        workId: required('--work-id'),
+        pr: Number(required('--pr')),
+        discussant: required('--discussant'),
+        question: required('--question'),
       })
     case 'ready':
       return registerReady(cwd, rest[0] ?? cwd, {
@@ -3846,18 +4032,12 @@ export function runBatchCommand(
     case 'status':
       return batchStatus(cwd, trigger(), workflow())
     case 'prepare':
-      return prepareBatch(
-        cwd,
-        trigger(),
-        (value('--workflow') ?? 'pr-merge-based') as WorktreeBatch['workflow'],
-        lifecycle,
-        {
-          groupWorkIds: (value('--group-work-ids') ?? '')
-            .split(',')
-            .map((id) => id.trim())
-            .filter(Boolean),
-        },
-      )
+      return prepareBatch(cwd, trigger(), workflow(), lifecycle, {
+        groupWorkIds: (value('--group-work-ids') ?? '')
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean),
+      })
     case 'resume':
       return resumeBatch(cwd, lifecycle)
     case 'scope':
@@ -3880,7 +4060,7 @@ export function runBatchCommand(
       return cancelBatch(cwd, required('--reason'))
     default:
       throw new Error(
-        'batch: checkpoint | ready | status | prepare | resume | scope | refresh | review | seal | land | confirm-merged | cleanup | cancel | recover-lock',
+        'batch: checkpoint | draft | ready | status | prepare | resume | scope | refresh | review | seal | land | confirm-merged | cleanup | cancel | recover-lock',
       )
   }
 }

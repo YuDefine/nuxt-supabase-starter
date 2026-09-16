@@ -23,7 +23,7 @@ $ARGUMENTS
 
 ## Step 0-Batch: 提交入口與既有批次（取得 commit lock 前）
 
-**每次**進入 `/commit` 先跑 `wt-helper batch status`（consumer：`scripts/wt-helper.ts`；clade：`vendor/scripts/wt-helper.ts`）。使用者主動要求的 trigger 是 `manual`，無最低件數；自動收割用 `auto`：`pr-merge-based` 1 個 distinct work id 即準備獨立 PR，`trunk-based` 仍要 4 個才啟動。dependency／drained／stop 可提前結批。Checkpoint 不是 `/commit`，不得在 checkpoint 啟動完整品質鏈或發版。
+**每次**進入 `/commit` 先跑 `wt-helper batch status --workflow <已解析 workflow_model>`（consumer：`scripts/wt-helper.ts`；clade：`vendor/scripts/wt-helper.ts`）。**NEVER** 省略 `--workflow` 讓 CLI 默認 PR 制。使用者主動要求的 trigger 是 `manual`，無最低件數；自動收割用 `auto`：`pr-merge-based` 1 個 distinct work id 即準備獨立 PR，`trunk-based` 仍要 4 個才啟動。dependency／drained／stop 可提前結批。Checkpoint 與 draft 都不是 `/commit`，不得在 checkpoint 或 draft 啟動完整品質鏈或發版。Draft 不是 ready。
 
 有就緒成員或待續跑／待清理批次時 **MUST 讀 [batch.md](batch.md)**，先準備或接續隔離整合區，再在該區跑本 skill 的完整 Step 0–5；Step 5 後 seal／land，正式落地才進 Step 6。已落地只欠 cleanup 的批次直接清理，不重跑品質鏈。沒有就緒成員且沒有 active batch 時走普通 `/commit`，當前 WIP 照常全包。未達自動門檻時返回開發，**不取得 commit lock**。
 
@@ -504,21 +504,21 @@ git push origin main
 
 > **Step 6b 的前提**：Step 6b 的 Notion 同步依賴 tag 已推出。走 6-B 且使用者選 `[2]` 時 **MUST 跳過 Step 6b**（沒有 tag 可同步）；選 `[1]` 並實際完成發版後才執行。
 
-## Step 6b: Notion 專案層同步（條件觸發）
+## Step 6b: Notion hub 同步（條件觸發）
 
-per [[notion-work-coupling]] § 專案層。consumer 的 `.claude/consumer-meta.json` 若有 `notion.projectWorkflow: true`，Step 6-A（或 6-B 選 `[1]` 後）的 tag 已推出後 **MUST** 執行：
+per [[notion-work-coupling]] § 生命週期。consumer 的 `.claude/consumer-meta.json` 若有 `notion.hub`，Step 6-A（或 6-B 選 `[1]` 後）的 tag 已推出後 **MUST** 對本次發版含的每個 work item 執行：
 
 ```bash
 node ~/offline/clade/vendor/scripts/notion-sync.ts release \
-  --consumer-path . --change <change-name> --tag "$(git describe --tags --abbrev=0)" --json
+  --consumer-path . --work <work-id> --tag "$(git describe --tags --abbrev=0)" --json
 ```
 
-本步驟寫 Story 的 `上線日`、並**重算所屬 Milestone 的進度**（Notion 不支援 rollup of rollup，進度由 script 親自算後 PATCH）。
+本步驟把連結的 ticket 推到 acceptance（`驗收中`）並填 `修復版本 >=` 與 `上線日期`，把客戶時程頁的 `交付項目` 進度% 寫 100。
 
-- Milestone 進度達 100% 且有連結報價單 → script 回 Class 3 (a)，尚未取得該動作授權時，**MUST** 透過本入口的使用者詢問介面確認是否標「已交付」/ 勾「可請款」；沒有專用工具時直接提問。**NEVER** 僅憑進度自動推進——那是請款後果。
-- Story `待驗收 → 已完成` 是驗收側轉移，script 一律回 Class 3 (b) 不自動寫。
+- `needsDecision` 非空（客戶側狀態、status regression、hub 對映不到現況）→ 尚未取得該動作授權時，**MUST** 透過本入口的使用者詢問介面確認，帶答案重跑；**NEVER** 自動執行任一條。
+- ticket `驗收中 → 完成` 是客戶側轉移，script 一律拒絕不自動寫。
 - `pending` 非空 → 寫入未確認落地，**MUST** 列進 Step 7 完成報告。
-- 未啟用 `projectWorkflow` → script 自行 exit 0，不需另外判斷。
+- consumer 未宣告 `notion.hub` → script 自行 exit 0，不需另外判斷。
 
 ## Step 7: 完成報告
 
@@ -565,7 +565,7 @@ Evidence:
 git branch --show-current
 ```
 
-**不在 main / master 分支** 且本 runtime 實際提供 `ship` skill → **MUST 讀 [`handoff-steps.md`](handoff-steps.md) § Step 8** 依已有授權或詢問結果銜接。批次 trunk 已落地時在 main 接續；批次 PR 依 batch.md 保留並等待合入，不重複建立 PR。在 main / master、或本入口未提供 `ship` → 不觸發，直接進 Final Step。
+**不在 main / master 分支** 且本 runtime 實際提供 `ship` skill → **MUST 讀 [`handoff-steps.md`](handoff-steps.md) § Step 8** 依已有授權或詢問結果銜接。批次 trunk 已落地時在 main 接續。批次 **ready** 若該 `workId` 已有 draft PR，MUST 把受審 formal HEAD 交到**那一張** PR 的 head ref，再標 ready；**NEVER** 另開第二張。來源 draft 本身不構成 ready。在 main / master、或本入口未提供 `ship` → 不觸發，直接進 Final Step。
 
 ## Final Step: 釋放 /commit lock（**必做最後一步**）
 

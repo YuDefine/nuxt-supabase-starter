@@ -5048,8 +5048,10 @@ async function cmdCleanup(slug, opts) {
  * —— 新增這類入口時 MUST 一併呼叫本 guard，清單只是當下的實況不是窮舉。
  *
  * **NEVER 降成 warn**：warn 的成本是別人一整趟 22 分鐘的 gate，等待成本是幾分鐘。
- * **NEVER** 在 pgrep 結果後面再接對 cmdline 長相的過濾（`^[0-9]+ node ` 那型）——
- * 過濾掉的會是真的 in-flight 行程，而失敗方向是靜默放行。
+ * **NEVER** 在 pgrep 結果後面再接對 launcher 長相的過濾（`^[0-9]+ node ` 那型）——
+ * 過濾掉的會是真的 in-flight 行程，而失敗方向是靜默放行。「腳本路徑是不是獨立 argv 元素」
+ * 不屬此類：它識別的是被執行的腳本、對所有 launcher 恆成立，且讀不到一律保留
+ * （判準與實測在 `lib/publish-in-flight.ts` 的 `detectPublishInFlight`）。
  */
 function detectPublishInFlight() {
   return detectPublishInFlightShared()
