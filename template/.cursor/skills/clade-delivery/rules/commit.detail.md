@@ -75,7 +75,7 @@ uncommitted 變更
 
 **手動 `/commit` 或 merge back 無最低件數**，立即收同 repo 所有已授權、驗收完成且交出寫入權的就緒任務；未就緒工作不阻擋手動提交。自動門檻為 **4 個 distinct work id**，同任務多個 wt 不重複計數。dependency（下游需要落地）、drained（已授權開發都完成或受阻）、stop（使用者結束本輪）提前結批；換 session 只交接佇列。等待累積不佔 commit lock、繼續開發。
 
-- 每次就緒、收割、停止開發與 session 接手都 MUST 读 `wt-helper batch status`；命中條件由主線啟動 `/commit`，不請使用者代打。批次開始後的新成員留到下一批。
+- 每次就緒、收割、停止開發與 session 接手都 MUST 读 `wt-helper batch status --workflow <workflow_model>`；命中條件由主線啟動 `/commit`，不請使用者代打。批次開始後的新成員留到下一批。
 - 批次 scope 是固定成員的完整 base→candidate diff，main 的其他 WIP 不自動納入；不得把 main 清空來配合整合。
 - 進入批次流程時 MUST 讀 commit skill 的 `batch.md`，由 helper 保留來源、固定整批範圍並在正式落地後回收。
 

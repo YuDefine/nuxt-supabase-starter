@@ -48,8 +48,8 @@ GPT worker 的 transport 依 [[agent-routing]] § Session transport boundary：C
 
 | transport | 指令 | 買到什麼 | 代價 |
 | --- | --- | --- | --- |
-| Herdr pane | `--launcher grok --model grok-4.6 --effort high` | 佔一個 Tab、在 Herdr 看得到、人可以中途介入 | 不過 ledger / quota chain / workspace-access admission |
-| Pi worker | `pi-dispatch.ts --model grok-xai --effort high` | route/tier-basis、quota chain、workspace-access admission、ledger 全套 | 沒有 Tab，人只能事後讀 log |
+| Herdr pane | `--launcher grok --model grok-4.6 --effort high` | 佔一個 pane（預設分割當前 Tab；`--new-tab`、無當前 pane、或 cwd 屬別的 workspace 時改開 Tab）、在 Herdr 看得到、人可以中途介入 | 不過 ledger / quota chain / workspace-access admission |
+| Pi worker | `pi-dispatch.ts --model grok-xai --effort high` | route/tier-basis、quota chain、workspace-access admission、ledger 全套 | 沒有 pane，人只能事後讀 log |
 
 relay successor 持有整個主線位置，所以判「還是主線複雜度」就 `--model opus`；判「只值 sonnet 等級」則兩條都行：`--relay --launcher grok --model grok-4.6` 把位置交給 Grok，或本 session 留著、把那件事用上表的 Grok worker 派掉。
 
@@ -63,6 +63,8 @@ relay successor 持有整個主線位置，所以判「還是主線複雜度」�
 > **NEVER** 因為別處還留著舊說法就複述它——看到就改掉。
 
 **NEVER 因為表上沒有你想派的模型就自己挑一個。** 對不上任一列的正解是走上面這條鏈，**NEVER** 是填 `--route manual` 去蓋掉一個從沒發生過的判定——`manual` 是政策成功指標的分母，填錯讀起來是假陰性而不是缺資料。逐字反開脫：「Herdr 要求明確 `--model`，那就在 Claude 值域裡挑一個」（2026-09-09 實測：五筆 dispatch 全部這樣填成 `sonnet` ＋ `manual`，而 `sonnet` 在本表的主模型欄位一次都沒出現過）。
+
+**Devin 原生前綴（11 列固定）**：`web-search`、`version-upgrade-first-pass`、`version-upgrade-research`、`non-ui-implementation`、`ui-implementation`、`screenshot-review-verify`、`mechanical-fanout`、`copywriting-draft`、`notion-ops`、`read-heavy-scan`、`commit-0c-fix-verify` 這十一列的執行鏈前綴固定為 Devin Fusion（`fusion-gpt-5-6-sol-high-sidekick-swe-2-high`，effort: high）→ Devin SWE-2 Max（`swe-2-max`，effort: max），之後接該列主模型與 Fallback 欄的原樣鏈。兩格是 Devin 原生 carrier，不是 Pi alias——`ModelTier`、`MODEL_TARGETS`、Pi `FALLBACK_NEXT` 一律不動；catalog 證明只認 `devin models list` 的 exact row，**NEVER** 猜 suffix 或 alias。只在 provider／quota／runtime 不可用時前進，quality／test failure 不前進。`ui-implementation` 的終端仍是當次 catalog 實測的 Composer 2.5。
 
 ## 工作類別對照
 

@@ -194,8 +194,8 @@ user **沒**點名別的 launcher 時，successor／worker MUST 用**當前這�
 
 | transport | 指令 | 買到什麼 | 代價 |
 | --- | --- | --- | --- |
-| Herdr pane | `--launcher grok --model grok-4.6 --effort high` | 佔一個 Tab、在 Herdr 看得到、人可中途介入；進 `--relay` 的 in-flight 轉移與 § 4 比對 gate | 不過 ledger / quota chain / workspace-access admission |
-| Pi worker | `pi-dispatch.ts --model grok-xai --effort high --route claude-delegate-sub --tier-basis delegate-sub --workspace-access <readonly\|mutation> --brief <brief.md> --label <slug>` | route/tier-basis、quota chain、workspace-access admission、ledger 全套 | 不佔 Tab，也不進 `--relay` 轉移；人只能事後讀 log |
+| Herdr pane | `--launcher grok --model grok-4.6 --effort high` | 佔一個 pane（預設分割當前 Tab；`--new-tab`、無當前 pane、或 cwd 屬別的 workspace 時改開 Tab）、在 Herdr 看得到、人可中途介入；進 `--relay` 的 in-flight 轉移與 § 4 比對 gate | 不過 ledger / quota chain / workspace-access admission |
+| Pi worker | `pi-dispatch.ts --model grok-xai --effort high --route claude-delegate-sub --tier-basis delegate-sub --workspace-access <readonly\|mutation> --brief <brief.md> --label <slug>` | route/tier-basis、quota chain、workspace-access admission、ledger 全套 | 不佔 pane，也不進 `--relay` 轉移；人只能事後讀 log |
 
 | 你手上這件事 | MUST |
 | --- | --- |

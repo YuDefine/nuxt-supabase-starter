@@ -16,7 +16,7 @@ Step 4a 的三條 dispatch 都假設 `/wt` 在本 repo 叫得動。那個假設�
 1. `node vendor/scripts/wt-helper.ts add <slug> --task-summary "<一句話>"` 開隔離來源，main WIP 保留。
 2. 主線在來源實作、跑必要測試與行為驗收、保存 scoped checkpoint。
 3. 照 [harvest.md](harvest.md) 驗 scope 與證據，釋出寫入權，依 commit skill `batch.md` 登記就緒。
-4. 跑 `wt-helper batch status --trigger auto`；達條件才由隔離 integration 跑一次完整 `/commit`、落地與清理。未達條件繼續下一件；drained / dependency / stop 或 manual 可以提前結批。
+4. 跑 `wt-helper batch status --trigger auto --workflow <workflow_model>`；達條件才由隔離 integration 跑一次完整 `/commit`、落地與清理。未達條件繼續下一件；drained / dependency / stop 或 manual 可以提前結批。
 
 卡人工 gate → 保留來源與 integration，依既有 packaging 流程交接；不以 raw commit 代替品質鏈。
 

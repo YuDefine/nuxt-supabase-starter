@@ -430,6 +430,8 @@ Change carrier 保持原 session，bounded phase 依 [[agent-routing.routing-tab
 
 Nuxt UI／Content 實作交 Cursor Composer 2.5，Nuxt 本體交 GPT-5.6 Sol xhigh，其餘 UI view 實作交 Opus 5（effort: medium）；Design Review 與 UI 詳細計畫交 Opus 5；截圖收集交 Gemini 3.8 Flash，項目符合性再交 Opus 5。Opus 5 無法執行上述 Design Review、UI 計畫或截圖符合性時，沿原工作列交 GPT-5.6 Sol（effort: high）；其他指定模型或實際工具不可用時保留該 phase 未完成。非 UI 實作與計畫沿各自具名列。
 
+[[agent-routing.routing-table]] 具名的十一列在各自原 carrier 之前先經兩個 Devin 原生 carrier：Devin Fusion（`fusion-gpt-5-6-sol-high-sidekick-swe-2-high`，effort: high）→ Devin SWE-2 Max（`swe-2-max`，effort: max）。派工走 canonical helper `herdr-session-handoff.ts --launcher devin --model <slug> --effort <high|max>`（helper 層驗 model↔effort 配對；實際 spawn 的 devin argv 為 `devin --permission-mode bypass --model <slug>`，不帶 `--effort`／`--session-id`，session 身分由 `CLADE_DEVIN_SESSION_ID` 承載）；catalog 證明只認 `devin models list` 的 exact row。只在 provider／quota／runtime 不可用時前進，quality／test failure 不前進；兩格不可用後才落到該列既有 carrier 與原 fallback 鏈。
+
 ## 截圖 routing
 
 | 階段 | 模型與載體 | 交付 |

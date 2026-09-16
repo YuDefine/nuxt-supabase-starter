@@ -6,7 +6,7 @@
 
 **核心命題**：工作按角色與能力選 executor，再判是否派工；寬掃／背景／隔離／有份量的獨立平行軌才派，主線能完成預設留主線。
 
-具體 model、effort、workspace access 與硬禁令只以 [[agent-routing.routing-table]] 為 SoT；查表前 MUST Read 該檔。Nuxt UI／Nuxt Content 實作使用 Cursor Composer 2.5，Nuxt 本體使用 GPT-5.6 Sol xhigh，其餘 UI view 實作使用 Claude Opus 5（effort: medium）；Design Review、UI 詳細計畫與截圖項目符合性判定使用 Claude Opus 5；screenshot review 使用 Gemini 3.8 Flash。
+具體 model、effort、workspace access 與硬禁令只以 [[agent-routing.routing-table]] 為 SoT；查表前 MUST Read 該檔。Nuxt UI／Nuxt Content 實作使用 Cursor Composer 2.5，Nuxt 本體使用 GPT-5.6 Sol xhigh，其餘 UI view 實作使用 Claude Opus 5（effort: medium）；Design Review、UI 詳細計畫與截圖項目符合性判定使用 Claude Opus 5；screenshot review 使用 Gemini 3.8 Flash。SoT 具名十一列的執行鏈前綴固定為 Devin Fusion（effort: high）→ Devin SWE-2 Max（effort: max）→ 該列原 carrier 與原 fallback，只在 provider／quota／runtime 不可用時前進。
 
 **GPT 外派載體**：Codex 可用原生 GPT agent；非 Codex 的 GPT worker 一律走 Pi；Claude Code 不承載 GPT。
 
