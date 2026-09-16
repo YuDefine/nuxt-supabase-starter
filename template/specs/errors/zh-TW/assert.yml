@@ -1,5 +1,5 @@
 # 🔒 LOCKED — managed by clade · Source: vendor/specformula-errors/zh-TW/assert.yml · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/specformula-errors/zh-TW/assert.yml
-# LOCKED: mirrored from SpecFormula/specformula-dev-framework@e5568250a2c0599983bce90fb08d548da35e1d64 via scripts/sync-upstream-mirrors.ts — edit upstream, never here
+# LOCKED: mirrored from SpecFormula/specformula-dev-framework@6234c444175969e7145cd41ff19f2ce0be01474f via scripts/sync-upstream-mirrors.ts — edit upstream, never here
 # 訊息模板 registry — ASSERT SUBSYSTEM
 # 本檔僅放 code prefix 為 `ASSERT_` 之 entry。
 

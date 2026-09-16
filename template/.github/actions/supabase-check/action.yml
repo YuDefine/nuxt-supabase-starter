@@ -110,33 +110,54 @@ runs:
         fi
 
         # ── 2. db lint ────────────────────────────────────────────────────
-        # exit code 不可靠（clean 與 findings 都可能回 0），所以判的是輸出內容。
-        # 優先 JSON：空陣列是「乾淨」的明確訊號，文字模式的 header 行會誤判成 finding。
+        # exit code 不可靠（clean 與 findings 都回 0），所以判的是 stdout 內容，NEVER 混入 stderr：
+        # CLI 把 `Connecting to…` / `Linting schema:` / `No schema errors found` 這類狀態行寫到 stderr，
+        # 併進來就會讓乾淨的 lint 看起來非空。stdout 的形狀隨 CLI 版本漂過（2.116.0 實測）：
+        #   --output json 乾淨 → 0 bytes；有 finding → JSON 陣列
+        #   非 tty 的預設輸出 → {"results":[…]} 包裝
+        # 所以「exit 0 且 stdout 全空白」是乾淨，能 parse 的 JSON 以筆數判，其餘非空 stdout 一律算 finding。
         echo "::group::supabase db lint --level $INPUT_LINT_LEVEL"
         LINT_OUT="${RUNNER_TEMP:-/tmp}/supabase-lint.out"
-        if supabase db lint --level "$INPUT_LINT_LEVEL" --local --output json > "$LINT_OUT" 2>/dev/null \
-           && node -e "JSON.parse(require('fs').readFileSync('$LINT_OUT','utf8'))" 2>/dev/null; then
-          COUNT="$(node -e "
-            const r = JSON.parse(require('fs').readFileSync('$LINT_OUT','utf8'));
-            process.stdout.write(String(Array.isArray(r) ? r.length : (r && r.lints ? r.lints.length : 0)));
-          ")"
-          if [ "$COUNT" != "0" ]; then
-            echo "::error::supabase db lint reported $COUNT finding(s) at level $INPUT_LINT_LEVEL or above."
-            cat "$LINT_OUT"
-            FAILED=1
-          else
-            echo "lint clean"
+        LINT_ERR="${RUNNER_TEMP:-/tmp}/supabase-lint.err"
+        # 印 finding 筆數；stdout 空白 → 0；不是可辨識的 JSON → exit 1。
+        lint_count() {
+          node -e "
+            const s = require('fs').readFileSync(process.argv[1], 'utf8');
+            if (!s.trim()) { process.stdout.write('0'); process.exit(0); }
+            let r; try { r = JSON.parse(s); } catch { process.exit(1); }
+            const list = Array.isArray(r) ? r : (r && (r.results || r.lints));
+            if (!Array.isArray(list)) process.exit(1);
+            process.stdout.write(String(list.length));
+          " "$1"
+        }
+        LINT_RC=0
+        supabase db lint --level "$INPUT_LINT_LEVEL" --local --output json > "$LINT_OUT" 2> "$LINT_ERR" || LINT_RC=$?
+        if [ "$LINT_RC" -ne 0 ] || ! COUNT="$(lint_count "$LINT_OUT")"; then
+          # --output json 不支援（舊 CLI 回 unknown flag）或輸出不可辨識 → 退預設輸出，同樣只看 stdout。
+          LINT_RC=0
+          supabase db lint --level "$INPUT_LINT_LEVEL" --local > "$LINT_OUT" 2> "$LINT_ERR" || LINT_RC=$?
+          if [ "$LINT_RC" -ne 0 ]; then
+            COUNT=error
+          elif ! COUNT="$(lint_count "$LINT_OUT")"; then
+            # 純文字輸出：排除狀態行後仍有非空白內容才算 finding。
+            if grep -vE '^[[:space:]]*(Connecting to |Linting schema:|No schema errors found)' "$LINT_OUT" | grep -qE '[^[:space:]]'; then
+              COUNT=unparsed
+            else
+              COUNT=0
+            fi
           fi
+        fi
+        if [ "$COUNT" = "error" ]; then
+          # lint 本身沒跑成（連不上 DB、CLI 崩潰）NEVER 讀成乾淨——gate 沒跑與 gate 通過不可長得一樣。
+          echo "::error::supabase db lint exited $LINT_RC — lint did not run to completion."
+          cat "$LINT_ERR" "$LINT_OUT"
+          FAILED=1
+        elif [ "$COUNT" != "0" ]; then
+          echo "::error::supabase db lint reported findings ($COUNT) at level $INPUT_LINT_LEVEL or above."
+          cat "$LINT_OUT"
+          FAILED=1
         else
-          # JSON 不支援 → 退文字模式，非空即失敗。
-          supabase db lint --level "$INPUT_LINT_LEVEL" --local > "$LINT_OUT" 2>&1 || true
-          if [ -s "$LINT_OUT" ] && grep -qE '[^[:space:]]' "$LINT_OUT"; then
-            echo "::error::supabase db lint reported findings at level $INPUT_LINT_LEVEL or above."
-            cat "$LINT_OUT"
-            FAILED=1
-          else
-            echo "lint clean"
-          fi
+          echo "lint clean"
         fi
         echo "::endgroup::"
 
@@ -189,14 +210,20 @@ runs:
             else
               echo "::warning::pgbot v$PGBOT_VER download failed — pgbot lint skipped (advisory step; the gate above is unaffected)."
             fi
+            if [ "$PGBOT_OK" -eq 1 ]; then
+              # 拋棄式 stack 的 DSN。`supabase status -o json` 的鍵名隨 CLI 版本漂過（DB_URL / db_url），兩個都試；
+              # 都沒有就 skip，NEVER 猜 127.0.0.1:54322——同台 runner 可能另有 supabase stack（例如 e2e）佔著那個 port，
+              # 猜中的是別人的 DB。
+              CI_DSN="$(supabase status -o json 2>/dev/null | node -e "
+                let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);process.stdout.write(j.DB_URL||j.db_url||'')}catch{process.stdout.write('')}})" 2>/dev/null || true)"
+              if [ -z "$CI_DSN" ]; then
+                echo "::warning::supabase status did not report DB_URL for the throwaway stack — pgbot lint skipped rather than guessing a port (advisory step; the gate above is unaffected)."
+                PGBOT_OK=0
+              fi
+            fi
             if [ "$PGBOT_OK" -ne 1 ]; then
               [ -f "$PGBOT_TGZ" ] || true
             else
-              # 拋棄式 stack 的 DSN。`supabase status -o json` 的鍵名隨 CLI 版本漂過（DB_URL / db_url），兩個都試；
-              # 都沒有就退回 CLI 預設 54322——這個 port 只可能是 supabase db start 起的那個，不可能是真實 DB。
-              CI_DSN="$(supabase status -o json 2>/dev/null | node -e "
-                let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);process.stdout.write(j.DB_URL||j.db_url||'')}catch{process.stdout.write('')}})" 2>/dev/null || true)"
-              [ -z "$CI_DSN" ] && CI_DSN="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
               PGBOT_OUT="${RUNNER_TEMP:-/tmp}/pgbot-lint.json"
               BASE_REPORT="$(printf '%s' "$INPUT_PGBOT_BASE_REPORT" | tr -d '[:space:]')"
               PGBOT_ARGS=(lint "$CI_DSN" --format=json --fail-on=none)

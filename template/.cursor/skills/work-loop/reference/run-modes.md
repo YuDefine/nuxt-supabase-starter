@@ -69,7 +69,7 @@ token 或路徑）僅供診斷，不是 proof；只用 `[ -f ]` 看檔案存在�
 
 preflight 與每輪 child 都經 `project-unattended.ts` 檢查專案授權、需求版本及執行持有者，再由
 `claude-account-routing.ts` 驗證官方訂閱登入與最新 quota 快照，在 `cc`／`ccw` 間選擇可用帳號。
-`ccg`、`ccagy`、`ccx` 入口已退役，會拒絕起跑；GPT／Codex 工作經 Pi dispatcher。
+gateway／退役入口（`ccg`、`ccx`，或任何帶 `ANTHROPIC_BASE_URL` 的 session）會拒絕起跑；GPT／Codex 工作經 Pi dispatcher。
 
 第一次起跑需在 `/overview` 開啟該專案的自動開發，並確保 consumer 已接收 flow 投影、位於
 `consumers.local`、官方帳號已登入且 <consumer-f> 快照仍有效。缺少前置時錯誤會指出原因；
