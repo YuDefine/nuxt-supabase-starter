@@ -17,16 +17,21 @@
 - `catalog:` 條目與 `overrides:` 條目 **MUST 同步改**——兩者共同釘選同一個版本，改一邊忘一邊 = lockfile 不動
 - `npm:` alias 條目（如 `vite: npm:@voidzero-dev/vite-plus-core@^0.3.0`）的版號追的是 **alias 目標 package**，不是 alias 名——`pnpm outdated` 報的也是目標 package 版本
 
-**移除依賴時的 `allowBuilds` 硬規則**（批次中順手清掉未使用套件時會撞到）：
+**移除依賴三判準**（批次中順手清掉未使用套件、**或**重生 lockfile 清掉殘留解析時都適用——後者同樣會讓套件離開依賴樹）：
 
-被移除的套件若仍是某個已安裝套件的 **optional peer**，它**不會**離開依賴樹。此時把
-`pnpm-workspace.yaml` 的 `allowBuilds` 對應條目一起刪掉，pnpm 會以 `ERR_PNPM_IGNORED_BUILDS`
-**exit 1**（不是 warning），而 `typecheck` / `lint` / `format` 都先跑 deps-status check
-（內部呼叫 `pnpm install`），於是三個 script 在跑到本體前就一起紅——症狀與成因完全脫鉤。
+一個套件只有下列三條**全部**成立，才算可以從依賴樹拿掉。任一條不成立就保留，並把理由寫進該條目上方的註解：
 
-判準：**`pnpm why <pkg>` 有輸出 → `allowBuilds` 條目改 `false`（明說不建置）；完全無輸出 → 才可以刪。**
-`false` 是決定，缺條目是沒決定，pnpm 只接受前者。改用 `ignoredBuiltDependencies:` 無效
-（pnpm 11.24 實測會忽略它，並往 `allowBuilds` 寫回 `set this to true or false` 佔位）。
+| # | 判準 | 指令 | 它擋的是哪一種 |
+| --- | --- | --- | --- |
+| 1 | `pnpm why <pkg>` 完全無輸出 | `pnpm why <pkg>` | 仍是某個已安裝套件的 optional peer |
+| 2 | vendored tgz／`file:` 來源內沒有任何 import | `for t in $(git ls-files '*.tgz'); do tar -xzOf "$t" \| grep -qE "['\"]<pkg>['\"]" && echo "$t"; done`；`file:` 目錄改 `grep -rlE "['\"]<pkg>['\"]" <dir>` | **沒宣告**卻靜態 import 它的套件——`pnpm why` 對這種零訊號 |
+| 3 | consumer 的 verify-commands **全鏈**綠，含 BDD／e2e | 照 `.clade/rules/verify-commands.md`（或 `.claude/rules/verify-commands.md`）逐條跑 | 前兩條都漏掉的 runtime 解析 |
+
+**NEVER** 用「typecheck / lint 綠」代替第 3 條：依賴變更沒有 `.ts` diff，而 ESM 的 bare specifier 解析只在執行時發生。
+
+判準 1 **有輸出**時，`pnpm-workspace.yaml` 的 `allowBuilds` 對應條目改 `false`（明說不建置），**NEVER** 刪掉——缺條目時 pnpm 以 `ERR_PNPM_IGNORED_BUILDS` **exit 1**，而 `typecheck` / `lint` / `format` 都先跑 deps-status check（內部呼叫 `pnpm install`），三個 script 在跑到本體前就一起紅，症狀與成因完全脫鉤。`false` 是決定，缺條目是沒決定，pnpm 只接受前者。改用 `ignoredBuiltDependencies:` 無效（pnpm 11.24 實測會忽略它，並往 `allowBuilds` 寫回 `set this to true or false` 佔位）。
+
+2026-09 <consumer-e> 實證：09-09 移除 `better-sqlite3` 宣告（`0403915`）時它仍靠 db0 的 optional peer 被裝著，BDD 照綠；09-14 重生 lockfile 清掉那筆殘留（`ade3e10`）後套件真的消失，而 vendored `@specformula/node` 靜態 import 它——BDD 從那一筆起紅，三天後才被發現。判準 2 在第一步就看得到。SpecFormula consumer 可跑 `node ~/offline/clade/scripts/audit-specformula-adoption.ts --repo .` 看 `sqlite` 欄。
 
 細節見 [[pitfall-pnpm-allowbuilds-entry-removal-reddens-unrelated-scripts]]。
 

@@ -6,7 +6,7 @@ metadata:
     invocation: explicit
 disable-model-invocation: true
 ---
-<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@db46b1ddf59c47c9aab52a7d66d15668811fa501 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@58960f8375d14d9c598eb2c350582917fe9b249c via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 
 # System Analysis
 
@@ -17,9 +17,11 @@ disable-model-invocation: true
 ## Phase 1 -- 對齊 plan、truth 與控制平面
 
 1. READ 讀取使用者需求、呼叫者要求、目標 plan package 的 `spec.md`、`research.md`、`truth-delta.md`、既有 `plan.md`、`specs/truth/techstack.md` 與相關 `specs/truth/**`。
+   - 命中 clade lifecycle repo 判準（本次 plan package 的 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:`；判準只看那兩個鍵，NEVER 用 repo 名、manifest 或其他檔案推斷）時，`plan.md` 是 lifecycle 檔（由 `flow` 持有）：本 skill 的輸出檔改名為同 package 的 `system-analysis.md`，既有系統分析內容改讀 `system-analysis.md`，本輪 truth delta 改讀 `plan.md` 的 `## Truth delta` 表，該 package 沒有 `truth-delta.md`。
 2. READ 讀取 `templates/plan.md` 與 `templates/plan.example.md`，確認 `plan.md` 的固定結構與完成樣貌。
 3. READ 讀取 `.agents/constitution/CONSTITUTION.md`、`.agents/constitution/shared.md` 與 `.agents/constitution/skills/system-analysis/plan.md`。
-4. WRITE 若 plan package 尚未有 `plan.md` 父層，建立必要目錄；本 skill 不建立或修改 `specs/truth/**`。
+4. WRITE 若 plan package 尚未有輸出檔父層，建立必要目錄；本 skill 不建立或修改 `specs/truth/**`。
+   - 命中 clade lifecycle repo 判準（本次 plan package 的 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:`；判準只看那兩個鍵，NEVER 用 repo 名、manifest 或其他檔案推斷）時，NEVER 建立、覆寫或刪除 `plan.md`，package 目錄也已存在、NEVER 另建。
 
 ## Phase 2 -- 收斂系統介面盤點與 clarify 策略
 
@@ -31,10 +33,10 @@ disable-model-invocation: true
 
 1. READ 需要判斷先後與平行分組時，讀取 `rules/Wave依賴排序與平行分組判準.md`。
 2. THINK 依介面依賴、truth 變更風險與可平行程度安排 Wave，確認每個介面至少被一個後續 planner 承接。
-3. WRITE 將系統介面盤點、Wave、分析重點與委派理由寫入 `specs/plans/NNN-<slug>/plan.md`。
+3. WRITE 將系統介面盤點、Wave、分析重點與委派理由寫入本次 plan package 的 `plan.md`；命中 clade lifecycle repo 判準（本次 plan package 的 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:`；判準只看那兩個鍵，NEVER 用 repo 名、manifest 或其他檔案推斷）時，改寫入同 package 的 `system-analysis.md`。
 
 ## Phase 4 -- 委派 planner 並交付
 
 1. READ 需要判斷 planner 對應時，讀取 `rules/分析介面委派與planner對應判準.md`。
 2. DELEGATE 依 Wave 順序將 API 介面交給 `/api-plan`、資料介面交給 `/data-plan`、UI 介面交給 `/ui-plan`；每次 handoff 都必須包含 plan package path、truth root、truth-delta path、介面名稱與分析重點。
-3. WRITE 向使用者回報 `plan.md`、系統介面數量、Wave 數量、委派到哪些 planner，以及是否可進入 `/dsl-refine` 或 `/tasks`。
+3. WRITE 向使用者回報輸出檔路徑（`plan.md`，命中 clade lifecycle repo 判準（本次 plan package 的 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:`；判準只看那兩個鍵，NEVER 用 repo 名、manifest 或其他檔案推斷）時，則是 `system-analysis.md`）、系統介面數量、Wave 數量、委派到哪些 planner，以及是否可進入 `/dsl-refine` 或 `/tasks`。
