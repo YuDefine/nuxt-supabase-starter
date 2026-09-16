@@ -28,6 +28,7 @@ paths: ['features/**', 'specs/api/**', 'specs/data/**', 'isa.yml', 'cucumber.cjs
 | 未知或未確認的 DB 類型 | ⚠️ 保持 unresolved；不得默認成 `embedded` 或「無 DB」 |
 | 需要對 **hosted** Supabase（`*.supabase.co`）跑 BDD | ❌ **目前不可行**，見下方 NEVER 第 2 條 |
 | 既有 consumer 已跑 spectra（legacy SDD） | 併存，新增的 API operation 走 SpecFormula；遷移節奏由該 consumer 自己決定 |
+| clade home 自身的行為（CLI／檔案系統／read model 折疊） | ✅ 走 § clade 驗收執行——同一個框架、clade 自己的 instruction adapter；沒有 HTTP API 與業務 DB 可捏造 |
 | consumer 同時宣告 `aixbdd` | 上游流程層也生效：`.feature` 與 DSL 由 [`aixbdd-workflow.md`](./aixbdd-workflow.md) 的九步產出，本檔管它們怎麼跑。**兩個 capability 各自獨立**——只宣告 `specformula`、自己手寫 `isa.yml` 與 `.feature` 是合法路徑 |
 
 ## API surface
@@ -50,7 +51,7 @@ packages: ['vendor/specformula-ts/packages/*']
 | `StepDefinitionFactory.register()` / `loadSpecFormulaPlugins()` | `@specformula/cucumber` | **MUST 在 module load 時跑**，不能放 `BeforeAll`——cucumber 載 feature 之前就要看得到 step definition |
 | `IsaSpecReader` / `EntityDdlReader` / `ApiSpecReader` | `@specformula/core` | 三者的路徑全部相對 **cwd** 解析，不是相對 isa.yml |
 
-**`@specformula/node` 的 index 靜態 export `SqliteDataSource`，而它靜態 `import 'better-sqlite3'`。** 所以 `db_type: postgresql` 的 consumer **也 MUST** 安裝 `better-sqlite3`，即使一行 SQLite 都不用；它不在 `@specformula/node` 的 dependencies 裡，pnpm 不會替你裝。
+**`@specformula/node` 的 index 靜態 export `SqliteDataSource`，而它靜態 `import 'better-sqlite3'`。** 所以 `db_type: postgresql` 的 consumer **也 MUST** 安裝 `better-sqlite3`，即使一行 SQLite 都不用；它不在 `@specformula/node` 的 dependencies 裡，pnpm 不會替你裝——裝法見下方 § Anti-pattern 最後一列。
 
 ### `/test/*` 控制面契約（四端點，缺一不可）
 
@@ -92,7 +93,7 @@ Nuxt 的 `server/api/**` 會掛在 `/api/` 之下；Nuxt 範本因此放 `server
 | 業務 handler 直接 `new Date()` | `POST /test/time` 對它零作用，時間相關 scenario 隨牆上時鐘飄 | `import { now } from '~/server/utils/time-service'` |
 | `isa.yml` 的 `resource_path` 寫成相對 isa.yml 的路徑 | 三個 reader 全部相對 **cwd** 解析 | 從 repo root 跑 `test:bdd`，路徑寫 `specs/api` / `specs/data` |
 | 兩個 operation 共用 `summary: 建立訂單` | `api_call` 反查 operation 撞名，靜默選錯一個 | summary 全 spec 唯一 |
-| 只裝 `pg` 沒裝 `better-sqlite3` | `@specformula/node` index 靜態拉 `SqliteDataSource` → `ERR_MODULE_NOT_FOUND` | devDeps 補 `better-sqlite3` ＋ `onlyBuiltDependencies` |
+| 只裝 `pg` 沒裝 `better-sqlite3`，或在 consumer devDeps 補它 | index 靜態拉 `SqliteDataSource` → `ERR_MODULE_NOT_FOUND`；devDeps 那條看起來沒人用，下一次清依賴就被刪（2026-09 <consumer-e>） | `pnpm-workspace.yaml` 的 `packageExtensions` 歸屬到 `@specformula/node`，條目上方註解理由與移除條件（[[code-style.toolchain]] § packageExtensions 條目契約）；`allowBuilds` 維持 `false`——只需套件存在 |
 
 ## 通用協定與 framework adapter
 
@@ -119,6 +120,22 @@ framework fixture、HTTP adapter 與 entity validation 共用同一個 DataSourc
 entity 指令的資料一致性，才可宣稱完成整合。D1 的實際 dialect 另行驗證。
 無 DB 的 API-only scenario 不建立業務 entity；runtime 需要的最小 schema
 僅屬測試初始化，不作為應用程式持久化已驗收的證據。
+
+## clade 驗收執行（CLI／檔案系統／投影）
+
+clade 的公開邊界不是 HTTP API：是 CLI（`flow`、`wt-helper`、`herdr-session-handoff`、`publish`／`propagate`）、檔案系統（spine `events.jsonl`、`.clade/projections`、manifest）與 read model 折疊。內建六指令對它們零覆蓋，所以 clade 用**同一個框架的 plugin 機制**接自己的 instruction adapter：`vendor/specformula-clade/`（`SpecFormulaPlugin`，由 `loadSpecFormulaPlugins()` 載入，`isa.yml` 在 clade root）。指令族固定四類——**建暫存 repo 並用真 CLI 產出 spine**（Given）、**在暫存 repo 跑 CLI 並捕捉 JSON**（When）、**對 JSON 路徑斷言**（Then）、**檔案系統斷言／擾動**（Then／When，含「刪檔」「改成不可讀」）。實際 `instruction_type` 名稱與 payload 以 `vendor/specformula-clade/README.md` 為 SoT，本節不 inline。
+
+| MUST | 為什麼 |
+| --- | --- |
+| Given 的資料由**真 CLI** 在 `mkdtemp` 暫存 repo 裡跑出來 | 手寫的 `events.jsonl` 是 fixture 對 fixture：spine 格式一改，場景還綠 |
+| When 跑的是**同一支** production CLI／projector，NEVER 跑測試專用替身 | 替身通過證明的是替身 |
+| Then 對**真輸出**斷言，失敗訊息指向 step 句子＋JSON 路徑＋期望／實際 | 訊息指向 spec 才修得到規格；指向測試碼會修錯地方 |
+| **每一個**新 instruction 上線時附一次 mutation 證據：本地弄壞一個不變量、對應場景以預期理由紅、還原 | 從未紅過的場景證明不了任何東西 |
+| cucumber JSON report 落到 plan 的 `evidence/`，讓 `vendor/scripts/flow/acceptance-verdicts.ts` 讀到 | 驗收結果不進 verdict 契約，close gate 就看不到它 |
+
+`test:bdd` 在 clade home 是 `node vendor/specformula-clade/bin/run-bdd.ts`（包一層 cucumber-js）而不是 § API surface 的裸 `cucumber-js`：pnpm 會把裸 `--` 原樣轉給 cucumber-js，readiness 的 `--dry-run --format json:` 會被吃掉變成一次真跑且不產檔。consumer 端照 § API surface；只有 acceptance_command 要接 dry-run 的 repo 才需要這層。
+
+UI 層（review-gui-web 的頁面行為）仍由 playwright-bdd 執行，分界是「打到瀏覽器」——同一個 acceptance scenario 的 CLI／read model 部分精煉成 `specs/truth/features/cli/**`，頁面部分留在 `vendor/review-gui-web/features/`。**NEVER** 為了讓 CLI adapter 覆蓋 UI 場景去 mock 瀏覽器；也 **NEVER** 為了讓 playwright 覆蓋 CLI 場景去讀 UI 上的數字當 CLI 輸出。
 
 ## Reference signal（不 block）
 

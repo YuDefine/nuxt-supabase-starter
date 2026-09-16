@@ -26,7 +26,9 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}
 | 缺少會改變方案的驗收條件或決策 | `clarify`，保留未回答前提 |
 | 新需求或既有行為新增／修改／刪除 | 進新 package／續跑判定 |
 
-Clade home 與已改用精簡 plan 的 repo：同一 work id 續跑 `specs/plans/<work-id>/plan.md`，**NEVER** 為同一工作再開一份。產品 SDD 仍走 aixbdd 九步的 consumer，在遷移完成前才建新的 `NNN-<slug>` package。
+**clade lifecycle repo 判準**：本次 plan package 的 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:` 兩個鍵。判準只看這兩個鍵，**NEVER** 用 repo 名、`.clade/manifest.json`、`specs/truth/work-lifecycle.md` 是否存在或任何其他檔案推斷。
+
+命中判準時：package 固定是 `specs/plans/<work-id>/`，work id 由 `flow plan open` 鑄；同一件工作續跑同一個 work id，**NEVER** 再開第二份。未命中判準、仍走 aixbdd 九步的產品 SDD consumer，在遷移完成前才建新的 `NNN-<slug>` package。
 
 </decision_boundary>
 
@@ -34,11 +36,11 @@ Clade home 與已改用精簡 plan 的 repo：同一 work id 續跑 `specs/plans
 
 ## 1. 先通過規則 artifact gate
 
-先檢查本次需求是否要新增或調整 `.agents/constitution/**`。需要時下一支 skill 固定是 `constitution`；完成前不得進 `specify`、續跑判定或任何下游步驟。這個 gate 優先於 package 是否存在。
+先檢查本次需求是否要新增或調整 `.agents/constitution/**`。需要時 MUST 讀取本 skill 目錄下 `rules/constitution/SKILL.md`，並依它引用的 `rules/constitution/rules/*.md` 執行 constitution gate；這是 `work-route` 的 internal contract，不是獨立 public skill。任一資源缺席時，輸出 `缺少的前提`，具名列出當前 runtime 與缺失路徑後停止。完成前不得進 `specify`、續跑判定或任何下游步驟。這個 gate 優先於 package 是否存在。
 
 ## 2. 收斂當前 package
 
-讀取使用者需求與目前 package 的 `spec.md`、`plan.md`、`research.md`、`truth-delta.md`、`ui/**`、`tasks.md`（存在時），以及 `specs/truth/**` 的必要 owner 產物。若尚無本次 package，交 `specify`；若 package 有待澄清問題，交 `clarify-over-specs`。
+讀取使用者需求與目前 package 的 `spec.md`、`plan.md`、`research.md`、`truth-delta.md`、`ui/**`、`tasks.md`（存在時），以及 `specs/truth/**` 的必要 owner 產物。命中 lifecycle repo 判準時，該 package 沒有 `truth-delta.md`：本輪 delta 讀 `plan.md` 的 `## Truth delta` 表，系統分析讀 `system-analysis.md`。若尚無本次 package，交 `specify`；若 package 有待澄清問題，交 `clarify-over-specs`。
 
 續跑時只接受本次指定、仍未完成且前提已滿足的 package。不要用 shared truth 或檔案存在代替本次 delta、PM 確認或 task 解鎖判定。
 
@@ -46,7 +48,7 @@ Clade home 與已改用精簡 plan 的 repo：同一 work id 續跑 `specs/plans
 
 依序判定：
 
-1. spec 尚無、或需求是新行為：clade home 走 `flow plan open`；產品 SDD consumer 走 `specify` 建 `NNN-<slug>` package。同一 work 已有 plan 則續跑，不另開。
+1. spec 尚無、或需求是新行為：命中 lifecycle repo 判準時，先 `node vendor/scripts/flow/flow.ts plan open <slug> --title '<title>'` 鑄 work id 與 package 骨架，再交 `specify` 填 `spec.md` 與 `checklists/requirements.md`；`specify` **NEVER** 覆寫 lifecycle 檔 `plan.md`，也 **NEVER** 建 `truth-delta.md`。未命中判準的產品 SDD consumer 直接交 `specify` 建 `NNN-<slug>` package。同一 work 已有 plan 則續跑，不另開。
 2. spec 有待澄清：`clarify-over-specs`。
 3. acceptance 尚未完成：`spec-by-example`；需求改 UI 時再交 `ui-plan`。API-only 不建立 UI 工作。
 4. acceptance 已完成但 UI 需求缺 `ui-plan`／靜態雛形／review：`ui-plan`，補齊後再回 PM confirmation gate；API-only 不建立 UI 工作。
@@ -57,6 +59,8 @@ Clade home 與已改用精簡 plan 的 repo：同一 work id 續跑 `specs/plans
 9. tasks 尚未產出或不一致：`tasks`。
 10. tasks 與本次 delta 一致且有已解鎖未完成 task：`implement`。
 11. 全部 tasks 完成且沒有新需求：交付／收尾；有新需求則另開 package。
+
+命中 lifecycle repo 判準時，本次省略的 artifact（`ui-plan.md`、`research.md`、openapi 等）MUST 在 `plan.md` 的 `## Decisions` 留一行工作特定理由；缺理由就當作前提未滿足，列進 `缺少的前提`。
 
 UI checkpoint 是路由與驗收前提。先完成 PRODUCT／design context、雛形與 review，再把結果交 PM；本 skill 不代替下游執行。
 

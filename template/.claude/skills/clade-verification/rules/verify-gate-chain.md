@@ -1,6 +1,6 @@
 ---
 description: 自主迴圈的驗證閘門鏈與停止條件——每個 iterate-until-green 迴圈 MUST 跑 gate chain、宣告 max_iterations、定義 escalation action
-paths: ['**/*.ts', '**/*.vue', '**/*.tsx', 'tasks/**', 'specs/**']
+paths: ['**/*.ts', '**/*.vue', '**/*.tsx', 'tasks/**', 'specs/**', 'package.json', 'packages/*/package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']
 ---
 <!-- Clade native rule; source: rules/core/verify-gate-chain.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->

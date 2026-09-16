@@ -31,4 +31,6 @@ paths: ['SECURITY.md', 'packages/*/SECURITY.md', 'server/middleware/**', 'packag
 
 每段只寫掃描器判斷需要的事實：範例、教學、逐 endpoint 的 handler 描述都不放——它是 `--knowledge-base`，每個字都進 prompt。
 
+CI runner 的信任邊界（哪些 job 碰得到持有 production 存取的 runner）不在本憲法的五段裡，判準見 [[self-hosted-runner]] § 10。
+
 機械稽核：`node $CLADE_HOME/scripts/audit-security-policy.ts --consumers <path>`。成因與文章論證：`docs/rule-rationale/security-policy.md`。

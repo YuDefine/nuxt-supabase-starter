@@ -8,7 +8,7 @@ metadata:
     invocation: explicit
 disable-model-invocation: true
 ---
-<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@db46b1ddf59c47c9aab52a7d66d15668811fa501 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@58960f8375d14d9c598eb2c350582917fe9b249c via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 
 # Implement
 
@@ -32,6 +32,7 @@ disable-model-invocation: true
 ## Phase 1 -- 對齊 plan 並啟動 One-Shot
 
 1. READ 讀取使用者需求、目標 plan package、`tasks.md`、`truth-delta.md` 與目前 task 完成狀態，確認指定範圍（若有）與 One-Shot 起點。
+   - 命中 clade lifecycle repo 判準（本次 plan package 的 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:`）時，`plan.md` 是 lifecycle 檔：系統分析內容改讀同 package 的 `system-analysis.md`，本輪 truth delta 改讀 `plan.md` 的 `## Truth delta` 表，該 package 沒有 `truth-delta.md`。判準只看那兩個 frontmatter 鍵，NEVER 用 repo 名、manifest 或其他檔案存在與否推斷。
 2. READ 讀取 `rules/任務選取與連續續跑判準.md`，確認已解鎖 task 的選取、One-Shot 與停止條件。
 3. READ 讀取 `rules/TruthDelta測試對齊與BDD委派判準.md`，確認 ADD / MODIFY / DELETE 的執行策略，以及哪些 marker 才委派 `/bdd`。
 4. THINK 依已讀任務與判準收斂 One-Shot 起點、是否命中 `Parallel Hint`、所屬 phase；預設做到交付，不停在第一筆。

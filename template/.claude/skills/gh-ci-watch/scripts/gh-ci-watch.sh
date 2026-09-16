@@ -268,6 +268,25 @@ if [[ -n "$EVIDENCE" ]]; then
 fi
 
 if [[ "$CONCLUSION" != "success" ]]; then
+  # 最後綠燈 SHA：紅燈的起點決定該往哪查。紅燈早於最近一次環境變更（換 runner、升 image）
+  # 時，根因與那次變更無關——不先比 range，第一個嫌疑人永遠是「剛剛動過的東西」
+  # （實證：一條 BDD 紅燈早於 runner 搬家三天，卻在搬家後才被發現，差點被讀成搬家造成；
+  # 時間線見 docs/pitfalls/2026-09-09-pnpm-allowbuilds-entry-removal-reddens-unrelated-scripts.md）。
+  # tag 觸發的 run 其 headBranch 是 tag 名，不能拿來當 -b 過濾。
+  echo "--- last green (same workflow) ---"
+  LG_ARGS=(-w "$WF_NAME" -s success -L 1)
+  if [[ -n "$HEAD_BRANCH" ]] && ! git rev-parse --verify --quiet "refs/tags/$HEAD_BRANCH" >/dev/null 2>&1; then
+    LG_ARGS+=(-b "$HEAD_BRANCH")
+  fi
+  LAST_GREEN=$(gh run list ${RARGS[@]+"${RARGS[@]}"} "${LG_ARGS[@]}" \
+    --json headSha,createdAt,url --jq '.[0] | select(.) | [.headSha, .createdAt, .url] | @tsv' 2>/dev/null || true)
+  if [[ -n "$LAST_GREEN" ]]; then
+    IFS=$'\t' read -r LG_SHA LG_AT LG_URL <<<"$LAST_GREEN"
+    echo "LAST_GREEN: ${LG_SHA:0:12} $LG_AT $LG_URL"
+    echo "RANGE: git log --oneline ${LG_SHA:0:12}..${HEAD_SHA:0:12}"
+  else
+    echo "LAST_GREEN: unknown（gh 查無 success run，或查詢失敗）"
+  fi
   echo "--- failed logs (first 200 lines) ---"
   gh run view ${RARGS[@]+"${RARGS[@]}"} "$RUN_ID" --log-failed 2>/dev/null | head -200
 fi

@@ -28,8 +28,9 @@ tag）——它們可被上游改寫指向，等於把 CI 的程式碼執行權�
 （`git ls-remote` 或 `gh api` 查那個 SHA 確實對應該 tag，不要用記憶或猜測）。操作範本見
 `vendor/snippets/ci-workflow-sha-pin/README.md`。
 
-機械偵測：`node scripts/audit-actions-sha-pin.ts`（warn-only；掃 `.github/workflows/**/*.yml`
-與 `.github/actions/**/action.yml`，對**每一個**外部 `uses:` 檢查 ref 是否為 40 碼十六進位字串）。
+機械偵測：`node scripts/audit-ci-workflow-safety.ts`（原 `audit-actions-sha-pin.ts`，2026-09-17 改名；warn-only；
+掃 `.github/workflows/**/*.yml` 與 `.github/actions/**/action.yml`，check #1 對**每一個**外部 `uses:` 檢查 ref 是否為
+40 碼十六進位字串；同支的 check #2 / #3 管 deploy 私鑰與 host key，規約在 [[self-hosted-runner]] § 11）。
 
 ## CI / test workflow MUST cancel superseded runs on the same ref
 
@@ -58,6 +59,6 @@ concurrency:
 **與 `audit-ci-toolchain-parity.ts` 的分工**：那支只檢查三個 toolchain 入口 action
 （`voidzero-dev/setup-vp` / `pnpm/action-setup` / `actions/setup-node`）的 SHA-pin，是它「fleet
 toolchain 一致性」多維度稽核（node 版本一致性等）裡的其中一項——範圍是本檔的子集。本檔規約與
-`audit-actions-sha-pin.ts` 才是**全部**外部 action 的權威來源（見 [[ci-toolchain-parity]]）。
+`audit-ci-workflow-safety.ts` 才是**全部**外部 action 的權威來源（見 [[ci-toolchain-parity]]）。
 兩支稽核刻意不合併：一支管「這個 repo 的 CI 安不安全」，一支管「這個 repo 跟 fleet 其他家一不一致」，
 發現需要再合併時先讀兩邊 registry entry 的 `trigger`，不要各自為政再開第三支。

@@ -1,4 +1,4 @@
-<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@db46b1ddf59c47c9aab52a7d66d15668811fa501 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@58960f8375d14d9c598eb2c350582917fe9b249c via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 # Clarify Round 1
 
 ## 問題 1
