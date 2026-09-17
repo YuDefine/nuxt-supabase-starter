@@ -491,9 +491,11 @@ pnpm test          # 或 vp test run / pnpm test:unit，依 consumer 設定
 **repo 宣告了 `test:affected` 時，0-C 跑的是它，不是 `pnpm test`**（2026-09-16，W-2026-09-16-test-suite-runtime-diet）：
 
 ```bash
-node -e "const s=require('./package.json').scripts; process.exit(s['test:affected']?0:1)" \
-  && pnpm test:affected -- --base="$(git merge-base HEAD origin/main 2>/dev/null || git rev-parse HEAD~1)" \
-  || pnpm test
+if node -e "const s=require('./package.json').scripts; process.exit(s['test:affected']?0:1)"; then
+  pnpm test:affected -- --base="$(git merge-base HEAD origin/main 2>/dev/null || git rev-parse HEAD~1)"
+else
+  pnpm test
+fi
 ```
 
 `test:affected` 是 repo 在 `package.json` **明文宣告**的 lane 入口：它從 diff（staged ＋ working tree ＋ base 以來的 range）反查
