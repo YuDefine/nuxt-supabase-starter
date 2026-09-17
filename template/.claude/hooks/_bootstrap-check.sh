@@ -6,7 +6,7 @@
 # 由 SessionStart hook 觸發。職責：
 #   0. codebase-memory-mcp auto-index（fire-and-forget，不阻擋）
 #   1. 確認 clade repo 找得到
-#   2. 確認 .claude/hub.json 存在
+#   2. 確認 .clade/manifest.json（或 legacy .claude/hub.json）存在
 #   3. 跑 sync-rules --check 偵測 drift / orphan
 #   4. drift 存在 → 嘗試自動修復（跑 bootstrap-hub.ts）
 #   5. 仍失敗 → 印 blocking warning（讓使用者明確看到）
@@ -23,9 +23,8 @@ set -u
 
 # 專案根目錄。下面這個變數只有 Claude 端會帶進來；Codex 端沒有對應的 env，會落到
 # fallback。fallback 取 git toplevel 而非 pwd：session cwd 可能是 repo 的子目錄，
-# 用 pwd 會讓 hub.json 找不到，也會讓 auto-index 把子目錄當成獨立 project 建 index。
+# 用 pwd 會讓 manifest 找不到，也會讓 auto-index 把子目錄當成獨立 project 建 index。
 PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-HUB_JSON="$PROJECT_ROOT/.claude/hub.json"
 STATE_JSON="$PROJECT_ROOT/.claude/.hub-state.json"
 
 # ─────────────────────────────────────────────────────────
@@ -129,7 +128,7 @@ find_clade_root() {
 # ─────────────────────────────────────────────────────────
 #
 # 位置很重要：必須在下面第 2 段的 early exit **之前**。clade home 沒有
-# .claude/hub.json（它是散播的源頭，不是 consumer），會在那裡靜默 exit 0。
+# .clade/manifest.json / .claude/hub.json（它是散播的源頭，不是 consumer），會在那裡靜默 exit 0。
 #
 # consumer 端天然跳過：兩個 guard 檔案只有 clade 中央倉有，shell test 不 spawn
 # node，成本是零。輸出走 stderr（SessionStart 只有 stderr 會注入 session context），
@@ -154,7 +153,7 @@ maybe_publish_status
 # 2. 沒 manifest = 此 repo 不是 clade consumer，靜默退出
 # ─────────────────────────────────────────────────────────
 
-if [[ ! -f "$HUB_JSON" ]]; then
+if [[ ! -f "$PROJECT_ROOT/.clade/manifest.json" && ! -f "$PROJECT_ROOT/.claude/hub.json" ]]; then
   exit 0
 fi
 
@@ -167,7 +166,7 @@ if ! CLADE_ROOT=$(find_clade_root); then
 
 [clade] ✘ 找不到 clade repo
 
-此專案的 .claude/hub.json 宣告需要 clade 配置中央倉，但本機沒裝。
+此專案的 clade manifest 宣告需要 clade 配置中央倉，但本機沒裝。
 
 修正：
   git clone <clade-repo-url> ~/clade        # 或 ~/offline/clade
