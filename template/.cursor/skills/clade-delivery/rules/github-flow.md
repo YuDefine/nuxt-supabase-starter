@@ -83,6 +83,18 @@ Required checks 必須綁定實際受測 revision。workflow 路徑條件或 ski
 
 private repo **不上** GitHub rulesets、branch protection、merge queue：不為此升 GitHub Pro，也不為此改公開。本機唯一 landing owner、squash-only merge method，以及 `batch confirm-merged` receipt，就是強制契約。**NEVER** 把缺遠端保護列成剩餘工作或能力缺口。**NEVER** 宣稱遠端 required checks 已強制。公開 repo 若之後要開遠端強制，另行決定。
 
+## 合併後分支回收
+
+`registry/consumers.json` 的**每一個** `repo_id` 都 MUST 開 GitHub「Automatically delete head branches」（`delete_branch_on_merge=true`），不限 `pr-merge-based`——trunk-based repo 偶發的 PR 一樣會留下分支。squash merge 之後原分支在 git 看來永遠領先 `main`，`--merged` 判不出它已落地，不開就只增不減。
+
+開它不影響本檔的事件契約：`batch confirm-merged`／`cleanup` 讀 PR 號、receipt 與本機 `refs/heads/*`，不讀合併後的遠端 head branch；GitHub 也不刪 default branch 與仍是其他 open PR head 的分支。它**只**回收遠端 head branch——本機 worktree 與 branch 仍走 `batch cleanup`／`wt-helper cleanup`。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | `node scripts/audit-repo-merge-settings.ts` exit 1（有 repo 沒開，印 `gh repo edit <repo> --delete-branch-on-merge`）；exit 2 是讀不到設定，**NEVER** 讀成已開。warn-only，不接 publish gate |
+| 消費端 | `scripts/bootstrap-project.ts` 的 `repo-merge-settings` step（新 consumer onboarding）；`/clade-health full` 掃存量 |
+| 載入路徑 | 本節（consumer 端投影為 `.claude/rules/github-flow.md`）；開設定的操作在 `project-bootstrap` skill § 4 |
+
 驗證 CI 的綠燈是**最新 candidate 那條 run**。同 ref 被更新的 SHA 取代後，過期 run 必須由 workflow `concurrency` 取消，不得繼續佔 self-hosted runner 讓 HEAD 排隊。寫法與 deploy/gate 例外見 [[ci-workflow]] § CI / test workflow MUST cancel superseded runs on the same ref。
 
 ## 失敗路徑
