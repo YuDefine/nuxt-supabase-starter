@@ -112,7 +112,7 @@ baseline 只存在於某次 session 記憶裡時，下一個讀 gate 的人算�
 > | 7 | capture 與 verification **MUST** 在同一個 operation round；驗證失敗 = 截圖作廢，修根因後重拍 |
 > | 8 | `[review:ui]` 既有 `[x]` 無 agent 自拍 evidence 一律視為 **false-green**，**MUST** 無視 checkbox 自拍自驗 |
 > | 9 | commit 觸及 `.vue` / `.tsx` / `.jsx` / `.css` / `.scss` 後該 change **全部** UI 截圖視為 stale，**MUST** 跑 `audit-screenshot-staleness.ts` 到 0 stale |
-> | 15 | 收尾前 **MUST** 跑 `audit-evidence-completeness.ts` 取得 exit 0，**NEVER** 逐項 `--has-evidence` 查過就當齊全，**NEVER** 為了變綠改 checkbox |
+> | 15 | 收尾前 **MUST** 跑 `flow plan check-close <work_id>` 取得 exit 0，**NEVER** 逐項查過就當齊全，**NEVER** 為了變綠改 checkbox 或 feature 檔 |
 
 11. **Negative search 不成立為證據（hard rule）**：下「零命中 / 不存在 / 只有 N 個」的結論前，**MUST** 先用一個已知會命中的樣本驗過 pattern（known-positive control），並在結論裡寫出「此 pattern 對 `<已知樣本>` 命中」——寫不出來，零命中就不是證據。**NEVER** 把「我 grep 過了」當成 absence 的證明：pattern 寫錯、資料形狀誤判（表格儲存格繼承 / 多種寫法 / 跨行屬性 / 別名 import）、未言明的假設偷偷收窄範圍，三者的輸出**都是零命中**，跟真的不存在外觀完全相同，而換一個工具重跑同一個 pattern 驗不到任何一項。有 structured output（`--json` / `--format json`）時優先用它取代文字 grep；更前一步是先問「有沒有不需要數的判準」（例：gate 已設 `severity: CRITICAL,HIGH`，則輸出的每一條依定義都是 HIGH，根本不必數）。（per [[pitfall-narrow-grep-absence-treated-as-proof]]）
 

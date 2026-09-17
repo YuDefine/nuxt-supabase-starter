@@ -279,7 +279,7 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 
 ## main / master 限定的 hard gate
 
-**人工檢查 Gate**（實作已開始且該 work item carrier 的 `## 人工檢查` 有未勾項時擋 commit）是 main / master 限定 hard rule，**無 override**。判定條件、fail-fast 位置、完整反開脫 NEVER 清單見 [[commit.trunk-gates]]；執行層在當前 runtime 的 commit skill Step 0-MR 與 `check-review-readiness.ts`。
+**人工檢查 Gate**（實作已開始且該 work item carrier 的 `## 人工檢查` 有未勾項時擋 commit）是 main / master 限定 hard rule，**無 override**。判定條件、fail-fast 位置、完整反開脫 NEVER 清單見 [[commit.trunk-gates]]；執行層在當前 runtime 的 commit skill Step 0-MR 與 `flow gates --require-empty`。
 
 ## 禁止事項
 

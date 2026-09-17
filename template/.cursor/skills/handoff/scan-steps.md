@@ -76,12 +76,12 @@ jq -r '.. | objects | select(.status? and .name? and .status != "pass")
 
 - **NEVER 用固定路徑**（`${TMPDIR:-/tmp}/handoff-scan.json` 或任何不含隨機段的名字）。`TMPDIR` 在本機未設 → 固定路徑等於**全機器所有 consumer 的所有 session 共用同一個檔**。2026-08-05 實證：<consumer-d> session 寫入後 48 秒被別 session 覆寫成 `clade`，第一次讀到的是 `<consumer-a>`，同時段 `/tmp/handoff-scan*.json` 還有 <consumer-b> 的產物。
 - **MUST 在讀任何一段之前先驗 `.consumerId`**，`SCAN-MISMATCH` 或 `MISSING` → **STOP**：整份 `$SCAN` 作廢，重跑上面的 block（**NEVER** 把它當「大致對」繼續判讀，也 NEVER 只重跑受影響的那一段）。
-- 危害不是「讀到舊資料」而是**拿別 repo 的事實對本 repo 下判斷**：health gate、review-gui bucket、tech-debt hygiene、worktree & stash audit 四段全部受影響，然後寫進本 repo 的 `HANDOFF.md`。最危險的是 **Step 3.2a 的 stash drop gate 是 MUST 主動 drop** —— 拿別 repo 的 stash 清單做本 repo 的刪除判定。
+- 危害不是「讀到舊資料」而是**拿別 repo 的事實對本 repo 下判斷**：health gate、human gates、tech-debt hygiene、worktree & stash audit 四段全部受影響，然後寫進本 repo 的 `HANDOFF.md`。最危險的是 **Step 3.2a 的 stash drop gate 是 MUST 主動 drop** —— 拿別 repo 的 stash 清單做本 repo 的刪除判定。
 - `handoff-scan.ts` 自身的 consumer 解析（`basename(dirname(git-common-dir))`，worktree 內也回主 repo）**無誤**，上面的 `EXPECT` 就是同一個算式 —— 壞的只有暫存檔路徑。
 
-一次涵蓋四段機械掃描：Health Gate（本 sub-step）+ review-gui readiness（§2B.1.7）+ worktree/stash audit（Step 3）+ tech-debt hygiene（§2B.1.8）。輸出四個 section（`healthGate` / `reviewGuiReadiness` / `worktreeStash` / `techDebtHygiene`），每 section 含 `checks`（`{name, status: pass|warn|fail|n/a, detail}`）與 `raw`（原始事實）。
+一次涵蓋四段機械掃描：Health Gate（本 sub-step）+ human gates（§2B.1.7，`flow gates`）+ worktree/stash audit（Step 3）+ tech-debt hygiene（§2B.1.8）。輸出四個 section（`healthGate` / `reviewGuiReadiness` / `worktreeStash` / `techDebtHygiene`），每 section 含 `checks`（`{name, status: pass|warn|fail|n/a, detail}`）與 `raw`（原始事實）。
 
-**落檔一次、各 sub-step 各自 `jq` 取自己的 section，不必重跑 script**（`$SCAN` 在整個 `next` 期間有效）。**NEVER 為了看某一段而重跑 `handoff-scan.ts`** —— review-gui scan 是昂貴子行程（代跑 clade home），重跑一次就多付一次。**也 NEVER 因為上面的摘要沒列到某段，就判定 scan 沒跑過或該段不存在** —— 摘要只列 status != pass，pass 的段照樣在 `$SCAN` 裡，用 `jq` 取。
+**落檔一次、各 sub-step 各自 `jq` 取自己的 section，不必重跑 script**（`$SCAN` 在整個 `next` 期間有效）。**NEVER 為了看某一段而重跑 `handoff-scan.ts`** —— 各段都是子行程（`flow gates` 讀整條 spine），重跑一次就多付一次。**也 NEVER 因為上面的摘要沒列到某段，就判定 scan 沒跑過或該段不存在** —— 摘要只列 status != pass，pass 的段照樣在 `$SCAN` 裡，用 `jq` 取。
 
 各 sub-step 的取法：`jq '.healthGate.raw' "$SCAN"`（本 sub-step）、`jq '.reviewGuiReadiness.raw' "$SCAN"`（§2B.1.7）、`jq '.worktreeStash.raw' "$SCAN"`（Step 3）、`jq '.techDebtHygiene.raw' "$SCAN"`（§2B.1.8 / §2B.2）。
 
@@ -114,7 +114,7 @@ JSON 範例（節錄）：
       ]
     }
   },
-  "reviewGuiReadiness": { "checks": ["..."], "raw": { "counts": {}, "entries": ["..."] } },
+  "reviewGuiReadiness": { "checks": ["..."], "raw": { "repo": "<name>", "generatedAt": "<ISO>", "counts": {}, "gates": ["..."] } },
   "worktreeStash": { "checks": ["..."], "raw": { "worktrees": ["..."], "stashes": ["..."], "orphanSidecars": ["..."] } },
   "techDebtHygiene": { "checks": ["..."], "raw": { "total": 0, "openCount": 0, "closedCount": 0, "closedLines": 0, "stale": ["..."], "aging": ["..."], "closed": ["..."] } }
 }
@@ -171,57 +171,48 @@ heading 標了結案但 body **還有** `- [ ]` 的段不在本表：那是 `tie
 
 ---
 
-## 2B.1.7 Review-gui readiness scan（hard rule）
+## 2B.1.7 Human gates scan（hard rule）
 
-讀 §2B.1a 那次 `handoff-scan.ts --json` 輸出的 `reviewGuiReadiness` 段（script 內部已從 clade home 代跑 headless `review-gui.ts --scan` 並 filter `consumerId` = 當前 consumer，`raw.entries` 即當前 consumer 的 active changes）。本 sub-step 前尚未跑過 scan 時補跑：
+讀 §2B.1a 那次 `handoff-scan.ts --json` 輸出的 `reviewGuiReadiness` 段（section key 沿用舊名；script 內部在當前 consumer 根目錄跑 `flow gates --json --repo-only`，且不帶 `CLADE_HOME`，所以讀到的是本 repo 的 spine）。本 sub-step 前尚未跑過 scan 時補跑：
 
 ```bash
 node ~/offline/clade/vendor/scripts/handoff-scan.ts --json 2>/dev/null
 ```
 
-Outstanding 推薦（§2B.2 / §2B.3 / §2B.4 / §2B.5）**MUST** 引用 scan 結果而非從 `HANDOFF.md` 既有 narrative 或 `tasks.md` leaf count 推測 review-gui bucket 與 ready 狀態。
+`raw` 形狀：`{repo, generatedAt, counts, gates: [{id, family, anchor, work_id, question, why_now, age_minutes, command}]}`，`counts` 以 family 為 key（`ruling` / `acceptance` / `ui-judgement` / `external-action` / `exception`）。取法：`jq '.reviewGuiReadiness.raw' "$SCAN"`。
 
-把 `raw.entries` 依 bucket 寫入 `$MAIN_WT_PATH/HANDOFF.md` 新段：
+Outstanding 推薦（§2B.2 / §2B.3 / §2B.4 / §2B.5）**MUST** 引用 `raw.gates`，**NEVER** 從 `HANDOFF.md` 既有 narrative 或 `tasks.md` leaf count 推測有沒有等人的事。
+
+把 `raw.gates` 依 family 寫入 `$MAIN_WT_PATH/HANDOFF.md`（標題沿用舊名，下游 `work-loop-verdict.ts` / `rotate-handoff-done.ts` 依它定位）：
 
 ```markdown
 ## Review-gui Readiness
 
-_Updated: <YYYY-MM-DD> /hub-core:handoff next — clade <version> scan_
+_Updated: <YYYY-MM-DD> /hub-core:handoff next — flow gates_
 
-### ✅ Ready (N)
+<repo> gates N：ruling a · acceptance b · ui-judgement c · external-action d · exception e
 
-- `<changeKey>` | pending=N/total | userActionPending=K
-- (空時寫 `_(none)_`)
+### <family> (N)
 
-### ⚠ notReady (M)
-
-- `<changeKey>` | bucket=`<bucket>` | pending=N/total | userActionPending=K
-  - bucket meaning hint：
-    - `feedbackGiven` → 有 verify pending / issued feedback，需 agent 處理 evidence
-    - `awaitArchiveWalkthrough` → 仍缺討論／驗收證據，待收尾 walkthrough（[[manual-review]] § `[discuss]` walkthrough）補齊
-    - `readyForEvidence` → apply 已完成但 evidence missing
-    - `applyInProgress` → impl 未達 APPLY_COMPLETE_THRESHOLD
-    - `applyBlocked` → impl 卡 `@apply-blocked` 外部 blocker（master 統計排除，但 **MUST 走 §2B.2.5 主動 triage**，不可 silently drop）
-    - `awaitingUserDecision` → Claude 已標 `(awaiting-user-decision:)` 交還 user（master 排除，同樣走 §2B.2.5 triage）
-    - `healthCheckNeeded` → Pre-Review Data Readiness pattern 命中
-    - `malformed` → tasks.md 解析失敗
+- `<anchor>` | <question> | <why_now> | → `<command 第一個指令>`
+- (該 family 空時整段省略；五個 family 全空寫 `_(no human gates)_`)
 ```
 
-> **master 排除 ≠ 不寫入 / 不 triage**：`applyBlocked` / `awaitingUserDecision` 雖不計入 ready/notReady master count，仍 **MUST** 寫進 `### ⚠ notReady` 段（附 bucket），並在 §2B.2.5 主動抽 blocker 原因。**NEVER** 因「master 排除」就從 HANDOFF / outstanding 中省略。
+每跑一次 **整段覆寫**（不是 append）— gates 是 snapshot，stale 內容應該被新 snapshot 替換。
 
-每跑一次 audit **整段覆寫**（不是 append）— scan 是 snapshot，stale audit content 應該被新 snapshot 替換。
+**每一張卡都 MUST 走 §2B.2.5 主動處置**：`external-action` / `exception` 卡不是「等人就好」——先抽 blocker 原因、辨識 startable 子集，**NEVER** 因為它是卡片就從 outstanding 省略。卡片以外的 pending（缺 evidence、未 triage 的 issue）是 agent 的球，走 §2B.2 的一般推薦，**NEVER** 寫成「等 user」。
 
-**判定 review-gui readiness 的 SoT**：handoff-scan 輸出 `reviewGuiReadiness.raw`（`counts` + `entries[].bucket`；底層即 review-gui `--scan` 的 `ready` / `notReady` / `buckets`）。tasks 檔的 leaf count / flow 卡的進度 / HANDOFF.md 既有 narrative 都**不是** SoT — 它們是不同維度的真相（leaf count 不解析 evidence annotation / kind marker；flow 卡不考慮 cross-wt 與 evidence；既有 narrative 是上次 session 的 stale snapshot）。
+**判定有沒有等人的事的 SoT**：`reviewGuiReadiness.raw.gates`。tasks 檔的 leaf count / HANDOFF.md 既有 narrative 都**不是** SoT。
 
 **`park` 跑時不執行本 sub-step** — `park` 是「靜默寫入交接」，scan 為 outstanding 推薦服務，`park` 沒推薦階段。
 
-**scan 失敗 fallback**（`reviewGuiReadiness.checks` 的 `review-gui-scan` check status=fail 時，detail 已含失敗原因 + stderr 前 5 行）：
+**scan 失敗 fallback**（`reviewGuiReadiness.checks` 的 `flow-gates` check status=fail 時，detail 已含失敗原因）：
 
 | 失敗情境 | 處理 |
 | --- | --- |
-| clade home 不存在 / 不可達 | 寫 `## Review-gui Readiness` 段含 `_(scan unavailable: <reason>)_`，並警告主線「outstanding 推薦無 review:ui 即時資訊，請避免推薦 review:ui flow」 |
-| `review-gui.ts` 報 error（type checked node version etc.） | 同上，把 check detail 內的 stderr 行貼進該段 |
-| scan 跑成功但回空 list（`review-gui-changes` check detail 標 0 changes） | 寫 `_(scan returned 0 changes — repo possibly fresh)_` |
+| `flow gates` 跑不起來（clade home 不可達、exit 非 0） | 寫 `## Review-gui Readiness` 段含 `_(flow gates unavailable: <reason>)_`，並警告主線「outstanding 推薦沒有人工 gate 即時資訊，NEVER 推薦把人導向面板」 |
+| 輸出缺 `counts` / `gates` | 同上。**NEVER** 讀成 0 張——判不出來與空長得一樣正是這格要擋的 |
+| 跑成功且 0 張 | 寫 `_(no human gates)_` |
 
 ---
 

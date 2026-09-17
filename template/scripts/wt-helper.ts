@@ -115,6 +115,13 @@ import {
 } from './lib/publish-in-flight.ts'
 import { runBatchCommand, assertLegacyAllowed } from './wt-batch.ts'
 import {
+  errorMessage,
+  known,
+  unknown as toUnknown,
+  type Observed,
+  type UncommittedFiles,
+} from './lib/safety-observation.ts'
+import {
   readTeardownJournal,
   recordedModuleChain,
   WT_TEARDOWN_JOURNAL_NAME,
@@ -3649,7 +3656,7 @@ function detectMergeBlockers(consumerRoot, branchName) {
 // added after <consumer-b> 2026-05-17 incident where 47 baseline files lived only in
 // the worktree's working tree (applied from stash, never committed) and
 // vanished on cleanup.
-function detectUncommittedWorktreeFiles(wtPath) {
+function detectUncommittedWorktreeFiles(wtPath): Observed<UncommittedFiles> {
   let statusRaw = ''
   try {
     statusRaw = execFileSync('git', ['status', '--porcelain'], {
@@ -3657,8 +3664,8 @@ function detectUncommittedWorktreeFiles(wtPath) {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     })
-  } catch {
-    return { modified: [], untracked: [] }
+  } catch (error) {
+    return toUnknown(`uncommitted status unreadable at ${wtPath}: ${errorMessage(error)}`)
   }
   const modified = []
   const untracked = []
@@ -3669,7 +3676,7 @@ function detectUncommittedWorktreeFiles(wtPath) {
     if (status === '??') untracked.push({ path })
     else modified.push({ path, status })
   }
-  return { modified, untracked }
+  return known({ modified, untracked })
 }
 
 /**
@@ -4865,7 +4872,21 @@ async function cmdCleanup(slug, opts) {
   // 豁免範圍嚴格等於 merge-back 的判準，**NEVER** 放寬成「髒檔一律豁免」：真 user WIP
   // （未 commit 的 openspec 提案、`.env*.example`、scratch script）照舊擋 —— 另外 12 個
   // worktree 就是靠這條繼續被擋住的。
-  const uncommittedRaw = detectUncommittedWorktreeFiles(target.path)
+  const uncommittedObs = detectUncommittedWorktreeFiles(target.path)
+  if (uncommittedObs.status === 'unknown') {
+    if (opts.dryRun) {
+      console.log(`cleanup --dry-run: ${cleanSlug}`)
+      console.log(`  worktree           ${target.path}`)
+      console.log(
+        `  verdict            BLOCKED — uncommitted status unknown: ${uncommittedObs.reason}`,
+      )
+      return
+    }
+    throw new Error(
+      `cleanup blocked: uncommitted status unknown (${uncommittedObs.reason}); refusing to treat failure as clean`,
+    )
+  }
+  const uncommittedRaw = uncommittedObs.value
   const isIgnorableDrift = (entry, kind) =>
     isLockedProjectionPathFor(target.path, entry.path) ||
     (kind === 'modified' && isToolManagedDrift(target.path, entry.path))
@@ -5131,7 +5152,13 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   // constant). Those are propagate residue, not user WIP, and re-materialize
   // on next bootstrap. User code (server/, src/, app/, ...) and untracked
   // non-projection files are real WIP and must be committed before squash.
-  const wtDirty = detectUncommittedWorktreeFiles(target.path)
+  const wtDirtyObs = detectUncommittedWorktreeFiles(target.path)
+  if (wtDirtyObs.status === 'unknown') {
+    throw new Error(
+      `merge-back blocked: worktree status unknown (${wtDirtyObs.reason}); refusing to treat failure as clean`,
+    )
+  }
+  const wtDirty = wtDirtyObs.value
   const wtUserDirtyAll = [
     // repo-aware：clade home 的 `vendor/snippets/**` 等是源檔不是投影，過濾掉它們等於讓
     // 只改 snippet 的 worktree 靜默通過未 commit gate（TD-344）。

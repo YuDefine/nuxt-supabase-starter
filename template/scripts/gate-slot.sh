@@ -18,6 +18,8 @@
 #   CLADE_GATE_LOCK_DIR      lock 檔目錄（預設 ${XDG_RUNTIME_DIR:-/tmp}/clade-gates）
 #   CLADE_GATE_WAIT_TIMEOUT  wait 模式最長等待秒數（預設 1800）
 #   CLADE_GATE_SLOT_HELD     外層已持有 slot；本層直接 exec，不重複上鎖（防自我死鎖）
+#   CLADE_GATE_SLOT_METRICS  設為檔案路徑時，取到 slot 後 append 一行 JSON
+#                            {key,mode,slots,slot_wait_ms}（opt-in，未設不寫；寫失敗不影響 gate）
 #
 # 兩層鎖：
 #   1. repo lock  —— 同一個 repo 同時只跑一個 heavy gate（去重：pre-push 與 post-edit 撞在一起）
@@ -165,6 +167,17 @@ _gate_abort() {
 trap '_gate_abort SIGINT 130' INT
 trap '_gate_abort SIGTERM 143' TERM
 
+# 毫秒時鐘用 bash 5 的 EPOCHREALTIME，NEVER 用 `date +%s%3N`：BSD date 原樣印 `…3N`，
+# uutils date（2026-09-17 本機實測）把 %3N 印成完整 9 位奈秒，兩者都讓算術靜默錯位。
+# 取不到（bash 3.2 無此變數）就當量不到、不寫。
+_now_ms() {
+  local v=${EPOCHREALTIME:-}
+  v=${v/[.,]/}
+  case "$v" in '' | *[!0-9]*) return 0 ;; esac
+  printf '%s' "$((v / 1000))"
+}
+_wait_started_ms=$(_now_ms)
+
 if [ "$mode" = wait ]; then
   # Bash defers traps while a foreground flock blocks; its wait builtin is
   # interruptible, so PID-only cancellation can abort a same-repo wait too.
@@ -211,6 +224,15 @@ if ! acquire_slot; then
 fi
 
 export CLADE_GATE_SLOT_HELD=1
+
+# 等待量測（W-2026-09-16-delivery-throughput H2）：push_ms 裡有多少是排 slot、多少是 gate 實跑，
+# 過去無從分辨。只記「取到 slot 為止」的等待；實跑時間由呼叫端以總時長相減——exec 之後
+# 本行程已不存在，NEVER 為了量 run time 改成背景執行（會丟掉 TTY 與 process group）。
+if [ -n "${CLADE_GATE_SLOT_METRICS:-}" ] && [ -n "$_wait_started_ms" ]; then
+  _waited_ms=$(($(_now_ms) - _wait_started_ms))
+  printf '{"key":"%s","mode":"%s","slots":%s,"slot_wait_ms":%s}\n' \
+    "$safe_key" "$mode" "$SLOTS" "$_waited_ms" >>"$CLADE_GATE_SLOT_METRICS" 2>/dev/null || true
+fi
 
 # ── holder 端自願上界 ──────────────────────────────────────────────────────
 # slot 數降到 1 之後，孤兒 holder 的代價從「半容量」升級成「全機 heavy gate 停擺」

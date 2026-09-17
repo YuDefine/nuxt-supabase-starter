@@ -130,15 +130,15 @@ node --experimental-strip-types vendor/scripts/audit-screenshot-staleness.ts \
 
 ## MUST 15 — 收尾前核對 receipt 齊全
 
-change 收尾 / archive / hand back user 前，**MUST** 跑
+plan 收尾 / close / hand back user 前，**MUST** 跑
 
 ```bash
-node --experimental-strip-types ~/offline/clade/vendor/scripts/audit-evidence-completeness.ts --repo <repo> --change <change>
+node ~/offline/clade/vendor/scripts/flow/flow.ts plan check-close <work_id>
 ```
 
-並取得 exit 0。exit 1 代表有**已勾**的 item 沒有對應 evidence receipt：**MUST** 補收 evidence（`evidence-store --write`），或在該 item 標 `(deferred: ...)` 附逐層 failure trail（格式同 MUST 3）。**NEVER** 為了讓它變綠去改 checkbox——那是把 false-green 從「沒被發現」變成「主動製造」。
+並取得 exit 0。exit 1 的每條 finding 都帶 `code`：`acceptance-verdict-missing`／`-stale` 代表機器場景沒跑或跑的是上一版——**MUST** 重跑 acceptance 指令、把 cucumber JSON 留在 `evidence/`；`acceptance-human-receipt-missing`／`-stale` 代表 `@human` 場景沒有新鮮人判——那是 `ui-judgement` 卡（`flow gates`），**MUST** 先把 evidence 收齊讓卡出現，**NEVER** 自己寫 `flow receipt` 代判。**NEVER** 為了讓它變綠去改 feature 檔或 checkbox——那是把 false-green 從「沒被發現」變成「主動製造」。
 
-**NEVER** 用逐項 `evidence-store --has-evidence` 查過就當全項齊全。逐項查回答得了「這一項有沒有」，回答不了「哪些項還缺」——而收尾要問的正是後者，漏掉的永遠是沒被查到的那一項。這條與 MUST 8 是同一個 false-green 的兩端：MUST 8 管單項的 checkbox 不可信，本條管整批的「都驗完了」不可信。
+**NEVER** 用逐項查過就當全項齊全。逐項查回答得了「這一項有沒有」，回答不了「哪些項還缺」——而收尾要問的正是後者，漏掉的永遠是沒被查到的那一項。這條與 MUST 8 是同一個 false-green 的兩端：MUST 8 管單項的 checkbox 不可信，本條管整批的「都驗完了」不可信。
 
 ## MUST 16 — 驗收對象需要登入態時，MUST 用真瀏覽器走到底並斷言登入後狀態
 

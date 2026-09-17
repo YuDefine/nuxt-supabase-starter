@@ -4,19 +4,19 @@
 > Runtime split: state, ownership, approval, and completion obligations are shared. Literal Claude tool names or runner commands in this reference are Claude host bindings; other hosts MUST use their adapter fragment or retain the dependent operation blocked.
 
 
-> 本檔從 SKILL.md § 3i / § 3j 搬移，原文逐字保留。主檔 pointer：「bucket 為 `applyBlocked` 時 MUST 先完整讀本檔 § 3i；bucket 為 `awaitingUserDecision` 時 MUST 先完整讀本檔 § 3j」。
+> 本檔從 SKILL.md § 3i / § 3j 搬移，原文逐字保留。主檔 pointer：「carrier 受阻（或 `flow gates` 有 `external-action` / `exception` 卡）時 MUST 先完整讀本檔 § 3i；有待決策描述（或 `ruling` 卡）時 MUST 先完整讀本檔 § 3j」。
 
 **進本檔任一條判定之前，該 item MUST 已經過 [blocker-ledger.md](blocker-ledger.md) 的三步查表且沒命中。** 命中查表的 item 本輪不進本檔——它上一輪已經照本檔判過，而解除條件的實測值沒有變。
 
 ## 批次蒐證（3i + 3j 合計 ≥4 條時）
 
-本輪 `applyBlocked` + `awaitingUserDecision` 合計 ≥4 條 → 逐條讀 tasks.md / HANDOFF 就是 [dispatch-topology.md](dispatch-topology.md) § 主線即時組的 pre-scan 前置判定 要攔的形狀。
+本輪受阻項 + 待決策項合計 ≥4 條 → 逐條讀 tasks.md / HANDOFF 就是 [dispatch-topology.md](dispatch-topology.md) § 主線即時組的 pre-scan 前置判定 要攔的形狀。
 
 **MUST** 批次派**一個** pre-scan 收齊事實表（change 名 / tasks.md 行號 / blocker 或決策描述原文 / 引用的依賴 change 名），主線拿表做鮮度判定與自主解決判斷。**判定本身（下方 3i / 3j 各表）NEVER 外派。**
 
 合計 <4 條時逐條定點讀，照舊。
 
-### 3i. applyBlocked（主動評估 blocker）
+### 3i. 受阻項（主動評估 blocker）
 
 不再無條件跳過。先讀 blocker 內容，判斷 blocker 是否仍 valid：
 
@@ -27,7 +27,7 @@
    | Blocker 類型 | 判定方式 | 動作 |
    | --- | --- | --- |
    | 「等 X 完成」且 X 已在本輪 shipped / archived | blocker 已解除 | **直接 unblock + dispatch**（移除 `[blocked]` annotation，走 3f） |
-   | 「等 dependency Y change」且 Y 在 scan 中 bucket=`done`/`ready` | dependency 已滿足 | **直接 unblock + dispatch** |
+   | 「等 dependency Y change」且 Y 的 flow 卡已 `done` / `accepted` | dependency 已滿足 | **直接 unblock + dispatch** |
    | 「等外部 API / 第三方」 | 無法自動驗證 | **AskUserQuestion**（`--unattended` 時改 log `⏭️ <change> blocked on external: <reason>, skip` + skip）：「`<change>` blocked on `<reason>`，blocker 解了嗎？」[1] 已解除，接手推進 / [2] 仍 blocked，跳過 |
    | 「等 user 測過 / 等 production data」 | 需 user 確認 | **AskUserQuestion**（`--unattended` 時改 log + skip）同上 |
    | 「需要看畫面 / 需已登入的視覺工作階段 / 需 runtime e2e 斷言」 | **先跑下方 § 視覺 blocker 的 capability probe**，NEVER 憑敘述判定 | probe 三條全綠 → **dispatch 收 evidence**（不是 blocker）；任一條紅 → 用**那一條 predicate 的原文**當 blocker 落 packaging |
@@ -39,9 +39,9 @@
 
 3. User 回答「仍 blocked」→ 跳過 + log。User 回答「已解除」→ unblock + dispatch。
 
-4. **Impl blocked ≠ review items blocked（hard rule）**：即使 impl 仍 blocked，**MUST** 檢查 `## 人工檢查` 區是否有 Claude-actionable items（`issued > 0` / `verifyClaudePendingCount > 0` / `discussPendingCount > 0` / review-gui 顯示「🤖 等 Claude 接手」）。有 → 走 SKILL.md § 3.1a 的證據補件流程處理 review items，**NEVER** 因為 impl blocked 就整件工作跳過。人工檢查 lifecycle 獨立於 impl lifecycle。
+4. **Impl blocked ≠ review items blocked（hard rule）**：即使 impl 仍 blocked，**MUST** 檢查 `## 人工檢查` 區是否有 Claude-actionable items（未處理 feedback／缺或過期 evidence／未 triage 的 `（issue:）`／未勾 `[discuss]`）。有 → 走 SKILL.md § 3.1a 的證據補件流程處理 review items，**NEVER** 因為 impl blocked 就整件工作跳過。人工檢查 lifecycle 獨立於 impl lifecycle。
 
-   **為什麼**（2026-07-21 <consumer-a> 實證）：`ops-deploy-safety` bucket=`applyBlocked`（4.1-4.3 卡 TD-002），但 review-gui 顯示「🤖 等 Claude 接手」有 1 個 Claude-actionable discuss item。loop 看到 `applyBlocked` 就整條跳過，review-gui 的 Claude-ball 永遠沒人接。
+   **為什麼**（2026-07-21 <consumer-a> 實證）：`ops-deploy-safety` 實作受阻（4.1-4.3 卡 TD-002），但 GUI 顯示有 1 個 Claude-actionable discuss item。loop 看到受阻就整條跳過，那顆 Claude-ball 永遠沒人接。
 
 ### 視覺 blocker 的 capability probe（unattended 一樣要跑）
 
@@ -56,7 +56,7 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
 | 2 | dev server 起得來 | 依 [[proactive-skills.dev-server-spawn]] 起，拿到 `http://localhost:<port>` | 起不來 → 記實際 stderr 當 blocker，那通常是環境債不是視覺債 |
 | 3 | **items 組得出來** | 對每個 item 都要有 `id` / `known_url` / `expected_dom` / `screenshot_path`，assertion-bearing 的還要 `ready_signal` | 組不出來 → item 描述沒有機械可判的斷言，那是 **item 品質缺口**（回去補 tasks.md 的斷言），不是視覺 blocker |
 
-三條全綠 → 照 [[review-gui-surface]] § 收 evidence 派 Gemini 3.8 Flash screenshot worker
+三條全綠 → 照 [[review-gui-surface]] § 截圖 evidence 與符合性判定
 （`review` skill 的 `screenshot` mode，Pi `screenshot-review-verify`，`gemini high`），主線只消費它回的 JSON 摘要，
 再跑 `node ~/offline/clade/vendor/scripts/verify-ui-receipt.ts --change <name> --items '<id,id>' --consumer-path .`
 落 receipt；項目符合性再交 Opus 5（effort: medium）。實際 dispatch 還要核對 Gemini provider 與 Opus 載體能否完成；模型／配額／工具失敗以真實輸出作 blocker，不能由 binary 存在推論可用。
@@ -88,7 +88,7 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
 （「需 Charles 對 3 張截圖做 en-US 文案判讀」），而且 **MUST 附上已經自動收好的 evidence 路徑**：把人要做的事
 從「開一個 dev session 自己點」縮到「看三張圖回一句」，那才是 packaging 的意義。
 
-### 3j. awaitingUserDecision（自主解決優先，只有商業決策才問 user）
+### 3j. 待決策項（自主解決優先，只有商業決策才問 user）
 
 不再無條件跳過。先讀決策需求，**自主嘗試解決**，只有真正的商業決策才問 user：
 
@@ -104,13 +104,13 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
    | 技術選型（A or B） | 待決項有具體技術選項、無商業影響 | 選最簡方案 + 在 tasks.md 記 `[decision: <選項> — work-loop 自決: <一行理由>]` |
    | 商業決策（pricing / scope / UX trade-off / 客戶需求確認） | 無法從 code / spec 推導、需 domain knowledge | → Step 3 |
 
-   **自主解決後**：移除 `awaitingUserDecision` 標記 → 該 change bucket 位移成 `applyInProgress` → 走 § 3f dispatch。
+   **自主解決後**：移除待決描述（有 `ruling` 卡就 `flow answer` 落自決理由）→ 回到實作 → 走 § 3f dispatch。
 
-3. **只有「商業決策」才問 user。Surface 是對話 `awaiting[]`，NEVER review-gui：**
+3. **只有「商業決策」才問 user。Surface 是 `flow ask`（`ruling` 卡）＋ 對話 `awaiting[]`，NEVER 人眼驗收：**
 
-   - `[discuss]` / `(awaiting-user-decision:)` **NEVER** 放進 PWA inbox（見 `itemBelongsOnReviewInbox`）。人眼驗收 GUI 不負責拍板。
+   - `[discuss]` **NEVER** 成為 `ui-judgement` 卡。人眼驗收不負責拍板。
    - **attended**：AskUserQuestion（一次 ≤4 題），選項從 tasks.md / HANDOFF 萃取。
-   - **unattended**：**MUST** 走 [autonomy-predicate.md](autonomy-predicate.md) § Packaging SOP，寫進 state `awaiting[]` + HANDOFF `## ⏳ Awaiting Charles`。**NEVER** 只 log + skip 讓決策只躺在 review-gui 或 tasks.md annotation 裡——那正是 2026-08-25 dual-track #6 人在 PWA 看到 `discuss` badge、不知道要驗什麼的成因。
+   - **unattended**：**MUST** 走 [autonomy-predicate.md](autonomy-predicate.md) § Packaging SOP，寫進 state `awaiting[]` + HANDOFF `## ⏳ Awaiting Charles`。**NEVER** 只 log + skip 讓決策只躺在 tasks.md annotation 裡——那正是 2026-08-25 dual-track #6 人在 PWA 看到 `discuss` badge、不知道要驗什麼的成因。
 
    ```
    <change> 等待你的決策：
@@ -121,9 +121,9 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
 
 4. 自主解決或 user 拍板後 → 把決策寫入 tasks.md（`[x]` + `(claude-discussed:)` / `(answered-user-decision:)`）→ 從 `awaiting[]` 出列 → dispatch 繼續推進。
 
-**核心原則**：work-loop 的自主模式承諾「能自主決策的自主完成」。未實作的 phase、技術 findings、標準 phase（Design Review / evidence collection）**全部屬於自主範疇**，NEVER 因為被標記 `awaitingUserDecision` 就當真 — 先判斷是否真的需要 user、還是上一輪實作過度保守地標記了。
+**核心原則**：work-loop 的自主模式承諾「能自主決策的自主完成」。未實作的 phase、技術 findings、標準 phase（Design Review / evidence collection）**全部屬於自主範疇**，NEVER 因為被標記待決策就當真 — 先判斷是否真的需要 user、還是上一輪實作過度保守地標記了。
 
-**反例（<consumer-b> 2026-07-21 `/change-loop turbo`）**：(1) 未實作的 phase 被標為 awaiting-user-decision → 應直接 dispatch apply；(2) 技術 findings（seed 歸屬 + UI wiring）被標為 blocker → 應自行修或登 TD；(3) Design Review 被標為「需排程」→ 應直接跑。三項全部可自主解決，loop 不應停下。
+**反例（<consumer-b> 2026-07-21 `/change-loop turbo`）**：(1) 未實作的 phase 被標為待 user 決策 → 應直接 dispatch apply；(2) 技術 findings（seed 歸屬 + UI wiring）被標為 blocker → 應自行修或登 TD；(3) Design Review 被標為「需排程」→ 應直接跑。三項全部可自主解決，loop 不應停下。
 
 
 Claude binding for this reference: use `AskUserQuestion` for attended blocker confirmation, in batches of at most 4. Map the source blocker options to the tool options and persist the answer before evaluating or dispatching the item; in `--unattended` / runner mode write the prescribed log and retain the blocker.

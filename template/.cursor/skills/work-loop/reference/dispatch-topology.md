@@ -14,7 +14,7 @@ Step 2 產出的**不是**一條佇列，是**四組**併發特性不同的工�
 - 佔 dev port → 一次一個
 - 寫 main → 一次一個
 
-同一個 change 的 item 之間有真依賴（bucket 位移要看上一步結果）；**不同 change 的 item 之間沒有任何資料流** —— 它們各自在自己的 worktree，B 不讀 A 的 output。把它們排成一條線只是讓後面的空等。
+同一個 change 的 item 之間有真依賴（下一步要看上一步結果）；**不同 change 的 item 之間沒有任何資料流** —— 它們各自在自己的 worktree，B 不讀 A 的 output。把它們排成一條線只是讓後面的空等。
 
 ## 四組契約
 
@@ -23,7 +23,7 @@ Step 2 產出的**不是**一條佇列，是**四組**併發特性不同的工�
 | **扇出組** | plan package 的實作／證據補件、非 plan code task（均不需要 dev server） | **同時 in-flight ≤ 4** | 無（各自 worktree） |
 | **dev-port 組** | 證據補件中**需要起 dev server** 的 item、Design Review 截圖 | **1** | consumer 的 dev port（SoT：`registry/consumers.json` 的 `dev_ports`） |
 | **main 組** | 收尾與已驗證改動落地 | **1** | 批次 coordinator（source archive → ready → integration commit → main landing／push） |
-| **主線即時組** | 3g healthCheckNeeded、3e ready(userActionPending>0) 的 Claude-actionable 檢查、3i applyBlocked 評估、3j awaitingUserDecision 評估、非 plan investigation | 主線自己做，不 dispatch（read-heavy 者先過 § 主線即時組的 pre-scan 前置判定） | 無 |
+| **主線即時組** | carrier 格式修復、有卡工作的 Claude-actionable 檢查、3i 受阻項評估、3j 待決策項評估、非 plan investigation | 主線自己做，不 dispatch（read-heavy 者先過 § 主線即時組的 pre-scan 前置判定） | 無 |
 
 **每一個** priority item 在 dispatch 前都要落進上表某一組，不是只對前幾個分類。
 

@@ -4,9 +4,9 @@
 <!-- carrier-independent candidate: 本檔的義務不經任何 runtime 專屬工具契約表達，是 [[TD-445]] 抽共用核心時最先可搬的一批。**這是候選標記，不是 audience**——真正的 audience 是上面那行 `clade-targets`，NEVER 因為看到本行就把 targets 放寬。放寬 reference 而不放寬 SKILL.md 會投出沒有 skill 入口指向的孤兒檔。 -->
 
 > 主檔 pointer：**任一** blocked item 在走 [blocker-evaluation.md](blocker-evaluation.md) 之前
-> MUST 先過本檔的三步查表——Step 3.1a 的**每一個** bucket、Step 3.1b 的 blocked 分類都算。
-> **NEVER 讀成只有 `applyBlocked` / `awaitingUserDecision` 兩列**：入表門檻是
-> § 入表門檻 的「本輪量得到 `predicateValue`」，**不是** bucket 白名單。
+> MUST 先過本檔的三步查表——Step 3.1a 的**每一個**受阻需求、Step 3.1b 的 blocked 分類都算。
+> **NEVER 讀成只有受阻／待決策兩類**：入表門檻是
+> § 入表門檻 的「本輪量得到 `predicateValue`」，**不是**分類白名單。
 
 ## 這份 ledger 在防什麼
 
@@ -61,20 +61,19 @@ for k,v in s.get('blockers',{}).items():
 
 三步都不觸發 → 跳過重診斷。收尾**固定四動作，順序不可換**：
 
-1. 讀本輪 scan JSON 的 `issued` / `verifyClaudePendingCount` / `discussPendingCount` / `staleEvidenceCount` 四欄
-2. **任一 > 0 → 本輪 MUST 動這條**（見下節），不往下走
-3. 四欄全 0 → log 一行 `⏭️ <id> blocker 未變（predicate <值>，round <first>–<now>）`
+1. 讀該工作的 carrier：未處理 feedback／缺或過期 evidence／未 triage 的 `（issue:）`／未勾 `[discuss]` 四類
+2. **任一存在 → 本輪 MUST 動這條**（見下節），不往下走
+3. 四類皆無 → log 一行 `⏭️ <id> blocker 未變（predicate <值>，round <first>–<now>）`
 4. `lastCheckedRound` 更新為本輪，繼續下一條
 
 **跳過重診斷不是 skip。** 它不進 § Skip 合法理由窮舉、不記 `failStreak`、不改 fingerprint，省下的只有**再推導一次同一個結論**那筆成本。
 
 ## 查表命中不豁免 Claude-actionable override（MUST）
 
-主檔 § 3.1a 的 **Claude-actionable override** 對**每一條** change 檢查 `issued` /
-`verifyClaudePendingCount` / `discussPendingCount` / `staleEvidenceCount`，任一 > 0 就代表有 Claude
+主檔 § 3.1a 的 **Claude-actionable override** 對**每一件**工作檢查carrier 內仍有 agent 做得完的項（未處理 feedback／缺或過期 evidence／未 triage 的 `（issue:）`／未勾 `[discuss]`），任一存在就代表有 Claude
 自己做得完的 review work。**本檔查表命中之後，那條檢查照跑**——查表買到的是「不必重新推導這條為什麼卡住」，**NEVER** 讀成「這條 item 本輪不用動」。
 
-這條 MUST 是本檔適用範圍涵蓋 Step 3.1a **每一個** bucket 的前提。`readyForEvidence` / `feedbackGiven`
+這條 MUST 是本檔適用範圍涵蓋 Step 3.1a **每一個**受阻需求的前提。缺 evidence／有 feedback
 的表列動作（「補 evidence annotation」「處理 review feedback → 補 evidence」）本來就是 Claude 做得完的事，
 少了這條，放寬適用範圍就等於把一批本來要動的 item 靜默停住。
 
@@ -109,7 +108,7 @@ predicate 未變講的是**卡點**沒變，`staleEvidenceCount=7` 講的是**�
 合格 / 不合格對照（`<>` 是佔位符，逐字寫進 ledger 就等於沒有 predicate）：
 
 - ✅ `gh pr view <n> --json state 回 MERGED`
-- ✅ `scan JSON 的 plans entry <slug> bucket 不再是 applyBlocked`
+- ✅ `flow gates --json 不再有 work_id=<W> 的 external-action 卡`
 - ✅ `<repo>/supabase/migrations/<file> 存在`
 - ❌ `上游修好了`
 - ❌ `Charles 確認過`
