@@ -12,6 +12,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readSync,
   readdirSync,
   realpathSync,
   renameSync,
@@ -314,7 +315,20 @@ const git = (cwd: string, args: string[], input?: string) =>
  * path: a filename that legitimately starts with a space is otherwise handed on in a
  * spelling that names no file, which is the same failure `-z` was adopted to prevent.
  */
-const hashFile = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex')
+const hashBuffer = Buffer.allocUnsafe(8 * 1024 * 1024)
+// Streams so multi-GB retire archives hash without loading into memory.
+const hashFile = (path: string) => {
+  const hash = createHash('sha256'),
+    fd = openSync(path, 'r')
+  try {
+    for (let read = readSync(fd, hashBuffer); read > 0; read = readSync(fd, hashBuffer))
+      hash.update(hashBuffer.subarray(0, read))
+  } finally {
+    closeSync(fd)
+  }
+  return hash.digest('hex')
+}
+const fullRef = (branch: string) => (branch.startsWith('refs/') ? branch : `refs/heads/${branch}`)
 const objectIdPattern = /^[0-9a-f]{40}$/i
 function patchId(cwd: string, from: string, to: string) {
   const directory = mkdtempSync(join(tmpdir(), 'clade-batch-patch-'))
@@ -412,7 +426,7 @@ function registeredWorktreePath(c: Context, branch: string): string | undefined 
       realpathSync(join(path, '.git'))
     )
       return undefined
-    const ref = branch.startsWith('refs/') ? branch : `refs/heads/${branch}`
+    const ref = fullRef(branch)
     if (readFileSync(join(admin, 'HEAD'), 'utf8').trim() !== `ref: ${ref}`) return undefined
     return path
   } catch {
@@ -653,6 +667,56 @@ function preserveWorktree(
     b.preserved = [...(b.preserved ?? []), { path, archive: receipt.archives.worktree.path }]
   }
   return receipt
+}
+// An unreadable or non-file archive entry fails verification instead of aborting cleanup.
+const hashMatches = (path: string, digest: string) => {
+  try {
+    return hashFile(path) === digest
+  } catch {
+    return false
+  }
+}
+// handoff-retire archives and removes a released landed-batch source on its own
+// path, and its manifest row is the only trace that survives. Accept that row as
+// preservation only when it names this exact source and every archived file
+// still hashes to what retire recorded.
+function retiredByHandoff(c: Context, path: string, branch: string, sourceHead: string) {
+  const manifest = join(c.main, 'docs', 'archives', 'retired-work.jsonl')
+  if (!existsSync(manifest)) return undefined
+  const ref = fullRef(branch)
+  for (const line of readFileSync(manifest, 'utf8').split('\n').toReversed()) {
+    let row: Record<string, unknown>
+    try {
+      row = parseJsonRecord(line)
+    } catch {
+      continue
+    }
+    const original = row.original,
+      archive = row.archive,
+      files = row.files
+    if (
+      row.schema !== 'retired-work/v1' ||
+      row.status !== 'retired' ||
+      !isRecord(original) ||
+      original.kind !== 'worktree' ||
+      original.path !== path ||
+      original.branch !== ref ||
+      original.head !== sourceHead ||
+      typeof archive !== 'string' ||
+      !isRecord(files) ||
+      typeof files['history.bundle'] !== 'string'
+    )
+      continue
+    const verified = Object.entries(files).every(
+      ([name, digest]) =>
+        typeof digest === 'string' &&
+        basename(name) === name &&
+        existsSync(join(archive, name)) &&
+        hashMatches(join(archive, name), digest),
+    )
+    if (verified) return archive
+  }
+  return undefined
 }
 function hasVerifiedPreservation(
   b: WorktreeBatch,
@@ -2880,6 +2944,25 @@ export function cleanupBatches(
           result.retained.push({ path: m.path, reason })
           continue
         }
+        const retiredArchive =
+          !wt && !removal && !existsSync(m.path) && retiredByHandoff(c, m.path, m.branch, m.head)
+        if (retiredArchive) {
+          if (branchHead && currentWorktrees.some((other) => other.branch === m.branch)) {
+            result.retained.push({
+              path: m.path,
+              reason: 'Source branch checked out elsewhere; retained',
+            })
+            continue
+          }
+          git(c.main, ['update-ref', `refs/clade/batches/${b.id}/${index}`, m.head])
+          cleanupLifecycle.removed(c.main, m.path)
+          if (branchHead) git(c.main, ['update-ref', '-d', m.branch, m.head])
+          b.preserved = [...(b.preserved ?? []), { path: m.path, archive: retiredArchive }]
+          b.removed.push(m.path)
+          result.removed.push(m.path)
+          save(c, s)
+          continue
+        }
         const profile = profileResolver(m.path, join(c.dir, 'preservation'))
         if (!profile) {
           result.retained.push({
@@ -3414,6 +3497,27 @@ export function cleanupBatches(
           const quarantineWorktree = removal
             ? currentWorktrees.find((w) => w.path === removal.quarantine)
             : undefined
+          const retiredArchive =
+            !wt &&
+            !removal &&
+            !existsSync(b.path) &&
+            retiredByHandoff(c, b.path, b.branch, b.landedHead!)
+          if (retiredArchive) {
+            requireKnownNoClaim(c.main, b.path, 'Integration has new work, lock or active owner')
+            const ref = `refs/heads/${b.branch}`
+            if (currentWorktrees.some((other) => other.branch === ref))
+              throw new Error('Integration branch checked out elsewhere; retained')
+            cleanupLifecycle.removed(c.main, b.path)
+            if (git(c.main, ['for-each-ref', '--format=%(refname)', ref]))
+              git(c.main, ['update-ref', '-d', ref, b.landedHead!])
+            b.preserved = [...(b.preserved ?? []), { path: b.path, archive: retiredArchive }]
+            b.phase = 'cleaned'
+            s.ready = s.ready.filter((m) => !b.members.some((source) => source.path === m.path))
+            save(c, s)
+            result.preserved = [...(b.preserved ?? [])]
+            results.push(result)
+            continue
+          }
           const profile = profileResolver(b.path, join(c.dir, 'preservation'))
           if (!profile) throw new Error('preservation profile missing; source retained')
           validateProfile(profile)
