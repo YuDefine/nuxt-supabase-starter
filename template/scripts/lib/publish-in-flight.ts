@@ -1,7 +1,7 @@
 // 🔒 LOCKED — managed by clade · Source: vendor/scripts/lib/publish-in-flight.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/lib/publish-in-flight.ts
 import { spawnSync } from 'node:child_process'
-import { readFileSync, realpathSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { readFileSync, readlinkSync, realpathSync, statSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 
 export type ProcessProbe = () => string[]
 
@@ -49,10 +49,88 @@ export function detectPublishInFlight(): string[] {
     .filter((line) => runsPublishScript(Number(line.trim().split(/\s+/)[0])))
 }
 
+const within = (cwd: string, target: string) =>
+  cwd === target || cwd.startsWith(`${target}/`) || target.startsWith(`${cwd}/`)
+
+/** 同一個檔案系統物件（dev＋ino），不經路徑字串。 */
+const sameObject = (a: { dev: number; ino: number }, b: { dev: number; ino: number }) =>
+  a.dev === b.dev && a.ino === b.ino
+
+/**
+ * cwd 物件在不在 target 樹內：它若在樹內的 `<rel>`，它視角路徑字串的尾段就是 `<rel>`（d_path 由 dentry
+ * 名稱組成，與掛載無關），而我方的 `<target>/<rel>` 會是同一個 dev/ino。逐個尾段比對即可。
+ * NEVER 改成沿 `/proc/<pid>/cwd/..` 往上走：`..` 之後核心會跨進對方的掛載點，被 overmount 的祖先
+ * 看不到（2026-09-17 unshare 實測：落到 tmpfs 根 ino=1）。
+ *
+ * 已知差集：對方 cwd 經 bind 別名進入樹內（`/repo/scripts` 掛在 `/alias`、cwd=`/alias`）時尾段對不上。
+ * 同一命名空間的 realpath 判定對同一形狀一樣回 free（射程本來就以路徑界定，2026-09-17 unshare 實測）。
+ */
+function cwdObjectInside(cwdPath: string, cwd: { dev: number; ino: number }, target: string) {
+  const parts = cwdPath.split('/').filter(Boolean)
+  for (let k = 0; k <= parts.length; k++) {
+    try {
+      if (sameObject(statSync(join(target, ...parts.slice(k))), cwd)) return true
+    } catch (error) {
+      // 我方沒有這個尾段 → 不是這一種對應；其他錯誤（權限）證明不了不在樹內，往上拋 fail closed
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') throw error
+    }
+  }
+  return false
+}
+
+/**
+ * 持有者與我方不在同一個掛載命名空間時，它的 cwd 路徑字串是**它視角**的：在我方 realpath 不是
+ * ENOENT，就是解析到我方同名的另一個目錄。所以不拿路徑字串在我方解析，改問兩件與視角無關的事：
+ *
+ * 1. cwd **物件**是不是在我方 target 樹內（見 `cwdObjectInside`）——它把該路徑 overmount 掉、cwd 仍
+ *    留在原樹內時，只看 root 視角會漏判
+ * 2. 它 root 底下的同一路徑是不是我方 target 物件——是，才拿它視角的 cwd 字串判「cwd 是 target 祖先」
+ *
+ * 回 `undefined` = 同一命名空間或判不出命名空間，走原本的 realpath 判定；`'unreadable'` = 確定跨
+ * 命名空間但讀不到，交給下方二次探測 fail closed。
+ *
+ * TD-1085（2026-09-17 CT 102）：runner slot 同 user、共用 PID namespace、各自 `PrivateTmp=yes`，
+ * shard 2 的 cleanup 被 shard 4 存活中的 `publish.ts --wait 2` 擋下（cwd 在 shard 4 私有 /tmp）。
+ */
+function crossNamespaceHold(
+  proc: string,
+  pid: string,
+  target: string,
+): 'held' | 'free' | 'unreadable' | undefined {
+  let ours: string
+  let theirs: string
+  try {
+    ours = readlinkSync(`${proc}/self/ns/mnt`)
+    theirs = readlinkSync(`${proc}/${pid}/ns/mnt`)
+  } catch {
+    return undefined
+  }
+  if (ours === theirs) return undefined
+  try {
+    const cwd = readlinkSync(`${proc}/${pid}/cwd`)
+    if (cwd.endsWith(' (deleted)')) return 'unreadable'
+    const mine = statSync(target)
+    if (cwdObjectInside(cwd, statSync(`${proc}/${pid}/cwd`), target)) return 'held'
+    let seen: ReturnType<typeof statSync>
+    try {
+      seen = statSync(`${proc}/${pid}/root${target}`)
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code === 'ENOENT' || code === 'ENOTDIR') return 'free'
+      throw error
+    }
+    return sameObject(seen, mine) && target.startsWith(`${cwd}/`) ? 'held' : 'free'
+  } catch {
+    return 'unreadable'
+  }
+}
+
 /** Narrow process matches to processes which can read the requested tree. */
 export function inFlightHoldersFor(
   targetRoot: string | undefined,
   detect: ProcessProbe = detectPublishInFlight,
+  proc = '/proc',
 ) {
   const lines = detect()
   if (lines.length === 0) return []
@@ -73,15 +151,20 @@ export function inFlightHoldersFor(
       held.push(line)
       continue
     }
+    const cross = crossNamespaceHold(proc, pid, target)
+    if (cross !== undefined) {
+      if (cross === 'held') held.push(line)
+      else if (cross === 'unreadable') unreadable.push({ pid, line })
+      continue
+    }
     let cwd: string
     try {
-      cwd = realpathSync(`/proc/${pid}/cwd`)
+      cwd = realpathSync(`${proc}/${pid}/cwd`)
     } catch {
       unreadable.push({ pid, line })
       continue
     }
-    if (cwd === target || cwd.startsWith(`${target}/`) || target.startsWith(`${cwd}/`))
-      held.push(line)
+    if (within(cwd, target)) held.push(line)
   }
   // cwd 讀不到 → 再問同一個 detector 一次，仍被列出才 fail closed。已退出的行程在兩次探測之間
   // 消失：pgrep 不再列出 zombie／正在退出者（cmdline 已清空），已回收者更不會出現。
