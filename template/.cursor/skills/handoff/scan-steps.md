@@ -127,7 +127,7 @@ JSON 範例（節錄）：
 | 內容類型 | 動作 |
 | --- | --- |
 | 與當前 SoT 矛盾（版本過時、檔案已不存在） | 修正或刪除 |
-| 重複條目（同一事在 HANDOFF / tech-debt / ROADMAP 都有） | 留最該的位置，其他刪 |
+| 重複條目（同一事在 HANDOFF / plan（未遷移 consumer 為 tech-debt）/ ROADMAP 都有） | 留最該的位置，其他刪；已遷移 repo **NEVER** 刪改 `docs/tech-debt.md` 那份（凍結），只刪 HANDOFF／ROADMAP 端 |
 | 寫法違反當前專案規則（如 clade 自治區內 `consumer 自治區工作` violation） | 依規則重寫或刪除 |
 | 仍 valid 的稽核 baseline 表 / outstanding follow-up | 保留 |
 | `## Deferred discuss items` 段（含 `<!-- deferred-begin:...:... -->` markers） | **保留、禁動**：由 [[manual-review]] § `[discuss]` walkthrough 的 resume 路徑處置，`/handoff` 不可改寫、reorder、合併或刪除任何 entry |
@@ -150,7 +150,7 @@ JSON 範例（節錄）：
 
 | 處置 | 判準（可觀察） | 動作 |
 | --- | --- | --- |
-| **拆條** | 段裡其實是多件事，且還有沒收的（heading 說完成但正文提到待驗 / 待散播 / 待決策） | 把未完那幾件拆到 `## In Progress` / `docs/tech-debt.md` / 新的 `tasks/<date>-<slug>.md`，剩下的走「關條」 |
+| **拆條** | 段裡其實是多件事，且還有沒收的（heading 說完成但正文提到待驗 / 待散播 / 待決策） | 把未完那幾件拆到 `## In Progress` / plan（有 `specs/truth/work-lifecycle.md` → `flow plan open` 或續跑既有 plan；未遷移 consumer 才 `docs/tech-debt.md`）/ 新的 `tasks/<date>-<slug>.md`，剩下的走「關條」 |
 | **關條** | 已 done，且 `git log --grep '<TD-NNN 或 slug>'` 查得到 | **直接刪整段**。NEVER 寫 archive narrative —— git history 是免費且完整的知識層（同 [[tech-debt-hygiene]] Invariant 7 § 處置是三選一） |
 | **知識語態重寫** | 段裡有真教訓**且**未被任何機械 gate 承載 | 走 `/oops`：clade home 寫 `specs/truth/`，未遷移 consumer 才寫 `docs/pitfalls/`（換語態，不是剪貼），原段同時刪掉 |
 | **不動（防重做 marker）** | heading 除了結案還明講「不要重做 / 不必重做 / 勿重做 / NEVER 重做 / 不必接續」 | **什麼都不做**。偵測器已自動豁免這一格，見下 |
@@ -220,6 +220,8 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff next — flow gates_
 
 讀 §2B.1a 那次 `handoff-scan.ts --json` 輸出的 `techDebtHygiene` 段（掃當前 consumer 自家 `docs/tech-debt.md`，與 clade SoT 無關）。本 sub-step 前未跑過 scan 時補跑同一指令。
 
+**遷移狀態分流（先判這一題）**：repo 有 `specs/truth/work-lifecycle.md` 時 scan 只回一條 `tech-debt-hygiene-retired`（n/a）且 `raw.retired: true` —— `docs/tech-debt.md` 與 `docs/archives/tech-debt-*` 是凍結舊載體，**本節以下全部處置（含 retained stub 化、正文外移、anti-snooze 追問）都不適用**，outstanding 走 SKILL.md §2B.2 的 `raw.plans[]`。**NEVER** 因為手動讀到舊檔裡的 open TD 就照下表補 Resolution／stamp Last reviewed／下推 bodies。下表只給未遷移 consumer。
+
 六條訊號 **MUST** 各自處置，**NEVER** 只看其中一條：
 
 | 訊號 | check | 意義 | 處置 |
@@ -229,11 +231,11 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff next — flow gates_
 | **evidenceStale** | `tech-debt-evidence-stale:<TD-NNN>`（warn） | open TD 的 `Location` 路徑在 `Discovered` 之後被 commit 過 — 「敘述可能已不成立」候選。與 staleOpen 正交：staleOpen 問「放多久了」，本條問「還成不成立」 | **MUST 逐條讀該 entry 對照現況後才列 outstanding**，NEVER 直接把它當成待辦推給 user。三種結果：① 事情已做完 → 補 `### Resolution` + 改 `Status`，**不**列 outstanding；② 敘述過期但問題還在 → 更正敘述（保留原文供追溯），再列 outstanding；③ 確認仍成立 → 加 `**Last reviewed**: <today>`，照常列。**這是啟發式不是判決** — 路徑被動過也可能與該 TD 主題無關 |
 | **archivedRetained** | `tech-debt-archived-retained`（fail） | `docs/archives/tech-debt-closed-*.md` 內出現帶 re-activation 契約的 TD；trigger 留在 archive 裡，後續盤點看不見 | 依 §2B.1a 的 fail 契約停止；按 detail 的 TD id／archive path 搬回 `docs/tech-debt.md`。判準與 rotation 共用：`*-until-*`、`### 重訪條件` / `### Defer 條件`、`**Signal**:` 任一命中 |
 | **closedBloat** | `tech-debt-closed-bloat`（warn，closed TD ≥ 門檻時觸發） | done/resolved/wontfix 的 closed TD 仍躺 `docs/tech-debt.md` 主檔 | **MUST** 跑 `node "$HOME/offline/clade/vendor/scripts/rotate-closed-bloat.ts"`。stdout `retired` = clade home／已遷移 repo，**停**，不要寫 archive 或改 register。未遷移 consumer：搬全部 rotatable（noop 時 stdout 是 `noop`）。**NEVER** 詢問操作。Park 不執行 |
-| **entryOversize** | `tech-debt-entry-oversize`（warn，任一 open TD > `raw.oversizeThreshold` 行時觸發） | **open** TD 單條正文過長。rotate 只吃 closed，對 open 零覆蓋 — <consumer-b> 實測 4986 行主檔裡 4807 行是 open，主檔體積的長期成長全在這裡 | 產出**下推**建議（**不是砍字**）：把長篇 root-cause 敘事搬到 `$MAIN_WT_PATH/docs/archives/tech-debt-bodies.md`，主檔留 metadata block（`Status` / `Discovered` / `Class` / `Location`）+ 摘要一段 + pointer。逐條見 `raw.oversize[]`（含 `lines` / `overBy` / `lineNo`）。**依詢問操作讓 user 拍板**（A 套用 / B 跳過 / C 手動），user 選 A 才動檔。**MUST 保留 metadata block 原封不動** — `audit-tech-debt-hygiene.ts` 的 Invariant 2 / 3 / 6 全靠它，搬走 `Location` 會讓那三條同時失效 |
+| **entryOversize** | `tech-debt-entry-oversize`（warn，任一 open TD > `raw.oversizeThreshold` 行時觸發） | **open** TD 單條正文過長。rotate 只吃 closed，對 open 零覆蓋 — <consumer-b> 實測 4986 行主檔裡 4807 行是 open，主檔體積的長期成長全在這裡 | （未遷移 consumer 才適用）三選一：**拆條**（其實是 2 條以上的命題）/ **關條**（已 done / 已被機械 gate 承載 / wontfix）/ **知識語態重寫**（真教訓且未機械化 → `/oops`，主檔那條同時關掉）。目標每條 ≤10 行。逐條見 `raw.oversize[]`（含 `lines` / `overBy` / `lineNo`）。**依詢問操作讓 user 拍板**，user 選定才動檔。**NEVER 把正文下推到 `docs/archives/tech-debt-bodies.md`**（TD-495 改判撤銷，與 scan detail 一致）。**MUST 保留 metadata block 原封不動** — `audit-tech-debt-hygiene.ts` 的 Invariant 2 / 3 / 6 全靠它 |
 
 **closedBloat 的幅度由 script 一次搬完全部 rotatable 承載**，不再走 (A) 選項。
 
-**entryOversize 的 (A) 受 [[threshold-remediation]] 的幅度紀律管**：MUST 標出預期降幅（搬走幾條 / 幾行），**降幅 < 超標量的 (A) NEVER 呈給 user**——要擴大搬遷範圍到
+**entryOversize 的處置受 [[threshold-remediation]] 的幅度紀律管**：MUST 標出預期降幅（拆／關幾條 / 幾行），**降幅 < 超標量的 (A) NEVER 呈給 user**——要擴大搬遷範圍到
 降幅 ≥ 超標量再問。user 選 A 執行完 MUST 用同一支 audit 複量，仍 > 門檻的 90% → 派 Fable 顧問
 檢討成長結構，NEVER 自行再壓一次。
 
@@ -245,7 +247,9 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff next — flow gates_
 
 ### retained stub 化與正文外移（`docs/archives/tech-debt-bodies.md`）
 
-closedBloat 的 retained 例外與 entryOversize 兩者的正文都落**同一個檔**：`$MAIN_WT_PATH/docs/archives/tech-debt-bodies.md`（append-only）。
+**只適用未遷移 consumer。** repo 有 `specs/truth/work-lifecycle.md` 時 **NEVER** append `tech-debt-bodies.md`、NEVER 產 stub —— re-activation 條件寫進承載它的 plan（或 truth 的 re-evaluation condition），per `specs/truth/work-lifecycle.md` § Close。
+
+closedBloat 的 retained 例外的正文落 `$MAIN_WT_PATH/docs/archives/tech-debt-bodies.md`（append-only；entryOversize 已不下推，見上表）。
 
 - **檔名 NEVER 用 `tech-debt-closed-*.md`**：`audit-tech-debt-hygiene.ts` 的 `loadArchiveEntries()` 用 glob `/^tech-debt-closed-.*\.md$/` 撿 archive 進 Invariant 1 的重號偵測。正文檔若落進那個 glob，會與主檔留下的 stub 同號互撞，**每一條**外移項都變成 duplicates 假陽性
 - **主檔 stub 的最小內容**：heading（`## TD-NNN — <title>`，編號與標題不變）+ metadata block（`Status` / `Discovered` / `Class` / `Location`，**原封不動**）+ trigger 條件或摘要一行 + pointer（`> 正文：docs/archives/tech-debt-bodies.md#td-nnn`）

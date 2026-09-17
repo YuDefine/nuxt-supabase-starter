@@ -154,7 +154,7 @@ Predicate 綁的是**結果**不是路徑，所以「先自己做掉再 park」�
 
 ## Step 1.5 — 路徑解析 invariant（park / next 共用）
 
-`HANDOFF.md` / `docs/tech-debt.md` / `ROADMAP.md` 是「跨工作全局狀態」，**不該** per-worktree 分裂。`/handoff` 若在 linked worktree 內跑、寫到 cwd-相對的 `HANDOFF.md`，得等 squash merge-back 才出現在 main，下一 session 接手會看到舊版。
+`HANDOFF.md` / `docs/tech-debt.md`（未遷移 consumer）/ `ROADMAP.md` 是「跨工作全局狀態」，**不該** per-worktree 分裂。`/handoff` 若在 linked worktree 內跑、寫到 cwd-相對的 `HANDOFF.md`，得等 squash merge-back 才出現在 main，下一 session 接手會看到舊版。
 
 **MUST** 在進入 park / next 寫入動作前先解析 main worktree absolute path：
 
@@ -177,7 +177,7 @@ fi
 `$MAIN_WT_PATH` 解析出來是 main worktree 的絕對路徑，但**有些 session 根本不准寫進去**：background job 的隔離 guard 會擋掉 shared checkout 的所有編輯，cwd 已在 linked worktree 的 session 同樣不該直接動 main。這時 **NEVER** 改寫成 cwd-相對路徑繞過（那正是本節要防的分裂），改走 worktree + merge-back：
 
 1. `node vendor/scripts/wt-helper.ts add <slug> --task-summary "<一句話：這棵樹要做什麼>"`，進該 worktree
-2. 在 **worktree 內**編輯 `HANDOFF.md` / `docs/tech-debt.md`（它們 fork 自乾淨 main，內容與 main 一致）
+2. 在 **worktree 內**編輯 `HANDOFF.md`（未遷移 consumer 才含 `docs/tech-debt.md`；有 `specs/truth/work-lifecycle.md` 時改寫 `specs/plans/<work-id>/plan.md`）（它們 fork 自乾淨 main，內容與 main 一致）
 3. `node vendor/scripts/wt-helper.ts merge-back <slug>`（先 `--dry-run` 確認不會捲進別 session WIP）
 4. **MUST 在 main 補一次 `git commit --only -- HANDOFF.md <其他寫過的檔>`**
 
@@ -277,11 +277,11 @@ fi
 
    不做這步的代價：無主檔單調累積，`node scripts/audit-stale-tasks.ts` 2026-08-02 實測全 fleet 38 檔。
 5. **Worktree & Stash audit**：跑 **Step 3 共用 audit block**（見下文）。park 為「靜默寫入」—— audit 段寫進 HANDOFF.md，但**不**在 chat 訊息輸出 audit 全文或摘要（避免雜訊干擾當前 session 交接收尾）。
-6. **回報**：一句話總結升級數量（如「升級 3 到 HANDOFF / 1 到 tech-debt / 砍 2」）。**禁止**追加「下一步建議」或「要不要繼續做 X」。Audit 因為靜默不出現在回報；user 想看走 HANDOFF.md。
+6. **回報**：一句話總結升級數量（如「升級 3 到 HANDOFF / 1 到 plan / 砍 2」；未遷移 consumer 寫「1 到 tech-debt」）。**禁止**追加「下一步建議」或「要不要繼續做 X」。Audit 因為靜默不出現在回報；user 想看走 HANDOFF.md。
 
 ## HANDOFF 寫回契約（park / next / work-loop 共用）
 
-依 `follow-up-register.md` § 主動消化，同步驗證並關閉本次完成的 TD，回讀 flow 關卡後移出主清單；HANDOFF 移除完成流水帳，已有 TD 的未完項只保留指針。等待訊號、部分完成及未驗收工作保留具體接手入口。
+依 `follow-up-register.md` § 主動消化，同步驗證並關閉本次完成的工作，回讀 flow 關卡後移出主清單：有 `specs/truth/work-lifecycle.md` → 在承載它的 plan 標 Open work／`flow plan apply-delta`，**NEVER** 改 `docs/tech-debt.md` 的 Status；未遷移 consumer 才關 TD。HANDOFF 移除完成流水帳，已有 plan／TD 的未完項只保留指針。等待訊號、部分完成及未驗收工作保留具體接手入口。
 
 **每一次**往 `HANDOFF.md` 寫待辦之前先過這三條。三條各自綁一個可觀察的下游後果，不是排版偏好。
 
@@ -297,15 +297,15 @@ fi
 
 heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消解 / 已答 / 本輪已清）而 body 還留著 `- [ ]` 的段，**對 rotate 完全免疫**——`handoff-scan.ts` 的 `collectDeadSections()` 依設計跳過帶未勾項的段，所以它不會出現在 `tier-a-dead-section` 裡，也不會被任何 rotate 流程碰到。標題說完成、內容說沒有，兩邊都不動，段只會單調累積。
 
-收段時二選一，**NEVER** 兩者都不做就標結案：把未完項勾掉，或把它搬去 `## In Progress` / TD / `tasks/`。
+收段時二選一，**NEVER** 兩者都不做就標結案：把未完項勾掉，或把它搬去 `## In Progress` / plan（未遷移 consumer 為 TD）/ `tasks/`。
 
 機械防線：`handoff-scan.ts` 的 `tier-a-done-section-stalled`（warn）。它 warn 時**唯一**正確處置是上面那個二選一，NEVER 把 heading 的結案標記拿掉來讓訊號消失。
 
-### 3. 已有 TD 編號的內容只留一行 pointer
+### 3. 已有 plan／TD 編號的內容只留一行 pointer
 
-`- [ ] TD-NNN — <一句話> → docs/tech-debt.md`
+有 `specs/truth/work-lifecycle.md`：`- [ ] <work-id> — <一句話> → specs/plans/<work-id>/plan.md`（舊 TD id 經 `specs/truth/legacy-ids.json` 解析到現行承載者再指過去）。未遷移 consumer：`- [ ] TD-NNN — <一句話> → docs/tech-debt.md`。
 
-正文（重現步驟、已排除方案、驗收 predicate）留在 TD entry。兩邊各寫一份，維護的人要同時改兩處，而只有一處會被讀。
+正文（重現步驟、已排除方案、驗收 predicate）留在 plan／TD entry。兩邊各寫一份，維護的人要同時改兩處，而只有一處會被讀。
 
 ### 4. Load-bearing claim MUST 帶當下實查的 receipt
 
@@ -408,7 +408,8 @@ https://review-gui.<maintainer-domain>/projects/<repo>
 從以下來源蒐集 outstanding 工作。**所有 active item 一律列入盤點並推薦處理** — drift scan 的 `active-section-stale`（14d）是 escalation threshold，不是 grace period；未超過 14d 的 active item **同樣 MUST 列入 outstanding**，不得因「尚未觸發 stale signal」而省略或降低優先序。
 
 - 整理後的 `HANDOFF.md`
-- 未解決的 TD-NNN — 三層來源**全部**取自 §2B.1a 落檔的 `techDebtHygiene.raw`（`jq '.techDebtHygiene.raw' "$SCAN"`）。**NEVER 為了列 outstanding 整讀 `docs/tech-debt.md` 主檔** —— 該檔已在數百 KB 量級（要當前值跑 `wc -c docs/tech-debt.md`），整讀一次就吃掉本 skill 大半預算，而 raw 已含排序所需的全部欄位。需要某一條的細節時用 raw 的 `lineNo` **定點 Read**（`offset` + `limit`），不整檔載入。優先序分三層，**MUST** 依此排序，**NEVER** 平鋪混在一起（這是「堆積然後忘記」的根因）：
+- **有 `specs/truth/work-lifecycle.md`（`techDebtHygiene.raw.retired: true`）**：outstanding 來源是 `raw.plans[]`（等同 `node vendor/scripts/flow/flow.ts plan list`）—— 逐份讀 `specs/plans/<work-id>/plan.md` 的 Open work 與未 applied delta 列入。**NEVER** 為列 outstanding 讀 `docs/tech-debt.md`、NEVER 對其中條目推薦 stamp Last reviewed／補 Resolution／wontfix（凍結舊載體）；下面三層 TD 規則整段不適用
+- 未遷移 consumer 的未解決 TD-NNN — 三層來源**全部**取自 §2B.1a 落檔的 `techDebtHygiene.raw`（`jq '.techDebtHygiene.raw' "$SCAN"`）。**NEVER 為了列 outstanding 整讀 `docs/tech-debt.md` 主檔** —— 該檔已在數百 KB 量級（要當前值跑 `wc -c docs/tech-debt.md`），整讀一次就吃掉本 skill 大半預算，而 raw 已含排序所需的全部欄位。需要某一條的細節時用 raw 的 `lineNo` **定點 Read**（`offset` + `limit`），不整檔載入。優先序分三層，**MUST** 依此排序，**NEVER** 平鋪混在一起（這是「堆積然後忘記」的根因）：
   1. **stale**（`techDebtHygiene.raw.stale[]`，>60d 無 Last reviewed）— 最高優先，`discAge` 越大越前。每條 **MUST** 附三選一（做掉 / wontfix / stamp Last reviewed），但 stamp Last reviewed 列為最後選項，不推薦
   2. **aging**（`techDebtHygiene.raw.aging[]`，>14d 含被 snooze 的）— 第二優先，`discAge` 越大越前。每條 **MUST** 主動追問 blocker：「什麼卡關？能現在推進嗎？」。對 `snoozed: true` 的項目明確指出「已 stamp Last reviewed 但仍未解決 — 不應再延期」
   3. **其他 open TD** — 取 `raw.open[]` 扣掉已在前兩層的 id，按 `discovered` 排序，正常列入 outstanding：
@@ -436,7 +437,7 @@ https://review-gui.<maintainer-domain>/projects/<repo>
 2. **辨識 startable 子集**（最關鍵）：一件工作有卡只代表它**含**至少一個等人的點，**不代表整件無事可做**。**MUST** 由 carrier 內容判斷是否有**不依賴那一題、可現在開工的 work**。有 startable 子集 → **提供 dispatch 選項**（`/wt <slug>` 只做不受阻的部分），**NEVER** 因整件有卡就當 user-bound 擱置。
 3. **端出具體 user 決策**：`ruling` 卡的判斷題原樣端出（逐字、帶選項）；`external-action` 卡寫明**要人到場做什麼**；`exception` 卡寫明核准恢復／改派／abort 各會怎樣。**NEVER** 只寫「等 owner 拍板」這種無法行動的模糊句。純外部依賴（等 A 端 contract / 等別件工作）才真的擱置，但仍 **MUST** 明列在等什麼 signal。
 
-triage 結果併入 §2B.2 outstanding 清單（與 HANDOFF / tech-debt / ROADMAP 來源並列），進 §2B.3 serial/parallel 評估、§2B.4 推薦。
+triage 結果併入 §2B.2 outstanding 清單（與 HANDOFF / plan（未遷移 consumer 為 tech-debt）/ ROADMAP 來源並列），進 §2B.3 serial/parallel 評估、§2B.4 推薦。
 
 **NEVER**：
 - ❌ 讀到卡片卻不讀 carrier 抽 blocker 原因
@@ -474,7 +475,7 @@ Step 3.1 audit **有任一條** wt 判為 `mergeBackSafety: ptb-unsafe` → **MU
 
 **MUST Read [scan-steps.md](scan-steps.md) § 2B.1.8 before proceeding** — 含 staleOpen / aging / closedBloat 三訊號處置表、anti-snooze 規約、SoT 判定。
 
-摘要：從 §2B.1a 同一次 handoff-scan 輸出讀 `techDebtHygiene` 段 → stale 列 outstanding 最高優先 → aging 列第二優先並追問 blocker → closedBloat warn 時跑 `rotate-closed-bloat.ts`（**NEVER** 詢問操作）。stdout `retired` = clade home／已遷移 repo，**不要**寫 closed archive 或改 `docs/tech-debt.md`。park 不執行。
+摘要：從 §2B.1a 同一次 handoff-scan 輸出讀 `techDebtHygiene` 段。`raw.retired: true`（check `tech-debt-hygiene-retired` n/a）= 已遷移 plan/truth repo：本 sub-step **整段跳過**，outstanding 改走 §2B.2 的 plan 來源，**NEVER** 寫 `docs/tech-debt.md` 或 `docs/archives/tech-debt-*`。未遷移 consumer：stale 列 outstanding 最高優先 → aging 列第二優先並追問 blocker → closedBloat warn 時跑 `rotate-closed-bloat.ts`（**NEVER** 詢問操作）。stdout `retired` = clade home／已遷移 repo，**不要**寫 closed archive 或改 `docs/tech-debt.md`。park 不執行。
 
 ### 2B.1.9 Consumer-local audit scan（hard rule）
 
@@ -605,7 +606,7 @@ Retained: N
 ## Output contract
 
 - `relay` / `fanout`：成功 = durable brief 已存在 + helper 回傳 `relay_dispatched` + （fanout）`relayed_dispatch_ids` 已逐筆比對通過 + runtime cleanup 已盤點 + parent worktree lifecycle 已 `removed`／具名 `retained`；完成訊息首行逐字包含「目前這裡收工」，之後不再工作或輪詢。`relay_refused`／`transport_error` 保留 pane 且不得假裝完成（見 [dispatch-common.md](dispatch-common.md) § 5）
-- park：成功 = **進入條件已滿足**（user 顯式打 `park`，或裸 `/handoff` 已取得 user 允許）+ HANDOFF.md / tech-debt / ROADMAP 有對應寫入 + tasks 檔已清 + Step 3 audit 已靜默寫入 HANDOFF.md `## Worktree & Stash Audit` 段；訊息只含升級摘要（不含 audit）。**未取得允許就寫入 = 失敗**，即使檔案內容正確
+- park：成功 = **進入條件已滿足**（user 顯式打 `park`，或裸 `/handoff` 已取得 user 允許）+ HANDOFF.md / plan（未遷移 consumer 為 tech-debt）/ ROADMAP 有對應寫入 + tasks 檔已清 + Step 3 audit 已靜默寫入 HANDOFF.md `## Worktree & Stash Audit` 段；訊息只含升級摘要（不含 audit）。**未取得允許就寫入 = 失敗**，即使檔案內容正確
 - next：成功 = 2B.0 pitfall sweep 已執行（dispatch `/oops` 或宣告「無 missed lesson」）+ `rotate-handoff-done.ts` 已跑（`noop` / `retired` / 100% 清掉可 rotate 的紀錄，不詢問）+ HANDOFF.md 已整理 + 2B.1.5 → Step 3 audit 已寫入並在訊息摘要一行 + 2B.1.7 `flow gates` 讀到的 `external-action` / `exception` / `ruling` 卡已走 2B.2.5 主動 triage（抽 blocker 原因 + 辨識 startable 子集 + 端出具體 user 決策，NEVER silently drop）+ 2B.1.8 tech-debt hygiene 已讀（staleOpen 排進 outstanding 最高優先 + aging 排第二優先並主動追問 blocker + closedBloat warn 時已跑 `rotate-closed-bloat.ts`，`retired` 算成功） + 2B.1.9 consumer-local audit 已跑（`.claude/rules/local/handoff-audits.md` 存在時逐條跑並分流 exit 1 / exit ≥2；不存在則明講跳過）+ 盤點訊息 + 詢問操作已發出讓 user 選 + user 選定後 2B.5 dispatch 已完成（直接 dispatch 或內呼 `/wt <slug>: /<next-skill> <change-name>`）
 - 失敗 / blocked：明確說明卡點，不假裝完成
 
