@@ -43,7 +43,7 @@ skill 由 consumer manifest 的 `modules` 決定裝哪些（canonical `.clade/ma
 | 規格落地〔aixbdd〕 | `/dsl-refine` | 把句型寫進 `specs/truth/features/**` 與 `dsl.md` |
 | 拆任務〔aixbdd〕 | `/tasks` | 產 plan package 的 `tasks.md`；開工前 `flow open <slug> --origin tasks:<path>` |
 | 實作〔aixbdd〕 | `/implement`（`[BDD-GREEN]` 委派 `/bdd`） | 依 `tasks.md` 逐 phase 落 code 與測試 |
-| 人工檢查 | `pnpm review:ui`（GUI）；批次前先 `/review scan` 看哪些 ready | UI / 資料類 manual review |
+| 人工檢查 | `/review scan`（＝`flow gates --repo-only`）看哪些卡等人判；`pnpm review:ui` 開本 repo 的控制面板專案頁，人判在「待我」落檔 | UI / 資料類 manual review |
 | 提交 | `/commit` | 依功能分組走品質閘門提交（所有 commit 的唯一入口） |
 
 不確定專案當前該走哪一站：先讀 `specs/plans/` 最新的 plan package 與它的 `tasks.md`，再按使用者目標接續。沒宣告 aixbdd 的 repo 整條主流程不適用——那裡的生命週期是「待辦來源 → `tasks/<date>-<slug>.md` → `/wt` → `/commit`」。

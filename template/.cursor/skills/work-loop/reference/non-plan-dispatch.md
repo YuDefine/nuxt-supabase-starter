@@ -13,7 +13,7 @@
    `## 你接下來要做的事` / `## Next Steps` / `## Outstanding` / `## Follow-up` / `## In Progress`
    - 每個 heading 下的 `- [ ]` 未勾項 = 一個 candidate；已勾 `- [x]` 跳過
    - 純文字段落（無 checkbox）視為單一 candidate
-2. **`docs/tech-debt.md`** —— 從 scan 的 `techDebtHygiene.raw` 取，**NEVER 整讀主檔**
+2. **`docs/tech-debt.md`** —— 有 `specs/truth/work-lifecycle.md`（scan `techDebtHygiene.raw.retired: true`）時本來源**退場**：`raw.open[]` 等欄位刻意為空，不是「沒有債」—— 工作改由 `specs/plans/<work-id>/plan.md` 的 Open work 承載（`raw.plans[]`），**NEVER** 回頭整讀或改寫凍結的 `docs/tech-debt.md`。未遷移 consumer：從 scan 的 `techDebtHygiene.raw` 取，**NEVER 整讀主檔**
 3. **repo 根目錄 `ROADMAP.md`**（存在時）：
    - `## Next Moves` 下的 `###` 子段（每個子段 = 一個 candidate）
 

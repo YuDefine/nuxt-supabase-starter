@@ -76,6 +76,8 @@ Charles 2026-08-05 逐字：「等我拍板的那些問題 其實你都能決策
 
 ## (a2) Open TD 不是 waiting-user
 
+（未遷移 consumer 才適用；有 `specs/truth/work-lifecycle.md` 時舊主檔已凍結，對應工作在 plan 的 Open work。）
+
 開場清算的輸入不只 `awaiting[]`。`docs/tech-debt.md` 裡 open class、未 parked 的條目**預設是債**，
 不是「缺 `### 自驗` 所以等 Charles」。2026-08-20 <consumer-b> 實測 158 條 open 只有 2 條有那個 heading，
 runner 於是在還有 161 條債時寫 `no-admissible-work`。
