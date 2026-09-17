@@ -18,7 +18,7 @@
 # 的 runGit 統一注入）。propagate 是被授權的寫入者，而且 sanitize 後的內容本來就 ≠ 投影內容。
 # 這**不是** `--no-verify`（那條全線禁止）—— hook 照跑，只有這一條 check 認得該身分。
 #
-# 缺 node / 找不到 clade repo / 不是 consumer（無 .claude/hub.json）一律 soft-skip exit 0：
+# 缺 node / 找不到 clade repo / 不是 consumer（.clade/manifest.json 與 legacy .claude/hub.json 皆無）一律 soft-skip exit 0：
 # 安全網不該把人鎖在門外（同 scripts/lib/pre-commit-governance.ts 的 Layer 3 guard）。
 #
 # 由 ~/clade vendor/scripts/pre-commit/ 散播，請勿直接編輯 consumer 副本。
@@ -33,7 +33,7 @@ command -v node >/dev/null 2>&1 || exit 0
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 cd "$PROJECT_ROOT"
 
-[[ -f .claude/hub.json ]] || exit 0
+[[ -f .clade/manifest.json || -f .claude/hub.json ]] || exit 0
 
 # clade root 三選一，鏡射 vendor/git-pre-commit.sh 的 find_clade_root()
 CLADE_ROOT="${CLADE_HOME:-}"
