@@ -406,16 +406,23 @@ function tarSize(root: string, inventory: SourceInventory): number {
   return size
 }
 
+// The identity view of an inventory entry: what an offline restore must
+// reproduce. `allocatedBytes` is st_blocks — filesystem-specific allocation
+// slack that is evidence for capacity accounting, not identity. A directory
+// `mtimeMs` is a topology clock: any child create/delete bumps it (a lockfile
+// lifecycle inside a shared Git common dir is enough) without changing a
+// preserved byte, and a live shared dir legitimately drifts inside the
+// capture window. File `mtimeMs` stays: a rewritten file is real drift the
+// archive must not hide.
+function inventoryIdentityEntry(entry: InventoryEntry): Record<string, unknown> {
+  const identity: Record<string, unknown> = { ...entry }
+  delete identity.allocatedBytes
+  if (identity.type === 'directory') delete identity.mtimeMs
+  return identity
+}
+
 function inventoryDigest(entries: InventoryEntry[]): string {
-  return sha256Json(
-    entries.map((entry) => {
-      const digestEntry: Record<string, unknown> = { ...entry }
-      // st_blocks is filesystem-specific; it is evidence for capacity accounting,
-      // not part of content/metadata identity compared after offline restore.
-      delete digestEntry.allocatedBytes
-      return digestEntry
-    }),
-  )
+  return sha256Json(entries.map(inventoryIdentityEntry))
 }
 
 function modeType(mode: number): InventoryEntryType {
@@ -1850,9 +1857,11 @@ function restoreAndCompare(
     return
   }
   const expectedByPath = new Map(
-    expected.entries.map((entry) => [entry.path, JSON.stringify(entry)]),
+    expected.entries.map((entry) => [entry.path, JSON.stringify(inventoryIdentityEntry(entry))]),
   )
-  const actualByPath = new Map(actual.entries.map((entry) => [entry.path, JSON.stringify(entry)]))
+  const actualByPath = new Map(
+    actual.entries.map((entry) => [entry.path, JSON.stringify(inventoryIdentityEntry(entry))]),
+  )
   const mismatch = [...new Set([...expectedByPath.keys(), ...actualByPath.keys()])]
     .filter((path) => expectedByPath.get(path) !== actualByPath.get(path))
     .slice(0, 3)
