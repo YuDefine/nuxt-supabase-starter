@@ -1,12 +1,10 @@
 ---
-description: Worktree 升級路徑 / Stop hook 死鎖 / spectra DB 跨 wt 共享 / artifact git / phase-tick commit / main 端 tasks.md 打勾方向判定 / review-gui 坑 / WORKTREE-BRIEF（worktree-default §7–§12 detail）
+description: Worktree 升級路徑 / Stop hook 死鎖 / spectra DB 跨 wt 共享 / artifact git / phase-tick commit / main 端 tasks.md 打勾方向判定 / review-gui 坑（已退役）/ WORKTREE-BRIEF（worktree-default §7–§12 detail）
 paths:
   - 'openspec/changes/**'
   - 'vendor/scripts/wt-helper.ts'
   - 'vendor/scripts/stash-reconcile.ts'
-  - 'vendor/scripts/review-gui.ts'
   - 'scripts/wt-helper.ts'
-  - 'scripts/review-gui.ts'
 ---
 <!-- Clade native rule; source: rules/core/worktree-default.troubleshooting.md; edit canonical source -->
 
@@ -65,9 +63,7 @@ history 回 corrupt／unsupported／truncated 時，先恢復可讀原件並核�
 
 ## §10 review-gui 與 worktree 互動的已知坑
 
-`vendor/scripts/review-gui.ts` 從多 worktree aggregate `openspec/changes/`，3 條已記坑：home list silent skip main change（[[pitfall-review-gui-collision-typo-and-worktree-startup]]）、source aggregation collision（[[pitfall-review-gui-source-aggregation-collision]]）、apply-pending batch button 按前 **MUST** spot check 每張 change impl 完成度（[[pitfall-review-gui-apply-pending-mid-apply-changes]]）。
-
-改 review-gui.ts 後 consumer 端 `pnpm review:ui:kill && pnpm review:ui` 重啟才吃到新版。
+**已退役（2026-09-17，control-panel redesign Phase 5）**。舊 `vendor/scripts/review-gui.ts` 從多 worktree aggregate `openspec/changes/` 的三條坑（home list silent skip、source aggregation collision、apply-pending batch button）隨該聚合器一起消失；面板改讀 spine 的 read model，人工 gate 由 `flow gates` 判定，不再掃 worktree 的 change 目錄。歷史脈絡留在 [[pitfall-review-gui-collision-typo-and-worktree-startup]]、[[pitfall-review-gui-source-aggregation-collision]]、[[pitfall-review-gui-apply-pending-mid-apply-changes]]。
 
 ## §11 WORKTREE-BRIEF.md — 持久化任務交接上下文
 

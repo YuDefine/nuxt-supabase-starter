@@ -557,7 +557,7 @@ Verify Mode **MUST NOT** 執行 mutation、form fill、click sequence、multi-ro
    - final-state screenshot 路徑
    - PASS / FAIL / UNCERTAIN 標記
 2. 更新 `screenshots/<env>/<change-name>/progress.json`（見下方 contract）。
-3. 跑 `node ${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/audit-screenshot-quality.ts <change-name> --fail-on-issues`
+3. 自查 § Evidence Manifest 每張圖欄位齊全、§ 拍前 Emptiness Preflight 沒有空白／載入中截圖混進交付
    - 不過 → 整理 `_exploration/`、補拍 final-state，retry；仍不過 → 報告主線
 4. 回傳給主 session 一個結構化清單（每 item 的 result + screenshot + dom observation），主 session 拿來跑 `evidence-store.mjs --write` 寫 sidecar、再把印出的短 marker 貼進行內。
 
@@ -846,15 +846,9 @@ export default defineEventHandler(async (event) => {
 
 ### 完成前自查
 
-完成 `review.md` 後 **MUST** 執行 screenshot quality audit：
+完成 `review.md` 後 **MUST** 逐列核對 § 證據對應表：缺欄的圖是 NON-EVIDENCE，空白／載入中的圖依 § 拍前 Emptiness Preflight 重拍。舊的 `audit-screenshot-quality.ts` 隨 Spectra annotation 層退役（2026-09-17），**沒有機械稽核替你擋**。
 
-```bash
-node ${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/audit-screenshot-quality.ts <change-name> --fail-on-issues
-```
-
-若有 warning / critical，先整理 `_exploration/`、補拍 final-state、或回報主 session 補 `@no-screenshot`，不要把問題留給使用者在 `pnpm review` 裡猜。
-
-> Audit 使用上述 clade 中央倉的絕對路徑。
+若有缺口，先整理 `_exploration/`、補拍 final-state、或回報主 session 補 `@no-screenshot`，不要把問題留給人在面板裡猜。
 
 ## 回傳給主 session
 

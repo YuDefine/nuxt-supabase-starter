@@ -284,23 +284,11 @@ node -e "import('~/offline/clade/vendor/snippets/dev-auth/lib/detect-dev-login-r
 
 **身分字面 MUST 與 fixture canonical 命名逐字相同**：employee_no 是 `E2E-<ROLE 全大寫>`、email 是 `e2e-<role>@dev.local`，其中 `<role>` 一律 snake_case（`trac_payroll`，**不是** `trac-payroll`）。寫成連字號時 GUI 仍解得出 role，但**照字面到 DB / seed 找會找不到**。role 本身也 MUST 是該 consumer dev-login route 認得的 role——寫一個不存在的 role（如 `E2E-T3-EMPLOYEE`）會讓 dev-login 回 400。GUI 判定合法 role 的來源有兩條：route 檔頂端的 `@dev-login-roles: a, b, c` 宣告，以及同檔 `DEV_LOGIN_FIXTURE_UUIDS` 的 key 集合。只有一條在就用那條；**兩條都在則 MUST 一致**（宣告是註解、會過期，不讓它蓋過同檔可執行的 key 集合），不一致時 GUI 直接停用 role 驗證並報 `role-list-unreadable`。role SoT 不在 route 檔內（放 util、跨 import）的 consumer **MUST** 寫宣告，否則 GUI 解不出清單、role 驗證整個關掉。
 
-機械稽核：`node scripts/audit-manual-executability.ts`（clade 端，`pnpm audit:manual` 批次含它）。它把每個 item 的入口宣稱對照 consumer 實際事實解析，回報 `MISSING-LOGIN-URL` / `ROLE-SPELLING` / `UNKNOWN-ROLE` / `NO-DEV-LOGIN-ROUTE` / `URL-UNRESOLVABLE`。**規約只能要求「要寫」，驗不了「寫的東西存在」**——dangling reference 靠這支 script 擋。
+**沒有機械稽核替你擋 dangling reference**：舊的入口稽核（`audit-manual-executability`）與結構化 entry 寫入器隨 Spectra annotation 層退役（2026-09-17）。**規約只能要求「要寫」，驗不了「寫的東西存在」**——所以寫 item 的人 **MUST** 當場自己跑一次上面那條 `resolveDevLoginContract` 與 route 檔 grep，確認 role 與檢驗起點真的存在，**NEVER** 期待事後有工具幫你抓。
 
-### 入口的 SoT 是結構化 entry，散文只描述「要判斷什麼」
+### 入口寫在 item 散文，而且要逐字可執行
 
-散文裡的入口是**推導來源**，不是事實來源。GUI 用 regex 從中文句子挖出身分與 URL，寫法變體（`E2E-TRAC-PAYROLL` vs `E2E-TRAC_PAYROLL`、具名員工 vs role fixture、帶不帶 `&email=`）永遠追不完，而每個追不到的變體都是一次驗收者卡在畫面前面。
-
-正規路徑是把入口寫成**結構化 entry**，落在既有的 evidence sidecar（`.spectra/evidence/<work-slug>.jsonl`，`kind: "entry"`）：
-
-```bash
-node ~/offline/clade/scripts/manual-entry.ts --repo <consumer> --change <change> \
-  --item '#4' --url 'https://<host>/my/clock/amendment' \
-  --login-as employee --login-email e2e-t3-employee@dev.local
-```
-
-既有 change 一次遷移：`--migrate`（把散文推導的結果落盤，`--dry-run` 先看）。
-
-**有 entry 的 item，GUI 直接讀欄位、完全不解析散文**；沒有 entry 的仍走散文推導（行為不變），但稽核會報 `PROSE-ONLY-ENTRY`。散文照樣要寫得人看得懂——它是給驗收者讀的，只是不再是機器的事實來源。
+散文是驗收者讀的，也是面板組「開啟畫面」連結時唯一的來源——身分（`E2E-<ROLE>` / `e2e-<role>@dev.local`）與完整檢驗起點 **MUST** 逐字寫在 item 內，規則同上一節。**NEVER** 另建一份 sidecar entry 當事實來源：那條寫入路徑已退役，沒有讀取者。
 
 ### 實體裝置 / 規格外輸入的替代路徑
 
@@ -412,4 +400,4 @@ GUI 端在診斷 console 寫同樣訊息。archive 後保留在 `docs/manual-rev
 
 ## 截圖檔名與 item id 配對（hard rule）
 
-`pnpm review:ui` 設計成自動把截圖配到正確的 item，使用者不需要手動挑選。檔名格式見 [[screenshot-strategy]]（canonical SoT）。
+截圖檔名首段 token MUST 等於 item id，人才不需要手動挑選。檔名格式見 [[screenshot-strategy]]（canonical SoT）。

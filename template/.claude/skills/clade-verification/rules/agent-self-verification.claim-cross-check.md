@@ -66,5 +66,5 @@ paths:
 
 `verify-evidence-deferred-without-self-collect-attempt` — TD-161 Resolution 留作 first incident 後再評估，script 未建。
 
-`audit-evidence-completeness`（MUST 15 的機械層）：`vendor/scripts/audit-evidence-completeness.ts`，遵守 [[checker-contract]] § REQUIRED output contract 與 § Exit code 契約——`0` = 全齊或無已勾 item、`1` = 有缺口、`2` = repo / change / tasks.md 讀不到。它只核對**已勾** item；未勾的計入 `skipped`，不算缺口。
+MUST 15 的機械層：`flow plan check-close <work_id>`（`vendor/scripts/flow/plan-gates.ts::checkAcceptanceClose`）——`0` = 可結案、`1` = 有 finding（每條帶穩定 `code`：`acceptance-verdict-missing`／`-not-passed`／`-stale`、`acceptance-human-receipt-missing`／`-not-pass`／`-stale`）。它逐條核對 plan 的 acceptance 場景有沒有**新鮮**判決，不看 checkbox。舊的 `audit-evidence-completeness.ts` 核對 Spectra `tasks.md` 已勾 item，隨該層退役（2026-09-17）。
 

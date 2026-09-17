@@ -14,14 +14,14 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 
 # 人工檢查（Manual Review）
 
-> **本檔是 path-scoped 主檔**（2026-07-05 起 path-scoped，2026-09-07 改綁 `tasks/**` / `specs/plans/**` / `screenshots/**`——manual-review 內容只在有進行中的 work item 時才用得到；原 always-load 佔 30KB 為預算最大單檔），列核心 invariant、Item Kind Marker 一覽、claude-analyzed annotation、@evidence-via-marker、Parent State Derivation、Post-Edit Gate、禁止事項。
+> **本檔是 path-scoped 主檔**（2026-07-05 起 path-scoped，2026-09-07 改綁 `tasks/**` / `specs/plans/**` / `screenshots/**`——manual-review 內容只在有進行中的 work item 時才用得到；原 always-load 佔 30KB 為預算最大單檔），列核心 invariant、Item Kind Marker 一覽、要人接手的結論怎麼開卡、Parent State Derivation、Post-Edit Gate、禁止事項。
 > 詳細規約依場景 path-scoped 載入：
 >
 > | Sub-file | Path-scoped 觸發 | 內容 |
 > | --- | --- | --- |
 > | [[manual-review.backend]] | `server/**`、`test/**`、`e2e/**`、`supabase/**` | Backend-only change 規約 + 標準流程 verify channels + review:ui flow |
 > | [[manual-review.data-readiness]] | `tasks/**`、`specs/plans/**` | Pre-Review Data Readiness + step actionability + `@no-manual-review-check` marker + 截圖檔名配對 |
-> | [[manual-review.evidence]] | `tasks/**`、`specs/plans/**`、`docs/manual-review-archive.md` | 給規格寫作者 + Kind 分類指引 + 反例 + `@no-screenshot` marker + annotation / marker 細節（claude-analyzed、awaiting-user-decision、@evidence-via-manual-review、@apply-blocked、ADR、真相層責任分工） |
+> | [[manual-review.evidence]] | `tasks/**`、`specs/plans/**`、`docs/manual-review-archive.md` | 給規格寫作者 + Kind 分類指引 + 反例 + `@no-screenshot` marker + annotation / marker 細節（legacy annotation 退役對照、ADR、真相層責任分工） |
 
 ## 這套機制在解什麼問題（先讀，決定你該不該用它）
 
@@ -57,17 +57,17 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 
 **`[discuss]` items 例外**：下方 § `[discuss]` walkthrough 中，主線 session owner 主動準備 evidence、向使用者展示後取得明確 OK，可由 session owner 勾選 `[x]` + 插入 `(claude-discussed: <ISO-8601-timestamp>)` annotation。詳見下方「Item Kind Marker」與「標準流程」章節。
 
-**`[verify:e2e]` / `[verify:api]` automatic channel 例外**：`/implement` 收尾的 Verify Channel Pass 寫入對應 `(verified-e2e/api: ...)` annotation 後，review-gui auto-check helper 可自動勾 `[x]`，不需使用者在 GUI 再確認；`[verify:ui]` 仍需使用者在 GUI 確認 visual evidence。
+**`[verify:e2e]` / `[verify:api]` automatic channel 例外**：`/implement` 收尾的 Verify Channel Pass 寫入對應 `(verified-e2e/api: ...)` annotation 後，session owner 可直接勾 `[x]`，不需使用者再確認；`[verify:ui]` 仍需使用者判 visual evidence（`ui-judgement` 卡，`flow receipt` 落判定）。
 
-**前提不成立直接 skip 例外**：item 前提**可由程式碼 / 架構事實驗證為不成立**時（例：route 不存在、column 被 migration 移除、feature flag 永久關閉），session owner **MAY** 直接標 `[x]` + `（skip: <一行事實原因>）`，不走 `(awaiting-user-decision:)` 也不走 review-gui 迴圈。判定條件（**全部**成立才適用）：
+**前提不成立直接 skip 例外**：item 前提**可由程式碼 / 架構事實驗證為不成立**時（例：route 不存在、column 被 migration 移除、feature flag 永久關閉），session owner **MAY** 直接標 `[x]` + `（skip: <一行事實原因>）`，不開 `flow ask` 卡也不走人工驗收迴圈。判定條件（**全部**成立才適用）：
 
 - 前提不成立是**可程式碼驗證的事實**（grep auth middleware / route config / schema / feature flag），不是主觀商業判斷
 - session owner 已實際跑驗證（grep / read / curl）確認事實成立
 - annotation 內寫明事實根據（哪個檔 / 哪行 / 什麼機制）
 
-**不適用**：「要不要改 auth 讓 staff 進」「要不要加這功能」等涉及商業取捨的判斷 — 仍走 `(awaiting-user-decision:)` 或 target-native question surface。
+**不適用**：「要不要改 auth 讓 staff 進」「要不要加這功能」等涉及商業取捨的判斷 — 仍走 `flow ask`（`ruling` 卡）或 target-native question surface。
 
-**`(claude-analyzed: route=E)` annotation 不勾 checkbox**：review-gui「接手分析」prompt 路由結論為 **(E) false positive / 等 user 重新評估** 時，session owner 可在帶 `（issue:）` 的 item 同行寫入 `(claude-analyzed: <ISO> route=E[ note=<...>])` annotation（語意：「已分析、ball in user's court」），但 **NEVER** 翻 checkbox。詳見下方「`(claude-analyzed: ...)` annotation」段。
+**route E 結論開卡、不勾 checkbox**：triage 一個 `（issue:）` 的路由結論為 **(E) false positive / 等 user 重新評估** 時，session owner **MUST** 用 `flow ask` 開卡交給人（語意：「已分析、球在人手上」），但 **NEVER** 翻 checkbox。詳見下方「要人接手的結論：開卡，不寫 annotation」段。
 
 ## 人工檢查時機（Hard rule）
 
@@ -103,13 +103,13 @@ worktree merge-back → 單一 /commit（一次包 fix + 規格產出 + 實作 c
 - **跨 session handoff**：user 主動切到別 session 處理實作時，本 session 視為 handoff 完成；新 session 接手後仍須遵守本節
 - **獨立外部 trigger 撞進來**（與本輪 review:ui issue 無關的緊急 bug fix）：可在中段獨立 commit，但**不**觸發 review-gui 評估 round
 
-### Auto-triage 前置條件（per [[review-gui-surface]] MUST 9）
+### Auto-triage 前置條件（per [[review-gui-surface]] MUST 8）
 
-**NEVER** 在 `bucket ≠ ready` 時引導 user 到 review-gui。引導前 **MUST** auto-triage 所有 pending leaf items：`（fix-requested）` → session owner 修 code；evidence missing → session owner self-collect；`（issue:）` 無分析 → session owner triage。只有 session owner 可處理的項目全部推進完畢、剩下純 `[review:ui]` user 驗收項、`bucket=ready` 時，才引導 user。
+**NEVER** 在 `flow gates --repo-only --require-empty` 回 exit 3 以外時引導 user 到面板。引導前 **MUST** auto-triage 所有 pending leaf items：`（fix-requested）` → session owner 修 code；evidence missing → session owner self-collect；`（issue:）` 無分析 → session owner triage。只有 session owner 可處理的項目全部推進完畢、`flow gates` 仍列出卡片時，才引導 user，並逐張列 family。
 
 ### 禁止事項
 
-- **NEVER** 在 `bucket ≠ ready` 時引導 user 到 review-gui（per [[review-gui-surface]] MUST 9）— 含 `/commit` 0-MR block、交付人工檢查的 handoff、session 結尾回報等所有場景
+- **NEVER** 在 `flow gates` 沒有列出卡片時引導 user 到面板（per [[review-gui-surface]] MUST 8）— 含 `/commit` 0-MR block、交付人工檢查的 handoff、session 結尾回報等所有場景
 - `/commit` 0-MR 對一件工作判 BLOCK 時，withheld 的只有該工作 carrier 的 pathspec 交集（`/commit` gates.md § 0-MR 判定粒度）。其他 group 放行是 commit 粒度的事，**NEVER** 讀成該工作的人工檢查已完成——auto-triage 對它一條沒少
 - **NEVER** 在補完規格、實作還沒跑時引導 user 回 review-gui 評估 OK/Issue/Skip
 - **NEVER** 在 (C) 路徑中段（補規格與實作之間、或 fix 與補規格之間）跑 `/commit`
@@ -201,7 +201,7 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 ### Canonical line format
 
 ```
-- [ ] #N [<kind>] <description> [(verified-<channel>: ...)]... [(claude-analyzed: ...)] [@followup[TD-NNN]] [@no-screenshot]
+- [ ] #N [<kind>] <description> [(verified-<channel>: ...)]... [@followup[TD-NNN]] [@no-screenshot]
 ```
 
 - Marker **MUST** 是 `#N` / `#N.M` 後第一個 token，與 id 之間僅一個空白。
@@ -217,41 +217,19 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 
 完整 flag 對照表、parser 對短 marker 的接受條件、以及「既有行內 payload annotation 一律不動」的理由：見 [[review-gui-surface]] § Annotation Format Contract § Evidence 寫入路徑。
 
-### `(claude-analyzed: ...)` annotation（session-owner-writable）
+### 要人接手的結論：開卡，不寫 annotation（hard rule）
 
-當 review-gui 「🤖 等 session owner 接手」群 → 「接手分析」prompt 走完後，session owner 路由結論為 **(E) false positive / item 應改回 OK 或翻 [x] / 需 user 重新評估** 時，**MAY** 在帶 `（issue:）` 的 item 同行寫入此 annotation 作為 evidence trail，告訴 GUI「我已分析過、ball in user's court」。
+session owner 判定某 pending item 的球在人手上時，**MUST** 開一張 gate 卡，**NEVER** 只在 tasks 檔寫行內 annotation——行內 annotation 沒有任何讀取者會把它變成卡片，人永遠看不到。
 
-#### Schema / session owner 可寫條件（hard rule）
+| 情境 | 指令 | 出現在 `flow gates` 的 family |
+| --- | --- | --- |
+| triage `（issue:）` 結論為 route **(E)**（false positive／修法已落地，等人重評） | `flow ask --question '<一句判斷題>' --option ... --work-id <W> --carrier <tasks 檔>` | `ruling` |
+| 純商業決策／production 授權，packet 已備妥 | 同上，`--question-page` 可掛決策頁 | `ruling` |
+| implementation 卡**外部 blocker**（等人到場、等帳號、等別家交付） | `flow ask --category external ...`；dispatched child 走 `--complete blocked` | `external-action` |
 
-```text
-(claude-analyzed: <ISO-8601>)          ← 行內；route / note 走 sidecar --route / --note
-```
+**MUST NOT** 翻 checkbox、**MUST NOT** strip 既有 `（issue:）`、**MUST NOT** 在 (A)–(D) 結論時開卡（那些情境球仍在 session owner）、**MUST NOT** 用開卡規避其實 actionable 的 item——可走 (A)/(B)/(C) 路徑就 **MUST** 走。
 
-核心可寫條件：**MUST** 路由 **(E)** 結論 + item 已帶 `（issue:）` 時才寫；**MUST NOT** 翻 checkbox、**MUST NOT** strip 既有 `（issue:）`、**MUST NOT** 在路由 (A)–(D) 結論時寫（那些情境 user 仍需要 session owner 動作）。
-
-#### 欄位細節 / Strip semantics / 與 `(claude-discussed:)` 的差異 / Home page 影響 / 範例
-
-見 [[manual-review.evidence]] § `(claude-analyzed:)` / `(awaiting-user-decision:)` Schema 欄位與可寫條件、§ `(claude-analyzed: ...)` annotation 細節。
-
-### `(awaiting-user-decision: ...)` annotation（session-owner-writable）
-
-當 session owner 判定某 pending item 是**純 user 商業決策**（production 授權 / 商業判斷），自己推不動、已準備好 decision packet 呈 user 時，**MAY** 在該 item 同行寫入此 annotation 把球交還 user。與 `(claude-analyzed:)` 對稱，但語意是「等 user 商業拍板」而非「等 user 重新評估 UI」。寫入後 change 落 **`awaitingUserDecision`** bucket（review-gui home page「🧑‍⚖️ 等 user 決策」群），master button 排除、不再抓回硬做。
-
-#### Schema / session owner 可寫條件（hard rule）
-
-```text
-(awaiting-user-decision: <ISO-8601>)   ← 行內；packet 走 sidecar --packet
-```
-
-核心可寫條件：**MUST** 在判定該 item 是純 user 商業決策、且已準備 decision packet 後才寫（**不**要求 item 已帶 `（issue:）`）；**MUST NOT** 翻 checkbox；**MUST NOT** 用此 annotation 規避該 item 其實 actionable 的情況 — 可走 (A)/(B)/(C) 路徑就 **MUST** 走。
-
-#### 欄位細節 / Strip semantics / CLI 寫入入口 / Home page 影響
-
-見 [[manual-review.evidence]] § `(claude-analyzed:)` / `(awaiting-user-decision:)` Schema 欄位與可寫條件、§ `(awaiting-user-decision: ...)` annotation 細節（含 `mark-claude-analyzed.ts` CLI helper）。
-
-### `@apply-blocked[<reason>]` marker（impl 卡外部 blocker）
-
-當 change 的 implementation 卡在**外部 blocker**（等決策 / 等別 change / 缺資源），session owner 推不動、不該被 master button 反覆抓回硬做時，在 **tasks.md 任意處獨立一行**加 `@apply-blocked[<reason>]`（檔層級 marker，非 `## 人工檢查` item 行）。bearing change 分到 `applyBlocked` bucket、master button 排除；解 blocker 後 **MUST** 移除 marker 讓 change 回 `applyInProgress`。bucket 條件、`<reason>` 寫法、HANDOFF paper-trail SHOULD：見 [[manual-review.evidence]] § `@apply-blocked[<reason>]` marker 細節。
+**legacy 退役**：`(claude-analyzed:)`、`(awaiting-user-decision:)`、`@apply-blocked[<reason>]` 是已退役 Spectra 讀法的 bucket 翻轉器。既有行內記錄不必清，**NEVER** 新寫。對照見 [[manual-review.evidence]] § Legacy annotation 退役對照。
 
 ### Default Kind Derivation Rule（fallback）
 
@@ -268,7 +246,7 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 
 ### 與 `@no-screenshot` / `@followup[TD-NNN]` 共存 ordering
 
-`[<kind>]` 永遠在最前（緊接 `#N`），`@no-screenshot` 永遠在最後；`@followup[TD-NNN]` 若存在須夾在 description 與 `@no-screenshot` 之間（見上方 Canonical line format）。所有寫回 annotation（`（issue:）` / `（skip）` / `（note:）` / `（finding:）` 與 `(claude-discussed:)` / `(claude-analyzed:)` / `(awaiting-user-decision:)` / `(verified-*:)`）**MUST** 插在 description 後、所有 trailing markers 前。`（finding: ...）` 與其他 action annotation 正交（可共存於同一行），其餘 action annotation 之間仍互斥；`(claude-analyzed:)` 與 `（issue:）` 必須共存。
+`[<kind>]` 永遠在最前（緊接 `#N`），`@no-screenshot` 永遠在最後；`@followup[TD-NNN]` 若存在須夾在 description 與 `@no-screenshot` 之間（見上方 Canonical line format）。所有寫回 annotation（`（issue:）` / `（skip）` / `（note:）` / `（finding:）` 與 `(claude-discussed:)` / `(verified-*:)`）**MUST** 插在 description 後、所有 trailing markers 前。`（finding: ...）` 與其他 action annotation 正交（可共存於同一行），其餘 action annotation 之間仍互斥。
 
 ### Kind 分類指引（摘要）
 
@@ -288,23 +266,13 @@ Marker schema、canonical ordering（與 `@followup` / `@no-manual-review-check`
 
 Marker schema、`<reason>` 必填規約、canonical ordering、audit trail、跟 hook regex 的關係：詳見 [[manual-review.data-readiness]] § `@no-manual-review-check` Marker。
 
-## `@evidence-via-manual-review` Marker（hard rule）
+## `@evidence-via-manual-review` Marker（已退役）
 
-針對「impl 已做、verification evidence 必須在 review-gui `## 人工檢查` 區蒐集」的 phase task，加 `@evidence-via-manual-review` marker 把該 task 從 review-gui 90% implementation-progress threshold 計數中排除。**這條 marker 用在 phase task line（regex `^- \[([ x])\] N.M `），不用在 `## 人工檢查` `#N` / `#N.M` items**。
-
-### Schema（核心）
-
-- Marker 形式：`@evidence-via-manual-review`，**MUST** 是 trailing token（位於 phase task line 行尾）；沒有 brackets / reason 欄位
-- 同一行 **MUST NOT** 出現多個 marker；出現在 description 中間視為 plain text，**MUST NOT** 被解析成 marker
-- Bearing task 的 `[ ]` / `[x]` 由 author 決定，**不**受 review-gui 強制；archive gate 仍依 `## 人工檢查` items 完成度獨立判斷
-
-### 解決什麼問題 / 何時該用、不該用 / Review-gui 行為 / Audit trail / 與其他 marker 共存
-
-細節見 [[manual-review.evidence]] § `@evidence-via-manual-review` Marker 細節（threshold deadlock 圖、canonical line format 與範例、「驗證」clause 字眼清單、excluded 計數行為）。
+它只為了把 phase task 排除在舊 GUI 的 90% implementation-progress threshold 之外；該 threshold 隨 Spectra 讀法退役，marker 已無讀取者。既有 marker 不必清，**NEVER** 新寫。
 
 ## 截圖檔名與 item id 配對（hard rule）
 
-`pnpm review` 自動把截圖配到 item。檔名格式見 [[screenshot-strategy]]（canonical SoT）。
+截圖依檔名配到 item。檔名格式見 [[screenshot-strategy]]（canonical SoT）。
 
 ## review-gui 補 evidence prompt 路徑分類（hard rule）
 
@@ -313,7 +281,7 @@ review-gui 主頁卡片上的「📋 補 evidence prompt」按鈕是 **fallback*
 **Default flow**（主線負責）：
 
 - 把工作交付人工檢查**之前**，主線 **MUST** 對**每一個** evidence-missing item 跑一輪 self-collect（自接路徑 (a)(b)(c)(d)，見 [[manual-review.backend]] § `[verify:*]` flow）
-- 成功 → 寫 `(verified-*:)` annotation，review-gui auto-check helper 自動勾 `[x]`
+- 成功 → 寫 `(verified-*:)` annotation（`[verify:e2e]`／`[verify:api]` 可直接勾 `[x]`）
 - 失敗 → 寫 `（deferred: tried (a)(b)(c)(d), <reason>）` annotation，註明已嘗試 path
 - 跑完一輪後**仍** evidence-missing 的 item 才進 review-gui handoff — user 在 GUI 看到的是「剩下真需要 user 拍板」的收斂集合
 
@@ -371,27 +339,25 @@ Verify channel pre-baseline 假設（all `verify:*` channel 都依賴 codebase-l
 
 Signal 發生後回流：對該條重新走第 2 步分類（signal 通常已 occurred），四個結果分支——**OK** 翻成 `(claude-discussed: <new-ISO>)` 並刪掉 `(deferred-to-handoff:)` 與 `(awaiting-signal:)`；**Issue** 翻回 `[ ]` ＋ `（issue:）`；**Skip** 翻成 `（skip[: reason]）`；**Still pending** 保持原樣。結案後清掉 HANDOFF 對應 entry（依 HTML marker）。
 
-### `[discuss]` 不進 review-gui（hard rule）
+### `[discuss]` 不進人眼驗收（hard rule）
 
-`[discuss]` 與 `(awaiting-user-decision:)` **NEVER** 出現在 PWA inbox，也 **NEVER** 在 GUI 上提供 ✓/⚠。人眼驗收只處理畫面。
+`[discuss]` **NEVER** 成為 `ui-judgement` 卡，也 **NEVER** 在面板上提供 ✓/⚠。人眼驗收只處理畫面。
 
 | 狀態 | Surface |
 | --- | --- |
-| 商業／prod 授權，packet 已備妥（`(awaiting-user-decision:)`） | work-loop `awaiting[]` ＋ 對話（attended）／Packaging SOP（unattended）。`\my` 看得到 |
+| 商業／prod 授權，packet 已備妥 | `flow ask`（`ruling` 卡）＋ 對話（attended）／Packaging SOP（unattended）。`\my` 看得到 |
 | 收尾當下還未勾的 `[discuss]` | 本節的七步 walkthrough |
 | External signal pending | 本節第 7 步的 Defer-to-HANDOFF，不是 inbox |
 
-2026-07-30 曾為了「bucket 沒有 GUI exit」把 confirmation gate 打開；2026-08-25 Charles 在 dual-track #6 否決：人看不懂要驗什麼，badge 寫 `discuss` 沒有畫面可點。Exit 改回對話。
-
-`itemBelongsOnReviewInbox` 對 `isAwaitingUserDecision` 與 `kinds.includes('discuss')` 回 false。`manualReviewItemRequiresUserConfirmation` 同。
+2026-07-30 曾為了「discuss 沒有 GUI exit」把 confirmation gate 打開；2026-08-25 Charles 在 dual-track #6 否決：人看不懂要驗什麼，badge 寫 `discuss` 沒有畫面可點。Exit 改回對話。
 
 ## 混合 kind 的執行順序
 
 一件工作同時含未勾 `[verify:*]` ＋ `[discuss]` ＋ `[review:ui]` items 時，**MUST** 依以下順序執行（早→晚，讓 user 拿到的 review GUI 內容最完整）：
 
-1. **實作階段** — `/implement` 收尾的 Verify Channel Pass：主線依 `e2e → api → ui` 跑 verify channels，寫 `(verified-e2e:)` / `(verified-api:)` / `(verified-ui:)` annotations；automatic-only items 由 helper 自動勾 `[x]`
-2. **Discuss** — 能現在拍板的（packet 已備妥／internal evidence 齊）走 work-loop `awaiting[]`；其餘走收尾 walkthrough。**NEVER** 塞進 review-gui
-3. **review GUI** — 只處理未勾 `[review:ui]`（以及人要點 OK 的 `[verify:ui]`）。User 在 GUI 看 evidence/screenshot 點 OK / Issue / Skip
+1. **實作階段** — `/implement` 收尾的 Verify Channel Pass：主線依 `e2e → api → ui` 跑 verify channels，寫 `(verified-e2e:)` / `(verified-api:)` / `(verified-ui:)` annotations；automatic-only items 由 session owner 直接勾 `[x]`
+2. **Discuss** — 能現在拍板的（packet 已備妥／internal evidence 齊）走 `flow ask`；其餘走收尾 walkthrough。**NEVER** 塞進人眼驗收
+3. **人眼驗收** — 只處理 `flow gates` 列出的 `ui-judgement` 卡。User 在面板看 evidence/screenshot 判通過／有問題／跳過（寫 `flow receipt`）
 
 ## Post-Edit Validation Gate（hard rule）
 
@@ -426,13 +392,11 @@ Worktree-local hook / patterns.json 是 pre-update stale 版本撞 false positiv
 | Annotation | 合法條件 | 格式 |
 | --- | --- | --- |
 | `(verified-<channel>: ...)` | evidence 成功產出 | key = `screenshot=`（單數，NEVER `screenshots=`） |
-| `(verified-ui: ...)` sub-item | — | screenshot basename 以 `#<this-item-id>-` 開頭（`#4.1` → `#4.1-*.png`，不用 parent `#4`）；review-gui 按 item ID 配對 |
-| `(claude-analyzed: ...)` | item 帶 `（issue: ...）` | `route` 限 `E`；寫入時 NEVER 翻 checkbox |
+| `(verified-ui: ...)` sub-item | — | screenshot basename 以 `#<this-item-id>-` 開頭（`#4.1` → `#4.1-*.png`，不用 parent `#4`）；按 item ID 配對 |
 | `(claude-discussed: ...)` | 收尾 walkthrough 實際討論並取得 OK | — |
 | `(deferred-to-handoff: ...)` | 僅 Resume mode（archived change directory） | — |
-| `(awaiting-user-decision: ...)` | item 真的不 actionable（(A)/(B)/(C) 路徑都不可走才用） | — |
 
-GUI 寫回 user action（OK / Issue / Skip）時 MUST strip `(claude-analyzed: ...)` annotation。
+`(claude-analyzed:)` / `(awaiting-user-decision:)` 已退役，NEVER 新寫；要人接手走 `flow ask`（§ 要人接手的結論：開卡，不寫 annotation）。
 
 ## Routing guard（何時走哪條路——條件句）
 
@@ -440,9 +404,9 @@ GUI 寫回 user action（OK / Issue / Skip）時 MUST strip `(claude-analyzed: .
 - `[verify:ui]` agent dispatch — agent 只負責 screenshot capture，NEVER 同時負責 mutation / form fill / multi-role login（那些屬 api / e2e channel）
 - `[discuss]` items — trigger 分類非「External signal pending」→ NEVER 走 Defer-to-HANDOFF 路徑
 - 問「要不要我直接幫你勾完」= NEVER（這句話在 session transcript 實際出現過，直接反制）
-- **NEVER** 用 `(awaiting-user-decision: ...)` 標註前提事實上不成立的 item — 那是可驗證事實，走「前提不成立直接 skip 例外」（核心規則段）
-- **NEVER** 在寫 `(awaiting-user-decision: ...)` 時翻 checkbox
-- **NEVER** 把 `@apply-blocked[<reason>]` 當「不想做就標一下」的逃生口 — 只在真正卡外部 blocker 時用
+- **NEVER** 對前提事實上不成立的 item 開 `flow ask` 卡 — 那是可驗證事實，走「前提不成立直接 skip 例外」（核心規則段）
+- **NEVER** 在開卡交給人時翻 checkbox
+- **NEVER** 把 `flow ask --category external` 當「不想做就標一下」的逃生口 — 只在真正卡外部 blocker 時用
 - **NEVER** dispatch verify channels 前不檢查 per-channel baseline — 主線預先 grep / read 確認，缺則停下回報 user 補齊
 - **NEVER** 在 verify dispatch 當下才問 user「dev-login / seed 準備好了嗎」— baseline 是 codebase 層長期狀態
 - **NEVER** 修完 `## 人工檢查` 區後直接 commit 而沒重跑 `manual-review-check.sh` 驗 0 violation — 見「Post-Edit Validation Gate」

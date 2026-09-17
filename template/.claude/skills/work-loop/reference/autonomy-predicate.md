@@ -55,7 +55,7 @@ Loop 的價值不在「做完可自主的事」——那部分合併前的 `/cha
 | 3 | **不需開新 change** | 條目不含「需 propose」「要開 change」；且預估涉及檔案 ≤5、不動 schema / API / 行為契約 |
 | 4 | **可逆** | 產出落在 worktree branch、本 repo commit、或**可 revert + 重新 publish 的散播**。**不含**：prod 部署、刪除 branch / tag / 遠端資料、任何花錢的 API 呼叫、`--force` 類操作 |
 | 5 | **Actionability 足夠** | 通過 `rules/core/handoff.md` § Outstanding actionability hygiene——有 audit 來源 + 檔案 list + target 形狀 + scope boundary。**或**：缺的部分能靠一次唯讀調查補齊 |
-| 6 | **無決策標記** | 不落 `awaitingUserDecision` bucket；文字不含指向 user 的問句、不含「拍板 / 決策 / confirm / 二選一 / A 或 B / 待 user」、未標 `@charles` |
+| 6 | **無決策標記** | `flow gates` 沒有它的 `ruling` 卡；文字不含指向 user 的問句、不含「拍板 / 決策 / confirm / 二選一 / A 或 B / 待 user」、未標 `@charles` |
 | 7 | **不放寬約束自身的門檻** | 這個改動**放寬**下列任一者 → 判定不成立，MUST packaging：(a) 判定 agent 行為合不合格的數值門檻 / 常數；(b) gate / hook / audit script 的觸發條件；(c) 規約裡約束 agent 自身行為的 NEVER / MUST 行；(d) 本檔這七條 predicate 自身。**方向就是判準**：收緊、或不動判定基準 → 成立 |
 
 **Predicate 4 是 human gate 的機械化，沒有例外旗標。** 「這次很安全」「反正可以 revert」都不是判斷空間——判定看的是動作類型，不是你對風險的估計。

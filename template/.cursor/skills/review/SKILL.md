@@ -13,7 +13,7 @@ independently discoverable skills.
 
 | Mode | Use when | Detailed guide |
 | --- | --- | --- |
-| `scan` | Batch-check active changes for manual-review readiness | [readiness guide](references/legacy/review-readiness-scan/SKILL.md) |
+| `scan` | Check whether anything in this repo is waiting on a human | No guide: run `flow gates --repo-only --json` and follow [[review-gui-surface]] § Hard rule |
 | `screenshot` | Collect UI screenshots or execute a visual checklist | [screenshot guide](references/legacy/review-screenshot/SKILL.md) and its evidence contract |
 | `archive` | Archive completed manual-review findings | [review archive guide](references/legacy/review-archive/SKILL.md) |
 | `screenshots` | Sweep completed screenshot topics into `_archive/` | [screenshot archive guide](references/legacy/screenshots-archive/SKILL.md) |
@@ -27,8 +27,9 @@ sign its own compliance result.
 
 ## Routing
 
-- `/review scan` runs the readiness scanner and updates only its managed
-  `HANDOFF.md` section.
+- `/review scan` runs `node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --json`
+  from the consumer root (never with `CLADE_HOME`) and reports every card by
+  gate family; exit 2 from `--require-empty` means it could not tell, never "none".
 - `/review screenshot` collects evidence through the existing screenshot
   worker and preserves every evidence limitation in the receipt.
 - `/review archive` archives only explicitly completed manual-review items and

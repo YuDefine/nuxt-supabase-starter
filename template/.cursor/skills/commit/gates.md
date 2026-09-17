@@ -176,32 +176,31 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
    - 印 `BLOCK pending=<n>` → 列入 blocker list，`<n>` 是未勾 leaf 數
    - 腳本不存在（clade checkout 不在 `~/offline/clade`）→ 對該 change **視為 BLOCK**，**NEVER** 因工具缺席放行
 
-5. **blocker list 非空時 → auto-triage（per [[review-gui-surface]] MUST 9）**：
+5. **blocker list 非空時 → auto-triage（per [[review-gui-surface]] MUST 8）**：
 
-   **MUST NOT** 直接停下叫 user 去 review-gui。改走 auto-triage：逐條讀 pending leaf item 的 annotation，判斷阻塞原因並自行推進主線可處理的項目。
+   **MUST NOT** 直接停下叫 user 去面板。改走 auto-triage：逐條讀 pending leaf item 的 annotation，判斷阻塞原因並自行推進主線可處理的項目。
 
    1. 對每個 blocked change 的每個 pending leaf item，讀 tasks.md 該行判斷：
 
       | Item 狀態 | 判斷方式 | 主線動作 |
       | --- | --- | --- |
-      | `（fix-requested）` | 行內含 `（fix-requested）` | 在既有來源修 code → 在該來源重拍截圖 → strip `（fix-requested）` + `(claude-analyzed:)` → 更新 `(verified-*:)` annotation |
+      | `（fix-requested）` | 行內含 `（fix-requested）` | 在既有來源修 code → 在該來源重拍截圖 → strip `（fix-requested）` → 更新 `(verified-*:)` annotation |
       | evidence missing | `[verify:ui]` / `[verify:api]` / `[verify:e2e]` 但無對應 `(verified-*:)` annotation | 走 [[agent-self-verification]] fallback chain 收 evidence |
-      | `（issue:）` 無 `(claude-analyzed:)` | 行內含 `（issue:）` 但無 `(claude-analyzed:)` | triage issue → 走 (A)-(E) 路由 |
-      | 純 `[review:ui]` user 驗收 | 上述都不符，item 是 `[review:ui]` | **只有這類**才引導 user 到 review-gui |
+      | `（issue:）` 未 triage | 行內含 `（issue:）`，且 `flow gates` 沒有對應卡片 | triage issue → 走 (A)-(E) 路由；要人接手才 `flow ask` 開卡 |
+      | 純 `[review:ui]` user 驗收 | 上述都不符，item 是 `[review:ui]` | **只有這類**才交給 user（`ui-judgement` 卡） |
       | 純 `[discuss]` | 上述都不符，item 是 `[discuss]` | 不在此處處理（archive walkthrough） |
 
-   2. **主線可處理的項目全部推進完畢後**，跑 mechanical readiness gate：
+   2. **主線可處理的項目全部推進完畢後**，在 consumer repo 根目錄跑（**NEVER** 帶 `CLADE_HOME`）：
 
       ```bash
-      node ~/offline/clade/vendor/scripts/check-review-readiness.ts \
-        --repo . --change <change-name>
+      node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --require-empty
       ```
 
-      - **exit 0** → 輸出 `✅ 0-MR auto-triage 完成，bucket=ready`，釋放 lock，引導 user 到 review-gui
-      - **exit 1** → 讀 stdout JSON 的 `bucket` + blocking 數據，繼續 auto-triage 或釋放 lock + 如實報告卡住原因，**NEVER** 只說「請去 review-gui」
-      - **exit 2** → 釋放 lock，回報 script 執行失敗
+      - **exit 3** → 改跑 `--json`，輸出 `✅ 0-MR auto-triage 完成，等人 <N> 張`，逐張列 family ＋ 判斷題，釋放 lock，引導 user 到面板
+      - **exit 0** → 沒有任何卡片，但 blocker 仍在 → 那是主線的球：繼續 auto-triage，或釋放 lock ＋ 如實報告卡在哪幾個 leaf，**NEVER** 說「請去面板」
+      - **exit 2** → 釋放 lock，回報判不出來的原因
 
-      **NEVER** 跳過 readiness gate 自判 bucket — Claude 自判已 9 次證明不可靠（per [[review-gui-surface]] MUST 9）
+      **NEVER** 跳過 `flow gates` 自判有沒有等人的事 — Claude 自判已 9 次證明不可靠（per [[review-gui-surface]] MUST 8）
 
    3. **NEVER** 自動勾任何 `[review:ui]` 的 `- [ ]`、**NEVER** 提議跳過 gate、**NEVER** 提議 stash 走 `tasks.md`
 

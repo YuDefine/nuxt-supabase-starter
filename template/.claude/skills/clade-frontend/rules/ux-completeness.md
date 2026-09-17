@@ -279,7 +279,7 @@ _本 change 為 backend-only，所有驗證由 apply 階段 Claude 自跑（見 
 問題：
 
 - 全部都是 SSH + psql + curl + `SELECT` 才能驗的事 → 是 evidence collection，不是人工檢查
-- 使用者打開 `pnpm review:ui` 看到這 3 條完全不知道怎麼做（無從判斷是要登入哪台 host、跑什麼指令、查什麼結果）
+- 使用者在面板看到這 3 條完全不知道怎麼做（無從判斷是要登入哪台 host、跑什麼指令、查什麼結果）
 - 真正該人工做的事（如「deploy production 前最後確認」「24h soak 後檢查 drift 是否爆量」）反而沒寫
 - 缺 `[review:ui]` / `[discuss]` marker；Default Kind Derivation Rule 會把它們推為 `[discuss]`（因 backend-only），但寫作者**MUST**顯式標 marker 而非依賴 fallback
 
@@ -405,14 +405,14 @@ function getBindingIcon(cardType: NfcCardType): string {
 | `/tasks` 產 `tasks.md` 時 | 有 UI scope 就加 `## Design Review` 區塊（[[proactive-skills.design-checkpoint]]） | 產 tasks 的當下 |
 | UI 檔編輯期間 | `plugins/hub-core/hooks/post-edit-ui-qa.sh`（PostToolUse） | 中途提醒 design / screenshot review，不要等到收尾才檢查 |
 | 交付人工檢查之前 | Design Gate（[[proactive-skills.design-checkpoint]] § Design Gate） | 缺設計審查證據的 UI 工作不得交付 |
-| 交付人工檢查之前 | `node ~/offline/clade/vendor/scripts/check-review-readiness.ts --repo . --change <work-slug>` | exit 0 才可引導 user 到 review-gui |
+| 交付人工檢查之前 | `node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --require-empty`（cwd = consumer repo） | exit 3 才可引導 user 到面板，逐張列 family；exit 2 = 判不出來 |
 | 寫下任何 follow-up 註記的當下 | 在 `docs/tech-debt.md` 開 `TD-NNN` entry（[[follow-up-register]]） | 同一次編輯內完成 |
 | Session start | `node vendor/scripts/flow/flow.ts status --stalled` | 列出停滯的 work item 與待拍板 |
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 混合：`post-edit-ui-qa.sh` 與 `flow status --stalled` 是自動 hook；其餘各列是**自檢**——原本的 `pre-propose-scan.sh` / `post-propose-check.sh` / `design-inject.sh` / `pre-apply-brief.sh` / `design-gate.sh` / `archive-gate.sh` / `followup-gate.sh` 全隨 spectra 生命週期退場（2026-09-07），**沒有機器替你跑那幾列** |
-| 消費端 | 走 SDD 流程的 agent（本節）；`/commit` Step 0-MR 讀 `check-review-readiness.ts` |
+| 消費端 | 走 SDD 流程的 agent（本節）；`/commit` Step 0-MR 讀 `flow gates` |
 | 載入路徑 | 本節（`rules/core/ux-completeness.md`，paths-gated 於 `tasks/**`、`specs/plans/**` 與 UI 檔） |
 
 **Runtime integration**：自動觸發的兩列由 hook 提供；其餘各列由讀到本節的 agent 自己執行。自動觸發、手動命令與 capability gap 由 adapter fragment 宣告。

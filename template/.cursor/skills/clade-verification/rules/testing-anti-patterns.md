@@ -636,7 +636,7 @@ E2E test coverage 不該用「跑了幾條」當 KPI，也不該用「按鈕能�
 
 - **Spectra change archive 前**：design.md / proposal.md 內含 § 「Risk paths」，列出該 change 動到的高風險路徑 + 對應 E2E 在哪
 - **Manual review 對應**：`rules/core/manual-review.md` 的 `[verify:e2e]` marker 應指向**風險路徑**，而非 happy path
-- **Review GUI 對應**：review-gui 在 archive 前可以 prompt「列出本 change 的 top 3 風險路徑跟對應測試」
+- **人工驗收對應**：`@human` 場景交人判之前，把「top 3 風險路徑跟對應測試」寫進該場景的 evidence，讓 `ui-judgement` 卡帶得到
 - **不**強制要求所有 PR 都附 risk-path doc — 純文件 / refactor / typo change 跳過
 - **不**用 coverage % 當 gate；用 risk-path 對應度當 review 對話起點
 

@@ -56,8 +56,8 @@ Outstanding（N 條）：
 - 推薦的 Option 1 不該是「都不做」（除非真的盤點為空）
 - **`mergeBackSafety: ptb-unsafe` wt 不可列為 Option 1 (Recommended)**；可列為 Option 但 label 強制標 `⚠ PTB unsafe`、描述明列 PTB 風險，**禁止**包裝為「最快 deliverable」「safe to land」「ready to merge」這類沒 signal 支撐的斷言
 - 對任何 wt 推薦 next move 時，描述 **MUST** 含 safety signal（blocker / uncommitted / baseline ref）— Step 3.1 audit（handoff-scan `worktreeStash`）已記錄，照搬即可
-- **NEVER** 推薦「review:ui」/「ready 區可點 OK」/「最快 deliverable 用 review:ui 收尾」相關 next move 而未先跑 §2B.1.7 readiness scan（handoff-scan 內含 review-gui `--scan`）+ 引用 `## Review-gui Readiness` 段的 scan 結果。Scan 後 change 落 `feedbackGiven` / `awaitArchiveWalkthrough` / `readyForEvidence` 等 bucket 時，描述 **MUST** 反映該 bucket 的真實 user action（不是「點 OK 收尾」） — 例：`feedbackGiven` 推薦語應為「補 evidence annotation 後 user 在 review GUI 點 OK」、`awaitArchiveWalkthrough` 推薦語應為「讀 carrier 的未勾 `[discuss]` 項並走收尾 walkthrough 補討論／驗收證據」
-- **NEVER** 從 `HANDOFF.md` 既有「Outstanding」段、carrier 的 leaf `[x]` / `[ ]` count、或 flow 卡的進度推測 review-gui bucket 或 ready 狀態 — 三類資料維度都跟 `reviewBucketForChange()` 不同，scan output 才是 SoT
+- **NEVER** 推薦「開面板驗收」/「可點 OK 收尾」相關 next move 而未先引用 §2B.1.7 的 `flow gates` 結果（`## Review-gui Readiness` 段）。只有 `ui-judgement` / `acceptance` 卡才能寫成「user 在面板判」；工作若**沒有**對應卡片，描述 **MUST** 反映 agent 真正要做的事（例：「補 evidence 後才會出現 `ui-judgement` 卡」、「讀 carrier 的未勾 `[discuss]` 項走收尾 walkthrough」），**NEVER** 寫成「點 OK 收尾」
+- **NEVER** 從 `HANDOFF.md` 既有「Outstanding」段、carrier 的 leaf `[x]` / `[ ]` count、或 flow 卡的進度推測有沒有等人的事 — `flow gates` 的卡片清單才是 SoT
 
 ### 2B.4.5 PTB-unsafe wt 的快速分流（v1.14+）
 
@@ -96,14 +96,13 @@ User 透過詢問操作選定下一步 outstanding（含明確的 next-skill 與
 
 **Parent cwd 不動 invariant**：`/wt` Form 3 內部用 subagent 進 worktree 跑 next-skill，主線（當前 chat session）cwd 全程在 main worktree，per [[worktree-default]] §1。先前 `wt-relax-for-archive-and-handoff` change 引入的 `--dispatch-from-handoff` flag 已**移除**，**禁止**在 args 內帶此 flag。
 
-**Review:ui dispatch scope rule**：`pnpm review` flow dispatch 前 **MUST** 引用 §2B.1.7 scan 結果確認該 change 落 `ready` bucket 或對應 user-actionable bucket。三類非 ready bucket 走不同入口（**NEVER** 一律推 review:ui）：
+**面板驗收 dispatch scope rule**：把 user 導向面板之前 **MUST** 引用 §2B.1.7 的 `flow gates` 結果。依卡片 family 走不同入口（**NEVER** 一律推「去面板」）：
 
-| Scan bucket | 真實下一步 | 入口 |
+| 狀態 | 真實下一步 | 入口 |
 | --- | --- | --- |
-| `ready` | 主線自行從 clade home 啟動 review GUI；user 只在 GUI 點 OK / Issue / Skip | 主線啟動 `pnpm review`、確認 URL 可連線後給 deep-link |
-| `feedbackGiven` | agent 先補 verify-* annotation evidence；user 後續在 review GUI 點 OK | 主線跑 verify channel（per `manual-review.md` Step 8a），補 annotation 後 → review GUI |
-| `awaitArchiveWalkthrough` | 先處理討論與缺失證據；人的 gate 仍經共同 decision command | 收尾 walkthrough（[[manual-review]] § `[discuss]` walkthrough） |
-| `readyForEvidence` | agent 補 verify-* annotation（同 `feedbackGiven`）；scan 顯示 evidenceMissing list 含具體 item | 主線跑 verify channel |
-| `applyInProgress` | 依 carrier 繼續實作 | `/wt <slug>: /implement`（依 §2B.5 隔離 worktree） |
-| `healthCheckNeeded` | 修 canonical source 的缺項，再 project／重驗 | `/wt <slug>` |
-| `malformed` | 讀 validator 錯誤並修 carrier 的 `
+| `ui-judgement` / `acceptance` 卡 | user 在面板判（通過／有問題／跳過；accept／drop） | 主線確認 `ops/review-gui-service.sh status` exit 0 後給 URL（[[review-gui-surface]] § Inline Review-GUI Deep-Link） |
+| `ruling` 卡 | user 回答判斷題 | 在對話端出 Qn，或 `/decisions`；回答後 `flow answer` |
+| `external-action` / `exception` 卡 | 先走 SKILL §2B.2.5 抽原因、辨識 startable 子集 | 依 triage 結果 |
+| 沒有卡片，但 evidence 缺 / issue 未 triage | agent 補 evidence 或 triage | 主線跑 verify channel（[[manual-review.backend]] § `[verify:*]` flow） |
+| 沒有卡片，實作未完 | 依 carrier 繼續實作 | `/wt <slug>: /implement`（依 §2B.5 隔離 worktree） |
+| 沒有卡片，只剩 `[discuss]` | 收尾 walkthrough | [[manual-review]] § `[discuss]` walkthrough |

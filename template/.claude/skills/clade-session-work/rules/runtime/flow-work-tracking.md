@@ -3,7 +3,7 @@ description: flow spine 的 work 生命週期契約——一件 work 何時誕�
 paths:
   - 'vendor/scripts/flow/**'
   - '.clade/flow/**'
-  - 'vendor/review-gui-web/pages/board.vue'
+  - 'vendor/review-gui-web/pages/work/**'
 ---
 <!-- Clade native rule; source: adapters/claude/instructions/rules/core/flow-work-tracking.md; edit canonical source -->
 

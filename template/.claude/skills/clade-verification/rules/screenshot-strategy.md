@@ -54,12 +54,12 @@ screenshots/<environment>/<topic>/
 
 ### 兩類截圖必分清楚
 
-| 類別 | 用途 | `<topic>` 約束 | 檔名約束 | review GUI 自動載入 |
+| 類別 | 用途 | `<topic>` 約束 | 檔名約束 | 算驗收證據 |
 | --- | --- | --- | --- | --- |
 | **A. 人工檢查截圖** | 對應 spectra change tasks.md `## 人工檢查` 各 item | **MUST** = `<change-name>`（一字不差等於 `openspec/changes/<change-name>/` 目錄名） | **MUST** `#<item-id>[<variant>]-<descriptor>.<ext>`（見下節「檔名強制規範」） | ✅ 是 |
 | **B. Ad-hoc / debug 截圖** | 探索、debug、screenshot review 視覺 QA、polish 過程觀察 | 自由語義（`debug-clock-overlap`、`live-preview-design-token`、`exploration-typography` 等） | 自由命名 | ❌ 否（資料夾名與 active change 不 match） |
 
-**禁止把兩類混在同一資料夾** — review GUI 用資料夾名 + 檔名 id 配對 item，A 類資料夾混入 B 類 ad-hoc 檔會造成「對應 0 張」誤導。
+**禁止把兩類混在同一資料夾** — 驗收讀端用資料夾名 + 檔名 id 配對 item，A 類資料夾混入 B 類 ad-hoc 檔會造成「對應 0 張」誤導。
 
 ### 驗收截圖 vs 探索截圖
 
@@ -79,7 +79,7 @@ screenshots/<environment>/<topic>/
 screenshots/<env>/<change-name>/_exploration/
 ```
 
-`_exploration/` 不被 review GUI / screenshot quality audit 當成驗收證據；裡面的檔名可自由命名，但不能拿來要求使用者在 `pnpm review:ui` 裡判斷 OK。
+`_exploration/` 不被當成驗收證據（staleness audit 也不看它）；裡面的檔名可自由命名，但不能拿來要求人判 OK。
 
 ## 路徑強制規範（hard rule）
 
@@ -93,8 +93,8 @@ screenshots/<env>/<change-name>/_exploration/
 
 ## 檔名強制規範（hard rule）
 
-人工檢查截圖**MUST** 與 `## 人工檢查` 的 item id 一一對應，讓 `pnpm review:ui` 自動把
-截圖配到正確的 item，使用者不需要手動挑選清單（review GUI 也設計成只顯示對應該 item 的截圖）。
+人工檢查截圖**MUST** 與 `## 人工檢查` 的 item id 一一對應，讓 evidence 讀端與人都能直接把
+截圖對到正確的 item，不需要手動挑選清單。
 
 ### 命名格式
 
@@ -118,23 +118,22 @@ screenshots/<env>/<change-name>/_exploration/
 ✅ #8.2-salary-positive-negative.png ← parent item #8.2 之外，等於主流程那張
 
 ❌ 8.1-home.png                   ← legacy section.item 命名，缺 `#`，請改成 `#1-home.png`
-❌ clock-light.png                ← 沒有 id，review GUI 無法配對
+❌ clock-light.png                ← 沒有 id，配不到任何 item
 ❌ #1_clock-light.png             ← 用 `_` 而非 `-`，pattern 不認
 ❌ #1-Clock_Light.PNG             ← 大小寫混用、底線、kebab 走樣
 ```
 
-### review GUI 配對邏輯（補充說明）
+### 配對邏輯（補充說明）
 
-`pnpm review:ui` 用 regex `^#?(\d+(?:\.\d+)?)[a-z]?(?=[-._])` 從檔名擷取 id token。
-直接 match item id；對 legacy `<section>.<item>` 命名（例 `8.1-`）會自動 fallback
-配到 parent item id（例 item `#1`），但這只是過渡期 fallback，**新拍截圖一律走
-canonical 格式**。命名漂走的副作用是 review GUI 顯示「對應 0 / N 張」，使用者
-看不到截圖、無法逐項確認。
+檔名首段 token 由 `^#?(\d+(?:\.\d+)?)[a-z]?(?=[-._])` 擷取，直接 match item id。舊 GUI 對 legacy
+`<section>.<item>` 命名（例 `8.1-`）的 parent fallback 隨面板改版退役（2026-09-17）——現在**沒有**
+任何讀端替漂走的檔名兜底，`audit-screenshot-staleness.ts` 會把缺 `#N` 前綴的檔標成 LEGACY。
+**新拍截圖一律走 canonical 格式**。
 
 ### 與 manual-review.md 的契約
 
 manual-review.md 規定 item id 一律 `#N` / `#N.M`；本檔規定截圖檔名首段 token
-與該 id 嚴格相等（含 `#` 前綴）。兩條規則一起成立，review GUI 才能真正自動配對。
+與該 id 嚴格相等（含 `#` 前綴）。兩條規則一起成立，截圖與 item 才對得上。
 
 ### 違反時
 
@@ -171,7 +170,7 @@ node scripts/before-after-screenshot.ts \
 
 預設落在 `screenshots/local/ad-hoc/before-after/<name>-<timestamp>/` 且 `publication=local-only`。只有 manifest `status=complete` 的輸出才是有效 comparison；`failed` / `partial` 的 `review.md` 不產生雙欄表，避免把單邊成功誤讀成完整比較。
 
-這個 helper 是 ad-hoc comparison，不會寫 `(verified-ui:)` 或 evidence sidecar。要納入正式 review-gui 驗收，仍依 item／sub-item 分別走 `vendor/snippets/verify-channels/annotation-cheatsheet.md` 的 `evidence-store.ts` 寫入契約；多 viewport、跨瀏覽器或重複 regression 仍走本檔決策樹指定的 target adapter runner。
+這個 helper 是 ad-hoc comparison，不會寫 `(verified-ui:)` 或 evidence sidecar。要納入正式人工驗收，仍依 item／sub-item 分別走 `vendor/snippets/verify-channels/annotation-cheatsheet.md` 的 `evidence-store.ts` 寫入契約；多 viewport、跨瀏覽器或重複 regression 仍走本檔決策樹指定的 target adapter runner。
 
 ## 平行 session 隔離（target adapter operation）
 

@@ -108,12 +108,8 @@ export const PROJECTION_EXCLUDES = [
  * review-gui.ts embeds an HTML template oxfmt/oxlint both mangle.
  * clade's own vite.config.ts drops `vendor/**` and adds these back.
  */
-// review-gui 本體與其 sibling 全部排除：SPA 的 HTML/CSS/前端 JS 是一整個 template
-// string，oxfmt 會重排字串內容、oxlint 會對字串裡的 client-side JS 誤報。用 glob 而非
-// 逐一列名 —— 拆檔後新增 sibling 若忘了加，格式化會直接改壞 embedded template。
 export const CLADE_VENDOR_EXCLUDES = [
   'vendor/snippets/**',
-  'vendor/scripts/review-gui*.ts',
   // SpecFormula：`vendor/specformula/` 是 git submodule（上游 repo 全文），
   // `vendor/specformula-ts/` 是 scripts/sync-upstream-mirrors.ts 生成的 mirror。
   // 兩者都不是 clade 手寫源碼 —— 上游用自己的 eslint/prettier baseline，在這裡 lint 它

@@ -101,9 +101,9 @@
 
 `## 人工檢查` 的 checkbox **不能由 agent 自行代勾**。
 
-**四條契約全文在 [[proactive-skills.manual-review-entry]] § 人工檢查推進的四條契約**（path-scoped：碰 `tasks/**` / `specs/plans/**` 時載入）——auto-triage 先於引導、`check-review-readiness.ts` exit 0 才可交付、**NEVER** 自判 bucket、給人的 URL 恆為 `https://review-gui.<maintainer-domain>`。
+**四條契約全文在 [[proactive-skills.manual-review-entry]] § 人工檢查推進的四條契約**（path-scoped：碰 `tasks/**` / `specs/plans/**` 時載入）——auto-triage 先於引導、`flow gates --repo-only --require-empty` exit 3 才可交付、**NEVER** 自判有沒有等人的事、給人的 URL 恆為 `https://review-gui.<maintainer-domain>`。
 
-Auto-triage 的三類 pending item 路由、`[discuss]` item 的歸屬、review-gui deep-link 格式與 fallback 模式見 [[proactive-skills.manual-review-entry]]（path-scoped：碰 `tasks/**` / `specs/plans/**` 時載入）。
+Auto-triage 的三類 pending item 路由、`[discuss]` item 的歸屬、面板 deep-link 格式與 fallback 模式見 [[proactive-skills.manual-review-entry]]（path-scoped：碰 `tasks/**` / `specs/plans/**` 時載入）。
 
 ### Dev Server Auto-Spawn（agent 自起，不要叫 user cd）
 

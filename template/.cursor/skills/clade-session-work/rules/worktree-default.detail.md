@@ -151,7 +151,7 @@ ls ~/offline/<consumer>-wt/<change-slug>/ 2>/dev/null || git worktree list
 
 ## §10 review-gui 與 worktree 互動的已知坑
 
-> 3 條已記坑（home list silent skip / source aggregation collision / apply-pending 按前 spot check）詳見 [[worktree-default.troubleshooting]] § review-gui 坑。改 review-gui.ts 後 consumer 端 `pnpm review:ui:kill && pnpm review:ui` 重啟才吃新版。
+> 已退役：舊聚合器掃 worktree change 目錄的三條坑隨它消失，面板改讀 spine read model。脈絡見 [[worktree-default.troubleshooting]] §10。
 
 ## §11 WORKTREE-BRIEF.md — 持久化任務交接上下文
 
