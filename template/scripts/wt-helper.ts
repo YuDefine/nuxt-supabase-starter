@@ -1102,6 +1102,17 @@ export function reconcileCopiedProjectionState(wtPath: string, consumerRoot?: st
         dirty = true
       }
     }
+    // A codex `delivery` marker is a pure function of the files map
+    // (buildState re-derives it on every apply). A copied state whose files map
+    // was reduced here — or reduced by an earlier run that predates this
+    // clearing — can hold a marker its map no longer supports (`skill-packages`
+    // over an AGENTS.md-only map fails apply's `invalid Codex delivery marker`
+    // fail-closed check). Drop the claim unconditionally: it carries no
+    // information the next apply cannot recompute.
+    if (typeof state.delivery === 'string') {
+      delete state.delivery
+      dirty = true
+    }
     if (!dirty) continue
     state.files = files
     // A codex `delivery` marker is derived from the files map; a reconcile that
@@ -1245,10 +1256,14 @@ export function seedWorktreeCladeSubstrate(
     console.error(`note: .clade/rules copy skipped: ${e?.message ?? e}`)
   }
 
-  // Rehash only after this invocation copied projection state. A later bootstrap that
-  // skips copy would otherwise stamp subsequent local edits as owned hashes and let
-  // SessionStart auto-repair overwrite them instead of leaving a local-conflict.
-  if (copiedProjections) {
+  // Rehash only after this invocation copied projection state or merged `.agents`
+  // children. A later bootstrap that skips copy would otherwise stamp subsequent
+  // local edits as owned hashes and let SessionStart auto-repair overwrite them
+  // instead of leaving a local-conflict. The `.agents` arm is what repairs a
+  // worktree seeded before the merge existed: the merge restores the ignored
+  // children, and reconcile then clears a `delivery` marker that earlier drops
+  // already invalidated.
+  if (copiedProjections || copied.some((p) => p === '.agents' || p.startsWith('.agents/'))) {
     try {
       const reconciled = reconcileCopiedProjectionState(wtPath, consumerRoot)
       if (reconciled.updated > 0) {
