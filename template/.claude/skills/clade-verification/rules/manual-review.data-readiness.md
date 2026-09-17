@@ -346,9 +346,9 @@ node -e "import('~/offline/clade/vendor/snippets/dev-auth/lib/detect-dev-login-r
 
 ## `@no-manual-review-check` Marker（hard rule）
 
-> **本節的 fence 範例是 live fixture**：`test/rule-example-parser-contract.test.ts` 現場抽出來餵進
-> `vendor/scripts/review-gui.parser.ts`。改動範例（含標點全半形）等於改動 parser 的驗收條件，
-> 測試紅了就是兩邊真的不一致，**NEVER** 改測試期望值去遷就。
+> **本節的 fence 範例只是範例，沒有機械守門**：原本抽它餵 parser 的 live fixture 於 2026-09-17
+> 隨舊驗收 GUI 的 parser 一起退役，現在沒有任何測試會抽出或比對它。改動範例不會有測試紅燈——
+> 格式一致性只靠改的人自己對照 marker 語法，**NEVER** 把「沒紅」讀成「格式仍對」。
 
 針對 hook regex 誤判（false positive）或合法例外（如真機掃 SMS 驗證碼、實體鎖匙、印表機調整等真的無 dev replay endpoint 的場景），可在該 checkbox line 行尾加上 `@no-manual-review-check[<reason>]` marker，跳過 Pre-Review Data Readiness regex 檢查（manual-review-check.sh + review-gui pre-flight banner 都 skip）。
 
