@@ -97,7 +97,11 @@ node scripts/wt-helper.ts batch cleanup
 
 每個來源都需正式落地、HEAD 未變、無未保存工作／活 claim／lock／保留契約才移除；有不能安全刪的 ignored 內容也保留。**NEVER** 用 `--force` 補掉不成立的 predicate。報告逐來源列 `path`、`branch`、`dirty`、`merged_to_main`、`locked` 與 removed／retained 原因，integration 最後回收。
 
-Cleanup 前，每一棵樹先被 P0 全量保存進 common Git 目錄下的 archive（receipt 記 inventory／Git closure，不再發 `excluded` 清單）。預設 `defaultLifecycle` **沒有** `withExclusiveWriterOwnership`，且未解析的 profile 會讓 `validateProfile` 失敗——此時 CLI `batch cleanup` **retain 每一個來源**，不會做上面描述的 capture／刪除。要真的 teardown，呼叫端必須提供：已解析且通過 `validateProfile` 的 profile，以及帶 mandatory exclusive-writer adapter 的 lifecycle。兩件事讀報告時要知道：
+Cleanup 前，每一棵樹先被 P0 全量保存進 common Git 目錄下的 archive（receipt 記 inventory／Git closure，不再發 `excluded` 清單）。預設 `defaultLifecycle` **沒有** `withExclusiveWriterOwnership`，且未解析的 profile 會讓 `validateProfile` 失敗——此時 CLI `batch cleanup` **retain 每一個來源**，不會做上面描述的 capture／刪除。要真的 teardown，呼叫端必須提供：已解析且通過 `validateProfile` 的 profile，以及帶 mandatory exclusive-writer adapter 的 lifecycle。
+
+**Profile 解析不了的 repo（例如帶 submodule 的 clade home）走 retire 路徑收尾**：`phase=landed` 的批次，只要 landed commit 由 Git 實查是 main 的祖先（pr-merge-based 另需 `mergeReceipt.merged`）、成員 branch 未前進、樹上 HEAD 與登記相符、無 `retain`／`removing`，`handoff-retire.ts` 就不再把該來源（與 ready 裡同 path＋head 的條目）算作 batch owner，由它的 archive→validate→recheck→remove 保存並移除。之後 `batch cleanup` 對「來源已不在、`docs/archives/retired-work.jsonl` 有 path＋branch＋head 完全相符的 `retired` 紀錄、且 archive 每個檔 hash 仍相符」的成員與 integration 記為 removed 並把批次轉 `cleaned`；紀錄不符或 archive 受損一律照舊 retain。**NEVER** 為了讓 retire 接手而改 state.json 的 phase 或刪 ready 條目。
+
+兩件事讀報告時要知道：
 
 - **Teardown 跑的是 main checkout 的 `scripts/wt-env-bootstrap.ts`，不是被刪那棵樹自己的那一份。** 一棵樹帶著的是它 fork 當天的 shim，於是 fork 早於某個 branch 命名形式的樹認不得自己的 branch（`E_BRANCH_SLUG`），結構上永遠刪不掉自己。Provisioning 仍用該樹自己的 shim，只有 teardown 換根。目標身分一律由 `--worktree` 決定，換根只換 config 與 script 的來源。**副作用**：provisioning 讀該樹的 config、teardown 讀 main 的 config，所以 `.claude/worktree-db.json` 的 prefix 在 fork 之後改過時，destroy 會算出不同的 dbName 而找不到 clone，留下 orphan。真的改過 prefix 時 MUST 先確認在途的樹已回收。
 - **Nested repository（典型：Pi dispatch clone 進 `.pi/git/**`、或 `modules/` 裡 deinitialized / damaged submodule git dir）預設整棵保存，不排除。** P0 全量保存：沒有 nested-repository adapter 證明可離線復原時 MUST retain。不能只把「有 `.git` 且 `is-bare-repository=true`」當 nested；source 與 captured common metadata 都要查。top-level fsck 不能替代 nested closure。有 adapter 且證明成立時仍保存 remote 交還不了的部分（修改過的 tracked 檔、untracked、ignored）；證明不成立就整棵保存。
