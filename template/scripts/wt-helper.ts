@@ -1104,6 +1104,13 @@ export function reconcileCopiedProjectionState(wtPath: string, consumerRoot?: st
     }
     if (!dirty) continue
     state.files = files
+    // A codex `delivery` marker is derived from the files map; a reconcile that
+    // dropped owned paths can invalidate it (`skill-packages` over an
+    // AGENTS.md-only map fails apply's `invalid Codex delivery marker`
+    // fail-closed check). The next apply re-derives the marker in buildState,
+    // so drop the stale claim instead of letting it describe files the state
+    // no longer owns.
+    if (typeof state.delivery === 'string') delete state.delivery
     writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`)
     updated++
   }
@@ -1152,6 +1159,31 @@ export function seedWorktreeCladeSubstrate(
       cpSync(agentsSrc, agentsDst, { recursive: true })
       copied.push('.agents')
       log('  agent-projection: copied .agents from main')
+    } else if (existsSync(agentsSrc)) {
+      // `.agents` can be partially tracked — <consumer-e> keeps `.agents/constitution/`
+      // in git via a `!.agents/constitution/` exception, so a linked worktree
+      // already has the directory. Treating its existence as "done" skips
+      // `.agents/skills/` forever; reconcile then strips every
+      // `.agents/skills/clade-*` entry out of codex.rules.json and leaves a
+      // `delivery: "skill-packages"` marker over an AGENTS.md-only file map,
+      // which apply fails closed as `invalid Codex delivery marker`.
+      // Merge instead: copy every missing child, never overwrite an existing
+      // one, and skip children git would have provided (non-ignored paths).
+      for (const entry of readdirSync(agentsSrc)) {
+        try {
+          const rel = `.agents/${entry}`
+          const dst = join(agentsDst, entry)
+          if (existsSync(dst)) continue
+          if (spawnSync('git', ['check-ignore', '-q', rel], { cwd: consumerRoot }).status !== 0)
+            continue
+          cpSync(join(agentsSrc, entry), dst, { recursive: true })
+          copied.push(rel)
+          log(`  agent-projection: copied ${rel} from main`)
+        } catch (entryErr) {
+          if (strict) throw entryErr
+          console.error(`note: .agents/${entry} copy skipped: ${entryErr?.message ?? entryErr}`)
+        }
+      }
     }
   } catch (e) {
     if (strict) throw e
@@ -1396,15 +1428,27 @@ function processStatIsExited(value: string): boolean {
   return fields[17] === '1'
 }
 
-// True when any entry in the tree could be modified by a foreign-uid process:
-// group/other write bits (the group bits also reflect the POSIX ACL mask), or
-// any entry owned by a different uid — its owner can chmod it writable even
-// when the write bits are currently clear. Root is exempt from this boundary
-// by capability, not by permission bits — see probeLiveWriterCwd for the
-// resulting detection limit.
-function treeWritableByForeign(root: string, ownerUid: number): boolean {
-  const foreignWritable = (st: { uid: number; mode: number }) =>
-    (st.mode & 0o022) !== 0 || st.uid !== ownerUid
+// The credentials under which a process could modify the tree: an entry's
+// owner can always chmod it writable, other-write bits grant every uid access,
+// and group-write bits grant access to processes carrying that gid (the group
+// bits also reflect the POSIX ACL mask). Collected in one walk so the probe
+// can answer per-process writability instead of treating any group/other bit
+// as writable by every foreign uid — that over-approximation made unrelated
+// daemons (systemd-resolve, containerized postgres, pid 1) wedge cleanup on
+// any tree containing a group-writable file.
+// A fully sealed directory cannot be traversed by any non-root UID — not even
+// its owner — so nothing beneath it is reachable by a foreign writer
+// regardless of the permissions recorded inside; its own uid is still
+// recorded, since that owner can reopen it.
+function treeWritableCredentials(root: string, ownerUid: number) {
+  const uids = new Set<number>()
+  const gids = new Set<number>()
+  let other = false
+  const see = (st: { uid: number; gid: number; mode: number }) => {
+    if (st.uid !== ownerUid) uids.add(st.uid)
+    if (st.mode & 0o002) other = true
+    if (st.mode & 0o020) gids.add(st.gid)
+  }
   const stack = [root]
   while (stack.length) {
     const dir = stack.pop()!
@@ -1412,32 +1456,33 @@ function treeWritableByForeign(root: string, ownerUid: number): boolean {
     try {
       st = lstatSync(dir)
     } catch {
-      return true
+      // An entry that cannot be inspected might be other-writable.
+      other = true
+      continue
     }
-    if (foreignWritable(st)) return true
-    // A fully sealed directory cannot be traversed by any non-root UID —
-    // not even its owner — so nothing beneath it is reachable by a foreign
-    // writer regardless of the permissions recorded inside.
+    see(st)
     if ((st.mode & 0o777) === 0) continue
     let entries
     try {
       entries = readdirSync(dir, { withFileTypes: true })
     } catch {
-      return true
+      other = true
+      continue
     }
     for (const e of entries) {
       const p = join(dir, e.name)
       try {
         st = lstatSync(p)
       } catch {
-        return true
+        other = true
+        continue
       }
       if (st.isSymbolicLink()) continue
-      if (foreignWritable(st)) return true
+      see(st)
       if (st.isDirectory()) stack.push(p)
     }
   }
-  return false
+  return { uids, gids, other }
 }
 
 // Writability is recomputed from the live tree on every probe, so permission
@@ -1451,32 +1496,46 @@ function mapsPathname(line: string): string {
   return match ? match[1] : ''
 }
 
-function probeLiveWriterCwd(path: string) {
+export function probeLiveWriterCwd(path: string) {
   const target = resolve(path)
   if (!existsSync(target)) return
   if (!existsSync('/proc'))
     throw new Error('exclusive writer ownership control unavailable; /proc is missing')
   const ownerUid = statSync(target).uid
-  const foreignWritable = treeWritableByForeign(target, ownerUid)
+  const writableCreds = treeWritableCredentials(target, ownerUid)
+  const writableByProc = (uid: number, procGids: ReadonlySet<number>) =>
+    writableCreds.other ||
+    writableCreds.uids.has(uid) ||
+    [...procGids].some((g) => writableCreds.gids.has(g))
   // Classify a process whose task state we cannot read. A foreign-uid process
-  // is a writer signal only when the tree grants it write access; otherwise
-  // its state is outside the enforceable boundary. Root-owned processes can
-  // write regardless of permission bits and cannot be observed by an
-  // unprivileged prober — that residual is inherent to userspace probing, not
-  // waived by choice. Same-uid or uid-unknown processes fail closed unless
-  // positively identified as kernel threads or single-thread exits.
+  // is a writer signal only when the tree grants ITS credential write access;
+  // otherwise its state is outside the enforceable boundary. Root-owned
+  // processes can write regardless of permission bits and cannot be observed
+  // by an unprivileged prober — that residual is inherent to userspace
+  // probing, not waived by choice, so they are exempt rather than a
+  // fail-closed block that can never clear. A same-uid process whose state is
+  // unreadable is non-dumpable (systemd --user, tailscaled, container
+  // helpers): its cwd/fd/maps are unobservable to us either way, so it is the
+  // same inherent blind spot, not a writer signal. Uid-unknown processes fail
+  // closed unless positively identified as kernel threads or single-thread
+  // exits.
   const unreadableDisposition = (pid: string): 'gone' | 'benign' | 'exempt' | 'block' => {
     if (!existsSync(`/proc/${pid}`)) return 'gone'
     // /proc/<pid> directory ownership reports root for non-dumpable
     // processes, mislabeling an actual same-UID writer as foreign. The
     // status file's filesystem UID (the credential file access checks use)
-    // stays readable for them.
+    // stays readable for them; the same file carries fsgid and the
+    // supplementary group list the writability check needs.
     let uid: number | undefined
+    const procGids = new Set<number>()
     try {
-      const uidLine = readFileSync(`/proc/${pid}/status`, 'utf8').match(
-        /^Uid:\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/m,
-      )
+      const status = readFileSync(`/proc/${pid}/status`, 'utf8')
+      const uidLine = status.match(/^Uid:\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/m)
       if (uidLine) uid = Number(uidLine[4])
+      const gidLine = status.match(/^Gid:\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/m)
+      if (gidLine) procGids.add(Number(gidLine[4]))
+      const groupsLine = status.match(/^Groups:\s*(.*)$/m)
+      for (const g of (groupsLine?.[1] ?? '').trim().split(/\s+/)) if (g) procGids.add(Number(g))
     } catch {
       // Fall through to the directory owner estimate.
     }
@@ -1486,7 +1545,13 @@ function probeLiveWriterCwd(path: string) {
       } catch {
         // Keep uid unknown; without it the process fails closed below.
       }
-    if (uid !== undefined && uid !== ownerUid && !foreignWritable) return 'benign'
+    if (uid !== undefined) {
+      if (uid === ownerUid) return 'exempt'
+      // Root bypasses permission bits and an unprivileged prober cannot read
+      // its cwd/fd/maps at all — blocking on it wedged every cleanup on pid 1.
+      if (uid === 0) return 'exempt'
+      if (!writableByProc(uid, procGids)) return 'benign'
+    }
     let kernelThread = false
     let exited = false
     try {
