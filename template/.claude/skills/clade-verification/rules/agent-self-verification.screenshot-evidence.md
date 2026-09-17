@@ -68,10 +68,9 @@ Reviewer 的 model 選擇依 [[agent-routing]] 當前 Routing Table 與對應 ad
 
 逐層列出 (a)(b)(c)(d) 的嘗試結果。逐字範例：
 
-> **下面這個 fence 是 live fixture**：`test/rule-example-parser-contract.test.ts` 會現場把它抽出來
-> 餵進 `vendor/scripts/review-gui.parser.ts`。改動它（含標點全半形）等於改動 parser 的驗收條件——
-> 測試紅了就是兩邊真的不一致，**NEVER** 為了讓它綠而去改測試的期望值。範例被整段搬走時，
-> 該測試的抽取數守門會失敗，不會靜默失去保護。
+> **下面這個 fence 只是範例，沒有機械守門**：原本抽它餵 parser 的 live fixture 於 2026-09-17
+> 隨舊驗收 GUI 的 parser 一起退役，現在沒有任何測試會抽出或比對它。改動範例（含整段搬走）
+> 不會有測試紅燈——格式一致性只靠改的人自己對照 (a)–(d) 四層，**NEVER** 把「沒紅」讀成「格式仍對」。
 
 ```text
 （deferred: tried (a) dev-login route 限 E2E user only, edit 後 typecheck fail / (b) service_role 不適用（需驗 RLS 邏輯）/ (c) OAuth callback 撞 redirect URI mismatch / (d) target visual verifier fail with "login required"。剩需 user 親自跑）
