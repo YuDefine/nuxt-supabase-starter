@@ -8,10 +8,12 @@
 #
 # usage:
 #   gate-slot.sh <try|wait> <key> -- <command> [args...]
+#   gate-slot.sh status
 #
 # modes:
 #   try   取不到 slot 立刻 exit 75（EX_TEMPFAIL），呼叫端自行決定 skip（post-edit hook 走這條）
 #   wait  等到取得 slot 才執行（pre-push / 手動 pnpm typecheck 走這條，品質 gate 不可略過）
+#   status  唯讀：逐行印出 lock dir 內每個 lock 的持有者（TD-1072，見下方 print_status）
 #
 # env:
 #   CLADE_HEAVY_GATE_SLOTS   整台機器同時執行上限（預設 2，clamp 到 1..8）
@@ -34,28 +36,33 @@ set -uo pipefail
 BUSY=75
 
 usage() {
-  printf 'usage: gate-slot.sh <try|wait> <key> -- <command> [args...]\n' >&2
+  printf 'usage: gate-slot.sh <try|wait> <key> -- <command> [args...] | gate-slot.sh status\n' >&2
   exit 2
 }
 
-[ "$#" -ge 3 ] || usage
-mode=$1
-key=$2
-shift 2
-[ "${1:-}" = "--" ] && shift
-[ "$#" -ge 1 ] || usage
-case "$mode" in
-  try | wait) ;;
-  *) usage ;;
-esac
+if [ "${1:-}" = status ]; then
+  [ "$#" -eq 1 ] || usage
+  mode=status
+else
+  [ "$#" -ge 3 ] || usage
+  mode=$1
+  key=$2
+  shift 2
+  [ "${1:-}" = "--" ] && shift
+  [ "$#" -ge 1 ] || usage
+  case "$mode" in
+    try | wait) ;;
+    *) usage ;;
+  esac
+fi
 
 # 外層已持有 slot（例如 post-edit hook 已上鎖，內層 pnpm typecheck 又轉呼叫 clade-gate）。
 # 沒有這個 escape hatch，第二層會在同一個 repo lock 上等自己 → 死鎖。
-if [ "${CLADE_GATE_SLOT_HELD:-}" = "1" ]; then
+if [ "$mode" != status ] && [ "${CLADE_GATE_SLOT_HELD:-}" = "1" ]; then
   exec "$@"
 fi
 
-command -v flock >/dev/null 2>&1 || exec "$@"
+[ "$mode" = status ] || command -v flock >/dev/null 2>&1 || exec "$@"
 
 # LOCK_DIR 決定「全機 semaphore 的命名空間」。NEVER 直接退 /tmp —— cron / systemd
 # service / daemon 起的 gate 沒有 XDG_RUNTIME_DIR，會落到 /tmp/clade-gates 形成**第二套
@@ -74,7 +81,7 @@ _default_lock_dir() {
   printf '/tmp/clade-gates'
 }
 LOCK_DIR=${CLADE_GATE_LOCK_DIR:-$(_default_lock_dir)}
-mkdir -p "$LOCK_DIR" 2>/dev/null || exec "$@"
+[ "$mode" = status ] || mkdir -p "$LOCK_DIR" 2>/dev/null || exec "$@"
 
 SLOTS=${CLADE_HEAVY_GATE_SLOTS:-2}
 case "$SLOTS" in
@@ -82,6 +89,110 @@ case "$SLOTS" in
 esac
 [ "$SLOTS" -lt 1 ] && SLOTS=1
 [ "$SLOTS" -gt 8 ] && SLOTS=8
+
+# ── status：唯讀的持有者清單（TD-1072）────────────────────────────────────
+# 呼叫端（propagate 的 push 逾時判讀）要回答「我排隊時是誰佔著 slot」。證據 MUST 由
+# gate-slot 自己給 —— lock dir 的推導、slot 數的 clamp 都只在本檔，NEVER 在呼叫端
+# 另寫一份會漂移的路徑邏輯。
+#
+# 輸出：每個持有者一行 tab 分隔的 key=value，cwd 放最後；沒有持有者的 lock 印 `state=free`。
+# 判不出來一律 `state=unknown` 帶 `reason=`，NEVER 把判不出印成 free。
+# NEVER 用 `flock -n` 探測：那會短暫搶到 slot，讓正在輪詢的 waiter 錯過一輪。
+# 同 print_holder_diag：只印 comm 不印 argv（argv 可能帶 token，TD-685）。
+#
+# NEVER 把 `fuser <lock>` 的清單報成持有者：它列的是「開著 lock 檔的行程」，排隊者也開著——
+# repo lock 是先 `exec 9>>` 才 `flock -w`，acquire_slot 取不到 slot 前也短暫開檔。
+# 持有者由下面三層判定，依序：
+#   1. sidecar `<lock>.holder`：取到鎖的 gate-slot 自己寫的 $$（之後 exec timeout／
+#      systemd-run --scope 都不換 pid、fd 一路繼承），且該 pid 此刻真的開著這個 lock 檔
+#   2. /proc/locks：kernel 說這個 inode 有沒有被 FLOCK 佔（排隊者不會出現在裡面）。它的 pid
+#      欄是取鎖那支 `flock` 子行程、通常已結束，所以只判 held／free，不拿來認人
+#   3. 兩者都沒有（macOS 等）：有開檔者就 unknown 並列出 openers（含排隊者），否則 free
+print_status() {
+  local i lock
+  printf 'lock_dir=%s\tslots=%s\n' "$LOCK_DIR" "$SLOTS"
+  for i in $(seq 1 "$SLOTS"); do
+    print_lock_status "$LOCK_DIR/heavy-$i.lock" "slot=$i/$SLOTS"
+  done
+  for lock in "$LOCK_DIR"/repo-*.lock; do
+    # repo lock 一個 repo 一支、只增不刪；free 的全印出來是雜訊，只印有持有者的。
+    [ -f "$lock" ] && print_lock_status "$lock" 'slot=repo' held-only
+  done
+}
+
+# sidecar 的 pid 還活著、而且真的開著這個 lock 檔才算數；否則是上一任留下的 stale 檔。
+valid_holder_pid() {
+  local lock=$1 pid real fd
+  [ -r "$lock.holder" ] || return 1
+  pid=$(head -n 1 "$lock.holder" 2>/dev/null)
+  case "$pid" in '' | *[!0-9]*) return 1 ;; esac
+  [ -d "/proc/$pid/fd" ] || return 1
+  real=$(readlink -f "$lock" 2>/dev/null) || return 1
+  for fd in /proc/"$pid"/fd/*; do
+    if [ "$(readlink "$fd" 2>/dev/null)" = "$real" ]; then
+      printf '%s' "$pid"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# 0 = held，1 = free，2 = 判不出（沒有 /proc/locks 或 stat 不是 GNU 形式）。
+kernel_lock_state() {
+  local lock=$1 dev ino key
+  [ -r /proc/locks ] || return 2
+  dev=$(stat -c '%d' "$lock" 2>/dev/null) || return 2
+  ino=$(stat -c '%i' "$lock" 2>/dev/null) || return 2
+  case "$dev$ino" in '' | *[!0-9]*) return 2 ;; esac
+  # glibc dev_t 解碼；/proc/locks 以 `%02x:%02x:%lu` 印 major:minor:inode。
+  key=$(printf '%02x:%02x:%s' "$(((dev >> 8) & 0xfff))" "$(((dev & 0xff) | ((dev >> 12) & 0xfff00)))" "$ino")
+  grep -q "FLOCK .* $key " /proc/locks && return 0
+  return 1
+}
+
+print_lock_status() {
+  local lock=$1 label=$2 filter=${3:-} name pid line state openers
+  name=$(basename "$lock")
+  if [ ! -f "$lock" ]; then
+    [ "$filter" = held-only ] || printf 'lock=%s\t%s\tstate=free\n' "$name" "$label"
+    return
+  fi
+  if pid=$(valid_holder_pid "$lock"); then
+    line=$(ps -o etime=,comm= -p "$pid" 2>/dev/null | awk '{$1=$1; print}')
+    if [ -n "$line" ]; then
+      printf 'lock=%s\t%s\tstate=held\tpid=%s\tetime=%s\tcomm=%s\tcwd=%s\n' \
+        "$name" "$label" "$pid" "${line%% *}" "${line#* }" \
+        "$(readlink "/proc/$pid/cwd" 2>/dev/null || echo unknown)"
+      return
+    fi
+  fi
+  kernel_lock_state "$lock"
+  state=$?
+  if [ "$state" -eq 0 ]; then
+    # 被佔但 sidecar 無效：持有者是沒寫 sidecar 的舊版 gate-slot，或非 gate-slot 的 flock。
+    printf 'lock=%s\t%s\tstate=held\tholder=unknown\n' "$name" "$label"
+    return
+  fi
+  if [ "$state" -eq 1 ]; then
+    [ "$filter" = held-only ] || printf 'lock=%s\t%s\tstate=free\n' "$name" "$label"
+    return
+  fi
+  if ! command -v fuser >/dev/null 2>&1; then
+    printf 'lock=%s\t%s\tstate=unknown\treason=no-fuser\n' "$name" "$label"
+    return
+  fi
+  openers=$(fuser "$lock" 2>/dev/null | awk '{$1=$1; gsub(/ /, ","); print}')
+  if [ -z "$openers" ]; then
+    [ "$filter" = held-only ] || printf 'lock=%s\t%s\tstate=free\n' "$name" "$label"
+    return
+  fi
+  printf 'lock=%s\t%s\tstate=unknown\treason=no-proc-locks\topeners=%s\n' "$name" "$label" "$openers"
+}
+
+if [ "$mode" = status ]; then
+  print_status
+  exit 0
+fi
 
 # slots 降到 1 的機器上佇列會變深（一套 typecheck 3–8 分鐘，3–4 個 waiter 要排得完），
 # 1800s 會讓品質 gate 變成隨機 exit 75。NEVER 改成無限等 —— 逾時的 holder 診斷是唯一
@@ -98,6 +209,16 @@ REPO_LOCK="$LOCK_DIR/repo-$safe_key.lock"
 : >>"$REPO_LOCK" 2>/dev/null || exec "$@"
 
 exec 9>>"$REPO_LOCK"
+
+# 取到鎖的那一刻由本行程寫下自己是持有者（status 的第 1 層證據，見 print_status 上方）。
+# 原子寫；寫失敗不影響 gate。stale 檔 NEVER 主動刪：會和剛取到鎖、正要覆寫的新持有者競態。
+record_holder() {
+  local tmp="$1.holder.$$"
+  if ! { printf '%s\n' "$$" >"$tmp" && mv -f "$tmp" "$1.holder"; } 2>/dev/null; then
+    rm -f "$tmp" 2>/dev/null
+  fi
+  return 0
+}
 
 # 印 lock holder 診斷到 stderr（逾時出口用）。
 # 用法: print_holder_diag <lock_file> <context_msg>
@@ -189,6 +310,7 @@ if [ "$mode" = wait ]; then
 else
   flock -n 9 || exit "$BUSY"
 fi
+record_holder "$REPO_LOCK"
 
 # 掃描 slot 1..N，取到第一個空的就持有。fd 11..18 對應 slot 1..8。
 acquire_slot() {
@@ -198,6 +320,7 @@ acquire_slot() {
     : >>"$LOCK_DIR/heavy-$i.lock" 2>/dev/null || continue
     eval "exec $fd>>\"\$LOCK_DIR/heavy-\$i.lock\"" 2>/dev/null || continue
     if flock -n "$fd"; then
+      record_holder "$LOCK_DIR/heavy-$i.lock"
       return 0
     fi
     eval "exec $fd>&-" 2>/dev/null || true
