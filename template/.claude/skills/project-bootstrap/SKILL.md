@@ -183,6 +183,8 @@ exit code：`0` 全綠 / `1` 用法錯誤或 registry 登記失敗 / `2` 有 gat
 
 這支**不修業務 code**，只跑 gate 並如實回報。例外：mint 缺的 playbook pack，以及 readiness 紅時再跑一次 `sync-vendor --force`。**`hub:vendor` 成功訊息不算證據**，必須 `audit-consumer-readiness.ts --gate` exit 0。紅燈時修 root cause 後重跑，**NEVER** 把 `BLOCKED` 當成「大致完成」。
 
+`repo-merge-settings` 是 `FAIL` 時，repo 已存在且你有 admin 權限就跑它印出的 `gh repo edit <owner/repo> --delete-branch-on-merge` 再重跑（判準見 `github-flow` § 合併後分支回收）；`SKIP` 代表量不到（repo 尚未建立或 `gh` 未登入），補齊後重跑，**NEVER** 讀成已開。
+
 `semantic-inspection` 回報 required／variant／design 缺項時，依下一節完成 declarations 與既有 intake 決策，再重跑完整 onboarding CLI；不單獨補跑一項來替換整趟結果。
 
 ## 5. 核對 meta 與 convention declarations
