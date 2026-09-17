@@ -2,7 +2,7 @@
 
 <!-- carrier-independent candidate: 本檔的義務不經任何 runtime 專屬工具契約表達，是 [[TD-445]] 抽共用核心時最先可搬的一批。**這是候選標記，不是 audience**——真正的 audience 是上面那行 `clade-targets`，NEVER 因為看到本行就把 targets 放寬。放寬 reference 而不放寬 SKILL.md 會投出沒有 skill 入口指向的孤兒檔。 -->
 
-需求分類與執行以 [SKILL.md](../SKILL.md) § 3.1a 為準。既有 scan bucket 名稱保留作觀測提示；canonical source、當前 revision 與 evidence 決定可執行動作。
+需求分類與執行以 [SKILL.md](../SKILL.md) § 3.1a 為準。人工 gate 以 `flow gates` 的卡片為準；canonical source、當前 revision 與 evidence 決定可執行動作。
 
 - active 的 plan package 走 `/wt <slug>: /implement`，讀 carrier 的下一個未勾 phase。
 - legacy parked／stashed 先透過中立 history 讀取原件，保留 supersedes／provenance 後接續。原始暫存資料維持唯讀。

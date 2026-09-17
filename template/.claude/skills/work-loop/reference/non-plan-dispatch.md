@@ -54,7 +54,7 @@
 **判準**：一條驗收條件能寫成「跑某個指令看 exit code / 看輸出字串」就是 machine，其餘全是 human。
 判不出來的**歸 human**——保守側是多一次人看，不是少一次。
 
-**NEVER** 用「這條 item 很小，驗收顯而易見」略過本節。plan package 路徑靠 `userActionPending` 與
+**NEVER** 用「這條 item 很小，驗收顯而易見」略過本節。plan package 路徑靠 acceptance scenario 的 `@human` 標記與
 machine check 分離把這件事結構化了，非 plan 路徑沒有那個結構——不明寫，evidence pointer 的品質
 就退回 agent 自覺，而 harvest 拿到的是 machine 與 human 混在一起的一段自報完成。
 

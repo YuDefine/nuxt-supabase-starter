@@ -40,7 +40,7 @@ pnpm test:e2e:verify <change>
 
 **Evidence trail**：spec pass 後，主線跑 `evidence-store.mjs --write --kind verified-e2e --spec <path> --trace <path>`，把印出的 `(verified-e2e: <ISO-8601>)` 貼到 item line 末尾（payload 進 sidecar，per [[review-gui-surface]] § Evidence 寫入路徑）。
 
-**Gate 結果**：`verify:e2e` 是 automatic channel；annotation present 即通過，可由 review-gui 的 `autoCheckCompletedAutomaticItems(...)` 自動 flip `[x]`。缺 annotation 時 item 留在未勾狀態，**NEVER** 在那個狀態下報完成。
+**Gate 結果**：`verify:e2e` 是 automatic channel；annotation present 即通過，session owner 可直接勾 `[x]`（per [[manual-review]] § automatic channel 例外）。缺 annotation 時 item 留在未勾狀態，**NEVER** 在那個狀態下報完成。
 
 #### `[verify:api]` channel
 
@@ -48,7 +48,7 @@ pnpm test:e2e:verify <change>
 
 **Evidence trail**：request 通過後，主線跑 `evidence-store.mjs --write --kind verified-api --method <M> --url <U> --status <S> [--body <sha256-12chars>]`，把印出的 `(verified-api: <ISO-8601>)` 貼到 item line 末尾。
 
-**Gate 結果**：`verify:api` 是 automatic channel；annotation present 即通過，可由 review-gui 的 `autoCheckCompletedAutomaticItems(...)` 自動 flip `[x]`。缺 annotation 時 item 留在未勾狀態，**NEVER** 在那個狀態下報完成。
+**Gate 結果**：`verify:api` 是 automatic channel；annotation present 即通過，session owner 可直接勾 `[x]`（per [[manual-review]] § automatic channel 例外）。缺 annotation 時 item 留在未勾狀態，**NEVER** 在那個狀態下報完成。
 
 #### `[verify:ui]` channel
 
@@ -59,10 +59,10 @@ pnpm test:e2e:verify <change>
 **Annotation 格式 hard rule**（反覆違反，per `pitfall-verified-ui-annotation-format-drift`）：
 
 - **NEVER** 一次 `--screenshot` 傳多個逗號分隔 path。多張圖 → 對同一 `(itemId, kind)` 跑多次 `--write`（sidecar append-only），或拆 scoped sub-items `#N.M` 各自 `--write`
-- **NEVER** 在 scoped sub-item `#N.M` 的 evidence 引用 parent `#N` 的截圖檔名 — 例：`#4.1` 的 `--screenshot` 路徑 **MUST** 含 `#4.1-` 前綴，**NEVER** 引用 `#4-*.png`。review-gui 按 `#<item-id>-*` pattern 配對截圖到 item；ID 不符 → evidence missing，user 被迫手動排查
+- **NEVER** 在 scoped sub-item `#N.M` 的 evidence 引用 parent `#N` 的截圖檔名 — 例：`#4.1` 的 `--screenshot` 路徑 **MUST** 含 `#4.1-` 前綴，**NEVER** 引用 `#4-*.png`。evidence 讀端按 `#<item-id>-*` pattern 配對截圖到 item；ID 不符 → evidence missing，人被迫手動排查
 - **MUST** 寫完立即 self-check：`node <clade>/vendor/scripts/lib/evidence-store.ts --repo . --change <change> --item '#N' --kind verified-ui --json` 讀回剛寫的記錄 → 確認 (a) 有這筆 (b) `screenshot` basename 以 `#<this-item-id>-` 開頭 (c) 檔案存在。任一不符 → 立即修正，**NEVER** 帶病 handoff
 
-**Gate 結果**：`verify:ui` 是 semi-automatic channel；annotation present 只是 visual evidence，使用者仍 **MUST** 在 review GUI 點 OK 才能 flip `[x]`。缺 annotation 時 GUI 顯示 evidence missing，item 留在未勾狀態，**NEVER** 在那個狀態下報完成。
+**Gate 結果**：`verify:ui` 是 semi-automatic channel；annotation present 只是 visual evidence，仍 **MUST** 由人判（`ui-judgement` 卡 → `flow receipt`）才能 flip `[x]`。缺 annotation 時沒有卡（機械待辦 NEVER 成卡），item 留在未勾狀態，**NEVER** 在那個狀態下報完成。
 
 #### Multi-marker items
 
@@ -72,9 +72,9 @@ Multi-marker item **MUST** 由主線依 channel order `e2e → api → ui` 逐�
 - [ ] #1 [verify:api+ui] admin 改 offset → 200 + grid 顯示更新 (verified-api: 2026-05-11T08:00:00Z) (verified-ui: 2026-05-11T08:00:30Z)
 ```
 
-- 若 item 只含 verify channels（`verify:e2e` / `verify:api` / `verify:ui`），最後一個 channel annotation 寫入後 `autoCheckCompletedAutomaticItems(...)` 可自動 flip `[x]`。
-- 若 item 含 `review:ui`，automatic channel 只完成 evidence；checkbox **MUST** 保持 `[ ]`，等使用者在 PWA 確認畫面。
-- 每個 kind **MUST** 獨立驗證，任一 kind 缺 annotation 整條 item 就不勾（review-gui 的 `hasExpectedAutomaticAnnotations` 對 `item.kinds` 走 `every`）。原本再取 worst-case 的 archive-gate 已於 2026-09-07 隨 spectra 生命週期退役，**沒有機器在 archive 那一刻再驗一次**。
+- 若 item 只含 verify channels（`verify:e2e` / `verify:api` / `verify:ui`），最後一個 channel annotation 寫入後 session owner 可直接勾 `[x]`。
+- 若 item 含 `review:ui`，automatic channel 只完成 evidence；checkbox **MUST** 保持 `[ ]`，等人判畫面。
+- 每個 kind **MUST** 獨立驗證，任一 kind 缺 annotation 整條 item 就不勾（對 `item.kinds` 是 `every`，不是 `some`）。原本再取 worst-case 的 archive-gate 已於 2026-09-07 隨 spectra 生命週期退役，**沒有機器在 archive 那一刻再驗一次**。
 
 #### `[verify:auto]` deprecated alias
 
@@ -82,9 +82,9 @@ Multi-marker item **MUST** 由主線依 channel order `e2e → api → ui` 逐�
 
 1. 主線先跑 `verify:api` channel，寫 `(verified-api: ...)`
 2. 再跑 `verify:ui` channel，寫 `(verified-ui: ...)`
-3. 使用者不需在 PWA 對 UI evidence 再點一次；`(verified-ui:)` 寫入後 auto-check 勾 `[x]`。
+3. 人不需對 UI evidence 再判一次；`(verified-ui:)` 寫入後 session owner 勾 `[x]`。
 
-Parser **MUST** emit deprecation warning（`review-gui.parser.ts` 的 `warnParser`）。新 authoring **NEVER** 使用 `[verify:auto]`；新項目必須使用 explicit `[verify:e2e]` / `[verify:api]` / `[verify:ui]` 或 multi-marker。
+解析它的舊 parser 隨面板改版退役（2026-09-17），不再有 deprecation warning 替你攔。新 authoring **NEVER** 使用 `[verify:auto]`；新項目必須使用 explicit `[verify:e2e]` / `[verify:api]` / `[verify:ui]` 或 multi-marker。
 
 #### Pre-verify baseline 假設（hard rule）
 
@@ -199,29 +199,26 @@ Cookbook template 不存在的情境（如 nuxt-auth-utils + libsql-drizzle，�
 
 ### `[review:ui]` flow（真的需要人）
 
-tasks.md 仍有未勾 `[review:ui]` 項時，第一動作 **MUST** 是引導使用者跑 `pnpm review:ui` — 本地 GUI 自動依 `#N` / `#N.M` schema 配對截圖、可鍵盤完成 OK / Issue / SKIP、conflict-aware 寫回 tasks.md，不在 chat 內燒 token。完整工具行為見 `vendor/scripts/review-gui.ts`。
+tasks.md 仍有未勾 `[review:ui]` 項時，第一動作 **MUST** 是 auto-triage 後跑 `flow gates --repo-only --require-empty`（per [[proactive-skills.manual-review-entry]]）；exit 3 才把人導向面板的待我佇列（`pnpm review:ui --print` 印出本 repo 專案頁）。人在面板看 evidence 判定，不在 chat 內燒 token。
 
 **NEVER** 預設用 `target-native question surface` 在 chat 內逐項彈對話框 — 那是 fallback，不是 default path。
 
-**Fallback**（`pnpm review:ui` 不可用時 — consumer 沒有該 script、使用者明確拒絕 GUI、或 pure backend 完全無 UI 證據需求）：
+**Fallback**（面板不可用時 — 服務起不來、使用者明確拒絕 GUI、或 pure backend 完全無 UI 證據需求）：
 
 1. 依 task 清單逐項準備截圖或證據
 2. 說明截圖中看到的狀態
 3. 問使用者這一項是否通過
 4. 依使用者答覆決定勾選、保留未勾、或註記 skip
 
-#### review-gui pre-flight warning
+#### Pre-review data readiness 檢查
 
-`pnpm review:ui` 渲染 `[review:ui]` / `[verify:ui]` item 前會 client-side 偵測 Pre-Review Data Readiness hard rule 違反（模糊指代 / 缺 UID / 缺 URL / multi-step 未拆）。Patterns 來自 `vendor/snippets/manual-review-enforcement/patterns.json`（與 `vendor/scripts/manual-review-check.sh` 共用 single source-of-truth）。
+Pre-Review Data Readiness hard rule 的違反（模糊指代 / 缺 UID / 缺 URL / multi-step 未拆）由 `vendor/scripts/manual-review-check.sh` 在**寫入時**攔，patterns 來自 `vendor/snippets/manual-review-enforcement/patterns.json`。舊 GUI 渲染前的 client-side amber banner 隨面板改版退役（2026-09-17），寫入時漏網的 item **不會**再被第二道攔下——寫的人當場自驗。
 
-- 看到 amber warning banner → 該 item 寫入時沒被 pattern check 攔到（漏網或被 bypass），直接改 tasks 檔補上 inline sample / scoped sub-items，改完重跑 `manual-review-check.sh`
-- Banner 列出 hit pattern 與 manual-review.md sub-section anchor，並提示要補什麼
-- Banner **non-blocking**：user 仍可 OK / Issue / SKIP（warning 不擋住操作）
-- Banner 用 amber 色，跟 verify channel evidence missing 的 red banner 區分
+- 發現漏網 item → 直接改 tasks 檔補上 inline sample / scoped sub-items，改完重跑 `manual-review-check.sh`
 
 ##### Bypass
 
-對 hook regex 誤判（false positive）或刻意例外的 item，可加 `@no-manual-review-check[<reason>]` marker（見 `manual-review.data-readiness.md` 的「`@no-manual-review-check` Marker」段）跳過 banner + hook 檢查。Banner 不顯示，但 GUI 診斷 console 仍寫 `[info] #N bypass: <reason>` 留 audit trail。
+對 hook regex 誤判（false positive）或刻意例外的 item，可加 `@no-manual-review-check[<reason>]` marker（見 `manual-review.data-readiness.md` 的「`@no-manual-review-check` Marker」段）跳過 hook 檢查；`<reason>` 留在行內即是 audit trail。
 
 ### `[discuss]` flow
 

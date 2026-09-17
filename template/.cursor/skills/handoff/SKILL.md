@@ -45,7 +45,7 @@ Session 交接管理。**四個 arg，全部以「本 session 收工」結束**�
 ## Step 0.5 — Session context 預算 gate（MUST，早於 Step 1）
 
 **`next` 是四個 arg 裡唯一會在當前 session 燒掉大量 context 的**：它的成本前載（2B.0 pitfall
-sweep ＋ handoff-scan ＋ review-gui readiness ＋ tech-debt hygiene ＋ 2B.2.5 逐條 triage），
+sweep ＋ handoff-scan ＋ human gates ＋ tech-debt hygiene ＋ 2B.2.5 逐條 triage），
 而它的終點 2B.5 是**在當前 session 內呼**下一件工作的入口。兩者恰好是
 [[session-tasks]] § Session context 預算 過門檻後 MUST 停的事。所以 context 預算 MUST 在
 Step 1 兩層判定**之前**先判 —— Step 1 只問「有幾件工作、幾件派得出去」，問不到「這個 session
@@ -310,21 +310,21 @@ heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消�
 ### 4. Load-bearing claim MUST 帶當下實查的 receipt
 
 **判準**：把這句宣稱刪掉，接手者會不會做出**不同的分工決定**？會 → 它是 load-bearing。
-典型四類：驗收入口可用、evidence 已就緒、產物已依約命名、bucket / 球在誰手上。
+典型四類：驗收入口可用、evidence 已就緒、產物已依約命名、球在誰手上（`flow gates` 有沒有卡）。
 
 這類宣稱 MUST 寫成「判定來源 ＋ 當下結果」，**NEVER** 寫成自由文字斷言：
 
 ```markdown
 <!-- ✅ 判定成立 -->
-**驗收入口**（2026-08-26 實查 `review-handoff-url.ts resolve --change <name>` exit 0）：
-https://review-gui.<maintainer-domain>/review/<consumer-id>:<change-name>
+**驗收入口**（2026-09-17 實查 `flow gates --repo-only --require-empty` exit 3，ui-judgement 2 張）：
+https://review-gui.<maintainer-domain>/projects/<repo>
 
 <!-- ✅ 判定不成立 —— 誠實寫缺口，NEVER 省略不提 -->
-**驗收入口：無。** `resolve` 回 `not-in-inbox`（`verifyUiUserPendingCount:0`）——
-三條 item 尚無 `(verified-*)` annotation，**球在 agent 這邊**。
+**驗收入口：無。** `flow gates --repo-only --require-empty` exit 0（0 張卡）——
+三條 item 尚無 `(verified-*)` evidence，**球在 agent 這邊**。
 
 <!-- ❌ 自由文字斷言：事後無法分辨「我以為做完」與「我驗過做完」 -->
-三條 item 的 evidence 都已備妥，只需看圖點 OK。跑 `pnpm review` 開 GUI。
+三條 item 的 evidence 都已備妥，只需看圖點 OK。開面板就好。
 ```
 
 **下游後果**：這兩種句子在檔案裡長得一樣，所以接手者沒有任何辦法分辨。它會原樣轉述給 user，
@@ -333,10 +333,10 @@ https://review-gui.<maintainer-domain>/review/<consumer-id>:<change-name>
 接手 session 轉述兩次才被 user 反彈揪出（[[pitfall-handoff-claim-without-verification-receipt]]）。
 
 **人工驗收入口另有 Iron Law**（`rules/core/proactive-skills.manual-review-entry.md` § 交付入口前置查詢）：
-入口**永遠**是 `review-handoff-url.ts resolve` exit 0 的 `review_url`。
+入口**永遠**是 `flow gates --repo-only` 實查過的面板位址（格式同上方 ✅ 範例）。
 寫進 HANDOFF / `tasks/*.md` 時同樣適用——**NEVER** 寫任何 shell 指令（`pnpm review:ui`、
 `cd … && pnpm …`）或 loopback URL 當入口。持久檔案裡的錯入口會被下一棒忠實複製，
-而 Stop hook 是 receipt-gated ＋ fail-open，對「從沒跑過 resolve」的路徑毫無防線
+而 Stop hook 是 receipt-gated ＋ fail-open，receipt 的寫入端已隨 review-gui 退場，這條路徑目前毫無防線
 （[[pitfall-review-entry-degraded-to-local-shell-command]] 第五變體）。
 
 **這條與開頭「判現況一律當場跑」是兩件事**：那條管**數字**（git status / worktree / commit 數），
@@ -397,11 +397,11 @@ https://review-gui.<maintainer-domain>/review/<consumer-id>:<change-name>
 
 跑 **Step 3 共用 audit block**（見下文）。next 完成 audit 後，在 chat 訊息加一行摘要：「Audit: N 個 worktree / M 個 stash 寫進 HANDOFF.md `## Worktree & Stash Audit` 段」。具體判定邏輯不在此重複，避免兩處規約走 drift。
 
-### 2B.1.7 Review-gui readiness scan（hard rule）
+### 2B.1.7 Human gates scan（hard rule）
 
-**MUST Read [scan-steps.md](scan-steps.md) § 2B.1.7 before proceeding** — 含 bucket meaning table、master 排除規約、SoT 判定、scan 失敗 fallback。
+**MUST Read [scan-steps.md](scan-steps.md) § 2B.1.7 before proceeding** — 含 raw 形狀、family 分組寫法、SoT 判定、scan 失敗 fallback。
 
-摘要：從 §2B.1a 同一次 handoff-scan 輸出讀 `reviewGuiReadiness` 段 → 依 bucket 寫入 `$MAIN_WT_PATH/HANDOFF.md` `## Review-gui Readiness` 段（整段覆寫）。Outstanding 推薦 **MUST** 引用 scan 結果。park 不執行。
+摘要：從 §2B.1a 同一次 handoff-scan 輸出讀 `reviewGuiReadiness` 段（`flow gates`）→ 依 family 寫入 `$MAIN_WT_PATH/HANDOFF.md` `## Review-gui Readiness` 段（整段覆寫）。Outstanding 推薦 **MUST** 引用 scan 結果。park 不執行。
 
 ### 2B.2 盤點剩餘 outstanding
 
@@ -426,33 +426,25 @@ https://review-gui.<maintainer-domain>/review/<consumer-id>:<change-name>
 - 涉及檔案 / module / consumer
 - 依賴關係（依賴誰、誰依賴它）
 
-### 2B.2.5 applyBlocked / awaitingUserDecision bucket 主動 triage（hard rule）
+### 2B.2.5 external-action / exception / ruling 卡主動 triage（hard rule）
 
-**核心命題**：`applyBlocked` / `awaitingUserDecision` 是 master 排除 bucket，但**排除的只是 ready 統計，不是主線的責任**。§2B.1.7 scan 抓到這兩類 change 時，**MUST** 對**每一條**主動 triage，**NEVER** 只寫進 `### ⚠ notReady` 就 silently drop、等 user 主動問才處理。此步對齊 [[goal-mode]] §「applyInProgress 不是 user-bound」的同一 spirit：blocked bucket 不等於「主線無事可做」。
+**核心命題**：`flow gates` 列出的卡是「等人」，但**等人的只是那一題，不是整件工作**。§2B.1.7 讀到 `external-action` / `exception` / `ruling` 卡時，**MUST** 對**每一張**主動 triage，**NEVER** 只寫進 `## Review-gui Readiness` 就 silently drop、等 user 主動問才處理。此步對齊 [[goal-mode]] 的同一 spirit：卡在一題不等於「主線無事可做」。
 
-對每條 `applyBlocked` / `awaitingUserDecision` change **MUST** 做三件事：
+對每張卡 **MUST** 做三件事：
 
-1. **抽 blocker 原因**：直接讀該工作的 carrier（`tasks/<date>-<slug>.md` 或 `specs/plans/NNN-<slug>/tasks.md`）的 `@apply-blocked` 註記與未勾項。逐條列出每一個原因，**NEVER** 從 bucket 名或 HANDOFF 既有 narrative 推測。
-2. **辨識 startable 子集**（最關鍵）：一件工作落 `applyBlocked` bucket 只代表它**含**至少一個 `@apply-blocked` phase，**不代表整件無事可做**。**MUST** 由 carrier 內容判斷是否有**未 blocked、可現在開工的 work**（典型：上游條件已解封但整件仍被 blocked marker 拖著）。有 startable 子集 → 依 [[goal-mode]] 規約**提供 dispatch 選項**（`/wt <slug>` 只做 unblocked phases），**NEVER** 因整件標 applyBlocked 就當 user-bound 擱置。
-3. **端出具體 user 決策**：把 blocker reason 中**真正需 user / owner 拍板**的具體題目（例：「work-order grain 二選一：`receiving_scans+process_tracking` vs `work_reports`」）逐條列進 outstanding，讓 user 當場能答，**NEVER** 只寫「等 owner 拍板」這種無法行動的模糊句。同時分辨哪些 blocker 是**外部依賴**（等 A 端 contract / 等別 change 先完成）— 這類才真的擱置，但仍 **MUST** 明列在等什麼。
+1. **抽 blocker 原因**：讀卡片的 `question` / `why_now`，再讀 `work_id` 對應 carrier（`tasks/<date>-<slug>.md` 或 `specs/plans/<id>/tasks.md`）的未勾項。逐條列出每一個原因，**NEVER** 從 family 名或 HANDOFF 既有 narrative 推測。
+2. **辨識 startable 子集**（最關鍵）：一件工作有卡只代表它**含**至少一個等人的點，**不代表整件無事可做**。**MUST** 由 carrier 內容判斷是否有**不依賴那一題、可現在開工的 work**。有 startable 子集 → **提供 dispatch 選項**（`/wt <slug>` 只做不受阻的部分），**NEVER** 因整件有卡就當 user-bound 擱置。
+3. **端出具體 user 決策**：`ruling` 卡的判斷題原樣端出（逐字、帶選項）；`external-action` 卡寫明**要人到場做什麼**；`exception` 卡寫明核准恢復／改派／abort 各會怎樣。**NEVER** 只寫「等 owner 拍板」這種無法行動的模糊句。純外部依賴（等 A 端 contract / 等別件工作）才真的擱置，但仍 **MUST** 明列在等什麼 signal。
 
 triage 結果併入 §2B.2 outstanding 清單（與 HANDOFF / tech-debt / ROADMAP 來源並列），進 §2B.3 serial/parallel 評估、§2B.4 推薦。
 
-**分類對照**：
-
-| blocker 類型 | 判定 | outstanding 處置 |
-| --- | --- | --- |
-| **有 startable 子集** | carrier 有未 blocked work 可現在做 | 列 outstanding + 提供 `/wt <slug>` dispatch 選項（只做 unblocked phases） |
-| **需 user/owner 內部決策** | `@apply-blocked[需 owner 拍板: X]` 類 | 列 outstanding + **端出具體決策題**讓 user 當場答 |
-| **等外部依賴** | 等 A 端 contract / 等別件工作先完成 | 列 outstanding + 明列**在等什麼 signal**（對齊 [[goal-mode]] `@apply-blocked` 僅限真外部 blocker） |
-
 **NEVER**：
-- ❌ scan 抓到 applyBlocked 的工作卻不讀 carrier 抽 blocker 原因
-- ❌ 把「含 blocked phase」等同「整件無 startable 工作」→ 漏掉可現在 dispatch 的子集
+- ❌ 讀到卡片卻不讀 carrier 抽 blocker 原因
+- ❌ 把「有一張卡」等同「整件無 startable 工作」→ 漏掉可現在 dispatch 的子集
 - ❌ 只寫「等 owner 拍板 / 卡外部」而不端出**具體**決策題或**具體**等待 signal
-- ❌ 因 master 統計排除就把這兩類 bucket 從 outstanding / 詢問操作 選項中省略
+- ❌ 因為是卡片就從 outstanding / 詢問操作 選項中省略
 
-**為什麼這條 rule 存在**（2026-07-06 <consumer-b> 實證）：/handoff next 對 3 條 applyBlocked 的 `ai-*` change 只寫進 notReady 段就結束，未抽 blocker 原因、未辨識 `ai-mcp-server` 其實 Phase 1-7.2 已解封可現在開工、未端出唯一需 user 拍板的 work-order grain 決策。user 被迫主動追問才拿到這些資訊 — 主動 triage 本應是 next 內建職責。
+**為什麼這條 rule 存在**（2026-07-06 <consumer-b> 實證）：/handoff next 對 3 條外部 blocked 的 `ai-*` change 只寫進 readiness 段就結束，未抽 blocker 原因、未辨識 `ai-mcp-server` 其實 Phase 1-7.2 已解封可現在開工、未端出唯一需 user 拍板的 work-order grain 決策。user 被迫主動追問才拿到這些資訊 — 主動 triage 本應是 next 內建職責。
 
 ### 2B.3 Serial vs Parallel 評估
 
@@ -462,9 +454,9 @@ triage 結果併入 §2B.2 outstanding 清單（與 HANDOFF / tech-debt / ROADMA
 
 ### 2B.4 推薦 + 詢問操作
 
-**MUST Read [dispatch-steps.md](dispatch-steps.md) § 2B.4 before proceeding** — 含推薦訊息格式、Option 1–4 配置、7 條禁止行為（ptb-unsafe 不得標 Recommended、wt 推薦必附 safety signal、review-gui bucket 推測禁令）。
+**MUST Read [dispatch-steps.md](dispatch-steps.md) § 2B.4 before proceeding** — 含推薦訊息格式、Option 1–4 配置、7 條禁止行為（ptb-unsafe 不得標 Recommended、wt 推薦必附 safety signal、等人狀態推測禁令）。
 
-摘要：先輸出「outstanding 盤點 + serial/parallel 推薦」訊息，再用 詢問操作 讓 user 選；review:ui 相關 next move **MUST** 引用 §2B.1.7 scan 結果，**NEVER** 自行推測 bucket。
+摘要：先輸出「outstanding 盤點 + serial/parallel 推薦」訊息，再用 詢問操作 讓 user 選；面板驗收相關 next move **MUST** 引用 §2B.1.7 的 `flow gates` 結果，**NEVER** 自行推測有沒有等人的事。
 
 ### 2B.4.5 PTB-unsafe wt 的快速分流（v1.14+）
 
@@ -474,7 +466,7 @@ Step 3.1 audit **有任一條** wt 判為 `mergeBackSafety: ptb-unsafe` → **MU
 
 ### 2B.5 接續 dispatch（user 選定 outstanding 後）
 
-**MUST Read [dispatch-steps.md](dispatch-steps.md) § 2B.5 before proceeding**（user 在 詢問操作 選定下一步的當下就要讀）— 含 5 列 next-skill dispatch 表、判定條件三條、slug 解析、parent cwd 不動 invariant、review:ui dispatch 的 7 列 bucket 入口表。
+**MUST Read [dispatch-steps.md](dispatch-steps.md) § 2B.5 before proceeding**（user 在 詢問操作 選定下一步的當下就要讀）— 含 5 列 next-skill dispatch 表、判定條件三條、slug 解析、parent cwd 不動 invariant、面板驗收 dispatch 的 family 入口表。
 
 摘要：一律透過 Skill tool 內呼對應入口，**不要**輸出「請執行 cd ... && claude ...」oneliner；會寫 tracked file 的實作入口（`/implement`、`/bdd`）包進 `/wt <slug>: /<next-skill>`，read-only 與規格類（`/specify`、`/clarify-over-specs`、`/system-analysis`）直接內呼。
 
@@ -499,7 +491,7 @@ Step 3.1 audit **有任一條** wt 判為 `mergeBackSafety: ptb-unsafe` → **MU
 讀 `handoff-scan.ts --json` 輸出的 `worktreeStash` 段（next 在 §2B.1a 已跑過 → 直接共用該輸出；park 沒經過 2B.1 → 在此跑）：
 
 ```bash
-# next：§2B.1a 已落檔到 $SCAN → 直接 jq，NEVER 重跑（review-gui 子行程很貴）
+# next：§2B.1a 已落檔到 $SCAN → 直接 jq，NEVER 重跑（各段子行程都要付費）
 jq '.worktreeStash.raw' "$SCAN"
 # park：沒經過 2B.1，在此落檔後同樣 jq 取段
 # MUST mktemp 唯一路徑 + 驗 consumerId —— 固定路徑是全機器共用，會拿別 repo 的 stash 清單
@@ -614,7 +606,7 @@ Retained: N
 
 - `relay` / `fanout`：成功 = durable brief 已存在 + helper 回傳 `relay_dispatched` + （fanout）`relayed_dispatch_ids` 已逐筆比對通過 + runtime cleanup 已盤點 + parent worktree lifecycle 已 `removed`／具名 `retained`；完成訊息首行逐字包含「目前這裡收工」，之後不再工作或輪詢。`relay_refused`／`transport_error` 保留 pane 且不得假裝完成（見 [dispatch-common.md](dispatch-common.md) § 5）
 - park：成功 = **進入條件已滿足**（user 顯式打 `park`，或裸 `/handoff` 已取得 user 允許）+ HANDOFF.md / tech-debt / ROADMAP 有對應寫入 + tasks 檔已清 + Step 3 audit 已靜默寫入 HANDOFF.md `## Worktree & Stash Audit` 段；訊息只含升級摘要（不含 audit）。**未取得允許就寫入 = 失敗**，即使檔案內容正確
-- next：成功 = 2B.0 pitfall sweep 已執行（dispatch `/oops` 或宣告「無 missed lesson」）+ `rotate-handoff-done.ts` 已跑（`noop` / `retired` / 100% 清掉可 rotate 的紀錄，不詢問）+ HANDOFF.md 已整理 + 2B.1.5 → Step 3 audit 已寫入並在訊息摘要一行 + 2B.1.7 scan 抓到的 `applyBlocked` / `awaitingUserDecision` change 已走 2B.2.5 主動 triage（抽 blocker 原因 + 辨識 startable 子集 + 端出具體 user 決策，NEVER silently drop）+ 2B.1.8 tech-debt hygiene 已讀（staleOpen 排進 outstanding 最高優先 + aging 排第二優先並主動追問 blocker + closedBloat warn 時已跑 `rotate-closed-bloat.ts`，`retired` 算成功） + 2B.1.9 consumer-local audit 已跑（`.claude/rules/local/handoff-audits.md` 存在時逐條跑並分流 exit 1 / exit ≥2；不存在則明講跳過）+ 盤點訊息 + 詢問操作已發出讓 user 選 + user 選定後 2B.5 dispatch 已完成（直接 dispatch 或內呼 `/wt <slug>: /<next-skill> <change-name>`）
+- next：成功 = 2B.0 pitfall sweep 已執行（dispatch `/oops` 或宣告「無 missed lesson」）+ `rotate-handoff-done.ts` 已跑（`noop` / `retired` / 100% 清掉可 rotate 的紀錄，不詢問）+ HANDOFF.md 已整理 + 2B.1.5 → Step 3 audit 已寫入並在訊息摘要一行 + 2B.1.7 `flow gates` 讀到的 `external-action` / `exception` / `ruling` 卡已走 2B.2.5 主動 triage（抽 blocker 原因 + 辨識 startable 子集 + 端出具體 user 決策，NEVER silently drop）+ 2B.1.8 tech-debt hygiene 已讀（staleOpen 排進 outstanding 最高優先 + aging 排第二優先並主動追問 blocker + closedBloat warn 時已跑 `rotate-closed-bloat.ts`，`retired` 算成功） + 2B.1.9 consumer-local audit 已跑（`.claude/rules/local/handoff-audits.md` 存在時逐條跑並分流 exit 1 / exit ≥2；不存在則明講跳過）+ 盤點訊息 + 詢問操作已發出讓 user 選 + user 選定後 2B.5 dispatch 已完成（直接 dispatch 或內呼 `/wt <slug>: /<next-skill> <change-name>`）
 - 失敗 / blocked：明確說明卡點，不假裝完成
 
 ## 與其他 skill 的銜接

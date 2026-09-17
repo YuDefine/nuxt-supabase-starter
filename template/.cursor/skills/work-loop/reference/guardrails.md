@@ -24,9 +24,9 @@
 10. **Error isolation + 跨輪升級** —— 單一 item 失敗不停整個 loop；同 item `failStreak` ≥3 → Escalated，不再 dispatch。同錯重複該產出系統性修正，不是無限 retry。pi pre-scan 的 exit 4（quota）/ exit 3（機械故障）**NEVER** 記入 `failStreak` / `consecutiveDispatchFailures`——fallback 形狀見 `dispatch-topology.md` § pre-scan 的 exit code 分流
 11. **收割護欄** —— `inFlight` > 0 時**不是**停止狀態；lock 在此期間 **NEVER** 釋放。deadline 到達只進 `cancelling` / intervention，依 owner 的原生控制面取消並等待 terminal；terminal 確認前 NEVER 移除 ledger、記 fail-streak、重派或收割
 12. **每條停止路徑 MUST 跑 `work-loop-lock.ts release --session <id>`** —— 含失敗提早結束的路徑。**NEVER** 改用 Write tool 或 `rm` 直接動 `.clade/work-loop/lock`（per Step 0 § 互斥鎖 Iron Law）
-13. **Blocked / Decision item 先評估再處理** —— `applyBlocked` 走 blocker 鮮度判定、`awaitingUserDecision` 先嘗試自主解決（技術決策自決，只有商業決策才是真的 user-bound）。兩者都**不是**「永遠跳過」。見 `blocker-evaluation.md`
-14. **NEVER 因 size / progress 跳過 dispatch** —— `applyInProgress` 不管進度 0% 或工作看起來多大，MUST dispatch；`/implement` 依 carrier 的 phase 結構管理步驟、pause 與 blocker。「需要完整 session」「不適合 loop」= 違反本條
-15. **Bucket ≠ ball ownership** —— `bucket=ready` 不等於 user-bound，`bucket=applyBlocked` 不等於 Claude 無事可做。**MUST** 在每條 change 的 bucket routing 後檢查 `issued` / `verifyClaudePendingCount` / `discussPendingCount` / `staleEvidenceCount`，任一 > 0 = 仍有工作。實證（2026-07-21 <consumer-a>）：bucket=`ready` + issued=5 → loop 宣告 user-bound + 30min idle，user 在 review-gui 等一個不會來的接手。**「所有 change 卡 user action」這句話在 `issued>0` 時就是錯誤判斷**
+13. **Blocked / Decision item 先評估再處理** —— 受阻項走 blocker 鮮度判定、待決策項先嘗試自主解決（技術決策自決，只有商業決策才是真的 user-bound）。兩者都**不是**「永遠跳過」。見 `blocker-evaluation.md`
+14. **NEVER 因 size / progress 跳過 dispatch** —— 實作未完的 carrier 不管進度 0% 或工作看起來多大，MUST dispatch；`/implement` 依 carrier 的 phase 結構管理步驟、pause 與 blocker。「需要完整 session」「不適合 loop」= 違反本條
+15. **有卡 ≠ ball ownership** —— `flow gates` 有卡不等於整件 user-bound，受阻不等於 Claude 無事可做。**MUST** 在每件工作路由後檢查carrier 內仍有 agent 做得完的項（未處理 feedback／缺或過期 evidence／未 triage 的 `（issue:）`／未勾 `[discuss]`），任一存在 = 仍有工作。實證（2026-07-21 <consumer-a>）：GUI 標可驗收 + 5 條 issue 未處理 → loop 宣告 user-bound + 30min idle，user 在 GUI 等一個不會來的接手。**「所有工作卡 user action」這句話在 carrier 還有 agent 可做項時就是錯誤判斷**
 16. **重複 invocation safe（三層）** —— 已 shipped 的 item 不出現在 scan；in-flight item 由 Step 2 的 claim 鮮度 filter 排除；整輪重疊由 Step 0 互斥鎖擋。**三層合起來才算 idempotent**——只靠「shipped 不再出現」不夠
 
 ### 護欄 7 的來源授權

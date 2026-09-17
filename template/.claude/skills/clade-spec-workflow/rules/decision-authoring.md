@@ -12,9 +12,8 @@ paths:
 
 # 待拍板條目的寫法
 
-**這一份是寫的人讀的。** 讀的人那一份是 [[review-gui-surface]] § `\my` 的四個檔案來源——
-它規範掃描器與頁面，本檔規範**被掃的那條 bullet**。選項的 canonical 形狀以本檔為準，
-[[review-gui-surface]] MUST 4 指過來。
+**這一份是寫的人讀的。** 讀的人那一份是 [[review-gui-surface]] § 待拍板佇列（pointer）——
+它規範掃描器與頁面，本檔規範**被掃的那條 bullet**。選項的 canonical 形狀以本檔為準。
 
 你寫進 `HANDOFF.md` / `docs/tech-debt.md` 的一條待拍板 bullet，60 秒內會被
 `vendor/scripts/flow/decision-sources.ts` 掃進 spine，出現在 `https://review-gui.<maintainer-domain>/decisions`
@@ -154,8 +153,8 @@ tech-debt 的 `### 需要 Charles`、tasks 的 `deferred-user-only`。寫進那�
 
 | 哪一種 | 誰記錄 | 一句「通過」結掉的是什麼 |
 | --- | --- | --- |
-| 佇列的 `Ready for review` → `通過` | spine 上的 span，答完那條就離開 `\my` / `/decisions` | **方向 OK、可以進 review inbox** |
-| `tasks.md` 的 `[review:ui]` checkbox | 那個 checkbox 自己，經 /review inbox 寫回 | **人真的在瀏覽器把那一頁開起來看過了** |
+| 佇列的 `Ready for review` → `通過` | spine 上的 span，答完那條就離開 `\my` / `/decisions` | **方向 OK、可以進人工驗收** |
+| `tasks.md` 的 `[review:ui]` checkbox／plan 的 `@human` 場景 receipt | checkbox 自己，或 `flow receipt` 寫進 `evidence/receipts.jsonl`（`ui-judgement` 卡） | **人真的在瀏覽器把那一頁開起來看過了** |
 
 **答佇列 NEVER 等於驗收。** 2026-08-29 <consumer-a> 實測：四條 ready-for-review 全部已被答
 「A. 通過」（span `c99f0d2acd529afc` / `07635ab2db246bc5` / `8bef7118645c7121` /
@@ -173,12 +172,12 @@ NEVER 是佇列的題。** 掃描端會偵測到並掛 `belongs-on-review`，且
 
 **NEVER 把未勾的 `[review:ui]` 各開一條進佇列。** 一條 change 的 17 項瀏覽器驗收是**一趟**
 差事，拆成 17 列就是 17 則推播問同一件事——同 `scanTasks` 對 deferred 子步驟已經寫明的理由。
-它們的家是 /review inbox，不是這裡。
+它們的家是人工驗收那一趟（`ui-judgement` 卡），不是這裡。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 條目指向的 live change 有 ≥1 項未勾 `[review:ui]` → `belongs-on-review` lint ＋ 不合成 通過／退回。**warn-only，不 block** |
-| 消費端 | 寫該條目的 agent（看到 lint 就把它移回 /review 流程）＋ `/decisions` 與 `flow pending` 上的 Charles（看到沒有通過鍵就知道要去 /review 逐條驗） |
+| 消費端 | 寫該條目的 agent（看到 lint 就把它移回人工驗收流程）＋ `/decisions` 與 `flow pending` 上的 Charles（看到沒有通過鍵就知道要去逐條驗） |
 | 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`） |
 
 ## 驗收：已經出版的，NEVER 再問一次
@@ -391,25 +390,21 @@ MUST 先跑 [[session-tasks]] § 並行爭用 的 Step 0 判出持有者，再�
 
 ### NEVER 把 live change 的 `## 人工檢查` 寫成登記簿條目
 
-逐條看證據、勾 `[x]`、寫 `[issue]` 退回，是 **`/review` 的職責**——它有 preview 入口、evidence
-檢視、以及寫回 `tasks.md` 的能力，`/decisions` 三樣都沒有。所以 `HANDOFF.md` /
+逐條看證據、寫判定、退回，是**人工驗收**的職責——它有 preview 入口、evidence 檢視、以及寫回
+receipt 的能力（`ui-judgement` 卡 → `flow receipt`），待拍板條目三樣都沒有。所以 `HANDOFF.md` /
 `docs/tech-debt.md` 的條目 **NEVER** 承載「去把 `<change>` 的 `## 人工檢查` 逐條確認」。
 
 那條 bullet 只會在兩種狀態下被寫出來，兩種的處置都不是留在登記簿上：
 
-| 那個 change 現在的 bucket | 這條 bullet 是什麼 | MUST |
+| `flow gates` 對那件 work 的輸出 | 這條 bullet 是什麼 | MUST |
 | --- | --- | --- |
-| `changeBelongsOnReviewInbox` 回 **true**（票已經在 `/review` 上） | 重複——同一個勾由兩個畫面各要一次 | 刪掉這條 bullet |
-| 回 **false**（`readyForEvidence` / `applyInProgress` 這類 **Claude 球**的桶） | 繞道——票進不了 inbox，於是改用登記簿叫人做 | 補齊缺的 evidence 讓它進 inbox，**再**刪掉這條 |
+| 已有對應的 `ui-judgement` 卡（票已經在人的佇列上） | 重複——同一個判定由兩個畫面各要一次 | 刪掉這條 bullet |
+| 沒有卡（evidence 缺或過期——**agent 的球**，機械待辦 NEVER 成卡） | 繞道——卡出不來，於是改用登記簿叫人做 | 補齊缺的 evidence 讓卡出現，**再**刪掉這條 |
 
-**判之前 MUST 實跑**，NEVER 從「我記得它已經做完了」推斷：
+**判之前 MUST 實跑**，NEVER 從「我記得它已經做完了」推斷（cwd = 該 repo，**NEVER** 帶 `CLADE_HOME`）：
 
 ```bash
-cd ~/offline/clade && node --input-type=module -e "
-const m = await import('./vendor/scripts/review-gui.ts')
-for (const c of await m.listPendingChanges('<repo>'))
-  console.log(c.name, c.bucket, JSON.stringify(c.evidenceMissing?.map(e => e.itemId)))
-"
+node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --json
 ```
 
 **NEVER 代勾 `## 人工檢查` 的 checkbox 讓這條消失**——沒有人確認的 `[x]` 一律是 false-green
@@ -425,10 +420,10 @@ for (const c of await m.listPendingChanges('<repo>'))
 
 > 2026-08-28 成因：<consumer-i> 的 `product-save-hardening` 四條 `## 人工檢查` 都宣告
 > `[verify:api+ui]`，實際每條只寫了一種 evidence，於是 change 停在 `readyForEvidence`
-> （`changeBelongsOnReviewInbox` 回 false，那是**Claude 球**的桶，刻意不畫進 inbox）。
-> 作者拿不到 `/review` 的票，就把「五條逐項確認」寫成 `## 需要 Charles 執行` 的 bullet——
+> （`changeBelongsOnReviewInbox` 回 false，那是**Claude 球**的桶，刻意不畫進 inbox；bucket 詞彙 2026-09-17 退役，同一件事現在是「沒有 `ui-judgement` 卡」）。
+> 作者拿不到人工驗收的票，就把「五條逐項確認」寫成 `## 需要 Charles 執行` 的 bullet——
 > 於是它以「要我動手」出現在 `/decisions`，而 Charles 在那裡連要看什麼都打不開。
-> **繞道的成因不是不懂分工，是 `/review` 收不進來**，所以本節的第二列要求先補 evidence、
+> **繞道的成因不是不懂分工，是人工驗收收不進來**，所以本節的第二列要求先補 evidence、
 > 而不是只要求刪 bullet。
 
 ## 答案落檔失敗不再是靜默的（`answer-not-filed`）

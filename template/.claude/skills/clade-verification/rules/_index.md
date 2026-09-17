@@ -11,7 +11,7 @@
 {"file":"manual-review.evidence.md","source":"rules/core/manual-review.evidence.md","paths":["tasks/**","specs/plans/**","docs/manual-review-archive.md"]}
 {"file":"manual-review.md","source":"rules/core/manual-review.md","paths":["tasks/**","specs/plans/**","screenshots/**"]}
 {"file":"playwright-webserver.md","source":"rules/core/playwright-webserver.md","paths":["playwright.config.ts","playwright.config.js","**/playwright.config.ts"]}
-{"file":"review-gui-surface.md","source":"rules/core/review-gui-surface.md","paths":["screenshots/**","openspec/changes/**","HANDOFF.md",".claude/agents/**"]}
+{"file":"review-gui-surface.md","source":"rules/core/review-gui-surface.md","paths":["screenshots/**","specs/plans/**","openspec/changes/**","HANDOFF.md",".claude/agents/**"]}
 {"file":"review-tiers.md","source":"rules/core/review-tiers.md","paths":["openspec/changes/**","specs/plans/**","specs/truth/**",".claude/agents/**",".codex/agents/**",".cursor/agents/**","supabase/migrations/**/*.sql","server/database/migrations/**/*.sql","packages/*/supabase/migrations/**/*.sql","packages/*/server/database/migrations/**/*.sql"]}
 {"file":"runtime/agent-self-verification.md","source":"adapters/claude/instructions/rules/core/agent-self-verification.md","paths":null}
 {"file":"runtime/agent-self-verification.screenshot-evidence.md","source":"adapters/claude/instructions/rules/core/agent-self-verification.screenshot-evidence.md","paths":["screenshots/**","openspec/changes/**/tasks.md","app/**/*.vue","components/**/*.vue","packages/*/components/**/*.vue","pages/**/*.vue","packages/*/pages/**/*.vue","layouts/**/*.vue","packages/*/layouts/**/*.vue","e2e/**","packages/*/e2e/**","playwright.config.*","packages/**/app/**/*.vue"]}
@@ -20,7 +20,7 @@
 {"file":"runtime/manual-review.data-readiness.md","source":"adapters/claude/instructions/rules/core/manual-review.data-readiness.md","paths":["tasks/**","specs/plans/**","screenshots/**"]}
 {"file":"runtime/manual-review.evidence.md","source":"adapters/claude/instructions/rules/core/manual-review.evidence.md","paths":["tasks/**","specs/plans/**","docs/manual-review-archive.md"]}
 {"file":"runtime/manual-review.md","source":"adapters/claude/instructions/rules/core/manual-review.md","paths":["tasks/**","specs/plans/**","screenshots/**"]}
-{"file":"runtime/review-gui-surface.md","source":"adapters/claude/instructions/rules/core/review-gui-surface.md","paths":["screenshots/**","openspec/changes/**","HANDOFF.md",".claude/agents/**"]}
+{"file":"runtime/review-gui-surface.md","source":"adapters/claude/instructions/rules/core/review-gui-surface.md","paths":["screenshots/**","specs/plans/**","openspec/changes/**","HANDOFF.md",".claude/agents/**"]}
 {"file":"runtime/screenshot-strategy.md","source":"adapters/claude/instructions/rules/core/screenshot-strategy.md","paths":["screenshots/**","tests/e2e/**","packages/*/tests/e2e/**","openspec/changes/**/design-review.md"]}
 {"file":"runtime/verification-lease.spec.md","source":"adapters/claude/instructions/rules/core/verification-lease.spec.md","paths":[".claude/consumer-meta.json","scripts/dev-session*","scripts/dev-singleton*","nuxt.config.*","packages/**/nuxt.config.*"]}
 {"file":"screenshot-strategy.md","source":"rules/core/screenshot-strategy.md","paths":["screenshots/**","tests/e2e/**","packages/*/tests/e2e/**","openspec/changes/**/design-review.md"]}

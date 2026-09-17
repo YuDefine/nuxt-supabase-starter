@@ -277,7 +277,7 @@ fi
   "decisions": { "TD-355": { "answer": "A", "outcome": "granted", "note": "<Charles 逐字>", "answeredAt": "…",
                  "grant": { "actionFingerprint": "sha256:<item + exact scope>", "scope": { "resource": "…", "action": "…", "pathsOrRefs": ["…"], "exclusions": ["…"] }, "grantedAt": "…", "consumedAt": null } } },
   "failStreak": { "TD-388": 2, "fix-pinia-mutation": 1 },
-  "escalated": { "add-audit-log": { "bucket": "applyBlocked", "reason": "…" } },
+  "escalated": { "add-audit-log": { "state": "blocked", "reason": "…" } },
   "blockers": { "TD-402": { "fingerprint": "sha256:…", "blocker": "<原文>",
                             "unblockPredicate": "<一條可觀察 predicate>", "predicateValue": "<上次量到的值>",
                             "firstSeenRound": 12, "lastCheckedRound": 18 } }
@@ -424,7 +424,7 @@ helper 在單一 Node process 內完成 handoff-scan → repo-local 同目錄 te
 
 | source | 來自 | 進 Step 3 走哪條 |
 | --- | --- | --- |
-| `plans` | `specs/plans/*/tasks.md` 與 `tasks/*.md` 的未勾項（依 carrier 路徑去重）；review readiness 只補驗收資訊 | § 3.1a bucket 路由 |
+| `plans` | `specs/plans/*/tasks.md` 與 `tasks/*.md` 的未勾項（依 carrier 路徑去重）；人工 gate 由 `reviewGuiReadiness`（`flow gates`）補 | § 3.1a carrier 接續 |
 | `handoff` / `techdebt` / `roadmap` | `HANDOFF.md` 待辦段、`techDebtHygiene.raw`、repo 根目錄 `ROADMAP.md` | § 3.1b 分類表 |
 
 - **`HANDOFF.md`** —— 掃 `## In Progress` / `## Blocked` / `## Next Steps` / `## Outstanding` / `## Follow-up`（heading 名因 consumer 而異，靠 `##` / `###` 辨識）。`- [ ]` 未勾項 = 一個 candidate；`- [x]` 跳過；純文字段落視為單一 candidate
@@ -538,7 +538,7 @@ launcher 早就死了。分類之前先實跑一次，死掉的組直接標不�
 
 **MUST** 保留每一筆 legacy 未完需求，直到有可回讀的承接關係或明確處置。**NEVER** 呼叫 Spectra writer、unpark 或用修改歷史 checkbox 代替接續；歷史保存與需求完成是兩種結果。
 
-`ready` 只是聚合提示。仍有 feedback、stale evidence 或 agent 可處理項時，先修復並重驗，不能因 ready badge 把工作交回給人。`applyInProgress` 的大小或進度不構成略過理由，依 carrier 的下一個未勾 phase 推進可執行步驟。
+`flow gates` 有卡只代表那一題等人。仍有 feedback、stale evidence 或 agent 可處理項時，先修復並重驗，不能因為有卡就把整件工作交回給人。實作未完的大小或進度不構成略過理由，依 carrier 的下一個未勾 phase 推進可執行步驟。
 
 ### 3.1b 非 plan source — 分類表
 
@@ -606,7 +606,7 @@ runner.sh 另有 mechanical fail-closed：起跑前、每次 child launch 前，
 
 **每一個** `/wt` brief **MUST 逐字內嵌** [guardrails.md](reference/guardrails.md) § C 的護欄區塊。subagent 是 fresh context，天然免疫主線 compaction——把安全執行面下沉到 subagent 是本設計對 governance decay 最可靠的一道。**NEVER** 只寫「照護欄做」這種 by-reference 指示。
 
-**NEVER 因 size / progress 跳過 dispatch**：`applyInProgress` 不管進度 0% 或工作看起來多大，MUST dispatch——`/implement` 依 carrier 的 phase 結構管理步驟、pause 與 blocker。「需要完整 session」「不適合 loop」都是違規。
+**NEVER 因 size / progress 跳過 dispatch**：實作未完的 carrier 不管進度 0% 或工作看起來多大，MUST dispatch——`/implement` 依 carrier 的 phase 結構管理步驟、pause 與 blocker。「需要完整 session」「不適合 loop」都是違規。
 
 ### 4b. 本輪承載不了的 item → 出口分流（dispatch 是 default，登記是付費 fallback）
 
@@ -736,7 +736,7 @@ node ~/offline/clade/vendor/scripts/work-loop-verdict.ts \
 
 `fingerprintUnchangedRounds == 2` 且 `inFlight` 空 → 不停，但下次 `ScheduleWakeup` 退到長間隔。
 
-**in-flight ledger > 0 就不是停止狀態**，即使 candidate list 空——background agent 完成後狀態會位移（`applyInProgress` → `ready` → `done`），此時退出 = 成果懸空等 user 手動善後。
+**in-flight ledger > 0 就不是停止狀態**，即使 candidate list 空——background agent 完成後狀態會位移（實作中 → 收尾 → `work.done`），此時退出 = 成果懸空等 user 手動善後。
 
 ### 6.3 生產性判定（**每一輪**收輪時算，含 runner child 的每一輪；只當停止條件用，NEVER 當本輪目標）
 
@@ -892,7 +892,7 @@ git show --stat HEAD | tail -3   # 驗 scope；出現 .ts/.vue/.sql 等 → STOP
 | [productivity-gate.md](reference/productivity-gate.md) | 改准入／生產性判準之前（Step 0 § 開場准入判定、Step 6.3）——執行時不必讀 |
 | [decision-drain.md](reference/decision-drain.md) | **每一輪**（Step 2.7，hard rule） |
 | [blocker-evaluation.md](reference/blocker-evaluation.md) | 需求或文件待辦的 blocker 需要診斷（Step 3.1a） |
-| [blocker-ledger.md](reference/blocker-ledger.md) | **任一** blocked item 進評估之前（Step 3.1a 的**每一個** bucket／3.1b，不限 `applyBlocked`・`awaitingUserDecision` 兩列）、以及寫 `stoppedReason` 之前（Step 6.2） |
+| [blocker-ledger.md](reference/blocker-ledger.md) | **任一** blocked item 進評估之前（Step 3.1a 的**每一個**受阻需求／3.1b，不限受阻與待決策兩類）、以及寫 `stoppedReason` 之前（Step 6.2） |
 | [non-plan-dispatch.md](reference/non-plan-dispatch.md) | 分類非 plan candidate（Step 3.1b） |
 | [autonomy-predicate.md](reference/autonomy-predicate.md) | 判自主 / 做 packaging（Step 3.2 / 4b） |
 | [dispatch-topology.md](reference/dispatch-topology.md) | 分組（Step 3.3） |

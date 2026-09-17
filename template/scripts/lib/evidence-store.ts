@@ -37,7 +37,6 @@ export interface EvidenceRecord {
   body?: string
   route?: string
   note?: string
-  packet?: string
   raw?: string
 }
 
@@ -54,7 +53,6 @@ interface EvidenceAnnotation {
   body?: string
   route?: string
   note?: string
-  packet?: string
 }
 
 export interface ManualReviewItemAnnotations {
@@ -68,8 +66,6 @@ export interface ManualReviewItemAnnotations {
   claudeDiscussedList?: EvidenceAnnotation[]
   claudeAnalyzed?: EvidenceAnnotation
   claudeAnalyzedList?: EvidenceAnnotation[]
-  awaitingUserDecision?: EvidenceAnnotation
-  awaitingUserDecisionList?: EvidenceAnnotation[]
 }
 
 interface EvidenceCliValues {
@@ -91,7 +87,6 @@ interface EvidenceCliValues {
   body?: string
   route?: string
   note?: string
-  packet?: string
 }
 
 // ── Record schema ──
@@ -99,7 +94,7 @@ interface EvidenceCliValues {
 // {
 //   itemId:    string   — e.g. '#1', '#3.2'
 //   kind:      string   — 'verified-e2e' | 'verified-api' | 'verified-ui' |
-//                         'claude-discussed' | 'claude-analyzed' | 'awaiting-user-decision'
+//                         'claude-discussed' | 'claude-analyzed'
 //   timestamp: string   — ISO 8601
 //   author:    string   — 'claude' | 'user' | 'system'
 //   // kind-specific fields (all optional at schema level):
@@ -113,7 +108,6 @@ interface EvidenceCliValues {
 //   body?:       string
 //   route?:      string
 //   note?:       string
-//   packet?:     string
 //   raw?:        string  — original inline annotation text (for migration)
 // }
 
@@ -153,6 +147,12 @@ export function assertSafeChangeName(changeName) {
  * @param {string} changeName
  * @returns {Array<object>}
  */
+/**
+ * 已退役、讀端略過的 kind。`awaiting-user-decision` 的唯一寫入者（Spectra annotation CLI）已隨 Spectra 層退役
+ * （W-2026-09-16-control-panel-redesign Phase 5）；「等人拍板」改走 `flow ask`。
+ */
+export const RETIRED_KINDS: ReadonlySet<string> = new Set(['awaiting-user-decision'])
+
 export function readSidecar(repoRoot, changeName) {
   const p = sidecarPath(repoRoot, changeName)
   if (!existsSync(p)) return []
@@ -162,7 +162,10 @@ export function readSidecar(repoRoot, changeName) {
     const trimmed = line.trim()
     if (!trimmed) continue
     try {
-      records.push(JSON.parse(trimmed))
+      const record = JSON.parse(trimmed)
+      // 已退役的 kind 在舊 sidecar 裡仍可能有記錄（append-only，不回寫）：略過，NEVER 讓它炸或被當成證據。
+      if (RETIRED_KINDS.has(record?.kind)) continue
+      records.push(record)
     } catch {
       // skip malformed lines
     }
@@ -257,16 +260,6 @@ export function inlineAnnotationsToRecords(itemId, annotations) {
       timestamp: a.timestamp,
       route: a.route,
       ...(a.note ? { note: a.note } : {}),
-      raw: a.raw,
-      author: 'claude',
-    })
-  }
-  for (const a of annotations.awaitingUserDecisionList || []) {
-    records.push({
-      itemId,
-      kind: 'awaiting-user-decision',
-      timestamp: a.timestamp,
-      ...(a.packet ? { packet: a.packet } : {}),
       raw: a.raw,
       author: 'claude',
     })
@@ -433,16 +426,6 @@ export function recordsToAnnotations(records: EvidenceRecord[]): ManualReviewIte
         ;(annotations.claudeAnalyzedList ??= []).push(a)
         break
       }
-      case 'awaiting-user-decision': {
-        const a = {
-          raw: r.raw || '',
-          timestamp: r.timestamp,
-          ...(r.packet ? { packet: r.packet } : {}),
-        }
-        annotations.awaitingUserDecision = a
-        ;(annotations.awaitingUserDecisionList ??= []).push(a)
-        break
-      }
     }
   }
   return annotations
@@ -460,7 +443,6 @@ if (isMain) {
     'verified-ui',
     'claude-discussed',
     'claude-analyzed',
-    'awaiting-user-decision',
   ]
 
   const { values: rawValues } = parseArgs({
@@ -484,7 +466,6 @@ if (isMain) {
       body: { type: 'string' },
       route: { type: 'string' },
       note: { type: 'string' },
-      packet: { type: 'string' },
     } as const,
     strict: false,
   })
@@ -550,8 +531,6 @@ if (isMain) {
     } else if (kind === 'claude-analyzed') {
       record.route = values.route
       if (values.note) record.note = values.note
-    } else if (kind === 'awaiting-user-decision') {
-      if (values.packet) record.packet = values.packet
     }
     // claude-discussed: no payload fields
 
