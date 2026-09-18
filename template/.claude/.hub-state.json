@@ -4,7 +4,7 @@
   "checksums": {
     "scripts/0a-metrics.mjs": "540804d439286b45",
     "scripts/codex-review-safe.sh": "1558258e1447c32d",
-    "scripts/commit-lock.mjs": "146373a55901bda6",
+    "scripts/commit-lock.mjs": "59c2dcb50fc817bd",
     "scripts/gh-ci-watch.sh": "fb52cb9c0ebc0820",
     "skills/commit/SKILL.md": "2cfa03e2d8441d2d",
     "skills/commit/batch.md": "a4564015b3c7a80f",
