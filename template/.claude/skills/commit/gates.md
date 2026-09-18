@@ -204,7 +204,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
    3. **NEVER** 自動勾任何 `[review:ui]` 的 `- [ ]`、**NEVER** 提議跳過 gate、**NEVER** 提議 stash 走 `tasks.md`
 
-6. **批次模式** auto-triage 後仍有 blocker → 保留 integration 與全部來源，停止 seal／land；修復後重驗。需排除未就緒來源時 cancel 後重登記合格來源再 prepare，不能切掉幾個 artifacts 卻帶走該來源 code。**普通 main 模式** auto-triage 跑完後 blocker list 仍非空 → 把每件 BLOCK 工作的 carrier 路徑（`tasks/<X>.md`，或整個 `specs/plans/<X>/**`）記為 **withheld scope**，輸出 `⏸️ 0-MR 保留 <X>（pending=<n>；withheld: <carrier 路徑>）`，**進入 Step 0**（不是停下）。withheld scope 由後面兩步消費：
+6. **批次模式** auto-triage 後仍有 blocker → 保留 integration 與全部來源，停止 seal／land；修復後重驗。單成員／獨立 workId 的 Charles-only leftover 只停該來源：`batch yield-blocked` 讓出 active slot，**NEVER** 凍結其他獨立切片。合批內一成員 blocked 則整批不落地；要讓其他成員先走必須 cancel 後重組，不能切掉幾個 artifacts 卻帶走該來源 code。需排除未就緒來源時 cancel 後重登記合格來源再 prepare。**普通 main 模式** auto-triage 跑完後 blocker list 仍非空 → 把每件 BLOCK 工作的 carrier 路徑（`tasks/<X>.md`，或整個 `specs/plans/<X>/**`）記為 **withheld scope**，輸出 `⏸️ 0-MR 保留 <X>（pending=<n>；withheld: <carrier 路徑>）`，**進入 Step 0**（不是停下）。withheld scope 由後面兩步消費：
 
    - **Step 3 分組**：withheld scope 內的路徑不進任何 group（分組唯一的機械排除）。它們留在 working tree，Step 5-A 照「仍有 uncommitted 變更」登記進 HANDOFF，並寫明卡在哪件工作的哪幾個 leaf。
    - **Step 4 每個 group commit 前**：
@@ -254,7 +254,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 Step 0-Scope 確認本次 WIP 後，依 [`review-tiers.md`](rules/review-tiers.md)
 Tier 3 判定：migration / schema / auth / permission / RLS / raw SQL / billing / security-critical
 任一類別命中就觸發；純 docs、一般業務邏輯與非敏感重構跳過。本判定涵蓋本次 `/commit` 的
-**每一個** changed path，不只主線 agent 自己改的檔。
+**每一個** changed path，不只主線 agent 自己改的檔。Unattended merge **不**偷換 scanner、**不**略過本 gate；0-S.2 無法執行時 gate 保持未完成，缺能力仍 block。
 
 觸發後依序跑 **0-S.1 → 0-S.2**，兩層都在本機十秒級內結束。
 **NEVER** 在 pre-commit 啟動 Codex Security——理由、實證與它的兩個合法用法在 § 0-S.3。

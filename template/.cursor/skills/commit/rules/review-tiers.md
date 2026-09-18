@@ -59,3 +59,4 @@
 - **NEVER** 省略規格／實作一致性審查或獨立 code review 就宣稱 Tier 2 / 3 已完成
 - 規格／實作一致性審查 MUST 對照適用的 current plan/spec 與 frozen changeset，報告規格偏差與覆蓋範圍；若專案提供實際 workflow verification entry，使用該 entry 留下可查證結果，不呼叫已退役的 writer 或 review 指令
 - **NEVER** 把「測試有過」當成可取代 review 的理由
+- **NEVER** 因 unattended coordinator merge 降低 review tier；helper authority 邊界依真實風險判 tier
