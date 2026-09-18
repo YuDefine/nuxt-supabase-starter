@@ -37,7 +37,7 @@ TYPES=$(node -e "
 git diff --name-only HEAD -- "$TYPES" supabase/migrations/ | grep -q . && echo HAS || echo NO
 ```
 
-`NO` → 回主檔進 Step 2。`HAS` → 往下走。
+`NO` → 回主檔進 Step 2。`HAS` → 往下走。批次 `/commit` MUST 用 helper `batch scope` 的 `base`→candidate tree 做同一判定，不只看 working tree vs HEAD；member checkpoint 裡已 commit 的 migrations 也算。
 
 > 主檔的觸發判定刻意寬鬆（寧可誤送進本檔），這一步才是權威判定 —— 它認得
 > `package.json` 的 `config.dbTypesPath` 自訂路徑，主檔的粗篩不認得。
@@ -50,8 +50,16 @@ git diff --name-only HEAD -- "$TYPES" supabase/migrations/ | grep -q . && echo H
 TYPES_BEFORE="$(mktemp -t types-before-reset.XXXXXXXXXX)"
 cp "$TYPES" "$TYPES_BEFORE"
 
-# 2. 重置 DB + 從 migrations 重新生成 types（自動偵測 LXC/Docker 模式）
-if node -e "process.exit(require('./package.json').scripts?.['db:reset'] ? 0 : 1)" 2>/dev/null; then
+# 2. 重置 DB + 從 migrations 重新生成 types
+#    依執行環境選命令，不只看 package.json 有沒有 scripts['db:reset']
+#    Desk shared/canonical live DB → pnpm db:reset（先過 [[db-reset-coordination]]）
+#    隔離雲端 VM ephemeral → 該 VM 的 supabase db reset --local
+#    無 DB 切片 → 不跑本步；缺 docker／supabase CLI 就停，不回連 desk
+if [ "${CLADE_CLOUD_EPHEMERAL_DB:-}" = 1 ]; then
+  command -v supabase >/dev/null || { echo 'missing supabase CLI on cloud VM' >&2; exit 1; }
+  supabase db reset --local
+  supabase gen types typescript --local > "$TYPES"
+elif node -e "process.exit(require('./package.json').scripts?.['db:reset'] ? 0 : 1)" 2>/dev/null; then
   # LXC / 遠端 Supabase 模式：consumer 提供 pnpm db:reset wrapper（會 reset DB + 跑 db:types 寫到 $TYPES）
   pnpm db:reset
 else

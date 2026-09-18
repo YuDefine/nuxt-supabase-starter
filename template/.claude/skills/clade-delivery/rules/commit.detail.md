@@ -23,7 +23,8 @@ paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**', '.clade/work-loop/**']
 - **0-E** evlog map 覆蓋率（條件觸發）：diff 觸及 entry point（`server/{api,routes,middleware,tasks}/` / pages / Next route handler）時跑 gate；`@evlog/cli` **必裝**（缺裝 = block commit，比照 doctor）。判定是 **strict：整個 repo 的每一個 entry point 零失敗 check、零 suppression**，**不是**只看本次 diff 觸及的那幾個 —— 既有 gap 一律要補
 - **並行**：simplify 序跑完後，已觸發的 0-A.1 / 0-B / 0-C 使用可收回結果的原生載體並行；沒有並行能力時依 skill 的已授權同步分支完成全部 gates。0-D / 0-E 在匯合後條件觸發。
 - **Step 1** Schema 同步檢查 — `database.types.ts` 與 migration 對齊
-- **Step 5** 版本號升級 + tag push — `feat` → minor、其他 → patch
+- **Step 5** HANDOFF／ROADMAP bookkeeping 必須在 formal HEAD／seal 前完成，避免 merge 後再推一筆取消 staging
+- **Step 6** 發版是獨立授權：unattended 模式預先核准 `release=manual` 時停在 6-B（已 land、未發版）。真正 production APPLY／tag 仍要 Charles 授權。合併前先跑 `deploy-trigger-check.ts`，不能等 merge 後才發現 main 更新會發 production。
 
 這些檢查**無法事後補跑**：漏跑的 commit 已在 history、壞版本號已 push 出去。
 
@@ -73,7 +74,7 @@ uncommitted 變更
 
 **批次 `/commit` 在已登記的隔離整合區跑一次完整品質流程**；沒有就緒 wt 或待續跑批次時，普通 `/commit` 照常處理當前工作區。
 
-**手動 `/commit` 或 merge back 無最低件數**，立即收同 repo 所有已授權、驗收完成且交出寫入權的就緒任務；未就緒工作不阻擋手動提交。自動門檻為 **4 個 distinct work id**，同任務多個 wt 不重複計數。dependency（下游需要落地）、drained（已授權開發都完成或受阻）、stop（使用者結束本輪）提前結批；換 session 只交接佇列。等待累積不佔 commit lock、繼續開發。
+**手動 `/commit` 或 merge back 無最低件數**，立即收同 repo 所有已授權、驗收完成且交出寫入權的就緒任務；未就緒工作不阻擋手動提交。自動門檻依 workflow：`pr-merge-based` 為 **1 個** distinct work id（一張獨立可接受 PR），`trunk-based` 仍為 **4 個**。同任務多個 wt 不重複計數。dependency（下游需要落地）、drained（已授權開發都完成或受阻）、stop（使用者結束本輪）提前結批；換 session 只交接佇列。等待累積不佔 commit lock、繼續開發。Unattended coordinator merge **不免除** 0-A／0-C 與其他已觸發 gate；CI 綠燈不能代替 Astra review。
 
 - 每次就緒、收割、停止開發與 session 接手都 MUST 读 `wt-helper batch status --workflow <workflow_model>`；命中條件由主線啟動 `/commit`，不請使用者代打。批次開始後的新成員留到下一批。
 - 批次 scope 是固定成員的完整 base→candidate diff，main 的其他 WIP 不自動納入；不得把 main 清空來配合整合。
@@ -83,7 +84,7 @@ uncommitted 變更
 
 ### 批次使用 checkpoint 保存來源
 
-所有 worker 與主線自走的實作 wt，完成必要驗收後可用 scoped `git commit --only -- <paths>` 保存 substantive change 與 evidence；新檔先逐檔 `git add -- <paths>`。Hooks 照跑，不 push session branch，不各自啟動完整 `/commit`。Checkpoint 只保存來源成果，**NEVER** 當作正式品質流程已通過。
+所有 worker 與主線自走的實作 wt，完成必要驗收後可用 scoped `git commit --only -- <paths>` 保存 substantive change 與 evidence；新檔先逐檔 `git add -- <paths>`。Hooks 照跑，**NEVER** `git commit --no-verify`、**NEVER** `HUSKY=0`。不各自啟動完整 `/commit`，**NEVER** push `origin main`。相對 `main` 有非空 committed diff 後，slice owner **MUST** push **該** session branch 並開 draft PR（[[github-flow]]），不是把 checkpoint 當成已落地。Checkpoint 只保存來源成果，**NEVER** 當作正式品質流程已通過。
 
 | 情境 | 保存方式 | 正式品質鏈 |
 | --- | --- | --- |

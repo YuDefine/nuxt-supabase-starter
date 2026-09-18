@@ -13,6 +13,8 @@
 
 **下任何 `git commit` / `git add` / `git stash` / `git tag` / `git push --tags` / `git push origin v<版本>` / `/commit` 之前，MUST 先讀 [[commit.detail]]**——沒讀到就等於沒有 gate 清單、沒有 `--only` 紀律、沒有 recovery 流程。
 
+Unattended coordinator squash **仍走 `/commit`**：完整品質鏈、formal HEAD CI、`batch merge-unattended` 機械 predicate。本檔不複製 C 節；見 [[commit.detail]]、[[github-flow]] 與 commit skill `batch.md`。
+
 | 搬走的段 | 去 [[commit.detail]] 的 § |
 | --- | --- |
 | 理由（0-A ~ Step 5 各 gate 定性） | § 理由 |

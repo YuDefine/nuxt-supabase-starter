@@ -356,6 +356,26 @@ export function checkDeployTrigger(
   }
 }
 
+export type MainPushScope = 'staging-only' | 'production' | 'none'
+
+export function deriveMainPushScope(
+  files: { file: string; raw: string }[],
+): MainPushScope | 'unknown' {
+  let stagingMain = false
+  let productionMain = false
+  for (const wf of files) {
+    if (!DEPLOY_RE.test(wf.file) && !DEPLOY_RE.test(wf.raw.slice(0, 400))) continue
+    const classes = classifyWorkflowTriggers(wf.raw)
+    if (!classes.includes('push-main')) continue
+    if (NON_PROD_RE.test(wf.file) || NON_PROD_RE.test(wf.raw.slice(0, 400))) stagingMain = true
+    else productionMain = true
+  }
+  if (productionMain && stagingMain) return 'production'
+  if (productionMain) return 'production'
+  if (stagingMain) return 'staging-only'
+  return 'none'
+}
+
 // ── CLI ──────────────────────────────────────────────────────────────────
 
 async function main(argv: string[]) {
@@ -377,10 +397,13 @@ async function main(argv: string[]) {
   }
 
   let declared: string | null = null
+  let declaredMainPushScope: string | null = null
   const metaPath = join(repo, '.claude/consumer-meta.json')
   if (existsSync(metaPath)) {
     try {
-      declared = JSON.parse(readFileSync(metaPath, 'utf8'))?.deploy?.deployTrigger ?? null
+      const meta = JSON.parse(readFileSync(metaPath, 'utf8'))
+      declared = meta?.deploy?.deployTrigger ?? null
+      declaredMainPushScope = meta?.deploy?.mainPushScope ?? null
     } catch {
       declared = null
     }
@@ -400,16 +423,21 @@ async function main(argv: string[]) {
   }
 
   const check = checkDeployTrigger(declared, deriveDeployTrigger(files))
+  const mainPushScope = deriveMainPushScope(files)
 
   if (asJson) {
-    process.stdout.write(`${JSON.stringify(check, null, 2)}\n`)
+    process.stdout.write(
+      `${JSON.stringify({ ...check, declaredMainPushScope, derivedMainPushScope: mainPushScope }, null, 2)}\n`,
+    )
   } else {
     process.stdout.write(
       `declared=${check.declared ?? 'unknown'}\n` +
         `derived=${check.derived.value ?? check.derived.reason}\n` +
         `verdict=${check.verdict}\n` +
         `status=${check.status}\n` +
-        `detail=${check.detail}\n`,
+        `detail=${check.detail}\n` +
+        `declaredMainPushScope=${declaredMainPushScope ?? 'undeclared'}\n` +
+        `derivedMainPushScope=${mainPushScope}\n`,
     )
   }
 

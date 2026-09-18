@@ -180,7 +180,7 @@ If you are a new session resuming this worktree:
 1. Run `git log main..HEAD --oneline` to see completed commits
 2. Run `git status` to see uncommitted work
 3. Continue from the next unchecked Progress item above
-4. Follow the subagent contract: selective `git add -- <files>`, no `git add -A`, no `git push`
+4. Follow the subagent contract: selective `git add -- <files>`, no `git add -A`, no `git push origin main`; after commits, draft PR on this session branch
 ```
 
 **Progress section**: Decompose the task into concrete steps if possible. If the task is too vague to decompose upfront, write a single item `- [ ] Complete task` — the subagent will refine the checklist as it works.
@@ -292,7 +292,7 @@ Ready / blocked worktrees: <counts from batch status>; report each retained path
 
 The `[pi]` / `[claude]` / `[pi:analyze]` / `[pi:debug]` tag indicates which executor was used. This helps the user understand the execution path and cost profile.
 
-**Batch handover**: after harvesting verified checkpoints (`batch checkpoint`, no full AI ceremony), register readiness (`batch ready`) and run `wt-helper batch status --trigger auto --workflow <已解析 workflow_model>`。**NEVER** 省略 `--workflow`。PR workflow prepares one independently acceptable purpose as its own **ready** PR; trunk-based still waits for 4 distinct work ids. A draft PR is optional and only when [[github-flow]] 三條 draft predicate 全中；coordinator 依該檔發佈順序建立遠端 draft，再 `batch draft`。Worker **NEVER** `git push`、開 PR 或 merge。討論期唯一合法 push 是 coordinator 對**該** session branch 的首次 `git push -u`。seal 之後若要沿用同一張 PR，coordinator 才把 formal HEAD 交到既有 head ref（見 [[github-flow]]）。User `/commit` or merge back has no minimum; dependency/drained/stop can flush early. Archive runs its gates and bookkeeping in the source tree before readiness. Cleanup belongs to the final commit workflow after verified landing.
+**Batch handover**: after harvesting verified checkpoints (`batch checkpoint`, no full AI ceremony), register readiness (`batch ready`) and run `wt-helper batch status --trigger auto --workflow <已解析 workflow_model>`。**NEVER** 省略 `--workflow`。PR workflow prepares one independently acceptable purpose as its own **ready** PR; trunk-based still waits for 4 distinct work ids. Slice owner 在相對 `main` 有非空 committed diff 後 **MUST** `git push` 該 session branch 並開 **draft** PR，再盯該 PR 的 CI（[[github-flow]]）。Worker **NEVER** push `origin main`、**NEVER** merge。CI 紅燈回同一張 PR。User `/commit` or merge back has no minimum; dependency/drained/stop can flush early. Archive runs its gates and bookkeeping in the source tree before readiness. Cleanup belongs to the final commit workflow after verified landing.
 
 Form 1 work uses the same queue; the coordinator handles authorized landing without asking the user to type commands.
 
@@ -335,15 +335,15 @@ The coordinator's next actions:
 
 `/wt` **worker** does NOT:
 
-- Squash to main.
-- Cleanup worktrees.
-- Commit on main.
-- `git push` anywhere.
-- Open or merge any PR, including draft.
+- `batch ready` or start the full `/commit` quality chain
+- Squash, `gh pr merge`, or `batch merge-unattended`
+- `git push origin main`
+- Cleanup worktrees
+- Commit on main
 
-Coordinator push 只發生在 [[github-flow]] 已列明的兩段：討論期首次推 session branch、seal 後把 formal HEAD 交到既有 PR head。這兩段都不是 `/wt` worker 的權限。
+Worker **MUST** push **that** session branch, open or update its own draft PR, register `batch draft --kind visibility`, and watch that PR's CI ([[github-flow]]). On completion, return `workId`, repository, PR, branch, checkpoint SHA, scope, evidence, and writer-release, then **stop writing the source**. Worker done is not landing.
 
-These are owned by the batch commit coordinator after review and verified landing.
+Coordinator push after review is limited to delivering the formal HEAD onto the existing PR head. Ready, merge, and main push stay with the named coordinator.
 
 ## Edge cases
 

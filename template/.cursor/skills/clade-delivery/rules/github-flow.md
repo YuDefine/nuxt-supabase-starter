@@ -3,52 +3,58 @@ description: GitHub Flow 事件責任與成本邊界 — checkpoint、review、�
 paths:
   - 'vendor/scripts/wt-batch.ts'
   - 'plugins/hub-core/skills/commit/**'
+  - 'plugins/hub-core/skills/wt/**'
+  - 'plugins/hub-core/skills/handoff/**'
+  - 'plugins/hub-core/skills/gh-ci-watch/**'
   - '.github/workflows/**'
+  - 'HANDOFF.md'
+  - 'tasks/**'
 ---
 <!-- Clade native rule; source: rules/core/github-flow.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # GitHub Flow 事件契約
 
-本檔是 clade 標準層與 `YuDefine/clade` 試行契約。全面採用與 fleet rollout 另行決定。操作命令見 commit skill `batch.md`。
+本檔是 Claude Code／Cursor／Codex／Pi 共用的平行切片作業契約。盤點 outstanding → 獨立切片各派一個 owner → **一刀一 branch 一 draft PR** → 盯該 PR 的 CI → 紅燈回原 owner。操作命令見 commit skill `batch.md`、[[worktree-default]] §5、[[gh-ci-watch]]。
 
 ## 事件與成本
 
 | 事件 | 入口 | 必要成本 | 禁止綁上的成本 |
 | --- | --- | --- | --- |
 | 實作 checkpoint | `batch checkpoint` | 保存自己的 scope、必要基本檢查、作者與來源 | 完整 AI review、收割全 repo WIP、全域 handoff、發版 |
-| 討論／草稿 PR | `batch draft` | 可討論的獨立 diff、具名討論者、會改變剩餘實作的具體問題 | 把未完成範圍當已 ready、啟動完整品質鏈、授予 worker push／merge |
+| 切片可見性 draft | slice owner `git push` + `gh pr create --draft` | 相對 `main` 非空 committed diff、該 session branch、CI watch | 把未完成範圍當已 ready、啟動完整品質鏈、merge、直推 `main` |
+| 討論 draft（可選） | 同上，另記 `batch draft` | 可見性 draft 的條件，加上具名討論者與會改變剩餘實作的具體問題 | 把討論當 ready |
 | PR ready | `batch ready` + 完整品質鏈 | 獨立可接受的完整 diff、風險分級、適用 review／測試／人工 gate | 等待湊滿四件、重跑未受影響的完整 ceremony |
-| 合併 | squash merge + `batch confirm-merged` | 最新 candidate、必要 CI／衝突／人工 gate 當下成立 | 用過期綠燈或未合併的 closed PR 當落地 |
+| 合併 | 具名 coordinator 在 C 節 predicate 全成立時 squash + `batch confirm-merged`／`batch merge-unattended` | 最新 candidate、必要 CI／衝突／人工 gate 當下成立；unattended 另需授權 JSON | 用過期綠燈或未合併的 closed PR 當落地；slice **worker NEVER merge** |
 | 回收 | `batch cleanup` | 已合併、HEAD 未變、無未保存工作／活寫入者／保留契約 | 把 checkpoint、draft 或 PR 開啟當可刪來源 |
 | 發版 | `/commit` Step 6 | 獨立授權與獨立證據 | 由 checkpoint、draft、PR ready 或 merge 自動觸發 |
 
-同一獨立可接受目的對應一個 PR。緊密相依工作可明確合批；**NEVER** 為湊數拆碎單一需求。`pr-merge-based` 的 auto 門檻是 1 件；`trunk-based` 仍是 4 件。試行預設最多 3 件 active implementation；ready backlog 達 3 件時優先交付。
+同一獨立可接受目的對應一個 PR。緊密相依工作可明確合批；**NEVER** 為湊數拆碎單一需求。`pr-merge-based` 的 auto 門檻是 1 件；`trunk-based` 仍是 4 件。預設最多 3 件 active implementation；ready backlog 達 3 件時優先交付。
 
 ## Draft 不是 ready
 
-**Iron Law：Draft 不是 ready。違反字面就是違反精神。** 「可討論的獨立 diff」不是「獨立可接受的完整 diff」。PR ready／merge 仍在實作與完整品質鏈之後；draft 只是討論事件。
+**Iron Law：Draft 不是 ready。違反字面就是違反精神。** 切片 draft 付的是**可見性與 CI**，不是「獨立可接受的完整 diff」。PR ready／merge 仍在實作與完整品質鏈之後。
 
-已有可討論的獨立 diff，且具名討論者須回答會影響後續實作的具體問題時，可於實作完成前建立 draft PR；不得因此登記 ready、啟動完整品質鏈或授予 worker push／merge 權限。
+### 切片可見性 draft（預設；slice owner 自己開）
 
-**每一個** draft 都 MUST 三條全中，缺一就停在 checkpoint，不開 PR：
+獨立切片在來源 worktree 相對 `main` 已有非空 committed diff 後，**slice owner**（cloud implementer、`/wt` worker、desk worktree 執行者）MUST：
 
-1. 來源 worktree 相對 `main` 已有非空 committed diff（空 branch／只有 WIP 都不算）
-2. 具名討論者（人的名字或角色，不是「有人」）
-3. 一條具體待答問題，且該答案會改變剩餘實作
+1. 來源 `git status` 乾淨（相對於要推的 commits）。
+2. `gh pr view <session-branch> --json number,isDraft,headRefName`（branch 是位置參數；查無 PR 時非 0 退出）：已有 PR 就沿用該號，**NEVER** 再開一張。
+3. 沒有遠端物件時 **只** `git push -u origin <session-branch>`。**NEVER** `git push origin main`。
+4. 沒有 PR 時 `gh pr create --draft --base main --head <session-branch>`。
+5. `gh pr view <session-branch> --json number,isDraft,headRefName`：`isDraft` 為 true、head 就是該 session branch。**NEVER** 省略 branch。
+6. 立刻盯**該 PR head SHA** 的 CI（Claude／Codex：`/gh-ci-watch`；Cursor：`subscribe_github_ci`／`subscribe_github_pr` 或同等）。
+7. CI 紅燈：同一 owner、同一張 PR 上修再 push；**NEVER** 為同一切片開第二張 PR。
+8. 用該 PR 號跑 `batch draft --kind visibility` 把可見性 receipt 持久登記。create／push 失敗就不要寫 receipt。討論 draft 才用 `--kind discussion`（或舊的 `--discussant`＋`--question`）。
 
-操作入口是 `batch draft`（commit skill `batch.md`）。它只記 receipt，**不是**建立 GitHub PR 的命令，**NEVER** 把該來源放進 ready 池、**NEVER** 當 `prepare` 成員、**NEVER** 當落地授權。
+Draft 維持 draft 直到 review。slice **worker NEVER merge**、**NEVER** `gh pr ready`、**NEVER** 為了看得見而 merge-back。空 branch／只有 WIP **NEVER** 開 PR。具名 coordinator 只在 [[commit]] 批次 `merge-unattended` 的機械 predicate 全成立、且沒有有效 do-not-merge hold 時才能 squash；那不是 worker 權限，也不是把所有 agent 當 coordinator。
 
-### Coordinator 發佈 draft（順序不可調換）
+原生派工載體不同、結果相同：Cursor Project 用 `CreateAgent`；Claude／Codex 用 `/wt` 或 Herdr fanout。**NEVER** 把 Cursor 主線的 `/handoff relay|fanout` 讀成這條契約的必要入口。
 
-**每一個**遠端 draft 都由 coordinator 做，worker **NEVER** `git push`、**NEVER** `gh pr create`、**NEVER** merge。建立任何遠端物件之前 MUST 先核對三條 predicate，且來源 worktree 乾淨、HEAD 相對 checkpoint 未前移。缺一停在 checkpoint。
+### 討論 draft（可選、較嚴）
 
-1. 本機三條 predicate 全中，來源 `git status` 乾淨。
-2. `gh pr view <session-branch> --json number,isDraft,headRefName`（`gh pr view` 沒有 `--head` 旗標，branch 是位置參數；查無 PR 時非 0 退出）：已有 PR 就沿用該號，**NEVER** 再開一張。
-3. 沒有遠端物件時，coordinator **只** `git push -u origin <session-branch>`（討論期唯一合法 push）。
-4. `gh pr create --draft --base main --head <session-branch>`，body 寫具名討論者與那條具體問題。
-5. `gh pr view <session-branch> --json number,isDraft,headRefName`：`isDraft` 為 true、head 就是該 session branch。**NEVER** 省略 branch——不帶參數時 `gh` 取當前 checkout 的 branch，coordinator 不在來源 worktree 內就查到別張 PR。
-6. 用該 PR 號跑 `batch draft`。create／push 失敗就不要寫 receipt；已存在的 PR 不要重開。
+已有可討論的獨立 diff，且具名討論者須回答會改變剩餘實作的具體問題時，可在實作完成前開 draft。除上方可見性條件外，body MUST 寫具名討論者與那條問題。`batch draft --kind discussion`（或舊命令）缺任一欄就拒絕；不要假裝已進入討論事件。可見性事件必須明示 `--kind visibility`。
 
 ### Draft → ready：同一張 PR
 
@@ -64,12 +70,12 @@ paths:
 
 | 藉口 | 現實 |
 | --- | --- |
-| 「PR 是落地／送審事件，所以做完才能開任何 PR」 | 本檔已有討論／草稿事件；draft 付的是討論成本，不是 ready |
-| 「branch 一開就先開 PR 比較看得見」 | 空 PR 不是可討論的獨立 diff；worktree／session branch 才是開工身分 |
-| 「反正是 draft，先 ready 再說」 | draft **NEVER** 進 ready 池，也不啟動完整品質鏈 |
-| 「worker 自己 push 比較快」 | draft 不授予 worker push／merge；worker 仍只 checkpoint |
+| 「PR 是落地／送審事件，所以做完才能開任何 PR」 | 切片 draft 付的是可見性與 CI，不是 ready |
+| 「為了看得見先 merge-back / 直推 main」 | 可見性走 draft PR；[[worktree-default]] §5 禁止拿 landing 換可見性 |
+| 「反正是 draft，先 ready 再說」 | draft **NEVER** 進 ready 池，也不啟動完整品質鏈；**worker NEVER merge**。具名 coordinator 的 unattended squash 仍要完整 `/commit` 品質鏈 + 最新 formal HEAD CI |
+| 「CI 紅了另開一張 PR 比較乾淨」 | 同一切片同一張 PR，修回原 owner |
 
-**NEVER** 在 `wt-helper add` 或第一個 commit 之前開 PR。**NEVER** 把 draft、checkpoint 或未合併 PR 當成可刪來源或已落地。
+**NEVER** 在 `wt-helper add` 或第一個 commit 之前開 PR。**NEVER** 把 draft、checkpoint 或未合併 PR 當成可刪來源或已落地。**NEVER** 把 `git commit --no-verify` 或 `HUSKY=0` 寫成 fleet 預設。
 
 ## 證據綁定
 

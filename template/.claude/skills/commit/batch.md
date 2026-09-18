@@ -15,22 +15,29 @@ node scripts/wt-helper.ts batch status --trigger auto --workflow <workflow_model
 
 `batch ready` 才是 PR ready／品質入口。證據放來源外可持久讀取的檔；紀錄實跑命令、結果、受測 HEAD。`--authorize-landing` 表示既有工作授權允許正式落地及安全回收，不是由 flag 創造授權。需保留來源時加 `--retain <owner 與下一個落地事件>`。
 
-### Draft PR（不是 ready）
+### Draft PR（可見性；不是 ready）
 
-已有可討論的獨立 diff，且具名討論者須回答會影響後續實作的具體問題時，可於實作完成前建立 draft PR。三條全中才開；缺一停在 checkpoint。來源還必須乾淨。遠端物件由 coordinator 建立；`batch draft` 只在遠端 draft 已存在後記 receipt。
+相對 `main` 已有非空 committed diff 後，**slice owner** 自己 push 該 session branch 並開 draft PR（全文 [[github-flow]]）。開 draft 後 **MUST** 登記可見性 receipt，否則 prepare 沒有完整綁定：
 
-順序不可調換（全文在 [[github-flow]]）：本機 predicate → 查既有 PR → 只 push session branch → `gh pr create --draft` → 核對 `isDraft` → `batch draft`。
+```bash
+node scripts/wt-helper.ts batch draft <source-path> \
+  --work-id <work-id> --pr <number> --kind visibility
+```
 
 ```bash
 gh pr view <session-branch> --json number,isDraft,headRefName
 git push -u origin <session-branch>
-gh pr create --draft --base main --head <session-branch> --title '<討論題>' --body '<具名討論者必須回答的具體問題>'
+gh pr create --draft --base main --head <session-branch> --title '<切片摘要>' --body '<scope；CI 紅燈回這張 PR>'
 gh pr view <session-branch> --json number,isDraft,headRefName
-node scripts/wt-helper.ts batch draft <source-path> \
-  --work-id <work-id> --pr <number> --discussant '<具名討論者>' --question '<會改變剩餘實作的具體問題>'
 ```
 
-`batch draft` 只寫 receipt。**NEVER** 把該來源放進 ready 池、**NEVER** 當 `prepare` 成員、**NEVER** 啟動完整品質鏈、**NEVER** 授予 worker push／merge。空 branch、只有 WIP、或缺具體問題 → helper 拒絕。Draft 或 PR 開啟都不是可刪來源。
+**NEVER** 把該來源放進 ready 池、**NEVER** 當 `prepare` 成員、**NEVER** 啟動完整品質鏈、**NEVER** merge、**NEVER** push `origin main`。空 branch、只有 WIP → 不開 PR。CI 紅燈修回同一張 PR。討論 draft 另加具名討論者與具體問題時才跑（舊命令無 `--kind` 仍是 discussion，兩欄都必填）：
+
+```bash
+node scripts/wt-helper.ts batch draft <source-path> \
+  --work-id <work-id> --pr <number> --kind discussion \
+  --discussant '<具名討論者>' --question '<會改變剩餘實作的具體問題>'
+```
 
 seal 之後同一 `workId` MUST 把受審 formal HEAD 交到**既有** draft 的 head ref，再標 ready。**NEVER** 開第二張 PR。轉換失敗就停。PR ready 仍走上面的 `batch ready`。
 
@@ -42,7 +49,7 @@ seal 之後同一 `workId` MUST 把受審 formal HEAD 交到**既有** draft 的
 | 已授權開發皆完成或受阻 | `drained` | 有就緒成員即結批 |
 | 使用者結束本輪開發 | `stop` | 有就緒成員即結批；換 session 不屬於 stop |
 
-Status 沒有就緒 wt，也沒有待續跑批次時，回普通 `/commit`。所有輸出中的 stale／invalid 來源列名保留，不假裝進池。既有 active batch 優先續跑，新就緒工作進下一批。
+Status 沒有就緒 wt，也沒有待續跑批次時，回普通 `/commit`。所有輸出中的 stale／invalid 來源列名保留，不假裝進池。既有 active batch 優先續跑，新就緒工作進下一批。單成員 PR 預設；Charles-only leftover 卡該來源時跑 `batch yield-blocked` 讓出 active slot，blocked source 不可自動重回 ready，須具名 `batch unlock-blocked --event` 後重驗再 ready。無關獨立 workId 繼續。合批內一成員 blocked 則整批不落地。
 
 ## 2. 準備隔離整合區
 
@@ -86,6 +93,22 @@ node scripts/wt-helper.ts batch confirm-merged --receipt <merge-receipt.json>
 Receipt 必須是 JSON 物件，欄位固定為：`repository`、`pr`（正整數）、`base`（`main`）、`merge_method`（`squash`）、`merged`（必須為 `true`）、`source_head`（reviewed formal HEAD）、`reviewed_base`、`candidate_tree`、`merge_sha`（GitHub squash 產生的單一 parent commit），以及 `content_patch_id`（`base..source_head` 的 `git patch-id --stable`）。Helper 會向 GitHub 查同一 `repository`／`pr`：必須 `merged=true`、base 為 `main`、遠端 merge SHA 等於 receipt、GitHub `head.sha` 等於 reviewed `source_head`；若本 checkout 有 `origin` GitHub remote，其 owner/repo 必須與 receipt 及遠端 PR 一致。**NEVER** 只信 caller 自填的 `merged`。接著確認 `source_head` 仍是 reviewed formal HEAD、`reviewed_base` 仍是 seal 時的 base、merge parent 就是該 base、`merge_sha` 是 `main` 可達的單一 parent commit，並比對 reviewed candidate tree 與 merge tree（涵蓋 binary／rename／file mode）以及 stable patch-id；任一不符即保留來源與 integration。
 
 `batch confirm-merged` 不接受沒有 receipt 的確認，也不接受 fast-forward／一般 merge 冒充 squash。PR 關閉但未合併、receipt 缺失或機械證據不足時保留並查證，不宣稱 landed。Receipt 驗證通過後才記錄 landed；cleanup 對 PR 批次以 receipt 的 `merge_sha` 驗證 main 可達性，同時仍以 formal HEAD 保護 integration branch 與來源回收。清理失敗只重試 cleanup，不重複合併。
+
+具名 coordinator 在 C 節 predicate 全成立時，用 helper 合併，不自行拼裸 `gh pr merge`：
+
+```bash
+node scripts/wt-helper.ts batch yield-blocked \
+  --work-id <work-id> --reason '<Charles leftover>' --owner <coord> \
+  --carrier <path> --resume-event <named-event>
+node scripts/wt-helper.ts batch unlock-blocked \
+  --work-id <work-id> --event <named-event>
+node scripts/wt-helper.ts batch merge-unattended \
+  --authorization <auth.json> --world <world.json> --dry-run
+node scripts/wt-helper.ts batch merge-unattended \
+  --authorization <auth.json> --world <world.json>
+```
+
+`--world` 是當下 GitHub／CI／seal 快照；未知旗標 fail-closed。崩潰後重入：遠端已合併只補 receipt／confirm，不再次 merge。`batch land` 的 PR 路徑不偷偷啟用 auto-merge。Merge 後盯該 `merge_sha` 的 staging，不追下一個 SHA。
 
 ## 4. 完成報告前的回收
 
