@@ -43,7 +43,9 @@ When Step 1.8 routes to Pi for coding work, use `Bash run_in_background=true` to
 
    - **允許** commit：`git add -- <files>` + `git commit -m "🧹 chore: wt <slug> — <short>"`
    - **MUST** selective stage — `git add -A` / `git add .` 會撈到 baseline
-   - **NEVER** `git push` / `git stash` / `git commit --amend` / `--no-verify`
+   - **NEVER** `git push origin main` / `git stash` / `git commit --amend` / `--no-verify` / `HUSKY=0`
+   - 相對 `main` 有非空 committed diff 後 **MUST** push **該** session branch 並開 draft PR（[[github-flow]]），再盯該 PR 的 CI；紅燈修同一張 PR
+   - 完成回報 MUST 含：`workId`、repository、PR 號、branch、checkpoint SHA、scope、證據路徑與 hash、writer-release。回報後 **停止寫入來源**。Worker 完成 ≠ landing；不准 `batch ready`／merge／push `origin main`。
    - **NEVER** 任何 main-bound ceremony：`/commit` /
      `wt-helper merge-back` / `git merge --squash`。
      標 `work.done` 只有 brief 明確指派且 gates 通過才在來源內執行，不進 main。

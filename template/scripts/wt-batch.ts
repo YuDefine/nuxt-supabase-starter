@@ -24,6 +24,13 @@ import { hostname, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isRecord, parseJsonRecord, parseJsonWith } from './lib/json-unknown.ts'
+import {
+  evaluateUnattendedAdmission,
+  parseUnattendedMergeAuthorization,
+  parseUnattendedWorld,
+  type UnattendedMergeAuthorization,
+  type UnattendedWorld,
+} from './wt-unattended-merge.ts'
 import { runWtEnvBootstrap } from './lib/wt-env-bootstrap-runner.ts'
 import {
   assertNoPublishInFlight,
@@ -199,15 +206,40 @@ export interface CheckpointReceipt {
   scope: string[]
   at: string
 }
-export interface DraftPrReceipt {
+export type DraftPrReceipt = {
   workId: string
   source: string
   branch: string
   head: string
   pr: number
-  discussant: string
-  question: string
   at: string
+} & ({ kind: 'visibility' } | { kind: 'discussion'; discussant: string; question: string })
+export interface MergeAttemptJournal {
+  operationId: string
+  expectedHead: string
+  expectedBase: string
+  stage: 'admitting' | 'ready' | 'merging' | 'confirming' | 'completed' | 'failed'
+  remote?: { merged: boolean; mergeSha?: string; error?: string }
+}
+export interface StagingReceipt {
+  workflowFile: string
+  mergeSha: string
+  runId: number
+  runAttempt: number
+  conclusion: 'success' | 'failure' | 'cancelled' | 'timed_out' | 'pending'
+}
+export interface BlockedSource {
+  workId: string
+  path: string
+  reason: string
+  resumeEvent: string
+}
+export interface ReleaseWindowRecord {
+  owner: string
+  repository: string
+  releaseSha: string
+  productionRunId: number | null
+  status: 'active' | 'unknown' | 'closed'
 }
 export interface BatchDraftBinding {
   workId: string
@@ -238,6 +270,10 @@ export interface WorktreeBatch {
   cancellationReason?: string
   landedHead?: string
   mergeReceipt?: MergeReceipt
+  unattendedAuthorization?: UnattendedMergeAuthorization
+  mergeAttempt?: MergeAttemptJournal
+  stagingReceipt?: StagingReceipt
+  waiting?: { reason: string; owner: string; carrier: string; resumeEvent: string }
   removed: string[]
   preserved?: { path: string; archive: string }[]
   removing?: {
@@ -263,6 +299,8 @@ interface State {
   version: 1
   ready: ReadySource[]
   batches: WorktreeBatch[]
+  blockedSources?: BlockedSource[]
+  releaseWindows?: ReleaseWindowRecord[]
 }
 interface Context {
   cwd: string
@@ -2074,6 +2112,10 @@ export function registerReady(
       )
     )
       throw new Error('Source already belongs to a batch')
+    if ((s.blockedSources ?? []).some((blocked) => blocked.workId === options.workId))
+      throw new Error(
+        `Work id ${options.workId} is waiting on a named resume event and cannot re-enter ready`,
+      )
     const evidence = realpathSync(resolve(cwd, options.evidence))
     if (!readFileSync(evidence).length) throw new Error('Evidence must be nonempty')
     const m: ReadySource = {
@@ -2130,20 +2172,55 @@ export function checkpointSource(
 function workIdFile(workId: string): string {
   return `${workId.replace(/[^A-Za-z0-9._-]+/g, '_')}.json`
 }
-function isDraftPrReceipt(value: unknown): value is DraftPrReceipt {
-  if (!isRecord(value)) return false
-  return (
-    typeof value.workId === 'string' &&
-    typeof value.source === 'string' &&
-    typeof value.branch === 'string' &&
-    typeof value.head === 'string' &&
-    typeof value.pr === 'number' &&
-    Number.isInteger(value.pr) &&
-    value.pr > 0 &&
-    typeof value.discussant === 'string' &&
-    typeof value.question === 'string' &&
-    typeof value.at === 'string'
+function isNonemptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+export function parseDraftPrReceipt(value: unknown): DraftPrReceipt {
+  if (!isRecord(value)) throw new Error('Invalid draft receipt; preserve it for recovery')
+  if (
+    typeof value.workId !== 'string' ||
+    typeof value.source !== 'string' ||
+    typeof value.branch !== 'string' ||
+    typeof value.head !== 'string' ||
+    typeof value.pr !== 'number' ||
+    !Number.isInteger(value.pr) ||
+    value.pr <= 0 ||
+    typeof value.at !== 'string'
   )
+    throw new Error('Invalid draft receipt; preserve it for recovery')
+  const base = {
+    workId: value.workId,
+    source: value.source,
+    branch: value.branch,
+    head: value.head,
+    pr: value.pr,
+    at: value.at,
+  }
+  const kind = value.kind
+  if (kind === 'visibility') {
+    if (value.discussant !== undefined || value.question !== undefined)
+      throw new Error('Invalid draft receipt; preserve it for recovery')
+    return { ...base, kind: 'visibility' }
+  }
+  if (kind === 'discussion' || kind === undefined) {
+    if (!isNonemptyString(value.discussant) || !isNonemptyString(value.question))
+      throw new Error('Invalid draft receipt; preserve it for recovery')
+    return {
+      ...base,
+      kind: 'discussion',
+      discussant: value.discussant.trim(),
+      question: value.question.trim(),
+    }
+  }
+  throw new Error('Invalid draft receipt; preserve it for recovery')
+}
+function isDraftPrReceipt(value: unknown): value is DraftPrReceipt {
+  try {
+    parseDraftPrReceipt(value)
+    return true
+  } catch {
+    return false
+  }
 }
 function readDraft(file: string): DraftPrReceipt {
   return parseJsonWith(
@@ -2206,15 +2283,29 @@ function assertReceiptReusesDraft(
 export function recordDraftPr(
   cwd: string,
   source: string,
-  options: { workId: string; pr: number; discussant: string; question: string },
+  options: {
+    workId: string
+    pr: number
+    kind?: 'visibility' | 'discussion'
+    discussant?: string
+    question?: string
+  },
 ): DraftPrReceipt {
   const workId = options.workId.trim()
-  const discussant = options.discussant.trim()
-  const question = options.question.trim()
-  if (!workId || !discussant || !question)
-    throw new Error('Draft requires work-id, named discussant and a concrete question')
+  if (!workId) throw new Error('Draft requires work-id, named discussant and a concrete question')
   if (!Number.isInteger(options.pr) || options.pr <= 0)
     throw new Error('Draft requires a positive integer PR number')
+  if (options.kind !== undefined && options.kind !== 'visibility' && options.kind !== 'discussion')
+    throw new Error('Unknown draft kind; expected visibility or discussion')
+  const kind = options.kind ?? 'discussion'
+  if (kind === 'visibility' && (options.discussant !== undefined || options.question !== undefined))
+    throw new Error('Visibility draft forbids discussant and question')
+  const discussant = options.discussant?.trim() ?? ''
+  const question = options.question?.trim() ?? ''
+  if (kind === 'discussion') {
+    if (!discussant) throw new Error('Draft requires a named discussant')
+    if (!question) throw new Error('Draft requires a concrete question')
+  }
   const c = context(cwd)
   const path = realpathSync(resolve(cwd, source))
   const wt = worktrees(c.main).find((w) => w.path === path)
@@ -2225,16 +2316,28 @@ export function recordDraftPr(
     .split('\n')
     .filter(Boolean)
   if (changed.length === 0) throw new Error('Draft requires a discussable independent diff')
-  const receipt: DraftPrReceipt = {
-    workId,
-    source: path,
-    branch: wt.branch,
-    head: head(path),
-    pr: options.pr,
-    discussant,
-    question,
-    at: new Date().toISOString(),
-  }
+  const receipt: DraftPrReceipt =
+    kind === 'visibility'
+      ? {
+          workId,
+          source: path,
+          branch: wt.branch,
+          head: head(path),
+          pr: options.pr,
+          at: new Date().toISOString(),
+          kind: 'visibility',
+        }
+      : {
+          workId,
+          source: path,
+          branch: wt.branch,
+          head: head(path),
+          pr: options.pr,
+          at: new Date().toISOString(),
+          kind: 'discussion',
+          discussant,
+          question,
+        }
   return mutate(c, (s) => {
     const activeBatch = s.batches.find(
       (batch) => isLiveBatch(batch) && batch.members.some((member) => member.workId === workId),
@@ -4069,6 +4172,55 @@ export function cancelBatch(cwd: string, reason: string) {
     return { batch: b.id, reason, retained: [b.path, ...b.members.map((m) => m.path)] }
   })
 }
+export function yieldBlockedBatch(
+  cwd: string,
+  waiting: { reason: string; owner: string; carrier: string; resumeEvent: string; workId: string },
+) {
+  if (!waiting.resumeEvent.trim()) throw new Error('Blocked yield requires a named resume event')
+  const c = context(cwd)
+  return mutate(c, (s) => {
+    const b = active(s)
+    if (!b.members.some((member) => member.workId === waiting.workId))
+      throw new Error(`Blocked work id ${waiting.workId} is not in the active batch`)
+    b.waiting = {
+      reason: waiting.reason,
+      owner: waiting.owner,
+      carrier: waiting.carrier,
+      resumeEvent: waiting.resumeEvent,
+    }
+    b.phase = 'cancelled'
+    b.cancellationReason = waiting.reason
+    delete b.seal
+    s.ready = s.ready.filter((m) => !b.members.some((source) => source.path === m.path))
+    const blocked = s.blockedSources ?? []
+    s.blockedSources = [
+      ...blocked.filter((row) => row.workId !== waiting.workId),
+      {
+        workId: waiting.workId,
+        path: b.members.find((member) => member.workId === waiting.workId)!.path,
+        reason: waiting.reason,
+        resumeEvent: waiting.resumeEvent,
+      },
+    ]
+    save(c, s)
+    return { batch: b.id, waiting: b.waiting, retained: [b.path, ...b.members.map((m) => m.path)] }
+  })
+}
+export function unlockBlockedSource(cwd: string, workId: string, event: string) {
+  const c = context(cwd)
+  return mutate(c, (s) => {
+    const blocked = s.blockedSources ?? []
+    const row = blocked.find((item) => item.workId === workId)
+    if (!row) throw new Error(`Work id ${workId} is not blocked`)
+    if (row.resumeEvent !== event)
+      throw new Error(
+        `Resume event ${event} does not unlock ${workId}; expected ${row.resumeEvent}`,
+      )
+    s.blockedSources = blocked.filter((item) => item.workId !== workId)
+    save(c, s)
+    return row
+  })
+}
 export function batchScope(cwd: string) {
   const c = context(cwd),
     b = active(readState(c))
@@ -4083,10 +4235,118 @@ export function batchScope(cwd: string) {
     members: b.members.map((m) => ({ path: m.path, workId: m.workId, head: m.head })),
   }
 }
+export type UnattendedMergeProbes = {
+  world: UnattendedWorld
+  markReady?: (query: { repository: string; pr: number }) => void
+  mergePr?: (query: { repository: string; pr: number; head: string }) => { mergeSha: string }
+}
+
+function assertEvidenceHash(path: string, expected: string, label: string) {
+  const resolved = realpathSync(path)
+  if (!readFileSync(resolved).length || hashFile(resolved) !== expected)
+    throw new Error(`${label} evidence missing, empty or changed`)
+}
+
+export function mergeUnattendedBatch(
+  cwd: string,
+  authorizationPath: string,
+  options: { dryRun?: boolean; probes?: UnattendedMergeProbes } = {},
+) {
+  const c = context(cwd)
+  const raw = parseJsonRecord(
+    readFileSync(realpathSync(resolve(cwd, authorizationPath)), 'utf8'),
+    authorizationPath,
+  )
+  const auth = parseUnattendedMergeAuthorization(raw)
+  if (!options.probes?.world)
+    throw new Error('Unattended merge requires an injected world snapshot')
+  assertEvidenceHash(auth.authority.evidence, auth.authority.hash, 'authority')
+  assertEvidenceHash(auth.human.evidence, auth.human.hash, 'human')
+  assertEvidenceHash(auth.deployment_evidence.evidence, auth.deployment_evidence.hash, 'deployment')
+  const decision = evaluateUnattendedAdmission(auth, options.probes.world)
+  return mutate(c, (state) => {
+    const batch = state.batches.find((item) => item.id === auth.batchId)
+    if (!batch) throw new Error(`Batch ${auth.batchId} is not in the journal`)
+    batch.unattendedAuthorization = auth
+    if (decision.action === 'yield-blocked') {
+      const waiting = {
+        reason: 'blocked-charles leftover',
+        owner: auth.coordinator.owner,
+        carrier: auth.human.leftovers[0]?.carrier ?? auth.human.evidence,
+        resumeEvent: `charles-leftover:${auth.human.leftovers[0]?.id ?? auth.batchId}`,
+        workId: auth.workIds[0]!,
+      }
+      batch.waiting = {
+        reason: waiting.reason,
+        owner: waiting.owner,
+        carrier: waiting.carrier,
+        resumeEvent: waiting.resumeEvent,
+      }
+      batch.phase = 'cancelled'
+      batch.cancellationReason = waiting.reason
+      delete batch.seal
+      state.ready = state.ready.filter(
+        (row) => !batch.members.some((member) => member.path === row.path),
+      )
+      state.blockedSources = [
+        ...(state.blockedSources ?? []).filter((row) => row.workId !== waiting.workId),
+        {
+          workId: waiting.workId,
+          path:
+            batch.members.find((member) => member.workId === waiting.workId)?.path ?? batch.path,
+          reason: waiting.reason,
+          resumeEvent: waiting.resumeEvent,
+        },
+      ]
+      save(c, state)
+      return { action: 'yield-blocked', batch: batch.id, waiting: batch.waiting }
+    }
+    const prior = batch.mergeAttempt
+    if (prior?.stage === 'merging' && options.probes!.world.alreadyMerged) {
+      batch.mergeAttempt = { ...prior, stage: 'confirming' }
+      save(c, state)
+      if (options.dryRun) return { action: 'confirm-only', dryRun: true, batch: batch.id }
+      return { action: 'confirm-only', batch: batch.id, reentry: true }
+    }
+    batch.mergeAttempt = {
+      operationId: prior?.operationId ?? randomUUID(),
+      expectedHead: auth.source_head,
+      expectedBase: auth.reviewed_base,
+      stage: options.dryRun ? 'admitting' : decision.action === 'merge' ? 'merging' : 'confirming',
+    }
+    save(c, state)
+    if (options.dryRun) return { action: decision.action, dryRun: true, batch: batch.id }
+    if (decision.action === 'merge') {
+      options.probes!.markReady?.({ repository: auth.repository, pr: auth.pr })
+      const merged = options.probes!.mergePr?.({
+        repository: auth.repository,
+        pr: auth.pr,
+        head: auth.source_head,
+      })
+      if (!merged?.mergeSha) throw new Error('Unattended squash merge did not return merge SHA')
+      batch.mergeAttempt = {
+        ...batch.mergeAttempt,
+        stage: 'confirming',
+        remote: { merged: true, mergeSha: merged.mergeSha },
+      }
+      save(c, state)
+      return { action: 'merge', batch: batch.id, mergeSha: merged.mergeSha }
+    }
+    return { action: 'confirm-only', batch: batch.id }
+  })
+}
+
+function rejectUnknownFlags(rest: string[], allowed: Set<string>) {
+  for (const token of rest.filter((item) => item.startsWith('--'))) {
+    if (!allowed.has(token)) throw new Error(`Unknown flag ${token}`)
+  }
+}
+
 export function runBatchCommand(
   cwd: string,
   args: string[],
   lifecycle: BatchLifecycle = defaultLifecycle,
+  probes?: UnattendedMergeProbes,
 ): unknown {
   const [command, ...rest] = args
   const value = (flag: string) => {
@@ -4118,13 +4378,31 @@ export function runBatchCommand(
           .map((path) => path.trim())
           .filter(Boolean),
       })
-    case 'draft':
+    case 'draft': {
+      rejectUnknownFlags(
+        rest.filter((token) => token.startsWith('--')),
+        new Set(['--work-id', '--pr', '--kind', '--discussant', '--question']),
+      )
+      const kind = value('--kind')
+      if (kind !== undefined && kind !== 'visibility' && kind !== 'discussion')
+        throw new Error('Unknown --kind; expected visibility or discussion')
+      if (kind === 'visibility') {
+        if (value('--discussant') !== undefined || value('--question') !== undefined)
+          throw new Error('Visibility draft forbids --discussant and --question')
+        return recordDraftPr(cwd, rest[0] ?? cwd, {
+          workId: required('--work-id'),
+          pr: Number(required('--pr')),
+          kind: 'visibility',
+        })
+      }
       return recordDraftPr(cwd, rest[0] ?? cwd, {
         workId: required('--work-id'),
         pr: Number(required('--pr')),
+        kind: 'discussion',
         discussant: required('--discussant'),
         question: required('--question'),
       })
+    }
     case 'ready':
       return registerReady(cwd, rest[0] ?? cwd, {
         workId: required('--work-id'),
@@ -4154,6 +4432,44 @@ export function runBatchCommand(
       return sealBatch(cwd, required('--evidence'))
     case 'land':
       return landBatch(cwd)
+    case 'yield-blocked': {
+      rejectUnknownFlags(
+        rest.filter((token) => token.startsWith('--')),
+        new Set(['--work-id', '--reason', '--owner', '--carrier', '--resume-event']),
+      )
+      return yieldBlockedBatch(cwd, {
+        workId: required('--work-id'),
+        reason: required('--reason'),
+        owner: required('--owner'),
+        carrier: required('--carrier'),
+        resumeEvent: required('--resume-event'),
+      })
+    }
+    case 'unlock-blocked': {
+      rejectUnknownFlags(
+        rest.filter((token) => token.startsWith('--')),
+        new Set(['--work-id', '--event']),
+      )
+      return unlockBlockedSource(cwd, required('--work-id'), required('--event'))
+    }
+    case 'merge-unattended': {
+      rejectUnknownFlags(
+        rest.filter((token) => token.startsWith('--')),
+        new Set(['--authorization', '--dry-run', '--world']),
+      )
+      const worldPath = required('--world')
+      const worldRaw = parseJsonRecord(
+        readFileSync(realpathSync(resolve(cwd, worldPath)), 'utf8'),
+        worldPath,
+      )
+      return mergeUnattendedBatch(cwd, required('--authorization'), {
+        dryRun: rest.includes('--dry-run'),
+        probes: {
+          world: parseUnattendedWorld(worldRaw),
+          ...probes,
+        },
+      })
+    }
     case 'confirm-merged':
       return confirmMergedBatch(cwd, required('--receipt'))
     case 'cleanup':
@@ -4164,7 +4480,7 @@ export function runBatchCommand(
       return cancelBatch(cwd, required('--reason'))
     default:
       throw new Error(
-        'batch: checkpoint | draft | ready | status | prepare | resume | scope | refresh | review | seal | land | confirm-merged | cleanup | cancel | recover-lock',
+        'batch: checkpoint | draft | ready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | confirm-merged | cleanup | cancel | recover-lock',
       )
   }
 }

@@ -1,6 +1,6 @@
 ---
 name: gh-ci-watch
-description: "Use immediately after a successful git push when the repo has GitHub Actions and CI / deploy completion must be watched; also use when 查詢某 run 或某 SHA、撈 run log 證據、查 runner 佇列。NOT for 修 CI 紅燈本身（那是拿到結果後的除錯流程）。"
+description: "Use immediately after a successful git push when the repo has GitHub Actions and CI / deploy completion must be watched — including slice draft PRs; also use when 查詢某 run 或某 SHA、撈 run log 證據、查 runner 佇列。CI 紅燈修回同一張 PR。NOT for 修 CI 紅燈本身的實作步驟（那是拿到結果後的除錯流程）。"
 metadata:
   author: clade
   version: "1.0"
@@ -34,6 +34,27 @@ Script 位置：
 ## 監看：canonical dispatch 樣板
 
 以下命令一律由 target adapter 以 background command runner 派出（cwd = 該 repo，或帶 `--repo <owner>/<repo>`），派出後主線**繼續原本工作**，等系統的完成通知。
+
+### 場景 E — 切片 draft PR（平行實作的標準場景）
+
+slice owner 剛 push session branch 並開 draft PR 後，盯**該 PR 的 head SHA**（push 前先存 `SLICE_SHA=$(git rev-parse HEAD)`），不要盯 `main`：
+
+```bash
+bash "$GH_CI_WATCH" workflow ci.yml --commit "$SLICE_SHA"
+```
+
+`RESULT: failure` → 同一 owner、同一張 PR 上修，再 push 同一個 head；**NEVER** 另開 PR。Cursor 可用 `subscribe_github_ci`／`subscribe_github_pr` 代替本 script，處置契約相同。綠燈 completion 喚醒**同一 coordinator** 收件並跑 `/commit`，不是請 Charles 代觸發，也不是 worker 自己 ready／merge。
+
+### 場景 F — merge 後 staging 精確 SHA
+
+Coordinator squash 後盯 **該** `MERGE_SHA`，不要追下一個 main SHA：
+
+```bash
+bash "$GH_CI_WATCH" workflow deploy-staging.yml \
+  --branch main --commit "$MERGE_SHA" --no-follow
+```
+
+selector 不能保證精確篩選時，先查出滿足 workflow＋main＋SHA 的 run id，再用 `run <run-id> --no-follow`。`cancelled`／failure／timeout 保留部署 blocker。`UNAVAILABLE` 對 merge／staging gate **NEVER** 算略過成功。
 
 ### 場景 A — 盯已知 run id
 
@@ -186,7 +207,7 @@ gh api "/repos/<owner>/<repo>/actions/runs?status=queued" --jq '.workflow_runs[]
 
 | 主題 | 位置 |
 | --- | --- |
-| Push 後何時觸發監看、綠燈/紅燈後主線的處置政策（target decision surface / HANDOFF 登記） | 本 skill § Push 後政策：`git push` 成功且 repo 含 `.github/workflows/*.yml` 時 MUST 立刻派 watcher；`success` → 一行報 `v<version> CI 綠燈 — <runUrl>` 後結束；失敗類 → 先照 § 失敗處置第一步 跑 `RANGE` 比最後綠燈，再 target decision surface 二選一 `[1] 立刻 root-cause + 修` / `[2] 登記 HANDOFF.md`（`- [ ] [<date>] v<version> CI <fail|timeout> — <job>` + Run URL + 根因猜測）；`UNAVAILABLE` → 一行報略過 |
+| Push 後何時觸發監看、綠燈/紅燈後主線的處置政策 | 本 skill § Push 後政策：`git push` 成功且 repo 含 `.github/workflows/*.yml` 時 MUST 立刻派 watcher。**切片 draft PR**：盯該 PR 的 head SHA／branch，`failure` → **同一 owner、同一張 PR** 修，**NEVER** 另開 PR；`success` → 一行報綠燈 + run URL，draft 維持 draft，completion 交 coordinator。**發版 push main／tag**：`success` → 一行報 `v<version> CI 綠燈 — <runUrl>`；失敗類 → 先照 § 失敗處置第一步 跑 `RANGE`，再 `[1] 立刻 root-cause + 修` / `[2] 登記 HANDOFF.md`。`UNAVAILABLE` → 監看可報略過；**merge／staging gate 不得把 UNAVAILABLE 當成功** |
 | CI / test workflow 必須自己取消過期 run | [[ci-workflow]] § CI / test workflow MUST cancel superseded runs on the same ref。本 script 在 cancelled 時改追 successor，那是監看補救，不能代替 workflow `concurrency` |
 | Script 本體 | skill-local `scripts/gh-ci-watch.sh`（由 resource declaration 投影至本 skill） |
 | 背景派工通用回報契約 | `rules/core/agent-routing.dispatch-execution.md` § Subagent 回報契約 |

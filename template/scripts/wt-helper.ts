@@ -6544,7 +6544,7 @@ async function main() {
       return
     default:
       console.error(
-        'Usage: wt-helper <add|detect-main-dirty|list|prune|reclaim-stale|cleanup|merge-back|resolve|land-pending|rescue|orphan-prune|sweep-siblings|dev> [args]',
+        'Usage: wt-helper <add|detect-main-dirty|list|prune|reclaim-stale|cleanup|merge-back|resolve|land-pending|rescue|orphan-prune|sweep-siblings|dev|batch> [args]',
       )
       console.error('')
       console.error(

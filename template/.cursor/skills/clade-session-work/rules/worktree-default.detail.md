@@ -77,7 +77,7 @@ OPSX create / revise 會寫 canonical intent、binding 與投影。每次呼叫�
 
 ## §5 Commit 階段：checkpoint → 批次整合 → /commit → 回收
 
-Worker 完成實作與必要驗收後 checkpoint，主線確認 scope 與寫入權交接後登記就緒。同 repo 累積 4 件 distinct work id 自動進批次；手動 `/commit` / merge back 無最低件數，dependency / drained / stop 提前結批。隔離整合區跑一次完整 `/commit`，正式落地 main 後統一清理。Worker 不各跑完整品質鏈、不 push；所有 skill-owned wt 同樣走就緒池。
+Worker 完成實作與必要驗收後 checkpoint，主線確認 scope 與寫入權交接後登記就緒。同 repo 累積 4 件 distinct work id 自動進批次；手動 `/commit` / merge back 無最低件數，dependency / drained / stop 提前結批。隔離整合區跑一次完整 `/commit`，正式落地 main 後統一清理。Worker 不各跑完整品質鏈、**NEVER** push `origin main`、**NEVER** merge。相對 `main` 有非空 committed diff 後，slice owner **MUST** push **該** session branch 並開 draft PR（見 [[github-flow]]），再盯該 PR 的 CI。所有 skill-owned wt 同樣走就緒池。
 
 > 執行 checkpoint／收割／落地前 **MUST** 讀 [[worktree-default.commit-ceremony]] §5 與 commit skill 的 `batch.md`。
 

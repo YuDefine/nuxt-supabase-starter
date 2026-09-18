@@ -28,6 +28,7 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 
 - 每份 brief **MUST** 寫明**檔案所有權**：這個 worker 可以動哪些路徑、不可以動哪些。N 個 worker 同時在同一個 repo 跑，沒有所有權欄位就是併發寫入同一檔（per [[subagent-scope-discipline]]）。
 - 每份 brief **MUST** 寫明「你是被派來做這一件事的 worker，不是繼任者」，以及「做完回報 outcome；要交棒只能用 `/handoff relay`，**不能** fanout」。
+- 每份 brief **MUST** 寫明：一刀一 branch 一 **draft PR**；push 後盯 CI；紅燈回這張 PR。這是 Claude／Codex 達到與 Cursor `CreateAgent` 相同結果的入口，不是「只開 worktree、永遠不開 PR」。**NEVER** 把 `/handoff fanout` 當 Cursor Project 必經入口；Cursor Project 用 CreateAgent。Worker 回報完成後由 coordinator 接續，worker 不准 ready／merge。
 
 ## 2. 逐個裸 dispatch
 

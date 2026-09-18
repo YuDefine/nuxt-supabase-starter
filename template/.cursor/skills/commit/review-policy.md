@@ -31,7 +31,7 @@ UI Design Review 與截圖符合性 reviewer 使用 fresh Claude Opus 5（effort
 
 1. 依當前 catalog 與已驗證 adapter 取得實際候選，逐欄記錄判定。支援 CLI 的入口可呼叫共同 wrapper；呼叫者不因 wrapper 名含 codex 或相容路徑 `.claude/` 就改變 runtime。
 2. 使用該入口原生背景 handle、等待／取消及完成事件；先確保 owner 能收回結果，再並行其他軸。沒有非同步能力時可使用已授權的同步載體，保留全部 gate 與 snapshot 條件並明示並行不可用。
-3. Astra 配額耗盡或 dispatch 失敗時沒有替補：依 `codex-review-safe.sh` 的 RESULT 行與 exit code 判定結果，gate 保持未完成並保留實跑證據。主線自審可以協助修復，不能產生缺席 reviewer 的 PASS。
+3. Astra 配額耗盡或 dispatch 失敗時沒有替補：依 `codex-review-safe.sh` 的 RESULT 行與 exit code 判定結果，gate 保持未完成並保留實跑證據。主線自審可以協助修復，不能產生缺席 reviewer 的 PASS。Cloud CI success **不能代替** Astra 0-A。Coordinator 跑 `/commit`；reviewer 必須是獨立 Astra medium session，身分與 coordinator 分離。Astra 不可用 → pending，不以 worker／Charles／主線自審補位。
 
 **NEVER** 用假 model、假 family、假完成事件或另一入口的 tool 參數填滿表格。每一個 gate receipt 都描述實際執行；完整輸出與可核對的 snapshot 是完成證據，背景啟動成功不是。
 
