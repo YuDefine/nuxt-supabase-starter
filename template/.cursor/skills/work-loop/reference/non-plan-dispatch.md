@@ -69,7 +69,7 @@ machine check 分離把這件事結構化了，非 plan 路徑沒有那個結構
 - 每筆需求建立依 [guardrails.md](guardrails.md) § 護欄 7 的來源授權判定；已授權且明確的需求走 `/specify` 或建 tasks 檔，未授權新目標或產品歧義才 packaging。
 - **NEVER** 跨 consumer 操作 —— loop 仍限當前 repo
 
-**動標準層不再是 skip 理由**：`rules/` / `plugins/hub-core/` / `CLAUDE.md` / `vendor/`（clade 端）
+**動標準層不再是 skip 理由**：`rules/` / `capabilities/core/` / `CLAUDE.md` / `vendor/`（clade 端）
 **可以改**（2026-08-05 授權），但 MUST 改完走 `/clade-publish` Step 1–9 散播完畢，**NEVER** 改完擱著。
 做不到就 packaging。判準見 [guardrails.md](guardrails.md) 護欄 5 與 [autonomy-predicate.md](autonomy-predicate.md) predicate 2。
 

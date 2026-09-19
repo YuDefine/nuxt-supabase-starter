@@ -1,6 +1,6 @@
 # 🔒 LOCKED — managed by clade · Source: vendor/actions/evlog-map-gate/action.yml · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/actions/evlog-map-gate/action.yml
 name: 'evlog map Coverage Gate'
-description: 'Run the clade evlog map gate. Default mode is strict: EVERY entry point in the repo must have zero failing checks and zero suppressions — not just the ones this diff touched. Ratchet mode (score must not drop below the committed evlog.map.json baseline, touched entry points must be perfect) remains available for repos still climbing to 100. Also fails on the false-green case where evlog map finds 0 entry points but reports score 100. Assumes the caller has already checked out the repo with fetch-depth 0 and installed dependencies.'
+description: 'Run the clade evlog map gate. Callers MUST pass mode explicitly — min-score (strict: EVERY entry point zero failing checks and zero suppressions) or ratchet (baseline must not regress; touched entry points must be perfect). No default on mode: upstream cannot silently retarget unpinned workflows when the recommended mode changes. Also fails on the false-green case where evlog map finds 0 entry points but reports score 100. Assumes the caller has already checked out the repo with fetch-depth 0 and installed dependencies.'
 author: 'YuDefine/clade'
 
 inputs:
@@ -17,9 +17,8 @@ inputs:
     required: false
     default: 'evlog.map.json'
   mode:
-    description: 'min-score (default; strict — every entry point zero-failure, zero-suppression) or ratchet (transitional: baseline must not regress and touched entry points must be perfect).'
-    required: false
-    default: 'min-score'
+    description: 'min-score (strict — every entry point zero-failure, zero-suppression) or ratchet (transitional: baseline must not regress and touched entry points must be perfect). Required on every consumer workflow — never rely on an inherited default.'
+    required: true
   min-score:
     description: 'Score floor used when mode is min-score.'
     required: false

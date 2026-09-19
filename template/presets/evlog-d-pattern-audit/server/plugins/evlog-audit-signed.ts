@@ -155,10 +155,10 @@ export default defineNitroPlugin((nitroApp) => {
   )
 
   nitroApp.hooks.hook('close', () => auditWriter.flush())
-  nitroApp.hooks.hook('request', (event) => {
-    const waitUntil = event.context.cloudflare?.context?.waitUntil
-    if (typeof waitUntil === 'function') {
-      waitUntil(auditWriter.flush())
+  nitroApp.hooks.hook('afterResponse', (event) => {
+    const ctx = event.context.cloudflare?.context
+    if (ctx && typeof ctx.waitUntil === 'function') {
+      ctx.waitUntil(auditWriter.flush())
     }
   })
 })

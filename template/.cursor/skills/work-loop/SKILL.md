@@ -618,7 +618,7 @@ runner.sh 另有 mechanical fail-closed：起跑前、每次 child launch 前，
 | 需要 attended / permission gate（publish、`.claude/**`） | attended 佇列（`tasks/` 既有形狀，一檔一條） |
 | 可執行，且 context 可 durable 化成 ≤5K thin brief | **裸 dispatch**（default 出口）：`herdr-session-handoff.ts --cwd <main-checkout> --label <描述性 label> --prompt-file <brief> --model <slug> --effort <level> --route <policy> --tier-basis <conclusion>`，**不帶 `--relay`、不帶 `--coordinate`**。brief 紀律照 [[session-tasks.operations]] § Herdr session transport |
 | 等具體外部 signal | 有 `specs/truth/work-lifecycle.md` → `flow plan open` ＋ **可觀察 signal predicate**。未遷移 consumer 才寫 TD ＋ `wontfix-until-signal`。寫不出 predicate 就不准用本格——那是等待區，不是掩埋場 |
-| 以上皆非（context 無法 durable 化） | 有 `specs/truth/work-lifecycle.md` → `flow plan open`，**NEVER** 新 TD。未遷移 consumer 才 TD 登記，**MUST 同 commit 附 `### Restart brief` 段**：檔案路徑、指令、驗收 predicate、已排除方案。heading 逐字 `### Restart brief`（`####` 亦可），**NEVER** 寫成 `**Restart brief**` 粗體或 `## `（前者不是 heading、後者被 TD parser 當成新 entry 的起點）。缺 = `audit-tech-debt-hygiene` violation（`restart-brief-missing`，紅線 >0） |
+| 以上皆非（context 無法 durable 化） | 有 `specs/truth/work-lifecycle.md` → `flow plan open`，**NEVER** 新 TD。未遷移 consumer 才 TD 登記，**MUST 同 commit 附 `### Restart brief` 段**：檔案路徑、指令、驗收 predicate、已排除方案。heading 逐字 `### Restart brief`（`####` 亦可），**NEVER** 寫成 `**Restart brief**` 粗體或 `## `（前者不是 heading、後者被 TD parser 當成新 entry 的起點）。`audit-tech-debt-hygiene` 的 Invariant 13 只對未遷移 consumer fail-loud；plan-truth repo 的舊 `docs/tech-debt.md` 是 read-only legacy carrier，該 invariant retired。 |
 
 **Iron Law：登記之前先問「這條為什麼不能現在 dispatch」。違反字面就是違反精神**——「登記比較快」
 「brief 明天再補」「反正 HANDOFF 會有人看」都不成立：Restart brief 的內容就是 thin brief 的內容，

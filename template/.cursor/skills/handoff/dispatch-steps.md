@@ -6,6 +6,8 @@ SKILL.md § 2B.3 / 2B.4 / 2B.4.5 / 2B.5 的完整規約：outstanding 的 serial
 
 **`next` 也收工。** 本檔的表格決定的是「下一步該用哪一支 skill、要不要 worktree」，**不是**「在本 session 內把它跑完」——盤點完、user 選定後，選中的工作寫進 durable brief 交給 pane 執行，本 session 隨即收工（1 件走 [relay-steps.md](relay-steps.md)、N 件可平行走 [fanout-steps.md](fanout-steps.md)）。
 
+**Codex 例外在進入本流程前生效**：依 [SKILL.md](SKILL.md) § Codex native boundary，同一個 upstream task 保留責任。user 選定的 bounded GPT work 以 `collaboration.spawn_agent` 派出並由 upstream 收割；不建立 successor pane、不執行本檔 2B.5 的 Herdr handoff，也不因 worker 完成而收工。缺 native capability 就回 blocker。user 明確點名的 Devin bounded worker 是 § Codex native boundary 的唯一外部例外：create-only `--launcher devin` 派工、upstream 收割，仍不是 successor、不收工。以下「派給 pane後收工」只適用其他支援該 transport 的 runtime。
+
 唯一的例外是**當場做得完的單一 bounded action**（改一行 typo、補一條 pointer、勾一個 checkbox）：直接做掉再收工，不值得為它開一個 pane。**NEVER** 拿這個例外去涵蓋「反正我順手跑完 `/implement` 比較快」——那是完整的一件工作，該派出去。
 
 ### 2B.3 Serial vs Parallel 評估
@@ -32,10 +34,12 @@ SKILL.md § 2B.3 / 2B.4 / 2B.4.5 / 2B.5 的完整規約：outstanding 的 serial
 
 ### 2B.4 推薦 + 詢問操作
 
-寫一段「outstanding 盤點 + serial/parallel 推薦」訊息：
+寫一段「outstanding 盤點 + serial/parallel 推薦」訊息。**MUST** 含 **「做到一半的 specs/plans」** 三桶（來自 `jq '.planInventory.raw' "$SCAN"`：`startable` / `blockedHuman` / `retire`）。可做項的 next **MUST** 用 inventory 列印的 `next` 字串（claim → plan show → `/implement`），**NEVER** 對半成品推薦 `/work-route`（舊名 `/sdd-start`）。
 
 ```
 Outstanding（N 條）：
+
+**做到一半的 specs/plans**（可做 A / 卡人 B / 該 RETIRE C）— 逐列貼 scan 的 `next`／`waitingOn`
 
 1. <標題> — <涉及範圍> — <serial/parallel 判定>
 2. ...
@@ -104,5 +108,5 @@ User 透過詢問操作選定下一步 outstanding（含明確的 next-skill 與
 | `ruling` 卡 | user 回答判斷題 | 在對話端出 Qn，或 `/decisions`；回答後 `flow answer` |
 | `external-action` / `exception` 卡 | 先走 SKILL §2B.2.5 抽原因、辨識 startable 子集 | 依 triage 結果 |
 | 沒有卡片，但 evidence 缺 / issue 未 triage | agent 補 evidence 或 triage | 主線跑 verify channel（[[manual-review.backend]] § `[verify:*]` flow） |
-| 沒有卡片，實作未完 | 依 carrier 繼續實作 | `/wt <slug>: /implement`（依 §2B.5 隔離 worktree） |
+| 沒有卡片，實作未完 | 依 carrier 繼續實作 | `planInventory` 可做桶的 `next`（claim → plan show → `/implement`）；必要時 `/wt <slug>: /implement`（依 §2B.5 隔離 worktree） |
 | 沒有卡片，只剩 `[discuss]` | 收尾 walkthrough | [[manual-review]] § `[discuss]` walkthrough |

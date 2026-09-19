@@ -47,7 +47,7 @@ node scripts/shell-safety-check.ts <你剛寫的檔>     # 命中 exit 1，乾�
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 三條件全中（內部 `sudo` × user-level toolchain × 缺 guard）。**warn-only，不 block** —— 命中的多半是既有腳本被順手改了一行，擋下編輯治不了它，只會逼人繞過 hook |
-| 消費端 | 執行上方自驗的 agent；Claude hook `plugins/hub-core/hooks/post-edit-shell-safety.sh`（PostToolUse `Edit|Write`，命中 `*.sh` 時就地判該單檔）；clade 的 `scripts/audit-sudo-euid-guard.ts` fleet 掃描（`/clade-health enforcement`／`full`）。Hook 與 audit 使用同一份 checker：clade source 為 `vendor/scripts/shell-safety-check.ts`，consumer 投影為 `scripts/shell-safety-check.ts`。Codex／Cursor 的原生事件接線須另有實測證據，本規約的投影不代表已安裝該 hook |
+| 消費端 | 執行上方自驗的 agent；Claude hook `capabilities/core/hooks/post-edit-shell-safety.sh`（PostToolUse `Edit|Write`，命中 `*.sh` 時就地判該單檔）；clade 的 `scripts/audit-sudo-euid-guard.ts` fleet 掃描（`/clade-health enforcement`／`full`）。Hook 與 audit 使用同一份 checker：clade source 為 `vendor/scripts/shell-safety-check.ts`，consumer 投影為 `scripts/shell-safety-check.ts`。Codex／Cursor 的原生事件接線須另有實測證據，本規約的投影不代表已安裝該 hook |
 | 載入路徑 | 本檔 frontmatter 的 paths 宣告適用範圍；Claude／Codex／Cursor adapter 依各自載入契約交付完整正文，適用範圍不等同各產品的自動事件能力 |
 
 ## 2. `trap` body 引用的變數 MUST 在 trap 執行當下真的拿得到值

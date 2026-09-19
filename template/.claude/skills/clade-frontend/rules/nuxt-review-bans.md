@@ -7,7 +7,7 @@ paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'pages/**/*.vue', 'packages/*
 
 # Nuxt Review Bans（實作階段強制）
 
-**核心命題**：`vendor/review-rules/patterns.json` 定義了跨 consumer 統一的機械可檢 ban 規則，由 pre-commit hook + code-review agent 消費。但這些規則過去**只在 review 階段可見**（`plugins/hub-core/agents/references/clade-review-rules.md`），實作階段的 Claude 完全看不到 → 反覆寫出違規 → 事後才被抓。
+**核心命題**：`vendor/review-rules/patterns.json` 定義了跨 consumer 統一的機械可檢 ban 規則，由 pre-commit hook + code-review agent 消費。但這些規則過去**只在 review 階段可見**（`capabilities/core/agents/references/clade-review-rules.md`），實作階段的 Claude 完全看不到 → 反覆寫出違規 → 事後才被抓。
 
 本 rule 把 `patterns.json` 的 ban 清單提升到 **path-scoped implementation rule**，由當前 runtime 的 scoped delivery 送達全文；agent 在首次修改符合範圍的 `.vue` / `app.config.ts` 之前讀取並套用。
 
@@ -117,7 +117,7 @@ paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'pages/**/*.vue', 'packages/*
 
 2026-06-28 實證：`patterns.json` 的 `ubadge-size-ban` 存在且 pre-commit hook 生效，但實作階段 Claude 完全不知道此 ban → 在 `app.config.ts` 設 `badge.defaultVariants.size: 'sm'` 繞過機械層。使用者反映已 10+ 次遇到 review rules 不被遵守的情況。
 
-根因：review rules 放在 `plugins/hub-core/agents/references/clade-review-rules.md`（只有 code-review agent 讀），不在 `.claude/rules/` path-scoped 層（實作 Claude 讀）。本 rule 補上這個可見性斷層。
+根因：review rules 放在 `capabilities/core/agents/references/clade-review-rules.md`（只有 code-review agent 讀），不在 `.claude/rules/` path-scoped 層（實作 Claude 讀）。本 rule 補上這個可見性斷層。
 
 ## 與其他 rule 的關係
 

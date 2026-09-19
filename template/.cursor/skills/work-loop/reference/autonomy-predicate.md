@@ -51,7 +51,7 @@ Loop 的價值不在「做完可自主的事」——那部分合併前的 `/cha
 | # | Predicate | 怎麼機械判定 |
 | --- | --- | --- |
 | 1 | **單 repo scope** | 條目文字不含其他 consumer 名（對照 `~/offline/clade/registry/consumers.json` 的 `id` 清單）、不含「全 fleet」「所有 consumer」「散播」 |
-| 2 | **動標準層要走完整散播** | 落在 `rules/`、`plugins/hub-core/`、`CLAUDE.md`、`vendor/`（clade 端）或帶 `🔒 LOCKED` banner 的檔**可以改**，但 **MUST** 改完走 `/clade-publish` Step 1–9 散播完畢，**NEVER** 改完擱著。做不到就 packaging |
+| 2 | **動標準層要走完整散播** | 落在 `rules/`、`capabilities/core/`、`CLAUDE.md`、`vendor/`（clade 端）或帶 `🔒 LOCKED` banner 的檔**可以改**，但 **MUST** 改完走 `/clade-publish` Step 1–9 散播完畢，**NEVER** 改完擱著。做不到就 packaging |
 | 3 | **不需開新 change** | 條目不含「需 propose」「要開 change」；且預估涉及檔案 ≤5、不動 schema / API / 行為契約 |
 | 4 | **可逆** | 產出落在 worktree branch、本 repo commit、或**可 revert + 重新 publish 的散播**。**不含**：prod 部署、刪除 branch / tag / 遠端資料、任何花錢的 API 呼叫、`--force` 類操作 |
 | 5 | **Actionability 足夠** | 通過 `rules/core/handoff.md` § Outstanding actionability hygiene——有 audit 來源 + 檔案 list + target 形狀 + scope boundary。**或**：缺的部分能靠一次唯讀調查補齊 |

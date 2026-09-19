@@ -39,7 +39,7 @@ paths:
 
 只滿足其一不擋（尚未動工、或實作完且人工檢查全綠，都允許 commit）。判定流程、fail-fast 位置見當前 runtime 已投影的 commit skill Step 0-MR；`.claude/skills/commit/SKILL.md` 是 Claude 的交付位置。
 
-**擋的粒度是 pathspec 交集，不是 repo 級 freeze**（TD-897）：一件工作判 BLOCK，被 withheld 的是落在該 carrier 的路徑（`tasks/<date>-<slug>.md`，或 `specs/plans/NNN-<slug>/**`）；同一次 `/commit` 其餘 group 的 `git commit --only -- <pathspec>` 照常落地。pathspec 只接受具名檔或該 plan package 目錄以下的路徑——祖先目錄（`.`、`tasks`、`specs`、`specs/plans`）、glob、`:` magic、絕對路徑一律視為交集擋下，空 pathspec 恆擋。判定式與理由在 `plugins/hub-core/skills/commit/gates.md` § 0-MR「判定粒度」；其他 group 放行 **NEVER** 讀成該工作已驗收，auto-triage 對它一條沒少。
+**擋的粒度是 pathspec 交集，不是 repo 級 freeze**（TD-897）：一件工作判 BLOCK，被 withheld 的是落在該 carrier 的路徑（`tasks/<date>-<slug>.md`，或 `specs/plans/NNN-<slug>/**`）；同一次 `/commit` 其餘 group 的 `git commit --only -- <pathspec>` 照常落地。pathspec 只接受具名檔或該 plan package 目錄以下的路徑——祖先目錄（`.`、`tasks`、`specs`、`specs/plans`）、glob、`:` magic、絕對路徑一律視為交集擋下，空 pathspec 恆擋。判定式與理由在 `capabilities/core/skills/commit/gates.md` § 0-MR「判定粒度」；其他 group 放行 **NEVER** 讀成該工作已驗收，auto-triage 對它一條沒少。
 
 ### 為何加條件 0（worktree 未 land 即 SKIP）
 

@@ -4,7 +4,7 @@ paths:
   [
     'rules/**',
     '.claude/rules/**',
-    'plugins/**/skills/**',
+    'capabilities/**/skills/**',
     '.claude/skills/**',
     'vendor/snippets/**',
     'vendor/scripts/**',

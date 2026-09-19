@@ -1,6 +1,6 @@
 ---
 name: verification-maintain
-description: Use when user requests verification maintenance. NOT for setup.
+description: Maintain an existing project verification feature map and its harness when product changes make source or live coverage drift. NOT for initial setup or fixing product code.
 ---
 
 

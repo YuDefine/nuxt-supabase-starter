@@ -9,8 +9,8 @@ paths:
     '.mcp.json',
     'vendor/scripts/**',
     'scripts/**',
-    'plugins/**/hooks/**',
-    'plugins/**/skills/**',
+    'capabilities/**/hooks/**',
+    'capabilities/**/skills/**',
     'server/api/auth/**',
     'packages/*/server/api/auth/**',
   ]

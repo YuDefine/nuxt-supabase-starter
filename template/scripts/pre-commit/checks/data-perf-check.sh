@@ -23,7 +23,7 @@
 # 正解：useFetch（SSR hydration）或 useQuery（Pinia Colada cache + dedup）。
 # 規約來源：
 #   - impl-time rule : rules/core/nuxt-data-perf.md § HR-1
-#   - review-layer   : plugins/hub-core/agents/references/clade-review-rules.md
+#   - review-layer   : capabilities/core/agents/references/clade-review-rules.md
 #
 # 由 ~/clade vendor/scripts/pre-commit/ 散播，請勿直接編輯 consumer 副本。
 

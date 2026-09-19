@@ -1,6 +1,6 @@
 ---
 description: 新增、安裝或同步 skill 時，辨認 canonical source、runtime projection、版控與 ownership 邊界
-paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/**', '.codex/skills/**', '.cursor/skills/**', 'plugins/*/skills/**', 'scripts/install-skills.sh', 'skills-lock.json']
+paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/**', '.codex/skills/**', '.cursor/skills/**', 'capabilities/**/skills/**', 'scripts/install-skills.sh', 'skills-lock.json']
 ---
 <!-- Clade native rule; source: adapters/claude/instructions/rules/core/skill-management.md; edit canonical source -->
 <!-- clade-targets: claude -->

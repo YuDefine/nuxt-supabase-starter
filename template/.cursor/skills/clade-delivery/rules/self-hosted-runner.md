@@ -191,6 +191,17 @@ gh api "repos/<owner>/<repo>/pulls?state=all&per_page=100" --paginate --jq '.[].
 
 實證（2026-09-16 <consumer-i> 77ada28 review）：bdd 與 supabase-check 從 `ubuntu-latest` 搬到 `[self-hosted, supabase]`，而 `supabase` 標籤唯一的 X64 runner 就是承載 <consumer-b> / <consumer-e> / <consumer-i> 共用 production Postgres 的主機，同一台的 `migrate-prod.sh` 以 `docker exec -i supabase-db psql` 寫 production。同一時間 <consumer-b> 與 <consumer-e> 的 `supabase-check` 已在 main 上以同一組標籤跑 PR。
 
+**<client-b> 現況（2026-09-17）**：<client-b> 的 Actions 預算 $0 且 `prevent_further_usage`，org 內**沒有** GitHub-hosted 選項，
+上面「沒有能力標籤時先用 `ubuntu-latest`」那條退路在 <client-b> 不存在。<client-b> 的 untrusted-execution job 一律落
+`runs-on: [self-hosted, linux, gh-runner-lxc, X64, supabase-ci]`——`supabase-ci` 只掛在 CT220 的單一 runner
+（`gh-runner-<client-b>-2`），所以這個標籤**同時就是跨 repo mutex**：所有起 supabase stack 的 job 自動序列化，
+不必動 port 或 `project_id`。`X64` 排除 ARM64。
+
+- **NEVER** 把 `supabase-ci` 掛到第二個 runner（含 CT220 的另一個 slot），除非同時導入 per-job port 隔離（per-run `project_id` ＋ 各 job 不重疊的 port 區段）——同一個 dockerd 上兩個 stack 會在 `supabase/config.toml` 的預設 port 上互撞；標籤一旦對應不只一個 runner，mutex 就靜默失效
+- **MUST** 每個落 `supabase-ci` 的 supabase 類 job 在 setup-cli 之後第一步跑 `supabase stop --all --no-backup || true`，cleanup `if: always()` 跑 `supabase stop --no-backup || true`：timeout 砍 process tree 時 cleanup 可能沒跑完，前一個 job 的殘留 stack 只有前置 stop 清得掉
+- **MUST** ephemeral runner 的標籤寫在註冊腳本（CT220 為 `ephemeral-wrapper.sh` 的 `LABELS`）。**NEVER** 用 `gh api .../runners/<id>/labels` 加標籤當作落地——每個 job 結束後 wrapper 重新 `config.sh --labels` 註冊，API 加的標籤下一輪就消失，job 會無限排隊
+- `supabase` 標籤（VM100，production supabase-db 所在）在 <client-b> 仍是本節的 prod 主機標籤，上面那條 NEVER 不因「沒有 GitHub-hosted」而放寬
+
 機械偵測（warn-only，**每一個** consumer 都掃，不是只掃出事的那台）：
 
 ```bash
@@ -205,7 +216,7 @@ prod 主機標籤預設 `supabase`；別的 fleet 用不同標籤時，在該 re
 **適用 predicate**：job 的 `runs-on` 會落到「runner user 的 `$HOME` 跨 job 存活」的機器——persistent LXC / VM，
 或 GitHub 語意上 ephemeral 但同一個 `$HOME` 反覆 `./run.sh` 的 runner（YuDefine CT 102 就是這種）。
 **NEVER 用「self-hosted」或「ephemeral」標籤判**——判準是 `$HOME` 存不存活。每 job 全新容器的 runner
-（Zenbook ARM64 Docker 池）與 GitHub-hosted 都不在本條射程。
+與 GitHub-hosted 都不在本條射程。
 
 **威脅**：`~/.ssh/<key>` 在 persistent runner 上跨 job 殘留；之後**任何** job（同 repo 的 PR CI、第三方套件的
 `postinstall`、供應鏈路徑）跑在同一個 runner user 底下都讀得到它，而 § 7 已說明同一台機器上的多個 runner 槽

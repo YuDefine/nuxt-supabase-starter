@@ -56,7 +56,7 @@ pre-push hook 可被 `--no-verify` / web 編輯介面繞過。本 check 的 PR m
 
 ## 規約來源
 
-- **review 層**：`plugins/hub-core/agents/references/clade-review-rules.md` § 原生 HTML date / time / calendar 輸入（含 reviewer grep 檢查方式）
+- **review 層**：`capabilities/core/agents/references/clade-review-rules.md` § 原生 HTML date / time / calendar 輸入（含 reviewer grep 檢查方式）
 - **pre-commit gate**：`vendor/scripts/pre-commit/checks/native-picker-ban.sh`（掃 staged `.vue`）
 - **pre-push gate**：`vendor/scripts/pre-push/checks/native-picker-ban.sh`（掃**全 repo** `.vue`，回溯型）
 - **API 正確性**：[[nuxt-ui-mcp]]

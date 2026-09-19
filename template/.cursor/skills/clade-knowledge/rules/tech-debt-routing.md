@@ -26,7 +26,7 @@ paths: ['docs/tech-debt.md', '**/docs/tech-debt.md']
 
 | 修法位置 | 散播後受惠 | TD 登在 |
 | --- | --- | --- |
-| clade `scripts/` / `vendor/` / `rules/` / `plugins/hub-core/` / `claude-md/core-snippets/` | 全部 consumer（散播後） | **clade `docs/tech-debt.md`** |
+| clade `scripts/` / `vendor/` / `rules/` / `capabilities/core/` / `claude-md/core-snippets/` | 全部 consumer（散播後） | **clade `docs/tech-debt.md`** |
 | 單一 consumer 業務碼（自家 `server/` / `app/` / 自家 migration / 自家 nuxt.config） | 只該 consumer | **該 consumer `docs/tech-debt.md`** |
 | starter scaffolder（`packages/create-nuxt-starter/`） | 未來所有 scaffold 出的新專案 | **starter `docs/tech-debt.md`** |
 | 同時 clade + consumer 都要改 | 跨層 | **clade 為主、consumer 為輔**：clade TD 描述根因 + 散播計畫，consumer TD 描述本地後置動作（如 `pnpm hub:vendor:force` 後跑某個 backfill） |
@@ -108,7 +108,7 @@ Consumer 端的 `.claude/` / `.clade/` / vendor 副本是 clade **投影**（帶
 
 ```
 看到 TD 候選 → 問：「修法是改 X？」
-  X ∈ {scripts/, vendor/, rules/, plugins/hub-core/, claude-md/core-snippets/, vendor/evlog-templates/, docs/} (clade)
+  X ∈ {scripts/, vendor/, rules/, capabilities/core/, claude-md/core-snippets/, vendor/evlog-templates/, docs/} (clade)
     → 登 clade
   X ∈ {scaffolder, template/} (starter)
     → 登 starter

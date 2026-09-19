@@ -52,7 +52,7 @@ concurrency:
 - **MUST** 只對 `push` 與 `pull_request` 開 `cancel-in-progress`。其餘 event 維持跑完——nightly 不得取消正在測的 HEAD，merge queue 的 landing run 也不得被下一筆 push 殺掉
 - **NEVER** 把 `cancel-in-progress: true` 抄到 staging / production deploy、或「另一條 workflow 用同 SHA success 當放行條件」的 workflow。那個組合會讓發版 gate 看到 cancelled、誤判沒過 staging。反面實證：[[pitfall-deploy-gate-vs-cancel-in-progress]]
 - **NEVER** 用同一個 concurrency group 蓋住 callee 自己也會被獨立 trigger 的 reusable workflow——會互殺。見 [[pitfall-reusable-ci-concurrency-collision]]
-- 同一條 run 裡的 matrix shard（例如 `test-lanes` 1/4…4/4）**不是**「前面步驟」，**NEVER** 為了縮短排隊取消其他 shard。它們測的是不同檔；concurrency 取消的是**過期 SHA 的整條 run**
+- 同一條 run 裡的 matrix shard（例如 `test-lanes` 1/6…6/6）**不是**「前面步驟」，**NEVER** 為了縮短排隊取消其他 shard。它們測的是不同檔；concurrency 取消的是**過期 SHA 的整條 run**
 
 `gh-ci-watch` 在 run 被取消時會改追 superseding run（同 workflow + 同 branch、較新 `createdAt`）。那是監看側的補救，**不能**代替 workflow 自己取消過期 run。
 

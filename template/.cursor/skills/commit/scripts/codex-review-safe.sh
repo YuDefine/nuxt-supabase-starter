@@ -155,7 +155,7 @@ if [ "${1:-}" = "--findings" ]; then
 fi
 
 # Resolve repo root via git, not the script's own path — clade's own checkout
-# (plugins/hub-core/scripts/) and a consumer's projected copy (.claude/scripts/)
+# (capabilities/core/scripts/) and a consumer's projected copy (.claude/scripts/)
 # sit at different depths, so a path computed from $0 would resolve wrong in
 # one of the two contexts.
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"

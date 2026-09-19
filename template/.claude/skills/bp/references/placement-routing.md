@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | 1 | `rules/core/*.md` | 逐 target 投影到該 runtime 的 rules 目錄（Claude `.claude/rules/<name>.md`、Codex `.agents/rules/`、Cursor `.cursor/rules/`），無條件收 | 無 `paths:` → always-load；有 `paths:` → 命中才載 |
 | 2 | `rules/modules/<group>/<variant>/*.md` | 同上，但只在 consumer manifest（canonical `.clade/manifest.json`，legacy `.claude/hub.json`）的 `modules[group]` 選了該 variant 才收 | 同上 |
-| 3 | `plugins/hub-core/{skills,commands,agents,hooks}/` | plugin cache（`claude plugin update`）；**consumer 需重啟 session 才生效** | skill / command 被呼叫時 |
+| 3 | `capabilities/core/{skills,commands,agents,hooks}/` | plugin cache（`claude plugin update`）；**consumer 需重啟 session 才生效** | skill / command 被呼叫時 |
 | 4 | `claude-md/core-snippets/*.md` | **已停用（2026-09-03）**：always-on 走落點 1 無 `paths:` | — |
 | 5 | `vendor/{scripts,actions,git-hooks,oxc-shared,ci,...}` | `sync-vendor.ts`（targets 定義在 `scripts/lib/vendor-targets.ts`） | 被執行時 |
 | 6 | `vendor/snippets/<topic>/` | **不散播**（唯一例外：`manual-review-enforcement/patterns.json`） | 由 rule / skill 用絕對路徑指過去，讀的當下 |

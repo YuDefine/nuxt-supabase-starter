@@ -5,8 +5,8 @@ paths:
     '.mcp.json',
     '**/cbm-index.sh',
     '**/cbm-health.ts',
-    'plugins/hub-core/hooks/session-start-cbm-index-check.sh',
-    'plugins/hub-core/hooks/post-bash-cbm-index-refresh.sh',
+    'capabilities/core/hooks/session-start-cbm-index-check.sh',
+    'capabilities/core/hooks/post-bash-cbm-index-refresh.sh',
   ]
 ---
 <!-- Clade native rule; source: rules/core/codebase-memory-index.freshness.md; edit canonical source -->
@@ -25,7 +25,7 @@ paths:
 
 上表的自動觸發以該產品入口已安裝、啟用並驗證 hook 為前提。Codex／Cursor 的 hook adapter
 存在不代表這兩支 handler 已接通。沒有該入口的自動檢查證據時，agent 在首次使用圖譜前，
-從目前 repo 執行 `bash ~/offline/clade/plugins/hub-core/hooks/session-start-cbm-index-check.sh`，
+從目前 repo 執行 `bash ~/offline/clade/capabilities/core/hooks/session-start-cbm-index-check.sh`，
 讀取提示再決定是否經 wrapper 更新；commit／rebase／pull 後若還要查圖譜，再做相同檢查。
 Clade 不在預設位置時使用其實際 checkout 路徑。檢查程式缺席或無法執行就回報保鮮未驗，
 不把缺少自動觸發當成 index 新鮮，也不啟用 `auto_index`／`auto_watch` 補洞。

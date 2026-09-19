@@ -74,7 +74,7 @@
 
 **原因**：clade 的 SDD 層自 2026-09-07 起是 SpecFormula ＋ aixbdd（[[specformula]] / [[aixbdd-workflow]]），spectra / openspec 生命週期已整批退場，對應的 hook、script 與 skill 都已移除。consumer 若由上游 `spectra init` 帶入這些 skill 仍適用本清單。**每一支**清單上的 skill 都 **NEVER** 主動觸發，不是只有 `spectra-commit`。
 
-**禁用不只管「不觸發」，也管「不引導」**——任何 skill / rule / snippet / script 輸出 NEVER 出現叫人去跑清單上那支 skill 的句子。合法與違規的語境分界表、audit 訊號與 REQUIRED 欄位在 [[proactive-skills.disabled-skill-guidance]]（path-scoped：碰 `rules/**` / `plugins/**/skills/**` / `vendor/snippets/**` / `scripts/**` 時載入）。
+**禁用不只管「不觸發」，也管「不引導」**——任何 skill / rule / snippet / script 輸出 NEVER 出現叫人去跑清單上那支 skill 的句子。合法與違規的語境分界表、audit 訊號與 REQUIRED 欄位在 [[proactive-skills.disabled-skill-guidance]]（path-scoped：碰 `rules/**` / `capabilities/**/skills/**` / `vendor/snippets/**` / `scripts/**` 時載入）。
 
 ## Scope Discipline
 

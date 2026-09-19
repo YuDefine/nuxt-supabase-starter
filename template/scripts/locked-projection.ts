@@ -198,9 +198,10 @@ const CLADE_OWN_SOURCE_RE = new RegExp(
       String.raw`AGENTS\.md$`,
       String.raw`CLAUDE\.md$`,
       String.raw`commitlint\.config\.ts$`,
-      // clade home 手寫的 Cursor 主線 residency，沒有 LOCKED banner。
-      // `.cursor/` 整目錄在 consumer 是 sync-to-cursor 生成物，但這一檔是源。
+      // clade home 的 Cursor 主線 residency / routing overlay。
+      // `.cursor/` 整目錄在 consumer 是 sync-to-cursor 生成物，但這兩檔是源。
       String.raw`\.cursor/rules/cursor-model-residency\.mdc$`,
+      String.raw`\.cursor/rules/cursor-grok-routing\.mdc$`,
       // clade 自治區規約：`.claude/rules/local/**` 是**手寫源檔**，clade home 就是它的 SoT
       // （consumer 端的 `local/` 也完全自管，per clade-source-routing § 例外）。
       // LOCKED_PROJECTION_RE 為 consumer 的 `.claude/rules/` 投影而收整個前綴，沒有這一列

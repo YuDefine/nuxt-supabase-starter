@@ -16,7 +16,7 @@
 2. **落地 main 的 commit 看路徑，不是一律 `--only`** —— 路徑全在 `rules/core/commit.detail.md` § `--only` 適用範圍白名單（HANDOFF / tech-debt / tasks / artifact-tick 等）→ `git commit --only -m "…" -- <paths>`。任一路徑不在白名單（source / migration / plugin / 任何程式碼）→ **MUST** invoke `/commit`。兩種都 **NEVER** `git add` + `git commit` 兩段式（會吞掉別 session 預 stage 的內容）。work-loop / unattended / 「護欄寫過一律 `--only`」**NEVER** 是跳過 `/commit` 的理由；卡人工檢查 → packaging，**NEVER** 用 `--only` 繞 0-A
 3. **每個 item 獨立 commit** —— 不把多個 item 的改動混進同一 commit
 4. **不 force push** —— 所有 git 操作 safe，無 `--force`
-5. **動標準層 MUST 散播完畢** —— `rules/`、`plugins/hub-core/`、`CLAUDE.md`、`vendor/`。**可以改**（2026-08-05 Charles 授權），但改完 **MUST** 走 `/clade-publish` Step 1–9 把它推到 consumer，**NEVER** 改完擱著等人來散。做不到就別動它
+5. **動標準層 MUST 散播完畢** —— `rules/`、`capabilities/core/`、`CLAUDE.md`、`vendor/`。**可以改**（2026-08-05 Charles 授權），但改完 **MUST** 走 `/clade-publish` Step 1–9 把它推到 consumer，**NEVER** 改完擱著等人來散。做不到就別動它
 6. **不跨 consumer** —— loop 只操作當前 repo
 7. **需求建立有來源授權** —— 每一筆新 plan package（`/specify`）都依下方 § 護欄 7 的來源授權判定；未授權的新目標先 packaging，已授權需求依原身分與驗收接續。
 8. **不碰 user 的 stash** —— worktree / stash audit 只讀不寫
@@ -72,7 +72,7 @@
 - 在 worktree 內 commit 用 `git commit --only -m "…" -- <你改的檔案路徑>`；NEVER `git add` + `git commit` 兩段式
 - NEVER 在 worktree 內跑 `/commit` 或 `git push origin main`——落地 main 是主線 harvest / archive 之後的 `/commit`
 - NEVER `git push --force` / `--force-with-lease`
-- 標準層（rules/、plugins/hub-core/、CLAUDE.md）只改**本 brief 所有權清單逐條列出的**那幾個檔；
+- 標準層（rules/、capabilities/core/、CLAUDE.md）只改**本 brief 所有權清單逐條列出的**那幾個檔；
   清單沒列的標準層檔 NEVER 改。帶 `🔒 LOCKED — managed by clade` banner 的檔一律 NEVER 改，
   清單列了也不例外（那是投影不是源）
 - NEVER 操作本 repo 以外的目錄
@@ -83,7 +83,7 @@
 **授權邊界由 brief 的所有權清單承載，不由路徑黑名單承載。** 這是 2026-08-05 從路徑制改過來的：
 護欄 5 已授權「標準層可以改，改完 MUST 走 `/clade-publish`」，而舊版第 3 行寫死
 `NEVER 改標準層` —— round 11 兩條要改標準層的 dispatch 照舊版逐字貼，brief 會同時說「做這 12 個
-`rules/` / `plugins/` 檔」和「NEVER 改 `rules/` / `plugins/`」，合規的 subagent 只能停手回報。
+`rules/` / `capabilities/` 檔」和「NEVER 改 `rules/` / `capabilities/`」，合規的 subagent 只能停手回報。
 主線當時是自行在 brief 裡加 carve-out 才派得出去，而 § C 的存在理由正是「不可即興改寫」。
 
 因此主線 **MUST** 確保 brief 帶一份逐條列出的所有權清單（`subagent-scope-discipline.md`
@@ -148,7 +148,7 @@
 ## E. Red Flags（出現任一 → 停手，重讀本檔）
 
 - 正要呼叫 `AskUserQuestion`，而本輪是 `--unattended` 或 runner 起的
-- 正要對 `rules/` 或 `plugins/hub-core/` 底下的檔下 Edit / Write
+- 正要對 `rules/` 或 `capabilities/core/` 底下的檔下 Edit / Write
 - 正要跑 `publish.ts` / `propagate.ts` / `git push --force` / `wrangler deploy` / `supabase db push`
 - 正要 `git add` 之後接 `git commit`
 - 正要在 main 上對白名單外路徑跑 `git commit --only`（該走 `/commit`）

@@ -6,7 +6,7 @@
 
 ```bash
 cd ~/offline/<consumer> && \
-  ~/offline/clade/plugins/hub-core/skills/work-loop/runner.sh --max-rounds 20
+  ~/offline/clade/capabilities/core/skills/work-loop/runner.sh --max-rounds 20
 ```
 
 它每輪起新 process、context 不累積，`--unattended` 由它自己帶（見 [run-modes.md](run-modes.md)）。

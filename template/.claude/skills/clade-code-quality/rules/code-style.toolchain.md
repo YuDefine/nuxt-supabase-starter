@@ -1,5 +1,5 @@
 ---
-description: lint / fmt 工具鏈治理——preset 是唯一設定入口、eslint/prettier 全面禁令、vite.config.ts 必備欄位、CI 與 pre-commit 的命令邊界、ignore patterns 雙軌制；動任何工具鏈設定檔時載入
+description: lint / fmt 工具鏈治理——preset 是唯一設定入口、eslint/prettier 全面禁令、vite.config.ts 必備欄位、CI 與 pre-commit 的命令邊界、ignore patterns 雙軌制；format/lint check 紅了 agent MUST 立刻 write/fix 再驗到綠（不限 /commit）；動任何工具鏈設定檔時載入
 paths:
   [
     'vite.config.*',
@@ -43,8 +43,30 @@ glob 掛著 `md` 而讓編輯 markdown 也拉進整份規約（該規約自己�
 
 **核心命題**：本治理範圍下所有 JS/TS 專案**一律使用 `vite-plus`（vp）內建的 oxc 工具鏈**：`oxfmt`（formatter）+ `oxlint`（linter）。禁止任何 eslint / prettier 設定檔。
 
+## Agent 義務：check 紅了立刻 fix（全 session）
+
+**違反字面就是違反精神。** `format:check`、`pnpm check`、`vp fmt --check`、`vp run format:check`、lint typecheck 失敗，或 landing PR / CI 紅燈，**MUST** 在本 session 內修到同一條 check 全綠再收工。**NEVER** 只跑 `--check` 就停、**NEVER** 把「等 CI 自己綠」當計畫、**NEVER** 把 CI workflow 裡的唯讀 `vp fmt --check` 讀成 agent 也只能掃不修——runner 不能改 working tree，agent **可以且 MUST**。
+
+### 標準 loop（MUST）
+
+1. 跑失敗的那條 check（與 CI / 0-C 同一入口，**NEVER** 換成更窄的單檔命令代替整條 gate）
+2. format 紅 → `pnpm format`（等同 `vp fmt --write --ignore-path .oxfmtignore`）；lint 可 auto-fix → consumer 的 `pnpm lint --fix` 或 `pnpm vp lint --fix`
+3. 修掉無法 auto-fix 的項目
+4. 重跑步驟 1 的**同一條**命令 → exit 0 才算完成
+
+`/commit` 的 0-C 是這條 loop 在 commit ceremony 裡的機械化；**義務不限於 `/commit`**——本機驗證、PR landing、CI 失敗後的修復，同一套。
+
+| 藉口（逐字實錄） | 現實 |
+| --- | --- |
+| 「CI 跑的是 `--check`，我照 CI 做只掃」 | CI 唯讀是 runner 權限，不是 agent 行為契約 |
+| 「先開 PR，format 讓 CI 提醒就好」 | 紅 PR 浪費 runner；你現在就能 `pnpm format` |
+| 「check 過了再修」 | check **沒過**才是修的理由；順序是 fix→check，不是 check→等別人 |
+| 「只有 /commit 才要跑 format loop」 | 0-C 引用本節；沒走 `/commit` 時義務仍在 |
+
+**Red Flags**：發現自己在想「report 紅燈就好」「等下一輪 CI」「只跑 format:check 確認」→ 停，改跑 write/fix loop。
 
 理由：
+
 - `oxc` 用 Rust 寫的，比 prettier/eslint 快 10–100 倍
 - `vp` 已 batteries-included，不需要額外裝 / 維護兩套生態系
 - 統一工具鏈避免 consumer 之間 lint rule drift
@@ -176,7 +198,7 @@ starter 命中的意義與另外兩台不同：**每個從它 scaffold 出來的
 - **NEVER** 把 `.bin/prettier` 存在接成 `pnpm check` 的 fail —— 它是移不掉的 transitive dep，
   那條 check 會讓兩台 CI 永久紅，而永久紅的 gate 是噪音不是攔阻
 
-攔阻掛在**動作**上：`plugins/hub-core/hooks/pre-bash-prettier-invocation-gate.sh`
+攔阻掛在**動作**上：`capabilities/core/hooks/pre-bash-prettier-invocation-gate.sh`
 （PreToolUse:Bash）在命令位置比對到 prettier 時 exit 2 並指回 `pnpm format`。
 它是**絆索不是牆** —— 只看得到 Claude Code 的 Bash tool call，user 在自己 terminal 手打
 完全碰不到它。**NEVER** 把它存在讀成「這個 repo 已經不可能被 prettier 改壞」。
@@ -217,7 +239,7 @@ catalog:
 
 - 全域版本是 user 機器狀態，跨機器、跨 CI runner 不一致 → `vp lint` / `vp fmt` 行為漂移。CI 跟 dev 抓到不同 lint violation 是常見實證踩坑（user 升全域 → 突然某條 rule 變嚴 → dev 過 / CI 紅）。
 - vp bundle 的 oxlint / oxfmt 版本由 vp `dependencies` 嚴格 pin（`=1.63.0` / `=0.48.0` 之類），等同 vp 版本 = 工具鏈確定版本。vp 沒釘 = 工具鏈沒釘。
-- consumer 端升 vp **MUST** 走 [`version-upgrade`](../../plugins/hub-ecosystem-node/skills/version-upgrade/SKILL.md) skill 的 § Outdated mode（per-package commit + bisect-friendly + 走品質閘門），不是 user 跑 `pnpm add -g vite-plus@latest` 偷偷升所有 consumer。
+- consumer 端升 vp **MUST** 走 [`version-upgrade`](../../capabilities/modules/ecosystem/node/skills/version-upgrade/SKILL.md) skill 的 § Outdated mode（per-package commit + bisect-friendly + 走品質閘門），不是 user 跑 `pnpm add -g vite-plus@latest` 偷偷升所有 consumer。
 - 跨 consumer 工具鏈 lockstep 是 clade governance 的前提（[`code-style.md`](./code-style.md) § Governance），全域裝法繞過了這層治理。
 
 #### MUST

@@ -10,6 +10,9 @@ paths: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts}']
 > preset 是唯一設定入口、eslint / prettier 全面禁令、`vite.config.ts` 必備欄位、CI 與
 > pre-commit 的命令邊界、ignore patterns 雙軌制。
 >
+> **format/lint check 紅了 MUST 立刻 `pnpm format` / lint fix 再 check 到綠**（不限 `/commit`、
+> 不等 CI）——全文在 [[code-style.toolchain]] § Agent 義務：check 紅了立刻 fix。
+>
 > **要改工具鏈設定卻沒看到那份規約時 MUST 先開它**——本檔不重複那些條文，看不到不等於沒有。
 
 # Code Style — 寫 code 當下

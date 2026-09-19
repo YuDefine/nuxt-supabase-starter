@@ -173,51 +173,247 @@ export function requestDefaultHerdr(args: string[]): unknown {
   return JSON.parse(result.stdout)
 }
 
-export function auditVisibleWork(request: HerdrRequest): Record<string, unknown>[] {
-  const response = request(['workspace', 'list'])
-  if (
-    !isRecord(response) ||
-    !isRecord(response.result) ||
-    !Array.isArray(response.result.workspaces)
-  ) {
-    throw new Error('Herdr workspace 清單無法回讀')
+export type VisiblePane = {
+  pane_id: string
+  tab_id: string
+  workspace_id: string
+  label: string
+  cwd: string
+  agent: string | null
+}
+export type VisibleTab = { tab_id: string; workspace_id: string; label: string; pane_count: number }
+export type VisibleSnapshot = {
+  panes: VisiblePane[]
+  tabs: VisibleTab[]
+  /** Top-left first; the fallback when a Tab label names no live pane. */
+  paneOrder: Record<string, string[]>
+}
+/** What the reconciler last wrote, so a later difference says which side a person changed. */
+export type VisibleState = {
+  tabs: Record<string, { pane_id: string; tab_label: string; pane_label: string }>
+}
+export type VisibleChange = {
+  kind: 'pane' | 'tab'
+  id: string
+  from: string
+  to: string
+  reason: string
+}
+export type VisibleFinding = {
+  kind: 'pane' | 'tab'
+  id: string
+  tab_id: string
+  label: string
+  expected: string
+  issue: 'misleading' | 'incomplete'
+  detail: string
+}
+
+const ID_PREFIX = /^\[(w[\da-z-]+:p[\da-z-]+)\]\s*/iu
+
+export function labelPaneId(label: string): string | undefined {
+  return ID_PREFIX.exec(label.trim())?.[1]
+}
+
+function text(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function paneNumber(paneId: string): number {
+  const suffix = paneId.split(':p')[1] ?? ''
+  return suffix ? Number.parseInt(suffix, 36) : Number.POSITIVE_INFINITY
+}
+
+/** One `api snapshot` read: every pane, Tab and layout of the default session. */
+export function readVisibleSnapshot(request: HerdrRequest): VisibleSnapshot {
+  const response = request(['api', 'snapshot'])
+  const snapshot =
+    isRecord(response) && isRecord(response.result) && isRecord(response.result.snapshot)
+      ? response.result.snapshot
+      : undefined
+  if (!snapshot || !Array.isArray(snapshot.panes) || !Array.isArray(snapshot.tabs))
+    throw new Error('Herdr snapshot 無法回讀')
+  const panes = snapshot.panes.filter(isRecord).map((pane) => ({
+    pane_id: text(pane.pane_id),
+    tab_id: text(pane.tab_id),
+    workspace_id: text(pane.workspace_id),
+    label: text(pane.label),
+    cwd: text(pane.cwd),
+    agent: typeof pane.agent === 'string' ? pane.agent : null,
+  }))
+  const tabs = snapshot.tabs.filter(isRecord).map((tab) => ({
+    tab_id: text(tab.tab_id),
+    workspace_id: text(tab.workspace_id),
+    label: text(tab.label),
+    pane_count: typeof tab.pane_count === 'number' ? tab.pane_count : 0,
+  }))
+  if (panes.some((pane) => !pane.pane_id || !pane.tab_id) || tabs.some((tab) => !tab.tab_id))
+    throw new Error('Herdr snapshot 缺少 pane／Tab ID')
+  const paneOrder: Record<string, string[]> = {}
+  for (const layout of Array.isArray(snapshot.layouts) ? snapshot.layouts.filter(isRecord) : []) {
+    const rects = (Array.isArray(layout.panes) ? layout.panes.filter(isRecord) : []).map((pane) => {
+      const rect = isRecord(pane.rect) ? pane.rect : {}
+      return {
+        id: text(pane.pane_id),
+        y: typeof rect.y === 'number' ? rect.y : 0,
+        x: typeof rect.x === 'number' ? rect.x : 0,
+      }
+    })
+    paneOrder[text(layout.tab_id)] = rects
+      .toSorted((left, right) => left.y - right.y || left.x - right.x)
+      .map((rect) => rect.id)
   }
-  const rows: Record<string, unknown>[] = []
-  for (const workspace of response.result.workspaces) {
-    if (!isRecord(workspace) || typeof workspace.workspace_id !== 'string')
-      throw new Error('Herdr workspace 缺少 ID')
-    const listed = request(['pane', 'list', '--workspace', workspace.workspace_id])
-    if (!isRecord(listed) || !isRecord(listed.result) || !Array.isArray(listed.result.panes))
-      throw new Error('Herdr pane 清單無法回讀')
-    for (const pane of listed.result.panes) {
-      if (!isRecord(pane) || !pane.agent) continue
-      if (typeof pane.pane_id !== 'string' || typeof pane.tab_id !== 'string')
-        throw new Error('Herdr agent 缺少 pane／Tab ID')
-      const tab = entity(request(['tab', 'get', pane.tab_id]), 'tab')
-      const cwd = typeof pane.cwd === 'string' ? pane.cwd : ''
-      const issues = [
-        taskLabelProblem(typeof pane.label === 'string' ? pane.label : '', cwd)
-          ? 'pane 未具名'
-          : '',
-        taskLabelProblem(typeof tab.label === 'string' ? tab.label : '', cwd) ? 'Tab 未具名' : '',
-        typeof pane.label === 'string' && pane.label === paneTaskLabel(pane.pane_id, pane.label)
-          ? ''
-          : 'pane ID 前綴缺少或不符',
-        typeof tab.label === 'string' && /^\[w[\da-z-]+:p[\da-z-]+\] /iu.test(tab.label)
-          ? ''
-          : 'Tab 缺少主工作 ID 前綴',
-      ].filter(Boolean)
-      rows.push({
-        workspace: workspace.label,
-        pane_id: pane.pane_id,
-        tab_id: pane.tab_id,
-        pane_label: pane.label,
-        tab_label: tab.label,
-        issues,
+  return { panes, tabs, paneOrder }
+}
+
+/**
+ * The Tab's primary pane: the one its label already names while that pane still lives in the Tab
+ * (sticky, so a split never steals the name), else the top-left pane, else the oldest ID.
+ */
+export function primaryPane(snapshot: VisibleSnapshot, tab: VisibleTab): VisiblePane | undefined {
+  const members = snapshot.panes.filter((pane) => pane.tab_id === tab.tab_id)
+  const named = labelPaneId(tab.label)
+  const sticky = members.find((pane) => pane.pane_id === named)
+  if (sticky) return sticky
+  for (const id of snapshot.paneOrder[tab.tab_id] ?? []) {
+    const pane = members.find((member) => member.pane_id === id)
+    if (pane) return pane
+  }
+  return members.toSorted((left, right) => paneNumber(left.pane_id) - paneNumber(right.pane_id))[0]
+}
+
+function validTask(label: string, cwd: string): string | undefined {
+  const task = taskName(label)
+  return taskLabelProblem(task, cwd) ? undefined : task
+}
+
+/**
+ * Misleading = the label states an ID or a task that Herdr contradicts. A missing prefix or a
+ * missing name hides information but asserts nothing false, so it is only incomplete.
+ */
+function contradiction(label: string, expected: string, cwd: string): VisibleFinding['issue'] {
+  const statedId = labelPaneId(label)
+  if (statedId && statedId !== labelPaneId(expected)) return 'misleading'
+  const statedTask = validTask(label, cwd)
+  return statedTask && statedTask !== taskName(expected) ? 'misleading' : 'incomplete'
+}
+
+function unnamedLabel(pane: VisiblePane): string {
+  return `[${pane.pane_id}] ${basename(pane.cwd) || 'shell'}`
+}
+
+/**
+ * The single naming invariant:
+ *   pane label = `[own pane id] task` (task = cwd basename while unnamed)
+ *   Tab label  = its primary pane's label
+ * A Tab label that names a pane no longer in the Tab describes closed work and is never carried
+ * over. When Tab and primary pane disagree on a real task, the side that changed since the last
+ * reconcile wins; with no record, the Tab wins because the Tab bar is what people rename.
+ */
+export function planVisibleIdentity(
+  snapshot: VisibleSnapshot,
+  state: VisibleState = { tabs: {} },
+  scope: { workspaceIds?: string[] } = {},
+): { changes: VisibleChange[]; findings: VisibleFinding[] } {
+  const inScope = (workspaceId: string) =>
+    !scope.workspaceIds || scope.workspaceIds.includes(workspaceId)
+  const changes: VisibleChange[] = []
+  const findings: VisibleFinding[] = []
+  const desiredPane = new Map<string, { label: string; reason: string }>()
+
+  for (const tab of snapshot.tabs) {
+    if (!inScope(tab.workspace_id)) continue
+    const primary = primaryPane(snapshot, tab)
+    if (!primary) continue
+    const tabPaneId = labelPaneId(tab.label)
+    const tabIsStale = Boolean(tabPaneId && tabPaneId !== primary.pane_id)
+    const tabTask = tabIsStale ? undefined : validTask(tab.label, primary.cwd)
+    const paneTask = validTask(primary.label, primary.cwd)
+    const last = state.tabs[tab.tab_id]
+    let task: string | undefined
+    let reason: string
+    if (tabTask && paneTask && tabTask !== paneTask) {
+      const paneChanged =
+        last?.pane_id === primary.pane_id &&
+        last.tab_label === tab.label &&
+        last.pane_label !== primary.label
+      task = paneChanged ? paneTask : tabTask
+      reason = paneChanged ? 'pane 任務名稱較新，同步到 Tab' : 'Tab 任務名稱較新，同步到 pane'
+    } else {
+      task = paneTask ?? tabTask
+      reason = tabIsStale
+        ? `Tab 名稱指向已不在此 Tab 的 ${tabPaneId}`
+        : paneTask
+          ? 'Tab 名稱跟隨主 pane'
+          : 'pane 名稱跟隨 Tab 任務'
+    }
+    const label = task ? `[${primary.pane_id}] ${task}` : unnamedLabel(primary)
+    desiredPane.set(primary.pane_id, { label, reason })
+    if (tab.label !== label) {
+      changes.push({ kind: 'tab', id: tab.tab_id, from: tab.label, to: label, reason })
+      findings.push({
+        kind: 'tab',
+        id: tab.tab_id,
+        tab_id: tab.tab_id,
+        label: tab.label,
+        expected: label,
+        issue: contradiction(tab.label, label, primary.cwd),
+        detail: reason,
       })
     }
   }
-  return rows
+
+  for (const pane of snapshot.panes) {
+    if (!inScope(pane.workspace_id)) continue
+    const task = validTask(pane.label, pane.cwd)
+    const planned = desiredPane.get(pane.pane_id)
+    const label = planned?.label ?? (task ? `[${pane.pane_id}] ${task}` : unnamedLabel(pane))
+    const reason =
+      planned?.reason ?? (task ? 'pane ID 前綴跟隨實際 pane ID' : 'pane 未具名，補上實際 pane ID')
+    if (pane.label !== label) {
+      changes.push({ kind: 'pane', id: pane.pane_id, from: pane.label, to: label, reason })
+      findings.push({
+        kind: 'pane',
+        id: pane.pane_id,
+        tab_id: pane.tab_id,
+        label: pane.label,
+        expected: label,
+        issue: contradiction(pane.label, label, pane.cwd),
+        detail: reason,
+      })
+    }
+  }
+  // Pane writes first: a Tab label must never name a pane label that does not exist yet.
+  return {
+    changes: changes.toSorted((left, right) =>
+      left.kind === right.kind ? 0 : left.kind === 'pane' ? -1 : 1,
+    ),
+    findings,
+  }
+}
+
+/** Record Tabs whose label already equals their primary pane; anything else stays as last seen. */
+export function observedVisibleState(
+  snapshot: VisibleSnapshot,
+  previous: VisibleState,
+): VisibleState {
+  const tabs = { ...previous.tabs }
+  const live = new Set(snapshot.tabs.map((tab) => tab.tab_id))
+  for (const id of Object.keys(tabs)) if (!live.has(id)) delete tabs[id]
+  for (const tab of snapshot.tabs) {
+    const primary = primaryPane(snapshot, tab)
+    if (primary && primary.label === tab.label)
+      tabs[tab.tab_id] = {
+        pane_id: primary.pane_id,
+        tab_label: tab.label,
+        pane_label: primary.label,
+      }
+  }
+  return { tabs }
+}
+
+export function auditVisibleWork(request: HerdrRequest): VisibleFinding[] {
+  return planVisibleIdentity(readVisibleSnapshot(request)).findings
 }
 
 /** Synchronous launcher admission: argv is never inspected or rewritten (including resume). */
@@ -232,9 +428,14 @@ export async function main(): Promise<void> {
     strict: true,
   })
   if (values.audit) {
-    const rows = auditVisibleWork(requestDefaultHerdr)
-    process.stdout.write(`${JSON.stringify({ session: 'default', rows }, null, 2)}\n`)
-    if (rows.some((row) => Array.isArray(row.issues) && row.issues.length)) process.exitCode = 1
+    const findings = auditVisibleWork(requestDefaultHerdr)
+    const misleading = findings.filter((finding) => finding.issue === 'misleading')
+    const incomplete = findings.filter((finding) => finding.issue === 'incomplete')
+    process.stdout.write(
+      `${JSON.stringify({ session: 'default', misleading, incomplete }, null, 2)}\n`,
+    )
+    // Only a name that contradicts Herdr fails; a missing ID or name is listed, not failed.
+    if (misleading.length) process.exitCode = 1
     return
   }
   if (process.env.HERDR_ENV !== '1' && !values.pane) return

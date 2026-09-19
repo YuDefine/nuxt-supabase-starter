@@ -79,11 +79,11 @@ jq -r '.. | objects | select(.status? and .name? and .status != "pass")
 - 危害不是「讀到舊資料」而是**拿別 repo 的事實對本 repo 下判斷**：health gate、human gates、tech-debt hygiene、worktree & stash audit 四段全部受影響，然後寫進本 repo 的 `HANDOFF.md`。最危險的是 **Step 3.2a 的 stash drop gate 是 MUST 主動 drop** —— 拿別 repo 的 stash 清單做本 repo 的刪除判定。
 - `handoff-scan.ts` 自身的 consumer 解析（`basename(dirname(git-common-dir))`，worktree 內也回主 repo）**無誤**，上面的 `EXPECT` 就是同一個算式 —— 壞的只有暫存檔路徑。
 
-一次涵蓋四段機械掃描：Health Gate（本 sub-step）+ human gates（§2B.1.7，`flow gates`）+ worktree/stash audit（Step 3）+ tech-debt hygiene（§2B.1.8）。輸出四個 section（`healthGate` / `reviewGuiReadiness` / `worktreeStash` / `techDebtHygiene`），每 section 含 `checks`（`{name, status: pass|warn|fail|n/a, detail}`）與 `raw`（原始事實）。
+一次涵蓋五段機械掃描：Health Gate（本 sub-step）+ human gates（§2B.1.7，`flow gates`）+ worktree/stash audit（Step 3）+ tech-debt hygiene（§2B.1.8）+ **做到一半的 specs/plans 三桶**（`planInventory`）。輸出 `healthGate` / `reviewGuiReadiness` / `worktreeStash` / `techDebtHygiene` / `planInventory`，每 section 含 `checks`（`{name, status: pass|warn|fail|n/a, detail}`）與 `raw`（原始事實）。
 
 **落檔一次、各 sub-step 各自 `jq` 取自己的 section，不必重跑 script**（`$SCAN` 在整個 `next` 期間有效）。**NEVER 為了看某一段而重跑 `handoff-scan.ts`** —— 各段都是子行程（`flow gates` 讀整條 spine），重跑一次就多付一次。**也 NEVER 因為上面的摘要沒列到某段，就判定 scan 沒跑過或該段不存在** —— 摘要只列 status != pass，pass 的段照樣在 `$SCAN` 裡，用 `jq` 取。
 
-各 sub-step 的取法：`jq '.healthGate.raw' "$SCAN"`（本 sub-step）、`jq '.reviewGuiReadiness.raw' "$SCAN"`（§2B.1.7）、`jq '.worktreeStash.raw' "$SCAN"`（Step 3）、`jq '.techDebtHygiene.raw' "$SCAN"`（§2B.1.8 / §2B.2）。
+各 sub-step 的取法：`jq '.healthGate.raw' "$SCAN"`（本 sub-step）、`jq '.reviewGuiReadiness.raw' "$SCAN"`（§2B.1.7）、`jq '.worktreeStash.raw' "$SCAN"`（Step 3）、`jq '.techDebtHygiene.raw' "$SCAN"`（§2B.1.8）、`jq '.planInventory.raw' "$SCAN"`（§2B.2 plan/truth outstanding 三桶；`raw.startable` / `raw.blockedHuman` / `raw.retire`）。
 
 本 sub-step 讀 `healthGate` 段（**在 2B.1b 已跑完 rotate 之後**）：
 
@@ -220,7 +220,7 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff next — flow gates_
 
 讀 §2B.1a 那次 `handoff-scan.ts --json` 輸出的 `techDebtHygiene` 段（掃當前 consumer 自家 `docs/tech-debt.md`，與 clade SoT 無關）。本 sub-step 前未跑過 scan 時補跑同一指令。
 
-**遷移狀態分流（先判這一題）**：repo 有 `specs/truth/work-lifecycle.md` 時 scan 只回一條 `tech-debt-hygiene-retired`（n/a）且 `raw.retired: true` —— `docs/tech-debt.md` 與 `docs/archives/tech-debt-*` 是凍結舊載體，**本節以下全部處置（含 retained stub 化、正文外移、anti-snooze 追問）都不適用**，outstanding 走 SKILL.md §2B.2 的 `raw.plans[]`。**NEVER** 因為手動讀到舊檔裡的 open TD 就照下表補 Resolution／stamp Last reviewed／下推 bodies。下表只給未遷移 consumer。
+**遷移狀態分流（先判這一題）**：repo 有 `specs/truth/work-lifecycle.md` 時 scan 只回一條 `tech-debt-hygiene-retired`（n/a）且 `raw.retired: true` —— `docs/tech-debt.md` 與 `docs/archives/tech-debt-*` 是凍結舊載體，**本節以下全部處置（含 retained stub 化、正文外移、anti-snooze 追問）都不適用**，outstanding 走 SKILL.md §2B.2 的 `planInventory` 三桶（**NEVER** 把 `techDebtHygiene.raw.plans[]` 平鋪成接著做）。**NEVER** 因為手動讀到舊檔裡的 open TD 就照下表補 Resolution／stamp Last reviewed／下推 bodies。下表只給未遷移 consumer。
 
 六條訊號 **MUST** 各自處置，**NEVER** 只看其中一條：
 

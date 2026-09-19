@@ -55,7 +55,7 @@ skill 由 consumer manifest 的 `modules` 決定裝哪些（canonical `.clade/ma
 - **專案還沒有可重跑的 app control／feature map** → `/verification create`（建立 consumer-owned `verify-<app>` skill）
 - **既有 verification skill／feature map 要對帳 source 與 live behavior** → `/verification maintain`（`clean` 是零 branch／零 commit／零 PR 的成功結果）
 - **要動 code 而還在 main working tree** → `/wt`（開 worktree 隔離；`/wt A: ... B: ...` 可並行多條 task）
-- **implementation plan 內有多個獨立 task 想並行** → 讀 `plugins/hub-core/references/implement-executor/`（同 session 派 subagent；跨 change 的並行仍走 `/wt`）
+- **implementation plan 內有多個獨立 task 想並行** → 讀 `capabilities/core/references/implement-executor/`（同 session 派 subagent；跨 change 的並行仍走 `/wt`）
 - **session 要收尾 / 交接** → `/handoff`（有 in-progress 工作寫交接；沒有則整理 HANDOFF.md 推薦 outstanding）
 - **要把待辦無人值守推完**（plan package / tasks 檔 / HANDOFF / tech-debt / ROADMAP）→ `/work-loop`（自主推進 loop；一次性任務不適用）
 - **外部新資訊要改需求** →〔aixbdd〕`/specify` 開新的 `NNN-<slug>`；舊 plan package 是歷史，**NEVER** 回頭覆寫

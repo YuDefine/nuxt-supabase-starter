@@ -135,14 +135,51 @@ export const CLADE_VENDOR_EXCLUDES = [
  * 維護的清單，而那份清單會漂開。
  */
 export const CLADE_MIRROR_EXCLUDES = [
-  'plugins/hub-capabilities-aixbdd/**',
-  'plugins/hub-capabilities-specformula/skills/**',
+  'capabilities/modules/capabilities/aixbdd/**',
+  'capabilities/modules/capabilities/specformula/skills/**',
   // `reference/**` 是 mirror.extraDirs 的落點（specformula-docs 的 Gherkin/ISA .mdx）。
   // **NEVER 把這一列併回上面那列的 `skills/**` 去猜一個共同前綴**：plugin 根底下還有
   // clade 自己寫的 README / PIN.json，整個 plugin 排除掉會連它們一起放生。
   // 2026-09-08 實證：本目錄第一次落地當天就被一次 `vp fmt` 改寫（markdown 表格對齊 ＋
   // frontmatter 後補空行），22 個檔全數 drift，`sync-upstream-mirrors --check` 從 0 變 2。
-  'plugins/hub-capabilities-specformula/reference/**',
+  'capabilities/modules/capabilities/specformula/reference/**',
+]
+
+/**
+ * Shipped-template lint 規則子集（TD-1003）—— `scripts/audit-shipped-template-lint.ts`
+ * 餵給 vite-doctor `--rules` 的 rule id 清單。
+ *
+ * 為什麼需要它：`vendor/snippets/**` 在 `CLADE_VENDOR_EXCLUDES` 內（template 刻意不完整，
+ * 全套 lint 會假陽性爆炸），於是 clade 自己的 `vp check` 對出貨 template 結構性 0 命中 ——
+ * 但同一份檔經 vendor-targets 投影進每個 non-public consumer，由 consumer 的 vite-doctor
+ * 擋（2026-09-07 <consumer-b> 實測：`time-service.template.ts` 的
+ * `globalThis as unknown as FrozenHolder` 觸發 TS0001，擋掉該 repo 每一次 /commit）。
+ * 本子集是「在 publish 前置先現形」的那道檢查。
+ *
+ * 收錄判準（兩條都要中，NEVER 放寬）：
+ *   1. severity = error —— 只有 error 會讓 consumer `pnpm doctor` exit 非 0；warn / info
+ *      不構成「出貨會現形」的失敗模式，收進來只放大假陽性面
+ *   2. 純語法層 —— 判定只讀單檔 AST，不依賴專案上下文（import 解析、framework
+ *      detection、檔案角色、env / worker / SSR-entry 判定）。template 刻意不完整，
+ *      需要上下文的規則在這裡恆假陽性
+ *
+ * `pnpm doctor` 預設只在 error+ 失敗（warn 要 --max-warnings 才擋），所以本清單就是
+ * consumer doctor 的 blocking 面 ∩ 語法層規則：template 中了任何一條，在 consumer 端
+ * 就是 error —— publish 必須先擋。
+ *
+ * NEVER 直接套 `doctorRules`（vendor/doctor-shared/preset.ts）當子集：那是完整 consumer
+ * 規則集，絕大多數條目需要 Nuxt 專案上下文，對 template 恆假陽性 —— 而一個吵到要被
+ * 關掉的 gate 就是一個不存在的 gate。
+ */
+export const SHIPPED_TEMPLATE_LINT_RULES = [
+  // TS0001 — 鏈式 type assertion 製造型別證據。觸發 TD-1003 的實際條目。
+  'typescript/evidence/no-chained-type-assertions',
+  // TS0004 — generic 簽名讓 caller 自選 result type，同屬型別證據製造家族。
+  'typescript/evidence/no-caller-chosen-result-type',
+  // JSON.parse 之類的輸出未經驗證直接當可信型別用。
+  'typescript/boundaries/no-unvalidated-deserialization',
+  // import.meta.glob 帶動態 pattern —— 純語法層缺陷（只認靜態字串 glob）。
+  'vite/imports/require-static-glob-pattern',
 ]
 
 /**
@@ -297,7 +334,7 @@ export const lintBase = {
     //   __dirname / __filename — Node ESM reconstructions (via fileURLToPath)
     //   _serviceClient — Supabase admin-client private convention (<consumer-a> / <consumer-d>)
     //   _samples / _corrupt / _evlogFlushPromise — internal audit/digest fields
-    //     in vendor/scripts/*, plugins/hub-core/scripts/commit-lock.mjs, and
+    //     in vendor/scripts/*, capabilities/core/scripts/commit-lock.mjs, and
     //     vendor/snippets/evlog-drain-pipeline/* (all propagate to consumers).
     'no-underscore-dangle': [
       'warn',

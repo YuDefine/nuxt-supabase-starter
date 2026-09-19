@@ -1,6 +1,6 @@
 ---
 description: 多 session 並行下「哪些路徑屬於別 session 還活著的工作」的判定規格——claim 檔 schema、寫 / refresh / drop 時機、誰讀、stale 處理、claim-helper CLI，以及 ownership provenance journal 的寫入時證據與 other-live / orphan / unknown 三分類
-paths: ['.clade/claims/**', 'HANDOFF.md', 'plugins/hub-core/hooks/pre-bash-ownership-stamp.sh', 'scripts/claim-helper.ts', 'vendor/scripts/claim-helper.ts', 'vendor/scripts/ownership-journal.ts', 'vendor/scripts/flow/who.ts', '.clade/ownership/**', 'plugins/hub-core/hooks/post-tool-ownership-journal.sh', 'plugins/hub-core/hooks/pre-edit-claim-conflict.sh']
+paths: ['.clade/claims/**', 'HANDOFF.md', 'capabilities/core/hooks/pre-bash-ownership-stamp.sh', 'scripts/claim-helper.ts', 'vendor/scripts/claim-helper.ts', 'vendor/scripts/ownership-journal.ts', 'vendor/scripts/flow/who.ts', '.clade/ownership/**', 'capabilities/core/hooks/post-tool-ownership-journal.sh', 'capabilities/core/hooks/pre-edit-claim-conflict.sh']
 ---
 <!-- Clade native rule; source: rules/core/session-claims.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
@@ -227,7 +227,7 @@ join 回 claim，宣告值與導出值並存，每一列帶 `via: 'declared' | '
 | --- | --- |
 | 觸發條件 | 目標路徑落在別人活 claim 的 `declared` 或 `derived-hook` 範圍內 → 遞一行（最多 3 行）。**warn-only，NEVER block** |
 | 消費端 | 正要 Edit / Write 的那個 agent（本節）；`wt-helper add` 開樹時對宣告範圍做同一查詢 |
-| 載入路徑 | 本節（`rules/core/session-claims.md`，paths-gated 於 `.clade/claims/**`、`vendor/scripts/claim-helper.ts`、`plugins/hub-core/hooks/pre-edit-claim-conflict.sh`） |
+| 載入路徑 | 本節（`rules/core/session-claims.md`，paths-gated 於 `.clade/claims/**`、`vendor/scripts/claim-helper.ts`、`capabilities/core/hooks/pre-edit-claim-conflict.sh`） |
 
 ## 3.5 接手別人留下的工作之前 MUST 先 claim
 

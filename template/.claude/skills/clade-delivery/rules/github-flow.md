@@ -2,10 +2,10 @@
 description: GitHub Flow 事件責任與成本邊界 — checkpoint、review、合併、回收、發版分成不同事件
 paths:
   - 'vendor/scripts/wt-batch.ts'
-  - 'plugins/hub-core/skills/commit/**'
-  - 'plugins/hub-core/skills/wt/**'
-  - 'plugins/hub-core/skills/handoff/**'
-  - 'plugins/hub-core/skills/gh-ci-watch/**'
+  - 'capabilities/core/skills/commit/**'
+  - 'capabilities/core/skills/wt/**'
+  - 'capabilities/core/skills/handoff/**'
+  - 'capabilities/core/skills/gh-ci-watch/**'
   - '.github/workflows/**'
   - 'HANDOFF.md'
   - 'tasks/**'
@@ -50,7 +50,7 @@ paths:
 
 Draft 維持 draft 直到 review。slice **worker NEVER merge**、**NEVER** `gh pr ready`、**NEVER** 為了看得見而 merge-back。空 branch／只有 WIP **NEVER** 開 PR。具名 coordinator 只在 [[commit]] 批次 `merge-unattended` 的機械 predicate 全成立、且沒有有效 do-not-merge hold 時才能 squash；那不是 worker 權限，也不是把所有 agent 當 coordinator。
 
-原生派工載體不同、結果相同：Cursor Project 用 `CreateAgent`；Claude／Codex 用 `/wt` 或 Herdr fanout。**NEVER** 把 Cursor 主線的 `/handoff relay|fanout` 讀成這條契約的必要入口。
+原生派工載體不同、結果相同：Cursor Project 用 `CreateAgent`；Claude 用 `/wt` 或 Herdr fanout；Codex 使用 native subagent 協作並由原上游完成交付，不建立另一個 Codex successor pane。**NEVER** 把 Cursor 主線的 `/handoff relay|fanout` 讀成這條契約的必要入口。
 
 ### 討論 draft（可選、較嚴）
 

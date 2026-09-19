@@ -1,6 +1,8 @@
 # Relay Mode — `/handoff relay`
 
-本分支把**本 session 的整個位置**交給另一個可獨立續跑的 Herdr interactive pane，然後收工；successor runtime 依 [dispatch-common.md](dispatch-common.md) § 3.1 **原樣繼承當前 session**（`cx → cx`、`cc → cc`、`ccw → ccw`、`ccg → ccg`）。只有 user 當次明確點名不同 launcher 才可覆蓋；工作 routing 不構成授權。
+**Codex 不執行本分支。** Codex upstream 依 [SKILL.md](SKILL.md) § Codex native boundary 保留責任；bounded GPT 工作只用 `collaboration.spawn_agent`，native subagent 不把自己轉成 successor。真正的 user-owned successor 需求在 native surface 缺席時保持 blocked，**NEVER** 進 Herdr preflight 或外部 `cx` launcher。唯一外部例外是 user 點名的 create-only `--launcher devin` bounded worker（§ Codex native boundary）：它轉移工作不轉移位置，relay 維持禁止。
+
+以下只適用支援 Herdr successor 的 runtime：把**本 session 的整個位置**交給另一個可獨立續跑的 Herdr interactive pane，然後收工；successor runtime 依 [dispatch-common.md](dispatch-common.md) § 3.1 **原樣繼承當前 session**（`cc → cc`、`ccw → ccw`、`ccg → ccg`、`grok → grok`）。只有 user 當次明確點名不同且受支援的 launcher 才可覆蓋；工作 routing 不構成授權。
 
 成功事件是 helper 回傳 **`relay_dispatched`**，代表 successor 已 live、已收到 brief、durable 轉移已落盤。**不是**「successor 完成了工作」——那不再是本 session 的事。
 

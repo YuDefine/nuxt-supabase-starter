@@ -8,7 +8,7 @@
  * 於是「這個 dirty 檔屬於誰」只能靠反推，而每一條反推訊號都不可信（herdr pane 掃描對已
  * commit 完的工作零訊號、terminal title 繼承上一棒、`agent_status` 只反映 tab 有沒有被看過）。
  *
- * 這支讀的是 `plugins/hub-core/hooks/post-tool-ownership-journal.sh` append 的 jsonl：
+ * 這支讀的是 `capabilities/core/hooks/post-tool-ownership-journal.sh` append 的 jsonl：
  * 不問任何人宣告什麼，只讀 harness 實際執行了什麼。
  *
  * **NEVER 回寫 verdict**：verdict 是 derived 值，落成 store 就是 drift 的起點

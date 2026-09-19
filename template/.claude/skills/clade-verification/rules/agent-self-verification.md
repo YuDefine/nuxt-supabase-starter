@@ -188,11 +188,11 @@ baseline 只存在於某次 session 記憶裡時，下一個讀 gate 的人算�
     推論這次也沒問題：差別在被測命令有沒有 shell metachar，而那不是你在讀輸出時會注意的事。
     機制、三組對照與上游 issue 見 [[TD-1059]]。
 
-    **這條與 hook 層的防守不重疊，兩者都要。** `vendor/scripts/evidence-hook.ts` 是 fleet 的
-    **唯一 rewrite owner**：它自己 spawn `rtk hook claude` 取 permission decision，但包進 run-evidence 的是
-    **原始**命令。所以經 Bash tool 的命令已經是防守後的——本條管的是**你自己在命令列裡手打**
-    filter 的那些時刻（`rtk err` / `rtk test` / 任何 `| tail` 式截斷），那條路徑沒有任何 hook 接得到。
-    **NEVER** 因為「反正 hook 有接」就略過本條。另見 MUST 17（診斷型指令 NEVER 串接後截斷）——
+    **輸出 wrapper 已退役，本條是唯一防線。** `vendor/scripts/evidence-hook.ts` 現在恆回傳
+    `{}`——不改寫命令、不合成 permission decision，經 Bash tool 的命令就是原生命令。
+    本條管的是**你自己在命令列裡手接**展示層過濾的那些時刻（任何 `| tail` / `| head` 式
+    截斷、或任何會摘要／替換輸出的 wrapper），那條路徑沒有任何 hook 接得到。
+    另見 MUST 17（診斷型指令 NEVER 串接後截斷）——
     那條管截斷，本條管替換，同一個判準的兩面。實證全文見 [[agent-self-verification.structural-and-exit-evidence]]。
 
 ## 派工前的主線預檢責任在 [[agent-self-verification.screenshot-evidence]]（具名時機 MUST-Read）
