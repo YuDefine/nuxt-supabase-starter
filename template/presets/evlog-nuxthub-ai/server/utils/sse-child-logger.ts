@@ -96,10 +96,12 @@ export async function emitChildLogger(
   // 不同 consumer 可能命名不同
   const drainPromise = runChildLogDrain(event, emitted)
 
-  // Workers per-stream flush
-  const waitUntil = event.context.cloudflare?.context?.waitUntil ?? event.context.waitUntil
-  if (typeof waitUntil === 'function') {
-    waitUntil(drainPromise)
+  // Workers per-stream flush — waitUntil 必須對 receiver 呼叫（裸呼會 Illegal invocation）
+  const ctx = event.context.cloudflare?.context
+  if (ctx && typeof ctx.waitUntil === 'function') {
+    ctx.waitUntil(drainPromise)
+  } else if (typeof event.context.waitUntil === 'function') {
+    event.context.waitUntil(drainPromise)
   } else {
     await drainPromise
   }

@@ -17,7 +17,7 @@ disable-model-invocation: true
 - **Fleet sweep**：看到 upstream release、想跨 consumer 跟上同一個版本
 - **Skills**：`npx skills` 裝進來的第三方 skill 落後上游，或上游新增了我們還沒裝的 skill
 - **Machine**：本機裝的東西落後——mise 管的工具、全域 npm（含 agent runtime 自己）、
-  手裝 binary（rtk）、MCP server（codebase-memory-mcp）
+  手裝 binary（`~/.local/bin`）、MCP server（codebase-memory-mcp）
 
 skill 開頭依輸入分流，**不要記四個 skill 名**。
 
@@ -58,7 +58,7 @@ C 軸刻意留在外面：升遠端 staging / prod 的 runtime 是 consumer 的 
 | 給 package manager / runtime 本身（「升 pnpm」、「fleet packageManager 統一」、「Node 版本統一」） | clade home | **Fleet · Toolchain** | § Fleet · Step F.1，**再讀 fleet-mode.md § Toolchain sweep 分支** |
 | `/version-upgrade skills`，或提到 **skill** 上游 / 落後 / 新增（「supabase skill 上游更新了我們有跟嗎」「掃一下 skill 有沒有落後」） | clade home | **Skills** | § Skills · Step S.1 |
 | 提到 **submodule-tracked 上游**（「SpecFormula / aixbdd 上游動了」「specformula pin 落後」「audit-upstream-submodules 報落後」「fork 的 patch」「vendor/specformula」） | clade home | **Skills · submodule** | § Skills · Step S.1 的 submodule 段 → `docs/dev-guide.md` § 6.5 |
-| `/version-upgrade machine`，或提到**本機裝的東西**落後（「supabase cli 該升了嗎」「rtk / codebase-memory-mcp 有新版嗎」「mise 那堆工具掃一下」「全域 npm / claude-code 自己的版本」） | 任意（本機唯一） | **Machine** | § Machine · Step M.1 |
+| `/version-upgrade machine`，或提到**本機裝的東西**落後（「supabase cli 該升了嗎」「codebase-memory-mcp 有新版嗎」「mise 那堆工具掃一下」「全域 npm / claude-code 自己的版本」） | 任意（本機唯一） | **Machine** | § Machine · Step M.1 |
 | 無參數但 cwd = clade home | — | STOP + 問意圖 | 見下方 § Disambiguation |
 
 **「Fleet · Toolchain」與「Machine」都會被「Node 版本」這句話命中，MUST 先分辨再走。**

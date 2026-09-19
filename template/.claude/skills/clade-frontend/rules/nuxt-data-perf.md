@@ -408,7 +408,7 @@ async function handleSubmit() {
 - **pre-commit gate**：`vendor/scripts/pre-commit/checks/data-perf-check.sh`（掃 staged `.vue`）
 - **pre-push gate**：`vendor/scripts/pre-push/checks/data-perf-check.sh`（掃**全 repo** `.vue`，warn-only 回溯型）
 - **資源層 pattern**：`vendor/review-rules/patterns.json` 的 `fontsource-bare-import` / `lazy-atomic-component`（由 `vendor/review-rules/scan.mjs` 於 pre-commit / pre-push / CI 三層執行）
-- **review-layer**：`plugins/hub-core/agents/references/clade-review-rules.md` § Nuxt 效能規約
+- **review-layer**：`capabilities/core/agents/references/clade-review-rules.md` § Nuxt 效能規約
 
 ## Self-check Gate（Enforcement Layer 1）
 

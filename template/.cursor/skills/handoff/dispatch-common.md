@@ -4,6 +4,8 @@
 
 本檔是 [relay-steps.md](relay-steps.md) 與 [fanout-steps.md](fanout-steps.md) 的共用底座：preflight、durable thin brief 紀律、runtime cleanup、parent worktree lifecycle、收工訊息契約。兩支只寫各自差異，**NEVER** 在自己的檔內重述本檔內容。
 
+**Codex boundary：Codex upstream 與 native subagent 都 MUST 在進入本檔任何 Herdr preflight 前返回 [SKILL.md](SKILL.md) § Codex native boundary。** Codex bounded delegation 只走 `collaboration.spawn_agent`，upstream 保留 coordinator 與完成責任；本檔任何 `successor`、`--relay`、`--launcher` 或收工條款都不適用。缺 native capability 是 blocker，**NEVER** 授權外部 transport——唯一例外是 user 當次明確點名的 Devin bounded worker：create-only `--launcher devin` 經 helper 派工、upstream 以 `--coordinate` 收割；它是 worker 不是 successor，其餘 Codex 禁令不變。
+
 ## 0.1 Value-first dispatch gate（四種模式共用）
 
 在 `park` 登記、`relay`、`fanout`、`next` 的每一條接續路徑上，先判這件事是否仍值得開新 session。只有下列至少一條成立，才是可 dispatch 的 continuation candidate：
@@ -43,7 +45,7 @@ command -v herdr
 | `HERDR_ENV` | 允許 | 拒絕 |
 | --- | --- | --- |
 | `= 1`（在 Herdr pane 內） | 全部：dispatch / relay / reclaim / complete / harvest | — |
-| 空（Cursor、Codex、一般 shell） | create-only dispatch（`--cwd --label --prompt`／`--prompt-file`）**加上** harvest（`--coordinate`／`--coordinate-resume`）。可辨識 live runtime 時不帶 `--launcher`、原生繼承；辨識不到或 helper 不支援同 runtime 時 fail closed。只有 user 當次明確點名不同 runtime 才帶 `--launcher`。拓樸永遠是 Tab／workspace，**忽略** inherited `HERDR_PANE_ID` | `--relay` / `--reclaim` / `--complete` / `--continue` / `--recover-orphan` / `--parent-pane` → `not_in_herdr` |
+| 空（Cursor、一般 shell；Codex 已由本檔開頭分流） | create-only dispatch（`--cwd --label --prompt`／`--prompt-file`）**加上** harvest（`--coordinate`／`--coordinate-resume`）。可辨識 live runtime 時不帶 `--launcher`、原生繼承；辨識不到或 helper 不支援同 runtime 時 fail closed。只有 user 當次明確點名不同且受支援的 runtime 才帶 `--launcher`。拓樸永遠是 Tab／workspace，**忽略** inherited `HERDR_PANE_ID` | `--relay` / `--reclaim` / `--complete` / `--continue` / `--recover-orphan` / `--parent-pane` → `not_in_herdr` |
 
 **NEVER** 在 Cursor 裡 `export HERDR_ENV=1` 或假裝自己是 focused pane。那會讓 split／reclaim 打到使用者當下盯著的工作。
 
@@ -146,20 +148,20 @@ receipt 的 `pane_label_applied` **為 `false`，或這個欄位根本不存在*
 
 ### 3.1 Launcher inherit（relay / fanout / 任何 identity-bound dispatch）
 
-user **沒**點名別的 launcher 時，successor／worker MUST 用**當前這格實際在跑的 runtime**。helper 自己從 live process identity 重判：`cx → cx`、`cc → cc`、`ccw → ccw`、`ccg → ccg`、`grok → grok`。這是 handoff 的 runtime affinity hard rule：**agent-routing、工作類型、模型能力、成本與 repo 預設都無權覆蓋**。**NEVER** 沒點名就在 relay、fanout worker 或外部 create-only handoff 上帶 `--launcher`。
+user **沒**點名別的 launcher 時，successor／worker MUST 用**當前這格實際在跑的 runtime**。進入本 Herdr 分支的 helper 從 live process identity 重判：`cc → cc`、`ccw → ccw`、`ccg → ccg`、`grok → grok`；Pi 只依下方 continuity 契約。Codex 不在本值域，已由檔頭 native boundary 分流。這是 handoff 的 runtime affinity hard rule：**agent-routing、工作類型、模型能力、成本與 repo 預設都無權覆蓋**。**NEVER** 沒點名就在 relay、fanout worker 或外部 create-only handoff 上帶 `--launcher`。
 
 當前 runtime 無法辨識，或 helper 不支援建立同 runtime successor 時，**MUST fail closed**：保留 brief 與 pane、回報 blocker。**NEVER** fallback 到 `cc`／`ccw`，也 NEVER 把「至少派得出去」當成跨 runtime 的授權。
 
-`cx` 是 native Codex launcher：selected runtime adapter 以 `CODEX_THREAD_ID` 或 live native-Codex evidence 判定，helper 以 `cx resume <fresh-id>` 建立 Codex successor。`PI_CODING_AGENT=true` 加非空 `PI_SESSION_ID` 代表 Pi runtime（launcher `pi`），不是 Codex；Pi successor 使用 `pi --session-id <fresh-id>`。兩者都走 exact-session ownership gate。
+`CODEX_THREAD_ID` 或 live native-Codex evidence 命中時，動作是**返回 Codex native boundary**，不是選 `cx` launcher。`PI_CODING_AGENT=true` 加非空 `PI_SESSION_ID` 代表 Pi runtime（launcher `pi`），不是 Codex；Pi successor 使用 `pi --session-id <fresh-id>` 並走 exact-session ownership gate。
 
-`ccx` 是退役例外：helper 仍辨識 live `ccx-*`，只為了回 `retired_launcher`，**NEVER** 再建立 ccx successor。需要 GPT／Codex successor 時可由 user 明示 `--launcher cx`；當前已是 cx 時不帶旗標即原生繼承。
+`ccx` 是退役例外：helper 仍辨識 live `ccx-*`，只為了回 `retired_launcher`，**NEVER** 再建立 ccx successor。Codex upstream 的 GPT bounded work 只能透過 native collaboration 派出；沒有該 surface 時保持 blocked。其他 runtime 的 GPT routing 仍依 agent-routing。
 
 `CLADE_CLAUDE_LAUNCHER` 是當初 dispatch 注入 pane 的相容 marker，`/clear` 之後同一格可能已換成別的 binary，marker 不會跟著改。**NEVER** 把它當 SoT。
 
 | 可觀察 predicate | launcher |
 | --- | --- |
 | `PI_CODING_AGENT=true` 且 `PI_SESSION_ID` 非空 | `pi` |
-| `CODEX_THREAD_ID` 非空或 live native-Codex evidence | `cx` |
+| `CODEX_THREAD_ID` 非空或 live native-Codex evidence | 返回 Codex native boundary；不建立 Herdr pane |
 | `ANTHROPIC_DEFAULT_OPUS_MODEL`（或 sonnet／haiku）以 `ccg-` 開頭，且 `ANTHROPIC_BASE_URL=http://127.0.0.1:8317` | `ccg` |
 | 同上，prefix `ccx-` | `retired_launcher`，不建立 pane |
 | 沒有 live runtime identity，才退到 `CLADE_CLAUDE_LAUNCHER` 或 `CLAUDE_CONFIG_DIR` | 退路，不是優先 |
@@ -168,10 +170,10 @@ user **沒**點名別的 launcher 時，successor／worker MUST 用**當前這�
 
 | 可觀察 predicate | 帶什麼 |
 | --- | --- |
-| user 白紙黑字點名另一個**仍支援的 successor launcher**（「successor 走 cx」「用 ccw 接手」） | `--relay --launcher <那個>` |
-| user 白紙黑字點名另一個仍支援的 launcher，且這次是 create-only（「用 cx」） | create-only `--launcher <那個>` |
+| user 白紙黑字點名另一個**仍支援的 Herdr successor launcher**（例如「用 ccw 接手」） | `--relay --launcher <那個>` |
+| user 白紙黑字點名另一個仍支援的 Herdr launcher，且這次是 create-only | create-only `--launcher <那個>` |
 
-沒點名就不要帶 `--launcher`。user 說「handoff／relay／fanout」本身**不等於**授權換 runtime；必須在當次要求中明確點名目標 launcher。`--launcher` 只覆蓋 successor／child 的 binary 與相容 marker，**不改** current pane 的簽署身分——誰能簽 relay 仍由 `HERDR_ENV`、current pane、exact runtime session（Claude 或 Pi）驗證。`--launcher ccx` 一律回 `retired_launcher`；`cx`、`ccg` 維持完整支援。
+沒點名就不要帶 `--launcher`。user 說「handoff／relay／fanout」本身**不等於**授權換 runtime；必須在當次要求中明確點名目標 launcher。`--launcher` 只覆蓋 successor／child 的 binary 與相容 marker，**不改** current pane 的簽署身分——誰能簽 relay 仍由 `HERDR_ENV`、current pane、exact runtime session（Claude 或 Pi）驗證。`--launcher ccx` 一律回 `retired_launcher`；Codex-origin 的 `--launcher` override 不能繞過 native boundary——唯一放行是 user 點名的 create-only `--launcher devin` bounded worker（見 [SKILL.md](SKILL.md) § Codex native boundary），`--relay` 即使帶 `--launcher devin` 也照樣拒絕；helper 保留非 Codex caller 的既有相容性。
 
 `--reclaim` / `--complete` / `--continue` / `--adjudicate` / `--recover-orphan` / `--parent-pane` **NEVER** 帶 `--launcher`。
 
@@ -179,9 +181,9 @@ user **沒**點名別的 launcher 時，successor／worker MUST 用**當前這�
 
 | 藉口 | 現實 |
 | --- | --- |
-| 「這格 `CLADE_CLAUDE_LAUNCHER=ccw`，relay 繼承它才對」 | 那是 W1 被派出來時注入的。當前若有 live Pi identity，繼承 marker 等於把 cx session 的工作交給 ccw |
+| 「這格 `CLADE_CLAUDE_LAUNCHER=ccw`，relay 繼承它才對」 | 那是 W1 被派出來時注入的。當前若有 live Pi identity，繼承 marker 會把目前工作交錯 runtime；當前若是 Codex，更應在 preflight 前走 native boundary |
 | 「帶 `--launcher` 才能簽 relay／改了簽署身分」 | 簽署仍是 `HERDR_ENV` + current pane + exact runtime session。`--launcher` 只選 successor binary |
-| 「沒點名，但我自己想把 cx successor 換成 ccw」 | live runtime 是 SoT；只有 user 明確點名另一個仍支援的 launcher 才覆蓋 |
+| 「Codex 也可以先用 helper 開一個 cx successor」 | native subagent 是 bounded worker，不是 successor；upstream 保留責任，helper 不建立 Codex pane |
 | 「agent-routing 判這類工作更適合 cc／ccw」 | routing 可決定 bounded executor，不能改 handoff successor／worker 的 runtime affinity；要跨 runtime 必須由 user 當次明示 |
 | 「當前 runtime 辨識不到，先 fallback 到 ccw 至少能接」 | 辨識失敗是 blocker，不是授權；handoff 必須 fail closed |
 

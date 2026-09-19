@@ -80,7 +80,6 @@ npm outdated -g --depth=0
 
 | binary | 現版查法 | 上游 | 升級路徑 |
 | --- | --- | --- | --- |
-| `rtk` | `rtk --version` | `github.com/rtk-ai/rtk`（binary 內字串證實） | **無 self-update 子指令**，走上游 release |
 | `codebase-memory-mcp` | `codebase-memory-mcp --version` | — | **有 self-update**：`codebase-memory-mcp update` |
 
 **要加一支進這張表，MUST 先查證它的上游**（`strings <binary> | grep github.com`、`--help` footer、
@@ -143,7 +142,6 @@ cat .mcp.json
 | mise exact-pinned | 改 `~/.config/mise/config.toml` 的版號 → `mise install <tool>` → `mise use <tool>@<ver>` |
 | 全域 npm | `npm i -g <pkg>@<ver>` |
 | `codebase-memory-mcp` | `codebase-memory-mcp update` |
-| `rtk` | 從 `github.com/rtk-ai/rtk` release 取對應 asset 覆蓋 `~/.local/bin/rtk` |
 
 **`~/.config/mise/config.toml` 不在任何 git repo 裡**（實測 `git rev-parse` 回
 `not a git repository`）。所以改它**沒有 diff、沒有歷史、沒有 revert**——改之前先備份，
@@ -168,7 +166,6 @@ cp ~/.config/mise/config.toml "$(mktemp -t mise-config-before.XXXXXX)"
 | --- | --- |
 | `vp` | `cd ~/offline/clade && vp check`（要看到它真的跑完，不是印 usage） |
 | `supabase` | `supabase --version && supabase projects list`（或任一需要 CLI 邏輯的子指令） |
-| `rtk` | `rtk git status`（proxy 到真的 git，看得到輸出） |
 | `codebase-memory-mcp` | `codebase-memory-mcp cli list_projects`（走一次真的 tool 呼叫）。**NEVER 用 `index_status`**——它 MUST 帶 `project` 參數，不帶會回 `missing required argument`，那個錯誤與「升壞了」同形 |
 | `gh` | `gh auth status` |
 | `node` | `node -e 'console.log(1+1)'` ＋ **M.1.2 全域清單對帳** |

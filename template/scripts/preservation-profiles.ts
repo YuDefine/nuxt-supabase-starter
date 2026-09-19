@@ -40,8 +40,24 @@ const profileEntries: Array<[string, ProfileDefinition]> = [
   [
     'clade',
     {
-      topology: { ...unknownTopology, submodules: 'declared-present' },
-      resources: unknownResources,
+      // Evidence 2026-09-17 (98 linked worktrees + 3 landed sources inventoried): two
+      // uninitialized gitlinks (vendor/aixbdd, vendor/specformula); no nested .git, no
+      // objects/info/alternates, no LFS filter; 0 special files / ACL / xattr on ext4; the only
+      // external symlink is wt-helper's `consumers.local` runtime link; only template env files.
+      topology: {
+        nestedRepositories: 'verified-absent',
+        submodules: 'declared-present',
+        sharedGitObjects: 'verified-absent',
+        lfs: 'verified-absent',
+      },
+      resources: absentResources,
+      filesystem: {
+        externalSymlinks: 'declared-present',
+        externalSymlinkAllowlist: ['consumers.local'],
+        specialFiles: 'verified-absent',
+        acl: 'verified-absent',
+        xattr: 'verified-absent',
+      },
     },
   ],
   [
@@ -165,10 +181,16 @@ export function preservationProfileFor(
 }
 
 export function unknownProfileFields(profile: ConsumerProfile): string[] {
+  const filesystemEvidence: Record<string, EvidenceState> = {
+    externalSymlinks: profile.filesystem.externalSymlinks,
+    specialFiles: profile.filesystem.specialFiles,
+    acl: profile.filesystem.acl,
+    xattr: profile.filesystem.xattr,
+  }
   const groups: Record<string, Record<string, EvidenceState>> = {
     topology: profile.topology,
     resources: profile.resources,
-    filesystem: profile.filesystem,
+    filesystem: filesystemEvidence,
   }
   return Object.entries(groups).flatMap(([group, fields]) =>
     Object.entries(fields)

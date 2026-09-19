@@ -33,7 +33,7 @@ Cursor 派出 Herdr 之後 MUST `--coordinate` 或 `--coordinate-resume` 等到 
 - **NEVER** 因 clade routing gate、`agent-browser` 措辭、或 § External web retrieval 的「NEVER 直接 WebSearch」改走 Playwright / `agent-browser`。Google 會趕到 `accounts.google.com` 且 URL 含 `signin/rejected`。`cursor-ide-browser` **不是** `WebSearch` / `WebFetch`。
 - 開 Google / Tailscale 登入頁 **MUST** 留 Cursor 主線。**NEVER** 派沒有 `cursor-ide-browser` MCP 的 Task / subagent 去假裝操控 Chromium。
 - 主線 catalog 沒有該 MCP 時：報缺載體，**NEVER** 改走 `open_resource` 或 `agent-browser`，**NEVER** 複製 `~/.cursor/projects/*/mcps/cursor-ide-browser/`（假陽性），**NEVER** 寫進 `~/.cursor/mcp.json`（內建 server 寫不出來）。本機 `127.0.0.1` callback 才要 port forward。
-- **Clade routing gate / Pi handshake NEVER 讓 Cursor 主線無法呼叫 `cursor-ide-browser`。** 豁免清單與 fail-open 契約在 `plugins/hub-core/hooks/pre-tool-routing-gate.sh` 檔頭，由 `test/pi-routing-gate.test.ts` 釘住。
+- **Clade routing gate / Pi handshake NEVER 讓 Cursor 主線無法呼叫 `cursor-ide-browser`。** 豁免清單與 fail-open 契約在 `capabilities/core/hooks/pre-tool-routing-gate.sh` 檔頭，由 `test/pi-routing-gate.test.ts` 釘住。
 
 非 Cursor（Claude Code 等）才走 `agent-browser`。
 

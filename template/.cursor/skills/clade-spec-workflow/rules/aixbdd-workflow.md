@@ -8,7 +8,7 @@ paths: ['specs/plans/**', 'specs/truth/**', '.agents/constitution/**']
 
 # aixbdd Workflow 標準
 
-> Upstream: <https://github.com/Waterball-Software-Academy/aixbdd>（Apache-2.0）。clade 端 `vendor/aixbdd/`（submodule），16 支 skill 鏡射到 `plugins/hub-capabilities-aixbdd/skills/`。
+> Upstream: <https://github.com/Waterball-Software-Academy/aixbdd>（Apache-2.0）。clade 端 `vendor/aixbdd/`（submodule），16 支 skill 鏡射到 `capabilities/modules/capabilities/aixbdd/skills/`。
 >
 > Cookbook：`~/offline/clade/vendor/snippets/aixbdd/`
 >

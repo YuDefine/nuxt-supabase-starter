@@ -16,7 +16,7 @@ metadata:
 Script 位置：
 
 - Consumer 端：由 adapter 綁定 `$GH_CI_WATCH`
-- Clade home：`plugins/hub-core/scripts/gh-ci-watch.sh`
+- Clade home：`capabilities/core/scripts/gh-ci-watch.sh`
 
 ## 機制選擇：為什麼是 background Bash + script，不是其他
 
@@ -78,9 +78,9 @@ display name 是自由文字、跟檔名無關（`ci.yml` 的 name 常是 `CI / 
 bash "$GH_CI_WATCH" workflow deploy-staging.yml --branch main
 ```
 
-- **run 尚未建立也可以直接派**：run 在 push 送達後才被建立，watcher 起跑時它可能還不存在；`/commit` 的發版序列是 `git push origin main` 先、具名 tag 後（2026-09-04 起無條件，見 `plugins/hub-core/skills/commit/SKILL.md` § Step 6-A），所以 tag 觸發的 production run 更是要等第二趟 push 才出現——script 把「查無 run」視為 pending 繼續等（預設只認腳本啟動前 120s 之後建立的 run，可用 `--since <ISO8601>` 調整）
+- **run 尚未建立也可以直接派**：run 在 push 送達後才被建立，watcher 起跑時它可能還不存在；`/commit` 的發版序列是 `git push origin main` 先、具名 tag 後（2026-09-04 起無條件，見 `capabilities/core/skills/commit/SKILL.md` § Step 6-A），所以 tag 觸發的 production run 更是要等第二趟 push 才出現——script 把「查無 run」視為 pending 繼續等（預設只認腳本啟動前 120s 之後建立的 run，可用 `--since <ISO8601>` 調整）
 - run 被 concurrency `cancel-in-progress` 取代 → script 自動改追 superseding run（同 workflow + 同 branch、createdAt 較新者）
-- **tag 觸發的 workflow MUST 用 `--tag v<version>`，NEVER 用 `--branch main`**（例外：**同一支** workflow 同時由 main push 與 tag push 觸發時，`--tag` 解析成 SHA 之後兩條 run 在同一個 SHA 上、分不開，要判「這個 tag 有沒有觸發」得改用 `headBranch` 過濾——見 `plugins/hub-core/skills/commit/SKILL.md` § Step 6-A）：tag 觸發的 run 其 `headBranch` 是 **tag 名**不是 `main`，`--branch main` 對它永遠篩不到 run → watcher 一路 pending 到 `WATCH_TIMEOUT` exit 3，即使該 run 其實是綠的（2026-07-25 <consumer-b> v1.250.0 實證）
+- **tag 觸發的 workflow MUST 用 `--tag v<version>`，NEVER 用 `--branch main`**（例外：**同一支** workflow 同時由 main push 與 tag push 觸發時，`--tag` 解析成 SHA 之後兩條 run 在同一個 SHA 上、分不開，要判「這個 tag 有沒有觸發」得改用 `headBranch` 過濾——見 `capabilities/core/skills/commit/SKILL.md` § Step 6-A）：tag 觸發的 run 其 `headBranch` 是 **tag 名**不是 `main`，`--branch main` 對它永遠篩不到 run → watcher 一路 pending 到 `WATCH_TIMEOUT` exit 3，即使該 run 其實是綠的（2026-07-25 <consumer-b> v1.250.0 實證）
 
 ```bash
 bash "$GH_CI_WATCH" workflow ci.yml --tag "v$(node -p 'require("./package.json").version')"

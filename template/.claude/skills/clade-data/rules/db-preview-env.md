@@ -246,7 +246,7 @@ Cloudflare Workers 的能力邊界另見 § Cloudflare Workers trip-wires（含 
 
 - `rules/core/audit-pattern.md`：D-pattern audit 結果**不**等於 schema diff — 兩者都要做
 - `rules/modules/db-runtime/supabase-self-hosted/postgrest-resilience.md`：preview env 跑起來時也適用同樣的 PostgREST topology / reload channel 規則
-- `plugins/hub-db-schema-supabase/skills/supabase-migration/SKILL.md`：migration 寫作規範（DDL / view security / SECURITY DEFINER 位置）
+- `capabilities/modules/db-schema/supabase/skills/supabase-migration/SKILL.md`：migration 寫作規範（DDL / view security / SECURITY DEFINER 位置）
 
 ## 變體
 

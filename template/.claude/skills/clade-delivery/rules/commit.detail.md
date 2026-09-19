@@ -233,7 +233,7 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 | `vendor/snippets/**/*.md` | cookbook / pressure scenario 散文 |
 | `tasks/**/*.md`、`specs/plans/**/tasks.md`<br>`.spectra/evidence/<work-slug>.jsonl` | worktree phase-tick 專用，**兩條一起**（見 § worktree 內唯一合法的 commit：artifact-tick） |
 
-**白名單外的一切改動 MUST 走 `/commit`**，包含但不限於：`rules/**`、`scripts/**`、`vendor/scripts/**`、`plugins/**`、`claude-md/**`、`registry/**`、任何 source code。改動落在白名單內外**混合**時，整批走 `/commit`——**NEVER** 拆成「白名單那半用 `--only` 先送」。
+**白名單外的一切改動 MUST 走 `/commit`**，包含但不限於：`rules/**`、`scripts/**`、`vendor/scripts/**`、`capabilities/**`、`claude-md/**`、`registry/**`、任何 source code。改動落在白名單內外**混合**時，整批走 `/commit`——**NEVER** 拆成「白名單那半用 `--only` 先送」。
 
 **work-loop 不是例外。** HANDOFF / tech-debt 短更走本表 `--only`；merge-back 與收割後的產品落地走 **user 觸發的** `/commit`（全包，含當時 index 上別人已 staged 的檔）。**NEVER** 對那批跑 ad-hoc `--only` 只收「自己的」幾檔。護欄原文若寫「一律 `--only`」，以本節為準。機械層：`pre-bash-git-commit-only-whitelist.sh` 在 main 上擋白名單外的 `--only`（`/commit` 的 `Via: /commit` trailer 放行）。
 
@@ -410,7 +410,7 @@ git rev-list --count origin/main..HEAD    # 必須回 0（沒有還沒推上去�
 發版的推送順序 **無條件 MUST 是 main 先、tag 後**（tag 指向的 commit 得先存在於
 `origin/<default branch>`）——這是上面三步序列的直接推論，**與這個 repo 有沒有接這道 gate 無關**：
 沒接的 repo 只是少了兜底，規約本身沒有變。完整序列、失敗復原與推 tag 後的觸發確認在
-`plugins/hub-core/skills/commit/SKILL.md` § Step 6-A，**此處不複述**。
+`capabilities/core/skills/commit/SKILL.md` § Step 6-A，**此處不複述**。
 
 `CLADE_ALLOW_STALE_TAG=1` 的唯一合法用途：**刻意**在舊 commit 上打 hotfix release tag，且已知
 該 tag 那棵樹不含 main 後續改動。**NEVER** 用它讓一個「不知道為什麼被擋」的 push 過關——

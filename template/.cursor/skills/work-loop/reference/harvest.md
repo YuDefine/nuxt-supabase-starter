@@ -78,3 +78,5 @@ ledger 移除照做、2h hang 上限照算。8 步 SOP 的 scope-verify / checke
 
 
 Cursor binding for this reference: discover the host's notification, terminal readback, cancellation, and wakeup surfaces before harvesting. Use returned owner ids, preserve lifecycle and deadline ownership, and retain the dependent operation when terminal proof is unavailable.
+
+When harvesting a finished Devin session, close that session's herdr pane in the same harvest (`herdr pane close` only that harvested session's pane). Never leave leftover herdr panes. This is harvest close-out, not a substitute for `--coordinate` reclaiming a Claude child.

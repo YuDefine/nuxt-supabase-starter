@@ -8,7 +8,7 @@
 
 具體 model、effort、workspace access 與硬禁令只以 [[agent-routing.routing-table]] 為 SoT；查表前 MUST Read 該檔。Nuxt UI／Nuxt Content 實作使用 Cursor Composer 2.5，Nuxt 本體使用 GPT-5.6 Sol xhigh，其餘 UI view 實作使用 Claude Opus 5（effort: medium）；Design Review、UI 詳細計畫與截圖項目符合性判定使用 Claude Opus 5；screenshot review 使用 Gemini 3.8 Flash。SoT 具名十一列的執行鏈前綴固定為 Devin Fusion（effort: high）→ Devin SWE-2 Max（effort: max）→ 該列原 carrier 與原 fallback，只在 provider／quota／runtime 不可用時前進。
 
-**GPT 外派載體**：Codex 可用原生 GPT agent；非 Codex 的 GPT worker 一律走 Pi；Claude Code 不承載 GPT。
+**GPT 外派載體**：Codex 需要 GPT 協作時 MUST 使用 Codex native subagent（`collaboration.spawn_agent`）；上游保留協調與交付責任，不透過 `/handoff relay`、Herdr 或外部 launcher 建立另一個 Codex successor。原生能力不可用時保留工作並回報缺口，不改用外部 Codex pane。唯一外部例外：user 當次明確點名的 Devin bounded worker 可由上游經 helper 以 create-only `--launcher devin` 派出並以 `--coordinate` 收割；它是 worker 不是 successor，cx successor 與其他 launcher 維持拒絕。非 Codex 的 GPT worker 一律走 Pi；Claude Code 不承載 GPT。
 
 ## 派不派（先於派給誰）
 

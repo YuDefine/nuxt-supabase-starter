@@ -90,12 +90,12 @@ export default defineNitroPlugin((nitroApp) => {
 
   // Workers per-request flush — 用 event.waitUntil 確保 worker 結束前 batch 送出
   // 沒 wire 這個 hook 時：dev mode OK（process 不 die），prod Workers 會丟 batch
-  nitroApp.hooks.hook('request', (event) => {
-    const waitUntil = event.context.cloudflare?.context?.waitUntil
-    if (typeof waitUntil === 'function') {
+  nitroApp.hooks.hook('afterResponse', (event) => {
+    const ctx = event.context.cloudflare?.context
+    if (ctx && typeof ctx.waitUntil === 'function') {
       // request 結束時推一次（不阻塞 response）
       event.context._evlogFlushPromise = drain.flush()
-      waitUntil(event.context._evlogFlushPromise)
+      ctx.waitUntil(event.context._evlogFlushPromise)
     }
   })
 })

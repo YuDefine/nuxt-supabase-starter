@@ -75,7 +75,7 @@ slug 的重述，那正是這條規約要修的東西（一個不指涉任何東
 | --- | --- |
 | 觸發條件 | 新建 / 編輯 `tasks/*.md`（`archive/` 與 `lessons.md` 除外）且三個靜默訊號都不成立 → 印出鑄名指令。**warn-only，不 block**——擋一次 tasks 檔寫入來換一筆遙測，正好把整條脊椎的優先序顛倒過來（工作大於工作的紀錄，emit 全線 fail-open 同一個理由） |
 | 消費端 | 剛寫完 tasks 檔的那個 agent（照著跑那條指令）；成效由既有的 R3 orphan 佔比訊號量測，不另建 metric |
-| 載入路徑 | 本節（散播到 consumer runtime rules/session-tasks.operations.md）＋ hook 本身（`plugins/hub-core/hooks/hooks.json`，consumer 端隨 plugin 生效） |
+| 載入路徑 | 本節（散播到 consumer runtime rules/session-tasks.operations.md）＋ hook 本身（`capabilities/core/hooks/hooks.json`，consumer 端隨 plugin 生效） |
 
 權威的對應由 `work.open` 的 `origin_ref: tasks:<路徑>` 承載——spine 指向 tasks 檔，這個方向由
 工具在 emit 當下寫入、append-only。反方向的檔頭 `work_id:` 是**選填索引**，維持選填的理由與
@@ -276,6 +276,8 @@ Hook / human review 偵測到違反時，輸出格式統一：
 ```
 
 ## 收工（session close-out）
+
+**Codex 適用邊界**：Codex 的 GPT 協作走其 runtime 原生 collaboration 能力（機制見 codex adapter 投影），由原上游持有收件、驗證與交付責任。下文 Herdr relay／fanout、每次派工以 successor 收尾及關閉上游的要求只適用支援該 pane transport 的其他 runtime；不得用於 Codex，也不得由 `\nx` 或 context 預算指示繞過此邊界。原生能力缺失時留下具體 blocker，不以外部 launcher 建立 Codex successor——唯一例外是 user 明確點名的 Devin bounded worker：create-only `--launcher devin` 經 helper 派工、上游以 `--coordinate` 收割，仍非 successor。
 
 > 本節是 [[session-tasks]] § Session context 預算 的下推正文。觸發錨是 `session-context-budget-warn.sh` 在收工線上的提示，不是本檔的 `paths:`——「收工」不對應任何檔案路徑。母檔常駐 Iron Law ＋ 兩級門檻表 ＋ 具名時機指針。
 

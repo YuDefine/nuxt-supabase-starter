@@ -59,11 +59,11 @@ node scripts/wt-helper.ts batch prepare --trigger <trigger> --workflow <workflow
 
 `status` 與 `prepare` MUST 用**同一個**已解析 `workflow_model`。registry 裡已宣告的 consumer 用它的值；解析失敗 **NEVER** 默默改成 `pr-merge-based`。clade home 不是 registry consumer，試跑才准顯式 `--workflow pr-merge-based`。Trunk prepare 固定所有當下就緒成員。PR prepare 預設只收**一個** work id（一個獨立可接受目的對應一個 PR）；緊密相依合批必須顯式 `--group-work-ids <id>,<id>`，**NEVER** 把不相干的就緒來源默默塞進同一張 PR。來源 checkpoints 及整合中繼成果皆保留，main 不接收待審內容。另一位 coordinator 撞 active batch 時接續該批，**NEVER** 另開一批與它競爭。
 
-衝突只在隔離區解，解完精確 stage 衝突檔後跑 `batch resume`；不删來源、不把未解衝突藏成就緒。中斷後先讀 `batch status`，依持久狀態續跑。main 前移用 `batch refresh` 對齊新基準並重新驗受影響範圍；來源變動則 `batch cancel --reason <原因>` 保存既有工作，重驗來源、重登記再 prepare。
+衝突只在隔離區解，解完精確 stage 衝突檔後跑 `batch resume`；不删來源、不把未解衝突藏成就緒。中斷後先讀 `batch status`，依持久狀態續跑。`pr-merge-based` 的 base 是 `git fetch origin main` 後的 `refs/remotes/origin/main`；`trunk-based` 才使用 local main。main 前移用 `batch refresh` 對齊新基準並重新驗受影響範圍；來源變動則 `batch cancel --reason <原因>` 保存既有工作，重驗來源、重登記再 prepare。
 
 Helper 在整批合併後沿用既有 worktree runtime bootstrap，建立投影工具、環境檔、dev-port 與 backing service；失敗保留 integration 並由 resume 重試。接著在 integration path 依專案 package manager 以 frozen lockfile 安裝依賴，再確認 dev-port／db-preview 的獨立驗證環境。依 SKILL.md Step 0-Lock 解析鎖腳本與 integration 的絕對路徑，取得 commit lock 後跑 Step 0–5 的完整流程。Scope 為該整合區的完整 base→candidate 差異；同一批只啟動一次品質鏈，可按功能建立多筆正式 commits。手動普通 commit 的全 WIP 契約只作用於普通工作區，不把 main WIP 偷渡進 batch。
 
-Prepare 已把整批差異呈現在 base 上的 index。中断後若已有部分正式 commits、或需要補審整批，先跑 `batch review`：它保留 candidate、重新呈現完整 staged diff 並使舊 seal 失效，再依同一批狀態續跑既有品質鏈。不能對乾淨 HEAD 跑空 diff review 後宣稱整批通過。
+Prepare 已把整批差異呈現在 base 上的 index。中断後若已有部分正式 commits、或需要補審整批，先跑 `batch review`：它保留 candidate、重新呈現完整 staged diff 並使舊 seal 失效，再依同一批狀態續跑既有品質鏈。不能對乾淨 HEAD 跑空 diff review 後宣稱整批通過。有 active PR 批次時，其他 session 可以照常 commit 到 local main，但 **NEVER push**；push 會前移 origin/main，才會使批次要求 refresh。
 
 helper 登記的 integration 同樣適用 Step 0-MR／0-Archive 的 trunk 人工 gate，不能因 branch 名稱而 skip。依每個 member 的 change 與 archive 對應檢查整批 readiness；有 blocker 就保留整批與來源，修正後重驗。若要排除未就緒成員，取消本批後重新登記其餘成員、prepare，再跑完整品質鏈。
 
@@ -90,7 +90,7 @@ PR 制不直推 main：正式批次 commits 依原有 PR／ship 流程送審，P
 node scripts/wt-helper.ts batch confirm-merged --receipt <merge-receipt.json>
 ```
 
-Receipt 必須是 JSON 物件，欄位固定為：`repository`、`pr`（正整數）、`base`（`main`）、`merge_method`（`squash`）、`merged`（必須為 `true`）、`source_head`（reviewed formal HEAD）、`reviewed_base`、`candidate_tree`、`merge_sha`（GitHub squash 產生的單一 parent commit），以及 `content_patch_id`（`base..source_head` 的 `git patch-id --stable`）。Helper 會向 GitHub 查同一 `repository`／`pr`：必須 `merged=true`、base 為 `main`、遠端 merge SHA 等於 receipt、GitHub `head.sha` 等於 reviewed `source_head`；若本 checkout 有 `origin` GitHub remote，其 owner/repo 必須與 receipt 及遠端 PR 一致。**NEVER** 只信 caller 自填的 `merged`。接著確認 `source_head` 仍是 reviewed formal HEAD、`reviewed_base` 仍是 seal 時的 base、merge parent 就是該 base、`merge_sha` 是 `main` 可達的單一 parent commit，並比對 reviewed candidate tree 與 merge tree（涵蓋 binary／rename／file mode）以及 stable patch-id；任一不符即保留來源與 integration。
+Receipt 必須是 JSON 物件，欄位固定為：`repository`、`pr`（正整數）、`base`（`main`）、`merge_method`（`squash`）、`merged`（必須為 `true`）、`source_head`（reviewed formal HEAD）、`reviewed_base`、`candidate_tree`、`merge_sha`（GitHub squash 產生的單一 parent commit），以及 `content_patch_id`（`base..source_head` 的 `git patch-id --stable`）。Helper 會向 GitHub 查同一 `repository`／`pr`：必須 `merged=true`、base 為 `main`、遠端 merge SHA 等於 receipt、GitHub `head.sha` 等於 reviewed `source_head`；若本 checkout 有 `origin` GitHub remote，其 owner/repo 必須與 receipt 及遠端 PR 一致。**NEVER** 只信 caller 自填的 `merged`。接著 fetch origin/main，確認 `source_head` 仍是 reviewed formal HEAD、`reviewed_base` 仍是 seal 時的 base、merge parent 就是該 base、`merge_sha` 可由 `refs/remotes/origin/main` 達到且是單一 parent commit，並比對 reviewed candidate tree 與 merge tree（涵蓋 binary／rename／file mode）以及 stable patch-id；任一不符即保留來源與 integration。PR merge 確認後，local main 以 `git merge origin/main` 對齊，**NEVER rebase**。
 
 `batch confirm-merged` 不接受沒有 receipt 的確認，也不接受 fast-forward／一般 merge 冒充 squash。PR 關閉但未合併、receipt 缺失或機械證據不足時保留並查證，不宣稱 landed。Receipt 驗證通過後才記錄 landed；cleanup 對 PR 批次以 receipt 的 `merge_sha` 驗證 main 可達性，同時仍以 formal HEAD 保護 integration branch 與來源回收。清理失敗只重試 cleanup，不重複合併。
 
