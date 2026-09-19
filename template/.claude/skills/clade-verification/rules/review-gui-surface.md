@@ -43,8 +43,8 @@ paths:
 
 | Surface | 入口 | 預期 contract |
 | --- | --- | --- |
-| `/commit` 0-MR gate block | `plugins/hub-core/skills/commit/SKILL.md` Step 0-MR | block 後 **MUST** 先把 agent 可推進的 pending 推完（MUST 9）；只把 `flow gates` 列出的卡片交給人 |
-| `/handoff` Mode B 2B.1.7 | `plugins/hub-core/skills/handoff/SKILL.md` Step 2B.1.7 | 推薦人開面板**前** MUST 先跑 `flow gates`，依 family 寫入 HANDOFF.md |
+| `/commit` 0-MR gate block | `capabilities/core/skills/commit/SKILL.md` Step 0-MR | block 後 **MUST** 先把 agent 可推進的 pending 推完（MUST 9）；只把 `flow gates` 列出的卡片交給人 |
+| `/handoff` Mode B 2B.1.7 | `capabilities/core/skills/handoff/SKILL.md` Step 2B.1.7 | 推薦人開面板**前** MUST 先跑 `flow gates`，依 family 寫入 HANDOFF.md |
 | `screenshot-review` verify mode | 主線派 reviewed visual-evidence worker（per [[agent-routing]]） | item 含 compound visual state → 分成 scoped sub-items 或同 item 多次寫 sidecar |
 | `verified-ui` evidence collection | `vendor/snippets/verify-channels/ui-final-state-brief*.template.md` | compound state evidence 必拆 / 必多筆 |
 | `screenshot-review` subagent 的 CLI 呼叫 | agent body 內的 runtime-approved browser CLI | invoke 前 verify CLI contract（per [[agent-self-verification]] § MUST 4） |
@@ -332,7 +332,7 @@ jq '.image.shareOfToolResultTokens, .image.shareOfToolResultChars' out.json
 | 面板本體 change SLA | [[review-gui-change-discipline]]（clade 自治區） |
 | Verify channel evidence 格式 | [[manual-review.backend]] § 標準流程 § `[verify:ui]` channel |
 | Compound item 拆分 / multi-screenshot | [[manual-review.evidence]] § Item Kind Marker `verify:ui` |
-| Handoff Mode B Step 2B.1.7 gate 段 | `plugins/hub-core/skills/handoff/scan-steps.md` |
+| Handoff Mode B Step 2B.1.7 gate 段 | `capabilities/core/skills/handoff/scan-steps.md` |
 | gate family 判定 | `vendor/scripts/flow/gates.ts` |
 
 ## Audit signal

@@ -105,7 +105,7 @@ Self-host Supabase production migration 前，先分類 migration 風險：
 - **NEVER** 把 app code retry/session fix 當成 migration safety。
 - **MUST** 區分 PostgREST schema cache reload 與 DB lock；split surface 不能解除同一張 table 的 blocking lock。
 - **MUST** 在 self-host production deploy 保存 `/ready` evidence、traffic smoke summary、PostgREST logs。
-- 可用 clade script prototype，來源 `plugins/hub-db-runtime-supabase-self-hosted/scripts/postgrest-resilience/`，由本 skill 的 resource declaration 投影到各 runtime 的 skill-local `scripts/postgrest-resilience/`。
+- 可用 clade script prototype，來源 `capabilities/modules/db-runtime/supabase-self-hosted/scripts/postgrest-resilience/`，由本 skill 的 resource declaration 投影到各 runtime 的 skill-local `scripts/postgrest-resilience/`。
 - `classify-migration.mjs <migration.sql>`、`ready-watch.mjs --url=<admin-ready-url>`、`smoke-runner.mjs --endpoint=<name=url>` 均從該 skill-local 目錄以 Node 執行；找不到投影資源時 **NEVER** 改用其他 runtime 的路徑猜一個，回報標準未送達並保留 evidence 要求。
 
 ## Schema 規範

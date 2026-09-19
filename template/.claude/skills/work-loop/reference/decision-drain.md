@@ -84,7 +84,7 @@ runner 於是在還有 161 條債時寫 `no-admissible-work`。
 
 | 可觀察 predicate | 動作 |
 | --- | --- |
-| open TD、未 parked、runner child 且 Location 落 `.claude/` / `rules/` / `plugins/` / `vendor/` / `claude-md/` | 本輪排除（needsPublish），**不是** skip 其他 item 的理由 |
+| open TD、未 parked、runner child 且 Location 落 `.claude/` / `rules/` / `capabilities/` / `vendor/` / `claude-md/` | 本輪排除（needsPublish），**不是** skip 其他 item 的理由 |
 | open TD、未 parked、重判後寫得出推薦 A 且未命中 predicate 7 | **不當 waiting-user**。進 Step 3 當 candidate。缺 `### 自驗` 就在做完那一輪補，**NEVER** 因此 packaging |
 | 重判寫不出推薦、或命中 predicate 7 / 真的要值（時段／人／門檻） | 才 packaging 進 `awaiting[]` 走 (b) |
 

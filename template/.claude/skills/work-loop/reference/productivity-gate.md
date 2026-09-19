@@ -12,7 +12,7 @@ loop-interactive 8.0% ＝ 46.0%** 的配額落在 work-loop，而同期 clade �
 （每個完成項平均 2.8 輪，且 completed 多為 rotate / 下推這類內務）。實質產出（交付＋清算）29.5%、
 治理內務 48.0%。
 
-原樣可重跑（**務必 `--out`，RTK 會截斷 stdout**）：
+原樣可重跑（**務必 `--out`**——stdout 會被展示層截斷，完整輸出必須落檔再讀）：
 
 ```bash
 node scripts/usage-report.ts --days 3 --out /tmp/r.md
@@ -140,7 +140,7 @@ SKILL.md Step 6.3 留的是一句話對照表。**機械 SoT 是 `vendor/scripts
 
 **P2 為什麼是排除集而不是路徑白名單**：白名單只可能列出寫規約那一刻手上那個 repo 的交付路徑。
 2026-08-19 <consumer-a> r54 實證——舊白名單逐字寫 `rules/core/`／`rules/modules/`／`vendor/`／
-`plugins/hub-core/`／`scripts/`，那是 **clade 自己**的交付形狀；consumer 的交付落在 `packages/**`／
+`capabilities/core/`／`scripts/`，那是 **clade 自己**的交付形狀；consumer 的交付落在 `packages/**`／
 `app/**`／`test/**`，**字面一條都不中**。那一輪關掉一條 TD（三條 HTTP 探測）並 land 一次 refactor
 （100 tests 全綠、已 merge-back），P1–P4 仍全部不成立 → `nonProductiveRounds` 進 2、整個 loop 停掉。
 **NEVER** 用「本 repo 的交付路徑不在清單上」推論本輪非生產——那是判準沒涵蓋這個 repo，不是本輪沒交付。

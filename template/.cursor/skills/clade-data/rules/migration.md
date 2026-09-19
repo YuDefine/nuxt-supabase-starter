@@ -23,7 +23,7 @@ paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'packages/*/server/**/
 
 ## Lint 與 advisors 的處置義務
 
-上面兩條的機械執行點是 `/commit` **Step 1.4 / 1.5**（`plugins/hub-core/skills/commit/schema-sync.md`）——
+上面兩條的機械執行點是 `/commit` **Step 1.4 / 1.5**（`capabilities/core/skills/commit/schema-sync.md`）——
 它在 Step 1.3 的 reset 之後跑，那是 DB 剛好處於「migrations 全部重放一次」狀態的唯一時刻。
 本節定義**義務**，執行流程不在這裡複述。
 

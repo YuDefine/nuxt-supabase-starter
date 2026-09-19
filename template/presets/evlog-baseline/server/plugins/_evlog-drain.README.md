@@ -81,9 +81,9 @@ onDropped: (events, error) => {
 // 才由 evlog emit 進 buffer。在 request 時 flush 只會處理先前殘留 batch、漏掉
 // 當前 event；低流量場景 worker 回收前不會再有 request 觸發下一次 flush。
 nitroApp.hooks.hook('afterResponse', (event) => {
-  const waitUntil = event.context.cloudflare?.context?.waitUntil
-  if (typeof waitUntil === 'function') {
-    waitUntil(drain.flush())
+  const ctx = event.context.cloudflare?.context
+  if (ctx && typeof ctx.waitUntil === 'function') {
+    ctx.waitUntil(drain.flush())
   }
 })
 ```

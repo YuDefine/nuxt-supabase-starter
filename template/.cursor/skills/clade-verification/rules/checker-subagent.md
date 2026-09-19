@@ -1,6 +1,6 @@
 ---
 description: 高擴散半徑改動（跨 consumer 共用 SoT / migration / auth 路徑 / 共用 util）在 publish 或 commit 前 MUST 派 fresh-context checker subagent 複核——只讀 diff + spec，產出 PASS/FAIL + finding；gate 全綠是派 checker 的前置條件不是複核項；其餘任務不派
-paths: ['rules/core/**', 'vendor/scripts/**', 'plugins/hub-core/**', 'claude-md/**', '.claude/rules/**', '.claude/skills/**', '**/migrations/**', 'shared/**', 'packages/*/shared/**', 'server/utils/**', 'packages/*/server/utils/**']
+paths: ['rules/core/**', 'vendor/scripts/**', 'capabilities/core/**', 'claude-md/**', '.claude/rules/**', '.claude/skills/**', '**/migrations/**', 'shared/**', 'packages/*/shared/**', 'server/utils/**', 'packages/*/server/utils/**']
 ---
 <!-- Clade native rule; source: rules/core/checker-subagent.md; edit canonical source -->
 
@@ -20,7 +20,7 @@ paths: ['rules/core/**', 'vendor/scripts/**', 'plugins/hub-core/**', 'claude-md/
 寫它的 agent NEVER 是唯一判定它可以散播的人。
 ```
 
-**動跨 consumer 共用 SoT**（`rules/core/` 本體、`vendor/scripts/` 散播層、`plugins/hub-core/` skill、`claude-md/` 注入段落）或**高擴散半徑 consumer 資產**（DB migration、auth 路徑、多處 import 的共用 util、對外 API contract）時，主線在 publish / propagate / commit 之前 **MUST** 派一個 fresh-context checker subagent。checker 使用目前 runtime 可建立的獨立上下文入口；實際工具與參數由該 runtime 的 checker adapter 指定。checker 不繼承 maker 的對話，不續跑 maker。若入口無法建立獨立上下文，回報具體能力缺口，保留未通過狀態。
+**動跨 consumer 共用 SoT**（`rules/core/` 本體、`vendor/scripts/` 散播層、`capabilities/core/` skill、`claude-md/` 注入段落）或**高擴散半徑 consumer 資產**（DB migration、auth 路徑、多處 import 的共用 util、對外 API contract）時，主線在 publish / propagate / commit 之前 **MUST** 派一個 fresh-context checker subagent。checker 使用目前 runtime 可建立的獨立上下文入口；實際工具與參數由該 runtime 的 checker adapter 指定。checker 不繼承 maker 的對話，不續跑 maker。若入口無法建立獨立上下文，回報具體能力缺口，保留未通過狀態。
 
 Fresh context 與跨模型是兩個欄位：同模型的新上下文可以提供獨立複核，但不能據此宣稱已完成跨模型裁決。另有跨模型 gate 時仍依其指定模型與證據要求執行。
 

@@ -22,8 +22,8 @@ The following `runner.sh`, `claude --print`, `Bash(run_in_background=true)`, `Ta
 # 實體在版本化的 plugin cache 路徑下，會隨每次 publish 漂移）。
 # runner 自己用 `git rev-parse --show-toplevel` 認 repo，
 # 所以**在哪個 repo 的 cwd 跑就作用於哪個 repo**。
-cd <目標 repo> && ~/offline/clade/plugins/hub-core/skills/work-loop/runner.sh --max-rounds 20
-cd <目標 repo> && ~/offline/clade/plugins/hub-core/skills/work-loop/runner.sh --dry-run
+cd <目標 repo> && ~/offline/clade/capabilities/core/skills/work-loop/runner.sh --max-rounds 20
+cd <目標 repo> && ~/offline/clade/capabilities/core/skills/work-loop/runner.sh --dry-run
 ```
 
 **主線起它時 MUST 用 `Bash(run_in_background=true)`，且 NEVER 加 `nohup` / `disown` / 尾綴 `&`**——
@@ -218,7 +218,7 @@ route 表判到 `runner.sh` 之後（含 headroom 判定改判過去的那條）
 
 ```text
 Bash(run_in_background=true):
-  cd <目標 repo> && ~/offline/clade/plugins/hub-core/skills/work-loop/runner.sh --max-rounds 20
+  cd <目標 repo> && ~/offline/clade/capabilities/core/skills/work-loop/runner.sh --max-rounds 20
 ```
 
 **NEVER** 在該指令裡加 `nohup`、`disown` 或尾綴 `&`。`runner.sh` 是前景同步跑（每輪 `claude --print` 跑完才進下一輪），harness 正是靠這點追蹤它、並在它退出時回頭叫醒主線。自行背景化 → Bash call 立刻返回 → harness 判定已結束 → 真正的 runner 成為無人追蹤的孤兒，**收尾通知永遠不會到達**。這是**靜默**失敗：起跑當下零異常訊號，log 照寫、round 照前進，看起來一切正常。

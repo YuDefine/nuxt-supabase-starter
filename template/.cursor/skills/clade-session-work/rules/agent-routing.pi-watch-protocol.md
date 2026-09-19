@@ -79,7 +79,7 @@ simplify、review、checks 的既有入口；正式 review row 由原本的專�
 
 **NEVER** 用 `codex review`、raw `codex exec`或一般 coding dispatcher做跨模型 review。
 
-commit 0-A 的標準入口是 `plugins/hub-core/scripts/codex-review-safe.sh`。它由 caller凍結完整working-tree changeset，再呼叫Pi review runner；runner只開`read,grep,find,ls`，沒有bash、write、edit或MCP，因此read-only是tool allowlist契約，不靠prompt自律。
+commit 0-A 的標準入口是 `capabilities/core/scripts/codex-review-safe.sh`。它由 caller凍結完整working-tree changeset，再呼叫Pi review runner；runner只開`read,grep,find,ls`，沒有bash、write、edit或MCP，因此read-only是tool allowlist契約，不靠prompt自律。
 
 ```bash
 .claude/scripts/codex-review-safe.sh medium
@@ -328,7 +328,7 @@ basis，**NEVER** 隨手挑一個列名湊過去。
 
 **內建行為**：Pi `--no-session --no-extensions` machine mode、explicit MCP extension、token discipline system prompt、routing metadata validation、telemetry append 到 `~/.pi/agent/clade/dispatch-ledger.jsonl`（fail-open；`scripts/audit-pi-adoption.ts` 靠它量 adoption）。Pi目前沒有authoritative pre-dispatch quota snapshot，因此precheck明示unavailable並fail-open；runtime quota仍固定映射exit 4。
 
-**Token discipline 是 runtime 內建，template / brief NEVER 各自重寫一份**：`vendor/pi/system/token-discipline.md`（codebase-memory 優先於 grep ＋ rtk 包裹重輸出指令）由 `runPi()` 以 `--append-system-prompt` 附掛到**每一發**有工具的 dispatch，現行 Pi dispatcher 與 review 入口一致生效，`toolProfile: 'none'` 除外。主線 Claude 是靠 harness 的 SessionStart hook 與 Bash 改寫 hook 拿到這兩條，**Pi 上沒有等價機制**——2026-08-19 實測：全歷史 dispatch 3415 次 bash 只有 460 次走 rtk，同時仍有 raw `git` 657、`ls` 229、`pnpm` 143。
+**Token discipline 是 runtime 內建，template / brief NEVER 各自重寫一份**：`vendor/pi/system/token-discipline.md`（codebase-memory 優先於 grep ＋ 原生命令與明確 run-evidence 取證）由 `runPi()` 以 `--append-system-prompt` 附掛到**每一發**有工具的 dispatch，現行 Pi dispatcher 與 review 入口一致生效，`toolProfile: 'none'` 除外。主線 Claude 由 harness 的 SessionStart hook 注入對等指引，**Pi 上沒有等價機制**，所以靠這個附掛補齊。
 
 **readonly profile 的 `--tools` allowlist MUST 含 codebase-memory 工具名**：pi 的 allowlist 同時作用於 built-in、extension 與 MCP 工具，所以 `review-readonly` / `analysis-readonly` 少列 `mcp_codebase_memory_*` = MCP extension 載了也一次都叫不到（2026-08-19 實測：`commit-0a1-review-r61` 整輪只有 `read`）。清單在 `CODEBASE_MEMORY_READONLY_TOOLS`（`vendor/scripts/lib/pi-runtime.ts`），`index_repository` 刻意不在列。
 
@@ -482,7 +482,7 @@ Canonical intent 的修改只走 OPSX command；生成 tasks.md 保持唯讀。
 
 **核心命題**：派出 〔`screenshot-review-verify`〕（Pi `--model gemini --effort high`）後**主線不能單純等回報**。worker 在 browser 內可能：撞 emptiness preflight、卡 selector、無限 retry。歷史案例（add-pass-fail-inspection-type）verify 跑 7 小時無回報 — 「乾等盲區」對 verify mode 跟對其他 pi 一樣致命。
 
-Gemini worker 的對應規範（hard budget、checkpoint、fail-fast、progress.json schema）寫在 `plugins/hub-core/skills/review/references/legacy/review-screenshot/references/evidence-contract.md` § Verify Mode；本節定義**主線派工 + 監看**規範。
+Gemini worker 的對應規範（hard budget、checkpoint、fail-fast、progress.json schema）寫在 `capabilities/core/skills/review/references/legacy/review-screenshot/references/evidence-contract.md` § Verify Mode；本節定義**主線派工 + 監看**規範。
 
 ### 派工 Brief 必含項（hard rule）
 

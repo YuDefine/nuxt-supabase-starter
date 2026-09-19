@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # gh-ci-watch.sh — GitHub Actions run watcher（機械輪詢，單次 terminal-state 輸出）
 #
-# 設計目標（見 plugins/hub-core/skills/gh-ci-watch/SKILL.md）：
+# 設計目標（見 capabilities/core/skills/gh-ci-watch/SKILL.md）：
 #   - 無 LLM 參與：達 terminal state 才 exit，配 Bash(run_in_background=true) 剛好一次完成通知
 #   - 涵蓋所有 terminal state（success / failure / cancelled / timed_out / ...）— 沉默不等同成功
 #   - run 尚未建立 → 視為 pending 繼續等（workflow mode）

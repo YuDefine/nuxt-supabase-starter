@@ -9,7 +9,7 @@ paths: ['tasks/**', 'HANDOFF.md', '.clade/work-loop/**']
 # Session context 預算的判定層
 
 > 本檔是 [[session-tasks]] § Session context 預算 的下推層。**Iron Law（適用 hard tier 是收工線；
-> soft tier 是限制新大工作段）**留在常駐層。本檔由 `plugins/hub-core/hooks/session-context-budget-warn.sh`
+> soft tier 是限制新大工作段）**留在常駐層。本檔由 `capabilities/core/hooks/session-context-budget-warn.sh`
 > 越過門檻時的提示指過來——**NEVER** 因為本檔沒載入就當作門檻不存在。
 
 ### 主判準是可觀察 predicate

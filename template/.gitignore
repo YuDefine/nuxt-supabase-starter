@@ -105,3 +105,5 @@ openspec/.vector-search.db*
 
 .pi/*
 !.pi/settings.json
+
+!.clade/rules/

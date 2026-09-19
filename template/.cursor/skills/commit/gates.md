@@ -232,7 +232,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 | --- | --- |
 | 觸發條件 | step 4 任一工作印 `BLOCK` 且 auto-triage 後仍 BLOCK → 該 carrier 路徑進 withheld scope；Step 4 任一 group 的 `intersect` exit 1 → 該 group 不 commit。**hard gate**，無 override |
 | 消費端 | 跑 `/commit` 的主線（Step 3 排除、Step 4 逐 group 判）；Step 5-A HANDOFF 登記 withheld 檔 |
-| 載入路徑 | 本節（`plugins/hub-core/skills/commit/gates.md` § 0-MR，觸發 0-MR 時 MUST 完整讀）；判定條件 SoT `rules/core/commit.trunk-gates.md` § 人工檢查 Gate |
+| 載入路徑 | 本節（`capabilities/core/skills/commit/gates.md` § 0-MR，觸發 0-MR 時 MUST 完整讀）；判定條件 SoT `rules/core/commit.trunk-gates.md` § 人工檢查 Gate |
 
 ### 禁止項
 
@@ -329,7 +329,7 @@ gate 自己的可用度跑 `node scripts/audit-security-gate-readiness.ts`（war
 | --- | --- |
 | 觸發條件 | Tier 3 命中 → 0-S.1 exit 1 / 2 或 0-S.2 有 High / Critical 就**擋住本次 commit**。0-S.1 的 `skipped` 不擋 |
 | 消費端 | 跑 `/commit` 的 attended agent（本節）；`security-precommit.ts` 自己判 exit |
-| 載入路徑 | 本節（`plugins/hub-core/skills/commit/gates.md`，`/commit` 必經） |
+| 載入路徑 | 本節（`capabilities/core/skills/commit/gates.md`，`/commit` 必經） |
 
 ---
 
@@ -472,6 +472,8 @@ Heavy gate 的 `exit 75` 代表 `gate-slot.sh` 等不到 slot、inner command �
 
 ## § 0-C: CI 等效檢查（Fix-Verify Loop、並行軸 C）
 
+**Fix-verify 義務的全局 SoT 是 [[code-style.toolchain]] § Agent 義務：check 紅了立刻 fix**——本節是 `/commit` 裡的機械化；landing PR、CI `vp fmt --check` 紅燈、本機 `pnpm check` 失敗時 **NEVER** 只掃不修或等 CI 自己綠，同一 loop 適用。
+
 **並行啟動**：0-A.1 的 snapshot 已凍結且有可收回的背景 handle 時，同回合啟動 0-C；各軸回報後匯合。缺非同步能力時依 review-policy 的同步執行契約，所有檢查仍要完成。
 
 跑下列指令確保 **format / lint / typecheck / test / doctor 全部 0 errors + 0 warnings + 0 test failures**：
@@ -504,7 +506,7 @@ fi
 
 判讀 affected 輸出時看兩行：`Affected analysis: N changed files -> M tests selected` 與逐檔的 `:: <reason>`。
 出現 `unmapped-fallback` 代表有改動對不到任何測試而退回整個 fast lane——那不是錯，但通常是新檔還沒有測試在引用它。
-**純文件 diff（只改 `.md`）也照跑**：clade 有百餘支測試讀真實 `rules/ docs/ plugins/` 內容，lane 會把它們選出來；
+**純文件 diff（只改 `.md`）也照跑**：clade 有百餘支測試讀真實 `rules/ docs/ capabilities/` 內容，lane 會把它們選出來；
 選出 0 支時 runner 印 `No affected tests found`，那才是「這次沒有測試該跑」的合法結論。
 
 **NEVER 先判斷 `pnpm check` 有沒有涵蓋 test 再決定跑不跑。** 本步驟原本用 `/test|vitest/.test(scripts.check)` 做這個判斷，比對的是整條 `&&` 串接命令的字串，於是任何**名字裡帶 `test`** 的 sibling script 都會誤觸——實測 <consumer-a> 的 `check:dual-test-config` / `check:e2e-paths` 與 <consumer-c> 的 `check:test-roots` 全部中招，三者都跟跑測試無關。誤觸 → 「必須額外跑」的條件不成立 → 補跑被跳過 → 0-C 在零測試覆蓋下判綠，且因為兩個分支都不 exit non-zero，判錯跟判對外觀完全一樣（<consumer-a> v0.103.0 實際踩到：兩條既有測試已紅，0-C 沒抓到）。
@@ -875,7 +877,7 @@ diff 觸及下列**任一**（全不成立 → 輸出 `⏭️ 0-F 跳過（diff 
 
 1. 新增 `vendor/snippets/<topic>/` 目錄
 2. 新增 `scripts/*audit*.mjs` / `vendor/scripts/*audit*.mjs`
-3. 新增 `plugins/*/skills/<name>/SKILL.md`
+3. 新增 `capabilities/**/skills/<name>/SKILL.md`
 4. 新增 `rules/core/**` / `rules/modules/**`
 
 ```bash

@@ -100,4 +100,4 @@ Red flag：正在把「checkpoint 已 commit」「draft PR 已開」「squash ex
 
 完整工具表（含 `cleanup --force`（**丟工作**，必先 merge-back + rescue 撈 baseline）、`land-pending`、`prune`、reconcile 各模式、`handoff-drift-scan.ts`）見 `~/offline/clade/vendor/snippets/wt-helper/README.md` § 工具速查表。
 
-`/wt` skill source：`~/offline/clade/plugins/hub-core/skills/wt/SKILL.md`；`wt-helper.ts` / `stash-reconcile.ts` / `handoff-drift-scan.ts` source：`~/offline/clade/vendor/scripts/`（散播投影到 consumer 的 `scripts/`）。
+`/wt` skill source：`~/offline/clade/capabilities/core/skills/wt/SKILL.md`；`wt-helper.ts` / `stash-reconcile.ts` / `handoff-drift-scan.ts` source：`~/offline/clade/vendor/scripts/`（散播投影到 consumer 的 `scripts/`）。

@@ -260,6 +260,7 @@ export interface WorktreeBatch {
   bootstrapped?: boolean
   pending?: { before: string; tree?: string }
   refresh?: { base: string; before: string; tree?: string }
+  origin_advanced_during_review?: number
   seal?: {
     head?: string
     tree: string
@@ -686,6 +687,53 @@ function clearStaleIndexLock(root: string) {
 }
 function head(cwd: string) {
   return git(cwd, ['rev-parse', 'HEAD'])
+}
+function fetchOriginMain(c: Context): string {
+  try {
+    git(c.main, ['fetch', 'origin', 'main'])
+    return git(c.main, ['rev-parse', 'refs/remotes/origin/main'])
+  } catch (error) {
+    throw new Error(
+      `Unable to fetch origin/main; refusing to use local main as PR base: ${errorMessage(error)}`,
+      { cause: error },
+    )
+  }
+}
+function batchBase(c: Context, b: Pick<WorktreeBatch, 'workflow'>): string {
+  return b.workflow === 'pr-merge-based' ? fetchOriginMain(c) : head(c.main)
+}
+function recordOriginAdvance(b: WorktreeBatch): void {
+  b.origin_advanced_during_review = (b.origin_advanced_during_review ?? 0) + 1
+}
+function assertBatchBase(c: Context, b: WorktreeBatch): string {
+  const current = batchBase(c, b)
+  if (current !== b.base) {
+    if (b.workflow === 'pr-merge-based') recordOriginAdvance(b)
+    throw new Error('Main advanced: refresh the batch before restarting review')
+  }
+  return current
+}
+function localMainOnlyCommits(c: Context): string[] {
+  const origin = fetchOriginMain(c)
+  return git(c.main, ['rev-list', 'refs/heads/main', `^${origin}`])
+    .split('\n')
+    .filter(Boolean)
+}
+function rejectMembersCarryingLocalMainCommits(c: Context, members: ReadySource[]): void {
+  const localOnly = new Set(localMainOnlyCommits(c))
+  if (localOnly.size === 0) return
+  const carried = new Map<string, string[]>()
+  for (const member of members) {
+    const commits = git(member.path, ['rev-list', member.head]).split('\n').filter(Boolean)
+    const unexpected = commits.filter((commit) => localOnly.has(commit))
+    if (unexpected.length > 0) carried.set(member.path, unexpected)
+  }
+  if (carried.size > 0) {
+    const details = [...carried.entries()]
+      .map(([path, commits]) => `${path}: ${commits.join(', ')}`)
+      .join('; ')
+    throw new Error(`Member carries commits that exist only on local main: ${details}`)
+  }
 }
 function preserveWorktree(
   c: Context,
@@ -2312,7 +2360,7 @@ export function recordDraftPr(
   if (!wt?.branch || path === c.main) throw new Error('Draft requires a source linked worktree')
   if (git(path, ['status', '--porcelain']))
     throw new Error('Commit scoped changes before draft; draft does not harvest WIP')
-  const changed = git(path, ['diff', '--name-only', `${head(c.main)}...HEAD`])
+  const changed = git(path, ['diff', '--name-only', `${fetchOriginMain(c)}...HEAD`])
     .split('\n')
     .filter(Boolean)
   if (changed.length === 0) throw new Error('Draft requires a discussable independent diff')
@@ -2472,10 +2520,12 @@ export function prepareBatch(
     const eligibleMembers = eligible(c, s)
       .filter((r) => !r.reason)
       .map((r) => r.source)
+    if (workflow === 'pr-merge-based') fetchOriginMain(c)
     const members =
       workflow === 'pr-merge-based'
         ? selectPrMembers(eligibleMembers, options.groupWorkIds)
         : eligibleMembers
+    if (workflow === 'pr-merge-based') rejectMembersCarryingLocalMainCommits(c, members)
     const draftBindings =
       workflow === 'pr-merge-based'
         ? members.flatMap((member) => {
@@ -2501,7 +2551,7 @@ export function prepareBatch(
     const b: WorktreeBatch = {
       id,
       branch,
-      base: head(c.main),
+      base: workflow === 'pr-merge-based' ? fetchOriginMain(c) : head(c.main),
       main: c.main,
       path: join(dirname(c.main), `${c.main.split('/').pop()}-wt`, `batch-${id}`),
       workflow,
@@ -2550,8 +2600,9 @@ export function refreshBatch(cwd: string, resume = false) {
       return b
     }
     if (!b.refresh) {
-      const base = head(c.main)
+      const base = batchBase(c, b)
       if (base === b.base) return b
+      if (b.workflow === 'pr-merge-based') recordOriginAdvance(b)
       git(c.main, ['merge-base', '--is-ancestor', b.base, base])
       if (
         git(b.path, ['diff', '--name-only']) ||
@@ -2617,8 +2668,12 @@ export function reviewBatch(cwd: string) {
     integration(c, b)
     verifyMembers(c, b)
     assertMain(c)
-    if (head(c.main) !== b.base)
-      throw new Error('Main advanced: refresh the batch before restarting review')
+    try {
+      assertBatchBase(c, b)
+    } catch (error) {
+      save(c, s)
+      throw error
+    }
     if (
       git(b.path, ['ls-files', '-u']) ||
       git(b.path, ['diff', '--name-only']) ||
@@ -2645,8 +2700,12 @@ export function sealBatch(cwd: string, evidencePath: string) {
     integration(c, b)
     verifyMembers(c, b)
     if (b.refresh) throw new Error('Complete batch refresh before review')
-    if (head(c.main) !== b.base)
-      throw new Error('Main advanced: integrate new base and repeat review')
+    try {
+      assertBatchBase(c, b)
+    } catch (error) {
+      save(c, s)
+      throw error
+    }
     if (
       git(b.path, ['diff', '--name-only']) ||
       git(b.path, ['ls-files', '--others', '--exclude-standard'])
@@ -2877,7 +2936,8 @@ function verifyMergeReceipt(
     throw new Error('Merge receipt merge SHA is not a commit in the main repository')
   }
   try {
-    git(c.main, ['merge-base', '--is-ancestor', receipt.merge_sha, 'refs/heads/main'])
+    fetchOriginMain(c)
+    git(c.main, ['merge-base', '--is-ancestor', receipt.merge_sha, 'refs/remotes/origin/main'])
   } catch {
     throw new Error('Merge receipt merge SHA is not reachable from main; sources are retained')
   }

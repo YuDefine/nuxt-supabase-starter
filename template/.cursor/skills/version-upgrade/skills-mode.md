@@ -13,7 +13,7 @@
 
 **不適用**：
 
-- clade 自家維護的 hub skill（`plugins/hub-*/skills/`）— 那是我們自己是上游，走 [[clade-publish]]
+- clade 自家維護的 hub skill（`capabilities/**/skills/`）— 那是我們自己是上游，走 [[clade-publish]]
 - consumer 自家 local skill（`<skills-root>/` 內沒有出現在 `skills-lock.json` 的）— 那不是第三方
 - npm 套件升版 — 走 § Outdated mode 或 § Fleet mode
 

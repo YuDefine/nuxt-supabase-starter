@@ -31,7 +31,7 @@ export const STATUS_LINE = /^(?:[-*+]\s+)?\*\*Status\*\*\s*[:：]\s*(.*)$/
 export const PARENT_LINE = /^(?:[-*+]\s+)?\*\*Parent\*\*\s*[:：]\s*(TD-\d+)\b/
 /** A Location pointing into a clade-managed tree means the fix is not done until it propagates. */
 export const PUBLISH_REQUIRED_PATH =
-  /(?:^|[\s`(（、＋+])(?:rules|plugins|vendor|claude-md|\.claude)\//
+  /(?:^|[\s`(（、＋+])(?:rules|plugins|capabilities|vendor|claude-md|\.claude)\//
 
 export interface TdEntry {
   id: string

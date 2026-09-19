@@ -113,6 +113,12 @@ export interface ConsumerProfile {
   }
   filesystem: {
     externalSymlinks: EvidenceState
+    /**
+     * When set with `externalSymlinks: 'declared-present'`, the only source-relative paths
+     * allowed to be external symlinks. Anything else fails closed, so the declaration cannot
+     * silently cover a symlink into a secret or a shared store.
+     */
+    externalSymlinkAllowlist?: string[]
     specialFiles: EvidenceState
     acl: EvidenceState
     xattr: EvidenceState
@@ -855,24 +861,84 @@ const isolatedGitEnv = {
   GIT_OPTIONAL_LOCKS: '0',
 }
 
-function localGitConfigValue(config: string, key: string): string | undefined {
-  try {
-    return execFileSync('git', ['config', '--file', config, '--no-includes', '--get', key], {
+type GitConfigEntry = { key: string; value: string | undefined }
+
+/**
+ * One `git config --no-includes --list -z` read of a single file, in file order. Callers used to
+ * spawn `--get` once per key; a restore verification read the same file up to six times, which
+ * was the largest git-spawn family in a wt-batch cleanup (2026-09-16). Git parses the file either
+ * way, so the error surface is the same: a malformed file fails the list exactly as it failed each
+ * `--get`. `value` is undefined for a value-less key (`[core] bare`), which `--get` prints as "".
+ */
+function readGitConfigFile(
+  configFile: string,
+): { entries: GitConfigEntry[] } | { error: string; status: number | null } {
+  const result = spawnSync(
+    'git',
+    ['config', '--file', configFile, '--no-includes', '--list', '-z'],
+    {
       encoding: 'utf8',
       env: isolatedGitEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim()
-  } catch {
-    return undefined
+    },
+  )
+  if (result.error) return { error: String(result.error), status: null }
+  if (result.status !== 0)
+    return { error: String(result.stderr ?? '').trim(), status: result.status }
+  const entries = String(result.stdout ?? '')
+    .split('\0')
+    .filter(Boolean)
+    .map((record) => {
+      const separator = record.indexOf('\n')
+      return separator === -1
+        ? { key: record, value: undefined }
+        : { key: record.slice(0, separator), value: record.slice(separator + 1) }
+    })
+  return { entries }
+}
+
+/**
+ * `git config --get <key>` over entries already read: the last occurrence wins, section and
+ * variable names compare case-insensitively, a subsection compares exactly, and a value-less key
+ * reads as "". Trimmed like the per-key reads it replaces.
+ */
+function gitConfigEntryValue(entries: GitConfigEntry[], key: string): string | undefined {
+  const canonical = (name: string) => {
+    const first = name.indexOf('.')
+    const last = name.lastIndexOf('.')
+    if (first === -1) return name.toLowerCase()
+    return (
+      name.slice(0, first).toLowerCase() + name.slice(first, last) + name.slice(last).toLowerCase()
+    )
   }
+  const wanted = canonical(key)
+  const match = entries.findLast((entry) => canonical(entry.key) === wanted)
+  return match ? (match.value ?? '').trim() : undefined
+}
+
+/**
+ * Git's own quoting for a written config value (a leading or trailing space, `;` or `#` quotes the
+ * whole value; tabs and newlines are escaped, not quoted), so the file matches `git config` output.
+ */
+function gitConfigQuotedValue(value: string): string {
+  const escaped = value
+    .replaceAll('\\', '\\\\')
+    .replaceAll('"', '\\"')
+    .replaceAll('\n', '\\n')
+    .replaceAll('\t', '\\t')
+  const quote = /^ | $|[;#]/.test(value)
+  return quote ? `"${escaped}"` : escaped
 }
 
 function isolateRestoredGitConfig(gitDirectory: string, worktree: string): void {
   const config = join(gitDirectory, 'config')
-  const repositoryFormat = localGitConfigValue(config, 'core.repositoryformatversion') ?? '0'
-  const objectFormat = localGitConfigValue(config, 'extensions.objectformat')
-  const refStorage = localGitConfigValue(config, 'extensions.refstorage')
-  const partialClone = localGitConfigValue(config, 'extensions.partialClone')
+  // A config Git cannot parse reads as having no keys -- the same result the per-key reads gave.
+  const read = readGitConfigFile(config)
+  const entries = 'entries' in read ? read.entries : []
+  const repositoryFormat = gitConfigEntryValue(entries, 'core.repositoryformatversion') ?? '0'
+  const objectFormat = gitConfigEntryValue(entries, 'extensions.objectformat')
+  const refStorage = gitConfigEntryValue(entries, 'extensions.refstorage')
+  const partialClone = gitConfigEntryValue(entries, 'extensions.partialClone')
   if (!/^\d+$/.test(repositoryFormat))
     throw new Error(`Offline restored Git has an invalid repository format: ${repositoryFormat}`)
   if (objectFormat && !['sha1', 'sha256'].includes(objectFormat))
@@ -885,18 +951,21 @@ function isolateRestoredGitConfig(gitDirectory: string, worktree: string): void 
   // A captured local config may name the live worktree, include arbitrary host files, or
   // launch helpers such as fsmonitor. Restore verification must prove the archived Git data
   // works without consulting any of those live-machine dependencies.
+  // Written directly rather than by one `git config` spawn per key: the text is what those spawns
+  // produced on an empty file, and every value but the worktree path is validated above.
   rmSync(config, { force: true })
-  writeFileSync(config, '')
-  const set = (key: string, value: string) =>
-    execFileSync('git', ['config', '--file', config, key, value], {
-      env: isolatedGitEnv,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-  set('core.repositoryformatversion', repositoryFormat)
-  set('core.bare', 'false')
-  set('core.worktree', worktree)
-  if (objectFormat) set('extensions.objectFormat', objectFormat)
-  if (refStorage) set('extensions.refStorage', refStorage)
+  const extensions = [
+    ...(objectFormat ? [`\tobjectFormat = ${objectFormat}\n`] : []),
+    ...(refStorage ? [`\trefStorage = ${refStorage}\n`] : []),
+  ]
+  writeFileSync(
+    config,
+    '[core]\n' +
+      `\trepositoryformatversion = ${repositoryFormat}\n` +
+      '\tbare = false\n' +
+      `\tworktree = ${gitConfigQuotedValue(worktree)}\n` +
+      (extensions.length ? `[extensions]\n${extensions.join('')}` : ''),
+  )
 }
 
 function assertAlternatesLocal(path: string, allowedRoots: string[]): void {
@@ -1093,9 +1162,23 @@ export function gitExcludedRootsForArchive(
           }
         })
     : []
+  // `<common>/modules` holds the MAIN checkout's submodule gitdirs. Removing a linked
+  // worktree never touches it, and inventorying it would read those module repos as nested
+  // repositories of every linked source. A module gitdir that belongs to this source is
+  // rejected earlier by assertGitlinkPolicy, never hidden here.
+  const sharedModules = (() => {
+    try {
+      return lstatSync(join(sourceRoot, '.git')).isFile() && existsSync(join(common, 'modules'))
+        ? [join(common, 'modules')]
+        : []
+    } catch {
+      return []
+    }
+  })()
   return [
     ...(excludedRoot ? [excludedRoot] : []),
     ...trashedMetadata,
+    ...sharedModules,
     ...assertLinkedWorktreeMetadataLocal(sourceRoot, common),
   ]
 }
@@ -1618,6 +1701,57 @@ function assertNoUninitializedGitlinks(sourceRoot: string): void {
     )
 }
 
+/**
+ * Top-level gitlink policy for a capture source.
+ *
+ * A gitlink's commit id lives in the index and HEAD tree, both inside the Git archive, and the
+ * submodule remote holds the commit itself — so an UNINITIALIZED submodule (empty or absent
+ * directory, no module gitdir owned by this checkout) loses nothing when the source goes.
+ * An initialized one can hold unpushed submodule commits and local edits that no adapter
+ * captures, so it still fails closed. Without a `declared-present` profile any gitlink fails:
+ * the profile must not claim absence of what the index contains.
+ */
+function assertGitlinkPolicy(sourceRoot: string, common: string, declared: boolean): void {
+  const gitlinks = gitlinkPaths(sourceRoot)
+  if (!gitlinks.length) return
+  if (!declared)
+    throw new Error(
+      `Git preservation has no nested repository closure adapter: ${gitlinks.join(', ')}`,
+    )
+  const rawGitDir = gitValue(sourceRoot, ['rev-parse', '--path-format=absolute', '--git-dir'])
+  if (!rawGitDir) throw new Error('Git preservation cannot resolve the source git dir')
+  const gitDir = realpathSync(rawGitDir)
+  const commonDir = realpathSync(common)
+  const initialized = gitlinks.filter((path) => {
+    const checkout = join(sourceRoot, path)
+    let stat
+    try {
+      stat = lstatSync(checkout)
+    } catch {
+      stat = undefined
+    }
+    if (stat && (!stat.isDirectory() || readdirSync(checkout).length > 0)) return true
+    if (existsSync(join(gitDir, 'modules', path))) return true
+    // A linked worktree's `<common>/modules` belongs to the main checkout, unless its
+    // core.worktree was pointed back into this source.
+    const sharedModule = join(commonDir, 'modules', path)
+    if (gitDir !== commonDir && existsSync(join(sharedModule, 'config'))) {
+      const result = spawnSync(
+        'git',
+        ['config', '--file', join(sharedModule, 'config'), '--get', 'core.worktree'],
+        { encoding: 'utf8', env: isolatedGitEnv },
+      )
+      const worktree = (result.stdout ?? '').trim()
+      if (worktree && isWithin(sourceRoot, resolve(sharedModule, worktree))) return true
+    }
+    return false
+  })
+  if (initialized.length)
+    throw new Error(
+      `Initialized submodules are not captured by this archive adapter: ${initialized.join(', ')}`,
+    )
+}
+
 function assertNoReachableGitlinks(repo: string): void {
   const gitlinks = reachableGitlinkPaths(repo)
   if (gitlinks.length)
@@ -1638,48 +1772,22 @@ function isGitConfigInventoryPath(path: string, inventoryRoot: string): boolean 
   return top === 'modules' || top === 'worktrees'
 }
 
-function gitConfigIncludePaths(configFile: string): Array<{ value: string; condition?: string }> {
-  try {
-    const stdout = execFileSync(
-      'git',
-      ['config', '--file', configFile, '--no-includes', '--list'],
-      { encoding: 'utf8', env: isolatedGitEnv, stdio: ['ignore', 'pipe', 'pipe'] },
-    )
-    return stdout
-      .split('\n')
-      .map((line): { value: string; condition?: string } | undefined => {
-        const separator = line.indexOf('=')
-        if (separator === -1) return undefined
-        const key = line.slice(0, separator)
-        const value = line.slice(separator + 1).trim()
-        if (key === 'include.path') return { value }
-        const conditional = key.match(/^includeIf\.(.+)\.path$/i)
-        return conditional ? { value, condition: conditional[1] } : undefined
-      })
-      .filter((row) => row !== undefined)
-  } catch (error) {
-    const err = error as { status?: number; stderr?: Buffer | string }
-    const stderr = String(err.stderr ?? '').trim()
-    throw new Error(
-      `Git preservation cannot inspect config includes: ${configFile}: ${stderr || String(error)}`,
-      { cause: error },
-    )
-  }
-}
-
-function gitConfigValue(configFile: string, key: string): string | undefined {
-  const result = spawnSync('git', ['config', '--file', configFile, '--no-includes', '--get', key], {
-    encoding: 'utf8',
-    env: isolatedGitEnv,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-  if (result.error) throw new Error(`Git preservation cannot inspect config ${key}: ${configFile}`)
-  if (result.status === 1) return undefined
-  if (result.status !== 0)
-    throw new Error(
-      `Git preservation cannot inspect config ${key}: ${configFile}: ${String(result.stderr ?? '').trim()}`,
-    )
-  return String(result.stdout ?? '').trim()
+/**
+ * `-z` keeps a subsection containing `=` (`[includeIf "gitdir:/a=b/"]`) from being split at the
+ * wrong separator, which the line-oriented `--list` parse silently dropped as a non-include.
+ */
+function gitConfigIncludePaths(
+  entries: GitConfigEntry[],
+): Array<{ value: string; condition?: string }> {
+  return entries
+    .map((entry): { value: string; condition?: string } | undefined => {
+      if (entry.value === undefined) return undefined
+      const value = entry.value.trim()
+      if (entry.key === 'include.path') return { value }
+      const conditional = entry.key.match(/^includeIf\.(.+)\.path$/i)
+      return conditional ? { value, condition: conditional[1] } : undefined
+    })
+    .filter((row) => row !== undefined)
 }
 
 function resolveIncludePath(configFile: string, value: string): string {
@@ -1728,7 +1836,12 @@ function assertGitConfigClosure(
     const visitKey = `${resolve(configFile)}\0${resolvedConfig}`
     if (visited.has(visitKey)) continue
     visited.add(visitKey)
-    const worktree = gitConfigValue(resolvedConfig, 'core.worktree')
+    const read = readGitConfigFile(resolvedConfig)
+    if ('error' in read)
+      throw new Error(
+        `Git preservation cannot inspect config core.worktree: ${resolvedConfig}${read.status === null ? '' : `: ${read.error}`}`,
+      )
+    const worktree = gitConfigEntryValue(read.entries, 'core.worktree')
     if (portableRoot && worktree) {
       if (isAbsolute(worktree) || worktree === '~' || worktree.startsWith('~/'))
         throw new Error(
@@ -1745,7 +1858,7 @@ function assertGitConfigClosure(
           `Git preservation cannot capture nested core.worktree in the source Git directory: ${worktree}`,
         )
     }
-    for (const { value, condition } of gitConfigIncludePaths(resolvedConfig)) {
+    for (const { value, condition } of gitConfigIncludePaths(read.entries)) {
       if (portableRoot && condition) {
         const gitdir = condition.match(/^gitdir(?:\/i)?:(.*)$/i)
         const pattern = gitdir?.[1]
@@ -2317,10 +2430,6 @@ export function captureAndVerify(options: {
     throw new Error(
       'Git LFS preservation requires a payload-closure adapter; storage locality alone is insufficient',
     )
-  if (options.profile.topology.submodules === 'declared-present')
-    throw new Error(
-      'Git submodule preservation requires a nested-repository adapter; uninitialized gitlinks are not captured by worktree inventory',
-    )
   const metadataOptions = inventoryOptionsFromProfile(options.profile)
   const gitMetadataOptions: InventoryOptions = {
     acl: metadataOptions.acl,
@@ -2362,8 +2471,13 @@ export function captureAndVerify(options: {
     inventory,
     metadataOptions.allowNestedRepositories === true,
   )
+  if (gitCommonDir)
+    assertGitlinkPolicy(
+      sourceRoot,
+      gitCommonDir,
+      options.profile.topology.submodules === 'declared-present',
+    )
   if (gitCommonDir && gitInventory) assertNoNestedRepositories(gitCommonDir, gitInventory)
-  if (gitCommonDir) assertNoUninitializedGitlinks(sourceRoot)
   const configRoots = gitCommonDir ? [sourceRoot, gitCommonDir] : [sourceRoot]
   assertGitConfigClosure(sourceRoot, inventory, configRoots)
   if (gitCommonDir && gitInventory) assertGitConfigClosure(gitCommonDir, gitInventory, configRoots)
@@ -2377,6 +2491,14 @@ export function captureAndVerify(options: {
     throw new Error(
       `External symlink targets are not captured by this archive adapter: ${inventory.externalSymlinks.join(', ')}`,
     )
+  const symlinkAllowlist = options.profile.filesystem.externalSymlinkAllowlist
+  if (symlinkAllowlist) {
+    const unexpected = inventory.externalSymlinks.filter((path) => !symlinkAllowlist.includes(path))
+    if (unexpected.length)
+      throw new Error(
+        `External symlinks outside the profile allowlist are not captured: ${unexpected.join(', ')}`,
+      )
+  }
   const capacity = capacityRequirement(archiveRoot, inventory, {
     gitRoot: gitCommonDir,
     gitExcludedRoots,

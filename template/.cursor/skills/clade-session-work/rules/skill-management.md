@@ -1,6 +1,6 @@
 ---
 description: 新增、安裝或同步 skill 時，辨認 canonical source、runtime projection、版控與 ownership 邊界
-paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/**', '.codex/skills/**', '.cursor/skills/**', 'plugins/*/skills/**', 'scripts/install-skills.sh', 'skills-lock.json']
+paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/**', '.codex/skills/**', '.cursor/skills/**', 'capabilities/**/skills/**', 'scripts/install-skills.sh', 'skills-lock.json']
 ---
 <!-- Clade native rule; source: rules/core/skill-management.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
@@ -30,7 +30,7 @@ paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/*
 
 ## 來源與安裝邊界
 
-Clade-managed skill 的共同來源在選用 plugin 的 `plugins/<plugin>/skills/<name>/`，單端差異在相應 adapter。Consumer 自有與第三方安裝內容先依既有 ownership／安裝紀錄辨認來源；**NEVER** 因它位於 `.claude/skills/` 就把同名內容自動接管為 generator-owned。遷移來源位置需保存原內容、明確 adoption 與可恢復紀錄。
+Clade-managed skill 的共同來源在選用 plugin 的 `capabilities/<package>/skills/<name>/`，單端差異在相應 adapter。Consumer 自有與第三方安裝內容先依既有 ownership／安裝紀錄辨認來源；**NEVER** 因它位於 `.claude/skills/` 就把同名內容自動接管為 generator-owned。遷移來源位置需保存原內容、明確 adoption 與可恢復紀錄。
 
 node_modules-backed symlink 只有在 adapter 明列、且 fresh setup 能重建時才可例外。Clade capability planner 目前拒絕 plugin source 中的 symlink；legacy installer 的例外不能用來放行此 planner 的拒絕。
 

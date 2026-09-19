@@ -112,11 +112,11 @@ warn_if_tmp_pressure
 # ─────────────────────────────────────────────────────────
 
 find_clade_root() {
-  if [[ -n "${CLADE_HOME:-}" && -f "$CLADE_HOME/.claude-plugin/marketplace.json" ]]; then
+  if [[ -n "${CLADE_HOME:-}" && -f "$CLADE_HOME/registry/consumers.json" ]]; then
     echo "$CLADE_HOME"; return 0
   fi
   for c in "$HOME/clade" "$HOME/offline/clade"; do
-    if [[ -f "$c/.claude-plugin/marketplace.json" ]]; then
+    if [[ -f "$c/registry/consumers.json" ]]; then
       echo "$c"; return 0
     fi
   done

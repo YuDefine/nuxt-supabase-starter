@@ -20,7 +20,7 @@
 #
 # 規約來源：
 #   - impl-time rule : rules/modules/framework/nuxt/page-loading-golden-path.md Tier 2.5
-#   - review-layer   : plugins/hub-core/agents/references/clade-review-rules.md
+#   - review-layer   : capabilities/core/agents/references/clade-review-rules.md
 #
 # 由 ~/clade vendor/scripts/pre-commit/ 散播，請勿直接編輯 consumer 副本。
 

@@ -1,6 +1,8 @@
 # Fanout Mode — `/handoff fanout`
 
-本分支把**多件可平行、主題不同的工作**各派一個 worker session，且每個 worker 各佔一個獨立 Tab；再把**本 session 的整個位置**交給同樣位於獨立 Tab 的 successor——由它繼承那 N 筆 worker 的 coordinator 身分並回收本 pane，然後本 session 收工。
+**Codex 不執行本檔的 Herdr fanout。** Codex upstream 依 [SKILL.md](SKILL.md) § Codex native boundary 保留 coordinator 責任；多件互不依賴的 bounded GPT work 才用 `collaboration.spawn_agent` 平行派，upstream 收割結果後繼續工作。native worker 完成不建立 successor、不中止 upstream；缺 native capability 就回 blocker，**NEVER** 改走外部 launcher——唯一例外是 user 明確點名的 Devin bounded worker：各派一件 create-only `--launcher devin`、upstream 逐一收割；這仍是 worker 不是 successor，不是本檔的 fanout。
+
+以下只適用支援 Herdr successor 的 runtime：把**多件可平行、主題不同的工作**各派一個 worker session，且每個 worker 各佔一個獨立 Tab；再把**本 session 的整個位置**交給同樣位於獨立 Tab 的 successor——由它繼承那 N 筆 worker 的 coordinator 身分並回收本 pane，然後本 session 收工。
 
 與 [relay-steps.md](relay-steps.md) 的差別只有一個：relay 交出位置時手上沒有新派的工作，fanout 先派了 N 筆再交。收尾動作完全相同，因為 helper 的 `--relay` 本來就會把**所有** in-flight dispatch 一起轉移。
 
@@ -28,7 +30,7 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 
 - 每份 brief **MUST** 寫明**檔案所有權**：這個 worker 可以動哪些路徑、不可以動哪些。N 個 worker 同時在同一個 repo 跑，沒有所有權欄位就是併發寫入同一檔（per [[subagent-scope-discipline]]）。
 - 每份 brief **MUST** 寫明「你是被派來做這一件事的 worker，不是繼任者」，以及「做完回報 outcome；要交棒只能用 `/handoff relay`，**不能** fanout」。
-- 每份 brief **MUST** 寫明：一刀一 branch 一 **draft PR**；push 後盯 CI；紅燈回這張 PR。這是 Claude／Codex 達到與 Cursor `CreateAgent` 相同結果的入口，不是「只開 worktree、永遠不開 PR」。**NEVER** 把 `/handoff fanout` 當 Cursor Project 必經入口；Cursor Project 用 CreateAgent。Worker 回報完成後由 coordinator 接續，worker 不准 ready／merge。
+- 每份 brief **MUST** 寫明：一刀一 branch 一 **draft PR**；push 後盯 CI；紅燈回這張 PR。這是 Herdr worker 達到與 Cursor `CreateAgent` 相同結果的入口，不是「只開 worktree、永遠不開 PR」。**NEVER** 把 `/handoff fanout` 當 Cursor Project 必經入口；Cursor Project 用 CreateAgent。Worker 回報完成後由 coordinator 接續，worker 不准 ready／merge。
 
 ## 2. 逐個裸 dispatch
 

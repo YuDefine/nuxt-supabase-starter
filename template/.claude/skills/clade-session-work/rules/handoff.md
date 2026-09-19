@@ -103,7 +103,7 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 
 > **14 天是 escalation threshold，不是 grace period**。所有 active item 預設都應儘速處理；`next` 盤點時**一律列入 outstanding 並推薦處理**，不因 age < 14d 而降低優先序或省略。14d threshold 的作用僅是「超過時語氣升級為 warn — 可能 silently 卡住」，不代表「未超過 = 不需關注」。
 
-審計只 warn 不阻擋；實際 rotate 由 `/handoff next` Health Gate 執行（per `plugins/hub-core/skills/handoff/SKILL.md § 2B.1`）。
+審計只 warn 不阻擋；實際 rotate 由 `/handoff next` Health Gate 執行（per `capabilities/core/skills/handoff/SKILL.md § 2B.1`）。
 
 ### rotate 是每次 `/handoff next` 的第一個寫入，100%，無門檻
 

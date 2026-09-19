@@ -6,7 +6,7 @@
 
 **NEVER** 只說「記得裝 impeccable」就過。Agent MUST 對下列每一項檢查；已齊的跳過，缺的 **MUST 向 user 追問直到齊**，不准默默用預設、不准寫進 plan checklist 當「稍後再做」就繼續宣告 bootstrap `READY`。
 
-對齊來源：consumer／starter 的 impeccable **v4.1.1**、`plugins/hub-core/skills/design/SKILL.md` Prerequisites／Step 1、`plugins/hub-core/skills/design/references/impeccable-install.md`。
+對齊來源：consumer／starter 的 impeccable **v4.1.1**、`capabilities/core/skills/design/SKILL.md` Prerequisites／Step 1、`capabilities/core/skills/design/references/impeccable-install.md`。
 
 UI predicate：`@nuxt/ui`、或 Nuxt 且有 `pages/`／`app/pages/`、或已有 `design` skill 目錄。非 UI 專案整表 N/A。
 

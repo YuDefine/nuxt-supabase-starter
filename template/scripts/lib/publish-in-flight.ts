@@ -6,6 +6,30 @@ import { join, resolve } from 'node:path'
 export type ProcessProbe = () => string[]
 
 const SCRIPT_ARG = /(?:^|\/)scripts\/(?:publish|propagate)\.ts$/
+/** pgrep 行裡獨立的絕對腳本路徑 → 該腳本所在樹根（`…/scripts/publish.ts` 的上兩層）。 */
+const ABSOLUTE_SCRIPT = /(?:^|\s)(\/\S+\/scripts\/(?:publish|propagate)\.ts)(?=\s|$)/
+
+function scriptTreeFromLine(line: string): string | undefined {
+  const match = ABSOLUTE_SCRIPT.exec(line)
+  if (!match) return undefined
+  return resolve(match[1], '../..')
+}
+
+const CI_HOME = /clade-ci-home-r\d+/
+
+/** Other-run isolate vs this target. Unproven paths stay fail closed. */
+function isForeignScriptTree(scriptTree: string, target: string): boolean {
+  if (within(scriptTree, target)) return false
+  const scriptHome = CI_HOME.exec(scriptTree)?.[0]
+  const targetHome = CI_HOME.exec(target)?.[0]
+  if (scriptHome && targetHome && scriptHome !== targetHome) return true
+  try {
+    realpathSync(scriptTree)
+    return true
+  } catch {
+    return false
+  }
+}
 
 /** 這個行程是不是把 publish/propagate 腳本當成**獨立的 argv 元素**在執行。讀不到 → true。 */
 function runsPublishScript(pid: number): boolean {
@@ -174,9 +198,21 @@ export function inFlightHoldersFor(
   // 2026-09-16 CI（run 35145389949, test-lanes 2/4）：同 shard `publish-lock-exit-code.test.ts`
   // 的 `publish.ts --wait 2` 在 pgrep 與讀 cwd 之間退出，`wt-batch.test.ts` 的 cleanup 因此被擋。
   // 本機探測：讀 cwd 失敗的每一筆都是 state Z／R 且 cmdline 長度 0。
+  //
+  // 2026-09-18 CI（run 35394786384, leftover #82 lane 2）：同一 runner 上另一趟
+  // `clade-ci-home-r35394162751a1-lane1` 的 `clade-deleted-cwd-publish` fixture 仍在跑，
+  // cwd 已刪所以 realpath 失敗。舊判準 fail closed 把**另一個 run 的私有樹**當成 holder，
+  // 擋掉本 job fixture 的 `batch cleanup`。腳本絕對路徑若與 target 不相交，那不是這棵樹。
   if (unreadable.length > 0) {
     const still = new Set(detect().map((line) => line.trim().split(/\s+/)[0]))
-    for (const { pid, line } of unreadable) if (still.has(pid)) held.push(line)
+    for (const { pid, line } of unreadable) {
+      if (!still.has(pid)) continue
+      const scriptTree = scriptTreeFromLine(line)
+      // Skip a proven other tree (another CI home / live tmp isolate). `/repo/scripts/publish.ts`
+      // in wt-batch's same-tree probe is not a live isolate — fail closed and still hold.
+      if (scriptTree && isForeignScriptTree(scriptTree, target)) continue
+      held.push(line)
+    }
   }
   return held
 }
