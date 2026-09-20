@@ -133,7 +133,7 @@ Run from the main worktree's cwd. The helper:
   - **Clean** → fork directly（no stash needed）.
   - **Dirty 非空** → default leaves that WIP on main; capture requires explicit flags under baseline-guard.md.
 - Normalizes the slug.
-- Creates branch `session/<YYYY-MM-DD-HHMM>-<slug>` from `main`.
+- Creates branch `session/<YYYY-MM-DD-HHMM>-<slug>` from `main`. (Forking from `integration/<work-id>` is not supported yet; a slice that depends on a previous slice's content is serialized — see [[github-flow]] § Integration branch › 工具現況.)
 - Materializes the worktree at `<consumer-parent>/<consumer-name>-wt/<slug>/`.
 - Merges `origin/main` if present.
 
@@ -180,7 +180,7 @@ If you are a new session resuming this worktree:
 1. Run `git log main..HEAD --oneline` to see completed commits
 2. Run `git status` to see uncommitted work
 3. Continue from the next unchecked Progress item above
-4. Follow the subagent contract: selective `git add -- <files>`, no `git add -A`, no `git push origin main`; after commits, draft PR on this session branch
+4. Follow the subagent contract: selective `git add -- <files>`, no `git add -A`, no `git push origin main`; after commits, draft PR on this session branch (independent slice) — or, in integration mode, commit only and hand completion to the coordinator with no push and no PR
 ```
 
 **Progress section**: Decompose the task into concrete steps if possible. If the task is too vague to decompose upfront, write a single item `- [ ] Complete task` — the subagent will refine the checklist as it works.
@@ -292,7 +292,7 @@ Ready / blocked worktrees: <counts from batch status>; report each retained path
 
 The `[pi]` / `[claude]` / `[pi:analyze]` / `[pi:debug]` tag indicates which executor was used. This helps the user understand the execution path and cost profile.
 
-**Batch handover**: after harvesting verified checkpoints (`batch checkpoint`, no full AI ceremony), register readiness (`batch ready`) and run `wt-helper batch status --trigger auto --workflow <已解析 workflow_model>`。**NEVER** 省略 `--workflow`。PR workflow prepares one independently acceptable purpose as its own **ready** PR; trunk-based still waits for 4 distinct work ids. Slice owner 在相對 `main` 有非空 committed diff 後 **MUST** `git push` 該 session branch 並開 **draft** PR，再盯該 PR 的 CI（[[github-flow]]）。Worker **NEVER** push `origin main`、**NEVER** merge。CI 紅燈回同一張 PR。User `/commit` or merge back has no minimum; dependency/drained/stop can flush early. Archive runs its gates and bookkeeping in the source tree before readiness. Cleanup belongs to the final commit workflow after verified landing.
+**Batch handover**: after harvesting verified checkpoints (`batch checkpoint`, no full AI ceremony), register readiness (`batch ready`) and run `wt-helper batch status --trigger auto --workflow <已解析 workflow_model>`。**NEVER** 省略 `--workflow`。PR workflow prepares one independently acceptable purpose as its own **ready** PR; trunk-based still waits for 4 distinct work ids. Slice owner 在相對 `main` 有非空 committed diff 後 **MUST** `git push` 該 session branch 並開 **draft** PR，再盯該 PR 的 CI（[[github-flow]]）；draft 期間該 PR 的 CI 只跑機械檢查、**不跑 test-lane**；要測試訊號就在來源 worktree 跑 `test:affected`，**NEVER** 為了看綠燈提前 `gh pr ready`。**Integration 模式例外**（[[github-flow]] § Integration branch）：切片屬於同一個 work id 的大型工作時，worker **不 push、不開 PR、不盯 CI**——在來源 worktree 跑完本機門檻（repo 的 canonical check：lint／fmt／typecheck，clade 是 `pnpm exec vp check`；**只有這一項**，`test:affected` 由 coordinator 在 integration 轉 ready 前跑一次）後 commit，completion 直接回 coordinator，由 coordinator 併入 `integration/<work-id>`。Worker **NEVER** push `origin main`、**NEVER** merge。CI 紅燈回同一張 PR。User `/commit` or merge back has no minimum; dependency/drained/stop can flush early. Archive runs its gates and bookkeeping in the source tree before readiness. Cleanup belongs to the final commit workflow after verified landing.
 
 Form 1 work uses the same queue; the coordinator handles authorized landing without asking the user to type commands.
 
@@ -341,7 +341,7 @@ The coordinator's next actions:
 - Cleanup worktrees
 - Commit on main
 
-Worker **MUST** push **that** session branch, open or update its own draft PR, register `batch draft --kind visibility`, and watch that PR's CI ([[github-flow]]). On completion, return `workId`, repository, PR, branch, checkpoint SHA, scope, evidence, and writer-release, then **stop writing the source**. Worker done is not landing.
+Worker **MUST** push **that** session branch, open or update its own draft PR, register `batch draft --kind visibility`, and watch that PR's CI ([[github-flow]]); while the PR is a draft that CI is mechanical checks only, never the test lanes. **Integration-mode exception** ([[github-flow]] § Integration branch): when the slice belongs to a larger work that shares one work id, the worker does **not** push, open a PR, or watch CI — it runs the local gate in its source worktree (the repo's canonical check only — lint / fmt / typecheck, `pnpm exec vp check` in clade; `test:affected` is run once by the coordinator on integration before the PR turns ready), commits, and returns completion to the coordinator, who merges it into `integration/<work-id>`. On completion, return `workId`, repository, PR (omit in integration mode), branch, checkpoint SHA, scope, evidence, and writer-release, then **stop writing the source**. Worker done is not landing.
 
 Coordinator push after review is limited to delivering the formal HEAD onto the existing PR head. Ready, merge, and main push stay with the named coordinator.
 

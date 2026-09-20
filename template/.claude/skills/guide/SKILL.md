@@ -36,7 +36,7 @@ skill 由 consumer manifest 的 `modules` 決定裝哪些（canonical `.clade/ma
 
 | 階段 | Skill | 這一站做什麼 |
 | --- | --- | --- |
-| 提案〔aixbdd〕 | `/specify` | 建 `specs/plans/NNN-<slug>/`：驗收標準與 truth-delta |
+| 提案〔aixbdd〕 | `/specify` | lifecycle repo（有 `specs/truth/work-lifecycle.md`）：先 `flow plan open` 再填 `spec.md`。未遷移 consumer：建 `specs/plans/NNN-<slug>/` |
 | 澄清〔aixbdd〕 | `/clarify-over-specs` | 對 `spec.md` 的模糊處逐項收斂 |
 | 驗收 Gherkin〔aixbdd〕 | `/spec-by-example` → `/ui-plan` | 產 `features/acceptance/**` 與靜態雛形 |
 | 設計〔aixbdd〕 | `/technical-research`、`/system-analysis` | 定 techstack 與系統設計 |
@@ -58,16 +58,18 @@ skill 由 consumer manifest 的 `modules` 決定裝哪些（canonical `.clade/ma
 - **implementation plan 內有多個獨立 task 想並行** → 讀 `capabilities/core/references/implement-executor/`（同 session 派 subagent；跨 change 的並行仍走 `/wt`）
 - **session 要收尾 / 交接** → `/handoff`（有 in-progress 工作寫交接；沒有則整理 HANDOFF.md 推薦 outstanding）
 - **要把待辦無人值守推完**（plan package / tasks 檔 / HANDOFF / tech-debt / ROADMAP）→ `/work-loop`（自主推進 loop；一次性任務不適用）
-- **外部新資訊要改需求** →〔aixbdd〕`/specify` 開新的 `NNN-<slug>`；舊 plan package 是歷史，**NEVER** 回頭覆寫
+- **外部新資訊要改需求** →〔aixbdd〕lifecycle repo 開新的 `W-…` package；未遷移 consumer 才開 `NNN-<slug>`。舊 plan package 是歷史，**NEVER** 回頭覆寫
 - **問規格內容** → 直接讀 `specs/truth/**`（對非 owner skill 唯讀）與該 plan package 的 `spec.md`
 - **安全視角掃 changed code** → `/security-review`
 
-## 歸檔兩兄弟的邊界
+## 歸檔兩兄弟（已停寫）
 
-`/review archive` 與 `/review screenshots` 各管一種資產，不互相替代（plan package 本身是歷史，不搬動）：
+`/review archive` 與 `/review screenshots` **不再**是必做 archive：
 
-- `/review archive` — 歸檔**已結束的人工檢查結果**（manual review → docs/manual-review-archive.md）；完成時同樣自動 sweep 截圖
-- `/review screenshots` — 只搬**截圖資料夾**到 `_archive/`；由 `/review archive` 的既有流程呼叫或依明確清理範圍執行，手動跑用於補救 pending sweep
+- `/review archive` — **停寫** `docs/manual-review-archive.md`；完成項留在 work package
+- `/review screenshots` — **停 rotate**；不要把 topic 搬進 `_archive/`
+
+stash-dropped append 已停（drop 仍走機械 gate；替代墓碑載體 **NEEDS CLARIFICATION**）。`retired-work.jsonl` 仍是 live 機器謂詞，本輪不停寫（替代謂詞 **NEEDS CLARIFICATION**）。
 
 ## 品質 / 稽核類（standalone）
 

@@ -21,7 +21,7 @@ $ARGUMENTS
 
 **每次**進入 `/commit` 先跑 `wt-helper batch status --workflow <已解析 workflow_model>`（consumer：`scripts/wt-helper.ts`；clade：`vendor/scripts/wt-helper.ts`）。**NEVER** 省略 `--workflow` 讓 CLI 默認 PR 制。使用者主動要求的 trigger 是 `manual`，無最低件數；自動收割用 `auto`：`pr-merge-based` 1 個 distinct work id 即準備獨立 PR，`trunk-based` 仍要 4 個才啟動。dependency／drained／stop 可提前結批。Checkpoint 與 draft 都不是 `/commit`，不得在 checkpoint 或 draft 啟動完整品質鏈或發版。Draft 不是 ready。
 
-Cloud／worker completion 與該 PR 的 CI 通知 MUST 喚醒**同一 coordinator** 續跑本入口，不請 Charles 代觸發。Coordinator 核對遠端 SHA 後把 commits／證據匯入本機受管來源，再 `batch ready`。Worker 完成 ≠ landing。
+Cloud／worker completion 與該 PR 的 CI 通知 MUST 喚醒**同一 coordinator** 續跑本入口，不請 Charles 代觸發。integration 模式的切片沒有自己的 PR／CI：喚醒 coordinator 的是 worker 的 completion，coordinator 併入 `integration/<work-id>` 後，整件工作只對 `main` 跑一次本入口。Coordinator 核對遠端 SHA 後把 commits／證據匯入本機受管來源，再 `batch ready`。Worker 完成 ≠ landing。
 
 有就緒成員或待續跑／待清理批次時 **MUST 讀 [batch.md](batch.md)**，先準備或接續隔離整合區，再在該區跑本 skill 的完整 Step 0–5；Step 5 後 seal／land，正式落地才進 Step 6。PR 制合併前 MUST 先跑 `deploy-trigger-check.ts`（與 Step 6-Gate 同一支），判定 main 更新會不會未授權部署 production。`confirmed-push-main` 且 production 由 main 觸發 → 停止 unattended merge。Unattended 預先核准 `release=manual` 時 Step 6 停在 6-B（已 land、未發版）。已落地只欠 cleanup 的批次直接清理，不重跑品質鏈。沒有就緒成員且沒有 active batch 時走普通 `/commit`，當前 WIP 照常全包。未達自動門檻時返回開發，**不取得 commit lock**。
 
