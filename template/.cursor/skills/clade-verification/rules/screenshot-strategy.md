@@ -176,25 +176,11 @@ node scripts/before-after-screenshot.ts \
 
 平行 agent / 多分頁作業 MUST 使用 target adapter 宣告的原生 session isolation。任何會改變頁面的 action 後 MUST 重新取得 snapshot/ref；無法證明隔離時保持 blocked。
 
-## 歸檔機制
+## 歸檔機制（已停 rotate）
 
-`screenshots/<env>/` 預設只放「目前 pending 人工檢查」的 topic；已收錄到 `docs/manual-review-archive.md` 的 change，對應截圖資料夾搬到 `screenshots/<env>/_archive/YYYY-MM/<topic>/`。
+`W-2026-09-20-non-lifecycle-archive-retire`：停止把 topic 搬進 `screenshots/<env>/_archive/YYYY-MM/`。完成的截圖留在 `screenshots/<env>/<topic>/`。`/review archive` 與 `/review screenshots` **MUST NOT** 再自動或手動搬 `_archive/`。既有 `_archive/` 目錄可讀；刪檔等 live-ref 改點。
 
-```text
-screenshots/local/
-├── change-pending-A/        # ← 仍在 review
-├── change-pending-B/
-└── _archive/
-    ├── 2026-04/
-    │   └── change-old-1/
-    └── 2026-05/
-        └── change-old-2/
-```
-
-- 歸檔由 `/review archive` 與 `/spectra-archive` 完成時**自動觸發**（指定 change 模式，無需 user 介入）；獨立呼叫 `/review screenshots` 用於補救 pending sweep 或跨 change 一次掃乾淨
-- 對齊條件：未指定範圍模式（Mode A）只 sweep `docs/manual-review-archive.md` 已收錄的 change，避免誤搬 pending；指定 change 模式（Mode B）信任 caller，但找不到對應 topic 時會 prompt user 列候選
-- `--no-sweep` 例外旗標：user 在觸發 `/review archive` 或 `/spectra-archive` 時若明確說「不要 sweep 截圖」，自動 sweep 步驟跳過（仍可事後手動跑 `/review screenshots`）
-- 目的：`ls screenshots/<env>/`（排除 `_archive/`）= 目前 pending review 清單
+pending 與否改看 work package 的人工檢查狀態，不靠 `ls screenshots/<env>/` 排除 `_archive/` 當現行清單。
 
 ## 沉澱規則
 

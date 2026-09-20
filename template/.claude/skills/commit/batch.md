@@ -17,7 +17,7 @@ node scripts/wt-helper.ts batch status --trigger auto --workflow <workflow_model
 
 ### Draft PR（可見性；不是 ready）
 
-相對 `main` 已有非空 committed diff 後，**slice owner** 自己 push 該 session branch 並開 draft PR（全文 [[github-flow]]）。開 draft 後 **MUST** 登記可見性 receipt，否則 prepare 沒有完整綁定：
+相對 `main` 已有非空 committed diff 後，**slice owner** 自己 push 該 session branch 並開 draft PR（全文 [[github-flow]]）。同一個 work id 拆成多個平行切片時**不走這一段**——切片不開 PR，由 coordinator 併入 `integration/<work-id>`，只有那一條對 `main` 開 draft（[[github-flow]] § Integration branch）。開 draft 後 **MUST** 登記可見性 receipt，否則 prepare 沒有完整綁定：
 
 ```bash
 node scripts/wt-helper.ts batch draft <source-path> \
@@ -43,7 +43,7 @@ seal 之後同一 `workId` MUST 把受審 formal HEAD 交到**既有** draft 的
 
 | 事件 | trigger | 行為 |
 | --- | --- | --- |
-| 就緒／收割／session 接手 | `auto` | `pr-merge-based`：1 個 distinct work id 即準備獨立 PR；`trunk-based`：4 個才啟動。未達門檻繼續開發、不佔 commit lock。ready backlog 達 3 件時優先交付，active implementation 預設最多 3 件 |
+| 就緒／收割／session 接手 | `auto` | `pr-merge-based`：1 個 distinct work id 即準備獨立 PR；`trunk-based`：4 個才啟動。未達門檻繼續開發、不佔 commit lock。ready backlog 達 3 件時優先交付，active implementation 預設最多 3 件——**數的是進 `main` 的 PR**，一條 `integration/<work-id>` 連同它底下每一個切片合計算 1 件（[[github-flow]]） |
 | 使用者 `/commit` 或 merge back | `manual` | 無最低件數；未就緒工作不阻擋；緊密相依工作可明確合批 |
 | 下游須先落地 | `dependency` | 有就緒成員即結批 |
 | 已授權開發皆完成或受阻 | `drained` | 有就緒成員即結批 |

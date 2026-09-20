@@ -44,7 +44,7 @@ When Step 1.8 routes to Pi for coding work, use `Bash run_in_background=true` to
    - **允許** commit：`git add -- <files>` + `git commit -m "🧹 chore: wt <slug> — <short>"`
    - **MUST** selective stage — `git add -A` / `git add .` 會撈到 baseline
    - **NEVER** `git push origin main` / `git stash` / `git commit --amend` / `--no-verify` / `HUSKY=0`
-   - 相對 `main` 有非空 committed diff 後 **MUST** push **該** session branch 並開 draft PR（[[github-flow]]），再盯該 PR 的 CI；紅燈修同一張 PR
+   - 相對 `main` 有非空 committed diff 後 **MUST** push **該** session branch 並開 draft PR（[[github-flow]]），再盯該 PR 的 CI；紅燈修同一張 PR。draft 期間該 PR 的 CI 只跑機械檢查、**不跑 test-lane**；要測試訊號就在來源 worktree 跑 `test:affected`，**NEVER** 為了看綠燈提前 `gh pr ready`。**Integration 模式例外**（[[github-flow]] § Integration branch）：切片屬於同一個 work id 的大型工作時，worker **不 push、不開 PR、不盯 CI**——在來源 worktree 跑完本機門檻（lint／fmt／typecheck ＋ repo 宣告的 `test:affected`，經 heavy gate slot）後 commit，completion 直接回 coordinator，由 coordinator 併入 `integration/<work-id>`。
    - 完成回報 MUST 含：`workId`、repository、PR 號、branch、checkpoint SHA、scope、證據路徑與 hash、writer-release。回報後 **停止寫入來源**。Worker 完成 ≠ landing；不准 `batch ready`／merge／push `origin main`。
    - **NEVER** 任何 main-bound ceremony：`/commit` /
      `wt-helper merge-back` / `git merge --squash`。

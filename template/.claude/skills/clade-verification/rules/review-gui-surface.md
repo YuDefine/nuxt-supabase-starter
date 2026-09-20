@@ -35,9 +35,9 @@ paths:
 | `acceptance` | `work.done` 尚未 `accept`，且 landing 未全綠 | `flow accept` / `drop` |
 | `ui-judgement` | plan 的 acceptance scenario 標 `@human` 且 evidence 齊 | `flow receipt <scenario_id> --verdict pass\|fail\|skip`；fail 時回交 `flow ask` |
 | `external-action` | 需要人到場的 blocker（`--complete blocked`、`flow ask --category external`） | 確認完成（附 evidence）／宣告做不到 |
-| `exception` | 路由鏈耗盡、dead-holder、lease 過期、批次衝突 | 核准恢復／改派／abort |
+| `exception` | 僅 pane 仍 listed 的 dead-holder 碰撞 | 核准恢復／改派／abort |
 
-**機械待辦（agent 自己該做的）NEVER 是卡片**：缺 evidence、`（fix-requested）`、未 triage 的 `（issue:）` 都是 agent 的工作，不會出現在 `flow gates`，也 **NEVER** 被說成「等你」。
+**機械待辦（agent 自己該做的）NEVER 是卡片**：過期 lease、pipeline 機械 exhausted、pane 已不在的 dead-holder、缺 evidence、`（fix-requested）`、未 triage 的 `（issue:）` 都是 agent 的工作，不會出現在 `flow gates`，也 **NEVER** 被說成「等你」。合成 `work.done` 驗收若 audience 不是 Charles，同樣不進待我。
 
 ## 適用範圍
 

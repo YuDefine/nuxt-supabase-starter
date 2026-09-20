@@ -302,18 +302,16 @@ user 不成立**，結果是 stash 單調遞增、owner 資訊隨時間流失，
 
 因此 `git stash drop` **不是**絕對禁令，而是**綁機械判準的條件動作**。
 
-### 放行判準（三條全中才可 drop）
+### 放行判準（兩條機械條件全中才可 drop）
 
 1. **內容可重生**：`git stash show --stat <ref>` 列出的**每一個**檔都落在可重生投影層 ——
    `.claude/**`、`.codex/**`、`.clade/**`、`AGENTS.md`、`CLAUDE.md`、`.npmrc`、`skills-lock.json`
    （這些由 `pnpm hub:bootstrap` 重生）。**有任何一個檔不在此清單就不算命中**
 2. **來源已消失**：stash message 內的 slug 對應的 worktree **已不存在**（`git worktree list` 查不到）。
    slug 解析不出來時，退回時間門檻：**建立逾 24 小時**
-3. **先留痕再 drop**：把 `<ref>`、`createdAt`、`--stat` 全文、命中的判準 append 進
-   `docs/archives/stash-dropped.md`（append-only），**寫完才 drop**
+3. **兩條機械放行全中即可 drop**：內容可重生 + 來源已消失。**NEVER** 再 append `docs/archives/stash-dropped.md`（已停寫）。替代墓碑載體 **NEEDS CLARIFICATION**，本輪不發明新格式；drop 當下 git 物件可從 reflog 取回直到過期，那不是拍板後的替代載體。
 
-   ⚠️ **副檔名 MUST 是 `.md` 不是 `.log`** —— 多數 consumer 的 `.gitignore` 有 `*.log`，寫成 `.log`
-   的留痕永遠進不了 git，換機器或重新 clone 就消失，等於沒留（2026-08-02 <consumer-a> 實證）。
+   停寫該 archive **不是**授權對共享 stash `git stash drop` 以外的不可逆動作，也 **不是** `reset --hard`。
 
 ### 否決判準（任一命中即 NEVER drop）
 

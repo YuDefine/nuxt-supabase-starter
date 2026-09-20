@@ -32,11 +32,11 @@ node vendor/scripts/wt-helper.ts add <slug> --task-summary "<一句話：這棵�
 
 獨立切片的可見性是 **session branch 上的 draft PR**，不是合回 main。三件事分開：
 
-1. **可見性**：slice owner push 該 branch、開 draft、登記 visibility receipt、盯該 PR CI。
+1. **可見性**：slice owner push 該 branch、開 draft、登記 visibility receipt、盯該 PR CI（draft 期間只有機械檢查）。integration 模式的切片不走這一步——它的可見性是 `integration/<work-id>` 對 `main` 那一張 draft PR 的 commit 列表。
 2. **Ready**：coordinator 驗授權、writer release 與驗收後 `batch ready`，再跑完整 `/commit`。
 3. **Landing**：只有具名 coordinator 在 unattended predicate 全成立時 squash；**worker NEVER merge**、**NEVER** 直推 `main`。
 
-slice owner 在相對 `main` 有非空 committed diff 後 MUST push **該** branch 並開 draft PR，再盯該 PR 的 CI；紅燈回同一 owner、同一張 PR。**NEVER** 為了看得見而 merge-back 或直推 `main`。Draft 維持 draft 直到 review。平行預設走隔離雲端／worktree；要 shared live DB（desk LXC／3040）才 desk。操作見 [[github-flow]] 與 [[db-topology-invariant]]。Cloud clone 的絕對路徑不能當 desk 共用 worktree；coordinator 必須 fetch 具名 branch 並在本機受管來源對同一 `workId` 建映射。唯一 landing owner 在本 repository，worker 不持 merge credential。
+slice owner 在相對 `main` 有非空 committed diff 後 MUST push **該** branch 並開 draft PR，再盯該 PR 的 CI；紅燈回同一 owner、同一張 PR。**Integration 模式例外**（[[github-flow]] § Integration branch）：切片屬於同一個 work id 的大型工作時，worker **不 push、不開 PR、不盯 CI**——在來源 worktree 跑完本機門檻（repo 的 canonical check：lint／fmt／typecheck，clade 是 `pnpm exec vp check`；**只有這一項**，`test:affected` 由 coordinator 在 integration 轉 ready 前跑一次）後 commit，completion 直接回 coordinator，由 coordinator 併入 `integration/<work-id>`。**NEVER** 為了看得見而 merge-back 或直推 `main`。Draft 維持 draft 直到 review。平行預設走隔離雲端／worktree；要 shared live DB（desk LXC／3040）才 desk。操作見 [[github-flow]] 與 [[db-topology-invariant]]。Cloud clone 的絕對路徑不能當 desk 共用 worktree；coordinator 必須 fetch 具名 branch 並在本機受管來源對同一 `workId` 建映射。唯一 landing owner 在本 repository，worker 不持 merge credential。
 
 merge-back 是驗收後的 landing ceremony，不是「先合回去比較方便」。主線尚未看到本次 revision 的必要 evidence／驗收通過前，命中「合回、收尾、完成、已解決」等落地話術 MUST 停下，切回 worktree 內的 dev-server／驗收路徑；驗收與正式 landing 分開。
 

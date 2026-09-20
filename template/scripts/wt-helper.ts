@@ -159,6 +159,8 @@ interface WtOptions {
   expectedPaths?: string
   agent?: string
   minimalStashPaths?: string[]
+  /** Fork from this ref instead of the landing base. Must be integration/… */
+  base?: string
 }
 
 function git(args, opts = {}) {
@@ -1023,7 +1025,7 @@ export function linkGitignoredRuntimeFiles(
 }
 
 const ADD_USAGE =
-  'Usage: wt-helper add <slug> --task-summary <text> [--expected-paths <comma>] [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>] [--skip-prefork-audit] [--include-unrelated-dirty]'
+  'Usage: wt-helper add <slug> --task-summary <text> [--base <ref>] [--expected-paths <comma>] [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>] [--skip-prefork-audit] [--include-unrelated-dirty]'
 
 function hashUtf8(content: string) {
   return createHash('sha256').update(content).digest('hex')
@@ -2594,7 +2596,18 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   }
 
   // Fork base MUST 等於 merge-back 的 land 目標（見 resolveLandingBase 的 doc comment）。
+  // `--base` 只覆寫成 integration/… — 任意 ref 會繞過 landing-base 判定。
   let baseRef = resolveLandingBase(consumerRoot)
+  if (opts.base && String(opts.base).trim()) {
+    const raw = String(opts.base).trim()
+    const localName = raw.startsWith('origin/') ? raw.slice('origin/'.length) : raw
+    if (!localName.startsWith('integration/')) {
+      throw new Error(
+        `--base only accepts integration/… (local or origin/integration/…). Other refs would bypass landing-base.\n${ADD_USAGE}`,
+      )
+    }
+    baseRef = raw
+  }
   try {
     git(['rev-parse', '--verify', baseRef], { cwd: consumerRoot })
   } catch {
@@ -2890,7 +2903,7 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
 
   // Fast-forward to the remote tracking branch of the landing base (TD-592:
   // was hardcoded to origin/main; now uses the consumer root's current branch).
-  const remoteBase = `origin/${baseRef}`
+  const remoteBase = baseRef.startsWith('origin/') ? baseRef : `origin/${baseRef}`
   let hasRemoteBase = false
   try {
     git(['rev-parse', '--verify', remoteBase], { cwd: wtPath })
@@ -6450,6 +6463,7 @@ async function main() {
     '--expected-paths',
     '--origin',
     '--verification',
+    '--base',
   ])
   const flags = new Set()
   const values = {}
@@ -6497,6 +6511,7 @@ async function main() {
     taskSummary: values['--task-summary'],
     expectedPaths: values['--expected-paths'],
     origin: values['--origin'],
+    base: values['--base'],
     workDone: flags.has('--work-done'),
     iKnowPublishIsRunning: flags.has('--i-know-publish-is-running'),
     verification: values['--verification'],
@@ -6553,6 +6568,9 @@ async function main() {
       console.error('')
       console.error(
         '  add <slug>                Create worktree at ~/offline/<consumer>-wt/<slug>/',
+      )
+      console.error(
+        '    --base <ref>            Fork from integration/… (local or origin/integration/…)',
       )
       console.error('    --precheck-baseline [<change>]')
       console.error('                            Pre-fork dirty check on main; pairs with')

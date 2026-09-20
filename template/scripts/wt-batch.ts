@@ -2110,14 +2110,14 @@ export function batchStatus(
     rows = eligible(c, s)
   const ready = rows.filter((r) => !r.reason).map((r) => r.source)
   const readyCount = new Set(ready.map((m) => m.workId)).size
-  const activeImplementationCount = new Set(
-    [
-      ...ready.map((m) => m.workId),
-      ...s.batches
-        .filter((b) => !['cleaned', 'cancelled'].includes(b.phase))
-        .flatMap((b) => b.members.map((m) => m.workId)),
-    ].filter(Boolean),
-  ).size
+  const countedIds = [
+    ...ready.map((m) => m.workId),
+    ...s.batches
+      .filter((b) => !['cleaned', 'cancelled', 'landed'].includes(b.phase))
+      .flatMap((b) => b.members.map((m) => m.workId)),
+  ]
+  const unattributedCount = countedIds.filter((id) => !id).length
+  const activeImplementationCount = new Set(countedIds.filter(Boolean)).size
   return {
     readyCount,
     trigger,
@@ -2126,6 +2126,7 @@ export function batchStatus(
     shouldPrepare: triggerReached(trigger, ready, workflow),
     shouldPrioritizeLanding: readyCount >= MAX_ACTIVE_IMPLEMENTATIONS,
     activeImplementationCount,
+    unattributedCount,
     maxActiveImplementations: MAX_ACTIVE_IMPLEMENTATIONS,
     overActiveCap: activeImplementationCount > MAX_ACTIVE_IMPLEMENTATIONS,
     drafts: listDrafts(c),

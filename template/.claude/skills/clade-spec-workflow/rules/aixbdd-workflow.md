@@ -87,7 +87,7 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 
 > package 內 `plan.md` 的 frontmatter **同時**含 `work_id:` 與 `truth_baseline:`。
 
-**NEVER** 用 repo 名、manifest 欄位、或「`specs/truth/work-lifecycle.md` 存不存在」代替這條——那三者都回答不了「眼前這個 package 是哪一種」。
+**NEVER** 用 repo 名或 manifest 欄位代替這條——那些回答不了「眼前這個 package 是哪一種」。`specs/truth/work-lifecycle.md` 是否存在回答的是下一件**新工作**走 `flow plan open` 還是 `NNN-<slug>`（見 `specs/truth/work-lifecycle.md` § Carriers），不是眼前這份 package 的種類。
 
 | 上游名 | lifecycle repo | owner |
 | --- | --- | --- |

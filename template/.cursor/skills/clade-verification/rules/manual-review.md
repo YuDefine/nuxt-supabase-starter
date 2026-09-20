@@ -21,7 +21,7 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 > | --- | --- | --- |
 > | [[manual-review.backend]] | `server/**`、`test/**`、`e2e/**`、`supabase/**` | Backend-only change 規約 + 標準流程 verify channels + review:ui flow |
 > | [[manual-review.data-readiness]] | `tasks/**`、`specs/plans/**` | Pre-Review Data Readiness + step actionability + `@no-manual-review-check` marker + 截圖檔名配對 |
-> | [[manual-review.evidence]] | `tasks/**`、`specs/plans/**`、`docs/manual-review-archive.md` | 給規格寫作者 + Kind 分類指引 + 反例 + `@no-screenshot` marker + annotation / marker 細節（legacy annotation 退役對照、ADR、真相層責任分工） |
+> | [[manual-review.evidence]] | `tasks/**`、`specs/plans/**` | 給規格寫作者 + Kind 分類指引 + 反例 + `@no-screenshot` marker + annotation / marker 細節（legacy annotation 退役對照、ADR、真相層責任分工） |
 
 ## 這套機制在解什麼問題（先讀，決定你該不該用它）
 
