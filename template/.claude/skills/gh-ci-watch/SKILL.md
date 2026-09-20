@@ -35,7 +35,9 @@ Script 位置：
 
 以下命令一律由 target adapter 以 background command runner 派出（cwd = 該 repo，或帶 `--repo <owner>/<repo>`），派出後主線**繼續原本工作**，等系統的完成通知。
 
-### 場景 E — 切片 draft PR（平行實作的標準場景）
+### 場景 E — 獨立切片的 draft PR
+
+**先判這個切片要不要走本場景**：integration 模式的切片（同一個 work id 的大型工作，見 [[github-flow]] § Integration branch）不 push、不開 PR，**沒有可盯的 run**——它的訊號是來源 worktree 的本機門檻，completion 直接回 coordinator。只有獨立可接受目的的切片才走下面這段。draft 期間這條 run **只有機械檢查**（lint／fmt／typecheck／doctor），test-lane 要等 PR 轉 ready 才跑；所以這裡的綠燈 **NEVER** 讀成測試通過。
 
 slice owner 剛 push session branch 並開 draft PR 後，盯**該 PR 的 head SHA**（push 前先存 `SLICE_SHA=$(git rev-parse HEAD)`），不要盯 `main`：
 
@@ -207,7 +209,7 @@ gh api "/repos/<owner>/<repo>/actions/runs?status=queued" --jq '.workflow_runs[]
 
 | 主題 | 位置 |
 | --- | --- |
-| Push 後何時觸發監看、綠燈/紅燈後主線的處置政策 | 本 skill § Push 後政策：`git push` 成功且 repo 含 `.github/workflows/*.yml` 時 MUST 立刻派 watcher。**切片 draft PR**：盯該 PR 的 head SHA／branch，`failure` → **同一 owner、同一張 PR** 修，**NEVER** 另開 PR；`success` → 一行報綠燈 + run URL，draft 維持 draft，completion 交 coordinator。**發版 push main／tag**：`success` → 一行報 `v<version> CI 綠燈 — <runUrl>`；失敗類 → 先照 § 失敗處置第一步 跑 `RANGE`，再 `[1] 立刻 root-cause + 修` / `[2] 登記 HANDOFF.md`。`UNAVAILABLE` → 監看可報略過；**merge／staging gate 不得把 UNAVAILABLE 當成功** |
+| Push 後何時觸發監看、綠燈/紅燈後主線的處置政策 | 本 skill § Push 後政策：`git push` 成功且 repo 含 `.github/workflows/*.yml` 時 MUST 立刻派 watcher。**獨立切片的 draft PR**（integration 模式的切片不派 watcher；draft 的 run 只含機械檢查）：盯該 PR 的 head SHA／branch，`failure` → **同一 owner、同一張 PR** 修，**NEVER** 另開 PR；`success` → 一行報綠燈 + run URL，draft 維持 draft，completion 交 coordinator。**發版 push main／tag**：`success` → 一行報 `v<version> CI 綠燈 — <runUrl>`；失敗類 → 先照 § 失敗處置第一步 跑 `RANGE`，再 `[1] 立刻 root-cause + 修` / `[2] 登記 HANDOFF.md`。`UNAVAILABLE` → 監看可報略過；**merge／staging gate 不得把 UNAVAILABLE 當成功** |
 | CI / test workflow 必須自己取消過期 run | [[ci-workflow]] § CI / test workflow MUST cancel superseded runs on the same ref。本 script 在 cancelled 時改追 successor，那是監看補救，不能代替 workflow `concurrency` |
 | Script 本體 | skill-local `scripts/gh-ci-watch.sh`（由 resource declaration 投影至本 skill） |
 | 背景派工通用回報契約 | `rules/core/agent-routing.dispatch-execution.md` § Subagent 回報契約 |

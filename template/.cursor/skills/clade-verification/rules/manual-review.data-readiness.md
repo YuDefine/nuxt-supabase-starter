@@ -392,7 +392,7 @@ Canonical ordering（從前到後）：description → annotation → `@followup
 [info] tasks.md:<lineno> bypass: <reason>
 ```
 
-GUI 端在診斷 console 寫同樣訊息。archive 後保留在 `docs/manual-review-archive.md`（與其他 marker 一致）可重跑分析 bypass 頻率 — 若某類 reason 出現 ≥ 5 次跨 consumer，應該調整 pattern regex 而非繼續累積 bypass。
+GUI 端在診斷 console 寫同樣訊息。bypass 頻率從 work package 的人工檢查紀錄重跑分析 — 若某類 reason 出現 ≥ 5 次跨 consumer，應該調整 pattern regex 而非繼續累積 bypass。**NEVER** 再把完成項搬進 `docs/manual-review-archive.md`。
 
 ### 與 hook regex 的關係
 

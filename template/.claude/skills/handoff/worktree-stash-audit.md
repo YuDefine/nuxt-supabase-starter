@@ -108,12 +108,12 @@ git worktree list | grep "<slug>"      # 放行②：對應 worktree 已消失�
 
 | 判定 | 動作 |
 | --- | --- |
-| 三條放行全中、否決零命中 | **MUST drop**：先把 `<ref>` + `createdAt` + `--stat` 全文 + 命中判準 append 進 `$MAIN_WT_PATH/docs/archives/stash-dropped.md`（**`.md` 不是 `.log`** —— `*.log` 多半被 gitignore，留痕會進不了 git），**寫完才** `git stash drop "<ref>"` |
+| 兩條機械放行全中、否決零命中 | **MUST drop**：`git stash drop "<ref>"`。**NEVER** 再 append `docs/archives/stash-dropped.md`（該檔已停寫；替代墓碑載體 **NEEDS CLARIFICATION**，本輪不發明新格式）。drop 當下 git 物件仍可從 reflog 取回直到過期；這不是拍板後的替代載體 |
 | 任一否決命中 | 不 drop，寫進 audit 段並註明**踩到哪一條否決判準** |
 | 判準跑不出明確結論 | 不 drop，寫進 audit 段標 `needs-judgment` + 寫出卡在哪 |
 
 ⚠️ **drop 會使後面的 `stash@{N}` index 位移**。**MUST 由高到低 drop**（先 `stash@{5}` 再 `stash@{3}`），
 或每次 drop 後重新解析 ref，**NEVER** 拿一份跑之前算好的 index 清單依序刪 —— 那會刪錯條目。
 
-audit 段的 stash 子節 **MUST** 記本輪 drop 了幾條、留痕檔在哪，讓接手 session 知道數字為何變動。
+audit 段的 stash 子節 **MUST** 記本輪 drop 了幾條。**NEVER** 把停寫 `stash-dropped.md` 讀成授權對共享 stash 做 `git stash drop` 或 `reset --hard` 以外的處置——drop 仍只走上面三條機械放行。
 

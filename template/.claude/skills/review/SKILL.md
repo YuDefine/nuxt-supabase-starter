@@ -15,8 +15,8 @@ independently discoverable skills.
 | --- | --- | --- |
 | `scan` | Check whether anything in this repo is waiting on a human | No guide: run `flow gates --repo-only --json` and follow [[review-gui-surface]] § Hard rule |
 | `screenshot` | Collect UI screenshots or execute a visual checklist | [screenshot guide](references/legacy/review-screenshot/SKILL.md) and its evidence contract |
-| `archive` | Archive completed manual-review findings | [review archive guide](references/legacy/review-archive/SKILL.md) |
-| `screenshots` | Sweep completed screenshot topics into `_archive/` | [screenshot archive guide](references/legacy/screenshots-archive/SKILL.md) |
+| `archive` | Retired: do not append `docs/manual-review-archive.md`; completed items stay in the work package | [review archive guide](references/legacy/review-archive/SKILL.md) |
+| `screenshots` | Retired: do not move topics into `_archive/` | [screenshot archive guide](references/legacy/screenshots-archive/SKILL.md) |
 
 Screenshot evidence is collected by the named **Pi Gemini 3.8 Flash** worker
 (`screenshot-review-verify`, effort `high`; dispatch with
@@ -32,15 +32,12 @@ sign its own compliance result.
   gate family; exit 2 from `--require-empty` means it could not tell, never "none".
 - `/review screenshot` collects evidence through the existing screenshot
   worker and preserves every evidence limitation in the receipt.
-- `/review archive` archives only explicitly completed manual-review items and
-  then invokes the screenshot archive mode required by the guide.
-- `/review screenshots` archives only topics covered by the alignment rules;
-  never sweep an unrelated topic or use a force flag.
+- `/review archive` does **not** write `docs/manual-review-archive.md`. Completed items stay in the work package; see the retired guide.
+- `/review screenshots` does **not** sweep topics into `_archive/`; it reports current top-level topics only.
 
 If the request is a product code review, use the configured code-review agent.
 If it is a Lighthouse audit or performance trace breakdown, use the dedicated
-browser-devtools capability. This skill owns lifecycle evidence and archive
-coordination, not product acceptance.
+browser-devtools capability. This skill owns lifecycle evidence. Archive production writers are retired.
 
 
 ## Runtime 執行 — Claude Code

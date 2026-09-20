@@ -1,6 +1,6 @@
 ---
 description: Manual Review evidence 規約——寫 / 審 tasks.md 的 ## 人工檢查 區塊時 path-scoped 載入
-paths: ['tasks/**', 'specs/plans/**', 'docs/manual-review-archive.md']
+paths: ['tasks/**', 'specs/plans/**']
 ---
 <!-- Clade native rule; source: adapters/cursor/instructions/rules/core/manual-review.evidence.md; edit canonical source -->
 <!-- clade-targets: cursor -->

@@ -151,6 +151,7 @@ LOCK_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-lock.ts"
 ROUNDS_LEDGER="$REPO/.clade/work-loop/rounds.jsonl"
 UNHARVESTED_FILE="$REPO/.clade/work-loop/unharvested.json"
 PATROL_HELPER="$HOME/offline/clade/vendor/scripts/herdr-patrol.ts"
+RECONCILE_HELPER="$HOME/offline/clade/vendor/scripts/runtime-reconcile.ts"
 READY_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-ready-count.ts"
 SCAN_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-scan.ts"
 # worktree 母目錄，與 vendor/scripts/wt-helper.ts:779 的 `<repo>-wt` 慣例對齊（推導不寫死）。
@@ -652,6 +653,12 @@ if [ "$DRY_RUN" = 1 ] || [ "$SKIP_PREFLIGHT" = 1 ]; then
 else
   run_preflight
   run_ready_gate
+fi
+
+# pane 確認不在之後收過期 lease（只 exhausted attempt）。碰撞則 CLI 拒 --apply，runner 繼續。
+if [ "$DRY_RUN" != 1 ] && [ -f "$RECONCILE_HELPER" ]; then
+  echo "runtime-reconcile: 清過期 lease（pane 不在才 --apply）"
+  timeout 30 node "$RECONCILE_HELPER" --apply --repo-root "$REPO" || true
 fi
 
 exit_fail_streak=0

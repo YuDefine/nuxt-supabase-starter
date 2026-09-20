@@ -8,7 +8,7 @@
 {"file":"fixtures-reference.md","source":"rules/core/fixtures-reference.md","paths":["docs/FIXTURES.md","docs/fixtures.md"]}
 {"file":"manual-review.backend.md","source":"rules/core/manual-review.backend.md","paths":["server/**/*.ts","packages/*/server/**/*.ts","test/**/*.ts","packages/*/test/**/*.ts","e2e/**/*.ts","packages/*/e2e/**/*.ts","supabase/**"]}
 {"file":"manual-review.data-readiness.md","source":"rules/core/manual-review.data-readiness.md","paths":["tasks/**","specs/plans/**","screenshots/**"]}
-{"file":"manual-review.evidence.md","source":"rules/core/manual-review.evidence.md","paths":["tasks/**","specs/plans/**","docs/manual-review-archive.md"]}
+{"file":"manual-review.evidence.md","source":"rules/core/manual-review.evidence.md","paths":["tasks/**","specs/plans/**"]}
 {"file":"manual-review.md","source":"rules/core/manual-review.md","paths":["tasks/**","specs/plans/**","screenshots/**"]}
 {"file":"playwright-webserver.md","source":"rules/core/playwright-webserver.md","paths":["playwright.config.ts","playwright.config.js","**/playwright.config.ts"]}
 {"file":"review-gui-surface.md","source":"rules/core/review-gui-surface.md","paths":["screenshots/**","specs/plans/**","openspec/changes/**","HANDOFF.md",".claude/agents/**"]}
@@ -18,7 +18,7 @@
 {"file":"runtime/checker-subagent.md","source":"adapters/claude/instructions/rules/core/checker-subagent.md","paths":["rules/core/**","vendor/scripts/**","capabilities/core/**","claude-md/**",".claude/rules/**",".claude/skills/**","**/migrations/**","shared/**","packages/*/shared/**","server/utils/**","packages/*/server/utils/**"]}
 {"file":"runtime/manual-review.backend.md","source":"adapters/claude/instructions/rules/core/manual-review.backend.md","paths":["server/**/*.ts","packages/*/server/**/*.ts","test/**/*.ts","packages/*/test/**/*.ts","e2e/**/*.ts","packages/*/e2e/**/*.ts","supabase/**"]}
 {"file":"runtime/manual-review.data-readiness.md","source":"adapters/claude/instructions/rules/core/manual-review.data-readiness.md","paths":["tasks/**","specs/plans/**","screenshots/**"]}
-{"file":"runtime/manual-review.evidence.md","source":"adapters/claude/instructions/rules/core/manual-review.evidence.md","paths":["tasks/**","specs/plans/**","docs/manual-review-archive.md"]}
+{"file":"runtime/manual-review.evidence.md","source":"adapters/claude/instructions/rules/core/manual-review.evidence.md","paths":["tasks/**","specs/plans/**"]}
 {"file":"runtime/manual-review.md","source":"adapters/claude/instructions/rules/core/manual-review.md","paths":["tasks/**","specs/plans/**","screenshots/**"]}
 {"file":"runtime/review-gui-surface.md","source":"adapters/claude/instructions/rules/core/review-gui-surface.md","paths":["screenshots/**","specs/plans/**","openspec/changes/**","HANDOFF.md",".claude/agents/**"]}
 {"file":"runtime/screenshot-strategy.md","source":"adapters/claude/instructions/rules/core/screenshot-strategy.md","paths":["screenshots/**","tests/e2e/**","packages/*/tests/e2e/**","openspec/changes/**/design-review.md"]}
