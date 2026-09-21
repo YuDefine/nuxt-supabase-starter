@@ -9,6 +9,7 @@ metadata:
     permission_tier: draft
 ---
 
+<!-- clade-skill-scope: both -->
 
 # `\my` — `/decisions` 的 chat 互動版本
 

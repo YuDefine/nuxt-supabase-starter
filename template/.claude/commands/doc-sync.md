@@ -2,6 +2,7 @@
 description: 同步更新 docs/verify/ 文件，確保文件反映當前系統狀態
 ---
 
+<!-- clade-skill-scope: both -->
 
 ## User Input
 

@@ -3,6 +3,7 @@ name: cf-crawl
 description: "Use when crawling a website with Cloudflare Browser Rendering /crawl to ingest web content."
 ---
 
+<!-- clade-skill-scope: project -->
 
 # Cloudflare Website Crawler
 

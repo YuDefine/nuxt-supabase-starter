@@ -2,6 +2,7 @@
 description: 建立 Supabase migration，確保符合安全規範
 ---
 
+<!-- clade-skill-scope: project -->
 
 ## User Input
 

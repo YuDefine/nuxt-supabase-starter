@@ -8,6 +8,7 @@ metadata:
     permission_tier: read-only
 ---
 
+<!-- clade-skill-scope: both -->
 
 # /gh-ci-watch — GitHub Actions 監看 / 查詢唯一入口
 

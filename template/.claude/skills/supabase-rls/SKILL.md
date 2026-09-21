@@ -4,6 +4,7 @@ description: >-
   Supabase RLS 政策規範：CREATE POLICY / ALTER POLICY、Row Level Security、角色存取控制。NOT for schema DDL 與 migration 檔規範（走 supabase-migration）；policy 寫在 migration 檔裡時，內容設計仍走本 skill。
 ---
 
+<!-- clade-skill-scope: project -->
 
 # Supabase RLS 政策規範
 

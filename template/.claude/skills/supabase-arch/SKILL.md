@@ -5,6 +5,7 @@ description: >-
   或 debug 既有 RLS policy，NOT for 前端狀態管理（走 pinia-store）。
 ---
 
+<!-- clade-skill-scope: project -->
 
 # Supabase 架構決策指南
 

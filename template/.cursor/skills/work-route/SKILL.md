@@ -5,6 +5,7 @@ license: MIT
 metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}}
 ---
 
+<!-- clade-skill-scope: both -->
 
 <!-- clade-workflow-bundles: ["spec-by-example","technical-research","ui-plan","api-plan","data-plan","dsl-refine","gherkin-and-dsl","tasks","bdd","truth-delta","clarify-over-specs"] -->
 

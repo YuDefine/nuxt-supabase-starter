@@ -4,6 +4,7 @@ description: >-
   Supabase migration 檔與 schema DDL 規範。觸發：supabase migration new、CREATE FUNCTION / ALTER TABLE / CREATE INDEX。NOT for RLS policy 的內容設計（走 supabase-rls）。
 ---
 
+<!-- clade-skill-scope: project -->
 
 # Supabase Migration 規範
 

@@ -8,6 +8,7 @@ metadata:
     permission_tier: action
 ---
 
+<!-- clade-skill-scope: both -->
 
 # /work-loop — 待辦自主推進迴圈
 

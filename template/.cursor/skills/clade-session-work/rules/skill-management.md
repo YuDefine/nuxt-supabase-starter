@@ -28,6 +28,22 @@ paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/*
 2. **commit 必須帶上 `skills-lock.json`**。安裝工具可能重算 lock 內所有 entry 的 `computedHash`；漏帶會讓 lock 與實際安裝不一致。
 3. **NEVER 讓 runtime skill source 是 symlink 指向未 tracked 的 target。** 判準是 target 內容是否進版控；runtime projection 的 symlink 例外必須由 adapter 明列。
 
+## 投放範圍宣告（clade-skill-scope）
+
+每支 canonical skill 與每個會渲染成 codex skill 的 command，在源檔與 `clade-targets` 並列宣告一行：
+
+```html
+<!-- clade-skill-scope: global|project|both -->
+```
+
+| 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 源檔出現該 marker；`global`＝只進 user-level、`project`＝只進 repo 內投影、`both`＝兩層都投 |
+| 消費端 | `scripts/lib/skill-scope.ts` 是唯一 parser；`runtime-capability-plan.ts`（`skillAudience`）、`projection-inventory.ts`（`collectPluginSkillSources` 固定 project 層）、`user-runtime.ts`（`--audience`／`root===cladeRoot` 推斷 `project`）各自接線 |
+| 載入路徑 | user 層收 `global`＋`both`，project 層收 `project`＋`both`；未宣告預設 `both`（back-compat），`_validate-manifests.ts` 對未宣告 warn、對非法值／重複 marker 報 error |
+
+user-level 的同名 skill 與 repo 內投影同名是合法遮蔽：pi 採 project 版、略過 user 版。`sync-to-codex.ts` 的撞名分級據此分 managed（兩邊皆 clade 投影 → 摘要）／mixed（單邊 → fail）／unmanaged（雙邊手寫 → warn）；「clade 投影」的證據是 LOCKED banner 或 `.clade/projections/codex.{capabilities,rules}.json` 的 files 清單。
+
 ## 來源與安裝邊界
 
 Clade-managed skill 的共同來源在選用 plugin 的 `capabilities/<package>/skills/<name>/`，單端差異在相應 adapter。Consumer 自有與第三方安裝內容先依既有 ownership／安裝紀錄辨認來源；**NEVER** 因它位於 `.claude/skills/` 就把同名內容自動接管為 generator-owned。遷移來源位置需保存原內容、明確 adoption 與可恢復紀錄。

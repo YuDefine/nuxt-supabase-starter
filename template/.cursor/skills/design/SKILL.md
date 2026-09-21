@@ -6,6 +6,7 @@ metadata:
     permission_tier: draft
 ---
 
+<!-- clade-skill-scope: both -->
 
 # Design Orchestrator
 

@@ -8,6 +8,7 @@ disable-model-invocation: true
 effort: medium
 ---
 
+<!-- clade-skill-scope: project -->
 
 本 skill 由使用者明確要求建立／設定 tunnel 時啟動，包含本機配置與外部 Cloudflare 資源修改；不屬唯讀稽核。原生叫用方式由各 target adapter 交付，取得 skill 不代表已授權 DNS、token、OAuth provider 或對外開放資源。依本次既有授權執行，缺的是資源決策或帳號授權時才詢問。
 

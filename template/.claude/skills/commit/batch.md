@@ -31,7 +31,7 @@ gh pr create --draft --base main --head <session-branch> --title '<切片摘要>
 gh pr view <session-branch> --json number,isDraft,headRefName
 ```
 
-**NEVER** 把該來源放進 ready 池、**NEVER** 當 `prepare` 成員、**NEVER** 啟動完整品質鏈、**NEVER** merge、**NEVER** push `origin main`。空 branch、只有 WIP → 不開 PR。CI 紅燈修回同一張 PR。討論 draft 另加具名討論者與具體問題時才跑（舊命令無 `--kind` 仍是 discussion，兩欄都必填）：
+**NEVER** 把該來源放進 ready 池、**NEVER** 當 `prepare` 成員、**NEVER** 啟動完整品質鏈、**NEVER** merge、**NEVER** push `origin main`。空 branch、只有 WIP → 不開 PR。CI 紅燈修回同一張 PR（處置見下方 § CI 紅燈處置）。討論 draft 另加具名討論者與具體問題時才跑（舊命令無 `--kind` 仍是 discussion，兩欄都必填）：
 
 ```bash
 node scripts/wt-helper.ts batch draft <source-path> \
@@ -50,6 +50,38 @@ seal 之後同一 `workId` MUST 把受審 formal HEAD 交到**既有** draft 的
 | 使用者結束本輪開發 | `stop` | 有就緒成員即結批；換 session 不屬於 stop |
 
 Status 沒有就緒 wt，也沒有待續跑批次時，回普通 `/commit`。所有輸出中的 stale／invalid 來源列名保留，不假裝進池。既有 active batch 優先續跑，新就緒工作進下一批。單成員 PR 預設；Charles-only leftover 卡該來源時跑 `batch yield-blocked` 讓出 active slot，blocked source 不可自動重回 ready，須具名 `batch unlock-blocked --event` 後重驗再 ready。無關獨立 workId 繼續。合批內一成員 blocked 則整批不落地。
+
+### CI 紅燈處置
+
+本節在落地路徑上被讀：draft／ready PR 的 CI 紅了，處置從這裡開始，不是從「再推一次」。**違反字面就是違反精神。**
+
+**Iron Law：先判讀再處置。** 紅燈當下第一個動作是跑 `node scripts/test-lanes/ci-triage.ts --run <id> --json`，讀它的 `action`／`rerun_shards`／`register`／`failures[].class`。沒有這份輸出就 **NEVER** 重跑、**NEVER** 再 push。
+
+| `action` | MUST |
+| --- | --- |
+| `fix` | 修 `failures` 裡的 real，push **同一張** PR。**NEVER** 開第二張 PR |
+| `rerun-failed-shards` | `gh run rerun <id> --failed`。指令必須帶 `--failed` |
+| `register-flaky` | 同一張 PR 同一支檔的**第二次** flaky：登記（`flow plan` 或 TD）並附 `register[].evidence`，**NEVER** 再重跑 |
+
+合併門檻不變：所有 shard 都通過才可落地。本節不改 0-A／0-B／0-C、不改 `batch ready`、不改六 shard 互斥聯集。
+
+逐字禁令：
+
+- **NEVER** `gh run rerun <id>`（不帶 `--failed`）處理 flaky／infra
+- **NEVER** 以空 commit 或 force-push 觸發整輪重跑
+- **NEVER** 整輪重推同一 SHA 來「碰碰運氣」
+
+| 開脫（逐字） | 實際 |
+| --- | --- |
+| 「整輪 rerun 比較快，shard 對帳很煩」 | 先判讀再 `gh run rerun <id> --failed` 才是處置；整輪 rerun 不是較短的路 |
+| 「先 rerun 一遍，還紅再判」 | 沒有 `ci-triage` 輸出就重跑，是在用 runner 分鐘猜 class |
+| 「空 commit 觸發 CI 又沒改產品」 | 空 commit 就是整輪重跑，且污染歷史 |
+| 「force-push 清掉紅燈紀錄比較乾淨」 | 紅燈紀錄是 flaky 判準的輸入；清掉會把第二次 flaky 當成第一次 |
+| 「同一檔又紅了，再 rerun 一次就好」 | 同一 PR 同一檔第二次 flaky 走 `register-flaky`，不是第三次 `--failed` |
+
+P1 基線（`specs/plans/W-2026-09-20-test-lane-overhaul/evidence/p1-pr-run-baseline.md`；複驗：`gh run list --workflow validate.yml --event pull_request -L 100 --json databaseId,conclusion,runAttempt`）裡，rerun 轉綠的 run 平均用了 2.9 個整趟 attempt。本證據決定：flaky／infra 用 `--failed` 而不是整輪 rerun。本證據不決定：要不要修 real——real 的 `action` 是 `fix`，與 runner 分鐘無關。
+
+**Red Flags**：發現自己正要打不帶 `--failed` 的 `gh run rerun`、正要 `git commit --allow-empty`、正要 force-push 只為重跑、或還沒打開 `ci-triage` 輸出就伸手推——停，回到本節第一句。
 
 ## 2. 準備隔離整合區
 

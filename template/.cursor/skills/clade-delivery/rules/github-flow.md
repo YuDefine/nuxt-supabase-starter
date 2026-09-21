@@ -46,7 +46,7 @@ paths:
 
 | 層 | 事件 | 門檻 | test-lane |
 | --- | --- | --- | --- |
-| 切片 → `integration/<work-id>` | coordinator 在 integration worktree `git merge --squash <slice-branch>`，一個切片一個 commit，message 帶 task 編號 | 來源 worktree 內跑 repo 的 canonical check 入口（lint、fmt、typecheck；clade 是 `pnpm exec vp check`，約 3 秒）。**只有這一項**，本機跑、不佔 CI runner、不必排 gate slot | 不跑 |
+| 切片 → `integration/<work-id>` | coordinator 在 integration worktree `git merge --squash <slice-branch>`，一個切片一個 commit，message 帶 task 編號 | 來源 worktree 內跑 canonical check ＋ repo 在 CI 機械檢查裡跑的 typecheck（clade：`pnpm exec vp check` ＋ `npx tsc -p tsconfig.clade.json --noEmit`，動到 `vendor/scripts` 再加 `npx tsc -p tsconfig.vendor.json --noEmit`）。兩條 tsc 以秒計、本機跑、不佔 CI runner、不必排 heavy gate slot | 不跑 |
 | `integration/<work-id>` 每次 push | workflow 對 `integration/**` 的 push trigger；同 ref 的舊 run 由 workflow `concurrency` 取消。它那張對 `main` 的 PR 此時是 draft，不跑 test-lane，所以同一個 SHA 不會付兩次 | 無——非阻塞的滾動訊號 | fast lane；紅燈的嫌疑範圍＝上一次綠燈之後併入的切片 |
 | `integration/<work-id>` → `main` | 同一張 PR 轉 ready，走 `batch ready`／seal／`confirm-merged` | 轉 ready **之前** coordinator 在 integration worktree 跑一次 `test:affected`（base＝`origin/main`，經 heavy gate slot），綠了才 `gh pr ready`；之後是完整品質鏈 | 這張 PR 上跑；整件工作只付這一次 |
 
@@ -55,13 +55,14 @@ paths:
 1. coordinator 從最新 `origin/main` 開 `integration/<work-id>`（`wt-helper add --base integration/<work-id>` 開後續切片；第一棵 integration 仍從 landing base 分叉），**第一個切片併入後立刻**對 `main` 開 draft PR 並登記 `batch draft --kind visibility`。這一張就是整件工作的可見性；commit 列表就是切片清單。
 2. **每一個**切片併入之前，coordinator MUST 先把 integration 同步到最新 `origin/main`。integration 活得越久、離 `main` 越遠，最後那一輪越難綠——這一步不是收尾動作，是每次併入的前置。
 3. **每一個**切片開工前 MUST 宣告路徑（claim 的 `expected_paths`），且與**每一個**其他活切片的宣告路徑不相交。相交就序列化，或併成同一個切片。
-4. 切片層**只跑** canonical check，**NEVER** 在每個切片各跑一次 `test:affected`／測試——它要排 heavy gate slot，N 個切片就是 N 次排隊，瓶頸只是從 runner 搬到本機。測試在 integration 層付：轉 ready 前一次 `test:affected`（經 `clade-gate`），加上進 `main` 那一趟 test-lane。
+4. 切片層跑 canonical check ＋ repo 在 CI 機械檢查裡跑的 typecheck，**NEVER** 在每個切片各跑一次 `test:affected`／測試——它要排 heavy gate slot，N 個切片就是 N 次排隊，瓶頸只是從 runner 搬到本機。`test:affected` 仍只在 integration 轉 ready 前跑一次（經 `clade-gate`），加上進 `main` 那一趟 test-lane。
 5. 滾動訊號紅燈：coordinator 以上一次綠燈之後併入的切片為嫌疑範圍，紅因歸到切片就 `git revert` 該切片的 commit、把它退回 owner；**NEVER** 讓整條 integration 等一個切片修好。
 6. 切片 owner **NEVER** 對 `main` 開 PR、**NEVER** 自己併入 integration。具名討論才另開 draft，base 是 `integration/<work-id>`（CI 只跑機械檢查）。
 
 | 藉口（2026-09-21 設計對話逐字） | 現實 |
 | --- | --- |
 | 「切片也各跑一次 `test:affected` 比較保險，它在本機以秒計，省它不會更快」（本檔 2026-09-21 初版的條文） | 實測相反：同日兩個切片的 `test:affected` 在 heavy gate slot 各排了二十分鐘以上還沒輪到，是切片層最慢的一環；而 canonical check 只要 3 秒。Charles 當日拍板切片只付 canonical check。保護沒有少：`test:affected` 改在 integration 轉 ready 前跑一次，紅了用切片 commit 列表二分；進 `main` 仍有完整 test-lane |
+| 「切片只跑 vp check 就夠，它已經含 typecheck」 | `vp check` 的 typecheck 範圍不等於 CI `validate-manifests` 跑的 `tsconfig.clade.json`。2026-09-21 `scripts/main-sync.ts` 的 TS2534 通過 `vp check`、進了 main 才紅，之後每張 ready 的 PR 都帶這個紅，直到另開一張 PR 修掉 |
 
 ### 工具現況
 

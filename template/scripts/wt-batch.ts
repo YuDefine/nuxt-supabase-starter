@@ -818,7 +818,7 @@ function hasVerifiedPreservation(
   if (!archive) return false
   return verifyPreservationArchive(archive, path, inventoryOptionsFromProfile(profile))
 }
-function comparableInventory(inventory: Pick<SourceInventory, 'entries'>): string {
+function comparableInventory(inventory: Pick<SourceInventory, 'entries'>, gitDir = false): string {
   return JSON.stringify(
     inventory.entries
       .filter((entry) => entry.path !== '.git')
@@ -826,10 +826,13 @@ function comparableInventory(inventory: Pick<SourceInventory, 'entries'>): strin
         const normalized = { ...entry }
         // `git worktree move` rewrites the linked-worktree .git pointer and
         // directory mtimes. Those are topology changes, not user bytes.
+        // Git-dir inventories also drop file mtime: sibling sessions freshen
+        // object mtimes without moving a byte (TD-1097); digest still pins
+        // content.
         delete (normalized as Partial<typeof normalized>).allocatedBytes
         delete (normalized as Partial<typeof normalized>).uid
         delete (normalized as Partial<typeof normalized>).gid
-        if (normalized.type === 'directory') delete normalized.mtimeMs
+        if (gitDir || normalized.type === 'directory') delete normalized.mtimeMs
         return normalized
       }),
   )
@@ -848,6 +851,7 @@ function entriesMatchModulo(
   live: SourceInventory,
   expected: SourceInventory,
   allow: (path: string, live: InventoryEntry, expected: InventoryEntry) => boolean,
+  gitDir = false,
 ): boolean {
   const liveBy = new Map(
     live.entries.filter((entry) => entry.path !== '.git').map((entry) => [entry.path, entry]),
@@ -861,7 +865,7 @@ function entriesMatchModulo(
     delete (copy as Partial<typeof copy>).allocatedBytes
     delete (copy as Partial<typeof copy>).uid
     delete (copy as Partial<typeof copy>).gid
-    if (copy.type === 'directory') delete copy.mtimeMs
+    if (gitDir || copy.type === 'directory') delete copy.mtimeMs
     return JSON.stringify(copy)
   }
   // A relocation rewrite is allowed to change only content-derived fields
@@ -997,47 +1001,52 @@ export function gitInventoryMatchesRelocated(
     return withRestoredArchive(archive, (restored) => {
       const expected = inventoryTree(
         restored,
-        options,
+        { ...options, excludeGitTransientState: true },
         excludedPaths.map((path) => join(restored, path)),
       )
-      return entriesMatchModulo(live, expected, (path) => {
-        if (
-          basename(path) !== 'config' ||
-          !/(?:^|\/)modules\//.test(path) ||
-          !existsSync(join(liveRoot, path)) ||
-          !existsSync(join(restored, path))
-        )
-          return false
-        const liveFile = join(liveRoot, path)
-        const wantFile = join(restored, path)
-        const liveLines = configLines(liveFile, 'core.worktree')
-        const wantLines = configLines(wantFile, 'core.worktree')
-        if (!liveLines.length || liveLines.join('\n') !== wantLines.join('\n')) return false
-        const worktree = execFileSync(
-          'git',
-          ['config', '--file', liveFile, '--get', 'core.worktree'],
-          { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
-        ).trim()
-        const wantWorktree = execFileSync(
-          'git',
-          ['config', '--file', wantFile, '--get', 'core.worktree'],
-          { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
-        ).trim()
-        if (!worktree || !wantWorktree) return false
-        // The archived value resolves from its ORIGINAL module-dir
-        // position under the recorded common dir — that minus the recorded
-        // source root is the location-independent in-tree checkout path.
-        // The live value must resolve to exactly that checkout under the
-        // current tree root, not merely anywhere inside it.
-        const inTree = relative(
-          sourcePath,
-          resolve(join(sourceCommon, dirname(path)), wantWorktree),
-        )
-        if (!inTree || inTree.startsWith('..') || isAbsolute(inTree)) return false
-        return (
-          realpathSync(resolve(dirname(liveFile), worktree)) === realpathSync(join(root, inTree))
-        )
-      })
+      return entriesMatchModulo(
+        live,
+        expected,
+        (path) => {
+          if (
+            basename(path) !== 'config' ||
+            !/(?:^|\/)modules\//.test(path) ||
+            !existsSync(join(liveRoot, path)) ||
+            !existsSync(join(restored, path))
+          )
+            return false
+          const liveFile = join(liveRoot, path)
+          const wantFile = join(restored, path)
+          const liveLines = configLines(liveFile, 'core.worktree')
+          const wantLines = configLines(wantFile, 'core.worktree')
+          if (!liveLines.length || liveLines.join('\n') !== wantLines.join('\n')) return false
+          const worktree = execFileSync(
+            'git',
+            ['config', '--file', liveFile, '--get', 'core.worktree'],
+            { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+          ).trim()
+          const wantWorktree = execFileSync(
+            'git',
+            ['config', '--file', wantFile, '--get', 'core.worktree'],
+            { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+          ).trim()
+          if (!worktree || !wantWorktree) return false
+          // The archived value resolves from its ORIGINAL module-dir
+          // position under the recorded common dir — that minus the recorded
+          // source root is the location-independent in-tree checkout path.
+          // The live value must resolve to exactly that checkout under the
+          // current tree root, not merely anywhere inside it.
+          const inTree = relative(
+            sourcePath,
+            resolve(join(sourceCommon, dirname(path)), wantWorktree),
+          )
+          if (!inTree || inTree.startsWith('..') || isAbsolute(inTree)) return false
+          return (
+            realpathSync(resolve(dirname(liveFile), worktree)) === realpathSync(join(root, inTree))
+          )
+        },
+        true,
+      )
     })
   } catch {
     return false
@@ -1073,14 +1082,18 @@ function liveGitInventory(
   archiveRoot: string,
   profile: ConsumerProfile,
 ): SourceInventory {
-  return inventoryTree(common, inventoryOptionsFromProfile(profile), [
-    ...gitExcludedRootsForArchive(sourcePath, common, archiveRoot),
-    ...gitWorktreeMetadataRoots(sourcePath, common)
-      .flatMap((root) => [join(root, 'gitdir'), join(root, WT_TEARDOWN_JOURNAL_NAME)])
-      // Exclusions are realpathed — a teardown journal only exists after a
-      // detach ran, so absent names must not reach the walk.
-      .filter((excluded) => existsSync(excluded)),
-  ])
+  return inventoryTree(
+    common,
+    { ...inventoryOptionsFromProfile(profile), excludeGitTransientState: true },
+    [
+      ...gitExcludedRootsForArchive(sourcePath, common, archiveRoot),
+      ...gitWorktreeMetadataRoots(sourcePath, common)
+        .flatMap((root) => [join(root, 'gitdir'), join(root, WT_TEARDOWN_JOURNAL_NAME)])
+        // Exclusions are realpathed — a teardown journal only exists after a
+        // detach ran, so absent names must not reach the walk.
+        .filter((excluded) => existsSync(excluded)),
+    ],
+  )
 }
 
 // Archive-side comparisons must exclude the same operational names the
@@ -1165,7 +1178,7 @@ function verifyTrashedMetadataInventory(
     })
   const actual = inventoryTree(
     trashPath,
-    inventoryOptionsFromProfile(profile),
+    { ...inventoryOptionsFromProfile(profile), excludeGitTransientState: true },
     [
       join(trashPath, 'gitdir'),
       join(trashPath, WT_TEARDOWN_JOURNAL_NAME),
@@ -1175,7 +1188,7 @@ function verifyTrashedMetadataInventory(
   )
   if (actual.specialFiles.length || actual.externalSymlinks.length)
     throw new Error('trashed Git metadata contains unsupported or external data')
-  if (comparableInventory(actual) !== comparableInventory({ entries: expected }))
+  if (comparableInventory(actual, true) !== comparableInventory({ entries: expected }, true))
     throw new Error('trashed Git metadata changed during removal')
 }
 
@@ -1187,7 +1200,10 @@ function verifyQuarantineGitInventory(
 ): void {
   if (!receipt.source.gitCommonDir || !receipt.inventory.git || !receipt.archives.git)
     throw new Error('preservation receipt has no complete Git inventory; retain worktree')
-  const metadataOptions = inventoryOptionsFromProfile(profile)
+  const metadataOptions = {
+    ...inventoryOptionsFromProfile(profile),
+    excludeGitTransientState: true,
+  }
   const currentCommon = git(quarantine, ['rev-parse', '--path-format=absolute', '--git-common-dir'])
   if (currentCommon !== receipt.source.gitCommonDir)
     throw new Error('quarantine Git common directory changed; retain worktree')
@@ -1208,7 +1224,7 @@ function verifyQuarantineGitInventory(
       gitArchiveExclusions(currentMetadataRoots, currentCommon),
     )
   if (
-    comparableInventory(currentGit) !== comparableInventory(archivedGit) ||
+    comparableInventory(currentGit, true) !== comparableInventory(archivedGit, true) ||
     currentGit.entryCount !== archivedGit.entryCount
   ) {
     const currentPaths = new Map(
@@ -1874,7 +1890,7 @@ function removeWorktreeAfterVerification(
         verifyBaseline?.git ??
         inventoryArchive(
           receipt.archives.git!.path,
-          inventoryOptionsFromProfile(profile),
+          { ...inventoryOptionsFromProfile(profile), excludeGitTransientState: true },
           gitArchiveExclusions(metadataRoots, common),
         )
       for (let rounds = 0; ; ) {
@@ -3041,7 +3057,28 @@ export function cleanupBatches(
         preserved: [...(b.preserved ?? [])],
       }
       const landedCommit = b.mergeReceipt?.merge_sha ?? b.landedHead!
-      git(c.main, ['merge-base', '--is-ancestor', landedCommit, 'refs/heads/main'])
+      // `merge-base --is-ancestor` is a query here, not an assertion: exit 1
+      // is the ordinary "not an ancestor" answer. A batch journaled landed
+      // whose recorded commit is unreachable from main retains whole — the
+      // journal says it landed, so either main was rewritten or the wrong
+      // head was recorded, and that one batch must not abort the queue.
+      let landedProblem: string | undefined
+      try {
+        git(c.main, ['merge-base', '--is-ancestor', landedCommit, 'refs/heads/main'])
+      } catch (error) {
+        landedProblem =
+          (error as { status?: number }).status === 1
+            ? `landed commit ${landedCommit} is not an ancestor of refs/heads/main; batch retained — check whether main was rewritten or the journal recorded the wrong landed head/merge sha, reconcile the batch, then retry cleanup`
+            : `could not verify landed commit ${landedCommit} against refs/heads/main; batch retained — resolve the underlying git error, then retry cleanup: ${errorMessage(error)}`
+      }
+      if (landedProblem) {
+        for (const m of b.members)
+          if (!b.removed.includes(m.path))
+            result.retained.push({ path: m.path, reason: landedProblem })
+        result.retained.push({ path: b.path, reason: landedProblem })
+        results.push(result)
+        continue
+      }
       // The batch lock is held for the whole loop and nothing here writes a claim,
       // so one read serves every member instead of one directory scan each.
       const claimsObs = readActiveClaimsObserved(c.main)
@@ -3295,16 +3332,22 @@ export function cleanupBatches(
                     const archiveRoot = dirname(dirname(receipt.archives.worktree.path))
                     const currentGit = liveGitInventory(m.path, currentCommon, archiveRoot, profile)
                     gitBaseline =
-                      comparableInventory(currentGit) === comparableInventory(removal.verifyGit)
+                      comparableInventory(currentGit, true) ===
+                      comparableInventory(removal.verifyGit, true)
                     const gitdirRecords = gitArchiveExclusions(
                       gitWorktreeMetadataRoots(m.path, currentCommon),
                       currentCommon,
                     )
                     gitArchive =
                       Boolean(receipt.archives.git) &&
-                      comparableInventory(currentGit) ===
+                      comparableInventory(currentGit, true) ===
                         comparableInventory(
-                          inventoryArchive(receipt.archives.git!.path, options, gitdirRecords),
+                          inventoryArchive(
+                            receipt.archives.git!.path,
+                            { ...options, excludeGitTransientState: true },
+                            gitdirRecords,
+                          ),
+                          true,
                         )
                     gitRelocated =
                       !gitBaseline &&
@@ -3406,16 +3449,22 @@ export function cleanupBatches(
                       profile,
                     )
                     gitBaseline =
-                      comparableInventory(currentGit) === comparableInventory(removal.verifyGit)
+                      comparableInventory(currentGit, true) ===
+                      comparableInventory(removal.verifyGit, true)
                     const gitdirRecords = gitArchiveExclusions(
                       gitWorktreeMetadataRoots(removal.quarantine, currentCommon),
                       currentCommon,
                     )
                     gitArchive =
                       Boolean(receipt.archives.git) &&
-                      comparableInventory(currentGit) ===
+                      comparableInventory(currentGit, true) ===
                         comparableInventory(
-                          inventoryArchive(receipt.archives.git!.path, options, gitdirRecords),
+                          inventoryArchive(
+                            receipt.archives.git!.path,
+                            { ...options, excludeGitTransientState: true },
+                            gitdirRecords,
+                          ),
+                          true,
                         )
                     gitRelocated =
                       !gitBaseline &&
@@ -3855,16 +3904,22 @@ export function cleanupBatches(
                     const archiveRoot = dirname(dirname(receipt.archives.worktree.path))
                     const currentGit = liveGitInventory(b.path, currentCommon, archiveRoot, profile)
                     gitBaseline =
-                      comparableInventory(currentGit) === comparableInventory(removal.verifyGit)
+                      comparableInventory(currentGit, true) ===
+                      comparableInventory(removal.verifyGit, true)
                     const gitdirRecords = gitArchiveExclusions(
                       gitWorktreeMetadataRoots(b.path, currentCommon),
                       currentCommon,
                     )
                     gitArchive =
                       Boolean(receipt.archives.git) &&
-                      comparableInventory(currentGit) ===
+                      comparableInventory(currentGit, true) ===
                         comparableInventory(
-                          inventoryArchive(receipt.archives.git!.path, options, gitdirRecords),
+                          inventoryArchive(
+                            receipt.archives.git!.path,
+                            { ...options, excludeGitTransientState: true },
+                            gitdirRecords,
+                          ),
+                          true,
                         )
                     gitRelocated =
                       !gitBaseline &&
@@ -3960,16 +4015,22 @@ export function cleanupBatches(
                       profile,
                     )
                     gitBaseline =
-                      comparableInventory(currentGit) === comparableInventory(removal.verifyGit)
+                      comparableInventory(currentGit, true) ===
+                      comparableInventory(removal.verifyGit, true)
                     const gitdirRecords = gitArchiveExclusions(
                       gitWorktreeMetadataRoots(removal.quarantine, currentCommon),
                       currentCommon,
                     )
                     gitArchive =
                       Boolean(receipt.archives.git) &&
-                      comparableInventory(currentGit) ===
+                      comparableInventory(currentGit, true) ===
                         comparableInventory(
-                          inventoryArchive(receipt.archives.git!.path, options, gitdirRecords),
+                          inventoryArchive(
+                            receipt.archives.git!.path,
+                            { ...options, excludeGitTransientState: true },
+                            gitdirRecords,
+                          ),
+                          true,
                         )
                     gitRelocated =
                       !gitBaseline &&

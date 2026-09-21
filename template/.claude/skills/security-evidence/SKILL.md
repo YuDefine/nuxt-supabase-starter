@@ -9,6 +9,7 @@ metadata:
 effort: high
 ---
 
+<!-- clade-skill-scope: both -->
 
 # security-evidence
 

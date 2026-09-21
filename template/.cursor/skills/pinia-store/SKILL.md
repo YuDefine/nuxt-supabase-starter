@@ -5,6 +5,7 @@ description: >-
   狀態或 API route 設計（走 server-api），NOT for 單一元件內的區域狀態（直接用 ref/reactive）。
 ---
 
+<!-- clade-skill-scope: project -->
 
 # Pinia Store 架構規範
 
