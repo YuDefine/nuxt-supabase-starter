@@ -31,6 +31,14 @@ export interface CatalogQuestion {
   defaultValue?: string
 }
 
+/**
+ * `owner/repo` 形狀：兩段非空、不含空白或 `/` 的身分片段。fleet registry 的
+ * repo_id 是 identity token，不強制 GitHub ASCII charset——consumer_id 本身可
+ * 是 unicode（BDD 以 CJK 名稱跑完整 managed 流程）。這裡只擋「沒有 owner/repo
+ * 結構」的壞值，字元集交給下游 registry／GitHub 各自把關。
+ */
+export const REPO_ID_PATTERN = /^[^\s/]+\/[^\s/]+$/
+
 export const QUESTION_CATALOG: readonly CatalogQuestion[] = [
   {
     id: 'db-host',
