@@ -23,6 +23,12 @@ export interface CatalogQuestion {
   when: QuestionWhen
   flag: string
   options?: CatalogOption[]
+  /**
+   * catalog 宣告的合法 default：非互動流程沒收到此題答案時，由產品 normalizer
+   * 套這個值（例如 update-policy → pinned），而不是把它當必填旗標拒絕。
+   * 測試／呼叫端 NEVER 代填 default——default 屬於 catalog，套用屬於 normalizer。
+   */
+  defaultValue?: string
 }
 
 export const QUESTION_CATALOG: readonly CatalogQuestion[] = [
@@ -104,6 +110,24 @@ export const QUESTION_CATALOG: readonly CatalogQuestion[] = [
       { value: 'none', label: '這階段先不上線' },
     ],
   },
+  {
+    id: 'update-policy',
+    prompt: '登記之後，clade 出新版本時這個專案要怎麼跟進？',
+    hint: 'pinned 固定在這次驗證過的版本，之後發布不自動改動本專案；subscribed 之後每次發布都會跟進。這跟「要不要登記」是兩個獨立決策。',
+    when: 'register',
+    flag: '--update-policy',
+    defaultValue: 'pinned',
+    options: [
+      {
+        value: 'pinned',
+        label: '固定版本（預設）— 釘在這次驗證過的 release，之後不自動追版',
+      },
+      {
+        value: 'subscribed',
+        label: '持續訂閱 — clade 每次發布都自動套用更新',
+      },
+    ],
+  },
 ]
 
 export function questionById(id: string): CatalogQuestion {
@@ -151,6 +175,8 @@ export function missingYesFlags(ctx: {
 }): CatalogQuestion[] {
   return applicableQuestions(ctx).filter((question) => {
     if (question.id === 'register-fleet') return false
+    // 有 catalog 宣告 default 的題由 normalizer 代答，不是必填旗標。
+    if (question.defaultValue !== undefined) return false
     return !ctx.present.has(question.flag)
   })
 }

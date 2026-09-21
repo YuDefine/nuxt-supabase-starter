@@ -18,7 +18,14 @@ import {
   postScaffold,
   preflightCladeRegistration,
   type CladeModules,
+  type PostScaffoldOutcome,
 } from './post-scaffold'
+import {
+  IntakeError,
+  loadAnswersFile,
+  mergeAnswersIntoFlags,
+  type CatalogArgValues,
+} from './answers-file'
 import {
   PRESET_IDS,
   applyPreset,
@@ -36,6 +43,8 @@ import {
   type DbHost,
   type DbStack,
   type EvlogPreset,
+  UPDATE_POLICIES,
+  type UpdatePolicy,
   type UserSelections,
 } from './types'
 import {
@@ -176,9 +185,9 @@ function parseAgentTargets(value: string | undefined): AgentRuntime[] | undefine
   const invalid = parsed.filter((item) => !VALID_AGENT_TARGETS.includes(item as AgentRuntime))
 
   if (invalid.length > 0) {
-    consola.error(`--agents 只接受：${VALID_AGENT_TARGETS.join(' | ')}`)
-    consola.error(`無效值：${invalid.join(', ')}`)
-    process.exit(1)
+    failValidation(
+      `--agents 只接受：${VALID_AGENT_TARGETS.join(' | ')}\n無效值：${invalid.join(', ')}`,
+    )
   }
 
   return [...new Set(parsed)] as AgentRuntime[]
@@ -269,32 +278,136 @@ function resolveDbStack(evlogPreset: EvlogPreset, dbArg: DbStack | undefined): D
   return dbArg ?? DEFAULT_DB_STACK
 }
 
+/**
+ * 旗標與 `--answers-file` 共用同一份攤平題值 —— CLI flag 是 `<catalog-flag> <value>`，
+ * answers 是 `{ <catalog-id>: <value> }`，兩者進這裡時已經同形，走完全相同的
+ * normalizer（契約 § 共用建立 intake：「兩者走相同 normalizer」）。
+ */
+export interface CatalogFlagArgs {
+  /** --db-host 或 answers-file 的 db-host 值 */
+  dbHost?: string
+  nonInteractive: boolean
+  /** register-fleet 解析結果；true = managed 流程 */
+  register?: boolean
+  repoId?: string
+  workflowModel?: string
+  businessActivity?: string
+  /** 'auto' 或 1024-65535 的 port 字串（互動流程的 'custom' 不存在於機讀答案） */
+  devPort?: string
+  deployTrack?: string
+  updatePolicy?: string
+}
+
+const REPO_ID_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
+const WORKFLOW_MODEL_VALUES = ['trunk-based', 'pr-merge-based'] as const
+const BUSINESS_ACTIVITY_VALUES = [
+  'pre-production',
+  'active',
+  'maintenance',
+  'paused',
+  'auto',
+] as const
+const DEPLOY_TRACK_VALUES = ['wrangler-action', 'void-cloud', 'node-server', 'none'] as const
+
 export function applyCatalogFlags(
   selections: UserSelections,
-  args: { dbHost?: string; nonInteractive: boolean },
+  args: CatalogFlagArgs,
 ): UserSelections {
-  const dbHostRaw = args.dbHost
-  const supabase = usesSupabaseDatabase(selections.dbStack, selections.features)
+  const next = { ...selections }
+  const supabase = usesSupabaseDatabase(next.dbStack, next.features)
 
-  if (dbHostRaw && !supabase) {
+  if (args.dbHost && !supabase) {
     failValidation('--db-host 只在這個專案會用到 Supabase 時才有意義')
   }
 
-  if (!supabase) return selections
-
-  if (dbHostRaw && DB_HOSTS.includes(dbHostRaw as DbHost)) {
-    return { ...selections, dbHost: dbHostRaw as DbHost }
+  if (supabase) {
+    if (args.dbHost && DB_HOSTS.includes(args.dbHost as DbHost)) {
+      next.dbHost = args.dbHost as DbHost
+    } else if (args.nonInteractive && !next.dbHost) {
+      const q = questionById('db-host')
+      failValidation(
+        `--yes / 旗標模式不能略過「${q.prompt}」。\n` +
+          `請加 --db-host this-machine（這台電腦 Docker）或 --db-host existing-server（連到已在跑的伺服器）。`,
+      )
+    }
   }
 
-  if (args.nonInteractive) {
-    const q = questionById('db-host')
-    failValidation(
-      `--yes / 旗標模式不能略過「${q.prompt}」。\n` +
-        `請加 --db-host this-machine（這台電腦 Docker）或 --db-host existing-server（連到已在跑的伺服器）。`,
-    )
+  // register-only 題：先驗值（壞值要報值，不報 coherence），再驗「沒登記卻帶
+  // register 答案」的矛盾。兩者都在寫第一個檔之前完成。
+  if (args.repoId !== undefined && !REPO_ID_PATTERN.test(args.repoId)) {
+    failValidation('--repo-id 格式必須是 owner/repo')
+  }
+  if (
+    args.workflowModel !== undefined &&
+    !WORKFLOW_MODEL_VALUES.includes(args.workflowModel as 'trunk-based')
+  ) {
+    failValidation('--workflow-model 必須是 trunk-based 或 pr-merge-based')
+  }
+  if (
+    args.businessActivity !== undefined &&
+    !BUSINESS_ACTIVITY_VALUES.includes(args.businessActivity as 'pre-production')
+  ) {
+    failValidation('--business-activity 值不合法')
+  }
+  if (args.devPort !== undefined) {
+    const parsed = Number(args.devPort)
+    if (args.devPort !== 'auto' && (!Number.isInteger(parsed) || parsed < 1024 || parsed > 65535)) {
+      failValidation('--dev-port 必須是 1024 到 65535 的整數，或 auto')
+    }
+  }
+  if (args.deployTrack !== undefined && !DEPLOY_TRACK_VALUES.includes(args.deployTrack as 'none')) {
+    failValidation('--deploy-track 必須是 wrangler-action | void-cloud | node-server | none')
+  }
+  if (
+    args.updatePolicy !== undefined &&
+    !UPDATE_POLICIES.includes(args.updatePolicy as UpdatePolicy)
+  ) {
+    throw new IntakeError('POLICY_INVALID', `--update-policy 只接受 ${UPDATE_POLICIES.join(' | ')}`)
   }
 
-  return selections
+  if (args.register !== undefined) {
+    next.registerFleet = args.register
+  }
+  if (args.register !== true) {
+    const contradictions = [
+      ['--repo-id', args.repoId],
+      ['--workflow-model', args.workflowModel],
+      ['--business-activity', args.businessActivity],
+      ['--dev-port', args.devPort],
+      ['--deploy-track', args.deployTrack],
+      ['--update-policy', args.updatePolicy],
+    ]
+      .filter(([, value]) => value !== undefined)
+      .map(([flag]) => flag)
+    if (contradictions.length > 0) {
+      throw new IntakeError(
+        'INTAKE_CONFLICT',
+        `${contradictions.join('、')} 是登記 fleet（register-fleet=yes）才需要的答案，` +
+          '與 register-fleet=no／--no-register-consumer 衝突',
+      )
+    }
+    return next
+  }
+
+  if (args.repoId !== undefined) next.repoId = args.repoId
+  if (args.workflowModel !== undefined) {
+    next.workflowModel = args.workflowModel as UserSelections['workflowModel']
+  }
+  if (args.businessActivity !== undefined) {
+    next.businessActivity = args.businessActivity as UserSelections['businessActivity']
+  }
+  if (args.devPort !== undefined) {
+    next.devPort = args.devPort === 'auto' ? 'auto' : Number(args.devPort)
+  }
+  if (args.deployTrack !== undefined) {
+    next.deployTrack = args.deployTrack as UserSelections['deployTrack']
+  }
+  // update-policy 的 default 由 catalog 宣告（pinned）—— normalizer 在這裡套用，
+  // 契約禁止呼叫端或測試代填預設值。
+  next.updatePolicy = (args.updatePolicy ?? questionById('update-policy').defaultValue) as
+    | UpdatePolicy
+    | undefined
+  return next
 }
 
 export function buildSelectionsFromArgs(args: {
@@ -457,6 +570,84 @@ export function buildSelectionsFromArgs(args: {
   }
 }
 
+interface CompletionReport {
+  status: 'ready' | 'scaffolded' | 'failed' | 'cancelled'
+  registration?: 'completed' | 'unregistered' | 'failed'
+  consumerId?: string
+  effectivePolicy?: unknown
+  release?: unknown
+  workRoute?: string
+  target: string
+  diagnostics: Array<{ code: string; message: string }>
+}
+
+/**
+ * `--json` 完成報告（契約 § 機讀完成報告）：
+ * - managed 成功且 bootstrap 回報了可驗證身分 → ready / completed + identity 欄位
+ * - bootstrap 跑過但沒給 consumerId/effectivePolicy/release → 不宣稱 ready
+ *   （降回 scaffolded + completed + BOOTSTRAP_RESULT_UNVERIFIED）
+ * - scaffold-only → scaffolded / unregistered，NEVER 捏造 managed policy／release
+ * - bootstrap 實際失敗 → failed，保留具名 diagnostics
+ */
+function buildCompletionReport(
+  targetDir: string,
+  registerConsumer: boolean,
+  outcome: PostScaffoldOutcome,
+): CompletionReport {
+  const target = targetDir
+  if (!registerConsumer) {
+    return { status: 'scaffolded', registration: 'unregistered', target, diagnostics: [] }
+  }
+  const managed = outcome.managed
+  if (!managed?.ran) {
+    return {
+      status: 'scaffolded',
+      registration: 'unregistered',
+      target,
+      diagnostics: managed?.diagnostics ?? [
+        {
+          code: 'ASSET_UNAVAILABLE',
+          message: 'managed 流程被要求，但 clade 來源不可用，bootstrap 未執行',
+        },
+      ],
+    }
+  }
+  if (!managed.ok) {
+    return { status: 'failed', registration: 'failed', target, diagnostics: managed.diagnostics }
+  }
+  const bootstrapReport = managed.report
+  const hasVerifiableIdentity =
+    typeof bootstrapReport?.consumerId === 'string' &&
+    bootstrapReport.effectivePolicy !== undefined &&
+    bootstrapReport.release !== undefined
+  if (!hasVerifiableIdentity) {
+    return {
+      status: 'scaffolded',
+      registration: 'completed',
+      target,
+      diagnostics: [
+        {
+          code: 'BOOTSTRAP_RESULT_UNVERIFIED',
+          message:
+            'managed bootstrap 回報成功但未提供可驗證的 consumerId/effectivePolicy/release；' +
+            '不宣稱 ready。registry/manifest 以真產物為準。',
+        },
+      ],
+    }
+  }
+  return {
+    status: 'ready',
+    registration: 'completed',
+    consumerId: bootstrapReport.consumerId as string,
+    effectivePolicy: bootstrapReport.effectivePolicy,
+    release: bootstrapReport.release,
+    workRoute:
+      typeof bootstrapReport.workRoute === 'string' ? bootstrapReport.workRoute : undefined,
+    target,
+    diagnostics: [],
+  }
+}
+
 const main = defineCommand({
   meta: {
     name: 'create-nuxt-starter',
@@ -582,8 +773,78 @@ const main = defineCommand({
         'Where the Supabase database runs in development: this-machine | existing-server（Supabase 軌必填；--yes 不可省略）',
       required: false,
     },
+    'update-policy': {
+      type: 'string',
+      description:
+        'Clade consumer 更新政策：pinned | subscribed（register-fleet=yes 才適用；未給由 catalog default 得 pinned）',
+      required: false,
+    },
+    'answers-file': {
+      type: 'string',
+      description:
+        'AI intake 的機讀答案檔：{ schemaVersion: 1, answers: { <catalog-id>: <value> } }；給了自動進非互動模式',
+      required: false,
+    },
+    json: {
+      type: 'boolean',
+      description: '機讀完成報告：stdout 只輸出一個 JSON object，進度／診斷一律走 stderr',
+      default: false,
+    },
+    release: {
+      type: 'string',
+      description: 'managed bootstrap 要安裝的 clade release（semver，例如 1.13.16）',
+      required: false,
+    },
+    'release-store': {
+      type: 'string',
+      description: '已驗證 release 的儲存根目錄（managed 流程的執行控制旗標）',
+      required: false,
+    },
+    'registry-path': {
+      type: 'string',
+      description:
+        '明確指定 registry 檔（managed 流程用）；給定後所有讀寫與子程序使用同一個 registry',
+      required: false,
+    },
+    push: {
+      type: 'boolean',
+      description:
+        'managed bootstrap 允許 push／外部設定變更（--no-push 關閉，仍做本機同步與驗證）',
+      default: true,
+    },
+    offline: {
+      type: 'boolean',
+      description: '禁止外部查詢與下載；必要的本機輸入缺失時明確失敗',
+      default: false,
+    },
   },
   async run({ args }) {
+    // --json：stdout 只留下最後一個 JSON object，所有進度／診斷一律走 stderr。
+    // 在 fd 層攔截 stdout.write —— consola、遺漏的裸寫、以及子行程轉發
+    // 都會落進 stderr，不靠每個呼叫點記得「現在是 json 模式」。
+    const jsonMode = args.json === true
+    let emitJson: ((report: unknown) => void) | undefined
+    if (jsonMode) {
+      const realStdoutWrite = process.stdout.write.bind(process.stdout)
+      process.stdout.write = process.stderr.write.bind(
+        process.stderr,
+      ) as typeof process.stdout.write
+      emitJson = (report) => realStdoutWrite(`${JSON.stringify(report, null, 2)}\n`)
+    }
+    // 失敗共用形狀：具名 diagnostic code + 人讀訊息。這裡的呼叫點全在
+    // 「寫第一個檔之前」，registration 只能是 unregistered。
+    const failRun = (code: string, message: string): never => {
+      consola.error(message)
+      emitJson?.({
+        status: 'failed',
+        registration: 'unregistered',
+        diagnostics: [{ code, message }],
+      })
+      process.exit(1)
+    }
+    const intakeCode = (error: unknown): string =>
+      error instanceof IntakeError ? error.code : 'INTAKE_INVALID'
+
     const monorepoRoot = detectMonorepoRoot()
     const invocationCwd = getInvocationCwd(monorepoRoot)
     const projectName = args.dir as string | undefined
@@ -597,13 +858,14 @@ const main = defineCommand({
     const deployTrackRaw = args['deploy-track'] as string | undefined
     const deployTracks = new Set(['wrangler-action', 'void-cloud', 'node-server', 'none'])
     if (deployTrackRaw && !deployTracks.has(deployTrackRaw)) {
-      consola.error('--deploy-track 必須是 wrangler-action | void-cloud | node-server | none')
-      process.exit(1)
+      failRun(
+        'INTAKE_INVALID',
+        '--deploy-track 必須是 wrangler-action | void-cloud | node-server | none',
+      )
     }
     const dbHostArg = args['db-host'] as string | undefined
     if (dbHostArg && !DB_HOSTS.includes(dbHostArg as DbHost)) {
-      consola.error('--db-host 必須是 this-machine 或 existing-server')
-      process.exit(1)
+      failRun('INTAKE_INVALID', '--db-host 必須是 this-machine 或 existing-server')
     }
     const deployTrackArg = deployTrackRaw as
       | 'wrangler-action'
@@ -613,26 +875,38 @@ const main = defineCommand({
       | undefined
     const repoIdArg = args['repo-id'] as string | undefined
     if (repoIdArg && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoIdArg)) {
-      consola.error('--repo-id 格式必須是 owner/repo')
-      process.exit(1)
+      failRun('INTAKE_INVALID', '--repo-id 格式必須是 owner/repo')
     }
     if (!['trunk-based', 'pr-merge-based'].includes(workflowModelArg)) {
-      consola.error('--workflow-model 必須是 trunk-based 或 pr-merge-based')
-      process.exit(1)
+      failRun('INTAKE_INVALID', '--workflow-model 必須是 trunk-based 或 pr-merge-based')
     }
     if (
       !['pre-production', 'active', 'maintenance', 'paused', 'auto'].includes(businessActivityArg)
     ) {
-      consola.error('--business-activity 值不合法')
-      process.exit(1)
+      failRun('INTAKE_INVALID', '--business-activity 值不合法')
     }
     if (
       devPortArg !== undefined &&
       (!Number.isInteger(devPortArg) || devPortArg < 1024 || devPortArg > 65535)
     ) {
-      consola.error('--dev-port 必須是 1024 到 65535 的整數，或 auto')
-      process.exit(1)
+      failRun('INTAKE_INVALID', '--dev-port 必須是 1024 到 65535 的整數，或 auto')
     }
+    const updatePolicyArg = args['update-policy'] as string | undefined
+    if (
+      updatePolicyArg !== undefined &&
+      !UPDATE_POLICIES.includes(updatePolicyArg as UpdatePolicy)
+    ) {
+      failRun('POLICY_INVALID', `--update-policy 只接受 ${UPDATE_POLICIES.join(' | ')}`)
+    }
+    const releaseArg = args['release'] as string | undefined
+    if (releaseArg !== undefined && !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)*$/.test(releaseArg)) {
+      failRun('INTAKE_INVALID', '--release 必須是 semver（例如 1.13.16）')
+    }
+    const releaseStoreArg = args['release-store'] as string | undefined
+    const registryPathArg = args['registry-path'] as string | undefined
+    const offline = args.offline === true
+    const noPush = args.push === false
+    const answersFileArg = args['answers-file'] as string | undefined
     const hasCustomFlags = Boolean(
       args.auth ||
       args.ci ||
@@ -646,6 +920,44 @@ const main = defineCommand({
       args['evlog-preset'],
     )
 
+    // --answers-file：AI intake 的機讀入口。與旗標走同一 normalizer；
+    // 未知 id／壞 JSON／schemaVersion 不符／與顯式旗標衝突，都在寫第一個檔之前拒絕。
+    const present = flagsPresent(process.argv)
+    let answers: Record<string, string> | undefined
+    if (answersFileArg !== undefined) {
+      try {
+        answers = loadAnswersFile(resolve(invocationCwd, answersFileArg))
+      } catch (error) {
+        return failRun(intakeCode(error), (error as Error).message)
+      }
+    }
+    let catalogArgs: CatalogArgValues
+    try {
+      catalogArgs = mergeAnswersIntoFlags(
+        answers,
+        {
+          dbHost: dbHostArg,
+          registerConsumer: (args['register-consumer'] as boolean) !== false,
+          repoId: repoIdArg,
+          workflowModel: args['workflow-model'] as string | undefined,
+          businessActivity: args['business-activity'] as string | undefined,
+          devPort: devPortRaw,
+          deployTrack: deployTrackRaw,
+          updatePolicy: updatePolicyArg,
+        },
+        present,
+      )
+    } catch (error) {
+      return failRun(intakeCode(error), (error as Error).message)
+    }
+    // answers 已答的題視同旗標已給 —— missingYesFlags 不得再對它們要旗標。
+    if (answers) {
+      for (const id of Object.keys(answers)) {
+        present.add(questionById(id).flag)
+      }
+    }
+    const answersDriven = answers !== undefined
+
     // Validate directory.
     //
     // 「已開好 git repo + 寫好產品 README，還沒有 code」是最常見的起手式之一，
@@ -658,15 +970,14 @@ const main = defineCommand({
       adoptState = classifyTargetDir(targetDir)
       if (adoptState.kind === 'occupied') {
         const [headline, ...rest] = describeRejection(projectName, adoptState)
-        consola.error(headline)
-        for (const line of rest) consola.log(line)
-        process.exit(1)
+        failRun('TARGET_OCCUPIED', [headline, ...rest].join('\n'))
       }
     }
 
     let selections: UserSelections
 
-    if (args.yes || hasCustomFlags) {
+    // --answers-file 自動進非互動模式（與 --yes／自訂旗標同一路徑）。
+    if (args.yes || hasCustomFlags || answersDriven) {
       // Non-interactive mode with defaults/custom flags
       const name = projectName || 'nuxt-app'
       try {
@@ -685,24 +996,29 @@ const main = defineCommand({
             evlogPreset: args['evlog-preset'] as string | undefined,
           }),
           {
-            dbHost: dbHostArg,
+            dbHost: catalogArgs.dbHost,
             nonInteractive: true,
+            register: catalogArgs.register !== false,
+            repoId: catalogArgs.repoId,
+            workflowModel: catalogArgs.workflowModel,
+            businessActivity: catalogArgs.businessActivity,
+            devPort: catalogArgs.devPort,
+            deployTrack: catalogArgs.deployTrack,
+            updatePolicy: catalogArgs.updatePolicy,
           },
         )
-        const register = (args['register-consumer'] as boolean) !== false
         const missing = missingYesFlags({
           hasSupabase: usesSupabaseDatabase(selections.dbStack, selections.features),
-          register,
-          present: flagsPresent(process.argv),
+          register: catalogArgs.register !== false,
+          present,
         })
         if (missing.length > 0) failValidation(formatMissingYesFlags(missing))
       } catch (error) {
-        consola.error((error as Error).message)
-        process.exit(1)
+        return failRun(intakeCode(error), (error as Error).message)
       }
 
       const displayName = basename(resolve(invocationCwd, name))
-      if (hasCustomFlags) {
+      if (hasCustomFlags || answersDriven) {
         consola.info(`使用自訂參數配置建立專案：${displayName}`)
       } else {
         consola.info(`使用預設配置建立專案：${displayName}`)
@@ -721,9 +1037,7 @@ const main = defineCommand({
     adoptState = classifyTargetDir(targetDir)
     if (adoptState.kind === 'occupied') {
       const [headline, ...rest] = describeRejection(pkgName, adoptState)
-      consola.error(headline)
-      for (const line of rest) consola.log(line)
-      process.exit(1)
+      failRun('TARGET_OCCUPIED', [headline, ...rest].join('\n'))
     }
 
     // Display summary and confirm
@@ -740,10 +1054,13 @@ const main = defineCommand({
       }
     }
 
-    if (!args.yes) {
+    // answers-file 自動進非互動：confirm 與下游的互動確認都照 --yes 同等處理。
+    const effectiveYes = (args.yes as boolean) || answersDriven
+    if (!effectiveYes) {
       const confirmed = await confirmScaffold()
       if (!confirmed) {
         consola.info('已取消。')
+        emitJson?.({ status: 'cancelled', registration: 'unregistered', diagnostics: [] })
         process.exit(0)
       }
     }
@@ -754,7 +1071,46 @@ const main = defineCommand({
     const deployTrack = selections.deployTrack ?? deployTrackArg
     const resolvedDevPort = selections.devPort ?? (devPortAutoArg ? 'auto' : devPortArg)
     const registerConsumer =
-      selections.registerFleet === false ? false : (args['register-consumer'] as boolean)
+      selections.registerFleet === false ? false : catalogArgs.register !== false
+    // 政策只存在於 managed 流程；default 一律讀 catalog 宣告，不在這裡寫死。
+    const updatePolicy = registerConsumer
+      ? ((selections.updatePolicy ??
+          updatePolicyArg ??
+          questionById('update-policy').defaultValue) as UpdatePolicy | undefined)
+      : undefined
+
+    // managed 執行控制旗標只服務 register 流程；register-fleet=no 帶它們是矛盾
+    // 答案，與 answers/flag 衝突同等處理：寫第一個檔之前拒絕。
+    if (!registerConsumer) {
+      const managedOnly = [
+        releaseArg !== undefined ? '--release' : undefined,
+        releaseStoreArg !== undefined ? '--release-store' : undefined,
+        registryPathArg !== undefined ? '--registry-path' : undefined,
+        noPush ? '--no-push' : undefined,
+      ].filter((flag): flag is string => flag !== undefined)
+      if (managedOnly.length > 0) {
+        failRun(
+          'INTAKE_CONFLICT',
+          `${managedOnly.join('、')} 是 managed 流程的執行控制；與 --no-register-consumer（register-fleet=no）衝突`,
+        )
+      }
+    }
+
+    // --offline：禁止外部查詢與下載。依賴安裝一定要網路；managed 流程的 clade
+    // 來源也必須已在本機 —— CLADE_HOME 指定但不存在時 findCladeRoot 不 fallback。
+    if (offline && args.install !== false) {
+      failRun(
+        'INTAKE_INVALID',
+        '--offline 禁止外部下載：依賴安裝需要網路。請加 --no-install，或先備妥依賴後重跑。',
+      )
+    }
+    if (offline && registerConsumer && !findCladeRoot()) {
+      failRun(
+        'ASSET_UNAVAILABLE',
+        '--offline 且 managed 流程需要本機 clade 來源：CLADE_HOME / ~/clade / ~/offline/clade 皆不可用' +
+          '（CLADE_HOME 已指定但不存在時不 fallback 真 home）。',
+      )
+    }
 
     // 給了 --repo-id 就是要求登記進 Clade fleet —— 那些約束（fleet base、
     // consumer_id / repo_id 衝突、dev port 撞號）在寫第一個檔之前就問得出來。
@@ -771,12 +1127,15 @@ const main = defineCommand({
           devPort: resolvedDevPort,
           deployTrack,
           dbRuntime: cladeModules.dbRuntime,
+          // registry path 明確指定時，預檢與後續所有子程序都對同一個 registry。
+          registryPath: registryPathArg ? resolve(invocationCwd, registryPathArg) : undefined,
         })
         if (preflight.status === 'rejected') {
-          consola.error('Clade fleet 登記預檢未過，未建立任何檔案：')
-          consola.log(`  ${preflight.reason}`)
           consola.log('  修正後重跑，或拿掉 --repo-id 先建立不登記的專案。')
-          process.exit(1)
+          failRun(
+            'IDENTITY_CONFLICT',
+            `Clade fleet 登記預檢未過，未建立任何檔案：${preflight.reason ?? '未知原因'}`,
+          )
         }
         if (preflight.status === 'skipped') {
           consola.warn(`略過 Clade 登記預檢：${preflight.reason}`)
@@ -798,34 +1157,51 @@ const main = defineCommand({
       )
       consola.success('專案檔案建立完成！')
     } catch (error) {
-      consola.error('建立專案失敗：', error)
-      process.exit(1)
+      return failRun('SCAFFOLD_FAILED', `建立專案失敗：${(error as Error).message}`)
     }
 
     // Post-scaffold
-    await postScaffold(targetDir, pkgName, invocationCwd, cladeModules, {
-      yes: args.yes as boolean,
-      registerConsumer,
-      wirePreCommit: args['wire-pre-commit'] as boolean,
-      cloneClade: args['clone-clade'] as boolean,
-      installDeps: args.install as boolean,
-      existingGitRepo: adoptState?.hasGitRepo === true,
-      deployTarget: selections.deploymentTarget,
-      dbStack: selections.dbStack,
-      dbHost: selections.dbHost,
-      repoId,
-      workflowModel: workflowModel as 'trunk-based' | 'pr-merge-based',
-      businessActivity: businessActivity as
-        | 'pre-production'
-        | 'active'
-        | 'maintenance'
-        | 'paused'
-        | 'auto',
-      devPort: resolvedDevPort,
-      deployTrack,
-      dbRuntime: cladeModules.dbRuntime,
-      agentTargets: selections.agentTargets,
-    })
+    let outcome: PostScaffoldOutcome
+    try {
+      outcome = await postScaffold(targetDir, pkgName, invocationCwd, cladeModules, {
+        yes: effectiveYes,
+        registerConsumer,
+        wirePreCommit: args['wire-pre-commit'] as boolean,
+        cloneClade: args['clone-clade'] as boolean,
+        installDeps: args.install as boolean,
+        existingGitRepo: adoptState?.hasGitRepo === true,
+        deployTarget: selections.deploymentTarget,
+        dbStack: selections.dbStack,
+        dbHost: selections.dbHost,
+        repoId,
+        workflowModel: workflowModel as 'trunk-based' | 'pr-merge-based',
+        businessActivity: businessActivity as
+          | 'pre-production'
+          | 'active'
+          | 'maintenance'
+          | 'paused'
+          | 'auto',
+        devPort: resolvedDevPort,
+        deployTrack,
+        dbRuntime: cladeModules.dbRuntime,
+        agentTargets: selections.agentTargets,
+        updatePolicy,
+        release: releaseArg,
+        releaseStore: releaseStoreArg ? resolve(invocationCwd, releaseStoreArg) : undefined,
+        registryPath: registryPathArg ? resolve(invocationCwd, registryPathArg) : undefined,
+        noPush,
+        offline,
+        json: jsonMode,
+      })
+    } catch (error) {
+      return failRun('SCAFFOLD_FAILED', `post-scaffold 失敗：${(error as Error).message}`)
+    }
+
+    // --json 完成報告：stdout 唯一一個 JSON object（機讀契約）。
+    // bootstrap 回報成功但未提供可驗證身分時降回 scaffolded，不宣稱 ready。
+    const report = buildCompletionReport(targetDir, registerConsumer, outcome)
+    emitJson?.(report)
+    if (report.status === 'failed') process.exit(1)
   },
 })
 

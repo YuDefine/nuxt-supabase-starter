@@ -6,6 +6,7 @@ import {
   type DbHost,
   type DbStack,
   type EvlogPreset,
+  type UpdatePolicy,
   type UserSelections,
 } from './types'
 import { questionById, usesSupabaseDatabase } from './question-catalog'
@@ -601,6 +602,7 @@ async function promptCatalogSelect(id: string): Promise<string> {
   const value = (await consola.prompt(q.prompt, {
     type: 'select',
     options: q.options.map((option) => ({ label: option.label, value: option.value })),
+    ...(q.defaultValue !== undefined ? { initial: q.defaultValue } : {}),
   })) as string
   if (typeof value === 'symbol') process.exit(0)
   return value
@@ -666,6 +668,7 @@ async function promptCatalogTail(partial: UserSelections): Promise<UserSelection
     | 'void-cloud'
     | 'node-server'
     | 'none'
+  const updatePolicy = (await promptCatalogSelect('update-policy')) as UpdatePolicy
 
   return {
     ...partial,
@@ -676,6 +679,7 @@ async function promptCatalogTail(partial: UserSelections): Promise<UserSelection
     businessActivity,
     devPort,
     deployTrack,
+    updatePolicy,
   }
 }
 
