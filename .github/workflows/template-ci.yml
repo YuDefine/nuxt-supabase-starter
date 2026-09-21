@@ -1,4 +1,5 @@
 name: Template CI
+# spotcheck-draft-gate
 
 on:
   pull_request:
