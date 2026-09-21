@@ -8,6 +8,9 @@ name: CI
 
 on:
   pull_request:
+    # ready_for_review：draft 轉 ready 的那一刻要補跑 Unit tests（draft 期間不跑）。
+    # edited：把 PR base 改成 main 時 GitHub 只發 edited，不發 synchronize。
+    types: [opened, synchronize, reopened, ready_for_review, edited]
     paths:
       - 'app/**'
       - 'server/**'
@@ -43,7 +46,7 @@ concurrency:
 
 jobs:
   check:
-    name: Format / Lint / Typecheck / Unit tests
+    name: Format / Lint / Typecheck
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -67,6 +70,26 @@ jobs:
 
       - name: Typecheck
         run: vp run typecheck
+
+  test:
+    # PR 只有「base=main 且非 draft」才跑完整測試。draft 只付上方機械檢查。
+    # 判準在 rules/core/github-flow.md § Integration branch。
+    name: Unit tests
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && github.base_ref == 'main' && github.event.pull_request.draft == false)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Vite+ (vp)
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: '24'
+          cache: true
+
+      - name: Install dependencies
+        run: vp install
 
       - name: Unit tests
         run: vp run test

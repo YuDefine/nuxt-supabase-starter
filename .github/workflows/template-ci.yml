@@ -2,6 +2,9 @@ name: Template CI
 
 on:
   pull_request:
+    # ready_for_review：draft 轉 ready 的那一刻要補跑 Unit tests（draft 期間不跑）。
+    # edited：把 PR base 改成 main 時 GitHub 只發 edited，不發 synchronize。
+    types: [opened, synchronize, reopened, ready_for_review, edited]
     paths:
       - 'template/app/**'
       - 'template/server/**'
@@ -51,7 +54,47 @@ concurrency:
 
 jobs:
   check:
-    name: Format / Lint / Typecheck / Unit tests
+    name: Format / Lint / Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: template
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Vite+ (vp)
+        # composite action 不吃 job 的 defaults.working-directory，它跑在 workspace 根，
+        # 而這個 meta monorepo 的根沒有 package.json。setup-vp 的 run-install 預設是
+        # true，於是它會在根跑 `vp install` 並以 ENOENT / code 254 掛掉（浮動 v1 tag
+        # 在 2026-09-08 前後移動後開始發生）。working-directory 同時修好 lockfile 與
+        # cache key 的自動偵測；install 維持由下面那個顯式步驟負責，只留一個安裝點。
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: '24'
+          cache: true
+          working-directory: template
+          run-install: false
+
+      - name: Install dependencies
+        run: vp install
+
+      - name: Format check
+        run: vp fmt --check
+
+      - name: Lint
+        run: vp lint
+
+      - name: Typecheck
+        run: vp run typecheck
+
+  test:
+    # PR 只有「base=main 且非 draft」才跑完整測試。draft 只付上方機械檢查；
+    # ready_for_review 才補這一趟，同一個 SHA 不會在 draft 期間先付一次。
+    # 判準在 rules/core/github-flow.md § Integration branch。
+    name: Unit tests
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && github.base_ref == 'main' && github.event.pull_request.draft == false)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -83,15 +126,6 @@ jobs:
 
       - name: Install dependencies
         run: vp install
-
-      - name: Format check
-        run: vp fmt --check
-
-      - name: Lint
-        run: vp lint
-
-      - name: Typecheck
-        run: vp run typecheck
 
       - name: Unit tests
         run: vp test --coverage
