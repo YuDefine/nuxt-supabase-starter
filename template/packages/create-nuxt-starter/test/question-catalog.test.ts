@@ -12,7 +12,7 @@ describe('applicableQuestions', () => {
     expect(ids).toEqual(['db-host', 'register-fleet'])
   })
 
-  it('選了登記才問 GitHub / 流程 / 階段 / port / 上線', () => {
+  it('選了登記才問 GitHub / 流程 / 階段 / port / 上線 / 追版政策', () => {
     const ids = applicableQuestions({ hasSupabase: true, register: true }).map((q) => q.id)
     expect(ids).toEqual([
       'db-host',
@@ -22,6 +22,7 @@ describe('applicableQuestions', () => {
       'business-activity',
       'dev-port',
       'deploy-track',
+      'update-policy',
     ])
   })
 

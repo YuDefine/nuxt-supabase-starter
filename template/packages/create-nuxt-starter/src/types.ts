@@ -4,6 +4,14 @@ export type EvlogPreset = 'none' | 'baseline' | 'd-pattern-audit' | 'nuxthub-ai'
 
 export type DbStack = 'supabase' | 'nuxthub-d1' | 'void-d1'
 
+/**
+ * Managed consumer 的更新政策。`pinned` 固定當次已驗證 release（預設，不自動追版）；
+ * `subscribed` 之後 clade 發布時自動跟進。catalog `update-policy` 題的 options 與此同形。
+ */
+export type UpdatePolicy = 'pinned' | 'subscribed'
+
+export const UPDATE_POLICIES: readonly UpdatePolicy[] = ['pinned', 'subscribed'] as const
+
 /** 開發時 Supabase 跑在哪。與部署目標無關：自架 Node 仍可能在這台電腦 Docker 起一份。 */
 export type DbHost = 'this-machine' | 'existing-server'
 
@@ -75,4 +83,6 @@ export interface UserSelections {
   businessActivity?: 'pre-production' | 'active' | 'maintenance' | 'paused' | 'auto'
   devPort?: number | 'auto'
   deployTrack?: 'wrangler-action' | 'void-cloud' | 'node-server' | 'none'
+  /** managed 流程的更新政策；registerFleet=false 時不得攜帶。未提供由 normalizer 套 catalog default（pinned）。 */
+  updatePolicy?: UpdatePolicy
 }

@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import {
   appendFileSync,
   chmodSync,
@@ -6,6 +6,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
@@ -13,7 +14,8 @@ import { homedir } from 'node:os'
 import { basename, dirname, join, relative } from 'node:path'
 import { consola } from 'consola'
 import { z } from 'zod'
-import { DEFAULT_DB_STACK, type DbHost, type DbStack } from './types'
+import { questionById } from './question-catalog'
+import { DEFAULT_DB_STACK, type DbHost, type DbStack, type UpdatePolicy } from './types'
 
 export interface CladeModules {
   auth: 'none' | 'better-auth' | 'nuxt-auth-utils' | 'supabase-self-hosted'
@@ -53,6 +55,40 @@ export interface PostScaffoldOptions {
   deployTarget?: 'cloudflare' | 'void' | 'node'
   /** 使用者勾選的 AI runtime。決定要不要跑 Cursor 投影。預設只有 claude-code。 */
   agentTargets?: readonly ('claude-code' | 'codex' | 'cursor')[]
+  /** managed 流程的更新政策（pinned 預設 / subscribed）。registerConsumer=false 時不得攜帶。 */
+  updatePolicy?: UpdatePolicy
+  /** managed bootstrap 要安裝的 release 版本（契約 § bootstrap 入口）。 */
+  release?: string
+  /** 已驗證 release 的儲存根目錄。 */
+  releaseStore?: string
+  /** 明確指定的 registry 檔；給定後所有讀寫與子程序使用同一個 registry。 */
+  registryPath?: string
+  /** true = --no-push：禁止 push／外部設定變更，本機同步與驗證照跑。 */
+  noPush?: boolean
+  /** true = --offline：禁止外部查詢與下載（含 clade auto-clone）。 */
+  offline?: boolean
+  /** true = --json：子行程 stdout 一律轉 stderr，保留 stdout 給最終 JSON report。 */
+  json?: boolean
+}
+
+export interface PostScaffoldDiagnostic {
+  code: string
+  message: string
+}
+
+export interface ManagedBootstrapResult {
+  /** false = 從未執行（script 缺、缺 --repo-id、互動流程被略過） */
+  ran: boolean
+  /** ran && exit 0 */
+  ok: boolean
+  /** bootstrap --json stdout 解析出的物件（若有；未提供 identity 欄位時不得宣稱 ready） */
+  report?: Record<string, unknown>
+  diagnostics: PostScaffoldDiagnostic[]
+}
+
+export interface PostScaffoldOutcome {
+  /** registerConsumer=true 才存在；scaffold-only 是零管理，此欄位缺席。 */
+  managed?: ManagedBootstrapResult
 }
 
 /**
@@ -797,12 +833,34 @@ export function rewriteGeneratedPort(targetDir: string, devPort?: number): void 
   }
 }
 
+/**
+ * 人類可見的子行程（pnpm install / typecheck / format）平時走 stdio inherit；
+ * --json 模式改 capture 後轉發 stderr —— stdout 只留給最終那一個 JSON object。
+ */
+function runPassthrough(command: string, args: string[], cwd: string, jsonMode: boolean): void {
+  if (!jsonMode) {
+    execFileSync(command, args, { cwd, stdio: 'inherit' })
+    return
+  }
+  const result = spawnSync(command, args, {
+    cwd,
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  if (result.stdout) process.stderr.write(result.stdout)
+  if (result.stderr) process.stderr.write(result.stderr)
+  if (result.error) throw result.error
+  if (result.status !== 0) {
+    throw new Error(`${command} ${args.join(' ')} exited with code ${result.status ?? 'null'}`)
+  }
+}
+
 /** Format after bootstrap, agent projection and all generated manifest/doc rewrites. */
-export function formatGeneratedProject(targetDir: string): void {
+export function formatGeneratedProject(targetDir: string, jsonMode = false): void {
   const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf8'))
   if (!pkg.scripts?.format) return
-  execFileSync('pnpm', ['run', 'format'], { cwd: targetDir, stdio: 'inherit' })
-  execFileSync('pnpm', ['run', 'format:check'], { cwd: targetDir, stdio: 'inherit' })
+  runPassthrough('pnpm', ['run', 'format'], targetDir, jsonMode)
+  runPassthrough('pnpm', ['run', 'format:check'], targetDir, jsonMode)
 }
 
 export async function postScaffold(
@@ -811,7 +869,7 @@ export async function postScaffold(
   invocationCwd: string,
   cladeModules: CladeModules,
   opts: PostScaffoldOptions,
-): Promise<void> {
+): Promise<PostScaffoldOutcome> {
   // Use the user's actual cwd for the cd hint, not invocationCwd
   // (which may differ when running inside the monorepo).
   // NEVER 退回 process.env.PWD：那是呼叫者 shell 的值，不隨 spawn 的 cwd 改變，
@@ -823,7 +881,19 @@ export async function postScaffold(
   //    selected modules and inject postinstall + hub:* scripts into
   //    package.json. --no-bootstrap defers the heavy sync to pnpm install.
   //    If clade is missing, may attempt to git clone it (controlled by opts.cloneClade).
-  const cladeRoot = await runInitConsumer(targetDir, cladeModules, opts)
+  //
+  //    scaffold-only（register-fleet=no）是零管理：init-consumer 本身也是
+  //    managed 副作用（寫 hub.json／改 package.json scripts），這裡整支略過。
+  //
+  //    先剝 assemble 整包拷進來的 `.claude/hub.json` —— 那是 starter repo
+  //    自己的 consumer manifest，不是本專案的身分。managed 流程由
+  //    init-consumer 覆寫成真 manifest；scaffold-only 必須不存在
+  //    （契約：零管理，NEVER 留下 starter 的 managed 身分）。
+  rmSync(join(targetDir, '.claude', 'hub.json'), { force: true })
+
+  const cladeRoot = opts.registerConsumer
+    ? await runInitConsumer(targetDir, cladeModules, opts)
+    : undefined
 
   // 2. Install dependencies — postinstall hook runs clade bootstrap-hub
   //    which pulls fresh rules / skills / hooks / scripts into .claude/.
@@ -843,7 +913,7 @@ export async function postScaffold(
     consola.start('正在安裝依賴套件...')
     for (const attempt of [1, 2]) {
       try {
-        execFileSync('pnpm', ['install'], { cwd: targetDir, stdio: 'inherit' })
+        runPassthrough('pnpm', ['install'], targetDir, opts.json === true)
         consola.success('依賴套件安裝完成！')
         pnpmInstalled = true
         break
@@ -894,7 +964,7 @@ export async function postScaffold(
   if (pnpmInstalled) {
     consola.start('驗證產出的專案編得過（pnpm typecheck）...')
     try {
-      execFileSync('pnpm', ['typecheck'], { cwd: targetDir, stdio: 'inherit' })
+      runPassthrough('pnpm', ['typecheck'], targetDir, opts.json === true)
       consola.success('typecheck 通過。')
     } catch {
       consola.warn('typecheck 沒過 —— scaffold 產出的專案有型別錯誤。')
@@ -914,29 +984,23 @@ export async function postScaffold(
     consola.warn('Git 初始化失敗，請手動執行。')
   }
 
-  if (cladeRoot) {
-    maybeWriteConsumerMeta(cladeRoot, targetDir, opts.devPort)
-  }
-
-  // 6. Register as clade consumer (idempotent; opt-out via --no-register-consumer)
+  // 6. Managed delivery —— 單一入口：clade `scripts/bootstrap-project.ts`
+  //    （契約 § bootstrap 入口）。registry / consumer-meta / gate mint /
+  //    vendor sync / readiness gates 全在那支裡面；starter 只把 intake 決策
+  //    轉成 argv，不在這裡重寫 registry/manifest 語意。
+  //    registerConsumer=false 時連這支都不呼叫 —— scaffold-only 是零管理。
+  let managed: ManagedBootstrapResult | undefined
   let consumerRegistered = false
   if (cladeRoot && opts.registerConsumer) {
-    consumerRegistered = await maybeRegisterConsumer(cladeRoot, targetDir, opts)
+    managed = await runManagedBootstrap(cladeRoot, targetDir, opts)
+    consumerRegistered = managed.ok
   }
 
-  // 6b. Mint gate playbook pack（缺才寫）。template 已帶一份 placeholder pack；
-  // clade 有 mint script 時再填 consumer / port。沒有 script（尚未 publish）不算失敗。
-  if (cladeRoot) {
-    maybeMintGatePlaybooks(cladeRoot, targetDir, opts)
-  }
-
-  if (cladeRoot) {
-    maybeSyncVendor(cladeRoot, targetDir)
-  }
-
-  // 7. Wire pre-commit hook (idempotent; opt-out via --no-wire-pre-commit)
+  // 7. Wire pre-commit hook (idempotent; opt-out via --no-wire-pre-commit)。
+  //    只在 managed 交付成功之後才有意義 —— bootstrap 沒完成時 hook 守的是
+  //    不存在的投影檔。
   let preCommitWired = false
-  if (cladeRoot && opts.wirePreCommit) {
+  if (cladeRoot && opts.registerConsumer && opts.wirePreCommit && consumerRegistered) {
     preCommitWired = await maybeWirePreCommit(cladeRoot, targetDir, opts.yes)
   }
 
@@ -965,7 +1029,7 @@ export async function postScaffold(
     stripOrphanPostMigrationHook(targetDir, opts.dbHost)
   }
 
-  if (pnpmInstalled) formatGeneratedProject(targetDir)
+  if (pnpmInstalled) formatGeneratedProject(targetDir, opts.json === true)
 
   consola.start(adoptingRepo ? '正在提交 starter 檔案...' : '正在提交 initial scaffold...')
   try {
@@ -1074,6 +1138,24 @@ export async function postScaffold(
     consola.log('    VOID_PROJECT_STAGING / VOID_PROJECT')
     consola.log('  部署認證走 GitHub OIDC，沒有 token 要保管。')
   }
+
+  // --json 完成報告的材料：managed 有跑就給真實結果；要求 managed 但
+  // clade 來源不可用 → 明說未執行（unregistered），不捏造成功。
+  const outcome: PostScaffoldOutcome = {}
+  if (opts.registerConsumer) {
+    outcome.managed = managed ?? {
+      ran: false,
+      ok: false,
+      diagnostics: [
+        {
+          code: 'ASSET_UNAVAILABLE',
+          message:
+            '找不到 clade（CLADE_HOME / ~/clade / ~/offline/clade），managed bootstrap 未執行',
+        },
+      ],
+    }
+  }
+  return outcome
 }
 
 /**
@@ -1137,6 +1219,182 @@ export function buildRegisterConsumerArgs(
     args.push('--db-runtime', extras.dbRuntime)
   }
   return args
+}
+
+/**
+ * clade `scripts/bootstrap-project.ts` 的 argv —— managed 交付的唯一入口
+ * （契約 § bootstrap 入口：`--consumer <abs> --repo-id <owner/repo> --consumer-id <id>
+ * --update-policy pinned|subscribed --release <version> --registry-path <path>
+ * --json --no-push`，外加本輪的 release-store / offline 執行控制）。
+ * registry 寫入、consumer-meta、gate mint、vendor sync、readiness 全在 bootstrap
+ * 內部；starter 只把 intake 決策轉成 argv，argv 形狀本身就是被測的 seam。
+ */
+export function buildBootstrapProjectArgs(
+  script: string,
+  targetDir: string,
+  opts: {
+    repoId: string
+    consumerId: string
+    updatePolicy: UpdatePolicy
+    workflowModel: 'trunk-based' | 'pr-merge-based'
+    businessActivity: 'pre-production' | 'active' | 'maintenance' | 'paused' | 'auto'
+    devPort: number | 'auto'
+    deployTrack?: PostScaffoldOptions['deployTrack']
+    dbRuntime?: PostScaffoldOptions['dbRuntime']
+    release?: string
+    releaseStore?: string
+    registryPath?: string
+    noPush?: boolean
+    offline?: boolean
+  },
+): string[] {
+  const args = [
+    script,
+    '--consumer',
+    targetDir,
+    '--repo-id',
+    opts.repoId,
+    '--consumer-id',
+    opts.consumerId,
+    '--workflow-model',
+    opts.workflowModel,
+    '--business-activity',
+    opts.businessActivity,
+    '--dev-port',
+    String(opts.devPort),
+  ]
+  if (opts.deployTrack) args.push('--deploy-track', opts.deployTrack)
+  if (opts.dbRuntime) args.push('--db-runtime', opts.dbRuntime)
+  args.push('--update-policy', opts.updatePolicy)
+  if (opts.release) args.push('--release', opts.release)
+  if (opts.releaseStore) args.push('--release-store', opts.releaseStore)
+  if (opts.registryPath) args.push('--registry-path', opts.registryPath)
+  args.push('--json')
+  if (opts.noPush) args.push('--no-push')
+  if (opts.offline) args.push('--offline')
+  return args
+}
+
+/** bootstrap --json 的 stdout：取最後一個可解析的 JSON object（前面可能有進度行）。 */
+function parseJsonObject(stdout: string | undefined): Record<string, unknown> | undefined {
+  const text = stdout?.trim()
+  if (!text) return undefined
+  try {
+    const parsed = JSON.parse(text)
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+    return undefined
+  } catch {
+    // stdout 混了非 JSON 行：從尾端往前找第一個以 { 開頭的片段試解析。
+    const start = text.lastIndexOf('\n{')
+    if (start < 0) return undefined
+    try {
+      const parsed = JSON.parse(text.slice(start + 1))
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>
+      }
+    } catch {
+      return undefined
+    }
+    return undefined
+  }
+}
+
+/**
+ * Managed 交付：呼叫 clade `scripts/bootstrap-project.ts`。
+ * 不寫 registry／manifest，不代工 bootstrap 的任何步驟 —— starter 只負責
+ * 把 intake 決策正確轉成 argv、把成功／失敗與機讀結果如實回報。
+ */
+async function runManagedBootstrap(
+  cladeRoot: string,
+  targetDir: string,
+  opts: PostScaffoldOptions,
+): Promise<ManagedBootstrapResult> {
+  const fail = (code: string, message: string): ManagedBootstrapResult => ({
+    ran: false,
+    ok: false,
+    diagnostics: [{ code, message }],
+  })
+  if (!opts.repoId) {
+    return fail('IDENTITY_MISSING', '缺少 --repo-id，managed bootstrap 未執行')
+  }
+  if (opts.devPort === undefined) {
+    return fail('IDENTITY_MISSING', '缺少 --dev-port，managed bootstrap 未執行')
+  }
+  const script = join(cladeRoot, 'scripts', 'bootstrap-project.ts')
+  if (!existsSync(script)) {
+    return fail('ASSET_UNAVAILABLE', `Clade checkout 缺少 bootstrap-project.ts：${script}`)
+  }
+
+  if (!opts.yes) {
+    const confirmed = await consola.prompt(
+      `把 ${opts.repoId} 交付給 Clade managed bootstrap（登記 fleet + 套用 release）？`,
+      { type: 'confirm', initial: true },
+    )
+    if (!confirmed) {
+      consola.info('已跳過 Clade managed bootstrap')
+      return fail('CANCELLED', '使用者取消 managed bootstrap')
+    }
+  }
+
+  const args = buildBootstrapProjectArgs(script, targetDir, {
+    repoId: opts.repoId,
+    consumerId: basename(targetDir),
+    // policy default 一律讀 catalog 宣告（pinned），不在這裡寫死。
+    updatePolicy: opts.updatePolicy ?? (questionById('update-policy').defaultValue as UpdatePolicy),
+    workflowModel: opts.workflowModel ?? 'trunk-based',
+    businessActivity: opts.businessActivity ?? 'pre-production',
+    devPort: opts.devPort,
+    deployTrack: opts.deployTrack,
+    dbRuntime: opts.dbRuntime,
+    release: opts.release,
+    releaseStore: opts.releaseStore,
+    registryPath: opts.registryPath,
+    noPush: opts.noPush,
+    offline: opts.offline,
+  })
+
+  consola.start('交付 managed bootstrap（clade scripts/bootstrap-project.ts）')
+  const result = spawnSync('node', args, {
+    cwd: cladeRoot,
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: process.env,
+  })
+  // 子程序輸出全部先 capture：--json 模式連它的 stdout 也轉 stderr，
+  // 保住「stdout 只有最終一個 JSON object」的機讀契約。
+  if (result.stdout) {
+    if (opts.json) process.stderr.write(result.stdout)
+    else process.stdout.write(result.stdout)
+  }
+  if (result.stderr) process.stderr.write(result.stderr)
+  if (result.error) {
+    return {
+      ran: true,
+      ok: false,
+      diagnostics: [{ code: 'BOOTSTRAP_FAILED', message: String(result.error) }],
+    }
+  }
+  const report = parseJsonObject(result.stdout)
+  if (result.status !== 0) {
+    const detail =
+      (typeof report?.error === 'string' && report.error) ||
+      (typeof report?.message === 'string' && report.message) ||
+      (result.stderr ?? '').trim()
+    return {
+      ran: true,
+      ok: false,
+      diagnostics: [
+        {
+          code: 'BOOTSTRAP_FAILED',
+          message: `bootstrap-project.ts exit ${result.status ?? 'null'}：${detail || '無診斷輸出'}`,
+        },
+      ],
+    }
+  }
+  consola.success('managed bootstrap 完成')
+  return { ran: true, ok: true, report, diagnostics: [] }
 }
 
 export function buildMintGatePlaybooksArgs(
@@ -1235,7 +1493,13 @@ export function preflightCladeRegistration(
   targetDir: string,
   opts: Pick<
     PostScaffoldOptions,
-    'repoId' | 'workflowModel' | 'businessActivity' | 'devPort' | 'deployTrack' | 'dbRuntime'
+    | 'repoId'
+    | 'workflowModel'
+    | 'businessActivity'
+    | 'devPort'
+    | 'deployTrack'
+    | 'dbRuntime'
+    | 'registryPath'
   >,
 ): PreflightOutcome {
   if (!opts.repoId) return { status: 'skipped', reason: '未給 --repo-id' }
@@ -1253,6 +1517,8 @@ export function preflightCladeRegistration(
       opts.devPort ?? 'auto',
       { deployTrack: opts.deployTrack, dbRuntime: opts.dbRuntime },
     ),
+    // registry 明確指定時，預檢必須查同一個 registry，否則查的是另一份名單。
+    ...(opts.registryPath ? ['--registry-path', opts.registryPath] : []),
     '--preflight',
     '--json',
   ]
@@ -1268,6 +1534,11 @@ export function preflightCladeRegistration(
     // 這次 scaffold 有問題 —— 略過 preflight，讓 scaffold 照舊往下走。
     if (/unknown flag: --preflight/.test(message)) {
       return { status: 'skipped', reason: 'Clade checkout 尚未支援 --preflight' }
+    }
+    // --registry-path 是後加的旗標：舊 register-consumer 不認得時預檢無法對
+    // 指定 registry 作答，結果不可用 —— 略過並交付 bootstrap 自己的診斷。
+    if (/unknown flag: --registry-path/.test(message)) {
+      return { status: 'skipped', reason: 'Clade checkout 尚未支援 --registry-path' }
     }
     return { status: 'rejected', reason: message }
   }
@@ -1499,7 +1770,9 @@ function tryReadFile(path: string): string | undefined {
 
 export function findCladeRoot(): string | undefined {
   const env = process.env.CLADE_HOME?.trim()
-  if (env && existsSync(env)) return env
+  // CLADE_HOME 一指定就是權威來源：不存在時回 undefined，NEVER fallback 真 home
+  // （契約 § 同一可執行入口：「指定 CLADE_HOME 但該來源不可用時，不得 fallback」）。
+  if (env) return existsSync(env) ? env : undefined
   const home = homedir()
   for (const candidate of [join(home, 'clade'), join(home, 'offline', 'clade')]) {
     if (existsSync(candidate)) return candidate
@@ -1609,7 +1882,9 @@ async function runInitConsumer(
   opts: PostScaffoldOptions,
 ): Promise<string | undefined> {
   let cladeRoot = findCladeRoot()
-  if (!cladeRoot && opts.cloneClade) {
+  // --offline 禁止外部下載：clade auto-clone 是網路操作，明確略過（缺本機來源
+  // 由 cli.ts 在寫第一個檔之前 fail-fast）。
+  if (!cladeRoot && opts.cloneClade && !opts.offline) {
     cladeRoot = await tryCloneClade(opts.yes)
   }
   if (!cladeRoot) {
