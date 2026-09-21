@@ -6,13 +6,17 @@ on:
   push:
     branches: [main]
   pull_request:
+    # ready_for_review：draft 轉 ready 的那一刻要補跑 tests（draft 期間不跑）。
+    # edited：把 PR base 改成 main 時 GitHub 只發 edited，不發 synchronize。
+    types: [opened, synchronize, reopened, ready_for_review, edited]
     branches: [main]
 
 permissions:
   contents: read
 
 jobs:
-  ci:
+  check:
+    name: Format / Lint / Typecheck
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -36,6 +40,26 @@ jobs:
 
       - name: Typecheck
         run: vp run typecheck
+
+  test:
+    # PR 只有非 draft 才跑完整測試。draft 只付上方機械檢查。
+    # 判準在 rules/core/github-flow.md § Integration branch。
+    name: Unit tests
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: '24'
+          cache: true
+
+      - run: vp install
 
       - name: Run tests
         run: vp run test
