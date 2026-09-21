@@ -863,6 +863,34 @@ export function formatGeneratedProject(targetDir: string, jsonMode = false): voi
   runPassthrough('pnpm', ['run', 'format:check'], targetDir, jsonMode)
 }
 
+/**
+ * 採用既有業務專案（adopt）：不 scaffold、不跑 init-consumer、不改 package.json，
+ * 只把既有 repo 交給 clade managed bootstrap（登記 + release + runtime）。
+ * 既有業務檔與 WIP 一個字都不動——受管理寫入只落在 bootstrap 的 ownership 範圍。
+ */
+export async function adoptExistingProject(
+  targetDir: string,
+  opts: PostScaffoldOptions,
+): Promise<PostScaffoldOutcome> {
+  const cladeRoot = findCladeRoot()
+  if (!cladeRoot) {
+    return {
+      managed: {
+        ran: false,
+        ok: false,
+        diagnostics: [
+          {
+            code: 'ASSET_UNAVAILABLE',
+            message:
+              '採用既有專案需要本機 clade 來源：CLADE_HOME / ~/clade / ~/offline/clade 皆不可用',
+          },
+        ],
+      },
+    }
+  }
+  return { managed: await runManagedBootstrap(cladeRoot, targetDir, opts) }
+}
+
 export async function postScaffold(
   targetDir: string,
   projectName: string,
@@ -1340,7 +1368,9 @@ async function runManagedBootstrap(
 
   const args = buildBootstrapProjectArgs(script, targetDir, {
     repoId: opts.repoId,
-    consumerId: basename(targetDir),
+    // consumer 身分取 repo_id 的 repo 段（fleet 慣例：consumer_id == repo 名），
+    // 不取目標目錄名——同一份 intake 在不同目錄建立時 registry 身分必須一致。
+    consumerId: opts.repoId.split('/').pop() || basename(targetDir),
     // policy default 一律讀 catalog 宣告（pinned），不在這裡寫死。
     updatePolicy: opts.updatePolicy ?? (questionById('update-policy').defaultValue as UpdatePolicy),
     workflowModel: opts.workflowModel ?? 'trunk-based',
@@ -1519,6 +1549,9 @@ export function preflightCladeRegistration(
     ),
     // registry 明確指定時，預檢必須查同一個 registry，否則查的是另一份名單。
     ...(opts.registryPath ? ['--registry-path', opts.registryPath] : []),
+    // 受管 intake 的身分／落點契約（非空、owner/repo 形狀、不限 fleet base），
+    // 不是 register-consumer 的 standalone 嚴格白名單。
+    '--managed',
     '--preflight',
     '--json',
   ]
@@ -1539,6 +1572,10 @@ export function preflightCladeRegistration(
     // 指定 registry 作答，結果不可用 —— 略過並交付 bootstrap 自己的診斷。
     if (/unknown flag: --registry-path/.test(message)) {
       return { status: 'skipped', reason: 'Clade checkout 尚未支援 --registry-path' }
+    }
+    // --managed 同樣是後加：舊版沒有受管 intake 契約，預檢結果不可用。
+    if (/unknown flag: --managed/.test(message)) {
+      return { status: 'skipped', reason: 'Clade checkout 尚未支援 --managed' }
     }
     return { status: 'rejected', reason: message }
   }

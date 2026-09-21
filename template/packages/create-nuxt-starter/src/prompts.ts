@@ -9,7 +9,7 @@ import {
   type UpdatePolicy,
   type UserSelections,
 } from './types'
-import { questionById, usesSupabaseDatabase } from './question-catalog'
+import { questionById, REPO_ID_PATTERN, usesSupabaseDatabase } from './question-catalog'
 import { featureModules, getModuleById, resolveFeatureDependencies } from './features'
 import { PRESETS, applyPreset, getPresetById, type PresetDefinition } from './presets'
 
@@ -635,7 +635,7 @@ async function promptCatalogTail(partial: UserSelections): Promise<UserSelection
   }
 
   let repoId = (await promptCatalogText('repo-id', 'owner/專案名')).trim()
-  while (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoId)) {
+  while (!REPO_ID_PATTERN.test(repoId)) {
     consola.error('格式必須是 owner/專案名，例如 acme/my-app')
     repoId = (await promptCatalogText('repo-id', 'owner/專案名')).trim()
   }

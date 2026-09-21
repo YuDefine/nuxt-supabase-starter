@@ -14,6 +14,7 @@ import {
 import { featureModules, getModuleById, resolveFeatureDependencies } from './features'
 import { confirmScaffold, displaySummary, getDefaultSelections, promptUser } from './prompts'
 import {
+  adoptExistingProject,
   findCladeRoot,
   postScaffold,
   preflightCladeRegistration,
@@ -52,6 +53,7 @@ import {
   formatMissingYesFlags,
   missingYesFlags,
   questionById,
+  REPO_ID_PATTERN,
   usesSupabaseDatabase,
 } from './question-catalog'
 
@@ -298,7 +300,6 @@ export interface CatalogFlagArgs {
   updatePolicy?: string
 }
 
-const REPO_ID_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 const WORKFLOW_MODEL_VALUES = ['trunk-based', 'pr-merge-based'] as const
 const BUSINESS_ACTIVITY_VALUES = [
   'pre-production',
@@ -874,7 +875,7 @@ const main = defineCommand({
       | 'none'
       | undefined
     const repoIdArg = args['repo-id'] as string | undefined
-    if (repoIdArg && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoIdArg)) {
+    if (repoIdArg && !REPO_ID_PATTERN.test(repoIdArg)) {
       failRun('INTAKE_INVALID', '--repo-id 格式必須是 owner/repo')
     }
     if (!['trunk-based', 'pr-merge-based'].includes(workflowModelArg)) {
@@ -964,11 +965,17 @@ const main = defineCommand({
     // 舊行為把它跟「目錄裡已經有一個專案」混為一談，兩者都吐同一句
     // 「已存在且不為空」就 exit 1，使用者沒有任何下一步可循。
     // 現在分成三態：可就地展開 → 說明處置後照走；真的被佔用 → 拒絕但給出路。
+    // 採用既有業務專案：目標是已有內容的 git repo，且使用者「明確」給了
+    // --register-consumer（預設值不算）——只交付 managed bootstrap，不 scaffold。
+    // 沒有明確旗標的 occupied 目錄仍照舊拒絕，避免誤把既有專案登記進 fleet。
+    const explicitRegister = present.has('--register-consumer')
+    const isManagedAdopt = (state: TargetDirState): boolean =>
+      state.kind === 'occupied' && state.hasGitRepo && explicitRegister
     let adoptState: TargetDirState | undefined
     if (projectName) {
       const targetDir = resolve(invocationCwd, projectName)
       adoptState = classifyTargetDir(targetDir)
-      if (adoptState.kind === 'occupied') {
+      if (adoptState.kind === 'occupied' && !isManagedAdopt(adoptState)) {
         const [headline, ...rest] = describeRejection(projectName, adoptState)
         failRun('TARGET_OCCUPIED', [headline, ...rest].join('\n'))
       }
@@ -1035,7 +1042,8 @@ const main = defineCommand({
     const pkgName = basename(targetDir)
 
     adoptState = classifyTargetDir(targetDir)
-    if (adoptState.kind === 'occupied') {
+    const managedAdopt = isManagedAdopt(adoptState)
+    if (adoptState.kind === 'occupied' && !managedAdopt) {
       const [headline, ...rest] = describeRejection(pkgName, adoptState)
       failRun('TARGET_OCCUPIED', [headline, ...rest].join('\n'))
     }
@@ -1079,14 +1087,15 @@ const main = defineCommand({
           questionById('update-policy').defaultValue) as UpdatePolicy | undefined)
       : undefined
 
-    // managed 執行控制旗標只服務 register 流程；register-fleet=no 帶它們是矛盾
-    // 答案，與 answers/flag 衝突同等處理：寫第一個檔之前拒絕。
+    // managed 資料來源旗標（release／store／registry）只服務 register 流程；
+    // register-fleet=no 帶它們是矛盾答案，與 answers/flag 衝突同等處理：寫第一個
+    // 檔之前拒絕。--no-push／--offline 是限制型執行控制，scaffold-only 本來就不
+    // push、不下載，帶著它們不矛盾（契約：scaffold-only 執行控制只留 no-push/offline）。
     if (!registerConsumer) {
       const managedOnly = [
         releaseArg !== undefined ? '--release' : undefined,
         releaseStoreArg !== undefined ? '--release-store' : undefined,
         registryPathArg !== undefined ? '--registry-path' : undefined,
-        noPush ? '--no-push' : undefined,
       ].filter((flag): flag is string => flag !== undefined)
       if (managedOnly.length > 0) {
         failRun(
@@ -1141,6 +1150,51 @@ const main = defineCommand({
           consola.warn(`略過 Clade 登記預檢：${preflight.reason}`)
         }
       }
+    }
+
+    if (managedAdopt) {
+      // adopt：既有業務專案只接 managed bootstrap；scaffold／init-consumer／
+      // commit 全部略過，業務檔與 WIP 原封不動。
+      consola.info(
+        `偵測到既有業務專案「${pkgName}」，只交付 Clade managed bootstrap（不 scaffold）。`,
+      )
+      let adoptOutcome: PostScaffoldOutcome
+      try {
+        adoptOutcome = await adoptExistingProject(targetDir, {
+          yes: effectiveYes,
+          registerConsumer: true,
+          wirePreCommit: false,
+          cloneClade: false,
+          existingGitRepo: true,
+          dbStack: selections.dbStack,
+          dbHost: selections.dbHost,
+          repoId,
+          workflowModel: workflowModel as 'trunk-based' | 'pr-merge-based',
+          businessActivity: businessActivity as
+            | 'pre-production'
+            | 'active'
+            | 'maintenance'
+            | 'paused'
+            | 'auto',
+          devPort: resolvedDevPort,
+          deployTrack,
+          dbRuntime: cladeModules.dbRuntime,
+          agentTargets: selections.agentTargets,
+          updatePolicy,
+          release: releaseArg,
+          releaseStore: releaseStoreArg ? resolve(invocationCwd, releaseStoreArg) : undefined,
+          registryPath: registryPathArg ? resolve(invocationCwd, registryPathArg) : undefined,
+          noPush,
+          offline,
+          json: jsonMode,
+        })
+      } catch (error) {
+        return failRun('BOOTSTRAP_FAILED', `採用既有專案失敗：${(error as Error).message}`)
+      }
+      const adoptReport = buildCompletionReport(targetDir, true, adoptOutcome)
+      emitJson?.(adoptReport)
+      if (adoptReport.status === 'failed') process.exit(1)
+      return
     }
 
     consola.start(`正在建立專案 ${pkgName}...`)
