@@ -8,15 +8,51 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: template-e2e-${{ github.event.workflow_run.head_sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
+  gate:
+    name: Should run E2E
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          SOURCE_EVENT: ${{ github.event.workflow_run.event }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$SOURCE_EVENT" != "pull_request" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          conclusion="$(gh api "repos/${REPO}/actions/runs/${SOURCE_RUN_ID}/jobs" \
+            --jq '[.jobs[] | select(.name == "Unit tests")] | if length == 0 then "missing" else .[0].conclusion end')"
+          if [[ "$conclusion" == "success" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Unit tests job conclusion=${conclusion}; skip E2E when the test-lane did not run"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   e2e:
     name: Playwright E2E
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    needs: [gate]
+    if: ${{ needs.gate.outputs.run == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
