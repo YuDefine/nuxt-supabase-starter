@@ -4840,6 +4840,27 @@ function preserveWorktreeEvidence(wtPath, mainPath, slug = 'worktree') {
   return { files, ok: files.every((f) => !f.failed) }
 }
 
+function findCleanupWorktree(consumerRoot, cleanSlug) {
+  const wts = sessionWorktrees(consumerRoot)
+  const sessionHit = wts.find(
+    (w) => w.path.endsWith(`/${cleanSlug}`) && w.branch && w.branch.endsWith(`-${cleanSlug}`),
+  )
+  if (sessionHit) return sessionHit
+
+  const all = parseWorktreeList(git(['worktree', 'list', '--porcelain'], { cwd: consumerRoot }))
+  const mainPath = resolve(consumerRoot)
+  const candidates = all.filter((w) => {
+    if (!w.path.endsWith(`/${cleanSlug}`)) return false
+    if (resolve(w.path) === mainPath) return false
+    const branch = (w.branch || '').replace(/^refs\/heads\//, '')
+    if (branch.startsWith('integration/')) return false
+    return true
+  })
+  if (candidates.length === 1) return candidates[0]
+  const extra = candidates.length >= 2 ? `\n${candidates.map((c) => c.path).join('\n')}` : ''
+  throw new Error(`No session worktree found for slug: ${cleanSlug}${extra}`)
+}
+
 async function cmdCleanup(slug, opts) {
   if (!slug)
     throw new Error(
@@ -4847,11 +4868,7 @@ async function cmdCleanup(slug, opts) {
     )
   const cleanSlug = makeSlugSafe(slug)
   const consumerRoot = findConsumerRoot()
-  const wts = sessionWorktrees(consumerRoot)
-  const target = wts.find(
-    (w) => w.path.endsWith(`/${cleanSlug}`) && w.branch && w.branch.endsWith(`-${cleanSlug}`),
-  )
-  if (!target) throw new Error(`No session worktree found for slug: ${cleanSlug}`)
+  const target = findCleanupWorktree(consumerRoot, cleanSlug)
 
   assertLegacyAllowed(consumerRoot, target.path)
   const branchName = target.branch.replace('refs/heads/', '')

@@ -3,6 +3,7 @@ name: notion-ticket
 description: "Outbound 在當前 consumer 所屬 Notion hub 建一張新的決策題 ticket，用客戶看得懂的格式問非技術決策者，並埋可貼回 Claude 的接手 prompt 與 HANDOFF 登記。Use when 使用者要建 ticket 問客戶或老闆拍板。NOT for 處理 board 上既有 ticket（走 notion-board），NOT for 未宣告 notion.hub 的 repo。"
 ---
 
+<!-- clade-skill-scope: both -->
 
 # notion-ticket
 

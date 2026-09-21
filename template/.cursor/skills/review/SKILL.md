@@ -3,6 +3,7 @@ name: review
 description: "Use for review lifecycle work: readiness scans, UI evidence, manual-review archive, or screenshot archive. Not for product code review."
 ---
 
+<!-- clade-skill-scope: both -->
 
 # Review lifecycle（統一入口）
 

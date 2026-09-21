@@ -11,6 +11,7 @@ metadata:
 effort: medium
 ---
 
+<!-- clade-skill-scope: project -->
 
 本流程只稽核與回報。`metadata.clade.permission_tier` 是政策標記，不是原生權限控制；修正依本次任務既有授權處理。
 

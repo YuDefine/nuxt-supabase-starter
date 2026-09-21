@@ -8,6 +8,7 @@ metadata:
 disable-model-invocation: true
 ---
 
+<!-- clade-skill-scope: both -->
 
 # version-upgrade — 統一版本升級入口
 

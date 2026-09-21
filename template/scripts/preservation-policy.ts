@@ -154,6 +154,16 @@ export interface InventoryOptions {
   allowMissingSymlinkTargets?: boolean
   allowExternalSymlinks?: boolean
   allowNestedRepositories?: boolean
+  /**
+   * Inventory a Git directory (common dir, admin dir, module gitdir, or a
+   * restored Git archive) instead of a worktree. Skips Git's transient
+   * state names and drops file `mtimeMs` from identity: sibling sessions
+   * freshen object mtimes and hold/drop lockfiles without changing any
+   * byte Git owns, and entry digests still pin real content drift. Never
+   * set for a worktree inventory: a worktree `yarn.lock` is real content
+   * and a rewritten worktree file is real drift.
+   */
+  excludeGitTransientState?: boolean
 }
 
 export function inventoryOptionsFromProfile(profile: ConsumerProfile): InventoryOptions {
@@ -373,7 +383,7 @@ function sha256Json(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex')
 }
 
-function tarSize(root: string, inventory: SourceInventory): number {
+function tarSize(root: string, inventory: SourceInventory, tolerateFileChange = false): number {
   const result = spawnSync(
     'tar',
     [
@@ -387,6 +397,10 @@ function tarSize(root: string, inventory: SourceInventory): number {
       '--sparse',
       '--numeric-owner',
       '--totals',
+      // Sizing walks the same live tree as the capture; Git lockfile churn
+      // (TD-1097) trips tar's file-changed check on directory stat data that
+      // carries no content.
+      ...(tolerateFileChange ? ['--warning=no-file-changed'] : []),
       '--directory',
       root,
       '--null',
@@ -418,17 +432,21 @@ function tarSize(root: string, inventory: SourceInventory): number {
 // `mtimeMs` is a topology clock: any child create/delete bumps it (a lockfile
 // lifecycle inside a shared Git common dir is enough) without changing a
 // preserved byte, and a live shared dir legitimately drifts inside the
-// capture window. File `mtimeMs` stays: a rewritten file is real drift the
-// archive must not hide.
-function inventoryIdentityEntry(entry: InventoryEntry): Record<string, unknown> {
+// capture window. File `mtimeMs` stays for a worktree: a rewritten file is
+// real drift the archive must not hide. A Git directory is different —
+// concurrent sessions freshen object mtimes and the lockfile protocol
+// touches and unlinks staging names without moving a byte Git owns, so
+// `gitDir` drops `mtimeMs` for every entry type while the entry digest
+// still pins content.
+function inventoryIdentityEntry(entry: InventoryEntry, gitDir = false): Record<string, unknown> {
   const identity: Record<string, unknown> = { ...entry }
   delete identity.allocatedBytes
-  if (identity.type === 'directory') delete identity.mtimeMs
+  if (gitDir || identity.type === 'directory') delete identity.mtimeMs
   return identity
 }
 
-function inventoryDigest(entries: InventoryEntry[]): string {
-  return sha256Json(entries.map(inventoryIdentityEntry))
+function inventoryDigest(entries: InventoryEntry[], gitDir = false): string {
+  return sha256Json(entries.map((entry) => inventoryIdentityEntry(entry, gitDir)))
 }
 
 function modeType(mode: number): InventoryEntryType {
@@ -470,6 +488,26 @@ function metadataFor(
   }
 }
 
+// Git's transient namespace inside a Git directory. A `<name>.lock` entry is
+// the lockfile protocol's staging file: its bytes become repository content
+// only by rename onto the real path, which a later inventory observes as
+// drift on that path. `gc.pid` marks a running collector, and `tmp_obj_*`,
+// `tmp_pack_*`, `incoming-*` under an objects/ directory stage objects not
+// yet visible. None of these names can hold content the repository owns, so
+// a Git-dir inventory never lists them — their mid-walk disappearance would
+// otherwise abort lstat (TD-1097). `*.lock` applies to non-directories only:
+// the lockfile protocol creates files, so a directory at that name is
+// foreign content and stays visible.
+function isTransientGitPath(path: string, isDirectory: boolean): boolean {
+  const segments = path.split('/')
+  const name = segments.at(-1) ?? ''
+  if (!isDirectory && (name.endsWith('.lock') || name === 'gc.pid')) return true
+  const objects = segments.indexOf('objects')
+  if (objects === -1 || objects >= segments.length - 1) return false
+  if (!isDirectory && /^tmp_(?:obj|pack)_/.test(name)) return true
+  return isDirectory && objects === segments.length - 2 && name.startsWith('incoming-')
+}
+
 function walk(
   root: string,
   current: string,
@@ -487,6 +525,10 @@ function walk(
     )
       continue
     const path = relative(root, absolute)
+    // Transient names are skipped before lstat: a lockfile that disappears
+    // between readdir and stat cannot abort the walk, and one that persists
+    // is not repository content the archive must carry.
+    if (options.excludeGitTransientState && isTransientGitPath(path, child.isDirectory())) continue
     const stat = lstatSync(absolute)
     const type = modeType(stat.mode)
     const entry: InventoryEntry = {
@@ -554,9 +596,11 @@ export function liveEntryMatchesInventory(
     stat.gid !== entry.gid ||
     // Directory mtime is not a preserved field — the verify comparators
     // delete it because a dir's mtime only echoes a child create/delete.
+    // Git-dir inventories drop file mtime the same way (object freshening).
     // Comparing it here would flag that echo; a chmod/xattr change on the
     // dir itself is still caught by the identity fields.
-    (entry.type !== 'directory' && stat.mtimeMs !== entry.mtimeMs)
+    ((options.excludeGitTransientState || entry.type !== 'directory') &&
+      stat.mtimeMs !== entry.mtimeMs)
   )
     return false
   if (entry.type !== 'directory') {
@@ -636,7 +680,7 @@ export function inventoryTree(
     logicalBytes,
     allocatedBytes,
     entryCount: entries.length,
-    digest: inventoryDigest(entries),
+    digest: inventoryDigest(entries, options.excludeGitTransientState === true),
     externalSymlinks,
     specialFiles,
   }
@@ -709,7 +753,7 @@ export function capacityRequirement(
   const restoreAvailableInodes = Number(restoreFs.ffree)
   const restoreTotalInodes = Number(restoreFs.files)
   const gitInventory = options.gitRoot
-    ? inventoryTree(options.gitRoot, {}, [
+    ? inventoryTree(options.gitRoot, { excludeGitTransientState: true }, [
         ...(options.gitExcludedRoot ? [options.gitExcludedRoot] : []),
         ...(options.gitExcludedRoots ?? []),
       ])
@@ -718,7 +762,7 @@ export function capacityRequirement(
   const gitInodes = gitInventory?.entryCount ?? 0
   const growth = Math.max(GIB, Math.ceil(inventory.logicalBytes * 0.2))
   const worktreeArchiveBytes = tarSize(inventory.root, inventory)
-  const gitArchiveBytes = gitInventory ? tarSize(gitInventory.root, gitInventory) : 0
+  const gitArchiveBytes = gitInventory ? tarSize(gitInventory.root, gitInventory, true) : 0
   const worktreeFootprint = worktreeArchiveBytes
   const gitFootprint = gitArchiveBytes
   const restorePeakBytes =
@@ -1598,6 +1642,7 @@ export function assertContainedNestedGitStorage(repo: string, sourceRoot: string
     const storageInventory = inventoryTree(storageRoot, {
       allowExternalSymlinks: true,
       allowMissingSymlinkTargets: true,
+      excludeGitTransientState: true,
     })
     assertGitConfigClosure(storageRoot, storageInventory, [sourceRoot], sourceRoot, gitDir)
     assertLinkedWorktreesPortable(storageRoot)
@@ -1894,6 +1939,7 @@ function createTar(
   root: string,
   args: string[] = ['.'],
   fileList?: string[],
+  tolerateFileChange = false,
 ): void {
   execFileSync(
     'tar',
@@ -1909,6 +1955,12 @@ function createTar(
       '--acls',
       '--sparse',
       '--numeric-owner',
+      // A Git directory's mtimes churn while sibling sessions hold and drop
+      // lockfiles (TD-1097). tar's file-changed check compares stat data
+      // across its own read and aborts the capture on a change that carries
+      // no content. Suppression is safe only because the caller still
+      // re-inventories the tree and digests every archived member.
+      ...(tolerateFileChange ? ['--warning=no-file-changed'] : []),
       ...(fileList
         ? ['--null', '--verbatim-files-from', '--no-recursion', '--files-from', '-']
         : args),
@@ -1969,11 +2021,18 @@ function restoreAndCompare(
     verifyRestoredNestedGitClosure(archive, options)
     return
   }
+  const gitDir = options.excludeGitTransientState === true
   const expectedByPath = new Map(
-    expected.entries.map((entry) => [entry.path, JSON.stringify(inventoryIdentityEntry(entry))]),
+    expected.entries.map((entry) => [
+      entry.path,
+      JSON.stringify(inventoryIdentityEntry(entry, gitDir)),
+    ]),
   )
   const actualByPath = new Map(
-    actual.entries.map((entry) => [entry.path, JSON.stringify(inventoryIdentityEntry(entry))]),
+    actual.entries.map((entry) => [
+      entry.path,
+      JSON.stringify(inventoryIdentityEntry(entry, gitDir)),
+    ]),
   )
   const mismatch = [...new Set([...expectedByPath.keys(), ...actualByPath.keys()])]
     .filter((path) => expectedByPath.get(path) !== actualByPath.get(path))
@@ -2049,7 +2108,7 @@ function verifyRestoredGitClosure(
   options: InventoryOptions,
 ): void {
   withRestoredArchive(archive, (restored) => {
-    const inventory = inventoryTree(restored, options)
+    const inventory = inventoryTree(restored, { ...options, excludeGitTransientState: true })
     assertInventoryStable(expected, inventory, 'Restored Git inventory')
     assertNoNestedRepositories(restored, inventory)
     assertGitConfigClosure(restored, inventory, [restored])
@@ -2072,7 +2131,7 @@ function verifyRestoredGitClosureDigest(
   options: InventoryOptions,
 ): void {
   withRestoredArchive(archive, (restored) => {
-    const inventory = inventoryTree(restored, options)
+    const inventory = inventoryTree(restored, { ...options, excludeGitTransientState: true })
     if (inventory.digest !== expected.digest || inventory.entryCount !== expected.entries)
       throw new Error(
         `Offline restore inventory mismatch: expected ${expected.digest}, got ${inventory.digest}`,
@@ -2102,7 +2161,10 @@ function verifyRestoredGitLayout(
 ): void {
   withRestoredArchive(worktreeArchive, (worktree) =>
     withRestoredArchive(gitArchivePath, (restoredGit) => {
-      const inventory = inventoryTree(restoredGit, options)
+      const inventory = inventoryTree(restoredGit, {
+        ...options,
+        excludeGitTransientState: true,
+      })
       if (inventory.digest !== expectedGit.digest || inventory.entryCount !== expectedGit.entries)
         throw new Error(
           `Offline restore inventory mismatch: expected ${expectedGit.digest}/${expectedGit.entries}, got ${inventory.digest}/${inventory.entryCount}`,
@@ -2327,7 +2389,7 @@ export function verifyPreservationArchive(
       const currentGitInventory = currentGitCommonDir
         ? inventoryTree(
             currentGitCommonDir,
-            options,
+            { ...options, excludeGitTransientState: true },
             gitExcludedRootsForArchive(sourcePath, currentGitCommonDir, dirname(dirname(archive))),
           )
         : undefined
@@ -2401,7 +2463,10 @@ function gitArchive(
   if (!common) return undefined
   const inventory =
     expectedInventory ??
-    inventoryTree(common, options, [...(excludedRoot ? [excludedRoot] : []), ...excludedRoots])
+    inventoryTree(common, { ...options, excludeGitTransientState: true }, [
+      ...(excludedRoot ? [excludedRoot] : []),
+      ...excludedRoots,
+    ])
   if (inventory.specialFiles.length || inventory.externalSymlinks.length)
     throw new Error('Git common directory contains unsupported special files or external symlinks')
   if (!inventory.entries.length) return undefined
@@ -2410,9 +2475,17 @@ function gitArchive(
     common,
     [],
     inventory.entries.map((entry) => entry.path || '.'),
+    true,
   )
   syncFile(destination)
-  compareAndInventory(destination, common, inventory, options)
+  // tar --compare is skipped for Git archives: it diffs live stat data —
+  // including file mtime — against members, and Git's own lockfile/object
+  // freshening makes that race (TD-1097). restoreAndCompare verifies the
+  // archive by restoring and re-inventorying it instead, which pins content
+  // digests without tripping on protocol-owned timestamp churn; live drift
+  // between inventory and capture still fails closed at the post-archive
+  // stability re-inventory in captureAndVerify.
+  restoreAndCompare(destination, inventory, { ...options, excludeGitTransientState: true })
   if (!expectedHead) throw new Error('Git preservation cannot verify an unborn HEAD')
   verifyRestoredGitClosure(destination, inventory, expectedHead, options)
   return { path: destination, digest: sha256File(destination), bytes: lstatSync(destination).size }
@@ -2434,6 +2507,7 @@ export function captureAndVerify(options: {
   const gitMetadataOptions: InventoryOptions = {
     acl: metadataOptions.acl,
     xattr: metadataOptions.xattr,
+    excludeGitTransientState: true,
   }
   const sourceRoot = realpathSync(resolve(options.sourceRoot))
   const profileRoot = realpathSync(resolve(options.profile.roots.source))

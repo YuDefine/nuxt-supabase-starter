@@ -4,6 +4,7 @@ description: >-
   RLS 效能診斷：EXPLAIN ANALYZE、PGRST003 pool timeout、connection pool 耗盡、API 變慢。NOT for RLS policy 的正確性設計（走 supabase-rls）。
 ---
 
+<!-- clade-skill-scope: project -->
 
 # RLS Performance Playbook
 

@@ -3,6 +3,7 @@ name: notion-board
 description: "Inbound 管理當前 consumer 所屬 Notion hub 上客戶既有的 ticket：scan 分桶、triage 評估、sync 回寫、reconcile 對帳、report 全景。Use when 使用者要看 board、評估某張 ticket、同步狀態、對帳或要進度報告。NOT for 主動建新 ticket 問客戶（走 notion-ticket），NOT for 未宣告 notion.hub 的 repo。"
 ---
 
+<!-- clade-skill-scope: both -->
 
 # notion-board
 

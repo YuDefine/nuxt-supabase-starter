@@ -3,6 +3,7 @@ name: server-api
 description: "Use for Nuxt or Nitro server API routes, defineEventHandler, request validation, or server-side auth data access."
 ---
 
+<!-- clade-skill-scope: project -->
 
 # Server API 設計規範
 

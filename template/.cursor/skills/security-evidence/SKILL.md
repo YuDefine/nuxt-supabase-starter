@@ -6,6 +6,7 @@ metadata:
     permission_tier: read
 ---
 
+<!-- clade-skill-scope: both -->
 
 # security-evidence
 

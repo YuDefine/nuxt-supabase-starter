@@ -3,6 +3,7 @@ name: wrangler
 description: "Use before running Wrangler commands for Cloudflare Workers or related resources."
 ---
 
+<!-- clade-skill-scope: project -->
 
 # Wrangler CLI
 
