@@ -100,3 +100,14 @@ consumer-meta、gate mint、vendor sync、readiness）收進 clade `bootstrap-pr
 - `.clade/ai-control-plane/runtime-events.jsonl` 與 `.clade/flow/events.jsonl`
   的 diff 是 herdr/flow runtime 在 dispatch 時自動 append 的 telemetry，
   非本 worker 產物。
+
+## Landing（2026-09-22）
+
+- origin/main：`b96a67a0..d88f67a6` fast-forward push（無 force、無 PR；origin/main 無 branch protection，與 registry 宣告的 trunk-based 一致）
+- feature commit 在 origin 上的 SHA：`6da1c9e8`（← 6897fffd）、`54ef74f2`（← b70d1741 telemetry，保留：`.clade/*.jsonl` 是 tracked 的 append-only 控制面紀錄）、`d88f67a6`（← d740d9a6）
+- 本機 main 分岔收斂：33 筆本機 commit rebase 到 origin/main；`a22908c6` 與 origin `b96a67a0`（PR #2）patch 等價而略過，其餘 32 筆重放；rebase 後 tree 與原本機 main 相同（`824c6b00`）
+- `git rev-list --left-right --count origin/main...main` → `0	0`
+- `template/packages/create-nuxt-starter/dist/cli.js`：被 `template/.gitignore` 的 `dist/` 忽略、未 tracked，需要 `pnpm build`；已在本機 main checkout 建出（188 kB），`--help` 有列出 `--update-policy` / `--answers-file`
+- 驗證：tsc 0、build 0、hygiene audit 0 findings；vitest 222 pass / 1 fail。失敗的是 `scaffold.test.ts` 的「codex + cursor multi-select」，不含 feature 的 base（`df9efb60`）上一樣會失敗，原因是乾淨 worktree 沒有 `template/.codex` 投影（被 gitignore）
+- lifecycle：已移除 worktree `consumer-update-policy` 並刪除 branch（`git cherry` 全部等價）；worktree 內未提交的 1 行 dispatch telemetry 已接到 main checkout 的 `.clade/flow/events.jsonl`
+- 殘工（clade 主線負責）：`vendor/specformula-clade/src/consumer-policy-fixtures.ts` 的 starter 路徑還指向已移除的 `…-wt/consumer-update-policy`，要改成 `~/offline/nuxt-supabase-starter`，之後重跑 `pnpm test:bdd -- --tags @surface:consumer-policy` 確認原本紅的 7 個轉綠
