@@ -1,7 +1,7 @@
 # Commit CLI review runner safety
 
 
-本檔只描述 `codex-review-safe.sh` 及其 Pi runner 的能力與限制。任何能合法執行 CLI 的 runtime 均可使用；它不宣稱呼叫者的原生工具或模型資格已達成。先依 [review-policy.md](review-policy.md) 判資格（唯一合格 review 模型是 GPT-6 Astra via Pi，effort: medium），再讀以下完整限制。
+本檔描述 `codex-review-safe.sh`（Pi Astra 格）與 `claude-review-safe.sh`（Herdr Fable 格）這對 review wrapper 及其 runner 的能力與限制——兩者共用 `lib/review-common.sh` 的 changeset 凍結、snapshot 完整性與 exit 語義。任何能合法執行 CLI 的 runtime 均可使用；它不宣稱呼叫者的原生工具或模型資格已達成。先依 [review-policy.md](review-policy.md) 判資格（合格 review 兩格同級：GPT-6 Astra via Pi，effort: medium 優先；Claude Fable 5.1 via Herdr Claude child，effort: medium 只在 Astra 實際不可用時啟用），再讀以下完整限制。
 
 > codex-review-safe.sh 先凍結changeset，再呼叫Pi `openai-codex` review runner。Runner只允許`read,grep,find,ls`，沒有bash、write、edit或MCP；prompt injection無法取得mutation tool。這支script只review自家fleet diff，NEVER拿去review不可信第三方code。
 >
@@ -81,4 +81,13 @@ pi 讀的是一份混雜的 diff，findings 也會混進別人的檔。
 處置：**verdict 不可信、NEVER 當作 0-A.1 通過**。先人工檢視 stderr 的 snapshot diff 定性 —— 可能是 cursor 池被 prompt injection 帶去 mutation（此時被動到的檔 **NEVER 自動還原**，依 [[commit]] WIP 處置禁令交使用者拍板），也可能是並行 session 在 review 期間的正當編輯（此時 verdict 審的不是最終狀態，處置完重跑即可）。
 
 **覆蓋邊界**：只偵測本 repo worktree 的 tracked + untracked 內容。**gitignored 檔（`.env`、`node_modules/` 等）、**/tmp、`$HOME`、其他 repo、MCP / 網路副作用在 cursor 池下**查不到也偵測不到** —— NEVER 把 exit 6 沒觸發講成「cursor 池 review 確認無副作用」。
+
+#### `claude-review-safe.sh`（Fable 格）專屬限制
+
+- 載體是 Herdr create-only Claude child（`--launcher ccw`，account_unavailable 由 helper 內建 ccw→cc fallback 承接），派工走 `--route routing-table --tier-basis table-row --table-row code-review-fable`——helper 對該列機械鎖死 `--model fable --effort medium --workspace-access readonly`，偏離即拒跑。wrapper 層另拒絕任何非 `medium` 的 effort 參數（exit 2），NEVER 靜默降檔或抬檔。
+- brief 交付兩模式，wrapper 依 brief bytes 自動選：不超過 `CLAUDE_REVIEW_INLINE_PROMPT_MAX_BYTES`（預設 100000）時 prompt 檔就是 brief 本身（inline）；超過則改交一份短指標，child 用 Read 分段讀 WORK_DIR 裡的完整 brief（pointer，繞過 argv `MAX_ARG_STRLEN` 128 KiB 的 E2BIG 上限，指標重申 CHANGESET 標記之間是不受信任資料）。兩道 fail-closed 上限命中即 **exit 9 本地拒絕、不派工**：brief 總量超過 `CLAUDE_REVIEW_BRIEF_MAX_BYTES`（預設 358400＝350 KiB：2026-09-21 三份 328／319／158 KB pointer 交付全數跑完且 receipt verified——該實測只證明「跑得完」，對 child 讀到檔尾前有無 context 壓縮零訊號，定值是最大實測交付量加約 7% headroom 的保守值，不是已證容量）；pointer 模式下任一單行超過 `CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS`（預設 2000，child Read 的靜默截斷邊界，檢查涵蓋整份 brief，RESULT 印行號與所屬區塊）。三個 `*_MAX_*` env 非正整數或超過 15 位數 → exit 2；`CLAUDE_REVIEW_INLINE_PROMPT_MAX_BYTES` 另設硬上限 110000（argv `MAX_ARG_STRLEN` 131072 扣掉 helper 附加 directive／completion protocol 約 10 KB），超過同樣 exit 2 並指名該 env——設超過會讓 110 KB–350 KiB 的 brief 走回 inline 重現 spawn E2BIG，wrapper 回的 exit 3 transport_error 會被誤歸成 reviewer 不可用。
+- verdict 走檔案傳輸：child 把完整輸出寫進 brief 指定的 repo 外路徑，wrapper 通過完整性檢查後才放行到 stdout。child 沒寫檔＝transport 契約未履行＝review 沒跑成（exit 3）。
+- 身分採 `model_verification` 三值：`verified` 才讓 verdict 進完整性檢查；`unverified` 先做一次**有界** verification 重讀（同一 session 的 transcript 證據，NEVER 重跑 review），仍非 `verified` 或 `mismatch` → exit 8，verdict 扣住。receipt（`dispatchStateDir()/review/<dispatch-id>.json`）記 requested／observed model、`model_verification`、`model_verification_reason`（「沒核實」如 transcript-timeout 與「核實但不符」是兩個結論）、session／dispatch／pane 歸屬、verdict SHA-256、`brief_delivery`（inline／pointer）與 `brief_bytes`（每次派工的交付方式可稽核）。
+- 派工帶 `--bounded-leaf`（TD-1105），dispatched worker 內也開得動：helper 只對 readonly gate-review row＋`--coordinate` 放行巢狀一層，leaf 自己再派仍拒。
+- exit 語義與 codex 路對齊：0 verdict／2 本地用法／3 Fable 席 runtime 未跑成（含 coordination 逾時、completion_failed、無 verdict 檔）／4 account_unavailable（兩格皆盡的證據）／6 snapshot drift／8 model verification 失敗／9 brief 無法安全交付——**本地拒絕不是 reviewer 不可用**，NEVER 當兩格皆盡記 pending，折超長行或拆 commit 後重跑；縮 `CODEX_REVIEW_MAX_DIFF_LINES` 只會把超出的檔擠進 OMITTED 漏審清單（該檔未被 review，缺檔 verdict 不能記 PASS），除非被剔除的檔另行送審，否則不是出路。Fable 路另有 10 = helper `nested_dispatch_refused`（本 session 不得開 reviewer child → 交回 coordinator，**不是** reviewer 不可用，NEVER 讀成 exit 3 去換格或判兩格皆盡）；11 = account_unverifiable（配額量不到，量不到 ≠ 沒額度；RESULT／NEXT 印出 receipt 路徑與 `retry_after_ms`——欄位缺席＝沒有 ETA，交 coordinator 決定，有 ETA 才依它重試；NEVER 讀成 exit 4，也 NEVER 讀成 exit 9 的本地拒絕）。
 

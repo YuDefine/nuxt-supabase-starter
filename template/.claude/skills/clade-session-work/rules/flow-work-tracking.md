@@ -106,8 +106,9 @@ paths:
 | --- | --- | --- |
 | `/handoff relay` / `fanout` | 不鑄，繼承 env；無 ambient 時 adapter 用 label 降級鑄名 | fail-open |
 | `/wt`（`wt-helper add`） | 用必填 `--task-summary` 鑄名並印 `export CLADE_WORK_ID=…` | fail-open |
-| `/notion-board` triage | 每一張進 triage 的 ticket 都鑄一個，`origin_ref: notion:<uuid>`——不是只處理第一張 | fail-open |
-| `/notion-ticket` | 建票 + 登 HANDOFF 時一併鑄，work_id 寫進 entry | fail-open |
+| `notion-hub` 認領客戶票 | 每一張認領的 ticket 都鑄一個，`origin_ref: notion:<uuid>`——不是只處理第一張 | fail-open |
+| `notion-sync.ts file`（工程師發現即建票） | 建票後由 script 自己 `flow open --origin notion:<uuid>` 並把 work_id 寫回票的 `Work ID` | fail-closed：票已建但 flow open 失敗 → 印出補跑指令 |
+| `notion-hub` 問客戶 | 已有 work item 就沿用；沒有就等客戶回覆後走認領客戶票那一列 | fail-open |
 | `tasks/<date>-<slug>.md` | 建檔順路 `flow open <slug>`，`origin_ref: tasks:<路徑>` | fail-open |
 | 臨時小改動（單 session 內做完） | **刻意不鑄**——orphan 是這一格的正確結局 | — |
 | 客戶通訊軟體 | 人轉述 → agent 判跨 session 就開 `tasks/` 檔，退化成上一列 | 無機械兜底可能 |
@@ -148,11 +149,28 @@ paths:
 
 **NEVER** 用「反正多寫一個 id 也不會怎樣」在這兩格之外新增回指：沒有消費端的回指沒有人會發現它爛掉，而它爛掉的形狀是「看起來有對照、實際指向不存在的 work」。要新增第三格，先講得出誰在讀。
 
+## 可重驗的驗收：`flow done --verify-cmd`（W-2026-09-20 R8）
+
+`--verification '<摘要>'` 記的是「當時驗過了」；`--verify-cmd '<指令>'` 多留一條**現在還能再跑一次**的指令。帶了指令的完成宣稱，`flow sources --apply --reverify` 對帳時機器代跑一次：
+
+| 指令結果 | spine 落什麼 | 之後 |
+| --- | --- | --- |
+| exit 0 | `work.accept`（`accepted_by: 'machine-reverify'`、`actor: 'system'`） | 不再問人 |
+| exit ≠ 0（且不是 126/127、輸出不帶環境錯誤簽名） | `work.reopened`（`cause: 'evidence_insufficient'`，reason 帶 exit code 與輸出尾巴） | 回到 agent 手上修——NEVER 變成問人的卡 |
+| 跑不起來／逾時（126、127、spawn 失敗、signal、依賴沒裝、輸出帶環境錯誤簽名如 `command not found`／`Cannot find module`） | 什麼都不寫 | 照舊排驗收列問人。**判不出來 NEVER 翻成通過，也 NEVER 翻成沒過** |
+
+- **指令 MUST 唯讀**（唯讀檢查：測試、lint、`test -f`、`git status` 這類）。它會在 operator 的 repo root 原樣執行；寫東西、動服務、`rm` 一律 NEVER。
+- **執行是 opt-in**：`verify_cmd` 是 spine payload 裡的字串，任何能寫 spine 的 agent 都寫得進去，所以 `sources --apply` 預設**只列出不跑**，帶 `--reverify` 的那趟才真的執行。NEVER 讓例行對帳路徑（hook、cron、無 `--reverify` 的 `--apply`）執行這些指令。
+- **dry-run NEVER 跑指令**——dry-run 的承諾是什麼都不動。
+- 時限 120 秒，逾時歸「跑不起來」；同一宣稱（同 work_id＋done_ts＋指令）15 分鐘內不重跑（`.clade/flow/reverify-attempts.json` 退避窗，本機狀態，壞了只代表退避失效）。
+- **只有散文 verification 的件 NEVER 自動收**——猜一段話算不算「現在仍為真」正是這個設計要避免的事。
+- 寫裁決前重讀 spine：`done_ts` 變了（reopen／重新宣告）、dispatch 還在飛、或已不具候選資格 → 該輪不寫。NEVER 用「再跑一次指令」代替重讀。
+
 ## 驗收權歸實際擁有它的人
 
 | work 類型 | 驗收者 | 怎麼落 spine |
 | --- | --- | --- |
-| `notion:` origin | **客戶**（board 狀態欄本來就是他們的驗收介面） | `notion-board reconcile` 讀到客戶側狀態進終態 → emit `work.accept {accepted_by: 'customer', reason: <狀態值>}` |
+| `notion:` origin | **客戶**（board 狀態欄本來就是他們的驗收介面） | `notion-hub` 對帳驗收讀到客戶側狀態進終態 → emit `work.accept {accepted_by: 'customer', reason: <狀態值>}` |
 | 其餘全部（`td:` / `tasks:` / `handoff:` / `im:`） | 人，經 /board 驗收按鈕或 `flow accept <id> --reason` | `reason` 必填 |
 
 `work.accept` / `work.drop` **NEVER** 由 agent 代按。上表每一格都綁在一個已經有人在跑的動作上——這是它與 work-loop `decisions{}` 那個 39 筆全 null 的 `answeredAt` 欄位的唯一差異：欄位存在不等於有人負責填它。

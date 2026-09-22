@@ -62,7 +62,7 @@ pnpm review:ui --print                                          # 本 repo 專�
 
 | 查詢結果 | 交付什麼 |
 | --- | --- |
-| service exit 0，`gates` 非空 | 待我佇列 `https://review-gui.<maintainer-domain>/` ＋ 第 3 條印出的專案頁 URL，並逐張列 family ＋ 判斷題。**NEVER** 換成 `127.0.0.1` / Tailscale IPv4 / `*.ts.net`。**這是常態** |
+| service exit 0，`gates` 非空 | 輪到你佇列 `https://review-gui.<maintainer-domain>/` ＋ 第 3 條印出的專案頁 URL，並逐張列 family ＋ 判斷題。**NEVER** 換成 `127.0.0.1` / Tailscale IPv4 / `*.ts.net`。**這是常態** |
 | service exit 0，`gates` 為空 | 不給連結。報告「沒有等你的事」 |
 | service exit ≠ 0 | 自己用 `bash ~/offline/clade/ops/review-gui-service.sh install` 把服務帶起來（該子命令自帶 restart 與健康等待），再回到上面幾列 |
 
@@ -144,4 +144,4 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 5  http://127.0.0.1:5174/__p
 1. 進入人工檢查階段（implementation tasks 完成、剩 `## 人工檢查` 區塊）時，**第一動作是 auto-triage**（per [[review-gui-surface]] MUST 8），不是直接引導使用者開面板
 2. 推進完畢後 **MUST** 在 consumer repo 跑 `node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --require-empty`；**exit 3 才可引導 user 到面板**，並逐張列 family
 3. **NEVER** 自判有沒有等人的事、**NEVER** 跳過 `flow gates`、**NEVER** 把 exit 2 讀成 exit 0 —— runtime 自判已多次證明不可靠
-4. **給人的 URL 永遠在 `https://review-gui.<maintainer-domain>` 底下**（待我佇列 `/`、專案頁由 `pnpm review:ui --print` 印）。違反字面就是違反精神。`127.0.0.1` / Tailscale IPv4 / `*.ts.net` 只准 agent 探測。交付前 MUST 讀 [[proactive-skills.manual-review-entry]] § 交付入口前置查詢
+4. **給人的 URL 永遠在 `https://review-gui.<maintainer-domain>` 底下**（輪到你佇列 `/`、專案頁由 `pnpm review:ui --print` 印）。違反字面就是違反精神。`127.0.0.1` / Tailscale IPv4 / `*.ts.net` 只准 agent 探測。交付前 MUST 讀 [[proactive-skills.manual-review-entry]] § 交付入口前置查詢

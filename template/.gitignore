@@ -107,3 +107,7 @@ openspec/.vector-search.db*
 !.pi/settings.json
 
 !.clade/rules/
+
+.claude/.commit.lock.guard/
+.claude/.commit-recovery/
+.claude/.commit.lock.*.claim*

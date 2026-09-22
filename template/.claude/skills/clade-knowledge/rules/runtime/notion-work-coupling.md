@@ -1,6 +1,6 @@
 ---
 description: Runtime adapter fragment for notion-work-coupling.md
-paths: ['tasks/**', 'specs/plans/**', '.claude/consumer-meta.json', 'registry/notion-hubs.json', 'vendor/scripts/notion-sync.ts', 'vendor/scripts/lib/notion-hub.ts']
+paths: ['tasks/**', 'specs/plans/**', '.claude/consumer-meta.json', 'registry/notion-hubs.json', 'vendor/scripts/notion-sync.ts', 'vendor/scripts/lib/notion-hub.ts', 'vendor/scripts/lib/notion-stage.ts', 'vendor/scripts/flow/notion-follow.ts', 'scripts/audit-notion-hub-schema.ts']
 ---
 <!-- Clade native rule; source: adapters/claude/instructions/rules/core/notion-work-coupling.md; edit canonical source -->
 <!-- clade-targets: claude -->

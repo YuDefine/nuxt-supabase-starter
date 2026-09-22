@@ -47,15 +47,18 @@ spine 更是 grep 不到的：`flow ask` 開的題不在任何檔案裡，只有
 
 ```bash
 node ~/offline/clade/vendor/scripts/flow/flow.ts ask \
+  --headline '<一句人話的問句>' \
   --question '<一句話講完，讀者沒有 scrollback>' \
-  --options '<選項1>,<選項2>' --recommended '<推薦那個>' \
+  --option '<短標籤> :: <按了會怎樣>' --option '<短標籤> :: <按了會怎樣>' \
+  --recommended '<推薦那條的短標籤>' --why '<一句為什麼>' \
   --carrier '<TD-NNN | HANDOFF.md | tasks/xxx.md>' --actor '<你的 pane id>'
 ```
 
 推進去才有價值：手機那側同一秒看得到，而且會推播。**NEVER** 只在對話裡列出來就算——
 那正是「待拍板事項多數只存在於對話裡」這個缺口本身。
 
-選項文字**只寫選項**：字母前綴與「（推薦）」都由渲染端加，寫進文字會疊成 `A. A. 改（推薦）（推薦）`。
+缺短標籤（≤16 字）、推薦或理由時 `flow ask` 會 exit 1 並印出改法；要的是一個值就改帶
+`--needs-value --field '<欄位名>'`。選項文字**只寫選項**：字母前綴與「（推薦）」都由渲染端加，寫進文字會疊成 `A. A. 改（推薦）（推薦）`。
 
 ### 3. 渲染
 

@@ -373,7 +373,7 @@ compact 壓掉的是敘事，**壓完之後每一 turn 仍重讀壓縮後的整�
 | 可觀察狀態 | 動作 |
 | --- | --- |
 | workflow明定 worktree要 parked | `retained`，指名 owner與 next landing event |
-| clean + 內容已在 main（ancestry merged，或 `wt-helper cleanup <slug> --dry-run` 印 `merged=Y`）+ 無 unique commit／WIP + 無 parking contract | **直接**用零 force flag 的移除指令（有 `wt-helper` 就 `wt-helper cleanup <slug>`，否則 `git worktree remove` + `git branch -d`）移除 worktree與branch，receipt寫 `removed`；**NEVER** 先問 `remove`／`retain`——條件全中就是授權 |
+| clean + 內容已在 main 或 origin/<base>（ancestry merged，或 `wt-helper cleanup <slug> --dry-run` 印 `verdict CLEAN`／`merged=Y`／`mergedPr(origin/<base>)=Y` 任一；「已在 origin/<base>、本機 main 尚未同步」算 `removed` 條件——clade 是 PR 制，origin 是落地權威，本機 main 由 `main-sync` 追上，gate 防的是內容遺失而 server 端已保存）+ 無 unique commit／WIP + 無 parking contract | **直接**用零 force flag 的移除指令（有 `wt-helper` 就 `wt-helper cleanup <slug>`，否則 `git worktree remove` + `git branch -d`）移除 worktree與branch，receipt寫 `removed`；**NEVER** 先問 `remove`／`retain`——條件全中就是授權 |
 | 零 force flag 的移除被擋，或上一列任一條件判不出 | fail closed列 blocker；回答前**不得**輸出「目前這裡收工」或等價完整 closure |
 | dirty、未 fully merged、ownership不明 | fail closed列 blocker；**NEVER**用 `--force`把不確定性刪掉 |
 
@@ -516,6 +516,13 @@ coordinator 身分轉移，以及寫出讓 successor 回收本 pane 的 predeces
 為了讓 fanout 在 child 內跑起來去取 `--recovery-token`：orphan recovery 的前提是 parent 已死，
 拿它繞過一道針對「parent 還活著」設計的 guard 是偽造前提。
 
+guard 另外只有兩個具名缺口，都不擴張責任樹：**`--successor`**（TD-1104）給 Herdr 外、沒有 pane 能簽 relay
+的 main line 交出位置——successor 不帶 correlation env、可以再派 worker；coordinated child 或 Herdr pane
+呼叫它一律 `successor_refused`。**`--bounded-leaf`**（TD-1105）讓 coordinated child 以 `--coordinate` 開一層
+readonly gate-review leaf（`claude-review-safe.sh` 的 Fable 格），leaf 再派仍拒——**含 `--relay`**：leaf 沒有位置可交棒，
+做不完就 `--complete blocked` 交還開它的 coordinator。判準與反開脫在
+`handoff` skill 的 `dispatch-common.md` § `CLADE_DISPATCH_ID` 分流。
+
 每一個被派出去的 **worker** 都 **MUST** 在正常 final response 前透過 helper 回報與 dispatch／pane／
 successor session identity 相關聯的 `success | blocked | failed | unknown` outcome；`blocked` 必須帶一個
 具體 decision。**NEVER** 把 secret 寫進 Herdr argv、prompt metadata、receipt、summary、decision、
@@ -544,7 +551,7 @@ agent 回完一個 turn 後照樣繼續工作。
 的 exact child 可經 canonical `--recover-orphan` one-way claim 建立唯一 fresh successor。可觀察判準是
 durable record 的 exact `parent_claude_session_id` 在 `herdr agent list` 全域缺席——
 prompt-cache TTL與record年齡對ownership零訊號。一般 coordinated child仍禁止nested handoff，**只有**helper核准的 recovery token與 attested relay例外。
-已送出 `--complete blocked` 的 worker 若 receipt 的 `coordinator_wake` ≠ `sent*`，出口是 receipt `next_step` 指的 `/handoff relay`（pending decision 隨 brief 交棒），**NEVER** `--recover-orphan`。
+已送出 `--complete blocked` 的 worker 若 receipt 的 `coordinator_wake` ≠ `sent*`，出口是 receipt `next_step` 指的 `/handoff relay`（pending decision 隨 brief 交棒），**NEVER** `--recover-orphan`。**bounded leaf** 的 `next_step` 指 `standby` 而非 relay：它沒有位置可交棒、也不能寫受審樹——pending decision 已隨 `--complete` 進 completion record 與 decision 佇列，probe 到 parent 在線就 `agent prompt` 叫醒，否則待命由 opener `--coordinate-resume` 收割。
 
 ### 收割的機械兜底：Stop gate（不是提醒，是擋）
 
@@ -611,7 +618,10 @@ Step 1–9 屬 `clade-publish` skill。
 | `status: relay_dispatched` | （`fanout` 先過 `relayed_dispatch_ids` 逐筆比對）依收工訊息契約 **A** 結束回合 |
 | `status: dispatched`（fanout 的 worker） | 記下 `dispatch_id` 與 `pane_id`，繼續派下一筆；**全部派完才跑 `--relay`** |
 | `status: relay_refused` | 保留 durable task 與**所有已派出的 pane**，回具體 blocker 並列出那些 dispatch_id。**NEVER** 改用 raw `herdr` 繞過、**NEVER** 收工 |
-| `status: nested_dispatch_refused` | 本 session 是 coordinated child，fanout 不適用。改走 `relay` |
+| `status: nested_dispatch_refused` | 本 session 是 coordinated child，fanout 不適用。一般 child 改走 `relay`；**bounded leaf**（`CLADE_DISPATCH_BOUNDED_LEAF=1` 或 source record `bounded_leaf: true`）沒有位置可交棒，`--relay` 也回同一個 status——做不完就 `--complete blocked` 交還開它的 coordinator，NEVER relay |
+| `status: successor_dispatched` | Herdr 外 `--successor` 交出位置成功。確認未收割的 dispatch_id 已寫進 successor brief，依收工訊息契約 **A** 結束回合 |
+| `status: successor_incomplete` | Cursor 前任的 in-flight dispatch 沒全數轉給 successor（`untransferred_dispatch_ids`；`transfer_error` 存在代表 claim 寫入中途失敗）。successor pane 已活、持有 brief，其 dispatch record 與 span 已由 helper 收尾（它是 main line、沒有 harvester），但本 session **NEVER** 站下——那幾筆的 outcome 會回到沒人等的 Cursor session。先收割或查明它們再交棒 |
+| `status: successor_refused` | 本 session 是 coordinated child 或 Herdr pane。改走 `relay`，**NEVER** 退回一般 create-only 派 successor（它會是開不了 pane 的 coordinated child） |
 | transport / launcher / Herdr preflight 失敗 | 保留 durable task；能在本 session 合法完成就直接完成，否則回具體 blocker。**NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt |
 
 #### Helper 與 Herdr CLI 的能力邊界

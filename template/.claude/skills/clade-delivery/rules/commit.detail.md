@@ -15,7 +15,7 @@ paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**', '.clade/work-loop/**']
 
 `/commit` 封裝了品質閘門，繞過等於讓壞 code / 壞版本號 / 壞 tag 進 repo。各 gate 一行定性如下，**MUST 全綠才能 commit**；執行細節一律讀當前 runtime 已投影的 commit skill 全文及其 `gates.md`。找不到技能或其必要能力時，該 gate 保持未完成，不改用裸 Git 略過 ceremony。
 
-- **0-A** 程式碼審查：simplify 序跑第一，再執行獨立 review；Critical／Major 條件觸發同一 review 模型的 fresh-context 深度複審，修正由主線匯合後執行。Reviewer 品質、模型資格、transport／隔離與配額分流依 commit skill `gates.md` § 0-A 的同一份政策；fresh context 與模型資格分開驗證。必要 reviewer 或隔離能力不可用時，保留未達成及待補範圍，主線自審或其他模型補位都不算該 gate 通過。
+- **0-A** 程式碼審查：simplify 序跑第一，再執行獨立 review；合格 reviewer 兩格同級（GPT-6 Astra via Pi，effort: medium，優先；Claude Fable 5.1 via Herdr，effort: medium，只在 Astra 實際不可用時啟用），Critical／Major 條件觸發合格 reviewer 的 fresh-context 深度複審——格別每輪依當下可用性重判（Astra 優先、exit 3／4＋逐字證據才換 Fable），與 0-A.1 落在不同格合法；修正由主線匯合後執行。Reviewer 品質、模型資格、transport／隔離與配額分流依 commit skill `gates.md` § 0-A 的同一份政策；fresh context 與模型資格分開驗證。必要 reviewer 或隔離能力不可用時，保留未達成及待補範圍，主線自審或其他模型補位都不算該 gate 通過。
   **NEVER** 以「既有問題」「不在本次 scope」「建議性質」靜默跳過 review finding；依同一份 0-A 政策逐條處置、記錄裁決與未達 gate。
 - **0-B** UI Design Review（條件觸發）：`.vue` 模板 + 頁面/元件/佈局/互動/樣式變更時由 Gemini 3.8 Flash 收截圖，再由 Opus 5 做 Design Review
 - **0-C** format / lint / typecheck / test / doctor 全綠：執行 check 後無條件跑明確的 test command，不由 script 名稱猜測覆蓋；`scripts.doctor` **必裝**（缺裝 = block commit）。命令與格式檢查的處置依 skill `gates.md` § 0-C。
@@ -74,7 +74,7 @@ uncommitted 變更
 
 **批次 `/commit` 在已登記的隔離整合區跑一次完整品質流程**；沒有就緒 wt 或待續跑批次時，普通 `/commit` 照常處理當前工作區。
 
-**手動 `/commit` 或 merge back 無最低件數**，立即收同 repo 所有已授權、驗收完成且交出寫入權的就緒任務；未就緒工作不阻擋手動提交。自動門檻依 workflow：`pr-merge-based` 為 **1 個** distinct work id（一張獨立可接受 PR），`trunk-based` 仍為 **4 個**。同任務多個 wt 不重複計數。dependency（下游需要落地）、drained（已授權開發都完成或受阻）、stop（使用者結束本輪）提前結批；換 session 只交接佇列。等待累積不佔 commit lock、繼續開發。Unattended coordinator merge **不免除** 0-A／0-C 與其他已觸發 gate；CI 綠燈不能代替 Astra review。
+**手動 `/commit` 或 merge back 無最低件數**，立即收同 repo 所有已授權、驗收完成且交出寫入權的就緒任務；未就緒工作不阻擋手動提交。自動門檻依 workflow：`pr-merge-based` 為 **1 個** distinct work id（一張獨立可接受 PR），`trunk-based` 仍為 **4 個**。同任務多個 wt 不重複計數。dependency（下游需要落地）、drained（已授權開發都完成或受阻）、stop（使用者結束本輪）提前結批；換 session 只交接佇列。等待累積不佔 commit lock、繼續開發。Unattended coordinator merge **不免除** 0-A／0-C 與其他已觸發 gate；CI 綠燈不能代替合格 reviewer 的 review。
 
 - 每次就緒、收割、停止開發與 session 接手都 MUST 读 `wt-helper batch status --workflow <workflow_model>`；命中條件由主線啟動 `/commit`，不請使用者代打。批次開始後的新成員留到下一批。
 - 批次 scope 是固定成員的完整 base→candidate diff，main 的其他 WIP 不自動納入；不得把 main 清空來配合整合。
@@ -416,7 +416,17 @@ git rev-list --count origin/main..HEAD    # 必須回 0（沒有還沒推上去�
 
 **它只准用在落後那一邊，NEVER 拿它放行超前那一邊**——兩者語義相反（一個是「我知道這是舊樹」，
 另一個是「這棵樹還不存在於 origin」），共用等於把逃生口變成雙向萬能鑰匙。超前被擋時的正解是
-`git push origin main` 之後再推 tag，沒有別的出路。合法的 hotfix 不會命中超前那一邊——
+`git push origin main` 之後再推 tag。gate 另認得一條同批放行路徑（2026-09-21 TD-911）：
+本批帶 `refs/heads/<default branch>` 且 tag commit **即該 branch head 本身**時放行
+（同批的其他 branch **不構成涵蓋**；tag 打在 head 之前的中繼 commit——嚴格祖先——
+**不放行**：推送落地那一刻它就落後新 `origin/<default>`，與落後方向同一失敗模式，
+歸 stale 擋法，刻意為之走 `CLADE_ALLOW_STALE_TAG`）——它把「先後」折進一次推送，
+**因此推送 MUST 帶 `--atomic`**：非原子的同批推送在 branch ref 被 server 拒絕時，
+tag 仍會單獨落地成 origin 上不在 default branch 的物件，正是本條要防的形狀。是否把
+發版序列改成 atomic batch 是另一個決策（TD-911 只放寬 gate），本節的 main 先、tag 後
+順序不變；若日後真改，本格 MUST 重新評估——例如由 `/commit` 的推送指令本身固定帶
+`--atomic`，而非依賴操作者記得。
+合法的 hotfix 不會命中超前那一邊——
 舊 commit 是 `origin/main` 的祖先，反方向 count 恆為 0。
 
 **這條是政策，NEVER 讀成 script 會替你擋。** `tag-position.sh` 的逃生口判斷排在方向計算

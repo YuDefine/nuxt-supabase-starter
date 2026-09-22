@@ -20,8 +20,14 @@
  *                    tree. Pre-checks both gates and reports the full flag
  *                    combo needed. --dry-run reports the verdict read-only.
  *                    Squash-landed branches (refs/wt-landed/<slug> matching
- *                    the branch tip) skip both ancestry gates; clade-managed
- *                    projection drift is exempt from the uncommitted gate.
+ *                    the branch tip) skip both ancestry gates; a GitHub PR
+ *                    merged at the exact branch tip (headRefOid == tip,
+ *                    base == landing base) counts as equivalent server-side
+ *                    landing evidence — the local branch ref is then deleted
+ *                    outright (its head stays reachable via refs/pull/N/head;
+ *                    TD-1103; gh errors stay fail-closed);
+ *                    clade-managed projection drift is exempt from the
+ *                    uncommitted gate.
  *   merge-back <slug> [--dry-run] [--auto-stash] [--no-cleanup] [--accept-landed]
  *                    Legacy squash into main; source retained until formal commit.
  *                    New workflows use `batch`. Pre-flight detects main-worktree
@@ -113,7 +119,13 @@ import {
   detectPublishInFlight as detectPublishInFlightShared,
   inFlightHoldersFor as inFlightHoldersForShared,
 } from './lib/publish-in-flight.ts'
-import { runBatchCommand, assertLegacyAllowed } from './wt-batch.ts'
+import {
+  runBatchCommand,
+  assertLegacyAllowed,
+  githubRepositoryFromRemote,
+  BatchUsageError,
+  BATCH_USAGE,
+} from './wt-batch.ts'
 import {
   errorMessage,
   known,
@@ -3905,6 +3917,144 @@ function isSquashLanded(consumerRoot, slug, branchName) {
   return Boolean(marked) && marked === tip
 }
 
+// ── Merged-PR landing credential (TD-1103) ─────────────────────────────
+//
+// 三條本地憑證對「PR 在 GitHub 上 squash-merge」結構性失明：marker 只有 wt-helper
+// 自己 land 才寫、squash 不建 merge 邊（ancestry 恆 false）、main 後續動過同段
+// context 就讓 hunk 反套失敗（absorbed 恆 false）。伺服器端其實已記下落地事實
+// —— merged PR 的 `headRefOid` 就是當時送進 merge 的 branch tip —— 這一條把它
+// 讀回來。
+//
+// 命中條件（全中才算）：
+//   1. `gh pr list --head <branch> --state merged` 回傳至少一筆 record
+//   2. `baseRefName` 等於 landing base（resolveLandingBase，本 repo 即 main）
+//   3. `headRefOid` **逐字**等於 branch 現在的 tip —— merge 後 tip 前移（D 桶）
+//      自動不相等，不需要另寫規則擋。
+//   record 帶 `mergeCommit.oid` 且該 commit 與 `origin/<base>` 在本地都可解析時，
+//   加驗它是 origin/<base> 祖先（擋 base 被重寫的 case）；本地看不到就只靠
+//   server 端欄位採信 —— TD-1103 已把那組欄位本身列為 airtight。
+//
+// 只放行、NEVER 擋：gh 缺席／離線／rate limit／逾時／回傳殘缺一律 `unknown`，
+// 下游照舊走原本三道 gate —— 行為與沒有這條憑證時逐字相同（fail closed）。
+// probe 也只在三條本地憑證全失手時才跑：cleanup 的 gh／網路依賴因此只出現在
+// 「現況本就會 BLOCKED」的分支上，永不變成新的阻擋來源。
+
+const MERGED_PR_PROBE_TIMEOUT_MS = 15_000
+
+/**
+ * 預設 probe：`gh pr list` 找 `<branch>` 的 merged PR。回 `Observed` ——
+ * 任何失敗（gh 缺席、離線、rate limit、逾時、殘缺回傳）都是 `unknown`，
+ * NEVER throw。
+ */
+function defaultMergedPrProbe(consumerRoot, branchName) {
+  // repo identity 與 wt-batch 對齊：同一條 remote.origin.url → owner/repo 解析。
+  const repository = githubRepositoryFromRemote(consumerRoot)
+  if (!repository) return toUnknown('origin is not a GitHub remote (or unset)')
+  let raw
+  try {
+    raw = execFileSync(
+      'gh',
+      [
+        'pr',
+        'list',
+        '--repo',
+        repository,
+        '--head',
+        branchName,
+        '--state',
+        'merged',
+        '--json',
+        'number,headRefOid,baseRefName,mergeCommit',
+        '--limit',
+        '20',
+      ],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: MERGED_PR_PROBE_TIMEOUT_MS,
+      },
+    )
+  } catch (e) {
+    return toUnknown(`gh pr list failed: ${errorMessage(e)}`)
+  }
+  let rows
+  try {
+    rows = JSON.parse(raw)
+  } catch (e) {
+    return toUnknown(`gh pr list returned non-JSON: ${errorMessage(e)}`)
+  }
+  if (!Array.isArray(rows)) return toUnknown('gh pr list returned a non-array payload')
+  for (const r of rows) {
+    if (
+      typeof r?.number !== 'number' ||
+      typeof r?.headRefOid !== 'string' ||
+      typeof r?.baseRefName !== 'string'
+    ) {
+      return toUnknown('gh pr list returned an incomplete record')
+    }
+  }
+  return known(rows)
+}
+
+/**
+ * 便宜 belt：record 帶 `mergeCommit.oid`、且該 commit 與 `origin/<base>` 在本地都
+ * 可解析時，要求它是 origin/<base> 的祖先。本地看不到（merge 後還沒 fetch）就
+ * 跳過這層 —— server 端欄位本身已是 airtight 憑證，belt 只擋「base 被重寫」。
+ */
+function mergedPrCommitOnBase(consumerRoot, record, landingBase) {
+  const oid = record?.mergeCommit?.oid
+  if (typeof oid !== 'string' || !oid.trim()) return true
+  const sha = oid.trim()
+  const baseRef = `refs/remotes/origin/${landingBase}`
+  try {
+    git(['rev-parse', '--verify', `${sha}^{commit}`], { cwd: consumerRoot })
+    git(['rev-parse', '--verify', `${baseRef}^{commit}`], { cwd: consumerRoot })
+  } catch {
+    return true
+  }
+  try {
+    git(['merge-base', '--is-ancestor', sha, baseRef], { cwd: consumerRoot })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 「branch tip 是某個已 merge PR 的 head」的判定（TD-1103 第四條憑證）。
+ * 回 `Observed<{landed, pr?}>`；probe 可注入以便測試（比照 wt-batch 的
+ * `RemotePrProbe` 慣例）。只放行、NEVER 擋：任何讀不到都是 `unknown`。
+ */
+function detectMergedPrLanding(
+  consumerRoot,
+  branchName,
+  probe = defaultMergedPrProbe,
+): Observed<{ landed: boolean; pr?: number }> {
+  let tip
+  try {
+    tip = git(['rev-parse', '--verify', `${branchName}^{commit}`], { cwd: consumerRoot })
+      .trim()
+      .toLowerCase()
+  } catch {
+    return toUnknown(`branch tip unreadable: ${branchName}`)
+  }
+  const landingBase = resolveLandingBase(consumerRoot)
+  let obs
+  try {
+    obs = probe(consumerRoot, branchName)
+  } catch (e) {
+    return toUnknown(`merged-PR probe threw: ${errorMessage(e)}`)
+  }
+  if (obs.status !== 'known') return toUnknown(`merged-PR probe: ${obs.reason}`)
+  for (const r of obs.value) {
+    if (r.baseRefName !== landingBase) continue
+    if (typeof r.headRefOid !== 'string' || r.headRefOid.trim().toLowerCase() !== tip) continue
+    if (!mergedPrCommitOnBase(consumerRoot, r, landingBase)) continue
+    return known({ landed: true, pr: r.number })
+  }
+  return known({ landed: false })
+}
+
 function sweepSiblingChangeResidues(consumerRoot, slug) {
   const out = git(['worktree', 'list', '--porcelain'], { cwd: consumerRoot })
   const wts = parseWorktreeList(out)
@@ -4861,7 +5011,11 @@ function findCleanupWorktree(consumerRoot, cleanSlug) {
   throw new Error(`No session worktree found for slug: ${cleanSlug}${extra}`)
 }
 
-async function cmdCleanup(slug, opts) {
+async function cmdCleanup(
+  slug,
+  opts,
+  probes: { mergedPrProbe?: typeof defaultMergedPrProbe } = {},
+) {
   if (!slug)
     throw new Error(
       'Usage: wt-helper cleanup <slug> [--dry-run] [--force] [--force-discard-unland] [--force-discard-uncommitted] [--allow-orphan-record]',
@@ -4944,12 +5098,36 @@ async function cmdCleanup(slug, opts) {
       ? detectAbsorbedByOtherPath(consumerRoot, branchName, 'main')
       : null
   const absorbedLanded = absorbed?.absorbed === true
-  const branchMerged = squashLanded || ancestryMerged || absorbedLanded
+  // TD-1103 第四條憑證：GitHub 上 MERGED 的 PR 其 headRefOid 逐字等於 branch tip
+  // —— 伺服器端落地事實，commit 級證據嚴格強於檔案內容比對，命中時同
+  // squashLanded 路徑連 detectUnlandedFiles 一起跳過。只在三條本地憑證全失手時
+  // 才出門打 gh（網路依賴因此只出現在「現況本就 BLOCKED」的分支）；probe 回
+  // unknown／無命中都落回原本三道 gate，fail closed。
+  // 再窄一層：probe 唯一能豁免的是 --force 與 --force-discard-unland 兩道 gate，
+  // 兩個 flag 都給了之後它無論回什麼都不改變判定 —— 那時出門打 gh（最長 15s）
+  // 只是白跑，跳過。`--force` 單獨給時仍跑：命中可豁免 --force-discard-unland，
+  // 跳過反而讓「多給一個 flag」比零 flag 更難過。
+  const mergedPr =
+    !squashLanded && !ancestryMerged && !absorbedLanded && !(opts.force && opts.forceDiscardUnland)
+      ? detectMergedPrLanding(consumerRoot, branchName, probes.mergedPrProbe)
+      : null
+  const prLanded = mergedPr?.status === 'known' && mergedPr.value.landed === true
+  const branchMerged = squashLanded || ancestryMerged || absorbedLanded || prLanded
   const unlanded =
-    squashLanded || absorbedLanded ? [] : detectUnlandedFiles(consumerRoot, branchName)
+    squashLanded || absorbedLanded || prLanded ? [] : detectUnlandedFiles(consumerRoot, branchName)
+  // 第四條憑證證明的是「已落在 origin/<base>」，前三條證明的是「已在本機 main」
+  // —— clade home 的本機 main 與 origin 常態分岔，兩者在報表上 MUST 分開標，
+  // 不讓 merged=Y 的語意被悄悄放寬（TD-1103 複審）。
+  const landingBase = resolveLandingBase(consumerRoot)
+  const mergedLocal = squashLanded || ancestryMerged || absorbedLanded
   if (absorbedLanded) {
     console.log(
       `cleanup: ${branchName} 的 changeset 已完整存在於 main（${absorbed.reason}）—— 略過兩道 ancestry gate`,
+    )
+  }
+  if (prLanded) {
+    console.log(
+      `cleanup: ${branchName} 的 tip 與 GitHub merged PR #${mergedPr.value.pr} 的 headRefOid 逐字相符（內容已落地到 origin/${landingBase}）—— 略過兩道 ancestry gate`,
     )
   }
   if (squashLanded) {
@@ -5028,7 +5206,7 @@ async function cmdCleanup(slug, opts) {
     console.log(`  worktree           ${target.path}`)
     console.log(`  branch             ${branchName}`)
     console.log(
-      `  ancestry           merged=${branchMerged ? 'Y' : 'N'} squashLandedMarker=${squashLanded ? 'Y' : 'N'} absorbedByOtherPath=${absorbedLanded ? 'Y' : 'N'} unlandedFiles=${unlanded.length}`,
+      `  ancestry           merged=${mergedLocal ? 'Y' : 'N'} squashLandedMarker=${squashLanded ? 'Y' : 'N'} absorbedByOtherPath=${absorbedLanded ? 'Y' : 'N'} mergedPr(origin/${landingBase})=${mergedPr === null ? '-' : prLanded ? 'Y' : mergedPr.status === 'unknown' ? 'unknown' : 'N'} unlandedFiles=${unlanded.length}`,
     )
     console.log(
       `  uncommitted        blocking=${uncommittedCount} ignored(projection/tool-managed)=${toolManagedCount}`,
@@ -5142,7 +5320,14 @@ async function cmdCleanup(slug, opts) {
   // gate above was trying (and failing) to prevent. Deleting it stays available as a deliberate,
   // separate `git branch -D`.
   // absorbed 不同於 squash：內容已逐 hunk 驗證在 main 上，branch 只是重複的副本，`-D` 不丟任何東西。
-  const deleteFlag = (opts.force && !squashLanded) || absorbedLanded ? '-D' : '-d'
+  // prLanded 同理但落地處在 server 端：squash 後的內容已在 origin/<base>、merge 前的 head 由
+  // GitHub `refs/pull/N/head` 保存，本地 branch 只是重複副本 —— `-D` 不丟任何東西，且 MUST
+  // 刪：worktree 移除後 `cleanup <slug>` 會以 `No session worktree found` 拒絕服務，留著的
+  // branch 從此再也清不到，正是 TD-1103 要消滅的殘留。用 `-D` 而非 `-d` 還有一層原因：
+  // `git branch -d` 在 branch 設有 upstream 時是對 upstream 判 merged，同一憑證會依
+  // tracking ref 在不在產生「刪／留」兩種結果，`-D` 讓兩格一致。`opts.force` 同理 ——
+  // 使用者明示的 `--force` 拿到的是 `-D`，NEVER 被 probe 命中降級回 `-d`。
+  const deleteFlag = (opts.force && !squashLanded) || absorbedLanded || prLanded ? '-D' : '-d'
   try {
     git(['branch', deleteFlag, branchName], { cwd: consumerRoot })
   } catch {
@@ -6454,16 +6639,27 @@ async function main() {
   const [, , sub, ...rest] = process.argv
 
   if (sub === 'batch') {
-    const result = runBatchCommand(process.cwd(), rest, {
-      bootstrap: (root, path) => bootstrapWorktreeRuntime(root, path, { strict: true }),
-      destroy: releaseWorktreeRuntime,
-      restore: (_main, path, detached) => reattachWorktreeSubmodules(path, detached),
-      removed: cleanupRemovedWorktreeRuntime,
-      withExclusiveWriterOwnership: withProbedExclusiveWriterOwnership,
-      beforeRemove: (_main, quarantine) => probeLiveWriterCwd(quarantine),
-      afterRemove: (_main, path, extraRoots) => probeDeletedHandles(path, extraRoots),
-    })
-    console.log(JSON.stringify(result, null, 2))
+    try {
+      const result = runBatchCommand(process.cwd(), rest, {
+        bootstrap: (root, path) => bootstrapWorktreeRuntime(root, path, { strict: true }),
+        destroy: releaseWorktreeRuntime,
+        restore: (_main, path, detached) => reattachWorktreeSubmodules(path, detached),
+        removed: cleanupRemovedWorktreeRuntime,
+        withExclusiveWriterOwnership: withProbedExclusiveWriterOwnership,
+        beforeRemove: (_main, quarantine) => probeLiveWriterCwd(quarantine),
+        afterRemove: (_main, path, extraRoots) => probeDeletedHandles(path, extraRoots),
+      })
+      console.log(JSON.stringify(result, null, 2))
+    } catch (e) {
+      // Usage errors (bad flags, missing/ambiguous args) exit 2 with usage —
+      // same contract as invoking wt-batch.ts directly; runtime failures exit 1.
+      if (e instanceof BatchUsageError) {
+        console.error(`error: ${e.message}`)
+        console.error(`subcommands: ${BATCH_USAGE}`)
+        process.exit(2)
+      }
+      throw e
+    }
     return
   }
 
@@ -6715,8 +6911,10 @@ export {
   cmdPrune,
   cmdRescue,
   cmdSweepSiblings,
+  defaultMergedPrProbe,
   detectMainDirty,
   detectMergeBlockers,
+  detectMergedPrLanding,
   detectUncommittedWorktreeFiles,
   detectUnlandedFiles,
   enrichWorktree,

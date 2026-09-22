@@ -13,7 +13,7 @@ paths:
 
 # Review-GUI Surface SoP
 
-**核心命題**：「現在有什麼等人」只有一個來源——`flow gates`。控制面板（review-gui PWA 的「待我」佇列）與 CLI 讀同一份 queue functions，是它的**渲染端**，不是另一份判定。本 rule 規約所有**把人導向面板、或向人陳述人工 gate 狀態**的 surface。
+**核心命題**：「現在有什麼等人」只有一個來源——`flow gates`。控制面板（review-gui PWA 的「輪到你」佇列）與 CLI 讀同一份 queue functions，是它的**渲染端**，不是另一份判定。本 rule 規約所有**把人導向面板、或向人陳述人工 gate 狀態**的 surface。
 
 本 rule 是 [[agent-self-verification]] 的特例化（面板是其中一個 evidence 呈現 surface），同時延伸 [[manual-review]] 對人工檢查的規約。
 
@@ -34,7 +34,7 @@ paths:
 | `ruling` | `flow ask` 的 decision span | `flow answer` / `ask-options` / `clarify` / `dismiss` |
 | `acceptance` | `work.done` 尚未 `accept`，且 landing 未全綠 | `flow accept` / `drop` |
 | `ui-judgement` | plan 的 acceptance scenario 標 `@human` 且 evidence 齊 | `flow receipt <scenario_id> --verdict pass\|fail\|skip`；fail 時回交 `flow ask` |
-| `external-action` | 需要人到場的 blocker（`--complete blocked`、`flow ask --category external`） | 確認完成（附 evidence）／宣告做不到 |
+| `external-action` | 需要人到場的 blocker（`--complete blocked`、`flow ask --category human-action`） | 確認完成（附 evidence）／宣告做不到 |
 | `exception` | 僅 pane 仍 listed 的 dead-holder 碰撞 | 核准恢復／改派／abort |
 
 **機械待辦（agent 自己該做的）NEVER 是卡片**：過期 lease、pipeline 機械 exhausted、pane 已不在的 dead-holder、缺 evidence、`（fix-requested）`、未 triage 的 `（issue:）` 都是 agent 的工作，不會出現在 `flow gates`，也 **NEVER** 被說成「等你」。合成 `work.done` 驗收若 audience 不是 Charles，同樣不進待我。
@@ -81,7 +81,7 @@ paths:
 
    approved performance inspection adapter entry 已散播至所有 consumer runtime MCP configuration 並全 fleet 啟用（enabledMcpjsonServers）；perf-trace review 建議仍在 clade home 集中跑（profile/量測環境一致）。
 5. **Ball-ownership 依卡片判讀**：回答「等你還是等我」「ready 了沒」時，`flow gates` **非空** → 逐張列出 `family` ＋ 判斷題 ＋ 為什麼現在輪到人 ＋ 該跑的指令；**空**（且 exit 0）→ 才可以說「沒有等你的事」。卡片以外的 pending 一律是 agent 的球。
-6. **triage 結論要人接手時，MUST 落成卡片，NEVER 留散文**：triage 一個 `（issue:）` 得出「out-of-scope / false-positive / 修法已落地，等人重評」時，**MUST 在同一動作** `flow ask --question '<一句判斷題>' --option ... --work-id <W> --carrier <tasks 檔>` 開卡。只寫散文分析或只開 `@followup[TD-NNN]` 都不會出現在 `flow gates`，人永遠看不到。**NEVER** 為這件事新寫 `(claude-analyzed:)` / `(awaiting-user-decision:)` 行內 annotation——那是已退役的 Spectra 讀法，現在沒有任何讀取者會把它變成卡片。
+6. **triage 結論要人接手時，MUST 落成卡片，NEVER 留散文**：triage 一個 `（issue:）` 得出「out-of-scope / false-positive / 修法已落地，等人重評」時，**MUST 在同一動作** `flow ask --question '<一句判斷題>' --option '<短標籤> :: <後果>' ... --recommended '<短標籤>' --why '<理由>' --work-id <W> --carrier <tasks 檔>` 開卡。只寫散文分析或只開 `@followup[TD-NNN]` 都不會出現在 `flow gates`，人永遠看不到。**NEVER** 為這件事新寫 `(claude-analyzed:)` / `(awaiting-user-decision:)` 行內 annotation——那是已退役的 Spectra 讀法，現在沒有任何讀取者會把它變成卡片。
 7. **Post-work 回報 MUST 逐張標 family**：完成 evidence collection / issue triage 等批次工作後回報時，**MUST** 對每張卡個別寫 family 與判斷題。只有 `ui-judgement` / `acceptance` 卡才能寫「可以在面板驗收」並附連結。其餘 family 照實寫（例：「`ruling` — 要你決定 X 走 A 還是 B」），**NEVER** 混進「可以驗收」的清單。
 8. **引導人到面板前 MUST 先把 agent 的球推完（hard rule）**：**任何**要把人導向面板的場景（`/commit` 0-MR block、handoff、實作後驗收、session 結尾回報），session owner **MUST** 先把自己能推進的 pending 推完，再跑 MUST 1 的 `--require-empty`，依 exit 分流：
 
@@ -157,7 +157,7 @@ bash ~/offline/clade/ops/review-gui-service.sh status   # 判 exit code，不要
 
 | 要人看什麼 | URL |
 | --- | --- |
-| 待我佇列（所有 family 的卡片） | `https://review-gui.<maintainer-domain>/` |
+| 輪到你佇列（所有 family 的卡片） | `https://review-gui.<maintainer-domain>/` |
 | 這個 repo 的專案頁 | `pnpm review:ui --print` 印出的那一條（`vendor/scripts/control-panel/open.ts`，形如 `https://review-gui.<maintainer-domain>/projects/<repo>`） |
 
 - **`<repo>` MUST 由 `open.ts` 算，NEVER 手寫**：它與面板路由用同一個 `repoName`（worktree 解析回 main、`<repo>/template` 這類較深 root 取最深），靠印象拼的名字對不上就是 404
@@ -173,7 +173,7 @@ bash ~/offline/clade/ops/review-gui-service.sh status   # 判 exit code，不要
 
 ## 判定後的游標落點（hard rule）
 
-人在待我佇列判完一張卡後，面板 **MUST** 把游標落在**同一個 work／plan 的下一張**；同一件判完才退到同 repo 的其他卡；整個 repo 判完才輪到佇列第一張。
+人在輪到你佇列判完一張卡後，面板 **MUST** 把游標落在**同一個 work／plan 的下一張**；同一件判完才退到同 repo 的其他卡；整個 repo 判完才輪到佇列第一張。
 
 這條之所以要寫成 rule：佇列是**跨 consumer 串接**的單一陣列，第 0 張屬於哪個 repo 純粹由排序決定。判完的那張會從佇列消失，所以「保住原本的游標 id」必然失敗——舊實作在那個時刻直接落到 index 0，於是判完 <consumer-b> 一項就跳去 <consumer-a> 的第一條，而畫面上完全看不出換了專案（2026-08-29 回報）。人以為自己還在同一件事裡，對著別家的卡按下一個通過。
 

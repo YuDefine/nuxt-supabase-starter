@@ -335,11 +335,11 @@ gate 自己的可用度跑 `node scripts/audit-security-gate-readiness.ts`（war
 
 ## § 0-A: 程式碼審查（simplify → 0-A.1 → 條件式 0-A.2）
 
-**每次 dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，分開驗證 scope、fresh context、模型資格、品質與唯讀載體。commit 0-A 的唯一合格 review 模型是 GPT-6 Astra via Pi（effort: medium）；review 角色不固定由哪個 runtime 主線執行，原生呼叫方式見本檔末尾投影的 runtime 操作段。
+**每次 dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，分開驗證 scope、fresh context、模型資格、品質與唯讀載體。commit 0-A 的合格 review **兩格同級**：GPT-6 Astra via Pi（effort: medium）優先，Claude Fable 5.1 via Herdr Claude child（effort: medium，`code-review-fable` 列）只在 Astra 實際不可用（exit 3／4＋逐字 RESULT 證據）時啟用；兩格 verified PASS 等效，兩格都不可用 → gate 保持未完成。review 角色不固定由哪個 runtime 主線執行，原生呼叫方式見本檔末尾投影的 runtime 操作段。
 
 1. 主線先完成 0-A.0；修完的 snapshot 才交給 reviewer。
 2. Fast-path 不成立時啟動 0-A.1 獨立 review，並行 0-B 與 0-C。每個背景工作綁 owner、實際 handle、deadline 與收回方法；不把另一個 runtime 的參數交給本端工具。
-3. 0-A.1 出 Critical／Major 時，修正後進 0-A.2 深度 review——同一個 Astra medium 以 fresh context 對修復後 snapshot 再審一輪。
+3. 0-A.1 出 Critical／Major 時，修正後進 0-A.2 深度 review——合格 reviewer 的格別每輪依當下可用性重判（Astra medium 優先、不可用時同前述條件換 Fable medium；0-A.2 與 0-A.1 落在不同格合法）以 fresh context 對修復後 snapshot 再審一輪。
 4. Findings 由主線匯合、查證與修正；各軸的背景 reviewer 不同時寫受審檔。
 
 ### 0-A.0 — simplify（主線，永遠先跑）
@@ -355,7 +355,8 @@ Fast-path 的三條件以 SKILL.md 的同一份定義為準：diff <20 行、只
 Reviewer 看完整 frozen changeset 與驗收契約，以一般 review 的已核准推理深度查邏輯、安全、跨檔影響及適用 semantic patterns。共用 CLI 載體可使用：
 
 ```bash
-bash "$COMMIT_SKILL_DIR/scripts/codex-review-safe.sh" medium
+bash "$COMMIT_SKILL_DIR/scripts/codex-review-safe.sh" medium        # Astra 格（優先）
+bash "$COMMIT_SKILL_DIR/scripts/claude-review-safe.sh" medium       # Fable 格（僅 Astra exit 3／4 後）
 ```
 
 **使用該 CLI 前 MUST 完整讀 [runner-safety.md](runner-safety.md)**；`COMMIT_SKILL_DIR` 的取得方式與依賴檢查見 runtime-lifecycle。其他載體同樣要提供完整 snapshot、唯讀／隔離、真實 identity、完整 verdict 與對應來源。工具白名單不受底層 runtime 執行時，必須由核准的 OS 隔離承接，不能只相信參數名字。
@@ -363,7 +364,10 @@ bash "$COMMIT_SKILL_DIR/scripts/codex-review-safe.sh" medium
 | 實際結果 | 動作 |
 | --- | --- |
 | 啟動／等待中 | 記錄 handle 與 owner，透過本端完成事件或 bounded wait 收回同一工作；並行推進其他軸，不能重播命令代替等待 |
-| 配額耗盡 | Astra 是唯一合格 review 模型，沒有可換的候選：gate 保持未完成，保留 quota-blocked 的實跑證據（exit 4／`RESULT: quota-blocked`）並記錄 pending review；NEVER 用其他模型或主線自審補位 |
+| 配額耗盡／reviewer 沒跑成（Astra exit 4 `RESULT: quota-blocked`，或 exit 3 runtime 未跑成） | 保留逐字 RESULT 行與 exit code 作為不可用證據，改用 `claude-review-safe.sh`（Fable medium via Herdr）；Fable 格回 exit 4（account_unavailable）或其他不可用證據時，兩格皆盡——gate 保持未完成並記錄 pending review，NEVER 用其他模型或主線自審補位。Fable exit 11（account_unverifiable）是「量不到」不是「耗盡」：wrapper 的 RESULT／NEXT 行會印出 receipt 路徑與 `retry_after_ms`（有的話）——receipt **不帶** `retry_after_ms`＝沒有 ETA，交 coordinator 決定而不是自行腦補時間；有 ETA 則依它重試。量不到本身不構成兩格皆盡，也 NEVER 讀成 account_unavailable。Astra exit 2／5／6 **不是**不可用，不觸發換格 |
+| Fable exit 10（helper `nested_dispatch_refused`：本 session 不得開 reviewer child） | 不是 reviewer 不可用，NEVER 換格或判兩格皆盡：把 0-A 的 Fable 格交回 coordinator 代跑，gate 保持未完成直到拿回帶 receipt 的 verdict。**NEVER** 改走 headless `claude -p`——無 receipt 的 verdict 不得當 gate 證據（[review-policy.md](review-policy.md)） |
+| Fable exit 8（`model_verification` 有界重讀後仍 `unverified`，或 `mismatch`） | 身分歸屬不成立：verdict 扣住不採，gate 保持未完成並記錄 pending review；receipt 的 `model_verification_reason` 區分「無法核實」與「核實不符」，NEVER 把 unverified 讀成已核實或當 PASS |
+| Fable exit 9（brief 無法安全交付：總量超過 `CLAUDE_REVIEW_BRIEF_MAX_BYTES`，或 pointer 模式下有單行超過 `CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS`，RESULT 行會指出超長行號與所屬區塊） | **本地拒絕，review 沒跑但不是 reviewer 不可用**——NEVER 歸進「兩格皆盡」記 pending；把超長行折行（changeset、--findings 檔或 semantic 規則文，依 RESULT 指的區塊）或拆 commit 後重跑；上限確需調整時先評估 child context 實測再改 `*_MAX_*` env。NEVER 拿縮小 `CODEX_REVIEW_MAX_DIFF_LINES` budget 換過關——超出的檔只會移進 OMITTED 漏審清單，依下一列「Scope 缺檔」同樣不能記 PASS，除非被剔除的檔另行送審 |
 | Scope 缺檔／截斷、缺 verdict／Semantic Verdict id、workspace 綁定失敗 | 對應範圍未被完整 review；修復取證後再執行，不能記 PASS |
 | Snapshot 漂移／不明 mutation | 先查具體 diff 與歸屬；已確認為合法並行工作可移至隔離 fixture 後重跑，不明或非預期 mutation 保留現場並處理授權，不自動覆寫 |
 | 完整結果，無 issue | 0-A.1 通過，0-A.2 不觸發 |
@@ -405,9 +409,9 @@ PRE-EXISTING — 未觸碰：<file>:<line>（舉證本次 diff 不含此檔／�
 
 只在 0-A.1 出 Critical／Major 時執行；修復後的完整 snapshot 是輸入。
 
-合格深度 reviewer 是同一個 GPT-6 Astra via Pi（effort: medium）——fresh context、不繼承 0-A.1 的對話。它取得修復後 snapshot、原始 0-A.1 findings 與修法內容，逐條確認 real issue 已修、附反證 dismiss 或重標 severity，另查修法帶來的漏項與 regression。reviewer 唯讀，主線負責修復。使用共用 CLI 時，先把 0-A.1 的 `## Review Verdict` 區段存成檔案，再以 `codex-review-safe.sh medium --findings <檔案>` 餵給 fresh reviewer——不帶 findings 的複審沒有逐條驗證的依據，只能算第二次 discovery，不滿足本節。保存完整輸出，不只摘錄結論。
+合格深度 reviewer 依 0-A.1 同一套選用規則**當下重判格別**（GPT-6 Astra via Pi，effort: medium 優先；Astra 實際不可用且留有逐字證據時，換同級的 Claude Fable 5.1 via Herdr，effort: medium）——fresh context、不繼承 0-A.1 的對話，也不繼承 0-A.1 的格別：0-A.1 由哪一格完成不限制 0-A.2 的判格，兩份 receipt 各自記 requested／observed。複審 MUST 由合格格執行，NEVER 降級成主線自審、worker、cloud CI 或第三個模型。它取得修復後 snapshot、原始 0-A.1 findings 與修法內容，逐條確認 real issue 已修、附反證 dismiss 或重標 severity，另查修法帶來的漏項與 regression。reviewer 唯讀，主線負責修復。使用共用 CLI 時，先把 0-A.1 的 `## Review Verdict` 區段存成檔案，再以 `codex-review-safe.sh medium --findings <檔案>`（或 Fable 格 `claude-review-safe.sh medium --findings <檔案>`）餵給 fresh reviewer——不帶 findings 的複審沒有逐條驗證的依據，只能算第二次 discovery，不滿足本節。保存完整輸出，不只摘錄結論。
 
-深度輸出缺 `## Review Verdict`（含截斷／context exhaustion）時，明示深度階段未完整；不盲重跑相同耗盡命令。查明耗盡或截斷原因後對同一 snapshot 重跑（diff 過大先縮小受審範圍），補齊完整 verdict 才可收口；Astra 配額耗盡沒有替補，0-A.2 保持未完成。
+深度輸出缺 `## Review Verdict`（含截斷／context exhaustion）時，明示深度階段未完整；不盲重跑相同耗盡命令。查明耗盡或截斷原因後對同一 snapshot 重跑（diff 過大先縮小受審範圍），補齊完整 verdict 才可收口；兩格都不可用時 0-A.2 保持未完成，不以其他模型或主線自審補位。
 
 0-A.2 輸出對**每一條** dismissed finding 提供：
 
@@ -438,11 +442,11 @@ node "$COMMIT_SKILL_DIR/scripts/0a-metrics.mjs" record \
   --screenshot <pass|skip> --doc <aligned|skip>
 ```
 
-Fast-path 不填未執行的 reviewer；`escalated` 的 `--reviewer` 記實際跑 0-A.2 深度 review 者（仍是 Astra medium）。`--dismissed-unsubstantiated` 是反證不足被保留為 real issue 的條數。`blocked` 記「gate 觸發但因外部原因沒跑完」（如 Astra 配額耗盡）：MUST 提供非空 `--blocked-reason`，`--reviewer` 可省，findings 記已觀察到的部分——pending review 要留遙測記錄，不能整筆消失。Recorder 的參數檢查不證明 review 真有執行，須同時保留各軸原始 receipt；參數矛盾時修正流程或記錄，不能填假值讓它通過。舊 `--codex` CLI／歷史記錄是相容資料，不要求新入口冒充該模型組合；含 `+fable` 的舊 mode 與 `--adjudicator`／`--a2-deferral-*` 參數已退役，CLI 會拒收。
+Fast-path 不填未執行的 reviewer；`escalated` 的 `--reviewer` 記實際跑 0-A.2 深度 review 者（合格格之一：Astra medium 或 Fable medium）。`--dismissed-unsubstantiated` 是反證不足被保留為 real issue 的條數。`blocked` 記「gate 觸發但因外部原因沒跑完」（如兩格 reviewer 配額皆盡）：MUST 提供非空 `--blocked-reason`，`--reviewer` 可省，findings 記已觀察到的部分——pending review 要留遙測記錄，不能整筆消失。Recorder 的參數檢查不證明 review 真有執行，須同時保留各軸原始 receipt；參數矛盾時修正流程或記錄，不能填假值讓它通過。舊 `--codex` CLI／歷史記錄是相容資料，不要求新入口冒充該模型組合；含 `+fable` 的舊 mode 與 `--adjudicator`／`--a2-deferral-*` 參數已退役，CLI 會拒收。
 
 本地 `.clade/0a-metrics.jsonl` 是閾值評估依據；`summary` 的歷史數據與本次結果分開。Fast-path 與大改動門檻的變更需據分佈判定，不憑單次觀感調整。
 
-**未完成的 gate 不產生通過匯合行，也不進 commit。** Reviewer 不可用、配額不足、缺隔離／身份／完整輸出都不能以主線自審或其他模型補位。發現自己正用「另一個 fresh agent」代替合格的 Astra review、或用啟動成功代替完成，就是回上表補證據的時刻。
+**未完成的 gate 不產生通過匯合行，也不進 commit。** Reviewer 不可用、配額不足、缺隔離／身份／完整輸出都不能以主線自審或其他模型補位。發現自己正用「另一個 fresh agent」代替兩格合格 reviewer 之一、或用啟動成功代替完成，就是回上表補證據的時刻。
 
 Heavy gate 的 `exit 75` 代表 `gate-slot.sh` 等不到 slot、inner command 尚未執行；不是 typecheck／OOM 的證據。依 [[pitfall-heavy-gate-exit-75-reads-as-typecheck-failure]] 查實際 holder 與執行輸出，不能用增大 heap 或等待參數修錯層。
 
@@ -910,10 +914,10 @@ script 抓不到「這是一條新的最佳實踐」——那是語意判斷。�
 每次先核對本入口實際 catalog；IDE 原生工具、Cursor CLI 與經 Pi 的 Cursor provider 是不同載體，分別記錄證據。
 
 - Simplify：使用本入口可讀取的技能及共同四軸契約；不把 Claude Skill API 當成本端工具。
-- Review：符合共用資格的 CLI runner 可由本端 shell 執行。背景／等待／取消只帶當前 schema 支持的參數，保存真實返回 handle 並收回同一工作。沒有背景能力但有已授權的同步載體時同步執行，保留全部 gate 與 snapshot 條件並明示限制。0-A.1／0-A.2 一律走 `codex-review-safe.sh`（Pi Astra medium），0-A.2 只是同一 reviewer 的 fresh-context 複審，不需 Herdr pane。`idle`／`done` 不是完成。**NEVER** `--relay`，**NEVER** 叫 user 開 Claude。
-- Fresh agent：只用 catalog 真實提供的獨立上下文工具及合法模型值；模型僅能 inherit 時記錄實際繼承結果。0-A 已無跨模型要求，fresh-context 複審由新的 Astra review session 承擔，不需另派 agent；需要換 runtime 時先查本任務既有授權與可用 transport，不暗換 Claude launcher。
+- Review：符合共用資格的 CLI runner 可由本端 shell 執行。背景／等待／取消只帶當前 schema 支持的參數，保存真實返回 handle 並收回同一工作。沒有背景能力但有已授權的同步載體時同步執行，保留全部 gate 與 snapshot 條件並明示限制。0-A.1／0-A.2 優先走 `codex-review-safe.sh`（Pi Astra medium）；Astra 實際不可用（exit 3／4＋逐字證據）時走 `claude-review-safe.sh`（Fable medium via Herdr），0-A.2 是合格 reviewer 的 fresh-context 複審（格別每輪依當下可用性重判，與 0-A.1 不同格合法），主線不需自己開 Herdr pane。`idle`／`done` 不是完成。**NEVER** `--relay`，**NEVER** 叫 user 開 Claude。
+- Fresh agent：只用 catalog 真實提供的獨立上下文工具及合法模型值；模型僅能 inherit 時記錄實際繼承結果。0-A 已無跨模型要求，fresh-context 複審由新的合格 reviewer session（Astra 格優先，實際不可用時 Fable 格）承擔，不需另派 agent；需要換 runtime 時先查本任務既有授權與可用 transport，不暗換 Claude launcher。
 - UI：依本入口實際圖片／瀏覽器能力取得證據，再選具核准視覺資格的 reviewer。Pi Cursor provider 的 tools flag 不限制 SDK 原生工具，使用該 provider 前完整套用 runner-safety 的 OS／網路隔離契約。
 - 協調／詢問：使用本入口可用且已授權的具名通道；缺通道時回報具體缺口。需要使用者資訊可直接對話，不要求補裝另一 runtime 的詢問工具。
 - Exit：核對 writer 的 terminal 結果後依 runtime-lifecycle 釋放原 owner 鎖。沒有原生完成事件或 wakeup 時使用現有 handle 的 bounded wait，不創造 ScheduleWakeup／TaskOutput API。
 
-每次 receipt 記實際 runtime、model 與隔離方式；本段不把 Cursor 主線視為固定模型，也不代替共用 reviewer 資格判定（唯一合格：GPT-6 Astra via Pi medium）。
+每次 receipt 記實際 runtime、model 與隔離方式；本段不把 Cursor 主線視為固定模型，也不代替共用 reviewer 資格判定（兩格同級：GPT-6 Astra via Pi medium 優先，Astra 實際不可用〔exit 3／4＋逐字證據〕時 Claude Fable 5.1 via Herdr medium）。

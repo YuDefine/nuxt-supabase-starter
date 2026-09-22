@@ -49,7 +49,9 @@ command -v herdr
 
 **NEVER** 在 Cursor 裡 `export HERDR_ENV=1` 或假裝自己是 focused pane。那會讓 split／reclaim 打到使用者當下盯著的工作。
 
-create-only 的成功 receipt 是 `dispatched`，**不是** `relay_dispatched`（沒有 predecessor pane 可交）。`command -v herdr` 失敗才 STOP；不得宣稱已交接或輸出「目前這裡收工」。identity-bound 在外部被拒時同樣不得輸出「目前這裡收工」。
+create-only 的成功 receipt 是 `dispatched`，**不是** `relay_dispatched`（沒有 predecessor pane 可交）。
+
+**Herdr 外的 main line 要交出位置（TD-1104）時用 `--successor`，不是一般 create-only。** 一般 create-only 派出去的是 coordinated child（帶 `CLADE_DISPATCH_ID`），它結構上開不了任何 pane——除了 relay 之外一律 `nested_dispatch_refused`。`--successor` 是 relay 的 create-only 對應：不注入 correlation env、不留待收割 record、延續同一個 work id，receipt 是 `successor_dispatched`（`predecessor: outside-herdr`）。本 session 還欠收割的 dispatch_id MUST 寫進 successor brief，由 successor `--coordinate-resume`。歸屬怎麼跟過去依前任而定：**Cursor** 派的 record 綁 `CURSOR_SESSION_ID`，successor pane 永遠對不上，所以 helper 在交棒當下以 relay claim 把它們轉給 successor 的 pane／session（receipt `predecessor: cursor`＋`transferred_dispatch_ids`；轉不完回 `successor_incomplete`，Cursor 不得站下）；其他 Herdr 外前任的 record 沒有 parent pane 也沒有 Cursor id，持有 dispatch_id 即為所有權證明，不需轉移。helper 在兩種情況回 `successor_refused`：本 session 是 coordinated child（欠 outcome，只能 `--relay` 把義務一起轉走）、或本 session 就是 Herdr pane（用 `--relay`，它還會轉 in-flight dispatch）。`command -v herdr` 失敗才 STOP；不得宣稱已交接或輸出「目前這裡收工」。identity-bound 在外部被拒時同樣不得輸出「目前這裡收工」。
 
 ### `CLADE_DISPATCH_ID` 分流（本 session 自己是不是被派出來的 child）
 
@@ -64,7 +66,9 @@ create-only 的成功 receipt 是 `dispatched`，**不是** `relay_dispatched`�
 
 本 session 若持有尚未回報的 `--complete` 義務（它是被 dispatch 出來的 child，而 coordinator 還在等 outcome），**MUST 先回報 outcome 再 relay**，不得把未結的 handshake 一起丟給 successor。
 
-> relay 開出來的 successor **不帶** `CLADE_DISPATCH_ID`（helper 刻意不注入 correlation env，見該檔 grep `TD-547` 的註解段），所以它是 main line、可以自由 fanout。被 fanout 派出去的 **worker 帶**該 env，因此 worker 只能 relay，不能再 fanout。
+> relay 開出來的 successor **不帶** `CLADE_DISPATCH_ID`（helper 刻意不注入 correlation env，見該檔 grep `TD-547` 的註解段），所以它是 main line、可以自由 fanout。`--successor` 開出來的同理（TD-1104）。被 fanout 派出去的 **worker 帶**該 env，因此 worker 只能 relay，不能再 fanout。
+
+**guard 的唯一另一個缺口是 `--bounded-leaf`（TD-1105）**：coordinated child 可以開**一層**有界葉節點——只限 readonly 的 gate-review row（由 `NATIVE_TABLE_ROW_POLICIES` × `GATE_OUTPUT_ROWS` 推導，目前只有 `code-review-fable`）且必須 `--coordinate`（開的人在同一個呼叫裡收割）。leaf 自己帶 correlation env 加上 `CLADE_DISPATCH_BOUNDED_LEAF=1`，record 記 `bounded_leaf: true`；它的裸 dispatch 照一般 guard 擋，再開 leaf 也回 `nested_dispatch_refused`，**`--relay` 也回 `nested_dispatch_refused`**——一般 child 的 relay 缺口是「把位置橫向交出去」，leaf 沒有位置，relay 只會鑄出一條不受 guard 約束的 main line。leaf 做不完就 `--complete blocked` 交還 coordinator；wake 沒送到時它的 `next_step` 是 `standby`（probe parent→在線叫醒→待命由 opener `--coordinate-resume` 收割），不是 relay——pending decision 已隨 `--complete` 進 completion record 與 decision 佇列，leaf 不需要也不能寫 tracked 檔。這不是責任樹擴張：leaf 不能寫它審的樹、跑完即回、不能再派（含 relay）。**NEVER** 為了讓一般工作過 guard 而把它包裝成 leaf——准入由 row 推導，flag 本身不開門。
 
 ### `--cwd` 指向既存工作區時的佔用探測（fail closed）
 
@@ -252,7 +256,7 @@ successor 繼承的是整個位置，所以「接手後仍需要」的範圍比�
 | workflow 明定 parked | 保留，receipt 寫 `retained: <owner + next landing event>` |
 | 已登記批次、尚未正式落地 | 保留来源與佇列，successor 依 commit skill `batch.md` 接手；換 session 不強制結批 |
 | 已登記批次且正式落地 | 主動跑 `wt-helper batch cleanup`；登記時的落地授權含安全回收，不重問 remove／retain，依結果逐來源記 removed／retained 原因 |
-| clean + 內容已在 main（ancestry merged，或 `wt-helper cleanup <slug> --dry-run` 印 `merged=Y`）+ 無 unique commit／WIP + 無 parking contract | **直接**以零 force flag 移除 worktree 與 branch（`wt-helper cleanup <slug>`），receipt 寫 `removed`；**NEVER** 先問 `remove`／`retain`——條件全中就是授權 |
+| clean + 內容已在 main 或 origin/<base>（ancestry merged，或 `wt-helper cleanup <slug> --dry-run` 印 `verdict CLEAN`／`merged=Y`／`mergedPr(origin/<base>)=Y` 任一；「已在 origin/<base>、本機 main 尚未同步」算 `removed` 條件——clade 是 PR 制，origin 是落地權威，本機 main 由 `main-sync` 追上，gate 防的是內容遺失而 server 端已保存）+ 無 unique commit／WIP + 無 parking contract | **直接**以零 force flag 移除 worktree 與 branch（`wt-helper cleanup <slug>`），receipt 寫 `removed`；**NEVER** 先問 `remove`／`retain`——條件全中就是授權 |
 | 零 force flag 的移除被擋，或上一列任一條件判不出 | fail closed 列 blocker；答案前停止收工訊息 |
 | dirty、未 fully merged、ownership 不明 | fail closed 列 blocker，**NEVER** 用 `--force` 代替判斷 |
 

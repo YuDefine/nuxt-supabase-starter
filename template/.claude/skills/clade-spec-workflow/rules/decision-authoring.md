@@ -16,7 +16,7 @@ paths:
 它規範掃描器與頁面，本檔規範**被掃的那條 bullet**。選項的 canonical 形狀以本檔為準。
 
 你寫進 `HANDOFF.md` / `docs/tech-debt.md` 的一條待拍板 bullet，60 秒內會被
-`vendor/scripts/flow/decision-sources.ts` 掃進 spine，出現在 `https://review-gui.<maintainer-domain>/`（控制面板首頁「待我」）
+`vendor/scripts/flow/decision-sources.ts` 掃進 spine，出現在 `https://review-gui.<maintainer-domain>/`（控制面板首頁「輪到你」）
 和 `\my` 兩個畫面上。Charles 多半在手機上讀它。**寫的人與答的人不是同一個人，中間隔著一個
 解析器**——本檔存在的唯一理由是讓這三方對同一條 bullet 的理解一致。
 
@@ -283,15 +283,34 @@ agent 代收也有正路了：`flow dismiss <span_id> --reason '<為什麼不再
 
 ```bash
 node vendor/scripts/flow/flow.ts ask \
-  --question '<問句>' \
-  --option 'A（推薦）第一案 —— 這樣做會怎樣' \
-  --option 'B 第二案 —— 這樣做會怎樣' \
-  --recommended 'A（推薦）第一案 —— 這樣做會怎樣' \
+  --headline '<卡片標題：一句人話的問句，不放 work id／SHA>' \
+  --question '<完整問句，讀者沒有 scrollback>' \
+  --option '<短標籤> :: <按了會怎樣>' \
+  --option '<短標籤> :: <按了會怎樣>' \
+  --recommended '<推薦那一條的短標籤>' \
+  --why '<一句為什麼推薦>' \
   --carrier HANDOFF.md
 ```
 
-問句走 `--question`（**不是** positional），選項走可重複的 `--option`（一條一個旗標，選項本文
-含逗號是常態）。字母前綴與「（推薦）」由寫入端剝掉，卡片依索引自己編號。
+問句走 `--question`（**不是** positional），選項走可重複的 `--option`（一條一個旗標）。
+字母前綴與「（推薦）」由寫入端剝掉，卡片依索引自己編號。
+
+**問人的題是三種形狀之一，`flow ask` 依形狀檢查必填，缺了就 exit 1 並印出可照抄的改法**
+（判定在 `vendor/scripts/flow/ask-admission.ts`，herdr `--complete blocked --decision-for charles`
+共用同一份）：
+
+| 這題要人做什麼 | 必帶 |
+| --- | --- |
+| 選一個（`ruling`／`review`） | 2–4 條 `--option '<短標籤> :: <後果>'`（短標籤 ≤16 字）＋ `--recommended` ＋ `--why` |
+| 給一個值 | `--needs-value` ＋ 每個要填的值一條 `--field '<欄位名>'` |
+| 到場做事（`--category human-action`） | 每個動作一條 `--step '<做什麼>'`；帶選項的到場題則照「選一個」那列給 `--option`＋`--recommended`＋`--why`，`--step` 只在沒有可用選項時必填 |
+
+選填：`--deadline <ISO> --deadline-basis '<為什麼是這天>'`（72 小時內到期的卡排最前）、
+`--dedupe-key <key>`（同一件事的第二次發問併進同一張卡）。問 agent 的題加
+`--audience coordinator`，不受上表限制。
+
+讀者是手機上的人：他第一眼只看得到標題、推薦與理由、短標籤按鈕。長的背景、證據、指令寫進
+`--question` 與 carrier，它們收在卡片的「細節」裡。
 
 檔案來源是給「本來就要寫進登記簿」的題用的。兩條路徑寫進的是同一個佇列。
 
@@ -303,10 +322,14 @@ pane 裡問的題不經這支 CLI，走的是 completion handshake，選項一�
 node vendor/scripts/herdr-session-handoff.ts --complete blocked \
   --summary '<目前狀態>' \
   --decision '<只問一個具體問題>' \
-  --decision-option 'A …' --decision-option 'B …' \
-  [--decision-recommended 'A …'] \
+  --decision-option '<短標籤> :: <後果>' --decision-option '<短標籤> :: <後果>' \
+  [--decision-recommended '<短標籤>' --decision-why '<一句為什麼>'] \
   [--decision-for coordinator|charles]
 ```
+
+`--decision-for charles` 的題過同一份 admission（上一節的表）：選一個就 MUST 帶短標籤選項＋
+`--decision-recommended`＋`--decision-why`；要一個值就改帶 `--decision-field '<欄位名>'`。
+問 coordinator（預設）的題不受限。
 
 #### `--decision-for` —— 這題問誰，預設 coordinator
 

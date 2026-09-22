@@ -562,7 +562,7 @@ Gemini worker 的對應規範（hard budget、checkpoint、fail-fast、progress.
 readonly:
   Astra    → 計畫／決策由 Opus；gate row 依下方獨立性契約
   Sol      → 回報同角色 carrier 不可用，不轉 Astra／cx
-  Gemini   → luna → luna-cursor（cursor/gpt-5.6-luna@272k）→ grok-xai（xai/grok-4.6）→ grok-cursor（cursor/grok-4.6）→ Claude Haiku
+  Gemini   → luna → luna-cursor（cursor/gpt-5.6-luna@272k）→ grok-xai（xai/grok-4.7）→ grok-cursor（cursor/grok-4.6）→ Claude Haiku
   Luna     → luna-cursor → grok-xai → grok-cursor → Claude Haiku
   Grok-xai → grok-cursor（cursor/grok-4.6）→ Claude Sonnet
 mutation:

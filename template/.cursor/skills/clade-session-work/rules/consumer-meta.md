@@ -222,7 +222,15 @@ fleet 的部署形態收斂成**三型**。新專案 **MUST** 貼齊其中一型
 3. **aggregator run**：consumer 採用後在 clade 跑 sync-consumer-meta.ts，snapshot 落地
 4. **規則 / skill 開始讀**：依賴 manifest 的規則改寫，從 hardcode 改成讀 snapshot
 
-未採用 manifest 的 consumer 在 snapshot 內顯示為 `{ "declared": null, "derived": {...}, "validation": { "warnings": ["no .claude/consumer-meta.json found"] } }`，aggregator 不 fail，只 warn。
+未採用 manifest 的 consumer 在 snapshot 內顯示為 `{ "declared": null, "derived": {...}, "validation": { "warnings": ["no .claude/consumer-meta.json found"] } }`——**兩種模式的 snapshot 內容都相同**（分級隨旗標變，`--check` 的 drift 比對就會報一個重跑也消不掉的 DRIFTED）。失敗與否在 exit code 層分：
+
+| 跑法 | 缺 manifest | 名單上的路徑不存在 |
+| --- | --- | --- |
+| `node scripts/sync-consumer-meta.ts`（寫入 snapshot） | warning，exit 0——**NEVER** 擋 publish／snapshot 重生 | warning，exit 0 |
+| `node scripts/sync-consumer-meta.ts --check`（`/clade-health` live／full 跑的那條） | `✗`，exit 1。修法在那家 consumer：relay 給它採用 | `✗`，exit 1。修法在 `consumers.local`：改或刪那一行 |
+| `node scripts/sync-consumer-meta.ts --consumers-file <list>`（fixture／單體驗收跑法；implies check mode，但不比對 committed snapshot——它描述的是真實 fleet 而非 fixture） | `✗`，exit 1。修法同 `--check`：那家 consumer 採用 | `✗`，exit 1。修法在 `<list>` 名單檔：改或刪那一行 |
+
+`--check` 是採用收斂的 gate（TD-779）：只 warn 的版本讓未採用的 consumer 可以無限期停在 warning，沒有任何東西逼它收斂。`--consumers-file` 是同一個 check mode 的 fixture 入口（絕不寫 snapshot），所以同一套 gate 照樣生效——relay brief 的單體驗收指令走的就是這條，未採用的 consumer 必須在那裡紅掉，不能 exit 0 放行。
 
 ## Adoption gap detection
 
