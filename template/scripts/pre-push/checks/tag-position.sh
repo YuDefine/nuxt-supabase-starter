@@ -38,13 +38,28 @@ ZERO='0000000000000000000000000000000000000000'
 # git pre-push stdin 格式：<local_ref> <local_sha> <remote_ref> <remote_sha>
 tag_names=()
 tag_shas=()
+# 同一批 push 裡的 branch ref：tag 超前 origin/<default> 時，若 tag commit 就是
+# 本批 default branch ref 的 head（git push --atomic origin main v<版本>，tag 打在
+# 正要推上去的那個 commit 上），它就落在被維護的線上，不算「打在沒推上去的 commit」。
+# 同批的其他 branch 不構成涵蓋——tag 依然不在 origin/<default> 的可達範圍內。
+# 嚴格祖先也不放行：tag 打在本批 head 之前的中繼 commit 時，落地那一刻它就落後
+# 新 origin/<default>——與 behind 方向同一失敗模式，不能讓 batch 路徑變成旁路。
+batch_branch_names=()
+batch_branch_shas=()
 while read -r local_ref local_sha remote_ref _remote_sha; do
   [[ -n "${remote_ref:-}" ]] || continue
-  [[ "$remote_ref" == refs/tags/* ]] || continue
-  # 全零 local_sha = 刪除 tag，沒有位置可言，放行
+  # 全零 local_sha = 刪除 ref，沒有位置可言，不計入
   [[ "$local_sha" == "$ZERO" || -z "$local_sha" ]] && continue
-  tag_names+=("${remote_ref#refs/tags/}")
-  tag_shas+=("$local_sha")
+  case "$remote_ref" in
+    refs/tags/*)
+      tag_names+=("${remote_ref#refs/tags/}")
+      tag_shas+=("$local_sha")
+      ;;
+    refs/heads/*)
+      batch_branch_names+=("${remote_ref#refs/heads/}")
+      batch_branch_shas+=("$local_sha")
+      ;;
+  esac
 done < "$REFS_FILE"
 
 # 這次 push 不含 tag → 零成本離開（絕大多數 push 走這條）
@@ -100,8 +115,44 @@ for i in "${!tag_shas[@]}"; do
   # 反方向 count 恆為 0。
   ahead_n="$(git rev-list --count "origin/$default_branch..$commit" 2>/dev/null || echo 0)"
   if [[ "$ahead_n" != "0" ]]; then
-    echo "[clade pre-push] ✗ tag-position: tag '$name' 含 origin/$default_branch 沒有的 $ahead_n 個 commit" >&2
-    ahead=1
+    # 同一批 push 也帶著 default branch ref（git push --atomic origin main v<版本>）時，
+    # tag commit 只要是該 branch head 本身，它就會跟 default branch 一起上
+    # origin——「還沒推上去」對它不成立。
+    covered=''
+    stale_batch=0
+    if [[ ${#batch_branch_shas[@]} -gt 0 ]]; then
+      for j in "${!batch_branch_shas[@]}"; do
+        # 只認 default branch：同批 feature branch 涵蓋 tag 時，tag 仍落在
+        # origin/<default> 之外——正是本 gate 超前方向要防的形狀
+        [[ "${batch_branch_names[$j]}" == "$default_branch" ]] || continue
+        if [[ "$commit" == "${batch_branch_shas[$j]}" ]]; then
+          covered="${batch_branch_names[$j]}"
+          break
+        fi
+        # 嚴格祖先 ≠ 放行：落地那一刻 tag 即落後新 origin/<default>——與 behind
+        # 方向同一失敗模式（batch 路徑不能成為 stale gate 的旁路），歸 stale 擋法；
+        # 刻意打在中繼 commit 走 CLADE_ALLOW_STALE_TAG（語義本就覆蓋「舊樹」）
+        if git merge-base --is-ancestor "$commit" "${batch_branch_shas[$j]}" 2>/dev/null; then
+          behind_batch_n="$(git rev-list --count "$commit..${batch_branch_shas[$j]}" 2>/dev/null || echo 0)"
+          echo "[clade pre-push] ✗ tag-position: tag '$name' 是同批 branch '$default_branch' head 的祖先但落後它 $behind_batch_n 個 commit——推送後即落後 origin/$default_branch" >&2
+          # 這一格的修法與下方通用 stale 訊息不同：tag 打在自己未推的中繼 commit，
+          # 不是「別人推了 main」——重打到本批 head 再推即可，不需重新 bump 版本
+          echo "    修法：git tag -f $name ${batch_branch_shas[$j]} 後重推 --atomic 同批；刻意打在中繼 commit 走 CLADE_ALLOW_STALE_TAG=1" >&2
+          stale=1
+          stale_batch=1
+          break
+        fi
+      done
+    fi
+    if [[ -n "$covered" ]]; then
+      echo "[clade pre-push] tag-position: tag '$name' 超前 origin/$default_branch，但同批 push 的 branch '$covered' head 就是它——放行" >&2
+      # pre-push stdin 看不見 --atomic；放行語義只在原子批次下成立——非 atomic
+      # 同批推送若 branch ref 被 server 拒絕，tag 會單獨落地（規約層 MUST --atomic）
+      echo "[clade pre-push]   ⚠ 此放行只在 --atomic 同批推送下安全：非 atomic 時 branch ref 被 server 拒絕，tag 會單獨落地成 origin 上不在 $default_branch 的物件" >&2
+    elif [[ "$stale_batch" == "0" ]]; then
+      echo "[clade pre-push] ✗ tag-position: tag '$name' 含 origin/$default_branch 沒有的 $ahead_n 個 commit" >&2
+      ahead=1
+    fi
   fi
 done
 
@@ -120,6 +171,10 @@ if [[ "$ahead" != "0" ]]; then
 
     git push origin main
     git push origin <tag>
+
+  或同一批推（本 gate 認得同批的 branch ref，不會擋）：
+
+    git push --atomic origin main <tag>
 
 MSG
   exit 1

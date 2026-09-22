@@ -223,9 +223,9 @@ session owner 判定某 pending item 的球在人手上時，**MUST** 開一張 
 
 | 情境 | 指令 | 出現在 `flow gates` 的 family |
 | --- | --- | --- |
-| triage `（issue:）` 結論為 route **(E)**（false positive／修法已落地，等人重評） | `flow ask --question '<一句判斷題>' --option ... --work-id <W> --carrier <tasks 檔>` | `ruling` |
+| triage `（issue:）` 結論為 route **(E)**（false positive／修法已落地，等人重評） | `flow ask --question '<一句判斷題>' --option '<短標籤> :: <後果>' ... --recommended '<短標籤>' --why '<理由>' --work-id <W> --carrier <tasks 檔>` | `ruling` |
 | 純商業決策／production 授權，packet 已備妥 | 同上，`--question-page` 可掛決策頁 | `ruling` |
-| implementation 卡**外部 blocker**（等人到場、等帳號、等別家交付） | `flow ask --category external ...`；dispatched child 走 `--complete blocked` | `external-action` |
+| implementation 卡**外部 blocker**（等人到場、等帳號、等別家交付） | `flow ask --category human-action --step '<要人做的動作>' ...`；dispatched child 走 `--complete blocked` | `external-action` |
 
 **MUST NOT** 翻 checkbox、**MUST NOT** strip 既有 `（issue:）`、**MUST NOT** 在 (A)–(D) 結論時開卡（那些情境球仍在 session owner）、**MUST NOT** 用開卡規避其實 actionable 的 item——可走 (A)/(B)/(C) 路徑就 **MUST** 走。
 
@@ -406,7 +406,7 @@ Worktree-local hook / patterns.json 是 pre-update stale 版本撞 false positiv
 - 問「要不要我直接幫你勾完」= NEVER（這句話在 session transcript 實際出現過，直接反制）
 - **NEVER** 對前提事實上不成立的 item 開 `flow ask` 卡 — 那是可驗證事實，走「前提不成立直接 skip 例外」（核心規則段）
 - **NEVER** 在開卡交給人時翻 checkbox
-- **NEVER** 把 `flow ask --category external` 當「不想做就標一下」的逃生口 — 只在真正卡外部 blocker 時用
+- **NEVER** 把 `flow ask --category human-action` 當「不想做就標一下」的逃生口 — 只在真正卡外部 blocker 時用
 - **NEVER** dispatch verify channels 前不檢查 per-channel baseline — 主線預先 grep / read 確認，缺則停下回報 user 補齊
 - **NEVER** 在 verify dispatch 當下才問 user「dev-login / seed 準備好了嗎」— baseline 是 codebase 層長期狀態
 - **NEVER** 修完 `## 人工檢查` 區後直接 commit 而沒重跑 `manual-review-check.sh` 驗 0 violation — 見「Post-Edit Validation Gate」

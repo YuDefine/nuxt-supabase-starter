@@ -289,9 +289,9 @@ Scoped sub-item 範例：
 
 | 舊寫法 | 當時的語意 | 現在要人接手時 |
 | --- | --- | --- |
-| `(claude-analyzed: <ISO> route=E)` | triage 結論為 (E)，球在人 | `flow ask --question ... --work-id <W> --carrier <tasks 檔>` → `ruling` 卡 |
+| `(claude-analyzed: <ISO> route=E)` | triage 結論為 (E)，球在人 | `flow ask --question ... --option ... --recommended ... --why ... --work-id <W> --carrier <tasks 檔>` → `ruling` 卡 |
 | `(awaiting-user-decision: <ISO>)`（含其 CLI helper） | 純商業決策，packet 已備妥 | 同上；packet 用 `--question-page` 掛決策頁 → `ruling` 卡 |
-| `@apply-blocked[<reason>]` | implementation 卡外部 blocker | `flow ask --category external ...`（dispatched child 走 `--complete blocked`）→ `external-action` 卡 |
+| `@apply-blocked[<reason>]` | implementation 卡外部 blocker | `flow ask --category human-action --step '<要人做的動作>' ...`（dispatched child 走 `--complete blocked`）→ `external-action` 卡 |
 | `@evidence-via-manual-review` | 把 phase task 排除在舊 GUI 90% implementation threshold 外 | 無後繼（threshold 已退役） |
 
 四者共通的可寫條件在新寫法下照舊成立：**MUST NOT** 翻 checkbox、**MUST NOT** strip 既有 `（issue:）`、**MUST NOT** 用開卡規避其實 actionable 的 item。判「現在有什麼等人」一律跑 `flow gates`，見 [[review-gui-surface]] § Hard rule MUST 1。

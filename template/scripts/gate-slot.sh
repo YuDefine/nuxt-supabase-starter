@@ -278,10 +278,23 @@ print_holder_diag() {
 _gate_abort() {
   # Reap this helper's background lock waiter before closing its inherited fd.
   # These are our wait commands, not another job holding the lock.
+  #
+  # 逐 pid `wait "$pid"`，NEVER 裸 `wait`（TD-1110）：process-group SIGTERM 同時打到
+  # 背景 flock 與本 shell 時，flock 可能先死、並已被 `wait "$!"` 的 wait4 reap 掉，
+  # trap 卻在 bash 更新 job 狀態之前觸發 —— job table 仍記它 running。此時裸 `wait`
+  # 會進入 wait4→ECHILD→重試 的自旋（100% CPU、永不返回，WAIT_TIMEOUT 也救不了，
+  # 因為計時的 flock 已經死了）；`wait "$pid"` 對同一個過期 pid 則是回 127 立即返回。
+  # bash 5.3.9 實測：裸 wait 無負載 11/150、24 CPU burner 下 46/100 卡死；逐 pid 0/250。
   for _gate_wait_pid in $(jobs -pr); do
-    kill -TERM "$_gate_wait_pid" 2>/dev/null || true
+    # 同一張過期 job table 還有第二個效應：列出的 pid 可能已被 reap 並被 kernel 配給
+    # 不相干的行程，kill 會誤殺。送訊號前確認 PPID 仍為本 shell；ps 不可用或 pid 已
+    # 消失時（回傳空）退回既有行為——ESRCH 本來就無害，而活著的 flock 是 $$ 的子行程。
+    _gate_ppid=$(ps -o ppid= -p "$_gate_wait_pid" 2>/dev/null | tr -d '[:space:]')
+    if [ -z "$_gate_ppid" ] || [ "$_gate_ppid" = "$$" ]; then
+      kill -TERM "$_gate_wait_pid" 2>/dev/null || true
+    fi
+    wait "$_gate_wait_pid" 2>/dev/null || true
   done
-  wait 2>/dev/null || true
   printf '\ngate-slot: 收到 %s，放棄等待 slot（inner command 未執行）\n' "$1" >&2
   exit "$2"
 }

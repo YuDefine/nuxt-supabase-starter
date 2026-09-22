@@ -203,10 +203,26 @@ export function inFlightHoldersFor(
   // `clade-ci-home-r35394162751a1-lane1` 的 `clade-deleted-cwd-publish` fixture 仍在跑，
   // cwd 已刪所以 realpath 失敗。舊判準 fail closed 把**另一個 run 的私有樹**當成 holder，
   // 擋掉本 job fixture 的 `batch cleanup`。腳本絕對路徑若與 target 不相交，那不是這棵樹。
+  //
+  // 2026-09-21 CI（run 35549872744, lanes 2–5 全紅）：別的 runner service（PrivateTmp，跨掛
+  // 載命名空間）殘留的 `node scripts/publish.ts` **相對 argv** 孤兒活了 6+ 分鐘，cwd 已刪。
+  // 相對 argv 抽不出絕對腳本樹 → 走不到 isForeignScriptTree → 無限期 fail closed。cwd 已刪
+  // 的行程其工作目錄物件已不存在：它不可能是 target、也裝不下還活著的 target。readlink 仍給
+  // 得出它最後的路徑字串——字面上在 target 內（曾是我方樹的一部分）→ 照樣擋；在外 → free。
+  // 已知差集（與 cwdObjectInside 註解同型、實害低——已刪的樹無法再對活 target publish）：
+  // 經 bind alias 進入 target 的已刪 cwd，路徑字串對不上 → free；絕對 argv 指向 target 外、
+  // 腳本樹本身也已不存在時，不再要 isForeignScriptTree 的 live/CI-home 佐證即放行。
   if (unreadable.length > 0) {
     const still = new Set(detect().map((line) => line.trim().split(/\s+/)[0]))
     for (const { pid, line } of unreadable) {
       if (!still.has(pid)) continue
+      const gone = deletedCwdPath(proc, pid)
+      if (gone !== undefined) {
+        // 相對 argv 的腳本樹就是已刪的 cwd 本身；絕對 argv 仍看腳本樹（在我方樹內 → 擋）。
+        const scriptTree = scriptTreeFromLine(line) ?? gone
+        if (within(scriptTree, target) || within(gone, target)) held.push(line)
+        continue
+      }
       const scriptTree = scriptTreeFromLine(line)
       // Skip a proven other tree (another CI home / live tmp isolate). `/repo/scripts/publish.ts`
       // in wt-batch's same-tree probe is not a live isolate — fail closed and still hold.
@@ -215,6 +231,32 @@ export function inFlightHoldersFor(
     }
   }
   return held
+}
+
+/**
+ * `/proc/<pid>/cwd` readlink 原文以 ` (deleted)` 結尾 → 回已刪 cwd 最後的路徑字串；
+ * 讀不到或不是 deleted → `undefined`（留在原本的 fail-closed 路徑）。
+ *
+ * 尾綴只是 link 文字：活著的目錄若剛好以 ` (deleted)` 結尾，單看字尾會誤判成已刪。
+ * 補一道 `statSync` 的 nlink 判準（本機實測：被刪但仍被引用的目錄 inode 還在、
+ * nlink=0；活目錄 nlink ≥ 2）。stat 成功且 nlink>0 → 活目錄、不是 deleted；
+ * nlink=0 或 stat 失敗（跨 ns 我方解析不到／dangling）→ 與已刪一致。
+ * 方向仍是 fail closed：判不出來就不當 deleted。
+ */
+function deletedCwdPath(proc: string, pid: string): string | undefined {
+  let raw: string
+  try {
+    raw = readlinkSync(`${proc}/${pid}/cwd`)
+  } catch {
+    return undefined
+  }
+  if (!raw.endsWith(' (deleted)')) return undefined
+  try {
+    if (statSync(`${proc}/${pid}/cwd`).nlink !== 0) return undefined
+  } catch {
+    // stat 失敗（跨 ns 路徑不可達／懸空）：與已刪一致
+  }
+  return raw.slice(0, -' (deleted)'.length)
 }
 
 export function assertNoPublishInFlight(

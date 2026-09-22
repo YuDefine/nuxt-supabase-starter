@@ -199,7 +199,7 @@ Cookbook template 不存在的情境（如 nuxt-auth-utils + libsql-drizzle，�
 
 ### `[review:ui]` flow（真的需要人）
 
-tasks.md 仍有未勾 `[review:ui]` 項時，第一動作 **MUST** 是 auto-triage 後跑 `flow gates --repo-only --require-empty`（per [[proactive-skills.manual-review-entry]]）；exit 3 才把人導向面板的待我佇列（`pnpm review:ui --print` 印出本 repo 專案頁）。人在面板看 evidence 判定，不在 chat 內燒 token。
+tasks.md 仍有未勾 `[review:ui]` 項時，第一動作 **MUST** 是 auto-triage 後跑 `flow gates --repo-only --require-empty`（per [[proactive-skills.manual-review-entry]]）；exit 3 才把人導向面板的輪到你佇列（`pnpm review:ui --print` 印出本 repo 專案頁）。人在面板看 evidence 判定，不在 chat 內燒 token。
 
 **NEVER** 預設用 `target-native question surface` 在 chat 內逐項彈對話框 — 那是 fallback，不是 default path。
 

@@ -15,6 +15,12 @@ node scripts/wt-helper.ts batch status --trigger auto --workflow <workflow_model
 
 `batch ready` 才是 PR ready／品質入口。證據放來源外可持久讀取的檔；紀錄實跑命令、結果、受測 HEAD。`--authorize-landing` 表示既有工作授權允許正式落地及安全回收，不是由 flag 創造授權。需保留來源時加 `--retain <owner 與下一個落地事件>`。
 
+```bash
+node scripts/wt-helper.ts batch unready <source-path> --reason <撤回原因>
+```
+
+`batch unready` 撤回單一來源的 ready 登記：只刪該來源的 ready 紀錄，並把 path／branch／head／workId／reason 記進 state 的 `unready[]`（例如來源經 ad-hoc `commit --only` 或他人 merge-back 在 batch 外落地、或已被取代）。屬於 in-flight batch（integrating／review／sealed）的成員拒絕——成員由 batch lifecycle（cancel／cleanup）處理，**NEVER** 用 unready 抽別人批次的成員。撤回後該來源可重驗再 `batch ready`。`<source-path>` 必填（不預設 cwd），旗標順序自由；worktree 目錄已被手動刪除的 stale ready 列同樣可撤回。缺 path、多餘位置參數或其他 usage error 一律印 usage 並 exit 2。
+
 ### Draft PR（可見性；不是 ready）
 
 相對 `main` 已有非空 committed diff 後，**slice owner** 自己 push 該 session branch 並開 draft PR（全文 [[github-flow]]）。同一個 work id 拆成多個平行切片時**不走這一段**——切片不開 PR，由 coordinator 併入 `integration/<work-id>`，只有那一條對 `main` 開 draft（[[github-flow]] § Integration branch）。開 draft 後 **MUST** 登記可見性 receipt，否則 prepare 沒有完整綁定：
@@ -89,7 +95,7 @@ P1 基線（`specs/plans/W-2026-09-20-test-lane-overhaul/evidence/p1-pr-run-base
 node scripts/wt-helper.ts batch prepare --trigger <trigger> --workflow <workflow_model>
 ```
 
-`status` 與 `prepare` MUST 用**同一個**已解析 `workflow_model`。registry 裡已宣告的 consumer 用它的值；解析失敗 **NEVER** 默默改成 `pr-merge-based`。clade home 不是 registry consumer，試跑才准顯式 `--workflow pr-merge-based`。Trunk prepare 固定所有當下就緒成員。PR prepare 預設只收**一個** work id（一個獨立可接受目的對應一個 PR）；緊密相依合批必須顯式 `--group-work-ids <id>,<id>`，**NEVER** 把不相干的就緒來源默默塞進同一張 PR。來源 checkpoints 及整合中繼成果皆保留，main 不接收待審內容。另一位 coordinator 撞 active batch 時接續該批，**NEVER** 另開一批與它競爭。
+`status` 與 `prepare` MUST 用**同一個**已解析 `workflow_model`。registry 裡已宣告的 consumer 用它的值；解析失敗 **NEVER** 默默改成 `pr-merge-based`。clade home 不是 registry consumer，試跑才准顯式 `--workflow pr-merge-based`。Trunk prepare 固定所有當下就緒成員。PR prepare 預設只收**一個** work id（一個獨立可接受目的對應一個 PR）；緊密相依合批必須顯式 `--group-work-ids <id>,<id>`，**NEVER** 把不相干的就緒來源默默塞進同一張 PR。來源 checkpoints 及整合中繼成果皆保留，main 不接收待審內容。另一位 coordinator 撞 active batch 時接續該批，**NEVER** 另開一批與它競爭。prepare 回傳既有批次時輸出帶 `reused: true`（新批為 `reused: false`），呼叫端可憑它分辨自己開的批與接續的批；帶 `--expect-work-id <id>`（逗號可複數）而回傳批成員不含該 id 時 prepare 直接拒絕。**NEVER** 看到成員不對就 `batch cancel`——先用 `batch status` 查那批是誰的。
 
 衝突只在隔離區解，解完精確 stage 衝突檔後跑 `batch resume`；不删來源、不把未解衝突藏成就緒。中斷後先讀 `batch status`，依持久狀態續跑。`pr-merge-based` 的 base 是 `git fetch origin main` 後的 `refs/remotes/origin/main`；`trunk-based` 才使用 local main。main 前移用 `batch refresh` 對齊新基準並重新驗受影響範圍；來源變動則 `batch cancel --reason <原因>` 保存既有工作，重驗來源、重登記再 prepare。
 

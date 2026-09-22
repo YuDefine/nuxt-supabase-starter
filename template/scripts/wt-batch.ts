@@ -22,6 +22,7 @@ import {
 } from 'node:fs'
 import { hostname, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isRecord, parseJsonRecord, parseJsonWith } from './lib/json-unknown.ts'
 import {
@@ -241,6 +242,14 @@ export interface ReleaseWindowRecord {
   productionRunId: number | null
   status: 'active' | 'unknown' | 'closed'
 }
+export interface UnreadyRecord {
+  path: string
+  branch: string
+  head: string
+  workId: string
+  reason: string
+  at: string
+}
 export interface BatchDraftBinding {
   workId: string
   pr: number
@@ -302,6 +311,7 @@ interface State {
   batches: WorktreeBatch[]
   blockedSources?: BlockedSource[]
   releaseWindows?: ReleaseWindowRecord[]
+  unready?: UnreadyRecord[]
 }
 interface Context {
   cwd: string
@@ -2201,6 +2211,53 @@ export function registerReady(
     return m
   })
 }
+/** Ready rows are keyed by realpath, which stops resolving once the worktree
+ *  directory is gone — the exact stale rows `unready` exists to withdraw. Fall
+ *  back to the resolved literal, canonicalized through the surviving parent so
+ *  a symlinked ancestor still matches the stored row. */
+function canonicalSourcePath(cwd: string, source: string): string {
+  const resolved = resolve(cwd, source)
+  try {
+    return realpathSync(resolved)
+  } catch {
+    try {
+      return join(realpathSync(dirname(resolved)), basename(resolved))
+    } catch {
+      return resolved
+    }
+  }
+}
+/** Withdraw one source's ready registration. Members of an in-flight batch stay owned by
+ *  that batch's lifecycle (cancel/cleanup), so `unready` refuses them; members of a landed
+ *  batch keep a stale row that cleanup would drop anyway, so withdrawal is allowed. The
+ *  removed row is recorded in `state.unready` — a superseded or externally-landed source
+ *  leaves a machine-readable reason instead of silently vanishing (TD-1079). */
+export function unreadySource(cwd: string, source: string, reason: string) {
+  if (!reason.trim()) throw new Error('Unready requires a reason')
+  const c = context(cwd)
+  return mutate(c, (s) => {
+    const path = canonicalSourcePath(cwd, source)
+    const owner = s.batches.find(
+      (b) => isLiveBatch(b) && b.members.some((member) => member.path === path),
+    )
+    if (owner)
+      throw new Error(`Source is a member of in-flight batch ${owner.id}; batch lifecycle owns it`)
+    const row = s.ready.find((m) => m.path === path)
+    if (!row) throw new Error(`No ready registration for ${path}`)
+    const record: UnreadyRecord = {
+      path: row.path,
+      branch: row.branch,
+      head: row.head,
+      workId: row.workId,
+      reason,
+      at: new Date().toISOString(),
+    }
+    s.ready = s.ready.filter((m) => m.path !== path)
+    s.unready = [...(s.unready ?? []), record]
+    save(c, s)
+    return record
+  })
+}
 export function checkpointSource(
   cwd: string,
   source: string,
@@ -2526,14 +2583,26 @@ export function prepareBatch(
   trigger: BatchTrigger,
   workflow: 'trunk-based' | 'pr-merge-based' = 'pr-merge-based',
   lifecycle: BatchLifecycle = defaultLifecycle,
-  options: { groupWorkIds?: string[] } = {},
+  options: { groupWorkIds?: string[]; expectWorkIds?: string[] } = {},
 ) {
   if (!triggers.has(trigger)) throw new Error('Unknown batch trigger')
   if (!['trunk-based', 'pr-merge-based'].includes(workflow)) throw new Error('Unknown workflow')
   const c = context(cwd)
   return mutate(c, (s) => {
     const existing = s.batches.find(isLiveBatch)
-    if (existing) return existing
+    if (existing) {
+      // Reuse is explicit: the caller joined another coordinator's batch and must
+      // be able to tell — a silent identical return once invited cancelling a
+      // batch nobody here prepared (TD-1094). NEVER cancel on member mismatch.
+      const missing = (options.expectWorkIds ?? []).filter(
+        (id) => !existing.members.some((member) => member.workId === id),
+      )
+      if (missing.length)
+        throw new Error(
+          `Live batch ${existing.id} does not contain expected work id(s) ${missing.join(', ')}; inspect with batch status — NEVER cancel a batch you did not prepare`,
+        )
+      return { ...existing, reused: true as const }
+    }
     const eligibleMembers = eligible(c, s)
       .filter((r) => !r.reason)
       .map((r) => r.source)
@@ -2543,6 +2612,13 @@ export function prepareBatch(
         ? selectPrMembers(eligibleMembers, options.groupWorkIds)
         : eligibleMembers
     if (workflow === 'pr-merge-based') rejectMembersCarryingLocalMainCommits(c, members)
+    const missingExpected = (options.expectWorkIds ?? []).filter(
+      (id) => !members.some((member) => member.workId === id),
+    )
+    if (missingExpected.length)
+      throw new Error(
+        `Expected work id(s) ${missingExpected.join(', ')} are not among the eligible members of this prepare`,
+      )
     const draftBindings =
       workflow === 'pr-merge-based'
         ? members.flatMap((member) => {
@@ -2580,7 +2656,7 @@ export function prepareBatch(
     }
     s.batches.push(b)
     save(c, s)
-    return integrate(c, s, b, false, lifecycle)
+    return { ...integrate(c, s, b, false, lifecycle), reused: false as const }
   })
 }
 export function resumeBatch(cwd: string, lifecycle: BatchLifecycle = defaultLifecycle) {
@@ -2905,7 +2981,7 @@ function defaultRemotePrProbe(query: { repository: string; pr: number }): Remote
     headRef: parsed.headRef,
   }
 }
-function githubRepositoryFromRemote(main: string): string | undefined {
+export function githubRepositoryFromRemote(main: string): string | undefined {
   let url: string
   try {
     url = git(main, ['config', '--get', 'remote.origin.url'])
@@ -4458,11 +4534,18 @@ export function mergeUnattendedBatch(
   })
 }
 
+/** Argument-shape failures inside the batch dispatcher. `wt-helper batch` maps
+ *  them to printed usage + exit 2, distinct from runtime failures (exit 1). */
+export class BatchUsageError extends Error {}
+
 function rejectUnknownFlags(rest: string[], allowed: Set<string>) {
   for (const token of rest.filter((item) => item.startsWith('--'))) {
-    if (!allowed.has(token)) throw new Error(`Unknown flag ${token}`)
+    if (!allowed.has(token)) throw new BatchUsageError(`Unknown flag ${token}`)
   }
 }
+
+export const BATCH_USAGE =
+  'batch: checkpoint | draft | ready | unready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | confirm-merged | cleanup | cancel | recover-lock'
 
 export function runBatchCommand(
   cwd: string,
@@ -4477,17 +4560,22 @@ export function runBatchCommand(
   }
   const required = (flag: string) => {
     const v = value(flag)
-    if (!v || v.startsWith('--')) throw new Error(`Required ${flag}`)
+    if (!v || v.startsWith('--')) throw new BatchUsageError(`Required ${flag}`)
     return v
   }
+  /** Non-flag tokens that are not a value of one of `valueFlags`; this is how a
+   *  subcommand takes its positional path regardless of flag order. */
+  const positionals = (valueFlags: Set<string>) =>
+    rest.filter((token, i) => !token.startsWith('--') && !valueFlags.has(rest[i - 1] ?? ''))
   const trigger = () => (value('--trigger') ?? 'auto') as BatchTrigger
   const workflow = () => {
     const v = value('--workflow')
     if (!v || v.startsWith('--'))
-      throw new Error(
+      throw new BatchUsageError(
         'Required --workflow (trunk-based or pr-merge-based); CLI must not default to PR',
       )
-    if (!['trunk-based', 'pr-merge-based'].includes(v)) throw new Error('Unknown workflow')
+    if (!['trunk-based', 'pr-merge-based'].includes(v))
+      throw new BatchUsageError('Unknown workflow')
     return v as WorktreeBatch['workflow']
   }
   switch (command) {
@@ -4507,10 +4595,10 @@ export function runBatchCommand(
       )
       const kind = value('--kind')
       if (kind !== undefined && kind !== 'visibility' && kind !== 'discussion')
-        throw new Error('Unknown --kind; expected visibility or discussion')
+        throw new BatchUsageError('Unknown --kind; expected visibility or discussion')
       if (kind === 'visibility') {
         if (value('--discussant') !== undefined || value('--question') !== undefined)
-          throw new Error('Visibility draft forbids --discussant and --question')
+          throw new BatchUsageError('Visibility draft forbids --discussant and --question')
         return recordDraftPr(cwd, rest[0] ?? cwd, {
           workId: required('--work-id'),
           pr: Number(required('--pr')),
@@ -4533,11 +4621,26 @@ export function runBatchCommand(
         releaseWriter: rest.includes('--release-writer'),
         retain: value('--retain'),
       })
+    case 'unready': {
+      rejectUnknownFlags(
+        rest.filter((token) => token.startsWith('--')),
+        new Set(['--reason']),
+      )
+      const reason = required('--reason')
+      const source = positionals(new Set(['--reason']))
+      if (source.length !== 1)
+        throw new BatchUsageError('Usage: wt-helper batch unready <source-path> --reason <text>')
+      return unreadySource(cwd, source[0]!, reason)
+    }
     case 'status':
       return batchStatus(cwd, trigger(), workflow())
     case 'prepare':
       return prepareBatch(cwd, trigger(), workflow(), lifecycle, {
         groupWorkIds: (value('--group-work-ids') ?? '')
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean),
+        expectWorkIds: (value('--expect-work-id') ?? '')
           .split(',')
           .map((id) => id.trim())
           .filter(Boolean),
@@ -4601,8 +4704,29 @@ export function runBatchCommand(
     case 'cancel':
       return cancelBatch(cwd, required('--reason'))
     default:
-      throw new Error(
-        'batch: checkpoint | draft | ready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | confirm-merged | cleanup | cancel | recover-lock',
-      )
+      throw new BatchUsageError(BATCH_USAGE)
   }
+}
+
+// CLI 進入判定：兩邊都 realpath（同 aggregate-signals.ts）。本檔是 runBatchCommand
+// 所在的 module，不是入口——batch 操作要經 `wt-helper.ts batch <cmd>` 的 lifecycle
+// 才拿得到 lock 與 lifecycle adapters。被直接執行時印 usage 並 exit 2（TD-979）；
+// NEVER 讓直接執行也能跑 batch。
+function invokedAsCli() {
+  const entry = process.argv[1]
+  if (!entry) return false
+  try {
+    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return entry === fileURLToPath(import.meta.url)
+  }
+}
+
+if (invokedAsCli()) {
+  console.error(
+    'wt-batch.ts is a module, not an entry point. Run:\n' +
+      '  node vendor/scripts/wt-helper.ts batch <subcommand> [args]\n' +
+      `subcommands: ${BATCH_USAGE}`,
+  )
+  process.exit(2)
 }

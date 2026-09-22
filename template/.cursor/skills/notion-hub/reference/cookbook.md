@@ -1,6 +1,8 @@
-# Notion hub 操作 cookbook（notion-board / notion-ticket 共用）
+# Notion hub 操作 cookbook（notion-hub skill）
 
-> 座標**不在這裡**：一律 `node ~/offline/clade/vendor/scripts/lib/notion-hub.ts resolve --consumer-path .`。本檔只收「怎麼打」的 recipe。狀態字用輸出的 `hub.ticketStatus`，欄位名用 `fields`。
+> 座標**不在這裡**：一律 `node ~/offline/clade/vendor/scripts/lib/notion-hub.ts resolve --consumer-path .`。本檔只收「怎麼打」的 recipe。狀態字用輸出的 `hub.ticketStatus`，類型字用 `hub.ticketType`，欄位名用 `hub.fields`（已含本 hub 的改名覆寫；下方 recipe 的欄位名是 canonical 寫法，打之前換成 `hub.fields` 的值）。
+
+自由形式的 `ntn api`／MCP 呼叫走 Routing Table 〔`notion-ops`〕，**NEVER** 主線第一手跑；`notion-sync.ts` 與 `notion-hub.ts resolve` 主線直接跑。
 
 ## 1. 讀
 
@@ -25,19 +27,19 @@ ntn api -X POST "/v1/data_sources/$DDS/query" -d "{\"page_size\":100,\"filter\":
 
 ## 2. 寫（machine 欄位）
 
-狀態 / 版本 / 上線日 / Work ID / 交付項目 一律經 `notion-sync.ts`（open / progress / done / release / eta / reconcile），它帶授權表、regression 偵測與 sidecar。直接 PATCH 只用於 script 沒有入口的兩處：
+狀態 / 版本 / 上線日 / Work ID / PR / 備註 / 交付項目 一律經 `notion-sync.ts`（file / open / follow / progress / done / release / eta / reconcile），它帶授權表、客戶面證據守門、regression 偵測與 sidecar。直接 PATCH 只剩 script 沒有入口的一處：
 
 ```bash
-# triage：backlog → needs-customer（狀態字從 hub.ticketStatus 取）
-S=$(jq -r '.hub.ticketStatus["needs-customer"]' /tmp/hub.json)
-ntn api -X PATCH "/v1/pages/<page-id>" -d "{\"properties\":{\"狀態\":{\"status\":{\"name\":\"$S\"}}}}"
-# 補開發備註（不動客戶欄）
-ntn api -X PATCH "/v1/pages/<page-id>" -d '{"properties":{"備註":{"rich_text":[{"text":{"content":"已在 line 通知"}}]}}}'
+# 問客戶：票 → needs-customer（狀態字從 hub.ticketStatus 取，欄位名從 hub.fields 取）
+S=$(jq -r '.hub.ticketStatus["needs-customer"]' /tmp/hub.json); K=$(jq -r '.hub.fields.board.status' /tmp/hub.json)
+ntn api -X PATCH "/v1/pages/<page-id>" -d "{\"properties\":{\"$K\":{\"status\":{\"name\":\"$S\"}}}}"
 ```
+
+`備註` 與內文是客戶看得到的地方：只放 consumer prod 網域的完整 URL（D2），**NEVER** 手動 PATCH 進 GitHub 連結或其他網域。
 
 `ntn` 的 `PATCH /v1/blocks/<id>/children` **不支援 `after`**；要把 block 插到頁面中段直接打 Notion API（token 在 `~/.config/notion/auth.json`），見 `~/.claude/docs/notion-api.md`。
 
-## 3. 建票（outbound）
+## 3. 建決策題票（問客戶）
 
 MCP `notion-create-pages`，parent 用 `data_source_id`：
 
@@ -48,7 +50,7 @@ MCP `notion-create-pages`，parent 用 `data_source_id`：
     "properties": {
       "名稱": "{客戶口語化標題}",
       "狀態": "<hub.ticketStatus['needs-customer']>",
-      "類型": "功能調整",
+      "類型": "<hub.ticketType.feature>",
       "所屬專案": ["<project.rowId>"],
       "date:提報日期:start": "{YYYY-MM-DD}",
       "date:提報日期:is_datetime": 0
@@ -108,8 +110,8 @@ git branch -a --contains <sha>                                # 只在 session/*
 git show --stat <sha>                                         # 輔助判斷是否真解客戶抱怨
 ```
 
-判定：拿得到 tag 且在 main → **sync 候選**（版本 = 該 tag）；否則維持 in-progress。命中 ≠ 真解，回填前 **MUST** 逐張給 user 看證據。
+判定：拿得到 tag 且在 main → **補跑 `release` 的候選**（版本 = 該 tag；代表 `/commit` Step 6b 當時漏跑）；否則維持 in-progress。命中 ≠ 真解，回填前 **MUST** 逐張給 user 看證據。
 
 ## 6. 版本對照
 
-`修復版本 >=` 填 git tag（`vX.Y.Z`），由 `notion-sync.ts release --tag` 寫；`git describe --tags --abbrev=0` 只在 `/commit` 打完 tag 之後才是本次版本。客戶看版本對照 consumer 的 `CHANGELOG.md` / release 頁。
+版本欄（`hub.fields.board.fixVersion`）填 git tag（`vX.Y.Z`），由 `notion-sync.ts release --tag` 寫；`git describe --tags --abbrev=0` 只在 `/commit` 打完 tag 之後才是本次版本。客戶看版本對照 consumer 的 `CHANGELOG.md` / release 頁。

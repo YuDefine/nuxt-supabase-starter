@@ -1,4 +1,4 @@
-<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@58960f8375d14d9c598eb2c350582917fe9b249c via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@903c11836d1190728647794cf73afb0f239aa496 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 # 規格品質檢查清單：全線上 PVP 1A2B 猜數字遊戲
 
 **建立日期**: 2026-07-22

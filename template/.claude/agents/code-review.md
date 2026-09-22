@@ -2,7 +2,7 @@
 name: code-review
 description: Code review — PR review 或 commit 0-A.2 裁決；依目標 runtime 的 native review agent 執行
 model: fable
-effort: max
+effort: medium
 tools: Bash, Read, Grep, Glob
 ---
 

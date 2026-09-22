@@ -73,7 +73,7 @@ WIP 確實阻礙本次工作時，使用 `commit.detail` 的三項 stash predica
 先判斷 Step 0-Scope 的本次變更是否命中 [`review-tiers.md`](rules/review-tiers.md)
 Tier 3；命中才執行官方 Codex Security path scan。觸發時 **MUST** 先完整讀
 [gates.md](gates.md) § 0-S 的範圍、成本上限與 exit 分流再繼續。未命中則跳過，進入一般
-獨立 code review（GPT-6 Astra via Pi，effort: medium）。完整 repository baseline 保持 operator 明確觸發，不屬於 `/commit`。
+獨立 code review（合格 reviewer 兩格同級：GPT-6 Astra via Pi，effort: medium 優先；Claude Fable 5.1 via Herdr，effort: medium 只在 Astra 實際不可用時啟用）。完整 repository baseline 保持 operator 明確觸發，不屬於 `/commit`。
 
 ### 0-A/B/C/D 執行與匯合
 
@@ -103,7 +103,7 @@ simplify → fast-path 判定
 
 每個 gate 的完整執行流程（bash scripts、trigger 條件、fix loop、pi offload）見 [gates.md](gates.md)。執行任一 gate 前 **MUST** 先讀對應 §。
 
-- **0-A 程式碼審查**：simplify（0-A.0）→ 合格獨立 review（0-A.1）→ Critical／Major 條件觸發深度 review（0-A.2）。唯一合格 review 模型是 GPT-6 Astra via Pi（effort: medium）；配額耗盡沒有替補，gate 保持未完成，不以主線自審或其他模型補位。詳見 [gates.md](gates.md) § 0-A。
+- **0-A 程式碼審查**：simplify（0-A.0）→ 合格獨立 review（0-A.1）→ Critical／Major 條件觸發深度 review（0-A.2）。合格 review 兩格同級：GPT-6 Astra via Pi（effort: medium）優先，Claude Fable 5.1 via Herdr Claude child（effort: medium）只在 Astra 實際不可用（exit 3／4＋逐字證據）時啟用；兩格 verified PASS 等效，兩格都不可用時 gate 保持未完成，不以主線自審或其他模型補位。詳見 [gates.md](gates.md) § 0-A。
 - **0-B UI Design Review**：條件觸發（`.vue` template 變更 + 視覺影響）。詳見 [gates.md](gates.md) § 0-B。
 - **0-C CI 等效檢查**：`pnpm check` + `pnpm test` + `pnpm run doctor`，全綠才過。詳見 [gates.md](gates.md) § 0-C。
 - **0-D Doc Alignment**：條件觸發（diff 觸及 docs / rules / snippets / audit / 業務碼 / pitfall）。詳見 [gates.md](gates.md) § 0-D。
@@ -324,6 +324,11 @@ git log -1 --format=%s     # MUST 是 🚀 deploy: 發布新版本 v{新版本�
 超前 origin/main 一個 commit，未設回 exit 1、設了回「已設，放行」exit 0）。擋住超前方向的只有
 上面那條規約本身。
 
+（2026-09-21 TD-911：gate 對同批 `--atomic` 且 `refs/heads/<default>` head **即** tag
+commit 的推送放行——放行語義只在原子批次下成立，嚴格祖先仍歸 stale 擋法、同批其他
+branch 不算數，細節見 `rules/core/commit.detail.md` § Tag 位置。這是放寬 gate，**不改**
+本節的 main 先、tag 後序列。）
+
 （`tag-position` 也擋「落後」方向，那一邊**有**合法用途——刻意在舊 commit 上打 hotfix release
 tag——判準見 `rules/core/commit.detail.md` § 機械 gate 與它的邊界，**NEVER** 把本條讀成連那一邊
 也一起禁掉。）
@@ -509,11 +514,14 @@ per [[notion-work-coupling]] § 生命週期。consumer 的 `.claude/consumer-me
 
 ```bash
 node ~/offline/clade/vendor/scripts/notion-sync.ts release \
-  --consumer-path . --work <work-id> --tag "$(git describe --tags --abbrev=0)" --json
+  --consumer-path . --work <work-id> --tag "$(git describe --tags --abbrev=0)" \
+  [--prod-url <prod 上看得到修正的頁面>] [--screenshot <驗收畫面.png>]… --json
 ```
 
-本步驟把連結的 ticket 推到 acceptance（`驗收中`）並填 `修復版本 >=` 與 `上線日期`，把客戶時程頁的 `交付項目` 進度% 寫 100。
+本步驟把連結的 ticket 推到 acceptance（`驗收中`）並填版本、`上線日期`、`PR` 欄（script 從 work item 的 commit／url artifact 查），`備註` 寫 `--prod-url`、內文附「驗收畫面（<tag>）」截圖，把客戶時程頁的 `交付項目` 進度% 寫 100。
 
+- **客戶面證據（D2）**：`--prod-url` 只收 consumer prod 網域（`.claude/consumer-meta.json` `deploy.prodUrl`）；GitHub PR／CI／tag 連結 **NEVER** 當證據給客戶——script 會拒寫。有 UI 變更且本次有拍驗收截圖（`[verify:ui]`／screenshot review）就帶 `--screenshot`。
+- **綁不到要點名**：本次發版含的 commit 若有對不到任何 work item 的、或 work item 沒有連結 ticket 的，**MUST** 在 Step 7 報告逐條點名（commit／work id ＋「無 ticket」或「無 work item」），**NEVER** 靜默跳過。客戶提的問題卻沒有 ticket → 回 `notion-hub` 的工程師建票意圖補建。
 - `needsDecision` 非空（客戶側狀態、status regression、hub 對映不到現況）→ 尚未取得該動作授權時，**MUST** 透過本入口的使用者詢問介面確認，帶答案重跑；**NEVER** 自動執行任一條。
 - ticket `驗收中 → 完成` 是客戶側轉移，script 一律拒絕不自動寫。
 - `pending` 非空 → 寫入未確認落地，**MUST** 列進 Step 7 完成報告。
@@ -579,7 +587,7 @@ Cursor 主線在**當前 checkout**（含 linked worktree）跑完整 commit cer
 
 - `COMMIT_RUNTIME` 為 `cursor`；`COMMIT_SESSION_ID` 取本 session 已暴露的 `CURSOR_SESSION_ID`（或缺席時的同等原生 session id）。缺身分就停在 Step 0-Lock。
 - 讀檔、diff、shell、對話詢問使用本入口 catalog。不要把 `--cwd` 改到 main worktree 假裝 WIP 在那裡。
-- 0-A.1／0-A.2 一律 GPT-6 Astra via Pi（effort: medium，走 `codex-review-safe.sh`）；Astra 不可用或配額耗盡時 gate 保持未完成。**NEVER** 把 Cursor Task／Agent `model` 設成非 grok-4.6 來充 reviewer，也不以其他模型補位。
-- commit 流程不需要 Herdr pane；**NEVER** `--relay`，也 NEVER 把後續 `git commit` 丟給任何 pane。
+- 0-A.1／0-A.2 合格 reviewer 兩格同級：GPT-6 Astra via Pi（effort: medium，走 `codex-review-safe.sh`）優先；Astra 實際不可用（exit 3／4＋逐字證據）時換 Claude Fable 5.1 via Herdr（effort: medium，走 `claude-review-safe.sh`）；兩格都不可用時 gate 保持未完成。**NEVER** 把 Cursor Task／Agent `model` 設成非 grok-4.6 來充 reviewer，也不以其他模型補位。
+- commit 流程主線不需要自己開 Herdr pane（0-A 的 Fable 格由 `claude-review-safe.sh` 內部以 Herdr create-only 承載）；**NEVER** `--relay`，也 NEVER 把後續 `git commit` 丟給任何 pane。
 - 0-B 使用本 session 已暴露的 browser／截圖能力與合格視覺 reviewer。
 - 缺合格載體的 gate 保持未完成；不因此改派整場 ceremony 到 Claude，也不跳過品質要求逕行 `git commit`。

@@ -79,7 +79,8 @@ relay successor 持有整個主線位置，所以判「還是主線複雜度」�
 | 〔`version-upgrade-first-pass`〕version-upgrade 首輪升版 | xAI Grok 4.6 | low | Cursor Grok 4.6 low → Gemini 3.8 Flash high → blocker |
 | 〔`version-upgrade-research`〕version-upgrade 失敗後研究重試 | xAI Grok 4.6 | high | Cursor Grok 4.6 high → Gemini 3.8 Flash high → blocker |
 | 〔`web-search`〕WebSearch／WebFetch | Gemini 3.8 Flash | high | GPT-5.6 Luna low → 有對應失敗 receipt 才放行同種內建工具 |
-| 〔`code-review`〕Code review／commit 0-A | GPT-6 Astra；合格獨立 reviewer | medium | commit 0-A 無替補——Astra 配額耗盡時 gate 保持未完成（`review-policy.md`）；Critical／Major 觸發同一 Astra medium 的 fresh-context 深度複審。非 commit 的 code-review 委派終端沿用 gate-output 鏈 |
+| 〔`code-review`〕Code review／commit 0-A | GPT-6 Astra；合格獨立 reviewer（優先格） | medium | commit 0-A 同級 reviewer 兩格並列（`review-policy.md`）：Astra 優先，實際不可用（exit 3／4＋逐字 RESULT 證據）才換 〔`code-review-fable`〕；兩格皆不可用 → gate 保持未完成。Critical／Major 觸發合格 reviewer 的 fresh-context 深度複審——格別每輪依當下可用性重判（Astra 優先、同條件才換 Fable），與 0-A.1 落在不同格合法，兩份 receipt 各自記 requested／observed；NEVER 降級成主線自審、worker、cloud CI 或第三個模型。非 commit 的 code-review 委派終端沿用 gate-output 鏈 |
+| 〔`code-review-fable`〕commit 0-A 同級 reviewer（Fable 格） | Claude Fable 5.1（Herdr Claude child，native） | medium | 只在 `code-review` 列的 Astra 實際不可用（exit 3／4＋逐字 RESULT 證據）時啟用，由 `claude-review-safe.sh` 派工；verified PASS 與 Astra 等效，非降級結果；兩格皆不可用 → gate 保持未完成。NEVER 走 Pi；effort 天花板就是 medium |
 | 〔`ui-implementation`〕Nuxt UI 元件組裝／Nuxt Content 實作 | Cursor 原生 Composer 2.5 | 依原生能力 | 範圍限 Nuxt UI／Content；當次 catalog 必須提供 Composer 2.5，不可用時回報 blocker |
 | 〔`nuxt-core-implementation`〕Nuxt 本體實作 | GPT-5.6 Sol | xhigh | Nuxt 框架、模組與執行邏輯；GPT 依原生／Pi transport，不使用 Cursor Task |
 | 〔`ui-view-implementation`〕其餘 UI view 實作 | Claude Opus 5 | medium | 排除 Nuxt UI／Content 與 Nuxt 本體；Claude Code 原生／Herdr carrier，不可用時回報 blocker |
@@ -89,7 +90,7 @@ relay successor 持有整個主線位置，所以判「還是主線複雜度」�
 | 〔`screenshot-match-analysis`〕截圖 vs 驗收項目符合性判定 | Claude Opus 5 | medium | GPT-5.6 Sol high；逐張讀實際圖片與完整 item，回 PASS／FAIL／UNCERTAIN |
 | 〔`mechanical-fanout`〕Mechanical fan-out／收集、掃描、驗證矩陣 | Gemini 3.8 Flash | high | GPT-5.6 Luna low；觸發與 threshold gate 依 [[agent-routing]] |
 | 〔`copywriting-draft`〕行銷／產品文案草稿與變體 | Gemini 3.8 Flash | high | 失敗直接回主線；最終文字由主線重寫 |
-| 〔`notion-ops`〕Notion 讀寫 | Gemini 3.8 Flash | high | GPT-5.6 Luna high；仍無法完成時回報 blocker |
+| 〔`notion-ops`〕Notion 讀寫（自由形式 `ntn`／MCP；確定性 script 除外，見硬禁令） | Gemini 3.8 Flash | high | GPT-5.6 Luna high；仍無法完成時回報 blocker |
 | 〔`read-heavy-scan`〕封閉來源固定欄位抽取／read-heavy scan | Gemini 3.8 Flash | high | GPT-5.6 Luna low；來源矛盾交主線整理為 `implementation-decision` |
 | 〔`commit-0c-fix-verify`〕commit 0-C fix-verify loop | xAI Grok 4.6 | high | Cursor Grok 4.6 high → GPT-5.6 Sol high；同一實作者最多兩輪 check→fix |
 | 〔`commit-0c-fix-verify-escalate`〕commit 0-C 修復升級 | GPT-5.6 Sol | high | 承接 Grok 4.6 未收斂的修復，主線重跑檢查 |
@@ -117,9 +118,10 @@ relay successor 持有整個主線位置，所以判「還是主線複雜度」�
 | 〔`screenshot-match-analysis`〕 | Opus 5（effort: medium），無法執行時 GPT-5.6 Sol（effort: high）；兩者均讀實際截圖與 item 要求；收集與判定**NEVER** 併成同一次 dispatch。 |
 | 〔`mechanical-fanout`〕 | **NEVER** 以「我自己順手跑掉比較快」略過本列（成因見 rationale）。 |
 | 〔`copywriting-draft`〕 | 本列 **NEVER** 進全域配額降級鏈（exit 2／3／4 一律直接回本 task 主線自己寫）。**主線 MUST 收斂重寫每一條採用的文案，NEVER 原樣貼進交付物**——Pi 回的是素材不是成稿。本列只涵蓋行銷／產品對外文案，**NEVER** 從本列外推到規約措辭／commit message／技術文件／PR 描述／對外報告。 |
-| 〔`notion-ops`〕 | Gemini 3.8 Flash（effort: high）→ GPT-5.6 Luna（effort: high）→ blocker。**本列 NEVER 續走其他 fallback**（Notion auth 在 `$HOME`）。**NEVER** 主線第一手自己跑 ntn／MCP。 |
+| 〔`notion-ops`〕 | Gemini 3.8 Flash（effort: high）→ GPT-5.6 Luna（effort: high）→ blocker。**本列 NEVER 續走其他 fallback**（Notion auth 在 `$HOME`）。**NEVER** 主線第一手自己跑 ntn／MCP。**本列不涵蓋確定性 script**：`vendor/scripts/notion-sync.ts`、`vendor/scripts/lib/notion-hub.ts resolve`、`scripts/audit-notion-hub-schema.ts` 主線直接跑——寫入範圍、授權轉移表與 schema 檢查寫死在 script 裡，派 Pi 只多一層失敗面。自己組 `ntn api` 指令或 MCP 呼叫的，一律仍算本列。 |
 | 〔`read-heavy-scan`〕 | **NEVER** 拿「反正我讀一下就知道了」略過 gate，也 NEVER 把固定輸出 schema 當成不需裁決的證據。 |
 | 〔`commit-0c-fix-verify-escalate`〕 | **NEVER** 當第一手：只在 grok 2 輪後仍紅、grok 報 pass 但主線重跑仍紅、或 grok 兩池都 exit 4 時進。 |
+| 〔`code-review-fable`〕 | **NEVER** 當第一手：只在 `code-review` 列 Astra 回 exit 3／4 且有逐字 RESULT 證據時進（exit 2／5／6 不算不可用）；**NEVER** 經 Pi 派工（native Claude-only row，走 Herdr）；effort 恆 `medium`，family cap **NEVER** 抬檔；receipt MUST 記 requested／observed model 與 `model_verification`（＋`model_verification_reason`），`unverified` NEVER 讀成已核實。 |
 
 > **每一次** pi dispatch **MUST 帶 `--route` 與 `--tier-basis`**（缺就 exit 1）：前者記走哪條政策（[[agent-routing.routing-table]] 某列 → `routing-table`；§ Native delegation model boundary → `claude-delegate-sub`；配額降級鏈 → `fallback-chain`；皆非才**顯式** `manual`），後者記該政策對 model 的**結論**（六值見 reference）；dispatcher 交叉檢查兩者與 `--model`、矛盾即 exit 1。**NEVER** 不確定就填 `manual` ／ `table-row`——與「判定沒發生」不可區分。重試帶 `--retry-of <label>`，**NEVER** 用 `<label>2`。
 >
