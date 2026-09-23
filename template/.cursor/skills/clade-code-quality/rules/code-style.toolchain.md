@@ -103,6 +103,8 @@ clade 投影進 consumer 的路徑（`vendor/**`、`.claude/**`、`.clade/**`、
 上面那條管的是 `lint.ignorePatterns` / `fmt.ignorePatterns`。**`staged` 那一格是獨立的第二處**——
 `vp staged` 不讀 `ignorePatterns` 決定要不要把檔案送進命令，它照 glob 把 staged 檔原樣交出去。
 
+**這一格只在 hook 直接跑 `vp staged` 時才有讀者**。fleet 的 pre-commit 收斂到 `scripts/pre-commit/runner.sh`（見下方 § Pre-commit hook 走 `runner.sh`），走 runner 的 consumer 從不呼叫 `vp staged`，`staged:` 對它們是死設定——**NEVER** 拿它的綠燈推論 pre-commit 有濾投影層（[[TD-776]]）。
+
 - **MUST** 讓 `staged` 區塊的過濾邏輯追溯得到 `vendor/oxc-shared/preset.ts` 匯出的
   `PROJECTION_EXCLUDES`（直接用它，或用由它推導出的 helper）
 - **NEVER** 在 `staged` 手寫一份平行的投影層目錄清單。preset 一補條目、這裡沒跟上，
@@ -388,7 +390,7 @@ consumer 端 LOCKED projection 的 ignore 機制設計：
   run: vp run check              # = pnpm check = vp check && ... (vp check 沒 ignore-path)
 ```
 
-對應 `package.json` `check` script（local dev / pre-push 用）可保留 `vp check` 但 consumer 必須**清楚知道**這個 script 在 LOCKED projection 既有的情況下會撞——dev 端用 `vp staged` (pre-commit) 或拆 step 跑各別 npm script 替代。
+對應 `package.json` `check` script（local dev / pre-push 用）可保留 `vp check` 但 consumer 必須**清楚知道**這個 script 在 LOCKED projection 既有的情況下會撞——dev 端用 pre-commit 的 `scripts/pre-commit/runner.sh`（見 § Pre-commit hook 走 `runner.sh`）或拆 step 跑各別 npm script 替代。
 
 
 ## 必須事項（MUST）
@@ -500,7 +502,7 @@ pnpm vp fmt --ignore-path .oxfmtignore
 pnpm format        # 等同 vp fmt --write --ignore-path .oxfmtignore
 pnpm format:check  # 等同 vp fmt --check --ignore-path .oxfmtignore
 
-# Pre-commit staged 檢查（clade 散播的 vp-staged.sh，shell layer 已過濾 LOCKED）
+# Pre-commit staged 檢查（clade 散播的 runner.sh → vp-staged.sh，過濾判定讀 preset 的 isStagedExcluded）
 bash scripts/pre-commit/runner.sh
 ```
 
@@ -510,7 +512,7 @@ bash scripts/pre-commit/runner.sh
 
 ### staged 配置：一行 re-export，NEVER 手寫排除陣列
 
-投影層的排除清單 **MUST** 追溯得到 preset 的 `PROJECTION_EXCLUDES`。預設形狀是 `vite.config.ts` 直接用 preset 匯出的 `stagedBase`：
+本節只適用**尚未收斂**、hook 仍直接跑 `vp staged` 的 consumer（過渡期；收斂目標見 § Pre-commit hook 走 `runner.sh`）。投影層的排除清單 **MUST** 追溯得到 preset 的 `PROJECTION_EXCLUDES`。預設形狀是 `vite.config.ts` 直接用 preset 匯出的 `stagedBase`（它與 runner 讀同一支 `isStagedExcluded`，兩條路徑濾掉的集合相同）：
 
 ```ts
 import { defineConfig } from 'vite-plus'
@@ -523,15 +525,15 @@ export default defineConfig({
 })
 ```
 
-需要自訂 glob 時改用 preset 匯出的 `isProjectionPath` 自己組，一樣算接上這條 MUST：
+需要自訂 glob 時改用 preset 匯出的 `isStagedExcluded` 自己組，一樣算接上這條 MUST。**NEVER** 只用 `isProjectionPath`：它只涵蓋投影層，漏掉 `STAGED_ONLY_EXCLUDES`（投影到 repo root 的 `scripts/**` 與 LOCKED `AGENTS.md`），會把它們送進 `vp check --fix`：
 
 ```ts
-import { isProjectionPath } from './vendor/oxc-shared/preset.ts'
+import { isStagedExcluded } from './vendor/oxc-shared/preset.ts'
 
 export default defineConfig({
   staged: {
     '*': (files) => {
-      const t = files.filter((f) => !isProjectionPath(f))
+      const t = files.filter((f) => !isStagedExcluded(f))
       return t.length > 0 ? [`vp check --fix ${t.map((f) => JSON.stringify(f)).join(' ')}`] : []
     },
   },
@@ -556,20 +558,21 @@ CI `setup-vp` 的 `node-version` **MUST** 跟 `engines.node` 同一主版（預�
 
 詳見 `docs/conventions/code-quality-tooling.md` Known drift 與 [[pitfall-nuxt-vp-migrate-overrides-mismatch]]。
 
-### Pre-commit hook 用 `vp staged`
+### Pre-commit hook 走 `runner.sh`
 
-`.husky/pre-commit` / `.vite-hooks/pre-commit`：
-
-```sh
-vp staged
-```
-
-或當需要 customize 時：
+fleet 的 pre-commit **只有一條路徑**（[[TD-776]]）。`.husky/pre-commit` / `.vite-hooks/pre-commit`（`core.hooksPath` 實際指到的那一個）在 clade drift-guard 區塊之後：
 
 ```sh
-pnpm exec vp lint --fix --no-error-on-unmatched-pattern "$@"
-pnpm exec vp fmt --ignore-path .oxfmtignore --no-error-on-unmatched-pattern "$@"
+bash scripts/pre-commit/runner.sh
 ```
+
+runner 的 `checks/vp-staged.sh` 自己取 staged 檔、經 `scripts/pre-commit/staged-targets.ts` 讀 `vendor/oxc-shared/preset.ts` 的 `isStagedExcluded` 濾掉投影層、再 `vp lint --fix` + `vp fmt`；runner 另外帶 8 條條件觸發的 check（native-picker-ban、clade-projection-drift…），直接跑 `vp staged` 的 hook 一條都拿不到。
+
+- **NEVER** 在 hook 裡另外呼叫 `vp staged` / `lint-staged`——那是第二個 lint 入口，`vite.config.ts` 的 `staged:` 會因此活過來，兩份過濾各自漂移
+- **NEVER** 在 `vp-staged.sh` 或任何 shell 裡手寫投影路徑清單——判定只在 preset（`PROJECTION_EXCLUDES` ∪ `STAGED_ONLY_EXCLUDES`）。[[TD-777]] 之前 `vp-staged.sh` 的 `CLADE_MANAGED_PREFIXES` 就是那份平行清單，缺 `.spectra/` `.cursor/`
+- 橋接讀不到 preset 時 `vp-staged.sh` **非零退出**，不會退回「全部放行」或「全部跳過」——兩者在輸出上都像正常
+
+機械檢查：`node scripts/audit-governance-drift.ts` check16 逐台解析實際 hook（`resolveHookTarget`）判路徑，`staged:` 只在會被執行的路徑上驗；未收斂的存量列在 `scripts/lib/staged-projection-filter.ts` 的 `UNCONVERGED_BASELINE`，清單外新增的未收斂 consumer 判 offender。
 
 ### 自家 ignore patterns — 雙軌制
 

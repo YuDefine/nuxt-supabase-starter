@@ -30,7 +30,7 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 
 - 每份 brief **MUST** 寫明**檔案所有權**：這個 worker 可以動哪些路徑、不可以動哪些。N 個 worker 同時在同一個 repo 跑，沒有所有權欄位就是併發寫入同一檔（per [[subagent-scope-discipline]]）。
 - 每份 brief **MUST** 寫明「你是被派來做這一件事的 worker，不是繼任者」，以及「做完回報 outcome；要交棒只能用 `/handoff relay`，**不能** fanout」。
-- 先判模式再寫 brief：切片是獨立可接受目的 → 每份 brief **MUST** 寫明：一刀一 branch 一 **draft PR**；push 後盯 CI（draft 期間只有機械檢查）；紅燈回這張 PR。切片屬於同一個 work id 的大型工作 → brief **MUST** 改寫明 integration 模式：不 push、不開 PR、本機門檻通過後 commit 並回報 coordinator、宣告路徑且與**每一個**其他活切片不相交（[[github-flow]] § Integration branch）。這是 Herdr worker 達到與 Cursor `CreateAgent` 相同結果的入口，不是「只開 worktree、永遠不開 PR」。**NEVER** 把 `/handoff fanout` 當 Cursor Project 必經入口；Cursor Project 用 CreateAgent。Worker 回報完成後由 coordinator 接續，worker 不准 ready／merge。
+- 先判模式再寫 brief：這件工作一個切片就完工 → brief **MUST** 寫明：一刀一 branch 一 **draft PR**（base `main`）；push 後盯 CI（draft 期間只有機械檢查）；紅燈回這張 PR。同一個 work id 有 2 個以上切片（預設）→ brief **MUST** 改寫明 integration 模式：push 該 branch、對 `integration/<work-id>` 開 PR（base 寫明）、盯該 PR 的機械檢查、本機門檻通過且 CI 綠後自己 `gh pr ready` 該切片 PR 並回報 coordinator（由 coordinator 以 `integration-merge.ts --pr <n>` 落地）、宣告路徑且與**每一個**其他活切片不相交（[[github-flow]] § Integration branch）。這是 Herdr worker 達到與 Cursor `CreateAgent` 相同結果的入口，不是「只開 worktree、永遠不開 PR」。**NEVER** 把 `/handoff fanout` 當 Cursor Project 必經入口；Cursor Project 用 CreateAgent。Worker 回報完成後由 coordinator 接續，worker 不准 ready／merge。
 
 ## 2. 逐個裸 dispatch
 

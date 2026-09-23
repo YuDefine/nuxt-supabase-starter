@@ -213,6 +213,30 @@ export function refreshClaim(consumerPath, sessionId) {
   }
 }
 
+/**
+ * Record the work id a claim serves, after the fact (TD-915). `wt-helper add` writes the claim
+ * before it mints the work id (`--origin` without ambient CLADE_WORK_ID), so without this the
+ * binding lives only in one printed `export` line that does not survive the next Bash call — and
+ * `merge-back --work-done` then had nothing to read but whatever ambient id the next shell had.
+ *
+ * Only fills an empty slot. A claim already bound to a DIFFERENT id is left alone and reported
+ * (`conflict`): rebinding would silently move every later attribution to another card.
+ */
+export function bindClaimWorkId(
+  consumerPath,
+  sessionId,
+  workId,
+): { status: 'bound' | 'already' | 'conflict' | 'missing'; work_id?: string | null } {
+  const file = join(claimsDir(consumerPath), `${sessionId}.json`)
+  if (!existsSync(file)) return { status: 'missing' }
+  const claim = JSON.parse(readFileSync(file, 'utf8'))
+  if (claim.work_id === workId) return { status: 'already', work_id: workId }
+  if (claim.work_id) return { status: 'conflict', work_id: claim.work_id }
+  claim.work_id = workId
+  writeFileSync(file, `${JSON.stringify(claim, null, 2)}\n`, 'utf8')
+  return { status: 'bound', work_id: workId }
+}
+
 export function dropClaim(consumerPath, sessionId) {
   const file = join(claimsDir(consumerPath), `${sessionId}.json`)
   if (existsSync(file)) {

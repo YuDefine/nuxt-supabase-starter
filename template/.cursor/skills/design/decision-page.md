@@ -55,6 +55,10 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts ask \
 （`flow ask` 當場驗，不符直接 fail）。帶 `--question-page` 的題**不必**也**不該**再抄
 `--option`：選項是頁面上的卡片，抄成一行字就是把卡片壓扁。
 
+在 linked worktree 內跑也照這三步：`flow ask` 會把題目改寫到 main checkout 的共用 spine、
+payload 一併複製過去，並在 stderr／stdout（`rerouted_from`）明說改寫了（clade TD-798）。
+main 已有**內容不同**的同名 payload 時它 fail closed——換一個 `<gate>` 檔名，**NEVER** 手動覆寫。
+
 ### 為什麼不是自己開 server（兩條都在 2026-08-28 同一輪發作過）
 
 1. **生命週期對不上。** question server 有 idle-grace 與 timeout，而 `/decisions` 的使用情境

@@ -42,9 +42,16 @@
  *                    --accept-landed is the explicit exit — it pins the tip as
  *                    refs/wt-accepted-landed/<slug> before discarding the delta.
  *                    --work-done files a flow `work.done` claim against the
- *                    ambient $CLADE_WORK_ID; requires --verification and is
- *                    refused with --dry-run. Opt-in on purpose: landing one
- *                    branch is a smaller claim than "this work is finished".
+ *                    work id the worktree's claim is bound to (ambient
+ *                    $CLADE_WORK_ID only as fallback; a mismatch or no id at
+ *                    all refuses before anything moves — TD-915); requires
+ *                    --verification and is refused with --dry-run. Opt-in on
+ *                    purpose: landing one branch is a smaller claim than
+ *                    "this work is finished".
+ *                    Refuses before touching anything when main's index is
+ *                    not empty (TD-739 / TD-964) or when local main has
+ *                    commits pre-sync will not bring into the branch
+ *                    (TD-745). No flag bypasses either gate.
  *   land-pending <slug> [opts]
  *                    Alias for merge-back. Semantic marker for migrating
  *                    grandfathered worktrees from the pre-atomic flow
@@ -103,10 +110,12 @@ import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline/promises'
 import {
   classifyDirtyPaths,
+  bindClaimWorkId,
   dropClaim,
   findClaimByWorktree,
   genSessionId,
   readActiveClaims,
+  readActiveClaimsObserved,
   writeClaim,
   claimConflictsForPath,
   formatClaimConflict,
@@ -3186,6 +3195,24 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
       })
       associatedWorkId = work_id
       console.log(`  Work: ${work_id}${unattributed ? '（未歸屬）' : ` (${origin})`}`)
+      // TD-915: the claim was written above, before this id existed. Bind it now so the worktree
+      // itself remembers which card it serves — `merge-back --work-done` reads it from here, not
+      // from an ambient variable that dies with this Bash call.
+      //
+      // ONLY an attributed card is bound. The 未歸屬 card is named after this transport (TD-787);
+      // binding it would make merge-back treat it as authoritative — refusing the real card's
+      // ambient id as a "mismatch", and filing `work.done` against the transport card otherwise.
+      if (!unattributed)
+        try {
+          const bind = bindClaimWorkId(consumerRoot, preGenSessionId, work_id)
+          if (bind.status === 'conflict') {
+            console.error(
+              `note: claim ${preGenSessionId} is already bound to ${bind.work_id}; left as is (not rebinding to ${work_id})`,
+            )
+          }
+        } catch (e) {
+          console.error(`note: claim work_id bind skipped: ${e?.message ?? e}`)
+        }
       if (unattributed) {
         console.error(
           `note: 這個 worktree 不屬於任何已知工作（沒有 CLADE_WORK_ID、也沒有 --origin），卡片標為「未歸屬」。\n` +
@@ -4319,6 +4346,18 @@ function commitsBehindRef(cwd, ref) {
   }
 }
 
+// Commits on local main (HEAD at `consumerRoot`) that the branch lacks and that
+// pre-sync will not bring in — pre-sync merges `landingRef`, never local main
+// (TD-745). Unlike `commitsBehindRef` this is NOT fail-open: an unreadable count
+// throws, because the caller uses it to refuse a squash whose outcome it cannot
+// predict. `landingRef === 'main'` (no remote) makes it 0 by construction.
+function countCommitsMissingFromBranch(consumerRoot, branchName, landingRef) {
+  const exclude = [`^${branchName}`]
+  if (landingRef !== 'HEAD') exclude.push(`^${landingRef}`)
+  const out = git(['rev-list', '--count', 'HEAD', ...exclude], { cwd: consumerRoot })
+  return parseInt(out, 10) || 0
+}
+
 /**
  * 把失敗的 `git merge --squash` 留在 main 上的殘骸還原（TD-619）。
  *
@@ -4364,6 +4403,201 @@ export function resetSquashResidue(consumerRoot: string, paths: string[]) {
     }
   }
   return restored
+}
+
+/**
+ * main 的 index 上現在有哪些 staged 路徑（TD-739 / TD-964）。回傳 `git diff --cached
+ * --name-status` 的逐列（`M\tpath` / `A\tpath` / `U\tpath` …），空陣列 = index 與 HEAD 一致。
+ *
+ * `git merge --squash` 讀寫的是**整個** index，不是本 branch 的那幾個路徑：squash 前已
+ * staged 的內容會跟 changeset 混成同一份 index（下一個 `/commit` 分不出來源），而 squash
+ * 失敗後的還原只能以 HEAD 為基準——index 上本來就有的東西沒有「還原回去」的依據。
+ * 所以 merge-back 只在空 index 上 squash；讀不到就拋出，呼叫端 **NEVER** 把失敗當成空。
+ */
+export function readMainStagedEntries(consumerRoot: string): string[] {
+  return git(['diff', '--cached', '--name-status', '--no-renames'], { cwd: consumerRoot })
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+/**
+ * squash 前後兩份 `git status --porcelain` 的差集，兩個方向都列（`-` = 只在之前、
+ * `+` = 只在之後）。空陣列才可以說「main 已還原」（TD-754）。
+ */
+export function porcelainDrift(before: string, after: string): string[] {
+  const split = (s: string) => s.split('\n').filter((l) => l.trim().length > 0)
+  const b = new Set(split(before))
+  const a = new Set(split(after))
+  return [
+    ...[...b].filter((l) => !a.has(l)).map((l) => `- ${l}`),
+    ...[...a].filter((l) => !b.has(l)).map((l) => `+ ${l}`),
+  ]
+}
+
+/**
+ * squash 失敗後還原的結果說明（TD-754）。`drift` 是 `porcelainDrift` 的輸出，`squashScope` 是這次
+ * squash 可能動到的路徑（squash 改過的 index 列 ∪ branch changeset）。
+ *
+ * 前後快照是整棵樹的：squash 期間別 session 改了無關的檔，也會出現在 drift 裡。那些列 NEVER 附上
+ * `git checkout HEAD -- <path>` —— 照做就是丟掉別人未 stage 的 WIP。只有 scope 內的列給還原指令；
+ * scope 外的列逐條標「不是這次 squash 動的」。解析不出路徑的列留在 scope 內（寧可給人看，不靜默略過）。
+ */
+export function restoreDriftNote(drift: string[], squashScope: Set<string>): string {
+  if (drift.length === 0) {
+    return `main 已還原到 squash 之前的狀態（逐列比對 git status --porcelain 前後一致）。`
+  }
+  // 未追蹤目錄在預設的 porcelain 裡塌縮成一列 `?? dir/`：branch 新增在新目錄下的檔沒刪乾淨時，
+  // 精確比對永遠命中不了 scope，於是被標成「別人的」並附上 NEVER 刪除。目錄列展開成 scope 內
+  // 位於該目錄下的路徑；scope 內沒有任何路徑在它底下，才真的是範圍外。
+  const pathsOf = (row: string) => {
+    const m = /^[-+] .. (.+)$/.exec(row)
+    if (!m) return null
+    return m[1]
+      .split(' -> ')
+      .map((p) => p.trim())
+      .flatMap((p) => {
+        if (!p.endsWith('/')) return [p]
+        const under = [...squashScope].filter((s) => s.startsWith(p))
+        return under.length > 0 ? under : [p]
+      })
+  }
+  const ours: string[] = []
+  const foreign: string[] = []
+  for (const row of drift) {
+    const paths = pathsOf(row)
+    if (paths === null || paths.some((p) => squashScope.has(p))) ours.push(row)
+    else foreign.push(row)
+  }
+  const list = (rows: string[]) =>
+    rows
+      .slice(0, 15)
+      .map((l) => `  ${l}`)
+      .join('\n') + (rows.length > 15 ? `\n  … 另外 ${rows.length - 15} 列` : '')
+  let note = ''
+  if (ours.length > 0) {
+    const restorePaths = [...new Set(ours.flatMap((r) => pathsOf(r) ?? []))]
+    note +=
+      `main **沒有**完整還原到 squash 之前的狀態 —— 下列 ${ours.length} 列在這次 squash 的範圍內、與 squash 前不同：\n` +
+      list(ours) +
+      `\n  squash 前的樹在 HEAD（squash 前 index 已確認為空），只對上列路徑逐檔還原：` +
+      (restorePaths.length > 0
+        ? `git checkout HEAD -- ${restorePaths.join(' ')}`
+        : 'git checkout HEAD -- <path>') +
+      `；branch 新增的檔直接刪除。NEVER 用 git reset --hard（會連別人的 WIP 一起丟）。`
+  } else {
+    note += `這次 squash 範圍內的路徑已還原到 squash 之前的狀態（逐列比對 git status --porcelain）。`
+  }
+  if (foreign.length > 0) {
+    note +=
+      `\n  另有 ${foreign.length} 列在 squash 前後不同，但路徑**不在**這次 squash 的範圍內 —— 不是我們動的（多半是別 session 同時在改）：\n` +
+      list(foreign) +
+      `\n  NEVER 對這些路徑跑 git checkout／刪除：那是別人的 WIP。`
+  }
+  return note
+}
+
+/** main index 非空時的拒絕訊息。沒有旗標可以繞過：它擋的正是「唯一副本即將被帶走」。 */
+export function mainIndexNotEmptyMessage(slug: string, entries: string[], when: string) {
+  const preview = entries
+    .slice(0, 15)
+    .map((line) => {
+      const [status, ...rest] = line.split('\t')
+      return `  ${status.padEnd(3)} ${rest.join('\t')}`
+    })
+    .join('\n')
+  const more = entries.length > 15 ? `\n  … 另外 ${entries.length - 15} 個` : ''
+  return (
+    `merge-back STOP (${when}): main 的 index 已有 ${entries.length} 個 staged 路徑，不是這次 merge-back 放的：\n` +
+    preview +
+    more +
+    `\n\n` +
+    `\`git merge --squash\` 讀寫整個 index：這些內容會跟本 branch 的 changeset 混成同一份 index，\n` +
+    `squash 失敗時也沒有基準把它們還原（TD-739 / TD-754 / TD-964）。main 沒有被動過。\n` +
+    `它們可能是前一條 merge-back 還沒 commit 的內容（那時 index 是它唯一的副本），或別 session 的 WIP。\n\n` +
+    `處置：\n` +
+    `  1. 判持有者：clade home 跑 \`node vendor/scripts/flow/flow.ts who\`；其他 repo 問正在這棵樹上工作的 session\n` +
+    `  2. 前一條 merge-back 的殘留 → 照它印的指示跑完 /commit（\`git commit --only -- <它的 paths>\`）\n` +
+    `  3. 別 session 的 WIP → 請持有者 commit 或 unstage。NEVER 替它 unstage／reset／stash\n` +
+    `  4. \`git diff --cached --quiet\` 回 0 之後，原樣重跑：wt-helper merge-back ${slug}\n` +
+    `沒有旗標可以跳過這道檢查。`
+  )
+}
+
+/**
+ * `--work-done` 要記給哪張卡（TD-915）。
+ *
+ * worktree 開樹時就知道自己為哪張卡開（`wt-helper add` 把 work id 寫進 claim），而
+ * `CLADE_WORK_ID` 是活不過單次 Bash 呼叫的環境變數——merge-back 常在另一個 shell 跑，
+ * 撿到的 ambient 可能是別張卡。所以 claim 綁定優先；ambient 只在沒有綁定時當 fallback。
+ * 兩者都有而不同、或兩者都沒有、或 claim 讀不到，一律回 `error`：`work.done` 沒有撤回路徑，
+ * 判不出就不記。
+ */
+export function resolveMergeBackWorkId(
+  consumerRoot: string,
+  worktreePath: string,
+  ambientRaw: string | undefined,
+  branchName?: string,
+): { workId: string; source: 'claim' | 'ambient' } | { error: string } {
+  const ambient = ambientRaw?.trim() || null
+  // Expired claims stay in: expiry only means the heartbeat went quiet, and a long-idle worktree's
+  // binding is still the card it was opened for. A leftover claim from an EARLIER worktree at the
+  // same path is excluded by branch instead (every `wt add` mints a fresh timestamped branch).
+  // An unparseable claim file still returns `unknown`: it could be this worktree's own binding, and
+  // guessing past it would fall back to ambient — the exact misfiling TD-915 exists to stop.
+  const claims = readActiveClaimsObserved(consumerRoot, { includeExpired: true })
+  if (claims.status === 'unknown') {
+    return {
+      error:
+        `讀不到 .clade/claims/（${claims.reason}），判不出這棵 worktree 綁的是哪張卡。\n` +
+        `  修好 claim 檔後重跑；或這次不帶 --work-done，land 完再手動：node vendor/scripts/flow/flow.ts done <work-id> --verification '<…>'`,
+    }
+  }
+  const stripHeads = (b: string) => b.replace(/^refs\/heads\//, '')
+  const samePath = (p) => {
+    if (!p) return false
+    if (p === worktreePath) return true
+    try {
+      return realpathSync(p) === realpathSync(worktreePath)
+    } catch {
+      return false
+    }
+  }
+  const bound = [
+    ...new Set(
+      claims.value
+        .filter((c) => samePath(c.worktree_path))
+        .filter((c) => !branchName || !c.branch || stripHeads(c.branch) === stripHeads(branchName))
+        .map((c) => (typeof c.work_id === 'string' ? c.work_id.trim() : ''))
+        .filter(Boolean),
+    ),
+  ]
+  if (bound.length > 1) {
+    return {
+      error:
+        `這棵 worktree 有 ${bound.length} 個 claim 各綁不同的卡（${bound.join(', ')}），判不出 done 該記給誰。\n` +
+        `  這次不帶 --work-done，land 完對正確那張手動：node vendor/scripts/flow/flow.ts done <work-id> --verification '<…>'`,
+    }
+  }
+  if (bound.length === 1) {
+    if (ambient && ambient !== bound[0]) {
+      return {
+        error:
+          `worktree 的 claim 綁的是 ${bound[0]}，這個 shell 的 CLADE_WORK_ID 卻是 ${ambient}。\n` +
+          `  ambient 活不過單次 Bash 呼叫，常是別張卡留下的（TD-915）；判不出 done 該記給誰，所以不記。\n` +
+          `  若這次確實是在收 ${bound[0]}：CLADE_WORK_ID=${bound[0]} 或 env -u CLADE_WORK_ID 重跑同一條指令\n` +
+          `  若這棵樹其實在做 ${ambient}：這次不帶 --work-done，land 完手動 flow done ${ambient}`,
+      }
+    }
+    return { workId: bound[0], source: 'claim' }
+  }
+  if (ambient) return { workId: ambient, source: 'ambient' }
+  return {
+    error:
+      `這棵 worktree 的 claim 沒有綁 work id，這個 shell 也沒有 CLADE_WORK_ID，判不出 done 該記給誰。\n` +
+      `  NEVER 為了有地方記而鑄一張新卡：在自己完成時才誕生的卡是一列沒人需要的 /flow。\n` +
+      `  有卡：CLADE_WORK_ID=<work-id> 重跑同一條指令；沒有卡：這次不帶 --work-done`,
+  }
 }
 
 /**
@@ -5434,6 +5668,38 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
 
   const branchName = target.branch.replace('refs/heads/', '')
   assertLegacyAllowed(consumerRoot, target.path)
+
+  // TD-915: which card the claim goes to is decided HERE, before anything moves. The tail used to
+  // read ambient CLADE_WORK_ID after the squash, and an ambient left over from another shell filed
+  // `work.done` against a different card — an event with no retraction path.
+  let doneWorkId: string | null = null
+  if (opts.workDone) {
+    const resolved = resolveMergeBackWorkId(
+      consumerRoot,
+      target.path,
+      process.env.CLADE_WORK_ID,
+      branchName,
+    )
+    if ('error' in resolved) {
+      throw new Error(`merge-back --work-done STOP（main 沒有被動過）：${resolved.error}`)
+    }
+    doneWorkId = resolved.workId
+    console.log(`merge-back: --work-done will file against ${doneWorkId} (from ${resolved.source})`)
+  }
+
+  // TD-739 / TD-964: the squash reads and writes main's WHOLE index. Measured before anything
+  // moves (dry-run reports it; a real run refuses right after the dry-run block) and measured
+  // again right before the squash, because pre-sync runs a network fetch in between.
+  let mainStaged: string[]
+  try {
+    mainStaged = readMainStagedEntries(consumerRoot)
+  } catch (e) {
+    throw new Error(
+      `merge-back blocked: main index status unknown (${e?.message ?? e}); refusing to treat failure as empty`,
+      { cause: e },
+    )
+  }
+
   const blockers = detectMergeBlockers(consumerRoot, branchName)
 
   // Pre-flight: worktree dirty tracked-file check (<consumer-b>-1J 2026-05-18 incident).
@@ -5518,6 +5784,14 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   // files this worktree never touched.
   const mainBehindTarget = commitsBehindRef(consumerRoot, landingRef)
 
+  // TD-745, the mirror of `mainBehindTarget`: commits local main has that the branch will still
+  // lack after pre-sync (pre-sync brings in `landingRef`, never local main). Nonzero means the
+  // squash is a 3-way merge of a branch that never saw those commits — the case where the branch's
+  // older copy of a file lands over local main's newer one, and `Pre-sync behind: 0` says nothing.
+  const branchBehindLocalMain = opts.skipPreSync
+    ? null
+    : countCommitsMissingFromBranch(consumerRoot, branchName, landingRef)
+
   if (opts.dryRun) {
     console.log(`merge-back dry-run for ${cleanSlug}:`)
     console.log(`  Worktree:        ${target.path}`)
@@ -5554,7 +5828,29 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
       `  Local main behind ${landingRef}: ${mainBehindTarget} commit(s)` +
         (mainBehindTarget > 0 ? ` (would fast-forward local main before squash)` : ''),
     )
-    if (wtUserDirty.length > 0) {
+    console.log(
+      branchBehindLocalMain === null
+        ? `  Branch behind local main: not measured (--skip-pre-sync: squash is a 3-way merge by request)`
+        : `  Branch behind local main: ${branchBehindLocalMain} commit(s) after pre-sync` +
+            // dry-run resolves landingRef with fetch:false; the real run fetches in pre-sync and
+            // re-measures, so commits main-sync already pushed can read nonzero here and pass there.
+            ` (measured against cached ${landingRef}; dry-run does not fetch)` +
+            (branchBehindLocalMain > 0
+              ? ` (the squash would land the branch's older copy of those files over local main — merge-back would refuse unless a fetch of ${landingRef} brings them in)`
+              : ''),
+    )
+    console.log(`  Main index staged: ${mainStaged.length}`)
+    for (const line of mainStaged.slice(0, 20)) console.log(`    ${line.replace('\t', '  ')}`)
+    if (mainStaged.length > 20) console.log(`    ... and ${mainStaged.length - 20} more`)
+    if (mainStaged.length > 0) {
+      console.log(
+        `  Action: main index is not empty; merge-back would refuse before touching anything (TD-739 / TD-964).`,
+      )
+    } else if (branchBehindLocalMain !== null && branchBehindLocalMain > 0) {
+      console.log(
+        `  Action: local main has ${branchBehindLocalMain} commit(s) cached ${landingRef} lacks; merge-back would refuse (TD-745) unless pre-sync's fetch brings them in.`,
+      )
+    } else if (wtUserDirty.length > 0) {
       console.log(
         `  Action: worktree has uncommitted WIP; without --include-worktree-wip, merge-back would refuse.`,
       )
@@ -5579,7 +5875,13 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
       baselineRefs,
       preSyncBehind,
       mainBehindTarget,
+      branchBehindLocalMain,
+      mainStaged,
     }
+  }
+
+  if (mainStaged.length > 0) {
+    throw new Error(mainIndexNotEmptyMessage(cleanSlug, mainStaged, 'before any change'))
   }
 
   if (baselineRefs.length > 0) {
@@ -5683,6 +5985,76 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
     if (syncResult.synced) {
       console.log(
         `merge-back: pre-synced wt with main (${syncResult.behind} commit(s) behind, merge commit: '${preSyncCommitMessage(branchName).split('\n')[0]}')`,
+      )
+    }
+  }
+
+  // Both gates below run BEFORE the stash / fast-forward / squash: at this point only the
+  // worktree branch has moved (pre-sync), main's working tree and index are exactly as found,
+  // so a refusal here leaves nothing on main to put back.
+  //
+  // (1) TD-739 / TD-964 re-check. Pre-sync ran a network fetch since the first reading.
+  let stagedAtSquash: string[]
+  try {
+    stagedAtSquash = readMainStagedEntries(consumerRoot)
+  } catch (e) {
+    throw new Error(
+      `merge-back blocked: main index status unknown (${e?.message ?? e}); refusing to treat failure as empty`,
+      { cause: e },
+    )
+  }
+  if (stagedAtSquash.length > 0) {
+    throw new Error(
+      mainIndexNotEmptyMessage(cleanSlug, stagedAtSquash, 'after pre-sync, before squash') +
+        `\nWorktree '${target.path}' + branch '${branchName}' preserved（pre-sync 已進 branch，重跑不會重做）。`,
+    )
+  }
+
+  // (2) TD-745. Measured after pre-sync, against the post-fast-forward main: the ff below only
+  // adds commits `landingRef` has, and pre-sync already merged `landingRef` into the branch, so
+  // counting now equals counting after the ff. Nonzero = local main is ahead of the landing ref
+  // with commits the branch never saw, and the squash is a 3-way merge nobody asked for.
+  // `--skip-pre-sync` is the explicit request for that 3-way squash and is left alone.
+  if (!opts.skipPreSync) {
+    let missing: number
+    try {
+      missing = countCommitsMissingFromBranch(consumerRoot, branchName, landingRef)
+    } catch (e) {
+      throw new Error(
+        `merge-back blocked: cannot measure whether local main is ahead of '${branchName}' (${e?.message ?? e}); refusing to squash blind (TD-745)`,
+        { cause: e },
+      )
+    }
+    if (missing > 0) {
+      const sample = (() => {
+        try {
+          return git(['log', '--oneline', '-5', 'HEAD', `^${branchName}`, `^${landingRef}`], {
+            cwd: consumerRoot,
+          })
+        } catch {
+          return ''
+        }
+      })()
+      throw new Error(
+        `merge-back STOP: Branch behind local main: ${missing} commit(s) — local main has commits that\n` +
+          `'${branchName}' never saw, and pre-sync only brings in ${landingRef}.\n` +
+          (sample
+            ? sample
+                .split('\n')
+                .map((l) => `  ${l}`)
+                .join('\n') +
+              (missing > 5 ? `\n  … 另外 ${missing - 5} 個` : '') +
+              '\n'
+            : '') +
+          `\nSquashing now is a 3-way merge of a branch holding OLDER copies of files local main has since\n` +
+          `changed; every dry-run field (Blockers / WIP / Pre-sync behind) reads 0 on this shape (TD-745).\n` +
+          `main 沒有被動過。\n\n` +
+          `Resolution — pick one, then re-run: wt-helper merge-back ${cleanSlug}\n` +
+          `  1. land local main's commits on ${landingRef} first (clade home: node scripts/main-sync.ts --apply;\n` +
+          `     elsewhere: push them through the repo's normal landing path)\n` +
+          `  2. or bring local main into the branch inside the worktree, where conflicts stay isolated:\n` +
+          `       git -C ${target.path} merge --no-ff ${resolveLandingBase(consumerRoot)}\n` +
+          `Worktree '${target.path}' + branch '${branchName}' preserved。`,
       )
     }
   }
@@ -5968,6 +6340,33 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
       .filter(Boolean)
     resetSquashResidue(consumerRoot, squashTouched)
 
+    // TD-754: "main 已還原" used to be printed unconditionally. It is now a MEASUREMENT: the
+    // porcelain status after the residue reset must equal the pre-squash snapshot, read before the
+    // stash pop below (the pop legitimately changes it). Any difference is listed and the claim is
+    // withdrawn — a failure message that says "restored" while index content is gone is how the
+    // 2026-08-28 loss read as a clean failure.
+    let restoreDrift: string[]
+    try {
+      restoreDrift = porcelainDrift(
+        statusBefore,
+        git(['status', '--porcelain'], { cwd: consumerRoot }),
+      )
+    } catch (e) {
+      restoreDrift = [`(status unreadable after restore: ${e?.message ?? e})`]
+    }
+    // The snapshot is whole-tree, so a concurrent session editing an unrelated file in this window
+    // also shows up as drift. Only rows on paths this squash could have touched get restore advice.
+    const squashScope = new Set(squashTouched)
+    try {
+      const base = git(['merge-base', 'HEAD', branchName], { cwd: consumerRoot })
+      for (const p of git(['diff', '--name-only', '--no-renames', base, branchName], {
+        cwd: consumerRoot,
+      }).split('\n')) {
+        if (p.trim()) squashScope.add(p.trim())
+      }
+    } catch {}
+    const restoreNote = restoreDriftNote(restoreDrift, squashScope)
+
     // git 在寫入任何東西之前就拒絕了（`Entry … not uptodate` / `would be overwritten` /
     // `stash failed`）：沒有衝突、樹前後完全相同。成因是 main 當下的 index／working tree，
     // 不是 branch 內容 —— absorbed 量測與 `--accept-landed` 在這裡都答錯問題，
@@ -6018,6 +6417,16 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
         : popExitError
           ? `\n\nstash pop exited with error but no UU detected; stash '${stashRef}' preserved — inspect with \`git stash list\`.`
           : ''
+
+    // 還原沒量到一致 → 不論後面判成 refused / absorbed / accept-landed 都停在這裡：那三條路徑
+    // 都建立在「main 已回到 squash 之前」之上，往下走等於在殘骸上宣告結果（TD-754）。
+    if (restoreDrift.length > 0) {
+      throw new Error(
+        `merge-back: ${squashDetail}${popDetail}\n\n${restoreNote}\n` +
+          `Worktree '${target.path}' + branch '${branchName}' preserved。先處理 squash 範圍內的列；範圍外的列屬於別的持有者（clade home 跑 flow who），NEVER 替它還原。之後再判要不要重跑。`,
+        { cause: squashError ?? undefined },
+      )
+    }
 
     // 內容已被別條路徑吸收 → 沒有東西可 commit，重跑幾次都一樣。改走正常 cleanup，
     // 使用者不必按 `cleanup --force --force-discard-unland`（那個旗標的語義是「丟棄
@@ -6154,7 +6563,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
       throw new Error(
         `merge-back: ${squashDetail}${popDetail}${absorbNote}\n\n` +
           `Worktree '${target.path}' + branch '${branchName}' preserved; ` +
-          `main 已還原到 squash 之前的狀態（沒有留下衝突的 index）。\n` +
+          `${restoreNote}\n` +
           `原樣重跑會撞到同一組衝突 —— 上面兩條出路擇一。`,
       )
     }
@@ -6399,69 +6808,62 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   // is clade-home-only while wt-helper itself is projected into every consumer, so the import is
   // dynamic and every failure path is a warn. NEVER let this gate the landing — main's index is
   // already written by the time we get here.
-  if (opts.workDone) {
-    const ambientWorkId = process.env.CLADE_WORK_ID?.trim()
-    if (!ambientWorkId) {
-      console.warn(
-        `merge-back: --work-done skipped — no ambient CLADE_WORK_ID.\n` +
-          `             NEVER mint a work id here just to have somewhere to file the claim: a work\n` +
-          `             item born at its own completion is a row on /flow nobody ever needed.`,
-      )
-    } else {
-      const observed = [
-        absorbedByOtherPath
-          ? `already in main via another path (nothing squashed)`
-          : `squash landed on main`,
-        'source retained; removal owned by batch cleanup',
-        stagedPaths.length > 0
-          ? `${stagedPaths.length} path(s) STAGED, not yet committed`
-          : 'nothing left staged',
-        stashRef ? `blockers stashed as ${stashRef}` : null,
-      ].filter(Boolean)
-      try {
-        const { markWorkDone } = await import(new URL('./flow/emit.ts', import.meta.url).href)
-        // `substrate` is a closed enum in vendor/signals/schema.json and `git` is the honest
-        // member: the observable act this claim is about is the squash. NEVER invent a
-        // `wt-helper` value here — the validator rejects unknown members, and a rejected write
-        // is silent apart from one stderr line (2026-08-28: the first cut of this code did
-        // exactly that and still printed "filed"). `actor` is the free-form field; the tool name
-        // belongs there.
-        const res = markWorkDone({
-          work_id: ambientWorkId,
-          verification: `${opts.verification.trim()} — merge-back ${cleanSlug}: ${observed.join('; ')}`,
-          verifiedBy: 'wt-helper',
-          actor: opts.agent ?? 'wt-helper',
-          substrate: 'git',
-          payload: {
-            slug: cleanSlug,
-            absorbed_by_other_path: absorbedByOtherPath,
-            cleanup_done: cleanupDone,
-            staged_pending: stagedPaths.length,
-            stash_ref: stashRef ?? null,
-          },
-          cwd: consumerRoot,
-        })
-        // MUST branch on `written`. `markWorkDone` returns `{written:false, errors}` on a
-        // validator refusal instead of throwing, so a bare call followed by a success line
-        // reports a claim that was never filed — indistinguishable, in the terminal, from one
-        // that was.
-        console.log('')
-        if (res?.written) {
-          console.log(`merge-back: flow work.done filed for ${ambientWorkId}`)
-          console.log(
-            `  Acceptance is a human's: node vendor/scripts/flow/flow.ts accept ${ambientWorkId} --reason '<why>'`,
-          )
-        } else {
-          console.error(
-            `merge-back: flow work.done REFUSED for ${ambientWorkId} — ` +
-              `${(res?.errors ?? []).map((e) => e.code ?? String(e)).join(',') || 'unknown'}.\n` +
-              `             The landing itself is unaffected; the claim was not filed. File it by hand:\n` +
-              `             node vendor/scripts/flow/flow.ts done ${ambientWorkId} --verification '<...>'`,
-          )
-        }
-      } catch (e) {
-        console.error(`note: flow work.done skipped (fail-open): ${e?.message ?? e}`)
+  // `doneWorkId` was resolved before anything moved (TD-915); reaching here with --work-done means
+  // it is set. The claim binding wins over ambient CLADE_WORK_ID — see resolveMergeBackWorkId.
+  if (opts.workDone && doneWorkId) {
+    const observed = [
+      absorbedByOtherPath
+        ? `already in main via another path (nothing squashed)`
+        : `squash landed on main`,
+      'source retained; removal owned by batch cleanup',
+      stagedPaths.length > 0
+        ? `${stagedPaths.length} path(s) STAGED, not yet committed`
+        : 'nothing left staged',
+      stashRef ? `blockers stashed as ${stashRef}` : null,
+    ].filter(Boolean)
+    try {
+      const { markWorkDone } = await import(new URL('./flow/emit.ts', import.meta.url).href)
+      // `substrate` is a closed enum in vendor/signals/schema.json and `git` is the honest
+      // member: the observable act this claim is about is the squash. NEVER invent a
+      // `wt-helper` value here — the validator rejects unknown members, and a rejected write
+      // is silent apart from one stderr line (2026-08-28: the first cut of this code did
+      // exactly that and still printed "filed"). `actor` is the free-form field; the tool name
+      // belongs there.
+      const res = markWorkDone({
+        work_id: doneWorkId,
+        verification: `${opts.verification.trim()} — merge-back ${cleanSlug}: ${observed.join('; ')}`,
+        verifiedBy: 'wt-helper',
+        actor: opts.agent ?? 'wt-helper',
+        substrate: 'git',
+        payload: {
+          slug: cleanSlug,
+          absorbed_by_other_path: absorbedByOtherPath,
+          cleanup_done: cleanupDone,
+          staged_pending: stagedPaths.length,
+          stash_ref: stashRef ?? null,
+        },
+        cwd: consumerRoot,
+      })
+      // MUST branch on `written`. `markWorkDone` returns `{written:false, errors}` on a
+      // validator refusal instead of throwing, so a bare call followed by a success line
+      // reports a claim that was never filed — indistinguishable, in the terminal, from one
+      // that was.
+      console.log('')
+      if (res?.written) {
+        console.log(`merge-back: flow work.done filed for ${doneWorkId}`)
+        console.log(
+          `  Acceptance is a human's: node vendor/scripts/flow/flow.ts accept ${doneWorkId} --reason '<why>'`,
+        )
+      } else {
+        console.error(
+          `merge-back: flow work.done REFUSED for ${doneWorkId} — ` +
+            `${(res?.errors ?? []).map((e) => e.code ?? String(e)).join(',') || 'unknown'}.\n` +
+            `             The landing itself is unaffected; the claim was not filed. File it by hand:\n` +
+            `             node vendor/scripts/flow/flow.ts done ${doneWorkId} --verification '<...>'`,
+        )
       }
+    } catch (e) {
+      console.error(`note: flow work.done skipped (fail-open): ${e?.message ?? e}`)
     }
   }
 
@@ -6844,7 +7246,10 @@ async function main() {
         '    --origin <scheme>:<id>  name the WORK this tree serves (td:TD-787, notion:<uuid>).',
         '                            Without it — and without an ambient $CLADE_WORK_ID — the card',
         '                            is minted but marked 未歸屬 (TD-787).',
-        '    --work-done             file a flow `work.done` claim for ambient $CLADE_WORK_ID',
+        "    --work-done             file a flow `work.done` claim for the worktree claim's work id",
+      )
+      console.error(
+        '                            (ambient $CLADE_WORK_ID only as fallback; mismatch refuses, TD-915)',
       )
       console.error(
         '    --verification <line>   required with --work-done: how it was verified. The observed',

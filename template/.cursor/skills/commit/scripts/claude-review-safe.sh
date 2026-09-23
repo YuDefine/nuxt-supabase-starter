@@ -72,7 +72,8 @@
 #   2  本地用法／依賴錯誤（非 medium effort、--findings 壞檔、helper 不存在）
 #   3  Fable 席 review 未跑成（transport、completion_failed、無 verdict 檔、
 #      coordination 逾時）——與 Astra exit 3 同義：reviewer 不可用
-#   4  account_unavailable——兩格皆盡的逐字證據，gate 維持 pending
+#   4  account_unavailable——兩格皆盡的逐字證據，gate 維持 pending；stderr 另印
+#      `NEXT_STEP_JSON:` 一行（可機讀，轉出 helper receipt 的 next_step）
 #   6  review 期間受審樹被改動（snapshot drift），verdict 扣住
 #   8  model verification 失敗（mismatch，或重讀後仍 unverified）——身分歸屬
 #      不成立，verdict 扣住；NEVER 當作通過，也 NEVER 當作 mismatch 以外的东西
@@ -162,8 +163,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "$REPO_ROOT" || exit 1
 
-WORK_DIR="$(mktemp -d)" || exit 1
-trap 'rm -rf "$WORK_DIR"' EXIT
+review_make_workdir || exit 1
 VERDICT_OUT="$WORK_DIR/verdict.md"
 REVIEW_OUTPUT_PATH="$VERDICT_OUT"
 
@@ -334,10 +334,31 @@ if [ "$STATUS" = "nested_dispatch_refused" ]; then
   exit 10
 fi
 
-# account_unavailable（helper EXIT.blocked=15）：Fable 席不可用——兩格皆盡的證據。
+# account_unavailable（helper EXIT.blocked=15）：本 0-A 席（REVIEW_SEAT）不可用——gate 停在 pending 等 Opus 額度恢復。
 if [ "$rc" -eq 15 ] || [ "$STATUS" = "account_unavailable" ]; then
   echo "[claude-review-safe] RESULT: account_unavailable — ${REVIEW_SEAT} 席（ccw/cc）無可用帳號配額，review DID NOT run；NEVER 當作 0-A.1 通過（exit 4）" >&2
   echo "[claude-review-safe] NEXT: 本 0-A 席（${REVIEW_SEAT}）不可用 — Opus 5.5 覆寫期間 NEVER 改派 Astra／Fable；gate 維持 pending，記錄雙方逐字失敗證據；NEVER 用其他模型、另一個 fresh agent 或主線自審補位。" >&2
+  # 可機讀的 next_step（Z5）：helper receipt 的 next_step 原樣轉出（兩帳號實測皆耗盡時才有），
+  # receipt 留存到 dispatchStateDir()/review/ 供 coordinator 取證——WORK_DIR 隨 trap 清掉。
+  UNAVAILABLE_STATE_DIR="$(node -e 'process.stdout.write(require("path").resolve(process.argv[1]))' "${CLADE_DISPATCH_STATE_DIR:-$HOME/.cache/clade/dispatch}")"
+  UNAVAILABLE_RECEIPT="$UNAVAILABLE_STATE_DIR/review/account-unavailable-$(date +%Y%m%dT%H%M%S)-$$.json"
+  mkdir -p "$(dirname "$UNAVAILABLE_RECEIPT")"
+  cp "$RECEIPT" "$UNAVAILABLE_RECEIPT"
+  NEXT_STEP_JSON="$(node -e '
+    let helper = null
+    try { helper = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).next_step ?? null } catch {}
+    process.stdout.write(JSON.stringify({
+      kind: "review-seat-unavailable",
+      exit_code: 4,
+      table_row: process.env.REVIEW_ROW,
+      gate: "pending",
+      hold_at_gate: true,
+      receipt: process.argv[2],
+      helper_next_step: helper,
+      instruction: `0-A reviewer 席（${process.env.REVIEW_SEAT}，ccw/cc）額度耗盡，review 沒跑：gate 停在 pending，push 分支並回報「待 Opus seat 0-A」，等 Opus 額度恢復再跑；本 next_step 不適用「雙帳號耗盡 → 回原 routing 表」——NEVER 依 routing table 的 code-review／code-review-fable 列改派 Astra／Fable／其他模型，NEVER 主線自審補位`,
+    }))
+  ' "$RECEIPT" "$UNAVAILABLE_RECEIPT")"
+  echo "[claude-review-safe] NEXT_STEP_JSON: $NEXT_STEP_JSON" >&2
   exit 4
 fi
 

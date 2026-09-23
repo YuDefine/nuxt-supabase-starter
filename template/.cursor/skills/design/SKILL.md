@@ -47,7 +47,7 @@ npx skills add pbakaus/impeccable --agent claude-code --copy -y
 >
 > `npx skills add` 拉的是 default branch HEAD，**不保證等於 latest release**——2026-08-25 實測 HEAD frontmatter 是 4.1.1（與 `skill-v4.1.1` tag 同號），那是這次的事實不是保證。上游推了新 commit 但還沒發 release 時，裝到的會是未發布內容；`npx skills check` 可對齊 release tag，但它會把 `.claude/skills/<skill>` 改成 symlink → `.agents/skills/`，與本檔 copy mode 的前提衝突。**判定漂移一律以上面兩條檢查為準**，發現不符再決定要不要動。
 
-**新 consumer 安裝 / 升降版操作流程**：見 `references/impeccable-install.md`（含標準 install-skills.sh snippet、copy vs symlink mode、vp-staged 已知衝突繞法）。
+**新 consumer 安裝 / 升降版操作流程**：見 `references/impeccable-install.md`（含標準 install-skills.sh snippet、copy vs symlink mode、`staged:` 的 `*.md` 禁令）。
 
 ### 2. 呼叫形式（v3 原生）
 
