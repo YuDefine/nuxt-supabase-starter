@@ -78,7 +78,7 @@ When Step 1.8 routes to Pi for coding work, use `Bash run_in_background=true` to
    | 命中 [[agent-routing.routing-table]] 某列 | 照該列逐字（含 `grok-xai` 的列） | `routing-table` / `table-row` ＋ `--table-row <row>` |
    | Nuxt UI／Content 實作 | Cursor 原生 Composer 2.5 | `ui-implementation`；依原生載體，不使用 Pi mutation 池 |
    | Nuxt 本體實作 | `--model sol --effort xhigh` | `routing-table` / `table-row` ＋ `--table-row nuxt-core-implementation` |
-   | 其餘 UI view 實作 | Claude Opus 5（effort: medium） | `ui-view-implementation`；Claude Code 原生／Herdr 載體 |
+   | 其餘 UI view 實作 | Claude Opus 5.5（effort: medium） | `ui-view-implementation`；Claude Code 原生／Herdr 載體 |
    | 本次工作**原本會派 Claude subagent**（原判 `sonnet`） | `--model grok-xai --effort high` | `claude-delegate-sub` / `delegate-sub` |
    | 本次工作**原本會派 Claude subagent**（原判 `haiku`） | `--model grok-xai --effort high` | `claude-delegate-sub` / `delegate-sub` |
    | 一般非 UI implementation | `--model luna --effort medium` | `routing-table` / `table-row` ＋ `--table-row non-ui-implementation` |

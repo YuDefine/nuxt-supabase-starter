@@ -59,7 +59,7 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
 三條全綠 → 照 [[review-gui-surface]] § 截圖 evidence 與符合性判定
 （`review` skill 的 `screenshot` mode，Pi `screenshot-review-verify`，`gemini high`），主線只消費它回的 JSON 摘要，
 再跑 `node ~/offline/clade/vendor/scripts/verify-ui-receipt.ts --change <name> --items '<id,id>' --consumer-path .`
-落 receipt；項目符合性再交 Opus 5（effort: medium）。實際 dispatch 還要核對 Gemini provider 與 Opus 載體能否完成；模型／配額／工具失敗以真實輸出作 blocker，不能由 binary 存在推論可用。
+落 receipt；項目符合性再交 Opus 5.5（effort: medium）。實際 dispatch 還要核對 Gemini provider 與 Opus 載體能否完成；模型／配額／工具失敗以真實輸出作 blocker，不能由 binary 存在推論可用。
 
 任一條紅 → packaging 的 blocker 欄 **MUST 逐字寫那一條 probe 的失敗輸出**（哪一條、跑了什麼、回了什麼）。
 **NEVER** 寫「需 attended」這種形容詞——形容詞每一輪都會被重新「發現」一次，而 predicate 有解除條件、

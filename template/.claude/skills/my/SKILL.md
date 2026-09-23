@@ -100,13 +100,15 @@ cd ~/offline/clade && node vendor/scripts/flow/flow.ts answer '<span_id>' \
 **NEVER 手寫 `node --input-type=module -e "import { answerDecision } ..."`**（本 skill 2026-08-27
 之前逐字要求的形狀）：那條路徑不經 roster 檢查，`repoRoot` 由人目測填。
 
-它一次做完三件事：關 span（佇列與 `/decisions` 同時消失那題）、把決策紀錄 append 到 carrier、
+它一次做完三件事：關 span（佇列與 `/decisions` 同時消失那題）、把決策紀錄寫進 carrier 的錨定區段
+（`## 決策紀錄` 節；`td:` carrier 則是該 TD entry 尾，TD-714）、
 量測 tech-debt hygiene 的差集。**NEVER** 只在對話裡回覆就算結案——那樣答案沒有持久載體，
 下一個 session 看到的還是那題還在等。
 
-要先看會寫成什麼就加 `--dry-run`：輸出裡的 `block` 逐字就是等一下會 append 的那段。
+要先看會寫成什麼就加 `--dry-run`：輸出裡的 `block` 逐字就是等一下會寫進去的那段。
 
-跑完 **MUST 實查**：`git status --porcelain` 只動 carrier 那一個檔、`tail` 該檔看 block 真的在。
+跑完 **MUST 實查**：`git status --porcelain` 只動 carrier 那一個檔、`grep -n '<span_id>' <carrier>` 看 block
+真的在。**NEVER** 用 `tail` 查——block 落在區段裡，不在檔尾。
 
 `ok:false`（非 0 退出）時看 `reason`：`no-such-decision`（span 不在這個 repo，換 `--repo`）、
 `already-resolved`（已經答過了，要改答案是另一條路徑）。**NEVER** 自己造一個新 carrier 檔繞過。

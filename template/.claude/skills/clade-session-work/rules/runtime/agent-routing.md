@@ -84,3 +84,7 @@ predicate 走，**NEVER** 把本小節外推成「委派都該指定 model」。
 ## Claude residency carrier
 
 The Claude session is the primary carrier for the common source's Claude-primary predicate. Native delegation remains bounded by the common Routing Table and completion claim; it does not create a new routing exception.
+
+## Opus 5.5 暫時覆寫的 Claude 載體
+
+共用段 § Opus 5.5 暫時覆寫 生效期間，Claude Code 開 session／subagent 的寫法：Herdr `--launcher cc`／`ccw` `--model opus`（effort ≤ high）；`Agent` tool 帶 `model: 'opus'`。**NEVER** `ccg`／`ccx`——gateway 把 `opus` 映射成 Grok／GPT。commit 0-A reviewer 走 `CLAUDE_REVIEW_SEAT=opus` 跑 `claude-review-safe.sh medium`。

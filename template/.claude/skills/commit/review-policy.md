@@ -3,6 +3,8 @@
 
 本檔是每一個 runtime 的 commit review 共用政策。`gates.md` 定義觸發與完成條件；本檔決定 reviewer 是否合格。Runtime adapter 只選可執行載體，不降低資格。
 
+> **Opus 5.5 暫時覆寫期間（2026-09-23 起）本段的 Astra／Fable 兩格政策停用**：0-A（含 0-A.2 深度 review）只跑 `CLAUDE_REVIEW_SEAT=opus claude-review-safe.sh medium`（`code-review-opus` 列；wrapper 預設即 opus），**NEVER** 派 Astra 或 Fable。Opus 額度用完時 gate 保持未完成、等額度恢復；覆寫撤銷也**不**自動恢復 Astra／Fable 0-A——那要 Charles 另行拍板（Charles 2026-09-23 硬禁令，見 `rules/core/agent-routing.md` § Opus 5.5 暫時覆寫 的 0-A 例外）。receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。下文的「兩格同級」「Astra 優先」描述的是覆寫前的政策，覆寫期間不適用。
+
 ## 每次派遣的判定表
 
 | 欄位 | 完成條件 |
@@ -31,13 +33,13 @@ Fable 格的 effort 天花板就是 `medium`（Claude child 的 family cap）。
 
 新模型／載體採同一組有已知答案的案例比較：邏輯與安全缺陷召回、誤報反證、跨檔影響、修法 regression、完整 verdict／semantic coverage、唯讀及 snapshot 約束。保留逐例原始輸入輸出、版本與實際工具事件，明示哪些是合成案例、哪些是真實產品觀察。資格變更由對照證據與明確採用決定承載；只有可啟動、一次 PASS 或純文字壓力測試不足以改門檻。
 
-UI Design Review 與截圖符合性 reviewer 使用 fresh Claude Opus 5（effort: medium），須實際取得及檢視指定圖片、對照 item 與互動證據。Opus 5 無法執行時由對應 GPT-5.6 Sol（effort: high）fallback 接手，仍逐欄符合上表。Screenshot evidence 由另一個 Gemini 3.8 Flash high worker 收集，收集 PASS 不代替 0-B 判定。沒有合格且可用的組合時，0-B 保持未完成，不以一般 code reviewer、文字摘要或自行宣稱「看過」補位。
+UI Design Review 與截圖符合性 reviewer 使用 fresh Claude Opus 5.5（effort: medium），須實際取得及檢視指定圖片、對照 item 與互動證據。Opus 5.5 無法執行時由對應 GPT-5.6 Sol（effort: high）fallback 接手，仍逐欄符合上表。Screenshot evidence 由另一個 Gemini 3.8 Flash high worker 收集，收集 PASS 不代替 0-B 判定。沒有合格且可用的組合時，0-B 保持未完成，不以一般 code reviewer、文字摘要或自行宣稱「看過」補位。
 
 ## 執行與缺能力
 
 1. 依當前 catalog 與已驗證 adapter 取得實際候選，逐欄記錄判定。支援 CLI 的入口可呼叫共同 wrapper；呼叫者不因 wrapper 名含 codex 或相容路徑 `.claude/` 就改變 runtime。
 2. 使用該入口原生背景 handle、等待／取消及完成事件；先確保 owner 能收回結果，再並行其他軸。沒有非同步能力時可使用已授權的同步載體，保留全部 gate 與 snapshot 條件並明示並行不可用。
-3. Astra 配額耗盡或 dispatch 失敗時，依 `codex-review-safe.sh` 的 RESULT 行與 exit code 判定：exit 3／4 且有逐字證據 → 改用 `claude-review-safe.sh`（Fable medium via Herdr，`--table-row code-review-fable` 機械鎖死 model／effort／readonly）；兩格都不可用 → gate 保持未完成並保留雙方實跑證據。主線自審可以協助修復，不能產生缺席 reviewer 的 PASS。Cloud CI success **不能代替** 0-A。Coordinator 跑 `/commit`；reviewer 必須是獨立的合格格 session，身分與 coordinator 分離。Fable 格的 receipt 記 requested／observed model、`model_verification` 與 `model_verification_reason`；`unverified` NEVER 讀成已核實——wrapper 對 `unverified` 做一次有界 verification 重讀（不重跑 review），仍非 `verified` 則 verdict 扣住、gate pending。
+3. （覆寫期間不適用——見檔首；`claude-review-safe.sh` 覆寫期間預設 `code-review-opus` 列，Fable 格要顯式 `CLAUDE_REVIEW_SEAT=fable` 且其 verdict 不得當 gate 證據。）Astra 配額耗盡或 dispatch 失敗時，依 `codex-review-safe.sh` 的 RESULT 行與 exit code 判定：exit 3／4 且有逐字證據 → 改用 `claude-review-safe.sh`（Fable medium via Herdr，`--table-row code-review-fable` 機械鎖死 model／effort／readonly）；兩格都不可用 → gate 保持未完成並保留雙方實跑證據。主線自審可以協助修復，不能產生缺席 reviewer 的 PASS。Cloud CI success **不能代替** 0-A。Coordinator 跑 `/commit`；reviewer 必須是獨立的合格格 session，身分與 coordinator 分離。Fable 格的 receipt 記 requested／observed model、`model_verification` 與 `model_verification_reason`；`unverified` NEVER 讀成已核實——wrapper 對 `unverified` 做一次有界 verification 重讀（不重跑 review），仍非 `verified` 則 verdict 扣住、gate pending。
 
 **無 receipt 的 verdict 不得當 gate 證據。** 0-A 的 PASS 只能來自帶 requested／observed model、`model_verification` 與 session／dispatch 歸屬 receipt 的合格格輸出（`codex-review-safe.sh`／`claude-review-safe.sh` 產出的那一份）。headless `claude -p --model …`、互動 session 手動貼 prompt、或任何沒有這份 receipt 的複審，產物只能當線索，**NEVER** 記成 0-A.1／0-A.2 的 verdict——「模型名字打對了」不等於身分已核實。
 

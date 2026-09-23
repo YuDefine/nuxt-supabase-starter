@@ -24,6 +24,8 @@ paths:
 > `--table-row` 的記帳義務、以及每一條硬禁令）；本檔只回答「這類工作查出來是哪個 model、哪個
 > effort、為什麼」。取證與跑分在 [[agent-routing.routing-table-rationale]]。
 
+> **Opus 5.5 暫時覆寫生效中（2026-09-23 起）**：Opus 5.5 額度可用時，本表每一列都由 [[agent-routing]] § Opus 5.5 暫時覆寫 蓋過；本表只在額度用完時生效——**唯一例外是 commit 0-A**（`code-review`／`code-review-fable` 兩列）：覆寫期間 **NEVER** 派 Astra 或 Fable，Opus 額度用完時 0-A gate 保持未完成、等額度恢復（Charles 2026-09-23 硬禁令；見 [[agent-routing]] § Opus 5.5 暫時覆寫 的 0-A 例外）。
+
 ## effort 與執行載體
 
 每一個 Gemini 3.8 Flash 工作都使用 `high`，包含首派與 fallback。`gemini` 是 Pi model alias，實際 provider 為 `google-gemini-cli`、model 為 `gemini-3.8-flash`。Grok 4.6 的 `grok-xai` 與 `grok-cursor` 分別表示 xAI 與 Cursor 配額池。
@@ -32,11 +34,11 @@ GPT worker 的 transport 依 [[agent-routing]] § Session transport boundary：C
 
 每一個 xAI Grok 4.6 工作的 fallback 都先接 Cursor Grok 4.6，保留該 Grok 工作的 effort，再走該列後續 fallback。每一跳都核對實際 runtime、workspace access 與工具能力。Cursor Pi pool 不支援 mutation；遇到修改任務時不啟動 Cursor，在 authoritative payload／ledger 的 `skipped_tiers` 記明 capability 原因後才交下一個可執行模型，保留同一 work 身分。
 
-每一次 Design Review、UI 詳細計畫、截圖符合性判定先用 Claude Opus 5（effort: medium）；有實際 quota、runtime、工具或任務失敗證據時，交 GPT-5.6 Sol（effort: high）。Fallback 保留圖片、fresh context 與原驗收契約，失敗回報 blocker。
+每一次 Design Review、UI 詳細計畫、截圖符合性判定先用 Claude Opus 5.5（effort: medium）；有實際 quota、runtime、工具或任務失敗證據時，交 GPT-5.6 Sol（effort: high）。Fallback 保留圖片、fresh context 與原驗收契約，失敗回報 blocker。
 
-**判不進任一列時的預設鏈（MUST）**：工作對不上下表任何一列、而它若照主線模型走就會是 Claude Opus 5 時，**MUST** 依序試 `--model grok-xai --effort high` → `--model grok-cursor --effort high` → Claude `sonnet` effort `high`。每一跳都核對 workspace access 與工具能力：Cursor Pi pool 不支援 mutation，遇修改任務跳過該格並在 `skipped_tiers` 記明原因，保留同一 work 身分。下表**已具名 Claude Opus 5 的四列**（`ui-view-implementation`／`design-review`／`ui-detailed-planning`／`screenshot-match-analysis`）照列派，**NEVER** 改走本鏈。
+**判不進任一列時的預設鏈（MUST）**：工作對不上下表任何一列、而它若照主線模型走就會是 Claude Opus 5.5 時，**MUST** 依序試 `--model grok-xai --effort high` → `--model grok-cursor --effort high` → Claude `sonnet` effort `high`。每一跳都核對 workspace access 與工具能力：Cursor Pi pool 不支援 mutation，遇修改任務跳過該格並在 `skipped_tiers` 記明原因，保留同一 work 身分。下表**已具名 Claude Opus 5.5 的四列**（`ui-view-implementation`／`design-review`／`ui-detailed-planning`／`screenshot-match-analysis`）照列派，**NEVER** 改走本鏈。
 
-本鏈的起點是「**Opus 5 等級但無落點**」。原判 Claude `sonnet`／`haiku` **等級**的委派工作是另一題，依 [[agent-routing]] § Native delegation model boundary 轉派 **`--model grok-xai --effort high`**（2026-09-10 拍板，取代原本的 `gemini` 首跳：同級或更好的實測品質、更便宜的座位）——兩條 **NEVER** 互換：本鏈的 `sonnet` 是第三跳終點，不是起點。
+本鏈的起點是「**Opus 5.5 等級但無落點**」。原判 Claude `sonnet`／`haiku` **等級**的委派工作是另一題，依 [[agent-routing]] § Native delegation model boundary 轉派 **`--model grok-xai --effort high`**（2026-09-10 拍板，取代原本的 `gemini` 首跳：同級或更好的實測品質、更便宜的座位）——兩條 **NEVER** 互換：本鏈的 `sonnet` 是第三跳終點，不是起點。
 
 **`--tier-basis delegate-sub` 的 effort 是結論的另一半，NEVER 只對 model 交叉檢查。** 檔位跟著 model 走，與 `pi-routing-gate.ts` 的 `delegateExpectedEffort` 同一張表：gate-output row 落 astra／medium，其餘每一跳（`grok-xai` 首派、升 Sol、配額降級）都是 `high`；`pi-dispatch.ts` 對兩半都比對、矛盾即 exit 1。配額耗盡沿 `FALLBACK_NEXT` 的 grok 鏈往下走，那些跳仍宣告 `delegate-sub`（挑首派的政策沒有改變），**MUST** 帶 `--retry-of`。**NEVER** 靜默填一個 `--effort low`——它與「判定根本沒發生」事後不可區分。
 
@@ -79,15 +81,16 @@ relay successor 持有整個主線位置，所以判「還是主線複雜度」�
 | 〔`version-upgrade-first-pass`〕version-upgrade 首輪升版 | xAI Grok 4.6 | low | Cursor Grok 4.6 low → Gemini 3.8 Flash high → blocker |
 | 〔`version-upgrade-research`〕version-upgrade 失敗後研究重試 | xAI Grok 4.6 | high | Cursor Grok 4.6 high → Gemini 3.8 Flash high → blocker |
 | 〔`web-search`〕WebSearch／WebFetch | Gemini 3.8 Flash | high | GPT-5.6 Luna low → 有對應失敗 receipt 才放行同種內建工具 |
-| 〔`code-review`〕Code review／commit 0-A | GPT-6 Astra；合格獨立 reviewer（優先格） | medium | commit 0-A 同級 reviewer 兩格並列（`review-policy.md`）：Astra 優先，實際不可用（exit 3／4＋逐字 RESULT 證據）才換 〔`code-review-fable`〕；兩格皆不可用 → gate 保持未完成。Critical／Major 觸發合格 reviewer 的 fresh-context 深度複審——格別每輪依當下可用性重判（Astra 優先、同條件才換 Fable），與 0-A.1 落在不同格合法，兩份 receipt 各自記 requested／observed；NEVER 降級成主線自審、worker、cloud CI 或第三個模型。非 commit 的 code-review 委派終端沿用 gate-output 鏈 |
-| 〔`code-review-fable`〕commit 0-A 同級 reviewer（Fable 格） | Claude Fable 5.1（Herdr Claude child，native） | medium | 只在 `code-review` 列的 Astra 實際不可用（exit 3／4＋逐字 RESULT 證據）時啟用，由 `claude-review-safe.sh` 派工；verified PASS 與 Astra 等效，非降級結果；兩格皆不可用 → gate 保持未完成。NEVER 走 Pi；effort 天花板就是 medium |
+| 〔`code-review`〕Code review／commit 0-A | GPT-6 Astra；合格獨立 reviewer（優先格） | medium | **Opus 5.5 覆寫期間本列停用、NEVER 派（0-A 改走 〔`code-review-opus`〕；見檔首 banner）。** commit 0-A 同級 reviewer 兩格並列（`review-policy.md`）：Astra 優先，實際不可用（exit 3／4＋逐字 RESULT 證據）才換 〔`code-review-fable`〕；兩格皆不可用 → gate 保持未完成。Critical／Major 觸發合格 reviewer 的 fresh-context 深度複審——格別每輪依當下可用性重判（Astra 優先、同條件才換 Fable），與 0-A.1 落在不同格合法，兩份 receipt 各自記 requested／observed；NEVER 降級成主線自審、worker、cloud CI 或第三個模型。非 commit 的 code-review 委派終端沿用 gate-output 鏈 |
+| 〔`code-review-fable`〕commit 0-A 同級 reviewer（Fable 格） | Claude Fable 5.1（Herdr Claude child，native） | medium | **Opus 5.5 覆寫期間本列停用、NEVER 派（見檔首 banner）。** 只在 `code-review` 列的 Astra 實際不可用（exit 3／4＋逐字 RESULT 證據）時啟用，由 `claude-review-safe.sh` 派工；verified PASS 與 Astra 等效，非降級結果；兩格皆不可用 → gate 保持未完成。NEVER 走 Pi；effort 天花板就是 medium |
+| 〔`code-review-opus`〕commit 0-A reviewer（Opus 5.5 暫時覆寫格） | Claude Opus 5.5（Herdr Claude child，native） | medium | 只在 [[agent-routing]] § Opus 5.5 暫時覆寫 生效期間使用，由 `CLAUDE_REVIEW_SEAT=opus claude-review-safe.sh medium` 派工；NEVER 走 Pi；Opus 額度用完時 gate 保持未完成、NEVER 改派 Astra／Fable；覆寫撤銷時本列**保留**、仍是 0-A 唯一席——恢復 Astra／Fable 0-A 須 Charles 另行拍板（0-A 禁令不隨覆寫失效） |
 | 〔`ui-implementation`〕Nuxt UI 元件組裝／Nuxt Content 實作 | Cursor 原生 Composer 2.5 | 依原生能力 | 範圍限 Nuxt UI／Content；當次 catalog 必須提供 Composer 2.5，不可用時回報 blocker |
 | 〔`nuxt-core-implementation`〕Nuxt 本體實作 | GPT-5.6 Sol | xhigh | Nuxt 框架、模組與執行邏輯；GPT 依原生／Pi transport，不使用 Cursor Task |
-| 〔`ui-view-implementation`〕其餘 UI view 實作 | Claude Opus 5 | medium | 排除 Nuxt UI／Content 與 Nuxt 本體；Claude Code 原生／Herdr carrier，不可用時回報 blocker |
-| 〔`design-review`〕Design Review／視覺品質判讀 | Claude Opus 5 | medium | GPT-5.6 Sol high；實際讀圖與設計要求 |
-| 〔`ui-detailed-planning`〕UI 詳細實作計畫 | Claude Opus 5 | medium | GPT-5.6 Sol high；保留 UI 範圍、互動、狀態與驗收 |
+| 〔`ui-view-implementation`〕其餘 UI view 實作 | Claude Opus 5.5 | medium | 排除 Nuxt UI／Content 與 Nuxt 本體；Claude Code 原生／Herdr carrier，不可用時回報 blocker |
+| 〔`design-review`〕Design Review／視覺品質判讀 | Claude Opus 5.5 | medium | GPT-5.6 Sol high；實際讀圖與設計要求 |
+| 〔`ui-detailed-planning`〕UI 詳細實作計畫 | Claude Opus 5.5 | medium | GPT-5.6 Sol high；保留 UI 範圍、互動、狀態與驗收 |
 | 〔`screenshot-review-verify`〕Screenshot review 全部四種模式（`[verify:ui]`、archive 前 QA、commit 0-B、ad-hoc） | Gemini 3.8 Flash | high | browser、截圖與 evidence 收集；不代簽符合性 gate，不換其他模型 |
-| 〔`screenshot-match-analysis`〕截圖 vs 驗收項目符合性判定 | Claude Opus 5 | medium | GPT-5.6 Sol high；逐張讀實際圖片與完整 item，回 PASS／FAIL／UNCERTAIN |
+| 〔`screenshot-match-analysis`〕截圖 vs 驗收項目符合性判定 | Claude Opus 5.5 | medium | GPT-5.6 Sol high；逐張讀實際圖片與完整 item，回 PASS／FAIL／UNCERTAIN |
 | 〔`mechanical-fanout`〕Mechanical fan-out／收集、掃描、驗證矩陣 | Gemini 3.8 Flash | high | GPT-5.6 Luna low；觸發與 threshold gate 依 [[agent-routing]] |
 | 〔`copywriting-draft`〕行銷／產品文案草稿與變體 | Gemini 3.8 Flash | high | 失敗直接回主線；最終文字由主線重寫 |
 | 〔`notion-ops`〕Notion 讀寫（自由形式 `ntn`／MCP；確定性 script 除外，見硬禁令） | Gemini 3.8 Flash | high | GPT-5.6 Luna high；仍無法完成時回報 blocker |
@@ -115,7 +118,7 @@ relay successor 持有整個主線位置，所以判「還是主線複雜度」�
 | `--model gemini`（Routing Table 類別內降檔） | **NEVER** 靜默改用舊 Flash model。 |
 | 〔`web-search`〕 | 查不到就回「查不到」，**NEVER** 拿二手彙整頁充數。 |
 | 〔`screenshot-review-verify`〕 | 四個模式一律用 Gemini 3.8 Flash（effort: high）；由主線直接呼叫 Pi dispatcher，**NEVER** 以 subagent 中介轉派。模型不可用就回報 blocker，**NEVER** 靜默改派其他模型。 |
-| 〔`screenshot-match-analysis`〕 | Opus 5（effort: medium），無法執行時 GPT-5.6 Sol（effort: high）；兩者均讀實際截圖與 item 要求；收集與判定**NEVER** 併成同一次 dispatch。 |
+| 〔`screenshot-match-analysis`〕 | Opus 5.5（effort: medium），無法執行時 GPT-5.6 Sol（effort: high）；兩者均讀實際截圖與 item 要求；收集與判定**NEVER** 併成同一次 dispatch。 |
 | 〔`mechanical-fanout`〕 | **NEVER** 以「我自己順手跑掉比較快」略過本列（成因見 rationale）。 |
 | 〔`copywriting-draft`〕 | 本列 **NEVER** 進全域配額降級鏈（exit 2／3／4 一律直接回本 task 主線自己寫）。**主線 MUST 收斂重寫每一條採用的文案，NEVER 原樣貼進交付物**——Pi 回的是素材不是成稿。本列只涵蓋行銷／產品對外文案，**NEVER** 從本列外推到規約措辭／commit message／技術文件／PR 描述／對外報告。 |
 | 〔`notion-ops`〕 | Gemini 3.8 Flash（effort: high）→ GPT-5.6 Luna（effort: high）→ blocker。**本列 NEVER 續走其他 fallback**（Notion auth 在 `$HOME`）。**NEVER** 主線第一手自己跑 ntn／MCP。**本列不涵蓋確定性 script**：`vendor/scripts/notion-sync.ts`、`vendor/scripts/lib/notion-hub.ts resolve`、`scripts/audit-notion-hub-schema.ts` 主線直接跑——寫入範圍、授權轉移表與 schema 檢查寫死在 script 裡，派 Pi 只多一層失敗面。自己組 `ntn api` 指令或 MCP 呼叫的，一律仍算本列。 |
