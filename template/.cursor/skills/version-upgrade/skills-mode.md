@@ -103,7 +103,7 @@ gh api "repos/<owner>/<repo>/git/trees/$n?recursive=1" \
 
 **NEVER 用 skill frontmatter 的 `metadata.version` 判斷是否落後。** 上游可以只改內文而不 bump version——實證：`supabase/agent-skills` PR #194 整段改寫 `supabase-postgres-best-practices` 的 description，`version` 停在 `1.1.1` 不動，兩個落後的 consumer 與兩個最新的 consumer 版號完全一樣。判準只有內容 hash，那正是 audit script 在算的東西。
 
-## Step S.2 — 判讀四類 status
+## Step S.2 — 判讀各類 status
 
 Script 只呈現事實，處置是主線的工作。**每一類都要處理**，不是只看 `stale`：
 
@@ -113,6 +113,9 @@ Script 只呈現事實，處置是主線的工作。**每一類都要處理**，
 | `stale` | 內容有差異 | → Step S.3 讀變動性質 → Step S.5 更新 |
 | `upstream-gone` | 上游查無同名 skill | **先讀 script 給的成因猜測**（合併 / 改名 / 移除），三種處置不同，見下表 |
 | `missing` | lock 有記載但 `<skills-root>/` 下不存在 | lock drift：確認是「該裝沒裝」還是「已移除但 lock 沒清」，前者補裝、後者 `npx skills remove <name> --agent <runtime-agent> -y` 清 lock |
+| `lock-only` | 上游查無、本地目錄也不在 | 純 lock 殘留：`npx skills remove <name> --agent <runtime-agent> -y`，**事後 MUST 確認 `skills-lock.json` 的條目真的消失**——skills CLI 1.7.0 對目錄已不在的 skill 可能回報成功卻不清 lock（2026-09-23 <consumer-a> 實測），沒消失就手動刪該條目 |
+| `projected` | lock 有記載，但目錄由 clade 投影認領（`.clade/projections/*.json`） | lock 條目是殘留：只從 `skills-lock.json` 刪該條目、從 `scripts/install-skills.sh` 拿掉安裝行。**NEVER** `rm -rf` 或 `npx skills remove`——會連 clade 投影一起刪（實證：<consumer-i> `clarify`、<consumer-k>／<consumer-j> `wrangler`） |
+| `unresolved` | source 型態不支援或上游查詢失敗（note 有原因） | 不是 skill 的問題：照 note 排除（`gh auth status`、source 是否改名／轉私有、well-known 網域可否連線）後重跑；排除不了就在報告裡列為未驗證，**NEVER** 讀成 current |
 
 `upstream-gone` 的三種成因與處置：
 
@@ -183,6 +186,9 @@ rm -rf <skills-root>/<name>
 npx skills add <owner>/<repo>@<name> --agent <runtime-agent> --copy -y
 # well-known source（evlog.dev 這類）要用完整 URL，且不支援 @skill 選取：
 npx skills add https://www.<domain> --agent <runtime-agent> --copy -y
+# lock 條目有 `ref`（釘 tag／branch，例：impeccable 的 skill-v4.3.1）：用 audit 對該項印出的
+# /tree/<ref>/<上游 skill 目錄> 指令，NEVER 用 @<name>——那會拉 default branch，解除釘選
+npx skills add https://github.com/<owner>/<repo>/tree/<ref>/<skill-dir> --agent <runtime-agent> --copy -y
 ```
 
 **另外兩條看起來該有效、實際無效的路徑（2026-08-02 實測，NEVER 拿來當更新手段）**：
@@ -230,7 +236,7 @@ node scripts/audit-skill-freshness.ts --target <runtime-target>
 test -f <skills-root>/<name>/SKILL.md
 ```
 
-處理過的項目要從 `stale` / `upstream-gone` / `missing` 消失。沒消失就是沒修好，回 Step S.2。
+處理過的項目要從 `stale` / `upstream-gone` / `missing` / `lock-only` / `projected` 消失（後兩類消失的判據是 `skills-lock.json` 已無該條目——CLI 報成功不算）。沒消失就是沒修好，回 Step S.2。
 
 ## 禁止事項（Skills mode）
 

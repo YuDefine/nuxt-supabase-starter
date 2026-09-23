@@ -80,6 +80,28 @@ C 軸刻意留在外面：升遠端 staging / prod 的 runtime 是 consumer 的 
 
 **MUST 等 user 拍板**，**NEVER** 主線自選 mode。
 
+## Step 0.5 — clade 更新政策詢問（cwd 是 consumer root 的 mode，進 mode 之前）
+
+cwd 是 consumer root（Outdated batch／actions，或 Machine mode 在 consumer 內觸發）時，**每一次**
+跑本 skill 都 MUST 先跑這一條，**NEVER** 憑「上次問過了」略過——Charles 要的是每次都問：
+
+```bash
+node ~/offline/clade/scripts/consumer-policy-upgrade-prompt.ts --json
+# clade 主線 relay 時給了 REG（clade linked worktree 的 registry）就帶上：--registry-path "$REG"
+```
+
+| 輸出 | MUST |
+| --- | --- |
+| `ask: true`（有效政策是 pinned） | 用 native question surface 問「要不要從 clade pinned 改成 subscribed」，選項**逐字**用 `options[].label`、每項附 `options[].consequence`，`recommended: true` 那項排第一並標推薦。選定後照該項 `commands` 依序跑（空陣列＝不動）；任一指令非 0 就停下回報原錯誤，**NEVER** 改跑另一個選項補救。「維持 pinned」的 upgrade-once 只寫 consumer 端、對 clade registry 零寫入，不需要 `REG`；只有改政策種類的「改成 subscribed」（resume）可能帶 `blockedBy`。選定項帶 `blockedBy`（沒有可寫的 registry 落點）時**不跑任何政策指令**，把「consumer id＋選定的 label」回報 clade 主線，由主線照 `docs/runbooks/consumer-pin-migration.md` 開 worktree 以 `REG` 代跑；**NEVER** 為了拿到指令改帶 clade home main 的 `registry/consumers.json` |
+| `ask: false` 且 exit 0 | 不問，直接進 Step 0 判出的 mode。**NEVER** 為了「保險」補問——subscribed 不問是判定結果，不是省略 |
+| exit 1（政策破損／衝突、consumer id 讀不到、pinned 但中央目標版本讀不到、host 不符目標 release 的 runtime〔`host-incompatible`〕） | 不問，照 `reason` 回報；修好之前不跑任何政策指令 |
+| exit 2（參數用法錯誤，stdout 沒有 JSON） | 不問，照 stderr 回報；**NEVER** 把空 stdout 當成 `ask: false` 往下走 |
+
+跑完政策指令後，照 `notes` 做：consumer 端只 commit `.clade/manifest.json`（有 tracked 的 `.claude/hub.json`
+legacy mirror 時它會被一起改寫，兩檔同一筆；consumer main 上走 `/commit`，ad-hoc commit 會被 commit-only 白名單 hook 擋）；
+resume 造成的中央 registry `update_policy.kind` 改動屬於 clade，回報給 clade 主線落 PR，consumer session **NEVER** 替它 commit。
+判定細節與測試在 `scripts/consumer-policy-upgrade-prompt.ts`／`test/consumer-policy-upgrade-prompt.test.ts`，此處不複述。
+
 ## 共用基礎（**只有 Outdated 與 Fleet 兩個 A 軸 mode 用到**）
 
 | 基礎 | 出處 |

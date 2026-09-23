@@ -1,4 +1,4 @@
-<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@db46b1ddf59c47c9aab52a7d66d15668811fa501 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@bc8fdebe2d30db384f77911aaed81888ad03bf5f via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 # Rule 1 - 當前 phase 有 Parallel Hint 時必須一次派出該批 subagent
 
 - Level: `MUST`
