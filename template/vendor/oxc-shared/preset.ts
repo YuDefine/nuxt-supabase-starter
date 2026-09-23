@@ -24,19 +24,27 @@
 //     },
 //   })
 //
-// lint-staged / `staged` hook 的排除清單 MUST 追溯得到 `PROJECTION_EXCLUDES`，NEVER 手寫
-// 一份平行的。預設形狀是直接用 preset 匯出的 `stagedBase`（一行，不必自己組 filter）：
+// fleet 的 pre-commit 只收斂到一條路徑（TD-776，2026-09-22）：hook 呼叫
+// `bash scripts/pre-commit/runner.sh` → `checks/vp-staged.sh`，它經
+// `scripts/pre-commit/staged-targets.ts` 讀本檔的 `isStagedExcluded` 決定哪些 staged 檔
+// 進 `vp lint` / `vp fmt`。**NEVER** 在 hook 另外呼叫 `vp staged` / `lint-staged`——那會讓
+// 下面的 `staged:` 區塊變成第二個 lint 入口。
+//
+// 還沒收斂的 consumer（hook 直接跑 `vp staged`）在過渡期仍讀 `vite.config.ts` 的 `staged:`。
+// 那一格的排除清單 MUST 追溯得到 `PROJECTION_EXCLUDES`，NEVER 手寫一份平行的。
+// 形狀是直接用 preset 匯出的 `stagedBase`（一行，不必自己組 filter）：
 //
 //   import { fmtBase, lintBase, stagedBase } from './vendor/oxc-shared/preset.ts'
 //
 //   export default defineConfig({ /* … */ staged: stagedBase })
 //
-// glob 要客製（例如 `'*': 'vp check --fix'` 那種形狀）時改用 `isProjectionPath`：
+// glob 要客製（例如 `'*': 'vp check --fix'` 那種形狀）時改用 `isStagedExcluded`（NEVER 只用
+// `isProjectionPath`——它漏掉 `STAGED_ONLY_EXCLUDES` 的 root `scripts/**` 與 LOCKED `AGENTS.md`）：
 //
-//   import { isProjectionPath } from './vendor/oxc-shared/preset.ts'
+//   import { isStagedExcluded } from './vendor/oxc-shared/preset.ts'
 //   staged: {
 //     '*': (files) => {
-//       const t = files.filter((f) => !isProjectionPath(f))
+//       const t = files.filter((f) => !isStagedExcluded(f))
 //       // 逐檔加引號（含空白的路徑不加就被 string-argv 拆錯）、空的回 `[]` 不回 `['true']`
 //       return t.length > 0 ? [`vp check --fix ${t.map((f) => JSON.stringify(f)).join(' ')}`] : []
 //     },
@@ -250,6 +258,63 @@ export function isProjectionPath(file: string): boolean {
 }
 
 /**
+ * **只有 pre-commit staged 過濾**需要、而 lint / fmt 的 ignorePatterns **不能**要的排除。
+ *
+ * `scripts/**`：clade 的 `vendor/scripts/**` 在 consumer 端投影到 repo root 的 `scripts/`
+ * （`scripts/lib/vendor-targets.ts`），與 consumer 自家的 script 共用同一個目錄。
+ * - 它**不能**進 `PROJECTION_EXCLUDES`：那份清單被展開進 `lintBase` / `fmtBase` 的
+ *   ignorePatterns，放進去等於 consumer 的整倉 `vp check` / CI 從此看不到自家 script。
+ * - 它**要**留在 staged 過濾：propagate 的 delivery commit 帶的是整批投影 script，
+ *   pre-commit 對它們跑 `vp lint --fix` + `vp fmt` 再 `git add`，任何一次改寫都會把
+ *   偏離源檔的內容 commit 進投影（v1.4.349 實證同型：sanitize 改寫後 fmt 想改就整個
+ *   commit 掛掉）。consumer 端判不出「`scripts/` 底下哪幾支是投影」—— 那份清單只在
+ *   clade 的 vendor-targets，`.claude/.hub-state.json` 只記 plugin scripts —— 所以只能
+ *   整個目錄排除。代價：consumer 自家 `scripts/` 的檔在 commit 當下不跑 lint / fmt，
+ *   靠整倉 `vp check`（CI / pre-push）兜住。
+ *
+ * 2026-09-22（TD-777）前這條只躺在 `vp-staged.sh` 的手寫 `CLADE_MANAGED_PREFIXES`，
+ * 與 `PROJECTION_EXCLUDES` 雙向漂移（缺 `.spectra/` `.cursor/`、`.claude/` 只列 5 個子目錄）。
+ * 同一批手寫清單裡的 `codex/` 沒有搬過來：已廢止目錄（`gitignore-governance.ts` 的
+ * `DEPRECATED_ENTRIES`）。
+ *
+ * `AGENTS.md`：sync-to-codex 產出、consumer 端 chmod 444 的 LOCKED 檔。TD-777 當時判
+ * 「`fmtBase.ignorePatterns` 的 `**\/*.md` 已蓋到」而不收——但那只在 consumer 的 fmt
+ * ignore **展開了 `fmtBase.ignorePatterns`** 時成立；consumer 自訂 fmt ignore 沒帶
+ * `**\/*.md` 時，`vp fmt` 會真的去寫這個 444 檔 → EACCES → 整個 commit 掛掉
+ * （PR #175 0-A；與 `scripts/` 的 v1.4.349 同型）。它與 `scripts/**` 同屬「只有
+ * staged 過濾需要」的排除——`AGENTS.md` 不能進 `PROJECTION_EXCLUDES`：那份清單會
+ * 展開進 lintBase.ignorePatterns，而 repo root 的 `AGENTS.md` 在 **clade 自己**是
+ * 手寫源檔（本檔 AGENTS.md 不是 sync 產物），整倉 lint 還是要看得到它。
+ * 只比 repo root 的單檔，不比巢狀——`docs/AGENTS.md` 是 consumer 自己的檔。
+ */
+export const STAGED_ONLY_EXCLUDES = ['scripts/**', 'AGENTS.md']
+
+/**
+ * `STAGED_ONLY_EXCLUDES` 的比對形式：`/**` 收尾的取目錄前綴（`scripts/**` → `scripts/`），
+ * 其餘視為 repo root 的**單檔精確比對**（`AGENTS.md`）。目錄只比起頭，NEVER 片段比對 ——
+ * `app/scripts/` 是業務檔。
+ */
+const stagedOnlyPrefixes = STAGED_ONLY_EXCLUDES.map((p) => p.replace(/\/\*\*$/, '/'))
+
+/**
+ * pre-commit staged 過濾的**唯一**判定式：投影層（`PROJECTION_EXCLUDES`）∪ `STAGED_ONLY_EXCLUDES`。
+ *
+ * fleet 的兩個讀者都走這一支，NEVER 各自組 filter（TD-776 / TD-777）：
+ *   - `scripts/pre-commit/checks/vp-staged.sh`（經 `scripts/pre-commit/staged-targets.ts` 橋接）——
+ *     fleet 收斂後唯一會執行的 pre-commit 路徑
+ *   - 下方的 `stagedBase`（`vp staged` 路徑，收斂前的過渡期讀者）
+ *
+ * @param file staged 檔路徑（相對或絕對皆可）
+ */
+export function isStagedExcluded(file: string): boolean {
+  if (isProjectionPath(file)) return true
+  const rel = toRepoRelative(file)
+  if (rel.startsWith('/')) return false
+  // `scripts/` 是目錄前綴；`AGENTS.md` 是 repo-root 單檔精確比對（`docs/AGENTS.md` 是業務檔）
+  return stagedOnlyPrefixes.some((p) => (p.endsWith('/') ? rel.startsWith(p) : rel === p))
+}
+
+/**
  * consumer `vite.config.ts` 的 `staged` 現成值 —— 直接 `staged: stagedBase` 即可，
  * NEVER 再自己抄一份 filter（那正是本檔檔頭那條 MUST 要禁的漂移）。
  *
@@ -285,7 +350,7 @@ function quoteArgs(files: readonly string[]): string {
 
 export const stagedBase = {
   '*.{js,ts,mjs,cjs,vue}': (files: readonly string[]) => {
-    const fmtable = files.filter((f) => !isProjectionPath(f))
+    const fmtable = files.filter((f) => !isStagedExcluded(f))
     const lintable = fmtable.filter((f) => !f.endsWith('.d.ts'))
     const cmds = []
     if (lintable.length > 0) cmds.push(`vp lint --fix ${quoteArgs(lintable)}`)

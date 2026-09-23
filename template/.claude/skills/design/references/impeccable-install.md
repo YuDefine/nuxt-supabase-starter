@@ -75,33 +75,31 @@ $ npx skills add pbakaus/impeccable -l
 
 `pbakaus/impeccable@adapt` / `@colorize` 等子路徑在 v3 release 不存在，安裝會 fail。
 
-## 已知 vp-staged 衝突（vite-plus 專案）
+## staged `*.md` transform（舊 vp-staged 衝突，TD-776/TD-777 後已消滅）
 
-`vp staged` 對 staged file 跑 lint-staged 時，若 staging 含大量 `<skills-root>/impeccable/**/*.md`（升級 impeccable 時的常見場景），兩條路都會卡：
+**收斂後本節是歷史背景＋一條現行禁令。** fleet pre-commit 已收斂到
+`bash scripts/pre-commit/runner.sh` → `checks/vp-staged.sh`（TD-776）：它經
+`staged-targets.ts` 用 preset 的 `isStagedExcluded` 過濾，`<skills-root>/impeccable/**/*.md`
+全部命中投影層（`.claude/` `.agents/` `.codex/` `.cursor/` 都在 `PROJECTION_EXCLUDES`），
+根本送不進 `vp fmt`；`vite.config.ts` 的 `staged:` 在這條路徑上**沒有讀者**，裡面放
+`*.md` transform 是死設定。
 
-| 寫法 | 卡點 |
-| --- | --- |
-| `'*.md': ['vp fmt']`（simple） | `vp fmt` 收到 files 後全被 `fmt.ignorePatterns`（`.claude/**` / `.agents/**`）過濾 → exit 1「All matched files may have been excluded by ignore rules」 |
-| `'*.md': (files) => ... return []`（transform 過濾後 0 target） | `vp staged` 把 `[]` interpret 為 vp fmt empty args → exit 1「Expected at least one target file」 |
+舊衝突（`vp staged` 路徑）：`staged:` 裡若有 `'*.md'` 那一格，升級 impeccable 一次 staged
+大量 skill md 時兩種寫法都會卡——`'*.md': ['vp fmt']` 的 files 全被 ignorePatterns 濾掉 →
+exit 1；transform 回 `[]` 被 `vp staged` 當 empty args → exit 1「Expected at least one
+target file」。當時的繞法是 transform 回 `['true']` noop。
 
-vp 0.1.20 仍有此 bug（驗證過）。**繞法**：transform function 0 target 時回傳 `['true']` noop bash 命令：
-
-```js
-'*.md': (files) => {
-  const allowed = files.filter(f =>
-    !/\/(\.claude\/(skills|rules|hooks|agents|commands)|\.agents|\.codex|\.cursor)\//.test(f)
-  )
-  return allowed.length > 0 ? [`vp fmt --ignore-path .oxfmtignore ${allowed.join(' ')}`] : ['true']
-}
-```
-
-只 nuxt-supabase-starter/template 用 `core.hooksPath = template/.vite-hooks/_` + `*.md` rule，會踩到。其他 consumer 沒 `*.md` rule 或 ignorePatterns 寫法不同，不會踩。
+現在的正解是**不要放那一格**：`stagedBase` 刻意沒有 `*.md` glob（`fmtBase.ignorePatterns`
+的 `**/*.md` 讓它只能產生空目標），md 檔不命中任何 glob 就不會被送進 `vp fmt`——比
+`['true']` noop 更穩（`true` 是 shell 依賴，原生 Windows 無 coreutils 就失敗）。還留著
+`'*.md': (files) => …` transform 的 `staged:` config 把該格整個刪掉即可；未收斂的
+`vp staged` consumer（如 starter template）也照這形狀。
 
 ## 參考實作
 
 - `<consumer-a>/scripts/install-skills.sh` — copy mode 標準範本
-- `<consumer-c>/scripts/install-skills.sh` — copy mode + simple `*.md` lint-staged
-- `nuxt-supabase-starter/template/scripts/install-skills.sh` — copy mode + transform `*.md` + noop fallback
+- `<consumer-c>/scripts/install-skills.sh` — copy mode
+- `nuxt-supabase-starter/template/scripts/install-skills.sh` — copy mode（仍走 `vp staged` 路徑；`staged:` 不放 `*.md` 那一格，見上節）
 - `<consumer-d>/scripts/install-skills.sh` — copy mode（同 <consumer-a>；目前無 symlink-mode consumer 可當範本，需 symlink 時用標準 snippet 的 `--agent claude-code -y` 變體）
 
 ## v3.1.0 → v3.9.1 累積 user-facing 行為（orchestrator 對齊項）

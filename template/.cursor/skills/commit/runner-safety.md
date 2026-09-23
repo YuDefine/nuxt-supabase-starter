@@ -40,12 +40,21 @@ review 期間沒有人改檔的機率隨 session 數遞減。改在**隔離的 d
 changeset 就只含自己這批：
 
 ```bash
-git worktree add --detach /tmp/<repo>-<slug>-review HEAD
-cd /tmp/<repo>-<slug>-review && git apply <自己這批的 patch>
-cd /tmp/<repo>-<slug>-review && bash "$COMMIT_SKILL_DIR/scripts/codex-review-safe.sh" medium
+# 用標準層原語（TD-895）：快照落 ~/.cache/clade/review-snap/（磁碟，不吃 /tmp 配額）、
+# 命令結束（含 signal）即 git worktree remove + prune；--stage 讓 git diff --cached 就是 base..head
+node ~/offline/clade/vendor/scripts/review-snapshot.ts run --repo "$REPO_ROOT" --base <merge-base> --stage <head> -- \
+  bash "$COMMIT_RESOURCE_DIR/scripts/codex-review-safe.sh" medium
 ```
 
-patch 取自 `git diff --cached -- <自己的路徑>`（或 `git diff`），**MUST** 用路徑限定 ——
+**NEVER 手寫 `git worktree add --detach /tmp/…` 或 `$SCRATCHPAD/rev*`**：2026-09-22 一個 coordinator 的
+`run0a.sh` 每輪 review 在 session scratchpad（tmpfs）建一棵、從不移除，52 棵 4.7G 撞滿 per-user
+配額，連 Bash tool 的輸出檔都建不起來、0-A 鏈中途死。真的要手動時，同一支的 `create`／`remove`
+子命令也可用，且**每一棵都要走 `remove`**，別寄望 sweep（它只回收 session 已結束的）。
+`create` 印完路徑就退出，它自己的 pid 不是持有者：沒有 `CLAUDE_CODE_SESSION_ID` 的呼叫端（Pi／Codex／
+cron／plain shell）要讓 `reclaim` 兜底 MUST 帶 `--owner-pid <長命的持有者 pid>`，否則 reclaim 永不回收那棵。
+
+要用未 commit 的 index 內容當 changeset：`git diff --cached -- <自己的路徑>` 出 patch、在 `create` 的
+快照裡 `git apply --cached`，**MUST** 用路徑限定 ——
 那同時解掉第二個問題：在 main 直接跑，changeset 會含**所有** session 的 dirty 檔，
 pi 讀的是一份混雜的 diff，findings 也會混進別人的檔。
 
@@ -56,7 +65,7 @@ pi 讀的是一份混雜的 diff，findings 也會混進別人的檔。
 
 - 這**不是**繞過 exit 6。隔離 worktree 內的 snapshot 檢查照跑，只是沒有別人會去動它
 - 這**不放寬**任何判準。定性為蓄意 mutation 或定不出性時，仍是停下來查，**NEVER** 換場地重跑當作解決
-- worktree 用完 **MUST** `git worktree remove`，**NEVER** 留著累積（它會進下一次 `/handoff` 的 audit）
+- worktree 用完 **MUST** 移除（`review-snapshot.ts run` 自動做；手動 `create` 的走 `remove`），**NEVER** 留著累積（它會進下一次 `/handoff` 的 audit，也會吃 /tmp 配額——TD-895）
 
 **write-tree 換法解的是可攜性與覆蓋率，不是安全性。** 它移除了 GNU coreutils 依賴、把 executable bit 與 symlink target 收進覆蓋範圍，但 `git write-tree` 一樣走 PATH 上的 `git` —— 「同 UID 對手可劫持度量工具本身」的問題，換 tree hash **一點都沒解**。**NEVER** 把 snapshot 實作的改良讀成安全等級提升；封口的是 bwrap（TD-524，已落地，見下）。
 
@@ -89,5 +98,5 @@ pi 讀的是一份混雜的 diff，findings 也會混進別人的檔。
 - verdict 走檔案傳輸：child 把完整輸出寫進 brief 指定的 repo 外路徑，wrapper 通過完整性檢查後才放行到 stdout。child 沒寫檔＝transport 契約未履行＝review 沒跑成（exit 3）。
 - 身分採 `model_verification` 三值：`verified` 才讓 verdict 進完整性檢查；`unverified` 先做一次**有界** verification 重讀（同一 session 的 transcript 證據，NEVER 重跑 review），仍非 `verified` 或 `mismatch` → exit 8，verdict 扣住。receipt（`dispatchStateDir()/review/<dispatch-id>.json`）記 requested／observed model、`model_verification`、`model_verification_reason`（「沒核實」如 transcript-timeout 與「核實但不符」是兩個結論）、session／dispatch／pane 歸屬、verdict SHA-256、`brief_delivery`（inline／pointer）與 `brief_bytes`（每次派工的交付方式可稽核）。
 - 派工帶 `--bounded-leaf`（TD-1105），dispatched worker 內也開得動：helper 只對 readonly gate-review row＋`--coordinate` 放行巢狀一層，leaf 自己再派仍拒。
-- exit 語義與 codex 路對齊：0 verdict／2 本地用法／3 Fable 席 runtime 未跑成（含 coordination 逾時、completion_failed、無 verdict 檔）／4 account_unavailable（兩格皆盡的證據）／6 snapshot drift／8 model verification 失敗／9 brief 無法安全交付——**本地拒絕不是 reviewer 不可用**，NEVER 當兩格皆盡記 pending，折超長行或拆 commit 後重跑；縮 `CODEX_REVIEW_MAX_DIFF_LINES` 只會把超出的檔擠進 OMITTED 漏審清單（該檔未被 review，缺檔 verdict 不能記 PASS），除非被剔除的檔另行送審，否則不是出路。Fable 路另有 10 = helper `nested_dispatch_refused`（本 session 不得開 reviewer child → 交回 coordinator，**不是** reviewer 不可用，NEVER 讀成 exit 3 去換格或判兩格皆盡）；11 = account_unverifiable（配額量不到，量不到 ≠ 沒額度；RESULT／NEXT 印出 receipt 路徑與 `retry_after_ms`——欄位缺席＝沒有 ETA，交 coordinator 決定，有 ETA 才依它重試；NEVER 讀成 exit 4，也 NEVER 讀成 exit 9 的本地拒絕）。
+- exit 語義與 codex 路對齊：0 verdict／2 本地用法／3 Fable 席 runtime 未跑成（含 coordination 逾時、completion_failed、無 verdict 檔）／4 account_unavailable（兩格皆盡的證據；stderr 另印一行 `NEXT_STEP_JSON:`，含 `gate: pending`、`hold_at_gate: true`（停在 gate 前等額度恢復，不依 routing table 的 review 列改派）、留存的 helper receipt 路徑，以及 helper 在 ccw、cc 兩帳號實測皆耗盡時給的 `helper_next_step`——否則為 `null`）／6 snapshot drift／8 model verification 失敗／9 brief 無法安全交付——**本地拒絕不是 reviewer 不可用**，NEVER 當兩格皆盡記 pending，折超長行或拆 commit 後重跑；縮 `CODEX_REVIEW_MAX_DIFF_LINES` 只會把超出的檔擠進 OMITTED 漏審清單（該檔未被 review，缺檔 verdict 不能記 PASS），除非被剔除的檔另行送審，否則不是出路。Fable 路另有 10 = helper `nested_dispatch_refused`（本 session 不得開 reviewer child → 交回 coordinator，**不是** reviewer 不可用，NEVER 讀成 exit 3 去換格或判兩格皆盡）；11 = account_unverifiable（配額量不到，量不到 ≠ 沒額度；RESULT／NEXT 印出 receipt 路徑與 `retry_after_ms`——欄位缺席＝沒有 ETA，交 coordinator 決定，有 ETA 才依它重試；NEVER 讀成 exit 4，也 NEVER 讀成 exit 9 的本地拒絕）。
 

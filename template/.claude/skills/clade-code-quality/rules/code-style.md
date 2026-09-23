@@ -194,13 +194,13 @@ async function writeThenExit(payload: string, code: number): Promise<never> {
 | 寫 code 時 IDE 即時 lint | oxlint（vp 包） | IDE 設 oxlint extension |
 | 跑全專案 lint | vp | `pnpm vp lint --fix` |
 | 跑全專案 format | vp | `pnpm vp fmt` |
-| pre-commit | vp | `vp staged` |
+| pre-commit | vp（經 clade runner） | `bash scripts/pre-commit/runner.sh` |
 | CI lint check | vp | `pnpm vp lint`（非 --fix） |
 | CI format check | vp | `pnpm vp fmt --check` |
 
 ## 與其他規則的關係
 
-- `commit.md`：commit 走 `/commit` 流程；本規則補充 commit 前 `vp staged` 應該 pass
+- `commit.md`：commit 走 `/commit` 流程；本規則補充 commit 前 pre-commit runner（`scripts/pre-commit/runner.sh`）應該 pass
 - `development.md`（framework/nuxt 等 variant）：framework-specific 風格約定（Composition API、`<script setup>` 等）跟本規則正交，**都要遵守**
 
 ## 違反時的回報方式

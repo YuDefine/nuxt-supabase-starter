@@ -214,8 +214,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # from a subdirectory would silently drop untracked files elsewhere in the tree.
 cd "$REPO_ROOT" || exit 1
 
-WORK_DIR="$(mktemp -d)" || exit 1
-trap 'rm -rf "$WORK_DIR"' EXIT
+review_make_workdir || exit 1
 
 review_load_semantic_list
 

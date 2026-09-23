@@ -251,7 +251,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ## § 0-S: 敏感路徑安全掃描（條件觸發、attended hard gate）
 
-Step 0-Scope 確認本次 WIP 後，依 [`review-tiers.md`](rules/review-tiers.md)
+Step 0-Scope 確認本次 WIP 後，依 [`review-tiers.md`](rules/review-tiers.md)（路徑相對 `$COMMIT_RESOURCE_DIR`，見 [runtime-lifecycle.md](runtime-lifecycle.md) § 執行依賴）
 Tier 3 判定：migration / schema / auth / permission / RLS / raw SQL / billing / security-critical
 任一類別命中就觸發；純 docs、一般業務邏輯與非敏感重構跳過。本判定涵蓋本次 `/commit` 的
 **每一個** changed path，不只主線 agent 自己改的檔。Unattended merge **不**偷換 scanner、**不**略過本 gate；0-S.2 無法執行時 gate 保持未完成，缺能力仍 block。
@@ -357,16 +357,16 @@ Fast-path 的三條件以 SKILL.md 的同一份定義為準：diff <20 行、只
 Reviewer 看完整 frozen changeset 與驗收契約，以一般 review 的已核准推理深度查邏輯、安全、跨檔影響及適用 semantic patterns。共用 CLI 載體可使用：
 
 ```bash
-bash "$COMMIT_SKILL_DIR/scripts/codex-review-safe.sh" medium        # Astra 格（優先）
-bash "$COMMIT_SKILL_DIR/scripts/claude-review-safe.sh" medium       # Fable 格（僅 Astra exit 3／4 後）
+bash "$COMMIT_RESOURCE_DIR/scripts/codex-review-safe.sh" medium        # Astra 格（優先）
+bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" medium       # Fable 格（僅 Astra exit 3／4 後）
 ```
 
-**使用該 CLI 前 MUST 完整讀 [runner-safety.md](runner-safety.md)**；`COMMIT_SKILL_DIR` 的取得方式與依賴檢查見 runtime-lifecycle。其他載體同樣要提供完整 snapshot、唯讀／隔離、真實 identity、完整 verdict 與對應來源。工具白名單不受底層 runtime 執行時，必須由核准的 OS 隔離承接，不能只相信參數名字。
+**使用該 CLI 前 MUST 完整讀 [runner-safety.md](runner-safety.md)**；`COMMIT_RESOURCE_DIR` 的取得方式與依賴檢查見 runtime-lifecycle。其他載體同樣要提供完整 snapshot、唯讀／隔離、真實 identity、完整 verdict 與對應來源。工具白名單不受底層 runtime 執行時，必須由核准的 OS 隔離承接，不能只相信參數名字。
 
 | 實際結果 | 動作 |
 | --- | --- |
 | 啟動／等待中 | 記錄 handle 與 owner，透過本端完成事件或 bounded wait 收回同一工作；並行推進其他軸，不能重播命令代替等待 |
-| 配額耗盡／reviewer 沒跑成（Astra exit 4 `RESULT: quota-blocked`，或 exit 3 runtime 未跑成） | 保留逐字 RESULT 行與 exit code 作為不可用證據，改用 `claude-review-safe.sh`（Fable medium via Herdr）；Fable 格回 exit 4（account_unavailable）或其他不可用證據時，兩格皆盡——gate 保持未完成並記錄 pending review，NEVER 用其他模型或主線自審補位。Fable exit 11（account_unverifiable）是「量不到」不是「耗盡」：wrapper 的 RESULT／NEXT 行會印出 receipt 路徑與 `retry_after_ms`（有的話）——receipt **不帶** `retry_after_ms`＝沒有 ETA，交 coordinator 決定而不是自行腦補時間；有 ETA 則依它重試。量不到本身不構成兩格皆盡，也 NEVER 讀成 account_unavailable。Astra exit 2／5／6 **不是**不可用，不觸發換格 |
+| 配額耗盡／reviewer 沒跑成（Astra exit 4 `RESULT: quota-blocked`，或 exit 3 runtime 未跑成） | 保留逐字 RESULT 行與 exit code 作為不可用證據，改用 `claude-review-safe.sh`（Fable medium via Herdr）；Fable 格回 exit 4（account_unavailable，stderr 的 `NEXT_STEP_JSON:` 行是它的可機讀版）或其他不可用證據時，兩格皆盡——gate 保持未完成並記錄 pending review，NEVER 用其他模型或主線自審補位。Fable exit 11（account_unverifiable）是「量不到」不是「耗盡」：wrapper 的 RESULT／NEXT 行會印出 receipt 路徑與 `retry_after_ms`（有的話）——receipt **不帶** `retry_after_ms`＝沒有 ETA，交 coordinator 決定而不是自行腦補時間；有 ETA 則依它重試。量不到本身不構成兩格皆盡，也 NEVER 讀成 account_unavailable。Astra exit 2／5／6 **不是**不可用，不觸發換格 |
 | Fable exit 10（helper `nested_dispatch_refused`：本 session 不得開 reviewer child） | 不是 reviewer 不可用，NEVER 換格或判兩格皆盡：把 0-A 的 Fable 格交回 coordinator 代跑，gate 保持未完成直到拿回帶 receipt 的 verdict。**NEVER** 改走 headless `claude -p`——無 receipt 的 verdict 不得當 gate 證據（[review-policy.md](review-policy.md)） |
 | Fable exit 8（`model_verification` 有界重讀後仍 `unverified`，或 `mismatch`） | 身分歸屬不成立：verdict 扣住不採，gate 保持未完成並記錄 pending review；receipt 的 `model_verification_reason` 區分「無法核實」與「核實不符」，NEVER 把 unverified 讀成已核實或當 PASS |
 | Fable exit 9（brief 無法安全交付：總量超過 `CLAUDE_REVIEW_BRIEF_MAX_BYTES`，或 pointer 模式下有單行超過 `CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS`，RESULT 行會指出超長行號與所屬區塊） | **本地拒絕，review 沒跑但不是 reviewer 不可用**——NEVER 歸進「兩格皆盡」記 pending；把超長行折行（changeset、--findings 檔或 semantic 規則文，依 RESULT 指的區塊）或拆 commit 後重跑；上限確需調整時先評估 child context 實測再改 `*_MAX_*` env。NEVER 拿縮小 `CODEX_REVIEW_MAX_DIFF_LINES` budget 換過關——超出的檔只會移進 OMITTED 漏審清單，依下一列「Scope 缺檔」同樣不能記 PASS，除非被剔除的檔另行送審 |
@@ -435,7 +435,7 @@ DISMISSED — 反證：<file>:<line> ／ <契約或規則條文的具體出處>
 實際匯合完成後使用 metrics recorder，記錄真實結果與身份：
 
 ```bash
-node "$COMMIT_SKILL_DIR/scripts/0a-metrics.mjs" record \
+node "$COMMIT_RESOURCE_DIR/scripts/0a-metrics.mjs" record \
   --review-mode <independent|escalated|fast-path-skip|blocked> \
   --reviewer <實際runtime/model> \
   --diff-lines <行數> --diff-files <檔數> \

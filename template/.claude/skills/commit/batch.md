@@ -23,7 +23,7 @@ node scripts/wt-helper.ts batch unready <source-path> --reason <撤回原因>
 
 ### Draft PR（可見性；不是 ready）
 
-相對 `main` 已有非空 committed diff 後，**slice owner** 自己 push 該 session branch 並開 draft PR（全文 [[github-flow]]）。同一個 work id 拆成多個平行切片時**不走這一段**——切片不開 PR，由 coordinator 併入 `integration/<work-id>`，只有那一條對 `main` 開 draft（[[github-flow]] § Integration branch）。開 draft 後 **MUST** 登記可見性 receipt，否則 prepare 沒有完整綁定：
+相對 `main` 已有非空 committed diff 後，**slice owner** 自己 push 該 session branch 並開 draft PR（全文 [[github-flow]]）。同一個 work id 有 2 個以上切片時（預設）**不走這一段**——切片對 `integration/<work-id>` 開 PR，由 coordinator 以 `integration-merge.ts --pr <n>` 落地，只有 integration 那一條對 `main` 開 draft、登記 receipt（[[github-flow]] § Integration branch）。開 draft 後 **MUST** 登記可見性 receipt，否則 prepare 沒有完整綁定：
 
 ```bash
 node scripts/wt-helper.ts batch draft <source-path> \

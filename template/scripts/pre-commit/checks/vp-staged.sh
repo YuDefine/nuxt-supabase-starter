@@ -4,7 +4,7 @@
 #
 # vp-staged — 對 staged 檔案跑 vite-plus lint + format
 #
-# - 排除 .claude/ 治理區（rules/skills/hooks/commands 都是 chmod 444 的副本）
+# - 排除 clade 投影層：判定來自 vendor/oxc-shared/preset.ts 的 isStagedExcluded（經 staged-targets.ts）
 # - lint --fix 自動修可修的問題
 # - fmt 後 git add 把格式化結果重新 staged
 # - bash 3.2 相容（macOS 預設）
@@ -21,45 +21,41 @@ if ! pnpm exec vp --version >/dev/null 2>&1; then
   exit 0
 fi
 
-# clade 治理副本 — 永遠不該被 lint/fmt 處理（會被 chmod 444 擋住寫入，且行為應跟中央倉一致）
-CLADE_MANAGED_PREFIXES=(
-  '.claude/rules/'
-  '.claude/skills/'
-  '.claude/hooks/'
-  '.claude/commands/'
-  '.claude/agents/'
-  '.codex/'
-  'codex/'
-  '.agents/'
-  'AGENTS.md'
-  # vendor/ 與 scripts/ 同樣是 clade 投影（chmod 444），只是不在 .claude/ 底下。
-  # 漏掉它們的後果跟漏掉 .claude/ 一樣：fmt 想改就撞 Permission denied，整個
-  # commit 掛掉。實證：clade 對 vendor/snippets/**/patterns.json 做 sanitize 改寫
-  # 後，consumer 端每次 propagate commit 都失敗（v1.4.349）。
-  'vendor/'
-  'scripts/'
-  '.clade/'
-  # specformula capability 的訊息 catalog 投影，唯一落在 consumer repo root 的 mirror
-  # （不在 vendor/ 底下）——同上，clade 產生的內容，consumer 端 lint/fmt 改不了源頭。
-  'specs/errors/'
-)
+# 哪些 staged 檔不該被 lint/fmt（clade 投影層 ＋ 只有 pre-commit 需要的排除）的判定**不在本檔**：
+# 一律經 ../staged-targets.ts 讀 vendor/oxc-shared/preset.ts 的 `isStagedExcluded`。
+# NEVER 在這裡手寫路徑清單——TD-777 之前本檔的 `CLADE_MANAGED_PREFIXES` 就是那份平行清單，
+# 與 preset 的 PROJECTION_EXCLUDES 雙向漂移（缺 .spectra/ .cursor/、.claude/ 只列 5 個子目錄）。
+#
+# 橋接失敗 MUST 非零退出：拿不到清單時「全部放行」會把投影檔送進 lint/fmt，
+# 「全部排除」會讓整個 check 靜默變成 no-op，兩者在輸出上都像正常。
+if ! command -v node >/dev/null 2>&1; then
+  echo "[clade pre-commit] vp-staged：PATH 內找不到 node，無法讀 preset 的過濾判定（TD-777）" >&2
+  exit 2
+fi
 
-is_clade_managed() {
-  local file="$1"
-  for prefix in "${CLADE_MANAGED_PREFIXES[@]}"; do
-    case "$file" in
-      "$prefix"*) return 0 ;;
-    esac
-  done
-  return 1
-}
+STAGED_TARGETS_TS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/staged-targets.ts"
+if [[ ! -f "$STAGED_TARGETS_TS" ]]; then
+  echo "[clade pre-commit] vp-staged：找不到 $STAGED_TARGETS_TS（投影不完整，跑 pnpm hub:vendor）" >&2
+  exit 2
+fi
+
+# bash 3.2 沒有 mapfile，而 command substitution 會吃掉 NUL —— 走暫存檔。
+# trap 引用的是全域變數（不宣告 local），清理時一定拿得到值。
+VP_STAGED_ALL="$(mktemp)"
+VP_STAGED_KEPT="$(mktemp)"
+trap 'rm -f "$VP_STAGED_ALL" "$VP_STAGED_KEPT"' EXIT
+
+git diff --cached --name-only --diff-filter=ACM -z >"$VP_STAGED_ALL"
+if ! node "$STAGED_TARGETS_TS" <"$VP_STAGED_ALL" >"$VP_STAGED_KEPT"; then
+  echo "[clade pre-commit] vp-staged：staged-targets 橋接失敗，拒絕在沒有過濾清單的情況下跑 lint/fmt" >&2
+  exit 2
+fi
 
 lint_targets=()
 fmt_targets=()
 
 while IFS= read -r -d '' file; do
   [[ -f "$file" ]] || continue
-  is_clade_managed "$file" && continue
 
   case "$file" in
     *.js|*.ts|*.tsx|*.ts|*.cts|*.vue|*.svelte)
@@ -70,7 +66,7 @@ while IFS= read -r -d '' file; do
       fmt_targets+=("$file")
       ;;
   esac
-done < <(git diff --cached --name-only --diff-filter=ACM -z)
+done <"$VP_STAGED_KEPT"
 
 # vp 在 staged paths 全被 vite.config.lint.ignorePatterns / .oxfmtrc.json ignore 後會 exit 非零 +
 # 印 (a) 舊版「No files found to (lint|format)」(b) 新版「Expected at least one target file」

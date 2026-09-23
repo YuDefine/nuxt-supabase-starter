@@ -13,7 +13,7 @@
 #   FINDINGS             0-A.2 的上一輪 verdict 檔（可空字串）
 #   MAX_DIFF_LINES       embed budget（預設由呼叫端帶 CODEX_REVIEW_MAX_DIFF_LINES 展開）
 #   PATTERNS_JSON        semantic 規則檔（缺席 → 空 SEMANTIC_LIST＋warn，不 fail）
-#   WORK_DIR             caller 已建的 mktemp 目錄（trap 由 caller 持有）
+#   WORK_DIR             由 review_make_workdir 建立（落磁碟、結束即移除，見下）
 #   REVIEW_SANDBOX_NOTE  prompt 中段、carrier 專屬的隔離說明行（codex 的 MCP 拒絕句
 #                        或 claude 的 readonly 說明）
 #   REVIEW_OUTPUT_PATH   非空時 prompt 尾段要求 reviewer 把完整輸出逐字寫進該檔
@@ -28,6 +28,45 @@
 # (3) openai-codex 池 pi 層 enforcement 的回歸。對抗性場景的真修是 OS 層隔離
 # （bwrap，TD-520 處置節），不是這裡。
 #
+# review_make_workdir — 建 WORK_DIR 並保證任何結束方式都移除它（TD-895）。
+#
+# 落點是 ${CLADE_REVIEW_SNAP_DIR:-~/.cache/clade/review-snap}（磁碟），NEVER 是 mktemp 預設的
+# /tmp：/tmp 是帶 per-user usrquota 的 tmpfs，brief／snapshot／receipt 動輒數 MB，0-A 批次跑
+# 起來與其他快照一起把 uid 配額撞滿（2026-09-22），連 Bash tool 的輸出檔都建不起來。
+# 結束方式三種都要收：正常 exit／失敗 exit 走 EXIT trap；INT／TERM／HUP 先轉成 exit 128+n，
+# 讓同一個 EXIT trap 必跑（bash 沒有 TERM trap 時是否跑 EXIT 依版本與前景子行程而異，不賭）。
+# trap body 只引用全域 WORK_DIR（不是 local），trap 觸發時一定拿得到值。SIGKILL／OOM 收不到——
+# 所以 WORK_DIR 旁邊寫一份 review-snapshot.ts 同格式的 `<WORK_DIR>.stamp.json`（pid＝本 script
+# 的 $$，活得跟 WORK_DIR 一樣久）：殘留由 `review-snapshot.ts reclaim`（pid 死 ∧ session 結束 ∧
+# 到齡）回收。沒有 stamp 的目錄 reclaim 一律判「not ours」，會永遠留著。
+review_make_workdir() {
+  local base="${CLADE_REVIEW_SNAP_DIR:-$HOME/.cache/clade/review-snap}"
+  mkdir -p "$base" || return 1
+  WORK_DIR="$(mktemp -d "$base/work.XXXXXX")" || return 1
+  trap 'rm -rf "$WORK_DIR" "$WORK_DIR.stamp.json"' EXIT
+  review_write_workdir_stamp || return 1
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+}
+
+# review_json_str — 把一個 shell 字串印成 JSON 字串（只需處理 \ 與 "；路徑與 uuid 不含控制字元）
+review_json_str() {
+  local v=${1//\\/\\\\}
+  v=${v//\"/\\\"}
+  printf '"%s"' "$v"
+}
+
+# review_write_workdir_stamp — 欄位與 review-snapshot.ts 的 SnapshotStamp（version 1）一致
+review_write_workdir_stamp() {
+  local session=null
+  [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && session=$(review_json_str "$CLAUDE_CODE_SESSION_ID")
+  printf '{"version":1,"pid":%s,"pidDurable":true,"ppid":%s,"sessionId":%s,"hostname":%s,"createdAt":"%s","repo":%s,"base":"","stage":null,"label":"review-workdir"}\n' \
+    "$$" "$PPID" "$session" "$(review_json_str "${HOSTNAME:-$(uname -n)}")" \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(review_json_str "${REPO_ROOT:-}")" \
+    >"$WORK_DIR.stamp.json"
+}
+
 # snapshot = HEAD + 暫存 index 的 `git write-tree`（tracked 修改 + untracked 非
 # ignored 一次收進單一 tree hash；原生涵蓋內容、executable bit、symlink target、
 # binary）+ `git status --porcelain=v2`（staged/worktree 分佈）。純 git、可攜
@@ -379,9 +418,8 @@ review_verify_integrity() {
   echo "[$REVIEW_SAFE_TAG] 這是偵測控制不是 sandbox：只擋「受審 repo 被改」這一類。資料外洩、其他 repo/\$HOME 破壞、先改再還原（前後 snapshot 相同）都擋不住（TD-520）。" >&2
   echo "[$REVIEW_SAFE_TAG] 可能來源：reviewer 被 prompt injection 帶去 mutation，或並行 session 的正當編輯。NEVER 自動還原（rules/core/commit.md WIP 處置禁令）—— 人工檢視上列明細定性後，重跑 review。" >&2
   echo "[$REVIEW_SAFE_TAG] NEXT: 定性為並行 session 的正當編輯 → 別在 main 原樣重跑（會撞同一件事），改在隔離 worktree 內跑："  >&2
-  echo "[$REVIEW_SAFE_TAG]   git worktree add --detach /tmp/\$(basename \"\$REPO_ROOT\")-review HEAD" >&2
-  echo "[$REVIEW_SAFE_TAG]   cd /tmp/\$(basename \"\$REPO_ROOT\")-review && git apply <自己這批的 patch>  # git diff --cached -- <自己的路徑>" >&2
-  echo "[$REVIEW_SAFE_TAG]   cd /tmp/\$(basename \"\$REPO_ROOT\")-review && bash \"\$REPO_ROOT/.claude/scripts/$REVIEW_SAFE_SCRIPT\" <effort>" >&2
-  echo "[$REVIEW_SAFE_TAG]   用完 git worktree remove。判準與禁令見 skills/commit/gates.md § exit 6 處置。定性為蓄意 mutation 或定不出性時 NEVER 換場地重跑。" >&2
+  echo "[$REVIEW_SAFE_TAG]   node \$CLADE_HOME/vendor/scripts/review-snapshot.ts run --repo \"\$REPO_ROOT\" --base HEAD -- bash \"\$REPO_ROOT/.claude/scripts/$REVIEW_SAFE_SCRIPT\" <effort>" >&2
+  echo "[$REVIEW_SAFE_TAG]   （未 commit 的 changeset：先 create 一棵、在裡面 git apply --cached <自己的 patch>，跑完 remove；patch 取 git diff --cached -- <自己的路徑>）" >&2
+  echo "[$REVIEW_SAFE_TAG]   快照落 ~/.cache/clade/review-snap/（磁碟）且用完自動移除——NEVER 手寫 git worktree add 到 /tmp 或 scratchpad（TD-895）。判準與禁令見 skills/commit/gates.md § exit 6 處置。定性為蓄意 mutation 或定不出性時 NEVER 換場地重跑。" >&2
   exit 6
 }

@@ -43,7 +43,7 @@ paths:
 | dispatch 收尾 | `--complete success` | 加 `--work-done --verification '<摘要>'`。**opt-in 明示**：pane success **NEVER** 自動升級成 work done（`dispatch-common.md` 那條 NEVER 仍然有效）。同時帶 `--followup-brief` 時機械拒絕 `--work-done` |
 | attended session 直接做完 | `/handoff park` \| `relay` | ambient work 存在且無殘工要交接 → 順路 `flow done <id> --verification`；有殘工 → emit `work.park`。`relay` 走 Step 1.5：**同一件事的續集 NEVER emit**（successor 要接著做），ambient work 本身已完成才 emit |
 | 做的人沒宣告、收割者判定落地 | `--adjudicate --disposition landed` | landed 且該 work 無其他 in-flight span → 順路 emit done，`verification` 引 adjudication 的 `--reason` |
-| worktree land 收尾 | `wt-helper merge-back` | 加 `--work-done --verification '<摘要>'`。**opt-in 明示**；與 `--dry-run` 互斥；caller 的 verification 逐字保留，工具觀測到的落地事實（squash / cleanup / staged-pending）附加在後 |
+| worktree land 收尾 | `wt-helper merge-back` | 加 `--work-done --verification '<摘要>'`。**opt-in 明示**；與 `--dry-run` 互斥；caller 的 verification 逐字保留，工具觀測到的落地事實（squash / cleanup / staged-pending）附加在後。記給**worktree claim 綁定的卡**（`wt-helper add` 當下寫進 claim），ambient `CLADE_WORK_ID` 只當 fallback；兩者不一致或兩者皆無 → 在動 main 之前拒絕（TD-915：ambient 活不過單次 Bash 呼叫，而 `work.done` 沒有撤回路徑） |
 | 標準層散播收尾 | `/clade-publish` Step 9b | ambient `CLADE_WORK_ID` 非空**且** publish 是那件 work 的最後一步 → `flow done`；publish 只是其中一步 → 跳過 |
 
 **NEVER** 用「這件事很明顯做完了」「pane 回 success 就是做完」跳過憑證——那兩句話正是這條 gate 要擋的東西，而它們在 emit 端一律得到同一個拒寫。
