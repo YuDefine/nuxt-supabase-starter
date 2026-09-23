@@ -1,8 +1,9 @@
-<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@58960f8375d14d9c598eb2c350582917fe9b249c via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@bc8fdebe2d30db384f77911aaed81888ad03bf5f via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 # Rule 1 - research 留在 plan package
 
 - Level: `MUST`
 - `/technical-research` 的 decision-driven 研究過程必須輸出到 `specs/plans/NNN-<slug>/research.md`。
+- 命中 clade lifecycle repo 判準（本次 plan package 的 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:`；判準只看那兩個鍵）時，輸出位置改為 `specs/plans/<work-id>/research.md`；plan package 是 `flow plan open` 鑄出的 `specs/plans/<work-id>/`，NEVER 另建 `NNN-<slug>` 目錄。
 - `research.md` 描述本次迭代如何做技術決策，可包含替代方案、採納理由與殘餘風險。
 
 ## Good Example

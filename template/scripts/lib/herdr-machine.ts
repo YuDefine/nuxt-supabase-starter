@@ -12,6 +12,8 @@ import { existsSync, readFileSync } from 'node:fs'
 import { availableParallelism, homedir, loadavg } from 'node:os'
 import { resolve } from 'node:path'
 
+import { isRecord, parseJson } from './json-unknown.ts'
+
 /**
  * Where a Herdr command runs. The bare binary means this machine (and keeps the
  * `--session default` pin); `{ bin, machine }` names a saved peer. Herdr refuses `--machine`
@@ -191,10 +193,12 @@ export function readMachinePanesAndAgents(
     })
     if ((result.status ?? 1) !== 0) return null
     try {
-      const parsed = JSON.parse((result.stdout ?? '').trim()) as {
-        result?: Record<string, unknown>
-      }
-      const items = parsed.result?.[`${what}s`]
+      // Not an object at all is not a Herdr envelope — as unusable as unparseable output. A missing
+      // `result.<what>s` stays an empty list, as it always was.
+      const parsed = parseJson((result.stdout ?? '').trim())
+      if (!isRecord(parsed)) return null
+      const body = parsed.result
+      const items = isRecord(body) ? body[`${what}s`] : undefined
       return Array.isArray(items) ? items : []
     } catch {
       return null

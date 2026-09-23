@@ -1,12 +1,13 @@
-<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@58960f8375d14d9c598eb2c350582917fe9b249c via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@bc8fdebe2d30db384f77911aaed81888ad03bf5f via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 # Rule 1 - 盤點只用來寫 Phase 3，不得輸出 Impact Audit phase
 
 - Level: `MUST`
 - 當 `truth-delta.md` 包含 `MODIFY` 或 `DELETE` row，寫 Phase 3 前必須盤點受影響的 truth feature/dsl、既有 step definitions、fixtures、helpers、focused tests、產品分支與回歸測試面。
 - 這份盤點只發生在 `/tasks` 收斂與寫 task 時，用來決定 ALIGN / REMOVE / RED、Foundational 的 `Read`，以及 Feature 的產品碼落點。
 - 不得把盤點寫成 `Truth Delta Impact Audit` phase，也不得輸出給 `/implement` 做的 T00x。
-- Phase 1 `Setup` 只在本輪有新增技術時建立：寫清套件名、配置、技術環境與最後的 smoke-test；不寫 DSL 語意、不寫產品行為。
-- 本輪沒有新增技術就省略 Setup；不得把 helper、fixture 或落點骨架塞進 Setup。
+- Phase 1 `Setup` 在本輪有新增技術時建立：寫清套件名、配置、技術環境與最後的 smoke-test；不寫 DSL 語意、不寫產品行為。
+- 本輪沒有新增技術、且 canonical doctor 已存在並通過時，省略 Setup。doctor 缺失或非零時是例外：即使沒有新增技術也必須保留 Setup，放一個具名、無後續依賴且可解鎖的 doctor bootstrap／repair task（見 `SKILL.md` Phase 2 步驟 2、Phase 5 步驟 3）。
+- 不得把 helper、fixture 或落點骨架塞進 Setup。
 - Phase 2 `Foundational` 只建立後續實作程式、測試共用元件、入口、fixture、helper 與落點骨架；每則必須寫「只做／不做」。
 - Setup 與 Foundational 不得偷做 Phase 3 測試層或 Feature Green。
 

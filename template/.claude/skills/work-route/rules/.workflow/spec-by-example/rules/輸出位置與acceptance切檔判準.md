@@ -1,8 +1,9 @@
-<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@58960f8375d14d9c598eb2c350582917fe9b249c via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@bc8fdebe2d30db384f77911aaed81888ad03bf5f via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 # Rule 1 - Acceptance feature files 必須留在 plan package
 
 - Level: `MUST`
 - `/spec-by-example` 的輸出位置固定為 `specs/plans/NNN-<slug>/features/acceptance/*.feature`。
+- 命中 clade lifecycle repo 判準（本次 plan package 的 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:`；判準只看那兩個鍵）時，輸出位置改為 `specs/plans/<work-id>/features/acceptance/*.feature`；plan package 是 `flow plan open` 鑄出的 `specs/plans/<work-id>/`，NEVER 另建 `NNN-<slug>` 目錄。
 - Acceptance Gherkin 是本次迭代的業務驗收旅程，不是 interface truth。
 - 不得把 acceptance feature files 寫入 `specs/truth/features/**`。
 
