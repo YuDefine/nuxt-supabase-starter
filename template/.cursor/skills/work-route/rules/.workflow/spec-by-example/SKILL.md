@@ -2,14 +2,14 @@
 name: spec-by-example
 description: >-
   承接新的 plan package 中的 `spec.md`，把需求收斂成 plan-side
-  `features/acceptance/*.feature`。此 skill 只寫入
-  `specs/plans/NNN-*/features/acceptance/**`，不修改 `specs/truth/**`，也不更新
-  `truth-delta.md`。
+  `features/acceptance/*.feature`。此 skill 只寫入本次 plan
+  package（`specs/plans/NNN-*/`，clade lifecycle repo 為 `specs/plans/<work-id>/`）的
+  `features/acceptance/**`，不修改 `specs/truth/**`，也不更新 `truth-delta.md`。
 metadata:
   clade:
     invocation: explicit
 ---
-<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@58960f8375d14d9c598eb2c350582917fe9b249c via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@bc8fdebe2d30db384f77911aaed81888ad03bf5f via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Spec By Example
@@ -23,6 +23,7 @@ metadata:
 1. READ 讀取使用者需求、呼叫者要求、目標 plan package 的 `spec.md`、既有 `features/acceptance/` 內容，以及必要的 `specs/truth/**` 高層現況。
 2. READ 讀取 `rules/輸出位置與acceptance切檔判準.md`，確認 acceptance feature files 必須輸出到當前 plan package。
 3. WRITE 若 `specs/plans/NNN-<slug>/features/acceptance/` 尚不存在，建立該目錄。
+   - 命中 clade lifecycle repo 判準（本次 plan package 的 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:`；判準只看那兩個鍵）時，目錄換成 `specs/plans/<work-id>/features/acceptance/`：本次 plan package 是 `flow plan open` 鑄出的 `specs/plans/<work-id>/`，NEVER 另建 `NNN-<slug>` 目錄。
 
 ## Phase 2 -- 收斂驗收旅程與需求缺口
 

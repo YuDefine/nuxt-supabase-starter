@@ -1,4 +1,4 @@
-<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@903c11836d1190728647794cf73afb0f239aa496 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@bc8fdebe2d30db384f77911aaed81888ad03bf5f via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 # Clarify Round {{ROUND_NUMBER}}
 
 <!-- 直接把這份內容輸出給使用者；單輪最多 3 題。若本輪不足 3 題，刪除多餘區塊。 -->

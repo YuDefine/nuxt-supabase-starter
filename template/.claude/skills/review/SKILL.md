@@ -1,6 +1,6 @@
 ---
 name: review
-description: "Use for review lifecycle work: readiness scans, UI evidence, manual-review archive, or screenshot archive. Not for product code review."
+description: "Use for review lifecycle work: human-gate checks or UI screenshot evidence. Not for archiving (retired), product code review, or Lighthouse analysis."
 ---
 
 <!-- clade-skill-scope: both -->

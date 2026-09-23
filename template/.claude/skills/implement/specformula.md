@@ -13,7 +13,7 @@
 | `[BDD-ALIGN]` | 依 truth-delta 對齊既有測試 | 把 `dsl.md` 該列轉成 / 更新 `dsl.yml` 的 `dsl_steps[]`；句型對不上 `isa.yml` 才補 `instructions[]` |
 | `[BDD-REMOVE]` | 刪掉被淘汰的測試 | 刪 `dsl.yml` 的對應 `dsl_steps[]` 與 `.feature` 的 `Example`。**`isa.yml` 的指令 regex 是共用資產，NEVER 順手刪** |
 | `[BDD-RED]` | 寫出失敗的測試 | 只補 `.feature` 的 `Example`。紅 MUST 紅在斷言上 |
-| `[BDD-GREEN]` / `[BDD-REFACTOR]` | 委派 `/bdd` | 不變 —— 委派 `/bdd`，它會讀同目錄的 `specformula.md` |
+| `[BDD-GREEN]` / `[BDD-REFACTOR]` | 委派 `/bdd` | 不變 —— 委派 `/bdd`；`/bdd` 會讀它自己目錄的 `specformula.md`（work-route bundle 內是 `rules/.workflow/bdd/specformula.md`，由 work-route § 2 指路） |
 
 ## MUST
 

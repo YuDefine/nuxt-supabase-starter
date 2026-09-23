@@ -134,9 +134,9 @@ Run from the main worktree's cwd. The helper:
   - **Clean** → fork directly（no stash needed）.
   - **Dirty 非空** → default leaves that WIP on main; capture requires explicit flags under baseline-guard.md.
 - Normalizes the slug.
-- Creates branch `session/<YYYY-MM-DD-HHMM>-<slug>` from `main`. (Forking from `integration/<work-id>` is not supported yet; a slice that depends on a previous slice's content is serialized — see [[github-flow]] § Integration branch › 工具現況.)
+- Creates branch `session/<YYYY-MM-DD-HHMM>-<slug>` from the landing base (`main`). With `--base integration/<work-id>` (or `origin/integration/<work-id>`) it forks from that integration branch instead; any other ref is rejected — see [[github-flow]] § Integration branch › 工具現況.
 - Materializes the worktree at `<consumer-parent>/<consumer-name>-wt/<slug>/`.
-- Merges `origin/main` if present.
+- Fast-forwards to the chosen base's remote-tracking ref (`origin/main`, or `origin/integration/<work-id>` under `--base`) if present; when it cannot fast-forward it only warns `could not fast-forward merge …` and leaves the worktree on the fork point.
 
 Capture the worktree absolute path (the helper prints `cd <path>` and `Branch: <branch>` — parse them, or derive them from the consumer-root + slug convention).
 
