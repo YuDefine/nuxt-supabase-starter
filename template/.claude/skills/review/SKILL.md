@@ -21,7 +21,7 @@ independently discoverable skills.
 
 Screenshot evidence is collected by the named **Pi Gemini 3.8 Flash** worker
 (`screenshot-review-verify`, effort `high`; dispatch with
-`--model gemini --effort high --table-row screenshot-review-verify`); 截圖與 item 的符合性 gate 另交 **Claude Opus 5 · medium** (`screenshot-match-analysis`). The worker must not
+`--model gemini --effort high --table-row screenshot-review-verify`); 截圖與 item 的符合性 gate 另交 **Claude Opus 5.5 · medium** (`screenshot-match-analysis`). The worker must not
 sign its own compliance result.
 
 需要使用者拍板時，向使用者提問並等待回答；不要自行補完未決事項。

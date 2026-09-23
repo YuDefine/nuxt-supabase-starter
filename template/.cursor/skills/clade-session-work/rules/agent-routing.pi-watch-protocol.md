@@ -428,7 +428,7 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`native wakeu
 
 Change carrier 保持原 session，bounded phase 依 [[agent-routing.routing-table]] 選模型。每次交接帶 canonical work／revision、scope、驗收與結果路徑；交回後核對 diff scope、實跑證據與當前 work 狀態。
 
-Nuxt UI／Content 實作交 Cursor Composer 2.5，Nuxt 本體交 GPT-5.6 Sol xhigh，其餘 UI view 實作交 Opus 5（effort: medium）；Design Review 與 UI 詳細計畫交 Opus 5；截圖收集交 Gemini 3.8 Flash，項目符合性再交 Opus 5。Opus 5 無法執行上述 Design Review、UI 計畫或截圖符合性時，沿原工作列交 GPT-5.6 Sol（effort: high）；其他指定模型或實際工具不可用時保留該 phase 未完成。非 UI 實作與計畫沿各自具名列。
+Nuxt UI／Content 實作交 Cursor Composer 2.5，Nuxt 本體交 GPT-5.6 Sol xhigh，其餘 UI view 實作交 Opus 5.5（effort: medium）；Design Review 與 UI 詳細計畫交 Opus 5.5；截圖收集交 Gemini 3.8 Flash，項目符合性再交 Opus 5.5。Opus 5.5 無法執行上述 Design Review、UI 計畫或截圖符合性時，沿原工作列交 GPT-5.6 Sol（effort: high）；其他指定模型或實際工具不可用時保留該 phase 未完成。非 UI 實作與計畫沿各自具名列。
 
 [[agent-routing.routing-table]] 具名的十一列在各自原 carrier 之前先經兩個 Devin 原生 carrier：Devin Fusion（`fusion-gpt-5-6-sol-high-sidekick-swe-2-high`，effort: high）→ Devin SWE-2 Max（`swe-2-max`，effort: max）。派工走 canonical helper `herdr-session-handoff.ts --launcher devin --model <slug> --effort <high|max>`（helper 層驗 model↔effort 配對；實際 spawn 的 devin argv 為 `devin --permission-mode bypass --model <slug>`，不帶 `--effort`／`--session-id`，session 身分由 `CLADE_DEVIN_SESSION_ID` 承載）；catalog 證明只認 `devin models list` 的 exact row。只在 provider／quota／runtime 不可用時前進，quality／test failure 不前進；兩格不可用後才落到該列既有 carrier 與原 fallback 鏈。
 
@@ -437,13 +437,13 @@ Nuxt UI／Content 實作交 Cursor Composer 2.5，Nuxt 本體交 GPT-5.6 Sol xhi
 | 階段 | 模型與載體 | 交付 |
 | --- | --- | --- |
 | 四個模式的 screenshot review | Pi `gemini high`，`screenshot-review-verify` | 實際 browser 操作、圖片、DOM／network evidence、逐 item 摘要與 progress.json |
-| 截圖 vs item 符合性 gate | Claude Code Opus 5（effort: medium），`screenshot-match-analysis` | 讀取每張指定圖片與完整 item，給 PASS／FAIL／UNCERTAIN 及理由 |
+| 截圖 vs item 符合性 gate | Claude Code Opus 5.5（effort: medium），`screenshot-match-analysis` | 讀取每張指定圖片與完整 item，給 PASS／FAIL／UNCERTAIN 及理由 |
 
-收集與判定分兩次 dispatch。Gemini 不代簽 Opus gate；Opus 不以 Gemini 的文字摘要代替實際圖片。Opus 5 無法執行時帶實際失敗原因沿 `screenshot-match-analysis` 原列交 GPT-5.6 Sol（effort: high）；Gemini 或 Sol 不可用就回報 blocker，不沿 generic 配額鏈換模型。執行方式與 evidence contract 見 `review-screenshot` skill。
+收集與判定分兩次 dispatch。Gemini 不代簽 Opus gate；Opus 不以 Gemini 的文字摘要代替實際圖片。Opus 5.5 無法執行時帶實際失敗原因沿 `screenshot-match-analysis` 原列交 GPT-5.6 Sol（effort: high）；Gemini 或 Sol 不可用就回報 blocker，不沿 generic 配額鏈換模型。執行方式與 evidence contract 見 `review-screenshot` skill。
 
 ### Opus 工作的 Pi fallback 憑證
 
-`design-review`、`ui-detailed-planning`、`screenshot-match-analysis` 的 Pi Sol 接替使用原列。Herdr 首派帶該列、`--model claude-opus-5 --effort medium`，由 correlated `--complete failed` 產生 canonical completion；在同一 repo 執行：
+`design-review`、`ui-detailed-planning`、`screenshot-match-analysis` 的 Pi Sol 接替使用原列。Herdr 首派帶該列、`--model claude-opus-5-5 --effort medium`，由 correlated `--complete failed` 產生 canonical completion；在同一 repo 執行：
 
 ```bash
 node vendor/scripts/pi-dispatch.ts \
@@ -454,7 +454,7 @@ node vendor/scripts/pi-dispatch.ts \
   --native-failure-receipt <dispatch-state-dir>/completion/<receipt.dispatch_id>.json
 ```
 
-Pi CLI 驗 receipt 的 `herdr-native-completion/v1` schema、failed outcome、requested／observed Opus 5、medium、verified model，以及相同 canonical cwd、work、row、readonly access；`retry-of` 等於原 dispatch id。缺少或不符時保留 blocker，不手寫 receipt 代替原執行結果。
+Pi CLI 驗 receipt 的 `herdr-native-completion/v1` schema、failed outcome、requested／observed Opus 5.5、medium、verified model，以及相同 canonical cwd、work、row、readonly access；`retry-of` 等於原 dispatch id。缺少或不符時保留 blocker，不手寫 receipt 代替原執行結果。
 
 Claude 原生 Agent 的失敗目前沒有這種 durable completion，不能直接作為 Pi CLI 自動接替憑證。受控 controller 另可依原 primary candidate 的 attempted receipt，或該 primary pool 的 fresh exhausted quota observation 選擇同列 Sol；這條能力不外推到一般 CLI。
 
@@ -466,17 +466,17 @@ Controlled execution 在 Herdr owner 尚未綁定、且沒有已確認停止的 
 
 需求建立與修訂經 `opsx` skill 的 `references/intent.md`；先查已有 change/work 身分，再形成有來源、驗收、impact 與 work plan 的 canonical intent。已授權的需求直接執行，缺少產品決議才送既有 decision queue。
 
-UI 詳細計畫走 `ui-detailed-planning` Opus 5，非 UI 計畫走 `detailed-planning` Astra；主線持有 quality gate，讀 draft、核對來源及驗收後自行修正。**NEVER** 把 cross-check / final check 的修補丟回 pi。每次 mutation 明確帶 repo、change_id 與預期 revision，create／revise 後回讀 binding 及 canonical source。UI scope 的設計與體驗驗收沿用既有 gate。
+UI 詳細計畫走 `ui-detailed-planning` Opus 5.5，非 UI 計畫走 `detailed-planning` Astra；主線持有 quality gate，讀 draft、核對來源及驗收後自行修正。**NEVER** 把 cross-check / final check 的修補丟回 pi。每次 mutation 明確帶 repo、change_id 與預期 revision，create／revise 後回讀 binding 及 canonical source。UI scope 的設計與體驗驗收沿用既有 gate。
 
 Canonical intent 的修改只走 OPSX command；生成 tasks.md 保持唯讀。
 
 ## OPSX work execution dispatch（具體做法）
 
 1. 以 OPSX inspect／instructions 讀 canonical work plan、work_spec_id、依賴、revision 與驗收政策；生成 tasks.md 保持唯讀。
-2. 按工作角色選 bounded executor：Nuxt UI／Content 走 `ui-implementation` Composer 2.5；Nuxt 本體走 `nuxt-core-implementation` Sol xhigh；其餘 UI view 走 `ui-view-implementation` Opus 5（effort: medium）；Design Review 走 `design-review` Opus 5；UI 計畫走 `ui-detailed-planning` Opus 5；非 UI 實作按一般／複雜列分 Luna／Sol。Screenshot review 與項目符合性各走上表。
+2. 按工作角色選 bounded executor：Nuxt UI／Content 走 `ui-implementation` Composer 2.5；Nuxt 本體走 `nuxt-core-implementation` Sol xhigh；其餘 UI view 走 `ui-view-implementation` Opus 5.5（effort: medium）；Design Review 走 `design-review` Opus 5.5；UI 計畫走 `ui-detailed-planning` Opus 5.5；非 UI 實作按一般／複雜列分 Luna／Sol。Screenshot review 與項目符合性各走上表。
 3. 混合 UI／非 UI phase 先保存已做的 scoped checkpoint，再以 OPSX revise 明列各模型的檔案所有權與依賴，依新 revision 續跑。產品範圍未變沿既有授權處理；需要新產品決議時送既有 decision queue。
 4. 派工 brief 帶全部 scoped tasks、Plan-first、Commit Authorization、canonical change/work/attempt、revision 與 evidence 政策。非 UI worker 的 brief 明寫「禁止修改 view 層檔案；需要 view 改動時回報，由主持者依 Nuxt UI／Content、Nuxt 本體、其餘 UI view 三類派工」。
-5. 收回後核對 scoped diff、checkpoint、每項工作的 evidence 與 current revision，執行 typecheck／相關測試；checkbox 或 process exit 0 不代替完成憑證。Design Review 與符合性 gate 由 Opus 5 完成後，carrier 才進後續既有收尾流程。
+5. 收回後核對 scoped diff、checkpoint、每項工作的 evidence 與 current revision，執行 typecheck／相關測試；checkbox 或 process exit 0 不代替完成憑證。Design Review 與符合性 gate 由 Opus 5.5 完成後，carrier 才進後續既有收尾流程。
 
 ## screenshot-review Verify Mode Dispatch & Watch Protocol
 

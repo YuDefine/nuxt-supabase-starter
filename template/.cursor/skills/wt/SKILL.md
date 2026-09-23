@@ -203,7 +203,7 @@ Classify the work using the shared routing table, then select its supported tran
 1. **UI or Nuxt implementation** → select the matching shared table row by the work being implemented:
    - Nuxt UI component assembly／Nuxt Content → `ui-implementation`: native Cursor Composer 2.5 from the current catalog.
    - Nuxt framework, modules and runtime logic → `nuxt-core-implementation`: GPT-5.6 Sol xhigh via the GPT transport for the current runtime.
-   - Other UI views → `ui-view-implementation`: Claude Opus 5（effort: medium） via native Claude Code／Herdr.
+   - Other UI views → `ui-view-implementation`: Claude Opus 5.5（effort: medium） via native Claude Code／Herdr.
    - A main line that meets the selected row’s model and tool requirements implements directly. Otherwise use the bounded phase transport in [[agent-routing]]; preserve the worktree and work identity.
    - Design review, UI planning and screenshot work use their own named rows. File extensions and UI keywords help locate the work but do not select its model.
 

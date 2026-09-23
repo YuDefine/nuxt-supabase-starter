@@ -271,11 +271,11 @@ node ~/offline/clade/vendor/scripts/lib/evidence-store.ts \
 | 可觀察 predicate | MUST |
 | --- | --- |
 | 收集 `[verify:ui]`／`[review:ui]` evidence | `screenshot-review-verify`，Gemini 3.8 Flash high，依 evidence contract 收集與回報 |
-| 判定截圖是否符合 item | `screenshot-match-analysis`，Opus 5（effort: medium）；逐張讀指定圖片，不能只憑收集摘要給 PASS |
+| 判定截圖是否符合 item | `screenshot-match-analysis`，Opus 5.5（effort: medium）；逐張讀指定圖片，不能只憑收集摘要給 PASS |
 | 主持者收回符合性判定結果 | 消費結構化結果；FAIL／UNCERTAIN 時可讀該張圖診斷，不代簽 gate |
 | 確認截圖是否空白 | worker emptiness preflight；結果不代替符合性 gate |
 
-**NEVER** 讓收集 worker 再轉派或代簽判定；Opus 5 無法執行時沿 `screenshot-match-analysis` 原列交 GPT-5.6 Sol（effort: high）；圖片／browser 或其餘指定模型不可用時保留未完成項。Pi Cursor pool 的 mutation 與 egress 邊界維持，不為截圖擴權。完整派工方法見 `review-screenshot` skill。
+**NEVER** 讓收集 worker 再轉派或代簽判定；Opus 5.5 無法執行時沿 `screenshot-match-analysis` 原列交 GPT-5.6 Sol（effort: high）；圖片／browser 或其餘指定模型不可用時保留未完成項。Pi Cursor pool 的 mutation 與 egress 邊界維持，不為截圖擴權。完整派工方法見 `review-screenshot` skill。
 
 ### 實測（2026-08-06 更正：截圖成本遠小於本節初版所稱）
 

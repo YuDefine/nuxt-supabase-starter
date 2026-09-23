@@ -13,14 +13,14 @@
 
 其餘 Task／Agent 沿 Grok 4.6；省略 `model`（inherit 主線）與 `cursor-grok-4.6-high` 同家族合法。**NEVER** 把 Cursor Task 設成 `claude-*` 或 GPT 模型來代替對應 runtime。Pi 承載的 Cursor pool 仍禁止 mutation，不能藉 Composer UI 例外解除隔離。
 
-Nuxt 本體走 `nuxt-core-implementation` Pi Sol xhigh，其餘 UI view 走 `ui-view-implementation` Herdr Opus 5 medium。其他模型依具名列使用以下載體：
+Nuxt 本體走 `nuxt-core-implementation` Pi Sol xhigh，其餘 UI view 走 `ui-view-implementation` Herdr Opus 5.5 medium。其他模型依具名列使用以下載體：
 
 1. **Pi 具名工作（含 Gemini screenshot review）** → `vendor/scripts/pi-dispatch.ts`。predicate：`command -v pi` 成功，且該次 `--model` 沒被 dispatcher 以 exit 3（runtime）或 exit 4（配額）當場拒絕；失敗只走該列已定義的 fallback，Gemini screenshot review 保留 blocker。
-2. **Claude 具名工作** → Herdr create-only：`node vendor/scripts/herdr-session-handoff.ts --cwd <abs> --label <label> --prompt-file <brief> --model <slug> --effort <level> --route <route> --tier-basis <basis> --launcher cc` 或 `--launcher ccw`，並加 `--coordinate`。`--model` 必填：要 child 跑特定 model 就給 slug，brief 正文寫「用 Opus 5」child 做不到。**NEVER** `--relay`。clade / YuDefine 工作預設 `ccw`，其餘 `cc`。Cursor 沒有 `CLADE_CLAUDE_LAUNCHER`，缺 `--launcher` 會 `unsupported_launcher`。 **NEVER `--launcher pi`**：create 一律拒（Pi 新工作走 `pi-dispatch.ts`），Cursor 池連 relay 都拒。`/commit` 走 `~/.cursor/skills/commit/SKILL.md`（主線跑完整 ceremony；0-A 合格 reviewer 兩格同級：Pi Astra medium 優先，Astra 實際不可用〔exit 3／4＋逐字證據〕時 Fable medium 由 `claude-review-safe.sh` 內部走 Herdr——主線不需自己開 Herdr pane）。缺 pane／helper 還沒建 session → **MUST 再開一次**，不是寫 BLOCKED。
+2. **Claude 具名工作** → Herdr create-only：`node vendor/scripts/herdr-session-handoff.ts --cwd <abs> --label <label> --prompt-file <brief> --model <slug> --effort <level> --route <route> --tier-basis <basis> --launcher cc` 或 `--launcher ccw`，並加 `--coordinate`。`--model` 必填：要 child 跑特定 model 就給 slug，brief 正文寫「用 Opus 5.5」child 做不到。**NEVER** `--relay`。clade / YuDefine 工作預設 `ccw`，其餘 `cc`。Cursor 沒有 `CLADE_CLAUDE_LAUNCHER`，缺 `--launcher` 會 `unsupported_launcher`。 **NEVER `--launcher pi`**：create 一律拒（Pi 新工作走 `pi-dispatch.ts`），Cursor 池連 relay 都拒。`/commit` 走 `~/.cursor/skills/commit/SKILL.md`（主線跑完整 ceremony；Opus 5.5 覆寫期間 0-A 只跑 `CLAUDE_REVIEW_SEAT=opus claude-review-safe.sh medium`〔`code-review-opus`，wrapper 內部走 Herdr——主線不需自己開 Herdr pane〕，**NEVER** 派 Astra／Fable，額度用完 gate 保持未完成；見 `rules/core/agent-routing.md` § Opus 5.5 暫時覆寫 的 0-A 例外）。缺 pane／helper 還沒建 session → **MUST 再開一次**，不是寫 BLOCKED。
 
 Cursor 派出 Herdr 之後 MUST `--coordinate` 或 `--coordinate-resume` 等到 correlated `--complete`，再收回 child pane 並繼續；NEVER `--relay`。切片逾時會回 `coordination_pending`，主線立刻 `--coordinate-resume <dispatch_id>`，**不得**把 idle/done 當完成、也不得直接 `herdr pane close`。這不是 `/handoff`：主線繼續工作，**NEVER** 輸出「目前這裡收工」。
 
-**NEVER** 把「Routing Table 寫 Agent tool Claude」讀成「Cursor Task 設 `model=claude-opus-5`」。那是 Claude Code 的 Agent tool，不是 Cursor 的 Task catalog。screenshot review 走第 1 條 Pi Gemini 3.8 Flash；Design Review、UI 詳細計畫與截圖符合性走第 2 條 `--model claude-opus-5 --effort medium`，每次帶 `--route routing-table --tier-basis table-row --table-row <design-review|ui-detailed-planning|screenshot-match-analysis>`，依實際工作選一列。
+**NEVER** 把「Routing Table 寫 Agent tool Claude」讀成「Cursor Task 設 `model=claude-opus-5`」。那是 Claude Code 的 Agent tool，不是 Cursor 的 Task catalog。screenshot review 走第 1 條 Pi Gemini 3.8 Flash；Design Review、UI 詳細計畫與截圖符合性走第 2 條 `--model claude-opus-5-5 --effort medium`，每次帶 `--route routing-table --tier-basis table-row --table-row <design-review|ui-detailed-planning|screenshot-match-analysis>`，依實際工作選一列。
 
 全域注入走 Cursor **User Rules**（Customize → Rules，「Cursor 主線只留 Grok 4.6」）。專案 `.cursor/rules/` 只罩該 repo；**NEVER** 靠 consumer `CLAUDE.md` snippet 當全域通道——那會讓 Claude Code session 付 always-load 預算。
 
@@ -39,4 +39,4 @@ Cursor 派出 Herdr 之後 MUST `--coordinate` 或 `--coordinate-resume` 等到 
 
 The common routing predicates remain binding for every Cursor Task or Herdr handoff. The Cursor catalog and IDE browser are native surfaces only when the current session exposes them.
 
-Opus 5 無法執行 Design Review、UI 詳細計畫或截圖符合性時，記錄實際失敗原因並沿 routing table 原工作列改派 GPT-5.6 Sol（effort: high）；原 gate 與圖片存取要求維持，Sol 再失敗就保留 blocker。
+Opus 5.5 無法執行 Design Review、UI 詳細計畫或截圖符合性時，記錄實際失敗原因並沿 routing table 原工作列改派 GPT-5.6 Sol（effort: high）；原 gate 與圖片存取要求維持，Sol 再失敗就保留 blocker。

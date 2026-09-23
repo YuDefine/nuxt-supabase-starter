@@ -96,4 +96,4 @@ predicate 走，**NEVER** 把本小節外推成「委派都該指定 model」。
 
 進入 apply 後，個別 phase executor 仍走 共通 Routing Table；那張表決定誰實作，不反向改寫 residency。
 
-Design Review, UI planning and screenshot matching use Opus 5, with the GPT-5.6 Sol high fallback on the original row on actual failure. Nuxt UI/Content implementation uses Cursor Composer 2.5, Nuxt core uses GPT-5.6 Sol xhigh, other UI views use Opus 5 medium, and screenshot capture uses Pi Gemini 3.8 Flash.
+Design Review, UI planning and screenshot matching use Opus 5.5, with the GPT-5.6 Sol high fallback on the original row on actual failure. Nuxt UI/Content implementation uses Cursor Composer 2.5, Nuxt core uses GPT-5.6 Sol xhigh, other UI views use Opus 5.5 medium, and screenshot capture uses Pi Gemini 3.8 Flash.

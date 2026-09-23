@@ -96,9 +96,26 @@
 
 set -uo pipefail
 
+# Opus 5.5 暫時覆寫（agent-routing.md § Opus 5.5 暫時覆寫）：CLAUDE_REVIEW_SEAT=opus 讓本格
+# 改派 fresh Opus 5.5 child（`code-review-opus` 列，同樣 medium／readonly）。覆寫生效期間預設
+# opus——預設 fable 會讓沒帶變數的呼叫端靜默退回 Fable 格，正是 2026-09-23 Charles 硬禁令
+# 要擋的 Astra → Fable 退路。fable 只在顯式 CLAUDE_REVIEW_SEAT=fable 時啟用。覆寫撤銷也維持 opus 預設——0-A 禁令不隨
+# 覆寫失效，改回 fable 須 Charles 另行拍板。
+REVIEW_SEAT="${CLAUDE_REVIEW_SEAT:-opus}"
+case "$REVIEW_SEAT" in
+  fable|opus) ;;
+  *) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_SEAT 只接受 fable|opus；收到 $REVIEW_SEAT" >&2; exit 2 ;;
+esac
+if [ "$REVIEW_SEAT" = "fable" ]; then
+  echo "[claude-review-safe] 警告：CLAUDE_REVIEW_SEAT=fable——Opus 5.5 覆寫期間 Fable 格的 verdict NEVER 當 commit 0-A gate 證據（agent-routing.md § Opus 5.5 暫時覆寫 的 0-A 例外）；只供顯式非 gate 用途（恢復 Fable 0-A 須 Charles 另行拍板）。" >&2
+fi
+REVIEW_ROW="code-review-$REVIEW_SEAT"
+if [ "$REVIEW_SEAT" = "opus" ]; then REVIEW_MODEL="claude-opus-5-5"; else REVIEW_MODEL="fable"; fi
+export REVIEW_SEAT REVIEW_ROW REVIEW_MODEL
+
 REASONING="${1:-medium}"
 if [ "$REASONING" != "medium" ]; then
-  echo "[claude-review-safe] 錯誤：effort 只接受 medium（Fable family ceiling）；收到 $REASONING" >&2
+  echo "[claude-review-safe] 錯誤：effort 只接受 medium（0-A reviewer 席固定 medium，Claude child 上限內）；收到 $REASONING" >&2
   exit 2
 fi
 shift || true
@@ -135,7 +152,7 @@ fi
 
 REVIEW_SAFE_TAG="claude-review-safe"
 REVIEW_SAFE_SCRIPT="claude-review-safe.sh"
-REVIEW_SANDBOX_NOTE='This review runs as a Herdr Claude child with read-only workspace access on the `code-review-fable` Routing Table row — the dispatch record carries your model, effort, and session identity, and a mismatch voids the verdict.'
+REVIEW_SANDBOX_NOTE='This review runs as a Herdr Claude child with read-only workspace access on the `'"$REVIEW_ROW"'` Routing Table row — the dispatch record carries your model, effort, and session identity, and a mismatch voids the verdict.'
 PATTERNS_JSON="$REPO_ROOT/vendor/review-rules/patterns.json"
 MAX_DIFF_LINES="${CODEX_REVIEW_MAX_DIFF_LINES:-6000}"
 
@@ -249,7 +266,7 @@ if [ "$BRIEF_BYTES" -gt "$INLINE_MAX_BYTES" ]; then
   fi
   PROMPT_FILE="$WORK_DIR/brief-pointer.md"
   cat >"$PROMPT_FILE" <<POINTER
-# commit 0-A review（Fable 格）
+# commit 0-A review（${REVIEW_SEAT} 席，\`${REVIEW_ROW}\` 列）
 
 本次 review 的完整 brief 在 \`$BRIEF\`（$BRIEF_BYTES bytes，超過單一 prompt 參數上限，所以改以檔案交付）。
 
@@ -287,14 +304,14 @@ DEADLINE=$(( $(date +%s) + BUDGET_MINUTES * 60 ))
 
 herdr_call \
   --cwd "$REPO_ROOT" \
-  --label "commit-0a-fable-review" \
+  --label "commit-0a-$REVIEW_SEAT-review" \
   --prompt-file "$PROMPT_FILE" \
   --launcher ccw \
-  --model fable \
+  --model "$REVIEW_MODEL" \
   --effort medium \
   --route routing-table \
   --tier-basis table-row \
-  --table-row code-review-fable \
+  --table-row "$REVIEW_ROW" \
   --coordinate \
   --bounded-leaf >"$RECEIPT" 2>"$WORK_DIR/herdr-stderr.log"
 rc=$?
@@ -312,15 +329,15 @@ fi
 # nested_dispatch_refused：本 session 是不得再開 child 的 dispatched session（例如自己就是
 # bounded leaf）。這不是 reviewer 不可用——NEVER 映射成 3 讓呼叫端去換格或判兩格皆盡。
 if [ "$STATUS" = "nested_dispatch_refused" ]; then
-  echo "[claude-review-safe] RESULT: dispatch_refused（exit 10）— helper 拒絕從本 session 開 Fable reviewer child：$(herdr_field "$RECEIPT" error)" >&2
-  echo "[claude-review-safe] NEXT: 交回 coordinator 代跑 0-A 的 Fable 格（commit skill review-policy.md § 無 receipt 的 verdict）；NEVER 改走 headless \`claude -p\`——無 receipt 的 verdict 不得當 gate 證據。" >&2
+  echo "[claude-review-safe] RESULT: dispatch_refused（exit 10）— helper 拒絕從本 session 開 ${REVIEW_SEAT} reviewer child：$(herdr_field "$RECEIPT" error)" >&2
+  echo "[claude-review-safe] NEXT: 交回 coordinator 以同一席（${REVIEW_SEAT}，\`${REVIEW_ROW}\`）代跑 0-A——Opus 5.5 覆寫期間 NEVER 改派 Astra／Fable（commit skill review-policy.md § 無 receipt 的 verdict）；NEVER 改走 headless \`claude -p\`——無 receipt 的 verdict 不得當 gate 證據。" >&2
   exit 10
 fi
 
 # account_unavailable（helper EXIT.blocked=15）：Fable 席不可用——兩格皆盡的證據。
 if [ "$rc" -eq 15 ] || [ "$STATUS" = "account_unavailable" ]; then
-  echo "[claude-review-safe] RESULT: account_unavailable — Fable 席（ccw/cc）無可用帳號配額，review DID NOT run；NEVER 當作 0-A.1 通過（exit 4）" >&2
-  echo "[claude-review-safe] NEXT: Astra 與 Fable 兩格皆不可用 — gate 維持 pending，記錄雙方逐字失敗證據；NEVER 用其他模型、另一個 fresh agent 或主線自審補位。" >&2
+  echo "[claude-review-safe] RESULT: account_unavailable — ${REVIEW_SEAT} 席（ccw/cc）無可用帳號配額，review DID NOT run；NEVER 當作 0-A.1 通過（exit 4）" >&2
+  echo "[claude-review-safe] NEXT: 本 0-A 席（${REVIEW_SEAT}）不可用 — Opus 5.5 覆寫期間 NEVER 改派 Astra／Fable；gate 維持 pending，記錄雙方逐字失敗證據；NEVER 用其他模型、另一個 fresh agent 或主線自審補位。" >&2
   exit 4
 fi
 
@@ -333,7 +350,7 @@ if [ "$rc" -eq 21 ] || [ "$STATUS" = "account_unverifiable" ]; then
   UNVERIFIABLE_RECEIPT="$UNVERIFIABLE_STATE_DIR/review/account-unverifiable-$(date +%Y%m%dT%H%M%S)-$$.json"
   mkdir -p "$(dirname "$UNVERIFIABLE_RECEIPT")"
   cp "$RECEIPT" "$UNVERIFIABLE_RECEIPT"
-  echo "[claude-review-safe] RESULT: account_unverifiable — Fable 席（ccw/cc）配額量不到（量不到 ≠ 沒額度），review DID NOT run；retry_after_ms=${RETRY_AFTER_MS:-<absent，沒有 ETA>}；receipt: $UNVERIFIABLE_RECEIPT；NEVER 當作 0-A.1 通過，也 NEVER 讀成 account_unavailable（exit 11）" >&2
+  echo "[claude-review-safe] RESULT: account_unverifiable — ${REVIEW_SEAT} 席（ccw/cc）配額量不到（量不到 ≠ 沒額度），review DID NOT run；retry_after_ms=${RETRY_AFTER_MS:-<absent，沒有 ETA>}；receipt: $UNVERIFIABLE_RECEIPT；NEVER 當作 0-A.1 通過，也 NEVER 讀成 account_unavailable（exit 11）" >&2
   echo "[claude-review-safe] NEXT: gate 維持 pending——retry_after_ms 存在就依 ETA 重跑同一派工，欄位缺席＝沒有 ETA、交 coordinator 決定；NEVER 用其他模型、另一個 fresh agent 或主線自審補位。" >&2
   exit 11
 fi
@@ -395,7 +412,7 @@ if [ "$VERIFICATION" = "unverified" ] && [ -n "$SESSION_ID" ]; then
     const m = await import(process.argv[2])
     const r = await m.verifyObservedModel(process.argv[3], process.argv[4], process.argv[5], process.argv[6], { timeoutMs: 30000, intervalMs: 2000 })
     process.stdout.write(JSON.stringify(r))
-  ' _ "$HELPER" "${LAUNCHER:-ccw}" "fable" "$REPO_ROOT" "$SESSION_ID" 2>/dev/null)"
+  ' _ "$HELPER" "${LAUNCHER:-ccw}" "$REVIEW_MODEL" "$REPO_ROOT" "$SESSION_ID" 2>/dev/null)"
   if [ -n "$REREAD_JSON" ]; then
     VERIFICATION="$(node -e 'const r=JSON.parse(process.argv[1]);process.stdout.write(r.model_verification??"")' "$REREAD_JSON")"
     O="$(node -e 'const r=JSON.parse(process.argv[1]);process.stdout.write(r.observed_model??"")' "$REREAD_JSON")"
@@ -415,7 +432,7 @@ write_review_receipt() {
       version: 1,
       kind: "commit-0a-review-receipt/v1",
       reviewer_family: "claude",
-      requested_model: "fable",
+      requested_model: process.env.REVIEW_MODEL,
       observed_model: process.argv[4] || undefined,
       requested_effort: "medium",
       model_verification: process.argv[5],
@@ -427,7 +444,7 @@ write_review_receipt() {
       pane_id: process.argv[10] || undefined,
       route: "routing-table",
       tier_basis: "table-row",
-      table_row: "code-review-fable",
+      table_row: process.env.REVIEW_ROW,
       workspace_access: "readonly",
       repo: process.argv[11],
       verdict_sha256: process.argv[12] || undefined,
@@ -443,7 +460,7 @@ write_review_receipt() {
 
 if [ "$VERIFICATION" != "verified" ]; then
   if [ "$VERIFICATION" = "mismatch" ]; then
-    echo "[claude-review-safe] RESULT: model verification mismatch — ${REASON:-requested fable, observed ${OBSERVED:-unknown}}；verdict 扣住不輸出，NEVER 當作 0-A.1 通過（exit 8）" >&2
+    echo "[claude-review-safe] RESULT: model verification mismatch — ${REASON:-requested $REVIEW_MODEL, observed ${OBSERVED:-unknown}}；verdict 扣住不輸出，NEVER 當作 0-A.1 通過（exit 8）" >&2
   else
     echo "[claude-review-safe] RESULT: model verification unverified（${REASON:-no reason recorded}，已重讀 ${REREADS} 次）— 身分歸屬不成立，verdict 扣住不輸出，NEVER 當作 0-A.1 通過（exit 8）" >&2
   fi

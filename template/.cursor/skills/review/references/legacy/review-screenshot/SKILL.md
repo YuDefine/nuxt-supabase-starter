@@ -8,15 +8,15 @@ metadata:
 
 # 截圖（統一入口）
 
-所有四個模式（`[verify:ui]`、archive 前 QA、commit 0-B、ad-hoc）由主持者直派 **Pi Gemini 3.8 Flash**，具名列 `screenshot-review-verify`，effort `high`。截圖與 item 要求的符合性 gate 另交 **Claude Opus 5 · medium**，具名列 `screenshot-match-analysis`。
+所有四個模式（`[verify:ui]`、archive 前 QA、commit 0-B、ad-hoc）由主持者直派 **Pi Gemini 3.8 Flash**，具名列 `screenshot-review-verify`，effort `high`。截圖與 item 要求的符合性 gate 另交 **Claude Opus 5.5 · medium**，具名列 `screenshot-match-analysis`。
 
 ## Runtime 分流
 
 Gemini 經 `pi-dispatch.ts` 的 `google-gemini-cli` provider 執行；brief 指向本 skill 的 [evidence contract](references/evidence-contract.md)，並提供當次可用 browser 工具、明確 URL 與允許的操作。工具未提供、登入／fixture／provider 阻塞時回報實際 blocker，保留未完成項。
 
-Opus 5 使用 Claude Code 原生模型或已驗證的 Herdr bounded carrier。Cursor Task 的 `claude-*` catalog 不代替 Claude Code。
+Opus 5.5 使用 Claude Code 原生模型或已驗證的 Herdr bounded carrier。Cursor Task 的 `claude-*` catalog 不代替 Claude Code。
 
-兩階段各有自己的 brief 與回報。Gemini 不再轉派、不代簽符合性 gate；Opus 必須讀每張指定圖片與完整 item。主 session 消費結構化結果；符合性判定者使用未參與實作的新上下文，並實際讀圖。Opus 5 無法執行時記錄實際原因，沿 `screenshot-match-analysis` 原列交 GPT-5.6 Sol（effort: high）讀圖判定。Gemini 或 Sol 不可用時保留 blocker，**NEVER** 沿 generic fallback 換成其他模型。
+兩階段各有自己的 brief 與回報。Gemini 不再轉派、不代簽符合性 gate；Opus 必須讀每張指定圖片與完整 item。主 session 消費結構化結果；符合性判定者使用未參與實作的新上下文，並實際讀圖。Opus 5.5 無法執行時記錄實際原因，沿 `screenshot-match-analysis` 原列交 GPT-5.6 Sol（effort: high）讀圖判定。Gemini 或 Sol 不可用時保留 blocker，**NEVER** 沿 generic fallback 換成其他模型。
 
 ## Brief 注意事項
 
@@ -42,7 +42,7 @@ node <clade-vendor>/scripts/pi-dispatch.ts \
   --tier-basis table-row --table-row screenshot-review-verify --workspace-access mutation
 ```
 
-3. 依 agent-routing 的 Pi watch 收割 completion 與 evidence manifest。需要符合性 gate 時，把每張實際圖片路徑與 item 交給獨立 Opus 5 dispatch；保留收集者與判定者的 requested／observed model 證據。
+3. 依 agent-routing 的 Pi watch 收割 completion 與 evidence manifest。需要符合性 gate 時，把每張實際圖片路徑與 item 交給獨立 Opus 5.5 dispatch；保留收集者與判定者的 requested／observed model 證據。
 4. `verify:ui` 收集後由主持者依 watch protocol 呼叫 `verify-ui-receipt.ts`，寫入失敗時保持 UNCERTAIN。
 
 下面三段是 brief 的 prompt 本體素材。
@@ -104,6 +104,6 @@ agent 交回的 manifest 已含 `discriminating` 欄，但**主線 MUST 自行�
 
 ## 注意事項
 
-- 四個 screenshot review 模式同走 Gemini 3.8 Flash；item 符合性 gate 另走 Opus 5。
-- 取證 worker 的 PASS 只描述收集結果；item 由 Opus 5 或已符合 fallback 條件的 GPT-5.6 Sol reviewer 判定後才標為符合。
+- 四個 screenshot review 模式同走 Gemini 3.8 Flash；item 符合性 gate 另走 Opus 5.5。
+- 取證 worker 的 PASS 只描述收集結果；item 由 Opus 5.5 或已符合 fallback 條件的 GPT-5.6 Sol reviewer 判定後才標為符合。
 - 主持者保留 scope、真實 evidence、NON-EVIDENCE／UNREACHABLE 揭露與 receipt 責任。

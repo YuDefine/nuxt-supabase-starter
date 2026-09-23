@@ -250,7 +250,7 @@ clade 自家正例：`notion-hub` 的「**NOT for** clade 內部待拍板題（�
   | `docs/tech-debt.md` TD entry | 判斷該不該做 | Class / Location + 一句話問題 + 一句話代價 |
   | subagent brief | 開工 | 具體路徑 + 相關規約條目 + 驗收標準 |
 
-  Opus 5 的落盤文件比前代長是已知偏差（官方 prompting guide § Written deliverable length）。**NEVER** 拿「內容都是真的」當保留篇幅的理由——真但不改變任何決定的段落，成本由每一個讀者付。
+  Opus 5.5 的落盤文件比前代長是已知偏差（官方 prompting guide § Written deliverable length）。**NEVER** 拿「內容都是真的」當保留篇幅的理由——真但不改變任何決定的段落，成本由每一個讀者付。
 - 跨 rule 引用用 `[[name]]`，**NEVER** 複製他 rule 內文——複本必漂移。
 - **Pointer 方向 MUST 是 conditional → always**（去重時最容易踩的洞）：always-load 檔指向 conditional-load 檔，等於在 conditional 檔沒載入的 session 完全失去該規約。判定法：去重前先確認兩檔的 `paths:` 狀態，**SoT 一律留在載入面較廣的那一份**，窄的那份放 pointer。看似「同一份清單重複兩次」的東西，若一份在 always、一份在 conditional，那是**跨載入邊界的刻意備份**，不是冗餘——此時要修的是漂移（對齊內容），不是刪副本。實例：破壞性話術關鍵詞表留在 always-load 的 [[commit]]，conditional 的 [[scope-discipline]] 引用它。
 

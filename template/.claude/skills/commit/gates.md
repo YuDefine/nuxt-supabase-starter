@@ -335,6 +335,8 @@ gate 自己的可用度跑 `node scripts/audit-security-gate-readiness.ts`（war
 
 ## § 0-A: 程式碼審查（simplify → 0-A.1 → 條件式 0-A.2）
 
+> **Opus 5.5 暫時覆寫期間（2026-09-23 起）本段的 Astra／Fable 兩格政策停用**：0-A（含 0-A.2 深度 review）只跑 `CLAUDE_REVIEW_SEAT=opus claude-review-safe.sh medium`（`code-review-opus` 列；wrapper 預設即 opus），**NEVER** 派 Astra 或 Fable。Opus 額度用完時 gate 保持未完成、等額度恢復；覆寫撤銷也**不**自動恢復 Astra／Fable 0-A——那要 Charles 另行拍板（Charles 2026-09-23 硬禁令，見 `rules/core/agent-routing.md` § Opus 5.5 暫時覆寫 的 0-A 例外）。receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。
+
 **每次 dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，分開驗證 scope、fresh context、模型資格、品質與唯讀載體。commit 0-A 的合格 review **兩格同級**：GPT-6 Astra via Pi（effort: medium）優先，Claude Fable 5.1 via Herdr Claude child（effort: medium，`code-review-fable` 列）只在 Astra 實際不可用（exit 3／4＋逐字 RESULT 證據）時啟用；兩格 verified PASS 等效，兩格都不可用 → gate 保持未完成。review 角色不固定由哪個 runtime 主線執行，原生呼叫方式見本檔末尾投影的 runtime 操作段。
 
 1. 主線先完成 0-A.0；修完的 snapshot 才交給 reviewer。
@@ -466,7 +468,7 @@ Heavy gate 的 `exit 75` 代表 `gate-slot.sh` 等不到 slot、inner command �
 
 **不觸發**：純 `<script>` / `<style>` 微調、composable / store / API 純邏輯、測試、文件、設定檔、單純重構不影響視覺輸出。
 
-**Dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，確認真實圖片存取、視覺品質資格、fresh context 與可用載體；brief 帶完整 item、截圖與互動證據，依本檔 native 操作段執行。取證走 `screenshot-review-verify` Gemini 3.8 Flash high；Design Review 與截圖符合性由 fresh Claude Opus 5（effort: medium） 讀實際圖片後完成。取證與判定分開 dispatch；Opus 5 無法執行時帶實際原因走對應 GPT-5.6 Sol（effort: high）fallback，保留 fresh context／圖片／gate 要求；fallback 仍失敗時保留 0-B 未完成。
+**Dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，確認真實圖片存取、視覺品質資格、fresh context 與可用載體；brief 帶完整 item、截圖與互動證據，依本檔 native 操作段執行。取證走 `screenshot-review-verify` Gemini 3.8 Flash high；Design Review 與截圖符合性由 fresh Claude Opus 5.5（effort: medium） 讀實際圖片後完成。取證與判定分開 dispatch；Opus 5.5 無法執行時帶實際原因走對應 GPT-5.6 Sol（effort: high）fallback，保留 fresh context／圖片／gate 要求；fallback 仍失敗時保留 0-B 未完成。
 
 **並行啟動**：有真實並行載體時，0-A.1 啟動後同回合啟動已觸發的 0-B；收回 findings 後與 0-A.1／0-C 匯合修正。缺並行能力時依 review-policy 記錄同步載體限制，不略過視覺 gate。
 
