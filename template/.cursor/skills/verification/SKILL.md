@@ -13,8 +13,8 @@ contracts and are references rather than separate runtime skills.
 
 | Mode | Use when | Detailed guide |
 | --- | --- | --- |
-| `create` | No `verify-*/features/README.md` exists and infrastructure is needed | [create guide](references/legacy/verification-create/SKILL.md) |
-| `maintain` | A verify skill exists and its source map or live coverage may have drifted | [maintenance guide](references/legacy/verification-maintain/SKILL.md) |
+| `create` | No `verify-*/features/README.md` exists and infrastructure is needed | [create guide](references/.legacy/verification-create/SKILL.md) |
+| `maintain` | A verify skill exists and its source map or live coverage may have drifted | [maintenance guide](references/.legacy/verification-maintain/SKILL.md) |
 
 ## Routing and boundary
 

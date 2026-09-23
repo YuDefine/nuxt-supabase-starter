@@ -15,9 +15,9 @@ independently discoverable skills.
 | Mode | Use when | Detailed guide |
 | --- | --- | --- |
 | `scan` | Check whether anything in this repo is waiting on a human | No guide: run `flow gates --repo-only --json` and follow [[review-gui-surface]] § Hard rule |
-| `screenshot` | Collect UI screenshots or execute a visual checklist | [screenshot guide](references/legacy/review-screenshot/SKILL.md) and its evidence contract |
-| `archive` | Retired: do not append `docs/manual-review-archive.md`; completed items stay in the work package | [review archive guide](references/legacy/review-archive/SKILL.md) |
-| `screenshots` | Retired: do not move topics into `_archive/` | [screenshot archive guide](references/legacy/screenshots-archive/SKILL.md) |
+| `screenshot` | Collect UI screenshots or execute a visual checklist | [screenshot guide](references/.legacy/review-screenshot/SKILL.md) and its evidence contract |
+| `archive` | Retired: do not append `docs/manual-review-archive.md`; completed items stay in the work package | [review archive guide](references/.legacy/review-archive/SKILL.md) |
+| `screenshots` | Retired: do not move topics into `_archive/` | [screenshot archive guide](references/.legacy/screenshots-archive/SKILL.md) |
 
 Screenshot evidence is collected by the named **Pi Gemini 3.8 Flash** worker
 (`screenshot-review-verify`, effort `high`; dispatch with

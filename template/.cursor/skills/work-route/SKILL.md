@@ -67,13 +67,13 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}
 
 已有 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:` 時，沿用 `specs/plans/<work-id>/`。新工作：repo 根有 `specs/truth/work-lifecycle.md` 時 MUST 先 `flow plan open` 鑄 `W-…`；沒有該檔的 consumer 才鑄 `NNN-<slug>`。不為補前提、轉 owner 或重試另開 package。
 
-本次要調整 project constitution，或下一 owner 必讀的 constitution 缺失時，載入本 skill 的 `rules/constitution/SKILL.md` 及其要求的資源，由該 owner 做最小增量處理。已授權工作中的可確定前提直接補齊；會改需求、權限或高影響規則時，只問具體缺口。
+本次要調整 project constitution，或下一 owner 必讀的 constitution 缺失時，載入本 skill 的 `rules/.constitution/SKILL.md` 及其要求的資源，由該 owner 做最小增量處理。已授權工作中的可確定前提直接補齊；會改需求、權限或高影響規則時，只問具體缺口。
 
 | 藉口（逐字，出自既有 plan 的 Decisions） | 現實 |
 | --- | --- |
 | 「constitution 未存在，本輪不改 constitution artifact」 | 缺失就是本段的觸發條件，不是豁免。同型註記在三個 session 各出現一次，各留下一份互不相同的未提交 constitution，沒有一份落地。既有 plan 這樣寫 **NEVER** 構成前例：由 owner 建最小版、獨立落地，再續跑原工作 |
 
-內部 `rules/constitution/**` 是執行契約；專案 `.agents/constitution/**` 是治理 artifact。兩者不能互相替代。按當前 checkout 驗證 project artifact，不拿另一 worktree 的未提交檔冒充存在，也不把內部契約複製成 project constitution。
+內部 `rules/.constitution/**` 是執行契約；專案 `.agents/constitution/**` 是治理 artifact。兩者不能互相替代。按當前 checkout 驗證 project artifact，不拿另一 worktree 的未提交檔冒充存在，也不把內部契約複製成 project constitution。
 
 ## 2. 載入真正可用的 owner
 
@@ -81,21 +81,21 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}
 
 | Owner | 實際載入位置（相對本 skill） |
 | --- | --- |
-| constitution | `rules/constitution/SKILL.md` |
-| spec-by-example | `rules/workflow/spec-by-example/SKILL.md` |
-| technical-research | `rules/workflow/technical-research/SKILL.md` |
-| ui-plan | `rules/workflow/ui-plan/SKILL.md` |
-| api-plan、data-plan | `rules/workflow/<owner>/SKILL.md` |
-| dsl-refine、gherkin-and-dsl | `rules/workflow/<owner>/SKILL.md` |
-| tasks、bdd、truth-delta | `rules/workflow/<owner>/SKILL.md` |
-| clarify-over-specs | 優先當前 runtime 已安裝公開入口；未提供時用 `rules/workflow/clarify-over-specs/SKILL.md` |
+| constitution | `rules/.constitution/SKILL.md` |
+| spec-by-example | `rules/.workflow/spec-by-example/SKILL.md` |
+| technical-research | `rules/.workflow/technical-research/SKILL.md` |
+| ui-plan | `rules/.workflow/ui-plan/SKILL.md` |
+| api-plan、data-plan | `rules/.workflow/<owner>/SKILL.md` |
+| dsl-refine、gherkin-and-dsl | `rules/.workflow/<owner>/SKILL.md` |
+| tasks、bdd、truth-delta | `rules/.workflow/<owner>/SKILL.md` |
+| clarify-over-specs | 優先當前 runtime 已安裝公開入口；未提供時用 `rules/.workflow/clarify-over-specs/SKILL.md` |
 | specify、clarify、system-analysis、implement | 當前 runtime 的公開入口與必要 resources |
 
-Claude、Codex、Cursor 的本 skill 根分別為 `.claude/skills/work-route/`、`.agents/skills/work-route/`、`.cursor/skills/work-route/`。內部流程由 `clade-workflow-bundles` 隨本 skill 投影，完整保留其相對 rules／templates，不另加公開 skill。只按需讀本步入口及它明列的必讀資源，不一次載入全部流程。
+Claude、Codex、Cursor 的本 skill 根分別為 `.claude/skills/work-route/`、`.agents/skills/work-route/`、`.cursor/skills/work-route/`。內部流程由 `clade-workflow-bundles` 隨本 skill 投影，完整保留其相對 rules／templates，不另加公開 skill。內部契約放在 `.` 開頭的目錄，是為了不讓會遞迴掃 `SKILL.md` 的 runtime 把它們列成公開 skill；多數檔案搜尋工具預設不掃這類目錄，所以一律照上表的明確路徑讀取，**NEVER** 用搜尋結果為空判定內部流程不存在。只按需讀本步入口及它明列的必讀資源，不一次載入全部流程。
 
 下游契約內提到 `/tasks`、`/bdd`、`/truth-delta` 等流程時，也回本表解析並接續，不要求它們有獨立公開入口。這項工作已授權的內部流程由 orchestrator 載入契約執行；不能把缺少 slash UI 當成能力缺失。
 
-內部流程的可執行資源也以實際 owner 根解析。上游契約中的 `.agents/skills/<owner>/scripts/...` 是原安裝位置；此 bundle 下須將該前綴換成當前 runtime 的 `work-route/rules/workflow/<owner>/`，保留腳本與參數，不另外建立頂層 skill。尤其 gherkin-and-dsl Phase 6 必須實際執行 `uv run <work-route-root>/rules/workflow/gherkin-and-dsl/scripts/audit_feature_dsl_topology.py --root <features-root>`；其中 `<work-route-root>` 是上表所列當前 runtime 的 skill 根，`<features-root>` 是 **truth 的介面根**（含 `dsl.md` 的那一層，例如 `specs/truth/features/cli`）。plan package 的 `features/acceptance/` 沒有 `dsl.md`，拿它當 root 每一個 step 都會報找不到 DSL row——plan 端 acceptance 的對應檢查是 `flow plan readiness <work-id>`（dry-run 無 undefined／ambiguous step）。保留稽核輸出，失敗交回該 owner，不因路徑搬移而略過。
+內部流程的可執行資源也以實際 owner 根解析。上游契約中的 `.agents/skills/<owner>/scripts/...` 是原安裝位置；此 bundle 下須將該前綴換成當前 runtime 的 `work-route/rules/.workflow/<owner>/`，保留腳本與參數，不另外建立頂層 skill。尤其 gherkin-and-dsl Phase 6 必須實際執行 `uv run <work-route-root>/rules/.workflow/gherkin-and-dsl/scripts/audit_feature_dsl_topology.py --root <features-root>`；其中 `<work-route-root>` 是上表所列當前 runtime 的 skill 根，`<features-root>` 是 **truth 的介面根**（含 `dsl.md` 的那一層，例如 `specs/truth/features/cli`）。plan package 的 `features/acceptance/` 沒有 `dsl.md`，拿它當 root 每一個 step 都會報找不到 DSL row——plan 端 acceptance 的對應檢查是 `flow plan readiness <work-id>`（dry-run 無 undefined／ambiguous step）。保留稽核輸出，失敗交回該 owner，不因路徑搬移而略過。
 
 每次交棒都記錄 runtime、owner、實際載入路徑、必要 artifact 與同步證據。用既有 projector 的唯讀規劃／check 核對目前 checkout；檔案存在、dry-run exit 0、另一 runtime 的成功都不單獨證明已同步。
 

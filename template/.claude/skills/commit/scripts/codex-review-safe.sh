@@ -97,6 +97,58 @@
 
 set -uo pipefail
 
+# Runtime 一律走 CLADE_HOME main（Z2）：propagate 只寫 main，repo 內／舊 worktree 的
+# 投影副本會凍結在開樹那一刻——舊 wrapper 不認得新 seat、舊 helper 拒絕新的 Routing
+# Table 列（2026-09-23 實測）。所以 wrapper 先把自己換成 CLADE_HOME 那份再跑，helper
+# 也從 CLADE_HOME 解析。正在開發這支 wrapper／helper 的樹設 CLADE_RUNTIME_FROM_REPO=1
+# 跑自己的版本。CLADE_HOME 沒有這份檔（非 clade 機器）時照原樣跑。
+CLADE_HOME="${CLADE_HOME:-$HOME/offline/clade}"
+_CLADE_SELF_MAIN="$CLADE_HOME/capabilities/core/scripts/codex-review-safe.sh"
+# CLADE_HOME main 是多 session 共寫的 working tree：Z2 要的是「main 已 commit 的版本」，
+# 不是別人改到一半的檔。所以借用 CLADE_HOME 的 runtime 之前先驗那幾個路徑與 HEAD 一致；
+# 不一致就 fail closed（exit 2）。NEVER 改成從快照副本執行——helper／ledger-writer／flow
+# 的 state root 由自身檔案位置推導（CLADE_ROOT = dirname(import.meta.url)/..），副本會把
+# dispatch record 與 spine 寫進快照目錄。也 NEVER 靜默退回受審 repo 的副本——那正是 Z2
+# 要消滅的凍結舊版。受審 repo 就是 CLADE_HOME 本身、或 CLADE_HOME 不是 git repo 時不驗。
+# 殘餘窗口：驗完到 exec／node 載入之間的改寫擋不到（秒級）。
+if [ "${CLADE_RUNTIME_FROM_REPO:-}" != "1" ] && [ -z "${CLADE_RUNTIME_REEXEC:-}" ]; then
+  _clade_home_top="$(git -C "$CLADE_HOME" rev-parse --show-toplevel 2>/dev/null || true)"
+  _clade_repo_top="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+  if [ -n "$_clade_home_top" ] \
+    && [ "$(cd "$_clade_home_top" && pwd -P)" != "$(cd "$_clade_repo_top" && pwd -P)" ]; then
+    _clade_dirty="$(git -C "$_clade_home_top" --no-optional-locks diff --name-only HEAD -- \
+      capabilities/core/scripts vendor/scripts vendor/signals 2>/dev/null)"
+    if [ -n "$_clade_dirty" ]; then
+      {
+        echo "[codex-review-safe] 錯誤：CLADE_HOME（$_clade_home_top）的 review runtime 有未 commit 的改動，拒絕執行別人改到一半的 wrapper／helper："
+        printf '%s\n' "$_clade_dirty" | head -10 | sed 's/^/  /'
+        echo "  → 等持有者 commit 或還原（node \"$_clade_home_top/vendor/scripts/flow/flow.ts\" who 查持有者）後重跑；要跑本樹自己 commit 的版本就設 CLADE_RUNTIME_FROM_REPO=1。"
+      } >&2
+      exit 2
+    fi
+  fi
+  unset _clade_home_top _clade_repo_top _clade_dirty
+fi
+if [ "${CLADE_RUNTIME_FROM_REPO:-}" != "1" ] && [ -z "${CLADE_RUNTIME_REEXEC:-}" ] \
+  && [ -f "$_CLADE_SELF_MAIN" ] \
+  && [ "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")" \
+    != "$(cd "$(dirname "$_CLADE_SELF_MAIN")" && pwd -P)/codex-review-safe.sh" ]; then
+  CLADE_RUNTIME_REEXEC=1 exec bash "$_CLADE_SELF_MAIN" "$@"
+fi
+unset _CLADE_SELF_MAIN CLADE_RUNTIME_REEXEC
+
+# clade_runtime <repo-relative path>：CLADE_HOME 優先；CLADE_RUNTIME_FROM_REPO=1 且受審
+# repo 有該檔時用 repo 版；CLADE_HOME 缺檔時退回 repo 版（非 clade 機器）。
+clade_runtime() {
+  if [ "${CLADE_RUNTIME_FROM_REPO:-}" = "1" ] && [ -f "$REPO_ROOT/$1" ]; then
+    printf '%s\n' "$REPO_ROOT/$1"
+  elif [ -f "$CLADE_HOME/$1" ]; then
+    printf '%s\n' "$CLADE_HOME/$1"
+  else
+    printf '%s\n' "$REPO_ROOT/$1"
+  fi
+}
+
 REASONING="${1:-medium}"
 case "$REASONING" in
   low|medium) ;;
@@ -164,12 +216,7 @@ fi
 # sit at different depths, so a path computed from $0 would resolve wrong in
 # one of the two contexts.
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-CLADE_HOME="${CLADE_HOME:-$HOME/offline/clade}"
-if [ -f "$REPO_ROOT/vendor/scripts/pi-review.ts" ]; then
-  PI_REVIEW_RUNNER="$REPO_ROOT/vendor/scripts/pi-review.ts"
-else
-  PI_REVIEW_RUNNER="$CLADE_HOME/vendor/scripts/pi-review.ts"
-fi
+PI_REVIEW_RUNNER="$(clade_runtime vendor/scripts/pi-review.ts)"
 if [ "$#" -gt 0 ]; then
   echo "[codex-review-safe] 錯誤：遷移到 Pi 後不接受額外 runtime flags；收到：$*" >&2
   exit 1

@@ -69,7 +69,7 @@
 #
 # Exit code 與 codex-review-safe.sh 同一套判讀：
 #   0  verdict 上 stdout（完整性＋身分皆過）
-#   2  本地用法／依賴錯誤（非 medium effort、--findings 壞檔、helper 不存在）
+#   2  本地用法／依賴錯誤（非 medium effort、--findings 壞檔、helper 不存在、CLADE_HOME review runtime 有未 commit 改動）
 #   3  Fable 席 review 未跑成（transport、completion_failed、無 verdict 檔、
 #      coordination 逾時）——與 Astra exit 3 同義：reviewer 不可用
 #   4  account_unavailable——兩格皆盡的逐字證據，gate 維持 pending；stderr 另印
@@ -96,6 +96,58 @@
 # high/max 由 wrapper 直接拒絕（exit 2），NEVER 靜默降檔或抬檔。
 
 set -uo pipefail
+
+# Runtime 一律走 CLADE_HOME main（Z2）：propagate 只寫 main，repo 內／舊 worktree 的
+# 投影副本會凍結在開樹那一刻——舊 wrapper 不認得新 seat、舊 helper 拒絕新的 Routing
+# Table 列（2026-09-23 實測）。所以 wrapper 先把自己換成 CLADE_HOME 那份再跑，helper
+# 也從 CLADE_HOME 解析。正在開發這支 wrapper／helper 的樹設 CLADE_RUNTIME_FROM_REPO=1
+# 跑自己的版本。CLADE_HOME 沒有這份檔（非 clade 機器）時照原樣跑。
+CLADE_HOME="${CLADE_HOME:-$HOME/offline/clade}"
+_CLADE_SELF_MAIN="$CLADE_HOME/capabilities/core/scripts/claude-review-safe.sh"
+# CLADE_HOME main 是多 session 共寫的 working tree：Z2 要的是「main 已 commit 的版本」，
+# 不是別人改到一半的檔。所以借用 CLADE_HOME 的 runtime 之前先驗那幾個路徑與 HEAD 一致；
+# 不一致就 fail closed（exit 2）。NEVER 改成從快照副本執行——helper／ledger-writer／flow
+# 的 state root 由自身檔案位置推導（CLADE_ROOT = dirname(import.meta.url)/..），副本會把
+# dispatch record 與 spine 寫進快照目錄。也 NEVER 靜默退回受審 repo 的副本——那正是 Z2
+# 要消滅的凍結舊版。受審 repo 就是 CLADE_HOME 本身、或 CLADE_HOME 不是 git repo 時不驗。
+# 殘餘窗口：驗完到 exec／node 載入之間的改寫擋不到（秒級）。
+if [ "${CLADE_RUNTIME_FROM_REPO:-}" != "1" ] && [ -z "${CLADE_RUNTIME_REEXEC:-}" ]; then
+  _clade_home_top="$(git -C "$CLADE_HOME" rev-parse --show-toplevel 2>/dev/null || true)"
+  _clade_repo_top="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+  if [ -n "$_clade_home_top" ] \
+    && [ "$(cd "$_clade_home_top" && pwd -P)" != "$(cd "$_clade_repo_top" && pwd -P)" ]; then
+    _clade_dirty="$(git -C "$_clade_home_top" --no-optional-locks diff --name-only HEAD -- \
+      capabilities/core/scripts vendor/scripts vendor/signals 2>/dev/null)"
+    if [ -n "$_clade_dirty" ]; then
+      {
+        echo "[claude-review-safe] 錯誤：CLADE_HOME（$_clade_home_top）的 review runtime 有未 commit 的改動，拒絕執行別人改到一半的 wrapper／helper："
+        printf '%s\n' "$_clade_dirty" | head -10 | sed 's/^/  /'
+        echo "  → 等持有者 commit 或還原（node \"$_clade_home_top/vendor/scripts/flow/flow.ts\" who 查持有者）後重跑；要跑本樹自己 commit 的版本就設 CLADE_RUNTIME_FROM_REPO=1。"
+      } >&2
+      exit 2
+    fi
+  fi
+  unset _clade_home_top _clade_repo_top _clade_dirty
+fi
+if [ "${CLADE_RUNTIME_FROM_REPO:-}" != "1" ] && [ -z "${CLADE_RUNTIME_REEXEC:-}" ] \
+  && [ -f "$_CLADE_SELF_MAIN" ] \
+  && [ "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")" \
+    != "$(cd "$(dirname "$_CLADE_SELF_MAIN")" && pwd -P)/claude-review-safe.sh" ]; then
+  CLADE_RUNTIME_REEXEC=1 exec bash "$_CLADE_SELF_MAIN" "$@"
+fi
+unset _CLADE_SELF_MAIN CLADE_RUNTIME_REEXEC
+
+# clade_runtime <repo-relative path>：CLADE_HOME 優先；CLADE_RUNTIME_FROM_REPO=1 且受審
+# repo 有該檔時用 repo 版；CLADE_HOME 缺檔時退回 repo 版（非 clade 機器）。
+clade_runtime() {
+  if [ "${CLADE_RUNTIME_FROM_REPO:-}" = "1" ] && [ -f "$REPO_ROOT/$1" ]; then
+    printf '%s\n' "$REPO_ROOT/$1"
+  elif [ -f "$CLADE_HOME/$1" ]; then
+    printf '%s\n' "$CLADE_HOME/$1"
+  else
+    printf '%s\n' "$REPO_ROOT/$1"
+  fi
+}
 
 # Opus 5.5 暫時覆寫（agent-routing.md § Opus 5.5 暫時覆寫）：CLAUDE_REVIEW_SEAT=opus 讓本格
 # 改派 fresh Opus 5.5 child（`code-review-opus` 列，同樣 medium／readonly）。覆寫生效期間預設
@@ -140,12 +192,7 @@ if [ "$#" -gt 0 ]; then
 fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-CLADE_HOME="${CLADE_HOME:-$HOME/offline/clade}"
-if [ -f "$REPO_ROOT/vendor/scripts/herdr-session-handoff.ts" ]; then
-  HELPER="$REPO_ROOT/vendor/scripts/herdr-session-handoff.ts"
-else
-  HELPER="$CLADE_HOME/vendor/scripts/herdr-session-handoff.ts"
-fi
+HELPER="$(clade_runtime vendor/scripts/herdr-session-handoff.ts)"
 if [ ! -f "$HELPER" ]; then
   echo "[claude-review-safe] 錯誤：herdr-session-handoff.ts 不存在：$HELPER" >&2
   exit 2
@@ -299,7 +346,28 @@ herdr_field() {
 # ── 派工＋等待迴圈 ────────────────────────────────────────────────────────
 # --coordinate 每輪最多等 MAX_COORDINATION_SLICE_MS（8min）；回 coordination_pending
 # 就 --coordinate-resume 同一 dispatch_id，直到終態或總預算用盡。
+#
+# 預算 30min 的依據（2026-09-23 取樣）：dispatchStateDir()/review/ 47 份 Opus receipt，
+# 以 child transcript 首筆時間到 completion reported_at 計，最大 5.3min、多數 1–3min；
+# 唯一較長的是某 consumer 一筆 10.6min（child 把 pnpm check 丟背景）。30min 約為最長實測的 3 倍。
+# 那一次 wrapper 在第 3 分鐘就 exit 3，不是預算不夠：child 開背景任務後結束 turn，Herdr
+# 判它 idle，helper 對 Claude 族「idle 且無 completion」回 completion_unknown——但 child 會被
+# task notification 喚醒續做、之後照常 --complete。所以「idle＋retained＋尚無 completion」在這裡
+# 是「還在跑」，隔 IDLE_POLL_SECONDS 再 --coordinate-resume 同一 dispatch，NEVER 當終態；
+# 真的停了（沒 --complete 就結束）由總預算收尾。
 BUDGET_MINUTES="${CLAUDE_REVIEW_BUDGET_MINUTES:-30}"
+IDLE_POLL_SECONDS="${CLAUDE_REVIEW_IDLE_POLL_SECONDS:-20}"
+case "$BUDGET_MINUTES" in ''|*[!0-9]*) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_BUDGET_MINUTES 必須是非負整數；收到 '$BUDGET_MINUTES'" >&2; exit 2 ;; esac
+case "$IDLE_POLL_SECONDS" in ''|*[!0-9]*) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_IDLE_POLL_SECONDS 必須是非負整數；收到 '$IDLE_POLL_SECONDS'" >&2; exit 2 ;; esac
+# 與 check_pos_int 同一上限（見該處註解）：全數字但超過 15 位會讓 `BUDGET_MINUTES * 60` 繞回、
+# `[ -gt 0 ]` 報錯被 if 當 false——預算提早用盡或輪詢間隔靜默失效。這兩個允許 0，所以不共用它。
+for pair in "CLAUDE_REVIEW_BUDGET_MINUTES=$BUDGET_MINUTES" "CLAUDE_REVIEW_IDLE_POLL_SECONDS=$IDLE_POLL_SECONDS"; do
+  value="${pair#*=}"; digits="${value#"${value%%[!0]*}"}"
+  if [ "${#digits}" -gt 15 ]; then
+    echo "[claude-review-safe] 錯誤：${pair%%=*} 必須是不超過 15 位的非負整數；收到 '$value'" >&2
+    exit 2
+  fi
+done
 DEADLINE=$(( $(date +%s) + BUDGET_MINUTES * 60 ))
 
 herdr_call \
@@ -376,18 +444,103 @@ if [ "$rc" -eq 21 ] || [ "$STATUS" = "account_unverifiable" ]; then
   exit 11
 fi
 
-while [ "$STATUS" = "coordination_pending" ]; do
+# child 仍在跑：coordination_pending（slice 逾時而 child working），或 helper 明標
+# completion_recorded=false（pane 身分已確認、尚無 business outcome）的 idle＋retained
+# completion_unknown（見上方預算註解）。其餘 completion_unknown 一律終態：child 自報
+# --complete unknown（帶 business_outcome）、pane／session 身分確認不了（exactAgent 失敗），
+# 以及 pane 消失、blocked——它們與「還在跑」共用 status＋agent_status，NEVER 只看那兩欄。
+#
+# 另兩種「child 還活著、只是 helper 這一次沒確認到」（2026-09-23 RUSH-4：load 60–90 下 #191／#201
+# 連續多輪、#156-b 一輪都中，reviewer 事後都審完了，wrapper 卻已刪掉快照與 brief）：
+#   - 派工回 transport_error（exit 16）且 helper 明標 prompt_delivery=unconfirmed：runtime 已接受
+#     prompt，只是「開始工作」的確認逾時——child 多半已收到 brief。其餘 transport_error 一律終態，
+#     即使它們同樣帶 retained＋pane_id＋dispatch_id：標籤回讀失敗與可見身分驗證失敗發生在投遞
+#     之前（brief 根本沒送出，續等只會空等到預算用完）、model mismatch 會讓錯的 model 跑完整份
+#     review。NEVER 用那三欄或 error 字串判定，只看 helper 的 prompt_delivery 欄位。
+#   - --coordinate(-resume) 回 reclaim_refused 且 helper 明標 refusal_reason=agent_not_settled：
+#     pane 內就是本 dispatch 的 session，child 已 --complete 但 turn 還在收尾，helper 拒收 pane。
+#     outcome 已落盤，稍後再 resume 即收得到。其他拒收原因（pane 被別的 session 佔用、身分不符、
+#     他人持有、pane get 失敗）照舊終態——「別的 session」那條同樣帶 agent_status=working，
+#     NEVER 用 agent_status 或 error 字串判定，只看 helper 的 refusal_reason 欄位。
+launch_unconfirmed() {
+  [ "$STATUS" = "transport_error" ] \
+    && [ "$(herdr_field "$RECEIPT" prompt_delivery)" = "unconfirmed" ] \
+    && [ -n "$(herdr_field "$RECEIPT" pane_id)" ] \
+    && [ -n "$DISPATCH_ID" ]
+}
+harvest_settling() {
+  [ "$STATUS" = "reclaim_refused" ] \
+    && [ "$(herdr_field "$RECEIPT" refusal_reason)" = "agent_not_settled" ] \
+    && [ -n "$DISPATCH_ID" ]
+}
+child_still_running() {
+  [ "$STATUS" = "coordination_pending" ] && return 0
+  launch_unconfirmed && return 0
+  harvest_settling && return 0
+  [ "$STATUS" = "completion_unknown" ] \
+    && [ "$(herdr_field "$RECEIPT" completion_recorded)" = "false" ] \
+    && [ "$(herdr_field "$RECEIPT" agent_status)" = "idle" ] \
+    && [ "$(herdr_field "$RECEIPT" retained)" = "true" ] \
+    && [ -n "$DISPATCH_ID" ]
+}
+
+while child_still_running; do
   if [ "$(date +%s)" -ge "$DEADLINE" ]; then
-    echo "[claude-review-safe] RESULT: review failed（exit 3）— coordination 逾時（budget ${BUDGET_MINUTES}min），dispatch ${DISPATCH_ID:-?} 未回終態，NEVER 當作通過" >&2
+    echo "[claude-review-safe] RESULT: review failed（exit 3）— 等待預算 ${BUDGET_MINUTES}min 用盡，dispatch ${DISPATCH_ID:-?} 未回終態（最後狀態 ${STATUS}／agent_status=$(herdr_field "$RECEIPT" agent_status)）；child 可能仍在跑，本輪沒有 receipt，NEVER 當作通過" >&2
+    echo "[claude-review-safe] NEXT: 以更大的 CLAUDE_REVIEW_BUDGET_MINUTES 重跑本 wrapper（新 dispatch、照常產 receipt）。NEVER 手動 --coordinate-resume 收割 ${DISPATCH_ID:-這個 dispatch} 再「人工補驗」它的 verdict——沒有 wrapper receipt 的 verdict 不是 gate 證據（commit skill review-policy.md § 無 receipt 的 verdict）；那個 pane 要回收時收割結果一律丟棄。" >&2
     exit 3
+  fi
+  # coordination_pending 的 resume 本身就在 helper 內等一個 slice；其餘續等狀態（含 transport_error）
+  # 都是 helper 立即回的——不 sleep 會在高 load 下不停重啟 node helper 直到預算用盡。
+  if [ "$STATUS" != "coordination_pending" ] && [ "$IDLE_POLL_SECONDS" -gt 0 ]; then
+    sleep "$IDLE_POLL_SECONDS"
   fi
   herdr_call --coordinate-resume "$DISPATCH_ID" >"$RECEIPT" 2>>"$WORK_DIR/herdr-stderr.log"
   rc=$?
   STATUS="$(herdr_field "$RECEIPT" status)"
 done
 
+# transport_error 的 error 屬送達失敗類（helper deliverPrompt：`prompt delivery failed:`／
+# `stalled prompt …`／`resent prompt also …`）且帶 pane_id＝reviewer pane 已開、prompt 送達未獲證實
+# （helper 已給過 stall 寬限窗，見 herdr-session-handoff.ts PROMPT_STALL_GRACE_MS）。本 wrapper 放棄後
+# WORK_DIR 隨 trap 清掉，那格 child 就算稍後開工，verdict 也無處可收——留著只是孤兒，所以當場關掉，
+# 再把 dispatch record 裁定為 dropped；只關不裁定，record 一小時後會落進 `herdr-patrol --stalled`
+# 的 ABANDONED RECORDS。--adjudicate 需要 HERDR_ENV=1，不在 Herdr 內就印出指令。
+# 其他 transport_error（model mismatch、visible identity、launcher failed…）的 pane 是 helper 刻意
+# 留下的證據（retained），NEVER 在這裡關。
+TRANSPORT_ERROR="$(herdr_field "$RECEIPT" error)"
+ORPHAN_PANE="$(herdr_field "$RECEIPT" pane_id)"
+if [ "$STATUS" = "transport_error" ] && [ -n "$ORPHAN_PANE" ]; then
+  case "$TRANSPORT_ERROR" in
+    "prompt delivery failed:"*|"stalled prompt "*|"resent prompt also "*)
+      if "${HERDR_BIN:-herdr}" pane close "$ORPHAN_PANE" >/dev/null 2>>"$WORK_DIR/herdr-stderr.log"; then
+        echo "[claude-review-safe] 已關閉未確認送達的 reviewer pane $ORPHAN_PANE（放棄收割，不留孤兒）" >&2
+        ADJUDICATE_ARGS=(--adjudicate "$DISPATCH_ID" --disposition dropped --reason "claude-review-safe: reviewer pane $ORPHAN_PANE closed without a verdict after transport_error: $TRANSPORT_ERROR")
+        ADJUDICATE_RECEIPT="$WORK_DIR/adjudicate-receipt.json"
+        if [ -z "$DISPATCH_ID" ]; then
+          echo "[claude-review-safe] 警告：receipt 無 dispatch_id，無法裁定 dispatch record" >&2
+        elif [ "${HERDR_ENV:-}" != "1" ]; then
+          echo "[claude-review-safe] 警告：不在 Herdr 內（HERDR_ENV≠1），dispatch $DISPATCH_ID 未裁定；在 Herdr 內手動跑：node $HELPER --adjudicate $DISPATCH_ID --disposition dropped --reason <理由>" >&2
+        elif herdr_call "${ADJUDICATE_ARGS[@]}" >"$ADJUDICATE_RECEIPT" 2>>"$WORK_DIR/herdr-stderr.log"; then
+          echo "[claude-review-safe] dispatch $DISPATCH_ID 已裁定 dropped" >&2
+        else
+          # 拒絕原因（adjudication_refused：pane 仍在 agent list、簽署 session 解析不到…）只在 stdout receipt。
+          echo "[claude-review-safe] 警告：dispatch $DISPATCH_ID 裁定被拒——$(herdr_field "$ADJUDICATE_RECEIPT" status)：$(herdr_field "$ADJUDICATE_RECEIPT" error)；排除原因後重跑：node $HELPER --adjudicate $DISPATCH_ID --disposition dropped --reason <理由>" >&2
+        fi
+      else
+        echo "[claude-review-safe] 警告：reviewer pane $ORPHAN_PANE 關閉失敗，需手動回收（herdr pane close $ORPHAN_PANE）" >&2
+      fi
+      ;;
+    *)
+      echo "[claude-review-safe] reviewer pane $ORPHAN_PANE 保留（非送達類 transport_error，helper 留作證據）" >&2
+      ;;
+  esac
+fi
+
 if [ "$STATUS" != "completion_success" ]; then
   echo "[claude-review-safe] RESULT: review failed（exit 3）— herdr 終態 ${STATUS:-unknown}（helper exit $rc），無 verdict 產出，NEVER 當作通過" >&2
+  # receipt 的 error 是本次失敗的逐字原因；WORK_DIR（含 receipt）隨 trap 清掉，這裡不印就只剩 dispatch record 可查。
+  [ -n "$TRANSPORT_ERROR" ] && echo "[claude-review-safe]   error: $TRANSPORT_ERROR" >&2
   sed 's/^/[claude-review-safe]   /' "$WORK_DIR/herdr-stderr.log" | tail -10 >&2
   exit 3
 fi

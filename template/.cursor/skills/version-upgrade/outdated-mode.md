@@ -415,6 +415,8 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
 
 Dispatch（同 O.2.2，保留 `--workspace-access mutation`，把 `--effort` 改成 `high`、`--table-row` 改成 `version-upgrade-research`）+ watch（high 跑得更久，但節奏不變：notification-only + 單一安全網 fallback，節奏以 [[agent-routing.pi-watch-protocol]] 的既定節奏為準）。
 
+> **Opus 5.5 暫時覆寫期間**（[[agent-routing]] § Opus 5.5 暫時覆寫）：本步不派 pi，研究由 Opus 5.5 做；開任何 Opus session／subagent 一律 `--effort medium`，**NEVER** 把本步的 `--effort high` 原樣帶到 Opus（helper 會以 `usage_error` 擋下）。「失敗 → research」的升級在 Opus 下靠上面的 GitHub issues／releases／changelog 與 web search 研究，**不靠抬 effort**。
+
 ### O.2.5 research 仍失敗 → runtime-native question interface
 
 ```

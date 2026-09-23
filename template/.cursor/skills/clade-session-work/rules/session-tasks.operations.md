@@ -489,7 +489,7 @@ coordinator 身分轉移，以及寫出讓 successor 回收本 pane 的 predeces
 
 `--route` 與 `--tier-basis` 的值域與語義**與 `pi-dispatch.ts` 逐字相同**（`--route` 記走哪條政策，`--tier-basis` 記那條政策對檔位的**結論**，兩者不可互相推導）——這條對稱是 2026-09-07 補上的：在那之前 Pi 派工必須講出理由、Claude Code 派工不必，於是一句手打的 `--model claude-opus-5 --effort max` 通過了每一道 gate，事後沒有任何欄位講得出是誰依什麼授權的。**NEVER 給這兩欄 default**：default 會讓「真的判過」與「呼叫者從沒判」事後不可區分。
 
-**Claude child 的 effort 值域是 `low` / `medium` / `high`，並且按 model family 再設天花板：Fable ≤ `medium`、Opus ≤ `high`、其餘 ≤ `high`（Charles 2026-09-10 拍板）。** `max` **對 Claude child 完全不可達**，建 pane 之前就被拒，**沒有任何 `--tier-basis` 開得了它**。
+**Claude child 的 effort 值域是 `low` / `medium` / `high`，並且按 model family 再設天花板：Fable ≤ `medium`（Charles 2026-09-10 拍板）、Opus ≤ `medium`（2026-09-23 由 `high` 降下）、其餘（sonnet／haiku／未知 slug）≤ `high`。**（helper 查上限時會把未帶 `--model` 解析成 Opus，但那只是防禦性預設——每次派工本來就必須明確帶 `--model`，缺了會先被拒。） `max` **對 Claude child 完全不可達**，建 pane 之前就被拒，**沒有任何 `--tier-basis` 開得了它**。
 
 2026-09-06 這條路徑第一次出事時，補的是**歸因**而不是**上限**：`max` 留著，只要顯式帶 `--tier-basis adjudication`，「宣告就會落在 receipt 與 durable record 上」。2026-09-10 量到那個承諾值多少——當天 5 個 pane 以 `max` 起跑（4 個 Fable 顧問、1 個 Opus），而整個 state dir 裡 `requested_effort` 只有 14 筆命中，**全部是 `table-row` / `medium`**，`max` 一筆都沒有。成因是 completion record 的歸屬區塊被寫成「`table_row` 存在才複製」，於是**唯一能抬高檔位的那條基底，正好是唯一不留紀錄的那條**。
 

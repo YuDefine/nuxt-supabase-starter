@@ -57,6 +57,12 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts ask \
 推進去才有價值：手機那側同一秒看得到，而且會推播。**NEVER** 只在對話裡列出來就算——
 那正是「待拍板事項多數只存在於對話裡」這個缺口本身。
 
+**只有 Charles 做得了的工作**（典型：consumer 端 `disable-model-invocation` 的 skill，如 dep batch 的
+`/version-upgrade`；派工 preflight 回 `skill_not_invocable` 的就是這種）：題目是**哪一台、哪個範圍**，
+開成拍板題，執行寫成 `--step`——例：`--headline '<consumer-a> 跑 dep batch：範圍？'`、選項是範圍與「這輪不跑」、
+`--step 'Charles 在 <consumer-a> 親自打 /version-upgrade → Outdated mode'`。**NEVER** 把「去跑它」本身開成
+帶字母的題（QnX：動作不編號）。
+
 缺短標籤（≤16 字）、推薦或理由時 `flow ask` 會 exit 1 並印出改法；要的是一個值就改帶
 `--needs-value --field '<欄位名>'`。選項文字**只寫選項**：字母前綴與「（推薦）」都由渲染端加，寫進文字會疊成 `A. A. 改（推薦）（推薦）`。
 
@@ -80,6 +86,9 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts ask \
 QnX 的三條細則（全域指令檔只留綁定條件與准入判準，細則在此）：`Qn` 從 `Q1` 起算；
 可回覆條目與不可回覆條目 **NEVER** 混排連號（跨類連號會讓狀態列讀起來也像可回答的題）；
 寫了「回 `Q1A Q2A` 即可結案」這句話，就 MUST 保證每個 `Qn` 真的能這樣回。
+
+「要我動手」桶裡帶選項的列，`flow pending` 在 bullet 下印 `可回：X／Y` 與 span（**不加字母**）；
+Charles 回了其中一個字，照第 4 步對那個 span 跑 `flow answer`。
 
 四類全空就一句話講完，NEVER 硬湊。
 

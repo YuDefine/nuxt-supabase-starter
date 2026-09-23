@@ -12,7 +12,7 @@ metadata:
 
 `/design retro` is the maintainer mode for reviewing historical design findings
 and extracting recurring patterns. Read
-[the retained retro guide](references/legacy/design-retro/SKILL.md) before
+[the retained retro guide](references/.legacy/design-retro/SKILL.md) before
 running it; it is a reference mode of this skill, not a separate trigger.
 
 You are a design director coordinating specialized design skills. Your job: **assess → diagnose → decision pages → plan**. You do NOT implement UI. You DO run the decision pages in [decision-page.md](decision-page.md) when their skip predicates miss — write the payload, then hang it on the decision queue with `flow ask --question-page`, and give the user **`https://review-gui.<maintainer-domain>/decisions`**. Never a chat A/B, and never a `host:port` URL of your own — you do not start the question server, `/decisions` does, at the moment the card is opened. After the world / register / components / sequence are pinned, you produce the remaining skill plan and invoke the chosen `/impeccable …` sequence. **MUST Read [decision-page.md](decision-page.md) before any user-facing choice.**
@@ -21,31 +21,32 @@ You are a design director coordinating specialized design skills. Your job: **as
 
 本 skill 是 orchestrator：決策頁自己跑（[decision-page.md](decision-page.md)），UI 實作交由第三方 skill。Clade 不自動安裝這些 skill，consumer 首次使用前 **MUST** 手動安裝。
 
-### 1. pbakaus/impeccable（對齊 v4.1.1）
+### 1. pbakaus/impeccable（對齊 v4.3.1）
 
 impeccable 是 1 個 skill 含 23 個 sub-command：`craft`（**v4 起為 deprecated alias**，見下）/ shape / **init** / document / extract / critique / audit / polish / bolder / quieter / distill / harden / onboard / animate / colorize / typeset / layout / delight / overdrive / clarify / adapt / optimize / live（不含 `pin` / `unpin` / `hooks` 三個 management 命令，作者標註 "Plus three management commands"，不算 sub-command；v4.1 另有 `doctor`，同樣是 management，clade plan 不排）。另有 subagent（不是 sub-command）`impeccable_asset_producer` / `impeccable_manual_edit_applier` / `impeccable_documenter` / `impeccable_finish_reviewer`；前兩者僅在具 native `image_gen` 的 Codex harness 可用，Claude Code 用不到。
 
-> **Clade 對齊版本：`skill-v4.1.1`**（2026-08-25 從 v4.0.4 升級；GitHub release: <https://github.com/pbakaus/impeccable/releases/tag/skill-v4.1.1>）
+> **Clade 對齊版本：`skill-v4.3.1`**（2026-09-23 從 v4.1.1 升級；GitHub release: <https://github.com/pbakaus/impeccable/releases/tag/skill-v4.3.1>；engine `0.1.5`）
 >
-> **v4.0.4 → v4.1.1 對 clade plan 的實際衝擊：零條指令。** 逐條比對過 HEAD Commands table，**23 個 sub-command 的集合與 v4.0.4 完全相同**——本檔各 mode 排出來的 `/impeccable <sub>` 指令全部仍然有效，不需要改寫 plan 形態。`craft` 維持 deprecated alias：**clade plan NEVER 輸出 `/impeccable craft`**，改為直接描述目標介面。
+> **v4.1.1 → v4.3.1 對 clade plan 的衝擊：sub-command 零條，呼叫形態全部。** 23 個 sub-command 集合不變（`command-metadata.json` 逐 key 比對），本檔各 mode 排出來的 `/impeccable <sub>` 全部仍有效；`craft` 維持 deprecated alias，**clade plan NEVER 輸出 `/impeccable craft`**。改變的是**腳本**：4.2.0 刪掉全部 `scripts/*.mjs`，改成一支原生 launcher `scripts/impeccable`（Windows 無 `sh` 時用 `impeccable.cmd`），舊腳本都變成它的 verb——`context`、`signals`、`concept-seed`、`serve-question`、`surface-brief`、`live`、`pin`、`hooks`。
 >
-> `/design` 決策頁契約（[decision-page.md](decision-page.md)）同樣相容：`serve-question.mjs` 的 `--schema` / `--start` / `--wait` / `--update` / `--key` / `--payload` 與 exit 0/2/3/4、stdout `QUESTION URL` / `QUESTION KEY` / `ANSWER:` 都還在（`--start` 現在由 `/decisions` 呼叫，不由 agent；agent 只用 `--schema`）。HEAD 只**加**了 `--idle-grace` / `--page-inset` / `--register` / `--reroll`，沒刪既有旗標。`concept-seed.mjs` 同樣只加 `--kind` / `--register` / `--schema`。4.1.0 把決策頁的 sketch 換成 full-fidelity comp，那是 serve-question 內部渲染；ANSWER JSON 仍帶 `optionId` / `steer`，sketch 欄位若有就讀、沒有就略過。
+> **launcher 第一次執行時下載 engine binary**（`github.com/pbakaus/impeccable/releases/download/engine-v<ver>/`，放 `~/.impeccable/bin/<ver>/`，每台機器每個 user 一份、跨 repo 共用；`IMPECCABLE_HOME` 可改落點）。binary 不在 skill 樹裡、`skills-lock.json` 的 hash 涵蓋不到，完整性只靠同 release 的 sha256 sidecar——這是 2026-09-23 拍板接受的供應鏈取捨。**沒有對外網路的沙箱拿不到 binary**，所以安裝 snippet 在裝完當下就跑 `engine-probe` 把 binary 先下載好（見 `references/impeccable-install.md`）。
 >
-> **v4 的 Setup 步驟**（不是 BC，但不做會少掉 context）：每個 session 首次使用前跑一次 `node <impeccable>/scripts/context.mjs --target <path>`。路徑解析與決策頁相同，見 [decision-page.md](decision-page.md)（copy `.claude/skills/impeccable`、symlink `.agents/skills/impeccable`、Cursor `.cursor/skills/impeccable`）。它載入 PRODUCT.md / DESIGN.md 與對應 surface brief。**只跑一次，不要重跑**。
+> `/design` 決策頁契約（[decision-page.md](decision-page.md)）相容：`serve-question` 的 `--schema` / `--start` / `--wait` / `--update` / `--key` / `--payload`、exit 語意、stdout `QUESTION URL` / `QUESTION KEY` / `ANSWER:`、答案檔 `.impeccable/questions/<key>.answer.json` 全部不變（上游以 byte 級回放驗證 Rust 版）。`concept-seed` 的 `--scope` / `--mode` / `--kind` / `--register` / `--reroll`、`ASSIGNED INDEX`、`NO_PRODUCT_MD`（exit 1）也不變。**4.1.3 起** question server 對非 loopback 的 `Host` / `Origin` 回 403——`/decisions` 嵌頁那一側要改寫 Origin，見 clade TD-799。
 >
-> `/design` **直接呼叫**同一棵樹的 `concept-seed.mjs` 與 `serve-question.mjs`。找不到 → STOP 去裝，**NEVER** 用聊天問答代替決策頁。
+> **Setup 步驟**（不是 BC，但不做會少掉 context）：每個 session 首次使用前跑一次 `$IMPECCABLE/scripts/impeccable context --target <path>`。`$IMPECCABLE` 的解析見 [decision-page.md](decision-page.md) § 路徑解析。它載入 PRODUCT.md / DESIGN.md 與對應 surface brief。**只跑一次，不要重跑**。
 >
-> v3.1.0 → v4.0.4 的累積 user-facing 行為已折進本檔 Step 1.6 / 2.5 / 6 的對應段落。**要升降版、或要查本檔某條規範的上游出處時 MUST 讀 `references/impeccable-install.md`**；跑一次 design pass 不需要讀。Consumer 不自行升版，由 clade 統一更新再 propagate。
+> `/design` **直接呼叫**同一棵樹的 `scripts/impeccable concept-seed` 與 `scripts/impeccable serve-question`。launcher 不存在 → STOP 去裝；launcher 在但 engine 下載失敗（沙箱無網路）→ 同樣 STOP 回報，**NEVER** 用聊天問答代替決策頁。上游 SKILL.md 對 launcher 失敗的退路（「讀 PRODUCT／DESIGN.md 繼續做」）只適用 impeccable 自己的 sub-command，**不適用決策頁**——決策頁沒有 server 就開不出來。
+>
+> v3.1.0 → v4.1.1 的累積 user-facing 行為已折進本檔 Step 1.6 / 2.5 / 6 的對應段落。**要升降版、或要查本檔某條規範的上游出處時 MUST 讀 `references/impeccable-install.md`**；跑一次 design pass 不需要讀。Consumer 不自行升版，由 clade 統一更新再 propagate。
 
 ```bash
-npx skills add pbakaus/impeccable --agent claude-code --copy -y
+npx skills add https://github.com/pbakaus/impeccable/tree/skill-v4.3.1 --agent claude-code --copy -y
+"$IMPECCABLE/scripts/impeccable" engine-probe   # 預先下載 engine；印 impeccable-engine <ver>
 ```
 
-**檢查**：`grep -m1 '^version:' "$IMPECCABLE/SKILL.md"`（`$IMPECCABLE` 的解析見 [decision-page.md](decision-page.md) § 路徑解析），與上方對齊版本比對。**NEVER** 在本檔 inline 內容 hash——上游 HEAD 會動，而 inline 的那份沒有任何東西會來更新它。不符 → 跑 `references/impeccable-install.md § 升降版流程`，**NEVER** 直接改本檔的數字讓它「看起來對」。
+**檢查**：`awk 'NR==1&&/^---$/{f=1;next} f&&/^---$/{exit} f' "$IMPECCABLE/SKILL.md" | grep -m1 -E '^[[:space:]]*version:'`（`$IMPECCABLE` 的解析見 [decision-page.md](decision-page.md) § 路徑解析），與上方對齊版本比對。4.1.3 起被安裝的那份（上游 repo 的 agents 版 skill 樹）把 `version:` 移到 `metadata:` 底下（縮排兩格），**NEVER** 用 `^version:` 錨定行首——那會讀到空值，而空值在「比對版本」的檢查裡長得像「沒問題」。**NEVER** 在本檔 inline 內容 hash——上游 HEAD 會動，而 inline 的那份沒有任何東西會來更新它。不符 → 跑 `references/impeccable-install.md § 升降版流程`，**NEVER** 直接改本檔的數字讓它「看起來對」。
 
-> **版本判定改看 frontmatter，不是只看 hash。** v4 起 SKILL.md 帶 `version:` frontmatter，直接讀得到；hash 仍列著是為了偵測同版本內的內容漂移。
->
-> `npx skills add` 拉的是 default branch HEAD，**不保證等於 latest release**——2026-08-25 實測 HEAD frontmatter 是 4.1.1（與 `skill-v4.1.1` tag 同號），那是這次的事實不是保證。上游推了新 commit 但還沒發 release 時，裝到的會是未發布內容；`npx skills check` 可對齊 release tag，但它會把 `.claude/skills/<skill>` 改成 symlink → `.agents/skills/`，與本檔 copy mode 的前提衝突。**判定漂移一律以上面兩條檢查為準**，發現不符再決定要不要動。
+> **安裝 MUST 釘 tag**（`…/tree/skill-v<X>`）。裸 `npx skills add pbakaus/impeccable` 拉的是 default branch HEAD，**不等於 latest release**：2026-09-23 實測 HEAD 比 `skill-v4.3.1` 多 56 筆 commit、frontmatter 仍寫 `4.3.1`，卻多了一個未發布的 sub-command `generate`——版本號對得上、內容對不上，上面那條檢查抓不到。clade home 就是這樣在 2026-09-18 靜默漂到 HEAD 的。`npx skills check` 可對齊 release tag，但它會把 `.claude/skills/<skill>` 改成 symlink → `.agents/skills/`，與本檔 copy mode 的前提衝突。
 
 **新 consumer 安裝 / 升降版操作流程**：見 `references/impeccable-install.md`（含標準 install-skills.sh snippet、copy vs symlink mode、`staged:` 的 `*.md` 禁令）。
 
@@ -96,7 +97,7 @@ Before any diagnosis or planning, always check. **缺檔是硬停，不是 plan 
 
 - **`PRODUCT.md` 存在且非空、非 placeholder**（`[TODO]` 或 <200 chars 視同缺）— 若無：**立刻**跑 `/impeccable init`（v3.5 前叫 `teach`，仍為 alias）。補正完成前 **NEVER** 繼續診斷、Fidelity、Decision Gates（Register 在 init 寫入 `register` 後才判 skip）、Skill sequence、Health wave；**NEVER** 把缺 md 寫進 plan checklist 當「先做 init」就過關；**NEVER** 把缺 md 當 health finding 過關。
 - **`DESIGN.md` 存在且非空** — 已有 UI code 且缺檔：**立刻**跑 `/impeccable document`（或由 init 一併產出）。不得標「強烈建議」後繼續。無 UI code 時由 init 產出即可。
-- 補正完成的可觀察 predicate：`node <impeccable>/scripts/load-context.mjs`（或 `context.mjs --target`）顯示 `hasProduct: true`；有 UI code 時還要 `hasDesign: true`。未過 → **STOP**，不得恢復原 mode。
+- 補正完成的可觀察 predicate：`$IMPECCABLE/scripts/impeccable signals` 的 JSON `setup.hasProduct` 為 `true`；有 UI code 時還要 `setup.hasDesign` 為 `true`。未過 → **STOP**，不得恢復原 mode。
 - Design system tokens 檔（`design-system/MASTER.md` 或 `app.config.ts` 的 `ui` 區塊）— 用於 iterate 模式追蹤跨 phase 一致性
 - **Tech stack** — detect and lock（見 Tech Stack Detection）
 - **Register** — brand vs product（見 Step 1.5）

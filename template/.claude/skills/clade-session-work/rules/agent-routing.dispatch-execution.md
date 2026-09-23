@@ -120,6 +120,18 @@ N ≥ 3 個 dispatch 的 findings 要收斂進同一個 synthesis 時，reducer 
 
 **便宜模型的資格是量出來的，不是寫死的。** readiness 通過只代表 package 完整到可以被獨立 context 接手，它**不是**改走更便宜 model 的授權：model 仍照 [[agent-routing]] § Routing Table 與本檔 § 4 選檔。要宣稱某類 task 可交給低成本模型，MUST 有該 task class 的獨立試驗證據（fresh context、無場外指導、獨立 verifier 跑未改動的 acceptance、記 model／effort／attempts／rework／總成本）；試驗失敗回到契約或 routing，**NEVER** 把殘餘交給強模型補完再標成功而不記那次介入。
 
+## Skill invocability gate（brief 指名 skill 前）
+
+brief 叫 pane 呼叫的 skill，可不可呼叫由**目標端投影 SKILL.md 的 frontmatter** 決定（`disable-model-invocation: true` = 叫不動），**NEVER** 由寫 brief 那台看得到、或源檔長什麼樣推論。Herdr dispatch（新建、relay、`--continue`）在建 pane 前對 Claude child 自動判定，命中回 `skill_not_invocable`；不經 Herdr 的 brief 跑 `node vendor/scripts/brief-skill-check.ts --cwd <target> <brief>`（exit 1 = 紅）。指名看**形式**不看語意：`/<skill>` 或 `Skill(<skill>)` 一律算指名，周圍寫了 NEVER／由 Charles 也一樣；只是**提到**就寫裸名（`version-upgrade`，不加斜線）。**NEVER** 為了讓禁止句過關加散文豁免——2026-09-23 0-A 七輪每輪都找到新的 fail-open 句型。已知限制：裸名寫成的指令（「invoke the dep-upgrade skill」）不在攔截範圍，由寫 brief 的人負責；判定只掃 `<target>/.claude/skills` 與 launcher 的 user-level skills，不掃 plugin skills。readonly gate-review 列（`--table-row` 屬 code-review 類）不判：它的 prompt 內嵌被審 diff，是引用不是指令。
+
+被擋的工作只有人做得了：把「哪一台、跑哪個範圍」用 `flow ask` 開成拍板題、執行寫成 `--step`，**NEVER** 改寫成「請 user 執行」再派同一個 pane、**NEVER** 叫 pane 讀 skill 內文自己照跑（拒絕訊息逐字寫 `Do not replicate this skill workflow by other means`）。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | brief 以指名形式叫 Claude child 呼叫目標端 `disable-model-invocation: true` 的 skill → Herdr dispatch exit 15 `skill_not_invocable`，零 pane、零 record；CLI exit 1 |
+| 消費端 | 正在派工的主線（拒絕訊息附 `flow ask` 範本）；`\my`／`/decisions` 承接改開的拍板題 |
+| 載入路徑 | 本節（決定派工、寫 brief 前 MUST Read 本檔）；判定式在 `vendor/scripts/lib/brief-skill-invocability.ts` |
+
 ## 必禁事項 — Dispatch 入口（原在 `agent-routing.md` § 必禁事項）
 
 | NEVER | 說明 |
