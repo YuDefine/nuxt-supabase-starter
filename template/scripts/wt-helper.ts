@@ -103,7 +103,7 @@ import {
   rmSync,
   unlinkSync,
 } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
 import { fileURLToPath } from 'node:url'
@@ -123,6 +123,14 @@ import {
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isLockedProjectionPathFor } from './locked-projection.ts'
 import { runWtEnvBootstrap } from './lib/wt-env-bootstrap-runner.ts'
+import {
+  localMachineLabel,
+  MACHINE_LABEL_PATTERN,
+  REMOTE_PATH_PREFIX,
+  shellQuote,
+  sshBin,
+  SSH_OPTIONS,
+} from './lib/herdr-machine.ts'
 import {
   assertNoPublishInFlight as assertNoPublishInFlightShared,
   detectPublishInFlight as detectPublishInFlightShared,
@@ -7037,8 +7045,65 @@ async function cmdOrphanPrune(opts) {
   }
 }
 
+/**
+ * `--machine <peer>`: run this very subcommand on the peer's own clade checkout, in the same repo
+ * path there (fleet convention: both machines keep `~/offline/<repo>` at the same path). GitHub is
+ * the only sync layer — the peer's `add` fetches origin itself; NEVER rsync or scp a worktree.
+ * Returns the peer's exit code, or null when no `--machine` (or this machine's own label) was given.
+ */
+const PEER_SUBCOMMANDS = new Set(['add', 'cleanup', 'list', 'resolve'])
+
+function forwardToPeer(sub: string | undefined, rest: string[]): number | null {
+  const at = rest.indexOf('--machine')
+  if (at < 0) return null
+  const machine = rest[at + 1] ?? ''
+  const args = [...rest.slice(0, at), ...rest.slice(at + 2)]
+  if (!MACHINE_LABEL_PATTERN.test(machine)) {
+    console.error(
+      `error: --machine needs a saved Herdr machine label (got ${JSON.stringify(machine)})`,
+    )
+    return 2
+  }
+  if (machine === localMachineLabel()) {
+    process.argv.splice(2, process.argv.length - 2, sub ?? '', ...args)
+    return null
+  }
+  if (!sub || !PEER_SUBCOMMANDS.has(sub)) {
+    console.error(
+      `error: --machine supports ${[...PEER_SUBCOMMANDS].join(' / ')}; got ${sub ?? '<none>'}`,
+    )
+    return 2
+  }
+  const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+    encoding: 'utf8',
+  })
+  const gitDir = (common.stdout ?? '').trim()
+  if (common.status !== 0 || !gitDir.endsWith('/.git')) {
+    console.error('error: --machine must run inside a repository whose main checkout ends in .git')
+    return 2
+  }
+  const repoRoot = gitDir.slice(0, -'/.git'.length)
+  const peerClade = process.env.CLADE_PEER_CLADE_ROOT?.trim() || join(homedir(), 'offline', 'clade')
+  const remote = [
+    REMOTE_PATH_PREFIX,
+    `cd ${shellQuote(repoRoot)}`,
+    ['exec', 'node', join(peerClade, 'vendor', 'scripts', 'wt-helper.ts'), sub, ...args]
+      .map(shellQuote)
+      .join(' '),
+  ].join(' && ')
+  const forwarded = spawnSync(sshBin(), [...SSH_OPTIONS, machine, remote], { stdio: 'inherit' })
+  if (forwarded.error) {
+    console.error(`error: ssh ${machine} failed: ${forwarded.error.message}`)
+    return 1
+  }
+  return forwarded.status ?? 1
+}
+
 async function main() {
   const [, , sub, ...rest] = process.argv
+  const peerExit = forwardToPeer(sub, rest)
+  if (peerExit !== null) process.exit(peerExit)
+  if (rest.includes('--machine')) return main()
 
   if (sub === 'batch') {
     try {

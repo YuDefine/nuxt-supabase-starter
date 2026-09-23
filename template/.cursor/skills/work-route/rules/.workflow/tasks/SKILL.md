@@ -9,7 +9,7 @@ metadata:
   clade:
     invocation: explicit
 ---
-<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@58960f8375d14d9c598eb2c350582917fe9b249c via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@bc8fdebe2d30db384f77911aaed81888ad03bf5f via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # Tasks Skill
@@ -53,6 +53,7 @@ tasks.md 的結構產出與 doctor 驗證是兩個結果：`/tasks` 必須跑一
 ## Phase 5 -- 輸出並驗證 tasks.md
 
 1. WRITE 依 template 骨架輸出 `specs/plans/NNN-<slug>/tasks.md`。
+   - 命中 Phase 1 的 clade lifecycle repo 判準時，輸出路徑換成 `specs/plans/<work-id>/tasks.md`：本次 plan package 是 `flow plan open` 鑄出的 `specs/plans/<work-id>/`，NEVER 另建 `NNN-<slug>` 目錄。
 2. READ 回頭檢查：任務皆為 `- [ ] T###`、truth-delta 已納入 Core Inputs、沒有 Impact Audit phase、有新增技術時 Setup 寫清套件名與 smoke-test；若 doctor 缺失或非零，即使沒有新增技術也保留具名 doctor bootstrap／repair Setup task；Foundational 每則有「只做／不做」、Phase 3 已集中 ALIGN / REMOVE / RED、Feature phase 不含 `[BDD-RED]` / `[BDD-ALIGN]` / `[BDD-REMOVE]`、每個 Feature phase 有 `Test Scope`、truth 路徑都指向 `specs/truth/**`；若不符合，立即修正。
 3. RUN consumer 的 canonical doctor，並在 tasks.md 或本輪 carrier 留下可重跑 receipt：
    <!-- clade-doctor-hook: tasks-after-generation -->

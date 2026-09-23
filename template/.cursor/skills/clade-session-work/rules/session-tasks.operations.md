@@ -422,6 +422,8 @@ receipt 送出後，本 session **NEVER** 再開新工作段、輪詢接手 pane
 
 每一個符合的跨 cwd / 新 interactive runtime session handoff 都保留原有 worktree、scope、approval、verification 與 clade / consumer 邊界。Transport 失敗也不改變 routing 結論，且 **NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt。Cursor 主線看到「無 Herdr pane」時 MUST 自己 `herdr-session-handoff.ts --new-tab --coordinate` 開一個（`ccw` 再 `cc`）；那不是 0-A.2／`/commit` 的合法停點。
 
+**跨機放置**：pane 可以開在對等的另一台（`--machine <peer>`／`--machine auto`）。record 只存在派工的那台（home），peer child 的 `--complete` 經 ssh 交回 home 寫入；程式碼一律走 GitHub（peer 上從 origin 建 worktree、push、開 PR），**NEVER** 跨機 rsync／scp 工作樹，也 **NEVER** 讓 peer 端本地寫 completion。負載門檻逐台按核數換算（load1 per core > 7.5 不開新 pane，即 desk 6 核的 45）。用法、setup、限制（不能 split、不能與 `--session` 並用）與失敗模式全在 `vendor/snippets/herdr-session-handoff/README.md` § Cross-machine dispatch。
+
 **每一個**原本會要求 user 切換資料夾、開另一個 interactive runtime session、再貼 prompt 或指令的 handoff，
 都由主線自行走 Herdr transport；本節是使用者對這項 transport 的 standing explicit authorization，不必逐次再問。
 

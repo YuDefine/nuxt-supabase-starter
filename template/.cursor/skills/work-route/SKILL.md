@@ -93,6 +93,8 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}
 
 Claude、Codex、Cursor 的本 skill 根分別為 `.claude/skills/work-route/`、`.agents/skills/work-route/`、`.cursor/skills/work-route/`。內部流程由 `clade-workflow-bundles` 隨本 skill 投影，完整保留其相對 rules／templates，不另加公開 skill。內部契約放在 `.` 開頭的目錄，是為了不讓會遞迴掃 `SKILL.md` 的 runtime 把它們列成公開 skill；多數檔案搜尋工具預設不掃這類目錄，所以一律照上表的明確路徑讀取，**NEVER** 用搜尋結果為空判定內部流程不存在。只按需讀本步入口及它明列的必讀資源，不一次載入全部流程。
 
+**clade overlay 只從本表走得到。** bdd 與 technical-research 的 bundle 目錄各有一份 clade-owned 的 `specformula.md`（`rules/.workflow/bdd/specformula.md`、`rules/.workflow/technical-research/specformula.md`），上游 `SKILL.md` 一個字都不會提到它們。載入這兩個 owner 時 MUST 一併讀同目錄的 `specformula.md`，再依該檔自己寫的適用條件決定是否套用：bdd 那份在 `techstack.md` 的後端 BDD techstack 是 SpecFormula 時覆蓋 step definition 的落點（不手寫 step definition），technical-research 那份給 clade consumer 三題必問的 fleet 預設。**NEVER** 因上游入口沒列就略過——照上游假設手寫 step definition，正是 bdd 那份 overlay 要擋的事。
+
 下游契約內提到 `/tasks`、`/bdd`、`/truth-delta` 等流程時，也回本表解析並接續，不要求它們有獨立公開入口。這項工作已授權的內部流程由 orchestrator 載入契約執行；不能把缺少 slash UI 當成能力缺失。
 
 內部流程的可執行資源也以實際 owner 根解析。上游契約中的 `.agents/skills/<owner>/scripts/...` 是原安裝位置；此 bundle 下須將該前綴換成當前 runtime 的 `work-route/rules/.workflow/<owner>/`，保留腳本與參數，不另外建立頂層 skill。尤其 gherkin-and-dsl Phase 6 必須實際執行 `uv run <work-route-root>/rules/.workflow/gherkin-and-dsl/scripts/audit_feature_dsl_topology.py --root <features-root>`；其中 `<work-route-root>` 是上表所列當前 runtime 的 skill 根，`<features-root>` 是 **truth 的介面根**（含 `dsl.md` 的那一層，例如 `specs/truth/features/cli`）。plan package 的 `features/acceptance/` 沒有 `dsl.md`，拿它當 root 每一個 step 都會報找不到 DSL row——plan 端 acceptance 的對應檢查是 `flow plan readiness <work-id>`（dry-run 無 undefined／ambiguous step）。保留稽核輸出，失敗交回該 owner，不因路徑搬移而略過。

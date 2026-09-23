@@ -8,7 +8,7 @@ metadata:
   clade:
     invocation: explicit
 ---
-<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@58960f8375d14d9c598eb2c350582917fe9b249c via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@bc8fdebe2d30db384f77911aaed81888ad03bf5f via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 <!-- clade-targets: claude,codex,cursor -->
 
 # UI Plan
@@ -29,6 +29,7 @@ metadata:
 1. THINK 依需求、truth-delta 與現有 truth 收斂畫面範圍、狀態、主要 flow、可見回饋、錯誤處理、accessibility 與 responsive 行為。
 2. WRITE 將 UI 規劃寫入 `specs/plans/NNN-<slug>/ui/ui-plan.md`。
 3. WRITE 依 UI plan 產出或更新 `specs/plans/NNN-<slug>/ui/*.html` 與必要靜態資源；不得寫入 `specs/truth/**`。
+   - 命中 Phase 1 的 clade lifecycle repo 判準時，步驟 2–3 的 `specs/plans/NNN-<slug>/` 一律換成本次 plan package `specs/plans/<work-id>/`（由 `flow plan open` 鑄出），NEVER 另建 `NNN-<slug>` 目錄。
 4. READ 回頭檢查 UI plan 與靜態雛形是否對齊 spec、truth-delta 與相關 truth；若不符合，立即修正。
 
 ## Phase 3 -- 交付後續 handoff
