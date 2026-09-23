@@ -446,6 +446,26 @@ commit 失敗都會 wedge」。修好 wedge，134 再發生也只會浪費一趟
 `template/.clade/rescue/auto-commit-*.patch` → `git apply` → 驗 projections 與磁碟 0 mismatch →
 commit → 跑 `hub-sync` 確認綠。
 
+### 復發：v1.13.25（2026-09-24，RUSH-11 relay）——第二條觸發路徑
+
+v1.13.25 propagate 對本 consumer failed：`capability-ownership-conflict`，點名
+`.claude/skills/clarify/rules/Context與選項題撰寫判準.md`。這次**不是** commit 失敗觸發，而是
+auto-commit flow 的 **pre-sync reset**（clade `scripts/propagate.ts` `propagateAutoCommitFlow` 第 4 步：
+clade-managed dirty → `dumpRescuePatch` → `resetPathsToHead`）：
+
+1. v1.13.24 propagate 寫出新投影並更新 receipts，但 TD-1130（不帶 `-z` 的 porcelain）讓中文檔名的 ` M` 沒進 commit，留在 working tree。
+2. v1.13.25 的 auto-commit flow 把這批殘留當 clade-managed dirty：存成 `template/.clade/rescue/auto-commit-2026-09-23T16-06-31-626Z.patch`（168 筆）後 reset 回 HEAD。
+3. receipts（gitignored）留在新 hash → 44 筆（`.claude`／`.cursor` 下 aixbdd 的 clarify／implement／specify／system-analysis／work-route `.workflow` 規則檔，全是中文檔名）磁碟 = HEAD、receipt = clade 源 → apply throw。以 clarify 那檔為例：兩者只差第 1 行 aixbdd mirror SHA（`db46b1dd…` → `bc8fdebe…`）。
+
+本 repo 是 `consumers.local` 裡唯一 `flow=auto-commit` 的 consumer，所以這趟只有它失敗。
+
+**未照場景 F 復原**：rescue patch 蓋 168 筆、mismatch 只有 44 筆，且 `git apply --check` 有多個 hunk 套不上
+（例：`.claude/skills/spec-by-example/rules/gherkin-驗收句型與結構判準.md`）→ 依 runbook 判準不套，交 clade 端裁決。
+同一趟已先把 36 筆 TD-1130 遺留的 aixbdd 舊投影 ` D` 補 commit（`8d038af2`；36/36 與 clade 源 byte 一致、不在任何 receipt）。
+
+**待 clade 端**：Fix approach 1（reset 路徑同步回捲 receipts）或 2（`before == HEAD` 時改重投影）任一落地後，
+重跑 `propagate --resume`；或由 clade 主持者裁定本台的一次性復原方式。殘留：本台停在 v1.13.24。
+
 ### Acceptance
 
 - clade 端：任一 consumer 的 auto-commit commit 失敗後，下一趟 propagate **不再**出現
