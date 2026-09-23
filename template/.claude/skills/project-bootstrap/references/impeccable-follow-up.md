@@ -6,7 +6,7 @@
 
 **NEVER** 只說「記得裝 impeccable」就過。Agent MUST 對下列每一項檢查；已齊的跳過，缺的 **MUST 向 user 追問直到齊**，不准默默用預設、不准寫進 plan checklist 當「稍後再做」就繼續宣告 bootstrap `READY`。
 
-對齊來源：consumer／starter 的 impeccable **v4.1.1**、`capabilities/core/skills/design/SKILL.md` Prerequisites／Step 1、`capabilities/core/skills/design/references/impeccable-install.md`。
+對齊來源：consumer／starter 的 impeccable **v4.3.1**、`capabilities/core/skills/design/SKILL.md` Prerequisites／Step 1、`capabilities/core/skills/design/references/impeccable-install.md`。
 
 UI predicate：`@nuxt/ui`、或 Nuxt 且有 `pages/`／`app/pages/`、或已有 `design` skill 目錄。非 UI 專案整表 N/A。
 
@@ -19,9 +19,9 @@ UI predicate：`@nuxt/ui`、或 Nuxt 且有 `pages/`／`app/pages/`、或已有 
 | `impeccable-claude` | 要裝 impeccable 給 Claude | `.claude/skills/impeccable/SKILL.md` 存在（copy 目錄或 symlink） |
 | `impeccable-agents` | Codex／多 agent 共用路徑 | `.agents/skills/impeccable/SKILL.md` 存在（symlink mode 常只在這裡有實體） |
 | `impeccable-cursor` | Cursor 主線要讀得到 | `.cursor/skills/impeccable/SKILL.md` 存在 |
-| `impeccable-version` | 鎖定 **4.1.1**（`skill-v4.1.1`） | 任一存在路徑的 SKILL.md frontmatter `version: 4.1.1` |
+| `impeccable-version` | 鎖定 **4.3.1**（`skill-v4.3.1`） | 每一條存在路徑的 SKILL.md frontmatter 都讀得到版本且等於 `4.3.1`——頂層 `version:` 或 `metadata:` 底下的 `version:`（4.1.3 起被安裝的那份在後者）。**讀不到版本也算未齊**，NEVER 當成通過 |
 | `install-mode` | copy vs symlink 要跟該 repo 其餘 skill 同一慣例 | `ls -la .claude/skills/`：impeccable 與鄰居同是真實目錄或同是 symlink；對照 `impeccable-install.md` |
-| `install-script` | `scripts/install-skills.sh` 必須單行 v4.1.1，禁止 v2 迴圈 | 有 `npx skills add pbakaus/impeccable` **且沒有** `pbakaus/impeccable@$skill`／`for skill in … adapt animate` |
+| `install-script` | `scripts/install-skills.sh` 必須單行、**釘 tag** `skill-v4.3.1`，禁止 v2 迴圈 | 有 `npx skills add https://github.com/pbakaus/impeccable/tree/skill-v4.3.1`（或 `IMPECCABLE_TAG="skill-v4.3.1"` 帶入同一條 URL）**且沒有**裸 `npx skills add pbakaus/impeccable`、`pbakaus/impeccable@$skill`／`for skill in … adapt animate` |
 | `product-md` | 要有非 placeholder 的 `PRODUCT.md` | 檔存在、非 `[TODO]`、正文 ≥ 200 chars |
 | `product-users` | 目標使用者是誰 | `PRODUCT.md` 有 Users（或同等欄位）；沒有就問 |
 | `product-brand` | 品牌名／識別 | `PRODUCT.md` 有 brand |

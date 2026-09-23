@@ -22,7 +22,7 @@
 | --- | --- |
 | Routing Table 任一列、預設鏈、sonnet／haiku 轉派 | 主線 Opus 5.5 自己做。**NEVER** 派 Pi、Cursor、Codex、Devin |
 | § 派不派 的「寬掃」「平行軌」、mechanical／read-heavy threshold | 停用。只剩「長時間 background」或「必須隔離 worktree／port／環境」才開新 session |
-| 開任何 session 或 subagent（relay、fanout、Herdr、native subagent） | 只開 Opus 5.5（effort ≤ high），各 runtime 的載體寫法見該 runtime 的 adapter 段。**NEVER** fable／sonnet／haiku／grok，**NEVER** 走會把 `opus` 改映射成別家模型的 gateway launcher。user 當下指名其他 model 時照指名 |
+| 開任何 session 或 subagent（relay、fanout、Herdr、native subagent） | 只開 Opus 5.5，effort 一律 `medium`（上限 medium，**NEVER** `high`；原列寫 `--effort high` 的派工換成 Opus 時一樣降到 medium——覆寫原本只寫「≤ high」沒有預設，被改寫的 grok-xai／version-upgrade research 列就把 high 原樣帶到 Opus。Charles 2026-09-23 拍板，helper 機械擋下），各 runtime 的載體寫法見該 runtime 的 adapter 段。**NEVER** fable／sonnet／haiku／grok，**NEVER** 走會把 `opus` 改映射成別家模型的 gateway launcher。user 當下指名其他 model 時照指名 |
 | commit 0-A review | 仍開 fresh-context reviewer：`CLAUDE_REVIEW_SEAT=opus` 跑 `claude-review-safe.sh medium`（`code-review-opus` 列；覆寫期間 wrapper 預設即 opus），不跑 Astra 格、**NEVER** 退回 Fable 格（見上方 0-A 例外）。**NEVER** 主線自審補位 |
 | commit 0-C fix-verify、version-upgrade、implementation | 主線自己修、自己重跑檢查 |
 | 截圖取證、符合性判定、design review | 主線自己做；取證與判定仍分兩步 |
@@ -60,7 +60,7 @@ Iron Law：本 session 做得到的動作與查得出的決策 NEVER 交 user。
 
 每份 brief MUST 列 paths、命令與外部服務；清單外回報、NEVER 自取；secret／個資／private URL／signed material 不進 brief。詳見 [[agent-routing.pi-watch-protocol]] § Dispatch 資料邊界。
 
-dispatch／resume／retry／bridge MUST 傳 model／effort／route／tier-basis／workspace access；NEVER inherit 或 quota fallback 降檔；回報依 dispatch-execution 的 4-status、scope verify、receipt 核實。實作派工綁 lifecycle package 時先過 `flow plan readiness`，判準與 implementer 的唯讀邊界在 [[agent-routing.dispatch-execution]] § Implementation readiness gate。
+dispatch／resume／retry／bridge MUST 傳 model／effort／route／tier-basis／workspace access；NEVER inherit 或 quota fallback 降檔；回報依 dispatch-execution 的 4-status、scope verify、receipt 核實。實作派工綁 lifecycle package 時先過 `flow plan readiness`，判準與 implementer 的唯讀邊界在 [[agent-routing.dispatch-execution]] § Implementation readiness gate。 brief 叫 pane 呼叫的 skill 以**目標端投影 frontmatter** 判可不可呼叫，見同檔 § Skill invocability gate。
 
 ## External web retrieval
 

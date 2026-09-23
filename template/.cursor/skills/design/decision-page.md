@@ -5,7 +5,7 @@
 
 **Iron Law：A DECISION GATE THAT EXISTS ONLY AS A PLAN CHECKLIST IS NOT A GATE.** 違反字面就是違反精神。
 
-開任何一頁之前 **MUST** 用本檔的路徑解析與 loop。payload 形狀以 `serve-question.mjs --schema` 為準，本檔 skeleton 是欄位契約不是替代 schema。
+開任何一頁之前 **MUST** 用本檔的路徑解析與 loop。payload 形狀以 `impeccable serve-question --schema` 為準，本檔 skeleton 是欄位契約不是替代 schema。
 
 ## 何時讀
 
@@ -18,12 +18,16 @@ Meta 問題（「Y 跟 Z 差在哪」「該不該採用 X」）不開頁，直�
 
 ## 路徑解析
 
-`$IMPECCABLE` = 第一個存在 `scripts/serve-question.mjs` 的目錄，依序：
+`$IMPECCABLE` = 第一個存在**可執行** `scripts/impeccable` launcher 的目錄（`[ -x "$dir/scripts/impeccable" ]`），依序：
 
 1. 本 session 已載入的 impeccable skill base dir（harness 有給就用）
 2. runtime 私有 skill 樹，依序試 `.claude/skills/impeccable` → `.agents/skills/impeccable` → `.cursor/skills/impeccable`（哪一個存在依 runtime 與安裝模式而定，四條都要試）
 
 cwd = consumer project root。全部候選都不存在 → **STOP**，叫 user 跑 SKILL.md Prerequisites 的 install。**NEVER** 改用聊天 A/B 代替。
+
+只找到 `scripts/serve-question.mjs`、沒有 `scripts/impeccable` = 裝的是 v4.2.0 以前的版本，與 SKILL.md 鎖定版本不符 → 同樣 **STOP** 去重裝，**NEVER** 退回跑舊 `.mjs`。
+
+launcher 找到了，但第一次呼叫失敗（engine 下載不到——沙箱沒有對外網路、`~/.impeccable` 不可寫）→ **STOP** 並逐字回報 launcher 的 stderr。上游 impeccable 對 launcher 失敗的退路是「讀 PRODUCT／DESIGN.md 繼續做」，那只適用 impeccable 自己的 sub-command；**決策頁沒有 server 就開不出來，NEVER 套用那條退路**。
 
 ## Loop
 
@@ -35,8 +39,10 @@ cwd = consumer project root。全部候選都不存在 → **STOP**，叫 user �
 Session 內第一次寫 payload 前跑一次 `--schema` 對欄位，不要每次重跑：
 
 ```bash
-node $IMPECCABLE/scripts/serve-question.mjs --schema
+$IMPECCABLE/scripts/impeccable serve-question --schema
 ```
+
+輸出是一份範例 payload JSON，**後面接一段說明文字**（option id 保留字、hero/board/comp 欄位規則）。兩段都要讀；要機器解析時截到第一個頂層 `}` 為止，**NEVER** 整段丟給 `JSON.parse`。
 
 然後：
 
@@ -113,7 +119,7 @@ ls -t .impeccable/questions/*.answer.json 2>/dev/null | head -1
 | NEVER 把 gate 只寫進 plan 當 checklist、自己不開頁 | checklist 不是決策。user 沒點過卡 |
 | NEVER 找不到腳本就改用聊天問答代替 | 缺腳本 = 缺 Prerequisites。STOP 去裝 |
 | NEVER 開完頁還問「要進入 Plan Mode 逐步執行這些改進嗎？」 | Skill sequence 頁的 ANSWER 就是執行授權 |
-| NEVER 把 `serve-question.mjs` / `concept-seed.mjs` 複製進 `vendor/` 或 `design/scripts/` | 第三方 skill 的 script，跟 catalog / roll API 綁在一起 |
+| NEVER 把 impeccable 的 launcher / engine binary 複製進 `vendor/` 或 `design/scripts/`，也 NEVER 為了繞過 launcher 而改跑舊版 `.mjs` | 第三方 skill 的執行碼，跟 catalog / roll API 與 engine 版本綁在一起 |
 | NEVER 自己 `serve-question --start` 或架 tailnet proxy 把 URL 給 user | server 活不到人來點；且那是 `/decisions` 之外的第二條通道 |
 | NEVER 把任何 `http://<host>:<port>/` 當成給人的決策頁網址 | 決策頁的 user-facing 入口只有一個：`https://review-gui.<maintainer-domain>/decisions` |
 | NEVER 自己產 key 再 `--wait --key` | key 由 review-gui 在 spawn 那刻產生；自產的那把永遠等不到答案 |
@@ -165,7 +171,7 @@ Skip：局部延伸既有 surface；窄需求；world 已 pin。
 
 ```
 # 先推 7 個 grounded direction（文化世界，不是 CSS lane）。NEVER 自己排行讓 user 挑 grounded 清單。
-node $IMPECCABLE/scripts/concept-seed.mjs --scope direction --mode <persuade|operate|read|experience>
+$IMPECCABLE/scripts/impeccable concept-seed --scope direction --mode <persuade|operate|read|experience>
 # stdout: DIRECTION CONCEPT SEED (key: …; source: local|api|degraded)
 #         ASSIGNED INDEX: N
 #         CHALLENGERS（≤3 進手，其餘進 re-roll pool）
@@ -177,7 +183,7 @@ payload：assigned 領先（`kicker: "THE ROLL"`），challengers 帶 `case` / `
 
 **payload 寫完就 `flow ask`**，不要等 sketch。有 image_gen 才在之後補寫 sketch 到 `.impeccable/sketches/`（頁面 shimmer-wait，人點開時才 spawn，來得及）。沒有 image_gen 的卡片靠 palette chips，那頁是完整的。
 
-選完：`surface-brief.mjs write` + 寫進 Design Plan。user-/brief-pinned direction beats the roll，後續 impeccable 不重抽。選 `canon`：問 2–3 個對標產品當 quality bar，不諷刺、不偷渡 quirk。選完若 ANSWER 帶 hero/board：**現在**打開 QUALITY BAR（sandbox 先下載進 workspace）。
+選完：`$IMPECCABLE/scripts/impeccable surface-brief write` + 寫進 Design Plan。user-/brief-pinned direction beats the roll，後續 impeccable 不重抽。選 `canon`：問 2–3 個對標產品當 quality bar，不諷刺、不偷渡 quirk。選完若 ANSWER 帶 hero/board：**現在**打開 QUALITY BAR（sandbox 先下載進 workspace）。
 
 Unattended default：assigned direction。
 

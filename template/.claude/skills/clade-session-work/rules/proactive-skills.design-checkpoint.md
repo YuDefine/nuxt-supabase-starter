@@ -160,7 +160,7 @@ Design Review 過程中若發現問題過多（例如需要列修正計劃讓使
 
 ### 週期性分析 → `/design retro`
 
-Findings log 的分析由 `/design retro` mode 負責（見 `capabilities/core/skills/design/references/legacy/design-retro/SKILL.md`）。記錄本身只負責結構化紀錄，分析與改善建議交由 design skill 在適當時機執行。
+Findings log 的分析由 `/design retro` mode 負責（見 `capabilities/core/skills/design/references/.legacy/design-retro/SKILL.md`）。記錄本身只負責結構化紀錄，分析與改善建議交由 design skill 在適當時機執行。
 
 ## Design → 規格回饋迴路
 

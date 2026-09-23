@@ -56,8 +56,6 @@ live 的 prerequisite 是「dev server with HMR **或一個靜態 HTML 檔**」�
 
 mockup 用 Tailwind CDN 寫近似版即可——這個階段要比的是版面與互動模式，不是像素級的元件還原。真元件的 API 細節由上面的 query 負責、實作時驗。
 
-啟動：`node "$IMPECCABLE/scripts/live.mjs"`（`$IMPECCABLE` 的解析見 [decision-page.md](../decision-page.md) § 路徑解析；回 `ok: true` + `serverPort` 即成功）。poll **MUST** 走背景任務（Claude Code 的 background task，或其他 runtime 的等價機制），不要用短 timeout 阻塞 shell。
-
-> `.mjs` 投影曾因 LOCKED banner 用錯註解語法而全數 SyntaxError，live 因此長期不可用；v1.4.369 已修（見 `sync-to-codex` § injectLockedBanner）。若 `live.mjs` 第一行報 `Invalid or unexpected token`，代表該 consumer 的投影還沒更新到該版本。
+啟動：`"$IMPECCABLE/scripts/impeccable" live`（`$IMPECCABLE` 的解析見 [decision-page.md](../decision-page.md) § 路徑解析；回 `ok: true` + `serverPort` 即成功）。poll **MUST** 走背景任務（Claude Code 的 background task，或其他 runtime 的等價機制），不要用短 timeout 阻塞 shell。
 
 **為什麼是強制 step**：實作後才發現「另一個組合體驗更好」，代價是整段重做（fleet 實證：`ai-chat-ui` → `ai-ui-rebuild` → `0b-ai-chat-rework`，同一塊 UI 跨三週六個 change）。候選比較在 plan 階段做，成本是幾分鐘；在實作後做，成本是重寫。

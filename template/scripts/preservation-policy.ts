@@ -129,6 +129,12 @@ export interface ConsumerProfile {
     /** Fixture override; omitted production profiles keep the 40 GiB floor. */
     byteReserve?: number
     inodeReserve?: number
+    /**
+     * Fixture override; omitted production profiles keep the 1 GiB growth floor. Without it a
+     * KiB-sized capture fixture still demands 1 GiB of host headroom, so its verdict depends on
+     * the machine that runs it (2026-09-23 #203: 834 MB free on the runner → 81 capture tests red).
+     */
+    growthFloor?: number
   }
 }
 
@@ -741,6 +747,7 @@ export function capacityRequirement(
     restoreRoot?: string
     byteReserve?: number
     inodeReserve?: number
+    growthFloor?: number
   } = {},
 ): CapacityRequirement {
   const fs = statfsSync(root)
@@ -760,7 +767,7 @@ export function capacityRequirement(
     : undefined
   const gitBytes = gitInventory?.logicalBytes ?? 0
   const gitInodes = gitInventory?.entryCount ?? 0
-  const growth = Math.max(GIB, Math.ceil(inventory.logicalBytes * 0.2))
+  const growth = Math.max(options.growthFloor ?? GIB, Math.ceil(inventory.logicalBytes * 0.2))
   const worktreeArchiveBytes = tarSize(inventory.root, inventory)
   const gitArchiveBytes = gitInventory ? tarSize(gitInventory.root, gitInventory, true) : 0
   const worktreeFootprint = worktreeArchiveBytes
@@ -796,7 +803,8 @@ export function capacityRequirement(
     gitBytes,
     gitInodes,
     // Production floor is 40 GiB or 10% of the filesystem, whichever is larger.
-    // Fixture profiles pass `byteReserve` so capture tests do not depend on host headroom.
+    // Fixture profiles pass `byteReserve` (and `growthFloor`) so capture tests do not depend
+    // on host headroom.
     byteReserve: options.byteReserve ?? Math.max(40 * GIB, Math.ceil(totalBytes * 0.1)),
     inodeReserve: options.inodeReserve ?? Math.max(1_000_000, Math.ceil(totalInodes * 0.05)),
   }
@@ -2579,6 +2587,7 @@ export function captureAndVerify(options: {
     restoreRoot: tmpdir(),
     byteReserve: options.profile.retention.byteReserve,
     inodeReserve: options.profile.retention.inodeReserve,
+    growthFloor: options.profile.retention.growthFloor,
   })
   assertCapacity(capacity)
   let generation = options.generation ?? randomUUID()

@@ -42,7 +42,6 @@ import { findClaimByWorktreeObserved, readActiveClaimsObserved } from './claim-h
 import { errorMessage } from './lib/safety-observation.ts'
 import {
   captureAndVerify,
-  gitExcludedRootsForArchive,
   gitWorktreeMetadataRoots,
   inventoryTree,
   inventoryArchive,
@@ -991,6 +990,7 @@ export function gitInventoryMatchesRelocated(
   sourceCommon: string,
   options: InventoryOptions,
   excludedPaths: string[],
+  metadataRoots: string[],
 ): boolean {
   const configLines = (file: string, drop: string): string[] => {
     try {
@@ -1009,13 +1009,17 @@ export function gitInventoryMatchesRelocated(
   try {
     const root = realpathSync(treeRoot)
     return withRestoredArchive(archive, (restored) => {
-      const expected = inventoryTree(
-        restored,
-        { ...options, excludeGitTransientState: true },
-        excludedPaths.map((path) => join(restored, path)),
+      const expected = scopeGitInventory(
+        inventoryTree(
+          restored,
+          { ...options, excludeGitTransientState: true },
+          excludedPaths.map((path) => join(restored, path)),
+        ),
+        liveRoot,
+        metadataRoots,
       )
       return entriesMatchModulo(
-        live,
+        scopeGitInventory(live, liveRoot, metadataRoots),
         expected,
         (path) => {
           if (
@@ -1080,30 +1084,91 @@ function verifyQuarantineInventory(
     )
 }
 
-// The live common-dir inventory with the same exclusions the quarantine
-// verify applies: other worktrees' metadata, cleanup trash, the archive
-// root, and each of this worktree's own `gitdir` relocation pointers
-// (`worktree move` must rewrite them). Captured post-teardown it becomes
-// the baseline a quarantine verify compares against — deinit's config
-// rewrite is part of that baseline, not drift.
-function liveGitInventory(
+// Teardown and resume Git comparisons cover what cleanup destroys: this
+// worktree's private admin dir under `worktrees/<id>/`. Everything else in
+// the common dir — root, FETCH_HEAD, sibling refs, packed-refs, objects,
+// config — is shared state cleanup never deletes, and sibling sessions move
+// it continuously. Comparing it retained every source whose teardown
+// overlapped a fetch, and made one interrupted removal unrecoverable: the
+// journaled baseline could never match again (TD-1112, TD-1114). The source
+// branch needs no entry here — HEAD is re-checked against the receipt and
+// the branch delete is a CAS against the landed head (`update-ref -d`), so a
+// commit landing during teardown still retains the branch. Live sides and
+// new baselines are walked scoped (scopedLiveGitInventory); preservation
+// archives and baselines journaled before this scope existed are full and
+// get scoped here at comparison time, so they resume under the same rule.
+export function scopeGitInventory<T extends Pick<SourceInventory, 'entries'>>(
+  inventory: T,
+  common: string,
+  metadataRoots: string[],
+): T & { entryCount: number } {
+  // An empty scope would compare empty against empty and pass vacuously.
+  if (metadataRoots.length !== 1)
+    throw new Error('linked-worktree Git metadata is incomplete; retain worktree')
+  const prefixes = metadataRoots.map((root) => relative(common, root))
+  const inScope = (path: string) =>
+    prefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
+  // A hardlink alias carries only `target` + `size`; when its canonical sits
+  // outside the scope (module objects linked to the shared object store),
+  // dropping the canonical would leave the alias unpinned. Promote the first
+  // in-scope alias to a file holding the canonical's digest and repoint later
+  // aliases at it — the same rebase verifyTrashedMetadataInventory applies —
+  // so a content rewrite is still caught, and a sibling gc that splits the
+  // link (alias becomes a plain file, same bytes) still compares equal.
+  const canonicalByPath = new Map(
+    inventory.entries.filter((entry) => entry.digest).map((entry) => [entry.path, entry]),
+  )
+  const firstAliasByTarget = new Map<string, string>()
+  const entries = inventory.entries
+    .filter((entry) => inScope(entry.path))
+    .map((entry) => {
+      if (entry.type !== 'hardlink' || !entry.target || inScope(entry.target)) return entry
+      const firstAlias = firstAliasByTarget.get(entry.target)
+      if (firstAlias !== undefined) return { ...entry, target: firstAlias }
+      const promoted = {
+        ...entry,
+        type: 'file' as const,
+        digest: canonicalByPath.get(entry.target)?.digest,
+      }
+      delete promoted.target
+      firstAliasByTarget.set(entry.target, entry.path)
+      return promoted
+    })
+  return { ...inventory, entries, entryCount: entries.length }
+}
+
+// The live side of a scoped comparison walks only the admin root: a
+// full common-dir walk would still digest every shared object and throw
+// ENOENT when a sibling gc prunes one mid-walk — the very sibling-activity
+// retain the scope removes. Walked alone, an admin file hardlinked to the
+// shared store is the first alias seen and lands as a plain file with its
+// digest, the same shape scopeGitInventory promotes it to on the stored side.
+function scopedLiveGitInventory(
   sourcePath: string,
   common: string,
-  archiveRoot: string,
   profile: ConsumerProfile,
 ): SourceInventory {
-  return inventoryTree(
-    common,
+  const metadataRoots = gitWorktreeMetadataRoots(sourcePath, common)
+  if (metadataRoots.length !== 1)
+    throw new Error('linked-worktree Git metadata is incomplete; retain worktree')
+  const root = metadataRoots[0]
+  const prefix = relative(common, root)
+  const walked = inventoryTree(
+    root,
     { ...inventoryOptionsFromProfile(profile), excludeGitTransientState: true },
-    [
-      ...gitExcludedRootsForArchive(sourcePath, common, archiveRoot),
-      ...gitWorktreeMetadataRoots(sourcePath, common)
-        .flatMap((root) => [join(root, 'gitdir'), join(root, WT_TEARDOWN_JOURNAL_NAME)])
-        // Exclusions are realpathed — a teardown journal only exists after a
-        // detach ran, so absent names must not reach the walk.
-        .filter((excluded) => existsSync(excluded)),
-    ],
+    [join(root, 'gitdir'), join(root, WT_TEARDOWN_JOURNAL_NAME)].filter((excluded) =>
+      existsSync(excluded),
+    ),
   )
+  const rebase = (path: string) => (path === '' ? prefix : `${prefix}/${path}`)
+  const entries = walked.entries.map((entry) => ({
+    ...entry,
+    path: rebase(entry.path),
+    ...(entry.target !== undefined && entry.type === 'hardlink'
+      ? { target: rebase(entry.target) }
+      : {}),
+  }))
+  return { ...walked, entries, entryCount: entries.length }
 }
 
 // Archive-side comparisons must exclude the same operational names the
@@ -1134,12 +1199,11 @@ function captureVerifyBaseline(
   }
   if (receipt.source.gitCommonDir) {
     const common = git(sourcePath, ['rev-parse', '--path-format=absolute', '--git-common-dir'])
-    baseline.git = liveGitInventory(
-      sourcePath,
-      common,
-      dirname(dirname(receipt.archives.worktree.path)),
-      profile,
-    )
+    // Scoped like every comparison that consumes it: a full common-dir walk
+    // here would still retain on a sibling gc mid-walk (TD-1112). Walked
+    // alone, admin files hardlinked to the shared store carry their own
+    // digest, which is all the trashed-metadata verification needs.
+    baseline.git = scopedLiveGitInventory(sourcePath, common, profile)
   }
   return baseline
 }
@@ -1219,20 +1283,22 @@ function verifyQuarantineGitInventory(
     throw new Error('quarantine Git common directory changed; retain worktree')
   if (git(quarantine, ['rev-parse', 'HEAD']) !== receipt.source.head)
     throw new Error('quarantine Git HEAD changed; retain worktree')
-  const archiveRoot = dirname(dirname(receipt.archives.worktree.path))
   const currentMetadataRoots = gitWorktreeMetadataRoots(quarantine, currentCommon)
   if (currentMetadataRoots.length !== 1)
     throw new Error('quarantine linked-worktree metadata is incomplete; retain worktree')
-  const currentGit = liveGitInventory(quarantine, currentCommon, archiveRoot, profile)
+  const currentGit = scopedLiveGitInventory(quarantine, currentCommon, profile)
   // The baseline is the post-teardown live inventory when the caller
   // journaled one; legacy journals fall back to the preservation archive.
-  const archivedGit =
+  const archivedGit = scopeGitInventory(
     baseline ??
-    inventoryArchive(
-      receipt.archives.git.path,
-      metadataOptions,
-      gitArchiveExclusions(currentMetadataRoots, currentCommon),
-    )
+      inventoryArchive(
+        receipt.archives.git.path,
+        metadataOptions,
+        gitArchiveExclusions(currentMetadataRoots, currentCommon),
+      ),
+    currentCommon,
+    currentMetadataRoots,
+  )
   if (
     comparableInventory(currentGit, true) !== comparableInventory(archivedGit, true) ||
     currentGit.entryCount !== archivedGit.entryCount
@@ -3405,23 +3471,27 @@ export function cleanupBatches(
                       '--path-format=absolute',
                       '--git-common-dir',
                     ])
-                    const archiveRoot = dirname(dirname(receipt.archives.worktree.path))
-                    const currentGit = liveGitInventory(m.path, currentCommon, archiveRoot, profile)
+                    const currentGit = scopedLiveGitInventory(m.path, currentCommon, profile)
+                    const metadataRoots = gitWorktreeMetadataRoots(m.path, currentCommon)
                     gitBaseline =
                       comparableInventory(currentGit, true) ===
-                      comparableInventory(removal.verifyGit, true)
-                    const gitdirRecords = gitArchiveExclusions(
-                      gitWorktreeMetadataRoots(m.path, currentCommon),
-                      currentCommon,
-                    )
+                      comparableInventory(
+                        scopeGitInventory(removal.verifyGit, currentCommon, metadataRoots),
+                        true,
+                      )
+                    const gitdirRecords = gitArchiveExclusions(metadataRoots, currentCommon)
                     gitArchive =
                       Boolean(receipt.archives.git) &&
                       comparableInventory(currentGit, true) ===
                         comparableInventory(
-                          inventoryArchive(
-                            receipt.archives.git!.path,
-                            { ...options, excludeGitTransientState: true },
-                            gitdirRecords,
+                          scopeGitInventory(
+                            inventoryArchive(
+                              receipt.archives.git!.path,
+                              { ...options, excludeGitTransientState: true },
+                              gitdirRecords,
+                            ),
+                            currentCommon,
+                            metadataRoots,
                           ),
                           true,
                         )
@@ -3439,6 +3509,7 @@ export function cleanupBatches(
                         receipt.source.gitCommonDir!,
                         options,
                         gitdirRecords,
+                        metadataRoots,
                       )
                     if (!gitBaseline && !gitArchive && !gitRelocated)
                       throw new Error(
@@ -3517,28 +3588,34 @@ export function cleanupBatches(
                       '--path-format=absolute',
                       '--git-common-dir',
                     ])
-                    const archiveRoot = dirname(dirname(receipt.archives.worktree.path))
-                    const currentGit = liveGitInventory(
+                    const currentGit = scopedLiveGitInventory(
                       removal.quarantine,
                       currentCommon,
-                      archiveRoot,
                       profile,
+                    )
+                    const metadataRoots = gitWorktreeMetadataRoots(
+                      removal.quarantine,
+                      currentCommon,
                     )
                     gitBaseline =
                       comparableInventory(currentGit, true) ===
-                      comparableInventory(removal.verifyGit, true)
-                    const gitdirRecords = gitArchiveExclusions(
-                      gitWorktreeMetadataRoots(removal.quarantine, currentCommon),
-                      currentCommon,
-                    )
+                      comparableInventory(
+                        scopeGitInventory(removal.verifyGit, currentCommon, metadataRoots),
+                        true,
+                      )
+                    const gitdirRecords = gitArchiveExclusions(metadataRoots, currentCommon)
                     gitArchive =
                       Boolean(receipt.archives.git) &&
                       comparableInventory(currentGit, true) ===
                         comparableInventory(
-                          inventoryArchive(
-                            receipt.archives.git!.path,
-                            { ...options, excludeGitTransientState: true },
-                            gitdirRecords,
+                          scopeGitInventory(
+                            inventoryArchive(
+                              receipt.archives.git!.path,
+                              { ...options, excludeGitTransientState: true },
+                              gitdirRecords,
+                            ),
+                            currentCommon,
+                            metadataRoots,
                           ),
                           true,
                         )
@@ -3556,6 +3633,7 @@ export function cleanupBatches(
                         receipt.source.gitCommonDir!,
                         options,
                         gitdirRecords,
+                        metadataRoots,
                       )
                     if (!gitBaseline && !gitArchive && !gitRelocated)
                       throw new Error(
@@ -3977,23 +4055,27 @@ export function cleanupBatches(
                       '--path-format=absolute',
                       '--git-common-dir',
                     ])
-                    const archiveRoot = dirname(dirname(receipt.archives.worktree.path))
-                    const currentGit = liveGitInventory(b.path, currentCommon, archiveRoot, profile)
+                    const currentGit = scopedLiveGitInventory(b.path, currentCommon, profile)
+                    const metadataRoots = gitWorktreeMetadataRoots(b.path, currentCommon)
                     gitBaseline =
                       comparableInventory(currentGit, true) ===
-                      comparableInventory(removal.verifyGit, true)
-                    const gitdirRecords = gitArchiveExclusions(
-                      gitWorktreeMetadataRoots(b.path, currentCommon),
-                      currentCommon,
-                    )
+                      comparableInventory(
+                        scopeGitInventory(removal.verifyGit, currentCommon, metadataRoots),
+                        true,
+                      )
+                    const gitdirRecords = gitArchiveExclusions(metadataRoots, currentCommon)
                     gitArchive =
                       Boolean(receipt.archives.git) &&
                       comparableInventory(currentGit, true) ===
                         comparableInventory(
-                          inventoryArchive(
-                            receipt.archives.git!.path,
-                            { ...options, excludeGitTransientState: true },
-                            gitdirRecords,
+                          scopeGitInventory(
+                            inventoryArchive(
+                              receipt.archives.git!.path,
+                              { ...options, excludeGitTransientState: true },
+                              gitdirRecords,
+                            ),
+                            currentCommon,
+                            metadataRoots,
                           ),
                           true,
                         )
@@ -4011,6 +4093,7 @@ export function cleanupBatches(
                         receipt.source.gitCommonDir!,
                         options,
                         gitdirRecords,
+                        metadataRoots,
                       )
                     if (!gitBaseline && !gitArchive && !gitRelocated)
                       throw new Error(
@@ -4083,28 +4166,34 @@ export function cleanupBatches(
                       '--path-format=absolute',
                       '--git-common-dir',
                     ])
-                    const archiveRoot = dirname(dirname(receipt.archives.worktree.path))
-                    const currentGit = liveGitInventory(
+                    const currentGit = scopedLiveGitInventory(
                       removal.quarantine,
                       currentCommon,
-                      archiveRoot,
                       profile,
+                    )
+                    const metadataRoots = gitWorktreeMetadataRoots(
+                      removal.quarantine,
+                      currentCommon,
                     )
                     gitBaseline =
                       comparableInventory(currentGit, true) ===
-                      comparableInventory(removal.verifyGit, true)
-                    const gitdirRecords = gitArchiveExclusions(
-                      gitWorktreeMetadataRoots(removal.quarantine, currentCommon),
-                      currentCommon,
-                    )
+                      comparableInventory(
+                        scopeGitInventory(removal.verifyGit, currentCommon, metadataRoots),
+                        true,
+                      )
+                    const gitdirRecords = gitArchiveExclusions(metadataRoots, currentCommon)
                     gitArchive =
                       Boolean(receipt.archives.git) &&
                       comparableInventory(currentGit, true) ===
                         comparableInventory(
-                          inventoryArchive(
-                            receipt.archives.git!.path,
-                            { ...options, excludeGitTransientState: true },
-                            gitdirRecords,
+                          scopeGitInventory(
+                            inventoryArchive(
+                              receipt.archives.git!.path,
+                              { ...options, excludeGitTransientState: true },
+                              gitdirRecords,
+                            ),
+                            currentCommon,
+                            metadataRoots,
                           ),
                           true,
                         )
@@ -4122,6 +4211,7 @@ export function cleanupBatches(
                         receipt.source.gitCommonDir!,
                         options,
                         gitdirRecords,
+                        metadataRoots,
                       )
                     if (!gitBaseline && !gitArchive && !gitRelocated)
                       throw new Error(

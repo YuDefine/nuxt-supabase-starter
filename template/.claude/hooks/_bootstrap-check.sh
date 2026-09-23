@@ -193,6 +193,16 @@ if [[ $CHECK_EXIT -eq 0 ]]; then
   exit 0
 fi
 
+# readonly session（herdr-session-handoff 對 readonly table row 注入 CLADE_WORKSPACE_READONLY=1，
+# 例：0-A reviewer）NEVER 自動修復：bootstrap-hub 會改寫投影，而這棵樹正被 review——
+# 2026-09-23 一次 v1.13.19→v1.13.20 bump 在受審樹改了 45 條投影路徑，
+# claude-review-safe.sh 的 snapshot 檢查把 verdict 作廢（exit 6）。只回報，照受審當下的樹審。
+if [[ "${CLADE_WORKSPACE_READONLY:-}" == "1" ]]; then
+  FIRST_ERROR=$(printf '%s\n' "$CHECK_OUTPUT" | grep -m1 '\[clade error\]' || true)
+  echo "[clade] 偵測到 drift / orphan，readonly session 不自動修復（CLADE_WORKSPACE_READONLY=1）${FIRST_ERROR:+: $FIRST_ERROR}" >&2
+  exit 0
+fi
+
 # drift / orphan 偵測到 → 嘗試自動修復
 # 第一行 MUST 帶上實際錯誤：Grok / 部分 harness 只展示 SessionStart stderr 的首行，
 # 只寫「自動修復中」會讓人以為 hook 卡死，真正的 conflict path 被截掉。

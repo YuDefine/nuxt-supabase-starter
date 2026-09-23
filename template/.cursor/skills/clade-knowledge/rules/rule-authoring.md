@@ -200,7 +200,9 @@ clade 自家正例：`notion-hub` 的「**NOT for** clade 內部待拍板題（�
 
 出處：`openai/codex-security` 的 skill 集（2026-08 快照）——階段型 skill（finding-discovery / validation / attack-path-analysis / threat-model）每一支 description 都帶「Do not use as the primary trigger for full PR, commit, branch, patch, or repository scans」，把「頂層入口 vs 階段內部」這條邊界寫死在 description 而非 body。稽核見 § 稽核 的 `desc-no-negative-boundary`。
 
-**Callee MUST 保持 model-invoked**：被其他 skill 以 Skill tool 呼叫的 skill，`disable-model-invocation: true` 會連 orchestrator 的呼叫一起擋掉。設定前 MUST grep 全 skill / rule 確認無跨檔 Skill-tool 呼叫（實證：screenshots-archive / review-archive 被 spectra-archive 與 spectra orchestrator 自動呼叫，2026-07-24 排雷）。
+**Callee MUST 保持 model-invoked**（僅限 clade 自撰的 skill）：被其他 skill 以 Skill tool 呼叫的 skill，`disable-model-invocation: true` 會連 orchestrator 的呼叫一起擋掉。設定前 MUST grep 全 skill / rule 確認無跨檔 Skill-tool 呼叫（實證：screenshots-archive / review-archive 被 spectra-archive 與 spectra orchestrator 自動呼叫，2026-07-24 排雷）。
+
+**上游鏡像 skill 不適用本條**：帶 `LOCKED: mirrored from` banner 的 skill（例如 aixbdd），invocation 與呼叫關係以上游為準，**NEVER** 為了符合本條改鏡像檔或改它的 `metadata.clade.invocation`——鏡像不做魔改，clade 配合上游。上游 skill 在流程中交給一支 explicit skill（例如 `specify` 的「DELEGATE 呼叫 `/clarify`」）時，讀法是停下來請使用者手動執行那個指令，不是繞過 `disable-model-invocation`。`scripts/audit-rule-authoring.ts` 對鏡像檔整支略過，同一個邊界。
 
 出處：mattpocock/skills `.agents/invocation.md` 的 model-invoked／user-invoked 成本二分法 + `writing-great-skills`（"Synonyms that rename a single branch are duplication"）。
 

@@ -1,16 +1,27 @@
 # Impeccable 安裝指南（給 consumer `install-skills.sh` 用）
 
 
-> Clade 鎖定版本見 `../SKILL.md` Prerequisites 區塊（目前 v4.1.1）。新 consumer 對齊本檔即可，不要從歷史 install-skills.sh copy v2 拆分形態。
+> Clade 鎖定版本見 `../SKILL.md` Prerequisites 區塊（目前 v4.3.1）。新 consumer 對齊本檔即可，不要從歷史 install-skills.sh copy v2 拆分形態。
 
 ## 標準 snippet
 
 直接貼進 consumer 的 `scripts/install-skills.sh`：
 
 ```bash
-# Impeccable Design Skill（pbakaus/impeccable — 單一 skill 含 23 sub-command + pin/unpin/hooks 三個 management command；clade design orchestrator 鎖定 v4.1.1）
-echo "📦 Impeccable Design Skill..."
-npx skills add pbakaus/impeccable $COPY_FLAGS  # symlink mode 改 --agent claude-code -y
+# Impeccable Design Skill（pbakaus/impeccable — 單一 skill 含 23 sub-command + pin/unpin/hooks 三個 management command；clade design orchestrator 鎖定 v4.3.1）
+# 釘 tag：裸 `pbakaus/impeccable` 拉 default branch HEAD，會裝到未發布內容（見下方「為什麼要釘 tag」）
+IMPECCABLE_TAG="skill-v4.3.1"
+echo "📦 Impeccable Design Skill（$IMPECCABLE_TAG）..."
+npx skills add "https://github.com/pbakaus/impeccable/tree/$IMPECCABLE_TAG" $COPY_FLAGS  # symlink mode 改 --agent claude-code -y
+# 4.2.0 起執行碼是原生 engine，launcher 第一次執行才下載。裝完當下先下載好，
+# 之後在沒有對外網路的沙箱裡 /design 才跑得起來。下載失敗只警告、不中止其餘 skill 的安裝。
+for IMPECCABLE_DIR in .claude/skills/impeccable .agents/skills/impeccable .cursor/skills/impeccable; do
+  if [ -x "$IMPECCABLE_DIR/scripts/impeccable" ]; then
+    "$IMPECCABLE_DIR/scripts/impeccable" engine-probe \
+      || echo "  ⚠ impeccable engine 下載失敗（無對外網路或 ~/.impeccable 不可寫）；/design 決策頁要等 engine 裝好才跑得起來"
+    break
+  fi
+done
 echo "  ✓ Impeccable Design Skill 完成"
 echo ""
 
@@ -34,18 +45,18 @@ echo ""
 
 兩種模式都會被 design orchestrator 認到。**加裝前 MUST 先確認該 repo 走哪一種**——`ls -la <skills-root>/` 看既有 skill 是 symlink 還是真實目錄，照它的慣例裝。
 
-`/design` 決策頁直接呼叫 `scripts/concept-seed.mjs` 與 `scripts/serve-question.mjs`。路徑解析（skill-base-dir → `.claude/` → `.agents/` → `.cursor/skills/impeccable`）見 [decision-page.md](../decision-page.md)。Cursor 安裝後實際用到的常常是 `.cursor/skills/impeccable`，四條都要試。
+`/design` 決策頁直接呼叫 `scripts/impeccable concept-seed` 與 `scripts/impeccable serve-question`。路徑解析（skill-base-dir → `.claude/` → `.agents/` → `.cursor/skills/impeccable`）見 [decision-page.md](../decision-page.md)。Cursor 安裝後實際用到的常常是 `.cursor/skills/impeccable`，四條都要試。
 
 > 2026-08-02 實證：對 symlink mode 的 repo 跑 `--copy` 會把 tracked 的 symlink（git 物件 `120000`）換成 59 個真實檔案，diff 看起來像整包新增，而該 repo 其餘 skill 仍是 symlink——單方面破壞了它的 skill 管理慣例。當時是 <consumer-k>，已還原。
 
-當前各處配置（2026-08-25 實查，鎖定 v4.1.1）：
+當前各處配置（2026-08-25 實查安裝模式；2026-09-23 鎖定版本升到 v4.3.1，consumer 端重裝由 version-upgrade 的 Skills 落地承接）：
 
 - **copy mode**: <consumer-a>、nuxt-supabase-starter/template、<consumer-c>、<consumer-d>、<consumer-b>、<consumer-j>、co-purchase、<consumer-h>、<consumer-g>、<consumer-e>
 - **symlink mode**: <consumer-k>（`.claude/skills/*` → `.agents/skills/*`）
 - **clade home**（clade home 是 Claude session）: copy mode，但 `.claude/*` 被 `.gitignore` 排除且白名單只放行自治區 skill 與 hub symlink → 靠 `scripts/install-skills.sh`（`pnpm skills:install`）重現，不進版控
 - **global**（各 runtime 的 user-level skills 目錄；Claude 是 `~/.claude/skills/`，其他 runtime 依自身落點）: copy mode，手動安裝
 
-（快照；清單以 registry 為準。驗版本跑 `grep -m1 '^version:' "$IMPECCABLE/SKILL.md"`）
+（快照；清單以 registry 為準。驗版本跑 `awk 'NR==1&&/^---$/{f=1;next} f&&/^---$/{exit} f' "$IMPECCABLE/SKILL.md" | grep -m1 -E '^[[:space:]]*version:'`——4.1.3 起 `version:` 在 `metadata:` 底下，`^version:` 讀不到）
 
 ## skills-lock.json 會被一併改寫
 
@@ -57,11 +68,27 @@ echo ""
 
 只動 clade，consumer 自動跟齊：
 
-1. 在 clade 改 `capabilities/core/skills/design/SKILL.md` Prerequisites 區塊的鎖定版本（含 GitHub release 連結）
-2. `node scripts/publish.ts patch && node scripts/propagate.ts` 散播
-3. consumer 跑 `pnpm skills:install`（執行 install-skills.sh）pull latest
+1. 在 clade 改鎖定版本，**同一張 PR 一起改**（漏一處就是兩個版本號互相矛盾）：
+   - `capabilities/core/skills/design/SKILL.md` Prerequisites（版本、release 連結、install 範例的 tag）
+   - 本檔標準 snippet 的 `IMPECCABLE_TAG`
+   - `scripts/inspect-new-project-round.ts` 的 `IMPECCABLE_LOCKED_VERSION`
+   - `capabilities/modules/framework/nuxt/skills/project-bootstrap/references/impeccable-follow-up.md` 的版本
+   - clade home `scripts/install-skills.sh` 的 `IMPECCABLE_TAG`
+2. 走 `/clade-publish` 散播
+3. consumer 把自己 `install-skills.sh` 的 impeccable 段對齊本檔 snippet（改 tag），再跑 `pnpm skills:install`
 
 **不要在 consumer 端自行升降版**：clade design orchestrator 與 impeccable sub-command 形態強耦合，version drift 會導致 plan 內指令不存在。
+
+## 為什麼要釘 tag（NEVER 裸 `pbakaus/impeccable`）
+
+`npx skills add pbakaus/impeccable` 拉的是 default branch HEAD，而 HEAD 常常領先最新 release。
+2026-09-23 實測：HEAD 比 `skill-v4.3.1` 多 56 筆 commit，frontmatter **仍寫 `4.3.1`**，卻多了一個
+未發布的 sub-command `generate`。**版本號對得上、內容對不上**，所以版本檢查抓不到這種漂移。
+clade home 就是這樣在 2026-09-18 靜默漂到 HEAD——`/design` 依賴的 `.mjs` 全部消失，而版本檢查只印一行
+「找不到 version frontmatter」。
+
+`npx skills add https://github.com/pbakaus/impeccable/tree/skill-v<X>` 裝出來的檔案集合
+等於該 tag 在上游 repo 的 agents 版 skill 樹，`scripts/impeccable` 的執行權限也會保留（2026-09-23 實測）。
 
 ## 為什麼是 single-line install（不要再用 v2 拆分形態）
 
@@ -117,9 +144,21 @@ target file」。當時的繞法是 transform 回 `['true']` noop。
 7. **Shape → build 4 named gates with STOP markers**（僅 Codex harness 啟用 native image_gen 時生效）：(a) Shape brief confirmed（Claude Code 走 Shape brief 決策頁）(b) Direction questions answered (c) Palette confirmed (d) One mock direction approved/delegated。**Claude Code 不是 native image-gen harness**，gates b-d collapse 進 Direction 決策頁 + shape brief；只在使用者跨到 Codex 時參照 4 gates。**NEVER** 輸出 `/impeccable craft`。
 8. **Bare `/impeccable` context-aware 推薦 + monorepo-aware context + 每日 self-update check**（v3.5 / v3.8）：無參數 `/impeccable` 讀專案 + dirty git tree + 最新 critique 後推薦 2-3 個最高價值指令（不自動跑）；monorepo 下 PRODUCT.md / DESIGN.md 逐 app 解析。clade plan 一律輸出完整 `/impeccable <subcommand>` 形式，不受這些互動行為影響。
 
+## v4.1.1 → v4.3.1（2026-09-23 升級）
+
+**何時讀**：升降版對齊、或 consumer 回報「`/design` 找不到 impeccable」時。
+
+1. **執行形態換成原生 launcher**（4.2.0）：全部 `scripts/*.mjs` 刪除，改成 `scripts/impeccable`（sh launcher）＋ `impeccable.cmd`。舊腳本都變成 verb：`impeccable context`、`signals`、`concept-seed`、`serve-question`、`surface-brief`、`live`、`pin`、`hooks`。**sub-command 集合（23 個）與 reference 檔集合都沒變**。
+2. **engine 在執行期下載**（4.2.0）：skill 樹裡沒有 binary。第一次呼叫從 `github.com/pbakaus/impeccable/releases/download/engine-v<ver>/impeccable-<os>-<arch>` 下載到 `~/.impeccable/bin/<ver>/`，只以同 release 的 `.sha256` sidecar 驗雜湊（非 Windows 版沒有簽章）。4.3.1 對應 engine `0.1.5`，約 16 MB。`skills-lock.json` 的 `computedHash` 不涵蓋它。`IMPECCABLE_HOME` 改快取落點，`IMPECCABLE_BIN` 指向預先裝好的 binary。
+3. **frontmatter 的 `version:` 移到 `metadata:` 底下**（4.1.3，只在被安裝的那份——上游 repo 的 agents 版 skill 樹）。所有讀版本的地方都要容許兩格縮排。
+4. **question server 的 Host／Origin 閘**（4.1.3）：對非 loopback `Host` 的 GET、帶非 loopback `Origin` 的 POST `/answer`／`/build-path`／`/heartbeat` 回 403。經 proxy 嵌頁的一側要改寫 Origin（clade TD-799）。
+5. **`allowed-tools` 拿掉 legacy 的 `Bash(node .claude/skills/impeccable/scripts/*)`**（4.2.0）。
+6. **detector hook 遷移**：legacy 安裝寫進 `.claude/settings*.json` 的是 `[ ! -f …/hook.mjs ] || node …/hook.mjs`。`hook.mjs` 刪除後這個 guard 讓 hook **靜默失效**（不報錯、detector 不再跑）。重裝後在該專案重跑一次 `$IMPECCABLE/scripts/impeccable hooks on`，engine 認得舊形式並會改寫成新命令（上游 `crates/context/src/hook_markers.rs`）。
+7. 其他（對 clade plan 無影響）：monorepo 逐 app 解析 DESIGN.md、detector 誤報減少、comp phase gates、透明背景 asset 生成。
+
 ## pin / unpin / hooks 三個 management command（user 問起才需要）
 
-- `pin` / `unpin`：`node "$IMPECCABLE/scripts/pin.mjs" pin <command>` 把 sub-command 轉成獨立 slash command（如 `/colorize` → `/impeccable colorize`），`unpin` 還原。clade design 文件**不依賴**這個機制；只在你個人偏好短名打字時自行 pin 常用幾個。
-- `hooks`：`$impeccable hooks <on|off|status|...>` 安裝 / 修復專案級 detector hook（見上節第 2 條）。**clade plan 不主動排**；純 user 選裝的專案設定，問起才引導。
+- `pin` / `unpin`：`$IMPECCABLE/scripts/impeccable pin <pin|unpin> <command>` 把 sub-command 轉成獨立 slash command（如 `/colorize` → `/impeccable colorize`），`unpin` 還原。clade design 文件**不依賴**這個機制；只在你個人偏好短名打字時自行 pin 常用幾個。
+- `hooks`：`$IMPECCABLE/scripts/impeccable hooks <on|off|status|...>` 安裝 / 修復專案級 detector hook（見上節第 2 條）。**clade plan 不主動排**；純 user 選裝的專案設定，問起才引導。
 
 **標準回答**：這三個是 v3 的 management command（不是 sub-command），clade design plan 一律輸出完整 `/impeccable <subcommand>` 形式，沒 pin 也能直接執行。pin 後的 alias 與 hooks 設定只在 user 自己專案 / 機器有效，不在 clade 治理範圍。
