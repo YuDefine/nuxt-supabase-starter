@@ -2,7 +2,9 @@
 
 > 座標**不在這裡**：一律 `node ~/offline/clade/vendor/scripts/lib/notion-hub.ts resolve --consumer-path .`。本檔只收「怎麼打」的 recipe。狀態字用輸出的 `hub.ticketStatus`，類型字用 `hub.ticketType`，欄位名用 `hub.fields`（已含本 hub 的改名覆寫；下方 recipe 的欄位名是 canonical 寫法，打之前換成 `hub.fields` 的值）。
 
-自由形式的 `ntn api`／MCP 呼叫走 Routing Table 〔`notion-ops`〕，**NEVER** 主線第一手跑；`notion-sync.ts` 與 `notion-hub.ts resolve` 主線直接跑。
+自由形式的 Notion 讀寫**一律 `ntn api`**，**NEVER** 用 Notion MCP（`notion-fetch`／`notion-create-pages`／`notion-get-comments`…）或 WebFetch；走 Routing Table 〔`notion-ops`〕，**NEVER** 主線第一手跑。`notion-sync.ts` 與 `notion-hub.ts resolve` 主線直接跑。
+
+`ntn api` 在 stdin 沒關、stdout 又導向檔案（`> file`）時會一直等 stdin，看起來像卡死或逾時（ntn 0.23.8 實測：同一個 query `> file` 20 秒逾時、加 `< /dev/null` 0.7 秒回來）——每個呼叫 MUST 帶 `< /dev/null` 並包 `timeout 60`。仍逾時或回錯時，再用同路徑 `curl -m 30` 直打（token 取自 `~/.config/notion/auth.json`）看錯誤本文判成因；**NEVER** 沒排除 stdin 就下「DB 沒分享給 integration」的結論或改走 MCP。
 
 ## 1. 讀
 
@@ -12,17 +14,19 @@ node ~/offline/clade/vendor/scripts/lib/notion-hub.ts resolve --consumer-path . 
 DS=$(jq -r .hub.board.dataSourceId /tmp/hub.json); ROW=$(jq -r .project.rowId /tmp/hub.json)
 
 # 本專案的票（board 是 hub 共用，filter 所屬專案）
-ntn api -X POST "/v1/data_sources/$DS/query" \
-  -d "{\"page_size\":100,\"filter\":{\"property\":\"所屬專案\",\"relation\":{\"contains\":\"$ROW\"}}}" > /tmp/board.json
+timeout 60 ntn api -X POST "/v1/data_sources/$DS/query" \
+  -d "{\"page_size\":100,\"filter\":{\"property\":\"所屬專案\",\"relation\":{\"contains\":\"$ROW\"}}}" < /dev/null > /tmp/board.json
 # has_more → 帶 start_cursor 翻頁；大輸出一律 dump 到檔再 jq / python，不倒進 context
 
 # 單張 raw（含 property id）
-ntn api "/v1/pages/<page-id>" > /tmp/t.json
-# 好讀 markdown / comment：MCP notion-fetch <page-id>、notion-get-comments <page-id>
+timeout 60 ntn api "/v1/pages/<page-id>" < /dev/null > /tmp/t.json
+# 內文與 comment
+timeout 60 ntn api "/v1/blocks/<page-id>/children?page_size=100" < /dev/null > /tmp/t-blocks.json   # has_children 要遞迴；has_more 要帶 start_cursor 翻頁
+timeout 60 ntn api "/v1/comments?block_id=<page-id>" < /dev/null > /tmp/t-comments.json
 
 # 交付項目（客戶時程頁）本專案列
 DDS=$(jq -r .hub.delivery.dataSourceId /tmp/hub.json)
-ntn api -X POST "/v1/data_sources/$DDS/query" -d "{\"page_size\":100,\"filter\":{\"property\":\"專案\",\"relation\":{\"contains\":\"$ROW\"}}}"
+timeout 60 ntn api -X POST "/v1/data_sources/$DDS/query" -d "{\"page_size\":100,\"filter\":{\"property\":\"專案\",\"relation\":{\"contains\":\"$ROW\"}}}" < /dev/null
 ```
 
 ## 2. 寫（machine 欄位）
@@ -32,7 +36,7 @@ ntn api -X POST "/v1/data_sources/$DDS/query" -d "{\"page_size\":100,\"filter\":
 ```bash
 # 問客戶：票 → needs-customer（狀態字從 hub.ticketStatus 取，欄位名從 hub.fields 取）
 S=$(jq -r '.hub.ticketStatus["needs-customer"]' /tmp/hub.json); K=$(jq -r '.hub.fields.board.status' /tmp/hub.json)
-ntn api -X PATCH "/v1/pages/<page-id>" -d "{\"properties\":{\"$K\":{\"status\":{\"name\":\"$S\"}}}}"
+timeout 60 ntn api -X PATCH "/v1/pages/<page-id>" -d "{\"properties\":{\"$K\":{\"status\":{\"name\":\"$S\"}}}}" < /dev/null
 ```
 
 `備註` 與內文是客戶看得到的地方：只放 consumer prod 網域的完整 URL（D2），**NEVER** 手動 PATCH 進 GitHub 連結或其他網域。
@@ -41,24 +45,34 @@ ntn api -X PATCH "/v1/pages/<page-id>" -d "{\"properties\":{\"$K\":{\"status\":{
 
 ## 3. 建決策題票（問客戶）
 
-MCP `notion-create-pages`，parent 用 `data_source_id`：
+`ntn api -X POST /v1/pages`，parent 用 `data_source_id`；內文用 `children` blocks（標題 `heading_1`／`heading_2`、
+拍板題的勾選框 `to_do`、接手 Prompt `code`、其餘 `paragraph`／`bulleted_list_item`）。body 先寫檔再 `-d @file`：
 
-```json
+```bash
+cat > /tmp/decision.json <<'JSON'
 {
   "parent": { "type": "data_source_id", "data_source_id": "<hub.board.dataSourceId>" },
-  "pages": [{
-    "properties": {
-      "名稱": "{客戶口語化標題}",
-      "狀態": "<hub.ticketStatus['needs-customer']>",
-      "類型": "<hub.ticketType.feature>",
-      "所屬專案": ["<project.rowId>"],
-      "date:提報日期:start": "{YYYY-MM-DD}",
-      "date:提報日期:is_datetime": 0
-    },
-    "content": "{markdown}"
-  }]
+  "properties": {
+    "名稱":   { "title": [{ "text": { "content": "{客戶口語化標題}" } }] },
+    "狀態":   { "status": { "name": "<hub.ticketStatus['needs-customer']>" } },
+    "類型":   { "select": { "name": "<hub.ticketType.feature>" } },
+    "所屬專案": { "relation": [{ "id": "<project.rowId>" }] }
+  },
+  "children": [
+    { "type": "heading_1", "heading_1": { "rich_text": [{ "text": { "content": "開發前想跟您確認 N 件事" } }] } },
+    { "type": "to_do", "to_do": { "checked": false, "rich_text": [{ "text": { "content": "{選項}" } }] } }
+  ]
 }
+JSON
+timeout 60 ntn api -X POST /v1/pages -d @/tmp/decision.json < /dev/null > /tmp/decision-out.json   # .id 就是 page id
 ```
+
+Notion API 硬限制（違反回 400 `validation_error`）：`code` block 的 `language` 必填（接手 Prompt 用 `"plain text"`）；每個 rich_text 物件的 `content` ≤ 2000 字元，長文拆成多個 rich_text 物件；`children` 一次 ≤ 100 個 block，超過的建頁後用 `timeout 60 ntn api -X PATCH "/v1/blocks/<page-id>/children" -d @<file> < /dev/null` 續補。
+
+範本刻意不帶 `提報日期`：`created_time` 型（例如 fc hub）由 Notion 自動填且唯讀，帶了整張票回 400；只有該欄是 `date` 型時才在 `properties` 補 `"提報日期": { "date": { "start": "{YYYY-MM-DD}" } }`。
+
+欄位名換成 `hub.fields.board.*`；`類型` 若該 hub 是 status 型別，改 `{ "status": … }`（以 `ntn api "/v1/data_sources/<id>" < /dev/null` 讀到的型別為準）。
+讀客戶勾了哪幾題：`timeout 60 ntn api "/v1/blocks/<page-id>/children?page_size=100" < /dev/null` → 取 `type=="to_do"` 的 `to_do.checked`；回應 `has_more: true` 時 MUST 帶 `&start_cursor=<next_cursor>` 翻到底，漏讀的 `to_do` 會被誤判成「客戶沒勾」。
 
 ## 4. 附圖（client 截圖）方案 C：token_v2 抓原檔
 

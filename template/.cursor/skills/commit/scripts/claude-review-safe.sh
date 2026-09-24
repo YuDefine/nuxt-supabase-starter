@@ -92,6 +92,12 @@
 #
 # Usage:
 #   .claude/scripts/claude-review-safe.sh [medium] [--findings <prior verdict file>]
+#       Herdr carrier——只給叫不出 Claude subagent 的 runtime（Codex、Pi…）
+#   .claude/scripts/claude-review-safe.sh prepare [medium] [--findings <prior verdict file>]
+#   .claude/scripts/claude-review-safe.sh finalize <work-dir>
+#       subagent carrier——Claude Code 主線 MUST 用這條：prepare 印 AGENT_CALL，主線照它派
+#       commit-0a-reviewer subagent，再跑 finalize 取 verdict。流程與核對全文在
+#       lib/review-subagent.sh 檔頭。
 # effort 只接受 medium——Fable family ceiling 就是 medium，沒有低檔需求、
 # high/max 由 wrapper 直接拒絕（exit 2），NEVER 靜默降檔或抬檔。
 
@@ -149,6 +155,14 @@ clade_runtime() {
   fi
 }
 
+# Carrier：Claude Code 主線走 in-process subagent（prepare → Agent → finalize）；叫不出
+# Claude subagent 的 runtime（Codex、Pi…）才走下方的 Herdr child（無子命令）。
+# 兩條 carrier 共用同一份 brief、同一套 exit code 與 receipt 格式，判讀只有一套。
+CARRIER_MODE="herdr"
+case "${1:-}" in
+  prepare|finalize) CARRIER_MODE="$1"; shift ;;
+esac
+
 # Opus 5.5 暫時覆寫（agent-routing.md § Opus 5.5 暫時覆寫）：CLAUDE_REVIEW_SEAT=opus 讓本格
 # 改派 fresh Opus 5.5 child（`code-review-opus` 列，同樣 medium／readonly）。覆寫生效期間預設
 # opus——預設 fable 會讓沒帶變數的呼叫端靜默退回 Fable 格，正是 2026-09-23 Charles 硬禁令
@@ -165,6 +179,14 @@ fi
 REVIEW_ROW="code-review-$REVIEW_SEAT"
 if [ "$REVIEW_SEAT" = "opus" ]; then REVIEW_MODEL="claude-opus-5-5"; else REVIEW_MODEL="fable"; fi
 export REVIEW_SEAT REVIEW_ROW REVIEW_MODEL
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ "$CARRIER_MODE" = "finalize" ]; then
+  # shellcheck source=lib/review-subagent.sh
+  . "$SCRIPT_DIR/lib/review-subagent.sh"
+  review_subagent_finalize "$@"
+  exit $?
+fi
 
 REASONING="${1:-medium}"
 if [ "$REASONING" != "medium" ]; then
@@ -192,19 +214,31 @@ if [ "$#" -gt 0 ]; then
 fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-HELPER="$(clade_runtime vendor/scripts/herdr-session-handoff.ts)"
-if [ ! -f "$HELPER" ]; then
-  echo "[claude-review-safe] 錯誤：herdr-session-handoff.ts 不存在：$HELPER" >&2
-  exit 2
+if [ "$CARRIER_MODE" = "prepare" ]; then
+  # subagent transcript 落在 <config>/projects/*/<本 session>/subagents/——不知道本 session
+  # 是誰，finalize 就找不到 reviewer 的身分證據。
+  if [ -z "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+    echo "[claude-review-safe] 錯誤：prepare 只給 Claude Code 主線用（CLAUDE_CODE_SESSION_ID 為空）；叫不出 Claude subagent 的 runtime 改跑無子命令的 Herdr carrier" >&2
+    exit 2
+  fi
+else
+  HELPER="$(clade_runtime vendor/scripts/herdr-session-handoff.ts)"
+  if [ ! -f "$HELPER" ]; then
+    echo "[claude-review-safe] 錯誤：herdr-session-handoff.ts 不存在：$HELPER" >&2
+    exit 2
+  fi
 fi
 
 REVIEW_SAFE_TAG="claude-review-safe"
 REVIEW_SAFE_SCRIPT="claude-review-safe.sh"
-REVIEW_SANDBOX_NOTE='This review runs as a Herdr Claude child with read-only workspace access on the `'"$REVIEW_ROW"'` Routing Table row — the dispatch record carries your model, effort, and session identity, and a mismatch voids the verdict.'
+if [ "$CARRIER_MODE" = "prepare" ]; then
+  REVIEW_SANDBOX_NOTE='This review runs as a read-only `commit-0a-reviewer` subagent on the `'"$REVIEW_ROW"'` Routing Table row — your transcript is checked for your model, your tools, and whether you read this whole brief, and any mismatch voids the verdict. Your only tools are Read, Grep and Glob: wherever this brief mentions `sed -n` or "read-only inspection commands", use Read with offset/limit instead. A call to any other tool voids the verdict.'
+else
+  REVIEW_SANDBOX_NOTE='This review runs as a Herdr Claude child with read-only workspace access on the `'"$REVIEW_ROW"'` Routing Table row — the dispatch record carries your model, effort, and session identity, and a mismatch voids the verdict.'
+fi
 PATTERNS_JSON="$REPO_ROOT/vendor/review-rules/patterns.json"
 MAX_DIFF_LINES="${CODEX_REVIEW_MAX_DIFF_LINES:-6000}"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/review-common.sh
 . "$SCRIPT_DIR/lib/review-common.sh"
 
@@ -212,7 +246,9 @@ cd "$REPO_ROOT" || exit 1
 
 review_make_workdir || exit 1
 VERDICT_OUT="$WORK_DIR/verdict.md"
-REVIEW_OUTPUT_PATH="$VERDICT_OUT"
+# subagent 把 verdict 當最終回覆交出，finalize 從 transcript 取——不給輸出路徑，
+# reviewer 的工具面才能只有 Read／Grep／Glob。
+if [ "$CARRIER_MODE" = "prepare" ]; then REVIEW_OUTPUT_PATH=""; else REVIEW_OUTPUT_PATH="$VERDICT_OUT"; fi
 
 review_load_semantic_list
 review_snapshot_or_die "$WORK_DIR/worktree-before.txt" before
@@ -286,7 +322,7 @@ if [ "$BRIEF_BYTES" -gt "$BRIEF_MAX_BYTES" ]; then
 fi
 
 DELIVERY="inline"
-if [ "$BRIEF_BYTES" -gt "$INLINE_MAX_BYTES" ]; then
+if [ "$CARRIER_MODE" = "prepare" ] || [ "$BRIEF_BYTES" -gt "$INLINE_MAX_BYTES" ]; then
   DELIVERY="pointer"
   # 長行檢查涵蓋整份 brief 而不只 CHANGESET：child 要讀完整檔，--findings
   # 嵌入的上一輪 verdict、semantic guidance 的長行同樣被 Read 靜默截斷——
@@ -324,6 +360,13 @@ if [ "$BRIEF_BYTES" -gt "$INLINE_MAX_BYTES" ]; then
 POINTER
 fi
 echo "[claude-review-safe] brief ${BRIEF_BYTES} bytes：delivery=${DELIVERY}（inline 上限 ${INLINE_MAX_BYTES} bytes）" >&2
+
+if [ "$CARRIER_MODE" = "prepare" ]; then
+  # shellcheck source=lib/review-subagent.sh
+  . "$SCRIPT_DIR/lib/review-subagent.sh"
+  review_subagent_prepare
+  exit $?
+fi
 
 RECEIPT="$WORK_DIR/herdr-receipt.json"
 : >"$RECEIPT"

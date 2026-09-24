@@ -821,8 +821,9 @@ const stripTrailingNewlines = (s) => s.replace(/\n+$/, '')
 //     8 GB mem budget for a fresh repo can take 30 s+; awaiting would defeat
 //     the purpose of a fast worktree fork.
 //   - **Test hook**: WT_HELPER_SKIP_INDEX=1 (set in fixtures.test) disables the
-//     spawn entirely. WT_HELPER_INDEX_BIN overrides the binary path for stub
-//     injection if/when end-to-end test coverage is needed.
+//     spawn entirely. WT_HELPER_INDEX_BIN overrides the binary path used for the
+//     "is codebase-memory-mcp installed" skip check; the index itself runs through
+//     cbm-index.sh (TD-677, see test/cbm-index-orphan-reclaim.test.ts).
 //
 // Set up git exclude for WORKTREE-BRIEF.md so it never shows as untracked.
 //
@@ -879,8 +880,12 @@ export function maybeIndexRepository(worktreePath) {
         resolveOuter({ skipped: true, reason: `binary missing: ${binPath}` })
         return
       }
-      const payload = JSON.stringify({ repo_path: worktreePath, mode: 'fast' })
-      const child = spawn(binPath, ['cli', 'index_repository', payload], {
+      // TD-677: go through the single index entry point (flock + MemoryMax cgroup,
+      // temporary-path skip, orphan-DB reclaim), never the bare CLI — per
+      // pitfall-cbm-auto-index-concurrent-oom. The wrapper indexes a missing DB on
+      // explicit calls, which is exactly what a fresh worktree needs.
+      const [command, args] = worktreeIndexCommand(worktreePath)
+      const child = spawn(command, args, {
         detached: true,
         stdio: 'ignore',
       })
@@ -894,6 +899,10 @@ export function maybeIndexRepository(worktreePath) {
       resolveOuter({ skipped: true, reason: 'spawn threw' })
     }
   })
+}
+
+export function worktreeIndexCommand(worktreePath: string): [string, string[]] {
+  return ['bash', [join(WT_HELPER_DIR, 'cbm-index.sh'), worktreePath, 'fast']]
 }
 
 function cleanupCodebaseMemoryIndex(worktreePath) {
@@ -1772,6 +1781,58 @@ function withProbedExclusiveWriterOwnership<T>(_main: string, path: string, oper
   const result = operation()
   if (existsSync(path)) probeLiveWriterCwd(path)
   return result
+}
+
+/**
+ * linked worktree 的 git hook 目錄。
+ *
+ * `core.hooksPath` 存在共用的 `.git/config`；husky 寫的是相對路徑（`.husky/_`），
+ * 所以每棵 worktree 都要有自己的那個目錄，而它是 gitignored 的生成物——checkout
+ * 不會帶。pnpm 在 `Already up to date` 時不跑 `prepare`，於是 `wt-helper add` 開的樹
+ * 靜默沒有 hook：2026-09-24 實測一個 PR 的 16 筆 commit 沒有一筆跑過 commit-msg，
+ * 其中 5 筆 header 非法。缺目錄時跑一次 `pnpm run prepare`；跑完仍缺就回 `missing`
+ * 讓呼叫端出聲，NEVER 靜默放行。
+ */
+export function ensureWorktreeGitHooks(wtPath: string): {
+  state: 'not-applicable' | 'present' | 'installed' | 'missing'
+  hooksPath?: string
+  detail?: string
+} {
+  const cfg = spawnSync('git', ['-C', wtPath, 'config', '--get', 'core.hooksPath'], {
+    encoding: 'utf8',
+  })
+  const hooksPath = cfg.status === 0 ? cfg.stdout.trim() : ''
+  if (!hooksPath || hooksPath.startsWith('/') || hooksPath.startsWith('~')) {
+    return { state: 'not-applicable' }
+  }
+  const dir = join(wtPath, hooksPath)
+  if (existsSync(dir)) return { state: 'present', hooksPath }
+  let hasPrepare = false
+  try {
+    const pkg = JSON.parse(readFileSync(join(wtPath, 'package.json'), 'utf8'))
+    hasPrepare = typeof pkg?.scripts?.prepare === 'string'
+  } catch {}
+  if (!hasPrepare) {
+    return { state: 'missing', hooksPath, detail: 'package.json 沒有 prepare script，無從生成' }
+  }
+  const run = spawnSync('pnpm', ['run', 'prepare'], {
+    cwd: wtPath,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 60_000,
+  })
+  if (existsSync(dir)) return { state: 'installed', hooksPath }
+  // pnpm 不存在（ENOENT）或 timeout 被 SIGTERM 時 status 是 null，真因只在 error／signal。
+  const why = run.error
+    ? run.error.message
+    : run.signal
+      ? `killed by ${run.signal}（timeout 60s？）`
+      : ((run.stderr || run.stdout || '').trim().split('\n').slice(-1)[0] ?? '')
+  return {
+    state: 'missing',
+    hooksPath,
+    detail: `pnpm run prepare exited ${run.status}${why ? ` — ${why}` : ''}`,
+  }
 }
 
 export function destroyWorktreeRuntime(
@@ -3332,6 +3393,15 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
       }
     } catch (e) {
       console.error(`  deps: skipped (${e.message ?? e})`)
+    }
+
+    const hooks = ensureWorktreeGitHooks(wtPath)
+    if (hooks.state === 'installed') console.log(`  hooks: ${hooks.hooksPath} installed`)
+    else if (hooks.state === 'missing') {
+      console.error(
+        `  hooks: ⚠️ ${hooks.hooksPath} 不存在，這棵樹的 git commit 不會跑 pre-commit／commit-msg`,
+      )
+      console.error(`  hooks: ${hooks.detail}`)
     }
 
     // Flip verify-deps-before-run to install (worktree-only).

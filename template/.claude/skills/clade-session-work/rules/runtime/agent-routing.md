@@ -87,4 +87,4 @@ The Claude session is the primary carrier for the common source's Claude-primary
 
 ## Opus 5.5 暫時覆寫的 Claude 載體
 
-共用段 § Opus 5.5 暫時覆寫 生效期間，Claude Code 開 session／subagent 的寫法：Herdr `--launcher cc`／`ccw` `--model opus --effort medium`（上限 medium，helper 對 Opus `high` 回 `usage_error`）；`Agent` tool 帶 `model: 'opus'`。**NEVER** `ccg`／`ccx`——gateway 把 `opus` 映射成 Grok／GPT。commit 0-A reviewer 走 `CLAUDE_REVIEW_SEAT=opus` 跑 `claude-review-safe.sh medium`。
+共用段 § Opus 5.5 暫時覆寫 生效期間，Claude Code 開 session／subagent 的寫法：短期、本 turn 收得回的 Claude 工作用 `Agent` tool（前景，`model: 'opus'`），NEVER 為了這類工作開 Herdr pane。Herdr `--launcher cc`／`ccw` `--model opus --effort medium`（上限 medium，helper 對 Opus `high` 回 `usage_error`）只留給 successor、長時間 background、必須隔離的環境，或叫不出 subagent 的 runtime。**NEVER** `ccg`／`ccx`——gateway 把 `opus` 映射成 Grok／GPT。commit 0-A reviewer：`claude-review-safe.sh prepare medium` → `Agent`（`subagent_type: commit-0a-reviewer`）→ FINALIZE；叫不出 subagent 才跑無子命令的 `claude-review-safe.sh medium`。

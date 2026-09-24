@@ -389,6 +389,22 @@ function sha256Json(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex')
 }
 
+// GNU tar 1.35 still exits 1 (TAREXIT_DIFFERS) after `--warning=no-file-changed`
+// suppresses the diagnostic. That exit is the lockfile/mtime race TD-1097
+// already accepts; a shrunk or removed member still prints its own line and
+// must keep failing.
+function gitTarDriftTolerated(status: number | null | undefined, stderr: string): boolean {
+  if (status !== 1) return false
+  return stderr.split('\n').every((line) => {
+    const text = line.trim()
+    return (
+      text.length === 0 ||
+      text.startsWith('Total bytes written:') ||
+      text.endsWith(': file changed as we read it')
+    )
+  })
+}
+
 function tarSize(root: string, inventory: SourceInventory, tolerateFileChange = false): number {
   const result = spawnSync(
     'tar',
@@ -420,7 +436,11 @@ function tarSize(root: string, inventory: SourceInventory, tolerateFileChange = 
       encoding: 'utf8',
     },
   )
-  if (result.error || result.status !== 0)
+  const drifted =
+    tolerateFileChange &&
+    !result.error &&
+    gitTarDriftTolerated(result.status, String(result.stderr ?? ''))
+  if ((result.error || result.status !== 0) && !drifted)
     throw new Error(
       `Preservation archive sizing failed for ${root}: ${result.error?.message ?? result.stderr.trim()}`,
     )
@@ -1949,32 +1969,45 @@ function createTar(
   fileList?: string[],
   tolerateFileChange = false,
 ): void {
-  execFileSync(
-    'tar',
-    [
-      '--create',
-      '--file',
-      archive,
-      '--format=posix',
-      '--directory',
-      root,
-      '--xattrs',
-      '--xattrs-include=*',
-      '--acls',
-      '--sparse',
-      '--numeric-owner',
-      // A Git directory's mtimes churn while sibling sessions hold and drop
-      // lockfiles (TD-1097). tar's file-changed check compares stat data
-      // across its own read and aborts the capture on a change that carries
-      // no content. Suppression is safe only because the caller still
-      // re-inventories the tree and digests every archived member.
-      ...(tolerateFileChange ? ['--warning=no-file-changed'] : []),
-      ...(fileList
-        ? ['--null', '--verbatim-files-from', '--no-recursion', '--files-from', '-']
-        : args),
-    ],
-    { input: fileList ? fileList.join('\0') + '\0' : undefined, stdio: ['pipe', 'pipe', 'pipe'] },
-  )
+  try {
+    execFileSync(
+      'tar',
+      [
+        '--create',
+        '--file',
+        archive,
+        '--format=posix',
+        '--directory',
+        root,
+        '--xattrs',
+        '--xattrs-include=*',
+        '--acls',
+        '--sparse',
+        '--numeric-owner',
+        // A Git directory's mtimes churn while sibling sessions hold and drop
+        // lockfiles (TD-1097). tar's file-changed check compares stat data
+        // across its own read and aborts the capture on a change that carries
+        // no content. Suppression is safe only because the caller still
+        // re-inventories the tree and digests every archived member.
+        // `--warning=no-file-changed` hides the line; GNU tar 1.35 still exits 1.
+        ...(tolerateFileChange ? ['--warning=no-file-changed'] : []),
+        ...(fileList
+          ? ['--null', '--verbatim-files-from', '--no-recursion', '--files-from', '-']
+          : args),
+      ],
+      { input: fileList ? fileList.join('\0') + '\0' : undefined, stdio: ['pipe', 'pipe', 'pipe'] },
+    )
+  } catch (error) {
+    const failed = error as { status?: number | null; stderr?: unknown }
+    const stderr =
+      typeof failed.stderr === 'string'
+        ? failed.stderr
+        : failed.stderr instanceof Uint8Array
+          ? Buffer.from(failed.stderr).toString('utf8')
+          : ''
+    if (tolerateFileChange && gitTarDriftTolerated(failed.status, stderr)) return
+    throw error
+  }
 }
 
 export function withRestoredArchive<T>(archive: string, fn: (root: string) => T): T {

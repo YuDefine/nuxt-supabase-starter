@@ -1,7 +1,16 @@
 #!/usr/bin/env node
 // 🔒 LOCKED — managed by clade · Source: vendor/scripts/cbm-health.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/cbm-health.ts
 import { spawn, spawnSync } from 'node:child_process'
-import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync, rmSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+  rmSync,
+} from 'node:fs'
 import { createHash } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -90,7 +99,63 @@ function resultState(output: string, code: number | null) {
     return 'success'
   return 'unknown'
 }
+// TD-677: index DBs are keyed by path, so a worktree deleted outside `wt-helper remove`
+// (fixture teardown, bare `rm -rf`) leaves its DB behind forever. Reclaim only what is
+// provably orphaned: every non-empty `projects.root_path` recorded in the DB is gone.
+// Unreadable DBs, DBs without a projects table, and `::missed` rows (empty root) never count.
+async function gcOrphanIndexes(cache: string) {
+  let sqlite: typeof import('node:sqlite')
+  try {
+    sqlite = await import('node:sqlite')
+  } catch {
+    return []
+  }
+  const removed: string[] = []
+  let entries: string[] = []
+  try {
+    entries = readdirSync(cache).filter((f) => f.endsWith('.db'))
+  } catch {
+    return removed
+  }
+  for (const file of entries) {
+    let roots: string[] = []
+    try {
+      const db = new sqlite.DatabaseSync(join(cache, file), { readOnly: true })
+      try {
+        roots = db
+          .prepare('SELECT root_path FROM projects')
+          .all()
+          .map((row: any) => String(row.root_path ?? ''))
+          .filter((root: string) => root.startsWith('/'))
+      } finally {
+        db.close()
+      }
+    } catch {
+      continue
+    }
+    if (roots.length === 0 || roots.some((root) => existsSync(root))) continue
+    const name = file.slice(0, -'.db'.length)
+    for (const path of [
+      `${name}.db`,
+      `${name}.db-wal`,
+      `${name}.db-shm`,
+      `provenance/${name}.json`,
+      `provenance/${name}.lock`,
+    ])
+      rmSync(join(cache, path), { force: true })
+    removed.push(name)
+  }
+  return removed
+}
 let [action, requested = process.cwd(), mode = ''] = process.argv.slice(2)
+if (action === '--gc') {
+  const cache = join(
+    process.env.XDG_CACHE_HOME || join(process.env.HOME || '', '.cache'),
+    'codebase-memory-mcp',
+  )
+  for (const name of await gcOrphanIndexes(cache)) console.log(`reclaimed orphan index ${name}`)
+  process.exit(0)
+}
 if (action === '--hook') {
   let input = ''
   for await (const chunk of process.stdin) input += chunk
@@ -114,6 +179,8 @@ const id = identity(requested)
 if (id) {
   const receiptPath = join(id.cache, 'provenance', `${id.project}.json`)
   if (action === '--index') {
+    // Reclaim hangs off the one entry point every new index goes through (TD-677).
+    await gcOrphanIndexes(id.cache)
     const before = snapshot(id.repo)
     const prior = read(receiptPath)
     const base = {

@@ -19,7 +19,7 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 
 ## 證據鑑別力（先於下方每一條 NEVER / MUST）
 
-驗收引用的證據 E，MUST 能回答「若被驗命題為假，E 會長什麼不一樣？」——答不出或答案是「一樣」→ E 不是證據，換一個在兩個世界會分岔的觀測。**status code、exit code、「檔案存在」、工具自我宣告、來自常數宣告而非量測的數字，預設視為未分岔訊號**。MUST 11 / 16 / 19 / 20 是本條的四個實例；新形態回到上面那句自判。降級路徑觸發時 MUST loud（warning / health degraded），讓假世界主動分岔。實證三例見 [[pitfall-empty-state-screenshot-has-no-discriminating-power]]。
+驗收引用的證據 E，MUST 能回答「若被驗命題為假，E 會長什麼不一樣？」——答不出或答案是「一樣」→ E 不是證據，換一個在兩個世界會分岔的觀測。**status code、exit code、「檔案存在」、工具自我宣告、來自常數宣告而非量測的數字，預設視為未分岔訊號**。MUST 11 / 16 / 19 / 20 / 21 是本條的五個實例；新形態回到上面那句自判。降級路徑觸發時 MUST loud（warning / health degraded），讓假世界主動分岔。實證三例見 [[pitfall-empty-state-screenshot-has-no-discriminating-power]]。
 
 **摘要值（hash / 行數 / 檔案數 / diff 大小）同屬未分岔訊號**：`sha256sum` / `md5sum` / `wc -l` 這類全域函式對空輸入不報錯、照樣回一個外觀正常的值，於是「上游命令死掉」與「內容真的是空的」在它的輸出裡完全相同。**每一次**拿 hash 或 count 當證據，MUST 先驗產生它的那條 pipeline 的 exit code 與非空性；**NEVER** 從摘要值反推成因。逐字反開脫：「hash 有值代表命令成功了」——`[ -n "$(printf '' | sha256sum)" ]` 恆真（空輸入的 sha256 就是 `e3b0c442…`），那道 guard 讀起來在防空值、實際永遠通過。實證見 [[pitfall-hash-of-empty-stdout-collapses-distinct-causes]]。
 
@@ -92,7 +92,7 @@ baseline 只存在於某次 session 記憶裡時，下一個讀 gate 的人算�
 
 > **MUST 1 / 4 / 10 / 12 / 13 / 14 全文在 [[agent-self-verification.claim-cross-check]]**（path-scoped：碰 deploy config／auth 路徑／工具定義檔／`.claude/agents/**` 時載入）——派 subagent 前主線先自跑、呼叫外部 CLI 前驗 contract、部署宣稱三方交叉核對、帳號可用性五層、改工具定義前反查 source、daemon 存活對齊自己這條連線。**MUST 16**（登入態 MUST 用真瀏覽器斷言）在 [[agent-self-verification.screenshot-evidence]]。
 >
-> 下面留常駐的五條，觸發都是「任何一次下結論、任何一次跑診斷指令」——綁不到任何檔案，**NEVER 下推**。
+> 下面留常駐的六條，觸發都是「任何一次下結論、任何一次跑診斷指令」——綁不到任何檔案，**NEVER 下推**。
 
 
 > **MUST 2 / 3 / 5 / 6 / 7 / 8 / 9 / 15 的全文已下推 [[agent-self-verification.screenshot-evidence]]**
@@ -194,6 +194,24 @@ baseline 只存在於某次 session 記憶裡時，下一個讀 gate 的人算�
     截斷、或任何會摘要／替換輸出的 wrapper），那條路徑沒有任何 hook 接得到。
     另見 MUST 17（診斷型指令 NEVER 串接後截斷）——
     那條管截斷，本條管替換，同一個判準的兩面。實證全文見 [[agent-self-verification.structural-and-exit-evidence]]。
+
+21. **檢查的判讀 MUST 由檢查結果產生（hard rule）**：為警告或攔截寫驗證指令時，結論字串（「安全」「乾淨」
+    「沒人在寫」）**MUST** 只在檢查結果成立時才出現——讓非預期結果自己非零退出、擋下後續動作，或只印
+    證據不印結論。**NEVER** 在同一則指令裡寫一句無條件輸出的結論：它不依賴結果，那個檢查就沒有失敗路徑，
+    而它印在證據下面，是讀者最後讀到的一行。
+
+    ```bash
+    # ❌ 結論寫死：上一行印出 ` M docs/tech-debt.md`，最後一行仍是 (empty=safe)，寫入照跑
+    git status --porcelain docs/tech-debt.md; echo "(empty=safe)"; python3 - <<'EOF' …
+    # ❌ 同形：`git status --porcelain` 不論 dirty 與否都回 0，接 `&&`／`||` 的結論一樣無條件
+    git status --porcelain HANDOFF.md || echo "(clean)"
+    # ✅ 非預期結果自己擋下寫入；git 本身失敗另有分支（空輸出不等於乾淨）
+    st=$(git status --porcelain -- docs/tech-debt.md) || exit 2; [ -z "$st" ] || { echo "OCCUPIED: $st"; exit 1; }; python3 - <<'EOF' …
+    ```
+
+    逐字反開脫：「把 `(empty=safe)` 換成更精確的措辭」——問題不在措辭，換一句更準的話仍然無條件印出。
+    同一則指令裡跑檢查沒有問題，問題是結論不依賴檢查。MUST 19 管通道回的是不是應用本身，本條管判讀；
+    兩者修法不共用。實證見 [[TD-784]]。
 
 ## 派工前的主線預檢責任在 [[agent-self-verification.screenshot-evidence]]（具名時機 MUST-Read）
 

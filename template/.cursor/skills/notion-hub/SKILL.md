@@ -20,9 +20,11 @@ description: "consumer 所屬 Notion hub 的唯一入口。Use when 看 board／
 
 - **確定性 script 主線直接跑**：`vendor/scripts/notion-sync.ts`、`vendor/scripts/lib/notion-hub.ts resolve`、
   `scripts/audit-notion-hub-schema.ts`。它們的寫入範圍、授權轉移表、schema 檢查、sidecar 都寫死在 script 裡。
-- **自由形式的 Notion 讀寫**（`ntn api` 查詢、MCP `notion-fetch`／`notion-create-pages`／comment）走
-  Routing Table 〔`notion-ops`〕：Pi `--model gemini --effort high` → luna → blocker。**NEVER** 主線第一手自己跑
-  `ntn`／MCP；**NEVER** `luna-cursor`（Notion auth 在 `$HOME`）。
+- **自由形式的 Notion 讀寫一律 `ntn api`**（查詢、讀頁／blocks、comment、建頁、PATCH 全部），recipe 見
+  [reference/cookbook.md](reference/cookbook.md)。**NEVER** 用 Notion MCP（`notion-fetch`／`notion-create-pages`／
+  `notion-get-comments`…）或 WebFetch；不走 `ntn` 的只有兩處：`ntn` 不支援的 `after` 插入（cookbook § 2 直打 Notion API）與 in-app 附件原檔（cookbook § 4 token_v2 內部 API）。
+  執行者走 Routing Table 〔`notion-ops`〕：Pi `--model gemini --effort high` → luna → blocker。**NEVER** 主線第一手自己跑
+  `ntn`；**NEVER** `luna-cursor`（Notion auth 在 `$HOME`）。每個 `ntn api` 呼叫 MUST 帶 `< /dev/null`——stdin 沒關時 `ntn` 會等 stdin 而像卡死（cookbook 開頭）。
 - 客戶看得到的文字（ticket 名稱、決策題、comment）是定稿措辭：Pi 起草後主線 **MUST** 收斂重寫才寫入。
 
 ## 開工前置（每次）
@@ -84,7 +86,7 @@ prod 網域（`.claude/consumer-meta.json` `deploy.prodUrl`）、`類型` 選項
 寫 code 前有 ≥1 個只有非技術決策者能拍板、且會決定 schema／API／UI 範圍的問題時用；純技術決策自己決、1–2 句的小確認在 chat 問。
 ticket 結構、撰寫規約、接手 prompt 六段全文在 [reference/decision-ticket.md](reference/decision-ticket.md)。
 
-- 建票經 〔`notion-ops`〕（MCP `notion-create-pages`，cookbook § 3）：`狀態`=`hub.ticketStatus['needs-customer']`、`類型`=`hub.ticketType.feature`（bug 修正類用 `.bug`）、`所屬專案` relation、`提報日期` 今日。
+- 建票經 〔`notion-ops`〕（`ntn api -X POST /v1/pages`，cookbook § 3）：`狀態`=`hub.ticketStatus['needs-customer']`、`類型`=`hub.ticketType.feature`（bug 修正類用 `.bug`）、`所屬專案` relation、`提報日期` 今日（只在該欄是 `date` 型時帶；`created_time` 型由 Notion 自動填）。
 - 已有 work item 時由 `notion-sync.ts open --work <id> --ticket <page>` 綁 `Work ID`；沒有就等客戶回覆後走 § 2。
 - 既有客戶票只需要問一句 → 在該票留 comment（口語、給選項情境），並把 `狀態` 設成 `hub.ticketStatus['needs-customer']`（cookbook § 2）。
 - 客戶沒回就回報「還沒回」並結束；**NEVER** 建議「N 天後 ping 客戶」。

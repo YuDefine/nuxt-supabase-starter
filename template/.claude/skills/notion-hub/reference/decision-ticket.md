@@ -34,7 +34,7 @@
 - {N} 題答案會直接決定 {schema / API / UI 範圍}
 ```
 
-> Notion markdown（fence、checkbox、引言塊）與標準 markdown 不完全相同，寫之前 **MUST** `notion-fetch notion://docs/enhanced-markdown-spec` 確認。
+> 上方是版面示意；實際寫入走 `ntn api` 的 `children` blocks（cookbook § 3）：`- [ ]` → `to_do`、fence → `code`、`#`／`##` → `heading_1`／`heading_2`。**NEVER** 用 Notion MCP 建頁。
 
 | 段落 | 客戶讀法 | 開發者讀法 |
 | --- | --- | --- |
@@ -47,14 +47,14 @@
 
 **MUST**：標題 = 客戶用自己話說的需求；每題口語化 + 給範例；每題給選項 + 每個選項給情境；題數 3–6；每題只有一個決策維度；**不用任何技術術語**（RPC / schema / DTO / API / table / foreign key / migration 全部禁）。
 
-**NEVER**：讓客戶選技術路徑（「A. CREATE TABLE / B. ALTER TABLE」）；用 `-` 當 checkbox（必須 `- [ ]`）；多題擠成一段散文。
+**NEVER**：讓客戶選技術路徑（「A. CREATE TABLE / B. ALTER TABLE」）；把選項寫成一般條列（必須是 `to_do` 勾選框）；多題擠成一段散文。
 
 ## Claude 接手 Prompt 必含 6 段（順序固定，標題用全形【】）
 
 ```
 繼續處理 {repo / 模組} 「{需求一句話}」需求（HANDOFF.md {YYYY-MM-DD} entry）。
 【第一步 — 先檢查客戶有沒有回 Notion】
-用 notion-fetch 撈 page id {page id}（URL: {url}），看 {N} 題 checkbox 哪幾個被打勾。
+用 `timeout 60 ntn api "/v1/blocks/{page id}/children?page_size=100" < /dev/null` 撈 page（URL: {url}），回應 `has_more: true` 時帶 `&start_cursor=<next_cursor>` 翻到底，再看 {N} 題 `to_do` block 的 `checked` 哪幾個是 true（漏頁會把客戶已勾誤判成沒勾）。
 【{N} 題對應的架構決策】
 1. {第 1 題重述} → 影響 {schema / API / UI 變化點}
 ...
@@ -73,15 +73,15 @@ Prompt 規約：self-contained（新 session 只看它就能接手）；code poi
 ## 流程
 
 1. **萃取輸入**：需求標題（口語化，使用者確認）、N 個拍板題（決策維度／選項／影響）、code pointer（`search_graph`／`trace_path`）。不確定的一次問齊，**NEVER** 邊寫邊問。
-2. **resolve hub ＋ 經 〔`notion-ops`〕 重撈 schema 與 Notion markdown spec**（並行）。
-3. **組內容**：4 段結構 checklist（標題層級、`## N.` 編號、`- [ ]`、fence 含 6 段、開發者備忘含 HANDOFF cross-link）。
+2. **resolve hub ＋ 經 〔`notion-ops`〕 用 `ntn api "/v1/data_sources/<board>" < /dev/null` 重撈 schema**。
+3. **組內容**：4 段結構 checklist（`heading_1`／`heading_2` 層級、`## N.` 編號、選項用 `to_do` block、接手 Prompt 6 段放 `code` block、開發者備忘含 HANDOFF cross-link）。
 4. **建 page**（cookbook § 3）；拿到 page id 後 **MUST** 回填進接手 Prompt 的【第一步】。
 5. **HANDOFF.md**：先讀當前 repo 格式 → append entry（ticket URL + page_id、N 題、接手方式）。
 6. **回報**：ticket URL、N 題、HANDOFF entry 位置、接手方式。**NEVER** 主動建議「N 天後 ping 客戶」。
 
 ## 常見坑
 
-1. **checkbox 渲染不出來** → `- [ ] ` 而不是 `-`。
+1. **checkbox 渲染不出來** → 題目選項要用 `to_do` block，不是 `bulleted_list_item`。
 2. **選項沒給情境** → 每個 option 前先 `- **{詞}**：{解釋 + 範例}`。
 3. **接手 Prompt 漏「客戶沒回」分流** → 新 session 會自作主張 ping 客戶。
 4. **內文頁面給相對路徑或 GitHub 連結** → 只准 consumer prod 網域的完整 URL（D2）。
