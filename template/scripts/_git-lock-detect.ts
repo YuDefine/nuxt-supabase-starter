@@ -181,6 +181,16 @@ export function detectActiveGitProcesses(repoScope?: string): number[] | null {
   return pids.filter((pid) => gitProcessTouchesRepo(pid, scope))
 }
 
+/** `/proc/<pid>/stat` 的 state 欄（`R`/`S`/`Z`…）；讀不到回 null。comm 可含空白與括號，取最後一個 `)` 之後。 */
+function processState(pid: number): string | null {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+    return stat.slice(stat.lastIndexOf(')') + 2).split(' ', 1)[0] || null
+  } catch {
+    return null
+  }
+}
+
 /** `p` 是不是 `root` 本身或它底下。純字串比對，兩端都已 realpath 過。 */
 export function withinRepo(p: string, root: string): boolean {
   return p === root || p.startsWith(root.endsWith('/') ? root : `${root}/`)
@@ -194,6 +204,11 @@ export function withinRepo(p: string, root: string): boolean {
  * 假陽性只剩「別的 repo 真的有 git 在跑」，遠小於舊實作的整行文字比對。
  */
 function gitProcessTouchesRepo(pid: number, scope: string): boolean {
+  // zombie（state `Z`）已經釋放所有 fd，不可能持有 index.lock。它的 cwd 與 cmdline 同時讀不到，
+  // 若不先分辨，會掉進下方「判不出範圍 → 保守保留」而讓 stale 鎖永遠清不掉（TD-1022）。
+  // NEVER 拿「cmdline 空」當 zombie 判準——那正是把「讀不到」與「沒有」混為一談。
+  if (processState(pid) === 'Z') return false
+
   let cwd: string | null = null
   try {
     cwd = realpathSync(`/proc/${pid}/cwd`)

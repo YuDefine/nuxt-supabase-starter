@@ -111,6 +111,7 @@ GPT-5.6 與 Claude 4.8 都**字面遵守指令、不外推**（Anthropic prompt 
 2. **明寫套用範圍**：要對多個對象做同一件事時，**MUST** 點名範圍（「**每個** phase 都做，不只第一個」「`app/components/` 底下**全部** `.vue`」）。4.8 不會把「修 X」默默推廣到 Y/Z，範圍含糊就只做命中的第一個。
 3. **禁止 hard-code 過測試**：brief **MUST** 含一條——「**NEVER** 為了讓 test 綠而 hard-code 回傳值、跳過邏輯分支、或改測試期望值遷就實作；test 必須驗真實行為，不確定就回報而非硬湊」。pi `high` 卡住時傾向 hard-code 騙綠燈。
 4. **附驗收標準**：brief 結尾 **MUST** 列「完成判準」（哪個 test 綠、哪個 endpoint 回什麼、tasks.md 哪幾條 `[x]`），讓主線 cross-check 有客觀對齊點。
+5. **寫入落點 MUST 在該 dispatch 的 cwd 之內**。指令會寫進別的 repo（含 `~/offline/clade/scripts/` 與 `~/offline/clade/vendor/scripts/` 裡有寫入行為的 script，而 cwd 不是那個 repo）時，brief **MUST** 改成「回報它應該跑什麼」，由 coordinator 在自己的 repo 跑。**NEVER** 把跨 repo 寫入寫成驗收步驟讓 worker 執行（TD-782）。
 
 ### Git baseline declaration（dirty working tree 派工必加）
 
@@ -439,7 +440,7 @@ Nuxt UI／Content 實作交 Cursor Composer 2.5，Nuxt 本體交 GPT-5.6 Sol xhi
 | 四個模式的 screenshot review | Pi `gemini high`，`screenshot-review-verify` | 實際 browser 操作、圖片、DOM／network evidence、逐 item 摘要與 progress.json |
 | 截圖 vs item 符合性 gate | Claude Code Opus 5.5（effort: medium），`screenshot-match-analysis` | 讀取每張指定圖片與完整 item，給 PASS／FAIL／UNCERTAIN 及理由 |
 
-收集與判定分兩次 dispatch。Gemini 不代簽 Opus gate；Opus 不以 Gemini 的文字摘要代替實際圖片。Opus 5.5 無法執行時帶實際失敗原因沿 `screenshot-match-analysis` 原列交 GPT-5.6 Sol（effort: high）；Gemini 或 Sol 不可用就回報 blocker，不沿 generic 配額鏈換模型。執行方式與 evidence contract 見 `review-screenshot` skill。
+收集與判定分兩次 dispatch。Gemini 不代簽 Opus gate；Opus 不以 Gemini 的文字摘要代替實際圖片。Opus 5.5 無法執行時帶實際失敗原因沿 `screenshot-match-analysis` 原列交 GPT-5.6 Sol（effort: high）；Gemini 或 Sol 不可用就回報 blocker，不沿 generic 配額鏈換模型。執行方式與 evidence contract 見 `/review screenshot`（`review` skill 的 screenshot mode）。
 
 ### Opus 工作的 Pi fallback 憑證
 
@@ -494,8 +495,8 @@ Gemini worker 的對應規範（hard budget、checkpoint、fail-fast、progress.
 4. 對應實作檔案路徑（主線預消化過的）— **NEVER** 只丟 change name 讓 agent 自己 grep
 5. **Hard budget: 60 min**（明示寫進 brief，agent 端 SKILL.md 也有但 brief 仍須提醒）
 6. **Checkpoint cadence**：每完成 item 或每 15 min（取較短者）寫 `progress.json` + 跑一個 cheap tool call return main loop
-7. **Fail-fast 條件**：登入失敗 / fixture 缺且無 plan / DOM selector 3 次找不到 / 單 item > 5min / click 後 DOM 連續 2 次無預期變化（詳見 `review-screenshot/references/evidence-contract.md` § Fail-Fast 條件）
-8. **單 Bash call ≤ 1 語義動作**（詳見 `review-screenshot/references/evidence-contract.md` § 為什麼單一 long Bash call 會 break SendMessage）
+7. **Fail-fast 條件**：登入失敗 / fixture 缺且無 plan / DOM selector 3 次找不到 / 單 item > 5min / click 後 DOM 連續 2 次無預期變化（詳見 `capabilities/core/skills/review/references/.legacy/review-screenshot/references/evidence-contract.md` § Fail-Fast 條件）
+8. **單 Bash call ≤ 1 語義動作**（詳見 `capabilities/core/skills/review/references/.legacy/review-screenshot/references/evidence-contract.md` § 為什麼單一 long Bash call 會 break SendMessage）
 9. **progress.json 路徑**：`screenshots/<env>/<change-name>/progress.json`
 10. **回報格式**：每 item PASS / FAIL / UNCERTAIN + evidence（network / dom / screenshot path）
 
@@ -680,7 +681,7 @@ redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**d
 | NEVER | 說明 |
 | --- | --- |
 | **NEVER** 派 Pi 寫 code（非 UI 實作）而 prompt 漏掉 Plan-first 硬指令 | 沒 plan 主線只能從 diff 反推；pi 寫完 plan 必須立刻續跑 |
-| **NEVER** 派 general-purpose / worktree / 臨時 session 自跑 playwright / agent-browser 收 verify:ui evidence | 唯一入口是 `review-screenshot` skill 直派 `screenshot-review-verify` Gemini 3.8 Flash worker。本列擋的是繞過具名 carrier；瀏覽器與互動登入由 target adapter 的 native surface 處理，缺少該 surface 就維持 blocked。 |
+| **NEVER** 派 general-purpose / worktree / 臨時 session 自跑 playwright / agent-browser 收 verify:ui evidence | 唯一入口是 `/review screenshot`（`review` skill 的 screenshot mode）直派 `screenshot-review-verify` Gemini 3.8 Flash worker。本列擋的是繞過具名 carrier；瀏覽器與互動登入由 target adapter 的 native surface 處理，缺少該 surface 就維持 blocked。 |
 | pi **MUST** 由**該層編排者**在其自身 sandbox 內直接 Bash background process launcher 派出（含泛用 dispatcher）：主線是編排者時由主線派；`/wt` Form 3 / Form 4 的 worktree subagent 執行它被指派的 next-skill 時（next-skill 的診斷、repro 與其他具名 Pi 工作）由**該 subagent** 派 | 例外的**准入條件**是該編排者自跑完整 Pi Watch Protocol（notification-only + 安全網 fallback，per [[agent-routing.pi-watch-protocol]] § 監看排程）——做不到就退回上一列的薄中介禁令。編排者**以外**的任何一層對這些 pi **零探針**（per 同檔 § 跨 sandbox 可見度約束 v2）。**本列的範圍只及 `/wt` Form 3 / Form 4 開出的 worktree subagent**，**NEVER** 外推成「任意 native delegation subagent 都可以派 pi」 |
 
 ## 配額與 residency 的下推兩段

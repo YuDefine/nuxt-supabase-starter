@@ -347,6 +347,8 @@ node vendor/scripts/herdr-session-handoff.ts --complete blocked \
 承諾、密鑰、不可逆且他要負責的。**NEVER** 因為「這題比較重要」就寫 `charles`：重要與該問誰
 無關，而佇列被不需要他的題塞滿，代價是他不再讀它。
 
+child 判出「只有 Charles 答得了」時仍走 `--decision-for charles`，**NEVER** 自己在對話裡問 principal。`CLADE_DISPATCH_ID` 非空時，final response 裡的提問不是授權通道（TD-901）。
+
 **coordinator 的題照樣是 span，這一點 NEVER 拿掉。** 它被藏起來的只有「Charles 的那一頁」；
 `answer-not-filed` 與各種停滯偵測照樣看得到它。所以 **parent 回答之後 MUST 跑
 `flow answer <span_id> --answer '<答案>'`**——在 pane 裡口頭裁決而不落 `flow answer`，那一題會

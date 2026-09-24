@@ -18,6 +18,8 @@ paths: ['tasks/**', 'specs/plans/**', '.claude/consumer-meta.json', 'registry/no
 | **主檔** `專案`、`里程碑` | 內部結構；`專案` 一列 = 一個 projectCode | 內部 | 人建列；進度% 是 rollup，沒有人手填的欄 |
 | **交付項目**（在 `開發時程追蹤` 頁） | 客戶看的工作清單：一列 = 一個 work item 或合約交付項 | 客戶 | machine（`狀態` / `進度%` / `Work ID` / relation）；`預估完成日` 是**人確認後**才寫 |
 
+**交付項目 是選填表**：hub 可以把進度併進 ticket board（board 的 `進度%` 欄 ＋ 時程頁上唯讀的 board view），這時 registry 省略該 hub 的 `delivery`。下文所有「交付項目 進度%」在這種 hub 一律改寫 ticket 的 board `進度%`（跟 ticket 轉移同一次 PATCH、只往前；`progress` 指令寫絕對值），`eta` / `reconcile` 不適用，承諾日期留在 board 的 `dueDate` 欄（registry `fields.board.dueDate`；fc 是 `預估完成日`）由人維護。主檔 `專案`／`里程碑` 的 `進度%` 是 Notion 端 rollup、machine 不寫；`FIELDS.project/milestone.deliveries` 只在有 交付項目 的 hub 有意義，這種 hub 的 rollup 來源由 hub 擁有者在 Notion 上改指 board 或移除。沒有 ticket 的工作在這種 hub 不會出現在客戶面——需要客戶看見就先 `file` 建票。
+
 `任務` 層**不投影**：`- [ ] N.M` 那層 task 留在 carrier，NEVER 同步到 Notion。
 
 座標全部在 `registry/notion-hubs.json`（一個 hub 一組 board / 主檔 / 交付項目 / 時程頁 / 各 projectCode 的 page 與主檔列）。**NEVER** 在 rule / skill / 文件 / script 寫死任何 Notion id；要用就經 `vendor/scripts/lib/notion-hub.ts`（`resolveConsumerHub`，或 CLI `node vendor/scripts/lib/notion-hub.ts resolve`）。

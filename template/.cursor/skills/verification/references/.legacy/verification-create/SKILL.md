@@ -69,7 +69,7 @@ description: Use when user requests verification setup. NOT for maintenance.
 ### 4. Validate structure
 
 ```bash
-node <skills-root>/verification-maintain/scripts/check-feature-map.mjs \
+node <skills-root>/verification/references/.legacy/verification-maintain/scripts/check-feature-map.mjs \
   <skills-root>/verify-<app>
 ```
 

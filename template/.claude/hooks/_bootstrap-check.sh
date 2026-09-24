@@ -149,6 +149,75 @@ maybe_publish_status() {
 
 maybe_publish_status
 
+# TD-1007：stop-wip-guard 把 orphan WIP 委派給下一個 session-start。這支是 consumer 與
+# clade home 都會跑的 SessionStart（投影到 `.claude/hooks/_bootstrap-check.sh`）。
+# MUST 在下面「沒 manifest 就 exit 0」之前：clade home 沒有 consumer manifest，放在那之後永遠跑不到。
+# NEVER 再掛進 session-start-stalled.sh：那支只在 clade home settings，兩邊都掛會跑兩次。
+# 只轉印 orphan WIP 列；失敗／逾時不改這支 hook 的 exit。
+#
+# 掃描本身在背景跑、結果落 git common dir 的快取，前景最多等 3 秒：
+# clade home 有上百棵 worktree，一輪掃描 4–10 秒。前景 `timeout 3` 會每次都殺掉它，
+# orphan WIP 就在最需要它的 repo 靜默消失（0-A #254）。等不到時印**上一輪完成的結果**，
+# 這一輪的結果下一個 session 看得到；**NEVER** 改回前景 timeout 砍掉掃描。
+maybe_orphan_wip() {
+  local name="handoff-drift-scan.ts" scan=""
+  local common cache tmp pid deadline
+  for scan in "$PROJECT_ROOT/vendor/scripts/$name" "$PROJECT_ROOT/scripts/$name"; do
+    [[ -f "$scan" ]] || continue
+    common=$(git -C "$PROJECT_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 0
+    cache="$common/clade-handoff-drift.last"
+    tmp="$cache.$$"
+    local -a guard=()
+    command -v timeout >/dev/null 2>&1 && guard=(timeout 120)
+    (
+      cd "$PROJECT_ROOT" || exit 0
+      # scanner 本身 fail-open：拋錯時只印 `[handoff-drift] error (non-fatal)` 仍 exit 0。那一行
+      # 不是掃描結果，NEVER 讓它覆寫上一輪的快取、也 NEVER 當成本輪新鮮結果（0-A #254 第三輪）。
+      if ${guard[@]+"${guard[@]}"} node "$scan" >"$tmp" 2>&1 &&
+        ! grep -qF '[handoff-drift] error' "$tmp" && mv -f "$tmp" "$cache"; then exit 0; fi
+      rm -f "$tmp"
+      exit 1
+    ) </dev/null >/dev/null 2>&1 &
+    pid=$!
+    # 牆鐘期限，NEVER 數迴圈次數：高負載下每次 `sleep 0.1` 都會拖長，30 次可以超過 5 秒。
+    local wait_s="${CLADE_HANDOFF_DRIFT_WAIT_S:-3}"
+    [[ "$wait_s" =~ ^[0-9]+$ ]] || wait_s=3
+    deadline=$((SECONDS + wait_s))
+    while kill -0 "$pid" 2>/dev/null && ((SECONDS < deadline)); do
+      sleep 0.1
+    done
+    # fresh=1 只在「這一輪的掃描完成且改寫了快取」時成立。掃描失敗／`timeout 120` 砍掉時
+    # 快取仍是上一輪的，NEVER 用本輪的標頭印它（0-A #254 第二輪）。
+    local running=0 fresh=0 report=""
+    if kill -0 "$pid" 2>/dev/null; then
+      running=1
+      disown "$pid" 2>/dev/null || true
+    elif wait "$pid" 2>/dev/null; then
+      fresh=1
+    fi
+    if [[ ! -s "$cache" ]]; then
+      ((running)) && echo "[handoff-drift] 掃描 >3s 仍在背景跑，尚無上一輪結果；下一個 session 會顯示" >&2
+      return 0
+    fi
+    # 只轉印 orphan WIP（本 hook 的職責）。其餘 drift 類型在 clade home 一輪可達數十條，
+    # 每個 session 灌一次會蓋掉這一條；它們照舊由 `/handoff` 的 scan 呈現。
+    report=$(grep -F '(orphan-uncommitted-wip)' "$cache" || true)
+    [[ -n "$report" ]] || return 0
+    if ((running)); then
+      echo "[handoff-drift] orphan WIP（本輪掃描 >3s 仍在背景跑；以下是上一輪完成的結果）：" >&2
+    elif ((!fresh)); then
+      echo "[handoff-drift] orphan WIP（本輪掃描失敗或逾時；以下是上一輪完成的結果）：" >&2
+    else
+      echo "[handoff-drift] orphan WIP：" >&2
+    fi
+    printf '%s\n' "$report" >&2
+    return 0
+  done
+  return 0
+}
+
+maybe_orphan_wip
+
 # ─────────────────────────────────────────────────────────
 # 2. 沒 manifest = 此 repo 不是 clade consumer，靜默退出
 # ─────────────────────────────────────────────────────────

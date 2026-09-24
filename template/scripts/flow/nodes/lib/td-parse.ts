@@ -141,8 +141,27 @@ export function parseTdRegister(source: string): TdEntry[] {
 }
 
 /** Highest TD number present, or 0. The `r*-tdmax` family existed only to answer this. */
-export function maxTdNumber(entries: TdEntry[]): number {
-  return entries.reduce((max, e) => Math.max(max, Number(e.id.slice(3))), 0)
+/**
+ * Class B one-liners (`TD-NNN: …`) are a second ledger (TD-913). The live block sits inside the
+ * register's own fence, so the fence-blanked heading scan never sees it. Same raw `^TD-(\d+):`
+ * scan as `scripts/td-number.ts` `usedNumbers`. Number space only: a raw scan also matches a body
+ * line that merely references an archived id, which is harmless for a maximum but wrong as an
+ * entry — so this NEVER feeds `parseTdRegister` (0-A #254: `td-inject` / `planRotate` /
+ * `register-scan --filter all` would otherwise act on ids that exist only as a one-liner).
+ */
+export function classBTdNumbers(source: string): number[] {
+  const numbers: number[] = []
+  for (const line of source.split('\n')) {
+    const m = /^TD-(\d+):/.exec(line)
+    if (m) numbers.push(Number(m[1]))
+  }
+  return numbers
+}
+
+/** Highest TD number in use. Pass the raw `source` to include Class B one-liners (TD-913). */
+export function maxTdNumber(entries: TdEntry[], source?: string): number {
+  const headings = entries.reduce((max, e) => Math.max(max, Number(e.id.slice(3))), 0)
+  return source === undefined ? headings : Math.max(headings, ...classBTdNumbers(source))
 }
 
 export type TdFilter = 'all' | 'open' | 'parked' | 'ready' | 'blocked-by-publish' | 'no-evidence'

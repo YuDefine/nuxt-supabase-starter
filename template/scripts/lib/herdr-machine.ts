@@ -197,6 +197,10 @@ export function readMachinePanesAndAgents(
       // `result.<what>s` stays an empty list, as it always was.
       const parsed = parseJson((result.stdout ?? '').trim())
       if (!isRecord(parsed)) return null
+      // Herdr reports some failures (e.g. `protocol_mismatch`) as an `error` envelope with exit 0.
+      // Reading that as an empty list is "no other sessions" — the one wrong answer that looks
+      // right (TD-1026). NEVER trust the exit code alone.
+      if (parsed.error !== undefined) return null
       const body = parsed.result
       const items = isRecord(body) ? body[`${what}s`] : undefined
       return Array.isArray(items) ? items : []

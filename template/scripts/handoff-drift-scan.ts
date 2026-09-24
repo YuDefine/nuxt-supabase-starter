@@ -12,10 +12,10 @@
  *
  * This scanner emits stderr warnings (one per worktree) to surface drift.
  *
- * NO LIVE CALLER as of 2026-09-07: its session-start caller
- * `session-start-roadmap-sync.sh` retired with the spectra lifecycle (TD-976 Wave 1)
- * and nothing replaced it. `stop-wip-guard.sh` still delegates orphan-WIP detection
- * here ("Layer 2"), so that chain is currently open — see TD-1007.
+ * Session-start caller (TD-1007): `vendor/_bootstrap-check.sh` `maybe_orphan_wip`,
+ * before the no-manifest early exit, so clade home and consumers both run it.
+ * `stop-wip-guard.sh` delegates orphan-WIP detection here ("Layer 2"). NEVER also
+ * wire `session-start-stalled.sh` — that hook is clade-home-only and would double-scan.
  *
  * Worktree drift triggers (any one is enough):
  *   1. Branch HEAD has ≥1 commit past main HEAD AND slug not mentioned in HANDOFF.md

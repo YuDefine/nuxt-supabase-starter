@@ -14,6 +14,8 @@
 
 **生效條件：Opus 5.5 額度當下可用。** 額度實際用完（有逐字 quota／`account_unavailable` 輸出）才失效，回到本檔其餘各節與 [[agent-routing.routing-table]] 原判；「可能快用完」不算。
 
+**機器開關**：routing gate 以 `vendor/scripts/pi-routing-policy.ts` 的 `opusOverrideActive()` 判定覆寫——常數 `OPUS_55_OVERRIDE_ACTIVE` 開啟**且**主線 model（gate 讀 transcript 尾端）是 Opus 時，read-heavy-scan／mechanical-fanout／external-web 三種 latch 不武裝、顯式帶 `model: 'opus'` 的 Claude subagent 派工不武裝 claude-agent-dispatch（它們的出口是外派、sonnet／fable 委派或 waive，覆寫期間會卡死主線）；主線是 Fable／Sonnet 時照原判武裝，讀不到 transcript 退回常數。額度耗盡不經本開關：主線那時無法推論，或已改用其他 model 而被上一條接住。Charles 撤銷覆寫時 **MUST** 同一個 commit 把常數改成 `false`。
+
 **0-A 例外（Charles 2026-09-23 硬禁令）**：commit 0-A **NEVER** 退回 Astra → Fable——不論是 wrapper／helper 不認得 opus seat、還是 Opus 額度用完。前者停在 0-A 之前 push 並回報「待 Opus seat 0-A」；後者 gate 保持未完成、等 Opus 額度恢復。覆寫撤銷時本例外**不**跟著失效：`code-review-opus` 列與 wrapper 的 opus 預設保留，恢復 Astra／Fable 0-A 須 Charles 另行拍板。receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。
 
 **優先序：本節蓋過** [[agent-routing.routing-table]] 每一列、判不進任一列的預設鏈、sonnet／haiku 轉派，以及各 skill（commit、handoff、wt、implement、work-loop、version-upgrade、notion-hub、review）寫死的 model 與外派條款。skill 讀到「派 astra／sol／luna／gemini／grok／fable」時，照下表改做，**NEVER** 照 skill 原文派。
@@ -46,6 +48,10 @@
 
 命中多條條件時先問能否由一個 worker 完成整條資料依賴鏈；可以就派一個，**NEVER** 一條 task 配一個 agent 地拆。brief 與回報依 [[agent-routing.dispatch-execution]]，派出後依 [[agent-routing.pi-watch-protocol]]。
 
+派顧問／分析型 subagent 的 brief **MUST** 逐字含「結論寫在最終輸出，NEVER 只用 SendMessage 回覆主線」。側通道訊息沒有時效保證；subagent 的最終輸出才有。主線在宣告「這支 agent 沒有產出」之前 **MUST** 先讀它的 transcript；runtime 顯示的閒置狀態不是產出訊號（TD-679）。各 runtime 的 transcript 位置與原生訊號見 adapter。
+
+brief 裡每個指令的寫入落點 **MUST** 在該 dispatch 的 cwd 之內。會寫進別的 repo 的 script **MUST** 改成「回報它應該跑什麼」，由 coordinator 在自己的 repo 跑。見 [[agent-routing.pi-watch-protocol]] § Brief 措辭紀律（TD-782）。
+
 ## Runtime residency and native transport
 
 Routing Table 決定 executor，adapter 決定原生載體；能力不足只交 bounded phase，不能跨 runtime 代打。每條 change MUST 跑 `residency-classify.ts classify` 與 `record`；gate 依 [[agent-routing.pi-watch-protocol]]。
@@ -58,7 +64,7 @@ Iron Law：本 session 做得到的動作與查得出的決策 NEVER 交 user。
 
 ## Dispatch data and transport boundary
 
-每份 brief MUST 列 paths、命令與外部服務；清單外回報、NEVER 自取；secret／個資／private URL／signed material 不進 brief。詳見 [[agent-routing.pi-watch-protocol]] § Dispatch 資料邊界。
+每份 brief MUST 列 paths、命令與外部服務；清單外回報、NEVER 自取；secret／個資／private URL／signed material 不進 brief。寫入落點不在該 dispatch cwd 的指令不是「列了就准跑」——那是回報項，不是執行項（TD-782）。詳見 [[agent-routing.pi-watch-protocol]] § Dispatch 資料邊界 與 § Brief 措辭紀律。
 
 **Claude 派 Claude 的短期工作走 in-process subagent，NEVER 開 Herdr pane。** 判準是「本 turn 內收得回來、不需要 successor」：review、裁決、掃描這類 bounded 工作由主線用該 runtime 的 in-process subagent 載體派、前景等結果（工具名只寫在該 runtime 的 adapter）。Herdr pane 只留給四種情形：successor 交棒（relay／fanout）、長時間 background、必須隔離 worktree／port／環境、主線 runtime 叫不出 Claude subagent。逐字反開脫：「要留 model 身分 receipt，所以開 pane」——subagent transcript 記得到每則訊息的 model，commit 0-A 的 `prepare`／`finalize` 就是從那裡核對的。
 

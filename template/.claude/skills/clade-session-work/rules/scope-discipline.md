@@ -121,6 +121,8 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 - **A. 馬上修，回 flow 繼續** — 在當前 session 直接編輯該 WIP 檔，原 flow（`/commit` / `/handoff` / 等）繼續走完。前提：A0 已送出且對方不反對（或 A0 不適用），且 user 確認該編輯不會跟別 session 的修改互踩（或別 session 已結束）
 - **B. 登 TD，放棄當前 flow** — 把問題寫進 `docs/tech-debt.md`（編號 `TD-NNN`），當前 flow **立即中止**（commit 不繼續、archive 不繼續），等別 session 結束後由 user 決定何時處理；已成功 commit 的 group 保留不動
 
+**A0 的等待終點是單一布林：對方 land 了沒有。** 回覆或詢問持有者時 **NEVER** 帶 commit 顆粒（拆幾筆、哪一筆先 land、哪一批先解誰的阻塞）——下游 publish 帶全部 commit、`/commit` Step 3 自理分組，對顆粒零依賴。判準：對方拿這句話會做出不同的動作嗎？不會就刪。
+
 **A 與 B 之間的二選一 MUST 交給使用者決定**，透過當前 runtime 的提問介面或對話，已有對該具體處置的答案就沿用。A0 是已授權的協調動作，不能用一個替代問題跳過它。
 
 **選 B 之前 MUST 先跑 [[session-tasks]] § 並行爭用 的 Step 0 確認「別 session」真的會結束。** 對方是 unattended runner 時它不會在可預期時間內停，「等它結束」等於把 flow 無限期掛起——判出是 runner 就直接登 TD 並讓位，**NEVER** 把中止理由寫成「等對方結束」。

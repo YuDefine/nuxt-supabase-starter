@@ -384,12 +384,13 @@ node scripts/wt-helper.ts merge-back <slug> --auto-stash    # stash main blocker
 node scripts/wt-helper.ts land-pending <slug>               # alias for grandfathered worktrees
 node scripts/wt-helper.ts prune                             # remove merged ones interactively
 node scripts/wt-helper.ts cleanup <slug> --force --force-discard-unland  # discard worktree + commits
+node scripts/wt-helper.ts cleanup <slug> --superseded-by <commit|file=commit|file=path>[,…] --reason <text>  # main later rewrote the unlanded hunks
 node scripts/stash-reconcile.ts                             # plan recovery for wt-merge-block/* stashes
 ```
 
 Use `node scripts/wt-helper.ts batch status --trigger manual --workflow <workflow_model>` and commit skill `batch.md` for requested merge back. The coordinator runs the full batch commit and cleanup; archive prepares its source first.
 
-`cleanup --force --force-discard-unland` is for discarding unwanted worktrees (subagent fail, abandoned exploration). It permanently loses the branch's commits; use `merge-back` first to preserve the work.
+`cleanup --force --force-discard-unland` is for discarding unwanted worktrees (subagent fail, abandoned exploration). It permanently loses the branch's commits; use `merge-back` first to preserve the work. When the branch is "unlanded" only because main later rewrote the same hunks (its content was superseded, not lost), use `cleanup <slug> --superseded-by … --reason …` instead: every unlanded file needs evidence on main, the tip is pinned in `refs/wt-superseded/`, and nothing is removed unless all files are covered (TD-1082).
 
 # Runtime adapter: Cursor
 Keep UI implementation, screenshot evidence, visual judgement, and human review on the qualified main line. Relay/fanout restrictions remain in force; use only verified host operations and preserve worktree state when completion evidence is unavailable.

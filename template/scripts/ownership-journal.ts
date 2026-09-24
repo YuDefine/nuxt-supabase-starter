@@ -28,6 +28,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { isRecord } from './lib/json-unknown.ts'
+import { detectRuntime, detectSessionId } from './lib/detect-runtime.ts'
 
 export const JOURNAL_PATH = '.clade/ownership/journal.jsonl'
 
@@ -140,9 +141,69 @@ export function lastWriterByPath(
   const map = new Map<string, JournalEntry>()
   for (const e of entries) {
     if (tree !== null && e.worktree !== null && e.worktree !== tree) continue
+    // 弱證據不覆蓋強證據（TD-772）。`hook` 記的是 harness 指名的實際寫入、`script` 是寫入者
+    // 自報；`mtime-diff` 只是「這個 session 跑 Bash 的窗口內這個檔動過」——同窗口的併發寫入
+    // 會被記到它頭上，2026-08-28 實測一筆晚 7 分鐘的 mtime-diff 就這樣蓋掉了真作者的 hook，
+    // 且錯的答案長得比對的還有說服力。同級證據維持最後一筆勝；跨級時強者留下，
+    // 「兩個候選其實都成立」由 `flow who` 的 contested 判定在讀端印出來，不在這裡挑。
+    //
+    // 只擋**別 session** 的弱筆。同 session 先 Write（hook）、之後再用 Bash 跑 formatter／
+    // `sed -i` 改同一個檔是常態：那筆 mtime-diff 的作者不存在爭議（就是它自己），而它的 ts
+    // 才描述檔案現況——留著舊的 hook 筆，讀端的 unrecorded-write 檢查就會拿過期的 ts 比，
+    // 把一次有登記的寫入誤判成「沒登記的寫入」。
+    const held = map.get(e.path)
+    if (
+      held &&
+      held.attribution !== 'mtime-diff' &&
+      e.attribution === 'mtime-diff' &&
+      e.session_id !== held.session_id
+    )
+      continue
     map.set(e.path, e)
   }
   return map
+}
+
+/**
+ * 呼叫端自己的 session id —— 僅當兩個**獨立**來源互相印證時回值，否則 null。
+ *
+ * 來源一：harness 的 session 環境變數（`detectSessionId`，且 runtime MUST 唯一判成 claude）。
+ * 來源二：`pre-bash-ownership-stamp.sh` 在每一次 Bash 呼叫前 touch 的
+ * `.clade/ownership/.bash-stamp-<id>`（post hook 用完即刪）。`flow who` 本身就是一次 Bash
+ * 呼叫，所以 hooked 的呼叫端自己的 stamp 此刻一定新鮮。
+ *
+ * **NEVER** 只憑 stamp 推身分（0-A #241 Major）。stamp 目錄是整個 consumer root 共用的（所有
+ * worktree 同一個目錄），任何 hooked Claude Bash 都會寫；非 hooked 的呼叫端（Codex／pi、人的
+ * terminal、腳本）或自己那次 Bash 已跑超過 `freshMs` 的呼叫端，只要剛好有一個別 session 的
+ * Bash 在飛，「恰好一個新鮮 stamp」指到的就是**別人**——對方的檔被判 `mine`、action 是
+ * `git commit --only`，正是 TD-743 與 rules/core/session-claims.md § 3.2 逐字禁止的方向。
+ *
+ * 所以：env 說了是誰，且那個 id 自己的 stamp 此刻新鮮，才回它。env 沒有、runtime 判不出唯一
+ * （例如 Codex child 繼承了 parent 的 `CLAUDE_*`）、或那個 id 沒有新鮮 stamp，一律 null——
+ * `mine` 維持不可達是安全方向。別 session 的 stamp 存不存在**不影響**結果。
+ */
+export function bashStampSession(
+  consumerRoot: string,
+  {
+    env = process.env,
+    freshMs = 60_000,
+    now = Date.now(),
+  }: { env?: NodeJS.ProcessEnv; freshMs?: number; now?: number } = {},
+): string | null {
+  if (detectRuntime(env) !== 'claude') return null
+  const claimed = detectSessionId(env, 'claude')
+  if (!claimed) return null
+  // 與 pre hook 同一個檔名過濾——NEVER 各寫一份，否則合法 id 會永遠對不上自己的 stamp。
+  const safe = claimed.replace(/[^A-Za-z0-9_.-]/g, '_')
+  try {
+    const mtimeMs = statSync(
+      join(consumerRoot, '.clade', 'ownership', `.bash-stamp-${safe}`),
+    ).mtimeMs
+    if (now - mtimeMs > freshMs) return null
+  } catch {
+    return null
+  }
+  return claimed
 }
 
 /**

@@ -128,6 +128,19 @@ export function detectSessionId(
   return null
 }
 
+/**
+ * `env` 去掉某 runtime 的 session id 鍵——給「繼承了 parent env、卻不是那個 session」的子行程用。
+ * 鍵名與 `detectSessionId` 讀的是同一份 `SESSION_ID_KEYS`，NEVER 在呼叫端另列一份。
+ */
+export function withoutSessionIds(
+  env: NodeJS.ProcessEnv,
+  runtime: KnownRuntime,
+): NodeJS.ProcessEnv {
+  const out = { ...env }
+  for (const key of SESSION_ID_KEYS[runtime]) delete out[key]
+  return out
+}
+
 /** telemetry / ledger 的 executor 合法值（從詞彙表推導，不另外寫死）。 */
 export function validExecutors(): Set<string> {
   return new Set<string>(KNOWN_RUNTIMES)

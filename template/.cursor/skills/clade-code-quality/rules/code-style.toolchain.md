@@ -697,9 +697,16 @@ session 各自獨立寫出同一個壞形狀**，只有一個（<consumer-i>）�
 | 消費端 | `/clade-health enforcement`（每輪跑 `node scripts/audit-gate-coverage.ts`）；findings 進 HANDOFF 稽核段並 relay 給對應 consumer 的 session |
 | 載入路徑 | 本節 `rules/core/code-style.toolchain.md`，依 frontmatter paths 由各 runtime adapter 交付 |
 
-**單檔測試 / 小範圍 lint NEVER 包進 heavy label**。`test:file` / `test:unit` / `lint` /
-`format:check` 直呼工具即可 —— heavy 與 light 的區分**就是** label 有沒有進
-`CLADE_HEAVY_GATES`，不需要第二套分類。
+**小範圍 lint NEVER 包進 heavy label**。`lint` / `format:check` 直呼工具即可。
+
+**`pnpm test <檔名>` 走 light semaphore，不排 heavy slot（W-2026-09-24-gate-slot-light-lane）**。`test` label 的 inner argv
+扣掉命令本身後，positional **全部**是存在的測試檔（1..`CLADE_LIGHT_TEST_MAX_FILES`，預設 5；帶目錄、
+name filter 就判 heavy）、沒有 `--lane`、且沒有一支宣告
+`// clade-test-isolation: spawn-heavy` 時，`clade-gate` 設 `CLADE_GATE_CLASS=light`，`gate-slot.sh`
+改取獨立的 `light-<i>.lock`（`CLADE_LIGHT_GATE_SLOTS`，預設 2），不取 heavy slot 與 repo lock；
+記憶體 scope 與 `MAX_RUNTIME` 照舊。成因：heavy slot 降到 1 之後，重跑 5 個小檔要排在別 repo 的整套
+suite 後面，agent 於是繞過閘門直跑——那才是沒有上限的路徑。**NEVER** 為了「定點重跑」直呼
+`node --test` / `vitest` 繞過 `clade-gate`：light lane 就是那條路，而且仍受全機上限。
 
 ### 三個 exit code 說的是不同層的話
 
@@ -721,7 +728,9 @@ session 各自獨立寫出同一個壞形狀**，只有一個（<consumer-i>）�
 
 | env | desk 值 | 沒設時 |
 | --- | --- | --- |
-| `CLADE_HEAVY_GATE_SLOTS` | `1` | 2（clamp 1..8） |
+| `CLADE_HEAVY_GATE_SLOTS` | `2`（2026-09-24 VM100 套 10 vCPU 後由 1 調回） | 2（clamp 1..8） |
+| `CLADE_LIGHT_GATE_SLOTS` | 預設 | 2（clamp 1..8）——`pnpm test <檔名>` 的 light 類上限 |
+| `CLADE_LIGHT_TEST_MAX_FILES` | 預設 | 5；`CLADE_LIGHT_TEST=0` 關閉 light 分類 |
 | `CLADE_OXC_THREADS` | `2` | **不注入** —— oxlint / oxfmt 用滿全部核心 |
 | `CLADE_VITEST_MAX_WORKERS` | `2` | **不注入** —— vitest 用滿全部核心 |
 | `CLADE_GATE_WAIT_TIMEOUT` | 預設 | 3600s |

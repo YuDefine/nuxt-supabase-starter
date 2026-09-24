@@ -52,6 +52,15 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 
 單一對象的規約照常寫。
 
+## 保管 MUST 與洩漏 NEVER 拆開寫（MUST）
+
+同一條目同時要求「把值寫進 X」（保管）與「NEVER 把值寫進檔案／commit／對話」（洩漏）時，**MUST** 拆成兩個 bullet，各自寫明**主體**（誰做）與**射程**；洩漏那條 **MUST** 明寫射程不含保管處。綁在同一個 bullet 時，agent 只執行禁令那半，保管義務變成孤兒，接著整條管理鏈被退回給 user（[[pitfall-custody-mandate-read-as-prohibition-only]]）。
+
+- ❌「值 MUST 同步寫進 Notion 保管頁，NEVER 寫進任何檔案、commit 或對話」
+- ✅ 兩個 bullet：「**agent** 收到值後 MUST 寫進 Notion 保管頁的對應列」／「**agent** NEVER 把值寫進 repo 檔案、commit message、對話輸出——保管頁不在此射程」
+
+「執行者是 <人名>」「X 為 user-only」這類句子 **MUST** 附**成立前提**，並寫明前提消失後本條失效——否則當時的事實限制會被照字面當成永久權責劃分續用。範本在 [[secret-custody]] 的前提失效條款段。
+
 ## 紀律型規約三件套（高違規規約 MUST 全配）
 
 判定「高違規」：已有對應 pitfall、或 oops / audit 訊號顯示同型違規 ≥2 次。三件套：

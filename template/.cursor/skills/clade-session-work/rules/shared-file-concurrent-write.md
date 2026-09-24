@@ -53,6 +53,24 @@ paths: ['HANDOFF.md', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/pitfalls/**', 'pa
 代對方 commit 有前置條件，見 [[commit]] 與各 repo 自家的 ad-hoc commit 紀律——
 **NEVER** 因為對方沒回應就直接把它的未完成內容 commit 進 history。
 
+## 廣播是最終手段：准入與檢討報告（MUST）
+
+「廣播」＝對一組候選 session 同發同一則「這是誰的」。它的成本是 N 個 session 各被中斷一次，
+命中率卻可以是 0：2026-08-28 clade home 對同一組 dirty 檔廣播 4 次、19 人次，一次都沒指認出持有者。
+
+**准入**——廣播前兩件 MUST 都成立：
+
+1. 已跑 `flow who`（沒有 flow 的 repo 跑 cookbook 第 0 步的 transcript 歸屬查詢）
+2. 它**有鑑別力**：journal 非空，且 verdict 不是全部同值（全 `unknown`／全 `orphan`）
+
+沒有鑑別力時改做**指名探測**（只問第 0 步命中的那一個 session）或修探測層的接線，**NEVER** 直接廣播——
+一個回答不了問題的探測層，不會因為問更多人就回答得出來。
+
+**事後**——**每一次**廣播後都 MUST 出一份檢討報告（寫在該 session 的收尾輸出或 task 檔），
+逐字回答「**是哪一層失效導致必須廣播**」，並把那一層的缺口登記成 TD 或 pitfall、附上編號。
+**NEVER** 用「大家都回了、問題解決了」結案——廣播成功不代表失效的那一層不用修，不修就是下一次再付一次 N 人次。
+檢討報告範本在 `vendor/snippets/concurrent-session-probe/README.md`。
+
 ## 寫之後
 
 `git commit --only -- <該檔>`，然後照 [[commit]] § Verify hard rule 驗三層。

@@ -5,6 +5,8 @@
 
 When the current Claude tool catalog exposes the following surfaces, use them for the selected Claude session; the adapter declaration alone does not prove availability. `Agent` is the delegation entry; `run_in_background` is the async owner mode. `AskUserQuestion` is the structured user decision surface, and `TaskOutput(block=false)`, `ScheduleWakeup`, and `TaskStop` are the task status, wakeup, and cancellation controls. The common scope, approval, evidence, model, and fallback predicates remain binding.
 
+顧問／分析型 subagent 的產出通道（TD-679）：`SendMessage` 沒有時效保證，`Agent` tool 的最終輸出才有。宣告「這支 agent 沒有產出」之前 **MUST** 先讀它的 transcript（`~/.claude/projects/*/<session-id>/subagents/*.jsonl`）；`ListAgents` 的 `idle` 不是產出訊號。
+
 ## Claude 委派的 model 檔位（決定層）
 
 **Cursor runtime 先停：本節整節不適用。** 命中 § Runtime residency and native transport 的 session **NEVER** 走到本節挑 `Agent` / `Task` 的 Claude／Fable／Haiku 檔位。

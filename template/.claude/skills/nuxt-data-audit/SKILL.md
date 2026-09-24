@@ -37,7 +37,7 @@ Cookbook：`~/offline/clade/vendor/snippets/nuxt-data-perf/`
 ```
 
 `schema` mode 的完整偵測項、JSON schema 與 exit-code contract 保留於
-[data-sanity reference](../../references/data-sanity/SKILL.md)；需要時讀取後執行
+[data-sanity reference](references/data-sanity.md)；需要時讀取後執行
 `node <clade-vendor>/scripts/audit-data-sanity.ts --consumer-path . --json`。
 
 ## Phase 1 — Dependency Detection

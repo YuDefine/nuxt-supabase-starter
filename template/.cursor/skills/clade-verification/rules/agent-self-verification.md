@@ -213,6 +213,27 @@ baseline 只存在於某次 session 記憶裡時，下一個讀 gate 的人算�
     同一則指令裡跑檢查沒有問題，問題是結論不依賴檢查。MUST 19 管通道回的是不是應用本身，本條管判讀；
     兩者修法不共用。實證見 [[TD-784]]。
 
+22. **要 exit code 就 NEVER 讓那個指令進 pipeline（hard rule）**：`$?` 永遠是 pipeline **最後一段**
+    的——`cmd | tail` 的 exit 屬於 tail、`cmd | grep` 的 exit 是「有沒有命中」不是「有沒有出錯」。
+    讀任何指令的 exit code 之前 MUST 先答兩題：「這個 exit code 是**誰**的」「它的 `0` 是什麼意思」。
+    不分指令種類、不分輸出長短：
+
+    ```bash
+    log=$(mktemp); cmd > "$log" 2>&1; echo "exit=$? log=$log"   # exit 是 cmd 自己的；log 不共用固定路徑
+    ```
+
+    `${PIPESTATUS[0]}` 是次選——它要求記得在**下一行立刻取**，比「不要進 pipeline」多一個失效點。
+    本條是 MUST 17 的無限定版：17 管「失敗訊息會不會被截掉」，本條管「exit code 歸屬」，typecheck、
+    `git push --dry-run`、稽核這類不在 17 射程內的載體一律由本條接。
+    （per [[pitfall-pipeline-exit-code-attributed-to-wrong-command]]／[[TD-707]]）
+
+23. **改動注入子行程環境變數時 MUST 帶該變數重跑測試（hard rule）**：判準是**環境的出生時間 vs
+    改動的落地時間**——測試 env／fixture env 早於那行注入改動建立時，跑綠**不算數**。
+    **NEVER** 拿「測試的執行時間 vs 改動的落地時間」當判準——它永遠是「測試比較晚」，
+    恆給安全的假答案。觸發判定：`git diff --cached | grep -E 'env:|process\.env\['` 或 diff 內
+    出現往 child env 寫入的欄位 → 帶著該變數重跑受影響測試（`VAR=<值> node --test <affected>`）；
+    不帶變數的綠燈與沒跑同義。（per [[pitfall-verifier-env-predates-the-change-it-verifies]]／[[TD-802]]）
+
 ## 派工前的主線預檢責任在 [[agent-self-verification.screenshot-evidence]]（具名時機 MUST-Read）
 
 **派 subagent / pi / visual verifier 收 evidence 之前，MUST 先讀

@@ -359,9 +359,15 @@ export function pruneExpired(consumerPath) {
   return dropped
 }
 
-export function findClaimByWorktree(consumerPath, worktreePath) {
+export function findClaimByWorktree(
+  consumerPath,
+  worktreePath,
+  { includeExpired = false }: { includeExpired?: boolean } = {},
+) {
   return (
-    readActiveClaims(consumerPath).find((claim) => claim.worktree_path === worktreePath) ?? null
+    readActiveClaims(consumerPath, { includeExpired }).find(
+      (claim) => claim.worktree_path === worktreePath,
+    ) ?? null
   )
 }
 

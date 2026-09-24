@@ -111,7 +111,7 @@ helper 登記的 integration 同樣適用 Step 0-MR／0-Archive 的 trunk 人工
 node scripts/wt-helper.ts batch scope
 ```
 
-以輸出填寫 seal JSON 的 `base`、`tree`、`members`（逐成員保留 `path`／`workId`／`head`），另附 `gates`：`simplify`、`review`、`checks`、`human`。每格使用 `{ "status": "passed", "evidence": "<絕對路徑>", "hash": "<檔案 sha256>" }`；條件未觸發時使用 `{ "status": "not-applicable", "reason": "<可核對判準>" }`。Review 包含適用的 0-A／0-B，checks 包含其他已觸發的檢查；human 只收既有人工 gate 的實際結果。
+以輸出填寫 seal JSON 的 `base`、`tree`、`members`（逐成員保留 `path`／`workId`／`head`），另附 `gates`：`simplify`、`review`、`checks`、`human`。每格使用 `{ "status": "passed", "evidence": "<絕對路徑>", "hash": "<檔案 sha256>" }`；條件未觸發時使用 `{ "status": "not-applicable", "reason": "<可核對判準>" }`；gate 跑了但沒過使用 `{ "status": "unmet", "reason": "<沒過在哪>", "evidence": "<絕對路徑>", "hash": "<檔案 sha256>" }`——helper 驗完證據後把它留在 batch state 的 `unmetGates`，**拒絕 seal**、批次停在 review，修好重跑該 gate 改成 `passed` 才能 seal。Review 包含適用的 0-A／0-B，checks 包含其他已觸發的檢查；human 只收既有人工 gate 的實際結果。
 
 證據必須是本批真實執行產物，**NEVER** 用 worker checkpoint、布林 true 或自己寫的「all passed」代替。Helper 驗檔案與雜湊，不替主線判語意正確；主線仍須讀實際結果。任何審後修改（含 Step 5 bookkeeping）先依既有規約補驗／補審受影響範圍，證據覆蓋最終 tree 後才 seal。
 
@@ -132,7 +132,7 @@ Receipt 必須是 JSON 物件，欄位固定為：`repository`、`pr`（正整�
 
 `batch confirm-merged` 不接受沒有 receipt 的確認，也不接受 fast-forward／一般 merge 冒充 squash。PR 關閉但未合併、receipt 缺失或機械證據不足時保留並查證，不宣稱 landed。Receipt 驗證通過後才記錄 landed；cleanup 對 PR 批次以 receipt 的 `merge_sha` 驗證 main 可達性，同時仍以 formal HEAD 保護 integration branch 與來源回收。清理失敗只重試 cleanup，不重複合併。
 
-具名 coordinator 在 C 節 predicate 全成立時，用 helper 合併，不自行拼裸 `gh pr merge`：
+具名 coordinator 在 C 節 predicate 全成立時，用 helper 合併，不自行拼裸 `gh pr merge`（唯一例外：Charles 在對話中具名授權該 PR 的 attended 合併，條件見 [[github-flow]] § Attended 合併）：
 
 ```bash
 node scripts/wt-helper.ts batch yield-blocked \
@@ -157,6 +157,14 @@ node scripts/wt-helper.ts batch cleanup
 ```
 
 每個來源都需正式落地、HEAD 未變、無未保存工作／活 claim／lock／保留契約才移除；有不能安全刪的 ignored 內容也保留。**NEVER** 用 `--force` 補掉不成立的 predicate。報告逐來源列 `path`、`branch`、`dirty`、`merged_to_main`、`locked` 與 removed／retained 原因，integration 最後回收。
+
+**來源在落地後合法繼續工作**（retained 原因是 `source HEAD changed` 或 `source branch advanced`，而新 commit 疊在登記 head 之上）時，這棵樹不該被移除，也永遠不會回到登記 head。改走保留來源關閉：
+
+```bash
+node scripts/wt-helper.ts batch release-source <source-path> --reason "<為什麼這棵樹要留著>"
+```
+
+它驗 batch 已 landed、landed commit 在 main、登記 head 是來源現 head 的祖先，通過後把登記 head 釘在 `refs/clade/batches/<id>/<index>`、該 member 算 settled 並立刻解除 batch 佔有（可用現 head 重新 `batch ready`）；下一次 `batch cleanup` 收掉 integration、批次轉 `cleaned`。來源改寫過已落地的 history（登記 head 不再是祖先）時拒絕。**NEVER** 為了同一目的手改 state.json。
 
 Cleanup 前，每一棵樹先被 P0 全量保存進 common Git 目錄下的 archive（receipt 記 inventory／Git closure，不再發 `excluded` 清單）。預設 `defaultLifecycle` **沒有** `withExclusiveWriterOwnership`，且未解析的 profile 會讓 `validateProfile` 失敗——此時 CLI `batch cleanup` **retain 每一個來源**，不會做上面描述的 capture／刪除。要真的 teardown，呼叫端必須提供：已解析且通過 `validateProfile` 的 profile，以及帶 mandatory exclusive-writer adapter 的 lifecycle。
 

@@ -56,8 +56,8 @@
 
 | 情境 | 觸發 | 說明 |
 |---|---|---|
-| 有 UI 的工作完成（design review findings 已產出） | `design-retro` | 分析 findings、識別重複模式、建議改善 |
-| Findings 累積達 5 的倍數（5、10、15…） | `design-retro` | 週期性全量分析 |
+| 有 UI 的工作完成（design review findings 已產出） | `/design retro` | 分析 findings、識別重複模式、建議改善 |
+| Findings 累積達 5 的倍數（5、10、15…） | `/design retro` | 週期性全量分析 |
 
 ### Sub-skill 禁用清單（永不觸發）
 

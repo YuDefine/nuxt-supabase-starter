@@ -68,7 +68,7 @@ create-only 的成功 receipt 是 `dispatched`，**不是** `relay_dispatched`�
 
 > relay 開出來的 successor **不帶** `CLADE_DISPATCH_ID`（helper 刻意不注入 correlation env，見該檔 grep `TD-547` 的註解段），所以它是 main line、可以自由 fanout。`--successor` 開出來的同理（TD-1104）。被 fanout 派出去的 **worker 帶**該 env，因此 worker 只能 relay，不能再 fanout。
 
-**guard 的唯一另一個缺口是 `--bounded-leaf`（TD-1105）**：coordinated child 可以開**一層**有界葉節點——只限 readonly 的 gate-review row（由 `NATIVE_TABLE_ROW_POLICIES` × `GATE_OUTPUT_ROWS` 推導，目前只有 `code-review-fable`）且必須 `--coordinate`（開的人在同一個呼叫裡收割）。leaf 自己帶 correlation env 加上 `CLADE_DISPATCH_BOUNDED_LEAF=1`，record 記 `bounded_leaf: true`；它的裸 dispatch 照一般 guard 擋，再開 leaf 也回 `nested_dispatch_refused`，**`--relay` 也回 `nested_dispatch_refused`**——一般 child 的 relay 缺口是「把位置橫向交出去」，leaf 沒有位置，relay 只會鑄出一條不受 guard 約束的 main line。leaf 做不完就 `--complete blocked` 交還 coordinator；wake 沒送到時它的 `next_step` 是 `standby`（probe parent→在線叫醒→待命由 opener `--coordinate-resume` 收割），不是 relay——pending decision 已隨 `--complete` 進 completion record 與 decision 佇列，leaf 不需要也不能寫 tracked 檔。這不是責任樹擴張：leaf 不能寫它審的樹、跑完即回、不能再派（含 relay）。**NEVER** 為了讓一般工作過 guard 而把它包裝成 leaf——准入由 row 推導，flag 本身不開門。
+**guard 的唯一另一個缺口是 `--bounded-leaf`（TD-1105）**：coordinated child 可以開**一層**有界葉節點——只限 readonly 的 gate-review row（由 `NATIVE_TABLE_ROW_POLICIES` × `GATE_OUTPUT_ROWS` 推導成 `BOUNDED_LEAF_ROWS`，目前是 `code-review-fable` 與 `code-review-opus`）且必須 `--coordinate`（開的人在同一個呼叫裡收割）。leaf 自己帶 correlation env 加上 `CLADE_DISPATCH_BOUNDED_LEAF=1`，record 記 `bounded_leaf: true`；它的裸 dispatch 照一般 guard 擋，再開 leaf 也回 `nested_dispatch_refused`，**`--relay` 也回 `nested_dispatch_refused`**——一般 child 的 relay 缺口是「把位置橫向交出去」，leaf 沒有位置，relay 只會鑄出一條不受 guard 約束的 main line。leaf 做不完就 `--complete blocked` 交還 coordinator；wake 沒送到時它的 `next_step` 是 `standby`（probe parent→在線叫醒→待命由 opener `--coordinate-resume` 收割），不是 relay——pending decision 已隨 `--complete` 進 completion record 與 decision 佇列，leaf 不需要也不能寫 tracked 檔。這不是責任樹擴張：leaf 不能寫它審的樹、跑完即回、不能再派（含 relay）。**NEVER** 為了讓一般工作過 guard 而把它包裝成 leaf——准入由 row 推導，flag 本身不開門。
 
 ### `--cwd` 指向既存工作區時的佔用探測（fail closed）
 
@@ -93,6 +93,12 @@ ls <目標 repo>/.clade/claims/ 2>/dev/null                  # 活 claim
 git -C <該 worktree> status --porcelain     # 非空 = 有人正在寫
 git -C <該 worktree> log -1 --format=%cr    # 最後一筆 commit 幾分鐘前？
 ```
+
+**helper 也會量 (c) 那一層，但只在派出之後告訴你**：dispatch receipt 的 `cwd_occupancy_warn` 列出
+目標目錄的三種訊號——`dirty-linked-worktree`、`recent-commit`（不在預設分支 `origin/HEAD`／`main`／`master` 上的數分鐘內 commit）、
+`process-cwd`（別的 terminal 的 process 落在目錄下；呼叫端自己那個 pane 的整棵行程樹不算）。呼叫端自己就在
+目標目錄裡時，前兩種分不出是誰的改動，不量——那時別人在不在只看 `process-cwd`。它是 warn-only 的**事後**訊號（TD-733），
+**NEVER** 拿它代替派出前的 (a)–(c)；receipt 帶著它就回頭照本節協商，不要讀完往下做。
 
 **(a) 不可省，而且它排第一是有理由的**：(b) 與 (c) 都是 point-in-time 量測，對「兩個 item 之間什麼都不跑」的迴圈型 runner 有結構性 race（見 [[concurrent-session-probe]] 入口 A 第 3 步的盲區聲明）。HANDOFF 的 ownership 條目與 `.clade/claims/` 是**耐久**的——它們在 runner 睡覺時仍然存在。
 
@@ -135,6 +141,8 @@ git -C <該 worktree> log -1 --format=%cr    # 最後一筆 commit 幾分鐘前�
 7. brief 的**範圍**依 [[agent-routing.dispatch-execution]] § 派多少 判定：與被派工作構成串行鏈的環，預設一起寫進同一份 brief。
    brief 裡出現「X 由主線處理」「不要做 X」這類句子時，**MUST** 能具名說出主線做 X 需要 worker 沒有的什麼；
    說不出來就刪掉那句、把 X 寫進 brief。
+8. 寫 brief 的人 **MUST** 把每個「已驗證」主張指到 SoT（檔案路徑＋可重跑指令），**NEVER** 只 inline 結論。
+   同一份 brief 可以一半新一半舊；沒有指標時接手者分不出哪一半還成立，回讀成本等於沒有 brief（TD-717）。
 
 **NEVER** 把完整 transcript、token、cookie、credential 或與工作無關的 dirty state 塞進 brief。
 
@@ -256,7 +264,7 @@ successor 繼承的是整個位置，所以「接手後仍需要」的範圍比�
 | workflow 明定 parked | 保留，receipt 寫 `retained: <owner + next landing event>` |
 | 已登記批次、尚未正式落地 | 保留来源與佇列，successor 依 commit skill `batch.md` 接手；換 session 不強制結批 |
 | 已登記批次且正式落地 | 主動跑 `wt-helper batch cleanup`；登記時的落地授權含安全回收，不重問 remove／retain，依結果逐來源記 removed／retained 原因 |
-| clean + 內容已在 main 或 origin/<base>（ancestry merged，或 `wt-helper cleanup <slug> --dry-run` 印 `verdict CLEAN`／`merged=Y`／`mergedPr(origin/<base>)=Y` 任一；「已在 origin/<base>、本機 main 尚未同步」算 `removed` 條件——clade 是 PR 制，origin 是落地權威，本機 main 由 `main-sync` 追上，gate 防的是內容遺失而 server 端已保存）+ 無 unique commit／WIP + 無 parking contract | **直接**以零 force flag 移除 worktree 與 branch（`wt-helper cleanup <slug>`），receipt 寫 `removed`；**NEVER** 先問 `remove`／`retain`——條件全中就是授權 |
+| clean + 內容已在 main 或 origin/<base>（ancestry merged，或 `wt-helper cleanup <slug> --dry-run` 印 `verdict CLEAN`／`merged=Y`／`mergedPr(origin/<base>)=Y` 任一；「已在 origin/<base>、本機 main 尚未同步」算 `removed` 條件——clade 是 PR 制，origin 是落地權威，本機 main 由 `main-sync` 追上，gate 防的是內容遺失而 server 端已保存）+ 無 unique commit／WIP + 無 parking contract ＋ 無宿主設定引用（`--dry-run` 的 `host-config refs=0`；非 0 時先把 systemd unit／drop-in／crontab 改指 main 或刪掉，沒有 flag 可繞過，TD-1148） | **直接**以零 force flag 移除 worktree 與 branch（`wt-helper cleanup <slug>`），receipt 寫 `removed`；**NEVER** 先問 `remove`／`retain`——條件全中就是授權 |
 | 零 force flag 的移除被擋，或上一列任一條件判不出 | fail closed 列 blocker；答案前停止收工訊息 |
 | dirty、未 fully merged、ownership 不明 | fail closed 列 blocker，**NEVER** 用 `--force` 代替判斷 |
 

@@ -113,3 +113,5 @@ openspec/.vector-search.db*
 
 .agents/*
 !.agents/constitution/
+
+.codebase-memory/

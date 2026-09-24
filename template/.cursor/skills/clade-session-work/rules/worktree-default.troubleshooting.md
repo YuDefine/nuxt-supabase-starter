@@ -20,7 +20,7 @@ This troubleshooting source keeps common recovery predicates and exact WIP/stash
 
 ## §7 升級路徑與 grandfathered worktree
 
-命名不符 `session/*` 的舊 worktree **grandfathered**，不強制重命名；`wt-helper list` / `prune` 只認 `session/` 前綴，新建一律走 `/wt`。V2 → V3 in-flight worktree 處置：ready archive → OPSX 在實作樹驗 gate、archive、commit bookkeeping，再由主持者序列落地；還在 implementation → 沿原身分接續；ad-hoc Form-1 → `wt-helper land-pending <slug>`（alias of merge-back，容忍 multi-commit branch）；過時不要 → `cleanup --force --force-discard-unland`（**永久砍 commit**）。Legacy `cross-session-block-*` stash 走 `stash-reconcile.ts`；HANDOFF drift 由 session-start `handoff-drift-scan.ts` 偵測，drift → `/handoff` refresh。
+命名不符 `session/*` 的舊 worktree **grandfathered**，不強制重命名；`wt-helper list` / `prune` 只認 `session/` 前綴，新建一律走 `/wt`。V2 → V3 in-flight worktree 處置：ready archive → OPSX 在實作樹驗 gate、archive、commit bookkeeping，再由主持者序列落地；還在 implementation → 沿原身分接續；ad-hoc Form-1 → `wt-helper land-pending <slug>`（alias of merge-back，容忍 multi-commit branch）；內容已被 main 後續改寫取代 → `cleanup <slug> --superseded-by <commit|file=commit|file=path>[,…] --reason <text>`（逐檔證據，tip 釘在 `refs/wt-superseded/`，不丟內容）；過時不要 → `cleanup --force --force-discard-unland`（**永久砍 commit**）。Legacy `cross-session-block-*` stash 走 `stash-reconcile.ts`；HANDOFF drift 由 session-start `handoff-drift-scan.ts` 偵測，drift → `/handoff` refresh。
 
 ## §8 Stop hook 死鎖 fallback
 

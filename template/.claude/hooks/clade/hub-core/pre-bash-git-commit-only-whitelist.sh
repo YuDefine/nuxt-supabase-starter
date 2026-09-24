@@ -17,7 +17,12 @@
 # else is judged by where the commit could land.
 #
 # Trigger: after deleting quotes and backslashes, the text has a `commit`
-# word and a `--only` word. (A commit without `--only` is not this gate.)
+# word and a `--only` word, and could run git: a `git` word anywhere, a `$`
+# or backtick anywhere (single quotes and heredoc bodies included), or a
+# function definition (TD-1128: `rg -e commit -e --only` is a search, not a
+# commit). The whole text, not one seg: a function or `| xargs git` puts
+# `git` and the words in different segs. A commit without `--only` is not
+# this gate.
 #
 # Allowlist shape — every piece must hold, or the command is "unchecked":
 #   command := list ( (`;` | newline) list )*
@@ -36,7 +41,10 @@
 #   Redirects (`>`, `>>`, `2>&1`, `<`, `>|`, `&>`) may appear anywhere in a
 #   seg with a literal target. A heredoc (`<<[-]DELIM`) is allowed on a git
 #   seg; so is the message idiom `"$(cat <<'EOF' … EOF\n)"` inside double
-#   quotes on a git seg (on any other command its body counts as code). An
+#   quotes on a git seg (on any other command its body counts as code). A
+#   "git seg" here is one whose global options are only -C / --no-pager and
+#   whose SUB is a builtin above: `-c alias.x='!sh'`, `--config-env` or an
+#   alias subcommand can run an argument or stdin as code (TD-1128). An
 #   unquoted DELIM's body must have no `$`, backtick or `\`.
 #   Every word is LITERAL: no `$` expansion, no backtick / `$(` (except that
 #   idiom), no unquoted glob or brace (`* ? [ { }`); a leading `~` / `~/` is
@@ -66,8 +74,10 @@
 #   passes. A session cwd that is not a repo counts every outside path.
 #
 # `Via: /commit` (the /commit trailer) passes the command only when it sits
-# in an argument of a git command or a heredoc fed to one — not in a
-# comment, an `echo`, or a script body.
+# in a git commit's own message: a -m / --message / --trailer value, or the
+# heredoc a `-F -` commit reads — not in another git command's argument
+# (`git log --grep 'Via: /commit'`, TD-1128), a comment, an `echo`, or a
+# script body.
 #
 # Known boundary: the trigger reads literal `commit` / `--only` words; a
 # command that spells them through an expansion is not seen at all. This is
@@ -82,6 +92,7 @@ if command -v jq >/dev/null 2>&1; then
   command=$(printf '%s' "$input" | jq -r '.tool_input.command // ""' 2>/dev/null || printf '')
 fi
 
+# Cheap prefilter; the scan below decides per command (T record).
 # `com''mit`, `"--only"`: quotes and backslashes do not hide the words.
 dequoted=$(printf '%s' "$command" | tr -d "'\"\\\\")
 # Here-strings, not `printf | grep -q`: under pipefail an early-exiting
@@ -94,7 +105,8 @@ if ! grep -qE '(^|[[:space:];&|()=])--only([[:space:];&|()]|$)' <<<"$dequoted"; 
 fi
 
 # Tokenise and match the allowlist shape. Output records (\037-separated):
-#   V            `Via: /commit` in a git seg's argument or git-fed heredoc
+#   T            some command could be a `git commit --only` (the trigger)
+#   V            `Via: /commit` in a git commit's own message
 #   N <reason>   not the allowlist shape (first reason only)
 #   E            a `$` / backtick expansion in code
 #   S            pushd / popd / `cd -` / bare `cd` / `~user` / CDPATH cd
@@ -109,6 +121,7 @@ scan=$(awk '
   }
   function no(why) { if (nr == "") nr = why }
   function out(   k, b, p, seen) {
+    if (GU || trig()) print "T"
     if (V) print "V"
     if (nr != "") print "N", nr
     if (E) print "E"
@@ -124,7 +137,20 @@ scan=$(awk '
     for (b = 2; b <= nb; b++) if (!(base[b] in seen)) print "X", base[b]
     for (k = 1; k <= nrec; k++) print rec[k]
   }
-  function giveup(why) { E = 1; no(why); out(); exit }
+  function giveup(why) { E = 1; GU = 1; no(why); out(); exit }
+  # The text could run `git commit --only` (the prefilter saw both words):
+  # a `git` word anywhere (any path, any quoting), a `$` / backtick anywhere
+  # (quoted too: `bash -c \047"$G" commit\047` runs it), or a function
+  # definition. Whole text, not per seg: `g(){ git "$@"; }; g commit`,
+  # `echo commit --only | xargs git` split the words across segs.
+  function trig(   t, m, a, k) {
+    if (s ~ /[$`]/) return 1
+    if (s ~ /(^|[^A-Za-z0-9_])function[ \t]/ || s ~ /[A-Za-z0-9_.:-][ \t]*\([ \t]*\)/) return 1
+    t = s; gsub(/[\047"\\]/, "", t)
+    m = split(t, a, "[ \t\n;&|()=<>{}`]+")
+    for (k = 1; k <= m; k++) if (a[k] ~ /(^|\/)git$/) return 1
+    return 0
+  }
   # Every directory a cd / -C chain can reach, in any order: each target
   # joined onto every base so far (the unchecked path resolves candidates
   # against all of them, so `cd /etc && cd ../<main>` is seen as <main>).
@@ -169,6 +195,42 @@ scan=$(awk '
     return j
   }
   function gitseg(   j) { j = effidx(); return j <= nw && words[j] == "git" && wl[j] }
+  # Index of the git subcommand past -C DIR / --no-pager; any other global
+  # option stops there (it is then not a builtin name).
+  function gitsub(   j) {
+    j = effidx() + 1
+    while (j <= nw) {
+      if (words[j] == "-C" && j < nw) { j += 2; continue }
+      if (words[j] == "--no-pager") { j++; continue }
+      break
+    }
+    return j
+  }
+  # A git seg whose arguments and stdin are data (TD-1128): `git -c
+  # alias.x=!sh x`, `--config-env` or an alias subcommand run them as code.
+  function gitdata(   j) {
+    if (!gitseg()) return 0
+    j = gitsub()
+    return j <= nw && words[j] ~ /^(commit|add|diff|log|push|restore|rev-parse|show|status)$/
+  }
+  # `Via: /commit` in the own message of this commit seg (TD-1128): a -m /
+  # --message / --trailer value; `-F -` makes the fed heredoc the message.
+  function commitvia(   j, a, v) {
+    if (!gitdata()) return
+    j = gitsub()
+    if (words[j] != "commit") return
+    for (j++; j <= nw; j++) {
+      a = words[j]; v = ""
+      if (a == "--") break
+      if (a ~ /^(-m|--message|--trailer)$/ && j < nw) v = words[++j]
+      else if (a ~ /^(-F|--file)$/ && j < nw) { if (words[++j] == "-") segmsg[segid] = 1; continue }
+      else if (a == "-F-" || a == "--file=-") { segmsg[segid] = 1; continue }
+      else if (a ~ /^(-[Cct]|--(author|date|cleanup|fixup|squash|reuse-message|reedit-message|template))$/) { j++; continue }
+      else if (a ~ /^-m/) v = substr(a, 3)
+      else if (a ~ /^--(message|trailer)=/) v = substr(a, index(a, "=") + 1)
+      if (v ~ /Via: \/commit/) V = 1
+    }
+  }
   function join(base, dir) {
     if (dir ~ /^\// || base == "") return dir
     return base "/" dir
@@ -227,9 +289,7 @@ scan=$(awk '
     if (!dq && body ~ /[$`\\]/) giveup("an expansion in a heredoc body")
     # Message data only when a git command consumes it; elsewhere
     # (`sh -c "$(cat <<EOF …)"`, `echo "$(…)" | bash`) the body may be code.
-    if (nw > 0 && gitseg()) {
-      if (body ~ /Via: \/commit/) V = 1
-    } else {
+    if (!(nw > 0 && gitdata())) {
       E = 1; no("a command substitution outside a git command"); cands(body)
     }
     w = w body; inword = 1
@@ -246,7 +306,6 @@ scan=$(awk '
       cands(wc)
     } else {
       nw++; words[nw] = w; wl[nw] = wlit
-      if (nw > 1 && w ~ /Via: \/commit/ && gitseg()) V = 1
       cands(wc)
     }
     w = ""; wc = ""; inword = 0; wlit = 1; wq = 0
@@ -263,7 +322,7 @@ scan=$(awk '
         body = body line "\n"
       }
       if (!hdq[k] && body ~ /[$`\\]/) { E = 1; no("an expansion in a heredoc body") }
-      if (seggit[hdseg[k]] && body ~ /Via: \/commit/) V = 1
+      if (segmsg[hdseg[k]] && body ~ /Via: \/commit/) V = 1
       # A heredoc fed to git is message data; fed to anything else it may
       # be code, so its text counts.
       if (!seggit[hdseg[k]]) {
@@ -314,7 +373,8 @@ scan=$(awk '
       cmd = words[j]
       lit = 1
       for (k = 1; k <= nw; k++) if (!wl[k]) lit = 0
-      seggit[segid] = gitseg()
+      seggit[segid] = gitdata()
+      commitvia()
       if (!lit) no("a word with an expansion or glob")
       else if (filt) {
         if (cmd !~ /^(tail|head|cat|wc|grep)$/) no("`" cmd "` after a pipe")
@@ -470,9 +530,13 @@ $scan
 EOF
 }
 
-# /commit Step 4 puts `Via: /commit` in the message. It counts only inside a
-# git command's argument or git-fed heredoc — not in a comment, an `echo`,
-# or a script body.
+if ! grep -qx 'T' <<<"$scan"; then
+  exit 0
+fi
+
+# /commit Step 4 puts `Via: /commit` in the message. It counts only in a git
+# commit's own message — not another git command's argument, a comment, an
+# `echo`, or a script body.
 if grep -qx 'V' <<<"$scan"; then
   exit 0
 fi

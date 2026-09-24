@@ -49,6 +49,9 @@
  *     跟 `exclude` 的路徑層排除不同層次）
  *   - `multiLine`: true（顯式指定跨行 tag 展平；未給則用 needsMultiLine() 對 `<Tag...` 形式
  *     pattern 的既有 heuristic 自動判斷，行為與舊 review-rules-ban.sh 一致）
+ *   - `matchComments`: true（pattern 本來就要比對註解，例如 `} // end`、prose 規則）。未給時
+ *     比對前先把註解遮成空白（見 maskComments()），`excludePattern` 仍對原始行比對——
+ *     逐行 opt-out 標記（`<!-- raw-img -->`、`// heavy-lib-ok`）本身就是註解（TD-719）
  *
  * 路徑基準一律是 **consumerRoot**（本檔所在的 `<consumerRoot>/vendor/review-rules/` 往上兩層），
  * 不是 git toplevel——monorepo 子目錄 consumer 兩者不同，見 resolveConsumerRoot() 的註解。
@@ -94,6 +97,7 @@ type Rule = {
   exclude?: string[]
   excludePattern?: string
   multiLine?: boolean
+  matchComments?: boolean
 }
 
 type Hit = { file: string; line: number; text: string }
@@ -207,6 +211,108 @@ function extractTags(content: string) {
   return tags
 }
 
+// ---------- 註解遮蔽（TD-719） ----------
+//
+// 原始字串比對讓「警告不要用 X」這句註解與使用 X 同形——對被禁 token 最安全的文件化方式
+// 被計成違規。這裡把註解字元換成空白、保留換行，所以行號、欄位與非註解內容逐位元不變。
+// 判不出來時一律**不遮**：誤遮會漏掉真違規，漏遮只是維持舊行為。
+
+const JS_EXT_RE = /\.(?:[cm]?[jt]sx?)$/
+const CSS_EXT_RE = /\.css$/
+const MARKUP_EXT_RE = /\.(?:vue|html?)$/
+/** `/` 前一個非空白字元落在這些之後時是 regex literal 的開頭，而不是除號。 */
+const REGEX_PRECEDER_RE = /[(,=:[!&|?{};+\-*%<>~^]/
+
+function blank(text: string) {
+  return text.replace(/[^\n]/g, ' ')
+}
+
+/** 遮 JS／TS 的 `//` 與 `/* *\/` 註解；字串、template literal、regex literal 內的不動。 */
+function maskJsComments(src: string) {
+  let out = ''
+  let i = 0
+  let lastSignificant = ''
+  while (i < src.length) {
+    const ch = src[i] ?? ''
+    const next = src[i + 1] ?? ''
+    if (ch === '/' && next === '/') {
+      const end = src.indexOf('\n', i)
+      const stop = end === -1 ? src.length : end
+      out += blank(src.slice(i, stop))
+      i = stop
+      continue
+    }
+    if (ch === '/' && next === '*') {
+      const end = src.indexOf('*/', i + 2)
+      const stop = end === -1 ? src.length : end + 2
+      out += blank(src.slice(i, stop))
+      i = stop
+      continue
+    }
+    if (ch === '"' || ch === "'" || ch === '`') {
+      let j = i + 1
+      while (j < src.length && src[j] !== ch) {
+        if (src[j] === '\\') j++
+        else if (ch !== '`' && src[j] === '\n') break // 未閉合的單行字串：到行尾為止
+        j++
+      }
+      out += src.slice(i, j + 1)
+      i = j + 1
+      lastSignificant = ch
+      continue
+    }
+    if (ch === '/' && (lastSignificant === '' || REGEX_PRECEDER_RE.test(lastSignificant))) {
+      let j = i + 1
+      let inClass = false
+      while (j < src.length && src[j] !== '\n') {
+        const c = src[j]
+        if (c === '\\') j++
+        else if (c === '[') inClass = true
+        else if (c === ']') inClass = false
+        else if (c === '/' && !inClass) break
+        j++
+      }
+      out += src.slice(i, j + 1)
+      i = j + 1
+      lastSignificant = '/'
+      continue
+    }
+    out += ch
+    if (!/\s/.test(ch)) lastSignificant = ch
+    i++
+  }
+  return out
+}
+
+function maskCssComments(src: string) {
+  return src.replace(/\/\*[\s\S]*?(?:\*\/|$)/g, blank)
+}
+
+/** `.vue`／`.html`：HTML 註解；`<script>` 區塊走 JS、`<style>` 區塊走 CSS。 */
+function maskMarkupComments(src: string) {
+  const blockRe = /(<script\b[^>]*>)([\s\S]*?)(<\/script>)|(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi
+  let out = ''
+  let last = 0
+  let m
+  while ((m = blockRe.exec(src)) !== null) {
+    out += src.slice(last, m.index).replace(/<!--[\s\S]*?(?:-->|$)/g, blank)
+    out +=
+      m[1] !== undefined
+        ? `${m[1]}${maskJsComments(m[2] ?? '')}${m[3]}`
+        : `${m[4]}${maskCssComments(m[5] ?? '')}${m[6]}`
+    last = m.index + m[0].length
+  }
+  return out + src.slice(last).replace(/<!--[\s\S]*?(?:-->|$)/g, blank)
+}
+
+/** 依副檔名遮註解；不認得的格式（`.md`、`.json`…）原樣回傳。 */
+function maskComments(file: string, content: string) {
+  if (MARKUP_EXT_RE.test(file)) return maskMarkupComments(content)
+  if (JS_EXT_RE.test(file)) return maskJsComments(content)
+  if (CSS_EXT_RE.test(file)) return maskCssComments(content)
+  return content
+}
+
 // ---------- 核心掃描 ----------
 
 /** 單一 rule 對候選檔案清單跑比對，回傳 hit 陣列（不含 rule 中繼資料）。 */
@@ -234,18 +340,21 @@ function scanRuleOnFiles(rule: Rule, files: string[], readFile: ReadFile): Hit[]
     } catch {
       continue // 檔案讀不到（例如已刪除但仍留在檔案清單）→ 略過
     }
+    const code = rule.matchComments === true ? content : maskComments(file, content)
 
     if (multiLine) {
-      for (const tag of extractTags(content)) {
+      for (const tag of extractTags(code)) {
         if (!re.test(tag.flat)) continue
         if (excludeContentRe && excludeContentRe.test(tag.flat)) continue
         hits.push({ file, line: tag.line, text: tag.flat.slice(0, 120) })
       }
     } else {
       const lines = content.split('\n')
+      const codeLines = code.split('\n')
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i] ?? ''
-        if (!re.test(line)) continue
+        if (!re.test(codeLines[i] ?? '')) continue
+        // 對原始行比對：逐行 opt-out 標記本身就是註解，遮掉就失效
         if (excludeContentRe && excludeContentRe.test(line)) continue
         hits.push({ file, line: i + 1, text: line.trim().slice(0, 200) })
       }
@@ -313,6 +422,35 @@ function writeBaselineFile(
   const payload = { _meta: { ...scope }, ...baseline }
   writeFileSync(baselinePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
   return { written: true, empty: Object.keys(baseline).length === 0 }
+}
+
+/**
+ * baseline 裡指向已不存在檔案的 (ruleId, file)。ratchet 只比「實際 > baseline」，所以死 entry
+ * 永遠不會被消耗、也不擋任何東西 —— 它讓「debt 隨 rename 搬家」與「debt 真的清掉」在檔案內容上
+ * 同形，而 rename 的那一趟搬過去的存量全被判成新增（TD-762：`/flow` → `/board` 那次 30 項）。
+ * 只出聲、不改 exit code：刪不刪由看得懂那次 rename 的人判。
+ */
+function findDeadEntries(baseline: Baseline | null, exists: (file: string) => boolean) {
+  const dead: { ruleId: string; file: string; baseline: number }[] = []
+  for (const [ruleId, fileCounts] of Object.entries(baseline ?? {})) {
+    if (ruleId === '_meta' || !isRecord(fileCounts)) continue
+    for (const [file, count] of Object.entries(fileCounts)) {
+      if (!exists(file)) dead.push({ ruleId, file, baseline: Number(count) })
+    }
+  }
+  return dead
+}
+
+function printDeadEntries(dead: { ruleId: string; file: string; baseline: number }[]) {
+  if (dead.length === 0) return
+  process.stderr.write(
+    `⚠️  review-rules-baseline.json 有 ${dead.length} 筆指向不存在的檔（rename／刪除後沒跟上的死 entry）：\n`,
+  )
+  for (const d of dead) process.stderr.write(`  [${d.ruleId}] ${d.file} — baseline ${d.baseline}\n`)
+  process.stderr.write(
+    '  死 entry 永遠不會被消耗；若是 rename，搬過去的存量會在新檔名被判成新增。確認後刪掉這些 entry\n' +
+      '  （或修完違規後重跑 --write-baseline），NEVER 只跑 --write-baseline 而不看新增的那幾項。\n',
+  )
 }
 
 /** 只回報「實際命中數 > baseline」的 (ruleId, file) — 既有存量違規（≤ baseline）不報。 */
@@ -557,7 +695,10 @@ function main() {
       )
     } else {
       const overages = compareRatchet(oldBaseline, violations)
-      ratchetResult = { overages, pass: overages.length === 0 }
+      const deadEntries = findDeadEntries(oldBaseline, (f) => existsSync(join(consumerRoot, f)))
+      ratchetResult = { overages, pass: overages.length === 0, deadEntries }
+      // json 與人讀模式都印在 stderr：死 entry 不改判定，但呼叫端只看 exit code 時它仍要出聲
+      printDeadEntries(deadEntries)
     }
   }
 
