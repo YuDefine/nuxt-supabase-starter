@@ -220,6 +220,7 @@
     },
     {
       "id": "closing-brace-tag",
+      "matchComments": true,
       "section": 11,
       "severity": "warning",
       "fileGlob": "**/*.ts",
@@ -229,6 +230,7 @@
     },
     {
       "id": "file-header-changelog",
+      "matchComments": true,
       "section": 11,
       "severity": "warning",
       "fileGlob": "**/*.ts",
@@ -238,6 +240,7 @@
     },
     {
       "id": "prose-difficulty-dismissal-en",
+      "matchComments": true,
       "severity": "warning",
       "fileGlob": "**",
       "scanPaths": ["content/", "app/pages/"],
@@ -248,6 +251,7 @@
     },
     {
       "id": "prose-vague-anchor-text",
+      "matchComments": true,
       "severity": "error",
       "fileGlob": "**",
       "scanPaths": ["content/", "app/pages/"],
@@ -257,6 +261,7 @@
     },
     {
       "id": "prose-anthropomorphism",
+      "matchComments": true,
       "severity": "error",
       "fileGlob": "**",
       "scanPaths": ["content/", "app/pages/"],
@@ -266,6 +271,7 @@
     },
     {
       "id": "prose-appeal-to-authority",
+      "matchComments": true,
       "severity": "warning",
       "fileGlob": "**",
       "scanPaths": ["content/", "app/pages/"],

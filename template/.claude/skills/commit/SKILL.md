@@ -74,6 +74,8 @@ WIP 確實阻礙本次工作時，使用 `commit.detail` 的三項 stash predica
 
 ## Step 0: 品質檢查
 
+> **Opus 5.5 暫時覆寫期間（2026-09-23 起）下段的 Astra／Fable 兩格政策停用**：0-A 只跑 `CLAUDE_REVIEW_SEAT=opus claude-review-safe.sh medium`（`code-review-opus` 列），**NEVER** 派 Astra 或 Fable；額度用完時 gate 保持未完成。全文見 [review-policy.md](review-policy.md) 開頭的覆寫段。
+
 先判斷 Step 0-Scope 的本次變更是否命中 [`review-tiers.md`](rules/review-tiers.md)（路徑相對 `$COMMIT_RESOURCE_DIR`，見 [runtime-lifecycle.md](runtime-lifecycle.md) § 執行依賴）
 Tier 3；命中才執行官方 Codex Security path scan。觸發時 **MUST** 先完整讀
 [gates.md](gates.md) § 0-S 的範圍、成本上限與 exit 分流再繼續。未命中則跳過，進入一般
@@ -185,6 +187,8 @@ git diff --stat                 # 僅輔助看 tracked 改動規模；NEVER 當�
 - 看到 `??` 開頭的檔想加 `.gitignore` 消掉時 **STOP**：先問「這本來就該 ignore（build artifact / runtime state），還是我在逃避 commit？」逃避 commit 而 gitignore = 把該入庫的東西藏掉，方向反了（詳見 [[wip-orphan-recovery]] § 反射性 gitignore 禁令）
 - **0-MR withheld scope 內的路徑不進任何 group**（gates.md § 0-MR step 6 印出的 carrier 路徑）：它們留在 working tree，Step 5-A 登記進 HANDOFF。這是「全部變更都要入庫」的機械例外
 
+分組顆粒是本 skill 的**內部決策**：**NEVER** 對別的 session 宣告「我要拆幾筆、哪筆先 land」或拿它協調——對方要等的只有「land 了沒有」這一個布林。
+
 ## Step 4: 逐一執行 Commit
 
 對每個分組（用 `git commit --only -- <files>` 強制 limit scope，防別 session staged race — 詳見 `rules/core/commit.md` § Ad-hoc commit 必走 `git commit --only -- <paths>`）：
@@ -261,7 +265,7 @@ node scripts/deploy-trigger-check.ts
 
 **NEVER 因為「這個 repo 我記得是 push-main」就跳過這條查詢。**推錯的方向是不可逆的（tag 一推出去 production 就開始跑）。
 
-> `status=` 那一行同時是 finding 來源：`undeclared`（缺 `deploy.deployTrigger`）、`mismatch`（宣告與 workflow 矛盾）、`unconfirmable`（`derived=ambiguous`：deploy workflow 掛了 ≥2 種觸發，宣告要填 **production** 的那個；或 `derived=none`：根本找不到 deploy workflow——後者不是宣告寫錯，是沒有東西可宣告）。**列進 Step 7 完成報告**，但 **NEVER** 在本次 `/commit` 順手改它——那是獨立的宣告修正，要單獨走。
+> `status=` 那一行同時是 finding 來源：`undeclared`（缺 `deploy.deployTrigger`）、`mismatch`（宣告與 workflow 矛盾）、`unconfirmable`（`derived=ambiguous`：deploy workflow 掛了 ≥2 種觸發——分散在不同 workflow 時，宣告要填 **production** 的那個；同一個檔案裡 production job 分不出來時 detail 會寫 `changing the declaration will not help`，改宣告救不了，要拆檔或替 job 加 `environment:` ＋ ref 的 `if:`；或 `derived=none`：根本找不到 deploy workflow——後者不是宣告寫錯，是沒有東西可宣告）。**列進 Step 7 完成報告**，但 **NEVER** 在本次 `/commit` 順手改它——那是獨立的宣告修正，要單獨走。
 
 ## Step 6-A: 版本號升級與 Deploy Commit（`push-main` 專用）
 

@@ -58,8 +58,11 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts ask \
 ```
 
 `--question-page` **MUST** 是 repo-relative 且落在 `.impeccable/questions/` 底下的 `.json`
-（`flow ask` 當場驗，不符直接 fail）。帶 `--question-page` 的題**不必**也**不該**再抄
-`--option`：選項是頁面上的卡片，抄成一行字就是把卡片壓扁。
+（`flow ask` 當場驗，不符直接 fail）。帶 `--question-page` 的題**同樣 MUST** 帶
+`--option`：寫 2–4 條頁面選項的**壓縮版**當 degraded fallback——頁面開不出來時
+（payload 遺失、spawn 失敗、worktree 落點錯誤）它們是唯一的作答路徑，沒有它們
+那張卡只剩一個無從選擇的簡答框。卡片開得出來時仍以頁面上的選項為準。
+同樣要帶 `--recommended` 與 `--why`。
 
 在 linked worktree 內跑也照這三步：`flow ask` 會把題目改寫到 main checkout 的共用 spine、
 payload 一併複製過去，並在 stderr／stdout（`rerouted_from`）明說改寫了（clade TD-798）。
@@ -75,7 +78,7 @@ main 已有**內容不同**的同名 payload 時它 fail closed——換一個 `
    同一個待決策點在兩個地方長得不一樣，人會以為那是兩件事 —— 那正是 `\my` 與 `/decisions`
    同源那條決策要消除的東西。
 
-`/decisions` 的卡片被點開的**那一秒**才 spawn server（`vendor/scripts/review-gui.question-page.ts`），
+`/decisions` 的卡片被點開的**那一秒**才 spawn server（`vendor/scripts/flow/question-page.ts`），
 拿到 port 後走既有 preview proxy 曝露、iframe 內嵌。span 裡記的是**怎麼重建這一頁**
 （payload 的 repo-relative 路徑），**NEVER** 記 port —— 過期的 port 與活著的 port 在 span 裡
 長得一模一樣。同一份 payload 已有活著的 server 就重用，避免兩台 server 對同一份 payload、

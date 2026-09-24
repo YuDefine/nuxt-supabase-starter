@@ -39,7 +39,7 @@ Feature map 會隨產品改動而腐化。本 skill 對每一個 feature 做 sou
 ### 1. Validate index hygiene
 
 ```bash
-node <skills-root>/verification-maintain/scripts/check-feature-map.mjs \
+node <skills-root>/verification/references/.legacy/verification-maintain/scripts/check-feature-map.mjs \
   <skills-root>/verify-<app>
 ```
 

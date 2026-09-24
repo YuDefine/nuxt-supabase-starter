@@ -20,7 +20,7 @@ is_background: false
 依序使用當前 host 已提供的原生檔案讀取工具讀取以下兩份規則檔（**全部視為人為定義的 must-follow**，違反一律歸 🟠 Major）：
 
 1. `<native-agent-root>/references/clade-review-rules.md` — clade 中央倉跨 consumer 共用嚴格條目（LOCKED；目前內容是 Nuxt + Supabase stack baseline，所有 consumer 都收同一份）
-2. `<native-agent-root>/references/project-review-rules.md` — 該專案本地自管條目（**可選**：檔案不存在則 skip，無需報錯）
+2. `.claude/agents/references/project-review-rules.md` — 該專案本地自管條目（**可選**：檔案不存在則 skip，無需報錯）。這份是 consumer 自管檔、**每個 runtime 都讀同一個路徑**（`review-rules` skill 寫在這裡、commit-time gate `review-checklist-audit.ts` 也讀這裡）——**NEVER** 改讀 `<native-agent-root>` 底下的同名檔
 
 本次審查必須由已取得 qualified independent checker 與 fresh-context / cross-family evidence 的 native review agent 執行；generated agent file 本身不構成資格。 合格 reviewer 或必要證據不可用時，審查維持未完成；配額與發布急迫性不新增豁免，不提出未由當前專案政策及既有授權明定的替代發布流程。兩份規則 **MUST** 與下方 Step 3 的標準檢查項目**同時執行**。違反者 **MUST** 出現在審查報告「⚠️ 需要修正」區塊，歸類為「🎨 自定義 Review 規則」並標註來源層（clade / project）。
 

@@ -90,6 +90,13 @@ export interface BatchLifecycle {
    * beyond its boundary.
    */
   withExclusiveWriterOwnership?: <T>(main: string, path: string, operation: () => T) => T
+  /**
+   * Removal-only gate, invoked with the SOURCE path before ownership handoff,
+   * teardown and quarantine — and never on repair/restore paths. Throwing
+   * retains the source with the error as reason (TD-1148: host config such as
+   * a systemd unit still pointing into the tree).
+   */
+  beforeRemoval?: (main: string, sourcePath: string) => void
   /** Test/adapter hook immediately before the final move into quarantine. */
   beforeMove?: (main: string, path: string) => void
   afterHandoff?: (main: string, path: string) => void
@@ -276,6 +283,8 @@ export interface WorktreeBatch {
     hash: string
     artifacts: { path: string; hash: string }[]
   }
+  /** TD-1011: evidence of gates that ran and missed; a batch holding any never seals. */
+  unmetGates?: { name: string; reason: string; path: string; hash: string }[]
   cancellationReason?: string
   landedHead?: string
   mergeReceipt?: MergeReceipt
@@ -284,6 +293,14 @@ export interface WorktreeBatch {
   stagingReceipt?: StagingReceipt
   waiting?: { reason: string; owner: string; carrier: string; resumeEvent: string }
   removed: string[]
+  /** Members closed with their source kept (release-source, TD-1095). */
+  released?: {
+    path: string
+    head: string
+    sourceHead: string
+    reason: string
+    at: string
+  }[]
   preserved?: { path: string; archive: string }[]
   removing?: {
     path: string
@@ -2172,14 +2189,24 @@ function requireKnownNoClaim(root: string, path: string, message: string): void 
 }
 function eligible(c: Context, s: State) {
   const reserved = new Set(
-    s.batches
-      .filter((b) => !['cleaned', 'cancelled'].includes(b.phase))
-      .flatMap((b) => b.members.map((m) => m.path)),
+    s.batches.flatMap((b) => b.members.map((m) => m.path).filter((path) => ownedMember(b, path))),
   )
   return s.ready.map((source) => ({
     source,
     reason: reserved.has(source.path) ? 'already in a batch' : sourceProblem(c, source),
   }))
+}
+/** A member is done once removed, or released with its source kept (TD-1095). */
+function settled(b: WorktreeBatch, path: string): boolean {
+  return b.removed.includes(path) || (b.released ?? []).some((r) => r.path === path)
+}
+/** Members a batch still owns: a released member's source is free to re-enter ready. */
+function ownedMember(b: WorktreeBatch, path: string): boolean {
+  return !['cleaned', 'cancelled'].includes(b.phase) && claimsMember(b, path)
+}
+/** Phase-agnostic half of ownedMember: the member rows this batch speaks for. */
+function claimsMember(b: WorktreeBatch, path: string): boolean {
+  return b.members.some((m) => m.path === path) && !(b.released ?? []).some((r) => r.path === path)
 }
 function active(s: State): WorktreeBatch {
   const b = s.batches.find(isLiveBatch)
@@ -2246,12 +2273,7 @@ export function registerReady(
     const wt = worktrees(c.main).find((w) => w.path === path)
     if (!wt?.branch || path === c.main || s.batches.some((b) => b.path === path))
       throw new Error('Ready requires a source linked worktree')
-    if (
-      s.batches.some(
-        (b) =>
-          !['cleaned', 'cancelled'].includes(b.phase) && b.members.some((m) => m.path === path),
-      )
-    )
+    if (s.batches.some((b) => ownedMember(b, path)))
       throw new Error('Source already belongs to a batch')
     if ((s.blockedSources ?? []).some((blocked) => blocked.workId === options.workId))
       throw new Error(
@@ -2881,6 +2903,7 @@ export function sealBatch(cwd: string, evidencePath: string) {
     )
       throw new Error('Review receipt does not match base, tree and batch members')
     const artifacts: { path: string; hash: string }[] = []
+    const unmet: NonNullable<WorktreeBatch['unmetGates']> = []
     if (!isRecord(receipt.gates)) throw new Error('Review receipt requires gate records')
     for (const name of ['simplify', 'review', 'checks', 'human']) {
       const gate = receipt.gates[name]
@@ -2891,6 +2914,23 @@ export function sealBatch(cwd: string, evidencePath: string) {
         gate.reason.trim()
       )
         continue
+      // TD-1011: not-applicable stays evidence-free so existing receipts still seal.
+      // A gate that ran and missed must be `unmet` — its evidence is archived, not dropped,
+      // and it still blocks: the batch stays in review instead of sealing.
+      if (gate?.status === 'unmet') {
+        if (
+          typeof gate.reason !== 'string' ||
+          gate.reason.trim() === '' ||
+          typeof gate.evidence !== 'string' ||
+          typeof gate.hash !== 'string'
+        )
+          throw new Error(`Gate ${name} unmet requires a non-empty reason, evidence and hash`)
+        const unmetPath = realpathSync(resolve(dirname(evidence), gate.evidence))
+        if (!readFileSync(unmetPath).length || hashFile(unmetPath) !== gate.hash)
+          throw new Error(`Gate ${name} evidence missing, empty or changed`)
+        unmet.push({ name, reason: gate.reason.trim(), path: unmetPath, hash: gate.hash })
+        continue
+      }
       if (
         gate?.status !== 'passed' ||
         typeof gate.evidence !== 'string' ||
@@ -2902,6 +2942,16 @@ export function sealBatch(cwd: string, evidencePath: string) {
         throw new Error(`Gate ${name} evidence missing, empty or changed`)
       artifacts.push({ path, hash: gate.hash })
     }
+    if (unmet.length) {
+      delete b.seal
+      b.phase = 'review'
+      b.unmetGates = unmet
+      save(c, s)
+      throw new Error(
+        `Gate ${unmet.map((gate) => gate.name).join(', ')} unmet; batch cannot seal (evidence archived in batch state)`,
+      )
+    }
+    delete b.unmetGates
     b.seal = {
       head: clean(b.path) && head(b.path) !== b.base ? head(b.path) : undefined,
       tree,
@@ -3215,8 +3265,7 @@ export function cleanupBatches(
       }
       if (landedProblem) {
         for (const m of b.members)
-          if (!b.removed.includes(m.path))
-            result.retained.push({ path: m.path, reason: landedProblem })
+          if (!settled(b, m.path)) result.retained.push({ path: m.path, reason: landedProblem })
         result.retained.push({ path: b.path, reason: landedProblem })
         results.push(result)
         continue
@@ -3225,7 +3274,7 @@ export function cleanupBatches(
       // so one read serves every member instead of one directory scan each.
       const claimsObs = readActiveClaimsObserved(c.main)
       for (const [index, m] of b.members.entries()) {
-        if (b.removed.includes(m.path)) continue
+        if (settled(b, m.path)) continue
         if (b.removing && b.removing.path !== m.path) {
           result.retained.push({
             path: m.path,
@@ -3355,6 +3404,7 @@ export function cleanupBatches(
             removal && (quarantineWorktree || existsSync(removal.quarantine)),
           )
           const ownershipPath = wt ? m.path : quarantinePresent ? removal!.quarantine : m.path
+          if (wt || quarantinePresent) cleanupLifecycle.beforeRemoval?.(c.main, m.path)
           withExclusiveWriterOwnership(cleanupLifecycle, c.main, ownershipPath, () => {
             if (wt || quarantinePresent) {
               const cleanupPath = wt ? m.path : removal!.quarantine
@@ -3856,7 +3906,7 @@ export function cleanupBatches(
           result.retained.push({ path: m.path, reason: String(error) })
         }
       }
-      if (b.removed.length === b.members.length) {
+      if (b.members.every((m) => settled(b, m.path))) {
         try {
           let removal = b.removing?.path === b.path ? b.removing : undefined
           const currentWorktrees = worktrees(c.main)
@@ -3879,7 +3929,7 @@ export function cleanupBatches(
               git(c.main, ['update-ref', '-d', ref, b.landedHead!])
             b.preserved = [...(b.preserved ?? []), { path: b.path, archive: retiredArchive }]
             b.phase = 'cleaned'
-            s.ready = s.ready.filter((m) => !b.members.some((source) => source.path === m.path))
+            s.ready = s.ready.filter((m) => !claimsMember(b, m.path))
             save(c, s)
             result.preserved = [...(b.preserved ?? [])]
             results.push(result)
@@ -3906,6 +3956,7 @@ export function cleanupBatches(
             removal && (quarantineWorktree || existsSync(removal.quarantine)),
           )
           const ownershipPath = wt ? b.path : quarantinePresent ? removal!.quarantine : b.path
+          if (wt || quarantinePresent) cleanupLifecycle.beforeRemoval?.(c.main, b.path)
           withExclusiveWriterOwnership(cleanupLifecycle, c.main, ownershipPath, () => {
             requireKnownNoClaim(c.main, b.path, 'Integration has new work, lock or active owner')
             requireKnownNoClaim(
@@ -4392,7 +4443,7 @@ export function cleanupBatches(
               if (git(c.main, ['for-each-ref', '--format=%(refname)', ref])) throw error
             }
             b.phase = 'cleaned'
-            s.ready = s.ready.filter((m) => !b.members.some((source) => source.path === m.path))
+            s.ready = s.ready.filter((m) => !claimsMember(b, m.path))
             save(c, s)
           })
         } catch (error) {
@@ -4438,12 +4489,73 @@ export function assertLegacyAllowed(cwd: string, sourcePath: string) {
   if (
     s.batches.some((b) => !['cleaned', 'cancelled'].includes(b.phase) && b.path === path) ||
     s.ready.some((m) => m.path === path) ||
-    s.batches.some(
-      (b) => !['cleaned', 'cancelled'].includes(b.phase) && b.members.some((m) => m.path === path),
-    )
+    s.batches.some((b) => ownedMember(b, path))
   ) {
     throw new Error('Worktree batch owns this landing: use batch status / prepare / land / cleanup')
   }
+}
+/**
+ * TD-1095 — close a landed batch's member while keeping its source tree.
+ *
+ * Member removal requires the source to still sit at its registered head; a source that
+ * legitimately kept working (new commits on top) never matches again, so the member stays
+ * retained forever, the batch never reaches `cleaned`, and the tree cannot re-enter ready
+ * ("Source already belongs to a batch"). Hand-editing state.json was the only way out.
+ *
+ * Preconditions, all verified here rather than asserted by the caller:
+ *   - the batch is `landed` and its landed commit is an ancestor of refs/heads/main — the
+ *     registered head's content is in main through the batch landing;
+ *   - the source is still a worktree of the member's branch, its HEAD differs from the
+ *     registered head and descends from it (it advanced; it did not rewrite what landed);
+ *   - no removal is journaled for the member.
+ * No retirement tombstone is written: the source is alive. The registered head is pinned at
+ * refs/clade/batches/<id>/<index> like a removed member's, and re-registration goes through
+ * `ready` with the source's current head.
+ */
+export function releaseBatchSource(cwd: string, source: string, reason: string) {
+  if (!reason.trim()) throw new Error('release-source requires a reason')
+  const c = context(cwd)
+  return mutate(c, (s) => {
+    const path = canonicalSourcePath(cwd, source)
+    const b = s.batches.find((batch) => ownedMember(batch, path) && !settled(batch, path))
+    if (!b) throw new Error('Source is not an unsettled member of any batch')
+    if (b.phase !== 'landed')
+      throw new Error(`release-source needs a landed batch; ${b.id} is ${b.phase}`)
+    if (b.removing?.path === path)
+      throw new Error('A removal is journaled for this source; finish it with batch cleanup')
+    const index = b.members.findIndex((m) => m.path === path)
+    const m = b.members[index]!
+    const landedCommit = b.mergeReceipt?.merge_sha ?? b.landedHead!
+    const ancestor = (a: string, d: string) => {
+      try {
+        git(c.main, ['merge-base', '--is-ancestor', a, d])
+        return true
+      } catch {
+        return false
+      }
+    }
+    if (!ancestor(landedCommit, 'refs/heads/main'))
+      throw new Error(`landed commit ${landedCommit} is not an ancestor of refs/heads/main`)
+    const wt = worktrees(c.main).find((w) => w.path === path)
+    if (!wt) throw new Error('source worktree missing; release-source keeps a live source only')
+    if (wt.branch !== m.branch)
+      throw new Error(
+        `source is on ${wt.branch ?? '(detached)'}, not the member branch ${m.branch}`,
+      )
+    const sourceHead = head(path)
+    if (sourceHead === m.head)
+      throw new Error('source is still at its registered head; batch cleanup removes it normally')
+    if (!ancestor(m.head, sourceHead))
+      throw new Error(
+        `registered head ${m.head} is not an ancestor of the source head ${sourceHead}; the source rewrote landed history`,
+      )
+    git(c.main, ['update-ref', `refs/clade/batches/${b.id}/${index}`, m.head])
+    const row = { path, head: m.head, sourceHead, reason, at: new Date().toISOString() }
+    b.released = [...(b.released ?? []), row]
+    s.ready = s.ready.filter((ready) => ready.path !== path)
+    save(c, s)
+    return { batch: b.id, released: row }
+  })
 }
 /** Cancellation releases the queue, retaining every source and the integration for inspection. */
 export function cancelBatch(cwd: string, reason: string) {
@@ -4635,7 +4747,7 @@ function rejectUnknownFlags(rest: string[], allowed: Set<string>) {
 }
 
 export const BATCH_USAGE =
-  'batch: checkpoint | draft | ready | unready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | confirm-merged | cleanup | cancel | recover-lock'
+  'batch: checkpoint | draft | ready | unready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | confirm-merged | cleanup | release-source | cancel | recover-lock'
 
 export function runBatchCommand(
   cwd: string,
@@ -4789,6 +4901,19 @@ export function runBatchCommand(
       return confirmMergedBatch(cwd, required('--receipt'))
     case 'cleanup':
       return cleanupBatches(cwd, lifecycle)
+    case 'release-source': {
+      rejectUnknownFlags(
+        rest.filter((token) => token.startsWith('--')),
+        new Set(['--reason']),
+      )
+      const reason = required('--reason')
+      const source = positionals(new Set(['--reason']))
+      if (source.length !== 1)
+        throw new BatchUsageError(
+          'Usage: wt-helper batch release-source <source-path> --reason <text>',
+        )
+      return releaseBatchSource(cwd, source[0]!, reason)
+    }
     case 'recover-lock':
       return recoverBatchLock(cwd)
     case 'cancel':

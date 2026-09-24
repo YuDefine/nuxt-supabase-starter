@@ -7,7 +7,7 @@ description: "consumer 所屬 Notion hub 的唯一入口。Use when 看 board／
 
 # notion-hub
 
-當前 consumer 所屬 Notion hub（ticket board ＋ 客戶看的 `交付項目`）的**唯一入口**。規約在
+當前 consumer 所屬 Notion hub（ticket board ＋ 客戶看的 `交付項目`；hub 可省略交付項目、把進度併進 board `進度%`，見規約）的**唯一入口**。規約在
 [[notion-work-coupling]]；本 skill 只承載**人主動發起**的五個意圖。
 
 **生命週期大半不在這裡。** `flow plan open`／`flow done` 成功後 `follow` 自動推進 ticket 狀態與
@@ -54,7 +54,7 @@ recipe 見 [reference/cookbook.md](reference/cookbook.md) § 1。依 `stageOf` �
 - 🚧 進行中——**每張** MUST 讀 `Work ID`（`<consumerId>/<workId>`）：前綴不是本 repo → `⚑ 屬別 repo`；是 → `notion-sync.ts status --work <id>`，spine 已 done／accepted 但票仍進行中 → `⚑ 疑似已修好未發版`；空 → cookbook § 5 模糊對帳
 - ⏳ 待客戶驗收、❓ 等拍板、⚠️ stale（進行中／驗收中且 `提報日期` 距今 > 14 天）、✅ 已收斂（只報數量）
 
-報告模式另撈 `交付項目`（filter `專案`）列 `逾期`。**整個意圖不改任何欄位。** 有 `⚑` → 結尾首要建議對應意圖。
+報告模式另撈 `交付項目`（filter `專案`）列 `逾期`；hub 沒有 交付項目（resolve 的 `hub.delivery` 為 null）時改列 board 上承諾日期欄（resolve 的 `hub.fields.board.dueDate`；fc 是 `預估完成日`）已過、狀態未完成的票。**整個意圖不改任何欄位。** 有 `⚑` → 結尾首要建議對應意圖。
 
 ### 2. 認領客戶票
 

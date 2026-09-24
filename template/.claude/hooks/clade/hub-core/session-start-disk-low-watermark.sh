@@ -21,7 +21,12 @@
 # 讀不到 / 解析不了一律靜默（fail-open）：SessionStart 噪音的成本高於漏報一次，
 # 而 publish preflight 那一格是 fail-closed 的，兩層不共用失敗方向。
 #
+# 回收服務自己壞掉也要出聲（TD-1148）：上面「由 user timer 負責」是前提，而 unit 指向已刪的
+# worktree 時 timer 照跑、service 每次失敗，2026-09-22～24 兩支同時停擺兩天，沒有任何東西出聲。
+# 只問 `is-failed`（unit 不存在／非 systemd 主機回非 failed → 靜默），與低水位無關、各自一行。
+#
 # 可覆寫：CLADE_DISK_WARN_ROOT_GB（預設 25）、CLADE_DISK_WARN_TMP_GB（預設 8）、
+#         CLADE_DISK_SYSTEMCTL（預設 systemctl，測試換 stub；設成空字串就不查回收服務）、
 #         CLADE_DISK_DF（預設 df，測試換 stub）、CLADE_DISK_TMP_CAPACITY（預設
 #         $CLAUDE_PROJECT_DIR/vendor/scripts/tmp-capacity.ts，不在則
 #         $HOME/offline/clade/vendor/scripts/tmp-capacity.ts；設成空字串就只看 df）
@@ -82,4 +87,14 @@ if [ -n "$quota_hint" ]; then
 fi
 
 [ -n "$low" ] && echo "⚠️ 磁碟低水位：${low}——長任務（publish gate／測試）會中途失敗。${hint}"
+
+SYSTEMCTL=${CLADE_DISK_SYSTEMCTL-systemctl}
+failed=""
+if [ -n "$SYSTEMCTL" ] && command -v "$SYSTEMCTL" >/dev/null 2>&1; then
+  for u in clade-disk-hygiene clade-cleanup-stale-tmp; do
+    [ "$(timeout 2 "$SYSTEMCTL" --user is-failed "$u.service" 2>/dev/null)" = failed ] \
+      && failed="${failed:+$failed、}$u"
+  done
+fi
+[ -n "$failed" ] && echo "⚠️ 磁碟回收服務 failed：${failed}——timer 照跑但每次失敗、磁碟不會被回收。看原因：journalctl --user -u <unit> -n 20；指向已刪路徑就在 ~/offline/clade 重跑該服務的 install"
 exit 0

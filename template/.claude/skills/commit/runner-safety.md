@@ -41,9 +41,10 @@ changeset 就只含自己這批：
 
 ```bash
 # 用標準層原語（TD-895）：快照落 ~/.cache/clade/review-snap/（磁碟，不吃 /tmp 配額）、
-# 命令結束（含 signal）即 git worktree remove + prune；--stage 讓 git diff --cached 就是 base..head
+# 命令結束（含 signal）即 git worktree remove + prune；--stage 讓 git diff --cached 就是 base..head。
+# wrapper 依 review-policy.md 選席；Opus 5.5 暫時覆寫期間只有 Opus 席（下例），NEVER 換成 codex-review-safe
 node ~/offline/clade/vendor/scripts/review-snapshot.ts run --repo "$REPO_ROOT" --base <merge-base> --stage <head> -- \
-  bash "$COMMIT_RESOURCE_DIR/scripts/codex-review-safe.sh" medium
+  env CLAUDE_REVIEW_SEAT=opus bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" medium
 ```
 
 **NEVER 手寫 `git worktree add --detach /tmp/…` 或 `$SCRATCHPAD/rev*`**：2026-09-22 一個 coordinator 的

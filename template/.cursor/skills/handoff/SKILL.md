@@ -519,7 +519,7 @@ GOT="$(jq -r '.consumerId // "MISSING"' "$SCAN")"
 
 `SCAN-MISMATCH` / `MISSING` → **STOP，整份 `$SCAN` 作廢重跑**，NEVER 據此判 worktree / stash。
 
-`worktreeStash.raw.worktrees[]` 每條已含 wt-helper list 欄位（`slug` / `branch` / `path` / `daysOld` / `mergedToMain`）+ kind 判定（`kind` / `nextStep`）；script 另掃 `git worktree list --porcelain`，非 `session/*` branch 的 worktree 列進 `raw.unmanagedWorktrees`。
+`worktreeStash.raw.worktrees[]` 每條已含 wt-helper list 欄位（`slug` / `branch` / `path` / `daysOld` / `mergedToMain`）+ kind 判定（`kind` / `nextStep`）。script 以 `wt-helper list --json --no-landed-state` 取資料，**不含** `landedState` / `landedReason` / `supersededBy` / `dirty`——要逐棵判「清樹會不會丟內容」直接跑 `node vendor/scripts/wt-helper.ts list --json`，可清 = `landedState ∈ {in-history, in-base}` **且** `dirty === 0`（`in-worktree` 的唯一副本是 main 未 commit 的改動，**NEVER** 讀成可清）；script 另掃 `git worktree list --porcelain`，非 `session/*` branch 的 worktree 列進 `raw.unmanagedWorktrees`。
 
 **Gate（可觀察，先判再讀）**：`worktreeStash.raw` 的 `worktrees` / `unmanagedWorktrees` / `stashes` / `orphanSidecars` **四個陣列全空** → 本段無可判之物，**跳過 worktree-stash-audit.md 不讀**，直接照 § 3.3 寫 `No linked worktrees.` + `No stashes.` 的空 audit 段（該指令在本檔 § 3.4 末條，不依賴那份檔）。**任一非空** → 下面這條 MUST Read 生效，**NEVER** 憑 raw 摘要自行判 kind。
 

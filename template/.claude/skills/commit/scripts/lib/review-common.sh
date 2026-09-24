@@ -418,7 +418,8 @@ review_verify_integrity() {
   echo "[$REVIEW_SAFE_TAG] 這是偵測控制不是 sandbox：只擋「受審 repo 被改」這一類。資料外洩、其他 repo/\$HOME 破壞、先改再還原（前後 snapshot 相同）都擋不住（TD-520）。" >&2
   echo "[$REVIEW_SAFE_TAG] 可能來源：reviewer 被 prompt injection 帶去 mutation，或並行 session 的正當編輯。NEVER 自動還原（rules/core/commit.md WIP 處置禁令）—— 人工檢視上列明細定性後，重跑 review。" >&2
   echo "[$REVIEW_SAFE_TAG] NEXT: 定性為並行 session 的正當編輯 → 別在 main 原樣重跑（會撞同一件事），改在隔離 worktree 內跑："  >&2
-  echo "[$REVIEW_SAFE_TAG]   node \$CLADE_HOME/vendor/scripts/review-snapshot.ts run --repo \"\$REPO_ROOT\" --base HEAD -- bash \"\$REPO_ROOT/.claude/scripts/$REVIEW_SAFE_SCRIPT\" <effort>" >&2
+  echo "[$REVIEW_SAFE_TAG]   node \$CLADE_HOME/vendor/scripts/review-snapshot.ts run --repo \"\$REPO_ROOT\" --base <merge-base> --stage HEAD -- bash \"\$REPO_ROOT/.claude/scripts/$REVIEW_SAFE_SCRIPT\" <effort>" >&2
+  echo "[$REVIEW_SAFE_TAG]   （--stage 讓快照的 git diff --cached 等於 base..HEAD；漏帶它快照 index＝HEAD，送出的是空 changeset）" >&2
   echo "[$REVIEW_SAFE_TAG]   （未 commit 的 changeset：先 create 一棵、在裡面 git apply --cached <自己的 patch>，跑完 remove；patch 取 git diff --cached -- <自己的路徑>）" >&2
   echo "[$REVIEW_SAFE_TAG]   快照落 ~/.cache/clade/review-snap/（磁碟）且用完自動移除——NEVER 手寫 git worktree add 到 /tmp 或 scratchpad（TD-895）。判準與禁令見 skills/commit/gates.md § exit 6 處置。定性為蓄意 mutation 或定不出性時 NEVER 換場地重跑。" >&2
   exit 6

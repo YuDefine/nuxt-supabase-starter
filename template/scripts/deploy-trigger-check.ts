@@ -124,7 +124,11 @@ export function deriveDeployTrigger(
     const haystack = `${file} ${workflowName ?? ''}`
     if (!DEPLOY_RE.test(haystack)) continue
     if (NON_PROD_RE.test(haystack)) continue
-    candidates.push({ file, workflowName, classes: classifyWorkflowTriggers(raw) })
+    candidates.push({
+      file,
+      workflowName,
+      classes: refineByProductionJobs(raw, classifyWorkflowTriggers(raw)),
+    })
   }
 
   if (candidates.length === 0) return { value: null, reason: 'none', workflows: [], source }
@@ -145,6 +149,253 @@ export function deriveDeployTrigger(
       : { value: null, reason: 'none', workflows: candidates, source }
   }
   return { value: null, reason: 'ambiguous', workflows: candidates, source }
+}
+
+interface JobInfo {
+  id: string
+  name: string | null
+  environment: string | null
+  ifExpr: string | null
+}
+
+/**
+ * A single workflow file may carry both the production and the staging deploy
+ * as separate jobs (TD-778: `deploy.yml` with `deploy-production` gated on
+ * `refs/tags/v*` and `deploy-staging` gated on `refs/heads/main`). The file's
+ * `on:` then lists both triggers and the filename is neutral, so the file-level
+ * view can only say "ambiguous" — and no declaration can fix that.
+ *
+ * When the file splits into non-production and production jobs, keep only the
+ * triggers the production jobs' `if:` admits. Anything this cannot read — a
+ * production job with no `if:`, an `if:` that is not a flat allow-list of known
+ * atoms (see `refsAdmittedBy`), or a gate that admits none of the file's
+ * automatic triggers — leaves the classes untouched, so the result stays
+ * fail-closed.
+ */
+export function refineByProductionJobs(
+  raw: string,
+  classes: DeployTriggerClass[],
+): DeployTriggerClass[] {
+  const automatic = classes.filter((k) => k !== 'manual')
+  if (automatic.length < 2) return classes
+
+  const jobs = parseJobs(raw)
+  const isNonProd = (j: JobInfo) =>
+    NON_PROD_RE.test(`${j.id} ${j.name ?? ''} ${j.environment ?? ''}`)
+  if (!jobs.some(isNonProd)) return classes
+  const production = jobs.filter(
+    (j) => !isNonProd(j) && (j.environment !== null || DEPLOY_RE.test(`${j.id} ${j.name ?? ''}`)),
+  )
+  if (production.length === 0) return classes
+
+  const admitted = new Set<DeployTriggerClass>()
+  for (const job of production) {
+    const gate = refsAdmittedBy(job.ifExpr)
+    if (gate === null) return classes
+    for (const k of gate) admitted.add(k)
+  }
+  const refined = classes.filter((k) => k === 'manual' || admitted.has(k))
+  // The job gate and `on:` share no automatic trigger: one of the two reads is
+  // wrong, and dropping to `manual` / `none` would hide that.
+  if (!refined.some((k) => k !== 'manual')) return classes
+  return refined
+}
+
+/**
+ * The automatic triggers an `if:` admits, or null when it cannot be read as an
+ * allow-list. The expression must be `||` branches of `&&` conjuncts, and every
+ * conjunct must be one of the atoms `readAtom` knows — anything else (a negation
+ * in any spelling: `!`, `!=`, `== false`, `== 0`; another function over the ref;
+ * a nested `||`) makes the whole gate unread. Each branch must test a positive
+ * ref or be explicitly gated on `workflow_dispatch`: a branch without either
+ * could admit any event.
+ */
+export function refsAdmittedBy(expr: string | null): DeployTriggerClass[] | null {
+  if (!expr) return null
+  const body = expr.replace(/^\s*\$\{\{/, '').replace(/\}\}\s*$/, '')
+  const branches = splitTopLevel(body, '||')
+  if (branches === null) return null
+
+  const out = new Set<DeployTriggerClass>()
+  for (const branch of branches) {
+    const conjuncts = splitTopLevel(branch, '&&')
+    if (conjuncts === null) return null
+    let gated = false
+    for (const conjunct of conjuncts) {
+      const atom = readAtom(conjunct)
+      if (atom === null) return null
+      if (atom.kind === 'ref') {
+        out.add(atom.trigger)
+        gated = true
+      } else if (atom.kind === 'dispatch') gated = true
+    }
+    if (!gated) return null
+  }
+  return out.size > 0 ? [...out] : null
+}
+
+type Atom =
+  | { kind: 'ref'; trigger: DeployTriggerClass }
+  | { kind: 'dispatch' }
+  | { kind: 'neutral' }
+
+const LIT = String.raw`'([^']*)'`
+const eq = (lhs: string) => new RegExp(String.raw`^(?:${lhs}\s*==\s*${LIT}|${LIT}\s*==\s*${lhs})$`)
+const REF_EQ = eq(String.raw`github\.ref`)
+const REF_NAME_EQ = eq(String.raw`github\.ref_name`)
+const EVENT_EQ = eq(String.raw`github\.event_name`)
+// Conjuncts that only narrow and never mention the ref.
+const NEUTRAL_EQ = eq(String.raw`(?:github\.event\.inputs|inputs)\.[A-Za-z_][\w-]*`)
+const TAG_PREFIX = new RegExp(String.raw`^startsWith\(\s*github\.ref\s*,\s*${LIT}\s*\)$`)
+
+/** One `&&` conjunct, or null when it is not an exact known form. */
+function readAtom(raw: string): Atom | null {
+  const text = raw.trim()
+  if (text === 'success()') return { kind: 'neutral' }
+  let m = REF_EQ.exec(text)
+  if (m) {
+    const ref = m[1] ?? m[2]
+    if (ref === 'refs/heads/main' || ref === 'refs/heads/master') {
+      return { kind: 'ref', trigger: 'push-main' }
+    }
+    return ref.startsWith('refs/tags/') ? { kind: 'ref', trigger: 'tag-v' } : null
+  }
+  m = REF_NAME_EQ.exec(text)
+  if (m) {
+    const name = m[1] ?? m[2]
+    return name === 'main' || name === 'master' ? { kind: 'ref', trigger: 'push-main' } : null
+  }
+  m = TAG_PREFIX.exec(text)
+  if (m) return m[1].startsWith('refs/tags/') ? { kind: 'ref', trigger: 'tag-v' } : null
+  m = EVENT_EQ.exec(text)
+  if (m) return (m[1] ?? m[2]) === 'workflow_dispatch' ? { kind: 'dispatch' } : { kind: 'neutral' }
+  if (NEUTRAL_EQ.test(text)) return { kind: 'neutral' }
+  return null
+}
+
+/**
+ * Split on `op` outside parentheses and string literals, flattening parts wrapped
+ * whole in parentheses that are themselves `op`-lists; null on unbalanced input.
+ * An `&&` part wrapping an `||` (`a && (b || c)`) is not a flat allow-list: null.
+ */
+function splitTopLevel(expr: string, op: '||' | '&&'): string[] | null {
+  const parts = splitOnce(expr.trim(), op)
+  if (parts === null) return null
+  const out: string[] = []
+  for (const part of parts) {
+    if (!isWrapped(part)) {
+      out.push(part)
+      continue
+    }
+    const inner = part.slice(1, -1)
+    const ors = splitOnce(inner.trim(), '||')
+    if (ors === null) return null
+    if (op === '||' && ors.length === 1) out.push(part)
+    else if (op === '&&' && ors.length > 1) return null
+    else {
+      const nested = splitTopLevel(inner, op)
+      if (nested === null) return null
+      out.push(...nested)
+    }
+  }
+  return out
+}
+
+function isWrapped(part: string): boolean {
+  if (!part.startsWith('(') || !part.endsWith(')')) return false
+  let depth = 0
+  let quoted = false
+  for (let i = 0; i < part.length; i++) {
+    if (part[i] === "'") quoted = !quoted
+    else if (quoted) continue
+    else if (part[i] === '(') depth++
+    else if (part[i] === ')' && --depth === 0) return i === part.length - 1
+  }
+  return false
+}
+
+function splitOnce(expr: string, op: '||' | '&&'): string[] | null {
+  const parts: string[] = []
+  let depth = 0
+  let start = 0
+  let quoted = false
+  for (let i = 0; i < expr.length; i++) {
+    const ch = expr[i]
+    if (ch === "'") quoted = !quoted
+    else if (quoted) continue
+    else if (ch === '(') depth++
+    else if (ch === ')' && --depth < 0) return null
+    else if (depth === 0 && ch === op[0] && expr[i + 1] === op[1]) {
+      parts.push(expr.slice(start, i))
+      start = i + 2
+      i++
+    }
+  }
+  if (depth !== 0 || quoted) return null
+  parts.push(expr.slice(start))
+  return parts.map((p) => p.trim())
+}
+
+/** Jobs under the root `jobs:` key with the few fields the refinement reads. */
+function parseJobs(raw: string): JobInfo[] {
+  const lines = raw.split('\n')
+  const start = lines.findIndex((l) => /^jobs:\s*$/.test(l))
+  if (start === -1) return []
+  const indentOf = (l: string) => l.length - l.trimStart().length
+  const meaningful = (l: string) => l.trim() !== '' && !/^\s*#/.test(l)
+
+  const jobs: JobInfo[] = []
+  let jobIndent = -1
+  let current: { info: JobInfo; lines: string[] } | null = null
+  const flush = () => {
+    if (current) jobs.push(fillJob(current.info, current.lines))
+  }
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i]
+    if (!meaningful(line)) {
+      if (current) current.lines.push(line)
+      continue
+    }
+    const indent = indentOf(line)
+    if (indent === 0) break
+    if (jobIndent === -1) jobIndent = indent
+    if (indent === jobIndent) {
+      flush()
+      const id = splitKey(line.trim())?.key ?? line.trim()
+      current = { info: { id, name: null, environment: null, ifExpr: null }, lines: [] }
+    } else if (current) {
+      current.lines.push(line)
+    }
+  }
+  flush()
+  return jobs
+}
+
+function fillJob(info: JobInfo, lines: string[]): JobInfo {
+  const indentOf = (l: string) => l.length - l.trimStart().length
+  const first = lines.find((l) => l.trim() !== '' && !/^\s*#/.test(l))
+  if (!first) return info
+  const propIndent = indentOf(first)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (line.trim() === '' || indentOf(line) !== propIndent) continue
+    const kv = splitKey(line.trim())
+    if (!kv) continue
+    // A property's value may continue on deeper-indented lines (block scalar or map).
+    const nested: string[] = []
+    for (let j = i + 1; j < lines.length; j++) {
+      if (lines[j].trim() !== '' && indentOf(lines[j]) <= propIndent) break
+      nested.push(lines[j].trim())
+    }
+    const inline = /^[|>][-+]?$/.test(kv.value) ? '' : kv.value
+    if (kv.key === 'name') info.name = unquote(inline) || null
+    if (kv.key === 'if') info.ifExpr = [inline, ...nested].join(' ').trim() || null
+    if (kv.key === 'environment') {
+      const envName = nested.map((l) => splitKey(l)).find((n) => n?.key === 'name')?.value
+      info.environment = unquote(inline || envName || '') || null
+    }
+  }
+  return info
 }
 
 // ── minimal indentation parser ───────────────────────────────────────────
@@ -332,7 +583,9 @@ export function checkDeployTrigger(
       status: 'unconfirmable',
       detail:
         derived.reason === 'ambiguous'
-          ? `production deploy workflows disagree (${where}) — declare the production trigger, not the staging one`
+          ? derived.workflows.some((w) => w.classes.filter((k) => k !== 'manual').length > 1)
+            ? `${where} fires on more than one automatic trigger and its production jobs could not be told apart — changing the declaration will not help; split the file, or give each deploy job an environment: and a job-level if: on the ref`
+            : `production deploy workflows disagree (${where}) — declare the production trigger, not the staging one`
           : `no production deploy workflow found in .github/workflows/ — "${declared}" cannot be confirmed from this repo`,
     }
   }

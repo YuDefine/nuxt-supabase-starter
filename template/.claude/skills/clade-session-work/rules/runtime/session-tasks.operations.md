@@ -7,7 +7,7 @@ paths: ['tasks/**', 'HANDOFF.md']
 
 # Claude close-out and handoff carrier
 
-Interactive Claude close-out may use `AskUserQuestion` for a genuinely user-owned remove/retain decision and `Agent`/`TaskOutput`/`TaskStop` for owned workers. Native `run_in_background` status is not correlated business completion. Canonical Herdr transport still follows the common contract; native launcher availability must be checked before dispatch.
+Interactive Claude close-out may use `AskUserQuestion` for a genuinely user-owned remove/retain decision and `Agent`/`TaskOutput`/`TaskStop` for owned workers. Native `run_in_background` status is not correlated business completion. Canonical Herdr transport still follows the common contract; native launcher availability must be checked before dispatch. When `CLADE_DISPATCH_ID` is non-empty, `AskUserQuestion` is a principal question too and is forbidden the same way (TD-901): use `--complete blocked`.
 
 ### 成本模型（2026-08-07 納入 prompt caching 修正）
 

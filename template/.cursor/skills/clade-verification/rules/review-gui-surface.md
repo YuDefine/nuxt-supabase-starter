@@ -275,7 +275,7 @@ node ~/offline/clade/vendor/scripts/lib/evidence-store.ts \
 | 主持者收回符合性判定結果 | 消費結構化結果；FAIL／UNCERTAIN 時可讀該張圖診斷，不代簽 gate |
 | 確認截圖是否空白 | worker emptiness preflight；結果不代替符合性 gate |
 
-**NEVER** 讓收集 worker 再轉派或代簽判定；Opus 5.5 無法執行時沿 `screenshot-match-analysis` 原列交 GPT-5.6 Sol（effort: high）；圖片／browser 或其餘指定模型不可用時保留未完成項。Pi Cursor pool 的 mutation 與 egress 邊界維持，不為截圖擴權。完整派工方法見 `review-screenshot` skill。
+**NEVER** 讓收集 worker 再轉派或代簽判定；Opus 5.5 無法執行時沿 `screenshot-match-analysis` 原列交 GPT-5.6 Sol（effort: high）；圖片／browser 或其餘指定模型不可用時保留未完成項。Pi Cursor pool 的 mutation 與 egress 邊界維持，不為截圖擴權。完整派工方法見 `/review screenshot`（`review` skill 的 screenshot mode）。
 
 ### 實測（2026-08-06 更正：截圖成本遠小於本節初版所稱）
 

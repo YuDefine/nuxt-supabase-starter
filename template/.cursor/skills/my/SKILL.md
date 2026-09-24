@@ -74,6 +74,8 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts ask \
 在 `flow pending` 的輸出裡長得一模一樣（推進去的那一刻就都是「已登記」了），而 Charles 需要
 知道哪幾條是他從沒看過的。
 
+`CLADE_DISPATCH_ID` 非空（本 session 是被派出的 worker）時 **NEVER** 出 `Qn`、**NEVER** 把題目寫進 final response 問 principal。要授權就 `--complete blocked --decision-for coordinator`（只有 Charles 答得了才 `charles`）後待命（TD-901）。
+
 **編號依 §QnX 協定**（使用者的全域指令檔；Claude 走 `~/.claude/CLAUDE.md`，其他 runtime 走各自的常駐指令檔）：只有**可回答的兩類**編 `Qn`——`ruling`（要我拍板）
 與 `review`（要我驗收），兩者的編號**連續**跑過去，NEVER 在第二組重新從 `Q1` 起算。其餘三個
 狀態類（不在本 repo／不可逆等外部條件／loop 推不動）一律 bullet。

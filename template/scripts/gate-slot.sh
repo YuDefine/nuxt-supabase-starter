@@ -21,11 +21,18 @@
 #   CLADE_GATE_WAIT_TIMEOUT  wait 模式最長等待秒數（預設 1800）
 #   CLADE_GATE_SLOT_HELD     外層已持有 slot；本層直接 exec，不重複上鎖（防自我死鎖）
 #   CLADE_GATE_SLOT_METRICS  設為檔案路徑時，取到 slot 後 append 一行 JSON
-#                            {key,mode,slots,slot_wait_ms}（opt-in，未設不寫；寫失敗不影響 gate）
+#                            {key,mode,class,slots,slot_wait_ms}（opt-in，未設不寫；寫失敗不影響 gate）
+#   CLADE_GATE_CLASS         heavy（預設）| light。由 clade-gate 判定後設定，本層讀完即 unset（W-2026-09-24-gate-slot-light-lane）
+#   CLADE_LIGHT_GATE_SLOTS   light 類整台機器同時執行上限（預設 2，clamp 到 1..8）
 #
 # 兩層鎖：
 #   1. repo lock  —— 同一個 repo 同時只跑一個 heavy gate（去重：pre-push 與 post-edit 撞在一起）
 #   2. slot lock  —— 整台機器同時只跑 N 個 heavy gate（跨 repo 總量上限）
+#
+# light 類（W-2026-09-24-gate-slot-light-lane）：少數檔的定點測試不取上面兩層，改取獨立的 light-<i>.lock semaphore。
+# 動機：heavy slot 降到 1 之後（TD-685），重跑 5 個小測試檔要排在別 repo 的整套 suite 後面，
+# agent 於是自己繞過閘門直跑——那才是真正沒有上限的路徑。light 類仍有全機上限、仍進記憶體
+# scope 與 MAX_RUNTIME，**NEVER** 讓它完全免閘。判定「算不算 light」只在 clade-gate，本檔只認 env。
 # 兩層都用 flock(1)。fd 由 exec 出去的子行程繼承，鎖隨行程結束自動釋放（含被 kill / timeout）。
 #
 # 降級原則：flock 不存在、lock dir 不可寫、參數異常時一律 **直接執行原命令**，
@@ -55,6 +62,13 @@ else
     *) usage ;;
   esac
 fi
+
+# 只作用於這一層：讀完就 unset，被包的命令裡再進 gate-slot 時回到 heavy（同 CLADE_GATE_MODE）。
+# MUST 在任何「降級直接 exec」之前：flock 不存在、lock dir 建不起來、SLOT_HELD 等路徑都會
+# 直接 exec inner command，放在後面它就帶著 light 外洩進去。
+GATE_CLASS=heavy
+[ "${CLADE_GATE_CLASS:-}" = light ] && GATE_CLASS=light
+unset CLADE_GATE_CLASS
 
 # 外層已持有 slot（例如 post-edit hook 已上鎖，內層 pnpm typecheck 又轉呼叫 clade-gate）。
 # 沒有這個 escape hatch，第二層會在同一個 repo lock 上等自己 → 死鎖。
@@ -90,6 +104,21 @@ esac
 [ "$SLOTS" -lt 1 ] && SLOTS=1
 [ "$SLOTS" -gt 8 ] && SLOTS=8
 
+LIGHT_SLOTS=${CLADE_LIGHT_GATE_SLOTS:-2}
+case "$LIGHT_SLOTS" in
+  '' | *[!0-9]*) LIGHT_SLOTS=2 ;;
+esac
+[ "$LIGHT_SLOTS" -lt 1 ] && LIGHT_SLOTS=1
+[ "$LIGHT_SLOTS" -gt 8 ] && LIGHT_SLOTS=8
+
+if [ "$GATE_CLASS" = light ]; then
+  SLOT_PREFIX=light
+  ACTIVE_SLOTS=$LIGHT_SLOTS
+else
+  SLOT_PREFIX=heavy
+  ACTIVE_SLOTS=$SLOTS
+fi
+
 # ── status：唯讀的持有者清單（TD-1072）────────────────────────────────────
 # 呼叫端（propagate 的 push 逾時判讀）要回答「我排隊時是誰佔著 slot」。證據 MUST 由
 # gate-slot 自己給 —— lock dir 的推導、slot 數的 clamp 都只在本檔，NEVER 在呼叫端
@@ -113,6 +142,12 @@ print_status() {
   printf 'lock_dir=%s\tslots=%s\n' "$LOCK_DIR" "$SLOTS"
   for i in $(seq 1 "$SLOTS"); do
     print_lock_status "$LOCK_DIR/heavy-$i.lock" "slot=$i/$SLOTS"
+  done
+  # light 類只印有持有者的：呼叫端（push-timeout-phase）讀 heavy 行判「誰佔著 slot」，
+  # free 的 light 行對它是雜訊。
+  for i in $(seq 1 "$LIGHT_SLOTS"); do
+    [ -f "$LOCK_DIR/light-$i.lock" ] &&
+      print_lock_status "$LOCK_DIR/light-$i.lock" "slot=light-$i/$LIGHT_SLOTS" held-only
   done
   for lock in "$LOCK_DIR"/repo-*.lock; do
     # repo lock 一個 repo 一支、只增不刪；free 的全印出來是雜訊，只印有持有者的。
@@ -207,8 +242,6 @@ REPO_LOCK="$LOCK_DIR/repo-$safe_key.lock"
 
 # lock dir 存在但不可寫（權限 / 唯讀 fs）→ 降級直接跑，不要在這裡失敗。
 : >>"$REPO_LOCK" 2>/dev/null || exec "$@"
-
-exec 9>>"$REPO_LOCK"
 
 # 取到鎖的那一刻由本行程寫下自己是持有者（status 的第 1 層證據，見 print_status 上方）。
 # 原子寫；寫失敗不影響 gate。stale 檔 NEVER 主動刪：會和剛取到鎖、正要覆寫的新持有者競態。
@@ -312,28 +345,33 @@ _now_ms() {
 }
 _wait_started_ms=$(_now_ms)
 
-if [ "$mode" = wait ]; then
-  # Bash defers traps while a foreground flock blocks; its wait builtin is
-  # interruptible, so PID-only cancellation can abort a same-repo wait too.
-  flock -w "$WAIT_TIMEOUT" 9 &
-  if ! wait "$!"; then
-    print_holder_diag "$REPO_LOCK" "repo lock wait timed out after ${WAIT_TIMEOUT}s (key=$safe_key)"
-    exit "$BUSY"
+# light 類不取 repo lock：repo lock 防的是同一 repo 兩套 heavy gate 重複跑，而定點重跑
+# 幾個檔正是在同 repo 的 heavy gate 旁邊做的事——排在它後面就回到 W-2026-09-24-gate-slot-light-lane 的原狀。
+if [ "$GATE_CLASS" = heavy ]; then
+  exec 9>>"$REPO_LOCK"
+  if [ "$mode" = wait ]; then
+    # Bash defers traps while a foreground flock blocks; its wait builtin is
+    # interruptible, so PID-only cancellation can abort a same-repo wait too.
+    flock -w "$WAIT_TIMEOUT" 9 &
+    if ! wait "$!"; then
+      print_holder_diag "$REPO_LOCK" "repo lock wait timed out after ${WAIT_TIMEOUT}s (key=$safe_key)"
+      exit "$BUSY"
+    fi
+  else
+    flock -n 9 || exit "$BUSY"
   fi
-else
-  flock -n 9 || exit "$BUSY"
+  record_holder "$REPO_LOCK"
 fi
-record_holder "$REPO_LOCK"
 
 # 掃描 slot 1..N，取到第一個空的就持有。fd 11..18 對應 slot 1..8。
 acquire_slot() {
   local i fd
-  for i in $(seq 1 "$SLOTS"); do
+  for i in $(seq 1 "$ACTIVE_SLOTS"); do
     fd=$((10 + i))
-    : >>"$LOCK_DIR/heavy-$i.lock" 2>/dev/null || continue
-    eval "exec $fd>>\"\$LOCK_DIR/heavy-\$i.lock\"" 2>/dev/null || continue
+    : >>"$LOCK_DIR/$SLOT_PREFIX-$i.lock" 2>/dev/null || continue
+    eval "exec $fd>>\"\$LOCK_DIR/\$SLOT_PREFIX-\$i.lock\"" 2>/dev/null || continue
     if flock -n "$fd"; then
-      record_holder "$LOCK_DIR/heavy-$i.lock"
+      record_holder "$LOCK_DIR/$SLOT_PREFIX-$i.lock"
       return 0
     fi
     eval "exec $fd>&-" 2>/dev/null || true
@@ -349,9 +387,9 @@ if ! acquire_slot; then
   until acquire_slot; do
     if [ "$(date +%s)" -ge "$deadline" ]; then
       # 印所有 slot lock 的 holder 診斷
-      for si in $(seq 1 "$SLOTS"); do
-        slot_lock="$LOCK_DIR/heavy-$si.lock"
-        [ -f "$slot_lock" ] && print_holder_diag "$slot_lock" "slot $si/$SLOTS holder (slot acquire timed out after ${WAIT_TIMEOUT}s, key=$safe_key)"
+      for si in $(seq 1 "$ACTIVE_SLOTS"); do
+        slot_lock="$LOCK_DIR/$SLOT_PREFIX-$si.lock"
+        [ -f "$slot_lock" ] && print_holder_diag "$slot_lock" "$SLOT_PREFIX slot $si/$ACTIVE_SLOTS holder (slot acquire timed out after ${WAIT_TIMEOUT}s, key=$safe_key)"
       done
       exit "$BUSY"
     fi
@@ -366,8 +404,8 @@ export CLADE_GATE_SLOT_HELD=1
 # 本行程已不存在，NEVER 為了量 run time 改成背景執行（會丟掉 TTY 與 process group）。
 if [ -n "${CLADE_GATE_SLOT_METRICS:-}" ] && [ -n "$_wait_started_ms" ]; then
   _waited_ms=$(($(_now_ms) - _wait_started_ms))
-  printf '{"key":"%s","mode":"%s","slots":%s,"slot_wait_ms":%s}\n' \
-    "$safe_key" "$mode" "$SLOTS" "$_waited_ms" >>"$CLADE_GATE_SLOT_METRICS" 2>/dev/null || true
+  printf '{"key":"%s","mode":"%s","class":"%s","slots":%s,"slot_wait_ms":%s}\n' \
+    "$safe_key" "$mode" "$GATE_CLASS" "$ACTIVE_SLOTS" "$_waited_ms" >>"$CLADE_GATE_SLOT_METRICS" 2>/dev/null || true
 fi
 
 # ── holder 端自願上界 ──────────────────────────────────────────────────────

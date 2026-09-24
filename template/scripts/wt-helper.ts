@@ -9,8 +9,14 @@
  *                    on branch session/<YYYY-MM-DD-HHMM>-<slug>; post-create
  *                    fast-forward merge origin/<landing-base> so projection layers
  *                    (rules/, scripts/, etc.) are current.
- *   list [--json]    Enumerate session worktrees with path, branch,
- *                    last-commit ISO timestamp, days-since-touch, merged flag.
+ *   list [--json] [--no-landed-state]
+ *                    Enumerate session worktrees with path, branch,
+ *                    last-commit ISO timestamp, days-since-touch, merged flag,
+ *                    landedState (in-history / in-base / in-worktree /
+ *                    clean-apply / superseded / conflict / unknown — TD-863),
+ *                    landedReason, supersededBy, and dirty (uncommitted path
+ *                    count in the session worktree). --no-landed-state skips
+ *                    those four fields (they cost a diff + apply per tree).
  *   prune            Interactively remove worktrees whose branches are
  *                    already merged into main. Per-entry [y/N] confirm.
  *   cleanup <slug> [--dry-run]
@@ -27,7 +33,13 @@
  *                    outright (its head stays reachable via refs/pull/N/head;
  *                    TD-1103; gh errors stay fail-closed);
  *                    clade-managed projection drift is exempt from the
- *                    uncommitted gate.
+ *                    uncommitted gate. --superseded-by <spec>[,…] --reason
+ *                    <text> declares that main later rewrote the unlanded
+ *                    hunks (TD-1082): every unlanded file needs a later main
+ *                    commit touching it or a named replacement on main; the
+ *                    tip is pinned in refs/wt-superseded/ first, and an event
+ *                    is appended to <git-common-dir>/wt-superseded.jsonl
+ *                    once the worktree is removed.
  *   merge-back <slug> [--dry-run] [--auto-stash] [--no-cleanup] [--accept-landed]
  *                    Legacy squash into main; source retained until formal commit.
  *                    New workflows use `batch`. Pre-flight detects main-worktree
@@ -123,6 +135,12 @@ import {
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isLockedProjectionPathFor } from './locked-projection.ts'
 import { runWtEnvBootstrap } from './lib/wt-env-bootstrap-runner.ts'
+import {
+  HOST_CONFIG_REMEDY,
+  assertNoHostConfigReferences,
+  findHostConfigReferences,
+  formatHostConfigRefs,
+} from './lib/host-config-refs.ts'
 import {
   localMachineLabel,
   MACHINE_LABEL_PATTERN,
@@ -2653,6 +2671,33 @@ export function cleanupRemovedWorktreeRuntime(consumerRoot: string, wtPath: stri
   cleanupCodebaseMemoryIndex(wtPath)
 }
 
+// TD-793: `.nuxt/types` is a `nuxt prepare` product reached through pnpm's
+// postinstall lifecycle. Most fleet consumers chain it behind `&&` after
+// earlier steps, so a mid-chain failure exits install with the artifact never
+// generated — while the old output only printed the install exit line and
+// still declared `Worktree ready.`. The receiving agent then met thousands of
+// auto-import errors and read them as a broken task, not an absent
+// prerequisite (<consumer-a> 2026-08-29: 1,867 errors → task marked blocked; a manual
+// `pnpm prepare` made the same typecheck pass).
+//
+// Warn-only by contract: an install failure still hands over a usable tree,
+// so this MUST NOT flip the ready state into a failure — it names the exact
+// remediation command instead of staying silent.
+export function nuxtTypeArtifactRemediation(wtPath: string): string | null {
+  const pkgPath = join(wtPath, 'package.json')
+  if (!existsSync(pkgPath)) return null
+  let pkg: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> }
+  try {
+    pkg = JSON.parse(readFileSync(pkgPath, 'utf8'))
+  } catch {
+    return null
+  }
+  const deps = { ...pkg?.dependencies, ...pkg?.devDependencies }
+  if (!('nuxt' in deps)) return null
+  if (existsSync(join(wtPath, '.nuxt', 'types'))) return null
+  return 'type artifacts `.nuxt/types` absent — run `pnpm exec nuxt prepare` (or re-run `pnpm install`) in this worktree before typecheck'
+}
+
 async function cmdAdd(slug, opts: WtOptions = {}) {
   if (!slug) {
     throw new Error(ADD_USAGE)
@@ -3436,6 +3481,12 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
     } catch {}
   }
 
+  // TD-793: after any install outcome, say out loud when a Nuxt consumer's
+  // type artifacts never materialised — silence here is what made the defect
+  // indistinguishable from a broken task.
+  const typeArtifactNote = nuxtTypeArtifactRemediation(wtPath)
+  if (typeArtifactNote) console.error(`  deps: ${typeArtifactNote}`)
+
   // Auto-trigger codebase-memory index_repository (fast mode, detached) so
   // search_graph / trace_path / get_code_snippet work immediately in the new
   // worktree. Failures (missing binary, mcp unreachable) are silently swallowed
@@ -3469,7 +3520,14 @@ async function cmdDetectMainDirty(opts) {
   }
 }
 
-function enrichWorktree(consumerRoot, w, now = Date.now()) {
+// `landed` 預設關：landedState 每棵未 merged 的樹要付一次 `git diff --binary` ＋ 最多三次
+// `git apply --check` ＋ 可能一次 `git log`，只有 `list` 的讀者要它。`reclaim-stale` 只看
+// staleness、`handoff-scan` 經 `list --no-landed-state` 呼叫——都不付這個成本（TD-863 0-A r1）。
+function enrichWorktree(
+  consumerRoot,
+  w,
+  { landed: withLanded = false, now = Date.now() }: { landed?: boolean; now?: number } = {},
+) {
   const branchName = w.branch.replace('refs/heads/', '')
   let lastCommitSec = 0
   try {
@@ -3513,7 +3571,22 @@ function enrichWorktree(consumerRoot, w, now = Date.now()) {
     staleness = 'live'
   }
 
-  return {
+  // 具名欄位，不要收成 Record<string, unknown>：list enrich 的 branch 是字串，
+  // smoke 會呼叫 endsWith；收成 unknown 會讓 vendor typecheck 在那一行爆掉。
+  const row: {
+    path: string
+    branch: string
+    lastCommit: string | null
+    daysOld: number | null
+    mergedToMain: boolean
+    briefStatus: string | null
+    taskSummary: string | null
+    staleness: string
+    landedState?: LandedState
+    landedReason?: string | null
+    supersededBy?: string[]
+    dirty?: number | null
+  } = {
     path: w.path,
     branch: branchName,
     lastCommit: lastCommitMs ? new Date(lastCommitMs).toISOString() : null,
@@ -3523,12 +3596,37 @@ function enrichWorktree(consumerRoot, w, now = Date.now()) {
     taskSummary,
     staleness,
   }
+  if (withLanded) {
+    const landed = merged
+      ? { landedState: 'in-history' as LandedState, supersededBy: [], reason: undefined }
+      : classifyLandedState(consumerRoot, branchName)
+    row.landedState = landed.landedState
+    row.landedReason = landed.reason ?? null
+    row.supersededBy = landed.supersededBy
+    // landedState 只描述 branch tip 的 commit；session worktree 裡未 commit 的檔它看不到。
+    // 所以「清樹不丟內容」要兩個欄位一起讀：landedState ∈ {in-history, in-base} 且 dirty === 0。
+    row.dirty = countWorktreeDirty(w.path)
+  }
+  return row
+}
+
+/** session worktree 內 `git status --porcelain` 的路徑數（含 untracked）；讀不到回 null。 */
+function countWorktreeDirty(wtPath): number | null {
+  try {
+    return git(['status', '--porcelain', '--untracked-files=all'], { cwd: wtPath })
+      .split('\n')
+      .filter(Boolean).length
+  } catch {
+    return null
+  }
 }
 
 async function cmdList(opts) {
   const consumerRoot = findConsumerRoot()
   const wts = sessionWorktrees(consumerRoot)
-  const enriched = wts.map((w) => enrichWorktree(consumerRoot, w))
+  const enriched = wts.map((w) =>
+    enrichWorktree(consumerRoot, w, { landed: !opts.noLandedState }),
+  ) as any[]
 
   if (opts.json) {
     console.log(JSON.stringify(enriched, null, 2))
@@ -3542,7 +3640,11 @@ async function cmdList(opts) {
   const holderBySlug = new Map(devPortHolders(consumerRoot).map((h) => [h.slug, h.offset]))
   for (const w of enriched) {
     const ageLabel = w.daysOld === null ? '?' : `${w.daysOld}d`
-    const mergedTag = w.mergedToMain ? ', merged' : ''
+    const landedTag =
+      w.landedState === undefined
+        ? ''
+        : `, ${w.landedState}${w.landedReason ? ` (${w.landedReason})` : ''}${w.dirty ? `, dirty ${w.dirty}` : w.dirty === null ? ', dirty ?' : ''}`
+    const mergedTag = w.mergedToMain ? `, merged${w.dirty ? `, dirty ${w.dirty}` : ''}` : landedTag
     const offset = holderBySlug.get(basename(w.path))
     // Which worktrees hold a dev-port offset is the one thing this listing was
     // missing when the band ran dry: without it the reader picks a cleanup
@@ -3555,6 +3657,7 @@ async function cmdList(opts) {
       const statusTag = w.briefStatus ? ` [${w.briefStatus}]` : ''
       console.log(`  ${w.taskSummary}${statusTag}`)
     }
+    for (const c of (w.supersededBy ?? []).slice(0, 5)) console.log(`  superseded by ${c}`)
   }
 
   const declared = readDeclaredDevPorts(consumerRoot)
@@ -3583,6 +3686,12 @@ async function cmdPrune() {
       .trim()
       .toLowerCase()
     if (ans === 'y' || ans === 'yes') {
+      try {
+        assertNoHostConfigReferences(c.path)
+      } catch (e) {
+        console.error(`skip ${c.path}: ${e instanceof Error ? e.message : String(e)}`)
+        continue
+      }
       git(['worktree', 'remove', c.path], { cwd: consumerRoot })
       cleanupCodebaseMemoryIndex(c.path)
       try {
@@ -3982,6 +4091,150 @@ function detectUnlandedFiles(consumerRoot, branchName) {
 // 由呼叫端在 main 跑 /commit 收尾。marker 的語義嚴格是「wt-helper 已把這個 tip 的
 // changeset 併進 main 的 index」。這已經**嚴格強於現況**：cmdMergeBack 今天是無條件對
 // 自己的 cleanup 傳 force + forceDiscardUnland，連 tip 相不相符都沒驗。
+// ── Superseded declaration (cleanup --superseded-by, TD-1082) ─────────────
+//
+// detectAbsorbedByOtherPath 的反套判準刻意不放寬：main 對同一段做過後續修改，branch 的
+// hunk 就反套不回去，一律判 unlanded。這時「已被 main 後續演進取代」是人工判定，而它原本
+// 唯一的出口是 `--force --force-discard-unland`——lifecycle gate 禁止拿 `--force` 代替判斷，
+// 於是這類樹只能 retained。本宣告是那個判定的**載體**：逐檔要證據、不成立就整個不放行，
+// 成立時先把 branch tip 釘進 refs/wt-superseded/ 並寫事件，之後才移除。
+//
+// NEVER 拿它放寬 absorbed 判準本身，也 NEVER 部分放行（覆蓋 5/6 檔 = 不成立）。
+//
+// 每個條目（逗號分隔）：
+//   <commit>          main 上、不在 branch history 裡的 commit；它觸及的 unlanded 檔算被取代
+//   <file>=<commit>   同上但只套到 <file>，且該 commit MUST 觸及 <file>
+//   <file>=<path>     <file> 被 main 上的具名檔取代（例：後繼 brief）；<path> MUST 存在於 main
+function supersededRef(slug, tip) {
+  return `refs/wt-superseded/${slug}-${tip.slice(0, 12)}`
+}
+
+export function verifySupersededDeclaration(consumerRoot, branchName, unlanded, raw) {
+  const cwd = consumerRoot
+  const specs = String(raw ?? '')
+    .split(',')
+    .map((spec) => spec.trim())
+    .filter(Boolean)
+  const errors = []
+  const covered = new Map()
+  if (specs.length === 0) errors.push('--superseded-by 沒有任何條目')
+  const landingBase = resolveLandingBase(cwd)
+  const commitOf = (rev) => {
+    try {
+      return git(['rev-parse', '--verify', '--quiet', `${rev}^{commit}`], { cwd }).trim() || null
+    } catch {
+      return null
+    }
+  }
+  const isAncestor = (a, b) => {
+    try {
+      git(['merge-base', '--is-ancestor', a, b], { cwd })
+      return true
+    } catch {
+      return false
+    }
+  }
+  // 「main 上晚於 branch」：在 main（或 landing base）上，且不在 branch 自己的 history 裡。
+  const notLaterOnMain = (sha) => {
+    if (!isAncestor(sha, 'main') && !isAncestor(sha, landingBase))
+      return `${sha.slice(0, 9)} 不在 main／${landingBase} 上`
+    if (isAncestor(sha, branchName))
+      return `${sha.slice(0, 9)} 已在 ${branchName} 的 history 裡，不是晚於 branch 的演進`
+    return null
+  }
+  const touched = (sha) =>
+    new Set(
+      git(['diff-tree', '--no-commit-id', '--name-only', '-r', '-m', '--root', sha], { cwd })
+        .split('\n')
+        .filter(Boolean),
+    )
+  for (const spec of specs) {
+    const eq = spec.indexOf('=')
+    if (eq === -1) {
+      const sha = commitOf(spec)
+      if (!sha) {
+        errors.push(`${spec}：不是 commit（檔案被取代請寫 <file>=<path>）`)
+        continue
+      }
+      const bad = notLaterOnMain(sha)
+      if (bad) {
+        errors.push(bad)
+        continue
+      }
+      const files = touched(sha)
+      const hit = unlanded.filter((file) => files.has(file))
+      if (hit.length === 0) {
+        errors.push(`${sha.slice(0, 9)} 沒有觸及任何 unlanded 檔`)
+        continue
+      }
+      for (const file of hit) if (!covered.has(file)) covered.set(file, { by: sha, kind: 'commit' })
+      continue
+    }
+    const file = spec.slice(0, eq)
+    const target = spec.slice(eq + 1)
+    if (!unlanded.includes(file)) {
+      errors.push(`${file}：不在 unlanded 清單裡`)
+      continue
+    }
+    const sha = commitOf(target)
+    if (sha) {
+      const bad = notLaterOnMain(sha)
+      if (bad) errors.push(bad)
+      else if (!touched(sha).has(file)) errors.push(`${sha.slice(0, 9)} 沒有觸及 ${file}`)
+      else covered.set(file, { by: sha, kind: 'commit' })
+      continue
+    }
+    if (target === file) {
+      errors.push(`${file}=${target}：取代檔不能是它自己（main 改寫過它就給那個 commit）`)
+      continue
+    }
+    try {
+      git(['cat-file', '-e', `main:${target}`], { cwd })
+      covered.set(file, { by: target, kind: 'path' })
+    } catch {
+      errors.push(`${target}：不存在於 main`)
+    }
+  }
+  const uncovered = unlanded.filter((file) => !covered.has(file))
+  return {
+    ok: errors.length === 0 && uncovered.length === 0,
+    errors,
+    uncovered,
+    coverage: [...covered].map(([file, value]) => ({ file, ...value })),
+  }
+}
+
+// 移除前的憑證：ref 讓 branch 的 commit 在 `branch -D` 之後仍可達。寫不進去就 throw——
+// NEVER 降成 warn 照樣移除。
+function pinSupersededTip(consumerRoot, slug, branchName, reason) {
+  const cwd = consumerRoot
+  const tip = git(['rev-parse', '--verify', `${branchName}^{commit}`], { cwd }).trim()
+  const ref = supersededRef(slug, tip)
+  git(['update-ref', '-m', `wt-helper cleanup --superseded-by: ${reason}`, ref, tip], { cwd })
+  return { tip, ref }
+}
+
+// 事件記下誰據什麼宣告移除了樹：只在 `git worktree remove` 成功後寫，env cleanup 或移除
+// 失敗時不留一筆沒發生的 cleanup（重跑也不重複 append）。寫在 `branch -D` 之前——寫不進去
+// 就 throw，branch 留著，不會出現「已刪卻沒有事件」。
+function recordSupersededCleanup(consumerRoot, slug, branchName, pinned, declaration, reason) {
+  const cwd = consumerRoot
+  const { tip, ref } = pinned
+  const commonDir = resolve(cwd, git(['rev-parse', '--git-common-dir'], { cwd }).trim())
+  appendFileSync(
+    join(commonDir, 'wt-superseded.jsonl'),
+    `${JSON.stringify({
+      at: new Date().toISOString(),
+      slug,
+      branch: branchName,
+      tip,
+      ref,
+      reason,
+      coverage: declaration.coverage,
+    })}\n`,
+  )
+}
+
 function landedMarkerRef(slug) {
   return `refs/wt-landed/${slug}`
 }
@@ -4608,8 +4861,8 @@ export function mainIndexNotEmptyMessage(slug: string, entries: string[], when: 
  * worktree 開樹時就知道自己為哪張卡開（`wt-helper add` 把 work id 寫進 claim），而
  * `CLADE_WORK_ID` 是活不過單次 Bash 呼叫的環境變數——merge-back 常在另一個 shell 跑，
  * 撿到的 ambient 可能是別張卡。所以 claim 綁定優先；ambient 只在沒有綁定時當 fallback。
- * 兩者都有而不同、或兩者都沒有、或 claim 讀不到，一律回 `error`：`work.done` 沒有撤回路徑，
- * 判不出就不記。
+ * 兩者都有而不同、或兩者都沒有、或 claim 讀不到，一律回 `error`：記錯卡的 `work.done` 只能事後
+ * `flow reopen` 追加撤回（TD-1115），舊行留在 stream 上、撤回前已被讀成完成——判不出就不記。
  */
 export function resolveMergeBackWorkId(
   consumerRoot: string,
@@ -4843,6 +5096,132 @@ export function detectAbsorbedByOtherPath(consumerRoot, branchName, baseRef = 'H
   } finally {
     rmSync(scratch, { recursive: true, force: true })
   }
+}
+
+/**
+ * 一棵 session worktree 的 branch 內容「落地到哪了」（TD-863 修法 2）。
+ *
+ * `mergedToMain` 只認 ancestry，於是 squash 落地、patch 落地、被另一份實作取代的樹全顯示
+ * unlanded，收割者得逐棵手跑 `git apply --check -R` 才知道能不能清。這裡把那幾步算好：
+ *
+ *   in-history  branch tip 是 base 的祖先（commit 都在 base 的歷史裡）
+ *   in-base     `merge-base..branch` 的 diff 反套得進 **base 的 commit tree**（squash／patch
+ *               落地後已 commit）。`reason: empty-changeset` = 淨 diff 為空，沒有東西要落地
+ *   in-worktree 反套不進 base tree、只反套得進 consumer root 的**工作區**——內容唯一的副本
+ *               是 main 上**未 commit** 的改動（可能是別 session 的 WIP）。**NEVER 讀成可清**：
+ *               那份改動被 `checkout --`／`reset --hard`／revert 掉，清過的樹就再也找不回來
+ *   clean-apply 正套得進工作區——內容還沒落地，但現在套得乾淨
+ *   superseded  以上都不成立，且 branch 動過的檔（新舊路徑都算，`--no-renames`）在 fork 之後
+ *               base 上有 commit（`supersededBy` 列出那些 commit 供人判，**不是**自動可清）
+ *   conflict    以上都不成立，base 在 fork 後也沒碰這些檔（衝突來自工作區 WIP）
+ *   unknown     量不到（branch／merge-base／base tree 讀不到、git 失敗）——NEVER 讀成可清；
+ *               `reason` 指出哪一步失敗
+ *
+ * 只看 branch tip 的 commit：session worktree 自己未 commit 的檔不在 changeset 裡，由
+ * `enrichWorktree` 的 `dirty` 欄位另報。「清樹不丟內容」= landedState ∈ {in-history, in-base}
+ * **且** dirty === 0；本函式只回報，清不清由呼叫端決定。
+ *
+ * 全程唯讀：`git apply --check` 不寫檔；base tree 比對用 scratch 目錄裡的暫時 index
+ * （`GIT_INDEX_FILE`），consumer root 的 index 與工作區都不碰。
+ */
+export type LandedState =
+  | 'in-history'
+  | 'in-base'
+  | 'in-worktree'
+  | 'clean-apply'
+  | 'superseded'
+  | 'conflict'
+  | 'unknown'
+
+export function classifyLandedState(
+  consumerRoot,
+  branchName,
+  baseRef = resolveLandingBase(consumerRoot),
+): { landedState: LandedState; supersededBy: string[]; reason?: string } {
+  const unknown = (reason) => ({ landedState: 'unknown' as const, supersededBy: [], reason })
+  try {
+    git(['merge-base', '--is-ancestor', branchName, baseRef], { cwd: consumerRoot })
+    return { landedState: 'in-history', supersededBy: [] }
+  } catch (e) {
+    // exit 1 = 不是祖先；其他 exit（ref 不存在…）一律 unknown
+    if (e?.status !== 1) return unknown('ancestry-unreadable')
+  }
+  let mergeBase
+  let patch
+  try {
+    mergeBase = git(['merge-base', baseRef, branchName], { cwd: consumerRoot }).trim()
+    patch = execFileSync('git', ['diff', '--binary', mergeBase, branchName], {
+      cwd: consumerRoot,
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch {
+    return unknown('changeset-unreadable')
+  }
+  // ahead > 0 但淨 diff 為空（加了又撤回）：沒有任何東西要落地
+  if (!patch.trim()) return { landedState: 'in-base', supersededBy: [], reason: 'empty-changeset' }
+
+  const scratch = mkdtempSync(join(tmpdir(), 'wt-landed-'))
+  const patchFile = join(scratch, 'changeset.patch')
+  const baseIndexEnv = { ...process.env, GIT_INDEX_FILE: join(scratch, 'base.index') }
+  const applies = (extra, env = undefined) => {
+    try {
+      git(['apply', '--check', ...extra, patchFile], { cwd: consumerRoot, env })
+      return true
+    } catch {
+      return false
+    }
+  }
+  try {
+    writeFileSync(patchFile, patch)
+    // 先對 base 的 commit tree 比（暫時 index），再對工作區比：兩者都反套得進時以
+    // 「已 commit」為準；只有工作區反套得進的才是 in-worktree（TD-863 0-A r1 Major）。
+    try {
+      git(['read-tree', baseRef], { cwd: consumerRoot, env: baseIndexEnv })
+    } catch {
+      return unknown('base-tree-unreadable')
+    }
+    if (applies(['--cached', '--reverse'], baseIndexEnv))
+      return { landedState: 'in-base', supersededBy: [] }
+    if (applies(['--reverse']))
+      return { landedState: 'in-worktree', supersededBy: [], reason: 'uncommitted-on-base' }
+    if (applies([])) return { landedState: 'clean-apply', supersededBy: [] }
+  } finally {
+    rmSync(scratch, { recursive: true, force: true })
+  }
+
+  let supersededBy = []
+  try {
+    // --no-renames：rename 偵測只列新路徑，base 碰舊路徑（或反之）就對不上（0-A r1 Minor）
+    const paths = new Set(
+      git(['diff', '--no-renames', '--name-only', mergeBase, branchName], { cwd: consumerRoot })
+        .split('\n')
+        .filter(Boolean),
+    )
+    // 不把 paths 當 pathspec 傳：changeset 大時會撞 argv 上限（同 detectAbsorbedByOtherPath）
+    const log = execFileSync(
+      'git',
+      [
+        'log',
+        '--no-renames',
+        '--format=%x00%h %s',
+        '--name-only',
+        '--no-decorate',
+        `${mergeBase}..${baseRef}`,
+      ],
+      { cwd: consumerRoot, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 },
+    )
+    for (const block of log.split('\0').filter((b) => b.trim())) {
+      const [head, ...files] = block.split('\n')
+      if (files.some((f) => paths.has(f.trim()))) supersededBy.push(head.trim())
+    }
+  } catch {
+    return unknown('base-history-unreadable')
+  }
+  return supersededBy.length > 0
+    ? { landedState: 'superseded', supersededBy }
+    : { landedState: 'conflict', supersededBy: [] }
 }
 
 export function syncWorktreeWithMain(wtPath, branchName, slug) {
@@ -5330,8 +5709,11 @@ async function cmdCleanup(
 ) {
   if (!slug)
     throw new Error(
-      'Usage: wt-helper cleanup <slug> [--dry-run] [--force] [--force-discard-unland] [--force-discard-uncommitted] [--allow-orphan-record]',
+      'Usage: wt-helper cleanup <slug> [--dry-run] [--force] [--force-discard-unland] [--force-discard-uncommitted] [--allow-orphan-record] [--superseded-by <commit|file=commit|file=path>[,…] --reason <text>]',
     )
+  const declaring = opts.supersededBy !== undefined
+  if (declaring && !String(opts.reason ?? '').trim())
+    throw new Error('cleanup --superseded-by 需要 --reason <為什麼判定已被取代>')
   const cleanSlug = makeSlugSafe(slug)
   const consumerRoot = findConsumerRoot()
   const target = findCleanupWorktree(consumerRoot, cleanSlug)
@@ -5432,6 +5814,23 @@ async function cmdCleanup(
   // 不讓 merged=Y 的語意被悄悄放寬（TD-1103 複審）。
   const landingBase = resolveLandingBase(consumerRoot)
   const mergedLocal = squashLanded || ancestryMerged || absorbedLanded
+  // TD-1082：只在四條落地憑證全失手時才驗宣告；已落地的 branch 不需要它。
+  const superseded =
+    declaring && !branchMerged
+      ? verifySupersededDeclaration(consumerRoot, branchName, unlanded, opts.supersededBy)
+      : null
+  const supersededOk = superseded?.ok === true
+  if (declaring && branchMerged)
+    console.log(`cleanup: ${branchName} 已有落地憑證 —— --superseded-by 不需要，忽略`)
+  if (superseded && !superseded.ok && !opts.dryRun) {
+    throw new Error(
+      `cleanup --superseded-by 不成立，未移除任何東西：\n` +
+        [
+          ...superseded.errors.map((e) => `  - ${e}`),
+          ...superseded.uncovered.map((f) => `  - ${f}：沒有任何條目覆蓋`),
+        ].join('\n'),
+    )
+  }
   if (absorbedLanded) {
     console.log(
       `cleanup: ${branchName} 的 changeset 已完整存在於 main（${absorbed.reason}）—— 略過兩道 ancestry gate`,
@@ -5487,6 +5886,10 @@ async function cmdCleanup(
     )
   }
   const uncommittedRaw = uncommittedObs.value
+  // TD-1148：systemd unit／drop-in／crontab 仍指進這棵樹時，移除它等於讓那些服務靜默失效。
+  // 沒有 flag 可繞過——唯一的修法是把設定改指 main 或刪掉，gate 本身不替人判斷哪一個。
+  const hostRefsObs = findHostConfigReferences(target.path)
+  const hostRefs = hostRefsObs.status === 'known' ? hostRefsObs.value : []
   const isIgnorableDrift = (entry, kind) =>
     isLockedProjectionPathFor(target.path, entry.path) ||
     (kind === 'modified' && isToolManagedDrift(target.path, entry.path))
@@ -5501,8 +5904,8 @@ async function cmdCleanup(
     uncommittedRaw.modified.length -
     uncommitted.modified.length +
     (uncommittedRaw.untracked.length - uncommitted.untracked.length)
-  const needsForce = !branchMerged && !opts.force
-  const needsDiscardUnland = unlanded.length > 0 && !opts.forceDiscardUnland
+  const needsForce = !branchMerged && !opts.force && !supersededOk
+  const needsDiscardUnland = unlanded.length > 0 && !opts.forceDiscardUnland && !supersededOk
   const needsDiscardUncommitted = uncommittedCount > 0 && !opts.forceDiscardUncommitted
 
   // --dry-run：唯讀回報三道 gate 的判定，不動 worktree、不刪 branch、不寫任何 ref。
@@ -5520,6 +5923,13 @@ async function cmdCleanup(
     console.log(
       `  ancestry           merged=${mergedLocal ? 'Y' : 'N'} squashLandedMarker=${squashLanded ? 'Y' : 'N'} absorbedByOtherPath=${absorbedLanded ? 'Y' : 'N'} mergedPr(origin/${landingBase})=${mergedPr === null ? '-' : prLanded ? 'Y' : mergedPr.status === 'unknown' ? 'unknown' : 'N'} unlandedFiles=${unlanded.length}`,
     )
+    if (superseded) {
+      console.log(
+        `  superseded         declared=Y valid=${superseded.ok ? 'Y' : 'N'} covered=${superseded.coverage.length}/${unlanded.length}`,
+      )
+      for (const e of superseded.errors) console.log(`    ✗ ${e}`)
+      for (const f of superseded.uncovered) console.log(`    ✗ ${f}：沒有任何條目覆蓋`)
+    }
     console.log(
       `  uncommitted        blocking=${uncommittedCount} ignored(projection/tool-managed)=${toolManagedCount}`,
     )
@@ -5528,12 +5938,28 @@ async function cmdCleanup(
       for (const u of uncommitted.untracked.slice(0, 10)) console.log(`    ??  ${u.path}`)
     }
     console.log(
+      `  host-config        refs=${hostRefsObs.status === 'known' ? hostRefs.length : `unknown (${hostRefsObs.reason})`}`,
+    )
+    if (hostRefs.length > 0) console.log(formatHostConfigRefs(hostRefs))
+    if (hostRefsObs.status === 'unknown' || hostRefs.length > 0)
+      blocked.push('宿主設定改指 main 或移除（無 flag 可繞過）')
+    console.log(
       blocked.length === 0
         ? '  verdict            CLEAN — 零 flag 即可 cleanup'
         : `  verdict            BLOCKED — 需要 ${blocked.join(' ')}`,
     )
     return
   }
+
+  if (hostRefsObs.status === 'unknown')
+    throw new Error(
+      `cleanup blocked: host config references unknown (${hostRefsObs.reason}); refusing to treat failure as clean`,
+    )
+  if (hostRefs.length > 0)
+    throw new Error(
+      `Cleanup blocked: host config still references '${target.path}':\n` +
+        `${formatHostConfigRefs(hostRefs)}\n${HOST_CONFIG_REMEDY}`,
+    )
 
   if (needsForce || needsDiscardUnland || needsDiscardUncommitted) {
     const issues = []
@@ -5586,10 +6012,19 @@ async function cmdCleanup(
         `  --force-discard-uncommitted   acknowledges worktree's uncommitted files\n` +
         `                                (modified/untracked, including pre-fork baseline\n` +
         `                                 applied from stash) will be permanently destroyed\n` +
+        (needsDiscardUnland
+          ? `\nmain 之後改寫了這些 hunk（內容已被後續演進取代）？不要用 --force，改宣告：\n` +
+            `  node scripts/wt-helper.ts cleanup ${cleanSlug} --superseded-by <commit|file=commit|file=path>[,…] --reason <text>\n` +
+            `  （逐檔驗證；成立時先釘 refs/wt-superseded/ 才移除，移除成功後寫事件）\n`
+          : '') +
         `\nUse \`wt-helper merge-back ${cleanSlug}\` first if you want to commit the work,\n` +
         `or \`wt-helper rescue\` to see pinned pre-fork baselines available for restore.`,
     )
   }
+
+  const supersededPin = supersededOk
+    ? pinSupersededTip(consumerRoot, cleanSlug, branchName, String(opts.reason).trim())
+    : undefined
 
   // Release per-worktree resources before the directory disappears — the
   // bootstrap script lives inside the worktree. No-op for consumers without it.
@@ -5611,6 +6046,19 @@ async function cmdCleanup(
   if (opts.force || toolManagedCount > 0) removeArgs.push('--force')
   removeArgs.push(target.path)
   git(removeArgs, { cwd: consumerRoot })
+  if (supersededPin) {
+    recordSupersededCleanup(
+      consumerRoot,
+      cleanSlug,
+      branchName,
+      supersededPin,
+      superseded,
+      String(opts.reason).trim(),
+    )
+    console.log(
+      `cleanup: ${branchName} 依取代宣告移除（${superseded.coverage.length} 檔有證據）—— tip 保留在 ${supersededPin.ref}`,
+    )
+  }
   // worktree 已消失，marker 的用途（證明這個 tip 已 land）也隨之結束。留著只會在同名
   // slug 被重新開出來時變成一條指向舊 tip 的死 ref。
   deleteLandedMarker(consumerRoot, cleanSlug)
@@ -5639,7 +6087,9 @@ async function cmdCleanup(
   // `git branch -d` 在 branch 設有 upstream 時是對 upstream 判 merged，同一憑證會依
   // tracking ref 在不在產生「刪／留」兩種結果，`-D` 讓兩格一致。`opts.force` 同理 ——
   // 使用者明示的 `--force` 拿到的是 `-D`，NEVER 被 probe 命中降級回 `-d`。
-  const deleteFlag = (opts.force && !squashLanded) || absorbedLanded || prLanded ? '-D' : '-d'
+  // supersededOk 同理：tip 已釘在 refs/wt-superseded/，`-D` 不讓任何 commit 變成不可達。
+  const deleteFlag =
+    (opts.force && !squashLanded) || absorbedLanded || prLanded || supersededOk ? '-D' : '-d'
   try {
     git(['branch', deleteFlag, branchName], { cwd: consumerRoot })
   } catch {
@@ -5650,7 +6100,9 @@ async function cmdCleanup(
     )
   }
   try {
-    const claim = findClaimByWorktree(consumerRoot, target.path)
+    // TD-996: this tree is being removed, so its claim goes with it even after TTL.
+    // The default reader skips expired files; those would otherwise survive every cleanup.
+    const claim = findClaimByWorktree(consumerRoot, target.path, { includeExpired: true })
     if (claim) {
       dropClaim(consumerRoot, claim.session_id)
       console.log(`Dropped claim ${claim.session_id}`)
@@ -7169,6 +7621,85 @@ function forwardToPeer(sub: string | undefined, rest: string[]): number | null {
   return forwarded.status ?? 1
 }
 
+function printUsage(log = console.error) {
+  log(
+    'Usage: wt-helper <add|detect-main-dirty|list|prune|reclaim-stale|cleanup|merge-back|resolve|land-pending|rescue|orphan-prune|sweep-siblings|dev|batch> [args]',
+  )
+  log('')
+  log("  dev [<alias>]             Start dev server on this worktree's allocated port")
+  log('')
+  log('  add <slug>                Create worktree at ~/offline/<consumer>-wt/<slug>/')
+  log('    --base <ref>            Fork from integration/… (local or origin/integration/…)')
+  log('    --precheck-baseline [<change>]')
+  log('                            Pre-fork dirty check on main; pairs with')
+  log('                            --baseline-strategy. Bare form = no change context.')
+  log('    --baseline-strategy commit|stash|warn')
+  log('                            commit: selective stage + commit baseline on main;')
+  log('                            stash: leave main dirty + fork clean (default); carry')
+  log(
+    '                            ALL main dirty into worktree only with --include-unrelated-dirty;',
+  )
+  log('                            warn: stop with report (default).')
+  log('    --baseline-scope-paths <comma>   Required for commit strategy; selective stage scope.')
+  log('                            (Not supported by stash — use commit for scoped capture.)')
+  log('    --include-unrelated-dirty        stash strategy only: bulk-capture ALL main dirty')
+  log('                            into the worktree (off by default — fork forks clean).')
+  log(
+    '    --baseline-stash-name <name>     Override default `wt-baseline/<slug>/<ISO>` stash name.',
+  )
+  log('    --skip-prefork-audit             Silence the in-flight feature audit warning')
+  log('                            (default threshold: 50 tracked changes;')
+  log('                            override via WT_PREFORK_AUDIT_THRESHOLD env var).')
+  log("  detect-main-dirty         Report main's dirty paths; pairs with --json.")
+  log(
+    '  list [--json] [--no-landed-state]  Enumerate session worktrees with staleness + landedState',
+  )
+  log('  prune                     Interactively remove merged session worktrees')
+  log('  reclaim-stale             Free dev-port slots held by stale worktrees')
+  log('  cleanup <slug>            Remove worktree (gated by --force +')
+  log('                            --force-discard-unland; pre-checks both)')
+  log('    --superseded-by <commit|file=commit|file=path>[,…] --reason <text>')
+  log('                            main later rewrote the hunks: per-file evidence,')
+  log('                            tip pinned in refs/wt-superseded/ + event, then removed')
+  log('  resolve <slug>            Print the session worktree path owning <slug> (exit 3 = none,')
+  log('                            meaning main is authoritative). Same matcher merge-back uses,')
+  log('                            so gates scan exactly the tree Step 0 will land.')
+  log('    --json                  emit {slug,found,path,branch,consumerRoot}')
+  log('  merge-back <slug>         Legacy squash into main; retain sources; flags:')
+  log('    --dry-run               preview blockers + worktree WIP without acting')
+  log('    --auto-stash            stash main blockers as wt-merge-block/<slug>/<ISO>')
+  log(
+    '    --origin <scheme>:<id>  name the WORK this tree serves (td:TD-787, notion:<uuid>).',
+    '                            Without it — and without an ambient $CLADE_WORK_ID — the card',
+    '                            is minted but marked 未歸屬 (TD-787).',
+    "    --work-done             file a flow `work.done` claim for the worktree claim's work id",
+  )
+  log(
+    '                            (ambient $CLADE_WORK_ID only as fallback; mismatch refuses, TD-915)',
+  )
+  log('    --verification <line>   required with --work-done: how it was verified. The observed')
+  log('                            landing facts (squashed / cleaned / staged-pending) are')
+  log('                            appended to it, never substituted. Refused with --dry-run.')
+  log('    --include-worktree-wip  auto-amend uncommitted worktree edits into branch HEAD')
+  log('                            (default: refuse with remediation; explicit commit safer)')
+  log('                            NB: dirty files matching OXFMT_AUTO_PATHS whose drift')
+  log('                            reproduces from oxfmt(HEAD) are auto-committed as a')
+  log('                            separate "🧹 chore: wt <slug> 自動落地 N 個純格式漂移檔" commit')
+  log('                            with no prompt (no flag needed; semantic drift still STOPs).')
+  log('    --no-cleanup            skip worktree cleanup after squash')
+  log('    --noop-if-missing       silently no-op if no matching worktree (for hooks)')
+  log('    --skip-pre-sync         skip wt-side merge of landing base before squash')
+  log('                            (default: pre-sync isolates conflicts in wt, not main)')
+  log('  land-pending <slug>       Alias of merge-back for grandfathered worktrees')
+  log('  rescue [--show <ref|sha>] [--json]')
+  log('                            List pre-fork baseline rescue candidates')
+  log('                            (refs/wt-baseline/* pinned + fsck dangling).')
+  log('                            --show prints full patch via stash show -p.')
+  log('  orphan-prune [--force]    Find and remove orphaned dirs in <consumer>-wt/')
+  log('                            (leftover gitignored content after worktree removal)')
+  log('  sweep-siblings <slug>     Remove stale fork-time change copies from sibling worktrees')
+}
+
 async function main() {
   const [, , sub, ...rest] = process.argv
   const peerExit = forwardToPeer(sub, rest)
@@ -7183,6 +7714,8 @@ async function main() {
         restore: (_main, path, detached) => reattachWorktreeSubmodules(path, detached),
         removed: cleanupRemovedWorktreeRuntime,
         withExclusiveWriterOwnership: withProbedExclusiveWriterOwnership,
+        // TD-1148：只在移除路徑、以 source path（宿主設定引用的那個）於 teardown 之前擋
+        beforeRemoval: (_main, sourcePath) => assertNoHostConfigReferences(sourcePath),
         beforeRemove: (_main, quarantine) => probeLiveWriterCwd(quarantine),
         afterRemove: (_main, path, extraRoots) => probeDeletedHandles(path, extraRoots),
       })
@@ -7214,8 +7747,29 @@ async function main() {
     '--origin',
     '--verification',
     '--base',
+    '--superseded-by',
+    '--reason',
   ])
-  const flags = new Set()
+  const BOOLEAN_FLAGS = new Set([
+    '--json',
+    '--force',
+    '--force-discard-unland',
+    '--force-discard-uncommitted',
+    '--accept-landed',
+    '--dry-run',
+    '--auto-stash',
+    '--include-worktree-wip',
+    '--no-cleanup',
+    '--noop-if-missing',
+    '--skip-pre-sync',
+    '--skip-prefork-audit',
+    '--include-unrelated-dirty',
+    '--allow-orphan-record',
+    '--work-done',
+    '--i-know-publish-is-running',
+    '--no-landed-state',
+  ])
+  const flags = new Set<string>()
   const values = {}
   const positional = []
   for (let i = 0; i < rest.length; i++) {
@@ -7236,8 +7790,23 @@ async function main() {
       positional.push(a)
     }
   }
+  // TD-1142：`--help` 與不認得的旗標都 MUST 在任何子指令動手之前處理。這裡以前只把旗標收進
+  // `flags`，於是 `reclaim-stale --help` 直接釋放了 4 格 dev-port 登記、`prune --help` 跳出刪樹確認。
+  if (flags.has('--help') || positional.includes('-h')) {
+    printUsage(console.log)
+    process.exit(0)
+  }
+  const unknownFlags = [...flags].filter((f) => !BOOLEAN_FLAGS.has(f))
+  if (unknownFlags.length > 0) {
+    console.error(
+      `error: unknown flag(s) for \`${sub ?? ''}\`: ${unknownFlags.join(' ')}（未執行任何動作）`,
+    )
+    printUsage()
+    process.exit(2)
+  }
   const opts = {
     json: flags.has('--json'),
+    noLandedState: flags.has('--no-landed-state'),
     force: flags.has('--force'),
     forceDiscardUnland: flags.has('--force-discard-unland'),
     forceDiscardUncommitted: flags.has('--force-discard-uncommitted'),
@@ -7265,6 +7834,10 @@ async function main() {
     workDone: flags.has('--work-done'),
     iKnowPublishIsRunning: flags.has('--i-know-publish-is-running'),
     verification: values['--verification'],
+    supersededBy: Object.prototype.hasOwnProperty.call(values, '--superseded-by')
+      ? values['--superseded-by']
+      : undefined,
+    reason: values['--reason'],
   }
 
   switch (sub) {
@@ -7308,131 +7881,7 @@ async function main() {
       await cmdDev(positional[0], opts)
       return
     default:
-      console.error(
-        'Usage: wt-helper <add|detect-main-dirty|list|prune|reclaim-stale|cleanup|merge-back|resolve|land-pending|rescue|orphan-prune|sweep-siblings|dev|batch> [args]',
-      )
-      console.error('')
-      console.error(
-        "  dev [<alias>]             Start dev server on this worktree's allocated port",
-      )
-      console.error('')
-      console.error(
-        '  add <slug>                Create worktree at ~/offline/<consumer>-wt/<slug>/',
-      )
-      console.error(
-        '    --base <ref>            Fork from integration/… (local or origin/integration/…)',
-      )
-      console.error('    --precheck-baseline [<change>]')
-      console.error('                            Pre-fork dirty check on main; pairs with')
-      console.error(
-        '                            --baseline-strategy. Bare form = no change context.',
-      )
-      console.error('    --baseline-strategy commit|stash|warn')
-      console.error(
-        '                            commit: selective stage + commit baseline on main;',
-      )
-      console.error(
-        '                            stash: leave main dirty + fork clean (default); carry',
-      )
-      console.error(
-        '                            ALL main dirty into worktree only with --include-unrelated-dirty;',
-      )
-      console.error('                            warn: stop with report (default).')
-      console.error(
-        '    --baseline-scope-paths <comma>   Required for commit strategy; selective stage scope.',
-      )
-      console.error(
-        '                            (Not supported by stash — use commit for scoped capture.)',
-      )
-      console.error(
-        '    --include-unrelated-dirty        stash strategy only: bulk-capture ALL main dirty',
-      )
-      console.error(
-        '                            into the worktree (off by default — fork forks clean).',
-      )
-      console.error(
-        '    --baseline-stash-name <name>     Override default `wt-baseline/<slug>/<ISO>` stash name.',
-      )
-      console.error(
-        '    --skip-prefork-audit             Silence the in-flight feature audit warning',
-      )
-      console.error('                            (default threshold: 50 tracked changes;')
-      console.error('                            override via WT_PREFORK_AUDIT_THRESHOLD env var).')
-      console.error("  detect-main-dirty         Report main's dirty paths; pairs with --json.")
-      console.error('  list [--json]             Enumerate session worktrees with staleness')
-      console.error('  prune                     Interactively remove merged session worktrees')
-      console.error('  reclaim-stale             Free dev-port slots held by stale worktrees')
-      console.error('  cleanup <slug>            Remove worktree (gated by --force +')
-      console.error('                            --force-discard-unland; pre-checks both)')
-      console.error(
-        '  resolve <slug>            Print the session worktree path owning <slug> (exit 3 = none,',
-      )
-      console.error(
-        '                            meaning main is authoritative). Same matcher merge-back uses,',
-      )
-      console.error('                            so gates scan exactly the tree Step 0 will land.')
-      console.error('    --json                  emit {slug,found,path,branch,consumerRoot}')
-      console.error('  merge-back <slug>         Legacy squash into main; retain sources; flags:')
-      console.error('    --dry-run               preview blockers + worktree WIP without acting')
-      console.error(
-        '    --auto-stash            stash main blockers as wt-merge-block/<slug>/<ISO>',
-      )
-      console.error(
-        '    --origin <scheme>:<id>  name the WORK this tree serves (td:TD-787, notion:<uuid>).',
-        '                            Without it — and without an ambient $CLADE_WORK_ID — the card',
-        '                            is minted but marked 未歸屬 (TD-787).',
-        "    --work-done             file a flow `work.done` claim for the worktree claim's work id",
-      )
-      console.error(
-        '                            (ambient $CLADE_WORK_ID only as fallback; mismatch refuses, TD-915)',
-      )
-      console.error(
-        '    --verification <line>   required with --work-done: how it was verified. The observed',
-      )
-      console.error(
-        '                            landing facts (squashed / cleaned / staged-pending) are',
-      )
-      console.error(
-        '                            appended to it, never substituted. Refused with --dry-run.',
-      )
-      console.error(
-        '    --include-worktree-wip  auto-amend uncommitted worktree edits into branch HEAD',
-      )
-      console.error(
-        '                            (default: refuse with remediation; explicit commit safer)',
-      )
-      console.error(
-        '                            NB: dirty files matching OXFMT_AUTO_PATHS whose drift',
-      )
-      console.error(
-        '                            reproduces from oxfmt(HEAD) are auto-committed as a',
-      )
-      console.error(
-        '                            separate "🧹 chore: wt <slug> 自動落地 N 個純格式漂移檔" commit',
-      )
-      console.error(
-        '                            with no prompt (no flag needed; semantic drift still STOPs).',
-      )
-      console.error('    --no-cleanup            skip worktree cleanup after squash')
-      console.error(
-        '    --noop-if-missing       silently no-op if no matching worktree (for hooks)',
-      )
-      console.error('    --skip-pre-sync         skip wt-side merge of landing base before squash')
-      console.error(
-        '                            (default: pre-sync isolates conflicts in wt, not main)',
-      )
-      console.error('  land-pending <slug>       Alias of merge-back for grandfathered worktrees')
-      console.error('  rescue [--show <ref|sha>] [--json]')
-      console.error('                            List pre-fork baseline rescue candidates')
-      console.error('                            (refs/wt-baseline/* pinned + fsck dangling).')
-      console.error('                            --show prints full patch via stash show -p.')
-      console.error('  orphan-prune [--force]    Find and remove orphaned dirs in <consumer>-wt/')
-      console.error(
-        '                            (leftover gitignored content after worktree removal)',
-      )
-      console.error(
-        '  sweep-siblings <slug>     Remove stale fork-time change copies from sibling worktrees',
-      )
+      printUsage()
       process.exit(1)
   }
 }

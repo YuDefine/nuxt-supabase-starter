@@ -72,7 +72,7 @@
 #   2  本地用法／依賴錯誤（非 medium effort、--findings 壞檔、helper 不存在、CLADE_HOME review runtime 有未 commit 改動）
 #   3  Fable 席 review 未跑成（transport、completion_failed、無 verdict 檔、
 #      coordination 逾時）——與 Astra exit 3 同義：reviewer 不可用
-#   4  account_unavailable——兩格皆盡的逐字證據，gate 維持 pending；stderr 另印
+#   4  account_unavailable——本 0-A 席不可用的逐字證據，gate 維持 pending；stderr 另印
 #      `NEXT_STEP_JSON:` 一行（可機讀，轉出 helper receipt 的 next_step）
 #   6  review 期間受審樹被改動（snapshot drift），verdict 扣住
 #   8  model verification 失敗（mismatch，或重讀後仍 unverified）——身分歸屬
@@ -306,7 +306,7 @@ check_pos_int CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS "$BRIEF_MAX_LINE_CHARS"
 # dispatch directive／completion protocol（約 8–10 KB），安全上限取 110000。
 # 門檻設超過此值會讓 110 KB–350 KiB 的 brief 重新走 inline 並重現 spawn
 # E2BIG——wrapper 只回 exit 3 transport_error，被讀成「reviewer 沒跑成」而
-# 誤歸兩格皆盡：本地設定錯誤被當成 reviewer 不可用，正是 exit 9 要防的
+# 誤歸 reviewer 席不可用：本地設定錯誤被當成 reviewer 不可用，正是 exit 9 要防的
 # 誤歸類。超過硬上限即 exit 2 本地用法錯誤並指名 env，NEVER 放行。
 INLINE_ARGV_SAFE_MAX=110000
 if [ "$INLINE_MAX_BYTES" -gt "$INLINE_ARGV_SAFE_MAX" ]; then
@@ -438,7 +438,7 @@ if [ "$rc" -eq 2 ]; then
 fi
 
 # nested_dispatch_refused：本 session 是不得再開 child 的 dispatched session（例如自己就是
-# bounded leaf）。這不是 reviewer 不可用——NEVER 映射成 3 讓呼叫端去換格或判兩格皆盡。
+# bounded leaf）。這不是 reviewer 不可用——NEVER 映射成 3 讓呼叫端去換席或判本席不可用。
 if [ "$STATUS" = "nested_dispatch_refused" ]; then
   echo "[claude-review-safe] RESULT: dispatch_refused（exit 10）— helper 拒絕從本 session 開 ${REVIEW_SEAT} reviewer child：$(herdr_field "$RECEIPT" error)" >&2
   echo "[claude-review-safe] NEXT: 交回 coordinator 以同一席（${REVIEW_SEAT}，\`${REVIEW_ROW}\`）代跑 0-A——Opus 5.5 覆寫期間 NEVER 改派 Astra／Fable（commit skill review-policy.md § 無 receipt 的 verdict）；NEVER 改走 headless \`claude -p\`——無 receipt 的 verdict 不得當 gate 證據。" >&2
@@ -448,7 +448,7 @@ fi
 # account_unavailable（helper EXIT.blocked=15）：本 0-A 席（REVIEW_SEAT）不可用——gate 停在 pending 等 Opus 額度恢復。
 if [ "$rc" -eq 15 ] || [ "$STATUS" = "account_unavailable" ]; then
   echo "[claude-review-safe] RESULT: account_unavailable — ${REVIEW_SEAT} 席（ccw/cc）無可用帳號配額，review DID NOT run；NEVER 當作 0-A.1 通過（exit 4）" >&2
-  echo "[claude-review-safe] NEXT: 本 0-A 席（${REVIEW_SEAT}）不可用 — Opus 5.5 覆寫期間 NEVER 改派 Astra／Fable；gate 維持 pending，記錄雙方逐字失敗證據；NEVER 用其他模型、另一個 fresh agent 或主線自審補位。" >&2
+  echo "[claude-review-safe] NEXT: 本 0-A 席（${REVIEW_SEAT}）不可用 — Opus 5.5 覆寫期間 NEVER 改派 Astra／Fable；gate 維持 pending，記錄本席逐字失敗證據；NEVER 用其他模型、另一個 fresh agent 或主線自審補位。" >&2
   # 可機讀的 next_step（Z5）：helper receipt 的 next_step 原樣轉出（兩帳號實測皆耗盡時才有），
   # receipt 留存到 dispatchStateDir()/review/ 供 coordinator 取證——WORK_DIR 隨 trap 清掉。
   UNAVAILABLE_STATE_DIR="$(node -e 'process.stdout.write(require("path").resolve(process.argv[1]))' "${CLADE_DISPATCH_STATE_DIR:-$HOME/.cache/clade/dispatch}")"

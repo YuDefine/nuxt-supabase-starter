@@ -14,7 +14,7 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 
 # Agent Self-Verification — 視覺 evidence 收集
 
-> 從 [[agent-self-verification]] 抽出（2026-07-31）。那份是 always-load 的 meta rule（NEVER 句型黑名單 + fallback chain + 派工前預檢）；本檔是**真的在收截圖 evidence 時**才用得到的操作層，對應主檔 § Hard rule 的 MUST 5 / 7 / 8 / 9。
+> 從 [[agent-self-verification]] 抽出（2026-07-31）。主檔是 meta rule（NEVER 句型黑名單 + fallback chain + 派工前預檢）；本檔是**真的在收截圖 evidence 時**才用得到的操作層，對應主檔 § Hard rule 的 MUST 5 / 7 / 8 / 9。
 
 主檔的四條一句話 MUST 是契約，本檔是它們的執行細節與 canonical pattern。兩邊衝突時以主檔為準。
 

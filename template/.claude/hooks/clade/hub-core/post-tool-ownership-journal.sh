@@ -107,16 +107,26 @@ journal_dir="$consumer_root/.clade/ownership"
 #
 # 窗內仍可能夾到別 session 的併發寫入，所以 `attribution` 欄要留著讓消費端知道證據較弱 ——
 # `flow who` 對 mtime-diff 的列會明說這件事。漏記安全、記錯不安全，這裡一律取窄。
-rels=""
-if [ "${tool:-}" = "Bash" ]; then
-  stamp="$journal_dir/.bash-stamp-$(printf '%s' "$session" | tr -c 'A-Za-z0-9_.-' '_')"
-  [ -f "$stamp" ] || exit 0
-  stamp_s=$(stat -c %Y "$stamp" 2>/dev/null) || exit 0
-  case "$stamp_s" in
-    '' | *[!0-9]*) exit 0 ;;
-  esac
-  rm -f "$stamp" 2>/dev/null || true
-  candidates=$(git -C "$tree_root" status --porcelain=v1 --untracked-files=all 2>/dev/null) || exit 0
+#
+# ## Bash 寫進別的 repo（TD-734）
+#
+# cwd 在 A、用 `git -C B …` 或絕對路徑在 B 寫檔時，只掃 A 會讓那筆寫入兩邊都不留證據。
+# 可掃的樹 MUST 有**窄證據**：命令字串**明確提及**它（絕對路徑、`~/`、`-C` / `cd` /
+# `--git-dir` / `--work-tree` 的值）。每棵被提及的樹套同一個時間窗，列寫進**那棵樹的
+# consumer** 的 journal —— 讀的人問「B 的這個檔是誰寫的」，答案要在 B 的 journal 裡。
+#
+# **NEVER** 擴成「掃所有已知 consumer / 所有 worktree」：沒被這次命令提及的樹，它的 dirty
+# 檔就是別人的 WIP，記進來正是 § 3.2 的禁令。解析只負責**選樹**，不負責選檔 —— 檔仍由
+# 時間窗決定，所以解析錯（多選一棵沒寫到的樹）不會多記別人的**舊**檔；但那棵樹裡別 session
+# 在同一時間窗內的併發寫入，會被記成本 session 的 `mtime-diff` 列。所以選樹一律取窄：命令
+# 字串的 word 不做 glob 展開（`ls /x/*/HANDOFF.md` 只提及 `/x`，不是每一棵樹），而且最多
+# 選 8 棵。
+rows=""
+tab=$(printf '\t')
+# 一棵樹的時間窗內 dirty 路徑 → rows（journal_dir<TAB>tree<TAB>rel）。
+scan_tree() {
+  local tree=$1 jdir=$2 candidates line cand m
+  candidates=$(git -C "$tree" status --porcelain=v1 --untracked-files=all 2>/dev/null) || return 0
   while IFS= read -r line; do
     [ ${#line} -gt 3 ] || continue
     cand=${line#???}
@@ -131,15 +141,93 @@ if [ "${tool:-}" = "Bash" ]; then
       '"'*) continue ;;
       .clade/ownership/*) continue ;;
     esac
-    [ -f "$tree_root/$cand" ] || continue
-    m=$(stat -c %Y "$tree_root/$cand" 2>/dev/null) || continue
+    [ -f "$tree/$cand" ] || continue
+    m=$(stat -c %Y "$tree/$cand" 2>/dev/null) || continue
     [ "$m" -ge "$stamp_s" ] 2>/dev/null || continue
-    rels="$rels$cand
+    rows="$rows$jdir$tab$tree$tab$cand
 "
   done <<EOF
 $candidates
 EOF
-  [ -n "$rels" ] || exit 0
+}
+# 命令字串提及的路徑 → 各自所在 git 樹的 toplevel（每行一棵，去重，不含本 session 的樹，
+# 最多 8 棵）。目錄先去重、`rev-parse` 最多跑 32 次：一條帶大量絕對路徑的命令（長檔案清單、
+# 拼進命令的 `find` 輸出）不會讓這支 PostToolUse hook 的成本沒有上限。
+mentioned_trees() {
+  local cmd word prev p d top words dirs="" tops="" found=0 probes=0
+  command -v jq >/dev/null 2>&1 || return 0
+  cmd=$(printf '%s' "$payload" | jq -r '.tool_input.command // ""' 2>/dev/null) || return 0
+  prev=""
+  # 引號、分隔符、`=` 都當空白：`--git-dir=/x`、`"/x/y"`、`>/x` 都拆得出 `/x…`。
+  # `read -a` 只切字、不做 glob 展開（未加引號的 `$(…)` 會把 `/x/*` 對檔案系統展開）。
+  read -r -a words <<<"$(printf '%s' "$cmd" | tr "\"';&|()<>=\n\t" '           ')" || true
+  for word in ${words[@]+"${words[@]}"}; do
+    p=""
+    case "$word" in
+      /*) p=$word ;;
+      '~') p=$HOME ;;
+      '~/'*) p="$HOME/${word#\~/}" ;;
+      *)
+        case "$prev" in
+          -C | cd | --git-dir | --work-tree) p="$hook_cwd/$word" ;;
+        esac
+        ;;
+    esac
+    prev=$word
+    [ -n "$p" ] || continue
+    d=$p
+    while [ -n "$d" ] && [ "$d" != / ] && [ ! -e "$d" ]; do d=$(dirname "$d"); done
+    [ -d "$d" ] || d=$(dirname "$d")
+    case "$d" in
+      */.git | */.git/*) d=${d%%/.git*} ;;
+    esac
+    [ -d "$d" ] && [ "$d" != / ] || continue
+    case "
+$dirs
+" in
+      *"
+$d
+"*) continue ;;
+    esac
+    dirs="$dirs
+$d"
+    probes=$((probes + 1))
+    [ "$probes" -le 32 ] || break
+    top=$(git -C "$d" rev-parse --show-toplevel 2>/dev/null) || continue
+    [ -n "$top" ] && [ "$top" != "$tree_root" ] || continue
+    case "
+$tops
+" in
+      *"
+$top
+"*) continue ;;
+    esac
+    tops="$tops
+$top"
+    # 上限只為了約束成本；提及十幾棵樹的命令本來就不是這條證據能涵蓋的形狀。
+    found=$((found + 1))
+    [ "$found" -le 8 ] || break
+    printf '%s\n' "$top"
+  done
+}
+if [ "${tool:-}" = "Bash" ]; then
+  stamp="$journal_dir/.bash-stamp-$(printf '%s' "$session" | tr -c 'A-Za-z0-9_.-' '_')"
+  [ -f "$stamp" ] || exit 0
+  stamp_s=$(stat -c %Y "$stamp" 2>/dev/null) || exit 0
+  case "$stamp_s" in
+    '' | *[!0-9]*) exit 0 ;;
+  esac
+  rm -f "$stamp" 2>/dev/null || true
+  scan_tree "$tree_root" "$journal_dir"
+  while IFS= read -r other; do
+    [ -n "$other" ] || continue
+    other_common=$(git -C "$other" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || continue
+    [ -n "$other_common" ] || continue
+    scan_tree "$other" "$(dirname "$other_common")/.clade/ownership"
+  done <<EOF
+$(mentioned_trees)
+EOF
+  [ -n "$rows" ] || exit 0
   attribution=mtime-diff
 else
   case "$file_path" in
@@ -178,7 +266,7 @@ else
     journal_dir="$target_consumer/.clade/ownership"
     tree_root=$target_root
   fi
-  rels="$rel
+  rows="$journal_dir	$tree_root	$rel
 "
   attribution=hook
 fi
@@ -205,11 +293,6 @@ case "$pid_start" in
   '' | *[!0-9]*) pid_start=null ;;
 esac
 
-mkdir -p "$journal_dir" 2>/dev/null || exit 0
-if [ ! -f "$journal_dir/.gitignore" ]; then
-  printf '*\n!.gitignore\n' >"$journal_dir/.gitignore" 2>/dev/null || true
-fi
-
 json_escape() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
@@ -224,12 +307,16 @@ fi
 # 單行 append。O_APPEND 對 PIPE_BUF 以內的寫入是原子的，所以多 session 併發
 # append 不會互相截斷 —— 這是選 jsonl 而非結構化檔的理由，NEVER 改成 read-modify-write。
 now_iso=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-printf '%s' "$rels" | while IFS= read -r rel; do
+printf '%s' "$rows" | while IFS="$(printf '\t')" read -r jdir tree rel; do
   [ -n "$rel" ] || continue
+  mkdir -p "$jdir" 2>/dev/null || continue
+  if [ ! -f "$jdir/.gitignore" ]; then
+    printf '*\n!.gitignore\n' >"$jdir/.gitignore" 2>/dev/null || true
+  fi
   printf '{"ts":"%s","path":"%s","worktree":"%s","session_id":"%s","pane_id":%s,"cwd":"%s","tool":"%s","pid":%s,"pid_start":%s,"attribution":"%s"}\n' \
     "$now_iso" \
     "$(json_escape "$rel")" \
-    "$(json_escape "$tree_root")" \
+    "$(json_escape "$tree")" \
     "$(json_escape "$session")" \
     "$pane" \
     "$(json_escape "$hook_cwd")" \
@@ -237,7 +324,7 @@ printf '%s' "$rels" | while IFS= read -r rel; do
     "$claude_pid" \
     "$pid_start" \
     "$attribution" \
-    >>"$journal_dir/journal.jsonl" 2>/dev/null || true
+    >>"$jdir/journal.jsonl" 2>/dev/null || true
 done
 
 # ── Claim heartbeat，throttle ≥5 分鐘（TD-664 Phase 2）──────────────────────────

@@ -145,7 +145,7 @@ paths: ['.claude/consumer-meta.json', 'registry/consumers-meta.json', 'registry/
 兩個 schema 有少數欄位有**交叉約束**：
 
 - `consumers.json workflow_model='trunk-based'` ⇒ `consumer-meta.deploy.deployTrigger` 應為 `push-main` 或 `tag-v`
-- `consumer-meta.deploy.deployTrigger` ⇒ 必須等於 `.github/workflows/` 裡 production deploy workflow 的實際 `on:` 觸發（由 `vendor/scripts/deploy-trigger-check.ts` 推導比對）
+- `consumer-meta.deploy.deployTrigger` ⇒ 必須等於 `.github/workflows/` 裡 production deploy workflow 的實際觸發（由 `vendor/scripts/deploy-trigger-check.ts` 推導比對：先讀 `on:`；單一檔案同時帶 production 與 non-production job 時，再以 production job 的 `if:` 收窄——`if:` 讀不成 ref 允許清單就維持歧義，fail-closed）
 - `consumers.json capabilities.preview_db` ⇒ `consumer-meta.database.previewEnvCapability` 應一致
 
 aggregator 對這些交叉約束做 cross-check，不一致寫進 `validation.errors`。

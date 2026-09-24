@@ -643,18 +643,24 @@ Worker brief 帶具體 failures、命令、允許檔案、禁止修改的主線�
 
 以下**任一**成立即觸發（全不成立 → 輸出 `⏭️ 0-D 跳過（diff 無 doc-relevant 變更）`，進入匯合）：
 
-1. diff 觸及 `docs/**` 本身
+1. diff 觸及 `docs/**` 本身——**排除工作流必觸檔**：`docs/tech-debt.md`、`docs/archives/tech-debt-closed-*.md`、`HANDOFF.md`（TD 登記與封存是 commit 流程的產物，不是「本次變更需要文件對齊」的訊號；TD-1058 實測 23/23 天由這條獨立觸發）
 2. diff 觸及 `rules/core/**` / `rules/modules/**` / `vendor/snippets/**`（標準層有變 → docs 可能需同步）
-3. diff 觸及 `scripts/*-audit.mjs`（audit signal 變更 → `registry/audits.json` 的 `cadence` / `consumers` 或 `docs/dev-guide.md` 可能需更新）
-4. diff 觸及 `[packages/<pkg>/]{server/api,server/utils,server/routes,app/components,app/pages,composables}/**` 或 `[packages/<pkg>/]nuxt.config.ts`（業務碼 / 框架設定有變 → consumer docs/ 可能需對齊）
+3. diff 觸及 `scripts/audit-*` 或 `scripts/*-audit.*`（audit signal 變更 → `registry/audits.json` 的 `cadence` / `consumers` 或 `docs/dev-guide.md` 可能需更新）
+4. diff 觸及 `[packages/<pkg>/]{server/api,server/utils,server/routes,app/components,app/pages,composables}/**` 或 `[packages/<pkg>/]nuxt.config.ts`（業務碼 / 框架設定有變 → consumer docs/ 可能需對齊；**consumer-repo 專用**，在 clade home 結構性不命中）
 5. diff 含 bug fix（commit message 含 `fix` type）→ pitfall 覆蓋檢查
 
 ```bash
 DIFF_FILES=$(git diff --name-only HEAD)
-HAS_DOC=$(echo "$DIFF_FILES" | grep -E '^docs/' | head -1)
+# 工作流必觸檔不算 doc-relevant 訊號：TD 登記 / 封存 / HANDOFF 是流程產物，
+# 每天必中卻不代表需要文件對齊（TD-1058：docs/ 獨立觸發 23/23 天）。
+WORKFLOW_CHURN='^(docs/tech-debt\.md|docs/archives/tech-debt-closed-[^/]*\.md|HANDOFF\.md)$'
+HAS_DOC=$(echo "$DIFF_FILES" | grep -E '^docs/' | grep -vE "$WORKFLOW_CHURN" | head -1)
 HAS_RULES=$(echo "$DIFF_FILES" | grep -E '^rules/(core|modules)/' | head -1)
 HAS_SNIPPETS=$(echo "$DIFF_FILES" | grep -E '^vendor/snippets/' | head -1)
-HAS_AUDIT=$(echo "$DIFF_FILES" | grep -E '^scripts/.*-audit\.mjs$' | head -1)
+# clade 實際命名是 audit-*.ts；*-audit.mjs 是舊 pattern —— 兩形並列避免 consumer 漂移
+HAS_AUDIT=$(echo "$DIFF_FILES" | grep -E '^scripts/(audit-[^/]*|[^/]*-audit)\.(ts|mjs)$' | head -1)
+# 以下兩行是 consumer repo（Nuxt）專用 —— 在 clade home 結構性零命中，
+# 保留給投影出去的 consumer 使用，不要因本 repo 零命中刪除。
 HAS_BIZ=$(echo "$DIFF_FILES" | grep -E '^(packages/[^/]+/)?(server/(api|utils|routes)|app/(components|pages)|composables)/' | head -1)
 HAS_CONFIG=$(echo "$DIFF_FILES" | grep -E '^(packages/[^/]+/)?nuxt\.config\.(ts|js)$' | head -1)
 # fix type 在 Step 3 分組後才能判，0-D 先用 diff 中有無 pitfall-related file 近似

@@ -8,7 +8,7 @@ paths: ['.claude/consumer-meta.json', 'scripts/dev-session*', 'scripts/dev-singl
 
 # Verification Lease — 機制規格
 
-> 從 [[verification-lease]] 抽出（2026-07-31）。那份是 always-load 的行為契約（核心命題 + Agent 行為契約）；本檔是**實作面規格** —— 動 lease-aware launcher / consumer manifest 的 lease 設定，或要新寫一個 lease-aware 工具時才需要。
+> 從 [[verification-lease]] 抽出（2026-07-31）。主檔是行為契約（核心命題 + Agent 行為契約）；本檔是**實作面規格** —— 動 lease-aware launcher / consumer manifest 的 lease 設定，或要新寫一個 lease-aware 工具時才需要。
 
 ## Lease 的五元組
 

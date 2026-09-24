@@ -108,7 +108,7 @@ new-work build          ← 描述目標介面（Direction Gate 之後；NEVER �
 - [ ] N.3 修復所有 DRIFT 項目（Fidelity Score < 8/8 時必做，loop 直到 DRIFT = 0）
 - [ ] N.4 依 /design 計劃按 canonical order 執行 targeted skills
 - [ ] N.5 執行 /impeccable audit — 確認 Critical = 0
-- [ ] N.6 執行 review-screenshot — 視覺 QA
+- [ ] N.6 執行 `/review screenshot` — 視覺 QA
 - [ ] N.7 Fidelity 確認 — design-review.md 中無 DRIFT 項
 ```
 

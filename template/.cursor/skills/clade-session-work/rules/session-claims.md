@@ -157,11 +157,12 @@ join 回 claim，宣告值與導出值並存，每一列帶 `via: 'declared' | '
 | `attribution` | 怎麼來 | 可信度 |
 | --- | --- | --- |
 | `hook` | harness 在 payload 裡直接給路徑（Edit / Write / NotebookEdit） | 強 —— model 動不了 |
-| `mtime-diff` | Bash：PreToolUse `pre-bash-ownership-stamp.sh` 開時間窗，post hook 只收 mtime 落在窗內的 dirty 路徑 | 較弱 —— 窗內別 session 的併發寫入會被記成我的 |
+| `mtime-diff` | Bash：PreToolUse `pre-bash-ownership-stamp.sh` 開時間窗，post hook 只收 mtime 落在窗內的 dirty 路徑——掃 cwd 的樹，外加命令字串**明確提及**的樹（絕對路徑、`~/`、`-C` / `cd` / `--git-dir` / `--work-tree` 的值，不做 glob 展開，最多 8 棵）；別棵樹的列寫進**那棵樹 consumer** 的 journal（TD-734） | 較弱 —— 窗內別 session 的併發寫入（含被提及那棵樹裡的）會被記成我的 |
 
-- **NEVER 解析 Bash command 字串推路徑**，也 **NEVER** 在拿不到 stamp 時退化成「掃 `git status`
-  把所有 dirty 記成本 session 的」—— 後者把偶爾誤歸換成必定誤歸，正是 § 3.1 唯一會毀掉工作的方向。
-  沒有 stamp 就整段不記
+- **NEVER 解析 Bash command 字串推「哪個檔是我寫的」**：命令字串只用來**選樹**，檔一律由時間窗決定。
+  也 **NEVER** 把選樹擴成「掃所有已知 consumer / 所有 worktree」，**NEVER** 在拿不到 stamp 時退化成
+  「掃 `git status` 把所有 dirty 記成本 session 的」—— 後兩者把偶爾誤歸換成必定誤歸，正是 § 3.1
+  唯一會毀掉工作的方向。沒有 stamp 就整段不記
 - `flow who` 對 `mtime-diff` 的列會在 action 裡明說證據較弱；**NEVER** 把它讀成與 `hook` 同級
 
 - **`session_id` MUST 取自 harness 的 hook input JSON，NEVER 由 model 自報。** 本機制的全部價值

@@ -13,7 +13,7 @@
 
 **下任何 `git commit` / `git add` / `git stash` / `git tag` / `git push --tags` / `git push origin v<版本>` / `/commit` 之前，MUST 先讀 [[commit.detail]]**——沒讀到就等於沒有 gate 清單、沒有 `--only` 紀律、沒有 recovery 流程。
 
-Unattended coordinator squash **仍走 `/commit`**：完整品質鏈、formal HEAD CI、`batch merge-unattended` 機械 predicate。本檔不複製 C 節；見 [[commit.detail]]、[[github-flow]] 與 commit skill `batch.md`。
+Unattended coordinator squash **仍走 `/commit`**：完整品質鏈、formal HEAD CI、`batch merge-unattended` 機械 predicate。Charles 具名授權的 attended 合併見 [[github-flow]] § Attended 合併。本檔不複製 C 節；見 [[commit.detail]]、[[github-flow]] 與 commit skill `batch.md`。
 
 | 搬走的段 | 去 [[commit.detail]] 的 § |
 | --- | --- |
@@ -82,6 +82,7 @@ Unattended coordinator squash **仍走 `/commit`**：完整品質鏈、formal HE
 
 ### 推理層禁令
 
+- **持有者是前景 agent session，且已授權協調並有可用通道 → MUST 先對話再拍板**：對精確 session 送達、詢問該筆 commit 的範圍與接手意願（Herdr 已驗證可用時 `herdr agent prompt <對方 pane_id> "<四項>"`）；持有者是 unattended runner、身分不明、缺通道或缺本次協調授權時，保留原因、不假裝已送達。全文與四項範本見 [[commit.detail]] § Recovery 步驟 2
 - **NEVER** 以「這變更看起來壞掉了 / 不該存在 / 不在 scope，是否要還原？」徵詢使用者 — 唯一允許的選項是 `git stash` + `HANDOFF.md`，照「WIP 阻礙處理」流程走
 - **NEVER** 把「revert / restore / discard」包裝成「清理」「重置」「回到乾淨狀態」「對齊規約」「修正狀態」等委婉說法繞過上述禁令
 - **NEVER** 拿其他 rule（例 manual-review.md `[discuss]` 應 user walkthrough）當理由還原 hook 自動產出 — 先保留現狀、查歸屬與既有授權，未解衝突再以當前提問介面請使用者決定（詳見 `scope-discipline.md`「Rule 衝突解法」）

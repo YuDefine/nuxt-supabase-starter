@@ -51,7 +51,7 @@
 - 依**實際**嚴重度分級（不是每條都 Critical）；先列 strengths 再列 issues——準確的肯定讓其餘 feedback 可信
 - 從 diff 驗不了的要求（活在未變動 code、跨 task）標 **⚠️ cannot-verify** 回報給 dispatch 端，**NEVER** 自行擴大搜索範圍
 
-模板實作：`subagent-dev` skill 的 `task-reviewer-prompt.md`；回報契約見 [[agent-routing.dispatch-execution]] § Subagent 回報契約。
+模板實作：`capabilities/core/references/implement-executor/subagent-dev/task-reviewer-prompt.md`（`/implement` 的 executor reference）；回報契約見 [[agent-routing.dispatch-execution]] § Subagent 回報契約。
 
 ## 禁止事項
 

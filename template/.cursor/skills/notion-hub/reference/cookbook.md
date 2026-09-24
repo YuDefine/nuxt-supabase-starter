@@ -24,9 +24,10 @@ timeout 60 ntn api "/v1/pages/<page-id>" < /dev/null > /tmp/t.json
 timeout 60 ntn api "/v1/blocks/<page-id>/children?page_size=100" < /dev/null > /tmp/t-blocks.json   # has_children 要遞迴；has_more 要帶 start_cursor 翻頁
 timeout 60 ntn api "/v1/comments?block_id=<page-id>" < /dev/null > /tmp/t-comments.json
 
-# 交付項目（客戶時程頁）本專案列
-DDS=$(jq -r .hub.delivery.dataSourceId /tmp/hub.json)
-timeout 60 ntn api -X POST "/v1/data_sources/$DDS/query" -d "{\"page_size\":100,\"filter\":{\"property\":\"專案\",\"relation\":{\"contains\":\"$ROW\"}}}" < /dev/null
+# 交付項目（客戶時程頁）本專案列——hub 沒有 交付項目（delivery 為 null）時跳過：
+# 進度在 board 的 `進度%`、逾期看 board 的承諾日期欄（`hub.fields.board.dueDate`；fc 是 `預估完成日`），上面的 board 查詢已含
+DDS=$(jq -r '.hub.delivery.dataSourceId // empty' /tmp/hub.json)
+[ -n "$DDS" ] && timeout 60 ntn api -X POST "/v1/data_sources/$DDS/query" -d "{\"page_size\":100,\"filter\":{\"property\":\"專案\",\"relation\":{\"contains\":\"$ROW\"}}}" < /dev/null
 ```
 
 ## 2. 寫（machine 欄位）

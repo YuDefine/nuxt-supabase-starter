@@ -44,6 +44,23 @@ paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/*
 
 user-level 的同名 skill 與 repo 內投影同名是合法遮蔽：pi 採 project 版、略過 user 版。`sync-to-codex.ts` 的撞名分級據此分 managed（兩邊皆 clade 投影 → 摘要）／mixed（單邊 → fail）／unmanaged（雙邊手寫 → warn）；「clade 投影」的證據是 LOCKED banner 或 `.clade/projections/codex.{capabilities,rules}.json` 的 files 清單。
 
+## User level skill 的收容範圍
+
+`~/.claude/skills/` 不經 publish／propagate／conformance，是全機器唯一沒有主人的 skill 來源。它**只收基礎設施類**；跨專案工作流 **MUST** 走 clade plugin（`capabilities/<package>/skills/<name>/`）。判準是一個可回答的問題：
+
+| 這支 skill 描述的是什麼 | 落點 |
+| --- | --- |
+| 這台機器與外部基礎設施（主機、NAS、runner、遠端服務、本機工具） | user level，並登記進 `registry/user-level-skills.json` |
+| 行為綁定某個 repo 的內容，或跨專案共用的工作流 | clade plugin |
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | `~/.claude/skills/<name>/SKILL.md` 存在、不是指回 native target 的 symlink、不與 clade plugin 撞名，且不在 `registry/user-level-skills.json` |
+| 消費端 | `scripts/sync-to-codex.ts`（user level）報告的「未登記的 user-level skill」段與 stderr 一行 warn——只報不擋、不影響投影 |
+| 載入路徑 | 本節（paths-gated 於 skill 目錄）＋收容名單本身的 `charter` 欄 |
+
+報出來的每一支逐支判：基礎設施類登記進名單並寫 `why`；其餘搬進 clade plugin。**NEVER** 為了讓報告變乾淨把工作流類登記成 `infrastructure`，**也 NEVER** 讀成取消 user-level skill——基礎設施類刪掉就是真的沒地方放。
+
 ## 來源與安裝邊界
 
 Clade-managed skill 的共同來源在選用 plugin 的 `capabilities/<package>/skills/<name>/`，單端差異在相應 adapter。Consumer 自有與第三方安裝內容先依既有 ownership／安裝紀錄辨認來源；**NEVER** 因它位於 `.claude/skills/` 就把同名內容自動接管為 generator-owned。遷移來源位置需保存原內容、明確 adoption 與可恢復紀錄。
