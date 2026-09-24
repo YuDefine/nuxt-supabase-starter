@@ -84,7 +84,6 @@ openspec/.vector-search.db*
 .clade/vendor/ledger/*.jsonl.lock
 
 # Codex 投影層（sync-to-codex.ts 從 .claude/ 產生，可重生 → 不進版控）
-.agents/
 
 .spectra/*
 !.spectra/evidence/
@@ -111,3 +110,6 @@ openspec/.vector-search.db*
 .claude/.commit.lock.guard/
 .claude/.commit-recovery/
 .claude/.commit.lock.*.claim*
+
+.agents/*
+!.agents/constitution/

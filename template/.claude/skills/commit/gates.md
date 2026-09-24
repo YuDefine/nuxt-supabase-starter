@@ -335,7 +335,7 @@ gate 自己的可用度跑 `node scripts/audit-security-gate-readiness.ts`（war
 
 ## § 0-A: 程式碼審查（simplify → 0-A.1 → 條件式 0-A.2）
 
-> **Opus 5.5 暫時覆寫期間（2026-09-23 起）本段的 Astra／Fable 兩格政策停用**：0-A（含 0-A.2 深度 review）只跑 `CLAUDE_REVIEW_SEAT=opus claude-review-safe.sh medium`（`code-review-opus` 列；wrapper 預設即 opus），**NEVER** 派 Astra 或 Fable。Opus 額度用完時 gate 保持未完成、等額度恢復；覆寫撤銷也**不**自動恢復 Astra／Fable 0-A——那要 Charles 另行拍板（Charles 2026-09-23 硬禁令，見 `rules/core/agent-routing.md` § Opus 5.5 暫時覆寫 的 0-A 例外）。receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。
+> **Opus 5.5 暫時覆寫期間（2026-09-23 起）本段的 Astra／Fable 兩格政策停用**：0-A（含 0-A.2 深度 review）只跑 `code-review-opus` 列（wrapper 預設即 opus），**NEVER** 派 Astra 或 Fable。載體依主線 runtime：Claude Code 主線走下方 § 0-A.1 的 subagent carrier（prepare → AGENT_CALL → FINALIZE，**NEVER** 開 Herdr pane），叫不出 Claude subagent 的 runtime 才跑無子命令的 `claude-review-safe.sh medium`（Herdr child）。Opus 額度用完時 gate 保持未完成、等額度恢復；覆寫撤銷也**不**自動恢復 Astra／Fable 0-A——那要 Charles 另行拍板（Charles 2026-09-23 硬禁令，見 `rules/core/agent-routing.md` § Opus 5.5 暫時覆寫 的 0-A 例外）。receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。
 
 **每次 dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，分開驗證 scope、fresh context、模型資格、品質與唯讀載體。commit 0-A 的合格 review **兩格同級**：GPT-6 Astra via Pi（effort: medium）優先，Claude Fable 5.1 via Herdr Claude child（effort: medium，`code-review-fable` 列）只在 Astra 實際不可用（exit 3／4＋逐字 RESULT 證據）時啟用；兩格 verified PASS 等效，兩格都不可用 → gate 保持未完成。review 角色不固定由哪個 runtime 主線執行，原生呼叫方式見本檔末尾投影的 runtime 操作段。
 
@@ -360,6 +360,19 @@ Reviewer 看完整 frozen changeset 與驗收契約，以一般 review 的已核
 bash "$COMMIT_RESOURCE_DIR/scripts/codex-review-safe.sh" medium        # Astra 格（優先）
 bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" medium       # Fable 格（僅 Astra exit 3／4 後）
 ```
+
+**Claude 席的 subagent carrier（Claude Code 主線 MUST 用這條，Opus 覆寫期間即 0-A 唯一席）**：三步，全部在同一個 session、同一個 turn 內做完。
+
+```bash
+bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" prepare medium [--findings <上一輪 verdict 檔>]
+# stdout：AGENT_CALL: {...}（subagent_type／model／prompt）與 FINALIZE: bash … finalize <work-dir>
+```
+
+1. 跑 `prepare`，照 `AGENT_CALL` 的欄位**逐字**呼叫 `Agent` tool（`subagent_type: commit-0a-reviewer`、`model`、`prompt` 原樣照抄，前景）。
+2. subagent 回來後跑 `FINALIZE` 那一行。它從本 session 的 subagent transcript 核對 nonce 歸屬、agent type、observed model、唯讀工具面、brief 是否逐行讀完，通過後把 verdict 印上 stdout 並寫 receipt。
+3. **verdict 只來自 finalize 的 stdout。** subagent 的回覆是它交給 finalize 的原料，**NEVER** 由主線轉述、摘錄或拼接成 verdict——主線是受審改動的 producer。
+
+exit code 與 Herdr carrier 同一張表（下表各列照用；4／10／11 是帳號與巢狀派工的結論，subagent carrier 不會產生）。`finalize` 回 exit 3 且 RESULT 寫「WORK_DIR 保留」＝還沒派 subagent 就跑了 finalize，補派後重跑同一行即可；其餘 exit 3 是 reviewer 沒跑完或沒讀完 brief，重跑 `prepare` 拿新 nonce 再派。
 
 **使用該 CLI 前 MUST 完整讀 [runner-safety.md](runner-safety.md)**；`COMMIT_RESOURCE_DIR` 的取得方式與依賴檢查見 runtime-lifecycle。其他載體同樣要提供完整 snapshot、唯讀／隔離、真實 identity、完整 verdict 與對應來源。工具白名單不受底層 runtime 執行時，必須由核准的 OS 隔離承接，不能只相信參數名字。
 

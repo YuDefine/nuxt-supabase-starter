@@ -95,7 +95,7 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --ori
 
 ## 執行機制
 
-- **Runtime**：確定性 script（`notion-sync.ts`、`lib/notion-hub.ts resolve`、`scripts/audit-notion-hub-schema.ts`）主線直接跑；自由形式的 `ntn`／MCP 讀寫走 [[agent-routing]] 〔`notion-ops`〕（gemini → luna → blocker），**NEVER** 主線第一手自己跑。transport 是 `lib/notion-client.ts` 直接呼叫 Notion HTTPS API（token 取自 `ntn login` 的 auth 檔；同一份 API version / timeout / sidecar），不經 `ntn` CLI 子行程。
+- **Runtime**：確定性 script（`notion-sync.ts`、`lib/notion-hub.ts resolve`、`scripts/audit-notion-hub-schema.ts`）主線直接跑；自由形式的 Notion 讀寫一律 `ntn api`（**NEVER** Notion MCP／WebFetch），走 [[agent-routing]] 〔`notion-ops`〕（gemini → luna → blocker），**NEVER** 主線第一手自己跑。transport 是 `lib/notion-client.ts` 直接呼叫 Notion HTTPS API（token 取自 `ntn login` 的 auth 檔；同一份 API version / timeout / sidecar），不經 `ntn` CLI 子行程。
 - **寫入前**：script 用 `hub.fields` 對 data source 現況做 schema 檢查，缺欄位就以「疑似 schema drift」中止，**NEVER** 猜。常駐對帳跑 `node scripts/audit-notion-hub-schema.ts`（exit 1 = drift，2 = 讀不到 live schema，n/a **NEVER** 讀成 0 drift）；drift → 補 registry `fields`／`ticketType`，**NEVER** 改 `FIELDS` 或在 script 分支。
 - **失敗模式**：所有寫入是絕對值 SET；讀失敗中止；寫入 timeout 留 marker 在 `<consumer>/.clade/notion-sync-pending/` 不自動重試，`notion-sync.ts pending` 列出、下一個自然觸發點重跑（重跑 idempotent）。
 - **Work ID 是對帳鍵**：ticket 與 交付項目 都存 `Work ID` = `<consumerId>/<workId>`（`lib/notion-hub.ts` `encodeWorkKey` / `parseWorkKey`；flow work id 只在單一 repo 內唯一，而 projectCode 可被多個 repo 共用），反查時再限定本專案 relation。reconcile / scan 先用它精確對，找不到才退回標題關鍵字（模糊、有 false positive）。
