@@ -48,7 +48,7 @@
  *   node scripts/dev-session.ts status [opts]        # 查 session + port + lease + 佇列
  *   node scripts/dev-session.ts stop [opts]          # 關掉 tab + 釋放 lease
  *   node scripts/dev-session.ts list                 # 列所有 dev-* session + health
- *   node scripts/dev-session.ts sweep [--dry-run]    # 清掉 dev 已退出的 dev-* tab（反累積）
+ *   node scripts/dev-session.ts sweep [--dry-run]    # 回收 TTL 已過的 agent 租約（沒人爭用也收；心跳斷不收）＋清掉 dev 已退出的 dev-* tab
  *
  * 常用 opts：
  *   --consumer-meta <path>   讀 consumer_id / dev.ports / auth.portPinned / dev.leaseMode
@@ -87,6 +87,8 @@ import {
   writeFileSync,
   unlinkSync,
   realpathSync,
+  renameSync,
+  linkSync,
 } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
@@ -1913,7 +1915,144 @@ function cmdList() {
   }
 }
 
+/** 兩次讀到的是不是同一份租約（中間 holder 續租 / 別人接手都會改掉其中一欄）。 */
+function sameLease(a, b) {
+  return (
+    Boolean(a && b) &&
+    a.claimedAt === b.claimedAt &&
+    a.heartbeatAt === b.heartbeatAt &&
+    a.expiresAt === b.expiresAt &&
+    a.holder?.sessionId === b.holder?.sessionId
+  )
+}
+
+/**
+ * 回收**沒人爭用**的過期 agent 租約（TD-763）。
+ *
+ * 之前過期租約只在「下一個人剛好要用同一個 slot」那一刻，由競爭者在 enforceLeaseOrExit 的
+ * 有界性 gate 裡順手接管——沒人來搶就永遠佔著 port 與 herdr Tab。偵測（leaseReclaimable）
+ * 一直是完整的，缺的是一個不綁在「有人要用」上的執行點。本函式就是那個執行點；誰、多久
+ * 呼叫它一次（排程觸發點）不在本函式的範圍。
+ *
+ * **只收 `reason === 'expired'`，NEVER 收 `heartbeat-dead`**（0-A r1，PR #285）。
+ * leaseReclaimable() 對兩者都回 truthy，但兩者的證據強度不同：
+ *   - `expired`：holder 自己宣告的 TTL 已經過了——holder 簽下的承諾到期，是持有者自己的話
+ *   - `heartbeat-dead`：180s 沒人跑 `dev-session.ts heartbeat`。沒有任何東西會自動續心跳，
+ *     只有 model 手動跑才會更新；安靜地在讀 code、跑長測試的 agent 三分鐘就會「心跳斷」
+ * 有爭用時，enforceLeaseOrExit 仍用 heartbeat-dead 讓等著用的人接手——那時有一個具體的
+ * 受益者在等。沒人爭用時收它沒有受益者，只有代價（關掉仍在用的 Tab、殺掉 dev server），
+ * 而 LEASE_DIR 是全機共用的 os.tmpdir()，任一 consumer 跑 sweep 就會掃到所有人的租約。
+ *
+ * 其餘判準與 enforceLeaseOrExit 的 (0) 同源：
+ *   - 人類租約（無界）恆不回收，不論心跳多舊
+ *   - 舊格式 agent 租約（無 expiresAt / heartbeatAt）恆不回收
+ *   - 存活中的 agent 租約不回收（那是 --takeover 的領域，要人拍板）
+ *
+ * 殺程序前 MUST 確認 lease 記錄的 pid **此刻仍在聽 lease 記錄的 port**。回收是無人要求的
+ * 動作，pid 早已被系統回收給不相干的程序時，照 lease 上的數字 kill 就是誤殺；對不上時只刪
+ * lease 檔（dev 已經不在了，剩下的是一張死紙），Tab 殘骸交給下面的 dead-tab sweep。
+ *
+ * 動手前先把 lease 檔 rename 到 `.reaping-<pid>`（原子地把它從「可續租的位置」拿走），再比對
+ * 拿到的這份是不是判過期的那份；之後只刪那份 claim 檔，NEVER unlink 原位（0-A r1）。
+ * 只驗一次再 unlink 原位的寫法，holder 在 kill 期間續租寫回的新租約會被一併刪掉。
+ * 殘餘窗口（明確接受）：`heartbeat` 是原位的 read→write 而非原子替換，一個在 rename 之前讀、
+ * 之後寫的 heartbeat 會在原位寫出新租約。它不會被刪（我們只刪 claim 檔），但它記錄的 dev
+ * 已被 kill——結果是 holder 手上一份指向死 pid 的租約，下次 start 會照常重建；不波及別人。
+ * 這種情形以 `reaped:renewed-during-reap` 回報，讓它看得見。
+ */
+export function reapExpiredLeases({ dryRun = false } = {}) {
+  let files
+  try {
+    files = readdirSync(LEASE_DIR).filter((f) => f.endsWith('-verification-lease.json'))
+  } catch {
+    return []
+  }
+  const results = []
+  for (const f of files) {
+    const id = f.slice(0, -'-verification-lease.json'.length)
+    const lease = readLease(id)
+    const reason = leaseReclaimable(lease)
+    // heartbeat-dead 只在有爭用時接管（enforceLeaseOrExit），無人爭用的 reaper NEVER 收
+    if (reason !== 'expired') continue
+    const pid = Number(lease.devServer?.pid) || null
+    const port = Number(lease.devServer?.port) || null
+    const serving = Boolean(pid && port && Number(portPid(port)) === pid)
+    const sessionName = lease.devSession?.name || null
+    const entry = { id, reason, pid, port, sessionName, serving, action: 'reaped' }
+    if (dryRun) {
+      results.push({ ...entry, action: 'would-reap' })
+      continue
+    }
+    const path = leasePath(id)
+    const claimPath = `${path}.reaping-${process.pid}`
+    try {
+      renameSync(path, claimPath)
+    } catch {
+      // 讀完到 rename 之間已被 release / 別的 sweep 拿走
+      results.push({ ...entry, action: 'skipped:lease-changed' })
+      continue
+    }
+    let claimed = null
+    try {
+      claimed = JSON.parse(readFileSync(claimPath, 'utf8'))
+    } catch {
+      /* 讀不到就當不是同一份 */
+    }
+    if (!sameLease(claimed, lease)) {
+      restoreClaim(claimPath, path)
+      results.push({ ...entry, action: 'skipped:lease-changed' })
+      continue
+    }
+    try {
+      if (serving) {
+        // 與 takeover 分支同一組動作：關 lease 記錄的 herdr Tab，再 kill lease 記錄的 dev pid。
+        if (sessionName) killSession(sessionName)
+        if (pidAlive(pid) && Number(portPid(port)) === pid) sh('kill', [String(pid)])
+      }
+      unlinkSync(claimPath)
+    } catch (e) {
+      restoreClaim(claimPath, path)
+      results.push({ ...entry, action: `failed:${(e as Error)?.message ?? e}` })
+      continue
+    }
+    results.push(existsSync(path) ? { ...entry, action: 'reaped:renewed-during-reap' } : entry)
+  }
+  return results
+}
+
+/**
+ * 把 claim 檔放回原位。用 link 而不是 rename：原位若已有更新的寫入（holder 續租寫回），
+ * link 會以 EEXIST 失敗，更新的那份留著——NEVER 用舊內容蓋掉它。
+ */
+function restoreClaim(claimPath, path) {
+  try {
+    linkSync(claimPath, path)
+  } catch {
+    /* 原位已有更新的租約，以它為準 */
+  }
+  try {
+    unlinkSync(claimPath)
+  } catch {
+    /* 已不在 */
+  }
+}
+
 function cmdSweep(o) {
+  // (1) TTL 已過的 agent 租約：沒人爭用也要回收（TD-763）；心跳斷不在此收（見 reapExpiredLeases）。
+  //     先做，被它關掉的 Tab 不會再被下面重報。
+  const reaped = reapExpiredLeases({ dryRun: o.dryRun })
+  if (!reaped.length) {
+    out('sweep：沒有 TTL 已過的 agent 租約需要回收（心跳斷的不在 sweep 收）')
+  } else {
+    out(`sweep：${reaped.length} 份 TTL 已過的 agent 租約${o.dryRun ? '（--dry-run，不動）' : ''}`)
+    for (const r of reaped) {
+      const what = r.serving
+        ? `dev PID ${r.pid} 仍在聽 :${r.port}${r.sessionName ? `，Tab ${r.sessionName}` : ''}`
+        : 'dev 已不在（只刪 lease）'
+      out(`  [${r.action}] ${r.id}（${r.reason}）— ${what}`)
+    }
+  }
+
   // herdr 沒有 EXITED session：殘骸 = Tab 還在但前景只剩 shell（dev 命令已結束）。
   const sessions = listDevTabs().map((s) => ({ ...s, alive: devProcessAlive(s.paneId) }))
   const dead = sessions.filter((s) => !s.alive)
