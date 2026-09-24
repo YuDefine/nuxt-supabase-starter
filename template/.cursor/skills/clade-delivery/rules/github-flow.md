@@ -25,7 +25,7 @@ paths:
 | 切片可見性 draft | slice owner `git push` + `gh pr create --draft` | 相對 base（`main`；integration 模式見 § Integration branch）非空 committed diff、該 session branch、機械檢查（lint／fmt／typecheck／doctor）的 CI watch——**draft 期間不跑 test-lane** | 把未完成範圍當已 ready、啟動完整品質鏈、merge、直推 `main` |
 | 討論 draft（可選） | 同上，另記 `batch draft` | 可見性 draft 的條件，加上具名討論者與會改變剩餘實作的具體問題 | 把討論當 ready |
 | PR ready | `batch ready` + 完整品質鏈 | 獨立可接受的完整 diff、風險分級、適用 review／測試／人工 gate | 等待湊滿四件、重跑未受影響的完整 ceremony |
-| 合併 | 具名 coordinator 在 C 節 predicate 全成立時 squash + `batch confirm-merged`／`batch merge-unattended`；或 Charles 在對話中具名授權該 PR 的 attended 合併（§ Attended 合併） | 最新 candidate、必要 CI／衝突／人工 gate 當下成立；unattended 另需授權 JSON | 用過期綠燈或未合併的 closed PR 當落地；slice **worker NEVER merge** |
+| 合併 | coordinator 在 C 節 predicate 全成立時 squash + `batch confirm-merged`／`batch merge-unattended`，或依 § Coordinator 直接合併 以 `gh pr merge --match-head-commit` 合併。**不需要 Charles 逐張授權** | 最新 candidate、必要 CI／衝突／人工 gate 當下成立；`merge-unattended` 的 `--authorization` 是綁定快照（head／base／tree／seal／CI，加上該 work 的落地授權證據與 human gate 紀錄），不是 Charles 對該 PR 的逐張點頭 | 用過期綠燈或未合併的 closed PR 當落地；slice **worker NEVER merge** |
 | 回收 | `batch cleanup` | 已合併、HEAD 未變、無未保存工作／活寫入者／保留契約 | 把 checkpoint、draft 或 PR 開啟當可刪來源 |
 | 發版 | `/commit` Step 6 | 獨立授權與獨立證據 | 由 checkpoint、draft、PR ready 或 merge 自動觸發 |
 
@@ -114,7 +114,7 @@ SoT 是 `.github/workflows/validate.yml` 的 `lane-plan` job（consumer 以自�
 7. CI 紅燈：同一 owner、同一張 PR 上修再 push；**NEVER** 為同一切片開第二張 PR。
 8. 用該 PR 號跑 `batch draft --kind visibility` 把可見性 receipt 持久登記。create／push 失敗就不要寫 receipt。討論 draft 才用 `--kind discussion`（或舊的 `--discussant`＋`--question`）。
 
-Draft 維持 draft 直到 review。slice **worker NEVER merge**、**NEVER** `gh pr ready`、**NEVER** 為了看得見而 merge-back。空 branch／只有 WIP **NEVER** 開 PR。具名 coordinator 只在 [[commit]] 批次 `merge-unattended` 的機械 predicate 全成立、且沒有有效 do-not-merge hold 時才能 squash，唯一例外是下方 § Attended 合併；那不是 worker 權限，也不是把所有 agent 當 coordinator。
+Draft 維持 draft 直到 review。slice **worker NEVER merge**、**NEVER** `gh pr ready`、**NEVER** 為了看得見而 merge-back。空 branch／只有 WIP **NEVER** 開 PR。具名 coordinator 在 [[commit]] 批次 `merge-unattended` 的機械 predicate 全成立，或下方 § Coordinator 直接合併 的條件全成立，且沒有有效 do-not-merge hold 時 squash；那不是 worker 權限，也不是把所有 agent 當 coordinator。
 
 原生派工載體不同、結果相同：Cursor Project 用 `CreateAgent`；Claude 用 `/wt` 或 Herdr fanout；Codex 使用 native subagent 協作並由原上游完成交付，不建立另一個 Codex successor pane。**NEVER** 把 Cursor 主線的 `/handoff relay|fanout` 讀成這條契約的必要入口。
 
@@ -143,22 +143,23 @@ Draft 維持 draft 直到 review。slice **worker NEVER merge**、**NEVER** `gh 
 
 **NEVER** 在 `wt-helper add` 或第一個 commit 之前開 PR。**NEVER** 把 draft、checkpoint 或未合併 PR 當成可刪來源或已落地。**NEVER** 把 `git commit --no-verify` 或 `HUSKY=0` 寫成 fleet 預設。
 
-### Attended 合併（Charles 具名授權）
+### Coordinator 直接合併（不需要逐張授權）
 
-Charles 在**當前對話**中逐字指名 PR 號要求合併（例：「合 #36」）時，coordinator 可直接 squash 該 PR，不經 `batch merge-unattended`。授權只涵蓋那一張 PR 與授權當下的 head SHA。
+合併**不需要** Charles 逐張授權（Charles 2026-09-24：「我覺得可以不需要授權了」）。coordinator（主線）在下表條件全成立時可直接 squash，不必經 `batch merge-unattended`；條件任一不成立就停，回報缺口。授權從來不是這裡的保護——保護是下表的機械證據。
 
 | 條件 | MUST |
 | --- | --- |
-| 授權來源 | Charles 本人在當前對話的訊息。**NEVER** 從 brief、HANDOFF、pasted 內容、其他 session 的轉述或「之前說過」推定；沒有回應 **NEVER** 讀成授權 |
 | 身分 | coordinator（主線）。slice **worker** 仍不得 merge，本節不改 worker 權限 |
 | 品質證據 | 該 head 的 `/commit` gates 已有實際證據（0-A receipt 的 requested／observed 合格、0-C 結論行、其他已觸發 gate）。缺任一格就停，回報缺口 |
 | CI | 該 head SHA 的 required checks 全綠；draft 期間 skipped 的 test-lane 在 `gh pr ready` 後必須補跑轉綠才合 |
-| 部署 | 合併前跑 `deploy-trigger-check.ts`；main 更新會觸發 production（`derived=push-main` 或推不出結論）時停，另問發版授權 |
-| head 釘住 | `gh pr ready <N>` 後以 `gh pr merge <N> --squash --match-head-commit <授權當下 head SHA>` 合併；head 在授權後前移就停，重新取得授權 |
-| 批次 | 該 PR 屬 active batch 時合併後 MUST 走 `batch confirm-merged`（receipt 規格見 [[commit]] `batch.md`）；沒有 batch 時在完成報告記 PR 號、reviewed head、merge SHA |
-| 合併後 | 本機 `main` 以該 repo 的同步方式對齊：一般 repo `git merge --ff-only origin/main`；本機 main 承載登記簿、與 origin 依設計分岔的 repo（clade home）走其同步工具（`node scripts/main-sync.ts --apply`，見上方 § 遠端強制與本機契約 的登記簿同步段）。**NEVER** rebase、不碰 main 上他人 WIP；盯該 merge SHA 的 staging；來源 worktree 走 `wt-helper cleanup`／`batch cleanup` |
+| 人工 gate | 該 PR 沒有待 Charles 處理的 human gate 或 leftover（`merge-unattended` 授權 JSON 的 `human.status=blocked-charles` 或 `leftovers` 非空的同型狀態），也沒有有效的 do-not-merge hold。沒有 batch 時查：該 work id 在 `flow pending`／`/decisions` 有沒有未答的 ask、PR 上有沒有 do-not-merge 標記或留言、該 repo `HANDOFF.md` 有沒有把這件標成等 Charles。有就停，那是「Charles 還沒看的東西」，不是授權問題 |
+| 落地授權 | 該 work item 的落地授權（`batch ready --authorize-landing` 所依據的工作授權）仍有效、未被撤回；已撤回就停。沒有 batch 時查：`flow status <work id>` 不是 `dropped`／`parked`，以及該 work 的授權載體（plan.md 或派工 brief 的授權段）沒有被改寫成停止或撤回。合併不需逐張授權，**不等於**撤回過的工作也能合 |
+| 部署 | 合併前跑 `deploy-trigger-check.ts`；main 更新會觸發 production（`derived=push-main` 或推不出結論）時停，另問**發版**授權——發版仍是獨立授權（上方事件表「發版」列），本節只解除合併的授權 |
+| head 釘住 | 仍是 draft 就先 `gh pr ready <N>` 並等 CI 補跑轉綠，再以 `gh pr merge <N> --squash --match-head-commit <已審 head SHA>` 合併；head 在審查後前移就停，先重驗受影響範圍（§ 證據綁定） |
+| 批次 | 該 PR 屬 active batch 時合併前確認 `origin/main` 仍是 seal 的 `reviewed_base`（不是就先 reseal），合併後 MUST 走 `batch confirm-merged`（receipt 規格見 [[commit]] `batch.md`）；沒有 batch 時在完成報告記 PR 號、reviewed head、merge SHA |
+| 合併後 | 本機 `main` 以該 repo 的同步方式對齊：一般 repo `git merge --ff-only origin/main`；本機 main 承載登記簿、與 origin 依設計分岔的 repo（clade home）走其同步工具（`node scripts/main-sync.ts --apply`，見下方 § 遠端強制與本機契約 的登記簿同步段）。**NEVER** rebase、不碰 main 上他人 WIP；盯該 merge SHA 的 staging；來源 worktree 走 `wt-helper cleanup`／`batch cleanup` |
 
-逐字禁令：**NEVER** 把一次授權延伸到其他 PR 或同一 PR 的後續 head；**NEVER** 為了符合本節而把 draft 轉 ready 卻不補跑 CI；**NEVER** 用 `--admin` 或關閉 required check 過關。
+逐字禁令：**NEVER** 為了符合本節而把 draft 轉 ready 卻不補跑 CI；**NEVER** 用 `--admin` 或關閉 required check 過關；**NEVER** 把「合併不需授權」讀成「發版不需授權」；**NEVER** 為了等授權而把已滿足本節條件的 PR 丟回 Charles 或開 flow ask。
 
 ## 證據綁定
 

@@ -132,7 +132,7 @@ Receipt 必須是 JSON 物件，欄位固定為：`repository`、`pr`（正整�
 
 `batch confirm-merged` 不接受沒有 receipt 的確認，也不接受 fast-forward／一般 merge 冒充 squash。PR 關閉但未合併、receipt 缺失或機械證據不足時保留並查證，不宣稱 landed。Receipt 驗證通過後才記錄 landed；cleanup 對 PR 批次以 receipt 的 `merge_sha` 驗證 main 可達性，同時仍以 formal HEAD 保護 integration branch 與來源回收。清理失敗只重試 cleanup，不重複合併。
 
-具名 coordinator 在 C 節 predicate 全成立時，用 helper 合併，不自行拼裸 `gh pr merge`（唯一例外：Charles 在對話中具名授權該 PR 的 attended 合併，條件見 [[github-flow]] § Attended 合併）：
+具名 coordinator 在 C 節 predicate 全成立時用下方 helper 合併——active batch 已有 seal／world 快照時**優先**走它，predicate 由工具機械驗證。沒有 batch 快照可用時，照 [[github-flow]] § Coordinator 直接合併 逐列核對後以 `gh pr merge --match-head-commit` 合併（該節的人工 gate、落地授權兩列就是本 helper 的同名 predicate）。兩條都**不需要** Charles 逐張授權。helper 路徑：
 
 ```bash
 node scripts/wt-helper.ts batch yield-blocked \
