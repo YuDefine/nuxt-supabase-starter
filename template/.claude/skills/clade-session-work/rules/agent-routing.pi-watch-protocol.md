@@ -643,7 +643,7 @@ redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**d
 
 第一層是workspace capability：只有`readonly`可進Cursor；`mutation`與unknown都fail closed。這一層與cwd visibility獨立——即使所有路徑都在cwd內，cwd仍是`--ro-bind`。**NEVER**加writable bind把mutation硬塞進Cursor。
 
-第二層才是材料來源，門檻是機械的：repo 不在 `registry/consumers.json` 內 → runtime 拒跑（`errorClass: material-origin-refused`）。第三方作者檢查（branch 上有從未在 origin 預設分支出現過的作者）原由 `codex-review-safe.sh` exit 7 承載；該 wrapper 2026-09-24 起整支拒跑、review 不再進 Pi／Cursor 池，這一半**目前沒有 live enforcement**——review 以外的 Cursor 池工作只剩 registry 那一半在擋。**NEVER** 用 env var / flag / 提示語把它做成可繞過的形式——那三種都是「綁使用者意願」的變體（TD-534）。
+第二層才是材料來源，門檻是機械的，兩半都在 runtime 的 `planCursorSandbox` 執行、所有 Cursor 池派工必經：repo 不在 `registry/consumers.json` 內，或目前 branch 上有從未在 origin 預設分支出現過的作者（第三方 PR 的形狀）→ 拒跑（`errorClass: material-origin-refused`，provider 層，照鏈改派非 Cursor 池）。作者那一半原由 `codex-review-safe.sh` exit 7 承載，該 wrapper 2026-09-24 退場後改由 runtime 接手，**NEVER** 再讓它依附單一入口。**NEVER** 用 env var / flag / 提示語把它做成可繞過的形式——那三種都是「綁使用者意願」的變體（TD-534）。
 
 ### 最小 dispatch 門檻（避免瑣碎 override）
 
