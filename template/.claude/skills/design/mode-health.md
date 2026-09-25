@@ -17,7 +17,7 @@
 
 ## 八維度（每維度用苛刻刻度評分 + file:line 證據）
 
-1. **UI / Design fidelity** — 複用 `improve` Step 2 + 2.5 Fidelity + `/impeccable critique` + `/impeccable audit`（41 rules）
+1. **UI / Design fidelity** — 複用 `improve` Step 2 + 2.5 Fidelity + `/impeccable critique` + `/impeccable audit`
 2. **架構 & 分層** — **codebase-memory-mcp** `get_architecture` / `search_graph` / `trace_path` / high fan-out / dead-code
 3. **程式碼品質** — codebase-memory-mcp dead-code + 複雜度熱點；lint；type-safety（`any` / `@ts-ignore`）
 4. **資料 & 契約** — schema/migration、contract 單一真相源、N+1、RLS / D1

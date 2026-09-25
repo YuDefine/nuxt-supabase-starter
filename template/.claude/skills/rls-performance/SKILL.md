@@ -8,21 +8,7 @@ description: >-
 
 # RLS Performance Playbook
 
-大型專案常累積大量 RLS policy 與 SECURITY DEFINER function，加上 self-hosted LXC 的 connection pool 限制，任何 N+1 或 full scan 都會被放大。本 skill 是遇到效能問題時的操作手冊。
-
-決策原則（「MUST 做 / NEVER 做」）仍在 `db-runtime/<variant>/database.md` 與 `db-schema/<variant>/database-design.md` 規約（依 consumer 的 module variant 投影，三端都送達），本檔提供**實際診斷與優化工具**。
-
-## 何時開啟本 skill
-
-- 新增涉及 policy join 的表
-- 修改既有 RLS policy 的 WHERE 條件
-- 新增 server API endpoint 含 pagination / filter
-- 遇到 `PGRST003`（504 timeout）或 pool 耗盡
-- 使用者抱怨特定頁面 / endpoint 變慢
-- 需要稽核 production 效能或清理無用 index
-- 排查 LXC 連線問題 / Tunnel 斷線
-
-**核心原則**：policy 改動前先量，改動後驗證，不要憑感覺優化。
+RLS 效能問題的診斷操作手冊。決策原則在 `db-runtime/<variant>/database.md` 與 `db-schema/<variant>/database-design.md` 規約；本檔只放診斷與優化工具。適用於：新增 policy join 或改 policy WHERE、新增含 pagination / filter 的 endpoint、`PGRST003`、pool 耗盡、特定頁面變慢、LXC 連線 / Tunnel 問題。
 
 ## EXPLAIN ANALYZE — 正確的 RLS 測量方式
 
@@ -54,13 +40,7 @@ reset role;
 
 ## Index 設計（RLS 專屬部分）
 
-**Policy WHERE/USING 引用的欄位**（`user_id`、`tenant_id`、`department_id`）**MUST** 有 index ——
-RLS 是 per-row 檢查，這些欄位沒 index 等於每列都掃一次。這條是 RLS 特有的，一般 query 的索引
-直覺涵蓋不到它。
-
-index 類型選擇、partial / composite / covering index、FK index、找出零使用量 index：走上游
-`supabase-postgres-best-practices` 的 `references/query-*.md` 與 `schema-foreign-key-indexes.md`，
-本檔不重複。
+**Policy WHERE/USING 引用的欄位**（`user_id`、`tenant_id`、`department_id`）**MUST** 有 index（RLS 是 per-row 檢查）。其餘 index 設計走上游 `supabase-postgres-best-practices` 的 `references/query-*.md` 與 `schema-foreign-key-indexes.md`。
 
 ## Pagination
 
@@ -172,9 +152,9 @@ limit 20;
 | ----------------- | -------------------------- | ------------------------------------------- |
 | OS 與 kernel 更新 | 自動                       | `apt upgrade` 週期 + 重啟排程               |
 | Postgres 備份     | PITR + 每日 snapshot       | `pg_dump` 排程 + Tailscale 拉到 NAS         |
-| 監控告警          | Dashboard charts + Grafana | 目前無 — 倚賴 `docker logs` + 手動 SSH 檢查 |
+| 監控告警          | Dashboard charts + Grafana | 自行建置；未建置時只剩 `docker logs` + 手動 SSH |
 | SSL / HTTPS       | 自動                       | Cloudflare Tunnel 代管（cloudflared）       |
-| Rate limiting     | Platform 層                | Nuxt 層自行實作（目前無）                   |
+| Rate limiting     | Platform 層                | Nuxt 層自行實作                             |
 | Schema cache 重載 | 自動                       | `notify pgrst, 'reload schema'` 手動        |
 | Postgres 升級     | 一鍵                       | 需手動規劃 + 停機                           |
 
@@ -194,8 +174,4 @@ API 變慢或 `PGRST003` 出現時：
 4. 若是 RLS policy 問題 → 改 policy 或加 index
 5. 若是 N+1 → 改用 `select(*, related(*))` embed 或 RPC
 
-## 定期稽核
-
-- `pg_stat_user_indexes` — 找零使用量 index
-- `pg_stat_statements` — 找 total_exec_time 最高的 query
-- `pg_stat_activity` idle > 5 min — 找連線洩漏
+定期稽核：`pg_stat_user_indexes`（零使用量 index）、`pg_stat_statements`（total_exec_time 最高）、`pg_stat_activity` idle > 5 min（連線洩漏）。

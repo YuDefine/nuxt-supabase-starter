@@ -48,7 +48,7 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 
 - `HANDOFF.md` 是 **session-scoped**
 - `HANDOFF.md` 只保留**尚未被接手**的項目，以及**當前 baseline snapshot blocks**（如 `## Worktree & Stash Audit` / `## Review-gui Readiness` / `## Parked changes` / `## Deferred discuss`）；snapshot block **MUST** 以覆寫式更新，**不**累積歷史版本
-- **不得**保留已完成 chronological session narrative。結案工作退出目前版本；歷史由 git 追溯。Clade home **MUST NOT** 再把完成段 append 進 `docs/archives/<YYYY-MM>-handoff-narrative.md`。`rotate-handoff-done.ts` 只留給未遷移 consumer，直到 consumer 遷移完成後刪除。
+- **不得**保留已完成 chronological session narrative；結案工作退出目前版本，歷史由 git 追溯（未遷移 consumer 的 rotate 規則見 § rotate）。
 - 新 session 接手後：**先建立 claim**（per [[session-claims]] § 3.5）→ 移除已接手項目 → 繼續執行
 - 所有項目都接完後：刪除 `HANDOFF.md`
 - **允許 commit 進 git**，因為跨機器、跨 agent 交接時很有價值
@@ -74,7 +74,7 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 | `tasks/<date>-<slug>.md` | 當次可完成的 ad-hoc 清單 | 短期，結案即刪 |
 | `specs/plans/<work-id>/plan.md` | 需要接續的工作 | 結案刪除；歷史在 git |
 | `.clade/claims/**` | 即時 ownership / heartbeat | 短期、機器維護 |
-| `docs/archives/<YYYY-MM>-handoff-narrative.md` | 從 HANDOFF rotate 過來的已完成 dated session narrative | 長期、month-bucket append-only |
+| `docs/archives/<YYYY-MM>-handoff-narrative.md` | 僅未遷移 consumer：從 HANDOFF rotate 過來的已完成 narrative | 長期、month-bucket append-only |
 | `docs/archives/<YYYY-MM>-<topic>.md` | 一次性 wave / 主題盤點成果（既有用途） | 長期 |
 | `docs/solutions/**` | 非直覺問題的解法沉澱 | 長期 |
 | `docs/decisions/**` | 架構決策與取捨 | 長期 |
@@ -93,7 +93,7 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 | **completed-narrative** | `## YYYY-MM-DD ...` 且**不**符 active / baseline 條件 | 從主檔刪除；歷史由 git 追溯。未遷移 consumer 仍可暫用 `rotate-handoff-done.ts` |
 | **ambiguous** | 介於上述之間、無法穩定判定 | 保守保留 `HANDOFF.md` + 標 review-pending（等下次 `next` 重判） |
 
-> **baseline 過度累積**：若活的 baseline 段超過 `section_max_kb`（default 6 KB），表示那段該換載體——拆出成 `docs/archives/<YYYY-MM>-<topic>.md` 或 `docs/solutions/<topic>.md`、`docs/decisions/<topic>.md`，主檔只留 pointer。HANDOFF 不是長期 KB。整檔 KB／行數門檻已廢（它存在的唯一理由是逼 rotate，現在每次 `next` 先 100% rotate）。
+> **baseline 過度累積**：活的 baseline 段超過 `section_max_kb`（default 6 KB）就換載體（`docs/archives/<YYYY-MM>-<topic>.md`、`docs/solutions/`、`docs/decisions/`），主檔只留 pointer。
 
 審計訊號（handoff drift scan）對應的觸發點：
 
@@ -101,14 +101,14 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 - `active-section-stale`：active dated section 超過 active_age_days（default 14 天）→ 提醒「outstanding work 可能 silently 卡住」
 - `handoff-section-oversize` / `handoff-entry-oversize`：單一 `##` / `###` 超過 `section_max_kb` / `entry_max_lines` → 換載體，不是 rotate 觸發
 
-> **14 天是 escalation threshold，不是 grace period**。所有 active item 預設都應儘速處理；`next` 盤點時**一律列入 outstanding 並推薦處理**，不因 age < 14d 而降低優先序或省略。14d threshold 的作用僅是「超過時語氣升級為 warn — 可能 silently 卡住」，不代表「未超過 = 不需關注」。
+> **14 天是 escalation threshold，不是 grace period**：`next` 盤點時所有 active item 一律列入 outstanding 並推薦處理，不因 age < 14d 降低優先序。
 
 審計只 warn 不阻擋；實際 rotate 由 `/handoff next` Health Gate 執行（per `capabilities/core/skills/handoff/SKILL.md § 2B.1`）。
 
 ### rotate 是每次 `/handoff next` 的第一個寫入，100%，無門檻
 
 `rotate-handoff-done.ts` 在 2B.1a scan **之前**跑。可 rotate 的紀錄每次全搬，
-**NEVER** 問 A／B／C，**NEVER** 啃到某個 KB 數字下就停。整檔 size／lines 門檻已廢。
+**NEVER** 問 A／B／C，**NEVER** 啃到某個 KB 數字下就停；沒有整檔 size／lines 門檻。
 
 **可 rotate**：heading 標了結案（`✅` / 已完成 / 已落地 / 已發版 / 已處置 / dismissed / 已 supersede）
 且 body 沒有 `- [ ]`；dated `##` 無 live checkbox；混合段裡的 `- [x]`。
@@ -119,16 +119,9 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 重跑或報卡點，不是拍板題。搬完後活段仍超 `section_max_kb`／`entry_max_lines` → 換載體，
 **NEVER** 砍驗收 pointer / 選項內容 / 自驗指令湊數字。
 
-Clade home 與已遷移 repo（存在 `specs/truth/work-lifecycle.md`）：script 回 `retired`，
-完成段從主檔刪除、**不** append 月份 archive，歷史由 git 追溯。
-未遷移 consumer：搬走的每一段 **MUST** 逐字進 `docs/archives/<YYYY-MM>-handoff-narrative.md`
-並驗零遺失（`grep -c -F '<獨特字串>'` 在 archive 回 ≥1、主檔回 0）。
+Clade home 與已遷移 repo（存在 `specs/truth/work-lifecycle.md`）：script 回 `retired`，完成段從主檔刪除、**NEVER** append 月份 archive，歷史由 git 追溯。未遷移 consumer：搬走的每一段 **MUST** 逐字進 `docs/archives/<YYYY-MM>-handoff-narrative.md` 並驗零遺失（`grep -c -F '<獨特字串>'` 在 archive 回 ≥1、主檔回 0）。
 
-> **實證（2026-09-10，<consumer-a>）**：HANDOFF 堆到 235.6 KB / 2643 行才有人做一次手動 rotate A。
-> In Progress 60 條裡 41 條是已完成項。根因就是「等破 35 KB 才 rotate、而且只搬到門檻下」。
-> 改成每次 `next` 先 100% 搬走後，主檔 17.9 KB / 232 行，剩下的是活工作。
-
-## Outstanding writing hygiene (v1.14+)
+## Outstanding writing hygiene
 
 **核心命題**：HANDOFF.md `## Outstanding` / `## In Progress` 推薦 next move 前，**MUST** 跑當次 ground-truth signal 確認；禁止把 task 進度當 land 安全度寫。
 
@@ -154,13 +147,9 @@ git -C <wt-path> status --porcelain | wc -l
 git for-each-ref "refs/wt-baseline/<slug>/" --format='%(refname)'
 ```
 
-把結果（blocker count、uncommitted count、baseline ref present/absent）反映在 outstanding 描述。不跑 = 寫的是上次 session 的樂觀推測，不是 ground truth。
+把結果（blocker count、uncommitted count、baseline ref present/absent）反映在 outstanding 描述。
 
-### 為什麼這條 rule 存在
-
-2026-05-23 實證：HANDOFF outstanding 寫「page-titles-baseline 收尾（最快 deliverable，wt 32/33 done）」 → 下一 session `/handoff` dispatch 收尾 → merge-back 撞 793 staged blockers + 無 baseline ref → 連續 3 輪 AskUserQuestion 才退回 Defer。3 輪 round-trip 全可在 outstanding 寫作階段跑 1 條 dry-run 避免。
-
-## Outstanding actionability hygiene (v1.15+)
+## Outstanding actionability hygiene
 
 **核心命題**：HANDOFF.md `## Outstanding` / `## Next Steps` / handoff `next` § 2B.4 推薦下一 session（含 remote-control session、並行 Codex / Cursor session、人類 user）動工時，**MUST** inline 必要 actionable detail；禁止「by reference」handoff（只列 candidate 名稱 + 1-line summary + 指向 audit/scan/decision doc，要 receiver 自己 grep 還原 context）。
 
@@ -190,65 +179,15 @@ git for-each-ref "refs/wt-baseline/<slug>/" --format='%(refname)'
 - ❌ 「從 high impact 第一條開始」— 不指定 candidate identifier
 - ❌ 「Audit 結論詳見 `docs/audit/X.md`」當作 HANDOFF 唯一指引 — implicit pointer 不算 inline
 
-### 範例
+範例：「C1 `<AppStatusBadge>` extraction」要寫出 audit 來源與行號、pattern 片段與 8 個檔的完整路徑、`<AppStatusBadge :status :color-map :label-map />` 這類 target API 與落點、以及「動哪些 callsite／不動哪些 UBadge usage」；只寫 bare slug 讓 receiver 自己去 grep audit doc 就是不夠。
 
-❌ 不夠（2026-05-24 <consumer-a> HANDOFF Next Steps #4 實證問題寫法）：
-
-```markdown
-### 4. Nuxt UI v4 audit refactor candidates（9 條，本次稽核產出）
-
-`docs/audit/nuxt-ui-audit-2026-05-23.md` 末段「Phase 4」整理：
-
-- **高 impact 3 條**: C1 `<AppStatusBadge>` (44 callsites) / C2 `<AppPanelCard>` (12+) / C3 `<AppOverlayShell>` (~26)
-- **中 impact 3 條**: ...
-
-建議路徑：對任一 candidate 開一件工作，從 high impact 開始。
-```
-
-→ 結果：remote session 收到 `app-status-badge-extraction` 這個 bare slug 後立刻問「scope 不夠 — 是哪種 badge？目前散落在哪？要抽到哪？」前 5-10 分鐘全在重做 investigation。
-
-✅ 夠（inline 4 件事）：
-
-```markdown
-### 4. C1 `<AppStatusBadge>` extraction（high signal × low complexity）
-
-- **Audit 來源**：`docs/audit/nuxt-ui-audit-2026-05-23.md` line 162-181 + 869-881
-- **Pattern**：`<UBadge :color="statusBadgeColor[row.status] ?? 'neutral'" variant="subtle" size="sm">{{ statusLabel[row.status] }}</UBadge>` + 各檔自己 declare 的 `statusBadgeColor` / `statusLabel` constant
-- **涉及 8 files**：
-  - `packages/ehr/app/pages/admin/attendance/index.vue`
-  - `packages/ehr/app/pages/admin/attendance/amendments.vue`
-  - `packages/ehr/app/pages/admin/salary/index.vue`
-  - `packages/ehr/app/pages/admin/schedules/index.vue`
-  - `packages/ehr/app/pages/admin/overtime/index.vue`
-  - `packages/ehr/app/pages/admin/overtime/backpay.vue`
-  - `packages/ehr/app/pages/admin/petition/index.vue`
-  - `packages/ehr/app/pages/admin/contracts/index.vue`
-- **Target API**：`<AppStatusBadge :status :color-map :label-map />`
-- **Target location**：`packages/core/app/components/AppStatusBadge.vue`
-- **Scope boundary**：
-  - 動：8 files 的 Pattern A status badge callsite + 新增 1 個 component
-  - 不動：其他 UBadge usage（Pattern B count badge / Pattern C `<AppDetailPage>` header pill 不在 scope；另開 candidate C4 / C5 處理）
-
-**Dispatch**：`/handoff relay`，brief 指向 `tasks/2026-05-24-app-status-badge-extraction.md`（上面 5 項寫進該檔）
-```
-
-### 為什麼這條 rule 存在
-
-2026-05-24 實證：<consumer-a> HANDOFF Next Steps #4 列 9 條 Nuxt UI audit candidate，只給 1-line summary + 指向 audit doc。當天另開 remote-control session 嘗試接 C1，第一句就是「argument 看起來像在說『把 app 內的 status badge 抽出來』，但細節不夠 — 是哪種 badge？目前散落在哪？要抽到哪？」，開始重跑 grep / glob 探索。
-
-Root cause = HANDOFF writer（包含 `next` § 2B.4 推薦階段）把 audit doc 當「receiver 自己會 grep」的 implicit context，沒 inline 必要細節。Receiver 重做 investigation = 重複 main session 已 sunk 的 token，且容易 scope drift（receiver 可能對「44 callsites」「8 files」「Pattern A vs B vs C」的邊界判斷不同）。
-
-「治根」修法 = 在 outstanding 寫作層強制 inline，不靠 audit doc 當 indirection。
-
-## Drift detection (v1.13+)
+## Drift detection
 
 每次 session start 時，若所用 runtime 有已驗證的 session-start integration，該 integration 會跑 handoff drift scan，自動掃所有 `session/*` worktree 跟 `HANDOFF.md` 內容比對，把 drift 寫到 stderr；沒有此 integration 時，MUST 執行等價的 entry check。各 runtime 的能力與觸發方式由 adapter fragment 宣告。
 
 - **unmentioned-progress** — branch HEAD 已 commit 但 slug 沒在 HANDOFF 出現 → 下個 session 看不到這個工作
 - **mention-stale** — branch 最新 commit 時間晚於 HANDOFF mtime → HANDOFF 描述可能過時
 - **merged-but-not-cleaned** — branch 已 fully merge 進 main 但 worktree 還在 → 跑 `wt-helper cleanup`
-
-理由：[[worktree-default]] §5.5 採 atomic landing model，worktree → main 吸收延後到 merge-back 才發生。中間 subagent commit 後若 user 沒同步更新 HANDOFF，下個 session 可能誤判工作未做。drift scan 把這類情境 surface 出來。
 
 行為：scan 是純 informational，**不**擋 session、**不**自動改 HANDOFF。User 看到警告後依情境跑 `/handoff` refresh、或繼續工作（warnings 在每次 session start 重新評估，工作 land 後自動消失）。
 
@@ -257,7 +196,7 @@ Root cause = HANDOFF writer（包含 `next` § 2B.4 推薦階段）把 audit doc
 - **NEVER** 把需要交接的資訊只留在對話裡
 - **NEVER** 用含糊句子如「差不多好了」「剩下一點點」
 - **NEVER** 把 `HANDOFF.md` 當成長期知識庫，結案後不清理
-- **NEVER** 在 `HANDOFF.md` 累積 `## YYYY-MM-DD` chronological session log；已完成 dated section 退出目前版本，**NEVER** 在 clade home 再 append 月份 archive
+- **NEVER** 在 `HANDOFF.md` 累積 `## YYYY-MM-DD` chronological session log
 - **NEVER** 在 baseline snapshot block（Worktree Audit / Review-gui Readiness / Parked / Deferred discuss）累積歷史版本；snapshot 必須**覆寫式**更新
 - **NEVER** 在 handoff 裡省略 work slug、task 編號、關鍵檔案路徑
 - **NEVER** 接手之後還把同一項目留在 `HANDOFF.md`

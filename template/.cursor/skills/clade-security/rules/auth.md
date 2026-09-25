@@ -32,7 +32,7 @@ paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'server/**/*.ts', '
 3. server helper **MUST 誠實命名**。`getSupabaseWithContext` 這種名字會讓 handler 作者以為範圍已限縮；本 variant 的等價 helper 是 **`getAuthedSupabase(event)`**（只驗 session、回 `{ client, user }`、不做授權）。reference implementation：`nuxt-supabase-starter` 的 `template/server/utils/supabase.ts`
 4. **NEVER** 用 `set_app_context` 這類 RPC 寫 GUC 給 policy 讀——`set_config(..., true)` 是 transaction-local，PostgREST 每 request 獨立 transaction，恆定無效
 
-完整命題、三次事故實證與判準見 [[auth-data-path-consistency]] § Server 側：RLS policy 的前提條件。
+完整命題與判準見 [[auth-data-path-consistency]] § Server 側：RLS policy 的前提條件。
 
 ## 僅適用直接使用 Supabase Auth（GoTrue）的場景
 

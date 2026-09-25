@@ -69,7 +69,7 @@ Trigger 用語：「健康檢查 / 體檢 / 重構評估 / 技術債盤點 / 全
 每維度：**及格 baseline** vs **卓越 bar** + **工具 / query recipe** + **要 raise 的 finding**。逐維度用 §0 刻度評分。
 
 ### D1 — UI / Design fidelity
-- **複用** `improve` 模式：Step 2 八維視覺 rubric（`references/diagnosis.md`）+ Step 2.5 Design Fidelity Check + `/impeccable critique`（persona + P0/P1）+ `/impeccable audit`（41-rule detector）。
+- **複用** `improve` 模式：Step 2 八維視覺 rubric（`references/diagnosis.md`）+ Step 2.5 Design Fidelity Check + `/impeccable critique`（persona + P0/P1）+ `/impeccable audit`。
 - **卓越 bar**：過 impeccable audit 只是 ★★★☆☆ 起跳；卓越要無 AI-slop tell、空/載入/錯誤狀態有打磨、有 intentional motion、文案過 `copy-tone.md`。
 - Raise：任何 ordinary-tax UI（見 §0）。
 
@@ -84,7 +84,7 @@ Trigger 用語：「健康檢查 / 體檢 / 重構評估 / 技術債盤點 / 全
 - Raise：god function、複製貼上重複、`any` 逃生、命名要猜、缺該有的抽象或過度抽象。
 
 ### D4 — 資料 & 契約
-- **工具**：consumer schema / migration 檔；契約一致性（如 <consumer-a>/<consumer-e> 的 `shared/schemas` vs `shared/types` — 從 schema 匯出型別、非兩套各寫）；`trace_path` 找 query 熱點抓 N+1；RLS（Supabase）/ D1 binding。
+- **工具**：consumer schema / migration 檔；契約一致性（如 `shared/schemas` vs `shared/types`：從 schema 匯出型別，不是兩套各寫）；`trace_path` 找 query 熱點抓 N+1；RLS（Supabase）/ D1 binding。
 - **及格**：資料存得進讀得出。**卓越**：contract 單一真相源、migration 可逆且有序、無 N+1、RLS/授權在資料層而非只靠 UI 藏。
 - Raise：型別與 runtime schema 各自為政、fallback 回傳原始 code/error、migration 不可逆、N+1、RLS 缺漏。
 

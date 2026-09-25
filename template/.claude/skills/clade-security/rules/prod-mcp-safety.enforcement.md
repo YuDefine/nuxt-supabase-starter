@@ -30,9 +30,9 @@ Claude settings 中這兩個工具 **只能**放 `deny`，**NEVER** 放 `allow` 
 
 中立 MCP 來源用 server 的 `requiredDeniedTools` 聲明必須封鎖的工具。來源聲明、投影成功與產品實際封鎖是三層證據。每次同步以**全部選定端**為一個交易：任何一端無法表示必要封鎖，**所有選定端的設定與 ownership receipt 均保持原狀，整批零寫入**。例如同批選 Codex 與 Cursor IDE，而 IDE 封鎖未證實，Codex 也不寫入；要變更選定範圍，先明確重定範圍再另建完整計畫。**NEVER** 為了通過投影而刪掉必要封鎖，也不改寫 consumer 自有權限來消除 conflict。
 
-違反後果：<consumer-d> prod DB 被建立孤兒表 `public.sutekh`（2026-06-22）。
+違反後果：agent 可直接對 prod DB 執行 SQL（已實際發生過在 prod 建出孤兒表）。
 
-偵測：`scripts/audit-tooling-drift.ts` 的 `prodMcpPermission` 目前只檢查 Claude `allow`／`ask`，不是三端封鎖有效性的驗收。原生 MCP 的作者操作與支援範圍見 clade 中央倉的 `docs/runtime-mcp.md`。
+偵測：`scripts/audit-tooling-drift.ts` 的 `prodMcpPermission` 只檢查 Claude `allow`／`ask`，不是三端封鎖有效性的驗收。原生 MCP 的作者操作與支援範圍見 clade 中央倉的 `docs/runtime-mcp.md`。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |

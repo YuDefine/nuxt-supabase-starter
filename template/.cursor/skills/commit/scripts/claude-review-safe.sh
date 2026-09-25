@@ -1,26 +1,25 @@
 #!/usr/bin/env bash
-# claude-review-safe.sh — commit 0-A 的第二格合格 reviewer：Claude Fable 5.1 medium
-# via Herdr Claude child（段 K，2026-09-21 Charles 拍板）。
+# claude-review-safe.sh — commit 0-A 唯一合格 reviewer：Claude Opus 5.5 medium
+# fresh-context child（`code-review-opus` 列；2026-09-24 Charles 拍板撤掉 Astra 與
+# Fable 兩席——「通常一定是 Astra 先耗盡」，Fable 所有用途禁用）。
 #
 # 這是 codex-review-safe.sh 的 sibling：同一套 changeset 凍結、budget 篩選、
 # prompt 契約、`## Review Verdict` 輸出格式、worktree 完整性檢查與 RESULT/exit
-# code 語義（共用 lib/review-common.sh），carrier 從 Pi Astra 換成 Herdr
-# create-only Claude child。
+# code 語義（共用 lib/review-common.sh），carrier 是 Claude subagent（prepare／
+# finalize）或 Herdr create-only Claude child。
 #
-# 啟用條件（由 gates.md／review-policy.md 約束，不是本 script 的選項）：Astra
-# 優先；只有 codex-review-safe.sh 實際回 exit 3／4（quota 或 runtime 沒跑成，
-# 有逐字 RESULT 行證據）才輪到本 script。本 script 自己不判斷「Astra 是否不可用」
-# ——呼叫端拿著上一份 RESULT 證據來，本 script 只負責讓 Fable 格與 Astra 格
-# 等效、可稽核。
+# 沒有備援席：Opus 額度耗盡（exit 4）或量不到（exit 11）時 gate 保持未完成，
+# NEVER 改派其他模型、NEVER 主線自審補位（agent-routing.md § commit 0-A reviewer）。
 #
 # 派工形狀（每一項都由機制鎖死，不靠約定）：
-#   node herdr-session-handoff.ts --cwd <repo> --label commit-0a-fable-review \
-#     --prompt-file <prompt> --launcher ccw --model fable --effort medium \
-#     --route routing-table --tier-basis table-row --table-row code-review-fable \
+#   node herdr-session-handoff.ts --cwd <repo> --label commit-0a-opus-review \
+#     --prompt-file <prompt> --launcher cc --model claude-opus-5-5 --effort medium \
+#     --route routing-table --tier-basis table-row --table-row code-review-opus \
 #     --coordinate --bounded-leaf
 #   --table-row 讓 helper 對照 NATIVE_TABLE_ROW_POLICIES 機械拒絕任何非
-#   fable/medium/readonly 的偏離；family ceiling（fable ≤ medium）是第二層。
-#   launcher 先 ccw，account_unavailable 由 helper 內建的 ccw→cc fallback 承接。
+#   opus/medium/readonly 的偏離；family ceiling（opus ≤ medium）是第二層。
+#   launcher 預設 cc（CLAUDE_REVIEW_LAUNCHER=ccw 顯式切工作帳號），account_unavailable
+#   由 helper 內建的帳號 fallback 承接。
 #   --bounded-leaf（TD-1105）讓 dispatched worker（帶 CLADE_DISPATCH_ID）也能開這一格：
 #   helper 只對 readonly gate-review row＋--coordinate 放行巢狀一層，leaf 自己再派仍拒。
 #   helper 回 nested_dispatch_refused（本 session 自己就是 leaf）→ exit 10「交回
@@ -70,8 +69,8 @@
 # Exit code 與 codex-review-safe.sh 同一套判讀：
 #   0  verdict 上 stdout（完整性＋身分皆過）
 #   2  本地用法／依賴錯誤（非 medium effort、--findings 壞檔、helper 不存在、CLADE_HOME review runtime 有未 commit 改動）
-#   3  Fable 席 review 未跑成（transport、completion_failed、無 verdict 檔、
-#      coordination 逾時）——與 Astra exit 3 同義：reviewer 不可用
+#   3  Opus 席 review 未跑成（transport、completion_failed、無 verdict 檔、
+#      coordination 逾時）——reviewer 不可用，gate 維持 pending
 #   4  account_unavailable——本 0-A 席不可用的逐字證據，gate 維持 pending；stderr 另印
 #      `NEXT_STEP_JSON:` 一行（可機讀，轉出 helper receipt 的 next_step）
 #   6  review 期間受審樹被改動（snapshot drift），verdict 扣住
@@ -86,7 +85,7 @@
 #      另行送審，否則不是 exit 9 的出路
 #   10 本 session 不得開 reviewer child（helper nested_dispatch_refused）——不是
 #      reviewer 不可用（NEVER 讀成 exit 3），是這一格要交回 coordinator 代跑
-#   11 account_unverifiable——Fable 席配額量不到（量不到 ≠ 沒額度），
+#   11 account_unverifiable——Opus 席配額量不到（量不到 ≠ 沒額度），
 #      gate 維持 pending，可依 helper receipt 的 retry_after_ms 重試；
 #      NEVER 讀成 account_unavailable
 #
@@ -98,7 +97,7 @@
 #       subagent carrier——Claude Code 主線 MUST 用這條：prepare 印 AGENT_CALL，主線照它派
 #       commit-0a-reviewer subagent，再跑 finalize 取 verdict。流程與核對全文在
 #       lib/review-subagent.sh 檔頭。
-# effort 只接受 medium——Fable family ceiling 就是 medium，沒有低檔需求、
+# effort 只接受 medium——Opus family ceiling 就是 medium，沒有低檔需求、
 # high/max 由 wrapper 直接拒絕（exit 2），NEVER 靜默降檔或抬檔。
 
 set -uo pipefail
@@ -163,21 +162,25 @@ case "${1:-}" in
   prepare|finalize) CARRIER_MODE="$1"; shift ;;
 esac
 
-# Opus 5.5 暫時覆寫（agent-routing.md § Opus 5.5 暫時覆寫）：CLAUDE_REVIEW_SEAT=opus 讓本格
-# 改派 fresh Opus 5.5 child（`code-review-opus` 列，同樣 medium／readonly）。覆寫生效期間預設
-# opus——預設 fable 會讓沒帶變數的呼叫端靜默退回 Fable 格，正是 2026-09-23 Charles 硬禁令
-# 要擋的 Astra → Fable 退路。fable 只在顯式 CLAUDE_REVIEW_SEAT=fable 時啟用。覆寫撤銷也維持 opus 預設——0-A 禁令不隨
-# 覆寫失效，改回 fable 須 Charles 另行拍板。
+# 0-A 只有 Opus 一席（2026-09-24）。CLAUDE_REVIEW_SEAT 保留為顯式宣告；fable 已禁用，
+# 帶它的呼叫端是舊 brief／舊 skill，直接拒絕而不是靜默改成 opus——那樣它會以為自己
+# 拿到的是它要的那一席。
 REVIEW_SEAT="${CLAUDE_REVIEW_SEAT:-opus}"
-case "$REVIEW_SEAT" in
-  fable|opus) ;;
-  *) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_SEAT 只接受 fable|opus；收到 $REVIEW_SEAT" >&2; exit 2 ;;
+# 派 reviewer 用的 Claude 帳號：預設 cc（個人帳號）。ccw 只在顯式 CLAUDE_REVIEW_LAUNCHER=ccw
+# 時使用——不是每台機器都登入了工作帳號（zenbook 2026-09-24 沒有 ~/.claude-work 憑證，
+# 寫死 ccw 讓 0-A 以 missing-oauth 回 account_unavailable，Charles 拍板改用 cc）。
+REVIEW_LAUNCHER="${CLAUDE_REVIEW_LAUNCHER:-cc}"
+case "$REVIEW_LAUNCHER" in
+  cc|ccw) ;;
+  *) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_LAUNCHER 只接受 cc|ccw；收到 $REVIEW_LAUNCHER" >&2; exit 2 ;;
 esac
-if [ "$REVIEW_SEAT" = "fable" ]; then
-  echo "[claude-review-safe] 警告：CLAUDE_REVIEW_SEAT=fable——Opus 5.5 覆寫期間 Fable 格的 verdict NEVER 當 commit 0-A gate 證據（agent-routing.md § Opus 5.5 暫時覆寫 的 0-A 例外）；只供顯式非 gate 用途（恢復 Fable 0-A 須 Charles 另行拍板）。" >&2
-fi
-REVIEW_ROW="code-review-$REVIEW_SEAT"
-if [ "$REVIEW_SEAT" = "opus" ]; then REVIEW_MODEL="claude-opus-5-5"; else REVIEW_MODEL="fable"; fi
+case "$REVIEW_SEAT" in
+  opus) ;;
+  fable) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_SEAT=fable 已禁用（2026-09-24，Fable 所有用途禁用）；0-A 只有 Opus 5.5 medium 一席，Opus 不可用時 gate 保持未完成" >&2; exit 2 ;;
+  *) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_SEAT 只接受 opus；收到 $REVIEW_SEAT" >&2; exit 2 ;;
+esac
+REVIEW_ROW="code-review-opus"
+REVIEW_MODEL="claude-opus-5-5"
 export REVIEW_SEAT REVIEW_ROW REVIEW_MODEL
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -219,6 +222,19 @@ if [ "$CARRIER_MODE" = "prepare" ]; then
   # 是誰，finalize 就找不到 reviewer 的身分證據。
   if [ -z "${CLAUDE_CODE_SESSION_ID:-}" ]; then
     echo "[claude-review-safe] 錯誤：prepare 只給 Claude Code 主線用（CLAUDE_CODE_SESSION_ID 為空）；叫不出 Claude subagent 的 runtime 改跑無子命令的 Herdr carrier" >&2
+    exit 2
+  fi
+  # review-snapshot.ts run 在命令結束時刪快照；prepare 一返回樹就沒了，finalize 要 cd 回受審樹
+  # 拍 after snapshot，必定失敗。subagent carrier 的隔離跑法只能是 create／remove 包住兩段。
+  if [ -n "${CLADE_REVIEW_SNAPSHOT:-}" ] \
+    && [ "$(cd "$CLADE_REVIEW_SNAPSHOT" 2>/dev/null && pwd -P)" = "$(cd "$REPO_ROOT" && pwd -P)" ]; then
+    {
+      echo "[claude-review-safe] 錯誤：prepare 跑在 review-snapshot.ts run 的快照裡——run 會在 prepare 返回時刪掉這棵樹，finalize 無樹可驗"
+      echo "  → 改用 create／remove 包住 prepare 與 finalize："
+      echo "    SNAP=\$(node \$CLADE_HOME/vendor/scripts/review-snapshot.ts create --repo <repo> --base <merge-base> --stage <head>)"
+      echo "    cd \"\$SNAP\" && bash <claude-review-safe.sh> prepare medium  → 照 AGENT_CALL 派 reviewer → 跑 FINALIZE"
+      echo "    node \$CLADE_HOME/vendor/scripts/review-snapshot.ts remove \"\$SNAP\"（finalize 之後）"
+    } >&2
     exit 2
   fi
 else
@@ -417,7 +433,7 @@ herdr_call \
   --cwd "$REPO_ROOT" \
   --label "commit-0a-$REVIEW_SEAT-review" \
   --prompt-file "$PROMPT_FILE" \
-  --launcher ccw \
+  --launcher "$REVIEW_LAUNCHER" \
   --model "$REVIEW_MODEL" \
   --effort medium \
   --route routing-table \
@@ -441,14 +457,78 @@ fi
 # bounded leaf）。這不是 reviewer 不可用——NEVER 映射成 3 讓呼叫端去換席或判本席不可用。
 if [ "$STATUS" = "nested_dispatch_refused" ]; then
   echo "[claude-review-safe] RESULT: dispatch_refused（exit 10）— helper 拒絕從本 session 開 ${REVIEW_SEAT} reviewer child：$(herdr_field "$RECEIPT" error)" >&2
-  echo "[claude-review-safe] NEXT: 交回 coordinator 以同一席（${REVIEW_SEAT}，\`${REVIEW_ROW}\`）代跑 0-A——Opus 5.5 覆寫期間 NEVER 改派 Astra／Fable（commit skill review-policy.md § 無 receipt 的 verdict）；NEVER 改走 headless \`claude -p\`——無 receipt 的 verdict 不得當 gate 證據。" >&2
+  echo "[claude-review-safe] NEXT: 交回 coordinator 以同一席（${REVIEW_SEAT}，\`${REVIEW_ROW}\`）代跑 0-A——NEVER 改派其他模型（commit skill review-policy.md § 無 receipt 的 verdict）；NEVER 改走 headless \`claude -p\`——無 receipt 的 verdict 不得當 gate 證據。" >&2
   exit 10
 fi
 
 # account_unavailable（helper EXIT.blocked=15）：本 0-A 席（REVIEW_SEAT）不可用——gate 停在 pending 等 Opus 額度恢復。
 if [ "$rc" -eq 15 ] || [ "$STATUS" = "account_unavailable" ]; then
-  echo "[claude-review-safe] RESULT: account_unavailable — ${REVIEW_SEAT} 席（ccw/cc）無可用帳號配額，review DID NOT run；NEVER 當作 0-A.1 通過（exit 4）" >&2
-  echo "[claude-review-safe] NEXT: 本 0-A 席（${REVIEW_SEAT}）不可用 — Opus 5.5 覆寫期間 NEVER 改派 Astra／Fable；gate 維持 pending，記錄本席逐字失敗證據；NEVER 用其他模型、另一個 fresh agent 或主線自審補位。" >&2
+  # account_unavailable 同時承載「額度耗盡」與「憑證／訂閱失效」（missing-oauth、subscription-*、
+  # profile-http-*）——後者不是配額問題，RESULT 照 helper account_preflight.probes 的逐帳號原因寫，
+  # NEVER 一律印「無可用帳號配額」讓人去等一個不會回來的額度。exit 4 語義不變。
+  # kind：quota（全數額度耗盡，或無 probes 但 helper 給了 claude-accounts-exhausted）／credential
+  # （全數非額度原因）／mixed（兩者並存——另一個帳號額度也耗盡，換 launcher 不是解）／unknown。
+  ACCOUNT_REASONS="$(node -e '
+    let receipt = {}
+    try { receipt = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")) } catch {}
+    const probes = receipt.account_preflight?.probes ?? []
+    const label = (r) => r === "quota-exhausted" ? "額度耗盡"
+      : r === "missing-oauth" ? "該 launcher 無 OAuth 憑證（未登入）"
+      : /^subscription-/.test(r ?? "") ? "訂閱非 active"
+      : /^profile-http-/.test(r ?? "") ? "帳號驗證被拒"
+      : "未知原因"
+    const quota = probes.filter((p) => p.reason === "quota-exhausted").length
+    const kind = probes.length === 0
+      ? (receipt.next_step?.kind === "claude-accounts-exhausted" ? "quota" : "unknown")
+      : quota === probes.length ? "quota" : quota === 0 ? "credential" : "mixed"
+    // 實際量過的 launcher：helper 帳號 fallback 未授權時只有一筆，另一個帳號沒量過。
+    const measured = probes.length > 0 ? probes.map((p) => p.launcher)
+      : receipt.next_step?.kind === "claude-accounts-exhausted" ? (receipt.next_step.accounts ?? []) : []
+    process.stdout.write(kind + "\t" + [...new Set(measured)].join(" ") + "\t" + probes.map((p) => `${p.launcher}：${label(p.reason)}（${p.reason}）`).join("；"))
+  ' "$RECEIPT")"
+  ACCOUNT_REASON_KIND="${ACCOUNT_REASONS%%$'\t'*}"
+  ACCOUNT_REASONS="${ACCOUNT_REASONS#*$'\t'}"
+  ACCOUNT_MEASURED="${ACCOUNT_REASONS%%$'\t'*}"
+  ACCOUNT_REASON_TEXT="${ACCOUNT_REASONS#*$'\t'}"
+  if [ "$REVIEW_LAUNCHER" = "cc" ]; then OTHER_LAUNCHER=ccw; else OTHER_LAUNCHER=cc; fi
+  ACCOUNT_REASON_SUFFIX="${ACCOUNT_REASON_TEXT:+（${ACCOUNT_REASON_TEXT}）}"
+  REVIEW_FORBID="0-A 沒有備援席，NEVER 改派其他模型、另一個 fresh agent 或主線自審補位"
+  case "$ACCOUNT_REASON_KIND" in
+    quota)
+      ACCOUNT_SUMMARY="無可用帳號配額${ACCOUNT_REASON_SUFFIX}"
+      # 只有 probes 真的涵蓋另一個帳號才能說兩邊都耗盡；沒涵蓋＝helper 帳號 fallback 未授權，
+      # 另一個帳號沒量過，改用它重跑是可行路。
+      case " $ACCOUNT_MEASURED " in
+        *" $OTHER_LAUNCHER "*)
+          ACCOUNT_NEXT="本 0-A 席（${REVIEW_SEAT}）不可用（cc、ccw 兩帳號實測額度皆耗盡）— 0-A 沒有備援席，NEVER 改派其他模型；gate 維持 pending，記錄本席逐字失敗證據；NEVER 用其他模型、另一個 fresh agent 或主線自審補位。"
+          ACCOUNT_INSTRUCTION="0-A reviewer 席（${REVIEW_SEAT}）cc、ccw 兩帳號實測額度皆耗盡，review 沒跑：gate 停在 pending，push 分支並回報「待 Opus seat 0-A」，等 Opus 額度恢復再跑；本 next_step 不適用「雙帳號耗盡 → 回原 routing 表」——0-A 沒有備援席，NEVER 改派其他模型，NEVER 主線自審補位" ;;
+        *)
+          ACCOUNT_NEXT="只量了 launcher ${REVIEW_LAUNCHER}（helper 帳號 fallback 未授權，${OTHER_LAUNCHER} 沒量過）——以 CLAUDE_REVIEW_LAUNCHER=${OTHER_LAUNCHER} 重跑同一派工，或等 Opus 額度恢復再跑；gate 維持 pending，${REVIEW_FORBID}。"
+          ACCOUNT_INSTRUCTION="0-A reviewer 席（${REVIEW_SEAT}）launcher ${REVIEW_LAUNCHER} 額度耗盡、${OTHER_LAUNCHER} 沒量過（helper 帳號 fallback 未授權），review 沒跑：gate 停在 pending，以 CLAUDE_REVIEW_LAUNCHER=${OTHER_LAUNCHER} 重跑，或等 Opus 額度恢復再跑；0-A 沒有備援席，NEVER 改派其他模型，NEVER 主線自審補位" ;;
+      esac ;;
+    credential)
+      ACCOUNT_SUMMARY="帳號憑證／訂閱不可用，非額度耗盡${ACCOUNT_REASON_SUFFIX}"
+      # 另一個帳號也量過且同樣憑證不可用時，換 launcher 不是可行路，只剩登入。
+      case " $ACCOUNT_MEASURED " in
+        *" $OTHER_LAUNCHER "*)
+          ACCOUNT_NEXT="這不是額度問題——cc、ccw 兩帳號實測皆憑證／訂閱不可用，換 launcher 不能解：登入後重跑同一派工；gate 維持 pending，${REVIEW_FORBID}。"
+          ACCOUNT_INSTRUCTION="0-A reviewer 席（${REVIEW_SEAT}）cc、ccw 兩帳號實測皆憑證／訂閱不可用${ACCOUNT_REASON_SUFFIX}，不是額度耗盡，review 沒跑：gate 停在 pending，登入後重跑；NEVER 改派其他模型，NEVER 主線自審補位" ;;
+        *)
+          ACCOUNT_NEXT="這不是額度問題——登入 launcher ${REVIEW_LAUNCHER}，或以 CLAUDE_REVIEW_LAUNCHER=${OTHER_LAUNCHER} 改用有憑證的帳號後重跑同一派工；gate 維持 pending，${REVIEW_FORBID}。"
+          ACCOUNT_INSTRUCTION="0-A reviewer 席（${REVIEW_SEAT}）launcher ${REVIEW_LAUNCHER} 憑證／訂閱不可用${ACCOUNT_REASON_SUFFIX}，不是額度耗盡，review 沒跑：gate 停在 pending，登入該 launcher 或以 CLAUDE_REVIEW_LAUNCHER=${OTHER_LAUNCHER} 改用有憑證的帳號後重跑；NEVER 改派其他模型，NEVER 主線自審補位" ;;
+      esac ;;
+    mixed)
+      ACCOUNT_SUMMARY="部分帳號額度耗盡、部分帳號憑證／訂閱不可用${ACCOUNT_REASON_SUFFIX}"
+      ACCOUNT_NEXT="有憑證的帳號額度已耗盡，換 launcher 不能解——登入缺憑證的 launcher 後重跑，或等 Opus 額度恢復再跑；gate 維持 pending，${REVIEW_FORBID}。"
+      ACCOUNT_INSTRUCTION="0-A reviewer 席（${REVIEW_SEAT}）帳號同時有額度耗盡與憑證／訂閱不可用${ACCOUNT_REASON_SUFFIX}，review 沒跑：gate 停在 pending，登入缺憑證的 launcher 後重跑，或等 Opus 額度恢復再跑；NEVER 改派其他模型，NEVER 主線自審補位" ;;
+    *)
+      ACCOUNT_SUMMARY="無可用帳號（helper receipt 未附逐帳號原因）"
+      ACCOUNT_NEXT="原因未知——先讀 NEXT_STEP_JSON 的 receipt 判是額度還是憑證，再決定等額度恢復或登入 launcher；gate 維持 pending，${REVIEW_FORBID}。"
+      ACCOUNT_INSTRUCTION="0-A reviewer 席（${REVIEW_SEAT}）無可用帳號且 helper receipt 未附逐帳號原因，review 沒跑：gate 停在 pending，先讀 receipt 判是額度還是憑證再處置；NEVER 改派其他模型，NEVER 主線自審補位" ;;
+  esac
+  export ACCOUNT_REASON_KIND ACCOUNT_REASON_TEXT ACCOUNT_INSTRUCTION
+  echo "[claude-review-safe] RESULT: account_unavailable — ${REVIEW_SEAT} 席（launcher ${REVIEW_LAUNCHER}）${ACCOUNT_SUMMARY}，review DID NOT run；NEVER 當作 0-A.1 通過（exit 4）" >&2
+  echo "[claude-review-safe] NEXT: ${ACCOUNT_NEXT}" >&2
   # 可機讀的 next_step（Z5）：helper receipt 的 next_step 原樣轉出（兩帳號實測皆耗盡時才有），
   # receipt 留存到 dispatchStateDir()/review/ 供 coordinator 取證——WORK_DIR 隨 trap 清掉。
   UNAVAILABLE_STATE_DIR="$(node -e 'process.stdout.write(require("path").resolve(process.argv[1]))' "${CLADE_DISPATCH_STATE_DIR:-$HOME/.cache/clade/dispatch}")"
@@ -466,7 +546,9 @@ if [ "$rc" -eq 15 ] || [ "$STATUS" = "account_unavailable" ]; then
       hold_at_gate: true,
       receipt: process.argv[2],
       helper_next_step: helper,
-      instruction: `0-A reviewer 席（${process.env.REVIEW_SEAT}，ccw/cc）額度耗盡，review 沒跑：gate 停在 pending，push 分支並回報「待 Opus seat 0-A」，等 Opus 額度恢復再跑；本 next_step 不適用「雙帳號耗盡 → 回原 routing 表」——NEVER 依 routing table 的 code-review／code-review-fable 列改派 Astra／Fable／其他模型，NEVER 主線自審補位`,
+      account_reason_kind: process.env.ACCOUNT_REASON_KIND,
+      account_reasons: process.env.ACCOUNT_REASON_TEXT || null,
+      instruction: process.env.ACCOUNT_INSTRUCTION,
     }))
   ' "$RECEIPT" "$UNAVAILABLE_RECEIPT")"
   echo "[claude-review-safe] NEXT_STEP_JSON: $NEXT_STEP_JSON" >&2
@@ -482,7 +564,7 @@ if [ "$rc" -eq 21 ] || [ "$STATUS" = "account_unverifiable" ]; then
   UNVERIFIABLE_RECEIPT="$UNVERIFIABLE_STATE_DIR/review/account-unverifiable-$(date +%Y%m%dT%H%M%S)-$$.json"
   mkdir -p "$(dirname "$UNVERIFIABLE_RECEIPT")"
   cp "$RECEIPT" "$UNVERIFIABLE_RECEIPT"
-  echo "[claude-review-safe] RESULT: account_unverifiable — ${REVIEW_SEAT} 席（ccw/cc）配額量不到（量不到 ≠ 沒額度），review DID NOT run；retry_after_ms=${RETRY_AFTER_MS:-<absent，沒有 ETA>}；receipt: $UNVERIFIABLE_RECEIPT；NEVER 當作 0-A.1 通過，也 NEVER 讀成 account_unavailable（exit 11）" >&2
+  echo "[claude-review-safe] RESULT: account_unverifiable — ${REVIEW_SEAT} 席（launcher ${REVIEW_LAUNCHER}）配額量不到（量不到 ≠ 沒額度），review DID NOT run；retry_after_ms=${RETRY_AFTER_MS:-<absent，沒有 ETA>}；receipt: $UNVERIFIABLE_RECEIPT；NEVER 當作 0-A.1 通過，也 NEVER 讀成 account_unavailable（exit 11）" >&2
   echo "[claude-review-safe] NEXT: gate 維持 pending——retry_after_ms 存在就依 ETA 重跑同一派工，欄位缺席＝沒有 ETA、交 coordinator 決定；NEVER 用其他模型、另一個 fresh agent 或主線自審補位。" >&2
   exit 11
 fi
@@ -629,7 +711,7 @@ if [ "$VERIFICATION" = "unverified" ] && [ -n "$SESSION_ID" ]; then
     const m = await import(process.argv[2])
     const r = await m.verifyObservedModel(process.argv[3], process.argv[4], process.argv[5], process.argv[6], { timeoutMs: 30000, intervalMs: 2000 })
     process.stdout.write(JSON.stringify(r))
-  ' _ "$HELPER" "${LAUNCHER:-ccw}" "$REVIEW_MODEL" "$REPO_ROOT" "$SESSION_ID" 2>/dev/null)"
+  ' _ "$HELPER" "${LAUNCHER:-$REVIEW_LAUNCHER}" "$REVIEW_MODEL" "$REPO_ROOT" "$SESSION_ID" 2>/dev/null)"
   if [ -n "$REREAD_JSON" ]; then
     VERIFICATION="$(node -e 'const r=JSON.parse(process.argv[1]);process.stdout.write(r.model_verification??"")' "$REREAD_JSON")"
     O="$(node -e 'const r=JSON.parse(process.argv[1]);process.stdout.write(r.observed_model??"")' "$REREAD_JSON")"

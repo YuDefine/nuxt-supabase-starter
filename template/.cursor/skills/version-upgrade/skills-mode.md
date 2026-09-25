@@ -1,35 +1,10 @@
 # § Skills mode — 第三方 skill 上游偵測、更新與整合評估
 
-把「`npx skills add` 裝進來的第三方 skill，上游改了我們不知道」變成可機械偵測的流程。npm 依賴有 `pnpm outdated` 會叫，第三方 skill 沒有——它們不進版控、版本記在 `skills-lock.json`，上游改動不會有任何訊號傳到我們這邊。
+偵測 `npx skills add` 裝的第三方 skill（版本記在 `skills-lock.json`、不進版控）與上游的差距，並落地更新。
 
-## 何時用 / 不適用（Skills mode）
+**不適用**：clade 自家 hub skill（`capabilities/**/skills/`，走 [[clade-publish]]）、consumer 自家 local skill（不在 `skills-lock.json`）、npm 套件升版。
 
-**適用**：
-
-- user 說「<某某> skill 上游更新了，我們有跟上嗎」/「掃一下 skill 有沒有落後」
-- 上游 repo 發了 release / 你在別處看到某支 skill 改版
-- 想知道上游**新增**了哪些我們還沒裝的 skill
-- 例行體檢：想確認 fleet 的第三方 skill 與上游的差距
-
-**不適用**：
-
-- clade 自家維護的 hub skill（`capabilities/**/skills/`）— 那是我們自己是上游，走 [[clade-publish]]
-- consumer 自家 local skill（`<skills-root>/` 內沒有出現在 `skills-lock.json` 的）— 那不是第三方
-- npm 套件升版 — 走 § Outdated mode 或 § Fleet mode
-
-## Step S.0 — 「主動發現」怎麼發生
-
-本 mode 是 user-invoked（`version-upgrade` 設 `disable-model-invocation: true`），**不會**自己跳出來。
-偵測要進入視野靠三個掛載點，**每一個**都指向同一支 script：
-
-| 掛載點 | 何時會跑 | 涵蓋範圍 |
-| --- | --- | --- |
-| `/clade-health skills` | user 要看 fleet 健康時 | 只跑 skill freshness 一項 |
-| `/clade-health full` | publish / propagate 前的例行體檢 | 併在十項稽核之中 |
-| 直接 `/version-upgrade skills` | user 看到某支 skill 有新版、或想掃一輪 | 全流程（偵測 → 落地） |
-
-所以「上游更新了我們不知道」的真正防線是**體檢頻率**，不是有沒有自動偵測。看到 fleet 已經
-一段時間沒跑過 `clade-health`，順手跑一次 `skills` 比等到下次 user 問更省事。
+同一支偵測 script 也掛在 `/clade-health skills` 與 `/clade-health full`。
 
 ## Step S.1 — 偵測（MUST 從這裡開始，NEVER 憑印象判斷落後與否）
 
@@ -42,7 +17,7 @@ node scripts/audit-skill-freshness.ts --new-only --target <runtime-target> # 只
 node scripts/audit-skill-freshness.ts --json --target <runtime-target> # 機器讀
 ```
 
-`audit-skill-freshness` 只認 `skills-lock.json` 管理的 source；**submodule-tracked source（SpecFormula、aixbdd）它結構上零訊號**，MUST 另跑 `node scripts/audit-upstream-submodules.ts`（逐上游印落後的 commit、依 watchPaths 分類的異動檔、fork 整合分支的 patch 是否已被上游收編；`--only <id>` 只看一個）。清單 SoT 是 `registry/upstream-submodules.json` —— 新增一個 submodule-tracked 上游只要加一筆 entry，**NEVER** 回頭改那支 script。
+`audit-skill-freshness` 只認 `skills-lock.json`；submodule-tracked source（SpecFormula、aixbdd）MUST 另跑 `node scripts/audit-upstream-submodules.ts`（`--only <id>` 只看一個）。清單 SoT 是 `registry/upstream-submodules.json`，新增上游只加 entry，**NEVER** 改 script。
 
 ### S.1-submodule — audit 報落後之後（submodule-tracked 上游專用）
 
@@ -54,11 +29,11 @@ node scripts/sync-upstream-submodules.ts --dry-run --only <id>   # 唯讀：印�
 node scripts/sync-upstream-submodules.ts --only <id>             # 實跑：rebase fork 整合分支 → force-with-lease push → pin → mirror；attended-only
 ```
 
-三條在跑之前就要知道的事（全文與修復程序在 § 6.5）：
+跑之前要知道（全文在 § 6.5）：
 
-- **兩個 repo 座標不是同一個東西**：`.gitmodules` 的 `url` 指 **fork**（pin 的 sha 要從它 fetch 得到），registry 的 `upstreamRepo` 指**真上游**（落後數對它算）。`.gitmodules` 指 fork 是刻意的——整合分支只存在於 fork。
-- **patch 只能落在 `integrationBranch`（`clade/main`）**。fork `main` 只鏡上游、不帶 patch。audit 印「pin 另有 N commit 不在上游」而 fork `clade/main` 卻等於上游舊點，就是 patch 落錯分支——先照 § 6.5 § fork 分支拓樸修復 把分支擺正，再跑 sync。
-- **實跑 MUST 在 worktree**：它會改 gitlink ＋ PIN ＋ banner 檔（一次幾十個 tracked 檔）；worktree 的 `vendor/<id>` 預設是空目錄，先 `git submodule update --init --recursive vendor/<id>`。
+- `.gitmodules` 的 `url` 指 **fork**（整合分支只在 fork），registry 的 `upstreamRepo` 指**真上游**（落後數對它算）
+- patch 只能落在 `integrationBranch`（`clade/main`）；audit 印「pin 另有 N commit 不在上游」而 fork `clade/main` 等於上游舊點 = patch 落錯分支，先照 § 6.5 § fork 分支拓樸修復
+- 實跑 **MUST** 在 worktree（會改幾十個 tracked 檔）；先 `git submodule update --init --recursive vendor/<id>`
 
 ### `--new-only` 掃的是兩類 source，不是一類
 
@@ -67,23 +42,16 @@ node scripts/sync-upstream-submodules.ts --only <id>             # 實跑：reba
 | 已裝上游的新 skill | 各 consumer 的 `skills-lock.json` | 我們已經在用的來源擴充了 —— 高訊號 |
 | 候選上游 | `registry/skill-sources.json` 裡 `status: "candidate"` 的條目 | fleet 一支都沒裝過的來源 —— 探索性 |
 
-沒有候選清單的時候，「fleet 從沒接觸過的上游」是**結構性看不見**的：`sourcesSeen` 只從 lock 收集，沒裝過的上游不會進雷達。實證：5 個 consumer 有 wrangler config、fleet 零 Cloudflare skill，這件事撐到 2026-08-18 才靠一次性人工對照發現。
+標記：
 
-三個標記要看懂：
-
-- `⚠ fleet 已由 <source> 提供同名` —— 這支**不是新能力**，是換一個上游拿同一支。`installedBySource` 是 per-source 統計，不標記的話跨 source 同名會被讀成新增
-- `（該 source 另有 N 支未列入 track 子集，未評估）` —— 該條目的 `track` 是子集。N 是我們**主動不看**的支數，不是上游沒有的支數
-- `⏭ 超過逐支評估承載` —— 該 source 是 `track: "all"` 而未裝支數超過門檻，整段沒展開、**也沒抓 description**。處置是給它一個 `track` 子集，或 `--changelog <source>` 單獨展開；**NEVER** 因為它沒列出來就當作那個 source 沒東西
+- `⚠ fleet 已由 <source> 提供同名` —— 不是新能力，只是換上游拿同一支
+- `（該 source 另有 N 支未列入 track 子集，未評估）` —— N 是主動不看的支數
+- `⏭ 超過逐支評估承載` —— `track: "all"` 且未裝支數超過門檻，整段沒展開；給它 `track` 子集或 `--changelog <source>` 單獨展開，**NEVER** 當作沒東西
 
 ### 加一條候選 entry 的紀律
 
-`reason` **MUST 是依賴證據**——指名哪個 consumer、哪個 dep 或 config 成立這條，例如「<consumer-c> / template 有 better-auth dep」。**NEVER** 寫「看起來有用」「社群風評好」這類無法反查的理由。
-
-這條不是格式要求，是這份清單的品質上限所在：`reason` 預答了 Step S.4 三條件的第一條（該技術是否真的在用），把 triage 成本前移到加 entry 的那一刻；依賴哪天從 fleet 消失，entry 的可移除性也才是可稽核的。
-
-**`track` 對 candidate 必填、無預設**，兩種值：`"all"`（整包追）或字串陣列（子集）。判準是 source 的同質性——vendor 維護且主題聚焦的（`cloudflare/skills` 13 支全是 CF）給 `"all"`，它出新支的先驗相關性高；grab-bag（`pproenca/dot-skills` 211 支橫跨所有 JS 套件）一律給子集。
-
-沒有預設值是刻意的：「省略就等於整包」會讓「加一條 174 支的 mega-repo 卻忘了限縮」變成一個**沒填欄位的副作用**，而不是一個看得見的決定。缺 `track` 的 entry 不進掃描，改在「候選解析失敗」段列一行。
+- `reason` **MUST 是依賴證據**：指名哪個 consumer 的哪個 dep 或 config（例「template 有 better-auth dep」），**NEVER** 寫「看起來有用」
+- `track` 必填、無預設：vendor 維護且主題聚焦的 source（`cloudflare/skills`）給 `"all"`；grab-bag（`pproenca/dot-skills` 211 支）給子集陣列。缺 `track` 的 entry 不進掃描
 
 **加 entry 之前 MUST 先實測該 source 的 SKILL.md 支數**：
 
@@ -93,15 +61,13 @@ gh api "repos/<owner>/<repo>/git/trees/$n?recursive=1" \
   --jq '[.tree[]|select(.type=="blob")|select(.path|endswith("SKILL.md"))]|length'
 ```
 
-兩次呼叫就有。**NEVER** 拿「某份策展 registry 從它挑了幾支」推估 source 規模——那兩個數字沒有關係：autoskills 從 `pproenca/dot-skills` 挑了 2 支，該 repo 實際有 211 支。支數決定 `track` 怎麼填，估錯就是整份輸出被單一 source 吃掉。
+**NEVER** 用策展 registry 挑了幾支推估 source 規模。
 
-其餘三條：
+- 子集內容 **MUST** 由 fleet 依賴證據決定，**NEVER** 照抄別人的策展（autoskills 是發現管道不是判準）
+- 決定不追的 source **MUST** 以 `status: "deferred"` 留檔並寫不採理由
+- 看到 `ℹ 候選 X 已進 fleet lock —— 可從 registry/skill-sources.json 移除` 就刪該條目
 
-- 子集的內容 **MUST 由 fleet 依賴證據決定，NEVER 照抄別人的策展**——autoskills 是發現管道不是判準。實證：它從 `dot-skills` 挑的 2 支裡 `react-hook-form` 是 React 生態，而 fleet 的 react 依賴是 0，照抄就是引進一支過不了 S.4 第一條的 skill
-- 評估後決定不追的 source **MUST 以 `status: "deferred"` 留檔並寫明不採理由**，**NEVER** 直接不寫進清單——被否決的判斷沒留檔等於沒判過，下一個人會把同一批 repo 重新 triage 一遍
-- 看到 `ℹ 候選 X 已進 fleet lock —— 可從 registry/skill-sources.json 移除` 就把該條目刪掉：它已經走既有 lock 管線了，留著只會永遠回報 0 支未裝
-
-**NEVER 用 skill frontmatter 的 `metadata.version` 判斷是否落後。** 上游可以只改內文而不 bump version——實證：`supabase/agent-skills` PR #194 整段改寫 `supabase-postgres-best-practices` 的 description，`version` 停在 `1.1.1` 不動，兩個落後的 consumer 與兩個最新的 consumer 版號完全一樣。判準只有內容 hash，那正是 audit script 在算的東西。
+**NEVER 用 skill frontmatter 的 `metadata.version` 判斷是否落後。** 上游常只改內文而不 bump version；判準只有內容 hash，那正是 audit script 在算的東西。
 
 ## Step S.2 — 判讀各類 status
 
@@ -113,8 +79,8 @@ Script 只呈現事實，處置是主線的工作。**每一類都要處理**，
 | `stale` | 內容有差異 | → Step S.3 讀變動性質 → Step S.5 更新 |
 | `upstream-gone` | 上游查無同名 skill | **先讀 script 給的成因猜測**（合併 / 改名 / 移除），三種處置不同，見下表 |
 | `missing` | lock 有記載但 `<skills-root>/` 下不存在 | lock drift：確認是「該裝沒裝」還是「已移除但 lock 沒清」，前者補裝、後者 `npx skills remove <name> --agent <runtime-agent> -y` 清 lock |
-| `lock-only` | 上游查無、本地目錄也不在 | 純 lock 殘留：`npx skills remove <name> --agent <runtime-agent> -y`，**事後 MUST 確認 `skills-lock.json` 的條目真的消失**——skills CLI 1.7.0 對目錄已不在的 skill 可能回報成功卻不清 lock（2026-09-23 <consumer-a> 實測），沒消失就手動刪該條目 |
-| `projected` | lock 有記載，但目錄由 clade 投影認領（`.clade/projections/*.json`） | lock 條目是殘留：只從 `skills-lock.json` 刪該條目、從 `scripts/install-skills.sh` 拿掉安裝行。**NEVER** `rm -rf` 或 `npx skills remove`——會連 clade 投影一起刪（實證：<consumer-i> `clarify`、<consumer-k>／<consumer-j> `wrangler`） |
+| `lock-only` | 上游查無、本地目錄也不在 | 純 lock 殘留：`npx skills remove <name> --agent <runtime-agent> -y`，**事後 MUST 確認 `skills-lock.json` 的條目真的消失**——skills CLI 對目錄已不在的 skill 可能回報成功卻不清 lock，沒消失就手動刪該條目 |
+| `projected` | lock 有記載，但目錄由 clade 投影認領（`.clade/projections/*.json`） | lock 條目是殘留：只從 `skills-lock.json` 刪該條目、從 `scripts/install-skills.sh` 拿掉安裝行。**NEVER** `rm -rf` 或 `npx skills remove`——會連 clade 投影一起刪 |
 | `unresolved` | source 型態不支援或上游查詢失敗（note 有原因） | 不是 skill 的問題：照 note 排除（`gh auth status`、source 是否改名／轉私有、well-known 網域可否連線）後重跑；排除不了就在報告裡列為未驗證，**NEVER** 讀成 current |
 
 `upstream-gone` 的三種成因與處置：
@@ -134,28 +100,20 @@ node scripts/audit-skill-freshness.ts --changelog supabase/agent-skills@supabase
 node scripts/audit-skill-freshness.ts --changelog antfu/skills      # 整個 repo 層級
 ```
 
-一次輸出三個來源：該 skill 目錄的 `CHANGELOG.md`（前 60 行）、repo 近 10 個 GitHub release、
-影響該目錄的近 20 筆 commit。三者都缺的 repo 就只有 commit 訊息可讀 —— 那也是為什麼判斷
-「要不要跟」不能只看有沒有 CHANGELOG。
+輸出該目錄 `CHANGELOG.md`、近 10 個 release、近 20 筆 commit。
 
-第三方 skill 的變動幾乎都是**內容改善**（措辭、新增 reference、修正錯誤指引），不是 API breaking change，所以預設是**跟**。判斷「不跟」需要具體理由，且 **MUST** 寫進 `docs/tech-debt.md` 一條 TD 記錄為什麼刻意留在舊版——否則下一次稽核會再報一次同一件事，且沒人知道那是決定過的。
+第三方 skill 變動多是內容改善，預設**跟**。「不跟」要具體理由，且 **MUST** 登一條 `docs/tech-debt.md` TD 記錄刻意留舊版的原因。
 
 ## Step S.4 — 整合評估（上游新 skill vs 自家資產）
 
-Script 的「上游有、fleet 未安裝」段列出上游新增的 skill。對**每一支**新 skill 逐一判斷，不是只看名字順不順眼：
+對「上游有、fleet 未安裝」的**每一支**逐一判斷：
 
-1. **先用 description 篩一輪**：`--new-only` 會把每支未裝 skill 的 frontmatter description 一併印出，
-   不必逐支開檔。通過初篩的才需要讀全文（`gh api repos/<r>/contents/<path> --jq .content | base64 -d`）
-2. **裝不裝要有依賴證據，NEVER 憑名字判斷**。三條依序全過才裝：
-   - **該技術是否真的在用** —— 到 consumer 的 `package.json` 查，不是憑印象。實證（2026-08-02）：
-     38 支未裝的上游 skill 裡只有 3 支對得上真實依賴（`@nuxtjs/i18n` → <consumer-a> / <consumer-b>、
-     `@nuxtjs/seo` → <consumer-k>），其餘 35 支全是「上游有但我們用不到」
-   - **已裝的 skill 是否已覆蓋同主題** —— 同主題兩支互相稀釋（例：已裝 `antfu/skills@vue`
-     就不再裝 `onmax/nuxt-skills@vue`）
-   - **是否與自家規約打架** —— 工作流類 skill（plan / commit / code review / worktree / 完成前驗證）
-     幾乎都已有自家規約，裝進來等於同一件事有兩套互相競爭的指令。**NEVER** 因為「上游寫得也不錯」而並存
-   - **NEVER** 因為「上游有就全裝」——每支 skill 的 description 常駐每輪 context 視窗
-3. **裝了之後，自家有沒有東西可以退場**：新上游 skill 常常覆蓋我們當初因為上游沒有才自己寫的 rule / skill
+1. 先用 `--new-only` 印的 description 初篩，通過的才讀全文（`gh api repos/<r>/contents/<path> --jq .content | base64 -d`）
+2. 三條依序全過才裝，**NEVER** 憑名字或「上游有就全裝」（description 常駐 context）：
+   - 該技術真的在用（查 consumer `package.json`）
+   - 已裝的 skill 沒覆蓋同主題（已裝 `antfu/skills@vue` 就不裝 `onmax/nuxt-skills@vue`）
+   - 不與自家規約打架（plan / commit / code review / worktree / 完成前驗證類幾乎都有自家規約）
+3. 裝了之後，自家有沒有 rule / skill 可以退場
 
 第 3 點的判定表——對**每一個**主題相關的自家 skill / rule 檔各出一列，四選一：
 
@@ -172,7 +130,7 @@ Script 的「上游有、fleet 未安裝」段列出上游新增的 skill。對*
 rg -l '<主題關鍵字>' ~/offline/clade/docs/pitfalls/
 ```
 
-pitfall 記錄的是我們**實際踩過**的坑，上游 skill 講的是通例——通例覆蓋不到的踩坑經驗一旦隨檔案刪掉就再也回不來。命中 pitfall 的段落一律降級為 SLIM，把該段留下。
+命中 pitfall 的段落一律降級為 SLIM 並保留。
 
 ## Step S.5 — 落地
 
@@ -191,23 +149,18 @@ npx skills add https://www.<domain> --agent <runtime-agent> --copy -y
 npx skills add https://github.com/<owner>/<repo>/tree/<ref>/<skill-dir> --agent <runtime-agent> --copy -y
 ```
 
-**另外兩條看起來該有效、實際無效的路徑（2026-08-02 實測，NEVER 拿來當更新手段）**：
+**NEVER 拿來當更新手段**：
 
 | 指令 | 實際行為 |
 | --- | --- |
 | `pnpm skills:install` / `npx skills add <repo>@<name>`（目錄還在時） | 判定已安裝，**整支跳過**，檔案一個字都不會變 |
 | `npx skills update -p -y` | 回報「✓ Updated N skill(s)」但**只改 `skills-lock.json` 的 hash、不換檔案**，反而讓 lock 對不上磁碟內容 |
 
-實證：<consumer-a> 跑完 `pnpm skills:install` 後 `supabase-postgres-best-practices/SKILL.md` 的 sha256 仍是舊值 `ccd6e459…`，上游是 `ad65e776…`；接著跑 `skills update` 回報 updated 18 skills，sha256 依然不動。刪目錄後重 add 才變成上游值。
-
-本證據決定：怎麼更新（先刪目錄再 add）。
-本證據不決定：要不要更新——**NEVER** 拿「更新機制很麻煩」當跳過更新的理由。
-
-repo 內只有少數幾支要更新時用上面的逐支形式；同一個 source 有一半以上要更新時，`npx skills add <owner>/<repo> --agent <runtime-agent> --copy -y`（不帶 `@skill`）會 refresh 該 repo 全部既有 skill——但它同時會**裝上該 repo 所有你原本沒選的 skill**，用之前先確認那個 repo 的 skill 數量。
+同一 source 一半以上要更新時可用不帶 `@skill` 的 `npx skills add <owner>/<repo> --agent <runtime-agent> --copy -y`，但它會**裝上該 repo 所有沒選的 skill**，先確認支數。
 
 ### S.5.2 新增 skill
 
-**MUST 先改 `scripts/install-skills.sh` 再跑安裝**，不要直接 `npx skills add` 了事——install script 是重建這台機器時的唯一依據，只跑指令不改 script，換機器後這支 skill 就無聲消失（第三方 skill 不進版控，`<skills-root>/` 多半 gitignored）。
+**MUST 先改 `scripts/install-skills.sh` 再跑安裝**：它是重建機器的唯一依據，`<skills-root>/` 多半 gitignored。
 
 ### S.5.3 清殘留與 lock drift
 
@@ -228,7 +181,7 @@ git show --stat HEAD | tail -3
 
 ### S.5.5 收尾驗證（MUST，NEVER 只憑安裝指令沒報錯就宣告完成）
 
-`npx skills add` 對失敗的 source 仍然 exit 0（例如 well-known source 少了 `https://www.` 前綴），而該 skill 的目錄此時已被你刪掉——**只看指令有沒有報錯會把「刪掉沒補回來」讀成成功**。
+`npx skills add` 對失敗的 source 仍 exit 0（如 well-known source 少了 `https://www.`），而目錄已被刪。
 
 ```bash
 cd ~/offline/clade
@@ -240,18 +193,12 @@ test -f <skills-root>/<name>/SKILL.md
 
 ## 禁止事項（Skills mode）
 
-- **NEVER** 用 `metadata.version` 判斷落後（見 Step S.1 的實證）
-- **NEVER** 用 `pnpm skills:install` 或 `npx skills update` 當更新手段——兩者都不會換檔案（見 Step S.5.1 的實測表）
-- **NEVER** 因為 `set -e` 的 install script 中途失敗就以為後面都跑過了：一支下架的 skill（例：`onmax/nuxt-skills@vueuse`）會讓整份 install script 從那行起全部沒跑
-- **NEVER** 只更新報告裡第一個落後的 repo——**每一個**列在該項「落後的 repo」清單裡的 repo 都要處理
-- **NEVER** 直接 `npx skills add` 而不同步改該 repo 的 `scripts/install-skills.sh`
-- **NEVER** 因為 script 判 `upstream-gone` 就直接刪本地目錄——先讀成因提示，「找不到對象」那類 MUST 人工去上游確認
-- **NEVER** 把「上游新 skill 覆蓋了自家 rule」的刪除動作與 skill 更新混進同一個 commit——前者是標準層改動（走 clade publish / propagate），後者是安裝層同步
-- **NEVER** 在判 CONFLICT 時主線自己選邊
+- `set -e` 的 install script 中途失敗時，後面的行都沒跑
+- **NEVER** 把「上游覆蓋自家 rule」的刪除與 skill 更新混進同一個 commit——前者是標準層改動（走 clade publish / propagate）
 
 ## 與 Fleet mode carve-out 的關係
 
-第三方 skill sweep 屬於 [[clade-role-and-todo-discipline]] § upstream-driven dep migration carve-out（該 rule 明列「非 npm 的 upstream 散播（`npx skills add` 拉的 skill 修正）同樣算 fleet sweep」）。准入條件比照 SKILL.md § Fleet mode carve-out 准入（SoT），但「一個套件 × 一個 target version」在本 mode 讀作「**一個 source repo × 一次同步**」——同一支 audit 報告內的多個 source 各自成批，NEVER 混成一個 commit。
+第三方 skill sweep 屬 [[clade-role-and-todo-discipline]] § upstream-driven dep migration carve-out，准入比照 SKILL.md § Fleet mode carve-out 准入（SoT），「一個套件 × 一個 target version」讀作「**一個 source repo × 一次同步**」，多個 source NEVER 混成一個 commit。
 
 
 Runtime substitutions: each target adapter binds `<runtime-target>` for audit selection and `<runtime-agent>` for the shared `npx skills add` CLI. Do not infer either value from the lock file.

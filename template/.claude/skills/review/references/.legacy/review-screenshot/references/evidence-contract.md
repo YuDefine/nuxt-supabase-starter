@@ -24,9 +24,7 @@
 
 ### 0. agent-browser 環境準備（MUST）
 
-`agent-browser` 用自管 persistent-profile Chromium，profile 已設在 `~/.agent-browser/config.json`，**每次呼叫自動讀取**。它**不** CDP-attach 使用者的 daily Chrome，從根本沒有 remote-debugging popup / HTTP 403 / chrome:// 撞牆問題，因此**不需要**任何 CDP endpoint 環境變數的 defensive prefix、**不需要** Python heredoc 包裝、**不需要** `--profile` flag。
-
-每個 Bash tool call 就是獨立的 `agent-browser <subcommand>`，多步用 `&&` 串：
+`agent-browser` 用自管 persistent-profile Chromium（`~/.agent-browser/config.json` 自動讀取），不需要 CDP 環境變數或 `--profile` flag。每個 Bash tool call 是獨立的 `agent-browser <subcommand>`，多步用 `&&` 串：
 
 ```bash
 agent-browser --session ssr get url
@@ -187,7 +185,7 @@ agent-browser --session ssr eval "localStorage.setItem('nuxt-color-mode','light'
 | **A. 人工檢查截圖** | 對應 工作計畫 tasks.md `## 人工檢查` 各 item | **MUST** `screenshots/<env>/<change-name>/`（資料夾名 == change name，不是 phase / section / 自由語義） | **MUST** `#<item-id>[<variant>]-<descriptor>.png`（id 與 tasks.md `## 人工檢查` 的 `#N` / `#N.M` 完全相等） | ✅ 是，`pnpm review`（從 clade home）自動配對 |
 | **B. Ad-hoc / debug 截圖** | 探索、debug、screenshot review 視覺 QA、其他驗證 | `screenshots/<env>/<semantic-topic>/`（自由語義） | 自由命名 | ❌ 否 |
 
-**兩類混在同一資料夾 = review GUI 配對失敗**。截圖前**MUST** 先確定這次拍的是 A 還是 B：
+截圖前**MUST** 先確定這次拍的是 A 還是 B（混在同一資料夾 = 配對失敗）：
 
 - 主 session brief 提到 工作計畫 name 或 `## 人工檢查` 清單 → A 類
 - 主 session brief 是 ad-hoc 探索、debug、polish UI、live preview → B 類
@@ -201,6 +199,8 @@ agent-browser --session ssr eval "localStorage.setItem('nuxt-color-mode','light'
 - **NEVER** 在 `screenshots/<env>/_archive/` 下建立新資料夾 — `_archive/` 只給 `/screenshots-archive` skill 寫入
 
 ### A 類：人工檢查截圖（review:ui 配對用）
+
+> 本節的 `<change-name>` 與 `openspec/changes/<change-name>/tasks.md` 只適用 openspec 載體。plan package 載體的 tasks 檔是 `specs/plans/<work-id>/tasks.md`；截圖資料夾的配對規則尚未為 plan package 定義，`audit-screenshot-staleness.ts` 也只掃 `openspec/changes`，plan package 的截圖要人工核對。
 
 #### 驗收點優先紀律
 
@@ -233,7 +233,7 @@ screenshots/<env>/<change-name>/_exploration/
 mkdir -p screenshots/local/<change-name>
 ```
 
-`<change-name>` **MUST** 等於 `openspec/changes/<change-name>/` 的目錄名 — 一字不差。**禁止**用 `phase-N-section-N`、`<change-prefix>`、`<feature-tag>`、`<topic>` 等別名；review:ui 用 substring match（`change === topic` 或 `change.startsWith(topic+'-')` 或 `topic.startsWith(change+'-')`）認資料夾，命名漂走 review GUI 就找不到對應 topic、整個 change 拍出來等於白拍。
+`<change-name>` **MUST** 等於 `openspec/changes/<change-name>/` 的目錄名 — 一字不差，**禁止**用 `phase-N-section-N`、`<feature-tag>`、`<topic>` 等別名（配對規則見下方 § review:ui 配對行為）。
 
 #### 檔名（hard rule）
 
@@ -271,28 +271,7 @@ screenshots/local/<change-name>/
 └── review.md                      # 截圖報告
 ```
 
-或用 `light/` `dark/` 子目錄（review:ui 會 recurse 收集，filename basename 相同就好）：
-
-```
-screenshots/local/<change-name>/
-├── light/
-│   ├── #1-clock.png
-│   ├── #2-salary.png
-│   └── #3-leave-quotas.png
-├── dark/
-│   ├── #1-clock.png
-│   ├── #2-salary.png
-│   └── #3-leave-quotas.png
-└── review.md
-```
-
-#### 收到 brief 時的拍攝流程
-
-1. 讀 `openspec/changes/<change-name>/tasks.md` 找 `## 人工檢查` 區塊
-2. 列出每個 item 的 id（`#1`, `#2`, `#3.1`, ...）+ description
-3. 為每個 item 規劃要拍的場景（happy path / variants / states）
-4. 檔名首段 token 對齊 item id；descriptor 反映 item description 的關鍵字
-5. 最後 review:ui 載入此 change 時應該每個 item 都有 ≥ 1 張對應檔
+或用 `light/` `dark/` 子目錄（review:ui 會 recurse 收集，兩邊 basename 相同）。
 
 #### descriptor 命名紀律
 
@@ -302,7 +281,7 @@ screenshots/local/<change-name>/
 
 - 資料夾名：`change === topic` 或 `change.startsWith(topic+'-')` 或 `topic.startsWith(change+'-')` 才會被認為屬於該 change
 - 檔名：`^#?(\d+(?:\.\d+)?)[a-z]?(?=[-._])` 擷取 id；id 必須等於 item id（去 `#`）才會 match
-- 不符合上面任一條件 → review:ui 顯示「對應 0 張」「請以 `#<id>-...` 命名後重整」 = 拍出來等於白拍
+- 不符合 → review:ui 顯示「對應 0 張」
 
 ### B 類：Ad-hoc / debug / screenshot review 視覺 QA
 
@@ -317,7 +296,7 @@ mkdir -p screenshots/local/<semantic-topic>/dark
 
 `<semantic-topic>` 例：`debug-clock-overlap`、`live-preview-design-token`、`exploration-typography`
 
-**B 類資料夾不會被 review:ui 載入到任一 change**（資料夾名與 active change 名稱不 match） — 這是預期行為，B 類本來就不該干擾人工檢查 GUI。
+B 類資料夾不會被 review:ui 載入（預期行為）。
 
 ## 拍前 Emptiness Preflight
 
@@ -601,40 +580,9 @@ agent 回傳：
 - **每完成一個 item 之後**：更新 `progress.json` + 跑一個 cheap tool call（如 `Bash("date")` 或 `Read` `progress.json` 自己剛寫的檔）強制 return main loop
 - **每 15 分鐘**（即使沒新完成 item）：同上
 
-存在原因：`SendMessage` 是 cooperative — 訊息 queue 進 agent inbox 後，**只有 agent 完成當下 tool call、回到 main loop、發出下一個 tool call 時**才會被遞送。verify mode 若把一個 Bash call 用 `&&` 串 10+ 個 agent-browser 動作（每個 `wait --load` 2–5s、`screenshot` 3–10s），整個 call 可能跑 5–15 分鐘以上，**期間主線完全無法介入**。Checkpoint 是強制 return main loop 的機制。
-
 ### 為什麼單一 long Bash call 會 break SendMessage
 
-一個 Bash 工具呼叫期間跑多少瀏覽器互動主線都看不到。寫法影響主線可介入性：
-
-**❌ 反例（多 item / 多動作 `&&` 串成單一 Bash call，主線 5–15 分鐘叫不動）**：
-
-```bash
-agent-browser --session ssr open "http://localhost:3000/page-a" && agent-browser --session ssr wait --load networkidle && agent-browser --session ssr screenshot "...#1.png" \
-  && agent-browser --session ssr open "http://localhost:3000/page-b" && agent-browser --session ssr wait --load networkidle && agent-browser --session ssr screenshot "...#2.png" \
-  && agent-browser --session ssr open "http://localhost:3000/page-c" && agent-browser --session ssr wait --load networkidle && agent-browser --session ssr screenshot "...#3.png"
-# ... 還有多個 URL / item ...
-```
-
-**✅ 正解（拆成多個 ≤ 1 語義動作的 Bash call）**：
-
-```bash
-# Call 1：跳目標頁（一個語義：「到達待操作頁面」）
-agent-browser --session ssr open "http://localhost:3000/目標路徑" \
-  && agent-browser --session ssr wait --load networkidle \
-  && agent-browser --session ssr get url
-# → return main loop（SendMessage queue 在此被處理）
-
-# Call 2：等待 final-state element（一個語義：「確認畫面載入」）
-agent-browser --session ssr wait --text "待驗狀態" \
-  && agent-browser --session ssr get url
-# → return main loop
-
-# Call 3：DOM observation + 截圖（一個語義：「收集 visual evidence」）
-agent-browser --session ssr eval "document.body.innerText" \
-  && agent-browser --session ssr screenshot "..."
-# → return main loop
-```
+`SendMessage` 只在 agent 完成當下 tool call、回到 main loop 時才遞送；把多個 item 用 `&&` 串成一個 Bash call 可能跑 5–15 分鐘，期間主線無法介入。
 
 **規則**：單個 Bash call 內的 agent-browser 命令鏈 **MUST** ≤ 1 語義動作（例如：「跳轉首頁」算一個；「等待 final-state element」算一個；「DOM observation + 截圖」算一個）。**NEVER** 把多個 verify item 串在同一個 Bash call。
 
@@ -686,11 +634,11 @@ Verify mode **MUST** 在 `screenshots/<env>/<change-name>/progress.json` 寫入�
 寫入時機（**MUST** 任一觸發都更新 `last_update` + 對應欄位）：
 
 - 每完成 / 失敗一個 item 之後
-- 每 15 分鐘（即使沒新進度，仍更新 `last_update` 標記 agent 還活著）
+- 每 15 分鐘（即使沒新進度）
 - 撞 fail-fast 條件後（寫進 `blockers`）
-- Time budget 到期前（自我中止流程觸發前）
+- Time budget 到期前
 
-**用途**：主線 Watch Protocol 靠這個 file 判斷 agent 健康（見 `rules/core/agent-routing.pi-watch-protocol.md`）。**NEVER** 把進度只寫進 review.md — review.md 是給人讀的，progress.json 是給主線機器讀的。
+主線 Watch Protocol 靠這個 file 判斷 agent 健康，**NEVER** 把進度只寫進 review.md。
 
 ### Verify mode 不適用情境（→ UNCERTAIN）
 
@@ -719,7 +667,7 @@ agent-browser --session change-B open "..." \
   && agent-browser --session change-B screenshot "..."
 ```
 
-不同 `--session` 名彼此互不干擾；平行 subagent 各自取語義名（如 change name）即可，**不需要** 任何 daemon / socket 環境變數。
+平行 subagent 各自取語義名（如 change name）即可。
 
 ## Playwright CLI 用法（響應式 / 跨瀏覽器 / 多分頁）
 
@@ -759,22 +707,6 @@ for (const bp of BREAKPOINTS) {
 多分頁：`const p2 = await context.newPage()`。
 
 若專案尚無 `playwright.config.ts`，先 `pnpm create playwright` 建立（選 `tests/e2e` 目錄）。
-
-## Dev-login Route 模板（optional）
-
-若 Chrome 對該專案沒登入過、且有 CI / 隔離 session 需求，可建議主 session 建立：
-
-```typescript
-// server/routes/auth/_dev-login.get.ts
-export default defineEventHandler(async (event) => {
-  if (!import.meta.dev) throw createError({ status: 404 })
-  const query = getQuery(event)
-  // ... set session
-  return sendRedirect(event, (query.redirect as string) || '/')
-})
-```
-
-註：agent-browser 預設情境下，該 profile 只要登入過一次，後續 agent 截圖都會繼承該 session — dev-login route 不再是 hard requirement。
 
 ## Evidence Manifest（每張圖 hard rule）
 
@@ -846,7 +778,7 @@ export default defineEventHandler(async (event) => {
 
 ### 完成前自查
 
-完成 `review.md` 後 **MUST** 逐列核對 § 證據對應表：缺欄的圖是 NON-EVIDENCE，空白／載入中的圖依 § 拍前 Emptiness Preflight 重拍。舊的 `audit-screenshot-quality.ts` 隨 Spectra annotation 層退役（2026-09-17），**沒有機械稽核替你擋**。
+完成 `review.md` 後 **MUST** 逐列核對 § 證據對應表：缺欄的圖是 NON-EVIDENCE，空白／載入中的圖依 § 拍前 Emptiness Preflight 重拍（沒有機械稽核替你擋）。
 
 若有缺口，先整理 `_exploration/`、補拍 final-state、或回報主 session 補 `@no-screenshot`，不要把問題留給人在面板裡猜。
 
@@ -874,10 +806,7 @@ agent-browser daemon 設計上常駐（保持後續呼叫快），**不需要**�
 - **NEVER** patch auth middleware — profile 沒登入過就走 dev-login route 或請使用者登入
 - **NEVER** 從截圖讀使用者帳密填寫登入表單 — 撞登入頁立刻停下回報
 - **NEVER** 在沒 `get url` 驗證 host 的情況下截圖 — session 可能切換過環境
-- **NEVER** 在 emptiness preflight 命中後硬拍交付（見「拍前 Emptiness Preflight」+「空資料解決流程」）
-- **NEVER** 改 component 加 fallback 假資料來填空 UI — 治標不治本，破壞真實 review
-- **NEVER** 在 dev 用 ad-hoc UI / API 補資料而不寫進 seed 檔 — 不持久化
-- **NEVER** 在 staging 未授權前寫資料 — 必須先回主 session 詢問
+- **NEVER** 在 emptiness preflight 命中後硬拍交付，也 **NEVER** 用 § 空資料解決流程 禁止的手段補資料
 - **ALWAYS** 讀取截圖後再判斷狀態，不要未看先判
 - **ALWAYS** 保留截圖檔案
 - **ALWAYS** 每個 Bash call 內的 agent-browser 命令鏈 ≤ 1 語義動作，多步用 `&&` 串、跨語義動作拆成多個 Bash call（見 §「為什麼單一 long Bash call 會 break SendMessage」）

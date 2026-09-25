@@ -10,16 +10,13 @@ effort: medium
 
 <!-- clade-skill-scope: project -->
 
-本 skill 由使用者明確要求建立／設定 tunnel 時啟動，包含本機配置與外部 Cloudflare 資源修改；不屬唯讀稽核。原生叫用方式由各 target adapter 交付，取得 skill 不代表已授權 DNS、token、OAuth provider 或對外開放資源。依本次既有授權執行，缺的是資源決策或帳號授權時才詢問。
+本 skill 會改本機配置與外部 Cloudflare 資源。載入 skill 不代表已授權 DNS、token、OAuth provider 或對外開放；依本次既有授權執行，缺資源決策或帳號授權時才詢問。
 
 對應 cookbook：`~/offline/clade/vendor/snippets/vite-tunnel/`
 
 ## 何時用 vs 何時不用
 
-**用這個 skill**：
-- 真實 OAuth provider flow 必須跑（Apple Sign In、不能 mock、要驗 production-like cookie flow）
-- 手機 / 平板 / 另一台筆電要連 dev server 跑 OAuth callback / webhook
-- 對外人秀 dev preview，需要穩定 hostname
+**用這個 skill**：必須跑真實 OAuth provider flow、另一台裝置要連 dev server 跑 callback / webhook、需要穩定 hostname 的 dev preview。
 
 **改走其他做法**：
 - 單機開發 + agent 並行驗證 → 用 `vendor/snippets/dev-auth/` cookbook 繞 OAuth（更快、不依賴外部網路）
@@ -48,8 +45,6 @@ effort: medium
 3. 使用 locally-managed tunnel 的 setup 腳本需要有效 account certificate。檔案存在只證明有檔；核對選定 credential 的帳號與目標 zone。需要登入時依既有授權執行 `cloudflared tunnel login`，人類 OAuth 操作另列待辦。
 4. 多帳號時以實際 account／zone ID 與 credential binding 查證。Tunnel 名稱前綴不承載帳號身分。
 
-選用 locally-managed setup helper 時，依 cookbook 提供明確的 account／zone 與 certificate 路徑。Helper 比對 certificate 的 account ID **及 zone ID**，再核對 API 的 zone ownership、tunnel UUID 與 DNS target；查詢失敗或不一致時停止資源寫入。Credential 的檔案存在、名稱前綴與命令 exit 0 均不取代此配對。
-
 ## Step 3: 取得 API token
 
 - **官方 Vite／獨立 cloudflared 路線**：依該版本與 tunnel 管理模式的認證方式執行。若使用下方 locally-managed helper，其 API preflight 另外需要 `CLOUDFLARE_API_KEY`；這個變數不表示採用了第三方 plugin。
@@ -70,7 +65,7 @@ effort: medium
 
 約定 tunnel-name = `<project>-dev`。Helper 需要 Python 3、curl 與 cloudflared；不自動登入。
 
-1. 驗證 hostname／zone 邊界、certificate account／zone 與 API 身分。
+1. 驗證 hostname／zone 邊界、certificate 的 account 與 zone ID、API 身分；查詢失敗或不一致就停止資源寫入（檔案存在、名稱前綴、exit 0 都不算配對）。
 2. 依結構化 API 查明 tunnel，確認不存在時才建立；既有 DNS 只接受指向同一 UUID 的 CNAME。
 3. DNS route 執行後再查實際 target，符合才回報 ready。
 4. 在 `.env.local` 保留既有內容、補非秘密的 `TUNNEL_HOSTNAME`／`TUNNEL_NAME`／`TUNNEL_ID`；設定衝突、被追蹤或 symlink 時停止。不保存 API token。
@@ -130,16 +125,9 @@ curl -I https://<hostname>   # 預期 200 / 301
 
 任一條沒過，去看 cookbook 的 Gotchas 表（`vendor/snippets/vite-tunnel/README.md`）。
 
-## 共用 tunnel 模型
+**每專案各建一條 tunnel**（`<project>-dev`），不要把多專案 hostname route 到同一條（一個 dev 關了會讓另一個 502）。
 
-**每專案各建一條 tunnel**（不要把多專案 hostname route 到同一 tunnel）：
-- tunnel-name 跟專案 name 綁定（`<consumer-a>-dev` / `<consumer-b>-dev`）
-- A 專案 dev 關閉時 B 不會被牽連 502
-- `cloudflared tunnel list` 一目了然
-
-憑證依專案指定的 custody 與目標 account／zone scope 管理；是否跨專案共用不由此 skill 預設。
-
-## Gotchas（精簡版，完整看 cookbook）
+## Gotchas（完整看 `vendor/snippets/vite-tunnel/README.md#gotchas`）
 
 - `server.allowedHosts` 漏 hostname → Vite 回 "Blocked request"；第三方路線**必加**
 - OAuth callback 仍指 localhost → provider 回 `redirect_uri_mismatch`
@@ -148,7 +136,5 @@ curl -I https://<hostname>   # 預期 200 / 301
 - Domain 不在 Cloudflare DNS → `route dns` 報 zone not found
 - 用 `cloudflared tunnel --url` 拉 quick tunnel → hostname 隨機，OAuth 註冊壞掉；這 skill **MUST** 用 named tunnel
 - 對外人分享 dev URL → 用 `vite preview` 而非 `vite dev`（HMR / source files 不對外洩）
-
-完整解法看 `~/offline/clade/vendor/snippets/vite-tunnel/README.md#gotchas`。
 
 

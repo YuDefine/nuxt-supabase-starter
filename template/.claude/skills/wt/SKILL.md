@@ -21,7 +21,7 @@ The user's only follow-up action is the actual 人工檢查 decision（GUI 的 O
 
 ## When to invoke
 
-Whenever a coding task (write, edit, refactor, migration prep) or investigation task (analysis, debugging, auditing) is about to start from the main worktree. `/wt` makes per-task worktree isolation cheap; the previous "type a slug, copy a oneliner, open a new session" choreography is gone.
+Whenever a coding task (write, edit, refactor, migration prep) or investigation task (analysis, debugging, auditing) is about to start from the main worktree. `/wt` makes per-task worktree isolation cheap.
 
 Step 1.8 selects the executor from the shared routing table and uses that model’s supported transport. Nuxt UI／Content, Nuxt core and other UI views have separate implementation rows.
 
@@ -38,14 +38,6 @@ Step 1.8 selects the executor from the shared routing table and uses that model�
 
 ```
 /wt <task description>
-```
-
-Examples:
-
-```
-/wt refactor the cache layer to use LRU eviction
-/wt add unit tests for src/parsers/csv.ts covering empty / unicode / quoted rows
-/wt update Node version pin to 24 and rerun pnpm install
 ```
 
 The skill derives a short slug from the task description (lowercased, kebab-case, trimmed to roughly 40 chars). If the user prefers an explicit slug, they MAY prefix the description with `<slug>:` — e.g., `/wt lru-cache: refactor the cache layer to use LRU eviction`.
@@ -78,9 +70,7 @@ Example:
 /wt evlog-dpattern: /implement 繼續 specs/plans/012-evlog-dpattern/tasks.md
 ```
 
-This form is invoked by `/handoff` Mode B (per [[worktree-default]] §1 and [[handoff]] §2B.5) when the user has selected a worktree-requiring change from the outstanding-work list. The subagent inside the worktree runs `<next-skill>` as its first action.
-
-Direct user invocation of this form is allowed but uncommon — usually the user just types `/wt <task>` and lets the subagent figure out the work.
+Invoked by `/handoff` §2B.5; the subagent inside the worktree runs `<next-skill>` as its first action.
 
 ### Form 4 — Resume interrupted worktree
 
@@ -110,7 +100,7 @@ Before creating a new worktree, check if one already exists at the expected path
    - Run `git -C <worktree-path> status --short` to see uncommitted work.
    - **Skip Step 1 entirely** — do NOT call `wt-helper add`.
    - Proceed to Step 1.5 (update the brief's `last_updated` timestamp) and Step 2 (dispatch a resume subagent with the brief content + git status as context).
-4. If the path exists but has no brief, the worktree was created before this feature. Fall through to the existing "already exists" error from `wt-helper add`.
+4. If the path exists but has no brief, fall through to the existing "already exists" error from `wt-helper add`.
 5. If the path does not exist and the invocation is Form 4 (`/wt resume <slug>`), error: "No worktree found for slug `<slug>`."
 6. If the path does not exist, proceed to Step 1 normally.
 
@@ -181,7 +171,7 @@ If you are a new session resuming this worktree:
 1. Run `git log main..HEAD --oneline` to see completed commits
 2. Run `git status` to see uncommitted work
 3. Continue from the next unchecked Progress item above
-4. Follow the subagent contract: selective `git add -- <files>`, no `git add -A`, no `git push origin main`; after commits, push this session branch and open a draft PR — base `main` for a single-slice work, base `integration/<work-id>` in integration mode (the default when one work id has 2+ slices); in integration mode mark the slice PR ready once its mechanical CI is green and hand completion to the coordinator, who lands it with `integration-merge.ts --pr <n>`
+4. Follow the worker contract in the `/wt` skill § After `/wt` completes (selective `git add -- <files>`, no `git add -A`, no `git push origin main`, own draft PR)
 ```
 
 **Progress section**: Decompose the task into concrete steps if possible. If the task is too vague to decompose upfront, write a single item `- [ ] Complete task` — the subagent will refine the checklist as it works.
@@ -195,25 +185,22 @@ Classify the work using the shared routing table, then select its supported tran
 **Invocation override flags** (parsed from args before slug/task extraction):
 
 - `/wt --claude <task>` → force Claude subagent (Step 2)
-- `/wt --pi <task>` (or the older `--codex`) → force Pi (Step 2-pi)
+- `/wt --pi <task>` (`--codex` is an accepted alias) → force Pi (Step 2-pi)
 - No flag → auto-classify below
 
 **Auto-classification** (check in order, first match wins):
 
 1. **UI or Nuxt implementation** → select the matching shared table row by the work being implemented:
-   - Nuxt UI component assembly／Nuxt Content → `ui-implementation`: native Cursor Composer 2.5 from the current catalog.
-   - Nuxt framework, modules and runtime logic → `nuxt-core-implementation`: GPT-5.6 Sol xhigh via the GPT transport for the current runtime.
-   - Other UI views → `ui-view-implementation`: Claude Opus 5.5（effort: medium） via native Claude Code／Herdr.
+   - Nuxt framework, modules and runtime logic → `nuxt-core-implementation`: GPT-6 Sol xhigh via the GPT transport for the current runtime.
+   - UI views, including Nuxt UI component assembly／Nuxt Content → `ui-view-implementation`: Claude Opus 5.5（effort: medium） via native Claude Code／Herdr; no fallback.
    - A main line that meets the selected row’s model and tool requirements implements directly. Otherwise use the bounded phase transport in [[agent-routing]]; preserve the worktree and work identity.
    - Design review, UI planning and screenshot work use their own named rows. File extensions and UI keywords help locate the work but do not select its model.
 
 2. **Analysis/debug work** → **Pi via pi-dispatch.ts** (Step 2-pi-investigate)
    - Task description contains investigation keywords: `analyze`, `analysis`, `debug`, `investigate`, `audit`, `scan`, `trace`, `why`, `root cause`, `分析`, `除錯`, `調查`, `掃描`, `追蹤`, `為什麼`
-   - Rationale: analysis/debug tasks benefit from Pi's structured evidence collection (pi-offload templates). These tasks typically don't need worktree commits — they produce JSON reports.
 
 3. **Non-UI coding work** → **Pi via the Pi dispatcher** (Step 2-pi)
    - Everything else: refactoring, adding tests, implementing features, fixing bugs, migrations, config changes, etc.
-   - Rationale: non-UI coding is the sweet spot for Pi — cheaper, doesn't consume Claude context, follows the same pi-watch-protocol already proven in `/commit` and `/implement`.
 
 **Form-specific overrides**:
 - Form 3 (`/wt <slug>: /<next-skill>`): use a carrier that can invoke the next skill; each implementation phase still follows its named routing row.
@@ -232,7 +219,7 @@ Routing: <task> → <table-row> / <model> / <effort> / <transport> (<reason>)
 
 摘要：`Agent(name: "wt-<slug>", prompt: <template>)` 派 subagent 進 worktree，cwd 透過 prompt 指定。Parent cwd 不動。Thin brief MUST 由 parent 預消化。
 
-**Same message as the dispatch**: 記下 Agent name/id 與 deadline（deadline 取值依 [[agent-routing]] § deadline 怎麼取），排 [[agent-routing]] § Async keepalive prompt 的 canonical `ASYNC_KEEPALIVE_CONTROL task=none owner=<owner> deadline=<ISO>...`。這條路徑沒有可查 harness task id，**NEVER** 放原 `/wt` input、偽造 task id 或用 `TaskOutput` 推斷狀態。deadline 到達走 `TaskStop(owner)` intervention，terminal notification 前保留 ownership。
+**Same message as the dispatch**: 記下 Agent name/id 與 deadline（deadline 取值依 [[agent-routing.keepalive-wake]] § deadline 怎麼取），排 [[agent-routing.keepalive-wake]] § Async keepalive prompt 的 canonical `ASYNC_KEEPALIVE_CONTROL task=none owner=<owner> deadline=<ISO>...`。這條路徑沒有可查 harness task id，**NEVER** 放原 `/wt` input、偽造 task id 或用 `TaskOutput` 推斷狀態。deadline 到達走 `TaskStop(owner)` intervention，terminal notification 前保留 ownership。
 
 ### Step 2-pi — Pi dispatch into worktree (non-UI coding)
 
@@ -248,7 +235,7 @@ Routing: <task> → <table-row> / <model> / <effort> / <transport> (<reason>)
 
 ### Step 3 — Wait for completion
 
-**All paths — keepalive first**: worktree tasks routinely run past an hour (2026-08-08: 1h43m). Before ending the dispatch turn，follow [[agent-routing]] § 主線靜默上限：Claude subagent 用 `ASYNC_KEEPALIVE_CONTROL task=none owner=<agent-name-or-id> deadline=<ISO>`；pi background Bash 用既有 1500s `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=<owner> deadline=<ISO>`，不另加第二條。兩者都只承載控制面，**NEVER** 重播原任務；完成時停止。
+**All paths — keepalive first**: worktree tasks routinely run past an hour. Before ending the dispatch turn，follow [[agent-routing]] § 主線靜默上限：Claude subagent 用 `ASYNC_KEEPALIVE_CONTROL task=none owner=<agent-name-or-id> deadline=<ISO>`；pi background Bash 用既有 1500s `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=<owner> deadline=<ISO>`，不另加第二條。兩者都只承載控制面，**NEVER** 重播原任務；完成時停止。
 
 **Claude subagent path** (Step 2): The Agent tool call returns when the subagent finishes — that describes how the result arrives, **not** what the mainline does meanwhile. Parse its report to determine success vs. failure.
 
@@ -291,9 +278,9 @@ After all tasks in the invocation have either completed (subagent committed) or 
 Ready / blocked worktrees: <counts from batch status>; report each retained path and reason
 ```
 
-The `[pi]` / `[claude]` / `[pi:analyze]` / `[pi:debug]` tag indicates which executor was used. This helps the user understand the execution path and cost profile.
+The tag shows which executor was used.
 
-**Batch handover**: after harvesting verified checkpoints (`batch checkpoint`, no full AI ceremony), register readiness (`batch ready`) and run `wt-helper batch status --trigger auto --workflow <已解析 workflow_model>`。**NEVER** 省略 `--workflow`。PR workflow prepares one independently acceptable purpose as its own **ready** PR; trunk-based still waits for 4 distinct work ids. Slice owner 在相對 `main` 有非空 committed diff 後 **MUST** `git push` 該 session branch 並開 **draft** PR，再盯該 PR 的 CI（[[github-flow]]）；draft 期間該 PR 的 CI 只跑機械檢查、**不跑 test-lane**；要測試訊號就在來源 worktree 跑 `test:affected`，**NEVER** 為了看綠燈提前 `gh pr ready`。**Integration 模式**（預設；[[github-flow]] § Integration branch）：同一個 work id 有 2 個以上切片時，worker push **該** branch 並對 `integration/<work-id>` 開 PR（`gh pr create --base integration/<work-id>`，做到一半先開 draft），盯該 PR 的 CI（只有機械檢查、不跑 test-lane）；在來源 worktree 跑完本機門檻（canonical check ＋ repo 在 CI 機械檢查裡跑的 typecheck；clade 是 `pnpm exec vp check` ＋ `node node_modules/typescript-native/bin/tsc -p tsconfig.clade.json --noEmit`，動到 vendor/scripts 再加 `node node_modules/typescript-native/bin/tsc -p tsconfig.vendor.json --noEmit`。兩條 tsc 以秒計、不必排 heavy gate slot。`test:affected` 仍由 coordinator 在 integration 轉 ready 前跑一次）且該 PR 的 CI 全綠後，自己 `gh pr ready` 該切片 PR，completion 回 coordinator，由 coordinator 以 `integration-merge.ts --pr <n>` 落地。切片 PR 不登記 `batch draft` receipt；**NEVER** 對 `main` 開 PR、**NEVER** 自己 merge。只有一個切片就完工的工作才走上面那條 base 為 `main` 的 draft PR。Worker **NEVER** push `origin main`、**NEVER** merge。CI 紅燈回同一張 PR。User `/commit` or merge back has no minimum; dependency/drained/stop can flush early. Archive runs its gates and bookkeeping in the source tree before readiness. Cleanup belongs to the final commit workflow after verified landing.
+**Batch handover**: after harvesting verified checkpoints (`batch checkpoint`, no full AI ceremony), register readiness (`batch ready`) and run `wt-helper batch status --trigger auto --workflow <已解析 workflow_model>`。**NEVER** 省略 `--workflow`。Trigger thresholds and landing follow commit skill `batch.md`. Worker push／draft PR obligations are in § After `/wt` completes; **NEVER** `gh pr ready` early just to get a green test signal — run `test:affected` in the source worktree. Cleanup belongs to the final commit workflow after verified landing.
 
 Form 1 work uses the same queue; the coordinator handles authorized landing without asking the user to type commands.
 
@@ -301,9 +288,7 @@ Form 1 work uses the same queue; the coordinator handles authorized landing with
 
 ### Claude subagent task failure
 
-Subagent reports failure or exits without commits. Preserve the worktree and branch; report the path. The user can inspect via `git -C <wt-path> log/diff/status` from the main session — no need to switch cwd.
-
-When the user fixes the underlying issue, they can either:
+Subagent reports failure or exits without commits. Preserve the worktree and branch; report the path. Recovery:
 
 - Re-run the subagent in the same worktree by passing the worktree path explicitly to a new Agent invocation, or
 - `wt-helper cleanup <slug> --force --force-discard-unland` to discard the worktree and start fresh via `/wt`.
@@ -320,7 +305,7 @@ Recovery options:
 
 For Pi investigation failures (Step 2-pi-investigate), exit code 2 (business fail) means the investigation ran but didn't meet acceptance criteria — read `result` JSON for details. Exit code 3 (mechanical failure) means Pi itself broke — check `/tmp/pi-<label>-stderr.log`. Exit code 4 (quota) means rate limited — wait or switch to Claude.
 
-### Squash conflicts (no longer at `/wt` time)
+### Batch integration conflicts
 
 Batch integration conflicts are resolved in the isolated integration worktree, then `wt-helper batch resume` continues. Sources remain intact; see commit skill `batch.md`.
 
@@ -334,6 +319,12 @@ The coordinator's next actions:
 2. Verify scope, evidence and writer handover; register all authorized ready sources via `wt-helper batch ready`.
 3. Evaluate the batch trigger and invoke `/commit` when due; preserve the queue across session handover.
 
+`/wt` **worker** MUST:
+
+- Stage selectively (`git add -- <files-you-actually-changed>`); **NEVER** `git add -A` / `git add .`
+- Once the session branch has a non-empty committed diff: push **that** branch and open a **draft** PR (integration mode targets `integration/<work-id>`; see [[worktree-default]] §5), then watch its CI
+- Fix red CI on the **same** branch and PR
+
 `/wt` **worker** does NOT:
 
 - `batch ready` or start the full `/commit` quality chain
@@ -342,7 +333,7 @@ The coordinator's next actions:
 - Cleanup worktrees
 - Commit on main
 
-Worker **MUST** push **that** session branch, open or update its own draft PR, register `batch draft --kind visibility`, and watch that PR's CI ([[github-flow]]); while the PR is a draft that CI is mechanical checks only, never the test lanes. **Integration mode** (the default when one work id has 2+ slices; [[github-flow]] § Integration branch): the worker still pushes that branch and watches CI, but the PR's base is `integration/<work-id>` (mechanical checks only, no test lanes) and it registers **no** `batch draft` receipt. It runs the local gate in its source worktree (canonical check plus the typecheck CI runs as a mechanical check — in clade `pnpm exec vp check` and `node node_modules/typescript-native/bin/tsc -p tsconfig.clade.json --noEmit`, plus `node node_modules/typescript-native/bin/tsc -p tsconfig.vendor.json --noEmit` when vendor/scripts changed; `test:affected` is still run once by the coordinator on integration before the PR to `main` turns ready), marks the slice PR ready once its CI is green, and returns completion to the coordinator, who lands it with `integration-merge.ts --pr <n>`. The worker **never** opens a PR against `main` and **never** merges. On completion, return `workId`, repository, PR, branch, checkpoint SHA, scope, evidence, and writer-release, then **stop writing the source**. Worker done is not landing.
+Worker **MUST** push **that** session branch, open or update its own draft PR, register `batch draft --kind visibility`, and watch that PR's CI ([[github-flow]]); while the PR is a draft that CI is mechanical checks only, never the test lanes. **Integration mode** (the default when one work id has 2+ slices; [[github-flow]] § Integration branch): the worker still pushes that branch and watches CI, but the PR's base is `integration/<work-id>` (mechanical checks only, no test lanes) and it registers **no** `batch draft` receipt. It runs the local gate in its source worktree (canonical check plus the typecheck CI runs as a mechanical check — in clade `pnpm exec vp check` and `node node_modules/typescript-native/bin/tsc -p tsconfig.clade.json --noEmit`, plus `node node_modules/typescript-native/bin/tsc -p tsconfig.vendor.json --noEmit` when vendor/scripts changed; these take seconds and need no heavy gate slot; `test:affected` is still run once by the coordinator on integration before the PR to `main` turns ready), marks the slice PR ready once its CI is green, and returns completion to the coordinator, who lands it with `integration-merge.ts --pr <n>`. The worker **never** opens a PR against `main` and **never** merges. On completion, return `workId`, repository, PR, branch, checkpoint SHA, scope, evidence, and writer-release, then **stop writing the source**. Worker done is not landing.
 
 Coordinator push after review is limited to delivering the formal HEAD onto the existing PR head. Ready, merge, and main push stay with the named coordinator.
 
@@ -353,9 +344,9 @@ Coordinator push after review is limited to delivering the formal HEAD onto the 
 If the user types just `/wt fix-auth` (no description, no `:`-prefixed next-skill), prompt the user to clarify whether they want:
 
 - An ad-hoc task in a new worktree (ask for the task description).
-- A long-lived worktree session (deprecated via `/wt`; suggest `node scripts/wt-helper.ts add fix-auth --task-summary "<一句話>"` + opening a fresh session in the resulting path).
+- A long-lived worktree session (`/wt` does not create these; suggest `node scripts/wt-helper.ts add fix-auth --task-summary "<一句話>"` + opening a fresh session in the resulting path).
 
-Do NOT silently build a worktree with no task — that's the deprecated v1 behavior and is gone.
+Do NOT silently build a worktree with no task.
 
 ### cwd already inside a session worktree
 
@@ -390,7 +381,7 @@ node scripts/stash-reconcile.ts                             # plan recovery for 
 
 Use `node scripts/wt-helper.ts batch status --trigger manual --workflow <workflow_model>` and commit skill `batch.md` for requested merge back. The coordinator runs the full batch commit and cleanup; archive prepares its source first.
 
-`cleanup --force --force-discard-unland` is for discarding unwanted worktrees (subagent fail, abandoned exploration). It permanently loses the branch's commits; use `merge-back` first to preserve the work. When the branch is "unlanded" only because main later rewrote the same hunks (its content was superseded, not lost), use `cleanup <slug> --superseded-by … --reason …` instead: every unlanded file needs evidence on main, the tip is pinned in `refs/wt-superseded/`, and nothing is removed unless all files are covered (TD-1082).
+`cleanup --force --force-discard-unland` permanently loses the branch's commits; use it only to discard unwanted worktrees. When the branch is "unlanded" only because main later rewrote the same hunks (content superseded, not lost), use `cleanup <slug> --superseded-by … --reason …` instead: every unlanded file needs evidence on main, the tip is pinned in `refs/wt-superseded/`, and nothing is removed unless all files are covered.
 
 # Runtime adapter: Claude
 Use Claude's qualified main line for UI implementation and visual judgement. Bind host question, Agent, completion notification, TaskStop and keepalive operations to the native Claude tools; these bindings do not authorize changing the shared worktree gates.

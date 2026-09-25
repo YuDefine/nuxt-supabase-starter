@@ -44,7 +44,7 @@ predicate 走，**NEVER** 把本小節外推成「委派都該指定 model」。
 
 | 可觀察 predicate | 檔位 |
 | --- | --- |
-| Pi可用（dispatcher未回exit 3／4） | 原判`sonnet` → `--model gemini --effort high`；原判`haiku` → `--model gemini --effort high` |
+| Pi可用（dispatcher未回exit 3／4） | 原判`sonnet` → `--model grok-xai --effort high`；原判`haiku` → `--model grok-xai --effort high` |
 | Pi runtime機械不可用（exit 3） | 依watch-protocol判斷修runtime或顯式改派Claude；**NEVER** fallback到Codex CLI |
 | Pi配額不可用（exit 4） | 走§ 配額耗盡時的fallback紀律，`sonnet`／`haiku` **顯式帶** |
 
@@ -54,11 +54,11 @@ predicate 走，**NEVER** 把本小節外推成「委派都該指定 model」。
 
 **PreToolUse:Agent 機械 gate**：主線呼叫 `Agent` **一律**立即建立 `claude-agent-dispatch` pending decision 並阻擋，**不分 `subagent_type`、也不分 `model`**——省略 `model`（繼承主線）與明寫 Opus／Fable 同樣計入（判準是 default-deny：繼承主線正是**最貴**的委派形狀，TD-513）。**NEVER** 把例外理由寫進 Agent prompt 當作 bypass——gate 只認 decision receipt，不解析自由文字。
 
-**撞到這道 gate、要決定怎麼結案之前，MUST 先讀 [[agent-routing.pi-watch-protocol]] § Routing threshold 與 Claude Agent dispatch gate**——正常結案的逐字 `pi-dispatch.ts` 指令與 effort 對照、四個具名 waiver、Gemini／Sol exit 2 的升級鏈與 exit 4 的配額鏈，都在那裡，**此處不複述**。
+**撞到這道 gate、要決定怎麼結案之前，MUST 先讀 [[agent-routing.pi-watch-protocol]] § Routing threshold 與 Claude Agent dispatch gate**——正常結案的逐字 `pi-dispatch.ts` 指令與 effort 對照、四個具名 waiver、grok-xai／Sol exit 2 的升級鏈與 exit 4 的配額鏈，都在那裡，**此處不複述**。
 
-**本節路徑的 luna 准入（與 § Routing Table 五條連言無關）**：原判 `sonnet` 的委派 MUST 同時滿足兩項——(1) § MUST 指定 `model: 'sonnet'` 的四條 predicate 全中（複核，不是加碼）；(2) 未命中 § NEVER 降檔的形狀任一條。兩項都過 → 派 `--model gemini --effort high`，**NEVER** 因「gemini 較便宜」自行改回 `--model sol` 或退回 Claude `sonnet`。任一項不過 → 照原判派 Claude `sonnet`（顯式帶 `model`），**NEVER** `--model terra`。
+**本節路徑的 grok-xai 准入（與 § Routing Table 五條連言無關）**：原判 `sonnet` 的委派 MUST 同時滿足兩項——(1) § MUST 指定 `model: 'sonnet'` 的四條 predicate 全中（複核，不是加碼）；(2) 未命中 § NEVER 降檔的形狀任一條。兩項都過 → 派 `--model grok-xai --effort high`，**NEVER** 因「較便宜」自行改派其他 model 或退回 Claude `sonnet`。任一項不過 → 照原判派 Claude `sonnet`（顯式帶 `model`），**NEVER** `--model terra`。
 
-**gemini 回 exit 2（業務 fail）→ 升 `--model sol` 同 effort 重派一次**；再 fail 才回 Claude `sonnet` subagent。exit 3／4 照 § 配額耗盡時的 fallback 紀律 與 watch-protocol 的 exit code 分流走，**NEVER** 記入品質判斷。
+**grok-xai 回 exit 2（業務 fail）→ 升 `--model sol` 同 effort 重派一次**；再 fail 才回 Claude `sonnet` subagent。exit 3／4 照 § 配額耗盡時的 fallback 紀律 與 watch-protocol 的 exit code 分流走，**NEVER** 記入品質判斷。
 
 ### MUST 指定 `model: 'sonnet'` 的 predicate（窮舉）
 

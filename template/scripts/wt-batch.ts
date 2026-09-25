@@ -130,6 +130,37 @@ const isolatedGitEnv = {
   GIT_COMMITTER_NAME: 'clade-batch',
   GIT_COMMITTER_EMAIL: 'clade-batch@localhost',
 }
+/**
+ * Env for talking to the remote. `isolatedGitEnv` drops the operator's global and system
+ * config so their merge / hook / identity settings cannot steer batch commits — but that
+ * also drops the only credential source on machines whose GitHub login lives in
+ * `~/.gitconfig` (`credential.helper = !gh auth git-credential`), and every PR-mode fetch
+ * then dies with "could not read Username". Fetching does not merge or commit, so it keeps
+ * the operator config; repo-context variables are still stripped. Accepted cost: the fetch
+ * also honors the operator's `fetch.*` settings and `core.hooksPath` (a `reference-transaction`
+ * hook runs on the ref update) — the isolation guarantee covers merge / commit, not fetch.
+ * GIT_TERMINAL_PROMPT=0: when the credential helper fails, git must fail closed instead of
+ * prompting on /dev/tty and hanging the batch. Built per call so a GIT_CONFIG_GLOBAL set
+ * after import is honored.
+ */
+function remoteGitEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    GIT_OPTIONAL_LOCKS: '0',
+    GIT_TERMINAL_PROMPT: '0',
+  }
+  for (const key of [
+    'GIT_DIR',
+    'GIT_WORK_TREE',
+    'GIT_INDEX_FILE',
+    'GIT_COMMON_DIR',
+    'GIT_OBJECT_DIRECTORY',
+    'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+    'GIT_PREFIX',
+  ])
+    delete env[key]
+  return env
+}
 function consumerIdForRoot(root: string): string {
   const metaPath = join(root, '.claude', 'consumer-meta.json')
   if (existsSync(metaPath)) {
@@ -287,6 +318,10 @@ export interface WorktreeBatch {
   unmetGates?: { name: string; reason: string; path: string; hash: string }[]
   cancellationReason?: string
   landedHead?: string
+  /** Wall-clock stamps of the lifecycle transitions (H4): `reviewAt` is the
+   *  latest entry into review, so `sealedAt - reviewAt` is the seal wait of
+   *  the candidate that was actually sealed. Absent on legacy journals. */
+  timeline?: BatchTimeline
   mergeReceipt?: MergeReceipt
   unattendedAuthorization?: UnattendedMergeAuthorization
   mergeAttempt?: MergeAttemptJournal
@@ -320,6 +355,13 @@ export interface WorktreeBatch {
     // pre-existing file that merely shares the prefix.
     detachedPointers?: string[]
   }
+}
+export interface BatchTimeline {
+  preparedAt?: string
+  reviewAt?: string
+  sealedAt?: string
+  landedAt?: string
+  closedAt?: string
 }
 interface State {
   version: 1
@@ -617,6 +659,22 @@ function save(c: Context, s: State) {
 function isLiveBatch(b: WorktreeBatch): boolean {
   return !['landed', 'cleaned', 'cancelled'].includes(b.phase)
 }
+// 同一 work id 的前一張 PR 已由某批正式落地（landed／cleaned，PR 制另需 merge receipt）時，
+// 它的 draft receipt 已被該批 journal 的 draftBindings 取代，不再擋同 work id 的下一張 PR。
+function draftReceiptLanded(s: State, receipt: DraftPrReceipt): boolean {
+  const headBranch = receipt.branch.replace(/^refs\/heads\//, '')
+  return s.batches.some(
+    (b) =>
+      (b.phase === 'landed' || b.phase === 'cleaned') &&
+      (b.workflow !== 'pr-merge-based' || b.mergeReceipt?.merged === true) &&
+      (b.draftBindings ?? []).some(
+        (binding) =>
+          binding.workId === receipt.workId &&
+          binding.pr === receipt.pr &&
+          binding.headBranch === headBranch,
+      ),
+  )
+}
 function processStart(pid: number): string | null {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
@@ -716,7 +774,12 @@ function head(cwd: string) {
 }
 function fetchOriginMain(c: Context): string {
   try {
-    git(c.main, ['fetch', 'origin', 'main'])
+    execFileSync('git', ['fetch', 'origin', 'main'], {
+      cwd: c.main,
+      encoding: 'utf8',
+      env: remoteGitEnv(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
     return git(c.main, ['rev-parse', 'refs/remotes/origin/main'])
   } catch (error) {
     throw new Error(
@@ -2196,6 +2259,81 @@ function eligible(c: Context, s: State) {
     reason: reserved.has(source.path) ? 'already in a batch' : sourceProblem(c, source),
   }))
 }
+function stamp(b: WorktreeBatch, key: keyof BatchTimeline): void {
+  b.timeline = { ...b.timeline, [key]: new Date().toISOString() }
+}
+/** Durations derived from the timeline; a missing stamp yields no duration. */
+export function batchTimings(b: Pick<WorktreeBatch, 'timeline'>) {
+  const t = b.timeline ?? {}
+  const span = (from?: string, to?: string) =>
+    from && to ? Date.parse(to) - Date.parse(from) : undefined
+  return {
+    prepareToReviewMs: span(t.preparedAt, t.reviewAt),
+    sealWaitMs: span(t.reviewAt, t.sealedAt),
+    sealToLandMs: span(t.sealedAt, t.landedAt),
+    prepareToLandMs: span(t.preparedAt, t.landedAt),
+  }
+}
+/** Several live batches may coexist when their paths are disjoint, so every
+ *  lifecycle verb resolves its batch explicitly: `--batch <id or unique
+ *  prefix>`, else the integration worktree the command runs in, else the only
+ *  live batch. Anything else is ambiguous and refuses. */
+function active(c: Context, s: State, batchId?: string): WorktreeBatch {
+  const live = s.batches.filter(isLiveBatch)
+  if (batchId !== undefined) {
+    const matches = live.filter((b) => batchId !== '' && b.id.startsWith(batchId))
+    if (matches.length !== 1)
+      throw new Error(
+        matches.length ? `Batch id ${batchId} is ambiguous` : `No live batch ${batchId}`,
+      )
+    return matches[0]!
+  }
+  if (live.length === 1) return live[0]!
+  if (!live.length) throw new Error('No active batch')
+  let cwd = c.cwd
+  try {
+    cwd = realpathSync(c.cwd)
+  } catch {}
+  const owner = live.filter((b) => cwd === b.path || cwd.startsWith(b.path + '/'))
+  if (owner.length === 1) return owner[0]!
+  throw new Error(
+    `Multiple live batches (${live.map((b) => b.id).join(', ')}); pass --batch <id> or run from its integration worktree`,
+  )
+}
+function diffPaths(c: Context, base: string, tip: string): string[] {
+  // Untrimmed `-z`: a path with a leading blank must keep its real spelling.
+  return execFileSync('git', ['diff', '--name-only', '--no-renames', '-z', `${base}...${tip}`], {
+    cwd: c.main,
+    encoding: 'utf8',
+    env: isolatedGitEnv,
+    maxBuffer: 256 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+    .split('\0')
+    .filter(Boolean)
+}
+function pathsOverlap(a: string, b: string): boolean {
+  return a === b || a.startsWith(b + '/') || b.startsWith(a + '/')
+}
+/** Parallel batches must not touch a common path: squash integration of one
+ *  would otherwise silently re-review the other's content after refresh. Any
+ *  Git failure computing either side propagates, so admission fails closed. */
+function assertDisjointFromLive(
+  c: Context,
+  live: WorktreeBatch[],
+  base: string,
+  members: ReadySource[],
+): void {
+  const mine = [...new Set(members.flatMap((m) => diffPaths(c, base, m.head)))]
+  for (const other of live) {
+    const theirs = [...new Set(other.members.flatMap((m) => diffPaths(c, other.base, m.head)))]
+    const shared = mine.filter((path) => theirs.some((their) => pathsOverlap(path, their)))
+    if (shared.length)
+      throw new Error(
+        `Paths intersect live batch ${other.id}: ${shared.slice(0, 10).join(', ')}; land or cancel it before preparing these work ids`,
+      )
+  }
+}
 /** A member is done once removed, or released with its source kept (TD-1095). */
 function settled(b: WorktreeBatch, path: string): boolean {
   return b.removed.includes(path) || (b.released ?? []).some((r) => r.path === path)
@@ -2207,11 +2345,6 @@ function ownedMember(b: WorktreeBatch, path: string): boolean {
 /** Phase-agnostic half of ownedMember: the member rows this batch speaks for. */
 function claimsMember(b: WorktreeBatch, path: string): boolean {
   return b.members.some((m) => m.path === path) && !(b.released ?? []).some((r) => r.path === path)
-}
-function active(s: State): WorktreeBatch {
-  const b = s.batches.find(isLiveBatch)
-  if (!b) throw new Error('No active batch')
-  return b
 }
 /** Batch registry without ready-pool evaluation; independent of workflow model. */
 export function listBatches(cwd: string): WorktreeBatch[] {
@@ -2251,7 +2384,7 @@ export function batchStatus(
     drafts: listDrafts(c),
     ready,
     invalid: rows.filter((r) => r.reason),
-    batches: s.batches,
+    batches: s.batches.map((b) => (b.timeline ? { ...b, timings: batchTimings(b) } : b)),
   }
 }
 export function registerReady(
@@ -2555,7 +2688,11 @@ export function recordDraftPr(
     if (activeBatch)
       throw new Error(`Draft work id ${workId} already belongs to active batch ${activeBatch.id}`)
     const existing = draftReceiptFor(c, workId)
-    if (existing && (existing.pr !== receipt.pr || existing.branch !== receipt.branch))
+    if (
+      existing &&
+      (existing.pr !== receipt.pr || existing.branch !== receipt.branch) &&
+      !draftReceiptLanded(s, existing)
+    )
       throw new Error(
         `Draft PR #${existing.pr} on ${existing.branch} is already recorded for ${workId}; reuse it instead of rebinding to #${receipt.pr} on ${receipt.branch}`,
       )
@@ -2663,6 +2800,7 @@ function integrate(
     b.bootstrapped = true
   }
   b.phase = 'review'
+  stamp(b, 'reviewAt')
   save(c, s)
   return b
 }
@@ -2677,23 +2815,51 @@ export function prepareBatch(
   if (!['trunk-based', 'pr-merge-based'].includes(workflow)) throw new Error('Unknown workflow')
   const c = context(cwd)
   return mutate(c, (s) => {
-    const existing = s.batches.find(isLiveBatch)
-    if (existing) {
+    const live = s.batches.filter(isLiveBatch)
+    const expected = [...new Set(options.expectWorkIds ?? [])]
+    // Ready-pool evaluation runs a status and claim probe per source, so the
+    // plain reuse path (no parallel request) skips it as before.
+    let eligibleCache: ReadySource[] | undefined
+    const eligibleNow = () =>
+      (eligibleCache ??= eligible(c, s)
+        .filter((r) => !r.reason)
+        .map((r) => r.source))
+    // Parallel admission (方案 6): a caller naming ready work ids that no live
+    // batch holds opens its own batch, provided its paths are disjoint from
+    // every live batch (checked below, before anything is created).
+    const parallel =
+      live.length > 0 &&
+      expected.length > 0 &&
+      expected.every(
+        (id) =>
+          !live.some((b) => b.members.some((member) => member.workId === id)) &&
+          eligibleNow().some((member) => member.workId === id),
+      )
+    if (live.length && !parallel) {
       // Reuse is explicit: the caller joined another coordinator's batch and must
       // be able to tell — a silent identical return once invited cancelling a
       // batch nobody here prepared (TD-1094). NEVER cancel on member mismatch.
-      const missing = (options.expectWorkIds ?? []).filter(
-        (id) => !existing.members.some((member) => member.workId === id),
+      const holder = live.find((b) =>
+        expected.every((id) => b.members.some((member) => member.workId === id)),
       )
-      if (missing.length)
+      if (holder && (expected.length || live.length === 1))
+        return { ...holder, reused: true as const }
+      if (live.length === 1) {
+        const existing = live[0]!
+        const missing = expected.filter(
+          (id) => !existing.members.some((member) => member.workId === id),
+        )
         throw new Error(
           `Live batch ${existing.id} does not contain expected work id(s) ${missing.join(', ')}; inspect with batch status — NEVER cancel a batch you did not prepare`,
         )
-      return { ...existing, reused: true as const }
+      }
+      throw new Error(
+        `Live batches ${live.map((b) => b.id).join(', ')} do not match expected work id(s) ${expected.join(', ') || '(none named)'}; name ready work ids no live batch holds with --expect-work-id, or inspect with batch status — NEVER cancel a batch you did not prepare`,
+      )
     }
-    const eligibleMembers = eligible(c, s)
-      .filter((r) => !r.reason)
-      .map((r) => r.source)
+    const eligibleMembers = parallel
+      ? eligibleNow().filter((m) => expected.includes(m.workId))
+      : eligibleNow()
     if (workflow === 'pr-merge-based') fetchOriginMain(c)
     const members =
       workflow === 'pr-merge-based'
@@ -2727,12 +2893,14 @@ export function prepareBatch(
       )
     if (!triggerReached(trigger, members, workflow)) return null
     assertMain(c)
+    const base = workflow === 'pr-merge-based' ? fetchOriginMain(c) : head(c.main)
+    if (live.length) assertDisjointFromLive(c, live, base, members)
     const id = randomUUID(),
       branch = `codex/batch-${id}`
     const b: WorktreeBatch = {
       id,
       branch,
-      base: workflow === 'pr-merge-based' ? fetchOriginMain(c) : head(c.main),
+      base,
       main: c.main,
       path: join(dirname(c.main), `${c.main.split('/').pop()}-wt`, `batch-${id}`),
       workflow,
@@ -2741,25 +2909,30 @@ export function prepareBatch(
       cursor: 0,
       phase: 'integrating',
       removed: [],
+      timeline: { preparedAt: new Date().toISOString() },
     }
     s.batches.push(b)
     save(c, s)
     return { ...integrate(c, s, b, false, lifecycle), reused: false as const }
   })
 }
-export function resumeBatch(cwd: string, lifecycle: BatchLifecycle = defaultLifecycle) {
+export function resumeBatch(
+  cwd: string,
+  lifecycle: BatchLifecycle = defaultLifecycle,
+  batchId?: string,
+) {
   const c = context(cwd)
   return mutate(c, (s) => {
-    const b = active(s)
+    const b = active(c, s, batchId)
     if (b.phase !== 'integrating') return b
     return integrate(c, s, b, true, lifecycle)
   })
 }
 /** Reconcile a newer main in the owned integration tree, invalidate the receipt, and review again. */
-export function refreshBatch(cwd: string, resume = false) {
+export function refreshBatch(cwd: string, resume = false, batchId?: string) {
   const c = context(cwd)
   return mutate(c, (s) => {
-    const b = active(s)
+    const b = active(c, s, batchId)
     if (!['review', 'sealed'].includes(b.phase))
       throw new Error('Finish integration before refreshing main')
     integration(c, b)
@@ -2799,6 +2972,7 @@ export function refreshBatch(cwd: string, resume = false) {
       b.refresh = { base, before }
       delete b.seal
       b.phase = 'review'
+      stamp(b, 'reviewAt')
       save(c, s)
       git(b.path, ['reset', '--soft', before])
       try {
@@ -2840,10 +3014,10 @@ export function refreshBatch(cwd: string, resume = false) {
   })
 }
 /** Re-expose the whole candidate to native staged-diff gates after an interrupted /commit. */
-export function reviewBatch(cwd: string) {
+export function reviewBatch(cwd: string, batchId?: string) {
   const c = context(cwd)
   return mutate(c, (s) => {
-    const b = active(s)
+    const b = active(c, s, batchId)
     if (!['review', 'sealed'].includes(b.phase) || b.refresh)
       throw new Error('Complete integration or refresh before restarting review')
     integration(c, b)
@@ -2867,16 +3041,17 @@ export function reviewBatch(cwd: string) {
     // Invalidate first: a failed/interrupted reset must never leave the old seal usable.
     delete b.seal
     b.phase = 'review'
+    stamp(b, 'reviewAt')
     save(c, s)
     if (tip !== b.base) git(b.path, ['reset', '--soft', b.base])
     return b
   })
 }
 /** Receipt values describe results produced by the complete /commit workflow. */
-export function sealBatch(cwd: string, evidencePath: string) {
+export function sealBatch(cwd: string, evidencePath: string, batchId?: string) {
   const c = context(cwd)
   return mutate(c, (s) => {
-    const b = active(s)
+    const b = active(c, s, batchId)
     if (!['review', 'sealed'].includes(b.phase)) throw new Error('Batch is not ready for review')
     integration(c, b)
     verifyMembers(c, b)
@@ -2960,6 +3135,7 @@ export function sealBatch(cwd: string, evidencePath: string) {
       artifacts,
     }
     b.phase = 'sealed'
+    stamp(b, 'sealedAt')
     save(c, s)
     return b
   })
@@ -3175,10 +3351,11 @@ function verifyMergeReceipt(
 function landSealedBatch(
   cwd: string,
   landing: { kind: 'trunk' } | { kind: 'pr'; receipt: string; remotePr?: RemotePrProbe },
+  batchId?: string,
 ) {
   const c = context(cwd)
   return mutate(c, (s) => {
-    const b = active(s)
+    const b = active(c, s, batchId)
     if (b.phase !== 'sealed') throw new Error('Batch must be sealed after /commit gates')
     const tip = formalHead(c, b)
     verifyMembers(c, b)
@@ -3206,25 +3383,28 @@ function landSealedBatch(
     }
     b.landedHead = tip
     b.phase = 'landed'
+    stamp(b, 'landedAt')
     save(c, s)
     return b
   })
 }
-export function landBatch(cwd: string) {
-  return landSealedBatch(cwd, { kind: 'trunk' })
+export function landBatch(cwd: string, batchId?: string) {
+  return landSealedBatch(cwd, { kind: 'trunk' }, batchId)
 }
 export function confirmMergedBatch(
   cwd: string,
   receipt: string,
   remotePr: RemotePrProbe = defaultRemotePrProbe,
+  batchId?: string,
 ) {
-  return landSealedBatch(cwd, { kind: 'pr', receipt, remotePr })
+  return landSealedBatch(cwd, { kind: 'pr', receipt, remotePr }, batchId)
 }
 export function cleanupBatches(
   cwd: string,
   lifecycle: BatchLifecycle = defaultLifecycle,
   detect: ProcessProbe = detectPublishInFlight,
   resolveProfile: PreservationProfileResolver = defaultPreservationProfile,
+  scope: { batchIds?: string[] } = {},
 ) {
   const c = context(cwd)
   const cleanupLifecycle: BatchLifecycle = { ...defaultLifecycle, ...lifecycle }
@@ -3241,7 +3421,10 @@ export function cleanupBatches(
       retained: { path: string; reason: string }[]
       preserved: { path: string; archive: string }[]
     }[] = []
-    for (const b of s.batches.filter((candidate) => candidate.phase === 'landed')) {
+    for (const b of s.batches.filter(
+      (candidate) =>
+        candidate.phase === 'landed' && (!scope.batchIds || scope.batchIds.includes(candidate.id)),
+    )) {
       const result = {
         batch: b.id,
         removed: [] as string[],
@@ -3929,6 +4112,7 @@ export function cleanupBatches(
               git(c.main, ['update-ref', '-d', ref, b.landedHead!])
             b.preserved = [...(b.preserved ?? []), { path: b.path, archive: retiredArchive }]
             b.phase = 'cleaned'
+            stamp(b, 'closedAt')
             s.ready = s.ready.filter((m) => !claimsMember(b, m.path))
             save(c, s)
             result.preserved = [...(b.preserved ?? [])]
@@ -4443,6 +4627,7 @@ export function cleanupBatches(
               if (git(c.main, ['for-each-ref', '--format=%(refname)', ref])) throw error
             }
             b.phase = 'cleaned'
+            stamp(b, 'closedAt')
             s.ready = s.ready.filter((m) => !claimsMember(b, m.path))
             save(c, s)
           })
@@ -4558,12 +4743,13 @@ export function releaseBatchSource(cwd: string, source: string, reason: string) 
   })
 }
 /** Cancellation releases the queue, retaining every source and the integration for inspection. */
-export function cancelBatch(cwd: string, reason: string) {
+export function cancelBatch(cwd: string, reason: string, batchId?: string) {
   if (!reason.trim()) throw new Error('Cancellation requires a reason')
   const c = context(cwd)
   return mutate(c, (s) => {
-    const b = active(s)
+    const b = active(c, s, batchId)
     b.phase = 'cancelled'
+    stamp(b, 'closedAt')
     b.cancellationReason = reason
     delete b.seal
     // Members must explicitly re-register after correction; cancellation cannot silently resubmit them.
@@ -4579,9 +4765,15 @@ export function yieldBlockedBatch(
   if (!waiting.resumeEvent.trim()) throw new Error('Blocked yield requires a named resume event')
   const c = context(cwd)
   return mutate(c, (s) => {
-    const b = active(s)
-    if (!b.members.some((member) => member.workId === waiting.workId))
+    // The work id names its batch; with parallel batches only the holder may yield.
+    const holders = s.batches.filter(
+      (candidate) =>
+        isLiveBatch(candidate) &&
+        candidate.members.some((member) => member.workId === waiting.workId),
+    )
+    if (holders.length !== 1)
       throw new Error(`Blocked work id ${waiting.workId} is not in the active batch`)
+    const b = holders[0]!
     b.waiting = {
       reason: waiting.reason,
       owner: waiting.owner,
@@ -4589,6 +4781,7 @@ export function yieldBlockedBatch(
       resumeEvent: waiting.resumeEvent,
     }
     b.phase = 'cancelled'
+    stamp(b, 'closedAt')
     b.cancellationReason = waiting.reason
     delete b.seal
     s.ready = s.ready.filter((m) => !b.members.some((source) => source.path === m.path))
@@ -4621,9 +4814,9 @@ export function unlockBlockedSource(cwd: string, workId: string, event: string) 
     return row
   })
 }
-export function batchScope(cwd: string) {
+export function batchScope(cwd: string, batchId?: string) {
   const c = context(cwd),
-    b = active(readState(c))
+    b = active(c, readState(c), batchId)
   if (b.refresh) throw new Error('Complete batch refresh before review')
   if (b.phase === 'integrating') throw new Error('Complete batch integration before review')
   integration(c, b)
@@ -4683,6 +4876,7 @@ export function mergeUnattendedBatch(
         resumeEvent: waiting.resumeEvent,
       }
       batch.phase = 'cancelled'
+      stamp(batch, 'closedAt')
       batch.cancellationReason = waiting.reason
       delete batch.seal
       state.ready = state.ready.filter(
@@ -4749,11 +4943,40 @@ function rejectUnknownFlags(rest: string[], allowed: Set<string>) {
 export const BATCH_USAGE =
   'batch: checkpoint | draft | ready | unready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | confirm-merged | cleanup | release-source | cancel | recover-lock'
 
+/** Landing closes with cleanup of that batch (方案 6). Cleanup is fail-closed
+ *  and never undoes the landing: a refusal (publish in flight, lock, anything
+ *  else) is reported next to the landed batch and `batch cleanup` retries it. */
+function landThenCleanup(
+  cwd: string,
+  landed: WorktreeBatch,
+  skip: boolean,
+  lifecycle: BatchLifecycle,
+  deps: BatchCleanupDeps,
+) {
+  if (skip) return { ...landed, cleanup: { skipped: '--no-cleanup' } }
+  try {
+    const [result] = cleanupBatches(cwd, lifecycle, deps.detect, deps.resolveProfile, {
+      batchIds: [landed.id],
+    })
+    return { ...landed, cleanup: result ?? { batch: landed.id, removed: [], retained: [] } }
+  } catch (error) {
+    return {
+      ...landed,
+      cleanup: { deferred: errorMessage(error), retry: 'wt-helper batch cleanup' },
+    }
+  }
+}
+export interface BatchCleanupDeps {
+  detect?: ProcessProbe
+  resolveProfile?: PreservationProfileResolver
+}
+
 export function runBatchCommand(
   cwd: string,
   args: string[],
   lifecycle: BatchLifecycle = defaultLifecycle,
   probes?: UnattendedMergeProbes,
+  cleanupDeps: BatchCleanupDeps = {},
 ): unknown {
   const [command, ...rest] = args
   const value = (flag: string) => {
@@ -4770,6 +4993,10 @@ export function runBatchCommand(
   const positionals = (valueFlags: Set<string>) =>
     rest.filter((token, i) => !token.startsWith('--') && !valueFlags.has(rest[i - 1] ?? ''))
   const trigger = () => (value('--trigger') ?? 'auto') as BatchTrigger
+  const batchId = () => {
+    if (!rest.includes('--batch')) return undefined
+    return required('--batch')
+  }
   const workflow = () => {
     const v = value('--workflow')
     if (!v || v.startsWith('--'))
@@ -4848,17 +5075,23 @@ export function runBatchCommand(
           .filter(Boolean),
       })
     case 'resume':
-      return resumeBatch(cwd, lifecycle)
+      return resumeBatch(cwd, lifecycle, batchId())
     case 'scope':
-      return batchScope(cwd)
+      return batchScope(cwd, batchId())
     case 'refresh':
-      return refreshBatch(cwd, rest.includes('--resume'))
+      return refreshBatch(cwd, rest.includes('--resume'), batchId())
     case 'review':
-      return reviewBatch(cwd)
+      return reviewBatch(cwd, batchId())
     case 'seal':
-      return sealBatch(cwd, required('--evidence'))
+      return sealBatch(cwd, required('--evidence'), batchId())
     case 'land':
-      return landBatch(cwd)
+      return landThenCleanup(
+        cwd,
+        landBatch(cwd, batchId()),
+        rest.includes('--no-cleanup'),
+        lifecycle,
+        cleanupDeps,
+      )
     case 'yield-blocked': {
       rejectUnknownFlags(
         rest.filter((token) => token.startsWith('--')),
@@ -4898,9 +5131,15 @@ export function runBatchCommand(
       })
     }
     case 'confirm-merged':
-      return confirmMergedBatch(cwd, required('--receipt'))
+      return landThenCleanup(
+        cwd,
+        confirmMergedBatch(cwd, required('--receipt'), undefined, batchId()),
+        rest.includes('--no-cleanup'),
+        lifecycle,
+        cleanupDeps,
+      )
     case 'cleanup':
-      return cleanupBatches(cwd, lifecycle)
+      return cleanupBatches(cwd, lifecycle, cleanupDeps.detect, cleanupDeps.resolveProfile)
     case 'release-source': {
       rejectUnknownFlags(
         rest.filter((token) => token.startsWith('--')),
@@ -4917,7 +5156,7 @@ export function runBatchCommand(
     case 'recover-lock':
       return recoverBatchLock(cwd)
     case 'cancel':
-      return cancelBatch(cwd, required('--reason'))
+      return cancelBatch(cwd, required('--reason'), batchId())
     default:
       throw new BatchUsageError(BATCH_USAGE)
   }

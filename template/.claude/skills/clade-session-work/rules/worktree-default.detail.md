@@ -9,15 +9,11 @@ paths: ['vendor/scripts/wt-helper.ts', 'scripts/wt-helper.ts', 'vendor/scripts/s
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
 
-> 本檔是 [[worktree-default]] 的下推全文。[[worktree-default]] 常駐 §1 判定、§2 禁止 silent branch、§5.1 停手信號，其餘全部在這裡。
-
-## Runtime boundary
-
-The common detail owns worktree, WIP, stash, landing, and recovery predicates. Runtime adapters own the native catalog operation, transport authorization, interactive question surface, and completion receipt used to execute those predicates. A helper name or projected hook does not establish that a target can invoke it.
+> [[worktree-default]] 的下推全文；runtime 邊界同母檔 § Runtime boundary。
 
 ## §1 細則
 
-### §1 archive-on-main 的 clobber 窗口（pitfall 2026-06-01）
+### §1 archive-on-main 的 clobber 窗口
 
 archive-on-main 例外讓未 commit 的 archive batch 躺在 **shared main**；`/commit` 因 gate halt 時這批 dirty 長期留在 main，會被別 session 的 `wt-helper add --baseline-strategy stash` 當 unclaimed dirty 整批捲進 `refs/wt-baseline/*`（實證見 [[pitfall-prefork-baseline-stash-sweeps-unclaimed-main-work]]）。
 
@@ -27,7 +23,7 @@ archive-on-main 例外讓未 commit 的 archive batch 躺在 **shared main**；`
 
 `/wt` 的所有 invocation form **SHALL NOT** 遷移 parent session 的 cwd。worktree 內操作由 subagent（cwd = worktree path）執行，主線（cwd = main）負責 dispatch。
 
-**無例外**。先前的 `--dispatch-from-handoff` flag 已**移除** — subagent 隔離 cwd 達到同樣 UX。理由：mid-conversation 切 parent cwd 會破壞 file watcher、Bash cwd state、未完成 Read window。
+**無例外**。理由：mid-conversation 切 parent cwd 會破壞 file watcher、Bash cwd state、未完成 Read window；subagent 隔離 cwd 已達到同樣 UX。
 
 ### §1.x 階段間 setup chore：主線一行式 `cd` 進 worktree 自動跑
 
@@ -37,7 +33,7 @@ Phase 切換之間若需在 worktree 跑 **local-only** setup chore，主線 **M
 
 **仍需 user 拍板（真 destructive）**：`rm -rf <wt>`、`git push`（已被 §5 禁）、Prod DB migration / Prod creds、outbound 訊息、shared infra。
 
-**失敗處理**：跑爆主線自己診斷修復，不丟回 user。**反模式**（立刻停手）：列「請你 cd 過去跑」清單、「跑完回我 OK」。**例外**：user 明確說「我自己跑」/「先別動」尊重。
+**失敗處理**：跑爆主線自己診斷修復，不丟回 user；user 明確說「我自己跑」/「先別動」時尊重。
 
 ### §1 Pre-fork baseline guard（契約）
 
@@ -77,28 +73,20 @@ OPSX create / revise 會寫 canonical intent、binding 與投影。每次呼叫�
 
 ## §5 Commit 階段：checkpoint → 批次整合 → /commit → 回收
 
-Worker 完成實作與必要驗收後 checkpoint，主線確認 scope 與寫入權交接後登記就緒。同 repo 累積 4 件 distinct work id 自動進批次（`pr-merge-based` 是 1 件；件數數的是進 `main` 的 PR，一條 integration 連同其切片算 1 件，見 [[github-flow]]）；手動 `/commit` / merge back 無最低件數，dependency / drained / stop 提前結批。隔離整合區跑一次完整 `/commit`，正式落地 main 後統一清理。Worker 不各跑完整品質鏈、**NEVER** push `origin main`、**NEVER** merge。相對 `main` 有非空 committed diff 後，slice owner **MUST** push **該** session branch 並開 draft PR（見 [[github-flow]]），再盯該 PR 的 CI。**Integration 模式**（預設；[[github-flow]] § Integration branch）：同一個 work id 有 2 個以上切片時，worker push **該** branch 並對 `integration/<work-id>` 開 PR（`gh pr create --base integration/<work-id>`，做到一半先開 draft），盯該 PR 的 CI（只有機械檢查、不跑 test-lane）；在來源 worktree 跑完本機門檻（canonical check ＋ repo 在 CI 機械檢查裡跑的 typecheck；clade 是 `pnpm exec vp check` ＋ `node node_modules/typescript-native/bin/tsc -p tsconfig.clade.json --noEmit`，動到 vendor/scripts 再加 `node node_modules/typescript-native/bin/tsc -p tsconfig.vendor.json --noEmit`。兩條 tsc 以秒計、不必排 heavy gate slot。`test:affected` 仍由 coordinator 在 integration 轉 ready 前跑一次）且該 PR 的 CI 全綠後，自己 `gh pr ready` 該切片 PR，completion 回 coordinator，由 coordinator 以 `integration-merge.ts --pr <n>` 落地。切片 PR 不登記 `batch draft` receipt；**NEVER** 對 `main` 開 PR、**NEVER** 自己 merge。只有一個切片就完工的工作才走上面那條 base 為 `main` 的 draft PR。所有 skill-owned wt 同樣走就緒池。
+visibility（push、draft PR、integration 模式）見 [[worktree-default]] §5；就緒、觸發門檻與批次落地見 [[worktree-default.commit-ceremony]] §5。所有 skill-owned wt 同樣走就緒池。
 
 > 執行 checkpoint／收割／落地前 **MUST** 讀 [[worktree-default.commit-ceremony]] §5 與 commit skill 的 `batch.md`。
-
 
 ## §5.5 Merge-back ceremony
 
 `wt-helper batch` 是新流程入口，來源固定、隔離整合、驗證落地後清理。Legacy `merge-back` 只保留供 caller 遷移，squash 後保留來源；其 `--auto-stash` 仍為 bulk-stash，claim guard 檢查範圍 **MUST ⊇** 全部將被捲走的 dirty。已登記來源不得走 legacy。
 
-> 完整 flags / claim guard scope / stash reconcile 詳見 [[worktree-default.commit-ceremony]] § Merge-back ceremony。
+> 完整 flags / claim guard scope / stash reconcile 詳見 [[worktree-default.commit-ceremony]] §5.5 Legacy merge-back 與 stash 救援。
 
-### §5.5.1 Pre-archive gate（整節退役，僅存 tombstone）
+### §5.5.1 驗收先驗實作樹（無機械 gate）
 
-這一節原本規定四道 pre-archive gate（`pre-archive-ux-gate.sh` / `-evidence-` / `-design-` /
-`-followup-`）**MUST** 先解析 change 所在的 worktree 再掃描，而不是掃 cwd。
-
-**它描述的每一個東西現在都不存在**：四支 gate 與共用 helper `_change-source-root.sh` 隨
-TD-976 Wave 1 退役，呼叫它們的 `opsx-control` 隨 TD-977 Wave 2 退役，機械兜底
-`test/pre-archive-gate-scans-change-worktree.test.ts` 一併刪除。
-
-**原則仍成立**——驗收 MUST 先驗實作樹、再進批次落地流程，**NEVER** 先合回 main 才收證據——
-但**沒有任何 gate 在機械層執行它**，執行者只剩讀到這一節的那個 agent。缺的那層機械兜底見 [[TD-978]]。
+驗收 MUST 先驗 change 所在的實作 worktree、再進批次落地流程，**NEVER** 掃 cwd 的 main、**NEVER** 先合回 main
+才收證據。**沒有任何 gate 在機械層執行它**，執行者是讀到這一節的 agent。
 
 對應 pitfall：[[pitfall-pre-archive-gate-scans-main-not-change-worktree]]。
 
@@ -147,11 +135,7 @@ ls ~/offline/<consumer>-wt/<change-slug>/ 2>/dev/null || git worktree list
 
 上一段管的是**讀**，它**不保證** main 上的改動比較舊 —— 在 main 補勾 checkbox 是常態。**NEVER** 把它外推成「main 端出現的 tasks.md 改動一律是退化副本」而 stash 掉；**MUST** 先用 `git diff HEAD`（含 staged）量打勾方向、再逐項比對打勾集合（**NEVER** 只比數量、**NEVER** 只看 `--stat`：`[ ]`→`[x]` 與反向給出完全相同的 insertions / deletions）。
 
-> 指令逐字、三種 predicate 的處置表、2026-08-11 <consumer-b> 實證詳見 [[worktree-default.troubleshooting]] §9.7.1 與 [[pitfall-main-side-tasks-md-tick-stashed-as-stale-copy]]。
-
-## §10 review-gui 與 worktree 互動的已知坑
-
-> 已退役：舊聚合器掃 worktree change 目錄的三條坑隨它消失，面板改讀 spine read model。脈絡見 [[worktree-default.troubleshooting]] §10。
+> 指令逐字、三種 predicate 的處置表詳見 [[worktree-default.troubleshooting]] §9.7.1 與 [[pitfall-main-side-tasks-md-tick-stashed-as-stale-copy]]。
 
 ## §11 WORKTREE-BRIEF.md — 持久化任務交接上下文
 

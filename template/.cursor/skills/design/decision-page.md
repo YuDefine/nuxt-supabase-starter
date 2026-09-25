@@ -25,7 +25,7 @@ Meta 問題（「Y 跟 Z 差在哪」「該不該採用 X」）不開頁，直�
 
 cwd = consumer project root。全部候選都不存在 → **STOP**，叫 user 跑 SKILL.md Prerequisites 的 install。**NEVER** 改用聊天 A/B 代替。
 
-只找到 `scripts/serve-question.mjs`、沒有 `scripts/impeccable` = 裝的是 v4.2.0 以前的版本，與 SKILL.md 鎖定版本不符 → 同樣 **STOP** 去重裝，**NEVER** 退回跑舊 `.mjs`。
+只找到 `scripts/serve-question.mjs`、沒有 `scripts/impeccable` = 裝的是舊版，與 SKILL.md 鎖定版本不符 → 同樣 **STOP** 去重裝，**NEVER** 退回跑舊 `.mjs`。
 
 launcher 找到了，但第一次呼叫失敗（engine 下載不到——沙箱沒有對外網路、`~/.impeccable` 不可寫）→ **STOP** 並逐字回報 launcher 的 stderr。上游 impeccable 對 launcher 失敗的退路是「讀 PRODUCT／DESIGN.md 繼續做」，那只適用 impeccable 自己的 sub-command；**決策頁沒有 server 就開不出來，NEVER 套用那條退路**。
 
@@ -68,12 +68,12 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts ask \
 payload 一併複製過去，並在 stderr／stdout（`rerouted_from`）明說改寫了（clade TD-798）。
 main 已有**內容不同**的同名 payload 時它 fail closed——換一個 `<gate>` 檔名，**NEVER** 手動覆寫。
 
-### 為什麼不是自己開 server（兩條都在 2026-08-28 同一輪發作過）
+### 為什麼不是自己開 server
 
 1. **生命週期對不上。** question server 有 idle-grace 與 timeout，而 `/decisions` 的使用情境
    是人回到電腦或滑手機時才點開 —— 中間可能隔幾小時。agent 先開好等人，等到的多半是一個
-   已經自己收掉的 port；同一天另一個版本是前景指令 timeout 把 process tree 連 server 一起收掉。
-   兩種的使用者體感都只是「打不開」，而 agent 這邊看起來一切正常。
+   已經自己收掉的 port（或前景指令 timeout 把 process tree 連 server 一起收掉）。
+   使用者體感只是「打不開」，而 agent 這邊看起來一切正常。
 2. **URL 是第二條通道。** 決策頁網址活在對話裡，而待拍板事項的正規入口是 `/decisions`。
    同一個待決策點在兩個地方長得不一樣，人會以為那是兩件事 —— 那正是 `\my` 與 `/decisions`
    同源那條決策要消除的東西。

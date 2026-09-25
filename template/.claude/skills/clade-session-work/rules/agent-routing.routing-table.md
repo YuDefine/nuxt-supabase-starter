@@ -17,119 +17,114 @@ paths:
 
 三端共用本表的工作角色；Cursor 的模型 residency 與載體見 `vendor/cursor-rules/cursor-model-residency.mdc`。Cursor Task 不代替 Pi 或 Claude Code。
 
-**Pi 派工的 model 維合法值**：`astra`、`sol`、`gemini`、`luna`、`luna-cursor`、`grok-xai`、`grok-cursor`（`grok` 是 `grok-cursor` 的向後相容別名）。同一 tier 的 `-cursor` 變體是**換配額池、不換檔位**，只在配額降級鏈上出現。External-web 第一手的 bare `gemini` 解析到 Gemini CLI provider；**NEVER** 改傳 Cursor catalog 的完整 `gemini-3.8-flash` slug 冒充同一跳。
-
 > 本檔是 [[agent-routing]] § Routing Table 的下推對照表。**判準留在該節**（合法 model 值、
 > `*-cursor` 的路徑可見性、workspace mutation 的 admission、`--route`／`--tier-basis`／
 > `--table-row` 的記帳義務、以及每一條硬禁令）；本檔只回答「這類工作查出來是哪個 model、哪個
 > effort、為什麼」。取證與跑分在 [[agent-routing.routing-table-rationale]]。
+> 機械 SoT 是 `vendor/scripts/pi-routing-policy.ts` 的 `TABLE_ROW_POLICIES`／`ROW_CHAINS`／
+> `DELEGATE_SUB_CHAIN`／`NATIVE_TABLE_ROW_POLICIES`／`chainTerminal()`——本表與它 MUST 同一個 commit 一起改。
 
-> **Opus 5.5 暫時覆寫生效中（2026-09-23 起）**：Opus 5.5 額度可用時，本表每一列都由 [[agent-routing]] § Opus 5.5 暫時覆寫 蓋過；本表只在額度用完時生效——**唯一例外是 commit 0-A**（`code-review`／`code-review-fable` 兩列）：覆寫期間 **NEVER** 派 Astra 或 Fable，Opus 額度用完時 0-A gate 保持未完成、等額度恢復（Charles 2026-09-23 硬禁令；見 [[agent-routing]] § Opus 5.5 暫時覆寫 的 0-A 例外）。
+## 禁用（Charles 2026-09-24）
+
+**NEVER** 派下列任一 model，任何列、任何 fallback、任何「額度耗盡備援」都一樣：
+
+| 禁用 | 備註 |
+| --- | --- |
+| GPT-6 Astra | 含 commit 0-A 的原優先格——「通常一定是 Astra 先耗盡」；`codex-review-safe.sh` 整支拒跑 |
+| GPT-6 Luna、`luna-cursor` | 原四列改派 Grok 4.7／GPT-6 Sol 後已無席位 |
+| Claude Fable 5.1 | **所有用途**，含原 0-A 額度耗盡備援格 |
+| Claude Sonnet、Claude Haiku | 原判 sonnet／haiku 等級的委派走 § delegate-sub 鏈 |
+| Cursor Composer 2.5 | 原 `ui-implementation` 列併入 `ui-view-implementation` |
+| Devin Fusion | Devin 只剩 SWE-2 Max 一格，且是任意列的**可選**載體（見下） |
+| `terra` | 2026-08-11 起禁用，不變 |
+
+**Pi 派工的 model 維合法值**：`sol`、`gemini`、`grok-xai`、`grok-cursor`（`grok` 是 `grok-cursor` 的向後相容別名）。`pi-dispatch.ts` 對上表任一 tier 在解析 model 之前就 exit 1。
 
 ## effort 與執行載體
 
-每一個 Gemini 3.8 Flash 工作都使用 `high`，包含首派與 fallback。`gemini` 是 Pi model alias，實際 provider 為 `google-gemini-cli`、model 為 `gemini-3.8-flash`。Grok 4.6 的 `grok-xai` 與 `grok-cursor` 分別表示 xAI 與 Cursor 配額池。
+**effort 跟著 model 走，不跟著列走**（`TIER_EFFORT`）：Tier 2 的 **Grok 4.7 與 GPT-6 Sol 一律 `xhigh`**；**Gemini 3.8 Flash 一律 `high`**（它沒有 xhigh runtime id，未知值過去會靜默退成 medium，現在 `lib/google-gemini-cli.ts` 直接 throw）；Claude Opus 5.5 一律 `medium`（鏈尾載體 `dispatch-fallback` 為 `low`）。任何一跳的 effort 與此不符，dispatcher exit 1。
 
-GPT worker 的 transport 依 [[agent-routing]] § Session transport boundary：Codex 主線 → 任一 GPT 可用原生 agent；每個非 Codex 主線的 GPT 外派一律走 Pi。**Astra 用途白名單**：`planning`、`decision`、`review`。GPT-6 Astra 只承接這三類唯讀工作，不承接實作與修復。
+`gemini` 是 Pi model alias，實際 provider 為 `google-gemini-cli`、model 為 `gemini-3.8-flash`；**NEVER** 改傳 Cursor catalog 的完整 `gemini-3.8-flash` slug 冒充同一跳。`sol` 解析到 `openai-codex/gpt-6-sol`。
 
-每一個 xAI Grok 4.6 工作的 fallback 都先接 Cursor Grok 4.6，保留該 Grok 工作的 effort，再走該列後續 fallback。每一跳都核對實際 runtime、workspace access 與工具能力。Cursor Pi pool 不支援 mutation；遇到修改任務時不啟動 Cursor，在 authoritative payload／ledger 的 `skipped_tiers` 記明 capability 原因後才交下一個可執行模型，保留同一 work 身分。
+**Grok 4.7 xhigh 的池序**：先 `grok-xai`（xAI 配額池），不可用再 `grok-cursor`（Cursor 配額池，釘 `grok-4.7`）。`grok-cursor` 那一跳**只有在本機 pi-cursor-sdk 把 effort 映射到 Cursor 的 `reasoning_effort` 參數時才上鏈**（`lib/cursor-sdk-effort.ts` 的 `cursorSdkMapsReasoningEffort()`）；沒映射時 SDK 會靜默丟掉 xhigh，該跳記進 `skipped_tiers`（`cursor-effort-unsupported`）後往下走。Cursor 池另兩個跳過條件不變：workspace mutation（sandbox 唯讀）與 `notion-ops`（`$HOME` 是空 tmpfs）。
 
-每一次 Design Review、UI 詳細計畫、截圖符合性判定先用 Claude Opus 5.5（effort: medium）；有實際 quota、runtime、工具或任務失敗證據時，交 GPT-5.6 Sol（effort: high）。Fallback 保留圖片、fresh context 與原驗收契約，失敗回報 blocker。
+GPT worker 的 transport 依 [[agent-routing]] § Session transport boundary：Codex 主線 → 任一 GPT 可用原生 agent；每個非 Codex 主線的 GPT 外派一律走 Pi。
 
-**判不進任一列時的預設鏈（MUST）**：工作對不上下表任何一列、而它若照主線模型走就會是 Claude Opus 5.5 時，**MUST** 依序試 `--model grok-xai --effort high` → `--model grok-cursor --effort high` → Claude `sonnet` effort `high`。每一跳都核對 workspace access 與工具能力：Cursor Pi pool 不支援 mutation，遇修改任務跳過該格並在 `skipped_tiers` 記明原因，保留同一 work 身分。下表**已具名 Claude Opus 5.5 的四列**（`ui-view-implementation`／`design-review`／`ui-detailed-planning`／`screenshot-match-analysis`）照列派，**NEVER** 改走本鏈。
+**執行鏈的「→」只在 provider／quota／runtime 不可用時前進**；quality／test failure 不前進。**鏈走完之後由誰接手**看下表的「鏈尾」欄：`dispatch-fallback` subagent（Claude Opus 5.5（effort: low），frontmatter 固定；讓主線不吞原始輸出），或主線（Claude Opus 5.5（effort: medium））自己做。**NEVER** 回報 blocker 當鏈尾，也 **NEVER** 改派禁用 model。
 
-本鏈的起點是「**Opus 5.5 等級但無落點**」。原判 Claude `sonnet`／`haiku` **等級**的委派工作是另一題，依 [[agent-routing]] § Native delegation model boundary 轉派 **`--model grok-xai --effort high`**（2026-09-10 拍板，取代原本的 `gemini` 首跳：同級或更好的實測品質、更便宜的座位）——兩條 **NEVER** 互換：本鏈的 `sonnet` 是第三跳終點，不是起點。
+## 判不進任一列時
 
-**`--tier-basis delegate-sub` 的 effort 是結論的另一半，NEVER 只對 model 交叉檢查。** 檔位跟著 model 走，與 `pi-routing-gate.ts` 的 `delegateExpectedEffort` 同一張表：gate-output row 落 astra／medium，其餘每一跳（`grok-xai` 首派、升 Sol、配額降級）都是 `high`；`pi-dispatch.ts` 對兩半都比對、矛盾即 exit 1。配額耗盡沿 `FALLBACK_NEXT` 的 grok 鏈往下走，那些跳仍宣告 `delegate-sub`（挑首派的政策沒有改變），**MUST** 帶 `--retry-of`。**NEVER** 靜默填一個 `--effort low`——它與「判定根本沒發生」事後不可區分。
+工作對不上下表任何一列 → **主線（Claude Opus 5.5（effort: medium））自己做**。**NEVER** 因為表上沒有你想派的模型就自己挑一個，也 **NEVER** 填 `--route manual` 去蓋掉一個從沒發生過的判定——`manual` 是政策成功指標的分母，填錯讀起來是假陰性而不是缺資料。
 
-**`sonnet` 在本檔只有一種合法出現：兩個 grok 池都耗盡之後的終端 carrier。** 它 **NEVER** 是任何工作的檔位選擇。這兩者形狀相同（欄位裡都寫著 `sonnet`）但前提相反：終端 carrier 的前提是 grok 已經不可用，所以它不可能改派 grok；而檔位選擇的前提是「這件事只值 sonnet」，那件事現在一律去 `--model grok-xai --effort high`。逐字反開脫：「反正規約裡本來就有 sonnet」——去看那個 `sonnet` 前面有沒有「耗盡」兩個字，沒有就是本節禁的那一種。
+## delegate-sub（原判 sonnet／haiku 等級的委派工作）
 
-**Herdr pane 拒收 `sonnet`**（`herdr-session-handoff.ts` 的 `refuseSonnetTier`，2026-09-10）：每次判定落在「sonnet 等級」時欄位就被填成 `sonnet`，2026-09-09 實測連續五筆皆如此。被拒的是**靜默替換**，不是這個檔位本身。
+依 [[agent-routing]] § Native delegation model boundary：`--model grok-xai --effort xhigh` → `grok-cursor` xhigh → `--model sol --effort xhigh` → 鏈尾 `dispatch-fallback`（Claude Opus 5.5（effort: low））。`--tier-basis delegate-sub` 的 effort 是結論的另一半，`pi-dispatch.ts` 與 `pi-routing-gate.ts` 對 model 與 effort 兩半都比對、矛盾即 exit 1。配額降級沿鏈往下，那些跳仍宣告 `delegate-sub` 並 **MUST** 帶 `--retry-of`。
 
-**Grok 4.6 有兩條 transport，都受支援，依工作需要挑**（2026-09-11 更正，見下方撤回）：
+品質失敗不前進鏈：delegate 的 Grok 產出品質不合格 → 升一次 GPT-6 Sol xhigh 修；Sol 仍不合格 → 主線自己做。
 
-| transport | 指令 | 買到什麼 | 代價 |
-| --- | --- | --- | --- |
-| Herdr pane | `--launcher grok --model grok-4.6 --effort high` | 佔一個 pane（預設分割當前 Tab；`--new-tab`、無當前 pane、或 cwd 屬別的 workspace 時改開 Tab）、在 Herdr 看得到、人可以中途介入 | 不過 ledger / quota chain / workspace-access admission |
-| Pi worker | `pi-dispatch.ts --model grok-xai --effort high` | route/tier-basis、quota chain、workspace-access admission、ledger 全套 | 沒有 pane，人只能事後讀 log |
+## Devin SWE-2 Max（任意 Pi 列可選）
 
-relay successor 持有整個主線位置，所以判「還是主線複雜度」就 `--model opus`；判「只值 sonnet 等級」則兩條都行：`--relay --launcher grok --model grok-4.6` 把位置交給 Grok，或本 session 留著、把那件事用上表的 Grok worker 派掉。
-
-> **已撤回（2026-09-11）：「pane 的 model 值域是 Claude-only」與「Grok 4.6 high 只有 `pi-dispatch.ts` 到得了」。**
-> 兩句都是事實錯誤。反證在 `herdr-session-handoff.ts` 自己身上：`grok` 是 `Launcher` 的合法值、
-> `agentKindForLauncher` 給它獨立的 `AgentKind`、`selectionValidForLauncher` 對它放行
-> `grok-4.6` / `grok-4.6-build`，`--help` 的 usage 字串也印著 `grok`。同日實測 `herdr api snapshot`
-> 有 `source: herdr:grok` 的 live pane。
-> 連帶更正：「relay successor 當不了 Pi seat」那條**是 Pi 的限制**（relay receipt 上
-> `launcher === 'pi'` 才標 `admission: 'relay-continuity'`），**NEVER** 讀成 grok 也不能 relay。
-> **NEVER** 因為別處還留著舊說法就複述它——看到就改掉。
-
-**NEVER 因為表上沒有你想派的模型就自己挑一個。** 對不上任一列的正解是走上面這條鏈，**NEVER** 是填 `--route manual` 去蓋掉一個從沒發生過的判定——`manual` 是政策成功指標的分母，填錯讀起來是假陰性而不是缺資料。逐字反開脫：「Herdr 要求明確 `--model`，那就在 Claude 值域裡挑一個」（2026-09-09 實測：五筆 dispatch 全部這樣填成 `sonnet` ＋ `manual`，而 `sonnet` 在本表的主模型欄位一次都沒出現過）。
-
-**Devin 原生前綴（11 列固定）**：`web-search`、`version-upgrade-first-pass`、`version-upgrade-research`、`non-ui-implementation`、`ui-implementation`、`screenshot-review-verify`、`mechanical-fanout`、`copywriting-draft`、`notion-ops`、`read-heavy-scan`、`commit-0c-fix-verify` 這十一列的執行鏈前綴固定為 Devin Fusion（`fusion-gpt-5-6-sol-high-sidekick-swe-2-high`，effort: high）→ Devin SWE-2 Max（`swe-2-max`，effort: max），之後接該列主模型與 Fallback 欄的原樣鏈。兩格是 Devin 原生 carrier，不是 Pi alias——`ModelTier`、`MODEL_TARGETS`、Pi `FALLBACK_NEXT` 一律不動；catalog 證明只認 `devin models list` 的 exact row，**NEVER** 猜 suffix 或 alias。只在 provider／quota／runtime 不可用時前進，quality／test failure 不前進。`ui-implementation` 的終端仍是當次 catalog 實測的 Composer 2.5。
+`swe-2-max`（effort `max`）**不是任何列的固定前綴**。任何 Pi 列都**可以**選它，但**只限相對不急、即便緩慢也不造成堵塞的任務**。dispatcher 看不到急不急，所以由派工方宣告：Herdr `--launcher devin` **MUST** 帶 `--non-blocking`，缺了 exit 2。Claude-only 列（Opus 四列與 review 席）不接受 Devin。catalog 只認 `devin models list` 的 exact `swe-2-max`，**NEVER** 猜 suffix 或 alias。
 
 ## 工作類別對照
 
-列名是每列開頭 〔`如此標示`〕 的 slug，`--tier-basis table-row` 時逐字填進 `--table-row`。Fallback 是原工作列的執行鏈，不另建立工作類型。
+列名是每列開頭 〔`如此標示`〕 的 slug，`--tier-basis table-row` 時逐字填進 `--table-row`。執行鏈的第一跳就是 `--table-row` 要求的 `--model`；後面各跳是配額降級，帶 `--route fallback-chain --retry-of <label>`，由 dispatcher 的 `next_step` 給出。
 
-| 工作類別 | 主模型／執行方式 | Effort | Fallback／契約 |
+| 工作類別 | 執行鏈（effort 依上節） | 鏈尾 | 備註 |
 | --- | --- | --- | --- |
-| 〔`non-ui-implementation`〕一般非 UI 實作 | GPT-5.6 Luna | medium | 修改、測試、修復與交付同一條鏈；機械具名列沿用該列 |
-| 〔`non-ui-implementation-escalate`〕複雜非 UI 實作／修復升級 | GPT-5.6 Sol | high | 根因／方案需要裁決時交 GPT-6 Astra，修改仍交實作者 |
-| 〔`implementation-decision`〕實作中的根因／方案裁決 | GPT-6 Astra | medium | 唯讀分析證據，交付根因、修法限制與驗收條件 |
-| 〔`detailed-planning`〕非 UI 詳細實作計畫 | GPT-6 Astra | medium | 唯讀產出範圍、介面、依賴、task→file 與驗收 |
-| 〔`version-upgrade-first-pass`〕version-upgrade 首輪升版 | xAI Grok 4.6 | low | Cursor Grok 4.6 low → Gemini 3.8 Flash high → blocker |
-| 〔`version-upgrade-research`〕version-upgrade 失敗後研究重試 | xAI Grok 4.6 | high | Cursor Grok 4.6 high → Gemini 3.8 Flash high → blocker |
-| 〔`web-search`〕WebSearch／WebFetch | Gemini 3.8 Flash | high | GPT-5.6 Luna low → 有對應失敗 receipt 才放行同種內建工具 |
-| 〔`code-review`〕Code review／commit 0-A | GPT-6 Astra；合格獨立 reviewer（優先格） | medium | **Opus 5.5 覆寫期間整列停用、NEVER 派（見檔首 banner）；commit 0-A 用途另外停用且**不**隨覆寫失效：0-A 唯一席是 〔`code-review-opus`〕（Charles 2026-09-23 硬禁令），恢復本列擔任 0-A 須 Charles 另行拍板（見 [[agent-routing]] § Opus 5.5 暫時覆寫 的 0-A 例外）。以下 0-A 判準為停用前原文，僅供拍板恢復時參照。** commit 0-A 同級 reviewer 兩格並列（`review-policy.md`）：Astra 優先，實際不可用（exit 3／4＋逐字 RESULT 證據）才換 〔`code-review-fable`〕；兩格皆不可用 → gate 保持未完成。Critical／Major 觸發合格 reviewer 的 fresh-context 深度複審——格別每輪依當下可用性重判（Astra 優先、同條件才換 Fable），與 0-A.1 落在不同格合法，兩份 receipt 各自記 requested／observed；NEVER 降級成主線自審、worker、cloud CI 或第三個模型。非 commit 的 code-review 委派終端沿用 gate-output 鏈 |
-| 〔`code-review-fable`〕commit 0-A 同級 reviewer（Fable 格） | Claude Fable 5.1（Herdr Claude child，native） | medium | **本列停用、NEVER 派：0-A 唯一席是 〔`code-review-opus`〕（Charles 2026-09-23 硬禁令，**不**隨 Opus 5.5 覆寫失效——覆寫撤銷後恢復本列須 Charles 另行拍板，見 [[agent-routing]] § Opus 5.5 暫時覆寫 的 0-A 例外）。以下為停用前的原判準，僅供拍板恢復時參照。** 只在 `code-review` 列的 Astra 實際不可用（exit 3／4＋逐字 RESULT 證據）時啟用，由 `claude-review-safe.sh` 派工；verified PASS 與 Astra 等效，非降級結果；兩格皆不可用 → gate 保持未完成。NEVER 走 Pi；effort 天花板就是 medium |
-| 〔`code-review-opus`〕commit 0-A reviewer（Opus 5.5 暫時覆寫格） | Claude Opus 5.5（Claude Code 主線：in-process `commit-0a-reviewer` subagent；叫不出 Claude subagent 的 runtime：Herdr Claude child） | medium | 只在 [[agent-routing]] § Opus 5.5 暫時覆寫 生效期間使用。Claude Code 主線跑 `claude-review-safe.sh prepare medium` → AGENT_CALL → FINALIZE，其他 runtime 跑無子命令的 `claude-review-safe.sh medium`；兩條 carrier 同一份 brief、同一套 exit code 與 receipt；NEVER 走 Pi；Opus 額度用完時 gate 保持未完成、NEVER 改派 Astra／Fable；覆寫撤銷時本列**保留**、仍是 0-A 唯一席——恢復 Astra／Fable 0-A 須 Charles 另行拍板（0-A 禁令不隨覆寫失效） |
-| 〔`ui-implementation`〕Nuxt UI 元件組裝／Nuxt Content 實作 | Cursor 原生 Composer 2.5 | 依原生能力 | 範圍限 Nuxt UI／Content；當次 catalog 必須提供 Composer 2.5，不可用時回報 blocker |
-| 〔`nuxt-core-implementation`〕Nuxt 本體實作 | GPT-5.6 Sol | xhigh | Nuxt 框架、模組與執行邏輯；GPT 依原生／Pi transport，不使用 Cursor Task |
-| 〔`ui-view-implementation`〕其餘 UI view 實作 | Claude Opus 5.5 | medium | 排除 Nuxt UI／Content 與 Nuxt 本體；Claude Code 原生／Herdr carrier，不可用時回報 blocker |
-| 〔`design-review`〕Design Review／視覺品質判讀 | Claude Opus 5.5 | medium | GPT-5.6 Sol high；實際讀圖與設計要求 |
-| 〔`ui-detailed-planning`〕UI 詳細實作計畫 | Claude Opus 5.5 | medium | GPT-5.6 Sol high；保留 UI 範圍、互動、狀態與驗收 |
-| 〔`screenshot-review-verify`〕Screenshot review 全部四種模式（`[verify:ui]`、archive 前 QA、commit 0-B、ad-hoc） | Gemini 3.8 Flash | high | browser、截圖與 evidence 收集；不代簽符合性 gate，不換其他模型 |
-| 〔`screenshot-match-analysis`〕截圖 vs 驗收項目符合性判定 | Claude Opus 5.5 | medium | GPT-5.6 Sol high；逐張讀實際圖片與完整 item，回 PASS／FAIL／UNCERTAIN |
-| 〔`mechanical-fanout`〕Mechanical fan-out／收集、掃描、驗證矩陣 | Gemini 3.8 Flash | high | GPT-5.6 Luna low；觸發與 threshold gate 依 [[agent-routing]] |
-| 〔`copywriting-draft`〕行銷／產品文案草稿與變體 | Gemini 3.8 Flash | high | 失敗直接回主線；最終文字由主線重寫 |
-| 〔`notion-ops`〕Notion 讀寫（自由形式 `ntn api`，NEVER Notion MCP；確定性 script 除外，見硬禁令） | Gemini 3.8 Flash | high | GPT-5.6 Luna high；仍無法完成時回報 blocker |
-| 〔`read-heavy-scan`〕封閉來源固定欄位抽取／read-heavy scan | Gemini 3.8 Flash | high | GPT-5.6 Luna low；來源矛盾交主線整理為 `implementation-decision` |
-| 〔`commit-0c-fix-verify`〕commit 0-C fix-verify loop | xAI Grok 4.6 | high | Cursor Grok 4.6 high → GPT-5.6 Sol high；同一實作者最多兩輪 check→fix |
-| 〔`commit-0c-fix-verify-escalate`〕commit 0-C 修復升級 | GPT-5.6 Sol | high | 承接 Grok 4.6 未收斂的修復，主線重跑檢查 |
+| 〔`non-ui-implementation`〕非 UI 實作（併入原 `-escalate`） | GPT-6 Sol xhigh | 主線 | 修改、測試、修復與交付同一條鏈 |
+| 〔`implementation-decision`〕實作中的根因／方案裁決 | GPT-6 Sol xhigh | 主線 | 唯讀分析證據，交付根因、修法限制與驗收條件 |
+| 〔`detailed-planning`〕非 UI 詳細實作計畫 | GPT-6 Sol xhigh | 主線 | 唯讀產出範圍、介面、依賴、task→file 與驗收 |
+| 〔`nuxt-core-implementation`〕Nuxt 本體實作 | GPT-6 Sol xhigh | 主線 | Nuxt 框架、模組與執行邏輯 |
+| 〔`version-upgrade-first-pass`〕version-upgrade 首輪升版 | GPT-6 Sol xhigh | 主線 | |
+| 〔`version-upgrade-research`〕version-upgrade 失敗後研究重試 | Gemini 3.8 Flash high → Grok 4.7 xhigh → GPT-6 Sol xhigh | 主線 | mutation：Cursor 池那跳跳過 |
+| 〔`commit-0c-fix-verify`〕commit 0-C fix-verify loop（併入原 `-escalate`） | GPT-6 Sol xhigh | 主線 | 同一實作者最多兩輪 check→fix |
+| 〔`web-search`〕WebSearch／WebFetch | Gemini 3.8 Flash high → Grok 4.7 xhigh → GPT-6 Sol xhigh | `dispatch-fallback` | 鏈尾 subagent 帶 WebSearch／WebFetch；主線 **NEVER** 直接呼叫內建工具 |
+| 〔`mechanical-fanout`〕Mechanical fan-out／收集、掃描、驗證矩陣 | Gemini 3.8 Flash high → Grok 4.7 xhigh | `dispatch-fallback` | 觸發與 threshold gate 依 [[agent-routing]] |
+| 〔`read-heavy-scan`〕封閉來源固定欄位抽取／read-heavy scan | Gemini 3.8 Flash high → Grok 4.7 xhigh | `dispatch-fallback` | 來源矛盾交主線整理為 `implementation-decision` |
+| 〔`notion-ops`〕Notion 讀寫（自由形式 `ntn api`，NEVER Notion MCP；確定性 script 除外，見硬禁令） | Gemini 3.8 Flash high → Grok 4.7 xhigh（僅 `grok-xai`） | `dispatch-fallback` | Cursor 池 `$HOME` 為空 tmpfs，永不上鏈 |
+| 〔`screenshot-review-verify`〕Screenshot review 全部四種模式（`[verify:ui]`、archive 前 QA、commit 0-B、ad-hoc） | Gemini 3.8 Flash high | `dispatch-fallback` | browser、截圖與 evidence 收集；取證與 `screenshot-match-analysis` 判定仍分兩步 |
+| 〔`copywriting-draft`〕行銷／產品文案草稿與變體 | Gemini 3.8 Flash high | `dispatch-fallback` | 最終文字由主線重寫 |
+| 〔`ui-view-implementation`〕UI view 實作（併入原 `ui-implementation`：Nuxt UI／Content） | Claude Opus 5.5（effort: medium） | 無 fallback | Claude Code 原生／Herdr carrier |
+| 〔`design-review`〕Design Review／視覺品質判讀 | Claude Opus 5.5（effort: medium） | 無 fallback | 實際讀圖與設計要求 |
+| 〔`ui-detailed-planning`〕UI 詳細實作計畫 | Claude Opus 5.5（effort: medium） | 無 fallback | 保留 UI 範圍、互動、狀態與驗收 |
+| 〔`screenshot-match-analysis`〕截圖 vs 驗收項目符合性判定 | Claude Opus 5.5（effort: medium） | 無 fallback | 逐張讀實際圖片與完整 item，回 PASS／FAIL／UNCERTAIN |
+| 〔`code-review-opus`〕Code review／commit 0-A（0-A.1／0-A.2／task reviewer／whole-branch／非 commit review 全部） | Claude Opus 5.5（effort: medium）（Claude Code 主線：in-process `commit-0a-reviewer` subagent；叫不出 Claude subagent 的 runtime：Herdr Claude child） | 無 fallback；**額度耗盡 → gate 保持未完成** | row id 保留 `-opus` 字尾以延續既有 receipt／ledger（原 `code-review`／`code-review-fable` 兩列已刪，歷史 ledger 裡的 `code-review` 是 Astra）。Claude Code 主線跑 `claude-review-safe.sh prepare medium` → AGENT_CALL → FINALIZE；NEVER 走 Pi；NEVER 主線自審補位 |
 
-## Pi 派工的 model 維與 workspace capability（原在 `agent-routing.md` § Routing Table）
+「無 fallback」的 Opus 四列在 Opus 不可用時由主線自己做；commit gate 例外——`code-review-opus`（0-A）與 commit 0-B 用到的 `design-review`／`screenshot-match-analysis`：產出 changeset 的那條線不是它的 reviewer，所以 gate 保持未完成（`commit` skill `review-policy.md`）。
 
-> **Pi 派工是 (model, effort) 二維**，model 維合法值：`astra`、`sol`、`gemini`、`luna`、`luna-cursor`、`grok-xai`、`grok-cursor`（`grok` 是 `grok-cursor` 的向後相容別名）。同一 tier 的 `-cursor` 變體是**換配額池、不換檔位**，只在配額降級鏈上出現，**NEVER** 拿它當第一手選擇。**Routing Table 已列明檔位的類別照列派**；**原本會派 Claude subagent 的委派工作**（原判 `sonnet`／`haiku`）依 § Native delegation model boundary轉派 `--model grok-xai`（檔位見對照表）。**NEVER 派 `--model terra`**（2026-08-11 拍板）。External-web 第一手的 bare `gemini` 解析到 Gemini CLI provider；**NEVER** 改傳 Cursor catalog 的完整 `gemini-3.8-flash` slug 冒充同一跳。
+不在表上的 Claude 載體只有一種：in-process 唯讀定位搜尋交 `Explore` subagent（顯式 `model: opus`，effort 意圖 `low`；`pi-routing-gate.ts` 只驗 model 直接放行，`low` 無機械強制）。掃描矩陣與固定欄位抽取照舊走 `mechanical-fanout`／`read-heavy-scan` 列，見 [[agent-routing.dispatch-execution]] 第 4 條。
+
+已退場的列 id（`non-ui-implementation-escalate`、`commit-0c-fix-verify-escalate`、`ui-implementation`、`code-review`、`code-review-fable`）只留在歷史 ledger；新派工帶它們 dispatcher exit 1 並指出吸收它的列（`RETIRED_TABLE_ROWS`）。
+
+## Pi 派工的 workspace capability 與路徑可見性
+
+> **`*-cursor` NEVER 接要讀 cwd 以外路徑的任務**（cursor 池的 `$HOME` / `/tmp` 是空 tmpfs，拿到的是**與真結果同形**的全 missing 表）。鏈走到那一格時，brief 指涉 cwd 以外路徑就**跳過該格**往下走——判的是**這份 brief**，不是列名。`pi-dispatch.ts` 會掃 brief 拒跑（exit 1），但它只看得到 brief 寫出來的路徑，**NEVER** 拿它當自己不必判的理由。**NEVER** 用 `PI_CURSOR_SANDBOX_BIND` 繞過。
 >
-> **`*-cursor` NEVER 接要讀 cwd 以外路徑的任務**（cursor 池的 `$HOME` / `/tmp` 是空 tmpfs，拿到的是**與真結果同形**的全 missing 表）。配額鏈走到那一格時，brief 指涉 cwd 以外路徑就**跳過該格**進終端步驟——判的是**這份 brief**，不是列名。`pi-dispatch.ts` 會掃 brief 拒跑（exit 1），但它只看得到 brief 寫出來的路徑，**NEVER** 拿它當自己不必判的理由。**NEVER** 用 `PI_CURSOR_SANDBOX_BIND` 繞過。
+> **Workspace capability 與路徑可見性是兩個獨立 predicate。** **每一個**會修改 working tree、lockfile、Git index 或建立 commit 的 Pi caller／brief 都屬 `mutation`：concrete table row 由 `pi-routing-policy.ts` 分類，manual caller **MUST** 帶 `--workspace-access mutation`；quota retry **MUST** 沿用 dispatcher 的 `next_step`／`--retry-of`，由 ledger 繼承同一 capability。只讀 inspection／review 才是 `readonly`。
 >
-> **Workspace capability 與路徑可見性是兩個獨立 predicate。** **每一個**會修改 working tree、lockfile、Git index 或建立 commit 的 Pi caller／brief 都屬 `mutation`：concrete table row 由 `pi-routing-policy.ts` 分類，manual caller **MUST** 帶 `--workspace-access mutation`；quota retry **MUST** 沿用 dispatcher 的 `next_step`／`--retry-of`，由 ledger 繼承同一 capability。只讀 inspection／review 才是 `readonly`；manual caller 要進 Cursor pool 時顯式帶 `--workspace-access readonly`。
->
-> **違反字面就是違反精神：任何 workspace mutation dispatch，NEVER 選 `grok-cursor`、`luna-cursor` 或 `sol-cursor`，包含每一個 fallback candidate。** `pi-dispatch.ts` 在 Cursor admission fail closed。**NEVER** 為了 mutation 放寬這道 security boundary——兩句最常見的開脫、Red Flags 與實證邊界在 [[agent-routing.routing-table-rationale]] § Cursor sandbox 與 mutation。
+> **違反字面就是違反精神：任何 workspace mutation dispatch，NEVER 選 `grok-cursor`**，包含每一個 fallback candidate。`pi-dispatch.ts` 在 Cursor admission fail closed。**NEVER** 為了 mutation 放寬這道 security boundary——Red Flags 與實證邊界在 [[agent-routing.routing-table-rationale]] § Cursor sandbox 與 mutation。
 
-### Routing 硬禁令（逐列，原本嵌在表格列內）
+### Routing 硬禁令（逐列）
 
-下推的是**列的內容**，不是列的禁令。每一條都以 [[agent-routing.routing-table]] 的列名為鍵——
-查到那一列時 MUST 回頭讀本節硬禁令表對應列，**NEVER** 只讀對照表就派。
+查到某一列時 MUST 回頭讀本節對應列，**NEVER** 只讀對照表就派。
 
 | 列 | 硬禁令 |
 | --- | --- |
-| `--model gemini`（Routing Table 類別內降檔） | **NEVER** 靜默改用舊 Flash model。 |
-| 〔`web-search`〕 | 查不到就回「查不到」，**NEVER** 拿二手彙整頁充數。 |
-| 〔`screenshot-review-verify`〕 | 四個模式一律用 Gemini 3.8 Flash（effort: high）；由主線直接呼叫 Pi dispatcher，**NEVER** 以 subagent 中介轉派。模型不可用就回報 blocker，**NEVER** 靜默改派其他模型。 |
-| 〔`screenshot-match-analysis`〕 | Opus 5.5（effort: medium），無法執行時 GPT-5.6 Sol（effort: high）；兩者均讀實際截圖與 item 要求；收集與判定**NEVER** 併成同一次 dispatch。 |
+| 任一列 | **NEVER** 派 § 禁用 表內的 model；**NEVER** 用非 `TIER_EFFORT` 的 effort。 |
+| 〔`web-search`〕 | 查不到就回「查不到」，**NEVER** 拿二手彙整頁充數。主線 **NEVER** 直接呼叫內建 WebSearch／WebFetch——鏈尾是 `dispatch-fallback` subagent。 |
+| 〔`screenshot-review-verify`〕 | 由主線直接呼叫 Pi dispatcher，**NEVER** 以 subagent 中介轉派首跳。收集與判定 **NEVER** 併成同一次 dispatch。 |
+| 〔`screenshot-match-analysis`〕 | 逐張讀實際截圖與 item 要求；**NEVER** 把取證 dispatch 的自述當判定。 |
 | 〔`mechanical-fanout`〕 | **NEVER** 以「我自己順手跑掉比較快」略過本列（成因見 rationale）。 |
-| 〔`copywriting-draft`〕 | 本列 **NEVER** 進全域配額降級鏈（exit 2／3／4 一律直接回本 task 主線自己寫）。**主線 MUST 收斂重寫每一條採用的文案，NEVER 原樣貼進交付物**——Pi 回的是素材不是成稿。本列只涵蓋行銷／產品對外文案，**NEVER** 從本列外推到規約措辭／commit message／技術文件／PR 描述／對外報告。 |
-| 〔`notion-ops`〕 | Gemini 3.8 Flash（effort: high）→ GPT-5.6 Luna（effort: high）→ blocker。**本列 NEVER 續走其他 fallback**（Notion auth 在 `$HOME`）。**NEVER** 主線第一手自己跑 ntn。**本列不涵蓋確定性 script**：`vendor/scripts/notion-sync.ts`、`vendor/scripts/lib/notion-hub.ts resolve`、`scripts/audit-notion-hub-schema.ts` 主線直接跑——寫入範圍、授權轉移表與 schema 檢查寫死在 script 裡，派 Pi 只多一層失敗面。自己組 `ntn api` 指令的一律仍算本列；Notion MCP 不是本列的合法 transport，**NEVER** 使用。 |
+| 〔`copywriting-draft`〕 | **主線 MUST 收斂重寫每一條採用的文案，NEVER 原樣貼進交付物**——Pi 回的是素材不是成稿。本列只涵蓋行銷／產品對外文案，**NEVER** 外推到規約措辭／commit message／技術文件／PR 描述／對外報告。 |
+| 〔`notion-ops`〕 | **NEVER** 上 Cursor 池（Notion auth 在 `$HOME`）。**NEVER** 主線第一手自己跑 ntn。**本列不涵蓋確定性 script**：`vendor/scripts/notion-sync.ts`、`vendor/scripts/lib/notion-hub.ts resolve`、`scripts/audit-notion-hub-schema.ts` 主線直接跑。Notion MCP 不是本列的合法 transport，**NEVER** 使用。 |
 | 〔`read-heavy-scan`〕 | **NEVER** 拿「反正我讀一下就知道了」略過 gate，也 NEVER 把固定輸出 schema 當成不需裁決的證據。 |
-| 〔`commit-0c-fix-verify-escalate`〕 | **NEVER** 當第一手：只在 grok 2 輪後仍紅、grok 報 pass 但主線重跑仍紅、或 grok 兩池都 exit 4 時進。 |
-| 〔`code-review-fable`〕 | **NEVER** 當第一手：只在 `code-review` 列 Astra 回 exit 3／4 且有逐字 RESULT 證據時進（exit 2／5／6 不算不可用）；**NEVER** 經 Pi 派工（native Claude-only row，走 Herdr）；effort 恆 `medium`，family cap **NEVER** 抬檔；receipt MUST 記 requested／observed model 與 `model_verification`（＋`model_verification_reason`），`unverified` NEVER 讀成已核實。 |
+| 〔`code-review-opus`〕 | **NEVER** 經 Pi 派工；effort 恆 `medium`；Opus 額度耗盡 → gate 保持未完成，**NEVER** 改派其他模型、**NEVER** 主線自審補位；receipt MUST 記 requested／observed model 與 `model_verification`，`requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。 |
 
-> **每一次** pi dispatch **MUST 帶 `--route` 與 `--tier-basis`**（缺就 exit 1）：前者記走哪條政策（[[agent-routing.routing-table]] 某列 → `routing-table`；§ Native delegation model boundary → `claude-delegate-sub`；配額降級鏈 → `fallback-chain`；皆非才**顯式** `manual`），後者記該政策對 model 的**結論**（六值見 reference）；dispatcher 交叉檢查兩者與 `--model`、矛盾即 exit 1。**NEVER** 不確定就填 `manual` ／ `table-row`——與「判定沒發生」不可區分。重試帶 `--retry-of <label>`，**NEVER** 用 `<label>2`。
+> **每一次** pi dispatch **MUST 帶 `--route` 與 `--tier-basis`**（缺就 exit 1）：前者記走哪條政策（本表某列 → `routing-table`；§ delegate-sub → `claude-delegate-sub`；配額降級 → `fallback-chain`；皆非才**顯式** `manual`），後者記該政策對 model 的**結論**；dispatcher 交叉檢查兩者與 `--model`、`--effort`，矛盾即 exit 1。**NEVER** 不確定就填 `manual` ／ `table-row`——與「判定沒發生」不可區分。重試帶 `--retry-of <label>`，**NEVER** 用 `<label>2`。
 >
-> **`--tier-basis table-row` 時 MUST 再帶 `--table-row <列名>`**（缺就 exit 1）：列名是 [[agent-routing.routing-table]] 每列開頭 〔`如此標示`〕 的 slug，dispatcher 拿該列的 model 交叉檢查。**NEVER** 因為「反正 table-row 也是查表」就省略它。**NEVER** 在派工當下偏離列上的 model —— 認為某列該換檔位就先改 [[agent-routing.routing-table]] 再派。
+> **`--tier-basis table-row` 時 MUST 再帶 `--table-row <列名>`**（缺就 exit 1）。**NEVER** 在派工當下偏離列上的 model —— 認為某列該換檔位就先改本表（與 `pi-routing-policy.ts`）再派。
 >
-> **Routing Table 類別的檔位選擇中，NEVER** 拿「輸出會被下游機械消費」當降檔理由：下游若只驗 JSON schema 而不驗語意，降檔引入的錯誤會被自動放大。只有下游具備**獨立且夠強的語意 gate** 才可降檔。（§ Native delegation model boundary 的轉派自帶語意 gate 要求——它的第 3 條 predicate 就是這一條。）
+> **Routing Table 類別的檔位選擇中，NEVER** 拿「輸出會被下游機械消費」當降檔理由：下游若只驗 JSON schema 而不驗語意，降檔引入的錯誤會被自動放大。
 >
-> **跑分、配額權重、grok 擴權取證這三類「拿數字當理由」的陷阱，全文在 [[agent-routing.routing-table-rationale]]**——它 paths-gated 於改對照表或動 `pi-routing-*.ts` 的時刻。要拿任何數字支持一次降檔 / 轉列之前 MUST 先讀它，**NEVER** 憑印象引用比例。
+> **跑分、配額權重、擴權取證這三類「拿數字當理由」的陷阱，全文在 [[agent-routing.routing-table-rationale]]**。要拿任何數字支持一次降檔 / 轉列之前 MUST 先讀它，**NEVER** 憑印象引用比例。

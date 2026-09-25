@@ -45,7 +45,7 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}
 
 | 情境 | 隔離路由 |
 | --- | --- |
-| read-only：只讀取／分類／檢查，不改檔且不需隔離或結構化證據蒐集 | 留在目前環境，不呼叫 `wt`；仍查驗 本步前提查驗 |
+| read-only：只讀取／分類／檢查，不改檔且不需隔離或結構化證據蒐集 | 留在目前環境，不呼叫 `wt`；仍查驗本步前提 |
 | multi-file／write：會寫檔的實作或調查、預期兩個以上檔案（spec+checklist、source+test/docs），或需要隔離／結構化證據蒐集 | 先確認 `work_id`，再交 `wt` 建立／選定隔離環境，重驗後才交原下游 |
 | dirty-main：共享 main 已有 >=2 個 clade-managed dirty files | 不可繼續在 main 寫入；交 `wt`／既有 worktree owner，先釐清本次 WIP 所有權；純唯讀檢查仍可繼續 |
 | already-worktree：git-dir 含 `/worktrees/`，或本工作已有 implementation checkout | 確認該 checkout 的 work_id、範圍與 writer ownership 後沿用；**同一個切片**不巢狀呼叫 `wt`、不另開第二棵；owner 不明則交既有 worktree owner |
@@ -53,17 +53,17 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}
 | publish-preparation：本次變更最後需 publish／propagate | 修改與驗證先走 worktree，交付後由發布 owner 承接 main-bound 階段 |
 | main-bound：僅執行設計上綁定 main 的 publish／propagate | 交 `clade-publish` 的 main-bound owner，不呼叫 `wt`；仍須通過發布的 clean／ownership gate，不能豁免 dirty-main 禁寫條件 |
 
-**判定優先序**：上表不是 first-match。先區分唯讀與寫入，再確認是否已有本工作擁有的 worktree；multi-file／write 在 already-worktree 中直接沿用，不重建。parallel-slices 命中時，「不另開第二棵」只約束單一切片，**NEVER** 讀成同一個 work_id 只能有一棵 worktree——那會把可平行的 task 全部壓回序列。dirty-main 的 >=2 門檻是共享 main 的 fail-closed 寫入限制，不是所有 checkout 的 dirty 上限，也不阻止純唯讀檢查。無法確認 dirty paths 的 managed 歸屬或 writer ownership 時，先交既有 owner 釐清，未確認前不得寫入。main-bound 例外僅適用發布操作本身；若仍要修改 source、test 或文件，該準備工作仍先走隔離流程。
+**判定優先序**（不是 first-match）：先分唯讀與寫入，再看是否已有本工作擁有的 worktree（有就沿用）。parallel-slices 的「不另開第二棵」只約束單一切片，**NEVER** 讀成同一個 work_id 只能有一棵 worktree。dirty-main 門檻只限制共享 main 的寫入，不阻止唯讀檢查。dirty paths 歸屬或 writer ownership 不明時先交既有 owner 釐清，未確認前不寫。main-bound 例外只適用發布操作本身，要改 source／test／文件仍先走隔離。
 
-**work_id-before-worktree**：先解析並沿用本工作的 `work_id`；沒有時交 work identity owner，依 repo 契約取得／鑄造識別後才建立或進入工作樹。若 `wt-helper add` 支援在建立前鑄造並綁定識別，可由 `wt` owner 在同一流程完成；不能把 slug 當 work_id，也不能為取得識別在 dirty main 先寫 package。需要寫入的 identity／package 初始化由該 owner 的隔離流程承接；若無可用流程，列阻塞，不繞過 gate。同一工作不得另鑄第二個識別。
+**work_id-before-worktree**：先沿用本工作的 `work_id`；沒有就交 work identity owner 依 repo 契約取得／鑄造後才建立或進入工作樹（`wt-helper add` 可在同一流程鑄造並綁定）。不把 slug 當 work_id，不為取得識別在 dirty main 先寫 package，沒有可用流程就列阻塞；同一工作不另鑄第二個識別。
 
-實際 transport 讀取當前 runtime 的 `wt/SKILL.md`，依其 baseline guard、既有 checkout 與 main-bound 例外執行；可用 Form 3 `/wt <slug>: /<downstream> <args>` 保留原候選。交棒攜帶 work_id、package、允許路徑、writer owner 與續跑位置。**NEVER** 用 stash、reset 或 commit 藏掉未知 WIP；需帶入既有 WIP 時先確認所有權與明確授權，交 `wt` owner 依 baseline guard 處理，不由 work-route 搬檔。
+transport 讀當前 runtime 的 `wt/SKILL.md`，可用 Form 3 `/wt <slug>: /<downstream> <args>` 保留原候選；交棒攜帶 work_id、package、允許路徑、writer owner 與續跑位置。**NEVER** 用 stash、reset 或 commit 藏掉未知 WIP；帶入既有 WIP 要先確認所有權與授權，交 `wt` owner 依 baseline guard 處理。
 
 ## 1. 定位同一工作與規則
 
 讀取本次需求、適用 `specs/truth/**`、既有 package 的 spec／plan／research／tasks 及證據；只續跑本次相關且未完成的工作。
 
-**提出方案或鑄新 work id 之前**，MUST 先列出**每一份** active plan（lifecycle repo：`flow plan list`），對**每一份** Scope 與本次需求路徑或主題重疊的 plan 讀完 `plan.md` 的 Scope、Decisions 與 Open work。重疊的工作續跑那一份；只有部分重疊時，新 plan 的 Scope MUST 有一張分工表寫明哪一塊歸哪個 work id。`flow plan open` 的 entry gate 只擋得住同 slug，擋不住同主題不同 slug——既有 plan 裡已拍板的決策與實測，不讀就會被重新提一次。
+**提出方案或鑄新 work id 之前**，MUST 列出**每一份** active plan（lifecycle repo：`flow plan list`），對**每一份** Scope 與本次需求重疊的 plan 讀完 `plan.md` 的 Scope、Decisions 與 Open work。重疊就續跑那一份；部分重疊時，新 plan 的 Scope MUST 有分工表寫明哪一塊歸哪個 work id（`flow plan open` 的 entry gate 只擋同 slug）。
 
 已有 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:` 時，沿用 `specs/plans/<work-id>/`。新工作：repo 根有 `specs/truth/work-lifecycle.md` 時 MUST 先 `flow plan open` 鑄 `W-…`；沒有該檔的 consumer 才鑄 `NNN-<slug>`。不為補前提、轉 owner 或重試另開 package。
 
@@ -71,7 +71,7 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}
 
 | 藉口（逐字，出自既有 plan 的 Decisions） | 現實 |
 | --- | --- |
-| 「constitution 未存在，本輪不改 constitution artifact」 | 缺失就是本段的觸發條件，不是豁免。同型註記在三個 session 各出現一次，各留下一份互不相同的未提交 constitution，沒有一份落地。既有 plan 這樣寫 **NEVER** 構成前例：由 owner 建最小版、獨立落地，再續跑原工作 |
+| 「constitution 未存在，本輪不改 constitution artifact」 | 缺失就是本段的觸發條件，不是豁免——照這句跳過，每個 session 會各留一份互不相同、未落地的 constitution。既有 plan 這樣寫 **NEVER** 構成前例：由 owner 建最小版、獨立落地，再續跑原工作 |
 
 內部 `rules/.constitution/**` 是執行契約；專案 `.agents/constitution/**` 是治理 artifact。兩者不能互相替代。按當前 checkout 驗證 project artifact，不拿另一 worktree 的未提交檔冒充存在，也不把內部契約複製成 project constitution。
 
@@ -91,20 +91,18 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}
 | clarify-over-specs | 優先當前 runtime 已安裝公開入口；未提供時用 `rules/.workflow/clarify-over-specs/SKILL.md` |
 | specify、clarify、system-analysis、implement | 當前 runtime 的公開入口與必要 resources |
 
-Claude、Codex、Cursor 的本 skill 根分別為 `.claude/skills/work-route/`、`.agents/skills/work-route/`、`.cursor/skills/work-route/`。內部流程由 `clade-workflow-bundles` 隨本 skill 投影，完整保留其相對 rules／templates，不另加公開 skill。內部契約放在 `.` 開頭的目錄，是為了不讓會遞迴掃 `SKILL.md` 的 runtime 把它們列成公開 skill；多數檔案搜尋工具預設不掃這類目錄，所以一律照上表的明確路徑讀取，**NEVER** 用搜尋結果為空判定內部流程不存在。只按需讀本步入口及它明列的必讀資源，不一次載入全部流程。
+本 skill 根：Claude `.claude/skills/work-route/`、Codex `.agents/skills/work-route/`、Cursor `.cursor/skills/work-route/`。內部流程由 `clade-workflow-bundles` 隨本 skill 投影到 `.` 開頭的目錄（避免被 runtime 列成公開 skill），多數搜尋工具預設不掃，所以一律照上表明確路徑讀取，**NEVER** 用搜尋結果為空判定不存在。只讀本步入口及它明列的必讀資源。
 
-**clade overlay 只從本表走得到。** bdd 與 technical-research 的 bundle 目錄各有一份 clade-owned 的 `specformula.md`（`rules/.workflow/bdd/specformula.md`、`rules/.workflow/technical-research/specformula.md`），上游 `SKILL.md` 一個字都不會提到它們。載入這兩個 owner 時 MUST 一併讀同目錄的 `specformula.md`，再依該檔自己寫的適用條件決定是否套用：bdd 那份在 `techstack.md` 的後端 BDD techstack 是 SpecFormula 時覆蓋 step definition 的落點（不手寫 step definition），technical-research 那份給 clade consumer 三題必問的 fleet 預設。**NEVER** 因上游入口沒列就略過——照上游假設手寫 step definition，正是 bdd 那份 overlay 要擋的事。
+**clade overlay 只從本表走得到。** bdd 與 technical-research 的 bundle 各有一份 clade-owned 的 `specformula.md`（`rules/.workflow/bdd/specformula.md`、`rules/.workflow/technical-research/specformula.md`），上游 `SKILL.md` 不會提到。載入這兩個 owner 時 MUST 一併讀它，依該檔的適用條件套用（bdd 那份在後端 BDD techstack 是 SpecFormula 時不手寫 step definition；technical-research 那份給三題必問的 fleet 預設）。**NEVER** 因上游入口沒列就略過。
 
-下游契約內提到 `/tasks`、`/bdd`、`/truth-delta` 等流程時，也回本表解析並接續，不要求它們有獨立公開入口。這項工作已授權的內部流程由 orchestrator 載入契約執行；不能把缺少 slash UI 當成能力缺失。
-
-內部流程的可執行資源也以實際 owner 根解析。上游契約中的 `.agents/skills/<owner>/scripts/...` 是原安裝位置；此 bundle 下須將該前綴換成當前 runtime 的 `work-route/rules/.workflow/<owner>/`，保留腳本與參數，不另外建立頂層 skill。尤其 gherkin-and-dsl Phase 6 必須實際執行 `uv run <work-route-root>/rules/.workflow/gherkin-and-dsl/scripts/audit_feature_dsl_topology.py --root <features-root>`；其中 `<work-route-root>` 是上表所列當前 runtime 的 skill 根，`<features-root>` 是 **truth 的介面根**（含 `dsl.md` 的那一層，例如 `specs/truth/features/cli`）。plan package 的 `features/acceptance/` 沒有 `dsl.md`，拿它當 root 每一個 step 都會報找不到 DSL row——plan 端 acceptance 的對應檢查是 `flow plan readiness <work-id>`（dry-run 無 undefined／ambiguous step）。保留稽核輸出，失敗交回該 owner，不因路徑搬移而略過。
+下游契約提到 `/tasks`、`/bdd`、`/truth-delta` 等流程時回本表解析，由 orchestrator 載入契約執行，不把缺少 slash UI 當成能力缺失。上游契約的 `.agents/skills/<owner>/scripts/...` 前綴換成當前 runtime 的 `work-route/rules/.workflow/<owner>/`，保留腳本與參數。尤其 gherkin-and-dsl Phase 6 必須實際執行 `uv run <work-route-root>/rules/.workflow/gherkin-and-dsl/scripts/audit_feature_dsl_topology.py --root <features-root>`；其中 `<work-route-root>` 是上表所列當前 runtime 的 skill 根，`<features-root>` 是 **truth 的介面根**（含 `dsl.md` 的那一層，例如 `specs/truth/features/cli`）。plan package 的 `features/acceptance/` 沒有 `dsl.md`，拿它當 root 每一個 step 都會報找不到 DSL row——plan 端 acceptance 的對應檢查是 `flow plan readiness <work-id>`（dry-run 無 undefined／ambiguous step）。保留稽核輸出，失敗交回該 owner，不因路徑搬移而略過。
 
 每次交棒都記錄 runtime、owner、實際載入路徑、必要 artifact 與同步證據。用既有 projector 的唯讀規劃／check 核對目前 checkout；檔案存在、dry-run exit 0、另一 runtime 的成功都不單獨證明已同步。
 
 ## 3. 前提修復與接續迴圈
 
-1. 從所選 owner 的實際契約解析輸入。按專案根解析 project artifact，按 owner 目錄解析 internal resources，逐檔檢查存在、可讀與適用性。尚待 owner 產出的檔案不是其輸入前提。
-2. 缺投影或安裝：在目前授權範圍內，使用 repo 的固定版本來源、既有投影／安裝 owner 及支援的 CLI 補齊後重驗。保留本工作與使用者 WIP；不手改 generated projection、不從網路追最新版本、不把 pinned internal flow 臨時安裝成公開 skill。
+1. 從所選 owner 的實際契約解析輸入（project artifact 按專案根、internal resources 按 owner 目錄），逐檔檢查。尚待該 owner 產出的檔案不是輸入前提。
+2. 缺投影或安裝：用 repo 的固定版本來源與既有投影／安裝 owner 補齊後重驗；不手改 generated projection、不從網路追最新版、不把 pinned internal flow 裝成公開 skill。
 3. 缺 project artifact：載入該 artifact owner 並執行其流程；constitution 走第 1 節，techstack 走 technical-research。既有 artifact 已回答的事項不重問，不代替 owner 捏造答案。
 4. 前提通過後，實際執行候選 owner，查驗產出，重新判定下一步並繼續；「知道下一支是誰」不是本輪完成條件。
 5. 同一修復方式沒有新證據時不重複重試；修復 owner 循環、來源不可取得、必要工具無法使用、權限不足或需要外部狀態改變時，保留已做工作與原始錯誤，回報具體缺口及解除條件。仍可獨立完成的工作繼續。

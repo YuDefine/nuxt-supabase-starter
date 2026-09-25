@@ -43,17 +43,15 @@
 - 編造不存在的 in-progress / blocker
 - 為了「填滿」區塊灌水 —— 真沒有就省略該區塊
 
-## 5-D. 同步 Spectra ROADMAP
+## 5-D. 同步 ROADMAP
 
-先依 canonical manifest 與實際 script 判定本 repo 是否使用 Spectra。已選用且有 ROADMAP 時執行下列同步；已選用卻缺命令時回報實際缺口，不宣稱同步完成。未選用 Spectra 的 repo 更新其既有待辦 carrier，記錄本步的 Spectra 分支未觸發。
-
-手動維護 repo 根目錄 `ROADMAP.md` 的 `## Next Moves`：把本次 session 產生的未來工作依 `high/mid/low` 插入，已完成的移除。
-
-若 5-B 收集到的 **Next Steps** 中包含跨 session backlog（不只是「commit 後立刻要做」的驗證動作），依當前 runtime 已投影的 `proactive-skills`「Spectra Roadmap Maintenance」**手動**更新 MANUAL 區塊的 `## Next Moves`，格式：
+手動維護 repo 根目錄 `ROADMAP.md` 的 `## Next Moves`（落點判準見 `scope-discipline`）：把 5-B 收集到的跨 session backlog（不只是「commit 後立刻要做」的驗證動作）依 `high/mid/low` 插入，已完成的移除。repo 沒有 `ROADMAP.md` 時更新其既有待辦 carrier，並在 5-F 報告註明。格式：
 
 ```text
 - [priority] 描述 — 依賴：xxx / 獨立 / 互斥：yyy
 ```
+
+**清理路徑**（5-A 判定不需要 handoff 時從這裡進）：`HANDOFF.md` 存在且內容已過時時清空或刪除；先核對其中其他工作的條目，仍有效的保留。
 
 ## 5-E. 把 HANDOFF/ROADMAP 變更納入 commit（不 push）
 

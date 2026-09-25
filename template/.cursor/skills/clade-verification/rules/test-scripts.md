@@ -63,10 +63,6 @@ vitest 會依 `vitest.config.ts` 內各 project 的 `include` / `exclude` 自動
 }
 ```
 
-寫死路徑的問題：
-- `pnpm test:unit -- app/pages/foo.test.ts` 經 npm script 展開為 `vp test run test/unit app/pages/foo.test.ts`
-- vitest 把兩者都當 path filter，行為不一致（依版本可能 0 file matched 或部分匹配）
-- 開發者無法明確知道 test 是否真的跑了該檔
 
 ### 禁止以 `pnpm test:<project> -- <path>` 形式跑單檔
 
@@ -74,31 +70,7 @@ vitest 會依 `vitest.config.ts` 內各 project 的 `include` / `exclude` 自動
 
 ### 禁止省略 `test:file` escape hatch
 
-每個 multi-project consumer **MUST** 提供無 filter 的 `test:file` script。沒有 escape hatch 時，開發者只能靠 `pnpm vp test run <path>` 直呼，新 contributor 容易踩 `test:<project> -- <path>` trap。
-
-## 範例：違反 → 修正
-
-**Before（寫死路徑 trap）**：
-
-```json
-{
-  "scripts": {
-    "test:unit": "vp test run test/unit"
-  }
-}
-```
-
-**After**：
-
-```json
-{
-  "scripts": {
-    "test:file": "vp test run",
-    "test:nuxt": "vp test run --project=nuxt",
-    "test:unit": "vp test run --project=unit"
-  }
-}
-```
+每個 multi-project consumer **MUST** 提供無 filter 的 `test:file` script。
 
 ## 心智模型
 
@@ -109,11 +81,6 @@ vitest 會依 `vitest.config.ts` 內各 project 的 `include` / `exclude` 自動
 | 跑特定路徑（單檔、目錄、glob）| `pnpm test:file <path>` |
 
 **不要**用 `pnpm test:<project> -- <path>` — 那是 path filter 限到 project include 範圍的混合形式，trap 之源。
-
-## 與其他規則的關係
-
-- **`testing-anti-patterns.md`**：本規則處理 test **執行入口**；anti-patterns 處理 test **內容**反模式。兩者並存
-- **`commit.md`**：commit 0-C 跑 `pnpm test`（無 filter），不受本規則影響；本規則只規範 dev / debug 跑單檔的入口
 
 ## Advisory：包 clade-gate 收 signal（improvement-loop enabled consumer）
 
@@ -126,8 +93,7 @@ Consumer 在 `registry/consumers.json` 標 `improvement_loop_enabled: true` 時�
 
 `lint` / `typecheck` 同理。詳細採用收益 + 快速 diff + anti-pattern：見 `vendor/snippets/clade-gate-package-scripts/README.md`。
 
-採用由 consumer 的 session 決定，clade 稽核命中時 **MUST relay 給它**（per
-[[clade-role-and-todo-discipline]] § Consumer 工作命中時 MUST relay），主線不替 consumer 拆步驟；本 § 僅 advisory pointer 讓 consumer agent 在改 test scripts 時看到該 cookbook。
+採用由 consumer 的 session 決定，clade 稽核命中時 **MUST relay 給它**。
 
 ## MUST：重寫已包 clade-gate 的 script 時保留前綴
 
@@ -143,21 +109,4 @@ Consumer 在 `registry/consumers.json` 標 `improvement_loop_enabled: true` 時�
 +"lint": "vp lint --deny-warnings",
 ```
 
-**為什麼是 MUST 不是 advisory**：clade-gate wrapper 以「命令前綴」內嵌在 script 字串裡，盯著「這個 script 該跑什麼命令」的人很容易把前綴當雜訊整段換掉。實證：2026-06-09 一次 `migrate lint from oxlint to vp lint across consumers` 的 fleet sweep 對 6 個 consumer 整行覆蓋，把 5 天前（TD-152，6-04 採用）的 clade-gate 前綴全部弄掉，instrumentation 即退化 —— 當時沒有任何規則擋得住，因為「要不要包」是 advisory、carve-out 只禁「帶搭 unrelated 改動」（防多做），沒有「重寫時保留前綴」（防少做）這一條。本 § 補上這個缺口。
-
 **改 `package.json` 的 test/lint/typecheck script 前自查一句**：這行原本有 `.clade/bin/clade-gate run` 前綴嗎？有 → 改完它**必須**還在。
-
-## 違反時的回報方式
-
-```
-[Test Scripts] vitest multi-project 偵測到寫死路徑
-
-問題：<consumer>/package.json 的 scripts.test:<name> 寫成 "vp test run <path>"，
-      consumer 用 vitest multi-project 配置時，此 path 等於 filter 限到該路徑下的
-      test，跨 project 單檔測試會靜默不跑。
-
-修正：
-  - 將 "test:<name>": "vp test run <path>" 改為 "vp test run --project=<name>"
-  - 補 "test:file": "vp test run" 作為單檔 escape hatch
-  - 跑單檔請改用 pnpm test:file <path>，禁止 pnpm test:<name> -- <path>
-```

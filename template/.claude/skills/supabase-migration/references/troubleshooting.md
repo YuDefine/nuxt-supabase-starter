@@ -13,6 +13,8 @@
 
 若 CI/CD 出現 `must be owner of table xxx` 錯誤：
 
+這是 SKILL.md § MCP 與 DDL 的唯一例外：物件 owner 已是 `supabase_admin`，`postgres` 改不了它的 owner，只能由同一條 MCP 連線把 owner 交還給 `postgres`。除了下面這幾句，remote MCP 仍不跑 DDL。
+
 ```sql
 -- 1. 透過 MCP 查詢問題表格
 SELECT schemaname, tablename, tableowner

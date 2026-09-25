@@ -434,6 +434,9 @@ function tarSize(root: string, inventory: SourceInventory, tolerateFileChange = 
     {
       input: inventory.entries.map((entry) => entry.path || '.').join('\0') + '\0',
       encoding: 'utf8',
+      // The byte total below is parsed from tar's human-readable `--totals` line, which
+      // tar localizes (zh_TW prints `已寫入位元組總數:`).
+      env: { ...process.env, LC_ALL: 'C' },
     },
   )
   const drifted =

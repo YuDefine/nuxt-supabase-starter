@@ -7,7 +7,7 @@ paths: ['package.json', 'nuxt.config.ts', 'registry/consumers.json', 'registry/c
 
 # Dev Port 中央分配
 
-**核心命題**：consumer 越來越多，dev server port 撞號是 cross-cutting concern — 不集中分配必然撞。本規約把 dev port 變成 clade 標準層治理：registry 集中分配、規約強制宣告、audit 偵測漂移與衝突。
+Dev port 由 clade 集中分配：registry 分配、規約強制宣告、audit 偵測漂移與衝突。本檔 §2.5–2.7 是 dev tunnel 規約的 SoT，[[dev-tunnel-convention]] 是其索引與補充。
 
 > SoT：`registry/consumers.json` 每個 consumer entry 的 `dev_ports` object。
 >
@@ -38,7 +38,7 @@ paths: ['package.json', 'nuxt.config.ts', 'registry/consumers.json', 'registry/c
 
 凡 consumer 用 `vite-plugin-cloudflare-tunnel` 開 dev tunnel：
 
-- **MUST** Hostname 走 `<consumer-id>-dev.<maintainer-domain>`（org convention；既有對齊：`<consumer-j>-dev` / `<consumer-b>-dev` / `<consumer-a>-shared-dev` / `co-purchase-dev`）
+- **MUST** Hostname 走 `<consumer-id>-dev.<maintainer-domain>`（org convention）
 - **NEVER** 自由發揮挑其他 zone（如 `bigbyteedu.com` / 個人域名）— 即使 DNS / tunnel 建得起來，plugin 仍會因 token-zone account 不匹配 403 crash Nuxt
 - **MUST** `.env.local` 設三件套：
 
@@ -49,18 +49,11 @@ paths: ['package.json', 'nuxt.config.ts', 'registry/consumers.json', 'registry/c
   ```
 
 - **MUST** Token 用 `cfat_*` account API token，**絕非** `cfut_*`（Worker token）或 `r_*`（cert.pem 簽發的 tunnel-scoped token）
-  - 來源 1：<consumer-j> `.env.local` 的 `CLOUDFLARE_API_KEY`（既有可用）
-  - 來源 2：Notion `Scrects` → Cloudflare → YuDefine（待補；目前只列 cfut_）
+  - 來源：<consumer-j> `.env.local` 的 `CLOUDFLARE_API_KEY`
   - 必備權限：`Cloudflare Tunnel:Edit`（account）+ `SSL and Certificates:Edit`（zone）+ `DNS:Edit`（zone）
-  - **必要**：`SSL and Certificates:Edit` — plugin `dist/index.mjs:617` 必跑 `/zones/<id>/ssl/certificate_packs` GET 確認 edge cert，403 會 re-throw crash Nuxt（即使 Cloudflare Universal SSL 已涵蓋）
+  - **必要**：`SSL and Certificates:Edit` — plugin 必跑 `/zones/<id>/ssl/certificate_packs` GET 確認 edge cert，403 會 re-throw crash Nuxt（即使 Cloudflare Universal SSL 已涵蓋）
 
-#### 三種錯誤 token 來源 + 為什麼不能用
-
-| Token 來源 | 為什麼不行 |
-| --- | --- |
-| `~/.cloudflared/cert.pem`（`cloudflared tunnel login` 簽發的 `r_*` token） | 只有 Tunnel + DNS scope，無 SSL；且綁定登入時選的 account zone（多數情況不是 yudefine） |
-| Notion `Scrects` 的 `cfut_*`「YuDefine - for Worker 通用」 | 設計給 wrangler deploy / Worker 用，無 SSL:Edit |
-| user 自行透過 dashboard 建的 limited-scope token | 多半漏 SSL 或漏 Tunnel；要建 token 一定要對齊上面 3 條權限 |
+錯誤來源：`cert.pem` 的 `r_*`（無 SSL scope、綁錯 account）、`cfut_*` Worker token（無 SSL:Edit）、dashboard 自建的 limited-scope token（常漏 SSL 或 Tunnel）。
 
 ### 2.6. Dev tunnel resilient pattern（防 Nuxt restart loop → CF 10502 lockout）
 
@@ -71,34 +64,20 @@ paths: ['package.json', 'nuxt.config.ts', 'registry/consumers.json', 'registry/c
 - **MUST** pre-flight probe 用 `AbortController` 設 ≤ 3s timeout，避免 Cloudflare 10502 lockout 期 API 阻塞拉長 dev startup time
 - **MUST** probe endpoint 用 `GET /accounts`（plugin 真正會跑的第一支 call），**NEVER** 用 `/user/tokens/verify`（後者需 token 含 `User Details:Read` permission，多數 Tunnel-only token 沒給 → 會把好 token 誤判 invalid，wrapper 永遠 fallback localhost、tunnel 永遠起不來）
 
-範本 + verify helper 見 [`vendor/snippets/dev-tunnel-resilient/`](../../vendor/snippets/dev-tunnel-resilient/)。直接抄 `nuxt.config.ts.template` 改少數 placeholder（port、env key name）即可。
+範本 + verify helper：`vendor/snippets/dev-tunnel-resilient/`。
 
-#### 為什麼需要這層 wrapper
-
-`vite-plugin-cloudflare-tunnel@1.0.12` 的 `retryWithBackoff`（`dist/index.mjs:286-304`）**只包 SSL cert 端點**，第一支 auth API call `GET /accounts`（line 520）裸跑無 retry。token invalid 時：
-
-1. Plugin throw `Error("[cloudflare-tunnel] API request failed: ...")`
-2. Nuxt dev 把 plugin throw 當 fatal → auto-restart
-3. 重啟 → plugin 重新 setup → 又打 `/accounts` → 又 throw → 無延遲 spin loop
-4. 十幾秒內可累積數十次 auth attempt → 觸發 Cloudflare `code 10502 Too many authentication failures` lockout（經驗值 15–60 分鐘）
-5. Lockout 期內**任何** token verify（含貼有效新 token）都回 `code 1000 Invalid API Token`（防 enumeration）— 誤導 user 以為「新 token 也壞」
-
-Wrapper 把這條鏈在第一步切斷：token verify 失敗 → log warn → 回 `plugins: []` → Nuxt 走純 localhost、不 throw、不 restart。
-
-詳見 [[pitfall-vite-plugin-cloudflare-tunnel-restart-loop-lockout]]。
+成因：plugin（1.0.12）的 `GET /accounts` 無 retry，token invalid → throw → Nuxt auto-restart spin loop → 觸發 CF `10502` lockout（15–60 分鐘），期間連有效新 token 都回 `code 1000 Invalid API Token`。見 [[pitfall-vite-plugin-cloudflare-tunnel-restart-loop-lockout]]。
 
 ### 2.7. Dev-over-tunnel 冷/熱載入量測（防誤判 hang）
 
 凡量測透過 `vite-plugin-cloudflare-tunnel` 開的 dev tunnel 頁面載入效能（人工或 agent CDP）：
 
-- **NEVER** 量測前 `clearBrowserCache` / `setCacheDisabled(true)` — 會強制走全新冷載入，把瀏覽器本機快取的 immutable dep 全部重抓。Vite dev 對 `?v=<hash>` 的 node_modules dep 送 `Cache-Control: max-age=31536000, immutable`；一個 Nuxt + @nuxt/ui v4 dev 頁面拆成 ~300–950 個 ES module 請求，cold 經 tunnel 逐一往返受 cloudflared 並發吞吐限制 → 30–60s，量測窗內看似 `pending` / hang
-- **MUST** 量「warm」反映日常情境：第一次載入 populate 瀏覽器快取（不計時）→ 第二次載入（不清快取）量 hydrate 時間。warm 數秒內 hydrate（實測 co-purchase 6.3s）= 正常；只有全新裝置 / 快取過期 / 無痕才會慢
-- **NEVER** 把 cold 載入慢判成 tunnel 壞掉 → 一路試 CF cache rule `cache:false` / cloudflared `--protocol http2` / `keepAliveConnections` / 移 plugin / 降版（實證全無效）。慢 vs 快是 cache-warmth 連續譜，不是 broken 二元判斷
-- **MAY** 減少 cold-load 模組數：`import { x } from '@nuxt/ui/locale'` barrel import 會拉進整包 62 語言檔；改公開 subpath deep-import（`import x from '@nuxt/ui/runtime/locale/<lang>.js'`）只載需要的 locale
+- **NEVER** 量測前 `clearBrowserCache` / `setCacheDisabled(true)`——一個 Nuxt + @nuxt/ui v4 dev 頁面有 ~300–950 個 ES module，cold 經 tunnel 要 30–60s，看似 hang
+- **MUST** 量「warm」：第一次載入 populate 快取（不計時）→ 第二次不清快取量 hydrate（約 6s 為正常）
+- **NEVER** 把 cold 載入慢判成 tunnel 壞掉而去試 CF cache rule / `--protocol http2` / `keepAliveConnections` / 移 plugin / 降版（實證全無效）
+- **MAY** 減少 cold-load 模組數：`import { x } from '@nuxt/ui/locale'` barrel import 會拉進整包語言檔；改公開 subpath deep-import（`import x from '@nuxt/ui/runtime/locale/<lang>.js'`）只載需要的 locale
 
-正確量測方法 + locale deep-import 完整範本見 [`vendor/snippets/dev-tunnel-perf/`](../../vendor/snippets/dev-tunnel-perf/)。
-
-詳見 [[pitfall-vite-dev-over-tunnel-cold-load-misdiagnosis]]。
+範本：`vendor/snippets/dev-tunnel-perf/`；見 [[pitfall-vite-dev-over-tunnel-cold-load-misdiagnosis]]。
 
 ### 3. Registry 唯一性
 
@@ -106,31 +85,24 @@ Wrapper 把這條鏈在第一步切斷：token verify 失敗 → log warn → �
   **以及**一段未用的 `worktree_band`（4200–4899 區，50 個一段）
 - **NEVER** 兩個 consumer 在 registry 取同 `dev_ports.nuxt` 值
 - **MUST** 改 port 必須先在 clade `registry/consumers.json` commit + publish + propagate，再改 consumer 端的 dev script / tunnel config
-- **MUST** 新 base 與任一既有 base 相距 **≥10**（`dev-port-audit.ts` 報 `band-spacing` CONFLICT）— 間距不是排版習慣，base+1..base+9 是該 consumer worktree 的 port 池，見 §4
+- **MUST** 新 base 與任一既有 base 相距 **≥10**（`dev-port-audit.ts` 報 `band-spacing` CONFLICT）；base+1..base+9 是 worktree port 池，見 §4
 
 ### 4. Worktree 維度
 
-[[worktree-default]] §1 要求任何動 tracked file 的工作都在獨立 worktree 執行，所以「一個 consumer 同時只有一個 dev server」從來不成立。同一 consumer 的 N 個 worktree 各跑 dev，撞的是 §1 那個**唯一**的 registry port。
+同一 consumer 的 N 個 worktree（[[worktree-default]]）各跑 dev，會撞 §1 那個唯一的 registry port。
 
 分配規則：**worktree 的 port = 各宣告 port + 一個 worktree 專屬 offset N**。N 依序取自兩個池：
 
 1. **base 池** `[1, 9]` —— registry 把各 base 排成 +10 間距，中間這 9 個號碼天然屬於它
 2. **worktree band** —— registry `dev_ports.worktree_band`，4200–4899 區每個 consumer 各 50 個號碼
 
-base 池只有 9 格，**而單一 consumer 開到十幾條 worktree 是常態**（2026-08-28 實測：<consumer-b> 15 條）。
-只有 base 池時，第 10 條之後的 worktree 分不到號碼，呼叫端就退回 base port —— 那台 dev server
-**起得來、health check 過、畫面正常**，只是服務的是別條 worktree 的 code。band 存在的唯一理由
-是讓那個 fallback 永遠不必發生。
+band 存在是為了讓「分不到號碼就退回 base port」永遠不必發生——退回的 dev server 起得來、health check 過，服務的卻是別條 worktree 的 code。
 
 - **MUST** worktree 內用 `node vendor/scripts/wt-helper.ts dev [<alias>]` 起 dev server，**NEVER** 在 worktree 內跑 `pnpm dev`（那會吃 `package.json` 寫死的 base port，直接撞 main）
 - **MUST** main working tree 維持 §1 的顯式宣告不變 — `package.json` 的 `--port <base 字面數字>` 一個字都不改。offset 只存在於 worktree，由 `wt-helper` 在 `wt-helper add` 時分配
-- **MUST** 分配與讀取都走 `vendor/scripts/lib/worktree-dev-port.ts`（唯一 SoT）。**NEVER** 在任何
-  消費端自己算一份 —— 2026-08-28 之前 `wt-helper` 自己分配、`review-gui` 自己用 registry base
-  port，兩份判定各自自洽，結果是 review-gui 把每一條 worktree 的 dev server 都起在 main 的號碼上
-- **NEVER** 手動挑 worktree port。offset 由 `pickDevPortOffset`（base 池）與 `pickBandPortOffset`
-  （band）算，它同時排除三件事：mapped port 超出 `[base, base+9]`（會踩到下一個 consumer 的 base）、mapped port 撞到本 consumer 另一個宣告 port（<consumer-a> 宣告 3040 + 3045，offset 5 會讓 `<client-a>` 蓋掉 `shared`）、offset 已被 sibling worktree 佔用
-- 宣告多個 port 的 consumer **帶寬較窄**：天花板由最高的宣告 port 決定（<consumer-a> 只有 N ∈ 1..4，不是 1..9）
-- Offset 記錄在 `~/.cache/clade/dev-port/<consumer>/<slug>.json`，**不**寫進 repo（`.clade/` 在多數 consumer 未被 gitignore，寫進去會讓每個 worktree 帶一個 untracked 檔進 merge-back / publish 的 dirty 判定）。worktree 目錄消失即釋放槽位，不需要手動回收
+- **MUST** 分配與讀取都走 `vendor/scripts/lib/worktree-dev-port.ts`（唯一 SoT），**NEVER** 在任何消費端自己算一份
+- **NEVER** 手動挑 worktree port。`pickDevPortOffset`（base 池）與 `pickBandPortOffset`（band）同時排除：超出 `[base, base+9]`、撞到本 consumer 另一個宣告 port、已被 sibling worktree 佔用。宣告多個 port 的 consumer 帶寬較窄
+- Offset 記錄在 `~/.cache/clade/dev-port/<consumer>/<slug>.json`，**不**寫進 repo；worktree 目錄消失即釋放
 - 兩池都用盡時 `wt-helper dev` **fail-loud 拒絕啟動**，**NEVER** fallback 到 base port — 那正是本節要防的撞車
 - **MUST** review-gui 的預覽連結、dev server 監看、「起 dev server」按鈕一律走同一份分配
   （`buildConsumerPortMap` 帶 worktree 參數）。沒有分配紀錄的舊 worktree **當場配一個**，
@@ -146,54 +118,29 @@ base 池只有 9 格，**而單一 consumer 開到十幾條 worktree 是常態**
 
 #### Tunnel 在 worktree 內
 
-Tunnel hostname 是 **per-consumer 單一資源**（§2.5 的 `<consumer-id>-dev.<maintainer-domain>`）。N 個 worktree 共用一個 hostname 比共用一個 port 更糟：dev server 起得來、tunnel 也連得上，只是流量被**後啟動的那個** worktree 劫持，main 的畫面靜默變成別人的。
+Tunnel hostname 是 per-consumer 單一資源（§2.5）；N 個 worktree 共用時流量被後啟動的那個靜默劫持。
 
-- **MUST** worktree 要開 tunnel 就走 `dev.perWorktreeTunnel` opt-in（`consumer-meta.json`），由 `vendor/scripts/wt-env-sync.ts` 改寫成 `<slug>.<host>` / `<name>-<slug>`
-- **NEVER** 沒開 opt-in 就在 worktree 內啟 tunnel。`wt-helper add` 會複製 `.env.local`（含 tunnel token，這是 `envSyncPolicy` 的既定行為），所以 token **存在不代表可以用**
-- `wt-helper add` 與 `wt-helper dev` 偵測到「有 tunnel key 但沒開 opt-in」會 warn。**warn 不是擋** — 判斷仍在 worktree owner：要嘛 opt-in，要嘛把那幾個 key 在該 worktree 註解掉
+- **MUST** worktree 要開 tunnel 就走 `dev.perWorktreeTunnel` opt-in（`consumer-meta.json`），由 `vendor/scripts/wt-env-sync.ts` 改寫成 `<slug>.<host>` / `<name>-<slug>`。前提是 consumer 有涵蓋 `*.<host>` 的 DNS record 與憑證，沒有就起不來
+- **NEVER** 沒開 opt-in 就在 worktree 內啟 tunnel——`wt-helper add` 複製來的 `.env.local` 含 token，**存在不代表可以用**
+- `wt-helper add` / `dev` 偵測到「有 tunnel key 但沒 opt-in」只 warn；worktree owner 要嘛 opt-in，要嘛註解掉那幾個 key
 
 ## 自治區（規約不強制）
 
 - `.env.example` 是否寫 `NUXT_DEV_PORT=<value>` 由 consumer 自定 — dev script 的 `--port` flag 是 SoT，env 不需重複
-- 子 service port（Storybook / Vitest UI / Vite preview / Wrangler）— schema 預留欄位，本輪未分配，consumer 用到時再進 registry
-
-## Why
-
-跨 consumer 同時跑 dev（例：開兩個 IDE / window）必然觸發 Nuxt port auto-increment（3000 → 3001），但 `vite-plugin-cloudflare-tunnel` 的 `port:` 是 hard-coded → tunnel 會打到先啟動的那個 consumer，後啟動的看似跑起來實際不通。這種 silent fail 不會出現在 log，只在「我打 tunnel URL 怎麼看到別的 consumer 的畫面」這種 user-visible symptom 才暴露。中央分配從架構上消除這種狀態。
+- 子 service port（Storybook / Vitest UI / Vite preview / Wrangler）— schema 預留欄位，尚未分配，consumer 用到時再進 registry
 
 ## How to apply
 
 | 情境 | 動作 |
 | --- | --- |
-| 新 consumer 進 registry | 取 `registry/consumers.json` 內 `dev_ports.base` 最大值 +10（SoT 是 registry，本檔不 inline 現值） |
+| 新 consumer 進 registry | 現算：最大 base +10、最大 band 上界 +1 起算 50 個（SoT 是 registry，本檔不維護快照） |
 | 既有 consumer 改 port | 先改 clade registry → publish patch → propagate → 改 consumer 自家 dev script + tunnel port |
 | Audit 報 DRIFT | **relay DRIFT 明細給該 consumer 的 session** 改 dev script / tunnel port 對齊 registry（per [[clade-role-and-todo-discipline]] § Consumer 工作命中時 MUST relay）；clade 主線不代改，但 **NEVER** 只出表就結束 |
 | Audit 報 CONFLICT（兩 consumer 同 port） | clade 主線立即解：選一個 consumer 改用未用 +10 號，registry commit + publish + propagate |
 
-## 當前分配（snapshot，以 registry 為準）
-
-| consumer | dev_ports.nuxt | worktree_band |
-| --- | --- | --- |
-| <consumer-a> | 3040 | 4200–4249 |
-| nuxt-supabase-starter | 3020 | 4250–4299 |
-| <consumer-d> | 3060 | 4350–4399 |
-| <consumer-b> | 3000 | 4400–4449 |
-| <consumer-j> | 3050 | 4450–4499 |
-| co-purchase | 3070 | 4500–4549 |
-| <consumer-k> | 3080 | 4550–4599 |
-| <consumer-e> | 3090 | 4650–4699 |
-| <consumer-g> | 3100 | 4600–4649 |
-| <consumer-i> | 3110 | 4700–4749 |
-| <consumer-f> | 3030 | 4750–4799 |
-| clade | — (source-of-truth，非 Nuxt consumer) | — |
-
-下一個可用 base / band 一律現算：讀 `registry/consumers.json` 的 `dev_ports`，取最大 base +10、最大 band 上界 +1 起算 50 個。
-
 ## Anti-pattern
 
-- ❌ 裸 `nuxt dev`（吃 default 3000，必跟 <consumer-b> 撞）
-- ❌ 在 `.env.local` 設 `PORT=3050` 但 dev script 沒帶 `--port` flag — Nuxt 不一定吃 `PORT` env（要 `NITRO_PORT`），且 `.env.local` 是 gitignored，協作者 clone 完不知道
-- ❌ 改 consumer 端 port 沒先改 clade registry — 下次 audit 報 DRIFT，且新 consumer 加入時可能撞號
+- ❌ 在 `.env.local` 設 `PORT=3050` 取代 dev script 的 `--port`（Nuxt 不一定吃 `PORT`，且 `.env.local` 不進版控）
 
 ## 何時不適用
 

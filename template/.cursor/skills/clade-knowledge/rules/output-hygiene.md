@@ -14,7 +14,7 @@ Session 內對 user 透明揭露錯誤是必要的（誠實 ≠ 隱瞞），但�
 | Session 對話 | 完整：「我原本以為 X、被你指出 Y、查證後改 Z」 |
 | 對外輸出 | 只給最終決定 + 必要 context；錯誤過程不外露 |
 
-**本檔管「揭露什麼」，不管「講多長」。** 兩件事分開：哪些內容該說出口由本檔決定；同一批內容用多少篇幅、在工作中出聲幾次，由使用者層輸出校準（篇幅與節奏）決定。混在一起的後果是雙向的——想調節奏就得動到誠實要求，或反過來拿「要簡潔」當省略已知錯誤的理由。上表「Session 對話：完整」指的是**錯誤不隱瞞**，不是「過程要逐步複述」。
+**本檔管「揭露什麼」，不管「講多長」。** 篇幅與節奏由使用者層輸出校準決定；**NEVER** 拿「要簡潔」當省略已知錯誤的理由。上表「Session 對話：完整」指的是**錯誤不隱瞞**，不是「過程要逐步複述」。
 
 ## 三種最常見的洩漏形式
 
@@ -68,10 +68,6 @@ Session 內對 user 透明揭露錯誤是必要的（誠實 ≠ 隱瞞），但�
 
 對「X 工具 / 文件 / API 是這樣規範的」這類 attribution claim，必須能對應到工具回傳的**直接字句**。多條 fact 推論出來的 pattern claim **不能**用 `documented` / `canonical` / `規範` 等修飾——那些 label 只能由 verbatim 引文支撐。
 
-### 為何加這層
-
-MCP 規約（[[nuxt-ui-mcp]] 等）擋「亂湊 API surface」，但沒擋「拿合法 MCP fact 合成 prescriptive pattern claim」— 實證：2026-05-24 <consumer-a> 把三條 MCP fact synth 成「Nuxt UI v3 規範 pattern」，被 user 標為**重大錯誤**。
-
 ### Hard rule
 
 寫含下列措辭的句子前，**MUST** 自查能否找到 verbatim MCP / docs / API 引文：
@@ -89,11 +85,7 @@ MCP 規約（[[nuxt-ui-mcp]] 等）擋「亂湊 API surface」，但沒擋「拿
 
 ### 適用範圍
 
-不限 Nuxt UI——同樣適用於 codebase-memory-mcp、任何 MCP / docs 抓資料後的二手宣稱：
-
-- MCP 直接 fact（「`search_graph` 顯示 X 被 5 個 caller 呼叫」✅）vs synth + prescriptive（「X 是 hot path 應該優化」❌）
-- **Reka UI / Headless UI / shadcn-vue**：API surface fact OK，「the recommended pattern」synth 禁止
-- **WebFetch 抓的 third-party blog**：作者意見 ≠ official spec，引用時 **MUST** 標 source URL + 「per <author>」不要寫「規範」
+任何 MCP / docs / WebFetch 抓資料後的二手宣稱都適用（MCP 直接 fact ✅，synth 成 prescriptive ❌）；third-party blog 引用 **MUST** 標 source URL + 「per <author>」。
 
 ### Counter-examples
 
@@ -124,4 +116,4 @@ MCP 規約（[[nuxt-ui-mcp]] 等）擋「亂湊 API surface」，但沒擋「拿
 | 「把訊號餵回迴圈」 | 「把 audit 輸出寫進 HANDOFF 稽核段」 |
 | 「一個值得轉的旋鈕」 | 「一個值得調的參數」 |
 
-判別：那個詞是在**傳達**判準，還是在**表現**寫的人？後者讓讀者多做一次翻譯，而且翻出來的往往不是你的原意。沒有 detector——消費端只有正在寫字的自己。
+判別：那個詞是在**傳達**判準，還是在**表現**寫的人？

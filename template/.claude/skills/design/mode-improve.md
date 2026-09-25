@@ -40,7 +40,7 @@ Read `references/diagnosis.md` for the full rubric. Assess these dimensions:
 | **Interaction Patterns**     | PRODUCT.md + DESIGN.md     | Admin CRUD 有 sort/filter/pagination？empty state 有 text+CTA？符合 PRODUCT.md 互動原則？                                |
 | **Layout Fidelity**          | DESIGN.md                  | desktop 有 sidebar+breadcrumb+max-width？auth 有 centered card？符合 Layout Architecture？                              |
 | **Design Principles**        | PRODUCT.md                 | strategic principles 逐條驗證（數據是主角？路徑最短？透明可追溯？a11y 達標？）                                          |
-| **Brand & Anti-references**  | PRODUCT.md                 | 無 PRODUCT.md 列出的反面教材（過度裝飾、冰冷金融風、遊戲化等）？brand voice 一致？無 v3.9 absolute bans（side-stripe borders、gradient text、glassmorphism-as-default、hero-metric template、identical card grids、**all-caps tracked eyebrow 每段一個**、**numbered section markers 01/02/03 當 scaffold**、**text overflow container**、**decorative grid backgrounds**、**cream/sand/beige body bg（warm-neutral band）**）？Codex-specific：無 ghost-card（1px border + ≥16px wide shadow）、border-radius ≥32px on cards、sketchy SVG、repeating-linear-gradient stripes？ |
+| **Brand & Anti-references**  | PRODUCT.md                 | 無 PRODUCT.md 列出的反面教材（過度裝飾、冰冷金融風、遊戲化等）？brand voice 一致？無 impeccable absolute bans（side-stripe borders、gradient text、glassmorphism-as-default、hero-metric template、identical card grids、**all-caps tracked eyebrow 每段一個**、**numbered section markers 01/02/03 當 scaffold**、**text overflow container**、**decorative grid backgrounds**、**cream/sand/beige body bg（warm-neutral band）**）？Codex-specific：無 ghost-card（1px border + ≥16px wide shadow）、border-radius ≥32px on cards、sketchy SVG、repeating-linear-gradient stripes？ |
 
 **輸出格式**（附加在 Quick Assessment 之後）：
 

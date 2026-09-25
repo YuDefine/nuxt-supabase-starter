@@ -47,29 +47,21 @@ Codex 在本節完成分流後 **NEVER 繼續進入下方 relay／fanout Herdr �
 
 **判準是「手上有幾件可平行的工作」，而預設方向是「派出去」**：1 件（含多件但彼此 serial）→ `relay`；N ≥ 2 件可平行 → `fanout`；還不知道有幾件 → `next`（盤點完會落到前三者之一）；**0 件才輪到 `park`，而裸 `/handoff` 自動判定落到 `park` 時 MUST 先取得 user 允許**（見 Step 1 § park gate）。
 
-`relay` 與 `fanout` 是**優先選項**，判定成立就直接派，**NEVER** 再回頭問 user「要不要派」——派出去的是互動式 pane，接手的 session 可以直接在那個 pane 問 user，多一次確認只是把決策工作原樣退回。
+`relay` 與 `fanout` 是**優先選項**，判定成立就直接派，**NEVER** 再回頭問 user「要不要派」（接手的 pane 是互動式的，可以直接問 user）。
 
 「可平行」走 [dispatch-steps.md](dispatch-steps.md) § Serial vs Parallel 評估的四條 rubric，**四條全成立**才算。任一條不成立就是 serial，合併成一份 brief 走 `relay`。
 
 **`relay` 與 `fanout` 的共用底座是 [dispatch-common.md](dispatch-common.md)**：preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、parent worktree lifecycle、收工訊息契約。兩支 steps 檔只寫各自差異。
 
-> `now` 已於本版**廢除**。它原本的區別點是「不收工、由 coordinator 持有 handshake 到 terminal receipt」，而現在四個 arg 全部收工——那個區別點不存在了。舊 `/handoff now <task pointer>` 一律改走 `relay`（單件）或 `fanout`（多件可平行）。
+> `now` 已於本版**廢除**：舊 `/handoff now <task pointer>` 一律改走 `relay`（單件）或 `fanout`（多件可平行）。
 
 ## Step 0.5 — Session context 預算 gate（MUST，早於 Step 1）
 
-**`next` 是四個 arg 裡唯一會在當前 session 燒掉大量 context 的**：它的成本前載（2B.0 pitfall
-sweep ＋ handoff-scan ＋ human gates ＋ tech-debt hygiene ＋ 2B.2.5 逐條 triage），
-而它的終點 2B.5 是**在當前 session 內呼**下一件工作的入口。兩者恰好是
-[[session-tasks]] § Session context 預算 過門檻後 MUST 停的事。所以 context 預算 MUST 在
-Step 1 兩層判定**之前**先判 —— Step 1 只問「有幾件工作、幾件派得出去」，問不到「這個 session
-還剩多少額度做這些盤點」。
-
-**本 gate 對裸 `/handoff` 與顯式 `next` 同等生效。** 顯式打 `next` 不構成豁免：user 打的是
-「幫我盤點下一步」，不是「即使這個 session 已經該收工也硬跑」。
+**`next` 是四個 arg 裡唯一會在當前 session 燒掉大量 context 的**（前載一連串 scan，終點 2B.5 在當前 session 內呼下一件工作）——那正是 [[session-tasks]] § Session context 預算 過門檻後 MUST 停的事。**本 gate 對裸 `/handoff` 與顯式 `next` 同等生效。**
 
 ### 可觀察 predicate（用訊號，NEVER 憑感覺估）
 
-門檻取 [[session-tasks]] § Session context 預算的 launcher profile（`cc/ccw` 300k／500k；`ccg` 400k／450k；native work-loop runner child 500k／600k）。`ccx` 已退役：live `ccx` handoff fail closed，不自行改派其他 runtime；只有 user 明確點名時才可改交仍支援的 launcher。會進入共用 Herdr 流程的 runtime 原生繼承當前 session（`cc → cc`、`ccw → ccw`、`ccg → ccg`）；Codex 已由上方 native boundary 分流，工作 routing 不得覆蓋。判定材料只認下列三種**在 transcript 裡看得到**的訊號：
+門檻取 [[session-tasks]] § Session context 預算的 launcher profile（數字的 SoT 是 `session-context-budget-warn.sh` 的 profile 表）。`ccx` 不是可用 launcher：live `ccx` handoff fail closed，不自行改派其他 runtime；只有 user 明確點名時才可改交仍支援的 launcher。會進入共用 Herdr 流程的 runtime 原生繼承當前 session（`cc → cc`、`ccw → ccw`、`ccg → ccg`）；Codex 已由上方 native boundary 分流，工作 routing 不得覆蓋。判定材料只認下列三種**在 transcript 裡看得到**的訊號：
 
 1. `session-context-budget-warn` hook 已在本 session 響過（它逐字報「session context 已達 Nk」）
 2. user 在訊息裡明講了 context 用量（「目前已經 43%」「快滿了」）
@@ -78,21 +70,18 @@ Step 1 兩層判定**之前**先判 —— Step 1 只問「有幾件工作、幾
 三者皆無 → 視為未過門檻，照 Step 1 正常判。**NEVER** 因為「感覺跑很久了」就自行判定過門檻，
 也 **NEVER** 因為「還沒看到 hook」就無視 user 明講的百分比。
 
-**身分豁免照 [[session-tasks]] § 身分豁免**：in-process subagent、Herdr 顧問 pane
-（`CLADE_ADVISORY_SESSION=1`）、Fable 系列主線不受本 gate 約束 —— hook 對它們根本不響，
-所以訊號 1 天然不會出現；訊號 2／3 命中時仍不改道。**NEVER** 從工作性質自評身分。
+**身分豁免照 [[session-tasks]] § 身分豁免**（in-process subagent、Herdr 顧問 pane `CLADE_ADVISORY_SESSION=1`、Fable 系列主線不改道）。**NEVER** 從工作性質自評身分。
 
 ### 分流
 
 | 可觀察 predicate | 動作 |
 | --- | --- |
-| 已過**該 launcher 的 hard tier** | **跳過** 2B.0–2B.1.9 全部 scan（盤點本身有價值，但要由乾淨 session 做），改依**當前已知**的殘工件數直接落 `relay`／`fanout`；**每一項**都講得出具體外部條件時才 `park`（仍受 § park gate 管）。**NEVER** 因為「已經滿了、沒餘裕再派」就直接 `park` —— [[session-tasks.operations]] § 收工三步逐字：context 越滿，dispatch 的相對價值越高，那一級是**最該派**的時刻 |
+| 已過**該 launcher 的 hard tier** | **跳過** 2B.0–2B.1.9 全部 scan（盤點本身有價值，但要由乾淨 session 做），改依**當前已知**的殘工件數直接落 `relay`／`fanout`；**每一項**都講得出具體外部條件時才 `park`（仍受 § park gate 管）。**NEVER** 因為「已經滿了、沒餘裕再派」就直接 `park`——那一級是**最該派**的時刻 |
 | 已過**該 launcher 的 soft tier** | **NEVER 落 `next`**。改依 Step 1 第二層的件數判：≥1 件派得出去 → `relay`（1 件或多件 serial）／`fanout`（N 件可平行）；0 件 → `park` |
 | 未過門檻 | 不改道，照 Step 1 兩層判定 |
 
-被本 gate 改道時 **MUST** 在宣布偵測結果那句話裡寫出來，例：「偵測到 `relay`（Step 0.5：context
-已達 43%，過第一級門檻故不落 `next`；第二層：1 件派得出去）」。**NEVER** 靜默改道 —— user 要能
-當場看出是預算而不是工作內容決定了落點。
+被本 gate 改道時 **MUST** 在宣布偵測結果那句話裡寫出來（例：「偵測到 `relay`（Step 0.5：context
+已達 43%，過第一級門檻故不落 `next`；第二層：1 件派得出去）」），**NEVER** 靜默改道。
 
 ### 逐字反開脫
 
@@ -106,7 +95,7 @@ Step 1 兩層判定**之前**先判 —— Step 1 只問「有幾件工作、幾
 
 顯式帶了 arg 就**跳過本步**，直接進對應分支（Step 0.5 的 gate 除外，它對顯式 `next` 也生效）。
 
-「Session」=**當前這個 chat session**，不是 working tree / git state / 檔案系統狀態。User 經常並行多開 Claude Code session 工作，所以 `git status` 髒污、`tasks/<date>-*.md` 內 unchecked 項、plan package `tasks.md` 的 unchecked 項 **都可能來自別的 session**，不能拿來判斷當前 session 是否有未交辦工作。
+「Session」=**當前這個 chat session**，不是 working tree / git state / 檔案系統狀態（那些都可能來自別的並行 session）。
 
 分兩層判：**先判當前 session 有沒有未交辦工作**，有的話**再判其中幾件派得出去**。
 
@@ -115,7 +104,7 @@ Step 1 兩層判定**之前**先判 —— Step 1 只問「有幾件工作、幾
 **有**（任一條成立）→ 進第二層：
 - 當前對話與已載入 task carrier 記錄顯示當前 session 任何 `in_progress` 或 `pending` task（該 inventory 是 per-session host state，可信）
 - 當前 chat 對話脈絡明顯顯示 user 正在 mid-task（我剛在做某事還沒收尾、user 剛交辦一個多步驟工作做到一半）
-- Stop hook 攔住但 acceptance 未滿足 + 處於 [[worktree-default]] §8 死鎖（cwd 在 main + main 已 dirty）且當前 session 已自評不適合走 §7 分支 A（context 不寬裕 / 剩餘 work 不小 / 無法 selective stash）
+- Stop hook 攔住但 acceptance 未滿足 + 處於 [[worktree-default.detail]] §8 死鎖（cwd 在 main + main 已 dirty）且當前 session 已自評不適合走 §7 分支 A（context 不寬裕 / 剩餘 work 不小 / 無法 selective stash）
 
 **沒有** → `next`：以上皆否（即使 working tree 髒、tasks/ 有別 session 的 unchecked、`specs/plans/**` 有別 session 的 active work，都仍走 `next` —— 那些屬於別 session 的責任）。
 
@@ -143,14 +132,13 @@ Step 1 兩層判定**之前**先判 —— Step 1 只問「有幾件工作、幾
 問法 MUST 附**為什麼派不出去**——逐項列出那個具體外部條件，讓 user 當場判得出理由站不站得住。
 問句 MUST 給 `park` 與「還是派出去」兩個選項，**NEVER** 只問「這樣可以嗎」。
 
-Predicate 綁的是**結果**不是路徑，所以「先自己做掉再 park」同樣命中：它與直接 park 在可觀察面
-完全相同——沒有任何 pane 被開出來——因此同樣要 user 允許。
+Predicate 綁的是**結果**不是路徑，所以「先自己做掉再 park」同樣命中（同樣沒有 pane 被開出來）。
 
 **Rationalization table（逐字實錄，看到自己正要說出其中一句就停）**：
 
 | 藉口 | 現實 |
 | --- | --- |
-| 「這件是單檔 2 分鐘的收尾，交出去等於讓下一個 session 重建 context」 | 2026-08-20 clade 實測：本 skill 自己這樣判過一次，結果是**沒有任何 pane 被派出去**。工作量小不是外部條件，是偏好 |
+| 「這件是單檔 2 分鐘的收尾，交出去等於讓下一個 session 重建 context」 | 照這句判，結果是**沒有任何 pane 被派出去**。工作量小不是外部條件，是偏好 |
 | 「它是本 session 自己造出來的殘留，先做完再收工比較乾淨」 | 「誰造的」不改變它派不派得出去。做完再 park 的可觀察結果與直接 park 相同 |
 | 「先登記起來，下個 session 會看到」 | 登記是 [[session-tasks.operations]] § 收工三步的**第 2 步**；第 1 步是派出去。跳過第 1 步就是這條 gate 要擋的 |
 | 「這幾件還是我自己比較清楚」 | context 在 durable brief 裡，不在你腦裡。寫不出 brief 才是真的講不清楚——那要說出來，不是拿來當不派的理由 |
@@ -167,7 +155,7 @@ Predicate 綁的是**結果**不是路徑，所以「先自己做掉再 park」�
 
 ## Step 1.5 — 路徑解析 invariant（park / next 共用）
 
-`HANDOFF.md` / `docs/tech-debt.md`（未遷移 consumer）/ `ROADMAP.md` 是「跨工作全局狀態」，**不該** per-worktree 分裂。`/handoff` 若在 linked worktree 內跑、寫到 cwd-相對的 `HANDOFF.md`，得等 squash merge-back 才出現在 main，下一 session 接手會看到舊版。
+`HANDOFF.md` / `docs/tech-debt.md`（未遷移 consumer）/ `ROADMAP.md` 是「跨工作全局狀態」，**不該** per-worktree 分裂。
 
 **MUST** 在進入 park / next 寫入動作前先解析 main worktree absolute path：
 
@@ -194,9 +182,7 @@ fi
 3. `node vendor/scripts/wt-helper.ts merge-back <slug>`（先 `--dry-run` 確認不會捲進別 session WIP）
 4. **MUST 在 main 補一次 `git commit --only -- HANDOFF.md <其他寫過的檔>`**
 
-第 4 步不可省：`merge-back` 只把改動 **squash 進 main 的 index**（輸出寫 `Squash commit -- not updating HEAD`），HEAD 不動。漏掉它，交接內容就停在 main 的 staged 狀態——`git log` 看不到、下一個 session 讀到的仍是舊版，而 `git status` 只顯示一個 `M`，與任何別 session 的 WIP 混在一起分不出來。
-
-> Why：`git rev-parse --path-format=absolute --git-common-dir` 在 main worktree 回 `.../.git`，在 linked worktree 回 `.../.git/worktrees/<slug>`；兩者的 dirname 就是 main worktree path（main 自己 / linked 的 main）。`git stash list` 跟 `git worktree list` 都是 repo-wide（`refs/stash` 與 worktree 索引共享所有 worktree），所以 Step 3 audit 的讀取階段無關當前 cwd，但寫入 HANDOFF.md 仍 MUST 用 `$MAIN_WT_PATH/HANDOFF.md`。
+第 4 步不可省：`merge-back` 只把改動 squash 進 main 的 index，HEAD 不動。
 
 ## park — 只做交接寫入
 
@@ -228,14 +214,12 @@ fi
 
 3. **寫入**：依分類 Edit / Write 對應檔案，path **MUST** 用 Step 1.5 解析出的 `$MAIN_WT_PATH/<rel>` 絕對路徑（即使當前 cwd 在 linked worktree）。格式與落點判準走下方 § HANDOFF 寫回契約（三條，寫入前逐條過）。HANDOFF.md `## In Progress` 條目 MUST 含：
    - work slug / task 名稱
-   - **ambient `CLADE_WORK_ID` 非空時：那個 work id**（寫成 `work: W-…` 一行）。park 是四個 arg 裡唯一純 prose 落檔、落完**沒有任何結構化載體存活**的，所以這裡是「prose 端不回指 work id」那條原則的具名例外（見 [[flow-work-tracking]] § 單向指向）。env 是空的就不寫，**NEVER** 為了補這一行去猜或去查一個 id
+   - **ambient `CLADE_WORK_ID` 非空時：那個 work id**（寫成 `work: W-…` 一行；[[flow-work-tracking]] § 單向指向 的具名例外）。env 是空的就不寫，**NEVER** 去猜或去查一個 id
    - 主要檔案路徑（讓接手者直接跳）
    - 目前做到哪裡 / 還剩什麼
    - 已踩過的坑（避免下一 session 重踩）
-   - **若來自 [[worktree-default]] §8 死鎖**：額外加 Stop hook 攔點摘要、missing acceptance criterion、改過檔案的 selective stash ref（若有，例 `stash@{0}: <slug>-handoff`）、下一 session 接手指引（指名 carrier 路徑與剩下的 phase；實作先隔離 worktree，收尾先驗當前 evidence 與人的 gate）
-3b. **spine 收尾（ambient `CLADE_WORK_ID` 非空時 MUST，空則整步跳過）**：park 是 attended session
-   做完事情之後最常見的收尾點，所以「這件事完成了沒」這一問在這裡有答案，別處沒有。二擇一，
-   依**步驟 1 盤點出的未完項是否還有要交接的殘工**判：
+   - **若來自 [[worktree-default.detail]] §8 死鎖**：額外加 Stop hook 攔點摘要、missing acceptance criterion、改過檔案的 selective stash ref（若有，例 `stash@{0}: <slug>-handoff`）、下一 session 接手指引（指名 carrier 路徑與剩下的 phase；實作先隔離 worktree，收尾先驗當前 evidence 與人的 gate）
+3b. **spine 收尾（ambient `CLADE_WORK_ID` 非空時 MUST，空則整步跳過）**：二擇一，依**步驟 2 分類後是否還有要交接的殘工**判：
 
    ```bash
    # (a) 無殘工要交接（步驟 2 分類後沒有任何項進 HANDOFF/TD/ROADMAP）→ 宣告完成
@@ -247,24 +231,11 @@ fi
      --carrier '<handoff:<段名> | td:TD-NNN | tasks:<路徑>>' --note '<一句話：停在哪、等什麼>'
    ```
 
-   `--carrier` 必填，填**步驟 3 實際寫進去的那個落點**——它是 /board 上「停在哪等接手」那句話的
-   唯一來源。`work_id` 不在 spine 上時 CLI 自己會拒絕，這一步不必先查。
-
-   **NEVER 在 (b) 的情況下走 (a)**：有東西交接出去就不是完成，而寬鬆的 `done` 會讓「驗收了沒」
-   建立在假的「完成了」上（`--verification` 的 fail-closed gate 擋得住空欄位，擋不住這個判斷）。
-   **NEVER** 用「主要的都做完了，剩下都是小事」跳過這一判——「剩下的算不算殘工」的答案就是
-   步驟 2 有沒有寫進 HANDOFF，不是印象。
-
-   沒有 ambient work（env 是空的）→ **整步跳過**，**NEVER** 為了留紀錄而現鑄一個新 work：
-   一件從沒被指認過的事，在收工這一刻鑄名只會在 /board 上多一列生下來就結束的工作。
-
-   兩支指令都 **fail-open**：非 0 exit **NEVER** 擋 park 的其餘步驟，照常收工。
+   `--carrier` 必填，填**步驟 3 實際寫進去的那個落點**。**NEVER 在 (b) 的情況下走 (a)**，也 **NEVER** 用「剩下都是小事」跳過這一判——答案就是步驟 2 有沒有寫進 HANDOFF。沒有 ambient work 時 **NEVER** 為了留紀錄現鑄一個新 work。兩支指令都 **fail-open**：非 0 exit **NEVER** 擋 park 的其餘步驟。
 
 4. **清理 session-tasks**：所有未完項升級完成後 → 只 `mv` / 刪「當前 session 自己開的」`tasks/<date>-*.md`（依 `rules/core/session-tasks.md`「NEVER 動別人的 tasks 檔」）。若當前 session 從頭到尾沒開 tasks 檔，跳過此步。
 
-   接著掃**無主檔**：`tasks/` 內**檔名 timestamp 與 mtime 都** >7 天的 `<date>-*.md`，其原 session 已被 auto-compact／中斷而不存在，「session 結束時清」對它永遠不會發生。有 `specs/truth/work-lifecycle.md` → 只刪 **已追蹤且與 HEAD 一致** 的過期檔（`git ls-files --error-unmatch -- <file>` 成功且 `git diff --quiet HEAD -- <file>`）；untracked 或 dirty 的留下，**NEVER** `mv tasks/archive/`。未遷移 consumer 才整檔 `mv tasks/archive/`。**只 `mv` 或刪，NEVER `Edit`、NEVER 代跑升級路徑**（升級要判斷未完項該進 HANDOFF 還是 plan，那需要原 session 的 context）。判準與 7 天門檻的 SoT 在 `rules/core/session-tasks.operations.md` § 寫入規約補充——**該檔是 paths-gated，skill invoke 不會觸發它載入**（per [[pitfall-skill-invoke-does-not-trigger-paths-gate]]），所以操作句寫在這裡而不是靠引用。
-
-   **MUST 兩個條件都驗**：只看 mtime 會漏掉一整批（無關的機械改名 sweep 會把真無主檔的 mtime 推到今天）；只看檔名會誤 mv 長期活躍的工作。
+   接著掃**無主檔**：`tasks/` 內**檔名 timestamp 與 mtime 都** >7 天的 `<date>-*.md`（兩個條件都 MUST 驗）。有 `specs/truth/work-lifecycle.md` → 只刪 **已追蹤且與 HEAD 一致** 的過期檔（`git ls-files --error-unmatch -- <file>` 成功且 `git diff --quiet HEAD -- <file>`）；untracked 或 dirty 的留下，**NEVER** `mv tasks/archive/`。未遷移 consumer 才整檔 `mv tasks/archive/`。**只 `mv` 或刪，NEVER `Edit`、NEVER 代跑升級路徑**。SoT 在 `rules/core/session-tasks.operations.md` § 寫入規約補充（paths-gated，所以操作句寫在這裡）。
 
    ```bash
    # 列出無主檔：mtime >7 天 且 檔名日期 >7 天（不含 archive/、lessons.md）
@@ -284,11 +255,7 @@ fi
      | jq -r '.rows[].archivable[]'
    ```
 
-   `--consumer` 不在 registry（或本 repo 不是 consumer）時跳過這段，不是錯誤。**同一檔 NEVER 被兩段各 mv 一次**
-   ——audit 保證 archivable 與 stale 互斥，所以先跑上面的無主掃描、再跑這段即可，不必去重。
-   **NEVER 因為某個檔沒宣告 `work_id:` 就把它當違例**（per `session-tasks.operations` § 寫入規約補充第三條）。
-
-   不做這步的代價：無主檔單調累積，`node scripts/audit-stale-tasks.ts` 2026-08-02 實測全 fleet 38 檔。
+   `--consumer` 不在 registry 時跳過這段。audit 保證 archivable 與 stale 互斥，不必去重。**NEVER 因為某個檔沒宣告 `work_id:` 就把它當違例**。
 5. **Worktree & Stash audit**：跑 **Step 3 共用 audit block**（見下文）。park 為「靜默寫入」—— audit 段寫進 HANDOFF.md，但**不**在 chat 訊息輸出 audit 全文或摘要（避免雜訊干擾當前 session 交接收尾）。
 6. **回報**：一句話總結升級數量（如「升級 3 到 HANDOFF / 1 到 plan / 砍 2」；未遷移 consumer 寫「1 到 tech-debt」）。**禁止**追加「下一步建議」或「要不要繼續做 X」。Audit 因為靜默不出現在回報；user 想看走 HANDOFF.md。
 
@@ -296,19 +263,17 @@ fi
 
 依 `follow-up-register.md` § 主動消化，同步驗證並關閉本次完成的工作，回讀 flow 關卡後移出主清單：有 `specs/truth/work-lifecycle.md` → 在承載它的 plan 標 Open work／`flow plan apply-delta`，**NEVER** 改 `docs/tech-debt.md` 的 Status；未遷移 consumer 才關 TD。HANDOFF 移除完成流水帳，已有 plan／TD 的未完項只保留指針。等待訊號、部分完成及未驗收工作保留具體接手入口。
 
-**每一次**往 `HANDOFF.md` 寫待辦之前先過這三條。三條各自綁一個可觀察的下游後果，不是排版偏好。
+**每一次**往 `HANDOFF.md` 寫待辦之前先過下列各條。
 
 ### 1. 待辦 MUST 是 checkbox 行，NEVER 是散文段
 
 `- [ ] <一句話說要做什麼> — <檔案路徑或指令>`
 
-理由在 work-loop 的掃描規則裡逐字寫著：**`- [ ]` 未勾項 = 一個 candidate；純文字段落視為單一 candidate**（`capabilities/core/skills/work-loop/SKILL.md` § Step 2 單一 candidate list，兩種 source）。一段講五件事的散文只產生**一個** candidate，於是那五件事被綁成一個不可分派的單位——loop 要嘛整段吃下去，要嘛整段跳過，沒有中間值。
-
-寫五件事就寫五行。**NEVER** 把它們縮成一段講完再補一句「以上都要做」。
+work-loop 掃描時 `- [ ]` 未勾項 = 一個 candidate，純文字段落只算**一個** candidate。寫五件事就寫五行。
 
 ### 2. 結案段的 checkbox MUST 全部是 `- [x]`
 
-heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消解 / 已答 / 本輪已清）而 body 還留著 `- [ ]` 的段，**對 rotate 完全免疫**——`handoff-scan.ts` 的 `collectDeadSections()` 依設計跳過帶未勾項的段，所以它不會出現在 `tier-a-dead-section` 裡，也不會被任何 rotate 流程碰到。標題說完成、內容說沒有，兩邊都不動，段只會單調累積。
+heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消解 / 已答 / 本輪已清）而 body 還留著 `- [ ]` 的段，**對 rotate 完全免疫**（`collectDeadSections()` 跳過帶未勾項的段）。
 
 收段時二選一，**NEVER** 兩者都不做就標結案：把未完項勾掉，或把它搬去 `## In Progress` / plan（未遷移 consumer 為 TD）/ `tasks/`。
 
@@ -318,7 +283,7 @@ heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消�
 
 有 `specs/truth/work-lifecycle.md`：`- [ ] <work-id> — <一句話> → specs/plans/<work-id>/plan.md`（舊 TD id 經 `specs/truth/legacy-ids.json` 解析到現行承載者再指過去）。未遷移 consumer：`- [ ] TD-NNN — <一句話> → docs/tech-debt.md`。
 
-正文（重現步驟、已排除方案、驗收 predicate）留在 plan／TD entry。兩邊各寫一份，維護的人要同時改兩處，而只有一處會被讀。
+正文（重現步驟、已排除方案、驗收 predicate）只留在 plan／TD entry。
 
 ### 4. Load-bearing claim MUST 帶當下實查的 receipt
 
@@ -340,20 +305,8 @@ https://review-gui.<maintainer-domain>/projects/<repo>
 三條 item 的 evidence 都已備妥，只需看圖點 OK。開面板就好。
 ```
 
-**下游後果**：這兩種句子在檔案裡長得一樣，所以接手者沒有任何辦法分辨。它會原樣轉述給 user，
-而 user 是最沒有能力驗證它的那一方。2026-08-26 <consumer-a> `manager-my-approval-inbox` 實測：
-三項宣稱（evidence 已備妥 / 截圖已依 item-id 命名 / 球在 user 手上）**全與磁碟不符**，
-接手 session 轉述兩次才被 user 反彈揪出（[[pitfall-handoff-claim-without-verification-receipt]]）。
-
 **人工驗收入口另有 Iron Law**（`rules/core/proactive-skills.manual-review-entry.md` § 交付入口前置查詢）：
-入口**永遠**是 `flow gates --repo-only` 實查過的面板位址（格式同上方 ✅ 範例）。
-寫進 HANDOFF / `tasks/*.md` 時同樣適用——**NEVER** 寫任何 shell 指令（`pnpm review:ui`、
-`cd … && pnpm …`）或 loopback URL 當入口。持久檔案裡的錯入口會被下一棒忠實複製，
-而 Stop hook 是 receipt-gated ＋ fail-open，receipt 的寫入端已隨 review-gui 退場，這條路徑目前毫無防線
-（[[pitfall-review-entry-degraded-to-local-shell-command]] 第五變體）。
-
-**這條與開頭「判現況一律當場跑」是兩件事**：那條管**數字**（git status / worktree / commit 數），
-本條管**狀態宣稱**。數字錯了接手者自己會發現，狀態宣稱錯了他不會——因為他沒有理由懷疑。
+入口**永遠**是 `flow gates --repo-only` 實查過的面板位址（格式同上方 ✅ 範例），寫進 HANDOFF / `tasks/*.md` 時同樣適用——**NEVER** 寫任何 shell 指令（`pnpm review:ui`、`cd … && pnpm …`）或 loopback URL 當入口。
 
 ### 一段能留在 HANDOFF 的充要條件
 
@@ -366,13 +319,13 @@ https://review-gui.<maintainer-domain>/projects/<repo>
 | 只中後者（任務級細節，接手者不必先讀） | 該任務的 TD entry body，或 `tasks/<date>-<slug>.md` |
 | 兩條都不中 | 刪 |
 
-**搬不是刪。** 敘事型內容是接手成本的主要來源，但它承載的是別人踩過的坑——綁單一任務的坑進該任務的 plan，跨任務可復用的走 `/oops`（clade home 寫 truth，未遷移 consumer 才進 `docs/pitfalls/`）。整段刪掉會讓下一個人重踩一次。
+**搬不是刪**：綁單一任務的坑進該任務的 plan，跨任務可復用的走 `/oops`。
 
-**整檔 KB／行數門檻已廢。** 活段太肥走 `section_max_kb` / `entry_max_lines`（換載體，不是 rotate 觸發）。各 consumer 可在 `.clade/` 覆寫那兩條；在這裡再寫一套數字只會與它漂移。
+**HANDOFF 沒有整檔 KB／行數門檻。** 活段太肥走 `section_max_kb` / `entry_max_lines`（換載體，不是 rotate 觸發）。
 
 ## next — 盤點 + 推薦
 
-### 2B.0 Session-end pitfall sweep（呼叫 /oops Mode C — from `hub-maintenance-full` plugin；無此 plugin 時跳過整段並繼續 2B.1）
+### 2B.0 Session-end pitfall sweep（呼叫 /oops Mode C；`/oops` 屬 maintenance/full capability，repo 沒有它時跳過整段並繼續 2B.1）
 
 在動 HANDOFF.md 前，先回顧當前 chat session transcript 掃 missed lessons。觸發訊號：
 
@@ -386,7 +339,8 @@ https://review-gui.<maintainer-domain>/projects/<repo>
 | Candidate 等級 | 動作 |
 | --- | --- |
 | 符合 `/oops` Mode B 四條件齊備（root cause / detection / fix / prevention） | dispatch `/oops`。有 `specs/truth/work-lifecycle.md` 時寫入 truth／plan，**NEVER** 新 pitfall 檔；未遷移 consumer 才走 `docs/pitfalls/` |
-| 個人偏好 / 跨專案沿用的行為更正（user 糾正用詞、強調某做法） | dispatch `/oops` Mode B 輕量降級 → 寫 auto-memory `feedback` type |
+| 工作習慣 / 流程更正（user 糾正做法、強調某流程） | dispatch `/oops` Mode B 輕量降級 → 寫 `<consumer>/tasks/lessons.md`（能變成規約的走規約源檔，不進 memory） |
+| 純個人偏好，無法歸進任何規約檔或 lessons | 先問 user 要不要寫進 memory，**取得同意才寫**；未同意就跳過 |
 | 只給當前 repo 的 self-improvement lesson | dispatch `/oops` Mode B 輕量降級 → 寫 `<consumer>/tasks/lessons.md` |
 | 一次性 typo / 純業務邏輯 bug / 純設計問題 | 跳過（不該成為 pitfall 也不該佔 memory 槽位） |
 
@@ -394,7 +348,7 @@ https://review-gui.<maintainer-domain>/projects/<repo>
 
 **禁止行為**：
 
-- ❌ 把 sweep candidate 一次塞給 user 讓他選哪些要記 — 主動分流後直接 dispatch，user 看結果
+- ❌ 把 sweep candidate 一次塞給 user 讓他選哪些要記 — 主動分流後直接 dispatch，user 看結果（唯一例外是上表的 memory 列：寫 memory 一律先問）
 - ❌ 把 candidate 暫存到 HANDOFF.md `outstanding` 段 — sweep 是 session 內 cleanup，不該變成跨 session 待辦
 - ❌ 強推 candidate 升級到 pitfall — 不符四條件就降級或跳過，不硬塞
 
@@ -402,7 +356,7 @@ https://review-gui.<maintainer-domain>/projects/<repo>
 
 **MUST Read [scan-steps.md](scan-steps.md) § 2B.1 before proceeding** — 含 2B.1b 100% rotate 指令、audit、JSON schema、reorganize 表、dead-section 處置表、寫入規約。
 
-摘要：先跑 `rotate-handoff-done.ts`（每次 `next` 的第一個寫入：100% 清掉可 rotate 的紀錄，不詢問、不看 KB 門檻）。JSON `retired: true` = clade home／已遷移 repo：完成段從主檔刪除、**不**寫月份 archive。未遷移 consumer 才搬進 archive。接著 `handoff-scan.ts --json` 讀 `healthGate` → fail 回報 user → 2B.1c reorganize。整檔 size/lines 門檻已廢。三 sub-step 完才進 2B.1.5。
+摘要：先跑 `rotate-handoff-done.ts`（每次 `next` 的第一個寫入：100% 清掉可 rotate 的紀錄，不詢問、不看 KB 門檻）。JSON `retired: true` = clade home／已遷移 repo：完成段從主檔刪除、**不**寫月份 archive。未遷移 consumer 才搬進 archive。接著 `handoff-scan.ts --json` 讀 `healthGate` → fail 回報 user → 2B.1c reorganize。三 sub-step 完才進 2B.1.5。
 
 `tier-a-dead-section` warn 的處置在 [scan-steps.md](scan-steps.md) § 2B.1d dead-section 處置（Tier A）—— 拆條 / 關條 / 知識語態重寫三選一，第四格「防重做 marker」偵測器已自動豁免、**NEVER 刪**。該 sub-step 不寫任何檔，逐段判即可，處置不完不擋 2B.1.5。
 
@@ -422,7 +376,7 @@ https://review-gui.<maintainer-domain>/projects/<repo>
 
 - 整理後的 `HANDOFF.md`
 - **有 `specs/truth/work-lifecycle.md`（`techDebtHygiene.raw.retired: true`）**：outstanding **先**讀 `jq '.planInventory.raw' "$SCAN"` 三桶（**可做** / **卡人** / **該 RETIRE**）。每列的 `next` 欄是給 agent 的下一動（claim → `flow.ts plan show` / `plan readiness` → `/implement`；卡人寫明 `waitingOn`；RETIRE 寫 close/GC）。**NEVER** 把 `techDebtHygiene.raw.plans[]` 或 `flow plan list` 全表平鋪成接著做；**NEVER** 對半成品推 `/work-route`、第二次 `/specify` 或 `flow plan open` 當入口。**NEVER** 為列 outstanding 讀 `docs/tech-debt.md`、NEVER 對其中條目推薦 stamp Last reviewed／補 Resolution／wontfix（凍結舊載體）；下面三層 TD 規則整段不適用
-- 未遷移 consumer 的未解決 TD-NNN — 三層來源**全部**取自 §2B.1a 落檔的 `techDebtHygiene.raw`（`jq '.techDebtHygiene.raw' "$SCAN"`）。**NEVER 為了列 outstanding 整讀 `docs/tech-debt.md` 主檔** —— 該檔已在數百 KB 量級（要當前值跑 `wc -c docs/tech-debt.md`），整讀一次就吃掉本 skill 大半預算，而 raw 已含排序所需的全部欄位。需要某一條的細節時用 raw 的 `lineNo` **定點 Read**（`offset` + `limit`），不整檔載入。優先序分三層，**MUST** 依此排序，**NEVER** 平鋪混在一起（這是「堆積然後忘記」的根因）：
+- 未遷移 consumer 的未解決 TD-NNN — 三層來源**全部**取自 §2B.1a 落檔的 `techDebtHygiene.raw`（`jq '.techDebtHygiene.raw' "$SCAN"`）。**NEVER 為了列 outstanding 整讀 `docs/tech-debt.md` 主檔**；需要細節時用 raw 的 `lineNo` **定點 Read**。優先序分三層，**MUST** 依此排序，**NEVER** 平鋪混在一起：
   1. **stale**（`techDebtHygiene.raw.stale[]`，>60d 無 Last reviewed）— 最高優先，`discAge` 越大越前。每條 **MUST** 附三選一（做掉 / wontfix / stamp Last reviewed），但 stamp Last reviewed 列為最後選項，不推薦
   2. **aging**（`techDebtHygiene.raw.aging[]`，>14d 含被 snooze 的）— 第二優先，`discAge` 越大越前。每條 **MUST** 主動追問 blocker：「什麼卡關？能現在推進嗎？」。對 `snoozed: true` 的項目明確指出「已 stamp Last reviewed 但仍未解決 — 不應再延期」
   3. **其他 open TD** — 取 `raw.open[]` 扣掉已在前兩層的 id，按 `discovered` 排序，正常列入 outstanding：
@@ -442,7 +396,7 @@ https://review-gui.<maintainer-domain>/projects/<repo>
 
 ### 2B.2.5 external-action / exception / ruling 卡主動 triage（hard rule）
 
-**核心命題**：`flow gates` 列出的卡是「等人」，但**等人的只是那一題，不是整件工作**。§2B.1.7 讀到 `external-action` / `exception` / `ruling` 卡時，**MUST** 對**每一張**主動 triage，**NEVER** 只寫進 `## Review-gui Readiness` 就 silently drop、等 user 主動問才處理。此步對齊 [[goal-mode]] 的同一 spirit：卡在一題不等於「主線無事可做」。
+**等人的只是那一題，不是整件工作**。§2B.1.7 讀到 `external-action` / `exception` / `ruling` 卡時，**MUST** 對**每一張**主動 triage，**NEVER** 只寫進 `## Review-gui Readiness` 就 silently drop。
 
 對每張卡 **MUST** 做三件事：
 
@@ -458,8 +412,6 @@ triage 結果併入 §2B.2 outstanding 清單（與 HANDOFF / plan（未遷移 c
 - ❌ 只寫「等 owner 拍板 / 卡外部」而不端出**具體**決策題或**具體**等待 signal
 - ❌ 因為是卡片就從 outstanding / 詢問操作 選項中省略
 
-**為什麼這條 rule 存在**（2026-07-06 <consumer-b> 實證）：/handoff next 對 3 條外部 blocked 的 `ai-*` change 只寫進 readiness 段就結束，未抽 blocker 原因、未辨識 `ai-mcp-server` 其實 Phase 1-7.2 已解封可現在開工、未端出唯一需 user 拍板的 work-order grain 決策。user 被迫主動追問才拿到這些資訊 — 主動 triage 本應是 next 內建職責。
-
 ### 2B.3 Serial vs Parallel 評估
 
 **MUST Read [dispatch-steps.md](dispatch-steps.md) § 2B.3 before proceeding** — 含 serial / parallel 兩份訊號清單、parallel candidate 的 thin-brief 長駐 subagent 四條。
@@ -472,7 +424,7 @@ triage 結果併入 §2B.2 outstanding 清單（與 HANDOFF / plan（未遷移 c
 
 摘要：先輸出「outstanding 盤點 + serial/parallel 推薦」訊息，再用 詢問操作 讓 user 選；面板驗收相關 next move **MUST** 引用 §2B.1.7 的 `flow gates` 結果，**NEVER** 自行推測有沒有等人的事。
 
-### 2B.4.5 PTB-unsafe wt 的快速分流（v1.14+）
+### 2B.4.5 PTB-unsafe wt 的快速分流
 
 Step 3.1 audit **有任一條** wt 判為 `mergeBackSafety: ptb-unsafe` → **MUST Read [dispatch-steps.md](dispatch-steps.md) § 2B.4.5 before proceeding** — 含 3 個 terminal 選項的動作 / 風險對照表、inspect 路徑只能作 Option 4 的規約。零條 ptb-unsafe → 本節不適用，直接進 2B.5。
 
@@ -527,15 +479,8 @@ GOT="$(jq -r '.consumerId // "MISSING"' "$SCAN")"
 jq '[.worktreeStash.raw | .worktrees, .unmanagedWorktrees, .stashes, .orphanSidecars | length] | add' "$SCAN"   # 0 → 跳過；>0 → MUST Read
 ```
 
-**MUST Read [worktree-stash-audit.md](worktree-stash-audit.md) before proceeding** — 含
-`mergeBackSafety` 三 signal 的推導與處置表、9 列 kind 判定表（含 `specs/plans/` 不存在的 repo
-哪三列不適用）、stash audit 每一筆要寫的欄位。**NEVER** 憑 `mergedToMain` 單一欄位推斷可
-cleanup —— `userWip > 0` 時 kind 要降級，而 `cleanup` 對未 commit 內容無 pinned ref 保護。
-
-摘要：每條 `mergedToMain: false` 的 wt 由 `blockers` / `uncommitted` / `baselineRef` 三
-signal 推出 `landable` / `ptb-recoverable` / `ptb-unsafe` / `unclassified`；`ptb-unsafe`
-禁止 dispatch 收尾工作，走 § 2B.4.5 分流。stash 對 `raw.stashes[*]` **每一筆**都
-要寫入，不過濾 archived-only 或 stale>7d。
+**MUST Read [worktree-stash-audit.md](worktree-stash-audit.md) before proceeding**（`mergeBackSafety` 推導、kind 判定表、stash audit 欄位）。**NEVER** 憑 `mergedToMain` 單一欄位推斷可
+cleanup —— `userWip > 0` 時 kind 要降級，而 `cleanup` 對未 commit 內容無 pinned ref 保護。`ptb-unsafe` 禁止 dispatch 收尾工作，走 § 2B.4.5 分流。
 
 ### 3.3 寫入 HANDOFF.md
 
@@ -611,7 +556,7 @@ Retained: N
 ### 3.6 禁止行為
 
 - ❌ 自動跑裸 `git worktree remove` / `git update-ref -d` / `wt-helper merge-back` —— 這些不經 planner 的動作仍禁止；安全集合的 `wt-helper cleanup`、已 landed batch 的 `wt-helper batch cleanup` 與歷史 retirement 只能由 § 3.5／§ 3.5.1 的 canonical entrypoint 執行
-- ✅ **`git stash drop` 是例外，且是 MUST 不是 MAY**：通過 [[commit]] § Stash 自動處置 gate **全部**判準的 stash，Step 3.2 **MUST** 主動 drop + 留痕，**NEVER** 留給 user。判準未過、或跑不出明確結論的才寫進 audit 段。理由：把處置權綁在 user 身上的前提是 user 會去看 stash；對不看的 user 而言那不是保護，只是讓它無限累積直到沒人判得動
+- ✅ **`git stash drop` 是例外，且是 MUST 不是 MAY**：通過 [[commit.detail]] § Stash 自動處置 gate **全部**判準的 stash，Step 3.2 **MUST** 主動 drop + 留痕，**NEVER** 留給 user。判準未過、或跑不出明確結論的才寫進 audit 段
 - ❌ 把 audit 條目改寫進 `## In Progress` / `## Blocked` 段 —— audit 是「待清紀錄」，不是 in-progress 工作
 - ❌ park 跑時在 chat 訊息輸出 audit 全文或摘要 —— 完全靜默寫入 HANDOFF.md（避免雜訊干擾交接收尾）
 - ❌ 偵測到無 worktree + 無 stash 就跳過整段 —— **仍要寫**「## Worktree & Stash Audit」段，內含 `No linked worktrees.` + `No stashes.`，讓接手 session 能確認 audit 已跑過、結果為空
@@ -621,14 +566,14 @@ Retained: N
 - Codex native branch：upstream 保留責任；native subagent receipt 只證明 bounded work 已回報，**NEVER** 宣稱 successor 已接手或「目前這裡收工」。缺 native capability 時回具體 blocker，不啟動外部 launcher——唯一例外是 user 點名的 create-only `--launcher devin` bounded worker，dispatch receipt 只證明 worker 已派出，upstream 以 `--coordinate` 收割
 - `relay` / `fanout`：成功 = durable brief 已存在 + helper 回傳 `relay_dispatched` + （fanout）`relayed_dispatch_ids` 已逐筆比對通過 + runtime cleanup 已盤點 + parent worktree lifecycle 已 `removed`／具名 `retained`；完成訊息首行逐字包含「目前這裡收工」，之後不再工作或輪詢。`relay_refused`／`transport_error` 保留 pane 且不得假裝完成（見 [dispatch-common.md](dispatch-common.md) § 5）
 - park：成功 = **進入條件已滿足**（user 顯式打 `park`，或裸 `/handoff` 已取得 user 允許）+ HANDOFF.md / plan（未遷移 consumer 為 tech-debt）/ ROADMAP 有對應寫入 + tasks 檔已清 + Step 3 audit 已靜默寫入 HANDOFF.md `## Worktree & Stash Audit` 段；訊息只含升級摘要（不含 audit）。**未取得允許就寫入 = 失敗**，即使檔案內容正確
-- next：成功 = 2B.0 pitfall sweep 已執行（dispatch `/oops` 或宣告「無 missed lesson」）+ `rotate-handoff-done.ts` 已跑（`noop` / `retired` / 100% 清掉可 rotate 的紀錄，不詢問）+ HANDOFF.md 已整理 + 2B.1.5 → Step 3 audit 已寫入並在訊息摘要一行 + 2B.1.7 `flow gates` 讀到的 `external-action` / `exception` / `ruling` 卡已走 2B.2.5 主動 triage（抽 blocker 原因 + 辨識 startable 子集 + 端出具體 user 決策，NEVER silently drop）+ 2B.1.8 tech-debt hygiene 已讀（staleOpen 排進 outstanding 最高優先 + aging 排第二優先並主動追問 blocker + closedBloat warn 時已跑 `rotate-closed-bloat.ts`，`retired` 算成功） + 2B.1.9 consumer-local audit 已跑（`.claude/rules/local/handoff-audits.md` 存在時逐條跑並分流 exit 1 / exit ≥2；不存在則明講跳過）+ 盤點訊息 + 詢問操作已發出讓 user 選 + user 選定後 2B.5 dispatch 已完成（直接 dispatch 或內呼 `/wt <slug>: /<next-skill> <change-name>`）
+- next：成功 = 2B.0–2B.5 每一個 sub-step 都照各自段落執行完（含 2B.2.5 的每一張卡主動 triage、2B.1.9 不存在時明講跳過）+ 盤點訊息與詢問操作已發出 + user 選定後 2B.5 dispatch 已完成
 - 失敗 / blocked：明確說明卡點，不假裝完成
 
 ## 與其他 skill 的銜接
 
 - `/commit` — park 升級 WIP 時，commit 走此 skill 的 selective stage
 - `/specify` / `/tasks` / `/implement` — 已授權的需求建立、拆解與實作接續；brief 保留明確 carrier 路徑與剩下的 phase
-- `/oops` — next 2B.0 sweep missed lessons 時的 dispatch 目標（pitfall / memory / lessons.md 三層分流；from `hub-maintenance-full` plugin，不在 starter consumer 內安裝）
+- `/oops` — next 2B.0 sweep missed lessons 時的 dispatch 目標（pitfall / memory / lessons.md 三層分流；屬 maintenance/full capability，不是每個 consumer 都有）
 - `capabilities/core/references/implement-executor/` — next 詢問操作 user 選 parallel 後，subagent fan-out 依此 executor reference 執行
 
 

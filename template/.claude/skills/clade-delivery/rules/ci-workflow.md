@@ -16,10 +16,7 @@ paths: ['.github/workflows/**', '.github/actions/**']
 - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 ```
 
-**NEVER** 用 floating tag（`@v4`、`@main`、`@latest`）或裸 major（`@v4` 這種只到 major 的
-tag）——它們可被上游改寫指向，等於把 CI 的程式碼執行權交給一個你事後改不了的第三方引用。
-實測 `setup-vp` 的 `v1` 曾指向 `v1.15.0`、`pnpm/action-setup` 的 `v6` 曾指向 `v6.0.10`，
-與 changelog 上的最新版不一致——SHA 旁的 `# <tag>` 註解是唯一人類可讀的版本訊號，標錯比不標更糟。
+**NEVER** 用 floating tag（`@v4`、`@main`、`@latest`）——可被上游改寫指向。SHA 旁的 `# <tag>` 註解是唯一人類可讀的版本訊號，標錯比不標更糟。
 
 **適用範圍**：外部 `uses:`（`owner/repo@ref` 或 `owner/repo/path@ref` 形式）。**不適用**：
 本 repo 內的 local action（`uses: ./.github/actions/<name>`）——那些沒有外部引用可被改寫的風險。
@@ -28,7 +25,7 @@ tag）——它們可被上游改寫指向，等於把 CI 的程式碼執行權�
 （`git ls-remote` 或 `gh api` 查那個 SHA 確實對應該 tag，不要用記憶或猜測）。操作範本見
 `vendor/snippets/ci-workflow-sha-pin/README.md`。
 
-機械偵測：`node scripts/audit-ci-workflow-safety.ts`（原 `audit-actions-sha-pin.ts`，2026-09-17 改名；warn-only；
+機械偵測：`node scripts/audit-ci-workflow-safety.ts`（warn-only；
 掃 `.github/workflows/**/*.yml` 與 `.github/actions/**/action.yml`，check #1 對**每一個**外部 `uses:` 檢查 ref 是否為
 40 碼十六進位字串；同支的 check #2 / #3 管 deploy 私鑰與 host key，規約在 [[self-hosted-runner]] § 11）。
 
@@ -36,7 +33,7 @@ tag）——它們可被上游改寫指向，等於把 CI 的程式碼執行權�
 
 **適用範圍**：lint、typecheck、test、validate 這類**驗證** workflow（本 repo 的 `validate.yml` 是原型）。**不適用**：會部署 staging / production、或被另一條 workflow 用「同 SHA success」當 gate 的 workflow。
 
-單槽 self-hosted runner 上，同 ref 連續 push 若每條 run 都跑完，**最新 SHA 會排在已過期 SHA 後面**。2026-09-14 `YuDefine/clade`：`main` 先 push `e28c18898`、六分鐘後 squash `4817dc670`；`validate.yml` 沒有 `concurrency`，兩條 run 搶同一台 `gh-runner-lxc`，HEAD 等了約 30 分鐘才開始跑。過期 SHA 的結果不能當最新 candidate 的綠燈。
+單槽 self-hosted runner 上，同 ref 連續 push 若每條 run 都跑完，**最新 SHA 會排在已過期 SHA 後面**，HEAD 可能要等半小時才開始跑。過期 SHA 的結果不能當最新 candidate 的綠燈。
 
 **每一個** CI / test / validate workflow **MUST** 有：
 
@@ -56,9 +53,4 @@ concurrency:
 
 `gh-ci-watch` 在 run 被取消時會改追 superseding run（同 workflow + 同 branch、較新 `createdAt`）。那是監看側的補救，**不能**代替 workflow 自己取消過期 run。
 
-**與 `audit-ci-toolchain-parity.ts` 的分工**：那支只檢查三個 toolchain 入口 action
-（`voidzero-dev/setup-vp` / `pnpm/action-setup` / `actions/setup-node`）的 SHA-pin，是它「fleet
-toolchain 一致性」多維度稽核（node 版本一致性等）裡的其中一項——範圍是本檔的子集。本檔規約與
-`audit-ci-workflow-safety.ts` 才是**全部**外部 action 的權威來源（見 [[ci-toolchain-parity]]）。
-兩支稽核刻意不合併：一支管「這個 repo 的 CI 安不安全」，一支管「這個 repo 跟 fleet 其他家一不一致」，
-發現需要再合併時先讀兩邊 registry entry 的 `trigger`，不要各自為政再開第三支。
+`audit-ci-toolchain-parity.ts`（[[ci-toolchain-parity]]）只檢查三個 toolchain 入口 action 的 SHA-pin，是本檔的子集；全部外部 action 的權威來源是本檔與 `audit-ci-workflow-safety.ts`。

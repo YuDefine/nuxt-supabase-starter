@@ -1,16 +1,15 @@
 # Decay 偵測 —— D4–D6 的成因與 D4 的部分寫入白名單
 
 
-<!-- carrier-independent candidate: 本檔的義務不經任何 runtime 專屬工具契約表達，是 [[TD-445]] 抽共用核心時最先可搬的一批。**這是候選標記，不是 audience**——真正的 audience 是上面那行 `clade-targets`，NEVER 因為看到本行就把 targets 放寬。放寬 reference 而不放寬 SKILL.md 會投出沒有 skill 入口指向的孤兒檔。 -->
 
 D4–D6 的分流表**留在 SKILL.md Step 1**：那張表每一輪都要判，搬過來等於每一輪都得開這個檔。
 本檔收的是「命中之後怎麼寫」與「為什麼這樣判」。
 
 ## 訊號的邊界
 
-> **2026-08-13 TD-495 起，「`round` 與 HANDOFF 記載輪次不一致」不再是訊號。** HANDOFF 不再 render loop 進度（Step 7.2），第二份現況不存在了，也就沒有「兩邊不一致」這回事。真正的停滯由 `runner.sh` 的 no-progress 網接（`exit=0 且 round 未前進` 連續 2 輪 → 自行停）。**NEVER** 為了恢復這個訊號把進度寫回 HANDOFF —— 兩份現況正是 2026-08-11 <consumer-b> 空轉近 7 小時的根因。
-**這個訊號在 runner child 身上永遠不代表 decay。** decay 指的是**同一個 process 的 context 被 auto-compaction 壓掉**——只有 in-session `/loop` 有這個失敗模式。runner child 每輪是 `claude --print` 起的**全新 process**，context 從零重建、狀態只從 state 檔讀，結構上不可能 decay。所以在 child 身上，訊號命中**一定**是「上一輪 bookkeeping 沒收尾」，而那需要的是**自癒或忽略**，不是中止。無條件中止會讓**每一輪**都在 Step 1 停住、零 scan 零 dispatch，直到 runner 的 no-progress 條件把自己停掉——而那個停法在 log 上跟正常收工幾乎無法區分（2026-08-11 <consumer-b> 實測：連續空轉近 7 小時，所有健康訊號正常，靠人工介入才發現）。
-**列有代號（D4–D6），其他段落引用時 MUST 用代號、NEVER 用「第 N 列」**——列序會隨增補改變，序號指標會在改動後指到別列而沒有任何訊號。**D1–D3 已於 2026-08-13 隨 HANDOFF 輪次訊號一併廢除，代號 NEVER 回收再用於新列**（舊 sessionNote 與 log 仍寫著它們，回收會讓歷史紀錄指到不同語義）。
+> **「`round` 與 HANDOFF 記載輪次不一致」不是訊號。** HANDOFF 不 render loop 進度（Step 7.2），沒有第二份現況，也就沒有「兩邊不一致」這回事。真正的停滯由 `runner.sh` 的 no-progress 網接（`exit=0 且 round 未前進` 連續 2 輪 → 自行停）。**NEVER** 為了恢復這個訊號把進度寫回 HANDOFF —— 兩份現況會漂開，是 loop 長時間空轉的成因。
+**這個訊號在 runner child 身上永遠不代表 decay。** decay 指的是**同一個 process 的 context 被 auto-compaction 壓掉**——只有 in-session `/loop` 有這個失敗模式。runner child 每輪是 `claude --print` 起的**全新 process**，context 從零重建、狀態只從 state 檔讀，結構上不可能 decay。所以在 child 身上，訊號命中**一定**是「上一輪 bookkeeping 沒收尾」，而那需要的是**自癒或忽略**，不是中止。無條件中止會讓**每一輪**都在 Step 1 停住、零 scan 零 dispatch，直到 runner 的 no-progress 條件把自己停掉——而那個停法在 log 上跟正常收工幾乎無法區分，所有健康訊號都正常。
+**列有代號（D4–D6），其他段落引用時 MUST 用代號、NEVER 用「第 N 列」**——列序會隨增補改變，序號指標會在改動後指到別列而沒有任何訊號。**D1–D3 是已廢除的代號，NEVER 回收再用於新列**（歷史 sessionNote 與 log 仍寫著它們，回收會讓歷史紀錄指到不同語義）。
 
 
 ## D4 的部分寫入白名單（唯一容許在 7.2 失敗後仍寫 state 的路徑）
@@ -32,9 +31,7 @@ D4 與 Step 7.2 的「寫入失敗時 NEVER 繼續寫 7.3」不衝突，因為�
 | Red Flag | 立即動作 |
 | --- | --- |
 | 身為 runner child，正在寫 `roundEndReason: "context-decay"` | 停手。child 不可能 decay，回上表判身分與方向 |
-| 看到輪次不一致就準備「把 HANDOFF 對齊到 state」，還沒判方向 | 停手。`state.round` < HANDOFF 時這個動作會把較新的敘事蓋上錯的輪次 |
-| 「兩邊輪次不一致、狀態不可信，安全起見先停一輪」 | 停止這個推論。安全中止在 child 身上不是保守選擇，是讓 loop 永久空轉 |
-| 自癒時順手把下方 In Progress / Next Steps 各段「更新成現況」 | 停手。本輪 scan 都還沒跑，那些「現況」是編的 |
+| 「狀態看起來不一致、不可信，安全起見先停一輪」 | 停止這個推論。安全中止在 child 身上不是保守選擇，是讓 loop 永久空轉 |
 
 **`roundEndReason` 與 `stoppedReason` 是兩件事，寫錯會讓 loop 提早死掉**：
 

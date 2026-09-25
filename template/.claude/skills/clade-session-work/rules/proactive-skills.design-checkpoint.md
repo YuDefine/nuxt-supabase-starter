@@ -8,7 +8,7 @@ paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'app/**/*.ts', 'packages/*/ap
 
 # Proactive Skills — Design Checkpoint
 
-> Reference 檔。核心規約見 [`proactive-skills.md`](./proactive-skills.md)。本檔聚焦動 UI 檔（pages / components / layouts / `.vue` / `.ts`）或寫 `design.md` / `spec.md` 時主動觸發的 design skill orchestrator、Design Review task block 模板、Design Gate 阻擋條件、跨 work item 整體性審查與非 UI exception。
+> [[proactive-skills]] 的 reference 檔：動 UI 檔或寫 design artifact 時的 design skill orchestrator。
 
 ## Design Skill 自主觸發
 
@@ -18,33 +18,7 @@ paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'app/**/*.ts', 'packages/*/ap
 
 ### Design Checkpoint 流程
 
-```
-Task 涉及 UI？
-  │
-  ├─ 否 → 正常完成 task
-  │
-  └─ 是 → Design Checkpoint：
-       │
-       ├─ 1. 檢查 PRODUCT.md（必要）+ DESIGN.md（建議）
-       │     PRODUCT.md 存在？→ 繼續（DESIGN.md 缺則建議跑 /impeccable document）
-       │     PRODUCT.md 不存在？→ 先跑 /impeccable init
-       │
-       ├─ 2. 跑 /design improve [affected pages/components]
-       │     → 取得診斷報告 + Design Fidelity Report
-       │
-       ├─ 2.5 修復所有 DRIFT 項目（fidelity check loop，max 2 輪）
-       │     Fidelity Score = 8/8？→ 繼續
-       │     有 DRIFT/MISSING？→ 修復 → 重新檢查（max 2 輪）
-       │
-       ├─ 3. 按 canonical order 執行計劃中的 design skill
-       │     （結構 → 視覺 → 體驗 → 韌性 → polish）
-       │
-       ├─ 4. 跑 /impeccable audit [affected pages]
-       │     Critical > 0？→ 修復後重跑
-       │     Critical = 0？→ 繼續
-       │
-       └─ 5. 標記 task 完成
-```
+依下方 § Design Review Task Template 的 N.1–N.7 順序執行：PRODUCT.md 缺則先 `/impeccable init` → `/design improve` 取診斷與 Design Fidelity Report → 修 DRIFT（fidelity loop，max 2 輪，目標 8/8）→ 按 canonical order 跑計劃中的 skill → `/impeccable audit` 到 Critical = 0 → N.6 `/review screenshot` 視覺 QA（截圖證據附進 `design-review.md`）→ N.7 確認 `design-review.md` 無 DRIFT → 標記 task 完成。
 
 ### Design Skill 選擇指南（診斷驅動）
 
@@ -68,7 +42,7 @@ Task 涉及 UI？
 ### Canonical Order（偏離需說明理由）
 
 ```
-/impeccable init        ← 專案首次（無 PRODUCT.md 時；舊名 teach）
+/impeccable init        ← 專案首次（無 PRODUCT.md 時）
 /impeccable document    ← 已有 code 但無 DESIGN.md 時，從 code 反推
 /impeccable shape       ← （選用）code 前需求釐清；確認走 Shape brief 決策頁
   ↓
@@ -114,15 +88,9 @@ new-work build          ← 描述目標介面（Direction Gate 之後；NEVER �
 
 `[affected pages/components]` 替換為此 change 實際涉及的 UI 檔案/頁面。
 
-**效果**：`/implement` 會依序執行到 Design Review 區塊，自然觸發 design 工作。Design tasks 是一等公民，不是附加步驟。
-
 ## Design Review 中斷與續跑
 
-Design Review 過程中若發現問題過多（例如需要列修正計劃讓使用者確認），**提前停下時必須提示**：
-
-> 完成上述修正後，需要**重新跑一次完整 Design Review**（從 N.2 `/design improve` 開始），確認所有問題都已修復且未引入新問題。
-
-**規則**：Design Review 的 N.4 `/impeccable audit` 必須在**所有修正完成後**才執行。若中途停下修正，恢復後從 N.2 重新開始，不得跳過。
+N.5 `/impeccable audit` 必須在**所有修正完成後**才執行。中途停下修正時 MUST 提示使用者：恢復後從 N.2 `/design improve` 重跑完整 Design Review，不得跳過。
 
 ## Design Review Findings Log
 
@@ -142,25 +110,7 @@ Design Review 過程中若發現問題過多（例如需要列修正計劃讓使
 | 3   | color   | 對比度不足      | critical | /impeccable colorize |
 ```
 
-### 類別定義
-
-| 類別          | 說明                                |
-| ------------- | ----------------------------------- |
-| `spacing`     | 間距、padding、margin 問題          |
-| `layout`      | 佈局結構、grid、flex 問題           |
-| `typography`  | 字型、字級、行高、字重問題          |
-| `color`       | 色彩、對比度、主題一致性問題        |
-| `a11y`        | 無障礙（aria、focus、keyboard）問題 |
-| `responsive`  | 響應式、跨裝置適配問題              |
-| `interaction` | 動效、hover、transition 問題        |
-| `copy`        | 文案、標籤、錯誤訊息問題            |
-| `consistency` | 與 design system 不一致             |
-| `hardening`   | 邊界情況、空狀態、loading 狀態      |
-| `performance` | 渲染效能、圖片優化問題              |
-
-### 週期性分析 → `/design retro`
-
-Findings log 的分析由 `/design retro` mode 負責（見 `capabilities/core/skills/design/references/.legacy/design-retro/SKILL.md`）。記錄本身只負責結構化紀錄，分析與改善建議交由 design skill 在適當時機執行。
+類別：`spacing` `layout` `typography` `color` `a11y` `responsive` `interaction` `copy` `consistency` `hardening` `performance`。分析由 `/design retro` 負責。
 
 ## Design → 規格回饋迴路
 
@@ -180,15 +130,15 @@ Design 工作可能發現 spec 未涵蓋的問題。**每一次**發現都按下
 1. **`design-review.md` 存在且含 fidelity 證據**——有 `/design improve` 產出的設計審查記錄，**且**包含「Design Fidelity Report」段落，**且**無未修復的 DRIFT 項目（表格中無 `| DRIFT |` 行）
 2. **Design Review tasks 全部完成**——tasks 檔的 `## Design Review` 區塊中所有 checkbox 為 `[x]`
 
-兩個信號至少一個成立才可交付。都不成立 → **STOP**，回去補完再交付。
+兩個信號至少一個成立，且 `## 人工檢查` 不留白，才可交付。都不成立 → **STOP**，回去補完再交付。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | informational — **不觸發任何東西**。原本的機械閘 `pre-archive-design-gate.sh` 隨 spectra 生命週期一起退場（2026-09-07），目前沒有 detector 掛在「交付人工檢查」這個事件上 |
+| 觸發條件 | informational — **不觸發任何東西**。沒有 detector 掛在「交付人工檢查」這個事件上 |
 | 消費端 | 正要把含 UI 變更的工作交付人工檢查、或標 `work.done` 的那個 agent（本節） |
 | 載入路徑 | 本節（`rules/core/proactive-skills.design-checkpoint.md`，path-scoped 於 UI 檔與 `specs/plans/**`） |
 
-**NEVER** 把「沒有 hook 擋我」讀成這道門檻已經不存在——它現在唯一的執行者是讀到本節的那個 agent。
+**NEVER** 把「沒有 hook 擋我」讀成這道門檻不存在——它唯一的執行者是讀到本節的那個 agent。
 
 ## Cross-Change Holistic Review（跨 change 整體性審查）
 
@@ -203,36 +153,8 @@ Design 工作可能發現 spec 未涵蓋的問題。**每一次**發現都按下
 - 既有頁面的偏差標記為 **Cross-Work DRIFT**（建議修復，不阻擋交付）
 - Cross-Work DRIFT 記錄在 `design-review.md` 的獨立段落，便於後續工作處理
 
-**效果**：防止第一件工作設壞模板後，後續工作複製偏差。跨 work item 審查是建議性的——不阻擋當前工作交付，但留下明確記錄。
+
 
 ## 純後端工作的例外
 
 若工作純後端（migration、API、RLS、config），不觸發 Design Checkpoint，直接走 [[aixbdd-workflow]] 的標準入口順序。判斷依據：tasks 檔中是否有任何 task 涉及 `.vue` / `pages/` / `components/` / `layouts/` 檔案，且 git diff 中無 `.vue` 檔案。
-
-## Design Review Orchestration（snippet 補充）
-
-當 `/implement` 任務碰到 UI 工作（頁面、元件、layout、互動流程），Design Review 是**一等公民**，不是收尾裝飾。
-
-### 觸發時機
-
-- tasks 檔涉及 UI 檔案或頁面路徑
-- 實作中第一次開始編輯 UI 檔案
-- `/tasks` 結束時已可判定這次工作有 UI scope
-
-### 必要流程
-
-1. 檢查設計脈絡是否存在；沒有就先建立
-2. 執行 `/design improve [affected pages/components]`
-3. 依計劃按 canonical order 執行 targeted design skills
-4. 執行 `/impeccable audit`，確認 Critical = 0
-5. 執行 screenshot review，將證據補到 `design-review.md`
-6. 對含 UI 的工作，交付人工檢查前必須通過 Design Gate
-
-### Design Gate（交付前硬門檻 — 補充版）
-
-含 UI 的工作在交付人工檢查前，至少要有以下其中一種完整證據，且**人工檢查不能留白**：
-
-- `design-review.md` 有實質內容（截圖、Fidelity Report、無未修復 DRIFT）
-- tasks 檔的 `## Design Review` 區塊全部完成
-
-兩者皆無時 **STOP**，回去補完再交付。執行者是讀到這裡的 agent，沒有 hook 代勞（見上方 § Design Gate 的 REQUIRED 欄位表）。

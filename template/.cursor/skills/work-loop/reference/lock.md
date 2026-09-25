@@ -1,13 +1,12 @@
 # 互斥鎖 —— budget 計數器窗口與 TD-424 的析取判準
 
-<!-- carrier-independent candidate: 本檔的義務不經任何 runtime 專屬工具契約表達，是 [[TD-445]] 抽共用核心時最先可搬的一批。**這是候選標記，不是 audience**——真正的 audience 是上面那行 `clade-targets`，NEVER 因為看到本行就把 targets 放寬。放寬 reference 而不放寬 SKILL.md 會投出沒有 skill 入口指向的孤兒檔。 -->
 
 SKILL.md Step 0 § 互斥鎖 的 exit 表、Iron Law、rationalization table 與 Red Flag **留在主檔**——
 那些在「正要手寫一個鎖檔」的那一刻必須已經在 context 裡。本檔收的是**改判準時**才需要的成因。
 
 ## `continued` 與 `took-over` 讀錯的代價
 
-**`continued` 是 runner 模式的常態**（第 2 輪起每一輪都回它）：同一個 `runner.sh` pid 的上一輪殘鎖，`sessionId` 與 `acquiredAt` 都由 script 保留。**NEVER 把 `continued` 讀成 `took-over`**——那正是 2026-08-13 那份「budget proxy 兩半皆為死碼」的成因：舊版對這一格回 `took-over` ＋ 換新 `sessionId`／`acquiredAt`，於是 runner 下 `subagentsSpawned` 每輪歸零、`lock timestamp` 每輪重設，`>= 15` 與 `≥6h` 兩條**在無人值守下永遠不可能成立**，攔 runaway 只剩 `--max-rounds` / no-progress 2 輪 / 連續失敗 2 輪。判準寫在檔上但不會觸發，與判準不存在的差別只在讀的人以為有防線
+**`continued` 是 runner 模式的常態**（第 2 輪起每一輪都回它）：同一個 `runner.sh` pid 的上一輪殘鎖，`sessionId` 與 `acquiredAt` 都由 script 保留。**NEVER 把 `continued` 讀成 `took-over`**——讀成 `took-over`（換新 `sessionId`／`acquiredAt`）的話，runner 下 `subagentsSpawned` 每輪歸零、`lock timestamp` 每輪重設，`>= 15` 與 `≥6h` 兩條**在無人值守下永遠不可能成立**，攔 runaway 只剩 `--max-rounds` / no-progress 2 輪 / 連續失敗 2 輪。判準寫在檔上但不會觸發，與判準不存在的差別只在讀的人以為有防線
 
 ## 歸零掛在哪裡
 
@@ -15,4 +14,4 @@ SKILL.md Step 0 § 互斥鎖 的 exit 表、Iron Law、rationalization table 與
 
 ## 析取判準（TD-424）
 
-判準是**析取**——`heartbeat 在 45min 窗口內` **或** `pid 存活`，任一成立即為 active。舊版單看 `$$` 的合取判準在 in-session 模式下恆判 stale，鎖從未擋過任何一次（[[TD-424]]）。
+判準是**析取**——`heartbeat 在 45min 窗口內` **或** `pid 存活`，任一成立即為 active。只看 `$$` 的合取判準在 in-session 模式下恆判 stale，鎖形同虛設（[[TD-424]]）。

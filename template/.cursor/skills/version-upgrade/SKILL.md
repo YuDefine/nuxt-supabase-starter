@@ -199,7 +199,7 @@ First-pass與research的**每一份**生成prompt都MUST包含`workspace_access:
 
 ## Workspace Capability
 
-`workspace_access: mutation`。這份 brief 會修改 working tree、lockfile、Git index 並建立 commit；dispatcher 與每一個 quota fallback 都 **MUST** 保留 `--workspace-access mutation`。**NEVER** 選 `grok-cursor`、`luna-cursor` 或 `sol-cursor`；它們只承接 readonly inspection／review。
+`workspace_access: mutation`。這份 brief 會修改 working tree、lockfile、Git index 並建立 commit；dispatcher 與每一個 quota fallback 都 **MUST** 保留 `--workspace-access mutation`。**NEVER** 選 `grok-cursor` 或 `sol-cursor`；它們只承接 readonly inspection／review。
 
 你在 worktree `<wt-path>`（branch `<branch>`）跑。Package manager 是 `<PM>`。
 
@@ -308,7 +308,7 @@ Release: <release_url>
 
 ## Workspace Capability
 
-`workspace_access: mutation`。這份 brief 會修改 working tree、lockfile、Git index 並建立 commit；dispatcher 與每一個 quota fallback 都 **MUST** 保留 `--workspace-access mutation`。**NEVER** 選 `grok-cursor`、`luna-cursor` 或 `sol-cursor`；它們只承接 readonly inspection／review。
+`workspace_access: mutation`。這份 brief 會修改 working tree、lockfile、Git index 並建立 commit；dispatcher 與每一個 quota fallback 都 **MUST** 保留 `--workspace-access mutation`。**NEVER** 選 `grok-cursor` 或 `sol-cursor`；它們只承接 readonly inspection／review。
 
 Medium 已經失敗一次。失敗 tail：
 
@@ -376,9 +376,9 @@ WHY_STUCK: <一句話為什麼即使查到資訊也卡住>
 # 禁止事項（Outdated 與 Fleet 兩個 mode 都受約束；Skills mode 見 skills-mode.md 尾段、Machine mode 見 machine-mode.md 尾段）
 
 - **NEVER** 在 main working tree 跑 — Outdated 與 Fleet 都受此規約，由 `wt-gate.ts` fail-closed 強制（見 § Worktree gate）
-- **NEVER** 主線自己改 `package.json` 或在升版階段（Step O.2）跑 `pnpm add` / `pnpm install`（升版全程委派給 pi / subagent）。**例外**：Step O.3.2.c post-merge-back `pnpm install` 是 setup chore，不是升版動作
-- **NEVER** first-pass 失敗就直接問使用者 — 必須先自動升 research（`--effort high`；Opus 5.5 暫時覆寫期間研究改由 Opus `--effort medium` 做，不抬 effort，見 `outdated-mode.md` § O.2.4）
-- **NEVER** high 也失敗就主線自己接手 — 必須 runtime-native question interface 讓使用者選
+- **NEVER** 主線自己改 `package.json` 或在升版階段（Step O.2）跑 `pnpm add` / `pnpm install`（升版全程委派給 pi / subagent）。**例外**：Step O.3.2.c post-merge-back `pnpm install` 是 setup chore，不是升版動作；以及 provider／配額不可用、該 package 的執行鏈走完（[outdated-mode.md](outdated-mode.md) § O.2.2）時由主線照同一份 per-package brief 接手升版——品質失敗不適用這條，見下一條
+- **NEVER** first-pass 失敗就直接問使用者 — 必須先自動升 research（`version-upgrade-research` 列，見 `outdated-mode.md` § O.2.4；靠研究不靠抬 effort）
+- **NEVER** research 也**品質失敗**就主線自己接手 — 必須 runtime-native question interface 讓使用者選（provider／配額不可用走完鏈才是主線接手，那不是品質失敗）
 - **NEVER** 把正在審查的 mutation carrier 先說成允許再在同一個決策反悔；若 carrier 是 `grok-cursor`，該 carrier 單一結論必須是拒絕，允許的 route 仍是 `grok-xai`。
 - runtime-native question interface 分成兩個能力判定：沒有 structured question 但普通對話與 exec session 可用時，直接在當前對話詢問使用者，**NEVER** 換 runtime；使用者已選 retry 但沒有可驗證的 background execution/completion surface 時，只阻擋依賴該 dispatch 的步驟、保留 worktree 與 durable task，**NEVER** 宣稱整個互動不可用。
 - **NEVER** 把 merge-back 當「下一步」丟給 user 自己跑（per [[worktree-default]] §5）

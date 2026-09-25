@@ -23,8 +23,8 @@ description: "consumer 所屬 Notion hub 的唯一入口。Use when 看 board／
 - **自由形式的 Notion 讀寫一律 `ntn api`**（查詢、讀頁／blocks、comment、建頁、PATCH 全部），recipe 見
   [reference/cookbook.md](reference/cookbook.md)。**NEVER** 用 Notion MCP（`notion-fetch`／`notion-create-pages`／
   `notion-get-comments`…）或 WebFetch；不走 `ntn` 的只有兩處：`ntn` 不支援的 `after` 插入（cookbook § 2 直打 Notion API）與 in-app 附件原檔（cookbook § 4 token_v2 內部 API）。
-  執行者走 Routing Table 〔`notion-ops`〕：Pi `--model gemini --effort high` → luna → blocker。**NEVER** 主線第一手自己跑
-  `ntn`；**NEVER** `luna-cursor`（Notion auth 在 `$HOME`）。每個 `ntn api` 呼叫 MUST 帶 `< /dev/null`——stdin 沒關時 `ntn` 會等 stdin 而像卡死（cookbook 開頭）。
+  執行者走 Routing Table 〔`notion-ops`〕：Pi `--model gemini --effort high` → `grok-xai` xhigh → 鏈尾 `dispatch-fallback`（Opus 5.5 low）。**NEVER** 主線第一手自己跑
+  `ntn`；**NEVER** 上 Cursor 池（`grok-cursor`；Notion auth 在 `$HOME`）。每個 `ntn api` 呼叫 MUST 帶 `< /dev/null`——stdin 沒關時 `ntn` 會等 stdin 而像卡死（cookbook 開頭）。
 - 客戶看得到的文字（ticket 名稱、決策題、comment）是定稿措辭：Pi 起草後主線 **MUST** 收斂重寫才寫入。
 
 ## 開工前置（每次）

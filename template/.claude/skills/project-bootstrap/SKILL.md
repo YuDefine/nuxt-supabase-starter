@@ -28,7 +28,7 @@ metadata:
 | `new` | 目標 repo 尚不存在，或使用者要求從 starter 建立 | project name + target path | scaffolded project + registered consumer + ready report |
 | `adopt` | repo 已存在，但 Clade registry 查不到 | existing repo path | registered consumer + ready report |
 
-若 repo 已在 `registry/consumers.json`，停止 onboarding，改回該 consumer 的一般工作流。**例外**：使用者明確授權把該 consumer 清掉從 starter 重建。可重複的 playground 重建走 `node "$CLADE_HOME/scripts/rescaffold-playground.ts"`（預設 <consumer-e> / `--db-host existing-server`；`--dry-run` 只印步驟；`--skip-gates` 只驗 CLI）。不要自己複述 unregister / rm / CLI 順序——那支腳本是這條路徑的 SoT。不要把 registry 衝突讀成「改回一般工作流」。若使用者只要候選標準、不授權寫入，呼叫 `/bp plan` 後交付 plan，不繼續本 skill。
+若 repo 已在 `registry/consumers.json`，停止 onboarding，改回該 consumer 的一般工作流；**例外**是使用者明確授權清掉從 starter 重建——playground 重建走 `node "$CLADE_HOME/scripts/rescaffold-playground.ts"`（預設 <consumer-e> / `--db-host existing-server`；`--dry-run` 只印步驟；`--skip-gates` 只驗 CLI），不自己複述 unregister / rm 順序。只要候選標準、不授權寫入時，呼叫 `/bp plan` 交付 plan 後結束。
 
 </decision_boundary>
 
@@ -44,7 +44,7 @@ metadata:
 4. 清：`node "$CLADE_HOME/scripts/rescaffold-playground.ts"`（會再 inspect）
 5. 對 ledger：過的 finding 關掉；還沒過的下一輪繼續
 
-停手：inspect `errorCount=0` **且** ledger 沒有未關的質性缺口 **且** 使用者說滿意。Campaign SoT：`tasks/2026-09-03-0018-new-project-quality-loop.md`。
+停手：inspect `errorCount=0` **且** ledger 沒有未關的質性缺口 **且** 使用者說滿意。
 
 <workflow>
 
@@ -106,7 +106,7 @@ const bom = await projectionPlan({ cladeRoot: process.env.CLADE_HOME, manifest }
 
 把兩份輸出併進 intake sheet 給使用者看。catalog 題（db-host / register-fleet / deploy-track…）仍只問 `question-catalog.ts`，不要跟 BOM 列混成一張表。
 
-UI／有前端（`@nuxt/ui`、或 Nuxt 且有 pages）：BOM 出完後 Read `references/impeccable-follow-up.md`。那是**追問契約**，不是 catalog。scaffold／projection 成功後（Step 3）agent **MUST 立刻自己載入**該檔並缺哪項問哪項直到齊、寫進檔。**NEVER** 只寫「記得裝 impeccable」就過，**NEVER** 把這段變成請人類手打 slash command。品牌／theme／tokens **不准**加成 catalog 題（會跟 `ai-guidance:catalog-vs-cli` 衝突）。
+UI／有前端（`@nuxt/ui`、或 Nuxt 且有 pages）：BOM 出完後 Read `references/impeccable-follow-up.md`——那是**追問契約**，不是 catalog 題；何時執行、由誰執行寫在該檔 § 觸發點。品牌／theme／tokens **不准**加成 catalog 題（會跟 `ai-guidance:catalog-vs-cli` 衝突）。
 
 ## 2. 建 session state 與隔離工作區
 
@@ -147,7 +147,7 @@ node "$CLADE_HOME/scripts/mint-gate-playbooks.ts" \
 
 產物：`docs/playbooks/README.md`（含 § Browser 分流）+ `PROGRESS.md` + `GATE-TODOS.md` + 01–05、HANDOFF `## User-gate board`。缺 pack 不算 bootstrap 完成。`bootstrap-project.ts` 已含這一步；本節是 skill 自己跑 scaffold 後、進 Step 4 之前的補齊。
 
-UI consumer（mode=`new`、有前端／impeccable 適用）scaffold／projection 成功後，agent **MUST 立刻自己載入** `references/impeccable-follow-up.md`，或內部 invoke hub-core `design` 的 new mode。這是 bootstrap **同一條流程的必經段**：對使用者缺哪項問哪項直到齊，並把答案寫進 `PRODUCT.md`／`DESIGN.md`／theme tokens。`/design new` 只是 agent 可呼叫的 skill 入口，**不是**人類必打指令。**NEVER** 把 design new mode 寫成人類必打的 slash 作業。缺項未問完、檔未寫齊 **不准**把本 skill 收成 `READY`。
+UI consumer（mode=`new`、有前端／impeccable 適用）scaffold／projection 成功後，agent **MUST 立刻自己載入** `references/impeccable-follow-up.md`（或內部 invoke hub-core `design` 的 new mode），照該檔 § 觸發點把追問清單補齊並寫檔。`/design new` 是 agent 可呼叫的 skill 入口，**不是**人類必打指令。缺項未問完、檔未寫齊 **不准**把本 skill 收成 `READY`。
 
 ### `adopt`
 
@@ -176,7 +176,7 @@ node "$CLADE_HOME/scripts/bootstrap-project.ts" \
   --json
 ```
 
-**NEVER 逐條複述那些指令**——複述會漂，而漂掉的那一步在報告上與跑過無法區分。`--dev-port auto` 依 fleet 慣例（3000 起、每 10 一階）配下一個空號；`--skip-registry` 用於已登記的 repo。
+**NEVER** 逐條手動複述它包的指令。`--dev-port auto` 依 fleet 慣例（3000 起、每 10 一階）配下一個空號；`--skip-registry` 用於已登記的 repo。
 
 exit code：`0` 全綠 / `1` 用法錯誤或 registry 登記失敗 / `2` 有 gate 紅燈。`result` 三值：`READY`（全跑全綠）、`READY_PARTIAL`（有 step 被跳過——**NEVER** 讀成 READY）、`BLOCKED`。
 
@@ -215,11 +215,7 @@ cd <target-path> && pnpm check
 
 ### 新專案需求入口
 
-宣告 `aixbdd` capability 的新產出，在所選 AI targets 的指引與可執行投影中都採用 `/specify` → `/tasks` → `/implement` 這條入口。以 target 的 `.claude/skills/` 實際存在該組 skill、且 `node .clade/vendor/scripts/flow/flow.ts status --json` 跑得起來為準；預設指引與 package scripts 須一致，不能只驗 skill 目錄存在。
-
-使用者任務包含首件需求時，沿同一 source/change/work 完成 create → instructions/materialize → 風險選擇的測試／BDD → evidence/project → archive，另附真實 commit 與 deploy track 狀態。readiness READY 只結案建案檢查，不代替這條需求的交付證據。
-
-<consumer-e> playground 的本輪驗證資料保存於 playground 外，再以正式 rescaffold 路徑重建。驗一件需 BDD 的行為、一件普通測試即可的低風險行為，以及明示修訂造成舊證據失效、重驗後才能 archive；修正一律回 clade／starter，再用相同答案重新產生驗證。
+宣告 `aixbdd` capability 的新產出與首件需求的交付證據，依 `references/completion-contract.md` § 需求交付證據；readiness READY 只結案建案檢查，不代替需求的交付證據。
 
 ## 7. Land 與 publish
 

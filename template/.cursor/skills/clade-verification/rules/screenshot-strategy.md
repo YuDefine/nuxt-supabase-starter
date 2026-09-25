@@ -16,16 +16,13 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 
 所有截圖工作都應先判斷：這是一次性探索，還是需要可重現的回歸驗證。
 
-## 工具選擇
+## 決策樹（工具選擇）
 
-先判斷一次性探索、人工驗收、可重現回歸、多 viewport、跨瀏覽器與量測需求，再由 target adapter 選擇已驗證的 browser carrier、reproducible runner 或 measurement surface。共通判準如下：
+1. 需要多 viewport / responsive、跨瀏覽器、多分頁或可重拍回歸？→ target adapter 的 reproducible browser runner
+2. 需要一次性互動或人工驗收？→ target adapter 的 interactive browser carrier
+3. 純 performance（LCP/CLS/INP）/ heap measurement？→ target adapter 的 measurement-only surface
 
-| 需求 | 共通選擇規則 |
-| --- | --- |
-| 一次性互動與人工驗收 | target adapter 的 interactive browser carrier |
-| 多 viewport、跨瀏覽器、多分頁或需重拍的回歸 | target adapter 的 reproducible browser runner |
-| LCP/CLS/INP breakdown 或 heap measurement | target adapter 的 measurement-only surface |
-| 不需要的上層 runtime / QA 平台 | MUST NOT 取代已批准的 target carrier |
+不需要的上層 runtime / QA 平台 MUST NOT 取代已批准的 target carrier。
 
 ## Cloud / clean-browser fallback
 
@@ -34,13 +31,6 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 ## 給 user 開瀏覽器看頁面
 
 agent 自驗、user 可見 headed navigation 與 measurement 是三種不同用途，必須使用 target adapter 明確聲明的 surface。任何 unavailable surface 都保持 blocked；NEVER 用 uncontrolled default browser 代替。
-
-## 決策樹
-
-1. 需要多 viewport / responsive？→ reproducible browser runner
-2. 需要跨瀏覽器或可重拍回歸？→ reproducible browser runner
-3. 需要一次性互動？→ target adapter 的 interactive browser carrier
-4. 純 performance / heap measurement？→ target adapter 的 measurement-only surface
 
 ## 存放方式
 
@@ -59,11 +49,11 @@ screenshots/<environment>/<topic>/
 | **A. 人工檢查截圖** | 對應 spectra change tasks.md `## 人工檢查` 各 item | **MUST** = `<change-name>`（一字不差等於 `openspec/changes/<change-name>/` 目錄名） | **MUST** `#<item-id>[<variant>]-<descriptor>.<ext>`（見下節「檔名強制規範」） | ✅ 是 |
 | **B. Ad-hoc / debug 截圖** | 探索、debug、screenshot review 視覺 QA、polish 過程觀察 | 自由語義（`debug-clock-overlap`、`live-preview-design-token`、`exploration-typography` 等） | 自由命名 | ❌ 否（資料夾名與 active change 不 match） |
 
-**禁止把兩類混在同一資料夾** — 驗收讀端用資料夾名 + 檔名 id 配對 item，A 類資料夾混入 B 類 ad-hoc 檔會造成「對應 0 張」誤導。
+**禁止把兩類混在同一資料夾**（驗收讀端用資料夾名 + 檔名 id 配對 item）。
 
 ### 驗收截圖 vs 探索截圖
 
-人工檢查資料夾 `screenshots/<env>/<change-name>/` 是 review pipeline，只能放「使用者可據此勾 OK / issue」的最終驗收證據。截圖應呈現 item 要求的最終狀態，例如 submit/save 後 toast 可見、數值已更新、modal 已關閉且列表刷新、readonly / disabled / unauthorized 狀態明確呈現，或 item 明確要求的 error / empty / conflict final state。
+人工檢查資料夾 `screenshots/<env>/<change-name>/` 只放「使用者可據此勾 OK / issue」的 final-state 驗收證據（toast 可見、數值已更新、modal 關閉且列表刷新、readonly / unauthorized 明確呈現等）。
 
 每個 `#N` / `#N.M` 預設 1 張驗收截圖；需要 light / dark、viewport、角色或同一驗收點的必要 variant 時，最多 4 張。若超過 4 張，必須做其中一種整理：
 
@@ -83,18 +73,11 @@ screenshots/<env>/<change-name>/_exploration/
 
 ## 路徑強制規範（hard rule）
 
-凡是給人工檢查、design review、debug 給 user 看的截圖：
-
-- **MUST** 用 explicit path 落在 `screenshots/<env>/<topic>/` 下：`<target-capture> screenshots/<env>/<topic>/#N-....png`
-- **NEVER** 讓 `<target-capture>` 不帶 path 參數 — 預設落點 user 找不到
-- `/tmp` 只允許 agent 內部 sanity check（拍完當場 `Read` 自己看，不交付給 user）
-
-換句話說：任何要交付給 user 的截圖路徑必須是 `screenshots/<env>/<topic>/...`，不能漂走。
+凡是給人工檢查、design review、debug 給 user 看的截圖，**MUST** 以 target adapter 的 capture command 寫入 explicit path `screenshots/<env>/<topic>/#N-....png`；**NEVER** 省略 path、把 temporary capture 當 canonical evidence，或在驗證前覆蓋既有 canonical 檔。`/tmp` 只允許 agent 內部 sanity check。
 
 ## 檔名強制規範（hard rule）
 
-人工檢查截圖**MUST** 與 `## 人工檢查` 的 item id 一一對應，讓 evidence 讀端與人都能直接把
-截圖對到正確的 item，不需要手動挑選清單。
+人工檢查截圖**MUST** 與 `## 人工檢查` 的 item id 一一對應。
 
 ### 命名格式
 
@@ -104,52 +87,19 @@ screenshots/<env>/<change-name>/_exploration/
 
 - `<item-id>`：對應 tasks.md `## 人工檢查` 的 canonical id（`#1` parent / `#3.1` scoped）。
   **MUST** 與 `manual-review.md` 規範的 `#N` / `#N.M` 完全一致。
-- `<variant>`：選填的單一小寫英文字母（`a`–`z`），用於同一 item 的多角度截圖（例如 light/dark
-  mode、不同 viewport、不同子流程節點）。例：`#1a-`、`#3.1b-`。
+- `<variant>`：選填的單一小寫英文字母（`a`–`z`），用於同一 item 的多角度截圖。例：`#1a-`、`#3.1b-`。
 - `<descriptor>`：kebab-case 描述，至少含頁面或場景關鍵字。例：`clock-light`、`leave-quotas-mobile`。
 
 ### 範例
 
 ```text
-✅ #1-clock-light.png             ← item #1，唯一一張
-✅ #1a-clock-light.png            ← item #1，第 a 個變體（明亮模式）
-✅ #1b-clock-dark.png             ← item #1，第 b 個變體（暗色模式）
-✅ #3.1-mobile-petition-list.png  ← scoped item #3.1
-✅ #8.2-salary-positive-negative.png ← parent item #8.2 之外，等於主流程那張
-
-❌ 8.1-home.png                   ← legacy section.item 命名，缺 `#`，請改成 `#1-home.png`
-❌ clock-light.png                ← 沒有 id，配不到任何 item
-❌ #1_clock-light.png             ← 用 `_` 而非 `-`，pattern 不認
-❌ #1-Clock_Light.PNG             ← 大小寫混用、底線、kebab 走樣
+✅ #1-clock-light.png  #1b-clock-dark.png  #3.1-mobile-petition-list.png
+❌ 8.1-home.png（缺 `#`）  clock-light.png（沒有 id）  #1_clock-light.png（`_` 不認）
 ```
 
-### 配對邏輯（補充說明）
-
-檔名首段 token 由 `^#?(\d+(?:\.\d+)?)[a-z]?(?=[-._])` 擷取，直接 match item id。舊 GUI 對 legacy
-`<section>.<item>` 命名（例 `8.1-`）的 parent fallback 隨面板改版退役（2026-09-17）——現在**沒有**
-任何讀端替漂走的檔名兜底，`audit-screenshot-staleness.ts` 會把缺 `#N` 前綴的檔標成 LEGACY。
-**新拍截圖一律走 canonical 格式**。
-
-### 與 manual-review.md 的契約
-
-manual-review.md 規定 item id 一律 `#N` / `#N.M`；本檔規定截圖檔名首段 token
-與該 id 嚴格相等（含 `#` 前綴）。兩條規則一起成立，截圖與 item 才對得上。
-
-### 違反時
-
-```
-[Screenshot Naming] 檔名與 item id 不對應
-
-問題：screenshots/<env>/<topic>/<file> 不符合 #<item-id>[<variant>]-<descriptor>.<ext>
-
-修正：
-  - 將檔名首段改成 #<item-id> 或 #<item-id><variant>（單一英文字母）
-  - 同 item 多角度截圖用 a/b/c... 變體後綴，descriptor 區分情境
-```
+檔名首段 token 由 `^#?(\d+(?:\.\d+)?)[a-z]?(?=[-._])` 擷取；沒有讀端替 legacy 命名兜底，`audit-screenshot-staleness.ts` 把缺 `#N` 前綴的檔標成 LEGACY。
 
 ## 截圖落檔（target adapter operation）
-
-MUST 以 target adapter 宣告的 capture command 寫入 explicit path `screenshots/<env>/<topic>/#N-....png`。NEVER 省略 path、把 temporary capture 當 canonical evidence，或在驗證前覆蓋既有 canonical 檔。
 
 ### Review evidence：`safe-screenshot.ts`（非破壞性，review/verify:ui 推薦入口）
 
@@ -168,19 +118,17 @@ node scripts/before-after-screenshot.ts \
   --expect-text "Settings"
 ```
 
-預設落在 `screenshots/local/ad-hoc/before-after/<name>-<timestamp>/` 且 `publication=local-only`。只有 manifest `status=complete` 的輸出才是有效 comparison；`failed` / `partial` 的 `review.md` 不產生雙欄表，避免把單邊成功誤讀成完整比較。
-
-這個 helper 是 ad-hoc comparison，不會寫 `(verified-ui:)` 或 evidence sidecar。要納入正式人工驗收，仍依 item／sub-item 分別走 `vendor/snippets/verify-channels/annotation-cheatsheet.md` 的 `evidence-store.ts` 寫入契約；多 viewport、跨瀏覽器或重複 regression 仍走本檔決策樹指定的 target adapter runner。
+預設落在 `screenshots/local/ad-hoc/before-after/<name>-<timestamp>/`；只有 manifest `status=complete` 才是有效 comparison。它不寫 evidence，正式驗收仍走 `evidence-store.ts` 寫入契約（`vendor/snippets/verify-channels/annotation-cheatsheet.md`）。
 
 ## 平行 session 隔離（target adapter operation）
 
 平行 agent / 多分頁作業 MUST 使用 target adapter 宣告的原生 session isolation。任何會改變頁面的 action 後 MUST 重新取得 snapshot/ref；無法證明隔離時保持 blocked。
 
-## 歸檔機制（已停 rotate）
+## 歸檔機制（不 rotate）
 
-`W-2026-09-20-non-lifecycle-archive-retire`：停止把 topic 搬進 `screenshots/<env>/_archive/YYYY-MM/`。完成的截圖留在 `screenshots/<env>/<topic>/`。`/review archive` 與 `/review screenshots` **MUST NOT** 再自動或手動搬 `_archive/`。既有 `_archive/` 目錄可讀；刪檔等 live-ref 改點。
+完成的截圖留在 `screenshots/<env>/<topic>/`，不搬進 `screenshots/<env>/_archive/YYYY-MM/`。`/review archive` 與 `/review screenshots` **MUST NOT** 自動或手動搬 `_archive/`。既有 `_archive/` 目錄可讀。
 
-pending 與否改看 work package 的人工檢查狀態，不靠 `ls screenshots/<env>/` 排除 `_archive/` 當現行清單。
+pending 與否看 work package 的人工檢查狀態，不靠 `ls screenshots/<env>/` 排除 `_archive/` 當現行清單。
 
 ## 沉澱規則
 
@@ -188,27 +136,17 @@ pending 與否改看 work package 的人工檢查狀態，不靠 `ls screenshots
 
 ## round-trip-only manual-review item
 
-有些 `## 人工檢查` 項目只能由使用者親自操作驗收，截圖無法證明功能 round-trip 已通過。這類 item 不需要截圖，**MUST** 在 tasks.md 對應 checkbox line 行尾加上 `@no-screenshot` marker，讓 `pnpm review:ui` 顯示 round-trip-only UI，而不是提示補截圖或複製 handoff prompt。
-
-典型 round-trip-only 情境：
-
-- form submit 真的送到 server，並確認 response / DB / list refetch。
-- API 行為需要觀察 request → response → state update。
-- status transition 需要送出後確認狀態實際轉移。
-- 樂觀鎖 409 / conflict path 需要真實觸發並檢查 copy 與保留輸入。
-- 權限拒絕 path 需要真實使用低權限角色操作並確認拒絕結果。
-
-`@no-screenshot` 是 manual-review schema 的一部分，不是截圖檔名規則。完整語法、parent / scoped item 範例，以及 `@followup[TD-NNN] @no-screenshot` canonical ordering，見 `manual-review.md` 的「`@no-screenshot` Marker（hard rule）」。
+截圖無法證明 round-trip 的 `## 人工檢查` 項目（form submit 到 server、status transition、409 conflict、權限拒絕等），**MUST** 在 tasks.md 對應 checkbox 行尾加 `@no-screenshot`。完整語法見 [[manual-review.evidence]] § `@no-screenshot` Marker（hard rule）。
 
 ## Empty Data Handling
 
-截圖時遇到空狀態 = 無效 review。處理走兩段策略：
+截圖時遇到空狀態 = 無效 review。
 
 ### 1. Propose 階段預防（治本）
 
 詳見 `ux-completeness.md` 的「必填 Fixtures / Seed Plan」段落。凡 `Affected Entity Matrix` 任一 entity 的 `Surfaces` 欄非空，`tasks.md` **MUST** 包含 `## N. Fixtures / Seed Plan` section（每個 entity 一條 task 列出最少筆數 + 寫入哪個 seed 檔，或明確 `**Existing seed sufficient**` 宣告 + 一行理由）。
 
-**沒有機器替你偵測這一條**——原本的 `post-propose-check.sh` Check 6 隨 spectra 生命週期退場（2026-09-07）。交付前自檢 `## N. Fixtures / Seed Plan` 在不在，**NEVER** 把「沒有 gate 擋我」讀成這條不必做。
+**沒有機器替你偵測這一條**：交付前自檢 `## N. Fixtures / Seed Plan` 在不在，**NEVER** 把「沒有 gate 擋我」讀成這條不必做。
 
 ### 2. Review 階段兜底
 
@@ -220,6 +158,4 @@ target visual verifier 拍前 **MUST** 跑 emptiness heuristic（DOM empty-state
 | staging（含 `staging`） | **MUST** 停下回報主 session 詢問授權，**NEVER** 直接寫 staging DB |
 | production / 真實 host | 拒絕，回報應改用 dev |
 
-完整流程見 target visual verifier 的「拍前 Emptiness Preflight」與「空資料解決流程」段落。
-
-**NEVER 改 component 加 fallback 假資料來填空 UI** — 空狀態的成因是資料沒進 seed，改 component 讓畫面看起來有東西是把 review 的判斷依據換成假的。三條解法都在上面：dev 補 seed 檔、staging 停下問授權、production 改用 dev。
+**NEVER 改 component 加 fallback 假資料來填空 UI**——那是把 review 的判斷依據換成假的。

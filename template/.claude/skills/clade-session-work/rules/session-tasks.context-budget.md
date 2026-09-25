@@ -8,9 +8,7 @@ paths: ['tasks/**', 'HANDOFF.md', '.clade/work-loop/**']
 
 # Session context 預算的判定層
 
-> 本檔是 [[session-tasks]] § Session context 預算 的下推層。**Iron Law（適用 hard tier 是收工線；
-> soft tier 是限制新大工作段）**留在常駐層。本檔由 `capabilities/core/hooks/session-context-budget-warn.sh`
-> 越過門檻時的提示指過來——**NEVER** 因為本檔沒載入就當作門檻不存在。
+> [[session-tasks]] § Session context 預算 的下推層，由 `session-context-budget-warn.sh` 越過門檻時的提示指過來。
 
 ### 主判準是可觀察 predicate
 
@@ -24,7 +22,7 @@ paths: ['tasks/**', 'HANDOFF.md', '.clade/work-loop/**']
 
 ### 已核准 profile 的兩級語義
 
-**Iron Law：適用 hard tier 是收工線；soft tier 是限制新大工作段。** 超過 soft tier 後，MUST 不開新的 tasks 檔、多檔重構、新的實作 phase 或尚未載入的 skill；手上驗收與小 item 仍可完成。超過 hard tier 後，MUST 保存狀態並按下節交接；不可分割的單一驗證迴圈先跑完，不延伸成下一段。壓縮不重設該 profile 定義的 hard-tier 義務。
+兩級語義與 Iron Law 見 [[session-tasks]] § Session context 預算。補充：超過 hard tier 時，不可分割的單一驗證迴圈先跑完，不延伸成下一段。
 
 **MUST 用該 profile 定義的量測口徑判門檻**：累計用量、當前 context 佔用與壓縮後剩餘量不是同一個值。缺少 profile 或量測能力時，明列該缺口，使用上述可觀察 predicate 與 harness 的實際限制；**NEVER** 借另一個 runtime 的門檻、hook payload 或 model 名稱宣稱已適用、未超標或取得豁免。
 

@@ -51,7 +51,7 @@
 ## 11. 標準 CRUD & Realtime
 
 **IF** 即時更新 → SDK + Realtime Channel
-**IF** 標準 CRUD → Client SDK + RLS
+**IF** 標準 CRUD → Server API（client 直讀依 `modules.auth`，見 `server-api` skill）
 
 ## 12. 排程任務
 

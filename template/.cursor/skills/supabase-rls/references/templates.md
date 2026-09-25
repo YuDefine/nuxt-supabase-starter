@@ -1,21 +1,19 @@
 # Policy 模板
 
 
+模板不含 `service_role` bypass 條件（原因見 SKILL.md § service_role：NEVER 寫進 policy），目標 role 用 `TO` 子句指定。
+
 ## 讀取政策（SELECT）
 
 ```sql
 -- 登入使用者可讀取
 CREATE POLICY "Authenticated users can read" ON your_schema.your_table
-FOR SELECT USING (
-  (SELECT auth.role()) = 'service_role'
-  OR (SELECT auth.role()) = 'authenticated'
-);
+FOR SELECT TO authenticated USING (true);
 
 -- 僅特定角色可讀取
 CREATE POLICY "Staff can read" ON your_schema.your_table
-FOR SELECT USING (
-  (SELECT auth.role()) = 'service_role'
-  OR your_schema.current_user_role() IN ('admin', 'manager', 'staff')
+FOR SELECT TO authenticated USING (
+  your_schema.current_user_role() IN ('admin', 'manager', 'staff')
 );
 ```
 
@@ -23,21 +21,18 @@ FOR SELECT USING (
 
 ```sql
 CREATE POLICY "Manager can insert" ON your_schema.your_table
-FOR INSERT WITH CHECK (
-  (SELECT auth.role()) = 'service_role'
-  OR your_schema.current_user_role() IN ('admin', 'manager')
+FOR INSERT TO authenticated WITH CHECK (
+  your_schema.current_user_role() IN ('admin', 'manager')
 );
 
 CREATE POLICY "Manager can update" ON your_schema.your_table
-FOR UPDATE USING (
-  (SELECT auth.role()) = 'service_role'
-  OR your_schema.current_user_role() IN ('admin', 'manager')
+FOR UPDATE TO authenticated USING (
+  your_schema.current_user_role() IN ('admin', 'manager')
 );
 
 CREATE POLICY "Manager can delete" ON your_schema.your_table
-FOR DELETE USING (
-  (SELECT auth.role()) = 'service_role'
-  OR your_schema.current_user_role() IN ('admin', 'manager')
+FOR DELETE TO authenticated USING (
+  your_schema.current_user_role() IN ('admin', 'manager')
 );
 ```
 
@@ -45,38 +40,14 @@ FOR DELETE USING (
 
 ```sql
 CREATE POLICY "Admin only" ON your_schema.sensitive_table
-FOR ALL USING (
-  (SELECT auth.role()) = 'service_role'
-  OR your_schema.current_user_role() = 'admin'
+FOR ALL TO authenticated USING (
+  your_schema.current_user_role() = 'admin'
 );
 ```
 
-## Storage Bucket Policy（需支援 upsert）
+## Storage Bucket Policy
 
-Storage upsert = 覆蓋既有檔案，需要 INSERT + SELECT + UPDATE 三個 policy 同時存在。
-
-```sql
--- ✅ 完整的 Storage upsert 支援
-CREATE POLICY "Auth users can upload" ON storage.objects
-FOR INSERT WITH CHECK (
-  bucket_id = 'avatars'
-  AND (SELECT auth.role()) = 'authenticated'
-);
-
-CREATE POLICY "Auth users can read own" ON storage.objects
-FOR SELECT USING (
-  bucket_id = 'avatars'
-  AND (SELECT auth.uid()) = owner
-);
-
-CREATE POLICY "Auth users can update own" ON storage.objects
-FOR UPDATE USING (
-  bucket_id = 'avatars'
-  AND (SELECT auth.uid()) = owner
-);
-
--- ❌ 只有 INSERT — 新上傳正常，但覆蓋（upsert）靜默失敗
-```
+upsert 需 INSERT + SELECT + UPDATE 三個 policy，寫法見官方 `supabase` skill（SKILL.md 開頭列的通用陷阱）。
 
 ## 角色階層
 

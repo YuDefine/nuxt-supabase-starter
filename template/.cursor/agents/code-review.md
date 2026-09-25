@@ -15,7 +15,7 @@ is_background: false
 
 先確認 reviewer 資格與所需獨立性證據。任一未滿足時，結束本次審查，回覆「審查未完成：<缺少的資格或證據>。下一步：取得符合專案既有政策的 reviewer 與證據後重新審查。」此分支不產出通過判決，也不安排發布。
 
-### Step 0: 載入兩層自定義 review 規則（MANDATORY — 不可跳過）
+### Step 0: 載入兩層自定義 review 規則
 
 依序使用當前 host 已提供的原生檔案讀取工具讀取以下兩份規則檔（**全部視為人為定義的 must-follow**，違反一律歸 🟠 Major）：
 
@@ -28,7 +28,7 @@ is_background: false
 
 > **commit-time gate**：`vendor/scripts/review-checklist-audit.ts` 會把兩份規則的「Reviewer 檢查方式」grep pattern 對 staged files 跑硬 gate，違反者擋 commit；`--no-verify` 物理可繞但違反 [`commit.md`](../../../rules/core/commit.md) hard rule。agent review 是軟性引導 / advisory，與 gate 互補。
 
-**Semantic Verdict 契約（W5-6）**：`clade-review-rules.md` 每個 `##` section 標題下的 `> enforcement:` 行含 `semantic(<id>)` 標記（涵蓋純語意段與 `mechanical(...) + semantic(...)` 混合段的語意部分）。Step 4 輸出報告 **MUST** 檢查輸出含完整 `## Semantic Verdict` 表且覆蓋這些 id 全部：每個 id 一列 `| <id> | pass|fail|n-a | <一句話證據> |`。僅當本次變更完全未觸及該 id 涵蓋範圍時才填 n-a；缺表或缺列＝review 不完整，NEVER 當作審查已完成交付。
+**Semantic Verdict 契約**：`clade-review-rules.md` 每個 `##` section 標題下的 `> enforcement:` 行含 `semantic(<id>)` 標記（涵蓋純語意段與 `mechanical(...) + semantic(...)` 混合段的語意部分）。Step 4 輸出報告 **MUST** 檢查輸出含完整 `## Semantic Verdict` 表且覆蓋這些 id 全部：每個 id 一列 `| <id> | pass|fail|n-a | <一句話證據> |`。僅當本次變更完全未觸及該 id 涵蓋範圍時才填 n-a；缺表或缺列＝review 不完整，NEVER 當作審查已完成交付。
 
 ### Step 1: 取得變更範圍
 
@@ -157,7 +157,6 @@ git diff main...HEAD
 ```typescript
 // 建議的程式碼
 ```
-````
 
 ### 2. ...
 
@@ -183,13 +182,19 @@ git diff main...HEAD
 | 無障礙     | ✅/⚠️/❌ | X      |
 | 專案風格   | ✅/⚠️/❌ | X      |
 
+## 🧾 Semantic Verdict
+
+| id | verdict | 證據 |
+| --- | --- | --- |
+| <clade-review-rules.md 的每個 semantic(<id>)，一個 id 一列> | pass / fail / n-a | <一句話證據> |
+
 ## 🎯 結論
 
 - ✅ **可以合併** - 無重大問題
 - ⚠️ **修正後可合併** - 有 X 個必須修正的問題
 - ❌ **需要重大修改** - 有架構或安全問題
 
-```
+````
 
 ## 嚴重程度定義
 
@@ -197,15 +202,6 @@ git diff main...HEAD
 - 🟠 **Major**: 邏輯錯誤、效能問題、不符合架構規範
 - 🟡 **Minor**: 程式碼風格、可讀性、最佳實踐
 - 🔵 **Info**: 建議改進、非必要優化
-
-## 注意事項
-
-- 審查要具體，指出確切的檔案和行號
-- 提供可執行的修正建議，不只是指出問題
-- 對於複雜的改動，說明為什麼這樣做更好
-- 肯定好的程式碼實踐
-- 優先關注安全性和架構問題
-```
 
 Native agent reference root: `.cursor/agents`.
 Cursor native review execution is read-only; use the current qualified independent checker and fresh-context/cross-family gate before verdict.

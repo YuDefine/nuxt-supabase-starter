@@ -7,7 +7,7 @@
 
 Lease identity 是 **(consumer_id, port)**：primary port 的檔在 `/tmp/<consumer_id>-verification-lease.json`，其他 port 加 `-<port>` 後綴。`dev-session.ts status` 讀得到當前 holder。
 
-**同一個 consumer 可以同時跑多台合法 dev server**（多 app 的各支、以及為了一邊開發一邊人工檢查而開的 review slot）——它們各持自己的 lease，彼此不算衝突。但 **cookie 綁 host、不綁 port**：同一台機器上兩個 port 的 session 會互相覆蓋，隔離手法見 [[verification-lease.spec]] § 綁定資源的 cookie namespace 列。
+**同一個 consumer 可以同時跑多台合法 dev server**（多 app 的各支、以及為了一邊開發一邊人工檢查而開的 review slot）——它們各持自己的 lease，彼此不算衝突。但 **cookie 綁 host、不綁 port**：同一台機器上兩個 port 的 session 會互相覆蓋，隔離手法見 [[verification-lease.spec]] § Lease 的五元組 的 cookie namespace 列。
 
 > 五元組欄位、檔 schema、claim / release / force-takeover 行為、holder identity 解析、哪些工具必須讀寫 lease、consumer-meta `leaseMode` 對照，見 [[verification-lease.spec]]（path-scoped：動 `dev-session*` / `consumer-meta.json` / `nuxt.config.*` 時載入）。
 

@@ -31,9 +31,8 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 
 ## 1.5 spine 收尾（ambient `CLADE_WORK_ID` 非空時 MUST，空則整步跳過）
 
-`park` 有 SKILL.md Step 3b，`relay` 一直沒有對應的一步——而 relay 是收工的四個 arg 之一，
-本 session 走到這裡同樣是「一段工作結束了」。缺這一步的後果不是少一筆紀錄，是**漏斗上游餓死**：
-2026-08-28 實測整條脊椎的「已收」欄恆為 0，終態從來沒有被按過，因為沒有任何必經收尾點會去按它。
+relay 是收工的四個 arg 之一，本 session 走到這裡同樣是「一段工作結束了」（對應 `park` 的 SKILL.md Step 3b）。
+缺這一步的後果不是少一筆紀錄，是**漏斗上游餓死**：沒有任何必經收尾點會去按 spine 的終態。
 
 **MUST 先判這一題再往下**，二擇一，判準是**你正在交出去的 brief 裡寫的是不是同一件事**：
 
@@ -64,7 +63,7 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts done "$CLADE_WORK_ID" \
 
 ⛔ **先過 [dispatch-common.md](dispatch-common.md) § 1 的 `--cwd` 佔用探測**——successor 的 `--cwd` 指向既存工作區時，與 fanout worker 適用同一道 gate。
 
-⛔ **`<routing-model>` NEVER 是 `sonnet`**（依 [dispatch-common.md](dispatch-common.md) § 3.2）：successor 判「還是主線複雜度」就 `opus`；判「只值 sonnet 等級」則兩條都行——`--launcher grok --model grok-4.6 --effort high` 把位置交給 Grok successor，或本 session 留著、把那件事用 Grok worker 派掉。`relay-continuity` 那道限制只綁 Pi，**NEVER** 讀成 grok 不能當 successor。
+⛔ **`<routing-model>` NEVER 是 `sonnet`**（依 [dispatch-common.md](dispatch-common.md) § 3.2）：successor 判「還是主線複雜度」就 `opus`；判「只值 sonnet 等級」則兩條都行——`--launcher grok --model grok-4.7 --effort xhigh` 把位置交給 Grok successor，或本 session 留著、把那件事用 Grok worker 派掉。`relay-continuity` 那道限制只綁 Pi，**NEVER** 讀成 grok 不能當 successor。
 
 ```bash
 node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \

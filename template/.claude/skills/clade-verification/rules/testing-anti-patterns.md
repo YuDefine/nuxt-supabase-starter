@@ -15,18 +15,14 @@ paths:
 
 ## Overview
 
-Tests must verify real behavior, not mock behavior. Mocks are a means to isolate, not the thing being tested.
-
-**Core principle:** Test what the code does, not what the mocks do.
-
-**Following strict TDD prevents these anti-patterns.**
+**Core principle:** Test what the code does, not what the mocks do. Mocks are tools to isolate, not things to test. Strict TDD prevents most of these anti-patterns.
 
 ## The Iron Laws
 
 ```
-1. NEVER test mock behavior
-2. NEVER add test-only methods to production classes
-3. NEVER mock without understanding dependencies
+1. Never test mock behavior
+2. Never add test-only methods to production classes
+3. Never mock without understanding dependencies
 ```
 
 ## Anti-Pattern 1: Testing Mock Behavior
@@ -40,12 +36,6 @@ test('renders sidebar', () => {
   expect(wrapper.find('[data-testid="sidebar-mock"]').exists()).toBe(true)
 })
 ```
-
-**Why this is wrong:**
-
-- You're verifying the mock works, not that the component works
-- Test passes when mock is present, fails when it's not
-- Tells you nothing about real behavior
 
 **The fix:**
 
@@ -89,13 +79,6 @@ class Session {
 // In tests
 afterEach(() => session.destroy())
 ```
-
-**Why this is wrong:**
-
-- Production class polluted with test-only code
-- Dangerous if accidentally called in production
-- Violates YAGNI and separation of concerns
-- Confuses object lifecycle with entity lifecycle
 
 **The fix:**
 
@@ -151,12 +134,6 @@ test('detects duplicate entry', () => {
   await addEntry(config) // Should throw - but won't!
 })
 ```
-
-**Why this is wrong:**
-
-- Mocked method had side effect test depended on
-- Over-mocking to "be safe" breaks actual behavior
-- Test passes for wrong reason or fails mysteriously
 
 **The fix:**
 
@@ -218,12 +195,7 @@ const mockResponse = {
 // Later: breaks when code accesses response.metadata.requestId
 ```
 
-**Why this is wrong:**
-
-- **Partial mocks hide structural assumptions** - You only mocked fields you know about
-- **Downstream code may depend on fields you didn't include** - Silent failures
-- **Tests pass but integration fails** - Mock incomplete, real API complete
-- **False confidence** - Test proves nothing about real behavior
+Partial mocks hide structural assumptions; tests pass while integration fails.
 
 **The Iron Rule:** Mock the COMPLETE data structure as it exists in reality, not just fields your immediate test uses.
 
@@ -239,49 +211,9 @@ const mockResponse = {
 }
 ```
 
-### Gate Function
-
-```
-BEFORE creating mock responses:
-  Check: "What fields does the real API response contain?"
-
-  Actions:
-    1. Examine actual API response from docs/examples
-    2. Include ALL fields system might consume downstream
-    3. Verify mock matches real response schema completely
-
-  Critical:
-    If you're creating a mock, you must understand the ENTIRE structure
-    Partial mocks fail silently when code depends on omitted fields
-
-  If uncertain: Include all documented fields
-```
-
 ## Anti-Pattern 5: Integration Tests as Afterthought
 
-**The violation:**
-
-```
-✅ Implementation complete
-❌ No tests written
-"Ready for testing"
-```
-
-**Why this is wrong:**
-
-- Testing is part of implementation, not optional follow-up
-- TDD would have caught this
-- Can't claim complete without tests
-
-**The fix:**
-
-```
-TDD cycle:
-1. Write failing test
-2. Implement to pass
-3. Refactor
-4. THEN claim complete
-```
+Testing is part of implementation. Can't claim complete without tests — write the failing test first (see § TDD Prevents These Anti-Patterns).
 
 ## Anti-Pattern 6: Boundary Values Not Tested
 
@@ -306,13 +238,7 @@ test('manual return without notes', () => {
 // Client sends { return_notes: null } → 400 ZodError, dialog dies on submit.
 ```
 
-**Why this is wrong:**
-
-- **`.optional()` rejects null** — Zod's `.optional()` means `string | undefined`, NOT `string | null`. JSON serialization preserves null. Forms commonly emit `null` for "user cleared the field" or "input was empty."
-- **Test only covered the values the implementer thought of** — `undefined` and a string. The actual production payload is `null` (because the dialog code does `value.trim() || null`).
-- **The boundary that ships to production is the one the test forgot.**
-
-This generalizes beyond null: zero, empty string, empty array, NaN, Infinity, max-length+1, unicode, leading/trailing whitespace, mixed-case enums.
+Zod's `.optional()` means `string | undefined`, NOT `null`, and forms commonly emit `null` for a cleared field. The boundary that ships to production is the one the test forgot.
 
 **The fix:**
 
@@ -377,13 +303,9 @@ AFTER writing the tests — mental mutation check:
     IF you cannot answer without running the tests:
       You do not know what your tests cover. Write the boundary test instead of guessing.
 
-  Why this catches what the enumeration above misses: the enumeration is a checklist of value
-  KINDS (null, empty, max+1). This check is anchored on the actual operators in YOUR code, so it
-  finds the boundary that is specific to this logic — `amount >= threshold` needs a test at
-  exactly `threshold`, and no generic checklist will tell you that.
-
-  Coverage answers "was this line executed". This check answers "would a WRONG version of this
-  line be caught". A line can be 100% covered with every boundary unpinned.
+  This finds the boundary specific to YOUR logic (`amount >= threshold` needs a test at exactly
+  `threshold`). Coverage answers "was this line executed"; this answers "would a WRONG version
+  of this line be caught".
 ```
 
 ### Red flags
@@ -395,20 +317,12 @@ AFTER writing the tests — mental mutation check:
 
 ### 機械驗證通道（選用；多數模組不需要）
 
-上面的 Gate Function 與 mental mutation check 靠的是**執行者自律** —— 沒有東西能檢查邊界是否
-真的被枚舉了。需要機械證據的模組（金流 / 額度 / 期限 / 配額這類「算錯會賠錢」的邏輯），可以用
-mutation testing 讓**存活的突變體**直接指出哪個邊界沒被釘住。
+需要機械證據的模組（金流 / 額度 / 期限 / 配額）可用 mutation testing 讓存活的突變體指出沒被釘住的邊界。
 
-- **該不該導入**：`~/offline/clade/vendor/snippets/mutation-testing/README.md` 的 gate ——
-  **沒有 unit test 的模組一律不導入**（二階指標在一階缺席時輸出恆為 0，不帶資訊）；
-  不含比較運算子的模組（純 CRUD / I/O 轉接）同樣不導入
-- **各 consumer 採用狀態**：`node ~/offline/clade/scripts/audit-mutation-testing.ts --repo .`
-  （靜態讀 consumer commit 的 `.clade/mutation-summary.json`，**不執行**任何測試）
-
-> 兩條都是**絕對路徑**：cookbook 與 audit script 只存在於 clade，不散播副本到 consumer，
-> 相對路徑在 consumer session 會解到自己的 repo 而落空（同 evlog-investigate 的理由 ——
-> 該規約在 `rules/modules/capabilities/evlog/`，未宣告 evlog 的 repo 沒有它，故此處不用 wikilink）。
-- **NEVER** 把 mutation score 變成常駐 KPI —— 一旦它成為被追的數字，產出就會從
+- **該不該導入**：`~/offline/clade/vendor/snippets/mutation-testing/README.md` 的 gate——**沒有 unit test 的模組、不含比較運算子的模組一律不導入**
+- **採用狀態**：`node ~/offline/clade/scripts/audit-mutation-testing.ts --repo .`（靜態讀 `.clade/mutation-summary.json`）
+- 兩條用絕對路徑：它們只存在於 clade、不散播
+- 不要把 mutation score 變成常駐 KPI —— 一旦它成為被追的數字，產出就會從
   「想清楚邊界」退化成「對每個中間值下 assertion」，測試變脆、重構全紅
 
 ## Anti-Pattern 7: Accumulated Invariant Not Pinned
@@ -422,16 +336,7 @@ mutation testing 讓**存活的突變體**直接指出哪個邊界沒被釘住�
 v_available := v_batch.hours + v_transaction_hours - v_reserved_hours;
 ```
 
-112 小時的額度看起來是 224 小時，員工能預約並核銷超出實際持有的時數。型別正確、lint 乾淨、
-happy-path 測試全綠 —— 因為測試餵的是**單筆**核發，單筆時 `Σ hours_change` 恰好等於
-`batch.hours`，兩個項相加的錯誤要到第二筆才顯形。實證：<consumer-a>
-`supabase/migrations/20260629181459_leave_quota_reservation_double_count_fix.sql`。
-
-**為什麼 Anti-Pattern 6 抓不到**：AP6 的 mental mutation check 錨在**你 code 裡既有的比較
-運算子**上 —— 它問「翻轉這個運算子，測試會不會紅」。本 anti-pattern 的 fault 不在任何既有
-運算子裡，而在**該有卻沒被寫下來的那條不變量**。對「缺的那一行」，以既有 code 為錨的檢查
-結構性全盲；mutation testing 繼承同一個盲點（突變體只能從既有語句生成）。所以 AP7 的錨點
-不是 code，是 **data model**。
+單筆核發時 `Σ hours_change` 恰好等於 `batch.hours`，happy-path 全綠，錯誤到第二筆才顯形。AP6 與 mutation testing 都錨在既有 code 上，對「該有卻沒寫下來的不變量」結構性全盲，所以 AP7 的錨點是 **data model**。
 
 ### Gate Function
 
@@ -445,36 +350,18 @@ FOR 每一個「可對同一 parent entity 重複寫入」的 amount / quantity 
   IF Q2 答不出來:
     STOP — 這是 spec gap，不是 test gap。
     先把不變量寫進 spec，再回來寫測試。
-    NEVER 自己發明一個上界然後把它測起來 —— 那是把猜測釘成契約。
+    不要自己發明一個上界然後把它測起來 —— 那是把猜測釘成契約。
 
   IF 不變量已在 spec:
     寫一條測試，fixture 直接帶「已累積若干筆歷史 row」的狀態，
     斷言聚合結果仍滿足該不變量。
 ```
 
-**In-fleet exemplar** —— <consumer-b> `openspec/specs/shipment-return/spec.md` 的
-`Requirement: Shipment quantity control` 把不變量寫成一行：
+spec 範例：`可出貨數量 = 進料數量 - 報廢數量 - 已出貨數量`（<consumer-b> `shipment-return` spec）。
 
-```
-可出貨數量 = 進料數量 - 報廢數量 - 已出貨數量
-```
+**Test shape：static fixture**，直接帶已累積的 history rows（`[{hours: 112}, {hours: 8}]`），斷言 available 是 120 而不是 232；不需連續呼叫 N 次。
 
-spec 有這一行，實作與測試就有共同錨點；沒有這一行，double-count 與 under-count 都只是
-「看起來合理的算式」。
-
-**Test shape：static fixture，不要真的連續呼叫 N 次。** fixture 直接帶已累積的 history rows
-（`[{hours: 112}, {hours: 8}]`），斷言 available 是 120 而不是 232。不需新依賴、不需
-property-based testing、不需跑 N 輪迴圈 —— 累積狀態是**資料**，直接餵資料。
-
-### 機械訊號（參照完整性，不判語意）
-
-**這條目前沒有機械訊號。** `audit-bdd-elicitation-enrollment.ts` 隨 TD-977 Wave 2 的自家 BDD
-evaluator 一起退役——它查的是 `spec: <change> :: <Example heading>` 標記，而 `<change>` 這個
-載體已經不存在。SpecFormula 接手後的等價訊號（`.feature` ↔ test 的參照完整性）尚未建立，
-見 [[TD-978]]。
-
-**NEVER 因為現在沒有 detector 就把上面那條 spec 契約讀成建議** —— 沒有訊號的規約靠人讀，
-那正是它需要被寫清楚的理由。
+這條沒有機械訊號（[[TD-978]]），但不要因此把 spec 契約讀成建議。
 
 ### Red flags
 
@@ -488,19 +375,12 @@ evaluator 一起退役——它查的是 `spec: <change> :: <Example heading>` �
 
 **The violation:**
 
-測試裡複製生產碼不願意寫的捷徑——單字母名、magic number、一條測試塞三個概念、fixture 直接
-new 出底層 SDK client。一開始綠，三個月後沒人敢改，然後被 `.skip`，最後被刪。
-
-**Why this is wrong:**
-
-- 髒測試會先變成維護負擔、再被 skip、最後被刪
-- 測試被刪之後，生產碼失去唯一的安全網
-- 「測試碼比較短、可以隨便寫」把安全網的承載力寫進例外條款
+測試裡用生產碼不願意寫的捷徑（單字母名、magic number、一條塞三個概念、直接 new 底層 SDK client）——三個月後被 `.skip`、最後被刪，生產碼失去安全網。
 
 **The fix:**
 
-測試碼遵守與生產碼同一套命名 / 結構契約（見下方 § 測試結構契約）。測試變髒的當下 MUST 先整理
-再加下一條，NEVER 用「先讓它綠」把髒寫進去。
+測試碼遵守與生產碼同一套命名 / 結構契約（見下方 § 測試結構契約）。測試變髒的當下先整理
+再加下一條，不要用「先讓它綠」把髒寫進去。
 
 ### Gate Function
 
@@ -519,14 +399,7 @@ BEFORE 宣告一條測試寫完:
 
 ## When Mocks Become Too Complex
 
-**Warning signs:**
-
-- Mock setup longer than test logic
-- Mocking everything to make test pass
-- Mocks missing methods real components have
-- Test breaks when mock changes
-
-**Consider:** Integration tests with real components often simpler than complex mocks
+Mock setup longer than test logic, or mocks missing methods real components have → consider an integration test with real components.
 
 ## TDD Prevents These Anti-Patterns
 
@@ -536,23 +409,15 @@ BEFORE 宣告一條測試寫完:
 2. **測試只寫到剛好失敗**（含編譯失敗）——不要一次把整個 spec 寫完再實作
 3. **生產碼只寫到剛好通過**——不要順便把「下次會用到」的分支寫進去
 
-**Why TDD helps:**
-
-1. **Write test first** → Forces you to think about what you're actually testing
-2. **Watch it fail** → Confirms test tests real behavior, not mocks
-3. **Minimal implementation** → No test-only methods creep in
-4. **Real dependencies** → You see what the test actually needs before mocking
-
-**If you're testing mock behavior, you violated TDD** - you added mocks without watching test fail against real code first.
+**If you're testing mock behavior, you violated TDD** — you added mocks without watching the test fail against real code first.
 
 ## 測試結構契約
 
-失敗時能不能立刻指出壞掉的是哪一個能力——本節三條都在服務這個問題。本節純 review 層，
-無機械訊號。
+失敗時要能立刻指出壞掉的是哪一個能力。純 review 層，無機械訊號。
 
 ### Fast / Isolated / Repeatable / Self-validating / Timely
 
-**每一條**測試 MUST 同時滿足：
+**每一條**測試都要同時滿足：
 
 | | 意思 | 可觀察判準 |
 | --- | --- | --- |
@@ -564,67 +429,19 @@ BEFORE 宣告一條測試寫完:
 
 ### 一個測試只驗一個概念
 
-`it('creates user, sends mail, and updates audit log')` 失敗時看不出壞的是哪一件。MUST 拆成三條。
+`it('creates user, sends mail, and updates audit log')` 失敗時看不出壞的是哪一件，要拆成三條。
 共用的 setup 抽 helper，不要靠把三件事塞進同一條來「少寫 setup」。
 
 ### Build-Operate-Check
 
-每條測試 MUST 看得出三段：準備資料 → 執行被測動作 → 斷言。低階 fixture（直接組 SDK client、
-手寫 SQL row）MUST 抽成 domain helper（`givenPendingOrder()`），讓 Build 段讀起來是領域語言。
-
-## Quick Reference
-
-| Anti-Pattern                    | Fix                                           |
-| ------------------------------- | --------------------------------------------- |
-| Assert on mock elements         | Test real component or unmock it              |
-| Test-only methods in production | Move to test utilities                        |
-| Mock without understanding      | Understand dependencies first, mock minimally |
-| Incomplete mocks                | Mirror real API completely                    |
-| Tests as afterthought           | TDD - tests first                             |
-| Boundary values not tested      | Enumerate null/empty/zero/max+1 boundaries; trace actual client payload |
-| Accumulated invariant not pinned | 先把「歷史聚合量的上界」寫進 spec，再用帶已累積 history rows 的 static fixture 釘住 |
-| 測試碼品質低於生產碼            | 測試遵守同一套命名／結構；髒了先整理再加下一條 |
-| 一條測試塞多個概念              | 拆成一概念一條；失敗訊息要指得出能力 |
-| 測試看不出 Build-Operate-Check  | 三段寫清楚；低階 fixture 抽成 domain helper |
-| Over-complex mocks              | Consider integration tests                    |
-
-## Red Flags
-
-- Assertion checks for `*-mock` test IDs
-- Methods only called in test files
-- Mock setup is >50% of test
-- Test fails when you remove mock
-- Can't explain why mock is needed
-- Mocking "just to be safe"
-- Optional input field test only covers `undefined` (forgets `null` and empty string)
-- Schema uses `.optional()` for a field the form sends as `null`
-
-## The Bottom Line
-
-**Mocks are tools to isolate, not things to test.**
-
-If TDD reveals you're testing mock behavior, you've gone wrong.
-
-Fix: Test real behavior or question why you're mocking at all.
+每條測試都要看得出三段：準備資料 → 執行被測動作 → 斷言。低階 fixture（直接組 SDK client、
+手寫 SQL row）要抽成 domain helper（`givenPendingOrder()`），讓 Build 段讀起來是領域語言。
 
 ## E2E 以風險路徑排序，非數量
 
-E2E test coverage 不該用「跑了幾條」當 KPI，也不該用「按鈕能不能按、頁面能不能打開」當 confidence proxy。AI 大量產出 happy path E2E 後，**測試數量會通膨**，但對「這個 change 安不安全」的證明力卻可能下降 — 因為真正會出事的是失敗路徑、權限切換、資料邊界，這些不會在 happy path 露面。
+E2E 不用「跑了幾條」或 coverage % 當 KPI——真正會出事的是失敗路徑、權限切換、資料邊界，不在 happy path 露面。測試名稱要對應風險（`rejects when user lacks write permission on shared resource`，不是 `clicks button`）。
 
-對應 [@FortesHuang HJnWgQGJMx](https://hackmd.io/@FortesHuang/HJnWgQGJMx)：「真正昂貴的不是 coding，而是定義規則、驗證規則。」
-
-### 反模式
-
-- **數量 KPI**：「這條 spectra change 加了 5 條 E2E」當作 done — 不問這 5 條覆蓋了什麼風險路徑
-- **Happy path bias**：登入成功 → 點某按鈕 → 看到「成功」訊息；不測登入失敗、無權限、cache 過期、duplicate request、partial write
-- **Coverage % 假性 confidence**：line coverage 80% 但 critical path（auth check / migration / payment）為 0%
-- **Test 名稱不對應風險**：`test('clicks button')` vs `test('rejects when user lacks write permission on shared resource')`
-
-### 正模式
-
-對每條 spectra change / PR，先問：**這次改動動到的程式碼，最可能出事的路徑是什麼？**
-
-排序依據（高到低）：
+對每條 change / PR 先問：**這次改動最可能出事的路徑是什麼？** 排序（高到低）：
 
 1. **權限 / 認證邊界** — 用低權限 user 跑、過期 token、無 session、cross-tenant
 2. **資料一致性** — partial write、concurrent update、cache invalidation、race condition
@@ -632,17 +449,11 @@ E2E test coverage 不該用「跑了幾條」當 KPI，也不該用「按鈕能�
 4. **input 邊界** — null / empty / max+1 / Unicode / SQL injection 嘗試
 5. **Happy path** — 最後才覆蓋，用來確認流程沒壞
 
-### 落地建議
-
-- **Spectra change archive 前**：design.md / proposal.md 內含 § 「Risk paths」，列出該 change 動到的高風險路徑 + 對應 E2E 在哪
-- **Manual review 對應**：`rules/core/manual-review.md` 的 `[verify:e2e]` marker 應指向**風險路徑**，而非 happy path
-- **人工驗收對應**：`@human` 場景交人判之前，把「top 3 風險路徑跟對應測試」寫進該場景的 evidence，讓 `ui-judgement` 卡帶得到
-- **不**強制要求所有 PR 都附 risk-path doc — 純文件 / refactor / typo change 跳過
-- **不**用 coverage % 當 gate；用 risk-path 對應度當 review 對話起點
+`[verify:e2e]` item 應指向風險路徑；`@human` 場景交人判之前把 top 3 風險路徑與對應測試寫進 evidence。
 
 ### 規約最小要求
 
-當 change 動到下列任一類別，archive 前 **MUST** 在 design.md 或 proposal.md 列出對應風險路徑：
+當 change 動到下列任一類別，archive 前要在 design.md 或 proposal.md 列出對應風險路徑：
 
 - 認證 / 授權邏輯
 - DB schema migration
@@ -650,7 +461,7 @@ E2E test coverage 不該用「跑了幾條」當 KPI，也不該用「按鈕能�
 - payment / billing / 不可逆操作
 - 資料 deletion / soft-delete logic
 
-其他 change 為**建議**而非強制。違反靠 reviewer 在 manual-review tier 1/2 攔截，不靠 CI gate（會誤殺 typo fix）。
+其他 change 為建議，不強制、不設 CI gate（會誤殺 typo fix）。
 
 ### 機械訊號（warn-only，TD-636）
 
@@ -658,25 +469,13 @@ E2E test coverage 不該用「跑了幾條」當 KPI，也不該用「按鈕能�
 node vendor/scripts/audit-risk-path-coverage.ts        # 恆 exit 0
 ```
 
-diff 命中上列五類任一時，驗作用中 change 的 design.md / proposal.md 有 § Risk paths，**且該節引用的
-測試檔真的存在**。只驗章節在不在會被 pro forma 生一段騙過——那正是「全部打勾但沒人看」的機械版。
-
-**這支 NEVER 升成 blocking。** 上一段反對的是**無條件** CI gate；本支是條件觸發，五類全部是 diff
-路徑可偵測的，碰不到 typo fix，所以原理由對它不適用——但反過來說，一旦讓它擋 PR，那個理由就重新成立。
-findings 是 review 的**對話起點**，不是通過條件。
-
-**綠燈 NEVER 讀成「風險路徑覆蓋足夠」**：它只證明「有宣告、宣告指的檔在」，測得對不對只有人能判。
-
-**上線 baseline 是 0，這是預期值不是異常。** 2026-08-24 實測三個 consumer 共 75 條 change
-（9 active + 66 archived）——**沒有任何一份**寫過 § Risk paths。本節 2026-05 上線至今未被遵守過一次，
-所以接上訊號後高風險 change 幾乎必然報 finding。**NEVER** 因為「一片紅」就把這支關掉或降級：
-那個紅正是它被建立的理由，也是「規約存在 ≠ 規約生效」最直接的讀數。
+diff 命中上列五類時，驗作用中 change 有 § Risk paths **且引用的測試檔真的存在**。**這支不升成 blocking**——findings 是 review 的對話起點。**綠燈不代表「風險路徑覆蓋足夠」**（只證明有宣告、檔在）。baseline 近 0 是預期值，不要因為「一片紅」就把它關掉或降級。
 
 ## E2E fixture 的時間錨點 MUST 相對於執行當下
 
 E2E seed 出來的資料若帶**絕對日期**，測試就綁在寫它的那個月。UI 只要有任何 recency 分群（今天 / 昨天 / 本週 / 本月 / 更早）、保留期、或「N 天內」的篩選，同一份 fixture 過幾週後就會落進不同的桶 —— 元素預設收合、或根本不 render，於是所有依賴它可見的斷言一起 timeout。
 
-**MUST** 用相對於執行當下的時間錨點：
+一律用相對於執行當下的時間錨點：
 
 ```ts
 // e2e/helpers.ts
@@ -688,12 +487,10 @@ seedConversation({ updatedAt: daysAgo(1) })   // 昨天
 seedConversation({ updatedAt: daysAgo(60) })  // 更早
 ```
 
-- **NEVER** 在 fixture / mock / seed 寫死 `'2026-04-12T09:00:00Z'` 這類絕對時刻，除非該測試**驗的就是**某個特定日期的行為（跨年、閏日、DST 邊界）—— 那種情況要在測試名稱或註解寫明為什麼日期必須固定
-- **NEVER** 用「先前跑過都綠」當作沒問題的證據
+- 不要在 fixture / mock / seed 寫死 `'2026-04-12T09:00:00Z'` 這類絕對時刻，除非該測試**驗的就是**某個特定日期的行為（跨年、閏日、DST 邊界）—— 那種情況要在測試名稱或註解寫明為什麼日期必須固定
+- 不要用「先前跑過都綠」當作沒問題的證據
 
-**為什麼值得單獨列一條**：這是最難察覺的一類失效 —— 寫的當下全綠、review 時全綠、CI 連續數週全綠，然後在沒有任何人改動的情況下自己變紅。定位成本高（第一反應永遠是「誰動了什麼」，而答案是沒有人），而且會整批發作。
-
-實證（2026-07-28 <consumer-c>）：4 個 spec 的 seeded conversation 用 2026 年 4 月的固定日期，7 月起全部落入預設收合的「更早」bucket，sidebar 看不到對話 —— 單一 anti-pattern 造成 8 條失敗，且與同批其他 7 條無關的失敗混在一起，掩蓋了彼此的根因。
+這類失效在沒有任何人改動的情況下自己整批變紅。
 
 > 相關但不同：[[timezone]] 管的是「日期怎麼被格式化 / 存取」，本節管的是「fixture 的時間錨點怎麼選」。同一份 fixture 兩條都要過。
 
@@ -701,19 +498,17 @@ seedConversation({ updatedAt: daysAgo(60) })  // 更早
 
 `on.push.paths` / `on.pull_request.paths` 的清單若漏掉測試檔所在目錄，**只改測試的 commit 不會觸發任何 workflow** —— 修 E2E 的那次 push 驗證不了自己，紅燈也不會因為修好而轉綠，得等下一次剛好碰到清單內路徑的 commit 才一起跑。
 
-- **MUST** 把 workflow 實際會執行到的測試目錄（`e2e/**`、`test/**`、`packages/*/test/**`）列進 paths filter
-- **MUST** 順帶檢查 `workflow_run` 鏈：下游 workflow 的觸發條件是上游**跑了**，上游沒被觸發時下游同樣不動
-- **NEVER** 只憑「我 push 了而且沒看到紅燈」判定修好 —— 先確認**真的有 run 被建立**（`gh run list --limit 3` 看 SHA 對不對）
-
-實證（2026-07-28 nuxt-supabase-starter）：`Template CI` 的 paths 有 `template/app/**`、`template/server/**`、`template/scripts/**` … 就是沒有 `template/e2e/**`；`Template E2E` 又是 `workflow_run: [Template CI]` 觸發。結果修 `e2e/fixtures/index.ts` 的 commit 既不跑 CI、也不跑 E2E，得手動 `gh workflow run` 才驗得到。同一份清單也漏了 `template/packages/**`，單元測試的修正一樣不觸發。
+- 把 workflow 實際會執行到的測試目錄（`e2e/**`、`test/**`、`packages/*/test/**`）列進 paths filter
+- 順帶檢查 `workflow_run` 鏈：下游 workflow 的觸發條件是上游**跑了**，上游沒被觸發時下游同樣不動
+- 不要只憑「我 push 了而且沒看到紅燈」判定修好 —— 先確認**真的有 run 被建立**（`gh run list --limit 3` 看 SHA 對不對）
 
 ## 對設定檔原文的斷言，標的是行為本身
 
-本節對**每一份被執行環境消費的宣告式原始碼**生效，不是只有 `.github/workflows/*.yml`、`docker-compose.yml`、`Dockerfile` 這類設定檔 —— SQL migration 與 function body、RLS policy、Terraform / wrangler 宣告同樣算，判準是「這份文字由某個 runtime 讀進去執行」而不是副檔名。斷言的標的**MUST** 是可執行的那幾行，不是含註解的整段原文。註解為了解釋實作會逐字引用實作 —— 一旦斷言看得到註解，「實作存在」與「有人寫過關於實作的說明」就變成同一件事，把實作刪掉，斷言仍被註解滿足。
+本節對**每一份被 runtime 讀進去執行的宣告式原始碼**生效（workflow、compose、Dockerfile、SQL migration / function body、RLS policy、Terraform / wrangler）。斷言的標的要是可執行的那幾行，不是含註解的整段原文——註解常逐字引用實作，刪掉實作斷言仍被註解滿足（恆綠）。
 
-**斷言原文即使剝掉註解仍是弱形式**：它證明的是「這幾個字元在檔案裡」，不是「這段宣告跑起來會得到正確結果」。實證：<consumer-a> `test/unit/supabase/leave-quota-reservation-double-count-fix.test.ts` 斷言 `expect(body).toContain('v_available := v_transaction_hours - v_reserved_hours')` —— 把算式改成任何其他**同樣正確**的等價寫法，測試就紅；把整個 RPC 的語意改壞但字串留著，測試照綠。有行為通道（能跑 migration、能查回結果）時**MUST** 斷言行為；只有在行為通道確實不存在時才退回原文斷言，並在測試檔逐字寫明退回理由。
+原文斷言即使剝掉註解仍是弱形式（等價改寫就紅、語意改壞字串留著照綠）。有行為通道（能跑 migration、能查回結果）時一律斷言行為；沒有才退回原文斷言，並在測試檔寫明理由。
 
-**兩條 MUST**：
+**兩條要求**：
 
 1. **先取行為 view，再斷言**。有 parser 就 parse 後對節點斷言；純文字比對則先剝一層註解，之後所有行為斷言都走這個 view：
 
@@ -736,29 +531,16 @@ seedConversation({ updatedAt: daysAgo(60) })  // 更早
 
    寫不出「改哪一行會讓它紅」，這條斷言就還沒被驗證過。
 
-負向斷言（`not.toContain(X)`）是鏡像形態：註解命中造成**誤報失敗**，逼作者去改一段正確的註解。同樣靠行為 view 解決。
-
-**為什麼值得單獨列一條**：這類斷言的失效方式是**恆綠**，而綠燈正是它被信任的理由 —— 沒有人會對綠燈測試問「它會不會永遠綠」。註解寫得越忠實越危險：一段逐字引用運算式的說明，就是一份能永久滿足該斷言的複本。
-
-實證（2026-07-29 <consumer-a>）：staging-gate 回歸腳本斷言 `status != "completed"` 這個 jq filter 存在，但同一個 step 的註解解釋了這個 filter 並逐字引用它。把整段 `--jq` filter 刪成 `.workflow_runs[].head_sha`，測試照樣 PASS —— 被鎖住的是 production deploy gate 的 fail-fast 判準。詳見 [[pitfall-config-assertion-satisfied-by-own-comment]]。
+負向斷言（`not.toContain(X)`）的鏡像問題（註解命中造成誤報）同樣靠行為 view 解決。實例與偵測見 [[pitfall-config-assertion-satisfied-by-own-comment]]。
 
 ## Bug 診斷紀律：重現先於推理
 
-**Iron Law：`NO ROOT-CAUSE GUESS BEFORE A RELIABLE RED`。違反字面就是違反精神** —— 「這個一看就知道是什麼問題」「先改改看比較快」都不算遵守。
+**`NO ROOT-CAUSE GUESS BEFORE A RELIABLE RED`。**「這個一看就知道是什麼問題」「先改改看比較快」都不算遵守。
 
-**1. 能穩定重現之前，NEVER 推測根因。** 第一個直覺猜中的機率低，而順著錯的直覺深挖會讓方向越走越偏 —— 耗掉的時間遠多於建重現環境。**MUST** 先建一個「一跑就紅、修好就綠」的環境，手段任選：寫一個註定失敗的測試（最常用，且修完直接留成迴歸測試）、用指令直接打 API、瀏覽器腳本觸發、`git bisect` 找出引入的 commit。
+**1. 能穩定重現之前，不推測根因。** 先建一個「一跑就紅、修好就綠」的環境（註定失敗的測試、直接打 API、瀏覽器腳本、`git bisect`），且它**快**（幾秒內）又**穩**（每次錯誤訊息一致；時好時壞＝**還沒重現**）。
 
-重現環境**MUST**同時滿足兩條，否則它還不能當診斷依據：
+**2. 假設一次列 3-5 個，不要只列一個。** 只列一個會讓思路僵化在第一個念頭上。每個假設都要附「若此成立，改哪裡可以修好」 —— 寫不出驗證方案的不算假設，是感想。
 
-- **快** —— 幾秒內跑完（診斷過程會跑幾十次）
-- **穩** —— 每次紅燈的錯誤訊息完全一致。時好時壞的重現＝**還沒重現**，先修重現環境本身
+**3. 動手前把假設清單交給第二雙眼睛**；沒有人可問時派 fresh-context checker 讀清單（[[checker-subagent]]）。
 
-**2. 假設 MUST 一次列 3-5 個，NEVER 只列一個。** 只列一個會讓思路僵化在第一個念頭上。每個假設**MUST**附「若此成立，改哪裡可以修好」 —— 寫不出驗證方案的不算假設，是感想。
-
-**3. 動手前把假設清單交給第二雙眼睛。** 旁觀者常一眼點出盲點（「那個模組昨天剛改過」）。沒有人可問時派一個 fresh-context checker 讀清單（per [[checker-subagent]] —— 它買到的是「沒看過你的推理過程」，正是這裡需要的）。
-
-**4. 修完 MUST 補迴歸測試把它封死。** 第 1 步那個註定失敗的測試留下來就是。沒補測試的修復＝同一個坑下次還會再踩。
-
-**為什麼放在本檔**：這四條的第一步就是「寫一個註定失敗的測試」，與 § TDD Prevents These Anti-Patterns 同源 —— 都是「先建驗證機制，再動手實作」。取捨要誠實講：本檔 `paths:` 的觸發時機是碰測試檔，比理想的「開始形成假設之前」略晚一步；接受這個延遲換取不佔 always-load 預算。
-
-出處：mattpocock/skills `diagnosing-bugs`。
+**4. 修完要補迴歸測試把它封死**——第 1 步那個測試留下來就是。

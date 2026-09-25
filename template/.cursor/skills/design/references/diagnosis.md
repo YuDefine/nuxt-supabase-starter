@@ -124,7 +124,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Text overflow: hidden without ellipsis or wrapping strategy
 - No input validation (rely entirely on server)
 
-**Maps to:** `/impeccable harden`, `/impeccable clarify`, `/impeccable harden`
+**Maps to:** `/impeccable harden`, `/impeccable clarify`
 
 ---
 

@@ -3,7 +3,7 @@
 
 Complete catalog of available design skills with routing guidance.
 
-> **v3 呼叫形式**：本表全部用 v3 原生形式 `/impeccable <subcommand>`（例：`/impeccable colorize`、`/impeccable polish`），對齊 v3 作者「impeccable 是一個 skill、底下用 sub-command 組織」的設計理念。pin alias 機制（`/colorize` 等獨立 slash command）為 escape hatch，clade design 不依賴。
+> 本表全部用原生形式 `/impeccable <subcommand>`（例：`/impeccable colorize`、`/impeccable polish`）。pin alias（`/colorize` 等獨立 slash command）clade design 不依賴。
 
 ## Issue → Skill Mapping
 
@@ -43,7 +43,7 @@ Use this table during diagnostic scans to map problems to the right skill.
 - **`/impeccable document`** — 從既有 code 反推 DESIGN.md。已經有 code 的專案用此入門比 `init` 從零問更省力。
 - **`/impeccable shape`** — Requirements gathering before code generation. 確認走 Shape brief 決策頁，self-authored brief 不算。
 - **new-work build** — 描述目標介面，走 impeccable new-work（create/replace world 先跑 Direction Gate）。Produces distinctive, production-grade frontend code. **NEVER** 輸出 `/impeccable craft`。
-- **`/nuxt-ui`** — Nuxt UI v4 component library reference (125+ components). Use when project has `@nuxt/ui`. Provides component APIs, theming via `app.config.ts`, and Tailwind Variants integration.
+- **`/nuxt-ui`** — Nuxt UI component library reference. Use when project has `@nuxt/ui`. Provides component APIs, theming via `app.config.ts`, and Tailwind Variants integration.
 
 ### Diagnostic / Iteration (assess or explore without committing)
 
@@ -80,7 +80,7 @@ Use this table during diagnostic scans to map problems to the right skill.
 
 ### Production (ship)
 
-- **`/impeccable polish`** — Final pass: alignment, spacing tokens, typography details, interaction states, micro-interactions, content, icons, forms, edge cases, responsive, performance, code quality. 16-dimension checklist.
+- **`/impeccable polish`** — Final pass: alignment, spacing tokens, typography details, interaction states, micro-interactions, content, icons, forms, edge cases, responsive, performance, code quality.
 - **`/impeccable adapt`** — Cross-platform: mobile, tablet, desktop, print. Touch targets, navigation patterns, responsive layouts.
 - **`/impeccable overdrive`** — Technically ambitious: View Transitions, scroll-driven animations, WebGL, spring physics. MUST propose 2-3 directions first.
 
@@ -194,16 +194,6 @@ When recommending skills, also suggest compatible open-source libraries for fast
 | **React (enterprise)**        | [Ant Design](https://ant.design/)   | MUI, Mantine                |
 | **Vue / Nuxt**                | [Nuxt UI](https://ui.nuxt.com/)     | PrimeVue, Naive UI          |
 | **Vanilla / Multi-framework** | [Shoelace](https://shoelace.style/) | Open Props + CSS, Pico CSS  |
-
-### Library Selection Criteria
-
-When recommending libraries, prioritize:
-
-1. **License**: Prefer MIT/Apache; flag GPL for commercial projects
-2. **Bundle size**: Recommend tree-shakeable options; check bundlephobia
-3. **Maintenance**: Check last commit date, issue response time
-4. **Accessibility**: Prioritize libraries with built-in a11y (Radix, Chakra)
-5. **Design system compatibility**: Match to detected tech stack
 
 ### Quick Reference by Tech Stack
 

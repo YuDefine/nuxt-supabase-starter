@@ -8,7 +8,7 @@ paths: ['.claude/consumer-meta.json', 'scripts/dev-session*', 'scripts/dev-singl
 
 # Verification Lease — 機制規格
 
-> 從 [[verification-lease]] 抽出（2026-07-31）。主檔是行為契約（核心命題 + Agent 行為契約）；本檔是**實作面規格** —— 動 lease-aware launcher / consumer manifest 的 lease 設定，或要新寫一個 lease-aware 工具時才需要。
+> [[verification-lease]] 是 always-load 的行為契約（核心命題 + Agent 行為契約指針）；本檔是**實作面規格** —— 動 lease-aware launcher / consumer manifest 的 lease 設定，或要新寫一個 lease-aware 工具時才需要。
 
 ## Lease 的五元組
 
@@ -31,45 +31,23 @@ Lease identity 是 **(consumer_id, port)**，不是 consumer_id 單獨一個：
 | `dev.ports[0].port`（primary），或 port 解不出來 | `/tmp/<consumer_id>-verification-lease.json` |
 | 其他 port（多 app 的第二支 / review slot） | `/tmp/<consumer_id>-<port>-verification-lease.json` |
 
-**為什麼不是 per consumer**：一個 consumer 可以同時有多台合法、互不相干的 dev server —— <consumer-a> 的
-`dev:<client-a>`(3040) 與 `dev:shared`(3045) 是兩個不同 app，再加上為了「一邊開發一邊人工檢查」開的
-review slot 就有三台。共用一個 lease 檔時第二台一律被判衝突（strict → refuse），而那個衝突是**假的**：
-它們根本沒共用 port。
-
-**為什麼 primary 沿用舊檔名**：規約、lease resource、dev-signin template、worktree helper (`vendor/snippets/wt-helper/`)
-的殘留清理都寫死那個路徑，而它們讀的正是最常用的那一台。改掉等於一次性讓所有既有讀者對不上。
+一個 consumer 可以同時有多台合法 dev server（多 app、review slot），各持自己的 lease；primary 沿用舊檔名是因為既有讀者都寫死那個路徑。
 
 - 路徑用 consumer_id（見 [`consumer-meta.md`](./consumer-meta.md)），不用任意字串
 - `/tmp` reboot 清空，跨 session 可讀，不被 git track
 - 任何 user / agent 都能讀（沒 ACL）；寫入要走 lease-aware launcher，不要直接 `echo > /tmp/...`
-- **consumer_id MUST 解析自 main worktree，不是當前 worktree 的目錄名**。在 linked worktree 內
-  `git rev-parse --show-toplevel` 回的是該 worktree 路徑，basename 會變成 slug（`td-279-...`）而非
-  consumer 名 → 算出 `/tmp/<slug>-verification-lease.json`，跟 main 用的檔**不是同一個**。後果是
-  從 worktree 跑又沒帶 `--consumer-meta` 的指令靜默操作錯的 lease：release 釋放不到、conflict
-  偵測不到，跨 worktree 隔離形同虛設。正解是 `git rev-parse --git-common-dir`（main 回
-  `<repo>/.git`、linked worktree 回 `<main-repo>/.git/worktrees/<slug>`），截到 `.git` 的父層即
-  main worktree（2026-07-26 <consumer-a> 實證：worktree 內 `stop` 後 main 的 lease 檔原封不動殘留）
+- **consumer_id 要解析自 main worktree，不是當前 worktree 的目錄名**：用 `git rev-parse --git-common-dir` 截到 `.git` 的父層；用 `--show-toplevel` 的 basename 會在 linked worktree 算出 slug，靜默操作到另一份 lease
 
 ## 有界性：agent 租約 vs 人類租約
 
-lease 原本是 session-scoped 且**無界**——誰先起就持有到 session 結束。無界所有權的必然推論鏈是：
-
-```
-另一個 agent 永遠不會自己放手 → 想用只能砍掉他 → 砍是破壞性動作 → 所以必須問 user
-```
-
-「必須問 user」不是規約訂太保守，是無界所有權的**數學結果**。因此解法**不是**放寬規約讓 agent
-自行 takeover（那會變成 agent 互砍），而是讓所有權**有界**——同意這一步才會在機制上消失：
+無界的 agent 租約只能靠砍掉對方或問 user 才拿得回來；解法是讓 agent 所有權**有界**，而不是放寬 takeover：
 
 | holder | TTL | 回收 |
 | --- | --- | --- |
 | agent（`holder.kind ≠ human`，或 `--agent`） | **必有**，預設 10m | 過期或心跳斷 → 下一個 agent 自動接管，不問 user |
-| 人類（`holder.kind = human`） | **無界**（`expiresAt: null`） | **NEVER** 自動回收；agent 要用一律 refuse + 把訊息呈給 user |
+| 人類（`holder.kind = human`） | **無界**（`expiresAt: null`） | 不要自動回收；agent 要用一律 refuse + 把訊息呈給 user |
 
-**人類租約無界是整個設計的安全閥。** `detectHolderKind()` 在偵測不到任何 agent runtime 時回的
-就是 `human`——也就是「user 自己在 terminal 跑 `pnpm dev`」的情形。把判不出來的 holder 當成
-agent 會讓 user 的 dev server 被自動回收，安全閥就此失效，而症狀是 user 的畫面莫名其妙變成
-別的 worktree 的 code。
+**人類租約無界是整個設計的安全閥**：`detectHolderKind()` 偵測不到任何 agent runtime 時回 `human`，不要把判不出來的 holder 當成 agent 回收。
 
 ### Liveness：兩條判準都要看
 
@@ -82,7 +60,7 @@ agent 會讓 user 的 dev server 被自動回收，安全閥就此失效，而�
 TTL；只看 (2) 的話，還活著但早該放手的 agent 永遠不會被回收。舊格式 lease（無這三個欄位）恆
 **不可回收**——升級不會回頭吃掉既有 holder。
 
-回收 **MUST 走既有的 lease-aware session stop / start 路徑**（takeover 分支），**NEVER** 自組
+回收 **要走既有的 lease-aware session stop / start 路徑**（takeover 分支），不要自組
 process discovery + kill。具體 launcher 與命令由 adapter fragment 宣告。
 
 ### 佇列
@@ -96,7 +74,7 @@ process discovery + kill。具體 launcher 與命令由 adapter fragment 宣告�
 ```
 
 排隊者自己 poll（lease-aware wait operation，預設 5s 一次、等待上限 15m）；超過 **180s**
-沒 poll 的項自動剔除——**與 lease liveness 同一套判準，NEVER 另發明一套**。撞上**人類租約**時
+沒 poll 的項自動剔除——**與 lease liveness 同一套判準，不要另發明一套**。撞上**人類租約**時
 `wait` 立刻 refuse 而不排隊：它無界，排了也永遠等不到。
 
 共享 development DB 另有獨立 lease；需要 reset 或 sync 時使用 portable `node vendor/scripts/db-lease.ts claim|release|status`，不把 DB ownership 混入本 verification lease。
@@ -106,11 +84,11 @@ process discovery + kill。具體 launcher 與命令由 adapter fragment 宣告�
 schema 全例見 `~/offline/clade/vendor/snippets/dev-session/lease-schema.jsonc`。欄位必填規則：
 
 - `devServer` + `holder` + `claimedAt` 必填；其餘 slot 可缺（如未啟瀏覽器 → `browserProfile: null`）
-- broker 欄位（2026-08-07 加，**往後相容**：舊 lease 缺這些欄位一律視為不可回收）：
+- broker 欄位（**往後相容**：舊 lease 缺這些欄位一律視為不可回收）：
 
   | 欄位 | 型別 | 說明 |
   | --- | --- | --- |
-  | `task` | `string \| null` | 這次租用要做什麼（`--task`）。agent 租約 MUST 帶——它是別的 agent 決定要不要排隊的唯一依據 |
+  | `task` | `string \| null` | 這次租用要做什麼（`--task`）。agent 租約要帶——它是別的 agent 決定要不要排隊的唯一依據 |
   | `ttlMs` | `number \| null` | 租期；人類租約為 `null`。`heartbeat` 用它決定往後推多久 |
   | `expiresAt` | ISO8601 `\| null` | 硬到期時間；`null` = 無界（人類租約） |
   | `heartbeatAt` | ISO8601 | 最後一次心跳；`start` 與 `heartbeat` 都會更新 |
@@ -124,36 +102,34 @@ schema 全例見 `~/offline/clade/vendor/snippets/dev-session/lease-schema.jsonc
 | **status** | 任何人（含 read-only） | 讀 lease 檔；無檔 = 無 holder；印 holder + uptime + 五元組摘要 |
 | **claim** | lease-aware 工具 | 嘗試取得 lease：無檔 → write；有檔且 PID dead → 視為 stale，覆寫；有檔且同 holder kind+sessionId → reuse（no-op）；其他 → **refuse** |
 | **release** | 持有者 | 刪 lease 檔 + 剔除自己的排隊項；非持有者呼叫 = no-op + warn |
-| **heartbeat** | **只有持有者** | `heartbeatAt = now`、`expiresAt = now + ttl`。非持有者呼叫 **MUST refuse**——續租別人的租約等於延長不屬於自己的所有權，「過期就能自動接管」這條保證會失效 |
+| **heartbeat** | **只有持有者** | `heartbeatAt = now`、`expiresAt = now + ttl`。非持有者呼叫**一律 refuse**——續租別人的租約等於延長不屬於自己的所有權，「過期就能自動接管」這條保證會失效 |
 | **wait** | agent | 排隊等 slot；取得後直接接手（含把 dev server 切到本次 cwd）。人類租約 → 立刻 refuse；逾時 → exit 1 |
 | **auto-reclaim** | 任何 lease-aware 工具，**無需** flag | 現有 lease 是 agent 租約且 expired / heartbeat-dead → 直接接管、**不問 user**。人類租約永不走這條 |
 | **force-takeover** | 任何 lease-aware 工具，需顯式 flag（`--takeover`） | 不管現有 holder，覆寫 lease；prev holder 寫進 auditLog；同步 kill 對方 dev server PID（如可達）。人類租約仍**只有 user 能授權** |
 
-**Stale 偵測**：claim 時現有 lease 的 `devServer.pid` 死了（`kill -0` fail）→ 視為 stale，silent overwrite，不要求 `--takeover`。pid 還活、port 還 `LISTEN`，但 HTTP 連續兩次短逾時無狀態碼 → 不是 stale pid，是卡住；走關 Tab 重建，同樣不要求 `--takeover`。
+**Stale 偵測**：claim 時現有 lease 的 `devServer.pid` 死了（`kill -0` fail）→ 視為 stale，silent overwrite，不要求 `--takeover`。pid 還活但 HTTP 無回應的卡住情形見 § Agent 行為契約。
 **並行 race**：同時 claim 靠 `fs.writeFile({ flag: 'wx' })` 檔案級 atomic check，後到者 fail → conflict → 跑 status + refuse。
 
 ### Ownership 與 served code 是兩個獨立判準
 
-lease gate **MUST** 分開問兩件事，**NEVER** 讓其中一個短路掉另一個：
+lease gate 要分開問兩件事，不要讓其中一個短路掉另一個：
 
 | 判準 | 問題 | 依據 |
 |---|---|---|
 | **ownership conflict** | lease 被**別人**持有嗎 | `holder.sessionId` |
 | **served-cwd mismatch** | 正在跑的 dev server 服務的是**我要的那份 code** 嗎 | `devServer.cwd` vs 請求的 cwd |
 
-served-cwd 檢查 **MUST 無條件執行、與 holder 是誰無關** —— 同一個 holder 在別的 worktree 起的
+served-cwd 檢查 **要無條件執行、與 holder 是誰無關** —— 同一個 holder 在別的 worktree 起的
 dev server，服務的仍然是別的 code，一樣會讓 evidence 拍到錯的版本。
 
-實證：`holderSessionId()` 在沒有 `CLAUDE_SESSION_ID` / `CODEX_SESSION_ID` 時一律回 `'human'`，
-所有這類 caller 的身分**塌縮成同一個**；若把 cwd 比對寫在 ownership 判定之後，`if (mine) return null`
-會先短路，cwd 比對**永遠走不到**。
+（沒有 session id 的 caller 身分會塌縮成同一個 `human`，cwd 比對寫在 ownership 判定之後就永遠走不到。）
 
 兩個配套硬規則：
 
-- **cwd 比對 MUST 正規化後再比**（`resolve()` + `realpathSync()`）。lease 內的 cwd 是寫入當下的值，
+- **cwd 比對要正規化後再比**（`resolve()` + `realpathSync()`）。lease 內的 cwd 是寫入當下的值，
   請求端的 `--cwd` 可能是相對路徑、帶結尾斜線、或走 symlink 的等價路徑；裸字串比對兩個方向都會
   出錯 —— strict 模式對自己那台 refuse，或 `--takeover` 誤殺自己剛起的 dev server
-- **reuse 路徑 NEVER 跳過 lease gate**。「port 有人聽 → 直接 reuse」的捷徑會讓 caller 傳的 `--cwd`
+- **reuse 路徑不要跳過 lease gate**。「port 有人聽 → 直接 reuse」的捷徑會讓 caller 傳的 `--cwd`
   被靜默忽略，指令回 exit 0 +「✓ reuse」但服務的是別的 working tree 的 code。任何 agent 照這個
   成功訊號往下收 evidence，拍到的都是錯的版本，且**外觀與成功無異** —— 比直接失敗危險得多
 
@@ -213,21 +189,14 @@ Lease 的「該不該強制走 singleton wrapper」由 consumer 自宣告：
 
 `auditLog` 保留最多 50 條，FIFO。長期紀錄走 `improvement-digest.ts` 拉 snapshot 進 digest。
 
-## Why（root cause）
-
-2026-05 之前 dev server port / browser profile / cookie namespace / env file 四個資源散規範散實作，但實際是綁定的。
-兩個 session 同時驗證 → 不同層各自 hold 對方資源 → inconsistent state。
-收成一等概念後：claim 一次拿一組、release 一次釋一組，atomicity 由 lease 檔保證。
-
-
-## Agent 行為契約（自 [[verification-lease]] 常駐層下推）
+## Agent 行為契約
 
 每一個 runtime 的 agent 均遵守以下契約：
 
-- **NEVER** 用 raw `nuxt dev` / `node server.mjs` / `playwright start` 之類 bypass lease 的方式啟動 dev server
-- **NEVER** 直接 `lsof + kill` 別 holder 的 PID（即使它是另一個自己的 session）；要殺一律走 `dev-session.ts stop` / `wait` / `--takeover` 的 op
-- **MUST** 在 claim 時帶 `--task "<這次要做什麼>"` 與 `--ttl`（未給 TTL 的 agent 租約自動套 10m）
-- **MUST** 長任務期間定期 `dev-session.ts heartbeat` 續租；task 結束 / session 收尾 / kill subagent 前主動 `release`，**NEVER** 讓下一個 agent 等到 TTL 自然到期
+- 不要用 raw `nuxt dev` / `node server.mjs` / `playwright start` 之類 bypass lease 的方式啟動 dev server
+- 不要直接 `lsof + kill` 別 holder 的 PID（即使它是另一個自己的 session）；要殺一律走 `dev-session.ts stop` / `wait` / `--takeover` 的 op
+- claim 時要帶 `--task "<這次要做什麼>"` 與 `--ttl`（未給 TTL 的 agent 租約自動套 10m）
+- 長任務期間要定期 `dev-session.ts heartbeat` 續租；task 結束 / session 收尾 / kill subagent 前主動 `release`，不要讓下一個 agent 等到 TTL 自然到期
 
 衝突時依**可觀察 predicate** 分流（`dev-session.ts status` 讀得到全部三項）：
 
@@ -235,18 +204,13 @@ Lease 的「該不該強制走 singleton wrapper」由 consumer 自宣告：
 | --- | --- |
 | lease 不存在，或持有者是 **agent 且已過期 / 心跳斷（>180s）** | 直接 `start` 自動接管，**不問 user** |
 | lease 由 **agent** 持有且仍存活 | `dev-session.ts wait --task "…" -- <cmd>` 排隊，**不問 user**；逾時才回報 |
-| port `LISTEN`，但對 `http://127.0.0.1:<port>/` **連續兩次**短逾時都拿不到 HTTP 狀態碼 | **卡住**。跑 `node scripts/dev-session.ts --consumer-meta .claude/consumer-meta.json --port <N> -- <cmd>`（或 consumer 的 `pnpm dev:agent`）。script 關 herdr Tab 再重建。**人類租約也走這條。** **NEVER** 叫 user 在 Tab 裡 Ctrl+C／重打 `pnpm dev`。**NEVER** `lsof + kill`。**NEVER** `--takeover`（那是搶健康租約） |
-| lease 由 **人類** 持有（`holder.kind = human`）且 HTTP **有回應** | **NEVER** 自動接管、**NEVER** `--takeover` —— refuse 並把訊息原樣呈給 user |
+| port `LISTEN`，但對 `http://127.0.0.1:<port>/` **連續兩次**短逾時都拿不到 HTTP 狀態碼 | **卡住**。跑 `node scripts/dev-session.ts --consumer-meta .claude/consumer-meta.json --port <N> -- <cmd>`（或 consumer 的 `pnpm dev:agent`）。script 關 herdr Tab 再重建。**人類租約也走這條。** 不要叫 user 在 Tab 裡 Ctrl+C／重打 `pnpm dev`，不要 `lsof + kill`，也不要 `--takeover`（那是搶健康租約） |
+| lease 由 **人類** 持有（`holder.kind = human`）且 HTTP **有回應** | 不要自動接管、不要 `--takeover` —— refuse 並把訊息原樣呈給 user |
 
-「人類租約且 HTTP 有回應 → NEVER 自動接管」在 autonomous mode（background subagent、scheduled task、/loop）同樣成立。卡住那一列不是接管健康租約，是把已經不能服務的 Tab 拆掉重建。
+「人類租約且 HTTP 有回應 → 不要自動接管」在 autonomous mode（background subagent、scheduled task、/loop）同樣成立。卡住那一列不是接管健康租約，是把已經不能服務的 Tab 拆掉重建。
 
-**Iron Law：LISTEN 不是活著。違反字面就是違反精神。** 能服務的判準是 HTTP 有狀態碼，不是 `lsof` 看到 LISTEN、也不是 pid 還在。
+**LISTEN 不是活著。** 能服務的判準是 HTTP 有狀態碼，不是 `lsof` 看到 LISTEN、也不是 pid 還在。
 
-| 開脫 | 現實 |
-| --- | --- |
-| 「lease 是 human:human，NEVER 殺還在聽的 server」 | 還在聽但 HTTP 000 的 server 已經不能服務持有人。關 Tab 重建不是 `--takeover` |
-| 「health 000 且 lease 已死才可重建」 | lease 無界不會自己死。用 HTTP 判卡住，不要等人類租約過期 |
-| 「請持有人在 herdr tab 重起 nuxi」 | 恢復入口是 `dev-session.ts` / `pnpm dev:agent`。叫人 Ctrl+C 是把 agent 做得到的動作推回去 |
-| 「不要自己 --takeover」 | 對。卡住走關 Tab，不走 `--takeover` |
+人類租約（`human:human`）也一樣：還在聽但 HTTP 000 的 server 已經不能服務持有人，關 Tab 重建不是 `--takeover`。人類租約無界、不會自己死，所以用 HTTP 判卡住，不要等它過期才重建。恢復入口是 `dev-session.ts`／`pnpm dev:agent`，請持有人在 herdr tab 重起 nuxi 是把 agent 做得到的動作推回去。卡住走關 Tab，不走 `--takeover`。
 
-**Red Flags**：正要寫「請在 `w*:t*` 重起 nuxi」；正要把 LISTEN + pid 活著當成健康；正要用 `lsof + kill` 代替 `herdr tab close`。
+正要寫「請在 `w*:t*` 重起 nuxi」、正要把 LISTEN + pid 活著當成健康、或正要用 `lsof + kill` 代替 `herdr tab close` 時，停下來改走上表「卡住」那一列。

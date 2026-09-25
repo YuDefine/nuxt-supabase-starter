@@ -22,12 +22,13 @@ Clade 的模型與推理強度預設採同一組合。來源：
 ## Scanner 登入位置
 
 wrapper 固定使用 `${XDG_DATA_HOME:-$HOME/.local/share}/clade/codex-security-state`，
-與未指定 state directory 的裸 CLI 登入分開。修復 `auth-failure` 時使用相同位置與已安裝版本：
+與未指定 state directory 的裸 CLI 登入分開。修復 `auth-failure` 時使用相同位置與已安裝版本
+（`<version>` 取 `scripts/security-scan.ts` 的 `CODEX_SECURITY_VERSION`）：
 
 ```bash
 security_data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
 CODEX_SECURITY_STATE_DIR="$security_data_home/clade/codex-security-state" \
-  "$security_data_home/clade/codex-security/0.1.25/node_modules/.bin/codex-security" login --device-auth
+  "$security_data_home/clade/codex-security/<version>/node_modules/.bin/codex-security" login --device-auth
 ```
 
 同一命令的尾端換成 `login status` 可讀取登入狀態；顯示已登入只代表有儲存的憑證，
@@ -83,20 +84,16 @@ ledger，取同 `run_kind` / model / effort / scanner 版本裡**每一筆撞上
 `estimated_cost_usd` 最大值當已知不足水位；`--max-cost` 低於或等於它就 fail closed
 （exit 2、`failure_reason: stop-line-below-observed-floor`、`failure_phase: wrapper-preflight`），
 一次 scanner 都不啟動，訊息裡帶建議值。**NEVER** 用「這次應該就夠了」把同一面牆再撞一次——
-<consumer-a> 2026-09-07 一晚 $2 → $8 → $15 三次猜測、每次都低於當時 ledger 已記錄的水位，燒掉 $22.4
-換到零 findings 與零 coverage。
+每次低於已記錄水位的猜測都是燒錢換零 findings 與零 coverage。
 
 **比對鍵是範圍，不是模式。** `run_kind` 只固定住模式；`working-tree --paths-file`、`path`、
-components / deep baseline 的實際掃描範圍逐次不同。clade 自家
-ledger 的五筆 working-tree row 範圍分別是 39 / 40 / 95 / 95 個檔與 7 個檔，其中 39 檔那批以
-$12.09 撞上停止線——只比對 `run_kind` 的話，之後每一次 ≤$12.09 的 `working-tree` 掃描都會被那筆擋掉，
-含只有一個檔的批次。（**NEVER** 寫成「0-S 掃描」——0-S.1／0-S.2 都不經過本檔，見本檔開頭。）所以 wrapper 另外比對 row 記下的範圍（`snapshot_paths` / `paths` /
+components / deep baseline 的實際掃描範圍逐次不同——只比對 `run_kind` 的話，一筆大範圍撞線的
+紀錄會擋掉之後每一次預算較低的同模式掃描，含只有一個檔的批次。（**NEVER** 寫成「0-S 掃描」——0-S.1／0-S.2 都不經過本檔，見本檔開頭。）所以 wrapper 另外比對 row 記下的範圍（`snapshot_paths` / `paths` /
 `diff_base`+`diff_head` / `scan_strategy`+`scan_mode`），範圍不同的紀錄不構成地板。
 
 **`working-tree` 的 `snapshot_paths` 是「同一份請求清單」，不是「同一個掃描範圍」**：那個清單只
 用來建私有快照，傳給 scanner 的參數只有 `--working-tree`，實際分母由 scanner 自己去 diff 那個快照
-推導（見 `gates.md` § 0-S.3）。同一份清單在不同日期的快照內容不同，分母可能收斂到完全不同的數字——
-clade ledger 兩筆同為 95 檔清單的 timeout 分別花 $11.55 / $9.07，而 40 檔那筆 $24.58 反而跑完。
+推導（見 `gates.md` § 0-S.3）。同一份清單在不同日期的快照內容不同，分母可能收斂到完全不同的數字，
 所以對這個模式，「已實測不足」是**啟發式**而非證明；行為仍 fail-closed（同清單擋、不同清單放），
 但 **NEVER** 把它讀成「這個範圍被證明過不夠」。`path` 模式沒有這個落差——它的 `paths` 就是傳給
 scanner 的那組。
@@ -116,7 +113,7 @@ wrapper 由**實際生效的**預算推導（180 s/$，下限 900s），因此**
 
 | failure_reason | 當次處置 |
 | --- | --- |
-| `quota-exhausted` | 停止該帳號的後續掃描；保留額度訊息與重設時間原文，不提高美元停止線重試。額度耗盡是**帳號層**狀態，換模式、換 repo、換停止線都不會繞過它（2026-09-07 實測：`You've hit your usage limit… try again at Sep 13th`，六天不可用）|
+| `quota-exhausted` | 停止該帳號的後續掃描；保留額度訊息與重設時間原文，不提高美元停止線重試。額度耗盡是**帳號層**狀態，換模式、換 repo、換停止線都不會繞過它，重設可能要數天 |
 | `auth-failure` | 修復既有認證；不自動切 API 計費或購買 credits |
 | `output-dir-not-empty` | 使用新的私有 output directory；不刪既有證據 |
 | `cost-limit-reached` | 記錄已完成單位、模型估算成本與剩餘範圍，再決定新一輪停止線 |
@@ -136,8 +133,7 @@ scanner stderr 在 `<output_dir>.stderr.log`，與 output directory 同層；sca
 `<M>` 不等於你請求的檔數就 **MUST 立刻中止**，不要等 `--max-cost` 把錢燒完才停——
 它停得住花費，停不住那趟已經注定跑不完的作業。
 
-`path --path <relative>` 是唯一把範圍交給呼叫端的模式（直接傳 `--path`，不建快照）。
-2026-09-07 實跑分母 `0/2`，等於請求檔數。
+`path --path <relative>` 是唯一把範圍交給呼叫端的模式（直接傳 `--path`，不建快照），分母等於請求檔數。
 
 `working-tree --paths-file <批次清單>` 的範圍由 scanner 自己推導：固定 HEAD 後在私有 Git
 快照加入選定內容，原 repo index、WIP 與未追蹤檔保持原樣，清單是一行一個 repo-relative 檔案；rename 列出兩端。

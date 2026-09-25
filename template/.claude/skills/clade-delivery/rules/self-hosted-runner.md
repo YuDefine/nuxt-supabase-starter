@@ -7,22 +7,9 @@ paths: ['.github/workflows/**', 'registry/consumers.json']
 
 # Self-Hosted Runner 標籤設計與職責分工
 
-**核心命題**：`runs-on` 是**標籤集合的交集查詢**，不是指定機器。任何同時具備該組標籤的 runner 都有資格接手，**誰空著誰接**。因此「哪台機器會執行這個 job」不是由 workflow 決定的，是由**標籤設計**決定的——標籤設計錯了，job 落在哪台是擲骰子，而且**多數時候會抽中對的那台**，於是問題以「偶發 CI 紅燈」的形式間歇出現，每次都被當成環境抖動。
+**核心命題**：`runs-on` 是**標籤集合的交集查詢**，不是指定機器——任何具備該組標籤的 runner 都可能接手。標籤設計錯了，job 落在哪台是擲骰子，以「偶發 CI 紅燈」形式出現（例：`ci-build` 同時掛在有 rsync 的 deploy 機與 Supabase 專用機，deploy job 抽中後者就 `rsync: command not found`）。根因是 runner **宣告了自己不具備的能力**。
 
-> 本規約與 [[cloudflare-workers]] § 7 互補：該節講 self-hosted runner 的 **CI step 寫法**（cache / secrets），本檔講 **runner 本身的標籤設計與 job 路由**，以及 § 11 的 **deploy 私鑰在 runner 上的生命週期**。
-
-## 為什麼這條規約存在
-
-2026-07-28 <consumer-b> 實證：deploy job 寫 `runs-on: [self-hosted, linux, ci-build]`，而 `ci-build` 這個標籤同時掛在兩台 runner 上：
-
-```
-gh-runner-<consumer-b>  labels=self-hosted,Linux,X64,ci-build,gh-runner-lxc   ← 有 rsync、有部署金鑰
-supabase-runner labels=self-hosted,Linux,X64,supabase,ci-build        ← Supabase 主機，兩者皆無
-```
-
-同一天內：14:05 的 deploy 抽中對的 runner → 成功；16:50 的 deploy 抽中 Supabase runner → `rsync: command not found`，exit 127，production 沒更新。**同一份 workflow、同一個 commit 形狀、相反的結果。**
-
-根因不在「那台沒裝 rsync」——一台 Supabase 專用機本來就不需要 rsync。根因是**它對外宣告了自己不具備的能力**。
+> CI step 寫法（cache / secrets）見 [[cloudflare-workers]] § 7。
 
 ## MUST
 
@@ -41,7 +28,7 @@ supabase-runner labels=self-hosted,Linux,X64,supabase,ci-build        ← Supaba
 | --- | --- |
 | 需要特定 CLI | `rsync` / `docker` / `psql` / `wrangler` |
 | 需要金鑰或憑證檔 | `$RUNNER_TEMP/<deploy-key>`（由 secret 於 job 內寫入，見 § 11）/ kubeconfig |
-| 需要特定 CPU 架構 | 原生模組（`better-sqlite3` / `sharp`）的 build 產物要在 X64 目標主機起得來；`docker exec` 進只在 X64 主機的容器 → 釘 `X64`。同一個 `gh-runner-lxc` / `ci-build` / `supabase` 標籤同時掛在 ARM64 容器池上（<consumer-i> 2026-09 實證，`deploy-production.yml` 兩個 job 各釘一次） |
+| 需要特定 CPU 架構 | 原生模組（`better-sqlite3` / `sharp`）的 build 產物要在 X64 目標主機起得來；`docker exec` 進只在 X64 主機的容器 → 釘 `X64`。同一個 `gh-runner-lxc` / `ci-build` / `supabase` 標籤同時掛在 ARM64 容器池上 |
 | 需要特定網段可達 | 內網 LAN IP、Tailscale、VPN-only 主機 |
 | 需要本機服務 | `systemctl is-active <svc>` / `curl 127.0.0.1:<port>` / 本機 Docker socket |
 
@@ -83,32 +70,32 @@ if ! ls -1t | tail -n +6 | xargs -r rm -rf; then
 fi
 ```
 
-2026-07-28 <consumer-b> 實證：舊 release 目錄屬於早期部署機制的 service user，`deploy` user 刪不掉 → 清理 exit 123 → **檔案已 rsync 就位、symlink 已切換，但重啟 step 被 skip**，production 跑著舊 process 而 CI 顯示紅燈。這種「部署了一半」比乾脆失敗更難察覺。
+否則清理失敗（例：舊目錄屬另一個 user）會讓檔案與 symlink 已就位、重啟 step 卻被 skip——「部署了一半」。
 
 - **MUST** 部署步驟的順序是「先讓新版本生效，再做清理」，或讓清理獨立成不影響結果的 step
 - **MUST** 部署產物目錄的 ownership 一致（都屬部署 user）；換部署機制時 **MUST** 一併處理既有目錄的 ownership
 
 ### 6. Action 版本釘選要考慮 runner 的 persistence
 
-Persistent runner（LXC / VM，跨 job 保留檔案系統）與 GitHub-hosted runner（每次全新容器）對「會自我更新的 action」反應不同：GitHub-hosted 上自我更新的副作用隨容器一起消失，persistent runner 上會留下來污染下一個 job。
+Persistent runner（LXC / VM，跨 job 保留檔案系統）上，會自我更新的 action 的副作用會留下來污染下一個 job。
 
-- **MUST** `pnpm/action-setup` 在 self-hosted runner 釘 **v5**。v6 會自我更新 pnpm，在 persistent runner 上把既有安裝改壞。實證：<consumer-j> `5213e8f` 與 co-purchase 同日各自從 v6 回退 v5
+- **MUST** `pnpm/action-setup` 在 self-hosted runner 釘 **v5**。v6 會自我更新 pnpm，在 persistent runner 上把既有安裝改壞
 - **MUST** 升任何「會在 runner 上安裝/更新工具」的 action 大版之前，先問「這個 action 有沒有自我更新行為？persistent runner 上它留下什麼？」——GitHub-hosted 綠燈**不是** self-hosted 也會綠的證據
 - 範本與完整 CI workflow 見 `vendor/snippets/cloudflare-workers/self-hosted-runner-ci.workflow.yml.template`
 
 ### 7. 同一台機器上的 runner 共享 home，NEVER 在 job 執行中動共用目錄
 
-多個 ephemeral runner 跑在同一台機器、同一個 user 底下時，`~/setup-pnpm/`、`~/.pnpm-store/`、`~/.cache/` 都是**共享可變狀態**。對它們做 `rm -rf` / 搬移 / 重寫，會直接抽掉其他 runner 正在使用的檔案。
+同一台機器、同一個 user 底下的多個 runner 共享 `~/setup-pnpm/`、`~/.pnpm-store/`、`~/.cache/`。
 
 - **NEVER** 在 job 執行期間清理共用目錄。清理只能放在 wrapper 裡、`./run.sh` **之前**（該 runner 的 job 尚未開始），而且要意識到那仍然影響**其他** runner 正在跑的 job
 - **MUST** 需要「乾淨環境」時改用 per-runner 的獨立路徑（`~/<repo>-runner/...`），而不是清共用的
 - **NEVER** 把「清一下 stale state 應該沒差」當成安全操作
 
-實證（2026-07-28）：為了清 pnpm 的 stale global store，在四個 runner 的 wrapper 各加了一行 `rm -rf ~/setup-pnpm/node_modules`。四個 runner 共用同一個 `~/setup-pnpm/`，propagate 觸發全 fleet 同時跑 workflow 時，A 的 wrapper 清掉目錄、B 正在用的 pnpm 就消失 —— 症狀是 `sh: 1: pnpm: not found`，發生在**巢狀 npm script** 裡（外層還跑得動，內層 `sh -c` 才炸），且時好時壞。原本已經修好的 repo 因此整批回紅。
+症狀：巢狀 npm script 裡時好時壞的 `sh: 1: pnpm: not found`。
 
 ### 8. Runner auto-update 會破壞 node externals 的 symlink
 
-Actions runner 自我升級時解壓 `externals.*/node*/`，會把 `bin/npm`、`bin/npx`、`bin/corepack` 從 symlink 變成一般檔案（tar 解壓不保留 symlink）。內容一模一樣，但相對路徑解析基準變了：`npm-cli.js` 裡的 `require('../lib/cli.js')` 原本從 `lib/node_modules/npm/bin/` 解析，變成從 `bin/` 解析 —— 於是
+Actions runner 自我升級時會把 `externals.*/node*/bin/{npm,npx,corepack}` 從 symlink 變成一般檔案，相對 require 解析失敗：
 
 ```
 Error: Cannot find module '../lib/cli.js'
@@ -116,17 +103,13 @@ Require stack:
 - /home/runner/<repo>-runner/externals.<ver>/node24/bin/npm
 ```
 
-runner 內建的 npm 就此壞掉，任何**經由它**安裝工具的 action 一起壞。
-
 - **MUST** persistent runner 的 baseline setup 內含 symlink 修復機制（修復腳本 + 定時器 + wrapper 在 `./run.sh` 前呼叫），因為 auto-update 隨時會再發生一次，一次性手修撐不過下次升級
 - **MUST** 新增 runner 時把該機制一併裝上，不要只裝在撞到問題的那台
 - 判準：runner 內建 npm 是否可用，用 `<runner>/externals.*/node*/bin/npm --version` 直接驗，**不要**靠「workflow 這次過了」推斷 —— 只有走 npm 路徑的 workflow 才會暴露它
 
 ### 9. GitHub-hosted 的「跳過下載」建議 NEVER 直接套到 self-hosted
 
-GitHub-hosted runner 每個 job 都是全新容器，所以官方與工具鏈的效能提示預設是「用 runner 預裝的瀏覽器」「用 `actions/cache` 存下載物」。Persistent runner（LXC / VM，per § 6）的前提相反：`$HOME` 跨 job 存活，而 `playwright install`、pnpm store、`hostedtoolcache` 都是**版本目錄命中即 no-op**——第二次之後本來就不下載。把 GitHub-hosted 的建議照搬過來，等於為一個不存在的問題付出成本。
-
-**MUST 先量再改。** 「安裝步驟看起來很慢」的印象不算證據，實際 step 耗時要從 API 取：
+Persistent runner 上 `playwright install`、pnpm store、`hostedtoolcache` 都是**版本目錄命中即 no-op**，GitHub-hosted 的快取建議在這裡解決的是不存在的問題。**MUST 先量再改**，step 耗時從 API 取：
 
 ```bash
 gh api repos/<owner>/<repo>/actions/runs/<run-id>/jobs \
@@ -142,15 +125,13 @@ gh api repos/<owner>/<repo>/actions/runs/<run-id>/jobs \
 | runner 每 job 重建檔案系統（K8s pod / 每次重灌的 VM） | 同上；或整個 job 改跑 `mcr.microsoft.com/playwright:v<x.y.z>-noble` image，該 tag **MUST** 逐版對齊 `package.json` 的 `@playwright/test`，否則 Playwright 判定版本不符會再下載一次 |
 | 安裝步驟實測 > 30s 但 runner 是 persistent | 先查**快取為何沒命中**（換過 service user、清過 `~/.cache`、Playwright 剛升版），修那個原因 |
 
-- **MUST** 只裝實際會跑的 browser（`npx playwright install chromium`），**NEVER** 裸 `npx playwright install`——三套的首次下載量與耗時都是單套的約三倍，而 CI 通常只跑一個 project
-- **NEVER** 為了跳過下載改用 `channel: 'chrome'` / `'msedge'`：自架機沒有預裝瀏覽器，這只是把「命中本機快取」換成「每次現裝系統套件」，且測試用的瀏覽器版本不再跟 Playwright 綁定
-- **NEVER** 用 `actions/cache` 存瀏覽器 binary：self-hosted 的 cache 走網路往返，比本機命中慢；persistent runner 上它要保護的東西本來就沒丟
-- **NEVER** 為了「乾淨」在 job 裡清 `~/.cache/ms-playwright`——那是共享可變狀態，per § 7
-
-Fleet 實測（2026-07-31 快照，重量方式見上方指令）：<consumer-a> 2s、<consumer-b> 8s（含 `--with-deps`）、<consumer-d> 1s，三者皆 persistent runner 且**未**做任何快取設定；同期 GitHub-hosted 的 <consumer-c> 為 20s。
+- **MUST** 只裝實際會跑的 browser（`npx playwright install chromium`），**NEVER** 裸 `npx playwright install`
+- **NEVER** 為了跳過下載改用 `channel: 'chrome'` / `'msedge'`（自架機沒有預裝瀏覽器，版本也不再跟 Playwright 綁定）
+- **NEVER** 用 `actions/cache` 存瀏覽器 binary（self-hosted 的 cache 走網路，比本機命中慢）
+- **NEVER** 在 job 裡清 `~/.cache/ms-playwright`（共享可變狀態，per § 7）
 
 本證據決定：persistent self-hosted runner 上要不要替下載型工具加一層快取機制——不要加。
-本證據不決定：GitHub-hosted runner 上要不要優化——**NEVER** 拿這組數字論證 `ubuntu-latest` 的 job 也不必量、不必改。
+本證據不決定：GitHub-hosted runner 上要不要優化——**NEVER** 拿本節論證 `ubuntu-latest` 的 job 也不必量、不必改。
 
 ### 10. 信任分層：untrusted-execution job NEVER 落在 production-access runner
 
@@ -168,7 +149,7 @@ Fleet 實測（2026-07-31 快照，重量方式見上方指令）：<consumer-a>
 
 - **MUST** untrusted-execution job 的 `runs-on` 只落在 GitHub-hosted（`ubuntu-latest`），或**不具 production 存取**的 self-hosted runner（能力標籤，例如 `supabase-ci`）
 - **MUST** production-access runner 只接同時滿足兩條的 job：觸發受限（tag，或 `workflow_dispatch` 加 ref guard；**NEVER** 是 `pull_request` / `pull_request_target` / push branch）、只執行 repo 內的腳本而不安裝依賴（migrate、deploy）
-- **MUST** 在 untrusted-execution job 的 `runs-on` 上方留註解，指明它**為什麼不能**用 prod 主機的標籤——77ada28 正是把沒有這行註解的 `ubuntu-latest` 改成了 self-hosted
+- **MUST** 在 untrusted-execution job 的 `runs-on` 上方留註解，指明它**為什麼不能**用 prod 主機的標籤——沒有這行註解的 `ubuntu-latest` 會被後人改成 self-hosted
 - **NEVER** 讓位置標籤兼作能力標籤（per § 3）：`supabase` 在 <client-b> fleet 的意思是「production supabase-db 所在主機」，不是「有 docker、可起拋棄式 stack」。沒有不具 production 存取的能力標籤時，job 先用 `ubuntu-latest`，**NEVER** 借 prod 主機的標籤
 - **NEVER** 拿 `paths:` 過濾、private repo、org 成員限定當作緩解——下表逐條說明
 
@@ -189,18 +170,11 @@ gh api "repos/<owner>/<repo>/pulls?state=all&per_page=100" --paginate --jq '.[].
 本證據決定：untrusted-execution job 從 prod 主機搬回 GitHub-hosted 時，要不要擔心 minutes——先量，量到近零就不用。
 本證據不決定：production-access runner 上要不要跑 untrusted-execution job——**NEVER** 拿「量到的頻率很高、minutes 不夠」論證搬回 prod 主機；不夠時改觸發方式（例如 `workflow_run`）或另建不具 production 存取的 runner。
 
-實證（2026-09-16 <consumer-i> 77ada28 review）：bdd 與 supabase-check 從 `ubuntu-latest` 搬到 `[self-hosted, supabase]`，而 `supabase` 標籤唯一的 X64 runner 就是承載 <consumer-b> / <consumer-e> / <consumer-i> 共用 production Postgres 的主機，同一台的 `migrate-prod.sh` 以 `docker exec -i supabase-db psql` 寫 production。同一時間 <consumer-b> 與 <consumer-e> 的 `supabase-check` 已在 main 上以同一組標籤跑 PR。
+**<client-b> 現況**：org 內沒有 GitHub-hosted 選項，untrusted-execution job 一律落 `runs-on: [self-hosted, linux, gh-runner-lxc, X64, supabase-ci]`。`supabase-ci` 只掛在單一 runner，所以它**同時是跨 repo mutex**；`supabase`（production supabase-db 所在）仍是 prod 主機標籤，上面那條 NEVER 不放寬。
 
-**<client-b> 現況（2026-09-17）**：<client-b> 的 Actions 預算 $0 且 `prevent_further_usage`，org 內**沒有** GitHub-hosted 選項，
-上面「沒有能力標籤時先用 `ubuntu-latest`」那條退路在 <client-b> 不存在。<client-b> 的 untrusted-execution job 一律落
-`runs-on: [self-hosted, linux, gh-runner-lxc, X64, supabase-ci]`——`supabase-ci` 只掛在 CT220 的單一 runner
-（`gh-runner-<client-b>-2`），所以這個標籤**同時就是跨 repo mutex**：所有起 supabase stack 的 job 自動序列化，
-不必動 port 或 `project_id`。`X64` 排除 ARM64。
-
-- **NEVER** 把 `supabase-ci` 掛到第二個 runner（含 CT220 的另一個 slot），除非同時導入 per-job port 隔離（per-run `project_id` ＋ 各 job 不重疊的 port 區段）——同一個 dockerd 上兩個 stack 會在 `supabase/config.toml` 的預設 port 上互撞；標籤一旦對應不只一個 runner，mutex 就靜默失效
-- **MUST** 每個落 `supabase-ci` 的 supabase 類 job 在 setup-cli 之後第一步跑 `supabase stop --all --no-backup || true`，cleanup `if: always()` 跑 `supabase stop --no-backup || true`：timeout 砍 process tree 時 cleanup 可能沒跑完，前一個 job 的殘留 stack 只有前置 stop 清得掉
-- **MUST** ephemeral runner 的標籤寫在註冊腳本（CT220 為 `ephemeral-wrapper.sh` 的 `LABELS`）。**NEVER** 用 `gh api .../runners/<id>/labels` 加標籤當作落地——每個 job 結束後 wrapper 重新 `config.sh --labels` 註冊，API 加的標籤下一輪就消失，job 會無限排隊
-- `supabase` 標籤（VM100，production supabase-db 所在）在 <client-b> 仍是本節的 prod 主機標籤，上面那條 NEVER 不因「沒有 GitHub-hosted」而放寬
+- **NEVER** 把 `supabase-ci` 掛到第二個 runner，除非同時導入 per-job port 隔離——同一個 dockerd 上兩個 stack 會撞預設 port，mutex 靜默失效
+- **MUST** 每個落 `supabase-ci` 的 supabase 類 job 在 setup-cli 之後第一步跑 `supabase stop --all --no-backup || true`，cleanup `if: always()` 跑 `supabase stop --no-backup || true`（timeout 時 cleanup 可能沒跑完）
+- **MUST** ephemeral runner 的標籤寫在註冊腳本（`ephemeral-wrapper.sh` 的 `LABELS`）。**NEVER** 用 `gh api .../runners/<id>/labels` 加標籤當作落地——下一輪重新註冊就消失，job 會無限排隊
 
 機械偵測（warn-only，**每一個** consumer 都掃，不是只掃出事的那台）：
 
@@ -213,29 +187,14 @@ prod 主機標籤預設 `supabase`；別的 fleet 用不同標籤時，在該 re
 
 ### 11. Deploy 私鑰只活在 job 內：寫進 `$RUNNER_TEMP`，`always()` 收尾刪除
 
-**適用 predicate**：job 的 `runs-on` 會落到「runner user 的 `$HOME` 跨 job 存活」的機器——persistent LXC / VM，
-或 GitHub 語意上 ephemeral 但同一個 `$HOME` 反覆 `./run.sh` 的 runner（YuDefine CT 102 就是這種）。
-**NEVER 用「self-hosted」或「ephemeral」標籤判**——判準是 `$HOME` 存不存活。每 job 全新容器的 runner
-與 GitHub-hosted 都不在本條射程。
-
-**威脅**：`~/.ssh/<key>` 在 persistent runner 上跨 job 殘留；之後**任何** job（同 repo 的 PR CI、第三方套件的
-`postinstall`、供應鏈路徑）跑在同一個 runner user 底下都讀得到它，而 § 7 已說明同一台機器上的多個 runner 槽
-**共用同一個 `$HOME`**。runner group 已 `allows_public_repositories=false`，所以射程是 private repo 內的其他
-job 與供應鏈，不是 fork PR。
-
-保管處是 GitHub Secrets（[[secret-custody]] 管「值到手時怎麼存」）；本節管**從 Secrets 取出之後在 runner 上的生命週期**。
+**適用 predicate**：job 會落到「runner user 的 `$HOME` 跨 job 存活」的機器（persistent LXC / VM，或同一個 `$HOME` 反覆 `./run.sh` 的「ephemeral」runner）。**NEVER 用「self-hosted」或「ephemeral」標籤判**。`~/.ssh/<key>` 在這種機器上跨 job 殘留，之後任何 job 與其供應鏈都讀得到。保管處是 GitHub Secrets（[[secret-custody]]）；本節管取出後在 runner 上的生命週期。
 
 - **MUST** 私鑰寫進 `$RUNNER_TEMP`，用 `install -m 600 /dev/null <path>` 先建 600 的空檔再 `printf` 進去
   （避免 umask 造成的可讀窗口）
-- **MUST** 最後一個 step `if: always()` 刪掉它。GitHub 文件（`docs.github.com/en/actions/reference/workflows-and-actions/variables`，
-  2026-09-17 查）對 `RUNNER_TEMP` 的描述逐字是「emptied at the beginning and end of each job. Note that files will not be
-  removed if the runner's user account does not have permission to delete them」——job 被 kill 時「結束時清空」不會跑，
-  下一個 job 開始前才有第二次。`always()` 刪除是規約，`RUNNER_TEMP` 自動清空是兜底，**兩個都要**
+- **MUST** 最後一個 step `if: always()` 刪掉它。`RUNNER_TEMP` 在 job 起訖自動清空只是兜底（job 被 kill 時結束清空不會跑），**兩個都要**
 - **MUST** `ssh` / `scp` / `rsync -e ssh` 一律帶 `-o BatchMode=yes -o StrictHostKeyChecking=yes`，host key 用
   `ssh-keyscan -H <host> >> ~/.ssh/known_hosts` 事先釘。`known_hosts` 是唯一允許寫進 `~/.ssh` 的東西——它不是 secret
-- **NEVER** `echo "$KEY" > ~/.ssh/<name>`、`cat > ~/.ssh/config`、或任何把 secret 寫進 `$HOME` 的形式。
-  「我有 `always()` 刪」不豁免：刪除步驟只保護 job 正常結束的路徑，`$HOME` 內的檔在 runner 被 kill、job timeout、
-  或 `rm` 那一步本身失敗時照樣留下；`$RUNNER_TEMP` 在下一個 job 開始前還有一次清空，`$HOME` 沒有
+- **NEVER** `echo "$KEY" > ~/.ssh/<name>`、`cat > ~/.ssh/config`、或任何把 secret 寫進 `$HOME` 的形式。「我有 `always()` 刪」不豁免：kill / timeout 時 `$HOME` 內的檔會留下，`$RUNNER_TEMP` 還有下一次清空
 - **NEVER** `StrictHostKeyChecking no` / `UserKnownHostsFile /dev/null`——那把 deploy 私鑰交給任何能回應那個 IP 的機器
 - **NEVER** 用 `ssh-agent` 當「不落盤」的替代並就此不清：agent socket 同樣是同 uid 可達，且 agent 行程會活過 job
 
@@ -261,9 +220,7 @@ REQUIRED 的兩個 step（deploy 本體夾中間）：
         run: rm -f "$RUNNER_TEMP/deploy_key"
 ```
 
-先例：`~/offline/<consumer-i>/.github/workflows/deploy-production.yml`（建與刪兩段齊全）、
-`~/offline/<consumer-e>/.github/workflows/deploy.yml`（`SSH_OPTIONS` 陣列寫法值得抄；2026-09-17 audit 顯示**缺** `always()` 刪除步驟）。
-可貼範本與 `~/.ssh` 形狀的遷移對照在 `vendor/snippets/deploy-key-custody/README.md`。
+範本與遷移對照在 `vendor/snippets/deploy-key-custody/README.md`。
 
 機械偵測：`node scripts/audit-ci-workflow-safety.ts --all-consumers`（warn-only；對「寫入 `~/.ssh/` 且 basename 非
 `known_hosts`」、「`$RUNNER_TEMP` 私鑰無 `always()` 刪除」、「`StrictHostKeyChecking no`」三種形狀出訊號）。
@@ -276,9 +233,7 @@ variant 判定進 `registry/conventions.json` 的 `deploy-key-custody`，由 `co
 
 ### 12. Runner 主機憑證衛生：runner user 碰得到的一切，都等於交給每一個 job
 
-**適用 predicate**：任何 self-hosted runner 主機——和 § 11 一樣，判準是 runner user 的 `$HOME` 跨 job 存活，不看標籤。
-§ 10 管「哪種 job 可以落在這台」，§ 11 管 CI 自己帶進來的 deploy 私鑰；本節管**主機上本來就在的東西**：人登入時留下的、
-維運時放上去的。只要 job 以 runner user 身分執行，這些東西的讀取權就等同交給每一個 job 的 transitive deps。
+**適用 predicate**：同 § 11（`$HOME` 跨 job 存活）。本節管**主機上本來就在的東西**（人登入時留下的、維運時放上去的）——job 以 runner user 身分執行，讀取權就等同交給每個 job 的 transitive deps。
 
 - **NEVER** 讓 runner user 的 `$HOME` 留著個人長效憑證：`~/.config/gh/hosts.yml`（`gh auth login`）、`~/.git-credentials`、
   `~/.docker/config.json` 內的 registry token、`~/.npmrc` 的 `_authToken`。在 runner 主機上用過 `gh` / `git push` 之後
@@ -298,14 +253,7 @@ variant 判定進 `registry/conventions.json` 的 `deploy-key-custody`，由 `co
 | 「沒有入侵證據」 | 2026-09 <client-b> 事件實查：sudo 紀錄、持久化、outbound 全乾淨，但**走 docker socket 的動作沒有任何日誌**。沒證據是查不到的上限，不是安全的下限 |
 | 「job 已經取消了，程式碼沒跑」 | `cancelled` 只代表最終狀態。取消前已完成的 step（`vp install` 的 install script）照樣跑過；重跑的 attempt 2 也可能在「已取消」的 run 底下重新起跑。以下方 SOP 查 step 級證據 |
 
-實證（2026-09-16 <client-b> `supabase-runner`，承載 production supabase-db 的 VM）：runner user 在 `docker` group 且 `NOPASSWD: ALL`，
-可讀 `/opt/supabase/.env`；home 內留有 Charles 的 `gh` OAuth token（`repo`+`workflow`，8 個 org，含 YuDefine/clade admin，現役）、
-一把 CI 寫入未清的 deploy 私鑰、runner `.credentials`；cloudflared tunnel token 在 unit 的 `ExecStart`。<consumer-b> e2e 在該主機跑了
-318 次（2026-03-12 → 09-14）。事故證據與後續在 `specs/plans/W-2026-09-16-runner-trust-boundary-midterm/plan.md` § Evidence，
-盤點全文 `~/offline/<consumer-i>/tasks/2026-09-17-runner-trust-prod-host-exposure-report.md`。
-
-機械偵測：repo 端的 workflow 形狀由 `audit-runner-trust-boundary.ts`（§ 10）與 `audit-ci-workflow-safety.ts`（§ 11）涵蓋；
-**主機端沒有自動 gate**，只能用下方 SOP 逐台唯讀盤點，這一段是純參考。
+主機端沒有自動 gate，用下方 § 暴露盤點 SOP 逐台唯讀盤點。
 
 本證據決定：runner 主機上哪些東西必須移走、暴露過的要輪替。
 本證據不決定：暴露過的 production secret（JWT secret、DB 密碼）要不要在維護窗口前就輪替——那是 Charles 依證據與停機成本拍板的 incident 決策。
@@ -361,8 +309,6 @@ id; sudo -n true && echo NOPASSWD
 ls -la ~/.config/gh/hosts.yml ~/.git-credentials ~/.npmrc ~/.docker/config.json ~/.ssh 2>&1
 systemctl cat '*' 2>/dev/null | grep -nE -- '--token|TOKEN=' | sed -E 's/(token[= ])[^ ]+/\1<redacted>/I'
 ```
-
-2026-09-16 實例：一個 brief 記為「已取消」的 run，attempt 2 由人重跑後正在該主機上執行 `vp install`；只有步驟 1 的 `filter=all` 加上步驟 3 的 `pgrep` 抓得到。
 
 ### 移除標籤
 

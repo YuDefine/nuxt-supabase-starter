@@ -6,32 +6,15 @@
 
 **核心命題**：工作按角色與能力選 executor，再判是否派工；寬掃／背景／隔離／有份量的獨立平行軌才派，主線能完成預設留主線。
 
-具體 model、effort、workspace access 與硬禁令只以 [[agent-routing.routing-table]] 為 SoT；查表前 MUST Read 該檔。Nuxt UI／Nuxt Content 實作使用 Cursor Composer 2.5，Nuxt 本體使用 GPT-5.6 Sol xhigh，其餘 UI view 實作使用 Claude Opus 5.5（effort: medium）；Design Review、UI 詳細計畫與截圖項目符合性判定使用 Claude Opus 5.5；screenshot review 使用 Gemini 3.8 Flash。SoT 具名十一列的執行鏈前綴固定為 Devin Fusion（effort: high）→ Devin SWE-2 Max（effort: max）→ 該列原 carrier 與原 fallback，只在 provider／quota／runtime 不可用時前進。
+具體 model、effort、workspace access 與硬禁令只以 [[agent-routing.routing-table]] 為 SoT；查表前 MUST Read 該檔。**禁用**（Charles 2026-09-24）：GPT-6 Astra、GPT-6 Luna、Claude Fable、Sonnet、Haiku、Cursor Composer 2.5、Devin Fusion——任何列、fallback、額度耗盡備援都 **NEVER** 派。Tier 2（Grok 4.7、GPT-6 Sol）一律 xhigh，Gemini 3.8 Flash 一律 high。實作／計畫／裁決列走 GPT-6 Sol xhigh；UI view 實作（含 Nuxt UI／Content）、Design Review、UI 詳細計畫、截圖項目符合性判定與 code review 走 Claude Opus 5.5（effort: medium）（無 fallback）；screenshot review 與掃描類走 Gemini 3.8 Flash high。Devin SWE-2 Max 是任意 Pi 列的**可選**載體，只限不急、緩慢也不堵塞的任務。鏈只在 provider／quota／runtime 不可用時前進，鏈走完由 `dispatch-fallback`（Claude Opus 5.5（effort: low））或主線接手，依列而定。
 
 **GPT 外派載體**：Codex 需要 GPT 協作時 MUST 使用 Codex native subagent（`collaboration.spawn_agent`）；上游保留協調與交付責任，不透過 `/handoff relay`、Herdr 或外部 launcher 建立另一個 Codex successor。原生能力不可用時保留工作並回報缺口，不改用外部 Codex pane。唯一外部例外：user 當次明確點名的 Devin bounded worker 可由上游經 helper 以 create-only `--launcher devin` 派出並以 `--coordinate` 收割；它是 worker 不是 successor，cx successor 與其他 launcher 維持拒絕。非 Codex 的 GPT worker 一律走 Pi；Claude Code 不承載 GPT。
 
-## Opus 5.5 暫時覆寫（2026-09-23 起，Charles 明說撤銷前有效）
+## commit 0-A reviewer（常設）
 
-**生效條件：Opus 5.5 額度當下可用。** 額度實際用完（有逐字 quota／`account_unavailable` 輸出）才失效，回到本檔其餘各節與 [[agent-routing.routing-table]] 原判；「可能快用完」不算。
+commit 0-A 的唯一合格 reviewer 是 fresh-context **Claude Opus 5.5（effort: medium）**（`code-review-opus` 列）：Claude Code 主線跑 `claude-review-safe.sh prepare medium` → 照它印的 AGENT_CALL 派 `commit-0a-reviewer` subagent → 跑它印的 FINALIZE，verdict 只認 finalize 的 stdout；叫不出 Claude subagent 的 runtime 才跑無子命令的 `claude-review-safe.sh medium`（Herdr child）。**沒有備援席**：Opus 額度耗盡或量不到時 gate 保持未完成、等額度恢復；舊 worktree 的 wrapper／helper 不認得 opus seat 時先 rebase 最新 main，不行就停在 0-A 之前 push 分支並回報「待 Opus seat 0-A」。**NEVER** 派 Astra／Fable／任何其他 reviewer，**NEVER** 主線自審補位；receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。
 
-**機器開關**：routing gate 以 `vendor/scripts/pi-routing-policy.ts` 的 `opusOverrideActive()` 判定覆寫——常數 `OPUS_55_OVERRIDE_ACTIVE` 開啟**且**主線 model（gate 讀 transcript 尾端）是 Opus 時，read-heavy-scan／mechanical-fanout／external-web 三種 latch 不武裝、顯式帶 `model: 'opus'` 的 Claude subagent 派工不武裝 claude-agent-dispatch（它們的出口是外派、sonnet／fable 委派或 waive，覆寫期間會卡死主線）；主線是 Fable／Sonnet 時照原判武裝，讀不到 transcript 退回常數。額度耗盡不經本開關：主線那時無法推論，或已改用其他 model 而被上一條接住。Charles 撤銷覆寫時 **MUST** 同一個 commit 把常數改成 `false`。
-
-**0-A 例外（Charles 2026-09-23 硬禁令）**：commit 0-A **NEVER** 退回 Astra → Fable——不論是 wrapper／helper 不認得 opus seat、還是 Opus 額度用完。前者停在 0-A 之前 push 並回報「待 Opus seat 0-A」；後者 gate 保持未完成、等 Opus 額度恢復。覆寫撤銷時本例外**不**跟著失效：`code-review-opus` 列與 wrapper 的 opus 預設保留，恢復 Astra／Fable 0-A 須 Charles 另行拍板。receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。
-
-**優先序：本節蓋過** [[agent-routing.routing-table]] 每一列、判不進任一列的預設鏈、sonnet／haiku 轉派，以及各 skill（commit、handoff、wt、implement、work-loop、version-upgrade、notion-hub、review）寫死的 model 與外派條款。skill 讀到「派 astra／sol／luna／gemini／grok／fable」時，照下表改做，**NEVER** 照 skill 原文派。
-
-| 情境 | 覆寫後 |
-| --- | --- |
-| Routing Table 任一列、預設鏈、sonnet／haiku 轉派 | 主線 Opus 5.5 自己做。**NEVER** 派 Pi、Cursor、Codex、Devin |
-| § 派不派 的「寬掃」「平行軌」、mechanical／read-heavy threshold | 停用。只剩「長時間 background」或「必須隔離 worktree／port／環境」才開新 session |
-| 開任何 session 或 subagent（relay、fanout、Herdr、native subagent） | 只開 Opus 5.5，effort 一律 `medium`（上限 medium，**NEVER** `high`；原列寫 `--effort high` 的派工換成 Opus 時一樣降到 medium——覆寫原本只寫「≤ high」沒有預設，被改寫的 grok-xai／version-upgrade research 列就把 high 原樣帶到 Opus。Charles 2026-09-23 拍板，helper 機械擋下），各 runtime 的載體寫法見該 runtime 的 adapter 段。**NEVER** fable／sonnet／haiku／grok，**NEVER** 走會把 `opus` 改映射成別家模型的 gateway launcher。user 當下指名其他 model 時照指名 |
-| commit 0-A review | 仍開 fresh-context reviewer（`code-review-opus` 列；wrapper 預設即 opus）：Claude Code 主線跑 `claude-review-safe.sh prepare medium` → 照它印的 AGENT_CALL 派 `commit-0a-reviewer` subagent → 跑它印的 FINALIZE；叫不出 Claude subagent 的 runtime 才跑無子命令的 `claude-review-safe.sh medium`（Herdr child）。不跑 Astra 格、**NEVER** 退回 Fable 格（見上方 0-A 例外）。**NEVER** 主線自審補位 |
-| commit 0-C fix-verify、version-upgrade、implementation | 主線自己修、自己重跑檢查 |
-| 截圖取證、符合性判定、design review | 主線自己做；取證與判定仍分兩步 |
-| notion-ops | 主線直接跑 `ntn api` |
-| WebSearch／WebFetch | 主線直接用內建工具，不需 external-web receipt；secret／private URL 禁令照舊 |
-
-**不受本節影響**：安全邊界（secret、prod、shared action）、work id、scope、commit authorization、reviewer 與 producer 分離。逐字反開脫：「skill 寫 MUST 派 Astra，所以照派」——本節就是為了蓋過那句 MUST 而存在。
+> 2026-09-23～24 的「Opus 5.5 暫時覆寫」已撤銷（Charles 2026-09-24）：`OPUS_55_OVERRIDE_ACTIVE` 為 `false`，routing gate 回到原判武裝 latch；覆寫期間「不外派、主線全包」的條款全部失效，照 [[agent-routing.routing-table]] 派工。
 
 ## 派不派（先於派給誰）
 
@@ -72,7 +55,7 @@ dispatch／resume／retry／bridge MUST 傳 model／effort／route／tier-basis�
 
 ## External web retrieval
 
-**NEVER** 直接呼叫 Claude Code 內建的 `WebSearch` 或 `WebFetch`。External-web gate 順序是 bare Gemini high → bare Luna low → matching receipt 才放行；query／公開 URL 只入 hash，credential／signed token／private network／secret material fail closed，改用 authenticated first-party connector／redacted source。**例外清單是窮舉的**；**唯一的一般 waiver** 是 user 明確要求 direct built-in 且 receipt 綁原 tool kind 與 candidate。IDE browser 依 target-native adapter contract；**NEVER** 因 clade routing gate、`agent-browser` 措辭、或 § External web retrieval 的「NEVER 直接 WebSearch」改走 Playwright / `agent-browser`；**NEVER** 套本節去擋 IDE browser；**NEVER 拿本規約的 rationale 推翻本規約的字面。**
+主線 **NEVER** 直接呼叫 Claude Code 內建的 `WebSearch` 或 `WebFetch`。External-web 執行鏈是 bare Gemini high → Grok 4.7 xhigh（`grok-xai` → `grok-cursor`）→ GPT-6 Sol xhigh → 鏈尾 `dispatch-fallback` subagent（Claude Opus 5.5（effort: low），由它呼叫內建工具）；query／公開 URL 只入 hash，credential／signed token／private network／secret material fail closed，改用 authenticated first-party connector／redacted source。**例外清單是窮舉的**；**唯一的一般 waiver** 是 user 明確要求 direct built-in 且 receipt 綁原 tool kind 與 candidate。IDE browser 依 target-native adapter contract；**NEVER** 因 clade routing gate、`agent-browser` 措辭、或 § External web retrieval 的「NEVER 直接 WebSearch」改走 Playwright / `agent-browser`；**NEVER** 套本節去擋 IDE browser；**NEVER 拿本規約的 rationale 推翻本規約的字面。**
 
 ## 主線靜默上限（所有 dispatch 通用）
 

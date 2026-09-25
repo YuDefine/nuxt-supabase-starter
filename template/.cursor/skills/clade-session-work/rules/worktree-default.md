@@ -30,13 +30,15 @@ node vendor/scripts/wt-helper.ts add <slug> --task-summary "<一句話：這棵�
 
 ## §5 Visibility before landing
 
-獨立切片的可見性是 **session branch 上的 draft PR**，不是合回 main。三件事分開：
+獨立切片的可見性是 **session branch 上的 PR**，不是合回 main。三件事分開：
 
-1. **可見性**：slice owner push 該 branch、開 draft、登記 visibility receipt、盯該 PR CI（draft 期間只有機械檢查）。integration 模式的切片同樣 push 並開 PR、盯機械檢查，但 base 是 `integration/<work-id>`、不登記 receipt——整件工作的 visibility receipt 綁在 `integration/<work-id>` 對 `main` 那一張 draft。
+1. **可見性**：slice owner 在相對 base 有非空 committed diff 後 MUST push **該** branch、開 draft PR、盯該 PR 的 CI（draft 期間只有機械檢查）；紅燈回同一 owner、同一張 PR。
+   - 一個切片就完工的工作：base 是 `main`，登記 visibility receipt。
+   - **Integration 模式**（預設，同一 work id ≥2 切片；[[github-flow]] § Integration branch）：`gh pr create --base integration/<work-id>`（做到一半先開 draft；該 PR 的 CI 只有機械檢查、不跑 test-lane），切片 PR 不登記 `batch draft` receipt（整件工作的 receipt 綁在 `integration/<work-id>` 對 `main` 那一張）。在來源 worktree 跑完本機門檻（canonical check ＋ CI 機械檢查裡的 typecheck；clade 是 `pnpm exec vp check` ＋ `node node_modules/typescript-native/bin/tsc -p tsconfig.clade.json --noEmit`，動到 vendor/scripts 再加 `node node_modules/typescript-native/bin/tsc -p tsconfig.vendor.json --noEmit`——TS 7，**NEVER** 寫 `npx tsc`（見 `scripts/lib/tsc-native.ts`）；兩條 tsc 以秒計、不必排 heavy gate slot）且 CI 全綠後，自己 `gh pr ready`，completion 回 coordinator，由 coordinator 以 `integration-merge.ts --pr <n>` 落地；`test:affected` 由 coordinator 在 integration 轉 ready 前跑一次。
 2. **Ready**：coordinator 驗授權、writer release 與驗收後 `batch ready`，再跑完整 `/commit`。
-3. **Landing**：只有具名 coordinator 在 unattended predicate 全成立時 squash；**worker NEVER merge**、**NEVER** 直推 `main`。
+3. **Landing**：只有具名 coordinator 在 unattended predicate 全成立時 squash，或依 [[github-flow]] § Coordinator 直接合併 的條件合併；**worker NEVER merge**、**NEVER** 直推 `main`；integration 模式的切片 **NEVER** 對 `main` 開 PR。
 
-slice owner 在相對 `main` 有非空 committed diff 後 MUST push **該** branch 並開 draft PR，再盯該 PR 的 CI；紅燈回同一 owner、同一張 PR。**Integration 模式**（預設；[[github-flow]] § Integration branch）：同一個 work id 有 2 個以上切片時，worker push **該** branch 並對 `integration/<work-id>` 開 PR（`gh pr create --base integration/<work-id>`，做到一半先開 draft），盯該 PR 的 CI（只有機械檢查、不跑 test-lane）；在來源 worktree 跑完本機門檻（canonical check ＋ repo 在 CI 機械檢查裡跑的 typecheck；clade 是 `pnpm exec vp check` ＋ `node node_modules/typescript-native/bin/tsc -p tsconfig.clade.json --noEmit`，動到 vendor/scripts 再加 `node node_modules/typescript-native/bin/tsc -p tsconfig.vendor.json --noEmit`。兩條 tsc 以秒計、不必排 heavy gate slot。`test:affected` 仍由 coordinator 在 integration 轉 ready 前跑一次）且該 PR 的 CI 全綠後，自己 `gh pr ready` 該切片 PR，completion 回 coordinator，由 coordinator 以 `integration-merge.ts --pr <n>` 落地。切片 PR 不登記 `batch draft` receipt；**NEVER** 對 `main` 開 PR、**NEVER** 自己 merge。只有一個切片就完工的工作才走上面那條 base 為 `main` 的 draft PR。**NEVER** 為了看得見而 merge-back 或直推 `main`。Draft 維持 draft 直到 review。平行預設走隔離雲端／worktree；要 shared live DB（desk LXC／3040）才 desk。操作見 [[github-flow]] 與 [[db-topology-invariant]]。Cloud clone 的絕對路徑不能當 desk 共用 worktree；coordinator 必須 fetch 具名 branch 並在本機受管來源對同一 `workId` 建映射。唯一 landing owner 在本 repository，worker 不持 merge credential。
+Draft 維持 draft 直到 review。**NEVER** 為了看得見而 merge-back 或直推 `main`。平行預設走隔離雲端／worktree；要 shared live DB（desk LXC／3040）才 desk（[[db-topology-invariant]]）。Cloud clone 的絕對路徑不能當 desk 共用 worktree；coordinator 必須 fetch 具名 branch 並在本機受管來源對同一 `workId` 建映射。唯一 landing owner 在本 repository，worker 不持 merge credential。
 
 merge-back 是驗收後的 landing ceremony，不是「先合回去比較方便」。主線尚未看到本次 revision 的必要 evidence／驗收通過前，命中「合回、收尾、完成、已解決」等落地話術 MUST 停下，切回 worktree 內的 dev-server／驗收路徑；驗收與正式 landing 分開。
 

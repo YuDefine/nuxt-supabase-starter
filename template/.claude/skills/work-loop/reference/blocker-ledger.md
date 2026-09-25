@@ -1,7 +1,6 @@
 # Blocker Ledger（卡點指紋，跨輪不重診斷）
 
 
-<!-- carrier-independent candidate: 本檔的義務不經任何 runtime 專屬工具契約表達，是 [[TD-445]] 抽共用核心時最先可搬的一批。**這是候選標記，不是 audience**——真正的 audience 是上面那行 `clade-targets`，NEVER 因為看到本行就把 targets 放寬。放寬 reference 而不放寬 SKILL.md 會投出沒有 skill 入口指向的孤兒檔。 -->
 
 > 主檔 pointer：**任一** blocked item 在走 [blocker-evaluation.md](blocker-evaluation.md) 之前
 > MUST 先過本檔的三步查表——Step 3.1a 的**每一個**受阻需求、Step 3.1b 的 blocked 分類都算。
@@ -10,7 +9,7 @@
 
 ## 這份 ledger 在防什麼
 
-runner 每輪是全新 process，**上一輪診斷過什麼完全不在 context 裡**。所以同一批卡住的 item 每輪被重新撿起、重新讀 tasks.md／HANDOFF、重新推導出同一個「還是卡住」的結論。2026-08-12 量測：<consumer-b> 31 個 substantive round 裡有 27 輪提到 blocker，而那批 blocker 的解除條件整段期間沒有變過。
+runner 每輪是全新 process，**上一輪診斷過什麼完全不在 context 裡**。所以同一批卡住的 item 每輪被重新撿起、重新讀 tasks.md／HANDOFF、重新推導出同一個「還是卡住」的結論，而那批 blocker 的解除條件多半整段期間沒有變過。
 
 [blocker-evaluation.md](blocker-evaluation.md) 管的是**怎麼判**一個 blocker 還算不算數；本檔管的是**這輪要不要重判**。兩者不互相取代：查表命中就跳過重判，沒命中就照那份逐條判。
 
@@ -49,15 +48,7 @@ ledger 是 `.clade/work-loop/state.json` 的一個欄位，寫入走 Step 7.3 �
 2. **量 predicate 現值**：跑那條命令 / 讀那個欄位。值與 `predicateValue` 不同 → **完整重診斷**
 3. **有界陳舊**：`round - firstSeenRound >= 10` → **完整重診斷**，不論前兩步結果。重診斷後仍 blocked 的條目**刪除後重新入表**（`firstSeenRound` = 本輪）——那是本條上界唯一的歸零方式
 
-**NEVER 把第 3 步錨在 `lastCheckedRound`。** 第 2 步每一輪都真的量了 predicate，而跳過重診斷的收尾又把 `lastCheckedRound` 更新為本輪，所以 `round - lastCheckedRound` 恆為 0：錨在它等於這條上界永遠不觸發，而「上界寫在紙上但從不觸發」與「沒有上界」在 state 檔上長得一模一樣。2026-08-24 <consumer-b> round 123 實測：4 條 ledger 的 `lastCheckedRound` **全部**等於 123，`firstSeenRound` 分別是 67 / 70 / 73 / 105——最久的一條已 56 輪沒有被完整重診斷過，而第 3 步一次也沒有觸發。複驗指令：
-
-```bash
-python3 -c "
-import json;s=json.load(open('$HOME/offline/<consumer-b>/.clade/work-loop/state.json'))
-print('round', s['round'])
-for k,v in s.get('blockers',{}).items():
-    print(k, 'first', v['firstSeenRound'], 'lastChecked', v['lastCheckedRound'])"
-```
+**NEVER 把第 3 步錨在 `lastCheckedRound`。** 第 2 步每一輪都真的量了 predicate，而跳過重診斷的收尾又把 `lastCheckedRound` 更新為本輪，所以 `round - lastCheckedRound` 恆為 0：錨在它等於這條上界永遠不觸發，而「上界寫在紙上但從不觸發」與「沒有上界」在 state 檔上長得一模一樣。
 
 三步都不觸發 → 跳過重診斷。收尾**固定四動作，順序不可換**：
 
@@ -77,22 +68,18 @@ for k,v in s.get('blockers',{}).items():
 的表列動作（「補 evidence annotation」「處理 review feedback → 補 evidence」）本來就是 Claude 做得完的事，
 少了這條，放寬適用範圍就等於把一批本來要動的 item 靜默停住。
 
-2026-08-24 <consumer-b> round 123 實測，`warehouse-part-stock-all-part-types` 的 `predicateValue` 逐字是
-`stale=7 uap=0`——`staleEvidenceCount=7` 觸發 override，而該條目自 round 105 起在 ledger 裡待了 18 輪。
-**它的 blocker 敘述沒變是事實，「本輪沒事可做」不是。**（複驗指令同 § 三步查表 第 3 步那段，
-`predicateValue` 欄逐字可讀。）
+**blocker 敘述沒變是事實，「本輪沒事可做」不是。**
 
-**逐字反開脫**（2026-08-24 無規約對照組 rep-4 實錄，語料在
-`vendor/snippets/rule-authoring/scenarios/blocker-ledger-hit-under-load.md`）：
+**逐字反開脫**（語料在 `vendor/snippets/rule-authoring/scenarios/blocker-ledger-hit-under-load.md`）：
 
 > 「指紋表命中且四條 predicate 實測值全部未變，本輪不重跑這條的高成本 evidence 重收，額度改投在
 > 成本極低的 `parts-search-ripple`。」
 
-predicate 未變講的是**卡點**沒變，`staleEvidenceCount=7` 講的是**有 7 件 Claude 自己做得完的事**——
+predicate 未變講的是**卡點**沒變，`staleEvidenceCount` 非 0 講的是**有 Claude 自己做得完的事**——
 兩者是不同欄位、不同判斷。**NEVER 拿前者的「沒變」推論後者的「不用動」。**
 
 本證據決定：查表命中之後 override 要不要照跑——要跑。
-本證據不決定：適用範圍要不要放寬——**NEVER** 拿這 18 輪論證「所以 3a／3b 不該進 ledger」。
+本證據不決定：適用範圍要不要放寬——**NEVER** 拿本節論證「所以 3a／3b 不該進 ledger」。
 把它們排除在外換回來的是每輪重推同一個結論，那正是本檔 § 這份 ledger 在防什麼 要防的事。
 
 ## 入表門檻：`predicateValue` 是必填，填不出來就不入表

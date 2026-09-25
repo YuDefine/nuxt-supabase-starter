@@ -11,7 +11,7 @@
 | 1 | `rules/core/*.md` | 逐 target 投影到該 runtime 的 rules 目錄（Claude `.claude/rules/<name>.md`、Codex `.agents/rules/`、Cursor `.cursor/rules/`），無條件收 | 無 `paths:` → always-load；有 `paths:` → 命中才載 |
 | 2 | `rules/modules/<group>/<variant>/*.md` | 同上，但只在 consumer manifest（canonical `.clade/manifest.json`，legacy `.claude/hub.json`）的 `modules[group]` 選了該 variant 才收 | 同上 |
 | 3 | `capabilities/core/{skills,commands,agents,hooks}/` | plugin cache（`claude plugin update`）；**consumer 需重啟 session 才生效** | skill / command 被呼叫時 |
-| 4 | `claude-md/core-snippets/*.md` | **已停用（2026-09-03）**：always-on 走落點 1 無 `paths:` | — |
+| 4 | `claude-md/core-snippets/*.md` | 不作為新落點：always-on 內容走落點 1 無 `paths:` | — |
 | 5 | `vendor/{scripts,actions,git-hooks,oxc-shared,ci,...}` | `sync-vendor.ts`（targets 定義在 `scripts/lib/vendor-targets.ts`） | 被執行時 |
 | 6 | `vendor/snippets/<topic>/` | **不散播**（唯一例外：`manual-review-enforcement/patterns.json`） | 由 rule / skill 用絕對路徑指過去，讀的當下 |
 | 7 | `docs/`（`pitfalls/`、`rule-rationale/`、`golden-paths/`、`conventions/`、`decisions/`、`sweeps/`） | **不散播** | 同上 |
@@ -40,7 +40,7 @@
 
 | 答案 | 落點 | 成本 |
 | --- | --- | --- |
-| 每個 session、任何工作都可能踩到 | 落點 1/2 且**不寫** `paths:`，或落點 4 | 最貴 |
+| 每個 session、任何工作都可能踩到 | 落點 1/2 且**不寫** `paths:` | 最貴 |
 | 編輯某類檔案時才用得到 | 落點 1/2 且寫 `paths: ['<glob>']` | 零 always-load |
 | 做某個特定任務時才用得到 | 落點 3（skill） | 零 always-load |
 | 想查的時候查得到就好 | 落點 6/7 | 零 |
@@ -83,7 +83,7 @@ Q1–Q3 定的是橫向落點。既有的 rule 太大要瘦身時，用這條分
 | 只在編輯特定檔案時才用得到的操作判準 | 新建帶 `paths:` 的 conditional rule |
 | 有順序、只在做某任務時用得到的步驟 | 下推成 skill 的 `references/`，主檔留觸發判定 |
 
-實證：`agent-routing.md` 只靠 rationale 外推淨減 **123 bytes**——大檔的體積多半是真載重的操作內容，**外推救不了**。有效的是最後一列的 branch disclosure 拆分（`commit/SKILL.md` 403→369 行，把只對有 supabase migrations 的 repo 生效的整段下推，主檔留一行觸發判定）。
+大檔的體積多半是真載重的操作內容，只靠 rationale 外推減不了多少；有效的是最後一列的 branch disclosure 拆分（例：`commit/SKILL.md` 把只對有 supabase migrations 的 repo 生效的整段下推，主檔留一行觸發判定）。
 
 ## 反模式
 

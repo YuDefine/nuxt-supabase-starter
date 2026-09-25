@@ -1,16 +1,16 @@
-# Step 6: Persist Evidence（Spectra 整合）
+# Step 6: Persist Evidence
 
 
-完成診斷和計劃輸出後，若偵測到 active Spectra change（Step 0.5）：
+完成診斷和計劃輸出後，若偵測到 active work item（Step 0.5）：
 
 1. **寫入 `design-review.md`** 到 carrier 旁（plan package：`specs/plans/NNN-<slug>/design-review.md`；ad-hoc：`docs/design-review/<slug>.md`）：
 
 ```markdown
-# Design Review: <change-name>
+# Design Review: <work item>
 
 - **Date**: YYYY-MM-DD
 - **Mode**: new / improve / iterate
-- **Spectra Change**: <change-name>
+- **Work item**: <work id / slug>
 - **Target**: [diagnosed pages/components]
 
 ## Diagnosis Summary
@@ -84,5 +84,5 @@ Copy Tone Score: N/6 PASS
 - [其他影響 spec 的設計決策，便於回交 truth owner skill]
 ```
 
-2. 此檔案原本是 `pre-archive-design-gate.sh` hook 的主要檢查依據；該 hook 已於 2026-09-07 隨 spectra 生命週期退役，**現在沒有機器讀它**，交付前自檢（判準見 [[proactive-skills.design-checkpoint]]）
+2. 此檔是 [[proactive-skills.design-checkpoint]] § Design Gate 的檢查依據；沒有 hook 自動讀它，交付前依該節自檢
 3. 若 Design Decisions 中有影響 spec 的發現，提醒回交 `/dsl-refine`（truth feature）或在 carrier 加一條 task；**NEVER** 就地改 `specs/truth/**`

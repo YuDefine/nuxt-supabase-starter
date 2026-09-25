@@ -15,7 +15,7 @@ metadata:
 
 `\my` 等同「列出只有我做得了的待辦」。回到電腦時問「我不在的期間，累積了哪些**球在我手上**的事」。
 
-> **同源鐵律（2026-08-27 Charles 拍板，決策紀錄在 clade `HANDOFF.md`）**：`\my` 與 `/decisions`
+> **同源鐵律**：`\my` 與 `/decisions`
 > 讀**同一份**佇列，兩邊都要提供該有的東西。**NEVER** 自己另外掃一份——同一個待拍板事項在手機上
 > 與在對話裡長得不一樣時，人會以為那是兩件事。
 
@@ -33,12 +33,7 @@ Fleet 是預設（consumer repo 的問題照樣是同一個人要回的）。exi
 的現況量測。
 
 **NEVER** 改用 `rg` / `grep` 自己去翻那四個檔——它們與佇列會漂，而漂掉的那一份看起來一樣真。
-spine 更是 grep 不到的：`flow ask` 開的題不在任何檔案裡，只有 `flow pending` 看得見。
-
-> spine 列入來源是 2026-08-28 Charles 對 span `65b0eaa5` 的拍板（carrier 已 append 進 clade
-> `HANDOFF.md`）。實作一直都讀 spine，落後的是本節原本寫「四個檔案來源」的描述——**規約落後於
-> 實作時，讀規約的人會照規約行事**，而這裡的後果是 agent 以為 `flow ask` 開的題不會出現在
-> `\my`，於是改用別的路徑問，那條題就真的只存在對話裡了。
+spine 更是 grep 不到的：`flow ask` 開的題不在任何檔案裡，只有 `flow pending` 看得見——所以用 `flow ask` 開的題一定會出現在 `\my`。
 
 ### 2. 補第 6 個來源：只存在本 session 對話裡的待決策點
 
@@ -81,8 +76,7 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts ask \
 狀態類（不在本 repo／不可逆等外部條件／loop 推不動）一律 bullet。
 
 `review` 進 `Qn` 是因為它符合 QnX 的准入判準——回一則短訊（`通過` 或 `退回` + 一句理由）就結案。
-**NEVER** 因為「它不是選擇題」把它降回 bullet：2026-08-28 之前它正是被當成狀態，7 條做完的工作
-因此躺了 10.8–16.6 小時。
+**NEVER** 因為「它不是選擇題」把它降回 bullet：當成狀態列時，做完的工作會躺著沒人驗收。
 `flow pending` 已經照這條渲染——**NEVER** 自己替第 2 / 3 / 4 類加號碼。
 
 QnX 的三條細則（全域指令檔只留綁定條件與准入判準，細則在此）：`Qn` 從 `Q1` 起算；
@@ -108,11 +102,10 @@ cd ~/offline/clade && node vendor/scripts/flow/flow.ts answer '<span_id>' \
 而它漂掉的後果不是「chat 端壞了」，是**答案寫進別的 repo 的 spine、改到別的 repo 的檔案**。
 名字解析不出來時它拒絕寫入並非 0 退出——**NEVER** 改用 `--repo` 以外的方式繞過那個拒絕。
 
-**NEVER 手寫 `node --input-type=module -e "import { answerDecision } ..."`**（本 skill 2026-08-27
-之前逐字要求的形狀）：那條路徑不經 roster 檢查，`repoRoot` 由人目測填。
+**NEVER 手寫 `node --input-type=module -e "import { answerDecision } ..."`**：那條路徑不經 roster 檢查，`repoRoot` 由人目測填。
 
 它一次做完三件事：關 span（佇列與 `/decisions` 同時消失那題）、把決策紀錄寫進 carrier 的錨定區段
-（`## 決策紀錄` 節；`td:` carrier 則是該 TD entry 尾，TD-714）、
+（`## 決策紀錄` 節；`td:` carrier 則是該 TD entry 尾）、
 量測 tech-debt hygiene 的差集。**NEVER** 只在對話裡回覆就算結案——那樣答案沒有持久載體，
 下一個 session 看到的還是那題還在等。
 

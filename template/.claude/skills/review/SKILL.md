@@ -38,7 +38,7 @@ sign its own compliance result.
 
 If the request is a product code review, use the configured code-review agent.
 If it is a Lighthouse audit or performance trace breakdown, use the dedicated
-browser-devtools capability. This skill owns lifecycle evidence. Archive production writers are retired.
+browser-devtools capability. This skill owns lifecycle evidence.
 
 
 ## Runtime 執行 — Claude Code

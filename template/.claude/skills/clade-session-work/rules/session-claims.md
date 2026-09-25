@@ -8,7 +8,7 @@ paths: ['.clade/claims/**', 'HANDOFF.md', 'capabilities/core/hooks/pre-bash-owne
 
 # Session Claims
 
-> 多 session AI 並行開發時，主線（publish / propagate / `/commit` / `wt-helper merge-back` / 別 session 的工作）需要知道「**哪些路徑屬於別 session 還活著的工作**」，避免誤殺別 session WIP、做出錯誤 commit 分組、或把 active session 的 worktree 當成可清理的 stale state。
+> 判定「**哪些路徑屬於別 session 還活著的工作**」，避免誤殺別 session WIP、錯誤 commit 分組、或清掉 active worktree。
 
 ## 1. 什麼是 claim
 
@@ -31,8 +31,8 @@ paths: ['.clade/claims/**', 'HANDOFF.md', 'capabilities/core/hooks/pre-bash-owne
 ```
 
 - `session_id` 純 ID（由 `claim-helper.ts` 生成；含 timestamp + random + hostname 片段）
-- `expected_paths` 是這個 session 預期會碰的檔案 glob（可空，越精確越好）。**實測恆為 `[]`** —— 所以讀 claim 的那一側 **MUST** 走 § 3.3 的導出值，**NEVER** 只讀這個欄位就下「這棵樹沒碰任何檔」的結論
-- `work_id` 是這個 session 正在執行的 flow work item（TD-794 刀 4）。由 `writeClaim()` 從 ambient `CLADE_WORK_ID` 自動帶入 —— **NEVER** 改成要每個呼叫端記得傳：`expected_paths` 就是那樣變成 22/22 全空的。舊 claim 沒有這個欄位是正常態，讀側 **NEVER** 把它當必填
+- `expected_paths` 是這個 session 預期會碰的檔案 glob（可空，越精確越好）。**實務上幾乎恆為 `[]`** —— 所以讀 claim 的那一側 **MUST** 走 § 3.3 的導出值，**NEVER** 只讀這個欄位就下「這棵樹沒碰任何檔」的結論
+- `work_id` 是這個 session 正在執行的 flow work item。由 `writeClaim()` 從 ambient `CLADE_WORK_ID` 自動帶入 —— **NEVER** 改成要每個呼叫端記得傳：`expected_paths` 就是那樣變成全空的。舊 claim 沒有這個欄位是正常態，讀側 **NEVER** 把它當必填
 - `expires_at` = `last_heartbeat + 24h`；過期 claim 視為失活，prune 階段會自動刪
 
 ## 2. Claim 寫 / refresh / drop 時機
@@ -41,27 +41,22 @@ paths: ['.clade/claims/**', 'HANDOFF.md', 'capabilities/core/hooks/pre-bash-owne
 
 | 時機 | 動作 | 由誰 |
 |---|---|---|
-| `wt-helper add <slug> --task-summary <text>` 開 worktree | 寫 claim（`--task-summary` 必填，TD-664 Phase 4） | `wt-helper.ts` |
+| `wt-helper add <slug> --task-summary <text>` 開 worktree | 寫 claim（`--task-summary` 必填） | `wt-helper.ts` |
 | AI session 啟動 in worktree | refresh `last_heartbeat` + `expires_at` | SessionStart hook `session-start-claim-heartbeat.sh` |
-| **每次 Edit / Write 寫檔**（throttle ≥5 分鐘） | refresh `last_heartbeat` + `expires_at` | PostToolUse hook `post-tool-ownership-journal.sh`（TD-664 Phase 2） |
+| **每次 Edit / Write 寫檔**（throttle ≥5 分鐘） | refresh `last_heartbeat` + `expires_at` | PostToolUse hook `post-tool-ownership-journal.sh` |
 | `wt-helper cleanup <slug>` | drop claim | `wt-helper.ts` |
 | merge-back 的來源 lifecycle | 只有實際 cleanup 成功才 drop；squash／staging 成功不證明來源已回收 | `wt-helper.ts` 的 cleanup receipt |
 | 過期超過 24h | prune | `claim-helper.ts prune`（手動 / cron） |
 
-**heartbeat 的寫者 MUST 是 hook，NEVER 是 model。** SessionStart 那列只證明「這個 session 開過」，
-所以在它是唯一寫者的期間，`last_heartbeat` 實測恆等於 `started_at`（17 個 claim 檔全數如此）——
-量到的是開機時刻，不是「還在推進」。PostToolUse 那列量的才是後者。**NEVER** 改成由 model 記得去
-呼叫 `claim-helper refresh`：那讓它退回宣告型欄位，而宣告型欄位不被維護正是 TD-664 的前提本身。
+**heartbeat 的寫者 MUST 是 hook，NEVER 是 model**（SessionStart 只證明開過，PostToolUse 才證明還在推進；由 model 記得 refresh 的欄位不會被維護）。
 
-主線 session（**非** worktree）目前**不自動寫** claim — 主線預設可動全部，是 worktree session 需要宣告「我擁有這條 branch + 這些 paths」。
+主線 session（**非** worktree）**不自動寫** claim — 主線預設可動全部，是 worktree session 需要宣告「我擁有這條 branch + 這些 paths」。
 
-### ⚠️ 主線無 claim 的保護缺口（pitfall 2026-06-01）
+### 主線無 claim 的保護缺口
 
-主線不寫 claim 有一個**已實證的危害**：主線在 main working tree 累積的 dirty（典型：archive batch 等 commit、跨多步的 in-flight 工作）對**別 session 的 `wt-helper add --baseline-strategy stash`** 是「unclaimed」→ pre-fork claim guard 的 `otherSession` STOP **看不到** → 被 bulk-stash 捲走（見 `docs/pitfalls/2026-06-01-prefork-baseline-stash-sweeps-unclaimed-main-work.md`）。
+主線在 main 累積的 dirty 對別 session 是 unclaimed（`otherSession` guard 看不到）。緩解：`wt-helper add` 的 stash strategy **預設完全不 capture** main dirty；要帶 main WIP 必須**顯式** `--include-unrelated-dirty` 或 `--baseline-scope-paths`（[[pitfall-prefork-baseline-stash-sweeps-unclaimed-main-work]]）。
 
-**現有緩解（已落地，P1 / TD-181，commit `b75667fb`）**：`wt-helper.ts` cmdAdd 的 stash strategy **預設完全不 capture** main dirty（留 main 原封不動、worktree fork clean from HEAD）。要把 main WIP 帶進 worktree 必須**顯式** `--include-unrelated-dirty`（bulk 全帶）或 `--baseline-scope-paths`（scoped，走 commit strategy）。原 incident 路徑（stash strategy silent bulk-capture）已從**工具層**消除。
-
-**SHOULD（治本，pending 自動化）**：主線 / 長駐 session 在 main 累積 dirty（尤其是會跨多個 tool-call 才 commit 的 batch）時，**SHOULD** 寫一個 coarse claim 涵蓋當前 dirty paths，讓既有 `otherSession` guard 直接保護：
+**SHOULD**：主線在 main 累積會跨多個 tool-call 才 commit 的 batch 時，寫一個 coarse claim 涵蓋當前 dirty paths：
 
 ```bash
 node scripts/claim-helper.ts add --change-id main-session-wip \
@@ -69,11 +64,11 @@ node scripts/claim-helper.ts add --change-id main-session-wip \
   --expected-paths "$(git status --porcelain | awk '{print $2}' | paste -sd, -)"
 ```
 
-完成 / commit 後 `claim-helper.ts drop <session-id>`。**自動觸發機制**（main session 累積 dirty 時自動 claim + commit 後自動 drop）經評估 **reject-by-design**（2026-06-12）：clade home main tree 經常 dirty（多 session / propagate 投影寫入 / 跨 tool-call WIP），auto-claim 整個 `git status` 快照會讓**每個**別 session 的 `wt-helper add --precheck-baseline` / `merge-back --auto-stash` 在任何路徑重疊時 `otherSession` STOP → 持續誤擋合法 fork；對 shared trunk 而言過度封鎖比偶發 WIP loss 更糟。主要 incident vector 已被機制層覆蓋（P1 default-no-capture / merge-back TD-175 claim-guard / `scripts/audit-shared-tree-safety.ts`）。**手動 coarse claim 是「主線跨多步累積大 batch」這種刻意、罕見場景的標準逃生口**，其非自動化是可接受的。
+完成後 `claim-helper.ts drop <session-id>`。**不自動化**——自動 claim 整個 `git status` 會讓別 session 在任何路徑重疊時被誤擋。主要 incident vector 由機制層覆蓋（merge-back claim-guard、propagate 時的 `scripts/audit-shared-tree-safety.ts`）。
 
 ## 3. 誰讀 claim
 
-**MUST** 任何「即將動 working tree」的工具（stash / bulk commit / 投影寫入）都走 `claim-helper.ts` 的 `classifyDirtyPaths()` 判所有權，**NEVER** 各自重寫一份路徑比對。這條是 TD-435 的結論：同型失敗累積 7 條 high severity pitfall，每條的 mitigation 都只綁住當時那一條寫入路徑，於是每開一條新路徑就重踩一次。
+**MUST** 任何「即將動 working tree」的工具（stash / bulk commit / 投影寫入）都走 `claim-helper.ts` 的 `classifyDirtyPaths()` 判所有權，**NEVER** 各自重寫一份路徑比對。
 
 判準只有三分類，讀法固定：
 
@@ -85,15 +80,9 @@ node scripts/claim-helper.ts add --change-id main-session-wip \
 
 第三列是最容易誤讀的一列 —— `other` 為空不代表安全，只代表沒有人宣告過。
 
-### 3.1 `other` 的三分類（TD-664，寫入時證據）
+### 3.1 `other` 的三分類（寫入時證據）
 
-`other` 把兩個相反的處境塌縮成同一個字：「有人**現在正在**寫它」與「寫它的人**早就死了**」。
-於是讀的人只能對兩者採同一種行為 —— 而那兩種處境該做的事正好相反。2026-08-26 實測代價：
-publish 的 gate 對一個已經 commit 完並退出的持有者盲等（gate 自己的措辭是「最多 90 分鐘」），
-三個 session 互等約兩小時。
-
-`classifyDirtyPaths()` 因此**在 `other` 之外**額外回三個陣列。`other` 內容一個不少，
-四個既有呼叫端一行不改就沿用今天的保守行為；要停止盲等的呼叫端才讀新欄位。
+`other` 把「有人正在寫」與「寫的人早就死了」塌成同一格，gate 只能盲等。`classifyDirtyPaths()` 因此**在 `other` 之外**額外回三個陣列（`other` 內容不變，舊呼叫端行為不變）：
 
 | 分類 | 證據 | 允許的動作 |
 | --- | --- | --- |
@@ -108,49 +97,29 @@ publish 的 gate 對一個已經 commit 完並退出的持有者盲等（gate �
 | process | `/proc/<pid>` 存在 ∧ `stat` 第 22 欄 starttime 與 journal 記的 `pid_start` 吻合（**pid 會被重用，單看 pid 不算**） | `null`（非 Linux / 沒記 pid） |
 | session presence | `herdr agent list` 的 `agent_session.value` 仍列出該 `session_id` —— 與 journal 的 `session_id` 是**同一個** harness id，可直接比對 | `null`（`HERDR_ENV != 1` / `herdr` 不可達） |
 
-**任一訊號說活著就是 `other-live`**；兩個都說死才是 `orphan`；其餘全部 `unknown`。
-成因：provenance hook 是 fail-open 的，**單靠證據缺席會把「hook 壞了」誤讀成「全員陣亡」**
-—— 而那個誤讀的方向正好是會 sweep 掉別人 WIP 的方向。
+**任一訊號說活著就是 `other-live`**；兩個都說死才是 `orphan`；其餘全部 `unknown`（hook 是 fail-open，單靠證據缺席會把「hook 壞了」誤讀成「全員陣亡」）。
 
-**不在 Herdr 裡跑的 session 會讓 `unknown` 變多**（第二個訊號整個取不到，process 已死的檔
-一律降級成 `unknown`）。那是**正確的保守方向**，**NEVER** 拿「unknown 太多、gate 太吵」
-當理由改成單訊號判死，也 **NEVER** 為了湊出 `orphan` 去偽造 session 清單 —— 在
-`classifyDirtyPaths` / `buildWhoRows` 上，live session 清單是**參數**不是環境變數，
-正是為了讓「扣住某個 session 以製造 orphan」做不到。
+- **NEVER** 拿「unknown 太多、gate 太吵」當理由改成單訊號判死或放寬 `unknown` 的禁令；也 **NEVER** 為了湊出 `orphan` 偽造 session 清單（它是參數不是環境變數）。Bash / Codex / 人手寫的檔常駐在 `unknown`
+- **session presence 比對的是 session id，NEVER 是 pane**（pane 會被下一棒接手）
 
-**session presence 比對的是 session id，NEVER 是 pane。** pane 會被下一棒接手、terminal title
-會繼承上一棒 —— 那兩個正是本條要停止依賴的四個不可信訊號中的兩個。
+### 3.3 `expected_paths` 由 journal 導出
 
-**`unknown` 不是暫時狀態，是常駐的一大類**：Bash 寫的檔（`sed -i` / heredoc）、Codex 寫的檔
-（沒有 PostToolUse hook）、人手改的、journal 上線前就存在的，全部落在這裡。
-**NEVER** 因為「`unknown` 太多、判不出來很煩」就放寬它的禁令 —— 數量多正是它必須保守的理由。
-
-### 3.3 `expected_paths` 由 journal 導出（TD-664 Phase 4）
-
-`expected_paths` 是宣告型欄位，而本 TD 的整個前提是宣告型欄位不被維護：17 個 claim 全 `[]`。
-後果不是「少一個欄位」，是 **`classifyDirtyPaths` 的 claim 比對永遠比不中，`otherSession`
-恆為空、guard 恆放行**（2026-08-03 <consumer-a> 實證：3 個 active claim 的 `expected_paths` 全空，
-88 條 unclaimed dirty 全數被 bulk-stash 捲走而 guard 零告警）。
-
-`--task-summary` 那條用「改成必填」解決，**這條不能照抄**：開 worktree 的當下還不知道會改哪些檔。
-所以方向是**導出**不是宣告 —— `derivedClaimPaths()` 把 journal 裡屬於該 worktree 的寫入路徑
-join 回 claim，宣告值與導出值並存，每一列帶 `via: 'declared' | 'derived'`。
+`expected_paths` 不會被維護（`otherSession` 恆為空、guard 恆放行），而開 worktree 時也還不知道會改哪些檔，所以方向是**導出**不是宣告：`derivedClaimPaths()` 把 journal 裡屬於該 worktree 的寫入路徑 join 回 claim，每一列帶 `via: 'declared' | 'derived'`。
 
 三條邊界，**NEVER** 放寬任何一條：
 
 | 邊界 | 逐字 | 放寬會怎樣 |
 | --- | --- | --- |
 | join key 是 `worktree` | claim 的 `session_id` 由 `claim-helper.ts` 生成，journal 的來自 harness —— **兩個不同命名空間**，拿它比對永遠不相等 | 安靜回空陣列，而空陣列與「這棵樹什麼都沒寫」長得一模一樣 |
-| 只有 `alive` 才導出 | 持有者 `orphan` / `unknown` 一律不導出，那些路徑回到 § 3.1 拿自己的 verdict 與證據 | TTL 未到期的死 claim 會把一批路徑鎖成 `otherSession`（永不可掃）—— 就是本 TD 要消滅的盲等從新的門走回來 |
+| 只有 `alive` 才導出 | 持有者 `orphan` / `unknown` 一律不導出，那些路徑回到 § 3.1 拿自己的 verdict 與證據 | TTL 未到期的死 claim 會把一批路徑鎖成 `otherSession`（永不可掃）—— 就是 § 3.1 要消滅的盲等從新的門走回來 |
 | 導出排在 journal 查詢**之後** | main 的 dirty 檔若有自己的寫入時證據，那個人就是答案 | 別棵樹的同名相對路徑會蓋過去，把「我自己剛寫的檔」判成別人的 |
 
-導出值**不回寫進 claim 檔**。verdict 與 derived 值落成 store 就是 drift 的起點（同
-`flow/serve.ts` 的 READ-ONLY 鐵律）—— journal 仍是唯一新增的寫入面。
+導出值**不回寫進 claim 檔**（derived 值落成 store 就是 drift 起點；journal 是唯一新增的寫入面）。
 
 ### 3.2 Provenance journal
 
 `.clade/ownership/journal.jsonl`，每行一次寫入：`{ts, path, worktree, session_id, pane_id, cwd, tool, pid, pid_start, attribution}`。
-目前已實作的寫入入口是 Claude PostToolUse hook `post-tool-ownership-journal.sh`（Edit / Write / NotebookEdit / Bash）；其他 runtime 須提供同等真實事件的 adapter 接線與落檔證據，不能用主線自報補成 provenance。
+已實作的寫入入口是 Claude PostToolUse hook `post-tool-ownership-journal.sh`（Edit / Write / NotebookEdit / Bash）；其他 runtime 須提供同等真實事件的 adapter 接線與落檔證據，不能用主線自報補成 provenance。
 
 **兩種證據等級，`attribution` 欄分辨**：
 
@@ -159,20 +128,11 @@ join 回 claim，宣告值與導出值並存，每一列帶 `via: 'declared' | '
 | `hook` | harness 在 payload 裡直接給路徑（Edit / Write / NotebookEdit） | 強 —— model 動不了 |
 | `mtime-diff` | Bash：PreToolUse `pre-bash-ownership-stamp.sh` 開時間窗，post hook 只收 mtime 落在窗內的 dirty 路徑——掃 cwd 的樹，外加命令字串**明確提及**的樹（絕對路徑、`~/`、`-C` / `cd` / `--git-dir` / `--work-tree` 的值，不做 glob 展開，最多 8 棵）；別棵樹的列寫進**那棵樹 consumer** 的 journal（TD-734） | 較弱 —— 窗內別 session 的併發寫入（含被提及那棵樹裡的）會被記成我的 |
 
-- **NEVER 解析 Bash command 字串推「哪個檔是我寫的」**：命令字串只用來**選樹**，檔一律由時間窗決定。
-  也 **NEVER** 把選樹擴成「掃所有已知 consumer / 所有 worktree」，**NEVER** 在拿不到 stamp 時退化成
-  「掃 `git status` 把所有 dirty 記成本 session 的」—— 後兩者把偶爾誤歸換成必定誤歸，正是 § 3.1
-  唯一會毀掉工作的方向。沒有 stamp 就整段不記
-- `flow who` 對 `mtime-diff` 的列會在 action 裡明說證據較弱；**NEVER** 把它讀成與 `hook` 同級
-
-- **`session_id` MUST 取自 harness 的 hook input JSON，NEVER 由 model 自報。** 本機制的全部價值
-  就在於它是 model 動不了的證據；一旦可自報，它立刻退化成又一個宣告型欄位 —— 也就是本節要繞開的東西
-- **`path` 相對 `worktree`，不是相對 consumer root。** 一個 consumer 一份 journal，main 與所有
-  linked worktree 共寫，所以同一個相對路徑在兩棵樹裡是兩個檔。**NEVER** 拿掉 `worktree` 欄位
-- **NEVER 把 verdict 回寫成 store** —— verdict 是 derived 值，落盤就是 drift 起點
-  （同 `flow/serve.ts` 的 READ-ONLY 鐵律）。journal 是本機制唯一新增的寫入面，其餘全部 derived
-- **NEVER 把 verdict 或 `unknown` 的處置寫死成「反正判不出來就當沒人要」** —— `unknown` 的禁令
-  在 § 3.1，一行不放寬
+- **NEVER 解析 Bash command 字串推「哪個檔是我寫的」**：命令字串只用來選樹，檔一律由時間窗決定。也 **NEVER** 把選樹擴成「掃所有已知 consumer／所有 worktree」，**NEVER** 在拿不到 stamp 時退化成「掃 `git status` 把所有 dirty 記成本 session 的」——沒有 stamp 就整段不記
+- `mtime-diff` 列 **NEVER** 讀成與 `hook` 同級
+- **`session_id` MUST 取自 harness 的 hook input JSON，NEVER 由 model 自報**
+- **`path` 相對 `worktree`**（main 與所有 linked worktree 共寫一份 journal），**NEVER** 拿掉 `worktree` 欄位
+- **NEVER 把 verdict 回寫成 store**
 
 查詢入口：`node vendor/scripts/flow/flow.ts who [--json] [--session <id>]` ——
 一行一資源（dirty path / worktree / stash），含 verdict 與具名 `action`（沿用 `stall.ts` 的 action 契約）。
@@ -187,42 +147,19 @@ join 回 claim，宣告值與導出值並存，每一列帶 `via: 'declared' | '
 | `wt-helper.ts` stash namespace | Phase 7：stash slug 帶 session_id |
 | `flow who` / `herdr-patrol` | 人與 agent 查「現在誰持有什麼」的同一份 JSON |
 
-### 3.4 動筆之前的消費端（TD-794 刀 4）
+### 3.4 動筆之前的消費端
 
-`claim-helper.ts` 的 `claimConflictsForPath()` 回答一個路徑的一題：「別人的活 claim 已經涵蓋這個檔了嗎」。
-目前 Claude 消費端是 PreToolUse hook `pre-edit-claim-conflict.sh`（`Edit|Write`），命中才遞**一行**給要動筆的人。其他 runtime 的 edit-time adapter 尚須逐入口證明已接入；本節查詢函式可用不等於每一端都有 edit-time 告警。
-
-在它之前，claim registry 有寫入端、有契約、有 heartbeat、有 journal，而**沒有任何動作在動筆之前讀它**。
-於是持有者只剩兩個選擇：沉默（別人重工），或廣播（N 份 token、N-1 份純浪費）。理性選擇是廣播——
-所以 **NEVER 把那個廣播記成紀律問題**，要求他「下次別廣播」只會把他推回沉默那一邊，而那更糟。
+`claimConflictsForPath()` 回答「別人的活 claim 已經涵蓋這個檔了嗎」。Claude 消費端是 PreToolUse hook `pre-edit-claim-conflict.sh`（`Edit|Write`），命中才遞**一行**；其他 runtime 的 edit-time adapter 須逐入口證明已接入。沒有這個讀取端時持有者只能廣播，所以 **NEVER 把那個廣播記成紀律問題**。
 
 三條，**NEVER 放寬任何一條**：
 
 | 邊界 | 逐字 | 放寬會怎樣 |
 | --- | --- | --- |
-| 只有 `declared` 與 `derived-hook` 出聲 | journal 的 `mtime-diff` 列 **NEVER** 用來出聲 | 見下方量測：一個大多時候是錯的告警會訓練所有人跳過它，連同那 4.6% 真陽性一起丟掉 |
+| 只有 `declared` 與 `derived-hook` 出聲 | journal 的 `mtime-diff` 列 **NEVER** 用來出聲 | clade 自身 journal 實測（2026-08-29，1748 列）：可由 `hook` 列裁決的 `mtime-diff` 有 87.5% 歸錯 session。一個大多時候是錯的告警會訓練所有人跳過它，連同少數真陽性一起丟掉 |
 | 文案 MUST 帶 `via` | `[via=declared]`（有人說會碰）與 `[via=derived-hook]`（有人確實碰過）要看得出差別 | 兩者要的答案不同——宣告會過期，寫入不會 |
 | 無命中 = 零輸出、exit 0 | 沒有「查過了，沒事」這種訊息 | 無事發生時仍要人讀一段字，就是同一個廣播換個地方發 |
 
-**為什麼 `mtime-diff` 被排除**（clade 自身 journal 實測，2026-08-29，1748 列 / 3.6 天 / 85 個 session）：
-
-| 量到的 | 數字 |
-| --- | --- |
-| `attribution: mtime-diff` 的佔比 | 1670 / 1748 = **95.5%** |
-| 其中可由同路徑 `hook` 列裁決的部分，**歸錯 session** 的比率 | 14/16 = **87.5%**（±60s）／26/28 = 92.9%（±300s） |
-| `mtime-diff` 列中「同一路徑同一分鐘內有 ≥2 個 session」的比率 | 1075 / 1670 = **64.4%** |
-| 來自單次 Bash 一口氣掃出 >5 個路徑的列 | 851 / 1670 = 51% |
-
-**NEVER 用「提高召回」當理由把 `mtime-diff` 收進來。** 召回問題的根因在上游——Bash 寫入靠時間窗歸因，
-是因為沒有東西告訴 hook 動了哪個檔。把那個窗口收窄（或讓 Bash 寫入說得出路徑），這裡自動就收得到；
-改為放寬消費端，只是把一個已知會錯的訊號變成一個被信任的訊號。
-
-**NEVER 讓 hook 補 `permissionDecision`。** 它是 warn 不是 block：爭用的正解是兩個 session 談，
-不是機器替其中一方否決另一方。同理 **NEVER** 在命中時把整段來源溯及塞給對方——遞的是一行，
-一段散文只是把廣播的污染改成點對點投遞。
-
-**導出值一律不回寫**（§ 3.3 鐵律）。機械驗法：hook 跑過之後 claim 檔的內容與 mtime 皆不變
-（`test/claim-conflict-consumer.test.ts` 釘住這條）。
+**NEVER 用「提高召回」當理由把 `mtime-diff` 收進來**——實測它大多歸錯 session；要改善召回就修上游（讓 Bash 寫入說得出路徑）。**NEVER 讓 hook 補 `permissionDecision`**（爭用的正解是兩個 session 談），也 **NEVER** 在命中時塞整段來源溯及。導出值一律不回寫（`test/claim-conflict-consumer.test.ts` 釘住）。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
@@ -261,15 +198,7 @@ join 回 claim，宣告值與導出值並存，每一列帶 `via: 'declared' | '
 
 ## 6. Agent-agnostic
 
-所有 supported runtime 共用 `claim-helper.ts` 的 claim 契約；runtime 原生事件支援與 Clade heartbeat handler 的安裝、啟用、實際寫入分開驗證。
-
-| 當前入口的證據 | 可判定的能力與處置 |
-|---|---|
-| `session-start-claim-heartbeat.sh` 已接入啟用的事件，且 claim 的 heartbeat 確實更新 | 該入口有 startup refresh；持續寫入的 refresh 仍須另驗 `post-tool-ownership-journal.sh` |
-| 只驗到原生 SessionStart／PostToolUse 或共同 hook fixture | 只證明事件通道，尚未證明 claim handler 已接入；逐入口觀測範圍見 clade `docs/runtime-hooks.md` |
-| handler 未安裝、未啟用或沒有寫入證據 | heartbeat 覆蓋標為未驗；依既有 Git、worktree 與 ownership 證據判定爭用，缺證據維持 unknown，不因 claim 過期接管他人的工作 |
-
-每個入口的 heartbeat 寫者仍遵守 § 2：由實際 hook 執行，不以 model 手動 refresh 補成活躍證據。新增 adapter 時保留原生 runtime／session identity，不把其他 runtime 的事件改稱 Claude 事件。
+所有 runtime 共用 `claim-helper.ts` 的 claim 契約；原生事件支援與 heartbeat handler 的接入、實際寫入分開驗證（只驗到事件通道不等於 handler 已接入，見 clade `docs/runtime-hooks.md`）。沒有寫入證據時 heartbeat 覆蓋標為未驗，缺證據維持 unknown，不因 claim 過期接管他人的工作。新增 adapter 時保留原生 runtime／session identity。
 
 ## 7. 失敗模式（fail-open）
 

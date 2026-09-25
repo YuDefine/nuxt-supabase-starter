@@ -57,12 +57,12 @@ paths: ['openspec/changes/**', 'specs/plans/**', 'specs/truth/**', '.claude/agen
 - 依**實際**嚴重度分級（不是每條都 Critical）；先列 strengths 再列 issues——準確的肯定讓其餘 feedback 可信
 - 從 diff 驗不了的要求（活在未變動 code、跨 task）標 **⚠️ cannot-verify** 回報給 dispatch 端，**NEVER** 自行擴大搜索範圍
 
-模板實作：`capabilities/core/references/implement-executor/subagent-dev/task-reviewer-prompt.md`（`/implement` 的 executor reference）；回報契約見 [[agent-routing.dispatch-execution]] § Subagent 回報契約。
+模板實作：`~/offline/clade/capabilities/core/references/implement-executor/subagent-dev/task-reviewer-prompt.md`（`/implement` 的 executor reference）；回報契約見 [[agent-routing.dispatch-execution]] § Subagent 回報契約。
 
 ## 禁止事項
 
 - **NEVER** 因為 diff 看起來短就把高風險變更降成 Tier 1
 - **NEVER** 省略規格／實作一致性審查或獨立 code review 就宣稱 Tier 2 / 3 已完成
-- 規格／實作一致性審查 MUST 對照適用的 current plan/spec 與 frozen changeset，報告規格偏差與覆蓋範圍；若專案提供實際 workflow verification entry，使用該 entry 留下可查證結果，不呼叫已退役的 writer 或 review 指令
+- 規格／實作一致性審查 MUST 對照適用的 current plan/spec 與 frozen changeset，報告規格偏差與覆蓋範圍；若專案提供實際 workflow verification entry，使用該 entry 留下可查證結果；只呼叫專案實際存在且未退役的指令
 - **NEVER** 把「測試有過」當成可取代 review 的理由
 - **NEVER** 因 unattended coordinator merge 降低 review tier；helper authority 邊界依真實風險判 tier

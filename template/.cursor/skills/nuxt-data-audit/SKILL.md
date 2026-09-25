@@ -12,17 +12,10 @@ metadata:
 
 本流程只稽核與回報。`metadata.clade.permission_tier` 是政策標記，不是原生權限控制；修正依本次任務既有授權處理。
 
-`nuxt-data-audit` — Nuxt data-fetching & performance golden path audit，含原 `data-sanity` 的 client-server schema boundary mode。這是 skill 的檢查流程，沒有同名獨立 CLI；下方參數由執行 skill 的 agent 解讀。原生入口未載入時，讀取本文件與 reference rule 後依已授權工具執行。
+`nuxt-data-audit` — Nuxt data-fetching & performance golden path audit，另含 client-server schema boundary mode（`schema`，即 `data-sanity`）。這是 skill 的檢查流程，沒有同名獨立 CLI；下方參數由執行 skill 的 agent 解讀。原生入口未載入時，讀取本文件與 reference rule 後依已授權工具執行。
 
 開始評分前讀取 reference rule：clade 的 `rules/core/nuxt-data-perf.md`，或目前 runtime 已交付的同名規約。若無法取得該規約，報告標示未完成。
 Cookbook：`~/offline/clade/vendor/snippets/nuxt-data-perf/`
-
-## 何時跑
-
-- **定期稽核**：跨 consumer fleet 完善度掃描（從 clade home 跑，指定 consumer path）
-- **新功能完成後**：對 consumer 當前 codebase 的 data-fetching 品質做 baseline check
-- **code-review 輔助**：reviewer 可跑此 skill 取得量化數據輔助 review
-- **新 consumer onboard**：day-1 baseline 建立
 
 ## 怎麼跑
 
@@ -329,22 +322,4 @@ Stack: Pinia Colada 1.3.1 + useFetch (mixed)
 
 ## Enforcement Integration
 
-本 skill 的 reference rule 由各 runtime adapter 交付正文與適用條件；`paths` metadata 本身不證明產品自動載入。執行 audit 前先讀目前 rule，依下列三層查核：
-
-### Layer 1 — Rule Self-check Gate（寫 code 時）
-
-Rule 內含：**每次寫完新的 useFetch / useQuery / $fetch 呼叫後，MUST 對照 HR-1~HR-7 自查**。這條靠主線的字面遵守生效，沒有機械 gate 接住它——Layer 2 / 3 才是兜底。
-
-### Layer 2 — Code Review Cross-check（review 時）
-
-`/code-review` 對 diff 中新增的 data-fetching 呼叫，SHOULD 跑以下 quick check：
-- 新的 useFetch 的預設 cancel／顯式 defer 是否符合觸發情境？
-- 新的 useQuery 有 staleTime 嗎？
-- 新的 useMutation 有 invalidateQueries 嗎？
-- 新的 $fetch 在 setup top-level 嗎？
-- 每個適用 query 的 signal 是否傳到 HTTP client，且未被 interceptor 覆寫？
-- 寫入是否有防重機制，而非依賴 abort／cancel？
-
-### Layer 3 — Periodic Fleet Audit（定期）
-
-從 clade home 跑 `/nuxt-data-audit --fleet`，更新 HANDOFF.md 稽核 baseline。
+寫 code 時的 HR-1～HR-7 自查與 code review quick check 由 reference rule 規範；本 skill 是定期兜底：從 clade home 跑 `/nuxt-data-audit --fleet`，更新 HANDOFF.md 稽核 baseline。

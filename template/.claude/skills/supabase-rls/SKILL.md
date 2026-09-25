@@ -49,16 +49,10 @@ ALTER TABLE your_schema.new_table FORCE ROW LEVEL SECURITY;
 
 ## service_role：NEVER 寫進 policy
 
-**NEVER** 在 policy 內加 `(SELECT auth.role()) = 'service_role'` 當 bypass 條件。`service_role`
-本身具備 PostgreSQL `BYPASSRLS`，**無條件**略過所有 policy —— 這個條件對它沒有任何實際保護作用，
-只會讓後續 agent 誤以為 privileged write path 由 policy 控制。
-
-上游官方 skill 另有一條同向理由：Supabase 已 deprecate `auth.role()`，改用 policy 的 `TO` 子句
-指定目標 role。
-
-privileged 寫入的安全邊界靠 server-side isolation（service role key 不出 server、privileged
-client 獨立 factory、API handler 明確權限檢查），完整規範見 rule `db-schema/supabase/rls-policy.md`
-§ service_role 與 privileged client isolation。
+**NEVER** 在 policy 內加 `(SELECT auth.role()) = 'service_role'` 當 bypass 條件：`service_role`
+具備 `BYPASSRLS`，這個條件沒有保護作用，只會讓人誤以為 privileged write path 由 policy 控制
+（`auth.role()` 也已 deprecated，目標 role 用 `TO` 子句）。privileged 寫入的邊界靠 server-side
+isolation，見 rule `db-schema/supabase/rls-policy.md` § service_role 與 privileged client isolation。
 
 ## 參考資料
 

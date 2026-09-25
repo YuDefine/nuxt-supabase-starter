@@ -7,9 +7,7 @@ paths: ['tasks/**', 'specs/plans/**', 'docs/tech-debt.md']
 
 # Follow-up Register
 
-**核心命題**：tasks 檔內的「DEFERRED / LOCAL BLOCKED / follow-up」註記活不過那個 session。需要跨 session 接續的項目 **MUST** 在寫下那行的同一次編輯內開或續跑 `specs/plans/<work-id>/plan.md`（`flow plan open`），**NEVER** 再往 `docs/tech-debt.md` 雙寫。舊 TD id 只經 `specs/truth/legacy-ids.json` 解析。
-
-此規則優先於個別 skill 說明與其他規則。
+tasks 檔內的「DEFERRED / LOCAL BLOCKED / follow-up」註記活不過那個 session，必須當下登記。此規則優先於個別 skill 說明與其他規則。
 
 ---
 
@@ -21,15 +19,15 @@ tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local
 node vendor/scripts/flow/flow.ts plan open <slug> --title '<一句話>'
 ```
 
-回指 `specs/plans/<work-id>/plan.md`（或 `plan:<work-id>`）。舊 `TD-NNN` 只經 `specs/truth/legacy-ids.json` 解析，**NEVER** 再往 `docs/tech-debt.md` 雙寫。
+回指 `specs/plans/<work-id>/plan.md`（或 `plan:<work-id>`）。舊 `TD-NNN` 只經 `specs/truth/legacy-ids.json` 解析，**NEVER** 同時往 `docs/tech-debt.md` 雙寫。
 
 未遷移 consumer（沒有 `specs/truth/work-lifecycle.md`）仍用既有 `TD-NNN` register，直到 consumer 遷移完成。
 
 **禁止事項**：
 
 - **NEVER** 只寫自由文字（「LOCAL BLOCKED: ...」「DEFERRED: ...」「待後續處理」）而不開 plan 或（未遷移 consumer）TD entry
-- **NEVER** 把登記推到「收尾時一起補」——tasks 檔的生命週期比那個「收尾」短
-- 舊的 `@followup[TD-NNN]` marker 語法已隨 spectra 生命週期退場（2026-09-07）。既有檔案裡的 marker **不必**改寫，讀到時當成舊 id 引用即可
+- **NEVER** 把登記推到「收尾時一起補」，**NEVER** 因為「沒有 hook 擋我」就往後推
+- tasks 檔裡既有的 `@followup[TD-NNN]` marker **不必**改寫，讀到時當成舊 id 引用即可
 
 ---
 
@@ -38,38 +36,19 @@ node vendor/scripts/flow/flow.ts plan open <slug> --title '<一句話>'
 每個有效欠帳在主 register 保留一條入口；已結案 ID 由既有 `docs/archives/tech-debt-closed-*.md` 的精簡憑證承載。Clade home 與已遷移 repo 的接續載體是 `specs/plans/<work-id>/plan.md`，本節只描述未遷移 consumer 仍在用的舊形狀。
 
 ```markdown
-# Tech Debt Register
+## TD-001 — <title>
 
-## Index
-
-| ID | Title | Priority | Status | Discovered | Owner |
-| --- | --- | --- | --- | --- | --- |
-| TD-001 | mcp-token-store libsql 不相容 | low | open | 2026-04-20 B16 #10 | — |
-
----
-
-## TD-001 — mcp-token-store libsql 不相容
-
-**Status**: open  
-**Priority**: low  
-**Discovered**: 2026-04-20 — `member-and-permission-management` 人工檢查 #10  
-**Location**: `server/utils/mcp-token-store.ts` (createToken / findUsableTokenByHash / touchLastUsedAt / revoke)  
-**Related markers**: search `@followup[TD-001]` in repo
+**Status**: open
+**Priority**: low
+**Discovered**: <date> — <來源>
+**Location**: <path (symbols)>
 
 ### Problem
-
-mcp-token-store 使用 D1 `$client.prepare()` raw API，local dev libsql 不相容，導致 local 無法 call MCP 認證流程（`database.prepare is not a function`）。Production D1 正常運作。
-
 ### Fix approach
-
-改用 Drizzle ORM（`import { db, schema } from 'hub:db'`）。四處 raw SQL 皆有對應 drizzle 表達式。
-
 ### Acceptance
-
-- Local `pnpm dev` 可 call `/mcp` 並通過 Bearer token 驗證
-- 新 spec `test/integration/mcp-token-store.spec.ts` 覆蓋 CRUD
-- B16 人工檢查 #10 可 local 跑一遍驗證（GUEST_ASK_DISABLED / ACCOUNT_PENDING）
 ```
+
+`## Index` 表列 ID / Title / Priority / Status / Discovered / Owner。Problem / Fix approach 必填且具體，**NEVER** 為湊一條寫空洞 entry。
 
 ### Status 欄位語意
 
@@ -93,26 +72,17 @@ mcp-token-store 使用 D1 `$client.prepare()` raw API，local dev libsql 不相�
 
 ## 登記時機（強制）
 
-原本擋在 archive 前的 `pre-archive-followup-gate.sh` 隨 spectra 生命週期一起退場（2026-09-07）。**它擋的東西沒有消失，只是現在沒有機器替你擋**——義務因此往前移到寫下那行註記的當下：
+**沒有機器替你擋這一條**，義務落在寫下註記的當下（§ 直接登記）。另外：
 
-1. 在 tasks 檔寫下任何 deferred / blocked / follow-up 註記時，**同一次編輯**內開或續跑 `flow plan open`（未遷移 consumer 才開 `docs/tech-debt.md` entry）
-2. 每個 ID 對應主清單的有效 entry，或既有 closed archive 的唯一終態憑證；重複 ID、未知狀態、缺 Reason 的關單都是不合規
-3. 未結案 entry 保留 Problem / Fix approach / Acceptance；已結案憑證保留 ID、Status、Resolution 或 Reason，以及可核對的證據
-4. 等待外部條件、部分完成與已落地待驗收**仍是未結案工作**，保留在主清單。active 工作只從主清單產生
+1. 每個 ID 對應主清單的有效 entry，或既有 closed archive 的唯一終態憑證；重複 ID、未知狀態、缺 Reason 的關單都是不合規
+2. 未結案 entry 保留 Problem / Fix approach / Acceptance；已結案憑證保留 ID、Status、Resolution 或 Reason，以及可核對的證據
+3. 等待外部條件、部分完成與已落地待驗收**仍是未結案工作**，保留在主清單。active 工作只從主清單產生
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | informational — **不觸發任何東西**。原機械閘已退場，目前沒有 detector 掛在「寫下 follow-up 註記」這個事件上 |
+| 觸發條件 | informational — **不觸發任何東西**。沒有 detector 掛在「寫下 follow-up 註記」這個事件上 |
 | 消費端 | 正在 tasks 檔寫 follow-up 註記的那個 agent（本節）；`flow sources --apply` 每輪把 actionable-open 的 TD 對帳成 work 卡 |
 | 載入路徑 | 本節（`rules/core/follow-up-register.md`，paths-gated 於 `tasks/**`、`specs/plans/**`、`docs/tech-debt.md`） |
-
-### 為什麼要這麼嚴格
-
-以往 tasks 檔的 `DEFERRED` / `LOCAL BLOCKED` 註記在工作收尾後被刪掉或埋進歸檔，沒人主動回頭 grep，結果是「寫了註記 = 沒寫」。本節強制作者在**當下**做出選擇：
-
-- 寫入 register → 有 ID 有責任人，未來可追蹤
-- 或標 `wontfix` → 明確放棄 + reason
-- 否則那行註記等於沒寫
 
 ---
 
@@ -145,43 +115,4 @@ mcp-token-store 使用 D1 `$client.prepare()` raw API，local dev libsql 不相�
 node vendor/scripts/flow/flow.ts sources --apply   # TD 主清單 → work 卡對帳（clade 自身）
 node .clade/vendor/scripts/flow/flow.ts sources --apply   # consumer 端
 node scripts/audit-tech-debt-hygiene.ts            # register 六條 invariant
-```
-
-輸出內容：主清單每條的 Status / Priority、對應的 work 卡、以及 orphan / consumer-scope leak 的 lint。
-
----
-
-## 與既有規則的關係
-
-- **`ux-completeness.md`**：本規則補充「Definition of Done」延伸面——即使 tasks 全勾，未登記的 follow-up 就是未完成。
-- **`proactive-skills.design-checkpoint.md` Design Gate**：Design Gate 檢查 UI 視覺品質；本規則檢查未解決項是否有追蹤。兩者並存。
-- **`commit.md`**：commit 收工依 § 主動消化 同步清理相關紀錄。
-- **`session-tasks.md`**：`tasks/<date>-<slug>.md` 內出現「等待中」「之後再說」性質的項目，**MUST** 當下建 TD-NNN entry，不能只留註記在 tasks 檔（tasks 檔會被刪，註記跟著消失）。
-
----
-
-## 必禁事項
-
-- **NEVER** 用自由文字註記 follow-up 而不開 TD entry
-- **NEVER** 因為「現在沒有 hook 擋我」就把登記往後推——執行者現在只剩讀到本節的那個 agent
-- **NEVER** 把本規則當作「多餘繁文」—— 隱患擱置正是本規則防堵的對象
-- **NEVER** 在 register 寫入內容空洞的 entry 只為湊一條；Problem / Fix approach 必填且具體
-
----
-
-## 違反時的回報方式
-
-Hook / script 偵測到違反時，輸出格式統一：
-
-```
-[Follow-up Register] 未登記的 follow-up
-
-問題：`tasks/<date>-<slug>.md` 出現 TD-003 引用，但 docs/tech-debt.md 無此 ID
-
-修正方式：
-  - 補寫 docs/tech-debt.md 的 TD-003 entry（包含 Problem / Fix / Acceptance 三段）
-  - 或移除 tasks 檔的引用（若問題已無效）
-
-歷史引用：
-  - 保留原 ID，提供 closed archive 的結論、理由與證據
 ```

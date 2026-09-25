@@ -12,15 +12,11 @@ paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/*
 
 | 層 | 角色 | 版控 |
 | --- | --- | --- |
-| canonical skill source | **真相層** | **MUST 進版控**（含第三方 skill） |
+| canonical skill source | **真相層** | **MUST 進版控**（含第三方 skill——上游可能 force-push 或刪除） |
 | runtime projection | generator 產生的投影 | **MUST 遵守該 runtime 的 ignore / ownership 契約** |
 | `skills-lock.json` | 各 skill 的 source 與 computedHash | **MUST 進版控** |
 
 生成的 runtime instruction 或 skill projection 必須能由 canonical source 完整重生；重生產物是否 tracked、放在哪個 native 目錄，由目標 runtime adapter 宣告。
-
-## 為什麼第三方 skill 也要進版控
-
-第三方 skill 的來源在別人的 repository。上游 force-push、refactor、刪除或改名都可能讓原版本無法重建，而 skill 內容會實質影響 agent 行為，是行為契約的一部分。
 
 ## 三條 MUST
 
@@ -65,7 +61,7 @@ user-level 的同名 skill 與 repo 內投影同名是合法遮蔽：pi 採 proj
 
 Clade-managed skill 的共同來源在選用 plugin 的 `capabilities/<package>/skills/<name>/`，單端差異在相應 adapter。Consumer 自有與第三方安裝內容先依既有 ownership／安裝紀錄辨認來源；**NEVER** 因它位於 `.claude/skills/` 就把同名內容自動接管為 generator-owned。遷移來源位置需保存原內容、明確 adoption 與可恢復紀錄。
 
-node_modules-backed symlink 只有在 adapter 明列、且 fresh setup 能重建時才可例外。Clade capability planner 目前拒絕 plugin source 中的 symlink；legacy installer 的例外不能用來放行此 planner 的拒絕。
+node_modules-backed symlink 只有在 adapter 明列、且 fresh setup 能重建時才可例外。Clade capability planner 拒絕 plugin source 中的 symlink；legacy installer 的例外不能用來放行此 planner 的拒絕。
 
 ## 驗證入口與覆蓋邊界
 

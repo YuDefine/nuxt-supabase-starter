@@ -39,11 +39,7 @@ commit 紀律（白名單 `--only` / 其餘 `/commit`）、scope-verify、三層
 
 本分支收窄的只有**寫**的併發（主線親自進 worktree，上限 1）。**每一個**命中 [dispatch-topology.md](dispatch-topology.md) § 主線即時組的 pre-scan 前置判定 的 read-heavy item 照樣派 pi——read 不佔主線的序列額度。這在本分支比其他 repo 更重要：全部執行 context 壓在單一主線時，pre-scan 省下的正是最稀缺的那份。
 
-## 實證
+## 為什麼主線自己做，不改派 subagent
 
-2026-08-06 round 18 於 clade home 實跑四次（TD-405 / TD-401 / TD-397 / TD-365 各一個 worktree），
-四次都走完 commit → merge-back → 三層 verify，主線的 `git` 完全正常。
-
-對照：round 11 兩個 worktree **subagent** 的 `git` 一律 permission denied（含 `git status` /
-`git log`，加 `dangerouslyDisableSandbox` 也一樣）——那是 [[TD-396]] 的命題，本分支不解它，
-只是繞開它。
+clade home 的 worktree **subagent** 跑 `git` 會 permission denied（含 `git status` / `git log`，
+加 `dangerouslyDisableSandbox` 也一樣，[[TD-396]]），主線的 `git` 正常。本分支繞開它，不解它。

@@ -35,7 +35,7 @@ supabase migration new <description_in_snake_case>
 
 根據需求撰寫 SQL，**必須遵守以下規範**：
 
-#### 函式規範（CRITICAL）
+#### 函式規範（防 search_path injection）
 
 ```sql
 -- ✅ 正確：search_path 必須是空字串
@@ -43,7 +43,7 @@ CREATE OR REPLACE FUNCTION schema_name.function_name()
 RETURNS return_type
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = ''  -- 必須是空字串！
+SET search_path = ''  -- 必須是空字串
 AS $$
 BEGIN
   -- 使用完整路徑：schema_name.table_name
@@ -54,8 +54,8 @@ $$;
 
 ```sql
 -- ❌ 禁止：任何其他 search_path 值
-SET search_path = public, pg_temp  -- 絕對禁止！
-SET search_path = public           -- 禁止！
+SET search_path = public, pg_temp  -- 禁止
+SET search_path = public           -- 禁止
 ```
 
 #### Schema 規範

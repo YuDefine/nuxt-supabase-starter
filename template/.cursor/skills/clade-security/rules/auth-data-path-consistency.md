@@ -11,7 +11,7 @@ paths: ['app/**/*.ts', 'packages/*/app/**/*.ts', 'app/**/*.vue', 'packages/*/app
 
 瀏覽器的 Supabase client（`useSupabaseClient()`）向 PostgREST 發 request 時，身分來自 **Supabase Auth 的 JWT**，不來自應用程式自己的 Cookie Session。若應用程式已移除或未使用 Supabase Auth（改用 `nuxt-auth-utils`、Better Auth 等），瀏覽器的 Supabase client **永遠以 `anon` role 存取**，無論使用者是否已登入。
 
-此規則防止「session 層已換、但 client 端仍直連 PostgREST」的混合狀態——<consumer-b> 2026-07-14 production 401 事故的根因。
+此規則防止「session 層已換、但 client 端仍直連 PostgREST」的混合狀態——它在 production 表現為看似隨機的 401。
 
 ## Trigger
 
@@ -45,19 +45,17 @@ RLS policy 裡的 `auth.uid()` 能取到值，前提是**該 request 攜帶 Supa
 
 若 server 端又是 service-role 連線（`SUPABASE_SECRET_KEY`），情況反過來：service_role 具 `BYPASSRLS`，policy 連評估都不評估，整表放行。
 
-兩者疊加就是最危險的形態：**RLS 已啟用、policy 檔案完整、實際授權為零**。code review 看到 `ENABLE ROW LEVEL SECURITY` 與四條 policy 會判定「有做授權」，但那四條在這個架構下一條都不生效。
+兩者疊加就是最危險的形態：**RLS 已啟用、policy 檔案完整、實際授權為零**。
 
 ### MUST
 
 1. **每一條**引用 `auth.uid()` 的 policy，其所在 repo 的 identity 來源 **MUST** 是 Supabase Auth。（**範圍是所有含 `supabase/migrations/**` 的 consumer 的每一條 policy，不是只檢查新加的那條**——換 auth 策略時既有 policy 會整批失效，而它們不會在 diff 裡出現。）
 2. identity 來源不是 Supabase Auth 時，授權 **MUST** 上移 handler 層（`requireAuth` + ownership 比對 / `requireRole` / 以 `user.id` 夾住查詢條件），RLS **MUST** 改為「啟用 + 零 policy」的 deny-all，並在 migration 內用註解寫明這是 deny-all by design、以及授權在哪一層。
-3. server helper 的**命名 MUST 反映它實際做的事**。回傳 service-role client 的 helper 叫 `getSupabaseWithContext` 這種名字，會讓 handler 作者以為資料範圍已被限縮——實測後果見下方 NEVER 第 1 條的三個事故。
+3. server helper 的**命名 MUST 反映它實際做的事**。回傳 service-role client 的 helper 叫 `getSupabaseWithContext` 這種名字，會讓 handler 作者以為資料範圍已被限縮，實際上 service_role 讓 policy 整表放行（見上方）。
 
 ### NEVER
 
-1. **NEVER** 用 `set_app_context` 這類 RPC 寫 GUC 供 policy 讀。`set_config(..., true)` 是 **transaction-local**，而 PostgREST 每個 request 是獨立 transaction——GUC 在 RPC 回傳的當下就失效，policy 裡的 `current_setting('app.*')` 永遠讀不到它。這不是「大部分情況能用」，是**恆定無效**。
-
-   三次獨立實證：<consumer-b>（Sentry <consumer-b>-6，已修，`server/utils/supabase.ts` 留有逐字註解）、nuxt-supabase-starter（2026-08-04，已修）、<consumer-a>（`supabase/migrations/20260318023108_*.sql` 的 `app.current_tenant_id`，**現況仍在**）。
+1. **NEVER** 用 `set_app_context` 這類 RPC 寫 GUC 供 policy 讀。`set_config(..., true)` 是 **transaction-local**，而 PostgREST 每個 request 是獨立 transaction——GUC 在 RPC 回傳的當下就失效，policy 裡的 `current_setting('app.*')` 永遠讀不到它。**恆定無效**。
 
 2. **NEVER** 把「policy 存在」當成「授權存在」。判斷授權是否生效要同時回答三件事：identity 來源是不是 Supabase Auth、連線角色是不是 service_role、policy 依賴的是 `auth.uid()` 還是 GUC。三者任一錯位，policy 就是死碼。
 
@@ -80,8 +78,5 @@ RLS policy 裡的 `auth.uid()` 能取到值，前提是**該 request 攜帶 Supa
 ## 相關規則
 
 - [[rls-policy]]：RLS policy 撰寫規範（含 GRANT 驗證段）
-- evlog 結構化 logging：`rules/modules/capabilities/evlog/evlog-adoption.md`
-  （capability 模組 —— 宣告 `capabilities: ["evlog"]` 的 consumer 才投影得到。
-  這裡刻意不用 wikilink：本檔留在 core、對每個 consumer 都投影，而 target 不是，
-  寫成 wikilink 會在沒有 evlog 的 repo 變成死鏈。同下一行 auth module 的寫法）
+- evlog 結構化 logging：`rules/modules/capabilities/evlog/evlog-adoption.md`（capability 模組，刻意不用 wikilink 以免在沒有 evlog 的 repo 變死鏈）
 - Auth module variants：`rules/modules/auth/{supabase-self-hosted,better-auth,nuxt-auth-utils}/`

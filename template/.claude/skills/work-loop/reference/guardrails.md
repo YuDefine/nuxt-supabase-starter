@@ -4,9 +4,7 @@
 > Runtime split: state, ownership, approval, and completion obligations are shared. Literal Claude tool names or runner commands in this reference are Claude host bindings; other hosts MUST use their adapter fragment or retain the dependent operation blocked.
 
 
-> 本檔存在的理由：長時間跑的 loop 會被 auto-compaction 壓縮 context，**壓掉的東西裡就包含安全約束，而且壓掉時不會通知你**。所以護欄不能只靠「主線記得」——它必須是每一輪重新讀進最近 context 的檔案。
->
-> **NEVER** 因為「這輪還記得」「上一輪剛讀過」「這輪只做一個小 item」跳過 re-read。你會覺得自己記得，那正是 decay 的症狀而不是反例。
+> compaction 壓掉安全約束時不會通知你，所以護欄每一輪都重新讀進 context。**NEVER** 因為「這輪還記得」「上一輪剛讀過」「這輪只做一個小 item」跳過 re-read。
 
 ---
 
@@ -16,7 +14,7 @@
 2. **落地 main 的 commit 看路徑，不是一律 `--only`** —— 路徑全在 `rules/core/commit.detail.md` § `--only` 適用範圍白名單（HANDOFF / tech-debt / tasks / artifact-tick 等）→ `git commit --only -m "…" -- <paths>`。任一路徑不在白名單（source / migration / plugin / 任何程式碼）→ **MUST** invoke `/commit`。兩種都 **NEVER** `git add` + `git commit` 兩段式（會吞掉別 session 預 stage 的內容）。work-loop / unattended / 「護欄寫過一律 `--only`」**NEVER** 是跳過 `/commit` 的理由；卡人工檢查 → packaging，**NEVER** 用 `--only` 繞 0-A
 3. **每個 item 獨立 commit** —— 不把多個 item 的改動混進同一 commit
 4. **不 force push** —— 所有 git 操作 safe，無 `--force`
-5. **動標準層 MUST 散播完畢** —— `rules/`、`capabilities/core/`、`CLAUDE.md`、`vendor/`。**可以改**（2026-08-05 Charles 授權），但改完 **MUST** 走 `/clade-publish` Step 1–9 把它推到 consumer，**NEVER** 改完擱著等人來散。做不到就別動它
+5. **動標準層 MUST 散播完畢** —— `rules/`、`capabilities/core/`、`CLAUDE.md`、`vendor/`。**可以改**，但改完 **MUST** 走 `/clade-publish` Step 1–9 把它推到 consumer，**NEVER** 改完擱著等人來散。做不到就別動它
 6. **不跨 consumer** —— loop 只操作當前 repo
 7. **需求建立有來源授權** —— 每一筆新 plan package（`/specify`）都依下方 § 護欄 7 的來源授權判定；未授權的新目標先 packaging，已授權需求依原身分與驗收接續。
 8. **不碰 user 的 stash** —— worktree / stash audit 只讀不寫
@@ -26,7 +24,7 @@
 12. **每條停止路徑 MUST 跑 `work-loop-lock.ts release --session <id>`** —— 含失敗提早結束的路徑。**NEVER** 改用 Write tool 或 `rm` 直接動 `.clade/work-loop/lock`（per Step 0 § 互斥鎖 Iron Law）
 13. **Blocked / Decision item 先評估再處理** —— 受阻項走 blocker 鮮度判定、待決策項先嘗試自主解決（技術決策自決，只有商業決策才是真的 user-bound）。兩者都**不是**「永遠跳過」。見 `blocker-evaluation.md`
 14. **NEVER 因 size / progress 跳過 dispatch** —— 實作未完的 carrier 不管進度 0% 或工作看起來多大，MUST dispatch；`/implement` 依 carrier 的 phase 結構管理步驟、pause 與 blocker。「需要完整 session」「不適合 loop」= 違反本條
-15. **有卡 ≠ ball ownership** —— `flow gates` 有卡不等於整件 user-bound，受阻不等於 Claude 無事可做。**MUST** 在每件工作路由後檢查carrier 內仍有 agent 做得完的項（未處理 feedback／缺或過期 evidence／未 triage 的 `（issue:）`／未勾 `[discuss]`），任一存在 = 仍有工作。實證（2026-07-21 <consumer-a>）：GUI 標可驗收 + 5 條 issue 未處理 → loop 宣告 user-bound + 30min idle，user 在 GUI 等一個不會來的接手。**「所有工作卡 user action」這句話在 carrier 還有 agent 可做項時就是錯誤判斷**
+15. **有卡 ≠ ball ownership** —— `flow gates` 有卡不等於整件 user-bound，受阻不等於 Claude 無事可做。**MUST** 在每件工作路由後檢查carrier 內仍有 agent 做得完的項（未處理 feedback／缺或過期 evidence／未 triage 的 `（issue:）`／未勾 `[discuss]`），任一存在 = 仍有工作，**NEVER** 宣告「所有工作卡 user action」
 16. **重複 invocation safe（三層）** —— 已 shipped 的 item 不出現在 scan；in-flight item 由 Step 2 的 claim 鮮度 filter 排除；整輪重疊由 Step 0 互斥鎖擋。**三層合起來才算 idempotent**——只靠「shipped 不再出現」不夠
 
 ### 護欄 7 的來源授權
@@ -56,8 +54,8 @@
     判不出自己在哪個 mode → **當作 unattended**。**NEVER** 用「這個 item 很重要」在 unattended 下破例呼叫——那會讓整個 loop 卡死在等人。
 
 18. **能寫出「推薦 A」就去做，NEVER packaging** —— packaging 是 fallback 不是 default。寫得出 `(推薦)` 標記＝決策已完成，送去等人覆述你的結論是拖慢開發。判準見 `autonomy-predicate.md` § Iron Law
-19. **人類 gate 只擋真正不可逆的** —— prod 部署 / 刪除 branch / tag / 遠端資料 / 花錢的 API / 任何 `--force`。**publish 與 propagate 不在此列**（2026-08-05 Charles 授權）：它們可 revert + 重新 publish，且 MUST 走 `/clade-publish` Step 1–9，NEVER 自己拼 `publish.ts` + `propagate.ts`
-20. **attended 下待答佇列非空 NEVER 開工** —— state 的 `awaiting[]` 非空、且本輪是 attended（非 `--unattended`、非 `claude --print`）→ **MUST** 先跑完 Step 2.7 開場清算把佇列問到空，**NEVER** 進 Step 3 分類或 Step 4 dispatch。判準是 mode 與佇列空不空，**NEVER** 是題數或急迫性。unattended 下反過來：佇列非空**照跑**、只排除佇列裡那幾條，**NEVER** 因此寫 `stoppedReason`。見 `decision-drain.md`
+19. **人類 gate 只擋真正不可逆的** —— prod 部署 / 刪除 branch / tag / 遠端資料 / 花錢的 API / 任何 `--force`。**publish 與 propagate 不在此列**：它們可 revert + 重新 publish，且 MUST 走 `/clade-publish` Step 1–9，NEVER 自己拼 `publish.ts` + `propagate.ts`
+20. **attended 下待答題未送達 NEVER 開工** —— state 的 `awaiting[]` 非空、且本輪是 attended（非 `--unattended`、非 `claude --print`）→ **MUST** 先跑 Step 2.7 開場清算，在新工作 dispatch 前送達全部待答題；答案未到只阻擋依賴該答案的 item，獨立且已授權的有界工作可在送達後進 Step 3／4。判準是 mode，**NEVER** 是題數或急迫性。unattended 下反過來：佇列非空**照跑**、只排除佇列裡那幾條，**NEVER** 因此寫 `stoppedReason`。見 `decision-drain.md`
 21. **specific shared-action consent 用可點選選項完成** —— classifier 要具名 consent 時，attended mode MUST 用 `AskUserQuestion`；推薦選項 description 放完整 repo / resource、action、path / ref 與排除項，選取即授權。**NEVER** 要 Charles 手打、複製或貼上同一句授權。unattended 只 packaging 同一份完整範圍，NEVER 推定 consent
 
 ---
@@ -80,15 +78,7 @@
 - 只改 brief 明列的檔案路徑。需要動 scope 外的檔 → 停下來回報，NEVER 自己動手（主線會跑 scope-verify 對照）
 ```
 
-**授權邊界由 brief 的所有權清單承載，不由路徑黑名單承載。** 這是 2026-08-05 從路徑制改過來的：
-護欄 5 已授權「標準層可以改，改完 MUST 走 `/clade-publish`」，而舊版第 3 行寫死
-`NEVER 改標準層` —— round 11 兩條要改標準層的 dispatch 照舊版逐字貼，brief 會同時說「做這 12 個
-`rules/` / `capabilities/` 檔」和「NEVER 改 `rules/` / `capabilities/`」，合規的 subagent 只能停手回報。
-主線當時是自行在 brief 裡加 carve-out 才派得出去，而 § C 的存在理由正是「不可即興改寫」。
-
-因此主線 **MUST** 確保 brief 帶一份逐條列出的所有權清單（`subagent-scope-discipline.md`
-§ 併發編輯協議 本來就要求兩份清單）——**NEVER** 只寫「你可以改標準層」這種沒有清單的授權，
-那等於把邊界還原成沒有邊界。
+**授權邊界由 brief 的所有權清單承載，不由路徑黑名單承載**：主線 **MUST** 確保 brief 帶一份逐條列出的所有權清單（`subagent-scope-discipline.md` § 併發編輯協議），**NEVER** 只寫「你可以改標準層」這種沒有清單的授權。
 
 ---
 
@@ -109,7 +99,7 @@
 - ❌「等 Charles 回來直接問比較快」— unattended / runner 下那是 `AskUserQuestion`，護欄 17 禁止
 - ❌「這條太模糊，packaging 不出來」— 先跑唯讀調查補事實（見 `autonomy-predicate.md` § 判不出來時的三步）
 
-**跳過 dispatch 類**（逐字實錄，前身為 `turbo-dispatch.md`）：
+**跳過 dispatch 類**（逐字實錄）：
 
 - ❌「needs careful testing」— worktree isolation 就是為此設計
 - ❌「complex」「多個 script 有不同 scope」— 那是 dispatch 的理由不是 skip 的理由
@@ -136,7 +126,7 @@
 - ❌「本輪無 actionable = 完成」— 只代表這輪 scan 沒新東西
 - ❌「in-flight 還在跑，但我先把 HANDOFF 寫了收工」— 違反護欄 11
 
-**睡掉無人值守時間類**（2026-08-05 round 1 實測違反 —— 還有 28 條 TD 未 triage 就排了 900s wakeup）：
+**睡掉無人值守時間類**：
 
 - ❌「這輪做了 3 件，夠了」— 沒有 per-round 配額
 - ❌「剩下的下一輪再做」— 那段睡眠不產生任何東西，而 user 正是為了離開座位才開這個 loop
@@ -154,7 +144,7 @@
 - 正要在 main 上對白名單外路徑跑 `git commit --only`（該走 `/commit`）
 - 正要對 `.clade/work-loop/lock` 下 Write / Edit / `printf` / `echo` / `rm`（鎖檔只由 `work-loop-lock.ts` 讀寫）
 - state 檔的 `inFlight` 非空，但你正在寫 Step 7
-- state 檔的 `awaiting[]` 非空、本輪是 attended，而你正要進 Step 3 分類
+- state 檔的 `awaiting[]` 有題目尚未送達、本輪是 attended，而你正要進 Step 3 分類
 - 已收到 Charles 的答案，但還沒寫進 `decisions` 就開始 dispatch
 - 這輪還沒 Read 過本檔
 

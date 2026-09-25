@@ -4,7 +4,7 @@
 
 **觸發點：** `project-bootstrap` 在 UI 新專案（mode=`new`、有前端／impeccable 適用）於 scaffold／projection 成功後，agent **MUST 立刻自己載入本檔**（或內部 invoke hub-core `design` 的 new mode），對使用者缺哪項問哪項直到齊，並把答案寫進 `PRODUCT.md`／`DESIGN.md`／theme tokens。這是 bootstrap **同一條流程的必經段**，不是可選作業。`/design new` 仍可當 skill 入口給 **agent 呼叫／bootstrap 內嵌**；對人類操作者不是必打指令。**NEVER** 叫使用者手打 slash command。
 
-**NEVER** 只說「記得裝 impeccable」就過。Agent MUST 對下列每一項檢查；已齊的跳過，缺的 **MUST 向 user 追問直到齊**，不准默默用預設、不准寫進 plan checklist 當「稍後再做」就繼續宣告 bootstrap `READY`。
+Agent 逐項檢查下表，缺的向 user 追問直到齊；不准默默用預設，也不准列成「稍後再做」就宣告 `READY`。
 
 對齊來源：consumer／starter 的 impeccable **v4.3.1**、`capabilities/core/skills/design/SKILL.md` Prerequisites／Step 1、`capabilities/core/skills/design/references/impeccable-install.md`。
 
@@ -19,7 +19,7 @@ UI predicate：`@nuxt/ui`、或 Nuxt 且有 `pages/`／`app/pages/`、或已有 
 | `impeccable-claude` | 要裝 impeccable 給 Claude | `.claude/skills/impeccable/SKILL.md` 存在（copy 目錄或 symlink） |
 | `impeccable-agents` | Codex／多 agent 共用路徑 | `.agents/skills/impeccable/SKILL.md` 存在（symlink mode 常只在這裡有實體） |
 | `impeccable-cursor` | Cursor 主線要讀得到 | `.cursor/skills/impeccable/SKILL.md` 存在 |
-| `impeccable-version` | 鎖定 **4.3.1**（`skill-v4.3.1`） | 每一條存在路徑的 SKILL.md frontmatter 都讀得到版本且等於 `4.3.1`——頂層 `version:` 或 `metadata:` 底下的 `version:`（4.1.3 起被安裝的那份在後者）。**讀不到版本也算未齊**，NEVER 當成通過 |
+| `impeccable-version` | 鎖定 **4.3.1**（`skill-v4.3.1`） | 每一條存在路徑的 SKILL.md frontmatter 都讀得到版本且等於 `4.3.1`——頂層 `version:` 或 `metadata:` 底下的 `version:`。**讀不到版本也算未齊**，NEVER 當成通過 |
 | `install-mode` | copy vs symlink 要跟該 repo 其餘 skill 同一慣例 | `ls -la .claude/skills/`：impeccable 與鄰居同是真實目錄或同是 symlink；對照 `impeccable-install.md` |
 | `install-script` | `scripts/install-skills.sh` 必須單行、**釘 tag** `skill-v4.3.1`，禁止 v2 迴圈 | 有 `npx skills add https://github.com/pbakaus/impeccable/tree/skill-v4.3.1`（或 `IMPECCABLE_TAG="skill-v4.3.1"` 帶入同一條 URL）**且沒有**裸 `npx skills add pbakaus/impeccable`、`pbakaus/impeccable@$skill`／`for skill in … adapt animate` |
 | `product-md` | 要有非 placeholder 的 `PRODUCT.md` | 檔存在、非 `[TODO]`、正文 ≥ 200 chars |
@@ -39,10 +39,8 @@ UI predicate：`@nuxt/ui`、或 Nuxt 且有 `pages/`／`app/pages/`、或已有 
 
 `pin`／`unpin`／`hooks`／`doctor` 是 management，**不是**本表必追項；user 問起才讀 `impeccable-install.md`。
 
-補正命令（仍要問人、不要默默跑完假裝齊）：缺 md → agent 跑 `/impeccable init`（有 UI code 缺 `DESIGN.md` → 先 `/impeccable document`）。缺安裝 → `impeccable-install.md` 標準 snippet（對齊既有 copy／symlink）。缺 design foundation → scaffold 成功後 agent 立刻自己觸發 design new mode／本表追問並寫檔。**NEVER** 把補正寫成請人類手打 `/design new`。
+補正命令（仍要問人、不要默默跑完假裝齊）：缺 md → agent 跑 `/impeccable init`（有 UI code 缺 `DESIGN.md` → 先 `/impeccable document`）。缺安裝 → `impeccable-install.md` 標準 snippet（對齊既有 copy／symlink）。缺 design foundation → agent 自己觸發 design new mode／本表追問並寫檔。
 
-## 與 catalog／BOM 的邊界
+## 與 BOM 的邊界
 
-- Catalog：`db-host`、`register-fleet`、fleet 題。本表不准混進去。
-- BOM：conventions 與 plugin／rule／skill **候選**。BOM 可以**指出**會有 `design` plugin 與 impeccable 第三方 skill；採用與填內容仍走本表追問。
-- 溝通期 BOM 出完後、寫第一個檔之前：若 UI predicate 為真，把本表未齊項列給 user，缺哪項問哪項。
+BOM 可以**指出**會有 `design` plugin 與 impeccable skill，採用與填內容仍走本表。溝通期 BOM 出完、寫第一個檔之前，UI predicate 為真就把本表未齊項列給 user。
