@@ -12,7 +12,7 @@ Reference: `docs/evlog-master-plan.md` § 8.4 (agentic-rag T3)
 
 ## 釐清：evlog 沒有 createAILogger
 
-master plan 早期版本提到 `createAILogger` — **這個函式不存在**。本 snippet 是 convention：在現有 `useLogger(event)` 上掛 `ai.*` 欄位 + 用 `log.info('ai.tool_call', ...)` 發子事件。
+evlog **沒有** `createAILogger` 這個函式。本 snippet 是 convention：在現有 `useLogger(event)` 上掛 `ai.*` 欄位 + 用 `log.info('ai.tool_call', ...)` 發子事件。
 
 優點：
 - 共享 enricher / drain / sampling / redaction 配置
@@ -45,7 +45,7 @@ master plan 早期版本提到 `createAILogger` — **這個函式不存在**。
 `costUsd` 由 consumer 自己計算（evlog 不知道 model pricing）。建議：
 
 ```ts
-const PRICING = {
+const PRICING = { // 範例值；依 provider 現行價目表填
   'gpt-4o-mini': { prompt: 0.15 / 1_000_000, completion: 0.6 / 1_000_000 },
   'claude-haiku-4-5': { prompt: 0.8 / 1_000_000, completion: 4 / 1_000_000 },
   '@cf/meta/llama-3-8b-instruct': { prompt: 0, completion: 0 }, // Workers AI free tier
@@ -67,16 +67,19 @@ function estimateCost(model: string, usage: { promptTokens: number; completionTo
 | `ai.embedding` | cost > $0.001 才 keep | 高量 batch embed 量太大，自家 filter |
 | `ai.moderation_flagged` | 100% | 合規必須有 |
 
-進 nuxt.config.ts `evlog.sampling.byRoute`：
+進 nuxt.config.ts `evlog.sampling`（evlog 2.27 型別：`rates` 是依 level 的 0–100 百分比，沒有依 route 的 head sampling；依 route 保留用 `keep`）：
 
 ```ts
 sampling: {
-  byRoute: {
-    'POST /api/chat': 1.0, // 全收
-    'POST /api/embed': 0.1, // 高量 embedding 採樣 10%
-  },
+  rates: { info: 10 }, // info 事件 head sampling 留 10%
+  keep: [
+    { path: '/api/chat/**' }, // chat 路由一律保留
+    { status: 400 }, // status >= 400 一律保留
+  ],
 }
 ```
+
+embedding 的「cost > 門檻才 keep」這類自訂條件走 Nitro `evlog:emit:keep` hook。
 
 ## PII / 安全（強制條件）
 

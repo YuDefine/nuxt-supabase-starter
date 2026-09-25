@@ -19,18 +19,9 @@ Script 位置：
 - Consumer 端：由 adapter 綁定 `$GH_CI_WATCH`
 - Clade home：`capabilities/core/scripts/gh-ci-watch.sh`
 
-## 機制選擇：為什麼是 background Bash + script，不是其他
+## 機制選擇
 
-> 這段是本 skill 存在的理由。**NEVER** 退回用 Agent subagent 監看 CI——那正是本 skill 要根治的事故根因。
-
-**事故實證（2026-07-25，<consumer-a> v0.99.7 發版）**：依當時規約派兩個 LLM watcher 監看 Deploy Staging / Production，實際發生四件事：(1) brief 明寫「completed 才回報」，agent 仍反覆中途回報「持續監看中…」，每次回報都是一次 LLM turn，累計 **235k+ tokens 且沒有產出最終結果**；(2) 監看的 staging run 被 concurrency `cancel-in-progress` 取消後，agent 繼續空等已死的 run；(3) 重新指派新 run id 後，watcher 口頭答應卻仍回報舊 run 結論；(4) 同一份 brief、同一個 model，兩個 watcher 行為不一致。
-
-| 機制 | 判定 | 理由 |
-| --- | --- | --- |
-| **target adapter 的 background command runner + 本 script** | ✅ **採用** | 官方定位就是「單次通知：告訴我 X 好了沒」。腳本達 terminal state 即 exit → 剛好一次通知；無 LLM 參與 → 零等待成本、行為確定。事故中需要「判斷力」的三件事（run 尚未建立、被 concurrency 取代、同 SHA 多條 run）其實都是**機械規則**，已全部編進 script（Phase 1 pending 重查、Phase 2 successor 追蹤、`--since`/`--commit` 過濾），不需要 LLM |
-| LLM watcher | ❌ 禁用 | 見上方事故四點。LLM「判斷力」在這個場景是負資產：不可預測 + 每個動作燒 token。唯一例外見下方「例外」節 |
-| 事件流通知器 | ❌ 不用 | CI 監看要的是**恰好一次**完成通知；事件流型通知若 filter 沒涵蓋所有 terminal state，crash 時沉默會跟「還在跑」一模一樣。本 script 用 `RESULT:` 行涵蓋全部 terminal state，從結構上排除這個坑 |
-| 主線 wakeup / 前景 `gh run watch` | ❌ 不用 | 佔用主線 context / block 主線對話。`gh run watch` 也不處理 run 被取代 |
+**NEVER** 用 LLM watcher（Agent subagent）監看 CI：它會中途反覆回報、空等被 cancel 的 run、回報舊 run 結論。run 尚未建立、被 concurrency 取代、同 SHA 多條 run 都已由 script 機械處理。事件流通知器與前景 `gh run watch`／主線 wakeup 也不用（前者漏 terminal state 時沉默，後者 block 主線）。
 
 ## 監看：canonical dispatch 樣板
 
@@ -67,23 +58,15 @@ bash "$GH_CI_WATCH" run <run-id>
 
 ### 場景 B — 盯某 workflow 最新一條 run（push 後標準場景）
 
-**workflow 識別字串一律傳檔名（`ci.yml`），NEVER 傳 display name 或自己想的簡稱。**
-`gh run list -w` 只認兩種形式：workflow **檔名**，或 `name:` 欄位的**逐字** display name。
-display name 是自由文字、跟檔名無關（`ci.yml` 的 name 常是 `CI / Deploy`），而且隨時可被編輯 ——
-檔名要改得動 git。傳錯時 script 自 2026-08-28 起在進輪詢前就 fail fast：exit 2 並把該 repo
-實際的 workflow 清單印進 `RESULT:` 行；先前是被當成 API 抖動重試 3 次後回通用 `UNAVAILABLE`，
-訊息與「gh 掛了 / 沒授權」同形（<consumer-b> v1.272.0 實證，見
-[[pitfall-gh-ci-watch-workflow-display-name-guess-fails-opaquely]]）。名字拿不準就先跑
-`gh workflow list`，或直接用場景 A 的 `run <run-id>`。
-
+**workflow 識別字串一律傳檔名（`ci.yml`），NEVER 傳 display name 或自己想的簡稱。** 傳錯時 script exit 2 並印出實際 workflow 清單；拿不準就先跑 `gh workflow list`，或用場景 A 的 `run <run-id>`。
 
 ```bash
 bash "$GH_CI_WATCH" workflow deploy-staging.yml --branch main
 ```
 
-- **run 尚未建立也可以直接派**：run 在 push 送達後才被建立，watcher 起跑時它可能還不存在；`/commit` 的發版序列是 `git push origin main` 先、具名 tag 後（2026-09-04 起無條件，見 `capabilities/core/skills/commit/SKILL.md` § Step 6-A），所以 tag 觸發的 production run 更是要等第二趟 push 才出現——script 把「查無 run」視為 pending 繼續等（預設只認腳本啟動前 120s 之後建立的 run，可用 `--since <ISO8601>` 調整）
+- **run 尚未建立也可以直接派**：script 把「查無 run」視為 pending 繼續等（預設只認腳本啟動前 120s 之後建立的 run，可用 `--since <ISO8601>` 調整）
 - run 被 concurrency `cancel-in-progress` 取代 → script 自動改追 superseding run（同 workflow + 同 branch、createdAt 較新者）
-- **tag 觸發的 workflow MUST 用 `--tag v<version>`，NEVER 用 `--branch main`**（例外：**同一支** workflow 同時由 main push 與 tag push 觸發時，`--tag` 解析成 SHA 之後兩條 run 在同一個 SHA 上、分不開，要判「這個 tag 有沒有觸發」得改用 `headBranch` 過濾——見 `capabilities/core/skills/commit/SKILL.md` § Step 6-A）：tag 觸發的 run 其 `headBranch` 是 **tag 名**不是 `main`，`--branch main` 對它永遠篩不到 run → watcher 一路 pending 到 `WATCH_TIMEOUT` exit 3，即使該 run 其實是綠的（2026-07-25 <consumer-b> v1.250.0 實證）
+- **tag 觸發的 workflow MUST 用 `--tag v<version>`，NEVER 用 `--branch main`**（例外：**同一支** workflow 同時由 main push 與 tag push 觸發時，`--tag` 解析成 SHA 之後兩條 run 在同一個 SHA 上、分不開，要判「這個 tag 有沒有觸發」得改用 `headBranch` 過濾——見 `capabilities/core/skills/commit/SKILL.md` § Step 6-A）：tag 觸發的 run 其 `headBranch` 是 tag 名，`--branch main` 永遠篩不到而一路等到 `WATCH_TIMEOUT`
 
 ```bash
 bash "$GH_CI_WATCH" workflow ci.yml --tag "v$(node -p 'require("./package.json").version')"
@@ -91,7 +74,7 @@ bash "$GH_CI_WATCH" workflow ci.yml --tag "v$(node -p 'require("./package.json")
 
 ### 目標 ref MUST pin 在你剛推的那一個（hard rule）
 
-**NEVER 在 dispatch 當下才 `--commit "$(git rev-parse HEAD)"`。** `HEAD` 是活的：多 session 共用同一條 main 是常態，`git push` 與派 watcher 之間別的 session 可能已經推了新 commit，`$(git rev-parse HEAD)` 於是解析成**不是你發版的那個 commit**。那個 SHA 通常沒有任何 run，`gh run list -c` 回空陣列，而 script 把「查無 run」當成「run 尚未建立」——失敗形狀是**一路 pending 到 `WATCH_TIMEOUT`**，跟「run 還在排隊」外觀完全一樣，一小時後才發現盯錯目標（2026-08-02 <consumer-b> v1.258.0 實證：HEAD 已被別 session 推進 2 個 commit）。
+**NEVER 在 dispatch 當下才 `--commit "$(git rev-parse HEAD)"`**：別 session 可能已推了新 commit，盯錯目標會一路 pending 到 `WATCH_TIMEOUT`。
 
 用不可變的 ref 取代活的 `HEAD`，三選一：
 
@@ -107,7 +90,7 @@ script 會在第一行回顯目標 commit 的 subject、所屬 tag 與是否為�
 [watch] target commit 4484a133 = "🚀 deploy: 發布新版本 v1.258.0" (tags: v1.258.0, is-HEAD: no)
 ```
 
-`is-HEAD: no` 本身**不是**錯誤——上例正是正確狀態（別 session 之後又推了 commit）。要核對的是 subject 與 tag 是不是你剛推的那一個。
+`is-HEAD: no` 本身**不是**錯誤；要核對的是 subject 與 tag 是不是你剛推的那一個。
 
 ### 場景 C — 等某 SHA 的某 workflow 出結果
 
@@ -117,7 +100,7 @@ bash "$GH_CI_WATCH" workflow deploy-production.yml --commit "$DEPLOY_SHA"
 
 `$DEPLOY_SHA` 是 push **之前**就存下來的（見上方 § 目標 ref MUST pin 在你剛推的那一個）。已經有 tag 時改用 `--tag` 更省事。
 
-**`--commit` MUST 給完整 SHA**（別從 `git log` 抄 7–8 碼縮寫）。`gh run list -c` 只認 40 碼，縮寫會**靜默回空陣列**、不報錯；script 自 2026-07-31 起會先用 `git rev-parse` 展開，展不開就 fail fast 回 `UNAVAILABLE`（先前是誤判成「run 尚未建立」等滿 3600s）。
+**`--commit` MUST 給完整 SHA**（script 會嘗試展開縮寫，展不開回 `UNAVAILABLE`）。
 
 同 SHA 多條 run（rerun 過 / concurrency 產生）時取 createdAt 最新一條；失敗照實回報 `RESULT: failure`（**不**默默等 rerun——failure 的處置是主線的事）。
 
@@ -161,7 +144,7 @@ Terminal report 一律自帶：`RESULT:` 行、run URL、各 job 耗時（`--jso
 | range 只含環境變更那一筆 | 才把環境列為第一嫌疑 |
 | `LAST_GREEN: unknown` | 用 `gh run list -w <workflow> -s success -L 1` 自己補查；查不到就明說「起點不明」，**NEVER** 預設是最近那次變更 |
 
-**NEVER** 用「剛剛才換了 runner，應該是它」當起點——那是本段要擋的那一句。2026-09-17 <consumer-e> 實證：`bdd.yml` 自 `ade3e10`（09-14，移除依賴）起就紅，到 `e634d06`（09-17）把 job 搬回 `ubuntu-latest` 才被注意到；range 一跑就看得出紅燈早於搬家。
+**NEVER** 用「剛剛才換了 runner，應該是它」當起點。
 
 ## 查詢：canonical 命令（一次性，前景跑即可）
 
@@ -188,18 +171,15 @@ gh api "/repos/<owner>/<repo>/actions/runs?status=queued" --jq '.workflow_runs[]
 
 1. 讀該 background bash 的輸出**尾段**（`=== CI WATCH RESULT ===` 起），依 `RESULT:` 分流（上表）
 2. **NEVER** 沉默等 user 問進度——通知到了就主動回報
-3. 要**改監看目標**（例如發現該盯另一條 run）：**kill 舊 background bash、派新命令**。**NEVER** 嘗試對跑一半的 watcher「下改派指令」——那是 Agent watcher 時代的失敗模式，script 沒有也不需要互動管道
+3. 要**改監看目標**（例如發現該盯另一條 run）：**kill 舊 background bash、派新命令**。**NEVER** 嘗試對跑一半的 watcher「下改派指令」——script 沒有也不需要互動管道
 
 ## NEVER
 
-- **NEVER** 用 LLM watcher 監看 CI（本 skill 的存在理由；例外見下）
-- **NEVER** 用事件流型通知器做「完成了告訴我」的單次通知
-- **NEVER** 前景 `gh run watch` / 主線 `sleep` 輪詢 block 對話
-- **NEVER** 手寫 ad-hoc `until ...; do sleep ...; done` 輪詢取代本 script——ad-hoc loop 幾乎必漏 terminal state 覆蓋（cancelled / 取代追蹤 / UNAVAILABLE），那些坑 script 都處理了
+- **NEVER** 用 LLM watcher 監看 CI（例外見下）、事件流型通知器、前景 `gh run watch` / 主線 `sleep` 輪詢
+- **NEVER** 手寫 ad-hoc `until ...; do sleep ...; done` 輪詢取代本 script
 - **NEVER** 輪詢間隔 <30s（script 已 clamp，手寫查詢 loop 也適用同紀律）
 - **NEVER** 把「沒收到通知」解讀成任何結論——用 target adapter 的 owner-status 查詢確認它還活著；**NEVER** 讀取未經 adapter 整理的 background output（那會把 output 送進 context，在 control-turn allowlist 之外）
 - **NEVER** 同一條 run 重複派第二個 watcher（改目標 = kill + 重派）
-- **NEVER** 在 dispatch 當下才 `--commit "$(git rev-parse HEAD)"`——`HEAD` 是活的，多 session 下可能已經不是你發版的那個 commit（見 § 目標 ref MUST pin 在你剛推的那一個）
 - **NEVER** 對「這次 diff 不會觸發」的 workflow 派 watcher（例：沒動 `supabase/migrations/` 卻派 migration gate）——它不會有 run，只會等滿 `WATCH_TIMEOUT`。派之前先確認該 workflow 的 `on:` 觸發條件被本次 diff 命中
 
 ## 例外：什麼時候仍可用 Agent

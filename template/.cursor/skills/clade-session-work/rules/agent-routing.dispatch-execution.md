@@ -74,26 +74,26 @@ Pi `openai-codex`目前不提供authoritative pre-dispatch quota snapshot。Disp
 
 ### 配額耗盡時的 fallback 紀律
 
-**執行 SoT 是 dispatcher 自己的 exit 4 payload**：`pi-dispatch.ts` 撞 runtime quota 時回
-`next_tier` / `next_step`（`--chain-origin` 未解時 `next_tier` 回 null 並要求補帶），逐跳鏈與終點
-Claude 檔位由它機械算出。**MUST 照那個 payload 派下一跳，NEVER 憑印象選 model**——記不得鏈長什麼樣
-不是問題，payload 每次都會印。
+**執行 SoT 是 dispatcher 自己的 exit 4 payload**：`pi-dispatch.ts` 撞 provider／quota／runtime 不可用時回
+`next_tier` / `next_step` / `skipped_tiers`，逐跳鏈（`ROW_CHAINS`／`DELEGATE_SUB_CHAIN`）與鏈尾
+（`chainTerminal()`：`dispatch-fallback` subagent 或主線）由它機械算出。**MUST 照那個 payload 派下一跳，
+NEVER 憑印象選 model**——記不得鏈長什麼樣不是問題，payload 每次都會印。`--chain-origin` 已是 inert：
+每列都有完整的鏈，下一跳是查表不是依 origin 走圖。
 
 本檔只留 payload **算不出來**的判斷：
 
-- **NEVER** 把 Astra 的活降成 Luna——鏈上每一跳是**換配額池**，不是降檔
-- **Sol 實作配額耗盡**：依 dispatcher 回報可用的同角色 carrier 或明確 blocker；**NEVER** 把 Astra、cx 或 Claude Code＋GPT 當實作接手者。品質失敗需要 Astra 時另開 `implementation-decision`，決策完成後交還實作者。
+- **NEVER** 派禁用 model 接手（GPT-6 Astra／Luna、Claude Fable／Sonnet／Haiku、Composer 2.5、Devin Fusion）——鏈上每一跳都在 [[agent-routing.routing-table]] 裡，表外沒有「再試一個」
+- **Sol 列的鏈尾是主線**：GPT-6 Sol 不可用時主線（Claude Opus 5.5（effort: medium））自己做；**NEVER** 把 cx 或 Claude Code＋GPT 當實作接手者。品質失敗不前進鏈：delegate-sub 的 Grok 產出不合格升一次 Sol xhigh，Sol 不合格回主線。
 - **NEVER** 拿 `--effort low` 重試當配額應對——配額按 **model** 記，同一個 model 撞的是同一個 limit
 - **輸出本身就是 gate 的工作，鏈的終點 NEVER 是主線自審**。判準見
-  `vendor/scripts/pi-routing-policy.ts` 的 `GATE_OUTPUT_ROWS`（`code-review`）——那一組與 [[agent-routing]]（Claude fragment）§ NEVER 降檔的形狀 第一條同源，**MUST 一起改**
+  `vendor/scripts/pi-routing-policy.ts` 的 `GATE_OUTPUT_ROWS`（`code-review-opus`）——那一組與 [[agent-routing]]（Claude fragment）§ NEVER 降檔的形狀 第一條同源，**MUST 一起改**
   ——「下游機械消費」是同節的**另一**條（結構化輸出不構成降檔理由），不是 `GATE_OUTPUT_ROWS` 建模的那條。
-  產出 changeset 的主線不能回頭自審；配額耗盡後由 dispatcher 指向合格獨立 reviewer，
-  沒有合格 reviewer 時 gate 維持未達成。其餘非 gate row 才按各列終端契約處置。
-  **Runtime-specific carrier 例外**：Fable／Opus subagent 不得把另一 runtime 的 model catalog 當成本端資格；改走 [[agent-routing]] § Runtime residency and native transport 所指的 target adapter carrier。
+  產出 changeset 的主線不能回頭自審；review 席只有 Claude Opus 5.5（effort: medium），額度耗盡時 gate 維持未達成。
+  其餘非 gate row 才按各列鏈尾處置。
+  **Runtime-specific carrier 例外**：Opus subagent 不得把另一 runtime 的 model catalog 當成本端資格；改走 [[agent-routing]] § Runtime residency and native transport 所指的 target adapter carrier。
 - `-cursor` 那一跳先過 workspace capability：`mutation` 一律跳過、`readonly` 才繼續判材料來源與 cwd visibility。材料來源的准入 **MUST 綁在待審材料本身，NEVER 綁在使用者意願**（TD-534）；兩層機械門檻與「NEVER 做成可繞過的形式」全文在下面那條指針指的那一節
 
-鏈的完整形狀、cross-family 跳的准入連言、`--chain-origin` 為何在 `grok-xai` 那格 required、
-grok 接手 luna 鏈的 `PRECONDITIONS_VERIFIED:` 補償控制，全文在
+鏈的完整形狀、cross-family 跳的准入連言、grok 跳的 `PRECONDITIONS_VERIFIED:` 補償控制，全文在
 [[agent-routing.pi-watch-protocol]] § 配額耗盡時的 fallback 紀律 —— **要新增或改動任何一跳之前
 MUST 先讀那一節**，本 pointer 不複述。
 
@@ -106,13 +106,28 @@ MUST 先讀那一節**，本 pointer 不複述。
    **Cursor 池的核實邊界（TD-520）**：`*-cursor` model 的 dispatch，pi 事件流只回放 builtin 七種工具（read/bash/edit/write/grep/find/ls）∩ pi active tools 的原生執行；**非 builtin 的原生工具（WebFetch、Delete、Cursor 端 Subagent 再派、MCP 呼叫）任何 profile 下都不產 tool_execution 事件**。`git status` / `git diff` 的核實**只覆蓋 worktree 內**——worktree 外副作用（`/tmp`、`$HOME`、網路）**查不到也稽核不了**。因此：會處理 secrets / prod 憑證、或 brief 明定「不得外連」的任務 **NEVER** 走 cursor 池；其餘任務走 cursor 池時，主線 NEVER 把「worktree 核實通過 + events log 乾淨」講成「無 scope 外副作用」——cursor 池的 events log 是單向證據，有痕可信、無痕不表示沒發生。
 3. **File handoffs**：brief／report／diff 超過 ~30 行的內容走**檔案路徑**傳遞，不貼進 dispatch prompt 或回報訊息——貼文會常駐主線 context、每 turn 重讀。dispatch prompt 五要素：定位一行、brief 檔路徑、跨 task interfaces、歧義裁決、report 檔路徑＋回報契約（單一事件實錄見 rationale）。
 4. **Model 與 effort 顯式指定**：**每一個** dispatch 都 MUST 把 model 與 effort 當成兩個獨立決策，不靠靜默繼承——省略 = 繼承主線（通常最貴檔 × 最深推理），機械掃描型 subagent 拿主線的 xhigh 跑就是效能過剩。選檔預設，依序判：
-   - **先過 Routing Table**：非 UI 工作命中 [[agent-routing]] § Routing Table 已 route 給 Pi 的類別 → 依該列的 model / effort 派工（`mechanical-fanout`、`read-heavy-scan` 為 `gemini high`；`notion-ops` 為 `gemini high`），**NEVER** 用 Claude subagent 接；Claude subagent 只留給 Claude 例外（需 claude.ai-connected 的非 Notion MCP——Notion 一律 `ntn api`，NEVER 走此例外——、判讀／治理型分析、user 明確指定）。SoT 具名十一列在該列 carrier 之前先經 Devin Fusion（effort: high）→ Devin SWE-2 Max（effort: max），只在不可用時前進
-   - **UI 實作**：Nuxt UI／Content 用 Cursor Composer 2.5，Nuxt 本體用 Sol xhigh，其餘 UI view 用 Opus 5.5（effort: medium），依 [[agent-routing]] § Runtime residency and native transport 的角色與工具判定；**NEVER** 用機械掃描／一般 native delegation 檔位承接 UI phase。原 session 保持 change-level orchestration。
-   - **effort 選檔**：Astra 依 named row 使用 `low` 或 `medium`；Sol 保留自己的 effort，**NEVER** 把 Sol alias 或 effort 映射成 Astra。Gemini 3.8 Flash 一律 `high`；其他模型：機械掃描／純轉錄 → `low`；一般執行 → `medium`；判讀型／高錯誤成本 → `high` 以上。**帶得了 effort 參數的入口**（pi `--effort` / `-c model_reasoning_effort`、Workflow `agent()` 的 `effort`、具名 agent type 的 frontmatter）**MUST** 顯式帶；native delegation 的 model／effort 欄位以本次 tool schema 為準。schema 有可用欄位時依已選檔位填入；schema 不提供欄位時記錄實際繼承限制，不能宣稱已指定。各 runtime 的欄位與繼承條件見 target adapter
+   - **先過 Routing Table**：非 UI 工作命中 [[agent-routing]] § Routing Table 已 route 給 Pi 的類別 → 依該列的 model / effort 派工（`mechanical-fanout`、`read-heavy-scan`、`notion-ops` 首跳 `gemini high`），**NEVER** 用 Claude subagent 接。唯一不過表的 Claude 載體是 in-process 唯讀**定位**搜尋（找檔／找符號／回結論，不回檔案原文）交 `Explore` subagent：顯式帶 `model: opus`，effort 意圖為 `low`——gate 只驗 model 直接放行，`low` 沒有機械強制，Agent tool 無 effort 欄位時照下方「記錄實際繼承限制」；命中 `mechanical-fanout`／`read-heavy-scan` 的掃描矩陣與固定欄位抽取不因換成 Explore 就免過表。其餘 Claude subagent 只留給 Claude 例外（需 claude.ai-connected 的非 Notion MCP——Notion 一律 `ntn api`，NEVER 走此例外——、判讀／治理型分析、user 明確指定）。Devin SWE-2 Max（effort: max）是任意 Pi 列的可選載體，只限不急、緩慢也不堵塞的任務
+   - **UI 實作**：Nuxt 本體用 GPT-6 Sol xhigh，UI view（含 Nuxt UI／Content）用 Opus 5.5（effort: medium），依 [[agent-routing]] § Runtime residency and native transport 的角色與工具判定；**NEVER** 用機械掃描／一般 native delegation 檔位承接 UI phase。原 session 保持 change-level orchestration。
+   - **effort 選檔**：effort 跟著 model 走（`TIER_EFFORT`）——GPT-6 Sol 與 Grok 4.7 一律 `xhigh`，Gemini 3.8 Flash 一律 `high`，Claude Opus 5.5 一律 `medium`（鏈尾 `dispatch-fallback` 為 `low`，由 frontmatter 固定）；dispatcher 對不符的 effort exit 1。**帶得了 effort 參數的入口**（pi `--effort` / `-c model_reasoning_effort`、Workflow `agent()` 的 `effort`、具名 agent type 的 frontmatter）**MUST** 顯式帶；native delegation 的 model／effort 欄位以本次 tool schema 為準。schema 有可用欄位時依已選檔位填入；schema 不提供欄位時記錄實際繼承限制，不能宣稱已指定。各 runtime 的欄位與繼承條件見 target adapter
    - model 選檔原則「**turn count beats token price**」：brief 內含完整 code 的純轉錄型工作才用最低檔；review 型依 diff 的大小／風險選檔（為什麼見 rationale）。
 5. **中間產物不進主線**：外派出去的 task，主線只讀對方寫回的 report 檔，**NEVER** 為了「確認它做對」把該 task 碰過的原始檔重讀一遍——那把省下來的 context 原封不動加回來，而且重讀的是同一批事實，換不到新判斷。第 2 條的 scope verify 照舊 MUST 跑：看**改了哪些檔**（`git status --short` / `git diff --stat`）跟重讀檔案內容是兩件事。
 
 N ≥ 3 個 dispatch 的 findings 要收斂進同一個 synthesis 時，reducer 的五步形狀、group key 准入表與 guard 表在 `~/offline/clade/vendor/snippets/fan-in-reduction/`。**這不是規約**——micro-test 顯示寫成 MUST 買不到東西，見 rationale § fan-in reducer 量到什麼。
+
+## Cloud session 載體（Claude Code 主線）
+
+Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工理由：先依 [[agent-routing]] § 派不派 判定「要開新 session」（覆寫期間只剩長時間 background 或必須隔離），**之後**才選載體。cloud 吃的是與 Opus 急件**同一份** Claude 額度，沒有官方的 cloud 餘額查詢，所以它排在最後：非急件先用 Devin `swe-2-max`（免費、只在 desk，見 [[agent-routing.routing-table]] § Devin SWE-2 Max），cloud 只接 desk 負載已滿、又不急的件。
+
+| 可觀察 predicate | 載體 |
+| --- | --- |
+| 工作在**單一 GitHub repo** 內做得完、驗收看 PR＋CI、不需要本機 secret／Herdr／pi seat／其他 `~/offline` repo／systemd／實體硬體，該 repo 已 push 的 `.claude/settings.json` 把 `model` 釘在 Opus、`effortLevel` 釘在 ≤ `medium`，而且派出帳號的 `--ref` preflight 判 GitHub App 已安裝（網頁看得到 repo 不算；判定方式見 cookbook） | **cloud 可選**，但只在 desk 負載已滿（load 持續高於核數）而且不急時才選；不急而 desk 還有餘裕 → Devin `swe-2-max`，急件 → Herdr pane |
+| 需要跨 repo、本機狀態（dev server、DB lease、未 push 的 commit）、Herdr／pi 派工、或要人即時回答 | Herdr pane（或主線自己做） |
+| review、裁決、掃描這類本 turn 收得回來的 bounded 工作 | in-process subagent（上一節不變）；**NEVER** 為它開 cloud |
+| commit 0-A | **NEVER** cloud：0-A 只認 `claude-review-safe.sh` 的 subagent carrier |
+
+派出帳號在 cc 與 ccw 之間**選額度寬裕的那個**（讀 `~/.cache/claude-quota/{cc,ccw}.json`，快照過期先 `node scripts/dev-node.ts probe-quota <cc|ccw>`），並以 `dispatch --account cc|ccw` 明確指定；不指定就繼承呼叫端的 `CLAUDE_CONFIG_DIR`。一次最多 1 件在飛。
+
+**MUST** 經 `vendor/scripts/cloud-dispatch.ts dispatch` 派出（或對已在跑的 cloud session 跑 `adopt`）：它拒絕 model 未釘的 repo、把交付契約（固定 `cloud/` branch、draft PR、`Work:` 行）寫進 brief 開頭，並留下 record 與 `substrate: cloud` 的 flow span。**NEVER** 裸跑 `claude --cloud` 派工作——沒有 record 的 cloud session 沒有任何本機巡檢面看得到，派它的 session 一結束它就成了孤兒。裸跑還有第二個代價：不帶 `--ref` 時，只要 checkout 有未 commit 改動，CLI 就改成上傳本機 working tree 起 session——VM 沒有 origin、推不回成果，而且同一棵樹上別的 session 未 commit 的內容也一起送上雲。`dispatch` 一律帶 `--ref <base>`（拿不到 GitHub clone 就直接失敗、不上傳），並拒絕 base 領先 origin 的派出。收割看 GitHub（`herdr-patrol.ts --stalled` 的 CLOUD DISPATCHES 區塊與 `cloud-dispatch.ts patrol`），落地後 `cloud-dispatch.ts harvest` 關 span。brief 的資料邊界同 [[agent-routing.pi-watch-protocol]] § Dispatch 資料邊界：cloud 是另一個 runtime，secret 的值 **NEVER** 進 brief。指令、限制與收割形狀全文在 `vendor/snippets/cloud-dispatch/README.md`。
 
 ## Implementation readiness gate（實作派工前）
 

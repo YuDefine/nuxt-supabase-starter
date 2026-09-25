@@ -8,7 +8,7 @@ paths: ['tasks/**', 'specs/plans/**', '.claude/consumer-meta.json', 'registry/no
 
 # Work Item ↔ Notion Hub 耦合
 
-**核心命題**：consumer 若屬於某個 Notion hub，工作的 Notion 狀態**不能跟 work item 生命週期脫鉤**，而且客戶看的時程頁（`交付項目`）**必須由機器維護**，不靠事後想起來。最常見的兩個漏洞：「做完了 / 發版了，但 ticket 還停在『進行中』」與「客戶時程頁上這件工作根本不存在或進度% 是上上週手填的」。本規則把「生命週期事件 → Notion 寫入」綁成明文步驟，全部經同一支 `notion-sync.ts`。
+consumer 屬於某個 Notion hub 時，ticket 狀態與客戶時程頁（`交付項目`）**由機器跟著 work item 生命週期維護**，全部經同一支 `notion-sync.ts`。
 
 ## Hub 模型（一個客戶一個 hub）
 
@@ -29,7 +29,7 @@ paths: ['tasks/**', 'specs/plans/**', '.claude/consumer-meta.json', 'registry/no
 1. **Consumer 屬於某 hub**：consumer metadata 宣告 `notion.hub` + `notion.projectCode`（schema 見 `registry/consumer-meta.schema.json`；hub 與 projectCode 必須在 `registry/notion-hubs.json` 存在）。未宣告 → 本規則**完全不生效**，`notion-sync.ts` 自己 exit 0 什麼都不做。
 2. **有 work item**：`flow open` 拿到 work id。沒有 work item 的動作（讀 board、回 comment、問客戶）不在本規則，走 runtime 的 `notion-hub` skill。
 
-ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --origin notion:<page-id>` 或 `notion-sync.ts open --ticket <page-id>` 把它釘住；來自 ROADMAP / 技術債的工作沒有 ticket，**照樣**在 `交付項目` 出現一列（這正是 Q5 的決策：交付項目 不綁死 ticket，不要為了出現在時程頁造假票）。
+ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --origin notion:<page-id>` 或 `notion-sync.ts open --ticket <page-id>` 把它釘住；來自 ROADMAP / 技術債的工作沒有 ticket，**照樣**在 `交付項目` 出現一列（交付項目 不綁死 ticket；不要為了出現在時程頁造假票）。
 
 ## 欄位契約（property key 一字不差）
 
@@ -40,7 +40,7 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --ori
 | ticket board | `狀態` `修復版本 >=` `上線日期` `Work ID` `所屬專案` `備註` `優先級` `PR` | — | `名稱` `類型` `提報人` `提報日期` `截止日期` `檔案和媒體` `驗收日期`（`名稱` `類型` `提報日期` 只在 machine 自己建票時給初值） |
 | 交付項目 | `狀態` `進度%` `Work ID` `專案` `里程碑` `原始 Ticket` | `預估完成日` | `Item`（建列時 machine 給初值，之後客戶可改字） |
 
-**每個欄位只有一個 writer**。`PR` 是選配欄（board 還沒建時 `release` 跳過並提示）。`提報日期` 是客戶提報日不是發版日（歷史命名坑，2026-09-16 已從 `發布日期` 改名）；發版資訊寫 `修復版本 >=` + `上線日期`。
+**每個欄位只有一個 writer**。`PR` 是選配欄（board 還沒建時 `release` 跳過並提示）。`提報日期` 是客戶提報日不是發版日；發版資訊寫 `修復版本 >=` + `上線日期`。
 
 狀態與 `類型` 選項名**不是**契約：Notion API 不能改 status 選項，所以每個 hub 在 registry 的 `ticketStatus` 把同一套生命週期（backlog / needs-engineer / needs-customer / in-progress / acceptance / done / archived）對映到自己的字；`類型` 同理，`ticketType` 把 bug / feature 對映到本 hub 的選項（未經 live schema 驗證前不宣告，`file` 會拒寫）。`交付項目.狀態` 是 API 建的 select，各 hub 相同：`待處理 / 進行中 / 待驗收 / 完成`。
 
@@ -68,7 +68,7 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --ori
 - **`/commit` Step 6b**（tag 已 push、deploy 已觸發）：同一主線**立即**跑 `release`。consumer 有 post-push CI watcher 時 SHOULD 等綠燈再跑。**NEVER** 留給「下次想起來」。
 - **`預估完成日`**：任何要寫它的時機（開工、客戶問、里程碑排程）**MUST** 先跑不帶 `--confirmed` 的 `eta` 拿建議（來源優先序：`flow eta` 宣告 → Notion 現值 → 無），用 runtime 的詢問介面讓使用者確認**那個日期**，確認後才帶 `--confirmed` 寫。NEVER 用模板數字，NEVER 沒問就寫。
 
-### 客戶面證據契約（D2）
+### 客戶面證據契約
 
 | 證據 | 放哪 | 誰寫 |
 | --- | --- | --- |
@@ -97,7 +97,7 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --ori
 
 ## 執行機制
 
-- **Runtime**：確定性 script（`notion-sync.ts`、`lib/notion-hub.ts resolve`、`scripts/audit-notion-hub-schema.ts`）主線直接跑；自由形式的 Notion 讀寫一律 `ntn api`（**NEVER** Notion MCP／WebFetch），走 [[agent-routing]] 〔`notion-ops`〕（gemini → luna → blocker），**NEVER** 主線第一手自己跑。transport 是 `lib/notion-client.ts` 直接呼叫 Notion HTTPS API（token 取自 `ntn login` 的 auth 檔；同一份 API version / timeout / sidecar），不經 `ntn` CLI 子行程。
+- **Runtime**：確定性 script（`notion-sync.ts`、`lib/notion-hub.ts resolve`、`scripts/audit-notion-hub-schema.ts`）主線直接跑；自由形式的 Notion 讀寫一律 `ntn api`（**NEVER** Notion MCP／WebFetch），依 [[agent-routing]] 〔`notion-ops`〕列派工（執行鏈以該列為準），**NEVER** 主線第一手自己跑。transport 是 `lib/notion-client.ts` 直接呼叫 Notion HTTPS API（token 取自 `ntn login` 的 auth 檔；同一份 API version / timeout / sidecar），不經 `ntn` CLI 子行程。
 - **寫入前**：script 用 `hub.fields` 對 data source 現況做 schema 檢查，缺欄位就以「疑似 schema drift」中止，**NEVER** 猜。常駐對帳跑 `node scripts/audit-notion-hub-schema.ts`（exit 1 = drift，2 = 讀不到 live schema，n/a **NEVER** 讀成 0 drift）；drift → 補 registry `fields`／`ticketType`，**NEVER** 改 `FIELDS` 或在 script 分支。
 - **失敗模式**：所有寫入是絕對值 SET；讀失敗中止；寫入 timeout 留 marker 在 `<consumer>/.clade/notion-sync-pending/` 不自動重試，`notion-sync.ts pending` 列出、下一個自然觸發點重跑（重跑 idempotent）。
 - **Work ID 是對帳鍵**：ticket 與 交付項目 都存 `Work ID` = `<consumerId>/<workId>`（`lib/notion-hub.ts` `encodeWorkKey` / `parseWorkKey`；flow work id 只在單一 repo 內唯一，而 projectCode 可被多個 repo 共用），反查時再限定本專案 relation。reconcile / scan 先用它精確對，找不到才退回標題關鍵字（模糊、有 false positive）。
@@ -117,29 +117,6 @@ consumer 宣告 `notion.hub` 即等同授權流程在**machine 欄位 + 授權�
 
 ## Cross-ref
 
-| 主題 | 真相層 |
-| --- | --- |
-| hub 座標 / 狀態字彙 / projectCode | `registry/notion-hubs.json`（schema 同目錄） |
-| 欄位契約 / 授權轉移 / 欄位所有權 | `vendor/scripts/lib/notion-hub.ts`（`FIELDS` `COLUMN_OWNERSHIP` `MACHINE_TICKET_TRANSITIONS`） |
-| 寫入實作 | `vendor/scripts/notion-sync.ts`（唯一寫入路徑，所有掛載點共用） |
-| 人主動發起的五個意圖（看板／認領客戶票／工程師建票／問客戶／對帳驗收） | runtime 的 `notion-hub` skill |
-| 階段推導（flow／plan → ticket 階段、進度%） | `vendor/scripts/lib/notion-stage.ts`；hook 在 `vendor/scripts/flow/notion-follow.ts` |
-| live schema 對帳 / 新 hub 範本 | `scripts/audit-notion-hub-schema.ts` / `vendor/snippets/notion-hub/README.md` |
-| consumer 能力宣告 | [[consumer-meta]] |
-| work item 開卡 / carrier / origin | [[flow-work-tracking]]、[[session-tasks]] |
-| 發版 / tag 產生點 | [[commit]] Step 5、Step 6b |
-
-## 違反時的回報方式
-
-```
-[notion-work-coupling] Notion 漏同步
-
-問題：work item <id>（hub <hub> / <projectCode>）在 <生命週期事件> 後未跑 notion-sync.ts <command>
-
-修正：
-  - node ~/offline/clade/vendor/scripts/notion-sync.ts <command> --work <id> [--tag <tag>]
-  - needsDecision 非空 → 問完帶答案重跑
-
-繞過：
-  - consumer 不屬於任何 hub → consumer metadata 不放 notion 區塊即 silent no-op
-```
+- 授權轉移與欄位所有權：`vendor/scripts/lib/notion-hub.ts`（`COLUMN_OWNERSHIP` `MACHINE_TICKET_TRANSITIONS`）
+- 階段推導：`vendor/scripts/lib/notion-stage.ts`；hook 在 `vendor/scripts/flow/notion-follow.ts`
+- work item 開卡 / origin：[[flow-work-tracking]]；發版 / tag：[[commit]] Step 5、Step 6b

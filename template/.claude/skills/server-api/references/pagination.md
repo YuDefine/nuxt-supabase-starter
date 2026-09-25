@@ -1,38 +1,5 @@
 # 分頁與搜尋
 
-## 分頁查詢
+分頁、搜尋、排序（含 `sortBy !== 'id'` 時補 `id` tie-breaker）的完整程式碼在 [api-template.md](api-template.md) § GET 列表 API，`PAGE_SIZE_MAX`（定義在 `shared/schemas/pagination.ts`）與 query schema 在同檔 § Zod Schema 定義。
 
-```typescript
-const from = (query.page - 1) * query.pageSize
-const to = from + query.pageSize - 1
-
-let dbQuery = db.from('resources').select('*', { count: 'exact' }).is('deleted_at', null)
-
-// 搜尋
-if (query.search) {
-  const searchStr = `%${query.search}%`
-  dbQuery = dbQuery.ilike('name', searchStr)
-}
-
-// 排序
-const sortBy = query.sortBy ?? 'id' // request schema 列舉允許的欄位
-dbQuery = dbQuery.order(sortBy, { ascending: query.sortDir === 'asc' })
-if (sortBy !== 'id') dbQuery = dbQuery.order('id', { ascending: true })
-
-// 分頁
-const { data, count, error } = await dbQuery.range(from, to)
-```
-
-## 操作日誌
-
-異動操作應記錄日誌：
-
-```typescript
-await db.from('operation_logs').insert({
-  user_id: user.id,
-  action: 'create', // create | update | delete
-  target_type: 'resource',
-  target_id: newItem.id.toString(),
-  details: body,
-})
-```
+異動操作的稽核日誌走 audit 規約（`rules/core/audit-pattern.md` 的 `audit_logs`；<consumer-b> legacy 的 `operation_logs` 見 `db-schema/supabase-self-hosted/audit-schema.md`），不在此另寫一份。

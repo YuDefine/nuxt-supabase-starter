@@ -23,38 +23,30 @@ You are a design director coordinating specialized design skills. Your job: **as
 
 ### 1. pbakaus/impeccable（對齊 v4.3.1）
 
-impeccable 是 1 個 skill 含 23 個 sub-command：`craft`（**v4 起為 deprecated alias**，見下）/ shape / **init** / document / extract / critique / audit / polish / bolder / quieter / distill / harden / onboard / animate / colorize / typeset / layout / delight / overdrive / clarify / adapt / optimize / live（不含 `pin` / `unpin` / `hooks` 三個 management 命令，作者標註 "Plus three management commands"，不算 sub-command；v4.1 另有 `doctor`，同樣是 management，clade plan 不排）。另有 subagent（不是 sub-command）`impeccable_asset_producer` / `impeccable_manual_edit_applier` / `impeccable_documenter` / `impeccable_finish_reviewer`；前兩者僅在具 native `image_gen` 的 Codex harness 可用，Claude Code 用不到。
+impeccable 是 1 個 skill 含 23 個 sub-command：`craft`（deprecated alias，**clade plan NEVER 輸出 `/impeccable craft`**）/ shape / **init** / document / extract / critique / audit / polish / bolder / quieter / distill / harden / onboard / animate / colorize / typeset / layout / delight / overdrive / clarify / adapt / optimize / live。`pin` / `unpin` / `hooks` / `doctor` 是 management 命令，不算 sub-command，clade plan 不排。另有 subagent（不是 sub-command）；其中 `impeccable_asset_producer` / `impeccable_manual_edit_applier` 只在具 native `image_gen` 的 Codex harness 可用。
 
-> **Clade 對齊版本：`skill-v4.3.1`**（2026-09-23 從 v4.1.1 升級；GitHub release: <https://github.com/pbakaus/impeccable/releases/tag/skill-v4.3.1>；engine `0.1.5`）
+> **Clade 對齊版本：`skill-v4.3.1`**（GitHub release: <https://github.com/pbakaus/impeccable/releases/tag/skill-v4.3.1>；engine `0.1.5`）
 >
-> **v4.1.1 → v4.3.1 對 clade plan 的衝擊：sub-command 零條，呼叫形態全部。** 23 個 sub-command 集合不變（`command-metadata.json` 逐 key 比對），本檔各 mode 排出來的 `/impeccable <sub>` 全部仍有效；`craft` 維持 deprecated alias，**clade plan NEVER 輸出 `/impeccable craft`**。改變的是**腳本**：4.2.0 刪掉全部 `scripts/*.mjs`，改成一支原生 launcher `scripts/impeccable`（Windows 無 `sh` 時用 `impeccable.cmd`），舊腳本都變成它的 verb——`context`、`signals`、`concept-seed`、`serve-question`、`surface-brief`、`live`、`pin`、`hooks`。
+> 腳本是一支原生 launcher `scripts/impeccable`（verb：`context`、`signals`、`concept-seed`、`serve-question`、`surface-brief`、`live`、`pin`、`hooks`），第一次執行時下載 engine binary（沙箱無網路拿不到，所以安裝時就跑 `engine-probe`，見 `references/impeccable-install.md`）。`serve-question` 與 `concept-seed` 的契約見 [decision-page.md](decision-page.md)。
 >
-> **launcher 第一次執行時下載 engine binary**（`github.com/pbakaus/impeccable/releases/download/engine-v<ver>/`，放 `~/.impeccable/bin/<ver>/`，每台機器每個 user 一份、跨 repo 共用；`IMPECCABLE_HOME` 可改落點）。binary 不在 skill 樹裡、`skills-lock.json` 的 hash 涵蓋不到，完整性只靠同 release 的 sha256 sidecar——這是 2026-09-23 拍板接受的供應鏈取捨。**沒有對外網路的沙箱拿不到 binary**，所以安裝 snippet 在裝完當下就跑 `engine-probe` 把 binary 先下載好（見 `references/impeccable-install.md`）。
+> **Setup**：每個 session 首次使用前跑一次 `$IMPECCABLE/scripts/impeccable context --target <path>`（`$IMPECCABLE` 的解析見 [decision-page.md](decision-page.md) § 路徑解析），載入 PRODUCT.md / DESIGN.md 與對應 surface brief。一個 session 跑一次即可。
 >
-> `/design` 決策頁契約（[decision-page.md](decision-page.md)）相容：`serve-question` 的 `--schema` / `--start` / `--wait` / `--update` / `--key` / `--payload`、exit 語意、stdout `QUESTION URL` / `QUESTION KEY` / `ANSWER:`、答案檔 `.impeccable/questions/<key>.answer.json` 全部不變（上游以 byte 級回放驗證 Rust 版）。`concept-seed` 的 `--scope` / `--mode` / `--kind` / `--register` / `--reroll`、`ASSIGNED INDEX`、`NO_PRODUCT_MD`（exit 1）也不變。**4.1.3 起** question server 對非 loopback 的 `Host` / `Origin` 回 403——`/decisions` 嵌頁那一側要改寫 Origin，見 clade TD-799。
+> launcher 不存在、或 engine 下載失敗 → STOP 回報，**NEVER** 用聊天問答代替決策頁（上游「讀 PRODUCT／DESIGN.md 繼續做」的退路不適用決策頁）。
 >
-> **Setup 步驟**（不是 BC，但不做會少掉 context）：每個 session 首次使用前跑一次 `$IMPECCABLE/scripts/impeccable context --target <path>`。`$IMPECCABLE` 的解析見 [decision-page.md](decision-page.md) § 路徑解析。它載入 PRODUCT.md / DESIGN.md 與對應 surface brief。**只跑一次，不要重跑**。
->
-> `/design` **直接呼叫**同一棵樹的 `scripts/impeccable concept-seed` 與 `scripts/impeccable serve-question`。launcher 不存在 → STOP 去裝；launcher 在但 engine 下載失敗（沙箱無網路）→ 同樣 STOP 回報，**NEVER** 用聊天問答代替決策頁。上游 SKILL.md 對 launcher 失敗的退路（「讀 PRODUCT／DESIGN.md 繼續做」）只適用 impeccable 自己的 sub-command，**不適用決策頁**——決策頁沒有 server 就開不出來。
->
-> v3.1.0 → v4.1.1 的累積 user-facing 行為已折進本檔 Step 1.6 / 2.5 / 6 的對應段落。**要升降版、或要查本檔某條規範的上游出處時 MUST 讀 `references/impeccable-install.md`**；跑一次 design pass 不需要讀。Consumer 不自行升版，由 clade 統一更新再 propagate。
+> **要升降版或排查安裝問題時讀 `references/impeccable-install.md`**；跑一次 design pass 不需要讀。Consumer 不自行升版，由 clade 統一更新再 propagate。
 
 ```bash
 npx skills add https://github.com/pbakaus/impeccable/tree/skill-v4.3.1 --agent claude-code --copy -y
 "$IMPECCABLE/scripts/impeccable" engine-probe   # 預先下載 engine；印 impeccable-engine <ver>
 ```
 
-**檢查**：`awk 'NR==1&&/^---$/{f=1;next} f&&/^---$/{exit} f' "$IMPECCABLE/SKILL.md" | grep -m1 -E '^[[:space:]]*version:'`（`$IMPECCABLE` 的解析見 [decision-page.md](decision-page.md) § 路徑解析），與上方對齊版本比對。4.1.3 起被安裝的那份（上游 repo 的 agents 版 skill 樹）把 `version:` 移到 `metadata:` 底下（縮排兩格），**NEVER** 用 `^version:` 錨定行首——那會讀到空值，而空值在「比對版本」的檢查裡長得像「沒問題」。**NEVER** 在本檔 inline 內容 hash——上游 HEAD 會動，而 inline 的那份沒有任何東西會來更新它。不符 → 跑 `references/impeccable-install.md § 升降版流程`，**NEVER** 直接改本檔的數字讓它「看起來對」。
-
-> **安裝 MUST 釘 tag**（`…/tree/skill-v<X>`）。裸 `npx skills add pbakaus/impeccable` 拉的是 default branch HEAD，**不等於 latest release**：2026-09-23 實測 HEAD 比 `skill-v4.3.1` 多 56 筆 commit、frontmatter 仍寫 `4.3.1`，卻多了一個未發布的 sub-command `generate`——版本號對得上、內容對不上，上面那條檢查抓不到。clade home 就是這樣在 2026-09-18 靜默漂到 HEAD 的。`npx skills check` 可對齊 release tag，但它會把 `.claude/skills/<skill>` 改成 symlink → `.agents/skills/`，與本檔 copy mode 的前提衝突。
-
-**新 consumer 安裝 / 升降版操作流程**：見 `references/impeccable-install.md`（含標準 install-skills.sh snippet、copy vs symlink mode、`staged:` 的 `*.md` 禁令）。
+**檢查**：`awk 'NR==1&&/^---$/{f=1;next} f&&/^---$/{exit} f' "$IMPECCABLE/SKILL.md" | grep -m1 -E '^[[:space:]]*version:'`，與上方對齊版本比對（`version:` 在 `metadata:` 底下，**NEVER** 用 `^version:` 錨定行首）。不符 → 跑 `references/impeccable-install.md § 升降版流程`，**NEVER** 直接改本檔的數字。**安裝 MUST 釘 tag**（`…/tree/skill-v<X>`），裸 `npx skills add pbakaus/impeccable` 拉的是 HEAD 不是 release。新 consumer 安裝 / 升降版見 `references/impeccable-install.md`。
 
 ### 2. 呼叫形式（v3 原生）
 
-clade design plan **一律使用 v3 原生呼叫形式** `/impeccable <subcommand>`（例如 `/impeccable colorize`、`/impeccable typeset`、`/impeccable polish`），對齊 v3 作者「impeccable 是一個 skill、底下用 sub-command 組織」的設計理念。直接複製 plan 內的指令即可執行。
+clade design plan 一律使用原生呼叫形式 `/impeccable <subcommand>`（例如 `/impeccable colorize`、`/impeccable typeset`、`/impeccable polish`），plan 內的指令直接複製即可執行。
 
-> `pin` / `unpin` / `hooks` 是 management command 不是 sub-command，clade plan 不依賴也不主動排。**使用者問起這三個時 MUST 讀 `references/impeccable-install.md` § pin / unpin / hooks** 取標準回答。
+> 使用者問起 `pin` / `unpin` / `hooks` 時，讀 `references/impeccable-install.md` § pin / unpin / hooks 取標準回答。
 
 ### 3. nuxt/ui（偵測到 Nuxt UI stack 時）
 
@@ -80,7 +72,7 @@ Auto-detection logic:
 - Existing UI code that needs work → `improve`
 - Large project with prior design phases / design-system directory → `iterate`
 - **User 要「健康檢查 / 體檢 / 重構評估 / 技術債盤點 / 全面診斷 / audit the whole app / 這專案該重構哪」** → `health`（整個 consumer / 子系統尺度，不是單一 UI target）
-- **Active Spectra change with UI tasks** → `improve`（自動，不需問使用者）
+- **Active work item（Step 0.5）with UI tasks** → `improve`（自動，不需問使用者）
 - When unclear → ask the user
 
 ## Step 0.5: 需求 Context Detection
@@ -95,7 +87,7 @@ Auto-detection logic:
 
 Before any diagnosis or planning, always check. **缺檔是硬停，不是 plan 起手項。**
 
-- **`PRODUCT.md` 存在且非空、非 placeholder**（`[TODO]` 或 <200 chars 視同缺）— 若無：**立刻**跑 `/impeccable init`（v3.5 前叫 `teach`，仍為 alias）。補正完成前 **NEVER** 繼續診斷、Fidelity、Decision Gates（Register 在 init 寫入 `register` 後才判 skip）、Skill sequence、Health wave；**NEVER** 把缺 md 寫進 plan checklist 當「先做 init」就過關；**NEVER** 把缺 md 當 health finding 過關。
+- **`PRODUCT.md` 存在且非空、非 placeholder**（`[TODO]` 或 <200 chars 視同缺）— 若無：**立刻**跑 `/impeccable init`。補正完成前 **NEVER** 繼續診斷、Fidelity、Decision Gates（Register 在 init 寫入 `register` 後才判 skip）、Skill sequence、Health wave；**NEVER** 把缺 md 寫進 plan checklist 當「先做 init」就過關；**NEVER** 把缺 md 當 health finding 過關。
 - **`DESIGN.md` 存在且非空** — 已有 UI code 且缺檔：**立刻**跑 `/impeccable document`（或由 init 一併產出）。不得標「強烈建議」後繼續。無 UI code 時由 init 產出即可。
 - 補正完成的可觀察 predicate：`$IMPECCABLE/scripts/impeccable signals` 的 JSON `setup.hasProduct` 為 `true`；有 UI code 時還要 `setup.hasDesign` 為 `true`。未過 → **STOP**，不得恢復原 mode。
 - Design system tokens 檔（`design-system/MASTER.md` 或 `app.config.ts` 的 `ui` 區塊）— 用於 iterate 模式追蹤跨 phase 一致性
@@ -162,7 +154,6 @@ Detect the project's UI tech stack to ensure all design skills produce compatibl
 
 若 PRODUCT.md 缺 `register` 欄位，推論結果當 assigned，**開 Register 決策頁**（見 [decision-page.md](decision-page.md) § Register）。有 `register` 欄位 → skip 該頁。**NEVER** 只推論不開頁。
 
-**為什麼 clade design 也要管 register**：plan 內推薦的 skill 序列在 brand vs product 不同——例如 brand 模式下 `/impeccable overdrive` 是合理 hero 選項；product 模式則幾乎永遠是 over-design。register 進 plan rationale，能避免推錯方向。
 
 ### Step 1.6: Register × Command Matrix
 
@@ -170,7 +161,7 @@ Detect the project's UI tech stack to ensure all design skills produce compatibl
 
 | Sub-command | brand register | product register | 備註 |
 | --- | --- | --- | --- |
-| `/impeccable bolder` | ✅ 預設 | ⚠ 慎用（限 hero / landing 區塊） | brand 場景的 amplification 工具；product 全頁 bolder 易壓垮可讀性。**v3.9**：有 DESIGN.md / token 時 bolder 改用 hierarchy / proportion / density / copy 讓既有語言更果斷，不新造 color / gradient / effect — product 端更安全 |
+| `/impeccable bolder` | ✅ 預設 | ⚠ 慎用（限 hero / landing 區塊） | brand 場景的 amplification 工具；product 全頁 bolder 易壓垮可讀性。有 DESIGN.md / token 時 bolder 用 hierarchy / proportion / density / copy 讓既有語言更果斷，不新造 color / gradient / effect — product 端更安全 |
 | `/impeccable quieter` | ⚠ 慎用 | ✅ 預設 | product UI 的 retreat 工具；brand 全 quieter 通常喪失亮點 |
 | `/impeccable colorize` | ✅ 自由（full palette / drenched 皆可） | ⚠ restrained / committed 為主 | product 預設 restrained；brand 可上 full palette |
 | `/impeccable overdrive` | ✅ 限 hero | ❌ 幾乎永遠 over-design | product overdrive = 雜訊 |
@@ -227,10 +218,10 @@ Shape brief 在 Skill sequence ANSWER 之後、且選中序列含 `/impeccable s
 
 | Mode | Reference | 一句話摘要 |
 | --- | --- | --- |
-| `new` | **MUST Read [mode-new.md](mode-new.md) before proceeding** | 從零建 UI：foundation → 決策頁 → new-work build → enhance → ship |
-| `improve` | **MUST Read [mode-improve.md](mode-improve.md) before proceeding** | 診斷既有 UI：8 維度 rubric + Fidelity Check → 決策頁 → targeted plan |
-| `iterate` | **MUST Read [mode-iterate.md](mode-iterate.md) before proceeding** | 多 phase 專案：scoped assessment + design system drift check → Skill sequence 頁 |
-| `health` | **MUST Read [mode-health.md](mode-health.md) before proceeding** | 全棧深度體檢：苛刻 8 維度 → refactor waves → Health wave 決策頁 → propose |
+| `new` | [mode-new.md](mode-new.md) | 從零建 UI：foundation → 決策頁 → new-work build → enhance → ship |
+| `improve` | [mode-improve.md](mode-improve.md) | 診斷既有 UI：8 維度 rubric + Fidelity Check → 決策頁 → targeted plan |
+| `iterate` | [mode-iterate.md](mode-iterate.md) | 多 phase 專案：scoped assessment + design system drift check → Skill sequence 頁 |
+| `health` | [mode-health.md](mode-health.md) | 全棧深度體檢：苛刻 8 維度 → refactor waves → Health wave 決策頁 → propose |
 
 ---
 
@@ -256,25 +247,20 @@ Three standalone diagnostic / iteration tools sit **outside** the production pip
 
 | Tool | Produces | When to use |
 |---|---|---|
-| `/impeccable critique [target]` | UX evaluation with persona testing: hierarchy, IA, emotional resonance, cognitive load. Qualitative + quantitative score。v3.1+ **每次跑會寫快照到 `.impeccable/critique/<ts>__<slug>.md`**（含 P0/P1 計數 + 全報告），後續 `/impeccable polish` 同 target 會自動讀作 input。`.impeccable/critique/ignore.md` 是 user-curated「不要再 raise」清單（plain markdown，每行一條）。 | **Early** — as part of `improve` mode Step 2 to surface directional issues before the structural rubric. Also useful when you don't trust your own read of the design. |
-| `/impeccable audit [target]` | Severity-rated issue list: a11y, performance, theming drift, responsive. Critical/High/Medium breakdown. v3.9 detector 共 41 deterministic rules（v3.5 加 14 條，引擎換 `htmlparser2` ~20x 快）。 | **Late** — right before `/impeccable polish` to verify readiness. Also as a periodic health check during `iterate`. |
+| `/impeccable critique [target]` | UX evaluation with persona testing: hierarchy, IA, emotional resonance, cognitive load. Qualitative + quantitative score。**每次跑會寫快照到 `.impeccable/critique/<ts>__<slug>.md`**（含 P0/P1 計數 + 全報告），後續 `/impeccable polish` 同 target 會自動讀作 input。`.impeccable/critique/ignore.md` 是 user-curated「不要再 raise」清單（plain markdown，每行一條）。 | **Early** — as part of `improve` mode Step 2 to surface directional issues before the structural rubric. Also useful when you don't trust your own read of the design. |
+| `/impeccable audit [target]` | Severity-rated issue list: a11y, performance, theming drift, responsive. Critical/High/Medium breakdown. | **Late** — right before `/impeccable polish` to verify readiness. Also as a periodic health check during `iterate`. |
 | `/impeccable live` | 在 dev server 瀏覽器中 hover/挑元素，當下生成多個視覺變體並挑選 → 寫回原始碼。 | **互動探索** — 對特定元件想試多種風格但難以言述時。Vite/Next React/TSX、Nuxt、純 HTML 都支援。需 dev server 運作中。 |
 
 `/impeccable critique` tells you **whether the design works** as an experience. `/impeccable audit` tells you **whether the implementation is production-safe**. `/impeccable live` lets you **iterate visually instead of textually**. They rarely substitute for each other.
 
-> **v3.1 critique snapshot vs clade design-review.md 邊界**：
->
-> - `.impeccable/critique/<ts>__<slug>.md`（impeccable 自管）= impeccable runtime 內部 state；給 `/impeccable polish` 讀回 P0/P1 backlog 用，user 一般不直接看
-> - `specs/plans/NNN-<slug>/design-review.md`（clade Step 6 寫）= 該 work item 的 deliverable；給 Design Gate / reviewer 用，會 commit
->
-> 兩者並存不衝突。clade Step 6 寫 design-review.md 時可在 「Planned Skills」 段提一句「v3.1 critique snapshot 位於 `.impeccable/critique/`，包含本輪 P0/P1 細節」當 cross-reference，但不要把 critique 快照內容塞進 design-review.md（會重複、且 critique 自己會 supersede）。
+> `.impeccable/critique/` 快照是 impeccable 內部 state；Step 6 的 `design-review.md` 是 work item deliverable。可在 design-review.md 引用快照路徑，**不要**把快照內容塞進去。
 
 ## Canonical Skill Order (production pipeline)
 
 When executing a multi-skill plan, follow this sequence (skip what's not needed):
 
 ```
-/impeccable init                ← foundation：建立 PRODUCT.md + DESIGN.md（缺則硬停補正，不是 plan 起手）｜v3.5 前叫 teach（alias）
+/impeccable init                ← foundation：建立 PRODUCT.md + DESIGN.md（缺則硬停補正，不是 plan 起手）
 /impeccable document            ← (alt) 已有 code 但無 DESIGN.md 時，從 code 反推 DESIGN.md
 /impeccable shape                          ← (optional) 寫 code 前需求釐清 — 見 `new` mode 判準；確認走 Shape brief 決策頁
   ↓
@@ -303,7 +289,7 @@ new-work build                  ← 描述目標介面，走 impeccable new-work
 
 **This order is mandatory.** Rationale: fix structure before visuals, visuals before experience, everything before hardening, audit → polish always final. If you need to deviate, state why in the plan.
 
-## Step 6: Persist Evidence（Spectra 整合）
+## Step 6: Persist Evidence
 
 若偵測到 active work item（Step 0.5），完成診斷和計劃輸出後 **MUST Read [persist-evidence.md](persist-evidence.md) § design-review.md template** 並寫入該 carrier 旁的 `design-review.md`（plan package 放 `specs/plans/NNN-<slug>/design-review.md`；ad-hoc 工作放 `docs/design-review/<slug>.md`）。此檔案是 [[proactive-skills.design-checkpoint]] § Design Gate 的主要檢查依據。
 
@@ -311,23 +297,10 @@ new-work build                  ← 描述目標介面，走 impeccable new-work
 
 ### Internal References (always consult)
 
-- `references/design-systems.md` — Industry-categorized design system index (209 systems)
+- `references/design-systems.md` — Industry-categorized design system index
 - `references/skill-map.md` — Issue → Skill mapping + library recommendations
 - `references/diagnosis.md` — 8-dimension diagnostic rubric + maturity model
 - `references/copy-tone.md` — UI 文案語氣規則：避免軟體開發範疇英文、保留行業共識專業詞（Step 1.7 Copy Tone Lock 的權威來源）
 - `decision-page.md` — 決策頁路徑、loop、exit code、六個 gate 的 skip / payload / unattended default（任何 user-facing 選擇前 MUST 讀）
 - `references/health-audit.md` — `health` 模式全棧深度體檢方法論：苛刻校準原則、8 維度 rubric + codebase-memory-mcp query recipe、Impact×Effort×Risk wave 排序、propose funnel、輸出模板（執行 `/design health` 前 MUST 讀）
 
-### When to Cite External References
-
-| Mode              | Citation Pattern                             |
-| ----------------- | -------------------------------------------- |
-| `/design new`     | Cite similar industry systems as inspiration |
-| `/design improve` | Cite mature systems as benchmarks            |
-| `/design iterate` | Cite maturity model for progression tracking |
-
-### Key External Resources
-
-- [awesome-design-systems](https://github.com/alexpate/awesome-design-systems) — Comprehensive index
-- [Design Systems Repo](https://designsystemsrepo.com/) — Searchable database
-- [Component Gallery](https://component.gallery/) — UI pattern reference

@@ -15,8 +15,7 @@ paths:
 
 # Service URL Locality（server 端與 client 端讀的是兩個不同的值）
 
-> Pitfall：[[pitfall-one-service-url-two-audiences-server-vs-client]]（<consumer-i> 2026-08-26、
-> <consumer-b> 2026-07-02 / 2026-07-21）。機械訊號：`node scripts/service-url-locality-audit.ts`
+> Pitfall：[[pitfall-one-service-url-two-audiences-server-vs-client]]。機械訊號：`node scripts/service-url-locality-audit.ts`
 > （warn-only、exit 0、接 `pnpm audit:manual`）。
 
 ## 適用條件（可觀察 predicate）
@@ -85,4 +84,4 @@ node scripts/service-url-locality-audit.ts --runtime \
 ```
 
 `OFF_LAN` = server 端 URL 解析到公網而本機身處 LAN。改完之後 **MUST** 用實測數字確認
-（<consumer-i>：`/api/health` 的 DB 段 590–660ms → 13–73ms），**NEVER** 只憑「設定改了」宣告修好。
+（例：`/api/health` 的 DB 段延遲前後對比），**NEVER** 只憑「設定改了」宣告修好。

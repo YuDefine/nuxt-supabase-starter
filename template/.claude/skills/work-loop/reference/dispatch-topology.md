@@ -8,13 +8,7 @@
 
 ## 核心命題
 
-Step 2 產出的**不是**一條佇列，是**四組**併發特性不同的工作。分組依據只有一條可觀察 predicate：**這個 item 要不要獨占某個共用資源**。
-
-- 不佔任何共用資源 → 可以同時跑
-- 佔 dev port → 一次一個
-- 寫 main → 一次一個
-
-同一個 change 的 item 之間有真依賴（下一步要看上一步結果）；**不同 change 的 item 之間沒有任何資料流** —— 它們各自在自己的 worktree，B 不讀 A 的 output。把它們排成一條線只是讓後面的空等。
+Step 2 產出的**不是**一條佇列，是**四組**併發特性不同的工作，分組依據是**這個 item 要不要獨占某個共用資源**。不同 change 的 item 之間沒有資料流，**NEVER** 排成一條線。
 
 ## 四組契約
 
@@ -41,16 +35,9 @@ plan package 實作／補件落哪一組看**這個 item 要不要起頁面**：
 - dispatch 到第 4 個 in-flight 後停止 dispatch，主線改做 main 組 / dev-port 組 / 主線即時組
 - 每收到一個 `<task-notification>` 並走完收割 SOP，從扇出組**補一個**新的 dispatch
 - **≤ 4 只計扇出組的 dispatch**。dev-port 組的 `/wt` dispatch 另計（它自己的配額是 1），兩者不互佔——4 個扇出 in-flight 加 1 個 dev-port dispatch 是合法狀態
-- `--unattended` 的 5-item cap 管的是**本輪處理總數**，不是併發數。兩者同時生效時**併發 4 先觸頂**（總數 5 > 併發 4），實質併發上限維持 4 —— 2026-08-24 把 cap 從 3 放寬到 5 之前是反過來的（總數 3 < 併發 4，實質併發被壓成 3）。**NEVER** 把本行讀成「併發上限跟著 cap 走」：兩個常數各有依據，改一個不會連動另一個
+- `--unattended` 的 5-item cap 管的是**本輪處理總數**，不是併發數
 
-**4 的依據**：每個 in-flight = 一個完整 worktree checkout + 一個 background agent。單機磁碟與 usage 成本在這個量級之上開始明顯。這是常數不是公式 —— 改它要改本檔。
-
-**`/wt` 不可用的 repo（產地 clade home 就是）扇出上限是 1，不是 4**：該情況下執行者是主線本身
-（SKILL.md § `/wt` 不可用時的 dispatch 形狀），而主線只有一個。此時「填滿 4」那一節整段不適用——
-主線做完一個 worktree 的 checkpoint／驗收並登記就緒後，即可開下一個；批次依 trigger 落地。
-
-上限變 1 **只改併發，不改工作量**：其餘分組判定、收割 SOP、commit 紀律逐條照舊，
-item 也不會因此變成可跳過（§ Skip 合法理由窮舉只有 3 條，併發不在內）。
+**`/wt` 不可用的 repo（產地 clade home 就是）扇出上限是 1**（執行者是主線本身）。上限變 1 **只改併發，不改工作量**：其餘判定照舊，item 也不會因此變成可跳過。
 
 ## dev-port 組：一次一個，等而不搶
 
@@ -62,8 +49,7 @@ dev port 的互斥**沿用既有機制**，不自建配額：
 - **無 lease 檔 + session 已離場的 stale dev server** → 這不是衝突，主線自行清理 + 重起（三層判定 SOP 見 SKILL.md § Dispatch 共通規則「Dev server 協調」）
 - **launcher 本身跑不起來**（SKILL.md § Step 2.5 的探針非 0）→ 這既不是衝突也不是 stale，本組**整組不可用**：item 全部走 packaging，**NEVER** dispatch 進去試
 
-「等而不搶」與「stale 自行清理」是兩件事，判準是 lease 檔存在且持有者仍 live。
-兩者都預設 launcher 是活的——那件事由 Step 2.5 先確認，不在本節重判。
+「等而不搶」與「stale 自行清理」的判準是 lease 檔存在且持有者仍 live。
 
 ## main 組：一次一個
 
@@ -81,8 +67,6 @@ Archive 在各自來源完成；main 組統一協調就緒登記與批次提交�
 | 本輪 3i + 3j 合計 ≥4 條 | **批次派一個 pre-scan** 收齊全部 blocker / 決策描述事實表（見 [blocker-evaluation.md](blocker-evaluation.md) § 批次蒐證）；涉及 blocker/status 對帳時固定走 `implementation-decision` |
 | 兩者皆未命中 | 主線直接定點 Read——≤3 檔本來就是本組的正常形狀，**NEVER** 為湊派工而擴清單 |
 
-本判定實作 [[agent-routing]] § 必禁事項「**NEVER** 在 exploration / research 型 session 自己逐檔 Read + scan 多個 source 超過 3 個 source file」——本組過去把 investigation 整組寫死在主線，結構上恆違反該條。
-
 **判讀與決策仍在主線**：pre-scan 只搬「讀」。分類（SKILL.md § 3.1b）、七條 predicate、blocker 鮮度判定、packaging 成稿全部照舊主線做，**NEVER** 外派。
 
 ### pre-scan 的 model predicate（extraction 與 reconciliation 分開）
@@ -92,13 +76,13 @@ Archive 在各自來源完成；main 組統一協調就緒登記與批次提交�
 | 可觀察 predicate | Routing Table row |
 | --- | --- |
 | 下列五項**全部**成立：source list 已封閉並逐條列出；回傳欄位固定；每個 fact 都要求 `source path + line/JSON pointer + raw value`；不需 identity matching、status 推斷或 evidence relevance 判斷；來源矛盾時只回 `needs-reconciliation`、不自行裁決 | `read-heavy-scan` → Gemini 3.8 Flash high |
-| 上列任一不成立，或任一命中：未知路徑探索、來源矛盾、跨來源 identity matching、partial completion／status 推斷、evidence relevance 判斷、git/history/state 對帳 | `implementation-decision` → GPT-6 Astra medium |
+| 上列任一不成立，或任一命中：未知路徑探索、來源矛盾、跨來源 identity matching、partial completion／status 推斷、evidence relevance 判斷、git/history/state 對帳 | `implementation-decision` → GPT-6 Sol xhigh |
 
-Gemini 3.8 Flash report 若回 `needs-reconciliation`，主線以同一份 sources + facts 建立 `implementation-decision` brief，交 GPT-6 Astra（effort: medium）判讀；保留原工作的來源與結果關聯。
+Gemini 3.8 Flash report 若回 `needs-reconciliation`，主線以同一份 sources + facts 建立 `implementation-decision` brief，交 GPT-6 Sol（effort: xhigh）判讀；保留原工作的來源與結果關聯。
 
 ### pre-scan 的 dispatch 形狀
 
-model / effort / template 的 SoT：[[agent-routing]] § Routing Table 對應列 + cookbook `~/offline/clade/vendor/snippets/pi-offload/README.md`。brief 的 `task` **MUST** 逐條列出來源清單與要回的欄位（檔名 / 行號 / 現值 / 判準命中與否）；`allowed_paths` 填「（只讀，無寫入授權）」。每一筆 dispatch 都帶 `--origin work-loop --origin-id wl-r<本輪 round>`；`read-heavy-scan` 另帶 `--cohort fact-extraction`，`implementation-decision` 另帶 `--cohort reconciliation`。runner child 已由 env 注入 origin pair，CLI 仍顯式帶以便 attended 與 dry-run 形狀一致。
+model / effort / template 的 SoT：[[agent-routing.routing-table]] 對應列 + cookbook `~/offline/clade/vendor/snippets/pi-offload/README.md`。brief 的 `task` **MUST** 逐條列出來源清單與要回的欄位（檔名 / 行號 / 現值 / 判準命中與否）；`allowed_paths` 填「（只讀，無寫入授權）」。每一筆 dispatch 都帶 `--origin work-loop --origin-id wl-r<本輪 round>`；`read-heavy-scan` 另帶 `--cohort fact-extraction`，`implementation-decision` 另帶 `--cohort reconciliation`。runner child 已由 env 注入 origin pair，CLI 仍顯式帶以便 attended 與 dry-run 形狀一致。
 
 執行形狀依 process 身分 first-match：
 
@@ -124,9 +108,7 @@ exit code 契約的 SoT 是 [[agent-routing.pi-watch-protocol]] § 泛用 Dispat
 | `3` 機械故障 | 主線 fallback 自讀（唯一允許的 Claude fallback），state `notes` 留 `pi-prescan-fallback(exit3): <stderr 首行>`；**本輪剩餘 pre-scan 不再嘗試 pi** |
 | `4` quota 擋 | `resets_at` 落 state `notes`；本輪剩餘 pre-scan 直接走 fallback（不重複撞）。fallback 依 [[agent-routing.dispatch-execution]] § 配額耗盡時的 fallback 紀律；主線接走時 `notes` 留 `self-read(quota)` |
 
-**exit `2` / `3` / `4` 都 NEVER 記入 `failStreak` / `consecutiveDispatchFailures`**——那兩個計數器管的是 **item 的工作 dispatch**，pre-scan 只是它的蒐證段。quota 擋被記成失敗時，`consecutiveDispatchFailures >= 2` 會在無人值守下把整個 loop 停掉一整夜。
-
-同理，pre-scan 走不通 **NEVER** 成為該 item 的 skip 或 packaging 理由——那份 read 工作主線本來就做得了，pre-scan 只是把它搬出去。
+**exit `2` / `3` / `4` 都 NEVER 記入 `failStreak` / `consecutiveDispatchFailures`**（那兩個計數器管 item 的工作 dispatch）。pre-scan 走不通也 **NEVER** 成為該 item 的 skip 或 packaging 理由。
 
 ### item 工作 dispatch 的 exit 4（quota 不是失敗，是換座位）
 
@@ -140,26 +122,13 @@ exit code 契約的 SoT 是 [[agent-routing.pi-watch-protocol]] § 泛用 Dispat
 | --- | --- |
 | exit 4 且 stdout 有 `next_step` | **MUST 照它重派一次**（`--retry-of <原 label>`），本輪內完成。這一跳成功 = 本 item 正常收割，quota 完全不進 state 的失敗計數 |
 | 整條 fallback 鏈都回 exit 4（沒有 `next_step` 可跳） | 記 state `notes` 一行 `quota-exhausted(<item>): resets_at=<ISO>`，該 item **本輪** skip；`resets_at` 進 `blockers` ledger 當解除條件。**NEVER** 記入 `consecutiveDispatchFailures`、**NEVER** 因此寫 `stoppedReason` |
-| 撞 exit 4 就寫「等配額恢復」進 HANDOFF 後不再處理 | **違反本節。** 「等配額恢復」是 fallback 鏈跑完才成立的結論，不是撞第一次 exit 4 的結論 |
+| 撞 exit 4 就寫「等配額恢復」進 HANDOFF 後不再處理 | **違反本節。** 「等配額恢復」是 fallback 鏈跑完才成立的結論 |
 
-**NEVER 把 quota 擋讀成「這個 item 需要 attended」**——它與人在不在場無關，`resets_at` 到了就自己解除。
-兩者混在一起會讓一條純機械的等待被 packaging 成待 Charles 拍板的決策。
+**NEVER 把 quota 擋讀成「這個 item 需要 attended」**——`resets_at` 到了就自己解除。
 
-## 併發上限是兩個，按載體選（NEVER 挑數字小的那個）
+## 併發上限是兩個，按載體選
 
-`≤4` 與 `≥2` 不是矛盾，是兩種**載體**各自的上限。判之前先問一題：**這幾條 dispatch 共用一棵 working tree 嗎？**
-
-| 可觀察 predicate | 上限 | 出處 |
-| --- | ---: | --- |
-| 每個 worker 各自 worktree（`/wt <slug>` 扇出組） | **4** | SKILL.md § 4a |
-| 共用同一棵 working tree 的 session dispatch | **2** | SKILL.md § dispatch 的三個不准 |
-
-4 那條買的是並行度（worktree 隔離，沒有 race 可搶）；2 那條買的是 race 防護
-（`N session 搶同一 working tree 是把 usage 問題升級成 race 問題`，逐字理由在 SKILL.md）。
-**NEVER** 把 2 當全域上限套到 worktree 扇出組上——那會把並行度砍半換一個不存在的 race；
-**NEVER** 把 4 套到共享樹上——那正是 2 那條在防的東西。
-
-兩者可同時生效：扇出組 4 條各自 worktree ＋ 主線這棵樹上另有 1 條 dispatch，合法。
+各自 worktree 的 `/wt` 扇出組上限 **4**；共用同一棵 working tree 的 session dispatch 上限 **2**（SKILL.md § 4a／§ dispatch 的三個不准）。兩者可同時生效，**NEVER** 挑數字小的那個套到另一種載體上。
 
 ## 主線在做什麼
 
@@ -169,7 +138,7 @@ exit code 契約的 SoT 是 [[agent-routing.pi-watch-protocol]] § 泛用 Dispat
 2. main 組還有 item → 做 main 組
 3. dev-port 組有 item 且 lease 可取 → dispatch 該 item（走 `/wt`，一次一個）
 4. 主線即時組還有 item → 做主線即時組
-5. 四組皆空 → 走 SKILL.md § Dispatch 共通規則 的「主線工作來源」補件（HANDOFF 的 ⏸ Skipped fail-streak < 3 / 📊 Progress 仍 actionable / Outstanding 已登記的 change）
+5. 四組皆空 → 補件：重量 `blockers` ledger（[blocker-ledger.md](blocker-ledger.md) § 清 ledger 是正當工作），並檢查 HANDOFF 待辦段與 state 中 `failStreak` < 3 的 item 是否仍 actionable
 6. 補件也空且 in-flight > 0 → 等 notification（此時等待是收斂，不是閒置）
 
 四組皆空、補件也空、**且** in-flight ledger = 0 才是本輪結束。

@@ -1,8 +1,7 @@
 # Step 1.8: Component Candidates（Nuxt UI stack 專用）
 
 
-> 來源：`design/SKILL.md` § Step 1.8（2026-08-03 拆出——只有偵測到 Nuxt UI stack 的 branch 會走這段）
-
+只有偵測到 Nuxt UI stack 時走這一步。
 
 對應規約：[[nuxt-ui-mcp]]（必走 `nuxt-ui-remote` MCP、ban prescriptive synthesis）。
 
@@ -42,7 +41,7 @@ Query 來源：nuxt-ui-remote `search-components: select`, `get-component: UComm
 
 live 的 prerequisite 是「dev server with HMR **或一個靜態 HTML 檔**」。**Nuxt 專案走靜態 HTML 那條**，理由是硬的：live 注入的是 `<script src="http://localhost:PORT/live.js">`，而 Nuxt 4 的 `app/app.vue` 是 Vue SFC——template 內沒有 `</body>` 可當 anchor，也不接受 `<script>` 標籤。改寫 HTML shell 只為了掛 live，是拿 SSR 輸出去換一個設計階段工具，不划算。
 
-讓 live 作用在 mockup 目錄，實測可行（<consumer-b> 2026-07-29）：
+讓 live 作用在 mockup 目錄：
 
 ```jsonc
 // .impeccable/live/config.json
@@ -58,4 +57,4 @@ mockup 用 Tailwind CDN 寫近似版即可——這個階段要比的是版面�
 
 啟動：`"$IMPECCABLE/scripts/impeccable" live`（`$IMPECCABLE` 的解析見 [decision-page.md](../decision-page.md) § 路徑解析；回 `ok: true` + `serverPort` 即成功）。poll **MUST** 走背景任務（Claude Code 的 background task，或其他 runtime 的等價機制），不要用短 timeout 阻塞 shell。
 
-**為什麼是強制 step**：實作後才發現「另一個組合體驗更好」，代價是整段重做（fleet 實證：`ai-chat-ui` → `ai-ui-rebuild` → `0b-ai-chat-rework`，同一塊 UI 跨三週六個 change）。候選比較在 plan 階段做，成本是幾分鐘；在實作後做，成本是重寫。
+**為什麼是強制 step**：實作後才發現「另一個組合體驗更好」，代價是整段重做。候選比較在 plan 階段做，成本是幾分鐘；在實作後做，成本是重寫。

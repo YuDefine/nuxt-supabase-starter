@@ -9,7 +9,7 @@ description: >-
 
 # Supabase 架構決策指南
 
-資料存取模式為 Client 讀、Server 寫（由 consumer 的 always-load 規約投影定義，三端相同）。本 skill 提供架構決策指引。
+資料存取路徑（寫入走 Server API；client 直讀是否合法取決於 `modules.auth`）以 db-runtime 規約與 `server-api` skill 為準，本 skill 只做架構選型。
 
 ## Schema 邊界
 
@@ -21,7 +21,7 @@ description: >-
 
 | 場景                 | 方案                        |
 | -------------------- | --------------------------- |
-| 簡單 CRUD            | Client SDK + RLS            |
+| 簡單 CRUD            | Server API（client 直讀依 `modules.auth`） |
 | 跨表交易             | Postgres RPC                |
 | 第三方 API           | Edge Function               |
 | Webhook              | Edge Function               |
@@ -35,11 +35,6 @@ description: >-
 
 需要更詳細的決策指引？→ [references/decision-tree.md](references/decision-tree.md)
 
-## 效能評估
-
-- **High Concurrency (>100 req/s)**：讀取密集加 Redis/CDN 快取，寫入密集用 Message Queue
-- **Standard**：遵循快速決策表
-
 ## 檢查清單
 
 ### 安全性
@@ -47,9 +42,3 @@ description: >-
 - [ ] RLS First：所有 Table 預設開啟 RLS
 - [ ] Never Trust Client：前端資料在 DB/Edge 層驗證
 - [ ] Service Role：僅在 Edge Function 或 RPC 內部使用
-
-### 效能
-
-- [ ] Filter/Join 欄位建立 Index
-- [ ] 避免 `select('*')`，明確指定欄位
-- [ ] 外部請求設定 Timeout

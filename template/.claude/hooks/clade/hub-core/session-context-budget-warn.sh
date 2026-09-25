@@ -144,7 +144,7 @@ extract() {
 # 收工線買的是「successor 從 fresh context 起跑」，而它的前提是**這個 session 有東西可以交**。
 # 下面三種身分都不成立，對它們發收工提示等於要求一個交不出東西的收件人去執行收工三步。
 #
-# 1. in-process subagent（Agent tool：Explore / Plan / general-purpose / fable 顧問…）
+# 1. in-process subagent（Agent tool：Explore / Plan / general-purpose / Opus 顧問…）
 #    —— 它的 tool call 與主線**共用同一份 transcript 與 session_id**（2026-09-02 probe hook
 #    實測），所以本 hook 在 subagent 的 tool call 上照樣算得出主線的 C 並提示；而那則提示
 #    送到的是 subagent，它既 relay 不了也 fanout 不了。判別靠 payload 的 `agent_id` /

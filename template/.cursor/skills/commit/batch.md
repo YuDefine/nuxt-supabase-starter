@@ -97,6 +97,8 @@ node scripts/wt-helper.ts batch prepare --trigger <trigger> --workflow <workflow
 
 `status` 與 `prepare` MUST 用**同一個**已解析 `workflow_model`。registry 裡已宣告的 consumer 用它的值；解析失敗 **NEVER** 默默改成 `pr-merge-based`。clade home 不是 registry consumer，試跑才准顯式 `--workflow pr-merge-based`。Trunk prepare 固定所有當下就緒成員。PR prepare 預設只收**一個** work id（一個獨立可接受目的對應一個 PR）；緊密相依合批必須顯式 `--group-work-ids <id>,<id>`，**NEVER** 把不相干的就緒來源默默塞進同一張 PR。來源 checkpoints 及整合中繼成果皆保留，main 不接收待審內容。另一位 coordinator 撞 active batch 時接續該批，**NEVER** 另開一批與它競爭。prepare 回傳既有批次時輸出帶 `reused: true`（新批為 `reused: false`），呼叫端可憑它分辨自己開的批與接續的批；帶 `--expect-work-id <id>`（逗號可複數）而回傳批成員不含該 id 時 prepare 直接拒絕。**NEVER** 看到成員不對就 `batch cancel`——先用 `batch status` 查那批是誰的。
 
+**平行批次**：`--expect-work-id` 點名的 work id 全部已就緒、且沒有任何活躍批持有時，prepare 只收這些 work id 另開一批（`reused: false`），前提是新批成員的異動路徑與**每一個**活躍批成員的異動路徑不相交（同一路徑、或一邊是另一邊的目錄前綴都算相交）。相交就拒絕並列出路徑，不建任何 worktree；等那批落地或取消後再 prepare。沒點名 work id 時行為不變：只有一個活躍批就接續它，有多個就拒絕。多個活躍批並存時，`resume`／`scope`／`refresh`／`review`／`seal`／`land`／`confirm-merged`／`cancel` 要帶 `--batch <id 或唯一前綴>`，或在該批的 integration worktree 內執行；兩者皆無即拒絕，**NEVER** 猜。`yield-blocked` 以 `--work-id` 找持有批。Trunk 平行批依序 land：先落地的一批前移 main，後一批 `land` 會回 `Main advanced`，照常 `batch refresh --batch <id>` → 重新 review／seal 再 land。
+
 衝突只在隔離區解，解完精確 stage 衝突檔後跑 `batch resume`；不删來源、不把未解衝突藏成就緒。中斷後先讀 `batch status`，依持久狀態續跑。`pr-merge-based` 的 base 是 `git fetch origin main` 後的 `refs/remotes/origin/main`；`trunk-based` 才使用 local main。main 前移用 `batch refresh` 對齊新基準並重新驗受影響範圍；來源變動則 `batch cancel --reason <原因>` 保存既有工作，重驗來源、重登記再 prepare。
 
 Helper 在整批合併後沿用既有 worktree runtime bootstrap，建立投影工具、環境檔、dev-port 與 backing service；失敗保留 integration 並由 resume 重試。接著在 integration path 依專案 package manager 以 frozen lockfile 安裝依賴，再確認 dev-port／db-preview 的獨立驗證環境。依 SKILL.md Step 0-Lock 解析鎖腳本與 integration 的絕對路徑，取得 commit lock 後跑 Step 0–5 的完整流程。Scope 為該整合區的完整 base→candidate 差異；同一批只啟動一次品質鏈，可按功能建立多筆正式 commits。手動普通 commit 的全 WIP 契約只作用於普通工作區，不把 main WIP 偷渡進 batch。
@@ -119,6 +121,8 @@ node scripts/wt-helper.ts batch scope
 node scripts/wt-helper.ts batch seal --evidence <seal.json>
 node scripts/wt-helper.ts batch land
 ```
+
+`land` 與 `confirm-merged` 記錄 landed 之後，當場對**該批**跑一次 `batch cleanup`（只處理這一批，其他待清理的 landed 批不動），結果放在輸出的 `cleanup` 欄：`removed`／`retained` 同 § 4；cleanup 本身被拒（publish／propagate 在飛、lock 等）時是 `cleanup.deferred`，landed 不回滾，之後重跑 `batch cleanup` 即可。需要保留來源時加 `--no-cleanup`（輸出 `cleanup.skipped`）。所有保留條件與 § 4 相同，自動 cleanup 不放寬任何一條。`land`／`confirm-merged` 要在整合區**之外**執行（main checkout 帶 `--batch <id>`）：cwd 落在整合區內時，live-writer 探測會把自己這個 shell 判成寫入者，整合區記成 `cleanup.retained` 而不是 `deferred`——遇到時離開該樹後重跑 `batch cleanup`。
 
 Trunk 成功後，Step 6 的發布／push 依原有 gates 在 main 執行；不在 integration branch 對 main 推送未受審內容。main dirty 時協調持有者，不 stash／丟棄 main WIP 以換取放行。
 
@@ -166,9 +170,9 @@ node scripts/wt-helper.ts batch release-source <source-path> --reason "<為什�
 
 它驗 batch 已 landed、landed commit 在 main、登記 head 是來源現 head 的祖先，通過後把登記 head 釘在 `refs/clade/batches/<id>/<index>`、該 member 算 settled 並立刻解除 batch 佔有（可用現 head 重新 `batch ready`）；下一次 `batch cleanup` 收掉 integration、批次轉 `cleaned`。來源改寫過已落地的 history（登記 head 不再是祖先）時拒絕。**NEVER** 為了同一目的手改 state.json。
 
-Cleanup 前，每一棵樹先被 P0 全量保存進 common Git 目錄下的 archive（receipt 記 inventory／Git closure，不再發 `excluded` 清單）。預設 `defaultLifecycle` **沒有** `withExclusiveWriterOwnership`，且未解析的 profile 會讓 `validateProfile` 失敗——此時 CLI `batch cleanup` **retain 每一個來源**，不會做上面描述的 capture／刪除。要真的 teardown，呼叫端必須提供：已解析且通過 `validateProfile` 的 profile，以及帶 mandatory exclusive-writer adapter 的 lifecycle。
+Cleanup 前，每一棵樹先被 P0 全量保存進 common Git 目錄下的 archive（receipt 記 inventory／Git closure，不再發 `excluded` 清單）。Teardown 需要兩樣：通過 `validateProfile` 的 profile，以及帶 mandatory exclusive-writer adapter 的 lifecycle。`wt-helper batch` 兩樣都提供——lifecycle 帶 `withProbedExclusiveWriterOwnership`，profile 依 consumer id 由 `preservation-profiles.ts` 解析（clade home 已有實證 profile）。直接呼叫 `wt-batch.ts` 的 `defaultLifecycle` 沒有 adapter；profile 仍有 `unknown` 欄位的 consumer 會讓 `validateProfile` 失敗——這兩種情況 cleanup **retain 每一個來源**。
 
-**Profile 解析不了的 repo（例如帶 submodule 的 clade home）走 retire 路徑收尾**：`phase=landed` 的批次，只要 landed commit 由 Git 實查是 main 的祖先（pr-merge-based 另需 `mergeReceipt.merged`）、成員 branch 未前進、樹上 HEAD 與登記相符、無 `retain`／`removing`，`handoff-retire.ts` 就不再把該來源（與 ready 裡同 path＋head 的條目）算作 batch owner，由它的 archive→validate→recheck→remove 保存並移除。之後 `batch cleanup` 對「來源已不在、`docs/archives/retired-work.jsonl` 有 path＋branch＋head 完全相符的 `retired` 紀錄、且 archive 每個檔 hash 仍相符」的成員與 integration 記為 removed 並把批次轉 `cleaned`；紀錄不符或 archive 受損一律照舊 retain。**NEVER** 為了讓 retire 接手而改 state.json 的 phase 或刪 ready 條目。
+**Profile 驗不過的 repo 走 retire 路徑收尾**：`phase=landed` 的批次，只要 landed commit 由 Git 實查是 main 的祖先（pr-merge-based 另需 `mergeReceipt.merged`）、成員 branch 未前進、樹上 HEAD 與登記相符、無 `retain`／`removing`，`handoff-retire.ts` 就不再把該來源（與 ready 裡同 path＋head 的條目）算作 batch owner，由它的 archive→validate→recheck→remove 保存並移除。之後 `batch cleanup` 對「來源已不在、`docs/archives/retired-work.jsonl` 有 path＋branch＋head 完全相符的 `retired` 紀錄、且 archive 每個檔 hash 仍相符」的成員與 integration 記為 removed 並把批次轉 `cleaned`；紀錄不符或 archive 受損一律照舊 retain。**NEVER** 為了讓 retire 接手而改 state.json 的 phase 或刪 ready 條目。
 
 兩件事讀報告時要知道：
 

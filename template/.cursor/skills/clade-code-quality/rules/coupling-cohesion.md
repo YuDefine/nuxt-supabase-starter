@@ -7,9 +7,7 @@ paths: ['**/*.{ts,tsx,mts,cts,vue}']
 
 # Coupling & Cohesion
 
-SOLID 在 functional TS 語境的**可測子集**。這裡只收 S（內聚）、O（shotgun surgery）、D（依賴方向）——
-L 與 I 在 composable-based 專案幾乎是空集合（沒有繼承層級就沒有 LSP 可違反；structural typing 下
-ISP 自動成立大半），為它們寫 checklist 只會產出無法判定的條目。
+SOLID 在 functional TS 語境的可測子集：只收 S（內聚）、O（shotgun surgery）、D（依賴方向）。
 
 ## 三層分工
 
@@ -19,17 +17,11 @@ ISP 自動成立大半），為它們寫 checklist 只會產出無法判定的�
 | Signal | `node scripts/audit-coupling-cohesion.ts` | change coupling、跨檔 discriminant switch —— 報告不擋 commit |
 | Review | `/code-review` checklist | 職責語意判斷 —— 機械測不到的部分 |
 
-**Signal 層的輸出 NEVER 當 gate 用**：跨檔規則在 staged-only 情境算不準，把它接進 pre-commit 只會
-產出「改一行擋十次」的體驗，然後大家學會加 disable comment。
+**Signal 層的輸出 NEVER 當 gate 用**（跨檔規則在 staged-only 情境算不準）。
 
 ## Review 層 checklist
 
-本節純 review 層，無機械訊號。消費端是 `code-review` agent 的程式碼品質 checklist。規模門檻
-（`max-params` / `max-lines` / `complexity`）不在本節、也不在 gate——理由見下方
-§ 為什麼 gate 只有兩條規則。
-
-**與 § Shotgun surgery 的關係**：本節管「一個函式做了幾件語意上不同的事」；Shotgun surgery 管
-「同一個 discriminant 散落 ≥3 個檔」。兩層互補，不重複判準。
+純 review 層（`code-review` agent 的程式碼品質 checklist）。規模門檻不在本節也不在 gate，見 § 為什麼 gate 只有兩條規則。
 
 ### 一個函式只做命令或只做查詢
 
@@ -67,10 +59,7 @@ MUST 抽成具名函式，讓上層函式讀起來是一份目錄而不是實作
 **NEVER disable `import/no-cycle`。** 出現違規時只有兩條合法路徑：當場修，或登一條 TD 記錄該 cycle
 與預定修法。`// oxlint-disable-next-line import/no-cycle` 出現在 diff 裡，`/code-review` 會擋。
 
-**既有 cycle 涉及檔數 > 20 的 consumer** 是唯一的降級情境——這種規模的 cycle 是結構性的，逐檔
-boy-scout 修不動。降級 recipe（**relay 給該 consumer 的 session 執行**，clade 主線不代勞——per
-[[clade-role-and-todo-discipline]] § Consumer 工作命中時 MUST relay；「不代勞」說的是不親手改，
-**NEVER** 是不送過去）：
+**既有 cycle 涉及檔數 > 20 的 consumer** 是唯一的降級情境（由 clade relay 給該 consumer 的 session 執行）：
 
 ```typescript
 // vite.config.ts —— business overrides 區塊
@@ -96,16 +85,7 @@ import { calcInvoice } from '~/server/utils/invoice'       // ❌ value——ser
 
 要共用實作就搬到 `shared/`，不要從 client 側伸手進 `server/`。
 
-**這道 gate 是 `layer: ratchet`——它只擋新增，不擋存量。** 既有的跨界 import 會原地留著且
-不報任何訊號（2026-08 實測：<consumer-b> 有 2 筆存量落在 `app/**` 內，正好是 gate 宣稱管的範圍）。
-所以「pre-commit 綠」**NEVER** 讀成「這個 repo 沒有跨界 import」——它只代表你這次沒有新增。
-
-**另一個缺口是範圍**：`fileGlob` 只有 `app/**`，root 層 `composables/**`、`components/**`
-與 `shared/**` 無機械覆蓋。`shared/**` 最值得注意——它同時被 client 與 server 匯入，從那裡
-import server 內部模組會把 server 碼一路帶進 client bundle。
-
-兩個缺口都登在 TD-402，本次不順手改（擴 ratchet 的觸發面等於對全 registry consumer 同時提高
-門檻，先量再擴）。**NEVER** 因為「gate 沒擋」就在這些位置 import server 碼。
+這道 gate 是 `layer: ratchet`（只擋新增），且 `fileGlob` 只有 `app/**`（root 層 `composables/**`、`components/**`、`shared/**` 無覆蓋，缺口登在 TD-402）。「pre-commit 綠」**NEVER** 讀成「沒有跨界 import」，**NEVER** 因為「gate 沒擋」就在這些位置 import server 碼。
 
 ## Shotgun surgery
 
@@ -127,40 +107,18 @@ fleet 表每格是 `violations / scanned` 雙數字，三種狀態不可混讀�
 | `NO-SCAN` | **scanned = 0**，該 consumer 的 lint 管線無輸出 | 這格**不是**綠的——該 consumer 的 gate 正在靜默全綠，修復歸 consumer 自治區 |
 | `N/A` | 管線形狀本來就不適用（monorepo 無 root、template 型 repo） | 無事，但 **NEVER** 與 `NO-SCAN` 混為一談 |
 
-**`NEVER` 把 `NO-SCAN` 讀成 0。** 這兩者在單一數字的表上長得一模一樣，而它們的意思相反：一個是
-「掃過，乾淨」，一個是「根本沒掃到，一無所知」。script 的 exit code 2 專門標記表上存在 `NO-SCAN`。
+**`NEVER` 把 `NO-SCAN` 讀成 0。** script 的 exit code 2 專門標記表上存在 `NO-SCAN`。
 
 ## 為什麼 gate 只有兩條規則
 
 `max-lines-per-function` / `max-lines` / `complexity` / `max-depth` / `max-params` **刻意不收**。
-它們量的是規模與分支密度，不是職責內聚：300 行零分支的 mapper 是 SRP 違規但 complexity 抓不到，
-40 行的 exhaustive switch 是好碼卻會被誤傷。<consumer-b> 實測 862 violations / 542 檔（2026-08 快照），
-其中 88% 的違規檔近 30 天仍在改動——staged-only 救不了，開成 error 等於天天擋路。對照組
-microsoft/TypeScript、vuejs/core、vitejs/vite、facebook/react、nuxt/nuxt、antfu/eslint-config、xo
-八個專案無一啟用其中任何一條（2026-08 快照）。
+它們量的是規模與分支密度，不是職責內聚，且在既有 consumer 上會產生數百筆仍在活躍改動的違規。複跑：`npx vp lint -A all -D max-lines-per-function -D max-lines -D complexity -D max-depth -D max-params .`（**NEVER** 直接跑 `npx oxlint`）。
 
-複跑（在任一 consumer 根目錄；`-A all` 先關掉預設類別，只留這五條）：
-
-```bash
-npx vp lint -A all -D max-lines-per-function -D max-lines -D complexity -D max-depth -D max-params .
-# 尾行的 "Found N warnings and M errors" 就是 violations，"on K files" 是掃描分母
-CHANGED=$(mktemp -t changed-30d.XXXXXXXXXX)   # NEVER 寫死 /tmp/<固定名>：全機器所有 session 共用同一個檔
-git log --since=2026-07-06T00:00:00 --until=2026-08-06T00:00:00 --name-only --pretty= \
-  | sort -u > "$CHANGED"             # 與上面的違規檔清單取交集 = 「近 30 天仍在改動」那 88%
-```
-
-**NEVER** 直接跑 `npx oxlint`——本 repo 的 wrapper 只給 IDE `--lsp` 用，會拒絕執行。
-
-本證據決定：gate 層收哪幾條規則。
-本證據不決定：要不要管內聚——**NEVER** 拿本節當「規模與複雜度不必管」的理由，那部分移到 Review 層
-由人判讀，不是消失了。
+**NEVER** 拿本節當「規模與複雜度不必管」的理由——那部分移到 Review 層由人判讀。
 
 ## 第三方邊界
 
-本節補 § 三層分工 宣告的 D（依賴方向）裡「domain code 對第三方 SDK」那一半。server / client
-邊界見上方 § Server / Client 邊界。操作範本：`~/offline/clade/vendor/snippets/third-party-boundary/`。
-
-本節純 review 層，無機械訊號。目前無 audit script。
+domain code 對第三方 SDK 的依賴方向；純 review 層。操作範本：`~/offline/clade/vendor/snippets/third-party-boundary/`。
 
 ### 第三方 SDK MUST 包在自己的 wrapper 後面
 

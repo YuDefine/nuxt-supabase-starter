@@ -6,7 +6,7 @@
 
 # evlog Drain Pipeline
 
-`createDrainPipeline` 是 evlog 的 batch + retry + buffer overflow 包覆層。clade 5 consumer 全跑 Cloudflare Workers，**所有 drain 都 MUST 經此 pipeline**（見 `rules/core/logging.md` Drain pipeline 規範）；raw drain 直接送外部 sink 會把 Workers 50 subrequest budget 吃光，且失敗無 fallback。
+`createDrainPipeline` 是 evlog 的 batch + retry + buffer overflow 包覆層。**所有 drain 都 MUST 經此 pipeline**（見 `rules/core/logging.md` Drain pipeline 規範）；raw drain 直接送外部 sink 在 Workers 上會把 50 subrequest budget 吃光，且失敗無 fallback。
 
 Reference: `docs/evlog-master-plan.md` § 3.2 + § 7（Cloudflare Workers 限制）
 
@@ -21,7 +21,7 @@ Reference: `docs/evlog-master-plan.md` § 3.2 + § 7（Cloudflare Workers 限制
 | 沒 buffer 上限 | event 暴量時 Worker 128MB 記憶體被吃光 → OOM |
 | 沒 flush hook | Worker 結束時 in-memory batch 被 GC → event 丟失 |
 
-`createDrainPipeline` 把這 4 個問題一次包好。本 snippet 提供經 5 consumer 驗證的預設值。
+`createDrainPipeline` 把這 4 個問題一次包好。本 snippet 提供已驗證的預設值。
 
 ## 安裝 SOP
 
@@ -113,7 +113,7 @@ nitroApp.hooks.hook('evlog:drain', auditDrain)
 
 audit 與 main pipeline **獨立**，不共用 batch / buffer，避免 audit event 排在 main batch 後面延遲送出。
 
-## Sampling 整合（M3a-yuntech 後校正）
+## Sampling 整合
 
 evlog 沒有 `samplingPolicy` factory function — sampling 是 nuxt module / LoggerConfig 的 `sampling` 欄位，由 evlog 內部在 emit 階段處理（**不**在 drain pipeline 之外包覆）：
 
@@ -125,7 +125,7 @@ export default defineNuxtConfig({
     sampling: {
       // rates 是百分比 0-100（不是 0-1）；error 預設 100 不可降
       rates: { error: 100, warn: 100, info: 50, debug: 0 },
-      // keep[] 是 OR-logic 條件：符合任一就強制 keep（取代 legacy `forceKeep` callback）
+      // keep[] 是 OR-logic 條件：符合任一就強制 keep（沒有 `forceKeep` callback）
       // 條件型別：{ status?: number, duration?: number, path?: string }
       keep: [
         { status: 400 },     // 4xx / 5xx 永遠 keep
@@ -137,7 +137,7 @@ export default defineNuxtConfig({
 })
 ```
 
-audit event 的「強制 keep」由 consumer 在 `server/plugins/evlog-enrich.ts` 末尾 `evlog:emit:keep` Nitro hook wire（`if (kind === 'audit') ctx.shouldKeep = true`）— evlog 2.16 **無**內建 audit forceKeep（master plan §14 第 12 條校正；vendor `evlog-enrichers-stack/enrichers.ts` 已含此 hook）。
+audit event 的「強制 keep」由 consumer 在 `server/plugins/evlog-enrich.ts` 末尾 `evlog:emit:keep` Nitro hook wire（`if (kind === 'audit') ctx.shouldKeep = true`）— evlog **無**內建 audit forceKeep（vendor `evlog-enrichers-stack/enrichers.ts` 已含此 hook）。
 
 drain pipeline 內 sampling **不需要也不能**包覆——sampling 在 emit 階段（pipeline 之前）就決定要不要送到 drain。
 

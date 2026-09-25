@@ -3,9 +3,7 @@
 
 # Secret Custody（secret 值到手時的既定動作）
 
-> **無 frontmatter — unconditional always-load**。觸發事件是「一個 secret 值出現在你手上」，
-> 那件事沒有對應的檔案路徑；綁 `paths:` 等於讓本規約永遠不載入。
-
+> 無 frontmatter 是刻意的（unconditional always-load）：觸發事件「secret 值到你手上」沒有對應的檔案路徑，加 `paths:` 會讓本規約永遠不載入。
 
 ## 觸發
 
@@ -26,9 +24,7 @@
 `gh secret set` 的 GitHub Secrets）。判定法：在 `HANDOFF.md` / `docs/` / `.clade/rules/` 搜尋
 「MUST 同步改 X」「完整值在 X」這類句子，X 就是保管處；尚未遷移的來源同時查 `.claude/rules/`。
 
-**寫入保管處不算洩漏。** 洩漏禁令（「NEVER 把值寫進任何檔案、commit 或對話」）的射程是
-**repo 內的檔案、commit message、你的對話輸出** —— 保管處是那條禁令要保護的**目的地**，不在射程內。
-把保管處讀進禁令射程，等於用禁令取消它自己要達成的目的。
+**寫入保管處不算洩漏。** 洩漏禁令的射程是 **repo 內的檔案、commit message、你的對話輸出**；保管處是那條禁令要保護的目的地。
 
 ## Iron Law：NEVER 把 secret 管理退回給 user
 
@@ -53,8 +49,7 @@
 
 ## 「執行者是 <人名>」「user-only」的前提失效條款
 
-規約裡出現「執行者是 <人名>」「X 為 user-only」時，**MUST** 先判它的**前提**是否還成立。
-這類句子絕大多數記錄的是**當時的事實限制**（值只在人手上、agent 取不到），不是永久權責劃分。
+規約裡出現「執行者是 <人名>」「X 為 user-only」時，**MUST** 先判它的**前提**（值只在人手上、agent 取不到）是否還成立。
 
 **值一旦交到你手上，該前提消失，那條句子隨之失效** —— 改由你執行並回報。
 
@@ -68,8 +63,6 @@
 ## 保管紀錄本身要能被取回
 
 保管處若只記**截斷前綴** ＋ 「完整值在 X」的指標，**MUST 實查 X 真的有值**。
-指標指向空位置時（實例：Notion 記 `9014d11beb6c…`、註明完整值在 GitHub Secrets，
-而 deploy run 的 job env dump 顯示那兩個 GitHub secret 的值都是空字串），
-**MUST** 改記完整值，並在保管處補一條帶日期的變更紀錄說明為何改。
+指標指向空位置時 **MUST** 改記完整值，並在保管處補一條帶日期的變更紀錄說明為何改。
 
 踩坑實例與 fleet scan 見 [[pitfall-custody-mandate-read-as-prohibition-only]]。

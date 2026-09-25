@@ -33,11 +33,17 @@ TYPES=$(node -e "
 ## Step 1.2 — 精確判定是否需要比對
 
 ```bash
-# 檢查 types 或 migrations 是否變更（HEAD diff 含 staged）
-git diff --name-only HEAD -- "$TYPES" supabase/migrations/ | grep -q . && echo HAS || echo NO
+# 檢查 types 或 migrations 是否變更：working tree vs HEAD（含 staged），
+# 加上本 branch 相對 base 已 commit 的部分——migration 在先前 commit 已入庫、
+# working tree 只剩其他檔時，單看 HEAD diff 會漏
+BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null)
+{
+  git diff --name-only HEAD -- "$TYPES" supabase/migrations/
+  [ -n "$BASE" ] && git diff --name-only "$BASE" HEAD -- "$TYPES" supabase/migrations/
+} | grep -q . && echo HAS || echo NO
 ```
 
-`NO` → 回主檔進 Step 2。`HAS` → 往下走。批次 `/commit` MUST 用 helper `batch scope` 的 `base`→candidate tree 做同一判定，不只看 working tree vs HEAD；member checkpoint 裡已 commit 的 migrations 也算。
+`NO` → 回主檔進 Step 2。`HAS` → 往下走。批次 `/commit` MUST 用 helper `batch scope` 的 `base`→candidate tree 做同一判定，不只看 working tree vs HEAD；member checkpoint 裡已 commit 的 migrations 也算。非批次路徑的 base 取 `merge-base HEAD origin/main`（fallback 本機 `main`）；base 解析不出來時已 commit 段缺席，退化成舊版的 HEAD-only 判定。
 
 > 主檔的觸發判定刻意寬鬆（寧可誤送進本檔），這一步才是權威判定 —— 它認得
 > `package.json` 的 `config.dbTypesPath` 自訂路徑，主檔的粗篩不認得。
@@ -72,7 +78,8 @@ fi
 diff "$TYPES_BEFORE" "$TYPES"
 ```
 
-有差異 → **停止 commit**，提示使用者依差異建立對應 migration 或還原 `$TYPES`。
+有差異 → **停止 commit**，提示使用者依差異建立對應 migration 或還原 `$TYPES`（migration 為準、
+types 只是落後未重生時，「還原」就是保留重生後的版本，讓它進下一輪 `/commit` 的分組）。
 
 > **遠端 LXC 模式注意**：`pnpm db:types` 通常**直接寫入** `$TYPES` 不輸出 stdout，所以**不能**用 `> "$TYPES_BEFORE"` 重導向取值（一定要先 `cp` 備份再 `pnpm db:reset`）。
 

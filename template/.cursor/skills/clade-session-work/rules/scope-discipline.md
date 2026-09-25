@@ -7,15 +7,9 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 
 # Scope Discipline
 
-**核心命題**：scope discipline 不是「範圍外就裝沒看到」，而是三件事一起成立：
-
-1. **不擴散**
-2. **必登記**
-3. **不擅改他人成果**
-
-少任何一項，都會讓 AI 工作流默默吞掉風險、遺失 WIP，或把範圍外問題埋進歷史。
-
 ## 正確的 scope discipline
+
+三件事同時成立，少一項都算違反：
 
 | 要素 | 意思 | 反例 |
 | --- | --- | --- |
@@ -96,20 +90,11 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 | 「gate 紅了，這次 commit 過不了」 | 先對預定 commit tree 與 gate 基線查因；新檔或 staged-only 不能直接排除 |
 | 「問一下比較安全」 | 過度 escalate 與正確 escalate 在 transcript 上長得一模一樣，差別只在當時有沒有可跑而沒跑的探測 |
 
-> 2026-08-08 <consumer-b>：主線引本節停下來問 user，user 回「你自己探測，未來這種情況你必須總是自己
-> 探測決策」。對應 pitfall [[pitfall-mechanically-decidable-conflict-escalated-to-user]]。
+> 對應 pitfall [[pitfall-mechanically-decidable-conflict-escalated-to-user]]（<consumer-b> 實例）：可探測的衝突要自己探測決策，不交給 user。
 
-**錯誤的內部反射**：
+「rule A 規定 X，但現況被 hook／別 session 做成 Z，所以該 revert 對齊 rule A」這條推理鏈是非法的：rule 衝突時預設保留現狀，當前 session 沒有 rule 仲裁權。
 
-> 「rule A 規定 X 必須 Y / Y 必須 user walkthrough，但現在狀態是 Z（被 hook 自動做了）— 違反 rule A，應該 revert / 還原 / 對齊」
-
-**這個推理鏈在本 rule 之下是非法的。** Rule 之間衝突時，**保留現狀**是預設，不是「找出哪條優先 + 動手 reconcile」。理由：
-
-- Rule A 與 Rule B 不一定真衝突（rule A 通常是「未來應該怎做」、rule B 是「現有狀態不准擅自動」— 兩者正交）
-- 即使真衝突，當前 session 沒有「rule 仲裁權」— 仲裁權在使用者
-- 拿 rule A 當理由 revert rule B 的產出，是把限制變武器 — 本 rule 明文禁止
-
-**授權來源是使用者對具體對象與動作的明確指示**，例如「請還原這個檔的這段修改」。本任務已有的同範圍授權持續有效；不因換了 runtime、提問工具或出現關鍵詞而重問。沒有具體授權時維持 preserve。
+**授權來源是使用者對具體對象與動作的明確指示**，例如「請還原這個檔的這段修改」（session 在 Herdr pane 內時要點選 structured user-input 選項才算，見 [[session-tasks.operations]] § Herdr session transport）。本任務已有的同範圍授權持續有效；不因換了 runtime、提問工具或出現關鍵詞而重問。沒有具體授權時維持 preserve。
 
 ### 具體分支模板：當前 flow 規約要求「必修」撞別 session WIP
 
@@ -131,7 +116,7 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 
 **NEVER** 自行在 A 與 B 之間二選一、自行 commit 略過該檔、自行用「不在 scope」當理由跳過 — A0 解鎖的是**對話**，不是**代替 user 拍板**。
 
-**為什麼預先固化 A0/A/B**：這個衝突在 `/commit` 流程裡會反覆出現（review agent 跑出 nitpick → 落在 HANDOFF 是常態）。每次重新發明選項會讓 Claude 傾向「自行解讀」而不是嚴格走這三支；預先固化 = 把分支變成 reflex，不留發揮空間。清單裡少一支 A0 的後果不是「少一個選項」，是**清單本身的形狀在把決策往人推**（[[pitfall-cross-session-blocker-escalated-to-human-instead-of-peer]]）。
+少了 A0 的選項清單本身就在把決策往人推（[[pitfall-cross-session-blocker-escalated-to-human-instead-of-peer]]）。
 
 ## 破壞性指令的 guardrails
 
@@ -145,26 +130,20 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 - `git revert <commit>`
 - `git stash drop` 依 [[commit.detail]] 的精確 stash ownership／處置 gate；`git stash clear` 不作為逐條處置替代
 
-### 檔案系統等效動作（同樣 destructive，但容易誤以為「不是 git 命令所以 OK」）
+### 檔案系統等效動作
 
-以下動作**功能上等同破壞性 git 命令**，因此**同樣受本 rule 限制**：
+以下動作功能上等同破壞性 git 命令，同樣受本 rule 限制（含包在 shell / Python script 裡的批次操作）：
 
-- `mv <git-tracked-path> <elsewhere>` / `mv <elsewhere> <git-tracked-path>` — 把 hook 自動建立的 archive directory 搬回原位（等同 revert hook 工作）；把目錄反向搬等同 `git checkout --` 對 directory layout 操作
-- `rm -rf <specs/**>` / `rm -rf <tasks/**>` / `rm -rf <screenshots/**>` 等批次刪除 user-authored 或 hook-authored 內容
-- `cp --remove-destination` / `cp -f <source> <git-tracked-path>` — 覆蓋掉現有 working tree 內容
-- `sed -i` / `awk -i inplace` / `perl -i` 等在 git-tracked 檔案上覆寫未授權內容；合法編輯依 [[commit]] 的範圍、原內容與可審查 diff 契約
-- 用 `echo > <git-tracked-path>` / `cat > <git-tracked-path>` / `tee <git-tracked-path>` 等覆蓋 git-tracked 檔案內容
-- 任何 shell script / Python script 中包含上述動作的批次操作
+- `mv` 反向搬 hook 建立的 archive directory 或其他 tracked 路徑
+- `rm -rf` 批次刪除 `specs/**`、`tasks/**`、`screenshots/**` 等 user-authored 或 hook-authored 內容
+- `cp -f` / `cp --remove-destination`、`echo >` / `cat >` / `tee` 覆蓋 tracked 檔
+- `sed -i` / `awk -i inplace` / `perl -i` 覆寫未授權內容；合法編輯依 [[commit]] 的範圍與可審查 diff 契約
 
 ### 總原則
 
 工作檔丟棄／覆寫與 index-only 操作分別依 [[commit]] 的 WIP 與 staged 所有權判準處理；Git、shell、editor 與 subprocess 使用同一個副作用判準。操作會丟棄或覆寫未獲本任務明確授權處置的內容時，**MUST** 保留現況並向使用者確認。Index-only 不代表可任意改他人的 staged 選擇；hook `MM` 的完整處置條件與既有授權的邊界均以 [[commit]] 為準。
 
-判別測試（self-check）：
-
-- 操作會動哪些 working tree、index、ref 或外部狀態？具體內容是否已在本任務授權內？
-- 現有內容的所有權與操作前快照能否確認？不在 Git 中的內容同樣需要保護；存在於 history 不等於目前 WIP 已被保存。
-- 對象、範圍或授權不明時停手；命令可逆不等於已獲授權，正常授權編輯也不因寫入工作檔就變成丟棄 WIP。
+判別測試：操作動到哪些 working tree／index／ref／外部狀態，內容所有權能否確認、是否在本任務授權內？不在 Git 中的內容同樣要保護，存在於 history 不等於 WIP 已保存；命令可逆不等於已獲授權。不明就停手。
 
 ## 話術關鍵詞 = 立即停手訊號
 
@@ -174,7 +153,7 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 
 中英全表見 [[commit]] § 話術關鍵詞 = 立即停手訊號——**該表是 SoT，本檔不複製**。
 
-方向不可顛倒：`commit.md` 是 always-load、本檔是 conditional-load（`paths:` 只涵蓋 tasks / specs / ROADMAP / HANDOFF / tech-debt / decisions）。**指標一律 conditional → always**；反過來會讓本檔沒載入的 session 完全失去這層保護。
+指標方向固定 conditional（本檔）→ always-load（`commit.md`），不可顛倒。
 
 ### 停手定義
 
@@ -185,11 +164,7 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 3. 唯讀釐清後仍需要使用者決定時，**MUST** 透過當前 runtime 可用的提問介面呈現當前狀態、具體衝突與選項（含「保留現狀不動」）
 4. 取得使用者明確指示後才繼續
 
-### 為什麼是「話術 = 思考表徵」
-
-把「現況不合預期」推導成「可自行丟棄現況」缺少了所有權與授權。關鍵詞提醒 agent 檢查這一跳；是否停手依動作表判定，不從模型或 runtime 名稱推論。
-
-**特別注意**：把破壞性動作包裝成「**清理**」「**重置**」「**回到乾淨狀態**」「**對齊規約**」「**修正一下**」等委婉說法繞過本節，**同樣違反本 rule**。委婉說法仍是話術關鍵詞，仍觸發停手訊號。
+把破壞性動作包裝成「**清理**」「**重置**」「**回到乾淨狀態**」「**對齊規約**」「**修正一下**」等委婉說法繞過本節，**同樣違反本 rule**。委婉說法仍是話術關鍵詞，仍觸發停手訊號。
 
 ## Subagent brief 最低要求
 
@@ -207,22 +182,13 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 - 準備丟棄／覆寫內容且對象或授權不明：依 commit 動作表停手，保留現況並釐清
 ```
 
-上面是 **brief 內容**的最低要求。派工另記 runtime、model／effort 與獨立上下文要求，依 [[agent-routing]] 的共同政策及當前 adapter 選擇實際參數。繼承主線模型是明確選擇，不代表新上下文或跨模型已成立；需要 fresh checker 時仍依 [[checker-subagent]] 建立不繼承 maker 對話的入口。缺必要能力時回報未達成，不填另一 runtime 的工具參數。
-
-## 與其他規則的關係
-
-- `follow-up-register.md`：提供技術債登記與 archive gate
-- `handoff.md`：提供跨 session 交接出口
-- `knowledge-and-decisions.md`：提供長期知識與 ADR 出口
-- `ux-completeness.md`：補上「發現未登記 = 未完成」的完成度觀點
+派工參數（runtime、model／effort、獨立上下文）依 [[agent-routing]]；需要 fresh checker 時依 [[checker-subagent]]。
 
 ## 已決 scope 不可重開
 
 當專案內存在**明確記錄的 scope 決策**（`docs/decisions/`、discussion artifact、lessons.md、或後續 supersede 紀錄），agent **MUST** 視為已定案。後續 session 只討論「怎麼做」，**NEVER** 把「是否要做」重新當開放問題。
 
 **可觀察 predicate**：agent 正在產出的文字含「是否需要」「要不要做」「可以考慮排除」「scope 可能不包含」等措辭，且對象是已有 decision artifact 的 feature → 停，讀 decision artifact 確認。
-
-**為什麼**：已決 scope 被重開 = user 花時間再次說明同一件事。Agent 查舊決策的成本（grep `docs/decisions/` + lessons.md）遠低於 user 重新解釋的成本。
 
 ## 交付物必須是可追蹤檔案
 
@@ -232,8 +198,6 @@ User 要求報告、分析、比較、盤點等輸出時，交付物 **MUST** �
 1. 以當前可用的檔案編輯工具寫到 `docs/` 或 `tasks/` 或 user 指定位置
 2. 在 chat 回報路徑 + 一句話摘要
 3. 需要跨 repo 共享時，指定單一 owner repo + 用 diff 或 snapshot 機械比對
-
-**為什麼**：chat inline 的分析無法被後續 session 引用、搜尋、或 version control。「聊天摘要不算交付」。
 
 ## 開放式策略問題不過早路由到 SDD 流程
 
@@ -246,10 +210,6 @@ User 提出**跨產品、商業模式、系統邊界**的大範圍策略題時�
 ## 禁止事項
 
 - **NEVER** 把「超出 scope」當成忽略發現的理由
-- **NEVER** 把未知變更當作「上次沒清乾淨」直接清掉
+- **NEVER** 把未知變更或 hook / automation 產出當作「上次沒清乾淨」直接清掉
 - **NEVER** 讓 subagent 把一般實作 brief 當成丟棄工作檔或改他人 staged 選擇的授權
-- **NEVER** 用 `mv` / `rm -rf` / `cp -f` / `sed -i` / `echo >` / `tee` 等檔案系統等效動作反向 hook 工作、刪除 archive directory、覆蓋 working tree 內容（同樣受破壞性指令 guardrails 限制）
-- **NEVER** 把 hook / automation 的產出默認為可丟棄；依歸屬探測及 commit 動作表處理
-- **NEVER** 拿 rule A 當理由 revert rule B 的產出（含 hook 自動產出）— 未解衝突保留現狀並請使用者決定
-- **NEVER** 用委婉詞規避副作用、所有權與授權判定 — 關鍵詞全表在 [[commit]]，停手定義在本檔
 - **NEVER** 寫只有「不擴散」沒有「必登記」的 brief

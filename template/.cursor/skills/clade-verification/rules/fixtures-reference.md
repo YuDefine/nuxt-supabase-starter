@@ -9,7 +9,7 @@ paths: ['docs/FIXTURES.md', 'docs/fixtures.md']
 
 凡 consumer 含 `## 人工檢查` items 引用具體業務 sample（NFC UID / staff email / business key / entity ID）時，consumer **MUST** 維護 `docs/FIXTURES.md`（或 `docs/fixtures.md` lowercase fallback）作為「測試身分 / 樣本 UID / business key」速查表。
 
-本規則是 `manual-review.md`「Pre-Review Data Readiness」與「`[review:ui]` 純功能驗證 step actionability」hard rule 的配套契約 — propose 寫作者在 manual-review item inline 引用 sample 時 **MUST** 從 `docs/FIXTURES.md` 抓 stable identifier，避免「某張」「某筆」「找一張」這種模糊指代。
+本規則是 [[manual-review.data-readiness]] 的配套契約：manual-review item inline 引用 sample 時 **MUST** 從 `docs/FIXTURES.md` 抓 stable identifier，避免「某張」「某筆」這種模糊指代。
 
 ## MUST
 
@@ -32,38 +32,7 @@ paths: ['docs/FIXTURES.md', 'docs/fixtures.md']
 
 ## Schema（per-consumer 自治）
 
-Clade 中央倉 **不**規定 `docs/FIXTURES.md` 內容 schema — per-consumer 業務差異大（kiosk UID 結構、staff role 命名、business key 命名規約都不同）。Clade 只規定該檔 **必須** 存在、必須含「測試身分」section、必須與 seed cross-link。
-
-範例（<consumer-b> 風格，可參考但非強制）：
-
-```markdown
-# Fixtures Reference
-
-## Test Identities
-
-### NFC 員工卡
-
-| UID | Holder | Role | Notes |
-| --- | --- | --- | --- |
-| `04A1B2C3` | 測試 Admin | admin | seed.sql 第 12 行 |
-| `04469C0FCB2A81` | 淑貞 | staff | seed.sql 第 18 行 |
-| `047D6201CC2A81` | flat_burr 治具 | tool | seed.sql 第 22 行 |
-
-### Staff Email
-
-| Email | Role | Org |
-| --- | --- | --- |
-| `admin@example.com` | admin | <consumer-b>-DEV |
-| `staff@example.com` | staff | <consumer-b>-DEV |
-
-## Work Report 範例
-
-| ID | Status | 用途 |
-| --- | --- | --- |
-| `WR-9001` | voided | 互斥狀態驗收（不可 Archive） |
-| `WR-9002` | archived | 互斥狀態驗收（不可 Void） |
-| `WR-9003` | active | 一般 round-trip |
-```
+Clade **不**規定 `docs/FIXTURES.md` 內容 schema，只規定該檔存在、含「測試身分」section（如 `## Test Identities` 下列 UID / Holder / Role / seed 行號）、與 seed cross-link。
 
 ## Cross-link with `supabase/seed.sql`
 
@@ -73,24 +42,4 @@ Clade 中央倉 **不**規定 `docs/FIXTURES.md` 內容 schema — per-consumer 
 
 ## Propagate 行為
 
-`scripts/propagate.ts` 對缺 `docs/FIXTURES.md` 的 consumer emit **warning**（不 block）：
-
-```
-⚠ propagate: <consumer-name> missing docs/FIXTURES.md
-  Required by clade/rules/core/fixtures-reference.md
-  Per-consumer follow-up: create the file with at least a「Test Identities」section
-  before writing the next [review:ui] items that carry sample references.
-```
-
-Consumer owner 收到 warning 後在自家 ROADMAP / HANDOFF / docs/tech-debt.md 排補檔。clade 端不替 consumer 創建該檔（per-consumer 業務差異大）。
-
-## 與 `manual-review.md` Pre-Review Data Readiness 的關係
-
-| Manual-review hard rule | Fixtures contract enforcement |
-| --- | --- |
-| 「禁止模糊指代」(`某張` / `某筆` / `find a record`) | `docs/FIXTURES.md` 提供具體 ID 可以引用 |
-| 「Sample inline 引用」 | `docs/FIXTURES.md` 是 ID 的 stable source |
-| 「Sample 持久化寫進 seed」 | `docs/FIXTURES.md` ↔ `supabase/seed.sql` cross-link enforce |
-| 「kiosk 刷卡 round-trip」範例 UID `04A1B2C3` | 來自 `docs/FIXTURES.md` NFC 卡 section |
-
-完整 manual-review 規約見 `manual-review.md`「Pre-Review Data Readiness」+「`[review:ui]` 純功能驗證 step actionability」。本規則只 scope 在「fixtures speed reference contract」這一層，不重複 manual-review 的所有規則。
+`scripts/propagate.ts` 對缺 `docs/FIXTURES.md` 的 consumer emit **warning**（不 block），訊息會指名缺檔的 consumer 並要求補一份至少含「Test Identities」段的檔。Consumer owner 收到 warning 後在自家 ROADMAP／HANDOFF／`docs/tech-debt.md` 排補檔；clade 端不替 consumer 創建該檔（per-consumer 業務差異大）。

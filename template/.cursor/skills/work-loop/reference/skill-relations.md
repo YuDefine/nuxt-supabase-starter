@@ -12,7 +12,7 @@ cd ~/offline/<consumer> && \
 它每輪起新 process、context 不累積，`--unattended` 由它自己帶（見 [run-modes.md](run-modes.md)）。
 主線起它時要配齊的 cache-keepalive heartbeat 與 per-round Monitor 見 SKILL.md § 起 runner 的形狀與收尾契約 (d)(e)。
 
-**本 skill 不走 cron / cloud routine**，也**不**教人建。2026-08-05 定案：唯一使用者不使用
+**本 skill 不走 cron / cloud routine**，也**不**教人建：唯一使用者不使用
 `/schedule`，而留著一份沒人跑的排程設定只會讓讀者以為那是預期路徑。要週期性觸發就把
 `runner.sh` 交給你自己的排程器（`--max-rounds` 控制單次上限，Step 0 互斥鎖擋重疊）。
 
@@ -23,7 +23,7 @@ cd ~/offline/<consumer> && \
 
 | Skill | 本 skill 如何用它 / 邊界 |
 | --- | --- |
-| handoff-scan.ts | Step 2 + Step 5 re-scan 的唯一狀態來源；輸出固定落 `.clade/work-loop/scan-latest.json`（覆蓋前 rotate 一份 `scan-prev.json`） |
+| work-loop-scan.ts（內部跑 handoff-scan） | Step 2 + Step 5 re-scan 的唯一狀態來源；輸出固定落 `.clade/work-loop/scan-latest.json`（覆蓋前 rotate 一份 `scan-prev.json`） |
 | work-loop-summary.ts | 把上面那份 scan 壓成十餘行摘要（只列非 pass 的 check）。**要回頭看 scan 就讀它，NEVER 重跑 scan** |
 | work-loop-state-write.ts | Step 7.3 落 state 的唯一寫入路徑（patch 淺層合併 + 原子換檔 + round 不得倒退）。**NEVER** 每輪自己生成一支 write-state script |
 | /implement | 需求接續與 evidence 收集；條件依 SKILL.md § 3.1a |
@@ -40,5 +40,5 @@ cd ~/offline/<consumer> && \
   （publish 與 propagate **不在**此列，見 [guardrails.md](guardrails.md) 護欄 19）
 - ❌ `--unattended` / runner 下呼叫 `AskUserQuestion` — 走 packaging，per SKILL.md Step 0 Iron Law
 
-**tech-debt 是合法工作來源**（合併前的 `/change-loop` 曾把它列在「不做」）——`docs/tech-debt.md`
+**tech-debt 是合法工作來源**——`docs/tech-debt.md`
 的 open entry 從 Step 2 的 `techDebtHygiene.raw` 進 candidate list，與 HANDOFF 條目同級。

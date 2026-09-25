@@ -26,8 +26,8 @@
 | 0-MR／Archive | 主線執行 branch／pathspec／人工檢查與 archive 判定 | 按 gates.md withheld 受阻 paths；不足的 archive 狀態不入庫 | 判定命令、change 名、交集與 readiness／coupling 輸出 |
 | 0-S | 主線對敏感 paths 呼叫已安裝的 security scanner | 讀 exit 與 failure_class；工具故障只能走 security-scan.md 的明確授權分支 | report、coverage、ledger；未掃描授權時保留該文件要求的兩種記號 |
 | 0-A.0 | 主線先執行 simplify | 完成修正才凍結 review snapshot | simplify 結果、變更後 snapshot |
-| 0-A.1 | 合格獨立 reviewer 兩格同級（GPT-6 Astra via Pi，effort: medium 優先；Astra 實際不可用＋逐字證據時換 Claude Fable 5.1 via Herdr，effort: medium）；主線核對資格與結果 | 完整 verdict 與全部 finding；缺資格、缺覆蓋或 snapshot 漂移時未通過；兩格都不可用保持未完成 | review-policy 各欄、真實 dispatch／session、requested／observed model 與 model_verification(_reason)、完整輸出 |
-| 0-A.2 | Critical／Major 觸發時由合格 reviewer（同 0-A.1 的選用順序，格別每輪依當下可用性重判，與 0-A.1 不同格合法）以 fresh context 對修復後 snapshot 深度複審 | 深度 review 完成才通過；兩格 reviewer 都不可用或配額耗盡時保持未完成，不是合法 skip | 深度 reviewer 身份、snapshot／verdict、逐條 finding 處置與修正依據 |
+| 0-A.1 | 唯一合格獨立 reviewer：fresh-context Claude Opus 5.5 medium；主線核對資格與結果 | 完整 verdict 與全部 finding；缺資格、缺覆蓋或 snapshot 漂移時未通過；Opus 不可用保持未完成 | review-policy 各欄、真實 dispatch／session、requested／observed model 與 model_verification(_reason)、完整輸出 |
+| 0-A.2 | Critical／Major 觸發時由同一席（Opus 5.5 medium）以新的 fresh context 對修復後 snapshot 深度複審 | 深度 review 完成才通過；Opus reviewer 不可用或配額耗盡時保持未完成，不是合法 skip | 深度 reviewer 身份、snapshot／verdict、逐條 finding 處置與修正依據 |
 | 0-B | 已觸發視覺改動由符合 UI 政策的執行者取得真實畫面並判讀 | 依 UI gate 收斂；無 browser／截圖／合格判讀載體時保留缺口 | 頁面、viewport、截圖、判讀與修正後證據 |
 | 0-C | 可派 runner 執行；主線依 gates.md 複驗 check、明確 test 與 doctor | 全部完成且符合各自判準；worker PASS、doctor exit 0 或仍在跑均不足 | 每支命令的終態與原始輸出、doctor 分數／warnings |
 | 0-D | 主線比對 diff 與文件、規約、snippet、audit 契約 | 同步必要文件；匯合後依大改動回扣重驗受影響 snapshot | 文件對照、修正 diff、回扣結果 |

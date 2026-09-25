@@ -18,8 +18,6 @@ Ask if not already clear（open-ended 蒐集，不是 pick-one，不開決策頁
 
 **先決：init vs document（避免從零問起）**
 
-> `/impeccable init` 是 v3.5+ 的名稱（v3.5 前叫 `teach`，仍保留為 alias）。clade plan 一律輸出 `init`。
-
 | 專案狀態 | 用哪個 | 理由 |
 | --- | --- | --- |
 | 完全空 repo / 還沒寫 UI 程式碼 | `/impeccable init` | 從零問品牌、使用者、語氣等，產 PRODUCT.md + DESIGN.md |
@@ -31,7 +29,7 @@ Foundation 未完成（缺 PRODUCT.md，或有 UI 卻缺 DESIGN.md）→ **STOP*
 
 新專案／bootstrap 剛開好的 UI consumer：完整配置追問清單 SoT 是 `project-bootstrap` 的 `references/impeccable-follow-up.md`（安裝路徑與版本、PRODUCT／DESIGN 欄位、theme tokens、live-mode）。bootstrap **自己**在 scaffold 成功後載入本 mode／該契約，**MUST** 缺哪項問哪項直到齊並寫檔；**NEVER** 默默跳過、只提醒「去裝 impeccable」，或叫使用者手打本 skill 的 slash command。
 
-`/impeccable init` 在 v3 會從單次 codebase scan 引導建立 **PRODUCT.md**（必要：使用者、品牌、語氣、anti-references、strategic principles、register）和 **DESIGN.md**（必要：色彩、字體、層次、元件、layout 規格），並順帶配置 Live Mode config + 推薦下一步指令。後續涵蓋：
+`/impeccable init` 會從單次 codebase scan 引導建立 **PRODUCT.md**（必要：使用者、品牌、語氣、anti-references、strategic principles、register）和 **DESIGN.md**（必要：色彩、字體、層次、元件、layout 規格），並順帶配置 Live Mode config + 推薦下一步指令。後續涵蓋：
 
 - Style direction (minimal, bold, editorial, etc.)
 - Color palette + **color strategy**（restrained / committed / full palette / drenched — 強制 commitment axis）
@@ -59,7 +57,7 @@ Register: brand | product
 Chosen world: [seed key / optionId / canon?]
 
 ### Phase 1 — Foundation
-□ /impeccable init                           ← 建立 PRODUCT.md + DESIGN.md（v3.5 前叫 teach）
+□ /impeccable init                           ← 建立 PRODUCT.md + DESIGN.md
 □ /impeccable shape                          ← (optional) 寫 code 前需求釐清；確認走 Shape brief 決策頁
 
 ### Phase 2 — Build
@@ -128,7 +126,7 @@ ANSWER 之後直接 invoke 選中序列。
 
 Shape brief 無 unattended default——沒答就停，不要當 approve。
 
-**v3.1+ Codex harness 4 gates（僅 native image_gen 才生效）**：當 user 是在 Codex 跑 new-work build 時，gate 從 1 個擴成 4 個，全部要明確 STOP：
+**Codex harness 4 gates（僅 native image_gen 才生效）**：當 user 是在 Codex 跑 new-work build 時，gate 從 1 個擴成 4 個，全部要明確 STOP：
 
 | Gate | 內容 | 來源 |
 | --- | --- | --- |

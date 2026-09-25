@@ -6,9 +6,9 @@ Use the Agent tool with:
 
 - `name`: `wt-<slug>` (so a continuation pattern can `SendMessage({to: name})` later).
 - `isolation`: omit (the worktree itself is the isolation; the Agent tool's built-in worktree isolation is for the *parent's* repo, which we don't want).
-- `model`: pick the tier per [[agent-routing]] § Claude 委派的 model 檔位 — that section enumerates
-  the downgrade predicates, and only a hit justifies `model: 'sonnet'`. Decide it explicitly either
-  way: omitting the parameter without having made that call silently inherits the Opus main line.
+- `model`: `'opus'`. Sonnet, Haiku and Fable are retired (2026-09-24); work judged below the main
+  line's tier goes to the delegate-sub chain on Pi ([[agent-routing]] § Claude 委派的 model 檔位),
+  not to a cheaper Claude. Pass it explicitly: omitting it inherits the main line's model unchecked.
   **This path does not carry UI view implementation** — Step 1.8 keeps that on the Opus main line
   and dispatches it nowhere. What reaches here is Form 3
   (`/wt <slug>: /<next-skill>`, needs Skill tool access), Form 4 (`/wt resume <slug>`, needs

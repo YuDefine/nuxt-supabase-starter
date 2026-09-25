@@ -24,7 +24,7 @@ description: ad-hoc 工作的追蹤載體、唯讀與指定產物邊界、共享
 
 先依 target adapter 確認實際 runtime、launcher、量測口徑與已核准 profile；不可借另一 runtime 的門檻或 model 名稱宣稱豁免。**Iron Law：適用 hard tier 是收工線；soft tier 是限制新大工作段。** 超過 soft tier 後 MUST 不開新的 tasks 檔、多檔重構、新實作 phase 或尚未載入的 skill；手上驗收與小 item 仍可完成。超過 hard tier 後 MUST 保存狀態並按 [[session-tasks.operations]] 收工；壓縮不重設 hard-tier 義務。
 
-主判準與兩級語義在 [[session-tasks.context-budget]]；runtime 的原生命令、hook 與 marker 由 adapter 承載。`paths:` 不是「收工」觸發錨；hard-tier 提示出現時依具名時機主動 Read。
+兩級語義與 Iron Law 以本節為準；主判準的可觀察 predicate 表在 [[session-tasks.context-budget]]；runtime 的原生命令、hook 與 marker 由 adapter 承載。`paths:` 不是「收工」觸發錨；hard-tier 提示出現時依具名時機主動 Read。
 
 ## 並行爭用
 
@@ -32,4 +32,4 @@ description: ad-hoc 工作的追蹤載體、唯讀與指定產物邊界、共享
 
 ## 真相層與回報
 
-task 檔只承載當前 session 的授權、進度、證據與未完項。長期契約在 `specs/truth/`（或既有唯一機器 owner）。跨 session 工作接續同一份 plan。`HANDOFF.md` 是從 flow + active plan 生成的 view。follow-up 依 [[follow-up-register]]。**「等」是上表三個動作之一，NEVER 是「判不出來」的同義詞。** Herdr 不可用時，**降級掉的是「對方是誰」，NEVER 是「所以可以 escalate 了」**；本規則不把短期 task 註記冒充長期登記，也不因 task 檔存在就宣稱工作完成。
+task 檔只承載當前 session 的授權、進度、證據與未完項。長期契約在 `specs/truth/`（或既有唯一機器 owner）。跨 session 工作接續同一份 plan。`HANDOFF.md` 是從 flow + active plan 生成的 view。follow-up 依 [[follow-up-register]]。**「等」是 [[session-tasks.concurrent-writers]] § 分類後直接行動 表中的一種處置，NEVER 是「判不出來」的同義詞。** Herdr 不可用時，**降級掉的是「對方是誰」，NEVER 是「所以可以 escalate 了」**；本規則不把短期 task 註記冒充長期登記，也不因 task 檔存在就宣稱工作完成。

@@ -12,13 +12,7 @@ paths:
 
 # 待拍板條目的寫法
 
-**這一份是寫的人讀的。** 讀的人那一份是 [[review-gui-surface]] § 待拍板佇列（pointer）——
-它規範掃描器與頁面，本檔規範**被掃的那條 bullet**。選項的 canonical 形狀以本檔為準。
-
-你寫進 `HANDOFF.md` / `docs/tech-debt.md` 的一條待拍板 bullet，60 秒內會被
-`vendor/scripts/flow/decision-sources.ts` 掃進 spine，出現在 `https://review-gui.<maintainer-domain>/`（控制面板首頁「輪到你」）
-和 `\my` 兩個畫面上。Charles 多半在手機上讀它。**寫的人與答的人不是同一個人，中間隔著一個
-解析器**——本檔存在的唯一理由是讓這三方對同一條 bullet 的理解一致。
+本檔規範**被掃的那條 bullet**（掃描器與頁面見 [[review-gui-surface]] § 待拍板佇列）。你寫進 `HANDOFF.md` / `docs/tech-debt.md` 的待拍板 bullet，60 秒內會被 `vendor/scripts/flow/decision-sources.ts` 掃進 spine，出現在控制面板「輪到你」與 `\my`，Charles 多半在手機上讀。**寫的人與答的人中間隔著一個解析器。**
 
 ## 拍板題的形狀（正向契約）
 
@@ -38,36 +32,16 @@ paths:
 | 每條選項 | 一句「這樣做會怎樣」，不是名詞短語 |
 | 縮排 | 選項是問句的 sibling bullets，彼此相鄰、同縮排 |
 
-**沒有選項的拍板題 MUST 改寫成「這題要給值」並逐項列出要填什麼**，兩者都不成立就不要放進
-待拍板區段。三者皆非的條目會以一個空白輸入框出現在手機上，看起來像可以回答，實際上不能。
+**沒有選項的拍板題 MUST 改寫成「這題要給值」並逐項列出要填什麼**，兩者都不成立就不要放進待拍板區段（否則手機上是一個答不了的空白輸入框）。
 
-### 選項行的三種粗體寫法都可以
+粗體只包字母、包整段、或包字母與標記（`**A（推薦）**：…`）三種都解析得到。選項可換行，但續行 **MUST** 縮排比該 bullet 深、不是新的 list item，上限 3 行——被截斷時手機上沒有任何訊號。
 
-```markdown
-  - **A**（推薦）—— 收進 rules/core/     ← 粗體只包字母
-  - **A（推薦）收進 rules/core/**        ← 粗體包整段
-  - **A（推薦）**：收進 rules/core/      ← 粗體包字母與標記，正文在外
-```
-
-三種都解析得到。2026-08-27 之前只認第一種，而 fleet 幾乎只寫第二種；第三種到 2026-08-29
-之前**匹配得到但讀錯**——手機上顯示成 `A. ：收進 rules/core/（推薦）`，冒號外洩、推薦標記被
-搬到句尾。這是**解析器**遷就寫法，不是寫法遷就解析器。
-
-### 選項換行沒有關係，但 NEVER 讓它跨出縮排
-
-一條選項寫不下換行，續行照樣算同一條選項——**條件是續行縮排比該 bullet 深、且自己不是
-新的 list item**。2026-08-29 之前續行整段丟失：<consumer-a> 的 A 案在手機上停在
-「…改記到 TD-296 —— 折進去要動」，說明代價的那半句在下一行，沒有刪節號、沒有任何訊號。
-**在被截斷的選項之間拍板，比排版難看嚴重得多。**
-
-續行上限 3 行。要寫更長就把它拆成問句本文的說明——選項是按鈕的標籤，不是段落。
-
-**這不代表「怎麼寫都行」**。以下每一種都解析不到，靜默退化成自由填答：
+以下每一種都解析不到，靜默退化成自由填答：
 
 | 寫法 | 為什麼收不到 |
 | --- | --- |
-| `或者可以 X，也可以 Y` | 散文。**NEVER** 從散文猜選項——猜錯的選項被點下去就是一個沒人想要的答案被落檔 |
-| `- **A 這樣做**` / `- **D 那樣做**` | 字母不連續。整組丟棄，**不會**只收兩條——兩條未知 N 的選項是沒人被問過的選擇題 |
+| `或者可以 X，也可以 Y` | 散文。**NEVER** 從散文猜選項 |
+| `- **A 這樣做**` / `- **D 那樣做**` | 字母不連續，整組丟棄 |
 | `- **A 只有這條**` | 一條不是選擇題 |
 | A 在段落開頭、B 在六段之後 | 選項是相鄰的 sibling bullets，隔太遠的兩個粗體字母是散文 |
 | `- **A 方案已採用**` / `- **B 案已否決**` | 在敘述已經決定的事。待拍板區段裡 **NEVER** 放已拍板的紀錄 |
@@ -85,26 +59,9 @@ paths:
 | **跨 repo** | **不進佇列** | 見下 |
 | **`Blocked`** | **不進佇列** | 見下 |
 
-**分桶的軸只有一條：這一列怎麼離開佇列。** NEVER 是重要性、也 NEVER 是可逆性。
+**分桶的軸只有一條：這一列怎麼離開佇列**（一句短回覆 → `ruling` / `review`；別處的一個動作 → `human-action`；結構改動 → `loop-structural`）。NEVER 是重要性或可逆性；「可回答」（`ANSWERABLE`）是它的衍生屬性，NEVER 是第二條軸。舊 span 的 `irreversible` 由 `bucketOf` 渲染時摺進 `human-action`，**NEVER** 改寫既有 span 的 `category`。
 
-- 被**一句短回覆**結掉 → `ruling` / `review`（編 `Qn`、給輸入框）
-- 被**別處的一個動作**結掉 → `human-action`（給動作行，不給編號）
-- 被**結構改動**結掉 → `loop-structural`
-
-「可回答」是這條軸的**衍生屬性**（`ANSWERABLE`），**NEVER** 是第二條正交的軸——把它讀成正交
-會讓下一個加 category 的人去做一個 2×2 矩陣，而那個矩陣有兩格是空的。`human-action` 這個名字 2026-08-28 取代 `irreversible`——
-舊名描述的是 heading 規則而不是讀的人要做什麼。spine 是 append-only，舊 span 上的 `irreversible`
-由 `bucketOf` 在渲染時摺進 `human-action`，**NEVER** 改寫既有 span 的 `category`。
-
-**跨 repo 與 `Blocked` 兩個區段 NEVER 進佇列。** 跨 repo 2026-08-27 起回 `null`：那裡的條目是
-「本 repo 不修 / 已移交」的紀錄，沒有裁決可下（實測一次進了 15 題）。`Blocked` 2026-08-28 起
-同樣回 `null`，理由同型——它敘述的是**工作為什麼停住**，球依 fleet 自己的慣例不在讀者手上；
-實測 15 列有 9 列來自它，**零列寫得出 Charles 的動作**。
-
-**NEVER 把 `Blocked` 重新收進來，也 NEVER 改用區段內文的關鍵字啟發式。** 真的要人動手時，
-fleet 已經有明確的家：`Awaiting Charles`（拍板）、`Ready for review`（驗收）、
-tech-debt 的 `### 需要 Charles`、tasks 的 `deferred-user-only`。寫進那四個之一，不要寫在 `Blocked`
-底下期待有人看到。
+**跨 repo 與 `Blocked` NEVER 進佇列**：前者是已移交的紀錄，後者敘述工作為什麼停住、寫不出 Charles 的動作。**NEVER 把 `Blocked` 重新收進來，也 NEVER 改用區段內文的關鍵字啟發式**——真的要人動手就寫進 `Awaiting Charles`、`Ready for review`、tech-debt 的 `### 需要 Charles`、或 tasks 的 `deferred-user-only`。
 
 ## `Ready for review` 的三欄（正向契約）
 
@@ -118,34 +75,11 @@ tech-debt 的 `### 需要 Charles`、tasks 的 `deferred-user-only`。寫進那�
   - 退回會怎樣: <一句，講退回的代價>
 ```
 
-**分不出 `review` 還是 `human-action` 時，問這一題：證據能不能被壓成「30 秒可開的東西」。**
-能（preview URL / commit / 一段輸出）→ `review`。不能——要人手、要實體裝置、要只有你有的帳號
-——→ `human-action`。<consumer-a> 的 LINE 手機真機驗收是後者：它的終點是「你拿手機做一件事」，verdict
-只是副產物，寫進 `Ready for review` 會永遠掛 `missing-evidence` 而**永遠進不了佇列**（手機握在
-手上這件事沒辦法變成可點證據），於是那件事從所有畫面上消失。
+**分不出 `review` 還是 `human-action` 時問：證據能不能壓成「30 秒可開的東西」**（preview URL / commit / 一段輸出）。不能（要人手、實體裝置、只有你有的帳號，例如手機真機驗收）→ `human-action`；硬寫進 `Ready for review` 會永遠掛 `missing-evidence` 而進不了佇列。
 
-三欄各自回答驗收的人在回覆之前一定要先答的一個問題：**我在不在乎**（改了什麼）、**我三十秒內
-看得完嗎**（證據）、**我說不的代價是什麼**（退回會怎樣）。缺任一欄這條就驗不了，所以
-**NEVER** 放寬成「三選一」或「有寫就好」。
+三欄缺一就驗不了，**NEVER** 放寬成「三選一」。**證據 NEVER 寫「見 HANDOFF」、change 名字、或任何要對方再跳一次的指標。** 三欄沒寫齊的條目 ingest 端**拒鑄 span**，改在 `flow sources` 與 `handoff-scan` 印退件行（收件人是你），補齊後下一趟掃描自己會開。
 
-**證據 NEVER 寫「見 HANDOFF」、change 名字、或任何要對方再跳一次的指標。** 那正是這條契約要
-刪掉的成本：2026-08-28 實測，佇列上 7 條 ready-for-review 全部只有標題與一個 carrier 路徑，
-每條都要人自己去開 repo、找 change、跑起來，於是每條都躺了 10.8–16.6 小時沒人動。
-
-三欄沒寫齊的條目**不會進佇列**：ingest 端判到 `missing-evidence` 就**拒鑄 span**，改在
-`flow sources` 與 `handoff-scan` 印一行退件（`HANDOFF.md:<行>` ＋ 缺什麼），收件人是你。
-補齊之後下一趟掃描自己會開，**NEVER** 需要任何人去解鎖。
-
-> 2026-09-03 Charles 拍板改成這樣（TD-904）。原本的做法是照樣鑄 span、再對它注入一段
-> 「請補三欄」的模板文字要求 agent 補件，逐字的裁定是**那是治標**：一條沒寫完的題在佇列上
-> 長成一顆按得下去的「通過」配零證據，而注入的那段字讓 `/decisions` 上大量出現不是 Charles
-> 打的文字。「做完的工作徹底隱形」那個顧慮由退件行接住——它印在寫的人看得到的地方，
-> 而不是印在拿手機的人看得到的地方。
-
-> 這一節之前不存在，而上面那張表當時寫著 `Ready for review` → `ruling`（可回答），
-> `categoryOfHeading()` 實際回的卻是 `irreversible`（每個渲染端都印「這條是狀態不是問題」）。
-> 規約承諾可回答、實作交付不可回答，兩邊各自自洽了好幾個月。**改分桶語義時 MUST 同時改這張表
-> 與 `categoryOfHeading()`**——它們是同一件事的兩半，只改一半不會有任何東西報錯。
+> **改分桶語義時 MUST 同時改上面那張分桶表與 `categoryOfHeading()`**。
 
 ## 「通過」有兩種，NEVER 讓佇列那一種代替另一種
 
@@ -156,23 +90,9 @@ tech-debt 的 `### 需要 Charles`、tasks 的 `deferred-user-only`。寫進那�
 | 佇列的 `Ready for review` → `通過` | spine 上的 span，答完那條就離開 `\my` / `/decisions` | **方向 OK、可以進人工驗收** |
 | `tasks.md` 的 `[review:ui]` checkbox／plan 的 `@human` 場景 receipt | checkbox 自己，或 `flow receipt` 寫進 `evidence/receipts.jsonl`（`ui-judgement` 卡） | **人真的在瀏覽器把那一頁開起來看過了** |
 
-**答佇列 NEVER 等於驗收。** 2026-08-29 <consumer-a> 實測：四條 ready-for-review 全部已被答
-「A. 通過」（span `c99f0d2acd529afc` / `07635ab2db246bc5` / `8bef7118645c7121` /
-`5ad93c75982be99c`），而 `retire-legacy-employee-route-cluster` 的 9 項 `[review:ui]`
-（`#1 /my/clock` 到 `#9 /my/salary`）一項都沒勾。答完那條就從佇列消失，9 項留在
-`tasks.md`，**沒有任何畫面會再提醒任何人**——真正 user-only 的驗收工作靜默消失了。
+**答佇列 NEVER 等於驗收**——答完就離開佇列，未勾的 `[review:ui]` 沒有任何畫面再提醒。所以**條目指向的 change 若還有沒勾的 `[review:ui]`，那條 NEVER 是佇列的題**：掃描端（`restatesManualReview()`，讀 `tasks/` 直下 live work 的未勾 checkbox，另以「`人工檢查` ＋ live work slug」文字 fallback）掛 `belongs-on-review`、**不**合成 通過／退回，但照樣留在佇列（**NEVER** 擋掉）。
 
-所以寫 `Ready for review` 條目時：**條目指向的 change 若還有沒勾的 `[review:ui]`，那條
-NEVER 是佇列的題。** 掃描端會偵測到並掛 `belongs-on-review`，且**不**替它合成 通過／退回
-——一鍵通過正是讓瀏覽器驗收靜默消失的那個按鈕。條目照樣留在佇列（**NEVER** 擋掉：擋在
-佇列外會讓做完的工作徹底隱形，同上一節的理由），但它渲染成沒有選項的條目，lint 說明那條
-的 verdict 在哪裡。
-
-**偵測讀的是 live work 的未勾 checkbox，也保留文字 fallback。** 條目提到尚有未勾 `[review:ui]` 的 live work；或同時含 `人工檢查` 與 live work slug。前者是「這件事驗了沒」本身，不是它的代理；後者保留對尚未進入 open-checkbox map 的 live work 的相容偵測。判定器 `restatesManualReview()`（`vendor/scripts/flow/decision-sources.ts`）先查 `openManualReview`，再查 `人工檢查` 與 live work slug；兩者都以 `tasks/` 直下工作檔導出的 live work 為準，子目錄不列入。
-
-**NEVER 把未勾的 `[review:ui]` 各開一條進佇列。** 一條 change 的 17 項瀏覽器驗收是**一趟**
-差事，拆成 17 列就是 17 則推播問同一件事——同 `scanTasks` 對 deferred 子步驟已經寫明的理由。
-它們的家是人工驗收那一趟（`ui-judgement` 卡），不是這裡。
+**NEVER 把未勾的 `[review:ui]` 各開一條進佇列**——一條 change 的驗收是一趟差事，家在 `ui-judgement` 卡。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
@@ -182,56 +102,23 @@ NEVER 是佇列的題。** 掃描端會偵測到並掛 `belongs-on-review`，且
 
 ## 驗收：已經出版的，NEVER 再問一次
 
-一件 work 做完之後佇列會問「驗收？」。但那件工作若**已經隨版本 tag 出版、散播到全 fleet 且零
-失敗**，再問人的就不是一個決定，是一個已經發生的事實。2026-09-03 實測：41 條待拍板裡有 18 條
-是這個形狀（Phase 3.5 / C / 5a / 4′ / TD-853…，全部隨 v1.11.130–v1.12.8 出版）。
-
-所以佇列自己把它收下：`flow sources --apply` 對每件 `done` 的工作查三格證據，三格全中就寫一筆
-`work.accept`（`actor: system`、`reason: landed <tag>`、`payload.accepted_by: 'landing'`），那一列
-從此不再出現。三格是：
+已經隨版本 tag 出版、散播到全 fleet 且零失敗的 work 不再問人：`flow sources --apply` 對每件 `done` 的工作查三格證據，全中就寫 `work.accept`（`actor: system`、`reason: landed <tag>`、`payload.accepted_by: 'landing'`）：
 
 1. `commit:<sha>` 這個憑證在本 repo 存在
 2. 它已經 push（至少一個 remote-tracking ref 包含它）
 3. 它落在一個 `v<semver>` tag 裡，而**那一版的 propagate journal 有紀錄、且每一台 consumer 都真的
    收到了那一版**
 
-**代替人按的是證據，NEVER 是判斷。** 三格全部由 git 與 propagate 自己的 journal 回答，沒有一格
-是誰的意見。`flow accept`（人按的那條路徑）行為完全不變。
+**代替人按的是證據，NEVER 是判斷。** **NEVER 對沒有 landing 證據的 work 自動 accept**（「pane 回 success 了」「commit 已經在 main 上了」都不算——進了 main 不等於出版）。判定 fail-closed：三格缺一就照樣問人；journal **0 筆不是零失敗**。
 
-**NEVER 對沒有 landing 證據的 work 自動 accept**，包括「我看它做完了」「pane 回 success 了」
-「commit 已經在 main 上了」——最後那句最像：進了 main 不等於出版，而**沒有第 3 格的 accept
-正是這條規則存在要防的東西**。
-
-**NEVER 把「找不到證據」讀成「大概沒事」。** 判定 fail-closed：三格缺一就照樣問人。第 3 格的
-journal **0 筆不是零失敗**——目錄不存在代表「這一版沒有散播紀錄」，而不是「散播得很乾淨」。
-
-第 3 格的 status 判定 **MUST 是 allow-list**（「只有這幾種算送達」），**NEVER 是 deny-list**
-（「這幾種算失敗」）：漏列一種的預設就是放行，而放行的那一邊是一個終態、append-only 的
-`work.accept`。逐字只有兩種算送達：
+第 3 格的 status 判定 **MUST 是 allow-list**，**NEVER 是 deny-list**（漏列的預設就是放行一個終態的 `work.accept`）。只有兩種算送達：
 
 - `bumped` —— commit 建了、push 了、remote 確認過
-- `skipped` **且那台 consumer 的 upstream remote-tracking ref 上的 manifest 版本已到達該 tag**——`skipped`
-  在 journal 裡分不出五種來源（缺 hub.json / `--resume` 已驗 / unmerged / dirty / 無 drift），
-  所以去問那台自己停在哪一版。**全 skipped 而版本沒到 = 無證據**。版本讀的是
-  `landing.ts` 固定的 upstream commit SHA 上的 manifest snapshot：`.clade/manifest.json`
-  是 canonical，`.claude/hub.json` 是遷移期 alias；共用 resolver 驗 schema 與雙檔一致性。
-  **NEVER** 讀磁碟、**也 NEVER** 讀 HEAD：
-  - 磁碟：propagate 先寫 hub.json 才跑投影同步，同步失敗時磁碟領先而那台的 origin 什麼都沒收到
-  - HEAD：journal 是整檔覆寫，同一版第二趟跑時那一列會從 `push-withheld` 被蓋成 `skipped`；
-    此時 HEAD 到版而 origin 從頭到尾沒收到，`push-withheld` 判成無證據、換個 status 名字就放行
-  - **NEVER** 改寫成「HEAD 到版 ＋ HEAD 已 push」：consumer 的 main 領先 origin 幾個本機 commit
-    是常態（2026-09-03 實測 fleet 只有 <consumer-b> 的 HEAD 在 remote-tracking ref 內），那樣寫會對每一台
-    回 false，而衰減成永遠 false 的判準與「沒有實作」事後不可區分
-  - 沒設 upstream / 讀不到 → 無證據（fail-closed）。remote-tracking ref 落後的方向是少報送達
+- `skipped` **且那台 consumer 的 upstream remote-tracking ref 上的 manifest 版本已到達該 tag**（`skipped` 分不出來源，所以問那台自己停在哪一版；讀 `landing.ts` 固定的 upstream commit 上的 `.clade/manifest.json`，`.claude/hub.json` 為遷移期 alias）。**NEVER** 讀磁碟（propagate 先寫 manifest 才同步）、**也 NEVER** 讀 HEAD（journal 整檔覆寫會把 `push-withheld` 蓋成 `skipped`），也 **NEVER** 改成「HEAD 到版 ＋ HEAD 已 push」（consumer main 領先 origin 是常態，會永遠 false）。讀不到 → 無證據
 
-其餘全部不算，包含 `push-unconfirmed`（commit 在本地、origin 沒收到）、`bumped-local`（投影落地
-但沒 commit）、`push-withheld`（刻意不 push）。**NEVER** 用「那一趟是 `--no-push`，不算它的錯」
-放行 `push-withheld`：一趟沒有 push 的 propagate 就是沒把東西送到 consumer 的 origin，那一版
-**沒有證據是正確的量測**，不是待修的缺陷。
+其餘全部不算，包含 `push-unconfirmed`、`bumped-local`、`push-withheld`。**NEVER** 用「那一趟是 `--no-push`」放行 `push-withheld`——沒有證據是正確的量測。
 
-沒有 landing 證據的驗收列（consumer 端工作、docs-only、還沒發版的）**同一個 repo 合併成一張卡**：
-一次問「全收 / 逐條 / 還沒」，選「逐條」才展開成 N 題。**NEVER** 把合併讀成「一次收掉一批沒看過
-的東西」——卡片逐條列出是哪幾件，而「逐條」是三個選項之一。
+沒有 landing 證據的驗收列**同一個 repo 合併成一張卡**（全收 / 逐條 / 還沒）；卡片逐條列出是哪幾件，**NEVER** 讀成一次收掉一批沒看過的東西。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
@@ -241,35 +128,15 @@ journal **0 筆不是零失敗**——目錄不存在代表「這一版沒有散
 
 ## 🟡 / ✅ 標記
 
-`- 🔴` / `- 🟡` 是「還沒解決」；`- ✅` 與 `- [x]` 是已完結，掃描器跳過。**答案落檔不會刪掉來源
-bullet**（`answer.ts` 是 append），所以**答完之後 MUST 自己把那條標成完結**，否則它會一直留在
-檔案裡——它不會被重問（`source_id` 已記錄答過），但下一個讀這份檔的人分不出來。
+`- 🔴` / `- 🟡` 是「還沒解決」；`- ✅` 與 `- [x]` 是已完結，掃描器跳過。答案落檔是 append、不刪來源 bullet，所以**答完之後 MUST 自己把那條標成完結**。
 
 ### 自述結案 = 離開待拍板段
 
-條目本文自己說了「已拍板 A」「已完結，供後續參考」「已隨 relay-4 落地」，那一條就不是題目，
-即使它還坐在待拍板 heading 底下。掃描端據此判 `self-closed`，**不鑄 span**——那條進不了佇列。
+條目本文自己說了「已拍板 A」「已完結」「已隨 relay-4 落地」，掃描端判 `self-closed`、**不鑄 span**。**NEVER 把 `self-closed` 讀成「所以不用管它」**：`flow sources` 每輪會印計數，**MUST 搬到參考段或刪掉**。
 
-**NEVER 把 `self-closed` 讀成「所以不用管它」。** 它會一直被掃到、一直被判成結案、一直不進
-佇列，直到有人把它搬走：`flow sources` 每輪印一行「N 條自述結案的條目仍在待拍板段」，收件人
-就是下一個編那份檔的人。**MUST 搬到參考段或刪掉**，理由與上一段是同一條——留在原地的話，
-下一個讀這份檔的人分不出它是不是還在等誰。
+判準只讀**標題 ＋ 第一段**，且要求**沒有**未勾 checkbox、**沒有**未答選項——一條寫著「已拍板 A，接下來要決定 B / C」的條目仍然是題目。題目訊號只算結案語之後、同一行內的疑問詞（明說「接下來要決定 / 待你拍板」的跨行照樣算）。被誤判的代價是一題永遠不會被問。**NEVER 加關鍵字啟發式擴充這張表**。
 
-判準只讀**標題 ＋ 第一段**（空行之前的內文），而且要求**沒有**未勾的 checkbox、**沒有**未答的
-選項。三個條件同時成立才算：一條寫著「已拍板 A，接下來要決定 B / C」的條目仍然是題目，而只看關鍵字會把它吃掉。整條 body
-搜也不行——一條真的在問「要不要照上次那個已拍板的做法辦」的題會因為引用自己的歷史而被判成結案。
-兩道否決與只讀第一段是同一條理由：**被誤判的代價是一題永遠不會被問，比多問一題重得多。**
-
-題目訊號**只算結案語之後、同一行內**的那幾個疑問詞。結案語之前的「是否 / 要不要」描述的是被
-結掉的那個題目本身（「當場查額度**是否**恢復 —— 已拍板 A」是結案，不是提問），換行之後的那些
-在描述作法（「看 `usageExceeded` **是否**轉 false」是一個動作）。**明說「接下來要決定 / 待你
-拍板」的跨行照樣算**——那幾個詞沒有第二種讀法。
-**NEVER 加關鍵字啟發式擴充這張表**——同 `docs/tech-debt.md` 那條 NEVER 的理由：「拍板」二字在
-登記簿裡出現幾十次，幾乎全是在講別的條目。
-
-agent 代收也有正路了：`flow dismiss <span_id> --reason '<為什麼不再需要人>' [--repo <name>]`
-寫一筆 `decision.dismiss` 並在 carrier 條目行首加 `✅ dismissed: `。**NEVER** 手動去改 carrier
-的那一行而不寫事件——一條從佇列上消失而沒有任何東西寫下來的題，與從來沒被掃到長得一模一樣。
+agent 代收走 `flow dismiss <span_id> --reason '<為什麼不再需要人>' [--repo <name>]`（寫 `decision.dismiss` 並在條目行首加 `✅ dismissed: `）。**NEVER** 手動改 carrier 那一行而不寫事件。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
@@ -295,9 +162,7 @@ node vendor/scripts/flow/flow.ts ask \
 問句走 `--question`（**不是** positional），選項走可重複的 `--option`（一條一個旗標）。
 字母前綴與「（推薦）」由寫入端剝掉，卡片依索引自己編號。
 
-**問人的題是三種形狀之一，`flow ask` 依形狀檢查必填，缺了就 exit 1 並印出可照抄的改法**
-（判定在 `vendor/scripts/flow/ask-admission.ts`，herdr `--complete blocked --decision-for charles`
-共用同一份）：
+**`flow ask` 依形狀檢查必填，缺了就 exit 1 並印出可照抄的改法**（`vendor/scripts/flow/ask-admission.ts`，與 `--complete blocked --decision-for charles` 共用）：
 
 | 這題要人做什麼 | 必帶 |
 | --- | --- |
@@ -309,10 +174,7 @@ node vendor/scripts/flow/flow.ts ask \
 `--dedupe-key <key>`（同一件事的第二次發問併進同一張卡）。問 agent 的題加
 `--audience coordinator`，不受上表限制。
 
-讀者是手機上的人：他第一眼只看得到標題、推薦與理由、短標籤按鈕。長的背景、證據、指令寫進
-`--question` 與 carrier，它們收在卡片的「細節」裡。
-
-檔案來源是給「本來就要寫進登記簿」的題用的。兩條路徑寫進的是同一個佇列。
+手機上第一眼只看得到標題、推薦與理由、短標籤按鈕；長的背景寫進 `--question` 與 carrier。檔案來源與 `flow ask` 寫進的是同一個佇列。
 
 ### 從 dispatch 出去的 pane 走 `--complete blocked`
 
@@ -333,26 +195,18 @@ node vendor/scripts/herdr-session-handoff.ts --complete blocked \
 
 #### `--decision-for` —— 這題問誰，預設 coordinator
 
-**你有 parent。** 一個 dispatch 出去的 pane 問的題，絕大多數是它的 coordinator 當場裁決得了的
-——而在這個旗標之前，每一題都被路由到 Charles 的 `/decisions`。2026-09-03 實測：<consumer-a> worker 問
-「要不要修 CI 兩條紅燈」，coordinator 當場裁決、clade 修掉、隨 v1.12.8 出版，那一題還掛在人的
-佇列上。
+**你有 parent。** dispatch 出去的 pane 問的題，絕大多數 coordinator 當場裁決得了。
 
 | 值 | 這題會怎樣 |
 | --- | --- |
 | `coordinator`（預設） | 照樣鑄 `decision.request`（`payload.audience: 'coordinator'`）、照樣送控制訊息喚醒 parent pane，但**不在** `/decisions` 與 `flow pending` 的預設佇列上（`--audience all` 才顯示） |
 | `charles` | 進人的佇列。parent pane 還活著時 helper 印一行 warn（不擋） |
 
-**MUST `--decision-for charles` 的判準是「這題只有 Charles 答得了」**——實機、線上帳號、對外
-承諾、密鑰、不可逆且他要負責的。**NEVER** 因為「這題比較重要」就寫 `charles`：重要與該問誰
-無關，而佇列被不需要他的題塞滿，代價是他不再讀它。
+**MUST `--decision-for charles` 的判準是「這題只有 Charles 答得了」**（實機、線上帳號、對外承諾、密鑰、不可逆且他要負責的）。**NEVER** 因為「這題比較重要」就寫 `charles`。
 
-child 判出「只有 Charles 答得了」時仍走 `--decision-for charles`，**NEVER** 自己在對話裡問 principal。`CLADE_DISPATCH_ID` 非空時，final response 裡的提問不是授權通道（TD-901）。
+**coordinator 的題照樣是 span，這一點 NEVER 拿掉。** **parent 回答之後 MUST 跑 `flow answer <span_id> --answer '<答案>'`**——口頭裁決不落檔，那題會以 `answer-not-filed` 躺在停滯清單上。
 
-**coordinator 的題照樣是 span，這一點 NEVER 拿掉。** 它被藏起來的只有「Charles 的那一頁」；
-`answer-not-filed` 與各種停滯偵測照樣看得到它。所以 **parent 回答之後 MUST 跑
-`flow answer <span_id> --answer '<答案>'`**——在 pane 裡口頭裁決而不落 `flow answer`，那一題會
-以 `answer-not-filed` 的形狀躺在停滯清單上，而回答它的人以為自己已經答完了。
+child 判出「只有 Charles 答得了」時仍走 `--decision-for charles`，**NEVER** 自己在對話裡問 principal。`CLADE_DISPATCH_ID` 非空時，final response 裡的提問不是授權通道。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
@@ -368,43 +222,15 @@ child 判出「只有 Charles 答得了」時仍走 `--decision-for charles`，*
   - **TD-305 → `wontfix-until-signal`（推薦）**：…
 ```
 
-這是 2026-08-29 <consumer-a> 的原文，兩個**互不相干**的 TD 綁成一題。它同時壞在兩層：
-
-- **語義層**：那兩條 bullet 是要處理的**項目**，不是同一個問題的**替代方案**。答「A」在這裡
-  沒有意義——沒有 A。問句自己也知道，所以它補了一句「或逐條指定即可」，那句話正是
-  「這其實是兩題」的自白
-- **機械層**：`TD-309` / `TD-305` 不是 A/B，整組解析不到，這題以**空白輸入框**上手機
-
-**MUST 拆成兩題**，各自帶自己的 A/B。「合成一題比較省 Charles 的時間」是反的：省下的是**寫的人**
-按兩次 `flow ask` 的時間，付出的是答的人在一個空白框裡自己組織兩件事的答案。
+兩個互不相干的 TD 綁成一題：那兩條 bullet 是**項目**不是替代方案（「或逐條指定即可」就是自白），也解析不到、以空白輸入框上手機。**MUST 拆成兩題**，各自帶自己的 A/B。
 
 ### 在 chat 渲染過的 `Qn` 選項 MUST 同一個 turn 落 carrier
 
-在對話裡把一題渲染成 `Q1` + A/B/C，**那不是登記**。`\my` 與 `/decisions` 讀的是 spine，
-spine 讀的是 carrier；chat 不在這條路徑上的任何一段。
-
-2026-08-29 實測：agent 在對話裡給了排序過的 A/B，carrier 上那條 bullet 沒有任何選項行，
-spine 上 `options: []`，手機上是一個空白輸入框。**寫的人看得到自己給過選項，答的人看不到**——
-這正是本檔開頭那句「寫的人與答的人不是同一個人」最貴的一種形式。
-
-**MUST 同一個 turn 兩邊都寫**：對話裡渲染的那組選項，逐字寫進 carrier 的 bullet（或直接
-`flow ask --option`）。**NEVER** 想著「等下再補進 HANDOFF」——`flow sources` 60 秒後就掃過去了，
-它掃到的是那一刻的檔案，不是你的打算。
-
-沒補的下場不是靜默，但也**不是「晚一點會被問到」**：ingest 端偵測得到「這題進來時沒有選項」，
-會**拒鑄 span**（TD-904）。那一題不會出現在 `/decisions`、不會出現在 `\my`、不會推播——
-它只會出現在 `flow sources` 的退件行上，而**那一行的收件人就是你**。不補等於這題永遠沒被問過。
+在對話裡渲染成 `Q1` + A/B/C **不是登記**——`\my` 與 `/decisions` 讀 spine，spine 讀 carrier。**MUST 同一個 turn 兩邊都寫**：選項逐字寫進 carrier 的 bullet（或 `flow ask --option`）。**NEVER** 想著「等下再補進 HANDOFF」——沒選項的題 ingest 端會拒鑄 span，只剩一行給你的退件。
 
 ### NEVER 把選項寫進問句本文
 
-`要留哪一個？(A) 留 X (B) 停 Y` 這種寫法，`options` 是空的——`/decisions` 依 `options` 決定畫
-按鈕還是空白輸入框，於是那題在手機上退化成自由填答，答的人得自己把字母打回去，落檔紀錄也
-對不回是哪一個字母。兩個入口都會擋（問句本文有「從 A 起連續」的字母、卻沒帶任何選項時直接
-拒絕）；擋不到的變體同樣禁止——**選項的載體是旗標，不是句子**。
-
-> 2026-08-27 <consumer-a> 實測：一題 A/B 的 version-upgrade 爭用題以空白輸入框出現在手機上。成因不是
-> 寫的人偷懶——當時 `--complete blocked` **根本沒有**帶選項的通道，而本節的 `flow ask` 範例寫的是
-> 一個 CLI 不接受的形狀（positional 問句 ＋ 未宣告的 `--option`），照抄會靜默掉光選項。
+`要留哪一個？(A) 留 X (B) 停 Y` 的 `options` 是空的，手機上退化成自由填答。兩個入口都會擋；擋不到的變體同樣禁止——**選項的載體是旗標，不是句子**。
 
 ### NEVER 把該協調的事開成拍板題
 
@@ -415,11 +241,7 @@ MUST 先跑 [[session-tasks]] § 並行爭用 的 Step 0 判出持有者，再�
 
 ### NEVER 把 live change 的 `## 人工檢查` 寫成登記簿條目
 
-逐條看證據、寫判定、退回，是**人工驗收**的職責——它有 preview 入口、evidence 檢視、以及寫回
-receipt 的能力（`ui-judgement` 卡 → `flow receipt`），待拍板條目三樣都沒有。所以 `HANDOFF.md` /
-`docs/tech-debt.md` 的條目 **NEVER** 承載「去把 `<change>` 的 `## 人工檢查` 逐條確認」。
-
-那條 bullet 只會在兩種狀態下被寫出來，兩種的處置都不是留在登記簿上：
+逐條驗收是**人工驗收**（`ui-judgement` 卡 → `flow receipt`）的職責，所以 `HANDOFF.md` / `docs/tech-debt.md` 的條目 **NEVER** 承載「去把 `<change>` 的 `## 人工檢查` 逐條確認」：
 
 | `flow gates` 對那件 work 的輸出 | 這條 bullet 是什麼 | MUST |
 | --- | --- | --- |
@@ -432,52 +254,25 @@ receipt 的能力（`ui-judgement` 卡 → `flow receipt`），待拍板條目�
 node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --json
 ```
 
-**NEVER 代勾 `## 人工檢查` 的 checkbox 讓這條消失**——沒有人確認的 `[x]` 一律是 false-green
-（per `agent-self-verification` MUST 8）。那是唯一比繞道更糟的收法：繞道至少還看得見。
-
-**已封存的 change 不在此列。** manual-review scan 與 `scanTasks()` 都只讀 `tasks/` 直下的 `.md`；日期前綴是目前命名慣例，不是掃描器的額外語義。`tasks/` 子目錄與舊 `openspec/changes/archive/**` 都不會成為佇列輸入。尚有人工動作的 live work 仍沿既有 live work carrier 與 `deferred-user-only:` 路徑進 `human-action`；archive 文字本身不自動進佇列，也不應用登記簿 bullet 捏造答案。
+**NEVER 代勾 `## 人工檢查` 的 checkbox 讓這條消失**（false-green，[[agent-self-verification]] MUST 8）。已封存的 change（`tasks/` 子目錄、舊 `openspec/changes/archive/**`）不是佇列輸入，不在此列。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | 條目文字同時含 `人工檢查` 與某個 **live** change 的目錄名 → `belongs-on-review` lint ＋ 不合成 通過／退回。**warn-only，不 block，且 NEVER 拒鑄 span**——這一碼是**路由**錯誤不是寫法錯誤（那一列寫得好好的，只是填錯了 surface），擋在佇列外會讓繞道變隱形，比一條掛著 lint 的列更糟 |
-| 消費端 | 寫該條目的 agent（在 `/decisions` 與 `flow pending` 的 `✎` 評語上看到，照上表處置）＋ Charles（看到那一行可以跳過不讀）。**2026-09-03 起不再對它注入任何文字**（TD-904）：該說的話由 `LINT_NOTES['belongs-on-review']` 在兩個渲染端說，NEVER 由 agent 寫一段話進人的佇列 |
+| 觸發條件 | 條目文字同時含 `人工檢查` 與某個 **live** change 的目錄名 → `belongs-on-review` lint ＋ 不合成 通過／退回。**warn-only，不 block，且 NEVER 拒鑄 span**（路由錯誤，擋掉會讓繞道變隱形） |
+| 消費端 | 寫該條目的 agent（看到 `✎` 評語照上表處置）＋ Charles。說明文字由 `LINT_NOTES['belongs-on-review']` 渲染，NEVER 由 agent 寫進人的佇列 |
 | 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`——寫那條 bullet 正是在編輯這兩個檔） |
 
-> 2026-08-28 成因：<consumer-i> 的 `product-save-hardening` 四條 `## 人工檢查` 都宣告
-> `[verify:api+ui]`，實際每條只寫了一種 evidence，於是 change 停在 `readyForEvidence`
-> （`changeBelongsOnReviewInbox` 回 false，那是**Claude 球**的桶，刻意不畫進 inbox；bucket 詞彙 2026-09-17 退役，同一件事現在是「沒有 `ui-judgement` 卡」）。
-> 作者拿不到人工驗收的票，就把「五條逐項確認」寫成 `## 需要 Charles 執行` 的 bullet——
-> 於是它以「要我動手」出現在 `/decisions`，而 Charles 在那裡連要看什麼都打不開。
-> **繞道的成因不是不懂分工，是人工驗收收不進來**，所以本節的第二列要求先補 evidence、
-> 而不是只要求刪 bullet。
+## 答案落檔失敗會被偵測（`answer-not-filed`）
 
-## 答案落檔失敗不再是靜默的（`answer-not-filed`）
-
-Carrier 是**別的 session 也在寫的檔**。人在手機上答題的同時，某條 session 可能正在重寫
-`## ⏳ Awaiting Charles` 整段——答案剛附上去就被整段覆寫掉了。寫入端回報成功，spine 上
-一切正常，而讀那個檔的 agent 什麼都沒看到。
-
-2026-08-29 <consumer-a> span `ee92949d75fa703c` 實測：答一次、改兩次，三次都沒進過 git 歷史；
-agent 兩小時內三度把同一題當「等你拍板」重報，最後是 Charles 自己去 `/decisions` 看不到
-自己的答案才發現。
-
-現在 `flow status --stalled` 會把這種狀態列成
-`answer-not-filed` 一行，並印出重新歸檔的指令：
+Carrier 是別的 session 也在寫的檔，答案附上去可能被整段覆寫。`flow status --stalled` 會列 `answer-not-filed` 並印出重新歸檔的指令：
 
 ```bash
 node vendor/scripts/flow/flow.ts relend <span_id>
 ```
 
-每個 attended session 開頭都要取得一次 `flow status --stalled` 的實際結果。已接通並驗證
-`session-start-stalled.sh` 的原生 session-start hook 可自動提供；沒有該產品入口的觸發證據時，
-agent 在開始本次工作前，從當前 repo 執行 `node scripts/flow/flow.ts status --stalled`
-（clade checkout 使用 `vendor/scripts/flow/flow.ts`）。只有事件 adapter、設定檔或空白輸出
-不證明 hook 曾執行；工具不可達時回報檢查未完成，不把它當成沒有停滯。
+每個 attended session 開頭 MUST 取得一次 `flow status --stalled` 的實際結果：已驗證的 session-start hook（`session-start-stalled.sh`）可自動提供，否則自己跑 `node scripts/flow/flow.ts status --stalled`（clade 用 `vendor/scripts/flow/flow.ts`）。設定檔或空白輸出不證明 hook 執行過；工具不可達就回報檢查未完成。
 
-`relend` **不收新答案**——答案在 spine 上一直是對的，壞掉的是檔案；它從 spine 重建那個區塊
-放回去。重跑是 no-op，不會疊出第二份。
-
-**NEVER 因為看到這一行就去要人重答一次。** 答案完好，要修的是投遞不是提問。
+`relend` 從 spine 重建區塊放回、重跑是 no-op。**NEVER 因為看到這一行就去要人重答一次。**
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
@@ -485,31 +280,19 @@ agent 在開始本次工作前，從當前 repo 執行 `node scripts/flow/flow.t
 | 消費端 | 每個 attended session 的 agent，透過已驗證的 session-start hook 或上段顯式 CLI 取得結果；讀到就照 `relend` 指令處置 |
 | 載入路徑 | 本節；停滯輸出自帶 action 句，不需要先知道要去看 |
 
-**判準是「有沒有決策紀錄區塊」，NEVER 是「有沒有提到那個 span id」**：一條被寫成事故報告的
-span id 到處都是，而那些檔案裡沒有答案。已歸檔（區塊搬進 `docs/archives/`）算已落檔——
-只看 carrier 一個檔會讓每一條歸檔過的決策永遠報警，而會叫的警報等於不會叫的警報。
+**判準是「有沒有決策紀錄區塊」，NEVER 是「有沒有提到那個 span id」**；搬進 `docs/archives/` 算已落檔。
 
 ## 寫入當下就會提醒你沒帶選項
 
-每次寫完 `HANDOFF.md` / `docs/tech-debt.md`，同一個 agent 就地檢查「這題是 ruling
-但沒有選項」。已接通的 Claude `PostToolUse` hook 會執行共同 lint 並把 `OPTIONS_REQUEST_TEXT`
-原文印回；其他入口若沒有同一 handler 的真實 post-tool 觸發證據，寫完立即執行
-`node scripts/flow/decision-lint.ts <repo-root> <edited-file>`（clade checkout 使用
-`vendor/scripts/flow/decision-lint.ts`）。兩個參數都是當次寫入的實際絕對路徑。
-讀 stderr 並修正列出的條目；exit 0 是 warn-only，不是條目完整的證明。
-
-它與佇列端的 lint、ingest 端的拒收**是同一個判準的三個時刻**，而它是唯一**還能補救**的那一個：
-ingest 拒收之後那題不存在，沒有任何畫面會再提醒任何人；而唯一五秒鐘就能修好的人——選項還在
-自己 context 裡的那個 agent——正是現在讀到這段提示的你。
+每次寫完 `HANDOFF.md` / `docs/tech-debt.md`，就地檢查「ruling 但沒有選項」：已接通的 `PostToolUse` hook 會跑共同 lint 並印 `OPTIONS_REQUEST_TEXT`；沒有 hook 觸發證據時寫完立即跑 `node scripts/flow/decision-lint.ts <repo-root> <edited-file>`（clade 用 `vendor/scripts/flow/decision-lint.ts`，參數用絕對路徑），讀 stderr 修正（exit 0 不代表條目完整）。這是同一判準三個時刻裡唯一還能補救的那一個。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 剛寫入的檔裡有 `no-options-under-ruling` 的條目 → 印到 stderr。**warn-only，一律 exit 0，NEVER 擋下 Edit**——`HANDOFF.md` 是高頻活文件，擋寫入買到的是繞過旗標不是更好的 bullet |
 | 消費端 | 剛寫下那條 bullet 的 agent（本節）；判準與措辭走 `vendor/scripts/flow/decision-lint.ts` → `decision-sources.ts` 的 scanner ＋ `decisions.ts` 的 `OPTIONS_REQUEST_TEXT` |
-| 載入路徑 | 本檔依上述 paths 由共同 rules planner 交付至各端：Claude 原生 rules、Codex AGENTS.md baseline、Cursor 原生 rules；編輯前取得完整適用正文。Hook 與顯式 CLI 共用 lint 輸出，兩者的觸發證據分開記錄 |
+| 載入路徑 | 本檔（paths-gated）；Hook 與顯式 CLI 共用 lint 輸出 |
 
-**NEVER 在 hook 裡自己解析 markdown。** 第二份 matcher 遲早與佇列給出不同答案，而不一致的
-那一次會教讀者「這個提示是雜訊」。
+**NEVER 在 hook 裡自己解析 markdown**——第二份 matcher 遲早與佇列不一致。
 
 ## 改寫與重問
 
@@ -522,14 +305,10 @@ ingest 拒收之後那題不存在，沒有任何畫面會再提醒任何人；�
 
 ## 編輯既有不合格條目時 MUST 順手轉正
 
-**每一次**編輯一條已經在待拍板區段、但不符本檔形狀的 bullet 時，都 MUST 一併把它改成合格形狀，
-不是只改你本來要改的那一部分。這條對**每一條**這樣的 bullet 生效，不是只有你正在處理的那一條。
-
-`/decisions` 卡片與 `\my` 輸出會對這類條目印一行 `✎ 來源檔有幾行差一點就是選項`——那一行的
-收件人就是下一個編輯該檔的 agent，也就是你。
+**每一次**編輯一條已經在待拍板區段、但不符本檔形狀的 bullet 時，都 MUST 一併把它改成合格形狀（`/decisions` 與 `\my` 的 `✎ 來源檔有幾行差一點就是選項` 就是給你的）。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | item 落 ruling 桶且無選項（`no-options-under-ruling`）、body 含差一點就解析成功的行（`near-miss-option-line`），或 item 落 review 桶而三欄沒寫齊 / 證據不可點（`missing-evidence`）。**寫入路徑上三者都 warn-only、不 block**——HANDOFF 是高頻活文件，把寫法卡在寫入路徑上換到的是一個 bypass flag，不是更好的 bullet。**ingest 路徑上前者與後者拒鑄 span**（`decision-sync.ts` 的 `REJECTING_LINTS`）：那一題不進佇列，改成 `flow sources` 與 `handoff-scan` 的一行退件，計入 `flow sources` 的 exit code。`near-miss-option-line` 是**評語不是退件碼**，NEVER 拿它擋 ingest |
-| 消費端 | 寫那條 bullet 的 carrier 作者——退件的收件人是他，因為只有他改得動；＋ `/decisions` 卡片與 `flow pending` 上的 Charles（那裡只剩合格的題） |
+| 觸發條件 | item 落 ruling 桶且無選項（`no-options-under-ruling`）、body 含差一點就解析成功的行（`near-miss-option-line`），或 item 落 review 桶而三欄沒寫齊 / 證據不可點（`missing-evidence`）。**寫入路徑上三者都 warn-only、不 block**。**ingest 路徑上前者與後者拒鑄 span**（`decision-sync.ts` 的 `REJECTING_LINTS`），改成 `flow sources` 與 `handoff-scan` 的退件行並計入 exit code。`near-miss-option-line` 是**評語不是退件碼**，NEVER 拿它擋 ingest |
+| 消費端 | carrier 作者（退件收件人）＋ `/decisions` 與 `flow pending` 上的 Charles |
 | 載入路徑 | 本檔，paths-gated 到 `HANDOFF.md` / `docs/tech-debt.md` / work-loop state——也就是寫這種條目的當下 |

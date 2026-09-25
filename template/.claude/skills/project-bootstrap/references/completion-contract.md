@@ -16,17 +16,17 @@
 | Publish | `/clade-publish` 的 Step 1–9 | publish + target propagate 成功 |
 | Post-publish | target 再跑 readiness + `pnpm hub:check` | 兩者 exit 0 |
 | Gate playbook pack | `docs/playbooks/README.md` 含 `## Browser 分流`；`PROGRESS.md` + `GATE-TODOS.md` + 01–05 都在；`HANDOFF.md` 有 `## User-gate board` | 缺任一檔或 heading → 跑 `mint-gate-playbooks.ts`（缺才寫）。沒有這包不算 bootstrap 完成 |
-| Impeccable follow-up（僅 UI／有前端） | `references/impeccable-follow-up.md` 逐 id；`inspect-new-project-round.ts` 的 `designPending` | scaffold 後 **agent 自己**載入追問契約、缺項問完並寫檔，或有書面 N/A。`designPending` 非空 → **不准** `READY`。只說「記得裝 impeccable」或叫人稍後打 slash command 都不算過 |
+| Impeccable follow-up（僅 UI／有前端） | `references/impeccable-follow-up.md` 逐 id；`inspect-new-project-round.ts` 的 `designPending` | 依追問契約缺項問完並寫檔，或有書面 N/A。`designPending` 非空 → **不准** `READY` |
 
 ## 需求交付證據
 
-- 所有新產出的 AI target 指引與 package scripts 一致指向 aixbdd 入口（`/specify` / `/tasks` / `/implement`）；target 實跑 `flow status --json` 成功。
-- 任務包含首件需求時，提交 source/change/work/revision、驗證 policy 與真實 evidence、archive 回讀、commit／deploy track。沒有部署的 track 明示未部署。
-- <consumer-e> 重建演練另附 playground 外的來源版本／建案答案／證據索引，覆蓋選擇性 BDD、普通測試、修訂失效與重驗；單次 scaffold 或 readiness 不計為完整交付。
+- 所選 AI targets 的指引與 package scripts 一致指向 aixbdd 入口（`/specify` → `/tasks` → `/implement`）：target 的 `.claude/skills/` 實際有該組 skill，且 `node .clade/vendor/scripts/flow/flow.ts status --json` 跑得起來；只驗 skill 目錄存在不算。
+- 任務包含首件需求時，沿同一 source/change/work 完成 create → instructions/materialize → 依風險選的測試／BDD → evidence/project → archive，附真實 commit 與 deploy track 狀態（沒部署就明示）。
+- <consumer-e> 重建演練：驗證資料保存於 playground 外，以正式 rescaffold 路徑重建；驗一件需 BDD 的行為、一件普通測試即可的低風險行為，以及修訂造成舊證據失效、重驗後才能 archive。修正一律回 clade／starter，再用相同答案重新產生。
 
 ## Failure handling
 
-- `init-consumer` 找不到：先驗 `$CLADE_HOME/scripts/init-consumer.ts`，不猜 `.mjs` 舊路徑。
+- `init-consumer` 找不到：先驗 `$CLADE_HOME/scripts/init-consumer.ts` 存在，不猜其他路徑。
 - registry exact match：視為 idempotent，繼續 parity/audit。
 - registry id 或 repo_id collision：停止，列出既有與 proposed entry，等待使用者決定 rename 或接管。
 - dependency install fail：保留 lockfile與完整 stderr；修根因後重跑 install + verify，不刪 target 重生以掩蓋問題。

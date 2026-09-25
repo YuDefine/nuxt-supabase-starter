@@ -75,7 +75,7 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --brief /tmp/pi-<topic>-<slug>-answered-<N>.md \
   --cwd <cwd> \
   --label <new-label> \
-  --model <astra|luna> --effort <level> \
+  --model <same-model> --effort <same-effort> \
   --route <same-route> --tier-basis <same-basis> \
   [--table-row <same-row>] \
   --retry-of <prior-label>

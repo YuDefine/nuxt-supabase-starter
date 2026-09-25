@@ -64,7 +64,7 @@ printf '%s\n' \
 
 ## O1 evlog signed chain overlay 整合（optional）
 
-如果 consumer 也套了 `vendor/snippets/evlog-audit-signed/` 的 O1 overlay（perno 已套）：
+如果 consumer 也套了 `vendor/snippets/evlog-audit-signed/` 的 O1 overlay：
 
 - `helper.ts` 會自動把 `audit_logs.prev_hash` / `audit_logs.hash` 透過 `log.set({ audit: { dbChain: ... } })` 寫進 wide event。
 - O1 `signed()` drain 階段讀這塊 dbChain 並對其加 evlog signed hash 簽章，落地 `audit_signed_chain` table。

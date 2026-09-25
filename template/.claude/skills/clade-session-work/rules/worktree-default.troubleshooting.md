@@ -8,15 +8,10 @@ paths:
 ---
 <!-- Clade native rule; source: rules/core/worktree-default.troubleshooting.md; edit canonical source -->
 
-> Path-scoped detail of [[worktree-default]] §7–§11。核心 always-load 規約在母檔 worktree-default.md。
+> Path-scoped detail of [[worktree-default]] §7–§12。核心 always-load 規約在母檔 worktree-default.md。
 
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
-
-## Runtime boundary
-
-This troubleshooting source keeps common recovery predicates and exact WIP/stash/landing safety. Runtime adapters own the native catalog, authorized transport, interactive question surface, and completion receipt; target-specific names below are historical or tool evidence until an adapter records current support.
-
 
 ## §7 升級路徑與 grandfathered worktree
 
@@ -24,12 +19,12 @@ This troubleshooting source keeps common recovery predicates and exact WIP/stash
 
 ## §8 Stop hook 死鎖 fallback
 
-殘留死鎖場景只剩一條：**主線在 main 累積當前 session 的 dirty WIP + Stop hook 攔住 + 還要繼續做**。兩分支：
+死鎖場景：**主線在 main 累積當前 session 的 dirty WIP + Stop hook 攔住 + 還要繼續做**。兩分支：
 
 - **剩下的事可靠 `/wt` 隔離** → 跑 `/wt <剩下要做的事>`；新 worktree 從 main HEAD 開、看不到主線 dirty WIP，撞同檔走 §5 squash conflict fallback。
 - **必須在 main 直接處理（罕見）** → escalate to `/handoff`（Mode A 自動偵測，per [[handoff]]）；HANDOFF entry 含 Stop hook 攔點 + missing acceptance criterion + 改過檔案清單 + 下一 session 接手指引。
 
-**移除**：先前 §8 分支 A（切 cwd）與分支 C（`--dispatch-from-handoff`）— dispatch 改走 `/wt <slug>: /<next-skill>` form per [[wt]] Form 3。
+要把後續 skill dispatch 出去時走 `/wt <slug>: /<next-skill>` form（per [[wt]] Form 3），不切 parent cwd。
 
 ### 預防原則
 
@@ -37,15 +32,7 @@ Session 開頭判定要動 code 就 **SHOULD** 立刻打 `/wt <task>`，不要�
 
 ## §9 spectra DB 跨 worktree 共享心智模型
 
-`.git/spectra-app/spectra.db` 是**單一 SQLite，跨所有 worktree 共享**。「main disk 無 directory + spectra list 顯示 active + park/unpark 失敗」**不**代表 zombie，多半是別 session 在 sibling worktree 物化。
-
-**MUST**：
-- **NEVER** 對 `spectra.db` 跑 `DELETE` / `UPDATE` / `INSERT` — 會影響別 worktree state
-- **NEVER** 把「main 無 directory + list 顯示 active + park/unpark 失敗」當 zombie / 系統性 bug
-- 偵測「zombie」前 **MUST** 先 `git worktree list` + `find ~/offline/<consumer>-wt` + `mdfind "<name>"`
-- 啟動 active / parked change `apply` 前 **MUST** `git worktree list` 確認別 session 沒在同 change 做
-
-碰到看似 zombie 一律 **STOP + target adapter 的 authorized interactive question surface**。誤動 DB 後從 `/tmp/spectra-db-backup-*.db` restore。
+核心禁令見 [[worktree-default.detail]] §9。補充：偵測「zombie」時 `find` 的範圍是 `~/offline/<consumer>-wt`；啟動 active / parked change `apply` 前 **MUST** `git worktree list` 確認別 session 沒在同 change 做；誤動 DB 後從 `/tmp/spectra-db-backup-*.db` restore。
 
 ## §9.5 需求 artifacts 與證據持久性
 
@@ -63,15 +50,11 @@ history 回 corrupt／unsupported／truncated 時，先恢復可讀原件並核�
 
 ## §10 review-gui 與 worktree 互動的已知坑
 
-**已退役（2026-09-17，control-panel redesign Phase 5）**。舊 `vendor/scripts/review-gui.ts` 從多 worktree aggregate `openspec/changes/` 的三條坑（home list silent skip、source aggregation collision、apply-pending batch button）隨該聚合器一起消失；面板改讀 spine 的 read model，人工 gate 由 `flow gates` 判定，不再掃 worktree 的 change 目錄。歷史脈絡留在 [[pitfall-review-gui-collision-typo-and-worktree-startup]]、[[pitfall-review-gui-source-aggregation-collision]]、[[pitfall-review-gui-apply-pending-mid-apply-changes]]。
+面板讀 spine 的 read model，人工 gate 由 `flow gates` 判定，不掃 worktree 的 change 目錄，所以舊聚合器的三條坑不適用。歷史脈絡在 [[pitfall-review-gui-collision-typo-and-worktree-startup]]、[[pitfall-review-gui-source-aggregation-collision]]、[[pitfall-review-gui-apply-pending-mid-apply-changes]]。
 
 ## §11 WORKTREE-BRIEF.md — 持久化任務交接上下文
 
-Session worktree 在 worktree root 攜帶 `WORKTREE-BRIEF.md`，內含原始任務描述、thin brief context、Progress checklist。這份檔案讓 session 意外中斷後，新 session 能無縫接手。
-
-**MUST read first**：cwd 在 session worktree 且 `WORKTREE-BRIEF.md` 存在時，**MUST** 先讀它再做任何工作。Brief 是這個 worktree「該做什麼、做到哪、還剩什麼」的唯一權威來源。
-
-**Subagent contract**：`/wt` 派出的 subagent **MUST** 在工作過程中更新 brief 的 Progress section（勾完成項、加新發現的步驟），並在完成時把 frontmatter `status` 改為 `done`（或 `blocked` / `failed`）。
+讀取與更新義務見 [[worktree-default.detail]] §11；brief 是這個 worktree「該做什麼、做到哪、還剩什麼」的唯一權威來源。完成時 frontmatter `status` 改為 `done`（或 `blocked` / `failed`）。
 
 **Resume path**：新 session 進入有 brief 的 worktree 時，走 brief 裡的 Recovery section：
 
@@ -79,8 +62,6 @@ Session worktree 在 worktree root 攜帶 `WORKTREE-BRIEF.md`，內含原始任�
 2. `git status` 看未 commit 的工作
 3. 從 Progress 下一個未勾選項繼續
 4. 不要從頭來過 — brief 已包含 digested context
-
-**File 不進 git**：`WORKTREE-BRIEF.md` 由 `wt-helper add` 自動寫入 per-worktree `$GIT_DIR/info/exclude`，不會出現在 `git status`。**NEVER** `git add` 它。**NEVER** 加到 `.gitignore`（那會影響 main）。
 
 **`/wt resume <slug>`**：明確 resume 入口。偵測既有 worktree + brief → 跳過建立，直接 dispatch resume subagent。
 
@@ -94,4 +75,4 @@ Session worktree 在 worktree root 攜帶 `WORKTREE-BRIEF.md`，內含原始任�
 
 ### §12.2 legacy archive 曾撞 sibling 副本
 
-Spectra 曾以 sibling worktree 的同名目錄阻擋 archive。該 writer 已退役；現行 OPSX 按指定 repo／change 身分解析並執行 gate。遇到同名歷史先 history 回讀來源與 digest，NEVER 刪除其他 worktree 的原件來讓新 archive 通過。未確認的 ownership 或來源衝突保持可見並回報。
+OPSX 按指定 repo／change 身分解析並執行 gate，不以 sibling worktree 的同名目錄阻擋。遇到同名歷史先 history 回讀來源與 digest，NEVER 刪除其他 worktree 的原件來讓新 archive 通過。未確認的 ownership 或來源衝突保持可見並回報。

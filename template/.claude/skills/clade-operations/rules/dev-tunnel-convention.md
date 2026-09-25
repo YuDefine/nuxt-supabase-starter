@@ -7,74 +7,39 @@ paths: ['nuxt.config.*', '.env', '.env.local', 'package.json']
 
 # Dev Tunnel Convention（索引）
 
-**核心命題**：dev tunnel（透過 `vite-plugin-cloudflare-tunnel` 或手動 `cloudflared`）是 cross-cutting concern — 跨多個 consumer 共用同一組 org convention（zone / token / hostname）與同一類失敗模式（token-zone account 不匹配、restart loop lockout、cold-load 誤判 hang）。本檔是**索引 hub**：把已散落在 [[dev-port-allocation]] § 2.5/2.6/2.7 與 vite-tunnel skill cookbook 的四題彙整，每題給一句 convention + 指向權威來源 + 對應 pitfall。
-
-> **真相層**：本檔**不重複**規約細節。每個 sub-§ 的 MUST/NEVER 與範本以「指向處」為唯一來源（[[dev-port-allocation]] 或 cookbook README）；本檔只做 convention 摘要 + 入口導航，避免兩處 drift。
->
-> 觸發本檔的 consumer 端閱讀時機：寫 / 改 `nuxt.config.ts` 的 `viteCloudflareTunnel` 呼叫、設 `.env(.local)` 的 tunnel 三件套、量測 dev-over-tunnel 載入效能、或在多 Cloudflare account 環境跑 `cloudflared tunnel route dns`。
+Dev tunnel（`vite-plugin-cloudflare-tunnel` 或手動 `cloudflared`）的 org convention 與失敗模式。§ 2–4 的完整規約與理由在 [[dev-port-allocation]] § 2.5–2.7，本檔每節只留一行 Convention（編輯 `.env*`／`nuxt.config.*` 時不一定載入該檔）與入口；§ 1 與 § 5 是本檔獨有的規約本體。
 
 ## § 1 — Zone 必在當前 account 內（multi-account misdirection）
 
-**Convention**：dev tunnel hostname 一律走 `<consumer-id>-dev.<maintainer-domain>`（org convention）。**NEVER** 自由挑其他 zone（`bigbyteedu.com` / 個人域名）。
+**Convention**：hostname 一律 `<consumer-id>-dev.<maintainer-domain>`（[[dev-port-allocation]] § 2.5），**NEVER** 自由挑其他 zone。
 
-**為什麼**：`cloudflared tunnel route dns` 在多 Cloudflare account 環境下，若 hostname 對應 zone 不在當前 `~/.cloudflared/cert.pem` 綁定的 account 內，**不會 fail-loud**，而是 silently 把整段 hostname 當 subdomain prefix 附加到該 account 第一個 zone（如寫成 `<host>.<maintainer-domain>.bigbyteedu.com`），外部 DNS 永遠 resolve 不到，但 CLI exit 0。
-
-**權威來源**：
-- vite-tunnel skill cookbook `~/offline/clade/vendor/snippets/vite-tunnel/bin/dev-tunnel-setup.sh`（以顯式 account／zone 比對 API 回應與 cloudflared certificate 身分；建立前檢查 tunnel／DNS，route 後回讀 DNS）+ 同目錄 README § 多 Cloudflare account 使用情境
-- hostname convention 規約：[[dev-port-allocation]] § 2.5
+多 account 環境下 `cloudflared tunnel route dns` 對不在 `cert.pem` 所綁 account 的 zone **不會 fail-loud**：它把整段 hostname 當 prefix 附加到該 account 第一個 zone，CLI exit 0 但 DNS 永遠 resolve 不到。改用 `~/offline/clade/vendor/snippets/vite-tunnel/bin/dev-tunnel-setup.sh`（顯式比對 account／zone、route 後回讀 DNS），見同目錄 README § 多 Cloudflare account 使用情境。
 
 **Pitfall**：[[pitfall-cloudflared-multi-account-cname-misdirection]]
 
 ## § 2 — Token scope：必用 cfat_*（含 SSL:Edit）
 
-**Convention**：`.env(.local)` 的 `CLOUDFLARE_API_KEY` **MUST** 是 `cfat_*` account API token，**NEVER** 用 `cfut_*`（Worker token）或 `r_*`（`cloudflared tunnel login` 簽發的 cert.pem token）。必備權限三條：`Cloudflare Tunnel:Edit`（account）+ `SSL and Certificates:Edit`（zone）+ `DNS:Edit`（zone）。
+**Convention**：`.env(.local)` 的 `CLOUDFLARE_API_KEY` **MUST** 是 `cfat_*` account API token（**NEVER** `cfut_*` 或 `r_*`），權限三條：`Cloudflare Tunnel:Edit`（account）＋`SSL and Certificates:Edit`（zone）＋`DNS:Edit`（zone）。
 
-**為什麼**：`vite-plugin-cloudflare-tunnel@1.0.12` named tunnel 主流程無條件呼叫 `/zones/<id>/ssl/certificate_packs` GET（`dist/index.mjs:617`）確認 edge cert，缺 `SSL and Certificates:Edit` → 403 re-throw → crash Nuxt（即使 Universal SSL 已涵蓋）。`cert.pem` / `cfut_*` token 都缺 SSL scope。
-
-**權威來源**：
-- 規約 + 三種錯誤 token 來源對照表：[[dev-port-allocation]] § 2.5（含 `.env.local` 三件套範本）
-- Token 來源：<consumer-j> `.env.local` 的 `CLOUDFLARE_API_KEY`（既有可用）/ Notion `Scrects`（待補 cfat_）
-
-**Pitfall**：[[pitfall-vite-plugin-cloudflare-tunnel-token-scope]]
+規約本體：[[dev-port-allocation]] § 2.5。Pitfall：[[pitfall-vite-plugin-cloudflare-tunnel-token-scope]]
 
 ## § 3 — Resilient wrapper：防 restart loop → CF 10502 lockout
 
-**Convention**：consumer `nuxt.config.ts` **NEVER** 裸呼叫 `viteCloudflareTunnel({...})`。**MUST** 包 pre-flight token probe + try-catch wrapper，probe / network 失敗時 fallback 純 localhost、不讓 plugin throw 進 Nuxt。Probe endpoint **MUST** 用 `GET /accounts`（plugin 真正會跑的第一支 call），**NEVER** 用 `/user/tokens/verify`（需 `User Details:Read` permission，多數 Tunnel-only token 沒給 → 會誤判好 token invalid）；probe 用 `AbortController` 設 ≤ 3s timeout。
+**Convention**：`nuxt.config.*` **NEVER** 裸呼叫 `viteCloudflareTunnel({...})`；**MUST** 包 pre-flight probe（`GET /accounts`，**NEVER** `/user/tokens/verify`，≤ 3s timeout）＋ try-catch，失敗時 fallback 純 localhost。
 
-**為什麼**：plugin 的 `retryWithBackoff` 只包 SSL cert 端點，第一支 auth call `GET /accounts` 裸跑無 retry。token invalid → plugin throw → Nuxt 把 plugin throw 當 fatal auto-restart → 重新 setup 又 throw → 無延遲 spin loop → 十幾秒內累積數十次 auth attempt → 觸發 Cloudflare `code 10502 Too many authentication failures` lockout（15–60 分鐘），期內任何 token verify（含有效新 token）都回 `code 1000 Invalid API Token`。
-
-**權威來源**：
-- 規約（含 anti-pattern 判定）：[[dev-port-allocation]] § 2.6
-- 範本（`nuxt.config.ts.template` + verify helper）：`~/offline/clade/vendor/snippets/dev-tunnel-resilient/`
-- Audit signal：`scripts/dev-port-audit.ts` § 2.6 `readTunnelResilientWrapper`（裸呼叫報 BARE，diagnostic-only）
-
-**Pitfall**：[[pitfall-vite-plugin-cloudflare-tunnel-restart-loop-lockout]]
+規約本體：[[dev-port-allocation]] § 2.6；範本 `vendor/snippets/dev-tunnel-resilient/`；`scripts/dev-port-audit.ts` 的 `readTunnelResilientWrapper` 報裸呼叫。Pitfall：[[pitfall-vite-plugin-cloudflare-tunnel-restart-loop-lockout]]
 
 ## § 4 — 冷/熱載入量測：別把 cold 誤判成 hang
 
-**Convention**：量測 dev-over-tunnel 頁面載入效能（人工或 agent CDP）時 **NEVER** 先 `clearBrowserCache` / `setCacheDisabled(true)`。**MUST** 量「warm」反映日常：第一次載入 populate 快取（不計時）→ 第二次不清快取量 hydrate 時間。warm 數秒內 hydrate（實測 ~6s）= 正常。
+**Convention**：量 dev-over-tunnel 載入時 **NEVER** 先清快取；**MUST** 先載一次 populate、第二次量 warm hydrate。
 
-**為什麼**：Vite dev 對 `?v=<hash>` node_modules dep 送 `immutable` cache header；一個 Nuxt + @nuxt/ui v4 dev 頁面拆成 ~300–950 個 ES module 請求，cold（清快取）經 tunnel 逐一往返受 cloudflared 並發吞吐限制 → 30–60s 看似 hang。慢 vs 快是 cache-warmth 連續譜，不是 tunnel broken 二元判斷。**NEVER** 因此一路試 CF cache rule `cache:false` / `--protocol http2` / `keepAliveConnections` / 移 plugin / 降版（實證全無效）。
-
-> 本節的「`cache:false` 無效」只針對**冷載慢**這個症狀。§ 5 的 MIME 混用是另一個問題，那裡的 `cache:false` 是唯一有效解 — 判準看症狀：慢但最終會載完 = 本節；白畫面 + strict MIME 錯 = § 5。
-
-**權威來源**：
-- 規約（含無效修法清單）：[[dev-port-allocation]] § 2.7
-- 正確量測法 + @nuxt/ui locale deep-import 減模組數範本：`~/offline/clade/vendor/snippets/dev-tunnel-perf/`
-
-**Pitfall**：[[pitfall-vite-dev-over-tunnel-cold-load-misdiagnosis]]
+規約本體：[[dev-port-allocation]] § 2.7；範本 `vendor/snippets/dev-tunnel-perf/`。判準看症狀：慢但最終會載完 = 本節（`cache:false` 無效）；白畫面 + strict MIME 錯 = § 5（`cache:false` 是唯一解）。Pitfall：[[pitfall-vite-dev-over-tunnel-cold-load-misdiagnosis]]
 
 ## § 5 — CDN 不得快取 dev tunnel（否則 Vite 的 CSS 會被當成 module script）
 
-**Convention**：dev tunnel hostname **MUST** 用 `<name>-dev.<zone>` 後綴（§ 1 已規定；這裡是它的第二個理由 — bypass 規則靠這個後綴匹配），且 zone 上 **MUST** 有一條 Cache Rule 讓這批 hostname 完全 bypass CDN 快取。Consumer 端 `nuxt.config.ts` **MUST** 在走 tunnel 時回 `Cache-Control: no-store` + `Vary: Accept`（defence in depth，單靠它擋不住既有 CDN 條目）。
+**Convention**：dev tunnel hostname **MUST** 用 `<name>-dev.<zone>` 後綴（bypass 規則靠它匹配），且 zone 上 **MUST** 有一條 Cache Rule 讓這批 hostname 完全 bypass CDN 快取。Consumer 端 `nuxt.config.ts` **MUST** 在走 tunnel 時回 `Cache-Control: no-store` + `Vary: Accept`（defence in depth，單靠它擋不住既有 CDN 條目）。
 
-**為什麼**：Vite dev 對**同一個 `.css` URL** 依請求的 `Accept` 回兩種東西 —— `<link rel="stylesheet">`（`Accept: text/css`）拿到真 CSS，module import（`Accept: */*`）拿到注入 style 的 JS wrapper。Vite 自己回的 `Vary` 只有 `Origin`，Cloudflare 又對 `.css` 副檔名套預設 4 小時 Browser Cache TTL（`max-age=14400`，蓋掉 origin 的 `no-cache`）。於是 `<link>` 那份 `text/css` 被存進快取，同一頁的 module import 用 ETag revalidate 命中它（`cf-cache-status: REVALIDATED`），瀏覽器 strict MIME 檢查拒收 → client entry chain 整條斷 → **白畫面**。
-
-**這個坑的診斷特別容易走偏**，三件事都會誤導：
-
-- 所有 network 請求都是 200，沒有任何 failed request
-- `curl` 怎麼打都正確 —— curl 不會像瀏覽器那樣先發 stylesheet 請求再發 module 請求，拿不到被污染的那個條目
-- local dev 永遠正常（沒有 CDN 層），只有走 tunnel 才炸
+**為什麼**：Vite dev 對同一個 `.css` URL 依 `Accept` 回真 CSS 或 JS wrapper，但 `Vary` 只有 `Origin`；Cloudflare 對 `.css` 套 4 小時 Browser Cache TTL，`text/css` 那份被快取後 module import 命中它，strict MIME 拒收 → **白畫面**。全部請求 200、curl 驗不到、local dev 正常。
 
 **規則落地**（zone 層一條規則涵蓋全 fleet）：
 
@@ -85,7 +50,7 @@ curl -s -X POST -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Typ
   -d '{"expression":"(ends_with(http.host, \"-dev.<maintainer-domain>\"))","action":"set_cache_settings","action_parameters":{"cache":false},"enabled":true,"description":"Dev tunnels: bypass CDN cache"}'
 ```
 
-生效約 10-15 秒，**不需要**先 purge（bypass 的請求不會去讀既有條目；反過來說 purge by URL 對 `@fs` 這種路徑清不乾淨，別把時間花在那）。
+生效約 10-15 秒，**不需要**先 purge。
 
 **驗證**（**MUST 用瀏覽器驗，curl 不算**）：
 
@@ -102,16 +67,3 @@ p.on('response', r => {
 - Hostname convention：§ 1 / [[dev-port-allocation]] § 2.5
 
 **Pitfall**：[[pitfall-cdn-cache-ignores-accept-breaks-vite-css-module-mime]]
-
-## 與 [[dev-port-allocation]] 的分工
-
-| 主題 | 規約 SoT | 本檔角色 |
-| --- | --- | --- |
-| Tunnel port 對齊 registry | [[dev-port-allocation]] § 2 | 不涵蓋（屬 port 治理） |
-| Zone / token / hostname convention | [[dev-port-allocation]] § 2.5 | § 1 / § 2 索引 + pitfall cross-link |
-| Resilient wrapper | [[dev-port-allocation]] § 2.6 | § 3 索引 + pitfall cross-link |
-| 冷/熱載入量測 | [[dev-port-allocation]] § 2.7 | § 4 索引 + pitfall cross-link |
-| 多 account `route dns` misdirection | vite-tunnel cookbook（非規約 §） | § 1 索引 + pitfall cross-link |
-| CDN 快取 dev tunnel → MIME 混用 | 本檔 § 5（無其他 SoT） | § 5 是規約本體，不只索引 |
-
-本檔是**導航層**：consumer agent 遇到 dev tunnel 任一題時先讀本檔定位，再跳對應權威 § / cookbook 拿完整 MUST/NEVER 與範本。

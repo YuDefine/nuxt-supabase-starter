@@ -74,9 +74,9 @@ schema?: ZodType
 
 ## 為什麼值得一條規約
 
-實證（<consumer-a> `AppFormLayout.vue`）：`schema?: ZodType` 讓 `schema` 與其後的 `state` 都沒被宣告，包在外面的 `useValidatedForm` 恆為 false，整個 UForm + Zod 驗證層**從未執行過** — 而 typecheck / lint / test / 視覺四道全綠，唯一症狀是「表單留空送出什麼都沒發生」。
+`schema?: ZodType` 會讓 `schema` 與其後的 `state` 都沒被宣告，包在外面的 `useValidatedForm` 恆為 false，整個 UForm + Zod 驗證層**從未執行過** — 而 typecheck / lint / test / 視覺四道全綠，唯一症狀是「表單留空送出什麼都沒發生」。
 
-靜態 grep 抓不到這個形狀（能篩的只有「有 `defineProps<` 且有外部 `import type`」，偽陽性極高），所以防線只能放在寫的當下。完整分析、detection 與 cross-consumer 掃描結果見 clade `docs/pitfalls/2026-08-02-vue-defineprops-external-generic-type-silently-drops-props.md`。
+靜態 grep 抓不到這個形狀（能篩的只有「有 `defineProps<` 且有外部 `import type`」，偽陽性極高），所以防線只能放在寫的當下。完整分析與 detection 見 clade `docs/pitfalls/2026-08-02-vue-defineprops-external-generic-type-silently-drops-props.md`。
 
 # Nuxt UI Color Mode 約束
 

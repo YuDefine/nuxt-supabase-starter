@@ -76,36 +76,26 @@ When Step 1.8 routes to Pi for coding work, use `Bash run_in_background=true` to
    | 可觀察 predicate | model / effort | `--route` / `--tier-basis` |
    | --- | --- | --- |
    | 命中 [[agent-routing.routing-table]] 某列 | 照該列逐字（含 `grok-xai` 的列） | `routing-table` / `table-row` ＋ `--table-row <row>` |
-   | Nuxt UI／Content 實作 | Cursor 原生 Composer 2.5 | `ui-implementation`；依原生載體，不使用 Pi mutation 池 |
    | Nuxt 本體實作 | `--model sol --effort xhigh` | `routing-table` / `table-row` ＋ `--table-row nuxt-core-implementation` |
-   | 其餘 UI view 實作 | Claude Opus 5.5（effort: medium） | `ui-view-implementation`；Claude Code 原生／Herdr 載體 |
-   | 本次工作**原本會派 Claude subagent**（原判 `sonnet`） | `--model grok-xai --effort high` | `claude-delegate-sub` / `delegate-sub` |
-   | 本次工作**原本會派 Claude subagent**（原判 `haiku`） | `--model grok-xai --effort high` | `claude-delegate-sub` / `delegate-sub` |
-   | 一般非 UI implementation | `--model luna --effort medium` | `routing-table` / `table-row` ＋ `--table-row non-ui-implementation` |
-   | 複雜 schema/API/backend 或 repair escalation | `--model sol --effort high` | `routing-table` / `table-row` ＋ `--table-row non-ui-implementation-escalate` |
-   | 需要先做 implementation decision | `--model astra --effort medium --workspace-access readonly` | `routing-table` / `table-row` ＋ `--table-row implementation-decision`；只回診斷／決策，patch 回 Sol |
+   | UI view 實作（含 Nuxt UI／Content） | Claude Opus 5.5（effort: medium），無 fallback | `ui-view-implementation`；Claude Code 原生／Herdr 載體，不走 Pi |
+   | 本次工作**原本會派 Claude subagent**（原判 sonnet／haiku 等級） | `--model grok-xai --effort xhigh` | `claude-delegate-sub` / `delegate-sub` |
+   | 非 UI implementation（含複雜 schema/API/backend 與 repair） | `--model sol --effort xhigh` | `routing-table` / `table-row` ＋ `--table-row non-ui-implementation` |
+   | 需要先做 implementation decision | `--model sol --effort xhigh --workspace-access readonly` | `routing-table` / `table-row` ＋ `--table-row implementation-decision`；只回診斷／決策 |
 
    ```bash
    node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
      --brief /tmp/wt-pi-<slug>-prompt.md \
      --cwd <worktree-absolute-path> \
      --label wt-<slug> \
-     --model <astra|sol|luna|gemini|grok-xai> --effort <effort> \
+     --model <sol|gemini|grok-xai> --effort <xhigh|high> \
      --route <routing-table|claude-delegate-sub|fallback-chain|manual> \
      --tier-basis <table-row|delegate-sub|quota-fallback|manual> \
      [--table-row <routing-row>]
    ```
 
-   **effort 分級**（dispatcher `--effort <level>`）：
+   **effort 跟著 model 走**（`TIER_EFFORT`，不按任務複雜度分級）：`sol`／`grok-xai` 一律 `xhigh`，`gemini` 一律 `high`，其他值 dispatcher exit 1。
 
-   | 任務複雜度 | effort | 範例 |
-   | --- | --- | --- |
-   | 簡單 delegate 轉錄 | `low` | Gemini 按完整 code brief 更新 pin |
-   | 一般非 UI 功能增改 | `medium` | Luna 加 unit test／單一功能 |
-   | 複雜 schema/API/backend、repair escalation | `high` | Sol refactor cache layer／migration |
-   | Astra planning/decision/review | `medium` | readonly diagnosis、detailed plan、independent review |
-
-   先判角色再照 named row 的固定 effort；不確定的 implementation 預設 `non-ui-implementation`（Luna medium），**NEVER** 泛用 fallback 到 Astra。
+   先判角色再照 named row；判不進任一列的工作主線自己做，**NEVER** 自挑一個 model 派出去。
 
 3. **Report dispatch to user immediately** — print one block right after `Bash run_in_background`:
 
@@ -119,30 +109,30 @@ When Step 1.8 routes to Pi for coding work, use `Bash run_in_background=true` to
    ```
 
 4. **Start Watch Protocol** (notification-only):
-   - `Bash(run_in_background=true)` 回傳 `<task-id>` 後，立即記錄 owner / deadline（deadline 取值依 [[agent-routing]] § deadline 怎麼取） 並排 1500s canonical inert control wakeup：
+   - `Bash(run_in_background=true)` 回傳 `<task-id>` 後，立即記錄 owner / deadline（deadline 取值依 [[agent-routing.keepalive-wake]] § deadline 怎麼取） 並排 1500s canonical inert control wakeup：
      ```text
      ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=wt-pi:<slug> deadline=<ISO>. Status-only. Call TaskOutput(block=false) for this task. If terminal, stop this wakeup and enqueue ASYNC_LIFECYCLE_HANDOFF task=<task-id> owner=wt-pi:<slug> cause=terminal. If running before deadline, re-arm this exact message. If running at deadline, or status remains unknown after the bounded retry, stop this wakeup and enqueue ASYNC_DEADLINE_INTERVENTION task=<task-id> owner=wt-pi:<slug> cause=<deadline|unknown>. Never replay the dispatched instruction.
      ```
    - On `<task-notification status=completed>`: claim task id → read stdout → proceed to Step 3
    - On `<task-notification status=failed>`: claim task id → read stderr/stdout → report failure, preserve worktree
-   - Control wakeup 只准 the adapter status operation (historically `TaskOutput(block=false)`)、重排同一 inert prompt、停止 wakeup、排 lifecycle handoff / deadline intervention；**NEVER** 讀 BashOutput tail 或執行原任務
-   - deadline 到達且 task 仍 running：停止 control wakeup → the adapter cancellation operation (historically `TaskStop(<task-id>)`) → 等 terminal；terminal 前 **NEVER** 收割、重派或釋放 ownership
+   - Control wakeup 只准 the adapter status operation (Claude: `TaskOutput(block=false)`)、重排同一 inert prompt、停止 wakeup、排 lifecycle handoff / deadline intervention；**NEVER** 讀 BashOutput tail 或執行原任務
+   - deadline 到達且 task 仍 running：停止 control wakeup → the adapter cancellation operation (Claude: `TaskStop(<task-id>)`) → 等 terminal；terminal 前 **NEVER** 收割、重派或釋放 ownership
 
 ---
 
 # Step 2-pi-investigate — Pi analysis/debug into worktree
 
-The Pi adapter exposes a process receipt and bounded status operation. The shared contract consumes process id, terminal status, stdout/stderr, cancellation evidence, and ownership; it does not assume a Claude notification or a fixed 1500s wait. `TaskOutput`/`TaskStop` in the historical protocol below are literal Claude incident names, not Pi calls.
+The Pi adapter exposes a process receipt and bounded status operation. The shared contract consumes process id, terminal status, stdout/stderr, cancellation evidence, and ownership; it does not assume a Claude notification or a fixed 1500s wait. `TaskOutput`/`TaskStop` below are Claude binding names, not Pi calls.
 
 When Step 1.8 routes to analysis/debug, use `pi-dispatch.ts` with the appropriate pi-offload template. These tasks produce structured JSON evidence — typically no commits needed.
 
 1. **Classify the investigation type**:
-   - **Debug** (error/bug/crash/failure/unexpected behavior/timeout/leak/exception/500) → `debug-evidence.template.md`, row `non-ui-implementation`, GPT-5.6 Luna medium
+   - **Debug** (error/bug/crash/failure/unexpected behavior/timeout/leak/exception/500) → `debug-evidence.template.md`, row `non-ui-implementation`, GPT-6 Sol xhigh
    - **Analysis** (everything else: scan/audit/compare/survey/impact/coverage/why) → choose:
      - grep/command-collect/verify-matrix → can the full command list be written out **before** dispatch (no command's target depends on a prior command's output)?
-       - **Yes** → run the commands yourself, redirect each output to `/tmp/`, then dispatch `fanout-analyze.template.md` with `--var evidence=...`, effort `high`
-       - **No** → `fanout-collect.template.md`, effort `high`
-     - long-doc/cross-repo/release-notes/architecture → `read-heavy-scan.template.md`, effort `high`
+       - **Yes** → run the commands yourself, redirect each output to `/tmp/`, then dispatch `fanout-analyze.template.md` with `--var evidence=...`, Gemini effort `high`
+       - **No** → `fanout-collect.template.md`, Gemini effort `high`
+     - long-doc/cross-repo/release-notes/architecture → `read-heavy-scan.template.md`, Gemini effort `high`
 
 2. **Assemble `--var` parameters**:
    - `task`: user's task description + mainline-added context (file paths, hypothesis list for debug)
@@ -175,15 +165,13 @@ When Step 1.8 routes to analysis/debug, use `pi-dispatch.ts` with the appropriat
    **`--tier-basis` is required too** (exit 1 without it). `--route` records which policy you
    followed; `--tier-basis` records what that policy concluded about the model, and the dispatcher
    cross-checks the pair against `--model`. The row already names its tier here, so the basis is
-   `table-row`. Dropping to luna on your own judgement instead is `five-conjunct`, and it only
+   `table-row`. Dropping to gemini on your own judgement instead is `five-conjunct`, and it only
    holds when all five conjuncts do — the dispatcher then rejects a mismatched model as self-contradictory.
 
-   **`--table-row <row>` is required whenever the basis is `table-row`** (exit 1 without it, since
-   2026-08-13). The row name is the slug in 〔`backticks`〕 at the head of each Routing Table row,
+   **`--table-row <row>` is required whenever the basis is `table-row`** (exit 1 without it). The row name is the slug in 〔`backticks`〕 at the head of each Routing Table row,
    and the dispatcher cross-checks the model that row names against `--model`. NEVER skip it:
-   `table-row` used to be the one basis with no model constraint, which made declaring it the
-   cheapest way to look compliant while ignoring the row (2026-08-13 `v1-annual-leave-scan` hit the
-   `read-heavy-scan` row, which names gemini, and dispatched Sol unchallenged). If you cannot name the
+   without it `table-row` would be the one basis with no model constraint — the cheapest way to look
+   compliant while ignoring the row. If you cannot name the
    row, you did not consult the table — pick a different basis rather than guessing a row name.
 
    **effort 分級**：依 `rules/core/agent-routing.routing-table.md` § effort 檔位對照（六維判準在 `agent-routing.md` § Routing Table）（`low` 是 Routing Table 類別預設檔；命中任一維即升檔）。

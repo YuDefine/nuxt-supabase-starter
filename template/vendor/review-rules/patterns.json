@@ -236,7 +236,7 @@
       "fileGlob": "**/*.ts",
       "pattern": "^\\s*(//|\\*)\\s*(@author|Modified by|Change[ -]?log|Created by)\\b",
       "message": "檔頭 @author / Modified by / Change log 區塊與 git history 重複，而且會過期。作者與變更紀錄以 git 為準。",
-      "fix": "刪掉檔頭 changelog / @author 區塊。workaround 成因改寫成帶 @followup[TD-xxx] 的一行註解，見 code-style.md § 註解。"
+      "fix": "刪掉檔頭 changelog / @author 區塊。workaround 成因改寫成帶 @followup[<id>] 的一行註解（id 用 follow-up register 的登記：plan:<work-id>；未遷移 consumer 用 TD-NNN），見 code-style.md § 註解。"
     },
     {
       "id": "prose-difficulty-dismissal-en",

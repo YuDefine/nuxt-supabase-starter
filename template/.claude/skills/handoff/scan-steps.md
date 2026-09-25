@@ -39,7 +39,7 @@ node ~/offline/clade/vendor/scripts/rotate-handoff-done.ts --repo "$MAIN_WT_PATH
 - ❌ 因為「還沒破 35 KB」就跳過
 - ❌ 只搬剛好夠過門檻的一部分
 - ❌ 詢問操作 A／B／C（rotate 不是拍板題）
-- ❌ 搬完再壓一次、或派 Fable 為了 KB 數字
+- ❌ 搬完再壓一次、或派顧問為了 KB 數字
 
 `park` 不跑本 sub-step。
 
@@ -236,7 +236,7 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff next — flow gates_
 **closedBloat 的幅度由 script 一次搬完全部 rotatable 承載**，不再走 (A) 選項。
 
 **entryOversize 的處置受 [[threshold-remediation]] 的幅度紀律管**：MUST 標出預期降幅（拆／關幾條 / 幾行），**降幅 < 超標量的 (A) NEVER 呈給 user**——要擴大搬遷範圍到
-降幅 ≥ 超標量再問。user 選 A 執行完 MUST 用同一支 audit 複量，仍 > 門檻的 90% → 派 Fable 顧問
+降幅 ≥ 超標量再問。user 選 A 執行完 MUST 用同一支 audit 複量，仍 > 門檻的 90% → 派 Opus 顧問
 檢討成長結構，NEVER 自行再壓一次。
 
 **Anti-snooze（防無限延期）**：`Last reviewed` 只是「我知道這條存在」的確認，**不等於**已在推進。以下情境 **MUST** 主動追問 user 而非默許延期：

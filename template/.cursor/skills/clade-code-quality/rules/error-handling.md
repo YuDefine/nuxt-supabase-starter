@@ -13,8 +13,6 @@ paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'server/**/*.ts', '
 **Client-side 錯誤顯示**：使用 `toastError(title, error)` 或 `getErrorMessage(error, fallback)`
 **NEVER** 直接讀取 `error.message` 顯示給使用者 — 可能包含堆疊追蹤或內部資訊
 
-> 本檔為 starter template 的預設規則，複製出去後依專案實際使用調整。
-
 ## PostgREST 錯誤碼診斷
 
 Supabase REST API 錯誤分兩層：**Postgres error code**（`23503` 等）與 **PostgREST code**（`PGRSTxxx`），都在 error object 的 `code` 欄位。
@@ -25,7 +23,7 @@ Supabase REST API 錯誤分兩層：**Postgres error code**（`23503` 等）與 
 | ------- | --------- | ----------------------- | --------------------------------------------- |
 | `23503` | 409       | Foreign key violation   | 回傳「關聯資料不存在或被他處引用」            |
 | `23505` | 409       | Unique violation        | 回傳「資料已存在」+ 指出衝突欄位              |
-| `42501` | 401 / 403 | Insufficient privileges | 通常是 RLS 擋住 — 檢查 policy + `auth.role()` |
+| `42501` | 401 / 403 | Insufficient privileges | table GRANT 或 RLS 擋住 — 先判 identity 與連線角色，再查 GRANT 與 policy（見下方 `42501` 條） |
 | `42P01` | 404       | Undefined table         | schema / 名稱錯誤或 schema cache 過期         |
 | `42883` | 404       | Undefined function      | RPC 函數簽名變更後未 reload schema            |
 | `P0001` | 400       | `RAISE EXCEPTION`       | 業務邏輯錯誤，從 detail/hint 取訊息           |
@@ -50,5 +48,5 @@ Supabase REST API 錯誤分兩層：**Postgres error code**（`23503` 等）與 
 - **4xx 是 caller 的錯**（user input / stale type）→ 不要 `log.error`，轉友善訊息即可
 - **5xx / 503 / 504 是系統問題** → `log.error` + 告警；`PGRST003` 代表 pool 耗盡，事故級
 - **`PGRST116` 特別注意** — `.single()` 查不到資料時拋的是 `PGRST116`（406），不是 404；handler 應轉為 `createError({ status: 404 })` 後再丟出，**禁止** 寫 `log.error`
-- **`PGRST103` 特別注意** — 任何 `.range(offset, end)` + `count: 'exact'` 的 list handler **MUST** 偵測 `PGRST103`（offset 超出實際筆數，多半因前端 page state 過時 / 改 filter 未 reset page），用 `isPostgrestRangeError(error)` helper 偵測、回 `emptyPaginatedResponse({ page, pageSize, count })`（200 + 空頁），**禁止** `throw 500` 或 `log.error`。Reference: `docs/pitfalls/2026-05-18-postgrest-pgrst103-offset-out-of-range.md`
-- **`42501` 出現在 API 回應** → 代表 RLS 擋住且沒有對應 bypass；檢查 server 是否用 `getSupabaseWithContext()` 以及 policy 的 `auth.role() = 'service_role'` 條件
+- **`PGRST103`**：任何 `.range(offset, end)` + `count: 'exact'` 的 list handler **MUST** 依上表處理（`emptyPaginatedResponse({ page, pageSize, count })`）
+- **`42501` 出現在 API 回應** → 代表 table GRANT 或 RLS 擋住；依 [[auth-data-path-consistency]] 先判 identity 來源與連線角色、補缺的 GRANT，**NEVER** 用 `GRANT … TO anon` 或 service_role bypass policy 讓它消失

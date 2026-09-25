@@ -25,7 +25,7 @@ Schema 與寫入邏輯固定（不可自訂 column），與 `evlog-postgres-drai
 | --- | --- |
 | 手寫 D1 drain（類似 `evlog-postgres-drain`） | NuxtHub 已封 D1 schema + retry + retention，自寫等於重造 |
 | `@nuxthub/core` 直接寫 + 自家 cron | 沒 schema migration tooling；`@evlog/nuxthub` schema 已經穩 |
-| Sentry only | agentic-rag 沒 Sentry；NuxtHub 是 D1 stack 的自然選擇 |
+| Sentry only | D1 stack 不一定有 Sentry；NuxtHub 是 D1 stack 的自然選擇 |
 
 ## T3 完整 stack 組合
 
@@ -64,7 +64,7 @@ Schema 與寫入邏輯固定（不可自訂 column），與 `evlog-postgres-drai
 | Cross-region eventual consistency | 寫入後 1-2s 才在所有 region 可見；debug 即時 query 可能 race |
 
 對應對策：
-- sampling：`info: 0.1`（10% 採樣），audit force-keep
+- sampling：info 10% 採樣，audit force-keep
 - attributes 大 row：超過 100KB 的事件改走 `evlog-postgres-drain` 或 R2 cold storage
 - Cross-region：讀取永遠 eventual；不用 D1 做 hot path query
 
@@ -79,12 +79,12 @@ Schema 與寫入邏輯固定（不可自訂 column），與 `evlog-postgres-drai
 
 ## sampling 與 redaction（必補）
 
-NuxtHub 快滿時最痛。配 `evlog.sampling` 把 info 率降到 `0.1`：
+NuxtHub 快滿時最痛。配 `evlog.sampling` 把 info 率降到 10%（`rates` 是 0–100 百分比，見 `evlog-drain-pipeline` § Sampling 整合）：
 
 ```ts
 evlog: {
   sampling: {
-    byLevel: { error: 1.0, warn: 1.0, info: 0.1, debug: 0 },
+    rates: { error: 100, warn: 100, info: 10, debug: 0 },
   },
   redact: true,
 }
@@ -95,7 +95,7 @@ production 不開 redact = PII 進 D1（`event.user.email` / `client.ua` 等）�
 ## 與其他 snippet 的關係
 
 - `evlog-drain-pipeline/`：本 snippet **不需**這層（NuxtHub 內建 retry / batch）
-- `evlog-sentry-drain/`：可並存（Sentry 接 hot path，D1 接 long-tail）— 對 agentic-rag 是 baseline
+- `evlog-sentry-drain/`：可並存（Sentry 接 hot path，D1 接 long-tail）
 - `evlog-enrichers-stack/`：必裝，與 NuxtHub drain 並行運作（enricher 在 drain 之前）
 - `evlog-ai-sdk-logger/`：T3 必補；AI cost / token 子事件進 D1 attributes
 - `evlog-mcp-sse-child-logger/`：T3 必補；SSE / MCP session 用 child logger
@@ -106,14 +106,14 @@ production 不開 redact = PII 進 D1（`event.user.email` / `client.ua` 等）�
 - [ ] `wrangler.jsonc` 或 `wrangler.toml` 有 D1 binding `DB`
 - [ ] cron schedule 已設（vercel.json 或 wrangler.toml triggers）
 - [ ] `evlog.retention` 配置好（預設 `7d`；高合規 consumer 改 `30d`/`90d`）
-- [ ] `evlog.sampling` info: 0.1（D1 100 writes/s 上限）
+- [ ] `evlog.sampling.rates.info` 10（D1 100 writes/s 上限）
 - [ ] `evlog.redact: true`（production）
 - [ ] dev：觸發 endpoint 後 `wrangler d1 execute <db> 'SELECT count(*) FROM _evlog;'` 有 row
 - [ ] production：cron 真的跑（檢查 `_evlog` 最舊 row 的 timestamp 不超過 retention）
 
 ## 何時不該用此 drain
 
-- **無 NuxtHub stack**（5 consumer 中 4 個是 Supabase）：用 `evlog-postgres-drain`
+- **無 NuxtHub stack**（Supabase consumer）：用 `evlog-postgres-drain`
 - **量 > 100 writes/s**：D1 上限會丟；考慮升級 paid plan 或改用 Postgres
 - **單一事件 > 100KB**：D1 row size 限制；改寫 R2 並只在 D1 存 reference
 - **Cross-region 強一致需求**：D1 是 eventual；用 Postgres

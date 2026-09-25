@@ -45,7 +45,7 @@ command -v herdr
 | `HERDR_ENV` | 允許 | 拒絕 |
 | --- | --- | --- |
 | `= 1`（在 Herdr pane 內） | 全部：dispatch / relay / reclaim / complete / harvest | — |
-| 空（Cursor、一般 shell；Codex 已由本檔開頭分流） | create-only dispatch（`--cwd --label --prompt`／`--prompt-file`）**加上** harvest（`--coordinate`／`--coordinate-resume`）。可辨識 live runtime 時不帶 `--launcher`、原生繼承；辨識不到或 helper 不支援同 runtime 時 fail closed。只有 user 當次明確點名不同且受支援的 runtime 才帶 `--launcher`。拓樸永遠是 Tab／workspace，**忽略** inherited `HERDR_PANE_ID` | `--relay` / `--reclaim` / `--complete` / `--continue` / `--recover-orphan` / `--parent-pane` → `not_in_herdr` |
+| 空（Cursor、一般 shell；Codex 已由本檔開頭分流） | create-only dispatch（`--cwd --label --prompt`／`--prompt-file`）**加上** harvest（`--coordinate`／`--coordinate-resume`）。可辨識 live runtime 時不帶 `--launcher`、原生繼承；辨識不到或 helper 不支援同 runtime 時 fail closed。只有 user 當次明確點名不同且受支援的 runtime 才帶 `--launcher`。拓樸永遠是 Tab／workspace，**忽略** inherited `HERDR_PANE_ID` | `--relay` / `--reclaim` / `--complete` / `--continue` / `--recover-orphan` / `--coordinate-claim` / `--parent-pane` → `not_in_herdr` |
 
 **NEVER** 在 Cursor 裡 `export HERDR_ENV=1` 或假裝自己是 focused pane。那會讓 split／reclaim 打到使用者當下盯著的工作。
 
@@ -68,7 +68,7 @@ create-only 的成功 receipt 是 `dispatched`，**不是** `relay_dispatched`�
 
 > relay 開出來的 successor **不帶** `CLADE_DISPATCH_ID`（helper 刻意不注入 correlation env，見該檔 grep `TD-547` 的註解段），所以它是 main line、可以自由 fanout。`--successor` 開出來的同理（TD-1104）。被 fanout 派出去的 **worker 帶**該 env，因此 worker 只能 relay，不能再 fanout。
 
-**guard 的唯一另一個缺口是 `--bounded-leaf`（TD-1105）**：coordinated child 可以開**一層**有界葉節點——只限 readonly 的 gate-review row（由 `NATIVE_TABLE_ROW_POLICIES` × `GATE_OUTPUT_ROWS` 推導成 `BOUNDED_LEAF_ROWS`，目前是 `code-review-fable` 與 `code-review-opus`）且必須 `--coordinate`（開的人在同一個呼叫裡收割）。leaf 自己帶 correlation env 加上 `CLADE_DISPATCH_BOUNDED_LEAF=1`，record 記 `bounded_leaf: true`；它的裸 dispatch 照一般 guard 擋，再開 leaf 也回 `nested_dispatch_refused`，**`--relay` 也回 `nested_dispatch_refused`**——一般 child 的 relay 缺口是「把位置橫向交出去」，leaf 沒有位置，relay 只會鑄出一條不受 guard 約束的 main line。leaf 做不完就 `--complete blocked` 交還 coordinator；wake 沒送到時它的 `next_step` 是 `standby`（probe parent→在線叫醒→待命由 opener `--coordinate-resume` 收割），不是 relay——pending decision 已隨 `--complete` 進 completion record 與 decision 佇列，leaf 不需要也不能寫 tracked 檔。這不是責任樹擴張：leaf 不能寫它審的樹、跑完即回、不能再派（含 relay）。**NEVER** 為了讓一般工作過 guard 而把它包裝成 leaf——准入由 row 推導，flag 本身不開門。
+**guard 的唯一另一個缺口是 `--bounded-leaf`（TD-1105）**：coordinated child 可以開**一層**有界葉節點——只限 readonly 的 gate-review row（由 `NATIVE_TABLE_ROW_POLICIES` × `GATE_OUTPUT_ROWS` 推導成 `BOUNDED_LEAF_ROWS`，目前只有 `code-review-opus`）且必須 `--coordinate`（開的人在同一個呼叫裡收割）。leaf 自己帶 correlation env 加上 `CLADE_DISPATCH_BOUNDED_LEAF=1`，record 記 `bounded_leaf: true`；它的裸 dispatch 照一般 guard 擋，再開 leaf 也回 `nested_dispatch_refused`，**`--relay` 也回 `nested_dispatch_refused`**——一般 child 的 relay 缺口是「把位置橫向交出去」，leaf 沒有位置，relay 只會鑄出一條不受 guard 約束的 main line。leaf 做不完就 `--complete blocked` 交還 coordinator；wake 沒送到時它的 `next_step` 是 `standby`（probe parent→在線叫醒→待命由 opener `--coordinate-resume` 收割），不是 relay——pending decision 已隨 `--complete` 進 completion record 與 decision 佇列，leaf 不需要也不能寫 tracked 檔。這不是責任樹擴張：leaf 不能寫它審的樹、跑完即回、不能再派（含 relay）。**NEVER** 為了讓一般工作過 guard 而把它包裝成 leaf——准入由 row 推導，flag 本身不開門。
 
 ### `--cwd` 指向既存工作區時的佔用探測（fail closed）
 
@@ -187,7 +187,7 @@ user **沒**點名別的 launcher 時，successor／worker MUST 用**當前這�
 
 沒點名就不要帶 `--launcher`。user 說「handoff／relay／fanout」本身**不等於**授權換 runtime；必須在當次要求中明確點名目標 launcher。`--launcher` 只覆蓋 successor／child 的 binary 與相容 marker，**不改** current pane 的簽署身分——誰能簽 relay 仍由 `HERDR_ENV`、current pane、exact runtime session（Claude 或 Pi）驗證。`--launcher ccx` 一律回 `retired_launcher`；Codex-origin 的 `--launcher` override 不能繞過 native boundary——唯一放行是 user 點名的 create-only `--launcher devin` bounded worker（見 [SKILL.md](SKILL.md) § Codex native boundary），`--relay` 即使帶 `--launcher devin` 也照樣拒絕；helper 保留非 Codex caller 的既有相容性。
 
-`--reclaim` / `--complete` / `--continue` / `--adjudicate` / `--recover-orphan` / `--parent-pane` **NEVER** 帶 `--launcher`。
+`--reclaim` / `--complete` / `--continue` / `--adjudicate` / `--recover-orphan` / `--coordinate-claim` / `--parent-pane` **NEVER** 帶 `--launcher`。
 
 **Rationalization table**：
 
@@ -199,24 +199,24 @@ user **沒**點名別的 launcher 時，successor／worker MUST 用**當前這�
 | 「agent-routing 判這類工作更適合 cc／ccw」 | routing 可決定 bounded executor，不能改 handoff successor／worker 的 runtime affinity；要跨 runtime 必須由 user 當次明示 |
 | 「當前 runtime 辨識不到，先 fallback 到 ccw 至少能接」 | 辨識失敗是 blocker，不是授權；handoff 必須 fail closed |
 
-### 3.2 `<routing-model>` 的值域：`sonnet` NEVER 是其中之一
+### 3.2 `<routing-model>` 的值域：`sonnet`／`fable`／`haiku` NEVER 是其中之一
 
 `--model` 走 [[agent-routing]] 查表，本節只關掉一個具名落點。
 
-**判定落在「sonnet 等級」時，那件事屬於 Grok 4.6，不是 `sonnet`。** 每次判定算出「這件事只值 sonnet」欄位就被填成 `sonnet` —— 2026-09-09 實測連續五筆全部這樣填，而且全部配 `--route manual`，因為沒有任何政策列產得出那個 model。helper 自 2026-09-10 起直接拒收（`refuseSonnetTier`，`usage_error`）。被拒的是**靜默替換**，不是這個檔位本身。
+**判定落在「sonnet 等級」時，那件事屬於 Grok 4.7 xhigh（delegate-sub 鏈首），不是 `sonnet`。** 每次判定算出「這件事只值 sonnet」欄位就被填成 `sonnet` —— 2026-09-09 實測連續五筆全部這樣填，而且全部配 `--route manual`，因為沒有任何政策列產得出那個 model。helper 自 2026-09-10 起直接拒收（`refuseRetiredClaudeTier`，`usage_error`；2026-09-24 起 Fable／Haiku 也一併拒收）。
 
-**Grok 4.6 有兩條 transport，都受支援**（2026-09-11 更正，見本節末撤回）：
+**Grok 4.7 有兩條 transport，都受支援**（2026-09-11 更正，見本節末撤回）：
 
 | transport | 指令 | 買到什麼 | 代價 |
 | --- | --- | --- | --- |
-| Herdr pane | `--launcher grok --model grok-4.6 --effort high` | 佔一個 pane（預設分割當前 Tab；`--new-tab`、無當前 pane、或 cwd 屬別的 workspace 時改開 Tab）、在 Herdr 看得到、人可中途介入；進 `--relay` 的 in-flight 轉移與 § 4 比對 gate | 不過 ledger / quota chain / workspace-access admission |
-| Pi worker | `pi-dispatch.ts --model grok-xai --effort high --route claude-delegate-sub --tier-basis delegate-sub --workspace-access <readonly\|mutation> --brief <brief.md> --label <slug>` | route/tier-basis、quota chain、workspace-access admission、ledger 全套 | 不佔 pane，也不進 `--relay` 轉移；人只能事後讀 log |
+| Herdr pane | `--launcher grok --model grok-4.7 --effort xhigh` | 佔一個 pane（預設分割當前 Tab；`--new-tab`、無當前 pane、或 cwd 屬別的 workspace 時改開 Tab）、在 Herdr 看得到、人可中途介入；進 `--relay` 的 in-flight 轉移與 § 4 比對 gate | 不過 ledger / quota chain / workspace-access admission |
+| Pi worker | `pi-dispatch.ts --model grok-xai --effort xhigh --route claude-delegate-sub --tier-basis delegate-sub --workspace-access <readonly\|mutation> --brief <brief.md> --label <slug>` | route/tier-basis、quota chain、workspace-access admission、ledger 全套 | 不佔 pane，也不進 `--relay` 轉移；人只能事後讀 log |
 
 | 你手上這件事 | MUST |
 | --- | --- |
 | fanout worker，判定是 sonnet 等級 | 依上表挑一條。**要人看得見／可能要中途介入 → pane；要 admission 與 ledger → Pi worker。** 講不出挑哪條的理由就挑 Pi worker（預設值，帳留得下來） |
 | relay successor，判定「還是主線複雜度」 | `--model opus`。successor 接手的是整個主線位置，要 mutation 也要判斷，本來就不該降檔 |
-| relay successor，判定「只值 sonnet 等級」 | 兩條都行：`--relay --launcher grok --model grok-4.6 --effort high` 把位置交給 Grok；或本 session 留著、把那件事用上表的 Grok worker 派掉。交出位置的前提仍是「有人要接手主線」，不是「有工作沒做完」 |
+| relay successor，判定「只值 sonnet 等級」 | 兩條都行：`--relay --launcher grok --model grok-4.7 --effort xhigh` 把位置交給 Grok；或本 session 留著、把那件事用上表的 Grok worker 派掉。交出位置的前提仍是「有人要接手主線」，不是「有工作沒做完」 |
 | 任何一格想填 `sonnet` | 回上表重判。**NEVER** 因為 helper 要求明確 `--model` 就在 Claude 值域裡挑一個 —— 那正是上述五筆的成因逐字 |
 
 **relay successor NEVER 是 Pi seat**：`--launcher pi` 只在 predecessor 本身已是已驗證 Pi runtime 時成立（`herdr-session-handoff.ts` 的 relay-continuity）。**這條只綁 Pi**——relay receipt 上只有 `launcher === 'pi'` 會標 `admission: 'relay-continuity'`。**NEVER** 把它讀成 grok 也不能 relay。

@@ -21,7 +21,7 @@
 
 ## 執行依賴
 
-原生投影隨本 skill 交付 `scripts/commit-lock.mjs`、`scripts/0a-metrics.mjs`、`scripts/codex-review-safe.sh`、`scripts/claude-review-safe.sh`、`scripts/lib/review-common.sh` 與 `rules/` 下的兩份 review 政策。執行 Node script 使用 `node`，shell wrapper 使用 `bash`；交付檔不依賴 executable bit。
+原生投影隨本 skill 交付 `scripts/commit-lock.mjs`、`scripts/0a-metrics.mjs`、`scripts/codex-review-safe.sh`、`scripts/claude-review-safe.sh`、`scripts/lib/review-common.sh`、`scripts/lib/review-subagent.sh`、`scripts/lib/review-subagent-transcript.mjs`（後兩支是 `claude-review-safe.sh` subagent carrier 的 `prepare`／`finalize` 依賴）與 `rules/` 下的兩份 review 政策。執行 Node script 使用 `node`，shell wrapper 使用 `bash`；交付檔不依賴 executable bit。
 
 資源只由原生投影（`.claude/`、`.agents/`、`.cursor/` 下的 `skills/commit/`）交付，三份 bytes 相同。從 hub-core plugin 載入的同名 skill 目錄**不帶**這些資源，所以 `COMMIT_SKILL_DIR` 不一定就是資源所在。進 Step 0-Lock 前先跑一次 resolver，把印出的絕對路徑當成 `COMMIT_RESOURCE_DIR` 的實值；下文 `scripts/…` 指令與 `rules/…` 連結都相對於它。
 
@@ -41,6 +41,7 @@
     missing=
     for rel in scripts/commit-lock.mjs scripts/0a-metrics.mjs scripts/codex-review-safe.sh \
       scripts/claude-review-safe.sh scripts/lib/review-common.sh \
+      scripts/lib/review-subagent.sh scripts/lib/review-subagent-transcript.mjs \
       rules/review-tiers.md rules/security-policy.md; do
       [ -r "$candidate/$rel" ] || missing="$missing $rel"
     done

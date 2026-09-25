@@ -4,19 +4,9 @@
 > Runtime split: state, ownership, approval, and completion obligations are shared. Literal Claude tool names or runner commands in this reference are Claude host bindings; other hosts MUST use their adapter fragment or retain the dependent operation blocked.
 
 
-> 主檔 pointer：Step 2.7 MUST 先完整讀本檔再執行。**每一輪都讀**——本檔管的是「開工前」，
-> 而 compaction 抹掉的正是「上一輪剛讀過」那份 context。
+> 主檔 pointer：Step 2.7 MUST 先完整讀本檔再執行，**每一輪都讀**。
 
-## 這一步在防什麼
-
-packaging 把非自主 item 寫進待答佇列（`## ⏳ Awaiting Charles`，**append 不覆寫**），而在本步
-存在之前，**沒有任何一步會把那些問題端到 Charles 面前**——只等他自己想到要去讀 HANDOFF。
-結果是待答決策單向累積，每一條都卡著一批下游工作。
-
-Charles 2026-08-06 逐字：「work-loop 會累積很多 waiting user 的事件」「應該在每一次新 work-loop
-開始時 先問我 然後才放我走」。
-
-**本步的產出不是「問了幾題」，是「佇列歸零」。**
+本步是把 packaging 累積的待答題端到 Charles 面前的唯一出口；產出是「佇列歸零」，不是「問了幾題」。
 
 ---
 
@@ -26,12 +16,7 @@ Charles 2026-08-06 逐字：「work-loop 會累積很多 waiting user 的事件�
 
 **NEVER** 從經過時間、沒有工具、delivery receipt、或缺少 `awaiting[]` 條目推導答案；已送達但尚未回答的題目保持 pending，NEVER 重複發問。
 
-順序是「**先清算，後開工**」，不是「邊做邊找機會問」。理由是機制事實而非禮貌：Charles 在場的
-時間是這個 loop 最稀缺的資源，而他在場的那一段**正是**他準備離開座位去做別的事的那一段。把
-問題留到「做完手上這件再問」，多數時候等同留到他已經走了。
-
-**這條的判準是 mode，不是題數、不是急迫性。** 佇列剩 1 題和剩 9 題適用同一條規則；「這幾條都
-不急」不構成延後送達的理由——不急的題目也要在新工作 dispatch 前送達；答案未到時只阻擋依賴該答案的 item，獨立且已授權的有界工作照常判定。
+順序是「**先清算，後開工**」，不是「邊做邊找機會問」。**判準是 mode，不是題數、不是急迫性。**
 
 ---
 
@@ -44,9 +29,7 @@ Charles 2026-08-06 逐字：「work-loop 會累積很多 waiting user 的事件�
 
 判不出自己在哪個 mode → **當作 unattended**（沿用 Step 0 既有規則，保守側是不打斷不在場的人）。
 
-**unattended 下佇列非空 NEVER 是停 loop 的理由。** Charles 2026-08-06 逐字：「如果我跑那個腳本
-就不用特別阻擋 就做那些不受影響的」。無人值守期間累積是**被允許的**，清算由下一次 attended
-開場承擔——**NEVER** 因佇列非空寫 `stoppedReason`、**NEVER** 因此跳過與該佇列無關的 item。
+**unattended 下佇列非空 NEVER 是停 loop 的理由**：清算由下一次 attended 開場承擔，**NEVER** 因佇列非空寫 `stoppedReason`、**NEVER** 因此跳過與該佇列無關的 item。
 
 **佇列裡的 item 本輪排除，不是 skip。** 它不進 `non-plan-dispatch.md` § skip 合法理由窮舉，
 也 **NEVER** 被拿來當第 4 條 skip 理由用在其他 item 上——排除的對象只有「佇列裡那幾條」本身。
@@ -63,14 +46,7 @@ Charles 2026-08-06 逐字：「work-loop 會累積很多 waiting user 的事件�
 | 依 [autonomy-predicate.md](autonomy-predicate.md) § Iron Law 重判：**現在**寫得出「推薦 A + 站得住的理由」，**且未命中 predicate 7，且 `requiresSpecificConsent !== true`** | 移出佇列，當自主 item 進 Step 3 做掉，**NEVER** 拿去問。已拒絕項目不在 awaiting，而在 `refused` ledger |
 | 以上皆非 | 留在佇列，進 (b) |
 
-**重判是 MUST，不是可選。** 一條 item 當初 packaging 是因為**那一輪**的事實不足；此後可能已經
-有 subagent 補了證據、有別的 item 完成後消除了 trade-off、或當初根本就是誤判。把一條現在自己
-能決定的事拿去問，per `autonomy-predicate.md` § Iron Law 是**把已完成的工作退回給人**。
-
-Charles 2026-08-05 逐字：「等我拍板的那些問題 其實你都能決策的話 也是在拖累開發速度」。
-
-**predicate 7（放寬約束自身門檻）命中的條目 NEVER 被 prune 掉**，即使你寫得出推薦、理由也
-站得住——「我有好理由」在那一格恰好不是可自主的證據。那類條目一律留到 (b) 問。
+**重判是 MUST**（事實可能已補齊）。**predicate 7 命中的條目 NEVER 被 prune 掉**，一律留到 (b) 問。
 
 ---
 
@@ -78,9 +54,7 @@ Charles 2026-08-05 逐字：「等我拍板的那些問題 其實你都能決策
 
 （未遷移 consumer 才適用；有 `specs/truth/work-lifecycle.md` 時舊主檔已凍結，對應工作在 plan 的 Open work。）
 
-開場清算的輸入不只 `awaiting[]`。`docs/tech-debt.md` 裡 open class、未 parked 的條目**預設是債**，
-不是「缺 `### 自驗` 所以等 Charles」。2026-08-20 <consumer-b> 實測 158 條 open 只有 2 條有那個 heading，
-runner 於是在還有 161 條債時寫 `no-admissible-work`。
+`docs/tech-debt.md` 裡 open class、未 parked 的條目**預設是債**，不是「缺 `### 自驗` 所以等 Charles」。
 
 | 可觀察 predicate | 動作 |
 | --- | --- |
@@ -118,8 +92,7 @@ permission classifier 要求 **specific shared-action consent** 的題目一律�
 
 **每一個**答案 **MUST 立刻落檔**，且 **MUST 在進 Step 3 之前完成**。
 
-理由是機制事實：runner 每輪是**全新 process**，in-session 也會被 compaction 壓縮——**沒落檔的
-答案等於沒答**。「等 Step 7 一起寫」在本步是違規，中間任何一次夭折都會讓 Charles 白答一輪。
+沒落檔的答案等於沒答；「等 Step 7 一起寫」是違規。
 
 三處同步，缺一不算落檔：
 
@@ -129,8 +102,7 @@ permission classifier 要求 **specific shared-action consent** 的題目一律�
 | state `awaiting[]` / `packaged` | granted 與 refused 都從 unresolved queue / projection 移除。granted 建 one-shot grant；refused 另寫 `refused[id]={answer,scope,refusedAt,note}` ledger，供 scan 排除 |
 | `$MAIN_WT_PATH/HANDOFF.md` | granted 刪對應子段；refused 保留子段並標明 blocked/refused scope，但它不回填 awaiting |
 
-`note` **MUST 逐字記 Charles 說的話**（含他在選項外補的說明），**NEVER** 記成你的複述——下一輪
-是新 context，複述會把他的但書弄丟。
+`note` **MUST 逐字記 Charles 說的話**（含選項外的補充），**NEVER** 記成你的複述。
 
 只有 `outcome=granted` 且 action fingerprint 與選取 scope 完全相符的條目，才在**本輪**進 Step 3；dispatch 前 MUST 原子寫入 `consumedAt`，同一 grant **NEVER** 重播。`outcome=refused` 寫入獨立 ledger後保持 blocked，**NEVER** 進 Step 3、NEVER 自動重問或自行執行，但不阻塞其他 unresolved item 清算與開工。
 

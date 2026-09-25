@@ -1,16 +1,11 @@
 # 自主判定 predicate 與 Decision Packaging
 
-<!-- carrier-independent candidate: 本檔的義務不經任何 runtime 專屬工具契約表達，是 [[TD-445]] 抽共用核心時最先可搬的一批。**這是候選標記，不是 audience**——真正的 audience 是上面那行 `clade-targets`，NEVER 因為看到本行就把 targets 放寬。放寬 reference 而不放寬 SKILL.md 會投出沒有 skill 入口指向的孤兒檔。 -->
 
 > 主檔 pointer：Step 3.2 判自主、Step 4b 做 packaging，兩處都 MUST 先完整讀本檔。
 
 ## 核心命題
 
-Loop 的價值不在「做完可自主的事」——那部分合併前的 `/change-loop` 已經證明可行。價值在**非自主的那些條目怎麼處理**。
-
-`log + skip` 是最直覺也最沒用的做法：Charles 的 HANDOFF / tech-debt 裡需要他拍板的比例本來就高，skip 掉之後 loop 每輪都在重掃同一批跳過的東西，fingerprint 不變、三輪後自己停掉，而 Charles 回來看到的還是原封不動的清單。**等於沒跑。**
-
-正確做法是把「等人」從**阻塞**改成**準備**：loop 不能替 Charles 決定，但能把決策從「要花 20 分鐘讀 code 才答得出來」壓成「看兩行選項就能答」。他答完的每一條，下一輪就變成可自主輸入。
+`log + skip` 等於沒跑。把「等人」從**阻塞**改成**準備**：把決策壓成「看兩行選項就能答」，答完的每一條下一輪就變成可自主輸入。
 
 ---
 
@@ -18,17 +13,15 @@ Loop 的價值不在「做完可自主的事」——那部分合併前的 `/cha
 
 **判定順序是「先問我能不能決定」，不是「先問要不要問人」。**
 
-如果你能對一個 item 寫出「推薦 A，理由是 X」而且理由站得住 —— **那個決策已經做完了**，把它寫成三個選項送到 `## ⏳ Awaiting Charles` 只是把已完成的工作退回給人，然後停下來等他覆述你的結論。這是**拖慢**開發，不是謹慎。
+如果你能對一個 item 寫出「推薦 A，理由是 X」而且理由站得住 —— **那個決策已經做完了**，寫成選項送到 `## ⏳ Awaiting Charles` 只是拖慢開發。
 
 **Packaging 是 fallback，不是 default。** 只有在你**真的選不出來**時才 packaging：兩個以上方案各有真實 trade-off、用專案內可得證據判不出優劣、而且選錯不是當場可逆。三條要**同時**成立。
 
 判斷自己是不是在假裝選不出來，用這條檢查：**寫得出 `(推薦)` 標記嗎？** 寫得出就是選得出來，去做。
 
-2026-08-05 round 1–3 的實際違反：四條 packaged item（`telemetry-產地盲區` / `handoff-baseline-rotate` / `TD-360-分母` / `TD-330-session-tasks`）**全部**寫了推薦 A 且理由建立在當輪實測的事實上，卻一條都沒執行。Charles 的回應逐字：「等我拍板的那些問題 其實你都能決策的話 也是在拖累開發速度」。
-
 **NEVER** 用以下理由把可決定的事 packaging：
 
-- ❌「這動到標準層，要 publish」— publish 現在 agent 可自行 invoke（見 § predicate 4 的 carve-out）
+- ❌「這動到標準層，要 publish」— agent 可自行 invoke publish（見 predicate 2）
 - ❌「讓 Charles 確認一下比較保險」— 可逆的事不需要保險，不可逆的才需要
 - ❌「他可能有我不知道的偏好」— 有就會推翻，推翻的成本遠低於停下來等
 - ❌「選項寫得很清楚了，讓他挑就好」— 寫得出清楚選項＝你已經有答案
@@ -62,32 +55,18 @@ Loop 的價值不在「做完可自主的事」——那部分合併前的 `/cha
 
 ### Predicate 7 —— 其餘六條全過正是它的形狀
 
-`/handoff-loop` 是無人值守的。放寬自身門檻的改動落地時沒有人在看，而它**合規到不會觸發任何
-warn**：單 repo、落在 `vendor/` 可 revert、涉及檔案 ≤5、無決策標記、actionability 足夠 ——
-predicate 1–6 逐條都過。**所以「六條全過」對本條零訊號，NEVER 拿它當本條也過的理由。**
+放寬自身門檻的改動通常 predicate 1–6 全過（可逆、無決策標記…），**所以「六條全過」對本條零訊號，NEVER 拿它當本條也過的理由。** **方向是唯一判準**：收緊門檻照常自主執行；命中的只有放寬（數字調鬆、gate 觸發條件縮小、從 NEVER 挖掉情況、拿掉 predicate）。
 
-predicate 4 問的是「可不可逆」，而放寬自己的上限**完全可逆**；predicate 6 問的是「有沒有決策
-標記」，而條目沒被寫成問句**不代表**它是授權。這兩條在此處都不是弱一點，是**零覆蓋**。
-
-**方向是唯一判準，不是「影響大不大」**：收緊門檻（加一條 gate、把閾值調嚴、補一條 NEVER）
-**不**命中本條，照常自主執行。命中的只有放寬——把數字調鬆、把 gate 的觸發條件縮小、把某類
-情況從 NEVER 裡挖掉、把 predicate 拿掉一條。
-
-**逐字反制**（來源：`docs/tech-debt.md` TD-391 記載的 baseline rep 4、與 TD-386 entry 本文）：
+**逐字反制**：
 
 | 讀到自己在想 | 現實 |
 | --- | --- |
 | 「這個門檻本來就訂錯了，我只是校正」 | 校正與放寬在**輸出上完全同形**——都是把數字改成對自己更寬鬆的值。訂錯的舉證責任在提案者，而無人值守時沒有人能接受那份舉證 |
-| 「機械段的大小不是人在控制的，把它算進門檻不合理」 | 這正是 TD-386 的逐字論證，也正是本條要攔的那一類。論證成不成立與**誰有權批准**是兩件事 |
-| 「我對這個做法有明確傾向、也寫得出理由」 | rep 4 的下一句就是答案：「但『我有好理由』不等於『我可以自己批准放寬管我的上限』」 |
+| 「機械段的大小不是人在控制的，把它算進門檻不合理」 | 這正是本條要攔的那一類。論證成不成立與**誰有權批准**是兩件事 |
+| 「我對這個做法有明確傾向、也寫得出理由」 | 「我有好理由」不等於「我可以自己批准放寬管我的上限」 |
 | 「它可 revert，出事再改回來就好」 | 可逆性對本失敗型態零訊號（見上）。會被 revert 的前提是有人發現，而放寬門檻的直接效果就是讓它更不容易被發現 |
 
-**累積形狀**才是代價：每一步都有好理由、每一步都可 revert、沒有任何一步會被 audit 抓到，
-而 agent 逐步鬆綁管自己的門檻。單看一步永遠划算，這是本條不交給個案判斷的原因。
-
-本證據決定：命中本條時走 packaging。
-本證據不決定：要不要動門檻本身——**NEVER** 拿本節論證「門檻不該改」。門檻常常真的該改，本條
-只管**誰批准**。
+本條只管**誰批准**，**NEVER** 拿它論證「門檻不該改」。
 
 ### 判不出來時的三步
 
@@ -115,11 +94,7 @@ predicate 4 問的是「可不可逆」，而放寬自己的上限**完全可逆
 
 ### (b) 抽 startable 子集先做掉
 
-**這一步最常被跳過，也是 packaging 與 skip 的實質差別。**
-
-一條 item 需要拍板，**不代表整條無事可做**。典型：五個步驟裡只有第三步需要 Charles 選 A 或 B，前兩步早就能做。
-
-**MUST** 判斷有沒有未 blocked、現在可開工的子集；有 → 依 Step 4a dispatch 做掉（它自己要通過七條 predicate）。做完在 packaging 內容裡註明「子集已完成，剩餘部分需拍板」。
+一條 item 需要拍板，**不代表整條無事可做**。**MUST** 判斷有沒有未 blocked、現在可開工的子集；有 → 依 Step 4a dispatch 做掉（它自己要通過七條 predicate）。做完在 packaging 內容裡註明「子集已完成，剩餘部分需拍板」。
 
 ### (c) 寫成 2–3 個排序過的選項
 
@@ -131,11 +106,7 @@ predicate 4 問的是「可不可逆」，而放寬自己的上限**完全可逆
 
 **NEVER** 寫「等 owner 拍板」「卡外部依賴」這種無法行動的模糊句。外部依賴要明列**在等什麼 signal**。
 
-**item 是「某個門檻超標」時，選項組另受 [[threshold-remediation]] 的幅度紀律管**：每個選項 MUST
-標出**預期降幅**，而 **降幅 < 超標量的選項 NEVER 進選項組、更 NEVER 標成推薦**。整組都不夠時
-**MUST 回 (a) 補事實把範圍擴大**，NEVER 端出一組「最接近的那個」——2026-08-12 clade HANDOFF 超標
-packaging 的三個選項沒有一個清得掉超標量（42.8 KB vs 門檻 35 KB，推薦的 A 只降約 4 KB），Charles
-答完照著執行仍然超標，等於整輪 packaging 白做。
+**item 是「某個門檻超標」時，選項組另受 [[threshold-remediation]] 的幅度紀律管**：每個選項 MUST 標出**預期降幅**，**降幅 < 超標量的選項 NEVER 進選項組**；整組都不夠時 **MUST 回 (a) 補事實把範圍擴大**。
 
 ### (d) 兩處落檔（缺一這條決策永遠問不出去）
 
@@ -144,7 +115,7 @@ packaging 的三個選項沒有一個清得掉超標量（42.8 KB vs 門檻 35 K
 | state `awaiting[]` | 完整條目：`id` / `title` / `packagedAt` / `round` / `blocker` / `startableDone` / `options[]`（`key` / `label` / `effect` / `recommended`）/ `rationale` / `nextStep` / `requiresSpecificConsent` / `state`。欄位與下方 § 第三部分段模板一一對應。**permission classifier 要求具名 shared-action consent 的題目 MUST 設 `requiresSpecificConsent: true`**——漏設會讓 [decision-drain.md](decision-drain.md) (a) 的 `requiresSpecificConsent !== true` 護欄恆為真，該題被當自主 item prune 掉 |
 | state `packaged` | `{"<item-id>": "<ISO>"}` 投影，供 Step 2 排除用 |
 
-`awaiting[]` 是 [decision-drain.md](decision-drain.md)（Step 2.7 開場清算）的**唯一輸入**——只寫 HANDOFF 段不寫 `awaiting[]`，這條決策就永遠不會被端到 Charles 面前，退回清算閘存在之前的單向累積狀態。**NEVER** 只寫其中一邊。
+`awaiting[]` 是 [decision-drain.md](decision-drain.md) 的**唯一輸入**，**NEVER** 只寫 HANDOFF 或 state 其中一邊。
 
 ---
 
@@ -185,13 +156,3 @@ _Packaged <ISO> · round <N>_
 - ❌ 「詳見 `docs/xxx.md`」當作唯一指引——per `rules/core/handoff.md` § Outstanding actionability hygiene，by-reference handoff 讓讀者重跑 investigation
 - ❌ 把 loop 自己能查到的事實寫成問題問 Charles——那不是決策，是偷懶
 - ❌ 排程型選項（「N 週後再看」）——per user CLAUDE.md § 不要把工作往後放
-
----
-
-## 對照表：skip vs packaging
-
-| 情境 | ❌ skip 的樣子 | ✅ packaging 的樣子 |
-| --- | --- | --- |
-| TD 需要選型 | 「TD-402 — skipped（需 user 決策）」 | 「TD-402 packaged：卡在 `src/db/schema.ts:88` 的 grain 二選一；已完成前置的 index 補齊；A(推薦)/B 兩案 + 各自後果 + 答完直接跑 `/wt td402`」 |
-| 條目太模糊 | 「ambiguous item，skipped」 | 先唯讀調查補齊 → 多數變成可自主直接做；真的還模糊 → packaging 內含調查結果 + 「這條原始描述缺 X，補上 X 後就能做」 |
-| 要動標準層 | 「動 rules/，skipped」 | packaging：說明要改哪條 rule 的哪一段、為什麼、改完要 propagate 到幾個 consumer、答完跑 `/bp` 還是直接改 |

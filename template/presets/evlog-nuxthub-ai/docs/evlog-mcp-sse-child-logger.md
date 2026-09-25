@@ -6,9 +6,9 @@
 
 # evlog SSE / MCP Child Request Logger
 
-T3 必補：SSE / MCP / Durable Object 的 lifecycle 跨越 Nitro `afterResponse`，parent `useLogger(event)` 會在 stream / tool call 還沒結束時就 emit，後續 `log.set` 撞 sealed wide event。本 snippet 提供 fork-child + 手動 emit pattern（agentic-rag TD-057 已實證）。
+T3 必補：SSE / MCP / Durable Object 的 lifecycle 跨越 Nitro `afterResponse`，parent `useLogger(event)` 會在 stream / tool call 還沒結束時就 emit，後續 `log.set` 撞 sealed wide event。本 snippet 提供 fork-child + 手動 emit pattern。
 
-Reference: `docs/evlog-master-plan.md` § 8.4 (agentic-rag T3) + nuxt-edge-agentic-rag `server/api/chat.post.ts` TD-057
+Reference: `docs/evlog-master-plan.md` § 8.4 + 已落地實例 nuxt-edge-agentic-rag `server/api/chat.post.ts`
 
 ## 為什麼需要 child logger
 
@@ -107,7 +107,7 @@ emitChildLogger(event, streamLog)
 
 dev 階段的 await 不影響功能，但 production Workers 必須 waitUntil。
 
-## Consumer onboarding checklist（agentic-rag T3）
+## Consumer onboarding checklist
 
 - [ ] `server/utils/sse-child-logger.ts` 已就位
 - [ ] SSE endpoint（chat.post.ts）改用 `forkChildLogger` + `emitChildLogger`
@@ -119,6 +119,6 @@ dev 階段的 await 不影響功能，但 production Workers 必須 waitUntil。
 
 ## 何時不該用此 snippet
 
-- **無 SSE / MCP / Durable Object**（5 consumer 中只有 agentic-rag 用）
+- **無 SSE / MCP / Durable Object**
 - **stream lifecycle 在 afterResponse 之內結束**：parent log 已夠
 - **單一 quick AI call（無 stream）**：parent log + `recordAIGeneration` 即可，不需 child

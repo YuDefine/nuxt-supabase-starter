@@ -34,7 +34,7 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 
 ## 2. 逐個裸 dispatch
 
-⛔ **`<routing-model>` 填 `sonnet` 的那一筆不派 pane**——依 [dispatch-common.md](dispatch-common.md) § 3.2 改走 `pi-dispatch.ts` 的 grok 座位（helper 自 2026-09-10 起直接回 `usage_error`）。
+⛔ **`<routing-model>` 填 `sonnet`（或已禁用的 `fable`／`haiku`）的那一筆不派 pane**——依 [dispatch-common.md](dispatch-common.md) § 3.2 改走 `pi-dispatch.ts` 的 grok 座位（helper 自 2026-09-10 起直接回 `usage_error`）。
 
 ⛔ **先過 [dispatch-common.md](dispatch-common.md) § 1 的 `--cwd` 佔用探測**——`--cwd` 指向**非本 session 建立的**既存工作區（尤其 `-wt/` linked worktree）時，三步任一命中或 ownership 判不出來就 **NEVER 派**。worker 自己的 STOP 條款是事故後的損害控制，接不住已經發生的併發寫。
 

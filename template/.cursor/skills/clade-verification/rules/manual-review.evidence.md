@@ -8,7 +8,7 @@ paths: ['tasks/**', 'specs/plans/**']
 
 # Manual Review — Evidence & Authoring Schema
 
-> Reference 檔。核心規約見 [`manual-review.md`](./manual-review.md)。本檔聚焦 `tasks.md` 的 `## 人工檢查` 區塊在 propose / ingest / apply / archive 階段的詳細 authoring schema：可解析格式、kind 分類指引、`@no-screenshot` / `@no-manual-review-check` marker schema，以及 ### 給 propose / spec 寫作者 的格式建議。
+> 核心規約見 [[manual-review]]。本檔是 `## 人工檢查` 區塊的 authoring schema。
 
 ## 給 propose / spec 寫作者
 
@@ -21,8 +21,6 @@ paths: ['tasks/**', 'specs/plans/**']
 ❌ 不夠：
 - [ ] #N 確認手動歸還按鈕能用
 ```
-
-「能用」是模糊驗收，落到實作會被解讀為「能點到 / 看到 dialog」，漏掉真實送出 + DB 變更。
 
 ## 可解析格式（hard rule）
 
@@ -43,7 +41,7 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
   - [x] #3.2 keyboard focus state 清楚
 ```
 
-禁止在 `## 人工檢查` checkbox line 使用 legacy section ids，例如 `8.1`、`9.3`，也禁止省略 `#N` / `#N.M`。這個 schema 只讓 tooling 能定位與寫回項目，不改變人工檢查 ownership：agent 仍然 **NEVER** 在未取得使用者明確 OK、Issue handling、skip 或 skip all 前自行勾選 `[review:ui]` items；`[discuss]` items 的勾選規則見 `manual-review.md` 「Item Kind Marker」核心定義。
+禁止 legacy section ids（`8.1`、`9.3`）或省略 `#N` / `#N.M`。schema 不改變勾選 ownership（見 [[manual-review]] § Checkbox ownership）。
 
 ## Kind 分類指引（給 propose / spec 寫作者）
 
@@ -74,18 +72,13 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 - 已有 seed / URL，可直接開頁後截 final-state screenshot
 - 不需要 agent 執行 mutation / 填表 / 多角色切換
 
-### Issue fix 後重拍範圍（hard rule，2026-05-30 補強）
+### Issue fix 後重拍範圍（hard rule）
 
 當 user 對某個 `[verify:ui]` / `[review:ui]` item 留 `（issue: ...）`、agent fix code 後要交回 user 重驗時：
 
-- **MUST** 重拍「受該次 code 改動影響的**所有** `[verify:ui]` / `[review:ui]` item」的 screenshot，**NEVER** 只重拍被標 issue 那一張。Issue 範圍是 item-scoped，但 code 改動常是 view-scoped（一次改動橫跨整批 item / 整個頁面）— 重拍範圍 **MUST** 對齊 code 改動影響範圍，不是 issue 標記範圍。
-- **MUST** 刪掉同 change 截圖目錄內所有無 `#N` 前綴的 legacy 舊圖（`#N` / `#N.M` 命名規約前的初版殘留）— 它們不再配對任何 item，留著只會被 review-gui filename-matching 誤補位。
-- **MUST** 在交回 user 重驗前跑 `audit-screenshot-staleness.ts`（或人工比對 mtime vs 最後 UI commit）確認 0 stale（在影響範圍內的）。
-- **NEVER** 倚賴 review-gui filename-matching 把舊圖補位當作 evidence 完整 — 舊圖配對的是改動前狀態，user 會對非最新狀態 OK。
-
-判別測試：「這次 fix 改的是哪些檔？這些檔 render 出哪些 item 的畫面？」凡命中的 item 都 **MUST** 重拍，與 issue 標在哪一張無關。
-
-偵測：`vendor/scripts/audit-screenshot-staleness.ts` 的 `stale_screenshot_after_ui_change` signal（screenshot mtime < change 最後 UI commit → STALE）；詳見 `docs/pitfalls/2026-05-30-issue-fix-refreshes-only-flagged-screenshot-leaves-batch-stale.md`。
+- **MUST** 重拍受該次 code 改動影響的**所有** `[verify:ui]` / `[review:ui]` item，**NEVER** 只重拍被標 issue 那一張——判別：「這次 fix 改的檔 render 出哪些 item 的畫面？」
+- **MUST** 刪掉同 change 截圖目錄內無 `#N` 前綴的 legacy 舊圖（會被 filename-matching 誤補位）
+- **MUST** 交回前跑 `vendor/scripts/audit-screenshot-staleness.ts`（`stale_screenshot_after_ui_change`）確認影響範圍內 0 stale（[[pitfall-issue-fix-refreshes-only-flagged-screenshot-leaves-batch-stale]]）
 
 **Multi-marker（多 channel evidence）**
 
@@ -140,21 +133,11 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 - persistence across reload → `[verify:e2e]`
 - 後端 SSH / psql / cron / drift 驗證 → `[discuss]`
 
-把這些誤標 `[review:ui]` = 把該由 agent 自驗的工作丟回 user，違反 propose 階段對 user 時間的尊重。review-gui PWA **不顯示**這類項；截圖 channel `[verify:ui]` 有 `(verified-ui:)` 後由 auto-check 勾選，不進 inbox。
+誤標 `[review:ui]` = 把該由 agent 自驗的工作丟回 user。
 
 ### `[verify:ui]` 對 sample-key-bound item 的反例（hard rule，2026-05-24 補強）
 
-`[verify:ui]` 預設 agent 可在 no-click scope（open URL → wait load → final-state screenshot → DOM observation）內驗完。但**當 item 描述要求 agent「找到某個特定 sample」**且 sample identifier 無法被 agent 從 page-load screenshot 直接 unambiguously 對應到 row 時，agent 在 scope 內**就是 fab 風險區**——這類**MUST** 標 `[review:ui]`。
-
-判別方法：item 描述含「找到 / 定位 / 搜尋 / locate / find / search」+ business-key 識別符（`EMP-\d+` / `contract-[a-z\-]+\d+` / 8-4-4-4-12 UUID），**且**該 key 不會 natively 顯示在 target URL 載入後的 viewport 內，則 agent 無法 truthfully bridge `sample-key → UI row` 對應。
-
-**實證**：2026-05-24 <consumer-a> `app-status-badge-extraction`：
-
-- task 寫「找到周怡君 `EMP-009` 補打下班卡」
-- target `/admin/attendance/amendments` 員工 column 因 API 400 fallback 全顯示「-」
-- agent screenshot 看不到「EMP-009 / 周怡君」字樣
-- agent 仍寫 `(verified-ui: ... dom=EMP-009-pending-row-...)` annotation
-- user 抓 9 個 annotation 全 fab，要求 strip + promote rule
+`[verify:ui]` 是 no-click scope（open URL → wait load → screenshot → DOM observation）。item 描述要求「找到 / 定位 / 搜尋」某個 business-key（`EMP-\d+` / `contract-…` / UUID），**且**該 key 不會 natively 顯示在頁面載入後的 viewport 內時，agent 無法 truthfully 對應 `sample-key → UI row`，寫出的 `(verified-ui:)` 就是捏造——這類 **MUST** 修正（見下方修正路徑）。
 
 **反例**：
 
@@ -166,44 +149,9 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
          全 fallback「-」）；agent screenshot 無法 unambiguously identify 該 row
          → MUST 標 [review:ui]
 
-❌ - [ ] #4.1 [verify:ui] /admin/schedules 搜尋或定位 `contract-intern-001` 對應班表
-   理由：合約 ID column 只顯示 truncated UUID 前幾碼（`15f4562e...`），無 business key
-         `contract-intern-001` 字樣；agent 在 no-type scope 無法 search
-         → MUST 標 [review:ui]
-
-❌ - [ ] #7.1 [verify:ui] /admin/petition 找到 petition `11111111-1111-1111-1111-111111111111`
-   理由：petition uuid 不在 displayed column（申請人 column 顯示不同 uuid `9d408709-...`）
-         → MUST 標 [review:ui]
 ```
 
-**正例 1**：sample identifier 本身**就會**顯示在 page-load viewport（page natively displays the key）：
-
-```markdown
-✅ - [ ] #1 [verify:ui] /admin/employees 列表第一行 employee_no `EMP-001` row
-        顯示「在職」success badge
-   理由：employee_no `EMP-001` 是 list page 第一個 column（`<EmployeeColumn employee_no="...">`），
-         agent page-load screenshot 直接看到字串，可 unambiguously 對應 row。
-```
-
-**正例 2**：description 同時 inline display name + business key（agent 用 display name 對 row）：
-
-```markdown
-✅ - [ ] #8.1 [verify:ui] /admin/contracts 列表 row「Charles Yu 開發管理員合約」(對應
-        seed contract-perm-001) 顯示「生效中」success badge
-   理由：合約名稱 column 直接顯示「Charles Yu 開發管理員合約」字串，agent 可由 display
-         name 對 row；business key contract-perm-001 在括號內僅為 cross-reference 不
-         依賴 UI 顯示。
-```
-
-**正例 3**：item 完全不依賴 sample identification，只看 page-load aggregate visual：
-
-```markdown
-✅ - [ ] #4 [verify:ui] /admin/schedules 載入後，列表所有 row 的「狀態」column
-        顯示「生效中」success badge（aggregate 視覺對齊：所有 active schedule 都 success tone，
-        無 raw English status key 漏網）
-   理由：assertion 是「all rows 都 success」aggregate property，agent screenshot 看
-         pixel column 即可驗，不需要 identify 個別 row 對應哪 sample。
-```
+**正例**：key 本身就顯示在 page-load viewport（例：list 第一欄就是 employee_no `EMP-001`）；或 description 同時寫 display name（「Charles Yu 開發管理員合約」）讓 agent 用畫面文字對 row；或 assertion 是 aggregate（「所有 row 的狀態欄都是 success badge」）不需辨識個別 row。
 
 **修正路徑（命中反例時）**：
 
@@ -211,18 +159,18 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 - (b) **改成 `[review:ui]`**：user 親自在 browser 對 sample（用 domain 知識 + filter / search 互動）
 - (c) **拆 multi-marker**：若涉及 mutation + visual，拆 `[verify:api]` 自驗 mutation + `[review:ui]` user 親驗 visual
 
-**Pre-Review Data Readiness hook `VERIFY_UI_SAMPLE_KEY_DISPLAY_CHECK`**（patterns.json v1.5.0+；前身 `VERIFY_UI_SAMPLE_KEY_BOUND` v1.4.2）會在 propose / ingest 時自動掃 description regex 命中後，額外跑 reverse page-grep（解析 item URL → 反推 `.vue` page → grep identifier-column token + literal key），把具體 grep 結果 enrich 進 remediation，建議保 `[verify:ui]` 或 reclassify `[review:ui]`，避免 mid-flight 才撞牆。
+hook `VERIFY_UI_SAMPLE_KEY_DISPLAY_CHECK` 會在寫入時跑 reverse page-grep，把結果 enrich 進 remediation。
 
-### `[verify:*]` 編輯/狀態變更類動作對 fixture 可編輯性的要求（hard rule，2026-05-30 TD-176）
+### `[verify:*]` 編輯/狀態變更類動作對 fixture 可編輯性的要求（hard rule）
 
 `[verify:*]` item 描述含**編輯/狀態變更類動作**（編輯 / 修改 / 更新 / 作廢 / 封存 / 送出 / 核准 / 取消 / 刪除）且引用**具體 sample**（business key / UID / 單號）時，該 sample **MUST** 處於可執行該動作的狀態（editable / not-completed / not-readonly / 未結案）。
 
-引用 completed / readonly / 已結案 / 已鎖定 的 sample 做編輯類動作 → **fixture 狀態與動作不相容**：agent 無法 truthfully 完成 round-trip（按鈕 disabled / 路徑 422 / 表單唯讀），evidence sweep 會正確判「缺證據」逼 user 當 relay channel。**MUST** 二擇一修正：
+引用 completed / readonly 的 sample 做編輯類動作，agent 無法 truthfully 完成 round-trip。**MUST** 二擇一修正：
 
 - **改引用可編輯狀態的 sample**（同 fixture 集合內挑一筆 draft / pending / 進行中的單），保持原 channel；或
 - 若該動作**本質需真人親自操作**（白名單情境）→ 改 `[review:ui]`。
 
-**實證**（TD-176，<consumer-b> `tool-usage-count-cost-formula` #3.1）：
+**反例**：
 
 ```markdown
 ❌ - [ ] #3.1 [verify:ui] /purchase 編輯 PO `991510` 的數量 → 存 → 顯示更新後數量
@@ -233,15 +181,14 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
            或若必須真人操作 → [review:ui]
 ```
 
-判別與本檔 §「`[review:ui]` 收斂原則」（form submit / persistence → verify:api/e2e）+ `manual-review.data-readiness.md` § signal-less 分流（需互動才出現的狀態 → verify:e2e/api；純主觀視覺 → review:ui）一致。**目前無機械 gate**（fixture runtime 狀態無法從 tasks.md 文字機械判斷）— 靠本 guidance 在 propose 寫作時導正。
+**無機械 gate**（fixture runtime 狀態無法從文字判斷），寫作當下自己對照。
 
 ## `@no-screenshot` Marker（hard rule）
 
 > **本節的 marker 語法由 `vendor/scripts/manual-review-check.sh` 解析**（trailing token 判定，回歸測試
-> `test/manual-review-check.test.ts`）。原本把 fence 抽出來餵 parser 的 live fixture 隨 `review-gui.parser.ts`
-> 於 2026-09-17 退役，**現在沒有測試抽本節範例**——改範例時 MUST 同步改 checker 與它的測試，NEVER 只改一邊。
+> `test/manual-review-check.test.ts`）。沒有測試抽本節範例——改語法時 MUST 同步改 checker 與它的測試。
 
-當人工檢查項目是純 functional round-trip，且 screenshot review 無法提供有效視覺證據時，可在該 checkbox line 行尾加上 `@no-screenshot` marker。這個 marker 表示該 item 是 round-trip-only manual-review item：使用者親自操作後可直接勾 OK，不需要截圖。
+純 functional round-trip、screenshot 無法提供視覺證據的 item，行尾加 `@no-screenshot`：使用者親自操作後直接勾 OK，不需截圖。
 
 Marker 語法：
 
@@ -251,30 +198,15 @@ Marker 語法：
 - Parent item（`#N`）與 scoped sub-item（`#N.M`）都支援此 marker。
 - `@no-screenshot` 出現在 description 中間時只是 plain text，**MUST NOT** 被解析成 marker。
 
-Parent item 範例：
-
-```markdown
-- [ ] #5 Admin 送出表單 → 200 OK，列表顯示新狀態 @no-screenshot
-```
-
-Scoped sub-item 範例：
-
-```markdown
-- [ ] #6 權限拒絕流程
-  - [ ] #6.1 非管理者送出 → 403，畫面保留原狀並顯示可理解錯誤 @no-screenshot
-```
-
-與 `@followup[TD-NNN]` 共存時，canonical ordering **MUST** 是：
+與 `@followup[TD-NNN]` 共存時 `@no-screenshot` 永遠最後：
 
 ```markdown
 - [ ] #7 送出時觸發樂觀鎖 409 → 顯示 conflict copy 並保留輸入 @followup[TD-001] @no-screenshot
 ```
 
-`@no-screenshot` 永遠是最後一個 trailing token；`@followup[TD-NNN]` 必須放在它前面。若寫成 `... @no-screenshot @followup[TD-001]`，就不是 canonical format，tooling 不保證可穩定解析。
-
 ## Parent State Derivation — 真相層責任分工
 
-> 自主檔 [[manual-review]] § Parent State Derivation 移入；parent AND-derive hard rule 與禁止項仍在主檔。
+> parent AND-derive hard rule 與禁止項在 [[manual-review]] § Parent State Derivation。
 
 | 真相層 | 責任 |
 | --- | --- |
@@ -285,7 +217,7 @@ Scoped sub-item 範例：
 
 ## Legacy annotation 退役對照
 
-> 2026-09-17 control-panel redesign Phase 5：下列四種是 Spectra 讀法下「翻 bucket」的寫入器，讀取端隨該層退役。**既有行內記錄不必清**（讀取端略過或照舊解析），**NEVER** 新寫。
+> 下列四種寫法的寫入器已退役。**既有行內記錄不必清**（讀取端略過或照舊解析），**NEVER** 新寫。
 
 | 舊寫法 | 當時的語意 | 現在要人接手時 |
 | --- | --- | --- |
@@ -298,15 +230,4 @@ Scoped sub-item 範例：
 
 ## ADR (2026-05-22) — Default Kind Flip 未採用，勿再提案
 
-> 自主檔 [[manual-review]] § Default Kind Derivation Rule 移入。
-
-曾被提出的修案：「把 user-facing fallback default 從 `[review:ui]` 改成 `[verify:ui]`」（理由：`[review:ui]` 是最 strict 的「真的需要人」白名單，silent fallback 到 strict kind 等於把 agent 該做的工作推給 user）。
-
-**未採用**，理由：
-
-1. **Root cause 已被 explicit marker enforcement 取代**：`MISSING_KIND_MARKER` pattern（`patterns.json` v1.4.0）在 propose / ingest 階段透過 hook fail-fast 強制每條 sub-item 標 explicit marker。Fallback 只剩 legacy in-flight item 在用，新 case 不會再進。
-2. **任何 default 都猜不對**：`[review:ui]` / `[verify:ui]` / `[verify:api]` 三種 kind 走不同 review flow，default 選哪個都會在某類內容上錯。改 default 從「猜成 review:ui」變「猜成 verify:ui」，PATCH /api/... 這種 backend roundtrip 還是錯（正解是 `[verify:api]`）。只有 explicit marker 是正解，default 永遠是「猜」。
-3. **會 break legacy review-gui flow**：fallback derived item 從「user 在 GUI 點 OK 過」變成「需 final-state screenshot evidence (`verified-ui` annotation) + 點 OK」，可能在 review-gui 觸發 evidence missing red banner、卡住既有 archive flow。
-4. **review-gui chip 已視覺化**：`hasExplicitKind: false` 的 item 顯示 `(fallback)` amber chip，user 看得到、知道那條 tasks 行要補 kind marker。漸進清 legacy 即可，不需大爆改。
-
-**Future agent**：看到 missing marker 問題的反射性建議**不該**是「改 default」，應該是「補 explicit marker（或 hook 已擋）」。本 ADR 防止 default flip 提案反覆出現。
+不把 fallback default 從 `[review:ui]` 改成 `[verify:ui]`：任何 default 都會在某類內容上猜錯，explicit marker 已由 `MISSING_KIND_MARKER` fail-fast 強制，改 default 還會讓 legacy item 突然缺 evidence。看到 missing marker，正解是補 marker。

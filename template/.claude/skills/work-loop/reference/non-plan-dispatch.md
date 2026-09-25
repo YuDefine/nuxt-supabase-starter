@@ -1,11 +1,7 @@
 # 非 plan candidate 的分類與 dispatch
 
 
-> 前身是 `change-loop/reference/turbo-dispatch.md`（`--turbo` 專屬）。合併成 `/work-loop` 後
-> `--turbo` flag 消失、非 plan package 的待辦成為預設 scope，本檔改為 **Step 3.1b 的分類依據**。
-> 分類表、skip 窮舉、逐字藉口實錄**原樣保留**——它們對應的 pitfall 沒有失效。
-
-適用對象：Step 2 candidate list 裡 source 為 `handoff` / `techdebt` / `roadmap` 的每一條。
+本檔是 **Step 3.1b 的分類依據**。適用對象：Step 2 candidate list 裡 source 為 `handoff` / `techdebt` / `roadmap` 的每一條。
 
 ## 掃描來源（Step 2 已合併，此處只記段落判準）
 
@@ -30,9 +26,6 @@
 | investigation / research | 含「調查」「確認」「檢查」「分析」「audit」 | 主線即時組直接執行（不需 worktree；read-heavy 者先過 [dispatch-topology.md](dispatch-topology.md) § 主線即時組的 pre-scan 前置判定），結果寫回對應條目 |
 | blocked / 需拍板 | 含「待 user」「待確認」「blocked」「需拍板」 | **NEVER 直接 skip** —— 走 [autonomy-predicate.md](autonomy-predicate.md) § Decision Packaging |
 | 模糊 / 無法判斷 | 以上皆不符 | 先跑唯讀調查補事實再重判（見 autonomy-predicate.md § 判不出來時的三步）；仍模糊 → packaging，**不是** skip |
-
-> 最後兩列與前身版本不同：`turbo-dispatch.md` 當時寫「跳過，log 到 Skipped」。合併後 packaging
-> 是 MUST——skip 會讓 user-bound 比例高的清單完全停擺，而那正是 `/handoff-loop` 當初存在的理由。
 
 ## Brief MUST 有驗收二分欄位（machine / human）
 
@@ -69,8 +62,8 @@ machine check 分離把這件事結構化了，非 plan 路徑沒有那個結構
 - 每筆需求建立依 [guardrails.md](guardrails.md) § 護欄 7 的來源授權判定；已授權且明確的需求走 `/specify` 或建 tasks 檔，未授權新目標或產品歧義才 packaging。
 - **NEVER** 跨 consumer 操作 —— loop 仍限當前 repo
 
-**動標準層不再是 skip 理由**：`rules/` / `capabilities/core/` / `CLAUDE.md` / `vendor/`（clade 端）
-**可以改**（2026-08-05 授權），但 MUST 改完走 `/clade-publish` Step 1–9 散播完畢，**NEVER** 改完擱著。
+**動標準層不是 skip 理由**：`rules/` / `capabilities/core/` / `CLAUDE.md` / `vendor/`（clade 端）
+**可以改**，但 MUST 改完走 `/clade-publish` Step 1–9 散播完畢，**NEVER** 改完擱著。
 做不到就 packaging。判準見 [guardrails.md](guardrails.md) 護欄 5 與 [autonomy-predicate.md](autonomy-predicate.md) predicate 2。
 
 ## Skip 合法理由窮舉（MUST，其他一律 dispatch 或 packaging）
@@ -82,8 +75,7 @@ machine check 分離把這件事結構化了，非 plan 路徑沒有那個結構
    且已依 packaging SOP 寫進 `## ⏳ Awaiting Charles`。**沒 packaging 的不算，那是 skip**
 3. **本輪已 packaged**（state 的 `packaged` 有 timestamp）—— 不重複 packaging
 
-> 前身版本有「需開新需求」與「動標準層」兩條。兩者現已改為 packaging 對象（前者寫進
-> packaging 內容建議走 `/specify`，後者可自主改 + 散播），不再是合法 skip 理由。
+「需開新需求」與「動標準層」都不是 skip 理由：前者寫進 packaging 內容建議走 `/specify`，後者可自主改 + 散播。
 
 以下**不是**合法跳過理由（逐字實錄，per [[pitfall-change-loop-turbo-self-rationalized-idle]]）：
 

@@ -20,10 +20,10 @@
  *     --reviewer '<actual runtime/model>' --a2 true ...
  *
  *   node .claude/scripts/0a-metrics.mjs record --review-mode blocked \
- *     --blocked-reason 'astra quota exhausted' --diff-lines 120 --diff-files 3 \
+ *     --blocked-reason 'opus quota exhausted' --diff-lines 120 --diff-files 3 \
  *     --critical 0 --major 1 --minor 0 --info 0 --a2 true \
  *     --screenshot skip --doc skip
- *   （blocked：gate 觸發但沒跑完——兩格 reviewer（Astra／Fable）皆不可用等
+ *   （blocked：gate 觸發但沒跑完——Opus 5.5 reviewer 不可用（配額耗盡／量不到）等
  *   外部原因。reviewer 可省；findings 記已觀察到的部分。）
  *
  * Legacy rows remain readable and the historical --codex interface remains supported:
@@ -53,7 +53,7 @@ const ANOMALY_KINDS = ['td246-fallback', 'verdict-missing', 'large-change-rerun'
 // 含 `+fable` 的舊 mode 隨跨模型裁決一起退役：歷史列仍由 summary 讀得出，
 // 但新記錄不得再宣告一個不存在的裁決者組合。
 const CODEX_MODES = ['astra-low', 'astra-medium', 'xhigh', 'fast-path-skip']
-// `blocked`：gate 觸發但因外部原因（如兩格 reviewer Astra／Fable 皆不可用）沒跑完
+// `blocked`：gate 觸發但因外部原因（如 Opus 5.5 reviewer 配額耗盡）沒跑完
 // ——review-policy 要求保留 pending review 記錄，不能讓它從遙測上消失（TD-1010）。
 const REVIEW_MODES = ['independent', 'escalated', 'fast-path-skip', 'blocked']
 
@@ -162,7 +162,7 @@ function modeConfig(args) {
   for (const key of RETIRED_ARGS) {
     if (args[key] !== undefined) {
       die(
-        `--${key} 已隨跨模型裁決退役——0-A.2 是合格 reviewer 的深度複審（格別每輪依可用性重判：Astra medium 優先、不可用時 Fable medium），沒有裁決者欄位`,
+        `--${key} 已隨跨模型裁決退役——0-A.2 是合格 reviewer（Claude Opus 5.5（effort: medium））的 fresh-context 深度複審，沒有裁決者欄位`,
       )
     }
   }

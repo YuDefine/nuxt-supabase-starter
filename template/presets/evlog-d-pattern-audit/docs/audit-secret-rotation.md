@@ -22,7 +22,7 @@ evlog signed chain 的 secret 不應永遠不換。rotation 觸發條件 + 完�
 ```
 1. 預備新 secret
 2. 寫入新版本（雙 secret 期：舊與新都接受）
-3. propagate 到 5 consumer + 重啟 Worker
+3. 部署到有裝 O1 的 consumer + 重啟 Worker
 4. monitor diff-cron false-positive 直到歸零
 5. 最後 cutover：移除舊 secret
 ```
@@ -87,7 +87,7 @@ EVLOG_AUDIT_SECRET_V1=0xabc...     # = 舊，cron 驗 v1 row 用
 EVLOG_AUDIT_SECRET_V2=0xdef...     # = 新（同 EVLOG_AUDIT_SECRET）
 ```
 
-### Step 3：propagate 到 5 consumer + 重啟 Worker
+### Step 3：部署到有裝 O1 的 consumer + 重啟 Worker
 
 ```bash
 # clade 端先 publish 含新 secret env schema 的版本
@@ -95,8 +95,8 @@ cd ~/offline/clade
 node scripts/publish.ts patch
 node scripts/propagate.ts
 
-# perno（O1 適用）：
-cd ~/offline/perno
+# 每個裝了 O1 的 consumer（例：perno）：
+cd ~/offline/<consumer>
 # 設新 env：
 wrangler secret put EVLOG_AUDIT_SECRET     # 貼新 secret
 wrangler secret put EVLOG_AUDIT_SECRET_V1  # 貼舊 secret（cron 驗 v1 用）
@@ -106,7 +106,7 @@ wrangler secret put EVLOG_AUDIT_SECRET_V2  # 貼新（與 EVLOG_AUDIT_SECRET 相
 pnpm build && wrangler deploy
 ```
 
-非 perno consumer 不裝 O1，跳過。
+沒裝 O1 的 consumer 跳過。
 
 ### Step 4：監控 diff-cron false-positive
 
@@ -165,7 +165,7 @@ wrangler secret delete EVLOG_AUDIT_SECRET_V1
 
 - [ ] 新 secret 已 generate 並安全儲存（1Password / Vault）
 - [ ] secret version 在 hub.json / env 都遞增
-- [ ] 5 consumer（實際只 perno）的 worker 已重 deploy
+- [ ] 裝了 O1 的 consumer 的 worker 已重 deploy
 - [ ] diff-cron.ts 的 SECRETS map 含舊與新
 - [ ] 24 小時觀察 audit_chain_drift 無新 row
 - [ ] 30+ 天後 cutover：移除舊 secret env + diff-cron map entry

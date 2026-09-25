@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# 🔒 LOCKED — managed by clade · Source: vendor/scripts/pre-push/runner.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/pre-push/runner.sh
 # CLADE:VENDOR-SCRIPT
 #
 # clade — pre-push runner
@@ -154,6 +153,187 @@ relevance_globs() {
   esac
 }
 
+# --- nuxt-typecheck 專屬：clade managed `.ts` 不算 typecheck-relevant ---------------
+# propagate 推的「升級 clade」sync commit 幾乎每筆都改到 `.ts`，但那些是 `scripts/**`、
+# `vendor/{scripts,review-rules,...}/**` 這類 clade 投影檔：consumer 的 `.nuxt/tsconfig.json`
+# include 不含它們（2026-09-24 實測 W-2026-09-16-delivery-throughput H3），近 25 筆 sync commit
+# 有 72–84% 的 typecheck-relevant 檔只落在這類，卻每筆都排一次 heavy slot 跑完整 typecheck。
+#
+# managed 的判定依據是**投影時注入的 LOCKED banner**（`scripts/lib/vendor-banner.ts`
+# `VENDOR_BANNER_SIGNATURE`），不是源檔手寫的 `// CLADE:VENDOR-SCRIPT`：後者約 1/3 vendor
+# script 沒有、也沒有任何程式讀它；而 sync-vendor 對每一支可註解的非 snippet 投影檔都注 banner，
+# 所以帶手寫 marker 的檔同時也帶 banner，只認 banner 不漏任何一支。也不用投影 state：
+# vendor 投影沒有逐檔 ownership state，`.clade/flow/last-propagate.json` 只記最後一輪。
+#
+# 例外（NEVER 跳過）：被 nuxt.config.* / vitest.config.* import 的檔（及其相對 import 閉包）——
+# 它們在 typecheck 圖內（現為 vendor/doctor-shared/**、vendor/oxc-shared/**）。這份清單
+# **每次執行期從 config 的 import 推導**，NEVER 寫死：config 改 import，清單自己跟著變。
+#
+# 任何一步判不出來（讀不到 config、無法解析的 import、banner 讀不到）一律當 relevant →
+# 照跑 typecheck（= 本段存在之前的行為）。NEVER 讓判定失敗變成 skip。
+# CLADE_PREPUSH_NO_MANAGED_SKIP=1 關掉本段（debug / 回退用）。
+MANAGED_BANNER='🔒 LOCKED — managed by clade · Source: '
+MANAGED_IGNORED_N=0
+CONFIG_CLOSURE=''        # 換行分隔、以 git toplevel 為基準的路徑；前後各一個換行方便 case 比對
+CONFIG_CLOSURE_STATE=''  # '' = 未算；ok；fail
+GIT_TOPLEVEL=''          # is_ignorable_managed_ts 首次需要時才算
+PUSH_TIP=''              # 本次 push 唯一的 branch tip；'-' = 多個或算不出（不跳過）
+
+# 路徑正規化（處理 . / ..，不碰檔案系統；不依賴 GNU realpath -m，macOS bash 3.2 也能跑）。
+# 超出 repo root 回 1。
+normalize_rel_path() {
+  local in="$1" part out=''
+  local -a parts=() stack=()
+  IFS='/' read -ra parts <<< "$in"
+  for part in "${parts[@]}"; do
+    case "$part" in
+      '' | .) ;;
+      ..)
+        [[ ${#stack[@]} -gt 0 ]] || return 1
+        unset "stack[$((${#stack[@]} - 1))]"
+        stack=("${stack[@]+"${stack[@]}"}")
+        ;;
+      *) stack+=("$part") ;;
+    esac
+  done
+  for part in "${stack[@]+"${stack[@]}"}"; do
+    out="${out:+$out/}$part"
+  done
+  printf '%s\n' "$out"
+}
+
+# 相對 specifier → 實際存在的檔（相對 PROJECT_ROOT）。回 1 = 解析不到；回 2 = 在 repo 外。
+resolve_import() {
+  local from_dir="$1" spec="$2" base cand
+  if [[ -n "$from_dir" ]]; then
+    base="$(normalize_rel_path "$from_dir/$spec")" || return 2
+  else
+    base="$(normalize_rel_path "$spec")" || return 2
+  fi
+  [[ -n "$base" ]] || return 1
+  for cand in "$base" "$base.ts" "$base.mts" "$base.cts" "$base.tsx" "$base.js" "$base.mjs" \
+    "$base.cjs" "$base/index.ts" "$base/index.mts" "$base/index.js" "$base/index.mjs"; do
+    if [[ -f "$cand" ]]; then
+      printf '%s\n' "$cand"
+      return 0
+    fi
+  done
+  # TS ESM 慣例：`import './x.js'` 指向 x.ts
+  case "$base" in
+    *.js) cand="${base%.js}.ts" ;;
+    *.mjs) cand="${base%.mjs}.mts" ;;
+    *.cjs) cand="${base%.cjs}.cts" ;;
+    *) return 1 ;;
+  esac
+  [[ -f "$cand" ]] || return 1
+  printf '%s\n' "$cand"
+}
+
+# 從 nuxt.config.* / vitest.config.* 出發，沿相對 import 走完閉包，結果寫進 CONFIG_CLOSURE。
+# 回 1 = 判不出來（呼叫端 MUST 當 relevant 照跑）。
+compute_config_closure() {
+  local prefix f content spec dir resolved rc n=0
+  local -a queue=() specs=()
+  prefix="$(git rev-parse --show-prefix 2>/dev/null)" || return 1
+  CONFIG_CLOSURE=$'\n'
+  for f in nuxt.config.* vitest.config.*; do
+    [[ -e "$f" ]] || continue
+    queue+=("$f")
+    CONFIG_CLOSURE+="${prefix}${f}"$'\n'
+  done
+  while [[ ${#queue[@]} -gt 0 ]]; do
+    f="${queue[0]}"
+    queue=("${queue[@]:1}")
+    n=$((n + 1))
+    # 閉包爆量（config import 進整個 app）就不再是「少數例外」，判不出來 → 照跑
+    [[ "$n" -le 500 ]] || return 1
+    content="$(cat -- "$f")" || return 1
+    dir="$(dirname -- "$f")"
+    [[ "$dir" == '.' ]] && dir=''
+    # 兩種來源，各自的誤判面不同：
+    #   ① 靜態 import／re-export 陳述句：只認**行首**是 `import` / `export` / `}` 的行。
+    #       config 常在字串／template literal 裡**產生**程式碼（<consumer-a> 的
+    #       `` `import { baseURL } from '#internal/nuxt/paths'` ``、<consumer-d> 說明字串裡的
+    #       `import logo from '@/assets/...'`），那些行首是引號，不是 import。註解行
+    #       （preset 的 usage 範例 `//   import ... from './vendor/...'`）同樣不在行首規則內。
+    #   ② 任意位置的 `import('...')` / `require('...')`：只追**相對** specifier。
+    specs=()
+    while IFS= read -r spec; do
+      [[ -n "$spec" ]] && specs+=("$spec")
+    done < <(
+      printf '%s\n' "$content" \
+        | grep -E "^[[:space:]]*(import|export|\})[^'\"]*['\"][^'\"]+['\"]" \
+        | grep -E "^[[:space:]]*import[[:space:]]*['\"]|from[[:space:]]*['\"]" \
+        | sed -E "s/^.*(from[[:space:]]*|import[[:space:]]*)['\"]([^'\"]+)['\"].*$/\2/" || true
+      printf '%s\n' "$content" \
+        | grep -vE '^[[:space:]]*(//|/\*|\*)' \
+        | grep -oE "(import|require)[[:space:]]*\([[:space:]]*['\"]\.{1,2}/[^'\"]+['\"]" \
+        | sed -E "s/^[^'\"]*['\"]([^'\"]+)['\"].*$/\1/" || true
+    )
+    for spec in "${specs[@]+"${specs[@]}"}"; do
+      case "$spec" in
+        ./* | ../*) ;;
+        # 靜態 import 的 alias / 絕對路徑 / subpath import：本段不重做 bundler 的解析 → 判不出來
+        '~'* | @/* | '#'* | /*) return 1 ;;
+        # 裸 package specifier（含 node:）不在 repo 內
+        *) continue ;;
+      esac
+      rc=0
+      resolved="$(resolve_import "$dir" "$spec")" || rc=$?
+      [[ "$rc" == 2 ]] && continue  # repo 外的檔不可能出現在本次 diff
+      [[ "$rc" == 0 ]] || return 1
+      case "$CONFIG_CLOSURE" in
+        *$'\n'"${prefix}${resolved}"$'\n'*) continue ;;
+      esac
+      CONFIG_CLOSURE+="${prefix}${resolved}"$'\n'
+      case "$resolved" in
+        *.ts | *.mts | *.cts | *.tsx | *.js | *.mjs | *.cjs) queue+=("$resolved") ;;
+      esac
+    done
+  done
+  return 0
+}
+
+# 回 0 = 這個 changed path（以 git toplevel 為基準）是可忽略的 managed `.ts`。
+is_ignorable_managed_ts() {
+  local p="$1" head
+  case "$p" in
+    *.ts | *.tsx | *.mts | *.cts) ;;
+    *) return 1 ;;
+  esac
+  # 路徑相對 git toplevel（PROJECT_ROOT 可能是子目錄，如 starter 的 template/）；只算一次。
+  if [[ -z "$GIT_TOPLEVEL" ]]; then
+    GIT_TOPLEVEL="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+  fi
+  # 只有 project 的 scripts/、vendor/ 底下在 app／server 的 typecheck 圖外（H3）。帶 banner 的投影
+  # 也會落在 app/utils、server/plugins（starter 的 evlog-*），那些 NEVER 跳過。
+  local prefix="${PROJECT_ROOT#"$GIT_TOPLEVEL"}"
+  prefix="${prefix#/}"
+  [[ -n "$prefix" ]] && prefix="$prefix/"
+  case "$p" in
+    "${prefix}scripts/"* | "${prefix}vendor/"*) ;;
+    *) return 1 ;;
+  esac
+  # banner 讀被 push 的 blob，不讀 working tree（pushed ref 不一定是 HEAD、樹可能 dirty）。
+  # 本次 push 只有一個 branch tip 時才判；多 tip 或讀不到 fail-open。
+  if [[ -z "$PUSH_TIP" ]]; then
+    PUSH_TIP="$(awk -v z="$ZERO_SHA" '$2 != z && $3 !~ /^refs\/tags\// { print $2 }' "$REFS_FILE" 2>/dev/null | sort -u)"
+    [[ -n "$PUSH_TIP" && "$PUSH_TIP" != *$'\n'* ]] || PUSH_TIP='-'
+  fi
+  [[ "$PUSH_TIP" != '-' ]] || return 1
+  # NEVER 寫成 `git show | head | grep -q`：pipefail 下提早關 pipe 會讓上游吃 SIGPIPE 判失敗。
+  head="$(git show "$PUSH_TIP:$p" 2>/dev/null | head -n 3)" || true
+  [[ "$head" == *"$MANAGED_BANNER"* ]] || return 1
+  if [[ -z "$CONFIG_CLOSURE_STATE" ]]; then
+    if compute_config_closure; then CONFIG_CLOSURE_STATE=ok; else CONFIG_CLOSURE_STATE=fail; fi
+  fi
+  [[ "$CONFIG_CLOSURE_STATE" == ok ]] || return 1
+  case "$CONFIG_CLOSURE" in
+    *$'\n'"$p"$'\n'*) return 1 ;;
+  esac
+  return 0
+}
+
 # 回 0 = 這支 check 與本次 push 相關（要跑）；回 1 = 無關（可 skip）。
 check_is_relevant() {
   local name="$1" g p rc
@@ -165,7 +345,14 @@ check_is_relevant() {
     [[ -n "$p" ]] || continue
     for g in "${globs[@]}"; do
       # shellcheck disable=SC2053  # 右側刻意不加引號：這裡要的就是 glob 比對
-      [[ "$p" == $g ]] && return 0
+      if [[ "$p" == $g ]]; then
+        if [[ "$name" == 'nuxt-typecheck' && -z "${CLADE_PREPUSH_NO_MANAGED_SKIP:-}" ]] \
+          && is_ignorable_managed_ts "$p"; then
+          MANAGED_IGNORED_N=$((MANAGED_IGNORED_N + 1))
+          break
+        fi
+        return 0
+      fi
     done
   done < "$CHANGED_FILE"
 
@@ -200,8 +387,12 @@ if [[ "$PATH_FILTER_ACTIVE" == '1' ]]; then
   echo "[clade pre-push] path filter: 本次 push 有 ${changed_n} 個 changed path"
   for i in "${!CHECKS[@]}"; do
     name="${CHECKS[$i]}"
+    MANAGED_IGNORED_N=0
     if ! check_is_relevant "$name"; then
       SKIP_MSG[$i]="⏭  [clade pre-push] $name skipped — 本次 push 的 ${changed_n} 個 changed path 不含 $(relevance_globs "$name")"
+      if [[ "$MANAGED_IGNORED_N" -gt 0 ]]; then
+        SKIP_MSG[$i]+="（另有 ${MANAGED_IGNORED_N} 個 clade managed .ts 已排除：帶 LOCKED banner、不在 nuxt/vitest config 的 import 圖內；CLADE_PREPUSH_NO_MANAGED_SKIP=1 可關閉）"
+      fi
     fi
   done
 else

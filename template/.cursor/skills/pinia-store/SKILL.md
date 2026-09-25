@@ -92,11 +92,4 @@ export const userPreferencesStore = defineStore('preferences', ...)
 | ------------------------------------------------ | -------------------------------------- |
 | [references/patterns.md](references/patterns.md) | Plugin 自動初始化、Composable 包裝模式 |
 
-## 檢查清單
-
-- [ ] Composition API 語法（`defineStore('id', () => {...})`）
-- [ ] 命名遵循 `use<Name>Store`
-- [ ] 回傳所有 state refs，業務更新集中在 actions
-- [ ] 完整錯誤處理（try/catch + error state）
-- [ ] 需要全域初始化則建立對應 Plugin
-- [ ] 不使用 `useState`
+需要全域初始化時建立對應 Plugin（見 references/patterns.md）。

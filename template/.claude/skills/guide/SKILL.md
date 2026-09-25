@@ -63,14 +63,14 @@ skill 由 consumer manifest 的 `modules` 決定裝哪些（canonical `.clade/ma
 - **問規格內容** → 直接讀 `specs/truth/**`（對非 owner skill 唯讀）與該 plan package 的 `spec.md`
 - **安全視角掃 changed code** → `/security-review`
 
-## 歸檔兩兄弟（已停寫）
+## 歸檔
 
 `/review archive` 與 `/review screenshots` **不再**是必做 archive：
 
-- `/review archive` — **停寫** `docs/manual-review-archive.md`；完成項留在 work package
-- `/review screenshots` — **停 rotate**；不要把 topic 搬進 `_archive/`
+- `/review archive` — 不寫 `docs/manual-review-archive.md`；完成項留在 work package
+- `/review screenshots` — 不 rotate；不要把 topic 搬進 `_archive/`
 
-stash-dropped append 已停（drop 仍走機械 gate；替代墓碑載體 **NEEDS CLARIFICATION**）。`retired-work.jsonl` 仍是 live 機器謂詞，本輪不停寫（替代謂詞 **NEEDS CLARIFICATION**）。
+`retired-work.jsonl` 是 live 機器謂詞，照常寫入。
 
 ## 品質 / 稽核類（standalone）
 
@@ -90,5 +90,5 @@ stash-dropped append 已停（drop 仍走機械 gate；替代墓碑載體 **NEED
 ## Commit 相關邊界
 
 - 一般 commit 一律 `/commit`（多閘門品質流程）
-- plan package 檔案的專屬 commit **同樣走 `/commit`**，在 argument 寫明「只 commit `specs/plans/<NNN-slug>/` 與該工作觸動的實作檔」——`/spectra-commit` 等 spectra 家族已自 clade 移除（見 [[proactive-skills]] § Sub-skill 禁用清單），**NEVER** 改派
+- plan package 檔案的專屬 commit **同樣走 `/commit`**，在 argument 寫明「只 commit `specs/plans/<NNN-slug>/` 與該工作觸動的實作檔」——`/spectra-commit` 等 spectra 家族在 [[proactive-skills]] § Sub-skill 禁用清單上，不改派
 - 兩者都用 `git commit --only` 隔離別 session 的 staged 內容——不要繞過 skill 手打 `git add + git commit`

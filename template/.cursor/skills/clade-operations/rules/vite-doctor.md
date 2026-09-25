@@ -26,8 +26,7 @@ vite-doctor 掃描 Nuxt/Vue/Vite/Nitro 專案，在 review 前偵測 hydration�
 
    import **NEVER 帶 `.ts` 副檔名** —— `nuxt.config.ts` 在 `nuxi typecheck` 的 program 內，
    帶副檔名在 Nuxt 4.4.x 是 `TS5097`，會擋死**所有** push（見 `rules/core/code-style.md`
-   § 三條語法限制）。本行 2026-08-29 修正：原範例寫的是 `preset.ts`，與 preset 檔頭自己的
-   警告相反。
+   § 三條語法限制；preset 檔頭同樣警告）。
 
    **接上 module 才算數，vendored 了 preset 不算。** Doctor CLI 只從 Nuxt
    manifest 的 `doctorConfig` 讀 rule 設定；module 沒接，那份 preset 就只是一個沒有人 import

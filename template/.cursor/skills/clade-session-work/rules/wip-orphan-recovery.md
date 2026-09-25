@@ -19,9 +19,7 @@ worktree 有未 commit 的 user 改動，且原工作已確認結束、沒有其
 | 原工作已確認結束，沒有其他 owner，且本次接手在授權範圍內 | orphan：進下方 SOP 判完成度與收尾 |
 | 只有過期／缺席 claim、startup event、舊 task 自報或查不到 presence | unknown：只讀 Git／task／ownership 證據並記錄待確認事項；保留 WIP，不 commit、restore、discard 或自行接管 |
 
-Native startup event 與 `project-context` 之類的 context handler 不承載 owner 已結束的證据。**NEVER** 先把 unknown 命名為 orphan，再以測試全綠補成接管授權；品質驗證與所有權是兩個 gate。
-
-**核心問題**：commit 是唯一的完成度標記，但 orphan WIP 定義就是「還沒 commit」。session 一死，這批改動成黑箱——新 session 無從得知「做到哪、做完沒、為什麼這樣改、是不是半成品被打斷」。只能靠下方 SOP 逐一考古推斷。
+Native startup event 與 `project-context` 之類的 context handler 不承載 owner 已結束的證據。**NEVER** 先把 unknown 命名為 orphan，再以測試全綠補成接管授權；品質驗證與所有權是兩個 gate。
 
 ## 兩個偵測入口
 
@@ -29,8 +27,6 @@ Native startup event 與 `project-context` 之類的 context handler 不承載 o
 | --- | --- | --- |
 | 提醒（Layer 0） | Stop hook `stop-wip-guard.sh` | session 結束前 working tree 有 user WIP → **warn**（不阻擋），提醒有未 commit 改動。多 session 並行共用 working tree 是常態，dirty file 可能屬於別的 active session，不應 block |
 | 事後（Layer 2） | `handoff-drift-scan.ts` Trigger 5 `orphan-uncommitted-wip` | session-start drift scan 偵測「worktree dirty + claim 無效/過期」→ 列出待判 ownership 的候選；訊號名稱不等於 orphan 裁決。**有 active claim 的 dirty worktree 不報**（不擾動 live session） |
-
-兩層共用 `wip-dirty.ts` 的 `userDirtyPaths()`（single-source projection filter，與 `wt-helper merge-back` 同源，避免重刻 `LOCKED_PROJECTION_RE` 漂移）。
 
 表中的自動觸發描述適用於已安裝、啟用並觀測到具名 handler 執行的產品入口；現有 Claude Stop／SessionStart 接線不代表 Codex／Cursor 已有相同接線。沒有該證據的入口，在收尾時從目標 repo 執行 `node scripts/wip-dirty.ts`，接手時執行 `node scripts/handoff-drift-scan.ts --json` 並讀取結果；clade 自身的兩支路徑為 `vendor/scripts/`。前者 exit 1 表示有 user WIP，後者為 informational、exit 0 不代表沒有 finding。helper 缺席或執行失敗時保留「未驗證」狀態，再以本節接手 SOP 的 Git 與 claim 即時證據判斷。
 
@@ -65,10 +61,4 @@ Stop hook `stop-wip-guard.sh` warn「working tree 有未 commit 改動」時，*
 1. **commit 它**（完成 + 驗過 + 無危險項 → selective commit per 上方 SOP 步驟 6）
 2. **寫 HANDOFF**（半成品 / 不確定 → 升 `HANDOFF.md` 或 `tasks/<id>.md` 留接手脈絡）
 
-**NEVER** 把 untracked WIP 檔（典型：`tasks/todo.md`、新建 doc）加進 `.gitignore` 來「消掉 warn 噪音」——那是把**該入庫的東西藏起來**，方向完全反了。warn 的目的是提醒「有東西還沒收尾」，加 gitignore 等於拔掉警報器而非處理火源。
-
-> **判斷準則**：想加 `.gitignore` 時 STOP 自問「這個檔本來就該 ignore（build artifact / runtime state / secret），還是我只是想讓 warn 閉嘴？」後者一律走 commit 或 HANDOFF。對應 [[commit]] § Step 3（untracked 非 ignored 一律納入分組）+ Step 2 `.gitignore` 變更處置（只允許 clade 管理的 artifact ignore 條目）。
-
-## 為什麼這條 rule 存在
-
-2026-06-01 一個 session 內連續撞到兩個實例：clade working tree 反覆冒出別 session 未 commit 的 fix / pitfall / script 改動（在 session 進行中流動消失）；某 worktree 有 9 檔 demo WIP（完成度不明）+ 一個危險的跨 change 目錄誤刪（若 commit 會破壞另一個 active change）。全靠手動考古（git status → 半成品掃描 → fmt/lint → git log 脈絡 → 危險項 restore）才釐清。本 rule 把該流程固化，避免每次重新發明 + 防止盲目 commit 半成品 / 跨 change 污染。
+**NEVER** 把 untracked WIP 檔（典型：`tasks/todo.md`、新建 doc）加進 `.gitignore` 來消掉 warn。只有本來就該 ignore 的檔（build artifact / runtime state / secret）才進 `.gitignore`，規則見 [[commit.detail]] § Commit 分組與訊息規範 的 `.gitignore` 條。

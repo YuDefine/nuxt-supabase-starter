@@ -87,10 +87,10 @@ codex-exec gate: 派工一律走 Pi dispatcher，NEVER 直接執行 codex exec /
   node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
     --route <routing-table|claude-delegate-sub|fallback-chain|manual> \
     --tier-basis <table-row|five-conjunct|adjudication|delegate-sub|quota-fallback|manual> \
-    --table-row <row> --model <astra|sol|luna|gemini|grok-xai|…> --effort <low|medium|high|xhigh|max|ultra> \
+    --table-row <row> --model <sol|gemini|grok-xai|grok-cursor> --effort <xhigh|high> \
     --label <descriptive-label>
 
-Astra 僅限 planning / decision / review；generic Astra 另帶 --task-role 與 readonly access。一般 implementation 用 Luna、複雜/repair 用 Sol。
+Sol／Grok 一律 xhigh、Gemini 一律 high；Astra／Luna 已禁用（2026-09-24）。非 UI implementation／decision／planning 用 Sol。
 判準與 Routing Table：rules/core/agent-routing.md § Routing Table
 派工流程：rules/core/agent-routing.pi-watch-protocol.md § Codex 派工的標準流程
 

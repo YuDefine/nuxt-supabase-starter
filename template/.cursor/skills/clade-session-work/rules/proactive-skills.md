@@ -25,7 +25,7 @@
 
 | 情境 | 觸發 | 說明 |
 |---|---|---|
-| 收到新需求，要開始一次迭代 | `/specify` | 建 `specs/plans/NNN-<slug>/`，`NNN` 取現有最大加一 |
+| 收到新需求，要開始一次迭代 | `/specify` | 建 plan package，目錄命名依 `/specify` 的命名判準 |
 | 需求來源是外部文件（Notion URL、PDF、貼文） | 先讀取內容 → `/specify` | 提取結構化需求後才建 plan package |
 | `spec.md` 有模糊用詞（TBD、矛盾、缺驗收標準） | `/clarify-over-specs` | 逐項澄清，更新 `spec.md` |
 | 驗收標準要寫成可執行 Gherkin | `/spec-by-example` → `/ui-plan` | 產 `features/acceptance/**` 與靜態雛形 |
@@ -64,7 +64,7 @@
 | Sub-skill | 規則 | 替代方式 |
 |---|---|---|
 | `spectra-commit` | **NEVER** 主動觸發 | 走 `rules/core/commit.md` 規範的標準 commit 工序（含 hooks / 訊息格式） |
-| `spectra-propose` | **NEVER** 主動觸發 | `/specify` 建 `specs/plans/NNN-<slug>/`；純技術工作走 `tasks/<date>-<slug>.md` |
+| `spectra-propose` | **NEVER** 主動觸發 | `/specify` 建 plan package；純技術工作走 `tasks/<date>-<slug>.md` |
 | `spectra-apply` | **NEVER** 主動觸發 | `/implement` 按 plan package 的 `tasks.md` 執行 |
 | `spectra-archive` | **NEVER** 主動觸發 | `flow` 卡標 done ＋ `/commit`；plan package 本身就是歷史，不搬動 |
 | `spectra-discuss` | **NEVER** 主動觸發 | `/clarify-over-specs`（規格模糊）或 `docs/decisions/**`（架構取捨） |
@@ -72,21 +72,15 @@
 | `spectra-analyze` / `spectra-clarify` / `spectra-ask` / `spectra-debug` | **NEVER** 主動觸發 | `/clarify-over-specs`、`/system-analysis`、直接讀 `specs/truth/**` |
 | `opsx` | **NEVER** 主動觸發 | 上列各條的替代入口 |
 
-**原因**：clade 的 SDD 層自 2026-09-07 起是 SpecFormula ＋ aixbdd（[[specformula]] / [[aixbdd-workflow]]），spectra / openspec 生命週期已整批退場，對應的 hook、script 與 skill 都已移除。consumer 若由上游 `spectra init` 帶入這些 skill 仍適用本清單。**每一支**清單上的 skill 都 **NEVER** 主動觸發，不是只有 `spectra-commit`。
+**原因**：clade 的 SDD 層是 SpecFormula ＋ aixbdd（[[specformula]] / [[aixbdd-workflow]]）；本清單是給由上游 `spectra init` 帶入這些 skill 的 consumer 用的。
 
 **禁用不只管「不觸發」，也管「不引導」**——任何 skill / rule / snippet / script 輸出 NEVER 出現叫人去跑清單上那支 skill 的句子。合法與違規的語境分界表、audit 訊號與 REQUIRED 欄位在 [[proactive-skills.disabled-skill-guidance]]（path-scoped：碰 `rules/**` / `capabilities/**/skills/**` / `vendor/snippets/**` / `scripts/**` 時載入）。
 
 ## Scope Discipline
 
-所有 SDD / design workflow 都受 [`scope-discipline.md`](./scope-discipline.md) 約束：範圍外檔案不順手改、途中發現其他問題**不修但必登記**、未知變更先回報不自行清場、不得在 subagent 內執行 `git reset --hard` / `git checkout --` / `git clean`。
+所有 SDD / design workflow 都受 [[scope-discipline]] 約束：範圍外檔案不順手改、途中發現其他問題**不修但必登記**、未知變更先回報不自行清場、不得在 subagent 內執行 `git reset --hard` / `git checkout --` / `git clean`。
 
-登記出口：
-
-- 技術債 → `docs/tech-debt.md`（直接登記一條 `TD-NNN`，per [[follow-up-register]]）
-- 當前 session 未完 → `HANDOFF.md`
-- 未來工作 → repo 根目錄 `ROADMAP.md`
-- 規格漏項 → 停下回交 truth owner skill（`/dsl-refine` 等），**NEVER** 就地補寫
-- 架構決策 → `docs/decisions/**`
+登記出口（always-load 備份，完整表在 [[scope-discipline]]）：技術債 → per [[follow-up-register]]（未遷移 consumer 為 `docs/tech-debt.md` 的 `TD-NNN`）；當前 session 未完 → `HANDOFF.md`；未來工作 → `ROADMAP.md`；規格漏項 → 停下回交 truth owner skill，**NEVER** 就地補寫；架構決策 → `docs/decisions/**`。
 
 ## Handoff Hygiene
 
@@ -101,21 +95,15 @@
 
 `## 人工檢查` 的 checkbox **不能由 agent 自行代勾**。
 
-**四條契約全文在 [[proactive-skills.manual-review-entry]] § 人工檢查推進的四條契約**（path-scoped：碰 `tasks/**` / `specs/plans/**` 時載入）——auto-triage 先於引導、`flow gates --repo-only --require-empty` exit 3 才可交付、**NEVER** 自判有沒有等人的事、給人的 URL 恆為 `https://review-gui.<maintainer-domain>`。
-
-Auto-triage 的三類 pending item 路由、`[discuss]` item 的歸屬、面板 deep-link 格式與 fallback 模式見 [[proactive-skills.manual-review-entry]]（path-scoped：碰 `tasks/**` / `specs/plans/**` 時載入）。
+**四條契約全文在 [[proactive-skills.manual-review-entry]] § 人工檢查推進的四條契約**（path-scoped：碰 `tasks/**` / `specs/plans/**` 時載入）——auto-triage 先於引導、`flow gates --repo-only --require-empty` exit 3 才可交付、**NEVER** 自判有沒有等人的事、給人的 URL 恆為 `https://review-gui.<maintainer-domain>`。同檔另有 auto-triage 路由、`[discuss]` 歸屬與 deep-link 格式。
 
 ### Dev Server Auto-Spawn（agent 自起，不要叫 user cd）
 
 詳見 [[proactive-skills.dev-server-spawn]]（path-scoped，碰 `scripts/dev-session*` / `consumer-meta.json` / `nuxt.config.*` 時載入）。核心 one-liner：agent 自己起 dev server，**MUST** 經 `vendor/scripts/dev-session.ts`（durability=herdr），**NEVER** 裸 `nuxt dev` / `pnpm dev` / background execution。
 
-## Review Tiers
+## Review Tiers / Screenshot Strategy
 
-詳見 [[review-tiers]]。
-
-## Screenshot Strategy
-
-詳見 [[screenshot-strategy]]。
+詳見 [[review-tiers]]、[[screenshot-strategy]]。
 
 ### Browser Worktree Verify Auth（hard rule）
 

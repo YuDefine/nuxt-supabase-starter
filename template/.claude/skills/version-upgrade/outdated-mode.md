@@ -349,7 +349,7 @@ npm items 的
 
 ### O.2.1 寫 prompt 到 `/tmp/pi-upgrade-<pkg>-prompt.md`
 
-用 § Pi prompt templates · § A first-pass 模板（O.2.2 派 `--effort low`）。**MUST** 內含：
+用 § Pi prompt templates · § A first-pass 模板（O.2.2 派 GPT-6 Sol `--effort xhigh`）。**MUST** 內含：
 - `[DELEGATED-BY-CLAUDE-CODE]` marker（第一行，per [[agent-routing.pi-watch-protocol]] § Runtime Gate）
 - 目標 package 名 + current version → target version + **正確的 install flag**
 - Git Baseline 段（per pi-watch-protocol § Git Baseline；列當前 worktree 內所有 main fork 過來的 in-flight 變更 path，**不要列死**——每個 consumer / 每次 fork 都不同，主線跑 `git status --porcelain` 動態抓）
@@ -371,22 +371,22 @@ npm items 的
 - `adaptation`（任何版號差距）：typecheck + build + 相關 test
 - major（任何分類）：typecheck + build + 全 test + pi 自己決定要不要 smoke test
 
-### O.2.2 Dispatch background bash（first-pass，`--effort low`）
+### O.2.2 Dispatch background bash（first-pass，GPT-6 Sol xhigh）
 
 ```bash
 node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --brief /tmp/pi-upgrade-<pkg>-prompt.md \
   --cwd <worktree-path> \
-  --label version-upgrade-<pkg>-low \
-  --model grok-xai --effort low \
+  --label version-upgrade-<pkg>-first-pass \
+  --model sol --effort xhigh \
   --workspace-access mutation \
   --route routing-table --tier-basis table-row \
   --table-row version-upgrade-first-pass
 ```
 
-配額／provider 不可用時，本流程的路徑是 **Grok → Gemini 3.8 Flash（bare `--model gemini`，同 effort）→ 停止並回報 blocker**。Gemini 不可用時不再換模型；不接 Sonnet。此路徑由 `version-upgrade-first-pass`／`version-upgrade-research` row 識別，適用 Outdated 與 Fleet 的每一個 package dispatch。
+配額／provider 不可用時的執行鏈依 [[agent-routing.routing-table]]（2026-09-24）：`version-upgrade-first-pass` 只有 **GPT-6 Sol xhigh** 一跳，`version-upgrade-research` 是 **Gemini 3.8 Flash high → Grok 4.7 xhigh（`grok-xai`；mutation 跳過 `grok-cursor`）→ GPT-6 Sol xhigh**；兩列鏈走完都由**主線**接手，不是 blocker，也 **NEVER** 改派禁用 model。適用 Outdated 與 Fleet 的每一個 package dispatch。
 
-這是workspace mutation dispatch。Runtime quota／provider failure後，**每一個**retry都MUST逐字採用dispatcher payload的`next_step`（含`--retry-of`與`--workspace-access mutation`）；NEVER自行改派`grok-cursor`、`luna-cursor`或`sol-cursor`。Linked worktree visibility與writable sandbox是兩個predicate，擴大cwd不會讓Cursor carrier合法。
+這是workspace mutation dispatch。Runtime quota／provider failure後，**每一個**retry都MUST逐字採用dispatcher payload的`next_step`（含`--retry-of`與`--workspace-access mutation`）；NEVER自行改派`grok-cursor`或`sol-cursor`。Linked worktree visibility與writable sandbox是兩個predicate，擴大cwd不會讓Cursor carrier合法。
 
 
 派出 mutation executor 後，立刻記錄 owner / deadline（deadline 取值依 [[agent-routing]] § deadline 怎麼取），並依 [[agent-routing.pi-watch-protocol]] 的 keepalive 規約維持單一控制生命週期。控制 turn 只准使用當前 runtime adapter 提供的 bounded completion transport 讀取狀態、重排同一 inert control 或排 lifecycle intervention；**NEVER** 放 upgrade prompt、讀 output tail或做 package mutation。收到 terminal completion 後先 claim task id，再讀結果並停止 wakeup。
@@ -395,16 +395,16 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
 
 | 訊號 | 判定 | 下一步 |
 | --- | --- | --- |
-| `PHASE_RESULT: SUCCESS` + worktree 多了一個 `🧹 chore: wt upgrade-<pkg>-...` commit | 成功 | **主線在該 worktree 自己重跑一次 typecheck**（O.2.2 派的是 grok-xai，前置契約未滿足時 grok 會自報 `pass`——commit 存在不等於內容正確，per [[agent-routing]] 〔`spectra-phase-implementation`〕列的取證）。綠了才記錄到摘要、進下一 package |
-| `PHASE_RESULT: FAILURE` + pi 自報原因 | 失敗 → 進 O.2.4 升 research | 不馬上問使用者；先讓 pi `--effort high` 自己研究 |
-| Plan section 缺 / commit message format 不符 / scope drift | pi 漏跑硬指令 | 不升 research；直接 runtime-native question interface [重派 first-pass（同 `--effort low`）/ 升 research / 跳過 / 中止] |
+| `PHASE_RESULT: SUCCESS` + worktree 多了一個 `🧹 chore: wt upgrade-<pkg>-...` commit | 成功 | **主線在該 worktree 自己重跑一次 typecheck**（前置契約未滿足時 worker 會自報 `pass`——commit 存在不等於內容正確）。綠了才記錄到摘要、進下一 package |
+| `PHASE_RESULT: FAILURE` + pi 自報原因 | 失敗 → 進 O.2.4 升 research | 不馬上問使用者；先讓 research 列自己研究 |
+| Plan section 缺 / commit message format 不符 / scope drift | pi 漏跑硬指令 | 不升 research；直接 runtime-native question interface [重派 first-pass / 升 research / 跳過 / 中止] |
 | `fetch failed` / sandbox 拒絕 / 互動 prompt 卡住 | 環境問題 | per watch protocol 「介入觸發」，runtime-native question interface |
 
 **絕不**在 O.2.3 替 pi 修檔（會破壞 per-package commit boundary）。要修就 reset worktree commit 後重派。
 
 ### O.2.4 升 research（first-pass 失敗自動觸發）
 
-寫 prompt 到 `/tmp/pi-upgrade-<pkg>-research-prompt.md`，用 § Pi prompt templates · § B research 模板（`--effort high`）。**MUST** 內含：
+寫 prompt 到 `/tmp/pi-upgrade-<pkg>-research-prompt.md`，用 § Pi prompt templates · § B research 模板。**MUST** 內含：
 
 - `[DELEGATED-BY-CLAUDE-CODE]` marker
 - First-pass 派工的失敗 tail（≤ 50 行）+ pi 自報的失敗原因
@@ -413,9 +413,9 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
 - 一樣的 Git Baseline / Commit Authorization 硬指令
 - Commit message format `🧹 chore: wt upgrade-<pkg>-<from>→<to> (researched <issue-url-slug>)`
 
-Dispatch（同 O.2.2，保留 `--workspace-access mutation`，把 `--effort` 改成 `high`、`--table-row` 改成 `version-upgrade-research`）+ watch（high 跑得更久，但節奏不變：notification-only + 單一安全網 fallback，節奏以 [[agent-routing.pi-watch-protocol]] 的既定節奏為準）。
+Dispatch（同 O.2.2，保留 `--workspace-access mutation`，改成 `--model gemini --effort high --table-row version-upgrade-research`）+ watch（research 跑得更久，但節奏不變：notification-only + 單一安全網 fallback，節奏以 [[agent-routing.pi-watch-protocol]] 的既定節奏為準）。
 
-> **Opus 5.5 暫時覆寫期間**（[[agent-routing]] § Opus 5.5 暫時覆寫）：本步不派 pi，研究由 Opus 5.5 做；開任何 Opus session／subagent 一律 `--effort medium`，**NEVER** 把本步的 `--effort high` 原樣帶到 Opus（helper 會以 `usage_error` 擋下）。「失敗 → research」的升級在 Opus 下靠上面的 GitHub issues／releases／changelog 與 web search 研究，**不靠抬 effort**。
+「失敗 → research」的升級靠上面的 GitHub issues／releases／changelog 與 web search 研究，**不靠抬 effort**——effort 跟著 model 走（`TIER_EFFORT`），dispatcher 對其他值 exit 1。
 
 ### O.2.5 research 仍失敗 → runtime-native question interface
 

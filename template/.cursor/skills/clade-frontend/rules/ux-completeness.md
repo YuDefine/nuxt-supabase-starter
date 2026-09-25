@@ -74,7 +74,7 @@ paths: ['tasks/**', 'specs/plans/**', 'app/**/*.vue', 'packages/*/app/**/*.vue',
 
 ### `## Implementation Risk Plan`
 
-這個區塊的目的不是寫 implementation 細節，而是把**最容易拖到 `/commit` 才被追問的前提問題**提前回答。固定使用以下五行：
+把最容易拖到 `/commit` 才被追問的前提問題提前回答。固定使用以下五行：
 
 ```markdown
 ## Implementation Risk Plan
@@ -119,41 +119,20 @@ paths: ['tasks/**', 'specs/plans/**', 'app/**/*.vue', 'packages/*/app/**/*.vue',
 
 ## Route Coverage（write endpoint ↔ UI caller）
 
-**核心命題**：API 做了但 UI 忘了呼叫（或 UI 呼叫了但 API 不存在）= feature 只交付一半，可 silently 通過 review + archive。Propose 階段就對齊 endpoint × UI caller 是最低成本攔截點。
+API 做了但 UI 忘了呼叫 = feature 只交付一半。propose 階段的 `## Affected Entity Matrix` 每個 **write action**（create / update / delete / archive — 對應 POST / PATCH / PUT / DELETE）**MUST** 在 `## User Journeys` 有至少一個 journey 覆蓋該 action 的 UI 入口（按鈕、表單送出、swipe action 等）。
 
-### Hard rule
-
-propose 階段的 `## Affected Entity Matrix` 每個 **write action**（create / update / delete / archive — 對應 POST / PATCH / PUT / DELETE）**MUST** 在 `## User Journeys` 有至少一個 journey 覆蓋該 action 的 UI 入口（按鈕、表單送出、swipe action 等）。
-
-**NEVER**：`Affected Entity Matrix` 列了 `create` action 但 `User Journeys` 只有 list / detail 頁面（= 寫了 API 但沒規劃 UI 入口）。
-
-### Server-only allowlist
-
-以下 endpoint 免 UI caller 要求，但 **MUST** 在 `## Affected Entity Matrix` 的 action 列旁標 `server-only: <reason>`：
+Server-only 例外（**MUST** 在 action 列旁標 `server-only: <reason>`）：
 
 - **cron / scheduled job**：定時觸發，無 UI 入口（如 `retention/prune`）
 - **webhook receiver**：外部 service 回呼（如 payment callback）
 - **MCP / external API consumer**：被外部工具或別系統消費（如 `mcp-tokens`）
 - **internal-only / dev scaffold**：`server/api/_dev/**` 慣例路徑自動排除，不需宣告
 
-### 機械檢查
-
-- **Post-propose gate**：**已退場**（`post-propose-check.sh` Check 8 隨 spectra 生命週期退役，2026-09-07）。`Affected Entity Matrix` action 列 vs `User Journeys` URL path 的比對現在是**自檢**，見本檔 § REQUIRED 欄位那格
-- **Fleet audit**（advisory）：`node scripts/audit-route-coverage.ts --all-consumers` 掃既有 codebase write endpoint × UI caller 覆蓋率
-
-### 為什麼在 propose 階段
-
-- propose 已寫 `Affected Entity Matrix` + `User Journeys`，交叉比對邊際成本 ≈ 0
-- apply 階段才發現 = 回頭改 proposal + tasks.md + 重新 review，成本 10x
-- archive 階段才發現 = feature 已標完成，reopen 成本 100x
+比對是**自檢**，沒有 hook 替你跑；fleet audit（advisory）：`node scripts/audit-route-coverage.ts --all-consumers`。
 
 ## 必填 Fixtures / Seed Plan
 
-**核心命題**：資料展示 UI 沒 mock = review 階段拍空畫面 = 白做檢視。Fixtures 是 feature 完整性的一部分，必須在 propose 階段就規劃，不是 review 階段才補的事後工。
-
-### 觸發條件
-
-凡 `Affected Entity Matrix` 任一 entity 的 `Surfaces` 欄非空（= 有 UI 展示）— `tasks.md` **MUST** 包含 `## N. Fixtures / Seed Plan` section（N = 緊接最後一個功能區塊之後、`## N+1. Design Review` 之前）。
+資料展示 UI 沒 fixture = review 拍空畫面。凡 `Affected Entity Matrix` 任一 entity 的 `Surfaces` 欄非空（= 有 UI 展示）— `tasks.md` **MUST** 包含 `## N. Fixtures / Seed Plan` section（N = 緊接最後一個功能區塊之後、`## N+1. Design Review` 之前）。
 
 ### Section 範本
 
@@ -192,30 +171,17 @@ propose 階段的 `## Affected Entity Matrix` 每個 **write action**（create /
 - **適用**：list / table / dashboard / detail / 任何展示既有資料的頁面
 - **不適用**：純表單建立頁、登入頁、純 layout / 樣式調整、純後端 change（已有 `No user-facing journey` 宣告）
 
-### 為什麼前置在 propose 階段
-
-- propose 階段已經寫了 `Affected Entity Matrix`，多列一個 fixtures task 邊際成本極低
-- apply 階段執行 fixtures task = 自動產生持久化 mock，下次 reset DB 還在
-- review 階段 screenshot-review agent 拍前若仍偵測到空狀態，可立刻反查 tasks.md 是否有 Fixtures Plan，定位是「沒規劃」還是「沒執行」
-
 ### 與 `## 人工檢查` items 的交叉約束（hard rule）
 
 Fixtures Plan 不只服務「list / detail 頁面非空狀態」，**MUST** 同時涵蓋 `## 人工檢查` items inline 引用的所有具體 sample：
 
 - 每個 `[review:ui]` / `[verify:ui]` / `[verify:api]` / `[verify:e2e]` item 描述中引用的具體 sample（如 `WR-9001` / `card_uid=04A1B2C3` / 帶特定 status / role / branch 的 row）**MUST** 在 Fixtures Plan 對應 task 顯式寫進 seed
 - 對 status 互斥、多角色 authz、edge case branch 等情境，**MUST** 為每條被驗的 branch 各備一筆 sample（**NEVER** 用「review 時自己造一筆」「ad-hoc INSERT」「依賴 dev DB 既有資料」打發）
-- Sample 在 Fixtures Plan task 內 **MUST** 列出 stable identifier（business key / fixed PK / UUID），與人工檢查 item 描述中的引用一字不差
-- 完整 hard rule（禁止模糊指代、必填三件事、反面範例）見 `manual-review.md` 的「Pre-Review Data Readiness」
-
-**心智模型**：seed.sql 是 review fixture 的 single source of truth；人工檢查 item 是該 fixture 的 consumer。Consumer 引用的 key **MUST** 在 source 中存在，否則 review 階段 user 無路可走。
+- Sample 在 Fixtures Plan task 內 **MUST** 列出 stable identifier（business key / fixed PK / UUID），與人工檢查 item 描述中的引用一字不差（完整規約見 [[manual-review.data-readiness]] § Pre-Review Data Readiness）
 
 ## 必填 Backend-only Manual Review 規約
 
-**核心命題**：當 `## User Journeys` 為 `**No user-facing journey (backend-only)**` 時，`## 人工檢查` 區塊**不該**塞滿 Claude 自己就能跑的 evidence collection（SSH + psql + curl + 查表 + schema introspect）。那些屬於 apply 階段 Claude 該自驗的工作，不是使用者該人工做的。把它們塞進「人工檢查」會誤導使用者去 SSH 跑 SQL，且把真正該由使用者把關的項目（production 授權 / 商業判斷 / production 觀察）淹沒在技術 evidence 之中。
-
-### 觸發條件
-
-`proposal.md` 的 `## User Journeys` 為 `**No user-facing journey (backend-only)**` 宣告時，本規約**強制**生效。
+`## User Journeys` 為 `**No user-facing journey (backend-only)**` 時強制生效：agent 自己能跑的 evidence collection **NEVER** 塞給使用者，否則會淹沒真正該由人把關的項目。
 
 ### `## 人工檢查` 限制（hard rule）
 
@@ -225,9 +191,7 @@ backend-only change 的 `## 人工檢查` **MUST** 只保留 `[discuss]` kind �
 2. **商業判斷型**：Claude 無法自動判斷「結果是否合理」的觀察項，例如「drift 統計分布是否符合業務預期」「異常頻率是否在容忍範圍」「告警閾值需要調整嗎」
 3. **Production 觀察型**：deploy 後 N 小時 / N 天的 production-only soak window 觀察，無法在 dev / staging 提前完成
 
-上述三類 **MUST** 標 `[discuss]` marker；由交付前收尾 walkthrough（[[manual-review]] § `[discuss]` walkthrough）中 Claude 主動準備 evidence 與使用者討論。**user-facing 的工作也可對個別 item 標 `[discuss]`**（例：純資料修復 task 雖屬於含 UI 的工作，但實際驗證仰賴 evidence 而非 round-trip）— 此時不需 `**No user-facing journey**` 宣告，逐項標 marker 即可。
-
-**user-facing change 的主流 marker 是 `[verify:e2e]` / `[verify:api]` / `[verify:ui]`（agent 自跑，channel 由能不能用 spec / curl / final-state screenshot 重現決定）跟 `[review:ui]`（真的需要人）**。`[verify:auto]` 已 DEPRECATED，新項目 NEVER 使用（見 [[manual-review]] § Item Kind Marker）。三 kind 完整定義 + 「真的需要人」白名單 + 「agent 可自跑」白名單見 `manual-review.md`「Item Kind Marker」+「Kind 分類指引」。本檔的 backend-only 規約屬於 `[discuss]` 子集，不影響 user-facing change 的 kind 分流。
+上述三類 **MUST** 標 `[discuss]`，由交付前收尾 walkthrough（[[manual-review]] § `[discuss]` walkthrough）推進。user-facing 工作的個別 item 也可標 `[discuss]`；其餘 kind 分流見 [[manual-review]] § Item Kind Marker。
 
 **MUST NOT** 把以下項目放進 `## 人工檢查`（即使該 change 是 backend-only）：
 
@@ -256,7 +220,7 @@ backend-only change 的 `## 人工檢查` **MUST** 只保留 `[discuss]` kind �
 
 ### 例外宣告
 
-若 backend-only change 確實不需要任何使用者授權 / 商業判斷 / production 觀察，`## 人工檢查` 區塊**MUST** 寫成下列固定文字（archive gate 會把它視為合法宣告）：
+若 backend-only change 確實不需要任何使用者授權 / 商業判斷 / production 觀察，`## 人工檢查` 區塊**MUST** 寫成下列固定文字，讓讀者分得出這是刻意宣告：
 
 ```markdown
 ## 人工檢查
@@ -264,24 +228,19 @@ backend-only change 的 `## 人工檢查` **MUST** 只保留 `[discuss]` kind �
 _本 change 為 backend-only，所有驗證由 apply 階段 Claude 自跑（見 `## N. Backend Verification Evidence`）；deploy 前無使用者人工檢查項目。_
 ```
 
-**禁止**寫空 section 或刪掉 `## 人工檢查` 標題 — archive gate 會誤判為「漏寫」。
+**禁止**寫空 section 或刪掉 `## 人工檢查` 標題 — 那與「漏寫」無法區分。
 
 ### 反面範例（為什麼這條規則存在）
 
 ```markdown
-❌ 不該出現的人工檢查（<consumer-a> TD-044 原版，且未標 marker）：
+❌ 不該出現的人工檢查（且未標 marker）：
 
 - [ ] #1 Apply the TD-044 migration to dev LXC and verify `audit_signed_chain.signed_business_keys` exists as nullable `jsonb`. @no-screenshot
 - [ ] #2 Trigger or seed controlled drift rows on dev LXC, run `/_cron/audit-chain-diff`, and verify only-business-key drift inserts `business_keys_drift`. @no-screenshot
 - [ ] #3 On dev LXC, verify business-key plus other-field drift inserts both `business_keys_drift` and `evlog_hash_mismatch` for the same event. @no-screenshot
 ```
 
-問題：
-
-- 全部都是 SSH + psql + curl + `SELECT` 才能驗的事 → 是 evidence collection，不是人工檢查
-- 使用者在面板看到這 3 條完全不知道怎麼做（無從判斷是要登入哪台 host、跑什麼指令、查什麼結果）
-- 真正該人工做的事（如「deploy production 前最後確認」「24h soak 後檢查 drift 是否爆量」）反而沒寫
-- 缺 `[review:ui]` / `[discuss]` marker；Default Kind Derivation Rule 會把它們推為 `[discuss]`（因 backend-only），但寫作者**MUST**顯式標 marker 而非依賴 fallback
+（全是 evidence collection；真正該人做的 soak 觀察與 deploy 授權反而沒寫；也缺 marker。）
 
 ```markdown
 ✅ 修正版：evidence collection 移到 `## N. Backend Verification Evidence`，
@@ -291,28 +250,6 @@ _本 change 為 backend-only，所有驗證由 apply 階段 Claude 自跑（見 
 
 - [ ] #1 [discuss] 24h soak 後確認 `business_keys_drift` count 是否在預期範圍 @no-screenshot
 - [ ] #2 [discuss] Production deploy 授權 — confirm migration M-042 已驗證且預備好回滾路徑 @no-screenshot
-```
-
-### 與其他規則的關係
-
-- `manual-review.md`：定義 `## 人工檢查` checkbox 不可由 agent 自行勾選；本規則補上 backend-only case 該放什麼進區塊。
-- `proactive-skills.md`：`/specify` 與 `/spec-by-example` 產出規格時必須執行此規約；三個區塊缺一即視為規格未完成。
-- `screenshot-strategy.md`：本規則排除的 evidence collection 不需要截圖；保留的三類項目通常也不需要截圖（用 `@no-screenshot` marker）。
-
-### 違反時的回報方式
-
-```
-[UX Gate] Backend-only Manual Review 規約不通過
-
-問題：change `<name>` 為 backend-only，但 `## 人工檢查` 含 SSH/psql/curl 等技術 evidence
-
-證據：
-  - tasks.md L<line>: <違規 checkbox 文字>
-
-修正方式：
-  - 把該項目從 `## 人工檢查` 移到 `## N. Backend Verification Evidence` section
-  - 或保留該項目但確認其屬於 production 授權 / 商業判斷 / production 觀察 三類其一
-  - 若全移走後 `## 人工檢查` 已空，改寫成例外宣告固定文字
 ```
 
 ## Exhaustiveness Rule（結構性強制）
@@ -361,7 +298,7 @@ function getBindingIcon(cardType: NfcCardType): string {
 
 1. **MUST** 在 `app/layouts/default.vue`（或對應 layout）的 navigation 清單中加入入口
 2. **或** 在 proposal 明確宣告 `navigation: internal-only`，並說明使用者如何到達（例如從其他頁面點擊）
-3. pre-archive hook 會檢查這點，漏掉會 warn
+3. 沒有 hook 檢查這點，交付前自檢
 
 ## Reverse Relationship Rule
 
@@ -407,49 +344,21 @@ function getBindingIcon(cardType: NfcCardType): string {
 | 交付人工檢查之前 | Design Gate（[[proactive-skills.design-checkpoint]] § Design Gate） | 缺設計審查證據的 UI 工作不得交付 |
 | 交付人工檢查之前 | `node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --require-empty`（cwd = consumer repo） | exit 3 才可引導 user 到面板，逐張列 family；exit 2 = 判不出來 |
 | 寫下任何 follow-up 註記的當下 | 在 `docs/tech-debt.md` 開 `TD-NNN` entry（[[follow-up-register]]） | 同一次編輯內完成 |
-| Session start | `node vendor/scripts/flow/flow.ts status --stalled` | 列出停滯的 work item 與待拍板 |
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | 混合：`post-edit-ui-qa.sh` 與 `flow status --stalled` 是自動 hook；其餘各列是**自檢**——原本的 `pre-propose-scan.sh` / `post-propose-check.sh` / `design-inject.sh` / `pre-apply-brief.sh` / `design-gate.sh` / `archive-gate.sh` / `followup-gate.sh` 全隨 spectra 生命週期退場（2026-09-07），**沒有機器替你跑那幾列** |
+| 觸發條件 | `post-edit-ui-qa.sh` 是自動 hook；其餘各列是**自檢**，**沒有機器替你跑那幾列** |
 | 消費端 | 走 SDD 流程的 agent（本節）；`/commit` Step 0-MR 讀 `flow gates` |
 | 載入路徑 | 本節（`rules/core/ux-completeness.md`，paths-gated 於 `tasks/**`、`specs/plans/**` 與 UI 檔） |
 
-**Runtime integration**：自動觸發的兩列由 hook 提供；其餘各列由讀到本節的 agent 自己執行。自動觸發、手動命令與 capability gap 由 adapter fragment 宣告。
+自動觸發、手動命令與 capability gap 由 adapter fragment 宣告。
 
 ## 必禁事項
 
-- **NEVER** 寫空洞的 User Journeys 為通過 gate
+- **NEVER** 寫空洞的 User Journeys / entity matrix 或只為通過 gate 的佔位內容
 - **NEVER** 用 Non-Goals 隱藏忘記做的 surface（必須有具體理由）
-- **NEVER** 把 `if/else if/else` 用在 enum 分支
-- **NEVER** 新增 route 但不在 navigation 加入口（除非明確宣告 internal-only）
 - **NEVER** 把「tasks 全勾 + tests 綠」當作 feature complete 的充分條件
 - **NEVER** 因為「沒有 hook 擋我」就跳過 § Workflow Integration 的自檢列
 - **NEVER** 未 claim 就接手別人留下的工作（per [[session-claims]] § 3.5）
-- **NEVER** 把 backend evidence collection（SSH / psql / `\d <table>` / `SELECT FROM` / 觸發 cron / 受控 drift 製造 / migration 存在性驗證）放進 backend-only change 的 `## 人工檢查`；改寫進 `## N. Backend Verification Evidence` 由實作 Claude 自跑自貼（見「必填 Backend-only Manual Review 規約」）
-## 與既有規則的關係
 
-- **`proactive-skills.md` Design Gate**：本規則**擴充**而非取代。Design Gate 檢查 UI 視覺品質；UX Completeness 檢查 UI 功能覆蓋
-- **`rules/modules/framework/nuxt/development.md`（module 投影）UI Reuse**：本規則**補充**。Reuse 檢查「是否重複寫了」；UX Completeness 檢查「是否漏改了既有的」
-- **`rules/modules/db-schema/supabase/migration.md`（module 投影）**：本規則**串聯**。migration 只是起點，後面還有 types + API + UI + navigation 四層
-
-## 違反時的回報方式
-
-hook 或 agent 偵測到違反時，輸出格式統一為：
-
-```
-[UX Gate] <檢查名稱> 不通過
-
-問題：<一句話描述>
-
-證據：
-  - <檔案/行號/具體缺漏>
-
-修正方式：
-  - <具體步驟>
-
-繞過：
-  - 若此為刻意決定，加入 <繞過 marker>
-```
-
-**禁止** 捏造 journey、空洞的 entity matrix、或只為通過 gate 而寫的佔位內容。發現 → 當場 flag 給使用者。
+Design Gate（[[proactive-skills.design-checkpoint]]）管視覺品質，本規則管功能覆蓋；兩者互補。

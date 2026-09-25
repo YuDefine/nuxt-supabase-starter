@@ -493,7 +493,7 @@ coordinator 身分轉移，以及寫出讓 successor 回收本 pane 的 predeces
 
 `--route` 與 `--tier-basis` 的值域與語義**與 `pi-dispatch.ts` 逐字相同**（`--route` 記走哪條政策，`--tier-basis` 記那條政策對檔位的**結論**，兩者不可互相推導）——這條對稱是 2026-09-07 補上的：在那之前 Pi 派工必須講出理由、Claude Code 派工不必，於是一句手打的 `--model claude-opus-5 --effort max` 通過了每一道 gate，事後沒有任何欄位講得出是誰依什麼授權的。**NEVER 給這兩欄 default**：default 會讓「真的判過」與「呼叫者從沒判」事後不可區分。
 
-**Claude child 的 effort 值域是 `low` / `medium` / `high`，並且按 model family 再設天花板：Fable ≤ `medium`（Charles 2026-09-10 拍板）、Opus ≤ `medium`（2026-09-23 由 `high` 降下）、其餘（sonnet／haiku／未知 slug）≤ `high`。**（helper 查上限時會把未帶 `--model` 解析成 Opus，但那只是防禦性預設——每次派工本來就必須明確帶 `--model`，缺了會先被拒。） `max` **對 Claude child 完全不可達**，建 pane 之前就被拒，**沒有任何 `--tier-basis` 開得了它**。
+**Claude child 的 effort 值域是 `low` / `medium` / `high`，並且按 model family 再設天花板：Opus ≤ `medium`（2026-09-23 由 `high` 降下）、其餘未知 slug ≤ `high`。Fable、Sonnet、Haiku 不是可派的 Claude child（2026-09-24 禁用；Fable 原上限 `medium`），helper 在建 pane 之前拒絕。**（helper 查上限時會把未帶 `--model` 解析成 Opus，但那只是防禦性預設——每次派工本來就必須明確帶 `--model`，缺了會先被拒。） `max` **對 Claude child 完全不可達**，建 pane 之前就被拒，**沒有任何 `--tier-basis` 開得了它**。
 
 2026-09-06 這條路徑第一次出事時，補的是**歸因**而不是**上限**：`max` 留著，只要顯式帶 `--tier-basis adjudication`，「宣告就會落在 receipt 與 durable record 上」。2026-09-10 量到那個承諾值多少——當天 5 個 pane 以 `max` 起跑（4 個 Fable 顧問、1 個 Opus），而整個 state dir 裡 `requested_effort` 只有 14 筆命中，**全部是 `table-row` / `medium`**，`max` 一筆都沒有。成因是 completion record 的歸屬區塊被寫成「`table_row` 存在才複製」，於是**唯一能抬高檔位的那條基底，正好是唯一不留紀錄的那條**。
 
@@ -523,7 +523,7 @@ coordinator 身分轉移，以及寫出讓 successor 回收本 pane 的 predeces
 guard 另外只有兩個具名缺口，都不擴張責任樹：**`--successor`**（TD-1104）給 Herdr 外、沒有 pane 能簽 relay
 的 main line 交出位置——successor 不帶 correlation env、可以再派 worker；coordinated child 或 Herdr pane
 呼叫它一律 `successor_refused`。**`--bounded-leaf`**（TD-1105）讓 coordinated child 以 `--coordinate` 開一層
-readonly gate-review leaf（`claude-review-safe.sh` 的 Fable 格），leaf 再派仍拒——**含 `--relay`**：leaf 沒有位置可交棒，
+readonly gate-review leaf（`claude-review-safe.sh` 的 Opus 席），leaf 再派仍拒——**含 `--relay`**：leaf 沒有位置可交棒，
 做不完就 `--complete blocked` 交還開它的 coordinator。判準與反開脫在
 `handoff` skill 的 `dispatch-common.md` § `CLADE_DISPATCH_ID` 分流。
 
@@ -553,10 +553,15 @@ agent 回完一個 turn 後照樣繼續工作。
 收割到的 `completion_success` 若帶 **非空 `followup_brief`**，那是 worker 留下、**還沒有人接**的工作：
 收割者 MUST 自己派下一跳，分流與兩條 NEVER 見 `handoff` skill 的 `dispatch-common.md` § 6。
 
-**worker 的 parent 死掉時**（successor 自己也消失了），該 worker 成為 orphan：只有該 durable dispatch
-的 exact child 可經 canonical `--recover-orphan` one-way claim 建立唯一 fresh successor。可觀察判準是
-durable record 的 exact `parent_claude_session_id` 在 `herdr agent list` 全域缺席——
-prompt-cache TTL與record年齡對ownership零訊號。一般 coordinated child仍禁止nested handoff，**只有**helper核准的 recovery token與 attested relay例外。
+**worker 的 parent 死掉時**（successor 自己也消失了），該 worker 成為 orphan。接手它的單一入口是
+一個活著的 attended 主線跑 `--coordinate-claim <dispatch-id>`，認領後照常 `--coordinate-resume` 收割。
+可觀察判準與 `--recover-orphan` 相同——durable record 的 exact `parent_claude_session_id`（或既有
+claim 綁的 successor session）在 `herdr agent list` 全域缺席；record 沒有 parent 身分可 probe 時改用
+替代證據，dispatch 年齡 ≥ 24h＋child pane 仍持 exact session＋呼叫者為 attended 主線三條同時成立。
+child 自己的 `--recover-orphan` one-way claim 仍在：它綁上 fresh successor 後 ownership 即轉給
+successor（等同 relay），只剩綁定前的窗口仍 fence——那個窗口連 `--coordinate-claim` 也會拒，
+唯一出口是 close pane＋`--adjudicate`。prompt-cache TTL 與 record 年齡各自對 ownership 零訊號
+（年齡只在上面那組三條替代證據裡當一條腿）。一般 coordinated child仍禁止nested handoff，**只有**helper核准的 recovery token與 attested relay例外。
 已送出 `--complete blocked` 的 worker 若 receipt 的 `coordinator_wake` ≠ `sent*`，出口是 receipt `next_step` 指的 `/handoff relay`（pending decision 隨 brief 交棒），**NEVER** `--recover-orphan`。**bounded leaf** 的 `next_step` 指 `standby` 而非 relay：它沒有位置可交棒、也不能寫受審樹——pending decision 已隨 `--complete` 進 completion record 與 decision 佇列，probe 到 parent 在線就 `agent prompt` 叫醒，否則待命由 opener `--coordinate-resume` 收割。
 
 ### 收割的機械兜底：Stop gate（不是提醒，是擋）

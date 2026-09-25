@@ -1,25 +1,13 @@
 # 准入與生產性：算法、邊界案例、反 Goodhart 防線
 
-<!-- carrier-independent candidate: 本檔的義務不經任何 runtime 專屬工具契約表達，是 [[TD-445]] 抽共用核心時最先可搬的一批。**這是候選標記，不是 audience**——真正的 audience 是上面那行 `clade-targets`，NEVER 因為看到本行就把 targets 放寬。放寬 reference 而不放寬 SKILL.md 會投出沒有 skill 入口指向的孤兒檔。 -->
 
 > 主檔 pointer：Step 0 § 開場准入判定 與 Step 6.3 § 生產性判定。**判準在主檔，本檔是論證與
 > 邊界案例**——執行時不必讀本檔，**改判準之前 MUST 讀**。
 
-## 為什麼要這兩道（實測，不是推測）
-
-`scripts/usage-report.ts` 的歸因區段實測 2026-08-10～13 三天：**loop-unattended 38.0% ＋
-loop-interactive 8.0% ＝ 46.0%** 的配額落在 work-loop，而同期 clade 是 **round 78 : completed 28**
-（每個完成項平均 2.8 輪，且 completed 多為 rotate / 下推這類內務）。實質產出（交付＋清算）29.5%、
-治理內務 48.0%。
-
-原樣可重跑（**務必 `--out`**——stdout 會被展示層截斷，完整輸出必須落檔再讀）：
-
-```bash
-node scripts/usage-report.ts --days 3 --out /tmp/r.md
-```
+## 兩軸
 
 **兩軸正交，缺一不可**：`fingerprintUnchangedRounds` 抓**空轉**（狀態沒變）；6.3 抓**翻攪**
-（狀態變了但債沒減）。rotate 一條 TD 會改 fingerprint（slug 消失）——那正是 78:28 的洞。
+（狀態變了但債沒減）。rotate 一條 TD 會改 fingerprint（slug 消失）——那正是翻攪的洞。
 
 ## 准入
 
@@ -31,9 +19,9 @@ node scripts/usage-report.ts --days 3 --out /tmp/r.md
 
 | NEVER | 依據 |
 | --- | --- |
-| 為了讓 `debtReady >= 1` 而登記新 TD | 量測輪自己製造彈藥＝「量測 → 登記 → 下輪再讀」自循環。2026-08-13 實測近 7 天 opened 40 / closed 10 |
+| 為了讓 `debtReady >= 1` 而登記新 TD | 量測輪自己製造彈藥＝「量測 → 登記 → 下輪再讀」自循環 |
 | 用「掃一輪看看」繞過本節 | scan ＋ 分類 ＋ guardrails re-read 是一輪最先燒掉的固定成本，對不准入的輪它的產出完全用不到——與 headroom 判定同型的理由 |
-| 不准入時排長間隔 wakeup | wakeup 保留 process 且每醒必付 re-hydrate ＋ guardrails re-read；「時間到就醒」正是 38% 的來源。退出把「再起」交還外部 signal，下次由 runner 既有的 `--min-ready` gate 先擋一次 |
+| 不准入時排長間隔 wakeup | wakeup 保留 process 且每醒必付 re-hydrate ＋ guardrails re-read；「時間到就醒」正是 loop 配額的大宗來源。退出把「再起」交還外部 signal，下次由 runner 既有的 `--min-ready` gate 先擋一次 |
 
 **`no-admissible-work` 走 `stoppedReason` 不是 `roundEndReason`**：它說的是「整個 loop 現在沒有
 可推進的債」，不是「這個 process 滿了」。寫成後者會讓 runner 起下一個 process 再判一次同樣的 0。
@@ -66,26 +54,14 @@ Tier A = `HANDOFF.md`、`tasks/*.md`、`docs/tech-debt.md`。本輪 `git diff <r
 | 修好一條 audit red，改動落在 `scripts/` | 生產 | P2 成立 |
 | 本輪只做 Step 2.7 清算（attended，答完 2 題） | 看有沒有落地 | 答案落 `decisions` 且據以關掉 TD → P3；只答不做 → 非生產（合法的過渡輪，N=2 才停） |
 
-## P3 的 status token 對照（SoT 在 audit script，本表只是導引）
-
-`scripts/audit-tech-debt-hygiene.ts` 的 `statusToken()` 取 `**Status**:` 行的第一個 token，分類由 `STRICT_DONE_RE` / `SOFT_CLOSE_RE` 決定：
-
-| class | token | 常見完整寫法 |
-| --- | --- | --- |
-| open | `open` / `pending` / `landed` / `blocked` | `open`、`landed-pending-verification`、`blocked-attended-only` |
-| closed | `done` / `resolved` / `wontfix` / `deferred` / `mitigated` / `closed` | `done`、`wontfix-until-signal`、`deferred（conditional …）` |
-
-⚠️ `deferred` 與 `wontfix-until-signal` 在 token 層都是 **closed-class** —— 它們仍可能被解凍，但解凍走的是「重新開一條或改回 open」，那一輪的 P3 由該次轉換自己成立，**NEVER** 追溯扣掉先前那次。
-
-**NEVER** 在本檔或 SKILL.md 複製一份 token 清單當判準來源——改了 audit script 卻沒改這裡時，兩份會無聲分歧。本表過期就刪，不要修。
+⚠️ `deferred` 與 `wontfix-until-signal` 在 token 層都是 **closed-class**；解凍走「重新開一條或改回 open」，**NEVER** 追溯扣掉先前那次 P3。
 
 ## 為什麼 N=2
 
 與既有 `consecutiveDispatchFailures >= 2`、runner 的「state 連續 2 輪未前進」同構。單一非生產輪
 有正當型態（等 notification 的過渡輪、純清算輪），不是噪音就殺會誤傷；連 2 輪已是模式。
 
-停止代價極低——ready gate 一過就能再起；而 N=3 會多放一整輪（unattended 一輪 ≈ 數十 M token）
-換不到任何診斷資訊。**NEVER** 因為「這輪快有結果了」自行放寬到 3。
+停止代價極低（ready gate 一過就能再起）。**NEVER** 因為「這輪快有結果了」自行放寬到 3。
 
 ## 與軟配額的關係是包含，不是並列
 
@@ -98,9 +74,7 @@ verdict。**NEVER** 拿「軟配額已滿足」論證本輪必為生產輪。
 
 ## 反 Goodhart 邊界（這是停止條件，不是目標）
 
-**不衝突的邊界在「方向」**：反 Goodhart 條款禁止把 burn-down 當**最大化目標**（objective）；
-6.3 是**停止條件**（fail-safe）。game 一個 objective 的獎勵是「看起來更好」；game 這個停止條件
-的獎勵只有「繼續跑」——而繼續跑本身不發任何獎勵，輪次數不是任何 metric 的分子。
+6.3 是**停止條件**（fail-safe），不是最大化目標。
 
 **配套硬約束**：runner 注入的 prompt 與 SKILL 全文 **NEVER 出現「本輪目標是讓 ΔTier A < 0」型
 措辭**——目標永遠是各 item 自己的驗收 predicate。看到自己在為了讓某個計數下降而挑 item，那已經
@@ -133,14 +107,9 @@ SKILL.md Step 6.3 留的是一句話對照表。**機械 SoT 是 `vendor/scripts
 
 | # | Predicate | 機械判法 |
 | --- | --- | --- |
-| P1 | Tier A 淨減 | Tier A 檔（`HANDOFF.md`、`tasks/*.md`、`docs/tech-debt.md`）行數合計下降，**且**通過 entropy 過濾：本輪 diff 中 Tier A 移除行若與 `docs/archives/**`、`*-bodies.md`、`docs/pitfalls/**` 的新增行**含相同 `TD-\d+` id 或行級匹配 ≥70%**，該部分減量**不計**。過濾後仍 <0 才算 |
+| P1 | Tier A 淨減 | Tier A 檔行數合計下降，**且**通過上方 § P1 的 entropy 過濾後仍 <0 |
 | P2 | 交付物 landed | 本輪 commit 觸及至少一個 **tracked 交付檔**，且該 item 已過 Step 5 收割的 scope-verify。交付檔 = 排除集以外的**全部** tracked path；排除集只有三類：(a) `.clade/**`（loop 自身 state）、(b) Tier A 待辦檔（`HANDOFF.md`、`tasks/*.md`、`docs/tech-debt.md` —— 由 P1／P3 計，不重複計）、(c) `docs/archives/**` 與 `*-bodies.md`（rotate 落點，與 P1 entropy 過濾同一組）。**判準是排除集，NEVER 是白名單** |
 | P3 | TD 關閉帶憑證 | `docs/tech-debt.md` 內某條 TD 的 `**Status**:` token 由 open-class（`open` / `pending` / `landed` / `blocked`）轉為 closed-class（`done` / `resolved` / `wontfix` / `deferred` / `mitigated` / `closed`），**且**同輪 commit 內含該條 `### 自驗` 的實跑輸出、或 state `decisions` 對應條目、或一行 wontfix 理由＋可觀察 signal predicate。token 集合的 SoT 是 `scripts/audit-tech-debt-hygiene.ts`（`statusToken()` ＋ `STRICT_DONE_RE` / `SOFT_CLOSE_RE`），**NEVER** 在此處另立一份。**不看 heading 是否消失**——rotate 由 `closedBloatThreshold` 批次化，與關閉是兩件事；同一條 TD 只在轉 closed-class 那一輪計一次，之後 rotate 那輪 NEVER 再計。憑證三選一皆無 = 不計 P3 也不計 P1（那是改標籤不是關閉） |
 | P4 | 新決策 packaging | `awaiting[]` 新增**先前未出現過的 id** 的完整條目（含 options）。**單輪 P4 至多貢獻一次**——三條 packaging 不等於三輪份的生產 |
 
-**P2 為什麼是排除集而不是路徑白名單**：白名單只可能列出寫規約那一刻手上那個 repo 的交付路徑。
-2026-08-19 <consumer-a> r54 實證——舊白名單逐字寫 `rules/core/`／`rules/modules/`／`vendor/`／
-`capabilities/core/`／`scripts/`，那是 **clade 自己**的交付形狀；consumer 的交付落在 `packages/**`／
-`app/**`／`test/**`，**字面一條都不中**。那一輪關掉一條 TD（三條 HTTP 探測）並 land 一次 refactor
-（100 tests 全綠、已 merge-back），P1–P4 仍全部不成立 → `nonProductiveRounds` 進 2、整個 loop 停掉。
-**NEVER** 用「本 repo 的交付路徑不在清單上」推論本輪非生產——那是判準沒涵蓋這個 repo，不是本輪沒交付。
+**P2 是排除集而不是路徑白名單**：各 repo 的交付路徑不同，**NEVER** 用「本 repo 的交付路徑不在清單上」推論本輪非生產。

@@ -34,7 +34,7 @@ SKILL.md § 2B.3 / 2B.4 / 2B.4.5 / 2B.5 的完整規約：outstanding 的 serial
 
 ### 2B.4 推薦 + 詢問操作
 
-寫一段「outstanding 盤點 + serial/parallel 推薦」訊息。**MUST** 含 **「做到一半的 specs/plans」** 三桶（來自 `jq '.planInventory.raw' "$SCAN"`：`startable` / `blockedHuman` / `retire`）。可做項的 next **MUST** 用 inventory 列印的 `next` 字串（claim → plan show → `/implement`），**NEVER** 對半成品推薦 `/work-route`（舊名 `/sdd-start`）。
+寫一段「outstanding 盤點 + serial/parallel 推薦」訊息。**MUST** 含 **「做到一半的 specs/plans」** 三桶（來自 `jq '.planInventory.raw' "$SCAN"`：`startable` / `blockedHuman` / `retire`）。可做項的 next **MUST** 用 inventory 列印的 `next` 字串（claim → plan show → `/implement`），**NEVER** 對半成品推薦 `/work-route`。
 
 ```
 Outstanding（N 條）：
@@ -63,7 +63,7 @@ Outstanding（N 條）：
 - **NEVER** 推薦「開面板驗收」/「可點 OK 收尾」相關 next move 而未先引用 §2B.1.7 的 `flow gates` 結果（`## Review-gui Readiness` 段）。只有 `ui-judgement` / `acceptance` 卡才能寫成「user 在面板判」；工作若**沒有**對應卡片，描述 **MUST** 反映 agent 真正要做的事（例：「補 evidence 後才會出現 `ui-judgement` 卡」、「讀 carrier 的未勾 `[discuss]` 項走收尾 walkthrough」），**NEVER** 寫成「點 OK 收尾」
 - **NEVER** 從 `HANDOFF.md` 既有「Outstanding」段、carrier 的 leaf `[x]` / `[ ]` count、或 flow 卡的進度推測有沒有等人的事 — `flow gates` 的卡片清單才是 SoT
 
-### 2B.4.5 PTB-unsafe wt 的快速分流（v1.14+）
+### 2B.4.5 PTB-unsafe wt 的快速分流
 
 對 Step 3.1 audit 判為 `mergeBackSafety: ptb-unsafe` 的 wt，**MUST** 依詢問操作直接給 3 個 terminal 選項，**禁止** inspect 子選項作為主推薦：
 
@@ -98,7 +98,7 @@ User 透過詢問操作選定下一步 outstanding（含明確的 next-skill 與
 
 **Slug 解析**：`/wt <slug>: /<next-skill> <change-name>` 的 `<slug>` 由 change-name 直接帶入（wt-helper 自動 normalize per [[worktree-default]] §3）。
 
-**Parent cwd 不動 invariant**：`/wt` Form 3 內部用 subagent 進 worktree 跑 next-skill，主線（當前 chat session）cwd 全程在 main worktree，per [[worktree-default]] §1。先前 `wt-relax-for-archive-and-handoff` change 引入的 `--dispatch-from-handoff` flag 已**移除**，**禁止**在 args 內帶此 flag。
+**Parent cwd 不動 invariant**：`/wt` Form 3 內部用 subagent 進 worktree 跑 next-skill，主線（當前 chat session）cwd 全程在 main worktree，per [[worktree-default]] §1。
 
 **面板驗收 dispatch scope rule**：把 user 導向面板之前 **MUST** 引用 §2B.1.7 的 `flow gates` 結果。依卡片 family 走不同入口（**NEVER** 一律推「去面板」）：
 

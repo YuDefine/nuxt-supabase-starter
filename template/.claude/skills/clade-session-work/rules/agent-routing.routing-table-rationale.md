@@ -43,9 +43,12 @@ EROFS 再 fallback → 停；回到 `workspace_access` 分類，讓 dispatcher �
 
 ## grok 擴權的取證狀態
 
-**理由欄只回答「為何不降 luna」，那不等於回答過「能不能用 grok」。NEVER** 把「理由欄沒提到 grok」
-讀成「已評估過並排除」。**樣本不足以轉列，現行檔位一律照表**；要轉先補 TD-509 列的 reps
-（已補的 n=1 取證見 rationale § grok 擴權取證）。
+> 2026-09-24 起 Grok 4.7 xhigh 已由 Charles 逐列拍板進入 `web-search`／`mechanical-fanout`／
+> `read-heavy-scan`／`notion-ops`／`version-upgrade-research` 的鏈與 delegate-sub 鏈首——那是**政策決定**，
+> 不是本節取證的結論。本節以下保留為當時（luna 仍在表上）的取證狀態紀錄。
+
+**現行判準**：Grok 在哪一格、第幾跳，一律照 [[agent-routing.routing-table]]。**NEVER** 拿本節的
+n=1 取證去主張把 Grok 推進表上沒有它的列——要轉列先補 TD-509 列的 reps，再改表。
 
 ## 拿數字當降檔理由的三個陷阱
 

@@ -5,7 +5,7 @@
 
 違反本檔語意段的項目歸類為 🟠 Major。
 
-> **Enforcement 架構（TD-194，v1.4.176+；W5 四層攔截網）**：
+> **Enforcement 架構（四層攔截網）**：
 >
 > | 層 | 位置 | 職責 |
 > | --- | --- | --- |
@@ -49,7 +49,7 @@ Reviewer **額外**需人工判斷：
 
 > enforcement: audit(audit-pinia-mutation-loading.ts)（單檔偵測器另見 `vendor/scripts/checks/mutation-loading-detect.ts`；無對應 patterns.json semantic id）
 
-`@pinia/colada` 的 `useMutation()` 回傳的 `status`（`'pending' | 'success' | 'error'`）是 **data-state**，mount 當下就是 `'pending'`（還沒呼叫過、沒 data），**與有沒有執行無關**。拿它當 loading → 按鈕 / spinner 一進頁面就永久 loading，且 typecheck 全綠（`status` 是合法欄位、`'pending'` 是合法值）、不發任何 request、查 log 也查不到。實證：<consumer-a> 30+ 處、<consumer-b> 3 處（含**跨行 destructuring** 寫法，舊單行 grep heuristic 會漏抓）。
+`@pinia/colada` 的 `useMutation()` 回傳的 `status`（`'pending' | 'success' | 'error'`）是 **data-state**，mount 當下就是 `'pending'`（還沒呼叫過、沒 data），**與有沒有執行無關**。拿它當 loading → 按鈕 / spinner 一進頁面就永久 loading，且 typecheck 全綠（`status` 是合法欄位、`'pending'` 是合法值）、不發任何 request、查 log 也查不到。含**跨行 destructuring** 寫法，單行 grep 會漏抓。
 
 Reviewer **MUST** 檢查 diff 內 Pinia Colada loading 推導：
 
@@ -93,7 +93,7 @@ node vendor/scripts/checks/mutation-loading-detect.ts $(git diff --name-only <ba
 
 ## Drizzle 邊界
 
-> enforcement: semantic(layered-truth)（Drizzle 邊界與分層真相同源，共用同一 semantic id，定案 2026-07-06）
+> enforcement: semantic(layered-truth)（Drizzle 邊界與分層真相同源，共用同一 semantic id）
 
 | 禁止使用 / 必查項 | 位置 | 說明 |
 | --- | --- | --- |
@@ -270,4 +270,4 @@ Reviewer 補判斷機械層看不到的：
 - banner 分隔線（`// ====` / `// ----`）——把被切開的區塊抽成具名函式
 - commented-out code（通用正則誤判率太高，不進 patterns.json）
 - 註解與 code 不符——錯的註解 MUST 當場刪
-- workaround 註解缺 `@followup[TD-xxx]`
+- workaround 註解缺 `@followup[<id>]`（`plan:<work-id>` 或未遷移 consumer 的 `TD-NNN`）

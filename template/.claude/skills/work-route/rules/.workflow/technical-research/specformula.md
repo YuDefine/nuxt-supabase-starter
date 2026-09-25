@@ -8,7 +8,7 @@
 
 | 必問題 | clade consumer 的預設 | 什麼時候不適用 |
 | --- | --- | --- |
-| **各端的 BDD techstack** | 後端 API：**SpecFormula TS ＋ Cucumber**（`@specformula/cucumber`，`pnpm test:bdd`）。前端 webapp：**Playwright** | consumer 的 `.claude/hub.json` 沒宣告 `capabilities: ["specformula"]` |
+| **各端的 BDD techstack** | 後端 API：**SpecFormula TS ＋ Cucumber**（`@specformula/cucumber`，`pnpm test:bdd`）。前端 webapp：**Playwright** | consumer manifest（`.clade/manifest.json`，legacy `.claude/hub.json`）沒宣告 `specformula` capability |
 | **測試策略** | 兩端都 E2E。後端 E2E 用 SpecFormula 打真 HTTP 端點與 Postgres 權威狀態，**不是**只打領域函式 | 使用者本輪明確改判某一端先不要 E2E |
 | **系統有哪些端** | 前端 webapp（Nuxt 4 pages）＋ 後端 API（Nitro `server/`）。DB 是 Supabase PostgreSQL | 該 consumer 是 library / tooling profile，沒有 web 端 |
 

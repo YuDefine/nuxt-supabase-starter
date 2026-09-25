@@ -7,7 +7,7 @@ stash audit 的寫入欄位。**`park` / `next` 都會走到 Step 3**，本檔�
 
 下表保留 scanner 的 legacy action token；`merge-back-or-resume` 現行路由是驗收／scoped checkpoint／登記 batch ready，再依 commit skill `batch.md` 收件。`landable` 只表示 Git 前置訊號通過，不是品質、授權或寫入權交接憑證。已登記 batch 的來源與 integration 由 `/commit` 收尾的 `batch cleanup` 統一處理。
 
-#### 3.1a 每條 wt 的 merge-back safety signal（v1.14+ hard rule）
+#### 3.1a 每條 wt 的 merge-back safety signal（hard rule）
 
 對每條 `mergedToMain: false` worktree，script 已以**純讀**方式蒐集 3 條 signal（不跑 `merge-back --dry-run` — 該入口會清 index.lock 屬寫入；blockers 改用等價唯讀邏輯：branch diff files ∩ main dirty paths，即 wt-helper `detectMergeBlockers` 演算法）：
 
@@ -54,23 +54,20 @@ squash-merge repo，那裡的 branch 在內容進 main 之後 `main..<branch>` �
 **粒度是行，NEVER 是 commit。** unmanaged 那半的 `trueUnlandedCommits` 是 per-commit 全稱判定
 （commit 內任一檔命中率 < 0.8 → 整個 commit 判未落地），拿來當 managed worktree 的三分依據會
 塌回兩分：一條 branch 只要有一個本來就不會進 main 的檔（worktree-local 的暫存產物
-這種 change metadata），整條就報 `no`。2026-08-29 <consumer-a> 實測 `v1-migration-status-fix`：
-per-commit 判 `no`，行粒度判 **87.6%（367/419 行）= `partial`** —— 而 `partial` 是那條唯一正確
-的處置。
+這種 change metadata），整條就報 `no`，而行粒度判得出 `partial`——`partial` 才是那種 branch 唯一正確的處置。
 
-**三分之後 NEVER 再塌回兩分。** `partial` 與 `no` 的處置不同：87.6% 那條整包 merge-back 會用
+**三分之後 NEVER 再塌回兩分。** `partial` 與 `no` 的處置不同：`partial` 的 branch 整包 merge-back 會用
 branch 的舊版覆蓋 main 上已經更新過的內容。`unknown`（取不到 merge-base / diff）同樣 **NEVER**
 讀成 `no` —— 取值失敗與真的沒落地事後不可區分，把它讀成 `no` 是把靜默變成一個看起來像發現的斷言。
 
 **低端門檻是 0.10 而不是 0，這是刻意的。** 長度 ≥ 12 的 import 行、boilerplate、共用字串會在任何
-兩個檔之間偶然命中：<consumer-a> `td275-audit-log-entity-id-filter` 18 行裡有 1 行（5.6%）是這種命中，
-而它實際完全未落地。門檻設 0 會把它報成 `partial`，而 `partial` 的處置是逐檔人工比對 ——
+兩個檔之間偶然命中，完全未落地的 branch 也會有個位數百分比的命中。門檻設 0 會把它報成 `partial`，而 `partial` 的處置是逐檔人工比對 ——
 用一個雜訊換走一個人的十分鐘。高端是 0.98：門檻不對稱地貼近兩端，寧可把「幾乎全落地」丟進
 `partial`，**NEVER** 反過來把 `partial` 讀成 `yes`。
 
-**沒有 flow 卡的 worktree（早於 spine 上線、或開樹時未帶 `--origin`）：上表 `active-*` 與 `done-work` 三列不適用** —— 那三列的判準是該 slug 在 flow spine 上的卡片狀態，查不到卡時恆為 false。這不是判定漏了，是 `aheadCount` 那四列接手。TD-297 之前這四種狀態全部塌縮成單一個 `orphan`，而 `orphan` 讀起來是「沒人要的殘骸」，實際可能是別 session 正在做的活躍工作。
+**沒有 flow 卡的 worktree（早於 spine 上線、或開樹時未帶 `--origin`）：上表 `active-*` 與 `done-work` 三列不適用** —— 那三列的判準是該 slug 在 flow spine 上的卡片狀態，查不到卡時恆為 false。這不是判定漏了，是 `aheadCount` 那四列接手。**NEVER** 把這四種狀態塌縮成 `orphan`：`orphan` 讀起來是「沒人要的殘骸」，實際可能是別 session 正在做的活躍工作。
 
-**claim 覆寫優先於上表全部 9 列，且不與 `userWip` 合取（TD-629）。** 兩個量測的時間語意不同：claim 有 TTL、描述一**段區間**；`userWip` 是 scan 那一刻的**瞬時**值。用瞬間去 gate 區間，live session 剛好在兩次寫入之間被掃到就落進 `mergedToMain: true` + `userWip: 0` 那列，拿到 `merged` / `cleanup` —— 對一個正被使用的 worktree 建議**永久刪除**。2026-08-24 實證：`clade-wt/td623-624-pitfalls` 被這樣判過，Charles 依 audit 段拍板回收，接住它的是 `wt-helper cleanup` 自己的 gate（該 wt 當時有 4 個未 commit 檔、475 行 pitfall 全文）。**audit 段的文字本身零保護 —— 人會照它拍板。**
+**claim 覆寫優先於上表全部 9 列，且不與 `userWip` 合取（TD-629）。** 兩個量測的時間語意不同：claim 有 TTL、描述一**段區間**；`userWip` 是 scan 那一刻的**瞬時**值。用瞬間去 gate 區間，live session 剛好在兩次寫入之間被掃到就落進 `mergedToMain: true` + `userWip: 0` 那列，拿到 `merged` / `cleanup` —— 對一個正被使用的 worktree 建議**永久刪除**。**audit 段的文字本身零保護 —— 人會照它拍板。**
 
 `underlyingKind` 照 TD-412 的約定不丟：claim 說的是「現在別碰」，不是「這條 branch 沒有未 land 的工作」，兩件事都要留給讀者。**NEVER** 把修法寫成「多量一次 `userWip` 取聯集」—— 那只把窗口縮小，區間內任一安靜點一樣漏。
 
@@ -97,7 +94,7 @@ audit 寫進 HANDOFF.md 時每條 wt 後綴 `(mergeBackSafety: <landable|ptb-rec
 
 🔴 **前置 gate**：本 sub-step 是整個 /handoff 唯一「MUST 主動執行不可逆刪除」的地方，而它的輸入 `raw.stashes[*]` 來自 `$SCAN`。**動任何 `git stash drop` 之前 MUST 先確認 `$SCAN` 的 `.consumerId` 就是本 repo**（`jq -r '.consumerId' "$SCAN"`，判準見 scan-steps.md §2B.1a「$SCAN 路徑與歸屬」）。不符 → **STOP，重跑 scan**，NEVER 據此 drop —— `stash@{N}` 是**索引不是識別碼**，別 repo 的清單套到本 repo 會逐條解析到完全不同的 stash，而每一步的表面訊號都正常。
 
-對 `raw.stashes[*]` **每一筆**套 [[commit]] § Stash 自動處置 gate 的判準，**逐條**跑：
+對 `raw.stashes[*]` **每一筆**套 [[commit.detail]] § Stash 自動處置 gate 的判準，**逐條**跑：
 
 ```bash
 git stash show --stat "<ref>"          # 放行①：每個檔都在可重生投影層清單內？
@@ -108,7 +105,7 @@ git worktree list | grep "<slug>"      # 放行②：對應 worktree 已消失�
 
 | 判定 | 動作 |
 | --- | --- |
-| 兩條機械放行全中、否決零命中 | **MUST drop**：`git stash drop "<ref>"`。**NEVER** 再 append `docs/archives/stash-dropped.md`（該檔已停寫；替代墓碑載體 **NEEDS CLARIFICATION**，本輪不發明新格式）。drop 當下 git 物件仍可從 reflog 取回直到過期；這不是拍板後的替代載體 |
+| 兩條機械放行全中、否決零命中 | **MUST drop**：`git stash drop "<ref>"`。**NEVER** 再 append `docs/archives/stash-dropped.md`（該檔已停寫，不發明新的墓碑格式）；drop 當下 git 物件仍可從 reflog 取回直到過期 |
 | 任一否決命中 | 不 drop，寫進 audit 段並註明**踩到哪一條否決判準** |
 | 判準跑不出明確結論 | 不 drop，寫進 audit 段標 `needs-judgment` + 寫出卡在哪 |
 

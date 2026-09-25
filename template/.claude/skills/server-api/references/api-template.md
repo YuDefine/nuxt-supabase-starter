@@ -58,12 +58,18 @@ export default defineEventHandler(async (event) => {
 在 `shared/schemas/` 定義可複用的 Schema 與 response contract：
 
 ```typescript
+// shared/schemas/pagination.ts —— 分頁上限的唯一定義處，其他 schema import 它，不各處自訂
+export const PAGE_SIZE_MAX = 1000;
+```
+
+```typescript
 // shared/schemas/resources.ts
 import { z } from "zod";
+import { PAGE_SIZE_MAX } from "./pagination"; // 即上面的 shared/schemas/pagination.ts
 
 export const paginationQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
-  pageSize: z.coerce.number().int().positive().max(1000).default(10),
+  pageSize: z.coerce.number().int().positive().max(PAGE_SIZE_MAX).default(10),
   search: z.string().nullish(),
   sortBy: z.enum(["id", "name"]).nullish(),
   sortDir: z.enum(["asc", "desc"]).default("desc"),

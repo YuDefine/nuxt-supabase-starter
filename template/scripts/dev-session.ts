@@ -48,7 +48,8 @@
  *   node scripts/dev-session.ts status [opts]        # 查 session + port + lease + 佇列
  *   node scripts/dev-session.ts stop [opts]          # 關掉 tab + 釋放 lease
  *   node scripts/dev-session.ts list                 # 列所有 dev-* session + health
- *   node scripts/dev-session.ts sweep [--dry-run]    # 回收 TTL 已過的 agent 租約（沒人爭用也收；心跳斷不收）＋清掉 dev 已退出的 dev-* tab
+ *   node scripts/dev-session.ts sweep [--dry-run] [--leases-only]    # 回收 TTL 已過的 agent 租約（沒人爭用也收；心跳斷不收）＋清掉 dev 已退出的 dev-* tab
+ *                     --leases-only：只回收租約、不清 dead-tab（dev node 的 clade-dev-lease-reaper.timer 每 5 分鐘跑這個）
  *
  * 常用 opts：
  *   --consumer-meta <path>   讀 consumer_id / dev.ports / auth.portPinned / dev.leaseMode
@@ -89,6 +90,7 @@ import {
   realpathSync,
   renameSync,
   linkSync,
+  statSync,
 } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
@@ -364,6 +366,7 @@ function parse(argv) {
     takeover: false,
     noLease: false,
     dryRun: false,
+    leasesOnly: false,
   }
   const sep = argv.indexOf('--')
   const head = sep === -1 ? argv : argv.slice(0, sep)
@@ -413,6 +416,9 @@ function parse(argv) {
         break
       case '--dry-run':
         o.dryRun = true
+        break
+      case '--leases-only':
+        o.leasesOnly = true
         break
       case '-h':
       case '--help':
@@ -1117,11 +1123,12 @@ function runInTab(paneId, cmdArgv) {
   return sh('herdr', ['pane', 'run', paneId, shellQuote(cmdArgv)], { allowFail: false })
 }
 
-/** 關掉 Tab 連同裡面的 process（實測：Tab 一關，dev 的 port 立即 dead）。 */
+/** 關掉 Tab 連同裡面的 process（實測：Tab 一關，dev 的 port 立即 dead）。回傳是否真的關了 Tab。 */
 function killSession(name) {
   const t = findSession(name)
-  if (!t) return
+  if (!t) return false
   sh('herdr', ['tab', 'close', t.tabId])
+  return true
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1186,8 +1193,11 @@ function pidAlive(pid) {
   try {
     process.kill(Number(pid), 0)
     return true
-  } catch {
-    return false
+  } catch (e) {
+    // EPERM = 行程存在但不屬於本 user，仍算活著（與 work-loop-lock.ts 同一判準）。
+    // LEASE_DIR 是全機共用的 tmpdir：把 EPERM 當死會讓 recoverOrphanClaims 搶走
+    // 別的 user 仍在跑的 sweep 持有的 claim（#321 0-A Minor）。
+    return (e as NodeJS.ErrnoException)?.code === 'EPERM'
   }
 }
 
@@ -1959,15 +1969,25 @@ function sameLease(a, b) {
  * 之後寫的 heartbeat 會在原位寫出新租約。它不會被刪（我們只刪 claim 檔），但它記錄的 dev
  * 已被 kill——結果是 holder 手上一份指向死 pid 的租約，下次 start 會照常重建；不波及別人。
  * 這種情形以 `reaped:renewed-during-reap` 回報，讓它看得見。
+ *
+ * **claim 檔的兩條失敗路徑**（0-A，PR #285 Minor）：
+ *   - sweep 在 rename 之後、unlink／還原之前死掉 → claim 檔成了孤兒，`-verification-lease.json`
+ *     的檔名過濾永遠看不到它，它記錄的 dev 與 Tab 就沒有任何租約在管。下一次 sweep 開頭先由
+ *     recoverOrphanClaims() 放回原位，再交給同一輪的判定重新處理（見該函式）
+ *   - 已經關 Tab／kill 之後 unlink 才失敗 → NEVER 還原。還原會放回一份指向剛被 kill 的 pid 的
+ *     租約，讀起來像 dev 還有人持有。claim 檔留著，以 `failed-after-kill:` 回報；它在本行程結束
+ *     後就是孤兒，下一次 sweep 照上一條收（那時 dev 已不在聽 port，只刪租約）
+ *
+ * `unlink` 參數只給回歸測試注入失敗用，caller NEVER 傳。
  */
-export function reapExpiredLeases({ dryRun = false } = {}) {
+export function reapExpiredLeases({ dryRun = false, unlink = unlinkSync } = {}) {
+  const results = recoverOrphanClaims({ dryRun })
   let files
   try {
     files = readdirSync(LEASE_DIR).filter((f) => f.endsWith('-verification-lease.json'))
   } catch {
-    return []
+    return results
   }
-  const results = []
   for (const f of files) {
     const id = f.slice(0, -'-verification-lease.json'.length)
     const lease = readLease(id)
@@ -2003,19 +2023,92 @@ export function reapExpiredLeases({ dryRun = false } = {}) {
       results.push({ ...entry, action: 'skipped:lease-changed' })
       continue
     }
+    // 一旦關了 Tab 或 kill 了 dev，claim 裡的租約就不再描述真實狀態——之後的失敗 NEVER 還原它
+    let destructive = false
     try {
       if (serving) {
         // 與 takeover 分支同一組動作：關 lease 記錄的 herdr Tab，再 kill lease 記錄的 dev pid。
-        if (sessionName) killSession(sessionName)
-        if (pidAlive(pid) && Number(portPid(port)) === pid) sh('kill', [String(pid)])
+        // destructive 只在破壞動作跑完之後才立：killSession 唯一的 throw 路徑是
+        // assertDefaultHerdrCaller（非預設 Herdr socket 的 pane 跑 sweep），它在任何 herdr
+        // 指令發出之前就被拒——什麼都還沒被破壞，claim MUST 還原。記成 failed-after-kill
+        // 會讓租約對 lease gate 與 readLease 隱形到下一次 sweep（#321 0-A Minor）。
+        if (sessionName) {
+          destructive = killSession(sessionName)
+        }
+        if (pidAlive(pid) && Number(portPid(port)) === pid) {
+          sh('kill', [String(pid)])
+          destructive = true
+        }
       }
-      unlinkSync(claimPath)
+      unlink(claimPath)
     } catch (e) {
-      restoreClaim(claimPath, path)
-      results.push({ ...entry, action: `failed:${(e as Error)?.message ?? e}` })
+      const why = (e as Error)?.message ?? e
+      if (destructive) {
+        results.push({ ...entry, action: `failed-after-kill:${why}（claim 留待下次 sweep 收）` })
+      } else {
+        restoreClaim(claimPath, path)
+        results.push({ ...entry, action: `failed:${why}` })
+      }
       continue
     }
     results.push(existsSync(path) ? { ...entry, action: 'reaped:renewed-during-reap' } : entry)
+  }
+  return results
+}
+
+/** claim 檔的持有 sweep 活著卻超過這麼久沒收尾，視為 pid 已被系統回收給不相干的程序。 */
+const ORPHAN_CLAIM_STALE_MS = 5 * 60_000
+const CLAIM_FILE = /^(.+)-verification-lease\.json\.reaping-(\d+)$/
+
+/**
+ * 找出 sweep 中途死掉留下的 `*.reaping-<pid>` claim 檔，放回原位（原位已有更新的租約就丟棄
+ * claim，以更新的為準——同 restoreClaim）。放回之後由 reapExpiredLeases 同一輪的判定處理：
+ * 它仍過期就照常回收（dev 還在聽 port 才 kill，否則只刪租約），被續租了就留著。
+ * **NEVER 在這裡直接刪 claim**：claim 的持有者可能在 kill 之前就死了，dev 還在跑，直接刪等於
+ * 讓一台仍在聽 port 的 dev 失去租約。
+ *
+ * 孤兒判定：檔名上的 pid 已不在，或它是本行程自己（每一輪 sweep 的 claim 都在同一輪內收尾，
+ * 開頭還看得到本 pid 的 claim 只可能是同 pid 的前一個行程留的），或 claim 已超過
+ * ORPHAN_CLAIM_STALE_MS（rename 會更新 ctime，所以 ctime 就是 claim 的時間）。
+ * 另一個 sweep 正持有的 claim 不動。
+ */
+export function recoverOrphanClaims({ dryRun = false } = {}) {
+  let files
+  try {
+    files = readdirSync(LEASE_DIR)
+  } catch {
+    return []
+  }
+  const results = []
+  for (const f of files) {
+    const m = CLAIM_FILE.exec(f)
+    if (!m) continue
+    const [, id, owner] = m
+    const claimPath = join(LEASE_DIR, f)
+    let ageMs
+    try {
+      ageMs = Date.now() - statSync(claimPath).ctimeMs
+    } catch {
+      continue // 持有者剛收尾
+    }
+    const ownerPid = Number(owner)
+    const orphaned =
+      ownerPid === process.pid || !pidAlive(ownerPid) || ageMs > ORPHAN_CLAIM_STALE_MS
+    if (!orphaned) continue
+    const path = leasePath(id)
+    const entry = { id, reason: 'orphan-claim', pid: null, port: null, sessionName: null }
+    const superseded = existsSync(path)
+    if (dryRun) {
+      results.push({ ...entry, serving: false, action: 'would-recover-orphan-claim', claim: f })
+      continue
+    }
+    restoreClaim(claimPath, path)
+    results.push({
+      ...entry,
+      serving: false,
+      action: superseded ? 'discarded-orphan-claim' : 'recovered-orphan-claim',
+      claim: f,
+    })
   }
   return results
 }
@@ -2044,14 +2137,25 @@ function cmdSweep(o) {
   if (!reaped.length) {
     out('sweep：沒有 TTL 已過的 agent 租約需要回收（心跳斷的不在 sweep 收）')
   } else {
-    out(`sweep：${reaped.length} 份 TTL 已過的 agent 租約${o.dryRun ? '（--dry-run，不動）' : ''}`)
+    const expired = reaped.filter((r) => r.reason !== 'orphan-claim').length
+    const orphans = reaped.length - expired
+    out(
+      `sweep：${expired} 份 TTL 已過的 agent 租約${orphans ? `、${orphans} 份孤兒 claim` : ''}${o.dryRun ? '（--dry-run，不動）' : ''}`,
+    )
     for (const r of reaped) {
+      if (r.reason === 'orphan-claim') {
+        out(`  [${r.action}] ${r.id} — 前一次 sweep 中途死掉留下的 ${r.claim}`)
+        continue
+      }
       const what = r.serving
         ? `dev PID ${r.pid} 仍在聽 :${r.port}${r.sessionName ? `，Tab ${r.sessionName}` : ''}`
         : 'dev 已不在（只刪 lease）'
       out(`  [${r.action}] ${r.id}（${r.reason}）— ${what}`)
     }
   }
+
+  // dev node timer 只收租約：dead-tab 可能正被人讀 crash log，不在無人值守的排程裡關
+  if (o.leasesOnly) return
 
   // herdr 沒有 EXITED session：殘骸 = Tab 還在但前景只剩 shell（dev 命令已結束）。
   const sessions = listDevTabs().map((s) => ({ ...s, alive: devProcessAlive(s.paneId) }))

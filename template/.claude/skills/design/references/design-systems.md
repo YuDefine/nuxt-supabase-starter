@@ -13,7 +13,7 @@ Industry-categorized design system index for contextual recommendations during `
 
 ## By Industry
 
-### Technology (51 systems)
+### Technology
 
 **Tier 1 — Industry Leaders** (V&T + Open Source + Comprehensive)
 
@@ -38,7 +38,7 @@ Industry-categorized design system index for contextual recommendations during `
 
 ---
 
-### Finance & Banking (15 systems)
+### Finance & Banking
 
 **Characteristics**: Conservative, trust-building, data-dense, security-conscious
 
@@ -58,7 +58,7 @@ Industry-categorized design system index for contextual recommendations during `
 
 ---
 
-### Government & Public Sector (13 systems)
+### Government & Public Sector
 
 **Characteristics**: Accessibility-first, plain language, high contrast, WCAG AAA
 
@@ -79,7 +79,7 @@ Industry-categorized design system index for contextual recommendations during `
 
 ---
 
-### E-Commerce & Retail (12 systems)
+### E-Commerce & Retail
 
 **Characteristics**: Conversion-focused, product presentation, trust signals, urgency
 
@@ -99,7 +99,7 @@ Industry-categorized design system index for contextual recommendations during `
 
 ---
 
-### SaaS & Developer Tools (22 systems)
+### SaaS & Developer Tools
 
 **Characteristics**: Onboarding flows, empty states, upgrade paths, keyboard shortcuts
 
@@ -120,7 +120,7 @@ Industry-categorized design system index for contextual recommendations during `
 
 ---
 
-### Media & Entertainment (10 systems)
+### Media & Entertainment
 
 | System                                  | Company         | V&T | OSS | Key Pattern    |
 | --------------------------------------- | --------------- | :-: | :-: | -------------- |
@@ -130,7 +130,7 @@ Industry-categorized design system index for contextual recommendations during `
 
 ---
 
-### Automotive & Manufacturing (7 systems)
+### Automotive & Manufacturing
 
 | System                                           | Company | V&T | OSS | Key Pattern       |
 | ------------------------------------------------ | ------- | :-: | :-: | ----------------- |
@@ -142,7 +142,7 @@ Industry-categorized design system index for contextual recommendations during `
 
 ## Voice & Tone Leaders
 
-These systems have **comprehensive V&T documentation** — reference for `/clarify` and `/impeccable init`:
+These systems have **comprehensive V&T documentation** — reference for `/impeccable clarify` and `/impeccable init`:
 
 ### Tier 1: Dedicated V&T Guides
 
@@ -167,15 +167,15 @@ These systems have **comprehensive V&T documentation** — reference for `/clari
 
 ### Production-Ready (MIT/Apache) — Use Directly
 
-| Library                             | Framework      | Stars | Best For                 |
-| ----------------------------------- | -------------- | ----- | ------------------------ |
-| [shadcn/ui](https://ui.shadcn.com/) | React          | 50k+  | Customizable, copy-paste |
-| [Radix](https://radix-ui.com/)      | React          | 12k+  | Headless, accessible     |
-| [Chakra UI](https://chakra-ui.com/) | React          | 35k+  | Styled, themeable        |
-| [Mantine](https://mantine.dev/)     | React          | 22k+  | Feature-rich             |
-| [Ant Design](https://ant.design/)   | React          | 88k+  | Enterprise               |
-| [Nuxt UI](https://ui.nuxt.com/)     | Vue/Nuxt       | 3k+   | Nuxt-native              |
-| [Shoelace](https://shoelace.style/) | Web Components | 10k+  | Framework-agnostic       |
+| Library                             | Framework      | Best For                 |
+| ----------------------------------- | -------------- | ------------------------ |
+| [shadcn/ui](https://ui.shadcn.com/) | React          | Customizable, copy-paste |
+| [Radix](https://radix-ui.com/)      | React          | Headless, accessible     |
+| [Chakra UI](https://chakra-ui.com/) | React          | Styled, themeable        |
+| [Mantine](https://mantine.dev/)     | React          | Feature-rich             |
+| [Ant Design](https://ant.design/)   | React          | Enterprise               |
+| [Nuxt UI](https://ui.nuxt.com/)     | Vue/Nuxt       | Nuxt-native              |
+| [Shoelace](https://shoelace.style/) | Web Components | Framework-agnostic       |
 
 ### Reference-Only (Study, Don't Copy)
 

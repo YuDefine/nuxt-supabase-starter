@@ -6,11 +6,11 @@
 
 # evlog Client Transport
 
-5/5 clade consumer 共同 gap：瀏覽器端 wide event 信號在 client 消失，瀏覽器錯誤完全靠 Sentry SDK。本 snippet 是 baseline 修補。
+常見 gap：瀏覽器端 wide event 信號在 client 消失，瀏覽器錯誤完全靠 Sentry SDK。本 snippet 是 baseline 修補。
 
-> **重大設計修正（M3a-yuntech 後）**：evlog/nuxt module 已內建 client transport — 自動註冊 `/api/_evlog/ingest` server handler + 自動把 client wide event 透過 fetch/sendBeacon 送出。**不需要**自家 `app/plugins/evlog-client.client.ts` 包 `createHttpLogDrain`，**不需要**自家 `server/api/_evlog/ingest.post.ts`（會跟 module 註冊的衝突）。
+> **evlog/nuxt module 內建 client transport** — 自動註冊 `/api/_evlog/ingest` server handler + 自動把 client wide event 透過 fetch/sendBeacon 送出。**不需要**自家 `app/plugins/evlog-client.client.ts` 包 `createHttpLogDrain`，**不需要**自家 `server/api/_evlog/ingest.post.ts`（會跟 module 註冊的衝突）。
 >
-> 本 snippet 簡化為「nuxt module 配置 + identity helper 兩步」。
+> 所以本 snippet 只有兩步：nuxt module 配置 + identity helper。
 
 Reference: `docs/evlog-master-plan.md` § 5 + `rules/core/logging.md` Client logging 規範
 
@@ -86,7 +86,7 @@ export default defineNuxtPlugin(() => {
 })
 ```
 
-`suppressConsole` 由 nuxt module config 的 `console: false` 控制（M3a-yuntech 後 evlog 提供）。
+`suppressConsole` 由 nuxt module config 的 `console: false` 控制。
 
 ## ingest endpoint 保護（nuxt module 內建 + 補強）
 
@@ -97,13 +97,13 @@ export default defineNuxtPlugin(() => {
 | **Body schema** | ✅（module 自家 schema 驗證） | 一般情況不需動 |
 | **Redact 二次過濾** | ✅（透過 `evlog.redact: true` 對 ingest 也套用） | 配 `redact` 即可 |
 
-> yuntech-usr-sroi 採用 `nuxt-security` 的 csrf middleware（已在 `security: { csrf: true }` 啟用），不需要為 ingest endpoint 額外設定。
+> 已啟用 `nuxt-security` csrf middleware（`security: { csrf: true }`）的 consumer，不需要為 ingest endpoint 額外設定。
 
 ## 與其他 snippet 的關係
 
 - `evlog-drain-pipeline` / `evlog-sentry-drain`：server-side ingest 收到 client event 後 re-emit，走完整 enricher + drain pipeline
 - `evlog-enrichers-stack`：server-side enricher 自動 trigger，client event 也帶 geo / trace 上下文
-- `evlog-client-http-drain`：純 client-side `createHttpLogDrain` 替代版；現在沒場景需要（nuxt module 已自帶 fetch/beacon transport）；本 snippet 不再依賴
+- `evlog-client-http-drain`：純 client-side `createHttpLogDrain` 低階替代版，只在它 README 列的觸發條件下採用；與本 snippet 互斥，不並裝
 
 ## Consumer onboarding checklist
 
@@ -122,7 +122,7 @@ export default defineNuxtPlugin(() => {
 
 ## 從 legacy snippet 遷移
 
-如果 consumer 已有舊版 `app/plugins/evlog-client.client.ts` + `server/api/_evlog/ingest.post.ts`（pre M3a-yuntech vendor snippet）：
+如果 consumer 已有舊版 `app/plugins/evlog-client.client.ts` + `server/api/_evlog/ingest.post.ts`（舊版 vendor snippet 的形狀）：
 
 1. `rm app/plugins/evlog-client.client.ts`
 2. `rm -rf server/api/_evlog`

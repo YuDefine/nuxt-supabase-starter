@@ -17,7 +17,7 @@ Reference: `docs/d-pattern-master-plan.md`
 
 1. **DB outbox canonical**：audit row 與業務 mutation 必須在同一個 PostgreSQL transaction 內完成。business commit 成功時 audit row 必須存在；business rollback 時 audit row 也 rollback。
 2. **evlog derived stream**：evlog 只從 canonical audit event 衍生，用於 ops、security monitoring、cross-service trace、短 TTL PII envelope。handler 不能只送 fire-and-forget audit event 就宣稱 audit 完成。
-3. **Hash anchor in DB**：`prev_hash` 與 `hash` 直接寫在 canonical DB row。Cloudflare Workers 的 `node:fs` VFS 不是 durable journal，多 instance hash chain 也會 race，所以 hash chain 不依賴 fs journal。
+3. **Hash anchor in DB**：`prev_hash` 與 `hash` 直接寫在 canonical DB row，不依賴 fs journal（Workers `node:fs` 不 durable、多 instance 會 race）。
 
 Source-of-truth 規則：任何 audit 問題先查 DB row，evlog 是衍生視圖；evlog miss 是 monitoring 缺口，不改變 canonical audit truth。
 
@@ -27,7 +27,7 @@ Source-of-truth 規則：任何 audit 問題先查 DB row，evlog 是衍生視�
 - Audit row **MUST** 與業務 mutation 在同一個 PostgreSQL transaction 內完成；Supabase JS 多次 `.from().insert()` 不是 transaction，必要時用 SQL RPC。
 - evlog audit events **MUST** 帶 `auditEventId`，且該值必須對應 DB canonical row 的 `event_id`。
 - DB row **MUST** 包含 `prev_hash` / `hash`。
-- DB row **MUST NOT** 包含 `ip_address` / `user_agent` / device fingerprint 等 PII 欄位。
+- DB row **MUST NOT** 包含 `ip_address` / `user_agent` / device fingerprint 等 PII 欄位（migration 也不得新增）。
 - Multi-tenant consumer **MUST** 使用 per-tenant chain；實作可用 PostgreSQL advisory lock per tenant，或用 partition / tenant-scoped chain owner。
 - `business_keys` **MUST** 只放結構化業務鍵，例如 `invoiceId`、`reportVersion`、`policyVersion`、`rowCount`。
 - `business_keys` **MUST NOT** 放 PII、姓名、email、raw LLM prompt、raw request body、大型 payload。
@@ -42,13 +42,12 @@ Source-of-truth 規則：任何 audit 問題先查 DB row，evlog 是衍生視�
 - Handler **MUST NOT** 直接 `db.from('audit_logs').insert(...)` 或 `db.from('operation_logs').insert(...)`。
 - Handler **MUST NOT** 直接操作 hash 欄位；`prev_hash` / `hash` 必須由 DB trigger 或 canonical SQL helper 產生。
 - Handler **MUST NOT** 把 `log.audit()` 當 canonical audit 完成條件；fire-and-forget 不算 audit 完成。
-- DB migration **MUST NOT** 新增 `audit_logs.ip_address` / `audit_logs.user_agent`。
 - Multi-tenant audit table **MUST NOT** 使用共用 global chain。Single-tenant consumer 可以用 global chain（tenant isolation 不適用）。
 - `server/utils/audit.ts` 以外的檔案 **MUST NOT** 直接寫 audit 表；一次性 migration script 例外，但 PR 必須註明。
 
 ## Tamper Resistance（防竄改與保留）
 
-hash chain（`prev_hash` / `hash`）讓竄改**可被偵測**，但**擋不住**有寫權限者直接 `UPDATE` / `DELETE` audit row 再重算整條 chain。真正的防竄改必須把 audit table 在 **DB 權限層**做成 append-only，並在 DB 外留獨立錨點。
+hash chain 讓竄改可被偵測，但擋不住有寫權限者改 row 再重算整條 chain；必須在 DB 權限層做成 append-only，並在 DB 外留獨立錨點。
 
 ### Append-only DB permission（權限層強制）
 
@@ -58,20 +57,19 @@ hash chain（`prev_hash` / `hash`）讓竄改**可被偵測**，但**擋不住**
   grant insert, select on <audit_schema>.<audit_table> to <audit_writer_role>;
   -- 明確不給 update / delete
   ```
-- **權限分離**：能 INSERT audit row **MUST NOT** 隱含能 UPDATE / DELETE。應用寫入用的 role（例如 audit writer）**只**有 INSERT；即使是 `service_role`（BYPASSRLS）也應透過 `REVOKE UPDATE, DELETE` 在 table 權限層擋掉改寫（BYPASSRLS 只 bypass RLS policy，**不** bypass table-level `GRANT` — 因此 table-level revoke 對 service_role 仍有效，是 privileged 寫入者也擋得住的關鍵防線）。
-- **MUST NOT** 在 audit table 上建 `UPDATE` / `DELETE` trigger 或 policy — 那等於開一條改寫 / 刪除的合法路徑，違反 append-only。audit table 只該有 `INSERT`（+ hash 計算的 `BEFORE INSERT` trigger）與 `SELECT`。
+- **權限分離**：能 INSERT **MUST NOT** 隱含能 UPDATE / DELETE。`service_role` 也 MUST 以 table-level `REVOKE UPDATE, DELETE` 擋住（BYPASSRLS 不 bypass table-level `GRANT`）。
+- **MUST NOT** 在 audit table 上建 `UPDATE` / `DELETE` trigger 或 policy；只該有 `INSERT`（+ hash 的 `BEFORE INSERT` trigger）與 `SELECT`。
 
 ### External anchoring / WORM export（DB 外的獨立錨點）
 
 - **MUST** 有 DB 之外的獨立防竄改機制（擇一或並用）：
-  - **External anchoring**：定期把 chain head 的 `hash`（或一段 chain 的 Merkle root）錨定到**不可回改**的外部（append-only object storage with object-lock、外部 timestamping service、另一個 write-once 系統）。之後任何 DB 內竄改都會與外部錨點對不上。
-  - **WORM export**：定期把 audit row export 到 **write-once-read-many** 儲存（S3 Object Lock / 具 retention lock 的 bucket），export 後不可修改 / 刪除。
-- 理由：DBA / 有 DB 寫權限者理論上能同時改 row + 重算 hash chain；external anchor / WORM 讓 in-DB 的完整竄改仍**留下對不上的外部證據**。
+  - **External anchoring**：定期把 chain head `hash`（或 Merkle root）錨定到不可回改的外部（object-lock storage、timestamping service）
+  - **WORM export**：定期把 audit row export 到 write-once-read-many 儲存（S3 Object Lock 等）
 
 ### Retention / Legal hold（保留與法律凍結）
 
 - **MUST** 定義 audit 的 **retention 政策**（保留多久、由誰、依什麼法規 / 合約要求），並確保清理只依該政策執行。
-- **Retention 清理只能是「到期後的批次 purge」**，走**明確記錄、可審計**的 migration / job，**MUST NOT** 是 ad-hoc 的 `DELETE`（且一般 application role 本來就沒有 DELETE 權限，見上）。
+- **Retention 清理只能是「到期後的批次 purge」**，走可審計的 migration / job，**MUST NOT** 是 ad-hoc 的 `DELETE`。
 - **Legal hold**：在調查 / 訴訟 / 稽核期間 **MUST** 能凍結相關 audit 不被 retention purge 清掉（標記 hold flag / 排除該範圍於 purge job）。**NEVER** 讓例行 retention 清掉正處於 legal hold 的紀錄。
 
 ## Handler 標準流程

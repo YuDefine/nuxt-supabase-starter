@@ -97,6 +97,14 @@
 
 set -uo pipefail
 
+# GPT-6 Astra 已禁用（Charles 2026-09-24）：本 script 的唯一 carrier 是 Astra，所以整支
+# 拒跑。commit 0-A 唯一合格 reviewer 是 claude-review-safe.sh（Claude Opus 5.5 medium）；
+# Opus 不可用時 gate 保持未完成，NEVER 回頭跑本 script 補位。exit 2 = 本地用法錯誤，
+# NEVER 讀成 reviewer 不可用（exit 3／4）而往下一格退。放在 CLADE_HOME re-exec 之前：
+# 否則在 main 尚未帶上本次改動時，會 re-exec 進仍會跑 Astra 的舊版。
+echo "[codex-review-safe] RESULT: retired（exit 2）— GPT-6 Astra 已禁用（2026-09-24）；commit 0-A 改跑 claude-review-safe.sh prepare medium（Opus 5.5 medium），Opus 不可用時 gate 保持未完成" >&2
+exit 2
+
 # Runtime 一律走 CLADE_HOME main（Z2）：propagate 只寫 main，repo 內／舊 worktree 的
 # 投影副本會凍結在開樹那一刻——舊 wrapper 不認得新 seat、舊 helper 拒絕新的 Routing
 # Table 列（2026-09-23 實測）。所以 wrapper 先把自己換成 CLADE_HOME 那份再跑，helper

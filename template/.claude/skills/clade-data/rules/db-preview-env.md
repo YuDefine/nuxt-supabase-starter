@@ -17,22 +17,16 @@ paths: ['supabase/migrations/**/*.sql', '.github/workflows/**/*.yml', 'docker-co
 
 ## 為什麼不規定 topology
 
-Self-host Supabase 在 platform-only Branching 之外的選項地景已收斂：
-
-- ❌ **Schema-per-branch**（同 PG 多 schema）：Auth/Storage/Realtime/RLS 共用狀態，假隔離
-- ❌ **PG TEMPLATE clone**：Postgres `CREATE DATABASE ... TEMPLATE` 不是 CoW、template 期間禁 active conn、且 Auth/Storage 仍共用 → 一旦補 per-branch service stack 就是 compose-per-PR，B 是 dead-end
-- ✅ **schema-migration-gate**（CI throwaway-DB replay + diff）：最便宜、立即解 reviewer 漏看，**MUST 第一階段必備**
-- ✅ **compose-per-PR**（docker-compose per PR，unique JWT/port/volume）：完整 preview，**可選**升級路徑
-- ⏸️ **LXC-per-PR**：LXC 同構在錯的層（OS/Tailscale/DNS/secret 不該每 PR 重建）；rare high-fidelity lane、不自動化
-- ⚠️ **clone + PostgREST sidecar**：PG TEMPLATE 死路的**窄例外**，且**只適用 worktree-level dev 隔離、不是 PR preview**；六個前提全滿足才開，見下節
-
-clade 規約管 capability，consumer 在 `registry/consumers.json` 宣告自家當前能力。
+- ❌ **Schema-per-branch**：Auth/Storage/Realtime/RLS 共用狀態，假隔離
+- ❌ **PG TEMPLATE clone**（PR preview）：不是 CoW，Auth/Storage 仍共用；補齊 service stack 就等於 compose-per-PR
+- ✅ **schema-migration-gate**（CI throwaway-DB replay + diff）：**MUST 第一階段必備**
+- ✅ **compose-per-PR**（unique JWT/port/volume）：可選升級路徑
+- ⏸️ **LXC-per-PR**：rare high-fidelity lane，不自動化
+- ⚠️ **clone + PostgREST sidecar**：只適用 worktree-level dev 隔離、不是 PR preview；見下節
 
 ### 窄例外：clone + PostgREST sidecar（worktree-level dev 隔離）
 
-上面「PG TEMPLATE clone 是 dead-end」的判定**針對 PR preview** —— 那個場景要的是完整 per-branch service stack（Auth / Storage / Realtime），補齊就等於 compose-per-PR，所以 clone 沒有中間態價值。
-
-但**同一台 dev 主機上多個 git worktree 各自要一份可 reset 的 DB** 是不同問題：不需要 per-branch Auth／Realtime（開發者共用一組 dev 身分即可），只需要「資料互不覆蓋 + 各自可 `db:reset`」。此時 clone + 每 clone 一個 PostgREST sidecar 是成立的，**但六個前提 MUST 全部滿足**：
+同一台 dev 主機上多個 worktree 各自要一份可 reset 的 DB（共用 dev 身分、只需 REST）時，clone + 每 clone 一個 PostgREST sidecar 成立，**但六個前提 MUST 全部滿足**：
 
 1. **Dedicated zero-connection template** —— 專用 template DB（`datistemplate=true`、`datallowconn=false`、0 active connection），**NEVER** 拿正在服務的 DB 當 template
 2. **小 DB** —— `CREATE DATABASE ... TEMPLATE` 是實體 copy 不是 CoW；DB 大到 clone 時間／磁碟不可接受就不適用
@@ -51,12 +45,7 @@ clade 規約管 capability，consumer 在 `registry/consumers.json` 宣告自家
 
 Fail-loud 的訊息 **MUST 點名 backing service 本身與修復指令**（例：`DB clone <consumer-b>_wt_<slug> 不存在 → node scripts/worktree-db.mjs create --slug <slug>`）。**NEVER** 只說「後端連線失敗」——那正是要避免的那層代言。
 
-**為什麼非綁在 dev server 啟動不可**：dev-session 這類 launcher 的成功判準通常是「port 有沒有 LISTENING」，而它對本問題**恆為真** —— app 起得來、只是打不到 DB。於是第一個發現異常的是瀏覽器，拿到的又是 app 為「後端暫時抖動」寫的 503/500 文案，完全指不到 DB。實測（<consumer-b> 2026-07-31）：修復只要兩個指令、數十秒，診斷卻花十幾輪，中途還跟兩個無關的 dev server 症狀混淆。**修復成本 ≈ 0，發現成本極高** —— 這個不對稱就是把檢查前移的全部理由。
-
-本證據決定：檢查該綁在哪個動作上（起 dev server，而非建 worktree）。
-本證據不決定：要不要做這個檢查——**NEVER** 拿「修復很便宜」當省略檢查的理由，便宜的是修復，貴的是發現。
-
-同一形狀會在**非 dev-server 的入口**復發：跑 integration test、收 verify evidence、任何預期 backing service 在的動作。這些路徑同樣適用本條款。
+launcher 的「port LISTENING」判準對本問題恆為真（app 起得來、只是打不到 DB）。**NEVER** 拿「修復很便宜」當省略檢查的理由。跑 integration test、收 verify evidence 等預期 backing service 在的入口同樣適用。
 
 Cookbook（naming / ownership / template refresh / path adapter / pool / cleanup 的 contract 與範例）：`vendor/snippets/worktree-db-isolation/`。
 
@@ -73,17 +62,11 @@ psql "$DATABASE_URL" -c "NOTIFY <PGRST_DB_CHANNEL>, 'reload schema'"
 channel 名字 **MUST 從該 sidecar 的 `PGRST_DB_CHANNEL` 讀，NEVER 猜**——per-schema sidecar
 拓樸下每個 schema 有自己的 channel，發錯 channel 不報錯、也不生效。
 
-**不發的後果是靜默且指不到真因**：新建的表在 PostgREST 眼裡不存在（回 `PGRST205` / 404），
-而 app 的 DB error wrapper 通常把它包成 503「資料庫操作失敗」——表明明在 DB 裡、container 正常、
-`information_schema` 查得到，唯一會分岔的觀測是「經 PostgREST 打那張表」。逐字反開脫：
-「migration exit 0 了，DB 端沒問題」——exit 0 只證明 DDL 執行了，對 schema cache 零訊號。
-
-修復成本是一行 psql，發現成本是一輪完整的 prod triage。**這個不對稱就是把它自動化的全部理由**，
-**NEVER** 把「記得手動發 NOTIFY」當成防線。
+不發時新表在 PostgREST 回 `PGRST205` / 404，常被 app 包成 503；唯一會分岔的觀測是「經 PostgREST 打那張表」，migration exit 0 對 schema cache 零訊號。**NEVER** 把「記得手動發 NOTIFY」當成防線，要自動化。
 
 實證與 detection 指令見 [[pitfall-migration-creates-table-postgrest-schema-cache-not-reloaded]]。
 
-**in-memory Postgres（PGlite）已評估、不採用**：三條硬阻礙——測試全走 PostgREST 而 PGlite 一次只接一個 client、RLS 是測試標的（改直連 SQL 就繞過去）、`pg_cron` / `pg_net` / `supabase_vault` / `auth.users` 對不上。證據與重啟條件見 `docs/discussions/2026-08-03-pglite-in-memory-db-rejected.md`，**NEVER** 因為「聽起來很快」就重跑一次調查。
+**in-memory Postgres（PGlite）已評估、不採用**（單 client、繞過 RLS、extension 對不上）；重啟條件見 `docs/discussions/2026-08-03-pglite-in-memory-db-rejected.md`。
 
 ## MUST
 
@@ -98,8 +81,8 @@ channel 名字 **MUST 從該 sidecar 的 `PGRST_DB_CHANNEL` 讀，NEVER 猜**—
 
 | Consumer `workflow_model` | Schema-gate trigger | 評論去處 | 阻擋方式 |
 | --- | --- | --- | --- |
-| `trunk-based`（目前所有 consumer）| `on: push: [main]`，pre-deploy step | commit comment | deploy-staging.yml migrate `needs: schema-gate` |
-| `pr-merge-based`（rare，目前無）| `on: pull_request:` | PR comment | required status check |
+| `trunk-based` | `on: push: [main]`，pre-deploy step | commit comment | deploy-staging.yml migrate `needs: schema-gate` |
+| `pr-merge-based` | `on: pull_request:` | PR comment | required status check |
 
 **有 PR-CI infra 的 trunk-based consumer** 可同時跑 pr-based template 當早期 gate — 兩個並存無衝突。範本：`vendor/snippets/db-preview-env/schema-migration-gate/{trunk-based,pr-based}.workflow.yml.template`。
 
@@ -143,26 +126,19 @@ channel 名字 **MUST 從該 sidecar 的 `PGRST_DB_CHANNEL` 讀，NEVER 猜**—
 
 **MUST** commit / PR 描述標出 migration 風險分類；reviewer **MUST** 對 `expand-contract` / `maintenance-required` 拍板才能 merge / tag。
 
-**現成自動化工具**：clade 已散播 `vendor/scripts/postgrest-migration-risk.mjs`（per-consumer 自動分類）+ `postgrest-ready-gate.mjs` + `postgrest-smoke.mjs`。consumer 可串 GitHub Actions `workflow_dispatch` input 把分類做成手動 gate — 範例：<consumer-b> `.github/workflows/ci.yml` `approve_high_risk_migration: choice` input。
+自動分類工具：`vendor/scripts/postgrest-migration-risk.mjs`（配 `postgrest-ready-gate.mjs`、`postgrest-smoke.mjs`），可串 `workflow_dispatch` input 做成手動 gate。
 
 ### 6. 主幹 deploy gate
 
 至少**兩條獨立 workflow**：一條 **PR-validation gate**（schema-migration-gate 即滿足），一條 **production deploy**（tag-triggered）。
 
 - **MUST** PR-validation gate 在 PR 階段跑，**NEVER** 用 shared staging 當 validation 環境
-- **MUST** production deploy 走 tag-trigger（tag pattern 由 consumer 自選 — `v*` 是 semver convention，`*` 也合法；<consumer-a> 用 `v*`、<consumer-b> 用 `*`）
+- **MUST** production deploy 走 tag-trigger（tag pattern 由 consumer 自選）
 - **MUST** production workflow 內有明確 confirm gate（環境變數 / GitHub environment protection / approval reviewer / `workflow_dispatch` approve input 都算）
 - **NEVER** 讓 PR / main push 直接打到 production
 - **NEVER** 把 production deploy 跟 PR-validation 寫在同一條 workflow 內共用 trigger
 
-**兩個典型 pattern**（consumer 自選）：
-
-| Pattern | 適用 | 範例 consumer |
-| --- | --- | --- |
-| `main → staging` push + `tag → production` | 有 persistent staging LXC 作 merge 整合環境 | <consumer-a>（`<client-a>-<consumer-a>-staging` LXC）|
-| `PR → schema-migration-gate` + `tag → production`（trunk-based，無 staging）| 單 dev LXC + tag-driven prod | <consumer-b>（`fc-supabase-dev` 單 LXC）|
-
-兩種 pattern 都滿足契約 — 重點是 PR 驗證**不**污染 shared writeable env。
+`main → staging` + `tag → production`（有 persistent staging）與 `PR → schema-migration-gate` + `tag → production`（無 staging）都滿足契約；重點是 PR 驗證不污染 shared writeable env。
 
 ## SHOULD
 
@@ -192,8 +168,8 @@ Managed platform（Cloudflare Workers 等）自帶 per-version preview URL，缺
 ### 適用前提（任一不滿足就不是這個變體）
 
 - **MUST** preview 接的 DB 與 production **不同 instance** —— 只換 URL 不換 DB 的不算，那是「拿 production 當 preview」
-- **MUST** seed 失敗**擋住** preview 發佈。preview 的價值在於「打開就有可用資料」，發出一個空庫 URL 等於把「資料沒備好」原封不動搬到 preview
-- **MUST** 有一道機械檢查確認建置產物真的綁到 preview DB。binding 在 build time 決定的框架（NuxtHub 等）尤其需要 —— 框架改變 env var 讀取方式時，preview 會**安靜地**接回 production DB，沒有任何錯誤訊息
+- **MUST** seed 失敗**擋住** preview 發佈
+- **MUST** 有一道機械檢查確認建置產物真的綁到 preview DB（build-time binding 的框架如 NuxtHub 會安靜地接回 production DB）
 - **MUST** preview URL 的存取控制與 production 分開評估。平台的 preview URL 多半**預設公開**
 
 ### Cloudflare Workers trip-wires
@@ -209,13 +185,7 @@ Managed platform（Cloudflare Workers 等）自帶 per-version preview URL，缺
 
 不是每個部署平台都做得出 per-change preview。**MUST** 先確認平台原生支援，再決定要不要投；平台沒有就宣告 `preview_db: none` 收工，**NEVER** 自己拼一個假的。
 
-已查證的死路（2026-07-29，實跑 `void deploy --help` 對 `void@^0.8.11` 與 `void@0.10.10` 兩版）：
-
-| 平台 | 結論 | 依據 |
-| --- | --- | --- |
-| **void.cloud** | **無 per-change preview**。兩版 flag 完全相同——`--project` / `--dir` / `--spa` / `--skip-build` / `--debug`，無 preview / staging / branch / alias | 唯一的多目標機制是 `--project <name>` 另開一個 project，那是「第二個 production」不是 per-change。**NEVER** 拿它假裝 preview——兩個 project 各自累積狀態，用完不會消失 |
-
-Cloudflare Workers 的能力邊界另見 § Cloudflare Workers trip-wires（含 Durable Object 會讓 preview URL 完全不產生這條 hard block）。
+已查證的死路：**void.cloud**（`void@0.8.x`／`0.10.x`）無 per-change preview；`--project <name>` 開的是第二個 production，**NEVER** 拿它假裝 preview。
 
 ## Capability declaration
 
@@ -242,12 +212,8 @@ Cloudflare Workers 的能力邊界另見 § Cloudflare Workers trip-wires（含 
 - ❌ 「有了 per-change preview URL 就不用 schema-migration-gate」：`shared-preview-db` 的所有 preview 共用同一個 DB，兩條 change 同時改 schema 照樣互踩 — URL 隔離不等於資料隔離
 - ❌ 「preview 用 production DB，反正只是看畫面」：只要 preview 能寫入就會污染 prod，而「只是看畫面」在有登入 / 有表單的 app 從來不成立
 
-## 與其他規約關係
+## 相關
 
-- `rules/core/audit-pattern.md`：D-pattern audit 結果**不**等於 schema diff — 兩者都要做
-- `rules/modules/db-runtime/supabase-self-hosted/postgrest-resilience.md`：preview env 跑起來時也適用同樣的 PostgREST topology / reload channel 規則
-- `capabilities/modules/db-schema/supabase/skills/supabase-migration/SKILL.md`：migration 寫作規範（DDL / view security / SECURITY DEFINER 位置）
-
-## 變體
-
-詳細的「self-host Supabase 該選哪一個變體、cookbook 範本怎麼用、image quirk 怎麼繞」見 `rules/modules/db-runtime/supabase-self-hosted/preview-env.md`。Cloud Supabase consumer 規約另寫（暫無 active cloud consumer，留 TD）。
+- D-pattern audit（`audit-pattern.md`）**不**等於 schema diff，兩者都要做
+- preview env 同樣適用 `rules/modules/db-runtime/supabase-self-hosted/postgrest-resilience.md` 的 topology / reload channel 規則
+- variant 選擇、cookbook 用法與 image 已知問題見 `rules/modules/db-runtime/supabase-self-hosted/preview-env.md`；migration 操作見 `supabase-migration` skill

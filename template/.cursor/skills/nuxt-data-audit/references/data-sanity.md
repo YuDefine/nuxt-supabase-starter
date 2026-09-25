@@ -2,17 +2,9 @@
 
 `nuxt-data-audit` 的 `schema` mode reference。讀取本文件後使用下列 CLI。
 
-本 mode 執行唯讀稽核與回報；發現問題後，修正依本次任務既有授權處理（權限層級沿用 `nuxt-data-audit` 的 `metadata.clade.permission_tier`）。
+`data-sanity` — Layer C 唯讀 static data-shape audit（修正依本次任務既有授權處理）。它抓的是 typecheck / lint / design review 都抓不到的**資料形狀**問題：client 傳 `perPage: 200` 而 server schema 是 `.max(100)` → API 400 → lookup map 空 → 整欄顯示 fallback。
 
-Born from <consumer-a> `app-status-badge-extraction`（2026-05-24）: `attendance/amendments.vue` 用 `useEmployeeListQuery({ perPage: 200 })`，但 server schema 是 `perPage: z....max(100)` → API 400 → `employeeNameMap` empty → 員工 column 整列「-」。typecheck / lint / design review / verify:ui 全沒抓到，因為它是**資料形狀**問題，不是型別或視覺問題。
-
-這是 clade 自有的稽核（**不是** `/impeccable` 的 sub-command — impeccable 是第三方 npx-managed skill，clade 不擁有）。
-
-## 何時跑
-
-- **Design Checkpoint 期間**（[[proactive-skills.design-checkpoint]]）：對本次工作觸及的 paginated query + lookup-resolved column 跑一次。
-- **交付人工檢查之前**：data-shape 防線。
-- **Ad-hoc**：任何改到 `useXxxQuery({ <param>: <literal> })` 或 lookup map 的工作。
+在 Design Checkpoint（[[proactive-skills.design-checkpoint]]）、交付人工檢查前，或改到 `useXxxQuery({ <param>: <literal> })` / lookup map 時，對觸及的 paginated query 與 lookup-resolved column 跑一次。
 
 ## 怎麼跑
 

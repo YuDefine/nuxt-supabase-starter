@@ -19,10 +19,10 @@ every session always-load。
    HANDOFF 超標事件的三個選項**沒有一個**清得掉超標量（實測 42.8 KB / 門檻 35 KB，推薦的 A 只降
    約 4 KB → 執行後 38.8 KB 仍超標），而它照樣被標成推薦並執行。
 3. **處置後 MUST 立刻複量**，用同一支 audit / 同一個指令，NEVER 用估算或 diff 行數推算。
-4. **複量結果仍 > 門檻的 90%（含仍超標）→ MUST 停止自行追加邊修，並取得 read-only Fable 顧問對成長
+4. **複量結果仍 > 門檻的 90%（含仍超標）→ MUST 停止自行追加邊修，並取得 read-only Opus 5.5 顧問對成長
    結構的檢討**。顧問 brief 帶：門檻與歷次實測值、本次處置手法與降幅、前幾次同型處置的結果。
    顧問 transport 與可用性依目前 runtime 的 adapter；transport 不可用時維持 remediation gate 未完成並回報
-   具體缺口，NEVER 以另一個未核准的 reviewer 冒充 Fable。
+   具體缺口，NEVER 以另一個未核准的 reviewer 冒充該顧問。
    反覆長回門檻的檔案，成因在**寫入契約**而不在存量，而那一層不是再壓縮一次能碰到的。
 
 ## NEVER
