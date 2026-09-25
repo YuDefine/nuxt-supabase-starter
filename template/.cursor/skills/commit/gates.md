@@ -362,11 +362,11 @@ bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" medium       # Herdr c
 
 ```bash
 bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" prepare medium [--findings <上一輪 verdict 檔>]
-# stdout：AGENT_CALL: {...}（subagent_type／model／prompt）與 FINALIZE: bash … finalize <work-dir>
+# stdout：AGENT_CALL: {...}（subagent_type／model／prompt；agent 定義固定 effort: medium）與 FINALIZE: bash … finalize <work-dir>
 ```
 
-1. 跑 `prepare`，照 `AGENT_CALL` 的欄位**逐字**呼叫 `Agent` tool（`subagent_type: commit-0a-reviewer`、`model`、`prompt` 原樣照抄，前景）。
-2. subagent 回來後跑 `FINALIZE` 那一行。它從本 session 的 subagent transcript 核對 nonce 歸屬、agent type、observed model、唯讀工具面、brief 是否逐行讀完，通過後把 verdict 印上 stdout 並寫 receipt。
+1. 跑 `prepare`，照 `AGENT_CALL` 的欄位**逐字**呼叫 `Agent` tool（`subagent_type: commit-0a-reviewer`、`model`、`prompt` 原樣照抄，前景）。該 agent 的 frontmatter 固定 `effort: medium`；不可改用會繼承主線 effort 的其他 agent。
+2. subagent 回來後跑 `FINALIZE` 那一行。它從本 session 的 subagent transcript 核對 nonce 歸屬、agent type、每則 assistant 的 observed model 與 effort、唯讀工具面、brief 是否逐行讀完；effort 缺席或非 medium 時 exit 8、扣住 verdict。
 3. **verdict 只來自 finalize 的 stdout。** subagent 的回覆是它交給 finalize 的原料，**NEVER** 由主線轉述、摘錄或拼接成 verdict——主線是受審改動的 producer。
 
 exit code 與 Herdr carrier 同一張表（下表各列照用；4／10／11 是帳號與巢狀派工的結論，subagent carrier 不會產生）。`finalize` 回 exit 3 且 RESULT 寫「WORK_DIR 保留」＝還沒派 subagent 就跑了 finalize，補派後重跑同一行即可；其餘 exit 3 是 reviewer 沒跑完或沒讀完 brief，重跑 `prepare` 拿新 nonce 再派。
@@ -918,10 +918,10 @@ script 抓不到「這是一條新的最佳實踐」——那是語意判斷。�
 每次先核對本入口實際 catalog；IDE 原生工具、Cursor CLI 與經 Pi 的 Cursor provider 是不同載體，分別記錄證據。
 
 - Simplify：使用本入口可讀取的技能及共同四軸契約；不把 Claude Skill API 當成本端工具。
-- Review：符合共用資格的 CLI runner 可由本端 shell 執行。背景／等待／取消只帶當前 schema 支持的參數，保存真實返回 handle 並收回同一工作。沒有背景能力但有已授權的同步載體時同步執行，保留全部 gate 與 snapshot 條件並明示限制。0-A.1／0-A.2 優先走 `codex-review-safe.sh`（Pi Astra medium）；Astra 實際不可用（exit 3／4＋逐字證據）時走 `claude-review-safe.sh`（Fable medium via Herdr），0-A.2 是合格 reviewer 的 fresh-context 複審（格別每輪依當下可用性重判，與 0-A.1 不同格合法），主線不需自己開 Herdr pane。`idle`／`done` 不是完成。**NEVER** `--relay`，**NEVER** 叫 user 開 Claude。
-- Fresh agent：只用 catalog 真實提供的獨立上下文工具及合法模型值；模型僅能 inherit 時記錄實際繼承結果。0-A 已無跨模型要求，fresh-context 複審由新的合格 reviewer session（Astra 格優先，實際不可用時 Fable 格）承擔，不需另派 agent；需要換 runtime 時先查本任務既有授權與可用 transport，不暗換 Claude launcher。
+- Review：0-A.1／0-A.2 走 `claude-review-safe.sh medium`，由它派 fresh-context Claude Opus 5.5 medium reviewer；保存真實 handle 並收回 terminal exit 與完整輸出。Opus 不可用時 gate 保持未完成。`idle`／`done` 不是完成。**NEVER** `--relay`，**NEVER** 叫 user 開 Claude。
+- Fresh agent：一般非 gate 協作用 catalog 真實提供的獨立上下文工具；0-A 複審由 wrapper 新建合格 Opus reviewer，不以 Cursor Task／Agent 補位。
 - UI：依本入口實際圖片／瀏覽器能力取得證據，再選具核准視覺資格的 reviewer。Pi Cursor provider 的 tools flag 不限制 SDK 原生工具，使用該 provider 前完整套用 runner-safety 的 OS／網路隔離契約。
 - 協調／詢問：使用本入口可用且已授權的具名通道；缺通道時回報具體缺口。需要使用者資訊可直接對話，不要求補裝另一 runtime 的詢問工具。
 - Exit：核對 writer 的 terminal 結果後依 runtime-lifecycle 釋放原 owner 鎖。沒有原生完成事件或 wakeup 時使用現有 handle 的 bounded wait，不創造 ScheduleWakeup／TaskOutput API。
 
-每次 receipt 記實際 runtime、model 與隔離方式；本段不把 Cursor 主線視為固定模型，也不代替共用 reviewer 資格判定（兩格同級：GPT-6 Astra via Pi medium 優先，Astra 實際不可用〔exit 3／4＋逐字證據〕時 Claude Fable 5.1 via Herdr medium）。
+每次 receipt 記 requested／observed model 與 effort、實際 runtime 和隔離方式；0-A 只認 fresh-context Claude Opus 5.5 medium。

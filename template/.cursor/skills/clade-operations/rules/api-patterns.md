@@ -147,4 +147,4 @@ Runtime module 不重複定義 schema；session agent 從 `db-schema/<variant>/a
 | 4xx user error | ❌ | 修輸入 |
 | 5xx server error | ⚠️ | 只 retry 明確無副作用的 GET |
 
-**NEVER** 對 POST/PATCH/DELETE 做 blind retry — 必須有 unique constraint、idempotency_key、或整個 handler 可在 transaction 內安全重跑；無法保證就讓使用者手動重試並顯示明確錯誤。`@supabase/supabase-js` 對 network error 已有內建 retry，不需再包一層。
+**NEVER** 對 POST/PATCH/DELETE 做 blind retry — 必須有 unique constraint、idempotency_key、或整個 handler 可在 transaction 內安全重跑；無法保證就讓使用者手動重試並顯示明確錯誤。對 `@supabase/supabase-js` 的 network error，不預設 SDK 會重試，也不預設需要自訂重試；先查使用中的版本、transport 與現有 fetch wrapper，再依請求的冪等性和總重試預算決定。已有安全 GET 的重試層時，不得只憑 SDK 名稱刪除。

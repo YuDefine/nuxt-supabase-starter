@@ -597,7 +597,7 @@ Cursor 主線在**當前 checkout**（含 linked worktree）跑完整 commit cer
 
 - `COMMIT_RUNTIME` 為 `cursor`；`COMMIT_SESSION_ID` 取本 session 已暴露的 `CURSOR_SESSION_ID`（或缺席時的同等原生 session id）。缺身分就停在 Step 0-Lock。
 - 讀檔、diff、shell、對話詢問使用本入口 catalog。不要把 `--cwd` 改到 main worktree 假裝 WIP 在那裡。
-- 0-A.1／0-A.2 合格 reviewer 兩格同級：GPT-6 Astra via Pi（effort: medium，走 `codex-review-safe.sh`）優先；Astra 實際不可用（exit 3／4＋逐字證據）時換 Claude Fable 5.1 via Herdr（effort: medium，走 `claude-review-safe.sh`）；兩格都不可用時 gate 保持未完成。**NEVER** 把 Cursor Task／Agent `model` 設成非 grok-4.6 來充 reviewer，也不以其他模型補位。
-- commit 流程主線不需要自己開 Herdr pane（0-A 的 Fable 格由 `claude-review-safe.sh` 內部以 Herdr create-only 承載）；**NEVER** `--relay`，也 NEVER 把後續 `git commit` 丟給任何 pane。
+- 0-A.1／0-A.2 唯一合格 reviewer 是 fresh-context Claude Opus 5.5 medium，走 `claude-review-safe.sh medium`。Opus 不可用時 gate 保持未完成；Cursor Task／Agent 不充 reviewer，也不以其他模型補位。
+- commit 流程主線不需要自己開 Herdr pane（0-A 的 Opus reviewer 由 `claude-review-safe.sh` 內部以 Herdr create-only 承載）；**NEVER** `--relay`，也 NEVER 把後續 `git commit` 丟給任何 pane。
 - 0-B 使用本 session 已暴露的 browser／截圖能力與合格視覺 reviewer。
 - 缺合格載體的 gate 保持未完成；不因此改派整場 ceremony 到 Claude，也不跳過品質要求逕行 `git commit`。

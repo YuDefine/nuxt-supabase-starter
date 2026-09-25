@@ -11,7 +11,7 @@
 | --- | --- |
 | Scope | 具名 checkout、base 與完整 changeset snapshot；每個受審檔都有內容及 hash，缺檔或截斷明示未覆蓋 |
 | Context | reviewer 沒參與實作、不繼承 maker 對話；只給 diff、驗收契約及必要來源 pointer，保有查證相關 code 的讀取權 |
-| Identity | 記錄 maker 與 reviewer 各自的實際 runtime、model、model family、effort、session／dispatch id；未知值不猜、不從 runtime 名推模型。reviewer receipt MUST 記 requested 與 observed model、`model_verification` 三值與 `model_verification_reason`——「沒核實」（如 transcript-timeout）與「核實了但不符」是兩個不同的結論，都要留逐字原因 |
+| Identity | 記錄 maker 與 reviewer 各自的實際 runtime、model、model family、effort、session／dispatch id；未知值不猜、不從 runtime 名推模型。reviewer receipt MUST 記 requested 與 observed model、`model_verification` 三值與原因；subagent carrier 另 MUST 記 requested／observed effort 與 `effort_verification`，缺值或不符都 exit 8、扣住 verdict。「沒核實」（如 transcript-timeout）與「核實了但不符」是兩個不同的結論，都要留逐字原因 |
 | Model | 合格的 code reviewer **只有一席**：Claude Opus 5.5（effort: medium），Claude Code 主線走 in-process `commit-0a-reviewer` subagent、叫不出 Claude subagent 的 runtime 走 Herdr Claude child；0-A.1 與 0-A.2 深度 review 同一席。其他模型、主線自審、或未經 `prepare`／`finalize` 的 agent 都不滿足本欄 |
 | Quality | 該組合已有對應任務的核准與品質證據；達到階段需要的推理深度，不能僅以名稱含 high 或模型較新推定等價 |
 | Access | 真正的唯讀工具／OS 限制或已核准的隔離方案；僅在 prompt 寫「不要修改」不算技術隔離。材料來源與外送服務在本次授權範圍 |

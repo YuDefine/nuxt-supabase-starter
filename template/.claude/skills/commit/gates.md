@@ -362,11 +362,11 @@ bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" medium       # Herdr c
 
 ```bash
 bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" prepare medium [--findings <上一輪 verdict 檔>]
-# stdout：AGENT_CALL: {...}（subagent_type／model／prompt）與 FINALIZE: bash … finalize <work-dir>
+# stdout：AGENT_CALL: {...}（subagent_type／model／prompt；agent 定義固定 effort: medium）與 FINALIZE: bash … finalize <work-dir>
 ```
 
-1. 跑 `prepare`，照 `AGENT_CALL` 的欄位**逐字**呼叫 `Agent` tool（`subagent_type: commit-0a-reviewer`、`model`、`prompt` 原樣照抄，前景）。
-2. subagent 回來後跑 `FINALIZE` 那一行。它從本 session 的 subagent transcript 核對 nonce 歸屬、agent type、observed model、唯讀工具面、brief 是否逐行讀完，通過後把 verdict 印上 stdout 並寫 receipt。
+1. 跑 `prepare`，照 `AGENT_CALL` 的欄位**逐字**呼叫 `Agent` tool（`subagent_type: commit-0a-reviewer`、`model`、`prompt` 原樣照抄，前景）。該 agent 的 frontmatter 固定 `effort: medium`；不可改用會繼承主線 effort 的其他 agent。
+2. subagent 回來後跑 `FINALIZE` 那一行。它從本 session 的 subagent transcript 核對 nonce 歸屬、agent type、每則 assistant 的 observed model 與 effort、唯讀工具面、brief 是否逐行讀完；effort 缺席或非 medium 時 exit 8、扣住 verdict。
 3. **verdict 只來自 finalize 的 stdout。** subagent 的回覆是它交給 finalize 的原料，**NEVER** 由主線轉述、摘錄或拼接成 verdict——主線是受審改動的 producer。
 
 exit code 與 Herdr carrier 同一張表（下表各列照用；4／10／11 是帳號與巢狀派工的結論，subagent carrier 不會產生）。`finalize` 回 exit 3 且 RESULT 寫「WORK_DIR 保留」＝還沒派 subagent 就跑了 finalize，補派後重跑同一行即可；其餘 exit 3 是 reviewer 沒跑完或沒讀完 brief，重跑 `prepare` 拿新 nonce 再派。
@@ -918,10 +918,10 @@ script 抓不到「這是一條新的最佳實踐」——那是語意判斷。�
 每次先核對本入口實際 catalog，以下是 Claude Code 的操作映射，不外推 Claude Web／Desktop 已有相同工具。
 
 - Simplify：有 `Skill` 且技能已安裝時直接呼叫 `simplify`；其內部委派照當前 routing。結果回來後立即繼續 ceremony。
-- Review：符合共用資格的 CLI runner 由 Bash 執行；工具實際支持 `run_in_background` 才帶此參數。保存返回 task id；以對應 TaskOutput／完成通知收回同一工作，核對 terminal exit 與完整輸出。使用 Agent 時從本次 catalog 取真實名稱與 model 值，以不帶 maker history 的 fresh context 派遣。
+- Review：Claude Code 主線跑 `claude-review-safe.sh prepare medium`，照輸出的 `AGENT_CALL` 前景派 `commit-0a-reviewer`（Opus 5.5、effort medium），再跑 `FINALIZE`；只採 finalize stdout 的 verdict。叫不出 Claude subagent 的 runtime 才走無子命令的 `claude-review-safe.sh medium` Herdr carrier，保存並收回真實 handle。
 - Watch：有 ScheduleWakeup 才使用目前已安裝 keepalive 契約；喚醒只處理該 id 的控制面，不重播 review 命令。沒有喚醒 API 時用已有背景 handle 的 bounded wait。Timeout 不取消工作、不代表 PASS。
 - UI：`screenshot-review` 只有在實際可用且符合 review-policy 的視覺資格時派遣，附完整 item、截圖及互動證據；不是有同名檔就算能看圖。
 - 協調／詢問：有已授權的具名 agent 通道時先協調；需要使用者資訊時用本入口實際可用的詢問工具或直接對話。AskUserQuestion 不是授權的唯一載體，既有同範圍回答不重問。
 - Exit：先收回或安全停止本次會寫入的背景工作，再依 runtime-lifecycle 以原 work/runtime/session/token 釋放鎖。完成事件缺席時保留 gate 未完成與具體 handle，不宣稱已退出。
 
-每次 receipt 記實際 runtime、model 與隔離方式；本段不把 Claude 主線視為固定模型，也不代替共用 reviewer 資格判定（兩格同級：GPT-6 Astra via Pi medium 優先，Astra 實際不可用〔exit 3／4＋逐字證據〕時 Claude Fable 5.1 via Herdr medium）。
+每次 receipt 記 requested／observed model 與 effort、實際 runtime 和隔離方式；0-A 只認 fresh-context Claude Opus 5.5 medium。模型或 effort 量不到、不符時 verdict 扣住，gate 保持未完成。
