@@ -7,7 +7,7 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}
 
 <!-- clade-skill-scope: both -->
 
-<!-- clade-workflow-bundles: ["spec-by-example","technical-research","ui-plan","api-plan","data-plan","dsl-refine","gherkin-and-dsl","tasks","bdd","truth-delta","clarify-over-specs"] -->
+<!-- clade-workflow-bundles: ["spec-by-example","technical-research","ui-plan","api-plan","data-plan","dsl-refine","gherkin-and-dsl","tasks","bdd","truth-delta","clarify-over-specs","specformula-config","specformula-api-spec","specformula-entity-spec","specformula-feature"] -->
 
 # work-route（統一工作入口）
 
@@ -89,15 +89,29 @@ transport 讀當前 runtime 的 `wt/SKILL.md`，可用 Form 3 `/wt <slug>: /<dow
 | dsl-refine、gherkin-and-dsl | `rules/.workflow/<owner>/SKILL.md` |
 | tasks、bdd、truth-delta | `rules/.workflow/<owner>/SKILL.md` |
 | clarify-over-specs | 優先當前 runtime 已安裝公開入口；未提供時用 `rules/.workflow/clarify-over-specs/SKILL.md` |
+| specformula-config、specformula-api-spec、specformula-entity-spec、specformula-feature | `rules/.workflow/<owner>/SKILL.md`；只由下方 § SpecFormula 契約載入點 的宿主 owner 載入，不單獨成步 |
 | specify、clarify、system-analysis、implement | 當前 runtime 的公開入口與必要 resources |
 
 本 skill 根：Claude `.claude/skills/work-route/`、Codex `.agents/skills/work-route/`、Cursor `.cursor/skills/work-route/`。內部流程由 `clade-workflow-bundles` 隨本 skill 投影到 `.` 開頭的目錄（避免被 runtime 列成公開 skill），多數搜尋工具預設不掃，所以一律照上表明確路徑讀取，**NEVER** 用搜尋結果為空判定不存在。只讀本步入口及它明列的必讀資源。
 
-**clade overlay 只從本表走得到。** bdd 與 technical-research 的 bundle 各有一份 clade-owned 的 `specformula.md`（`rules/.workflow/bdd/specformula.md`、`rules/.workflow/technical-research/specformula.md`），上游 `SKILL.md` 不會提到。載入這兩個 owner 時 MUST 一併讀它，依該檔的適用條件套用（bdd 那份在後端 BDD techstack 是 SpecFormula 時不手寫 step definition；technical-research 那份給三題必問的 fleet 預設）。**NEVER** 因上游入口沒列就略過。
+**clade overlay 只從本表走得到。** 三個 owner 各有一份 clade-owned 的 `specformula.md`，上游 `SKILL.md` 不會提到：bundle 內的 `rules/.workflow/bdd/specformula.md`、`rules/.workflow/technical-research/specformula.md`，以及公開入口 implement 目錄的 `implement/specformula.md`（與 implement 的 `SKILL.md` 同目錄）。載入這三個 owner 時 MUST 一併讀它，依該檔的適用條件套用（bdd 那份在後端 BDD techstack 是 SpecFormula 時不手寫 step definition；technical-research 那份給三題必問的 fleet 預設；implement 那份把 Phase 3 的三個 marker 改落在規格檔）。**NEVER** 因上游入口沒列就略過。
+
+### SpecFormula 契約載入點
+
+`specs/truth/techstack.md` 的後端 BDD techstack 是 SpecFormula 時，下列四支上游契約由表中的宿主 owner 在該步載入，與宿主契約一起執行；techstack 未採 SpecFormula 就一支都不載。它們規定 SpecFormula 的檔案形狀，不取代宿主的 truth 所有權、PM gate 或驗收。**NEVER** 用「宿主 `SKILL.md` 沒提到」略過；也 **NEVER** 在宿主以外的步驟自行改寫它們管的檔。
+
+| 契約 | 宿主 owner 與時機 | 本步必須做到 |
+| --- | --- | --- |
+| `specformula-config`（含 `nuxt.md`、`java.md`、`custom-instruction.md`） | technical-research 選定 SpecFormula 時；implement 的 Setup task 安裝與接線時；implement `[BDD-ALIGN]` 或 bdd `red` 要新增 `isa.yml` 指令時 | 選定時確認 `isa.yml` 表達得了本專案的資料源與 `db_type`，限制寫進 techstack。Nuxt 專案的安裝照 clade-owned 的 `rules/.workflow/specformula-config/nuxt.md` 與 `~/offline/clade/vendor/snippets/specformula/` cookbook。新句型先加 `instructions[]` regex，框架做不到的才用 `custom`（`custom-instruction.md`） |
+| `specformula-api-spec` | api-plan Phase 3 寫 truth OpenAPI 時 | `isa.yml` 的 `config.api.resource_path` 讀的就是 api-plan 維護的 `specs/truth/contracts/**`，不另存一份 OpenAPI。每個 operation 的 `summary` 全域唯一，用業務語言的「動詞＋名詞」。`isa.yml` 指向另一份 OpenAPI 時不手動同步兩份，交 tasks 排一條把 `isa.yml` 改指 truth 的 task |
+| `specformula-entity-spec` | data-plan 本輪有 table／field 語意變更時，同一輪 | 更新 `isa.yml` 各 `config.data.source[].resource_path` 下的 `entity_to_table_mapping.yml`（業務語言實體名）與 DDL（語法依該 source 的 `db_type`），與 DBML 同一語意；落在 `specs/truth/data/**` 內時一併列進本輪 delta。只改 API 的工作不捏造 entity |
+| `specformula-feature`（含各指令檔） | implement `[BDD-ALIGN]` 寫 `dsl.yml` 的 `isa_steps` 時；bdd `red` 補 `.feature` 的 `Example` 時 | 先讀專案 `isa.yml` 的 `instructions[].format`，指令句與符號（`>`、`<`、`$`、`&`）照該契約與各指令檔；`dsl.yml` 的轉換規則仍照 `implement/specformula.md` |
 
 下游契約提到 `/tasks`、`/bdd`、`/truth-delta` 等流程時回本表解析，由 orchestrator 載入契約執行，不把缺少 slash UI 當成能力缺失。上游契約的 `.agents/skills/<owner>/scripts/...` 前綴換成當前 runtime 的 `work-route/rules/.workflow/<owner>/`，保留腳本與參數。尤其 gherkin-and-dsl Phase 6 必須實際執行 `uv run <work-route-root>/rules/.workflow/gherkin-and-dsl/scripts/audit_feature_dsl_topology.py --root <features-root>`；其中 `<work-route-root>` 是上表所列當前 runtime 的 skill 根，`<features-root>` 是 **truth 的介面根**（含 `dsl.md` 的那一層，例如 `specs/truth/features/cli`）。plan package 的 `features/acceptance/` 沒有 `dsl.md`，拿它當 root 每一個 step 都會報找不到 DSL row——plan 端 acceptance 的對應檢查是 `flow plan readiness <work-id>`（dry-run 無 undefined／ambiguous step）。保留稽核輸出，失敗交回該 owner，不因路徑搬移而略過。
 
-每次交棒都記錄 runtime、owner、實際載入路徑、必要 artifact 與同步證據。用既有 projector 的唯讀規劃／check 核對目前 checkout；檔案存在、dry-run exit 0、另一 runtime 的成功都不單獨證明已同步。
+**每一次**交棒給 owner（含 owner 內要外派的工作）之前，MUST 讀本 skill 根的 `owner-routing.md`，照該 owner 那一列決定由誰執行（主線或 routing table 的哪一列、首跳 model／effort）。表上沒有的 model 或 effort 不自行挑；列的硬禁令與派不派判準照 routing table。
+
+每次交棒都記錄 runtime、owner、執行者（`owner-routing.md` 的列與首跳）、實際載入路徑、必要 artifact 與同步證據。用既有 projector 的唯讀規劃／check 核對目前 checkout；檔案存在、dry-run exit 0、另一 runtime 的成功都不單獨證明已同步。
 
 ## 3. 前提修復與接續迴圈
 
@@ -130,13 +144,15 @@ transport 讀當前 runtime 的 `wt/SKILL.md`，可用 Form 3 `/wt <slug>: /<dow
 | 尚有未完成 task，但全被阻塞 | 依相依性處理前置 task／具體 blocker，不重建 tasks 或宣稱完成 |
 | tasks 完成 | 第 5 節驗證、適用 review、commit／交付流程；檢查未結工作 |
 
+採 SpecFormula 時，上表 technical-research、api-plan、data-plan、implement、bdd 這幾步另依第 2 節 § SpecFormula 契約載入點 載入對應契約；那張表沒列到的步驟不載。
+
 Lifecycle package 的 `plan.md` 由 lifecycle owner 持有；分析寫 `system-analysis.md`，delta 意圖寫 `plan.md` 的 `## Truth delta`，不新建 `truth-delta.md`。對話裡的上游 NNN 範例不改變此落點。省略 UI／research／OpenAPI 等 artifact 時，在 `plan.md` 的 `## Decisions` 寫工作特定理由；尚未完成不叫省略。
 
 ## 5. 銜接 SpecFormula 與交付
 
 Aixbdd 決定需求、Gherkin、DSL、設計與 tasks；SpecFormula 執行已對齊的驗收。按當前 project techstack、capability 與 SpecFormula 契約選擇已安裝 runner；只用 aixbdd 且已明確採另一 BDD runner 的專案沿用其決策，不無條件改堆疊。
 
-對採 SpecFormula 的專案，先由 technical-research／dsl-refine／bdd 等 owner 把必要 DSL、ISA、adapter 與驗收命令接到真實被測入口，再執行該命令。步驟未定義、缺 runner 或 acceptance_command 時，由對應 owner 修復後重驗；不拿語法 parser、空 step 或永遠成功的替身充當驗收。
+對採 SpecFormula 的專案，先由 technical-research／dsl-refine／implement／bdd 等 owner 依第 2 節 § SpecFormula 契約載入點 把必要 DSL、ISA、adapter 與驗收命令接到真實被測入口，再執行該命令。步驟未定義、缺 runner 或 acceptance_command 時，由對應 owner 修復後重驗；不拿語法 parser、空 step 或永遠成功的替身充當驗收。
 
 分別呈現「Gherkin 可解析」「步驟已綁定／readiness 通過」「實際案例通過」「人工驗收已確認」。只有對應證據存在才能宣稱該項完成；失敗回到 owner 修復，scope 變更回需求 owner。不得為變綠自行降低已確認的驗收標準。
 
