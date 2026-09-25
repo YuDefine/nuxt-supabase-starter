@@ -116,11 +116,11 @@ N ≥ 3 個 dispatch 的 findings 要收斂進同一個 synthesis 時，reducer 
 
 ## Cloud session 載體（Claude Code 主線）
 
-Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工理由：先依 [[agent-routing]] § 派不派 判定「要開新 session」（覆寫期間只剩長時間 background 或必須隔離），**之後**才選載體。cloud 吃的是與 Opus 急件**同一份** Claude 額度，沒有官方的 cloud 餘額查詢，所以它排在最後：非急件先用 Devin `swe-2-max`（免費、只在 desk，見 [[agent-routing.routing-table]] § Devin SWE-2 Max），cloud 只接 desk 負載已滿、又不急的件。
+Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工理由：先依 [[agent-routing]] § 派不派 判定「要開新 session」（覆寫期間只剩長時間 background 或必須隔離），**之後**才選載體。cloud 吃的是與 Opus 急件**同一份** Claude 額度，沒有官方的 cloud 餘額查詢，所以它排在最後：非急件而且屬於 Pi 列的工作先用 Devin `swe-2-max`（免費、只在 desk，見 [[agent-routing.routing-table]] § Devin SWE-2 Max；Claude-only 列不接受 Devin），cloud 只接 desk 負載已滿、又不急的件。
 
 | 可觀察 predicate | 載體 |
 | --- | --- |
-| 工作在**單一 GitHub repo** 內做得完、驗收看 PR＋CI、不需要本機 secret／Herdr／pi seat／其他 `~/offline` repo／systemd／實體硬體，該 repo 已 push 的 `.claude/settings.json` 把 `model` 釘在 Opus、`effortLevel` 釘在 ≤ `medium`，而且派出帳號的 `--ref` preflight 判 GitHub App 已安裝（網頁看得到 repo 不算；判定方式見 cookbook） | **cloud 可選**，但只在 desk 負載已滿（load 持續高於核數）而且不急時才選；不急而 desk 還有餘裕 → Devin `swe-2-max`，急件 → Herdr pane |
+| 工作在**單一 GitHub repo** 內做得完、驗收看 PR＋CI、不需要本機 secret／Herdr／pi seat／其他 `~/offline` repo／systemd／實體硬體，該 repo 已 push 的 `.claude/settings.json` 把 `model` 釘在 Opus、`effortLevel` 釘在 ≤ `medium`，而且派出帳號的 `--ref` preflight 判 GitHub App 已安裝（網頁看得到 repo 不算；判定方式見 cookbook） | **cloud 可選**，但只在 desk 負載已滿（load 持續高於核數）而且不急時才選；不急、desk 還有餘裕而且屬於 Pi 列 → Devin `swe-2-max`；Claude-only 列或急件 → Herdr pane |
 | 需要跨 repo、本機狀態（dev server、DB lease、未 push 的 commit）、Herdr／pi 派工、或要人即時回答 | Herdr pane（或主線自己做） |
 | review、裁決、掃描這類本 turn 收得回來的 bounded 工作 | in-process subagent（上一節不變）；**NEVER** 為它開 cloud |
 | commit 0-A | **NEVER** cloud：0-A 只認 `claude-review-safe.sh` 的 subagent carrier |

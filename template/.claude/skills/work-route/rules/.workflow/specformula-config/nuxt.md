@@ -4,7 +4,7 @@
 
 Nuxt 4 + Supabase（PostgreSQL）consumer 的安裝指南。角色對應上游的 `java.md`，內容由 clade 維護。
 
-規約：`.claude/rules/specformula.md`（clade 源檔 `rules/core/specformula.md`）
+規約：clade 源檔 `rules/core/specformula.md`（各 runtime 讀自己的規約投影；Claude Code 是 `.claude/rules/specformula.md`）
 範本組：`~/offline/clade/vendor/snippets/specformula/`
 
 ## 依賴

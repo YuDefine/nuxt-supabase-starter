@@ -93,9 +93,17 @@ review_subagent_write_receipt() {
       requested_model: process.env.REVIEW_MODEL,
       observed_model: v.observed_model,
       observed_models: v.observed_models,
-      requested_effort: "medium",
+      requested_effort: v.requested_effort,
+      observed_effort: v.observed_effort,
+      observed_efforts: v.observed_efforts,
+      effort_verification: v.effort_verification,
+      effort_verification_reason: v.failed_check === "effort" ? v.reason : undefined,
       model_verification: v.model_verification,
-      model_verification_reason: v.reason || undefined,
+      model_verification_reason: v.failed_check === "model" ? v.reason : undefined,
+      // 哪一關失敗（agent_type／model／effort）與逐字原因；agent type 不符這類 model 之前的失敗
+      // NEVER 歸到 model_verification_reason，否則 receipt 會把 model 報成失敗原因。
+      failed_check: v.failed_check,
+      reason: v.reason || undefined,
       model_verification_rereads: 0,
       launcher: "claude-code-subagent",
       claude_session_id: process.env.REVIEW_SUBAGENT_PARENT_SESSION,
@@ -174,7 +182,7 @@ review_subagent_finalize() {
     --subagents-dir "$subagents_dir" --nonce "$REVIEW_SUBAGENT_NONCE" \
     --prompt "$WORK_DIR/subagent-prompt.md" \
     --brief "$REVIEW_SUBAGENT_BRIEF" --model "$REVIEW_MODEL" \
-    --agent-type "$REVIEW_SUBAGENT_TYPE" --verdict-out "$verdict_out")"
+    --agent-type "$REVIEW_SUBAGENT_TYPE" --effort medium --verdict-out "$verdict_out")"
   rc=$?
   reason="$(node -e 'try{process.stdout.write(JSON.parse(process.argv[1]).reason||"")}catch{}' "$result")"
 
@@ -194,8 +202,8 @@ review_subagent_finalize() {
       echo "[claude-review-safe] RESULT: review 完整性不成立（exit 6）— ${reason}，NEVER 當作 0-A.1 通過" >&2
       return 6 ;;
     8)
-      echo "[claude-review-safe] RESULT: model verification 失敗（exit 8）— ${reason}；verdict 扣住不輸出，NEVER 當作 0-A.1 通過" >&2
-      echo "[claude-review-safe] NEXT: 「沒核實」與「核實但不符」是兩個結論（receipt 的 model_verification_reason 欄有逐字記錄）；兩者都讓 gate 維持 pending，NEVER 主線自審補位。" >&2
+      echo "[claude-review-safe] RESULT: reviewer model／effort verification 失敗（exit 8）— ${reason}；verdict 扣住不輸出，NEVER 當作 0-A.1 通過" >&2
+      echo "[claude-review-safe] NEXT: 「沒核實」與「核實但不符」是兩個結論（receipt 的 failed_check 指出失敗的是 agent_type／model／effort 哪一關，reason 欄逐字記錄原因；model 與 effort 關另記在 model_verification_reason／effort_verification_reason）；兩者都讓 gate 維持 pending，NEVER 主線自審補位。" >&2
       review_subagent_write_receipt 8 "$result"
       return 8 ;;
     *)

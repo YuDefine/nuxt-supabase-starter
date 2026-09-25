@@ -3,6 +3,7 @@ name: commit-0a-reviewer
 description: commit 0-A 的唯讀 fresh-context reviewer。**只由 `claude-review-safe.sh prepare` 印出的 AGENT_CALL 派出**，prompt 逐字照抄 AGENT_CALL；派完 MUST 跑它印的 FINALIZE 取 verdict。NEVER 手寫 prompt 派本 agent，NEVER 把它的回覆當 verdict 轉述——沒經過 finalize 的輸出不是 gate 證據。
 tools: Read, Grep, Glob
 model: opus
+effort: medium
 ---
 
 

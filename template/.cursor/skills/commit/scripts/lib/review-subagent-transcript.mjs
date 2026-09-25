@@ -17,8 +17,13 @@
 //      reminder（2026-09-25 實測），日後 harness 真的放了，這裡 fail closed 成 exit 6
 //   2. 它是不是唯讀 reviewer——meta.json 的 agentType 必須是 commit-0a-reviewer
 //      （該 agent 定義只給 Read／Grep／Glob），transcript 裡也不得出現其他工具
-//   3. 實際跑的 model——每一則 assistant message 的 model 都必須是 requested model；
-//      一則都沒有＝unverified，任何一則不同＝mismatch（兩者都 exit 8，reason 分開寫）
+//   3. 實際跑的 model 與 effort——每一則 assistant message 都必須符合 requested；
+//      缺值＝unverified，任何一則不同＝mismatch（兩者都 exit 8，`failed_check` 指出是哪一關）。
+//      model 在 entry.message.model，effort 在 **entry 頂層** 的 `effort`（與 perTurnEffort 並列）：
+//      harness 不把 effort 寫進 message，讀 message.effort 會讓每一次真實 finalize 都 exit 8
+//      （2026-09-25 PR #343 0-A r1 Critical）。NEVER 退回讀 message.effort：真實 transcript 沒有
+//      那個形狀，接受它只會讓合成／改寫過的 transcript 多一條過關的路；harness 日後搬位置時
+//      這裡 fail closed 成 exit 8，由人更新讀取位置
 //   4. 它有沒有讀完 brief——從成功的 Read 結果還原實際回傳的行號，必須涵蓋 1..N。
 //      Herdr pointer 交付只能「要求」child 讀完，這裡是實際核對（缺行 exit 3）
 //   5. verdict——最後一則 assistant 文字就是 verdict，必須含 `## Review Verdict`
@@ -27,7 +32,7 @@
 // 讓它經手 verdict 文字就等於讓 maker 替 reviewer 交卷。
 //
 // 用法：node review-subagent-transcript.mjs --subagents-dir <dir> --nonce <n>
-//         --prompt <prepare 寫的 prompt 檔> --brief <path> --model <requested> --agent-type <type> --verdict-out <path>
+//         --prompt <prepare 寫的 prompt 檔> --brief <path> --model <requested> --effort medium --agent-type <type> --verdict-out <path>
 // stdout 印一份 JSON 結論；exit 0 verified／3 沒跑成或不完整／6 prompt 被改或用了寫入型工具／
 // 8 身分不成立／2 用法錯誤。
 
@@ -86,7 +91,7 @@ export function readTranscript(path) {
 export function findTranscripts(subagentsDir, nonce) {
   if (!existsSync(subagentsDir)) return []
   return readdirSync(subagentsDir)
-    .filter((name) => /^agent-[A-Za-z0-9]+\.jsonl$/.test(name))
+    .filter((name) => /^agent-[A-Za-z0-9-]+\.jsonl$/.test(name))
     .map((name) => join(subagentsDir, name))
     .filter((path) => firstUserText(readTranscript(path)).includes(nonce))
 }
@@ -154,8 +159,21 @@ export function finalReply(entries) {
     .trim()
 }
 
-export function verifySubagentReview({ subagentsDir, nonce, prompt, brief, model, agentType }) {
-  const result = { model_verification: 'unverified', requested_model: model }
+export function verifySubagentReview({
+  subagentsDir,
+  nonce,
+  prompt,
+  brief,
+  model,
+  effort,
+  agentType,
+}) {
+  const result = {
+    model_verification: 'unverified',
+    effort_verification: 'unverified',
+    requested_model: model,
+    requested_effort: effort,
+  }
   const found = findTranscripts(subagentsDir, nonce)
   result.found = found.length
   if (found.length === 0)
@@ -171,7 +189,7 @@ export function verifySubagentReview({ subagentsDir, nonce, prompt, brief, model
       reason: `${found.length} 份 transcript 都含 nonce ${nonce}（${found.join(', ')}）——同一份 brief 被派了不只一次，歸屬不成立；重跑 prepare 拿新 nonce`,
     }
   const transcript = found[0]
-  const agentId = /agent-([A-Za-z0-9]+)\.jsonl$/.exec(transcript)[1]
+  const agentId = /agent-([A-Za-z0-9-]+)\.jsonl$/.exec(transcript)[1]
   Object.assign(result, { transcript, agent_id: agentId })
 
   const sent = firstUserText(readTranscript(transcript)).trim()
@@ -201,16 +219,22 @@ export function verifySubagentReview({ subagentsDir, nonce, prompt, brief, model
     return {
       ...result,
       exit: 8,
-      model_verification: 'mismatch',
+      failed_check: 'agent_type',
       reason: `subagent_type 是 ${meta.agentType ?? '（meta.json 缺席）'}，不是 ${agentType}——只有 ${agentType} 的工具面是唯讀，其他 type 的輸出不是 0-A reviewer 的輸出`,
     }
 
   const entries = readTranscript(transcript)
   const observed = new Set()
+  const observedEfforts = new Set()
+  let missingEffort = false
   const tools = new Set()
   for (const e of entries) {
     if (e.type !== 'assistant' || !e.message) continue
     if (e.message.model && e.message.model !== '<synthetic>') observed.add(e.message.model)
+    if (e.message.model && e.message.model !== '<synthetic>') {
+      if (typeof e.effort === 'string' && e.effort.length > 0) observedEfforts.add(e.effort)
+      else missingEffort = true
+    }
     for (const c of contentBlocks(e.message)) if (c.type === 'tool_use') tools.add(c.name)
   }
   result.observed_models = [...observed]
@@ -219,6 +243,7 @@ export function verifySubagentReview({ subagentsDir, nonce, prompt, brief, model
     return {
       ...result,
       exit: 8,
+      failed_check: 'model',
       reason: 'transcript 沒有任何帶 model 的 assistant message，身分無法核實',
     }
   const wrong = [...observed].filter((m) => !modelMatches(model, m))
@@ -226,10 +251,29 @@ export function verifySubagentReview({ subagentsDir, nonce, prompt, brief, model
     return {
       ...result,
       exit: 8,
+      failed_check: 'model',
       model_verification: 'mismatch',
       reason: `requested ${model}，observed ${[...observed].join(', ')}`,
     }
   result.model_verification = 'verified'
+  result.observed_efforts = [...observedEfforts]
+  result.observed_effort = observedEfforts.size === 1 ? [...observedEfforts][0] : undefined
+  if (missingEffort || observedEfforts.size === 0)
+    return {
+      ...result,
+      exit: 8,
+      failed_check: 'effort',
+      reason: 'transcript 有 assistant entry 頂層沒有 effort，實際推理檔位無法核實',
+    }
+  if ([...observedEfforts].some((value) => value !== effort))
+    return {
+      ...result,
+      exit: 8,
+      failed_check: 'effort',
+      effort_verification: 'mismatch',
+      reason: `requested effort ${effort}，observed ${[...observedEfforts].join(', ')}`,
+    }
+  result.effort_verification = 'verified'
 
   const writeTools = [...tools].filter((t) => !READONLY_TOOLS.has(t))
   result.tools_used = [...tools]
@@ -269,6 +313,7 @@ function main() {
       prompt: { type: 'string' },
       brief: { type: 'string' },
       model: { type: 'string' },
+      effort: { type: 'string' },
       'agent-type': { type: 'string' },
       'verdict-out': { type: 'string' },
     },
@@ -279,6 +324,7 @@ function main() {
     'prompt',
     'brief',
     'model',
+    'effort',
     'agent-type',
     'verdict-out',
   ].filter((k) => !values[k])
@@ -288,12 +334,19 @@ function main() {
     )
     process.exit(2)
   }
+  if (values.effort !== 'medium') {
+    process.stdout.write(
+      `${JSON.stringify({ exit: 2, reason: 'commit 0-A 只接受 medium effort' })}\n`,
+    )
+    process.exit(2)
+  }
   const result = verifySubagentReview({
     subagentsDir: values['subagents-dir'],
     nonce: values.nonce,
     prompt: values.prompt,
     brief: values.brief,
     model: values.model,
+    effort: values.effort,
     agentType: values['agent-type'],
   })
   if (result.exit === 0) writeFileSync(values['verdict-out'], `${result.verdict}\n`)
