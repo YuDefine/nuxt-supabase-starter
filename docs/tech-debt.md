@@ -115,11 +115,14 @@ exit 0 且無輸出。實測 `bash template/scripts/pre-push/runner.sh` 為 exit
 
 ### Fix approach
 
-選定並完整落地一條路徑：
+已選定**移到 root**；實作順序、task→file、audit fixture 與驗收指令見
+[`tasks/2026-09-26-td-008-validate-starter-placement-plan.md`](../tasks/2026-09-26-td-008-validate-starter-placement-plan.md)。
+先整合會修改同一支腳本的 TD-017 draft PR #5，再搬移它的最新版本，保留 fixture 清理與 `--keep`。
+本條狀態仍為 open，以下 acceptance 須等後續程式實作驗證。
 
-- **移到 root**：搬到 `scripts/validate-starter-scaffold.mjs`，同步 workflow 與 package script；或
-- **留在 template、剝除輸出**：在 strip manifest 加入 script 與 `validate:starter` 的 package script rewrite，並補齊
-  create-clean / scaffolder 的 rewriting 支援。
+搬到 `scripts/validate-starter-scaffold.mjs`，調整腳本相對路徑與 workflow 入口／path filter，
+移除 `template/package.json` 的 `validate:starter`。scaffolder 的輸出 package 另由 base package 產生；
+目前 strip manifest 只支援檔案刪除，create-clean 另有 parser，因此不為單一維護 command 擴充 rewrite 契約。
 
 同時在 `scripts/audit-template-hygiene.sh` 與 fixture test 補上 `maintenance-script-misplacement` 覆蓋。
 
