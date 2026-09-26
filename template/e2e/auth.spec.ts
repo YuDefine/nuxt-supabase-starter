@@ -63,7 +63,13 @@ test.describe('Login page', () => {
     await page.getByPlaceholder('Enter your password').fill('wrongpassword')
 
     // 點擊登入
+    const signInResponse = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === '/api/auth/sign-in/email',
+    )
     await page.getByRole('button', { name: 'Sign In' }).click()
+    const response = await signInResponse
+    expect(response.status()).not.toBe(403)
+    expect(await response.text()).not.toContain('CSRF Token Mismatch')
 
     // 應顯示錯誤訊息（UAlert with error color）
     const errorAlert = page.locator('[class*="alert"]').first()
@@ -93,7 +99,11 @@ test.describe('Login flow with test account', () => {
 
     await page.getByPlaceholder('you@example.com').fill(email!)
     await page.getByPlaceholder('Enter your password').fill(password!)
+    const signInResponse = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === '/api/auth/sign-in/email',
+    )
     await page.getByRole('button', { name: 'Sign In' }).click()
+    expect((await signInResponse).status()).toBe(200)
 
     // 登入成功後應離開登入頁面
     await expect(page).not.toHaveURL(/\/auth\/login/, { timeout: 15_000 })

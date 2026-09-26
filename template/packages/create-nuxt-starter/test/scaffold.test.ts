@@ -407,6 +407,39 @@ describe('scaffold: Better Auth 模組身分', () => {
   })
 })
 
+describe('scaffold: Better Auth and security CSRF boundary', () => {
+  it('excludes only Better Auth routes when both features are selected', () => {
+    const targetDir = join(TEST_DIR, 'better-auth-security')
+    assembleProject(
+      targetDir,
+      resolveFeatureDependencies(['auth-better-auth', 'security']),
+      'ba-sec',
+    )
+
+    const config = readFileSync(join(targetDir, 'nuxt.config.ts'), 'utf-8')
+    expect(config).toContain("'/api/auth/**': { csurf: false }")
+    expect(config).toContain('csrf: true')
+    expect(config).not.toContain("'/api/**': { csurf: false }")
+  })
+
+  it('keeps global CSRF without an auth exclusion when Better Auth is absent', () => {
+    const targetDir = join(TEST_DIR, 'security-only')
+    assembleProject(targetDir, ['security'], 'sec-only')
+
+    const config = readFileSync(join(targetDir, 'nuxt.config.ts'), 'utf-8')
+    expect(config).toContain('csrf: true')
+    expect(config).not.toContain('csurf: false')
+  })
+
+  it('does not generate a CSRF route rule when security is absent', () => {
+    const targetDir = join(TEST_DIR, 'better-auth-only')
+    assembleProject(targetDir, resolveFeatureDependencies(['auth-better-auth']), 'ba-only')
+
+    const config = readFileSync(join(targetDir, 'nuxt.config.ts'), 'utf-8')
+    expect(config).not.toContain('csurf: false')
+  })
+})
+
 describe('scaffold: void.cloud 接線', () => {
   // `npx void init` 實測（void 0.10.12）只產 wrangler.jsonc —— 不產 void.json，
   // 也不會把 voidPlugin() patch 進 nuxt.config。少了那段接線，專案跑得起來卻完全沒接到
