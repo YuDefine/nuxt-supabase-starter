@@ -73,11 +73,14 @@ function estimateCost(model: string, usage: { promptTokens: number; completionTo
 sampling: {
   rates: { info: 10 }, // info 事件 head sampling 留 10%
   keep: [
-    { path: '/api/chat/**' }, // chat 路由一律保留
+    { path: '/api/chat' }, // chat 路由本身（server/api/chat.post.ts）一律保留
+    { path: '/api/chat/**' }, // chat 子路由一律保留
     { status: 400 }, // status >= 400 一律保留
   ],
 }
 ```
+
+`keep` 各條件是 OR，命中任一條就繞過 `rates`。**NEVER** 只寫 `/api/chat/**`：evlog 的 `**` 要求前面那個 `/` 存在，`/api/chat/**` **不**匹配 `/api/chat` 本身，而 chat endpoint 多半就是 `server/api/chat.post.ts`——那條路由的 info 事件會落回 `rates.info: 10`，約九成被丟。brace（`/api/chat{,/**}`）也不支援，兩條都不匹配。上述行為在 evlog 2.29.0 `matchesPattern` 實測。
 
 embedding 的「cost > 門檻才 keep」這類自訂條件走 Nitro `evlog:emit:keep` hook。
 

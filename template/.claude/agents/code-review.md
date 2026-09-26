@@ -1,7 +1,7 @@
 ---
 name: code-review
 description: Code review — PR review 或 commit 0-A.2 裁決；依目標 runtime 的 native review agent 執行
-model: fable
+model: opus
 effort: medium
 tools: Bash, Read, Grep, Glob
 ---
@@ -204,4 +204,4 @@ git diff main...HEAD
 - 🔵 **Info**: 建議改進、非必要優化
 
 Native agent reference root: `.claude/agents`.
-Claude native review execution uses qualified Claude Fable with the read and shell tools required by the review workflow; preserve the independent checker and cross-family qualification gate.
+Claude native review execution uses Claude Opus 5.5 medium (`code-review-opus` row; no fallback seat) with the read and shell tools required by the review workflow; preserve the independent checker gate. Banned models (including Fable) are never a review seat.
