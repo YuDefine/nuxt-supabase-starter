@@ -434,7 +434,8 @@ runner 的 `checks/vp-staged.sh` 經 `scripts/pre-commit/staged-targets.ts` 讀 
 name filter 就判 heavy）、沒有 `--lane`、且沒有一支宣告
 `// clade-test-isolation: spawn-heavy` 時，`clade-gate` 設 `CLADE_GATE_CLASS=light`，`gate-slot.sh`
 改取獨立的 `light-<i>.lock`（`CLADE_LIGHT_GATE_SLOTS`，預設 2），不取 heavy slot 與 repo lock；
-記憶體 scope 與 `MAX_RUNTIME` 照舊。成因：heavy slot 降到 1 之後，重跑 5 個小檔要排在別 repo 的整套
+記憶體 scope 與 `MAX_RUNTIME` 照舊。light 只替巢狀 gate 宣稱持有 light slot（`CLADE_GATE_LIGHT_HELD`），
+**NEVER** export `CLADE_GATE_SLOT_HELD`：被包命令裡再進的 heavy gate 照常取 repo lock 與 heavy slot。成因：heavy slot 降到 1 之後，重跑 5 個小檔要排在別 repo 的整套
 suite 後面，agent 於是繞過閘門直跑——那才是沒有上限的路徑。**NEVER** 為了「定點重跑」直呼
 `node --test` / `vitest` 繞過 `clade-gate`：light lane 就是那條路，而且仍受全機上限。
 

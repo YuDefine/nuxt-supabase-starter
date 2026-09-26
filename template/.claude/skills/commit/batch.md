@@ -101,7 +101,7 @@ node scripts/wt-helper.ts batch prepare --trigger <trigger> --workflow <workflow
 
 衝突只在隔離區解，解完精確 stage 衝突檔後跑 `batch resume`；不删來源、不把未解衝突藏成就緒。中斷後先讀 `batch status`，依持久狀態續跑。`pr-merge-based` 的 base 是 `git fetch origin main` 後的 `refs/remotes/origin/main`；`trunk-based` 才使用 local main。main 前移用 `batch refresh` 對齊新基準並重新驗受影響範圍；來源變動則 `batch cancel --reason <原因>` 保存既有工作，重驗來源、重登記再 prepare。
 
-Helper 在整批合併後沿用既有 worktree runtime bootstrap，建立投影工具、環境檔、dev-port 與 backing service；失敗保留 integration 並由 resume 重試。接著在 integration path 依專案 package manager 以 frozen lockfile 安裝依賴，再確認 dev-port／db-preview 的獨立驗證環境。依 SKILL.md Step 0-Lock 解析鎖腳本與 integration 的絕對路徑，取得 commit lock 後跑 Step 0–5 的完整流程。Scope 為該整合區的完整 base→candidate 差異；同一批只啟動一次品質鏈，可按功能建立多筆正式 commits。手動普通 commit 的全 WIP 契約只作用於普通工作區，不把 main WIP 偷渡進 batch。
+Helper 在整批合併後沿用既有 worktree runtime bootstrap，建立投影工具、環境檔、dev-port 與 backing service；失敗保留 integration 並由 resume 重試。接著在 integration path 依專案 package manager 以 frozen lockfile 安裝依賴，再確認 dev-port／db-preview 的獨立驗證環境。依 SKILL.md Step 0-Lock 解析鎖腳本與 integration 的絕對路徑，取得 commit lock 後跑 Step 0–5 的完整流程；Step 1 schema 同步判定前 MUST 先設 `BATCH_SCOPE=$(node scripts/wt-helper.ts batch scope) || BATCH_SCOPE='<batch scope 失敗>'`，否則只在 checkpoint 裡的 migration 會被 `git status` 乾淨漏掉；helper 非 0 退出（refresh 未完、仍在 integrating）時先照錯誤訊息收斂再重跑 Step 1——判定段在批次 branch 上把失敗當 HAS，**NEVER** 把它讀成可跳過。Scope 為該整合區的完整 base→candidate 差異；同一批只啟動一次品質鏈，可按功能建立多筆正式 commits。手動普通 commit 的全 WIP 契約只作用於普通工作區，不把 main WIP 偷渡進 batch。
 
 Prepare 已把整批差異呈現在 base 上的 index。中断後若已有部分正式 commits、或需要補審整批，先跑 `batch review`：它保留 candidate、重新呈現完整 staged diff 並使舊 seal 失效，再依同一批狀態續跑既有品質鏈。不能對乾淨 HEAD 跑空 diff review 後宣稱整批通過。有 active PR 批次時，其他 session 可以照常 commit 到 local main，但 **NEVER push**；push 會前移 origin/main，才會使批次要求 refresh。
 

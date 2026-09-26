@@ -251,7 +251,7 @@ STAGE_FAILED: <install | typecheck | build | test>
 ERROR_TAIL:
 <≤ 30 行 error message>
 HYPOTHESIS: <一句話猜為什麼炸>
-SUGGESTED_NEXT: <要不要升 high research / 要查什麼 issue / changelog>
+SUGGESTED_NEXT: <要不要升 research / 要查什麼 issue / changelog>
 `​`​`
 
 失敗時**不要**自己 commit、不要強過 fail、不要刪 / revert lockfile。

@@ -135,6 +135,7 @@ import {
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isLockedProjectionPathFor } from './locked-projection.ts'
 import { runWtEnvBootstrap } from './lib/wt-env-bootstrap-runner.ts'
+import { normalizeUnsplitArgv, UnsplitArgvError, type FlagOptions } from './lib/argv-unsplit.ts'
 import {
   HOST_CONFIG_REMEDY,
   assertNoHostConfigReferences,
@@ -7700,8 +7701,101 @@ function printUsage(log = console.error) {
   log('  sweep-siblings <slug>     Remove stale fork-time change copies from sibling worktrees')
 }
 
+// Value-taking flags consume the next token. Bare --precheck-baseline is also valid.
+const VALUE_FLAGS = new Set([
+  '--precheck-baseline',
+  '--baseline-strategy',
+  '--baseline-scope-paths',
+  '--baseline-stash-name',
+  '--show',
+  '--task-summary',
+  '--expected-paths',
+  '--origin',
+  '--verification',
+  '--base',
+  '--superseded-by',
+  '--reason',
+])
+const BOOLEAN_FLAGS = new Set([
+  '--json',
+  '--force',
+  '--force-discard-unland',
+  '--force-discard-uncommitted',
+  '--accept-landed',
+  '--dry-run',
+  '--auto-stash',
+  '--include-worktree-wip',
+  '--no-cleanup',
+  '--noop-if-missing',
+  '--skip-pre-sync',
+  '--skip-prefork-audit',
+  '--include-unrelated-dirty',
+  '--allow-orphan-record',
+  '--work-done',
+  '--i-know-publish-is-running',
+  '--no-landed-state',
+])
+const BATCH_VALUE_FLAGS = new Set([
+  '--work-id',
+  '--author',
+  '--scope',
+  '--pr',
+  '--kind',
+  '--discussant',
+  '--question',
+  '--evidence',
+  '--retain',
+  '--reason',
+  '--trigger',
+  '--workflow',
+  '--group-work-ids',
+  '--expect-work-id',
+  '--batch',
+  '--owner',
+  '--carrier',
+  '--resume-event',
+  '--event',
+  '--authorization',
+  '--world',
+  '--receipt',
+])
+const BATCH_BOOLEAN_FLAGS = new Set([
+  '--authorize-landing',
+  '--release-writer',
+  '--resume',
+  '--dry-run',
+  '--no-cleanup',
+])
+
 async function main() {
-  const [, , sub, ...rest] = process.argv
+  const [, , sub, ...rawRest] = process.argv
+  const options: FlagOptions = Object.fromEntries([
+    ...[
+      ...(sub === 'batch' ? BATCH_VALUE_FLAGS : VALUE_FLAGS),
+      ...(sub === 'batch' ? [] : ['--machine']),
+    ].map((flag) => [
+      flag.slice(2),
+      {
+        type: 'string' as const,
+        optionalValue: flag === '--precheck-baseline',
+        freeText: ['--task-summary', '--verification', '--reason'].includes(flag),
+      },
+    ]),
+    ...[...(sub === 'batch' ? BATCH_BOOLEAN_FLAGS : BOOLEAN_FLAGS), '--help'].map((flag) => [
+      flag.slice(2),
+      { type: 'boolean' as const },
+    ]),
+  ])
+  let rest: string[]
+  try {
+    rest = normalizeUnsplitArgv(rawRest, options)
+  } catch (error) {
+    if (!(error instanceof UnsplitArgvError)) throw error
+    console.error(`error: ${error.message}`)
+    if (sub === 'batch') console.error(`subcommands: ${BATCH_USAGE}`)
+    else printUsage()
+    process.exit(2)
+  }
   const peerExit = forwardToPeer(sub, rest)
   if (peerExit !== null) process.exit(peerExit)
   if (rest.includes('--machine')) return main()
@@ -7733,42 +7827,6 @@ async function main() {
     return
   }
 
-  // Value-taking flags consume the next positional token unless it starts with `--`.
-  // Bare `--precheck-baseline` (no value) is allowed — it means "any-change
-  // baseline guard, no change context" (ad-hoc /wt path).
-  const VALUE_FLAGS = new Set([
-    '--precheck-baseline',
-    '--baseline-strategy',
-    '--baseline-scope-paths',
-    '--baseline-stash-name',
-    '--show',
-    '--task-summary',
-    '--expected-paths',
-    '--origin',
-    '--verification',
-    '--base',
-    '--superseded-by',
-    '--reason',
-  ])
-  const BOOLEAN_FLAGS = new Set([
-    '--json',
-    '--force',
-    '--force-discard-unland',
-    '--force-discard-uncommitted',
-    '--accept-landed',
-    '--dry-run',
-    '--auto-stash',
-    '--include-worktree-wip',
-    '--no-cleanup',
-    '--noop-if-missing',
-    '--skip-pre-sync',
-    '--skip-prefork-audit',
-    '--include-unrelated-dirty',
-    '--allow-orphan-record',
-    '--work-done',
-    '--i-know-publish-is-running',
-    '--no-landed-state',
-  ])
   const flags = new Set<string>()
   const values = {}
   const positional = []

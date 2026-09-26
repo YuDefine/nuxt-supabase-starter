@@ -31,7 +31,7 @@ effort 恆 `medium`（Opus family cap）。**NEVER** 嘗試抬高——沒有 hi
 
 新模型／載體採同一組有已知答案的案例比較：邏輯與安全缺陷召回、誤報反證、跨檔影響、修法 regression、完整 verdict／semantic coverage、唯讀及 snapshot 約束。保留逐例原始輸入輸出、版本與實際工具事件，明示哪些是合成案例、哪些是真實產品觀察。資格變更由對照證據與明確採用決定承載；只有可啟動、一次 PASS 或純文字壓力測試不足以改門檻。
 
-UI Design Review 與截圖符合性 reviewer 使用 fresh Claude Opus 5.5（effort: medium），須實際取得及檢視指定圖片、對照 item 與互動證據。兩列無 Pi fallback。Routing Table 的「Opus 四列不可用時主線自己做」不適用於 commit gate：主線是 maker，不滿足上表 Context 欄，所以 Opus 5.5 無法執行時 0-B 與 0-A 一樣保持未完成。Screenshot evidence 由另一個 Gemini 3.8 Flash high worker 收集，收集 PASS 不代替 0-B 判定。沒有合格且可用的組合時，0-B 保持未完成，不以一般 code reviewer、文字摘要或自行宣稱「看過」補位。
+UI Design Review 與截圖符合性 reviewer 使用 fresh Claude Opus 5.5（effort: medium），須實際取得及檢視指定圖片、對照 item 與互動證據。兩列無 Pi fallback。Routing Table 的「Claude-only 各列 Opus 不可用時主線自己做」不適用於 commit gate：主線是 maker，不滿足上表 Context 欄，所以 Opus 5.5 無法執行時 0-B 與 0-A 一樣保持未完成。Screenshot evidence 由另一個 Gemini 3.8 Flash high worker 收集，收集 PASS 不代替 0-B 判定。沒有合格且可用的組合時，0-B 保持未完成，不以一般 code reviewer、文字摘要或自行宣稱「看過」補位。
 
 ## 執行與缺能力
 

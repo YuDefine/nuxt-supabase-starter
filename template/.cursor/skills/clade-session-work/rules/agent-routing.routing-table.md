@@ -64,7 +64,7 @@ GPT worker 的 transport 依 [[agent-routing]] § Session transport boundary：C
 
 ## Devin SWE-2 Max（任意 Pi 列可選）
 
-`swe-2-max`（effort `max`）**不是任何列的固定前綴**。任何 Pi 列都**可以**選它，但**只限相對不急、即便緩慢也不造成堵塞的任務**。dispatcher 看不到急不急，所以由派工方宣告：Herdr `--launcher devin` **MUST** 帶 `--non-blocking`，缺了 exit 2。Claude-only 列（Opus 四列與 review 席）不接受 Devin。catalog 只認 `devin models list` 的 exact `swe-2-max`，**NEVER** 猜 suffix 或 alias。
+`swe-2-max`（effort `max`）**不是任何列的固定前綴**。任何 Pi 列都**可以**選它，但**只限相對不急、即便緩慢也不造成堵塞的任務**。dispatcher 看不到急不急，所以由派工方宣告：Herdr `--launcher devin` **MUST** 帶 `--non-blocking`，缺了 exit 2。Claude-only 列（執行鏈是 Claude Opus 5.5 的各列：`ui-view-implementation`、`design-review`、`ui-detailed-planning`、`screenshot-match-analysis`、`dotclaude-authoring`、`code-review-opus`）不接受 Devin。catalog 只認 `devin models list` 的 exact `swe-2-max`，**NEVER** 猜 suffix 或 alias。
 
 ## 工作類別對照
 
@@ -89,11 +89,31 @@ GPT worker 的 transport 依 [[agent-routing]] § Session transport boundary：C
 | 〔`design-review`〕Design Review／視覺品質判讀 | Claude Opus 5.5（effort: medium） | 無 fallback | 實際讀圖與設計要求 |
 | 〔`ui-detailed-planning`〕UI 詳細實作計畫 | Claude Opus 5.5（effort: medium） | 無 fallback | 保留 UI 範圍、互動、狀態與驗收 |
 | 〔`screenshot-match-analysis`〕截圖 vs 驗收項目符合性判定 | Claude Opus 5.5（effort: medium） | 無 fallback | 逐張讀實際圖片與完整 item，回 PASS／FAIL／UNCERTAIN |
+| 〔`dotclaude-authoring`〕更新 `.claude/` 的檔案（skills、rules、agents、commands、hooks、settings；含投影到 consumer `.claude/` 的 clade 源檔） | Claude Opus 5.5（effort: medium） | 無 fallback | Claude Code 原生／Herdr carrier（`cc`／`ccw`）；範圍與對 `non-ui-implementation` 的優先序見下方 § `dotclaude-authoring` 的範圍 |
 | 〔`code-review-opus`〕Code review／commit 0-A（0-A.1／0-A.2／task reviewer／whole-branch／非 commit review 全部） | Claude Opus 5.5（effort: medium）（Claude Code 主線：in-process `commit-0a-reviewer` subagent；叫不出 Claude subagent 的 runtime：Herdr Claude child） | 無 fallback；**額度耗盡 → gate 保持未完成** | row id 保留 `-opus` 字尾以延續既有 receipt／ledger（原 `code-review`／`code-review-fable` 兩列已刪，歷史 ledger 裡的 `code-review` 是 Astra）。Claude Code 主線跑 `claude-review-safe.sh prepare medium` → AGENT_CALL → FINALIZE；NEVER 走 Pi；NEVER 主線自審補位 |
 
-「無 fallback」的 Opus 四列在 Opus 不可用時由主線自己做；commit gate 例外——`code-review-opus`（0-A）與 commit 0-B 用到的 `design-review`／`screenshot-match-analysis`：產出 changeset 的那條線不是它的 reviewer，所以 gate 保持未完成（`commit` skill `review-policy.md`）。
+「無 fallback」的 Opus 各列在 Opus 不可用時由主線自己做；commit gate 例外——`code-review-opus`（0-A）與 commit 0-B 用到的 `design-review`／`screenshot-match-analysis`：產出 changeset 的那條線不是它的 reviewer，所以 gate 保持未完成（`commit` skill `review-policy.md`）。
 
 不在表上的 Claude 載體只有一種：in-process 唯讀定位搜尋交 `Explore` subagent（顯式 `model: opus`，effort 意圖 `low`；`pi-routing-gate.ts` 只驗 model 直接放行，`low` 無機械強制）。掃描矩陣與固定欄位抽取照舊走 `mechanical-fanout`／`read-heavy-scan` 列，見 [[agent-routing.dispatch-execution]] 第 4 條。
+
+### `dotclaude-authoring` 的範圍（Charles 2026-09-26）
+
+`.claude/` 是 Claude Code 自己讀的 prompt／規約面，由 Claude 撰寫才與讀者對齊。判定只看**這次派工要寫入的路徑**，不看任務標題：
+
+| 可觀察 predicate | 列 |
+| --- | --- |
+| 寫入路徑含 `.claude/` 目錄段（任何 repo、任何深度：`.claude/skills/**`、`.claude/rules/**`、`.claude/agents/**`、`.claude/commands/**`、`.claude/hooks/**`、`.claude/settings*.json`） | 本列 |
+| clade 源檔，投影後落在 consumer `.claude/`：`rules/core/**`、`rules/modules/**`、`capabilities/**/{skills,agents,commands,hooks,references}/**` | 本列（改源頭與改投影是同一份讀者） |
+| `claude-md/**`（落在 consumer `CLAUDE.md`，不在 `.claude/`）、`vendor/scripts/**`、`scripts/**`、`capabilities/**/scripts/**`（不在上一條那五個段之下的 `scripts/`，見下方重疊判定）與其他程式碼 | **不是**本列，照原表查（通常 `non-ui-implementation`） |
+
+**`capabilities/**` 兩條同時命中時**（例如 `capabilities/core/skills/<name>/scripts/*.ts`）：看寫入路徑裡**最靠近 `capabilities/` 的**那個 `skills`／`agents`／`commands`／`hooks`／`references`／`scripts` 目錄段——前五者之一 → 本列（skill 底下的 `scripts/` 投影後落在 consumer `.claude/skills/<name>/scripts/`，第一條也命中）；是 `scripts` → 不是本列（例如 `capabilities/core/scripts/**`）。只看路徑字串，**NEVER** 依檔案副檔名或任務標題改判。
+
+**與 `non-ui-implementation` 的優先序**：同一件同時寫 `.claude/`（含上表源檔）與其他程式碼時——
+
+1. 兩側拆得開（各自能獨立通過驗收）→ **拆成兩次派工**，各自依寫入路徑查表。
+2. 拆不開（同一個行為契約的兩端，例如改 hook 腳本連帶改 `settings.json` 註冊與它的測試）→ **本列優先**，整件由 Claude Opus 5.5（effort: medium）做。理由：Opus 寫程式碼沒有檔位缺口，Sol 寫給 Claude 讀的規約才是本列要擋的事。
+
+consumer 端的 `.claude/rules/local/**` 同樣命中第一條；本列只決定載體，**不**改變「clade 源檔先改 clade 再散播」的路由（`clade-source-routing`）。
 
 已退場的列 id（`non-ui-implementation-escalate`、`commit-0c-fix-verify-escalate`、`ui-implementation`、`code-review`、`code-review-fable`）只留在歷史 ledger；新派工帶它們 dispatcher exit 1 並指出吸收它的列（`RETIRED_TABLE_ROWS`）。
 
@@ -119,6 +139,7 @@ GPT worker 的 transport 依 [[agent-routing]] § Session transport boundary：C
 | 〔`copywriting-draft`〕 | **主線 MUST 收斂重寫每一條採用的文案，NEVER 原樣貼進交付物**——Pi 回的是素材不是成稿。本列只涵蓋行銷／產品對外文案，**NEVER** 外推到規約措辭／commit message／技術文件／PR 描述／對外報告。 |
 | 〔`notion-ops`〕 | **NEVER** 上 Cursor 池（Notion auth 在 `$HOME`）。**NEVER** 主線第一手自己跑 ntn。**本列不涵蓋確定性 script**：`vendor/scripts/notion-sync.ts`、`vendor/scripts/lib/notion-hub.ts resolve`、`scripts/audit-notion-hub-schema.ts` 主線直接跑。Notion MCP 不是本列的合法 transport，**NEVER** 使用。 |
 | 〔`read-heavy-scan`〕 | **NEVER** 拿「反正我讀一下就知道了」略過 gate，也 NEVER 把固定輸出 schema 當成不需裁決的證據。 |
+| 〔`dotclaude-authoring`〕 | **NEVER** 經 Pi 派工（`pi-dispatch.ts` 以 Claude-only 拒跑）；**NEVER** 以「只是改一行 settings／改幾個字」把 `.claude/` 寫入塞進 `non-ui-implementation` 的派工——拆不開就整件走本列。 |
 | 〔`code-review-opus`〕 | **NEVER** 經 Pi 派工；effort 恆 `medium`；Opus 額度耗盡 → gate 保持未完成，**NEVER** 改派其他模型、**NEVER** 主線自審補位；receipt MUST 記 requested／observed model 與 `model_verification`，`requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。 |
 
 > **每一次** pi dispatch **MUST 帶 `--route` 與 `--tier-basis`**（缺就 exit 1）：前者記走哪條政策（本表某列 → `routing-table`；§ delegate-sub → `claude-delegate-sub`；配額降級 → `fallback-chain`；皆非才**顯式** `manual`），後者記該政策對 model 的**結論**；dispatcher 交叉檢查兩者與 `--model`、`--effort`，矛盾即 exit 1。**NEVER** 不確定就填 `manual` ／ `table-row`——與「判定沒發生」不可區分。重試帶 `--retry-of <label>`，**NEVER** 用 `<label>2`。
