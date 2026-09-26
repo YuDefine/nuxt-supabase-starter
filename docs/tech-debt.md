@@ -16,7 +16,7 @@
 | TD-008 | `validate-starter` 維護工具會被 scaffold 帶走 | mid | open | 2026-08-19 |
 | TD-010 | 參考 app email 登入被 nuxt-security CSRF 擋下 | mid | open | 2026-08-24 |
 | TD-011 | clade 投影 auth 文件仍寫舊套件名 | low | open | 2026-08-24 |
-| TD-012 | `lint` script guard 吃不掉 pnpm 附加參數 | mid | open | 2026-08-29 |
+| TD-012 | `lint` script guard 吃不掉 pnpm 附加參數 | mid | done | 2026-08-29 |
 | TD-014 | clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約 | low | open | 2026-09-09 |
 | TD-016 | Cloudflare 上 `useRuntimeConfig()` 的 module-eval snapshot 是否讀得到注入的 `NUXT_APP_ENV` | mid | open | 2026-09-11 |
 | TD-017 | `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅 | low | open | 2026-09-11 |
@@ -163,16 +163,16 @@ starter 端只驗收到貨的投影，不直接修改 managed files。
 
 與 `dd2b122e`（heavy gate guard 改 `sh -c` 形式）同型；修法照那筆。
 
-**Status**: open
+**Status**: done（2026-09-26 驗證；script 已於 `c86c3bad7` 修正）
 **Priority**: mid
 **Discovered**: 2026-08-29 — TD-685 heavy gate guard 回歸修正時發現
 **Location**: `template/package.json` 的 `lint` script
 
 ### Problem
 
-`lint` 是裸 `if … fi` shell guard；pnpm 將 `pnpm lint <args>` 的附加參數接在整條 script 尾端，造成
+`lint` 原是裸 `if … fi` shell guard；pnpm 將 `pnpm lint <args>` 的附加參數接在整條 script 尾端，造成
 `sh: 1: Syntax error: word unexpected`。`pnpm lint` 不帶參數才正常；typecheck、test、build 已用同形狀修正，
-lint 因原工作 scope 刻意留下。
+lint 因原工作 scope 刻意留下。`c86c3bad7` 已將 lint 改為下方形式。
 
 ### Fix approach
 
@@ -187,6 +187,13 @@ lint 因原工作 scope 刻意留下。
 - `pnpm lint --help` 顯示 `vp lint` help，沒有 shell syntax error。
 - `pnpm lint` 不帶參數仍 exit 0。
 - 刻意造成 lint failure 時 exit code 為非零，證明 `exec` 穿透。
+
+### Verification（2026-09-26，`template/` cwd）
+
+- `pnpm lint --help` → exit 0；輸出 `Usage: [-c=<./.oxlintrc.json>] [PATH]...` 與 Oxlint 選項，沒有 shell syntax error。
+- `pnpm lint` → exit 0；`Found 0 warnings and 0 errors.`，掃描 253 檔。
+- 暫存 `td012-lint-probe.ts` 內容為 `debugger;`，再跑 `pnpm lint` → exit 1；輸出 `eslint(no-debugger)` 與 `Found 1 warning and 0 errors.`。刪除暫存檔後重跑 `pnpm lint` → exit 0，`Found 0 warnings and 0 errors.`。
+- 額外本機檢查：`pnpm typecheck` → exit 0；`vp check` → exit 0（286 檔格式正確、253 檔 lint 無警告／錯誤）。本 repo 沒有 `tsconfig.clade.json`，型別檢查使用既有 `pnpm typecheck`。
 
 ## TD-014 — clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約
 
