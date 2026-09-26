@@ -19,7 +19,9 @@
 #   CLADE_HEAVY_GATE_SLOTS   整台機器同時執行上限（預設 2，clamp 到 1..8）
 #   CLADE_GATE_LOCK_DIR      lock 檔目錄（預設 ${XDG_RUNTIME_DIR:-/tmp}/clade-gates）
 #   CLADE_GATE_WAIT_TIMEOUT  wait 模式最長等待秒數（預設 1800）
-#   CLADE_GATE_SLOT_HELD     外層已持有 slot；本層直接 exec，不重複上鎖（防自我死鎖）
+#   CLADE_GATE_SLOT_HELD     外層已持有 heavy slot＋repo lock；本層直接 exec，不重複上鎖（防自我死鎖）。
+#                            只有 heavy 路徑會 export 它——light 沒持有 heavy 資源，NEVER 替巢狀 gate 宣稱已持有
+#   CLADE_GATE_LIGHT_HELD    外層已持有 light slot；只讓巢狀的 light 直接 exec，巢狀 heavy 照常取鎖
 #   CLADE_GATE_SLOT_METRICS  設為檔案路徑時，取到 slot 後 append 一行 JSON
 #                            {key,mode,class,slots,slot_wait_ms}（opt-in，未設不寫；寫失敗不影響 gate）
 #   CLADE_GATE_CLASS         heavy（預設）| light。由 clade-gate 判定後設定，本層讀完即 unset（W-2026-09-24-gate-slot-light-lane）
@@ -73,6 +75,11 @@ unset CLADE_GATE_CLASS
 # 外層已持有 slot（例如 post-edit hook 已上鎖，內層 pnpm typecheck 又轉呼叫 clade-gate）。
 # 沒有這個 escape hatch，第二層會在同一個 repo lock 上等自己 → 死鎖。
 if [ "$mode" != status ] && [ "${CLADE_GATE_SLOT_HELD:-}" = "1" ]; then
+  exec "$@"
+fi
+# light 裡再進 light：已經佔著一格 light，再排一格在 CLADE_LIGHT_GATE_SLOTS=1 時會等自己。
+# 巢狀 heavy 不走這裡——它要的 repo lock／heavy slot 外層 light 並沒有持有。
+if [ "$mode" != status ] && [ "$GATE_CLASS" = light ] && [ "${CLADE_GATE_LIGHT_HELD:-}" = "1" ]; then
   exec "$@"
 fi
 
@@ -397,7 +404,13 @@ if ! acquire_slot; then
   done
 fi
 
-export CLADE_GATE_SLOT_HELD=1
+# 只替巢狀 gate 宣稱「本層真的持有的資源」：heavy 持有 repo lock＋heavy slot，巢狀任何 gate 直接 exec；
+# light 只持有 light slot，巢狀 heavy MUST 照常取 repo lock 與 heavy slot（檔頭「NEVER 讓它完全免閘」）。
+if [ "$GATE_CLASS" = heavy ]; then
+  export CLADE_GATE_SLOT_HELD=1
+else
+  export CLADE_GATE_LIGHT_HELD=1
+fi
 
 # 等待量測（W-2026-09-16-delivery-throughput H2）：push_ms 裡有多少是排 slot、多少是 gate 實跑，
 # 過去無從分辨。只記「取到 slot 為止」的等待；實跑時間由呼叫端以總時長相減——exec 之後

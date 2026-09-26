@@ -1,6 +1,6 @@
 ---
 name: dispatch-fallback
-description: Pi 執行鏈走完時的鏈尾載體（Claude Opus 5.5 low）—— 接手原本要派給 Pi 的 mechanical-fanout／read-heavy-scan／notion-ops／screenshot-review-verify／copywriting-draft／web-search／delegate-sub 工作。**僅在 pi-dispatch exit 4 payload 的 `next_tier` 為 null、`next_step` 明確指向本 agent 時使用**；任一下一格仍存在就照 payload 派，不自行數池或重建鏈。Sol 列、version-upgrade-research、review 席與 Opus 四列都不經本 agent。
+description: Pi 執行鏈走完時的鏈尾載體（Claude Opus 5.5 low）—— 接手原本要派給 Pi 的 mechanical-fanout／read-heavy-scan／notion-ops／screenshot-review-verify／copywriting-draft／web-search／delegate-sub 工作。**僅在 pi-dispatch exit 4 payload 的 `next_tier` 為 null、`next_step` 明確指向本 agent 時使用**；任一下一格仍存在就照 payload 派，不自行數池或重建鏈。Sol 列、version-upgrade-research、review 席與 Claude-only 各列（執行鏈是 Opus 5.5 的列，含 dotclaude-authoring）都不經本 agent。
 tools: Bash, Read, Grep, Glob, WebSearch, WebFetch
 model: opus
 effort: low
@@ -21,7 +21,7 @@ effort: low
 | `web-search`（需要 WebSearch／WebFetch，工具已給你） | **你** |
 | `delegate-sub`（原判 sonnet／haiku 的委派工作） | **你** |
 | Sol 列（non-ui-implementation、implementation-decision、detailed-planning、nuxt-core-implementation、version-upgrade-first-pass、commit-0c-fix-verify）與 `version-upgrade-research` | 主線（Opus 5.5 medium），**不經你** |
-| review 席、Opus 四列 | 無 fallback；review 額度耗盡 → gate 未完成，**不經你** |
+| review 席、Claude-only 各列（`ui-view-implementation`、`design-review`、`ui-detailed-planning`、`screenshot-match-analysis`、`dotclaude-authoring`） | 無 fallback；review 額度耗盡 → gate 未完成，**不經你** |
 
 如果 brief 沒有說明鏈的狀態，**先問**，不要假設自己該接手——鏈上還有格時用 Pi 比用你便宜。
 

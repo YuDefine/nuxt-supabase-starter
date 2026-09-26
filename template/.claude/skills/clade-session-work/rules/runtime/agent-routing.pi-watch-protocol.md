@@ -51,4 +51,4 @@ The Claude native delegation entry is `Agent`; its async owner may use `run_in_b
 
 進入 apply 後，個別 phase executor 仍走 共通 Routing Table；那張表決定誰實作，不反向改寫 residency。
 
-Design Review, UI planning and screenshot matching use Opus 5.5 medium with no fallback; when Opus is unavailable the main line does the work, and commit-gate seats stay incomplete. UI view implementation, including Nuxt UI/Content, uses Opus 5.5 medium, Nuxt core uses Pi GPT-6 Sol xhigh, and screenshot capture uses Pi Gemini 3.8 Flash high.
+Design Review, UI planning, screenshot matching and `.claude/` authoring (`dotclaude-authoring`) use Opus 5.5 medium with no fallback; when Opus is unavailable the main line does the work, and commit-gate seats stay incomplete. UI view implementation, including Nuxt UI/Content, uses Opus 5.5 medium, Nuxt core uses Pi GPT-6 Sol xhigh, and screenshot capture uses Pi Gemini 3.8 Flash high.

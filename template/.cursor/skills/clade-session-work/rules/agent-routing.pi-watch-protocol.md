@@ -430,9 +430,9 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`native wakeu
 
 Change carrier 保持原 session，bounded phase 依 [[agent-routing.routing-table]] 選模型。每次交接帶 canonical work／revision、scope、驗收與結果路徑；交回後核對 diff scope、實跑證據與當前 work 狀態。
 
-UI view 實作（含 Nuxt UI／Content）、Design Review、UI 詳細計畫與截圖符合性交 Opus 5.5（effort: medium），四列都**無 fallback**——Opus 不可用時主線自己做；Nuxt 本體交 GPT-6 Sol xhigh；截圖收集交 Gemini 3.8 Flash high。非 UI 實作與計畫沿各自具名列（GPT-6 Sol xhigh）。
+UI view 實作（含 Nuxt UI／Content）、Design Review、UI 詳細計畫、截圖符合性與 `.claude/` 檔案更新（`dotclaude-authoring`）交 Opus 5.5（effort: medium），這些 Claude-only 列都**無 fallback**——Opus 不可用時主線自己做；Nuxt 本體交 GPT-6 Sol xhigh；截圖收集交 Gemini 3.8 Flash high。非 UI 實作與計畫沿各自具名列（GPT-6 Sol xhigh）。
 
-Devin SWE-2 Max（`swe-2-max`，effort: max）**不是任何列的固定前綴**：任何 Pi 列都**可選**它，但只限相對不急、即便緩慢也不造成堵塞的任務（[[agent-routing.routing-table]] § Devin SWE-2 Max）。派工走 canonical helper `herdr-session-handoff.ts --launcher devin --model swe-2-max --effort max --non-blocking`（缺 `--non-blocking` exit 2；實際 spawn 的 devin argv 為 `devin --permission-mode bypass --model <slug>`，不帶 `--effort`／`--session-id`，session 身分由 `CLADE_DEVIN_SESSION_ID` 承載）；catalog 證明只認 `devin models list` 的 exact row。Claude-only 列（Opus 四列與 review 席）不接受 Devin。
+Devin SWE-2 Max（`swe-2-max`，effort: max）**不是任何列的固定前綴**：任何 Pi 列都**可選**它，但只限相對不急、即便緩慢也不造成堵塞的任務（[[agent-routing.routing-table]] § Devin SWE-2 Max）。派工走 canonical helper `herdr-session-handoff.ts --launcher devin --model swe-2-max --effort max --non-blocking`（缺 `--non-blocking` exit 2；實際 spawn 的 devin argv 為 `devin --permission-mode bypass --model <slug>`，不帶 `--effort`／`--session-id`，session 身分由 `CLADE_DEVIN_SESSION_ID` 承載）；catalog 證明只認 `devin models list` 的 exact row。Claude-only 列（執行鏈是 Claude Opus 5.5 的各列：`ui-view-implementation`、`design-review`、`ui-detailed-planning`、`screenshot-match-analysis`、`dotclaude-authoring`、`code-review-opus`）不接受 Devin。
 
 ## 截圖 routing
 
@@ -445,7 +445,7 @@ Devin SWE-2 Max（`swe-2-max`，effort: max）**不是任何列的固定前綴**
 
 ### Opus 列沒有 Pi fallback
 
-`design-review`、`ui-detailed-planning`、`screenshot-match-analysis`、`ui-view-implementation` 2026-09-24 起**無 fallback**（`NATIVE_ROW_FALLBACKS` 為空）：Opus 5.5 無法執行時主線自己做，**NEVER** 改派 Pi Sol。`pi-dispatch.ts` 的 `--native-failure-receipt` 因此對任何列都不會被接受。
+`design-review`、`ui-detailed-planning`、`screenshot-match-analysis`、`ui-view-implementation`（2026-09-24 起）與 `dotclaude-authoring`（2026-09-26 起）**無 fallback**（`NATIVE_ROW_FALLBACKS` 為空）：Opus 5.5 無法執行時主線自己做，**NEVER** 改派 Pi Sol。`pi-dispatch.ts` 的 `--native-failure-receipt` 因此對任何列都不會被接受。
 
 ### Opus 啟動前失敗的受控接替
 

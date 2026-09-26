@@ -33,17 +33,24 @@ TYPES=$(node -e "
 ## Step 1.2 — 精確判定是否需要比對
 
 ```bash
-# 檢查 types 或 migrations 是否變更：working tree vs HEAD（含 staged），
-# 加上本 branch 相對 base 已 commit 的部分——migration 在先前 commit 已入庫、
-# working tree 只剩其他檔時，單看 HEAD diff 會漏
-BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null)
+# 範圍＝本次落地的變更：working tree vs HEAD（含 staged）＋ untracked 新檔。
+# 普通 /commit：branch 上先前 commit 的 migration 不算——它在自己那次 /commit 已走過本步驟。
+# 批次 /commit：BATCH_SCOPE 是 shell 變數，每次 Bash tool call 都是新 shell——MUST 與本段在同一次呼叫裡設
+#   （BATCH_SCOPE=$(node scripts/wt-helper.ts batch scope) || BATCH_SCOPE='<batch scope 失敗>'），另加 base→candidate tree（checkpoint 沒走過本步驟）；
+# 批次 branch（codex/batch-<id>）上 BATCH_SCOPE 沒設、空或讀不到一律判 HAS
+case "$(git symbolic-ref --short -q HEAD)" in codex/batch-*) IN_BATCH=1 ;; *) IN_BATCH= ;; esac
 {
   git diff --name-only HEAD -- "$TYPES" supabase/migrations/
-  [ -n "$BASE" ] && git diff --name-only "$BASE" HEAD -- "$TYPES" supabase/migrations/
+  git ls-files --others --exclude-standard -- "$TYPES" supabase/migrations/
+  if [ -n "$IN_BATCH" ] || [ -n "${BATCH_SCOPE:-}" ]; then
+    printf '%s' "${BATCH_SCOPE:-}" \
+      | node -e 'const s=JSON.parse(require("fs").readFileSync(0,"utf8"));if(!s.base||!s.tree)process.exit(1);console.log(s.base,s.tree)' \
+      | { read -r B T && git diff --name-only "$B" "$T" -- "$TYPES" supabase/migrations/; } || echo '<batch scope 讀不到>'
+  fi
 } | grep -q . && echo HAS || echo NO
 ```
 
-`NO` → 回主檔進 Step 2。`HAS` → 往下走。批次 `/commit` MUST 用 helper `batch scope` 的 `base`→candidate tree 做同一判定，不只看 working tree vs HEAD；member checkpoint 裡已 commit 的 migrations 也算。非批次路徑的 base 取 `merge-base HEAD origin/main`（fallback 本機 `main`）；base 解析不出來時已 commit 段缺席，退化成舊版的 HEAD-only 判定。
+`NO` → 回主檔進 Step 2。`HAS` → 往下走。批次 `/commit` 的本次落地範圍是 helper `batch scope` 的 `base`→candidate tree：MUST 設好 `BATCH_SCOPE` 再跑上面這段，member checkpoint 裡已 commit 的 migrations 屬於本次落地、也算（checkpoint 不是 `/commit`，沒走過本步驟）；批次 branch 上 `BATCH_SCOPE` 沒設、空（helper 失敗）或讀不到時判 HAS。非批次路徑 **NEVER** 用 `merge-base→HEAD` 全 branch 判——branch 早期一旦含 migration，之後每次 `/commit` 都會判 HAS、進 Step 1.3 跑破壞性 reset（desk 共用 canonical DB）。繞過 `/commit` 入庫的 stale types 由 CI `supabase-check` 擋。
 
 > 主檔的觸發判定刻意寬鬆（寧可誤送進本檔），這一步才是權威判定 —— 它認得
 > `package.json` 的 `config.dbTypesPath` 自訂路徑，主檔的粗篩不認得。

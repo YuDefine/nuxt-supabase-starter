@@ -16,7 +16,7 @@ Gemini 經 `pi-dispatch.ts` 的 `google-gemini-cli` provider 執行；brief 指�
 
 Opus 5.5 使用 Claude Code 原生模型或已驗證的 Herdr bounded carrier。Cursor Task 的 `claude-*` catalog 不代替 Claude Code。
 
-兩階段各有自己的 brief 與回報。Gemini 不再轉派、不代簽符合性 gate；Opus 必須讀每張指定圖片與完整 item。主 session 消費結構化結果；符合性判定者使用未參與實作的新上下文，並實際讀圖。Opus 5.5 無法執行時記錄實際原因，沿 `screenshot-match-analysis` 原列交 GPT-5.6 Sol（effort: high）讀圖判定。Gemini 或 Sol 不可用時保留 blocker，**NEVER** 沿 generic fallback 換成其他模型。
+兩階段各有自己的 brief 與回報。Gemini 不再轉派、不代簽符合性 gate；Opus 必須讀每張指定圖片與完整 item。主 session 消費結構化結果；符合性判定者使用未參與實作的新上下文，並實際讀圖。`screenshot-match-analysis` 列無 fallback：Opus 5.5 無法執行時記錄實際原因；commit 0-B 保持未完成（主線是 maker，commit skill `review-policy.md`），其餘模式由主線（Opus）自己讀圖判定，取證與判定仍分兩步。Gemini 不可用時保留 blocker，**NEVER** 沿 generic fallback 換成其他模型。
 
 ## Brief 注意事項
 
@@ -105,5 +105,5 @@ agent 交回的 manifest 已含 `discriminating` 欄，但**主線 MUST 自行�
 ## 注意事項
 
 - 四個 screenshot review 模式同走 Gemini 3.8 Flash；item 符合性 gate 另走 Opus 5.5。
-- 取證 worker 的 PASS 只描述收集結果；item 由 Opus 5.5 或已符合 fallback 條件的 GPT-5.6 Sol reviewer 判定後才標為符合。
+- 取證 worker 的 PASS 只描述收集結果；item 由 Opus 5.5 判定後才標為符合（非 commit 模式 Opus 無法執行時由主線讀圖判定；commit 0-B 保持未完成）。
 - 主持者保留 scope、真實 evidence、NON-EVIDENCE／UNREACHABLE 揭露與 receipt 責任。

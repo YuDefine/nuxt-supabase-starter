@@ -1,6 +1,6 @@
 # Screenshot evidence contract
 
-由 `review-screenshot` skill 的 Pi Gemini 3.8 Flash worker 讀取並執行。只收集與檢查 evidence；截圖 vs item 的最終符合性由另一個 Opus 5.5 dispatch 判定；Opus 無法執行時依 skill 走 GPT-5.6 Sol（effort: high）fallback。本 worker 不再轉派。以下 PASS／FAIL 是收集狀態，不代替符合性 gate。
+由 `review-screenshot` skill 的 Pi Gemini 3.8 Flash worker 讀取並執行。只收集與檢查 evidence；截圖 vs item 的最終符合性由另一個 Opus 5.5 dispatch 判定；該列無 fallback，Opus 無法執行時的處置依 skill（commit 0-B 保持未完成）。本 worker 不再轉派。以下 PASS／FAIL 是收集狀態，不代替符合性 gate。
 
 ## 你會收到
 

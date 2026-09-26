@@ -20,7 +20,7 @@ Nuxt 本體走 `nuxt-core-implementation` Pi Sol xhigh，其餘 UI view 走 `ui-
 
 Cursor 派出 Herdr 之後 MUST `--coordinate` 或 `--coordinate-resume` 等到 correlated `--complete`，再收回 child pane 並繼續；NEVER `--relay`。切片逾時會回 `coordination_pending`，主線立刻 `--coordinate-resume <dispatch_id>`，**不得**把 idle/done 當完成、也不得直接 `herdr pane close`。這不是 `/handoff`：主線繼續工作，**NEVER** 輸出「目前這裡收工」。
 
-**NEVER** 把「Routing Table 寫 Agent tool Claude」讀成「Cursor Task 設 `model=claude-opus-5`」。那是 Claude Code 的 Agent tool，不是 Cursor 的 Task catalog。screenshot review 走第 1 條 Pi Gemini 3.8 Flash；Design Review、UI 詳細計畫與截圖符合性走第 2 條 `--model claude-opus-5-5 --effort medium`，每次帶 `--route routing-table --tier-basis table-row --table-row <design-review|ui-detailed-planning|screenshot-match-analysis>`，依實際工作選一列。
+**NEVER** 把「Routing Table 寫 Agent tool Claude」讀成「Cursor Task 設 `model=claude-opus-5`」。那是 Claude Code 的 Agent tool，不是 Cursor 的 Task catalog。screenshot review 走第 1 條 Pi Gemini 3.8 Flash；Design Review、UI 詳細計畫、截圖符合性與 `.claude/` 撰寫走第 2 條 `--model claude-opus-5-5 --effort medium`，每次帶 `--route routing-table --tier-basis table-row --table-row <design-review|ui-detailed-planning|screenshot-match-analysis|dotclaude-authoring>`，依實際工作選一列。
 
 全域注入走 Cursor **User Rules**（Customize → Rules，「Cursor 主線只留 Grok 4.6」）。專案 `.cursor/rules/` 只罩該 repo；**NEVER** 靠 consumer `CLAUDE.md` snippet 當全域通道——那會讓 Claude Code session 付 always-load 預算。
 
