@@ -126,8 +126,10 @@ CSRF token；已觀察到 `403 CSRF Token Mismatch`。CI 目前漏測，因真�
 
 ### Fix approach
 
-先確認本專案 Better Auth 的 origin/cookie 防護，再擇一：對 `/api/auth/**` 建立明確 exclusion，或讓 client 帶
-nuxt-security token。不得關閉全域 `security.csrf`。
+方案裁決與實作、驗收步驟見 [2026-09-26 TD-010 CSRF decision](evidence/2026-09-26-td-010-csrf-decision.md)。
+推薦在 `/api/auth/**` 以 `routeRules` 的 **`csurf: false`** 建立例外，保留全域
+`security.csrf: true` 與 Better Auth 自身的 origin/cookie/Fetch Metadata 防護。參考 app 與
+scaffolder 的 Better Auth + security 輸出須一起修；目前尚未實作或完成執行時驗收。
 
 ### Acceptance
 
