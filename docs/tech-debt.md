@@ -26,28 +26,46 @@
 
 ## TD-004 — Spectra roadmap drift check 在 CI 的 structural diff
 
-**Status**: in-progress（2026-08-19 起診斷模式）
+**Status**: in-progress（2026-09-26：診斷步驟已失去輸入與同步指令，待 workflow owner 收斂）
 **Priority**: mid
 **Discovered**: 2026-05-10 — v0.31.0 release 後 Template CI 反覆報 stale
-**Location**: `template/scripts/spectra-advanced/roadmap-sync.ts`、`.github/workflows/template-ci.yml`
+**Location**: `.github/workflows/template-ci.yml`（原 `template/scripts/spectra-advanced/roadmap-sync.ts` 已退役）
 
 ### Problem
 
 CI 執行 `vp run spectra:roadmap --check` 時曾持續報 stale，即使 local 已同步並提交 `ROADMAP.md`。
-目前已驗證 timestamp normalization、Spectra CLI 不在 PATH、`.spectra/claims/` 缺失，以及 manual drift input
-都不足以重現差異；本機 working tree、shallow clone、Node 24 且 CLI 不在 PATH 的模擬均 PASS。剩餘未知點是
-active-change progress、parallelism mutex 排序，或 empty/missing input 的 render 差異。
+當時已驗證 timestamp normalization、Spectra CLI 不在 PATH、`.spectra/claims/` 缺失，以及 manual drift input
+都不足以重現差異；working tree、shallow clone、Node 24 且 CLI 不在 PATH 的本機模擬均 PASS。
+原始 structural diff 的 collect/render 根因尚未取得 CI 證據。
+
+### 2026-09-26 診斷紀錄
+
+- 讀取 Template CI main push runs `36214643821`、`36210379044`、`36198126577`、`36184362683`、`36098821814`
+  的 job/step 狀態與 log：Unit tests 先失敗，`Spectra roadmap drift check (diagnostic, non-blocking)` 全為
+  `skipped`。抽查較早的 `35953306353`、`34777720412`、`32481166558` 同樣 `skipped`。
+  **unified diff 摘要：沒有 diff 輸出；不能據此判定原始 stale 已修復。**
+- `693bf454`（2026-09-07）刪除 LOCKED 的 `roadmap-sync.ts` 投影；`67503a36` 同日移除
+  `template/package.json` 的 `spectra:*` scripts；`28a39971` 同日刪除 `template/openspec/ROADMAP.md`。
+  目前在 `template/` 執行 `vp run spectra:roadmap --check` 回 `Task "spectra:roadmap" not found`。
+- 現行 workflow 仍先 `cp openspec/ROADMAP.md`，再呼叫已不存在的 task。**目前診斷路徑失效的根因是
+  workflow 未隨 Spectra 投影退役同步更新**；沒有可執行的 collect/render path，也無 CI diff 可構造
+  修正前紅、修正後綠的回歸測試。本輪因此只記錄診斷，不復活已退役腳本或手改 roadmap。
 
 ### Workaround
 
-`.github/workflows/template-ci.yml` 暫時保留 drift step 但使用 `continue-on-error: true`，stale 時輸出
-committed 與 CI-synced 的 unified diff；local hook 仍維持同步。
+`.github/workflows/template-ci.yml` 仍保留 `continue-on-error: true` 與 stale 時的 diff 指令，
+但目前前置測試失敗使步驟跳過；即使走到該步驟，roadmap 檔與 task 也已不存在。
 
 ### Fix approach
 
 1. 依 CI 實際 unified diff 定位 structural difference。
 2. 修正 `roadmap-sync.ts` 的對應 collect/render path。
 3. 連續 5 次 main push 的 check 都 PASS 後，移除 `continue-on-error`，恢復真正 gate。
+
+上述步驟是歷史方案，已不能套用到退役後的樹。後續由 coordinator 指派 workflow owner（本輪 worker
+只持有本 TD-004 條目）：核對 Spectra 退役是否為預期產品決策；若是，清除
+`.github/workflows/template-ci.yml` 的無效診斷步驟並調整本條驗收；若仍需 roadmap gate，先在具名
+source of truth 恢復輸入、task 與同步器，再以實際 CI diff 重啟步驟 1–3。不得把 skipped run 當 PASS。
 
 ### Acceptance
 
