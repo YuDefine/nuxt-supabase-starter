@@ -333,7 +333,7 @@ build 期的值 → 落到 `'unknown'`。
 
 ### Problem
 
-`node scripts/validate-starter.mjs` 會在 `template/temp/validate-starter/` 下產出 4 份完整的
+修正前，`node scripts/validate-starter.mjs` 會在 `template/temp/validate-starter/` 下產出 4 份完整的
 scaffold 專案並**保留**（`temp/` 在 `.gitignore` 內）。vite-doctor 不跳過它，於是接著跑
 `pnpm run doctor` 會多出 3 條 `NUXT0054 no-secret-in-public-config` error（來自 generated
 `nuxt.config.ts` 的 `runtimeConfig.public.key`），doctor 從 exit 0 變 exit 1。
@@ -353,9 +353,13 @@ scaffold 專案並**保留**（`temp/` 在 `.gitignore` 內）。vite-doctor 不
 2. 讓 doctor 跳過 `temp/**`。落點是 consumer 自有的 doctor.config.json 宣告檔，
    **NOT** clade-LOCKED 的 `vendor/doctor-shared/`。
 
+本次選路線 1：預設在驗證結束時清掉 fixture（含失敗路徑），需要檢查 scaffold 產物時加 `--keep`。
+TD-008 若日後把這支 script 搬到 root，須同步確認 fixture 路徑與這段清理行為。
+
 ### Acceptance
 
 - 跑完 `validate-starter` 之後，`pnpm run doctor` 仍是 exit 0。
+- 預設執行後 `temp/validate-starter/` 不存在；加 `--keep` 時保留 4 份產物。
 
 ## TD-018 — auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict
 
