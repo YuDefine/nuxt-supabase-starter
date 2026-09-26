@@ -566,6 +566,12 @@ export function generateNuxtConfig(
     configBlocks.push(`  },`)
   }
   if (selectedFeatureIds.includes('security')) {
+    if (selectedFeatureIds.includes('auth-better-auth')) {
+      // Better Auth handles CSRF on its own API; keep nuxt-csurf on every other route.
+      configBlocks.push(`  routeRules: {`)
+      configBlocks.push(`    '/api/auth/**': { csurf: false },`)
+      configBlocks.push(`  },`)
+    }
     configBlocks.push(`  security: {`)
     configBlocks.push(`    rateLimiter: false,`)
     configBlocks.push(`    headers: {`)

@@ -14,7 +14,7 @@
 | TD-004 | Spectra roadmap drift check 在 CI 的 structural diff | mid | in-progress | 2026-05-10 |
 | TD-005 | meta-monorepo 下 pre-push checks 靜默 no-op | high | open | 2026-08-19 |
 | TD-008 | `validate-starter` 維護工具會被 scaffold 帶走 | mid | open | 2026-08-19 |
-| TD-010 | 參考 app email 登入被 nuxt-security CSRF 擋下 | mid | open | 2026-08-24 |
+| TD-010 | 參考 app email 登入被 nuxt-security CSRF 擋下 | mid | in-progress | 2026-08-24 |
 | TD-011 | clade 投影 auth 文件仍寫舊套件名 | low | open | 2026-08-24 |
 | TD-012 | `lint` script guard 吃不掉 pnpm 附加參數 | mid | done | 2026-08-29 |
 | TD-014 | clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約 | low | open | 2026-09-09 |
@@ -131,7 +131,7 @@ exit 0 且無輸出。實測 `bash template/scripts/pre-push/runner.sh` 為 exit
 
 ## TD-010 — 參考 app email 登入被 nuxt-security CSRF 擋下
 
-**Status**: open
+**Status**: in-progress（參考 app／scaffolder 修復與本機回歸已完成；有效帳號登入與部署 host 驗收待補）
 **Priority**: mid
 **Discovered**: 2026-08-24 — TD-009 遷移後實測發現；根因與遷移無關
 **Location**: `template/nuxt.config.ts` 的 `security.csrf`、`template/app/pages/auth/login.vue`
@@ -145,15 +145,43 @@ CSRF token；已觀察到 `403 CSRF Token Mismatch`。CI 目前漏測，因真�
 ### Fix approach
 
 方案裁決與實作、驗收步驟見 [2026-09-26 TD-010 CSRF decision](evidence/2026-09-26-td-010-csrf-decision.md)。
-推薦在 `/api/auth/**` 以 `routeRules` 的 **`csurf: false`** 建立例外，保留全域
-`security.csrf: true` 與 Better Auth 自身的 origin/cookie/Fetch Metadata 防護。參考 app 與
-scaffolder 的 Better Auth + security 輸出須一起修；目前尚未實作或完成執行時驗收。
+已在參考 app 加 `routeRules['/api/auth/**'].csurf = false`，scaffolder 僅於同時選 Better Auth 與
+security 時輸出同一設定；兩者均維持全域 `security.csrf: true`。Better Auth 獨佔此路徑，
+由其自身 origin、cookie、Fetch Metadata 防護接手；`server/auth.config.ts` 未開
+`advanced.disableCSRFCheck`／`disableOriginCheck`，也未另設 `trustedOrigins`，故使用 Better Auth
+以 base URL 推導可信來源及預設的 `SameSite=Lax`、`HttpOnly` cookie（HTTPS 下 Secure）。
+這是依 [Better Auth security 文件](https://better-auth.com/docs/reference/security) 與本機套件設定確認的
+機制；實際部署 host 與 cookie 屬性仍需驗證。
+
+本機 `pnpm test:nuxt`（6 tests）通過：錯誤帳密 `POST /api/auth/sign-in/email` 到達 Better Auth
+並回 401，無 nuxt-csurf 403；`POST /api/_dev/login` 帶 CSRF cookie 但無 token 回 403
+`CSRF Token not found`，帶無效 token 回 403 `CSRF Token invalid`。這兩個訊息是目前
+nuxt-csurf 的實際輸出，比先前決策稿預期的 `CSRF Token Mismatch` 更精確。
+scaffolder 三種 feature 組合測試通過：Better Auth + security 產生限定例外、單獨 security
+保留全域 CSRF、單獨 Better Auth 不產生例外。有效帳密登入尚未驗證，不能把 401 當登入成功。
+scaffolder 整包 `pnpm test` 仍因既有 `consumer-update-policy.test.ts` 的 `npx tsdown`
+啟動失敗及 `agent runtime selection` 缺 `.codex/config.toml` 投影而紅；本次新增三案的
+定向測試是綠的。本機 Playwright 因 Ubuntu 26.04 不受所裝版本支援而缺 Chromium，
+`e2e/auth.spec.ts` 尚未執行成功；CI 須覆核該 E2E。
+
+Better Auth 1.7.1 在 `NODE_ENV=test` 且未明設 `advanced.disableOriginCheck` 時，套件內部
+`isTest()` 預設跳過 origin check；因此本機 Nuxt test 不作跨來源拒絕的證據。部署模式須另驗
+不可信 Origin／Fetch Metadata 的有效形狀請求，以及實際 host 的 `trustedOrigins`／cookie。
 
 ### Acceptance
 
 - dev server 使用有效帳密由登入頁完成登入，不再出現 CSRF token error。
 - 至少一條其他 `POST /api/**` 在無 token 時仍回 403。
 - 有測試帳號時 `e2e/auth.spec.ts` 的真實登入路徑 PASS。
+
+### Follow-up brief
+
+工作指針：本條、上方決策文件、`template/nuxt.config.ts`、
+`template/packages/create-nuxt-starter/src/assemble.ts` 與兩處對應測試。已驗證的本機
+HTTP 證據如上；正式驗收仍需具 `E2E_USER_EMAIL`／`E2E_USER_PASSWORD` 的隔離測試帳號，
+用登入頁完成登入，並在非 test 模式以不可信 Origin 測 Better Auth 拒絕、檢查部署 host 的
+`SameSite`／`HttpOnly`／`Secure` cookie。這些工作限由主持者另派持有環境與驗收檔案
+所有權的 pane 執行；本 pane 僅持有本 brief 所列的參考 app、scaffolder 設定與測試檔。
 
 ## TD-011 — clade 投影 auth 文件仍寫舊套件名
 

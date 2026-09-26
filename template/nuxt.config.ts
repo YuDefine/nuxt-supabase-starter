@@ -200,6 +200,12 @@ export default defineNuxtConfig({
     },
   },
 
+  // Better Auth owns /api/auth/** and applies its own origin/cookie/Fetch Metadata checks.
+  // Keep nuxt-csurf on every other route, including the app's own APIs.
+  routeRules: {
+    '/api/auth/**': { csurf: false },
+  },
+
   // nuxt-security: OWASP 安全性 headers + rate limiting + CSRF
   security: {
     // Cloudflare Workers 相容：停用不支援的功能
