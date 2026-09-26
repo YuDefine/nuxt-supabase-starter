@@ -66,6 +66,8 @@ GPT worker 的 transport 依 [[agent-routing]] § Session transport boundary：C
 
 `swe-2-max`（effort `max`）**不是任何列的固定前綴**。任何 Pi 列都**可以**選它，但**只限相對不急、即便緩慢也不造成堵塞的任務**。dispatcher 看不到急不急，所以由派工方宣告：Herdr `--launcher devin` **MUST** 帶 `--non-blocking`，缺了 exit 2。Claude-only 列（執行鏈是 Claude Opus 5.5 的各列：`ui-view-implementation`、`design-review`、`ui-detailed-planning`、`screenshot-match-analysis`、`dotclaude-authoring`、`code-review-opus`）不接受 Devin。catalog 只認 `devin models list` 的 exact `swe-2-max`，**NEVER** 猜 suffix 或 alias。
 
+派得出 Devin 的機器是 desk 與 zenbook，兩台都 **MUST** 先 `devin auth status` 判已登入，未登入的那台不派。Devin 省的是額度不是負載：工具指令在派出的那台跑，要卸本機負載就派到負載較低的那台（cloud 固定跑 Opus，Pi 列不改派 cloud）。Devin session 不能 `--continue`，續做一律開新 session 帶 durable brief。載體怎麼跟 cloud、Sol pane 混搭見 [[agent-routing.dispatch-execution]] § Cloud session 載體。
+
 ## 工作類別對照
 
 列名是每列開頭 〔`如此標示`〕 的 slug，`--tier-basis table-row` 時逐字填進 `--table-row`。執行鏈的第一跳就是 `--table-row` 要求的 `--model`；後面各跳是配額降級，帶 `--route fallback-chain --retry-of <label>`，由 dispatcher 的 `next_step` 給出。
