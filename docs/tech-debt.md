@@ -195,6 +195,13 @@ lint 因原工作 scope 刻意留下。`c86c3bad7` 已將 lint 改為下方形�
 - 暫存 `td012-lint-probe.ts` 內容為 `debugger;`，再跑 `pnpm lint` → exit 1；輸出 `eslint(no-debugger)` 與 `Found 1 warning and 0 errors.`。刪除暫存檔後重跑 `pnpm lint` → exit 0，`Found 0 warnings and 0 errors.`。
 - 額外本機檢查：`pnpm typecheck` → exit 0；`vp check` → exit 0（286 檔格式正確、253 檔 lint 無警告／錯誤）。本 repo 沒有 `tsconfig.clade.json`，型別檢查使用既有 `pnpm typecheck`。
 
+### Coordinator follow-up
+
+- 工作指針：draft PR [#6](https://github.com/YuDefine/nuxt-supabase-starter/pull/6)，branch `session/2026-09-26-1655-starter-td012-lint-guard-verify-close`，base `main`。`template/package.json` 的 lint script 已由 `c86c3bad7` 修正，本次沒有改 script。
+- 驗證證據：本條目上方三項 Acceptance 實跑通過；`pnpm typecheck` 與 `vp check` 也通過。PR 只改本文件；workflow path filters 不涵蓋此 diff，GitHub PR checks 為空，沒有 PR CI 綠燈可等待。
+- 剩餘步驟：主持者核對 PR head、審閱結案證據並依 repo 流程處理 draft PR；本 worker 不 ready、merge 或部署。
+- 檔案所有權：本 worker 只動本條目與 Index 的 TD-012 列；`template/package.json` 原有修正維持不變。PR 後續由主持者持有，其他檔案不屬本 worker。
+
 ## TD-014 — clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約
 
 **Status**: open — **範圍已收斂到只剩 `<maintainer-domain>` 佔位符無解析說明**（2026-09-11）
