@@ -273,6 +273,7 @@ function generateFixture(validationCase, modules) {
 
 async function main() {
   const rows = []
+  const keepFixtures = process.argv.includes('--keep')
 
   try {
     ensureAuditScriptAvailable()
@@ -289,6 +290,10 @@ async function main() {
     console.error(`[validate-starter] ${error.message}`)
     process.exitCode = 1
     return
+  } finally {
+    if (!keepFixtures) {
+      rmSync(FIXTURE_ROOT, { recursive: true, force: true })
+    }
   }
 
   for (const row of rows) {
