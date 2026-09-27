@@ -91,7 +91,22 @@ export interface PostScaffoldOutcome {
   managed?: ManagedBootstrapResult
   codexProjection?:
     | { status: 'generated' }
-    | { status: 'deferred'; reason: 'scaffold_only' | 'dependencies_unavailable'; command: string }
+    | { status: 'deferred'; reason: CodexProjectionDeferReason; command: string }
+}
+
+export type CodexProjectionDeferReason =
+  | 'scaffold_only'
+  | 'dependencies_unavailable'
+  | 'clade_unavailable'
+  | 'managed_bootstrap_incomplete'
+
+const CODEX_DEFER_HINTS: Record<CodexProjectionDeferReason, string> = {
+  scaffold_only:
+    '本專案是 scaffold-only（零管理）。下列指令會先執行 init-consumer，把專案轉成 Clade managed consumer，再產生 Codex 投影：',
+  dependencies_unavailable: '依賴尚未安裝。安裝後執行下列指令產生 Codex 投影：',
+  clade_unavailable: '找不到 Clade 來源。取得 Clade 後執行下列指令產生 Codex 投影：',
+  managed_bootstrap_incomplete:
+    'Managed bootstrap 未完成，Codex 投影沒有產出。完成 bootstrap 後執行下列指令：',
 }
 
 /**
@@ -981,14 +996,17 @@ export async function postScaffold(
   //    prune 後立刻投影會把還沒剝掉的 local-supabase 寫進 .codex/config.toml
   //    與 .cursor/cli.json。
   let codexProjection: PostScaffoldOutcome['codexProjection']
-  if (opts.agentTargets?.includes('codex') && (!opts.registerConsumer || !pnpmInstalled)) {
+  const deferCodexProjection = (reason: CodexProjectionDeferReason) => {
     codexProjection = {
       status: 'deferred',
-      reason: !opts.registerConsumer ? 'scaffold_only' : 'dependencies_unavailable',
+      reason,
       command: buildDeferredCodexProjectionCommand(targetDir, cladeRoot, cladeModules),
     }
-    consola.warn(`Codex projection deferred：${codexProjection.reason}。完成 Clade 初始化後執行：`)
+    consola.warn(`Codex projection deferred：${reason}。${CODEX_DEFER_HINTS[reason]}`)
     consola.log(`  ${codexProjection.command}`)
+  }
+  if (opts.agentTargets?.includes('codex') && (!opts.registerConsumer || !pnpmInstalled)) {
+    deferCodexProjection(!opts.registerConsumer ? 'scaffold_only' : 'dependencies_unavailable')
   }
 
   // 4.5 Typecheck — scaffold 的自我驗證。在此之前沒有任何一步確認「產出的專案編得過」，
@@ -1058,8 +1076,20 @@ export async function postScaffold(
   if (pnpmInstalled) {
     if (opts.registerConsumer) {
       if (opts.agentTargets?.includes('codex')) {
-        generateManagedCodexProjection(targetDir, cladeRoot)
-        codexProjection = { status: 'generated' }
+        // 只有 managed bootstrap 成功時，投影失敗才算 scaffold 失敗。clade 不可用或
+        // bootstrap 沒完成時改回報 deferred，保留 unregistered 報告與 bootstrap
+        // diagnostics，也不跳過後面的 initial commit 與 next steps。
+        if (!cladeRoot) {
+          deferCodexProjection('clade_unavailable')
+        } else {
+          try {
+            generateManagedCodexProjection(targetDir, cladeRoot)
+            codexProjection = { status: 'generated' }
+          } catch (error) {
+            if (consumerRegistered) throw error
+            deferCodexProjection('managed_bootstrap_incomplete')
+          }
+        }
       } else {
         runSyncToAgents(targetDir, cladeRoot)
       }

@@ -378,6 +378,83 @@ describe('sync-to-codex 解析', () => {
     expect(existsSync(join(target, '.codex', 'config.toml'))).toBe(true)
     expect(existsSync(join(target, '.agents', 'skills', 'commit', 'SKILL.md'))).toBe(true)
   })
+
+  const managedCodexModules = {
+    auth: 'none' as const,
+    dbSchema: 'supabase' as const,
+    dbRuntime: 'cf-workers' as const,
+    runtime: 'cf-workers' as const,
+    framework: 'nuxt' as const,
+    localHooks: [],
+  }
+  const managedCodexOpts = {
+    yes: true,
+    registerConsumer: true,
+    wirePreCommit: false,
+    cloneClade: false,
+    installDeps: true,
+    repoId: 'fixture/managed-project',
+    devPort: 3010,
+    agentTargets: ['codex' as const],
+    offline: true,
+    noPush: true,
+    json: true,
+  }
+
+  it('clade 不可用時 codex 投影回報 deferred，不中止 scaffold', async () => {
+    const binDir = join(TEST_DIR, 'bin')
+    const target = join(TEST_DIR, 'no-clade-project')
+    mkdirSync(binDir, { recursive: true })
+    writeFileSync(join(binDir, 'pnpm'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+    vi.stubEnv('CLADE_HOME', join(TEST_DIR, 'missing-clade'))
+    vi.stubEnv('PATH', `${binDir}:${process.env.PATH}`)
+    assembleProject(target, [], 'no-clade-project', ['codex'])
+
+    const outcome = await postScaffold(
+      target,
+      'no-clade-project',
+      TEST_DIR,
+      managedCodexModules,
+      managedCodexOpts,
+    )
+
+    expect(outcome.managed?.ran).toBe(false)
+    expect(outcome.managed?.diagnostics[0]?.code).toBe('ASSET_UNAVAILABLE')
+    expect(outcome.codexProjection).toMatchObject({
+      status: 'deferred',
+      reason: 'clade_unavailable',
+    })
+  })
+
+  it('managed bootstrap 失敗且投影沒產出時回報 deferred，保留 bootstrap diagnostics', async () => {
+    const cladeRoot = join(TEST_DIR, 'clade')
+    const binDir = join(TEST_DIR, 'bin')
+    const target = join(TEST_DIR, 'bootstrap-failed-project')
+    mkdirSync(join(cladeRoot, 'scripts'), { recursive: true })
+    mkdirSync(binDir, { recursive: true })
+    writeFileSync(join(binDir, 'pnpm'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+    writeFileSync(join(cladeRoot, 'scripts', 'init-consumer.ts'), '')
+    writeFileSync(join(cladeRoot, 'scripts', 'bootstrap-project.ts'), 'process.exit(1)')
+    writeFileSync(join(cladeRoot, 'scripts', 'run-sync-to-codex.ts'), 'process.exit(1)')
+    vi.stubEnv('CLADE_HOME', cladeRoot)
+    vi.stubEnv('PATH', `${binDir}:${process.env.PATH}`)
+    assembleProject(target, [], 'bootstrap-failed-project', ['codex'])
+
+    const outcome = await postScaffold(
+      target,
+      'bootstrap-failed-project',
+      TEST_DIR,
+      managedCodexModules,
+      managedCodexOpts,
+    )
+
+    expect(outcome.managed?.ok).toBe(false)
+    expect(outcome.managed?.ran).toBe(true)
+    expect(outcome.codexProjection).toMatchObject({
+      status: 'deferred',
+      reason: 'managed_bootstrap_incomplete',
+    })
+  })
 })
 
 describe('sync-to-cursor 解析', () => {
