@@ -8,7 +8,7 @@ paths: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts}']
 > **工具鏈治理在 [[code-style.toolchain]]**（動 `vite.config.*` / `package.json` / `tsconfig*.json` /
 > `.github/workflows/**` / `.husky/**` / 任何 `rc` 或 ignore 檔時適用；沒看到那份規約時 MUST 先開它）。
 >
-> **format/lint check 紅了 MUST 立刻 `pnpm format` / lint fix 再 check 到綠**（不限 `/commit`、
+> **format/lint check 紅了 MUST 立刻只對擁有的路徑 fix（`pnpm exec vp check --fix <owned-paths>`）再 check 到綠**（不限 `/commit`、
 > 不等 CI）——全文在 [[code-style.toolchain]] § Agent 義務：check 紅了立刻 fix。
 
 # Code Style — 寫 code 當下

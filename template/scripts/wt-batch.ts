@@ -2515,13 +2515,20 @@ function assertMain(c: Context) {
   if (git(c.main, ['symbolic-ref', 'HEAD']) !== 'refs/heads/main')
     throw new Error('Main working tree must have main checked out')
 }
+/**
+ * Source WIP uses checkpoint/draft's ignorable-drift filter (blockingDirtyPaths,
+ * same predicate as wt-helper cleanup): the tool-managed verifyDepsBeforeRun
+ * flip and projection residue never block ready/prepare/land, and cleanup may
+ * discard them exactly as wt-helper cleanup does.
+ */
 function sourceProblem(c: Context, m: ReadySource): string | undefined {
   const wt = worktrees(c.main).find((w) => w.path === m.path)
   if (!wt) return 'source worktree missing'
   if (wt.locked) return 'source locked'
   if (wt.branch !== m.branch || head(m.path) !== m.head)
     return 'source HEAD changed; register again after verification'
-  if (!clean(m.path)) return 'source has uncommitted work'
+  const blocking = blockingDirtyPaths(m.path)
+  if (blocking.length) return `source has uncommitted work: ${describeBlocking(blocking)}`
   const claimObs = findClaimByWorktreeObserved(c.main, m.path)
   if (claimObs.status === 'unknown') return `source claim unknown: ${claimObs.reason}`
   const claimsObs = readActiveClaimsObserved(c.main)
@@ -2776,14 +2783,16 @@ export function unreadySource(cwd: string, source: string, reason: string) {
 /**
  * Dirty paths that still block after ignorable drift is removed — the exact
  * filter wt-helper's cleanup uncommitted gate uses (single predicate in
- * wip-dirty.ts). checkpoint/draft only ever record HEAD, so tool-managed
+ * wip-dirty.ts). Batch gates only consume HEAD, so tool-managed
  * residue (verifyDepsBeforeRun flip) and clade projection drift must not block
  * them; every other dirty path remains a hard refusal.
  */
 function blockingDirtyPaths(path: string): string[] {
   // NOT the shared `git()` helper: it .trim()s stdout, which eats the first
   // porcelain line's leading X-status space and shifts its path one char.
-  const out = execFileSync('git', ['status', '--porcelain'], {
+  // Untracked files are listed individually so a collapsed `?? dir/` never
+  // lets a projection-looking directory hide a real file inside it.
+  const out = execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], {
     cwd: path,
     env: isolatedGitEnv,
     encoding: 'utf8',
@@ -2791,13 +2800,15 @@ function blockingDirtyPaths(path: string): string[] {
   })
   return blockingPorcelainPaths(path, out)
 }
+function describeBlocking(blocking: string[]): string {
+  const more = blocking.length > 10 ? ` (+${blocking.length - 10} more)` : ''
+  return blocking.slice(0, 10).join(', ') + more
+}
 function assertNoBlockingDirty(path: string, op: 'checkpoint' | 'draft') {
   const blocking = blockingDirtyPaths(path)
   if (blocking.length === 0) return
-  const shown = blocking.slice(0, 10).join(', ')
-  const more = blocking.length > 10 ? ` (+${blocking.length - 10} more)` : ''
   throw new Error(
-    `Commit scoped changes before ${op}; ${op} does not harvest WIP. Blocking: ${shown}${more}`,
+    `Commit scoped changes before ${op}; ${op} does not harvest WIP. Blocking: ${describeBlocking(blocking)}`,
   )
 }
 export function checkpointSource(

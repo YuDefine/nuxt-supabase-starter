@@ -35,8 +35,9 @@ export const LIFECYCLE_MARKER = 'specs/truth/work-lifecycle.md'
 
 /**
  * 投影判定直接讀 `vendor/oxc-shared/preset.ts` 的 `isStagedExcluded`（`PROJECTION_EXCLUDES` ∪
- * `STAGED_ONLY_EXCLUDES`：`.claude/` `.clade/` `.spectra/` `vendor/` `specs/errors/` `.agents/`
- * `.codex/` `.cursor/`、投影到 root `scripts/` 的 vendor script、LOCKED `AGENTS.md`）。
+ * `STAGED_ONLY_EXCLUDES`：`.claude/` `.clade/` `.spectra/` `vendor/` `specs/errors/`
+ * `.github/actions/` `.agents/` `.codex/` `.cursor/`、`commitlint.config.ts`、
+ * `<utils>/assert-never.ts`、投影到 root `scripts/` 的 vendor script、LOCKED `AGENTS.md`）。
  * NEVER 在這裡手寫一份平行前綴清單——那份清單就是下次漂掉的那份（TD-310／TD-777 同型）。
  *
  * preset 位置用本檔所在目錄推（同 `pre-commit/staged-targets.ts`）：consumer 端本檔在

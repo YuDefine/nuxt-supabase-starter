@@ -130,6 +130,19 @@ transport 讀當前 runtime 的 `wt/SKILL.md`，可用 Form 3 `/wt <slug>: /<dow
 
 若必須問使用者，只問需求取捨、必要環境資訊、權限邊界或具體驗收確認；不問「要不要載入下一支 skill／修入口／繼續查」。不得宣稱未通過的 gate 已完成。
 
+### 品質 gate 失敗：先分可修復與不可修復
+
+`vp check`、typecheck、lint、測試等品質 gate 失敗時，先讀錯誤全文再分類；exit code 非 0 本身不是停手理由。判準全文在 verify-gate-chain 規約（clade 源檔 `rules/core/verify-gate-chain.md`，consumer 投影 Claude `.claude/rules/verify-gate-chain.md`、Codex `.agents/skills/clade-verification/rules/verify-gate-chain.md`）§ 可修復的 gate 失敗不是停手理由；該規約 path-gated，沒載入時照這個路徑直接讀。
+
+| 可觀察 predicate | 處理 |
+| --- | --- |
+| 可修復：錯誤具名到檔（與行），修法在本次 scope 內（格式、lint、型別、import、root cause 明確的 test assertion；root cause 不明的 test 紅燈照 verify-gate-chain 的不確定 error 處理） | 讀錯誤、就地修、從 L0 重跑整輪 gate chain，全綠後續接原工作；test assertion 紅修受測實作，**NEVER** 放寬或改寫斷言求綠 |
+| `pnpm exec vp check` 只報格式 | 修前看 `git status --porcelain`，只對本次擁有的路徑跑 `pnpm exec vp check --fix <owned-paths>`（或 `pnpm exec vp fmt --ignore-path .oxfmtignore <owned-files>`；裸打 `vp fmt` 必帶 `--ignore-path`），修後看 `git diff` 確認變動只落在擁有的路徑，再從 L0 重跑整輪 gate chain。**NEVER** 跑不帶路徑的全 repo `--fix`，也 **NEVER** 還原別人改過的檔；報錯的檔不歸你就回報持有者 |
+| spec 矛盾（verify-gate-chain 的 specification error） | 立刻退回規格層 owner（`ROLLBACK:<artifact>`），不在執行層改「做什麼」 |
+| 不可修復：環境經 self-fix 仍不可解、權限不足、需人拍板、修法在 scope 外、同一 error 連續 2 輪不收斂 | 照上方第 5 點停手並回報具體 blocker |
+
+**NEVER** 把可修復的 gate 失敗當成收工、`--complete failed` 或 `--complete blocked` 的理由；brief 或 relay prompt 寫「gate 失敗即停」時，也只指不可修復那一類。
+
 ## 4. 依產物推進 aixbdd
 
 依序處理第一個尚未完成的項目。每一步均先過第 2–3 節；不跳過 constitution、PM confirmation 或 task 解鎖。
