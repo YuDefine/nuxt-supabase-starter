@@ -27,3 +27,19 @@ v1.13.36／v1.13.37 兩筆升版 commit 留在本機，desk `origin/main...main`
 2. **SessionStart hook 也用 repo root 判斷**：在本 repo root 開 session 會印「`.clade/manifest.json`
    與 `.claude/hub.json` 都不存在 —— registry 宣告與 repo 實況不符」，但 `audit-registry-reality.ts --consumer nuxt-supabase-starter`
    回報 OK。這和第 1 點是同一類問題：沒有套用 `local_dir`。
+
+## Relay 繼任者須知
+
+你是**繼任者**，不是被派出去做子工作的 worker。前一個 session（W-2026-09-27-nuxt-supabase-starter-main-wip）
+已經完成 starter 端的收斂並推上 origin（`11838d0d`），因此交棒；手上**沒有** in-flight dispatch。
+
+- **cwd**：`<clade-central-repo>`（main checkout）
+- **工作**：處理上面「交給 clade 的問題」1、2——找出在 nuxt-supabase-starter repo root（而非 registry
+  `local_dir` = `nuxt-supabase-starter/template`）跑 rule projection／SessionStart 判定的呼叫端，修成以 `local_dir`
+  作為 consumer root，並對沒有 `.clade/manifest.json` 的目錄 fail closed（不寫空殼）。
+- **起點**：`scripts/sync-rules.ts`（`consumerRoot = process.cwd()`、`CLAUDE_MD_SHELL`）、`adapters/codex/rules.ts`、
+  SessionStart 印「registry 宣告與 repo 實況不符」的 hook（grep 該字串）、`node vendor/scripts/flow/flow.ts who --transcripts`
+  可用來查 2026-09-26T20:34:08Z 寫入 root `CLAUDE.md`／`AGENTS.md` 的是誰。
+- **規約**：照 clade 的 CLAUDE.md、tech-debt／plan 流程；需要時先登記 TD 再修。**NEVER** 回頭在 nuxt-supabase-starter
+  手改 clade 投影檔。
+- **gate**：遇到 gate 失敗就停，不要向原 session 輪詢。
