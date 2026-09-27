@@ -174,7 +174,7 @@ When Step 1.8 routes to analysis/debug, use `pi-dispatch.ts` with the appropriat
    compliant while ignoring the row. If you cannot name the
    row, you did not consult the table — pick a different basis rather than guessing a row name.
 
-   **effort 分級**：依 `rules/core/agent-routing.routing-table.md` § effort 檔位對照（六維判準在 `agent-routing.md` § Routing Table）（`low` 是 Routing Table 類別預設檔；命中任一維即升檔）。
+   **effort 分級**：依 `rules/core/agent-routing.routing-table.md` § 工作類別對照 各列 Effort 欄與同檔 § effort 與執行載體（檔位照列派；升檔／降檔規則見該節）。
 
 4. **Report dispatch to user immediately** — print one block right after `Bash run_in_background`:
 

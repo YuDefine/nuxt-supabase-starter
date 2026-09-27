@@ -350,7 +350,7 @@ npm items 的
 ### O.2.1 寫 prompt 到 `/tmp/pi-upgrade-<pkg>-prompt.md`
 
 用 § Pi prompt templates · § A first-pass 模板（O.2.2 派 GPT-6 Sol `--effort xhigh`）。**MUST** 內含：
-- `[DELEGATED-BY-CLAUDE-CODE]` marker（第一行，per [[agent-routing.pi-watch-protocol]] § Runtime Gate）
+- `[DELEGATED-BY-CLAUDE-CODE]` marker（第一行，per [[agent-routing.pi-watch-protocol]] § Pi 派工的標準流程）
 - 目標 package 名 + current version → target version + **正確的 install flag**
 - Git Baseline 段（per pi-watch-protocol § Git Baseline；列當前 worktree 內所有 main fork 過來的 in-flight 變更 path，**不要列死**——每個 consumer / 每次 fork 都不同，主線跑 `git status --porcelain` 動態抓）
 - Commit Authorization 段（per pi-watch-protocol § Commit Authorization；message format `🧹 chore: wt upgrade-<pkg>-<from>→<to>`，subagent 端需讀 commitlint config 調整）
@@ -389,7 +389,7 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
 這是workspace mutation dispatch。Runtime quota／provider failure後，**每一個**retry都MUST逐字採用dispatcher payload的`next_step`（含`--retry-of`與`--workspace-access mutation`）；NEVER自行改派`grok-cursor`或`sol-cursor`。Linked worktree visibility與writable sandbox是兩個predicate，擴大cwd不會讓Cursor carrier合法。
 
 
-派出 mutation executor 後，立刻記錄 owner / deadline（deadline 取值依 [[agent-routing]] § deadline 怎麼取），並依 [[agent-routing.pi-watch-protocol]] 的 keepalive 規約維持單一控制生命週期。控制 turn 只准使用當前 runtime adapter 提供的 bounded completion transport 讀取狀態、重排同一 inert control 或排 lifecycle intervention；**NEVER** 放 upgrade prompt、讀 output tail或做 package mutation。收到 terminal completion 後先 claim task id，再讀結果並停止 wakeup。
+派出 mutation executor 後，立刻記錄 owner / deadline（deadline 取值依 [[agent-routing.keepalive-wake]] § deadline 怎麼取），並依 [[agent-routing.pi-watch-protocol]] 的 keepalive 規約維持單一控制生命週期。控制 turn 只准使用當前 runtime adapter 提供的 bounded completion transport 讀取狀態、重排同一 inert control 或排 lifecycle intervention；**NEVER** 放 upgrade prompt、讀 output tail或做 package mutation。收到 terminal completion 後先 claim task id，再讀結果並停止 wakeup。
 
 ### O.2.3 收到 `<task-notification status=completed>` 後判定
 

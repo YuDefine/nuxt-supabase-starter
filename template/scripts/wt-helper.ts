@@ -340,7 +340,7 @@ function parseWorktreeList(porcelain) {
  * Worktree 的 landing base —— fork 從哪裡來、之後要 land 回哪裡去。
  *
  * **NEVER 寫死 `'main'`。** merge-back 的落地動作是在 consumer root 裡跑
- * `git merge --squash <branch>`（本檔 § cmdMergeBack），它 land 進去的是 consumer root
+ * `git merge --squash <branch>`（本檔 `cmdMergeBack()`），它 land 進去的是 consumer root
  * 的**當前 HEAD**，不是名為 `main` 的 branch。fork 端若寫死 `main`，兩端就在
  * 「main checkout 不在 main 上」時分岔 —— 這是長命 feature branch（`feat/*`、release
  * branch、fork 的預設分支不叫 main）的常態，不是邊角。
@@ -7230,7 +7230,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
       console.warn(
         `merge-back: ${carried.length} evidence sidecar(s) had worktree-only receipts and were carried to main: ${list}\n` +
           `             These should have landed via the phase-tick commit (see rules/core/commit.detail.md\n` +
-          `             § worktree 內唯一合法的 commit：artifact-tick). Review and commit them on main.`,
+          `             § Artifact-tick（hard rule）). Review and commit them on main.`,
       )
     }
     if (evFailed.length > 0) {
@@ -7266,8 +7266,8 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   console.log(summary)
 
   // `git merge --squash` stages the changeset but deliberately does NOT commit:
-  // landing is finished by the caller in main (worktree-default.md § v3 atomic
-  // landing — "user 再在 main 跑 /commit"). That contract is correct, but the
+  // landing is finished by the caller in main with /commit
+  // (worktree-default.commit-ceremony.md § §5.5 Legacy merge-back 與 stash 救援). That contract is correct, but the
   // summary above reads as "done" while the worktree and branch are already
   // gone, so the staged index is the only remaining copy. Say the remaining
   // step out loud. (2026-08-04: two clade-home sessions in one afternoon each

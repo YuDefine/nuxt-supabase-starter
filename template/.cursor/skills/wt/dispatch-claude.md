@@ -7,7 +7,7 @@ Use the Agent tool with:
 - `name`: `wt-<slug>` (so a continuation pattern can `SendMessage({to: name})` later).
 - `isolation`: omit (the worktree itself is the isolation; the Agent tool's built-in worktree isolation is for the *parent's* repo, which we don't want).
 - `model`: `'opus'`. Sonnet, Haiku and Fable are retired (2026-09-24); work judged below the main
-  line's tier goes to the delegate-sub chain on Pi ([[agent-routing]] § Claude 委派的 model 檔位),
+  line's tier goes to the delegate-sub chain on Pi ([[agent-routing]]（claude 投影）§ Claude 委派的 model 檔位),
   not to a cheaper Claude. Pass it explicitly: omitting it inherits the main line's model unchecked.
   **This path does not carry UI view implementation** — Step 1.8 keeps that on the Opus main line
   and dispatches it nowhere. What reaches here is Form 3
@@ -15,13 +15,13 @@ Use the Agent tool with:
   judgement to pick up from WORKTREE-BRIEF.md), and the explicit `--claude` override. Everything
   else goes to `dispatch-pi.md`.
 - `prompt`: see the subagent prompt template below.
-- and in the **same message**: schedule the canonical `ASYNC_KEEPALIVE_CONTROL task=none owner=<agent-name-or-id> deadline=<ISO>...` wakeup from § Watch below; derive the deadline per [[agent-routing]] § deadline 怎麼取 (never a gut-feel "+4h"). Dispatching without it is what produced 1h43m of mainline silence on 2026-08-08.
+- and in the **same message**: schedule the canonical `ASYNC_KEEPALIVE_CONTROL task=none owner=<agent-name-or-id> deadline=<ISO>...` wakeup from § Watch below; derive the deadline per [[agent-routing.keepalive-wake]] § deadline 怎麼取 (never a gut-feel "+4h"). Dispatching without it is what produced 1h43m of mainline silence on 2026-08-08.
 
 The subagent's cwd is set via the prompt — explicit instruction `your working directory is <worktree-path>; all writes happen there`. The parent's cwd remains on the main worktree.
 
 ## Watch (MUST — same message as the dispatch)
 
-Notification-only, plus one cache-keepalive wakeup. Agent tool 沒有可供 `TaskOutput` 查詢的 harness task id，因此 **MUST** 使用 [[agent-routing]] § Async keepalive prompt 並**逐字**填 `task=none`；派工時記下具名 `<owner>`（agent name / id）與 `<deadline>`：
+Notification-only, plus one cache-keepalive wakeup. Agent tool 沒有可供 `TaskOutput` 查詢的 harness task id，因此 **MUST** 使用 [[agent-routing.keepalive-wake]] § Async keepalive prompt 並**逐字**填 `task=none`；派工時記下具名 `<owner>`（agent name / id）與 `<deadline>`：
 
 ```text
 ASYNC_KEEPALIVE_CONTROL task=none owner=<owner> deadline=<ISO>. Status-only. Never query TaskOutput or infer task status; wait for the native completion notification instead. Before deadline, if no notification has arrived, re-arm this exact message. At or after deadline, stop this wakeup and enqueue ASYNC_DEADLINE_INTERVENTION task=none owner=<owner> cause=deadline. Never replay the dispatched instruction.

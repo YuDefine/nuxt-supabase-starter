@@ -331,7 +331,8 @@ async function evaluateRoot({ repoRoot, cwd, label, opts, changed }) {
   //   2. suppression 會把 fail 轉成不扣分的 `n/a`。只看分數的話，把整份專案
   //      disable 掉就是滿分。
   //   3. `structured-errors` 不檢查 catalog 定義的內容——`throw someErrors.X()`
-  //      一律當 pass。分數高不代表 why/fix 有價值（見 rules/core/evlog-adoption.md
+  //      一律當 pass。分數高不代表 why/fix 有價值（見
+  //      rules/modules/capabilities/evlog/evlog-adoption.depth-gate.md
   //      § Coverage 維度 的 false-green 警示）。這條 gate 擋不掉，但至少不該再
   //      被四捨五入與 suppression 二次稀釋。
   if (opts.mode === 'strict') {
