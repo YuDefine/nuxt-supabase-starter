@@ -55,9 +55,24 @@ The standalone Clade projection mode is a separate coordinator-owned TD.
 Latest local related tests (three files): 99 passed. `pnpm exec vp check`: pass.
 Required `npx tsc -p tsconfig.clade.json --noEmit` cannot run here: TS5058,
 this repo has no `tsconfig.clade.json` (also noted in the P7 report).
-Fresh clone scaffold-only Codex smoke output had `codexProjection.status = deferred`,
+After implementation commit `a5b0500c`, a new `git clone --no-local` into
+`/home/charles/.cache/clade/tmp/starter-codex-verified-ou2Rey/repo` contained
+neither `template/.codex` nor `template/.agents`. In this clone,
+`pnpm exec vp test run packages/create-nuxt-starter/test/scaffold.test.ts
+packages/create-nuxt-starter/test/post-scaffold.test.ts` passed: 2 files,
+72 tests. Fresh clone scaffold-only Codex smoke output had `codexProjection.status = deferred`,
 `reason = scaffold_only`, and a full command ending in Clade's
-`run-sync-to-codex.ts --no-health-check`.
+`run-sync-to-codex.ts --no-health-check`. The generated project contained
+`AGENTS.md`, while `.codex` and `.agents` were absent as reported.
+
+Draft PR: https://github.com/YuDefine/nuxt-supabase-starter/pull/13.
+Template CI run 36355596041 passed Format / Lint / Typecheck; Unit tests were
+skipped by the draft-PR workflow rule. Fresh Scaffold Audit Gate run
+36355596056 passed. The separate scaffold-smoke run 36355596039 failed at
+`placeholder scan found unexpected hits`. This is the same failure on latest
+main scaffold-smoke run 36345922647, and this PR does not modify the smoke
+script or the reported placeholder-hit files. Its pre-existing red check must
+be accounted for before merge; it is outside this worker's Codex change.
 
 ## Coordinator follow-up
 
@@ -65,4 +80,6 @@ The coordinator owns 0-A review, PR ready/merge, and the separate Clade TD for
 standalone projection before registration or installation. The Clade tree is
 outside this worker's write scope. The starter branch should remain draft until
 review is complete. Do not mistake a deferred Codex projection for a generated
-one; the JSON field records the distinction.
+one; the JSON field records the distinction. When PR #13 is ready, observe the
+full Template CI Unit tests and resolve the pre-existing scaffold-smoke check
+according to the repository's merge policy.
