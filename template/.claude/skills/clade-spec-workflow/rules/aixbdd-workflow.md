@@ -13,6 +13,8 @@ paths: ['specs/plans/**', 'specs/truth/**', '.agents/constitution/**']
 > Cookbook：`~/offline/clade/vendor/snippets/aixbdd/`
 >
 > 執行框架的規約：[`specformula.md`](./specformula.md)
+>
+> 導入 aixbdd 之前留下的舊測試（凍結、吸收、新測試落點）：[[legacy-tests]]
 
 aixbdd 切的是**職責**：PM 定義驗收標準，RD 落地成可執行系統。plan 是一次迭代的封裝（這次要改什麼），`specs/truth/**` 是系統當下的真相。aixbdd 產出可執行規格（`.feature` ＋ DSL），SpecFormula 執行它。
 

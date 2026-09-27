@@ -88,10 +88,13 @@
 #   11 account_unverifiable——Opus 席配額量不到（量不到 ≠ 沒額度），
 #      gate 維持 pending，可依 helper receipt 的 retry_after_ms 重試；
 #      NEVER 讀成 account_unavailable
+#   12 Claude Code runtime 誤用無子命令 Herdr carrier——改走 prepare → AGENT_CALL →
+#      finalize；本地拒絕，未呼叫 Herdr helper
 #
 # Usage:
 #   .claude/scripts/claude-review-safe.sh [medium] [--findings <prior verdict file>]
-#       Herdr carrier——只給叫不出 Claude subagent 的 runtime（Codex、Pi…）
+#       Herdr carrier——只給叫不出 Claude subagent 的 runtime（Codex、Pi…）；
+#       Claude Code（含 Herdr 派出的 worker）誤用時 exit 12
 #   .claude/scripts/claude-review-safe.sh prepare [medium] [--findings <prior verdict file>]
 #   .claude/scripts/claude-review-safe.sh finalize <work-dir>
 #       subagent carrier——Claude Code 主線 MUST 用這條：prepare 印 AGENT_CALL，主線照它派
@@ -157,10 +160,24 @@ clade_runtime() {
 # Carrier：Claude Code 主線走 in-process subagent（prepare → Agent → finalize）；叫不出
 # Claude subagent 的 runtime（Codex、Pi…）才走下方的 Herdr child（無子命令）。
 # 兩條 carrier 共用同一份 brief、同一套 exit code 與 receipt 格式，判讀只有一套。
+# 「是不是 Claude Code」只看 CLAUDE_CODE_SESSION_ID，而子行程會繼承它：從 Claude Code 的
+# Bash 起的非 Claude runtime（例如 codex exec）也會被判成 Claude 而拿到 exit 12。那種呼叫端
+# 叫不出 Agent，應以 `env -u CLAUDE_CODE_SESSION_ID bash <本腳本> …` 清掉繼承的變數再呼叫。
 CARRIER_MODE="herdr"
 case "${1:-}" in
   prepare|finalize) CARRIER_MODE="$1"; shift ;;
 esac
+if [ "$CARRIER_MODE" = "herdr" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+  {
+    echo "[claude-review-safe] 錯誤：Claude Code runtime 不得使用無子命令的 Herdr carrier（exit 12）；CLADE_DISPATCH_ID／--bounded-leaf 不豁免。"
+    echo "  → bash <claude-review-safe.sh> prepare medium [--findings <上一輪 verdict 檔>]"
+    echo "  → 逐字照 prepare 輸出的 AGENT_CALL 呼叫 Agent commit-0a-reviewer"
+    echo "  → 跑 prepare 輸出的 FINALIZE（finalize <work-dir>）取得 verdict"
+    echo "  呼叫端其實不是 Claude Code（例如從 Claude Bash 起的 codex exec，繼承了 CLAUDE_CODE_SESSION_ID）："
+    echo "  → env -u CLAUDE_CODE_SESSION_ID bash <claude-review-safe.sh> …（改走 Herdr carrier）"
+  } >&2
+  exit 12
+fi
 
 # 0-A 只有 Opus 一席（2026-09-24）。CLAUDE_REVIEW_SEAT 保留為顯式宣告；fable 已禁用，
 # 帶它的呼叫端是舊 brief／舊 skill，直接拒絕而不是靜默改成 opus——那樣它會以為自己

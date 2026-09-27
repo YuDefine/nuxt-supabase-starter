@@ -27,7 +27,7 @@
 | `technical-research`：決策與 techstack 定稿（含選定 SpecFormula 時的 `specformula-config`） | `mainline-contract` | Claude Opus 5.5・medium | |
 | `technical-research`：外部網路查證 | `web-search` | Gemini 3.8 Flash・high | 主線不直接呼叫內建 WebSearch／WebFetch |
 | `technical-research`：大量讀既有 codebase 抽固定欄位 | `read-heavy-scan` | Gemini 3.8 Flash・high | |
-| UI 需求確認用的設計雛形（design／impeccable） | `ui-view-implementation` | Claude Opus 5.5・medium | UI 檔位實測中；改檔位先改 routing table |
+| UI 需求確認用的設計雛形與實作後修改閉環（impeccable） | `ui-view-implementation` | Claude Opus 5.5・medium | UI 檔位實測中；改檔位先改 routing table |
 | 設計品質判讀 | `design-review` | Claude Opus 5.5・medium | UI 檔位實測中；改檔位先改 routing table |
 | UI 截圖取證 | `screenshot-review-verify` | Gemini 3.8 Flash・high | 主線直接呼叫 Pi；取證與判定分兩次 |
 | 截圖與驗收項目的符合性判定 | `screenshot-match-analysis` | Claude Opus 5.5・medium | UI 檔位實測中；改檔位先改 routing table |

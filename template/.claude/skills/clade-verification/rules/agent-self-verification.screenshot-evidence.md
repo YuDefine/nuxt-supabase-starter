@@ -1,5 +1,5 @@
 ---
-description: 收 verify:ui / review:ui 視覺 evidence 的操作規約——截圖與驗證同一個 Bash call、(a)–(e) 五層驗證的 canonical pattern、seed fixture 必須進 seed.sql、worktree .env 先驗再宣稱缺、既有 [x] 要自拍佐證、UI 改動後全批重拍、`(deferred:)` failure trail 逐字範例、收尾前 receipt 齊全核對
+description: 收 verify:ui / review:ui 視覺 evidence 的操作規約——截圖與驗證同一個 Bash call、(a)–(e) 五層驗證的 canonical pattern、seed fixture 必須進 seed.sql、worktree .env 先驗再宣稱缺、既有 [x] 要自拍佐證、UI 改動後全批重拍、`(deferred:)` failure trail 逐字範例、收尾前 receipt 齊全核對、截圖收集與符合性判定分兩步
 paths: ['screenshots/**', 'openspec/changes/**/tasks.md', 'app/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'e2e/**', 'packages/*/e2e/**', 'playwright.config.*', 'packages/**/app/**/*.vue']
 ---
 <!-- Clade native rule; source: rules/core/agent-self-verification.screenshot-evidence.md; edit canonical source -->
@@ -14,7 +14,7 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 
 # Agent Self-Verification — 視覺 evidence 收集
 
-> [[agent-self-verification]] 的 MUST 2 / 3 / 5 / 6 / 7 / 8 / 9 / 15 / 16 執行細節；衝突時以主檔為準。具體命令由 target adapter 提供，缺 verified carrier 時保持 blocked 並照 MUST 3 寫 failure trail。
+> [[agent-self-verification]] 的 MUST 2 / 3 / 5 / 6 / 7 / 8 / 9 / 15 / 16 執行細節，以及本檔自有的 § 截圖收集與判定分兩步；衝突時以主檔為準。具體命令由 target adapter 提供，缺 verified carrier 時保持 blocked 並照 MUST 3 寫 failure trail。
 
 ## NEVER — 禁止直接 handoff user 的三個 verify-channel 場景
 
@@ -131,6 +131,28 @@ Target adapter MUST provide the native browser operation for the authenticated f
 **NEVER** 拿 curl 的狀態碼當帶認證流程的證據：curl 不理會 cookie 的 `Secure` / `SameSite`，plain-HTTP 登入時 302 → 200 全部正常，瀏覽器卻已丟棄 cookie。**NEVER** 用「開過瀏覽器但只讀 `href`」抵這條。
 
 非 localhost origin 要能登入，該 origin 自己**必須**是真 HTTPS（例：tailnet 的 `tailscale cert` + MagicDNS）。兩者皆無時 **NEVER** 退回 plain-HTTP proxy 產生登入連結——改回報「需 HTTPS 才能登入」並說明原因。（per [[pitfall-plain-http-proxy-cannot-carry-secure-session]]）
+
+## 截圖收集與判定分兩步（MUST；自 `review-gui-surface.md` 移入，該檔已隨 review-gui 退役刪除）
+
+適用**每一張**截圖、**所有四個模式**（`[verify:ui]` channel／archive 前視覺 QA／commit 0-B／ad-hoc）。依據是**收集與判定分離（maker／checker）＋主線 context 隔離**，不是截圖成本（實測只佔 `tool_result` tokens 約 1.9%，`scripts/context-cost-report.ts` 可重跑，TD-375）。承接的 model 與 carrier 以 [[agent-routing.routing-table]] 的 〔`screenshot-review-verify`〕／〔`screenshot-match-analysis`〕 兩列為準，機制由 target adapter 提供，本檔不寫。
+
+| 可觀察 predicate | MUST |
+| --- | --- |
+| 收集 `[verify:ui]`／`[review:ui]` evidence | 派 〔`screenshot-review-verify`〕，主線只消費它回的結構化摘要 |
+| 判定截圖是否符合 item | 派 〔`screenshot-match-analysis`〕，逐張讀指定圖片，**NEVER** 只憑收集摘要給 PASS |
+| 主持者收回判定結果是 FAIL／UNCERTAIN | 可讀該張圖診斷，不代簽 gate |
+| 〔`screenshot-match-analysis`〕派不出、且是 commit 0-B | 0-B 保持未完成（主線是 maker，不能當自己的 reviewer） |
+| 〔`screenshot-match-analysis`〕派不出、非 0-B 模式 | 主線自己讀圖判定，取證與判定仍分兩步 |
+| 確認截圖是否空白 | worker emptiness preflight；結果不代替符合性判定 |
+
+**NEVER** 讓收集 worker 再轉派或代簽判定；圖片／browser 不可用時保留未完成項，**NEVER** 用目視補契約的洞。
+
+| 看到自己這樣說就停下 | 實際 |
+| --- | --- |
+| 「截圖成本很低，我直接看沒差」 | 准入條件是上表 predicate，不是成本門檻 |
+| 「我自己看比較快」 | 快的是 wall-clock，跳過的是 maker／checker 分離與 context 隔離 |
+| 「只看一張確認一下」 | 2026-07-28～08-04 實測主線讀了 281 張截圖（TD-375 同一份 `context-cost-report.ts` 量測），沒有任何一次是打算讀那麼多 |
+| 「收集摘要看不出細節」 | 那是 item 的 `ready_signal`／判準沒寫夠，補那裡 |
 
 ## Browser Worktree Verify Auth（hard rule；自 [[proactive-skills]] 下推）
 

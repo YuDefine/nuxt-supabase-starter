@@ -176,9 +176,9 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
    - 印 `BLOCK pending=<n>` → 列入 blocker list，`<n>` 是未勾 leaf 數
    - 腳本不存在（clade checkout 不在 `~/offline/clade`）→ 對該 change **視為 BLOCK**，**NEVER** 因工具缺席放行
 
-5. **blocker list 非空時 → auto-triage（per [[review-gui-surface]] MUST 8）**：
+5. **blocker list 非空時 → auto-triage**：
 
-   **MUST NOT** 直接停下叫 user 去面板。改走 auto-triage：逐條讀 pending leaf item 的 annotation，判斷阻塞原因並自行推進主線可處理的項目。
+   **MUST NOT** 直接停下把 blocker 丟給 user。改走 auto-triage：逐條讀 pending leaf item 的 annotation，判斷阻塞原因並自行推進主線可處理的項目。
 
    1. 對每個 blocked change 的每個 pending leaf item，讀 tasks.md 該行判斷：
 
@@ -187,7 +187,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
       | `（fix-requested）` | 行內含 `（fix-requested）` | 在既有來源修 code → 在該來源重拍截圖 → strip `（fix-requested）` → 更新 `(verified-*:)` annotation |
       | evidence missing | `[verify:ui]` / `[verify:api]` / `[verify:e2e]` 但無對應 `(verified-*:)` annotation | 走 [[agent-self-verification]] fallback chain 收 evidence |
       | `（issue:）` 未 triage | 行內含 `（issue:）`，且 `flow gates` 沒有對應卡片 | triage issue → 走 (A)-(E) 路由；要人接手才 `flow ask` 開卡 |
-      | 純 `[review:ui]` user 驗收 | 上述都不符，item 是 `[review:ui]` | **只有這類**才交給 user（`ui-judgement` 卡） |
+      | 等 user 判的 leaf | 上述都不符，item 是 `[review:ui]`（evidence 已齊）或已有 `(verified-ui:)` 的 `[verify:ui]` | **只有這類**才交給 user：tasks.md leaf 不會變成卡片，直接在 chat 逐項展示並依原話寫回（[[proactive-skills.manual-review-entry]] 第 4 步） |
       | 純 `[discuss]` | 上述都不符，item 是 `[discuss]` | 不在此處處理（archive walkthrough） |
 
    2. **主線可處理的項目全部推進完畢後**，在 consumer repo 根目錄跑（**NEVER** 帶 `CLADE_HOME`）：
@@ -196,11 +196,11 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
       node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --require-empty
       ```
 
-      - **exit 3** → 改跑 `--json`，輸出 `✅ 0-MR auto-triage 完成，等人 <N> 張`，逐張列 family ＋ 判斷題，釋放 lock，引導 user 到面板
-      - **exit 0** → 沒有任何卡片，但 blocker 仍在 → 那是主線的球：繼續 auto-triage，或釋放 lock ＋ 如實報告卡在哪幾個 leaf，**NEVER** 說「請去面板」
+      - **exit 3** → 改跑 `--json`，輸出 `✅ 0-MR auto-triage 完成，等人 <N> 張`，逐張列 family ＋ 判斷題，釋放 lock
+      - **exit 0** → 沒有任何卡片，但 blocker 仍在 → 剩下的若是 evidence 已齊的 `[review:ui]` 或已有 `(verified-ui:)` 的 `[verify:ui]` leaf，釋放 lock 並在 chat 逐項交給 user（[[proactive-skills.manual-review-entry]] 第 4 步）；其餘是主線的球：繼續 auto-triage，或釋放 lock ＋ 如實報告卡在哪幾個 leaf
       - **exit 2** → 釋放 lock，回報判不出來的原因
 
-      **NEVER** 跳過 `flow gates` 自判有沒有等人的事 — Claude 自判已 9 次證明不可靠（per [[review-gui-surface]] MUST 8）
+      **NEVER** 跳過 `flow gates` 自判有沒有等人的事 — Claude 自判已 9 次證明不可靠
 
    3. **NEVER** 自動勾任何 `[review:ui]` 的 `- [ ]`、**NEVER** 提議跳過 gate、**NEVER** 提議 stash 走 `tasks.md`
 
@@ -377,6 +377,7 @@ exit code 與 Herdr carrier 同一張表（下表各列照用；4／10／11 是�
 | --- | --- |
 | 啟動／等待中 | 記錄 handle 與 owner，透過本端完成事件或 bounded wait 收回同一工作；並行推進其他軸，不能重播命令代替等待 |
 | 配額耗盡／reviewer 沒跑成（exit 4 account_unavailable，stderr 的 `NEXT_STEP_JSON:` 行是它的可機讀版；或 exit 3 review 未跑成） | 保留逐字 RESULT 行與 exit code 作為不可用證據——沒有備援席，gate 保持未完成並記錄 pending review，NEVER 用其他模型或主線自審補位。exit 11（account_unverifiable）是「量不到」不是「耗盡」：wrapper 的 RESULT／NEXT 行會印出 receipt 路徑與 `retry_after_ms`（有的話）——receipt **不帶** `retry_after_ms`＝沒有 ETA，交 coordinator 決定而不是自行腦補時間；有 ETA 則依它重試。也 NEVER 讀成 account_unavailable。exit 2／6 **不是**不可用，照各自原因修正後重跑 |
+| exit 12（Claude Code runtime 以無子命令呼叫 wrapper，本地拒絕 Herdr carrier） | 不是 reviewer 不可用，NEVER 判 gate pending：改走 `prepare` → 逐字照 `AGENT_CALL` 呼叫 `Agent` → `FINALIZE`。呼叫端其實不是 Claude Code（例如從 Claude Bash 起、繼承了 `CLAUDE_CODE_SESSION_ID` 的 codex exec）時，以 `env -u CLAUDE_CODE_SESSION_ID` 呼叫改走 Herdr carrier |
 | exit 10（helper `nested_dispatch_refused`：本 session 不得開 reviewer child） | 不是 reviewer 不可用，NEVER 判 gate pending：把 0-A 交回 coordinator 代跑，gate 保持未完成直到拿回帶 receipt 的 verdict。**NEVER** 改走 headless `claude -p`——無 receipt 的 verdict 不得當 gate 證據（[review-policy.md](review-policy.md)） |
 | exit 8（`model_verification` 有界重讀後仍 `unverified`，或 `mismatch`） | 身分歸屬不成立：verdict 扣住不採，gate 保持未完成並記錄 pending review；receipt 的 `model_verification_reason` 區分「無法核實」與「核實不符」，NEVER 把 unverified 讀成已核實或當 PASS |
 | exit 9（brief 無法安全交付：總量超過 `CLAUDE_REVIEW_BRIEF_MAX_BYTES`，或 pointer 模式下有單行超過 `CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS`，RESULT 行會指出超長行號與所屬區塊） | **本地拒絕，review 沒跑但不是 reviewer 不可用**——NEVER 讀成 reviewer 不可用記 pending；把超長行折行（changeset、--findings 檔或 semantic 規則文，依 RESULT 指的區塊）或拆 commit 後重跑；上限確需調整時先評估 child context 實測再改 `*_MAX_*` env。NEVER 拿縮小 `CODEX_REVIEW_MAX_DIFF_LINES` budget 換過關——超出的檔只會移進 OMITTED 漏審清單，依下一列「Scope 缺檔」同樣不能記 PASS，除非被剔除的檔另行送審 |
@@ -466,6 +467,88 @@ Heavy gate 的 `exit 75` 代表 `gate-slot.sh` 等不到 slot、inner command �
 
 ## § 0-B: UI Design Review（條件觸發、並行軸 B）
 
+0-B 分兩段：**0-B.1 impeccable 檢查**（採用 impeccable 的 repo 有 UI 檔變更時觸發）與 **0-B.2 視覺判讀**（視覺影響才觸發）。兩段都通過（或未觸發）才算 0-B 通過。閉環本身的規約在 `proactive-skills.design-checkpoint`。
+
+### 0-B.1 impeccable 檢查
+
+**觸發**：候選中有 UI 檔（`.vue`、`.css`／`.scss`、`.html`、`.tsx`／`.jsx`，含 untracked 新增），且該檔所屬 package／app 或其祖先目錄（含 repo 根）有 `PRODUCT.md`、`DESIGN.md` 或 `.impeccable/config.json` 任一採用標記。每個 UI 檔獨立判定；兄弟 package 的標記不算。只有副檔名命中、沒有適用標記的 UI 檔，記 `⏭️ 0-B.1 跳過（未採用 impeccable）`；不得因缺 launcher 永久擋住它。已採用但 launcher 缺失才是安裝 blocker。
+
+```bash
+# 從 repo 根執行；worktree 的 .claude/skills 可能未版控，依序查三端投影、
+# linked worktree 的 common Git dir 所在主 checkout，以及安裝於 user home 的 skill。
+ROOT=$(git rev-parse --show-toplevel)
+COMMON=$(git rev-parse --path-format=absolute --git-common-dir)
+IMP=
+for candidate in \
+  "$ROOT/.claude/skills/impeccable/scripts/impeccable" \
+  "$ROOT/.agents/skills/impeccable/scripts/impeccable" \
+  "$ROOT/.cursor/skills/impeccable/scripts/impeccable" \
+  "$(dirname "$COMMON")/.claude/skills/impeccable/scripts/impeccable" \
+  "$HOME/.claude/skills/impeccable/scripts/impeccable"; do
+  if [ -x "$candidate" ]; then IMP=$candidate; break; fi
+done
+
+# NUL 分隔保留空白與 glob 字元；同一清單供 (a)(b)(c) 使用。
+mapfile -d '' CHANGED < <({ git diff --name-only -z HEAD; git ls-files --others --exclude-standard -z; } | sort -zu)
+UI=()
+for f in "${CHANGED[@]}"; do
+  case "$f" in
+    *.vue|*.css|*.scss|*.html|*.tsx|*.jsx) [ ! -f "$f" ] || UI+=("$f") ;;
+  esac
+done
+if [ "${#UI[@]}" -eq 0 ]; then echo '⏭️ 0-B.1 跳過（無 UI 檔變更）'; exit 0; fi
+ADOPTED_UI=()
+for f in "${UI[@]}"; do
+  dir=$(dirname "$f")
+  while :; do
+    if [ -f "$ROOT/$dir/PRODUCT.md" ] || [ -f "$ROOT/$dir/DESIGN.md" ] || [ -f "$ROOT/$dir/.impeccable/config.json" ]; then
+      ADOPTED_UI+=("$f"); break
+    fi
+    [ "$dir" = . ] && break
+    dir=$(dirname "$dir")
+  done
+done
+if [ "${#ADOPTED_UI[@]}" -eq 0 ]; then
+  echo '⏭️ 0-B.1 跳過（未採用 impeccable）'; exit 0
+fi
+UI=("${ADOPTED_UI[@]}") # (a)(b) 只核對已採用的 UI；(c) 逐 package／app 判 token 來源與 DESIGN.md
+[ -n "$IMP" ] || { echo '0-B.1 未完成：已採用 impeccable，但找不到 launcher'; exit 1; }
+
+# (a) detector：exit 0 且輸出 [] = 乾淨；exit 2 = 有 finding（JSON 陣列）
+"$IMP" detect --json "${UI[@]}"
+
+# (b) 唯讀列出快照。NEVER 在 commit gate 呼叫 critique-storage latest：
+# 指紋不符時該命令會自行寫 closed: true，正是這道 gate 要攔的繞過。
+for f in "${UI[@]}"; do
+  dir=$(dirname "$f")
+  while :; do
+    find "$ROOT/$dir/.impeccable/critique" -type f -name '*.md' -print 2>/dev/null || true
+    [ "$dir" = . ] && break
+    dir=$(dirname "$dir")
+  done
+done | sort -u
+# 逐份讀 frontmatter 的 target／p0_count／p1_count（舊版 p0／p1）與 closed，
+# 對照 UI 及 design-review.md 的受影響 URL；見下方 (b) 的證據判準。
+
+# (c) token 來源動了而 DESIGN.md 沒動
+printf '%s\0' "${CHANGED[@]}" | grep -zE '(^|/)app\.config\.ts$|\.css$|(^|/)tailwind\.config\.' || true
+printf '%s\0' "${CHANGED[@]}" | grep -zE '(^|/)DESIGN\.md$' || true
+```
+
+| 檢查 | 通過條件 | 未通過時 |
+| --- | --- | --- |
+| (a) detector | 輸出 `[]`；或每條 finding 都已有使用者確認過的 `impeccable hooks ignore-value` | 修掉 finding；要保留的先問使用者，確認後才 `ignore-value`。**NEVER** 自行 `ignore-file`／`ignore-rule` |
+| (b) critique 快照 | 受影響檔及 `design-review.md` 所列 URL 的每個 P0／P1，都有**對應的處置證據**：修正後重新 critique 證明 P0／P1 歸零，或 `design-review.md` 逐項記下 polish／明確 close 的快照路徑及修正，或使用者確認的 `ignore.md` 條目。只有 `closed: true` 或指紋不同不算證據；找不到可核對的處置就擋 | 跑 `polish`、人工核對 P0／P1，必要時重新 critique，明確 `critique-storage close`；刻意保留者先取得使用者確認並逐條記入 `ignore.md` |
+| (c) DESIGN.md 新鮮度 | token 來源（`app.config.ts` 的 `ui`、CSS `:root` 變數、Tailwind theme）沒動；或該來源所在 package／app 的 `DESIGN.md`（或適用的 repo 根 `DESIGN.md`）在 tracked diff 或 untracked 清單；或對應 `design-review.md` 寫明「本輪無 design system 變更」 | 跑 `impeccable document` 更新適用的 DESIGN.md，或補那一行 |
+
+`critique-storage latest` 會依內容指紋自動關閉過期快照，因此它的 exit 2 與 `closed: true` 都不能證明 P0／P1 已修。commit gate 只讀 `.impeccable/critique/`、`design-review.md` 與 `ignore.md`；對每個受影響 target 逐條核對上述證據，舊版無指紋快照也照樣核對。無法判定快照與改動的關係時保留 blocker，先補明確的 target／處置紀錄。這一段含人工核對，**不得**宣稱單靠 CLI exit code 就機械放行。gate 自身 **NEVER** 寫 `.impeccable/critique/*`。
+
+已採用但 launcher 不存在 → 0-B.1 未完成，回報 blocker（專案的 skills install）；未採用則跳過。保留 detector 輸出、唯讀快照清單與逐條處置、DESIGN.md 判定，0-B.2 的 brief 要附上。
+
+通過輸出 `✅ 0-B.1 通過`；無 UI 檔輸出 `⏭️ 0-B.1 跳過（無 UI 檔變更）`。
+
+### 0-B.2 視覺判讀（條件觸發）
+
 ```bash
 # tracked modified + untracked 新增的 .vue
 { git diff --name-only; git ls-files --others --exclude-standard -- '*.vue'; } | sort -u
@@ -478,11 +561,11 @@ Heavy gate 的 `exit 75` 代表 `gate-slot.sh` 等不到 slot、inner command �
 
 **不觸發**：純 `<script>` / `<style>` 微調、composable / store / API 純邏輯、測試、文件、設定檔、單純重構不影響視覺輸出。
 
-**Dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，確認真實圖片存取、視覺品質資格、fresh context 與可用載體；brief 帶完整 item、截圖與互動證據，依本檔 native 操作段執行。取證走 `screenshot-review-verify` Gemini 3.8 Flash high；Design Review 與截圖符合性由 fresh Claude Opus 5.5（effort: medium） 讀實際圖片後完成。取證與判定分開 dispatch；兩列無 fallback，Opus 5.5 無法執行時帶實際原因保留 0-B 未完成——主線是 maker，**NEVER** 主線自判或換其他模型補位（review-policy.md）。
+**Dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，確認真實圖片存取、視覺品質資格、fresh context 與可用載體；brief 帶完整 item、截圖、互動證據與 0-B.1 的 (a)(b) 輸出，依本檔 native 操作段執行。取證走 `screenshot-review-verify` Gemini 3.8 Flash high；Design Review 與截圖符合性由 fresh Claude Opus 5.5（effort: medium） 讀實際圖片後完成。取證與判定分開 dispatch；兩列無 fallback，Opus 5.5 無法執行時帶實際原因保留 0-B.2 未完成——主線是 maker，**NEVER** 主線自判或換其他模型補位（review-policy.md）。
 
-**並行啟動**：有真實並行載體時，0-A.1 啟動後同回合啟動已觸發的 0-B；收回 findings 後與 0-A.1／0-C 匯合修正。缺並行能力時依 review-policy 記錄同步載體限制，不略過視覺 gate。
+**並行啟動**：有真實並行載體時，0-A.1 啟動後同回合啟動已觸發的 0-B.2；收回 findings 後與 0-A.1／0-C 匯合修正。缺並行能力時依 review-policy 記錄同步載體限制，不略過視覺 gate。
 
-問題修正後輸出 `✅ 0-B 通過`；不觸發則直接輸出 `⏭️ 0-B 跳過（無 UI 變更）`。
+問題修正後輸出 `✅ 0-B 通過`；兩段都不觸發則輸出 `⏭️ 0-B 跳過（無 UI 變更）`。
 
 ---
 
@@ -524,7 +607,10 @@ fi
 
 判讀 affected 輸出時看兩行：`Affected analysis: N changed files -> M tests selected` 與逐檔的 `:: <reason>`。
 出現 `unmapped-fallback` 代表有改動對不到任何測試而退回保守選檔——沒有觀測紀錄時是整個 fast lane；clade 的 observed
-選檔在 v2 trace 下只補跑讀取範圍未知的測試（未 trace、過期、trace 時紅掉）。那不是錯，但通常是新檔還沒有測試在引用它。
+選檔在 v2 trace 下只補跑讀取範圍未知的測試（未 trace、過期、trace 時紅掉），新增檔落在該筆紀錄量測時還不存在的頂層目錄時，
+那筆紀錄也不能用來排除。那不是錯，但通常是新檔還沒有測試在引用它。另有兩條不經 fallback 的選法：經 git 列檔的測試
+（trace 看得到它讀 `.git`、看不到它列了哪些檔）在任何新增或刪除時都會被選；`run-p`／`run-s`／`npm-run-all` 的 glob
+（`check:*`）算進 `package.json` 的 script 呼叫閉包。
 **純文件 diff（只改 `.md`）也照跑**：clade 有百餘支測試讀真實 `rules/ docs/ capabilities/` 內容，lane 會把它們選出來；
 選出 0 支時 runner 印 `No affected tests found`，那才是「這次沒有測試該跑」的合法結論。
 

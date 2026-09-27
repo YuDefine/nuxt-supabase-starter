@@ -14,10 +14,6 @@ Dev port 由 clade 集中分配：registry 分配、規約強制宣告、audit �
 > Audit gate：`scripts/dev-port-audit.ts`（DRIFT / MISSING / CONFLICT → exit 1）。
 >
 > Cookbook 範本：`vendor/snippets/dev-port/`。
->
-> Preview 轉發：`/__preview/<port>` 在 request-time 用 `previewListenerDecision` 確認
-> listener cwd 屬於該 port 的主人。mismatch / unknown **MUST** 出自我頁，
-> **NEVER** 把別的 consumer 的 HTML（含 Nuxt welcome）嵌進驗收畫面。
 
 ## MUST
 
@@ -104,9 +100,6 @@ band 存在是為了讓「分不到號碼就退回 base port」永遠不必發�
 - **NEVER** 手動挑 worktree port。`pickDevPortOffset`（base 池）與 `pickBandPortOffset`（band）同時排除：超出 `[base, base+9]`、撞到本 consumer 另一個宣告 port、已被 sibling worktree 佔用。宣告多個 port 的 consumer 帶寬較窄
 - Offset 記錄在 `~/.cache/clade/dev-port/<consumer>/<slug>.json`，**不**寫進 repo；worktree 目錄消失即釋放
 - 兩池都用盡時 `wt-helper dev` **fail-loud 拒絕啟動**，**NEVER** fallback 到 base port — 那正是本節要防的撞車
-- **MUST** review-gui 的預覽連結、dev server 監看、「起 dev server」按鈕一律走同一份分配
-  （`buildConsumerPortMap` 帶 worktree 參數）。沒有分配紀錄的舊 worktree **當場配一個**，
-  **NEVER** 退回 base port
 - **NEVER** 用 `pnpm <script> -- --port <N>` 起 worktree 的 dev server（多出來的 `--` 會讓 Nuxt
   丟掉 port，落回 script 寫死的 base port，見 §1）；正確寫法是 `pnpm <script> --port <N>`
 

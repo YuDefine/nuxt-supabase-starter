@@ -19,8 +19,8 @@ The following `runner.sh`, `claude --print`, `Bash(run_in_background=true)`, `Ta
 
 ```bash
 # MUST 用絕對路徑；在哪個 repo 的 cwd 跑就作用於哪個 repo
-cd <目標 repo> && ~/offline/clade/capabilities/core/skills/work-loop/runner.sh --max-rounds 20
-cd <目標 repo> && ~/offline/clade/capabilities/core/skills/work-loop/runner.sh --dry-run
+cd <目標 repo> && ${CLADE_HOME:-$HOME/offline/clade}/capabilities/core/skills/work-loop/runner.sh --max-rounds 20
+cd <目標 repo> && ${CLADE_HOME:-$HOME/offline/clade}/capabilities/core/skills/work-loop/runner.sh --dry-run
 ```
 
 主線起它的形狀與收尾契約見下方 § 起 runner 的形狀與收尾契約。
@@ -29,7 +29,7 @@ cd <目標 repo> && ~/offline/clade/capabilities/core/skills/work-loop/runner.sh
 `--permission-mode <mode>`（預設 `acceptEdits`；**NEVER** 預設 `bypassPermissions`——那會連
 破壞性指令一起放行，要更寬鬆 MUST 由使用者顯式指定）、`--skip-preflight`、`--min-ready <n>`
 （預設 3，0 = 關掉）、`--min-wakeup <秒>`（預設 1200）。runner 另內建只批准該 repo 的
-`Bash(node "$HOME/offline/clade/vendor/scripts/work-loop-scan.ts")`（以及顯式 `--preflight`）精確 invocation；helper 在單一 process
+`Bash(node "<CLADE_HOME>/vendor/scripts/work-loop-scan.ts")`（以及顯式 `--preflight`）與 closedBloat 的 `rotate-closed-bloat.ts` 精確 invocation——`<CLADE_HOME>` 是 runner 啟動時把 `${CLADE_HOME:-$HOME/offline/clade}` 展開後的絕對路徑，同一字串也經 `--scan-helper-command`／`--rotate-helper-command` 交給 child；helper 在單一 process
 內完成 scan / parse / owner 驗證 / rotate / atomic rename，其他 Bash 仍照 permission mode 與使用者
 permission rules 判定。每輪另固定帶模型可見的
 `--runner-child` 與 `WORK_LOOP_RUNNER_CHILD=1`；Step 0 命中任一身分就只執行單輪，NEVER 再啟 runner。
@@ -58,7 +58,7 @@ preflight 與每輪 child 都經 `project-unattended.ts` 檢查專案授權、�
 `claude-account-routing.ts` 驗證官方訂閱登入與最新 quota 快照，在 `cc`／`ccw` 間選擇可用帳號。
 gateway／退役入口（`ccg`、`ccx`，或任何帶 `ANTHROPIC_BASE_URL` 的 session）會拒絕起跑；GPT／Codex 工作經 Pi dispatcher。
 
-第一次起跑需在 `/overview` 開啟該專案的自動開發，並確保 consumer 已接收 flow 投影、位於
+第一次起跑需先開啟該專案的自動開發（`node "${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/flow/project-automation-cli.ts" <project> --on --reason '<為什麼>'`；只帶 `<project>` 印目前狀態，`--off` 會讓執行中的自動 owner 收手），並確保 consumer 已接收 flow 投影、位於
 `consumers.local`、官方帳號已登入且 ai-quota 快照仍有效。缺少前置時錯誤會指出原因；
 `--skip-preflight` 只略過 headless 工具探針，不略過訂閱、版本或專案授權。
 `--dry-run` 只印完整控制入口與 child 指令，不要求 consumer 已安裝 helper。
@@ -153,7 +153,7 @@ route 表判到 `runner.sh` 之後（含 headroom 判定改判過去的那條）
 
 ```text
 Bash(run_in_background=true):
-  cd <目標 repo> && ~/offline/clade/capabilities/core/skills/work-loop/runner.sh --max-rounds 20
+  cd <目標 repo> && ${CLADE_HOME:-$HOME/offline/clade}/capabilities/core/skills/work-loop/runner.sh --max-rounds 20
 ```
 
 **NEVER** 在該指令裡加 `nohup`、`disown` 或尾綴 `&`：harness 靠前景同步執行追蹤它，自行背景化會讓收尾通知永遠不會到達（靜默失敗）。
@@ -230,4 +230,4 @@ runner process 的退出通知到達時 **MUST 主動回報，不等 user 問**�
 | 收尾 | runner 退出通知到達 → 走 (b) 回報，並 `TaskStop` 這個 Monitor。**NEVER** 讓它留到 session 結束 |
 | 與 (d) 的關係 | **兩個都要**，不是二選一。round 通常 15–25 分 < 55 分，事件本身順帶維持 cache；但 round 卡住超過 55 分時，(d) 的 heartbeat 是唯一還會醒的東西 |
 
-**NEVER 改用 `CLAUDE_CODE_MESSAGING_SOCKET` 把結果 post 回主線的變體**，除非先驗掉主線 inbox socket bind 與 wire format（評估見 `~/offline/clade/docs/discussions/2026-08-08-cross-session-messaging-evaluation.md`）。
+**NEVER 改用 `CLAUDE_CODE_MESSAGING_SOCKET` 把結果 post 回主線的變體**，除非先驗掉主線 inbox socket bind 與 wire format（評估見 `${CLADE_HOME:-$HOME/offline/clade}/docs/discussions/2026-08-08-cross-session-messaging-evaluation.md`）。

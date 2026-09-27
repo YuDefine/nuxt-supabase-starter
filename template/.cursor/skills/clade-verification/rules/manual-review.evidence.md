@@ -204,13 +204,30 @@ Marker 語法：
 - [ ] #7 送出時觸發樂觀鎖 409 → 顯示 conflict copy 並保留輸入 @followup[TD-001] @no-screenshot
 ```
 
+## Evidence 收集與狀態判讀的硬規則
+
+> 自 `review-gui-surface.md`（隨 review-gui 退役刪除）移入：與面板無關、仍適用每一個 consumer 的部分。
+
+1. **Compound item evidence**：一個 `[verify:ui]` / `[review:ui]` item 含多個 visual state（hover / focus / before-after / step1→step2）→ **MUST** 拆成 scoped sub-items（`#N.M` 各帶獨立 evidence），或對同一 `(itemId, kind)` 多次 `evidence-store.ts --write`（sidecar append-only）。**NEVER** 用一張截圖代表多個 state——evidence 在不在只看有沒有記錄，其餘 state 會靜默漏驗；**NEVER** 寫複數 key `screenshots=`（parser 不認）。
+2. **Performance 實測自動檢測**：review / verify **每一個** web UI change 時，**MUST** 先對改動檔機械 grep perf keyword：
+
+   ```bash
+   git diff --name-only <base>..<head> -- '*.vue' '*.tsx' '*.jsx' '*.css' '*.scss' '*.html' \
+     | xargs -r grep -lE 'fetchpriority|content-visibility|scheduler\.(yield|postTask)|requestIdleCallback|speculationrules|web-vitals|onLCP|onINP|onCLS'
+   ```
+
+   命中 → **MUST** 用 target adapter 的 performance inspection surface 實測，把 LCP / INP / CLS 與關鍵 insight inline 寫進 review report，改善前後各跑一次。adapter 不可用時明確標「待測」，**NEVER** 假裝已有數字。沒命中但改動觸及 hero image / above-the-fold layout / 字體載入時 **SHOULD** 照樣實測（keyword 偵測是下界）。
+3. **annotation MUST 與 item marker 同一行**：`(verified-*:)` / `(issue:)` / `(claude-discussed:)` 等 **MUST** 寫在 `- [ ] #N ...` 那一行的末尾，**NEVER** 寫在下一行（即使縮排正確）——parser 只解析 marker 行內的 token，獨立行 annotation 是 silent miss（[[pitfall-scan-non-ready-passive-report-instead-of-self-fix]]）。
+4. **寫完 evidence 後的收斂迴圈**：寫完 **MUST** 重跑 `flow gates --repo-only --require-empty` 與 `manual-review-check.sh`。缺 evidence／格式錯是 agent 的球，**MUST** 自行 root-cause 修正再重跑，直到剩下的只有真的要人判的項目。**NEVER** 把「evidence 還缺」「格式不對」回報給人。
+5. **陳述狀態前，本 turn 內 MUST 重新讀一次**：回答「還剩幾項」「ready 了沒」「這條過了嗎」「現在輪到誰」之前，本 turn 尚未跑過就 **MUST** 先跑 `flow gates`（tasks.md 項另讀該 carrier 當下的 checkbox），再答。上一則訊息跑過不算。人說「我已經回答／勾了 X」而讀不到時，**MUST** 當場依他的原話補寫（`flow receipt … --actor <人>`、`flow answer … --via '<原話>'`，或照 [[manual-review]] § 核心規則寫回 tasks.md），**NEVER** 回「你還沒做」或要人再做一次。
+
 ## Parent State Derivation — 真相層責任分工
 
 > parent AND-derive hard rule 與禁止項在 [[manual-review]] § Parent State Derivation。
 
 | 真相層 | 責任 |
 | --- | --- |
-| Review GUI (`applyReviewActionToContent`) | 每次寫回 child line 後 **MUST** 重 derive parent state 並寫回 parent line（auto-rollup / un-rollup） |
+| 寫回 leaf 的 agent（[[proactive-skills.manual-review-entry]] 第 4 步） | 沒有獨立的 rollup 寫入器：寫回 child line 的**同一次編輯**依 [[manual-review]] § Parent State Derivation 重 derive 並寫回 parent line（rollup／un-rollup） |
 | commit Step 0-MR awk gate | **MUST** leaf-only count — parent-with-scoped-children 不計 pending |
 | 任何計 pending 的 gate / tooling | **MUST** leaf-only count（semantic fully aggregated from scoped children） |
 | 未來新加的 tooling | **MUST** 沿用 leaf-only count；禁止 naive `grep '- \[ \]'` 或同義 awk 計 pending |
@@ -222,11 +239,11 @@ Marker 語法：
 | 舊寫法 | 當時的語意 | 現在要人接手時 |
 | --- | --- | --- |
 | `(claude-analyzed: <ISO> route=E)` | triage 結論為 (E)，球在人 | `flow ask --question ... --option ... --recommended ... --why ... --work-id <W> --carrier <tasks 檔>` → `ruling` 卡 |
-| `(awaiting-user-decision: <ISO>)`（含其 CLI helper） | 純商業決策，packet 已備妥 | 同上；packet 用 `--question-page` 掛決策頁 → `ruling` 卡 |
+| `(awaiting-user-decision: <ISO>)`（含其 CLI helper） | 純商業決策，packet 已備妥 | 同上；packet 的路徑放進 `--carrier` → `ruling` 卡 |
 | `@apply-blocked[<reason>]` | implementation 卡外部 blocker | `flow ask --category human-action --step '<要人做的動作>' ...`（dispatched child 走 `--complete blocked`）→ `external-action` 卡 |
-| `@evidence-via-manual-review` | 把 phase task 排除在舊 GUI 90% implementation threshold 外 | 無後繼（threshold 已退役） |
+| `@evidence-via-manual-review` | 把 phase task 排除在 90% implementation threshold 外 | 無後繼（threshold 已退役） |
 
-四者共通的可寫條件在新寫法下照舊成立：**MUST NOT** 翻 checkbox、**MUST NOT** strip 既有 `（issue:）`、**MUST NOT** 用開卡規避其實 actionable 的 item。判「現在有什麼等人」一律跑 `flow gates`，見 [[review-gui-surface]] § Hard rule MUST 1。
+四者共通的可寫條件在新寫法下照舊成立：**MUST NOT** 翻 checkbox、**MUST NOT** strip 既有 `（issue:）`、**MUST NOT** 用開卡規避其實 actionable 的 item。判「現在有什麼等人」一律跑 `flow gates`。
 
 ## ADR (2026-05-22) — Default Kind Flip 未採用，勿再提案
 

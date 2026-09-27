@@ -12,7 +12,7 @@
 
 ## commit 0-A reviewer（常設）
 
-commit 0-A 的唯一合格 reviewer 是 fresh-context **Claude Opus 5.5（effort: medium）**（`code-review-opus` 列）：Claude Code 主線跑 `claude-review-safe.sh prepare medium` → 照它印的 AGENT_CALL 派 `commit-0a-reviewer` subagent → 跑它印的 FINALIZE，verdict 只認 finalize 的 stdout；叫不出 Claude subagent 的 runtime 才跑無子命令的 `claude-review-safe.sh medium`（Herdr child）。**沒有備援席**：Opus 額度耗盡或量不到時 gate 保持未完成、等額度恢復；舊 worktree 的 wrapper／helper 不認得 opus seat 時先 rebase 最新 main，不行就停在 0-A 之前 push 分支並回報「待 Opus seat 0-A」。**NEVER** 派 Astra／Fable／任何其他 reviewer，**NEVER** 主線自審補位；receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。
+commit 0-A 的唯一合格 reviewer 是 fresh-context **Claude Opus 5.5（effort: medium）**（`code-review-opus` 列）：Claude Code runtime（含 Herdr 派出的 Claude worker）跑 `claude-review-safe.sh prepare medium` → 照它印的 AGENT_CALL 派 `commit-0a-reviewer` subagent → 跑它印的 FINALIZE，verdict 只認 finalize 的 stdout；叫不出 Claude subagent 的 runtime 才跑無子命令的 `claude-review-safe.sh medium`（Herdr child）。Claude Code 誤用無子命令入口時 wrapper 以 exit 12 本地拒絕，`CLADE_DISPATCH_ID`／`--bounded-leaf` 不豁免。**沒有備援席**：Opus 額度耗盡或量不到時 gate 保持未完成、等額度恢復；舊 worktree 的 wrapper／helper 不認得 opus seat 時先 rebase 最新 main，不行就停在 0-A 之前 push 分支並回報「待 Opus seat 0-A」。**NEVER** 派 Astra／Fable／任何其他 reviewer，**NEVER** 主線自審補位；receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。
 
 > 2026-09-23～24 的「Opus 5.5 暫時覆寫」已撤銷（Charles 2026-09-24）：`OPUS_55_OVERRIDE_ACTIVE` 為 `false`，routing gate 回到原判武裝 latch；覆寫期間「不外派、主線全包」的條款全部失效，照 [[agent-routing.routing-table]] 派工。
 

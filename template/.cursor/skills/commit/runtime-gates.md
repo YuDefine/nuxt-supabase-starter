@@ -28,7 +28,8 @@
 | 0-A.0 | 主線先執行 simplify | 完成修正才凍結 review snapshot | simplify 結果、變更後 snapshot |
 | 0-A.1 | 唯一合格獨立 reviewer：fresh-context Claude Opus 5.5 medium；主線核對資格與結果 | 完整 verdict 與全部 finding；缺資格、缺覆蓋或 snapshot 漂移時未通過；Opus 不可用保持未完成 | review-policy 各欄、真實 dispatch／session、requested／observed model 與 model_verification(_reason)、完整輸出 |
 | 0-A.2 | Critical／Major 觸發時由同一席（Opus 5.5 medium）以新的 fresh context 對修復後 snapshot 深度複審 | 深度 review 完成才通過；Opus reviewer 不可用或配額耗盡時保持未完成，不是合法 skip | 深度 reviewer 身份、snapshot／verdict、逐條 finding 處置與修正依據 |
-| 0-B | 已觸發視覺改動由符合 UI 政策的執行者取得真實畫面並判讀 | 依 UI gate 收斂；無 browser／截圖／合格判讀載體時保留缺口 | 頁面、viewport、截圖、判讀與修正後證據 |
+| 0-B.1 | 已採用 impeccable 且有 UI 檔變更時，主線跑 `detect`、唯讀核對 critique 快照處置與 DESIGN.md 新鮮度檢查 | 三項依 gates.md 判準通過；P0／P1 缺處置證據就擋；已採用但 launcher 缺失則未完成，未採用跳過 | detector 輸出、唯讀快照與逐條處置、DESIGN.md 判定、ignore 的使用者確認紀錄 |
+| 0-B.2 | 已觸發視覺改動由符合 UI 政策的執行者取得真實畫面並判讀 | 依 UI gate 收斂；無 browser／截圖／合格判讀載體時保留缺口 | 頁面、viewport、截圖、判讀與修正後證據、0-B.1 輸出 |
 | 0-C | 可派 runner 執行；主線依 gates.md 複驗 check、明確 test 與 doctor | 全部完成且符合各自判準；worker PASS、doctor exit 0 或仍在跑均不足 | 每支命令的終態與原始輸出、doctor 分數／warnings |
 | 0-D | 主線比對 diff 與文件、規約、snippet、audit 契約 | 同步必要文件；匯合後依大改動回扣重驗受影響 snapshot | 文件對照、修正 diff、回扣結果 |
 | 0-E／0-F | 主線執行已觸發的 entry point coverage／資產交叉比對 | 0-E 依 gate 滿分；0-F 維持 advisory | 各 entry point 分數／資產重疊與缺口，不混為同一種 verdict |

@@ -10,7 +10,8 @@
 # 「Shows stderr to Claude; the tool already ran」，不阻擋任何東西，warn-only 語義不變）。
 #
 # 節流：並行 batch 完成會連環觸發，10 分鐘 bucket 內只響一次（一次提醒涵蓋整個 batch）。
-# read-only agent（Explore / Plan）不改檔 → 跳過。
+# read-only agent（Explore / Plan / commit-0a-reviewer）不改檔 → 跳過。commit-0a-reviewer 的 tools 只有
+# Read, Grep, Glob（capabilities/core/agents/commit-0a-reviewer.md）；主持者每輪 0-A 派多批，提醒全是雜訊。
 # scope-verify.ts 不存在（非 clade home）/ jq 缺 → silent exit 0（fail-open）。
 
 set -uo pipefail
@@ -22,7 +23,7 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 SUBAGENT_TYPE=$(printf '%s' "$INPUT" | jq -r '.tool_input.subagent_type // ""' 2>/dev/null) || exit 0
 case "$SUBAGENT_TYPE" in
-  Explore | Plan) exit 0 ;;
+  Explore | Plan | commit-0a-reviewer) exit 0 ;;
 esac
 
 BUCKET=$(($(date +%s) / 600))

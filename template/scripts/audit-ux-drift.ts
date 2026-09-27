@@ -59,7 +59,9 @@
  *
  * Suppress per-file: `// ux-drift-audit: ignore <EnumName>`
  *
- * See docs/rules/ux-completeness.md for the Exhaustiveness Rule.
+ * See the `ux-completeness` rule (§ Exhaustiveness Rule). Its projected path depends on the
+ * agent: `.claude/rules/ux-completeness.md` (Claude Code); Codex and Cursor get their own
+ * projection under `.agents/` / `.cursor/rules/`. Source: clade `rules/core/ux-completeness.md`.
  */
 
 import { spawnSync } from 'node:child_process'
@@ -1112,7 +1114,9 @@ function emitText(report: Report): void {
   console.log('  2. Add the missing cases to the existing handler')
   console.log('  3. Suppress: add `// ux-drift-audit: ignore <EnumName>` near handler')
   console.log()
-  console.log('See docs/rules/ux-completeness.md — Exhaustiveness Rule')
+  console.log(
+    'See the ux-completeness rule — Exhaustiveness Rule (.claude/rules/ux-completeness.md; Codex/Cursor: its projection under .agents/ or .cursor/rules/)',
+  )
 }
 
 function main(): void {

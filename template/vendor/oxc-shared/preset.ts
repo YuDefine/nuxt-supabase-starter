@@ -112,8 +112,7 @@ export const PROJECTION_EXCLUDES = [
 /**
  * The slice of `vendor/` that stays excluded even in clade, where `vendor/` is
  * real source rather than a projection: snippet corpora are cookbook examples
- * (several deliberately demonstrate the anti-pattern a rule exists to ban), and
- * review-gui.ts embeds an HTML template oxfmt/oxlint both mangle.
+ * (several deliberately demonstrate the anti-pattern a rule exists to ban).
  * clade's own vite.config.ts drops `vendor/**` and adds these back.
  */
 export const CLADE_VENDOR_EXCLUDES = [
@@ -491,8 +490,7 @@ export const fmtBase = {
  *
  * **為什麼是複本而不是 `import { defaultExclude } from 'vite-plus'`**：本檔目前**零 import**，
  * 而它的消費端不只有 `vite.config.ts` —— 實際會 import 本檔的純 node 腳本包括
- * `scripts/audit-typecheck-projection-face.ts`；`vendor/review-gui-web/{nuxt,vite}.config.ts`
- * 也在建置期載入。頂層 import vite-plus 會讓這些非 vite 執行路徑（尤其是 audit script
+ * `scripts/audit-typecheck-projection-face.ts`。頂層 import vite-plus 會讓這些非 vite 執行路徑（尤其是 audit script
  * 這類會在 vite-plus 尚未安裝的新 consumer onboarding 途中被跑到的腳本）連帶付出載入成本。
  *
  * 複本的代價是會與上游漂開，**所以它由測試釘住**：`test/preset-test-base.test.ts` 直接

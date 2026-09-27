@@ -198,6 +198,8 @@ The obligations, predicates, evidence schema, failure handling, and review timin
     出現往 child env 寫入的欄位 → 帶著該變數重跑受影響測試（`VAR=<值> node --test <affected>`）；
     不帶變數的綠燈與沒跑同義。（per [[pitfall-verifier-env-predates-the-change-it-verifies]]／[[TD-802]]）
 
+**截圖一律收集與判定分兩步**（任何模式、任何路徑都適用，含 ad-hoc 與 commit 0-B）：〔`screenshot-review-verify`〕收、〔`screenshot-match-analysis`〕判；commit 0-B 主線不代簽，其餘模式在判定列派不出時才由主線讀圖判定。全文 [[agent-self-verification.screenshot-evidence]] § 截圖收集與判定分兩步。
+
 ## 派工前的主線預檢責任在 [[agent-self-verification.screenshot-evidence]]（具名時機 MUST-Read）
 
 **派 subagent / pi / visual verifier 收 evidence 之前，要先讀

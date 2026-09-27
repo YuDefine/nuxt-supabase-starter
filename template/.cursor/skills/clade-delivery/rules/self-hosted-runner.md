@@ -233,7 +233,7 @@ variant 判定進 `registry/conventions.json` 的 `deploy-key-custody`，由 `co
 
 ### 12. Runner 主機憑證衛生：runner user 碰得到的一切，都等於交給每一個 job
 
-**適用 predicate**：同 § 11（`$HOME` 跨 job 存活）。本節管**主機上本來就在的東西**（人登入時留下的、維運時放上去的）——job 以 runner user 身分執行，讀取權就等同交給每個 job 的 transitive deps。
+**適用 predicate**：self-hosted runner 上，job 程序（含 `container:` job 與 job 內 `docker run` 的子程序）**可讀到的一切憑證面**——程序 env、runner user（或容器內 user）可讀的檔案、可連到的 socket。`$HOME` 跨 job 存活（§ 11）只是其中一例。本節管**主機上本來就在的東西**（人登入時留下的、維運時放上去的）——job 以 runner user 身分執行，讀取權就等同交給每個 job 的 transitive deps。
 
 - **NEVER** 讓 runner user 的 `$HOME` 留著個人長效憑證：`~/.config/gh/hosts.yml`（`gh auth login`）、`~/.git-credentials`、
   `~/.docker/config.json` 內的 registry token、`~/.npmrc` 的 `_authToken`。在 runner 主機上用過 `gh` / `git push` 之後
@@ -244,16 +244,26 @@ variant 判定進 `registry/conventions.json` 的 `deploy-key-custody`，由 `co
   寫在 `ExecStart`（例：`cloudflared tunnel run --token <T>`）的值 `systemctl cat` 任何 user 都讀得到
 - **MUST** production-access runner（§ 10 定義）的 runner user 的 sudoers 收斂成 deploy 實際呼叫的腳本清單，不是 `NOPASSWD: ALL`。
   `docker` group 本身已等同 root，所以這台主機接的 job 清單同時 **MUST** 維持 § 10 的收斂
+- **NEVER** 讓 runner 程序或 runner 容器的環境變數帶長效憑證（job 自動拿到的 `GITHUB_TOKEN` 以外的 `gho_`／`ghp_`／`github_pat_`、cloud key）。
+  env 會被每個 step 繼承，`env` 與 `/proc/self/environ` 不需要任何權限；runner 註冊用的 token 只經 stdin 或 JIT config 交給
+  `config.sh`／`run.sh`，註冊完即丟
+- **NEVER** 讓 runner user（或 `runner` group）讀得到 GitHub App 私鑰、PAT 檔或任何「能再簽出 token」的材料。
+  `/etc/gh-runner/*.pem` 這類檔 **MUST** `0600 root:root`，放在 runner 不在的宿主（JIT 架構：Proxmox 宿主，CT 只收 JIT config）
+- **NEVER** 對接 untrusted job 的 runner 容器或 self-hosted job 掛宿主 `docker.sock`。掛 socket（含 `:ro`，見
+  pitfall `~/offline/clade/docs/pitfalls/2026-08-05-docker-sock-ro-mount-gives-zero-api-protection.md`）＝宿主 root，宿主 `$HOME` 的 `~/.config/gh/hosts.yml`、
+  `~/.ssh` 全進 job 射程；需要 Docker 時用 rootless／DinD sidecar 或 VM 隔離
 - **MUST** 在以上任何一項被發現「已暴露過」時輪替該憑證，並照 [[secret-custody]] 把新值存回保管處（Notion secrets 頁的對應列等）。
   只刪檔不輪替 = 假設過去沒有 job 讀過它，這個假設沒有證據能支持
 
 | 開脫 | 現實 |
 | --- | --- |
 | 「那台是我自己的機器，token 是我登入時留的，不是 CI 的」 | 排程不管 token 是誰留的。job 用的是同一個 uid，`cat ~/.config/gh/hosts.yml` 不需要任何權限提升 |
+| 「token 在容器 env，不在 `$HOME`，不算 § 12」 | job 讀 env 比讀檔更容易；§ 12 管的是 job 讀得到的面，不是路徑 |
+| 「私鑰是 `640 root:runner`，不是 world-readable」 | job 就是 `runner` group 的成員；group-readable 對 job 等同 world-readable |
 | 「沒有入侵證據」 | 2026-09 <client-b> 事件實查：sudo 紀錄、持久化、outbound 全乾淨，但**走 docker socket 的動作沒有任何日誌**。沒證據是查不到的上限，不是安全的下限 |
 | 「job 已經取消了，程式碼沒跑」 | `cancelled` 只代表最終狀態。取消前已完成的 step（`vp install` 的 install script）照樣跑過；重跑的 attempt 2 也可能在「已取消」的 run 底下重新起跑。以下方 SOP 查 step 級證據 |
 
-主機端沒有自動 gate，用下方 § 暴露盤點 SOP 逐台唯讀盤點。
+主機端沒有自動 gate，用下方 § 暴露盤點 SOP 逐台唯讀盤點。`scripts/audit-runner-trust-boundary.ts` 只抓 repo 內看得到的兩種形狀（self-hosted job 碰到 `docker.sock`、workflow 裡的 token 字面值），它綠燈對主機端的 env／檔案權限／容器掛載零訊號。
 
 本證據決定：runner 主機上哪些東西必須移走、暴露過的要輪替。
 本證據不決定：暴露過的 production secret（JWT secret、DB 密碼）要不要在維護窗口前就輪替——那是 Charles 依證據與停機成本拍板的 incident 決策。
@@ -358,6 +368,9 @@ pgrep -fa Runner.Worker    # 有輸出 = 此刻正在跑 job
 id; sudo -n true && echo NOPASSWD
 ls -la ~/.config/gh/hosts.yml ~/.git-credentials ~/.npmrc ~/.docker/config.json ~/.ssh 2>&1
 systemctl cat '*' 2>/dev/null | grep -nE -- '--token|TOKEN=' | sed -E 's/(token[= ])[^ ]+/\1<redacted>/I'
+tr '\0' '\n' < /proc/$(pgrep -f Runner.Listener | head -1)/environ | grep -E '^[A-Z_]+=(gh[opsru]_|github_pat_)' | cut -d= -f1   # 只印變數名
+find / -xdev \( -name '*.pem' -o -name '*.key' \) -readable 2>/dev/null   # 以 runner user 身分跑
+docker inspect $(docker ps -q) --format '{{.Name}} {{range .Mounts}}{{.Source}} {{end}}' 2>/dev/null | grep docker.sock
 ```
 
 ### 移除標籤

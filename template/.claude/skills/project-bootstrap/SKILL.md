@@ -147,7 +147,7 @@ node "$CLADE_HOME/scripts/mint-gate-playbooks.ts" \
 
 產物：`docs/playbooks/README.md`（含 § Browser 分流）+ `PROGRESS.md` + `GATE-TODOS.md` + 01–05、HANDOFF `## User-gate board`。缺 pack 不算 bootstrap 完成。`bootstrap-project.ts` 已含這一步；本節是 skill 自己跑 scaffold 後、進 Step 4 之前的補齊。
 
-UI consumer（mode=`new`、有前端／impeccable 適用）scaffold／projection 成功後，agent **MUST 立刻自己載入** `references/impeccable-follow-up.md`（或內部 invoke hub-core `design` 的 new mode），照該檔 § 觸發點把追問清單補齊並寫檔。`/design new` 是 agent 可呼叫的 skill 入口，**不是**人類必打指令。缺項未問完、檔未寫齊 **不准**把本 skill 收成 `READY`。
+UI consumer（mode=`new`、有前端／impeccable 適用）scaffold／projection 成功後，agent **MUST 立刻自己載入** `references/impeccable-follow-up.md`，照該檔 § 觸發點把追問清單補齊並寫檔（PRODUCT.md 由 agent 自己跑 impeccable `init`、已有 UI code 缺 DESIGN.md 跑 `document`）。impeccable 是 agent 自己呼叫的 skill，**不是**人類必打指令。缺項未問完、檔未寫齊 **不准**把本 skill 收成 `READY`。
 
 ### `adopt`
 

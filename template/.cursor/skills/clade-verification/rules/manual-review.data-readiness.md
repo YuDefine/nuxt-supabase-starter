@@ -18,7 +18,7 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 
 ## Pre-Review Data Readiness（hard rule）
 
-寫 `## 人工檢查` 項目時，**MUST** 把驗收所需資料當成 item 的一部分**在 propose 階段就準備好**：review GUI 開頁的瞬間，使用者已能照 step 直接跑。marker 誤標時先依 [[manual-review.evidence]] § `[review:ui]` 收斂原則改 marker。
+寫 `## 人工檢查` 項目時，**MUST** 把驗收所需資料當成 item 的一部分**在 propose 階段就準備好**：交給使用者的瞬間，他已能照 step 直接跑。marker 誤標時先依 [[manual-review.evidence]] § `[review:ui]` 收斂原則改 marker。
 
 ### 禁止的模糊指代
 
@@ -79,16 +79,17 @@ assertion-bearing `[verify:ui]` item **MUST** 能對應到一個**機械可判�
 
 ## `[review:ui]` 純功能驗證 step actionability（hard rule）
 
-「需要人」≠「user 該自己摸索」。review GUI 開頁瞬間 user **MUST** 能照 step 逐步操作，不需要回頭問「要刷哪張卡」「URL 是什麼」「該看到什麼」。寫不出來 = item 還沒 ready。
+「需要人」≠「user 該自己摸索」。交給 user 的瞬間他 **MUST** 能照 step 逐步操作，不需要回頭問「要刷哪張卡」「URL 是什麼」「該看到什麼」。寫不出來 = item 還沒 ready。
 
 ### 通則
 
 每條 `[review:ui]` item **MUST** 滿足「自帶導覽」標準：
 
-1. **明確 URL** — 具體頁面含必要 query string / route param（頁面用 `?tab=` 定 tab 就要寫進去），不要只說「kiosk 頁」「設定頁」。這條 URL 就是 review-gui「開啟畫面」的 `redirect=`；子項寫「同一 URL」時沿用父層或上一則 sibling 已補齊的那條。**Host MUST 依階梯擇一**（與 [[proactive-skills.manual-review-entry]] § 同一條 Iron Law 是同一道，不得分岔）：
+1. **明確 URL** — 具體頁面含必要 query string / route param（頁面用 `?tab=` 定 tab 就要寫進去），不要只說「kiosk 頁」「設定頁」。這條 URL 也是 dev-login 連結的 `redirect=`；子項寫「同一 URL」時沿用父層或上一則 sibling 已補齊的那條。**Host MUST 依階梯擇一**（與 [[proactive-skills.manual-review-entry]] § `[review:ui]` item 敘述內文的 URL 是同一道，不得分岔）：
    1. consumer `.env*` 有 `TUNNEL_HOSTNAME=<host>` → `https://<host>/<path>`（HTTPS-only feature 也只能用 tunnel 驗）
-   2. 沒設 → review-gui preview proxy `https://review-gui.<maintainer-domain>/__preview/<devPort>/<path>`（`<devPort>` 取自 `registry/consumers.json` 的 `dev_ports.nuxt`）
-   3. `http://localhost:<port>/<path>` **只給 agent 自己探測**，**NEVER** 出現在 `[review:ui]` item 裡（使用者手機上的 localhost 指向裝置自己）
+   2. `http://localhost:<port>/<path>` **只給 agent 自己探測**，**NEVER** 出現在 `[review:ui]` item 裡（使用者手機上的 localhost 指向裝置自己）
+
+   沒有 tunnel（`.env*` 無 `TUNNEL_HOSTNAME`）時 `[review:ui]` **沒有可給人的 host**：propose 階段就向使用者提出「先替此 consumer 設 tunnel」；該驗收若不需要人的判斷（主觀視覺、真機、收信這類只能人做的不算），也可以改成 `[verify:*]` 由 agent 跑。**NEVER** 退回 localhost，**NEVER** 加 `@no-manual-review-check[no-tunnel-configured]` 繞過。
 
    Multi-app consumer 依 change 觸碰的 app 反推 `.env.<app>`，找不到 app hint **MUST** 在 propose 階段問清楚。**NEVER** 在同一 item 同時列兩層 URL。解析 SOP 見 `~/offline/clade/vendor/snippets/tunnel-url-for-review/README.md`；`UI_URL_LOCALHOST_WITH_TUNNEL_AVAILABLE` pattern 會攔 localhost。
 2. **逐步動作 sub-items** — 用 `#N.M` scoped 拆，每條 sub-item 一個原子動作（開 X → 輸入 Y / 點 Z → 確認 W）。**禁止**流程式描述（例「刷卡 → 進入毛刺 → 操作完成 → 自動回 standby」整條塞在 parent line）
@@ -166,16 +167,16 @@ node -e "import('~/offline/clade/vendor/snippets/dev-auth/lib/detect-dev-login-r
 
 `<base>` 的選擇分兩條路：
 
-- **本機契約 route**（screenshot agent、E2E、`/__preview`）：contract 的 `loopbackOnly` 為 true 時，`<base>` MUST 是 `http://127.0.0.1:<port>`。這類 route 的 gate 看 request IP，tunnel 來源會 404。
-- **review-gui PWA「開啟畫面」**：每個 consumer 都走公開 `-dev.` origin 的 GET `/auth/_dev-login?as=<role>&email=e2e-<role>@dev.local&redirect=<inspect-path>`。`<inspect-path>` **MUST** 是該 item 的完整檢驗起點（path + 指定的 query／route param），不是父層 route。那條路 **MUST NOT** 做 loopback gate。**NEVER** 叫手機開 `http://127.0.0.1:<port>`，也 **NEVER** 讓開啟畫面落到 Google／人類登入頁。GUI 組連結時從 item 全文（含相對 path、bare query、同一組「同一 URL」／父層已補齊的 path）取最完整的那一條；**NEVER** 從中文標籤臆造 consumer 專屬參數，也 **NEVER** 用 `/` 充數。item 散文仍要寫得出身分與檢驗起點。
+- **本機契約 route**（screenshot agent、E2E）：contract 的 `loopbackOnly` 為 true 時，`<base>` MUST 是 `http://127.0.0.1:<port>`。這類 route 的 gate 看 request IP，tunnel 來源會 404。
+- **給人點的連結**：每個 consumer 都走公開 `-dev.` origin 的 GET `/auth/_dev-login?as=<role>&email=e2e-<role>@dev.local&redirect=<inspect-path>`。`<inspect-path>` **MUST** 是該 item 的完整檢驗起點（path + 指定的 query／route param），不是父層 route。那條路 **MUST NOT** 做 loopback gate。**NEVER** 叫手機開 `http://127.0.0.1:<port>`，也 **NEVER** 讓連結落到 Google／人類登入頁。item 散文要寫得出身分與檢驗起點。
 
 **NEVER** 只寫帳號 email / employee_no 就當作交代完登入方式。**NEVER** 假設 admin 登入就能看到所有員工的 /my/ 資料 — /my/ 頁面只顯示 session user 的紀錄。
 
-review-gui 會從 item 文字渲染「🔑 以 &lt;role&gt; 登入並開啟」按鈕，但只在 consumer 有 dev-login route 時才掛——**寫出 URL 仍是 item 的責任**。
+沒有任何工具會替 item 組登入連結——**寫出 URL 是 item 的責任**。
 
-**身分字面 MUST 與 fixture canonical 命名逐字相同**：`E2E-<ROLE 全大寫>` / `e2e-<role>@dev.local`，`<role>` 一律 snake_case（`trac_payroll`，**不是** `trac-payroll`），且 MUST 是該 consumer dev-login route 認得的 role（不存在的 role 回 400）。合法 role 來源：route 檔頂端 `@dev-login-roles: a, b, c` 宣告與同檔 `DEV_LOGIN_FIXTURE_UUIDS` 的 key；**兩條都在則 MUST 一致**（不一致時 GUI 報 `role-list-unreadable` 並停用驗證）；role SoT 不在 route 檔內的 consumer **MUST** 寫宣告。
+**身分字面 MUST 與 fixture canonical 命名逐字相同**：`E2E-<ROLE 全大寫>` / `e2e-<role>@dev.local`，`<role>` 一律 snake_case（`trac_payroll`，**不是** `trac-payroll`），且 MUST 是該 consumer dev-login route 認得的 role（不存在的 role 回 400）。合法 role 來源：route 檔頂端 `@dev-login-roles: a, b, c` 宣告與同檔 `DEV_LOGIN_FIXTURE_UUIDS` 的 key；**兩條都在則 MUST 一致**；role SoT 不在 route 檔內的 consumer **MUST** 寫宣告。
 
-沒有機械稽核擋 dangling reference：寫 item 的人 **MUST** 當場跑一次 `resolveDevLoginContract` 與 route 檔 grep，確認 role 與檢驗起點存在。身分與完整檢驗起點 **MUST** 逐字寫在 item 散文內（它是面板組「開啟畫面」連結的唯一來源），**NEVER** 另建 sidecar entry 當事實來源。
+沒有機械稽核擋 dangling reference：寫 item 的人 **MUST** 當場跑一次 `resolveDevLoginContract` 與 route 檔 grep，確認 role 與檢驗起點存在。身分與完整檢驗起點 **MUST** 逐字寫在 item 散文內（它是驗收者組登入連結的唯一來源），**NEVER** 另建 sidecar entry 當事實來源。
 
 ### 實體裝置 / 規格外輸入的替代路徑
 
@@ -210,7 +211,7 @@ review-gui 會從 item 文字渲染「🔑 以 &lt;role&gt; 登入並開啟」�
 
 ## `@no-manual-review-check` Marker（hard rule）
 
-hook regex 誤判或合法例外（真機掃 SMS 驗證碼等無 dev replay endpoint 的場景），在行尾加 `@no-manual-review-check[<reason>]` 跳過 Pre-Review Data Readiness regex 檢查（manual-review-check.sh 與 review-gui banner 都 skip）。它**只** scope 在這一層，**MUST NOT** 用來掩蓋 kind 分類、`@no-screenshot` 或 evidence trail 的問題。
+hook regex 誤判或合法例外（真機掃 SMS 驗證碼等無 dev replay endpoint 的場景），在行尾加 `@no-manual-review-check[<reason>]` 跳過 Pre-Review Data Readiness regex 檢查（manual-review-check.sh skip）。它**只** scope 在這一層，**MUST NOT** 用來掩蓋 kind 分類、`@no-screenshot` 或 evidence trail 的問題。
 
 ### Schema
 
@@ -219,7 +220,7 @@ hook regex 誤判或合法例外（真機掃 SMS 驗證碼等無 dev replay endp
 ```
 
 - **MUST** 是 trailing token（位於行尾，可後接 `@no-screenshot`）
-- `<reason>` **MUST** 非空（empty `@no-manual-review-check[]` 或無 brackets 的 bare `@no-manual-review-check` 均視為 invalid marker，hook / review-gui 不啟用 bypass）
+- `<reason>` **MUST** 非空（empty `@no-manual-review-check[]` 或無 brackets 的 bare `@no-manual-review-check` 均視為 invalid marker，hook 不啟用 bypass）
 - 同一行 **MUST NOT** 出現多個 `@no-manual-review-check` marker
 - Marker 出現在 description 中間（例：documenting the marker syntax inside backticks）視為 plain text，**MUST NOT** 被解析成 marker
 
@@ -239,7 +240,7 @@ Canonical ordering（從前到後）：description → annotation → `@followup
 
 ### Audit trail
 
-skip 時 **MUST** emit `[info] tasks.md:<lineno> bypass: <reason>`。某類 reason 跨 consumer 出現 ≥ 5 次時應調整 pattern，而非繼續累積 bypass。Hook 與 review-gui 共用 `vendor/snippets/manual-review-enforcement/patterns.json` 與同一份 bypass parser。
+skip 時 **MUST** emit `[info] tasks.md:<lineno> bypass: <reason>`。某類 reason 跨 consumer 出現 ≥ 5 次時應調整 pattern，而非繼續累積 bypass。Hook 的 patterns 在 `vendor/snippets/manual-review-enforcement/patterns.json`。
 
 ## 截圖檔名與 item id 配對（hard rule）
 

@@ -12,7 +12,7 @@ paths:
 
 # 待拍板條目的寫法
 
-本檔規範**被掃的那條 bullet**（掃描器與頁面見 [[review-gui-surface]] § 待拍板佇列）。你寫進 `HANDOFF.md` / `docs/tech-debt.md` 的待拍板 bullet，60 秒內會被 `vendor/scripts/flow/decision-sources.ts` 掃進 spine，出現在控制面板「輪到你」與 `\my`，Charles 多半在手機上讀。**寫的人與答的人中間隔著一個解析器。**
+本檔規範**被掃的那條 bullet**（掃描器與佇列契約在 clade 端 `decision-sources.ts`／`decision-sync.ts`）。你寫進 `HANDOFF.md` / `docs/tech-debt.md` 的待拍板 bullet，60 秒內會被 `vendor/scripts/flow/decision-sources.ts` 掃進 spine，出現在 `flow pending` 與 `\my`。**寫的人與答的人中間隔著一個解析器。**
 
 ## 拍板題的形狀（正向契約）
 
@@ -68,6 +68,8 @@ paths:
 **每一個** consumer 的 **每一條** `Ready for review` 條目，**MUST** 在它自己的 bullet 底下帶滿
 這三行——不是「盡量」、不是「重要的那幾條」、不是「等有空補」：
 
+> **Lifecycle repo（repo root 有 `specs/truth/work-lifecycle.md`）例外的是載體，不是三欄**：`HANDOFF.md` 不得有未勾的 `- [ ]`（[[handoff]] § Lifecycle repo，FR-028），所以本節與下節的 `- [ ]` 條目 **NEVER** 寫進它的 `HANDOFF.md`。改用 `flow ask --category review`（三欄照寫進題目）或 `flow ask --category ruling` 直接進佇列；三欄與「一題一問」的要求不變。
+
 ```markdown
 - [ ] **<change 名或一句標題>**
   - 改了什麼: <一句，講行為不是講檔名>
@@ -87,17 +89,17 @@ paths:
 
 | 哪一種 | 誰記錄 | 一句「通過」結掉的是什麼 |
 | --- | --- | --- |
-| 佇列的 `Ready for review` → `通過` | spine 上的 span，答完那條就離開 `\my` / `/decisions` | **方向 OK、可以進人工驗收** |
+| 佇列的 `Ready for review` → `通過` | spine 上的 span，答完那條就離開 `\my` / `flow pending` | **方向 OK、可以進人工驗收** |
 | `tasks.md` 的 `[review:ui]` checkbox／plan 的 `@human` 場景 receipt | checkbox 自己，或 `flow receipt` 寫進 `evidence/receipts.jsonl`（`ui-judgement` 卡） | **人真的在瀏覽器把那一頁開起來看過了** |
 
 **答佇列 NEVER 等於驗收**——答完就離開佇列，未勾的 `[review:ui]` 沒有任何畫面再提醒。所以**條目指向的 change 若還有沒勾的 `[review:ui]`，那條 NEVER 是佇列的題**：掃描端（`restatesManualReview()`，讀 `tasks/` 直下 live work 的未勾 checkbox，另以「`人工檢查` ＋ live work slug」文字 fallback）掛 `belongs-on-review`、**不**合成 通過／退回，但照樣留在佇列（**NEVER** 擋掉）。
 
-**NEVER 把未勾的 `[review:ui]` 各開一條進佇列**——一條 change 的驗收是一趟差事，家在 `ui-judgement` 卡。
+**NEVER 把未勾的 `[review:ui]` 各開一條進佇列**——一條 change 的驗收是一趟差事：plan 的 `@human` 場景家在 `ui-judgement` 卡，tasks.md 的 leaf 家在 checkbox 本身（evidence 齊了由 session owner 在 chat 一次交給 user，[[proactive-skills.manual-review-entry]] 第 4 步）。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 條目指向的 live change 有 ≥1 項未勾 `[review:ui]` → `belongs-on-review` lint ＋ 不合成 通過／退回。**warn-only，不 block** |
-| 消費端 | 寫該條目的 agent（看到 lint 就把它移回人工驗收流程）＋ `/decisions` 與 `flow pending` 上的 Charles（看到沒有通過鍵就知道要去逐條驗） |
+| 消費端 | 寫該條目的 agent（看到 lint 就把它移回人工驗收流程）＋ `flow pending` 上的 Charles（看到沒有通過鍵就知道要去逐條驗） |
 | 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`） |
 
 ## 驗收：已經出版的，NEVER 再問一次
@@ -123,7 +125,7 @@ paths:
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 三格證據全中 → `flow sources --apply` 寫 `work.accept`，佇列不再排那一列。**不 block**，只少問 |
-| 消費端 | `flow pending` 與 `/decisions`（同一支 `buildDecisionQueue`）；`flow accept` 保留給人 |
+| 消費端 | `flow pending`（同一支 `buildDecisionQueue`）；`flow accept` 保留給人 |
 | 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`）；判定器 `vendor/scripts/flow/landing.ts` |
 
 ## 🟡 / ✅ 標記
@@ -141,7 +143,7 @@ agent 代收走 `flow dismiss <span_id> --reason '<為什麼不再需要人>' [-
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 標題＋第一段命中結案語 ＋ 無未勾 checkbox ＋ 無未答選項 → 標 `self-closed`、不鑄 span、`flow sources` 印一行計數。**warn-only，不 block** |
-| 消費端 | 寫 / 編那份 carrier 的 agent（看到那一行就搬段或刪）；`flow pending` 與 `/decisions`（少一條問不到人的題） |
+| 消費端 | 寫 / 編那份 carrier 的 agent（看到那一行就搬段或刪）；`flow pending`（少一條問不到人的題） |
 | 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`）；判定器 `vendor/scripts/flow/decision-sources.ts` 的 `isSelfClosed`，對帳在 `decision-sync.ts` |
 
 ## 新問題優先走 `flow ask`
@@ -199,7 +201,7 @@ node vendor/scripts/herdr-session-handoff.ts --complete blocked \
 
 | 值 | 這題會怎樣 |
 | --- | --- |
-| `coordinator`（預設） | 照樣鑄 `decision.request`（`payload.audience: 'coordinator'`）、照樣送控制訊息喚醒 parent pane，但**不在** `/decisions` 與 `flow pending` 的預設佇列上（`--audience all` 才顯示） |
+| `coordinator`（預設） | 照樣鑄 `decision.request`（`payload.audience: 'coordinator'`）、照樣送控制訊息喚醒 parent pane，但**不在** `flow pending` 的預設佇列上（`--audience all` 才顯示） |
 | `charles` | 進人的佇列。parent pane 還活著時 helper 印一行 warn（不擋） |
 
 **MUST `--decision-for charles` 的判準是「這題只有 Charles 答得了」**（實機、線上帳號、對外承諾、密鑰、不可逆且他要負責的）。**NEVER** 因為「這題比較重要」就寫 `charles`。
@@ -211,7 +213,7 @@ child 判出「只有 Charles 答得了」時仍走 `--decision-for charles`，*
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | `--decision-for charles` 且 parent pane 的 wake 真的送達 → helper 收據帶 `warning`。**warn-only，不擋**：有些題就是要人，coordinator 在場不改變這件事 |
-| 消費端 | worker（填欄位）、coordinator（收控制訊息並 `flow answer`）、`/decisions` 與 `flow pending`（預設只顯示 `audience: charles`） |
+| 消費端 | worker（填欄位）、coordinator（收控制訊息並 `flow answer`）、`flow pending`（預設只顯示 `audience: charles`） |
 | 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`）＋ `rules/core/session-tasks.operations.md` § Herdr session transport；helper 的 completion handshake 樣板每次 dispatch 逐字帶給 worker |
 
 ### 一個拍板題 = 一個問題。底下的 bullet 是**選項**，NEVER 是**項目**
@@ -226,7 +228,7 @@ child 判出「只有 Charles 答得了」時仍走 `--decision-for charles`，*
 
 ### 在 chat 渲染過的 `Qn` 選項 MUST 同一個 turn 落 carrier
 
-在對話裡渲染成 `Q1` + A/B/C **不是登記**——`\my` 與 `/decisions` 讀 spine，spine 讀 carrier。**MUST 同一個 turn 兩邊都寫**：選項逐字寫進 carrier 的 bullet（或 `flow ask --option`）。**NEVER** 想著「等下再補進 HANDOFF」——沒選項的題 ingest 端會拒鑄 span，只剩一行給你的退件。
+在對話裡渲染成 `Q1` + A/B/C **不是登記**——`\my` 與 `flow pending` 讀 spine，spine 讀 carrier。**MUST 同一個 turn 兩邊都寫**：選項逐字寫進 carrier 的 bullet（或 `flow ask --option`）。**NEVER** 想著「等下再補進 HANDOFF」——沒選項的題 ingest 端會拒鑄 span，只剩一行給你的退件。
 
 ### NEVER 把選項寫進問句本文
 
@@ -305,10 +307,10 @@ node vendor/scripts/flow/flow.ts relend <span_id>
 
 ## 編輯既有不合格條目時 MUST 順手轉正
 
-**每一次**編輯一條已經在待拍板區段、但不符本檔形狀的 bullet 時，都 MUST 一併把它改成合格形狀（`/decisions` 與 `\my` 的 `✎ 來源檔有幾行差一點就是選項` 就是給你的）。
+**每一次**編輯一條已經在待拍板區段、但不符本檔形狀的 bullet 時，都 MUST 一併把它改成合格形狀（`flow pending` 與 `\my` 的 `✎ 來源檔有幾行差一點就是選項` 就是給你的）。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | item 落 ruling 桶且無選項（`no-options-under-ruling`）、body 含差一點就解析成功的行（`near-miss-option-line`），或 item 落 review 桶而三欄沒寫齊 / 證據不可點（`missing-evidence`）。**寫入路徑上三者都 warn-only、不 block**。**ingest 路徑上前者與後者拒鑄 span**（`decision-sync.ts` 的 `REJECTING_LINTS`），改成 `flow sources` 與 `handoff-scan` 的退件行並計入 exit code。`near-miss-option-line` 是**評語不是退件碼**，NEVER 拿它擋 ingest |
-| 消費端 | carrier 作者（退件收件人）＋ `/decisions` 與 `flow pending` 上的 Charles |
+| 消費端 | carrier 作者（退件收件人）＋ `flow pending` 上的 Charles |
 | 載入路徑 | 本檔，paths-gated 到 `HANDOFF.md` / `docs/tech-debt.md` / work-loop state——也就是寫這種條目的當下 |

@@ -18,7 +18,7 @@ Worktree、branch、archive、merge-back 的具體 carrier 由 target adapter �
 node vendor/scripts/wt-helper.ts add <slug> --task-summary "<一句話：這棵樹要做什麼>"
 ```
 
-`/wt` 自動使用 `session/<YYYY-MM-DD-HHMM>-<slug>` 命名；這是唯一不需另問 branch 名稱的例外。已在 worktree（`git rev-parse --git-dir` 含 `/worktrees/`）就不要疊建。寫入共享登記簿（`.clade/flow/` 的決策題、`.impeccable/questions/`）要落在 main checkout 才讀得到；`flow ask` 已自動改寫落點並明說，其餘寫入端未涵蓋（見 clade TD-798）。parent session cwd 不動；先依 [[worktree-default.detail]] 完成 pre-fork baseline guard。
+`/wt` 自動使用 `session/<YYYY-MM-DD-HHMM>-<slug>` 命名；這是唯一不需另問 branch 名稱的例外。已在 worktree（`git rev-parse --git-dir` 含 `/worktrees/`）就不要疊建。未顯式覆寫的 flow 事件寫入端與讀端共用 main checkout 的 `.clade/flow/events.jsonl`；linked worktree 找不到可用 main checkout 時，寫入端回報失敗，不把事件寫回待刪的樹。`flow ask` 另會明說題目的改寫落點。parent session cwd 不動；先依 [[worktree-default.detail]] 完成 pre-fork baseline guard。
 
 ## 強制載入指針
 

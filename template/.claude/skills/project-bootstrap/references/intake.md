@@ -19,6 +19,19 @@
 | `dev_port` | catalog `dev-port` | 登記時必問；`auto` 或自填 |
 | `deploy_track` | catalog `deploy-track` | 登記時必問 |
 
+### 由已簽 presale 包預填
+
+work-route 帶著已簽的 presale 包（`presale.json` status=signed）進來時，先讀它預填，再照上表補缺：
+
+| presale 欄位 | 預填 | 仍要確認 |
+| --- | --- | --- |
+| `case` | `project_name`，連帶 `target_path` 的預設 | 使用者可改名 |
+| `project.stack_hint` | `starter_preset` 的語意來源（照 § Starter preset mapping 對應） | 對不到唯一 preset 就問，**NEVER** 猜 |
+| `project.name`、`deliverables[].summary` | `business_activity` 的建議值 | catalog 題照問，建議值只當推薦選項 |
+| `PRODUCT.md`／`DESIGN.md` | 不在這裡帶入 | 由 `flow plan open --seed-from` 在 repo 沒有時帶入 |
+
+預填只縮短提問，**NEVER** 讓 `--yes` 略過 § AI 必須問的 catalog 題。
+
 ## AI 必須問的 catalog 題
 
 | catalog `id` | CLI flag | 何時問 |

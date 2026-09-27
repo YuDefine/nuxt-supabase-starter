@@ -45,7 +45,7 @@ tasks/
 
 ### 建檔的同一步順路鑄 work id（MUST）
 
-建完 tasks 檔的同一步 **MUST** 讓這件事在 /board 上有名字：
+建完 tasks 檔的同一步 **MUST** 讓這件事在 flow spine 上有名字：
 
 ```bash
 node ~/offline/clade/vendor/scripts/flow/flow.ts open <slug> \
@@ -60,7 +60,7 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts open <slug> \
 正是 79% 事件掛在 `orphan-` 名下的成因（clade 2026-08-27 實測）。
 
 鑄名 **fail-open**：clade home 不在、node 不在、指令非 0 exit，都**NEVER** 擋建檔或擋開工——
-照常做事，這件事在 /board 上叫 `未命名工作` 而已。
+照常做事，這件事在 spine 上沒有名字而已。
 
 **機械兜底**：`post-edit-task-file-work-open.sh`（PostToolUse `Edit|Write`）在 tasks 檔寫完的當下
 就地判，沒有具名 work item 就印出**填好本檔路徑與 slug 的**那條指令。它只印不擋，也**不代你鑄**——
@@ -204,7 +204,7 @@ slug 的重述，那正是這條規約要修的東西（一個不指涉任何東
 | `specs/plans/NNN-<slug>/tasks.md` | plan package 任務追蹤 | 該 plan 的 owner | per-plan 一檔 |
 | `ROADMAP.md`（repo 根目錄） | 中長期 backlog | 使用者與收工的 session | 單檔但低頻寫 |
 | `docs/tech-debt.md` | 永續追蹤 | 發現技術債時手動 | 單檔但低頻寫 |
-| `docs/solutions/`, `docs/decisions/` | 長期知識 | 任務結束時評估 | per-topic 一檔 |
+| 決策與會重現的教訓（落點依 [[knowledge-and-decisions]]：lifecycle repo 為 `specs/truth/**` 單位；未遷移 consumer 為當下工作的 plan／spec，既有 `docs/solutions/`、`docs/decisions/` 只原地更新） | 長期知識 | 任務結束時評估 | per-topic 一檔 |
 
 ---
 
@@ -561,8 +561,12 @@ agent 回完一個 turn 後照樣繼續工作。
 claim 綁的 successor session）在 `herdr agent list` 全域缺席；record 沒有 parent 身分可 probe 時改用
 替代證據，dispatch 年齡 ≥ 24h＋child pane 仍持 exact session＋呼叫者為 attended 主線三條同時成立。
 child 自己的 `--recover-orphan` one-way claim 仍在：它綁上 fresh successor 後 ownership 即轉給
-successor（等同 relay），只剩綁定前的窗口仍 fence——那個窗口連 `--coordinate-claim` 也會拒，
-唯一出口是 close pane＋`--adjudicate`。prompt-cache TTL 與 record 年齡各自對 ownership 零訊號
+successor（等同 relay），只剩綁定前的窗口仍 fence——claimant session 還活著時拒
+`--coordinate-claim`（它還可能綁定）；claimant 消失後，若 `recovery/<id>.binding.lock` 已保留
+且其 successor session 仍活著，也拒絕認領，避免 successor 已建 pane、claim 尚未寫入時出現
+兩個 coordinator。兩者都缺席才可認領；helper 在認領寫入前會重查。
+claimant 活著而要直接收攤時才走 close pane＋
+`--adjudicate`。prompt-cache TTL 與 record 年齡各自對 ownership 零訊號
 （年齡只在上面那組三條替代證據裡當一條腿）。一般 coordinated child仍禁止nested handoff，**只有**helper核准的 recovery token與 attested relay例外。
 已送出 `--complete blocked` 的 worker 若 receipt 的 `coordinator_wake` ≠ `sent*`，出口是 receipt `next_step` 指的 `/handoff relay`（pending decision 隨 brief 交棒），**NEVER** `--recover-orphan`。**bounded leaf** 的 `next_step` 指 `standby` 而非 relay：它沒有位置可交棒、也不能寫受審樹——pending decision 已隨 `--complete` 進 completion record 與 decision 佇列，probe 到 parent 在線就 `agent prompt` 叫醒，否則待命由 opener `--coordinate-resume` 收割。
 

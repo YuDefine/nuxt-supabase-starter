@@ -12,6 +12,18 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 
 此規則優先於個別 skill 說明與 ad-hoc 習慣。
 
+## Lifecycle repo（repo root 有 `specs/truth/work-lifecycle.md`）
+
+本節優先於下方的建議格式、生命週期、歷史段路由與銜接段，也優先於 [[decision-authoring]] 要求寫進 `HANDOFF.md` 的 `- [ ]` 條目；下方沒被本節改到的（claim、接手順序、transport）照舊。
+
+- `HANDOFF.md` 是現役工作的 view，不是待辦簿。**每一個**頂層項（檔內任何 `##` 段底下、欄 0 的 `-`／`*`／`1.` bullet）**MUST** 指向本 repo 一份現役 plan（`W-YYYY-MM-DD-<slug>`，`specs/plans/<該 id>/plan.md` 未 close），**NEVER** 寫未勾的 `- [ ]`（FR-028）。**沒有段落豁免**：`## Ready for review`、`## Awaiting Charles`、baseline snapshot block 底下的 bullet 一樣算
+- `Ready for review` 條目與拍板題 **NEVER** 寫成 `HANDOFF.md` 的 `- [ ]`：用 `flow ask --category review`（三欄照 [[decision-authoring]] § `Ready for review` 的三欄寫進題目）或 `flow ask --category ruling` 直接進待拍板佇列，所屬 plan § Open work 記一行
+- baseline snapshot block（`## Worktree & Stash Audit` 之類）**不**留在 `HANDOFF.md`：snapshot 寫進所屬 plan 的 `evidence/`，或不存、要時實跑產生；`HANDOFF.md` 只留指向該 plan 的 W- 指標行
+- 進行中、被擋、下一步的細節寫進該 plan 的 § Open work，`HANDOFF.md` 只留一行指標：`- W-2026-10-01-checkout-retry — 等金流商回覆，見 plan Open work`
+- 沒有 plan 可指的待辦，先 `flow plan open` 開 plan 或續跑既有 plan，再寫指標
+- 手寫或 renderer 產生都可以；判準相同，renderer 不是必要條件
+- adoption 前就在 `HANDOFF.md` 的舊項可留可刪，由遷移處置表清到 0；新寫進的未結項會被 consumer 的 pre-commit check `scripts/pre-commit/checks/consumer-carriers.sh` 擋下（判定式 `scripts/checks/consumer-carrier-gate.ts`；兩者都是 consumer repo 內的投影路徑，clade 源在 `vendor/scripts/pre-commit/checks/`、`vendor/scripts/checks/`，與本規約同一個 release 送達）
+
 ## 什麼時候建立或更新 `HANDOFF.md`
 
 符合以下任一情況，**MUST** 建立或更新專案根目錄的 `HANDOFF.md`：
@@ -23,6 +35,8 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 - 使用者明確要求留下交接
 
 ## 建議格式
+
+僅未遷移 consumer 適用；lifecycle repo 見上方 § Lifecycle repo（只有 W- 指標行，沒有 `- [ ]`）。
 
 ```markdown
 # Handoff
@@ -47,7 +61,7 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 ## 生命週期
 
 - `HANDOFF.md` 是 **session-scoped**
-- `HANDOFF.md` 只保留**尚未被接手**的項目，以及**當前 baseline snapshot blocks**（如 `## Worktree & Stash Audit` / `## Review-gui Readiness` / `## Parked changes` / `## Deferred discuss`）；snapshot block **MUST** 以覆寫式更新，**不**累積歷史版本
+- `HANDOFF.md` 只保留**尚未被接手**的項目，以及（僅未遷移 consumer）**當前 baseline snapshot blocks**（如 `## Worktree & Stash Audit` / `## Review-gui Readiness` / `## Parked changes` / `## Deferred discuss`）；snapshot block **MUST** 以覆寫式更新，**不**累積歷史版本
 - **不得**保留已完成 chronological session narrative；結案工作退出目前版本，歷史由 git 追溯（未遷移 consumer 的 rotate 規則見 § rotate）。
 - 新 session 接手後：**先建立 claim**（per [[session-claims]] § 3.5）→ 移除已接手項目 → 繼續執行
 - 所有項目都接完後：刪除 `HANDOFF.md`
@@ -76,11 +90,10 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 | `.clade/claims/**` | 即時 ownership / heartbeat | 短期、機器維護 |
 | `docs/archives/<YYYY-MM>-handoff-narrative.md` | 僅未遷移 consumer：從 HANDOFF rotate 過來的已完成 narrative | 長期、month-bucket append-only |
 | `docs/archives/<YYYY-MM>-<topic>.md` | 一次性 wave / 主題盤點成果（既有用途） | 長期 |
-| `docs/solutions/**` | 非直覺問題的解法沉澱 | 長期 |
-| `docs/decisions/**` | 架構決策與取捨 | 長期 |
+| 決策與會重現的教訓 | 落點依 [[knowledge-and-decisions]]：lifecycle repo 為它約束的 `specs/truth/**` 單位；未遷移 consumer 為當下工作的 plan／spec（既有 `docs/solutions/**`、`docs/decisions/**` 只原地更新，**NEVER** 開新檔） | 長期 |
 | `ROADMAP.md`（repo 根目錄） | 未來工作排序與優先度 | 持續維護 |
 
-**與 `session-tasks.md` 的銜接**：tasks 檔內未完項在 session 結束時若需下一 session 立刻接手，**MUST** 升到 `HANDOFF.md` 的 `## In Progress`，不能只留在 tasks 檔等下一 session 自己 grep。
+**與 `session-tasks.md` 的銜接**：tasks 檔內未完項在 session 結束時若需下一 session 立刻接手，**MUST** 升級，不能只留在 tasks 檔等下一 session 自己 grep——lifecycle repo 升到所屬 plan 的 § Open work 並在 `HANDOFF.md` 留一行 W- 指標；未遷移 consumer 升到 `HANDOFF.md` 的 `## In Progress`。
 
 ## 歷史段路由（`next` 2B.1 Health Gate 用）
 
@@ -93,7 +106,7 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 | **completed-narrative** | `## YYYY-MM-DD ...` 且**不**符 active / baseline 條件 | 從主檔刪除；歷史由 git 追溯。未遷移 consumer 仍可暫用 `rotate-handoff-done.ts` |
 | **ambiguous** | 介於上述之間、無法穩定判定 | 保守保留 `HANDOFF.md` + 標 review-pending（等下次 `next` 重判） |
 
-> **baseline 過度累積**：活的 baseline 段超過 `section_max_kb`（default 6 KB）就換載體（`docs/archives/<YYYY-MM>-<topic>.md`、`docs/solutions/`、`docs/decisions/`），主檔只留 pointer。
+> **baseline 過度累積**：活的 baseline 段超過 `section_max_kb`（default 6 KB）就換載體，主檔只留 pointer。lifecycle repo 換到所屬 plan 的 `evidence/`（現行契約才進 truth）；未遷移 consumer 換到既有的 `docs/archives/<YYYY-MM>-<topic>.md`；決策與教訓依 [[knowledge-and-decisions]]，**NEVER** 在 `docs/solutions/`、`docs/decisions/` 開新檔。
 
 審計訊號（handoff drift scan）對應的觸發點：
 
