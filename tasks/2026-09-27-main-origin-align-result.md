@@ -60,3 +60,32 @@ v1.13.36／v1.13.37 兩筆升版 commit 留在本機，desk `origin/main...main`
 - **規約**：照 clade 的 CLAUDE.md、tech-debt／plan 流程；需要時先登記 TD 再修。**NEVER** 回頭在 nuxt-supabase-starter
   手改 clade 投影檔。
 - **gate**：遇到 gate 失敗就停，不要向原 session 輪詢。
+
+## Relay 繼任者結果（2026-09-27）
+
+### 問題 1：歸因更正——不是 clade 工具
+
+2026-09-26T20:34:08Z 寫入 root `CLAUDE.md` 空殼與 root `AGENTS.md` 的是 codex session
+`01a0df67-53cc-72e0-a7f4-bb663c7afabc`（cwd=clade），依使用者指令「starter 那邊也要改掉 一致化」手寫 python 直接覆寫
+（`~/.codex/archived_sessions/rollout-2026-09-27T04-28-05-01a0df67-*.jsonl`，20:34:08.384Z 那筆 exec；
+同一筆也把 clade `AGENTS.md` 縮成 1 行，之後已回到 HEAD）。`sync-rules` 沒有在 root 跑過，所以「以 `local_dir`
+為 consumer root、拒絕寫入無 manifest 目錄」這項修正沒有實證，不做。
+
+`11838d0d` 還原 root `CLAUDE.md` 等於撤回了使用者當時的指令。要不要重做已放進待決佇列
+（flow ask，work `W-2026-09-27-orphan-9289b0`，掛在本 work 底下；推薦保留 37 行）。
+
+### 問題 2：SessionStart hook 沒套 `local_dir`——已修，待合併
+
+clade PR #428（work `W-2026-09-27-session-start-signal-local-dir`）：hook 改以 registry `local_dir` 判投影層，
+語意對齊 `audit-registry-reality.ts` 的 `resolveLocalPaths`。starter root 實跑不再報「都不存在」。
+
+### 問題 3：`/oops`——已收，並修上游成因
+
+clade plan `W-2026-09-27-untrack-runtime-file-rebase-deletes`（四條件、最小重現、fleet 掃描皆 none）。
+上游成因：propagate 只補 consumer root（`template/`）的 `.gitignore`，spine 卻寫在 git toplevel。
+clade PR #429 讓 `.clade/flow/` 自帶 `.gitignore`（比照 claims／ownership），五個寫入點共用。
+
+### starter 端補做
+
+`59fb81bf`：取消追蹤前一棒漏掉的 `.clade/ownership/.bash-stamp-*`（2 個）與 `.heartbeat-stamp`。
+推送前先確認與 origin `0 0`，沒有經過 rebase。
