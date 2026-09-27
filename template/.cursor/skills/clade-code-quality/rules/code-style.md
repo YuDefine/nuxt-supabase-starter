@@ -215,3 +215,11 @@ if (eligible || e.override) { ... }
 ```ts
 // @followup[TD-412] stripe SDK 在空字串 idempotencyKey 會 400，空值改傳 undefined。升級後刪。
 ```
+
+marker 說的是「這一行還有沒做完的工作」，所以它的壽命等於那個 id。把 id 標成結案（TD 改 `done` / `wontfix`、plan 離開 `active`）的**同一次改動**裡，處置 `git grep -n '@followup\[<id>\]'` 命中、且不在 `supabase/migrations/` 底下的**每一行**：成因仍有價值就改寫成不帶 marker 的出處，否則刪掉整行。
+
+```ts
+// stripe SDK 在空字串 idempotencyKey 會 400，空值改傳 undefined（TD-412 結案：升級後已不需要時刪）
+```
+
+2026-09-27 盤點：fleet 裡 17 個 marker 全數指向已結案的 TD。fleet 稽核跑 clade 的 `node scripts/audit-followup-markers.ts`。

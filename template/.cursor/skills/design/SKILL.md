@@ -36,7 +36,7 @@ impeccable 是 1 個 skill 含 23 個 sub-command：`craft`（deprecated alias�
 > **要升降版或排查安裝問題時讀 `references/impeccable-install.md`**；跑一次 design pass 不需要讀。Consumer 不自行升版，由 clade 統一更新再 propagate。
 
 ```bash
-npx skills add https://github.com/pbakaus/impeccable/tree/skill-v4.3.1 --agent claude-code --copy -y
+npx skills add https://github.com/pbakaus/impeccable/tree/skill-v4.3.1 --agent claude-code codex --copy -y
 "$IMPECCABLE/scripts/impeccable" engine-probe   # 預先下載 engine；印 impeccable-engine <ver>
 ```
 

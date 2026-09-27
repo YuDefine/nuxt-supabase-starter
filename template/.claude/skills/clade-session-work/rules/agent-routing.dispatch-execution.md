@@ -124,17 +124,17 @@ Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工�
 | Devin `swe-2-max` | Claude／GPT 額度（免費） | 派出的那台開發機：工具指令在本機跑 |
 | Pi（GPT-6 Sol、Grok 4.7、Gemini Flash） | 不省 | 派出的那台開發機 |
 
-**每輪就緒工作一次平行混搭派完**，逐件照下表判，不排「先 A 用完才輪 B」的序：
+**每輪就緒工作一次平行混搭派完**，逐件照下表由上往下判（第一列先攔下短任務），不排「先 A 用完才輪 B」的序：
 
 | 可觀察 predicate（先查 [[agent-routing.routing-table]] 列定 model 家族） | 載體 |
 | --- | --- |
+| 本 turn 收得回來的 bounded 工作——review、裁決、定位搜尋，也含短的實作／改檔（Claude-only 列，含 `dotclaude-authoring`；Pi 列照下方 Pi 列判） | in-process subagent（判準見 [[agent-routing]] § Dispatch data and transport boundary）；**NEVER** 為它開 cloud 或 Herdr pane |
 | Claude-only 列（`ui-view-implementation`、`design-review`、`ui-detailed-planning`、`screenshot-match-analysis`），符合下方「適合 cloud」且帳號額度有 slot | **cloud**（預設） |
-| Claude-only 列，但急件或不符合 cloud 條件；以及 `dotclaude-authoring`（commit 0-A 另見下方） | 本機 `cc`／`ccw` Herdr pane |
+| Claude-only 列（含 `dotclaude-authoring`），急件或不符合 cloud 條件，且屬 handoff 級／長時間／需隔離環境（commit 0-A 另見下方） | 本機 `cc`／`ccw` Herdr pane |
 | Pi 列，不急、慢也不堵塞 | Devin `swe-2-max`（desk，或已 `devin auth status` 登入的 zenbook） |
 | Pi 列，急件或會堵塞下游 | `cx` pane GPT-6 Sol xhigh，派到負載較低的那台（見 [[agent-routing.routing-table]]） |
 | `--tier-basis delegate-sub` | Grok 4.7 xhigh（照 [[agent-routing.routing-table]] § delegate-sub） |
 | 唯讀掃描（`read-heavy-scan`、`mechanical-fanout`） | 照原列 Gemini 3.8 Flash high／Grok |
-| review、裁決、定位搜尋這類本 turn 收得回來的 bounded 工作 | in-process subagent（上一節不變）；**NEVER** 為它開 cloud |
 | commit 0-A | **NEVER** cloud：0-A 只認 `claude-review-safe.sh` 的 subagent carrier |
 
 **適合 cloud** 要硬條件全中、工作形狀也對：

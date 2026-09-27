@@ -277,7 +277,7 @@ Hook / human review 偵測到違反時，輸出格式統一：
 
 ## 收工（session close-out）
 
-**Codex 適用邊界**：Codex 的 GPT 協作走其 runtime 原生 collaboration 能力（機制見 codex adapter 投影），由原上游持有收件、驗證與交付責任。下文 Herdr relay／fanout、每次派工以 successor 收尾及關閉上游的要求只適用支援該 pane transport 的其他 runtime；不得用於 Codex，也不得由 `\nx` 或 context 預算指示繞過此邊界。原生能力缺失時留下具體 blocker，不以外部 launcher 建立 Codex successor——唯一例外是 user 明確點名的 Devin bounded worker：create-only `--launcher devin` 經 helper 派工、上游以 `--coordinate` 收割，仍非 successor。
+**Codex 適用邊界**：Codex 與其他 runtime 用同一套判準（[[agent-routing]] § Dispatch data and transport boundary）——本 turn 收得回來的 bounded GPT 工作走其 runtime 原生 collaboration 能力（機制見 codex adapter 投影），由原上游持有收件、驗證與交付；收工殘工、handoff 級或長時間的獨立工作照下文走 Herdr relay／fanout 並以 successor 收尾。身分無法驗證的 Codex origin 由 helper fail closed，**NEVER** 以 `\nx` 或 context 預算指示繞過。
 
 > 本節是 [[session-tasks]] § Session context 預算 的下推正文。觸發錨是 `session-context-budget-warn.sh` 在收工線上的提示，不是本檔的 `paths:`——「收工」不對應任何檔案路徑。母檔常駐 Iron Law ＋ 兩級門檻表 ＋ 具名時機指針。
 
