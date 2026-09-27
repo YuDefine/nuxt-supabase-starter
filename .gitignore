@@ -24,6 +24,9 @@ temp
 .claude/.commit.lock
 .claude/.commit.lock.history/
 template/.wrangler/
+# flow 事件脊椎與 work-source mutex 是本機 runtime state（clade 規約：gitignored、只在本機）。
+# ai-control-plane／ownership 由各自目錄內 clade 管理的 .gitignore 涵蓋。
+.clade/flow/
 
 # 本地 MCP server 設定（含個人 absolute path，不適合共享）
 .mcp.json
