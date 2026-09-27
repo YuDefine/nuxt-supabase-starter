@@ -50,7 +50,7 @@ v1.13.36／v1.13.37 兩筆升版 commit 留在本機，desk `origin/main...main`
 你是**繼任者**，不是被派出去做子工作的 worker。前一個 session（W-2026-09-27-nuxt-supabase-starter-main-wip）
 已經完成 starter 端的收斂並推上 origin（`11838d0d`），因此交棒；手上**沒有** in-flight dispatch。
 
-- **cwd**：`<clade-central-repo>`（main checkout）
+- **cwd**：`<home>/offline/nuxt-supabase-starter`（已乾淨、與 origin 對齊）。clade 端的修改依 clade 規約在 clade 自己的 worktree 進行，**NEVER** 直接改共用的 clade main checkout
 - **工作**：處理上面「交給 clade 的問題」1、2、3——找出在 nuxt-supabase-starter repo root（而非 registry
   `local_dir` = `nuxt-supabase-starter/template`）跑 rule projection／SessionStart 判定的呼叫端，修成以 `local_dir`
   作為 consumer root，並對沒有 `.clade/manifest.json` 的目錄 fail closed（不寫空殼）。
