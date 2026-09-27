@@ -533,5 +533,5 @@ Skills 是根據上下文自動載入的。如果沒有觸發，可以明確提�
 
 - [Claude Code 官方文件](https://docs.anthropic.com/claude-code)
 - [skills.sh](https://skills.sh) - AI Skills 管理平台
-- [CLAUDE.md](../CLAUDE.md) - 本專案的開發規範
+- [.claude/rules/meta-repo.md](../.claude/rules/meta-repo.md) - 本專案 root（meta 層）的規範；root `CLAUDE.md` 只是空殼入口
 - [OPENSPEC.md](../template/docs/OPENSPEC.md) - Spectra 工作流程
