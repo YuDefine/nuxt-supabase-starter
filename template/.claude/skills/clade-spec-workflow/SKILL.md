@@ -1,6 +1,6 @@
 ---
 name: "clade-spec-workflow"
-description: "Specification and requirements workflow rules. Use when work involves SDD, BDD, SpecFormula, decisions, or structured plans."
+description: "Specification and requirements workflow rules. Use when work involves SDD, BDD, SpecFormula, decisions, structured plans, or pre-BDD legacy tests."
 ---
 
 # clade-spec-workflow

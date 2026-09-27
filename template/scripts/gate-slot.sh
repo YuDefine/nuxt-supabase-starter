@@ -104,6 +104,8 @@ _default_lock_dir() {
 LOCK_DIR=${CLADE_GATE_LOCK_DIR:-$(_default_lock_dir)}
 [ "$mode" = status ] || mkdir -p "$LOCK_DIR" 2>/dev/null || exec "$@"
 
+# 上限 clamp（8）與 CI 併發設定的 SoT：scripts/test-lanes/lane-capacity.json
+# runner.heavyGateSlotsMax——改這裡的 clamp 時同步那個檔（test/lane-capacity-sot.test.ts 擋漂移）。
 SLOTS=${CLADE_HEAVY_GATE_SLOTS:-2}
 case "$SLOTS" in
   '' | *[!0-9]*) SLOTS=2 ;;

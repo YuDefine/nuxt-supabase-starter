@@ -4,7 +4,9 @@
 #
 # 行為：
 # - 只在 session 首次觸發時輸出提醒（透過 flag file）
-# - 搜尋 docs/solutions/ 和 docs/verify/ 是否有相關經驗
+# - 提醒去既有知識載體找相關經驗：lifecycle repo（有 specs/truth/work-lifecycle.md）是
+#   specs/truth/**；未遷移 consumer 是既有的 docs/solutions/、docs/decisions/
+# - 新教訓的落點同 knowledge-and-decisions 規約：NEVER 叫 agent 在 docs/ 開新檔
 # - 根據有沒有 session task 檔引導不同流程
 # - 不阻擋（exit 0），純提醒
 #
@@ -44,6 +46,15 @@ if [ -f "$FLAG_FILE" ]; then
 fi
 touch "$FLAG_FILE"
 
+# 知識載體依 repo 是否已採用 lifecycle 分支（判準同 consumer-docs-retirement 規約）
+if [ -f "${_PROJECT}/specs/truth/work-lifecycle.md" ]; then
+  KNOWLEDGE_SEARCH="specs/truth/**（specs/truth/owners.md 查該模組歸哪個單位）"
+  KNOWLEDGE_RECORD="結束前把已驗證、會重現的教訓併進它所屬的 truth 單位（per knowledge-and-decisions）"
+else
+  KNOWLEDGE_SEARCH="docs/solutions/、docs/decisions/"
+  KNOWLEDGE_RECORD="結束前把教訓寫進當下工作的 plan／spec（NEVER 在 docs/solutions/ 開新檔）"
+fi
+
 # 檢查有沒有 session task 檔（tasks/<date>-<slug>.md）
 HAS_ACTIVE_TASK=false
 TASK_NAME=""
@@ -62,7 +73,7 @@ if [ "$HAS_ACTIVE_TASK" = true ]; then
 📚 知識搜尋提醒（首次編輯）：
 
 Session task: ${TASK_NAME}
-- 查詢相關經驗：搜尋 docs/solutions/ 是否有相關問題記錄
+- 查詢相關經驗：搜尋 ${KNOWLEDGE_SEARCH} 是否有相關記錄
 - 查詢現有規格：讀 isa.yml 與 specs/ 確認實作方向與規格一致
 EOF
 )
@@ -73,9 +84,9 @@ else
 ⚠️ tasks/ 底下沒有本次工作的 task 檔。建議：
 - 非瑣碎工作 → 先開 tasks/<date>-<slug>.md（per session-tasks 規約）
 - 需要規格 → 走 SpecFormula／aixbdd（specs/plans/）
-- 純 debug/hotfix → 可直接實作，但結束前考慮 docs/solutions/ 記錄
+- 純 debug/hotfix → 可直接實作，${KNOWLEDGE_RECORD}
 
-搜尋既有知識：docs/solutions/
+搜尋既有知識：${KNOWLEDGE_SEARCH}
 EOF
 )
 fi

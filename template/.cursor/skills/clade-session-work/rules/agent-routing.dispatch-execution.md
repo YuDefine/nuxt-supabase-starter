@@ -140,10 +140,10 @@ Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工�
 | 本 turn 收得回來的 bounded 工作——review、裁決、定位搜尋，也含短的實作／改檔（Claude-only 列，含 `dotclaude-authoring`；Pi 列照下方 Pi 列判） | in-process subagent（判準見 [[agent-routing]] § Dispatch data and transport boundary）；**NEVER** 為它開 cloud 或 Herdr pane |
 | Claude-only 列（`ui-view-implementation`、`design-review`、`ui-detailed-planning`、`screenshot-match-analysis`），符合下方「適合 cloud」且帳號額度有 slot | **cloud**（預設） |
 | Claude-only 列（含 `dotclaude-authoring`），急件或不符合 cloud 條件，且屬 handoff 級／長時間／需隔離環境（commit 0-A 另見下方） | 本機 `cc`／`ccw` Herdr pane |
-| Pi 列，不急、慢也不堵塞 | Devin `swe-2-max`（desk，或已 `devin auth status` 登入的 zenbook） |
-| Pi 列，急件或會堵塞下游 | `cx` pane GPT-6 Sol xhigh，派到負載較低的那台（見 [[agent-routing.routing-table]]） |
-| `--tier-basis delegate-sub` | Grok 4.7 xhigh（照 [[agent-routing.routing-table]] § delegate-sub） |
-| 唯讀掃描（`read-heavy-scan`、`mechanical-fanout`） | 照原列 Gemini 3.8 Flash high／Grok |
+| `--tier-basis delegate-sub` | 經 `pi-dispatch.ts` admission，Grok 4.7 xhigh（照 [[agent-routing.routing-table]] § delegate-sub） |
+| Routing Table 首跳是 Gemini／Grok 的任何 Pi 列 | 經 `pi-dispatch.ts` admission，照原列的 model、effort、pool 與 fallback 鏈派送；不得改派 Devin 或 `cx` pane 跳過首跳 |
+| 其他 Pi 列，不急、慢也不堵塞 | Devin `swe-2-max`（desk，或已 `devin auth status` 登入的 zenbook） |
+| 其他 Pi 列，急件或會堵塞下游 | `cx` pane GPT-6 Sol xhigh，派到負載較低的那台（見 [[agent-routing.routing-table]]） |
 | commit 0-A | **NEVER** cloud：0-A 只認 `claude-review-safe.sh` 的 subagent carrier |
 
 **適合 cloud** 要硬條件全中、工作形狀也對：
@@ -183,7 +183,7 @@ brief 叫 pane 呼叫的 skill，可不可呼叫由**目標端投影 SKILL.md �
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | brief 以指名形式叫 Claude child 呼叫目標端 `disable-model-invocation: true` 的 skill → Herdr dispatch exit 15 `skill_not_invocable`，零 pane、零 record；CLI exit 1 |
-| 消費端 | 正在派工的主線（拒絕訊息附 `flow ask` 範本）；`\my`／`/decisions` 承接改開的拍板題 |
+| 消費端 | 正在派工的主線（拒絕訊息附 `flow ask` 範本）；`\my` 承接改開的拍板題 |
 | 載入路徑 | 本節（決定派工、寫 brief 前 MUST Read 本檔）；判定式在 `vendor/scripts/lib/brief-skill-invocability.ts` |
 
 ## 必禁事項 — Dispatch 入口（原在 `agent-routing.md` § 必禁事項）

@@ -34,7 +34,7 @@ tasks 檔有未勾 `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / multi-marke
 pnpm test:e2e:verify <change>
 ```
 
-**Evidence**：pass 後跑 `evidence-store.mjs --write --kind verified-e2e --spec <path> --trace <path>`，把印出的 `(verified-e2e: <ISO-8601>)` 貼到行尾（[[review-gui-surface]] § Evidence 寫入路徑）。
+**Evidence**：pass 後跑 `evidence-store.mjs --write --kind verified-e2e --spec <path> --trace <path>`，把印出的 `(verified-e2e: <ISO-8601>)` 貼到行尾（payload 進 sidecar）。
 
 **Gate 結果**（e2e 與 api 相同）：automatic channel，annotation present 即通過，session owner 可直接勾 `[x]`（per [[manual-review]] § automatic channel 例外）。缺 annotation 時 item 留在未勾狀態，**NEVER** 在那個狀態下報完成。
 
@@ -107,7 +107,7 @@ ephemeral data 在下一次 db:reset 就消失，截圖跟著 stale（[[pitfall-
 
 ##### Detection（hard rule）
 
-任何時候要**斷定** consumer **有沒有** dev-login route（決定 scaffold、判 baseline-blocked、向 user 報告不存在、確認 review-gui「🚧 baseline 不齊」badge）——**MUST** 使用以下兩種路徑之一，**NEVER** 用 lazy grep / narrow `find`（root-only 搜尋對 monorepo 必 false-negative），也 **NEVER** 把 badge（derived signal）當證據直接回報 user：
+任何時候要**斷定** consumer **有沒有** dev-login route（決定 scaffold、判 baseline-blocked、向 user 報告不存在）——**MUST** 使用以下兩種路徑之一，**NEVER** 用 lazy grep / narrow `find`（root-only 搜尋對 monorepo 必 false-negative）：
 
 1. **CLI**（一次性 / cross-consumer 全景；**MUST 從 clade home 跑**，script 不散播到 consumer）：
    ```bash
@@ -147,7 +147,7 @@ Detection 確認 missing **且**有對應 auth-module 的 cookbook template 時�
 
 ### `[review:ui]` flow（真的需要人）
 
-tasks.md 仍有未勾 `[review:ui]` 項時，第一動作 **MUST** 是 auto-triage 後跑 `flow gates --repo-only --require-empty`（[[proactive-skills.manual-review-entry]]）；exit 3 才把人導向面板（`pnpm review:ui --print`）。**NEVER** 預設在 chat 內逐項彈對話框——那只在面板不可用（服務起不來、使用者拒絕 GUI、純 backend 無 UI 證據）時當 fallback：逐項展示證據、問是否通過、依答覆勾選 / 保留 / 註記 skip。
+tasks.md 仍有未勾 `[review:ui]` 項時，第一動作 **MUST** 是 auto-triage（[[proactive-skills.manual-review-entry]]）。tasks.md 的 leaf 不會變成 `flow gates` 卡片，所以推完仍 pending 且 evidence 已齊的 leaf 直接在 chat 交給 user（該檔第 4 步）：逐項展示證據與截圖、問是否通過，再依使用者原話照 [[manual-review]] § 核心規則第 3–6 步直接寫回 tasks.md 的 leaf（OK → `[x]`；有問題 → 保持 `[ ]` ＋ `（issue: <原話>）`；skip → `[x]` ＋ `（skip）`）。tasks.md 的 checkbox 本身就是載體；`flow receipt` 只收 plan package 的 `@human` scenario id，**NEVER** 拿它落 tasks.md 項。
 
 Pre-Review Data Readiness 的違反由 `vendor/scripts/manual-review-check.sh`（patterns 在 `vendor/snippets/manual-review-enforcement/patterns.json`）在寫入時攔；沒有第二道攔截，發現漏網就直接改 tasks 檔並重跑。
 

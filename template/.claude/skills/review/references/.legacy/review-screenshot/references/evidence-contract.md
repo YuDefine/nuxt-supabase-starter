@@ -180,9 +180,9 @@ agent-browser --session ssr eval "localStorage.setItem('nuxt-color-mode','light'
 
 ### 兩類截圖必分清楚
 
-| 類別 | 用途 | 資料夾 | 檔名 | review GUI 是否會自動載入 |
+| 類別 | 用途 | 資料夾 | 檔名 | 是否依 item id 配對 |
 | --- | --- | --- | --- | --- |
-| **A. 人工檢查截圖** | 對應 工作計畫 tasks.md `## 人工檢查` 各 item | **MUST** `screenshots/<env>/<change-name>/`（資料夾名 == change name，不是 phase / section / 自由語義） | **MUST** `#<item-id>[<variant>]-<descriptor>.png`（id 與 tasks.md `## 人工檢查` 的 `#N` / `#N.M` 完全相等） | ✅ 是，`pnpm review`（從 clade home）自動配對 |
+| **A. 人工檢查截圖** | 對應 工作計畫 tasks.md `## 人工檢查` 各 item | **MUST** `screenshots/<env>/<change-name>/`（資料夾名 == change name，不是 phase / section / 自由語義） | **MUST** `#<item-id>[<variant>]-<descriptor>.png`（id 與 tasks.md `## 人工檢查` 的 `#N` / `#N.M` 完全相等） | ✅ 是，`audit-screenshot-staleness.ts` 依 `#N` 前綴配對 |
 | **B. Ad-hoc / debug 截圖** | 探索、debug、screenshot review 視覺 QA、其他驗證 | `screenshots/<env>/<semantic-topic>/`（自由語義） | 自由命名 | ❌ 否 |
 
 截圖前**MUST** 先確定這次拍的是 A 還是 B（混在同一資料夾 = 配對失敗）：
@@ -198,7 +198,7 @@ agent-browser --session ssr eval "localStorage.setItem('nuxt-color-mode','light'
 - **NEVER** 直接存到 `screenshots/`、`screenshots/local/`、`screenshots/<env>/_archive/`、專案根目錄、`temp/`
 - **NEVER** 在 `screenshots/<env>/_archive/` 下建立新資料夾 — `_archive/` 只給 `/screenshots-archive` skill 寫入
 
-### A 類：人工檢查截圖（review:ui 配對用）
+### A 類：人工檢查截圖
 
 > 本節的 `<change-name>` 與 `openspec/changes/<change-name>/tasks.md` 只適用 openspec 載體。plan package 載體的 tasks 檔是 `specs/plans/<work-id>/tasks.md`；截圖資料夾的配對規則尚未為 plan package 定義，`audit-screenshot-staleness.ts` 也只掃 `openspec/changes`，plan package 的截圖要人工核對。
 
@@ -255,7 +255,7 @@ mkdir -p screenshots/local/<change-name>
 ✅ #8.2-salary-positive.png       # parent item #8.2
 
 ❌ 8.1-home.png                   # legacy section.item，缺 `#` → 改 `#1-home.png`
-❌ clock-light.png                # 沒有 id token，review:ui 找不到對應 item
+❌ clock-light.png                # 沒有 id token
 ❌ #1_clock-light.png             # 用 `_` 而非 `-`，pattern 不認
 ```
 
@@ -523,7 +523,7 @@ Verify Mode **MUST NOT** 執行 mutation、form fill、click sequence、multi-ro
 
 | 結果 | 條件 | 主 session 處置 |
 | --- | --- | --- |
-| **PASS** | known URL 載入成功 + readiness gate 命中（有 `ready_signal` 則 signal present + post-capture cross-check 截圖 DOM 仍含）+ final-state screenshot 已截 + DOM observation 可描述 | 主 session 跑 `evidence-store.mjs --write --kind verified-ui --screenshot <path> [--dom <obs>]`，把它印出的短 marker 貼進行內；checkbox 保持 `[ ]` 等 user GUI 確認 |
+| **PASS** | known URL 載入成功 + readiness gate 命中（有 `ready_signal` 則 signal present + post-capture cross-check 截圖 DOM 仍含）+ final-state screenshot 已截 + DOM observation 可描述 | 主 session 跑 `evidence-store.mjs --write --kind verified-ui --screenshot <path> [--dom <obs>]`，把它印出的短 marker 貼進行內；checkbox 保持 `[ ]` 等 user 確認 |
 | **FAIL** | URL 載入成功但 final state 明確不符合 item description；或 post-capture cross-check 發現 `ready_signal` 不在截圖當下 DOM 內 | 主 session 寫 `（issue: <details>）` 並回報 user |
 | **UNCERTAIN** | 撞登入頁、缺 seed、known URL 不足、需要 mutation / form fill / 多角色切換才能驗 | 主 session 不寫 annotation，改補 baseline 或改派 `verify:e2e` / `verify:api` |
 | **UNCERTAIN(content-not-rendered)** | readiness gate 逾時 15s 仍未見 `ready_signal`（async 資料未到 / query error 被 UI fallback 成合法外觀 / seed 缺局部資料）| 主 session 不寫 `(verified-ui:)`；讀 `_exploration/#<N>-content-not-rendered.png` diagnostic + progress samples 判斷 seed / query / auth / UI-fallback 哪一類，補對應 baseline 後重派 |
@@ -780,7 +780,7 @@ for (const bp of BREAKPOINTS) {
 
 完成 `review.md` 後 **MUST** 逐列核對 § 證據對應表：缺欄的圖是 NON-EVIDENCE，空白／載入中的圖依 § 拍前 Emptiness Preflight 重拍（沒有機械稽核替你擋）。
 
-若有缺口，先整理 `_exploration/`、補拍 final-state、或回報主 session 補 `@no-screenshot`，不要把問題留給人在面板裡猜。
+若有缺口，先整理 `_exploration/`、補拍 final-state、或回報主 session 補 `@no-screenshot`，不要把問題留給人猜。
 
 ## 回傳給主 session
 

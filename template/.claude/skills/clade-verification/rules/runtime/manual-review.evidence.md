@@ -7,4 +7,4 @@ paths: ['tasks/**', 'specs/plans/**']
 
 # Claude evidence transport
 
-Claude uses its native `Skill` and `Agent` surfaces for evidence collection, while the shared parser-facing `#N` / `#N.M`, kind, marker, freshness, and annotation contracts remain authoritative. A `review:ui` item is handed to the shared review-gui surface after Claude has collected the permitted evidence. `AskUserQuestion` is a fallback consent surface only when the review-gui is unavailable; it does not change item ownership.
+Claude uses its native `Skill` and `Agent` surfaces for evidence collection, while the shared parser-facing `#N` / `#N.M`, kind, marker, freshness, and annotation contracts remain authoritative. `AskUserQuestion` may collect the user's decision on a `review:ui` item after Claude has collected the permitted evidence; it does not change item ownership.

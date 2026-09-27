@@ -1,6 +1,6 @@
 ---
 name: notion-hub
-description: "consumer 所屬 Notion hub 的唯一入口。Use when 看 board／進度、評估或認領客戶票、在 prod 發現問題要建票、建決策題問客戶拍板、或問客戶驗收了沒。NOT for 生命週期狀態同步（由 notion-sync 跟隨 flow 事件推進）、未宣告 notion.hub 的 repo、clade 內部待拍板題（走 flow ask 與 /decisions）。"
+description: "consumer 所屬 Notion hub 的唯一入口。Use when 看 board／進度、評估或認領客戶票、在 prod 發現問題要建票、建決策題問客戶拍板、或問客戶驗收了沒。NOT for 生命週期狀態同步（由 notion-sync 跟隨 flow 事件推進）、未宣告 notion.hub 的 repo、clade 內部待拍板題（走 flow ask）。"
 ---
 
 <!-- clade-skill-scope: both -->

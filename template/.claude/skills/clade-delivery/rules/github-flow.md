@@ -137,7 +137,7 @@ Draft 維持 draft 直到 review。slice **worker NEVER merge**、**NEVER** `gh 
 | 身分 | coordinator（主線）。slice **worker** 仍不得 merge，本節不改 worker 權限 |
 | 品質證據 | 該 head 的 `/commit` gates 已有實際證據（0-A receipt 的 requested／observed 合格、0-C 結論行、其他已觸發 gate）。缺任一格就停，回報缺口 |
 | CI | 該 head SHA 的 required checks 全綠；draft 期間 skipped 的 test-lane 在 `gh pr ready` 後必須補跑轉綠才合 |
-| 人工 gate | 該 PR 沒有待 Charles 處理的 human gate 或 leftover（`merge-unattended` 授權 JSON 的 `human.status=blocked-charles` 或 `leftovers` 非空的同型狀態），也沒有有效的 do-not-merge hold。沒有 batch 時查：該 work id 在 `flow pending`／`/decisions` 有沒有未答的 ask、PR 上有沒有 do-not-merge 標記或留言、該 repo `HANDOFF.md` 有沒有把這件標成等 Charles。有就停，那是「Charles 還沒看的東西」，不是授權問題 |
+| 人工 gate | 該 PR 沒有待 Charles 處理的 human gate 或 leftover（`merge-unattended` 授權 JSON 的 `human.status=blocked-charles` 或 `leftovers` 非空的同型狀態），也沒有有效的 do-not-merge hold。沒有 batch 時查：該 work id 在 `flow pending` 有沒有未答的 ask、PR 上有沒有 do-not-merge 標記或留言、該 repo `HANDOFF.md` 有沒有把這件標成等 Charles。有就停，那是「Charles 還沒看的東西」，不是授權問題 |
 | 落地授權 | 該 work item 的落地授權（`batch ready --authorize-landing` 所依據的工作授權）仍有效、未被撤回；已撤回就停。沒有 batch 時查：`flow status <work id>` 不是 `dropped`／`parked`，以及該 work 的授權載體（plan.md 或派工 brief 的授權段）沒有被改寫成停止或撤回。合併不需逐張授權，**不等於**撤回過的工作也能合 |
 | 部署 | 合併前跑 `deploy-trigger-check.ts`；合併會觸發 production（`derived=push-main` 或 `pr-merge`）或 `status` 不是 `confirmed` 時停，另問**發版**授權——發版仍是獨立授權（上方事件表「發版」列），本節只解除合併的授權 |
 | head 釘住 | 仍是 draft 就先 `gh pr ready <N>` 並等 CI 補跑轉綠，再以 `gh pr merge <N> --squash --match-head-commit <已審 head SHA>` 合併；head 在審查後前移就停，先重驗受影響範圍（§ 證據綁定） |

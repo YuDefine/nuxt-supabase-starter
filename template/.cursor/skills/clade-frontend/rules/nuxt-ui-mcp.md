@@ -35,7 +35,58 @@ path scope 含 `specs/plans/**/{spec,plan,design-review}.md`，**不是**只有�
 
 只在實作階段載入這條規則，等於只擋住便宜的那一層。元件選擇在設計文件寫下「用 USlideover 400px」的當下就定了，到實作階段才想起要查 MCP，能修的只剩 prop 名稱——架構已經不能動。
 
-設計階段的具體要求（候選 ≥2、寫明淘汰理由）見 `design` skill § Step 1.8 Component Candidates。
+設計階段的具體要求（候選 ≥2、寫明淘汰理由）見下方 § Component Candidates。
+
+---
+
+## Component Candidates（設計階段）
+
+**MUST** 對 plan 內每一個 UI surface 走完以下三件事，缺一不可：
+
+1. **Query**——用 `nuxt-ui-remote` MCP（`search-components` / `get-component` / `list-examples` / `search-composables`）取得該場景可用的元件與其真實 slot / variant / prop。**NEVER** 憑記憶列元件
+2. **列出 ≥2 個候選組合**——不是「找到一個能做的就寫進 plan」。單一元件能達成的需求，組合起來體驗常更好（例：`USelect` 可以，但 `UInput` + `UCommandPalette` 支援搜尋與鍵盤操作）
+3. **讓使用者挑**——agent **NEVER** 代選。在對話中列出候選與各自的取捨讓使用者選；難以用文字比較時用 impeccable `live`／`generate` 出變體讓使用者看了再挑。選擇理由與被淘汰的候選寫進 plan
+
+**Plan 寫入格式**：
+
+```markdown
+### Component Candidates
+Surface：管理後台的刀具選擇欄位
+Query 來源：nuxt-ui-remote `search-components: select`, `get-component: UCommandPalette`
+
+| 候選 | 組成 | 適合 | 不適合 |
+| --- | --- | --- | --- |
+| A | `USelect` | 選項 < 20、純點選 | 無搜尋、長清單難用 |
+| B | `UInput` + `UCommandPalette` | 選項多、需搜尋與鍵盤操作 | 首次使用者不知道可以打字 |
+| C | `UModal` + `UTable` | 需要同時看多欄資訊再選 | 開關 modal 打斷流程 |
+
+選擇：**B**（使用者選定）。刀具編號有數百筆且使用者記得部分編號，搜尋是主要入口。
+淘汰：A 選項數量撐不住；C 的資訊量在這個欄位用不到。
+```
+
+**Block 條件**：plan 涉及 UI surface 但缺 Component Candidates 區塊、該區塊只列一個候選、或候選不是使用者選的 → **不得**進實作。
+
+**選定之前**可對候選跑 impeccable `critique`（persona 與認知負擔評估），不要等實作完。
+
+### live 在 Nuxt 專案的接法
+
+live 的前提是「dev server with HMR **或一個靜態 HTML 檔**」。**Nuxt 專案走靜態 HTML 那條**：live 注入的是 `<script src="http://localhost:PORT/live.js">`，而 Nuxt 4 的 `app/app.vue` 是 Vue SFC——template 內沒有 `</body>` 可當 anchor，也不接受 `<script>` 標籤。改寫 HTML shell 只為了掛 live，是拿 SSR 輸出去換一個設計階段工具，不划算。
+
+讓 live 作用在 mockup 目錄：
+
+```jsonc
+// .impeccable/live/config.json
+{
+  "files": ["design/mockups/**/*.html"],
+  "insertBefore": "</body>",
+  "commentSyntax": "html",
+  "cspChecked": true
+}
+```
+
+mockup 用 Tailwind CDN 寫近似版即可——這個階段比的是版面與互動模式，不是像素級的元件還原。真元件的 API 細節由上面的 query 負責、實作時驗。live 的 poll **MUST** 走背景任務，不要用短 timeout 阻塞 shell。
+
+**為什麼是強制 step**：實作後才發現「另一個組合體驗更好」，代價是整段重做。候選比較在 plan 階段做，成本是幾分鐘；在實作後做，成本是重寫。
 
 ---
 

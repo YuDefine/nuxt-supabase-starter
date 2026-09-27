@@ -22,7 +22,7 @@ import {
 } from 'node:fs'
 import { hostname, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isRecord, parseJsonRecord, parseJsonWith } from './lib/json-unknown.ts'
 import {
@@ -63,6 +63,28 @@ import {
   type SourceInventory,
 } from './preservation-policy.ts'
 import { preservationProfileFor } from './preservation-profiles.ts'
+import { reconcileLandedProjectionState } from './lib/projection-ledger-reconcile.ts'
+
+// clade keeps flow beside this file; consumers receive the same modules under
+// .clade/vendor/scripts/flow. Resolve that existing projection once at module load
+// so scripts/wt-helper.ts can import wt-batch from either layout.
+const scriptDir = dirname(fileURLToPath(import.meta.url))
+const localFlowDir = join(scriptDir, 'flow')
+const flowDir = existsSync(join(localFlowDir, 'emit.ts'))
+  ? localFlowDir
+  : join(scriptDir, '..', '.clade', 'vendor', 'scripts', 'flow')
+const flowModule = (name: string) => pathToFileURL(join(flowDir, name)).href
+const [
+  { spinePathIn },
+  { migrateSpineEventsFile },
+  { sharedSpineWriteRoot },
+  { repositorySpineRoot },
+] = await Promise.all([
+  import(flowModule('emit.ts')) as Promise<typeof import('./flow/emit.ts')>,
+  import(flowModule('spine-migration.ts')) as Promise<typeof import('./flow/spine-migration.ts')>,
+  import(flowModule('shared-spine.ts')) as Promise<typeof import('./flow/shared-spine.ts')>,
+  import(flowModule('spine-context.ts')) as Promise<typeof import('./flow/spine-context.ts')>,
+])
 
 export interface BatchLifecycle {
   bootstrap: (main: string, path: string) => void
@@ -382,6 +404,25 @@ export interface WorktreeBatch {
     // aside — the exact restore list, so rollback never renames a
     // pre-existing file that merely shares the prefix.
     detachedPointers?: string[]
+    // TD-1126: the legacy worktree `.clade/flow/events.jsonl` migrated into
+    // the repository's main-checkout spine before removal — journaled so an
+    // interrupted pass can prove the move (read-back verified), not just a
+    // count. `generation` binds the record to the preservation capture it
+    // rode in on.
+    spineMigration?: {
+      source: string
+      destination: string
+      generation?: string
+      sourceDigest: string
+      migratedIds: string[]
+      duplicates: number
+      verified: boolean
+      at: string
+    }
+    // TD-1135: admin-dir scratch drift (COMMIT_EDITMSG / index / ORIG_HEAD /
+    // logs/HEAD) adopted as the removal baseline under a pinned clean HEAD —
+    // the re-seal is journaled so adopting is auditable, never silent.
+    adminReseal?: { paths: string[]; head: string; at: string }
   }
 }
 export interface BatchTimeline {
@@ -1314,6 +1355,230 @@ function captureVerifyBaseline(
     baseline.git = scopedLiveGitInventory(sourcePath, common, profile)
   }
   return baseline
+}
+
+// ---- TD-1126/TD-1135: confined-drift adoption -------------------------------
+//
+// Two drifts are legitimate on an otherwise-removable source and must not
+// retain it forever:
+//
+//   `.clade/flow/events.jsonl` — events appended to the legacy worktree spine after
+//     preservation captured it. Removal may proceed only AFTER the records
+//     are migrated (locked append + read-back) into the repository's main
+//     spine, journaled with the source digest and migrated ids; the live
+//     divergent state is then adopted as the verify baseline so the file's
+//     final bytes ride into the trash copy instead of silently vanishing.
+//     Adoption covers only events.jsonl and its newly created parent directories; a malformed
+//     or id-conflicting source file still retains.
+//
+//   `worktrees/<id>/{COMMIT_EDITMSG,index,ORIG_HEAD,logs/HEAD}` — admin-dir
+//     scratch a concurrent `git status`/commit leaves behind after the
+//     landed-head check already ran. Re-sealed as the baseline only while
+//     HEAD still equals the receipt's captured head and the checkout is
+//     clean; every other admin path retains.
+
+const FLOW_SPINE_DIR = '.clade/flow'
+// Parent directory entries ride along when the event file creates the subtree.
+// Other flow state is not migrated and must retain the source.
+const isFlowSpinePath = (path: string) =>
+  path === '.clade' || path === FLOW_SPINE_DIR || path === `${FLOW_SPINE_DIR}/events.jsonl`
+
+const RESEALABLE_ADMIN_SUBPATHS = new Set(['COMMIT_EDITMSG', 'index', 'ORIG_HEAD', 'logs/HEAD'])
+// Drift paths are scoped as `worktrees/<id>/<subpath>` — the allowed set is
+// keyed on the subpath under the source's own admin dir.
+const isResealableAdminPath = (path: string) => {
+  const subpath = /^worktrees\/[^/]+\/(.+)$/.exec(path)?.[1]
+  return subpath !== undefined && RESEALABLE_ADMIN_SUBPATHS.has(subpath)
+}
+
+// Per-path identity diff under the same normalization comparableInventory
+// applies — `.git` filtered, volatile metadata fields dropped.
+function inventoryDiffPaths(
+  live: Pick<SourceInventory, 'entries'>,
+  expected: Pick<SourceInventory, 'entries'>,
+  gitDir = false,
+): string[] {
+  const normalize = (entry: InventoryEntry) => {
+    const copy = { ...entry }
+    delete (copy as Partial<typeof copy>).allocatedBytes
+    delete (copy as Partial<typeof copy>).uid
+    delete (copy as Partial<typeof copy>).gid
+    if (gitDir || copy.type === 'directory') delete copy.mtimeMs
+    return JSON.stringify(copy)
+  }
+  const liveBy = new Map(
+    live.entries
+      .filter((entry) => entry.path !== '.git')
+      .map((entry) => [entry.path, normalize(entry)]),
+  )
+  const wantBy = new Map(
+    expected.entries
+      .filter((entry) => entry.path !== '.git')
+      .map((entry) => [entry.path, normalize(entry)]),
+  )
+  return [...new Set([...liveBy.keys(), ...wantBy.keys()])]
+    .filter((path) => liveBy.get(path) !== wantBy.get(path))
+    .toSorted()
+}
+
+interface SpineMigrationRecord {
+  source: string
+  destination: string
+  generation?: string
+  sourceDigest: string
+  migratedIds: string[]
+  duplicates: number
+  verified: boolean
+  at: string
+}
+
+// The spine a source's flow events must reach, under the same precedence
+// eventsPath applies — explicit scoped root, CLADE_FLOW_EVENTS, then the
+// repo's main checkout. `null` = linked source whose main checkout is gone
+// (refuse to drop the only copy); `undefined` = the source IS its own spine
+// root and nothing needs migrating.
+function flowSpineDestination(sourceRoot: string, sourceFile: string): string | null | undefined {
+  const scopedRoot = repositorySpineRoot()
+  if (scopedRoot) {
+    const dest = spinePathIn(scopedRoot)
+    return dest === sourceFile ? undefined : dest
+  }
+  const envPath = process.env.CLADE_FLOW_EVENTS
+  if (envPath) {
+    const dest = resolve(envPath)
+    return dest === sourceFile ? undefined : dest
+  }
+  const write = sharedSpineWriteRoot(sourceRoot)
+  if (write.orphaned) return null
+  if (!write.root) return undefined
+  const dest = spinePathIn(write.root)
+  return dest === sourceFile ? undefined : dest
+}
+
+// Move a source's legacy `.clade/flow/events.jsonl` records into the
+// repository's durable spine — locked append + read-back inside
+// spine-migration. NEVER drops or rewrites records: malformed lines and
+// same-id conflicts fail the removal instead.
+function migrateWorktreeFlowSpine(sourceRoot: string): {
+  ok: boolean
+  record?: SpineMigrationRecord
+  error?: string
+} {
+  const source = join(sourceRoot, FLOW_SPINE_DIR, 'events.jsonl')
+  if (!existsSync(source)) return { ok: true }
+  const destination = flowSpineDestination(sourceRoot, source)
+  if (destination === null)
+    return { ok: false, error: 'main checkout spine unavailable for an orphaned worktree' }
+  if (destination === undefined) return { ok: true }
+  const result = migrateSpineEventsFile(source, destination)
+  if (!result.ok) return { ok: false, error: result.error ?? 'flow spine migration did not verify' }
+  if (result.empty) return { ok: true }
+  return {
+    ok: true,
+    record: {
+      source,
+      destination,
+      sourceDigest: hashFile(source),
+      migratedIds: result.migratedIds,
+      duplicates: result.duplicates,
+      verified: result.verified,
+      at: new Date().toISOString(),
+    },
+  }
+}
+
+// Re-seal is safe only while the guards the archive itself relies on still
+// hold: HEAD equals the receipt's captured head (a post-capture commit would
+// already fail the receipt compare) and the checkout is clean — so the
+// adopted scratch bytes are leftover protocol noise, not live work.
+function adminResealSafe(root: string, expectedHead: string | undefined): boolean {
+  if (!expectedHead) return false
+  try {
+    if (git(root, ['rev-parse', 'HEAD']) !== expectedHead) return false
+    return git(root, ['status', '--porcelain']) === ''
+  } catch {
+    return false
+  }
+}
+
+// The scoped Git side of a journaled resume, or the live-vs-archive check a
+// fresh capture just failed: decide whether every diverging admin path is
+// resealable scratch under a pinned clean HEAD, and if so adopt the current
+// scoped inventory as the caller's baseline.
+function resealableAdminDrift(
+  root: string,
+  liveScoped: SourceInventory,
+  expectedScoped: SourceInventory,
+  expectedHead: string | undefined,
+): { paths: string[]; head: string } | undefined {
+  const drift = inventoryDiffPaths(liveScoped, expectedScoped, true)
+  if (!drift.length || !drift.every(isResealableAdminPath)) return undefined
+  if (!adminResealSafe(root, expectedHead)) return undefined
+  return { paths: drift, head: git(root, ['rev-parse', 'HEAD']) }
+}
+
+// Fresh path only: verifyPreservationArchive failed; the source may still be
+// removed when every divergence is migratable flow events plus resealable
+// admin scratch. `adopt` receives the migration record for the journal.
+function adoptConfinedSourceDrift(
+  root: string,
+  receipt: PreservationReceipt,
+  profile: ConsumerProfile,
+): { ok: boolean; migration?: SpineMigrationRecord; reseal?: { paths: string[]; head: string } } {
+  const options = inventoryOptionsFromProfile(profile)
+  if (!verifyPreservationArchiveIntegrity(receipt.archives.worktree.path, options))
+    return { ok: false }
+  if (receipt.source.head) {
+    try {
+      if (git(root, ['rev-parse', 'HEAD']) !== receipt.source.head) return { ok: false }
+    } catch {
+      return { ok: false }
+    }
+  }
+  const expectedWorktree = inventoryArchive(receipt.archives.worktree.path, options)
+  const live = inventoryTree(root, options, [join(root, '.git')])
+  const treeDrift = inventoryDiffPaths(live, expectedWorktree)
+  if (!treeDrift.every(isFlowSpinePath)) return { ok: false }
+  let reseal: { paths: string[]; head: string } | undefined
+  if (receipt.source.gitCommonDir) {
+    if (!receipt.archives.git) return { ok: false }
+    const common = (() => {
+      try {
+        return git(root, ['rev-parse', '--path-format=absolute', '--git-common-dir'])
+      } catch {
+        return undefined
+      }
+    })()
+    if (!common || common !== receipt.source.gitCommonDir) return { ok: false }
+    const metadataRoots = gitWorktreeMetadataRoots(root, common)
+    const archivedGit = scopeGitInventory(
+      inventoryArchive(
+        receipt.archives.git.path,
+        { ...options, excludeGitTransientState: true },
+        gitArchiveExclusions(metadataRoots, common),
+      ),
+      common,
+      metadataRoots,
+    )
+    const gitDrift = inventoryDiffPaths(
+      scopedLiveGitInventory(root, common, profile),
+      archivedGit,
+      true,
+    )
+    if (gitDrift.length) {
+      if (!gitDrift.every(isResealableAdminPath) || !adminResealSafe(root, receipt.source.head))
+        return { ok: false }
+      reseal = { paths: gitDrift, head: git(root, ['rev-parse', 'HEAD']) }
+    }
+  }
+  // Both sides empty cannot explain the archive-verify failure this ran on —
+  // refuse rather than wave through a divergence we never identified.
+  if (!treeDrift.length && !reseal) return { ok: false }
+  const migration = treeDrift.length
+    ? migrateWorktreeFlowSpine(root)
+    : { ok: true as const, record: undefined }
+  if (!migration.ok) return { ok: false }
+  return { ok: true, migration: migration.record, reseal }
 }
 
 // The trashed metadata root gets the same post-rename verification the tree
@@ -3491,6 +3756,24 @@ export function cleanupBatches(
         results.push(result)
         continue
       }
+      try {
+        let updated = 0
+        for (const donor of [b.path, ...b.members.map((member) => member.path)]) {
+          const projectionState = reconcileLandedProjectionState(c.main, donor)
+          updated += projectionState.updated
+          for (const reason of projectionState.skipped)
+            console.log(`batch cleanup: projection receipt skipped: ${reason}`)
+        }
+        if (updated > 0)
+          console.log(`batch cleanup: reconciled ${updated} landed projection receipt(s)`)
+      } catch (error) {
+        const reason = `projection receipt reconcile failed; sources retained: ${errorMessage(error)}`
+        for (const m of b.members)
+          if (!settled(b, m.path)) result.retained.push({ path: m.path, reason })
+        result.retained.push({ path: b.path, reason })
+        results.push(result)
+        continue
+      }
       // The batch lock is held for the whole loop and nothing here writes a claim,
       // so one read serves every member instead of one directory scan each.
       const claimsObs = readActiveClaimsObserved(c.main)
@@ -3685,6 +3968,41 @@ export function cleanupBatches(
                 // undefined until destroy runs this pass; the restore path
                 // then uses this run's list, else the journaled one.
                 let detachedNow: string[] | undefined
+                // Fresh-path evidence attaches when `b.removing` is created
+                // below; a resume writes straight into the live journal —
+                // but only when that journal is THIS member's: `b.removing`
+                // can still name another source's interrupted removal.
+                // Repeated passes merge migratedIds so a re-run never
+                // erases which records already reached the main spine.
+                let pendingSpineMigration: SpineMigrationRecord | undefined
+                let pendingAdminReseal: { paths: string[]; head: string } | undefined
+                const recordSpineMigration = (record: SpineMigrationRecord) => {
+                  const journaled = { ...record, generation: receipt.operationId }
+                  if (b.removing?.path === m.path) {
+                    const prior = b.removing.spineMigration
+                    b.removing.spineMigration = prior
+                      ? {
+                          ...journaled,
+                          migratedIds: [
+                            ...new Set([...prior.migratedIds, ...journaled.migratedIds]),
+                          ],
+                        }
+                      : journaled
+                    save(c, s)
+                  } else {
+                    pendingSpineMigration = pendingSpineMigration
+                      ? {
+                          ...journaled,
+                          migratedIds: [
+                            ...new Set([
+                              ...pendingSpineMigration.migratedIds,
+                              ...journaled.migratedIds,
+                            ]),
+                          ],
+                        }
+                      : journaled
+                  }
+                }
                 if (removal?.verifyInventory && existsSync(m.path)) {
                   const options = inventoryOptionsFromProfile(profile)
                   // The journaled baseline governs the live-state
@@ -3695,7 +4013,7 @@ export function cleanupBatches(
                   if (!verifyPreservationArchiveIntegrity(receipt.archives.worktree.path, options))
                     throw new Error('preservation archive missing or corrupted; retain worktree')
                   const current = inventoryTree(m.path, options, [join(m.path, '.git')])
-                  const treeBaseline =
+                  let treeBaseline =
                     comparableInventory(current) === comparableInventory(removal.verifyInventory)
                   const treeArchive =
                     comparableInventory(current) === comparableInventory(expectedInventory)
@@ -3721,6 +4039,25 @@ export function cleanupBatches(
                         options,
                       )
                     })()
+                  if (!treeBaseline && !treeArchive && !treeRelocated) {
+                    // TD-1126: events appended to the legacy worktree spine
+                    // after capture are adoptable — but only after they are
+                    // migrated into the main spine (journaled, read-back
+                    // verified). The migrated state becomes the baseline;
+                    // anything outside `.clade/flow/` still retains.
+                    const drift = inventoryDiffPaths(current, removal.verifyInventory)
+                    if (drift.every(isFlowSpinePath)) {
+                      const migration = migrateWorktreeFlowSpine(m.path)
+                      if (!migration.ok)
+                        throw new Error(
+                          `flow spine migration failed; retain worktree (${migration.error})`,
+                        )
+                      if (migration.record) recordSpineMigration(migration.record)
+                      b.removing!.verifyInventory = current
+                      save(c, s)
+                      treeBaseline = true
+                    }
+                  }
                   if (!treeBaseline && !treeArchive && !treeRelocated)
                     throw new Error(
                       'restored source changed after interrupted removal; retain worktree',
@@ -3782,6 +4119,28 @@ export function cleanupBatches(
                         gitdirRecords,
                         metadataRoots,
                       )
+                    if (!gitBaseline && !gitArchive && !gitRelocated) {
+                      // TD-1135: COMMIT_EDITMSG/index/ORIG_HEAD/logs/HEAD
+                      // scratch drift under a still-captured, clean HEAD is
+                      // adopted as the new baseline — journaled, never
+                      // silent. Anything else retains.
+                      const reseal = resealableAdminDrift(
+                        m.path,
+                        currentGit,
+                        scopeGitInventory(removal.verifyGit, currentCommon, metadataRoots),
+                        receipt.source.head,
+                      )
+                      if (reseal) {
+                        b.removing!.verifyGit = currentGit
+                        b.removing!.adminReseal = {
+                          paths: reseal.paths,
+                          head: reseal.head,
+                          at: new Date().toISOString(),
+                        }
+                        save(c, s)
+                        gitBaseline = true
+                      }
+                    }
                     if (!gitBaseline && !gitArchive && !gitRelocated)
                       throw new Error(
                         'restored source Git metadata changed after interrupted removal; retain worktree',
@@ -3803,8 +4162,29 @@ export function cleanupBatches(
                     m.path,
                     inventoryOptionsFromProfile(profile),
                   )
-                )
-                  throw new Error('source changed after preservation capture; retain worktree')
+                ) {
+                  // TD-1126/1135 fresh path: a failed archive verify still
+                  // proceeds when every divergence is migratable flow-spine
+                  // content or resealable admin scratch — the migration and
+                  // re-seal land on the journal written below.
+                  const adopt = adoptConfinedSourceDrift(m.path, receipt, profile)
+                  if (!adopt.ok)
+                    throw new Error('source changed after preservation capture; retain worktree')
+                  if (adopt.migration) recordSpineMigration(adopt.migration)
+                  if (adopt.reseal) pendingAdminReseal = adopt.reseal
+                }
+                // Whatever the legacy worktree spine still holds must reach
+                // the repository's durable main spine before this tree can
+                // go — idempotent locked append + read-back, journaled when
+                // the removal record below is written.
+                if (existsSync(m.path)) {
+                  const migration = migrateWorktreeFlowSpine(m.path)
+                  if (!migration.ok)
+                    throw new Error(
+                      `flow spine migration failed; retain worktree (${migration.error})`,
+                    )
+                  if (migration.record) recordSpineMigration(migration.record)
+                }
                 // A post-move failure can also leave the tree restored
                 // inside the quarantine — its journaled detached baseline
                 // then mismatches forever. Accept the detached baseline or
@@ -3816,7 +4196,7 @@ export function cleanupBatches(
                   const current = inventoryTree(removal.quarantine, options, [
                     join(removal.quarantine, '.git'),
                   ])
-                  const treeBaseline =
+                  let treeBaseline =
                     comparableInventory(current) === comparableInventory(removal.verifyInventory)
                   const treeArchive =
                     comparableInventory(current) === comparableInventory(expectedInventory)
@@ -3842,6 +4222,23 @@ export function cleanupBatches(
                         options,
                       )
                     })()
+                  if (!treeBaseline && !treeArchive && !treeRelocated) {
+                    // Same flow-spine adoption as the source path: events
+                    // that landed in the quarantined tree's legacy spine
+                    // migrate to main first, then the baseline re-seals.
+                    const drift = inventoryDiffPaths(current, removal.verifyInventory)
+                    if (drift.every(isFlowSpinePath)) {
+                      const migration = migrateWorktreeFlowSpine(removal.quarantine)
+                      if (!migration.ok)
+                        throw new Error(
+                          `flow spine migration failed; retain worktree (${migration.error})`,
+                        )
+                      if (migration.record) recordSpineMigration(migration.record)
+                      b.removing!.verifyInventory = current
+                      save(c, s)
+                      treeBaseline = true
+                    }
+                  }
                   if (!treeBaseline && !treeArchive && !treeRelocated)
                     throw new Error(
                       'quarantined source changed after interrupted removal; retain worktree',
@@ -3906,6 +4303,25 @@ export function cleanupBatches(
                         gitdirRecords,
                         metadataRoots,
                       )
+                    if (!gitBaseline && !gitArchive && !gitRelocated) {
+                      // Same admin-scratch re-seal as the source path.
+                      const reseal = resealableAdminDrift(
+                        removal.quarantine,
+                        currentGit,
+                        scopeGitInventory(removal.verifyGit, currentCommon, metadataRoots),
+                        receipt.source.head,
+                      )
+                      if (reseal) {
+                        b.removing!.verifyGit = currentGit
+                        b.removing!.adminReseal = {
+                          paths: reseal.paths,
+                          head: reseal.head,
+                          at: new Date().toISOString(),
+                        }
+                        save(c, s)
+                        gitBaseline = true
+                      }
+                    }
                     if (!gitBaseline && !gitArchive && !gitRelocated)
                       throw new Error(
                         'quarantined source Git metadata changed after interrupted removal; retain worktree',
@@ -3951,6 +4367,15 @@ export function cleanupBatches(
                     b.removing!.detachedPointers = detachedNow
                     save(c, s)
                   }
+                  // A crash between journal write and this point can leave a
+                  // verified quarantine whose legacy spine never migrated —
+                  // cover it now that the quarantine is proven ours.
+                  const quarantineMigration = migrateWorktreeFlowSpine(removal.quarantine)
+                  if (!quarantineMigration.ok)
+                    throw new Error(
+                      `flow spine migration failed; retain worktree (${quarantineMigration.error})`,
+                    )
+                  if (quarantineMigration.record) recordSpineMigration(quarantineMigration.record)
                 }
                 if (!removal || sourceRestoredToArchive) {
                   if (sourceRestoredToArchive && !handoffObserver) {
@@ -4000,6 +4425,15 @@ export function cleanupBatches(
                         verifyInventory: baseline.worktree,
                         verifyGit: baseline.git,
                         detachedPointers: detachedNow,
+                        ...(pendingSpineMigration ? { spineMigration: pendingSpineMigration } : {}),
+                        ...(pendingAdminReseal
+                          ? {
+                              adminReseal: {
+                                ...pendingAdminReseal,
+                                at: new Date().toISOString(),
+                              },
+                            }
+                          : {}),
                       }
                     } else {
                       b.removing!.verifyInventory = baseline.worktree
@@ -4277,6 +4711,39 @@ export function cleanupBatches(
                 // undefined until destroy runs this pass; the restore path
                 // then uses this run's list, else the journaled one.
                 let detachedNow: string[] | undefined
+                // Fresh-path evidence attaches when `b.removing` is created
+                // below; a resume writes straight into the live journal —
+                // guarded by path like the member path, in case a stale
+                // member journal is still on the batch.
+                let pendingSpineMigration: SpineMigrationRecord | undefined
+                let pendingAdminReseal: { paths: string[]; head: string } | undefined
+                const recordSpineMigration = (record: SpineMigrationRecord) => {
+                  const journaled = { ...record, generation: receipt.operationId }
+                  if (b.removing?.path === b.path) {
+                    const prior = b.removing.spineMigration
+                    b.removing.spineMigration = prior
+                      ? {
+                          ...journaled,
+                          migratedIds: [
+                            ...new Set([...prior.migratedIds, ...journaled.migratedIds]),
+                          ],
+                        }
+                      : journaled
+                    save(c, s)
+                  } else {
+                    pendingSpineMigration = pendingSpineMigration
+                      ? {
+                          ...journaled,
+                          migratedIds: [
+                            ...new Set([
+                              ...pendingSpineMigration.migratedIds,
+                              ...journaled.migratedIds,
+                            ]),
+                          ],
+                        }
+                      : journaled
+                  }
+                }
                 if (removal?.verifyInventory && existsSync(b.path)) {
                   const options = inventoryOptionsFromProfile(profile)
                   // Same archive-integrity rule as the member path: the
@@ -4286,7 +4753,7 @@ export function cleanupBatches(
                   if (!verifyPreservationArchiveIntegrity(receipt.archives.worktree.path, options))
                     throw new Error('preservation archive missing or corrupted; retain worktree')
                   const current = inventoryTree(b.path, options, [join(b.path, '.git')])
-                  const treeBaseline =
+                  let treeBaseline =
                     comparableInventory(current) === comparableInventory(removal.verifyInventory)
                   const treeArchive =
                     comparableInventory(current) === comparableInventory(expectedInventory)
@@ -4312,6 +4779,23 @@ export function cleanupBatches(
                         options,
                       )
                     })()
+                  if (!treeBaseline && !treeArchive && !treeRelocated) {
+                    // Same flow-spine adoption as the member path: events
+                    // trapped in the legacy worktree spine migrate to main
+                    // first, then the baseline re-seals. Other paths retain.
+                    const drift = inventoryDiffPaths(current, removal.verifyInventory)
+                    if (drift.every(isFlowSpinePath)) {
+                      const migration = migrateWorktreeFlowSpine(b.path)
+                      if (!migration.ok)
+                        throw new Error(
+                          `flow spine migration failed; retain worktree (${migration.error})`,
+                        )
+                      if (migration.record) recordSpineMigration(migration.record)
+                      b.removing!.verifyInventory = current
+                      save(c, s)
+                      treeBaseline = true
+                    }
+                  }
                   if (!treeBaseline && !treeArchive && !treeRelocated)
                     throw new Error(
                       'restored integration changed after interrupted removal; retain worktree',
@@ -4368,6 +4852,25 @@ export function cleanupBatches(
                         gitdirRecords,
                         metadataRoots,
                       )
+                    if (!gitBaseline && !gitArchive && !gitRelocated) {
+                      // Same admin-scratch re-seal as the member path.
+                      const reseal = resealableAdminDrift(
+                        b.path,
+                        currentGit,
+                        scopeGitInventory(removal.verifyGit, currentCommon, metadataRoots),
+                        receipt.source.head,
+                      )
+                      if (reseal) {
+                        b.removing!.verifyGit = currentGit
+                        b.removing!.adminReseal = {
+                          paths: reseal.paths,
+                          head: reseal.head,
+                          at: new Date().toISOString(),
+                        }
+                        save(c, s)
+                        gitBaseline = true
+                      }
+                    }
                     if (!gitBaseline && !gitArchive && !gitRelocated)
                       throw new Error(
                         'restored integration Git metadata changed after interrupted removal; retain worktree',
@@ -4389,8 +4892,25 @@ export function cleanupBatches(
                     b.path,
                     inventoryOptionsFromProfile(profile),
                   )
-                )
-                  throw new Error('integration changed after preservation capture; retain worktree')
+                ) {
+                  const adopt = adoptConfinedSourceDrift(b.path, receipt, profile)
+                  if (!adopt.ok)
+                    throw new Error(
+                      'integration changed after preservation capture; retain worktree',
+                    )
+                  if (adopt.migration) recordSpineMigration(adopt.migration)
+                  if (adopt.reseal) pendingAdminReseal = adopt.reseal
+                }
+                // Same rule as the member path: the legacy worktree spine
+                // reaches the durable main spine before the tree can go.
+                if (existsSync(b.path)) {
+                  const migration = migrateWorktreeFlowSpine(b.path)
+                  if (!migration.ok)
+                    throw new Error(
+                      `flow spine migration failed; retain worktree (${migration.error})`,
+                    )
+                  if (migration.record) recordSpineMigration(migration.record)
+                }
                 // Same quarantine-restore rule as the member path: a
                 // post-move failure can leave the integration tree restored
                 // inside the quarantine, so it is accepted in either the
@@ -4401,7 +4921,7 @@ export function cleanupBatches(
                   const current = inventoryTree(removal.quarantine, options, [
                     join(removal.quarantine, '.git'),
                   ])
-                  const treeBaseline =
+                  let treeBaseline =
                     comparableInventory(current) === comparableInventory(removal.verifyInventory)
                   const treeArchive =
                     comparableInventory(current) === comparableInventory(expectedInventory)
@@ -4426,6 +4946,20 @@ export function cleanupBatches(
                         options,
                       )
                     })()
+                  if (!treeBaseline && !treeArchive && !treeRelocated) {
+                    const drift = inventoryDiffPaths(current, removal.verifyInventory)
+                    if (drift.every(isFlowSpinePath)) {
+                      const migration = migrateWorktreeFlowSpine(removal.quarantine)
+                      if (!migration.ok)
+                        throw new Error(
+                          `flow spine migration failed; retain worktree (${migration.error})`,
+                        )
+                      if (migration.record) recordSpineMigration(migration.record)
+                      b.removing!.verifyInventory = current
+                      save(c, s)
+                      treeBaseline = true
+                    }
+                  }
                   if (!treeBaseline && !treeArchive && !treeRelocated)
                     throw new Error(
                       'quarantined integration changed after interrupted removal; retain worktree',
@@ -4486,6 +5020,24 @@ export function cleanupBatches(
                         gitdirRecords,
                         metadataRoots,
                       )
+                    if (!gitBaseline && !gitArchive && !gitRelocated) {
+                      const reseal = resealableAdminDrift(
+                        removal.quarantine,
+                        currentGit,
+                        scopeGitInventory(removal.verifyGit, currentCommon, metadataRoots),
+                        receipt.source.head,
+                      )
+                      if (reseal) {
+                        b.removing!.verifyGit = currentGit
+                        b.removing!.adminReseal = {
+                          paths: reseal.paths,
+                          head: reseal.head,
+                          at: new Date().toISOString(),
+                        }
+                        save(c, s)
+                        gitBaseline = true
+                      }
+                    }
                     if (!gitBaseline && !gitArchive && !gitRelocated)
                       throw new Error(
                         'quarantined integration Git metadata changed after interrupted removal; retain worktree',
@@ -4527,6 +5079,14 @@ export function cleanupBatches(
                     b.removing!.detachedPointers = detachedNow
                     save(c, s)
                   }
+                  // Same coverage as the member path: a verified quarantine
+                  // whose legacy spine never reached main still migrates.
+                  const quarantineMigration = migrateWorktreeFlowSpine(removal.quarantine)
+                  if (!quarantineMigration.ok)
+                    throw new Error(
+                      `flow spine migration failed; retain worktree (${quarantineMigration.error})`,
+                    )
+                  if (quarantineMigration.record) recordSpineMigration(quarantineMigration.record)
                 }
                 if (!removal || sourceRestoredToArchive) {
                   if (sourceRestoredToArchive && !handoffObserver) {
@@ -4578,6 +5138,15 @@ export function cleanupBatches(
                         verifyInventory: baseline.worktree,
                         verifyGit: baseline.git,
                         detachedPointers: detachedNow,
+                        ...(pendingSpineMigration ? { spineMigration: pendingSpineMigration } : {}),
+                        ...(pendingAdminReseal
+                          ? {
+                              adminReseal: {
+                                ...pendingAdminReseal,
+                                at: new Date().toISOString(),
+                              },
+                            }
+                          : {}),
                       }
                     } else {
                       b.removing!.verifyInventory = baseline.worktree

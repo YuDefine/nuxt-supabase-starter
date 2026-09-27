@@ -1,7 +1,13 @@
-# UI Copy Tone Rules
+---
+description: UI 文案語氣硬規則——軟體開發範疇英文一律不顯露、行業詞依 PRODUCT.md Users 判、縮寫展開、中英混用反例、Register 嚴格度與 Exception；寫 user-facing string 或跑 impeccable clarify 時 path-scoped 載入
+paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'app/**/*.ts', 'packages/*/app/**/*.ts', 'components/**', 'packages/*/components/**', 'pages/**', 'packages/*/pages/**', 'layouts/**', 'packages/*/layouts/**', 'i18n/**', 'packages/*/i18n/**', 'locales/**', 'packages/*/locales/**', 'specs/plans/**/design-review.md']
+---
+<!-- Clade native rule; source: rules/core/ui-copy-tone.md; edit canonical source -->
+<!-- clade-targets: claude,codex,cursor -->
 
+# UI Copy Tone
 
-> **Purpose**: design orchestrator 在 propose / Exit Criteria 階段套用的 UI 文案語氣硬性規則。所有 user-facing string（labels / buttons / errors / empty states / help text / placeholder / toast / modal / confirm dialog 等）**MUST** 通過此檔規則才能 ship。
+> 所有 user-facing string（labels / buttons / errors / empty states / help text / placeholder / toast / modal / confirm dialog 等）**MUST** 通過本檔規則才能交付。impeccable 的 `clarify` 不懂這條 fleet 規則，跑它或任何改文案的指令時 MUST 一併套用。
 
 ---
 
@@ -169,33 +175,32 @@
 
 ---
 
-## propose 階段套用方式（design orchestrator 用）
+## 在 impeccable 閉環裡的位置
 
-design orchestrator 在 propose plan 時：
+依 [[proactive-skills.design-checkpoint]] 的閉環：
 
-1. **diagnosis 階段** — `Copy` 維度若觸發任一 black-list signal → 標 ★★☆☆☆ 以下 + 列入 Core Plan
-2. **plan 階段** — Core Plan 第一個位置（DRIFT 修復之後）排 `/impeccable clarify [target]`
-3. **brief `/impeccable clarify`** — 必註明 "follow `references/copy-tone.md` rules; eliminate engineering jargon; preserve only domain-appropriate terms per PRODUCT.md Users"
-4. **Exit Criteria** — 加 `Copy Tone Check passed`
+1. **Stage 1 找問題**——`critique`／`audit` 指出文案問題，或自己在受影響畫面看到任一黑名單詞 → 列為要修的問題族
+2. **Stage 2 專科修**——跑 `clarify [target]` 時 brief 註明「依 `ui-copy-tone` 規則：拿掉軟體開發範疇英文，只保留 PRODUCT.md Users 熟悉的行業詞」
+3. **交付前**——`design-review.md` 的 Stage 2 記下文案修正；有例外依下方 § Exception 機制寫明
 
 ---
 
 ## Block 條件
 
-未通過 Copy Tone Check 的 plan **不得**標記為完成。具體判定：
+未通過本檔檢查的 UI 工作**不得**標記為完成。具體判定：
 
 - ❌ Block — 任何 user-facing string 仍含 black-list 詞
 - ❌ Block — 任何縮寫未展開但目標使用者非技術人員
 - ❌ Block — 任何中英混用且英文是工程詞
 - ❌ Block — 保留的英文無法在 PRODUCT.md Users 欄位推得「使用者熟悉」
 
-通過判定後才能進 ship phase。
+通過判定後才能交付。
 
 ---
 
 ## Exception 機制
 
-若 plan 認為某個 black-list 詞**必須**保留（如 dev tool 的 API 文件展示、給工程師看的 admin 後台、debug log viewer），需在 plan 內顯式標註：
+若某個 black-list 詞**必須**保留（如 dev tool 的 API 文件展示、給工程師看的 admin 後台、debug log viewer），需在 `design-review.md`（或 plan）內顯式標註：
 
 ```
 Copy Tone Exception:

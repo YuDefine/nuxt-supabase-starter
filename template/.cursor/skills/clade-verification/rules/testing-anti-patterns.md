@@ -453,7 +453,7 @@ E2E 不用「跑了幾條」或 coverage % 當 KPI——真正會出事的是失
 
 ### 規約最小要求
 
-當 change 動到下列任一類別，archive 前要在 design.md 或 proposal.md 列出對應風險路徑：
+當一件工作動到下列任一類別，結案前要在它的設計載體列出對應風險路徑（aixbdd：plan package 的 `system-analysis.md`；其餘依該 repo 的設計文件）：
 
 - 認證 / 授權邏輯
 - DB schema migration
@@ -461,7 +461,7 @@ E2E 不用「跑了幾條」或 coverage % 當 KPI——真正會出事的是失
 - payment / billing / 不可逆操作
 - 資料 deletion / soft-delete logic
 
-其他 change 為建議，不強制、不設 CI gate（會誤殺 typo fix）。
+其他工作為建議，不強制、不設 CI gate（會誤殺 typo fix）。
 
 ### 機械訊號（warn-only，TD-636）
 
@@ -543,4 +543,4 @@ seedConversation({ updatedAt: daysAgo(60) })  // 更早
 
 **3. 動手前把假設清單交給第二雙眼睛**；沒有人可問時派 fresh-context checker 讀清單（[[checker-subagent]]）。
 
-**4. 修完要補迴歸測試把它封死**——第 1 步那個測試留下來就是。
+**4. 修完要補迴歸測試把它封死**——第 1 步那個測試留下來就是。宣告 aixbdd 的 consumer：行為迴歸落在 scenario（經 work-route，NOOP 或 ADD delta），只有沒有 I/O 的純邏輯才落 unit test——判準與舊測試的吸收見 `clade-spec-workflow` skill 的 `rules/legacy-tests.md`。

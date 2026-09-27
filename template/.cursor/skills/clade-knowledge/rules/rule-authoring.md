@@ -186,7 +186,7 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 
 **One trigger per branch（description 觸發詞紀律）**：model-invoked description 內每個觸發詞對應一個**真正不同**的使用分支；同一分支的同義改寫（「截圖」「看畫面」「幫我看 UI」寫三次）是 duplication，要 collapse 成一個。description 開頭前置該 skill 的 leading word，invocation 工作靠它完成。
 
-**Negative boundary（description 邊界紀律）**：**有另一支 skill 會被同一批觸發詞吸過來**時，description 要寫出最容易誤觸發的相鄰場景並指名去處（例：`notion-hub` 的「**NOT for** clade 內部待拍板題（走 flow ask 與 /decisions）」）——agent 當場看不到兄弟 skill 的 description。`skill-trigger-collision` 列出的每一對兩邊都該有 boundary；稽核見 § 稽核 的 `desc-no-negative-boundary`。
+**Negative boundary（description 邊界紀律）**：**有另一支 skill 會被同一批觸發詞吸過來**時，description 要寫出最容易誤觸發的相鄰場景並指名去處（例：`notion-hub` 的「**NOT for** clade 內部待拍板題（走 flow ask）」）——agent 當場看不到兄弟 skill 的 description。`skill-trigger-collision` 列出的每一對兩邊都該有 boundary；稽核見 § 稽核 的 `desc-no-negative-boundary`。
 
 **Callee 要保持 model-invoked**（僅限 clade 自撰的 skill）：被其他 skill 以 Skill tool 呼叫的 skill，`disable-model-invocation: true` 會連 orchestrator 的呼叫一起擋掉。設定前要先 grep 全 skill / rule 確認無跨檔 Skill-tool 呼叫。
 

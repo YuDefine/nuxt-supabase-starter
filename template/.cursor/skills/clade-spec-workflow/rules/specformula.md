@@ -110,8 +110,6 @@ clade 的公開邊界不是 HTTP API：是 CLI（`flow`、`wt-helper`、`herdr-s
 
 clade home 的 `test:bdd` 包一層 `vendor/specformula-clade/bin/run-bdd.ts`（pnpm 會把裸 `--` 轉給 cucumber-js，吃掉 readiness 的 `--dry-run`）；consumer 端照 § API surface。
 
-UI 層（review-gui-web 的頁面行為）仍由 playwright-bdd 執行，分界是「打到瀏覽器」——同一個 acceptance scenario 的 CLI／read model 部分精煉成 `specs/truth/features/cli/**`，頁面部分留在 `vendor/review-gui-web/features/`。**NEVER** 為了讓 CLI adapter 覆蓋 UI 場景去 mock 瀏覽器；也 **NEVER** 為了讓 playwright 覆蓋 CLI 場景去讀 UI 上的數字當 CLI 輸出。
-
 ## Reference signal（不 block）
 
 `node scripts/audit-specformula-adoption.ts` 逐 consumer 印一列：`isa` / `features` 檔數 / `api` spec 檔數 / `ddl` 檔數 / `endpoints` / `guard` / `test:bdd` / `workspace` / `pin` / `orphans`。Nuxt 的時鐘檢查另列 `new Date(` 殘留數。DB 預期值來自有效 manifest 與 registry 的結構化 `tech_stack`；service 的 module `none` 只代表未套用該 DB module，不能據此認定沒有資料庫。設定未知或宣告衝突時保留 `UNKNOWN`；實際 runtime 與資料一致性仍由 consumer receipt 驗證。

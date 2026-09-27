@@ -135,6 +135,7 @@ import {
 } from './claim-helper.ts'
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isLockedProjectionPathFor } from './locked-projection.ts'
+import { reconcileLandedProjectionState } from './lib/projection-ledger-reconcile.ts'
 import { runWtEnvBootstrap } from './lib/wt-env-bootstrap-runner.ts'
 import { normalizeUnsplitArgv, UnsplitArgvError, type FlagOptions } from './lib/argv-unsplit.ts'
 import {
@@ -463,10 +464,7 @@ async function prompt(question) {
 // offset applied uniformly to every declared port keeps the whole set inside the
 // consumer's own band, so no consumer's dev script or nuxt.config needs to change.
 
-// Dev-port allocation lives in ./lib/worktree-dev-port.ts — the single SoT shared
-// with review-gui. Keeping a second copy here is what let the two disagree: this
-// file handed each worktree its own port while review-gui went on spawning every
-// one of them on the registry base, so N worktrees fought over one dev server.
+// Dev-port allocation lives in ./lib/worktree-dev-port.ts — the single SoT.
 import {
   DEV_PORT_BAND,
   allocateWorktreeDevPorts as allocateWorktreeDevPortsIn,
@@ -5396,7 +5394,7 @@ export function isArchivePathConflict(p) {
 }
 
 // Preserve gitignored review artifacts from worktree before cleanup destroys
-// them. `screenshots/<env>/<topic>/` is the review-gui / verify:ui screenshot
+// them. `screenshots/<env>/<topic>/` is the verify:ui screenshot
 // convention; gitignored by spectra cookbook so they don't bloat git history.
 // `git merge --squash` carries no gitignored content, so without this sync,
 // `git worktree remove --force` permanently deletes screenshots and downstream
@@ -6033,6 +6031,22 @@ async function cmdCleanup(
     )
   }
 
+  if (mergedLocal || prLanded) {
+    try {
+      const projectionState = reconcileLandedProjectionState(consumerRoot, target.path)
+      if (projectionState.updated > 0)
+        console.log(`cleanup: reconciled ${projectionState.updated} landed projection receipt(s)`)
+      for (const reason of projectionState.skipped)
+        console.log(`cleanup: projection receipt skipped: ${reason}`)
+    } catch (error) {
+      throw new Error(
+        `cleanup retained ${target.path}: projection receipt reconcile failed: ${errorMessage(error)}; ` +
+          `resolve the receipt or pending projection transaction, then retry cleanup ${cleanSlug}`,
+        { cause: error },
+      )
+    }
+  }
+
   const supersededPin = supersededOk
     ? pinSupersededTip(consumerRoot, cleanSlug, branchName, String(opts.reason).trim())
     : undefined
@@ -6054,7 +6068,10 @@ async function cmdCleanup(
   // toolManagedCount > 0：gate 已判定這些 drift 可忽略（見上方），但 git 仍視之為 dirty
   // 而拒絕移除，所以這裡必須補 --force。它只涵蓋 isToolManagedDrift 與
   // isLockedProjectionPathFor 認可的檔——真的 user WIP 早在 gate 就攔下了，走不到這裡。
-  if (opts.force || toolManagedCount > 0) removeArgs.push('--force')
+  // forceDiscardUncommitted：gate 已由呼叫端授權丟棄 user WIP，git 同樣要 --force 才肯移除。
+  if (opts.force || opts.forceDiscardUncommitted || toolManagedCount > 0) {
+    removeArgs.push('--force')
+  }
   removeArgs.push(target.path)
   git(removeArgs, { cwd: consumerRoot })
   if (supersededPin) {

@@ -1,5 +1,6 @@
 {"file":"codebase-memory-index.freshness.md","source":"rules/core/codebase-memory-index.freshness.md","paths":[".mcp.json","**/cbm-index.sh","**/cbm-health.ts","capabilities/core/hooks/session-start-cbm-index-check.sh","capabilities/core/hooks/post-bash-cbm-index-refresh.sh"]}
 {"file":"codebase-memory-index.md","source":"rules/core/codebase-memory-index.md","paths":null}
+{"file":"consumer-docs-retirement.md","source":"rules/core/consumer-docs-retirement.md","paths":["docs/**","**/docs/**","specs/truth/**"]}
 {"file":"golden-path-onboarding.md","source":"rules/core/golden-path-onboarding.md","paths":[".clade/manifest.json",".claude/hub.json",".claude/consumer-meta.json","package.json","README.md","CLAUDE.md","AGENTS.md","scripts/init-consumer.ts","scripts/register-consumer.ts"]}
 {"file":"knowledge-and-decisions.md","source":"rules/core/knowledge-and-decisions.md","paths":["docs/solutions/**","docs/decisions/**","specs/**","tasks/**"]}
 {"file":"local-rule-override.md","source":"rules/core/local-rule-override.md","paths":[".clade/rules/**/*.md",".claude/rules/local/**/*.md"]}

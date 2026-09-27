@@ -290,19 +290,15 @@ heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消�
 
 ```markdown
 <!-- ✅ 判定成立 -->
-**驗收入口**（2026-09-17 實查 `flow gates --repo-only --require-empty` exit 3，ui-judgement 2 張）：
-https://review-gui.<maintainer-domain>/projects/<repo>
+**驗收入口**（2026-09-17 實查 `flow gates --repo-only --require-empty` exit 3，ui-judgement 2 張）
 
 <!-- ✅ 判定不成立 —— 誠實寫缺口，NEVER 省略不提 -->
 **驗收入口：無。** `flow gates --repo-only --require-empty` exit 0（0 張卡）——
 三條 item 尚無 `(verified-*)` evidence，**球在 agent 這邊**。
 
 <!-- ❌ 自由文字斷言：事後無法分辨「我以為做完」與「我驗過做完」 -->
-三條 item 的 evidence 都已備妥，只需看圖點 OK。開面板就好。
+三條 item 的 evidence 都已備妥，只需看圖點 OK。
 ```
-
-**人工驗收入口另有 Iron Law**（`rules/core/proactive-skills.manual-review-entry.md` § 交付入口前置查詢）：
-入口**永遠**是 `flow gates --repo-only` 實查過的面板位址（格式同上方 ✅ 範例），寫進 HANDOFF / `tasks/*.md` 時同樣適用——**NEVER** 寫任何 shell 指令（`pnpm review:ui`、`cd … && pnpm …`）或 loopback URL 當入口。
 
 ### 一段能留在 HANDOFF 的充要條件
 
@@ -418,7 +414,7 @@ triage 結果併入 §2B.2 outstanding 清單（與 HANDOFF / plan（未遷移 c
 
 **MUST Read [dispatch-steps.md](dispatch-steps.md) § 2B.4 before proceeding** — 含推薦訊息格式、Option 1–4 配置、7 條禁止行為（ptb-unsafe 不得標 Recommended、wt 推薦必附 safety signal、等人狀態推測禁令）。
 
-摘要：先輸出「outstanding 盤點 + serial/parallel 推薦」訊息，再用 詢問操作 讓 user 選；面板驗收相關 next move **MUST** 引用 §2B.1.7 的 `flow gates` 結果，**NEVER** 自行推測有沒有等人的事。
+摘要：先輸出「outstanding 盤點 + serial/parallel 推薦」訊息，再用 詢問操作 讓 user 選；人工驗收相關 next move **MUST** 引用 §2B.1.7 的 `flow gates` 結果，**NEVER** 自行推測有沒有等人的事。
 
 ### 2B.4.5 PTB-unsafe wt 的快速分流
 
@@ -428,7 +424,7 @@ Step 3.1 audit **有任一條** wt 判為 `mergeBackSafety: ptb-unsafe` → **MU
 
 ### 2B.5 接續 dispatch（user 選定 outstanding 後）
 
-**MUST Read [dispatch-steps.md](dispatch-steps.md) § 2B.5 before proceeding**（user 在 詢問操作 選定下一步的當下就要讀）— 含 5 列 next-skill dispatch 表、判定條件三條、slug 解析、parent cwd 不動 invariant、面板驗收 dispatch 的 family 入口表。
+**MUST Read [dispatch-steps.md](dispatch-steps.md) § 2B.5 before proceeding**（user 在 詢問操作 選定下一步的當下就要讀）— 含 5 列 next-skill dispatch 表、判定條件三條、slug 解析、parent cwd 不動 invariant、人工驗收 dispatch 的 family 入口表。
 
 摘要：一律透過 Skill tool 內呼對應入口，**不要**輸出「請執行 cd ... && claude ...」oneliner；會寫 tracked file 的實作入口（`/implement`、`/bdd`）包進 `/wt <slug>: /<next-skill>`，read-only 與規格類（`/specify`、`/clarify-over-specs`、`/system-analysis`）直接內呼。
 

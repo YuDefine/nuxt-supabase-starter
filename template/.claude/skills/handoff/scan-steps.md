@@ -210,7 +210,7 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff next — flow gates_
 
 | 失敗情境 | 處理 |
 | --- | --- |
-| `flow gates` 跑不起來（clade home 不可達、exit 非 0） | 寫 `## Review-gui Readiness` 段含 `_(flow gates unavailable: <reason>)_`，並警告主線「outstanding 推薦沒有人工 gate 即時資訊，NEVER 推薦把人導向面板」 |
+| `flow gates` 跑不起來（clade home 不可達、exit 非 0） | 寫 `## Review-gui Readiness` 段含 `_(flow gates unavailable: <reason>)_`，並警告主線「outstanding 推薦沒有人工 gate 即時資訊，NEVER 推薦「等 user 判」」 |
 | 輸出缺 `counts` / `gates` | 同上。**NEVER** 讀成 0 張——判不出來與空長得一樣正是這格要擋的 |
 | 跑成功且 0 張 | 寫 `_(no human gates)_` |
 

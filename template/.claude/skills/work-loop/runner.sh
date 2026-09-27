@@ -133,7 +133,48 @@ esac
 # first Claude process if either eligible settings file or any inherited model env points at GPT.
 # Conservative rejection is intentional: selecting a safe slot is the account router's job, while
 # this runner has no receipt proving which slot it will choose until after launch.
-MODEL_RESIDENCY_HELPER="$HOME/offline/clade/vendor/scripts/lib/claude-model-residency.ts"
+# clade checkout 的唯一解析點（TD-445 S1）：helper 路徑與下方釘死的 allowance 都從這裡展開，
+# 與 fleet hook 同一個慣例 `${CLADE_HOME:-$HOME/offline/clade}`。NEVER 在本檔另寫第二個 clade
+# checkout 路徑——第二個寫死點就是下一次 host 換路徑時漏改的那一個。
+# 引號、逗號與換行會讓展開後的 --allowedTools（逗號分隔）與 child prompt 的單引號參數錯位，直接拒跑。
+CLADE_HOME="${CLADE_HOME:-$HOME/offline/clade}"
+case "$CLADE_HOME" in
+  *\'*|*\"*|*,*|*$'\n'*)
+    echo "ERROR: CLADE_HOME must not contain quotes, commas or newlines: $CLADE_HOME" >&2
+    exit 2
+    ;;
+esac
+export CLADE_HOME
+
+# 無人值守 runner 只支援 Claude host（TD-445；SKILL.md § Host 支援）。在 Codex／Cursor session 裡
+# 被叫起來時直接拒絕並指向 in-session 用法，NEVER 改起別端 process 代跑——Codex 那一格是規約禁止
+# （rules/core/agent-routing.pi-watch-protocol.md：agent NEVER 以 codex CLI 起 worker）。
+# 辨識沿用 detect-runtime.ts 的單一詞彙表；只認顯式 CLADE_RUNTIME 或 session id 這類強訊號，
+# 單有 CODEX_HOME 之類弱訊號的一般 terminal 不擋。
+HOST_RUNTIME_HELPER="$CLADE_HOME/vendor/scripts/lib/detect-runtime.ts"
+[ -r "$HOST_RUNTIME_HELPER" ] || {
+  echo "ERROR: missing runtime detection helper: $HOST_RUNTIME_HELPER" >&2
+  exit 2
+}
+HOST_RUNTIME="$($NODE_PLAIN --input-type=module -e '
+const { detectRuntime, detectSessionId } = await import(process.argv[1])
+const runtime = detectRuntime(process.env)
+const explicit = Boolean(process.env.CLADE_RUNTIME?.trim())
+process.stdout.write(explicit || detectSessionId(process.env, runtime) ? runtime : "unknown")
+' "$HOST_RUNTIME_HELPER")" || {
+  echo "ERROR: runtime detection failed: $HOST_RUNTIME_HELPER" >&2
+  exit 2
+}
+case "$HOST_RUNTIME" in
+  codex|cursor)
+    printf '%s\n' \
+      "ERROR: work-loop runner.sh (unattended mode) supports the Claude host only; detected host: $HOST_RUNTIME." \
+      "Use in-session mode instead: invoke the work-loop skill inside your own $HOST_RUNTIME session (SKILL.md § Host 支援)." >&2
+    [ "$HOST_RUNTIME" = codex ] && echo 'Codex unattended is unsupported: agents must not start codex CLI workers (rules/core/agent-routing.pi-watch-protocol.md).' >&2
+    exit 2
+    ;;
+esac
+MODEL_RESIDENCY_HELPER="$CLADE_HOME/vendor/scripts/lib/claude-model-residency.ts"
 [ -r "$MODEL_RESIDENCY_HELPER" ] || {
   echo "ERROR: missing Claude model residency helper: $MODEL_RESIDENCY_HELPER" >&2
   exit 2
@@ -144,16 +185,16 @@ MODEL_RESIDENCY_HELPER="$HOME/offline/clade/vendor/scripts/lib/claude-model-resi
 $NODE_PLAIN "$MODEL_RESIDENCY_HELPER" guard \
   --config-dir "$HOME/.claude" --config-dir "$HOME/.claude-work" || exit 2
 QUARANTINE_FILE="$REPO/.clade/work-loop/orphan-quarantine.json"
-LOCK_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-lock.ts"
+LOCK_HELPER="$CLADE_HOME/vendor/scripts/work-loop-lock.ts"
 # 每輪一行的機械紀錄。round 內的敘事全在 $LOG_DIR/round-<ts>.log 裡，成功輪畫面上只剩
 # 「✓ round N 完成」，重建一輪的決策鏈要翻三個檔（log / state.sessionNote / dispatch record）。
 # ledger 把「這一輪做了什麼」壓成一行，讓 patrol --work-loop 不必讀 log 就答得出來。
 ROUNDS_LEDGER="$REPO/.clade/work-loop/rounds.jsonl"
 UNHARVESTED_FILE="$REPO/.clade/work-loop/unharvested.json"
-PATROL_HELPER="$HOME/offline/clade/vendor/scripts/herdr-patrol.ts"
-RECONCILE_HELPER="$HOME/offline/clade/vendor/scripts/runtime-reconcile.ts"
-READY_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-ready-count.ts"
-SCAN_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-scan.ts"
+PATROL_HELPER="$CLADE_HOME/vendor/scripts/herdr-patrol.ts"
+RECONCILE_HELPER="$CLADE_HOME/vendor/scripts/runtime-reconcile.ts"
+READY_HELPER="$CLADE_HOME/vendor/scripts/work-loop-ready-count.ts"
+SCAN_HELPER="$CLADE_HOME/vendor/scripts/work-loop-scan.ts"
 # worktree 母目錄，與 vendor/scripts/wt-helper.ts:779 的 `<repo>-wt` 慣例對齊（推導不寫死）。
 # 它必須進 --add-dir —— 見下方 PERM_MODE 註解。
 #
@@ -189,11 +230,11 @@ MIN_WAKEUP=1200
 PERM_MODE="acceptEdits"
 # Step 2 的 scan 收進單一 helper；closedBloat writer 是另一條同樣釘死的 invocation。
 # headless process 沒有人能回答 mktemp / cp / mv 的分段 approval。NEVER 擴成 bare `Bash`。
-SCAN_HELPER_CMD='node "$HOME/offline/clade/vendor/scripts/work-loop-scan.ts"'
+SCAN_HELPER_CMD="node \"$CLADE_HOME/vendor/scripts/work-loop-scan.ts\""
 SCAN_HELPER_RULE="Bash($SCAN_HELPER_CMD)"
 SCAN_PREFLIGHT_CMD="$SCAN_HELPER_CMD --preflight"
 SCAN_PREFLIGHT_RULE="Bash($SCAN_PREFLIGHT_CMD)"
-ROTATE_HELPER_CMD='node "$HOME/offline/clade/vendor/scripts/rotate-closed-bloat.ts"'
+ROTATE_HELPER_CMD="node \"$CLADE_HOME/vendor/scripts/rotate-closed-bloat.ts\""
 ROTATE_HELPER_RULE="Bash($ROTATE_HELPER_CMD)"
 CHILD_ALLOWED_TOOLS="$SCAN_HELPER_RULE,$ROTATE_HELPER_RULE"
 
@@ -709,7 +750,7 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
   fi
   # dispatcher 讀這兩個 env 當 telemetry attribution 的機械 fallback；模型顯式帶 CLI 時 CLI 優先。
   # 每輪一個 origin-id，讓 round summary 不必用時間窗猜哪筆 dispatch 屬於哪輪。
-  cmd=("${CHILD_ENV[@]}" WORK_LOOP_RUNNER_CHILD=1 "WORK_LOOP_MIN_WAKEUP_SECONDS=$MIN_WAKEUP" CLADE_DISPATCH_ORIGIN=work-loop "CLADE_DISPATCH_ORIGIN_ID=$origin_id" "$CHILD_BIN" --print --add-dir "$WT_PARENT" --allowedTools "$CHILD_ALLOWED_TOOLS" --permission-mode "$PERM_MODE" "/work-loop --unattended --runner-child --linked-dispatch-mode foreground --min-wakeup-seconds $MIN_WAKEUP --scan-helper-command '$SCAN_HELPER_CMD'")
+  cmd=("${CHILD_ENV[@]}" WORK_LOOP_RUNNER_CHILD=1 "WORK_LOOP_MIN_WAKEUP_SECONDS=$MIN_WAKEUP" CLADE_DISPATCH_ORIGIN=work-loop "CLADE_DISPATCH_ORIGIN_ID=$origin_id" "$CHILD_BIN" --print --add-dir "$WT_PARENT" --allowedTools "$CHILD_ALLOWED_TOOLS" --permission-mode "$PERM_MODE" "/work-loop --unattended --runner-child --linked-dispatch-mode foreground --min-wakeup-seconds $MIN_WAKEUP --scan-helper-command '$SCAN_HELPER_CMD' --rotate-helper-command '$ROTATE_HELPER_CMD'")
 
   if [ "$DRY_RUN" = 1 ]; then
     printf '[dry-run] round %s:' "$(next_round_label "$before")"

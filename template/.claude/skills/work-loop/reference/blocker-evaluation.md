@@ -52,13 +52,12 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
 
 | # | probe | 指令 | 紅了代表什麼 |
 | --- | --- | --- | --- |
-| 1 | dev-login route 存在 | `node ~/offline/clade/scripts/audit-dev-login-adoption.ts --consumer . --json` → 該 consumer `status == "PRESENT"` | `MISSING` → 真缺口。修法是 scaffold dev-login（[[manual-review.backend]] § Dev-login route missing → scaffold-first），**那是可自主推進的工作**，不是 attended 條目 |
+| 1 | dev-login route 存在 | `node "${CLADE_HOME:-$HOME/offline/clade}/scripts/audit-dev-login-adoption.ts" --consumer . --json` → 該 consumer `status == "PRESENT"` | `MISSING` → 真缺口。修法是 scaffold dev-login（[[manual-review.backend]] § Dev-login route missing → scaffold-first），**那是可自主推進的工作**，不是 attended 條目 |
 | 2 | dev server 起得來 | 依 [[proactive-skills.dev-server-spawn]] 起，拿到 `http://localhost:<port>` | 起不來 → 記實際 stderr 當 blocker，那通常是環境債不是視覺債 |
 | 3 | **items 組得出來** | 對每個 item 都要有 `id` / `known_url` / `expected_dom` / `screenshot_path`，assertion-bearing 的還要 `ready_signal` | 組不出來 → item 描述沒有機械可判的斷言，那是 **item 品質缺口**（回去補 tasks.md 的斷言），不是視覺 blocker |
 
-三條全綠 → 照 [[review-gui-surface]] § 截圖 evidence 與符合性判定
-（`review` skill 的 `screenshot` mode，Pi `screenshot-review-verify`，`gemini high`），主線只消費它回的 JSON 摘要，
-再跑 `node ~/offline/clade/vendor/scripts/verify-ui-receipt.ts --change <name> --items '<id,id>' --consumer-path .`
+三條全綠 → 走 `review` skill 的 `screenshot` mode（Pi `screenshot-review-verify`，`gemini high`），主線只消費它回的 JSON 摘要，
+再跑 `node "${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/verify-ui-receipt.ts" --change <name> --items '<id,id>' --consumer-path .`
 落 receipt；項目符合性再交 Opus 5.5（effort: medium）。實際 dispatch 還要核對 Gemini provider 與 Opus 載體能否完成；模型／配額／工具失敗以真實輸出作 blocker，不能由 binary 存在推論可用。
 
 任一條紅 → packaging 的 blocker 欄 **MUST 逐字寫那一條 probe 的失敗輸出**（哪一條、跑了什麼、回了什麼）。

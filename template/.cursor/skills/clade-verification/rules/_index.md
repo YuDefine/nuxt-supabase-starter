@@ -5,13 +5,12 @@
 {"file":"audit-pattern.md","source":"rules/core/audit-pattern.md","paths":["server/api/**/*.ts","packages/*/server/api/**/*.ts","server/utils/audit.ts","packages/*/server/utils/audit.ts","supabase/migrations/**/*.sql"]}
 {"file":"checker-contract.md","source":"rules/core/checker-contract.md","paths":["scripts/**/*","vendor/scripts/**/*",".github/workflows/**/*","package.json","pnpm-workspace.yaml"]}
 {"file":"checker-subagent.md","source":"rules/core/checker-subagent.md","paths":["rules/core/**","vendor/scripts/**","capabilities/core/**","claude-md/**",".claude/rules/**",".claude/skills/**","**/migrations/**","shared/**","packages/*/shared/**","server/utils/**","packages/*/server/utils/**"]}
-{"file":"fixtures-reference.md","source":"rules/core/fixtures-reference.md","paths":["docs/FIXTURES.md","docs/fixtures.md"]}
+{"file":"fixtures-reference.md","source":"rules/core/fixtures-reference.md","paths":["specs/truth/fixtures.md","docs/FIXTURES.md","docs/fixtures.md"]}
 {"file":"manual-review.backend.md","source":"rules/core/manual-review.backend.md","paths":["server/**/*.ts","packages/*/server/**/*.ts","test/**/*.ts","packages/*/test/**/*.ts","e2e/**/*.ts","packages/*/e2e/**/*.ts","supabase/**"]}
 {"file":"manual-review.data-readiness.md","source":"rules/core/manual-review.data-readiness.md","paths":["tasks/**","specs/plans/**","screenshots/**"]}
 {"file":"manual-review.evidence.md","source":"rules/core/manual-review.evidence.md","paths":["tasks/**","specs/plans/**"]}
 {"file":"manual-review.md","source":"rules/core/manual-review.md","paths":["tasks/**","specs/plans/**","screenshots/**"]}
 {"file":"playwright-webserver.md","source":"rules/core/playwright-webserver.md","paths":["playwright.config.ts","playwright.config.js","**/playwright.config.ts"]}
-{"file":"review-gui-surface.md","source":"rules/core/review-gui-surface.md","paths":["screenshots/**","specs/plans/**","openspec/changes/**","HANDOFF.md",".claude/agents/**"]}
 {"file":"review-tiers.md","source":"rules/core/review-tiers.md","paths":["openspec/changes/**","specs/plans/**","specs/truth/**",".claude/agents/**",".codex/agents/**",".cursor/agents/**","supabase/migrations/**/*.sql","server/database/migrations/**/*.sql","packages/*/supabase/migrations/**/*.sql","packages/*/server/database/migrations/**/*.sql"]}
 {"file":"runtime/agent-self-verification.md","source":"adapters/cursor/instructions/rules/core/agent-self-verification.md","paths":null}
 {"file":"runtime/agent-self-verification.screenshot-evidence.md","source":"adapters/cursor/instructions/rules/core/agent-self-verification.screenshot-evidence.md","paths":["screenshots/**","openspec/changes/**/tasks.md","app/**/*.vue","components/**/*.vue","packages/*/components/**/*.vue","pages/**/*.vue","packages/*/pages/**/*.vue","layouts/**/*.vue","packages/*/layouts/**/*.vue","e2e/**","packages/*/e2e/**","playwright.config.*","packages/**/app/**/*.vue"]}
@@ -20,7 +19,6 @@
 {"file":"runtime/manual-review.data-readiness.md","source":"adapters/cursor/instructions/rules/core/manual-review.data-readiness.md","paths":["tasks/**","specs/plans/**","screenshots/**"]}
 {"file":"runtime/manual-review.evidence.md","source":"adapters/cursor/instructions/rules/core/manual-review.evidence.md","paths":["tasks/**","specs/plans/**"]}
 {"file":"runtime/manual-review.md","source":"adapters/cursor/instructions/rules/core/manual-review.md","paths":["tasks/**","specs/plans/**","screenshots/**"]}
-{"file":"runtime/review-gui-surface.md","source":"adapters/cursor/instructions/rules/core/review-gui-surface.md","paths":["screenshots/**","specs/plans/**","openspec/changes/**","HANDOFF.md",".claude/agents/**"]}
 {"file":"runtime/screenshot-strategy.md","source":"adapters/cursor/instructions/rules/core/screenshot-strategy.md","paths":["screenshots/**","tests/e2e/**","packages/*/tests/e2e/**","openspec/changes/**/design-review.md"]}
 {"file":"runtime/verification-lease.spec.md","source":"adapters/cursor/instructions/rules/core/verification-lease.spec.md","paths":[".claude/consumer-meta.json","scripts/dev-session*","scripts/dev-singleton*","nuxt.config.*","packages/**/nuxt.config.*"]}
 {"file":"screenshot-strategy.md","source":"rules/core/screenshot-strategy.md","paths":["screenshots/**","tests/e2e/**","packages/*/tests/e2e/**","openspec/changes/**/design-review.md"]}

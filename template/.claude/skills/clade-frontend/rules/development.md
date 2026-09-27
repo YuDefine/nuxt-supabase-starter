@@ -32,7 +32,7 @@ paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'server/**/*.ts', '
 
 <!-- SPECTRA-UX:START v1.0.0 -->
 
-- **ALWAYS** `switch + assertNever` for enum / const-array / Zod-enum discrimination — **NEVER** `if/else if/else` chains on enum types。加新 enum 值時 compiler 會當場報錯，避免靜默漏 case。utility: `~/utils/assert-never`。離線稽核：`pnpm audit:ux-drift`。規則: [`docs/rules/ux-completeness.md`](docs/rules/ux-completeness.md) Exhaustiveness Rule
+- **ALWAYS** `switch + assertNever` for enum / const-array / Zod-enum discrimination — **NEVER** `if/else if/else` chains on enum types。加新 enum 值時 compiler 會當場報錯，避免靜默漏 case。utility: `~/utils/assert-never`。離線稽核：`pnpm audit:ux-drift`。規則：[[ux-completeness]] Exhaustiveness Rule
 <!-- SPECTRA-UX:END -->
 
 # defineProps 型別約束

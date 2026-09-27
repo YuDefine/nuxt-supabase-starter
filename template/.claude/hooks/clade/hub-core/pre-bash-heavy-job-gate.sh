@@ -7,7 +7,7 @@
 #
 # 為什麼需要它（TD-615）：18 個 agent session 共用 6 核，每個 session 都可以自己決定
 #   何時起一套 CI 等級的測試，彼此不知道對方在跑。代價不只是全體變慢——
-#   2026-08-24 實測 load 67 / 6 核（≈11x）時，`review-gui-web-quality` 的 5 筆
+#   2026-08-24 實測 load 67 / 6 核（≈11x）時，5 筆
 #   playwright 紅燈被誤歸因給一個 commit，三個 session 先後投入追查；降到 load 11
 #   後同一棵樹重跑 28 passed / 0 failed。超賣會產生**看起來像真缺陷的假訊號**。
 #
@@ -228,7 +228,7 @@ fi
 case "$cmd" in
   *vitest*|*playwright*|*'vp test'*|*'vp check'*|*'node --test'*|*vue-tsc*|*'tsc '*|*'tsc -'*) ;;
   *'nuxt typecheck'*|*'nuxt build'*|*'vite build'*|*'pnpm build'*|*'pnpm install'*) ;;
-  *publish.ts*|*propagate.ts*|*review-gui-web-quality*) ;;
+  *publish.ts*|*propagate.ts*) ;;
   *) exit 0 ;;
 esac
 
