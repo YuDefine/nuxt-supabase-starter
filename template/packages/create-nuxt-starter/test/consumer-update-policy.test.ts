@@ -874,6 +874,69 @@ describe('CLI process：--json 機讀完成報告', () => {
   )
 
   it(
+    'scaffold-only 選 Codex：明示 deferred、可執行指令且不宣稱已有投影',
+    { timeout: 120_000 },
+    () => {
+      const run = freshRun('codex-scaffold-only')
+      const result = runCli(
+        [
+          'codex-scaffold-only',
+          ...ISOLATION_FLAGS,
+          '--agents',
+          'codex',
+          '--no-register-consumer',
+          '--json',
+        ],
+        run,
+      )
+
+      expect(result.status, outputOf(result)).toBe(0)
+      const report = JSON.parse(result.stdout) as {
+        codexProjection?: { status: string; reason: string; command: string }
+      }
+      expect(report.codexProjection?.status).toBe('deferred')
+      expect(report.codexProjection?.reason).toBe('scaffold_only')
+      expect(report.codexProjection?.command).toContain('init-consumer.ts')
+      expect(report.codexProjection?.command).toContain('run-sync-to-codex.ts')
+      expect(outputOf(result)).toContain('Codex projection deferred')
+      expect(existsSync(join(run.cwd, 'codex-scaffold-only', '.codex'))).toBe(false)
+    },
+  )
+
+  it(
+    'managed --no-install 選 Codex：JSON 回報 deferred 與安裝後投影指令',
+    { timeout: 120_000 },
+    () => {
+      const run = freshRun('codex-no-install')
+      const result = runCli(
+        [
+          'codex-no-install',
+          ...ISOLATION_FLAGS,
+          '--agents',
+          'codex',
+          ...managedExecArgs({
+            registryPath: run.registryPath,
+            releaseStore: run.releaseStore,
+            release: '1.0.0',
+          }),
+          '--json',
+        ],
+        run,
+      )
+
+      expect(result.status, outputOf(result)).toBe(0)
+      const report = JSON.parse(result.stdout) as {
+        codexProjection?: { status: string; reason: string; command: string }
+      }
+      expect(report.codexProjection?.status).toBe('deferred')
+      expect(report.codexProjection?.reason).toBe('dependencies_unavailable')
+      expect(report.codexProjection?.command).toContain('pnpm install')
+      expect(report.codexProjection?.command).toContain('run-sync-to-codex.ts')
+      expect(outputOf(result)).toContain('Codex projection deferred')
+    },
+  )
+
+  it(
     'managed --json：bootstrap 未回可驗證身分時降 scaffolded + BOOTSTRAP_RESULT_UNVERIFIED',
     { timeout: 120_000 },
     () => {

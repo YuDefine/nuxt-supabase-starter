@@ -580,6 +580,7 @@ interface CompletionReport {
   workRoute?: string
   target: string
   diagnostics: Array<{ code: string; message: string }>
+  codexProjection?: PostScaffoldOutcome['codexProjection']
 }
 
 /**
@@ -596,8 +597,17 @@ function buildCompletionReport(
   outcome: PostScaffoldOutcome,
 ): CompletionReport {
   const target = targetDir
+  const projectionFields = outcome.codexProjection
+    ? { codexProjection: outcome.codexProjection }
+    : {}
   if (!registerConsumer) {
-    return { status: 'scaffolded', registration: 'unregistered', target, diagnostics: [] }
+    return {
+      status: 'scaffolded',
+      registration: 'unregistered',
+      target,
+      diagnostics: [],
+      ...projectionFields,
+    }
   }
   const managed = outcome.managed
   if (!managed?.ran) {
@@ -611,10 +621,17 @@ function buildCompletionReport(
           message: 'managed 流程被要求，但 clade 來源不可用，bootstrap 未執行',
         },
       ],
+      ...projectionFields,
     }
   }
   if (!managed.ok) {
-    return { status: 'failed', registration: 'failed', target, diagnostics: managed.diagnostics }
+    return {
+      status: 'failed',
+      registration: 'failed',
+      target,
+      diagnostics: managed.diagnostics,
+      ...projectionFields,
+    }
   }
   const bootstrapReport = managed.report
   const hasVerifiableIdentity =
@@ -634,6 +651,7 @@ function buildCompletionReport(
             '不宣稱 ready。registry/manifest 以真產物為準。',
         },
       ],
+      ...projectionFields,
     }
   }
   return {
@@ -646,6 +664,7 @@ function buildCompletionReport(
       typeof bootstrapReport.workRoute === 'string' ? bootstrapReport.workRoute : undefined,
     target,
     diagnostics: [],
+    ...projectionFields,
   }
 }
 

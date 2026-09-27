@@ -80,7 +80,7 @@ export function assembleProject(
   // 7. Copy shared template assets first so scaffold inherits template updates.
   copyTemplateClaudeAssets(targetDir)
   if (hasAgent(agentTargets, 'codex')) {
-    copyTemplateCodexAssets(targetDir)
+    copyAgentsInstructionFile(targetDir)
   }
   if (hasAgent(agentTargets, 'cursor')) {
     copyTemplateCursorAssets(targetDir)
@@ -245,20 +245,6 @@ function copyTemplateCursorAssets(targetDir: string): void {
   if (existsSync(cursorDir)) {
     copyDirectory(cursorDir, join(targetDir, '.cursor'))
   }
-  copyAgentsInstructionFile(targetDir)
-}
-
-function copyTemplateCodexAssets(targetDir: string): void {
-  const codexDir = join(STARTER_ROOT, '.codex')
-  if (existsSync(codexDir)) {
-    copyDirectory(codexDir, join(targetDir, '.codex'))
-  }
-
-  const agentsDir = join(STARTER_ROOT, '.agents')
-  if (existsSync(agentsDir)) {
-    copyDirectory(agentsDir, join(targetDir, '.agents'))
-  }
-
   copyAgentsInstructionFile(targetDir)
 }
 
