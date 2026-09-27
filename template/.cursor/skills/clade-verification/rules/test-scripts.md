@@ -48,6 +48,13 @@ pnpm vp test run <path>         # 等價：直接呼叫 vp
 ```
 
 vitest 會依 `vitest.config.ts` 內各 project 的 `include` / `exclude` 自動把該 path 路由到對應 project。
+執行前仍要核對 repo 的 gate 入口：已包 `clade-gate` 的 `test:file` 可直接使用；
+直呼 `vp test run` 若未經 script 受閘，須在 wrapper 可用時改由 `clade-gate run test -- vp test run <path>` 執行。
+小範圍定點測試會走 light lane；wrapper 不存在的 CI／cloud 環境保持原本測試入口可執行，
+不因 Bash admission hook 缺少 wrapper 而硬擋。
+對 `node --test`／`vitest run` 的直呼，明確列出 1–5 個 `.test.*`／`.spec.*` 檔案仍屬
+定點測試；`2>&1` 等重導向及 `--reporter=dot`、`--test-name-pattern` 旗標不算測試檔。
+未指定檔案或列出超過 5 個檔案才按整套測試處理；resource-patrol 用相同的檔數門檻。
 
 ## NEVER
 
