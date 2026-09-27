@@ -39,6 +39,7 @@ import {
   type ProcessProbe,
 } from './lib/publish-in-flight.ts'
 import { findClaimByWorktreeObserved, readActiveClaimsObserved } from './claim-helper.ts'
+import { blockingPorcelainPaths } from './wip-dirty.ts'
 import { errorMessage } from './lib/safety-observation.ts'
 import {
   captureAndVerify,
@@ -2772,6 +2773,33 @@ export function unreadySource(cwd: string, source: string, reason: string) {
     return record
   })
 }
+/**
+ * Dirty paths that still block after ignorable drift is removed — the exact
+ * filter wt-helper's cleanup uncommitted gate uses (single predicate in
+ * wip-dirty.ts). checkpoint/draft only ever record HEAD, so tool-managed
+ * residue (verifyDepsBeforeRun flip) and clade projection drift must not block
+ * them; every other dirty path remains a hard refusal.
+ */
+function blockingDirtyPaths(path: string): string[] {
+  // NOT the shared `git()` helper: it .trim()s stdout, which eats the first
+  // porcelain line's leading X-status space and shifts its path one char.
+  const out = execFileSync('git', ['status', '--porcelain'], {
+    cwd: path,
+    env: isolatedGitEnv,
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
+  return blockingPorcelainPaths(path, out)
+}
+function assertNoBlockingDirty(path: string, op: 'checkpoint' | 'draft') {
+  const blocking = blockingDirtyPaths(path)
+  if (blocking.length === 0) return
+  const shown = blocking.slice(0, 10).join(', ')
+  const more = blocking.length > 10 ? ` (+${blocking.length - 10} more)` : ''
+  throw new Error(
+    `Commit scoped changes before ${op}; ${op} does not harvest WIP. Blocking: ${shown}${more}`,
+  )
+}
 export function checkpointSource(
   cwd: string,
   source: string,
@@ -2783,8 +2811,7 @@ export function checkpointSource(
   const wt = worktrees(c.main).find((w) => w.path === path)
   if (!wt?.branch || path === c.main)
     throw new Error('Checkpoint requires a source linked worktree')
-  if (git(path, ['status', '--porcelain']))
-    throw new Error('Commit scoped changes before checkpoint; checkpoint does not harvest WIP')
+  assertNoBlockingDirty(path, 'checkpoint')
   const scope =
     options.scope && options.scope.length
       ? options.scope
@@ -2946,8 +2973,7 @@ export function recordDraftPr(
   const path = realpathSync(resolve(cwd, source))
   const wt = worktrees(c.main).find((w) => w.path === path)
   if (!wt?.branch || path === c.main) throw new Error('Draft requires a source linked worktree')
-  if (git(path, ['status', '--porcelain']))
-    throw new Error('Commit scoped changes before draft; draft does not harvest WIP')
+  assertNoBlockingDirty(path, 'draft')
   const changed = git(path, ['diff', '--name-only', `${fetchOriginMain(c)}...HEAD`])
     .split('\n')
     .filter(Boolean)
