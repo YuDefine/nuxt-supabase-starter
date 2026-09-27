@@ -517,11 +517,14 @@ fi
 ```
 
 `test:affected` 是 repo 在 `package.json` **明文宣告**的 lane 入口：它從 diff（staged ＋ working tree ＋ base 以來的 range）反查
-「哪些測試引用了改到的檔」，改到共用設定（runner／CI／package.json）時自動升 full。這與下一段禁止的事**不同型**——
+「哪些測試引用了改到的檔」，改到共用設定（runner／lockfile／tsconfig）時自動升 full。clade 的 runner 對 `package.json`
+做欄位判定：依賴、`test*`／生命週期 script、其他非描述欄位有變才升 full；只改其他 script 時改選引用到它（含遞移呼叫者與
+`pre`／`post` hook 所掛的 script）的測試，判不出來一律升 full。這與下一段禁止的事**不同型**——
 下一段禁的是「用字串啟發式猜 `check` 有沒有含 test」，本段靠的是宣告，沒有宣告就照原樣跑 `pnpm test`。
 
 判讀 affected 輸出時看兩行：`Affected analysis: N changed files -> M tests selected` 與逐檔的 `:: <reason>`。
-出現 `unmapped-fallback` 代表有改動對不到任何測試而退回整個 fast lane——那不是錯，但通常是新檔還沒有測試在引用它。
+出現 `unmapped-fallback` 代表有改動對不到任何測試而退回保守選檔——沒有觀測紀錄時是整個 fast lane；clade 的 observed
+選檔在 v2 trace 下只補跑讀取範圍未知的測試（未 trace、過期、trace 時紅掉）。那不是錯，但通常是新檔還沒有測試在引用它。
 **純文件 diff（只改 `.md`）也照跑**：clade 有百餘支測試讀真實 `rules/ docs/ capabilities/` 內容，lane 會把它們選出來；
 選出 0 支時 runner 印 `No affected tests found`，那才是「這次沒有測試該跑」的合法結論。
 

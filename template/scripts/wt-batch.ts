@@ -173,12 +173,11 @@ export const trustedRepositoriesByConsumerId: ReadonlyMap<string, string> = new 
   ['nuxt-supabase-starter', 'YuDefine/nuxt-supabase-starter'],
   ['<consumer-d>', 'YuDefine/<consumer-d>'],
   ['<consumer-b>', '<client-b>/<consumer-b>'],
+  ['<consumer-i>', 'YuDefine/<consumer-i>'],
   ['<consumer-j>', 'YuDefine/<consumer-j>'],
-  ['<consumer-k>', 'YuDefine/<consumer-k>'],
-  ['<consumer-h>', '<client-b>/<consumer-h>'],
   ['<consumer-g>', '<client-b>/<consumer-g>'],
-  ['<consumer-i>', '<client-b>/<consumer-i>'],
-  ['<consumer-f>', 'YuDefine/<consumer-f>'],
+  ['<consumer-f>', '<client-b>/<consumer-f>'],
+  ['<consumer-h>', '<client-b>/<consumer-h>'],
   ['<consumer-e>', '<client-b>/<consumer-e>'],
 ])
 function consumerIdForRoot(root: string): string {

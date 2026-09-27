@@ -91,7 +91,7 @@ const profileEntries: Array<[string, ProfileDefinition]> = [
     },
   ],
   [
-    '<consumer-j>',
+    '<consumer-i>',
     {
       topology: unknownTopology,
       resources: {
@@ -102,14 +102,14 @@ const profileEntries: Array<[string, ProfileDefinition]> = [
     },
   ],
   [
-    '<consumer-k>',
+    '<consumer-j>',
     {
       topology: unknownTopology,
       resources: { ...unknownResources, databases: 'verified-absent' },
     },
   ],
   [
-    '<consumer-h>',
+    '<consumer-g>',
     {
       topology: unknownTopology,
       resources: {
@@ -120,20 +120,19 @@ const profileEntries: Array<[string, ProfileDefinition]> = [
     },
   ],
   [
-    '<consumer-g>',
+    '<consumer-f>',
     {
       topology: unknownTopology,
       resources: { ...unknownResources, databases: 'unknown' },
     },
   ],
   [
-    '<consumer-i>',
+    '<consumer-h>',
     {
       topology: unknownTopology,
       resources: { ...unknownResources, databases: 'declared-present' },
     },
   ],
-  ['<consumer-f>', { topology: unknownTopology, resources: unknownResources }],
   [
     '<consumer-e>',
     {

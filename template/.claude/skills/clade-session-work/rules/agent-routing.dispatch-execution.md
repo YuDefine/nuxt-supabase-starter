@@ -21,7 +21,7 @@ paths:
 >
 > **本檔的觸發是具名時機，不是編輯檔案順帶載入**：`paths:` 只綁 pi dispatcher／routing gate 的 script
 > 與 agent 定義檔。2026-09-09 實測本檔 glob 的 session 命中率為 clade 6.4%（126/1965）／
-> <consumer-i> 2.9%（8/273）／<consumer-b> 11.4%（78/683）——**靠 auto-load 會讀不到**，主檔
+> <consumer-h> 2.9%（8/273）／<consumer-b> 11.4%（78/683）——**靠 auto-load 會讀不到**，主檔
 > § 必禁事項 的強制指針才是主要入口。重跑法：把本檔的 `paths:` 陣列寫成一份 probe sidecar 的
 > `{"probes":{"agent-routing.md":{"path":[…]}}}`，再跑
 > `node scripts/audit-rule-paths.ts --self --json --probes <sidecar>` 讀 `always-load` 列的
@@ -161,6 +161,8 @@ Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工�
 | 任一 < 30% | 0 件：不派 cloud，改 Herdr pane |
 
 機械閘在 `vendor/scripts/cloud-dispatch.ts dispatch` 的 admission：額度取自 fleet 額度 SoT（`selectClaudeAccount` 讀 quota collector；collector 不可達才退用經驗證的 statusline 快取），來源不可用或缺 `five_hour`／`seven_day` 任一窗就拒派；在飛數依該帳號尚未 `harvest` 的 record 計，未帶帳號的 adopted record 保守地在 cc、ccw 各佔一席。上表與它同一組門檻，**NEVER** 用任何方式繞過它拒派的結果。派出帳號在 cc 與 ccw 之間**選額度寬裕的那個**（比 `dispatch --dry-run` 印的 `admission` 兩窗；`dev-node.ts probe-quota` 只印兩窗較小者，且只讀不刷新來源），以 `dispatch --account cc|ccw` 明確指定；`adopt` 也帶 `--account` 讓 record 歸屬到帳號。不指定時只接受能從 `CLAUDE_CONFIG_DIR` 辨認出的 cc／ccw。
+
+Charles 於 2026-09-27 告知 cc 與 ccw **各有 USD 250 cloud session 專用 credit**。額度有效期間，每輪有 handoff 級 Claude-only 就緒件時，主持者先實際跑兩個帳號的 cloud dry-run admission，再選可派的帳號；若不派 cloud，在載體分佈旁記錄具體拒派條件（例如 repo 未釘 model、quota slot 用盡、工作要本機狀態）。專用 credit 是偏好 cloud 的成本理由，**不是**跳過 five_hour／seven_day admission 的理由。
 
 **Devin 續接**：Devin session 不能 `--continue`，要續做一律開新 session 帶 durable brief。
 
