@@ -64,7 +64,7 @@ esac
 #   grep -rn 'codex exec' docs/  → 同上
 #   codex login status           → 子命令不在白名單
 #   node scripts/sync-to-codex.ts → 命令位置是 node
-printf '%s' "$cmd" | perl -0777 -e '
+printf '%s' "$cmd" | LC_ALL=C perl -0777 -e '
   my $c = <>;
   $c = "" unless defined $c;
   exit(($c =~ m{

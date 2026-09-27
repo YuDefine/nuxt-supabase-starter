@@ -8,7 +8,7 @@
 
 具體 model、effort、workspace access 與硬禁令只以 [[agent-routing.routing-table]] 為 SoT；查表前 MUST Read 該檔。**禁用**（Charles 2026-09-24）：GPT-6 Astra、GPT-6 Luna、Claude Fable、Sonnet、Haiku、Cursor Composer 2.5、Devin Fusion——任何列、fallback、額度耗盡備援都 **NEVER** 派。Tier 2（Grok 4.7、GPT-6 Sol）一律 xhigh，Gemini 3.8 Flash 一律 high。實作／計畫／裁決列走 GPT-6 Sol xhigh；UI view 實作（含 Nuxt UI／Content）、Design Review、UI 詳細計畫、截圖項目符合性判定與 code review 走 Claude Opus 5.5（effort: medium）（無 fallback）；screenshot review 與掃描類走 Gemini 3.8 Flash high。Devin SWE-2 Max 是任意 Pi 列的**可選**載體，只限不急、緩慢也不堵塞的任務（desk 與已登入的 zenbook 皆可）；四個 UI／設計類 Claude-only 列（`ui-view-implementation`、`design-review`、`ui-detailed-planning`、`screenshot-match-analysis`）符合 cloud 條件時預設走 cloud session，cloud 同時在飛上限跟派出帳號額度掛鉤——載體混搭判準在 [[agent-routing.dispatch-execution]] § Cloud session 載體。鏈只在 provider／quota／runtime 不可用時前進，鏈走完由 `dispatch-fallback`（Claude Opus 5.5（effort: low））或主線接手，依列而定。
 
-**GPT 外派載體**：Codex 需要 GPT 協作時 MUST 使用 Codex native subagent（`collaboration.spawn_agent`）；上游保留協調與交付責任，不透過 `/handoff relay`、Herdr 或外部 launcher 建立另一個 Codex successor。原生能力不可用時保留工作並回報缺口，不改用外部 Codex pane。唯一外部例外：user 當次明確點名的 Devin bounded worker 可由上游經 helper 以 create-only `--launcher devin` 派出並以 `--coordinate` 收割；它是 worker 不是 successor，cx successor 與其他 launcher 維持拒絕。非 Codex 的 GPT worker 一律走 Pi；Claude Code 不承載 GPT。
+**GPT 外派載體**：Codex 需要 GPT 協作時，載體依下方 § Dispatch data and transport boundary 的「短任務 vs handoff 級」判：本 turn 收得回來的 bounded 工作 MUST 使用 Codex native subagent（`collaboration.spawn_agent`），上游保留協調與交付責任；handoff 級、主持分工級、長時間的獨立工作可經 Herdr 另開 session（含 `/handoff relay` 交給 successor）。身分無法驗證的 Codex origin 一律 fail closed。非 Codex 的 GPT worker 一律走 Pi；Claude Code 不承載 GPT。
 
 ## commit 0-A reviewer（常設）
 
@@ -49,7 +49,14 @@ Iron Law：本 session 做得到的動作與查得出的決策 NEVER 交 user。
 
 每份 brief MUST 列 paths、命令與外部服務；清單外回報、NEVER 自取；secret／個資／private URL／signed material 不進 brief。寫入落點不在該 dispatch cwd 的指令不是「列了就准跑」——那是回報項，不是執行項（TD-782）。詳見 [[agent-routing.pi-watch-protocol]] § Dispatch 資料邊界 與 § Brief 措辭紀律。
 
-**Claude 派 Claude 的短期工作走 in-process subagent，NEVER 開 Herdr pane。** 判準是「本 turn 內收得回來、不需要 successor」：review、裁決、掃描這類 bounded 工作由主線用該 runtime 的 in-process subagent 載體派、前景等結果（工具名只寫在該 runtime 的 adapter）。Herdr pane 只留給四種情形：successor 交棒（relay／fanout）、長時間 background、必須隔離 worktree／port／環境、主線 runtime 叫不出 Claude subagent。逐字反開脫：「要留 model 身分 receipt，所以開 pane」——subagent transcript 記得到每則訊息的 model，commit 0-A 的 `prepare`／`finalize` 就是從那裡核對的。
+**載體依任務長短判，不依任務類別判（Charles 2026-09-27）。** runtime 派同家族 model 時（Claude Code 派 Claude、Codex 派 GPT）：
+
+| 可觀察 predicate | 載體 |
+| --- | --- |
+| 本 turn 內收得回來、不需要 successor 的 bounded 工作——review、裁決、掃描，**也含**短的實作／改檔（改一支 skill、補一段規約） | 該 runtime 的 in-process subagent（工具名只寫在該 runtime 的 adapter），前景等結果；要寫檔且怕撞主線就用 subagent 自帶的 worktree 隔離。**NEVER** 開 Herdr pane |
+| successor 交棒（relay／fanout）、主持分工、長時間 background、必須隔離 port／環境、主線 runtime 叫不出同家族 subagent | Herdr session |
+
+逐字反開脫：「要留 model 身分 receipt，所以開 pane」——subagent transcript 記得到每則訊息的 model，commit 0-A 的 `prepare`／`finalize` 就是從那裡核對的。「這列寫 Herdr carrier，所以開 pane」——Routing Table 的載體欄列的是**可用**載體，長短判準優先於它。
 
 dispatch／resume／retry／bridge MUST 傳 model／effort／route／tier-basis／workspace access；NEVER inherit 或 quota fallback 降檔；回報依 dispatch-execution 的 4-status、scope verify、receipt 核實。實作派工綁 lifecycle package 時先過 `flow plan readiness`，判準與 implementer 的唯讀邊界在 [[agent-routing.dispatch-execution]] § Implementation readiness gate。 brief 叫 pane 呼叫的 skill 以**目標端投影 frontmatter** 判可不可呼叫，見同檔 § Skill invocability gate。
 

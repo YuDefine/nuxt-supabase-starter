@@ -12,7 +12,8 @@
 # 釘 tag：裸 `pbakaus/impeccable` 拉 default branch HEAD，會裝到未發布內容（見下方「為什麼要釘 tag」）
 IMPECCABLE_TAG="skill-v4.3.1"
 echo "📦 Impeccable Design Skill（$IMPECCABLE_TAG）..."
-npx skills add "https://github.com/pbakaus/impeccable/tree/$IMPECCABLE_TAG" $COPY_FLAGS  # symlink mode 改 --agent claude-code -y
+# --agent 帶 codex：Claude Code 讀 .claude/skills/、Codex 讀 .agents/skills/，只帶 claude-code 時 Codex 那份會一直停在舊版（標準寫法見 vendor/snippets/impeccable/README.md）
+npx skills add "https://github.com/pbakaus/impeccable/tree/$IMPECCABLE_TAG" --agent claude-code codex --copy -y  # symlink mode 改 --agent claude-code codex -y
 # 執行碼是原生 engine，launcher 第一次執行才下載。裝完當下先下載好，
 # 之後在沒有對外網路的沙箱裡 /design 才跑得起來。下載失敗只警告、不中止其餘 skill 的安裝。
 for IMPECCABLE_DIR in .claude/skills/impeccable .agents/skills/impeccable .cursor/skills/impeccable; do
@@ -40,8 +41,8 @@ echo ""
 
 | 模式 | flag | `<skills-root>/impeccable` 形態 | 適用 |
 | --- | --- | --- | --- |
-| **copy** | `--agent claude-code --copy -y` | 真實目錄 | 想把 skill 進 git tracking、不跨 agent 共用 |
-| **symlink** (default) | `--agent claude-code -y` | `<skills-root>/impeccable` 是 symlink → `.agents/skills/impeccable/`（universal agents directory） | 多 AI agent（Claude / Codex / Cursor）共用同一份 |
+| **copy** | `--agent claude-code codex --copy -y` | 真實目錄 | 想把 skill 進 git tracking、不跨 agent 共用 |
+| **symlink** (default) | `--agent claude-code codex -y` | `<skills-root>/impeccable` 是 symlink → `.agents/skills/impeccable/`（universal agents directory） | 多 AI agent（Claude / Codex / Cursor）共用同一份 |
 
 兩種模式都會被 design orchestrator 認到。**加裝前 MUST 先確認該 repo 走哪一種**——`ls -la <skills-root>/` 看既有 skill 是 symlink 還是真實目錄，照它的慣例裝。
 
@@ -70,6 +71,7 @@ echo ""
    - `scripts/inspect-new-project-round.ts` 的 `IMPECCABLE_LOCKED_VERSION`
    - `capabilities/modules/framework/nuxt/skills/project-bootstrap/references/impeccable-follow-up.md` 的版本
    - clade home `scripts/install-skills.sh` 的 `IMPECCABLE_TAG`
+   - `vendor/snippets/impeccable/README.md` 的鎖定版本與標準 snippet 的 `IMPECCABLE_TAG`（安裝寫法的 SoT）
 2. 走 `/clade-publish` 散播
 3. consumer 把自己 `install-skills.sh` 的 impeccable 段對齊本檔 snippet（改 tag），再跑 `pnpm skills:install`
 
@@ -119,7 +121,7 @@ target file」。
 - `<consumer-a>/scripts/install-skills.sh` — copy mode 標準範本
 - `<consumer-c>/scripts/install-skills.sh` — copy mode
 - `nuxt-supabase-starter/template/scripts/install-skills.sh` — copy mode（仍走 `vp staged` 路徑；`staged:` 不放 `*.md` 那一格，見上節）
-- `<consumer-d>/scripts/install-skills.sh` — copy mode（同 <consumer-a>；目前無 symlink-mode consumer 可當範本，需 symlink 時用標準 snippet 的 `--agent claude-code -y` 變體）
+- `<consumer-d>/scripts/install-skills.sh` — copy mode（同 <consumer-a>；目前無 symlink-mode consumer 可當範本，需 symlink 時用標準 snippet 的 `--agent claude-code codex -y` 變體）
 
 ## 疑難排解（consumer 回報「`/design` 找不到 impeccable」或 detector 不跑）
 

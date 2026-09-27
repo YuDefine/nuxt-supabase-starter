@@ -119,6 +119,7 @@ import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
 import { fileURLToPath } from 'node:url'
+import { extendCodexWorktreeHookTrust } from './codex-worktree-trust.ts'
 import { createInterface } from 'node:readline/promises'
 import {
   classifyDirtyPaths,
@@ -1269,6 +1270,15 @@ export function seedWorktreeCladeSubstrate(
       if (spawnSync('git', ['check-ignore', '-q', rel], { cwd: consumerRoot }).status !== 0)
         continue
       cpSync(src, dst, { recursive: true })
+      if (rel === '.codex') {
+        try {
+          log(`  ${extendCodexWorktreeHookTrust(wtPath).reason}`)
+        } catch (error) {
+          console.error(
+            `warn: Codex worktree hook trust unchanged: ${error instanceof Error ? error.message : String(error)}`,
+          )
+        }
+      }
       if (rel === '.clade/projections') copiedProjections = true
       copied.push(rel)
       log(`  clade-substrate: copied ${rel} from main (gitignored, worktree cannot check it out)`)

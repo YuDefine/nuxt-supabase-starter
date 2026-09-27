@@ -46,7 +46,7 @@ esac
 # 命令位置 = 開頭、換行、; & | 之後、( ` $( 之後、then/do 之後；允許 cd … &&、env／VAR=val 與 command／exec／nohup／timeout 前綴；
 # target 前可先接無值旗標（--wait 等）；
 # herdr 可帶路徑（~/.local/bin/herdr）。target 可被單／雙引號包住。
-targets=$(printf '%s' "$cmd" | perl -0777 -ne '
+targets=$(printf '%s' "$cmd" | LC_ALL=C perl -0777 -ne '
   while (m{
     (?: ^ | [;&|(`\n] | \bthen\b | \bdo\b )
     \s*

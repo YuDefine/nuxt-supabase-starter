@@ -1,8 +1,8 @@
 # Fanout Mode — `/handoff fanout`
 
-**Codex 不執行本檔的 Herdr fanout。** Codex upstream 依 [SKILL.md](SKILL.md) § Codex native boundary 保留 coordinator 責任；多件互不依賴的 bounded GPT work 才用 `collaboration.spawn_agent` 平行派，upstream 收割結果後繼續工作。native worker 完成不建立 successor、不中止 upstream；缺 native capability 就回 blocker，**NEVER** 改走外部 launcher——唯一例外是 user 明確點名的 Devin bounded worker：各派一件 create-only `--launcher devin`、upstream 逐一收割；這仍是 worker 不是 successor，不是本檔的 fanout。
+**Codex 先過 [SKILL.md](SKILL.md) § Codex boundary**：本 turn 收得回來的多件 bounded GPT 工作用 `collaboration.spawn_agent` 平行派、upstream 收割後繼續；每件都是 handoff 級的獨立工作時才照本檔 fanout。
 
-以下只適用支援 Herdr successor 的 runtime：把**多件可平行、主題不同的工作**各派一個 worker session，且每個 worker 各佔一個獨立 Tab；再把**本 session 的整個位置**交給同樣位於獨立 Tab 的 successor——由它繼承那 N 筆 worker 的 coordinator 身分並回收本 pane，然後本 session 收工。
+把**多件可平行、主題不同的工作**各派一個 worker session，且每個 worker 各佔一個獨立 Tab；再把**本 session 的整個位置**交給同樣位於獨立 Tab 的 successor——由它繼承那 N 筆 worker 的 coordinator 身分並回收本 pane，然後本 session 收工。
 
 與 [relay-steps.md](relay-steps.md) 的差別只有一個：relay 交出位置時手上沒有新派的工作，fanout 先派了 N 筆再交。收尾動作完全相同，因為 helper 的 `--relay` 本來就會把**所有** in-flight dispatch 一起轉移。
 

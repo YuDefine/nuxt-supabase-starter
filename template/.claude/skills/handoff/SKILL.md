@@ -15,19 +15,15 @@ metadata:
 
 > Runtime host-specific relay/fanout restrictions and launcher/tool bindings are supplied by the selected runtime adapter. The shared rules below define durable handoff semantics and fail-closed boundaries.
 
-Session 交接管理。非 Codex runtime 的四個 arg 依下方契約收工；Codex 先走下一節的 native boundary，upstream task 保留責任與控制權。
+Session 交接管理。四個 arg 依下方契約收工；Codex 先過下一節的 Codex boundary 判 bounded 還是 handoff 級。
 
-## Codex native boundary（MUST 早於 Step 0.1 與任何 Herdr preflight）
+## Codex boundary（MUST 早於 Step 0.1 與任何 Herdr preflight）
 
-當前 host 是 Codex 時，**在讀取或執行任何 Herdr／`herdr-session-handoff.ts`／`--launcher cx` 步驟前停止共用 successor 流程**：
+當前 host 是 Codex 時，先依 [[agent-routing]] § Dispatch data and transport boundary 判載體，判準與其他 runtime 相同：
 
-- 同一個 upstream Codex task 保留 change、user 對話、驗收與收尾責任；`relay`／`fanout`／`next` **NEVER** 把 upstream 轉成 successor、另開外部 Codex launcher，或因 native subagent 完成而強制結束 upstream。
-- 可切成 bounded GPT 工作時，依當前 schema 使用 `collaboration.spawn_agent`；一件 serial work 派一個，互不依賴的多件 work 才平行派。upstream 等待、收割 outcome、驗 scope 並繼續負責。
-- user 真正要求的是把整個 Codex 對話位置交給另一個 user-owned successor 時，當前 native surface 不提供這個能力；保留 durable state 並回報具體 blocker。**NEVER** 用 Herdr、`cx resume`、外部 launcher 或其他 runtime 冒充。
-- `collaboration.spawn_agent` 或所需 model／effort 不可用時，回報該 capability blocker；**NEVER** fallback 到外部 pane。被派出的 native subagent 只完成 brief 內 bounded work 並回報 parent，自己不 invoke `relay`／`fanout`。
-- **唯一外部 transport 例外**：user 當次明確點名 Devin bounded worker 時，upstream 可經 `herdr-session-handoff.ts` 以 create-only `--launcher devin` 派工並用 `--coordinate` 收割；routing 仍強制 exact Devin catalog model／effort。它是 worker 不是 successor——upstream 保留責任，`--relay`、cx successor 與其他 launcher 維持拒絕，無法驗證的 Codex 來源一律 fail closed。
-
-Codex 在本節完成分流後 **NEVER 繼續進入下方 relay／fanout Herdr 步驟**（Devin bounded worker 例外是 helper 的 create-only dispatch，不是下方 successor 流程）。`park` 仍可只寫 durable handoff state，但不因此關閉或移交 upstream task。
+- **本 turn 收得回來的 bounded GPT 工作**：依當前 schema 使用 `collaboration.spawn_agent`，**NEVER** 為它開 Herdr pane。同一個 upstream Codex task 保留 change、user 對話、驗收與收尾責任；一件 serial work 派一個，互不依賴的多件才平行派；upstream 等待、收割 outcome、驗 scope 後繼續。被派出的 native subagent 只完成 brief 內 bounded work 並回報 parent，自己不 invoke `relay`／`fanout`。
+- **handoff 級、主持分工級、長時間的獨立工作**：照下方 relay／fanout／next 的 Herdr 流程，與其他 runtime 相同；successor 原樣繼承 `cx`。
+- 身分無法驗證的 Codex origin（`CODEX_THREAD_ID` 在但 process evidence 判不出）由 helper 回 `codex_native_dispatch_forbidden`，**NEVER** 以 `--launcher` 或偽造 env 繞過。
 
 ## Step 0.1 — Value-first continuation gate（四種模式共用）
 
@@ -61,7 +57,7 @@ Codex 在本節完成分流後 **NEVER 繼續進入下方 relay／fanout Herdr �
 
 ### 可觀察 predicate（用訊號，NEVER 憑感覺估）
 
-門檻取 [[session-tasks]] § Session context 預算的 launcher profile（數字的 SoT 是 `session-context-budget-warn.sh` 的 profile 表）。`ccx` 不是可用 launcher：live `ccx` handoff fail closed，不自行改派其他 runtime；只有 user 明確點名時才可改交仍支援的 launcher。會進入共用 Herdr 流程的 runtime 原生繼承當前 session（`cc → cc`、`ccw → ccw`、`ccg → ccg`）；Codex 已由上方 native boundary 分流，工作 routing 不得覆蓋。判定材料只認下列三種**在 transcript 裡看得到**的訊號：
+門檻取 [[session-tasks]] § Session context 預算的 launcher profile（數字的 SoT 是 `session-context-budget-warn.sh` 的 profile 表）。`ccx` 不是可用 launcher：live `ccx` handoff fail closed，不自行改派其他 runtime；只有 user 明確點名時才可改交仍支援的 launcher。會進入共用 Herdr 流程的 runtime 原生繼承當前 session（`cc → cc`、`ccw → ccw`、`ccg → ccg`、`cx → cx`），工作 routing 不得覆蓋。判定材料只認下列三種**在 transcript 裡看得到**的訊號：
 
 1. `session-context-budget-warn` hook 已在本 session 響過（它逐字報「session context 已達 Nk」）
 2. user 在訊息裡明講了 context 用量（「目前已經 43%」「快滿了」）
@@ -563,7 +559,7 @@ Retained: N
 
 ## Output contract
 
-- Codex native branch：upstream 保留責任；native subagent receipt 只證明 bounded work 已回報，**NEVER** 宣稱 successor 已接手或「目前這裡收工」。缺 native capability 時回具體 blocker，不啟動外部 launcher——唯一例外是 user 點名的 create-only `--launcher devin` bounded worker，dispatch receipt 只證明 worker 已派出，upstream 以 `--coordinate` 收割
+- Codex bounded 分支：upstream 保留責任；native subagent receipt 只證明 bounded work 已回報，**NEVER** 宣稱 successor 已接手或「目前這裡收工」。Codex 走 relay／fanout 時套用下列同一份契約
 - `relay` / `fanout`：成功 = durable brief 已存在 + helper 回傳 `relay_dispatched` + （fanout）`relayed_dispatch_ids` 已逐筆比對通過 + runtime cleanup 已盤點 + parent worktree lifecycle 已 `removed`／具名 `retained`；完成訊息首行逐字包含「目前這裡收工」，之後不再工作或輪詢。`relay_refused`／`transport_error` 保留 pane 且不得假裝完成（見 [dispatch-common.md](dispatch-common.md) § 5）
 - park：成功 = **進入條件已滿足**（user 顯式打 `park`，或裸 `/handoff` 已取得 user 允許）+ HANDOFF.md / plan（未遷移 consumer 為 tech-debt）/ ROADMAP 有對應寫入 + tasks 檔已清 + Step 3 audit 已靜默寫入 HANDOFF.md `## Worktree & Stash Audit` 段；訊息只含升級摘要（不含 audit）。**未取得允許就寫入 = 失敗**，即使檔案內容正確
 - next：成功 = 2B.0–2B.5 每一個 sub-step 都照各自段落執行完（含 2B.2.5 的每一張卡主動 triage、2B.1.9 不存在時明講跳過）+ 盤點訊息與詢問操作已發出 + user 選定後 2B.5 dispatch 已完成
