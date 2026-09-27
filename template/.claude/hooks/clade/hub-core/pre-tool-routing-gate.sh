@@ -17,7 +17,8 @@ esac
 # CLAUDE_CODE_SESSION_ID, so minting a pending decision deadlocks the session.
 # Tests that spawn this wrapper MUST unset every Cursor probe to exercise the helper path.
 #
-# Contract (SoT for the Cursor half; rules/core/agent-routing.md § Cursor 環境的 browser 載體
+# Contract (SoT for the Cursor half;
+# adapters/cursor/instructions/rules/core/agent-routing.md § Cursor 環境的 browser 載體
 # points here). Clade routing gate / Pi handshake NEVER blocks a Cursor main thread from
 # calling cursor-ide-browser:
 #   1. On a Cursor session, mint no Claude-Code decision at all (the early exit above).

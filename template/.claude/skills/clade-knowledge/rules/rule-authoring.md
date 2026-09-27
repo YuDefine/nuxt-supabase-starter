@@ -220,6 +220,8 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 
 ## 稽核
 
+`node scripts/audit-section-refs.ts`（warn-only）：帶檔案限定詞的 `§ <name>` 跨檔引用，`<name>` 在被指向的檔裡必須找得到同名 heading。**改 § 名、拆檔搬節之後跑一次**——`registry/rule-invariants.json` 是 phrase 層，對 section 改名零訊號（TD-980 的失敗模式：§ 改名後引用檔照舊指引讀者去讀不存在的節）。裸 `§` 無目標檔可查，不在檢查範圍。
+
 `node scripts/audit-rule-authoring.ts`（warn-only）：偵測 description 流程摘要、nuance clause、skill 內 `@` force-load 連結、SKILL.md >400 行、description 引號觸發詞 ≥4、缺 negative boundary（`desc-no-negative-boundary`，只驗存在性，不驗有沒有指名去處）、**NEVER 牆**兩訊號：
 
 - `never-wall`：單檔**連續**列舉式 NEVER 超標（list item / table row；散文段落內的 NEVER 不算）。結構性反模式，**無豁免**——收斂成正向 canonical 契約表 + 少數逐字反制。
