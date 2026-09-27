@@ -17,6 +17,22 @@ v1.13.36／v1.13.37 兩筆升版 commit 留在本機，desk `origin/main...main`
 見 commit 後 desk 實測：`git rev-list --left-right --count origin/main...main` 回傳 `0 0`、
 `git status --short --untracked-files=no` 沒有輸出。
 
+## 事故：本機 runtime 檔被 rebase 刪除（已大部分還原）
+
+`git rm --cached` 之後跑 `git pull --rebase`：rebase 先 checkout origin/main（這三個檔在那裡仍是 tracked），
+接著重放「刪除」commit，**連同 working tree 的本機檔一起刪掉**。git 把 ignored 檔視為可覆寫，所以沒有警告。
+
+還原來源是 `git fsck --unreachable` 找到的 blob，比對條件是「內容以 e29c9c60 版本開頭」：
+
+| 檔 | 還原 blob | 結果 |
+| --- | --- | --- |
+| `.clade/flow/events.jsonl` | `7ce38db3` | 完整（+123 行、478971 bytes，與遺失前一致） |
+| `.clade/ownership/journal.jsonl` | `30fc969e` | 完整（+4 行，與 diff stat 一致） |
+| `.clade/ai-control-plane/runtime-events.jsonl` | `668338c5` | **不完整**：只救回 +3 行，原本 +97 行；約 94 行 runtime telemetry 遺失（第一輪已判定這段序號 121–132 與既有紀錄重疊，本來就不能當乾淨日誌） |
+
+教訓（交給 clade）：取消追蹤本機 runtime 檔時，**先把檔案複製到 repo 外面**，再 rebase／pull，之後複製回來；
+或者改成 merge，不要用 rebase。
+
 ## 交給 clade 的問題（不在 consumer 端修）
 
 1. **clade 工具把 nuxt-supabase-starter 的 repo root 當成 consumer root**：有東西在 root 跑了 rule projection
@@ -27,6 +43,7 @@ v1.13.36／v1.13.37 兩筆升版 commit 留在本機，desk `origin/main...main`
 2. **SessionStart hook 也用 repo root 判斷**：在本 repo root 開 session 會印「`.clade/manifest.json`
    與 `.claude/hub.json` 都不存在 —— registry 宣告與 repo 實況不符」，但 `audit-registry-reality.ts --consumer nuxt-supabase-starter`
    回報 OK。這和第 1 點是同一類問題：沒有套用 `local_dir`。
+3. 上面「事故」的教訓：評估 `/oops` 收進 clade `docs/pitfalls/`。
 
 ## Relay 繼任者須知
 
@@ -34,7 +51,7 @@ v1.13.36／v1.13.37 兩筆升版 commit 留在本機，desk `origin/main...main`
 已經完成 starter 端的收斂並推上 origin（`11838d0d`），因此交棒；手上**沒有** in-flight dispatch。
 
 - **cwd**：`/home/charles/offline/clade`（main checkout）
-- **工作**：處理上面「交給 clade 的問題」1、2——找出在 nuxt-supabase-starter repo root（而非 registry
+- **工作**：處理上面「交給 clade 的問題」1、2、3——找出在 nuxt-supabase-starter repo root（而非 registry
   `local_dir` = `nuxt-supabase-starter/template`）跑 rule projection／SessionStart 判定的呼叫端，修成以 `local_dir`
   作為 consumer root，並對沒有 `.clade/manifest.json` 的目錄 fail closed（不寫空殼）。
 - **起點**：`scripts/sync-rules.ts`（`consumerRoot = process.cwd()`、`CLAUDE_MD_SHELL`）、`adapters/codex/rules.ts`、
