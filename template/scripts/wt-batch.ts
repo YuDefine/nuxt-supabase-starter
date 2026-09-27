@@ -161,8 +161,29 @@ function remoteGitEnv(): NodeJS.ProcessEnv {
     delete env[key]
   return env
 }
+// Keep the approved repository IDs in the vendor source: a consumer's tracked
+// registry projection can be changed by the same contributor who changes its meta.
+// This map mirrors registry/consumers.json consumer_id → repo_id and MUST be
+// updated by register-consumer / init-consumer when a consumer is added or
+// renamed — drift silently turns that consumer's cleanups into kept sources.
+// test/wt-batch-profile-identity.test.ts asserts the parity.
+export const trustedRepositoriesByConsumerId: ReadonlyMap<string, string> = new Map([
+  ['clade', 'YuDefine/clade'],
+  ['<consumer-a>', '<client-a>/<consumer-a>'],
+  ['nuxt-supabase-starter', 'YuDefine/nuxt-supabase-starter'],
+  ['<consumer-d>', 'YuDefine/<consumer-d>'],
+  ['<consumer-b>', '<client-b>/<consumer-b>'],
+  ['<consumer-j>', 'YuDefine/<consumer-j>'],
+  ['<consumer-k>', 'YuDefine/<consumer-k>'],
+  ['<consumer-h>', '<client-b>/<consumer-h>'],
+  ['<consumer-g>', '<client-b>/<consumer-g>'],
+  ['<consumer-i>', '<client-b>/<consumer-i>'],
+  ['<consumer-f>', 'YuDefine/<consumer-f>'],
+  ['<consumer-e>', '<client-b>/<consumer-e>'],
+])
 function consumerIdForRoot(root: string): string {
   const metaPath = join(root, '.claude', 'consumer-meta.json')
+  let consumerId: string
   if (existsSync(metaPath)) {
     let parsed: unknown
     try {
@@ -178,13 +199,21 @@ function consumerIdForRoot(root: string): string {
     }
     if (!isRecord(parsed) || typeof parsed.consumerId !== 'string' || !parsed.consumerId)
       throw new Error('Consumer identity is incomplete: ' + metaPath)
-    return parsed.consumerId
+    consumerId = parsed.consumerId
+  } else {
+    const resolvedRoot = resolve(root)
+    const leaf = basename(resolvedRoot)
+    consumerId = leaf === 'template' ? basename(dirname(resolvedRoot)) : leaf
   }
-  const resolvedRoot = resolve(root)
-  const leaf = basename(resolvedRoot)
-  return leaf === 'template' ? basename(dirname(resolvedRoot)) : leaf
+  const remoteRepository = githubRepositoryFromRemote(root)
+  const trustedRepository = trustedRepositoriesByConsumerId.get(consumerId)
+  return remoteRepository !== undefined &&
+    trustedRepository !== undefined &&
+    remoteRepository.toLowerCase() === trustedRepository.toLowerCase()
+    ? consumerId
+    : 'unverified-consumer-identity'
 }
-function profileResolverForRoot(root: string): PreservationProfileResolver {
+export function profileResolverForRoot(root: string): PreservationProfileResolver {
   const consumerId = consumerIdForRoot(root)
   return (sourcePath, archiveRoot) => preservationProfileFor(consumerId, sourcePath, archiveRoot)
 }
@@ -3280,7 +3309,17 @@ export function githubRepositoryFromRemote(main: string): string | undefined {
   } catch {
     return undefined
   }
-  const match = url.match(/github\.com[:/]([^/]+\/[^/.]+?)(?:\.git)?$/i)
+  // Accept every github.com-hosted remote shape: scp-like `[user@]github.com:o/r`,
+  // `scheme://[creds@][sub.]github.com[:port]/o/r` (ssh / https / credentialed
+  // https / http / git), and schemeless `[creds@][sub.]github.com/o/r`. Matching
+  // stays anchored and limited to exactly two path segments, so `evilgithub.com`,
+  // `github.com.evil.com` and `o/r/sub` still fail. verifyRemotePr treats
+  // `undefined` as "not a GitHub checkout" and skips its repo cross-check, so
+  // rejecting a shape the pre-anchor pattern accepted is a fail-open regression —
+  // narrowing beyond the documented shapes needs that call site re-audited.
+  const match = url.match(
+    /^(?:(?:[^@\s/]+@)?(?:[A-Za-z0-9-]+\.)*github\.com[:/]|[A-Za-z][A-Za-z0-9+.-]*:\/\/(?:[^@\s/]+@)?(?:[A-Za-z0-9-]+\.)*github\.com(?::\d+)?\/)([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\/?$/i,
+  )
   return match?.[1]
 }
 function verifyRemotePr(c: Context, receipt: MergeReceipt, remotePr: RemotePrProbe): RemotePrState {
@@ -3294,9 +3333,9 @@ function verifyRemotePr(c: Context, receipt: MergeReceipt, remotePr: RemotePrPro
   if (remote.headSha !== receipt.source_head)
     throw new Error('GitHub PR head does not match the reviewed formal HEAD')
   const localRepo = githubRepositoryFromRemote(c.main)
-  if (localRepo && localRepo !== receipt.repository)
+  if (localRepo && localRepo.toLowerCase() !== receipt.repository.toLowerCase())
     throw new Error('Merge receipt repository does not match this checkout')
-  if (localRepo && remote.repository !== localRepo)
+  if (localRepo && remote.repository.toLowerCase() !== localRepo.toLowerCase())
     throw new Error('GitHub PR is not in this repository')
   return remote
 }

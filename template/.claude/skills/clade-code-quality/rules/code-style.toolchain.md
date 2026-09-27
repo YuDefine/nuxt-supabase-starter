@@ -390,6 +390,15 @@ runner 的 `checks/vp-staged.sh` 經 `scripts/pre-commit/staged-targets.ts` 讀 
 
 **heavy job 一律經 `clade-gate run <label> -- <cmd>` 才受閘。** 光把 label 加進 `CLADE_HEAVY_GATES` 不會讓任何東西受閘。
 
+`PreToolUse:Bash` 的防漏 hook 只攔 shell 指令位置上的重型工具直呼（例如 `pnpm exec vue-tsc`、
+整套 `vitest`）；引號和 heredoc 的文字不是命令。`pnpm check`、`pnpm test`、`vp check`
+等 canonical 入口由自己的 script／shim 持鎖，hook 直接放行，不要求重複包閘。
+consumer 的 package script 是否受閘由 `audit-gate-coverage.ts` 稽核；hook 無法從 Bash 字串判定。
+wrapper 在當前工作目錄缺席時，hook 只警告並放行，讓 CI／cloud 仍可執行既有命令。
+hook 對不含重型工具候選字串的 Bash 指令直接走快速路徑；需要解析時以 byte locale 掃描，
+避免長篇 UTF-8 訊息讓逐字截取變成平方時間。here-string 不建立 heredoc body，`<<-`
+的 tab 縮排終止行會正常關閉；`timeout` 的選項與時長不遮蔽後面的重型工具。
+
 | script | 要寫成 |
 | --- | --- |
 | `typecheck` | `clade-gate run typecheck -- <nuxt typecheck / vue-tsc …>` |
