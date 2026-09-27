@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, dirname, join, relative } from 'node:path'
+import { basename, dirname, join, relative, resolve } from 'node:path'
 import { consola } from 'consola'
 import { z } from 'zod'
 import { questionById } from './question-catalog'
@@ -89,6 +89,9 @@ export interface ManagedBootstrapResult {
 export interface PostScaffoldOutcome {
   /** registerConsumer=true 才存在；scaffold-only 是零管理，此欄位缺席。 */
   managed?: ManagedBootstrapResult
+  codexProjection?:
+    | { status: 'generated' }
+    | { status: 'deferred'; reason: 'scaffold_only' | 'dependencies_unavailable'; command: string }
 }
 
 /**
@@ -977,13 +980,15 @@ export async function postScaffold(
   // 4. Agent 投影改到 rewriteFirstGlance 之後（settings / MCP 已依 dbHost 收斂）。
   //    prune 後立刻投影會把還沒剝掉的 local-supabase 寫進 .codex/config.toml
   //    與 .cursor/cli.json。
-  if (!pnpmInstalled) {
-    if (skipInstall) {
-      consola.info('略過 sync-to-agents（依賴未安裝）。裝完依賴後手動：')
-    } else {
-      consola.warn('略過 sync-to-agents — 請在 pnpm install 成功後手動：')
+  let codexProjection: PostScaffoldOutcome['codexProjection']
+  if (opts.agentTargets?.includes('codex') && (!opts.registerConsumer || !pnpmInstalled)) {
+    codexProjection = {
+      status: 'deferred',
+      reason: !opts.registerConsumer ? 'scaffold_only' : 'dependencies_unavailable',
+      command: buildDeferredCodexProjectionCommand(targetDir, cladeRoot, cladeModules),
     }
-    consola.log(`  cd ${relativeTargetDir} && node ~/.claude/scripts/sync-to-codex.mjs`)
+    consola.warn(`Codex projection deferred：${codexProjection.reason}。完成 Clade 初始化後執行：`)
+    consola.log(`  ${codexProjection.command}`)
   }
 
   // 4.5 Typecheck — scaffold 的自我驗證。在此之前沒有任何一步確認「產出的專案編得過」，
@@ -1051,7 +1056,14 @@ export async function postScaffold(
   // 這裡一律重投影，不看 agentTargets（Round 29 leftover：沒選 cursor 仍留下
   // 錯 stack .cursor/rules；Round 30：沒重跑就把 local-supabase 留在 Codex/Cursor）。
   if (pnpmInstalled) {
-    runSyncToAgents(targetDir)
+    if (opts.registerConsumer) {
+      if (opts.agentTargets?.includes('codex')) {
+        generateManagedCodexProjection(targetDir, cladeRoot)
+        codexProjection = { status: 'generated' }
+      } else {
+        runSyncToAgents(targetDir, cladeRoot)
+      }
+    }
     runSyncToCursor(targetDir)
     // 重投影可能從 leftover 再拷 hook 檔；matcher 已剝就再刪一次。
     stripOrphanPostMigrationHook(targetDir, opts.dbHost)
@@ -1169,7 +1181,7 @@ export async function postScaffold(
 
   // --json 完成報告的材料：managed 有跑就給真實結果；要求 managed 但
   // clade 來源不可用 → 明說未執行（unregistered），不捏造成功。
-  const outcome: PostScaffoldOutcome = {}
+  const outcome: PostScaffoldOutcome = { codexProjection }
   if (opts.registerConsumer) {
     outcome.managed = managed ?? {
       ran: false,
@@ -1213,6 +1225,37 @@ export function buildInitConsumerArgs(script: string, mods: CladeModules): strin
     args.push('--local-hooks', mods.localHooks.join(','))
   }
   return args
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`
+}
+
+export function buildDeferredCodexProjectionCommand(
+  targetDir: string,
+  cladeRoot: string | undefined,
+  mods: CladeModules,
+): string {
+  const sourceRoot = resolve(
+    cladeRoot ??
+      findCladeRoot() ??
+      (process.env.CLADE_HOME?.trim() || join(homedir(), 'offline', 'clade')),
+  )
+  const steps = [`cd ${shellQuote(targetDir)}`]
+  if (!existsSync(sourceRoot)) {
+    steps.push(`mkdir -p ${shellQuote(dirname(sourceRoot))}`)
+    steps.push(`git clone https://github.com/YuDefine/clade.git ${shellQuote(sourceRoot)}`)
+  }
+  if (!existsSync(join(targetDir, '.claude', 'hub.json'))) {
+    const initArgs = buildInitConsumerArgs(join(sourceRoot, 'scripts', 'init-consumer.ts'), mods)
+    steps.push(`node ${initArgs.map(shellQuote).join(' ')}`)
+  }
+  steps.push('pnpm install')
+  steps.push(`node ${shellQuote(join(sourceRoot, 'scripts', 'bootstrap-hub.ts'))}`)
+  steps.push(
+    `node ${shellQuote(join(sourceRoot, 'scripts', 'run-sync-to-codex.ts'))} --no-health-check`,
+  )
+  return steps.join(' && ')
 }
 
 export function buildRegisterConsumerArgs(
@@ -1828,30 +1871,10 @@ function runHubPrune(targetDir: string): void {
   }
 }
 
-/**
- * 這支 script 被改過名（`sync-to-agents` → `sync-to-codex`），且同時存在 `.mjs`
- * 與 `.ts` 兩種投影。寫死單一檔名的後果是「找不到就靜默跳過」——改名之後
- * 每一次 scaffold 都不再產 `.codex/` 與 `AGENTS.md`，而使用者只會看到一行
- * 略過警告，不會知道專案少了東西。所以這裡按序探測，全部落空才報。
- */
-// 順序 MUST 是 `.ts` 在前：clade 自 `.mjs` → `.ts` 改名後，user shim 的安裝只增不減，
-// 於是很多機器上仍留著一支**指向已不存在的 `run-sync-to-codex.mjs`** 的死 `.mjs`。
-// 2026-08-24 全新 scaffold 實測，`.mjs` 排前面就固定挑到那支死的：
-//   Error: Cannot find module '<clade>/scripts/run-sync-to-codex.mjs'
-// clade v1.11.63 起 bootstrap-hub 會主動剪除它，但已存在的機器要下一次 bootstrap 才清掉。
-const SYNC_TO_CODEX_CANDIDATES = [
-  'sync-to-codex.ts',
-  'sync-to-codex.mjs',
-  // 舊名，保留給還沒更新 ~/.claude/scripts 的機器
-  'sync-to-agents.mjs',
-]
-
-export function resolveSyncToCodexScript(scriptsDir: string): string | undefined {
-  for (const name of SYNC_TO_CODEX_CANDIDATES) {
-    const candidate = join(scriptsDir, name)
-    if (existsSync(candidate)) return candidate
-  }
-  return undefined
+export function resolveSyncToCodexScript(cladeRoot?: string): string | undefined {
+  if (!cladeRoot) return undefined
+  const canonical = join(cladeRoot, 'scripts', 'run-sync-to-codex.ts')
+  return existsSync(canonical) ? canonical : undefined
 }
 
 /**
@@ -1892,24 +1915,31 @@ function runSyncToCursor(targetDir: string): void {
   }
 }
 
-function runSyncToAgents(targetDir: string): void {
-  const scriptsDir = join(homedir(), '.claude', 'scripts')
-  const script = resolveSyncToCodexScript(scriptsDir)
+function runSyncToAgents(targetDir: string, cladeRoot?: string): boolean {
+  const script = resolveSyncToCodexScript(cladeRoot)
   if (!script) {
-    consola.warn(
-      `在 ~/.claude/scripts/ 找不到 ${SYNC_TO_CODEX_CANDIDATES.join(' / ')}，` +
-        '略過 .codex/.agents/AGENTS.md 重投影',
-    )
-    consola.log('  這代表專案不會有 Codex / Cursor 的投影檔。只用 Claude Code 的話可以忽略。')
-    return
+    consola.warn('找不到 Clade scripts/run-sync-to-codex.ts，略過 Codex 重投影')
+    return false
   }
   consola.start('重投影 .codex/.agents/AGENTS.md（Claude Code First → projections）')
   try {
-    execFileSync('node', [script], { cwd: targetDir, stdio: 'pipe' })
+    execFileSync('node', [script, '--no-health-check'], { cwd: targetDir, stdio: 'pipe' })
     consola.success('Projection 重生完成')
+    return true
   } catch (error) {
     consola.warn(`${basename(script)} 執行失敗：${(error as Error).message}`)
     consola.log(`  之後可手動：node ${script}`)
+    return false
+  }
+}
+
+export function generateManagedCodexProjection(targetDir: string, cladeRoot?: string): void {
+  if (
+    !runSyncToAgents(targetDir, cladeRoot) ||
+    !existsSync(join(targetDir, '.codex', 'config.toml')) ||
+    !existsSync(join(targetDir, '.agents', 'skills', 'commit', 'SKILL.md'))
+  ) {
+    throw new Error('Codex 投影失敗：專案缺少 .codex/config.toml 或 .agents/skills/commit/SKILL.md')
   }
 }
 
