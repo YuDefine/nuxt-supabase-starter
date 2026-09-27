@@ -335,4 +335,4 @@ Track 判定：根目錄有 `void.json` 且 `package.json` 含 `void` dep → Tr
 
 ### § 7.3 — Fleet 現況
 
-現況以 `scripts/audit-wrangler-config.ts`（`ci.self_hosted_pnpm_cache`、`void.legacy_token_auth`）輸出為準；<consumer-k> 的 `.github/workflows/deploy.yml` 是 current void.cloud + OIDC reference。
+現況以 `scripts/audit-wrangler-config.ts`（`ci.self_hosted_pnpm_cache`、`void.legacy_token_auth`）輸出為準；<consumer-j> 的 `.github/workflows/deploy.yml` 是 current void.cloud + OIDC reference。

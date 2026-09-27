@@ -155,8 +155,8 @@ gh api repos/<owner>/<repo>/actions/runs/<run-id>/jobs \
 
 | 開脫（出處） | 現實 |
 | --- | --- |
-| 「`supabase-check`（pull_request，限定 paths）」（<consumer-i> `tasks/2026-09-16-runner-isolation-followup.md`，把 paths 當成範圍已受控） | `pull_request` 跑的是 PR merge commit（`GITHUB_SHA`，含 PR 的改動）上的 workflow 檔，`paths:` 與 workflow 內容都是 PR 可改的；而且 paths 命中的那一次，程式碼照樣在 prod 主機上跑 |
-| 「PR job 經 Docker 可觸及 supabase-runner 上的 production supabase-db … 依 decision … 接受」（<consumer-i> 77ada28 commit message） | 接受時評估的是「誰能開 PR」。風險不在人：`vp install` 之後整個 app 與全部 transitive deps 的 runtime code 都在那台跑，push main 時同樣發生。org 成員限定縮小的是人，不是供應鏈 |
+| 「`supabase-check`（pull_request，限定 paths）」（<consumer-h> `tasks/2026-09-16-runner-isolation-followup.md`，把 paths 當成範圍已受控） | `pull_request` 跑的是 PR merge commit（`GITHUB_SHA`，含 PR 的改動）上的 workflow 檔，`paths:` 與 workflow 內容都是 PR 可改的；而且 paths 命中的那一次，程式碼照樣在 prod 主機上跑 |
+| 「PR job 經 Docker 可觸及 supabase-runner 上的 production supabase-db … 依 decision … 接受」（<consumer-h> 77ada28 commit message） | 接受時評估的是「誰能開 PR」。風險不在人：`vp install` 之後整個 app 與全部 transitive deps 的 runtime code 都在那台跑，push main 時同樣發生。org 成員限定縮小的是人，不是供應鏈 |
 | 「省 minutes」（77ada28 把 `ubuntu-latest` 搬上 self-hosted 的理由） | 先量觸發頻率再談成本，下方指令 |
 
 量觸發頻率（逐 repo 跑，數字是全歷史 PR 數）：
@@ -165,7 +165,7 @@ gh api repos/<owner>/<repo>/actions/runs/<run-id>/jobs \
 gh api "repos/<owner>/<repo>/pulls?state=all&per_page=100" --paginate --jq '.[].number' | wc -l
 ```
 
-2026-09-16 快照（<client-b>，Free plan、`allow_forking=false`）：<consumer-i> 0、<consumer-e> 1、<consumer-b> 25。
+2026-09-16 快照（<client-b>，Free plan、`allow_forking=false`）：<consumer-h> 0、<consumer-e> 1、<consumer-b> 25。
 
 本證據決定：untrusted-execution job 從 prod 主機搬回 GitHub-hosted 時，要不要擔心 minutes——先量，量到近零就不用。
 本證據不決定：production-access runner 上要不要跑 untrusted-execution job——**NEVER** 拿「量到的頻率很高、minutes 不夠」論證搬回 prod 主機；不夠時改觸發方式（例如 `workflow_run`）或另建不具 production 存取的 runner。

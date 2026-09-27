@@ -77,7 +77,7 @@
  *
  * 2026-07-28: that is exactly how `nuxt-supabase-starter` Template CI broke on
  * `vp fmt --check` over `vendor/snippets/manual-review-enforcement/patterns.json`
- * — <consumer-j> and co-purchase had each independently patched `vendor/**`
+ * — <consumer-i> and co-purchase had each independently patched `vendor/**`
  * into their own vite.config.ts, which hid the gap instead of closing it.
  * `scripts/audit-governance-drift.ts` check 10 now fails on any config that
  * re-inlines one of these, so the next gap surfaces before a consumer does.
@@ -506,7 +506,7 @@ export const VITEST_DEFAULT_EXCLUDE = ['**/node_modules/**', '**/.git/**']
  * Agent runtime 在 consumer working tree 留下的 cache／投影目錄。
  *
  * 這裡面的「測試檔」**不是這個 repo 的測試** —— `.pi/git/` 底下是 Pi 為了做 code review
- * 而 clone 的**外部 repo 全文**（實測 2026-09-10：<consumer-g> 的 `.pi/git/` 有 114 MB、
+ * 而 clone 的**外部 repo 全文**（實測 2026-09-10：<consumer-f> 的 `.pi/git/` 有 114 MB、
  * 578 支測試檔，全部屬於 `github.com/YuDefine/clade`，而該 repo 自有測試檔為 **0**）。
  * 跑它們的結果是 107 失敗 → `vp test` exit 1，而紅綠取決於「這棵樹有沒有被 Pi clone 過」。
  *
@@ -558,7 +558,7 @@ export const AGENT_CACHE_TEST_EXCLUDES = [
  *
  * clade 自己**不消費本 base**：它的 `test.include` 收窄成 `vp-tests/**\/*.vp.ts`，
  * 掃描面本來就進不到 `.pi/`。**NEVER** 拿「clade 沒事」推論 consumer 也沒事 ——
- * fleet 現況不齊一：<consumer-f>／<consumer-i>／<consumer-k> 已收窄 `test.include`（同樣免疫，
+ * fleet 現況不齊一：ai-quota／<consumer-h>／<consumer-j> 已收窄 `test.include`（同樣免疫，
  * 但理由跟 clade 一樣是 include 收窄，不是本 base）；<consumer-b>／<consumer-c> 則是
  * consumer 自己手寫 `test.exclude`（如 `['e2e/**', 'node_modules/**', '.nuxt/**', '.output/**']`），
  * 這正是本檔開頭警告的覆蓋語義事故現場 —— 手寫版把 `**\/.git/**` 弄丟了、`node_modules/**`

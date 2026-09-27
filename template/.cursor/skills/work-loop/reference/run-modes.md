@@ -59,7 +59,7 @@ preflight 與每輪 child 都經 `project-unattended.ts` 檢查專案授權、�
 gateway／退役入口（`ccg`、`ccx`，或任何帶 `ANTHROPIC_BASE_URL` 的 session）會拒絕起跑；GPT／Codex 工作經 Pi dispatcher。
 
 第一次起跑需在 `/overview` 開啟該專案的自動開發，並確保 consumer 已接收 flow 投影、位於
-`consumers.local`、官方帳號已登入且 <consumer-f> 快照仍有效。缺少前置時錯誤會指出原因；
+`consumers.local`、官方帳號已登入且 ai-quota 快照仍有效。缺少前置時錯誤會指出原因；
 `--skip-preflight` 只略過 headless 工具探針，不略過訂閱、版本或專案授權。
 `--dry-run` 只印完整控制入口與 child 指令，不要求 consumer 已安裝 helper。
 
