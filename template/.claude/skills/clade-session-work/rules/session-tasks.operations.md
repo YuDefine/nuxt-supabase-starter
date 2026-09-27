@@ -581,6 +581,9 @@ claimant 活著而要直接收攤時才走 close pane＋
 | 已回報 outcome、`coordinator_pane_id` **就是本 pane** | **exit 2 擋下 stop**，逐筆把 `--coordinate-resume <id>` 射回本 session，當場收完再收工 |
 | 別人持有的 dispatch、abandoned record、orphan process、stale routing gate | exit 0 warn——它們的 action 不是本 session 一個 turn 做得完的 |
 | 本 session 不在 Herdr pane 內（`HERDR_ENV != 1`） | exit 0 warn（走 spine，grace 0）——`--coordinate-resume` 在那裡一律 `not_in_herdr`，擋下來是死路 |
+| 本 session 是被派出的 child（`CLADE_DISPATCH_ID` 非空），這一段還沒送 `--complete` | **exit 2 擋下 stop**，把三個回報時點射回去：告一段落（交出去後不歸它，含 PR 待主持者 0-A）／收工 → `--complete success\|failed`；等外部事件且結果回來後仍由它接著做（預期 > 10 分鐘或不會自動喚醒它）→ commit＋push、續接筆記落檔、`--complete blocked`，由主持決定保留還是提早關閉、事件到了冷續接；要拍板 → `--complete blocked --summary --decision` |
+
+**child 分支防的是 `silent-idle`**：child 停下卻不回報，主持者分不出它在做事還是在空等，只能等它過了快取 TTL 再冷續接——brief 寫「`--complete` 一定要送」擋不住（2026-09-28 同時兩個 silent-idle）。等待外部事件走 `blocked` 不走 `success --followup-brief`：success 收割時一定關 pane，主持者就失去「保留暖 pane」這個選項；blocked 的 `decision_for` 預設 coordinator，不進 Charles 的佇列。只有 Claude pane 有 Stop hook；其他 harness 靠 child prompt 注入的「要等外部事件（MUST）」節。已知限制：只有 `--continue` 會清掉上一段的回報狀態與上次擋的時間，所以回覆 blocked child **MUST** 走 `--continue`（對它直接 `herdr agent prompt` 的那一段 gate 不擋）；同一 dispatch 每 10 分鐘最多擋一次（上次擋的時間記在 `~/.cache/clade/child-stop-gate/<id>`），擋完 10 分鐘內再停只 warn；peer 上 `--continue` 撞上戳記剛要寫入的窄窗時，那一段不擋；child 的 session id 變了（例如 `/clear`）就不再比對得上，gate 靜默放行；peer 戳記只在 `--continue` 時刪，reclaim／adjudicate 結束的 dispatch 會各留一個空檔。
 
 **擋得到「剛做完」是這道 gate 存在的理由**：patrol 的 `owes-resume` 沒有 grace，worker 一回報
 就成立；而 `flow status --stalled` 的 `unharvested` 套 60 分鐘 grace，那一批對 SessionStart 那條
@@ -593,8 +596,8 @@ claimant 活著而要直接收攤時才走 close pane＋
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | 本 pane 持有 ≥1 筆已回報 outcome 而未 reclaim 的 dispatch → **exit 2 block**；其餘殘留 → exit 0 warn |
-| 消費端 | 正在收工的 coordinator 本人——它是唯一跑得動 `--coordinate-resume` 的角色，且此刻仍在場 |
+| 觸發條件 | 本 pane 持有 ≥1 筆已回報 outcome 而未 reclaim 的 dispatch → **exit 2 block**；child 本人（Stop payload `session_id` ＝ `CLADE_DISPATCH_SESSION_ID`，它自己啟動的巢狀 session 與 bounded leaf 不算）未回報 → **exit 2 block**：本機看這一段的 `CLADE_DISPATCH_RESULT_FILE`（`--continue` 會刪）；peer 看轉送成功留的 `~/.cache/clade/dispatch-reported/<id>` 戳記（home `--continue` 經 ssh 刪它；ssh 失敗時那一段不擋）；其餘殘留 → exit 0 warn |
+| 消費端 | 正在收工的 coordinator 本人——它是唯一跑得動 `--coordinate-resume` 的角色，且此刻仍在場；child 分支的消費端是要停下的 child 本人 |
 | 載入路徑 | hook stderr 經 exit 2 直接注入 turn（機械，不依賴規約載入）＋ 本節 |
 
 **每一次** transport **MUST** 帶任務描述性 `--label`：**split／tab／workspace 三種 topology 都命名 pane**，

@@ -33,7 +33,7 @@ paths:
 ### 標準 loop（MUST）
 
 1. 跑失敗的那條 check（與 CI / 0-C 同一入口，不要換成更窄的單檔命令代替整條 gate）
-2. format 紅 → `pnpm format`（等同 `vp fmt --write --ignore-path .oxfmtignore`）；lint 可 auto-fix → consumer 的 `pnpm lint --fix` 或 `pnpm vp lint --fix`
+2. format／lint 紅 → **只對本次擁有的路徑**修：`pnpm exec vp check --fix <owned-paths>`，或 `pnpm exec vp fmt --write --ignore-path .oxfmtignore <owned-files>`；修前修後各看一次 `git status`／`git diff`，確認變動只落在擁有的路徑。**NEVER** 用不帶路徑的全 repo `pnpm format`／`vp check --fix`／`pnpm lint --fix` 修 gate：共享 working tree 上會改到別 session 的 WIP（判準見 [[verify-gate-chain]] § 可修復的 gate 失敗不是停手理由）
 3. 修掉無法 auto-fix 的項目
 4. 重跑步驟 1 的**同一條**命令 → exit 0 才算完成
 
@@ -46,11 +46,11 @@ paths:
 
 ### 投影層排除清單集中在 preset
 
-投影路徑（`vendor/**`、`.claude/**`、`.clade/**`、`.spectra/**`）在 consumer 端是 `chmod 444` 的 LOCKED 副本，consumer 修不了裡面的 lint / fmt 違規。所以「這些路徑要不要送進 lint / fmt」只由 `vendor/oxc-shared/preset.ts` 的 `PROJECTION_EXCLUDES` 一處決定。
+投影路徑（`vendor/**`、`.claude/**`、`.clade/**`、`.spectra/**`、`.github/actions/**`、`commitlint.config.ts` 等，全表見 `PROJECTION_EXCLUDES`）在 consumer 端是 `chmod 444` 的 LOCKED 副本，consumer 修不了裡面的 lint / fmt 違規。所以「這些路徑要不要送進 lint / fmt」只由 `vendor/oxc-shared/preset.ts` 的 `PROJECTION_EXCLUDES` 一處決定。
 
 - 不要在 consumer 的 `vite.config.ts` inline 投影層排除路徑（`'vendor/**'`、`'.claude/rules/**'` …），也不要用「加一個 `.oxfmtignore` 就好」代替——那是在補 preset 的洞，沒補的 consumer 會 CI 紅且自己解不掉
 - 投影層檔案被 lint / fmt 報錯的**唯一**正解：回 clade 把路徑加進 `PROJECTION_EXCLUDES`，publish + propagate
-- 唯一例外是 clade 自己（`vendor/` 是原始碼），其 `vite.config.ts` 把 `vendor/**` 濾回來，有註解且 audit 認得
+- 唯一例外是 clade 自己（`vendor/`、root `commitlint.config.ts` 是原始碼），其 `vite.config.ts` 把它們濾回來，有註解且 audit 認得
 
 機械檢查：`node scripts/audit-governance-drift.ts` check 10（inline 排除路徑）。契約全文 `specs/truth/projection-ownership.md`；成因 [[pitfall-projection-excludes-not-in-shared-preset]]。
 
@@ -104,7 +104,7 @@ oxfmt 不會自動讀 `.oxfmtignore`（fallback 只有 `.prettierignore` / `.git
 上面兩條不管 transitive dependency，而 prettier 不需要 config 就能把整檔改成互斥風格（exit 0、零警告）。`@nuxt/hints` 經 `shamefully-hoist` 會把 `node_modules/.bin/prettier` 帶進部分 consumer。
 
 - 不要在本 fleet 的任何 repo 執行 prettier（`npx` / `pnpm exec` / `node_modules/.bin/` /
-  裸命令都一樣）。格式化一律走 `pnpm format`（全 repo）或 `pnpm exec vp fmt --write <file>`（單檔）
+  裸命令都一樣）。格式化一律走 vp fmt（`pnpm exec vp fmt --write --ignore-path .oxfmtignore <owned-files>`，範圍限制見 § 標準 loop）
 - 不要為了讓禁令生效去移除 `@nuxt/hints` —— 它是 Nuxt 系的正常依賴，不是這條坑的錯
 - 不要把 `.bin/prettier` 存在接成 `pnpm check` 的 fail —— 它是移不掉的 transitive dep，
   那條 check 會讓受影響的 CI 永久紅，而永久紅的 gate 是噪音不是攔阻
@@ -302,7 +302,7 @@ export default defineConfig({
 
 ```bash
 pnpm vp lint --fix
-pnpm format        # 等同 vp fmt --write --ignore-path .oxfmtignore；裸打 vp fmt 必須自帶 --ignore-path
+pnpm format        # 等同 vp fmt --write --ignore-path .oxfmtignore（全 repo；修 gate 只修擁有的路徑，見 § 標準 loop）；裸打 vp fmt 必須自帶 --ignore-path
 pnpm format:check
 bash scripts/pre-commit/runner.sh   # pre-commit staged 檢查
 ```
