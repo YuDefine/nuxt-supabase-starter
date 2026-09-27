@@ -23,6 +23,9 @@
 | TD-018 | auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict | high | done | 2026-09-11 |
 | TD-019 | `scaffold-smoke` 自 2026-08-24 起持續紅，剩餘 blocker 是 clade 投影未去識別化 | mid | open | 2026-09-11 |
 | TD-020 | 選了 codex 的 scaffold 輸出靜默少掉 `.codex/` 與 `.agents/` | high | open | 2026-09-11 |
+| TD-021 | Template CI `UX drift audit` 既有紅燈：`shared/types` 沒有 enum-like 定義就 fail | mid | open | 2026-09-28 |
+| TD-022 | repo root 的 Claude session 載不到 `commit-0a-reviewer` seat | mid | open | 2026-09-28 |
+| TD-023 | Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback | low | open | 2026-09-28 |
 
 ### 2026-09-27 origin/main 收斂接手 brief
 
@@ -709,6 +712,81 @@ scaffold 輸出由 assemble 生成，不屬 L3 掃 template 的範圍」。**NEV
 - 在乾淨 clone（沒跑過 `sync-to-codex`）上以 `--agents codex,cursor` scaffold，輸出要嘛含
   `.codex/config.toml` 與 `.agents/skills/commit/SKILL.md`，要嘛當場失敗並說明原因。
 - `Template CI` 的 Unit tests 在 main 上轉綠。
+
+## TD-021 — Template CI `UX drift audit` 既有紅燈：`shared/types` 沒有 enum-like 定義就 fail
+
+**Discovered**: 2026-09-28 — PR #13（`59adc3cb`）讓 Unit tests job 的 `Unit tests` step 轉綠之後露出來
+
+### Problem
+
+Template CI 的 Unit tests job 在 `Unit tests` step 之後跑 `vp run audit:ux-drift`
+（`node scripts/audit-ux-drift.ts`，clade-managed 投影）。它在 starter 上直接 exit 2：
+
+```
+✗ No enum-like definitions found in configured types dirs.
+  Searched: shared/types
+```
+
+`template/shared/types/` 只有 `pagination.ts`、`profiles.ts`，沒有 enum-like 定義；
+`template/spectra-advanced.config.json` 存在。main 上這一步一直是 skipped，因為前一步
+`Unit tests` 先紅了（run `36357036651` 等）。PR #13 修好那一步之後，這個紅燈才第一次被執行到
+（PR run `36357476335`）。在 PR head 本機跑 `vp run audit:ux-drift` 也一樣紅，PR diff 沒碰該 script、
+`shared/types` 或 config，所以這是既有問題，不是 PR #13 造成的。coordinator 2026-09-28 裁決視為既有紅燈照樣合入 PR #13。
+
+### Fix approach
+
+先判 root cause 在哪一層，再動手：
+
+- clade `audit-ux-drift.ts` 對「零 enum 的專案」fail-closed：若 starter 沒有 enum 是合法狀態，
+  修法在 clade（零 enum 時回報 skip／pass 而非 exit 2），starter 端 **NEVER** 直接改投影檔。
+- 若 audit 的前提是「專案必有 enum-like 定義」：修法在 starter 的 `spectra-advanced.config.json`
+  `paths.types` 指向或 CI step 條件，另開 change 設計。
+
+### Acceptance
+
+- main 上 Template CI 的 Unit tests job 全綠（`UX drift audit` 不再 exit 2，且不是靠跳過 step 過關）。
+
+## TD-022 — repo root 的 Claude session 載不到 `commit-0a-reviewer` seat
+
+**Discovered**: 2026-09-28 — PR #13 的 0-A 在 repo root session 呼叫 `Agent({subagent_type: 'commit-0a-reviewer'})`
+回 `Agent type 'commit-0a-reviewer' not found`
+
+### Problem
+
+`commit-0a-reviewer.md` 只投影在 `template/.claude/agents/`；repo root 的 `.claude/` 沒有 `agents/`。
+以 repo root 為 cwd 開的 Claude session 不載入 `template/.claude/agents/`，seat 不存在。
+`claude-review-safe.sh prepare` 仍會成功並印出 `AGENT_CALL`，到呼叫 Agent 才失敗。
+任何在 starter root 跑 `/commit` 的 Claude 主線都會卡在同一處。PR #13 的繞法是改以 `template/` 為 cwd 開 pane。
+
+### Fix approach
+
+修法屬 clade 投影（本 repo **NEVER** 手寫 root agent 定義繞過）：讓 root meta 層也投影
+`commit-0a-reviewer`，或 `prepare` 偵測當前 session 載不到 agent 定義時提早報錯並指出要換的 cwd。
+
+### Acceptance
+
+- 在 repo root 開的 Claude session 跑 `prepare medium` → 照 `AGENT_CALL` 呼叫 Agent 能叫出 seat，
+  或 `prepare` 當場以明確錯誤拒絕並指出正確 cwd。
+
+## TD-023 — Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback
+
+**Discovered**: 2026-09-28 — PR #13 0-A 第二輪（receipt `subagent-a094338120fbabd7e`）的 Minor，非阻擋
+
+### Problem
+
+`template/packages/create-nuxt-starter/src/post-scaffold.ts` 的 `buildDeferredCodexProjectionCommand`
+寫死 `scripts/init-consumer.ts`。實際初始化的 `runInitConsumer` 走 `resolveCladeInitScript`，
+只有 `init-consumer.mjs` 時會 fallback 過去。本機 Clade 只有舊版 `.mjs` 時，
+scaffold-only 印出的延後投影指令會指到不存在的檔案。
+
+### Fix approach
+
+`buildDeferredCodexProjectionCommand` 在 `sourceRoot` 已存在時改用 `resolveCladeInitScript(sourceRoot)`，
+不存在（要 clone）時維持 `.ts`；補一條只有 `.mjs` 的 fixture 測試。
+
+### Acceptance
+
+- 只有 `init-consumer.mjs` 的 fixture Clade 下，deferred 指令引用 `.mjs` 且測試綠。
 
 ## Cross-repo pointers
 
