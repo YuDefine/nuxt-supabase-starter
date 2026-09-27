@@ -20,9 +20,31 @@
 | TD-014 | clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約 | low | open | 2026-09-09 |
 | TD-016 | Cloudflare 上 `useRuntimeConfig()` 的 module-eval snapshot 是否讀得到注入的 `NUXT_APP_ENV` | mid | open | 2026-09-11 |
 | TD-017 | `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅 | low | open | 2026-09-11 |
-| TD-018 | auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict | high | open | 2026-09-11 |
+| TD-018 | auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict | high | done | 2026-09-11 |
 | TD-019 | `scaffold-smoke` 自 2026-08-24 起持續紅，剩餘 blocker 是 clade 投影未去識別化 | mid | open | 2026-09-11 |
 | TD-020 | 選了 codex 的 scaffold 輸出靜默少掉 `.codex/` 與 `.agents/` | high | open | 2026-09-11 |
+
+### 2026-09-27 origin/main 收斂接手 brief
+
+- 工作指針：本次基準 `origin/main` 為 `2679369d`；根目錄無 `HANDOFF.md`，`template/HANDOFF.md` 無未勾 checkbox。以下只以已合入 main 的內容判定，OPEN PR 不計入下降。
+- 已驗證：TD-018 的上游修正在 clade PR #233（`f4f310585`）合入；starter 升版提交 `830c992e`、`f1f211cf` 先後帶入投影。TD-012 已由本 repo PR #6（`8a78c687`）合入。
+
+| 仍未結案 | main 證據與接手條件 |
+| --- | --- |
+| TD-004 | PR #7（`6b04da7f`）只合入失效診斷；`template-ci.yml` 仍呼叫退役的 roadmap task。PR #10 尚未合入；由 workflow owner 核對 Spectra 退役決定及 PR #10 落地結果。 |
+| TD-005 | `CLADE_PROJECT_ROOT` 接線仍由尚未合入的 PR #10 處理；合入後按本條 Acceptance 驗收。 |
+| TD-008 | `template/package.json` 仍有 `validate:starter`；PR #8 是未合入的規劃，尚無實作。 |
+| TD-010 | `template/nuxt.config.ts` 尚無 `/api/auth/**` CSRF 例外；實作 PR #9 尚未合入，合入後仍需真實登入驗收。 |
+| TD-011 | `template/.cursor/skills/clade-security/rules/auth.md` 仍寫舊套件名；須從 clade source 修正並散播。 |
+| TD-014 | `template/.cursor/skills/design/SKILL.md` 仍有無解析說明的 `<maintainer-domain>`；須由 clade source 收斂。 |
+| TD-016 | 缺真實 Cloudflare 部署的 Sentry `environment` 讀數；需現場驗證後才可判定。 |
+| TD-017 | `template/scripts/validate-starter.mjs` 只在開始與生成單一 fixture 前清理，結束後沒有清理；PR #5 尚未合入。 |
+| TD-019 | `scaffold-smoke` 在 main `2679369d` 的 run `36298330400` 仍失敗；須修投影去識別化並重驗。 |
+| TD-020 | `assemble.ts` 的 `copyTemplateCodexAssets()` 仍以 `existsSync` 略過來源；需拍板 Codex 開箱契約，再實作與驗收。 |
+
+- 需人工判定：TD-004 的 Spectra workflow 退役方向、TD-016 的真實 Cloudflare 讀數、TD-020 的 Codex 開箱契約。未有證據前維持原狀。
+- 剩餘步驟：主持者追蹤 PR #5／#8／#9／#10 與 clade source 工作；各自合入後重新讀 `origin/main`，逐條核對 Acceptance、同步 Index 與 entry body，再量測 HANDOFF 未勾及 literal open TD。
+- 檔案所有權：本輪 worker 只修改根目錄 `docs/tech-debt.md`；`template/HANDOFF.md` 唯讀。程式碼、migration、`.claude/**`、`vendor/**`、其他 worktree、production 與 PR merge 由各自 owner 處理。
 
 ## TD-004 — Spectra roadmap drift check 在 CI 的 structural diff
 
@@ -213,12 +235,9 @@ lint 因原工作 scope 刻意留下。`c86c3bad7` 已將 lint 改為下方形�
 - 暫存 `td012-lint-probe.ts` 內容為 `debugger;`，再跑 `pnpm lint` → exit 1；輸出 `eslint(no-debugger)` 與 `Found 1 warning and 0 errors.`。刪除暫存檔後重跑 `pnpm lint` → exit 0，`Found 0 warnings and 0 errors.`。
 - 額外本機檢查：`pnpm typecheck` → exit 0；`vp check` → exit 0（286 檔格式正確、253 檔 lint 無警告／錯誤）。本 repo 沒有 `tsconfig.clade.json`，型別檢查使用既有 `pnpm typecheck`。
 
-### Coordinator follow-up
+### 落地證據
 
-- 工作指針：draft PR [#6](https://github.com/YuDefine/nuxt-supabase-starter/pull/6)，branch `session/2026-09-26-1655-starter-td012-lint-guard-verify-close`，base `main`。`template/package.json` 的 lint script 已由 `c86c3bad7` 修正，本次沒有改 script。
-- 驗證證據：本條目上方三項 Acceptance 實跑通過；`pnpm typecheck` 與 `vp check` 也通過。PR 只改本文件；workflow path filters 不涵蓋此 diff，GitHub PR checks 為空，沒有 PR CI 綠燈可等待。
-- 剩餘步驟：主持者核對 PR head、審閱結案證據並依 repo 流程處理 draft PR；本 worker 不 ready、merge 或部署。
-- 檔案所有權：本 worker 只動本條目與 Index 的 TD-012 列；`template/package.json` 原有修正維持不變。PR 後續由主持者持有，其他檔案不屬本 worker。
+- `c86c3bad7` 修正 `template/package.json` 的 lint script；PR #6 於 `8a78c687` 合入 main，帶入上方驗收紀錄。此項已結案，沒有待處理的 draft PR。
 
 ## TD-014 — clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約
 
@@ -393,7 +412,7 @@ scaffold 專案並**保留**（`temp/` 在 `.gitignore` 內）。vite-doctor 不
 
 ## TD-018 — auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict
 
-**Status**: open — 落點在 clade（`~/offline/clade`），本 repo 只是受害面，這裡登記入口與復原程序
+**Status**: done（2026-09-27 核對 origin/main；clade PR #233 修正、starter 連續升版落地）
 **Priority**: high — 一次 pre-commit 失敗就讓這台**永久**掉出 fleet，且錯誤訊息指向錯的方向
 **Discovered**: 2026-09-11 — v1.12.47 propagate 對本 consumer failed 時追出來
 **Location**: clade `scripts/lib/runtime-artifact-apply.ts`（conflict 判定）、clade auto-commit flow 的 rescue/revert 路徑
@@ -497,14 +516,18 @@ clade-managed dirty → `dumpRescuePatch` → `resetPathsToHead`）：
 （例：`.claude/skills/spec-by-example/rules/gherkin-驗收句型與結構判準.md`）→ 依 runbook 判準不套，交 clade 端裁決。
 同一趟已先把 36 筆 TD-1130 遺留的 aixbdd 舊投影 ` D` 補 commit（`8d038af2`；36/36 與 clade 源 byte 一致、不在任何 receipt）。
 
-**待 clade 端**：Fix approach 1（reset 路徑同步回捲 receipts）或 2（`before == HEAD` 時改重投影）任一落地後，
-重跑 `propagate --resume`；或由 clade 主持者裁定本台的一次性復原方式。殘留：本台停在 v1.13.24。
+**歷史待辦已收斂**：clade PR #233（`f4f310585`）證明「commit 失敗 → 下一趟 pre-sync reset」與本節復發是同一形狀，改為磁碟 hash 等於 receipt 的自產殘留不回捲；clade PR #327（`3bc9c4f65`）另外讓乾淨的 HEAD 內容可重新對齊過期 receipt。starter 的 `830c992e`（v1.13.30）、`f1f211cf`（v1.13.31）先後合入 manifest 與投影；`81eb192f` 已升到 v1.13.37。因此先前「停在 v1.13.24」的敘述僅是 2026-09-24 快照，不再是現況。
 
 ### Acceptance
 
 - clade 端：任一 consumer 的 auto-commit commit 失敗後，下一趟 propagate **不再**出現
   `local or modified file conflict`（而是重投影成功，或給出指名半套用狀態的訊息）。
 - 本 repo：連續兩趟 propagate 對 `nuxt-supabase-starter/template` 不是 `failed`。
+
+### 結案證據
+
+- clade PR #233（`f4f310585`）的回歸測試覆蓋 commit 失敗後的自產殘留與真正的 consumer 手改；PR #327（`3bc9c4f65`）覆蓋乾淨 HEAD／過期 receipt 的重新對齊。
+- starter main 的 `830c992e` 與 `f1f211cf` 是連續兩次帶投影的 clade 升版提交，均晚於 PR #233；後續 `81eb192f` 升至 v1.13.37。這些是合入 main 的證據，不以未合 PR 或派工紀錄代替。
 
 ## TD-019 — `scaffold-smoke` 自 2026-08-24 起持續紅，剩餘 blocker 是 clade 投影未去識別化
 
