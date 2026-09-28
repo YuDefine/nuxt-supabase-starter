@@ -17,3 +17,10 @@ fleet 沒有同時具備 Cloudflare＋Sentry＋NUXT_APP_ENV 的 consumer（perno
 - Q161 舊 consumer 讀數：唯讀查 `nuxt-edge-agentic-rag` production D1 `evlog_events`，事件 `environment=production`；其 evlog 未接到 starter 的 `NUXT_APP_ENV → useRuntimeConfig()` 零參數路徑，因此這筆值未拿來驗收 TD-016。該 consumer 未被部署或修改。
 - Q164 直接驗證：Charles 答「B」後，在獨立 Workers `starter-td016-verify-822797f7` 部署同版 Nuxt／Nitro 與 starter 相同的 runtimeConfig／Cloudflare preset 最小 probe。build inline `appEnv=unknown`，只在部署時注入 `NUXT_APP_ENV=staging`；真實 endpoint 回 `moduleEvalAppEnv=staging`、request 零參數及帶 event 值亦為 `staging`，否證 TD-016 的「module-eval snapshot 恆讀不到注入值」假說。取得讀數後已 `wrangler delete`，Cloudflare API 查詢回 `Worker does not exist [10007]`；完整指令、輸出及範圍限制在 `docs/tech-debt.md` TD-016。未送 Sentry 事件或跑完整 starter app，不能外推到其他版本／設定。
 - 其他接續：主持者擁有 `.claude/rules/starter-hygiene.md`，應把「忽略的 `.codex/`／`.agents/` 不會被 scaffold 帶走」改為「scaffold 會從 target `.claude/skills` 生成最小投影」；本 worker 不動該路徑。PR 0-A、ready、merge 與既有 TD-019／TD-021 CI 紅燈歸主持者或另派 owner，本 worker 不執行。
+
+## PR #14 0-A r1 修補交接
+
+- 工作指針：分支 `session/2026-09-28-1414-handoff-q143-answers`；finding 原文在 `/home/charles/offline/clade/tasks/2026-09-28-rush70/starter14-oa-r1.md`。本節隨同修補提交，最終 head 以 `git rev-parse HEAD` 為準。
+- 已修：私人筆記從 `template/HANDOFF.md` 移到本檔；`copyGatePlaybookPack()` 僅複製 `template/HANDOFF.md`，現在該檔與 `origin/main` 相同且指定敏感字樣無命中。TD-016 文件的五欄 probe 片段與本機 `template/temp/td016-verify/server/api/td016.get.ts` 一致，保留既有 curl 讀數；未重新部署 Worker。TD-020 表格已標記 Q160=A、PR #14 待驗證合入。
+- 本機證據：`test/scaffold.test.ts` 31/31、變更 Markdown 路徑 `pnpm exec vp check --no-lint`、`git diff --check` 通過。`npx --no-install tsc -p tsconfig.clade.json --noEmit` 因 repo 無此設定檔回 TS5058；本次僅改文件。廣範圍回歸依 PR CI 判讀，與本機結果分開。
+- 下一步與所有權：主持者對本分支最終 head 跑 PR #14 的 0-A 驗證輪、判讀 CI，再決定 PR ready／merge；`.claude/**`、`template/packages/create-nuxt-starter/src/**` 與 TD-019／TD-021 後續由主持者或另派 owner 處理。本 worker 的改檔僅本檔、`template/HANDOFF.md`、`docs/tech-debt.md`。
