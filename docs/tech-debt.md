@@ -34,22 +34,22 @@
 - 工作指針：本次基準 `origin/main` 為 `2679369d`；根目錄無 `HANDOFF.md`，`template/HANDOFF.md` 無未勾 checkbox。以下只以已合入 main 的內容判定，OPEN PR 不計入下降。
 - 已驗證：TD-018 的上游修正在 clade PR #233（`f4f310585`）合入；starter 升版提交 `830c992e`、`f1f211cf` 先後帶入投影。TD-012 已由本 repo PR #6（`8a78c687`）合入。
 
-| 仍未結案 | main 證據與接手條件 |
-| --- | --- |
-| TD-004 | PR #7（`6b04da7f`）只合入失效診斷；`template-ci.yml` 仍呼叫退役的 roadmap task。PR #10 尚未合入；由 workflow owner 核對 Spectra 退役決定及 PR #10 落地結果。 |
-| TD-005 | `CLADE_PROJECT_ROOT` 接線仍由尚未合入的 PR #10 處理；合入後按本條 Acceptance 驗收。 |
-| TD-008 | `template/package.json` 仍有 `validate:starter`；PR #8 是未合入的規劃，尚無實作。 |
-| TD-010 | `template/nuxt.config.ts` 尚無 `/api/auth/**` CSRF 例外；實作 PR #9 尚未合入，合入後仍需真實登入驗收。 |
-| TD-011 | `template/.cursor/skills/clade-security/rules/auth.md` 仍寫舊套件名；須從 clade source 修正並散播。 |
-| TD-014 | `template/.cursor/skills/design/SKILL.md` 仍有無解析說明的 `<maintainer-domain>`；須由 clade source 收斂。 |
-| TD-016 | 缺真實 Cloudflare 部署的 Sentry `environment` 讀數；需現場驗證後才可判定。 |
-| TD-017 | `template/scripts/validate-starter.mjs` 只在開始與生成單一 fixture 前清理，結束後沒有清理；PR #5 尚未合入。 |
-| TD-019 | `scaffold-smoke` 在 main `2679369d` 的 run `36298330400` 仍失敗；須修投影去識別化並重驗。 |
-| TD-020 | `assemble.ts` 的 `copyTemplateCodexAssets()` 仍以 `existsSync` 略過來源；需拍板 Codex 開箱契約，再實作與驗收。 |
+| 仍未結案 | main 證據與接手條件                                                                                                                                          |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| TD-004   | PR #7（`6b04da7f`）只合入失效診斷；`template-ci.yml` 仍呼叫退役的 roadmap task。PR #10 尚未合入；由 workflow owner 核對 Spectra 退役決定及 PR #10 落地結果。 |
+| TD-005   | `CLADE_PROJECT_ROOT` 接線仍由尚未合入的 PR #10 處理；合入後按本條 Acceptance 驗收。                                                                          |
+| TD-008   | `template/package.json` 仍有 `validate:starter`；PR #8 是未合入的規劃，尚無實作。                                                                            |
+| TD-010   | `template/nuxt.config.ts` 尚無 `/api/auth/**` CSRF 例外；實作 PR #9 尚未合入，合入後仍需真實登入驗收。                                                       |
+| TD-011   | `template/.cursor/skills/clade-security/rules/auth.md` 仍寫舊套件名；須從 clade source 修正並散播。                                                          |
+| TD-014   | `template/.cursor/skills/design/SKILL.md` 仍有無解析說明的 `<maintainer-domain>`；須由 clade source 收斂。                                                   |
+| TD-016   | 缺真實 Cloudflare 部署的 Sentry `environment` 讀數；需現場驗證後才可判定。                                                                                   |
+| TD-017   | `template/scripts/validate-starter.mjs` 只在開始與生成單一 fixture 前清理，結束後沒有清理；PR #5 尚未合入。                                                  |
+| TD-019   | `scaffold-smoke` 在 main `2679369d` 的 run `36298330400` 仍失敗；須修投影去識別化並重驗。                                                                    |
+| TD-020   | PR #13 已移除 `copyTemplateCodexAssets()`；Q160 已選 A，最小三件檔實作在 draft PR #14，待 PR 驗證與合入。                                                    |
 
 - 2026-09-28 更新：Q160 選 A 的開箱三件檔與 TD-004 診斷步驟移除已在 draft PR #14；TD-016 的既有 consumer 讀數不等價，Charles 答 Q164「B」後已用獨立 Workers 驗證部署直接實測，原「零參數 snapshot 恆為 unknown」推論不成立。詳見本條的部署、讀數與拆除證據。
 - 剩餘步驟：主持者追蹤 PR #5／#8／#9／#10 與 clade source 工作；各自合入後重新讀 `origin/main`，逐條核對 Acceptance、同步 Index 與 entry body，再量測 HANDOFF 未勾及 literal open TD。
-- 檔案所有權：本輪 worker 只修改根目錄 `docs/tech-debt.md`；`template/HANDOFF.md` 唯讀。程式碼、migration、`.claude/**`、`vendor/**`、其他 worktree、production 與 PR merge 由各自 owner 處理。
+- 檔案所有權：PR #14 0-A r1 修補由本輪 worker 修改根目錄 `HANDOFF.md`、`template/HANDOFF.md` 與 `docs/tech-debt.md`；程式碼、migration、`.claude/**`、`vendor/**`、其他 worktree、production 與 PR merge 由各自 owner 處理。
 
 ## TD-004 — Spectra roadmap drift check 在 CI 的 structural diff
 
@@ -257,7 +257,7 @@ node ~/offline/clade/scripts/project-runtime-capabilities.ts \
    （`aixbdd` 17 支、`specformula` 4 支）。其中 `sdd-start/SKILL.md` 另有
    `common skill frontmatter key homepage is runtime-specific`。
 2. **`hub-core/scripts/{codex-review-safe,gh-ci-watch}.sh`** → `Resource source is not safe for
-   this visibility profile`（PUBLIC）。此二條與 capability 無關，宣告前即存在。
+this visibility profile`（PUBLIC）。此二條與 capability 無關，宣告前即存在。
 3. **`hub-core/skills/subagent-dev/SKILL.md`** → `permission_tier` 放錯層。
 
 實際投影仍由較舊的 `sync-rules` + `sync-to-{codex,cursor}` 路徑完成，Claude 端 skill 可被發現
@@ -297,11 +297,11 @@ cd template && node ~/offline/clade/scripts/project-runtime-capabilities.ts \
 
 三類的去向：
 
-| 類 | 去向 |
-| --- | --- |
-| 21 支 capability skill 缺 `clade-targets` ＋ `subagent-dev` 的 `permission_tier` | clade 已補，隨 v1.12.46 到位 |
-| `hub-core/scripts/{codex-review-safe,gh-ci-watch}.sh` 的 PUBLIC resource | clade **TD-1019** 已解：實證註解搬進 `docs/pitfalls/`、原地留 pointer，並補了一條 invariant test |
-| CF `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_ZONE_ID` 可反查 identifier | clade **TD-1066** 已解 |
+| 類                                                                               | 去向                                                                                             |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 21 支 capability skill 缺 `clade-targets` ＋ `subagent-dev` 的 `permission_tier` | clade 已補，隨 v1.12.46 到位                                                                     |
+| `hub-core/scripts/{codex-review-safe,gh-ci-watch}.sh` 的 PUBLIC resource         | clade **TD-1019** 已解：實證註解搬進 `docs/pitfalls/`、原地留 pointer，並補了一條 invariant test |
+| CF `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_ZONE_ID` 可反查 identifier              | clade **TD-1066** 已解                                                                           |
 
 **CF 那條的實情比本條原本記的嚴重，值得留著**：它不只是「`audit-template-hygiene.sh` 不抓
 32-hex」，而是**已經洩漏**——`template/.cursor/skills/yudefine-deploy/SKILL.md` 自
@@ -372,12 +372,15 @@ Charles 隨後在 Q164 答「B」授權獨立驗證部署；下段才是本條�
 probe 的 server route 與 starter 三支 plugin 一樣從
 `nitropack/runtime/config` 引入零參數 `useRuntimeConfig()`，並在 module 頂層取 snapshot：
 
-```ts
+```text
 const moduleEvalAppEnv = useRuntimeConfig().appEnv
+const moduleEvalProcessEnv = process.env.NUXT_APP_ENV || null
+
 export default defineEventHandler(event => ({
   moduleEvalAppEnv,
   requestZeroArgAppEnv: useRuntimeConfig().appEnv,
   requestEventAppEnv: useRuntimeConfig(event).appEnv,
+  moduleEvalProcessEnv,
   requestProcessEnv: process.env.NUXT_APP_ENV || null,
 }))
 ```
@@ -515,10 +518,10 @@ scaffold 專案並**保留**（`temp/` 在 `.gitignore` 內）。vite-doctor 不
 
 clade 的 projection state 分兩層存放，而且**歸屬不同**：
 
-| 層 | 路徑 | git |
-| --- | --- | --- |
-| runtime projection state（conflict 判定實際讀的那份） | `template/.clade/projections/*.json` | untracked |
-| 投影出來的內容檔 | `template/.claude/**`、`template/.cursor/**` | tracked |
+| 層                                                    | 路徑                                         | git       |
+| ----------------------------------------------------- | -------------------------------------------- | --------- |
+| runtime projection state（conflict 判定實際讀的那份） | `template/.clade/projections/*.json`         | untracked |
+| 投影出來的內容檔                                      | `template/.claude/**`、`template/.cursor/**` | tracked   |
 
 `applyRuntimeArtifactPlan()` 把兩者放在同一個 manifest transaction 裡寫，所以 apply 本身是原子的。
 問題出在**之後**：auto-commit flow 的 `git commit` 若失敗，rescue 路徑會存下 patch
@@ -537,6 +540,7 @@ clade 的 projection state 分兩層存放，而且**歸屬不同**：
 它就是 HEAD 的內容。訊息把人導向「找誰覆寫了投影」，而真正的狀態是「state 跑到磁碟前面了」。
 
 實測（2026-09-11，v1.12.47）：
+
 - `.claude/rules/session-tasks.operations.md` 磁碟 `70896178…`（= HEAD）
 - `.clade/projections/claude.rules.json` 記 `b94a2f96…`
 - 用 clade **新** source 重跑投影轉換（插 native-rule 註解 → `TDMS`→`<consumer-b>` → clade 絕對路徑→`<clade-central-repo>`）得到的 sha 逐位等於 `b94a2f96…`，證明 state 是 v1.12.47 的預期輸出，不是 consumer 改動。
@@ -545,10 +549,10 @@ clade 的 projection state 分兩層存放，而且**歸屬不同**：
 **這不是單次意外**。本 consumer 從 v1.12.38 到 v1.12.45 連續 8 趟 propagate 都是同一形狀的
 `projection unavailable`，中間只有 v1.12.46 綠過一次。觸發 `git commit` 失敗的原因每次不同——
 
-| run | 觸發 commit 失敗的原因 |
-| --- | --- |
+| run             | 觸發 commit 失敗的原因                                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | v1.12.45 16:05Z | root `.husky/pre-commit` 的 `[Starter Hygiene] real-tenant-identifier` 擋下 clade 自己未去識別化的投影（TD-006 ratchet） |
-| v1.12.47 19:24Z | pre-commit 以 **134 / SIGABRT** 結束（見下） |
+| v1.12.47 19:24Z | pre-commit 以 **134 / SIGABRT** 結束（見下）                                                                             |
 
 ——但**後果永遠相同**：wedge 住，而且要人手動復原。
 
@@ -642,10 +646,10 @@ scaffold 輸出要有 `.claude/commands/validate-starter.md`，但 `17f080cf` �
 **第二層（未修）**：拿掉第一層之後，`placeholder scan` 接著紅。本機實跑 25 個命中，
 **全部**落在 clade 投影出來的 `vendor/**` 與 `scripts/**`，app 程式碼零命中：
 
-| 命中 | 數量 | 例子 |
-| --- | --- | --- |
-| 字面 `nuxt-supabase-starter` | 18 | `vendor/snippets/pitfalls/TEMPLATE.md`、`vendor/oxc-shared/preset.ts`、`scripts/pre-push/checks/*.sh` |
-| `demo` | 7 | 其中數個是子字串誤判：`demonstrably`、`demonstrate` 也會中 |
+| 命中                         | 數量 | 例子                                                                                                  |
+| ---------------------------- | ---- | ----------------------------------------------------------------------------------------------------- |
+| 字面 `nuxt-supabase-starter` | 18   | `vendor/snippets/pitfalls/TEMPLATE.md`、`vendor/oxc-shared/preset.ts`、`scripts/pre-push/checks/*.sh` |
+| `demo`                       | 7    | 其中數個是子字串誤判：`demonstrably`、`demonstrate` 也會中                                            |
 
 兩個成因要分開看：
 
@@ -750,10 +754,10 @@ multi-select while keeping claude source assets`），實作則把「來源不�
 
 決定性的證據是**同一支檔裡的不對稱**（已核實）：
 
-| 函式 | 行 | 寫法 |
-| --- | --- | --- |
+| 函式                       | 行                    | 寫法                                                            |
+| -------------------------- | --------------------- | --------------------------------------------------------------- |
 | `copyTemplateClaudeAssets` | `assemble.ts:207-209` | 直接 `copyDirectory`，**沒有** `existsSync` —— 「這個源是契約」 |
-| `copyTemplateCodexAssets` | `assemble.ts:251-263` | 兩個 `existsSync` 守門 —— 「有就拷、沒有算了」 |
+| `copyTemplateCodexAssets`  | `assemble.ts:251-263` | 兩個 `existsSync` 守門 —— 「有就拷、沒有算了」                  |
 
 使用者顯式 `--agents codex` 時，optional 模式就是錯的模式。而且 `.agents/skills/` 的內容
 **本來就推導得出來**：`template/.claude/skills/` 的 83 個目錄全部出現在 `.agents/skills/` 內，
@@ -796,10 +800,10 @@ multi-select while keeping claude source assets`），實作則把「來源不�
 
 **這是產品格不是技術格**，落地形狀完全不同：
 
-| | 意思 | 後果 |
-| --- | --- | --- |
-| **A**（顧問預設） | assemble 保證 `.codex/config.toml` + `.agents/skills/**`（含 `commit/SKILL.md`）+ tracked `AGENTS.md`；`.codex/rules` 等完整語義轉換有 clade 才升級 | 不改 hygiene 掃描範圍、不搬 converter、CI 單測可綠 |
-| **B** | 選了 `codex` 就必須等同開發機跑過 `sync-to-codex`（含 `.codex/rules` 全部） | `runSyncToAgents` 在缺 shim/clade 時 **throw**；等於宣告「Codex scaffold 需要本機 clade」。**仍然不走原文 2** |
+|                   | 意思                                                                                                                                                | 後果                                                                                                          |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **A**（顧問預設） | assemble 保證 `.codex/config.toml` + `.agents/skills/**`（含 `commit/SKILL.md`）+ tracked `AGENTS.md`；`.codex/rules` 等完整語義轉換有 clade 才升級 | 不改 hygiene 掃描範圍、不搬 converter、CI 單測可綠                                                            |
+| **B**             | 選了 `codex` 就必須等同開發機跑過 `sync-to-codex`（含 `.codex/rules` 全部）                                                                         | `runSyncToAgents` 在缺 shim/clade 時 **throw**；等於宣告「Codex scaffold 需要本機 clade」。**仍然不走原文 2** |
 
 **未驗證的那一格**：沒有人驗過 Codex CLI 在只有 `AGENTS.md` + `.codex/config.toml` + `.agents/skills`、
 **沒有** `.codex/rules` 時算不算可用專案。A 若在這格是假的，交付出去的會是「看起來有、實際不能用」的
