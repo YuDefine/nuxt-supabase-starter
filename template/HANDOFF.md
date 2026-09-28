@@ -19,3 +19,10 @@ cd ~/offline/clade && node scripts/convention-conformance-audit.ts --live --cons
 node ~/offline/clade/scripts/audit-consumer-readiness.ts --consumer ~/offline/{{CONSUMER}} --gate
 node ~/offline/{{CONSUMER}}/scripts/deploy-trigger-check.ts
 ```
+
+## 2026-09-28 starter Q160／Q161／TD-004 後續指針
+
+- 工作來源：`/home/charles/offline/clade/tasks/2026-09-28-rush68/charles-answers-Q143-Q163.md` 的 Q160=A、Q161=用現有 Cloudflare consumer 讀數。當前實作在 `session/2026-09-28-1414-handoff-q143-answers`，改動 `docs/tech-debt.md`、`.github/workflows/template-ci.yml`、`template/packages/create-nuxt-starter/{src/assemble.ts,test/scaffold.test.ts,test/consumer-update-policy.test.ts,README.md}`。
+- 已驗證：Codex CLI 0.157.1 在沒有 `.codex/rules` 的最小三件檔專案可讀 `.agents/skills`；scaffolder 相關 3 個測試檔 101/101 通過，scaffolder scoped `tsc` 與 `vp check` 通過。指定的 `npx tsc -p tsconfig.clade.json --noEmit` 因本 repo 沒有該 tsconfig 回 TS5058。CI／PR 結論待該 branch push 後填入主持者接續紀錄。
+- TD-016 剩餘：registry 的 Cloudflare consumer 中，starter 有 evlog 但無近期成功 `deploy.yml` 讀數；rental-scout 有成功部署但沒有 evlog/Sentry 接線；本機 `sentry-cli` 無 auth token。主持者須提供**既有**可讀的 Cloudflare＋Sentry／evlog 事件來源或存取路徑，唯讀取得真實 `environment` 後才能判定。不可新開部署。
+- 其他接續：主持者擁有 `.claude/rules/starter-hygiene.md`，應把「忽略的 `.codex/`／`.agents/` 不會被 scaffold 帶走」改為「scaffold 會從 target `.claude/skills` 生成最小投影」；本 worker 不動該路徑。PR 0-A、ready、merge 與既有 TD-019／TD-021 CI 紅燈歸主持者或另派 owner，本 worker 不執行。

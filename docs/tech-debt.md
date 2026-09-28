@@ -22,7 +22,7 @@
 | TD-017 | `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅 | low | open | 2026-09-11 |
 | TD-018 | auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict | high | done | 2026-09-11 |
 | TD-019 | `scaffold-smoke` 自 2026-08-24 起持續紅，剩餘 blocker 是 clade 投影未去識別化 | mid | open | 2026-09-11 |
-| TD-020 | 選了 codex 的 scaffold 輸出靜默少掉 `.codex/` 與 `.agents/` | high | open | 2026-09-11 |
+| TD-020 | 選了 codex 的 scaffold 輸出靜默少掉 `.codex/` 與 `.agents/` | high | in-progress | 2026-09-11 |
 | TD-021 | Template CI `UX drift audit` 既有紅燈：`shared/types` 沒有 enum-like 定義就 fail | mid | open | 2026-09-28 |
 | TD-022 | repo root 的 Claude session 載不到 `commit-0a-reviewer` seat | mid | open | 2026-09-28 |
 | TD-023 | Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback | low | open | 2026-09-28 |
@@ -47,13 +47,13 @@
 | TD-019 | `scaffold-smoke` 在 main `2679369d` 的 run `36298330400` 仍失敗；須修投影去識別化並重驗。 |
 | TD-020 | `assemble.ts` 的 `copyTemplateCodexAssets()` 仍以 `existsSync` 略過來源；需拍板 Codex 開箱契約，再實作與驗收。 |
 
-- 需人工判定：TD-004 的 Spectra workflow 退役方向、TD-016 的真實 Cloudflare 讀數、TD-020 的 Codex 開箱契約。未有證據前維持原狀。
+- 2026-09-28 Q160 已選 A（Codex 開箱三件檔），本次實作中；TD-004 已指示刪除無效診斷步驟。TD-016 仍缺真實 Cloudflare `environment` 讀數，不能把 registry 部署類型當讀數。
 - 剩餘步驟：主持者追蹤 PR #5／#8／#9／#10 與 clade source 工作；各自合入後重新讀 `origin/main`，逐條核對 Acceptance、同步 Index 與 entry body，再量測 HANDOFF 未勾及 literal open TD。
 - 檔案所有權：本輪 worker 只修改根目錄 `docs/tech-debt.md`；`template/HANDOFF.md` 唯讀。程式碼、migration、`.claude/**`、`vendor/**`、其他 worktree、production 與 PR merge 由各自 owner 處理。
 
 ## TD-004 — Spectra roadmap drift check 在 CI 的 structural diff
 
-**Status**: in-progress（2026-09-26：診斷步驟已失去輸入與同步指令，待 workflow owner 收斂）
+**Status**: in-progress（2026-09-28：已從 workflow 移除失效診斷，待 PR CI 與合入確認）
 **Priority**: mid
 **Discovered**: 2026-05-10 — v0.31.0 release 後 Template CI 反覆報 stale
 **Location**: `.github/workflows/template-ci.yml`（原 `template/scripts/spectra-advanced/roadmap-sync.ts` 已退役）
@@ -78,26 +78,16 @@ CI 執行 `vp run spectra:roadmap --check` 時曾持續報 stale，即使 local 
   workflow 未隨 Spectra 投影退役同步更新**；沒有可執行的 collect/render path，也無 CI diff 可構造
   修正前紅、修正後綠的回歸測試。本輪因此只記錄診斷，不復活已退役腳本或手改 roadmap。
 
-### Workaround
+### 2026-09-28 處置
 
-`.github/workflows/template-ci.yml` 仍保留 `continue-on-error: true` 與 stale 時的 diff 指令，
-但目前前置測試失敗使步驟跳過；即使走到該步驟，roadmap 檔與 task 也已不存在。
-
-### Fix approach
-
-1. 依 CI 實際 unified diff 定位 structural difference。
-2. 修正 `roadmap-sync.ts` 的對應 collect/render path。
-3. 連續 5 次 main push 的 check 都 PASS 後，移除 `continue-on-error`，恢復真正 gate。
-
-上述步驟是歷史方案，已不能套用到退役後的樹。後續由 coordinator 指派 workflow owner（本輪 worker
-只持有本 TD-004 條目）：核對 Spectra 退役是否為預期產品決策；若是，清除
-`.github/workflows/template-ci.yml` 的無效診斷步驟並調整本條驗收；若仍需 roadmap gate，先在具名
-source of truth 恢復輸入、task 與同步器，再以實際 CI diff 重啟步驟 1–3。不得把 skipped run 當 PASS。
+依本次派工確認退役方向，從 `.github/workflows/template-ci.yml` 移除整段 Spectra roadmap
+診斷步驟。原方案要求的 5 次 main push 已沒有輸入與 task，不能作為現行驗收。
 
 ### Acceptance
 
-- CI 重新啟用 `vp run spectra:roadmap --check`，連續 5 次 main push 都 PASS。
-- 不再需要診斷用 diff 或 `continue-on-error`。
+- `template-ci.yml` 不再呼叫退役的 `spectra:roadmap`，也沒有診斷用 diff 或
+  `continue-on-error` 步驟。
+- 變更 PR 的 Template CI 完成；合入後以 main 的 workflow 再核對一次。
 
 ## TD-005 — meta-monorepo 下 pre-push checks 靜默 no-op
 
@@ -336,6 +326,19 @@ secrets 存放處、新增 skill 級 `<!-- clade-visibility: private -->` 讓投
 **Priority**: mid — 若成立，Sentry 與 evlog 的 `environment` 在所有 Cloudflare 部署上恆為 `'unknown'`
 **Discovered**: 2026-09-11 — TD-015 的 delta review 順出來的
 **Location**: `template/server/plugins/sentry-cloudflare.ts`、`template/server/plugins/evlog-drain.ts`、`template/server/plugins/evlog-sentry-drain.ts`（後兩者為 clade-LOCKED 投影）
+
+### 2026-09-28 Q161 唯讀探測
+
+Charles 指示用**現有** Cloudflare consumer 的線上讀數。`clade/registry/consumers.json` 的
+`deploy-track=wrangler-action` 只有 `nuxt-supabase-starter` 與 `rental-scout`：前者宣告
+`evlog-stack=baseline`，但 GitHub `deploy.yml` 最近可查的 run 是 2026-03-14 的失敗紀錄，
+不足以證明目前有可讀的線上事件；後者的 production `deploy.yml` 在 2026-09-26 成功，
+但 registry 為 `evlog-stack=none`，專案設定沒有 Sentry 接線。本機 `sentry-cli info` 回
+`Auth token is required`，所以沒有讀到任何線上 Sentry `environment` 值。
+
+**讀數結論：未取得；TD-016 是否成立仍無法判定。** 不能把靜態 source、registry 宣告、
+deploy 成功或 `unknown` 的推論當成線上事件。下一步由主持者提供既有可讀的
+Cloudflare＋Sentry／evlog consumer 或唯讀事件存取路徑；不得為此建立新部署。
 
 ### Problem
 
@@ -600,11 +603,15 @@ scaffold 輸出要有 `.claude/commands/validate-starter.md`，但 `17f080cf` �
 
 ## TD-020 — 選了 codex 的 scaffold 輸出靜默少掉 `.codex/` 與 `.agents/`
 
-**Status**: open — 根因已驗證，但修法牽涉 hygiene 治理決定，需要拍板才動
+**Status**: in-progress — Q160 已選 A，scaffold 最小投影實作待 PR 驗證與合入
 **Priority**: high — 使用者選了 codex 卻拿到不完整的專案，而且沒有任何錯誤訊息
 **Discovered**: 2026-09-11 — 修好 setup-vp 之後 Template CI 第一次跑到 Unit tests 才露出來
-**Location**: `template/packages/create-nuxt-starter/src/assemble.ts:251-262`、
-`template/packages/create-nuxt-starter/test/scaffold.test.ts:255-256`、`template/.gitignore:81,87`
+**Location**: `template/packages/create-nuxt-starter/src/assemble.ts`、
+`template/packages/create-nuxt-starter/test/scaffold.test.ts`、`template/.gitignore`
+
+下方 Problem／Fix approach 是 2026-09-11 根因紀錄；PR #13 已移除當時的
+`copyTemplateCodexAssets()`，但只在 managed 安裝後由 Clade 補完整投影。
+本次 Q160 的差額是讓 scaffold-only／`--no-install` 也立即有最小三件檔。
 
 ### Problem
 
@@ -693,7 +700,13 @@ multi-select while keeping claude source assets`），實作則把「來源不�
 也就是說**現有生成路徑預設使用者有 Claude Code ＋ clade**——而「選了 Codex、機器上沒有 clade」
 的人正是這個選項的目標使用者。這條路對他們本來就過不去。
 
-### 需要拍板：Codex 開箱契約要到哪裡
+### Codex 開箱契約決策紀錄
+
+2026-09-28 Charles 對 Q160 答 A：scaffold 直接保證 `AGENTS.md`、
+`.codex/config.toml`、`.agents/skills/`。落地前用 Codex CLI 0.157.1 在只有這三類檔案、
+沒有 `.codex/rules` 的隔離目錄實跑 `codex exec --ephemeral --ignore-user-config`，
+成功載入 `.agents/skills/probe/SKILL.md` 並輸出 `CODEX_MINIMAL_OK`（exit 0）。
+完整 clade 投影仍可在 managed bootstrap 後覆蓋最小投影。
 
 **這是產品格不是技術格**，落地形狀完全不同：
 
@@ -723,8 +736,8 @@ scaffold 輸出由 assemble 生成，不屬 L3 掃 template 的範圍」。**NEV
 
 ### Acceptance
 
-- 在乾淨 clone（沒跑過 `sync-to-codex`）上以 `--agents codex,cursor` scaffold，輸出要嘛含
-  `.codex/config.toml` 與 `.agents/skills/commit/SKILL.md`，要嘛當場失敗並說明原因。
+- 在乾淨 clone（沒跑過 `sync-to-codex`）上以 `--agents codex,cursor` scaffold，輸出必含
+  `AGENTS.md`、`.codex/config.toml` 與 `.agents/skills/commit/SKILL.md`；來源缺失須當場失敗。
 - `Template CI` 的 Unit tests 在 main 上轉綠。
 
 ## TD-021 — Template CI `UX drift audit` 既有紅燈：`shared/types` 沒有 enum-like 定義就 fail
