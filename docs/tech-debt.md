@@ -18,7 +18,7 @@
 | TD-011 | clade 投影 auth 文件仍寫舊套件名 | low | open | 2026-08-24 |
 | TD-012 | `lint` script guard 吃不掉 pnpm 附加參數 | mid | done | 2026-08-29 |
 | TD-014 | clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約 | low | open | 2026-09-09 |
-| TD-016 | Cloudflare 上 `useRuntimeConfig()` 的 module-eval snapshot 是否讀得到注入的 `NUXT_APP_ENV` | mid | open | 2026-09-11 |
+| TD-016 | Cloudflare 上 `useRuntimeConfig()` 的 module-eval snapshot 是否讀得到注入的 `NUXT_APP_ENV` | mid | done | 2026-09-11 |
 | TD-017 | `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅 | low | open | 2026-09-11 |
 | TD-018 | auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict | high | done | 2026-09-11 |
 | TD-019 | `scaffold-smoke` 自 2026-08-24 起持續紅，剩餘 blocker 是 clade 投影未去識別化 | mid | open | 2026-09-11 |
@@ -47,7 +47,7 @@
 | TD-019 | `scaffold-smoke` 在 main `2679369d` 的 run `36298330400` 仍失敗；須修投影去識別化並重驗。 |
 | TD-020 | `assemble.ts` 的 `copyTemplateCodexAssets()` 仍以 `existsSync` 略過來源；需拍板 Codex 開箱契約，再實作與驗收。 |
 
-- 2026-09-28 更新：Q160 選 A 的開箱三件檔與 TD-004 診斷步驟移除已在 draft PR #14；TD-016 已讀到現有 Cloudflare consumer 的 D1 事件值，但來源機制不等價於本條的零參數 `useRuntimeConfig()`，仍保持 open。詳見各條的 2026-09-28 紀錄。
+- 2026-09-28 更新：Q160 選 A 的開箱三件檔與 TD-004 診斷步驟移除已在 draft PR #14；TD-016 的既有 consumer 讀數不等價，Charles 答 Q164「B」後已用獨立 Workers 驗證部署直接實測，原「零參數 snapshot 恆為 unknown」推論不成立。詳見本條的部署、讀數與拆除證據。
 - 剩餘步驟：主持者追蹤 PR #5／#8／#9／#10 與 clade source 工作；各自合入後重新讀 `origin/main`，逐條核對 Acceptance、同步 Index 與 entry body，再量測 HANDOFF 未勾及 literal open TD。
 - 檔案所有權：本輪 worker 只修改根目錄 `docs/tech-debt.md`；`template/HANDOFF.md` 唯讀。程式碼、migration、`.claude/**`、`vendor/**`、其他 worktree、production 與 PR merge 由各自 owner 處理。
 
@@ -322,7 +322,7 @@ secrets 存放處、新增 skill 級 `<!-- clade-visibility: private -->` 讓投
 
 ## TD-016 — Cloudflare 上 `useRuntimeConfig()` 的 module-eval snapshot 是否讀得到注入的 `NUXT_APP_ENV`
 
-**Status**: open — 機制已釘死，**starter 所用路徑的實際後果未實測**
+**Status**: done — Q164 獨立 Cloudflare Workers 實測否證「零參數 snapshot 讀不到部署時的 `NUXT_APP_ENV`」；證據在下方，隨 draft PR #14 待合入
 **Priority**: mid — 若成立，Sentry 與 evlog 的 `environment` 在所有 Cloudflare 部署上恆為 `'unknown'`
 **Discovered**: 2026-09-11 — TD-015 的 delta review 順出來的
 **Location**: `template/server/plugins/sentry-cloudflare.ts`、`template/server/plugins/evlog-drain.ts`、`template/server/plugins/evlog-sentry-drain.ts`（後兩者為 clade-LOCKED 投影）
@@ -358,9 +358,73 @@ runtimeConfig 值接到 `environment`。已安裝的 evlog `initLogger` 在未�
 `server/utils/knowledge-runtime.ts` 主要入口則是 `useRuntimeConfig(event)`，與 starter
 三支 plugin 的零參數呼叫不同。
 
-**結論：雖取得線上事件值，候選機制不等價，TD-016 是否成立仍無法判定，保持 open。**
-若要直接驗證，須另就 starter 的 Cloudflare 驗證部署取得 Charles 授權；本次沒有部署，
-也沒有修改該 consumer。不能把此 D1 標籤或 deploy 成功當成 starter 路徑的驗收證據。
+**當時結論：雖取得線上事件值，候選機制不等價，仍無法判定 TD-016。**
+Charles 隨後在 Q164 答「B」授權獨立驗證部署；下段才是本條的等價實測證據。
+既有 consumer 沒有被部署或修改，D1 讀數不拿來驗收 starter 路徑。
+
+### 2026-09-28 Q164 獨立 Workers 實測
+
+使用本 repo 的 Nuxt 4.4.2／Nitropack 2.13.3（`template/node_modules` 與 lockfile），
+在 gitignored `template/temp/td016-verify/` 建最小 probe，沿用 starter 的
+`runtimeConfig.appEnv = process.env.NUXT_APP_ENV || 'unknown'`、
+`nitro.preset = 'cloudflare_module'`、`cloudflare.deployConfig = true`、
+`nodeCompat = true`，以及 `compatibility_date: 2025-05-15`／`nodejs_compat`。
+probe 的 server route 與 starter 三支 plugin 一樣從
+`nitropack/runtime/config` 引入零參數 `useRuntimeConfig()`，並在 module 頂層取 snapshot：
+
+```ts
+const moduleEvalAppEnv = useRuntimeConfig().appEnv
+export default defineEventHandler(event => ({
+  moduleEvalAppEnv,
+  requestZeroArgAppEnv: useRuntimeConfig().appEnv,
+  requestEventAppEnv: useRuntimeConfig(event).appEnv,
+  requestProcessEnv: process.env.NUXT_APP_ENV || null,
+}))
+```
+
+build 指令 `env -u NUXT_APP_ENV node_modules/.bin/nuxt build` exit 0；產出的
+`.output/server/chunks/nitro/nitro.mjs` 明含 `appEnv:"unknown"`，證明 build 期
+沒有預先寫入 `staging`。Nitro 生成的 `.output/server/wrangler.json` 只有
+`ASSETS` 與 `NUXT_APP_ENV=staging` 兩個 binding，`workers_dev=true`、無 route／自訂網域、
+無 D1 或 secret；Worker 名稱 `starter-td016-verify-822797f7`。部署前以
+`wrangler deployments list --name starter-td016-verify-822797f7 --json` 查回
+`This Worker does not exist on your account. [code: 10007]`，避免覆寫既有 Worker。
+
+```text
+$ wrangler deploy --config .output/server/wrangler.json
+env.NUXT_APP_ENV ("staging")      Environment Variable
+Uploaded starter-td016-verify-822797f7
+Deployed starter-td016-verify-822797f7 triggers
+
+$ curl --fail-with-body --silent --show-error --location --max-time 20 \
+    --write-out '\nHTTP_STATUS=%{http_code}\nEFFECTIVE_URL=%{url_effective}\n' \
+    https://starter-td016-verify-822797f7.<account>.workers.dev/api/td016
+{"moduleEvalAppEnv":"staging","requestZeroArgAppEnv":"staging","requestEventAppEnv":"staging","moduleEvalProcessEnv":"staging","requestProcessEnv":"staging"}
+HTTP_STATUS=200
+EFFECTIVE_URL=https://starter-td016-verify-822797f7.<account>.workers.dev/api/td016
+
+$ wrangler delete starter-td016-verify-822797f7 --force --config .output/server/wrangler.json
+Successfully deleted starter-td016-verify-822797f7
+
+$ wrangler deployments list --name starter-td016-verify-822797f7 --json
+This Worker does not exist on your account. [code: 10007]
+```
+
+`curl` 的 status 與 final URL 都是 probe endpoint，沒有被導向其他頁。刪除後的
+同一條 Wrangler 查詢 exit 1／10007；它對已知存在的 Worker 唯讀查詢 exit 0，
+因此「不存在」不是 CLI／權限失效造成的空輸出。原始 run-evidence receipts：
+build `/tmp/clade-evidence-iWtLpG/receipt.json`、deploy
+`/tmp/clade-evidence-sSCMXl/receipt.json`、curl
+`/tmp/clade-evidence-mLmt8s/receipt.json`、delete
+`/tmp/clade-evidence-1gtopy/receipt.json`、刪後查詢
+`/tmp/clade-evidence-mQXI7r/receipt.json`（`/tmp` 會清除，上面輸出為 durable evidence）。
+
+**判定：TD-016 的「Cloudflare module-eval snapshot 恆讀不到 runtime 注入值」假說不成立。**
+build inline 為 `unknown`，實際 Workers 的零參數 snapshot 卻是 `staging`；
+因此此相容日期、flag、preset 與版本組合下，現行 `config.appEnv || 'unknown'`
+不會因本條推測的時序而落到 `unknown`。這是最小 probe 對 Nitro／runtimeConfig
+接線的等價驗證，**未發送 Sentry 事件，也未執行完整 starter app**；
+不能把它擴張成每種 Cloudflare 相容日期、依賴版本或所有 Sentry 故障的保證。
 
 ### Problem
 
@@ -385,27 +449,27 @@ build 期的值 → 落到 `'unknown'`。
 
 - Sentry 的 options callback **每個 request 都跑**（包在 `nitroApp.localFetch` 的 Proxy `apply` 內），
   所以呼叫時 `__env__` 一定已經在了 —— 時機不對的是 `useRuntimeConfig()` 那一半，不是 callback。
-- `wrangler.jsonc` 是 `compatibility_date: 2025-05-15` + `nodejs_compat`，理論上會 populate
-  原生 `process.env`；**但「在 module 頂層就 populate」還是「只在 handler scope 內」沒有實測**。
+- `wrangler.jsonc` 是 `compatibility_date: 2025-05-15` + `nodejs_compat`；
+  Q164 probe 已量到 module 頂層的 `process.env.NUXT_APP_ENV=staging`。
 - 同一個 repo 內另外兩支 evlog plugin 做一樣的零引數呼叫，只是因為檔頭帶 generated header
   被 vite-doctor 跳過，所以沒被這條規則打到 —— 它們有同樣的曝險。
 
-### Fix approach
+### Resolution
 
 **NEVER** 為了繞過這條就把 `config.appEnv` 換成 `process.env.NUXT_APP_ENV` —— `deploy-env-identity`
 指名了 runtime config 那條路徑，這是 clade 標準層的接線，consumer 不能自行偏離。
 
-1. 先實測：部署一次到 Cloudflare，讀回 Sentry 事件的 `environment` 標籤。恆為 `'unknown'` 即成立。
-2. 成立的話，這是 **clade 標準層的問題**（`deploy-env-identity` 的「server / nitro plugin →
-   `config.appEnv`」那一列在 Cloudflare preset 上不成立），MUST 回報 clade 並在那裡決定接線，
-   不在本 repo 端各修各的。
-3. 規約自己要求「MUST 有機械 gate 釘住整條接線」；那個 gate 目前抓不到這一類（值讀得到、
-   只是讀到舊的），gate 的形狀也要一起看。
+在本條測試條件下，runtime 注入值於 module evaluation 已可讀；無需改三支 plugin
+或偏離 `deploy-env-identity` 接線。若將來升級 Nitro／改 Cloudflare compatibility flags
+或觀測到真實 Sentry 標籤異常，應另以相同 build-vs-runtime 分岔 probe 重驗，
+不能用這一次讀數推斷所有未來部署。
 
 ### Acceptance
 
-- 有一次真實 Cloudflare 部署的 `environment` 標籤讀數作為證據。
-- 若成立：clade `deploy-env-identity` 的接線表對 Cloudflare preset 有明確答案，三支 plugin 一致。
+- 同版 Nuxt／Nitro、相同 Cloudflare preset／compatibility 條件，build inline
+  `appEnv=unknown`、部署時只注入 `NUXT_APP_ENV=staging`，真實 Workers route 回傳
+  module-eval 與 request 零參數值均為 `staging`。
+- 驗證 Worker 為獨立名稱、無既有 binding／自訂網域；讀數後刪除並由 Cloudflare API 查回 10007。
 
 ## TD-017 — `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅
 
