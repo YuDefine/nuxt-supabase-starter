@@ -22,6 +22,8 @@ node ~/offline/{{CONSUMER}}/scripts/deploy-trigger-check.ts
 
 ## 2026-09-28 starter Q160／Q161／TD-004 後續指針
 
+Q164（Charles 2026-09-28 逐字答覆）：**「B」**。主持者轉述的執行授權：另設獨立名稱的 starter Cloudflare Workers 驗證部署，只測 TD-016；不動既有 consumer 的 Workers／D1／secret、不綁自訂網域、只注入最小環境值；取得附指令與輸出的讀數後立即 `wrangler delete` 並驗證不存在。帳號／權限不足則停下回報；完成後更新 TD-016、commit＋push 到 draft PR #14。
+
 RUSH-69 主持者續行答覆（2026-09-28，保留原話）：
 
 > fleet 沒有同時具備 Cloudflare＋Sentry＋NUXT_APP_ENV 的 consumer（perno 是 Docker、不算）。最接近的來源是 /home/charles/offline/nuxt-edge-agentic-rag：Cloudflare Workers／NuxtHub 部署、evlog（nuxt.config.ts:131、382），環境經 runtimeConfig 注入（nuxt.config.ts:60 NUXT_KNOWLEDGE_ENVIRONMENT）。做法：只唯讀（wrangler tail 或既有 evlog drain／NuxtHub log，NEVER 部署、NEVER 改該 repo），取一筆 production 事件的 environment 實值，並核對它是否走「Workers 注入 NUXT_* → useRuntimeConfig() module-eval snapshot」同一路徑。等價且讀得到 → 用它回答 TD-016 並記證據；機制不等價或讀不到（缺憑證等）→ TD-016 保持 open、在 summary 寫明原因，--complete 時 decision 改問 Charles 要不要另設一個 starter 的 Cloudflare 驗證部署。
