@@ -47,7 +47,7 @@
 | TD-019 | `scaffold-smoke` 在 main `2679369d` 的 run `36298330400` 仍失敗；須修投影去識別化並重驗。 |
 | TD-020 | `assemble.ts` 的 `copyTemplateCodexAssets()` 仍以 `existsSync` 略過來源；需拍板 Codex 開箱契約，再實作與驗收。 |
 
-- 2026-09-28 Q160 已選 A（Codex 開箱三件檔），本次實作中；TD-004 已指示刪除無效診斷步驟。TD-016 仍缺真實 Cloudflare `environment` 讀數，不能把 registry 部署類型當讀數。
+- 2026-09-28 更新：Q160 選 A 的開箱三件檔與 TD-004 診斷步驟移除已在 draft PR #14；TD-016 已讀到現有 Cloudflare consumer 的 D1 事件值，但來源機制不等價於本條的零參數 `useRuntimeConfig()`，仍保持 open。詳見各條的 2026-09-28 紀錄。
 - 剩餘步驟：主持者追蹤 PR #5／#8／#9／#10 與 clade source 工作；各自合入後重新讀 `origin/main`，逐條核對 Acceptance、同步 Index 與 entry body，再量測 HANDOFF 未勾及 literal open TD。
 - 檔案所有權：本輪 worker 只修改根目錄 `docs/tech-debt.md`；`template/HANDOFF.md` 唯讀。程式碼、migration、`.claude/**`、`vendor/**`、其他 worktree、production 與 PR merge 由各自 owner 處理。
 
@@ -322,7 +322,7 @@ secrets 存放處、新增 skill 級 `<!-- clade-visibility: private -->` 讓投
 
 ## TD-016 — Cloudflare 上 `useRuntimeConfig()` 的 module-eval snapshot 是否讀得到注入的 `NUXT_APP_ENV`
 
-**Status**: open — 機制已釘死，**實際後果未實測**（需要一次真實 Cloudflare 部署才判得出來）
+**Status**: open — 機制已釘死，**starter 所用路徑的實際後果未實測**
 **Priority**: mid — 若成立，Sentry 與 evlog 的 `environment` 在所有 Cloudflare 部署上恆為 `'unknown'`
 **Discovered**: 2026-09-11 — TD-015 的 delta review 順出來的
 **Location**: `template/server/plugins/sentry-cloudflare.ts`、`template/server/plugins/evlog-drain.ts`、`template/server/plugins/evlog-sentry-drain.ts`（後兩者為 clade-LOCKED 投影）
@@ -336,9 +336,31 @@ Charles 指示用**現有** Cloudflare consumer 的線上讀數。`clade/registr
 但 registry 為 `evlog-stack=none`，專案設定沒有 Sentry 接線。本機 `sentry-cli info` 回
 `Auth token is required`，所以沒有讀到任何線上 Sentry `environment` 值。
 
-**讀數結論：未取得；TD-016 是否成立仍無法判定。** 不能把靜態 source、registry 宣告、
-deploy 成功或 `unknown` 的推論當成線上事件。下一步由主持者提供既有可讀的
-Cloudflare＋Sentry／evlog consumer 或唯讀事件存取路徑；不得為此建立新部署。
+### 2026-09-28 RUSH-69 補充讀數與等價性核對
+
+主持者指定現有 Cloudflare Workers／NuxtHub consumer `nuxt-edge-agentic-rag`。唯讀執行
+`wrangler d1 execute agentic-rag-db --remote --config wrangler.jsonc --command
+"SELECT environment, timestamp FROM evlog_events ORDER BY timestamp DESC LIMIT 1" --json`：
+production D1 的一筆事件是 `environment=production`、`timestamp=2026-09-28T06:18:16.095Z`，
+查詢回 `success=true`、`rows_written=0`。同樣唯讀查 staging D1 最新事件為
+`environment=production`、`timestamp=2026-09-28T06:16:27.114Z`；staging 的
+`wrangler.staging.jsonc` 卻設定 `NUXT_KNOWLEDGE_ENVIRONMENT=staging`。這是 D1 事件欄位
+的實值；事件的 `service` 欄位為空，無法由該列證明它走了哪一條標籤設定路徑。
+
+機制核對以該 consumer 最近成功 production deploy 的 source SHA
+`0c4ca38fc4886c68040e55a8eb3f9af988fc8708` 為準：`wrangler.jsonc` 注入
+`NUXT_KNOWLEDGE_ENVIRONMENT=production`，`nuxt.config.ts` 把它讀入
+`runtimeConfig.knowledge.environment`；但 evlog 的 `env` 只設定 `service`，未將該
+runtimeConfig 值接到 `environment`。已安裝的 evlog `initLogger` 在未設定
+`env.environment` 時回退到 `detectEnvironment()`，後者取 `process.env.NODE_ENV`
+（或預設 production/development）。因此 D1 的 `environment=production` **不是**
+`NUXT_KNOWLEDGE_ENVIRONMENT` 經零參數 `useRuntimeConfig()` 的驗證讀數；該 consumer 的
+`server/utils/knowledge-runtime.ts` 主要入口則是 `useRuntimeConfig(event)`，與 starter
+三支 plugin 的零參數呼叫不同。
+
+**結論：雖取得線上事件值，候選機制不等價，TD-016 是否成立仍無法判定，保持 open。**
+若要直接驗證，須另就 starter 的 Cloudflare 驗證部署取得 Charles 授權；本次沒有部署，
+也沒有修改該 consumer。不能把此 D1 標籤或 deploy 成功當成 starter 路徑的驗收證據。
 
 ### Problem
 
