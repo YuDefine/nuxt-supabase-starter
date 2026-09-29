@@ -5,7 +5,7 @@ work_id: W-2026-09-29-starter-scaffold-receipt-clade-536-7
 # starter scaffold receipt（clade plan 第 7 項 starter 半）— 交棒 brief
 
 你是**繼任者**，不是被派去做一件子工作的 worker。前任 session 把 starter 半做完並已 merge，交棒理由：剩下的
-pinned 驗證要等外部事件（clade 發出含 YuDefine/clade#536 的 release），前任無法在本 session 內完成。
+pinned 驗證要等外部事件（clade 發出含 YuDefine/clade#536 的 release），前任無法在本 session 內完成（已於 2026-09-29 完成，見〈pinned 驗證〉）。
 
 - **repo／cwd：** `~/offline/nuxt-supabase-starter`（main checkout）
 - **原派工 brief：** `~/offline/clade/tasks/2026-09-29-1650-starter-scaffold-receipt-brief.md`
@@ -27,15 +27,23 @@ pinned 驗證要等外部事件（clade 發出含 YuDefine/clade#536 的 release
   - 注意：scaffold 內 install 那條在沒有 git remote 時，會先停在 `Consumer identity unavailable`。這與 receipt 無關，是首投影之前的另一道門。
 - commit 0-A（Opus 5.5 medium）通過：Critical 0 / Major 0 / Minor 3，3 項已修。repo root session 載不到 `commit-0a-reviewer`（TD-022），改在 worktree 的 `template/` 開 headless `claude -p --model opus`，由它跑 prepare → Agent → finalize。
 
-## 剩餘步驟（等外部事件才做）
+## pinned 驗證（已完成，2026-09-29）
 
-1. 確認 clade #536 已 merge，且已發出包含它的 release：`gh pr view 536 -R YuDefine/clade`，並查 clade tags／CHANGELOG。沒發版就維持等待，**不要**用時間流逝當重試理由。
-2. 發版後驗 pinned 路徑。照 plan 第 6 項的本機 release store 做法（需 Node 24）：
-   - `node scripts/consumer-release.ts build --version <ver> --source <該 tag 的 clade clone> --output <store>`
-   - starter CLI 帶 `--release <ver> --release-store <store> --registry-path <隔離的 registry 副本> --no-push --offline --no-install`
-   - 補 origin remote 後跑 `pnpm install`
-   - 期望 postinstall 不出現 `unowned file differs at first projection`
-3. 結果寫回 clade plan 第 7 項（歸 clade desk 主線所有；本 repo **NEVER** 改 clade 檔，要改就交給 clade 主線）。
+- 外部事件已到：clade #536（`eb1828ef3`）是 tag v1.13.44（`245cb29ce`）的 ancestor；starter 也已升到 v1.13.44（`37b08828`）。
+- 做法（Node v24.21.0）：從 clade clone tag v1.13.44，`node scripts/consumer-release.ts build --version 1.13.44` 建本機 release store。
+  starter CLI（main `453b60a3` 的 dist）帶 `--release 1.13.44 --release-store <store> --registry-path <clone 的 registry> --no-push --offline --no-install --yes`，
+  且帶齊 `--workflow-model`／`--business-activity`／`--deploy-track`。之後補 origin remote，跑 `pnpm install`。registry 與 visibility 快取只寫進 throwaway clone，
+  真 `~/offline/clade` 的 `registry/`、`.spectra/` 為 0 行異動。
+- 結果：**PASS**。effectivePolicy 為 `pinned@1.13.44`（inventory `2ffb72c0…`）；receipt 有 1369 筆且已 commit。
+  postinstall 顯示 `✓ hub-sync`、`✓ bootstrap complete`，`pnpm install` exit 0，`unowned file differs at first projection` 出現 0 次；`pnpm hub:check` exit 0。
+- 對照組 v1.13.43（不含 #536），同腳本同旗標：`unowned file differs at first projection: .claude/skills/clade-code-quality/rules/code-style.toolchain.md`，exit 1。
+- 附帶觀察（交 clade 主線判斷，本 repo 不處理）：
+  - 首投影後有 82 個 tracked 檔變成 modified，符合 adoption「認領後覆寫成 desired」的設計，所以新專案第一次 install 後會有一批投影 diff 待 commit。
+  - `--yes` 缺上述三個旗標會回 `INTAKE_INVALID`。
+  - GitHub repo 尚未建立時，hub-sync 會停在 visibility 無法判定。
+- **唯一未驗**：在 fresh cloud session 上實跑（本次在桌機跑）。
+- 回寫 clade plan 第 7 項：歸 clade 主持者，不在本 repo 的範圍。
+- 報告原檔（scratch，可能被清）：`/tmp/claude-1000/-home-charles-offline-nuxt-supabase-starter/25f21f5c-7766-44ff-b7fc-7c4d03dba375/scratchpad/pinned-1.13.44-report.md`
 
 ## 邊界
 
