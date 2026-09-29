@@ -147,6 +147,25 @@ describe('generated quality readiness', () => {
     expect(pkg.scripts.check).toContain('pnpm typecheck')
     expect(pkg.scripts.check).not.toContain('pnpm test')
     expect(pkg.scripts.format).toBe('vp fmt --write --ignore-path .oxfmtignore')
-    expect(pkg['lint-staged']['*.{js,ts,vue}']).toEqual(['vp lint --fix', 'vp fmt --write'])
+    // 2026-09-29 bigbyte：lint-staged 對「全是投影檔」的 staged 組直接失敗，首次 commit 必擋。
+    // pre-commit 走 clade 的 runner（preset 過濾），不再產生 lint-staged。
+    expect(pkg['lint-staged']).toBeUndefined()
+    expect(pkg.devDependencies['lint-staged']).toBeUndefined()
+  })
+
+  it('pre-commit 優先走 clade runner，沒有 runner 才退回 vp staged', () => {
+    const root = scaffold(['quality', 'git-hooks'])
+    const hook = readFileSync(join(root, '.husky', 'pre-commit'), 'utf8')
+    expect(hook).toContain('scripts/pre-commit/runner.sh')
+    expect(hook).toContain('vp staged')
+    expect(hook).not.toContain('lint-staged')
+  })
+
+  it('base vite.config 的行內排除清單涵蓋 clade preset 的投影與 staged-only 排除', async () => {
+    const preset = await import('../../../vendor/oxc-shared/preset.ts')
+    const config = readFileSync(join(scaffold([]), 'vite.config.ts'), 'utf8')
+    for (const pattern of [...preset.PROJECTION_EXCLUDES, ...preset.STAGED_ONLY_EXCLUDES]) {
+      expect(config, `缺 ${pattern}`).toContain(`'${pattern}'`)
+    }
   })
 })

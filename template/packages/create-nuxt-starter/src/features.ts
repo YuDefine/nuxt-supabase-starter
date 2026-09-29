@@ -362,7 +362,6 @@ export const featureModules: FeatureModule[] = [
       husky: '^9.1.7',
       '@commitlint/cli': '^20.4.4',
       '@commitlint/config-conventional': '^20.4.4',
-      'lint-staged': '^16.3.3',
     },
     packages: {},
     templateDir: 'features/git-hooks',

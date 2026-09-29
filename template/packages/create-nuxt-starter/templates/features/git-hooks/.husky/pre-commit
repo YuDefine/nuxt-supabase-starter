@@ -1,1 +1,8 @@
-pnpm lint-staged
+# clade 的 pre-commit runner 依 preset 過濾投影檔再跑 lint／fmt（fleet 唯一 pre-commit 路徑，TD-776）。
+# clade bootstrap 之前還沒有 runner：退回 vite.config.ts 的 `staged`（同樣過濾投影檔）。
+# NEVER 改成直接對 staged 檔跑 vp lint／fmt：不過濾投影時，staged 組全是投影檔 vp 就 exit 1（2026-09-29 bigbyte）。
+if [ -f scripts/pre-commit/runner.sh ]; then
+  bash scripts/pre-commit/runner.sh
+else
+  pnpm exec vp staged
+fi
