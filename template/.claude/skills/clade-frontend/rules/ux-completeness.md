@@ -349,7 +349,7 @@ function getBindingIcon(cardType: NfcCardType): string {
 | --- | --- |
 | 觸發條件 | `post-edit-ui-qa.sh` 是自動 hook；其餘各列是**自檢**，**沒有機器替你跑那幾列** |
 | 消費端 | 走 SDD 流程的 agent（本節）；`/commit` Step 0-MR 讀 `flow gates` |
-| 載入路徑 | 本節（`rules/core/ux-completeness.md`，paths-gated 於 `tasks/**`、`specs/plans/**` 與 UI 檔） |
+| 觸發點 | 本節（`rules/core/ux-completeness.md`，paths-gated 於 `tasks/**`、`specs/plans/**` 與 UI 檔） |
 
 自動觸發、手動命令與 capability gap 由 adapter fragment 宣告。
 

@@ -200,6 +200,8 @@ Step 4 的 `consumer-meta` 與 `bp-scan` 兩步只**產出建議**，採用與�
 
 **安全憲法（`security-policy` convention）在這一步落地**：starter 的 `template/SECURITY.md` 是 user-owned 實填範例，`new` mode 已經帶進來——逐段核對 intake（攻擊入口是否多了 webhook / 公開表單、授權模型是 user-owned 還是 tenant-scoped、`.env.example` 的 key 名有沒有增減），tenant-scoped 就改用 `$CLADE_HOME/vendor/snippets/security-policy/SECURITY.template.tenant-scoped.md` 重填。`adopt` mode 沒有這份檔時從範本建。五段齊、不變量 ≥ 5 且每條 `enforced by` 是 `audit-new-project-readiness.ts` 與 `audit-security-policy.ts` 的判準；首次 baseline 掃描消耗 ChatGPT 額度，先跑官方 input check，再依 `commit/security-scan.md` 指定本次估算停止線執行，跑不了就在 registry 宣告 `security-policy: scan-only` 並登 TD。
 
+**Notion ticket 入口（選填）**：intake 寫明有外部客戶要在 Notion 開票／看進度時才做，沒有就跳過、**NEVER** 預設建。hub 或專案還不存在 → 照 `notion-hub` skill § 6 在 clade 開 work 建立並登記 `registry/notion-hubs.json`（新客戶或獨立 repo 複製 Org 模板；既有客戶加專案複製同 hub 入口頁），合入後才在 `<target-path>/.claude/consumer-meta.json` 寫 `"notion": {"hub": "<key>", "projectCode": "<CODE>"}`，再跑 `node "$CLADE_HOME/vendor/scripts/lib/notion-hub.ts" resolve --consumer-path <target-path>` 確認 `configured` 且有 `ticketUrl`。
+
 ## 6. 跑 completion contract
 
 先讀 `references/completion-contract.md`，按順序執行所有 applicable gate。任何 gate 紅燈就留在本 phase 修到綠；`N/A` 必須附 predicate，`NOT-RUN` 不算完成。

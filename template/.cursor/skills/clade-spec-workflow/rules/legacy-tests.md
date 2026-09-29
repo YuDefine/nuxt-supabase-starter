@@ -58,4 +58,4 @@ paths: ['**/*.test.*', '**/*.spec.*', 'vitest.config.*', 'playwright.config.*', 
 | --- | --- |
 | 觸發條件 | `status` 的 `late_marked` 或 `malformed` 非空 = 違規，移除該 marker；`post_freeze_unmarked` 非空 = 逐支確認是純邏輯不變量，不是就改寫成 scenario。**warn-only**，exit 0 |
 | 消費端 | 在該 consumer 工作、碰到測試檔的 agent；clade 主持者跑 `scripts/audit-legacy-tests.ts` 取 fleet 表進 HANDOFF 稽核段，WARN／NOT-FROZEN，以及 `sealed` 為 false 的 OK 列（沒有 `.legacy-tests.json` 的凍結：`mark` 仍開放）relay 給該 consumer |
-| 載入路徑 | 本檔（`clade-spec-workflow` skill 的 `rules/legacy-tests.md`）；每支舊測試的 marker 行指回本檔 |
+| 觸發點 | 本檔（`clade-spec-workflow` skill 的 `rules/legacy-tests.md`）；每支舊測試的 marker 行指回本檔 |

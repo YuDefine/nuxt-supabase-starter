@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # PostToolUse(Agent) hook — subagent 完成後提醒主線跑 scope-verify（clade home 自用）。
 #
-# 規約：.claude/rules/local/subagent-scope-discipline.md「收到 subagent 完成 notification
+# 規約：.claude/skills/clade-home/rules/subagent-scope-discipline.md「收到 subagent 完成 notification
 # 之後，MUST 先讀 detail」——verify SOP 是主線工作，主線的「那一刻」= Agent tool result
 # 回來時。SubagentStop 不適用：它的 exit 2 / stderr 收件人是 subagent 自己。
 # hook 拿不到 brief 宣告的 scope pattern，所以只做送達、不代跑。
@@ -32,7 +32,7 @@ MARKER="${TMPDIR:-/tmp}/claude-scope-verify-reminder-${PPID:-$$}-${BUCKET}"
 touch "$MARKER" 2>/dev/null || true
 
 cat >&2 <<'MSG'
-📋 subagent 完成 → 主線 verify SOP（subagent-scope-discipline.detail § 主線 verify SOP）：
+📋 subagent 完成 → 主線 verify SOP：READ .claude/skills/clade-home/rules/subagent-scope-discipline.detail.md § 主線 verify SOP
    node scripts/scope-verify.ts --scope '<brief 宣告的每一條 scope>'
    ⚠️ `**` 不匹配 dot 路徑段——.claude/** 等要明寫。scope 外有改動 → 先判斷再決定 revert。
 MSG

@@ -118,7 +118,7 @@ clade home 的 `test:bdd` 包一層 `vendor/specformula-clade/bin/run-bdd.ts`（
 | --- | --- |
 | 觸發條件 | 已宣告 capability 時，缺設定／必要資源為 `MISSING`、已知設定不符為 `MISMATCH`、無法判定為 `UNKNOWN`；符合為 `OK`。未宣告 capability 才是 `N/A`。異常列為 WARN，不改 CLI exit 契約 |
 | 消費端 | fleet 稽核主持者讀取具體 finding，交由該 consumer owner 修復並回傳 receipt |
-| 載入路徑 | 本檔；依 frontmatter 的規格／設定路徑載入 |
+| 觸發點 | 本檔；依 frontmatter 的規格／設定路徑載入 |
 
 四種 status：`N/A`（沒宣告 capability，**不等於落後**）、`PARTIAL`、`OK`、`DRIFT`。**`DRIFT` 優先於 `PARTIAL`**（`PIN.json` 對不上或有 orphan 檔時先重跑 vendor 投影）；「還沒投影」（`vendorPinMatches` 為 null）是 `PARTIAL` 不是 `DRIFT`。
 

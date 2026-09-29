@@ -75,7 +75,7 @@ slug 的重述，那正是這條規約要修的東西（一個不指涉任何東
 | --- | --- |
 | 觸發條件 | 新建 / 編輯 `tasks/*.md`（`archive/` 與 `lessons.md` 除外）且三個靜默訊號都不成立 → 印出鑄名指令。**warn-only，不 block**——擋一次 tasks 檔寫入來換一筆遙測，正好把整條脊椎的優先序顛倒過來（工作大於工作的紀錄，emit 全線 fail-open 同一個理由） |
 | 消費端 | 剛寫完 tasks 檔的那個 agent（照著跑那條指令）；成效由既有的 R3 orphan 佔比訊號量測，不另建 metric |
-| 載入路徑 | 本節（散播到 consumer runtime rules/session-tasks.operations.md）＋ hook 本身（`capabilities/core/hooks/hooks.json`，consumer 端隨 plugin 生效） |
+| 觸發點 | 本節（散播到 consumer runtime rules/session-tasks.operations.md）＋ hook 本身（`capabilities/core/hooks/hooks.json`，consumer 端隨 plugin 生效） |
 
 權威的對應由 `work.open` 的 `origin_ref: tasks:<路徑>` 承載——spine 指向 tasks 檔，這個方向由
 工具在 emit 當下寫入、append-only。反方向的檔頭 `work_id:` 是**選填索引**，維持選填的理由與
@@ -461,7 +461,7 @@ user 看得到那個 pane，接手 agent 可以用 structured user-input surface
 | --- | --- |
 | 觸發條件 | 每次派工／resume、阻塞／逾時通知、完成回報及責任交接；本表是操作契約，沒有新增自動偵測器 |
 | 消費端 | 該派工的主持者；relay 後為 receipt 指定的接手者，逐狀態執行上表 |
-| 載入路徑 | `session-tasks.operations` 的 Herdr session transport；clade 自用 `herdr-session-handoff` 指針於啟動／resume 前讀取 |
+| 觸發點 | `session-tasks.operations` 的 Herdr session transport；clade 自用 `herdr-session-handoff` 指針於啟動／resume 前讀取 |
 
 ### 派幾個 pane —— 先判這一題
 
@@ -598,7 +598,7 @@ claimant 活著而要直接收攤時才走 close pane＋
 | --- | --- |
 | 觸發條件 | 本 pane 持有 ≥1 筆已回報 outcome 而未 reclaim 的 dispatch → **exit 2 block**；child 本人（Stop payload `session_id` ＝ `CLADE_DISPATCH_SESSION_ID`，它自己啟動的巢狀 session 與 bounded leaf 不算）未回報 → **exit 2 block**：本機看這一段的 `CLADE_DISPATCH_RESULT_FILE`（`--continue` 會刪）；peer 看轉送成功留的 `~/.cache/clade/dispatch-reported/<id>` 戳記（home `--continue` 經 ssh 刪它；ssh 失敗時那一段不擋）；其餘殘留 → exit 0 warn |
 | 消費端 | 正在收工的 coordinator 本人——它是唯一跑得動 `--coordinate-resume` 的角色，且此刻仍在場；child 分支的消費端是要停下的 child 本人 |
-| 載入路徑 | hook stderr 經 exit 2 直接注入 turn（機械，不依賴規約載入）＋ 本節 |
+| 觸發點 | hook stderr 經 exit 2 直接注入 turn（機械，不依賴規約載入）＋ 本節 |
 
 **每一次** transport **MUST** 帶任務描述性 `--label`：**split／tab／workspace 三種 topology 都命名 pane**，
 建 Tab／workspace 時額外命名該 Tab／workspace。**NEVER** 只給 repo 名或倚賴預設值——同一 repo 派出去的多個 session 會在 UI
@@ -620,7 +620,7 @@ claimant 活著而要直接收攤時才走 close pane＋
 | --- | --- |
 | 觸發條件 | default 身分不符、任務名稱為空／裸 ID／目錄名，或任一名稱回讀不符 → admission exit 2；派工 transport_error，停止啟動／送題 |
 | 消費端 | 日常 launcher 與 herdr-session-handoff；既有工作以 herdr-visible-identity.ts --audit 列出未具名項 |
-| 載入路徑 | 本節；runtime 檢查在 herdr-visible-identity.ts，共用於新開與 resume |
+| 觸發點 | 本節；runtime 檢查在 herdr-visible-identity.ts，共用於新開與 resume |
 
 **命名對了不代表放對地方——落點是另一條獨立契約。** dispatch 出去的 pane **MUST** 落在**目標 cwd
 所屬的 workspace**，不是呼叫者當下所在的 workspace。預設 `mode: "split"` 分割的是**呼叫者的 pane**，

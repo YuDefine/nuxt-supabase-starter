@@ -44,4 +44,4 @@ paths:
 | --- | --- |
 | 觸發條件 | 非禁止語境下出現禁用 skill 名 → `scripts/audit-disabled-skill-guidance.ts` 報 offender、exit 1。**warn-only，不接 publish gate**：它靠語境啟發式判定，會有誤報，放在擋路的位置會逼人加逃生口 |
 | 消費端 | 正在寫 / 改 skill、rule、snippet、script 輸出文案的 agent（本節）；`/clade-health` 每輪跑一次 |
-| 載入路徑 | 本節由共同 rules planner 交付到所選 runtime 的 `clade-session-work` native skill package |
+| 觸發點 | 本節由共同 rules planner 交付到所選 runtime 的 `clade-session-work` native skill package |

@@ -50,15 +50,17 @@ paths:
 
 Plan mode 的契約是「不對 repo 做任何改動」。Pi dispatch 的 ledger（`~/.pi/agent/clade/dispatch-ledger.jsonl`）與 prompt 持久化（`~/.pi/agent/clade/dispatch-prompts/`）寫在 **homedir**，不是 repo working tree，**不違反** plan mode 的 no-mutation 契約。
 
-- **Plan mode 期間可派的 Routing Table 列**：`read-heavy-scan`、`mechanical-fanout`（read-only profile）、`screenshot-match-analysis`、`notion-ops`（read-only：scan／query）——這些列的工作不寫 working tree。
+- **Plan mode 期間可派的 Routing Table 列**：`code-locate`、`read-heavy-scan`、`mechanical-fanout`（read-only profile）、`screenshot-match-analysis`、`notion-ops`（read-only：scan／query）——這些列的工作不寫 working tree。
 - **Plan mode 期間不可派的列**：`ui-implementation`、`nuxt-core-implementation`、`ui-view-implementation`、`commit-0c-fix-verify`（含 escalate）、`notion-ops` 的 create／patch（遠端副作用，即使不寫 repo）——這些列的產物是 repo 內的 code change 或遠端 mutation，plan mode 下不應執行。
 - **NEVER** 因為「plan mode 不該有副作用」就把 read-only 的派工也退回主線自己做——那把 routing table 標明應派工的量體全堆回 Opus 主線，正是 TD-507 要修的行為。
 
 **Claude subagent 在 plan mode 的 gate 行為（TD-631）**：plan mode 禁止寫檔，而 routing gate 的
 `[dispatch]` 補救要先落 brief 檔——那條路徑在 plan mode 結構上不可執行。`pi-routing-gate.ts` 自
-`096ad5ea1` 起讀 `permission_mode`：plan mode 的 `Explore` / `Plan` dispatch 直接放行不 mint
-decision，其餘 `subagent_type` 照常 arm，block 訊息指名唯一可跑的
-`[waive] --reason plan-mode-readonly`。放行**不**解除既有 latch。**NEVER** 為了走 `[dispatch]`
+`096ad5ea1` 起讀 `permission_mode`：plan mode 的 `Plan` dispatch 直接放行不 mint decision，其餘
+`subagent_type` 照常 arm，block 訊息指名唯一可跑的 `[waive] --reason plan-mode-readonly`。放行**不**
+解除既有 latch。`Explore` 自 2026-09-28 起不再放行（任何 mode）：gate 自己把 `prompt` 落成 brief
+（`~/.claude/clade-routing-gate/briefs/`，homedir，理由同上方 Pi ledger），所以 `code-locate` 的
+`[dispatch]` 在 plan mode 也可逐字照跑。**NEVER** 為了走 `[dispatch]`
 而在 plan mode 寫 brief 檔繞過 harness，**也 NEVER** 把該 latch 回報成 deadlock。
 
 ## 配額邊界（決策層）
@@ -115,9 +117,9 @@ MUST 先讀那一節**，本 pointer 不複述。
    **Cursor 池的核實邊界（TD-520）**：`*-cursor` model 的 dispatch，pi 事件流只回放 builtin 七種工具（read/bash/edit/write/grep/find/ls）∩ pi active tools 的原生執行；**非 builtin 的原生工具（WebFetch、Delete、Cursor 端 Subagent 再派、MCP 呼叫）任何 profile 下都不產 tool_execution 事件**。`git status` / `git diff` 的核實**只覆蓋 worktree 內**——worktree 外副作用（`/tmp`、`$HOME`、網路）**查不到也稽核不了**。因此：會處理 secrets / prod 憑證、或 brief 明定「不得外連」的任務 **NEVER** 走 cursor 池；其餘任務走 cursor 池時，主線 NEVER 把「worktree 核實通過 + events log 乾淨」講成「無 scope 外副作用」——cursor 池的 events log 是單向證據，有痕可信、無痕不表示沒發生。
 3. **File handoffs**：brief／report／diff 超過 ~30 行的內容走**檔案路徑**傳遞，不貼進 dispatch prompt 或回報訊息——貼文會常駐主線 context、每 turn 重讀。dispatch prompt 五要素：定位一行、brief 檔路徑、跨 task interfaces、歧義裁決、report 檔路徑＋回報契約（單一事件實錄見 rationale）。
 4. **Model 與 effort 顯式指定**：**每一個** dispatch 都 MUST 把 model 與 effort 當成兩個獨立決策，不靠靜默繼承——省略 = 繼承主線（通常最貴檔 × 最深推理），機械掃描型 subagent 拿主線的 xhigh 跑就是效能過剩。選檔預設，依序判：
-   - **先過 Routing Table**：非 UI 工作命中 [[agent-routing.routing-table]] § 工作類別對照 已 route 給 Pi 的類別 → 依該列的 model / effort 派工（`mechanical-fanout`、`read-heavy-scan`、`notion-ops` 首跳 `gemini high`），**NEVER** 用 Claude subagent 接。唯一不過表的 Claude 載體是 in-process 唯讀**定位**搜尋（找檔／找符號／回結論，不回檔案原文）交 `Explore` subagent：顯式帶 `model: opus`，effort 意圖為 `low`——gate 只驗 model 直接放行，`low` 沒有機械強制，Agent tool 無 effort 欄位時照下方「記錄實際繼承限制」；命中 `mechanical-fanout`／`read-heavy-scan` 的掃描矩陣與固定欄位抽取不因換成 Explore 就免過表。其餘 Claude subagent 只留給 Claude 例外（需 claude.ai-connected 的非 Notion MCP——Notion 一律 `ntn api`，NEVER 走此例外——、判讀／治理型分析、user 明確指定）。Devin SWE-2 Max（effort: max）是任意 Pi 列的可選載體，只限不急、緩慢也不堵塞的任務；各載體怎麼混搭見本檔 § Cloud session 載體
+   - **先過 Routing Table**：非 UI 工作命中 [[agent-routing.routing-table]] § 工作類別對照 已 route 給 Pi 的類別 → 依該列的 model / effort 派工（`mechanical-fanout`、`read-heavy-scan`、`notion-ops` 首跳 `gemini high`），**NEVER** 用 Claude subagent 接。唯讀**定位**搜尋（找檔／找符號／回 `file:line` ＋結論，不回檔案原文）走 `code-locate` 列，**NEVER** 派 `Explore` subagent——gate 在任何 model、任何 mode 都攔它，並印出可照跑的 `--table-row code-locate` 指令。其餘 Claude subagent 只留給 Claude 例外（需 claude.ai-connected 的非 Notion MCP——Notion 一律 `ntn api`，NEVER 走此例外——、判讀／治理型分析、user 明確指定）。Devin SWE-2 Max（effort: max）是任意 Pi 列的可選載體，只限不急、緩慢也不堵塞的任務；各載體怎麼混搭見本檔 § Cloud session 載體
    - **UI 實作**：Nuxt 本體用 GPT-6 Sol xhigh，UI view（含 Nuxt UI／Content）用 Opus 5.5（effort: medium），依 [[agent-routing]] § Runtime residency and native transport 的角色與工具判定；**NEVER** 用機械掃描／一般 native delegation 檔位承接 UI phase。原 session 保持 change-level orchestration。
-   - **effort 選檔**：effort 跟著 model 走（`TIER_EFFORT`）——GPT-6 Sol 與 Grok 4.7 一律 `xhigh`，Gemini 3.8 Flash 一律 `high`，Claude Opus 5.5 一律 `medium`（鏈尾 `dispatch-fallback` 為 `low`，由 frontmatter 固定）；dispatcher 對不符的 effort exit 1。**帶得了 effort 參數的入口**（pi `--effort` / `-c model_reasoning_effort`、Workflow `agent()` 的 `effort`、具名 agent type 的 frontmatter）**MUST** 顯式帶；native delegation 的 model／effort 欄位以本次 tool schema 為準。schema 有可用欄位時依已選檔位填入；schema 不提供欄位時記錄實際繼承限制，不能宣稱已指定。各 runtime 的欄位與繼承條件見 target adapter
+   - **effort 選檔**：effort 跟著 model 走（`TIER_EFFORT`）——GPT-6 Sol 與 Grok 4.7 一律 `xhigh`，Gemini 3.8 Flash 一律 `high`，Claude Opus 5.5 預設 `medium`（鏈尾 `dispatch-fallback` 為 `low`，由 frontmatter 固定）；同一問題已在 `medium` 失敗一次或修法只修到一層、且有可跑的檢查時，才可 `--tier-basis stall-escalation --retry-of <label>` 開 `high`（只限 Claude launcher，見 [[agent-routing.routing-table]]），`max` 永不開；dispatcher 對不符的 effort exit 1。**帶得了 effort 參數的入口**（pi `--effort` / `-c model_reasoning_effort`、Workflow `agent()` 的 `effort`、具名 agent type 的 frontmatter）**MUST** 顯式帶；native delegation 的 model／effort 欄位以本次 tool schema 為準。schema 有可用欄位時依已選檔位填入；schema 不提供欄位時記錄實際繼承限制，不能宣稱已指定。各 runtime 的欄位與繼承條件見 target adapter
    - model 選檔原則「**turn count beats token price**」：brief 內含完整 code 的純轉錄型工作才用最低檔；review 型依 diff 的大小／風險選檔（為什麼見 rationale）。
 5. **中間產物不進主線**：外派出去的 task，主線只讀對方寫回的 report 檔，**NEVER** 為了「確認它做對」把該 task 碰過的原始檔重讀一遍——那把省下來的 context 原封不動加回來，而且重讀的是同一批事實，換不到新判斷。第 2 條的 scope verify 照舊 MUST 跑：看**改了哪些檔**（`git status --short` / `git diff --stat`）跟重讀檔案內容是兩件事。
 
@@ -129,7 +131,7 @@ Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工�
 
 | 載體 | 省什麼 | 負載落在哪 |
 | --- | --- | --- |
-| cloud session | 開發機 CPU（唯一真正卸掉本機負載的載體） | Anthropic VM；吃派出帳號（cc／ccw）的 Claude 額度，與 Opus 急件同一份 |
+| cloud session | 開發機 CPU（唯一真正卸掉本機負載的載體） | Anthropic VM；吃派出帳號（cc／ccw）的 cloud session 專用 credit，不佔 Claude 訂閱額度（D6） |
 | Devin `swe-2-max` | Claude／GPT 額度（免費） | 派出的那台開發機：工具指令在本機跑 |
 | Pi（GPT-6 Sol、Grok 4.7、Gemini Flash） | 不省 | 派出的那台開發機 |
 
@@ -138,7 +140,7 @@ Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工�
 | 可觀察 predicate（先查 [[agent-routing.routing-table]] 列定 model 家族） | 載體 |
 | --- | --- |
 | 本 turn 收得回來的 bounded 工作——review、裁決、定位搜尋，也含短的實作／改檔（Claude-only 列，含 `dotclaude-authoring`；Pi 列照下方 Pi 列判） | in-process subagent（判準見 [[agent-routing]] § Dispatch data and transport boundary）；**NEVER** 為它開 cloud 或 Herdr pane |
-| Claude-only 列（`ui-view-implementation`、`design-review`、`ui-detailed-planning`、`screenshot-match-analysis`），符合下方「適合 cloud」且帳號額度有 slot | **cloud**（預設） |
+| Claude-only 列（`ui-view-implementation`、`design-review`、`ui-detailed-planning`、`screenshot-match-analysis`），符合下方「適合 cloud」且該帳號 cloud admission 放行（在飛未滿、無 credit 用盡標記） | **cloud**（預設） |
 | Claude-only 列（含 `dotclaude-authoring`），急件或不符合 cloud 條件，且屬 handoff 級／長時間／需隔離環境（commit 0-A 另見下方） | 本機 `cc`／`ccw` Herdr pane |
 | `--tier-basis delegate-sub` | 經 `pi-dispatch.ts` admission，Grok 4.7 xhigh（照 [[agent-routing.routing-table]] § delegate-sub） |
 | Routing Table 首跳是 Gemini／Grok 的任何 Pi 列 | 經 `pi-dispatch.ts` admission，照原列的 model、effort、pool 與 fallback 鏈派送；不得改派 Devin 或 `cx` pane 跳過首跳 |
@@ -152,17 +154,11 @@ Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工�
 - **工作形狀**：自足（brief 讀完就做得完）、驗收全在 PR＋CI 看得到、不急。本機驗證越重（大測試矩陣、build、e2e）越划算——那些負載整包留在 VM。
 - **不適合**：clade 標準層（`rules/**`、`capabilities/**`、`vendor/**` 這類會散播到 fleet 的源檔）、跨 repo、要本機狀態（dev server、DB lease、未 push 的 commit、secret、Herdr／pi seat、systemd、實體硬體）、commit 0-A、要來回問答（cloud 回不了訊）、急件。命中任一 → Herdr pane（或主線自己做）。
 
-**同時在飛的 cloud 件數跟派出帳號的額度掛鉤**，以該帳號 `five_hour` 與 `seven_day` 的 `remainingPercent` 較小者判：
+**cloud 消耗的是 cc、ccw 各自額外的 USD 250 cloud credit，與訂閱 `five_hour`／`seven_day` 窗口無關**（Charles 2026-09-28）。admission 只判三件：帳號可判定（cc|ccw）、該帳號同時在飛 < 3 件、該帳號沒有 credit 用盡標記。
 
-| 兩個 `remainingPercent` | 該帳號同時在飛的 cloud 上限 |
-| --- | --- |
-| 都 ≥ 50% | 3 件 |
-| 任一 < 50%（都 ≥ 30%） | 1 件 |
-| 任一 < 30% | 0 件：不派 cloud，改 Herdr pane |
+機械閘在 `vendor/scripts/cloud-dispatch.ts dispatch` 的 admission：訂閱兩窗讀得到就照樣顯示，讀不到也不拒派；在飛數依該帳號尚未 `harvest` 的 record 計，未帶帳號的 adopted record 保守地在 cc、ccw 各佔一席；啟動失敗訊息顯示 credit／billing 耗盡時寫入該帳號的 credit 用盡標記，確認恢復後以 `cloud-dispatch.ts credit-reset --account cc|ccw` 清除。**NEVER** 用任何方式繞過它拒派的結果。派出帳號在 cc 與 ccw 之間選可派且在飛較少的那個（比 `dispatch --dry-run` 印的 `admission`），以 `dispatch --account cc|ccw` 明確指定；`adopt` 也帶 `--account` 讓 record 歸屬到帳號。不指定時只接受能從 `CLAUDE_CONFIG_DIR` 辨認出的 cc／ccw。
 
-機械閘在 `vendor/scripts/cloud-dispatch.ts dispatch` 的 admission：額度取自 fleet 額度 SoT（`selectClaudeAccount` 讀 quota collector；collector 不可達才退用經驗證的 statusline 快取），來源不可用或缺 `five_hour`／`seven_day` 任一窗就拒派；在飛數依該帳號尚未 `harvest` 的 record 計，未帶帳號的 adopted record 保守地在 cc、ccw 各佔一席。上表與它同一組門檻，**NEVER** 用任何方式繞過它拒派的結果。派出帳號在 cc 與 ccw 之間**選額度寬裕的那個**（比 `dispatch --dry-run` 印的 `admission` 兩窗；`dev-node.ts probe-quota` 只印兩窗較小者，且只讀不刷新來源），以 `dispatch --account cc|ccw` 明確指定；`adopt` 也帶 `--account` 讓 record 歸屬到帳號。不指定時只接受能從 `CLAUDE_CONFIG_DIR` 辨認出的 cc／ccw。
-
-Charles 於 2026-09-27 告知 cc 與 ccw **各有 USD 250 cloud session 專用 credit**。額度有效期間，每輪有 handoff 級 Claude-only 就緒件時，主持者先實際跑兩個帳號的 cloud dry-run admission，再選可派的帳號；若不派 cloud，在載體分佈旁記錄具體拒派條件（例如 repo 未釘 model、quota slot 用盡、工作要本機狀態）。專用 credit 是偏好 cloud 的成本理由，**不是**跳過 five_hour／seven_day admission 的理由。
+Charles 於 2026-09-27 告知 cc 與 ccw **各有 USD 250 cloud session 專用 credit**。額度有效期間，每輪有 handoff 級 Claude-only 就緒件時，主持者先實際跑兩個帳號的 cloud dry-run admission，再選可派的帳號；若不派 cloud，在載體分佈旁記錄具體拒派條件（例如 repo 未釘 model、在飛已滿、credit 用盡標記、工作要本機狀態）。
 
 **Devin 續接**：Devin session 不能 `--continue`，要續做一律開新 session 帶 durable brief。
 
@@ -184,7 +180,7 @@ brief 叫 pane 呼叫的 skill，可不可呼叫由**目標端投影 SKILL.md �
 | --- | --- |
 | 觸發條件 | brief 以指名形式叫 Claude child 呼叫目標端 `disable-model-invocation: true` 的 skill → Herdr dispatch exit 15 `skill_not_invocable`，零 pane、零 record；CLI exit 1 |
 | 消費端 | 正在派工的主線（拒絕訊息附 `flow ask` 範本）；`\my` 承接改開的拍板題 |
-| 載入路徑 | 本節（決定派工、寫 brief 前 MUST Read 本檔）；判定式在 `vendor/scripts/lib/brief-skill-invocability.ts` |
+| 觸發點 | 本節（決定派工、寫 brief 前 MUST Read 本檔）；判定式在 `vendor/scripts/lib/brief-skill-invocability.ts` |
 
 ## 必禁事項 — Dispatch 入口（原在 `agent-routing.md` § 必禁事項）
 

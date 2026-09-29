@@ -483,7 +483,12 @@ if mem_scope_available; then
   # scope 包在 timeout 外面 —— 逃出去的孫行程也在同一個 cgroup 裡，
   # 這正是 2026-09-03 那隻 reparent 到 pid 1 的 vue-tsc 逃掉的那一格。
   # flock 的 fd 在此之前就取得，scope 下照常繼承，鎖隨行程結束釋放的性質不變。
-  exec systemd-run --user --scope -q \
+  # Only hosts with an installed agent slice opt in. macOS/non-systemd keeps the old scope.
+  gate_slice_args=()
+  if [ "$GATE_CLASS" = heavy ] && [ "$(systemctl --user show -p LoadState --value agent-workloads.slice 2>/dev/null)" = loaded ]; then
+    gate_slice_args=(--slice=agent-workloads.slice)
+  fi
+  exec systemd-run --user --scope -q "${gate_slice_args[@]}" \
     -p MemoryHigh="$GATE_MEM_HIGH" -p MemoryMax="$GATE_MEM_MAX" -p MemorySwapMax=0 \
     "$@"
 fi

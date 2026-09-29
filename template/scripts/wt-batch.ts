@@ -302,6 +302,7 @@ export type DraftPrReceipt = {
   head: string
   pr: number
   at: string
+  retirement?: { status: 'retired'; repository: string; mergeSha: string; at: string }
 } & ({ kind: 'visibility' } | { kind: 'discussion'; discussant: string; question: string })
 export interface MergeAttemptJournal {
   operationId: string
@@ -2869,7 +2870,18 @@ export function parseDraftPrReceipt(value: unknown): DraftPrReceipt {
     head: value.head,
     pr: value.pr,
     at: value.at,
+    ...(isRecord(value.retirement) &&
+    value.retirement.status === 'retired' &&
+    typeof value.retirement.repository === 'string' &&
+    value.retirement.repository.includes('/') &&
+    typeof value.retirement.mergeSha === 'string' &&
+    objectIdPattern.test(value.retirement.mergeSha) &&
+    typeof value.retirement.at === 'string'
+      ? { retirement: value.retirement as DraftPrReceipt['retirement'] }
+      : {}),
   }
+  if (value.retirement !== undefined && !base.retirement)
+    throw new Error('Invalid draft retirement; preserve it for recovery')
   const kind = value.kind
   if (kind === 'visibility') {
     if (value.discussant !== undefined || value.question !== undefined)
@@ -2909,6 +2921,7 @@ function listDrafts(c: Context): DraftPrReceipt[] {
   return readdirSync(dir)
     .filter((name) => name.endsWith('.json'))
     .map((name) => readDraft(join(dir, name)))
+    .filter((receipt) => !receipt.retirement)
 }
 function draftReceiptFor(c: Context, workId: string): DraftPrReceipt | undefined {
   const file = join(c.dir, 'drafts', workIdFile(workId))
@@ -2918,7 +2931,65 @@ function draftReceiptFor(c: Context, workId: string): DraftPrReceipt | undefined
     throw new Error(
       `Draft receipt work id ${receipt.workId} does not match requested work id ${workId}; preserve the colliding receipt for recovery`,
     )
-  return receipt
+  return receipt.retirement ? undefined : receipt
+}
+
+/** A retired receipt remains on disk with its original identity and an immutable audit sidecar. */
+export function retireDraftPr(
+  cwd: string,
+  workId: string,
+  remotePr: RemotePrProbe = defaultRemotePrProbe,
+) {
+  if (!workId.trim()) throw new BatchUsageError('Required --work-id')
+  const c = context(cwd)
+  return mutate(c, () => {
+    const file = join(c.dir, 'drafts', workIdFile(workId))
+    if (!existsSync(file)) throw new Error(`No draft receipt for ${workId}`)
+    const receipt = readDraft(file)
+    if (receipt.workId !== workId)
+      throw new Error('Draft receipt work id collision; preserve it for recovery')
+    if (receipt.retirement) return receipt
+    const repository = githubRepositoryFromRemote(c.main)
+    if (!repository) throw new Error('Cannot verify this checkout against a GitHub repository')
+    const remote = remotePr({ repository, pr: receipt.pr })
+    if (
+      !remote.merged ||
+      remote.repository.toLowerCase() !== repository.toLowerCase() ||
+      remote.pr !== receipt.pr ||
+      remote.base !== 'main' ||
+      remote.headRef !== receipt.branch.replace(/^refs\/heads\//, '') ||
+      !objectIdPattern.test(remote.mergeSha)
+    )
+      throw new Error(
+        `PR #${receipt.pr} is not a verified MERGED PR for this draft; receipt retained`,
+      )
+    try {
+      git(c.main, ['merge-base', '--is-ancestor', remote.mergeSha, 'refs/remotes/origin/main'])
+    } catch {
+      throw new Error(
+        `PR #${receipt.pr} merge commit is not an origin/main ancestor; receipt retained`,
+      )
+    }
+    const retired = {
+      ...receipt,
+      retirement: {
+        status: 'retired' as const,
+        repository,
+        mergeSha: remote.mergeSha.toLowerCase(),
+        at: new Date().toISOString(),
+      },
+    }
+    const auditDir = join(c.dir, 'draft-retirements')
+    mkdirSync(auditDir, { recursive: true })
+    const auditFile = `${workIdFile(workId).slice(0, -5)}-${receipt.pr}.json`
+    if (existsSync(join(auditDir, auditFile)))
+      throw new Error(
+        'Draft retirement audit already exists but receipt is active; reconcile before retry',
+      )
+    writeJsonDurable(auditDir, auditFile, retired)
+    writeJsonDurable(dirname(file), basename(file), retired)
+    return retired
+  })
 }
 function draftBindingFor(c: Context, workId: string): BatchDraftBinding | undefined {
   const receipt = draftReceiptFor(c, workId)
@@ -3738,6 +3809,186 @@ export function confirmMergedBatch(
   batchId?: string,
 ) {
   return landSealedBatch(cwd, { kind: 'pr', receipt, remotePr }, batchId)
+}
+
+type CleanupPreviewRow = { path: string; action: 'removed' | 'preserved'; reason: string }
+
+/** Read-only admission forecast. Runtime preservation and writer probes run only during cleanup. */
+export function previewCleanupBatches(
+  cwd: string,
+  resolveProfile: PreservationProfileResolver = defaultPreservationProfile,
+  detect: ProcessProbe = detectPublishInFlight,
+) {
+  const c = context(cwd)
+  assertNoPublishInFlight('batch cleanup', c.main, false, detect)
+  const profileResolver =
+    resolveProfile === defaultPreservationProfile ? profileResolverForRoot(c.main) : resolveProfile
+  const state = readState(c)
+  return state.batches
+    .filter((b) => b.phase === 'landed')
+    .map((b) => {
+      const members: CleanupPreviewRow[] = []
+      let landedProblem: string | undefined
+      const landedCommit = b.mergeReceipt?.merge_sha ?? b.landedHead!
+      try {
+        git(c.main, ['merge-base', '--is-ancestor', landedCommit, 'refs/heads/main'])
+      } catch (error) {
+        landedProblem =
+          (error as { status?: number }).status === 1
+            ? `landed commit ${landedCommit} is not an ancestor of refs/heads/main; batch retained — check whether main was rewritten or the journal recorded the wrong landed head/merge sha, reconcile the batch, then retry cleanup`
+            : `could not verify landed commit ${landedCommit} against refs/heads/main; batch retained — resolve the underlying git error, then retry cleanup: ${errorMessage(error)}`
+      }
+      const currentWorktrees = worktrees(c.main)
+      const claimsObs = readActiveClaimsObserved(c.main)
+      for (const m of b.members) {
+        if (b.removed.includes(m.path)) {
+          members.push({
+            path: m.path,
+            action: 'removed',
+            reason: 'already removed in batch journal',
+          })
+          continue
+        }
+        if ((b.released ?? []).some((row) => row.path === m.path)) {
+          members.push({ path: m.path, action: 'preserved', reason: 'source released by batch' })
+          continue
+        }
+        let reason = landedProblem ?? m.retain
+        const removal = b.removing?.path === m.path ? b.removing : undefined
+        const wt = currentWorktrees.find((row) => row.path === m.path)
+        const quarantineWorktree = removal
+          ? currentWorktrees.find((row) => row.path === removal.quarantine)
+          : undefined
+        if (!reason && b.removing && !removal)
+          reason = `another removal is still journaled for ${b.removing.path}`
+        if (!reason && wt && !removal) {
+          try {
+            reason = sourceProblem(c, m)
+          } catch (error) {
+            reason = errorMessage(error)
+          }
+        }
+        let branchHead: string | undefined
+        try {
+          branchHead = git(c.main, ['rev-parse', '--verify', m.branch])
+        } catch {
+          // A previously deleted branch is permitted if preservation proves the source.
+        }
+        if (!reason && branchHead && branchHead !== m.head) reason = 'source branch advanced'
+        if (!reason && claimsObs.status === 'unknown')
+          reason = `claims unknown: ${claimsObs.reason}`
+        if (
+          !reason &&
+          claimsObs.status === 'known' &&
+          claimsObs.value.some(
+            (cl) =>
+              cl.worktree_path === m.path ||
+              cl.worktree_path === removal?.quarantine ||
+              cl.branch === m.branch ||
+              cl.branch === m.branch.replace('refs/heads/', ''),
+          )
+        )
+          reason = 'source has an active claim'
+        const retiredArchive =
+          !reason && !wt && !removal && !existsSync(m.path)
+            ? retiredByHandoff(c, m.path, m.branch, m.head)
+            : undefined
+        if (
+          !reason &&
+          retiredArchive &&
+          branchHead &&
+          currentWorktrees.some((other) => other.branch === m.branch)
+        )
+          reason = 'Source branch checked out elsewhere; retained'
+        if (!reason && !retiredArchive) {
+          const profile = profileResolver(m.path, join(c.dir, 'preservation'))
+          if (!profile) reason = 'preservation profile missing; source retained'
+          else {
+            try {
+              validateProfile(profile)
+              if (!wt && !removal && !hasVerifiedPreservation(b, m.path, profile))
+                reason = 'source worktree missing and no verified preservation receipt'
+              else if (removal && !wt && !quarantineWorktree && existsSync(removal.quarantine))
+                reason = 'removal quarantine is not a registered worktree; retain for inspection'
+              else if (
+                removal &&
+                !wt &&
+                !quarantineWorktree &&
+                !existsSync(removal.quarantine) &&
+                !hasVerifiedPreservation(b, m.path, profile)
+              )
+                reason = 'removal journal has no verified preservation receipt'
+              else if (removal?.removalConcern)
+                reason = `${removal.removalConcern}; requires reconciliation`
+            } catch (error) {
+              reason = errorMessage(error)
+            }
+          }
+        }
+        members.push({
+          path: m.path,
+          action: reason ? 'preserved' : 'removed',
+          reason:
+            reason ??
+            (retiredArchive
+              ? 'verified handoff-retire archive'
+              : 'cleanup admission passed; runtime checks pending'),
+        })
+      }
+      let integrationReason = landedProblem
+      if (
+        !integrationReason &&
+        members.some((m) => m.action === 'preserved' && !settled(b, m.path))
+      )
+        integrationReason = 'one or more members retained'
+      if (!integrationReason) {
+        const wt = currentWorktrees.find((row) => row.path === b.path)
+        const removal = b.removing?.path === b.path ? b.removing : undefined
+        const retiredArchive =
+          !wt && !removal && !existsSync(b.path)
+            ? retiredByHandoff(c, b.path, b.branch, b.landedHead!)
+            : undefined
+        if (retiredArchive) {
+          const claim = findClaimByWorktreeObserved(c.main, b.path)
+          const branch = `refs/heads/${b.branch}`
+          if (
+            claim.status === 'unknown' ||
+            claim.value ||
+            currentWorktrees.some((other) => other.branch === branch)
+          )
+            integrationReason = 'Integration has new work, lock or active owner'
+        } else {
+          const profile = profileResolver(b.path, join(c.dir, 'preservation'))
+          if (!profile) integrationReason = 'preservation profile missing; source retained'
+          else {
+            try {
+              validateProfile(profile)
+              if (wt?.locked || (wt && (!clean(b.path) || head(b.path) !== b.landedHead)))
+                integrationReason = 'Integration has new work, lock or active owner'
+              else if (!wt && !removal && !hasVerifiedPreservation(b, b.path, profile))
+                integrationReason =
+                  'integration worktree missing and no verified preservation receipt'
+              else {
+                const claim = findClaimByWorktreeObserved(c.main, b.path)
+                if (claim.status === 'unknown' || claim.value)
+                  integrationReason = 'Integration has new work, lock or active owner'
+              }
+            } catch (error) {
+              integrationReason = errorMessage(error)
+            }
+          }
+        }
+      }
+      return {
+        batch: b.id,
+        members,
+        integration: {
+          path: b.path,
+          action: integrationReason ? ('preserved' as const) : ('removed' as const),
+          reason: integrationReason ?? 'cleanup admission passed; runtime checks pending',
+        },
+      }
+    })
 }
 export function cleanupBatches(
   cwd: string,
@@ -5585,7 +5836,7 @@ function rejectUnknownFlags(rest: string[], allowed: Set<string>) {
 }
 
 export const BATCH_USAGE =
-  'batch: checkpoint | draft | ready | unready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | confirm-merged | cleanup | release-source | cancel | recover-lock'
+  'batch: checkpoint | draft | retire-draft | ready | unready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | confirm-merged | cleanup [--dry-run] | release-source | cancel | recover-lock'
 
 /** Landing closes with cleanup of that batch (方案 6). Cleanup is fail-closed
  *  and never undoes the landing: a refusal (publish in flight, lock, anything
@@ -5622,6 +5873,8 @@ export function runBatchCommand(
   probes?: UnattendedMergeProbes,
   cleanupDeps: BatchCleanupDeps = {},
 ): unknown {
+  // `wt-helper` dispatches batch before its own help gate. Intercept here before any operation.
+  if (args.includes('--help') || args.includes('-h')) return BATCH_USAGE
   const [command, ...rest] = args
   const value = (flag: string) => {
     const i = rest.indexOf(flag)
@@ -5685,6 +5938,12 @@ export function runBatchCommand(
         discussant: required('--discussant'),
         question: required('--question'),
       })
+    }
+    case 'retire-draft': {
+      rejectUnknownFlags(rest, new Set(['--work-id']))
+      if (positionals(new Set(['--work-id'])).length)
+        throw new BatchUsageError('Usage: wt-helper batch retire-draft --work-id <id>')
+      return retireDraftPr(cwd, required('--work-id'))
     }
     case 'ready':
       return registerReady(cwd, rest[0] ?? cwd, {
@@ -5783,7 +6042,12 @@ export function runBatchCommand(
         cleanupDeps,
       )
     case 'cleanup':
-      return cleanupBatches(cwd, lifecycle, cleanupDeps.detect, cleanupDeps.resolveProfile)
+      rejectUnknownFlags(rest, new Set(['--dry-run']))
+      if (positionals(new Set()).length)
+        throw new BatchUsageError('Usage: wt-helper batch cleanup [--dry-run]')
+      return rest.includes('--dry-run')
+        ? previewCleanupBatches(cwd, cleanupDeps.resolveProfile, cleanupDeps.detect)
+        : cleanupBatches(cwd, lifecycle, cleanupDeps.detect, cleanupDeps.resolveProfile)
     case 'release-source': {
       rejectUnknownFlags(
         rest.filter((token) => token.startsWith('--')),
@@ -5821,10 +6085,12 @@ function invokedAsCli() {
 }
 
 if (invokedAsCli()) {
-  console.error(
+  const help = process.argv.slice(2).some((arg) => arg === '--help' || arg === '-h')
+  const print = help ? console.log : console.error
+  print(
     'wt-batch.ts is a module, not an entry point. Run:\n' +
       '  node vendor/scripts/wt-helper.ts batch <subcommand> [args]\n' +
       `subcommands: ${BATCH_USAGE}`,
   )
-  process.exit(2)
+  process.exit(help ? 0 : 2)
 }

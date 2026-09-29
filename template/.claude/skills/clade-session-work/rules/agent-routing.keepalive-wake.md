@@ -53,7 +53,7 @@ canonical 模板的 `deadline` 是**必填**欄位，也是破壞性分支的觸
 
 | 可觀察 predicate | deadline 要取 |
 | --- | --- |
-| 派出的東西有**已知**硬超時（pi dispatch `--budget N` → 實際 kill 在 `(N+5)` 分；CI job 的 timeout；Monitor TTL） | ≥ 該硬超時 ＋ 父層收尾所需時間。不要取一個比它早的值 |
+| 派出的東西有**已知**硬超時（pi dispatch `--budget N` → 實際 kill 在 `(N+5)` 分；帶 `--time-budget S` 時改為恰好第 `S` 秒；CI job 的 timeout；Monitor TTL） | ≥ 該硬超時 ＋ 父層收尾所需時間。不要取一個比它早的值 |
 | 兩層 dispatch，下游 job 的 budget 由子層自己決定、父層填 deadline 當下**尚不存在**（`/wt` Form 3 → Claude subagent 再自行派 pi，是主幹不是邊角） | 取子層**可能的最大** budget 當上界；上界也取不出來 → brief 內要求子層回報它選定的 budget，收到後**改排**一次修正 deadline |
 | 完全估不出硬超時 | 取一個明顯寬鬆的值，並在 `native wakeup scheduler` 的 `reason` 逐字註明「deadline 為上界猜測」 |
 

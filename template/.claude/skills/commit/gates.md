@@ -232,7 +232,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 | --- | --- |
 | 觸發條件 | step 4 任一工作印 `BLOCK` 且 auto-triage 後仍 BLOCK → 該 carrier 路徑進 withheld scope；Step 4 任一 group 的 `intersect` exit 1 → 該 group 不 commit。**hard gate**，無 override |
 | 消費端 | 跑 `/commit` 的主線（Step 3 排除、Step 4 逐 group 判）；Step 5-A HANDOFF 登記 withheld 檔 |
-| 載入路徑 | 本節（`capabilities/core/skills/commit/gates.md` § 0-MR，觸發 0-MR 時 MUST 完整讀）；判定條件 SoT `rules/core/commit.trunk-gates.md` § 人工檢查 Gate |
+| 觸發點 | 本節（`capabilities/core/skills/commit/gates.md` § 0-MR，觸發 0-MR 時 MUST 完整讀）；判定條件 SoT `rules/core/commit.trunk-gates.md` § 人工檢查 Gate |
 
 ### 禁止項
 
@@ -329,7 +329,7 @@ gate 自己的可用度跑 `node scripts/audit-security-gate-readiness.ts`（war
 | --- | --- |
 | 觸發條件 | Tier 3 命中 → 0-S.1 exit 1 / 2 或 0-S.2 有 High / Critical 就**擋住本次 commit**。0-S.1 的 `skipped` 不擋 |
 | 消費端 | 跑 `/commit` 的 attended agent（本節）；`security-precommit.ts` 自己判 exit |
-| 載入路徑 | 本節（`capabilities/core/skills/commit/gates.md`，`/commit` 必經） |
+| 觸發點 | 本節（`capabilities/core/skills/commit/gates.md`，`/commit` 必經） |
 
 ---
 
@@ -361,7 +361,7 @@ bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" medium       # Herdr c
 **Subagent carrier（Claude Code 主線 MUST 用這條）**：三步，全部在同一個 session、同一個 turn 內做完。
 
 ```bash
-bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" prepare medium [--findings <上一輪 verdict 檔>]
+bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" prepare medium
 # stdout：AGENT_CALL: {...}（subagent_type／model／prompt；agent 定義固定 effort: medium）與 FINALIZE: bash … finalize <work-dir>
 ```
 
@@ -383,6 +383,8 @@ exit code 與 Herdr carrier 同一張表（下表各列照用；4／10／11 是�
 | exit 9（brief 無法安全交付：總量超過 `CLAUDE_REVIEW_BRIEF_MAX_BYTES`，或 pointer 模式下有單行超過 `CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS`，RESULT 行會指出超長行號與所屬區塊） | **本地拒絕，review 沒跑但不是 reviewer 不可用**——NEVER 讀成 reviewer 不可用記 pending；把超長行折行（changeset、--findings 檔或 semantic 規則文，依 RESULT 指的區塊）或拆 commit 後重跑；上限確需調整時先評估 child context 實測再改 `*_MAX_*` env。NEVER 拿縮小 `CODEX_REVIEW_MAX_DIFF_LINES` budget 換過關——超出的檔只會移進 OMITTED 漏審清單，依下一列「Scope 缺檔」同樣不能記 PASS，除非被剔除的檔另行送審 |
 | Scope 缺檔／截斷、缺 verdict／Semantic Verdict id、workspace 綁定失敗 | 對應範圍未被完整 review；修復取證後再執行，不能記 PASS |
 | Snapshot 漂移／不明 mutation | 先查具體 diff 與歸屬；已確認為合法並行工作可移至隔離 fixture 後重跑，不明或非預期 mutation 保留現場並處理授權，不自動覆寫 |
+| exit 13（輪數 ledger：此內容已有 verdict，或上一輪通過且之後的增量未達重驗門檻） | 不是 reviewer 不可用：RESULT 行是「不需再審」→ 0-A 證據沿用它指名的那一輪，照常推進；RESULT 行是「已審過且有 Critical／Major」→ 0-A 未通過，修完換內容再審（同內容重擲不產生新證據） |
+| exit 14（輪數上限：同一份改動第 4 輪） | review 沒跑、gate 未完成：拆成可獨立驗收的範圍，或把最後一輪 verdict 交人判；NEVER 刪改 ledger、換 branch 或 rebase 重置輪數 |
 | 完整結果，無 issue | 0-A.1 通過，0-A.2 不觸發 |
 | 只有 Minor／Info | 逐項修復並驗證，0-A.2 不觸發 |
 | 含 Critical／Major | 逐項修復後進 0-A.2；修法本身是新的受審範圍 |
@@ -422,7 +424,7 @@ PRE-EXISTING — 未觸碰：<file>:<line>（舉證本次 diff 不含此檔／�
 
 只在 0-A.1 出 Critical／Major 時執行；修復後的完整 snapshot 是輸入。
 
-合格深度 reviewer 與 0-A.1 同一席（Claude Opus 5.5 medium）——新的 fresh context、不繼承 0-A.1 的對話，兩份 receipt 各自記 requested／observed。複審 MUST 由合格席執行，NEVER 降級成主線自審、worker、cloud CI 或其他模型。它取得修復後 snapshot、原始 0-A.1 findings 與修法內容，逐條確認 real issue 已修、附反證 dismiss 或重標 severity，另查修法帶來的漏項與 regression。reviewer 唯讀，主線負責修復。使用共用 CLI 時，先把 0-A.1 的 `## Review Verdict` 區段存成檔案，再以 `claude-review-safe.sh prepare medium --findings <檔案>`（Herdr carrier：`claude-review-safe.sh medium --findings <檔案>`）餵給 fresh reviewer——不帶 findings 的複審沒有逐條驗證的依據，只能算第二次 discovery，不滿足本節。保存完整輸出，不只摘錄結論。
+合格深度 reviewer 與 0-A.1 同一席（Claude Opus 5.5 medium）——新的 fresh context、不繼承 0-A.1 的對話，兩份 receipt 各自記 requested／observed。複審 MUST 由合格席執行，NEVER 降級成主線自審、worker、cloud CI 或其他模型。它取得修復後 snapshot、原始 0-A.1 findings 與修法內容，逐條確認 real issue 已修、附反證 dismiss 或重標 severity，另查修法帶來的漏項與 regression。reviewer 唯讀，主線負責修復。修補後重跑同一個 `prepare medium`（Herdr carrier 同理）：wrapper 由輪數 ledger 自動帶上一輪 verdict、只嵌增量並限定驗證範圍；`--findings` 只給 ledger 之外的 verdict 來源。
 
 深度輸出缺 `## Review Verdict`（含截斷／context exhaustion）時，明示深度階段未完整；不盲重跑相同耗盡命令。查明耗盡或截斷原因後對同一 snapshot 重跑（diff 過大先縮小受審範圍），補齊完整 verdict 才可收口；Opus 席不可用時 0-A.2 保持未完成，不以其他模型或主線自審補位。
 
@@ -435,13 +437,19 @@ DISMISSED — 反證：<file>:<line> ／ <契約或規則條文的具體出處>
 
 先驗每條反證再判通過。無反證的 dismissal 保留為 real issue，沿原 severity 處理；模型／effort 的名稱不能代替查證。有 real issue 時主線修復並跑相關驗證；無 real issue 或全部有反證時完成該階段。
 
-**最多兩輪 discovery review（0-A.1／0-A.2）**。兩輪後仍無法收斂，拆成可獨立驗收的範圍或依具體 blocker 升級，不能無限重派相同 brief。此上限不取消修復後必要的 verify-only 與下方大改動 snapshot 回扣。
+**輪數上限由 wrapper 執行**（working tree 以 HEAD、PR 以 branch 上的同一張 PR（PR 號）為一份改動；最多 3 輪，第 4 輪 exit 14）——判定表在 `scripts/lib/review-common.sh` § 0-A 輪數 ledger。帶 `--include`／`--exclude` 篩選的輪只是部分審查，收齊也不算 0-A 通過。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 同一份改動已有 verdict 的內容再審、或上一輪通過後增量 ≤50 行且 <5 檔 → exit 13；第 4 輪 → exit 14 拒跑 |
+| 消費端 | 跑 0-A 的主線（上方 exit 表）；coordinator `oa-batches.ts prepare`（切批前判輪）與 `merge-queue.ts`（合併前查 `rounds passed`） |
+| 觸發點 | 本節（commit skill `gates.md` § 0-A，每次 0-A 必讀） |
 
 ### 0-A/B/C/D 並行匯合（收口檢查）
 
 收回每個實際工作結果後核對：0-A 通過或合法 fast-path；0-B 通過或未觸發；0-C 全綠。接著條件執行 0-D，再做大改動回扣；0-E／0-F 依自己的觸發與阻擋契約處理。
 
-**大改動回扣**：0-A／0-B／0-C／0-D 匯合後累計修正**超過 50 行或跨 5 檔以上**時，MUST 讓合格 reviewer 對新 snapshot 再驗，確認新內容也被覆蓋。未到門檻仍跑修法相應的驗證；不能把舊 snapshot 的 PASS 當成新內容的 review。
+**大改動回扣**：匯合後有修正就重跑 `prepare medium`，要不要再審由 wrapper 依上一輪通過後的累計增量判（exit 13＝沿用）；未到門檻仍跑修法相應的驗證。
 
 實際匯合完成後使用 metrics recorder，記錄真實結果與身份：
 

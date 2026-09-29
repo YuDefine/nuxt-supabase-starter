@@ -37,6 +37,14 @@ Central rules are authored in `rules/**/*.md`; consumer-local rules are authored
 
 實例見 [[session-tasks]]（[[pitfall-end-of-session-obligation-orphaned-by-compact]]、[[pitfall-harness-todo-tool-shadows-file-based-tasks]]）。
 
+### 新增判準 MUST 宣告觸發點
+
+**每一條**新增判準在同一次改動內寫出哪一刻把它帶進 context；全匹配與空值 `paths:` 由 `node scripts/audit-rule-paths.ts` 的 hard flag（`catch-all-paths`／`null-scope`）攔下，無 `paths:` 的常駐只留給 `UNCONDITIONAL_WHITELIST` 的 bootstrap 類。合法觸發點：① skill SOP `READ 若〈條件〉，讀取 rules/〈判準〉.md`；② 工具事件 hook 印 pointer 級一行；③ script／gate 失敗輸出印判準位置；④ 有明確 scope 的 `paths:`——散播層 `rules/**`、consumer-local `.clade/rules/**`（兩者同經 rules planner 交付成 native skill 的 scope metadata）與 clade home `.claude/rules/local/` 都適用。
+
+**Good Example**：`clade-home` SKILL.md Phase 4 寫「READ 若要在 clade repo 下 commit，讀取 `rules/clade-role-and-todo-discipline.commit.md`」，同時 `clade-home-guard.ts` 在偵測到 `git commit` 時印同一個檔的 pointer——兩個觸發點都指得出時刻。
+
+**Bad Example**：新增 `.claude/rules/local/foo.md` 放判準、frontmatter 寫 `paths: ['**/*']`，理由是「怕漏載」——那是把常駐成本藏進條件式載入，等於沒有觸發點。
+
 ## 措辭三禁（NEVER）
 
 1. **不要加 nuance clause**——「不要 X，除非真的重要」= 重開協商空間。真例外寫成獨立條件句、綁可觀察 predicate。
@@ -201,6 +209,7 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 
   **不要調高 `DEFAULT_MAX_KB` 代替**（要調只能先轉出等量以上再 append `BUDGET_RAISE_LOG`），**也不要靠刪 NEVER 行省空間**——那是拿規約效力換 KB。headroom 低於 4 KB 時 audit 會印 `NOTE:`，不要等到 publish 中段撞 gate 才處理。
 - **`paths:` 的寬度是成本變數，conditional-load 不等於免費**：命中就是**整份**進場並在該 session 剩下每個 request 重讀，長度校準一樣適用。寫或改 `paths:` 時要逐個 glob 問：**這個副檔名 / 目錄底下的編輯，本規約真的有對應條文嗎？** 答不出來就不要放（反例：`nuxt-data-perf.md` 原本的 `**/*.ts` 會在編輯 `scripts/` / `test/` 時觸發；已收窄，留作判讀範例）。
+- **全匹配 glob（`'**/*'` 之類）與空值 `paths:`**：讀任何檔就整份注入 = 常駐卻不進 always-load 預算，由 `node scripts/audit-rule-paths.ts` 報 `catch-all-paths`／`null-scope`；改法見 § 新增判準 MUST 宣告觸發點。
 - **`paths:` 的成本是「包」不是「支」**：真正付出的是**所有 glob 命中同一路徑的規約總和**，每支分開看都站得住。**新增或放寬 `paths:` 前先跑 `node scripts/audit-rule-bundle.ts`** 看該路徑已背多少；不要只確認「我這支有對應條文」就放行。命中 ≥15 支不等於 bug，但要知道這個代價。
 
   **模組化優先於收窄 glob**：規約只對某類 stack 成立時，正解是放進 `rules/modules/<group>/<variant>/` 讓 `hub.json` 決定誰拿，不是留在 `core/` 再把 glob 寫窄——後者仍然投影給每個 consumer，只是少觸發幾次。

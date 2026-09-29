@@ -158,7 +158,7 @@ Required checks 必須綁定實際受測 revision。workflow 路徑條件或 ski
 
 private repo **不上** GitHub rulesets、branch protection、merge queue：不為此升 GitHub Pro，也不為此改公開。本機唯一 landing owner、squash-only merge method，以及 `batch confirm-merged` receipt，就是強制契約。不要把缺遠端保護列成剩餘工作或能力缺口，也不要宣稱遠端 required checks 已強制。公開 repo 若之後要開遠端強制，另行決定。
 
-**登記簿同步（唯一直推 `main`、唯一非 squash 的具名例外）。** PR 制 repo 的共享本機 `main` 若承載必須當下可見的登記簿類檔案（handoff、tech-debt、tasks、plan 結案），要由**一支工具**負責同步：內容差**每一個**路徑都在該 repo 宣告的 allowlist 內才放行，以 merge commit 收斂、不碰 working tree、push 前驗遠端未移動。allowlist 不得含規約、skill、script、CI、truth 或任何會被散播／執行的路徑；不要手動 `git push origin main` 代替該工具，也不要擴 allowlist 來放行一筆本來該走 PR 的 commit。clade home 的實作是 `scripts/main-sync.ts`，判準在其 `.claude/rules/local/clade-home-worktree.md` § 本機 main 與 origin 的同步；沒有這類共享登記簿的 repo 不適用本段。
+**登記簿同步（唯一直推 `main`、唯一非 squash 的具名例外）。** PR 制 repo 的共享本機 `main` 若承載必須當下可見的登記簿類檔案（handoff、tech-debt、tasks、plan 結案），要由**一支工具**負責同步：內容差**每一個**路徑都在該 repo 宣告的 allowlist 內才放行，以 merge commit 收斂、不碰 working tree、push 前驗遠端未移動。allowlist 不得含規約、skill、script、CI、truth 或任何會被散播／執行的路徑；不要手動 `git push origin main` 代替該工具，也不要擴 allowlist 來放行一筆本來該走 PR 的 commit。clade home 的實作是 `scripts/main-sync.ts`，判準在其 `.claude/skills/clade-home/rules/clade-home-worktree.md` § 本機 main 與 origin 的同步；沒有這類共享登記簿的 repo 不適用本段。
 
 ## 本機 main 與 origin 的對齊
 
@@ -189,7 +189,7 @@ timer 只做 git 自己保證安全的動作：
 | --- | --- |
 | 觸發條件 | timer 判定 `unpushed`／`diverged`／`refused`／`error`（propagate 升版 commit 過 3 天才算）→ 寫入 `~/.local/state/clade/main-align/last.json` 的 `attention`，SessionStart 印出（consumer 內只印自己，clade home 印全部）。**不 block** |
 | 消費端 | SessionStart 的 `vendor/scripts/worktree-freshness.ts session-start`；timer 本身的健康由 `node scripts/dev-node.ts doctor --all` 的 `main-align timer`／`main-align last run` 兩步驗 |
-| 載入路徑 | 本節（consumer 端投影為 `.claude/rules/github-flow.md`） |
+| 觸發點 | 本節（consumer 端投影為 `.claude/rules/github-flow.md`） |
 
 ## 合併後分支回收
 
@@ -199,7 +199,7 @@ timer 只做 git 自己保證安全的動作：
 | --- | --- |
 | 觸發條件 | `node scripts/audit-repo-merge-settings.ts` exit 1（有 repo 沒開，印 `gh repo edit <repo> --delete-branch-on-merge`）；exit 2 是讀不到設定，不要讀成已開。warn-only，不接 publish gate |
 | 消費端 | `scripts/bootstrap-project.ts` 的 `repo-merge-settings` step（新 consumer onboarding）；`/clade-health full` 掃存量 |
-| 載入路徑 | 本節（consumer 端投影為 `.claude/rules/github-flow.md`）；開設定的操作在 `project-bootstrap` skill § 4 |
+| 觸發點 | 本節（consumer 端投影為 `.claude/rules/github-flow.md`）；開設定的操作在 `project-bootstrap` skill § 4 |
 
 驗證 CI 的綠燈是**最新 candidate 那條 run**。同 ref 被更新的 SHA 取代後，過期 run 必須由 workflow `concurrency` 取消，不得繼續佔 self-hosted runner 讓 HEAD 排隊。寫法與 deploy/gate 例外見 [[ci-workflow]] § CI / test workflow MUST cancel superseded runs on the same ref。
 
