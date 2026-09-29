@@ -89,9 +89,11 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
+        # 釘與維護者本機（mise）相同的 CLI 版本，NEVER latest：`supabase gen types` 的輸出格式
+        # 隨版本改（2.117 改了括號格式）。升 CLI 時本機重產 types，並在同一個 commit 改這裡的 version。
+        uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
         with:
-          version: latest
+          version: 2.117.0
 
       - name: Start Supabase
         id: supabase

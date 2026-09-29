@@ -586,6 +586,18 @@ scaffold 輸出要有 `.claude/commands/validate-starter.md`，但 `17f080cf` �
 - `bash scripts/smoke-scaffold.sh temp/<name>` 跑到 `[PASS] placeholder scan clean` 之後才停。
 - `scaffold-smoke` workflow 在 main 上轉綠。
 
+### 2026-09-29 root cause 複核（main `36546488912`，clade v1.13.44）
+
+- 死在 `[FAIL] placeholder scan found unexpected hits`，比 2026-09-11 那次少：`vendor/**` 已無命中，剩 10 個命中、9 個檔，
+  **全部**是 `template/scripts/` 下標了 `🔒 LOCKED — managed by clade` 的投影檔：`preservation-profiles.ts:74`
+  （consumer 名冊一列）、`wt-batch.ts:196`（consumer → repo 對照一列）、`pre-push/runner.sh:54` 與
+  `pre-push/checks/{nuxt-typecheck,utable-slots,mutation-loading,data-perf-check,review-rules-ratchet,native-picker-ban,nuxt-ui-mixed-slot}.sh`
+  各一行註解。
+- 落點在 clade 源檔 `vendor/scripts/`（同名同行，v1.13.44 仍在）：註解型 9 處可改成 `<consumer>`；名冊／對照型 2 處
+  （`preservation-profiles.ts`、`wt-batch.ts`）是真資料，要 clade 決定「投影時去識別化」或「名冊改由 registry 讀入」。
+  starter 端改投影檔會被下次 propagate 覆寫，加 exclude 又違反上面的 NEVER，因此本 repo 沒有可落地的修法。
+- scan 之後的 `typecheck`／`test:unit`／`test`／`check` 四關至今沒在 CI 跑到過；去識別化落地後仍可能各自露出新的紅燈。
+
 ## TD-020 — 選了 codex 的 scaffold 輸出靜默少掉 `.codex/` 與 `.agents/`
 
 **Status**: open — 根因已驗證，但修法牽涉 hygiene 治理決定，需要拍板才動
@@ -747,6 +759,18 @@ Template CI 的 Unit tests job 在 `Unit tests` step 之後跑 `vp run audit:ux-
 ### Acceptance
 
 - main 上 Template CI 的 Unit tests job 全綠（`UX drift audit` 不再 exit 2，且不是靠跳過 step 過關）。
+
+### 2026-09-29 root cause 複核
+
+- `gh api` 掃 Template CI 最近 31 趟：19 趟紅，最近 10 趟全是 `UX drift audit` 這一步（最早 `36357476335`，即 PR #13 讓前一步轉綠之後）；
+  更早 9 趟是 `Unit tests` 那步，已由 PR #13 修掉。所以現在的 Template CI 紅燈只有這一個 root cause。
+- 落點：clade `vendor/scripts/audit-ux-drift.ts` 的 `main()`（`report.enums.length === 0` → `process.exit(2)`，註解明寫
+  「Found nothing ≠ no drift」）。它把「零 enum」當成設定壞掉，對從來沒有 enum 的專案沒有出口（無 allow-empty 旗標或 config 欄位）。
+- starter 端沒有不作弊的修法：`shared/schemas/` 也沒有 `z.enum`，`paths.types` 改指過去不會多出定義；不能靠條件式跳過 step
+  （違反 Acceptance）。唯一實質選項是把 DB 已有的 `profiles.role CHECK (role IN ('admin','user'))`
+  建成 `shared/types` 的 enum-like（現在 `profileSchema.role` 是 `z.string()`）——那會改 API 契約與測試，
+  且 `server/api/_dev/login.post.ts` 的 `z.enum(['admin','member','guest'])` 與 DB CHECK 已不一致，須先決定角色集合。
+- 兩條路都要拍板，專案暫停中不擅動；建議先走 clade 側（零 enum 回報 skip／pass，或提供明確的 allow-empty 設定）。
 
 ## TD-022 — repo root 的 Claude session 載不到 `commit-0a-reviewer` seat
 
