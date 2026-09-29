@@ -186,14 +186,17 @@ function remoteGitEnv(): NodeJS.ProcessEnv {
 }
 // Keep the approved repository IDs in the vendor source: a consumer's tracked
 // registry projection can be changed by the same contributor who changes its meta.
-// This map mirrors registry/consumers.json consumer_id → repo_id and MUST be
+// Each entry mirrors registry/consumers.json consumer_id → repo_id and MUST be
 // updated by register-consumer / init-consumer when a consumer is added or
 // renamed — drift silently turns that consumer's cleanups into kept sources.
-// test/wt-batch-profile-identity.test.ts asserts the parity.
+// A consumer whose preservation profile is the all-unknown default may be left
+// out: verified or not, it resolves to the same retaining profile. Leaving it
+// out keeps its name out of this projected file (the public starter's own name
+// is not sanitized in its projection and trips its scaffold placeholder scan).
+// test/wt-batch-profile-identity.test.ts asserts both halves.
 export const trustedRepositoriesByConsumerId: ReadonlyMap<string, string> = new Map([
   ['clade', 'YuDefine/clade'],
   ['<consumer-a>', '<client-a>/<consumer-a>'],
-  ['nuxt-supabase-starter', 'YuDefine/nuxt-supabase-starter'],
   ['<consumer-d>', 'YuDefine/<consumer-d>'],
   ['<consumer-b>', '<client-b>/<consumer-b>'],
   ['<consumer-i>', 'YuDefine/<consumer-i>'],

@@ -160,13 +160,13 @@ receipt 的 `pane_label_applied` **為 `false`，或這個欄位根本不存在*
 
 ### 3.1 Launcher inherit（relay / fanout / 任何 identity-bound dispatch）
 
-user **沒**點名別的 launcher 時，successor／worker MUST 用**當前這格實際在跑的 runtime**。進入本 Herdr 分支的 helper 從 live process identity 重判：`cc → cc`、`ccw → ccw`、`ccg → ccg`、`grok → grok`、`cx → cx`；Pi 只依下方 continuity 契約。這是 handoff 的 runtime affinity hard rule：**agent-routing、工作類型、模型能力、成本與 repo 預設都無權覆蓋**。**NEVER** 沒點名就在 relay、fanout worker 或外部 create-only handoff 上帶 `--launcher`。
+user **沒**點名別的 launcher 時，successor／worker MUST 用**當前這格實際在跑的 runtime**。進入本 Herdr 分支的 helper 從 live process identity 重判：`cc → cc`、`ccw → ccw`、`grok → grok`、`cx → cx`；Pi 只依下方 continuity 契約。這是 handoff 的 runtime affinity hard rule：**agent-routing、工作類型、模型能力、成本與 repo 預設都無權覆蓋**。**NEVER** 沒點名就在 relay、fanout worker 或外部 create-only handoff 上帶 `--launcher`。
 
 當前 runtime 無法辨識，或 helper 不支援建立同 runtime successor 時，**MUST fail closed**：保留 brief 與 pane、回報 blocker。**NEVER** fallback 到 `cc`／`ccw`，也 NEVER 把「至少派得出去」當成跨 runtime 的授權。
 
 verified native-Codex evidence 命中時繼承 `cx`；只有 `CODEX_THREAD_ID` 而 process evidence 判不出時 helper fail closed。`PI_CODING_AGENT=true` 加非空 `PI_SESSION_ID` 代表 Pi runtime（launcher `pi`），不是 Codex；Pi successor 使用 `pi --session-id <fresh-id>` 並走 exact-session ownership gate。
 
-`ccx` 是退役例外：helper 仍辨識 live `ccx-*`，只為了回 `retired_launcher`，**NEVER** 再建立 ccx successor。Codex upstream 的 bounded GPT 工作走 native collaboration；其他 runtime 的 GPT routing 仍依 agent-routing。
+gateway launcher（`ccg`／`ccx`）已從 clade 拆除（2026-09-29）：`ANTHROPIC_BASE_URL` 指向本機 proxy（`http://127.0.0.1:8317`）的 session helper 判為無法辨識、fail closed（`unsupported_launcher`），**NEVER** 建立 gateway successor；`--launcher ccg|ccx` 回 `usage_error`。
 
 `CLADE_CLAUDE_LAUNCHER` 是當初 dispatch 注入 pane 的相容 marker，`/clear` 之後同一格可能已換成別的 binary，marker 不會跟著改。**NEVER** 把它當 SoT。
 
@@ -175,8 +175,7 @@ verified native-Codex evidence 命中時繼承 `cx`；只有 `CODEX_THREAD_ID` �
 | `PI_CODING_AGENT=true` 且 `PI_SESSION_ID` 非空 | `pi` |
 | live native-Codex evidence | `cx`（bounded 工作已在檔頭 Codex boundary 分流到 `collaboration.spawn_agent`） |
 | `CODEX_THREAD_ID` 非空但 process evidence 判不出 | helper fail closed（`codex_native_dispatch_forbidden`）；不建立 Herdr pane |
-| `ANTHROPIC_DEFAULT_OPUS_MODEL`（或 sonnet／haiku）以 `ccg-` 開頭，且 `ANTHROPIC_BASE_URL=http://127.0.0.1:8317` | `ccg` |
-| 同上，prefix `ccx-` | `retired_launcher`，不建立 pane |
+| `ANTHROPIC_BASE_URL=http://127.0.0.1:8317`（已拆除的 gateway） | 無法辨識，`unsupported_launcher`，不建立 pane |
 | 沒有 live runtime identity，才退到 `CLADE_CLAUDE_LAUNCHER` 或 `CLAUDE_CONFIG_DIR` | 退路，不是優先 |
 
 **例外**（兩條 dispatch 入口，簽署身分不變）：
@@ -186,7 +185,7 @@ verified native-Codex evidence 命中時繼承 `cx`；只有 `CODEX_THREAD_ID` �
 | user 白紙黑字點名另一個**仍支援的 Herdr successor launcher**（例如「用 ccw 接手」） | `--relay --launcher <那個>` |
 | user 白紙黑字點名另一個仍支援的 Herdr launcher，且這次是 create-only | create-only `--launcher <那個>` |
 
-沒點名就不要帶 `--launcher`。user 說「handoff／relay／fanout」本身**不等於**授權換 runtime；必須在當次要求中明確點名目標 launcher。`--launcher` 只覆蓋 successor／child 的 binary 與相容 marker，**不改** current pane 的簽署身分——誰能簽 relay 仍由 `HERDR_ENV`、current pane、exact runtime session 驗證。`--launcher ccx` 一律回 `retired_launcher`；身分無法驗證的 Codex origin 帶 `--launcher` 也照樣 fail closed。
+沒點名就不要帶 `--launcher`。user 說「handoff／relay／fanout」本身**不等於**授權換 runtime；必須在當次要求中明確點名目標 launcher。`--launcher` 只覆蓋 successor／child 的 binary 與相容 marker，**不改** current pane 的簽署身分——誰能簽 relay 仍由 `HERDR_ENV`、current pane、exact runtime session 驗證。`--launcher ccg|ccx` 一律回 `usage_error`；身分無法驗證的 Codex origin 帶 `--launcher` 也照樣 fail closed。
 
 `--reclaim` / `--complete` / `--continue` / `--adjudicate` / `--recover-orphan` / `--coordinate-claim` / `--parent-pane` **NEVER** 帶 `--launcher`。
 

@@ -12,9 +12,9 @@ The Claude native delegation entry is `Agent`; its async owner may use `run_in_b
 
 ## Claude 委派的 model 檔位（決定層）
 
-先依 [[agent-routing.routing-table]] 選角色與鏈；Claude child／subagent 只可用 Opus 5.5，effort 上限 medium。commit 0-A reviewer 固定 medium；`dispatch-fallback` 固定 low。配額或 runtime 不可用時，按表列鏈尾交 `dispatch-fallback` 或主線；Opus reviewer 不可用時 commit gate 保持未完成。
+先依 [[agent-routing.routing-table]] 選角色與鏈；Claude child／subagent 用 Opus 5.5，effort 上限 medium——唯一例外是 Routing Table 標 Sonnet 的四列與 delegate-sub 的兩個接手點，用 `sonnet-implementer`（Sonnet 5.5，effort 固定 high）。commit 0-A reviewer 固定 medium；`dispatch-fallback` 固定 low。配額或 runtime 不可用時，按表列鏈尾交 `dispatch-fallback` 或主線；Opus reviewer 不可用時 commit gate 保持未完成。
 
-**NEVER** 把本節讀成「不確定時降檔比較省」。2026-09-24 起 Sonnet／Haiku 已禁用，舊的「原判 Sonnet」與「原判 Haiku」只代表歷史工作量分類，不能當派工目標；**NEVER** 用沒有來源的 per-model debit multiplier 估算節省比例。
+**NEVER** 把本節讀成「不確定時降檔比較省」。Haiku 與 Sonnet 5 以下禁用；Sonnet 5.5 只坐 Routing Table 標它的列（2026-09-29），不是通用降檔目標。舊的「原判 Sonnet」與「原判 Haiku」只代表歷史工作量分類，不能當派工目標；**NEVER** 用沒有來源的 per-model debit multiplier 估算節省比例。
 
 ### `general-purpose`／`Explore` 與 Pi 分流
 
@@ -51,4 +51,4 @@ The Claude native delegation entry is `Agent`; its async owner may use `run_in_b
 
 進入 apply 後，個別 phase executor 仍走 共通 Routing Table；那張表決定誰實作，不反向改寫 residency。
 
-Design Review, UI planning, screenshot matching and `.claude/` authoring (`dotclaude-authoring`) use Opus 5.5 medium with no fallback; when Opus is unavailable the main line does the work, and commit-gate seats stay incomplete. UI view implementation, including Nuxt UI/Content, uses Opus 5.5 medium, Nuxt core uses Pi GPT-6 Sol xhigh, and screenshot capture uses Pi Gemini 3.8 Flash high.
+Design Review, UI planning, screenshot matching and `.claude/` authoring (`dotclaude-authoring`) use Opus 5.5 medium with no fallback; when Opus is unavailable the main line does the work, and commit-gate seats stay incomplete. UI view implementation, including Nuxt UI/Content, uses Opus 5.5 medium, Nuxt core uses Claude Sonnet 5.5 high (Devin only when the dispatcher names it), and screenshot capture uses Pi Gemini 3.8 Flash high.
