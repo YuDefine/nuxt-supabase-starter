@@ -15,6 +15,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path'
 import { consola } from 'consola'
 import { z } from 'zod'
 import { questionById } from './question-catalog'
+import { writeScaffoldReceipt } from './scaffold-receipt'
 import { DEFAULT_DB_STACK, type DbHost, type DbStack, type UpdatePolicy } from './types'
 
 export interface CladeModules {
@@ -937,6 +938,11 @@ export async function postScaffold(
   //    （契約：零管理，NEVER 留下 starter 的 managed 身分）。
   rmSync(join(targetDir, '.claude', 'hub.json'), { force: true })
 
+  // 1.5 首投影認領憑證：記下 assemble 拷進來的 agent 目錄最終位元組，讓第一次
+  //     `pnpm install` 的 hub-sync 能認領（而非以 unowned drift 拒收）這些檔。
+  //     MUST 在 init-consumer 與 install 之前；scaffold-only 也寫，事後補登記才吃得到。
+  writeScaffoldReceipt(targetDir)
+
   const cladeRoot = opts.registerConsumer
     ? await runInitConsumer(targetDir, cladeModules, opts)
     : undefined
@@ -1100,6 +1106,14 @@ export async function postScaffold(
   }
 
   if (pnpmInstalled) formatGeneratedProject(targetDir, opts.json === true)
+
+  // 以 initial commit 的最終位元組刷新 receipt。沒在上面 install 成功時（--no-install、
+  // install 失敗），首投影發生在之後補跑的 `pnpm install`，那時磁碟上已含後段改寫
+  // （dbHost、first-glance docs、hook strip）；1.5 那份會對不上而退回拒收。
+  // hub-sync 跑成功時 clade 已有 ownership state，不再讀 receipt。pending build approval
+  // 那條（pnpm exit 1 但 pnpmInstalled=true）postinstall 可能沒跑完，刷新後的 receipt
+  // 會連帶擔保上面重投影／format 寫出的位元組——刻意涵蓋：那些正是 initial commit 的內容。
+  writeScaffoldReceipt(targetDir)
 
   consola.start(adoptingRepo ? '正在提交 starter 檔案...' : '正在提交 initial scaffold...')
   try {
