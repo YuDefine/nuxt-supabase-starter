@@ -45,7 +45,7 @@ node scripts/shell-safety-check.ts <你剛寫的檔>     # 命中 exit 1，乾�
 | --- | --- |
 | 觸發條件 | 三條件全中（內部 `sudo` × user-level toolchain × 缺 guard）。**warn-only，不 block** |
 | 消費端 | 執行上方自驗的 agent；Claude hook `capabilities/core/hooks/post-edit-shell-safety.sh`（PostToolUse `Edit|Write`）；clade 的 `scripts/audit-sudo-euid-guard.ts` fleet 掃描。三者共用 `vendor/scripts/shell-safety-check.ts`（consumer 投影為 `scripts/shell-safety-check.ts`）。Codex／Cursor 的事件接線須另有實測證據 |
-| 載入路徑 | 本檔 frontmatter 的 paths，由各 runtime adapter 交付 |
+| 觸發點 | 本檔 frontmatter 的 paths，由各 runtime adapter 交付 |
 
 ## 2. `trap` body 引用的變數 MUST 在 trap 執行當下真的拿得到值
 
@@ -83,7 +83,7 @@ f      # → <UNSET>
 | --- | --- |
 | 觸發條件 | **informational — 不觸發任何東西**。刻意沒有 detector，理由見上方自驗段 |
 | 消費端 | 編輯適用腳本的 agent ＋ 該腳本自己的回歸測試 |
-| 載入路徑 | 本檔 frontmatter 的 paths，由各 runtime adapter 交付；本節沒有文字掃描 detector |
+| 觸發點 | 本檔 frontmatter 的 paths，由各 runtime adapter 交付；本節沒有文字掃描 detector |
 
 ## 3. `pkill -f` / `pgrep -f` 的 pattern MUST 不會命中發出它的那個 shell
 
@@ -141,7 +141,7 @@ kill_tree() { for c in $(pgrep -P "$1"); do kill_tree "$c"; done; kill -TERM "$1
 | --- | --- |
 | 觸發條件 | **informational — 不觸發任何東西**。`rg -n 'p(kill\|grep) -f'` 與 `rg -n 'kill .*-- *"?-\$'` 只能列出候選，兩條判準（pattern 會不會出現在呼叫端自己的 cmdline／呼叫端在不在那個 process group 裡）都沒有文字形狀 |
 | 消費端 | 下複合 shell 指令的 agent；撰寫 dev/test 腳本的人 |
-| 載入路徑 | 本檔 frontmatter 的 paths；agent 直接下的一次性指令由本節正文承接，不經 paths |
+| 觸發點 | 本檔 frontmatter 的 paths；agent 直接下的一次性指令由本節正文承接，不經 paths |
 
 > Pitfall：`docs/pitfalls/2026-09-07-pkill-f-pattern-kills-issuing-shell.md`
 

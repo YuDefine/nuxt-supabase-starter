@@ -100,7 +100,7 @@ paths:
 | --- | --- |
 | 觸發條件 | 條目指向的 live change 有 ≥1 項未勾 `[review:ui]` → `belongs-on-review` lint ＋ 不合成 通過／退回。**warn-only，不 block** |
 | 消費端 | 寫該條目的 agent（看到 lint 就把它移回人工驗收流程）＋ `flow pending` 上的 Charles（看到沒有通過鍵就知道要去逐條驗） |
-| 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`） |
+| 觸發點 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`） |
 
 ## 驗收：已經出版的，NEVER 再問一次
 
@@ -126,7 +126,7 @@ paths:
 | --- | --- |
 | 觸發條件 | 三格證據全中 → `flow sources --apply` 寫 `work.accept`，佇列不再排那一列。**不 block**，只少問 |
 | 消費端 | `flow pending`（同一支 `buildDecisionQueue`）；`flow accept` 保留給人 |
-| 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`）；判定器 `vendor/scripts/flow/landing.ts` |
+| 觸發點 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`）；判定器 `vendor/scripts/flow/landing.ts` |
 
 ## 🟡 / ✅ 標記
 
@@ -144,7 +144,7 @@ agent 代收走 `flow dismiss <span_id> --reason '<為什麼不再需要人>' [-
 | --- | --- |
 | 觸發條件 | 標題＋第一段命中結案語 ＋ 無未勾 checkbox ＋ 無未答選項 → 標 `self-closed`、不鑄 span、`flow sources` 印一行計數。**warn-only，不 block** |
 | 消費端 | 寫 / 編那份 carrier 的 agent（看到那一行就搬段或刪）；`flow pending`（少一條問不到人的題） |
-| 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`）；判定器 `vendor/scripts/flow/decision-sources.ts` 的 `isSelfClosed`，對帳在 `decision-sync.ts` |
+| 觸發點 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`）；判定器 `vendor/scripts/flow/decision-sources.ts` 的 `isSelfClosed`，對帳在 `decision-sync.ts` |
 
 ## 新問題優先走 `flow ask`
 
@@ -214,7 +214,7 @@ child 判出「只有 Charles 答得了」時仍走 `--decision-for charles`，*
 | --- | --- |
 | 觸發條件 | `--decision-for charles` 且 parent pane 的 wake 真的送達 → helper 收據帶 `warning`。**warn-only，不擋**：有些題就是要人，coordinator 在場不改變這件事 |
 | 消費端 | worker（填欄位）、coordinator（收控制訊息並 `flow answer`）、`flow pending`（預設只顯示 `audience: charles`） |
-| 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`）＋ `rules/core/session-tasks.operations.md` § Herdr session transport；helper 的 completion handshake 樣板每次 dispatch 逐字帶給 worker |
+| 觸發點 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`）＋ `rules/core/session-tasks.operations.md` § Herdr session transport；helper 的 completion handshake 樣板每次 dispatch 逐字帶給 worker |
 
 ### 一個拍板題 = 一個問題。底下的 bullet 是**選項**，NEVER 是**項目**
 
@@ -262,7 +262,7 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --json
 | --- | --- |
 | 觸發條件 | 條目文字同時含 `人工檢查` 與某個 **live** change 的目錄名 → `belongs-on-review` lint ＋ 不合成 通過／退回。**warn-only，不 block，且 NEVER 拒鑄 span**（路由錯誤，擋掉會讓繞道變隱形） |
 | 消費端 | 寫該條目的 agent（看到 `✎` 評語照上表處置）＋ Charles。說明文字由 `LINT_NOTES['belongs-on-review']` 渲染，NEVER 由 agent 寫進人的佇列 |
-| 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`——寫那條 bullet 正是在編輯這兩個檔） |
+| 觸發點 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`——寫那條 bullet 正是在編輯這兩個檔） |
 
 ## 答案落檔失敗會被偵測（`answer-not-filed`）
 
@@ -280,7 +280,7 @@ node vendor/scripts/flow/flow.ts relend <span_id>
 | --- | --- |
 | 觸發條件 | 已答（非 retracted）× 有指定 carrier × repo 內找不到它的決策紀錄區塊 × 超過 10 分鐘寬限 → `flow status --stalled` 列一行、exit 3。**warn-only，不 block** |
 | 消費端 | 每個 attended session 的 agent，透過已驗證的 session-start hook 或上段顯式 CLI 取得結果；讀到就照 `relend` 指令處置 |
-| 載入路徑 | 本節；停滯輸出自帶 action 句，不需要先知道要去看 |
+| 觸發點 | 本節；停滯輸出自帶 action 句，不需要先知道要去看 |
 
 **判準是「有沒有決策紀錄區塊」，NEVER 是「有沒有提到那個 span id」**；搬進 `docs/archives/` 算已落檔。
 
@@ -292,7 +292,7 @@ node vendor/scripts/flow/flow.ts relend <span_id>
 | --- | --- |
 | 觸發條件 | 剛寫入的檔裡有 `no-options-under-ruling` 的條目 → 印到 stderr。**warn-only，一律 exit 0，NEVER 擋下 Edit**——`HANDOFF.md` 是高頻活文件，擋寫入買到的是繞過旗標不是更好的 bullet |
 | 消費端 | 剛寫下那條 bullet 的 agent（本節）；判準與措辭走 `vendor/scripts/flow/decision-lint.ts` → `decision-sources.ts` 的 scanner ＋ `decisions.ts` 的 `OPTIONS_REQUEST_TEXT` |
-| 載入路徑 | 本檔（paths-gated）；Hook 與顯式 CLI 共用 lint 輸出 |
+| 觸發點 | 本檔（paths-gated）；Hook 與顯式 CLI 共用 lint 輸出 |
 
 **NEVER 在 hook 裡自己解析 markdown**——第二份 matcher 遲早與佇列不一致。
 
@@ -313,4 +313,4 @@ node vendor/scripts/flow/flow.ts relend <span_id>
 | --- | --- |
 | 觸發條件 | item 落 ruling 桶且無選項（`no-options-under-ruling`）、body 含差一點就解析成功的行（`near-miss-option-line`），或 item 落 review 桶而三欄沒寫齊 / 證據不可點（`missing-evidence`）。**寫入路徑上三者都 warn-only、不 block**。**ingest 路徑上前者與後者拒鑄 span**（`decision-sync.ts` 的 `REJECTING_LINTS`），改成 `flow sources` 與 `handoff-scan` 的退件行並計入 exit code。`near-miss-option-line` 是**評語不是退件碼**，NEVER 拿它擋 ingest |
 | 消費端 | carrier 作者（退件收件人）＋ `flow pending` 上的 Charles |
-| 載入路徑 | 本檔，paths-gated 到 `HANDOFF.md` / `docs/tech-debt.md` / work-loop state——也就是寫這種條目的當下 |
+| 觸發點 | 本檔，paths-gated 到 `HANDOFF.md` / `docs/tech-debt.md` / work-loop state——也就是寫這種條目的當下 |

@@ -42,7 +42,9 @@ paths:
 
 ## effort 與執行載體
 
-**effort 跟著 model 走，不跟著列走**（`TIER_EFFORT`）：Tier 2 的 **Grok 4.7 與 GPT-6 Sol 一律 `xhigh`**；**Gemini 3.8 Flash 一律 `high`**（它沒有 xhigh runtime id，未知值過去會靜默退成 medium，現在 `lib/google-gemini-cli.ts` 直接 throw）；Claude Opus 5.5 一律 `medium`（鏈尾載體 `dispatch-fallback` 為 `low`）。任何一跳的 effort 與此不符，dispatcher exit 1。
+**effort 跟著 model 走，不跟著列走**（`TIER_EFFORT`）：Tier 2 的 **Grok 4.7 與 GPT-6 Sol 一律 `xhigh`**；**Gemini 3.8 Flash 一律 `high`**（它沒有 xhigh runtime id，未知值過去會靜默退成 medium，現在 `lib/google-gemini-cli.ts` 直接 throw）；Claude Opus 5.5 預設 `medium`（鏈尾載體 `dispatch-fallback` 為 `low`）。任何一跳的 effort 與此不符，dispatcher exit 1。
+
+**Opus 卡住升 `high`（Charles 2026-09-28）**：同一問題已在 `medium` 失敗一次、或修法只修到一層，**且**有可跑的檢查（測試、指令、可重現步驟）時，下一次 Claude child 可以開 `high`——`herdr-session-handoff.ts --tier-basis stall-escalation --retry-of <前一次 medium 的 label> --effort high`。缺 `--retry-of`、或 basis 不是 `stall-escalation` 的 `high` 一律拒絕；`max` 任何 basis 都開不了。**NEVER** 用「這題很難」「這是裁決」代替前一次 medium 失敗的事實。
 
 `gemini` 是 Pi model alias，實際 provider 為 `google-gemini-cli`、model 為 `gemini-3.8-flash`；**NEVER** 改傳 Cursor catalog 的完整 `gemini-3.8-flash` slug 冒充同一跳。`sol` 解析到 `openai-codex/gpt-6-sol`。
 
@@ -75,7 +77,7 @@ GPT worker 的 transport 依 [[agent-routing]] § Session transport boundary：C
 | 工作類別 | 執行鏈（effort 依上節） | 鏈尾 | 備註 |
 | --- | --- | --- | --- |
 | 〔`non-ui-implementation`〕非 UI 實作（併入原 `-escalate`） | GPT-6 Sol xhigh | 主線 | 修改、測試、修復與交付同一條鏈 |
-| 〔`implementation-decision`〕實作中的根因／方案裁決 | GPT-6 Sol xhigh | 主線 | 唯讀分析證據，交付根因、修法限制與驗收條件 |
+| 〔`implementation-decision`〕實作中的根因／方案裁決（含 TD／backlog triage） | GPT-6 Sol xhigh | 主線 | 唯讀分析證據，交付根因、修法限制與驗收條件；TD／backlog 的分類、優先序與處置判定也走本列 |
 | 〔`detailed-planning`〕非 UI 詳細實作計畫 | GPT-6 Sol xhigh | 主線 | 唯讀產出範圍、介面、依賴、task→file 與驗收 |
 | 〔`nuxt-core-implementation`〕Nuxt 本體實作 | GPT-6 Sol xhigh | 主線 | Nuxt 框架、模組與執行邏輯 |
 | 〔`version-upgrade-first-pass`〕version-upgrade 首輪升版 | GPT-6 Sol xhigh | 主線 | |
@@ -84,6 +86,7 @@ GPT worker 的 transport 依 [[agent-routing]] § Session transport boundary：C
 | 〔`web-search`〕WebSearch／WebFetch | Gemini 3.8 Flash high → Grok 4.7 xhigh → GPT-6 Sol xhigh | `dispatch-fallback` | 鏈尾 subagent 帶 WebSearch／WebFetch；主線 **NEVER** 直接呼叫內建工具 |
 | 〔`mechanical-fanout`〕Mechanical fan-out／收集、掃描、驗證矩陣 | Gemini 3.8 Flash high → Grok 4.7 xhigh | `dispatch-fallback` | 觸發與 threshold gate 依 [[agent-routing]] |
 | 〔`read-heavy-scan`〕封閉來源固定欄位抽取／read-heavy scan | Gemini 3.8 Flash high → Grok 4.7 xhigh | `dispatch-fallback` | 來源矛盾交主線整理為 `implementation-decision`；只收 location ＋可機械複驗欄位，逐字原文不走本列（見硬禁令） |
+| 〔`code-locate`〕唯讀定位搜尋（找檔／符號／呼叫點；回 `file:line` ＋結論，不回檔案原文；取代 in-process `Explore`） | Gemini 3.8 Flash high → Grok 4.7 xhigh | 主線 | 鏈尾是主線自己 Read／Grep，**NEVER** `dispatch-fallback`（Charles 2026-09-28：連 Opus 5.5（effort: low）都不用）；readonly |
 | 〔`notion-ops`〕Notion 讀寫（自由形式 `ntn api`，NEVER Notion MCP；確定性 script 除外，見硬禁令） | Gemini 3.8 Flash high → Grok 4.7 xhigh（僅 `grok-xai`） | `dispatch-fallback` | Cursor 池 `$HOME` 為空 tmpfs，永不上鏈 |
 | 〔`screenshot-review-verify`〕Screenshot review 全部四種模式（`[verify:ui]`、archive 前 QA、commit 0-B、ad-hoc） | Gemini 3.8 Flash high | `dispatch-fallback` | browser、截圖與 evidence 收集；取證與 `screenshot-match-analysis` 判定仍分兩步 |
 | 〔`copywriting-draft`〕行銷／產品文案草稿與變體 | Gemini 3.8 Flash high | `dispatch-fallback` | 最終文字由主線重寫 |
@@ -96,7 +99,7 @@ GPT worker 的 transport 依 [[agent-routing]] § Session transport boundary：C
 
 「無 fallback」的 Opus 各列在 Opus 不可用時由主線自己做；commit gate 例外——`code-review-opus`（0-A）與 commit 0-B 用到的 `design-review`／`screenshot-match-analysis`：產出 changeset 的那條線不是它的 reviewer，所以 gate 保持未完成（`commit` skill `review-policy.md`）。
 
-不在表上的 Claude 載體只有一種：in-process 唯讀定位搜尋交 `Explore` subagent（顯式 `model: opus`，effort 意圖 `low`；`pi-routing-gate.ts` 只驗 model 直接放行，`low` 無機械強制）。掃描矩陣與固定欄位抽取照舊走 `mechanical-fanout`／`read-heavy-scan` 列，見 [[agent-routing.dispatch-execution]] 第 4 條。
+唯讀定位搜尋走 `code-locate` 列，**不再**有「不在表上的 Claude 載體」：`Explore` subagent 在任何 model、任何 permission mode（含 plan mode）都被 `pi-routing-gate.ts` 攔下，gate 把 `prompt` 落成 brief 並印出可逐字照跑的 `pi-dispatch --table-row code-locate` 指令。掃描矩陣與固定欄位抽取照舊走 `mechanical-fanout`／`read-heavy-scan` 列，見 [[agent-routing.dispatch-execution]] 第 4 條。
 
 ### `dotclaude-authoring` 的範圍（Charles 2026-09-26）
 
@@ -141,6 +144,7 @@ consumer 端的 `.claude/rules/local/**` 同樣命中第一條；本列只決定
 | 〔`copywriting-draft`〕 | **主線 MUST 收斂重寫每一條採用的文案，NEVER 原樣貼進交付物**——Pi 回的是素材不是成稿。本列只涵蓋行銷／產品對外文案，**NEVER** 外推到規約措辭／commit message／技術文件／PR 描述／對外報告。 |
 | 〔`notion-ops`〕 | **NEVER** 上 Cursor 池（Notion auth 在 `$HOME`）。**NEVER** 主線第一手自己跑 ntn。**本列不涵蓋確定性 script**：`vendor/scripts/notion-sync.ts`、`vendor/scripts/lib/notion-hub.ts resolve`、`scripts/audit-notion-hub-schema.ts` 主線直接跑。Notion MCP 不是本列的合法 transport，**NEVER** 使用。 |
 | 〔`read-heavy-scan`〕 | **NEVER** 拿「反正我讀一下就知道了」略過 gate，也 NEVER 把固定輸出 schema 當成不需裁決的證據。**NEVER 在本列的 brief 要求 verbatim `raw`／逐字引用**：本列每筆只收 location（`file` ＋ `line` 或 JSON pointer）＋可機械複驗欄位（該行命中的字面 token、計數）；要逐字原文的抽取不派本列，由主線拿 location 以確定性指令（`sed -n '<line>p' <file>`、`grep -nF '<token>' <files>`）自己取回。回傳裡只要出現 `raw`／引用字串，**每一筆** MUST 以 `grep -F` 對它所標的檔複驗，任一筆不中就**整份作廢**重取，**NEVER** 挑命中的那幾筆用（`pi-dispatch.ts` 對本列 JSON 回傳機械複驗的範圍：`raw`／`raw_value` 兩種 key，對 `file`／`path`／`source` 或 `location` 的 `path:line` 解出的檔，空字串也算不中，不中即 exit 2 帶 `verbatim_raw_mismatch`；其他 key 名的引用字串、非 JSON 回傳與鏈尾 `dispatch-fallback` 的輸出不在範圍內，由消費端自己驗）——捏造物與真結果同形（exit 0、schema 對、行數對），不複驗就沒有偵測面（TD-953：同一份 brief 5 reps 中 1 rep 有 43/172 筆 heading 為檔內不存在的捏造）。 |
+| 〔`code-locate`〕 | 回傳只收 `file:line` ＋結論，**NEVER** 在 brief 要求檔案原文或逐字引用。每一筆 `file:line` MUST 可機械複驗（`sed -n '<line>p' <file>` 命中回報的符號／token），**任一筆不中就整份作廢**重取，**NEVER** 挑命中的那幾筆用——精神同 `read-heavy-scan`。鏈走完由主線自己 Read／Grep，**NEVER** 派 `dispatch-fallback` 或 `Explore`。 |
 | 〔`dotclaude-authoring`〕 | **NEVER** 經 Pi 派工（`pi-dispatch.ts` 以 Claude-only 拒跑）；**NEVER** 以「只是改一行 settings／改幾個字」把 `.claude/` 寫入塞進 `non-ui-implementation` 的派工——拆不開就整件走本列。 |
 | 〔`code-review-opus`〕 | **NEVER** 經 Pi 派工；effort 恆 `medium`；Opus 額度耗盡 → gate 保持未完成，**NEVER** 改派其他模型、**NEVER** 主線自審補位；receipt MUST 記 requested／observed model 與 `model_verification`，`requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。 |
 

@@ -115,7 +115,7 @@ oxfmt 不會自動讀 `.oxfmtignore`（fallback 只有 `.prettierignore` / `.git
 | --- | --- |
 | 觸發條件 | 命令位置出現 prettier × 目標 repo 有 `.oxfmtignore` / `.claude/hub.json` / `package.json` 依賴 `vite-plus` → **exit 2 擋下**。逃生門 `CLADE_ALLOW_PRETTIER=1`（給「只是要在文件裡寫下這個字串」用） |
 | 消費端 | 已安裝該 Claude hook 的 Bash tool call（consumer 與 clade home）；回歸測試 `test/pre-bash-prettier-invocation-gate.test.ts`。Codex／Cursor 的原生攔截接線另行驗證，規約投影本身不代表已安裝 hook |
-| 載入路徑 | 本節 `rules/core/code-style.toolchain.md`，依 frontmatter paths 由各 runtime adapter 交付；成因與 fleet 掃描見 `docs/pitfalls/2026-08-28-banned-tool-binary-still-on-path.md` |
+| 觸發點 | 本節 `rules/core/code-style.toolchain.md`，依 frontmatter paths 由各 runtime adapter 交付；成因與 fleet 掃描見 `docs/pitfalls/2026-08-28-banned-tool-binary-still-on-path.md` |
 
 ### 禁止依賴全域 vite-plus（hard rule）
 
@@ -389,6 +389,7 @@ runner 的 `checks/vp-staged.sh` 經 `scripts/pre-commit/staged-targets.ts` 讀 
 （consumer 投影 `scripts/gate-slot.sh`），入口是 `bin/clade-gate`。
 
 **heavy job 一律經 `clade-gate run <label> -- <cmd>` 才受閘。** 光把 label 加進 `CLADE_HEAVY_GATES` 不會讓任何東西受閘。
+systemd user manager 可用、job 是 heavy 且 `agent-workloads.slice` 為 loaded 時，`gate-slot.sh` 透過 `systemd-run --user --scope --slice=agent-workloads.slice` 把 job 放進 agent slice；desk 的 `registry/dev-nodes.json` 宣告 `CPUWeight=10`、`IOWeight=10`、不設 `CPUQuota`，由 `dev-node.ts bootstrap` 產生 unit，`doctor` 同時比對 unit 檔與 live 值。zenbook 未宣告 CPU budget；`--slice=` 可隱式建立已 loaded 的 slice，因此 loaded 不代表 unit 檔存在或符合 SoT。
 
 `PreToolUse:Bash` 的防漏 hook 只攔 shell 指令位置上的重型工具直呼（例如 `pnpm exec vue-tsc`、
 整套 `vitest`）；引號和 heredoc 的文字不是命令。`pnpm check`、`pnpm test`、`vp check`
@@ -434,7 +435,7 @@ hook 對不含重型工具候選字串的 Bash 指令直接走快速路徑；需
 | --- | --- |
 | 觸發條件 | 任一 consumer 的 heavy script 已定義但未經 `clade-gate run <label>`（表格 `✗ 未受閘`），或有受閘但 guard 是裸 `if … fi`（表格 `⚠ 吃不掉參數`）→ 進該 audit 的 Warnings 段。**warn-only，不 block**：改 script 是 consumer 自治區的動作，擋 clade 自己的 publish 是錯的施力點（同 `audit-lockfile-staleness`） |
 | 消費端 | `/clade-health enforcement`（每輪跑 `node scripts/audit-gate-coverage.ts`）；findings 進 HANDOFF 稽核段並 relay 給對應 consumer 的 session |
-| 載入路徑 | 本節 `rules/core/code-style.toolchain.md`，依 frontmatter paths 由各 runtime adapter 交付 |
+| 觸發點 | 本節 `rules/core/code-style.toolchain.md`，依 frontmatter paths 由各 runtime adapter 交付 |
 
 **小範圍 lint 不要包進 heavy label**（`lint` / `format:check` 直呼工具）。
 
@@ -494,10 +495,10 @@ suite 後面，agent 於是繞過閘門直跑——那才是沒有上限的路�
 
 ### NEVER 用 slots 數量近似記憶體
 
-slot 是計數不是權重；記憶體權重靠 cgroup（`agent-workloads.slice` 與每個 session scope 的 `MemoryMax`）。要讓便宜的 heavy 併跑就**分池**（各池一把鎖），不要做成多單位計數 semaphore——檔案鎖上部分持有會死鎖。
+slot 是計數不是權重，不能當成記憶體上限。`registry/dev-nodes.json` 目前未宣告 `MemoryMax`，`dev-node.ts bootstrap` 也不會設定它；desk 的 `agent-workloads.slice` 只有 CPU／IO 權重，記憶體沒有 slice 上限（live `MemoryMax=infinity`）。若需限制記憶體，須先在 SoT 宣告，再由 bootstrap 套用、doctor 稽核。要讓便宜的 heavy 併跑就**分池**（各池一把鎖），不要做成多單位計數 semaphore——檔案鎖上部分持有會死鎖。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 取不到 slot → 排隊（`wait`）或 exit 75（`try`）。**排隊不失敗**：硬 block 會逼人加逃生口，而逃生口常設等於閘門失效 |
 | 消費端 | 每一次 `pnpm typecheck` / `test` / `build`（經 `clade-gate` 的必經點，全 fleet 已投影）；孤兒 holder 的判讀由逾時診斷輸出交給人 |
-| 載入路徑 | 本節 frontmatter paths 包含 `package.json` / `vite.config.*` / `tsconfig*.json`，接 heavy gate 的 script 就寫在那些檔裡；各 runtime adapter 交付相同義務 |
+| 觸發點 | 本節 frontmatter paths 包含 `package.json` / `vite.config.*` / `tsconfig*.json`，接 heavy gate 的 script 就寫在那些檔裡；各 runtime adapter 交付相同義務 |

@@ -148,7 +148,7 @@ Design 工作可能發現 spec 未涵蓋的問題。**每一次**發現都按下
 | --- | --- |
 | 觸發條件 | informational — **不觸發任何東西**。沒有 detector 掛在「交付人工檢查」這個事件上（commit 0-B.1 只擋 commit） |
 | 消費端 | 正要把含 UI 變更的工作交付人工檢查、或標 `work.done` 的那個 agent（本節） |
-| 載入路徑 | 本節（`rules/core/proactive-skills.design-checkpoint.md`，path-scoped 於 UI 檔與 `specs/plans/**`） |
+| 觸發點 | 本節（`rules/core/proactive-skills.design-checkpoint.md`，path-scoped 於 UI 檔與 `specs/plans/**`） |
 
 **NEVER** 把「沒有 hook 擋我」讀成這道門檻不存在——它唯一的執行者是讀到本節的那個 agent。
 

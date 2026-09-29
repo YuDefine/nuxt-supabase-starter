@@ -38,4 +38,4 @@ Claude settings 中這兩個工具 **只能**放 `deny`，**NEVER** 放 `allow` 
 | --- | --- |
 | 觸發條件 | 具名 production 來源缺必要聲明，或選定端無法完整封鎖 → 原生 MCP planner 拒絕，整批不寫入 |
 | 消費端 | 啟用／同步 MCP 的 agent 與原生 MCP CLI；依 diagnostic 修正來源或回報該產品的能力缺口 |
-| 載入路徑 | 本共同規約，經選用 runtime 的原生 rules 交付；設定轉換不取代入口的封鎖驗證 |
+| 觸發點 | 本共同規約，經選用 runtime 的原生 rules 交付；設定轉換不取代入口的封鎖驗證 |

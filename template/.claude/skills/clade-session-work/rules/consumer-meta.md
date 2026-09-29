@@ -153,7 +153,7 @@ fleet 的部署形態收斂成**三型**。新專案 **MUST** 貼齊其中一型
 | --- | --- |
 | 觸發條件 | committed `registry/consumers-meta.json` 中該 consumer entry 的 `validation.errors` 非空，或 `validation.manifest` ∈ `missing`／`repo-absent` |
 | 消費端 | `propagate.ts` 交付迴圈（扣該家交付，輸出 `meta-withheld`）；`/clade-health` live／full 經 `sync-consumer-meta.ts --check` 報告同一批狀態（exit 1） |
-| 載入路徑 | 本檔（`rules/core/consumer-meta.md`，觸碰 `registry/consumers-meta.json`／`.claude/consumer-meta.json` 時依 frontmatter `paths` 載入）＋ `scripts/lib/consumer-meta-gate.ts` 檔頭註解 |
+| 觸發點 | 本檔（`rules/core/consumer-meta.md`，觸碰 `registry/consumers-meta.json`／`.claude/consumer-meta.json` 時依 frontmatter `paths` 載入）＋ `scripts/lib/consumer-meta-gate.ts` 檔頭註解 |
 
 ## Adoption gap detection
 

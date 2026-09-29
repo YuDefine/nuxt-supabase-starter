@@ -52,6 +52,9 @@ PROMPT
     printf 'REVIEW_SUBAGENT_BRIEF_BYTES=%q\n' "$BRIEF_BYTES"
     printf 'REVIEW_SUBAGENT_REVIEWED_PATHS=%q\n' "$REVIEWED_PATHS"
     printf 'REVIEW_SUBAGENT_SEAT=%q\n' "$REVIEW_SEAT"
+    printf 'REVIEW_ROUND_LEDGER=%q\n' "${REVIEW_ROUND_LEDGER:-}"
+    printf 'REVIEW_ROUND_N=%q\n' "${REVIEW_ROUND_N:-}"
+    printf 'ROUND_PART=%q\n' "${ROUND_PART:-1/1}"
   } >"$WORK_DIR/$REVIEW_SUBAGENT_STATE"
 
   node -e '
@@ -223,6 +226,7 @@ review_subagent_finalize() {
   review_verify_integrity
   verdict_sha="$(sha256sum "$verdict_out" | cut -d' ' -f1)"
   review_subagent_write_receipt 0 "$result" "$verdict_sha"
+  review_record_round "$verdict_out"
   cat "$verdict_out"
   return 0
 }

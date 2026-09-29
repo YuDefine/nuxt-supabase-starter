@@ -1,6 +1,6 @@
 ---
 name: notion-hub
-description: "consumer 所屬 Notion hub 的唯一入口。Use when 看 board／進度、評估或認領客戶票、在 prod 發現問題要建票、建決策題問客戶拍板、或問客戶驗收了沒。NOT for 生命週期狀態同步（由 notion-sync 跟隨 flow 事件推進）、未宣告 notion.hub 的 repo、clade 內部待拍板題（走 flow ask）。"
+description: "consumer 所屬 Notion hub 的唯一入口。Use when 看 board／進度、評估或認領客戶票、在 prod 發現問題要建票、建決策題問客戶拍板、問客戶驗收了沒、或為新客戶／新專案開 hub。NOT for 生命週期狀態同步（由 notion-sync 跟隨 flow 事件推進）、未宣告 notion.hub 的 repo、clade 內部待拍板題（走 flow ask）。"
 ---
 
 <!-- clade-skill-scope: both -->
@@ -8,7 +8,7 @@ description: "consumer 所屬 Notion hub 的唯一入口。Use when 看 board／
 # notion-hub
 
 當前 consumer 所屬 Notion hub（ticket board ＋ 客戶看的 `交付項目`；hub 可省略交付項目、把進度併進 board `進度%`，見規約）的**唯一入口**。規約在
-[[notion-work-coupling]]；本 skill 只承載**人主動發起**的五個意圖。
+[[notion-work-coupling]]；本 skill 只承載**人主動發起**的六個意圖。
 
 **生命週期大半不在這裡。** `flow plan open`／`flow done` 成功後 `follow` 自動推進 ticket 狀態與
 交付項目 進度，`/commit` Step 6b 跑 `release`——**NEVER** 在本 skill 裡叫人「做完記得同步 Notion」。
@@ -22,7 +22,7 @@ description: "consumer 所屬 Notion hub 的唯一入口。Use when 看 board／
   `scripts/audit-notion-hub-schema.ts`。它們的寫入範圍、授權轉移表、schema 檢查、sidecar 都寫死在 script 裡。
 - **自由形式的 Notion 讀寫一律 `ntn api`**（查詢、讀頁／blocks、comment、建頁、PATCH 全部），recipe 見
   [reference/cookbook.md](reference/cookbook.md)。**NEVER** 用 Notion MCP（`notion-fetch`／`notion-create-pages`／
-  `notion-get-comments`…）或 WebFetch；不走 `ntn` 的只有兩處：`ntn` 不支援的 `after` 插入（cookbook § 2 直打 Notion API）與 in-app 附件原檔（cookbook § 4 token_v2 內部 API）。
+  `notion-get-comments`…）或 WebFetch；不走 `ntn` 的只有三處：`ntn` 不支援的 `after` 插入（cookbook § 2 直打 Notion API）、in-app 附件原檔（cookbook § 4 token_v2 內部 API），以及 § 6 provision 的整頁複製（Notion MCP `notion-duplicate-page`——public API 沒有 duplicate；move、改名、改 view 仍走 `ntn api`）。
   執行者走 Routing Table 〔`notion-ops`〕：Pi `--model gemini --effort high` → `grok-xai` xhigh → 鏈尾 `dispatch-fallback`（Opus 5.5 low）。**NEVER** 主線第一手自己跑
   `ntn`；**NEVER** 上 Cursor 池（`grok-cursor`；Notion auth 在 `$HOME`）。每個 `ntn api` 呼叫 MUST 帶 `< /dev/null`——stdin 沒關時 `ntn` 會等 stdin 而像卡死（cookbook 開頭）。
 - 客戶看得到的文字（ticket 名稱、決策題、comment）是定稿措辭：Pi 起草後主線 **MUST** 收斂重寫才寫入。
@@ -35,7 +35,7 @@ description: "consumer 所屬 Notion hub 的唯一入口。Use when 看 board／
    **NEVER** 憑記憶寫任何一個——不同 hub 不同字，客戶也會改。
 3. 懷疑欄位或選項被改過 → `node ~/offline/clade/scripts/audit-notion-hub-schema.ts --hub <key>`。
 
-## 五個意圖
+## 六個意圖
 
 | 意圖 | 觸發 | 做什麼 | 之後 |
 | --- | --- | --- | --- |
@@ -44,6 +44,7 @@ description: "consumer 所屬 Notion hub 的唯一入口。Use when 看 board／
 | 工程師建票 | prod 截圖／DB 發現、「這是 bug」「這要做」 | § 3：`notion-sync file` | work-route |
 | 問客戶 | 需要客戶拍板才能往下 | § 4：建決策題 ticket | 客戶回覆後回 work-route |
 | 對帳驗收 | 「客戶驗收了嗎／對一下」 | § 5：讀客戶側狀態 → `flow accept` | — |
+| 開 hub／加專案 | 新客戶、新 repo 要 Notion 票、既有客戶加專案 | § 6：複製模板或同 hub 入口頁 → 登記 registry（在 clade 做） | consumer 宣告 `notion` |
 
 ### 1. 看板（唯讀）
 
@@ -63,6 +64,12 @@ recipe 見 [reference/cookbook.md](reference/cookbook.md) § 1。依 `stageOf` �
    - **可直接做** → 使用者同意後 `flow open <slug> --origin notion:<page-id>`，緊接 `notion-sync.ts open --work <id> --ticket <page-id> --title "<客戶看得懂的一句話>"`（票 → 進行中 ＋ `Work ID`；建 交付項目 列——客戶提的 bug 與功能都建，D3）。然後交給 work-route。
    - **要客戶先拍板** → § 4。
    - **前提不成立／重複／已修** → 回報使用者，客戶側處理（封存類 NEVER 自動碰）。
+3. **coordinator 派來的票**（brief 帶 ticket page id；coordinator skill 巡檢 Rule 10）：派出就是使用者的同意，**NEVER** 再問要不要接。
+   worktree 已帶 `--origin notion:<page-id>` 開好，跳過 `flow open`。順序固定：**先**照 1 評估，**再**分流——
+   - 可直接做 → `notion-sync.ts open --work <id> --ticket <page-id> --title "<客戶看得懂的一句話>"`（**MUST** 帶 `--title`：省略時
+     交付項目 Item 會是 worktree slug 如 `notion-fc-85`，客戶看得到），一路做到 `/commit` release（票 → 驗收中）。
+   - 需求不清 → **不跑** `notion-sync open`（它會寫 `Work ID`、把票推到進行中）：`flow ask` 把題目送進使用者的 `\my` 佇列，同時照
+     § 4 在票上留補充說明並設 needs-customer——使用者與客戶兩邊都知道卡在哪，**NEVER** 猜需求先做。
 
 ### 3. 工程師建票（發現即建）
 
@@ -99,6 +106,17 @@ ticket 結構、撰寫規約、接手 prompt 六段全文在 [reference/decision
 2. 客戶側已 完成 → 對該 work item `flow accept`（`accepted_by: customer`，per [[flow-work-tracking]]）。
 3. 發版了但票還在進行中（`⚑ 疑似已修好未發版`）→ 不是本意圖的事：那代表 `/commit` Step 6b 的 `release` 沒跑，回報並補跑 `release`。
 
+### 6. 開 hub／加專案（provision）
+
+consumer 要開始用 Notion 票、而 hub 或專案還不存在時用。座標住在 clade `registry/`，所以**這件在 clade 做**：consumer session 只 relay 給 clade 主線，合入後回來在自己的 `.claude/consumer-meta.json` 宣告 `notion`（consumer-self 決策，[[notion-work-coupling]] § Consumer 採用）。沒有外部客戶會看票的 repo 不建 hub。
+
+- **新客戶或獨立 repo**（獨立 repo＝只有一個專案的 hub，同一套模型）→ 複製 clade `registry/notion-fleet.json` 的 `templates.org`：副本自帶 board／專案／里程碑、開發時程追蹤、`驗收完成` button、預設新票模板，所有 linked view 自動改指副本自己的 board。
+- **既有 hub 加專案** → 複製**同 hub** 已有的入口頁（`projects.<任一>.ticketPageId`），改篩選成新專案。**NEVER** 拿 Org 模板裡的專案頁來複製——它的 view 指回模板 board。
+- 之後：專案主檔建列 → 入口頁 Ticket view 篩 `所屬專案` → 寫 `registry/notion-hubs.json`（新 hub 或新 `projects.<CODE>`，含 `ticketPageId`）→ `audit-notion-hub-schema.ts --hub <key>` 必須 ok。
+- 模板本身 **NEVER** 直接使用、**NEVER** 填客戶資料；複製來源若是別客戶的 hub，先確認副本不帶對方資料。
+
+逐步指令見 [reference/cookbook.md](reference/cookbook.md) § 7。
+
 ## 客戶面證據（硬規則，D2）
 
 - `備註` 與票內文 **NEVER** 出現 github.com（PR／CI run／tag／merge commit）——PR 連結只進 `PR` 欄，其餘留在 flow artifacts。`notion-sync.ts` 會拒寫。
@@ -121,3 +139,4 @@ ticket 結構、撰寫規約、接手 prompt 六段全文在 [reference/decision
 - 「prod 上這個是 bug」「我發現…」「開一張票」「這個功能要做」→ § 3
 - 「建 ticket 問客戶」「問老闆 N 題」「拍板才能寫」→ § 4
 - 「客戶驗收了嗎」「對一下 board 跟 git」→ § 5
+- 「新客戶要 Notion 票」「這個 repo 也要 ticket」「幫 X 建 hub／加專案」→ § 6

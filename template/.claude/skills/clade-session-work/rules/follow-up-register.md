@@ -82,7 +82,7 @@ node vendor/scripts/flow/flow.ts plan open <slug> --title '<一句話>'
 | --- | --- |
 | 觸發條件 | informational — **不觸發任何東西**。沒有 detector 掛在「寫下 follow-up 註記」這個事件上 |
 | 消費端 | 正在 tasks 檔寫 follow-up 註記的那個 agent（本節）；`flow sources --apply` 每輪把 actionable-open 的 TD 對帳成 work 卡 |
-| 載入路徑 | 本節（`rules/core/follow-up-register.md`，paths-gated 於 `tasks/**`、`specs/plans/**`、`docs/tech-debt.md`） |
+| 觸發點 | 本節（`rules/core/follow-up-register.md`，paths-gated 於 `tasks/**`、`specs/plans/**`、`docs/tech-debt.md`） |
 
 ---
 
@@ -101,7 +101,7 @@ node vendor/scripts/flow/flow.ts plan open <slug> --title '<一句話>'
 | --- | --- |
 | 觸發條件 | `rotate-closed-bloat` rotate 的 id 在 code 裡仍有 marker → stderr warn，**不擋 rotate**；clade `audit-followup-markers.ts` 有 stale／unknown → exit 1 |
 | 消費端 | 正在關單的 agent（第 1、3 步）；clade `/clade-health enforcement`／`full`，命中 relay 給該 consumer |
-| 載入路徑 | 本節（paths-gated 於 `docs/tech-debt.md`、`specs/plans/**`）＋ [[code-style]] § 註解（paths-gated 於程式碼檔） |
+| 觸發點 | 本節（paths-gated 於 `docs/tech-debt.md`、`specs/plans/**`）＋ [[code-style]] § 註解（paths-gated 於程式碼檔） |
 
 ## Session-start Surfacing
 
@@ -111,7 +111,7 @@ node vendor/scripts/flow/flow.ts plan open <slug> --title '<一句話>'
 | --- | --- |
 | 觸發條件 | `flow status --stalled` exit 3（有停滯）時印進 session 開頭；不阻擋 SessionStart |
 | 消費端 | 當前 session 依 § 主動消化 處理一個安全小批次；commit／handoff／work-loop 收工同步清理相關項 |
-| 載入路徑 | 本規則（paths-gated）；session 開頭只注入停滯清單 |
+| 觸發點 | 本規則（paths-gated）；session 開頭只注入停滯清單 |
 
 ---
 

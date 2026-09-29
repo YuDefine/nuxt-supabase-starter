@@ -36,4 +36,4 @@ Clade 不在預設位置時使用其實際 checkout 路徑。檢查程式缺席�
 | --- | --- |
 | 觸發條件 | `session-start-cbm-index-check.sh` 在 index 落後 HEAD 或 DB 缺失 / 不可讀、dirty 或 provenance 不明時提示。**提示不 block**；已有索引且乾淨的過期 HEAD 自動背景刷新，缺索引仍由 bootstrap 或 wrapper 建立 |
 | 消費端 | 要用 `search_graph` / `trace_path` / `get_code_snippet` 的 agent（讀提示決定要不要先 index）；Claude hooks、Codex / Cursor 原生投影與 Pi extension 共用 `cbm-health.ts` |
-| 載入路徑 | 本檔由共同 rules planner 交付到所選 runtime 的 `clade-knowledge` native skill package（Claude `.claude/skills/`、Codex `.agents/skills/`、Cursor `.cursor/skills/`）；clade home 經 `.claude/rules/local/` pointer。Package 投影與 skill 實際載入分別驗證 |
+| 觸發點 | 本檔由共同 rules planner 交付到所選 runtime 的 `clade-knowledge` native skill package（Claude `.claude/skills/`、Codex `.agents/skills/`、Cursor `.cursor/skills/`）；clade home 經 `.claude/rules/local/` pointer。Package 投影與 skill 實際載入分別驗證 |

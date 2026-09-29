@@ -107,7 +107,7 @@ band 存在是為了讓「分不到號碼就退回 base port」永遠不必發�
 | --- | --- |
 | 觸發條件 | `dev_ports.worktree_band` 之間互相重疊、蓋到任一 consumer 的 base、或伸進 dev-router 的 3300–3510 → `scripts/dev-port-audit.ts` 報 `worktree-band` CONFLICT、**exit 1** |
 | 消費端 | `scripts/dev-port-audit.ts`（clade 主線改 registry 時跑）＋ `vendor/scripts/lib/worktree-dev-port.ts` 的分配器（band 是它唯一的第二個池） |
-| 載入路徑 | 本節（`rules/core/dev-port-allocation.md`，paths-gated 於 `registry/consumers.json`——加新 consumer / 改 band 正是在改那個檔） |
+| 觸發點 | 本節（`rules/core/dev-port-allocation.md`，paths-gated 於 `registry/consumers.json`——加新 consumer / 改 band 正是在改那個檔） |
 
 #### Tunnel 在 worktree 內
 

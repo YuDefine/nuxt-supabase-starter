@@ -42,7 +42,7 @@ skill 開頭依輸入分流，**不要記四個 skill 名**。
 | **C. Remote-deployed** | LXC / VM 上實際跑的版本 | ❌ | **不在本 skill**：`scripts/audit-remote-env-version-drift.ts` 出訊號，落地 relay 給該 consumer 的 session |
 
 C 軸刻意留在外面：升遠端 staging / prod 的 runtime 是 consumer 的 production 動作，clade 主線
-替它動手正是 `.claude/rules/local/clade-role-and-todo-discipline.md` § 反模式 逐字禁止的那件事。
+替它動手正是 `.claude/skills/clade-home/rules/clade-role-and-todo-discipline.md` § 反模式 逐字禁止的那件事。
 **NEVER** 因為「使用者問的是版本、本 skill 就叫 version-upgrade」把 C 軸吸進來。
 
 ## Step 0 — Mode dispatcher（最先讀）
