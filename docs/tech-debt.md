@@ -26,6 +26,8 @@
 | TD-021 | Template CI `UX drift audit` 既有紅燈：`shared/types` 沒有 enum-like 定義就 fail | mid | open | 2026-09-28 |
 | TD-022 | repo root 的 Claude session 載不到 `commit-0a-reviewer` seat | mid | open | 2026-09-28 |
 | TD-023 | Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback | low | open | 2026-09-28 |
+| TD-024 | Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict` | mid | open | 2026-09-29 |
+| TD-025 | scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅 | mid | open | 2026-09-29 |
 
 ### 2026-09-27 origin/main 收斂接手 brief
 
@@ -787,6 +789,52 @@ scaffold-only 印出的延後投影指令會指到不存在的檔案。
 ### Acceptance
 
 - 只有 `init-consumer.mjs` 的 fixture Clade 下，deferred 指令引用 `.mjs` 且測試綠。
+
+## TD-024 — Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict`
+
+**Discovered**: 2026-09-29 — clade `W-2026-09-29-work-route-evlog-map-ci-parity-runner-task-pre-p`（D3）relay
+
+### Problem
+
+`.github/workflows/template-ci.yml` 的 `evlog map coverage gate` 原本沒寫 `mode:`；action 的 `mode`
+沒有預設值，clade 修掉 `@evlog/cli` 偵測 bug（目前整道 gate 靜默 skip）後會以
+`--mode must be ratchet | strict (got: )` exit 2，pre-push 同一道 gate 也會擋。2026-09-29 本機量測
+`template/` 13 個 entry point、score 39：`ratchet` 通過、strict 不通過，所以先掛 `ratchet`。
+evlog-adoption depth-gate § Gate 規定判定走 strict，`ratchet` 只作過渡，**NEVER** 當長期狀態。
+
+### Fix approach
+
+在 `template/` 跑 `npx evlog map --all --no-write` 列出失敗 check，逐個 entry point 補 `log.set` /
+error 欄位到零失敗、零 suppression（無法插樁者也不得豁免），更新 `template/evlog.map.json` baseline，
+再把 workflow 的 `mode: ratchet` 改成 `mode: strict`（`min-score` 是 gate.ts 的 deprecated 別名，**NEVER** 寫它當終點）。
+
+### Acceptance
+
+- `template-ci.yml` 的 gate 步驟為 `mode: strict`，註解不再指向本條。
+- repo 根跑 `node template/.github/actions/evlog-map-gate/local.ts` exit 0（strict 判定）。`local.ts`／`run.sh`
+  由含 YuDefine/clade#538 的 clade 版本投影；投影到位前改以 clade 源檔
+  `vendor/actions/evlog-map-gate/run.sh` 帶 `INPUT_CWD=template INPUT_MODE=strict` 驗。
+
+## TD-025 — scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅
+
+**Discovered**: 2026-09-29 — TD-024 那次 `/commit` 的 0-C（`pnpm test`）；把 TD-024 改動 stash 掉後在 `631418e4` 上同樣重現，非該次引入
+
+### Problem
+
+`template/packages/create-nuxt-starter/test/scaffold-receipt.test.ts` 的 scaffold-only 案例穩定失敗：
+`git show HEAD:.claude/settings.local.json` → `fatal: path '.claude/settings.local.json' exists on disk, but not in 'HEAD'`。
+receipt（`src/scaffold-receipt.ts`）把磁碟上存在、但被 gitignore 擋在 initial commit 外的檔案也列進去，
+違反「committed receipt 等於 initial commit 的 blob」。PR #15 當時 3 passed，推測是之後的 clade 投影開始
+在 scaffold 期間產生該檔（未驗證）。
+
+### Fix approach
+
+先查是誰在 scaffold 期間寫出 `.claude/settings.local.json`；receipt 收錄範圍改以 initial commit 實際追蹤的檔案
+（或排除 gitignored 路徑）為準，而不是磁碟上的全部投影檔。
+
+### Acceptance
+
+- `cd template/packages/create-nuxt-starter && pnpm exec vp test run test/scaffold-receipt.test.ts` 3 passed。
 
 ## Cross-repo pointers
 
