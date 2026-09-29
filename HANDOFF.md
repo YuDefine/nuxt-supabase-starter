@@ -24,3 +24,12 @@ fleet 沒有同時具備 Cloudflare＋Sentry＋NUXT_APP_ENV 的 consumer（perno
 - 已修：私人筆記從 `template/HANDOFF.md` 移到本檔；`copyGatePlaybookPack()` 僅複製 `template/HANDOFF.md`，現在該檔與 `origin/main` 相同且指定敏感字樣無命中。TD-016 文件的五欄 probe 片段與本機 `template/temp/td016-verify/server/api/td016.get.ts` 一致，保留既有 curl 讀數；未重新部署 Worker。TD-020 表格已標記 Q160=A、PR #14 待驗證合入。
 - 本機證據：`test/scaffold.test.ts` 31/31、變更 Markdown 路徑 `pnpm exec vp check --no-lint`、`git diff --check` 通過。`npx --no-install tsc -p tsconfig.clade.json --noEmit` 因 repo 無此設定檔回 TS5058；本次僅改文件。廣範圍回歸依 PR CI 判讀，與本機結果分開。
 - 下一步與所有權：主持者對本分支最終 head 跑 PR #14 的 0-A 驗證輪、判讀 CI，再決定 PR ready／merge；`.claude/**`、`template/packages/create-nuxt-starter/src/**` 與 TD-019／TD-021 後續由主持者或另派 owner 處理。本 worker 的改檔僅本檔、`template/HANDOFF.md`、`docs/tech-debt.md`。
+
+## 2026-09-30 PR #14 rebase 與 main 既有紅燈落點（clade 端 followup brief）
+
+- 工作指針：Work `W-2026-09-28-rush68-starter-handoff`；PR #14 已 rebase 到 `origin/main` `1cf6899d`（clade v1.13.46）。衝突兩處：`.github/workflows/template-ci.yml` 保留 main 的 evlog gate `mode: ratchet`、刪 Spectra 診斷步驟；`docs/tech-debt.md` index 取 main 版（含 TD-024／TD-025）。
+- 主持者裁定在本 PR 修兩個 main 紅燈；實查兩者根因都在 clade 源檔（clade HEAD `df94fac9d` 仍在），starter 端沒有不繞過的修法，依 brief 停手：
+  1. **UX drift audit（TD-021）**：不是路徑漂移。`template/shared/types/` 存在且 config 正確，但 starter 本就沒有 enum-like 定義（`shared/schemas/` 也無 `z.enum`）。clade `vendor/scripts/audit-ux-drift.ts:1130-1133` 對零 enum 一律 `process.exit(2)`，沒有 allow-empty 出口。建議修在 clade：零 enum 時回報 skip 並 exit 0，或加 config 欄位（例如 `paths.allowEmptyTypes`）明示允許。
+  2. **scaffold-smoke placeholder scan（TD-019）**：命中全部是 clade 投影檔。clade `vendor/scripts/preservation-profiles.ts:73`（consumer 名冊列）、`vendor/scripts/wt-batch.ts:195`（consumer→repo 對照列）是真資料，要 clade 決定投影時去識別化或改由 registry 讀入；`vendor/scripts/pre-push/runner.sh:55` 與 `vendor/scripts/pre-push/checks/{nuxt-typecheck,utable-slots,mutation-loading,data-perf-check,review-rules-ratchet,native-picker-ban,nuxt-ui-mixed-slot}.sh` 各一行註解，改成 `<consumer>` 即可。starter 端加 exclude 違反 TD-019 的 NEVER。
+- 剩餘步驟：(a) clade owner 修上述兩處、發版；(b) starter 升級 clade 後重跑 PR／main 的 Template CI 與 scaffold-smoke；scan 之後的 typecheck／test:unit／test／check 四關從未在 CI 跑過，可能再露紅燈。
+- 所有權：clade `vendor/scripts/**` 歸 clade owner；starter 端本 PR 不動投影檔。
