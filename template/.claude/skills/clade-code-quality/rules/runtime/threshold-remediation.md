@@ -7,4 +7,4 @@ When the shared threshold rule requires the read-only Opus 5.5 structural review
 
 `Agent({ subagent_type: 'Plan', model: 'opus', run_in_background: false, prompt: <read-only brief> })`
 
-The brief MUST include the threshold, measured history, current remediation and measured reduction. The reviewer only returns advice and reasons; it NEVER edits files. If this transport or Opus 5.5 is unavailable, keep the remediation gate incomplete and report the concrete capability gap; NEVER substitute a banned model (Fable, Sonnet, Haiku and the rest of the shared banned list).
+The brief MUST include the threshold, measured history, current remediation and measured reduction. The reviewer only returns advice and reasons; it NEVER edits files. If this transport or Opus 5.5 is unavailable, keep the remediation gate incomplete and report the concrete capability gap; NEVER substitute a banned model (Fable, Haiku, Sonnet — Sonnet 5.5 only sits the implementation rows — and the rest of the shared banned list).

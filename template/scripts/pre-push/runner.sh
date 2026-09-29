@@ -52,7 +52,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECKS_DIR="$SCRIPT_DIR/checks"
 # PROJECT_ROOT 允許被 CLADE_PROJECT_ROOT 覆寫。meta-monorepo（app root 在子目錄，例如
-# nuxt-supabase-starter 的 template/）的 app root ≠ git toplevel，而各 check 的 auto-detect 是
+# starter 型 repo 的 template/）的 app root ≠ git toplevel，而各 check 的 auto-detect 是
 # 「找不到 nuxt.config 就 exit 0」，直接用 toplevel 會讓那幾道 check 全部靜默 no-op。
 # 未設 CLADE_PROJECT_ROOT 時行為與過去完全一致（既有 consumer 零影響）。
 #

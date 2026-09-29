@@ -81,7 +81,7 @@ cat <<WARN
 
    permission mode 是啟動 flag，本 session 改不了。MUST 主動告知 user：
    要 bypass 就結束本 session、在該 pane 改用 \`cc\`（個人）/ \`ccw\`（工作）重開。
-   GPT／Codex 工作改用 \`cx\`；\`ccx\` 已退役，不再是可重開入口。
+   \`ccg\`／\`ccx\` 已從 clade 拆除，不是可重開入口。
    刻意要非 bypass session 則忽略本則。
 WARN
 exit 0

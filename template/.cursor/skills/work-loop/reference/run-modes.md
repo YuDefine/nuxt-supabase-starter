@@ -56,7 +56,7 @@ headless 探針以顯式 `--preflight` 加 nonce **實際執行同一支 helper*
 
 preflight 與每輪 child 都經 `project-unattended.ts` 檢查專案授權、需求版本及執行持有者，再由
 `claude-account-routing.ts` 驗證官方訂閱登入與最新 quota 快照，在 `cc`／`ccw` 間選擇可用帳號。
-gateway／退役入口（`ccg`、`ccx`，或任何帶 `ANTHROPIC_BASE_URL` 的 session）會拒絕起跑；GPT／Codex 工作經 Pi dispatcher。
+帶 `ANTHROPIC_BASE_URL` 的 session（含已拆除的 gateway 入口 `ccg`／`ccx`）會拒絕起跑。
 
 第一次起跑需先開啟該專案的自動開發（`node "${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/flow/project-automation-cli.ts" <project> --on --reason '<為什麼>'`；只帶 `<project>` 印目前狀態，`--off` 會讓執行中的自動 owner 收手），並確保 consumer 已接收 flow 投影、位於
 `consumers.local`、官方帳號已登入且 ai-quota 快照仍有效。缺少前置時錯誤會指出原因；

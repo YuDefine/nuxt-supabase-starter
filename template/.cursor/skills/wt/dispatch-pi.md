@@ -1,6 +1,6 @@
 # Step 2-pi — Pi dispatch into worktree (non-UI coding)
 
-When Step 1.8 routes to Pi for coding work, use `Bash run_in_background=true` to call the canonical dispatcher; Pi `openai-codex` is the execution transport. Codex-main GPT workers may use a native agent instead; this procedure applies to the Pi branch. The worktree is the dispatcher's working directory.
+When Step 1.8 routes to Pi for coding work, use `Bash run_in_background=true` to call the canonical dispatcher; Pi seats are `gemini`／`grok-xai`／`grok-cursor` only (GPT retired 2026-09-29). Rows whose executor is native Claude (Sonnet 5.5 implementation rows, Opus 5.5 decision／planning) do not use this procedure — see the table in step 2. The worktree is the dispatcher's working directory.
 
 1. **Prepare the brief**: Write to `/tmp/wt-pi-<slug>-prompt.md` using the Write tool. The brief MUST contain all of the following sections:
 
@@ -76,24 +76,24 @@ When Step 1.8 routes to Pi for coding work, use `Bash run_in_background=true` to
    | 可觀察 predicate | model / effort | `--route` / `--tier-basis` |
    | --- | --- | --- |
    | 命中 [[agent-routing.routing-table]] 某列 | 照該列逐字（含 `grok-xai` 的列） | `routing-table` / `table-row` ＋ `--table-row <row>` |
-   | Nuxt 本體實作 | `--model sol --effort xhigh` | `routing-table` / `table-row` ＋ `--table-row nuxt-core-implementation` |
+   | Nuxt 本體實作 | Claude Sonnet 5.5（effort: high）；**不走 Pi** | `nuxt-core-implementation`；in-process `sonnet-implementer`（brief 含 `routing-row: nuxt-core-implementation`）或 Herdr `--model claude-sonnet-5-5 --effort high` |
    | UI view 實作（含 Nuxt UI／Content） | Claude Opus 5.5（effort: medium），無 fallback | `ui-view-implementation`；Claude Code 原生／Herdr 載體，不走 Pi |
    | 本次工作**原本會派 Claude subagent**（原判 sonnet／haiku 等級） | `--model grok-xai --effort xhigh` | `claude-delegate-sub` / `delegate-sub` |
-   | 非 UI implementation（含複雜 schema/API/backend 與 repair） | `--model sol --effort xhigh` | `routing-table` / `table-row` ＋ `--table-row non-ui-implementation` |
-   | 需要先做 implementation decision | `--model sol --effort xhigh --workspace-access readonly` | `routing-table` / `table-row` ＋ `--table-row implementation-decision`；只回診斷／決策 |
+   | 非 UI implementation（含複雜 schema/API/backend 與 repair） | Claude Sonnet 5.5（effort: high）；**不走 Pi** | `non-ui-implementation`；載體同上 |
+   | 需要先做 implementation decision | Claude Opus 5.5（effort: medium），唯讀；**不走 Pi** | `implementation-decision`；in-process `Plan` subagent 帶 `model: 'opus'`；只回診斷／決策 |
 
    ```bash
    node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
      --brief /tmp/wt-pi-<slug>-prompt.md \
      --cwd <worktree-absolute-path> \
      --label wt-<slug> \
-     --model <sol|gemini|grok-xai> --effort <xhigh|high> \
+     --model <gemini|grok-xai> --effort <xhigh|high> \
      --route <routing-table|claude-delegate-sub|fallback-chain|manual> \
      --tier-basis <table-row|delegate-sub|quota-fallback|manual> \
      [--table-row <routing-row>]
    ```
 
-   **effort 跟著 model 走**（`TIER_EFFORT`，不按任務複雜度分級）：`sol`／`grok-xai` 一律 `xhigh`，`gemini` 一律 `high`，其他值 dispatcher exit 1。
+   **effort 跟著 model 走**（`TIER_EFFORT`，不按任務複雜度分級）：`grok-xai` 一律 `xhigh`，`gemini` 一律 `high`，其他值 dispatcher exit 1。
 
    先判角色再照 named row；判不進任一列的工作主線自己做，**NEVER** 自挑一個 model 派出去。
 
@@ -127,7 +127,7 @@ The Pi adapter exposes a process receipt and bounded status operation. The share
 When Step 1.8 routes to analysis/debug, use `pi-dispatch.ts` with the appropriate pi-offload template. These tasks produce structured JSON evidence — typically no commits needed.
 
 1. **Classify the investigation type**:
-   - **Debug** (error/bug/crash/failure/unexpected behavior/timeout/leak/exception/500) → `debug-evidence.template.md`, row `non-ui-implementation`, GPT-6 Sol xhigh
+   - **Debug** (error/bug/crash/failure/unexpected behavior/timeout/leak/exception/500) → `debug-evidence.template.md` as brief material, row `non-ui-implementation`, Claude Sonnet 5.5 high (native carrier, not Pi; Devin only when the dispatcher names it)
    - **Analysis** (everything else: scan/audit/compare/survey/impact/coverage/why) → choose:
      - grep/command-collect/verify-matrix → can the full command list be written out **before** dispatch (no command's target depends on a prior command's output)?
        - **Yes** → run the commands yourself, redirect each output to `/tmp/`, then dispatch `fanout-analyze.template.md` with `--var evidence=...`, Gemini effort `high`

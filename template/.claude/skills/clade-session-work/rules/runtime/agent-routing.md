@@ -9,9 +9,9 @@ When the current Claude tool catalog exposes the following surfaces, use them fo
 
 ## Claude 委派的 model 檔位（決定層）
 
-先依 [[agent-routing.routing-table]] 選角色與鏈；Claude child／subagent 只可用 Opus 5.5，effort 上限 medium。commit 0-A reviewer 固定 medium；`dispatch-fallback` 固定 low。配額或 runtime 不可用時，按表列鏈尾交 `dispatch-fallback` 或主線；Opus reviewer 不可用時 commit gate 保持未完成。
+先依 [[agent-routing.routing-table]] 選角色與鏈；Claude child／subagent 用 Opus 5.5，effort 上限 medium——唯一例外是 Routing Table 標 Sonnet 的四列與 delegate-sub 的兩個接手點，用 `sonnet-implementer`（Sonnet 5.5，effort 固定 high）。commit 0-A reviewer 固定 medium；`dispatch-fallback` 固定 low。配額或 runtime 不可用時，按表列鏈尾交 `dispatch-fallback` 或主線；Opus reviewer 不可用時 commit gate 保持未完成。
 
-**NEVER** 把本節讀成「不確定時降檔比較省」。2026-09-24 起 Sonnet／Haiku 已禁用，舊的「原判 Sonnet」與「原判 Haiku」只代表歷史工作量分類，不能當派工目標；**NEVER** 用沒有來源的 per-model debit multiplier 估算節省比例。
+**NEVER** 把本節讀成「不確定時降檔比較省」。Haiku 與 Sonnet 5 以下禁用；Sonnet 5.5 只坐 Routing Table 標它的列（2026-09-29），不是通用降檔目標。舊的「原判 Sonnet」與「原判 Haiku」只代表歷史工作量分類，不能當派工目標；**NEVER** 用沒有來源的 per-model debit multiplier 估算節省比例。
 
 ### `general-purpose`／`Explore` 與 Pi 分流
 
@@ -43,4 +43,4 @@ The Claude session is the primary carrier for the common source's Claude-primary
 
 ## Claude 載體
 
-Claude Code 開 session／subagent 的寫法：短期、本 turn 收得回的 Claude 工作用 `Agent` tool（前景，`model: 'opus'`），NEVER 為了這類工作開 Herdr pane。Herdr `--launcher cc`／`ccw` `--model opus --effort medium`（上限 medium，helper 對 Opus `high` 回 `usage_error`）只留給 successor、長時間 background、必須隔離的環境，或叫不出 subagent 的 runtime。**NEVER** `ccg`／`ccx`——gateway 把 `opus` 映射成 Grok／GPT。commit 0-A reviewer：`claude-review-safe.sh prepare medium` → `Agent`（`subagent_type: commit-0a-reviewer`）→ FINALIZE；叫不出 subagent 才跑無子命令的 `claude-review-safe.sh medium`。
+Claude Code 開 session／subagent 的寫法：短期、本 turn 收得回的 Claude 工作用 `Agent` tool（前景，`model: 'opus'`），NEVER 為了這類工作開 Herdr pane。Herdr `--launcher cc`／`ccw` `--model opus --effort medium`（上限 medium，helper 對 Opus `high` 回 `usage_error`）只留給 successor、長時間 background、必須隔離的環境，或叫不出 subagent 的 runtime。Sonnet 列：in-process `sonnet-implementer`（brief 含 `routing-row: <列名>`），Herdr `--model claude-sonnet-5-5 --effort high`。gateway launcher `ccg`／`ccx` 已從 clade 拆除（2026-09-29），helper 對 `--launcher ccg|ccx` 回 `usage_error`。commit 0-A reviewer：`claude-review-safe.sh prepare medium` → `Agent`（`subagent_type: commit-0a-reviewer`）→ FINALIZE；叫不出 subagent 才跑無子命令的 `claude-review-safe.sh medium`。

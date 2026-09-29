@@ -70,7 +70,7 @@ NODE_PLAIN="env FORCE_COLOR=0 NO_COLOR=1 node"
 # ── headless child 的帳號入口 ────────────────────────────────────────────────
 # 每一個 preflight / round 都交給 claude-account-routing.ts 機械選 cc 或 ccw；
 # runner 不把兩個帳號當成一個池，也不沿用 gateway / Pi / API-key launcher。
-# 起源若是 gateway／退役入口（ccg、ccx，或任何帶 ANTHROPIC_BASE_URL 的 session），
+# 起源若帶 ANTHROPIC_BASE_URL（已拆除的 gateway 入口 ccg／ccx 或其陳舊 env），
 # 直接 fail-closed，不產生新的 child。
 #
 # NEVER 改用 `env -i`：child 需要 HOME / PATH / TERM。
@@ -95,12 +95,11 @@ CHILD_ENV=(
 )
 
 detect_origin_launcher() {
+  # 任何帶 proxy base URL 的起源、或 role model 仍是 gateway alias（`ccg-*`／`ccx-*`）的起源，
+  # 都是已拆除入口留下的 gateway seat —— 一律 fail-closed，不讓它落進下面的 cc/ccw 判定被當成訂閱槽。
   case "${ANTHROPIC_DEFAULT_OPUS_MODEL:-}:${ANTHROPIC_DEFAULT_SONNET_MODEL:-}:${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}" in
-    *ccg-*) echo ccg; return ;;
-    *ccx-*) echo ccx; return ;;
+    *ccg-*|*ccx-*) echo gateway; return ;;
   esac
-  # 任何帶 proxy base URL 的起源都是 gateway seat —— 含已移除入口留下的陳舊 env，
-  # 一律 fail-closed，不讓它落進下面的 cc/ccw 判定被當成訂閱槽。
   if [ -n "${ANTHROPIC_BASE_URL:-}" ]; then
     echo gateway
     return
@@ -115,12 +114,6 @@ detect_origin_launcher() {
 ORIGIN="$(detect_origin_launcher)"
 case "$ORIGIN" in
   cc|ccw) CHILD_BIN="claude" ;;
-  ccx)
-    printf '%s\n' \
-      'ERROR: ccx is retired; work-loop will not create a new child.' \
-      'Run GPT/Codex workers through the Pi dispatcher, or start the loop from cc/ccw when Claude Code is required.' >&2
-    exit 2
-    ;;
   *)
     printf '%s\n' \
       "ERROR: Subscription-only: unsupported Claude launcher origin $ORIGIN; use cc or ccw." \

@@ -36,6 +36,11 @@ const absentResources: ConsumerProfile['resources'] = {
 // sanitize 成 `<consumer-x>` 佔位符——只有在字串位置才仍是合法 TS（裸 object
 // key `<consumer-a>:` 會退化成 `<consumer-a>:` 語法錯誤）。object literal 的 quoted key
 // 又會被 fmt `quoteProps: 'as-needed'` 脫回裸 key，所以這裡用 entries tuple。
+//
+// 只列 profile 與 default（全 unknown）不同的 consumer：default 已由
+// preservationProfileFor 的 fallback 給出，重列一次只會把 consumer 名多寫進投影檔。
+// public starter 的投影不 sanitize 它自己的名字，scaffold 出的新專案 placeholder
+// scan 會把那一行當成未替換的 starter 名而擋下。
 const profileEntries: Array<[string, ProfileDefinition]> = [
   [
     'clade',
@@ -71,7 +76,6 @@ const profileEntries: Array<[string, ProfileDefinition]> = [
       },
     },
   ],
-  ['nuxt-supabase-starter', { topology: unknownTopology, resources: unknownResources }],
   [
     '<consumer-d>',
     {
