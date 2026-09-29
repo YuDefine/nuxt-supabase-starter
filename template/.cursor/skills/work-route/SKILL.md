@@ -161,6 +161,7 @@ transport 讀當前 runtime 的 `wt/SKILL.md`，可用 Form 3 `/wt <slug>: /<dow
 | DSL／Gherkin 與本次 delta 尚未對齊 | dsl-refine／gherkin-and-dsl 與適用 truth owner |
 | 缺 tasks 規劃，或既有規劃與確認後的 delta 不一致 | tasks 產出／更新規劃；既有 task 尚未實作不代表缺規劃 |
 | 規劃已對齊，存在已解鎖且尚未完成的 task | implement，依 task 類別承接 bdd 等 owner；完成後進驗證。2 個以上已解鎖且彼此無依賴 → 先過第 0 節 parallel-slices |
+| task 的改動含 entry point（`server/{api,routes,middleware,tasks}/`、pages、Next route handler），尚未跑 evlog map gate | 標 task done 之前跑 `node .github/actions/evlog-map-gate/local.ts`（app 根在子目錄的 repo 用該子目錄下那一支）：它照 CI workflow 的 mode／cwd 跑 CI 同一道 gate，未 commit 與 untracked 的檔也算本次觸及；CI 沒有這道 gate 時它回報跳過。紅燈照輸出逐一補插樁、重跑到綠才標 done |
 | UI task 實作完成、尚未走修改閉環 | 依 `proactive-skills.design-checkpoint` 跑閉環：Stage 1 `critique`＋`audit` → Stage 2 依 P0–P3 問題族跑專科指令、`polish` 關閉快照 → Stage 3 沉澱（`document`／`extract`／`ignore.md`），寫 `design-review.md`；三階段完成才標 task done |
 | 尚有未完成 task，但全被阻塞 | 依相依性處理前置 task／具體 blocker，不重建 tasks 或宣稱完成 |
 | tasks 完成 | 第 5 節驗證、適用 review、commit／交付流程；檢查未結工作 |
@@ -176,6 +177,8 @@ Aixbdd 決定需求、Gherkin、DSL、設計與 tasks；SpecFormula 執行已對
 對採 SpecFormula 的專案，先由 technical-research／dsl-refine／implement／bdd 等 owner 依第 2 節 § SpecFormula 契約載入點 把必要 DSL、ISA、adapter 與驗收命令接到真實被測入口，再執行該命令。步驟未定義、缺 runner 或 acceptance_command 時，由對應 owner 修復後重驗；不拿語法 parser、空 step 或永遠成功的替身充當驗收。
 
 有 UI 變更的工作交付前做沉澱檢查：本輪動到 token 來源（`app.config.ts` 的 `ui`、CSS `:root` 變數、Tailwind theme）或建立新元件慣例時，DESIGN.md 已由 `document` 更新，或 `design-review.md` 寫明「本輪無 design system 變更」；受影響畫面的每個 P0／P1 都有可核對的 polish／明確 close、重跑 critique 歸零或使用者確認的 ignore 證據。commit 0-B.1 對已採用 impeccable 的 repo 會唯讀核對；`closed: true` 或指紋不同本身不會放行。
+
+本工作動過 entry point 時，commit 與 `gh pr ready` 之前各以整份 branch diff 再跑一次 `node .github/actions/evlog-map-gate/local.ts`；push 時 pre-push 也跑同一支。三者與 CI 同一份判定，差別只在掃的是本機的樹（未 commit 的改動也會被掃到）。
 
 分別呈現「Gherkin 可解析」「步驟已綁定／readiness 通過」「實際案例通過」「人工驗收已確認」。只有對應證據存在才能宣稱該項完成；失敗回到 owner 修復，scope 變更回需求 owner。不得為變綠自行降低已確認的驗收標準。
 

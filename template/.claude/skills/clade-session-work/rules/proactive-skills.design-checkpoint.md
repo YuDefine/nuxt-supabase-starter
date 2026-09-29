@@ -59,7 +59,7 @@ paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'app/**/*.ts', 'packages/*/ap
 
 ### 新畫面與方向未定
 
-PM 確認前要給可審查的設計證據時：`shape` 釐清需求，new-work 的方向回合（impeccable 用 `serve-question` 自己開本機決策頁，**NEVER** 轉接到其他決策頁）；方向說不清就 `live`／`generate` 出變體。Nuxt UI 專案的元件選擇照 [[nuxt-ui-mcp]] § Component Candidates。
+PM 確認前要給可審查的設計證據時：`shape` 釐清需求，new-work 的方向回合（impeccable 用 `serve-question` 自己開本機決策頁，**NEVER** 轉接到其他決策頁；主機沒有 DISPLAY／WAYLAND_DISPLAY 或 impeccable 印 `no browser detected` 時改跑 `node ~/offline/clade/vendor/scripts/impeccable-tailnet-question.ts start --payload <file>`，把 `TAILNET URL` 給使用者，**NEVER** 退回結構化文字提問，用法見 impeccable cookbook § headless／遠端主機的決策頁）；方向說不清就 `live`／`generate` 出變體。Nuxt UI 專案的元件選擇照 [[nuxt-ui-mcp]] § Component Candidates。
 
 ## Design Review Task Template
 
