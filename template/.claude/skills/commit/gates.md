@@ -114,7 +114,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ## § 0-MR: 人工檢查 Gate（main / master 限定，硬擋無 override）
 
-`.claude/rules/commit.trunk-gates.md` 「人工檢查 Gate」hard rule 的執行點（`commit.md` 只有一句 pointer，判定條件的 SoT 在 `commit.trunk-gates.md`）。**MUST** 在 Step 0 品質檢查之前 fail-fast，避免人工檢查未完的工作浪費 5–15 min pi / screenshot review 時間。
+`commit.trunk-gates` rule「人工檢查 Gate」hard rule 的執行點（`commit.md` 只有一句 pointer，判定條件的 SoT 在 `commit.trunk-gates.md`）。**MUST** 在 Step 0 品質檢查之前 fail-fast，避免人工檢查未完的工作浪費 5–15 min pi / screenshot review 時間。
 
 **判定粒度是 pathspec 交集，不是 repo 級 freeze**：一件工作判 BLOCK 時，被擋的是「落在該 carrier 的那些路徑」，不是本次 `/commit` 的整個 dirty set。理由與判定式在下方 § 判定粒度。
 
@@ -166,7 +166,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
    > 來源 archive gate 與批次 commit gate 都保留；來源未驗收不進 ready，batch 審查發現驗收失效時保留整批，不以普通 main 的 SKIP 放行。
 
-4. 對每個 change 跑機械判定（「非 `## 人工檢查` 段有 `- [x]`」與「`## 人工檢查` 段有 **leaf** `- [ ]`」同時成立 → BLOCK；parent `#N` 有 scoped `#N.M` 子項時由子項 derive，leaf-only 計，見 `.claude/rules/manual-review.md` 「Parent State Derivation」段）：
+4. 對每個 change 跑機械判定（「非 `## 人工檢查` 段有 `- [x]`」與「`## 人工檢查` 段有 **leaf** `- [ ]`」同時成立 → BLOCK；parent `#N` 有 scoped `#N.M` 子項時由子項 derive，leaf-only 計，見 `manual-review` rule「Parent State Derivation」段）：
 
    ```bash
    node ~/offline/clade/vendor/scripts/commit-mr-gate.ts judge "<path>/tasks.md"
@@ -238,7 +238,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 - **NEVER** 把普通 feature branch 判進 trunk gate 範圍；helper 登記的 batch integration 明確納入，並保留 PR workflow 的外部審查
 - **NEVER** 接受 `$ARGUMENTS` 任何形式的「skip / ignore / override」旗標 — gate 無 override
-- **NEVER** 自行 `Edit` carrier 勾掉 `- [ ]` 來通過 gate — 違反 `.claude/rules/manual-review.md` 核心規則
+- **NEVER** 自行 `Edit` carrier 勾掉 `- [ ]` 來通過 gate — 違反 `manual-review` rule 核心規則
 - **NEVER** 把 carrier 檔 / plan package 目錄 stash / mv / rm 走讓 step 2 / 4 抓不到 — 等同繞過 hard rule
 - **NEVER** 為了讓 step 3 判成 SKIP 而動 worktree（不 merge-back、重開一條同名 worktree、改 branch 名）— step 3 是事實查詢，不是可操作的開關
 - **NEVER** 把 step 3 的 SKIP 讀成「這件工作的人工檢查可以不做」— 它只表示 code 還沒進 main，那些 item 一條沒少
@@ -482,7 +482,7 @@ Heavy gate 的 `exit 75` 代表 `gate-slot.sh` 等不到 slot、inner command �
 **觸發**：候選中有 UI 檔（`.vue`、`.css`／`.scss`、`.html`、`.tsx`／`.jsx`，含 untracked 新增），且該檔所屬 package／app 或其祖先目錄（含 repo 根）有 `PRODUCT.md`、`DESIGN.md` 或 `.impeccable/config.json` 任一採用標記。每個 UI 檔獨立判定；兄弟 package 的標記不算。只有副檔名命中、沒有適用標記的 UI 檔，記 `⏭️ 0-B.1 跳過（未採用 impeccable）`；不得因缺 launcher 永久擋住它。已採用但 launcher 缺失才是安裝 blocker。
 
 ```bash
-# 從 repo 根執行；worktree 的 .claude/skills 可能未版控，依序查三端投影、
+# 從 repo 根執行；worktree 的 skill 投影可能未版控，依序查三端投影、
 # linked worktree 的 common Git dir 所在主 checkout，以及安裝於 user home 的 skill。
 ROOT=$(git rev-parse --show-toplevel)
 COMMON=$(git rev-parse --path-format=absolute --git-common-dir)
@@ -648,7 +648,7 @@ vite-doctor 是 commit 品質閘門的必要組件（import graph 健康度：cy
        modules: [['vite-doctor/nuxt', doctorConfig]]
   4. 安裝完成後重跑 /commit
 
-詳見 .claude/rules/vite-doctor.md
+詳見 vite-doctor rule
 ```
 
 隨後 **MUST** 釋放 commit-lock（依 [runtime-lifecycle.md](runtime-lifecycle.md)「背景工作與退出」，帶原 tuple 與 owner token）並 STOP。**NEVER** 跳過此 gate 繼續跑後續步驟。
@@ -661,7 +661,7 @@ pnpm run doctor
 
 Doctor health score < 100 或 exit code ≠ 0 → **MUST block commit**，修復後重跑直到 health score 100/100 + 0 warnings + exit 0。**即使 warning 是既有、非本次 diff 引入**也必須修——每次 /commit 順手把既有 doctor warning 修掉，保持零警告 baseline。典型修法：移除 dead imports、修正 re-export 路徑、打斷 import cycles、套用 `readValidatedBody` 取代 raw body read。**NEVER** 以「非我引入」「既有 debt」為由跳過 doctor warning — 0-C gate 不區分新舊，一律全綠。
 
-> **oxfmt batched false-positive**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅但 single-file `vp fmt --check <path>` 通過，是 batched bug 不是 format issue — **先**跑一次 `pnpm format`（vp fmt --write）再重跑 check 通常就過。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（`.claude/rules/` / `AGENTS.md` / `CLAUDE.md` / `.clade/vendor/**`）試圖讓 oxfmt 滿意 — 那是 governance violation。clade 中央倉 release flow 已在 `scripts/publish.ts` 主流程加 stable fmt pre-stage（兩輪 `vp fmt --write` + `vp fmt --check`），consumer 端 commit 流程不需再背 workaround SOP。詳見 `docs/pitfalls/2026-05-18-oxfmt-batched-check-false-positive.md`。
+> **oxfmt batched false-positive**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅但 single-file `vp fmt --check <path>` 通過，是 batched bug 不是 format issue — **先**跑一次 `pnpm format`（vp fmt --write）再重跑 check 通常就過。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（依 runtime 的 rules 投影 / `AGENTS.md` / `CLAUDE.md` / `.clade/vendor/**`）試圖讓 oxfmt 滿意 — 那是 governance violation。clade 中央倉 release flow 已在 `scripts/publish.ts` 主流程加 stable fmt pre-stage（兩輪 `vp fmt --write` + `vp fmt --check`），consumer 端 commit 流程不需再背 workaround SOP。詳見 `docs/pitfalls/2026-05-18-oxfmt-batched-check-false-positive.md`。
 
 失敗時進入 loop：修復 → `pnpm format`（裸打 `vp fmt` 必須加 `--ignore-path .oxfmtignore`） → 重跑上述步驟 → 直到全綠。loop 的執行者依下方「fix loop 的 pi offload」規則決定（**預設背景 pi**；例外才主線直修）。
 
@@ -918,7 +918,7 @@ structured-errors、audit、error-handling 五類 check）。本次 diff 動到 
        git add evlog.map.json
   3. 安裝完成後重跑 /commit
 
-詳見 .claude/rules/evlog-adoption.md § Coverage 維度（evlog map）
+詳見 evlog-adoption rule § Coverage 維度（evlog map）
      與 ~/offline/clade/vendor/snippets/evlog-map/README.md
 ```
 

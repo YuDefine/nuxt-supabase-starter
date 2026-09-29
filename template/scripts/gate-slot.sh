@@ -488,7 +488,14 @@ if mem_scope_available; then
   if [ "$GATE_CLASS" = heavy ] && [ "$(systemctl --user show -p LoadState --value agent-workloads.slice 2>/dev/null)" = loaded ]; then
     gate_slice_args=(--slice=agent-workloads.slice)
   fi
-  exec systemd-run --user --scope -q "${gate_slice_args[@]}" \
+  # gate 底下全是批次工作。與互動 session 同權重時，滿載下 claude TUI 主執行緒喚醒延遲實測達
+  # 300ms、herdr 56ms；scope 設 idle 權重（cgroup cpu.idle）後 herdr 降到 5ms，批次仍吃得到所有閒置 CPU。
+  # systemd < 252 不認得 idle，會讓 systemd-run 整個失敗，所以先驗版本。
+  gate_cpu_args=()
+  if [ "$(systemctl --version 2>/dev/null | awk 'NR == 1 { print $2 + 0 }')" -ge 252 ] 2>/dev/null; then
+    gate_cpu_args=(-p CPUWeight=idle)
+  fi
+  exec systemd-run --user --scope -q "${gate_slice_args[@]}" "${gate_cpu_args[@]}" \
     -p MemoryHigh="$GATE_MEM_HIGH" -p MemoryMax="$GATE_MEM_MAX" -p MemorySwapMax=0 \
     "$@"
 fi

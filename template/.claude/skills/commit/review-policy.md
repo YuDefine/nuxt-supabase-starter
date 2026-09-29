@@ -35,7 +35,7 @@ UI Design Review（0-B.2）與截圖符合性 reviewer 使用 fresh Claude Opus 
 
 ## 執行與缺能力
 
-1. 依當前 catalog 與已驗證 adapter 取得實際候選，逐欄記錄判定。支援 CLI 的入口可呼叫共同 wrapper；呼叫者不因 wrapper 名含 codex 或相容路徑 `.claude/` 就改變 runtime。
+1. 依當前 catalog 與已驗證 adapter 取得實際候選，逐欄記錄判定。支援 CLI 的入口可呼叫共同 wrapper；呼叫者不因 wrapper 名含 codex 或放在其他 runtime 的相容路徑就改變 runtime。
 2. 使用該入口原生背景 handle、等待／取消及完成事件；先確保 owner 能收回結果，再並行其他軸。沒有非同步能力時可使用已授權的同步載體，保留全部 gate 與 snapshot 條件並明示並行不可用。
 3. Opus 席不可用時依 `claude-review-safe.sh` 的 RESULT 行與 exit code 判定（上節）；不可用 → gate 保持未完成並保留實跑證據。主線自審可以協助修復，不能產生缺席 reviewer 的 PASS。Cloud CI success **不能代替** 0-A。Coordinator 跑 `/commit`；reviewer 必須是獨立的 fresh-context session，身分與 coordinator 分離。receipt 記 requested／observed model、`model_verification` 與 `model_verification_reason`；`unverified` NEVER 讀成已核實——wrapper 對 `unverified` 做一次有界 verification 重讀（不重跑 review），仍非 `verified` 則 verdict 扣住、gate pending。
 

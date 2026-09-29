@@ -76,38 +76,116 @@ function readState(path: string, raw = readFileSync(path, 'utf8')): ProjectionSt
   return value as ProjectionState
 }
 
-function committedDiskHash(root: string, rel: string): { hash: string | null; reason?: string } {
+type CommittedHash = { hash: string | null; reason?: string }
+
+const PATHSPEC_CHUNK = 500
+
+/**
+ * 一次驗完整批路徑：status／ls-files／cat-file 各跑一輪，而不是每個檔三次 git。
+ * 逐檔版本在 batch cleanup 對數百個投影檔 × 多棵 worktree 時，每秒生 6 次 git status、
+ * 一跑二十分鐘（2026-09-29 desk 實測）。判定與 reason 與逐檔版本一致。
+ */
+function committedDiskHashes(root: string, rels: string[]): Map<string, CommittedHash> {
+  const result = new Map<string, CommittedHash>()
+  if (rels.length === 0) return result
   const env = Object.fromEntries(
     Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')),
   )
-  const git = (args: string[], maxBuffer = 1024 * 1024) =>
+  const git = (args: string[], input?: Buffer) =>
     execFileSync('git', args, {
       cwd: root,
       env,
-      maxBuffer,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      input,
+      maxBuffer: 1024 * 1024 * 1024,
+      stdio: ['pipe', 'pipe', 'pipe'],
     })
-  try {
-    const abs = join(root, rel)
-    if (!lstatSync(abs).isFile()) return { hash: null, reason: 'disk path is not a regular file' }
-    if (git(['status', '--porcelain=v1', '-z', '-uall', '--', `:(literal)${rel}`]).length > 0)
-      return { hash: null, reason: 'index or worktree is dirty' }
-    if (
-      !git(['ls-files', '-v', '-z', '--', `:(literal)${rel}`])
-        .subarray(0, 2)
-        .equals(Buffer.from('H '))
-    )
-      return { hash: null, reason: 'path is not a normal tracked file' }
-    const disk = readFileSync(abs)
-    const committed = git(['show', `HEAD:./${rel}`], disk.length + 1024 * 1024)
-    if (!disk.equals(committed)) return { hash: null, reason: 'disk bytes differ from HEAD' }
-    return { hash: createHash('sha256').update(disk).digest('hex') }
-  } catch (error) {
-    return {
-      hash: null,
-      reason: `could not verify HEAD and disk: ${error instanceof Error ? error.message : String(error)}`,
+  const fail = (error: unknown): CommittedHash => ({
+    hash: null,
+    reason: `could not verify HEAD and disk: ${error instanceof Error ? error.message : String(error)}`,
+  })
+  const pending: string[] = []
+  for (const rel of rels) {
+    try {
+      if (!lstatSync(join(root, rel)).isFile())
+        result.set(rel, { hash: null, reason: 'disk path is not a regular file' })
+      else pending.push(rel)
+    } catch (error) {
+      result.set(rel, fail(error))
     }
   }
+  const dirty = new Set<string>()
+  const tags = new Map<string, string>()
+  // status 的路徑相對 repo 頂層、ls-files 相對 cwd；root 不是頂層時用 prefix 對齊
+  let prefix: string
+  try {
+    prefix = git(['rev-parse', '--show-prefix']).toString('utf8').trim()
+    for (let i = 0; i < pending.length; i += PATHSPEC_CHUNK) {
+      const specs = pending.slice(i, i + PATHSPEC_CHUNK).map((rel) => `:(literal)${rel}`)
+      const status = git(['status', '--porcelain=v1', '-z', '-uall', '--', ...specs])
+        .toString('utf8')
+        .split('\0')
+      for (let j = 0; j < status.length; j++) {
+        const record = status[j]
+        if (record.length < 4) continue
+        dirty.add(record.slice(3).slice(prefix.length))
+        // rename／copy 的下一筆是原路徑，兩邊都算 dirty
+        if ('RC'.includes(record[0]) || 'RC'.includes(record[1]))
+          dirty.add((status[++j] ?? '').slice(prefix.length))
+      }
+      for (const record of git(['ls-files', '-v', '-z', '--', ...specs])
+        .toString('utf8')
+        .split('\0')) {
+        if (record.length > 2 && !tags.has(record.slice(2)))
+          tags.set(record.slice(2), record.slice(0, 2))
+      }
+    }
+  } catch (error) {
+    for (const rel of pending) result.set(rel, fail(error))
+    return result
+  }
+  const clean: string[] = []
+  for (const rel of pending) {
+    if (dirty.has(rel)) result.set(rel, { hash: null, reason: 'index or worktree is dirty' })
+    else if (tags.get(rel) !== 'H ')
+      result.set(rel, { hash: null, reason: 'path is not a normal tracked file' })
+    else clean.push(rel)
+  }
+  if (clean.length === 0) return result
+  let batch: Buffer
+  try {
+    batch = git(
+      ['cat-file', '--batch'],
+      Buffer.from(clean.map((rel) => `HEAD:${prefix}${rel}\n`).join('')),
+    )
+  } catch (error) {
+    for (const rel of clean) result.set(rel, fail(error))
+    return result
+  }
+  let offset = 0
+  for (const rel of clean) {
+    const newline = batch.indexOf(0x0a, offset)
+    const header = batch.subarray(offset, newline).toString('utf8').split(' ')
+    if (newline < 0 || header[1] !== 'blob') {
+      result.set(rel, fail(new Error(`HEAD:${rel} is ${header.at(-1) ?? 'unreadable'}`)))
+      offset = newline + 1
+      continue
+    }
+    const size = Number(header[2])
+    const committed = batch.subarray(newline + 1, newline + 1 + size)
+    offset = newline + 1 + size + 1
+    try {
+      const disk = readFileSync(join(root, rel))
+      result.set(
+        rel,
+        disk.equals(committed)
+          ? { hash: createHash('sha256').update(disk).digest('hex') }
+          : { hash: null, reason: 'disk bytes differ from HEAD' },
+      )
+    } catch (error) {
+      result.set(rel, fail(error))
+    }
+  }
+  return result
 }
 
 function existingInfo(path: string) {
@@ -218,14 +296,25 @@ export function reconcileLandedProjectionState(mainRoot: string, landedWorktree:
       const before = readFileSync(targetPath, 'utf8')
       const target = readState(targetPath, before)
       let changed = 0
+      const needsRebase = (rel: string, oldHash: string) => {
+        const landedHash = source.files[rel]
+        return !!landedHash && landedHash !== oldHash
+      }
+      const hashes = committedDiskHashes(
+        mainRoot,
+        Object.entries(target.files)
+          .filter(([rel, oldHash]) => needsRebase(rel, oldHash))
+          .filter(([rel]) => !target.sourceInputs || source.sourceInputs?.[rel])
+          .map(([rel]) => rel),
+      )
       for (const [rel, oldHash] of Object.entries(target.files)) {
         const landedHash = source.files[rel]
-        if (!landedHash || landedHash === oldHash) continue
+        if (!needsRebase(rel, oldHash)) continue
         if (target.sourceInputs && !source.sourceInputs?.[rel]) {
           skipped.push(`${name}:${rel}: landed receipt lacks required provenance`)
           continue
         }
-        const committed = committedDiskHash(mainRoot, rel)
+        const committed = hashes.get(rel)!
         if (committed.hash !== landedHash) {
           skipped.push(
             `${name}:${rel}: ${committed.reason ?? 'landed hash differs from HEAD bytes'}`,
