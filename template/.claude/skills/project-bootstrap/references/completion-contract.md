@@ -20,7 +20,7 @@
 
 ## 需求交付證據
 
-- 所選 AI targets 的指引與 package scripts 一致指向 aixbdd 入口（`/specify` → `/tasks` → `/implement`）：target 的 `.claude/skills/` 實際有該組 skill，且 `node .clade/vendor/scripts/flow/flow.ts status --json` 跑得起來；只驗 skill 目錄存在不算。
+- 所選 AI targets 的指引與 package scripts 一致指向 aixbdd 入口（`/specify` → `/tasks` → `/implement`）：每個所選 target 的 `<skills-root>` 實際有該組 skill，且 `node .clade/vendor/scripts/flow/flow.ts status --json` 跑得起來；只驗 skill 目錄存在不算。
 - 任務包含首件需求時，沿同一 source/change/work 完成 create → instructions/materialize → 依風險選的測試／BDD → evidence/project → archive，附真實 commit 與 deploy track 狀態（沒部署就明示）。
 - <consumer-e> 重建演練：驗證資料保存於 playground 外，以正式 rescaffold 路徑重建；驗一件需 BDD 的行為、一件普通測試即可的低風險行為，以及修訂造成舊證據失效、重驗後才能 archive。修正一律回 clade／starter，再用相同答案重新產生。
 

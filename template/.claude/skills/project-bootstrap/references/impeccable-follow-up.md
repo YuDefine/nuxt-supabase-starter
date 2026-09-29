@@ -19,7 +19,7 @@ UI predicate：`@nuxt/ui`、或 Nuxt 且有 `pages/`／`app/pages/`。非 UI 專
 | `impeccable-agents` | Codex／多 agent 共用路徑 | `.agents/skills/impeccable/SKILL.md` 存在（symlink mode 常只在這裡有實體） |
 | `impeccable-cursor` | Cursor 主線要讀得到 | `.cursor/skills/impeccable/SKILL.md` 存在 |
 | `impeccable-version` | 鎖定 **4.3.1**（`skill-v4.3.1`） | 每一條存在路徑的 SKILL.md frontmatter 都讀得到版本且等於 `4.3.1`——頂層 `version:` 或 `metadata:` 底下的 `version:`。**讀不到版本也算未齊**，NEVER 當成通過 |
-| `install-mode` | copy vs symlink 要跟該 repo 其餘 skill 同一慣例 | `ls -la .claude/skills/`：impeccable 與鄰居同是真實目錄或同是 symlink；對照 `vendor/snippets/impeccable/README.md` |
+| `install-mode` | copy vs symlink 要跟該 repo 其餘 skill 同一慣例 | 每個所選 target 跑 `ls -la <skills-root>`：impeccable 與鄰居同是真實目錄或同是 symlink；對照 `vendor/snippets/impeccable/README.md` |
 | `install-script` | `scripts/install-skills.sh` 必須單行、**釘 tag** `skill-v4.3.1`，禁止 v2 迴圈 | 有 `npx skills add https://github.com/pbakaus/impeccable/tree/skill-v4.3.1`（或 `IMPECCABLE_TAG="skill-v4.3.1"` 帶入同一條 URL）**且沒有**裸 `npx skills add pbakaus/impeccable`、`pbakaus/impeccable@$skill`／`for skill in … adapt animate` |
 | `install-agents` | `scripts/install-skills.sh` 的 impeccable 安裝要同時更新 `.agents/skills/`（Codex 讀的那份），寫法照 `vendor/snippets/impeccable/README.md` 標準 snippet | 每一條 impeccable `npx skills add` 的 `--agent`（含 `$VAR` 展開後）都含 `codex`；只有 `claude-code`、或靠 `cursor` 寫 `.agents/skills/` 都算未齊 |
 | `product-md` | 要有非 placeholder 的 `PRODUCT.md` | 檔存在、非 `[TODO]`、正文 ≥ 200 chars |
