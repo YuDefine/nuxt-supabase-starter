@@ -665,36 +665,29 @@ Doctor health score < 100 或 exit code ≠ 0 → **MUST block commit**，修復
 
 失敗時進入 loop：修復 → `pnpm format`（裸打 `vp fmt` 必須加 `--ignore-path .oxfmtignore`） → 重跑上述步驟 → 直到全綠。loop 的執行者依下方「fix loop 的 pi offload」規則決定（**預設背景 pi**；例外才主線直修）。
 
-**Fix loop 的 pi offload（預設派背景 pi，主線不留在 foreground 修）**：
+**Fix loop 的外派（預設派背景 worker，主線不留在 foreground 修）**：
 
-0-C 檢查發現失敗需要修補時，**預設**派背景 pi 跑 fix-verify loop，主線同回合繼續既有並行收尾（poll 軸 A、回收軸 B）— 三軸並行結構不變，軸 C 只是從「主線 foreground 修」換成「pi 背景修」：
+0-C 檢查發現失敗需要修補時，**預設**派背景 worker 跑 fix-verify loop，主線同回合繼續既有並行收尾（poll 軸 A、回收軸 B）— 三軸並行結構不變，軸 C 只是從「主線 foreground 修」換成「worker 背景修」。0-C 是 Routing Table 〔`commit-0c-fix-verify`〕列（2026-09-24 併入原 `-escalate` 列；2026-09-29 GPT 退場後改 Claude Sonnet 5.5（effort: high）），鏈尾是主線。brief 以 `~/offline/clade/vendor/snippets/pi-offload/templates/fix-verify-loop.template.md` 為素材填好（check 命令、失敗摘要／log、`max_iterations=2`）寫成檔；載體照 [[agent-routing.routing-table]] § Devin 與 [[agent-routing.dispatch-execution]] § Cloud session 載體：
+
+- 本 turn 收得回 → Claude Code 主線派 in-process `sonnet-implementer`（brief 含一行 `routing-row: commit-0c-fix-verify`）
+- 需隔離／長時間 → Herdr Claude child：
 
 ```bash
-node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
-  --template ~/offline/clade/vendor/snippets/pi-offload/templates/fix-verify-loop.template.md \
-  --var <key>=<value> ...（依 template 變數表填：check 命令、失敗摘要 / log 等） \
-  --var max_iterations=2 \
-  --label commit-0c-<slug> --model sol --effort xhigh \
-  --workspace-access mutation \
+node ~/offline/clade/vendor/scripts/herdr-session-handoff.ts \
+  --cwd <abs-worktree> --label commit-0c-<slug> --prompt-file <brief> \
+  --model claude-sonnet-5-5 --effort high \
   --route routing-table --tier-basis table-row --table-row commit-0c-fix-verify
 ```
 
-（`--route` / `--tier-basis` / `--table-row` 皆必填，缺就 exit 1。0-C 是 Routing Table
-〔`commit-0c-fix-verify`〕列（2026-09-24 併入原 `-escalate` 列），執行鏈只有 GPT-6 Sol xhigh 一跳，
-鏈尾是主線。`--var max_iterations=2` 是本列的次數上限：同一 dispatch 內最多 2 輪 check→fix，
-到上限仍紅 MUST 報 `fail` 而非 `pass`。）
+（`--route` / `--tier-basis` / `--table-row` 皆必填，缺就在建 pane 前拒絕。`max_iterations=2` 是本列的次數上限：同一 dispatch 內最多 2 輪 check→fix，到上限仍紅 MUST 報 `fail` 而非 `pass`。）
 
-**Sol 之後由主線接手（同一輪 0-C，不是新的 commit）**——命中任一即主線自己修，**NEVER** 再給 Sol 同一份 brief，
-**NEVER** 改派其他模型：
+**Sonnet 之後由主線接手（同一輪 0-C，不是新的 commit）**——命中任一即主線自己修，**NEVER** 原樣再給 Sonnet 同一份 brief，**NEVER** 改派禁用 model：
 
-1. Sol dispatch 回 `fail` / `uncertain` / exit 2（2 輪用盡或自報修不到）
-2. Sol 報 `pass` 但主線重跑 `pnpm check`（+ test / doctor）仍紅
-3. Sol exit 3／4（機械故障或配額）——dispatcher 的 `next_step` 指向主線
+1. worker 回 `fail` / `uncertain`（2 輪用盡或自報修不到）
+2. worker 報 `pass` 但主線重跑 `pnpm check`（+ test / doctor）仍紅
+3. 席位不可用（Sonnet 額度、Herdr transport 失敗）
 
-（背景跑、stdout 單一 JSON；exit 0=全綠 / 2=修不到全綠（業務 fail）/ 3=機械故障 / 4=quota。
-exit 3 → 機械故障，依 dispatcher/watch protocol 處理，**不**冒充品質失敗；
-exit 4 → 逐字採用 dispatcher payload（鏈尾＝主線），**NEVER** 當成機械故障，**NEVER** 改派禁用 model、
-Claude-hosted GPT 或 native `cx`。主線接手時帶著 Sol 留下的 remaining_failures。）
+品質失敗的升級照 [[agent-routing.routing-table]] § Sonnet 列品質失敗：主線先診斷；0-C 範圍內通常屬「小修 → 主線自己做」。Sonnet 以安全分類器拒答（`stop_reason: refusal`、Usage Policy 拒答、空產出）不是品質失敗，直接主線接手。主線接手時帶著 worker 留下的 remaining_failures。**NEVER** 改派 GPT、Claude-hosted GPT 或 native `cx`。
 
 修改範圍與前置授權持續適用；未知或活躍他人 WIP 不因修 gate 就可覆寫。
 

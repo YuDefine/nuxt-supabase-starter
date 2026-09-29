@@ -55,7 +55,8 @@
  *   node scripts/audit-ux-drift.ts --json      # machine-readable output
  *   node scripts/audit-ux-drift.ts --repo ../other  # audit another checkout (read-only)
  *
- * Exit: 0 clean · 1 drift found · 2 script error
+ * Exit: 0 clean (incl. type files that declare no enum) · 1 drift found · 2 script error
+ *       or no tracked type file under typesDirs (misconfigured paths.types)
  *
  * Suppress per-file: `// ux-drift-audit: ignore <EnumName>`
  *
@@ -268,12 +269,15 @@ function readSafe(path: string): string {
   }
 }
 
-function extractEnums(): EnumDef[] {
+function listTypeFiles(): string[] {
   const files: string[] = []
   for (const dir of config.typesDirs) {
     for (const f of gitList(dir, ['.ts'])) files.push(f)
   }
+  return files
+}
 
+function extractEnums(files: string[]): EnumDef[] {
   const enums: EnumDef[] = []
   for (const file of files) {
     const content = readSafe(file)
@@ -1019,13 +1023,16 @@ function dropSubsumed(findings: DriftFinding[], enumByName: Map<string, EnumDef>
 
 interface Report {
   enums: Array<{ name: string; values: string[]; source: string }>
+  /** Tracked `.ts` files found under typesDirs. 0 means typesDirs resolves to nothing. */
+  typeFiles: number
   scanned: number
   mode: 'full' | 'changed'
   findings: DriftFinding[]
 }
 
 function runScan(): Report {
-  const enums = extractEnums()
+  const typeFiles = listTypeFiles()
+  const enums = extractEnums(typeFiles)
   const enumByName = new Map(enums.map((e) => [e.name, e]))
   const allConsumers = collectConsumers()
 
@@ -1057,6 +1064,7 @@ function runScan(): Report {
       values: e.values,
       source: e.source,
     })),
+    typeFiles: typeFiles.length,
     scanned: consumers.length,
     mode: cli.changed ? 'changed' : 'full',
     findings,
@@ -1068,12 +1076,18 @@ function emitJson(report: Report): void {
 }
 
 function emitText(report: Report): void {
-  if (report.enums.length === 0) {
+  if (report.typeFiles === 0) {
     console.error(
-      '✗ No enum-like definitions found in configured types dirs.\n' +
+      '✗ No tracked type files found in configured types dirs.\n' +
         `  Searched: ${config.typesDirs.join(', ')}\n` +
         '  This likely means the config is missing or typesDirs points to a wrong path.\n' +
         '  Fix: create spectra-advanced.config.json with correct paths.types, or verify the default typesDirs match your project layout.',
+    )
+    return
+  }
+  if (report.enums.length === 0) {
+    console.log(
+      `✓ No enum-like definitions in ${report.typeFiles} type file(s) under ${config.typesDirs.join(', ')} — nothing to audit.`,
     )
     return
   }
@@ -1128,11 +1142,13 @@ function main(): void {
     emitText(report)
   }
 
-  if (report.enums.length === 0) {
+  if (report.typeFiles === 0) {
     // "Found nothing" ≠ "no drift" — config is broken or typesDirs is wrong.
     // Exit 2 (script error) to fail loud, not silently pass.
     process.exit(2)
   }
+  // Type files exist but declare no enum: a project with nothing to audit
+  // (a fresh starter scaffold), not a broken config.
   if (report.findings.length === 0) process.exit(0)
   process.exit(1)
 }

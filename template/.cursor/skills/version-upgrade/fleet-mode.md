@@ -236,8 +236,8 @@ Brief JSON：`/tmp/dep-fleet-brief-<pkg-slug>-<consumer-id>.json`
    - 讀 `~/offline/clade/capabilities/modules/ecosystem/node/skills/version-upgrade/outdated-mode.md`（Outdated mode 步驟）+ `~/offline/clade/capabilities/modules/ecosystem/node/skills/version-upgrade/SKILL.md` § Pi prompt templates
    - 跳過 Step O.1（target / version 由 brief 取）
    - 跑 Step O.2.1：用 § A first-pass 模板 + brief 內 BC 渲染 `<changelog-block>` + brief 內 callsites
-   - 跑 Step O.2.2：pi dispatch（`version-upgrade-first-pass`，GPT-6 Sol xhigh；model／effort 照 outdated-mode.md O.2.2 與 `TIER_EFFORT`，填其他值 dispatcher exit 1），繼承Outdated mode唯一的workspace mutation contract：首跳帶`--workspace-access mutation`，每一個fallback照dispatcher payload排除所有`*-cursor`
-   - Watch pi per [[agent-routing.pi-watch-protocol]]
+   - 跑 Step O.2.2：dispatch（`version-upgrade-first-pass`，Claude Sonnet 5.5 high；載體與處方照 outdated-mode.md O.2.2），繼承Outdated mode唯一的workspace mutation contract；研究重試經 Pi 時每一個fallback照dispatcher payload排除所有`*-cursor`
+   - 等 first-pass 回報（in-process `sonnet-implementer` 當回合收；Herdr child 照 `herdr-session-handoff` completion 收割）
    - 失敗 → 照 Step O.2.4 升 `version-upgrade-research`（Gemini 3.8 Flash high，用 § B 模板；靠研究不靠抬 effort）
    - research 也失敗 → 不要 runtime-native question interface，直接 STOP + 回報 orchestrator
 4. 跑 Step O.3 驗收並保存 scoped checkpoint（`package.json` + lockfile + callsite 改動檔）

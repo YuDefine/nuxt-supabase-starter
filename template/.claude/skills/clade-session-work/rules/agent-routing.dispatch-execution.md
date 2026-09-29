@@ -65,7 +65,7 @@ Plan mode 的契約是「不對 repo 做任何改動」。Pi dispatch 的 ledger
 
 ## 配額邊界（決策層）
 
-Pi `openai-codex`目前不提供authoritative pre-dispatch quota snapshot。Dispatcher的quota precheck固定回`available:false`並fail-open；舊`~/.codex/sessions/**/rate_limits`只代表legacy Codex CLI歷史，**NEVER**拿它阻擋或宣稱Pi現況。
+Pi 的 GPT tier（`openai-codex`）已退場（2026-09-29）；舊`~/.codex/sessions/**/rate_limits`只代表legacy Codex CLI歷史，**NEVER**拿它阻擋或宣稱Pi現況。
 
 - Pi runtime回usage／rate-limit／quota error → dispatcher exit 4，payload帶`detected:'runtime'`與可解析到的`resets_at_human`。
 - 沒有reset資訊時不得捏造window長度或時間；直接走 § 配額耗盡時的 fallback 紀律。
@@ -84,8 +84,8 @@ NEVER 憑印象選 model**——記不得鏈長什麼樣不是問題，payload �
 
 本檔只留 payload **算不出來**的判斷：
 
-- **NEVER** 派禁用 model 接手（GPT-6 Astra／Luna、Claude Fable／Sonnet／Haiku、Composer 2.5、Devin Fusion）——鏈上每一跳都在 [[agent-routing.routing-table]] 裡，表外沒有「再試一個」
-- **Sol 列的鏈尾是主線**：GPT-6 Sol 不可用時主線（Claude Opus 5.5（effort: medium））自己做；**NEVER** 把 cx 或 Claude Code＋GPT 當實作接手者。品質失敗不前進鏈：delegate-sub 的 Grok 產出不合格升一次 Sol xhigh，Sol 不合格回主線。
+- **NEVER** 派禁用 model 接手（所有 GPT（含 Astra）、Claude Fable／Haiku、Sonnet 5 以下、Composer 2.5、Devin Fusion；Sonnet 5.5 只坐表列它的位置）——鏈上每一跳都在 [[agent-routing.routing-table]] 裡，表外沒有「再試一個」
+- **Sonnet 列與 decision／planning 列的鏈尾是主線**：該 Claude 席位不可用時主線（Claude Opus 5.5（effort: medium））自己做；**NEVER** 把 cx 或任何 GPT 當接手者。品質失敗不前進鏈：delegate-sub 的 Grok 產出不合格升一次 `sonnet-implementer`（Sonnet 5.5（effort: high）），仍不合格回主線；Sonnet 列的品質失敗照 [[agent-routing.routing-table]] § Sonnet 列品質失敗 處置。
 - **NEVER** 拿 `--effort low` 重試當配額應對——配額按 **model** 記，同一個 model 撞的是同一個 limit
 - **輸出本身就是 gate 的工作，鏈的終點 NEVER 是主線自審**。判準見
   `vendor/scripts/pi-routing-policy.ts` 的 `GATE_OUTPUT_ROWS`（`code-review-opus`）——那一組與本檔 § NEVER 降檔的形狀 第一條同源，**MUST 一起改**
@@ -117,9 +117,9 @@ MUST 先讀那一節**，本 pointer 不複述。
    **Cursor 池的核實邊界（TD-520）**：`*-cursor` model 的 dispatch，pi 事件流只回放 builtin 七種工具（read/bash/edit/write/grep/find/ls）∩ pi active tools 的原生執行；**非 builtin 的原生工具（WebFetch、Delete、Cursor 端 Subagent 再派、MCP 呼叫）任何 profile 下都不產 tool_execution 事件**。`git status` / `git diff` 的核實**只覆蓋 worktree 內**——worktree 外副作用（`/tmp`、`$HOME`、網路）**查不到也稽核不了**。因此：會處理 secrets / prod 憑證、或 brief 明定「不得外連」的任務 **NEVER** 走 cursor 池；其餘任務走 cursor 池時，主線 NEVER 把「worktree 核實通過 + events log 乾淨」講成「無 scope 外副作用」——cursor 池的 events log 是單向證據，有痕可信、無痕不表示沒發生。
 3. **File handoffs**：brief／report／diff 超過 ~30 行的內容走**檔案路徑**傳遞，不貼進 dispatch prompt 或回報訊息——貼文會常駐主線 context、每 turn 重讀。dispatch prompt 五要素：定位一行、brief 檔路徑、跨 task interfaces、歧義裁決、report 檔路徑＋回報契約（單一事件實錄見 rationale）。
 4. **Model 與 effort 顯式指定**：**每一個** dispatch 都 MUST 把 model 與 effort 當成兩個獨立決策，不靠靜默繼承——省略 = 繼承主線（通常最貴檔 × 最深推理），機械掃描型 subagent 拿主線的 xhigh 跑就是效能過剩。選檔預設，依序判：
-   - **先過 Routing Table**：非 UI 工作命中 [[agent-routing.routing-table]] § 工作類別對照 已 route 給 Pi 的類別 → 依該列的 model / effort 派工（`mechanical-fanout`、`read-heavy-scan`、`notion-ops` 首跳 `gemini high`），**NEVER** 用 Claude subagent 接。唯讀**定位**搜尋（找檔／找符號／回 `file:line` ＋結論，不回檔案原文）走 `code-locate` 列，**NEVER** 派 `Explore` subagent——gate 在任何 model、任何 mode 都攔它，並印出可照跑的 `--table-row code-locate` 指令。其餘 Claude subagent 只留給 Claude 例外（需 claude.ai-connected 的非 Notion MCP——Notion 一律 `ntn api`，NEVER 走此例外——、判讀／治理型分析、user 明確指定）。Devin SWE-2 Max（effort: max）是任意 Pi 列的可選載體，只限不急、緩慢也不堵塞的任務；各載體怎麼混搭見本檔 § Cloud session 載體
-   - **UI 實作**：Nuxt 本體用 GPT-6 Sol xhigh，UI view（含 Nuxt UI／Content）用 Opus 5.5（effort: medium），依 [[agent-routing]] § Runtime residency and native transport 的角色與工具判定；**NEVER** 用機械掃描／一般 native delegation 檔位承接 UI phase。原 session 保持 change-level orchestration。
-   - **effort 選檔**：effort 跟著 model 走（`TIER_EFFORT`）——GPT-6 Sol 與 Grok 4.7 一律 `xhigh`，Gemini 3.8 Flash 一律 `high`，Claude Opus 5.5 預設 `medium`（鏈尾 `dispatch-fallback` 為 `low`，由 frontmatter 固定）；同一問題已在 `medium` 失敗一次或修法只修到一層、且有可跑的檢查時，才可 `--tier-basis stall-escalation --retry-of <label>` 開 `high`（只限 Claude launcher，見 [[agent-routing.routing-table]]），`max` 永不開；dispatcher 對不符的 effort exit 1。**帶得了 effort 參數的入口**（pi `--effort` / `-c model_reasoning_effort`、Workflow `agent()` 的 `effort`、具名 agent type 的 frontmatter）**MUST** 顯式帶；native delegation 的 model／effort 欄位以本次 tool schema 為準。schema 有可用欄位時依已選檔位填入；schema 不提供欄位時記錄實際繼承限制，不能宣稱已指定。各 runtime 的欄位與繼承條件見 target adapter
+   - **先過 Routing Table**：非 UI 工作命中 [[agent-routing.routing-table]] § 工作類別對照 已 route 給 Pi 的類別 → 依該列的 model / effort 派工（`mechanical-fanout`、`read-heavy-scan`、`notion-ops` 首跳 `gemini high`），**NEVER** 用 Claude subagent 接 Pi 列（Routing Table 本身列明 native Claude 的列——Sonnet 四列走 `sonnet-implementer`、decision／planning 走 Opus——不在此限）。唯讀**定位**搜尋（找檔／找符號／回 `file:line` ＋結論，不回檔案原文）走 `code-locate` 列，**NEVER** 派 `Explore` subagent——gate 在任何 model、任何 mode 都攔它，並印出可照跑的 `--table-row code-locate` 指令。其餘 Claude subagent 只留給 Claude 例外（需 claude.ai-connected 的非 Notion MCP——Notion 一律 `ntn api`，NEVER 走此例外——、判讀／治理型分析、user 明確指定）。Devin SWE-2 Max（effort: max）是任意 Pi 列與 Sonnet／decision／planning 六列的可選載體（不預設；Sonnet 四列預設 Claude Sonnet 5.5（effort: high）），只限不急、緩慢也不堵塞的任務；各載體怎麼混搭見本檔 § Cloud session 載體
+   - **UI 實作**：Nuxt 本體用 Claude Sonnet 5.5（effort: high），UI view（含 Nuxt UI／Content）用 Opus 5.5（effort: medium），依 [[agent-routing]] § Runtime residency and native transport 的角色與工具判定；**NEVER** 用機械掃描／一般 native delegation 檔位承接 UI phase。原 session 保持 change-level orchestration。
+   - **effort 選檔**：effort 跟著 model 走（`TIER_EFFORT`）——Grok 4.7 一律 `xhigh`，Gemini 3.8 Flash 一律 `high`，Claude Sonnet 5.5 一律 `high`，Claude Opus 5.5 預設 `medium`（鏈尾 `dispatch-fallback` 為 `low`，由 frontmatter 固定）；同一問題已在 `medium` 失敗一次或修法只修到一層、且有可跑的檢查時，才可 `--tier-basis stall-escalation --retry-of <label>` 開 `high`（只限 Claude launcher，見 [[agent-routing.routing-table]]），`max` 永不開；dispatcher 對不符的 effort exit 1。**帶得了 effort 參數的入口**（pi `--effort` / `-c model_reasoning_effort`、Workflow `agent()` 的 `effort`、具名 agent type 的 frontmatter）**MUST** 顯式帶；native delegation 的 model／effort 欄位以本次 tool schema 為準。schema 有可用欄位時依已選檔位填入；schema 不提供欄位時記錄實際繼承限制，不能宣稱已指定。各 runtime 的欄位與繼承條件見 target adapter
    - model 選檔原則「**turn count beats token price**」：brief 內含完整 code 的純轉錄型工作才用最低檔；review 型依 diff 的大小／風險選檔（為什麼見 rationale）。
 5. **中間產物不進主線**：外派出去的 task，主線只讀對方寫回的 report 檔，**NEVER** 為了「確認它做對」把該 task 碰過的原始檔重讀一遍——那把省下來的 context 原封不動加回來，而且重讀的是同一批事實，換不到新判斷。第 2 條的 scope verify 照舊 MUST 跑：看**改了哪些檔**（`git status --short` / `git diff --stat`）跟重讀檔案內容是兩件事。
 
@@ -132,8 +132,8 @@ Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工�
 | 載體 | 省什麼 | 負載落在哪 |
 | --- | --- | --- |
 | cloud session | 開發機 CPU（唯一真正卸掉本機負載的載體） | Anthropic VM；吃派出帳號（cc／ccw）的 cloud session 專用 credit，不佔 Claude 訂閱額度（D6） |
-| Devin `swe-2-max` | Claude／GPT 額度（免費） | 派出的那台開發機：工具指令在本機跑 |
-| Pi（GPT-6 Sol、Grok 4.7、Gemini Flash） | 不省 | 派出的那台開發機 |
+| Devin `swe-2-max` | Claude 額度（免費） | 派出的那台開發機：工具指令在本機跑 |
+| Pi（Grok 4.7、Gemini Flash） | 不省 | 派出的那台開發機 |
 
 **每輪就緒工作一次平行混搭派完**，逐件照下表由上往下判（第一列先攔下短任務），不排「先 A 用完才輪 B」的序：
 
@@ -143,9 +143,8 @@ Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工�
 | Claude-only 列（`ui-view-implementation`、`design-review`、`ui-detailed-planning`、`screenshot-match-analysis`），符合下方「適合 cloud」且該帳號 cloud admission 放行（在飛未滿、無 credit 用盡標記） | **cloud**（預設） |
 | Claude-only 列（含 `dotclaude-authoring`），急件或不符合 cloud 條件，且屬 handoff 級／長時間／需隔離環境（commit 0-A 另見下方） | 本機 `cc`／`ccw` Herdr pane |
 | `--tier-basis delegate-sub` | 經 `pi-dispatch.ts` admission，Grok 4.7 xhigh（照 [[agent-routing.routing-table]] § delegate-sub） |
-| Routing Table 首跳是 Gemini／Grok 的任何 Pi 列 | 經 `pi-dispatch.ts` admission，照原列的 model、effort、pool 與 fallback 鏈派送；不得改派 Devin 或 `cx` pane 跳過首跳 |
-| 其他 Pi 列，不急、慢也不堵塞 | Devin `swe-2-max`（desk，或已 `devin auth status` 登入的 zenbook） |
-| 其他 Pi 列，急件或會堵塞下游 | `cx` pane GPT-6 Sol xhigh，派到負載較低的那台（見 [[agent-routing.routing-table]]） |
+| Routing Table 首跳是 Gemini／Grok 的任何 Pi 列 | 經 `pi-dispatch.ts` admission，照原列的 model、effort、pool 與 fallback 鏈派送；不得改派 Devin 或其他 pane 跳過首跳 |
+| Sonnet 四列（`non-ui-implementation`／`nuxt-core-implementation`／`commit-0c-fix-verify`／`version-upgrade-first-pass`） | 預設 Claude Sonnet 5.5（effort: high）（Charles 2026-09-29 14:1xZ：不預設派 Devin）：本 turn 收得回的走 in-process `sonnet-implementer`；handoff 級／長時間走本機 `cc`／`ccw` Herdr pane `--model claude-sonnet-5-5 --effort high`；**NEVER** cloud；Devin `swe-2-max` 只在派工方明確指定且不急、慢也不堵塞時可選（desk，或已 `devin auth status` 登入的 zenbook） |
 | commit 0-A | **NEVER** cloud：0-A 只認 `claude-review-safe.sh` 的 subagent carrier |
 
 **適合 cloud** 要硬條件全中、工作形狀也對：

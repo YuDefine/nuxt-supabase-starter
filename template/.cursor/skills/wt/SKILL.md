@@ -191,7 +191,7 @@ Classify the work using the shared routing table, then select its supported tran
 **Auto-classification** (check in order, first match wins):
 
 1. **UI or Nuxt implementation** → select the matching shared table row by the work being implemented:
-   - Nuxt framework, modules and runtime logic → `nuxt-core-implementation`: GPT-6 Sol xhigh via the GPT transport for the current runtime.
+   - Nuxt framework, modules and runtime logic → `nuxt-core-implementation`: Claude Sonnet 5.5（effort: high） via the `sonnet-implementer` subagent or a Herdr Claude child (Devin SWE-2 Max only when the dispatcher names it; never the default); GPT is retired (2026-09-29).
    - UI views, including Nuxt UI component assembly／Nuxt Content → `ui-view-implementation`: Claude Opus 5.5（effort: medium） via native Claude Code／Herdr; no fallback.
    - A main line that meets the selected row’s model and tool requirements implements directly. Otherwise use the bounded phase transport in [[agent-routing]]; preserve the worktree and work identity.
    - Design review, UI planning and screenshot work use their own named rows. File extensions and UI keywords help locate the work but do not select its model.
