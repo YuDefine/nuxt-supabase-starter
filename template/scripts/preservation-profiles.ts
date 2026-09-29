@@ -129,8 +129,30 @@ const profileEntries: Array<[string, ProfileDefinition]> = [
   [
     '<consumer-h>',
     {
-      topology: unknownTopology,
-      resources: { ...unknownResources, databases: 'declared-present' },
+      // Evidence 2026-09-29 (main + 18 linked worktrees, 1.41M entries on ext4): three trees
+      // carry Pi clones under `.pi/git/**/.git`; no gitlink or .gitmodules, no
+      // objects/info/alternates, no `filter=lfs` (only the host-wide /etc/gitconfig filter);
+      // 76k symlinks all resolve inside their tree; 0 special files; no posix ACL xattr; seven
+      // Samba `user.DOSATTRIB` xattrs, one inside the common .git (spectra-app/.migrated).
+      // Real `.env` secrets and a worktree's local Supabase volumes and containers exist.
+      topology: {
+        nestedRepositories: 'declared-present',
+        submodules: 'verified-absent',
+        sharedGitObjects: 'verified-absent',
+        lfs: 'verified-absent',
+      },
+      resources: {
+        databases: 'declared-present',
+        volumes: 'declared-present',
+        sidecars: 'declared-present',
+        secrets: 'declared-present',
+      },
+      filesystem: {
+        externalSymlinks: 'verified-absent',
+        specialFiles: 'verified-absent',
+        acl: 'verified-absent',
+        xattr: 'declared-present',
+      },
     },
   ],
   [

@@ -472,6 +472,7 @@ import {
   devPortCapacity as devPortCapacityOf,
   devPortStateDir,
   pickDevPortOffset as pickDevPortOffsetIn,
+  planWorktreeDevPorts,
   readWorktreeDevPorts,
   type WorktreePortBand,
 } from './lib/worktree-dev-port.ts'
@@ -3662,7 +3663,7 @@ async function cmdPrune() {
  * worktree directory — that's a separate cleanup step. Live holders are left
  * alone; unknown holders are reported but not touched.
  */
-async function cmdReclaimStale() {
+async function cmdReclaimStale({ dryRun = false } = {}) {
   const consumerRoot = findConsumerRoot()
   const declared = readDeclaredDevPorts(consumerRoot)
   if (declared.length === 0) {
@@ -3681,29 +3682,31 @@ async function cmdReclaimStale() {
 
   let freed = 0
   const unknown = []
+  // `--dry-run` 是全域認得的旗標，TD-1142 的未知旗標檢查不會擋它；這裡不接的話它被靜默吞掉、照樣 unlink。
+  const release = (h, why) => {
+    const recPath = join(devPortStateDir(consumerRoot), `${h.slug}.json`)
+    if (dryRun) {
+      console.log(`  would free +${h.offset}  ${h.slug}  (${why})`)
+      freed++
+      return
+    }
+    try {
+      unlinkSync(recPath)
+      console.log(`  freed +${h.offset}  ${h.slug}  (${why})`)
+      freed++
+    } catch {}
+  }
   for (const h of holders) {
     const w = wtBySlug.get(h.slug)
     if (!w) {
       // Holder has no matching worktree entry (orphan record) — reclaim
-      const recPath = join(devPortStateDir(consumerRoot), `${h.slug}.json`)
-      try {
-        unlinkSync(recPath)
-        console.log(`  freed +${h.offset}  ${h.slug}  (orphan — no matching worktree)`)
-        freed++
-      } catch {}
+      release(h, 'orphan — no matching worktree')
       continue
     }
 
     const enriched = enrichWorktree(consumerRoot, w)
     if (enriched.staleness === 'stale') {
-      const recPath = join(devPortStateDir(consumerRoot), `${h.slug}.json`)
-      try {
-        unlinkSync(recPath)
-        console.log(
-          `  freed +${h.offset}  ${h.slug}  (${enriched.mergedToMain ? 'merged' : `status: ${enriched.briefStatus}`})`,
-        )
-        freed++
-      } catch {}
+      release(h, enriched.mergedToMain ? 'merged' : `status: ${enriched.briefStatus}`)
     } else if (enriched.staleness === 'live') {
       // Active session — do not touch
     } else {
@@ -3722,7 +3725,11 @@ async function cmdReclaimStale() {
 
   const capacity = devPortCapacity(declared, readWorktreeBand(consumerRoot))
   const remaining = holders.length - freed
-  console.log(`\nReclaimed ${freed} slot(s). ${remaining}/${capacity} still held.`)
+  console.log(
+    dryRun
+      ? `\nDry run: would reclaim ${freed} slot(s); nothing released. ${holders.length}/${capacity} held.`
+      : `\nReclaimed ${freed} slot(s). ${remaining}/${capacity} still held.`,
+  )
 }
 
 // Unmerged XY status codes from `git status --porcelain` (per git-status(1)
@@ -4446,9 +4453,18 @@ async function cmdDev(alias, opts: WtOptions = {}) {
   }
 
   // Worktrees created before TD-434 have no record; allocate on first use so
-  // they are not stranded on the shared port.
+  // they are not stranded on the shared port. `--dry-run` 只算不寫：預覽不能佔掉一格，
+  // 但分配不到時要報出跟實跑一樣的錯誤。
   const record =
-    readWorktreeDevPorts(consumerRoot, repoTop) ?? allocateWorktreeDevPorts(consumerRoot, repoTop)
+    readWorktreeDevPorts(consumerRoot, repoTop) ??
+    (opts.dryRun
+      ? planWorktreeDevPorts(
+          consumerRoot,
+          repoTop,
+          readDeclaredDevPorts(consumerRoot),
+          readWorktreeBand(consumerRoot),
+        )
+      : allocateWorktreeDevPorts(consumerRoot, repoTop))
   if (!record) {
     throw new Error(
       readDeclaredDevPorts(consumerRoot).length === 0
@@ -7620,7 +7636,7 @@ function printUsage(log = console.error) {
     '  list [--json] [--no-landed-state]  Enumerate session worktrees with staleness + landedState',
   )
   log('  prune                     Interactively remove merged session worktrees')
-  log('  reclaim-stale             Free dev-port slots held by stale worktrees')
+  log('  reclaim-stale [--dry-run] Free dev-port slots held by stale worktrees')
   log('  cleanup <slug>            Remove worktree (gated by --force +')
   log('                            --force-discard-unland; pre-checks both)')
   log('    --superseded-by <commit|file=commit|file=path>[,…] --reason <text>')
@@ -7731,6 +7747,31 @@ const BATCH_BOOLEAN_FLAGS = new Set([
   '--no-cleanup',
 ])
 
+// main() 的 switch 認得的子指令；不在這裡的（含缺漏）照舊落到 usage／exit 1。
+const SUBCOMMANDS = new Set([
+  'add',
+  'detect-main-dirty',
+  'list',
+  'prune',
+  'reclaim-stale',
+  'cleanup',
+  'merge-back',
+  'resolve',
+  'land-pending',
+  'rescue',
+  'orphan-prune',
+  'sweep-siblings',
+  'dev',
+])
+// 會讀 `opts.dryRun` 的子指令；新增子指令支援 `--dry-run` 時 MUST 同步加進來，否則會被 main() 拒絕。
+const DRY_RUN_SUBCOMMANDS = new Set([
+  'cleanup',
+  'merge-back',
+  'land-pending',
+  'dev',
+  'reclaim-stale',
+])
+
 async function main() {
   const [, , sub, ...rawRest] = process.argv
   const options: FlagOptions = Object.fromEntries([
@@ -7826,6 +7867,12 @@ async function main() {
     printUsage()
     process.exit(2)
   }
+  // 全域白名單只證明旗標「某個子指令認得」，不證明這個子指令會讀它。其他旗標被忽略是往安全的方向偏，
+  // `--dry-run` 被忽略則是把預覽變成實跑（reclaim-stale、sweep-siblings 都踩得到），所以只放行真的讀它的子指令。
+  if (flags.has('--dry-run') && SUBCOMMANDS.has(sub) && !DRY_RUN_SUBCOMMANDS.has(sub)) {
+    console.error(`error: \`${sub ?? ''}\` does not support --dry-run（未執行任何動作）`)
+    process.exit(2)
+  }
   const opts = {
     json: flags.has('--json'),
     noLandedState: flags.has('--no-landed-state'),
@@ -7876,7 +7923,7 @@ async function main() {
       await cmdPrune()
       return
     case 'reclaim-stale':
-      await cmdReclaimStale()
+      await cmdReclaimStale({ dryRun: opts.dryRun })
       return
     case 'cleanup':
       await cmdCleanup(positional[0], opts)

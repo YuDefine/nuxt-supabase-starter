@@ -207,7 +207,8 @@ export function readWorktreeDevPorts(
 }
 
 /** 分配並落檔。宣告不出 port、或兩池都滿 → null。 */
-export function allocateWorktreeDevPorts(
+/** 算出 allocate 會給的登記但不落盤——`wt-helper dev --dry-run` 用它預覽，不佔格。 */
+export function planWorktreeDevPorts(
   consumerRoot: string,
   wtPath: string,
   declared: readonly DeclaredDevPort[],
@@ -216,13 +217,23 @@ export function allocateWorktreeDevPorts(
   if (declared.length === 0) return null
   const offset = allocateDevPortOffset(declared, siblingDevPortOffsets(consumerRoot, wtPath), band)
   if (offset === null) return null
-  const record: WorktreeDevPortRecord = {
+  return {
     offset,
     base: declared[0].port,
     wtPath: resolve(wtPath),
     ports: declared.map((d) => ({ alias: d.alias, port: d.port + offset, mainPort: d.port })),
     pool: offset <= DEV_PORT_BAND ? 'base' : 'band',
   }
+}
+
+export function allocateWorktreeDevPorts(
+  consumerRoot: string,
+  wtPath: string,
+  declared: readonly DeclaredDevPort[],
+  band: WorktreePortBand | null = null,
+): WorktreeDevPortRecord | null {
+  const record = planWorktreeDevPorts(consumerRoot, wtPath, declared, band)
+  if (!record) return null
   const dir = devPortStateDir(consumerRoot)
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, `${basename(wtPath)}.json`), `${JSON.stringify(record, null, 2)}\n`)
