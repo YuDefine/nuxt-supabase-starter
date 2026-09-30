@@ -49,7 +49,9 @@ export function buildScaffoldReceipt(targetDir: string): ScaffoldReceipt {
     const abs = join(targetDir, dir)
     if (existsSync(abs) && lstatSync(abs).isDirectory()) walk(dir)
   }
-  const sorted = Object.fromEntries(Object.entries(files).sort(([a], [b]) => a.localeCompare(b)))
+  const entries = Object.entries(files)
+  entries.sort(([a], [b]) => a.localeCompare(b))
+  const sorted = Object.fromEntries(entries)
   return { schemaVersion: 1, producer: SCAFFOLD_RECEIPT_PRODUCER, files: sorted }
 }
 

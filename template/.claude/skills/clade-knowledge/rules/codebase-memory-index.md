@@ -7,7 +7,8 @@
 **也 NEVER** 為了「只跑一次、很快」而繞過它——wrapper 提供以下控制：
 
 - `flock -n`：每個 repo 同時只有一個 index。去抖語義是「有人在跑就放棄」，不是排隊
-- user systemd 可用時，以 `MemoryMax` / `CPUQuota` 限制本次 CLI 與其子行程。CLI 若把工作交給既有 daemon，該 daemon 不在這個 cgroup；沒有 user systemd 時亦沒有此限制
+- user systemd 可用時，以 `MemoryMax` / `CPUQuota` 限制本次 CLI 與其子行程；`agent-workloads.slice` 已載入時指定該 slice。CLI 若把工作交給既有 daemon，該 daemon 不在這個 cgroup；沒有 user systemd 時亦沒有此限制
+- 跳過測試沙盒中的 throwaway repo：XDG 與預設 HOME cache 下的 `clade/tmp/clade-test-*-run-*` 先解析實體路徑，涵蓋 symlink HOME
 - 索引 receipt 保存開始與結束的 HEAD、dirty 狀態、CLI 結果及原始輸出證據；進行中或不明回應不算成功
 
 **NEVER 把 `auto_index` / `auto_watch` 設回 true。** 它們是 per-instance 生效，而每個
@@ -19,3 +20,5 @@ instance 各自 rebuild，形成自我維持的迴圈。
 產出的是 `.db.corrupt`，不是新鮮的 index。
 
 **兩支已接通的 hook 覆蓋什麼、hook 未接通時的自跑程序、以及 REQUIRED 欄位，在 [[codebase-memory-index.freshness]]**（path-scoped：碰 `.mcp.json` / `cbm-index.sh` / `cbm-health.ts` / 兩支 cbm hook 時載入）。沒有自動檢查證據時 **NEVER** 把缺少自動觸發當成 index 新鮮，**也 NEVER** 啟用 `auto_index`／`auto_watch` 補洞。
+
+clade 的 `pnpm check` 與 CI 同步執行 `node scripts/audit-cbm-index-entry.ts`，預設只掃 tracked source；本機用 `--include-untracked` 明示納入新檔。稽核辨識跨行工具名稱、常數與靜態字串組合。具名例外限定原行且每檔只准一次：wrapper 核心呼叫、oracle 手動 `--reindex`、稽核詞彙宣告與 wrapper argv 的負向測試斷言。註解、fixture 原文及診斷文字不算工具呼叫；讀檔失敗回報 infrastructure error 與未完成 scope。

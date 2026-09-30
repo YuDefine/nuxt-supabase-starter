@@ -1,4 +1,3 @@
-// 🔒 LOCKED — managed by clade · Source: vendor/oxc-shared/preset.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/oxc-shared/preset.ts
 // vendor/oxc-shared/preset.ts — clade-governed oxlint + oxfmt baseline preset
 //
 // Single source of truth for `vite.config.ts` lint/fmt rules across:
@@ -66,6 +65,9 @@
 //   (trailingComma 'es5' vs 'all', missing categories/plugins on <consumer-d>, etc.).
 //   This preset turns the rule into an importable artifact; changing the
 //   baseline = edit this file in clade + propagate.
+
+import { closeSync, existsSync, openSync, readdirSync, readSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 /**
  * clade-projected paths. In a consumer these are LOCKED copies (chmod 444)
@@ -322,6 +324,73 @@ export function isProjectionPath(file: string): boolean {
 export const STAGED_ONLY_EXCLUDES = ['scripts/**', 'AGENTS.md']
 
 /**
+ * consumer `scripts/` 底下由 clade 投影的 LOCKED 檔（TD-1133），給 `fmtBase.ignorePatterns` 用。
+ *
+ * 投影落在 consumer 自家的 `scripts/`，被 consumer **自己那一版** oxfmt 檢查。oxfmt 跨版本
+ * 對同一段源碼的要求互斥（空 `for` 條件：vite-plus 0.2 要 `; ; )`、1.0 rc 要 `; ;)`），
+ * 所以 fleet 裡 vite-plus 版本不同的 consumer 永遠至少一邊紅；re-propagate 只能修好一邊。
+ * 投影的格式由 clade 自己的 fmt 負責，consumer 端檢查它沒有能修的人。
+ *
+ * 判定用投影時注入的 banner（`scripts/lib/vendor-banner.ts` 的 `VENDOR_BANNER_SIGNATURE`），
+ * 只看前兩行（shebang 之後那行）——consumer 端能判出「哪幾支是投影」的唯一 tracked 證據，
+ * CI 的乾淨 checkout 也看得到。NEVER 改成整個 `scripts/**`：那會讓 consumer 自家 script
+ * 從整倉 fmt 消失（`STAGED_ONLY_EXCLUDES` 註解的同一個理由）。
+ *
+ * 前提：banner 一定在前兩行。`vendor-banner.ts` 的 `projectedContent` 在源檔內文**任何位置**已含
+ * signature 時不注入 banner（冪等規則）——這種源檔若日後投影到 consumer `scripts/`，這裡排除不到。
+ * 目前這類檔（`rule-eco-test.ts`、`worktree-db/*.mjs`）都投到 `vendor/`，已由 PROJECTION_EXCLUDES 覆蓋。
+ *
+ * root 由本檔位置推（clade 與 consumer 都在 `<root>/vendor/oxc-shared/`），不靠 cwd。
+ * clade 自己的 `scripts/` 是源碼、沒有 banner → 空陣列。預設 root 推錯（config loader 把本檔搬到
+ * 別處載入）時在 stderr 留一行警告再回空陣列——退化成舊行為，但不是無聲的。
+ */
+export function lockedScriptProjections(root?: string): string[] {
+  if (root === undefined) {
+    root = fileURLToPath(new URL('../../', import.meta.url))
+    if (!existsSync(root + 'vendor/oxc-shared/preset.ts')) {
+      console.warn(
+        `[oxc-shared/preset] lockedScriptProjections: 推不出 repo root（${root}），LOCKED 投影不排除（TD-1133）`,
+      )
+      return []
+    }
+  }
+  if (!root.endsWith('/')) root += '/'
+  const signature = '🔒 LOCKED — managed by clade'
+  const out: string[] = []
+  const buf = Buffer.alloc(1024)
+  const walk = (rel: string): void => {
+    let entries
+    try {
+      entries = readdirSync(root + rel, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const e of entries) {
+      const path = rel + e.name
+      if (e.isDirectory()) {
+        if (e.name !== 'node_modules') walk(path + '/')
+        continue
+      }
+      if (!e.isFile()) continue
+      let head = ''
+      try {
+        const fd = openSync(root + path, 'r')
+        try {
+          head = buf.toString('utf8', 0, readSync(fd, buf, 0, buf.length, 0))
+        } finally {
+          closeSync(fd)
+        }
+      } catch {
+        continue
+      }
+      if (head.split('\n', 2).some((line) => line.includes(signature))) out.push(path)
+    }
+  }
+  walk('scripts/')
+  return out.toSorted()
+}
+
+/**
  * `STAGED_ONLY_EXCLUDES` 的比對形式：`/**` 收尾的取目錄前綴（`scripts/**` → `scripts/`），
  * 其餘視為 repo root 的**單檔精確比對**（`AGENTS.md`）。目錄只比起頭，NEVER 片段比對 ——
  * `app/scripts/` 是業務檔。
@@ -515,6 +584,9 @@ export const fmtBase = {
     // 投影面（`.claude/` `.clade/` `.spectra/` `vendor/` `.agents/` `.codex/` `.cursor/`）
     // 一律由 PROJECTION_EXCLUDES 帶入 —— consumer 不必在自己的 fmt.ignorePatterns 再列一次。
     ...PROJECTION_EXCLUDES,
+    // consumer `scripts/` 底下的 LOCKED 投影（TD-1133）：格式由 clade 負責，consumer 的 oxfmt
+    // 版本與 clade 不同時兩邊要求互斥。見 `lockedScriptProjections` 的註解。
+    ...lockedScriptProjections(),
   ],
 }
 

@@ -216,12 +216,15 @@ export function verifySubagentReview({
     // meta 缺席＝判不出 agent type，下面照 mismatch 處理，NEVER 當作符合。
   }
   result.agent_type = meta.agentType
-  if (meta.agentType !== agentType)
+  // agentType 可以是 prepare 寫進 state 的固定兩個名字（裸名與 hub-core 命名空間名）：逐字
+  // 比對集合成員，NEVER 改成前綴／字尾比對——那會讓其他 plugin 的同名 agent 混進來。
+  const allowedTypes = [agentType].flat()
+  if (!allowedTypes.includes(meta.agentType))
     return {
       ...result,
       exit: 8,
       failed_check: 'agent_type',
-      reason: `subagent_type 是 ${meta.agentType ?? '（meta.json 缺席）'}，不是 ${agentType}——只有 ${agentType} 的工具面是唯讀，其他 type 的輸出不是 0-A reviewer 的輸出`,
+      reason: `subagent_type 是 ${meta.agentType ?? '（meta.json 缺席）'}，不是 ${allowedTypes.join(' 或 ')}——只有 commit-0a-reviewer 的工具面是唯讀，其他 type 的輸出不是 0-A reviewer 的輸出`,
     }
 
   const entries = readTranscript(transcript)
@@ -315,7 +318,7 @@ function main() {
       brief: { type: 'string' },
       model: { type: 'string' },
       effort: { type: 'string' },
-      'agent-type': { type: 'string' },
+      'agent-type': { type: 'string', multiple: true },
       'verdict-out': { type: 'string' },
     },
   })

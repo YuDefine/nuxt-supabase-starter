@@ -1,6 +1,6 @@
 ---
 name: "clade-data"
-description: "Database, schema, storage, logging, and data-path rules. Use when changing persistence, migrations, queries, RLS, database environments, or application logging."
+description: "Database, schema, storage, logging, and data-path rules. Use when changing persistence, migrations, queries, RLS, database environments, or application logging; also before running integration tests, needing a test or dev database, running any supabase CLI command, or deciding where the dev DB lives."
 ---
 
 # clade-data

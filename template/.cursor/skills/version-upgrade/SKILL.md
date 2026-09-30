@@ -172,6 +172,21 @@ gate 沒有 `--allow-main` escape hatch，這是刻意的。
 
 **觸發判定**：能不能在 upstream release notes / changelog 找到「導致這個 mod 的具體 BC clause」。找不到，就不在 carve-out 範圍內，照原規則走：**relay 給該 consumer 的 session**（per [[clade-role-and-todo-discipline]] § Consumer 工作命中時 MUST relay），主線不徒手 sweep。
 
+## § Fleet MCP server 釘版：chrome-devtools-mcp（2026-09-30 Charles 拍板）
+
+clade 沒有 fleet MCP entry 的共同來源：`chrome-devtools-mcp` entry 是各 consumer 手放在自家 tracked 的 `.mcp.json` 與 `.cursor/mcp.json`（不在 `.clade/runtime/mcp.json`，投影器不產它）。所以釘版由 clade 在這裡定**唯一版本**，各 consumer 各自落地，不各 repo 各自選版。
+
+- **目前 fleet 版本：`chrome-devtools-mcp@1.10.1`**。entry 形狀一律 `"command": "npx", "args": ["-y", "chrome-devtools-mcp@1.10.1"]`，`.mcp.json` 與 `.cursor/mcp.json` 兩處同值
+- **NEVER** `@latest`、range（`@^1`、`@1.x`）或不帶版本：npx 每次啟動都可能拉到不同版本，fleet 內同一工具行為不一致、壞版上游一發就全 fleet 同時中
+- **允許的差異只有一條**：<consumer-a> 帶 `--headless`（`["-y", "chrome-devtools-mcp@1.10.1", "--headless"]`）。其他 consumer 要加旗標 → 先改本節再落地，**NEVER** 在 consumer 端自行分岔
+- **升版一律 fleet 一次升**：先改本節的「目前 fleet 版本」，同一個 target 版本 sweep 所有帶 entry 的 consumer（仍受上方准入條件約束：一個套件 × 一個 target version、每 consumer 一個 atomic commit、依 `workflow_model` 落地，`update_policy: pinned` 的 consumer 也照改——它 pin 的是 clade release，不是這個 entry）。**NEVER** 單一 consumer 先升
+- **每次升版記錄**：在下表追加一列（日期、版本、理由／上游 changelog 連結、rollout 清單路徑）
+- 沒有 entry 的 consumer 不因本節新增 entry；要不要裝 chrome-devtools-mcp 是該 consumer 自己的事，裝了就照本節形狀
+
+| 日期 | 版本 | 理由 | rollout |
+| --- | --- | --- | --- |
+| 2026-09-30 | 1.10.1 | 由 `@latest` 改為釘版（<consumer-i> TD-021；當日 npm `latest` dist-tag） | `tasks/2026-09-30-mcp-pin/rollout.md` |
+
 ---
 
 # § Pi prompt templates（兩 mode 共享）

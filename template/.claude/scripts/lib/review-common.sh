@@ -114,6 +114,11 @@ review_snapshot_or_die() {
 # 的檔：它們沒進 prompt，但呼叫端接下來 commit 的是整個 working tree —— 這道 gate
 # 保護的是那個 commit，不只是 prompt 裡的位元組。
 #
+# 刪除檔一律 `--irreversible-delete`：只留 `deleted file mode` 檔頭，不嵌整份舊內容。
+# 被刪的碼不會再執行，能審的是「刪了什麼、誰還引用它」——檔頭（路徑）就夠 reviewer
+# 去查引用；整份舊內容只會把 brief 撐爆（PR #546：一支 600KB 的測試檔被拆成 9 支，
+# 刪除那一側單檔就超過 CLAUDE_REVIEW_BRIEF_MAX_BYTES，exit 9 無解）。
+#
 # 空 changeset = exit 3 不呼叫 reviewer：這支 script 只在有東西要審時才被喚起，
 # 收到空收集等於收集 bug —— 對零行 diff 跑 review 會得到 "No findings"，也就是
 # 一個審了零行的通過 gate。
@@ -124,10 +129,10 @@ review_collect_changeset() {
   : >"$REVIEWED_PATHS"
 
   if git rev-parse --verify -q HEAD >/dev/null 2>&1; then
-    git diff HEAD --no-color --no-ext-diff >>"$RAW_DIFF" 2>/dev/null
+    git diff HEAD --no-color --no-ext-diff --irreversible-delete >>"$RAW_DIFF" 2>/dev/null
   else
-    git diff --cached --no-color --no-ext-diff >>"$RAW_DIFF" 2>/dev/null
-    git diff --no-color --no-ext-diff >>"$RAW_DIFF" 2>/dev/null
+    git diff --cached --no-color --no-ext-diff --irreversible-delete >>"$RAW_DIFF" 2>/dev/null
+    git diff --no-color --no-ext-diff --irreversible-delete >>"$RAW_DIFF" 2>/dev/null
   fi
 
   while IFS= read -r -d '' f; do
@@ -155,7 +160,16 @@ review_collect_changeset() {
 # 整棵目錄，44 個 HTML 檔 5999 行剛好填滿 6000 行 budget —— 該次 review 一行產品程式碼都
 # 沒讀到，卻照樣輸出了一份外觀完全正常的 verdict。這是「證據無鑑別力」的教科書形態：
 # 通過與沒讀到在輸出上長得一樣。
-REVIEW_GENERATED_RE='^(coverage|dist|build|\\.output|\\.nuxt|\\.void|\\.wrangler|node_modules)/|^[^ ]*/(coverage|dist|\\.output|\\.nuxt)/|^\\.claude/(rules|skills|agents|commands)/|\\.min\\.(js|css)$|\\.map$|(^|/)(pnpm-lock\\.yaml|package-lock\\.json|yarn\\.lock)$'
+#
+# `scripts/test-lanes/{deps,timings}.json` 是 clade 的機器量測資料（strace 依賴圖、CI 逐檔
+# 耗時），跟 lockfile 同性質：內容由產生器寫出，審的是產生器與它的測試，不是逐行資料。
+REVIEW_GENERATED_RE='^(coverage|dist|build|\\.output|\\.nuxt|\\.void|\\.wrangler|node_modules)/|^[^ ]*/(coverage|dist|\\.output|\\.nuxt)/|^\\.claude/(rules|skills|agents|commands)/|\\.min\\.(js|css)$|\\.map$|(^|/)(pnpm-lock\\.yaml|package-lock\\.json|yarn\\.lock)$|^scripts/test-lanes/(deps|timings)\\.json$'
+
+# 產生檔裡「超出 budget 只列摘要、不算漏審」的子集：只有 lockfile 與 clade 量測資料。
+# REVIEW_GENERATED_RE 其餘成員（`.claude/skills/**` 等投影層、`build/`、`dist/`、`coverage/`）
+# 可能是手寫原始碼（clade 自己的 `.claude/skills/coordinator/scripts/*.ts` 就是），它們超出
+# budget 照舊進 OMITTED＝漏審，NEVER 被「依政策」當成審過。
+REVIEW_SUMMARY_ONLY_RE='(^|/)(pnpm-lock\\.yaml|package-lock\\.json|yarn\\.lock)$|^scripts/test-lanes/(deps|timings)\\.json$'
 
 # Two passes over the same file: measure every `diff --git` block, then re-emit
 # only the blocks that fit the budget. `used == 0 ||` keeps the first block whole
@@ -165,7 +179,7 @@ REVIEW_GENERATED_RE='^(coverage|dist|build|\\.output|\\.nuxt|\\.void|\\.wrangler
 # sel=1 → 只收 **不** 符合 GENERATED_RE 的 block（原始碼優先）
 # sel=0 → 只收符合的（拿原始碼填完後剩下的 budget）
 review_select_blocks() {
-  awk -v maxl="$1" -v omit="$2" -v genre="$3" -v sel="$4" -v usedfile="$5" '
+  awk -v maxl="$1" -v omit="$2" -v genre="$3" -v sel="$4" -v usedfile="$5" -v summ="${6:-}" -v sumre="${7:-}" '
     NR == FNR {
       if ($0 ~ /^diff --git /) {
         blk++
@@ -187,6 +201,8 @@ review_select_blocks() {
       keep = (sel == 1 && used == 0 && maxl > 0) || (used + size[cur] <= maxl)
       if (keep) {
         used += size[cur]
+      } else if (sel == 0 && summ != "" && sumre != "" && bpath[cur] ~ sumre) {
+        printf("  - %s (%d lines)\n", bpath[cur], size[cur]) >>summ
       } else {
         printf("  - %s (%d lines)\n", bpath[cur], size[cur]) >>omit
       }
@@ -201,11 +217,18 @@ review_select_blocks() {
 # clade 投影層（.claude/rules|skills|agents|commands）同樣排在原始碼後面：它們的
 # 源檔在 ~/offline/clade，在 consumer 端改了會被下次 sync 還原。
 #
-# 產出：SNAPSHOT（嵌入 prompt 的 diff）、OMITTED（具名剔除清單）。
+# 產出：SNAPSHOT（嵌入 prompt 的 diff）、OMITTED（原始碼超出 budget 的具名剔除清單＝漏審）、
+# GENERATED_SUMMARY（REVIEW_SUMMARY_ONLY_RE 的產生檔超出 budget 只列路徑與行數＝依政策不逐行審，
+# 不是漏審；其餘產生檔超出 budget 照舊進 OMITTED）。
+# 兩者分開是因為語義不同：OMITTED 的檔沒被審，verdict 不能當完整 PASS；產生檔本來就不逐行審
+# （它的正確性由產生器與測試保證），混進 OMITTED 會讓每個動到 lockfile 的 commit 都卡在
+# 「漏審檔不能記 PASS」（實例：一份 17,567 行的 pnpm-lock、clade 的 2.9MB deps.json）。
 review_build_snapshot() {
   SNAPSHOT="$WORK_DIR/snapshot.diff"
   OMITTED="$WORK_DIR/omitted.txt"
+  GENERATED_SUMMARY="$WORK_DIR/generated-summary.txt"
   : >"$OMITTED"
+  : >"$GENERATED_SUMMARY"
 
   local snap_src="$WORK_DIR/snapshot-src.diff"
   local snap_gen="$WORK_DIR/snapshot-gen.diff"
@@ -218,7 +241,8 @@ review_build_snapshot() {
   src_files="$(grep -c '^diff --git ' "$snap_src" 2>/dev/null || echo 0)"
   gen_budget=$((MAX_DIFF_LINES - src_used))
   [ "$gen_budget" -lt 0 ] && gen_budget=0
-  review_select_blocks "$gen_budget" "$OMITTED" "$REVIEW_GENERATED_RE" 0 "$used_gen_file" >"$snap_gen"
+  review_select_blocks "$gen_budget" "$OMITTED" "$REVIEW_GENERATED_RE" 0 "$used_gen_file" \
+    "$GENERATED_SUMMARY" "$REVIEW_SUMMARY_ONLY_RE" >"$snap_gen"
   cat "$snap_src" "$snap_gen" >"$SNAPSHOT"
 
   local total_src_blocks
@@ -240,6 +264,10 @@ review_build_snapshot() {
   if [ -s "$OMITTED" ]; then
     echo "[$REVIEW_SAFE_TAG] warn: 超出 budget、未納入 review 的檔案：" >&2
     cat "$OMITTED" >&2
+  fi
+  if [ -s "$GENERATED_SUMMARY" ]; then
+    echo "[$REVIEW_SAFE_TAG] 產生檔超出 budget，只列摘要（依政策不逐行審，不是漏審）：" >&2
+    cat "$GENERATED_SUMMARY" >&2
   fi
 }
 
@@ -314,6 +342,17 @@ They are outside the scope of this review — do not run git diff on them. State
 that they went unreviewed in one line immediately ABOVE the `## Review Verdict`
 heading, and keep the verdict itself to files you actually saw.
 PROMPT_OMITTED
+  fi
+  if [ -s "$GENERATED_SUMMARY" ]; then
+    printf '\nThese generated / machine-produced files also changed; only their paths and diff sizes are listed:\n'
+    cat "$GENERATED_SUMMARY"
+    cat <<'PROMPT_GENERATED'
+By policy their content is not reviewed line by line: their correctness comes
+from the code that generates them and its tests, which are reviewed like any
+other source. Do not run git diff on them and do not list them as unreviewed.
+If a source change in this changeset should have regenerated one of them and it
+is not in this list, report that as a finding.
+PROMPT_GENERATED
   fi
   cat <<'PROMPT_BODY'
 
@@ -943,7 +982,7 @@ review_embed_round_increment() {
   git cat-file -e "$REVIEW_ROUND_INCREMENT_BASE^{tree}" 2>/dev/null || return 0
   local cur inc="$WORK_DIR/increment.diff"
   cur="$(sed -n 's/^tree //p' "$WORK_DIR/worktree-before.txt" | head -1)"
-  git diff --no-color --no-ext-diff --no-renames "$REVIEW_ROUND_INCREMENT_BASE" "$cur" >"$inc" 2>/dev/null || return 0
+  git diff --no-color --no-ext-diff --no-renames --irreversible-delete "$REVIEW_ROUND_INCREMENT_BASE" "$cur" >"$inc" 2>/dev/null || return 0
   [ -s "$inc" ] || return 0
   mv "$inc" "$RAW_DIFF"
   REVIEW_ROUND_INCREMENT=1
