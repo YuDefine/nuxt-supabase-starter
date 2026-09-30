@@ -874,7 +874,7 @@ describe('CLI process：--json 機讀完成報告', () => {
   )
 
   it(
-    'scaffold-only 選 Codex：明示 deferred、可執行指令且不宣稱已有投影',
+    'scaffold-only 選 Codex：最小投影即時可用，完整投影明示 deferred',
     { timeout: 120_000 },
     () => {
       const run = freshRun('codex-scaffold-only')
@@ -899,7 +899,11 @@ describe('CLI process：--json 機讀完成報告', () => {
       expect(report.codexProjection?.command).toContain('init-consumer.ts')
       expect(report.codexProjection?.command).toContain('run-sync-to-codex.ts')
       expect(outputOf(result)).toContain('Codex projection deferred')
-      expect(existsSync(join(run.cwd, 'codex-scaffold-only', '.codex'))).toBe(false)
+      const projectDir = join(run.cwd, 'codex-scaffold-only')
+      expect(existsSync(join(projectDir, 'AGENTS.md'))).toBe(true)
+      expect(existsSync(join(projectDir, '.codex', 'config.toml'))).toBe(true)
+      expect(existsSync(join(projectDir, '.agents', 'skills', 'commit', 'SKILL.md'))).toBe(true)
+      expect(existsSync(join(projectDir, '.codex', 'rules'))).toBe(false)
     },
   )
 
@@ -933,6 +937,10 @@ describe('CLI process：--json 機讀完成報告', () => {
       expect(report.codexProjection?.command).toContain('pnpm install')
       expect(report.codexProjection?.command).toContain('run-sync-to-codex.ts')
       expect(outputOf(result)).toContain('Codex projection deferred')
+      const projectDir = join(run.cwd, 'codex-no-install')
+      expect(existsSync(join(projectDir, 'AGENTS.md'))).toBe(true)
+      expect(existsSync(join(projectDir, '.codex', 'config.toml'))).toBe(true)
+      expect(existsSync(join(projectDir, '.agents', 'skills', 'commit', 'SKILL.md'))).toBe(true)
     },
   )
 
