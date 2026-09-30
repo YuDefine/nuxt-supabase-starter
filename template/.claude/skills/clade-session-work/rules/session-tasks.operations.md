@@ -373,6 +373,7 @@ compact 壓掉的是敘事，**壓完之後每一 turn 仍重讀壓縮後的整�
 | 可觀察狀態 | 動作 |
 | --- | --- |
 | workflow明定 worktree要 parked | `retained`，指名 owner與 next landing event |
+| branch 有 open PR（`gh pr list --head <branch>` 非空）| `retained` 之外 **MUST** 讓 owner／下一個落地事件機器可讀：PR body 有 `Work:`／`Owner:` 兩行，且以 `wt-helper batch draft --kind visibility` 登記 receipt；被派出的 child 另在 `--complete` 帶 `--pr-disposition`。**NEVER** 只寫在收工訊息 |
 | clean + 內容已在 main 或 origin/<base>（ancestry merged，或 `wt-helper cleanup <slug> --dry-run` 印 `verdict CLEAN`／`merged=Y`／`mergedPr(origin/<base>)=Y` 任一；「已在 origin/<base>、本機 main 尚未同步」算 `removed` 條件——clade 是 PR 制，origin 是落地權威，本機 main 由 `main-sync` 追上，gate 防的是內容遺失而 server 端已保存）+ 無 unique commit／WIP + 無 parking contract ＋ 無宿主設定引用（`--dry-run` 的 `host-config refs=0`；非 0 時先把 systemd unit／drop-in／crontab 改指 main 或刪掉，沒有 flag 可繞過，TD-1148） | **直接**用零 force flag 的移除指令（有 `wt-helper` 就 `wt-helper cleanup <slug>`，否則 `git worktree remove` + `git branch -d`）移除 worktree與branch，receipt寫 `removed`；**NEVER** 先問 `remove`／`retain`——條件全中就是授權 |
 | 零 force flag 的移除被擋，或上一列任一條件判不出 | fail closed列 blocker；回答前**不得**輸出「目前這裡收工」或等價完整 closure |
 | dirty、未 fully merged、ownership不明 | fail closed列 blocker；**NEVER**用 `--force`把不確定性刪掉 |
@@ -419,6 +420,8 @@ receipt 送出後，本 session **NEVER** 再開新工作段、輪詢接手 pane
 **Herdr transport 不新增 routing 權限。** 有空 workspace / pane 不是外派條件；當前 session 能在既有授權與 scope 內直接完成目標 cwd 的工作，就直接完成。只有本節已判定要換互動 session、或 [[session-tasks]] 的 session boundary 已成立時，才依 [[session-tasks.operations]] § Herdr session transport 搬運 durable task / thin brief。
 
 **Pane 是 dispatch 的投影，不是 dispatch 的理由。** Transport 預設分割當前 Tab，只改變已決定要派的工作長什麼樣。反方向同樣不承載資訊：**NEVER** 從「Tab 沒有分割」推論沒有工作在跑——in-process subagent 沒有 terminal。要看現況跑 `vendor/scripts/herdr-patrol.ts`。
+
+**一個 Tab 最多 4 個 pane（TD-1107）。** Split 派工先讀 live `tab list` / `pane list` / `pane layout`：當前 Tab 有容量就在 Tab 內排成 2×2（caller 右切 → 右欄向下 → 左欄向下）；滿 4 就改進 caller 既有的 overflow Tab（只由溢出標記認領：pane `clade_overflow_of` token／record `overflow_of_pane_id`，split 派工落在 caller Tab 以外時才打；**不**看 `clade_parent`／`parent_pane_id`——那兩個每種拓樸都有，`--new-tab` worker 的 Tab 因此永遠不是 split 候選）；caller 擁有的 Tab 全滿才在同一 workspace 開新 Tab。整段「讀拓撲 → 選落點 → split/create」由 per-workspace 鎖序列化，fanout 併發不會把同一 Tab 擠過上限。每一種拓樸（split、溢出 Tab、顯式 `--new-tab`／`--workspace`）的 durable record 都記 caller 的 `parent_pane_id` 與 `parent_claude_session_id`，派它的 pane 之後照常 `--reclaim`；record 上 `parent_pane_id` 空白只表示呼叫者沒有 Herdr pane（無 `HERDR_PANE_ID`／`--parent-pane`），不是拓樸漏記。`--new-tab` 不受 4 pane 上限約束（每個 worker 自成一個 Tab）。`pane layout` 讀到別的 Tab 或缺 pane 尺寸時視為無可用 layout；live layout 的 pane 數多於 `tab list` 時以 layout 為準。
 
 **閒置 ≥ prompt-cache TTL 的 Claude session 一律不叫醒**（Charles 2026-09-26）。一則 prompt 會讓冷 session 用未快取價格重讀整段 context；要它的工作繼續，改走冷續接：`node vendor/scripts/session-census.ts digest <pane>` 摘要 → 交代寫進 durable brief → 同 cwd 開新 pane → 新 pane 接手後 `--reclaim <pane> --verified`。四個入口都機械擋下：`herdr-session-handoff.ts --continue`（`cache_ttl_expired`，exit 17）、child 完成時的主持者喚醒（receipt `coordinator_wake=skipped:cache_ttl_expired`）、agent 在 Bash 直接打的 `herdr agent prompt`（hub-core PreToolUse gate `pre-bash-herdr-cold-prompt-gate.sh`，exit 2）、DB reset 協調的 peer prompt（冷 peer 維持 unresolved，出口見 `vendor/snippets/db-reset-peer-coordination/README.md`）。判定只有一份：`vendor/scripts/lib/pane-cache-ttl.ts`；讀不到閒置時間 NEVER 當冷。**NEVER** 為了送出而改寫指令繞過 gate——被擋就是該冷續接的訊號。
 

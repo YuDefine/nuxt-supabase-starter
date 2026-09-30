@@ -100,11 +100,11 @@ ready PR 上的 CI 不是試錯環境（「push 上去讓 CI 跑一下看看」�
 1. 來源 `git status` 乾淨（相對於要推的 commits）。
 2. `gh pr view <session-branch> --json number,isDraft,headRefName`（branch 是位置參數；查無 PR 時非 0 退出）：已有 PR 就沿用該號，不要再開一張。
 3. 沒有遠端物件時**只** `git push -u origin <session-branch>`。不得 `git push origin main`——slice owner、worker、coordinator 皆同；唯一具名例外見 § 遠端強制與本機契約 的「登記簿同步」。
-4. 沒有 PR 時 `gh pr create --draft --base main --head <session-branch>`。（integration 模式下的切片 base 是 `integration/<work-id>`、不登記 receipt、由 coordinator 以 `--pr` 落地，見 § Integration branch MUST 6。）
+4. 沒有 PR 時 `gh pr create --draft --base main --head <session-branch>`，body **MUST** 帶 `Work: <work-id>` 與 `Owner: <dispatch_id | session:<claude_session_id> | bot:<job>>` 兩行（沒有 `Work:` 行會被 PreToolUse hook 擋下；coordinator 分診靠它派修補）。（integration 模式下的切片 base 是 `integration/<work-id>`、不登記 receipt、由 coordinator 以 `--pr` 落地，見 § Integration branch MUST 6。）
 5. `gh pr view <session-branch> --json number,isDraft,headRefName`：`isDraft` 為 true、head 就是該 session branch。不要省略 branch。
 6. 立刻盯**該 PR head SHA** 的 CI（Claude／Codex：`/gh-ci-watch`；Cursor：`subscribe_github_ci`／`subscribe_github_pr` 或同等）。
 7. CI 紅燈：同一 owner、同一張 PR 上修再 push；不要為同一切片開第二張 PR。
-8. 用該 PR 號跑 `batch draft --kind visibility` 把可見性 receipt 持久登記。create／push 失敗就不要寫 receipt。討論 draft 才用 `--kind discussion`（或舊的 `--discussant`＋`--question`）。
+8. 用該 PR 號跑 `batch draft --kind visibility` 把可見性 receipt 持久登記。create／push 失敗就不要寫 receipt。同一 branch／PR 已綁在另一個 work id 的有效 receipt 上時 `batch draft` 會拒絕（綁錯），用 PR 的 `Work:` id 或先 `batch retire-draft` 舊的。PR 合入後 `batch retire-merged` 一次 retire 指向已合 PR 的 receipt。討論 draft 才用 `--kind discussion`（或舊的 `--discussant`＋`--question`）。
 
 Draft 維持 draft 直到 review。slice **worker NEVER merge**、**NEVER** `gh pr ready`、**NEVER** 為了看得見而 merge-back。空 branch／只有 WIP **NEVER** 開 PR。具名 coordinator 在 [[commit]] 批次 `merge-unattended` 的機械 predicate 全成立，或下方 § Coordinator 直接合併 的條件全成立，且沒有有效 do-not-merge hold 時 squash；那不是 worker 權限，也不是把所有 agent 當 coordinator。
 

@@ -6,6 +6,16 @@ scripts=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$scripts/cbm-project.sh"
 cbm_resolve_project "${1:-}" || exit 0
 cbm_is_temporary && exit 0
+# Test runners place throwaway Git worktrees below these run-scoped sandboxes.
+# They exercise worktree behavior, not full indexing; never index their fixtures.
+for cache_root in "${XDG_CACHE_HOME:-$HOME/.cache}" "$HOME/.cache"; do
+  sandbox_base="$cache_root/clade/tmp"
+  [[ -d "$sandbox_base" ]] || continue
+  sandbox_base=$(cd "$sandbox_base" && pwd -P)
+  case "$CBM_REPO" in
+    "$sandbox_base"/clade-test-run-* | "$sandbox_base"/clade-test-*-run-*) exit 0 ;;
+  esac
+done
 umask 077
 mkdir -p "$CBM_CACHE/provenance"
 # Cache/project identity serializes aliases and callers sharing the same database.

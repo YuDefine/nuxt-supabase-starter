@@ -19,17 +19,17 @@ paths: [".github/workflows/**/*.yml", "wrangler.toml", "wrangler.jsonc"]
 
 ## NEVER
 
-- **NEVER** 手動跑 `wrangler secret put <NAME>` 設 production / staging worker secret — 繞過正規流程，rotation 會脫節
+- **NEVER** 在 deploy workflow 的 `secrets:` 之外手動或另開 step 推 production / staging worker secret（`cf workers secrets` / `wrangler secret put` 皆同）— 繞過 SoT，rotation 會脫節，且容易 leak 進 log
 - **NEVER** 把 secret 寫進 `wrangler.toml` 的 `[vars]` 區塊 — `[vars]` 是 plaintext，會在 worker dashboard 可見且 commit 進 git
-- **NEVER** 在 `wrangler-action` 之外的 workflow step 直接 echo secret 到 `wrangler secret put` — 同樣繞過 SoT，且 echo 容易 leak 進 log
 - **NEVER** dev / staging / production 共用同一條 secret（rotation 風險：一漏全崩）— 每個 env 獨立生成
 
 ## 唯一例外
 
-只在以下情況可手動跑 `wrangler secret put`：
+只在以下情況可手動推 secret，照 `cf-cli` skill § Worker secret 推（值不進 argv）：
 
 - **Bootstrap 初次 deploy 之前**：worker 尚未存在、deploy workflow 還沒跑過第一次，需要手動 push 初始 secret 才能讓 first deploy 不 crash。第一次 deploy 後立即把 secret 加進 workflow `secrets:` list，後續 rotation 走正規流程
 - **緊急 incident response**：production secret 洩漏需立即 rotation，等不及下次 deploy。**必同時** `gh secret set` 更新 GitHub Secret + 開 issue / 在 commit message 註記，下次 deploy 會 overwrite 同值
+- **移除殘留 binding**：secret 已從 workflow `secrets:` 與 GitHub Secret 拿掉、且拿掉後的 deploy 已跑完，Worker 上仍留著舊 binding（wrangler-action 的 `secrets:` 只 upsert、不刪）。只准 `cf workers secrets delete`，**NEVER** 藉此推新值
 
 ## 推送流程範例（production）
 
@@ -56,18 +56,18 @@ paths: [".github/workflows/**/*.yml", "wrangler.toml", "wrangler.jsonc"]
 - [ ] `env:` block 對應每個 secret 從 GitHub Secret pull（帶 `STAGING_` / `PRODUCTION_` 前綴）
 - [ ] GitHub Secret 已設好對應的 `STAGING_<NAME>` + `PRODUCTION_<NAME>`（`gh secret list -R <repo>` 看得到）
 - [ ] Notion「GitHub Secrets & 環境變數」page 該 consumer 段落有記載 secret 用途 + 對應值
-- [ ] 沒人手動跑過 `wrangler secret put` 之外（檢查 `~/.wrangler/logs/` 有無近期 `secret put` 紀錄；有的話是 anti-pattern signal）
+- [ ] 沒有例外情境以外的手動 secret 異動（`cf workers versions list --worker-id <name>`，ID 或名稱皆可）。deploy workflow 的 `secrets:` 本身也會產生 secret 異動的 version，**NEVER** 單看 version metadata 判來源：把 secret 異動的 version 的建立時間對 `gh run list --workflow <deploy workflow>` 的 run 時間，對不上任何 deploy run 的才是 anti-pattern signal
 
 ## 為什麼
 
-- **Rotation 安全**：secret 只在 GitHub 一個地方更新，下次 deploy 自動推到 worker；不需要記得跑 `wrangler secret put` + 不會漏設 staging
-- **Audit trail**：GitHub Secret 的修改有 log；`wrangler secret put` 沒有 audit
+- **Rotation 安全**：secret 只在 GitHub 一個地方更新，下次 deploy 自動推到 worker；不需要記得手動推 secret + 不會漏設 staging
+- **Audit trail**：GitHub Secret 的修改有 log；手動推 secret 沒有 audit
 - **Consumer team handoff**：新 maintainer 只看 workflow yaml + Notion 就能看完整 secret 圖譜，不用問 “是不是還有什麼東西在 wrangler 裡？”
-- **CI/CD reproducibility**：deploy workflow 是 declarative；手動 `wrangler secret put` 是 imperative side effect，破壞 reproducibility
+- **CI/CD reproducibility**：deploy workflow 是 declarative；手動推 secret 是 imperative side effect，破壞 reproducibility
 
 ## 反例
 
-把 `wrangler secret put` 與 `gh secret set` 並列成 first-class 步驟（例如交接文件寫「兩個都跑」）：
+把手動推 secret（`cf workers secrets` / `wrangler secret put`）與 `gh secret set` 並列成 first-class 步驟（例如交接文件寫「兩個都跑」）：
 
 - deploy workflow 沒列入該 secret → 下次 deploy 不會 re-sync → rotation 時容易漏（GitHub Secret 改完，wrangler 沒重 push）
 - staging worker 也得手動跑一次，跟 production 不同 secret，容易混

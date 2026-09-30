@@ -23,7 +23,7 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 SUBAGENT_TYPE=$(printf '%s' "$INPUT" | jq -r '.tool_input.subagent_type // ""' 2>/dev/null) || exit 0
 case "$SUBAGENT_TYPE" in
-  Explore | Plan | commit-0a-reviewer) exit 0 ;;
+  Explore | Plan | commit-0a-reviewer | hub-core:commit-0a-reviewer) exit 0 ;;
 esac
 
 BUCKET=$(($(date +%s) / 600))

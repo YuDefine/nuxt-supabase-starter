@@ -22,6 +22,8 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 
 `CLADE_DISPATCH_ID` 非空（本 session 自己是被派出來的 child）時 relay **照常適用**——helper 對 relay 開了 nested 缺口，因為 relay 做的是把位置橫向移交、自己站下來，與那道 guard 要防的責任樹擴張相反。**NEVER** 因為身在 coordinated child 就改走 `--recover-orphan`：那是「parent 已死、由 child 補救」的路徑，而 relay 的前提正好相反——parent（本 session）還活著，親自簽字交出位置。
 
+已用 `--tier-basis stall-escalation --retry-of <medium label>` 升到 high 的 child，可以沿用這組參數與 `--effort high` relay 同一位置。helper 只豁免與當前 pane **及 exact runtime session** 相符的 live high record；其他 high attempt 與 reclaim／controlled-stop 的紀錄仍會擋第二次升級。Relay 是交接，不新增一次 high attempt。
+
 ## 1. 建 durable thin brief
 
 依 [dispatch-common.md](dispatch-common.md) § 2，**外加**兩項 relay 專屬內容：
@@ -82,6 +84,7 @@ helper 自行負責 topology、fresh runtime session identity、prompt delivery�
 | receipt | 動作 |
 | --- | --- |
 | `relay_dispatched` | 位置已交出。`relayed_dispatch_ids` 是隨之轉移的 in-flight dispatch，`predecessor_dispatch_id` 是為本 pane 寫的回收憑證。進收工訊息 **A** |
+| `relay_unconfirmed` | brief 已送出但沒看到 successor 起跑（`prompt_delivery: unconfirmed`），**交接已簽**：in-flight dispatch 已轉給 successor、本 pane 已寫回收憑證。**NEVER** 當成什麼都沒發生繼續做，**NEVER** 盲目重送。先 `herdr pane read <pane_id>` 看 successor：已收到 brief／在做 → 同 `relay_dispatched` 進收工訊息 **A**；輸入框閒置且 brief 明顯沒落地 → 用 `herdr agent prompt` 送一次 brief 路徑、確認起跑後進 **A**；pane 不在或讀不到 → 回 blocker 並附 `relayed_dispatch_ids`，不收工 |
 | `relay_refused` | 本 session 的 exact runtime session（Claude 或 Pi）無法辨識，或沒有可交出的 pane。保留 durable task，回具體 blocker，**NEVER** 改用 raw `herdr` 指令繞過 |
 | `transport_error`／其他 preflight failure | 同上：保留 durable task 與 pane，回具體 blocker，**NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt |
 

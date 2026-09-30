@@ -208,12 +208,26 @@ if (id) {
     const args = ['cli', 'index_repository', payload]
     const systemd = spawnSync('systemctl', ['--user', 'is-system-running'], { encoding: 'utf8' })
     const guarded = /^(running|degraded)\s*$/.test(systemd.stdout || '')
+    const slice = guarded
+      ? spawnSync(
+          'systemctl',
+          ['--user', 'show', '-p', 'LoadState', '--value', 'agent-workloads.slice'],
+          {
+            encoding: 'utf8',
+          },
+        )
+      : null
+    const sliceArgs =
+      slice?.status === 0 && slice.stdout.trim() === 'loaded'
+        ? ['--slice=agent-workloads.slice']
+        : []
     const command = guarded ? 'systemd-run' : resolved
     const commandArgs = guarded
       ? [
           '--user',
           '--scope',
           '-q',
+          ...sliceArgs,
           '-p',
           `MemoryMax=${process.env.CBM_INDEX_MEM_MAX || '6G'}`,
           '-p',
