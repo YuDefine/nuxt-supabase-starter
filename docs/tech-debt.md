@@ -26,7 +26,7 @@
 | TD-021 | Template CI `UX drift audit` 既有紅燈：`shared/types` 沒有 enum-like 定義就 fail | mid | open | 2026-09-28 |
 | TD-022 | repo root 的 Claude session 載不到 `commit-0a-reviewer` seat | mid | open | 2026-09-28 |
 | TD-023 | Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback | low | open | 2026-09-28 |
-| TD-024 | Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict` | mid | open | 2026-09-29 |
+| TD-024 | Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict` | mid | done | 2026-09-30 |
 | TD-025 | scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅 | mid | open | 2026-09-29 |
 
 ### 2026-09-27 origin/main 收斂接手 brief
@@ -816,6 +816,7 @@ scaffold-only 印出的延後投影指令會指到不存在的檔案。
 
 ## TD-024 — Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict`
 
+**Status**: done（2026-09-30：四支 API 插樁補齊，strict 本機驗收通過）
 **Discovered**: 2026-09-29 — clade `W-2026-09-29-work-route-evlog-map-ci-parity-runner-task-pre-p`（D3）relay
 
 ### Problem
@@ -838,6 +839,14 @@ error 欄位到零失敗、零 suppression（無法插樁者也不得豁免）�
 - repo 根跑 `node template/.github/actions/evlog-map-gate/local.ts` exit 0（strict 判定）。`local.ts`／`run.sh`
   由含 YuDefine/clade#538 的 clade 版本投影；投影到位前改以 clade 源檔
   `vendor/actions/evlog-map-gate/run.sh` 帶 `INPUT_CWD=template INPUT_MODE=strict` 驗。
+
+### Verification（2026-09-30）
+
+- 三支 profiles API 加入 operation、查詢目標／分頁脈絡；dev-login 改用 request logger，記錄成功、拒絕與失敗 audit，成功事件不收錄 email、密碼或 cookie。
+- 四支 API 使用 evlog `createError` 保留 why／fix／cause；測試實跑 h3 錯誤序列化與 NDJSON，並確認不可存取／不存在的 profile 對外錯誤一致。
+- `pnpm exec evlog map` 重新產生 baseline：13 個 entry point、score 100、零失敗、零 suppression；workflow 明確切至 `mode: strict`。
+- repo 根 `node template/.github/actions/evlog-map-gate/local.ts --print-config` 確認 strict／template；不帶旗標執行 exit 0。
+- `template/` 跑 `pnpm test:file test/unit/server/api/v1/profiles test/unit/server/api/_dev/login.post.test.ts test/unit/server/api/_dev/login.observability.dev.test.ts`：6 檔、45 passed；`pnpm run typecheck` 與改動路徑的 `pnpm run lint`／`pnpm run format:check` 全部 exit 0。開發分支與非開發 guard 分屬 Vitest project，無 skip。
 
 ## TD-025 — scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅
 
