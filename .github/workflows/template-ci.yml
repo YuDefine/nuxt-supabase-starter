@@ -128,6 +128,13 @@ jobs:
         run: vp install
 
       - name: Unit tests
+        # Scaffold receipt tests inspect real commits in temporary repositories.
+        # Supply a fixture identity without relying on runner-global Git config.
+        env:
+          GIT_AUTHOR_NAME: Scaffold Test Fixture
+          GIT_AUTHOR_EMAIL: fixture@example.com
+          GIT_COMMITTER_NAME: Scaffold Test Fixture
+          GIT_COMMITTER_EMAIL: fixture@example.com
         run: vp test --coverage
 
       - name: UX drift audit
