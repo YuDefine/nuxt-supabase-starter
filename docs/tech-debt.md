@@ -11,7 +11,7 @@
 
 | ID     | Title                                                                                                    | Priority | Status      | Discovered |
 | ------ | -------------------------------------------------------------------------------------------------------- | -------- | ----------- | ---------- |
-| TD-004 | Spectra roadmap drift check 在 CI 的 structural diff                                                     | mid      | in-progress | 2026-05-10 |
+| TD-004 | Spectra roadmap drift check 在 CI 的 structural diff                                                     | mid      | done        | 2026-05-10 |
 | TD-005 | meta-monorepo 下 pre-push checks 靜默 no-op                                                              | high     | in-progress | 2026-08-19 |
 | TD-008 | `validate-starter` 維護工具會被 scaffold 帶走                                                            | mid      | open        | 2026-08-19 |
 | TD-010 | 參考 app email 登入被 nuxt-security CSRF 擋下                                                            | mid      | in-progress | 2026-08-24 |
@@ -47,6 +47,7 @@
 | TD-019   | `scaffold-smoke` 在 main `2679369d` 的 run `36298330400` 仍失敗；須修投影去識別化並重驗。                                                                    |
 | TD-020   | PR #13 已移除 `copyTemplateCodexAssets()`；Q160 已選 A，最小三件檔實作在 draft PR #14，待 PR 驗證與合入。                                                    |
 
+- 2026-09-30 TD-004 更新：PR #10 已合入（`df0dbb90`），退役診斷已移除；main `94ff9b54` 的 Template CI 全綠，已結案（完整證據見本條）。上表保留 2026-09-27 接手快照。
 - 2026-09-28 更新：Q160 選 A 的開箱三件檔與 TD-004 診斷步驟移除已在 draft PR #14；TD-016 的既有 consumer 讀數不等價，Charles 答 Q164「B」後已用獨立 Workers 驗證部署直接實測，原「零參數 snapshot 恆為 unknown」推論不成立。詳見本條的部署、讀數與拆除證據。
 - 剩餘步驟：主持者追蹤 PR #5／#8／#9／#10 與 clade source 工作；各自合入後重新讀 `origin/main`，逐條核對 Acceptance、同步 Index 與 entry body，再量測 HANDOFF 未勾及 literal open TD。
 - 檔案所有權：PR #14 0-A r1 修補由本輪 worker 修改根目錄 `HANDOFF.md`、`template/HANDOFF.md` 與 `docs/tech-debt.md`；程式碼、migration、`.claude/**`、`vendor/**`、其他 worktree、production 與 PR merge 由各自 owner 處理。
@@ -70,7 +71,8 @@
   Format / Lint / Typecheck 成功、Unit tests skipped；本機 `vp check`、shellcheck 與實際
   Vite+ pre-push dispatcher 均 exit 0。外部 PR #1 已以目前 `better-auth` `^1.7.1` 的
   `template/package.json` 證據[留言](https://github.com/YuDefine/nuxt-supabase-starter/pull/1#issuecomment-5848381621)並關閉。
-- 剩餘步驟：coordinator 審查 PR #10 並在落地後核對 main Template CI，才將 TD-004 結案；
+- TD-004 結案更新（2026-09-30）：PR #10 已合併，main Template CI 已核對成功，見本條 Resolution / Verification。
+- 其餘條目的原交接：
   TD-005 須建立可追溯的 ratchet baseline 並驗證違規會擋 push；TD-018 由 clade 修復後取得
   連續兩趟 propagate 非 `failed` 的證據。PR #5/#8/#9 依各自 owner 審查，不在此 PR 重做。
 - 檔案所有權：PR #10 只持有 `.github/workflows/template-ci.yml`、兩份 pre-push hook 與
@@ -80,7 +82,7 @@
 
 ## TD-004 — Spectra roadmap drift check 在 CI 的 structural diff
 
-**Status**: in-progress — [PR #10](https://github.com/YuDefine/nuxt-supabase-starter/pull/10) 的 `23fbbff6` 已移除失效診斷；draft CI [run 36260052169](https://github.com/YuDefine/nuxt-supabase-starter/actions/runs/36260052169) 的 Format / Lint / Typecheck 成功，待合併及 main CI 後結案
+**Status**: done（2026-09-30：PR #10 已合併，退役診斷移除及 main Template CI 驗收完成）
 **Priority**: mid
 **Discovered**: 2026-05-10 — v0.31.0 release 後 Template CI 反覆報 stale
 **Location**: `.github/workflows/template-ci.yml`（原 `template/scripts/spectra-advanced/roadmap-sync.ts` 已退役）
@@ -101,7 +103,7 @@ CI 執行 `vp run spectra:roadmap --check` 時曾持續報 stale，即使 local 
 - `693bf454`（2026-09-07）刪除 LOCKED 的 `roadmap-sync.ts` 投影；`67503a36` 同日移除
   `template/package.json` 的 `spectra:*` scripts；`28a39971` 同日刪除 `template/openspec/ROADMAP.md`。
   目前在 `template/` 執行 `vp run spectra:roadmap --check` 回 `Task "spectra:roadmap" not found`。
-- 現行 workflow 仍先 `cp openspec/ROADMAP.md`，再呼叫已不存在的 task。**目前診斷路徑失效的根因是
+- 當時 workflow 仍先 `cp openspec/ROADMAP.md`，再呼叫已不存在的 task。**診斷路徑失效的根因是
   workflow 未隨 Spectra 投影退役同步更新**；沒有可執行的 collect/render path，也無 CI diff 可構造
   修正前紅、修正後綠的回歸測試。本輪因此只記錄診斷，不復活已退役腳本或手改 roadmap。
 
@@ -120,7 +122,7 @@ diff 指令；前置測試失敗使步驟跳過，即使走到該步驟，roadma
 `23fbbff6` 刪除 `.github/workflows/template-ci.yml` 原 145–168 行；舊 `ROADMAP.md`、
 `spectra:roadmap` task 與同步器的退役證據見上方三筆 commit。這不是證明原始 structural drift
 已修復，也不再把 skipped run 當 PASS。draft CI run `36260052169` 的機械檢查成功，Unit tests
-因 draft 狀態 skipped；合併後仍須確認 main workflow。
+因 draft 狀態 skipped；合併後的 main workflow 驗證見下方 Resolution / Verification。
 
 ### 2026-09-28 處置
 
@@ -133,7 +135,19 @@ diff 指令；前置測試失敗使步驟跳過，即使走到該步驟，roadma
   不再引用已退役的 roadmap 檔、`spectra:roadmap` task、診斷 diff 或該診斷的
   `continue-on-error` 步驟（程式證據：`23fbbff6`）。
 - 變更 PR 的 Template CI 完成，合入後以 main 的 workflow 再核對機械檢查成功；
-  PR draft run `36260052169` 的機械檢查已成功、Unit tests skipped，main 尚待驗。
+  PR draft run `36260052169` 的機械檢查已成功、Unit tests skipped；main 驗收證據見下方。
+
+### Resolution / Verification（2026-09-30，CDB-36 burn）
+
+- [PR #10](https://github.com/YuDefine/nuxt-supabase-starter/pull/10) 已於 2026-09-30 合併，merge commit
+  `df0dbb9088bdc60a2a277be055fa97a5c99ab0a2` 是本次基準 main `94ff9b54d415363d4e1767c66ee4068ecb8aaf32` 的祖先。
+- 核對 `.github/workflows/template-ci.yml` 已無 `openspec/ROADMAP.md`、`spectra:roadmap`、`roadmap-sync`
+  或 Spectra 診斷／diff／`continue-on-error` 步驟；同步器、roadmap 檔與 package task 均維持退役。
+- 合併當下的 [main run 36688298394](https://github.com/YuDefine/nuxt-supabase-starter/actions/runs/36688298394)
+  為 cancelled，不作通過證據。後續 main `94ff9b54` 的
+  [Template CI run 36716794775](https://github.com/YuDefine/nuxt-supabase-starter/actions/runs/36716794775)
+  已 completed / success：Format / Lint / Typecheck 與 Unit tests 兩個 job 均成功，UX drift audit、evlog map gate 亦成功。
+- 本次只同步 Index、TD-004 本文與交接指針；結案依據是移除退役診斷並完成現行驗收，未宣稱歷史 collect/render structural drift 已修復。
 
 ## TD-005 — meta-monorepo 下 pre-push checks 靜默 no-op
 
