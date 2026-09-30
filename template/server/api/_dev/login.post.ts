@@ -33,6 +33,7 @@
  */
 import { z } from 'zod'
 import type { H3Event } from 'h3'
+import { createError, EvlogError } from 'evlog'
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -83,11 +84,13 @@ export function assertSignUpAllowed(email: string, allowedDomains: string[]): vo
 
   if (!allowedDomains.includes(domain)) {
     throw createError({
-      statusCode: 401,
+      status: 401,
       message:
         `dev-login refuses to create an account for "${email}": domain not in ` +
         `DEV_LOGIN_EMAIL_DOMAINS (${allowedDomains.join(', ')}). ` +
         'Sign-up fallback exists for test fixtures only.',
+      why: 'The requested account is outside the permitted development fixture domains.',
+      fix: 'Use a permitted test account or sign in through the regular login page.',
     })
   }
 }
@@ -102,8 +105,10 @@ export function resolveDevLoginRole(input: {
 
   if (input.as === 'admin' && !isAllowlistedAdmin) {
     throw createError({
-      statusCode: 400,
+      status: 400,
       message: 'as=admin requires an email in ADMIN_EMAIL_ALLOWLIST',
+      why: 'The requested account is not authorized for the administrator role.',
+      fix: 'Request a non-admin role or use an authorized administrator account.',
     })
   }
 
@@ -155,15 +160,19 @@ async function finishAuthResponse(
     appendResponseHeader(event, 'set-cookie', setCookie)
   }
 
-  // Structured log — canonical fields (mirror real OAuth callback for audit
-  // parity). Swap for `useLogger(event).set({...})` if evlog is wired.
-  console.info('[dev-login]', {
-    route: '/api/_dev/login',
-    requestedAs: input.role,
-    requestedEmail: input.email,
-    resolvedUserId: payload.user?.id ?? null,
-    action: input.action,
-    environment: 'dev',
+  const log = useLogger(event)
+  log.set({
+    auth: { role: input.role, userId: payload.user?.id ?? null, action: input.action },
+  })
+  log.audit({
+    action: 'auth.dev_login',
+    actor: payload.user?.id
+      ? { type: 'user', id: payload.user.id }
+      : { type: 'api', id: 'dev-login' },
+    target: payload.user?.id
+      ? { type: 'user', id: payload.user.id }
+      : { type: 'route', id: '/api/_dev/login' },
+    outcome: 'success',
   })
 
   return {
@@ -184,70 +193,97 @@ export default defineEventHandler(async (event) => {
   // Hard guard: 404 (not 403) so the route is invisible in non-dev builds.
   // `import.meta.dev` is tree-shaken out of production bundles by Nuxt/Nitro.
   if (!import.meta.dev) {
-    throw createError({ statusCode: 404 })
-  }
-
-  const body = await readValidatedBody(event, bodySchema.parse)
-  const password = body.password ?? process.env.NUXT_DEV_LOGIN_PASSWORD
-
-  if (!password) {
     throw createError({
-      statusCode: 500,
-      message:
-        'Dev-login password missing. Pass `password` in the body or set NUXT_DEV_LOGIN_PASSWORD.',
+      status: 404,
+      message: 'Not Found',
+      why: 'The requested path is unavailable.',
+      fix: 'Check the request path.',
     })
   }
 
-  const role = resolveDevLoginRole({
-    as: body.as,
-    email: body.email,
-    adminEmailAllowlist: parseCsv(process.env.ADMIN_EMAIL_ALLOWLIST),
-  })
+  const log = useLogger(event)
+  log.set({ operation: 'auth.dev_login', auth: { provider: 'dev-login' } })
+  try {
+    const body = await readValidatedBody(event, bodySchema.parse)
+    log.set({ auth: { requestedRole: body.as ?? 'default' } })
+    const password = body.password ?? process.env.NUXT_DEV_LOGIN_PASSWORD
 
-  const auth = serverAuth(event)
-  const signInResponse = await auth.api
-    .signInEmail({
-      body: { email: body.email, password },
+    if (!password) {
+      throw createError({
+        status: 500,
+        message:
+          'Dev-login password missing. Pass `password` in the body or set NUXT_DEV_LOGIN_PASSWORD.',
+        why: 'Neither the request nor the development environment supplied a password.',
+        fix: 'Provide a password in the request or configure the development login password.',
+      })
+    }
+
+    const role = resolveDevLoginRole({
+      as: body.as,
+      email: body.email,
+      adminEmailAllowlist: parseCsv(process.env.ADMIN_EMAIL_ALLOWLIST),
+    })
+
+    const auth = serverAuth(event)
+    const signInResponse = await auth.api
+      .signInEmail({
+        body: { email: body.email, password },
+        asResponse: true,
+      })
+      .catch(() => null)
+
+    if (signInResponse?.ok) {
+      return await finishAuthResponse(event, signInResponse, {
+        email: body.email,
+        role,
+        action: 'signed_in',
+      })
+    }
+
+    // signIn 失敗 → 準備自動建帳號。這是唯一會產生持久狀態的分支，先過 domain 白名單。
+    log.set({ auth: { signUpFallback: true } })
+    const allowedDomains = parseCsv(process.env.DEV_LOGIN_EMAIL_DOMAINS)
+    assertSignUpAllowed(
+      body.email,
+      allowedDomains.length > 0 ? allowedDomains : DEFAULT_DEV_LOGIN_DOMAINS,
+    )
+
+    const displayName = body.name ?? body.email.split('@')[0] ?? 'Dev User'
+    const signUpResponse = await auth.api.signUpEmail({
+      body: {
+        email: body.email,
+        password,
+        name: displayName,
+      },
       asResponse: true,
     })
-    .catch(() => null)
 
-  if (signInResponse?.ok) {
-    return await finishAuthResponse(event, signInResponse, {
+    if (!signUpResponse.ok) {
+      const payload = (await signUpResponse.json().catch(() => ({}))) as AuthPayload
+      throw createError({
+        status: signUpResponse.status,
+        message: payload.message ?? 'Failed to create dev-login user',
+        why: 'The authentication service rejected the development account creation request.',
+        fix: 'Check the account credentials and development sign-up configuration.',
+      })
+    }
+
+    return await finishAuthResponse(event, signUpResponse, {
       email: body.email,
       role,
-      action: 'signed_in',
+      action: 'created_and_signed_in',
     })
-  }
-
-  // signIn 失敗 → 準備自動建帳號。這是唯一會產生持久狀態的分支，先過 domain 白名單。
-  const allowedDomains = parseCsv(process.env.DEV_LOGIN_EMAIL_DOMAINS)
-  assertSignUpAllowed(
-    body.email,
-    allowedDomains.length > 0 ? allowedDomains : DEFAULT_DEV_LOGIN_DOMAINS,
-  )
-
-  const displayName = body.name ?? body.email.split('@')[0] ?? 'Dev User'
-  const signUpResponse = await auth.api.signUpEmail({
-    body: {
-      email: body.email,
-      password,
-      name: displayName,
-    },
-    asResponse: true,
-  })
-
-  if (!signUpResponse.ok) {
-    const payload = (await signUpResponse.json().catch(() => ({}))) as AuthPayload
-    throw createError({
-      statusCode: signUpResponse.status,
-      message: payload.message ?? 'Failed to create dev-login user',
+  } catch (error) {
+    log.audit({
+      action: 'auth.dev_login',
+      actor: { type: 'api', id: 'dev-login' },
+      target: { type: 'route', id: '/api/_dev/login' },
+      outcome:
+        EvlogError.isEvlogError(error) && [400, 401, 403].includes(error.status)
+          ? 'denied'
+          : 'failure',
     })
+    log.error(error instanceof Error ? error : String(error))
+    throw error
   }
-
-  return await finishAuthResponse(event, signUpResponse, {
-    email: body.email,
-    role,
-    action: 'created_and_signed_in',
-  })
 })
