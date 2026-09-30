@@ -29,7 +29,9 @@
  *     leftovers, and unlocking them requires still recognising the path (TD-1000).
  *   - Snippets / shared presets: `vendor/snippets/`, `vendor/oxc-shared/`
  *   - GitHub Composite Actions vendored at `.github/actions/`
- *   - Top-level injected files: `AGENTS.md`, `CLAUDE.md`
+ *   - Top-level projection paths: `AGENTS.md`, `CLAUDE.md` (sync-rules rewrites
+ *     an existing CLAUDE.md to its shell, currently with zero snippet blocks;
+ *     repo-aware classification also guards against unsynced manual edits)
  *   - utility: `utils/assert-never.ts`
  *
  * Symlink 模式決策（2026-06-11）：consumer `.claude/rules/*.md` 改為絕對路徑
@@ -49,6 +51,13 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 const LOCKED_BANNER_SIGNATURE = '🔒 LOCKED — managed by clade'
+// Keep in sync with scripts/sync-rules.ts CLAUDE_MD_SHELL.
+const CLAUDE_MD_SHELL = '# CLAUDE.md\n'
+const CLAUDE_SNIPPET_BLOCK_RE =
+  /<!-- CLADE:SNIPPET:([A-Za-z0-9_.-]+):START -->[\s\S]*?<!-- CLADE:SNIPPET:\1:END -->/g
+const cwdScopedGitEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')),
+)
 
 /** Cursor CLI 自管目錄 — sync-to-cursor 的 CURSOR_OWNED_USER_ENTRIES，不得當投影。 */
 const CURSOR_OWNED_USER_RE =
@@ -77,11 +86,11 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // Improvement-loop infra (.clade/)
       // `scripts` / `registry` 於 2026-08-24 補上（TD-639）：兩者都是 improvement-loop
       // 投影的整目錄（`.clade/scripts/` 五支 + `.clade/registry/consumers.json`），
-      // 抽查 <consumer-a> / <consumer-b> / <consumer-f> / <consumer-j> 四台，目錄內**沒有**任何 consumer
+      // 抽查 <consumer-a> / <consumer-b> / ai-quota / <consumer-i> 四台，目錄內**沒有**任何 consumer
       // 自家檔——與 `scripts/lib/` 那種混住的目錄不同，可以整目錄匹配。
       String.raw`\.clade/(bin|signals|vendor|scripts|registry)/`,
       // Vendored script entry points (scripts/)
-      String.raw`scripts/(wt-helper|wt-batch|wt-unattended-merge|preservation-policy|preservation-profiles|preservation-inventory|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|audit-risk-path-coverage|audit-clade-leak|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|dev-singleton|dev-router|dev-session|herdr-visible-identity|db-lease|db-reset-peer-coordination|ownership-journal|shell-safety-check|run-evidence|cbm-health|evidence-hook|install-tool-evidence|control-plane-projection-validate)\.(mjs|mts|ts)$`,
+      String.raw`scripts/(wt-helper|codex-worktree-trust|wt-batch|wt-unattended-merge|preservation-policy|preservation-profiles|preservation-inventory|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|audit-risk-path-coverage|audit-clade-leak|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|dev-singleton|dev-router|dev-session|herdr-visible-identity|db-lease|db-reset-peer-coordination|ownership-journal|shell-safety-check|run-evidence|cbm-health|evidence-hook|install-tool-evidence|control-plane-projection-validate)\.(mjs|mts|ts)$`,
       // Heavy-gate 併發閘門（bash helper，非 .mjs/.ts 家族，故單列一條）
       String.raw`scripts/gate-slot\.sh$`,
       // codebase-memory index 的 lock + MemoryMax wrapper（同上，bash helper 單列一條）
@@ -95,7 +104,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // NEVER widen to `scripts/lib/`: consumers author their own files there
       // (<consumer-a> `common.sh` / `read-infra-manifest.mjs`, <consumer-d> `vue-component-resolution.ts`),
       // and matching the whole dir would mark those clade-managed → auto-reset clobbers them.
-      String.raw`scripts/lib/(argv-unsplit|evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|json-unknown|safety-observation|worktree-dev-port|publish-in-flight|herdr-machine|host-config-refs)\.(mjs|mts|ts)$`,
+      String.raw`scripts/lib/(argv-unsplit|evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|json-unknown|safety-observation|worktree-dev-port|publish-in-flight|projection-ledger-reconcile|herdr-machine|host-config-refs|pane-cache-ttl)\.(mjs|mts|ts)$`,
       // json-unknown.ts 第二條 dest：vendor/review-rules/scan.ts 以
       // `../scripts/lib/json-unknown.ts` 解析到 vendor/scripts/lib/。
       // NEVER 放寬成 `vendor/scripts/lib/`——那個目錄在 clade home 是源。
@@ -209,6 +218,13 @@ const CLADE_OWN_SOURCE_RE = new RegExp(
       // 對命中者一律 `checkout --theirs`，於是 branch 上已 commit 的規約改動被靜默取回
       // main 版（TD-1023：CI parity 的 35 行 clade 端 pointer 就是這樣消失的）。
       String.raw`\.claude/rules/local/`,
+      // 同型（TD-1023）：clade home 自有 skill 與 hook 是實體目錄／檔，不是 hub skill 的 symlink，
+      // 但 LOCKED_PROJECTION_RE 收整個 `.claude/(skills|hooks)/` 前綴。沒有這兩列，merge-back
+      // 會把 clade-home 的判準全文（`.claude/skills/clade-home/rules/**`）與它的 guard 當投影
+      // `checkout --theirs`。hub skill 的 symlink（bp / handoff / …）與 sync 重產的
+      // version-upgrade 等目錄仍是投影，NEVER 放寬成整個 `.claude/skills/`。
+      String.raw`\.claude/skills/(clade-home|clade-publish|clade-health|coordinator)/`,
+      String.raw`\.claude/hooks/clade-home-guard\.ts$`,
     ].join('|') +
     ')',
 )
@@ -250,6 +266,80 @@ export function isCladeSourceRepo(repoRoot) {
   return result
 }
 
+function claudeMdOutsideSnippets(content) {
+  let blocks = 0
+  let malformed = false
+  const outside = content.replace(CLAUDE_SNIPPET_BLOCK_RE, (block, name) => {
+    blocks++
+    const start = `<!-- CLADE:SNIPPET:${name}:START -->`
+    const end = `<!-- CLADE:SNIPPET:${name}:END -->`
+    if (block.slice(start.length, -end.length).includes('<!-- CLADE:SNIPPET:')) malformed = true
+    return `\0${name}\0`
+  })
+  // Missing or broken markers cannot establish that a change belongs to clade.
+  if (blocks === 0 || malformed || outside.includes('<!-- CLADE:SNIPPET:')) return null
+  return outside
+}
+
+function gitClaudeMd(repoRoot, revision) {
+  try {
+    return execFileSync('git', ['show', `${revision}:CLAUDE.md`], {
+      cwd: repoRoot,
+      env: cwdScopedGitEnv,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+  } catch {
+    return null
+  }
+}
+
+function isClaudeMdBannerOnly(repoRoot) {
+  let current
+  try {
+    current = readFileSync(join(repoRoot, 'CLAUDE.md'), 'utf8')
+  } catch {
+    return false
+  }
+
+  let unmerged
+  try {
+    unmerged = execFileSync('git', ['ls-files', '-u', '--', 'CLAUDE.md'], {
+      cwd: repoRoot,
+      env: cwdScopedGitEnv,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+  } catch {
+    return false
+  }
+
+  // During merge-back the working file contains conflict markers. Compare the
+  // index stages instead. A shell-vs-legacy conflict is generated drift only
+  // when the other side is unchanged or differs from the base solely in a
+  // snippet body; otherwise auto-resolve could discard a real edit.
+  const versions = unmerged
+    ? [gitClaudeMd(repoRoot, ':1'), gitClaudeMd(repoRoot, ':2'), gitClaudeMd(repoRoot, ':3')]
+    : [gitClaudeMd(repoRoot, 'HEAD'), gitClaudeMd(repoRoot, ':0'), current]
+  if (versions.some((version) => version === null)) return false
+  const [base, stagedOrOurs, currentOrTheirs] = versions
+  if (unmerged && (stagedOrOurs === CLAUDE_MD_SHELL || currentOrTheirs === CLAUDE_MD_SHELL)) {
+    const other = stagedOrOurs === CLAUDE_MD_SHELL ? currentOrTheirs : stagedOrOurs
+    const baseOutside = claudeMdOutsideSnippets(base)
+    return (
+      other === base || (baseOutside !== null && claudeMdOutsideSnippets(other) === baseOutside)
+    )
+  }
+  // sync-rules rewrites an existing file from scratch. Its current output has
+  // no markers, and may replace legacy text in HEAD. A staged manual edit is
+  // still WIP unless the index matches HEAD or holds that same sync output.
+  if (!unmerged && current === CLAUDE_MD_SHELL) {
+    return stagedOrOurs === base || stagedOrOurs === CLAUDE_MD_SHELL
+  }
+  const outside = versions.map(claudeMdOutsideSnippets)
+  return outside[0] !== null && outside.every((text) => text === outside[0])
+}
+
 /**
  * repo-aware 版的 `isLockedProjectionPath`：**判 user WIP 的呼叫端一律用這支**
  * （stop-wip-guard / drift-scan / handoff-scan userWip / merge-back 的未 commit gate）。
@@ -259,8 +349,12 @@ export function isCladeSourceRepo(repoRoot) {
  */
 export function isLockedProjectionPathFor(repoRoot, p) {
   if (CURSOR_OWNED_USER_RE.test(p)) return false
+  // sync-rules only owns top-level .claude/rules/*.md; local/ is consumer-owned
+  // in every repo. Keep it in the bare regex for projection-universe checks.
+  if (p.startsWith('.claude/rules/local/')) return false
   if (CLADE_OWN_SOURCE_RE.test(p) && isCladeSourceRepo(repoRoot)) return false
   if (!LOCKED_PROJECTION_RE.test(p)) return false
+  if (p === 'CLAUDE.md') return isClaudeMdBannerOnly(repoRoot)
   if (p.startsWith('.cursor/')) return isCursorGeneratedProjection(repoRoot, p)
   return true
 }

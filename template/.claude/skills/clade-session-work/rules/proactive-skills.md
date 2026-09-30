@@ -8,7 +8,7 @@
 > 本檔是 trigger 主規則（無 frontmatter，每個 session 必載入）。詳細場景規約拆到 path-scoped reference：
 >
 > - 動 UI 檔（`app/**/*.vue` / `components/**` / `pages/**` / `layouts/**`）或寫 design artifact：[`proactive-skills.design-checkpoint.md`](./proactive-skills.design-checkpoint.md)
-> - 走到 `## 人工檢查` 階段、要把驗收入口交給人：[`proactive-skills.manual-review-entry.md`](./proactive-skills.manual-review-entry.md)
+> - 走到 `## 人工檢查` 階段、要把卡片交給人：[`proactive-skills.manual-review-entry.md`](./proactive-skills.manual-review-entry.md)
 
 ## 原則
 
@@ -56,8 +56,7 @@
 
 | 情境 | 觸發 | 說明 |
 |---|---|---|
-| 有 UI 的工作完成（design review findings 已產出） | `/design retro` | 分析 findings、識別重複模式、建議改善 |
-| Findings 累積達 5 的倍數（5、10、15…） | `/design retro` | 週期性全量分析 |
+| 有 UI 的工作完成 | impeccable `critique-storage trend <surface>` | 看同一畫面 critique 分數的趨勢；跨畫面的重複問題由對全站跑 `critique` 找 |
 
 ### Sub-skill 禁用清單（永不觸發）
 
@@ -67,12 +66,13 @@
 | `spectra-propose` | **NEVER** 主動觸發 | `/specify` 建 plan package；純技術工作走 `tasks/<date>-<slug>.md` |
 | `spectra-apply` | **NEVER** 主動觸發 | `/implement` 按 plan package 的 `tasks.md` 執行 |
 | `spectra-archive` | **NEVER** 主動觸發 | `flow` 卡標 done ＋ `/commit`；plan package 本身就是歷史，不搬動 |
-| `spectra-discuss` | **NEVER** 主動觸發 | `/clarify-over-specs`（規格模糊）或 `docs/decisions/**`（架構取捨） |
+| `spectra-discuss` | **NEVER** 主動觸發 | `/clarify-over-specs`（規格模糊）或依 [[knowledge-and-decisions]] 記 ADR（架構取捨） |
 | `spectra-ingest` | **NEVER** 主動觸發 | 停下回交 truth owner skill（`/dsl-refine` 等），**NEVER** 就地補寫規格 |
 | `spectra-analyze` / `spectra-clarify` / `spectra-ask` / `spectra-debug` | **NEVER** 主動觸發 | `/clarify-over-specs`、`/system-analysis`、直接讀 `specs/truth/**` |
 | `opsx` | **NEVER** 主動觸發 | 上列各條的替代入口 |
+| `/design` | **NEVER** 主動觸發（2026-09-27 退役，hub-core 已刪） | 無參數 `impeccable` 推下一支指令；閉環見 [[proactive-skills.design-checkpoint]] |
 
-**原因**：clade 的 SDD 層是 SpecFormula ＋ aixbdd（[[specformula]] / [[aixbdd-workflow]]）；本清單是給由上游 `spectra init` 帶入這些 skill 的 consumer 用的。
+**原因**：clade 的 SDD 層是 SpecFormula ＋ aixbdd（[[specformula]] / [[aixbdd-workflow]]）；本清單是給由上游 `spectra init` 帶入這些 skill 的 consumer 用的。`/design` 是 clade 自建的 design orchestrator，挑下一支 impeccable 指令的職責已由 impeccable 無參數模式取代；以 slash 形列名，audit 只認呼叫形，不把一般的 design 字樣當引導。
 
 **禁用不只管「不觸發」，也管「不引導」**——任何 skill / rule / snippet / script 輸出 NEVER 出現叫人去跑清單上那支 skill 的句子。合法與違規的語境分界表、audit 訊號與 REQUIRED 欄位在 [[proactive-skills.disabled-skill-guidance]]（path-scoped：碰 `rules/**` / `capabilities/**/skills/**` / `vendor/snippets/**` / `scripts/**` 時載入）。
 
@@ -80,7 +80,7 @@
 
 所有 SDD / design workflow 都受 [[scope-discipline]] 約束：範圍外檔案不順手改、途中發現其他問題**不修但必登記**、未知變更先回報不自行清場、不得在 subagent 內執行 `git reset --hard` / `git checkout --` / `git clean`。
 
-登記出口（always-load 備份，完整表在 [[scope-discipline]]）：技術債 → per [[follow-up-register]]（未遷移 consumer 為 `docs/tech-debt.md` 的 `TD-NNN`）；當前 session 未完 → `HANDOFF.md`；未來工作 → `ROADMAP.md`；規格漏項 → 停下回交 truth owner skill，**NEVER** 就地補寫；架構決策 → `docs/decisions/**`。
+登記出口（always-load 備份，完整表在 [[scope-discipline]]）：技術債 → per [[follow-up-register]]（未遷移 consumer 為 `docs/tech-debt.md` 的 `TD-NNN`）；當前 session 未完 → `HANDOFF.md`；未來工作 → `ROADMAP.md`；規格漏項 → 停下回交 truth owner skill，**NEVER** 就地補寫；架構決策 → 落點依 [[knowledge-and-decisions]]（lifecycle repo：它約束的 truth 單位；未遷移 consumer：當下工作的 plan／spec，**NEVER** 在 `docs/decisions/` 開新檔）。
 
 ## Handoff Hygiene
 
@@ -95,7 +95,7 @@
 
 `## 人工檢查` 的 checkbox **不能由 agent 自行代勾**。
 
-**四條契約全文在 [[proactive-skills.manual-review-entry]] § 人工檢查推進的四條契約**（path-scoped：碰 `tasks/**` / `specs/plans/**` 時載入）——auto-triage 先於引導、`flow gates --repo-only --require-empty` exit 3 才可交付、**NEVER** 自判有沒有等人的事、給人的 URL 恆為 `https://review-gui.<maintainer-domain>`。同檔另有 auto-triage 路由、`[discuss]` 歸屬與 deep-link 格式。
+**三條契約全文在 [[proactive-skills.manual-review-entry]] § 人工檢查推進的三條契約**（path-scoped：碰 `tasks/**` / `specs/plans/**` 時載入）——auto-triage 先於引導、`flow gates --repo-only --require-empty` exit 3 才可交付、**NEVER** 自判有沒有等人的事。同檔另有 auto-triage 路由與 `[discuss]` 歸屬。
 
 ### Dev Server Auto-Spawn（agent 自起，不要叫 user cd）
 
@@ -111,5 +111,4 @@
 
 ## Knowledge And Decisions
 
-碰到非直覺問題或 workaround，任務結束時應評估沉澱到 `docs/solutions/**`。
-做出跨任務的技術取捨時，應評估寫 ADR 到 `docs/decisions/**`。
+碰到非直覺問題或 workaround，任務結束時應評估沉澱教訓；做出跨任務的技術取捨時，應評估記 ADR。兩者落點都依 [[knowledge-and-decisions]]：lifecycle repo 寫進它約束的 truth 單位，未遷移 consumer 寫進當下工作的 plan／spec——**NEVER** 在 `docs/solutions/`、`docs/decisions/` 開新檔（[[consumer-docs-retirement]]）。

@@ -60,7 +60,7 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --ori
 
 ### 掛載點（MUST）
 
-- **發現即建票**：工程師在 prod／資料裡發現問題、或決定做一個功能時，**先** `file` 再動手——它同時鑄 work id，之後的推進全部自動。
+- **發現即建票**：工程師在 prod／資料裡發現問題、或決定做一個功能時，**先** `file` 再動手——它同時鑄 work id，之後的推進全部自動。從 work-route 進來的新需求／新 bug 由 work-route § 1 在鑄 work id 前問一次要不要建票（board-only hub 點明不建票客戶看不到），不另加步驟。
 - **flow 事件自動跟隨**：`flow plan open` 與 `flow done` 成功後，flow 以 detached 子行程觸發 `follow`（fail-open，未宣告 hub 的 repo 零成本；`CLADE_NOTION_FOLLOW=0` 關閉）。**NEVER** 在 work-route 或任何 skill 裡加「記得同步 Notion」步驟——Notion 跟隨 flow，不是 flow 呼叫 Notion。
 
 - **`flow open` 之後、動第一個檔之前**：跑 `open`。
@@ -97,7 +97,7 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --ori
 
 ## 執行機制
 
-- **Runtime**：確定性 script（`notion-sync.ts`、`lib/notion-hub.ts resolve`、`scripts/audit-notion-hub-schema.ts`）主線直接跑；自由形式的 Notion 讀寫一律 `ntn api`（**NEVER** Notion MCP／WebFetch），依 [[agent-routing]] 〔`notion-ops`〕列派工（執行鏈以該列為準），**NEVER** 主線第一手自己跑。transport 是 `lib/notion-client.ts` 直接呼叫 Notion HTTPS API（token 取自 `ntn login` 的 auth 檔；同一份 API version / timeout / sidecar），不經 `ntn` CLI 子行程。
+- **Runtime**：確定性 script（`notion-sync.ts`、`lib/notion-hub.ts resolve`、`scripts/audit-notion-hub-schema.ts`）主線直接跑；自由形式的 Notion 讀寫一律 `ntn api`（**NEVER** Notion MCP／WebFetch；唯一 MCP 例外是 provision 整頁複製模板或入口頁用 `notion-duplicate-page`——public API 沒有 duplicate，其餘 move／改名／改 view 仍走 `ntn api`，見 notion-hub skill § 6），依 [[agent-routing]] 〔`notion-ops`〕列派工（執行鏈以該列為準），**NEVER** 主線第一手自己跑。transport 是 `lib/notion-client.ts` 直接呼叫 Notion HTTPS API（token 取自 `ntn login` 的 auth 檔；同一份 API version / timeout / sidecar），不經 `ntn` CLI 子行程。
 - **寫入前**：script 用 `hub.fields` 對 data source 現況做 schema 檢查，缺欄位就以「疑似 schema drift」中止，**NEVER** 猜。常駐對帳跑 `node scripts/audit-notion-hub-schema.ts`（exit 1 = drift，2 = 讀不到 live schema，n/a **NEVER** 讀成 0 drift）；drift → 補 registry `fields`／`ticketType`，**NEVER** 改 `FIELDS` 或在 script 分支。
 - **失敗模式**：所有寫入是絕對值 SET；讀失敗中止；寫入 timeout 留 marker 在 `<consumer>/.clade/notion-sync-pending/` 不自動重試，`notion-sync.ts pending` 列出、下一個自然觸發點重跑（重跑 idempotent）。
 - **Work ID 是對帳鍵**：ticket 與 交付項目 都存 `Work ID` = `<consumerId>/<workId>`（`lib/notion-hub.ts` `encodeWorkKey` / `parseWorkKey`；flow work id 只在單一 repo 內唯一，而 projectCode 可被多個 repo 共用），反查時再限定本專案 relation。reconcile / scan 先用它精確對，找不到才退回標題關鍵字（模糊、有 false positive）。

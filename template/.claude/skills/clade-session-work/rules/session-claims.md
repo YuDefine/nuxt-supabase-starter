@@ -165,7 +165,7 @@ node scripts/claim-helper.ts add --change-id main-session-wip \
 | --- | --- |
 | 觸發條件 | 目標路徑落在別人活 claim 的 `declared` 或 `derived-hook` 範圍內 → 遞一行（最多 3 行）。**warn-only，NEVER block** |
 | 消費端 | 正要 Edit / Write 的那個 agent（本節）；`wt-helper add` 開樹時對宣告範圍做同一查詢 |
-| 載入路徑 | 本節（`rules/core/session-claims.md`，paths-gated 於 `.clade/claims/**`、`vendor/scripts/claim-helper.ts`、`capabilities/core/hooks/pre-edit-claim-conflict.sh`） |
+| 觸發點 | 本節（`rules/core/session-claims.md`，paths-gated 於 `.clade/claims/**`、`vendor/scripts/claim-helper.ts`、`capabilities/core/hooks/pre-edit-claim-conflict.sh`） |
 
 ## 3.5 接手別人留下的工作之前 MUST 先 claim
 

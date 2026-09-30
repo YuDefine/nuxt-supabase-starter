@@ -104,7 +104,7 @@ simplify → fast-path 判定
 每個 gate 的完整執行流程（bash scripts、trigger 條件、fix loop、pi offload）見 [gates.md](gates.md)。執行任一 gate 前 **MUST** 先讀對應 §。
 
 - **0-A 程式碼審查**：simplify（0-A.0）→ 合格獨立 review（0-A.1）→ Critical／Major 條件觸發深度 review（0-A.2）。唯一合格 reviewer 是 fresh-context Claude Opus 5.5 medium（Claude Code 主線走 `claude-review-safe.sh prepare` → AGENT_CALL → FINALIZE）；Opus 不可用時 gate 保持未完成，不以主線自審或其他模型補位。詳見 [gates.md](gates.md) § 0-A。
-- **0-B UI Design Review**：條件觸發（`.vue` template 變更 + 視覺影響）。詳見 [gates.md](gates.md) § 0-B。
+- **0-B UI Design Review**：已採用 impeccable 且有 UI 檔變更時跑 0-B.1（detector 乾淨、唯讀核對受影響畫面 P0／P1 的處置證據、token 動了要有適用的 DESIGN.md 或說明）；未採用跳過。0-B.2 在 `.vue` template 變更且有視覺影響時判讀。詳見 [gates.md](gates.md) § 0-B。
 - **0-C CI 等效檢查**：`pnpm check` + `pnpm test` + `pnpm run doctor`，全綠才過。詳見 [gates.md](gates.md) § 0-C。
 - **0-D Doc Alignment**：條件觸發（diff 觸及 docs / rules / snippets / audit / 業務碼 / pitfall）。詳見 [gates.md](gates.md) § 0-D。
 - **0-E evlog map 覆蓋率**：條件觸發（diff 觸及 entry point：`server/{api,routes,middleware,tasks}/` / pages / Next route handler）。`@evlog/cli` **必裝**（缺裝 = block commit，比照 0-C 的 doctor）；本次 diff 觸及的**每一個** entry point 都 MUST 滿分。詳見 [gates.md](gates.md) § 0-E。

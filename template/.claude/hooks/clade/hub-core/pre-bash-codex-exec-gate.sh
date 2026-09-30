@@ -64,7 +64,7 @@ esac
 #   grep -rn 'codex exec' docs/  → 同上
 #   codex login status           → 子命令不在白名單
 #   node scripts/sync-to-codex.ts → 命令位置是 node
-printf '%s' "$cmd" | perl -0777 -e '
+printf '%s' "$cmd" | LC_ALL=C perl -0777 -e '
   my $c = <>;
   $c = "" unless defined $c;
   exit(($c =~ m{
@@ -91,8 +91,8 @@ codex-exec gate: 派工一律走 Pi dispatcher，NEVER 直接執行 codex exec /
     --label <descriptive-label>
 
 Sol／Grok 一律 xhigh、Gemini 一律 high；Astra／Luna 已禁用（2026-09-24）。非 UI implementation／decision／planning 用 Sol。
-判準與 Routing Table：rules/core/agent-routing.md § Routing Table
-派工流程：rules/core/agent-routing.pi-watch-protocol.md § Codex 派工的標準流程
+判準與 Routing Table：rules/core/agent-routing.routing-table.md § 工作類別對照
+派工流程：rules/core/agent-routing.pi-watch-protocol.md § Pi 派工的標準流程
 
 codex CLI 本身仍可用於本機操作與診斷（codex login / debug / --version 不受本 gate 影響），
 user 在自己 terminal 手動跑 cx 也完全不經過本 gate。

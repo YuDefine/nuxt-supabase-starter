@@ -15,19 +15,15 @@ metadata:
 
 > Runtime host-specific relay/fanout restrictions and launcher/tool bindings are supplied by the selected runtime adapter. The shared rules below define durable handoff semantics and fail-closed boundaries.
 
-Session 交接管理。非 Codex runtime 的四個 arg 依下方契約收工；Codex 先走下一節的 native boundary，upstream task 保留責任與控制權。
+Session 交接管理。四個 arg 依下方契約收工；Codex 先過下一節的 Codex boundary 判 bounded 還是 handoff 級。
 
-## Codex native boundary（MUST 早於 Step 0.1 與任何 Herdr preflight）
+## Codex boundary（MUST 早於 Step 0.1 與任何 Herdr preflight）
 
-當前 host 是 Codex 時，**在讀取或執行任何 Herdr／`herdr-session-handoff.ts`／`--launcher cx` 步驟前停止共用 successor 流程**：
+當前 host 是 Codex 時，先依 [[agent-routing]] § Dispatch data and transport boundary 判載體，判準與其他 runtime 相同：
 
-- 同一個 upstream Codex task 保留 change、user 對話、驗收與收尾責任；`relay`／`fanout`／`next` **NEVER** 把 upstream 轉成 successor、另開外部 Codex launcher，或因 native subagent 完成而強制結束 upstream。
-- 可切成 bounded GPT 工作時，依當前 schema 使用 `collaboration.spawn_agent`；一件 serial work 派一個，互不依賴的多件 work 才平行派。upstream 等待、收割 outcome、驗 scope 並繼續負責。
-- user 真正要求的是把整個 Codex 對話位置交給另一個 user-owned successor 時，當前 native surface 不提供這個能力；保留 durable state 並回報具體 blocker。**NEVER** 用 Herdr、`cx resume`、外部 launcher 或其他 runtime 冒充。
-- `collaboration.spawn_agent` 或所需 model／effort 不可用時，回報該 capability blocker；**NEVER** fallback 到外部 pane。被派出的 native subagent 只完成 brief 內 bounded work 並回報 parent，自己不 invoke `relay`／`fanout`。
-- **唯一外部 transport 例外**：user 當次明確點名 Devin bounded worker 時，upstream 可經 `herdr-session-handoff.ts` 以 create-only `--launcher devin` 派工並用 `--coordinate` 收割；routing 仍強制 exact Devin catalog model／effort。它是 worker 不是 successor——upstream 保留責任，`--relay`、cx successor 與其他 launcher 維持拒絕，無法驗證的 Codex 來源一律 fail closed。
-
-Codex 在本節完成分流後 **NEVER 繼續進入下方 relay／fanout Herdr 步驟**（Devin bounded worker 例外是 helper 的 create-only dispatch，不是下方 successor 流程）。`park` 仍可只寫 durable handoff state，但不因此關閉或移交 upstream task。
+- **本 turn 收得回來的 bounded GPT 工作**：依當前 schema 使用 `collaboration.spawn_agent`，**NEVER** 為它開 Herdr pane。同一個 upstream Codex task 保留 change、user 對話、驗收與收尾責任；一件 serial work 派一個，互不依賴的多件才平行派；upstream 等待、收割 outcome、驗 scope 後繼續。被派出的 native subagent 只完成 brief 內 bounded work 並回報 parent，自己不 invoke `relay`／`fanout`。
+- **handoff 級、主持分工級、長時間的獨立工作**：照下方 relay／fanout／next 的 Herdr 流程，與其他 runtime 相同；successor 原樣繼承 `cx`。
+- 身分無法驗證的 Codex origin（`CODEX_THREAD_ID` 在但 process evidence 判不出）由 helper 回 `codex_native_dispatch_forbidden`，**NEVER** 以 `--launcher` 或偽造 env 繞過。
 
 ## Step 0.1 — Value-first continuation gate（四種模式共用）
 
@@ -61,7 +57,7 @@ Codex 在本節完成分流後 **NEVER 繼續進入下方 relay／fanout Herdr �
 
 ### 可觀察 predicate（用訊號，NEVER 憑感覺估）
 
-門檻取 [[session-tasks]] § Session context 預算的 launcher profile（數字的 SoT 是 `session-context-budget-warn.sh` 的 profile 表）。`ccx` 不是可用 launcher：live `ccx` handoff fail closed，不自行改派其他 runtime；只有 user 明確點名時才可改交仍支援的 launcher。會進入共用 Herdr 流程的 runtime 原生繼承當前 session（`cc → cc`、`ccw → ccw`、`ccg → ccg`）；Codex 已由上方 native boundary 分流，工作 routing 不得覆蓋。判定材料只認下列三種**在 transcript 裡看得到**的訊號：
+門檻取 [[session-tasks]] § Session context 預算的 launcher profile（數字的 SoT 是 `session-context-budget-warn.sh` 的 profile 表）。`ccg`／`ccx` 已拆除、不是可用 launcher：gateway session 的 handoff fail closed，不自行改派其他 runtime；只有 user 明確點名時才可改交仍支援的 launcher。會進入共用 Herdr 流程的 runtime 原生繼承當前 session（`cc → cc`、`ccw → ccw`、`cx → cx`），工作 routing 不得覆蓋。判定材料只認下列三種**在 transcript 裡看得到**的訊號：
 
 1. `session-context-budget-warn` hook 已在本 session 響過（它逐字報「session context 已達 Nk」）
 2. user 在訊息裡明講了 context 用量（「目前已經 43%」「快滿了」）
@@ -294,19 +290,15 @@ heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消�
 
 ```markdown
 <!-- ✅ 判定成立 -->
-**驗收入口**（2026-09-17 實查 `flow gates --repo-only --require-empty` exit 3，ui-judgement 2 張）：
-https://review-gui.<maintainer-domain>/projects/<repo>
+**驗收入口**（2026-09-17 實查 `flow gates --repo-only --require-empty` exit 3，ui-judgement 2 張）
 
 <!-- ✅ 判定不成立 —— 誠實寫缺口，NEVER 省略不提 -->
 **驗收入口：無。** `flow gates --repo-only --require-empty` exit 0（0 張卡）——
 三條 item 尚無 `(verified-*)` evidence，**球在 agent 這邊**。
 
 <!-- ❌ 自由文字斷言：事後無法分辨「我以為做完」與「我驗過做完」 -->
-三條 item 的 evidence 都已備妥，只需看圖點 OK。開面板就好。
+三條 item 的 evidence 都已備妥，只需看圖點 OK。
 ```
-
-**人工驗收入口另有 Iron Law**（`rules/core/proactive-skills.manual-review-entry.md` § 交付入口前置查詢）：
-入口**永遠**是 `flow gates --repo-only` 實查過的面板位址（格式同上方 ✅ 範例），寫進 HANDOFF / `tasks/*.md` 時同樣適用——**NEVER** 寫任何 shell 指令（`pnpm review:ui`、`cd … && pnpm …`）或 loopback URL 當入口。
 
 ### 一段能留在 HANDOFF 的充要條件
 
@@ -422,7 +414,7 @@ triage 結果併入 §2B.2 outstanding 清單（與 HANDOFF / plan（未遷移 c
 
 **MUST Read [dispatch-steps.md](dispatch-steps.md) § 2B.4 before proceeding** — 含推薦訊息格式、Option 1–4 配置、7 條禁止行為（ptb-unsafe 不得標 Recommended、wt 推薦必附 safety signal、等人狀態推測禁令）。
 
-摘要：先輸出「outstanding 盤點 + serial/parallel 推薦」訊息，再用 詢問操作 讓 user 選；面板驗收相關 next move **MUST** 引用 §2B.1.7 的 `flow gates` 結果，**NEVER** 自行推測有沒有等人的事。
+摘要：先輸出「outstanding 盤點 + serial/parallel 推薦」訊息，再用 詢問操作 讓 user 選；人工驗收相關 next move **MUST** 引用 §2B.1.7 的 `flow gates` 結果，**NEVER** 自行推測有沒有等人的事。
 
 ### 2B.4.5 PTB-unsafe wt 的快速分流
 
@@ -432,7 +424,7 @@ Step 3.1 audit **有任一條** wt 判為 `mergeBackSafety: ptb-unsafe` → **MU
 
 ### 2B.5 接續 dispatch（user 選定 outstanding 後）
 
-**MUST Read [dispatch-steps.md](dispatch-steps.md) § 2B.5 before proceeding**（user 在 詢問操作 選定下一步的當下就要讀）— 含 5 列 next-skill dispatch 表、判定條件三條、slug 解析、parent cwd 不動 invariant、面板驗收 dispatch 的 family 入口表。
+**MUST Read [dispatch-steps.md](dispatch-steps.md) § 2B.5 before proceeding**（user 在 詢問操作 選定下一步的當下就要讀）— 含 5 列 next-skill dispatch 表、判定條件三條、slug 解析、parent cwd 不動 invariant、人工驗收 dispatch 的 family 入口表。
 
 摘要：一律透過 Skill tool 內呼對應入口，**不要**輸出「請執行 cd ... && claude ...」oneliner；會寫 tracked file 的實作入口（`/implement`、`/bdd`）包進 `/wt <slug>: /<next-skill>`，read-only 與規格類（`/specify`、`/clarify-over-specs`、`/system-analysis`）直接內呼。
 
@@ -563,7 +555,7 @@ Retained: N
 
 ## Output contract
 
-- Codex native branch：upstream 保留責任；native subagent receipt 只證明 bounded work 已回報，**NEVER** 宣稱 successor 已接手或「目前這裡收工」。缺 native capability 時回具體 blocker，不啟動外部 launcher——唯一例外是 user 點名的 create-only `--launcher devin` bounded worker，dispatch receipt 只證明 worker 已派出，upstream 以 `--coordinate` 收割
+- Codex bounded 分支：upstream 保留責任；native subagent receipt 只證明 bounded work 已回報，**NEVER** 宣稱 successor 已接手或「目前這裡收工」。Codex 走 relay／fanout 時套用下列同一份契約
 - `relay` / `fanout`：成功 = durable brief 已存在 + helper 回傳 `relay_dispatched` + （fanout）`relayed_dispatch_ids` 已逐筆比對通過 + runtime cleanup 已盤點 + parent worktree lifecycle 已 `removed`／具名 `retained`；完成訊息首行逐字包含「目前這裡收工」，之後不再工作或輪詢。`relay_refused`／`transport_error` 保留 pane 且不得假裝完成（見 [dispatch-common.md](dispatch-common.md) § 5）
 - park：成功 = **進入條件已滿足**（user 顯式打 `park`，或裸 `/handoff` 已取得 user 允許）+ HANDOFF.md / plan（未遷移 consumer 為 tech-debt）/ ROADMAP 有對應寫入 + tasks 檔已清 + Step 3 audit 已靜默寫入 HANDOFF.md `## Worktree & Stash Audit` 段；訊息只含升級摘要（不含 audit）。**未取得允許就寫入 = 失敗**，即使檔案內容正確
 - next：成功 = 2B.0–2B.5 每一個 sub-step 都照各自段落執行完（含 2B.2.5 的每一張卡主動 triage、2B.1.9 不存在時明講跳過）+ 盤點訊息與詢問操作已發出 + user 選定後 2B.5 dispatch 已完成
@@ -583,7 +575,7 @@ Cursor mainline keeps `park` available. `/handoff relay` and `/handoff fanout` a
 
 Parallel slices use Project **multitask** (workers / **CreateAgent**, one agent per independent slice). Each implementer opens a **draft** PR on its own branch, registers `batch draft --kind visibility`, subscribes to that PR's CI, and returns CI-red fixes to the same PR. Slice **worker NEVER merge**. Worker completion MUST return durable receipts (`workId`, repository, PR, branch, checkpoint SHA, scope, evidence, writer-release) and then stop writing the source. The named coordinator receives those receipts, runs `/commit` on a local managed source, and may squash only when unattended predicates hold. Charles does not open a pane or paste a prompt to continue. Bare `/handoff` that would land on fanout stays in the Project and multitasks; do not 收工; do not open successor panes. User explicitly saying fanout: same — multitask or `park`, never Herdr fanout panes. `/handoff next` inventory may still run; follow-through is multitask, not fanout.
 
-Implementation workers prefer Devin SWE-2 Max (`swe-2-max`); fallback exact `composer-2.5` if that slug is absent from the live Cursor catalog — never Composer-first, never invent a suffix. Planning, inventory, and coordination stay on the Project Grok main line. Do not invent a Devin row in the routing table. Other runtimes keep the routing table but still owe draft-PR + CI-watch + parallel slices.
+Implementation workers prefer Devin SWE-2 Max (`swe-2-max`, exact id from the live Cursor catalog — never invent a suffix); when it is absent, use the routing-table carrier for that work row or keep the slice on the main line. Composer is banned for every use — never dispatch it. Planning, inventory, and coordination stay on the Project Grok main line. Do not invent a Devin row in the routing table. Other runtimes keep the routing table but still owe draft-PR + CI-watch + parallel slices.
 
 Use the active conversation for questions and explicit drift checks. A native Task/Agent is bounded execution and cannot substitute for durable handoff. Durable session successor (a new pane that takes the conversation) is still not a native Task/Agent and still not `/handoff fanout`; stay and multitask, or `park`. Missing background/completion evidence blocks only the dependent dispatch.
 

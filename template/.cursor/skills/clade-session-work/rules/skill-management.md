@@ -36,7 +36,7 @@ paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/*
 | --- | --- |
 | 觸發條件 | 源檔出現該 marker；`global`＝只進 user-level、`project`＝只進 repo 內投影、`both`＝兩層都投 |
 | 消費端 | `scripts/lib/skill-scope.ts` 是唯一 parser；`runtime-capability-plan.ts`（`skillAudience`）、`projection-inventory.ts`（`collectPluginSkillSources` 固定 project 層）、`user-runtime.ts`（`--audience`／`root===cladeRoot` 推斷 `project`）各自接線 |
-| 載入路徑 | user 層收 `global`＋`both`，project 層收 `project`＋`both`；未宣告預設 `both`（back-compat），`_validate-manifests.ts` 對未宣告 warn、對非法值／重複 marker 報 error |
+| 觸發點 | user 層收 `global`＋`both`，project 層收 `project`＋`both`；未宣告預設 `both`（back-compat），`_validate-manifests.ts` 對未宣告 warn、對非法值／重複 marker 報 error |
 
 user-level 的同名 skill 與 repo 內投影同名是合法遮蔽：pi 採 project 版、略過 user 版。`sync-to-codex.ts` 的撞名分級據此分 managed（兩邊皆 clade 投影 → 摘要）／mixed（單邊 → fail）／unmanaged（雙邊手寫 → warn）；「clade 投影」的證據是 LOCKED banner 或 `.clade/projections/codex.{capabilities,rules}.json` 的 files 清單。
 
@@ -53,7 +53,7 @@ user-level 的同名 skill 與 repo 內投影同名是合法遮蔽：pi 採 proj
 | --- | --- |
 | 觸發條件 | `~/.claude/skills/<name>/SKILL.md` 存在、不是指回 native target 的 symlink、不與 clade plugin 撞名，且不在 `registry/user-level-skills.json` |
 | 消費端 | `scripts/sync-to-codex.ts`（user level）報告的「未登記的 user-level skill」段與 stderr 一行 warn——只報不擋、不影響投影 |
-| 載入路徑 | 本節（paths-gated 於 skill 目錄）＋收容名單本身的 `charter` 欄 |
+| 觸發點 | 本節（paths-gated 於 skill 目錄）＋收容名單本身的 `charter` 欄 |
 
 報出來的每一支逐支判：基礎設施類登記進名單並寫 `why`；其餘搬進 clade plugin。**NEVER** 為了讓報告變乾淨把工作流類登記成 `infrastructure`，**也 NEVER** 讀成取消 user-level skill——基礎設施類刪掉就是真的沒地方放。
 

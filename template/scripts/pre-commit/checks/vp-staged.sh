@@ -14,10 +14,20 @@ set -euo pipefail
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 cd "$PROJECT_ROOT"
 
+# 本檔所有 pnpm exec 一律經這裡：關掉 verify-deps-before-run。clade 散播的 .npmrc 設了
+# `verify-deps-before-run=install`，裸 `pnpm exec` 會在 package.json 有變時先跑完整 install
+# ＋postinstall bootstrap（含 sync-rules 寫檔）——commit 當中改工作樹，且一次 4–7 分鐘。
+# propagate 的 delivery commit 必然改 package.json，於是 <consumer-b> 連三趟在 300s 逾時被砍
+# （2026-09-27 v1.13.37，W-2026-09-27-precommit-vp-staged-pnpm-exec-install）。
+# 依賴不齊是 install 的事，pre-commit 只用已裝好的 vp。
+pnpm_exec() {
+  pnpm --config.verify-deps-before-run=false exec "$@"
+}
+
 # Auto-detect vite-plus 是否裝在此 consumer
 # 沒裝就 skip（graceful — 適用 non-vite-plus consumer 如純 nuxt + eslint 專案）
-if ! pnpm exec vp --version >/dev/null 2>&1; then
-  echo "⊘ vp 未安裝 — skip vp-staged check（如為 vite-plus 專案請 pnpm add -D vite-plus）"
+if ! pnpm_exec vp --version >/dev/null 2>&1; then
+  echo "⊘ vp 無法執行 — skip vp-staged check（本 check 不代跑 install：若 package.json 已有 vite-plus，多半是 deps 未安裝，先 pnpm install 再 commit；非 vite-plus 專案可忽略）"
   exit 0
 fi
 
@@ -73,7 +83,7 @@ done <"$VP_STAGED_KEPT"
 # 兩種訊息都視為 success（不是真正的 lint/fmt error）
 run_vp_with_empty_tolerance() {
   local out exit_code=0
-  out="$(pnpm exec "$@" 2>&1)" || exit_code=$?
+  out="$(pnpm_exec "$@" 2>&1)" || exit_code=$?
   echo "$out"
   if ((exit_code != 0)); then
     if echo "$out" | grep -qE "No files found to (lint|format)|Expected at least one target file"; then

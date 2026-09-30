@@ -493,9 +493,8 @@ const DEFAULT_EXCLUDE_RE = /^(vendor|node_modules)\//
  * `--include <glob>`（可重複）把預設排除掉的路徑重新納入。
  *
  * 存在的理由是 **clade home 自己**：上面那條排除說「vendor/ 是 clade 投影/cookbook，永遠不是
- * consumer 業務碼」，這句話在每個 consumer 上都對，在 clade 自己身上卻剛好相反 —— clade 唯一
- * 的 `.vue` 全部住在 `vendor/review-gui-web/`，它是源檔不是投影。結果是這支掃描器散播給 11 個
- * consumer 保護他們的 `.vue`，而**寫規則的那個 repo 自己的 `.vue` 沒有任何東西在掃**。
+ * consumer 業務碼」，這句話在每個 consumer 上都對，在 clade 自己身上卻可能相反 —— clade 放在
+ * `vendor/` 底下的 `.vue` 是源檔不是投影，要掃就得明確納入。
  *
  * 做成 opt-in flag 而不是改 `DEFAULT_EXCLUDE_RE` 的語意：後者是 fleet-wide 行為改動，會讓每個
  * consumer 的 cookbook 範例註解開始誤觸規則（TD-428 那條註解記的正是這個失敗）。沒傳 flag 的
@@ -591,7 +590,7 @@ function usage() {
   node scan.mjs --all --layer all --write-baseline           # 收斂 baseline
   node scan.mjs --all --layer pre-commit --json              # 機器可讀全站掃描
   node scan.mjs --all --layer all --ratchet \\
-    --include 'vendor/review-gui-web/**'                     # clade home 自己的 .vue（見 excluded()）
+    --include 'vendor/<dir>/**'                              # clade home 自己的 .vue（見 excluded()）
 `
 }
 

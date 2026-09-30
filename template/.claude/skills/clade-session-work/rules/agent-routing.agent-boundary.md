@@ -27,4 +27,4 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/**', '.clade/**']
 
 ## 已有領域出口
 
-dev server、commit、Herdr transport、review-gui、manual-review 的自救與 user-only terminal conditions，依 [[proactive-skills.dev-server-spawn]]、[[commit.detail]]、[[session-tasks.operations]]、[[review-gui-surface]] 與 [[manual-review.data-readiness]]；本檔不另造第二套流程。
+dev server、commit、Herdr transport、manual-review 的自救與 user-only terminal conditions，依 [[proactive-skills.dev-server-spawn]]、[[commit.detail]]、[[session-tasks.operations]] 與 [[manual-review.data-readiness]]；本檔不另造第二套流程。

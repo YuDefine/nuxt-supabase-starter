@@ -82,7 +82,7 @@ node vendor/scripts/flow/flow.ts plan open <slug> --title '<一句話>'
 | --- | --- |
 | 觸發條件 | informational — **不觸發任何東西**。沒有 detector 掛在「寫下 follow-up 註記」這個事件上 |
 | 消費端 | 正在 tasks 檔寫 follow-up 註記的那個 agent（本節）；`flow sources --apply` 每輪把 actionable-open 的 TD 對帳成 work 卡 |
-| 載入路徑 | 本節（`rules/core/follow-up-register.md`，paths-gated 於 `tasks/**`、`specs/plans/**`、`docs/tech-debt.md`） |
+| 觸發點 | 本節（`rules/core/follow-up-register.md`，paths-gated 於 `tasks/**`、`specs/plans/**`、`docs/tech-debt.md`） |
 
 ---
 
@@ -90,12 +90,18 @@ node vendor/scripts/flow/flow.ts plan open <slug> --title '<一句話>'
 
 每個 repo 的 HANDOFF 只保留當前交接、必要決策與阻塞；已有 TD 的工作用 ID 指針連到唯一入口。tech-debt 每條保留問題、影響、下一個動作及驗收，等待項附責任人或可觀察觸發條件。
 
-1. **收工時**：commit、handoff、work-loop 完成相關工作後，核對實際驗收證據，更新對應 TD 的狀態及精簡結論；同步移除 HANDOFF 的完成流水帳與重複背景。
+1. **收工時**：commit、handoff、work-loop 完成相關工作後，核對實際驗收證據，更新對應 TD 的狀態及精簡結論；同步移除 HANDOFF 的完成流水帳與重複背景。狀態改成結案的同一次改動，處置 code 裡指向該 ID 的每一個 `@followup` marker（做法見 [[code-style]] § 註解）。
 2. **移出前**：執行 `node .clade/vendor/scripts/flow/flow.ts sources --apply`，回讀該 ID 的關卡結果。clade 自身使用 `vendor/scripts/flow/flow.ts`。關卡未完成就保留來源，移除文字不作為完成證據。
-3. **關單後（未遷移 consumer）**：執行 `node .clade/vendor/scripts/rotate-closed-bloat.ts --all-closed` 移入 closed archive。Clade home 與已遷移 repo 該 script 回 `retired`，**NEVER** 再寫月份 closed archive 或改 `docs/tech-debt.md`。等待訊號與未知狀態保留，不用歸檔數宣稱實際欠帳減少。
+3. **關單後（未遷移 consumer）**：執行 `node .clade/vendor/scripts/rotate-closed-bloat.ts --all-closed` 移入 closed archive。Clade home 與已遷移 repo 該 script 回 `retired`，**NEVER** 再寫月份 closed archive 或改 `docs/tech-debt.md`。等待訊號與未知狀態保留，不用歸檔數宣稱實際欠帳減少。它在 stderr 列出的 `followup marker 仍指向這批已結案的 id` 是第 1 步漏掉的行，逐行處置完才算關單完成；印 `掃描失敗` 時自己跑 `git grep -n '@followup\['` 補查。
 4. **開工時**：主件優先；從既有掃描挑一個不衝突、無活躍認領的同主題小批次，查證已完成／重複項或可局部回復的小修。涉及客戶承諾、安全、資料完整性、schema/API、憑證或正式部署的決策回到其既有授權流程；其餘大型工作保留具體接手入口。
 
 寫入前重取目標檔的 dirty／claim 狀態；有人正在寫就先協調，基線有變則重讀。低價值淘汰與重複整併各附理由；完成數、整併數、淘汰數與純篇幅縮減分開回報。
+
+| REQUIRED 欄位 | 內容（結案 id 的殘留 `@followup` marker） |
+| --- | --- |
+| 觸發條件 | `rotate-closed-bloat` rotate 的 id 在 code 裡仍有 marker → stderr warn，**不擋 rotate**；clade `audit-followup-markers.ts` 有 stale／unknown → exit 1 |
+| 消費端 | 正在關單的 agent（第 1、3 步）；clade `/clade-health enforcement`／`full`，命中 relay 給該 consumer |
+| 觸發點 | 本節（paths-gated 於 `docs/tech-debt.md`、`specs/plans/**`）＋ [[code-style]] § 註解（paths-gated 於程式碼檔） |
 
 ## Session-start Surfacing
 
@@ -105,7 +111,7 @@ node vendor/scripts/flow/flow.ts plan open <slug> --title '<一句話>'
 | --- | --- |
 | 觸發條件 | `flow status --stalled` exit 3（有停滯）時印進 session 開頭；不阻擋 SessionStart |
 | 消費端 | 當前 session 依 § 主動消化 處理一個安全小批次；commit／handoff／work-loop 收工同步清理相關項 |
-| 載入路徑 | 本規則（paths-gated）；session 開頭只注入停滯清單 |
+| 觸發點 | 本規則（paths-gated）；session 開頭只注入停滯清單 |
 
 ---
 

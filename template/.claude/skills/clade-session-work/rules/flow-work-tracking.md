@@ -3,7 +3,6 @@ description: flow spine 的 work 生命週期契約——一件 work 何時誕�
 paths:
   - 'vendor/scripts/flow/**'
   - '.clade/flow/**'
-  - 'vendor/review-gui-web/pages/work/**'
 ---
 <!-- Clade native rule; source: rules/core/flow-work-tracking.md; edit canonical source -->
 
@@ -64,8 +63,8 @@ paths:
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 有 commit artifact 且一個都驗不出已 push → payload 標 `unverified_artifact`、stderr 印下一步、驗收列不排。**warn-only，不 block**；git 本身問不出來時 fail-open（不標） |
-| 消費端 | 打 `flow done` 的那個人（當下 stderr）；`buildDecisionQueue` 的驗收列（`pendingAcceptItems`）；`flow status --stalled` 與 `/decisions` 的 `done-unverified`（>24h） |
-| 載入路徑 | 本節由各 target adapter 投影；判定器 `vendor/scripts/flow/landing.ts` 的 `unverifiedCommitArtifacts`，與 R1 的出版證據共用同一份「已 push」判準 |
+| 消費端 | 打 `flow done` 的那個人（當下 stderr）；`buildDecisionQueue` 的驗收列（`pendingAcceptItems`）；`flow status --stalled` 的 `done-unverified`（>24h） |
+| 觸發點 | 本節由各 target adapter 投影；判定器 `vendor/scripts/flow/landing.ts` 的 `unverifiedCommitArtifacts`，與 R1 的出版證據共用同一份「已 push」判準 |
 
 ### dispatch 還沒回報時，驗收列同樣不排
 
@@ -94,7 +93,7 @@ paths:
 | --- | --- |
 | 觸發條件 | 近 7 天新增事件的 `orphan-` 佔比 > 25% 時 `flow status` 印 warn。**warn-only，不 block** |
 | 消費端 | 各 target adapter 配置的 attended-session status entry；只有有實際 invocation receipt 才能宣稱自動帶出 |
-| 載入路徑 | 本節由各 target adapter 投影，並與 clade home 的 `clade-role-and-todo-discipline.md` § 停滯訊號對接 |
+| 觸發點 | 本節由各 target adapter 投影，並與 clade home 的 `clade-role-and-todo-discipline.md` § 停滯訊號對接 |
 
 存量 orphan **不追溯**：佔比只看近 7 天新增，改動的效果才看得出來。
 
@@ -140,7 +139,7 @@ paths:
 | work 類型 | 驗收者 | 怎麼落 spine |
 | --- | --- | --- |
 | `notion:` origin | **客戶**（board 狀態欄本來就是他們的驗收介面） | `notion-hub` 對帳驗收讀到客戶側狀態進終態 → emit `work.accept {accepted_by: 'customer', reason: <狀態值>}` |
-| 其餘全部（`td:` / `tasks:` / `handoff:` / `im:`） | 人，經 /board 驗收按鈕或 `flow accept <id> --reason` | `reason` 必填 |
+| 其餘全部（`td:` / `tasks:` / `handoff:` / `im:`） | 人，經 `flow accept <id> --reason` | `reason` 必填 |
 
 `work.accept` / `work.drop` **NEVER** 由 agent 代按（landing 證據自動 accept 見 [[decision-authoring]]）。
 
@@ -177,7 +176,7 @@ spine 是**事件流**：它記錄「某個時刻有人做了什麼、宣稱了�
 | --- | --- |
 | 觸發條件 | **informational — 不觸發任何東西** |
 | 消費端 | `flow brief --work-id` 卷宗（successor 判「燒了幾個 session、什麼檔位、走過哪些 skill」）＋ 事後歸因（「那次是 invoke 了 clade-publish 還是憑記憶跑的」）。外派的 `route` / `tier_basis` 另有既有讀者 |
-| 載入路徑 | 本節由各 target adapter 投影（paths-gated 於 `vendor/scripts/flow/**` 的 target projectRoot） |
+| 觸發點 | 本節由各 target adapter 投影（paths-gated 於 `vendor/scripts/flow/**` 的 target projectRoot） |
 
 ### per-decision rule attribution：永久放棄
 

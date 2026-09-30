@@ -5,7 +5,8 @@
 #   1. claude-review-safe.sh prepare medium [--findings <f>]
 #        凍結 changeset、產 brief（與 Herdr carrier 同一份 review_emit_prompt）、鑄 nonce，
 #        印出 AGENT_CALL（要交給 Agent tool 的參數）與 FINALIZE（下一步指令）。WORK_DIR 保留。
-#   2. 主線照 AGENT_CALL 呼叫 Agent tool（subagent_type commit-0a-reviewer，前景）。
+#   2. 主線照 AGENT_CALL 呼叫 Agent tool（subagent_type commit-0a-reviewer，session 沒投影該 agent
+#      時是 hub-core:commit-0a-reviewer，見 review_subagent_resolve_type；前景）。
 #   3. claude-review-safe.sh finalize <work-dir>
 #        review-subagent-transcript.mjs 從本 session 的 subagent transcript 核對 nonce 歸屬、
 #        agent type、observed model、brief 是否讀完，並從 transcript 取出 verdict；
@@ -24,10 +25,52 @@
 # 不會產生。
 
 REVIEW_SUBAGENT_TYPE="commit-0a-reviewer"
+REVIEW_SUBAGENT_PLUGIN_TYPE="hub-core:${REVIEW_SUBAGENT_TYPE}"
 REVIEW_SUBAGENT_STATE="subagent-state.env"
 
+# session 看得到哪個 subagent_type：session project 目錄（或使用者層級 agents 目錄）有
+# `<type>.md` 就是裸名；沒有（例如 update_policy pinned 在 agent 出現之前的 consumer）時只剩
+# hub-core plugin 的命名空間名。session project 取主 transcript 第一個 cwd（Bash 的 cd 不改它），
+# 取不到才退回受審 repo。Claude Code 的 project agent 查找範圍沒有文件保證，所以這只是主要名：
+# AGENT_CALL 另附 fallback_subagent_type，Agent tool 回報找不到主要名時才改派它一次。
+# finalize 只收這兩個常數（不從 state 讀，producer 改 state 換不了允許集合；見
+# review-subagent-transcript.mjs）；唯讀由 transcript 的 tool_use 核對保證，不靠名字。
+review_subagent_session_project() {
+  local config transcript
+  config="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  transcript="$(ls "$config"/projects/*/"${CLAUDE_CODE_SESSION_ID:-none}.jsonl" 2>/dev/null | head -1)"
+  [ -n "$transcript" ] || return 0
+  node -e '
+    const fs = require("fs")
+    for (const line of fs.readFileSync(process.argv[1], "utf8").split("\n")) {
+      let e
+      try { e = JSON.parse(line) } catch { continue }
+      if (e && typeof e.cwd === "string" && e.cwd) { process.stdout.write(e.cwd); break }
+    }
+  ' "$transcript" 2>/dev/null || true
+}
+
+review_subagent_resolve_type() {
+  local project config
+  project="$(review_subagent_session_project)"
+  [ -n "$project" ] || project="$REPO_ROOT"
+  config="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  if [ -f "$project/.claude/agents/${REVIEW_SUBAGENT_TYPE}.md" ] \
+    || [ -f "$config/agents/${REVIEW_SUBAGENT_TYPE}.md" ]; then
+    printf '%s' "$REVIEW_SUBAGENT_TYPE"
+  else
+    printf '%s' "$REVIEW_SUBAGENT_PLUGIN_TYPE"
+  fi
+}
+
 review_subagent_prepare() {
-  local nonce prompt agent_model
+  local nonce prompt agent_model agent_type fallback_type
+  agent_type="$(review_subagent_resolve_type)"
+  if [ "$agent_type" = "$REVIEW_SUBAGENT_TYPE" ]; then
+    fallback_type="$REVIEW_SUBAGENT_PLUGIN_TYPE"
+  else
+    fallback_type="$REVIEW_SUBAGENT_TYPE"
+  fi
   nonce="0a-$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')"
   if [ "$REVIEW_SEAT" = "opus" ]; then agent_model="opus"; else agent_model="$REVIEW_SEAT"; fi
   prompt="$WORK_DIR/subagent-prompt.md"
@@ -52,20 +95,28 @@ PROMPT
     printf 'REVIEW_SUBAGENT_BRIEF_BYTES=%q\n' "$BRIEF_BYTES"
     printf 'REVIEW_SUBAGENT_REVIEWED_PATHS=%q\n' "$REVIEWED_PATHS"
     printf 'REVIEW_SUBAGENT_SEAT=%q\n' "$REVIEW_SEAT"
+    printf 'REVIEW_ROUND_LEDGER=%q\n' "${REVIEW_ROUND_LEDGER:-}"
+    printf 'REVIEW_ROUND_N=%q\n' "${REVIEW_ROUND_N:-}"
+    printf 'REVIEW_ROUND_HEAD=%q\n' "${REVIEW_ROUND_HEAD:-}"
+    printf 'REVIEW_ROUND_FILTER=%q\n' "${REVIEW_ROUND_FILTER:-}"
+    printf 'REVIEW_ROUND_OPENED_AT=%q\n' "${REVIEW_ROUND_OPENED_AT:-}"
+    printf 'REVIEW_ROUND_PART_FILES=%q\n' "${REVIEW_ROUND_PART_FILES:-}"
+    printf 'ROUND_PART=%q\n' "${ROUND_PART:-1/1}"
   } >"$WORK_DIR/$REVIEW_SUBAGENT_STATE"
 
   node -e '
     const fs = require("fs")
     process.stdout.write("AGENT_CALL: " + JSON.stringify({
       subagent_type: process.argv[1],
+      fallback_subagent_type: process.argv[4],
       model: process.argv[2],
       description: "commit 0-A review",
       run_in_background: false,
       prompt: fs.readFileSync(process.argv[3], "utf8"),
     }) + "\n")
-  ' "$REVIEW_SUBAGENT_TYPE" "$agent_model" "$prompt" || return 2
+  ' "$agent_type" "$agent_model" "$prompt" "$fallback_type" || return 2
   echo "FINALIZE: bash \"$SCRIPT_DIR/claude-review-safe.sh\" finalize \"$WORK_DIR\""
-  echo "[claude-review-safe] PREPARED（${REVIEW_SEAT} 席，subagent carrier）：照 AGENT_CALL 逐欄呼叫 Agent tool，回來後跑 FINALIZE。NEVER 自己轉述 subagent 的回覆當 verdict——verdict 只來自 finalize 的 stdout。" >&2
+  echo "[claude-review-safe] PREPARED（${REVIEW_SEAT} 席，subagent carrier）：照 AGENT_CALL 逐欄呼叫 Agent tool（fallback_subagent_type 不是 Agent 參數：只在 Agent tool 回報找不到 subagent_type 時，把 subagent_type 換成它、其餘欄位不動重派一次），回來後跑 FINALIZE。NEVER 自己轉述 subagent 的回覆當 verdict——verdict 只來自 finalize 的 stdout。" >&2
   # 成功的 prepare 把 WORK_DIR 交給 finalize：取消 EXIT 清理。殘留由 stamp（sessionId）
   # 交給 review-snapshot.ts reclaim 在本 session 結束後回收。
   trap - EXIT
@@ -182,7 +233,7 @@ review_subagent_finalize() {
     --subagents-dir "$subagents_dir" --nonce "$REVIEW_SUBAGENT_NONCE" \
     --prompt "$WORK_DIR/subagent-prompt.md" \
     --brief "$REVIEW_SUBAGENT_BRIEF" --model "$REVIEW_MODEL" \
-    --agent-type "$REVIEW_SUBAGENT_TYPE" --effort medium --verdict-out "$verdict_out")"
+    --agent-type "$REVIEW_SUBAGENT_TYPE" --agent-type "$REVIEW_SUBAGENT_PLUGIN_TYPE" --effort medium --verdict-out "$verdict_out")"
   rc=$?
   reason="$(node -e 'try{process.stdout.write(JSON.parse(process.argv[1]).reason||"")}catch{}' "$result")"
 
@@ -194,7 +245,16 @@ review_subagent_finalize() {
   trap 'rm -rf "$WORK_DIR" "$WORK_DIR.stamp.json"' EXIT
 
   case "$rc" in
-    0) ;;
+    0)
+      # exit 0 只在核對器真的跑完 main() 才有意義：入口判斷失準（symlink、需 percent-encode 的
+      # 路徑）時 node 什麼都不做也是 exit 0。沒有 exit:0 的 JSON 或沒有 verdict 就 fail closed，
+      # NEVER 讓空結果走到 receipt 與 cat verdict（2026-09-26 consumer 0-A Major）。
+      if ! node -e 'try{process.exit(JSON.parse(process.argv[1]).exit===0?0:1)}catch{process.exit(1)}' "$result" \
+        || [ ! -s "$verdict_out" ] || ! grep -q '^## Review Verdict' "$verdict_out"; then
+        echo "[claude-review-safe] RESULT: transcript 核對器 exit 0 卻沒有產出核對結果或 verdict（stdout：${result:-空}）——視為核對器失敗，NEVER 當作通過" >&2
+        return 2
+      fi
+      ;;
     3)
       echo "[claude-review-safe] RESULT: review failed（exit 3）— ${reason}，NEVER 當作通過" >&2
       return 3 ;;
@@ -214,6 +274,7 @@ review_subagent_finalize() {
   review_verify_integrity
   verdict_sha="$(sha256sum "$verdict_out" | cut -d' ' -f1)"
   review_subagent_write_receipt 0 "$result" "$verdict_sha"
+  review_record_round "$verdict_out"
   cat "$verdict_out"
   return 0
 }

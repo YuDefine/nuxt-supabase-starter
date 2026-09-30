@@ -23,7 +23,7 @@
 
 0-A.1 一般 review 與 0-A.2 深度 review 都由 Opus 5.5 medium 執行，每一輪都是新的 fresh-context reviewer，兩份 receipt 各自記 requested／observed。複審 MUST 由合格席執行，NEVER 降級成主線自審、worker、cloud CI 或其他模型。
 
-**Opus 不可用時 gate 保持未達成**並記錄 pending review——wrapper exit 4（account_unavailable）、11（account_unverifiable，量不到）、Herdr carrier 的 exit 3（review 沒跑成）都屬此類；subagent carrier 的 exit 3 是交付問題，照 `gates.md` § 0-A.1 重跑 finalize 或重跑 prepare 拿新 nonce；exit 8（model verification 為 `unverified`／`mismatch`）扣住 verdict，gate 保持未完成；**NEVER** 用其他模型、另一個 fresh agent 或主線自審補位；**NEVER** worker 或 Charles 代簽；**NEVER** 拿 cloud CI success 代替。exit 2（本地用法／依賴錯誤）、6（snapshot drift）、9（brief 無法安全交付）、10（本 session 是 leaf）是**本地或完整性問題**，照各自處置修正後重跑，不讀成 reviewer 不可用。
+**Opus 不可用時 gate 保持未達成**並記錄 pending review——wrapper exit 4（account_unavailable）、11（account_unverifiable，量不到）、Herdr carrier 的 exit 3（review 沒跑成）都屬此類；subagent carrier 的 exit 3 是交付問題，照 `gates.md` § 0-A.1 重跑 finalize 或重跑 prepare 拿新 nonce；exit 8（model verification 為 `unverified`／`mismatch`）扣住 verdict，gate 保持未完成；**NEVER** 用其他模型、另一個 fresh agent 或主線自審補位；**NEVER** worker 或 Charles 代簽；**NEVER** 拿 cloud CI success 代替。exit 2（本地用法／依賴錯誤）、6（snapshot drift）、9（brief 無法安全交付）、10（本 session 是 leaf）是**本地或完整性問題**，照各自處置修正後重跑，不讀成 reviewer 不可用。exit 13／14 是輪數 ledger 的判定（沿用前一輪證據／第 4 輪拒跑），處置見 `gates.md` § 0-A.1 exit 表。
 
 effort 恆 `medium`（Opus family cap）。**NEVER** 嘗試抬高——沒有 high／max 路徑，裁決需求也不升檔。`codex-review-safe.sh`（原 Astra carrier）整支 exit 2 拒跑；`CLAUDE_REVIEW_SEAT=fable` 同樣 exit 2，不靜默改 opus。
 
@@ -31,11 +31,11 @@ effort 恆 `medium`（Opus family cap）。**NEVER** 嘗試抬高——沒有 hi
 
 新模型／載體採同一組有已知答案的案例比較：邏輯與安全缺陷召回、誤報反證、跨檔影響、修法 regression、完整 verdict／semantic coverage、唯讀及 snapshot 約束。保留逐例原始輸入輸出、版本與實際工具事件，明示哪些是合成案例、哪些是真實產品觀察。資格變更由對照證據與明確採用決定承載；只有可啟動、一次 PASS 或純文字壓力測試不足以改門檻。
 
-UI Design Review 與截圖符合性 reviewer 使用 fresh Claude Opus 5.5（effort: medium），須實際取得及檢視指定圖片、對照 item 與互動證據。兩列無 Pi fallback。Routing Table 的「Claude-only 各列 Opus 不可用時主線自己做」不適用於 commit gate：主線是 maker，不滿足上表 Context 欄，所以 Opus 5.5 無法執行時 0-B 與 0-A 一樣保持未完成。Screenshot evidence 由另一個 Gemini 3.8 Flash high worker 收集，收集 PASS 不代替 0-B 判定。沒有合格且可用的組合時，0-B 保持未完成，不以一般 code reviewer、文字摘要或自行宣稱「看過」補位。
+UI Design Review（0-B.2）與截圖符合性 reviewer 使用 fresh Claude Opus 5.5（effort: medium），須實際取得及檢視指定圖片、對照 item 與互動證據；brief 附 0-B.1 的 `impeccable detect` 原始輸出、唯讀 critique 快照清單與逐條處置（未採用 impeccable 則附跳過理由）。兩列無 Pi fallback。Routing Table 的「Claude-only 各列 Opus 不可用時主線自己做」不適用於 commit gate：主線是 maker，不滿足上表 Context 欄，所以 Opus 5.5 無法執行時 0-B 與 0-A 一樣保持未完成。Screenshot evidence 由另一個 Gemini 3.8 Flash high worker 收集，收集 PASS 不代替 0-B 判定。沒有合格且可用的組合時，0-B 保持未完成，不以一般 code reviewer、文字摘要或自行宣稱「看過」補位。
 
 ## 執行與缺能力
 
-1. 依當前 catalog 與已驗證 adapter 取得實際候選，逐欄記錄判定。支援 CLI 的入口可呼叫共同 wrapper；呼叫者不因 wrapper 名含 codex 或相容路徑 `.claude/` 就改變 runtime。
+1. 依當前 catalog 與已驗證 adapter 取得實際候選，逐欄記錄判定。支援 CLI 的入口可呼叫共同 wrapper；呼叫者不因 wrapper 名含 codex 或放在其他 runtime 的相容路徑就改變 runtime。
 2. 使用該入口原生背景 handle、等待／取消及完成事件；先確保 owner 能收回結果，再並行其他軸。沒有非同步能力時可使用已授權的同步載體，保留全部 gate 與 snapshot 條件並明示並行不可用。
 3. Opus 席不可用時依 `claude-review-safe.sh` 的 RESULT 行與 exit code 判定（上節）；不可用 → gate 保持未完成並保留實跑證據。主線自審可以協助修復，不能產生缺席 reviewer 的 PASS。Cloud CI success **不能代替** 0-A。Coordinator 跑 `/commit`；reviewer 必須是獨立的 fresh-context session，身分與 coordinator 分離。receipt 記 requested／observed model、`model_verification` 與 `model_verification_reason`；`unverified` NEVER 讀成已核實——wrapper 對 `unverified` 做一次有界 verification 重讀（不重跑 review），仍非 `verified` 則 verdict 扣住、gate pending。
 
@@ -51,4 +51,4 @@ UI Design Review 與截圖符合性 reviewer 使用 fresh Claude Opus 5.5（effo
 | --- | --- |
 | 觸發條件 | 每次 commit 0-A／0-B dispatch 前逐欄判定；必要欄未滿則該 gate 未完成 |
 | 消費端 | 執行 commit 的主線與 reviewer adapter；匯合時核對結果，不讓 metrics 字串替代品質證據 |
-| 載入路徑 | 當前 runtime 的 commit skill `gates.md` 在 0-A／0-B 明確要求先讀本檔；規約入口由 `commit` 與 `commit.detail` 載入 skill |
+| 觸發點 | 當前 runtime 的 commit skill `gates.md` 在 0-A／0-B 明確要求先讀本檔；規約入口由 `commit` 與 `commit.detail` 載入 skill |

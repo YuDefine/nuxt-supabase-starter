@@ -1,5 +1,5 @@
 ---
-description: Routing Table 的取證層——Cursor readonly sandbox 為什麼擋掉每一個 mutation dispatch（含兩句最常見的開脫與 Red Flags）、grok 擴權的取證狀態、以及「拿數字當降檔理由」的三個陷阱（aggregate 跑分、配額權重 5:2.5:1、class-conditional 差距）。改 Routing Table 任一列、動 pi-routing-*.ts / pi-dispatch.ts，或要拿任何數字支持一次降檔／轉列時 path-scoped 載入；判準本身在 [[agent-routing]] § Routing Table，本檔只承載理由與實證
+description: Routing Table 的取證層——Cursor readonly sandbox 為什麼擋掉每一個 mutation dispatch（含兩句最常見的開脫與 Red Flags）、grok 擴權的取證狀態、以及「拿數字當降檔理由」的三個陷阱（aggregate 跑分、配額權重 5:2.5:1、class-conditional 差距）。改 Routing Table 任一列、動 pi-routing-*.ts / pi-dispatch.ts，或要拿任何數字支持一次降檔／轉列時 path-scoped 載入；判準本身在 [[agent-routing.routing-table]]，本檔只承載理由與實證
 paths:
   [
     '.claude/rules/agent-routing.md',

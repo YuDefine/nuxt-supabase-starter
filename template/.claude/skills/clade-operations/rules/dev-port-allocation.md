@@ -14,10 +14,6 @@ Dev port 由 clade 集中分配：registry 分配、規約強制宣告、audit �
 > Audit gate：`scripts/dev-port-audit.ts`（DRIFT / MISSING / CONFLICT → exit 1）。
 >
 > Cookbook 範本：`vendor/snippets/dev-port/`。
->
-> Preview 轉發：`/__preview/<port>` 在 request-time 用 `previewListenerDecision` 確認
-> listener cwd 屬於該 port 的主人。mismatch / unknown **MUST** 出自我頁，
-> **NEVER** 把別的 consumer 的 HTML（含 Nuxt welcome）嵌進驗收畫面。
 
 ## MUST
 
@@ -49,7 +45,7 @@ Dev port 由 clade 集中分配：registry 分配、規約強制宣告、audit �
   ```
 
 - **MUST** Token 用 `cfat_*` account API token，**絕非** `cfut_*`（Worker token）或 `r_*`（cert.pem 簽發的 tunnel-scoped token）
-  - 來源：<consumer-j> `.env.local` 的 `CLOUDFLARE_API_KEY`
+  - 來源：<consumer-i> `.env.local` 的 `CLOUDFLARE_API_KEY`
   - 必備權限：`Cloudflare Tunnel:Edit`（account）+ `SSL and Certificates:Edit`（zone）+ `DNS:Edit`（zone）
   - **必要**：`SSL and Certificates:Edit` — plugin 必跑 `/zones/<id>/ssl/certificate_packs` GET 確認 edge cert，403 會 re-throw crash Nuxt（即使 Cloudflare Universal SSL 已涵蓋）
 
@@ -104,9 +100,6 @@ band 存在是為了讓「分不到號碼就退回 base port」永遠不必發�
 - **NEVER** 手動挑 worktree port。`pickDevPortOffset`（base 池）與 `pickBandPortOffset`（band）同時排除：超出 `[base, base+9]`、撞到本 consumer 另一個宣告 port、已被 sibling worktree 佔用。宣告多個 port 的 consumer 帶寬較窄
 - Offset 記錄在 `~/.cache/clade/dev-port/<consumer>/<slug>.json`，**不**寫進 repo；worktree 目錄消失即釋放
 - 兩池都用盡時 `wt-helper dev` **fail-loud 拒絕啟動**，**NEVER** fallback 到 base port — 那正是本節要防的撞車
-- **MUST** review-gui 的預覽連結、dev server 監看、「起 dev server」按鈕一律走同一份分配
-  （`buildConsumerPortMap` 帶 worktree 參數）。沒有分配紀錄的舊 worktree **當場配一個**，
-  **NEVER** 退回 base port
 - **NEVER** 用 `pnpm <script> -- --port <N>` 起 worktree 的 dev server（多出來的 `--` 會讓 Nuxt
   丟掉 port，落回 script 寫死的 base port，見 §1）；正確寫法是 `pnpm <script> --port <N>`
 
@@ -114,7 +107,7 @@ band 存在是為了讓「分不到號碼就退回 base port」永遠不必發�
 | --- | --- |
 | 觸發條件 | `dev_ports.worktree_band` 之間互相重疊、蓋到任一 consumer 的 base、或伸進 dev-router 的 3300–3510 → `scripts/dev-port-audit.ts` 報 `worktree-band` CONFLICT、**exit 1** |
 | 消費端 | `scripts/dev-port-audit.ts`（clade 主線改 registry 時跑）＋ `vendor/scripts/lib/worktree-dev-port.ts` 的分配器（band 是它唯一的第二個池） |
-| 載入路徑 | 本節（`rules/core/dev-port-allocation.md`，paths-gated 於 `registry/consumers.json`——加新 consumer / 改 band 正是在改那個檔） |
+| 觸發點 | 本節（`rules/core/dev-port-allocation.md`，paths-gated 於 `registry/consumers.json`——加新 consumer / 改 band 正是在改那個檔） |
 
 #### Tunnel 在 worktree 內
 

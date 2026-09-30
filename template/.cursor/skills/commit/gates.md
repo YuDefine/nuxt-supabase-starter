@@ -114,7 +114,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ## § 0-MR: 人工檢查 Gate（main / master 限定，硬擋無 override）
 
-`.claude/rules/commit.trunk-gates.md` 「人工檢查 Gate」hard rule 的執行點（`commit.md` 只有一句 pointer，判定條件的 SoT 在 `commit.trunk-gates.md`）。**MUST** 在 Step 0 品質檢查之前 fail-fast，避免人工檢查未完的工作浪費 5–15 min pi / screenshot review 時間。
+`commit.trunk-gates` rule「人工檢查 Gate」hard rule 的執行點（`commit.md` 只有一句 pointer，判定條件的 SoT 在 `commit.trunk-gates.md`）。**MUST** 在 Step 0 品質檢查之前 fail-fast，避免人工檢查未完的工作浪費 5–15 min pi / screenshot review 時間。
 
 **判定粒度是 pathspec 交集，不是 repo 級 freeze**：一件工作判 BLOCK 時，被擋的是「落在該 carrier 的那些路徑」，不是本次 `/commit` 的整個 dirty set。理由與判定式在下方 § 判定粒度。
 
@@ -166,7 +166,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
    > 來源 archive gate 與批次 commit gate 都保留；來源未驗收不進 ready，batch 審查發現驗收失效時保留整批，不以普通 main 的 SKIP 放行。
 
-4. 對每個 change 跑機械判定（「非 `## 人工檢查` 段有 `- [x]`」與「`## 人工檢查` 段有 **leaf** `- [ ]`」同時成立 → BLOCK；parent `#N` 有 scoped `#N.M` 子項時由子項 derive，leaf-only 計，見 `.claude/rules/manual-review.md` 「Parent State Derivation」段）：
+4. 對每個 change 跑機械判定（「非 `## 人工檢查` 段有 `- [x]`」與「`## 人工檢查` 段有 **leaf** `- [ ]`」同時成立 → BLOCK；parent `#N` 有 scoped `#N.M` 子項時由子項 derive，leaf-only 計，見 `manual-review` rule「Parent State Derivation」段）：
 
    ```bash
    node ~/offline/clade/vendor/scripts/commit-mr-gate.ts judge "<path>/tasks.md"
@@ -176,9 +176,9 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
    - 印 `BLOCK pending=<n>` → 列入 blocker list，`<n>` 是未勾 leaf 數
    - 腳本不存在（clade checkout 不在 `~/offline/clade`）→ 對該 change **視為 BLOCK**，**NEVER** 因工具缺席放行
 
-5. **blocker list 非空時 → auto-triage（per [[review-gui-surface]] MUST 8）**：
+5. **blocker list 非空時 → auto-triage**：
 
-   **MUST NOT** 直接停下叫 user 去面板。改走 auto-triage：逐條讀 pending leaf item 的 annotation，判斷阻塞原因並自行推進主線可處理的項目。
+   **MUST NOT** 直接停下把 blocker 丟給 user。改走 auto-triage：逐條讀 pending leaf item 的 annotation，判斷阻塞原因並自行推進主線可處理的項目。
 
    1. 對每個 blocked change 的每個 pending leaf item，讀 tasks.md 該行判斷：
 
@@ -187,7 +187,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
       | `（fix-requested）` | 行內含 `（fix-requested）` | 在既有來源修 code → 在該來源重拍截圖 → strip `（fix-requested）` → 更新 `(verified-*:)` annotation |
       | evidence missing | `[verify:ui]` / `[verify:api]` / `[verify:e2e]` 但無對應 `(verified-*:)` annotation | 走 [[agent-self-verification]] fallback chain 收 evidence |
       | `（issue:）` 未 triage | 行內含 `（issue:）`，且 `flow gates` 沒有對應卡片 | triage issue → 走 (A)-(E) 路由；要人接手才 `flow ask` 開卡 |
-      | 純 `[review:ui]` user 驗收 | 上述都不符，item 是 `[review:ui]` | **只有這類**才交給 user（`ui-judgement` 卡） |
+      | 等 user 判的 leaf | 上述都不符，item 是 `[review:ui]`（evidence 已齊）或已有 `(verified-ui:)` 的 `[verify:ui]` | **只有這類**才交給 user：tasks.md leaf 不會變成卡片，直接在 chat 逐項展示並依原話寫回（[[proactive-skills.manual-review-entry]] 第 4 步） |
       | 純 `[discuss]` | 上述都不符，item 是 `[discuss]` | 不在此處處理（archive walkthrough） |
 
    2. **主線可處理的項目全部推進完畢後**，在 consumer repo 根目錄跑（**NEVER** 帶 `CLADE_HOME`）：
@@ -196,11 +196,11 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
       node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --require-empty
       ```
 
-      - **exit 3** → 改跑 `--json`，輸出 `✅ 0-MR auto-triage 完成，等人 <N> 張`，逐張列 family ＋ 判斷題，釋放 lock，引導 user 到面板
-      - **exit 0** → 沒有任何卡片，但 blocker 仍在 → 那是主線的球：繼續 auto-triage，或釋放 lock ＋ 如實報告卡在哪幾個 leaf，**NEVER** 說「請去面板」
+      - **exit 3** → 改跑 `--json`，輸出 `✅ 0-MR auto-triage 完成，等人 <N> 張`，逐張列 family ＋ 判斷題，釋放 lock
+      - **exit 0** → 沒有任何卡片，但 blocker 仍在 → 剩下的若是 evidence 已齊的 `[review:ui]` 或已有 `(verified-ui:)` 的 `[verify:ui]` leaf，釋放 lock 並在 chat 逐項交給 user（[[proactive-skills.manual-review-entry]] 第 4 步）；其餘是主線的球：繼續 auto-triage，或釋放 lock ＋ 如實報告卡在哪幾個 leaf
       - **exit 2** → 釋放 lock，回報判不出來的原因
 
-      **NEVER** 跳過 `flow gates` 自判有沒有等人的事 — Claude 自判已 9 次證明不可靠（per [[review-gui-surface]] MUST 8）
+      **NEVER** 跳過 `flow gates` 自判有沒有等人的事 — Claude 自判已 9 次證明不可靠
 
    3. **NEVER** 自動勾任何 `[review:ui]` 的 `- [ ]`、**NEVER** 提議跳過 gate、**NEVER** 提議 stash 走 `tasks.md`
 
@@ -232,13 +232,13 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 | --- | --- |
 | 觸發條件 | step 4 任一工作印 `BLOCK` 且 auto-triage 後仍 BLOCK → 該 carrier 路徑進 withheld scope；Step 4 任一 group 的 `intersect` exit 1 → 該 group 不 commit。**hard gate**，無 override |
 | 消費端 | 跑 `/commit` 的主線（Step 3 排除、Step 4 逐 group 判）；Step 5-A HANDOFF 登記 withheld 檔 |
-| 載入路徑 | 本節（`capabilities/core/skills/commit/gates.md` § 0-MR，觸發 0-MR 時 MUST 完整讀）；判定條件 SoT `rules/core/commit.trunk-gates.md` § 人工檢查 Gate |
+| 觸發點 | 本節（`capabilities/core/skills/commit/gates.md` § 0-MR，觸發 0-MR 時 MUST 完整讀）；判定條件 SoT `rules/core/commit.trunk-gates.md` § 人工檢查 Gate |
 
 ### 禁止項
 
 - **NEVER** 把普通 feature branch 判進 trunk gate 範圍；helper 登記的 batch integration 明確納入，並保留 PR workflow 的外部審查
 - **NEVER** 接受 `$ARGUMENTS` 任何形式的「skip / ignore / override」旗標 — gate 無 override
-- **NEVER** 自行 `Edit` carrier 勾掉 `- [ ]` 來通過 gate — 違反 `.claude/rules/manual-review.md` 核心規則
+- **NEVER** 自行 `Edit` carrier 勾掉 `- [ ]` 來通過 gate — 違反 `manual-review` rule 核心規則
 - **NEVER** 把 carrier 檔 / plan package 目錄 stash / mv / rm 走讓 step 2 / 4 抓不到 — 等同繞過 hard rule
 - **NEVER** 為了讓 step 3 判成 SKIP 而動 worktree（不 merge-back、重開一條同名 worktree、改 branch 名）— step 3 是事實查詢，不是可操作的開關
 - **NEVER** 把 step 3 的 SKIP 讀成「這件工作的人工檢查可以不做」— 它只表示 code 還沒進 main，那些 item 一條沒少
@@ -329,7 +329,7 @@ gate 自己的可用度跑 `node scripts/audit-security-gate-readiness.ts`（war
 | --- | --- |
 | 觸發條件 | Tier 3 命中 → 0-S.1 exit 1 / 2 或 0-S.2 有 High / Critical 就**擋住本次 commit**。0-S.1 的 `skipped` 不擋 |
 | 消費端 | 跑 `/commit` 的 attended agent（本節）；`security-precommit.ts` 自己判 exit |
-| 載入路徑 | 本節（`capabilities/core/skills/commit/gates.md`，`/commit` 必經） |
+| 觸發點 | 本節（`capabilities/core/skills/commit/gates.md`，`/commit` 必經） |
 
 ---
 
@@ -361,11 +361,12 @@ bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" medium       # Herdr c
 **Subagent carrier（Claude Code 主線 MUST 用這條）**：三步，全部在同一個 session、同一個 turn 內做完。
 
 ```bash
-bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" prepare medium [--findings <上一輪 verdict 檔>]
-# stdout：AGENT_CALL: {...}（subagent_type／model／prompt；agent 定義固定 effort: medium）與 FINALIZE: bash … finalize <work-dir>
+bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" prepare medium
+# stdout：AGENT_CALL: {...}（subagent_type／fallback_subagent_type／model／prompt；agent 定義固定 effort: medium）與 FINALIZE: bash … finalize <work-dir>
 ```
 
-1. 跑 `prepare`，照 `AGENT_CALL` 的欄位**逐字**呼叫 `Agent` tool（`subagent_type: commit-0a-reviewer`、`model`、`prompt` 原樣照抄，前景）。該 agent 的 frontmatter 固定 `effort: medium`；不可改用會繼承主線 effort 的其他 agent。
+1. 跑 `prepare`，照 `AGENT_CALL` 的欄位**逐字**呼叫 `Agent` tool（`subagent_type`、`model`、`prompt` 原樣照抄，前景）。該 agent 的 frontmatter 固定 `effort: medium`；不可改用會繼承主線 effort 的其他 agent。
+   - `subagent_type` 是 session 看得到的名字：session project 或使用者層級的 agents 目錄有投影 `commit-0a-reviewer` 定義時是裸名，否則是 plugin 命名空間名 `hub-core:commit-0a-reviewer`（例如 `update_policy` pinned 在 agent 出現之前的 consumer）。`fallback_subagent_type` 是另一個名字，**不是** `Agent` 參數：只有 `Agent` tool 明確回報找不到 `subagent_type` 時，才把 `subagent_type` 換成它、其餘欄位不動重派**一次**；其他錯誤 **NEVER** 換名重試。finalize 只收這兩個固定名字。
 2. subagent 回來後跑 `FINALIZE` 那一行。它從本 session 的 subagent transcript 核對 nonce 歸屬、agent type、每則 assistant 的 observed model 與 effort、唯讀工具面、brief 是否逐行讀完；effort 缺席或非 medium 時 exit 8、扣住 verdict。
 3. **verdict 只來自 finalize 的 stdout。** subagent 的回覆是它交給 finalize 的原料，**NEVER** 由主線轉述、摘錄或拼接成 verdict——主線是受審改動的 producer。
 
@@ -377,11 +378,14 @@ exit code 與 Herdr carrier 同一張表（下表各列照用；4／10／11 是�
 | --- | --- |
 | 啟動／等待中 | 記錄 handle 與 owner，透過本端完成事件或 bounded wait 收回同一工作；並行推進其他軸，不能重播命令代替等待 |
 | 配額耗盡／reviewer 沒跑成（exit 4 account_unavailable，stderr 的 `NEXT_STEP_JSON:` 行是它的可機讀版；或 exit 3 review 未跑成） | 保留逐字 RESULT 行與 exit code 作為不可用證據——沒有備援席，gate 保持未完成並記錄 pending review，NEVER 用其他模型或主線自審補位。exit 11（account_unverifiable）是「量不到」不是「耗盡」：wrapper 的 RESULT／NEXT 行會印出 receipt 路徑與 `retry_after_ms`（有的話）——receipt **不帶** `retry_after_ms`＝沒有 ETA，交 coordinator 決定而不是自行腦補時間；有 ETA 則依它重試。也 NEVER 讀成 account_unavailable。exit 2／6 **不是**不可用，照各自原因修正後重跑 |
+| exit 12（Claude Code runtime 以無子命令呼叫 wrapper，本地拒絕 Herdr carrier） | 不是 reviewer 不可用，NEVER 判 gate pending：改走 `prepare` → 逐字照 `AGENT_CALL` 呼叫 `Agent` → `FINALIZE`。呼叫端其實不是 Claude Code（例如從 Claude Bash 起、繼承了 `CLAUDE_CODE_SESSION_ID` 的 codex exec）時，以 `env -u CLAUDE_CODE_SESSION_ID` 呼叫改走 Herdr carrier |
 | exit 10（helper `nested_dispatch_refused`：本 session 不得開 reviewer child） | 不是 reviewer 不可用，NEVER 判 gate pending：把 0-A 交回 coordinator 代跑，gate 保持未完成直到拿回帶 receipt 的 verdict。**NEVER** 改走 headless `claude -p`——無 receipt 的 verdict 不得當 gate 證據（[review-policy.md](review-policy.md)） |
 | exit 8（`model_verification` 有界重讀後仍 `unverified`，或 `mismatch`） | 身分歸屬不成立：verdict 扣住不採，gate 保持未完成並記錄 pending review；receipt 的 `model_verification_reason` 區分「無法核實」與「核實不符」，NEVER 把 unverified 讀成已核實或當 PASS |
-| exit 9（brief 無法安全交付：總量超過 `CLAUDE_REVIEW_BRIEF_MAX_BYTES`，或 pointer 模式下有單行超過 `CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS`，RESULT 行會指出超長行號與所屬區塊） | **本地拒絕，review 沒跑但不是 reviewer 不可用**——NEVER 讀成 reviewer 不可用記 pending；把超長行折行（changeset、--findings 檔或 semantic 規則文，依 RESULT 指的區塊）或拆 commit 後重跑；上限確需調整時先評估 child context 實測再改 `*_MAX_*` env。NEVER 拿縮小 `CODEX_REVIEW_MAX_DIFF_LINES` budget 換過關——超出的檔只會移進 OMITTED 漏審清單，依下一列「Scope 缺檔」同樣不能記 PASS，除非被剔除的檔另行送審 |
+| exit 9（brief 無法安全交付：總量超過 `CLAUDE_REVIEW_BRIEF_MAX_BYTES`，或 pointer 模式下有單行超過 `CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS`，RESULT 行會指出超長行號與所屬區塊） | **本地拒絕，review 沒跑但不是 reviewer 不可用**——NEVER 讀成 reviewer 不可用記 pending；把超長行折行（changeset、--findings 檔或 semantic 規則文，依 RESULT 指的區塊）或拆 commit 後重跑；上限確需調整時先評估 child context 實測再改 `*_MAX_*` env。NEVER 拿縮小 `CODEX_REVIEW_MAX_DIFF_LINES` budget 換過關——超出的檔只會移進 OMITTED 漏審清單，依下一列「Scope 缺檔」同樣不能記 PASS，除非被剔除的檔另行送審。只有 lockfile 與 `scripts/test-lanes/{deps,timings}.json`（`REVIEW_SUMMARY_ONLY_RE`）超出 budget 的部分不進 OMITTED，改列在 brief 的 generated 摘要段——依政策不逐行審（正確性由產生器與其測試保證），**不是**漏審；`REVIEW_GENERATED_RE` 其餘成員（投影層、`build/`、`dist/` 等）超出 budget 照舊進 OMITTED。刪除檔（含驗證輪的增量）只嵌 `deleted file mode` 檔頭。放得進剩餘 budget 的產生檔仍整段嵌入、照樣計入 `CLAUDE_REVIEW_BRIEF_MAX_BYTES` 與單行長度上限 |
 | Scope 缺檔／截斷、缺 verdict／Semantic Verdict id、workspace 綁定失敗 | 對應範圍未被完整 review；修復取證後再執行，不能記 PASS |
 | Snapshot 漂移／不明 mutation | 先查具體 diff 與歸屬；已確認為合法並行工作可移至隔離 fixture 後重跑，不明或非預期 mutation 保留現場並處理授權，不自動覆寫 |
+| exit 13（輪數 ledger：此內容已有 verdict，或上一輪通過且之後的增量未達重驗門檻） | 不是 reviewer 不可用：RESULT 行是「不需再審」→ 0-A 證據沿用它指名的那一輪，照常推進；RESULT 行是「已審過且有 Critical／Major」→ 0-A 未通過，修完換內容再審（同內容重擲不產生新證據） |
+| exit 14（輪數上限：同一份改動第 4 輪） | review 沒跑、gate 未完成：拆成可獨立驗收的範圍，或把最後一輪 verdict 交人判；NEVER 刪改 ledger、換 branch 或 rebase 重置輪數 |
 | 完整結果，無 issue | 0-A.1 通過，0-A.2 不觸發 |
 | 只有 Minor／Info | 逐項修復並驗證，0-A.2 不觸發 |
 | 含 Critical／Major | 逐項修復後進 0-A.2；修法本身是新的受審範圍 |
@@ -421,7 +425,7 @@ PRE-EXISTING — 未觸碰：<file>:<line>（舉證本次 diff 不含此檔／�
 
 只在 0-A.1 出 Critical／Major 時執行；修復後的完整 snapshot 是輸入。
 
-合格深度 reviewer 與 0-A.1 同一席（Claude Opus 5.5 medium）——新的 fresh context、不繼承 0-A.1 的對話，兩份 receipt 各自記 requested／observed。複審 MUST 由合格席執行，NEVER 降級成主線自審、worker、cloud CI 或其他模型。它取得修復後 snapshot、原始 0-A.1 findings 與修法內容，逐條確認 real issue 已修、附反證 dismiss 或重標 severity，另查修法帶來的漏項與 regression。reviewer 唯讀，主線負責修復。使用共用 CLI 時，先把 0-A.1 的 `## Review Verdict` 區段存成檔案，再以 `claude-review-safe.sh prepare medium --findings <檔案>`（Herdr carrier：`claude-review-safe.sh medium --findings <檔案>`）餵給 fresh reviewer——不帶 findings 的複審沒有逐條驗證的依據，只能算第二次 discovery，不滿足本節。保存完整輸出，不只摘錄結論。
+合格深度 reviewer 與 0-A.1 同一席（Claude Opus 5.5 medium）——新的 fresh context、不繼承 0-A.1 的對話，兩份 receipt 各自記 requested／observed。複審 MUST 由合格席執行，NEVER 降級成主線自審、worker、cloud CI 或其他模型。它取得修復後 snapshot、原始 0-A.1 findings 與修法內容，逐條確認 real issue 已修、附反證 dismiss 或重標 severity，另查修法帶來的漏項與 regression。reviewer 唯讀，主線負責修復。修補後重跑同一個 `prepare medium`（Herdr carrier 同理）：wrapper 由輪數 ledger 自動帶上一輪 verdict、只嵌增量並限定驗證範圍；`--findings` 只給 ledger 之外的 verdict 來源。
 
 深度輸出缺 `## Review Verdict`（含截斷／context exhaustion）時，明示深度階段未完整；不盲重跑相同耗盡命令。查明耗盡或截斷原因後對同一 snapshot 重跑（diff 過大先縮小受審範圍），補齊完整 verdict 才可收口；Opus 席不可用時 0-A.2 保持未完成，不以其他模型或主線自審補位。
 
@@ -434,13 +438,19 @@ DISMISSED — 反證：<file>:<line> ／ <契約或規則條文的具體出處>
 
 先驗每條反證再判通過。無反證的 dismissal 保留為 real issue，沿原 severity 處理；模型／effort 的名稱不能代替查證。有 real issue 時主線修復並跑相關驗證；無 real issue 或全部有反證時完成該階段。
 
-**最多兩輪 discovery review（0-A.1／0-A.2）**。兩輪後仍無法收斂，拆成可獨立驗收的範圍或依具體 blocker 升級，不能無限重派相同 brief。此上限不取消修復後必要的 verify-only 與下方大改動 snapshot 回扣。
+**輪數上限由 wrapper 執行**（working tree 以 HEAD、PR 以 branch 上的同一張 PR（PR 號）為一份改動；最多 3 輪，第 4 輪 exit 14）——判定表在 `scripts/lib/review-common.sh` § 0-A 輪數 ledger。帶 `--include`／`--exclude` 篩選的輪只是部分審查，收齊也不算 0-A 通過。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 同一份改動已有 verdict 的內容再審、或上一輪通過後增量 ≤50 行且 <5 檔 → exit 13；第 4 輪 → exit 14 拒跑 |
+| 消費端 | 跑 0-A 的主線（上方 exit 表）；coordinator `oa-batches.ts prepare`（切批前判輪）與 `merge-queue.ts`（合併前查 `rounds passed`） |
+| 觸發點 | 本節（commit skill `gates.md` § 0-A，每次 0-A 必讀） |
 
 ### 0-A/B/C/D 並行匯合（收口檢查）
 
 收回每個實際工作結果後核對：0-A 通過或合法 fast-path；0-B 通過或未觸發；0-C 全綠。接著條件執行 0-D，再做大改動回扣；0-E／0-F 依自己的觸發與阻擋契約處理。
 
-**大改動回扣**：0-A／0-B／0-C／0-D 匯合後累計修正**超過 50 行或跨 5 檔以上**時，MUST 讓合格 reviewer 對新 snapshot 再驗，確認新內容也被覆蓋。未到門檻仍跑修法相應的驗證；不能把舊 snapshot 的 PASS 當成新內容的 review。
+**大改動回扣**：匯合後有修正就重跑 `prepare medium`，要不要再審由 wrapper 依上一輪通過後的累計增量判（exit 13＝沿用）；未到門檻仍跑修法相應的驗證。
 
 實際匯合完成後使用 metrics recorder，記錄真實結果與身份：
 
@@ -466,6 +476,88 @@ Heavy gate 的 `exit 75` 代表 `gate-slot.sh` 等不到 slot、inner command �
 
 ## § 0-B: UI Design Review（條件觸發、並行軸 B）
 
+0-B 分兩段：**0-B.1 impeccable 檢查**（採用 impeccable 的 repo 有 UI 檔變更時觸發）與 **0-B.2 視覺判讀**（視覺影響才觸發）。兩段都通過（或未觸發）才算 0-B 通過。閉環本身的規約在 `proactive-skills.design-checkpoint`。
+
+### 0-B.1 impeccable 檢查
+
+**觸發**：候選中有 UI 檔（`.vue`、`.css`／`.scss`、`.html`、`.tsx`／`.jsx`，含 untracked 新增），且該檔所屬 package／app 或其祖先目錄（含 repo 根）有 `PRODUCT.md`、`DESIGN.md` 或 `.impeccable/config.json` 任一採用標記。每個 UI 檔獨立判定；兄弟 package 的標記不算。只有副檔名命中、沒有適用標記的 UI 檔，記 `⏭️ 0-B.1 跳過（未採用 impeccable）`；不得因缺 launcher 永久擋住它。已採用但 launcher 缺失才是安裝 blocker。
+
+```bash
+# 從 repo 根執行；worktree 的 skill 投影可能未版控，依序查三端投影、
+# linked worktree 的 common Git dir 所在主 checkout，以及安裝於 user home 的 skill。
+ROOT=$(git rev-parse --show-toplevel)
+COMMON=$(git rev-parse --path-format=absolute --git-common-dir)
+IMP=
+for candidate in \
+  "$ROOT/.claude/skills/impeccable/scripts/impeccable" \
+  "$ROOT/.agents/skills/impeccable/scripts/impeccable" \
+  "$ROOT/.cursor/skills/impeccable/scripts/impeccable" \
+  "$(dirname "$COMMON")/.claude/skills/impeccable/scripts/impeccable" \
+  "$HOME/.claude/skills/impeccable/scripts/impeccable"; do
+  if [ -x "$candidate" ]; then IMP=$candidate; break; fi
+done
+
+# NUL 分隔保留空白與 glob 字元；同一清單供 (a)(b)(c) 使用。
+mapfile -d '' CHANGED < <({ git diff --name-only -z HEAD; git ls-files --others --exclude-standard -z; } | sort -zu)
+UI=()
+for f in "${CHANGED[@]}"; do
+  case "$f" in
+    *.vue|*.css|*.scss|*.html|*.tsx|*.jsx) [ ! -f "$f" ] || UI+=("$f") ;;
+  esac
+done
+if [ "${#UI[@]}" -eq 0 ]; then echo '⏭️ 0-B.1 跳過（無 UI 檔變更）'; exit 0; fi
+ADOPTED_UI=()
+for f in "${UI[@]}"; do
+  dir=$(dirname "$f")
+  while :; do
+    if [ -f "$ROOT/$dir/PRODUCT.md" ] || [ -f "$ROOT/$dir/DESIGN.md" ] || [ -f "$ROOT/$dir/.impeccable/config.json" ]; then
+      ADOPTED_UI+=("$f"); break
+    fi
+    [ "$dir" = . ] && break
+    dir=$(dirname "$dir")
+  done
+done
+if [ "${#ADOPTED_UI[@]}" -eq 0 ]; then
+  echo '⏭️ 0-B.1 跳過（未採用 impeccable）'; exit 0
+fi
+UI=("${ADOPTED_UI[@]}") # (a)(b) 只核對已採用的 UI；(c) 逐 package／app 判 token 來源與 DESIGN.md
+[ -n "$IMP" ] || { echo '0-B.1 未完成：已採用 impeccable，但找不到 launcher'; exit 1; }
+
+# (a) detector：exit 0 且輸出 [] = 乾淨；exit 2 = 有 finding（JSON 陣列）
+"$IMP" detect --json "${UI[@]}"
+
+# (b) 唯讀列出快照。NEVER 在 commit gate 呼叫 critique-storage latest：
+# 指紋不符時該命令會自行寫 closed: true，正是這道 gate 要攔的繞過。
+for f in "${UI[@]}"; do
+  dir=$(dirname "$f")
+  while :; do
+    find "$ROOT/$dir/.impeccable/critique" -type f -name '*.md' -print 2>/dev/null || true
+    [ "$dir" = . ] && break
+    dir=$(dirname "$dir")
+  done
+done | sort -u
+# 逐份讀 frontmatter 的 target／p0_count／p1_count（舊版 p0／p1）與 closed，
+# 對照 UI 及 design-review.md 的受影響 URL；見下方 (b) 的證據判準。
+
+# (c) token 來源動了而 DESIGN.md 沒動
+printf '%s\0' "${CHANGED[@]}" | grep -zE '(^|/)app\.config\.ts$|\.css$|(^|/)tailwind\.config\.' || true
+printf '%s\0' "${CHANGED[@]}" | grep -zE '(^|/)DESIGN\.md$' || true
+```
+
+| 檢查 | 通過條件 | 未通過時 |
+| --- | --- | --- |
+| (a) detector | 輸出 `[]`；或每條 finding 都已有使用者確認過的 `impeccable hooks ignore-value` | 修掉 finding；要保留的先問使用者，確認後才 `ignore-value`。**NEVER** 自行 `ignore-file`／`ignore-rule` |
+| (b) critique 快照 | 受影響檔及 `design-review.md` 所列 URL 的每個 P0／P1，都有**對應的處置證據**：修正後重新 critique 證明 P0／P1 歸零，或 `design-review.md` 逐項記下 polish／明確 close 的快照路徑及修正，或使用者確認的 `ignore.md` 條目。只有 `closed: true` 或指紋不同不算證據；找不到可核對的處置就擋 | 跑 `polish`、人工核對 P0／P1，必要時重新 critique，明確 `critique-storage close`；刻意保留者先取得使用者確認並逐條記入 `ignore.md` |
+| (c) DESIGN.md 新鮮度 | token 來源（`app.config.ts` 的 `ui`、CSS `:root` 變數、Tailwind theme）沒動；或該來源所在 package／app 的 `DESIGN.md`（或適用的 repo 根 `DESIGN.md`）在 tracked diff 或 untracked 清單；或對應 `design-review.md` 寫明「本輪無 design system 變更」 | 跑 `impeccable document` 更新適用的 DESIGN.md，或補那一行 |
+
+`critique-storage latest` 會依內容指紋自動關閉過期快照，因此它的 exit 2 與 `closed: true` 都不能證明 P0／P1 已修。commit gate 只讀 `.impeccable/critique/`、`design-review.md` 與 `ignore.md`；對每個受影響 target 逐條核對上述證據，舊版無指紋快照也照樣核對。無法判定快照與改動的關係時保留 blocker，先補明確的 target／處置紀錄。這一段含人工核對，**不得**宣稱單靠 CLI exit code 就機械放行。gate 自身 **NEVER** 寫 `.impeccable/critique/*`。
+
+已採用但 launcher 不存在 → 0-B.1 未完成，回報 blocker（專案的 skills install）；未採用則跳過。保留 detector 輸出、唯讀快照清單與逐條處置、DESIGN.md 判定，0-B.2 的 brief 要附上。
+
+通過輸出 `✅ 0-B.1 通過`；無 UI 檔輸出 `⏭️ 0-B.1 跳過（無 UI 檔變更）`。
+
+### 0-B.2 視覺判讀（條件觸發）
+
 ```bash
 # tracked modified + untracked 新增的 .vue
 { git diff --name-only; git ls-files --others --exclude-standard -- '*.vue'; } | sort -u
@@ -478,11 +570,11 @@ Heavy gate 的 `exit 75` 代表 `gate-slot.sh` 等不到 slot、inner command �
 
 **不觸發**：純 `<script>` / `<style>` 微調、composable / store / API 純邏輯、測試、文件、設定檔、單純重構不影響視覺輸出。
 
-**Dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，確認真實圖片存取、視覺品質資格、fresh context 與可用載體；brief 帶完整 item、截圖與互動證據，依本檔 native 操作段執行。取證走 `screenshot-review-verify` Gemini 3.8 Flash high；Design Review 與截圖符合性由 fresh Claude Opus 5.5（effort: medium） 讀實際圖片後完成。取證與判定分開 dispatch；兩列無 fallback，Opus 5.5 無法執行時帶實際原因保留 0-B 未完成——主線是 maker，**NEVER** 主線自判或換其他模型補位（review-policy.md）。
+**Dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，確認真實圖片存取、視覺品質資格、fresh context 與可用載體；brief 帶完整 item、截圖、互動證據與 0-B.1 的 (a)(b) 輸出，依本檔 native 操作段執行。取證走 `screenshot-review-verify` Gemini 3.8 Flash high；Design Review 與截圖符合性由 fresh Claude Opus 5.5（effort: medium） 讀實際圖片後完成。取證與判定分開 dispatch；兩列無 fallback，Opus 5.5 無法執行時帶實際原因保留 0-B.2 未完成——主線是 maker，**NEVER** 主線自判或換其他模型補位（review-policy.md）。
 
-**並行啟動**：有真實並行載體時，0-A.1 啟動後同回合啟動已觸發的 0-B；收回 findings 後與 0-A.1／0-C 匯合修正。缺並行能力時依 review-policy 記錄同步載體限制，不略過視覺 gate。
+**並行啟動**：有真實並行載體時，0-A.1 啟動後同回合啟動已觸發的 0-B.2；收回 findings 後與 0-A.1／0-C 匯合修正。缺並行能力時依 review-policy 記錄同步載體限制，不略過視覺 gate。
 
-問題修正後輸出 `✅ 0-B 通過`；不觸發則直接輸出 `⏭️ 0-B 跳過（無 UI 變更）`。
+問題修正後輸出 `✅ 0-B 通過`；兩段都不觸發則輸出 `⏭️ 0-B 跳過（無 UI 變更）`。
 
 ---
 
@@ -491,6 +583,8 @@ Heavy gate 的 `exit 75` 代表 `gate-slot.sh` 等不到 slot、inner command �
 **Fix-verify 義務的全局 SoT 是 [[code-style.toolchain]] § Agent 義務：check 紅了立刻 fix**——本節是 `/commit` 裡的機械化；landing PR、CI `vp fmt --check` 紅燈、本機 `pnpm check` 失敗時 **NEVER** 只掃不修或等 CI 自己綠，同一 loop 適用。
 
 **並行啟動**：0-A.1 的 snapshot 已凍結且有可收回的背景 handle 時，同回合啟動 0-C；各軸回報後匯合。缺非同步能力時依 review-policy 的同步執行契約，所有檢查仍要完成。
+
+**在 primary checkout 以外跑 0-C 時（隔離發版 worktree、batch 整合區），先讓那棵樹具備測試環境，再跑**：worktree 一律由 `/wt`（`wt-helper add`）建立，它會跑 consumer 的 env／DB bootstrap。**NEVER** 用裸 `git worktree add` 建要跑 0-C 的樹：gitignored 的 `.env*` 不會跟過去，per-worktree DB clone 也不會建立，整合測試會以「環境錯誤」大量失敗。也 **NEVER** 從 primary checkout 複製 `.env.local`，它的 managed DB block 指向 primary 自己的 clone。self-hosted Supabase consumer 的 DB 在遠端 LXC，desk 上 **NEVER** `supabase start`，拓樸與 reset 路徑見 `clade-data` skill 的 `db-topology-invariant`。已經手動建好的樹，照 consumer 的 bootstrap 補建（<consumer-b>：`node scripts/wt-env-bootstrap.ts ensure --worktree <abs>`，分支要符合 `session/YYYY-MM-DD-HHMM-<slug>`）。同一棵樹的 `pnpm check` 與 `pnpm test` **NEVER** 平行跑：check 裡的 lint／prepare 會觸發 postinstall 並重建 `.nuxt/`，同時進行的 test 會出現 `TSCONFIG_ERROR` 假失敗。
 
 跑下列指令確保 **format / lint / typecheck / test / doctor 全部 0 errors + 0 warnings + 0 test failures**：
 
@@ -517,11 +611,17 @@ fi
 ```
 
 `test:affected` 是 repo 在 `package.json` **明文宣告**的 lane 入口：它從 diff（staged ＋ working tree ＋ base 以來的 range）反查
-「哪些測試引用了改到的檔」，改到共用設定（runner／CI／package.json）時自動升 full。這與下一段禁止的事**不同型**——
+「哪些測試引用了改到的檔」，改到共用設定（runner／lockfile／tsconfig）時自動升 full。clade 的 runner 對 `package.json`
+做欄位判定：依賴、`test*`／生命週期 script、其他非描述欄位有變才升 full；只改其他 script 時改選引用到它（含遞移呼叫者與
+`pre`／`post` hook 所掛的 script）的測試，判不出來一律升 full。這與下一段禁止的事**不同型**——
 下一段禁的是「用字串啟發式猜 `check` 有沒有含 test」，本段靠的是宣告，沒有宣告就照原樣跑 `pnpm test`。
 
 判讀 affected 輸出時看兩行：`Affected analysis: N changed files -> M tests selected` 與逐檔的 `:: <reason>`。
-出現 `unmapped-fallback` 代表有改動對不到任何測試而退回整個 fast lane——那不是錯，但通常是新檔還沒有測試在引用它。
+出現 `unmapped-fallback` 代表有改動對不到任何測試而退回保守選檔——沒有觀測紀錄時是整個 fast lane；clade 的 observed
+選檔在 v2 trace 下只補跑讀取範圍未知的測試（未 trace、過期、trace 時紅掉），新增檔落在該筆紀錄量測時還不存在的頂層目錄時，
+那筆紀錄也不能用來排除。那不是錯，但通常是新檔還沒有測試在引用它。另有兩條不經 fallback 的選法：經 git 列檔的測試
+（trace 看得到它讀 `.git`、看不到它列了哪些檔）在任何新增或刪除時都會被選；`run-p`／`run-s`／`npm-run-all` 的 glob
+（`check:*`）算進 `package.json` 的 script 呼叫閉包。
 **純文件 diff（只改 `.md`）也照跑**：clade 有百餘支測試讀真實 `rules/ docs/ capabilities/` 內容，lane 會把它們選出來；
 選出 0 支時 runner 印 `No affected tests found`，那才是「這次沒有測試該跑」的合法結論。
 
@@ -551,7 +651,7 @@ vite-doctor 是 commit 品質閘門的必要組件（import graph 健康度：cy
        modules: [['vite-doctor/nuxt', doctorConfig]]
   4. 安裝完成後重跑 /commit
 
-詳見 .claude/rules/vite-doctor.md
+詳見 vite-doctor rule
 ```
 
 隨後 **MUST** 釋放 commit-lock（依 [runtime-lifecycle.md](runtime-lifecycle.md)「背景工作與退出」，帶原 tuple 與 owner token）並 STOP。**NEVER** 跳過此 gate 繼續跑後續步驟。
@@ -564,40 +664,33 @@ pnpm run doctor
 
 Doctor health score < 100 或 exit code ≠ 0 → **MUST block commit**，修復後重跑直到 health score 100/100 + 0 warnings + exit 0。**即使 warning 是既有、非本次 diff 引入**也必須修——每次 /commit 順手把既有 doctor warning 修掉，保持零警告 baseline。典型修法：移除 dead imports、修正 re-export 路徑、打斷 import cycles、套用 `readValidatedBody` 取代 raw body read。**NEVER** 以「非我引入」「既有 debt」為由跳過 doctor warning — 0-C gate 不區分新舊，一律全綠。
 
-> **oxfmt batched false-positive**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅但 single-file `vp fmt --check <path>` 通過，是 batched bug 不是 format issue — **先**跑一次 `pnpm format`（vp fmt --write）再重跑 check 通常就過。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（`.claude/rules/` / `AGENTS.md` / `CLAUDE.md` / `.clade/vendor/**`）試圖讓 oxfmt 滿意 — 那是 governance violation。clade 中央倉 release flow 已在 `scripts/publish.ts` 主流程加 stable fmt pre-stage（兩輪 `vp fmt --write` + `vp fmt --check`），consumer 端 commit 流程不需再背 workaround SOP。詳見 `docs/pitfalls/2026-05-18-oxfmt-batched-check-false-positive.md`。
+> **oxfmt batched false-positive**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅但 single-file `vp fmt --check <path>` 通過，是 batched bug 不是 format issue — **先**跑一次 `pnpm format`（vp fmt --write）再重跑 check 通常就過。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（依 runtime 的 rules 投影 / `AGENTS.md` / `CLAUDE.md` / `.clade/vendor/**`）試圖讓 oxfmt 滿意 — 那是 governance violation。clade 中央倉 release flow 已在 `scripts/publish.ts` 主流程加 stable fmt pre-stage（兩輪 `vp fmt --write` + `vp fmt --check`），consumer 端 commit 流程不需再背 workaround SOP。詳見 `docs/pitfalls/2026-05-18-oxfmt-batched-check-false-positive.md`。
 
 失敗時進入 loop：修復 → `pnpm format`（裸打 `vp fmt` 必須加 `--ignore-path .oxfmtignore`） → 重跑上述步驟 → 直到全綠。loop 的執行者依下方「fix loop 的 pi offload」規則決定（**預設背景 pi**；例外才主線直修）。
 
-**Fix loop 的 pi offload（預設派背景 pi，主線不留在 foreground 修）**：
+**Fix loop 的外派（預設派背景 worker，主線不留在 foreground 修）**：
 
-0-C 檢查發現失敗需要修補時，**預設**派背景 pi 跑 fix-verify loop，主線同回合繼續既有並行收尾（poll 軸 A、回收軸 B）— 三軸並行結構不變，軸 C 只是從「主線 foreground 修」換成「pi 背景修」：
+0-C 檢查發現失敗需要修補時，**預設**派背景 worker 跑 fix-verify loop，主線同回合繼續既有並行收尾（poll 軸 A、回收軸 B）— 三軸並行結構不變，軸 C 只是從「主線 foreground 修」換成「worker 背景修」。0-C 是 Routing Table 〔`commit-0c-fix-verify`〕列（2026-09-24 併入原 `-escalate` 列；2026-09-29 GPT 退場後改 Claude Sonnet 5.5（effort: high）），鏈尾是主線。brief 以 `~/offline/clade/vendor/snippets/pi-offload/templates/fix-verify-loop.template.md` 為素材填好（check 命令、失敗摘要／log、`max_iterations=2`）寫成檔；載體照 [[agent-routing.routing-table]] § Devin 與 [[agent-routing.dispatch-execution]] § Cloud session 載體：
+
+- 本 turn 收得回 → Claude Code 主線派 in-process `sonnet-implementer`（brief 含一行 `routing-row: commit-0c-fix-verify`）
+- 需隔離／長時間 → Herdr Claude child：
 
 ```bash
-node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
-  --template ~/offline/clade/vendor/snippets/pi-offload/templates/fix-verify-loop.template.md \
-  --var <key>=<value> ...（依 template 變數表填：check 命令、失敗摘要 / log 等） \
-  --var max_iterations=2 \
-  --label commit-0c-<slug> --model sol --effort xhigh \
-  --workspace-access mutation \
+node ~/offline/clade/vendor/scripts/herdr-session-handoff.ts \
+  --cwd <abs-worktree> --label commit-0c-<slug> --prompt-file <brief> \
+  --model claude-sonnet-5-5 --effort high \
   --route routing-table --tier-basis table-row --table-row commit-0c-fix-verify
 ```
 
-（`--route` / `--tier-basis` / `--table-row` 皆必填，缺就 exit 1。0-C 是 Routing Table
-〔`commit-0c-fix-verify`〕列（2026-09-24 併入原 `-escalate` 列），執行鏈只有 GPT-6 Sol xhigh 一跳，
-鏈尾是主線。`--var max_iterations=2` 是本列的次數上限：同一 dispatch 內最多 2 輪 check→fix，
-到上限仍紅 MUST 報 `fail` 而非 `pass`。）
+（`--route` / `--tier-basis` / `--table-row` 皆必填，缺就在建 pane 前拒絕。`max_iterations=2` 是本列的次數上限：同一 dispatch 內最多 2 輪 check→fix，到上限仍紅 MUST 報 `fail` 而非 `pass`。）
 
-**Sol 之後由主線接手（同一輪 0-C，不是新的 commit）**——命中任一即主線自己修，**NEVER** 再給 Sol 同一份 brief，
-**NEVER** 改派其他模型：
+**Sonnet 之後由主線接手（同一輪 0-C，不是新的 commit）**——命中任一即主線自己修，**NEVER** 原樣再給 Sonnet 同一份 brief，**NEVER** 改派禁用 model：
 
-1. Sol dispatch 回 `fail` / `uncertain` / exit 2（2 輪用盡或自報修不到）
-2. Sol 報 `pass` 但主線重跑 `pnpm check`（+ test / doctor）仍紅
-3. Sol exit 3／4（機械故障或配額）——dispatcher 的 `next_step` 指向主線
+1. worker 回 `fail` / `uncertain`（2 輪用盡或自報修不到）
+2. worker 報 `pass` 但主線重跑 `pnpm check`（+ test / doctor）仍紅
+3. 席位不可用（Sonnet 額度、Herdr transport 失敗）
 
-（背景跑、stdout 單一 JSON；exit 0=全綠 / 2=修不到全綠（業務 fail）/ 3=機械故障 / 4=quota。
-exit 3 → 機械故障，依 dispatcher/watch protocol 處理，**不**冒充品質失敗；
-exit 4 → 逐字採用 dispatcher payload（鏈尾＝主線），**NEVER** 當成機械故障，**NEVER** 改派禁用 model、
-Claude-hosted GPT 或 native `cx`。主線接手時帶著 Sol 留下的 remaining_failures。）
+品質失敗的升級照 [[agent-routing.routing-table]] § Sonnet 列品質失敗：主線先診斷；0-C 範圍內通常屬「小修 → 主線自己做」。Sonnet 以安全分類器拒答（`stop_reason: refusal`、Usage Policy 拒答、空產出）不是品質失敗，直接主線接手。主線接手時帶著 worker 留下的 remaining_failures。**NEVER** 改派 GPT、Claude-hosted GPT 或 native `cx`。
 
 修改範圍與前置授權持續適用；未知或活躍他人 WIP 不因修 gate 就可覆寫。
 
@@ -821,7 +914,7 @@ structured-errors、audit、error-handling 五類 check）。本次 diff 動到 
        git add evlog.map.json
   3. 安裝完成後重跑 /commit
 
-詳見 .claude/rules/evlog-adoption.md § Coverage 維度（evlog map）
+詳見 evlog-adoption rule § Coverage 維度（evlog map）
      與 ~/offline/clade/vendor/snippets/evlog-map/README.md
 ```
 

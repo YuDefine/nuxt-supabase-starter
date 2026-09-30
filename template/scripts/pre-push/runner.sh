@@ -11,6 +11,7 @@
 #   - native-picker-ban  偵測 nuxt.config.* 才跑（全站掃 .vue，回溯型；
 #                        補 pre-commit staged 版的盲區——歷史既有違規）
 #   - data-perf-check   偵測 nuxt.config.* 才跑（全站掃 .vue setup context raw $fetch）
+#   - evlog-map-gate     CI workflow 有 evlog-map-gate 步驟才跑（照 CI 的 mode／cwd，判定與 CI 同一支）
 #
 # 為什麼 typecheck 放 pre-push 不放 pre-commit：
 #   vue-tsc / nuxi typecheck 不支援單檔 typecheck（nuxt/cli #407），
@@ -51,7 +52,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECKS_DIR="$SCRIPT_DIR/checks"
 # PROJECT_ROOT 允許被 CLADE_PROJECT_ROOT 覆寫。meta-monorepo（app root 在子目錄，例如
-# nuxt-supabase-starter 的 template/）的 app root ≠ git toplevel，而各 check 的 auto-detect 是
+# starter 型 repo 的 template/）的 app root ≠ git toplevel，而各 check 的 auto-detect 是
 # 「找不到 nuxt.config 就 exit 0」，直接用 toplevel 會讓那幾道 check 全部靜默 no-op。
 # 未設 CLADE_PROJECT_ROOT 時行為與過去完全一致（既有 consumer 零影響）。
 #
@@ -89,6 +90,7 @@ CHECKS=(
   review-rules-ratchet  # patterns.json 全站掃 + baseline 比對（只擋新增違規；存量走分批清償）
   nuxt-ui-mixed-slot    # 全站掃 UDashboardPanel named template + stray 子元素混用（blocking；fleet 基線 0 hit）
   utable-slots          # 全站掃 UTable 內漏掉 -cell 後綴的 cell slot（blocking；fleet 基線 0 hit）
+  evlog-map-gate        # 與 CI 同一道 evlog map gate（CI workflow 有這一步才跑；判定在 local.ts → run.sh）
 )
 
 for name in "${CHECKS[@]}"; do
@@ -149,6 +151,10 @@ relevance_globs() {
       echo '*.vue scripts/checks/* vendor/scripts/checks/*' ;;
     # 規則自身異動一律跑；規則的 fileGlob 另外問 scan.ts（見 check_is_relevant）
     review-rules-ratchet) echo 'vendor/review-rules/* review-rules-baseline.json' ;;
+    # entry point（Nitro server 四類目錄、pages、Next route/page/middleware）、baseline 與放行單、
+    # gate 本身、決定 mode 的 workflow、決定 evlog／@evlog/cli 版本的 package.json 與 lockfile
+    evlog-map-gate)
+      echo '*server/api/* *server/routes/* *server/middleware/* *server/tasks/* *pages/* *route.ts *page.tsx *middleware.ts *evlog.map.json *evlog.map.waiver.json *.github/actions/evlog-map-gate/* .github/workflows/* *package.json *pnpm-lock.yaml' ;;
     *) echo '*' ;;
   esac
 }

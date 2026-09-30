@@ -1,6 +1,6 @@
 ---
 name: my
-description: Charles 送出 `\my`（backslash，非 slash）時的完整流程——`\my` 是 `/decisions` 的 chat 互動版本：讀同一份待拍板佇列、把只存在對話裡的待決策點推進佇列、在對話裡渲染成可回覆的 Qn、回答時關 span 並落 carrier。收到 `\my` 這個 token 時 MUST 立刻載入本 skill 再開工。
+description: Charles 送出 `\my`（backslash，非 slash）時的完整流程——`\my` 是待拍板佇列（`flow pending`）的 chat 互動版本：讀佇列、把只存在對話裡的待決策點推進佇列、在對話裡渲染成可回覆的 Qn、回答時關 span 並落 carrier。收到 `\my` 這個 token 時 MUST 立刻載入本 skill 再開工。
 license: MIT
 metadata:
   author: clade
@@ -11,13 +11,9 @@ metadata:
 
 <!-- clade-skill-scope: both -->
 
-# `\my` — `/decisions` 的 chat 互動版本
+# `\my` — 待拍板佇列的 chat 互動版本
 
 `\my` 等同「列出只有我做得了的待辦」。回到電腦時問「我不在的期間，累積了哪些**球在我手上**的事」。
-
-> **同源鐵律**：`\my` 與 `/decisions`
-> 讀**同一份**佇列，兩邊都要提供該有的東西。**NEVER** 自己另外掃一份——同一個待拍板事項在手機上
-> 與在對話裡長得不一樣時，人會以為那是兩件事。
 
 ## MUST 依序跑四步
 
@@ -49,7 +45,7 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts ask \
   --carrier '<TD-NNN | HANDOFF.md | tasks/xxx.md>' --actor '<你的 pane id>'
 ```
 
-推進去才有價值：手機那側同一秒看得到，而且會推播。**NEVER** 只在對話裡列出來就算——
+推進去才有價值。**NEVER** 只在對話裡列出來就算——
 那正是「待拍板事項多數只存在於對話裡」這個缺口本身。
 
 **只有 Charles 做得了的工作**（典型：consumer 端 `disable-model-invocation` 的 skill，如 dep batch 的
@@ -98,13 +94,13 @@ cd ~/offline/clade && node vendor/scripts/flow/flow.ts answer '<span_id>' \
 ```
 
 **`--repo` 給的是佇列上那個名字，NEVER 自己換算成目錄路徑。** 名字 → 根目錄由
-`resolveRepoRootByName` 解析，與 `/decisions` 頁面答題**同一支**；自己填路徑就是第二份實作，
+`resolveRepoRootByName` 解析；自己填路徑就是第二份實作，
 而它漂掉的後果不是「chat 端壞了」，是**答案寫進別的 repo 的 spine、改到別的 repo 的檔案**。
 名字解析不出來時它拒絕寫入並非 0 退出——**NEVER** 改用 `--repo` 以外的方式繞過那個拒絕。
 
 **NEVER 手寫 `node --input-type=module -e "import { answerDecision } ..."`**：那條路徑不經 roster 檢查，`repoRoot` 由人目測填。
 
-它一次做完三件事：關 span（佇列與 `/decisions` 同時消失那題）、把決策紀錄寫進 carrier 的錨定區段
+它一次做完三件事：關 span（那題從佇列消失）、把決策紀錄寫進 carrier 的錨定區段
 （`## 決策紀錄` 節；`td:` carrier 則是該 TD entry 尾）、
 量測 tech-debt hygiene 的差集。**NEVER** 只在對話裡回覆就算結案——那樣答案沒有持久載體，
 下一個 session 看到的還是那題還在等。
@@ -115,7 +111,12 @@ cd ~/offline/clade && node vendor/scripts/flow/flow.ts answer '<span_id>' \
 真的在。**NEVER** 用 `tail` 查——block 落在區段裡，不在檔尾。
 
 `ok:false`（非 0 退出）時看 `reason`：`no-such-decision`（span 不在這個 repo，換 `--repo`）、
-`already-resolved`（已經答過了，要改答案是另一條路徑）。**NEVER** 自己造一個新 carrier 檔繞過。
+`already-resolved`（已經答過了，要改答案走 `flow revise <span_id> --answer '<text>' [--repo <name>]`）。**NEVER** 自己造一個新 carrier 檔繞過。
+
+`flow revise` 回 `picked-up` 時 MUST 照 `locked.by` 說出是哪一種鎖：
+`pickup`（有 agent 宣告接手）是硬鎖，**NEVER** 提供覆寫；`follow-up` 是推測，渲染時 MUST 明說「推測已有人在執行」
+並附上推翻指令 `flow revise <span_id> --answer '<text>' --override-follow-up --reason '<why>'`——
+**只在 Charles 明說要推翻時才跑**，`--reason` 寫他給的理由。
 
 `ok:true` 但 `landed:false` 是**另一回事，不是失敗**：span 已收、答案已在 spine 上，只有 carrier
 那一步沒做到（`reason` 會說是哪一種）。**NEVER** 因此重跑一次——那個寫入已經生效了。

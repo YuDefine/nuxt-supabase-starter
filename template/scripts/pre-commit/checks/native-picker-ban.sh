@@ -16,7 +16,7 @@
 # 規約來源：
 #   - impl-time rule : rules/modules/framework/nuxt/nuxt-ui-native-picker-ban.md
 #   - review-layer   : capabilities/core/agents/references/clade-review-rules.md
-#                      § 原生 HTML date / time / calendar 輸入
+#                      （native picker 由機械層覆蓋，該檔明列不再重複）
 #
 # 由 ~/clade vendor/scripts/pre-commit/ 散播，請勿直接編輯 consumer 副本。
 

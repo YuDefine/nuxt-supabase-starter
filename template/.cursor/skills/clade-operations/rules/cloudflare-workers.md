@@ -1,5 +1,5 @@
 ---
-description: Cloudflare Workers / NuxtHub gating + wrangler.jsonc 格式統一 + deploy 命令規約（dual-track：wrangler-action / void.cloud）。依 DB 選擇分派（D1 → NuxtHub mandatory；Supabase / 外部 DB → 禁帶 @nuxthub/core dep），杜絕 unused NuxtHub dep 污染、wrangler 檔格式 drift、以及 void.cloud track 的 compat_flags 致命誤配
+description: Cloudflare Workers / NuxtHub gating + wrangler.jsonc 格式統一 + deploy 命令規約（dual-track：wrangler-action / void.cloud）。依 DB 選擇分派（D1 → NuxtHub mandatory；Supabase / 外部 DB → 禁帶 @nuxthub/core dep），杜絕 unused NuxtHub dep 污染、wrangler 檔格式 drift、以及 void.cloud track 的 compat_flags 致命誤配；帳號資源操作一律走 `cf` CLI（§ 8）
 paths: ['wrangler.{toml,jsonc}', 'void.json', 'nuxt.config.*', 'package.json', '.github/workflows/**/*.yml']
 ---
 <!-- Clade native rule; source: rules/core/cloudflare-workers.md; edit canonical source -->
@@ -329,10 +329,24 @@ Track 判定：根目錄有 `void.json` 且 `package.json` 含 `void` dep → Tr
 
   - Track A（wrangler-action）：CF token 走 `cloudflare/wrangler-action@v3` 的 `apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}`
   - Track B（void.cloud）：GitHub OIDC + `VOID_PROJECT`（link state 不在 CI，slug 必顯式給）
-- **MUST** runtime app secret（DB URL / session secret 等）由 user 在平台端預設一次（Track B：`void secret put <NAME>`；wrangler：`wrangler secret put`），**不**從 GH Actions 注入 runtime secret
+- **MUST** runtime app secret（DB URL / session secret 等）由 user 在平台端預設一次（Track B：`void secret put <NAME>`；Track A：依 [[secrets]]），**不**從 GH Actions 注入 runtime secret
 
 完整 workflow 範本見 `~/offline/clade/vendor/snippets/cloudflare-workers/self-hosted-runner-ci.workflow.yml.template`。
 
 ### § 7.3 — Fleet 現況
 
-現況以 `scripts/audit-wrangler-config.ts`（`ci.self_hosted_pnpm_cache`、`void.legacy_token_auth`）輸出為準；<consumer-k> 的 `.github/workflows/deploy.yml` 是 current void.cloud + OIDC reference。
+現況以 `scripts/audit-wrangler-config.ts`（`ci.self_hosted_pnpm_cache`、`void.legacy_token_auth`）輸出為準；<consumer-j> 的 `.github/workflows/deploy.yml` 是 current void.cloud + OIDC reference。
+
+## § 8 — Cloudflare 操作工具：`cf` CLI（hard rule）
+
+帳號資源的查詢與異動（D1 / KV / R2 / DNS / zone / tunnel 設定 / Worker secret / browser-run / cache 等）**MUST** 走官方 `cf` CLI，照 `cf-cli` skill 操作（指令探索、輸出格式、跟 wrangler 會出事的語意差都在那裡）。**NEVER** 用 Cloudflare Developer Platform MCP 做帳號操作。
+
+| 操作 | 工具 |
+|---|---|
+| 帳號資源查詢與異動（人或 agent 手動執行、runbook、skill 指令範例） | **`cf`**（`cf-cli` skill） |
+| Track A deploy（CI） | `cloudflare/wrangler-action`（§ 3.1）— `cf deploy` 需要 `cloudflare.config.ts`（`cf migrate`），fleet 尚未採用 |
+| Track B deploy / runtime secret | `void`（§ 3.2） |
+| `wrangler dev` / `tail` / `types`、查 dev server 的本機 D1 / KV / R2 | wrangler — `cf` 沒有 Workers tail；`cf workers types` 只讀 `cloudflare.config.ts`；`cf --local` 看不到 dev server 的資料 |
+| CI workflow 內的步驟（deploy 前後的 D1 migration / bookmark 等） | 維持 wrangler / wrangler-action — 跟 Track A deploy 一起等 `cf` 脫離 beta 再評估 |
+| 程式碼內的 API 呼叫（`fetch` / script 內嵌 client） | HTTP API — 不為了本節改成 spawn CLI |
+| `cf cli search` 查無對應指令的端點（例如 zone 層級 ruleset rule） | HTTP API，並在該處註明「cf 未覆蓋」 |

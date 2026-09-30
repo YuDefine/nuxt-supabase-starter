@@ -13,6 +13,7 @@
 #   - native-picker-ban         偵測 staged *.vue 才跑（無 .vue 自動 no-op）
 #   - review-rules-ban          偵測 staged *.vue 才跑（patterns.json 驅動，無 .vue 自動 no-op）
 #   - data-perf-check           偵測 staged *.vue 才跑（setup context raw $fetch anti-pattern）
+#   - consumer-carriers         已退役 docs/ 或 lifecycle repo 才啟用（否則 no-op）
 #
 # 重型檢查（nuxt typecheck、test tsconfig）放 pre-push runner，不在 pre-commit 跑。
 # 來源：vue-tsc / nuxi typecheck 不支援單檔 typecheck（issue #407），
@@ -64,3 +65,6 @@ run_check utable-slots
 
 # 9) clade-projection-drift — 擋 staged 的 clade 投影檔被本地改過（TD-582）
 run_check clade-projection-drift
+
+# 10) consumer-carriers — 擋已退役 consumer 重建 docs/、lifecycle repo 新開 TD（#412 C2）
+run_check consumer-carriers

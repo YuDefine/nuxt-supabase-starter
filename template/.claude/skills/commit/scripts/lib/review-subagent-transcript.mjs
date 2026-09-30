@@ -36,8 +36,9 @@
 // stdout 印一份 JSON 結論；exit 0 verified／3 沒跑成或不完整／6 prompt 被改或用了寫入型工具／
 // 8 身分不成立／2 用法錯誤。
 
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 
 const READONLY_TOOLS = new Set(['Read', 'Grep', 'Glob'])
@@ -215,12 +216,15 @@ export function verifySubagentReview({
     // meta 缺席＝判不出 agent type，下面照 mismatch 處理，NEVER 當作符合。
   }
   result.agent_type = meta.agentType
-  if (meta.agentType !== agentType)
+  // agentType 可以是 prepare 寫進 state 的固定兩個名字（裸名與 hub-core 命名空間名）：逐字
+  // 比對集合成員，NEVER 改成前綴／字尾比對——那會讓其他 plugin 的同名 agent 混進來。
+  const allowedTypes = [agentType].flat()
+  if (!allowedTypes.includes(meta.agentType))
     return {
       ...result,
       exit: 8,
       failed_check: 'agent_type',
-      reason: `subagent_type 是 ${meta.agentType ?? '（meta.json 缺席）'}，不是 ${agentType}——只有 ${agentType} 的工具面是唯讀，其他 type 的輸出不是 0-A reviewer 的輸出`,
+      reason: `subagent_type 是 ${meta.agentType ?? '（meta.json 缺席）'}，不是 ${allowedTypes.join(' 或 ')}——只有 commit-0a-reviewer 的工具面是唯讀，其他 type 的輸出不是 0-A reviewer 的輸出`,
     }
 
   const entries = readTranscript(transcript)
@@ -314,7 +318,7 @@ function main() {
       brief: { type: 'string' },
       model: { type: 'string' },
       effort: { type: 'string' },
-      'agent-type': { type: 'string' },
+      'agent-type': { type: 'string', multiple: true },
       'verdict-out': { type: 'string' },
     },
   })
@@ -355,4 +359,18 @@ function main() {
   process.exit(result.exit)
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main()
+// CLI 入口判斷 NEVER 用 `import.meta.url === \`file://${argv[1]}\``：import.meta.url 是 realpath
+// 且 percent-encode（空白、非 ASCII），argv[1] 是呼叫端給的原字串（可能經 symlink）。兩邊不等時
+// main() 不跑、node 以 exit 0 靜默結束，finalize 會把它當成核對通過（2026-09-26 consumer 0-A Major）。
+function invokedAsCli() {
+  const entry = process.argv[1]
+  if (!entry) return false
+  const self = fileURLToPath(import.meta.url)
+  try {
+    return realpathSync(entry) === realpathSync(self)
+  } catch {
+    return entry === self
+  }
+}
+
+if (invokedAsCli()) main()

@@ -119,6 +119,7 @@ import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
 import { fileURLToPath } from 'node:url'
+import { extendCodexWorktreeHookTrust } from './codex-worktree-trust.ts'
 import { createInterface } from 'node:readline/promises'
 import {
   classifyDirtyPaths,
@@ -134,6 +135,8 @@ import {
 } from './claim-helper.ts'
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isLockedProjectionPathFor } from './locked-projection.ts'
+import { isIgnorableWorktreeDrift, isToolManagedDrift } from './wip-dirty.ts'
+import { reconcileLandedProjectionState } from './lib/projection-ledger-reconcile.ts'
 import { runWtEnvBootstrap } from './lib/wt-env-bootstrap-runner.ts'
 import { normalizeUnsplitArgv, UnsplitArgvError, type FlagOptions } from './lib/argv-unsplit.ts'
 import {
@@ -339,12 +342,12 @@ function parseWorktreeList(porcelain) {
  * Worktree 的 landing base —— fork 從哪裡來、之後要 land 回哪裡去。
  *
  * **NEVER 寫死 `'main'`。** merge-back 的落地動作是在 consumer root 裡跑
- * `git merge --squash <branch>`（本檔 § cmdMergeBack），它 land 進去的是 consumer root
+ * `git merge --squash <branch>`（本檔 `cmdMergeBack()`），它 land 進去的是 consumer root
  * 的**當前 HEAD**，不是名為 `main` 的 branch。fork 端若寫死 `main`，兩端就在
  * 「main checkout 不在 main 上」時分岔 —— 這是長命 feature branch（`feat/*`、release
  * branch、fork 的預設分支不叫 main）的常態，不是邊角。
  *
- * 實證（2026-08-22 <consumer-i>）：main checkout 在 `feat/self-host-evlog-admin`
+ * 實證（2026-08-22 <consumer-h>）：main checkout 在 `feat/self-host-evlog-admin`
  * （領先 `main` 16 個 commit），`wt-helper add` 從 stale `main` fork 出來的 worktree
  * 缺 `openspec/`、`app/`、`DESIGN.md` —— 而 merge-back 會 land 回 `feat/...`。
  * 症狀出現在 worktree 內（檔案不見了），根因在 fork 端，中間隔了整個 session。
@@ -462,16 +465,14 @@ async function prompt(question) {
 // offset applied uniformly to every declared port keeps the whole set inside the
 // consumer's own band, so no consumer's dev script or nuxt.config needs to change.
 
-// Dev-port allocation lives in ./lib/worktree-dev-port.ts — the single SoT shared
-// with review-gui. Keeping a second copy here is what let the two disagree: this
-// file handed each worktree its own port while review-gui went on spawning every
-// one of them on the registry base, so N worktrees fought over one dev server.
+// Dev-port allocation lives in ./lib/worktree-dev-port.ts — the single SoT.
 import {
   DEV_PORT_BAND,
   allocateWorktreeDevPorts as allocateWorktreeDevPortsIn,
   devPortCapacity as devPortCapacityOf,
   devPortStateDir,
   pickDevPortOffset as pickDevPortOffsetIn,
+  planWorktreeDevPorts,
   readWorktreeDevPorts,
   type WorktreePortBand,
 } from './lib/worktree-dev-port.ts'
@@ -724,72 +725,10 @@ function runOxfmtStdin(text, filePath, cwd) {
   return null
 }
 
-// Tool-managed drift gate: drift that **wt-helper itself created** and that
-// **must never land on main**. Excluded from the WIP gate entirely — neither
-// blocked nor auto-committed.
-//
-// Today this is exactly one case: cmdAdd flips the worktree's
-// `verifyDepsBeforeRun` from `warn` to `install` (see the "Flip
-// verify-deps-before-run" block in cmdAdd — main deliberately keeps `warn` to
-// avoid postinstall on ctrl+c, worktrees take `install` so dep desync
-// auto-repairs).
-//
-// **兩個檔都要認（TD-723 遷移期）**：SoT 已從 `.npmrc` 搬到 `pnpm-workspace.yaml`
-// （pnpm 11 不再讀 `.npmrc` 的非 auth 設定），但既有 worktree 與尚未跑過
-// `ensureCladePnpmSettings` 的 consumer 還停在舊檔。只認一個，另一個的 drift 就會
-// 被算成 user WIP 並擋住 merge-back —— 那正是本函式存在的原因。
-// That leaves every worktree permanently showing ` M` on one of them,
-// which the pre-flight then reports as user WIP and refuses to merge-back on
-// — i.e. wt-helper's own bootstrap blocks wt-helper's own landing path
-// (<consumer-a> TD-252, hit by all 4 lanes on 2026-07-26).
-//
-// It must NOT go through the auto-commit branch either: committing it would
-// carry `install` into main, silently flipping main's pnpm behaviour. Since
-// merge-back squashes **commits** only, leaving it uncommitted is correct —
-// it simply must stop being counted as a blocker.
-//
-// Narrow by construction: returns true only when normalising that single line
-// makes HEAD and the working tree byte-identical. Any other edit to `.npmrc`
-// (a real user change) still falls through to the WIP gate.
-// key 名兩邊不同（ini kebab vs yaml camel），所以行形狀 per-file 決定。
-const TOOL_MANAGED_SETTING_LINE = {
-  '.npmrc': /^verify-deps-before-run=(warn|install)$/m,
-  'pnpm-workspace.yaml': /^verifyDepsBeforeRun:[ \t]*(warn|install)$/m,
-}
-
-function isToolManagedDrift(wtPath, filePath) {
-  const LINE = TOOL_MANAGED_SETTING_LINE[filePath]
-  if (!LINE) return false
-  let headText
-  try {
-    headText = execFileSync('git', ['show', `HEAD:${filePath}`], {
-      cwd: wtPath,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-  } catch {
-    return false
-  }
-  let currentText
-  try {
-    currentText = readFileSync(join(wtPath, filePath), 'utf8')
-  } catch {
-    return false
-  }
-  if (headText === currentText) return false
-
-  // **方向敏感**：只認 cmdAdd bootstrap 造成的 `warn` → `install`。
-  // 反方向（HEAD 是 `install`、working tree 是 `warn`）是 user 手動把它改回來——那是**真的
-  // user WIP**。若把兩個方向都當 tool-managed 放行，等於繞過 WIP 保護，cleanup 會靜默刪掉它。
-  const headMatch = headText.match(LINE)
-  const currentMatch = currentText.match(LINE)
-  if (!headMatch || !currentMatch) return false
-  if (headMatch[1] !== 'warn' || currentMatch[1] !== 'install') return false
-
-  // 該行以外的內容必須逐位元組相同——同一次編輯若還動了別的行，整份就當 user WIP。
-  const blank = (s) => s.replace(LINE, '<tool-managed-verify-deps-before-run>')
-  return blank(headText) === blank(currentText)
-}
+// isToolManagedDrift / TOOL_MANAGED_SETTING_LINE moved to ./wip-dirty.ts so the
+// "ignorable drift" rule (projection residue + tool-managed flip) lives in one
+// module shared by cleanup, merge-back and wt-batch checkpoint/draft — see
+// isIgnorableWorktreeDrift there.
 
 // Whitelist gate for the auto-commit branch in cmdMergeBack. Returns true iff:
 //   1. filePath is in OXFMT_AUTO_PATHS, AND
@@ -1203,7 +1142,7 @@ export function seedWorktreeCladeSubstrate(
 ) {
   // TD-1037: `.clade/runtime/`、`.clade/projections/`、`.clade/rules/` 與 `.codex/` 全部在
   // consumer .gitignore 內，而 `git worktree` fork 只帶 tracked 檔案 —— 新 worktree 因此
-  // 結構上不可能有它們。三個獨立現場（<consumer-a> / <consumer-g> / <consumer-k>）證實後果
+  // 結構上不可能有它們。三個獨立現場（<consumer-a> / <consumer-f> / <consumer-j>）證實後果
   // 相同：`sync-rules` 在 `.clade/runtime/hooks.json` 以 ENOENT 失敗（訊息 "canonical runtime
   // projection unavailable" 指不到根因），繞過它之後 `.clade/projections/*.json` 缺席又讓
   // ownership 判定把每個既有檔判成本地竄改。
@@ -1269,6 +1208,15 @@ export function seedWorktreeCladeSubstrate(
       if (spawnSync('git', ['check-ignore', '-q', rel], { cwd: consumerRoot }).status !== 0)
         continue
       cpSync(src, dst, { recursive: true })
+      if (rel === '.codex') {
+        try {
+          log(`  ${extendCodexWorktreeHookTrust(wtPath).reason}`)
+        } catch (error) {
+          console.error(
+            `warn: Codex worktree hook trust unchanged: ${error instanceof Error ? error.message : String(error)}`,
+          )
+        }
+      }
       if (rel === '.clade/projections') copiedProjections = true
       copied.push(rel)
       log(`  clade-substrate: copied ${rel} from main (gitignored, worktree cannot check it out)`)
@@ -3715,7 +3663,7 @@ async function cmdPrune() {
  * worktree directory — that's a separate cleanup step. Live holders are left
  * alone; unknown holders are reported but not touched.
  */
-async function cmdReclaimStale() {
+async function cmdReclaimStale({ dryRun = false } = {}) {
   const consumerRoot = findConsumerRoot()
   const declared = readDeclaredDevPorts(consumerRoot)
   if (declared.length === 0) {
@@ -3734,29 +3682,31 @@ async function cmdReclaimStale() {
 
   let freed = 0
   const unknown = []
+  // `--dry-run` 是全域認得的旗標，TD-1142 的未知旗標檢查不會擋它；這裡不接的話它被靜默吞掉、照樣 unlink。
+  const release = (h, why) => {
+    const recPath = join(devPortStateDir(consumerRoot), `${h.slug}.json`)
+    if (dryRun) {
+      console.log(`  would free +${h.offset}  ${h.slug}  (${why})`)
+      freed++
+      return
+    }
+    try {
+      unlinkSync(recPath)
+      console.log(`  freed +${h.offset}  ${h.slug}  (${why})`)
+      freed++
+    } catch {}
+  }
   for (const h of holders) {
     const w = wtBySlug.get(h.slug)
     if (!w) {
       // Holder has no matching worktree entry (orphan record) — reclaim
-      const recPath = join(devPortStateDir(consumerRoot), `${h.slug}.json`)
-      try {
-        unlinkSync(recPath)
-        console.log(`  freed +${h.offset}  ${h.slug}  (orphan — no matching worktree)`)
-        freed++
-      } catch {}
+      release(h, 'orphan — no matching worktree')
       continue
     }
 
     const enriched = enrichWorktree(consumerRoot, w)
     if (enriched.staleness === 'stale') {
-      const recPath = join(devPortStateDir(consumerRoot), `${h.slug}.json`)
-      try {
-        unlinkSync(recPath)
-        console.log(
-          `  freed +${h.offset}  ${h.slug}  (${enriched.mergedToMain ? 'merged' : `status: ${enriched.briefStatus}`})`,
-        )
-        freed++
-      } catch {}
+      release(h, enriched.mergedToMain ? 'merged' : `status: ${enriched.briefStatus}`)
     } else if (enriched.staleness === 'live') {
       // Active session — do not touch
     } else {
@@ -3775,7 +3725,11 @@ async function cmdReclaimStale() {
 
   const capacity = devPortCapacity(declared, readWorktreeBand(consumerRoot))
   const remaining = holders.length - freed
-  console.log(`\nReclaimed ${freed} slot(s). ${remaining}/${capacity} still held.`)
+  console.log(
+    dryRun
+      ? `\nDry run: would reclaim ${freed} slot(s); nothing released. ${holders.length}/${capacity} held.`
+      : `\nReclaimed ${freed} slot(s). ${remaining}/${capacity} still held.`,
+  )
 }
 
 // Unmerged XY status codes from `git status --porcelain` (per git-status(1)
@@ -4499,9 +4453,18 @@ async function cmdDev(alias, opts: WtOptions = {}) {
   }
 
   // Worktrees created before TD-434 have no record; allocate on first use so
-  // they are not stranded on the shared port.
+  // they are not stranded on the shared port. `--dry-run` 只算不寫：預覽不能佔掉一格，
+  // 但分配不到時要報出跟實跑一樣的錯誤。
   const record =
-    readWorktreeDevPorts(consumerRoot, repoTop) ?? allocateWorktreeDevPorts(consumerRoot, repoTop)
+    readWorktreeDevPorts(consumerRoot, repoTop) ??
+    (opts.dryRun
+      ? planWorktreeDevPorts(
+          consumerRoot,
+          repoTop,
+          readDeclaredDevPorts(consumerRoot),
+          readWorktreeBand(consumerRoot),
+        )
+      : allocateWorktreeDevPorts(consumerRoot, repoTop))
   if (!record) {
     throw new Error(
       readDeclaredDevPorts(consumerRoot).length === 0
@@ -5386,7 +5349,7 @@ export function isArchivePathConflict(p) {
 }
 
 // Preserve gitignored review artifacts from worktree before cleanup destroys
-// them. `screenshots/<env>/<topic>/` is the review-gui / verify:ui screenshot
+// them. `screenshots/<env>/<topic>/` is the verify:ui screenshot
 // convention; gitignored by spectra cookbook so they don't bloat git history.
 // `git merge --squash` carries no gitignored content, so without this sync,
 // `git worktree remove --force` permanently deletes screenshots and downstream
@@ -5891,9 +5854,7 @@ async function cmdCleanup(
   // 沒有 flag 可繞過——唯一的修法是把設定改指 main 或刪掉，gate 本身不替人判斷哪一個。
   const hostRefsObs = findHostConfigReferences(target.path)
   const hostRefs = hostRefsObs.status === 'known' ? hostRefsObs.value : []
-  const isIgnorableDrift = (entry, kind) =>
-    isLockedProjectionPathFor(target.path, entry.path) ||
-    (kind === 'modified' && isToolManagedDrift(target.path, entry.path))
+  const isIgnorableDrift = (entry, kind) => isIgnorableWorktreeDrift(target.path, entry.path, kind)
   const uncommitted = {
     modified: uncommittedRaw.modified.filter((m) => !isIgnorableDrift(m, 'modified')),
     untracked: uncommittedRaw.untracked.filter((u) => !isIgnorableDrift(u, 'untracked')),
@@ -6023,6 +5984,22 @@ async function cmdCleanup(
     )
   }
 
+  if (mergedLocal || prLanded) {
+    try {
+      const projectionState = reconcileLandedProjectionState(consumerRoot, target.path)
+      if (projectionState.updated > 0)
+        console.log(`cleanup: reconciled ${projectionState.updated} landed projection receipt(s)`)
+      for (const reason of projectionState.skipped)
+        console.log(`cleanup: projection receipt skipped: ${reason}`)
+    } catch (error) {
+      throw new Error(
+        `cleanup retained ${target.path}: projection receipt reconcile failed: ${errorMessage(error)}; ` +
+          `resolve the receipt or pending projection transaction, then retry cleanup ${cleanSlug}`,
+        { cause: error },
+      )
+    }
+  }
+
   const supersededPin = supersededOk
     ? pinSupersededTip(consumerRoot, cleanSlug, branchName, String(opts.reason).trim())
     : undefined
@@ -6044,7 +6021,10 @@ async function cmdCleanup(
   // toolManagedCount > 0：gate 已判定這些 drift 可忽略（見上方），但 git 仍視之為 dirty
   // 而拒絕移除，所以這裡必須補 --force。它只涵蓋 isToolManagedDrift 與
   // isLockedProjectionPathFor 認可的檔——真的 user WIP 早在 gate 就攔下了，走不到這裡。
-  if (opts.force || toolManagedCount > 0) removeArgs.push('--force')
+  // forceDiscardUncommitted：gate 已由呼叫端授權丟棄 user WIP，git 同樣要 --force 才肯移除。
+  if (opts.force || opts.forceDiscardUncommitted || toolManagedCount > 0) {
+    removeArgs.push('--force')
+  }
   removeArgs.push(target.path)
   git(removeArgs, { cwd: consumerRoot })
   if (supersededPin) {
@@ -7220,7 +7200,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
       console.warn(
         `merge-back: ${carried.length} evidence sidecar(s) had worktree-only receipts and were carried to main: ${list}\n` +
           `             These should have landed via the phase-tick commit (see rules/core/commit.detail.md\n` +
-          `             § worktree 內唯一合法的 commit：artifact-tick). Review and commit them on main.`,
+          `             § Artifact-tick（hard rule）). Review and commit them on main.`,
       )
     }
     if (evFailed.length > 0) {
@@ -7256,8 +7236,8 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   console.log(summary)
 
   // `git merge --squash` stages the changeset but deliberately does NOT commit:
-  // landing is finished by the caller in main (worktree-default.md § v3 atomic
-  // landing — "user 再在 main 跑 /commit"). That contract is correct, but the
+  // landing is finished by the caller in main with /commit
+  // (worktree-default.commit-ceremony.md § §5.5 Legacy merge-back 與 stash 救援). That contract is correct, but the
   // summary above reads as "done" while the worktree and branch are already
   // gone, so the staged index is the only remaining copy. Say the remaining
   // step out loud. (2026-08-04: two clade-home sessions in one afternoon each
@@ -7577,10 +7557,11 @@ async function cmdOrphanPrune(opts) {
 const PEER_SUBCOMMANDS = new Set(['add', 'cleanup', 'list', 'resolve'])
 
 function forwardToPeer(sub: string | undefined, rest: string[]): number | null {
-  const at = rest.indexOf('--machine')
+  const at = rest.findIndex((arg) => arg === '--machine' || arg.startsWith('--machine='))
   if (at < 0) return null
-  const machine = rest[at + 1] ?? ''
-  const args = [...rest.slice(0, at), ...rest.slice(at + 2)]
+  const equals = rest[at].startsWith('--machine=')
+  const machine = equals ? rest[at].slice('--machine='.length) : (rest[at + 1] ?? '')
+  const args = [...rest.slice(0, at), ...rest.slice(at + (equals ? 1 : 2))]
   if (!MACHINE_LABEL_PATTERN.test(machine)) {
     console.error(
       `error: --machine needs a saved Herdr machine label (got ${JSON.stringify(machine)})`,
@@ -7656,7 +7637,7 @@ function printUsage(log = console.error) {
     '  list [--json] [--no-landed-state]  Enumerate session worktrees with staleness + landedState',
   )
   log('  prune                     Interactively remove merged session worktrees')
-  log('  reclaim-stale             Free dev-port slots held by stale worktrees')
+  log('  reclaim-stale [--dry-run] Free dev-port slots held by stale worktrees')
   log('  cleanup <slug>            Remove worktree (gated by --force +')
   log('                            --force-discard-unland; pre-checks both)')
   log('    --superseded-by <commit|file=commit|file=path>[,…] --reason <text>')
@@ -7767,8 +7748,38 @@ const BATCH_BOOLEAN_FLAGS = new Set([
   '--no-cleanup',
 ])
 
+// main() 的 switch 認得的子指令；不在這裡的（含缺漏）照舊落到 usage／exit 1。
+const SUBCOMMANDS = new Set([
+  'add',
+  'detect-main-dirty',
+  'list',
+  'prune',
+  'reclaim-stale',
+  'cleanup',
+  'merge-back',
+  'resolve',
+  'land-pending',
+  'rescue',
+  'orphan-prune',
+  'sweep-siblings',
+  'dev',
+])
+// 會讀 `opts.dryRun` 的子指令；新增子指令支援 `--dry-run` 時 MUST 同步加進來，否則會被 main() 拒絕。
+const DRY_RUN_SUBCOMMANDS = new Set([
+  'cleanup',
+  'merge-back',
+  'land-pending',
+  'dev',
+  'reclaim-stale',
+])
+
 async function main() {
-  const [, , sub, ...rawRest] = process.argv
+  let [, , sub, ...rawRest] = process.argv
+  if (sub === '--machine' || sub?.startsWith('--machine=')) {
+    const machineArgs = sub === '--machine' ? [sub, rawRest.shift() ?? ''] : [sub]
+    sub = rawRest.shift()
+    rawRest.push(...machineArgs)
+  }
   const options: FlagOptions = Object.fromEntries([
     ...[
       ...(sub === 'batch' ? BATCH_VALUE_FLAGS : VALUE_FLAGS),
@@ -7798,7 +7809,7 @@ async function main() {
   }
   const peerExit = forwardToPeer(sub, rest)
   if (peerExit !== null) process.exit(peerExit)
-  if (rest.includes('--machine')) return main()
+  if (rest.some((arg) => arg === '--machine' || arg.startsWith('--machine='))) return main()
 
   if (sub === 'batch') {
     try {
@@ -7862,6 +7873,12 @@ async function main() {
     printUsage()
     process.exit(2)
   }
+  // 全域白名單只證明旗標「某個子指令認得」，不證明這個子指令會讀它。其他旗標被忽略是往安全的方向偏，
+  // `--dry-run` 被忽略則是把預覽變成實跑（reclaim-stale、sweep-siblings 都踩得到），所以只放行真的讀它的子指令。
+  if (flags.has('--dry-run') && SUBCOMMANDS.has(sub) && !DRY_RUN_SUBCOMMANDS.has(sub)) {
+    console.error(`error: \`${sub ?? ''}\` does not support --dry-run（未執行任何動作）`)
+    process.exit(2)
+  }
   const opts = {
     json: flags.has('--json'),
     noLandedState: flags.has('--no-landed-state'),
@@ -7912,7 +7929,7 @@ async function main() {
       await cmdPrune()
       return
     case 'reclaim-stale':
-      await cmdReclaimStale()
+      await cmdReclaimStale({ dryRun: opts.dryRun })
       return
     case 'cleanup':
       await cmdCleanup(positional[0], opts)

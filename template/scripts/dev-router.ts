@@ -210,7 +210,7 @@ const { values, positionals } = parseArgs({
     // 不給 default；未指定時用偵測到的第一個 app。
     app: { type: 'string' },
     // control HTTP server 的 bind host。default loopback；用 0.0.0.0 可讓
-    // 跨裝置（Tailscale）+ 跨 origin（review-gui bookmarklet）打到 control API。
+    // 跨裝置（Tailscale）打到 control API。
     // 只影響 control server listen 端；CLI client 與 proxy bind 都維持 127.0.0.1。
     'control-host': { type: 'string', default: '127.0.0.1' },
     // --no-tunnel：不 spawn tunnel（review 走 localhost 即可，且避開 CF token 403）。
@@ -311,7 +311,7 @@ function parseWorktrees() {
 // branch → slug
 // main worktree 的 slug 固定 'main'（由 caller 判斷）。
 // session/<YYYY-MM-DD-HHMM>-<slug>（或舊/非標準格式 session/<YYYY-MM-DD>-<slug>，無 HHMM）
-//   → 剝 session/ 前綴 + 開頭日期戳（HHMM 段 optional），對齊 review-gui worktreeSlug。
+//   → 剝 session/ 前綴 + 開頭日期戳（HHMM 段 optional），對齊 wt-helper slug。
 // branch 不符此格式 → branch basename。
 function branchToSlug(branch) {
   if (!branch) return null
@@ -319,7 +319,7 @@ function branchToSlug(branch) {
   if (name.startsWith('session/')) {
     name = name.slice('session/'.length)
     // 剝開頭時間戳 YYYY-MM-DD[-HHMM]-（HHMM 段 optional：handle 舊/非標準格式無 HHMM 的 session branch，
-    // 否則日期前綴殘留會與 review-gui/wt-helper slug drift → `use <slug>` unknown slug）
+    // 否則日期前綴殘留會與 wt-helper slug drift → `use <slug>` unknown slug）
     name = name.replace(/^\d{4}-\d{2}-\d{2}(-\d{4})?-/, '')
     return name
   }
@@ -739,8 +739,7 @@ async function runDaemon() {
   })
 
   // ── control HTTP server ──
-  // CORS：讓 review-gui origin（http://<host>:5174）的 bookmarklet 能跨 origin
-  // POST 並讀 response。control API 只在本機 / Tailscale 內網開放，wildcard 可接受。
+  // CORS：讓跨 origin 的 client 能 POST 並讀 response。control API 只在本機 / Tailscale 內網開放，wildcard 可接受。
   const corsHeaders = {
     'access-control-allow-origin': '*',
     'access-control-allow-methods': 'GET, POST, OPTIONS',

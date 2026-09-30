@@ -49,6 +49,13 @@ pnpm create nuxt-supabase-starter my-app --yes \
 scaffold 仍會完成 project-local Clade 初始化，並提示回 Clade 執行
 `/project-bootstrap adopt`。`consumers.local` 是由中央 registry 產生的本機投影，不應手動編輯。
 
+選 `--agents codex` 時，scaffold 立即從產出的 `.claude/skills/` 建立
+`.agents/skills/`，並提供 `.codex/config.toml` 與 `AGENTS.md`；不需要本機 Clade，
+Codex CLI 也能使用。managed scaffold 會在依賴安裝成功後由 Clade 的
+`run-sync-to-codex.ts` 補上完整投影。使用 `--no-install` 或
+`--no-register-consumer` 時，只有完整投影延後：CLI 會印出後續指令，`--json`
+結果的 `codexProjection.status` 為 `deferred`，`command` 欄位提供相同指令。
+
 ## evlog preset
 
 `--evlog-preset` 控制 wide event logging stack 套用 tier。對應 clade `presets/evlog-{baseline,d-pattern-audit,nuxthub-ai}/`。

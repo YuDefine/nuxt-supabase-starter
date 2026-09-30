@@ -13,7 +13,6 @@
 # 為什麼是 warn 不是 block：dispatcher 判 FAIL / UNCERTAIN 之後主線**應該**讀那一張，
 # 那是正當用途。block 會擋掉唯一合法路徑；這條提示的收件人是「正要連讀第二張」的主線。
 #
-# 對應規約：rules/core/review-gui-surface.md § 截圖 evidence 與符合性判定
 # 對應 TD-375。fail-open：拿不到 file_path / 非圖片 → 靜默 exit 0。
 
 set -euo pipefail
@@ -43,7 +42,6 @@ state_file="$state_dir/${session:-unknown}.seen"
 # 量出「56%」那個錯誤的同一個混淆。
 cat >&2 <<EOF
 ⚠️ 正在把截圖讀進主線 context。evidence 的正規入口是 dispatcher，不是主線目視。
-   per rules/core/review-gui-surface.md § 截圖 evidence 與符合性判定：
      • 收 [verify:ui] evidence → 派 screenshot-review Claude subagent，主線只讀它回的 JSON
      • dispatcher 判 FAIL / UNCERTAIN → 才讀**那一張**，NEVER 順便連讀其他張
      • 想確認整批有沒有拍到 → 跑 emptiness preflight，NEVER 逐張目視

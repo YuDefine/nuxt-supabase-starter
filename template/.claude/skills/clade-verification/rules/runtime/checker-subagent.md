@@ -13,7 +13,7 @@ checker **MUST** 是新開的 subagent（`Agent` tool，非續跑 maker）。**N
 
 
 **checker 的 `model` 刻意省略、繼承主線**——checker 的輸出**本身**就是品質判定，命中
-[[agent-routing]] § NEVER 降檔的形狀第 1 條。這是聲明不是疏漏：**NEVER** 拿該檔
-§ `subagent_type` 是 `general-purpose` 或 `Explore` 時… 的「MUST 顯式帶檔位」外推到 checker，
+[[agent-routing.dispatch-execution]] § NEVER 降檔的形狀第 1 條。這是聲明不是疏漏：**NEVER** 拿
+[[agent-routing]] § `general-purpose`／`Explore` 與 Pi 分流 的「MUST 顯式帶檔位」外推到 checker，
 **也 NEVER** 把 checker 轉派 codex `--model luna` 或 `--model gemini`。
 

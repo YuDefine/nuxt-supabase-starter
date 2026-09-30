@@ -80,7 +80,7 @@ export function assembleProject(
   // 7. Copy shared template assets first so scaffold inherits template updates.
   copyTemplateClaudeAssets(targetDir)
   if (hasAgent(agentTargets, 'codex')) {
-    copyTemplateCodexAssets(targetDir)
+    copyAgentsInstructionFile(targetDir)
   }
   if (hasAgent(agentTargets, 'cursor')) {
     copyTemplateCursorAssets(targetDir)
@@ -123,6 +123,12 @@ export function assembleProject(
   applyStripManifest(targetDir, loadStripManifest(options.stripManifestPath), {
     consumer: 'scaffolder',
   })
+
+  // Codex must work in a fresh clone without a local Clade checkout. Project
+  // rules and richer settings can be regenerated later by the managed wrapper.
+  if (hasAgent(agentTargets, 'codex')) {
+    generateMinimalCodexAssets(targetDir)
+  }
 }
 
 function inferAuthSelection(
@@ -248,26 +254,29 @@ function copyTemplateCursorAssets(targetDir: string): void {
   copyAgentsInstructionFile(targetDir)
 }
 
-function copyTemplateCodexAssets(targetDir: string): void {
-  const codexDir = join(STARTER_ROOT, '.codex')
-  if (existsSync(codexDir)) {
-    copyDirectory(codexDir, join(targetDir, '.codex'))
-  }
-
-  const agentsDir = join(STARTER_ROOT, '.agents')
-  if (existsSync(agentsDir)) {
-    copyDirectory(agentsDir, join(targetDir, '.agents'))
-  }
-
-  copyAgentsInstructionFile(targetDir)
-}
-
 function copyAgentsInstructionFile(targetDir: string): void {
   const agentsFile = join(STARTER_ROOT, 'AGENTS.md')
   if (existsSync(agentsFile)) {
     mkdirSync(targetDir, { recursive: true })
     cpSync(agentsFile, join(targetDir, 'AGENTS.md'))
   }
+}
+
+function generateMinimalCodexAssets(targetDir: string): void {
+  const claudeSkills = join(targetDir, '.claude', 'skills')
+  const commitSkill = join(claudeSkills, 'commit', 'SKILL.md')
+  const agentsFile = join(targetDir, 'AGENTS.md')
+  if (!existsSync(commitSkill) || !existsSync(agentsFile)) {
+    throw new Error('Codex scaffold requires .claude/skills/commit/SKILL.md and AGENTS.md')
+  }
+
+  copyDirectoryFiltered(claudeSkills, join(targetDir, '.agents', 'skills'), new Set(['CLAUDE.md']))
+  const codexDir = join(targetDir, '.codex')
+  mkdirSync(codexDir, { recursive: true })
+  writeFileSync(
+    join(codexDir, 'config.toml'),
+    '# Codex project config. Clade may add managed settings and rules later.\n',
+  )
 }
 
 function copyTemplateGitHubAssets(targetDir: string): void {

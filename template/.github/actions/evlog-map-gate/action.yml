@@ -37,56 +37,9 @@ runs:
         INPUT_MIN_SCORE: ${{ inputs.min-score }}
       run: |
         set -euo pipefail
-
-        GATE_ENGINE="$GITHUB_ACTION_PATH/gate.ts"
-
-        if [ ! -f "$GATE_ENGINE" ]; then
-          echo "::warning::gate.ts not found next to action.yml — consumer not yet propagated, skipping gate"
+        # 判定本體在 run.sh：本機的 local.ts 也呼叫同一支，CI 與本機只有一份邏輯。
+        if [ ! -f "$GITHUB_ACTION_PATH/run.sh" ]; then
+          echo "::warning::run.sh not found next to action.yml — consumer not yet propagated, skipping gate"
           exit 0
         fi
-
-        # @evlog/cli 宣告在哪個 package.json 取決於 app 根在哪：app 根 ≠ repo 根時
-        # （starter 的 template/、monorepo 的 apps/web）依賴跟著 app 走，而 repo 根
-        # 可能根本沒有 package.json。只看 repo 根會靜默 skip 掉整個 gate。
-        FIRST_CWD="$(printf '%s' "$INPUT_CWD" | head -1 | tr -d '[:space:]')"
-        [ -z "$FIRST_CWD" ] && FIRST_CWD=.
-        HAS_CLI=0
-        for candidate in "$FIRST_CWD/package.json" "./package.json"; do
-          [ -f "$candidate" ] || continue
-          if node -e "const d={...require('$candidate').dependencies,...require('$candidate').devDependencies};process.exit(d['@evlog/cli']?0:1)" 2>/dev/null; then
-            HAS_CLI=1
-            break
-          fi
-        done
-
-        if [ "$HAS_CLI" -eq 0 ]; then
-          echo "::warning::@evlog/cli not declared in $FIRST_CWD/package.json or ./package.json — evlog map not yet adopted here, skipping gate. See vendor/snippets/evlog-map/README.md"
-          exit 0
-        fi
-
-        # 取本次變更檔清單。base-ref 抓不到（shallow clone / 首次 push）時退化成
-        # 空清單 —— gate.ts 會警告並跳過「觸及的 entry point 必須滿分」那條判定，
-        # 但全域分與 suppressed 兩條仍照跑。
-        CHANGED_FILES="$RUNNER_TEMP/evlog-map-changed.txt"
-        if git rev-parse --verify "$INPUT_BASE_REF" >/dev/null 2>&1; then
-          git diff --name-only --diff-filter=ACMR "$INPUT_BASE_REF"...HEAD > "$CHANGED_FILES"
-        else
-          echo "::warning::base ref '$INPUT_BASE_REF' not resolvable — checkout with fetch-depth: 0 to enable the per-entry-point check"
-          : > "$CHANGED_FILES"
-        fi
-
-        # cwd 可以是多行（Nuxt layer monorepo：一行一個 layer），逐行展開成
-        # 可重複的 --cwd。每個 scan root 各自帶 <root>/evlog.map.json baseline。
-        CWD_ARGS=()
-        while IFS= read -r line; do
-          line="$(printf '%s' "$line" | tr -d '[:space:]')"
-          [ -n "$line" ] && CWD_ARGS+=(--cwd "$line")
-        done <<< "$INPUT_CWD"
-        [ ${#CWD_ARGS[@]} -eq 0 ] && CWD_ARGS=(--cwd .)
-
-        node "$GATE_ENGINE" \
-          --baseline "$INPUT_BASELINE" \
-          --changed-files "$CHANGED_FILES" \
-          "${CWD_ARGS[@]}" \
-          --mode "$INPUT_MODE" \
-          --min-score "$INPUT_MIN_SCORE"
+        bash "$GITHUB_ACTION_PATH/run.sh"

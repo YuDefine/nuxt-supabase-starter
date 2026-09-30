@@ -104,6 +104,8 @@ _default_lock_dir() {
 LOCK_DIR=${CLADE_GATE_LOCK_DIR:-$(_default_lock_dir)}
 [ "$mode" = status ] || mkdir -p "$LOCK_DIR" 2>/dev/null || exec "$@"
 
+# 上限 clamp（8）與 CI 併發設定的 SoT：scripts/test-lanes/lane-capacity.json
+# runner.heavyGateSlotsMax——改這裡的 clamp 時同步那個檔（test/lane-capacity-sot.test.ts 擋漂移）。
 SLOTS=${CLADE_HEAVY_GATE_SLOTS:-2}
 case "$SLOTS" in
   '' | *[!0-9]*) SLOTS=2 ;;
@@ -481,7 +483,19 @@ if mem_scope_available; then
   # scope 包在 timeout 外面 —— 逃出去的孫行程也在同一個 cgroup 裡，
   # 這正是 2026-09-03 那隻 reparent 到 pid 1 的 vue-tsc 逃掉的那一格。
   # flock 的 fd 在此之前就取得，scope 下照常繼承，鎖隨行程結束釋放的性質不變。
-  exec systemd-run --user --scope -q \
+  # Only hosts with an installed agent slice opt in. macOS/non-systemd keeps the old scope.
+  gate_slice_args=()
+  if [ "$GATE_CLASS" = heavy ] && [ "$(systemctl --user show -p LoadState --value agent-workloads.slice 2>/dev/null)" = loaded ]; then
+    gate_slice_args=(--slice=agent-workloads.slice)
+  fi
+  # gate 底下全是批次工作。與互動 session 同權重時，滿載下 claude TUI 主執行緒喚醒延遲實測達
+  # 300ms、herdr 56ms；scope 設 idle 權重（cgroup cpu.idle）後 herdr 降到 5ms，批次仍吃得到所有閒置 CPU。
+  # systemd < 252 不認得 idle，會讓 systemd-run 整個失敗，所以先驗版本。
+  gate_cpu_args=()
+  if [ "$(systemctl --version 2>/dev/null | awk 'NR == 1 { print $2 + 0 }')" -ge 252 ] 2>/dev/null; then
+    gate_cpu_args=(-p CPUWeight=idle)
+  fi
+  exec systemd-run --user --scope -q "${gate_slice_args[@]}" "${gate_cpu_args[@]}" \
     -p MemoryHigh="$GATE_MEM_HIGH" -p MemoryMax="$GATE_MEM_MAX" -p MemorySwapMax=0 \
     "$@"
 fi

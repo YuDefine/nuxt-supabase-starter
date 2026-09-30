@@ -9,7 +9,7 @@
 //
 //   runWtEnvBootstrap()  fail-closed —— wt-helper 的 add / cleanup 用。半 provision 的
 //                        remote resource MUST 浮出來，NEVER 被吞掉。
-//   probeBackingService() fail-open —— dev-session / review-gui 的 preflight 用。工具自身
+//   probeBackingService() fail-open —— dev-session 的 preflight 用。工具自身
 //                        故障（探針壞掉、JSON 爛掉）NEVER 阻擋沒有 per-worktree 拓樸的
 //                        consumer 起 dev server；真正的缺席才由呼叫端處置。
 //

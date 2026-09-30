@@ -9,7 +9,7 @@ paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'packages/*/server/**/
 
 > 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.claude/rules/local/`；要改本檔請回 clade 源檔並 propagate。
 
-Template 預設**不啟用**以下 Supabase feature。引入任一項前 **MUST**：列出觸發需求與為何現有工具（server API + polling、Cloudflare Workers Cron Trigger / Queues）不夠 → 評估替代方案 → 記錄 `docs/decisions/YYYY-MM-DD-<feature>.md` → 把章節從本檔移除或移到對應主題的 rule 檔。
+Template 預設**不啟用**以下 Supabase feature。引入任一項前 **MUST**：列出觸發需求與為何現有工具（server API + polling、Cloudflare Workers Cron Trigger / Queues）不夠 → 評估替代方案 → 記 ADR（落點依 [[knowledge-and-decisions]]；**NEVER** 在 `docs/decisions/` 開新檔）→ 把章節從本檔移除或移到對應主題的 rule 檔。
 
 ## Supabase Storage
 

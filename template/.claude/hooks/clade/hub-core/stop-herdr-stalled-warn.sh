@@ -2,7 +2,8 @@
 # Stop hook — 收工那一刻處理 Herdr 殘留。分兩級，判定與文字全在
 # vendor/scripts/herdr-stop-gate.ts（可單元測試；本檔只負責定位與 fail-open）。
 #
-#   exit 2（block）：本 pane 自己持有、已回報 outcome、現在就收得掉的 dispatch。
+#   exit 2（block）：本 pane 自己持有、已回報 outcome、現在就收得掉的 dispatch；
+#                   或本 session 是被派出的 child 本人、這一段還沒 `--complete` 回報主持。
 #                   patrol 的 owes-resume 沒有 grace，所以「剛做完」在這裡就看得見——
 #                   而 flow 的 unharvested 套 60 分鐘 grace，那一批對 SessionStart 是隱形的。
 #   exit 0（warn）： abandoned record、orphan process、stale gate、別人持有的 dispatch。

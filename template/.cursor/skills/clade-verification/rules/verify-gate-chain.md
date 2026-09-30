@@ -76,3 +76,17 @@ Gate chain FAIL 時，agent 要：
    - **specification error**（命中任一即是：驗收條件互相矛盾；要讓 gate 綠必須改 spec 宣告的行為、刪需求或改資料定義；test 斷言與 spec 文字直接衝突）→ **不是 iterate 對象**。**立刻**執行 `ROLLBACK:<artifact>`，不等 `max_iterations`：走 aixbdd 的工作退回規格層（feature／DSL 歸 `/dsl-refine`、`tasks.md` 結構歸 `/tasks`、需求內容歸 `/specify`——執行層不要自己改「做什麼」）；ad-hoc 工作退回 `tasks/<date>-<slug>.md` 改寫驗收段後再重進迴圈。退回時要保留證據：error output、互相衝突的 spec 條目原文、已試過的修法
 3. **同一 error 連續 2 輪不收斂 = 提前 escalation**——避免同一個修法來回震盪
 4. gate chain 是全 PASS 語義：跳過某條 test、把 timeout 當通過都不算綠；FAIL 的狀態下不要 commit
+
+### 可修復的 gate 失敗不是停手理由
+
+「gate 失敗即停」只適用**不可修復**的失敗。依錯誤輸出判，不依 exit code 判：
+
+| 可觀察 predicate | 類別 | MUST |
+| --- | --- | --- |
+| 錯誤輸出具名到檔（與行），修法落在本次 scope 內：格式、lint、型別、import、root cause 明確的 test assertion | 可修復 | 讀錯誤 → 就地修 → 從 L0 重跑整輪 gate chain → 全綠後續接原工作。test assertion 紅修的是受測實作，**NEVER** 為了變綠放寬或改寫斷言 |
+| `vp check`（或 `vp fmt --check`）只報格式 | 可修復 | 先 `git status --porcelain` 記下現況，只對本次擁有的路徑修：`pnpm exec vp check --fix <owned-paths>`（或 `pnpm exec vp fmt --ignore-path .oxfmtignore <owned-files>`，裸打 `vp fmt` 必帶 `--ignore-path`，見 [[code-style]] toolchain）；修完再看 `git status`／`git diff`，確認變動只落在擁有的路徑 → 從 L0 重跑整輪 gate chain。報錯的檔不歸你時不修、回報持有者 |
+| root cause 不明的 test 紅燈 | 不確定 | 照上方「不確定 error」列處理：可以 iterate，同一 error 連續 2 輪不收斂就提前 escalation |
+| specification error | 退回規格 | 照上方 specification error 列**立刻** `ROLLBACK:<artifact>`，不等 `max_iterations` |
+| 環境 error 經 self-fix 仍不可解、權限不足、需要人拍板、修法在本次 scope 外、同一 error 連續 2 輪不收斂 | 不可修復 | 停手，保留原始錯誤輸出，照 `escalation_action` 或回報 blocker |
+
+**NEVER** 把可修復失敗讀成收工、`--complete failed` 或 `--complete blocked` 的理由——被派出的 worker 與 relay successor 同樣適用。**NEVER** 跑不帶路徑的全 repo `vp check --fix`／`vp fmt`：共享 working tree 上它會改到別 session 的 WIP，而且事後沒有安全的還原法；**NEVER** 為了清場去還原別人改過的檔。可修復的修正仍受 `max_iterations` 約束。

@@ -2,7 +2,7 @@
 # PreToolUse(Edit|Write) hook — clade 自身 root config 修改前，代跑「反查誰以它為基準」
 # 的 rg 並把結果注入（clade home 自用）。
 #
-# 規約：.claude/rules/local/clade-role-and-todo-discipline.md § 改 clade 自身 root config
+# 規約：.claude/rules/local/clade-role-and-todo-discipline.self-config.md § 改 clade 自身 root config
 # 前 MUST 反查誰以它為基準——「檔案外觀不承載這個資訊，只有反查承載」
 # （pitfall-self-config-is-own-test-fixture）。本 hook 把「提醒 agent 去跑」壓成「代跑
 # 並附結果」，少一步遺忘面。

@@ -92,7 +92,7 @@ fi
 git branch --show-current
 ```
 
-**觸發條件**：當前**不在 main / master 分支**，且當前 runtime 實際載入的 consumer 能力提供 `ship` skill（會 push branch 並開 PR）。存在另一端的 `.claude/skills/ship` 不能證明本入口已提供。
+**觸發條件**：當前**不在 main / master 分支**，且當前 runtime 實際載入的 consumer 能力提供 `ship` skill（會 push branch 並開 PR）。其他 runtime 的 skill 樹（例如 `.claude/skills/ship`）存在不能證明本入口已提供。
 
 本任務已有對應 branch push／PR 的明確授權時直接依該 scope 執行；缺授權才用當前可用詢問工具或對話提出下列問題，沒有回答不執行。
 

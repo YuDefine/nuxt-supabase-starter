@@ -44,7 +44,7 @@ skill 由 consumer manifest 的 `modules` 決定裝哪些（canonical `.clade/ma
 | 規格落地〔aixbdd〕 | `/dsl-refine` | 把句型寫進 `specs/truth/features/**` 與 `dsl.md` |
 | 拆任務〔aixbdd〕 | `/tasks` | 產 plan package 的 `tasks.md`；開工前 `flow open <slug> --origin tasks:<path>` |
 | 實作〔aixbdd〕 | `/implement`（`[BDD-GREEN]` 委派 `/bdd`） | 依 `tasks.md` 逐 phase 落 code 與測試 |
-| 人工檢查 | `/review scan`（＝`flow gates --repo-only`）看哪些卡等人判；`pnpm review:ui` 開本 repo 的控制面板專案頁，人判在「輪到你」落檔 | UI / 資料類 manual review |
+| 人工檢查 | `/review scan`（＝`flow gates --repo-only`）看哪些卡等人判 | UI / 資料類 manual review |
 | 提交 | `/commit` | 依功能分組走品質閘門提交（所有 commit 的唯一入口） |
 
 不確定專案當前該走哪一站：先讀 `specs/plans/` 最新的 plan package 與它的 `tasks.md`，再按使用者目標接續。沒宣告 aixbdd 的 repo 整條主流程不適用——那裡的生命週期是「待辦來源 → `tasks/<date>-<slug>.md` → `/wt` → `/commit`」。
@@ -74,8 +74,7 @@ skill 由 consumer manifest 的 `modules` 決定裝哪些（canonical `.clade/ma
 
 ## 品質 / 稽核類（standalone）
 
-- `/design` — design orchestrator（new / improve / iterate / health）
-- `/design retro` — 分析歷史 design review findings 找重複模式
+- `/impeccable` — UI 設計與修改閉環（無參數時依 critique 快照、git 變更與 detector 推下一支指令；閉環規約見 design-checkpoint）
 - `/nuxt-data-audit`〔nuxt〕 — 審計 Nuxt data-fetching 模式與效能 golden path
 - `/nuxt-data-audit schema`〔nuxt〕 — 偵測 client-server schema mismatch（review 前 / archive 前跑）
 

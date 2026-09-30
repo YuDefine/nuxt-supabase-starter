@@ -1,8 +1,8 @@
 # Relay Mode — `/handoff relay`
 
-**Codex 不執行本分支。** Codex upstream 依 [SKILL.md](SKILL.md) § Codex native boundary 保留責任；bounded GPT 工作只用 `collaboration.spawn_agent`，native subagent 不把自己轉成 successor。真正的 user-owned successor 需求在 native surface 缺席時保持 blocked，**NEVER** 進 Herdr preflight 或外部 `cx` launcher。唯一外部例外是 user 點名的 create-only `--launcher devin` bounded worker（§ Codex native boundary）：它轉移工作不轉移位置，relay 維持禁止。
+**Codex 先過 [SKILL.md](SKILL.md) § Codex boundary**：bounded GPT 工作留在 `collaboration.spawn_agent`，不走本分支；handoff 級的整個位置交接照本檔執行。
 
-以下只適用支援 Herdr successor 的 runtime：把**本 session 的整個位置**交給另一個可獨立續跑的 Herdr interactive pane，然後收工；successor runtime 依 [dispatch-common.md](dispatch-common.md) § 3.1 **原樣繼承當前 session**（`cc → cc`、`ccw → ccw`、`ccg → ccg`、`grok → grok`）。只有 user 當次明確點名不同且受支援的 launcher 才可覆蓋；工作 routing 不構成授權。
+把**本 session 的整個位置**交給另一個可獨立續跑的 Herdr interactive pane，然後收工；successor runtime 依 [dispatch-common.md](dispatch-common.md) § 3.1 **原樣繼承當前 session**（`cc → cc`、`ccw → ccw`、`grok → grok`、`cx → cx`）。只有 user 當次明確點名不同且受支援的 launcher 才可覆蓋；工作 routing 不構成授權。
 
 成功事件是 helper 回傳 **`relay_dispatched`**，代表 successor 已 live、已收到 brief、durable 轉移已落盤。**不是**「successor 完成了工作」——那不再是本 session 的事。
 
@@ -21,6 +21,8 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 本條是 [[agent-routing.dispatch-execution]] § 派多少 的實例。該節多管一種本條字面擋不住的形狀：把 serial 鏈切成「worker ＋ 主線自己留著後半段」——沒有第二個 worker，本條不會 fire。
 
 `CLADE_DISPATCH_ID` 非空（本 session 自己是被派出來的 child）時 relay **照常適用**——helper 對 relay 開了 nested 缺口，因為 relay 做的是把位置橫向移交、自己站下來，與那道 guard 要防的責任樹擴張相反。**NEVER** 因為身在 coordinated child 就改走 `--recover-orphan`：那是「parent 已死、由 child 補救」的路徑，而 relay 的前提正好相反——parent（本 session）還活著，親自簽字交出位置。
+
+已用 `--tier-basis stall-escalation --retry-of <medium label>` 升到 high 的 child，可以沿用這組參數與 `--effort high` relay 同一位置。helper 只豁免與當前 pane **及 exact runtime session** 相符的 live high record；其他 high attempt 與 reclaim／controlled-stop 的紀錄仍會擋第二次升級。Relay 是交接，不新增一次 high attempt。
 
 ## 1. 建 durable thin brief
 
@@ -82,6 +84,7 @@ helper 自行負責 topology、fresh runtime session identity、prompt delivery�
 | receipt | 動作 |
 | --- | --- |
 | `relay_dispatched` | 位置已交出。`relayed_dispatch_ids` 是隨之轉移的 in-flight dispatch，`predecessor_dispatch_id` 是為本 pane 寫的回收憑證。進收工訊息 **A** |
+| `relay_unconfirmed` | brief 已送出但沒看到 successor 起跑（`prompt_delivery: unconfirmed`），**交接已簽**：in-flight dispatch 已轉給 successor、本 pane 已寫回收憑證。**NEVER** 當成什麼都沒發生繼續做，**NEVER** 盲目重送。先 `herdr pane read <pane_id>` 看 successor：已收到 brief／在做 → 同 `relay_dispatched` 進收工訊息 **A**；輸入框閒置且 brief 明顯沒落地 → 用 `herdr agent prompt` 送一次 brief 路徑、確認起跑後進 **A**；pane 不在或讀不到 → 回 blocker 並附 `relayed_dispatch_ids`，不收工 |
 | `relay_refused` | 本 session 的 exact runtime session（Claude 或 Pi）無法辨識，或沒有可交出的 pane。保留 durable task，回具體 blocker，**NEVER** 改用 raw `herdr` 指令繞過 |
 | `transport_error`／其他 preflight failure | 同上：保留 durable task 與 pane，回具體 blocker，**NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt |
 

@@ -2,18 +2,9 @@
 /**
  * worktree-dev-port.ts — 「這棵 worktree 的 dev server 聽哪個 port」的唯一 SoT。
  *
- * 為什麼要獨立成 lib（而不是留在 wt-helper 裡）：分配與**讀取**原本只有 wt-helper 一個
- * 消費端，於是 review-gui 起 dev server 時用的是 registry 的 base port —— 同一個 consumer
- * 的 N 條 worktree 全部指向同一個號碼，誰先起誰佔住，其餘的 item 只能顯示「port 3000 上跑
- * 的是別人的 dev server」。那不是提示，是設計本身要求人輪流等。
- *
- * 2026-08-28 實測：<consumer-b> 有 15 條 worktree、1 個 registry port，`shipment-loading-per-box-capacity`
- * 的驗收 item 嵌不了預覽，因為 3000 正被 `product-process-hierarchy-and-naming` 佔著。
- *
- * 所以分配與讀取都收斂到本檔，讓「哪個 port」對每一個消費端都是同一個答案：
+ * 分配與讀取都收斂到本檔，讓「哪個 port」對每一個消費端都是同一個答案：
  *
  *   - `wt-helper add` / `wt-helper dev`（worktree 建立時分配、起 dev server 時使用）
- *   - `review-gui` 的 port map（item 預覽連結、dev server 監看、start 按鈕的 spawn）
  *
  * ## 分配模型
  *
@@ -216,7 +207,8 @@ export function readWorktreeDevPorts(
 }
 
 /** 分配並落檔。宣告不出 port、或兩池都滿 → null。 */
-export function allocateWorktreeDevPorts(
+/** 算出 allocate 會給的登記但不落盤——`wt-helper dev --dry-run` 用它預覽，不佔格。 */
+export function planWorktreeDevPorts(
   consumerRoot: string,
   wtPath: string,
   declared: readonly DeclaredDevPort[],
@@ -225,13 +217,23 @@ export function allocateWorktreeDevPorts(
   if (declared.length === 0) return null
   const offset = allocateDevPortOffset(declared, siblingDevPortOffsets(consumerRoot, wtPath), band)
   if (offset === null) return null
-  const record: WorktreeDevPortRecord = {
+  return {
     offset,
     base: declared[0].port,
     wtPath: resolve(wtPath),
     ports: declared.map((d) => ({ alias: d.alias, port: d.port + offset, mainPort: d.port })),
     pool: offset <= DEV_PORT_BAND ? 'base' : 'band',
   }
+}
+
+export function allocateWorktreeDevPorts(
+  consumerRoot: string,
+  wtPath: string,
+  declared: readonly DeclaredDevPort[],
+  band: WorktreePortBand | null = null,
+): WorktreeDevPortRecord | null {
+  const record = planWorktreeDevPorts(consumerRoot, wtPath, declared, band)
+  if (!record) return null
   const dir = devPortStateDir(consumerRoot)
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, `${basename(wtPath)}.json`), `${JSON.stringify(record, null, 2)}\n`)

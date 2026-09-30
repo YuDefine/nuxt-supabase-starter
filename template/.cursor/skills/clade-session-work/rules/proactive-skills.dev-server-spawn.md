@@ -10,7 +10,7 @@ paths: ['scripts/dev-session*', 'vendor/scripts/dev-session*', '.claude/consumer
 
 ## 多工器唯一標準：herdr
 
-本 fleet 的終端多工器唯一標準是 **herdr**。**NEVER** 用 `tmux` 或 `zellij` 起任何 session、window、pane 或長駐 process——這條涵蓋**每一種**用途，不限 dev server：review-gui、ad-hoc 背景 job、跑 migration、看 log、暫存一個 shell，全部在內。
+本 fleet 的終端多工器唯一標準是 **herdr**。**NEVER** 用 `tmux` 或 `zellij` 起任何 session、window、pane 或長駐 process——這條涵蓋**每一種**用途，不限 dev server：ad-hoc 背景 job、跑 migration、看 log、暫存一個 shell，全部在內。
 
 這是 **universal contract**：consumer local rule **不得**重新選擇、覆寫或提供 fallback multiplexer（只能補 entrypoint、lease、port、OAuth pin、tunnel、是否允許自起等 constraints）；local rule 寫了其他持久層則該段無效。
 
@@ -22,7 +22,7 @@ paths: ['scripts/dev-session*', 'vendor/scripts/dev-session*', '.claude/consumer
 
 `tmux` / `zellij` 已被 runtime deny policy 擋；**NEVER** 用 `sh -c`、絕對路徑、alias、`env` 包裝等等價寫法繞過——規約管的是意圖，不是字串。
 
-當 review-gui 顯示某 item 的 screenshot 不存在 / outdated，或 user 想開瀏覽器親自操作 sanity check 時，**agent 自己起 dev server**，禁止叫使用者「請 cd 到 worktree 跑 `pnpm dev`」。完整 recipe（命令、fallback 步驟、回報訊息 template、env bootstrap）：`~/offline/clade/vendor/snippets/dev-session/README.md`。
+當 user 想開瀏覽器親自操作 sanity check 時，**agent 自己起 dev server**，禁止叫使用者「請 cd 到 worktree 跑 `pnpm dev`」。完整 recipe（命令、fallback 步驟、回報訊息 template、env bootstrap）：`~/offline/clade/vendor/snippets/dev-session/README.md`。
 
 **持久層（durability）— ALL agent 自起的長駐 dev server MUST 走 [`vendor/scripts/dev-session.ts`](../../vendor/scripts/dev-session.ts)（散播到 consumer `scripts/dev-session.ts`）。** harness 會在 tool-call 結束時回收 Bash 衍生的 process tree，dev-session 把 dev 命令掛到常駐 herdr server 的 Tab 下才能存活。
 

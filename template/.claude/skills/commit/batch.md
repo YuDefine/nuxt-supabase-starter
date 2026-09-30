@@ -33,11 +33,13 @@ node scripts/wt-helper.ts batch draft <source-path> \
 ```bash
 gh pr view <session-branch> --json number,isDraft,headRefName
 git push -u origin <session-branch>
-gh pr create --draft --base main --head <session-branch> --title '<切片摘要>' --body '<scope；CI 紅燈回這張 PR>'
+: "${CLADE_WORK_ID:?先 export CLADE_WORK_ID=<work-id>}" && \
+gh pr create --draft --base main --head <session-branch> --title '<切片摘要>' \
+  --body "$(printf '%s\n\nWork: %s\nOwner: %s\n' '<scope；CI 紅燈回這張 PR>' "$CLADE_WORK_ID" "${CLADE_DISPATCH_ID:-session:<claude_session_id>}")"
 gh pr view <session-branch> --json number,isDraft,headRefName
 ```
 
-**NEVER** 把該來源放進 ready 池、**NEVER** 當 `prepare` 成員、**NEVER** 啟動完整品質鏈、**NEVER** merge、**NEVER** push `origin main`。空 branch、只有 WIP → 不開 PR。CI 紅燈修回同一張 PR（處置見下方 § CI 紅燈處置）。討論 draft 另加具名討論者與具體問題時才跑（舊命令無 `--kind` 仍是 discussion，兩欄都必填）：
+body 的 `Work:`／`Owner:` 兩行必填（`Owner:` 填 `<dispatch_id>`、`session:<claude_session_id>` 或 `bot:<job>`）：PR 主人消失後，coordinator 分診靠它才派得了修補。沒有 `Work:` 行的 `gh pr create` 會被 PreToolUse hook 擋下（`CLADE_ALLOW_NO_WORK=1` 前綴只給非 clade 工作）。PR 合入後跑 `node scripts/wt-helper.ts batch retire-merged` retire 指向已合 PR 的 draft receipt。**NEVER** 把該來源放進 ready 池、**NEVER** 當 `prepare` 成員、**NEVER** 啟動完整品質鏈、**NEVER** merge、**NEVER** push `origin main`。空 branch、只有 WIP → 不開 PR。CI 紅燈修回同一張 PR（處置見下方 § CI 紅燈處置）。討論 draft 另加具名討論者與具體問題時才跑（舊命令無 `--kind` 仍是 discussion，兩欄都必填）：
 
 ```bash
 node scripts/wt-helper.ts batch draft <source-path> \
@@ -170,7 +172,7 @@ node scripts/wt-helper.ts batch release-source <source-path> --reason "<為什�
 
 它驗 batch 已 landed、landed commit 在 main、登記 head 是來源現 head 的祖先，通過後把登記 head 釘在 `refs/clade/batches/<id>/<index>`、該 member 算 settled 並立刻解除 batch 佔有（可用現 head 重新 `batch ready`）；下一次 `batch cleanup` 收掉 integration、批次轉 `cleaned`。來源改寫過已落地的 history（登記 head 不再是祖先）時拒絕。**NEVER** 為了同一目的手改 state.json。
 
-Cleanup 前，每一棵樹先被 P0 全量保存進 common Git 目錄下的 archive（receipt 記 inventory／Git closure，不再發 `excluded` 清單）。Teardown 需要兩樣：通過 `validateProfile` 的 profile，以及帶 mandatory exclusive-writer adapter 的 lifecycle。`wt-helper batch` 兩樣都提供——lifecycle 帶 `withProbedExclusiveWriterOwnership`，profile 依 consumer id 由 `preservation-profiles.ts` 解析（clade home 已有實證 profile）。直接呼叫 `wt-batch.ts` 的 `defaultLifecycle` 沒有 adapter；profile 仍有 `unknown` 欄位的 consumer 會讓 `validateProfile` 失敗——這兩種情況 cleanup **retain 每一個來源**。
+Cleanup 前，每一棵樹先被 P0 全量保存進 common Git 目錄下的 archive（receipt 記 inventory／Git closure，不再發 `excluded` 清單）。Teardown 需要兩樣：通過 `validateProfile` 的 profile，以及帶 mandatory exclusive-writer adapter 的 lifecycle。`wt-helper batch` 兩樣都提供——lifecycle 帶 `withProbedExclusiveWriterOwnership`，profile 依 consumer id 由 `preservation-profiles.ts` 解析（clade home 已有實證 profile），但 consumer id 先由 `wt-batch.ts` 用 origin 的 `owner/repo` 綁定：checkout 的 `remote.origin.url` 必須解析出 `trustedRepositoriesByConsumerId` 登記給該 consumer 的 repo（不分大小寫），對不上就降成 `unverified-consumer-identity`。registry `repo_id` 新增或改名時 MUST 同步那份 vendor map，parity 由 `test/wt-batch-profile-identity.test.ts` 鎖住。直接呼叫 `wt-batch.ts` 的 `defaultLifecycle` 沒有 adapter；profile 仍有 `unknown` 欄位的 consumer 會讓 `validateProfile` 失敗——這兩種情況 cleanup **retain 每一個來源**。
 
 **Profile 驗不過的 repo 走 retire 路徑收尾**：`phase=landed` 的批次，只要 landed commit 由 Git 實查是 main 的祖先（pr-merge-based 另需 `mergeReceipt.merged`）、成員 branch 未前進、樹上 HEAD 與登記相符、無 `retain`／`removing`，`handoff-retire.ts` 就不再把該來源（與 ready 裡同 path＋head 的條目）算作 batch owner，由它的 archive→validate→recheck→remove 保存並移除。之後 `batch cleanup` 對「來源已不在、`docs/archives/retired-work.jsonl` 有 path＋branch＋head 完全相符的 `retired` 紀錄、且 archive 每個檔 hash 仍相符」的成員與 integration 記為 removed 並把批次轉 `cleaned`；紀錄不符或 archive 受損一律照舊 retain。**NEVER** 為了讓 retire 接手而改 state.json 的 phase 或刪 ready 條目。
 

@@ -6,7 +6,7 @@ SKILL.md § 2B.3 / 2B.4 / 2B.4.5 / 2B.5 的完整規約：outstanding 的 serial
 
 **`next` 也收工。** 本檔的表格決定的是「下一步該用哪一支 skill、要不要 worktree」，**不是**「在本 session 內把它跑完」——盤點完、user 選定後，選中的工作寫進 durable brief 交給 pane 執行，本 session 隨即收工（1 件走 [relay-steps.md](relay-steps.md)、N 件可平行走 [fanout-steps.md](fanout-steps.md)）。
 
-**Codex 例外在進入本流程前生效**：依 [SKILL.md](SKILL.md) § Codex native boundary，同一個 upstream task 保留責任。user 選定的 bounded GPT work 以 `collaboration.spawn_agent` 派出並由 upstream 收割；不建立 successor pane、不執行本檔 2B.5 的 Herdr handoff，也不因 worker 完成而收工。缺 native capability 就回 blocker。user 明確點名的 Devin bounded worker 是 § Codex native boundary 的唯一外部例外：create-only `--launcher devin` 派工、upstream 收割，仍不是 successor、不收工。以下「派給 pane後收工」只適用其他支援該 transport 的 runtime。
+**Codex 先過 [SKILL.md](SKILL.md) § Codex boundary**：user 選定的工作若本 turn 收得回來，以 `collaboration.spawn_agent` 派出、upstream 收割且不收工；handoff 級的工作照本檔派給 pane 後收工。
 
 唯一的例外是**當場做得完的單一 bounded action**（改一行 typo、補一條 pointer、勾一個 checkbox）：直接做掉再收工，不值得為它開一個 pane。**NEVER** 拿這個例外去涵蓋「反正我順手跑完 `/implement` 比較快」——那是完整的一件工作，該派出去。
 
@@ -60,7 +60,7 @@ Outstanding（N 條）：
 - 推薦的 Option 1 不該是「都不做」（除非真的盤點為空）
 - **`mergeBackSafety: ptb-unsafe` wt 不可列為 Option 1 (Recommended)**；可列為 Option 但 label 強制標 `⚠ PTB unsafe`、描述明列 PTB 風險，**禁止**包裝為「最快 deliverable」「safe to land」「ready to merge」這類沒 signal 支撐的斷言
 - 對任何 wt 推薦 next move 時，描述 **MUST** 含 safety signal（blocker / uncommitted / baseline ref）— Step 3.1 audit（handoff-scan `worktreeStash`）已記錄，照搬即可
-- **NEVER** 推薦「開面板驗收」/「可點 OK 收尾」相關 next move 而未先引用 §2B.1.7 的 `flow gates` 結果（`## Review-gui Readiness` 段）。只有 `ui-judgement` / `acceptance` 卡才能寫成「user 在面板判」；工作若**沒有**對應卡片，描述 **MUST** 反映 agent 真正要做的事（例：「補 evidence 後才會出現 `ui-judgement` 卡」、「讀 carrier 的未勾 `[discuss]` 項走收尾 walkthrough」），**NEVER** 寫成「點 OK 收尾」
+- **NEVER** 推薦「人工驗收」/「可點 OK 收尾」相關 next move 而未先引用 §2B.1.7 的 `flow gates` 結果（`## Review-gui Readiness` 段）。只有 `ui-judgement` / `acceptance` 卡，以及 evidence 已齊的 tasks.md `[review:ui]` 或已有 `(verified-ui:)` 的 `[verify:ui]` leaf（不會變成卡片，[[proactive-skills.manual-review-entry]] 第 4 步），才能寫成「等 user 判」；其餘描述 **MUST** 反映 agent 真正要做的事（例：「補 evidence 後才能交給 user 驗收」、「讀 carrier 的未勾 `[discuss]` 項走收尾 walkthrough」），**NEVER** 寫成「點 OK 收尾」
 - **NEVER** 從 `HANDOFF.md` 既有「Outstanding」段、carrier 的 leaf `[x]` / `[ ]` count、或 flow 卡的進度推測有沒有等人的事 — `flow gates` 的卡片清單才是 SoT
 
 ### 2B.4.5 PTB-unsafe wt 的快速分流
@@ -100,13 +100,15 @@ User 透過詢問操作選定下一步 outstanding（含明確的 next-skill 與
 
 **Parent cwd 不動 invariant**：`/wt` Form 3 內部用 subagent 進 worktree 跑 next-skill，主線（當前 chat session）cwd 全程在 main worktree，per [[worktree-default]] §1。
 
-**面板驗收 dispatch scope rule**：把 user 導向面板之前 **MUST** 引用 §2B.1.7 的 `flow gates` 結果。依卡片 family 走不同入口（**NEVER** 一律推「去面板」）：
+**人工驗收 dispatch scope rule**：把球交給 user 之前 **MUST** 引用 §2B.1.7 的 `flow gates` 結果。依卡片 family 走不同入口：
 
 | 狀態 | 真實下一步 | 入口 |
 | --- | --- | --- |
-| `ui-judgement` / `acceptance` 卡 | user 在面板判（通過／有問題／跳過；accept／drop） | 主線確認 `ops/review-gui-service.sh status` exit 0 後給 URL（[[review-gui-surface]] § Inline Review-GUI Deep-Link） |
-| `ruling` 卡 | user 回答判斷題 | 在對話端出 Qn，或 `/decisions`；回答後 `flow answer` |
+| `ui-judgement` 卡 | user 看 evidence／截圖判通過／有問題／跳過 | 在對話端逐張展示；依原話 `flow receipt <scenario_id> --verdict pass\|fail\|skip` |
+| `acceptance` 卡 | user 判收或 drop | 在對話端出 Qn；依原話 `flow answer <span> --answer '<原話>'`（驗收合成題）。**NEVER** 由 agent 自跑 `flow accept`／`flow drop`（代按，[[flow-work-tracking]]） |
+| `ruling` 卡 | user 回答判斷題 | 在對話端出 Qn；回答後 `flow answer` |
 | `external-action` / `exception` 卡 | 先走 SKILL §2B.2.5 抽原因、辨識 startable 子集 | 依 triage 結果 |
+| 沒有卡片，tasks.md 的 `[review:ui]` 或已有 `(verified-ui:)` 的 `[verify:ui]` leaf evidence 已齊 | user 判通過／有問題／跳過 | 在對話端逐項展示；依原話寫回 checkbox（[[proactive-skills.manual-review-entry]] 第 4 步） |
 | 沒有卡片，但 evidence 缺 / issue 未 triage | agent 補 evidence 或 triage | 主線跑 verify channel（[[manual-review.backend]] § `[verify:*]` flow） |
 | 沒有卡片，實作未完 | 依 carrier 繼續實作 | `planInventory` 可做桶的 `next`（claim → plan show → `/implement`）；必要時 `/wt <slug>: /implement`（依 §2B.5 隔離 worktree） |
 | 沒有卡片，只剩 `[discuss]` | 收尾 walkthrough | [[manual-review]] § `[discuss]` walkthrough |

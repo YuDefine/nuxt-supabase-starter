@@ -342,14 +342,14 @@ function getBindingIcon(cardType: NfcCardType): string {
 | `/tasks` 產 `tasks.md` 時 | 有 UI scope 就加 `## Design Review` 區塊（[[proactive-skills.design-checkpoint]]） | 產 tasks 的當下 |
 | UI 檔編輯期間 | `capabilities/core/hooks/post-edit-ui-qa.sh`（PostToolUse） | 中途提醒 design / screenshot review，不要等到收尾才檢查 |
 | 交付人工檢查之前 | Design Gate（[[proactive-skills.design-checkpoint]] § Design Gate） | 缺設計審查證據的 UI 工作不得交付 |
-| 交付人工檢查之前 | `node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --require-empty`（cwd = consumer repo） | exit 3 才可引導 user 到面板，逐張列 family；exit 2 = 判不出來 |
+| 交付人工檢查之前 | `node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --require-empty`（cwd = consumer repo） | exit 3 才可把卡片交給 user，逐張列 family；exit 2 = 判不出來 |
 | 寫下任何 follow-up 註記的當下 | 在 `docs/tech-debt.md` 開 `TD-NNN` entry（[[follow-up-register]]） | 同一次編輯內完成 |
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | `post-edit-ui-qa.sh` 是自動 hook；其餘各列是**自檢**，**沒有機器替你跑那幾列** |
 | 消費端 | 走 SDD 流程的 agent（本節）；`/commit` Step 0-MR 讀 `flow gates` |
-| 載入路徑 | 本節（`rules/core/ux-completeness.md`，paths-gated 於 `tasks/**`、`specs/plans/**` 與 UI 檔） |
+| 觸發點 | 本節（`rules/core/ux-completeness.md`，paths-gated 於 `tasks/**`、`specs/plans/**` 與 UI 檔） |
 
 自動觸發、手動命令與 capability gap 由 adapter fragment 宣告。
 

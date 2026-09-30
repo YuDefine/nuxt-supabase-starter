@@ -4,7 +4,7 @@
 # 防的失敗類別：bypass 是**啟動路徑**的性質（`cc` / `ccw` wrapper 帶
 # `--permission-mode bypassPermissions` 與帳號路由 env），而裸 `claude` 是一條永遠存在、
 # 零摩擦、零回饋的錯誤路徑。打錯的那次若沒有任何東西出聲，這個類別就會重演。
-# 2026-08-19 實測：<consumer-h> 的 pane w6:p5 被手打 `claude` 起來，跑了 16 分鐘
+# 2026-08-19 實測：<consumer-g> 的 pane w6:p5 被手打 `claude` 起來，跑了 16 分鐘
 # 沒有任何訊號，是外部觀察 /proc cmdline 才發現的。
 #
 # 本 hook **只偵測、不修正**：permission mode 是啟動 flag，session 中途改不了；靜默升權
@@ -81,7 +81,7 @@ cat <<WARN
 
    permission mode 是啟動 flag，本 session 改不了。MUST 主動告知 user：
    要 bypass 就結束本 session、在該 pane 改用 \`cc\`（個人）/ \`ccw\`（工作）重開。
-   GPT／Codex 工作改用 \`cx\`；\`ccx\` 已退役，不再是可重開入口。
+   \`ccg\`／\`ccx\` 已從 clade 拆除，不是可重開入口。
    刻意要非 bypass session 則忽略本則。
 WARN
 exit 0

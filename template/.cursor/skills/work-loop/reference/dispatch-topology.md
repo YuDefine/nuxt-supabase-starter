@@ -75,14 +75,14 @@ Archive 在各自來源完成；main 組統一協調就緒登記與批次提交�
 
 | 可觀察 predicate | Routing Table row |
 | --- | --- |
-| 下列五項**全部**成立：source list 已封閉並逐條列出；回傳欄位固定；每個 fact 都要求 `source path + line/JSON pointer + raw value`；不需 identity matching、status 推斷或 evidence relevance 判斷；來源矛盾時只回 `needs-reconciliation`、不自行裁決 | `read-heavy-scan` → Gemini 3.8 Flash high |
-| 上列任一不成立，或任一命中：未知路徑探索、來源矛盾、跨來源 identity matching、partial completion／status 推斷、evidence relevance 判斷、git/history/state 對帳 | `implementation-decision` → GPT-6 Sol xhigh |
+| 下列五項**全部**成立：source list 已封閉並逐條列出；回傳欄位固定；每個 fact 只要求 `source path + line/JSON pointer` ＋可機械複驗欄位（命中的字面 token、計數），逐字原文由主線拿 location 以 `sed -n`／`grep -nF` 確定性取回（[[agent-routing.routing-table]] § Routing 硬禁令 `read-heavy-scan` 列）；不需 identity matching、status 推斷或 evidence relevance 判斷；來源矛盾時只回 `needs-reconciliation`、不自行裁決 | `read-heavy-scan` → Gemini 3.8 Flash high |
+| 上列任一不成立，或任一命中：未知路徑探索、來源矛盾、跨來源 identity matching、partial completion／status 推斷、evidence relevance 判斷、git/history/state 對帳 | `implementation-decision` → Claude Opus 5.5 medium（in-process `Plan` subagent 帶 `model: 'opus'`） |
 
-Gemini 3.8 Flash report 若回 `needs-reconciliation`，主線以同一份 sources + facts 建立 `implementation-decision` brief，交 GPT-6 Sol（effort: xhigh）判讀；保留原工作的來源與結果關聯。
+Gemini 3.8 Flash report 若回 `needs-reconciliation`，主線以同一份 sources + facts 建立 `implementation-decision` brief，交 Claude Opus 5.5（effort: medium）判讀；保留原工作的來源與結果關聯。
 
 ### pre-scan 的 dispatch 形狀
 
-model / effort / template 的 SoT：[[agent-routing.routing-table]] 對應列 + cookbook `~/offline/clade/vendor/snippets/pi-offload/README.md`。brief 的 `task` **MUST** 逐條列出來源清單與要回的欄位（檔名 / 行號 / 現值 / 判準命中與否）；`allowed_paths` 填「（只讀，無寫入授權）」。每一筆 dispatch 都帶 `--origin work-loop --origin-id wl-r<本輪 round>`；`read-heavy-scan` 另帶 `--cohort fact-extraction`，`implementation-decision` 另帶 `--cohort reconciliation`。runner child 已由 env 注入 origin pair，CLI 仍顯式帶以便 attended 與 dry-run 形狀一致。
+model / effort / template 的 SoT：[[agent-routing.routing-table]] 對應列 + cookbook `${CLADE_HOME:-$HOME/offline/clade}/vendor/snippets/pi-offload/README.md`。brief 的 `task` **MUST** 逐條列出來源清單與要回的欄位（檔名 / 行號 / 命中 token / 判準命中與否；不收逐字 `raw`）；`allowed_paths` 填「（只讀，無寫入授權）」。每一筆 dispatch 都帶 `--origin work-loop --origin-id wl-r<本輪 round>`；`read-heavy-scan` 另帶 `--cohort fact-extraction`，`implementation-decision` 另帶 `--cohort reconciliation`。runner child 已由 env 注入 origin pair，CLI 仍顯式帶以便 attended 與 dry-run 形狀一致。
 
 執行形狀依 process 身分 first-match：
 
