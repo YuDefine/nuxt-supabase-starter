@@ -362,10 +362,11 @@ bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" medium       # Herdr c
 
 ```bash
 bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" prepare medium
-# stdout：AGENT_CALL: {...}（subagent_type／model／prompt；agent 定義固定 effort: medium）與 FINALIZE: bash … finalize <work-dir>
+# stdout：AGENT_CALL: {...}（subagent_type／fallback_subagent_type／model／prompt；agent 定義固定 effort: medium）與 FINALIZE: bash … finalize <work-dir>
 ```
 
-1. 跑 `prepare`，照 `AGENT_CALL` 的欄位**逐字**呼叫 `Agent` tool（`subagent_type: commit-0a-reviewer`、`model`、`prompt` 原樣照抄，前景）。該 agent 的 frontmatter 固定 `effort: medium`；不可改用會繼承主線 effort 的其他 agent。
+1. 跑 `prepare`，照 `AGENT_CALL` 的欄位**逐字**呼叫 `Agent` tool（`subagent_type`、`model`、`prompt` 原樣照抄，前景）。該 agent 的 frontmatter 固定 `effort: medium`；不可改用會繼承主線 effort 的其他 agent。
+   - `subagent_type` 是 session 看得到的名字：session project 或使用者層級的 agents 目錄有投影 `commit-0a-reviewer` 定義時是裸名，否則是 plugin 命名空間名 `hub-core:commit-0a-reviewer`（例如 `update_policy` pinned 在 agent 出現之前的 consumer）。`fallback_subagent_type` 是另一個名字，**不是** `Agent` 參數：只有 `Agent` tool 明確回報找不到 `subagent_type` 時，才把 `subagent_type` 換成它、其餘欄位不動重派**一次**；其他錯誤 **NEVER** 換名重試。finalize 只收這兩個固定名字。
 2. subagent 回來後跑 `FINALIZE` 那一行。它從本 session 的 subagent transcript 核對 nonce 歸屬、agent type、每則 assistant 的 observed model 與 effort、唯讀工具面、brief 是否逐行讀完；effort 缺席或非 medium 時 exit 8、扣住 verdict。
 3. **verdict 只來自 finalize 的 stdout。** subagent 的回覆是它交給 finalize 的原料，**NEVER** 由主線轉述、摘錄或拼接成 verdict——主線是受審改動的 producer。
 
@@ -380,7 +381,7 @@ exit code 與 Herdr carrier 同一張表（下表各列照用；4／10／11 是�
 | exit 12（Claude Code runtime 以無子命令呼叫 wrapper，本地拒絕 Herdr carrier） | 不是 reviewer 不可用，NEVER 判 gate pending：改走 `prepare` → 逐字照 `AGENT_CALL` 呼叫 `Agent` → `FINALIZE`。呼叫端其實不是 Claude Code（例如從 Claude Bash 起、繼承了 `CLAUDE_CODE_SESSION_ID` 的 codex exec）時，以 `env -u CLAUDE_CODE_SESSION_ID` 呼叫改走 Herdr carrier |
 | exit 10（helper `nested_dispatch_refused`：本 session 不得開 reviewer child） | 不是 reviewer 不可用，NEVER 判 gate pending：把 0-A 交回 coordinator 代跑，gate 保持未完成直到拿回帶 receipt 的 verdict。**NEVER** 改走 headless `claude -p`——無 receipt 的 verdict 不得當 gate 證據（[review-policy.md](review-policy.md)） |
 | exit 8（`model_verification` 有界重讀後仍 `unverified`，或 `mismatch`） | 身分歸屬不成立：verdict 扣住不採，gate 保持未完成並記錄 pending review；receipt 的 `model_verification_reason` 區分「無法核實」與「核實不符」，NEVER 把 unverified 讀成已核實或當 PASS |
-| exit 9（brief 無法安全交付：總量超過 `CLAUDE_REVIEW_BRIEF_MAX_BYTES`，或 pointer 模式下有單行超過 `CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS`，RESULT 行會指出超長行號與所屬區塊） | **本地拒絕，review 沒跑但不是 reviewer 不可用**——NEVER 讀成 reviewer 不可用記 pending；把超長行折行（changeset、--findings 檔或 semantic 規則文，依 RESULT 指的區塊）或拆 commit 後重跑；上限確需調整時先評估 child context 實測再改 `*_MAX_*` env。NEVER 拿縮小 `CODEX_REVIEW_MAX_DIFF_LINES` budget 換過關——超出的檔只會移進 OMITTED 漏審清單，依下一列「Scope 缺檔」同樣不能記 PASS，除非被剔除的檔另行送審 |
+| exit 9（brief 無法安全交付：總量超過 `CLAUDE_REVIEW_BRIEF_MAX_BYTES`，或 pointer 模式下有單行超過 `CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS`，RESULT 行會指出超長行號與所屬區塊） | **本地拒絕，review 沒跑但不是 reviewer 不可用**——NEVER 讀成 reviewer 不可用記 pending；把超長行折行（changeset、--findings 檔或 semantic 規則文，依 RESULT 指的區塊）或拆 commit 後重跑；上限確需調整時先評估 child context 實測再改 `*_MAX_*` env。NEVER 拿縮小 `CODEX_REVIEW_MAX_DIFF_LINES` budget 換過關——超出的檔只會移進 OMITTED 漏審清單，依下一列「Scope 缺檔」同樣不能記 PASS，除非被剔除的檔另行送審。只有 lockfile 與 `scripts/test-lanes/{deps,timings}.json`（`REVIEW_SUMMARY_ONLY_RE`）超出 budget 的部分不進 OMITTED，改列在 brief 的 generated 摘要段——依政策不逐行審（正確性由產生器與其測試保證），**不是**漏審；`REVIEW_GENERATED_RE` 其餘成員（投影層、`build/`、`dist/` 等）超出 budget 照舊進 OMITTED。刪除檔（含驗證輪的增量）只嵌 `deleted file mode` 檔頭。放得進剩餘 budget 的產生檔仍整段嵌入、照樣計入 `CLAUDE_REVIEW_BRIEF_MAX_BYTES` 與單行長度上限 |
 | Scope 缺檔／截斷、缺 verdict／Semantic Verdict id、workspace 綁定失敗 | 對應範圍未被完整 review；修復取證後再執行，不能記 PASS |
 | Snapshot 漂移／不明 mutation | 先查具體 diff 與歸屬；已確認為合法並行工作可移至隔離 fixture 後重跑，不明或非預期 mutation 保留現場並處理授權，不自動覆寫 |
 | exit 13（輪數 ledger：此內容已有 verdict，或上一輪通過且之後的增量未達重驗門檻） | 不是 reviewer 不可用：RESULT 行是「不需再審」→ 0-A 證據沿用它指名的那一輪，照常推進；RESULT 行是「已審過且有 Critical／Major」→ 0-A 未通過，修完換內容再審（同內容重擲不產生新證據） |
@@ -582,6 +583,8 @@ printf '%s\0' "${CHANGED[@]}" | grep -zE '(^|/)DESIGN\.md$' || true
 **Fix-verify 義務的全局 SoT 是 [[code-style.toolchain]] § Agent 義務：check 紅了立刻 fix**——本節是 `/commit` 裡的機械化；landing PR、CI `vp fmt --check` 紅燈、本機 `pnpm check` 失敗時 **NEVER** 只掃不修或等 CI 自己綠，同一 loop 適用。
 
 **並行啟動**：0-A.1 的 snapshot 已凍結且有可收回的背景 handle 時，同回合啟動 0-C；各軸回報後匯合。缺非同步能力時依 review-policy 的同步執行契約，所有檢查仍要完成。
+
+**在 primary checkout 以外跑 0-C 時（隔離發版 worktree、batch 整合區），先讓那棵樹具備測試環境，再跑**：worktree 一律由 `/wt`（`wt-helper add`）建立，它會跑 consumer 的 env／DB bootstrap。**NEVER** 用裸 `git worktree add` 建要跑 0-C 的樹：gitignored 的 `.env*` 不會跟過去，per-worktree DB clone 也不會建立，整合測試會以「環境錯誤」大量失敗。也 **NEVER** 從 primary checkout 複製 `.env.local`，它的 managed DB block 指向 primary 自己的 clone。self-hosted Supabase consumer 的 DB 在遠端 LXC，desk 上 **NEVER** `supabase start`，拓樸與 reset 路徑見 `clade-data` skill 的 `db-topology-invariant`。已經手動建好的樹，照 consumer 的 bootstrap 補建（<consumer-b>：`node scripts/wt-env-bootstrap.ts ensure --worktree <abs>`，分支要符合 `session/YYYY-MM-DD-HHMM-<slug>`）。同一棵樹的 `pnpm check` 與 `pnpm test` **NEVER** 平行跑：check 裡的 lint／prepare 會觸發 postinstall 並重建 `.nuxt/`，同時進行的 test 會出現 `TSCONFIG_ERROR` 假失敗。
 
 跑下列指令確保 **format / lint / typecheck / test / doctor 全部 0 errors + 0 warnings + 0 test failures**：
 

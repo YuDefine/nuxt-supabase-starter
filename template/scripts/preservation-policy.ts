@@ -2503,7 +2503,7 @@ export function moduleChainFromAdminTail(gitdir: string, adminId: string): strin
   const normalized = gitdir.replaceAll('\\', '/')
   const tail = `${adminId}/modules/`
   let idx = -1
-  for (let from = 0; ; ) {
+  for (let from = 0; ;) {
     const hit = normalized.indexOf(tail, from)
     if (hit < 0) break
     if (hit === 0 || normalized[hit - 1] === '/') idx = hit

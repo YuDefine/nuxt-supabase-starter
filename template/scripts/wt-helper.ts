@@ -7557,10 +7557,11 @@ async function cmdOrphanPrune(opts) {
 const PEER_SUBCOMMANDS = new Set(['add', 'cleanup', 'list', 'resolve'])
 
 function forwardToPeer(sub: string | undefined, rest: string[]): number | null {
-  const at = rest.indexOf('--machine')
+  const at = rest.findIndex((arg) => arg === '--machine' || arg.startsWith('--machine='))
   if (at < 0) return null
-  const machine = rest[at + 1] ?? ''
-  const args = [...rest.slice(0, at), ...rest.slice(at + 2)]
+  const equals = rest[at].startsWith('--machine=')
+  const machine = equals ? rest[at].slice('--machine='.length) : (rest[at + 1] ?? '')
+  const args = [...rest.slice(0, at), ...rest.slice(at + (equals ? 1 : 2))]
   if (!MACHINE_LABEL_PATTERN.test(machine)) {
     console.error(
       `error: --machine needs a saved Herdr machine label (got ${JSON.stringify(machine)})`,
@@ -7773,7 +7774,12 @@ const DRY_RUN_SUBCOMMANDS = new Set([
 ])
 
 async function main() {
-  const [, , sub, ...rawRest] = process.argv
+  let [, , sub, ...rawRest] = process.argv
+  if (sub === '--machine' || sub?.startsWith('--machine=')) {
+    const machineArgs = sub === '--machine' ? [sub, rawRest.shift() ?? ''] : [sub]
+    sub = rawRest.shift()
+    rawRest.push(...machineArgs)
+  }
   const options: FlagOptions = Object.fromEntries([
     ...[
       ...(sub === 'batch' ? BATCH_VALUE_FLAGS : VALUE_FLAGS),
@@ -7803,7 +7809,7 @@ async function main() {
   }
   const peerExit = forwardToPeer(sub, rest)
   if (peerExit !== null) process.exit(peerExit)
-  if (rest.includes('--machine')) return main()
+  if (rest.some((arg) => arg === '--machine' || arg.startsWith('--machine='))) return main()
 
   if (sub === 'batch') {
     try {

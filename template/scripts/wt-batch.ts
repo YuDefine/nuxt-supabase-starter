@@ -2214,7 +2214,7 @@ function removeWorktreeAfterVerification(
     let verifiedAt = -1
     if (handoffError === undefined)
       try {
-        for (let activeRounds = 0; ; ) {
+        for (let activeRounds = 0; ;) {
           obs.flush(Date.now())
           const pre = obs.events().length
           verifyQuarantineInventory(quarantine, expectedWorktree, profile)
@@ -2347,7 +2347,7 @@ function removeWorktreeAfterVerification(
           { ...inventoryOptionsFromProfile(profile), excludeGitTransientState: true },
           gitArchiveExclusions(metadataRoots, common),
         )
-      for (let rounds = 0; ; ) {
+      for (let rounds = 0; ;) {
         verifyQuarantineInventory(trash, expectedWorktree, profile)
         for (const root of metadataRoots)
           verifyTrashedMetadataInventory(trashMeta(root), root, common, expectedGit, profile)
@@ -3100,11 +3100,48 @@ export function recordDraftPr(
       throw new Error(
         `Draft PR #${existing.pr} on ${existing.branch} is already recorded for ${workId}; reuse it instead of rebinding to #${receipt.pr} on ${receipt.branch}`,
       )
+    // 同一 branch／PR 已綁在另一個 work id 的有效 receipt 上 → 綁錯（#228），NEVER 靜默多一份
+    const clash = listDrafts(c).find(
+      (other) =>
+        other.workId !== workId &&
+        (other.branch === receipt.branch || other.pr === receipt.pr) &&
+        !draftReceiptLanded(s, other),
+    )
+    if (clash)
+      throw new Error(
+        `Draft PR #${clash.pr} on ${clash.branch} is already recorded for ${clash.workId}; ` +
+          `refusing to bind #${receipt.pr} on ${receipt.branch} to ${workId} — use the PR's Work: id, or retire the stale receipt first`,
+      )
     const dir = join(c.dir, 'drafts')
     mkdirSync(dir, { recursive: true })
     writeJsonDurable(dir, workIdFile(workId), receipt)
     return receipt
   })
+}
+
+/**
+ * PR 合入後把指向它的 draft receipt 一次 retire（P1）：逐張走 retireDraftPr 的同一套 merged 驗證，
+ * 未合入或查不到的保留。回傳 retired 與保留原因，供呼叫端列出。
+ */
+export function retireMergedDrafts(
+  cwd: string,
+  remotePr: RemotePrProbe = defaultRemotePrProbe,
+): {
+  retired: { workId: string; pr: number }[]
+  kept: { workId: string; pr: number; reason: string }[]
+} {
+  const c = context(cwd)
+  const retired: { workId: string; pr: number }[] = []
+  const kept: { workId: string; pr: number; reason: string }[] = []
+  for (const receipt of listDrafts(c)) {
+    try {
+      retireDraftPr(cwd, receipt.workId, remotePr)
+      retired.push({ workId: receipt.workId, pr: receipt.pr })
+    } catch (error) {
+      kept.push({ workId: receipt.workId, pr: receipt.pr, reason: (error as Error).message })
+    }
+  }
+  return { retired, kept }
 }
 function verifyMembers(c: Context, b: WorktreeBatch) {
   for (const m of b.members) {
@@ -5839,7 +5876,7 @@ function rejectUnknownFlags(rest: string[], allowed: Set<string>) {
 }
 
 export const BATCH_USAGE =
-  'batch: checkpoint | draft | retire-draft | ready | unready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | confirm-merged | cleanup [--dry-run] | release-source | cancel | recover-lock'
+  'batch: checkpoint | draft | retire-draft | retire-merged | ready | unready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | confirm-merged | cleanup [--dry-run] | release-source | cancel | recover-lock'
 
 /** Landing closes with cleanup of that batch (方案 6). Cleanup is fail-closed
  *  and never undoes the landing: a refusal (publish in flight, lock, anything
@@ -5947,6 +5984,11 @@ export function runBatchCommand(
       if (positionals(new Set(['--work-id'])).length)
         throw new BatchUsageError('Usage: wt-helper batch retire-draft --work-id <id>')
       return retireDraftPr(cwd, required('--work-id'))
+    }
+    case 'retire-merged': {
+      rejectUnknownFlags(rest, new Set())
+      if (rest.length) throw new BatchUsageError('Usage: wt-helper batch retire-merged')
+      return retireMergedDrafts(cwd)
     }
     case 'ready':
       return registerReady(cwd, rest[0] ?? cwd, {

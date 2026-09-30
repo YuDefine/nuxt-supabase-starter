@@ -60,7 +60,7 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --ori
 
 ### 掛載點（MUST）
 
-- **發現即建票**：工程師在 prod／資料裡發現問題、或決定做一個功能時，**先** `file` 再動手——它同時鑄 work id，之後的推進全部自動。
+- **發現即建票**：工程師在 prod／資料裡發現問題、或決定做一個功能時，**先** `file` 再動手——它同時鑄 work id，之後的推進全部自動。從 work-route 進來的新需求／新 bug 由 work-route § 1 在鑄 work id 前問一次要不要建票（board-only hub 點明不建票客戶看不到），不另加步驟。
 - **flow 事件自動跟隨**：`flow plan open` 與 `flow done` 成功後，flow 以 detached 子行程觸發 `follow`（fail-open，未宣告 hub 的 repo 零成本；`CLADE_NOTION_FOLLOW=0` 關閉）。**NEVER** 在 work-route 或任何 skill 裡加「記得同步 Notion」步驟——Notion 跟隨 flow，不是 flow 呼叫 Notion。
 
 - **`flow open` 之後、動第一個檔之前**：跑 `open`。

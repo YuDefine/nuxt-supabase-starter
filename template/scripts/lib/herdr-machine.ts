@@ -11,7 +11,6 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { availableParallelism, homedir, loadavg } from 'node:os'
 import { resolve } from 'node:path'
-
 import { isRecord, parseJson } from './json-unknown.ts'
 
 /**

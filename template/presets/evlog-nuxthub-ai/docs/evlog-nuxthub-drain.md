@@ -52,7 +52,7 @@ Schema 與寫入邏輯固定（不可自訂 column），與 `evlog-postgres-drai
    crons = ["0 */4 * * *"]   # 每 4 小時跑一次 retention
    ```
 5. **Vercel**：`@evlog/nuxthub` 安裝時自動建 `vercel.json`（如果你沒拒絕）。
-6. `pnpm dev` 起 server，觸發 endpoint，到 NuxtHub admin / `wrangler d1 execute` 查 `_evlog` table 看 row。
+6. `pnpm dev` 起 server，觸發 endpoint，到 NuxtHub admin / `wrangler d1 execute <db> --local --persist-to <dev server 的本機 state 目錄>` 查 `_evlog` table 看 row（目錄見下方 checklist 的 dev 項；少了 `--persist-to` 會查到 wrangler 預設目錄，恆為 0 row）。
 7. Production smoke：deployed worker，cron 觸發後 retention 真的 drop 過期 row。
 
 ## D1 寫入限制
@@ -108,7 +108,7 @@ production 不開 redact = PII 進 D1（`event.user.email` / `client.ua` 等）�
 - [ ] `evlog.retention` 配置好（預設 `7d`；高合規 consumer 改 `30d`/`90d`）
 - [ ] `evlog.sampling.rates.info` 10（D1 100 writes/s 上限）
 - [ ] `evlog.redact: true`（production）
-- [ ] dev：觸發 endpoint 後 `wrangler d1 execute <db> 'SELECT count(*) FROM _evlog;'` 有 row
+- [ ] dev：觸發 endpoint 後 `wrangler d1 execute <db> --local --persist-to <dev server 的本機 state 目錄> --command 'SELECT count(*) FROM _evlog;'` 有 row（目錄以該專案 NuxtHub dev 設定為準；對錯目錄會恆為 0 row，看起來像 drain 沒寫入）
 - [ ] production：cron 真的跑（檢查 `_evlog` 最舊 row 的 timestamp 不超過 retention）
 
 ## 何時不該用此 drain
