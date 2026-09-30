@@ -1031,6 +1031,7 @@ receipt（`src/scaffold-receipt.ts`）把磁碟上存在、但被 gitignore 擋�
 - 安裝前 receipt 繼續擔保磁碟上的 agent 檔，維持首投影認領契約。提交前先 `git add -A`，以 `git ls-files -z` 的 index 路徑篩選 receipt，再 stage 刷新的 receipt；避免收錄未追蹤 ignored 檔，並保留已追蹤但符合 ignore 的既有檔。NUL 分隔也保留含空白／中文的路徑。
 - 回歸涵蓋安裝時位元組、安裝產生的 tracked 檔、`--no-install`、ignored 目錄與 negation、既有 repo 的 tracked ignored 檔，並逐筆核對 committed blob 的 hash。排序改用工具鏈要求的 `toSorted()`，package tsconfig 補 `ES2023` lib，與 Node 24 runtime 對齊。
 - Scaffolder `pnpm test`：236 passed / 2 skipped（既有 skipped 未變更）；package `pnpm run typecheck`、改動路徑 `pnpm run lint`／`pnpm run format:check` 通過；template `pnpm run doctor` 為 clean、零診斷。
+- PR #20 轉 ready 後，CI run `36703862581` 的兩個 receipt 案例因 runner 缺少 Git 作者／提交者身分而沒有 initial commit，`git show HEAD:...` 失敗。以 `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1` 本機重現相同 2 failed；Template CI 的 Unit tests 步驟提供 fixture 的 `GIT_AUTHOR_*`／`GIT_COMMITTER_*` 後，同環境原測試 4 passed，未修改測試或斷言。合併 main 後的相關 scaffold／更新策略／receipt 測試另驗 62 passed。
 
 ## Cross-repo pointers
 
