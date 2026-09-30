@@ -24,7 +24,9 @@ consumer 的 runtime 事實（dev port、auth provider、DB、deploy platform、
 
 ## Aggregator 行為
 
-`node scripts/sync-consumer-meta.ts` 經 `registry/consumers.local.json` 解析各 consumer path，schema 驗證後 cross-validate（`dev.ports[].port` vs `scripts.dev --port`、`auth.provider` vs dependencies、`deploy.platform` vs `wrangler.toml`、`commands.*` vs `package.json scripts`），每個 consumer 寫成 `{ declared, derived, validation: { warnings, errors } }`。schema 驗證失敗 → exit 1，但 snapshot 仍寫出。
+`node scripts/sync-consumer-meta.ts` 經 `registry/consumers.local.json` 解析各 consumer path，schema 驗證後 cross-validate（`dev.ports[].port` vs `scripts.dev --port`、`auth.provider` vs dependencies、`deploy.platform` vs `wrangler.toml`、`commands.*` vs `package.json scripts`），每個 consumer 寫成 `{ declared, derived, validation: { manifest, manifestNote, warnings, errors } }`。schema 驗證失敗 → exit 1，但 snapshot 仍寫出。
+
+`validation.manifest` 是一等採用狀態欄位：`present`／`missing`（路徑在、沒有 manifest）／`repo-absent`（consumers.local 路徑整個不存在，名單過期）／`not-listed`（registry 有、consumers.local 沒有的名單涵蓋註記）。缺 manifest **不**混進 `warnings[]`——「從沒採用」與「採用了但有瑕疵」在彙總數字上同形，讓缺席能躲進常態噪音（TD-779）。
 
 ## 何時跑 aggregator
 
@@ -51,7 +53,6 @@ consumer 的 runtime 事實（dev port、auth provider、DB、deploy platform、
 | `rules/core/db-preview-env.md` audit | `database.previewEnvCapability` vs `registry/consumers.json capabilities.preview_db` |
 | `vendor/snippets/dev-auth/` cookbook 是否該推薦 | `auth.devSigninEnabled === false && auth.portPinned === true` |
 | `audit-ux-drift.ts` 截圖驗證 | `dev.ports[].port` + `verification.smokePaths` |
-| review-gui 常駐狀態列 / 起 review slot | `dev.ports[].role` + `dev.ports[].host`（`role: 'review'` 的那支是人工檢查專用，與開發用的 primary 各持自己的 lease，見 [[verification-lease]]） |
 | `notion-work-coupling.md` 判斷 work item 生命週期該不該推 Notion（ticket 狀態 + 客戶時程頁 交付項目） | `notion.hub` + `notion.projectCode`（座標在 `registry/notion-hubs.json`） |
 
 讀者**MUST** 從 `registry/consumers-meta.json` snapshot 讀，**NEVER** 直接讀 consumer repo 的 `.claude/consumer-meta.json`（避免每個工具都 path-resolve consumer absolute path）。
@@ -109,7 +110,7 @@ fleet 的部署形態收斂成**三型**。新專案 **MUST** 貼齊其中一型
 **MUST** 用 `$comment` 寫明是哪一種：
 
 - **尚未定型** — 合法但不該長期停在這，沒有 type 的 consumer 拿不到任何 type-scoped 的能力
-- **不適用** — 該 consumer 不是 Nuxt app。實例：`<consumer-h>` 是 5 個 Go service 的 matrix build，無 preset、無 D1/Supabase 概念
+- **不適用** — 該 consumer 不是 Nuxt app。實例：`<consumer-g>` 是 5 個 Go service 的 matrix build，無 preset、無 D1/Supabase 概念
 
 **NEVER** 為了「讓每個 consumer 都有 type」而多開一個 enum 值容納單一特例——`null` + 明寫不適用的成本低得多。
 
@@ -130,15 +131,29 @@ fleet 的部署形態收斂成**三型**。新專案 **MUST** 貼齊其中一型
 
 新增 consumer-meta.json 不是一次散播事件，是各 consumer 自家 session 漸進採用（步驟見 § 採用工作流；範例在 `vendor/snippets/consumer-meta/`）。
 
-未採用 manifest 的 consumer 在 snapshot 內是 `declared: null` + warning，兩種模式 snapshot 內容相同；失敗與否在 exit code 層分：
+未採用 manifest 的 consumer 在 snapshot 內是 `declared: null` + `validation.manifest='missing'`，兩種模式 snapshot 內容相同；失敗與否在 exit code 層分：
 
 | 跑法 | 缺 manifest | 名單上的路徑不存在 |
 | --- | --- | --- |
-| `node scripts/sync-consumer-meta.ts`（寫入 snapshot） | warning，exit 0——**NEVER** 擋 publish／snapshot 重生 | warning，exit 0 |
+| `node scripts/sync-consumer-meta.ts`（寫入 snapshot） | `manifest='missing'` 註記，exit 0——**NEVER** 擋 publish／snapshot 重生 | `manifest='repo-absent'` 註記，exit 0 |
 | `node scripts/sync-consumer-meta.ts --check`（`/clade-health` live／full 跑的那條） | `✗`，exit 1。修法在那家 consumer：relay 給它採用 | `✗`，exit 1。修法在 `consumers.local`：改或刪那一行 |
 | `node scripts/sync-consumer-meta.ts --consumers-file <list>`（fixture／單體驗收跑法；implies check mode，但不比對 committed snapshot——它描述的是真實 fleet 而非 fixture） | `✗`，exit 1。修法同 `--check`：那家 consumer 採用 | `✗`，exit 1。修法在 `<list>` 名單檔：改或刪那一行 |
 
 `--check` 是採用收斂的 gate；`--consumers-file` 是同一 check mode 的 fixture 入口（絕不寫 snapshot），relay brief 的單體驗收走這條，未採用的 consumer 必須紅掉。
+
+### propagate 交付前置（meta-withheld，TD-779）
+
+`propagate.ts` 在 per-consumer 交付迴圈之前讀 committed `registry/consumers-meta.json` snapshot（`scripts/lib/consumer-meta-gate.ts`）：該家 entry 的 `validation.errors` 非空、或 `manifest` 為 `missing`／`repo-absent` → **扣該家交付**（收尾輸出列 `meta-withheld=N` 與逐家明細）。2026-09-26 拍板選 B——errors 非空的宣告等於下游 release-gate／deploy-trigger-check 會讀到與事實相反的資料，先把交付扣住；連 missing 一起扣是刻意的，只扣 errors 的話刪掉 manifest 就能繞過 gate。
+
+邊界：**只扣那一列**——不擋其他 consumer、不計 `failed`、不改 propagate exit code、**NEVER** 接 clade 自己的 publish 前置。例外是 `--canary`：canary 目標被扣時 propagate exit 1——只有一台的 canary 被扣等於空跑，收尾計數卻與通過同形。snapshot 查無該家 entry（剛加進名單、snapshot 過期）→ `meta-unassessed` warn 放行：量不到不是扣交付的理由。解禁路徑：consumer 修自家 manifest → clade 跑 `node scripts/sync-consumer-meta.ts` 重生並 commit snapshot → 下趟 propagate 自動放行。存量修回屬 consumer 自治區，clade NEVER 代寫 consumer 的 manifest。
+
+**schema 收緊會連帶扣交付**：這道 gate 讓 `registry/consumer-meta.schema.json` 的任何收緊（新增 required 欄位、縮 enum、加 cross-check）在下次重生 snapshot 時把所有不符的既有 manifest 變成 `errors`，下一趟 propagate 就扣住它們的**全部**投影——含 rule／hook 的安全修補。所以收緊 schema 或 cross-validation 的 commit 之前 **MUST** 先跑 `node scripts/sync-consumer-meta.ts --check` 看哪些 consumer 會新增 errors，並在同一個 PR 寫明影響清單與處置（先 relay consumer 修回、或把新規則先做成 `warnings` 再升級）；**NEVER** 讓 schema 收緊與 snapshot 重生同趟默默落地。
+
+| 訊號契約 | 內容 |
+| --- | --- |
+| 觸發條件 | committed `registry/consumers-meta.json` 中該 consumer entry 的 `validation.errors` 非空，或 `validation.manifest` ∈ `missing`／`repo-absent` |
+| 消費端 | `propagate.ts` 交付迴圈（扣該家交付，輸出 `meta-withheld`）；`/clade-health` live／full 經 `sync-consumer-meta.ts --check` 報告同一批狀態（exit 1） |
+| 觸發點 | 本檔（`rules/core/consumer-meta.md`，觸碰 `registry/consumers-meta.json`／`.claude/consumer-meta.json` 時依 frontmatter `paths` 載入）＋ `scripts/lib/consumer-meta-gate.ts` 檔頭註解 |
 
 ## Adoption gap detection
 

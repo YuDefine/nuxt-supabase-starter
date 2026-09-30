@@ -52,6 +52,13 @@ PROMPT
     printf 'REVIEW_SUBAGENT_BRIEF_BYTES=%q\n' "$BRIEF_BYTES"
     printf 'REVIEW_SUBAGENT_REVIEWED_PATHS=%q\n' "$REVIEWED_PATHS"
     printf 'REVIEW_SUBAGENT_SEAT=%q\n' "$REVIEW_SEAT"
+    printf 'REVIEW_ROUND_LEDGER=%q\n' "${REVIEW_ROUND_LEDGER:-}"
+    printf 'REVIEW_ROUND_N=%q\n' "${REVIEW_ROUND_N:-}"
+    printf 'REVIEW_ROUND_HEAD=%q\n' "${REVIEW_ROUND_HEAD:-}"
+    printf 'REVIEW_ROUND_FILTER=%q\n' "${REVIEW_ROUND_FILTER:-}"
+    printf 'REVIEW_ROUND_OPENED_AT=%q\n' "${REVIEW_ROUND_OPENED_AT:-}"
+    printf 'REVIEW_ROUND_PART_FILES=%q\n' "${REVIEW_ROUND_PART_FILES:-}"
+    printf 'ROUND_PART=%q\n' "${ROUND_PART:-1/1}"
   } >"$WORK_DIR/$REVIEW_SUBAGENT_STATE"
 
   node -e '
@@ -194,7 +201,16 @@ review_subagent_finalize() {
   trap 'rm -rf "$WORK_DIR" "$WORK_DIR.stamp.json"' EXIT
 
   case "$rc" in
-    0) ;;
+    0)
+      # exit 0 只在核對器真的跑完 main() 才有意義：入口判斷失準（symlink、需 percent-encode 的
+      # 路徑）時 node 什麼都不做也是 exit 0。沒有 exit:0 的 JSON 或沒有 verdict 就 fail closed，
+      # NEVER 讓空結果走到 receipt 與 cat verdict（2026-09-26 consumer 0-A Major）。
+      if ! node -e 'try{process.exit(JSON.parse(process.argv[1]).exit===0?0:1)}catch{process.exit(1)}' "$result" \
+        || [ ! -s "$verdict_out" ] || ! grep -q '^## Review Verdict' "$verdict_out"; then
+        echo "[claude-review-safe] RESULT: transcript 核對器 exit 0 卻沒有產出核對結果或 verdict（stdout：${result:-空}）——視為核對器失敗，NEVER 當作通過" >&2
+        return 2
+      fi
+      ;;
     3)
       echo "[claude-review-safe] RESULT: review failed（exit 3）— ${reason}，NEVER 當作通過" >&2
       return 3 ;;
@@ -214,6 +230,7 @@ review_subagent_finalize() {
   review_verify_integrity
   verdict_sha="$(sha256sum "$verdict_out" | cut -d' ' -f1)"
   review_subagent_write_receipt 0 "$result" "$verdict_sha"
+  review_record_round "$verdict_out"
   cat "$verdict_out"
   return 0
 }

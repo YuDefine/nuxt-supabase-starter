@@ -24,19 +24,16 @@
 # | launcher | soft | hard | hard repeat |
 # | --- | ---: | ---: | ---: |
 # | `cc` / `ccw` | 300k | 500k | +100k |
-# | `ccg` | 400k | 450k | +50k |
 # | native work-loop runner child | 500k | 600k | +100k |
 #
-# `ccx` 已退役：新入口 fail-closed，既有 process 只做 drain，本 hook 對它不再發 numeric
-# 收工提示。歷史 transcript 的 ccx 分類仍由 audit 層保留，NEVER 從本表刪除歷史歸因。
+# gateway launcher（`ccg`／`ccx`）已從 clade 拆除（2026-09-29）：`ANTHROPIC_BASE_URL` 指向 gateway proxy（`http://127.0.0.1:8317`）的
+# session 不是 clade 的派工或收工入口，本 hook 對它不發 numeric 收工提示。歷史 transcript 的
+# ccx／ccg 分類仍由 audit 層保留，NEVER 從那裡刪除歷史歸因。
 #
-# soft 的語義是「不要開新的大工作段，小 item 照做」；hard 才是「現在收工」。Gateway 的
-# auto-compact window 比 native Claude 小，必須先服從 launcher 的物理上限，再考慮 runner child
-# 的固定起始成本。實測 ccg 約 467k auto-compact；450k hard tier 保留約 17k 的交棒空間。
+# soft 的語義是「不要開新的大工作段，小 item 照做」；hard 才是「現在收工」。
 #
 # native runner child 每輪是 `claude --print` 起的全新 process，跨輪不累積，起始載入是固定成本，
-# 所以 native profile 才能放寬成 500k/600k。Gateway child 仍走 launcher profile，NEVER 用 runner
-# marker 越過 auto-compact 的物理上限。
+# 所以 native profile 才能放寬成 500k/600k。
 #
 # 提示門檻與**分類器**門檻 NEVER 綁在一起：`audit-session-context-budget.ts` 的 >200k 是事後
 # 統計切點，不是 agent 行為門檻。分類定義改了，本 profile 不必跟著改；反之亦然。
@@ -96,10 +93,10 @@ if is_cursor_session; then
 fi
 
 detect_origin_launcher() {
-  case "${ANTHROPIC_DEFAULT_OPUS_MODEL:-}" in
-    ccx-*) echo ccx; return ;;
-    ccg-*) echo ccg; return ;;
-  esac
+  if [ "${ANTHROPIC_BASE_URL:-}" = "http://127.0.0.1:8317" ]; then
+    echo gateway
+    return
+  fi
   if [ "${CLAUDE_CONFIG_DIR:-}" = "$HOME/.claude-work" ]; then
     echo ccw
     return
@@ -112,21 +109,13 @@ WARN_AT=300000
 STRONG_AT=500000
 STRONG_STEP=100000
 
-# Gateway launcher 的 compact window 比原生 Claude 小；profile 必須先服從 launcher 的物理上限，
-# 再考慮 runner child 的固定起始成本。ccx 已退役；現有 process 只 drain，不再由 numeric gate
-# 逼出一個新的 ccx successor。ccg 則在約 467k auto-compact 前以 450k 收工。
+# gateway 起源（已拆除的 ccg／ccx）不是 clade 入口：不發 numeric 收工提示。
 case "$LAUNCHER" in
-  ccx)
+  gateway)
     exit 0
-    ;;
-  ccg)
-    WARN_AT=400000
-    STRONG_AT=450000
-    STRONG_STEP=50000
     ;;
   cc | ccw)
     # work-loop runner child 每輪是全新 process，native Claude 才有空間把門檻放寬到 500k/600k。
-    # Gateway child 仍走上面的 launcher profile，NEVER 用 runner marker 越過物理 compact window。
     if [ "${WORK_LOOP_RUNNER_CHILD:-}" = "1" ]; then
       WARN_AT=500000
       STRONG_AT=600000

@@ -41,15 +41,15 @@ esac
 # 抽迴圈條件片段：`until`/`while` 到 `; do` 或換行 `do` 之間。
 # 只看這一段是關鍵 —— 命令別處出現的 pgrep（典型 `kill $(pgrep -f ...)`）與
 # 迴圈是否會卡住無關，把它們算進來會製造雜訊（回測：117 → 98，少 19 個誤報）。
-conds=$(printf '%s' "$cmd" | perl -0777 -ne 'while (/\b(?:until|while)\b.*?(?=;\s*do\b|\n\s*do\b)/sg) { print "$&\0" }' | tr '\0' '\n') || exit 0
+conds=$(printf '%s' "$cmd" | LC_ALL=C perl -0777 -ne 'while (/\b(?:until|while)\b.*?(?=;\s*do\b|\n\s*do\b)/sg) { print "$&\0" }' | tr '\0' '\n') || exit 0
 [ -n "$conds" ] || exit 0
 
 hit=""
 while IFS= read -r cond; do
   [ -n "$cond" ] || continue
-  printf '%s' "$cond" | perl -0777 -e 'exit((<> =~ /\bpgrep\b[^|;&]*\s-\w*f/) ? 0 : 1)' || continue
+  printf '%s' "$cond" | LC_ALL=C perl -0777 -e 'exit((<> =~ /\bpgrep\b[^|;&]*\s-\w*f/) ? 0 : 1)' || continue
   # 已用 `[x]yz` 自我排除 → 這條寫對了，不出聲
-  printf '%s' "$cond" | perl -0777 -e 'exit((<> =~ /\[[^]]\]/) ? 0 : 1)' && continue
+  printf '%s' "$cond" | LC_ALL=C perl -0777 -e 'exit((<> =~ /\[[^]]\]/) ? 0 : 1)' && continue
   hit="$cond"
   break
 done <<EOF

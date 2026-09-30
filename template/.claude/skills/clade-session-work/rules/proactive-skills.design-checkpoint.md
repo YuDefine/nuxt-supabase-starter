@@ -1,160 +1,161 @@
 ---
-description: UI / design 工作的 Design Checkpoint、design skill 觸發順序、Design Review template、Design Gate、Cross-Change holistic review 與非 UI exception；動 UI 檔或寫 design artifact 時 path-scoped 載入
+description: UI 工作的 impeccable 修改閉環（找問題 → 專科修 → 沉澱）、P0–P3 問題族 × 專科指令對照、Design Review tasks 模板、design-review.md 證據與 Design Gate、非 UI exception；動 UI 檔或寫 design artifact 時 path-scoped 載入
 paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'app/**/*.ts', 'packages/*/app/**/*.ts', 'components/**', 'packages/*/components/**', 'pages/**', 'packages/*/pages/**', 'layouts/**', 'packages/*/layouts/**', 'specs/plans/**', 'docs/specs/**/spec.md']
 ---
 <!-- Clade native rule; source: rules/core/proactive-skills.design-checkpoint.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
 <!-- clade-adapters: claude,codex,cursor -->
 
-# Proactive Skills — Design Checkpoint
+# Proactive Skills — Design Checkpoint（impeccable 修改閉環）
 
-> [[proactive-skills]] 的 reference 檔：動 UI 檔或寫 design artifact 時的 design skill orchestrator。
+> [[proactive-skills]] 的 reference 檔：動 UI 檔或寫 design artifact 時，用 impeccable 跑完「找問題 → 專科修 → 沉澱」閉環。
 
-## Design Skill 自主觸發
+## 觸發條件
 
-### 觸發條件
+**任何實作 task 碰到 UI 工作**（建立/修改 `.vue`、pages、components、layouts）時進入 Design Checkpoint。**每一個**這樣的 task 都適用，不是只有整包工作的最後一個。task 標 done 之前閉環要走完（見 § Design Review Task Template）。
 
-**任何 `/implement` task 碰到 UI 工作**（建立/修改 `.vue` 檔案、pages、components、layouts）時，自動進入 Design Checkpoint。**每一個**這樣的 task 都適用，不是只有整包工作的最後一個。
+## 入口：不知道下一步就跑無參數 `impeccable`
 
-### Design Checkpoint 流程
+**NEVER** 照一張靜態順序表逐支跑 impeccable 指令。不確定下一步時跑**無參數** `impeccable`：它讀 `impeccable signals`（有沒有 critique 快照、快照的 P0／P1、`git.changedFiles`、dev server 是否在跑）與 `impeccable detect` 的結果，推 2–3 支指令，不自動執行。照它的推薦挑，偏離時在 `design-review.md` 寫一行理由。
 
-依下方 § Design Review Task Template 的 N.1–N.7 順序執行：PRODUCT.md 缺則先 `/impeccable init` → `/design improve` 取診斷與 Design Fidelity Report → 修 DRIFT（fidelity loop，max 2 輪，目標 8/8）→ 按 canonical order 跑計劃中的 skill → `/impeccable audit` 到 Critical = 0 → N.6 `/review screenshot` 視覺 QA（截圖證據附進 `design-review.md`）→ N.7 確認 `design-review.md` 無 DRIFT → 標記 task 完成。
+每個 session 做 UI 前先讓 impeccable 載入脈絡（`impeccable context`，skill 的 Setup 會自己跑）：
 
-### Design Skill 選擇指南（診斷驅動）
+| context 回報 | 先做 |
+| --- | --- |
+| `NO_PRODUCT_MD` | `impeccable init` 建 PRODUCT.md |
+| 有 code、沒有 DESIGN.md | `impeccable document` 從 code 反推 |
+| `MANUAL_DETECTOR_REQUIRED`（這個 runtime 沒有自動 detector hook，例如 Codex） | 收尾前手動跑一次 `impeccable detect --json <變更的 UI 檔>` |
 
-根據 `/design improve` 的診斷結果選擇，不要盲目全跑：
+## 閉環三階段
 
-| UI 類型                | 常見需要的 skill              | 通常不需要          |
-| ---------------------- | ----------------------------- | ------------------- |
-| 表單密集（CRUD、輸入） | /impeccable layout, /impeccable clarify, /impeccable harden    | /impeccable overdrive, /impeccable bolder |
-| 資料表格（列表、搜尋） | /impeccable layout, /impeccable typeset, /impeccable adapt     | /impeccable delight, /impeccable animate  |
-| 儀表板/圖表            | /impeccable colorize, /impeccable layout, /impeccable typeset  | /impeccable quieter, /impeccable harden   |
-| 首次體驗/空狀態        | /impeccable harden, /impeccable clarify, /impeccable delight   | /impeccable optimize           |
-| 複雜互動流程           | /impeccable animate, /impeccable clarify, /impeccable harden   | /impeccable bolder             |
-| 登入/認證頁            | /impeccable typeset, /impeccable colorize           | /impeccable extract, /impeccable distill |
+| 階段 | 做什麼 | 產出 |
+| --- | --- | --- |
+| 1 找問題 | `critique <surface>`（使用者角度，P0–P3，寫 `.impeccable/critique/` 快照並留趨勢）＋ `audit <surface>`（工程角度：a11y、RWD、對比、點擊範圍）；detector hook 在每次編輯時已跑機械層 | critique 快照、audit 報告 |
+| 2 專科修 | 依下表**一個問題族對一支指令**、只動指定範圍，從 P0 往 P3 修；`polish` 永遠最後，它讀快照當 backlog，清完就 `critique-storage close` | 修正後的 UI、已關閉的快照 |
+| 3 沉澱 | 本輪動到 token 或建立新元件慣例 → `document`（更新 DESIGN.md）或 `extract`（抽進 design system）；刻意保留的發現寫 `.impeccable/critique/ignore.md`；detector 例外**只在使用者確認後**用 `impeccable hooks ignore-value` | 更新的 DESIGN.md／ignore 紀錄 |
 
-### Mutual Exclusivity
+下一個畫面的 `impeccable context` 會自動載入更新後的 DESIGN.md，閉環回到起點。
 
-- `/impeccable bolder` vs `/impeccable quieter`——選一個方向
-- `/impeccable distill` 先於 `/impeccable bolder`——簡化後才放大
-- `/impeccable colorize` vs `/impeccable quieter`——減弱時不加色
+### P0–P3 問題族 × 專科指令
 
-### Canonical Order（偏離需說明理由）
+| critique／audit 指出的問題族 | 專科指令 |
+| --- | --- |
+| 死路、使用者不知道下一步、首次使用或空狀態沒引導 | `clarify`／`onboard` |
+| 主次不分、視覺噪音過多（或反過來：平淡沒重點） | `quieter`（或 `bolder`） |
+| 冗言、重複資訊、元素過多 | `distill` |
+| 字級、字重、行高層次 | `typeset` |
+| 間距、對齊、版面結構 | `layout` |
+| 色彩與對比、品牌色使用 | `colorize` |
+| 邊界狀況（空、錯、載入、超長內容、權限） | `harden` |
+| 跨裝置、斷點 | `adapt` |
+| 動效與過場 | `animate` |
+| 效能（首屏、互動延遲） | `optimize` |
+| 語意說不清、要看到才能判斷 | `live`（瀏覽器內即時出變體）或 `generate`（對指定元素出一批變體）讓使用者挑 |
+| 全路徑收尾 | `polish`（最後，關閉快照） |
 
-```
-/impeccable init        ← 專案首次（無 PRODUCT.md 時）
-/impeccable document    ← 已有 code 但無 DESIGN.md 時，從 code 反推
-/impeccable shape       ← （選用）code 前需求釐清；確認走 Shape brief 決策頁
-  ↓
-new-work build          ← 描述目標介面（Direction Gate 之後；NEVER 輸出 /impeccable craft）
-/impeccable distill     ← 先簡化（若雜亂）
-  ↓
-/impeccable layout      ← 結構與佈局
-/impeccable typeset     ← 字型與層次
-/impeccable colorize | /impeccable bolder | /impeccable quieter  ← 色彩與強度（擇一）
-  ↓
-/impeccable animate     ← 動效
-/impeccable clarify     ← 文案與訊息
-/impeccable delight     ← 個性與驚喜
-/impeccable harden      ← 韌性、邊界情況
-/impeccable onboard     ← 首次體驗、空狀態、activation
-  ↓
-/impeccable optimize    ← 效能
-/impeccable adapt       ← 跨裝置（如需要）
-/impeccable extract     ← 萃取為 design system（如適用）
-  ↓
-/impeccable audit       ← 診斷驗收（Critical 必須為 0）
-/impeccable polish      ← 永遠最後
-```
+互斥：`bolder` 與 `quieter` 選一個方向；`distill` 先於 `bolder`；減弱（`quieter`）時不加色（`colorize`）。
+
+`clarify` 或任何改 UI 文案的指令，文案語氣照 [[ui-copy-tone]]——impeccable 不懂「避免軟體開發英文、行業詞依 PRODUCT.md Users 判」這條 fleet 規則。
+
+### 新畫面與方向未定
+
+PM 確認前要給可審查的設計證據時：`shape` 釐清需求，new-work 的方向回合（impeccable 用 `serve-question` 自己開本機決策頁，**NEVER** 轉接到其他決策頁；主機沒有 DISPLAY／WAYLAND_DISPLAY 或 impeccable 印 `no browser detected` 時改跑 `node ~/offline/clade/vendor/scripts/impeccable-tailnet-question.ts start --payload <file>`，把 `TAILNET URL` 給使用者，**NEVER** 退回結構化文字提問，用法見 impeccable cookbook § headless／遠端主機的決策頁）；方向說不清就 `live`／`generate` 出變體。Nuxt UI 專案的元件選擇照 [[nuxt-ui-mcp]] § Component Candidates。
 
 ## Design Review Task Template
 
-**執行 `/tasks`（或手寫 `tasks/<date>-<slug>.md`）時**，若這次工作涉及 UI（清單中提及 `.vue`、`pages/`、`components/`、`layouts/`），**必須**在該 tasks 檔中加入 Design Review 區塊。
+**產出或手寫 tasks 檔時**，若這次工作涉及 UI（清單中提及 `.vue`、`pages/`、`components/`、`layouts/`），**必須**在該 tasks 檔加入 Design Review 區塊。
 
-位置：最後一個功能區塊之後、`## 人工檢查`之前。
-編號：N = 上一個功能區塊的序號 + 1。
+位置：最後一個功能區塊之後、`## 人工檢查` 之前。編號：N = 上一個功能區塊的序號 + 1。
 
 ```markdown
 ## N. Design Review
 
-- [ ] N.1 檢查 PRODUCT.md（必要）+ DESIGN.md（建議）；缺 PRODUCT.md 跑 /impeccable init、缺 DESIGN.md 跑 /impeccable document
-- [ ] N.2 執行 /design improve [affected pages/components]（含 Design Fidelity Report）
-- [ ] N.3 修復所有 DRIFT 項目（Fidelity Score < 8/8 時必做，loop 直到 DRIFT = 0）
-- [ ] N.4 依 /design 計劃按 canonical order 執行 targeted skills
-- [ ] N.5 執行 /impeccable audit — 確認 Critical = 0
-- [ ] N.6 執行 `/review screenshot` — 視覺 QA
-- [ ] N.7 Fidelity 確認 — design-review.md 中無 DRIFT 項
+- [ ] N.1 `impeccable context`：缺 PRODUCT.md 跑 `init`；有 code 缺 DESIGN.md 跑 `document`
+- [ ] N.2 `critique` ＋ `audit` [affected surfaces]（critique 快照路徑記進 design-review.md）
+- [ ] N.3 依 P0 → P3 逐族跑專科指令（說不清的走 `live`／`generate`）
+- [ ] N.4 `polish` [affected surfaces]，清完 `critique-storage close` 關閉快照
+- [ ] N.5 `impeccable detect --json [changed UI files]` 乾淨、`audit` Critical = 0
+- [ ] N.6 沉澱：`document`／`extract`／`ignore.md`，或在 design-review.md 寫「本輪無 design system 變更」
+- [ ] N.7 `/review screenshot` 取證，寫 design-review.md
 ```
 
-`[affected pages/components]` 替換為此 change 實際涉及的 UI 檔案/頁面。
+`[affected surfaces]` 替換為此工作實際涉及的頁面／元件。
 
-## Design Review 中斷與續跑
+### 中斷與續跑
 
-N.5 `/impeccable audit` 必須在**所有修正完成後**才執行。中途停下修正時 MUST 提示使用者：恢復後從 N.2 `/design improve` 重跑完整 Design Review，不得跳過。
+N.5 在**所有修正完成後**才跑。中途停下時提示使用者：恢復後從 N.2 重跑 critique，並逐項記錄 P0／P1 的修正與明確 close 證據。本機檔一改，`critique-storage latest` 可能因指紋不同自動寫 `closed: true`；那不代表問題已修，commit 0-B.1 不把它當成通過證據。
 
-## Design Review Findings Log
+## design-review.md（Design Gate 證據）
 
-每次 Design Review 完成時，**必須**將發現的問題記錄到 `docs/design-review-findings.md`，用於追蹤跨 spec 的重複問題模式。
-
-### 記錄格式
+位置：plan package 為 `specs/plans/<work-id>/design-review.md`；ad-hoc 為 `docs/design-review/<slug>.md`。檔名固定（`residency-classify`、[[nuxt-ui-mcp]] 的 paths 與既有紀錄都認它）。內容記閉環，不貼 critique 全文：
 
 ```markdown
-## [WORK-SLUG] — YYYY-MM-DD
+# Design Review: <work item>
 
-**影響範圍**: [affected pages/components]
+- **Date**: YYYY-MM-DD
+- **Work item**: <work id / slug>
+- **Surfaces**: [affected pages/components]
 
-| #   | 類別    | 問題摘要        | 嚴重度   | 發現來源  |
-| --- | ------- | --------------- | -------- | --------- |
-| 1   | spacing | 卡片間距不一致  | warning  | /impeccable layout   |
-| 2   | a11y    | 缺少 aria-label | critical | /impeccable audit    |
-| 3   | color   | 對比度不足      | critical | /impeccable colorize |
+## Stage 1 找問題
+
+| 來源 | 結果 |
+| --- | --- |
+| critique | 分數 <n>/<max>，P0 <n>／P1 <n>／P2 <n>／P3 <n>；快照 `.impeccable/critique/<file>` |
+| audit | Critical <n>／其他 <n> |
+| detect | <n> findings（或「乾淨」） |
+
+## Stage 2 專科修
+
+| 問題族 | 指令 | 範圍 | 結果 |
+| --- | --- | --- | --- |
+| 主次不分 | `quieter` | `app/pages/orders.vue` 篩選列 | 已修 |
+
+polish：已關閉快照 `<file>`（或：未關閉，理由）
+
+## Stage 3 沉澱
+
+- DESIGN.md：已更新（`document`）／本輪無 design system 變更
+- ignore.md／`ignore-value`：<條目與使用者確認紀錄>，或「無」
+
+## 截圖證據
+
+- `/review screenshot` 產出路徑與判讀結論
 ```
 
-類別：`spacing` `layout` `typography` `color` `a11y` `responsive` `interaction` `copy` `consistency` `hardening` `performance`。分析由 `/design retro` 負責。
+影響 spec 的設計發現照 § Design → 規格回饋迴路處理，**NEVER** 就地改 `specs/truth/**`。
 
 ## Design → 規格回饋迴路
 
 Design 工作可能發現 spec 未涵蓋的問題。**每一次**發現都按下表回饋，不是等收尾一起處理：
 
-| 情境                                                                    | 動作                                        |
-| ----------------------------------------------------------------------- | ------------------------------------------- |
-| /design 發現 spec 未涵蓋的 UX 需求（如缺 empty state、缺 loading 狀態） | 回交 `/dsl-refine` 更新 truth feature；**NEVER** 就地改 `specs/truth/**` |
-| /impeccable audit 發現需要新元件或新 API endpoint                       | 在當前 tasks 檔加一條 task；動到 API 契約時先改 `specs/api/**`（per [[specformula]] spec-first） |
-| Design 決策影響資料模型或 API schema                                    | 記進 `docs/decisions/**` → 由 owner skill 落 `specs/data/**` / `specs/truth/**` |
-| /design 改動範圍超出原工作 scope                                        | 停下，通知使用者，可能需要另開一個 work item |
+| 情境 | 動作 |
+| --- | --- |
+| critique／audit 發現 spec 未涵蓋的 UX 需求（如缺 empty state、缺 loading 狀態） | 回交 `/dsl-refine` 更新 truth feature；**NEVER** 就地改 `specs/truth/**` |
+| audit 發現需要新元件或新 API endpoint | 在當前 tasks 檔加一條 task；動到 API 契約時先改 `specs/api/**`（per [[specformula]] spec-first） |
+| Design 決策影響資料模型或 API schema | 依 [[knowledge-and-decisions]] 記 ADR（**NEVER** 在 `docs/decisions/` 開新檔）→ 由 owner skill 落 `specs/data/**` / `specs/truth/**` |
+| 修正範圍超出原工作 scope | 停下，通知使用者，可能需要另開一個 work item |
 
 ## Design Gate（交付人工檢查前的硬門檻）
 
-**把一件含 `.vue` 變更的工作交付人工檢查（或標 `work.done`）之前**，MUST 自己核對兩個信號：
+**把一件含 `.vue` 變更的工作交付人工檢查（或標 `work.done`）之前**，MUST 自己核對：
 
-1. **`design-review.md` 存在且含 fidelity 證據**——有 `/design improve` 產出的設計審查記錄，**且**包含「Design Fidelity Report」段落，**且**無未修復的 DRIFT 項目（表格中無 `| DRIFT |` 行）
+1. **`design-review.md` 存在且三階段都有紀錄**——Stage 1 有 critique 快照路徑與 P0–P3 計數；Stage 2 逐項記錄 P0／P1 修正、polish 與明確 close 的快照路徑，或使用者確認的 ignore；單有 `closed: true` 不算；Stage 3 有 DESIGN.md 更新或「本輪無 design system 變更」一行
 2. **Design Review tasks 全部完成**——tasks 檔的 `## Design Review` 區塊中所有 checkbox 為 `[x]`
 
-兩個信號至少一個成立，且 `## 人工檢查` 不留白，才可交付。都不成立 → **STOP**，回去補完再交付。
+兩項都成立，且 `## 人工檢查` 不留白，才可交付。任一不成立 → **STOP**，補完再交付。commit 端的唯讀快照處置檢查在 commit skill `gates.md` § 0-B.1。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | informational — **不觸發任何東西**。沒有 detector 掛在「交付人工檢查」這個事件上 |
+| 觸發條件 | informational — **不觸發任何東西**。沒有 detector 掛在「交付人工檢查」這個事件上（commit 0-B.1 只擋 commit） |
 | 消費端 | 正要把含 UI 變更的工作交付人工檢查、或標 `work.done` 的那個 agent（本節） |
-| 載入路徑 | 本節（`rules/core/proactive-skills.design-checkpoint.md`，path-scoped 於 UI 檔與 `specs/plans/**`） |
+| 觸發點 | 本節（`rules/core/proactive-skills.design-checkpoint.md`，path-scoped 於 UI 檔與 `specs/plans/**`） |
 
 **NEVER** 把「沒有 hook 擋我」讀成這道門檻不存在——它唯一的執行者是讀到本節的那個 agent。
 
-## Cross-Change Holistic Review（跨 change 整體性審查）
+## 跨工作的整體性
 
-**觸發條件**（任一）：
-
-- 專案已有 2+ 件完成的 UI 工作（`tasks/` 或 `specs/plans/**` 中含 `.vue` 相關 task 且已標 done）
-- 當前工作的 UI 頁面與已完成頁面共用 layout（如 `desktop.vue`、`default.vue`）
-
-**行為**：
-
-- `/design improve` 的 Fidelity Check 擴大範圍，額外抽樣 2-3 個**同 layout 已上線頁面**
-- 既有頁面的偏差標記為 **Cross-Work DRIFT**（建議修復，不阻擋交付）
-- Cross-Work DRIFT 記錄在 `design-review.md` 的獨立段落，便於後續工作處理
-
-
+同 layout 已上線的頁面（如共用 `desktop.vue`、`default.vue`）與本次頁面一起跑 `critique` 時，既有頁面的問題記在 `design-review.md` 的獨立段落（建議修，不阻擋本次交付）。整個 app 的健康度診斷就是對全站跑 `critique`／`audit`。
 
 ## 純後端工作的例外
 
-若工作純後端（migration、API、RLS、config），不觸發 Design Checkpoint，直接走 [[aixbdd-workflow]] 的標準入口順序。判斷依據：tasks 檔中是否有任何 task 涉及 `.vue` / `pages/` / `components/` / `layouts/` 檔案，且 git diff 中無 `.vue` 檔案。
+工作純後端（migration、API、RLS、config）不觸發 Design Checkpoint，直接走 [[aixbdd-workflow]] 的標準入口順序。判斷依據：tasks 檔中沒有任何 task 涉及 `.vue` / `pages/` / `components/` / `layouts/` 檔案，且 git diff 中無 `.vue` 檔案。

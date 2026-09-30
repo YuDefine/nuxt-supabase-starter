@@ -307,7 +307,7 @@ diff -u .claude/rules/<file> ~/offline/clade/rules/<file>
 
 ## 與其他文件的關係
 
-- root [`CLAUDE.md`](../CLAUDE.md) — clade 治理規則的高階說明（哪些去改 clade、哪些是 local）
+- root [`.claude/rules/meta-repo.md`](../.claude/rules/meta-repo.md)（root `CLAUDE.md` 只是空殼入口）— clade 治理規則的高階說明（哪些去改 clade、哪些是 local）
 - [QUICK_START.md](QUICK_START.md) — scaffold 流程，會 wire pre-commit 防呆
 - [`template/docs/NEW_PROJECT_CHECKLIST.md`](../template/docs/NEW_PROJECT_CHECKLIST.md) — 環境驗收，含 hub-drift 檢查項
 - [AGENTS.md](AGENTS.md) — meta layer AI 入口，drift 場景時跳到本檔

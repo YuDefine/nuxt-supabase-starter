@@ -69,7 +69,7 @@ esac
 #   rg prettier package.json        → 命令位置是 rg
 #   cat .prettierignore             → prettier 前面是 '.'，不在命令位置
 #   ls node_modules/.bin/prettier   → 命令位置是 ls（.bin 分支要求它自己在命令位置）
-printf '%s' "$cmd" | perl -0777 -e '
+printf '%s' "$cmd" | LC_ALL=C perl -0777 -e '
   my $c = <>;
   $c = "" unless defined $c;
   my $pos = qr{ (?: ^ | [;&|(\n] | \bthen\b | \bdo\b ) \s*
@@ -95,7 +95,7 @@ printf '%s' "$cmd" | perl -0777 -e '
 # 反方向是靜默改壞整檔。
 # 終止符用 lookahead 不消耗 —— 消耗掉 `&&` 的話，`cd /tmp && cd /oxfmt && npx prettier`
 # 的第二個 cd 前面就沒有分隔符可比對，只會收到 /tmp（0-A.1 第二輪抓到）。
-candidate_dirs=$(printf '%s' "$cmd" | perl -0777 -ne 'print "$1\n" while m{(?:^|[;&|\n])\s*cd\s+([^;&|\n]+?)\s*(?=&&|;|\||$)}g')
+candidate_dirs=$(printf '%s' "$cmd" | LC_ALL=C perl -0777 -ne 'print "$1\n" while m{(?:^|[;&|\n])\s*cd\s+([^;&|\n]+?)\s*(?=&&|;|\||$)}g')
 
 is_oxfmt_repo=0
 while IFS= read -r dir; do

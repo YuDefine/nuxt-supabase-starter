@@ -18,6 +18,20 @@
 | `business_activity` | catalog `business-activity` | 登記時必問 |
 | `dev_port` | catalog `dev-port` | 登記時必問；`auto` 或自填 |
 | `deploy_track` | catalog `deploy-track` | 登記時必問 |
+| `repo_visibility` | 既有 repo 以 `gh repo view` 為準 | 登記且 `new` 時必問；預設 `private` |
+
+### 由已簽 presale 包預填
+
+work-route 帶著已簽的 presale 包（`presale.json` status=signed）進來時，先讀它預填，再照上表補缺：
+
+| presale 欄位 | 預填 | 仍要確認 |
+| --- | --- | --- |
+| `case` | `project_name`，連帶 `target_path` 的預設 | 使用者可改名 |
+| `project.stack_hint` | `starter_preset` 的語意來源（照 § Starter preset mapping 對應） | 對不到唯一 preset 就問，**NEVER** 猜 |
+| `project.name`、`deliverables[].summary` | `business_activity` 的建議值 | catalog 題照問，建議值只當推薦選項 |
+| `PRODUCT.md`／`DESIGN.md` | 不在這裡帶入 | 由 `flow plan open --seed-from` 在 repo 沒有時帶入 |
+
+預填只縮短提問，**NEVER** 讓 `--yes` 略過 § AI 必須問的 catalog 題。
 
 ## AI 必須問的 catalog 題
 
@@ -32,6 +46,16 @@
 | `deploy-track` | `--deploy-track` | 選了要登記 |
 
 preset 已決定的事（部署平台、DB 種類、CI、evlog）不再問，但上表的 catalog 題不能由 preset 代替。選項文案用 catalog 的 `label`，**NEVER** 寫成 LXC、CT、<consumer-b>、playbook 編號。
+
+## GitHub repo（catalog 外，clade 端問）
+
+`new` mode 且 `register_fleet=yes` 時多問一題，與 catalog 題同一張 intake sheet 確認：
+
+| 題目 | 選項 | 預設 |
+| --- | --- | --- |
+| 「GitHub repo `<repo_id>` 要公開還是私有？」 | `private`（推薦）／`public` | `private` |
+
+`repo_id` 沿用 catalog `repo-id` 的答案，不另問。repo 已存在時 `provision-github-repo ensure`（不帶 `--yes`）會回報沿用，owner 或可見度與答案不符就停下改答案——**NEVER** 替既有 repo 改可見度。可見度寫進 `$CLADE_HOME/.spectra/repo-visibility-cache.json`，首次 `pnpm install` 的投影依它決定要不要去敏感化。
 
 ## Starter preset mapping
 

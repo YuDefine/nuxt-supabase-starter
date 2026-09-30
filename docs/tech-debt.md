@@ -20,9 +20,36 @@
 | TD-014 | clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約 | low | open | 2026-09-09 |
 | TD-016 | Cloudflare 上 `useRuntimeConfig()` 的 module-eval snapshot 是否讀得到注入的 `NUXT_APP_ENV` | mid | open | 2026-09-11 |
 | TD-017 | `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅 | low | open | 2026-09-11 |
-| TD-018 | auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict | high | open | 2026-09-11 |
+| TD-018 | auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict | high | done | 2026-09-11 |
 | TD-019 | `scaffold-smoke` 自 2026-08-24 起持續紅，剩餘 blocker 是 clade 投影未去識別化 | mid | open | 2026-09-11 |
 | TD-020 | 選了 codex 的 scaffold 輸出靜默少掉 `.codex/` 與 `.agents/` | high | open | 2026-09-11 |
+| TD-021 | Template CI `UX drift audit` 既有紅燈：`shared/types` 沒有 enum-like 定義就 fail | mid | open | 2026-09-28 |
+| TD-022 | repo root 的 Claude session 載不到 `commit-0a-reviewer` seat | mid | open | 2026-09-28 |
+| TD-023 | Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback | low | open | 2026-09-28 |
+| TD-024 | Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict` | mid | open | 2026-09-29 |
+| TD-025 | scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅 | mid | open | 2026-09-29 |
+
+### 2026-09-27 origin/main 收斂接手 brief
+
+- 工作指針：本次基準 `origin/main` 為 `2679369d`；根目錄無 `HANDOFF.md`，`template/HANDOFF.md` 無未勾 checkbox。以下只以已合入 main 的內容判定，OPEN PR 不計入下降。
+- 已驗證：TD-018 的上游修正在 clade PR #233（`f4f310585`）合入；starter 升版提交 `830c992e`、`f1f211cf` 先後帶入投影。TD-012 已由本 repo PR #6（`8a78c687`）合入。
+
+| 仍未結案 | main 證據與接手條件 |
+| --- | --- |
+| TD-004 | PR #7（`6b04da7f`）只合入失效診斷；`template-ci.yml` 仍呼叫退役的 roadmap task。PR #10 尚未合入；由 workflow owner 核對 Spectra 退役決定及 PR #10 落地結果。 |
+| TD-005 | `CLADE_PROJECT_ROOT` 接線仍由尚未合入的 PR #10 處理；合入後按本條 Acceptance 驗收。 |
+| TD-008 | `template/package.json` 仍有 `validate:starter`；PR #8 是未合入的規劃，尚無實作。 |
+| TD-010 | `template/nuxt.config.ts` 尚無 `/api/auth/**` CSRF 例外；實作 PR #9 尚未合入，合入後仍需真實登入驗收。 |
+| TD-011 | `template/.cursor/skills/clade-security/rules/auth.md` 仍寫舊套件名；須從 clade source 修正並散播。 |
+| TD-014 | `template/.cursor/skills/design/SKILL.md` 仍有無解析說明的 `<maintainer-domain>`；須由 clade source 收斂。 |
+| TD-016 | 缺真實 Cloudflare 部署的 Sentry `environment` 讀數；需現場驗證後才可判定。 |
+| TD-017 | `template/scripts/validate-starter.mjs` 只在開始與生成單一 fixture 前清理，結束後沒有清理；PR #5 尚未合入。 |
+| TD-019 | `scaffold-smoke` 在 main `2679369d` 的 run `36298330400` 仍失敗；須修投影去識別化並重驗。 |
+| TD-020 | `assemble.ts` 的 `copyTemplateCodexAssets()` 仍以 `existsSync` 略過來源；需拍板 Codex 開箱契約，再實作與驗收。 |
+
+- 需人工判定：TD-004 的 Spectra workflow 退役方向、TD-016 的真實 Cloudflare 讀數、TD-020 的 Codex 開箱契約。未有證據前維持原狀。
+- 剩餘步驟：主持者追蹤 PR #5／#8／#9／#10 與 clade source 工作；各自合入後重新讀 `origin/main`，逐條核對 Acceptance、同步 Index 與 entry body，再量測 HANDOFF 未勾及 literal open TD。
+- 檔案所有權：本輪 worker 只修改根目錄 `docs/tech-debt.md`；`template/HANDOFF.md` 唯讀。程式碼、migration、`.claude/**`、`vendor/**`、其他 worktree、production 與 PR merge 由各自 owner 處理。
 
 ## In-flight PR 對帳（2026-09-27）
 
@@ -257,12 +284,9 @@ lint 因原工作 scope 刻意留下。`c86c3bad7` 已將 lint 改為下方形�
 - 暫存 `td012-lint-probe.ts` 內容為 `debugger;`，再跑 `pnpm lint` → exit 1；輸出 `eslint(no-debugger)` 與 `Found 1 warning and 0 errors.`。刪除暫存檔後重跑 `pnpm lint` → exit 0，`Found 0 warnings and 0 errors.`。
 - 額外本機檢查：`pnpm typecheck` → exit 0；`vp check` → exit 0（286 檔格式正確、253 檔 lint 無警告／錯誤）。本 repo 沒有 `tsconfig.clade.json`，型別檢查使用既有 `pnpm typecheck`。
 
-### Coordinator follow-up
+### 落地證據
 
-- 工作指針：draft PR [#6](https://github.com/YuDefine/nuxt-supabase-starter/pull/6)，branch `session/2026-09-26-1655-starter-td012-lint-guard-verify-close`，base `main`。`template/package.json` 的 lint script 已由 `c86c3bad7` 修正，本次沒有改 script。
-- 驗證證據：本條目上方三項 Acceptance 實跑通過；`pnpm typecheck` 與 `vp check` 也通過。PR 只改本文件；workflow path filters 不涵蓋此 diff，GitHub PR checks 為空，沒有 PR CI 綠燈可等待。
-- 剩餘步驟：主持者核對 PR head、審閱結案證據並依 repo 流程處理 draft PR；本 worker 不 ready、merge 或部署。
-- 檔案所有權：本 worker 只動本條目與 Index 的 TD-012 列；`template/package.json` 原有修正維持不變。PR 後續由主持者持有，其他檔案不屬本 worker。
+- `c86c3bad7` 修正 `template/package.json` 的 lint script；PR #6 於 `8a78c687` 合入 main，帶入上方驗收紀錄。此項已結案，沒有待處理的 draft PR。
 
 ## TD-014 — clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約
 
@@ -437,7 +461,7 @@ scaffold 專案並**保留**（`temp/` 在 `.gitignore` 內）。vite-doctor 不
 
 ## TD-018 — auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict
 
-**Status**: open — 阻塞 owner：clade（`~/offline/clade`）；解除條件：clade 修復 auto-commit 失敗及 pre-sync reset 後的 projection state 超前問題（回捲或重投影），且本 repo 有連續兩趟 propagate 非 `failed` 的 run 證據。本 repo 只登記入口與復原程序，現有證據不足以結案。
+**Status**: done（2026-09-27 核對 origin/main；clade PR #233 修正、starter 連續升版落地）
 **Priority**: high — 一次 pre-commit 失敗就讓這台**永久**掉出 fleet，且錯誤訊息指向錯的方向
 **Discovered**: 2026-09-11 — v1.12.47 propagate 對本 consumer failed 時追出來
 **Location**: clade `scripts/lib/runtime-artifact-apply.ts`（conflict 判定）、clade auto-commit flow 的 rescue/revert 路徑
@@ -541,14 +565,18 @@ clade-managed dirty → `dumpRescuePatch` → `resetPathsToHead`）：
 （例：`.claude/skills/spec-by-example/rules/gherkin-驗收句型與結構判準.md`）→ 依 runbook 判準不套，交 clade 端裁決。
 同一趟已先把 36 筆 TD-1130 遺留的 aixbdd 舊投影 ` D` 補 commit（`8d038af2`；36/36 與 clade 源 byte 一致、不在任何 receipt）。
 
-**待 clade 端**：Fix approach 1（reset 路徑同步回捲 receipts）或 2（`before == HEAD` 時改重投影）任一落地後，
-重跑 `propagate --resume`；或由 clade 主持者裁定本台的一次性復原方式。殘留：本台停在 v1.13.24。
+**歷史待辦已收斂**：clade PR #233（`f4f310585`）證明「commit 失敗 → 下一趟 pre-sync reset」與本節復發是同一形狀，改為磁碟 hash 等於 receipt 的自產殘留不回捲；clade PR #327（`3bc9c4f65`）另外讓乾淨的 HEAD 內容可重新對齊過期 receipt。starter 的 `830c992e`（v1.13.30）、`f1f211cf`（v1.13.31）先後合入 manifest 與投影；`81eb192f` 已升到 v1.13.37。因此先前「停在 v1.13.24」的敘述僅是 2026-09-24 快照，不再是現況。
 
 ### Acceptance
 
 - clade 端：任一 consumer 的 auto-commit commit 失敗後，下一趟 propagate **不再**出現
   `local or modified file conflict`（而是重投影成功，或給出指名半套用狀態的訊息）。
 - 本 repo：連續兩趟 propagate 對 `nuxt-supabase-starter/template` 不是 `failed`。
+
+### 結案證據
+
+- clade PR #233（`f4f310585`）的回歸測試覆蓋 commit 失敗後的自產殘留與真正的 consumer 手改；PR #327（`3bc9c4f65`）覆蓋乾淨 HEAD／過期 receipt 的重新對齊。
+- starter main 的 `830c992e` 與 `f1f211cf` 是連續兩次帶投影的 clade 升版提交，均晚於 PR #233；後續 `81eb192f` 升至 v1.13.37。這些是合入 main 的證據，不以未合 PR 或派工紀錄代替。
 
 ## TD-019 — `scaffold-smoke` 自 2026-08-24 起持續紅，剩餘 blocker 是 clade 投影未去識別化
 
@@ -601,6 +629,18 @@ scaffold 輸出要有 `.claude/commands/validate-starter.md`，但 `17f080cf` �
 
 - `bash scripts/smoke-scaffold.sh temp/<name>` 跑到 `[PASS] placeholder scan clean` 之後才停。
 - `scaffold-smoke` workflow 在 main 上轉綠。
+
+### 2026-09-29 root cause 複核（main `36546488912`，clade v1.13.44）
+
+- 死在 `[FAIL] placeholder scan found unexpected hits`，比 2026-09-11 那次少：`vendor/**` 已無命中，剩 10 個命中、9 個檔，
+  **全部**是 `template/scripts/` 下標了 `🔒 LOCKED — managed by clade` 的投影檔：`preservation-profiles.ts:74`
+  （consumer 名冊一列）、`wt-batch.ts:196`（consumer → repo 對照一列）、`pre-push/runner.sh:54` 與
+  `pre-push/checks/{nuxt-typecheck,utable-slots,mutation-loading,data-perf-check,review-rules-ratchet,native-picker-ban,nuxt-ui-mixed-slot}.sh`
+  各一行註解。
+- 落點在 clade 源檔 `vendor/scripts/`（同名同行，v1.13.44 仍在）：註解型 9 處可改成 `<consumer>`；名冊／對照型 2 處
+  （`preservation-profiles.ts`、`wt-batch.ts`）是真資料，要 clade 決定「投影時去識別化」或「名冊改由 registry 讀入」。
+  starter 端改投影檔會被下次 propagate 覆寫，加 exclude 又違反上面的 NEVER，因此本 repo 沒有可落地的修法。
+- scan 之後的 `typecheck`／`test:unit`／`test`／`check` 四關至今沒在 CI 跑到過；去識別化落地後仍可能各自露出新的紅燈。
 
 ## TD-020 — 選了 codex 的 scaffold 輸出靜默少掉 `.codex/` 與 `.agents/`
 
@@ -730,6 +770,139 @@ scaffold 輸出由 assemble 生成，不屬 L3 掃 template 的範圍」。**NEV
 - 在乾淨 clone（沒跑過 `sync-to-codex`）上以 `--agents codex,cursor` scaffold，輸出要嘛含
   `.codex/config.toml` 與 `.agents/skills/commit/SKILL.md`，要嘛當場失敗並說明原因。
 - `Template CI` 的 Unit tests 在 main 上轉綠。
+
+## TD-021 — Template CI `UX drift audit` 既有紅燈：`shared/types` 沒有 enum-like 定義就 fail
+
+**Discovered**: 2026-09-28 — PR #13（`59adc3cb`）讓 Unit tests job 的 `Unit tests` step 轉綠之後露出來
+
+### Problem
+
+Template CI 的 Unit tests job 在 `Unit tests` step 之後跑 `vp run audit:ux-drift`
+（`node scripts/audit-ux-drift.ts`，clade-managed 投影）。它在 starter 上直接 exit 2：
+
+```
+✗ No enum-like definitions found in configured types dirs.
+  Searched: shared/types
+```
+
+`template/shared/types/` 只有 `pagination.ts`、`profiles.ts`，沒有 enum-like 定義；
+`template/spectra-advanced.config.json` 存在。main 上這一步一直是 skipped，因為前一步
+`Unit tests` 先紅了（run `36357036651` 等）。PR #13 修好那一步之後，這個紅燈才第一次被執行到
+（PR run `36357476335`）。在 PR head 本機跑 `vp run audit:ux-drift` 也一樣紅，PR diff 沒碰該 script、
+`shared/types` 或 config，所以這是既有問題，不是 PR #13 造成的。coordinator 2026-09-28 裁決視為既有紅燈照樣合入 PR #13。
+
+### Fix approach
+
+先判 root cause 在哪一層，再動手：
+
+- clade `audit-ux-drift.ts` 對「零 enum 的專案」fail-closed：若 starter 沒有 enum 是合法狀態，
+  修法在 clade（零 enum 時回報 skip／pass 而非 exit 2），starter 端 **NEVER** 直接改投影檔。
+- 若 audit 的前提是「專案必有 enum-like 定義」：修法在 starter 的 `spectra-advanced.config.json`
+  `paths.types` 指向或 CI step 條件，另開 change 設計。
+
+### Acceptance
+
+- main 上 Template CI 的 Unit tests job 全綠（`UX drift audit` 不再 exit 2，且不是靠跳過 step 過關）。
+
+### 2026-09-29 root cause 複核
+
+- `gh api` 掃 Template CI 最近 31 趟：19 趟紅，最近 10 趟全是 `UX drift audit` 這一步（最早 `36357476335`，即 PR #13 讓前一步轉綠之後）；
+  更早 9 趟是 `Unit tests` 那步，已由 PR #13 修掉。所以現在的 Template CI 紅燈只有這一個 root cause。
+- 落點：clade `vendor/scripts/audit-ux-drift.ts` 的 `main()`（`report.enums.length === 0` → `process.exit(2)`，註解明寫
+  「Found nothing ≠ no drift」）。它把「零 enum」當成設定壞掉，對從來沒有 enum 的專案沒有出口（無 allow-empty 旗標或 config 欄位）。
+- starter 端沒有不作弊的修法：`shared/schemas/` 也沒有 `z.enum`，`paths.types` 改指過去不會多出定義；不能靠條件式跳過 step
+  （違反 Acceptance）。唯一實質選項是把 DB 已有的 `profiles.role CHECK (role IN ('admin','user'))`
+  建成 `shared/types` 的 enum-like（現在 `profileSchema.role` 是 `z.string()`）——那會改 API 契約與測試，
+  且 `server/api/_dev/login.post.ts` 的 `z.enum(['admin','member','guest'])` 與 DB CHECK 已不一致，須先決定角色集合。
+- 兩條路都要拍板，專案暫停中不擅動；建議先走 clade 側（零 enum 回報 skip／pass，或提供明確的 allow-empty 設定）。
+
+## TD-022 — repo root 的 Claude session 載不到 `commit-0a-reviewer` seat
+
+**Discovered**: 2026-09-28 — PR #13 的 0-A 在 repo root session 呼叫 `Agent({subagent_type: 'commit-0a-reviewer'})`
+回 `Agent type 'commit-0a-reviewer' not found`
+
+### Problem
+
+`commit-0a-reviewer.md` 只投影在 `template/.claude/agents/`；repo root 的 `.claude/` 沒有 `agents/`。
+以 repo root 為 cwd 開的 Claude session 不載入 `template/.claude/agents/`，seat 不存在。
+`claude-review-safe.sh prepare` 仍會成功並印出 `AGENT_CALL`，到呼叫 Agent 才失敗。
+任何在 starter root 跑 `/commit` 的 Claude 主線都會卡在同一處。PR #13 的繞法是改以 `template/` 為 cwd 開 pane。
+
+### Fix approach
+
+修法屬 clade 投影（本 repo **NEVER** 手寫 root agent 定義繞過）：讓 root meta 層也投影
+`commit-0a-reviewer`，或 `prepare` 偵測當前 session 載不到 agent 定義時提早報錯並指出要換的 cwd。
+
+### Acceptance
+
+- 在 repo root 開的 Claude session 跑 `prepare medium` → 照 `AGENT_CALL` 呼叫 Agent 能叫出 seat，
+  或 `prepare` 當場以明確錯誤拒絕並指出正確 cwd。
+
+## TD-023 — Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback
+
+**Discovered**: 2026-09-28 — PR #13 0-A 第二輪（receipt `subagent-a094338120fbabd7e`）的 Minor，非阻擋
+
+### Problem
+
+`template/packages/create-nuxt-starter/src/post-scaffold.ts` 的 `buildDeferredCodexProjectionCommand`
+寫死 `scripts/init-consumer.ts`。實際初始化的 `runInitConsumer` 走 `resolveCladeInitScript`，
+只有 `init-consumer.mjs` 時會 fallback 過去。本機 Clade 只有舊版 `.mjs` 時，
+scaffold-only 印出的延後投影指令會指到不存在的檔案。
+
+### Fix approach
+
+`buildDeferredCodexProjectionCommand` 在 `sourceRoot` 已存在時改用 `resolveCladeInitScript(sourceRoot)`，
+不存在（要 clone）時維持 `.ts`；補一條只有 `.mjs` 的 fixture 測試。
+
+### Acceptance
+
+- 只有 `init-consumer.mjs` 的 fixture Clade 下，deferred 指令引用 `.mjs` 且測試綠。
+
+## TD-024 — Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict`
+
+**Discovered**: 2026-09-29 — clade `W-2026-09-29-work-route-evlog-map-ci-parity-runner-task-pre-p`（D3）relay
+
+### Problem
+
+`.github/workflows/template-ci.yml` 的 `evlog map coverage gate` 原本沒寫 `mode:`；action 的 `mode`
+沒有預設值，clade 修掉 `@evlog/cli` 偵測 bug（目前整道 gate 靜默 skip）後會以
+`--mode must be ratchet | strict (got: )` exit 2，pre-push 同一道 gate 也會擋。2026-09-29 本機量測
+`template/` 13 個 entry point、score 39：`ratchet` 通過、strict 不通過，所以先掛 `ratchet`。
+evlog-adoption depth-gate § Gate 規定判定走 strict，`ratchet` 只作過渡，**NEVER** 當長期狀態。
+
+### Fix approach
+
+在 `template/` 跑 `npx evlog map --all --no-write` 列出失敗 check，逐個 entry point 補 `log.set` /
+error 欄位到零失敗、零 suppression（無法插樁者也不得豁免），更新 `template/evlog.map.json` baseline，
+再把 workflow 的 `mode: ratchet` 改成 `mode: strict`（`min-score` 是 gate.ts 的 deprecated 別名，**NEVER** 寫它當終點）。
+
+### Acceptance
+
+- `template-ci.yml` 的 gate 步驟為 `mode: strict`，註解不再指向本條。
+- repo 根跑 `node template/.github/actions/evlog-map-gate/local.ts` exit 0（strict 判定）。`local.ts`／`run.sh`
+  由含 YuDefine/clade#538 的 clade 版本投影；投影到位前改以 clade 源檔
+  `vendor/actions/evlog-map-gate/run.sh` 帶 `INPUT_CWD=template INPUT_MODE=strict` 驗。
+
+## TD-025 — scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅
+
+**Discovered**: 2026-09-29 — TD-024 那次 `/commit` 的 0-C（`pnpm test`）；把 TD-024 改動 stash 掉後在 `631418e4` 上同樣重現，非該次引入
+
+### Problem
+
+`template/packages/create-nuxt-starter/test/scaffold-receipt.test.ts` 的 scaffold-only 案例穩定失敗：
+`git show HEAD:.claude/settings.local.json` → `fatal: path '.claude/settings.local.json' exists on disk, but not in 'HEAD'`。
+receipt（`src/scaffold-receipt.ts`）把磁碟上存在、但被 gitignore 擋在 initial commit 外的檔案也列進去，
+違反「committed receipt 等於 initial commit 的 blob」。PR #15 當時 3 passed，推測是之後的 clade 投影開始
+在 scaffold 期間產生該檔（未驗證）。
+
+### Fix approach
+
+先查是誰在 scaffold 期間寫出 `.claude/settings.local.json`；receipt 收錄範圍改以 initial commit 實際追蹤的檔案
+（或排除 gitignored 路徑）為準，而不是磁碟上的全部投影檔。
+
+### Acceptance
+
+- `cd template/packages/create-nuxt-starter && pnpm exec vp test run test/scaffold-receipt.test.ts` 3 passed。
 
 ## Cross-repo pointers
 

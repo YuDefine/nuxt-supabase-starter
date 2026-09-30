@@ -1,5 +1,5 @@
 ---
-description: Worktree 升級路徑 / Stop hook 死鎖 / spectra DB 跨 wt 共享 / artifact git / phase-tick commit / main 端 tasks.md 打勾方向判定 / review-gui 坑（已退役）/ WORKTREE-BRIEF（worktree-default §7–§12 detail）
+description: Worktree 升級路徑 / Stop hook 死鎖 / spectra DB 跨 wt 共享 / artifact git / phase-tick commit / main 端 tasks.md 打勾方向判定 / WORKTREE-BRIEF（worktree-default §7–§12 detail）
 paths:
   - 'openspec/changes/**'
   - 'vendor/scripts/wt-helper.ts'
@@ -47,10 +47,6 @@ history 回 corrupt／unsupported／truncated 時，先恢復可讀原件並核�
 每次看到 tasks.md 分歧，先分辨 canonical OPSX projection 與 legacy 原件。OPSX 由目前 revision 的同一 source／receipt 重建，不能合併 checkbox 宣告完成。legacy 的任何獨有內容都先保存並回讀 digest，再作承接；未確認身分、revision 與來源前，不以較舊時間、相同勾選數或 stash 標題捨棄任一份內容。
 
 `git diff HEAD -- <path>` 同時包含 staged 與 unstaged，逐項比較來源，不能只看 `--stat`。worktree 是隔離位置，不是較新證據的保證。
-
-## §10 review-gui 與 worktree 互動的已知坑
-
-面板讀 spine 的 read model，人工 gate 由 `flow gates` 判定，不掃 worktree 的 change 目錄，所以舊聚合器的三條坑不適用。歷史脈絡在 [[pitfall-review-gui-collision-typo-and-worktree-startup]]、[[pitfall-review-gui-source-aggregation-collision]]、[[pitfall-review-gui-apply-pending-mid-apply-changes]]。
 
 ## §11 WORKTREE-BRIEF.md — 持久化任務交接上下文
 

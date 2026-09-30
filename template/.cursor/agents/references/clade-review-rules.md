@@ -271,3 +271,5 @@ Reviewer 補判斷機械層看不到的：
 - commented-out code（通用正則誤判率太高，不進 patterns.json）
 - 註解與 code 不符——錯的註解 MUST 當場刪
 - workaround 註解缺 `@followup[<id>]`（`plan:<work-id>` 或未遷移 consumer 的 `TD-NNN`）
+- diff 把 TD／plan 標成結案，卻沒動指向它的 `@followup` marker
+- 重述下一行名字的註解（`// 新增項目` 接 `function addItem()`）與步驟編號旁白（`// 6. 錯誤處理`）——只報本次 diff 新增或改到的行

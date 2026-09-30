@@ -1,15 +1,15 @@
 {
   "$schema": "../../../clade/registry/consumer-meta.schema.json",
-  "$comment": "Fleet sweep TD-159, scaffolded by clade scripts/scaffold-consumer-meta.mjs 2026-06-04. Template project — no auth, no DB, no deploy. Port 3000 is default fallback.",
+  "$comment": "Fleet sweep TD-159, scaffolded by clade scripts/scaffold-consumer-meta.mjs 2026-06-04. Template project — no auth, no DB, no deploy. Port 3020 is pinned by pnpm dev.",
   "schemaVersion": "1",
   "consumerId": "nuxt-supabase-starter",
 
   "dev": {
     "ports": [
       {
-        "port": 3000,
+        "port": 3020,
         "alias": "main",
-        "purpose": "template dev fallback"
+        "purpose": "template dev (pnpm dev --port 3020)"
       }
     ],
     "leaseMode": "advisory",
@@ -45,19 +45,26 @@
 
   "database": {
     "kind": "none",
+    "hosted": "none",
     "instances": {},
     "envVarNames": {},
     "seedCommand": null,
-    "previewEnvCapability": null
+    "previewEnvCapability": "none"
   },
 
-  "commands": {},
+  "commands": {
+    "typecheck": "pnpm typecheck",
+    "lint": "pnpm lint",
+    "test": "pnpm test",
+    "build": "pnpm build",
+    "smoke": null
+  },
 
   "deploy": {
     "platform": "none",
     "prodUrl": null,
     "previewUrlShape": null,
-    "deployTrigger": null
+    "deployTrigger": "none"
   },
 
   "verification": {

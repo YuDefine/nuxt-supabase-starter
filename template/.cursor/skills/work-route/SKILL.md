@@ -1,6 +1,6 @@
 ---
 name: work-route
-description: Use when the user wants to start or continue project work without choosing workflow skills. Pure fleet readiness or registry drift queries belong to clade-onboard.
+description: Use when the user wants to start or continue project work (new requirement, bug report, or refactor) without picking workflow skills. NOT for fleet readiness or registry drift queries (clade-onboard).
 license: MIT
 metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}}
 ---
@@ -26,12 +26,19 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}
 | 只問 onboard 狀態、readiness、registry drift | 交 clade-onboard 完成查詢，不建立 package |
 | 純討論、評估方案，未要求落地 | 在對話中研究與說明，不寫 repo／flow |
 | 新建／採用專案 | 執行 clade-onboard 判定，依結果承接 project-bootstrap；保留其 intake、外部副作用授權與完成條件，完成後回此入口 |
+| 已簽 presale 包（`presale.json` status=signed）＋ 新 repo | 同上一列走 clade-onboard → project-bootstrap（intake 由 presale 包預填）；回此入口後以 `flow plan open <slug> --seed-from <presale 目錄> --milestone M1` 開第一個 package，不從會議紀錄重寫 spec |
+| 已簽 presale 包 ＋ 既有 consumer | 直接以 `flow plan open <slug> --seed-from <presale 目錄> --milestone <M-x>` 開 package；後續 Milestone 在前一個結案後才開。`contract-<M-x>.feature` NEVER 改寫或刪除，範圍變更回 presale 開修訂版 |
 | clade 中央倉，registry role=source-of-truth | 依 work-lifecycle 處理；不對它跑排除 source-of-truth 的 consumer audit，也不製造 consumer manifest |
 | 已 onboard 專案的新工作／續跑 | 檢查其實際 manifest 與所需 capability，定位本次 package |
 | 純措辭／設定，不改行為、權限、資料或部署語意 | 依 repo 流程直接實作與驗證，免 package |
-| 可重現的既有 scenario regression | 依 bug 流程恢復既有 truth；缺 scenario 或改行為則回 specify |
-| hotfix／一次性工作 | 遵守該次授權與 regression 要求，不強套完整流程 |
+| bug 回報，出錯的行為已有 scenario | NOOP delta 加一條迴歸 scenario，再修；不發明新 truth |
+| bug 回報，出錯的行為沒有 scenario（只有舊測試或沒有測試） | 進下方 workflow：ADD delta 把當下正確的行為寫成 truth 與 scenario，再修；該區舊測試在 Phase 3 吸收 |
+| 分析發現缺陷要重構，行為不變 | 進下方 workflow：先確認（缺的以 ADD delta 補上）釘住現行行為的 scenario 且綠，再動結構；該區舊測試同一件工作吸收。行為要變就走「新增／修改／刪除既有行為」列 |
+| hotfix | 可以先修；同一 work id 留下補 scenario 的 open work，不以一支 unit／e2e 迴歸測試結案 |
+| 一次性工作（不改行為） | 遵守該次授權，不強套完整流程 |
 | 新增／修改／刪除既有行為 | 進下方 workflow，完成已授權部分 |
+
+宣告 aixbdd 的 consumer 裡，迴歸只有在受測單元沒有 I/O（純計算、解析、邊界值）時才落 unit test；帶 `clade-legacy-test` marker 的舊測試怎麼吸收、變紅時怎麼分岔，照 `clade-spec-workflow` skill 的 `rules/legacy-tests.md`，**每一次**進 bug、重構或 hotfix 列之前讀它。
 
 所有路徑都檢查本步所需前提；不要求一次備齊未來步驟的輸出。使用者的「繼續／y」沿用已確認的範圍與決策，不重新訪談；未呈現過的 PM 驗收不因泛稱繼續而視為確認。
 
@@ -123,6 +130,19 @@ transport 讀當前 runtime 的 `wt/SKILL.md`，可用 Form 3 `/wt <slug>: /<dow
 
 若必須問使用者，只問需求取捨、必要環境資訊、權限邊界或具體驗收確認；不問「要不要載入下一支 skill／修入口／繼續查」。不得宣稱未通過的 gate 已完成。
 
+### 品質 gate 失敗：先分可修復與不可修復
+
+`vp check`、typecheck、lint、測試等品質 gate 失敗時，先讀錯誤全文再分類；exit code 非 0 本身不是停手理由。判準全文在 verify-gate-chain 規約（clade 源檔 `rules/core/verify-gate-chain.md`，consumer 投影 Claude `.claude/rules/verify-gate-chain.md`、Codex `.agents/skills/clade-verification/rules/verify-gate-chain.md`）§ 可修復的 gate 失敗不是停手理由；該規約 path-gated，沒載入時照這個路徑直接讀。
+
+| 可觀察 predicate | 處理 |
+| --- | --- |
+| 可修復：錯誤具名到檔（與行），修法在本次 scope 內（格式、lint、型別、import、root cause 明確的 test assertion；root cause 不明的 test 紅燈照 verify-gate-chain 的不確定 error 處理） | 讀錯誤、就地修、從 L0 重跑整輪 gate chain，全綠後續接原工作；test assertion 紅修受測實作，**NEVER** 放寬或改寫斷言求綠 |
+| `pnpm exec vp check` 只報格式 | 修前看 `git status --porcelain`，只對本次擁有的路徑跑 `pnpm exec vp check --fix <owned-paths>`（或 `pnpm exec vp fmt --ignore-path .oxfmtignore <owned-files>`；裸打 `vp fmt` 必帶 `--ignore-path`），修後看 `git diff` 確認變動只落在擁有的路徑，再從 L0 重跑整輪 gate chain。**NEVER** 跑不帶路徑的全 repo `--fix`，也 **NEVER** 還原別人改過的檔；報錯的檔不歸你就回報持有者 |
+| spec 矛盾（verify-gate-chain 的 specification error） | 立刻退回規格層 owner（`ROLLBACK:<artifact>`），不在執行層改「做什麼」 |
+| 不可修復：環境經 self-fix 仍不可解、權限不足、需人拍板、修法在 scope 外、同一 error 連續 2 輪不收斂 | 照上方第 5 點停手並回報具體 blocker |
+
+**NEVER** 把可修復的 gate 失敗當成收工、`--complete failed` 或 `--complete blocked` 的理由；brief 或 relay prompt 寫「gate 失敗即停」時，也只指不可修復那一類。
+
 ## 4. 依產物推進 aixbdd
 
 依序處理第一個尚未完成的項目。每一步均先過第 2–3 節；不跳過 constitution、PM confirmation 或 task 解鎖。
@@ -132,7 +152,7 @@ transport 讀當前 runtime 的 `wt/SKILL.md`，可用 Form 3 `/wt <slug>: /<dow
 | 尚無 spec／新行為 | specify 產 spec 與 requirements checklist |
 | spec 有高影響未決需求 | clarify-over-specs／clarify，只問未決事項 |
 | acceptance 未完成 | spec-by-example 產本 package 的 `features/acceptance/**` |
-| 本次有 UI，缺需求確認用的設計、雛形或 review | 適用 design／impeccable／review owner 依 spec 產出可供 PM 確認的證據；此時不呼叫需要 system-analysis 的 ui-plan |
+| 本次有 UI，缺需求確認用的設計、雛形或 review | impeccable 依 spec 產出可供 PM 確認的證據：`shape` 釐清需求 → new-work 方向回合（impeccable 自己開本機決策頁）；方向說不清用 `live`／`generate` 出變體；不確定下一步跑無參數 `impeccable` 照它的推薦。此時不呼叫需要 system-analysis 的 ui-plan |
 | techstack、測試策略或系統端未決 | technical-research；既有 techstack 明載且本次未改判即沿用，不為三題格式重問 |
 | Gherkin 與適用 UI 證據已完成，PM 未確認 | 展示可審查結果與具體確認問題，等待使用者；未確認不進 system-analysis |
 | PM 已確認、分析未完成 | system-analysis，按需承接 api-plan／data-plan |
@@ -141,6 +161,8 @@ transport 讀當前 runtime 的 `wt/SKILL.md`，可用 Form 3 `/wt <slug>: /<dow
 | DSL／Gherkin 與本次 delta 尚未對齊 | dsl-refine／gherkin-and-dsl 與適用 truth owner |
 | 缺 tasks 規劃，或既有規劃與確認後的 delta 不一致 | tasks 產出／更新規劃；既有 task 尚未實作不代表缺規劃 |
 | 規劃已對齊，存在已解鎖且尚未完成的 task | implement，依 task 類別承接 bdd 等 owner；完成後進驗證。2 個以上已解鎖且彼此無依賴 → 先過第 0 節 parallel-slices |
+| task 的改動含 entry point（`server/{api,routes,middleware,tasks}/`、pages、Next route handler），尚未跑 evlog map gate | 標 task done 之前跑 `node .github/actions/evlog-map-gate/local.ts`（app 根在子目錄的 repo 用該子目錄下那一支）：它照 CI workflow 的 mode／cwd 跑 CI 同一道 gate，未 commit 與 untracked 的檔也算本次觸及；CI 沒有這道 gate 時它回報跳過。紅燈照輸出逐一補插樁、重跑到綠才標 done |
+| UI task 實作完成、尚未走修改閉環 | 依 `proactive-skills.design-checkpoint` 跑閉環：Stage 1 `critique`＋`audit` → Stage 2 依 P0–P3 問題族跑專科指令、`polish` 關閉快照 → Stage 3 沉澱（`document`／`extract`／`ignore.md`），寫 `design-review.md`；三階段完成才標 task done |
 | 尚有未完成 task，但全被阻塞 | 依相依性處理前置 task／具體 blocker，不重建 tasks 或宣稱完成 |
 | tasks 完成 | 第 5 節驗證、適用 review、commit／交付流程；檢查未結工作 |
 
@@ -153,6 +175,10 @@ Lifecycle package 的 `plan.md` 由 lifecycle owner 持有；分析寫 `system-a
 Aixbdd 決定需求、Gherkin、DSL、設計與 tasks；SpecFormula 執行已對齊的驗收。按當前 project techstack、capability 與 SpecFormula 契約選擇已安裝 runner；只用 aixbdd 且已明確採另一 BDD runner 的專案沿用其決策，不無條件改堆疊。
 
 對採 SpecFormula 的專案，先由 technical-research／dsl-refine／implement／bdd 等 owner 依第 2 節 § SpecFormula 契約載入點 把必要 DSL、ISA、adapter 與驗收命令接到真實被測入口，再執行該命令。步驟未定義、缺 runner 或 acceptance_command 時，由對應 owner 修復後重驗；不拿語法 parser、空 step 或永遠成功的替身充當驗收。
+
+有 UI 變更的工作交付前做沉澱檢查：本輪動到 token 來源（`app.config.ts` 的 `ui`、CSS `:root` 變數、Tailwind theme）或建立新元件慣例時，DESIGN.md 已由 `document` 更新，或 `design-review.md` 寫明「本輪無 design system 變更」；受影響畫面的每個 P0／P1 都有可核對的 polish／明確 close、重跑 critique 歸零或使用者確認的 ignore 證據。commit 0-B.1 對已採用 impeccable 的 repo 會唯讀核對；`closed: true` 或指紋不同本身不會放行。
+
+本工作動過 entry point 時，commit 與 `gh pr ready` 之前各以整份 branch diff 再跑一次 `node .github/actions/evlog-map-gate/local.ts`；push 時 pre-push 也跑同一支。三者與 CI 同一份判定，差別只在掃的是本機的樹（未 commit 的改動也會被掃到）。
 
 分別呈現「Gherkin 可解析」「步驟已綁定／readiness 通過」「實際案例通過」「人工驗收已確認」。只有對應證據存在才能宣稱該項完成；失敗回到 owner 修復，scope 變更回需求 owner。不得為變綠自行降低已確認的驗收標準。
 

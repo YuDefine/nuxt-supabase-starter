@@ -17,6 +17,18 @@ effort: xhigh
 
 本 skill 是 loop 四型分類中的 **proactive loop**——trigger 交給 `runner.sh` 或 `/loop`，工作清單交給 scan 自己找。四型分類與通用方法論見 cookbook `vendor/snippets/loop-engineering/`。
 
+## Host 支援
+
+兩種跑法：**in-session**＝使用者自己開的 host session 載入本 skill，在該 session 內推進；**unattended**＝`runner.sh` 每輪起一個全新 host process，沒有人在場。
+
+| Host | in-session | unattended（`runner.sh`） |
+| --- | --- | --- |
+| Claude | 支援（含 `/loop`、`ScheduleWakeup` 續跑） | 支援：`runner.sh` 只投影到 Claude |
+| Codex | 支援：在該 session 內逐輪跑迴圈，沒有跨閒置的 durable wakeup（host 綁定見 Codex adapter 段） | **不支援**：agent NEVER 以 codex CLI 起 worker（`rules/core/agent-routing.pi-watch-protocol.md`），`runner.sh` 在 Codex session 內直接拒跑 |
+| Cursor | 只支援 attended 單輪（host 綁定見 Cursor adapter 段） | **不支援**：沒有經驗證的載體，Cursor 池被安全邊界拒派；`runner.sh` 在 Cursor session 內直接拒跑 |
+
+「不支援」的那一格要回報不可用並保留 work 身分，**NEVER** 改用別端 launcher 代跑（[[TD-445]]）。
+
 **沒有「走哪一支」的判定。** repo 有沒有 `specs/plans/`、待辦是 plan package 還是 tech-debt 條目，都由 Step 2 的 scan 結果決定路由——沒有 `specs/plans/` 的 repo 掃出來的 `plans` 段就是空的，**這是正常的，不是 scan 失敗**。
 
 核心 contract：**每次被叫起來，把待辦盡可能推到「已完成」「可驗收」或「已備妥決策選項」狀態。能自主決策的自主完成；必須人拍板的 NEVER 直接 skip——MUST 走 § Decision packaging 推進到「一句話就能答」的狀態。**
@@ -25,7 +37,6 @@ effort: xhigh
 
 - ✅ 「`<change>` 標 🟢 ready-for-review（寫入 HANDOFF）」「TD-317 已修並 commit `a1b2c3d`」— 報告事實
 - ✅ 「本輪處理 3 items：2 completed / 1 packaged。fingerprint 已變，續跑」— 報告進度
-- ❌ 「待 user 驗收：請執行 `pnpm review:ui`」— user call-to-action
 - ❌ 「待 user 決定：TD-402 要用 A 還是 B？」— 決策要落 `awaiting[]` + HANDOFF `## ⏳ Awaiting Charles`，不是 chat 敘述（attended 下由 Step 2.7 用 `AskUserQuestion` 端出去問）
 - ❌ 「下一輪可推進：1. ... 2. ...」— 列選單讓 user 決定
 
@@ -48,6 +59,7 @@ Every host must preserve the same scan, classification, ownership, approval, dis
   **裝載準則**：cap 之內優先把**同一 Location／同一 skill** 的 item 併進同一輪。理由是成本不是整齊——runner 每輪起全新 process，而 git snapshot 每輪變動使 always-load 段整段重付一次冷載（約 90k effective tokens），輪數減半即該固定成本減半（[[TD-433]]，前提實測 median 18.6 分 < 1h cache TTL）。**NEVER** 反過來為了湊滿 5 個而把不相干的 item 拉進同一輪：cap 是上限不是配額，湊數只會讓單輪失敗牽連無關 item。
 - `--runner-child`（只由 `runner.sh` 帶）：模型可見的 runner child 身分 marker；`WORK_LOOP_RUNNER_CHILD=1` 是同一身分的機械補強。
 - `--linked-dispatch-mode foreground`（只由 `runner.sh` 帶）：runner child 內每一筆 decision-linked Pi dispatch 都是同輪 dependency，依 Step 1.5 的 foreground 契約執行；不帶時沿用一般 async watch protocol。
+- `--scan-helper-command <cmd>`／`--rotate-helper-command <cmd>`（只由 `runner.sh` 帶）：runner 以解析後的 clade checkout（`$CLADE_HOME`）展開成絕對路徑的完整命令，逐字等於它 `--allowedTools` 放行的那兩條 Bash invocation。runner child 跑 scan／closedBloat rotate 時 **MUST** 逐字用這兩個值，**NEVER** 改用下文的 `${CLADE_HOME:-…}` 等價形狀——字面不同就不在 allowance 內，headless child 沒人能批准。
 - `--min-wakeup-seconds <n>`（僅 Claude runner adapter 參數；其他 host 依自身 schema 與 harness wait 界限）：本輪**每一個** `ScheduleWakeup` / `Monitor` 的 interval **MUST ≥ n**。帶了它就以它為準，**NEVER** 因為「這次只等一下下」用更短的值——短輪詢買不到 notification 沒給的東西（Step 0 § (d) 已逐字禁止輪詢進度）。不帶時各處原有的 interval 建議照舊。
 - 使用者說「自動推」「把待辦跑完」「持續做」「不要停」「無人值守」→ 等同要求 continuous（見下）。
 
@@ -168,7 +180,7 @@ hard rule，**NEVER** 憑印象起跑——(a) 的 `nohup` 禁令與 (e) 的 Mon
 
 ### 開場准入判定（headroom 之後、取鎖與 scan 之前；**每一輪**都跑，含 runner child 的每一輪，不是只有第一輪）
 
-跑 `node ~/offline/clade/vendor/scripts/work-loop-verdict.ts --repo "$(git rev-parse --show-toplevel)"`（attended 加 `--attended`），讀 `admission.mode` 一欄分流：
+跑 `node "${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/work-loop-verdict.ts" --repo "$(git rev-parse --show-toplevel)"`（attended 加 `--attended`），讀 `admission.mode` 一欄分流：
 
 | `admission.mode` | 動作 |
 | --- | --- |
@@ -196,7 +208,7 @@ hard rule，**NEVER** 憑印象起跑——(a) 的 `nohup` 禁令與 (e) 的 Mon
 單輪可能耗時數小時，無鎖會讓下一次觸發疊上第二輪。進 Step 1 前 **MUST** 跑：
 
 ```bash
-node ~/offline/clade/vendor/scripts/work-loop-lock.ts acquire
+node "${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/work-loop-lock.ts" acquire
 ```
 
 | exit | 輸出 | 動作 |
@@ -207,8 +219,8 @@ node ~/offline/clade/vendor/scripts/work-loop-lock.ts acquire
 
 **Iron Law：鎖檔只由這支 script 讀寫。違反字面就是違反精神**——「用 Write tool 補一個就好」「script 跑不動先手寫一個」都不算遵守。
 
-- **heartbeat**：**每一次**寫 `.clade/work-loop/state.json` 的同時都 MUST 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts refresh --session <id>`（Step 1 / Step 5 **每一次**收割 / Step 7 各一次，不是只在 Step 7 刷）。窗口 45 分鐘
-- **釋放**：正常 terminal / attended reconciliation 才 MUST 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts release --session <id>`；in-flight ledger > 0 或 runner orphan quarantine 期間 **NEVER** 釋放。runner 保留持久 lock 檔供診斷，但 heartbeat/pid lease 仍可能在 process 退出後失效；`orphan-quarantine.json` 的 startup gate 才是禁止自動 retry 的機械保證。只有 attended 將每筆 ownership 標成 terminal/cancelled、清空 `inFlight`，再移除 marker 並 release lock。
+- **heartbeat**：**每一次**寫 `.clade/work-loop/state.json` 的同時都 MUST 跑 `node "${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/work-loop-lock.ts" refresh --session <id>`（Step 1 / Step 5 **每一次**收割 / Step 7 各一次，不是只在 Step 7 刷）。窗口 45 分鐘
+- **釋放**：正常 terminal / attended reconciliation 才 MUST 跑 `node "${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/work-loop-lock.ts" release --session <id>`；in-flight ledger > 0 或 runner orphan quarantine 期間 **NEVER** 釋放。runner 保留持久 lock 檔供診斷，但 heartbeat/pid lease 仍可能在 process 退出後失效；`orphan-quarantine.json` 的 startup gate 才是禁止自動 retry 的機械保證。只有 attended 將每筆 ownership 標成 terminal/cancelled、清空 `inFlight`，再移除 marker 並 release lock。
 - **Budget 計數器歸零（定義「一次 run」的唯一位置）**：`acquire` 回 `acquired` 或 `took-over` = **一次新的 run 開始** → 本輪 Step 7 寫 state 時 MUST 把 `subagentsSpawned` **歸零重新起算**；回 `reentrant` 或 `continued` = 同一個 run 續跑 → **沿用**既有值，**NEVER** 歸零。這讓 Step 6.2 budget proxy 的兩半（`subagentsSpawned` 與 `lock timestamp`）字面共用同一個窗口定義
 
   **`continued` 是 runner 模式的常態**（第 2 輪起每一輪都回它），**NEVER 讀成 `took-over`**。這一格讀錯會讓 Step 6.2 的 budget proxy 兩半同時變成死碼——成因、TD-424 的析取判準、以及「為什麼歸零不能掛在 `runner.sh` 起跑」都在 [reference/lock.md](reference/lock.md)，**改動 `subagentsSpawned` 歸零時機前 MUST 先讀它**。
@@ -219,7 +231,7 @@ node ~/offline/clade/vendor/scripts/work-loop-lock.ts acquire
 | --- | --- |
 | 「sandbox 擋掉 `$$`，用 Write tool 補一個鎖檔就好」（round 33） | 手寫的鎖第一行是**已結束的那個 Bash call 的 pid**，寫進去的當下就是死的 |
 | 「pid 欄填 0 或哨兵值，反正判準會走 DEAD 分支」（round 30 / 36） | 那正是「鎖從未擋過任何一次」的成因，不是它的解法 |
-| 「這支 script 在這個 repo 找不到，先跳過鎖」 | 找不到 = 路徑打錯。先 `ls ~/offline/clade/vendor/scripts/work-loop-lock.ts` 確認，**NEVER** 無鎖開跑 |
+| 「這支 script 在這個 repo 找不到，先跳過鎖」 | 找不到 = 路徑打錯。先 `ls ${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/work-loop-lock.ts` 確認，**NEVER** 無鎖開跑 |
 
 **Red Flag**：正要對 `.clade/work-loop/lock` 下 Write / Edit / `printf` / `echo` —— 停手，回到上面那條指令。
 
@@ -372,7 +384,8 @@ predicate）、代號 NEVER 回收再用的理由、以及 runner child 為什�
   準備自己跑 ≥3 條唯讀指令、或自己讀 ≥5 個檔／>500 行長文件，就已經命中 → 派 `--model gemini --effort high`。
   **NEVER** 因「順手跑掉比較快」略過查表
 - **原判 Claude `sonnet`／`haiku` 等級的委派 MUST 走 delegate-sub 鏈**：`--model grok-xai --effort xhigh`
-  → `grok-cursor` xhigh → GPT-6 Sol xhigh → 鏈尾 `dispatch-fallback`；Sonnet／Haiku 本身已禁用，准入判準見該 §
+  → `grok-cursor` xhigh → 鏈尾（readonly 交 `dispatch-fallback`、mutation 交 `sonnet-implementer`）；Grok 品質不合格升一次
+  `sonnet-implementer`。Haiku 與 Sonnet 5 以下已禁用，`general-purpose`＋`model: sonnet` 不是合格載體，准入判準見該 §
 - **每一次 dispatch MUST 帶 `--route` 與 `--tier-basis`**（各缺就 exit 1），重試帶 `--retry-of <label>`。
   **NEVER** 不確定就填 `manual`／`table-row`——兩者都與「判定根本沒發生」事後不可區分。
   `--tier-basis` 各值與對 `--model` 的約束見該 § 的 `--tier-basis` 段；宣告與實際檔位矛盾時
@@ -399,9 +412,9 @@ Foreground 路徑**不**寫 `inFlight`、不建 background task、也不 arm kee
 
 ```bash
 # runner child MUST 從 $ARGUMENTS 的 --scan-helper-command 取完整命令並逐字執行；那是
-# runner.sh --allowedTools 放行的 Bash invocation（scan helper；closedBloat 另放行 rotate-closed-bloat.ts）。命令以 cwd 推導 repo，故不得把 repo
+# runner.sh --allowedTools 放行的 Bash invocation（scan helper；closedBloat rotate 同理取 --rotate-helper-command）。命令以 cwd 推導 repo，故不得把 repo
 # path（尤其含空白、引號或換行）插進 prompt / allowance。非 runner child 才用下列等價形狀。
-node "$HOME/offline/clade/vendor/scripts/work-loop-scan.ts"
+node "${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/work-loop-scan.ts"
 # 需求來源由下方 § 需求來源查詢 的 carrier 掃描與 flow status 讀取。
 ```
 
@@ -410,7 +423,7 @@ helper 在單一 Node process 內完成 handoff-scan → repo-local 同目錄 te
 `WORK_LOOP_SCAN_MALFORMED` / nonzero 都視為 scan 失敗，既有 latest 不得被覆蓋。完整理由見
 [reference/run-modes.md](reference/run-modes.md) § scan helper 的原子邊界。
 
-**同一輪內 NEVER 為了「找不到上一份輸出」重跑 scan**：要回頭看就讀 `scan-latest.json`，只要摘要就跑 `node ~/offline/clade/vendor/scripts/work-loop-summary.ts`。本輪合法的重跑**只有兩個**時機：① `tech-debt-closed-bloat` warn 時跑完 `rotate-closed-bloat.ts` 之後；② Step 5 收割後的 re-scan。
+**同一輪內 NEVER 為了「找不到上一份輸出」重跑 scan**：要回頭看就讀 `scan-latest.json`，只要摘要就跑 `node "${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/work-loop-summary.ts"`。本輪合法的重跑**只有兩個**時機：① `tech-debt-closed-bloat` warn 時跑完 `rotate-closed-bloat.ts` 之後；② Step 5 收割後的 re-scan。
 **NEVER 因此改成「N 輪跑一次」**：scan 是路由輸入，跳過的那一輪是盲跑；要省的是**同一輪內的重複**，不是輪次覆蓋率。
 
 **失敗 fallback**：script 不存在或回 error、**或 `SCAN-MISMATCH` / `MISSING`** → **STOP**，寫 HANDOFF 一行 `work-loop: scan failed at <ISO>`，跑 `work-loop-lock.ts release --session <id>` 後結束。`SCAN-MISMATCH` 表示讀到別 repo 的掃描結果（unattended 下危害最大：無人在旁審視就照它推進待辦）。**NEVER** 憑記憶或 HANDOFF 既有 narrative 猜待辦狀態。
@@ -441,7 +454,7 @@ helper 在單一 Node process 內完成 handoff-scan → repo-local 同目錄 te
 
   **`blocked-attended-only` 一律跳過**（unattended）：它的定義就是「本迴圈拿不到出口」，撈進 candidate list 只會每輪重新判定一次再放棄。attended 模式照撈——那正是它等的東西。判準與防濫用見 clade `.claude/rules/local/tech-debt-hygiene.md` § Invariant 12。
 
-  **closedBloat 自動 rotate（不佔 5-item cap）**：`techDebtHygiene.checks` 含 `name: tech-debt-closed-bloat` 且 `status: warn` 時，**MUST** 跑 `node "$HOME/offline/clade/vendor/scripts/rotate-closed-bloat.ts"`。stdout `retired` 或 `noop` → 不寫檔、不重 scan。其餘非 `noop` 再 scan 一次。**NEVER** 把 rotate 當 candidate、**NEVER** `AskUserQuestion`。`work-loop-scan.ts` 本身 NEVER 寫檔。
+  **closedBloat 自動 rotate（不佔 5-item cap）**：`techDebtHygiene.checks` 含 `name: tech-debt-closed-bloat` 且 `status: warn` 時，**MUST** 跑 `node "${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/rotate-closed-bloat.ts"`（runner child 改逐字跑 `$ARGUMENTS` 的 `--rotate-helper-command`）。stdout `retired` 或 `noop` → 不寫檔、不重 scan。其餘非 `noop` 再 scan 一次。**NEVER** 把 rotate 當 candidate、**NEVER** `AskUserQuestion`。`work-loop-scan.ts` 本身 NEVER 寫檔。
 
   ```bash
   wc -c docs/tech-debt.md   # 上面兩個數字的來源。主檔隨 rotate / 新增增減，複跑取當前值
@@ -666,7 +679,7 @@ attended mode 且真的選不出來 → 依 Step 0 Iron Law **MUST `AskUserQuest
 - **Lifecycle 兩階段綁定（MUST）**：dispatch 前先把 intent 寫入 state：`inFlight={agent,item,dispatchedAt,taskId:null,owner,deadline,lifecycle:"dispatching"}`。`host background dispatch operation` 回傳後，**同一 assistant turn** 原子綁定真實 `taskId`、確認 owner / deadline、改 `lifecycle:"pending"`，再 arm `ASYNC_KEEPALIVE_CONTROL`。dispatch 失敗則移除 intent或標 `lifecycle:"dispatch-failed"`，**NEVER** 留下假 ownership。無 task id 的 Agent / Monitor / Workflow 保留 `taskId:null`，但 MUST 寫可由 `host owner cancellation operation` 操作的 owner ref 與 deadline，並 arm 逐字填 `task=none` 的 `ASYNC_KEEPALIVE_CONTROL`。Pi pre-scan owner 固定 `pi-watch`。
 - **Per-item task 追蹤（MUST）**：每條 dispatch item MUST 先 `TaskCreate`（subject 用 `<item>: <狀態> → <動作>`），dispatch 時標 `in_progress`，完成/skip/blocked 立即標 `completed`。**NEVER** 只建概括性收割 task——user 看 task list 判斷 loop 在幹嘛，概括 task 提供零資訊
 - **Dev server 協調**：evidence collection 需要 dev server 時**主線自行協調**，**NEVER** 把 port 被佔當 user 協調事項跳過。池滿時先跑 `wt-helper reclaim-stale`（三層機械判定見 [[worktree-default]] §6：stale 自動釋放 dev-port record → live 不動 → unknown 才問 user / packaging），reclaim 後仍滿才進人工分流
-- **Workflow model 感知**（archive 後 push 前 MUST）：讀 `~/offline/clade/registry/consumers.json` 的 `workflow_model`——`trunk-based` 直接 push；`pr-merge-based` **NEVER 直推 main**，改 push feature branch + `gh pr create --fill`；查不到當 `pr-merge-based` 保守處理
+- **Workflow model 感知**（archive 後 push 前 MUST）：讀 `${CLADE_HOME:-$HOME/offline/clade}/registry/consumers.json` 的 `workflow_model`——`trunk-based` 直接 push；`pr-merge-based` **NEVER 直推 main**，改 push feature branch + `gh pr create --fill`；查不到當 `pr-merge-based` 保守處理
 - **Commit 紀律**：每個 item 保存 scoped checkpoint；主線驗收並登記就緒，4 件 distinct work id 批次跑一次完整 `/commit`（0-A + `Via: /commit`），正式 commits 仍按功能分組。手動要求無最低件數，dependency／drained／stop 提前結批。**NEVER** 用 work-loop 當跳過 `/commit` 的理由。卡人工檢查 → packaging。登記及清理必讀 commit skill 的 `batch.md`；worker checkpoint 見 [guardrails.md](reference/guardrails.md) § C
 - **Error handling**：
   - **Dispatch failure**（skill 報錯 / infra 不可達）→ log + skip + `failStreak` +1，繼續下一個
@@ -701,7 +714,7 @@ attended mode 且真的選不出來 → 依 Step 0 Iron Law **MUST `AskUserQuest
 Step 0 那支 verdict 已經算完了。加上本輪的 scan JSON 再跑一次，直接讀兩個欄位：
 
 ```bash
-node ~/offline/clade/vendor/scripts/work-loop-verdict.ts \
+node "${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/work-loop-verdict.ts" \
   --repo "$(git rev-parse --show-toplevel)" --scan <本輪 scan JSON 路徑>
 ```
 
@@ -744,7 +757,7 @@ node ~/offline/clade/vendor/scripts/work-loop-verdict.ts \
 本輪為**生產輪**，若下列 P1–P4 **任一**成立。**判定跑 script，NEVER 手跑 git diff 分析**：
 
 ```bash
-node ~/offline/clade/vendor/scripts/work-loop-verdict.ts \
+node "${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/work-loop-verdict.ts" \
   --repo "$(git rev-parse --show-toplevel)" --round-start-sha <round-start 基線 sha> \
   --prev-state <本輪 Step 1 讀到的 state 副本路徑>
 ```
@@ -821,7 +834,7 @@ node ~/offline/clade/vendor/scripts/work-loop-verdict.ts \
 
 ```bash
 ORIGIN_ID="${CLADE_DISPATCH_ORIGIN_ID:-wl-r<N>}"
-ROUTING_SUMMARY="$(node ~/offline/clade/vendor/scripts/work-loop-routing-summary.mjs --origin-id "$ORIGIN_ID")" || \
+ROUTING_SUMMARY="$(node "${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/work-loop-routing-summary.mjs" --origin-id "$ORIGIN_ID")" || \
   ROUTING_SUMMARY="{\"schemaVersion\":1,\"origin\":\"work-loop\",\"originId\":\"$ORIGIN_ID\",\"error\":\"summary-failed\"}"
 printf 'routing summary: %s\n' "$ROUTING_SUMMARY"   # runner round log 直接可見；zero 也照印
 
@@ -836,7 +849,7 @@ node -e '
   }
   fs.writeFileSync(process.argv[1], JSON.stringify(patch))
 ' "$PATCH" '<N>' '<ISO>' '<本輪一句話>' "$ROUTING_SUMMARY"
-node ~/offline/clade/vendor/scripts/work-loop-state-write.ts --patch "$PATCH"
+node "${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/work-loop-state-write.ts" --patch "$PATCH"
 rm -f "$PATCH"
 ```
 
@@ -856,7 +869,7 @@ patch 語義：**給值＝覆蓋、給 `null`＝刪除、沒提到＝原值不�
 `STATE_CORRUPT_REFUSED` 與 `STATE_ROUND_REGRESS` 的處置方向相反，憑印象選一個就是把 N 輪 bookkeeping
 賭在記憶上。
 
-寫完 **MUST** 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts refresh --session <lockSessionId>`。鎖的 heartbeat 只在 Step 1 / Step 5 / 本步被刷，漏掉一次就讓還在跑的這一輪被下一輪判成死掉並接手——失敗長相是兩個 loop 同時跑、state 互相覆寫，沒有任何錯誤訊號。
+寫完 **MUST** 跑 `node "${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/work-loop-lock.ts" refresh --session <lockSessionId>`。鎖的 heartbeat 只在 Step 1 / Step 5 / 本步被刷，漏掉一次就讓還在跑的這一輪被下一輪判成死掉並接手——失敗長相是兩個 loop 同時跑、state 互相覆寫，沒有任何錯誤訊號。
 
 **`decisions` 的內容 NEVER 在本步才寫**——Step 2.7 (c) 收到答案當下就已落檔。本步只是把 Step 2.7 之後又變動的欄位一併寫回。
 
@@ -919,6 +932,6 @@ git show --stat HEAD | tail -3   # 驗 scope；出現 .ts/.vue/.sql 等 → STOP
 背景工作與收割是 `Bash(run_in_background)` ＋ `TaskOutput` ／ `TaskStop`、喚醒是 `ScheduleWakeup`
 ／ `Monitor`、worktree 派工是 `/wt`、截圖收集是 Pi `--table-row screenshot-review-verify`。
 
-**沒有經驗證的 Codex／Cursor 對應載體，所以那兩端目前不在本 skill 的 audience 內。** 需要在
-那些 runtime 推進待辦時回報不可用並保留 work 身分，**NEVER** 靜默改用 Claude launcher 代跑。
-共用核心與逐端 host adapter 的拆分是 [[TD-445]] 的交付範圍，不在本檔用措辭預先宣稱。
+**無人值守（`runner.sh`）只有 Claude 這一端。** Codex 只支援 in-session、Cursor 只支援 attended
+單輪（見共用 SKILL.md § Host 支援）；`runner.sh` 不投影到那兩端，在那兩端的 session 內也直接拒跑。在那些 runtime 要連續推進時回報不可用並保留
+work 身分，**NEVER** 靜默改用 Claude launcher 代跑。

@@ -89,9 +89,12 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
+        # 釘死 CLI 版本，NEVER latest：下一步 grep `supabase status -o env` 的 ANON_KEY／SERVICE_ROLE_KEY
+        # key 名，CLI 改輸出格式就會拿到空 key。2.117.0 是寫下時維護者本機的版本，repo 內沒有其他檔機械同步它；
+        # 升版時先確認上述 key 名仍在，本機重產 database.types.ts 並在同一個 commit 改這裡。
+        uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
         with:
-          version: latest
+          version: 2.117.0
 
       - name: Start Supabase
         id: supabase

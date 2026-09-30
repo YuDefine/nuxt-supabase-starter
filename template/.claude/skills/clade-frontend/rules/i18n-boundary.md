@@ -13,7 +13,7 @@ paths: ['DESIGN.md', 'docs/decisions/**', 'app/**/*.{vue,ts,tsx,jsx}', 'packages
 
 當 i18n 覆蓋範圍是刻意決策時，consumer **MUST** 同時留下兩層記錄：
 
-1. `docs/decisions/YYYY-MM-DD-i18n-scope-boundary.md` ADR：記錄決策背景、取捨、翻譯責任與重評條件。
+1. i18n scope boundary ADR：記錄決策背景、取捨、翻譯責任與重評條件。落點依 [[knowledge-and-decisions]]（lifecycle repo：它約束的 truth 單位；未遷移 consumer：當下工作的 plan／spec，**NEVER** 在 `docs/decisions/` 開新檔）；既有的 `docs/decisions/*-i18n-scope-boundary.md` 可原地更新。
 2. `DESIGN.md` 的 `## i18n Scope Boundary` 專節：讓日常 UI 實作可直接查到目前邊界。
 
 兩層記錄都 **MUST** 明列：

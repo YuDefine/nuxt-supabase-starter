@@ -59,7 +59,7 @@ Consumer 的 CSP = baseline + 所有用到的 integration recipes 聯集。`scri
 | Supabase（client-side） | `@nuxtjs/supabase` 且 client 有 `useSupabaseClient()` | `connect-src`: `https://*.supabase.co` 或明列 self-hosted host（只在 server 存取則不加） |
 | Google OAuth / Identity Services | `vue3-google-login` 或 GIS 套件 | `script-src`: `https://accounts.google.com/gsi/client`；`connect-src` / `frame-src`: `https://accounts.google.com` |
 | LINE OAuth / LIFF | LINE Login / LIFF SDK 或 `line.me` 出現在 nuxt.config | `connect-src`: `https://*.line.me`, `https://*.line-scdn.net`, `https://*.line-apps.com` |
-| @nuxt/content v3（WASM） | `@nuxt/content` v3+ | `script-src`: `'wasm-unsafe-eval'`，擴大 XSS 攻擊面，**MUST** 記 ADR（`docs/decisions/YYYY-MM-DD-csp-wasm-unsafe-eval.md`） |
+| @nuxt/content v3（WASM） | `@nuxt/content` v3+ | `script-src`: `'wasm-unsafe-eval'`，擴大 XSS 攻擊面，**MUST** 記 ADR（主題 `csp-wasm-unsafe-eval`，落點依 [[knowledge-and-decisions]]） |
 | Dev HMR（tunnel 環境） | `.env*` 有 `TUNNEL_HOSTNAME` | dev-only `connect-src`: `...(import.meta.dev ? ['ws:', 'wss:'] : [])`（cookbook `~/offline/clade/vendor/snippets/nuxt-security-dev-csp/`） |
 
 ## CSRF 例外（`routeRules.csurf`）
@@ -116,4 +116,4 @@ Consumer `runtime: cf-workers` 時：
 
 ## 升級與 drift 檢查
 
-nuxt-security 大版升級時先在一個 consumer 試水，確認 baseline 欄位與 `routeRules.csurf` 語法仍適用；有 breaking change 就同步更新本 rule 並開 ADR。偏離 baseline 的任何欄位 **MUST** 記錄到 `docs/decisions/YYYY-MM-DD-csp-<topic>.md`。
+nuxt-security 大版升級時先在一個 consumer 試水，確認 baseline 欄位與 `routeRules.csurf` 語法仍適用；有 breaking change 就同步更新本 rule 並開 ADR。偏離 baseline 的任何欄位 **MUST** 記 ADR（主題 `csp-<topic>`），落點依 [[knowledge-and-decisions]]（lifecycle repo：它約束的 truth 單位；未遷移 consumer：當下工作的 plan／spec，**NEVER** 在 `docs/decisions/` 開新檔）。

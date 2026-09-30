@@ -70,6 +70,8 @@ starter_preset:
 db_host:
 register_fleet:
 repo_id:
+repo_visibility:        # private（預設）| public
+github_repo_plan:       # provision-github-repo ensure 不帶 --yes 的輸出：create 或沿用既有
 starter_overrides:
 agent_targets:
 workflow_model:
@@ -79,7 +81,17 @@ business_activity:
 optional_conventions:
 ```
 
-`repo_id` 在 `register_fleet=yes` 時必填。existing repo 優先由 `git remote get-url origin` 推導。建立 GitHub repo、雲端資料庫、部署專案或 secrets 都是額外外部副作用，只有使用者明確要求才執行。
+`repo_id` 在 `register_fleet=yes` 時必填。existing repo 優先由 `git remote get-url origin` 推導。
+
+`new` mode 且 `register_fleet=yes` 時，GitHub repo 是 intake 的一部分（題目與預設見 `references/intake.md` § GitHub repo）：出 intake sheet 之前先跑一次**不帶 `--yes`** 的計畫，把輸出填進 `github_repo_plan`：
+
+```bash
+node "$CLADE_HOME/scripts/provision-github-repo.ts" ensure --repo-id <owner/name> --visibility <private|public>
+```
+
+它只做唯讀的 `gh repo view`：repo 不存在印 `gh repo create …`；已存在但 owner 或可見度與答案不符就 exit 2，改 intake 再跑。雲端資料庫、部署專案、secrets 仍是額外外部副作用，只有使用者明確要求才執行。
+
+**確認點**：使用者確認 intake sheet（含 `github_repo_plan`）＝授權本 skill 建立或沿用該 repo、寫可見度快取、開 delete-branch-on-merge、設 origin 並推初始 commit。確認之前 **NEVER** 帶 `--yes` 跑 `provision-github-repo`；確認之後 **NEVER** 再為同一份 intake 另問一次。
 
 ### 溝通期 BOM（尚無 consumer manifest）
 
@@ -123,16 +135,27 @@ UI／有前端（`@nuxt/ui`、或 Nuxt 且有 pages）：BOM 出完後 Read `ref
 
 ### `new`
 
+`register_fleet=yes` 時照這個順序（外部副作用都在 § 1 確認點之後）：
+
+1. `node "$CLADE_HOME/scripts/provision-github-repo.ts" ensure --repo-id <owner/name> --visibility <答案> --yes`——建立或沿用 repo、開 delete-branch-on-merge、把可見度寫進 `$CLADE_HOME/.spectra/repo-visibility-cache.json`。首次 `pnpm install` 的可見度門與 Step 4 的 `repo-merge-settings` 都靠這一步。
+2. starter CLI（下表）帶 `--no-install`：starter 內建的 install 排在 managed 登記之前。
+3. `node "$CLADE_HOME/scripts/provision-github-repo.ts" origin --consumer <target-path> --repo-id <owner/name> --yes`——設 origin。hub-sync 以 origin 反查 registry 的 `repo_id` 判 consumer identity，沒有 origin 首投影會回 `Consumer identity unavailable`。
+4. `cd <target-path> && pnpm install`——首投影。hub-sync 依 scaffold receipt 認領 starter 帶來的投影檔並改寫成 release 版本，工作樹會出現一批投影 diff（v1.13.44 實測約 82 個 tracked 檔 modified）。
+5. 把這批投影 diff **MUST** 提交成初始歷史的一部分（明確 pathspec，`git status --porcelain` 列出的路徑；或 amend 進 starter 的 `chore: initial project scaffold`），**NEVER** 帶著它推 main——fresh clone 會少掉這些投影。
+6. `node "$CLADE_HOME/scripts/provision-github-repo.ts" push --consumer <target-path> --repo-id <owner/name> --yes`——推目前分支。工作樹不乾淨時它會拒推（exit 2）。
+
 依 intake 與當前 `question-catalog.ts`／CLI 組成一次 invocation。下表是組參數的條件，不是另一份 preset 判定器；實際 feature selection 與 flag 拼法以 starter 為準。
 
 | 條件 | 加入的參數 |
 | --- | --- |
 | 所有適用 catalog 題已有答案 | `--yes --preset <starter-preset> --agents <agent-targets>`，加 CLI 所需 project name／target path |
 | 最終 feature selection 使用需要主機選擇的 Supabase database | `--db-host <已回答的值>` |
-| `register_fleet=yes` | `--repo-id`、`--workflow-model`、`--business-activity`、`--dev-port`、`--deploy-track`，值均來自適用 catalog 題 |
+| `register_fleet=yes` | `--repo-id`、`--workflow-model`、`--business-activity`、`--dev-port`、`--deploy-track`、`--no-install`，值均來自適用 catalog 題。`--yes` 模式缺 `--workflow-model`／`--business-activity`／`--deploy-track` 任一個會回 `INTAKE_INVALID` |
 | `register_fleet=no` | `--no-register-consumer`；不傳 registration-only flags，這次只交付 scaffold，不能宣稱完成 fleet onboarding |
 
 呼叫前確認實際 CLI cwd 與解析後 target path 等於 intake，避免 `pnpm --dir` 改變相對目的地。使用 starter `template/package.json` 的 `packageManager` 指定版本；本機版本不同時透過已安裝的 package-manager 管理工具選對版本。版本不匹配不構成修改 starter pin、CI 或 lockfile 的授權。`deploy_track` 與 `db_host` 依適用 catalog 答案填入；沒有答案就不使用 `--yes`。
+
+release 不用手帶：managed intake 未給 `--release`／`--release-store` 時用 `$CLADE_HOME` 目前發佈版（`.claude-plugin/marketplace.json` 的 `metadata.version`）與主機 release store（`CLADE_RELEASE_STORE`，否則 `~/.cache/clade/release-store`），store 缺該版時從 `v<version>` tag 建進去（建置要 Node 24，不符回 `RUNTIME_INCOMPATIBLE`）。只有要釘別的版本或用隔離 store 才帶。新專案預設 `pinned`。
 
 需要 feature override 才加 `--auth` / `--db` / `--ci` / `--evlog-preset` / `--with` / `--without`。starter CLI 已負責組裝、dependency install、local `init-consumer.ts`、registry 登記（含 `--deploy-track` / `--db-runtime`）與初始 git；失敗時保留原始輸出，修 root cause 後重跑，不把半成品宣告成 consumer。
 
@@ -147,7 +170,7 @@ node "$CLADE_HOME/scripts/mint-gate-playbooks.ts" \
 
 產物：`docs/playbooks/README.md`（含 § Browser 分流）+ `PROGRESS.md` + `GATE-TODOS.md` + 01–05、HANDOFF `## User-gate board`。缺 pack 不算 bootstrap 完成。`bootstrap-project.ts` 已含這一步；本節是 skill 自己跑 scaffold 後、進 Step 4 之前的補齊。
 
-UI consumer（mode=`new`、有前端／impeccable 適用）scaffold／projection 成功後，agent **MUST 立刻自己載入** `references/impeccable-follow-up.md`（或內部 invoke hub-core `design` 的 new mode），照該檔 § 觸發點把追問清單補齊並寫檔。`/design new` 是 agent 可呼叫的 skill 入口，**不是**人類必打指令。缺項未問完、檔未寫齊 **不准**把本 skill 收成 `READY`。
+UI consumer（mode=`new`、有前端／impeccable 適用）scaffold／projection 成功後，agent **MUST 立刻自己載入** `references/impeccable-follow-up.md`，照該檔 § 觸發點把追問清單補齊並寫檔（PRODUCT.md 由 agent 自己跑 impeccable `init`、已有 UI code 缺 DESIGN.md 跑 `document`）。impeccable 是 agent 自己呼叫的 skill，**不是**人類必打指令。缺項未問完、檔未寫齊 **不准**把本 skill 收成 `READY`。
 
 ### `adopt`
 
@@ -184,7 +207,7 @@ exit code：`0` 全綠 / `1` 用法錯誤或 registry 登記失敗 / `2` 有 gat
 
 這支**不修業務 code**，只跑 gate 並如實回報。例外：mint 缺的 playbook pack，以及 readiness 紅時再跑一次 `sync-vendor --force`。**`hub:vendor` 成功訊息不算證據**，必須 `audit-consumer-readiness.ts --gate` exit 0。紅燈時修 root cause 後重跑，**NEVER** 把 `BLOCKED` 當成「大致完成」。
 
-`repo-merge-settings` 是 `FAIL` 時，repo 已存在且你有 admin 權限就跑它印出的 `gh repo edit <owner/repo> --delete-branch-on-merge` 再重跑（判準見 `github-flow` § 合併後分支回收）；`SKIP` 代表量不到（repo 尚未建立或 `gh` 未登入），補齊後重跑，**NEVER** 讀成已開。
+`repo-merge-settings` 是 `FAIL` 時，repo 已存在且你有 admin 權限就跑它印出的 `gh repo edit <owner/repo> --delete-branch-on-merge` 再重跑（判準見 `github-flow` § 合併後分支回收）；`SKIP` 代表量不到（repo 尚未建立或 `gh` 未登入），補齊後重跑，**NEVER** 讀成已開。`new` mode 走過 § 3 的 `provision-github-repo ensure --yes` 就已經開好。starter 的 managed intake 已登記 registry 時，這裡帶 `--skip-registry`。
 
 `semantic-inspection` 回報 required／variant／design 缺項時，依下一節完成 declarations 與既有 intake 決策，再重跑完整 onboarding CLI；不單獨補跑一項來替換整趟結果。
 
@@ -199,6 +222,8 @@ Step 4 的 `consumer-meta` 與 `bp-scan` 兩步只**產出建議**，採用與�
 不得把未拍板的 business variant 猜成 `compliant`。
 
 **安全憲法（`security-policy` convention）在這一步落地**：starter 的 `template/SECURITY.md` 是 user-owned 實填範例，`new` mode 已經帶進來——逐段核對 intake（攻擊入口是否多了 webhook / 公開表單、授權模型是 user-owned 還是 tenant-scoped、`.env.example` 的 key 名有沒有增減），tenant-scoped 就改用 `$CLADE_HOME/vendor/snippets/security-policy/SECURITY.template.tenant-scoped.md` 重填。`adopt` mode 沒有這份檔時從範本建。五段齊、不變量 ≥ 5 且每條 `enforced by` 是 `audit-new-project-readiness.ts` 與 `audit-security-policy.ts` 的判準；首次 baseline 掃描消耗 ChatGPT 額度，先跑官方 input check，再依 `commit/security-scan.md` 指定本次估算停止線執行，跑不了就在 registry 宣告 `security-policy: scan-only` 並登 TD。
+
+**Notion ticket 入口（選填）**：intake 寫明有外部客戶要在 Notion 開票／看進度時才做，沒有就跳過、**NEVER** 預設建。hub 或專案還不存在 → 照 `notion-hub` skill § 6 在 clade 開 work 建立並登記 `registry/notion-hubs.json`（新客戶或獨立 repo 複製 Org 模板；既有客戶加專案複製同 hub 入口頁），合入後才在 `<target-path>/.claude/consumer-meta.json` 寫 `"notion": {"hub": "<key>", "projectCode": "<CODE>"}`，再跑 `node "$CLADE_HOME/vendor/scripts/lib/notion-hub.ts" resolve --consumer-path <target-path>` 確認 `configured` 且有 `ticketUrl`。
 
 ## 6. 跑 completion contract
 
@@ -220,6 +245,15 @@ cd <target-path> && pnpm check
 ## 7. Land 與 publish
 
 先提交 target repo 的 scaffold/onboarding commit，再提交 Clade registry/skill source。Clade worktree merge-back 後呼叫 `/clade-publish` 完成 publish + propagate；禁止在 worktree 內 publish。
+
+**registry entry 落地**：managed intake／`register-consumer` 把新 entry 寫進 `$CLADE_HOME/registry/consumers.json` 的 working tree（hub-sync 當下要讀到），但不 commit。`registry/**` 不在 main 登記簿 allowlist（`clade-home-worktree` § 本機 main 與 origin 的同步），所以只走 worktree＋PR：
+
+```bash
+node "$CLADE_HOME/scripts/land-registry-entry.ts" --consumer-id <id>        # 印計畫
+node "$CLADE_HOME/scripts/land-registry-entry.ts" --consumer-id <id> --yes  # 開 worktree、commit、push、開 draft PR
+```
+
+PR diff 只含新 entry（名冊以 oxfmt 相容排版寫回）；PR 照 clade 規約走 0-A／merge，**NEVER** 自己 ready／merge。合入前 clade home 的那一行照舊留在 working tree；合入後它與 origin/main 逐位元組相同，`git -C "$CLADE_HOME" diff --quiet origin/main -- registry/consumers.json` 成立才由 main 持有者還原該檔再跑 `main-sync`。
 
 publish 後再次在 target repo 跑 readiness gate 與 `pnpm hub:check`，確認驗的是已發佈 projection，不是 worktree 暫存版本。
 

@@ -141,3 +141,6 @@ jobs:
         with:
           base-ref: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'origin/main' }}
           cwd: template
+          # 過渡值：template/ 目前 score 39，strict 不過。推到 strict 的收斂計畫見
+          # docs/tech-debt.md TD-024；action 的 mode 沒有預設值，NEVER 省略。
+          mode: ratchet

@@ -77,7 +77,7 @@
  *
  * 2026-07-28: that is exactly how `nuxt-supabase-starter` Template CI broke on
  * `vp fmt --check` over `vendor/snippets/manual-review-enforcement/patterns.json`
- * — <consumer-j> and co-purchase had each independently patched `vendor/**`
+ * — <consumer-i> and co-purchase had each independently patched `vendor/**`
  * into their own vite.config.ts, which hid the gap instead of closing it.
  * `scripts/audit-governance-drift.ts` check 10 now fails on any config that
  * re-inlines one of these, so the next gap surfaces before a consumer does.
@@ -99,6 +99,26 @@ export const PROJECTION_EXCLUDES = [
   // mirror，理由同 vendor/**：staged filter 得看得到它才不會把上游 mirror 誤判成 consumer
   // 自己的檔案去 lint/fmt。
   'specs/errors/**',
+  // repo root 與 `<paths.utils>` 的 LOCKED 投影（`scripts/lib/vendor-targets.ts`：
+  // `vendor/actions/<name>/*` → `.github/actions/<name>/*`、`vendor/commitlint/` →
+  // `commitlint.config.ts`、`vendor/utils/assert-never.ts` → `<utils>/assert-never.ts`）。
+  // 2026-09-28 <consumer-e>：只 spread 本清單、自家風格是雙引號的 consumer，pre-commit `vp fmt`
+  // 先把還原後的正版投影改成雙引號，`sync-vendor --check --staged` 再判 drift → 任何
+  // stage 到它們的 commit 都過不了 hook。清單以 `listProjectionUniverse()` 為準，
+  // `test/preset-projection-universe.test.ts` 逐一比對，NEVER 手列猜測。
+  // 單檔條目（沒有 `/**` 收尾）比對任意深度的同名路徑，與 oxfmt ignore 的 gitignore 語義一致。
+  // 取捨（同 `scripts/**` 的判準：多濾是 loud、漏濾是死結）：
+  //   - `.github/actions/**` 整個目錄排除，consumer 自己手寫的 composite action 也跟著不進
+  //     lint / fmt——與 `LOCKED_PROJECTION_RE`（locked-projection.ts）把整個 `.github/actions/`
+  //     當投影的判定一致；靠 CI 的 actionlint／workflow audit 兜住
+  //   - `commitlint.config.ts` 任意深度：starter 的 `template/` 巢狀投影需要；monorepo 子套件
+  //     自己的同名檔也會被排除
+  //   - `**/utils/assert-never.ts` 只蓋得到 `paths.utils` 以 `utils` 收尾的 consumer（與
+  //     `LOCKED_PROJECTION_RE` 同一限制；fleet 現值 `app/utils`、`packages/core/app/utils`）。
+  //     `paths.utils` 改成別的名字時兩邊要一起改
+  '.github/actions/**',
+  'commitlint.config.ts',
+  '**/utils/assert-never.ts',
   // Agent 投影面：`.agents/` `.codex/` 由 scripts/sync-to-codex.ts 生成，`.cursor/` 由
   // scripts/sync-to-cursor.ts 生成（2026-08-24 起，先前是人工快照）。三者與上面四條同性質
   // —— consumer 端是產生物，裡面的 lint / fmt 違規只能回 clade 修。先前它們只躺在下面的
@@ -112,8 +132,7 @@ export const PROJECTION_EXCLUDES = [
 /**
  * The slice of `vendor/` that stays excluded even in clade, where `vendor/` is
  * real source rather than a projection: snippet corpora are cookbook examples
- * (several deliberately demonstrate the anti-pattern a rule exists to ban), and
- * review-gui.ts embeds an HTML template oxfmt/oxlint both mangle.
+ * (several deliberately demonstrate the anti-pattern a rule exists to ban).
  * clade's own vite.config.ts drops `vendor/**` and adds these back.
  */
 export const CLADE_VENDOR_EXCLUDES = [
@@ -194,7 +213,17 @@ export const SHIPPED_TEMPLATE_LINT_RULES = [
  * `PROJECTION_EXCLUDES` 的目錄前綴形式（`'.clade/**'` → `'.clade/'`），給逐檔比對用。
  * glob 形式餵不了 staged hook —— hook 拿到的是 `git diff --name-only` 的相對路徑字串。
  */
-export const projectionPrefixes = PROJECTION_EXCLUDES.map((p) => p.replace(/\/\*\*$/, '/'))
+export const projectionPrefixes = PROJECTION_EXCLUDES.filter((p) => p.endsWith('/**')).map((p) =>
+  p.replace(/\/\*\*$/, '/'),
+)
+
+/**
+ * `PROJECTION_EXCLUDES` 的單檔條目（`commitlint.config.ts`、`**\/utils/assert-never.ts`），
+ * 去掉前導 `**\/`。比對 repo 內任意深度的同名路徑。
+ */
+const projectionFiles = PROJECTION_EXCLUDES.filter((p) => !p.endsWith('/**')).map((p) =>
+  p.replace(/^\*\*\//, ''),
+)
 
 /**
  * repo root 的絕對路徑。lint-staged 依版本 / 設定可能餵**絕對路徑**進來，而投影判定
@@ -254,7 +283,10 @@ export function isProjectionPath(file: string): boolean {
   // 相對化之後仍是絕對路徑 = 這個檔根本不在本 repo 內。投影判定對它沒有意義，
   // 而片段比對在這裡正是誤殺的來源 —— 一律回 false，交給下游工具自己處理。
   if (rel.startsWith('/')) return false
-  return projectionPrefixes.some((dir) => rel.startsWith(dir) || rel.includes(`/${dir}`))
+  return (
+    projectionPrefixes.some((dir) => rel.startsWith(dir) || rel.includes(`/${dir}`)) ||
+    projectionFiles.some((name) => rel === name || rel.endsWith(`/${name}`))
+  )
 }
 
 /**
@@ -491,8 +523,7 @@ export const fmtBase = {
  *
  * **為什麼是複本而不是 `import { defaultExclude } from 'vite-plus'`**：本檔目前**零 import**，
  * 而它的消費端不只有 `vite.config.ts` —— 實際會 import 本檔的純 node 腳本包括
- * `scripts/audit-typecheck-projection-face.ts`；`vendor/review-gui-web/{nuxt,vite}.config.ts`
- * 也在建置期載入。頂層 import vite-plus 會讓這些非 vite 執行路徑（尤其是 audit script
+ * `scripts/audit-typecheck-projection-face.ts`。頂層 import vite-plus 會讓這些非 vite 執行路徑（尤其是 audit script
  * 這類會在 vite-plus 尚未安裝的新 consumer onboarding 途中被跑到的腳本）連帶付出載入成本。
  *
  * 複本的代價是會與上游漂開，**所以它由測試釘住**：`test/preset-test-base.test.ts` 直接
@@ -506,7 +537,7 @@ export const VITEST_DEFAULT_EXCLUDE = ['**/node_modules/**', '**/.git/**']
  * Agent runtime 在 consumer working tree 留下的 cache／投影目錄。
  *
  * 這裡面的「測試檔」**不是這個 repo 的測試** —— `.pi/git/` 底下是 Pi 為了做 code review
- * 而 clone 的**外部 repo 全文**（實測 2026-09-10：<consumer-g> 的 `.pi/git/` 有 114 MB、
+ * 而 clone 的**外部 repo 全文**（實測 2026-09-10：<consumer-f> 的 `.pi/git/` 有 114 MB、
  * 578 支測試檔，全部屬於 `github.com/YuDefine/clade`，而該 repo 自有測試檔為 **0**）。
  * 跑它們的結果是 107 失敗 → `vp test` exit 1，而紅綠取決於「這棵樹有沒有被 Pi clone 過」。
  *
@@ -558,7 +589,7 @@ export const AGENT_CACHE_TEST_EXCLUDES = [
  *
  * clade 自己**不消費本 base**：它的 `test.include` 收窄成 `vp-tests/**\/*.vp.ts`，
  * 掃描面本來就進不到 `.pi/`。**NEVER** 拿「clade 沒事」推論 consumer 也沒事 ——
- * fleet 現況不齊一：<consumer-f>／<consumer-i>／<consumer-k> 已收窄 `test.include`（同樣免疫，
+ * fleet 現況不齊一：ai-quota／<consumer-h>／<consumer-j> 已收窄 `test.include`（同樣免疫，
  * 但理由跟 clade 一樣是 include 收窄，不是本 base）；<consumer-b>／<consumer-c> 則是
  * consumer 自己手寫 `test.exclude`（如 `['e2e/**', 'node_modules/**', '.nuxt/**', '.output/**']`），
  * 這正是本檔開頭警告的覆蓋語義事故現場 —— 手寫版把 `**\/.git/**` 弄丟了、`node_modules/**`

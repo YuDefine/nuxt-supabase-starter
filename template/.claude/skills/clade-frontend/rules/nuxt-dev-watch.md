@@ -111,5 +111,5 @@ Diagnostic-only（exit 0）；consumer 端落地 **MUST relay 給該 consumer �
   - 重跑 audit-nuxt-dev-watch.ts 確認 OK
   - 採樣 fd 用量驗修法生效（< 5000）
 
-若有充分理由偏離 baseline，記錄到 docs/decisions/YYYY-MM-DD-<topic>.md
+若有充分理由偏離 baseline，記 ADR（落點依 knowledge-and-decisions 規約；不在 docs/decisions/ 開新檔）
 ```

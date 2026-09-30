@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SessionStart hook — clade home 的 hub skill（symlink 或 claude 投影產物）↔ permissions.deny 對應自驗（clade home 自用）。
 #
-# 規約：.claude/rules/local/clade-role-and-todo-discipline.md § clade home 自己消費哪幾支
+# 規約：.claude/rules/local/clade-role-and-todo-discipline.self-config.md § clade home 自己消費哪幾支
 # hub skill——「deny MUST 逐支列名」，新增 symlink skill 缺 deny 一列就是製造下一個無聲丟失。
 # 自驗指令原文要人手跑；本 hook 掛在契約已知的 SessionStart（ConfigChange 契約未驗證，
 # 見 docs/hook-inventory.md 候選 7），下個 session 必然接住 drift。

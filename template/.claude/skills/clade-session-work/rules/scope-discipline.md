@@ -27,7 +27,7 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 | session 尚未完成的 WIP / blocker | `HANDOFF.md` | 留下目前狀態、阻擋原因、下一步 |
 | 未來要做但尚未開工的工作 | repo 根目錄 `ROADMAP.md` `## Next Moves` | 以 `high/mid/low` + 依賴關係記錄 |
 | 當前工作本身的 scope 漏項 | 當前 tasks 檔加一條；動到規格時回交 truth owner skill | **NEVER** 就地改 `specs/truth/**` |
-| 架構層級決策 | `docs/decisions/YYYY-MM-DD-<topic>.md` | 用 ADR 格式記錄 |
+| 架構層級決策 | 落點依 [[knowledge-and-decisions]]（lifecycle repo：它約束的 truth 單位；未遷移 consumer：當下工作的 plan／spec，**NEVER** 在 `docs/decisions/` 開新檔） | 用 ADR 格式記錄 |
 
 **登記後才能回到當前 task。**
 
@@ -186,7 +186,7 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 
 ## 已決 scope 不可重開
 
-當專案內存在**明確記錄的 scope 決策**（`docs/decisions/`、discussion artifact、lessons.md、或後續 supersede 紀錄），agent **MUST** 視為已定案。後續 session 只討論「怎麼做」，**NEVER** 把「是否要做」重新當開放問題。
+當專案內存在**明確記錄的 scope 決策**（lifecycle repo 的 `specs/truth/**` 決策段、未遷移 consumer 既有的 `docs/decisions/`、plan／spec、discussion artifact、lessons.md、或後續 supersede 紀錄），agent **MUST** 視為已定案。後續 session 只討論「怎麼做」，**NEVER** 把「是否要做」重新當開放問題。
 
 **可觀察 predicate**：agent 正在產出的文字含「是否需要」「要不要做」「可以考慮排除」「scope 可能不包含」等措辭，且對象是已有 decision artifact 的 feature → 停，讀 decision artifact 確認。
 

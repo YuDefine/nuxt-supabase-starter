@@ -531,6 +531,12 @@ function isTransientGitPath(path: string, isDirectory: boolean): boolean {
   const segments = path.split('/')
   const name = segments.at(-1) ?? ''
   if (!isDirectory && (name.endsWith('.lock') || name === 'gc.pid')) return true
+  // clade/sg 工具在 common dir 根部落的暫存檔：hook 一次性 marker
+  // (`sg-hook-once-*`)、handoff 漂移偵測殘檔 (`clade-handoff-drift.*`)。它們在
+  // inventory 與 tar 之間消失是常態（RUSH-50 的 `Cannot stat` 與 lstat ENOENT
+  // retain 就是這裡），從來不是 repo 要保存的內容。
+  if (!isDirectory && (name.startsWith('sg-hook-once-') || name.startsWith('clade-handoff-drift.')))
+    return true
   const objects = segments.indexOf('objects')
   if (objects === -1 || objects >= segments.length - 1) return false
   if (!isDirectory && /^tmp_(?:obj|pack)_/.test(name)) return true
@@ -545,9 +551,16 @@ function walk(
   options: InventoryOptions,
   excludedRoots: string[],
 ) {
-  for (const child of readdirSync(current, { withFileTypes: true }).toSorted((a, b) =>
-    a.name.localeCompare(b.name),
-  )) {
+  let children
+  try {
+    children = readdirSync(current, { withFileTypes: true })
+  } catch (error) {
+    // A directory unlinked between the parent's lstat and this readdir is the
+    // same sibling/gc race — under a Git-dir walk it simply stops existing.
+    if (options.excludeGitTransientState && (error as { code?: string }).code === 'ENOENT') return
+    throw error
+  }
+  for (const child of children.toSorted((a, b) => a.name.localeCompare(b.name))) {
     const absolute = join(current, child.name)
     if (
       excludedRoots.some((excluded) => absolute === excluded || absolute.startsWith(`${excluded}/`))
@@ -558,7 +571,19 @@ function walk(
     // between readdir and stat cannot abort the walk, and one that persists
     // is not repository content the archive must carry.
     if (options.excludeGitTransientState && isTransientGitPath(path, child.isDirectory())) continue
-    const stat = lstatSync(absolute)
+    let stat
+    try {
+      stat = lstatSync(absolute)
+    } catch (error) {
+      // Git-dir walks only: a concurrent gc/sibling may unlink a real entry
+      // between readdir and lstat. Skipping it cannot hide drift — the
+      // removed path simply is not live anymore, and the post-capture
+      // stability pass compares against this walk's view. Worktree walks
+      // still fail closed.
+      if (options.excludeGitTransientState && (error as { code?: string }).code === 'ENOENT')
+        continue
+      throw error
+    }
     const type = modeType(stat.mode)
     const entry: InventoryEntry = {
       path,
@@ -573,24 +598,31 @@ function walk(
       mtimeMs: stat.mtimeMs,
       ...metadataFor(absolute, options),
     }
-    if (type === 'file') {
-      const identity = `${stat.dev}:${stat.ino}`
-      const prior = seen.get(identity)
-      if (prior) {
-        entry.type = 'hardlink'
-        entry.target = prior
-      } else {
-        seen.set(identity, path)
-        entry.digest = sha256File(absolute)
-        entry.allocatedBytes = Number(stat.blocks ?? 0) * 512
+    try {
+      if (type === 'file') {
+        const identity = `${stat.dev}:${stat.ino}`
+        const prior = seen.get(identity)
+        if (prior) {
+          entry.type = 'hardlink'
+          entry.target = prior
+        } else {
+          seen.set(identity, path)
+          entry.digest = sha256File(absolute)
+          entry.allocatedBytes = Number(stat.blocks ?? 0) * 512
+        }
+        entries.push(entry)
+        continue
       }
-      entries.push(entry)
-      continue
-    }
-    if (type === 'symlink') {
-      entry.target = readlinkSync(absolute)
-      entries.push(entry)
-      continue
+      if (type === 'symlink') {
+        entry.target = readlinkSync(absolute)
+        entries.push(entry)
+        continue
+      }
+    } catch (error) {
+      // Same mid-walk unlink race as the lstat guard above.
+      if (options.excludeGitTransientState && (error as { code?: string }).code === 'ENOENT')
+        continue
+      throw error
     }
     entries.push(entry)
     if (type === 'directory') walk(root, absolute, entries, seen, options, excludedRoots)
@@ -1116,23 +1148,44 @@ function assertGitClosureLocal(
   }
 }
 
+// Only the source's OWN admin dir gets strict validation: it is the private
+// state cleanup destroys, so a corrupt or dangling record there must abort the
+// capture. Every other `worktrees/<name>` entry belongs to a sibling — shared
+// common-dir state that another checkout's lifecycle may be mutating or pruning
+// right now. A sibling whose worktree was deleted, whose `gitdir`/`commondir`
+// went stale, or whose back-pointer dangles is excluded from the archive and
+// must never abort THIS source's cleanup (RUSH-50: a dead sibling's
+// `commondir` ENOENT retained 11 landed batches). If such a dir were actually
+// ours, `gitWorktreeMetadataRoots`/`scopedLiveGitInventory` would fail to find
+// the source's admin root and retain through that path instead.
 function assertLinkedWorktreeMetadataLocal(sourceRoot: string, common: string): string[] {
   const metadataRoot = join(common, 'worktrees')
   if (!existsSync(metadataRoot)) return []
   const excluded: string[] = []
   for (const metadata of readdirSync(metadataRoot, { withFileTypes: true })) {
-    if (!metadata.isDirectory())
-      throw new Error('Git preservation cannot inspect linked-worktree metadata: ' + metadata.name)
     const metadataPath = join(metadataRoot, metadata.name)
+    // Non-directory or unreadable entries are not admin dirs git can use —
+    // they stay in the inventory (visible drift) instead of aborting.
+    if (!metadata.isDirectory()) continue
     const gitdirRecord = join(metadataPath, 'gitdir')
-    if (!existsSync(gitdirRecord) || !lstatSync(gitdirRecord).isFile())
-      throw new Error('Git preservation cannot capture linked-worktree metadata: ' + gitdirRecord)
-    const recordedWorktree = resolve(
-      dirname(gitdirRecord),
-      readFileSync(gitdirRecord, 'utf8').trim(),
-    )
-    if (!recordedWorktree || !recordedWorktree.endsWith('/.git'))
-      throw new Error('Git preservation cannot inspect linked-worktree metadata: ' + gitdirRecord)
+    let recordedWorktree: string | undefined
+    try {
+      if (existsSync(gitdirRecord) && lstatSync(gitdirRecord).isFile())
+        recordedWorktree = resolve(dirname(gitdirRecord), readFileSync(gitdirRecord, 'utf8').trim())
+    } catch {
+      recordedWorktree = undefined
+    }
+    // Not provably this source's admin dir → sibling or stale residue;
+    // excluded from the archive, never validated. The strict reciprocal
+    // checks below run only for the dir whose gitdir names this source.
+    if (
+      recordedWorktree === undefined ||
+      !recordedWorktree.endsWith('/.git') ||
+      dirname(recordedWorktree) !== sourceRoot
+    ) {
+      excluded.push(metadataPath)
+      continue
+    }
     if (!existsSync(recordedWorktree) || !lstatSync(recordedWorktree).isFile())
       throw new Error(
         'Git preservation cannot capture linked-worktree metadata: ' + recordedWorktree,
@@ -1149,7 +1202,6 @@ function assertLinkedWorktreeMetadataLocal(sourceRoot: string, common: string): 
     )
     if (pointerTarget !== realpathSync(metadataPath))
       throw new Error('Git preservation found mismatched linked-worktree metadata: ' + metadataPath)
-    if (dirname(recordedWorktree) !== sourceRoot) excluded.push(metadataPath)
   }
   return excluded
 }
@@ -1266,12 +1318,19 @@ export function gitWorktreeMetadataRoots(sourceRoot: string, common: string): st
     .filter((metadata) => metadata.isDirectory())
     .map((metadata) => join(metadataRoot, metadata.name))
     .filter((metadataPath) => {
+      // A sibling's `gitdir` may vanish mid-read while its own lifecycle
+      // prunes it — that only means it cannot name this source, which is the
+      // same answer as a record pointing elsewhere.
       const gitdirRecord = join(metadataPath, 'gitdir')
-      const recordedWorktree = resolve(
-        dirname(gitdirRecord),
-        readFileSync(gitdirRecord, 'utf8').trim(),
-      )
-      return dirname(recordedWorktree) === sourceRoot
+      try {
+        const recordedWorktree = resolve(
+          dirname(gitdirRecord),
+          readFileSync(gitdirRecord, 'utf8').trim(),
+        )
+        return dirname(recordedWorktree) === sourceRoot
+      } catch {
+        return false
+      }
     })
 }
 
@@ -2047,7 +2106,8 @@ function restoreAndCompare(
   archive: string,
   expected: SourceInventory,
   options: InventoryOptions,
-): void {
+  gitDriftPrefixes?: string[],
+): SourceInventory {
   const actual = restoredInventory(archive, options)
   const expectedExternalSymlinks = new Set(expected.externalSymlinks)
   const relocatedInternalSymlinks = actual.externalSymlinks.filter(
@@ -2061,9 +2121,22 @@ function restoreAndCompare(
     throw new Error(
       `Offline restore contains symlinks outside the restored root: ${actual.externalSymlinks.join(', ')}`,
     )
+  // Git archives compare source-privately: shared-mutable paths (a fetch
+  // landing mid-capture, a pruned object) are tolerated, everything else —
+  // the source's own worktrees/<id>/** admin dir, config, info — must be
+  // carried byte-exact.
+  if (gitDriftPrefixes !== undefined) {
+    const drift = gitInventoryDrift(expected, actual, gitDriftPrefixes)
+    if (drift.length)
+      throw new Error(
+        `Offline restore drops source-private Git state: ${drift.slice(0, 3).join(', ')}`,
+      )
+    verifyRestoredNestedGitClosure(archive, options)
+    return actual
+  }
   if (actual.digest === expected.digest && actual.entryCount === expected.entryCount) {
     verifyRestoredNestedGitClosure(archive, options)
-    return
+    return actual
   }
   const gitDir = options.excludeGitTransientState === true
   const expectedByPath = new Map(
@@ -2120,6 +2193,117 @@ function assertInventoryStable(
 ): void {
   if (expected.digest !== actual.digest || expected.entryCount !== actual.entryCount)
     throw new Error(`${label} changed during preservation capture`)
+}
+
+// Common-dir state sibling sessions legitimately move while a capture or a
+// resume's live comparison runs — none of it is private to the source being
+// cleaned, cleanup never deletes it, and the restored-closure checks (HEAD
+// reachability, fsck, worktree relink) prove the archive is still sufficient
+// without pinning these bytes:
+//   objects/**      — content-addressed; a concurrent fetch adds, a gc
+//                     repacks or prunes, and mtimes freshen without a byte of
+//                     the source's own state moving (TD-1097, RUSH-50).
+//   refs/**, packed-refs — sibling branches/tags move on any fetch or push;
+//                     the source's own head is separately pinned by the
+//                     receipt's recorded rev-parse value.
+//   logs/**         — reflogs are shared append-only protocol state; a remote
+//                     fetch writes logs/refs/remotes/** continuously.
+//   root scratch    — FETCH_HEAD/index/COMMIT_EDITMSG/*_HEAD/…: with a linked
+//                     worktree source these are the MAIN checkout's staging
+//                     files (the source's own admin state lives under
+//                     worktrees/<id>/ and stays strict); with a main-checkout
+//                     source they are the same mutable names, and HEAD
+//                     identity is still enforced by the receipt's head
+//                     compare — never by this file's bytes.
+//   worktrees/<other>/** — another checkout's admin dir. Siblings are already
+//                     excluded from capture and live walks; an entry only
+//                     appears when an archive predates an exclusion or a
+//                     sibling was pruned between capture and compare — either
+//                     way not this source's drift.
+const SHARED_GIT_SCRATCH_ROOT = new Set([
+  'HEAD',
+  'index',
+  'COMMIT_EDITMSG',
+  'FETCH_HEAD',
+  'ORIG_HEAD',
+  'MERGE_HEAD',
+  'MERGE_MSG',
+  'MERGE_MODE',
+  'AUTO_MERGE',
+  'CHERRY_PICK_HEAD',
+  'REVERT_HEAD',
+  'BISECT_LOG',
+  'BISECT_START',
+  'shallow',
+  'packed-refs',
+])
+
+export function isSharedGitMutablePath(path: string): boolean {
+  const top = path.split('/', 1)[0]
+  if (top === 'objects' || top === 'refs' || top === 'logs') return true
+  return !path.includes('/') && SHARED_GIT_SCRATCH_ROOT.has(path)
+}
+
+/**
+ * Per-path drift between two Git-dir inventories (capture-time vs live, or
+ * archive vs live). A path counts as drift only when it is source-private:
+ * anything NOT shared-mutable, and inside `worktrees/` only the caller's own
+ * admin dir (given as common-relative `ownMetadataPrefixes`, e.g.
+ * `worktrees/<id>`). Every other `worktrees/<name>` entry is sibling state
+ * and tolerated. Returns the drifted path list — empty means compatible.
+ */
+export function gitInventoryDrift(
+  expected: Pick<SourceInventory, 'entries'>,
+  actual: Pick<SourceInventory, 'entries'>,
+  ownMetadataPrefixes: string[] = [],
+): string[] {
+  const identity = (entry: InventoryEntry) => JSON.stringify(inventoryIdentityEntry(entry, true))
+  const expectedBy = new Map(expected.entries.map((entry) => [entry.path, identity(entry)]))
+  const actualBy = new Map(actual.entries.map((entry) => [entry.path, identity(entry)]))
+  const isPrivate = (path: string) =>
+    !isSharedGitMutablePath(path) &&
+    (!path.startsWith('worktrees/') ||
+      ownMetadataPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`)))
+  const drift: string[] = []
+  for (const path of new Set([...expectedBy.keys(), ...actualBy.keys()])) {
+    if (expectedBy.get(path) !== actualBy.get(path) && isPrivate(path)) drift.push(path)
+  }
+  return drift
+}
+
+/**
+ * The git-dir counterpart of assertInventoryStable: shared-mutable and
+ * sibling-metadata churn never counts as drift, everything else does.
+ */
+export function assertGitInventoryStable(
+  expected: Pick<SourceInventory, 'entries'>,
+  actual: Pick<SourceInventory, 'entries'>,
+  label: string,
+  ownMetadataPrefixes: string[] = [],
+): void {
+  const drift = gitInventoryDrift(expected, actual, ownMetadataPrefixes)
+  if (drift.length)
+    throw new Error(
+      `${label} changed during preservation capture (${drift.slice(0, 3).join(', ')})`,
+    )
+}
+
+// A tar failure whose diagnostics are only vanished/changed members is a
+// mid-capture unlink or freshen race (sg-hook scratch, pruned objects). The
+// caller re-walks and retries against a fresh inventory; a byte-level failure
+// (permission, real stat error on a stable file) still aborts.
+function gitTarCannotStatDrift(status: number | null | undefined, stderr: string): boolean {
+  if (status !== 1 && status !== 2) return false
+  return stderr.split('\n').every((line) => {
+    const text = line.trim()
+    return (
+      text.length === 0 ||
+      text.startsWith('Total bytes written:') ||
+      text.endsWith(': file changed as we read it') ||
+      text.endsWith(': Cannot stat: No such file or directory') ||
+      text === 'Exiting with failure status due to previous errors'
+    )
+  })
 }
 
 function compareAndInventory(
@@ -2437,12 +2621,36 @@ export function verifyPreservationArchive(
             gitExcludedRootsForArchive(sourcePath, currentGitCommonDir, dirname(dirname(archive))),
           )
         : undefined
-      if (
-        Boolean(currentGitInventory) !== Boolean(receipt.inventory.git) ||
-        currentGitInventory?.digest !== receipt.inventory.git?.digest ||
-        currentGitInventory?.entryCount !== receipt.inventory.git?.entries
-      )
-        return false
+      if (Boolean(currentGitInventory) !== Boolean(receipt.inventory.git)) return false
+      // The live common dir is compared against what the ARCHIVE actually
+      // holds (the tar is sha-bound to the receipt), not a stale capture-time
+      // digest: shared-mutable churn — a concurrent fetch moving FETCH_HEAD,
+      // logs/refs/**, objects — must not retain an unrelated landed source
+      // (RUSH-50). The source's own `worktrees/<id>/**` admin dir and every
+      // non-shared path still compare byte-exact.
+      if (currentGitInventory && receipt.archives.git && receipt.inventory.git) {
+        if (
+          !existsSync(receipt.archives.git.path) ||
+          sha256File(receipt.archives.git.path) !== receipt.archives.git.digest
+        )
+          return false
+        // An exact live match to the capture's archive inventory needs no
+        // extra Git restore for the drift comparison. The archive hash and
+        // closure checks below still run on every verification.
+        if (
+          currentGitInventory.digest !== receipt.inventory.git.digest ||
+          currentGitInventory.entryCount !== receipt.inventory.git.entries
+        ) {
+          const archivedGit = restoredInventory(receipt.archives.git.path, {
+            ...options,
+            excludeGitTransientState: true,
+          })
+          const ownPrefixes = gitWorktreeMetadataRoots(sourcePath, currentGitCommonDir!).map(
+            (metadataRoot) => relative(currentGitCommonDir!, metadataRoot),
+          )
+          if (gitInventoryDrift(archivedGit, currentGitInventory, ownPrefixes).length) return false
+        }
+      }
       const currentWorktree = inventoryTree(sourcePath, options)
       if (
         currentWorktree.digest !== receipt.inventory.digest ||
@@ -2503,36 +2711,69 @@ function gitArchive(
   excludedRoots: string[] = [],
   expectedInventory?: SourceInventory,
   expectedHead?: string,
-): { path: string; digest: string; bytes: number } | undefined {
+): { path: string; digest: string; bytes: number; inventory: SourceInventory } | undefined {
   if (!common) return undefined
-  const inventory =
-    expectedInventory ??
-    inventoryTree(common, { ...options, excludeGitTransientState: true }, [
-      ...(excludedRoot ? [excludedRoot] : []),
-      ...excludedRoots,
-    ])
+  const gitOptions: InventoryOptions = { ...options, excludeGitTransientState: true }
+  const walkLive = () =>
+    inventoryTree(common, gitOptions, [...(excludedRoot ? [excludedRoot] : []), ...excludedRoots])
+  let inventory = expectedInventory ?? walkLive()
   if (inventory.specialFiles.length || inventory.externalSymlinks.length)
     throw new Error('Git common directory contains unsupported special files or external symlinks')
   if (!inventory.entries.length) return undefined
-  createTar(
-    destination,
-    common,
-    [],
-    inventory.entries.map((entry) => entry.path || '.'),
-    true,
-  )
+  // A member that vanished between the walk and tar's own stat (`Cannot
+  // stat`) or changed under its feet is concurrent-sibling churn — most
+  // often hook scratch and pruned objects (RUSH-50). Re-walk and retry
+  // against a fresh inventory; a vanished source-private file still fails
+  // the archived-vs-intended drift check below.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      createTar(
+        destination,
+        common,
+        [],
+        inventory.entries.map((entry) => entry.path || '.'),
+        true,
+      )
+      break
+    } catch (error) {
+      const failed = error as { status?: number | null; stderr?: unknown }
+      const stderr =
+        typeof failed.stderr === 'string'
+          ? failed.stderr
+          : failed.stderr instanceof Uint8Array
+            ? Buffer.from(failed.stderr).toString('utf8')
+            : ''
+      if (attempt >= 2 || !gitTarCannotStatDrift(failed.status, stderr)) throw error
+      inventory = walkLive()
+      if (inventory.specialFiles.length || inventory.externalSymlinks.length)
+        throw new Error(
+          'Git common directory contains unsupported special files or external symlinks',
+          { cause: error },
+        )
+      if (!inventory.entries.length) return undefined
+    }
+  }
   syncFile(destination)
   // tar --compare is skipped for Git archives: it diffs live stat data —
   // including file mtime — against members, and Git's own lockfile/object
-  // freshening makes that race (TD-1097). restoreAndCompare verifies the
-  // archive by restoring and re-inventorying it instead, which pins content
-  // digests without tripping on protocol-owned timestamp churn; live drift
-  // between inventory and capture still fails closed at the post-archive
-  // stability re-inventory in captureAndVerify.
-  restoreAndCompare(destination, inventory, { ...options, excludeGitTransientState: true })
+  // freshening makes that race (TD-1097). The archive is restored and
+  // re-inventoried instead, and only source-private paths must match what
+  // the capture walked: shared-mutable churn (a fetch landing between walk
+  // and tar, a pack pruned mid-read) never retains, while a dropped admin
+  // file or config still fails closed. The returned inventory is the
+  // archive's own — the receipt records what the bytes provably contain.
+  const ownPrefixes = gitWorktreeMetadataRoots(root, common).map((metadataRoot) =>
+    relative(common, metadataRoot),
+  )
+  const restored = restoreAndCompare(destination, inventory, gitOptions, ownPrefixes)
   if (!expectedHead) throw new Error('Git preservation cannot verify an unborn HEAD')
-  verifyRestoredGitClosure(destination, inventory, expectedHead, options)
-  return { path: destination, digest: sha256File(destination), bytes: lstatSync(destination).size }
+  verifyRestoredGitClosure(destination, restored, expectedHead, options)
+  return {
+    path: destination,
+    digest: sha256File(destination),
+    bytes: lstatSync(destination).size,
+    inventory: restored,
+  }
 }
 
 export function captureAndVerify(options: {
@@ -2579,6 +2820,11 @@ export function captureAndVerify(options: {
     throw new Error('Git preservation cannot capture an unborn HEAD')
   const gitExcludedRoots = gitCommonDir
     ? gitExcludedRootsForArchive(sourceRoot, gitCommonDir, archiveRoot)
+    : []
+  const gitOwnPrefixes = gitCommonDir
+    ? gitWorktreeMetadataRoots(sourceRoot, gitCommonDir).map((metadataRoot) =>
+        relative(gitCommonDir, metadataRoot),
+      )
     : []
   const gitInventory = gitCommonDir
     ? inventoryTree(gitCommonDir, gitMetadataOptions, gitExcludedRoots)
@@ -2638,6 +2884,22 @@ export function captureAndVerify(options: {
     const parsed: unknown = JSON.parse(readFileSync(receiptPath, 'utf8'))
     if (!isCompletedReceipt(parsed))
       throw new Error(`Completed preservation receipt is invalid: ${receiptPath}`)
+    // The recorded git inventory is what the ARCHIVE holds — for receipts
+    // written by this policy it is the restored-archive inventory — so a
+    // strict digest mismatch may be shared-mutable churn (a concurrent
+    // fetch, pruned objects, main-checkout scratch) rather than source
+    // drift. Fall back to comparing the live common dir against the
+    // archive's own sha-bound bytes with only source-private paths strict.
+    const receiptGitMatchesLive = (): boolean => {
+      if (!parsed.inventory.git || !parsed.archives.git || !gitInventory) return false
+      if (
+        parsed.inventory.git.digest === gitInventory.digest &&
+        parsed.inventory.git.entries === gitInventory.entryCount
+      )
+        return true
+      const archivedGit = restoredInventory(parsed.archives.git.path, gitMetadataOptions)
+      return gitInventoryDrift(archivedGit, gitInventory, gitOwnPrefixes).length === 0
+    }
     const archiveMatches = !(
       parsed.profile.id !== options.profile.id ||
       parsed.profile.version !== options.profile.version ||
@@ -2650,22 +2912,17 @@ export function captureAndVerify(options: {
       sha256File(parsed.archives.worktree.path) !== parsed.archives.worktree.digest ||
       Boolean(parsed.archives.git) !== Boolean(gitCommonDir) ||
       Boolean(parsed.inventory.git) !== Boolean(gitCommonDir) ||
-      (parsed.inventory.git !== undefined &&
-        (gitInventory === undefined ||
-          parsed.inventory.git.digest !== gitInventory.digest ||
-          parsed.inventory.git.entries !== gitInventory.entryCount)) ||
       (parsed.archives.git !== undefined &&
         (!existsSync(parsed.archives.git.path) ||
-          sha256File(parsed.archives.git.path) !== parsed.archives.git.digest))
+          sha256File(parsed.archives.git.path) !== parsed.archives.git.digest)) ||
+      (parsed.inventory.git !== undefined && !receiptGitMatchesLive())
     )
     if (archiveMatches) {
       compareAndInventory(parsed.archives.worktree.path, sourceRoot, inventory, metadataOptions)
       if (parsed.archives.git && gitCommonDir) {
-        restoreAndCompare(parsed.archives.git.path, gitInventory!, gitMetadataOptions)
-        verifyRestoredGitClosure(
+        verifyRestoredGitClosureDigest(
           parsed.archives.git.path,
-          gitInventory!,
-          capturedHead!,
+          { ...parsed.inventory.git!, head: capturedHead! },
           gitMetadataOptions,
         )
         verifyRestoredGitLayout(
@@ -2683,10 +2940,11 @@ export function captureAndVerify(options: {
         'Source inventory',
       )
       if (gitCommonDir && gitInventory)
-        assertInventoryStable(
+        assertGitInventoryStable(
           gitInventory,
           inventoryTree(gitCommonDir, gitMetadataOptions, gitExcludedRoots),
           'Git inventory',
+          gitOwnPrefixes,
         )
       syncDirectoryAndParents(complete)
       return parsed
@@ -2720,21 +2978,26 @@ export function captureAndVerify(options: {
       gitInventory,
       capturedHead,
     )
-    if (gitArchiveResult && gitCommonDir && gitInventory)
+    if (gitArchiveResult && gitCommonDir)
       verifyRestoredGitLayout(
         worktreeArchive,
         gitArchiveResult.path,
         sourceRoot,
         gitCommonDir,
-        { digest: gitInventory.digest, entries: gitInventory.entryCount, head: capturedHead! },
+        {
+          digest: gitArchiveResult.inventory.digest,
+          entries: gitArchiveResult.inventory.entryCount,
+          head: capturedHead!,
+        },
         gitMetadataOptions,
       )
     assertInventoryStable(inventory, inventoryTree(sourceRoot, metadataOptions), 'Source inventory')
     if (gitCommonDir && gitInventory)
-      assertInventoryStable(
+      assertGitInventoryStable(
         gitInventory,
         inventoryTree(gitCommonDir, gitMetadataOptions, gitExcludedRoots),
         'Git inventory',
+        gitOwnPrefixes,
       )
     const receipt: PreservationReceipt = {
       schemaVersion: PRESERVATION_SCHEMA_VERSION,
@@ -2752,13 +3015,17 @@ export function captureAndVerify(options: {
         entries: inventory.entryCount,
         logicalBytes: inventory.logicalBytes,
         allocatedBytes: inventory.allocatedBytes,
-        ...(gitInventory
+        // inventory.git records what the GIT ARCHIVE provably carries (the
+        // restored-archive inventory), not the live walk: shared-mutable
+        // churn between walk and tar must never wedge the receipt against
+        // the bytes on disk.
+        ...(gitArchiveResult
           ? {
               git: {
-                digest: gitInventory.digest,
-                entries: gitInventory.entryCount,
-                logicalBytes: gitInventory.logicalBytes,
-                allocatedBytes: gitInventory.allocatedBytes,
+                digest: gitArchiveResult.inventory.digest,
+                entries: gitArchiveResult.inventory.entryCount,
+                logicalBytes: gitArchiveResult.inventory.logicalBytes,
+                allocatedBytes: gitArchiveResult.inventory.allocatedBytes,
               },
             }
           : {}),
@@ -2770,7 +3037,13 @@ export function captureAndVerify(options: {
           bytes: lstatSync(worktreeArchive).size,
         },
         ...(gitArchiveResult
-          ? { git: { ...gitArchiveResult, path: join(complete, 'git.tar') } }
+          ? {
+              git: {
+                path: join(complete, 'git.tar'),
+                digest: gitArchiveResult.digest,
+                bytes: gitArchiveResult.bytes,
+              },
+            }
           : {}),
       },
       capacity,

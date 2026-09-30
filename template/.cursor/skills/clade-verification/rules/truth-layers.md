@@ -11,7 +11,7 @@ paths: ['specs/**', 'tasks/**', 'ROADMAP.md', 'docs/decisions/**', 'server/**/*.
 
 ## 核心概念
 
-- **意圖層**：需求、限制、架構方向放在 `specs/**`（SpecFormula / aixbdd 產出）、`docs/decisions/**`
+- **意圖層**：需求、限制、架構方向放在 `specs/**`（SpecFormula / aixbdd 產出；lifecycle repo 的決策在 `specs/truth/**` 各單位的 Decision 段），未遷移 consumer 另有既存的 `docs/decisions/**`
 - **持久化層**：schema、constraints、migrations 是資料真相來源
 - **契約層**：request / response schema、shared contract 是跨層介面真相
 - **服務 / API 層**：負責驗證輸入、組裝資料、維持 request-scoped 行為

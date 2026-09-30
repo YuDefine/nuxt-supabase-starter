@@ -1,19 +1,25 @@
+// clade-legacy-test: frozen=2026-09-28 — 舊測試：沒有對應 truth，不是 BDD 的慣例來源；工作碰到就吸收（clade-spec-workflow/rules/legacy-tests.md）
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { consola } from 'consola'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { assembleProject } from '../src/assemble'
 import {
   buildInitConsumerArgs,
+  buildDeferredCodexProjectionCommand,
   buildMintGatePlaybooksArgs,
   buildRegisterConsumerArgs,
   formatGeneratedProject,
+  generateManagedCodexProjection,
   maybeRegisterConsumer,
   maybeSyncVendor,
   maybeWriteConsumerMeta,
+  postScaffold,
   readPendingBuildApprovals,
   resolveCladeInitScript,
+  resolveSyncToCodexScript,
   resolveSupabaseDevNextSteps,
   resolveSyncToCursorScript,
   rewriteEnvFilesForDbHost,
@@ -33,6 +39,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllEnvs()
   rmSync(TEST_DIR, { recursive: true, force: true })
 })
 
@@ -250,9 +257,208 @@ describe('base 模板的 pnpm build approval 設定', () => {
   })
 })
 
+describe('sync-to-codex 解析', () => {
+  it('使用 clade 的 canonical wrapper，不依賴已退役的 user shim', () => {
+    const cladeRoot = join(TEST_DIR, 'clade')
+    const script = join(cladeRoot, 'scripts', 'run-sync-to-codex.ts')
+    writeFileSync(join(TEST_DIR, 'scripts', 'sync-to-codex.ts'), '')
+    mkdirSync(join(cladeRoot, 'scripts'), { recursive: true })
+    writeFileSync(script, '')
+
+    expect(resolveSyncToCodexScript(cladeRoot)).toBe(script)
+  })
+
+  it('managed install 使用 canonical wrapper，且必須產出 Codex config 與 skill', () => {
+    const cladeRoot = join(TEST_DIR, 'clade')
+    const target = join(TEST_DIR, 'generated')
+    const script = join(cladeRoot, 'scripts', 'run-sync-to-codex.ts')
+    mkdirSync(join(cladeRoot, 'scripts'), { recursive: true })
+    mkdirSync(target, { recursive: true })
+    writeFileSync(
+      script,
+      [
+        "const fs = require('node:fs')",
+        "const path = require('node:path')",
+        "if (!process.argv.includes('--no-health-check')) process.exit(2)",
+        "fs.mkdirSync(path.join(process.cwd(), '.codex'), { recursive: true })",
+        "fs.mkdirSync(path.join(process.cwd(), '.agents', 'skills', 'commit'), { recursive: true })",
+        "fs.writeFileSync(path.join(process.cwd(), '.codex', 'config.toml'), 'includeGitInstructions = false\\n')",
+        "fs.writeFileSync(path.join(process.cwd(), '.agents', 'skills', 'commit', 'SKILL.md'), '# commit\\n')",
+      ].join('\n'),
+    )
+
+    expect(() => generateManagedCodexProjection(target, cladeRoot)).not.toThrow()
+    expect(existsSync(join(target, '.codex', 'config.toml'))).toBe(true)
+    expect(existsSync(join(target, '.agents', 'skills', 'commit', 'SKILL.md'))).toBe(true)
+  })
+
+  it('canonical wrapper exit 0 但沒有投影時拒絕宣稱完成', () => {
+    const cladeRoot = join(TEST_DIR, 'clade')
+    const target = join(TEST_DIR, 'missing-output')
+    mkdirSync(join(cladeRoot, 'scripts'), { recursive: true })
+    mkdirSync(target, { recursive: true })
+    writeFileSync(join(cladeRoot, 'scripts', 'run-sync-to-codex.ts'), '')
+
+    expect(() => generateManagedCodexProjection(target, cladeRoot)).toThrow('Codex 投影失敗')
+  })
+
+  it('deferred 指令包含本地 Clade 初始化與投影入口', () => {
+    const cladeRoot = join(TEST_DIR, 'clade')
+    const target = join(TEST_DIR, "user's project")
+    const modules = {
+      auth: 'none' as const,
+      dbSchema: 'supabase' as const,
+      dbRuntime: 'cf-workers' as const,
+      runtime: 'cf-workers' as const,
+      framework: 'nuxt' as const,
+      localHooks: [],
+    }
+    mkdirSync(target, { recursive: true })
+    const command = buildDeferredCodexProjectionCommand(target, cladeRoot, modules)
+
+    expect(command).toContain("cd '" + target.replaceAll("'", "'\"'\"'") + "'")
+    expect(command).toContain('init-consumer.ts')
+    expect(command).toContain('pnpm install')
+    expect(command).toContain('bootstrap-hub.ts')
+    expect(command).toContain('run-sync-to-codex.ts')
+    expect(command).toContain('--no-health-check')
+  })
+
+  it('managed scaffold 安裝成功後執行 canonical wrapper 並回報 generated', async () => {
+    const cladeRoot = join(TEST_DIR, 'clade')
+    const binDir = join(TEST_DIR, 'bin')
+    const target = join(TEST_DIR, 'managed-project')
+    const modules = {
+      auth: 'none' as const,
+      dbSchema: 'supabase' as const,
+      dbRuntime: 'cf-workers' as const,
+      runtime: 'cf-workers' as const,
+      framework: 'nuxt' as const,
+      localHooks: [],
+    }
+    mkdirSync(join(cladeRoot, 'scripts'), { recursive: true })
+    mkdirSync(binDir, { recursive: true })
+    writeFileSync(join(binDir, 'pnpm'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+    writeFileSync(join(cladeRoot, 'scripts', 'init-consumer.ts'), '')
+    writeFileSync(
+      join(cladeRoot, 'scripts', 'bootstrap-project.ts'),
+      "process.stdout.write(JSON.stringify({ consumerId: 'managed-project', effectivePolicy: 'pinned', release: '1.0.0' }))",
+    )
+    writeFileSync(
+      join(cladeRoot, 'scripts', 'run-sync-to-codex.ts'),
+      [
+        "const fs = require('node:fs')",
+        "const path = require('node:path')",
+        "fs.mkdirSync(path.join(process.cwd(), '.codex'), { recursive: true })",
+        "fs.mkdirSync(path.join(process.cwd(), '.agents', 'skills', 'commit'), { recursive: true })",
+        "fs.writeFileSync(path.join(process.cwd(), '.codex', 'config.toml'), 'includeGitInstructions = false\\n')",
+        "fs.writeFileSync(path.join(process.cwd(), '.agents', 'skills', 'commit', 'SKILL.md'), '# commit\\n')",
+      ].join('\n'),
+    )
+    vi.stubEnv('CLADE_HOME', cladeRoot)
+    vi.stubEnv('PATH', `${binDir}:${process.env.PATH}`)
+    assembleProject(target, [], 'managed-project', ['codex'])
+
+    const outcome = await postScaffold(target, 'managed-project', TEST_DIR, modules, {
+      yes: true,
+      registerConsumer: true,
+      wirePreCommit: false,
+      cloneClade: false,
+      installDeps: true,
+      repoId: 'fixture/managed-project',
+      devPort: 3010,
+      agentTargets: ['codex'],
+      offline: true,
+      noPush: true,
+      json: true,
+    })
+
+    expect(outcome.managed?.ok).toBe(true)
+    expect(outcome.codexProjection).toEqual({ status: 'generated' })
+    expect(existsSync(join(target, '.codex', 'config.toml'))).toBe(true)
+    expect(existsSync(join(target, '.agents', 'skills', 'commit', 'SKILL.md'))).toBe(true)
+  })
+
+  const managedCodexModules = {
+    auth: 'none' as const,
+    dbSchema: 'supabase' as const,
+    dbRuntime: 'cf-workers' as const,
+    runtime: 'cf-workers' as const,
+    framework: 'nuxt' as const,
+    localHooks: [],
+  }
+  const managedCodexOpts = {
+    yes: true,
+    registerConsumer: true,
+    wirePreCommit: false,
+    cloneClade: false,
+    installDeps: true,
+    repoId: 'fixture/managed-project',
+    devPort: 3010,
+    agentTargets: ['codex' as const],
+    offline: true,
+    noPush: true,
+    json: true,
+  }
+
+  it('clade 不可用時 codex 投影回報 deferred，不中止 scaffold', async () => {
+    const binDir = join(TEST_DIR, 'bin')
+    const target = join(TEST_DIR, 'no-clade-project')
+    mkdirSync(binDir, { recursive: true })
+    writeFileSync(join(binDir, 'pnpm'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+    vi.stubEnv('CLADE_HOME', join(TEST_DIR, 'missing-clade'))
+    vi.stubEnv('PATH', `${binDir}:${process.env.PATH}`)
+    assembleProject(target, [], 'no-clade-project', ['codex'])
+
+    const outcome = await postScaffold(
+      target,
+      'no-clade-project',
+      TEST_DIR,
+      managedCodexModules,
+      managedCodexOpts,
+    )
+
+    expect(outcome.managed?.ran).toBe(false)
+    expect(outcome.managed?.diagnostics[0]?.code).toBe('ASSET_UNAVAILABLE')
+    expect(outcome.codexProjection).toMatchObject({
+      status: 'deferred',
+      reason: 'clade_unavailable',
+    })
+  })
+
+  it('managed bootstrap 失敗且投影沒產出時回報 deferred，保留 bootstrap diagnostics', async () => {
+    const cladeRoot = join(TEST_DIR, 'clade')
+    const binDir = join(TEST_DIR, 'bin')
+    const target = join(TEST_DIR, 'bootstrap-failed-project')
+    mkdirSync(join(cladeRoot, 'scripts'), { recursive: true })
+    mkdirSync(binDir, { recursive: true })
+    writeFileSync(join(binDir, 'pnpm'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+    writeFileSync(join(cladeRoot, 'scripts', 'init-consumer.ts'), '')
+    writeFileSync(join(cladeRoot, 'scripts', 'bootstrap-project.ts'), 'process.exit(1)')
+    writeFileSync(join(cladeRoot, 'scripts', 'run-sync-to-codex.ts'), 'process.exit(1)')
+    vi.stubEnv('CLADE_HOME', cladeRoot)
+    vi.stubEnv('PATH', `${binDir}:${process.env.PATH}`)
+    assembleProject(target, [], 'bootstrap-failed-project', ['codex'])
+
+    const outcome = await postScaffold(
+      target,
+      'bootstrap-failed-project',
+      TEST_DIR,
+      managedCodexModules,
+      managedCodexOpts,
+    )
+
+    expect(outcome.managed?.ok).toBe(false)
+    expect(outcome.managed?.ran).toBe(true)
+    expect(outcome.codexProjection).toMatchObject({
+      status: 'deferred',
+      reason: 'managed_bootstrap_incomplete',
+    })
+  })
+})
+
 describe('sync-to-cursor 解析', () => {
-  // 與 resolveSyncToCodexScript 同型：按序探測，NEVER 寫死單一檔名。
-  // 那個形狀存在的理由是 sync-to-agents → sync-to-codex 改名後每次 scaffold 都靜默
+  // Cursor 仍沿用 user shim；舊 sync-to-agents → sync-to-codex 改名曾讓 scaffold 靜默
   // 不產投影的那次事故。
   // `.ts` MUST 優先：clade 的 `.mjs` → `.ts` 改名後，user shim 只增不減，很多機器上
   // 仍留著一支指向已不存在的 `run-sync-to-*.mjs` 的死 `.mjs`。挑到它就等於投影沒產。

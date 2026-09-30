@@ -130,3 +130,39 @@ git show --stat <sha>                                         # 輔助判斷是�
 ## 6. 版本對照
 
 版本欄（`hub.fields.board.fixVersion`）填 git tag（`vX.Y.Z`），由 `notion-sync.ts release --tag` 寫；`git describe --tags --abbrev=0` 只在 `/commit` 打完 tag 之後才是本次版本。客戶看版本對照 consumer 的 `CHANGELOG.md` / release 頁。
+
+## 7. Provision：開新 hub／既有 hub 加專案（skill § 6）
+
+在 clade 做（寫的是 clade `registry/`）。每步做完用 `ntn api` 讀回確認，副本是非同步建出來的，**NEVER** 以 MCP 回傳當完成。
+
+```bash
+# A. 新客戶／獨立 repo：複製 Org 模板
+ORG=$(jq -r '.templates.org.pageId' ~/offline/clade/registry/notion-fleet.json)
+# 1) Notion MCP notion-duplicate-page {page_id: $ORG}  ← 唯一的 MCP 呼叫（public API 沒有 duplicate）
+# 2) 移到客戶指定位置、改名（public API 就有）
+timeout 60 ntn api -X POST "/v1/pages/<副本>/move" -d '{"parent":{"type":"page_id","page_id":"<目標父頁>"}}' < /dev/null
+timeout 60 ntn api -X PATCH "/v1/pages/<副本>" -d '{"properties":{"title":{"title":[{"text":{"content":"Ticket 管理（<客戶/專案>）"}}]}}}' < /dev/null
+# 3) 找出副本的 board／專案／里程碑 database 與 data source（Main 的「全專案共用資料庫」列底下）
+timeout 60 ntn api "/v1/blocks/<共用資料庫頁>/children?page_size=100" < /dev/null   # child_database → GET /v1/databases/<id> 取 data_sources[0].id
+# 4) 專案主檔建一列（名稱、專案代碼）→ 記 rowId
+# 5) 「專案標準架構」列改名成專案頁 → 裡面「專案管理」就是入口頁（ticketPageId），照 B-3 把 Ticket view 篩成本專案
+
+# B. 既有 hub 加專案：複製同 hub 已有的入口頁（registry projects.<任一>.ticketPageId）
+# 1) notion-duplicate-page {page_id: <同 hub 的 ticketPageId>}；linked view 仍指向同一張 board（board 不在被複製的子樹裡）
+#    NEVER 複製 Org 模板裡的專案頁來用——它的 view 指回模板 board
+# 2) 專案主檔建列 → rowId；副本 move 到專案頁底下、改名「專案管理（<CODE>）」
+# 3) 入口頁 Ticket view 改篩本專案：讀出 filter，把 relation contains 換成新 rowId 再寫回
+timeout 60 ntn api "/v1/blocks/<入口頁>/children" < /dev/null                          # child_database id
+timeout 60 ntn api /v1/views database_id==<該 child_database id> < /dev/null          # view ids
+V=$(mktemp -d)                                                                         # 每次 provision 自己的暫存目錄，NEVER 固定 /tmp 路徑（並行或殘檔會把別頁的 filter 寫上去）
+timeout 60 ntn api /v1/views/<view-id> < /dev/null > "$V/view.json"                    # filter.and[] 裡 relation.contains 那條
+timeout 60 ntn api -X PATCH /v1/views/<view-id> -d @"$V/view-patch.json" < /dev/null    # {"filter": <改好的整個 filter>}；寫完 GET 讀回核對
+
+# C. 登記＋驗證
+#   registry/notion-hubs.json：A 新增整個 hub（ticketStatus／ticketType／fields 照 Org 模板＝fc 同一套字）；
+#   B 只加 projects.<CODE> = {pageId, rowId, ticketPageId}
+CLADE_HOME=<clade 樹> node scripts/audit-notion-hub-schema.ts --hub <key>                 # MUST ok
+CLADE_HOME=<clade 樹> node vendor/scripts/notion-intake.ts --hub <key>                    # 讀得到、歸屬對
+```
+
+分享給客戶時只分享 hub（或入口頁）那一層；專案頁底下若有 Secrets／內部子頁，**NEVER** 分享整個專案頁。

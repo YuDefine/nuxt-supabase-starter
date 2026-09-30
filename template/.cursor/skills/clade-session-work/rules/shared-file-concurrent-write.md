@@ -64,4 +64,4 @@ paths: ['HANDOFF.md', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/pitfalls/**', 'pa
 | --- | --- |
 | 觸發條件 | `git status --porcelain <該檔>` 非空 = 有別人的未 commit 內容。**warn-only，不 block**——它是你要自己跑的探測，沒有 gate 會擋你 |
 | 消費端 | 正要寫上列任一檔案的 agent（本檔，由 `paths:` 在 Read / Edit 該檔當下載入） |
-| 載入路徑 | 本檔的 `paths:` gating；clade home 另有 pointer（clade 不自動載入 `rules/core/`） |
+| 觸發點 | 本檔的 `paths:` gating；clade home 另有 pointer（clade 不自動載入 `rules/core/`） |
