@@ -54,6 +54,7 @@
     "supabase:sync": "bash ./scripts/supabase-sync.sh",
     "tag": "git tag v$(node -p \"require('./package.json').version\")",
     "test": "sh -c 'if test -x .clade/bin/clade-gate; then exec .clade/bin/clade-gate run test -- vp test --coverage \"$@\"; else exec vp test --coverage \"$@\"; fi' --",
+    "test:dev-login": "vp test run --project=dev-login",
     "test:e2e": "playwright test",
     "test:file": "vp test run",
     "test:nuxt": "vp test run --project=nuxt",

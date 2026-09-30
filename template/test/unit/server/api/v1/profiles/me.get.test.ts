@@ -45,6 +45,7 @@ describe('GET /api/v1/profiles/me', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.stubGlobal('useLogger', () => ({
+      set: vi.fn(),
       error: vi.fn(),
       warn: vi.fn(),
       info: vi.fn(),

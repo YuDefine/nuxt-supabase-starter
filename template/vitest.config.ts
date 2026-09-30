@@ -61,7 +61,18 @@ export default defineConfig(async () => ({
             '.output/**',
             'temp/**',
             '**/*.nuxt.test.ts',
+            '**/*.dev.test.ts',
           ],
+          setupFiles: ['./test/setup-env.ts'],
+        },
+      },
+      {
+        // Exercise the dev-only handler while the unit project keeps its production guard.
+        define: { 'import.meta.dev': 'true' },
+        test: {
+          name: 'dev-login',
+          include: ['test/unit/server/api/_dev/*.dev.test.ts'],
+          environment: 'node',
           setupFiles: ['./test/setup-env.ts'],
         },
       },

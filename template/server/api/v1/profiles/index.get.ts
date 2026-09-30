@@ -6,7 +6,8 @@
  * @module server/api/v1/profiles/index.get
  */
 
-import { createError, defineEventHandler, getQuery } from 'h3'
+import { defineEventHandler, getQuery } from 'h3'
+import { createError } from 'evlog'
 import {
   profileListQuerySchema,
   profileListResponseSchema,
@@ -19,12 +20,14 @@ import { getAuthedSupabase } from '../../../utils/supabase'
 
 export default defineEventHandler(async (event): Promise<ProfileListResponse> => {
   const log = useLogger(event)
+  log.set({ operation: 'profiles.list' })
   // 權限檢查：僅 admin 可查看列表
   requireRole(event, ['admin'])
 
   // 驗證查詢參數
   const query = validateQuery(getQuery(event), profileListQuerySchema)
   const { page, perPage, search } = query
+  log.set({ pagination: { page, perPage }, filtered: Boolean(search) })
 
   const { client } = getAuthedSupabase(event)
 
@@ -49,19 +52,27 @@ export default defineEventHandler(async (event): Promise<ProfileListResponse> =>
   const [countResult, dataResult] = await Promise.all([countQuery, dataQuery])
 
   if (countResult.error) {
-    log.error(countResult.error as Error, { step: 'db-count' })
-    throw createError({
-      statusCode: 500,
-      statusMessage: '查詢失敗，請稍後再試',
+    const error = createError({
+      status: 500,
+      message: '查詢失敗，請稍後再試',
+      why: '資料服務回傳讀取錯誤，無法取得查詢結果。',
+      fix: '請聯絡系統管理員並提供這次請求的時間。',
+      cause: countResult.error as Error,
     })
+    log.error(error, { step: 'db-count' })
+    throw error
   }
 
   if (dataResult.error) {
-    log.error(dataResult.error as Error, { step: 'db-select' })
-    throw createError({
-      statusCode: 500,
-      statusMessage: '查詢失敗，請稍後再試',
+    const error = createError({
+      status: 500,
+      message: '查詢失敗，請稍後再試',
+      why: '資料服務回傳讀取錯誤，無法取得查詢結果。',
+      fix: '請聯絡系統管理員並提供這次請求的時間。',
+      cause: dataResult.error as Error,
     })
+    log.error(error, { step: 'db-select' })
+    throw error
   }
 
   return profileListResponseSchema.parse(
