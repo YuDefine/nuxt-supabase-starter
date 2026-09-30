@@ -253,8 +253,12 @@ describe('agent runtime selection', () => {
 
     expect(existsSync(join(targetDir, 'CLAUDE.md'))).toBe(false)
     expect(existsSync(join(targetDir, 'AGENTS.md'))).toBe(true)
-    expect(existsSync(join(targetDir, '.codex'))).toBe(false)
-    expect(existsSync(join(targetDir, '.agents'))).toBe(false)
+    expect(existsSync(join(targetDir, '.codex', 'config.toml'))).toBe(true)
+    expect(existsSync(join(targetDir, '.agents', 'skills', 'commit', 'SKILL.md'))).toBe(true)
+    expect(existsSync(join(targetDir, '.codex', 'rules'))).toBe(false)
+    expect(readFileSync(join(targetDir, '.agents', 'skills', 'commit', 'SKILL.md'), 'utf8')).toBe(
+      readFileSync(join(targetDir, '.claude', 'skills', 'commit', 'SKILL.md'), 'utf8'),
+    )
     expect(existsSync(join(targetDir, '.claude', 'skills', 'commit', 'SKILL.md'))).toBe(true)
     expect(existsSync(join(targetDir, '.cursor', 'hooks.json'))).toBe(true)
     expect(existsSync(join(targetDir, '.claude', 'settings.json'))).toBe(true)

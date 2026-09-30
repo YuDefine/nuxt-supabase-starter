@@ -7,7 +7,7 @@ description: "Use when crawling a website with Cloudflare Browser Rendering /cra
 
 # Cloudflare Website Crawler
 
-Crawl a site through Cloudflare Browser Rendering's `/crawl` REST API and save pages as local markdown.
+Crawl a site through Cloudflare Browser Rendering's `/crawl` endpoint via the `cf` CLI and save pages as local markdown.
 
 ## Arguments (`/cf-crawl <url> …`)
 
@@ -21,9 +21,11 @@ Crawl a site through Cloudflare Browser Rendering's `/crawl` REST API and save p
 - `--source sitemaps|links|all`: page discovery (default all)
 - `--since DATE`: only pages modified since DATE (ISO date or Unix seconds) → API `modifiedSince` (`date -d "2026-03-10" +%s` on Linux, `date -j -f "%Y-%m-%d" "2026-03-10" +%s` on macOS)
 
-## Step 1: Credentials
+## Step 1: Credentials and `cf`
 
-Need `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (token permission "Browser Rendering - Edit"). Check env first, then `.env`, `.env.local`, `~/.env`:
+Starting and polling go through the `cf` CLI (`cf-cli` skill); Step 4's paging loop is an in-script client and stays on the HTTP API (`cloudflare-workers.md` § 8). `command -v cf` must succeed; otherwise ask the user to install it (see `cf-cli` skill — via mise, never `npm i -g`) and stop.
+
+Need `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (token permission "Browser Rendering - Edit"); `cf` reads both from the environment. Check env first, then `.env`, `.env.local`, `~/.env`:
 
 ```bash
 if [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$CLOUDFLARE_API_TOKEN" ]; then
@@ -40,23 +42,19 @@ Still missing or empty → ask the user to add both to the project `.env` and st
 ## Step 2: Start the crawl
 
 ```bash
-curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/browser-rendering/crawl" \
-  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "<TARGET_URL>",
-    "limit": <NUMBER_OF_PAGES>,
-    "formats": ["markdown"]
-  }'
+cf browser-run crawl create --body '{
+  "url": "<TARGET_URL>",
+  "limit": <NUMBER_OF_PAGES>,
+  "formats": ["markdown"]
+}'
 ```
 
-Fill the body from the parsed arguments, adding only what the user passed: `--depth` → `depth`, `--source` → `source`, `--no-render` → `"render": false`, `--include`／`--exclude` → `"options": { "includePatterns": [...], "excludePatterns": [...] }`, `--since` → `"modifiedSince": <UNIX_TIMESTAMP>` (see Core Parameters). The response `result` is the job ID.
+Fill the body from the parsed arguments, adding only what the user passed: `--depth` → `depth`, `--source` → `source`, `--no-render` → `"render": false`, `--include`／`--exclude` → `"options": { "includePatterns": [...], "excludePatterns": [...] }`, `--since` → `"modifiedSince": <UNIX_TIMESTAMP>` (see Core Parameters). The printed result is the job ID.
 
 ## Step 3: Poll every 5 seconds
 
 ```bash
-curl -s "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/browser-rendering/crawl/<JOB_ID>?limit=1" \
-  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'Status: {d[\"result\"][\"status\"]} | Finished: {d[\"result\"][\"finished\"]}/{d[\"result\"][\"total\"]}')"
+cf browser-run crawl get <JOB_ID> --limit 1 | jq -r '"Status: \(.status) | Finished: \(.finished)/\(.total)"'
 ```
 
 Statuses: `running`, `completed`, `cancelled_due_to_timeout` (7-day limit), `cancelled_due_to_limits`, `errored`.

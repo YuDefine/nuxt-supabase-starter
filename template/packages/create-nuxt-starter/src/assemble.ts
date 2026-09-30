@@ -123,6 +123,12 @@ export function assembleProject(
   applyStripManifest(targetDir, loadStripManifest(options.stripManifestPath), {
     consumer: 'scaffolder',
   })
+
+  // Codex must work in a fresh clone without a local Clade checkout. Project
+  // rules and richer settings can be regenerated later by the managed wrapper.
+  if (hasAgent(agentTargets, 'codex')) {
+    generateMinimalCodexAssets(targetDir)
+  }
 }
 
 function inferAuthSelection(
@@ -254,6 +260,23 @@ function copyAgentsInstructionFile(targetDir: string): void {
     mkdirSync(targetDir, { recursive: true })
     cpSync(agentsFile, join(targetDir, 'AGENTS.md'))
   }
+}
+
+function generateMinimalCodexAssets(targetDir: string): void {
+  const claudeSkills = join(targetDir, '.claude', 'skills')
+  const commitSkill = join(claudeSkills, 'commit', 'SKILL.md')
+  const agentsFile = join(targetDir, 'AGENTS.md')
+  if (!existsSync(commitSkill) || !existsSync(agentsFile)) {
+    throw new Error('Codex scaffold requires .claude/skills/commit/SKILL.md and AGENTS.md')
+  }
+
+  copyDirectoryFiltered(claudeSkills, join(targetDir, '.agents', 'skills'), new Set(['CLAUDE.md']))
+  const codexDir = join(targetDir, '.codex')
+  mkdirSync(codexDir, { recursive: true })
+  writeFileSync(
+    join(codexDir, 'config.toml'),
+    '# Codex project config. Clade may add managed settings and rules later.\n',
+  )
 }
 
 function copyTemplateGitHubAssets(targetDir: string): void {
