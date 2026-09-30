@@ -44,6 +44,7 @@ Dev tunnel（`vite-plugin-cloudflare-tunnel` 或手動 `cloudflared`）的 org c
 **規則落地**（zone 層一條規則涵蓋全 fleet）：
 
 ```bash
+# cf CLI 未覆蓋 zone 層 ruleset（只有 account-rulesets；見 cloudflare-workers § 8），故走 HTTP API
 # ruleset id 從 http_request_cache_settings entrypoint 取，再 POST 一條 rule
 curl -s -X POST -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
   "https://api.cloudflare.com/client/v4/zones/$ZONE/rulesets/$RULESET/rules" \

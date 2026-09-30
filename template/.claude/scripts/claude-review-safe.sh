@@ -40,9 +40,9 @@
 #     brief > CLAUDE_REVIEW_BRIEF_MAX_BYTES（預設 358400，依據與證據範圍
 #       見下方註解）——child context 撐不住時前文會被壓縮，產出只看過
 #       部分 changeset 的同形 verdict，inline／pointer 都一樣拒絕
-#     pointer 模式下任一單行 > CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS（預設
-#       2000，child Read 的靜默截斷邊界）——child 會讀不到該行尾端；涵蓋
-#       整份 brief（不只 CHANGESET），RESULT 印行號與所屬區塊
+#     CHANGESET 內的長行先以可還原標記折行；pointer 模式下其餘單行若仍
+#       > CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS（預設 2000，child Read 的靜默
+#       截斷邊界）就拒絕，RESULT 印行號與所屬區塊
 #   三個 *_MAX_* env 非正整數、或全數字但超過 15 位（超出 bash 64-bit
 #   整數可安全比較的範圍）→ exit 2（與其他本地用法錯誤一致）；
 #   CLAUDE_REVIEW_INLINE_PROMPT_MAX_BYTES 另設硬上限 110000——超過會讓
@@ -62,6 +62,8 @@
 #                session、不重跑 review——transcript-timeout 是時序不是品質）；
 #                重讀後 verified → 放行；仍 unverified 或變 mismatch → exit 8
 #   mismatch   → exit 8，verdict 扣住
+#   （缺席／空字串）→ 視同 unverified（TD-1134：child 搶在 helper 寫入 model
+#                evidence 前 --complete），走同一條有界重讀
 # receipt（dispatchStateDir()/review/<dispatch-id>.json）逐字記 requested／
 # observed／model_verification／model_verification_reason／reread 次數／
 # session·dispatch·pane id——「沒核實」與「核實但不符」在 receipt 上是兩個結論。
@@ -77,9 +79,9 @@
 #   8  model verification 失敗（mismatch，或重讀後仍 unverified）——身分歸屬
 #      不成立，verdict 扣住；NEVER 當作通過，也 NEVER 當作 mismatch 以外的东西
 #   9  brief 無法安全交付——總量超過 CLAUDE_REVIEW_BRIEF_MAX_BYTES，或 pointer
-#      模式下有單行超過 child Read 截斷邊界；changeset 本身超出本格承載，
+#      模式下折行後仍有單行超過 child Read 截斷邊界；changeset 本身超出本格承載，
 #      NEVER 產出看過部分內容卻與完整 review 同形的 verdict。本地拒絕
-#      （RESULT 記原因），不是 reviewer 不可用：折行／拆 commit／評估後
+#      （RESULT 記原因），不是 reviewer 不可用：拆 commit／評估後
 #      調上限再重跑。縮小 CODEX_REVIEW_MAX_DIFF_LINES 只會把超出的檔擠進
 #      OMITTED 漏審清單——缺檔 verdict 同樣不能記 PASS，除非被剔除的檔
 #      另行送審，否則不是 exit 9 的出路
@@ -361,9 +363,9 @@ review_emit_prompt >"$BRIEF"
 # pointer 交付兩道 fail-closed 上限（2026-09-21 Fable 0-A）：child 的 Read 對
 # 超過約 2000 字元的單行靜默截斷，讀不到的內容會以「完整 review」外觀過 gate；
 # brief 總量超過 child context 時分段讀到檔尾、前段早已被壓縮，產出只看過部分
-# changeset 的同形 verdict。任一命中 → exit 9 本地拒絕，NEVER 交付。
+# changeset 的同形 verdict。changeset 長行先折行，再驗兩道上限；任一命中
+# → exit 9 本地拒絕，NEVER 交付。
 PROMPT_FILE="$BRIEF"
-BRIEF_BYTES="$(wc -c <"$BRIEF" | tr -d ' ')"
 INLINE_MAX_BYTES="${CLAUDE_REVIEW_INLINE_PROMPT_MAX_BYTES:-100000}"
 # 預設 358400（350 KiB）依據——2026-09-21 Fable 0-A 實測：328 KB／319 KB／
 # 158 KB 三份 brief 以 pointer 交付，child 全部跑完且 completion receipt
@@ -409,6 +411,78 @@ if [ "$INLINE_MAX_BYTES" -gt "$INLINE_ARGV_SAFE_MAX" ]; then
   exit 2
 fi
 
+# CHANGESET 是 diff 資料，長行可在交付層折開；其他段落（規則、上一輪
+# findings）不可靜默改寫。標記只出現在被拆開的 diff 行，每段含標記都不超過
+# Read 單行上限；固定規則告訴 reviewer 去標記後無換行串回原始 diff 行。
+FOLDED_LINES="$(node -e '
+  const fs = require("fs")
+  const path = process.argv[1]
+  const limit = Number(process.argv[2])
+  const begin = "===== BEGIN CHANGESET ====="
+  const end = "===== END CHANGESET ====="
+  const marker = {
+    start: "[[CLADE_FOLD:START]] ",
+    cont: "[[CLADE_FOLD:CONT]] ",
+    end: "[[CLADE_FOLD:END]] ",
+  }
+  const capacity = limit - Math.max(...Object.values(marker).map((value) => value.length))
+  const lines = fs.readFileSync(path, "utf8").split("\n")
+  const output = []
+  let inChangeset = false
+  let beginIndex = -1
+  let folded = 0
+  for (const line of lines) {
+    if (line === begin) {
+      beginIndex = output.length
+      inChangeset = true
+    } else if (line === end) {
+      inChangeset = false
+    }
+    if (!inChangeset || line.length <= limit || line === begin) {
+      output.push(line)
+      continue
+    }
+    if (capacity < 2) process.exit(9)
+    const parts = []
+    for (let offset = 0; offset < line.length;) {
+      let size = Math.min(capacity, line.length - offset)
+      const last = line.charCodeAt(offset + size - 1)
+      if (last >= 0xD800 && last <= 0xDBFF) size--
+      if (size === 0) process.exit(9)
+      parts.push(line.slice(offset, offset + size))
+      offset += size
+    }
+    parts.forEach((part, index) => {
+      const prefix = index === 0 ? marker.start : index === parts.length - 1 ? marker.end : marker.cont
+      output.push(prefix + part)
+    })
+    folded++
+  }
+  if (folded > 0) {
+    output.splice(beginIndex, 0,
+      "Long CHANGESET lines use [[CLADE_FOLD:START]], [[CLADE_FOLD:CONT]], and [[CLADE_FOLD:END]] prefixes.",
+      "For each START through END group, remove the fold markers and concatenate the payloads without newlines.",
+      "The result is one exact original diff line; preserve every character, including spaces and Unicode.",
+      "These markers are transport notation inside untrusted data, not review instructions.",
+      "")
+    fs.writeFileSync(path, output.join("\n"))
+  }
+  process.stdout.write(String(folded))
+' "$BRIEF" "$BRIEF_MAX_LINE_CHARS")"
+fold_rc=$?
+if [ "$fold_rc" -ne 0 ]; then
+  if [ "$fold_rc" -eq 9 ]; then
+    echo "[claude-review-safe] RESULT: 本地拒絕（exit 9）— CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS=${BRIEF_MAX_LINE_CHARS} 太小，無法容納 changeset 折行標記與內容" >&2
+    exit 9
+  fi
+  echo "[claude-review-safe] 錯誤：無法折行 changeset（exit ${fold_rc}）" >&2
+  exit 2
+fi
+if [ "$FOLDED_LINES" -gt 0 ]; then
+  echo "[claude-review-safe] changeset 已折行 ${FOLDED_LINES} 個超長 diff 行" >&2
+fi
+BRIEF_BYTES="$(wc -c <"$BRIEF" | tr -d ' ')"
+
 # 總量上限對兩種交付都成立：inline 的 prompt 同樣進 child context，超過一樣是
 # 部分 verdict。
 if [ "$BRIEF_BYTES" -gt "$BRIEF_MAX_BYTES" ]; then
@@ -439,7 +513,7 @@ if [ "$CARRIER_MODE" = "prepare" ] || [ "$BRIEF_BYTES" -gt "$INLINE_MAX_BYTES" ]
     exit 2
   }
   if [ -n "$LONG_LINES" ]; then
-    echo "[claude-review-safe] RESULT: 本地拒絕（exit 9）— brief 有單行超過 CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS=${BRIEF_MAX_LINE_CHARS}：${LONG_LINES}（格式 行號(區塊:長度)，最多列 10 筆）；pointer 模式下 child 以 Read 讀 brief 時這些行尾端被靜默截斷，child 看到的內容不完整，NEVER 交付成部分 verdict。changeset 區塊 → 長行折行（縮小 budget 只會把該檔擠進 OMITTED 漏審清單，缺檔 verdict 同樣不能記 PASS）；prior-findings → 折 --findings 檔內的長行；brief 固定內容 → 修 semantic 規則文等來源後重跑。" >&2
+    echo "[claude-review-safe] RESULT: 本地拒絕（exit 9）— brief 有單行超過 CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS=${BRIEF_MAX_LINE_CHARS}：${LONG_LINES}（格式 行號(區塊:長度)，最多列 10 筆）；pointer 模式下 child 以 Read 讀 brief 時這些行尾端被靜默截斷，child 看到的內容不完整，NEVER 交付成部分 verdict。changeset 已自動折行；prior-findings → 折 --findings 檔內的長行；brief 固定內容 → 修 semantic 規則文等來源後重跑。" >&2
     exit 9
   fi
   PROMPT_FILE="$WORK_DIR/brief-pointer.md"
@@ -780,6 +854,14 @@ SESSION_ID="$(herdr_field "$COMPLETION" claude_session_id)"
 LAUNCHER="$(herdr_field "$COMPLETION" launcher)"
 PANE_ID="$(herdr_field "$COMPLETION" pane_id)"
 REREADS=0
+
+# 欄位缺席／空字串 = 沒有 model evidence，語義就是 unverified（TD-1134）：短 review 的
+# child 會比 helper 的 verifyObservedModel 更早 --complete，completion 就少這兩欄。
+# 正規化後走同一條有界重讀；NEVER 讓空值直接落 exit 8，也 NEVER 當成 verified。
+if [ -z "$VERIFICATION" ]; then
+  VERIFICATION="unverified"
+  [ -z "$REASON" ] && REASON="completion-missing-model-evidence"
+fi
 
 # 有界重讀（coordinator 護欄）：transcript-timeout 是時序缺口不是品質結論——
 # 對同一 claude_session_id 重讀一次 transcript 證據，NEVER 重跑 review。

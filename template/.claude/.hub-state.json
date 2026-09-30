@@ -3,16 +3,16 @@
   "rulesProjection": "copy",
   "checksums": {
     "scripts/0a-metrics.mjs": "876ce8d2ac932fe1",
-    "scripts/claude-review-safe.sh": "7cfbb39bde0ddc26",
+    "scripts/claude-review-safe.sh": "438560b61f372c97",
     "scripts/codex-review-safe.sh": "71540328f66b753d",
     "scripts/commit-lock.mjs": "59c2dcb50fc817bd",
     "scripts/gh-ci-watch.sh": "f404ea642cce7c7c",
-    "scripts/lib/review-common.sh": "10acf0aa3b669acf",
-    "scripts/lib/review-subagent-transcript.mjs": "423f3afa301e54c0",
-    "scripts/lib/review-subagent.sh": "19e08e2b300125fb",
+    "scripts/lib/review-common.sh": "926b404989bdff34",
+    "scripts/lib/review-subagent-transcript.mjs": "e2d33af7940599ff",
+    "scripts/lib/review-subagent.sh": "012bbe8ae23fafde",
     "skills/commit/SKILL.md": "de115e5f67b9b562",
-    "skills/commit/batch.md": "f52509ed8d17284d",
-    "skills/commit/gates.md": "cf6142903abd8d07",
+    "skills/commit/batch.md": "66f0481c1e1a9504",
+    "skills/commit/gates.md": "a124803c2bc1798e",
     "skills/commit/handoff-steps.md": "fb053986b4dc03c3",
     "skills/commit/review-policy.md": "79089b4726e31ac1",
     "skills/commit/runner-safety.md": "de63d390fc820e05",
@@ -84,7 +84,7 @@
     "skills/system-analysis/rules/系統介面盤點與端點歸類判準.md": "0d5cb8f4f8976164",
     "skills/system-analysis/templates/plan.example.md": "1ec3d4b6d0632a4f",
     "skills/system-analysis/templates/plan.md": "ef903d2b8ca4cee2",
-    "skills/work-route/SKILL.md": "984d60074ce9773f",
+    "skills/work-route/SKILL.md": "1b043a29190b0340",
     "skills/work-route/owner-routing.md": "83fbd57d704c10ef",
     "commands/db-migration.md": "95c47c0694afe71f",
     "commands/doc-sync.md": "e8d437b4e452b926",
@@ -92,6 +92,6 @@
     "agents/commit-0a-reviewer.md": "4a2c4fd7e864db69",
     "agents/dispatch-fallback.md": "1695ff383e279ca5",
     "agents/references/clade-review-rules.md": "ae7585db1cb9de25",
-    "agents/sonnet-implementer.md": "6e481720bc4337bc"
+    "agents/sonnet-implementer.md": "a46843e21e35ce18"
   }
 }
