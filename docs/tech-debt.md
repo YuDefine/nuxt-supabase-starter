@@ -27,7 +27,7 @@
 | TD-022 | repo root 的 Claude session 載不到 `commit-0a-reviewer` seat | mid | open | 2026-09-28 |
 | TD-023 | Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback | low | open | 2026-09-28 |
 | TD-024 | Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict` | mid | open | 2026-09-29 |
-| TD-025 | scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅 | mid | open | 2026-09-29 |
+| TD-025 | scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅 | mid | done | 2026-09-29 |
 
 ### 2026-09-27 origin/main 收斂接手 brief
 
@@ -841,6 +841,7 @@ error 欄位到零失敗、零 suppression（無法插樁者也不得豁免）�
 
 ## TD-025 — scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅
 
+**Status**: done（2026-09-30：提交版 receipt 改依 Git index 收錄，回歸驗證通過）
 **Discovered**: 2026-09-29 — TD-024 那次 `/commit` 的 0-C（`pnpm test`）；把 TD-024 改動 stash 掉後在 `631418e4` 上同樣重現，非該次引入
 
 ### Problem
@@ -858,7 +859,14 @@ receipt（`src/scaffold-receipt.ts`）把磁碟上存在、但被 gitignore 擋�
 
 ### Acceptance
 
-- `cd template/packages/create-nuxt-starter && pnpm exec vp test run test/scaffold-receipt.test.ts` 3 passed。
+- `cd template/packages/create-nuxt-starter && pnpm exec vp test run test/scaffold-receipt.test.ts` 4 passed（原 3 個案例擴充 ignored-file fixture，另補既有 repo 已追蹤 ignored 檔案例）。
+
+### Resolution / Verification（2026-09-30）
+
+- `assemble.ts` 的 `copyTemplateClaudeAssets()` 經 `copyDirectory()` 從磁碟整包複製 `.claude/`，不套用 Git ignore；來源若有本機的 `settings.local.json` 就會帶進 scaffold。新 worktree 沒有該 ignored 檔時原 3 個測試全過；加入明確 fixture 後，修正前 2 failed / 1 passed，證明 receipt 的磁碟範圍與 commit 範圍不同，而非斷言本身有誤。
+- 安裝前 receipt 繼續擔保磁碟上的 agent 檔，維持首投影認領契約。提交前先 `git add -A`，以 `git ls-files -z` 的 index 路徑篩選 receipt，再 stage 刷新的 receipt；避免收錄未追蹤 ignored 檔，並保留已追蹤但符合 ignore 的既有檔。NUL 分隔也保留含空白／中文的路徑。
+- 回歸涵蓋安裝時位元組、安裝產生的 tracked 檔、`--no-install`、ignored 目錄與 negation、既有 repo 的 tracked ignored 檔，並逐筆核對 committed blob 的 hash。排序改用工具鏈要求的 `toSorted()`，package tsconfig 補 `ES2023` lib，與 Node 24 runtime 對齊。
+- Scaffolder `pnpm test`：236 passed / 2 skipped（既有 skipped 未變更）；package `pnpm run typecheck`、改動路徑 `pnpm run lint`／`pnpm run format:check` 通過；template `pnpm run doctor` 為 clean、零診斷。
 
 ## Cross-repo pointers
 

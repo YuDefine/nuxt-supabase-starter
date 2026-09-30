@@ -33,14 +33,18 @@ export function hashReceiptContent(content: string): string {
  * 依磁碟當下位元組建 receipt。MUST 在所有 prune／placeholder 取代之後、init-consumer 與
  * `pnpm install` 之前呼叫；之後才改的檔不該被認領（clade 端會退回原本的拒收）。
  * symlink 不列：clade 以 lstat 判讀，receipt 只擔保 scaffold 寫出的一般檔。
+ * 提交前提供 Git index 的 trackedFiles，讓 committed receipt 只擔保會進 commit 的檔案。
  */
-export function buildScaffoldReceipt(targetDir: string): ScaffoldReceipt {
+export function buildScaffoldReceipt(
+  targetDir: string,
+  trackedFiles?: ReadonlySet<string>,
+): ScaffoldReceipt {
   const files: Record<string, string> = {}
   const walk = (rel: string): void => {
     for (const entry of readdirSync(join(targetDir, rel), { withFileTypes: true })) {
       const childRel = `${rel}/${entry.name}`
       if (entry.isDirectory()) walk(childRel)
-      else if (entry.isFile()) {
+      else if (entry.isFile() && (!trackedFiles || trackedFiles.has(childRel))) {
         files[childRel] = hashReceiptContent(readFileSync(join(targetDir, childRel), 'utf8'))
       }
     }
@@ -49,12 +53,17 @@ export function buildScaffoldReceipt(targetDir: string): ScaffoldReceipt {
     const abs = join(targetDir, dir)
     if (existsSync(abs) && lstatSync(abs).isDirectory()) walk(dir)
   }
-  const sorted = Object.fromEntries(Object.entries(files).sort(([a], [b]) => a.localeCompare(b)))
+  const sorted = Object.fromEntries(
+    Object.entries(files).toSorted(([a], [b]) => a.localeCompare(b)),
+  )
   return { schemaVersion: 1, producer: SCAFFOLD_RECEIPT_PRODUCER, files: sorted }
 }
 
-export function writeScaffoldReceipt(targetDir: string): ScaffoldReceipt {
-  const receipt = buildScaffoldReceipt(targetDir)
+export function writeScaffoldReceipt(
+  targetDir: string,
+  trackedFiles?: ReadonlySet<string>,
+): ScaffoldReceipt {
+  const receipt = buildScaffoldReceipt(targetDir, trackedFiles)
   writeFileSync(join(targetDir, SCAFFOLD_RECEIPT_PATH), `${JSON.stringify(receipt, null, 2)}\n`)
   return receipt
 }
