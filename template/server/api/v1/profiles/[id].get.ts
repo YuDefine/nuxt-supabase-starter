@@ -11,7 +11,8 @@
  * @module server/api/v1/profiles/[id].get
  */
 
-import { createError, defineEventHandler, getRouterParam } from 'h3'
+import { defineEventHandler, getRouterParam } from 'h3'
+import { createError } from 'evlog'
 import {
   profileIdParamSchema,
   profileResponseSchema,
@@ -25,19 +26,23 @@ import { getAuthedSupabase } from '../../../utils/supabase'
 
 export default defineEventHandler(async (event): Promise<ProfileResponse> => {
   const log = useLogger(event)
+  log.set({ operation: 'profiles.get' })
   const user = requireAuth(event)
 
   // 驗證 ID 參數
   const rawId = getRouterParam(event, 'id')
   const { id } = validateParam({ id: rawId }, profileIdParamSchema)
+  log.set({ profileId: id })
 
   // 只能讀自己的 profile；admin 可讀任意。
   // 回 404 而非 403 — 403 會告訴呼叫端「這個 id 存在」，讓任何登入者能枚舉
   // profile 是否存在。404 與「查無此人」對外不可區分。
   if (user.id !== id && user.role !== 'admin') {
     throw createError({
-      statusCode: 404,
-      statusMessage: '找不到指定的 Profile',
+      status: 404,
+      message: '找不到指定的 Profile',
+      why: '指定資源不存在或無法存取。',
+      fix: '請確認識別碼，或使用自己的個人資料頁面。',
     })
   }
 
@@ -50,15 +55,21 @@ export default defineEventHandler(async (event): Promise<ProfileResponse> => {
     .single()
 
   if (error) {
-    // PGRST116 (404) 是預期錯誤，不需要 log.error
-    if (error.code !== PGRST_NOT_FOUND) {
-      log.error(error as Error, { step: 'db-select' })
-    }
-    throw createError({
-      statusCode: error.code === PGRST_NOT_FOUND ? 404 : 500,
-      statusMessage:
-        error.code === PGRST_NOT_FOUND ? '找不到指定的 Profile' : '查詢失敗，請稍後再試',
+    const notFound = error.code === PGRST_NOT_FOUND
+    const failure = createError({
+      status: notFound ? 404 : 500,
+      message: notFound ? '找不到指定的 Profile' : '查詢失敗，請稍後再試',
+      why: notFound ? '指定資源不存在或無法存取。' : '資料服務回傳讀取錯誤，無法取得查詢結果。',
+      fix: notFound
+        ? '請確認識別碼，或使用自己的個人資料頁面。'
+        : '請聯絡系統管理員並提供這次請求的時間。',
+      cause: error as Error,
     })
+    // PGRST116 (404) 是預期錯誤，不需要 log.error
+    if (!notFound) {
+      log.error(failure, { step: 'db-select' })
+    }
+    throw failure
   }
 
   return profileResponseSchema.parse({ data })

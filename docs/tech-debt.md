@@ -14,7 +14,7 @@
 | TD-004 | Spectra roadmap drift check 在 CI 的 structural diff                                                     | mid      | in-progress | 2026-05-10 |
 | TD-005 | meta-monorepo 下 pre-push checks 靜默 no-op                                                              | high     | in-progress | 2026-08-19 |
 | TD-008 | `validate-starter` 維護工具會被 scaffold 帶走                                                            | mid      | open        | 2026-08-19 |
-| TD-010 | 參考 app email 登入被 nuxt-security CSRF 擋下                                                            | mid      | open        | 2026-08-24 |
+| TD-010 | 參考 app email 登入被 nuxt-security CSRF 擋下                                                            | mid      | in-progress | 2026-08-24 |
 | TD-011 | clade 投影 auth 文件仍寫舊套件名                                                                         | low      | open        | 2026-08-24 |
 | TD-012 | `lint` script guard 吃不掉 pnpm 附加參數                                                                 | mid      | done        | 2026-08-29 |
 | TD-014 | clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約                              | low      | open        | 2026-09-09 |
@@ -26,8 +26,8 @@
 | TD-021 | Template CI `UX drift audit` 既有紅燈：`shared/types` 沒有 enum-like 定義就 fail                         | mid      | open        | 2026-09-28 |
 | TD-022 | repo root 的 Claude session 載不到 `commit-0a-reviewer` seat                                             | mid      | open        | 2026-09-28 |
 | TD-023 | Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback                                         | low      | done        | 2026-09-28 |
-| TD-024 | Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict`                                               | mid      | open        | 2026-09-29 |
-| TD-025 | scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅 | mid      | open        | 2026-09-29 |
+| TD-024 | Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict`                                               | mid      | done        | 2026-09-30 |
+| TD-025 | scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅 | mid      | done        | 2026-09-29 |
 
 ### 2026-09-27 origin/main 收斂接手 brief
 
@@ -209,7 +209,7 @@ exit 0 且無輸出。實測 `bash template/scripts/pre-push/runner.sh` 為 exit
 
 ## TD-010 — 參考 app email 登入被 nuxt-security CSRF 擋下
 
-**Status**: open
+**Status**: in-progress（參考 app／scaffolder 修復與本機回歸已完成；有效帳號登入與部署 host 驗收待補）
 **Priority**: mid
 **Discovered**: 2026-08-24 — TD-009 遷移後實測發現；根因與遷移無關
 **Location**: `template/nuxt.config.ts` 的 `security.csrf`、`template/app/pages/auth/login.vue`
@@ -223,15 +223,43 @@ CSRF token；已觀察到 `403 CSRF Token Mismatch`。CI 目前漏測，因真�
 ### Fix approach
 
 方案裁決與實作、驗收步驟見 [2026-09-26 TD-010 CSRF decision](evidence/2026-09-26-td-010-csrf-decision.md)。
-推薦在 `/api/auth/**` 以 `routeRules` 的 **`csurf: false`** 建立例外，保留全域
-`security.csrf: true` 與 Better Auth 自身的 origin/cookie/Fetch Metadata 防護。參考 app 與
-scaffolder 的 Better Auth + security 輸出須一起修；目前尚未實作或完成執行時驗收。
+已在參考 app 加 `routeRules['/api/auth/**'].csurf = false`，scaffolder 僅於同時選 Better Auth 與
+security 時輸出同一設定；兩者均維持全域 `security.csrf: true`。Better Auth 獨佔此路徑，
+由其自身 origin、cookie、Fetch Metadata 防護接手；`server/auth.config.ts` 未開
+`advanced.disableCSRFCheck`／`disableOriginCheck`，也未另設 `trustedOrigins`，故使用 Better Auth
+以 base URL 推導可信來源及預設的 `SameSite=Lax`、`HttpOnly` cookie（HTTPS 下 Secure）。
+這是依 [Better Auth security 文件](https://better-auth.com/docs/reference/security) 與本機套件設定確認的
+機制；實際部署 host 與 cookie 屬性仍需驗證。
+
+本機 `pnpm test:nuxt`（6 tests）通過：錯誤帳密 `POST /api/auth/sign-in/email` 到達 Better Auth
+並回 401，無 nuxt-csurf 403；`POST /api/_dev/login` 帶 CSRF cookie 但無 token 回 403
+`CSRF Token not found`，帶無效 token 回 403 `CSRF Token invalid`。這兩個訊息是目前
+nuxt-csurf 的實際輸出，比先前決策稿預期的 `CSRF Token Mismatch` 更精確。
+scaffolder 三種 feature 組合測試通過：Better Auth + security 產生限定例外、單獨 security
+保留全域 CSRF、單獨 Better Auth 不產生例外。有效帳密登入尚未驗證，不能把 401 當登入成功。
+scaffolder 整包 `pnpm test` 仍因既有 `consumer-update-policy.test.ts` 的 `npx tsdown`
+啟動失敗及 `agent runtime selection` 缺 `.codex/config.toml` 投影而紅；本次新增三案的
+定向測試是綠的。本機 Playwright 因 Ubuntu 26.04 不受所裝版本支援而缺 Chromium，
+`e2e/auth.spec.ts` 尚未執行成功；CI 須覆核該 E2E。
+
+Better Auth 1.7.1 在 `NODE_ENV=test` 且未明設 `advanced.disableOriginCheck` 時，套件內部
+`isTest()` 預設跳過 origin check；因此本機 Nuxt test 不作跨來源拒絕的證據。部署模式須另驗
+不可信 Origin／Fetch Metadata 的有效形狀請求，以及實際 host 的 `trustedOrigins`／cookie。
 
 ### Acceptance
 
 - dev server 使用有效帳密由登入頁完成登入，不再出現 CSRF token error。
 - 至少一條其他 `POST /api/**` 在無 token 時仍回 403。
 - 有測試帳號時 `e2e/auth.spec.ts` 的真實登入路徑 PASS。
+
+### Follow-up brief
+
+工作指針：本條、上方決策文件、`template/nuxt.config.ts`、
+`template/packages/create-nuxt-starter/src/assemble.ts` 與兩處對應測試。已驗證的本機
+HTTP 證據如上；正式驗收仍需具 `E2E_USER_EMAIL`／`E2E_USER_PASSWORD` 的隔離測試帳號，
+用登入頁完成登入，並在非 test 模式以不可信 Origin 測 Better Auth 拒絕、檢查部署 host 的
+`SameSite`／`HttpOnly`／`Secure` cookie。這些工作限由主持者另派持有環境與驗收檔案
+所有權的 pane 執行；本 pane 僅持有本 brief 所列的參考 app、scaffolder 設定與測試檔。
 
 ## TD-011 — clade 投影 auth 文件仍寫舊套件名
 
@@ -989,6 +1017,7 @@ scaffold-only 印出的延後投影指令會指到不存在的檔案。
 
 ## TD-024 — Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict`
 
+**Status**: done（2026-09-30：四支 API 插樁補齊，strict 本機驗收通過）
 **Discovered**: 2026-09-29 — clade `W-2026-09-29-work-route-evlog-map-ci-parity-runner-task-pre-p`（D3）relay
 
 ### Problem
@@ -1012,8 +1041,17 @@ error 欄位到零失敗、零 suppression（無法插樁者也不得豁免）�
   由含 YuDefine/clade#538 的 clade 版本投影；投影到位前改以 clade 源檔
   `vendor/actions/evlog-map-gate/run.sh` 帶 `INPUT_CWD=template INPUT_MODE=strict` 驗。
 
+### Verification（2026-09-30）
+
+- 三支 profiles API 加入 operation、查詢目標／分頁脈絡；dev-login 改用 request logger，記錄成功、拒絕與失敗 audit，成功事件不收錄 email、密碼或 cookie。
+- 四支 API 使用 evlog `createError` 保留 why／fix／cause；測試實跑 h3 錯誤序列化與 NDJSON，並確認不可存取／不存在的 profile 對外錯誤一致。
+- `pnpm exec evlog map` 重新產生 baseline：13 個 entry point、score 100、零失敗、零 suppression；workflow 明確切至 `mode: strict`。
+- repo 根 `node template/.github/actions/evlog-map-gate/local.ts --print-config` 確認 strict／template；不帶旗標執行 exit 0。
+- `template/` 跑 `pnpm test:file test/unit/server/api/v1/profiles test/unit/server/api/_dev/login.post.test.ts test/unit/server/api/_dev/login.observability.dev.test.ts`：6 檔、45 passed；`pnpm run typecheck` 與改動路徑的 `pnpm run lint`／`pnpm run format:check` 全部 exit 0。開發分支與非開發 guard 分屬 Vitest project，無 skip。
+
 ## TD-025 — scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅
 
+**Status**: done（2026-09-30：提交版 receipt 改依 Git index 收錄，回歸驗證通過）
 **Discovered**: 2026-09-29 — TD-024 那次 `/commit` 的 0-C（`pnpm test`）；把 TD-024 改動 stash 掉後在 `631418e4` 上同樣重現，非該次引入
 
 ### Problem
@@ -1031,7 +1069,15 @@ receipt（`src/scaffold-receipt.ts`）把磁碟上存在、但被 gitignore 擋�
 
 ### Acceptance
 
-- `cd template/packages/create-nuxt-starter && pnpm exec vp test run test/scaffold-receipt.test.ts` 3 passed。
+- `cd template/packages/create-nuxt-starter && pnpm exec vp test run test/scaffold-receipt.test.ts` 4 passed（原 3 個案例擴充 ignored-file fixture，另補既有 repo 已追蹤 ignored 檔案例）。
+
+### Resolution / Verification（2026-09-30）
+
+- `assemble.ts` 的 `copyTemplateClaudeAssets()` 經 `copyDirectory()` 從磁碟整包複製 `.claude/`，不套用 Git ignore；來源若有本機的 `settings.local.json` 就會帶進 scaffold。新 worktree 沒有該 ignored 檔時原 3 個測試全過；加入明確 fixture 後，修正前 2 failed / 1 passed，證明 receipt 的磁碟範圍與 commit 範圍不同，而非斷言本身有誤。
+- 安裝前 receipt 繼續擔保磁碟上的 agent 檔，維持首投影認領契約。提交前先 `git add -A`，以 `git ls-files -z` 的 index 路徑篩選 receipt，再 stage 刷新的 receipt；避免收錄未追蹤 ignored 檔，並保留已追蹤但符合 ignore 的既有檔。NUL 分隔也保留含空白／中文的路徑。
+- 回歸涵蓋安裝時位元組、安裝產生的 tracked 檔、`--no-install`、ignored 目錄與 negation、既有 repo 的 tracked ignored 檔，並逐筆核對 committed blob 的 hash。排序改用工具鏈要求的 `toSorted()`，package tsconfig 補 `ES2023` lib，與 Node 24 runtime 對齊。
+- Scaffolder `pnpm test`：236 passed / 2 skipped（既有 skipped 未變更）；package `pnpm run typecheck`、改動路徑 `pnpm run lint`／`pnpm run format:check` 通過；template `pnpm run doctor` 為 clean、零診斷。
+- PR #20 轉 ready 後，CI run `36703862581` 的兩個 receipt 案例因 runner 缺少 Git 作者／提交者身分而沒有 initial commit，`git show HEAD:...` 失敗。以 `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1` 本機重現相同 2 failed；Template CI 的 Unit tests 步驟提供 fixture 的 `GIT_AUTHOR_*`／`GIT_COMMITTER_*` 後，同環境原測試 4 passed，未修改測試或斷言。合併 main 後的相關 scaffold／更新策略／receipt 測試另驗 62 passed。
 
 ## Cross-repo pointers
 
