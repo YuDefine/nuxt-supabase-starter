@@ -8,4 +8,5 @@
 # vp config 重新生成此檔時會把這個 cd 拿掉，要記得補回來。
 cd "$(dirname "$0")/.." || exit 1
 
-bash scripts/pre-push/runner.sh
+# 以 cd 後的 Nuxt app 根目錄定位 runner checks（本維護倉為 template/，scaffold 專案為 root）。
+CLADE_PROJECT_ROOT="$PWD" bash scripts/pre-push/runner.sh

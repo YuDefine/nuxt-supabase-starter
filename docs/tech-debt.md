@@ -9,25 +9,25 @@
 
 ## Index
 
-| ID | Title | Priority | Status | Discovered |
-| --- | --- | --- | --- | --- |
-| TD-004 | Spectra roadmap drift check 在 CI 的 structural diff | mid | in-progress | 2026-05-10 |
-| TD-005 | meta-monorepo 下 pre-push checks 靜默 no-op | high | open | 2026-08-19 |
-| TD-008 | `validate-starter` 維護工具會被 scaffold 帶走 | mid | open | 2026-08-19 |
-| TD-010 | 參考 app email 登入被 nuxt-security CSRF 擋下 | mid | open | 2026-08-24 |
-| TD-011 | clade 投影 auth 文件仍寫舊套件名 | low | open | 2026-08-24 |
-| TD-012 | `lint` script guard 吃不掉 pnpm 附加參數 | mid | done | 2026-08-29 |
-| TD-014 | clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約 | low | open | 2026-09-09 |
-| TD-016 | Cloudflare 上 `useRuntimeConfig()` 的 module-eval snapshot 是否讀得到注入的 `NUXT_APP_ENV` | mid | done | 2026-09-11 |
-| TD-017 | `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅 | low | open | 2026-09-11 |
-| TD-018 | auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict | high | done | 2026-09-11 |
-| TD-019 | `scaffold-smoke` 自 2026-08-24 起持續紅，剩餘 blocker 是 clade 投影未去識別化 | mid | open | 2026-09-11 |
-| TD-020 | 選了 codex 的 scaffold 輸出靜默少掉 `.codex/` 與 `.agents/` | high | in-progress | 2026-09-11 |
-| TD-021 | Template CI `UX drift audit` 既有紅燈：`shared/types` 沒有 enum-like 定義就 fail | mid | open | 2026-09-28 |
-| TD-022 | repo root 的 Claude session 載不到 `commit-0a-reviewer` seat | mid | open | 2026-09-28 |
-| TD-023 | Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback | low | open | 2026-09-28 |
-| TD-024 | Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict` | mid | open | 2026-09-29 |
-| TD-025 | scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅 | mid | open | 2026-09-29 |
+| ID     | Title                                                                                                    | Priority | Status      | Discovered |
+| ------ | -------------------------------------------------------------------------------------------------------- | -------- | ----------- | ---------- |
+| TD-004 | Spectra roadmap drift check 在 CI 的 structural diff                                                     | mid      | in-progress | 2026-05-10 |
+| TD-005 | meta-monorepo 下 pre-push checks 靜默 no-op                                                              | high     | in-progress | 2026-08-19 |
+| TD-008 | `validate-starter` 維護工具會被 scaffold 帶走                                                            | mid      | open        | 2026-08-19 |
+| TD-010 | 參考 app email 登入被 nuxt-security CSRF 擋下                                                            | mid      | open        | 2026-08-24 |
+| TD-011 | clade 投影 auth 文件仍寫舊套件名                                                                         | low      | open        | 2026-08-24 |
+| TD-012 | `lint` script guard 吃不掉 pnpm 附加參數                                                                 | mid      | done        | 2026-08-29 |
+| TD-014 | clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約                              | low      | open        | 2026-09-09 |
+| TD-016 | Cloudflare 上 `useRuntimeConfig()` 的 module-eval snapshot 是否讀得到注入的 `NUXT_APP_ENV`               | mid      | done        | 2026-09-11 |
+| TD-017 | `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅                                     | low      | open        | 2026-09-11 |
+| TD-018 | auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict                 | high     | done        | 2026-09-11 |
+| TD-019 | `scaffold-smoke` 自 2026-08-24 起持續紅，剩餘 blocker 是 clade 投影未去識別化                            | mid      | open        | 2026-09-11 |
+| TD-020 | 選了 codex 的 scaffold 輸出靜默少掉 `.codex/` 與 `.agents/`                                              | high     | in-progress | 2026-09-11 |
+| TD-021 | Template CI `UX drift audit` 既有紅燈：`shared/types` 沒有 enum-like 定義就 fail                         | mid      | open        | 2026-09-28 |
+| TD-022 | repo root 的 Claude session 載不到 `commit-0a-reviewer` seat                                             | mid      | open        | 2026-09-28 |
+| TD-023 | Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback                                         | low      | open        | 2026-09-28 |
+| TD-024 | Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict`                                               | mid      | open        | 2026-09-29 |
+| TD-025 | scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅 | mid      | open        | 2026-09-29 |
 
 ### 2026-09-27 origin/main 收斂接手 brief
 
@@ -51,9 +51,36 @@
 - 剩餘步驟：主持者追蹤 PR #5／#8／#9／#10 與 clade source 工作；各自合入後重新讀 `origin/main`，逐條核對 Acceptance、同步 Index 與 entry body，再量測 HANDOFF 未勾及 literal open TD。
 - 檔案所有權：PR #14 0-A r1 修補由本輪 worker 修改根目錄 `HANDOFF.md`、`template/HANDOFF.md` 與 `docs/tech-debt.md`；程式碼、migration、`.claude/**`、`vendor/**`、其他 worktree、production 與 PR merge 由各自 owner 處理。
 
+## In-flight PR 對帳（2026-09-27）
+
+以下條目的本文與 Index 行由各 PR 持有，本次不修改；PR 未合併不算完成。
+
+| TD     | 狀態              | 證據與剩餘事項                                                                                                                                                                                                |
+| ------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TD-008 | IN-FLIGHT — PR #8 | `docs/tech-debt.md` 的落點計畫與 `tasks/2026-09-26-td-008-validate-starter-placement-plan.md` 在 [PR #8](https://github.com/YuDefine/nuxt-supabase-starter/pull/8)；程式搬移仍待實作，且須保留 PR #5 的修正。 |
+| TD-010 | IN-FLIGHT — PR #9 | Better Auth CSRF 例外及本機測試在 [PR #9](https://github.com/YuDefine/nuxt-supabase-starter/pull/9)；有效帳號與部署 host 驗收仍待補。                                                                         |
+| TD-017 | IN-FLIGHT — PR #5 | `validate-starter` 的 fixture 清理與 `--keep` 在 [PR #5](https://github.com/YuDefine/nuxt-supabase-starter/pull/5)；未合併前不結案。                                                                          |
+
+### 後續交接（PR #10）
+
+- 工作指針：[PR #10](https://github.com/YuDefine/nuxt-supabase-starter/pull/10) 承接 TD-004/005；
+  TD-018 的實作入口在 clade `scripts/lib/runtime-artifact-apply.ts` 與 auto-commit rescue/revert flow。
+- 已驗證：`23fbbff6` 移除無效 CI 步驟並接通兩份 hook；PR #10 的 draft CI
+  [run 36260052169](https://github.com/YuDefine/nuxt-supabase-starter/actions/runs/36260052169)
+  Format / Lint / Typecheck 成功、Unit tests skipped；本機 `vp check`、shellcheck 與實際
+  Vite+ pre-push dispatcher 均 exit 0。外部 PR #1 已以目前 `better-auth` `^1.7.1` 的
+  `template/package.json` 證據[留言](https://github.com/YuDefine/nuxt-supabase-starter/pull/1#issuecomment-5848381621)並關閉。
+- 剩餘步驟：coordinator 審查 PR #10 並在落地後核對 main Template CI，才將 TD-004 結案；
+  TD-005 須建立可追溯的 ratchet baseline 並驗證違規會擋 push；TD-018 由 clade 修復後取得
+  連續兩趟 propagate 非 `failed` 的證據。PR #5/#8/#9 依各自 owner 審查，不在此 PR 重做。
+- 檔案所有權：PR #10 只持有 `.github/workflows/template-ci.yml`、兩份 pre-push hook 與
+  `docs/tech-debt.md` 中 TD-004/005/018 及本對帳段；PR #5/#8/#9 分別持有 TD-017/008/010
+  條目及各自程式檔；clade 持有 TD-018 的修復程式。`template/.husky/pre-push` 舊 hook 是否移除
+  待後續維護者處理，本 PR 不動。
+
 ## TD-004 — Spectra roadmap drift check 在 CI 的 structural diff
 
-**Status**: in-progress（2026-09-28：已從 workflow 移除失效診斷，待 PR CI 與合入確認）
+**Status**: in-progress — [PR #10](https://github.com/YuDefine/nuxt-supabase-starter/pull/10) 的 `23fbbff6` 已移除失效診斷；draft CI [run 36260052169](https://github.com/YuDefine/nuxt-supabase-starter/actions/runs/36260052169) 的 Format / Lint / Typecheck 成功，待合併及 main CI 後結案
 **Priority**: mid
 **Discovered**: 2026-05-10 — v0.31.0 release 後 Template CI 反覆報 stale
 **Location**: `.github/workflows/template-ci.yml`（原 `template/scripts/spectra-advanced/roadmap-sync.ts` 已退役）
@@ -78,6 +105,23 @@ CI 執行 `vp run spectra:roadmap --check` 時曾持續報 stale，即使 local 
   workflow 未隨 Spectra 投影退役同步更新**；沒有可執行的 collect/render path，也無 CI diff 可構造
   修正前紅、修正後綠的回歸測試。本輪因此只記錄診斷，不復活已退役腳本或手改 roadmap。
 
+### 歷史 Workaround
+
+`23fbbff6` 之前，`.github/workflows/template-ci.yml` 保留 `continue-on-error: true` 與 stale 時的
+diff 指令；前置測試失敗使步驟跳過，即使走到該步驟，roadmap 檔與 task 也已不存在。
+
+### 歷史 Fix approach
+
+1. 依 CI 實際 unified diff 定位 structural difference。
+2. 修正 `roadmap-sync.ts` 的對應 collect/render path。
+3. 連續 5 次 main push 的 check 都 PASS 後，移除 `continue-on-error`，恢復真正 gate。
+
+上述步驟是歷史方案，已不能套用到退役後的樹。2026-09-27 依退役後的現況選擇移除無效診斷：
+`23fbbff6` 刪除 `.github/workflows/template-ci.yml` 原 145–168 行；舊 `ROADMAP.md`、
+`spectra:roadmap` task 與同步器的退役證據見上方三筆 commit。這不是證明原始 structural drift
+已修復，也不再把 skipped run 當 PASS。draft CI run `36260052169` 的機械檢查成功，Unit tests
+因 draft 狀態 skipped；合併後仍須確認 main workflow。
+
 ### 2026-09-28 處置
 
 依本次派工確認退役方向，從 `.github/workflows/template-ci.yml` 移除整段 Spectra roadmap
@@ -85,35 +129,52 @@ CI 執行 `vp run spectra:roadmap --check` 時曾持續報 stale，即使 local 
 
 ### Acceptance
 
-- `template-ci.yml` 不再呼叫退役的 `spectra:roadmap`，也沒有診斷用 diff 或
-  `continue-on-error` 步驟。
-- 變更 PR 的 Template CI 完成；合入後以 main 的 workflow 再核對一次。
+- 合併 [PR #10](https://github.com/YuDefine/nuxt-supabase-starter/pull/10) 後，main 的 Template CI
+  不再引用已退役的 roadmap 檔、`spectra:roadmap` task、診斷 diff 或該診斷的
+  `continue-on-error` 步驟（程式證據：`23fbbff6`）。
+- 變更 PR 的 Template CI 完成，合入後以 main 的 workflow 再核對機械檢查成功；
+  PR draft run `36260052169` 的機械檢查已成功、Unit tests skipped，main 尚待驗。
 
 ## TD-005 — meta-monorepo 下 pre-push checks 靜默 no-op
 
 耐久 brief（含完整重現與判準）：`~/.cache/clade/briefs/td-005-prepush-project-root.md`。
 
-**Status**: open
+**Status**: in-progress — [PR #10](https://github.com/YuDefine/nuxt-supabase-starter/pull/10) 的 `23fbbff6` 已接通 hook；ratchet 阻擋驗收仍未完成
 **Priority**: high
 **Discovered**: 2026-08-19 — clade convention 對齊掃描
-**Location**: clade 的 `vendor/scripts/pre-push/runner.sh` 與 7 支 `checks/*.sh`；consumer 端 `template/.vite-hooks/pre-push`
+**Location**: clade 的 `vendor/scripts/pre-push/runner.sh` 與各 `checks/*.sh`；consumer 端 `template/.vite-hooks/pre-push` 與 `template/scripts/templates/vite-hooks/pre-push`
 
 ### Problem
 
-runner 與每支 check 都以 `git rev-parse --show-toplevel` 當 project root。scaffold 後專案這樣做正確，
-但在此 meta-monorepo 會跳到 repo root；Nuxt app 實際在 `template/`，所以 7 支 check 全部判定不適用、
+修正前，runner 與每支 check 都以 `git rev-parse --show-toplevel` 當 project root。scaffold 後專案這樣做正確，
+但在此 meta-monorepo 會跳到 repo root；Nuxt app 實際在 `template/`，所以 9 支 check 全部判定不適用、
 exit 0 且無輸出。實測 `bash template/scripts/pre-push/runner.sh` 為 exit 0、stdout 0 bytes。
 
 ### Fix approach
 
-1. 在 runner 與 7 支 check 使用 `PROJECT_ROOT="${CLADE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"`。
+1. 在 runner 與各支 check 使用 `PROJECT_ROOT="${CLADE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"`。
 2. 由 `template/.vite-hooks/pre-push` 傳入 `CLADE_PROJECT_ROOT="$PWD"`。
 3. 這是 clade vendor source 與 starter consumer wiring 的跨 repo 工作；先在 clade source 修正並 publish/propagate，
    再在本 repo 驗收，並檢查 `.husky` 是否留下不會被呼叫的重複 hook。
 
+### 2026-09-27 接線與驗收
+
+- clade 已投影的 `template/scripts/pre-push/runner.sh:61` 與 9 支 `checks/*.sh`（含 `tag-position.sh`）都讀取
+  `CLADE_PROJECT_ROOT`；本次 `23fbbff6` 在實際 hook 及 scaffold 用模板傳入 `"$PWD"`
+  （`template/.vite-hooks/pre-push:12`、`template/scripts/templates/vite-hooks/pre-push:12`）。
+- `core.hooksPath=template/.vite-hooks/_`；安裝後的 dispatcher `template/.vite-hooks/_/pre-push`
+  呼叫此 hook。本機實跑 dispatcher exit 0，有 Nuxt typecheck、ratchet 及 Vue checker 輸出；
+  首次 branch push 的 pre-push hook 亦 exit 0。`vp check` exit 0。
+- **尚未達成阻擋驗收**：`template/review-rules-baseline.json` 不在 `origin/main`，ratchet 輸出
+  `bootstrap warn-only 模式`，目前無法證明違規會擋 push。owner：starter/coordinator；解除條件是
+  依 ratchet 的既有存量程序建立可追溯 baseline，並以受控違規驗證 pre-push 非零退出。
+- 舊 `.husky/pre-push` 仍在版控，但 `core.hooksPath` 指向 Vite+ dispatcher，Git 不會呼叫它；
+  它不在本次 hook 接線的執行路徑，是否移除由後續維護者另案處理。
+
 ### Acceptance
 
-- `CLADE_PROJECT_ROOT="$PWD/template" bash template/scripts/pre-push/runner.sh` 有輸出，7 支 check 各自回報結果。
+- `CLADE_PROJECT_ROOT="$PWD/template" bash template/scripts/pre-push/runner.sh` 有輸出，9 支 check（含 `tag-position.sh`）
+  各自有可辨識結果或明示跳過原因。
 - 對 `template/**` 置入 review-rules-ratchet 可識別的違規時，pre-push 會阻擋。
 - 未設 `CLADE_PROJECT_ROOT` 時，既有 consumer 行為維持不變。
 
