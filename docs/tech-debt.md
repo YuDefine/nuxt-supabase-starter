@@ -19,7 +19,7 @@
 | TD-012 | `lint` script guard 吃不掉 pnpm 附加參數                                                                 | mid      | done        | 2026-08-29 |
 | TD-014 | clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約                              | low      | open        | 2026-09-09 |
 | TD-016 | Cloudflare 上 `useRuntimeConfig()` 的 module-eval snapshot 是否讀得到注入的 `NUXT_APP_ENV`               | mid      | done        | 2026-09-11 |
-| TD-017 | `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅                                     | low      | open        | 2026-09-11 |
+| TD-017 | `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅                                     | low      | in-progress | 2026-09-11 |
 | TD-018 | auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict                 | high     | done        | 2026-09-11 |
 | TD-019 | `scaffold-smoke` 自 2026-08-24 起持續紅，剩餘 blocker 是 clade 投影未去識別化                            | mid      | open        | 2026-09-11 |
 | TD-020 | 選了 codex 的 scaffold 輸出靜默少掉 `.codex/` 與 `.agents/`                                              | high     | in-progress | 2026-09-11 |
@@ -565,7 +565,7 @@ build 期的值 → 落到 `'unknown'`。
 
 ## TD-017 — `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅
 
-**Status**: open
+**Status**: in-progress（2026-09-30：fixture 清理、`--keep` 與回歸測試已實作並通過本機驗證；待 draft PR 合併後結案）
 **Priority**: low — 有明確的手動解法（刪掉 `template/temp/`），但會浪費下一個人一輪除錯
 **Discovered**: 2026-09-11 — TD-015 收尾時實際踩到
 **Location**: `template/scripts/validate-starter.mjs`、`template/vendor/doctor-shared/run.mjs`（clade-LOCKED）
@@ -592,9 +592,22 @@ scaffold 專案並**保留**（`temp/` 在 `.gitignore` 內）。vite-doctor 不
 2. 讓 doctor 跳過 `temp/**`。落點是 consumer 自有的 doctor.config.json 宣告檔，
    **NOT** clade-LOCKED 的 `vendor/doctor-shared/`。
 
+本次採第一條：在既有驗證流程的 `finally` 清掉 `temp/validate-starter/`，涵蓋成功、
+regression、build／audit 例外與 preflight 失敗；只清理該腳本的 fixture 目錄。
+需要保留完整或部分產物時執行 `pnpm run validate:starter --keep`，終端會列出保留路徑。
+TD-008 的工具搬移是獨立工作，搬移時須保留本條的清理行為與回歸測試。
+
 ### Acceptance
 
 - 跑完 `validate-starter` 之後，`pnpm run doctor` 仍是 exit 0。
+
+### Verification（2026-09-30）
+
+- `pnpm test:file test/unit/scripts/validate-starter.test.ts packages/create-nuxt-starter/test/scaffold-audit-regression.test.ts`：13 tests 通過。
+  新增 8 案執行真實 CLI 與檔案清理，隔離 build／scaffold／audit 依賴；修正前 5 個預設清理案例均失敗。
+- 改動腳本與測試的 `pnpm format:check`、`pnpm lint`，以及 `pnpm typecheck` 均 exit 0。
+- 實跑 `pnpm run validate:starter` → `--keep` → 預設模式：每趟四種 preset 均通過；
+  `--keep` 保留四份 fixture，預設模式結束後目錄不存在，`pnpm run doctor` 為 clean（0 errors／warnings、exit 0）。
 
 ## TD-018 — auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict
 
