@@ -15,7 +15,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path'
 import { consola } from 'consola'
 import { z } from 'zod'
 import { questionById } from './question-catalog'
-import { writeScaffoldReceipt } from './scaffold-receipt'
+import { SCAFFOLD_RECEIPT_PATH, writeScaffoldReceipt } from './scaffold-receipt'
 import { DEFAULT_DB_STACK, type DbHost, type DbStack, type UpdatePolicy } from './types'
 
 export interface CladeModules {
@@ -1107,17 +1107,18 @@ export async function postScaffold(
 
   if (pnpmInstalled) formatGeneratedProject(targetDir, opts.json === true)
 
-  // 以 initial commit 的最終位元組刷新 receipt。沒在上面 install 成功時（--no-install、
-  // install 失敗），首投影發生在之後補跑的 `pnpm install`，那時磁碟上已含後段改寫
-  // （dbHost、first-glance docs、hook strip）；1.5 那份會對不上而退回拒收。
-  // hub-sync 跑成功時 clade 已有 ownership state，不再讀 receipt。pending build approval
-  // 那條（pnpm exit 1 但 pnpmInstalled=true）postinstall 可能沒跑完，刷新後的 receipt
-  // 會連帶擔保上面重投影／format 寫出的位元組——刻意涵蓋：那些正是 initial commit 的內容。
-  writeScaffoldReceipt(targetDir)
-
   consola.start(adoptingRepo ? '正在提交 starter 檔案...' : '正在提交 initial scaffold...')
   try {
     execFileSync('git', ['add', '-A'], { cwd: targetDir, stdio: 'pipe' })
+    // 安裝前的 receipt 擔保磁碟內容；提交版只擔保 Git index 收錄的最終檔案。
+    // --no-install 後補跑 install 也用這份；ignored 的本地設定不會出現在 fresh clone。
+    const trackedFiles = new Set(
+      execFileSync('git', ['ls-files', '-z'], { cwd: targetDir, encoding: 'utf8' })
+        .split('\0')
+        .filter(Boolean),
+    )
+    writeScaffoldReceipt(targetDir, trackedFiles)
+    execFileSync('git', ['add', '--', SCAFFOLD_RECEIPT_PATH], { cwd: targetDir, stdio: 'pipe' })
     execFileSync(
       'git',
       [

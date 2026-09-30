@@ -1,5 +1,13 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { consola } from 'consola'
@@ -68,7 +76,9 @@ describe('scaffold receipt', () => {
         `const receipt = JSON.parse(readFileSync(${JSON.stringify(SCAFFOLD_RECEIPT_PATH)}, 'utf8'))`,
         'const mismatched = Object.entries(receipt.files).filter(([rel, hash]) =>',
         "  createHash('sha256').update(readFileSync(join(process.cwd(), rel), 'utf8')).digest('hex') !== hash)",
-        `writeFileSync(${JSON.stringify(checkOut)}, JSON.stringify({ count: Object.keys(receipt.files).length, mismatched }))`,
+        `writeFileSync(${JSON.stringify(checkOut)}, JSON.stringify({ count: Object.keys(receipt.files).length, mismatched, localSettingsIncluded: Object.hasOwn(receipt.files, '.claude/settings.local.json') }))`,
+        "writeFileSync('.claude/settings.local.json', JSON.stringify({ installed: true }))",
+        "writeFileSync('.cursor/install-generated.md', 'generated during install\\n')",
       ].join('\n'),
     )
     writeFileSync(
@@ -83,6 +93,8 @@ describe('scaffold receipt', () => {
     vi.stubEnv('GIT_COMMITTER_NAME', 'fixture')
     vi.stubEnv('GIT_COMMITTER_EMAIL', 'fixture@example.com')
     assembleProject(target, [], 'receipt-project', ['claude-code', 'cursor', 'codex'])
+    writeFileSync(join(target, '.claude', 'settings.local.json'), '{}\n')
+    appendFileSync(join(target, '.gitignore'), '\n.claude/settings.local.json\n')
 
     await postScaffold(target, 'receipt-project', TEST_DIR, modules, {
       yes: true,
@@ -97,9 +109,11 @@ describe('scaffold receipt', () => {
     const check = JSON.parse(readFileSync(checkOut, 'utf8')) as {
       count: number
       mismatched: unknown[]
+      localSettingsIncluded: boolean
     }
     expect(check.count).toBeGreaterThan(0)
     expect(check.mismatched).toEqual([])
+    expect(check.localSettingsIncluded).toBe(true)
 
     const receipt = JSON.parse(
       readFileSync(join(target, SCAFFOLD_RECEIPT_PATH), 'utf8'),
@@ -121,6 +135,10 @@ describe('scaffold receipt', () => {
     const committed = JSON.parse(
       execFileSync('git', ['show', `HEAD:${SCAFFOLD_RECEIPT_PATH}`], { cwd: target }).toString(),
     ) as ScaffoldReceipt
+    expect(committed.files['.claude/settings.local.json']).toBeUndefined()
+    expect(committed.files['.cursor/install-generated.md']).toBe(
+      hashReceiptContent('generated during install\n'),
+    )
     for (const [rel, hash] of Object.entries(committed.files)) {
       const blob = execFileSync('git', ['show', `HEAD:${rel}`], { cwd: target }).toString('utf8')
       expect(hashReceiptContent(blob), rel).toBe(hash)
@@ -133,6 +151,14 @@ describe('scaffold receipt', () => {
     const target = join(TEST_DIR, 'no-install-project')
     vi.stubEnv('CLADE_HOME', join(TEST_DIR, 'missing-clade'))
     assembleProject(target, [], 'no-install-project', ['claude-code'])
+    mkdirSync(join(target, '.claude', 'runtime'), { recursive: true })
+    writeFileSync(join(target, '.claude', 'settings.local.json'), '{}\n')
+    writeFileSync(join(target, '.claude', 'runtime', 'ignored.txt'), 'local runtime\n')
+    writeFileSync(join(target, '.claude', 'runtime', '保留 空白.md'), 'tracked exception\n')
+    appendFileSync(
+      join(target, '.gitignore'),
+      '\n.claude/settings.local.json\n.claude/runtime/*\n!.claude/runtime/保留 空白.md\n',
+    )
 
     await postScaffold(target, 'no-install-project', TEST_DIR, modules, {
       yes: true,
@@ -148,8 +174,15 @@ describe('scaffold receipt', () => {
       readFileSync(join(target, SCAFFOLD_RECEIPT_PATH), 'utf8'),
     ) as ScaffoldReceipt
     expect(Object.keys(receipt.files).length).toBeGreaterThan(0)
+    expect(receipt.files['.claude/settings.local.json']).toBeUndefined()
+    expect(receipt.files['.claude/runtime/ignored.txt']).toBeUndefined()
+    expect(receipt.files['.claude/runtime/保留 空白.md']).toBe(
+      hashReceiptContent('tracked exception\n'),
+    )
     for (const [rel, hash] of Object.entries(receipt.files)) {
       expect(hashReceiptContent(readFileSync(join(target, rel), 'utf8')), rel).toBe(hash)
+      const blob = execFileSync('git', ['show', `HEAD:${rel}`], { cwd: target }).toString('utf8')
+      expect(hashReceiptContent(blob), rel).toBe(hash)
     }
     expect(existsSync(join(target, '.clade'))).toBe(false)
   })
@@ -172,5 +205,34 @@ describe('scaffold receipt', () => {
       '.codex/config.toml',
     ])
     expect(receipt.files['.claude/a.md']).toBe(hashReceiptContent('a\n'))
+  })
+
+  it('既有 repo 已追蹤的檔案即使符合 gitignore，仍收錄於 committed receipt', async () => {
+    const target = join(TEST_DIR, 'existing-project')
+    vi.stubEnv('CLADE_HOME', join(TEST_DIR, 'missing-clade'))
+    assembleProject(target, [], 'existing-project', ['claude-code'])
+    writeFileSync(join(target, '.claude', 'settings.local.json'), '{}\n')
+    appendFileSync(join(target, '.gitignore'), '\n.claude/settings.local.json\n')
+    execFileSync('git', ['init'], { cwd: target, stdio: 'pipe' })
+    execFileSync('git', ['add', '-f', '--', '.claude/settings.local.json'], { cwd: target })
+
+    await postScaffold(target, 'existing-project', TEST_DIR, modules, {
+      yes: true,
+      registerConsumer: false,
+      wirePreCommit: false,
+      cloneClade: false,
+      installDeps: false,
+      existingGitRepo: true,
+      json: true,
+    })
+
+    const committed = JSON.parse(
+      execFileSync('git', ['show', `HEAD:${SCAFFOLD_RECEIPT_PATH}`], { cwd: target }).toString(),
+    ) as ScaffoldReceipt
+    const blob = execFileSync('git', ['show', 'HEAD:.claude/settings.local.json'], {
+      cwd: target,
+      encoding: 'utf8',
+    })
+    expect(committed.files['.claude/settings.local.json']).toBe(hashReceiptContent(blob))
   })
 })
