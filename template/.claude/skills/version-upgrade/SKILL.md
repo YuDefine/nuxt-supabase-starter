@@ -185,7 +185,7 @@ clade 沒有 fleet MCP entry 的共同來源：`chrome-devtools-mcp` entry 是�
 
 | 日期 | 版本 | 理由 | rollout |
 | --- | --- | --- | --- |
-| 2026-09-30 | 1.10.1 | 由 `@latest` 改為釘版（<consumer-i> TD-021；當日 npm `latest` dist-tag） | `tasks/2026-09-30-mcp-pin/rollout.md` |
+| 2026-09-30 | 1.10.1 | 由 `@latest` 改為釘版（<consumer-j> TD-021；當日 npm `latest` dist-tag） | `tasks/2026-09-30-mcp-pin/rollout.md` |
 
 ---
 

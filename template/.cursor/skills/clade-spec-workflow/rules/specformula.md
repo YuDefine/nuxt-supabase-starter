@@ -22,7 +22,7 @@ SpecFormula 的 step definition 由 `isa.yml` 的 regex 動態生成：OpenAPI `
 
 | 可觀察 predicate | 採用 |
 | --- | --- |
-| consumer 的 `.claude/hub.json` 宣告 `capabilities: ["specformula"]` | ✅ 本檔全部條款生效 |
+| consumer 的 resolved manifest（neutral manifest reader：canonical `.clade/manifest.json` 優先，canonical 缺席才讀 `.claude/hub.json`）宣告 `capabilities: ["specformula"]` | ✅ 本檔全部條款生效；**宣告即須完整覆蓋，既有 consumer 一律回補**（truth root、`techstack.md`、`isa.yml`、acceptance `.feature`；缺件由 `audit-registry-reality` R8 報 error；缺 `work-lifecycle.md` 是 lifecycle 遷移（先處置舊 TD，見 `vendor/snippets/consumer-lifecycle/README.md`），NEVER 用 scaffold 代放；已是 lifecycle repo 只缺 `owners.md` 才用 `scripts/scaffold-consumer-truth.ts --apply` 補） |
 | Nuxt 4 + PostgreSQL（Supabase）且有 HTTP API 要驗收 | ✅ 適用對象；資料源用 `postgresql`，連線指向每個 repo 核准的隔離測試 DB |
 | D1 或無資料庫服務（純 proxy、純靜態、純 CLI）且需要 API acceptance | ✅ 採用 `embedded`；以 API-only scenario 與 runtime 所需最小 fixture 驗證，不強造業務 entity |
 | 未知或未確認的 DB 類型 | ⚠️ 保持 unresolved；不得默認成 `embedded` 或「無 DB」 |

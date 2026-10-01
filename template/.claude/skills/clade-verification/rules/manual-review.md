@@ -88,6 +88,36 @@ worktree merge-back → 單一 /commit（一次包 fix + 規格產出 + 實作 c
 - **NEVER** 在 round N OK 後直接標 `work.done`；done 的 trigger 是 round N+1（含新增 verify item 與 (A)/(B) fix）全綠
 - **NEVER** 用「先 fix 後補規格」順序跑 commit — 同一輪 review:ui 觸發的改動，spec 跟 code 必須同 commit 出現
 
+## 緊急件的分段驗收（Charles 2026-09-28 Q7=A）
+
+| 可觀察 predicate | 驗收怎麼走 |
+| --- | --- |
+| 該 work 沒有有效緊急標記 | 照上方 § 人工檢查時機：全部驗收項完成才交付 |
+| 該 work 帶有效緊急標記（`<YYYY-MM-DD> <charles\|coordinator>【<語義名稱>】：「<出處逐字>」`；work 已 close 的標記失效） | 本節：可以分段 |
+
+分段的形狀：
+
+1. **先交付 happy path**：主要路徑的驗收項實際跑過並留證據（與一般件同一套 evidence 規則），才交付。happy path 沒實跑過就不是分段，是沒驗收。
+2. **其餘驗收項登記到同一個 work item** 的 plan `## Open work`，**每一條**一行、帶具名 owner：
+
+   ```text
+   - [ ] 延後驗收：<驗收項，動詞 → 結果>（owner: <具名 session／pane／人>；緊急件分段交付，<交付日期>）
+   ```
+
+   owner 空白、寫「TBD」「之後」「有空再說」都不算登記。不另開 TD 或第二份 plan。
+3. 延後項未全部勾掉之前，該 work item **NEVER** close（plan close、`work.accept`）。
+
+**不可延後**——下列四類驗收項，緊急件也 **MUST** 在交付前完成，**NEVER** 登記成延後項：
+
+| 類別 | 例 |
+| --- | --- |
+| 安全 | 認證、授權、權限拒絕路徑、RLS、secret 暴露面 |
+| 資料 | migration、production 資料寫入、資料完整性、備份與還原 |
+| 金流 | 付款、退款、計價、帳務金額 |
+| 實體出貨 | 販賣機／扭蛋機出貨、任何實體物品的交付；每一筆 production 實體出貨仍逐筆取得 Charles 同意 |
+
+判不出某一項屬不屬於這四類，就當它屬於——**NEVER** 用「這項應該跟金流無關」把它移到延後清單。
+
 ## Screenshot Review ≠ Functional Verification（Hard Rule）
 
 截圖是證據，不是使用者確認本身；screenshot review **只覆蓋視覺層**（控件存在、layout、狀態的視覺呈現），**不**覆蓋功能 round-trip（form submit 真的送到 server、DB 真的變更、refetch 後的新狀態、edge case payload、權限拒絕 path）。

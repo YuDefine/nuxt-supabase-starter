@@ -1,3 +1,4 @@
+// 🔒 LOCKED — managed by clade · Source: vendor/oxc-shared/preset.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/oxc-shared/preset.ts
 // vendor/oxc-shared/preset.ts — clade-governed oxlint + oxfmt baseline preset
 //
 // Single source of truth for `vite.config.ts` lint/fmt rules across:
@@ -79,7 +80,7 @@ import { fileURLToPath } from 'node:url'
  *
  * 2026-07-28: that is exactly how `nuxt-supabase-starter` Template CI broke on
  * `vp fmt --check` over `vendor/snippets/manual-review-enforcement/patterns.json`
- * — <consumer-i> and co-purchase had each independently patched `vendor/**`
+ * — <consumer-j> and co-purchase had each independently patched `vendor/**`
  * into their own vite.config.ts, which hid the gap instead of closing it.
  * `scripts/audit-governance-drift.ts` check 10 now fails on any config that
  * re-inlines one of these, so the next gap surfaces before a consumer does.
@@ -332,16 +333,18 @@ export const STAGED_ONLY_EXCLUDES = ['scripts/**', 'AGENTS.md']
  * 投影的格式由 clade 自己的 fmt 負責，consumer 端檢查它沒有能修的人。
  *
  * 判定用投影時注入的 banner（`scripts/lib/vendor-banner.ts` 的 `VENDOR_BANNER_SIGNATURE`），
- * 只看前兩行（shebang 之後那行）——consumer 端能判出「哪幾支是投影」的唯一 tracked 證據，
+ * 只看檔頭前 3 行的**註解行**（`//` 或 `#` 開頭；容許 shebang、空行）——consumer 端能判出「哪幾支是投影」的唯一 tracked 證據，
  * CI 的乾淨 checkout 也看得到。NEVER 改成整個 `scripts/**`：那會讓 consumer 自家 script
  * 從整倉 fmt 消失（`STAGED_ONLY_EXCLUDES` 註解的同一個理由）。
  *
- * 前提：banner 一定在前兩行。`vendor-banner.ts` 的 `projectedContent` 在源檔內文**任何位置**已含
- * signature 時不注入 banner（冪等規則）——這種源檔若日後投影到 consumer `scripts/`，這裡排除不到。
- * 目前這類檔（`rule-eco-test.ts`、`worktree-db/*.mjs`）都投到 `vendor/`，已由 PROJECTION_EXCLUDES 覆蓋。
+ * 窗口與 producer 同一規則：`vendor-banner.ts` 的 `projectedContent` 只在**檔頭前 3 行的註解行**
+ * 已含 signature 時才不注入（冪等規則，`BANNER_HEADER_LINES`＝3、`COMMENT_LINE_RE`）；本檔投影到
+ * consumer 不能 import clade 的 `scripts/lib`，所以兩端各持一份常數，改一邊 MUST 同改另一邊
+ * （`test/oxc-preset-locked-script-projections.test.ts` 釘住兩端判定一致）。
+ * 源檔內文深處（第 4 行以後）或非註解行出現 signature 不算 banner，producer 會注入、這裡也會掃到注入的那行。
  *
  * root 由本檔位置推（clade 與 consumer 都在 `<root>/vendor/oxc-shared/`），不靠 cwd。
- * clade 自己的 `scripts/` 是源碼、沒有 banner → 空陣列。預設 root 推錯（config loader 把本檔搬到
+ * clade 自己的 `scripts/` 是源碼（自帶 banner 的 user-shims 也不算投影）→ 空陣列。預設 root 推錯（config loader 把本檔搬到
  * 別處載入）時在 stderr 留一行警告再回空陣列——退化成舊行為，但不是無聲的。
  */
 export function lockedScriptProjections(root?: string): string[] {
@@ -355,7 +358,14 @@ export function lockedScriptProjections(root?: string): string[] {
     }
   }
   if (!root.endsWith('/')) root += '/'
+  // clade 自己的 scripts/ 是源碼：`user-shims/*.ts` 這類檔自帶 LOCKED 字樣（安裝到 ~/.claude 用），
+  // 不是被投影進來的——窗口拉到 3 行後不先擋就會被誤收、退出 clade 自家 fmt。
+  // `scripts/lib/vendor-banner.ts` 只存在於 clade（不投影），當「這是源碼倉」的標記。
+  if (existsSync(root + 'scripts/lib/vendor-banner.ts')) return []
   const signature = '🔒 LOCKED — managed by clade'
+  // 與 `scripts/lib/vendor-banner.ts` 的 BANNER_HEADER_LINES / COMMENT_LINE_RE 同值（見上方 JSDoc）
+  const headerLines = 3
+  const commentLine = /^\s*(\/\/|#)/
   const out: string[] = []
   const buf = Buffer.alloc(1024)
   const walk = (rel: string): void => {
@@ -383,7 +393,12 @@ export function lockedScriptProjections(root?: string): string[] {
       } catch {
         continue
       }
-      if (head.split('\n', 2).some((line) => line.includes(signature))) out.push(path)
+      if (
+        head
+          .split('\n', headerLines)
+          .some((line) => commentLine.test(line) && line.includes(signature))
+      )
+        out.push(path)
     }
   }
   walk('scripts/')
@@ -609,7 +624,7 @@ export const VITEST_DEFAULT_EXCLUDE = ['**/node_modules/**', '**/.git/**']
  * Agent runtime 在 consumer working tree 留下的 cache／投影目錄。
  *
  * 這裡面的「測試檔」**不是這個 repo 的測試** —— `.pi/git/` 底下是 Pi 為了做 code review
- * 而 clone 的**外部 repo 全文**（實測 2026-09-10：<consumer-f> 的 `.pi/git/` 有 114 MB、
+ * 而 clone 的**外部 repo 全文**（實測 2026-09-10：<consumer-g> 的 `.pi/git/` 有 114 MB、
  * 578 支測試檔，全部屬於 `github.com/YuDefine/clade`，而該 repo 自有測試檔為 **0**）。
  * 跑它們的結果是 107 失敗 → `vp test` exit 1，而紅綠取決於「這棵樹有沒有被 Pi clone 過」。
  *
@@ -661,7 +676,7 @@ export const AGENT_CACHE_TEST_EXCLUDES = [
  *
  * clade 自己**不消費本 base**：它的 `test.include` 收窄成 `vp-tests/**\/*.vp.ts`，
  * 掃描面本來就進不到 `.pi/`。**NEVER** 拿「clade 沒事」推論 consumer 也沒事 ——
- * fleet 現況不齊一：ai-quota／<consumer-h>／<consumer-j> 已收窄 `test.include`（同樣免疫，
+ * fleet 現況不齊一：ai-quota／<consumer-i>／<consumer-k> 已收窄 `test.include`（同樣免疫，
  * 但理由跟 clade 一樣是 include 收窄，不是本 base）；<consumer-b>／<consumer-c> 則是
  * consumer 自己手寫 `test.exclude`（如 `['e2e/**', 'node_modules/**', '.nuxt/**', '.output/**']`），
  * 這正是本檔開頭警告的覆蓋語義事故現場 —— 手寫版把 `**\/.git/**` 弄丟了、`node_modules/**`

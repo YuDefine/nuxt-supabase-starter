@@ -8,12 +8,12 @@
  *
  * ## 這支存在的理由
  *
- * 該規約要求 change 動到五類路徑時，archive 前 MUST 在 design.md / proposal.md 列出對應風險
+ * 該規約要求工作動到五類路徑時，結案前 MUST 在設計載體列出對應風險
  * 路徑。落地機制原本逐字是「靠 reviewer 在 manual-review tier 1/2 攔截，不靠 CI gate（會誤殺
  * typo fix）」——但在 agent 為主要產出者的 fleet 裡，那個 reviewer 多數時候也是 agent。
  *
  * **規約反對的是無條件 hard gate，本支不是那個。** 五類觸發條件全部是 diff 路徑可偵測的，
- * 條件觸發碰不到 typo fix，所以原理由對本支不適用。本支恆 exit 0，findings 是 review 的
+ * 條件觸發碰不到 typo fix，所以原理由對本支不適用。findings 恆 exit 0（執行失敗 exit 2），是 review 的
  * 對話起點，**NEVER** 升成 blocking——升了就正面違反該規約自己寫的理由。
  *
  * ## 為什麼不只驗「章節存在」
@@ -31,14 +31,16 @@
  *
  *   node vendor/scripts/audit-risk-path-coverage.ts [--base <ref>] [--json]
  *
- * `--base` 預設依序試 `origin/main` → `main`。無 git 或無 openspec/changes/ 時印 skip 理由。
+ * 掃描作用中的 specs/plans/；舊 change 目錄存在時才保留相容掃描。
+ * `--base` 預設依序試 `origin/main` → `main`。無 base 或無作用中工作時印 skip 理由。
  */
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { listPlans } from './flow/plan-gates.ts'
 
 /**
  * 五類觸發條件，逐條對應規約 § 規約最小要求 的五個 bullet。
@@ -73,6 +75,16 @@ const TEST_REF = /[\w./-]*\.(?:spec|test)\.[jt]sx?|[\w./-]*e2e\/[\w./-]+\.[jt]s/
 
 const RISK_SECTION = /^#{2,4}\s*(?:§\s*)?Risk paths?\b/im
 
+interface AuditResult {
+  status: 'pass' | 'finding' | 'N/A'
+  skipped: string | null
+  scope: { roots: string[]; patterns: string[]; mode: string; excluded: string[] }
+  completeness: 'complete' | 'partial' | 'unknown'
+  findings: Array<{ change: string; kind: string; detail: string }>
+  base?: string
+  hits?: Map<string, string[]>
+}
+
 function git(args: string[], cwd: string) {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
 }
@@ -106,13 +118,30 @@ export function classifyRiskPaths(files: string[]) {
   return hits
 }
 
-function activeChangeDirs(cwd: string) {
-  const root = join(cwd, 'openspec', 'changes')
-  if (!existsSync(root)) return null
-  return readdirSync(root)
-    .filter((n) => n !== 'archive')
-    .map((n) => join(root, n))
-    .filter((p) => statSync(p).isDirectory())
+function activeWorkDirs(cwd: string) {
+  const roots: string[] = []
+  const dirs: string[] = []
+  const plansRoot = join(cwd, 'specs', 'plans')
+  if (existsSync(plansRoot)) {
+    roots.push(plansRoot)
+    dirs.push(
+      ...listPlans(cwd)
+        .filter((plan) => ['active', 'blocked', 'closing'].includes(plan.status))
+        .map((plan) => dirname(join(cwd, plan.path))),
+    )
+  }
+
+  const legacyRoot = join(cwd, 'openspec', 'changes')
+  if (existsSync(legacyRoot)) {
+    roots.push(legacyRoot)
+    dirs.push(
+      ...readdirSync(legacyRoot)
+        .filter((name) => name !== 'archive')
+        .map((name) => join(legacyRoot, name))
+        .filter((path) => statSync(path).isDirectory()),
+    )
+  }
+  return { roots, dirs }
 }
 
 /**
@@ -139,20 +168,38 @@ export function inspectRiskSection(docText: string, repoRoot: string) {
   return { section: true, refs, missing }
 }
 
-export function auditRepo(cwd: string, baseRef?: string) {
-  const dirs = activeChangeDirs(cwd)
-  if (dirs === null) return { skipped: 'no openspec/changes/', findings: [] }
+export function auditRepo(cwd: string, baseRef?: string): AuditResult {
+  const { roots, dirs } = activeWorkDirs(cwd)
+  const report: Pick<AuditResult, 'scope' | 'completeness'> = {
+    scope: {
+      roots,
+      patterns: ['*/{system-analysis,design,proposal,plan}.md'],
+      mode: 'filesystem',
+      excluded: ['archive/', 'plans with status outside active/blocked/closing'],
+    },
+    completeness: 'complete',
+  }
+  if (dirs.length === 0)
+    return { ...report, status: 'N/A', skipped: 'no active work packages', findings: [] }
   const base = resolveBase(baseRef, cwd)
-  if (!base) return { skipped: 'no resolvable base ref (tried origin/main, main)', findings: [] }
+  if (!base)
+    return {
+      ...report,
+      status: 'N/A',
+      skipped: `no resolvable base ref (tried ${baseRef ?? 'origin/main, main'})`,
+      findings: [],
+    }
 
   const hits = classifyRiskPaths(changedFiles(base, cwd))
-  if (hits.size === 0) return { skipped: null, base, findings: [], hits }
+  if (hits.size === 0) return { ...report, status: 'pass', skipped: null, base, findings: [], hits }
 
   const findings: Array<{ change: string; kind: string; detail: string }> = []
   for (const dir of dirs) {
-    const docs = ['design.md', 'proposal.md'].map((n) => join(dir, n)).filter((p) => existsSync(p))
+    const docs = ['system-analysis.md', 'design.md', 'proposal.md', 'plan.md']
+      .map((name) => join(dir, name))
+      .filter((path) => existsSync(path))
     if (docs.length === 0) {
-      findings.push({ change: dir, kind: 'no-doc', detail: '無 design.md / proposal.md 可查' })
+      findings.push({ change: dir, kind: 'no-doc', detail: '無設計文件可查' })
       continue
     }
     const merged = docs.map((p) => readFileSync(p, 'utf8')).join('\n')
@@ -176,7 +223,14 @@ export function auditRepo(cwd: string, baseRef?: string) {
       })
     }
   }
-  return { skipped: null, base, findings, hits }
+  return {
+    ...report,
+    status: findings.length > 0 ? 'finding' : 'pass',
+    skipped: null,
+    base,
+    findings,
+    hits,
+  }
 }
 
 function invokedAsCli() {
@@ -189,14 +243,19 @@ function invokedAsCli() {
   }
 }
 
-if (invokedAsCli()) {
+function main() {
   const argv = process.argv.slice(2)
   const baseIdx = argv.indexOf('--base')
   const res = auditRepo(process.cwd(), baseIdx === -1 ? undefined : argv[baseIdx + 1])
   if (argv.includes('--json')) {
     console.log(JSON.stringify(res, (_k, v) => (v instanceof Map ? Object.fromEntries(v) : v), 2))
   } else {
-    console.log('# risk-path coverage 稽核（warn-only）\n')
+    console.log(`risk-path coverage: ${res.status}`)
+    console.log(
+      `scope: roots=${res.scope.roots.join(', ') || 'none'}; patterns=${res.scope.patterns.join(', ')}; mode=${res.scope.mode}`,
+    )
+    console.log(`skipped: ${res.skipped ?? 'none'}`)
+    console.log(`completeness: ${res.completeness}\n`)
     if (res.skipped) {
       console.log(`跳過：${res.skipped}`)
     } else if (res.findings.length === 0) {
@@ -204,10 +263,10 @@ if (invokedAsCli()) {
       console.log(
         n === 0
           ? 'diff 未命中五類高風險路徑 ✓'
-          : `命中 ${n} 類高風險路徑，作用中的 change 都有 § Risk paths 且引用的測試檔存在 ✓`,
+          : `命中 ${n} 類高風險路徑，作用中的工作都有 § Risk paths 且引用的測試檔存在 ✓`,
       )
     } else {
-      console.log('| Change | 類型 | 細節 |')
+      console.log('| 工作 | 類型 | 細節 |')
       console.log('| --- | --- | --- |')
       for (const f of res.findings)
         console.log(`| ${f.change} | ${f.kind} | ${f.detail.replace(/\|/g, '\\|')} |`)
@@ -217,5 +276,34 @@ if (invokedAsCli()) {
           `\n綠燈只代表「有宣告、宣告指的檔在」，NEVER 讀成「風險路徑覆蓋足夠」——測得對不對只有人能判。`,
       )
     }
+  }
+}
+
+if (invokedAsCli()) {
+  try {
+    main()
+  } catch (error) {
+    const report = {
+      status: 'infrastructure-error',
+      scope: {
+        roots: [join(process.cwd(), 'specs/plans'), join(process.cwd(), 'openspec/changes')].filter(
+          existsSync,
+        ),
+        patterns: ['*/{system-analysis,design,proposal,plan}.md'],
+        mode: 'filesystem',
+      },
+      skipped: 'scan failed',
+      completeness: 'unknown',
+      error: error instanceof Error ? error.message : String(error),
+    }
+    const json = process.argv.includes('--json')
+    const output = json ? process.stdout : process.stderr
+    const payload = json
+      ? `${JSON.stringify(report, null, 2)}\n`
+      : `risk-path coverage: ${report.status}\n` +
+        `scope: roots=${report.scope.roots.join(', ') || 'none'}; patterns=${report.scope.patterns.join(', ')}; mode=${report.scope.mode}\n` +
+        `skipped: ${report.skipped}\ncompleteness: ${report.completeness}\n${report.error}\n`
+    await new Promise<void>((resolve) => output.write(payload, () => resolve()))
+    process.exit(2)
   }
 }

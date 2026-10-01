@@ -53,11 +53,45 @@ paths:
 
 **Grok 4.7 xhigh 的池序**：先 `grok-xai`（xAI 配額池），不可用再 `grok-cursor`（Cursor 配額池，釘 `grok-4.7`）。`grok-cursor` 那一跳**只有在本機 pi-cursor-sdk 把 effort 映射到 Cursor 的 `reasoning_effort` 參數時才上鏈**（`lib/cursor-sdk-effort.ts` 的 `cursorSdkMapsReasoningEffort()`）；沒映射時 SDK 會靜默丟掉 xhigh，該跳記進 `skipped_tiers`（`cursor-effort-unsupported`）後往下走。Cursor 池另兩個跳過條件不變：workspace mutation（sandbox 唯讀）與 `notion-ops`（`$HOME` 是空 tmpfs）。
 
-**執行鏈的「→」只在 provider／quota／runtime 不可用時前進**；quality／test failure 不前進。**鏈走完之後由誰接手**看下表的「鏈尾」欄：`dispatch-fallback` subagent（Claude Opus 5.5（effort: low），frontmatter 固定；讓主線不吞原始輸出），或主線（Claude Opus 5.5（effort: medium））自己做。**NEVER** 回報 blocker 當鏈尾，也 **NEVER** 改派禁用 model。
+**執行鏈的「→」只在 provider／quota／runtime 不可用時前進**；quality／test failure 不前進。**鏈走完之後由誰接手**看下表的「鏈尾」欄：`dispatch-fallback` subagent（Claude Opus 5.5（effort: low），frontmatter 固定；讓主線不吞原始輸出），或主線自己做（主線是 Sonnet 時的語意見 § 主線 residency）。**NEVER** 回報 blocker 當鏈尾，也 **NEVER** 改派禁用 model。
 
 ## 判不進任一列時
 
-工作對不上下表任何一列 → **主線（Claude Opus 5.5（effort: medium））自己做**。**NEVER** 因為表上沒有你想派的模型就自己挑一個，也 **NEVER** 填 `--route manual` 去蓋掉一個從沒發生過的判定——`manual` 是政策成功指標的分母，填錯讀起來是假陰性而不是缺資料。
+工作對不上下表任何一列 → **主線自己做**；主線是 Claude Opus 5.5（effort: medium）時就是它，主線是 Sonnet 時照 § 主線 residency 交 Opus。**NEVER** 因為表上沒有你想派的模型就自己挑一個，也 **NEVER** 填 `--route manual` 去蓋掉一個從沒發生過的判定——`manual` 是政策成功指標的分母，填錯讀起來是假陰性而不是缺資料。
+
+## 主線 residency（誰當主線；Charles 2026-09-29）
+
+本表其他地方寫「主線」時指的是**當下這條主線 session**，它不一定是 Opus。席位：
+
+| 主線在做什麼 | 主線 model |
+| --- | --- |
+| 主持（coordinator，含繼任 relay） | Claude Opus 5.5（effort: medium），固定；不開 Sonnet、不升 high（`coordinator` skill § 主持者的 model，helper 機械擋） |
+| clade 標準層、規約撰寫（`dotclaude-authoring`）、跨 repo 裁決、commit 0-A 相關 | Claude Opus 5.5（effort: medium） |
+| 範圍已定稿的實作 session（plan／brief 已定案，工作落在 Sonnet 四列） | 可以 Claude Sonnet 5.5（effort: high）起手；**NEVER** 降 medium |
+
+Sonnet 主線的缺口，逐條補：
+
+1. **鏈尾「主線」與判不進任一列**：工作落在 Sonnet 四列範圍內 → Sonnet 主線自己做。其餘（判讀、計畫、規約、判不出列）→ 唯讀判斷派 `opus-advisor` subagent（省略 `model`；frontmatter 釘 Claude Opus 5.5（effort: medium））當顧問，改檔交 Opus 5.5（effort: medium）child。**NEVER** 由 Sonnet 主線自己吞下 Opus 列的工作。
+2. **Sonnet 列品質失敗的「小修」**：主線是 Sonnet 時不由主線做（會繞回同一個 model），改派 Opus 5.5（effort: medium）child，`--tier-basis quality-escalation --retry-of <label>`。
+3. **必須叫 Opus 的時刻**：定稿措辭（規約、對外文字、PR 描述之外的交付文字）、方案分歧與根因裁決（全域 § 分歧仲裁的顧問在 Sonnet 主線改走 `opus-advisor`）、判讀驗收 subagent 的回報（哪些證據相關、算不算通過）、session gate（收工判定、scope verify、readiness 判定）。Sonnet 主線到這些時刻 **MUST** 派 `opus-advisor` 或交 Opus child，**NEVER** 自己下結論。**NEVER** 派 `Plan`（`model: 'opus'`）：subagent 呼叫沒有 effort 參數，沒釘 effort 的 subagent 繼承主線的 high，等於開 Claude Opus 5.5（effort: high）；routing gate 擋。
+4. **refusal**：主線是 Sonnet 時碰到安全分類器拒答（`stop_reason: refusal`、Usage Policy 拒答訊息），**MUST** 以 `/handoff relay --model opus --effort medium` 開 Opus 接手，**NEVER** 改寫問法重試。
+5. **額度**：Sonnet 與 Opus 同一池、per-model 倍率 UNKNOWN（rationale）。本規約 **NEVER** 寫「省多少」，也不以省額度當選 Sonnet 主線的理由；理由只有「範圍已定稿、是實作」。
+
+commit 0-A 不受主線是誰影響：reviewer 永遠是 fresh-context Opus 5.5（effort: medium）（`code-review-opus`）。
+
+## Workflow 的 Sonnet `agent()`（2026-09-29）
+
+Workflow script 的 `agent()` 可以用 Sonnet 5.5 做改檔的工作，**三條全中**才用：工作要改檔；有機械驗收（測試、型別、lint、可跑的檢查）；最終結果由 Opus 或主線把關。
+
+| 場景 | Sonnet effort |
+| --- | --- |
+| 大量同形改寫、平行修紅測試、同一個 fix 散播到多個 repo、多候選實作由 Opus 評選 | `high` |
+| 文件草稿 | `high`；`medium` **待量測**（plan W-2026-09-29-coordinator-model-sonnet-residency-plan § D，量完才開） |
+
+- **不交給 Sonnet、也不降檔**：review、根因、方案取捨、規約措辭、「哪些證據相關」。這些 `agent()` 用 Opus（inline `model: 'opus', effort: 'medium'`）或留給主線。
+- **現有的掃描、抽取類 Pi 列不改走 Sonnet**：Sonnet 只比 Opus 省，不比 Gemini／Grok 省。
+- **形狀**（routing gate 對 Workflow tool 機械擋）：每個 Sonnet `agent()` 的 opts **inline** 寫 `model: 'sonnet'`（或 `claude-sonnet-5-5`）與 `effort: 'high'`，**NEVER** 省略 effort（會繼承 session）；prompt 帶一行 `routing-row: <列名>` 指回 Sonnet 四列之一，不另開 workflow 專用列。`agentType: 'sonnet-implementer'` 的 frontmatter 已釘 high，可省 effort。model 放在變數或共用 opts 常數裡的寫法 gate 讀不到，一律拒。
+- **Opus `agent()` 也 MUST inline 寫 effort**（`'medium'`；`'high'` 只在全域 § effort 例外成立時）：`agent()` 沒寫 effort 就繼承主線，Sonnet 主線（high）上等於開 Claude Opus 5.5（effort: high）。主線是 Sonnet 時，省略 `model` 的 `agent()` 繼承 Sonnet，gate 當 Sonnet `agent()` 判並要求寫明 model。
 
 ## delegate-sub（原判 sonnet／haiku 等級的委派工作）
 
@@ -80,7 +114,7 @@ paths:
 | 工作類別 | 執行鏈（effort 依上節） | 鏈尾 | 備註 |
 | --- | --- | --- | --- |
 | 〔`non-ui-implementation`〕非 UI 實作（併入原 `-escalate`） | Claude Sonnet 5.5（effort: high） | 主線 | 修改、測試、修復與交付同一條鏈 |
-| 〔`implementation-decision`〕實作中的根因／方案裁決（含 TD／backlog triage） | Claude Opus 5.5（effort: medium） | 主線 | 唯讀分析證據，交付根因、修法限制與驗收條件；TD／backlog 的分類、優先序與處置判定也走本列；in-process 載體 `Plan` subagent 顯式帶 `model: 'opus'`；Devin 可選 |
+| 〔`implementation-decision`〕實作中的根因／方案裁決（含 TD／backlog triage） | Claude Opus 5.5（effort: medium） | 主線 | 唯讀分析證據，交付根因、修法限制與驗收條件；TD／backlog 的分類、優先序與處置判定也走本列；in-process 載體 `Plan` subagent 顯式帶 `model: 'opus'`（Sonnet 主線改用 `opus-advisor`）；Devin 可選 |
 | 〔`detailed-planning`〕非 UI 詳細實作計畫 | Claude Opus 5.5（effort: medium） | 主線 | 唯讀產出範圍、介面、依賴、task→file 與驗收；載體同上；Devin 可選 |
 | 〔`nuxt-core-implementation`〕Nuxt 本體實作 | Claude Sonnet 5.5（effort: high） | 主線 | Nuxt 框架、模組與執行邏輯 |
 | 〔`version-upgrade-first-pass`〕version-upgrade 首輪升版 | Claude Sonnet 5.5（effort: high） | 主線 | — |
@@ -102,9 +136,9 @@ paths:
 
 **原 GPT-6 Sol 的六列**（2026-09-29）改由 native Claude 席位承接，不再經 Pi：實作四列 Sonnet 5.5（effort: high）、判讀兩列 Claude Opus 5.5（effort: medium）——後兩者錯誤會被下游放大、量小（09-24〜09-29 約 8 次），且官方明言最難的推理選 Opus。
 
-**Sonnet 列品質失敗**：① 主線先診斷，**NEVER** 原樣重派；② brief／規格問題 → 修 brief 再派一次 Sonnet；能力問題（跨層、跨模組推理）→ 派 Claude Opus 5.5（effort: medium）child，`--tier-basis quality-escalation --retry-of <Sonnet 那次的 label>`；小修 → 主線自己做；③ Opus 5.5（effort: medium）再失敗 → 既有 `stall-escalation` 升 high。**NEVER** 借 `stall-escalation` 做 Sonnet → Opus 的跨 model 升級（它量的是 Opus 被迫升 high 的次數）。refusal 不走這條，直接交主線。
+**Sonnet 列品質失敗**：① 主線先診斷，**NEVER** 原樣重派；② brief／規格問題 → 修 brief 再派一次 Sonnet；能力問題（跨層、跨模組推理）→ 派 Claude Opus 5.5（effort: medium）child，`--tier-basis quality-escalation --retry-of <Sonnet 那次的 label>`；小修 → 主線自己做（主線是 Sonnet 時改派同一個 Opus child，§ 主線 residency 第 2 條）；③ Opus 5.5（effort: medium）再失敗 → 既有 `stall-escalation` 升 high。**NEVER** 借 `stall-escalation` 做 Sonnet → Opus 的跨 model 升級（它量的是 Opus 被迫升 high 的次數）。refusal 不走這條，直接交主線（主線是 Sonnet 時照 § 主線 residency 第 4 條開 Opus）。
 
-**Sonnet 列的條件式 Opus 顧問配對（Charles 2026-09-29）**：Sonnet 5.5 實作列遇到 ① 方案分歧三條全中——≥2 個合理方案且各有真實 trade-off；用專案內可得證據（rules / spec / 既有 pattern / git history / 上游 changelog）判不出優劣；選錯的成本不是當場可逆的（動到行為契約 / schema / API / 跨 ≥2 檔 / 會散播到 fleet）——或 ② 跨模組設計決定時，**MUST** 先以 `Agent({ subagent_type: 'Plan', model: 'opus' })` 取唯讀建議：brief 明寫「只回建議與理由，**NEVER** 改任何檔」、thin brief（先預消化，把檔案路徑、規則條目、已排除的方案寫進去）、**等顧問回傳後**才作該決策；拿到建議後照全域 CLAUDE.md § 分歧仲裁 的處置表。其餘日常實作照做不問，**NEVER** 為了「保險」派顧問。載體差異：Herdr Sonnet child 自己派 Plan 顧問（gate 對 `Plan`＋`opus` 放行）；in-process `sonnet-implementer` 叫不出 subagent，改回 `NEEDS_CONTEXT` 附分歧與已排除方案，由主線取顧問意見後再續派。顧問與實作者分歧或多案並列 → Herdr child 走 `--complete blocked --decision`，**NEVER** 自己挑一案硬做。本條是做決定前的諮詢，不是品質失敗升級（那走上一段）。
+**Sonnet 列的條件式 Opus 顧問配對（Charles 2026-09-29）**：Sonnet 5.5 實作列遇到 ① 方案分歧三條全中——≥2 個合理方案且各有真實 trade-off；用專案內可得證據（rules / spec / 既有 pattern / git history / 上游 changelog）判不出優劣；選錯的成本不是當場可逆的（動到行為契約 / schema / API / 跨 ≥2 檔 / 會散播到 fleet）——或 ② 跨模組設計決定時，**MUST** 先以 `Agent({ subagent_type: 'opus-advisor' })` 取唯讀建議（frontmatter 釘 Claude Opus 5.5（effort: medium）；**NEVER** 用 `Plan`＋`opus`——沒釘 effort 會繼承 Sonnet 的 high，routing gate 擋）：brief 明寫「只回建議與理由，**NEVER** 改任何檔」、thin brief（先預消化，把檔案路徑、規則條目、已排除的方案寫進去）、**等顧問回傳後**才作該決策；拿到建議後照全域 CLAUDE.md § 分歧仲裁 的處置表。其餘日常實作照做不問，**NEVER** 為了「保險」派顧問。載體差異：Herdr Sonnet child 自己派 `opus-advisor`（gate 在 Sonnet 主線擋 `Plan`＋`opus`、放行 `opus-advisor`）；in-process `sonnet-implementer` 叫不出 subagent，改回 `NEEDS_CONTEXT` 附分歧與已排除方案，由主線取顧問意見後再續派。顧問與實作者分歧或多案並列 → Herdr child 走 `--complete blocked --decision`，**NEVER** 自己挑一案硬做。本條是做決定前的諮詢，不是品質失敗升級（那走上一段）。
 
 「無 fallback」的 native 各列在該席位不可用時由主線自己做；commit gate 例外——`code-review-opus`（0-A）與 commit 0-B 用到的 `design-review`／`screenshot-match-analysis`：產出 changeset 的那條線不是它的 reviewer，所以 gate 保持未完成（`commit` skill `review-policy.md`）。
 

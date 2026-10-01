@@ -15,7 +15,7 @@ paths:
 
 ## Overview
 
-**Core principle:** Test what the code does, not what the mocks do. Mocks are tools to isolate, not things to test. Strict TDD prevents most of these anti-patterns.
+**Core principle:** Test what the code does, not what the mocks do. Mocks are tools to isolate, not things to test. 測試從哪裡來、落在哪一層，見 § 測試從哪裡來（aixbdd）。
 
 ## The Iron Laws
 
@@ -213,7 +213,7 @@ const mockResponse = {
 
 ## Anti-Pattern 5: Integration Tests as Afterthought
 
-Testing is part of implementation. Can't claim complete without tests — write the failing test first (see § TDD Prevents These Anti-Patterns).
+Testing is part of implementation. Can't claim complete without tests — 測試的來源與落點見 § 測試從哪裡來（aixbdd）。
 
 ## Anti-Pattern 6: Boundary Values Not Tested
 
@@ -401,21 +401,22 @@ BEFORE 宣告一條測試寫完:
 
 Mock setup longer than test logic, or mocks missing methods real components have → consider an integration test with real components.
 
-## TDD Prevents These Anti-Patterns
+## 測試從哪裡來（aixbdd）
 
-**TDD 三法則**（寫任何生產碼之前，**每一條**都適用，不是只處理「看起來比較重要的那個模組」）：
+測試紀律只照 aixbdd，分流與入口順序以 [`aixbdd-workflow.md`](./aixbdd-workflow.md) 為準，本段不重抄：
 
-1. **先有失敗測試才寫生產碼**——沒有紅燈就沒有下一步
-2. **測試只寫到剛好失敗**（含編譯失敗）——不要一次把整個 spec 寫完再實作
-3. **生產碼只寫到剛好通過**——不要順便把「下次會用到」的分支寫進去
-
-**If you're testing mock behavior, you violated TDD** — you added mocks without watching the test fail against real code first.
+| 可觀察 predicate | 測試從哪裡來 |
+| --- | --- |
+| resolved capability 含 `aixbdd`（clade home 視同含，依據同 `aixbdd-workflow.md`），且該件 `work_kind` 要求 acceptance feature（`behavior`、`bug-uncovered`、未宣告） | `.feature` 是驗收層：acceptance `.feature` 在 plan package 的 `features/acceptance/**`；`/tasks` 先集中實作本輪 DSL 自動化測試，再由 `/implement` 逐 Feature File 走 `[BDD-GREEN]`／`[BDD-REFACTOR]` |
+| resolved capability 含 `aixbdd`，`work_kind` 不要求 acceptance feature（`bug-covered`、全 NOOP 的 `refactor`） | 不寫新 acceptance feature；迴歸錨點照 `flow plan readiness` 的要求集 |
+| `aixbdd-workflow.md` 判 ❌ 的逐件工作（沒有 I/O 的純邏輯 bug 等） | 迴歸 unit test 與修正同一個 commit |
+| resolved capability 不含 `aixbdd` | 本段不生效；照該 repo 自己的測試規約 |
 
 ## 測試結構契約
 
 失敗時要能立刻指出壞掉的是哪一個能力。純 review 層，無機械訊號。
 
-### Fast / Isolated / Repeatable / Self-validating / Timely
+### Fast / Isolated / Repeatable / Self-validating
 
 **每一條**測試都要同時滿足：
 
@@ -425,7 +426,6 @@ Mock setup longer than test logic, or mocks missing methods real components have
 | Isolated | 不依賴執行順序、不共享可變狀態 | 單獨跑與整包跑結果相同 |
 | Repeatable | 任何環境、任何時間點結果相同 | 見下方 E2E fixture 時間錨點；無網路、無鐘點、無亂數未 seed |
 | Self-validating | 失敗 = 非 0 exit，不靠人看 log | 沒有「跑完自己看輸出對不對」 |
-| Timely | 與生產碼同時寫 | 見上方 TDD 三法則 |
 
 ### 一個測試只驗一個概念
 
@@ -466,10 +466,10 @@ E2E 不用「跑了幾條」或 coverage % 當 KPI——真正會出事的是失
 ### 機械訊號（warn-only，TD-636）
 
 ```bash
-node vendor/scripts/audit-risk-path-coverage.ts        # 恆 exit 0
+node vendor/scripts/audit-risk-path-coverage.ts        # findings exit 0；掃描失敗 exit 2
 ```
 
-diff 命中上列五類時，驗作用中 change 有 § Risk paths **且引用的測試檔真的存在**。**這支不升成 blocking**——findings 是 review 的對話起點。**綠燈不代表「風險路徑覆蓋足夠」**（只證明有宣告、檔在）。baseline 近 0 是預期值，不要因為「一片紅」就把它關掉或降級。
+diff 命中上列五類時，檢查作用中的 plan packages（status 為 active／blocked／closing）有 § Risk paths **且引用的測試檔真的存在**；舊 `openspec/changes/` 存在時才保留相容掃描。**findings 不升成 blocking**——它們是 review 的對話起點；掃描失敗回 exit 2，不得當成檢查通過。**綠燈不代表「風險路徑覆蓋足夠」**（只證明有宣告、檔在）。baseline 近 0 是預期值，不要因為「一片紅」就把它關掉或降級。
 
 ## E2E fixture 的時間錨點 MUST 相對於執行當下
 

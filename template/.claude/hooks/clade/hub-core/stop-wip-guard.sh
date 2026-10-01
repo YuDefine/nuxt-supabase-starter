@@ -9,6 +9,27 @@ set -euo pipefail
 
 cat > /dev/null
 
+# TD-863: clean main still has a worktree backlog. Warn before any WIP early exit.
+# The whole hook has 10s (hooks.json): ancestry-only mode plus an inner 3s cap (portable via
+# node, macOS has no `timeout`), so a large backlog never starves the checks below.
+if command -v node >/dev/null 2>&1; then
+  for wt_helper in scripts/wt-helper.ts vendor/scripts/wt-helper.ts; do
+    if [ -f "$wt_helper" ]; then
+      WT_BACKLOG_TIMEOUT_MS="${WT_BACKLOG_TIMEOUT_MS:-3000}" node -e '
+        const { spawnSync } = require("node:child_process")
+        const r = spawnSync(process.execPath, [process.argv[1], "backlog", "--no-landed-state"], {
+          stdio: ["ignore", process.stderr, process.stderr],
+          timeout: Number(process.env.WT_BACKLOG_TIMEOUT_MS),
+          killSignal: "SIGKILL",
+        })
+        if (r.error && r.error.code === "ETIMEDOUT")
+          console.error(`⚠️ worktree 堆積檢查逾時（>${process.env.WT_BACKLOG_TIMEOUT_MS}ms）已跳過；跑 node ${process.argv[1]} backlog 看清單`)
+      ' "$wt_helper" >&2 || true
+      break
+    fi
+  done
+fi
+
 # ── 今日 task 檔未歸檔提示（session-tasks 規約的「升級或刪，二擇一」）────────
 # 只看今天建立的檔：舊檔的堆積由 audit-stale-tasks.ts 事後稽核，Stop hook 每次都唸
 # 別 session 的舊檔會變成背景噪音。task 檔多半已 commit，所以這段不能放在下面的

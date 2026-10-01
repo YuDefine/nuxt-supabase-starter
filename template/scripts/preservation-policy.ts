@@ -22,6 +22,7 @@ import {
 } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
+import { diskThresholds } from './lib/disk-low-water.ts'
 
 export const PRESERVATION_POLICY_ID = 'P0-full-preserve-v1'
 export const PRESERVATION_SCHEMA_VERSION = 1
@@ -126,7 +127,7 @@ export interface ConsumerProfile {
   retention: {
     destination: string
     owner: string
-    /** Fixture override; omitted production profiles keep the 40 GiB floor. */
+    /** Fixture override; omitted production profiles use `relativeByteReserve`. */
     byteReserve?: number
     inodeReserve?: number
     /**
@@ -792,6 +793,28 @@ export function validateProfile(profile: ConsumerProfile): void {
     throw new Error('Resource preservation adapters are required before a source can be removed')
 }
 
+/**
+ * Bytes that must stay free after the archive is written.
+ *
+ * Was `max(40 GiB, 10% of the filesystem)` — 62 GiB on desk's 620 GiB `/`, so batch cleanup could
+ * only start with ~66 GiB free and deadlocked itself exactly when space was needed
+ * (W-2026-10-01-disk-low-water-guard). Now: never let an archive push the disk below the
+ * low-water block tier (`CLADE_DISK_BLOCK_GB`, the line where new work is refused) or below twice
+ * its own peak, whichever is larger; the old 10% stays as the ceiling.
+ */
+export function relativeByteReserve(
+  totalBytes: number,
+  archivePeakBytes: number,
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const blockTier = diskThresholds(env).thresholds.blockGiB * GIB
+  return Math.min(Math.ceil(totalBytes * 0.1), Math.max(blockTier, 2 * archivePeakBytes))
+}
+
+export function relativeInodeReserve(totalInodes: number, archivePeakInodes: number): number {
+  return Math.min(Math.ceil(totalInodes * 0.05), Math.max(262_144, 2 * archivePeakInodes))
+}
+
 export function capacityRequirement(
   root: string,
   inventory: SourceInventory,
@@ -834,6 +857,9 @@ export function capacityRequirement(
   const restorePeakInodes = inventory.entryCount + gitInodes + 1024
   const peakBytes = worktreeFootprint + gitFootprint + restorePeakBytes + growth
   const peakInodes = inventory.entryCount + gitInodes + restorePeakInodes
+  const sameFilesystem = statSync(root).dev === statSync(options.restoreRoot ?? tmpdir()).dev
+  const archivePeakBytes = sameFilesystem ? peakBytes : peakBytes - restorePeakBytes
+  const archivePeakInodes = sameFilesystem ? peakInodes : peakInodes - restorePeakInodes
   return {
     filesystem: realpathSync(root),
     filesystemId: String(statSync(root).dev),
@@ -857,11 +883,10 @@ export function capacityRequirement(
     ),
     gitBytes,
     gitInodes,
-    // Production floor is 40 GiB or 10% of the filesystem, whichever is larger.
     // Fixture profiles pass `byteReserve` (and `growthFloor`) so capture tests do not depend
-    // on host headroom.
-    byteReserve: options.byteReserve ?? Math.max(40 * GIB, Math.ceil(totalBytes * 0.1)),
-    inodeReserve: options.inodeReserve ?? Math.max(1_000_000, Math.ceil(totalInodes * 0.05)),
+    // on host headroom; production uses the relative reserve below.
+    byteReserve: options.byteReserve ?? relativeByteReserve(totalBytes, archivePeakBytes),
+    inodeReserve: options.inodeReserve ?? relativeInodeReserve(totalInodes, archivePeakInodes),
   }
 }
 

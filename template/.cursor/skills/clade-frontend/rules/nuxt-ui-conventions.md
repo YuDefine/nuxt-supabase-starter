@@ -22,7 +22,7 @@ paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'pages/**/*.vue', 'packages/*
 ## 不一致時
 
 - 既有頁面之間本身不一致 → 以**最多頁面採用**的寫法為準
-- 新增一種既有沒有的語義角色 → 採用該專案 design system 文件（若有，如 `.impeccable.md` Component Conventions 段）決定，並在 commit message / PR 留言說明新增的角色
+- 新增一種既有沒有的語義角色 → 採用該專案 DESIGN.md 的 Components 段（語意角色對照見 [[nuxt-ui-mcp]] § Token 來源對照）決定，並在 commit message / PR 留言說明新增的角色
 
 ## 禁止事項
 

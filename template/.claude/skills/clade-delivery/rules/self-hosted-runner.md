@@ -79,9 +79,20 @@ fi
 
 Persistent runner（LXC / VM，跨 job 保留檔案系統）上，會自我更新的 action 的副作用會留下來污染下一個 job。
 
-- **MUST** `pnpm/action-setup` 在 self-hosted runner 釘 **v5**。v6 會自我更新 pnpm，在 persistent runner 上把既有安裝改壞
-- **MUST** 升任何「會在 runner 上安裝/更新工具」的 action 大版之前，先問「這個 action 有沒有自我更新行為？persistent runner 上它留下什麼？」——GitHub-hosted 綠燈**不是** self-hosted 也會綠的證據
-- 範本與完整 CI workflow 見 `vendor/snippets/cloudflare-workers/self-hosted-runner-ci.workflow.yml.template`
+- **MUST** `pnpm/action-setup` 用 **v6 SHA-pin**（目前 `ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0`；SHA 用 `gh api repos/pnpm/action-setup/git/ref/tags/<tag>` 查，annotated tag 再 deref 到 commit，NEVER 憑記憶）。**NEVER** 用 v5 或浮動 tag
+- **MUST** self-hosted runner 上每個 `pnpm/action-setup` step 設**每趟獨立**的 `dest`：
+
+  ```yaml
+  - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+    with:
+      dest: ${{ runner.temp }}/setup-pnpm-r${{ github.run_id }}a${{ github.run_attempt }}-${{ github.job }}${{ strategy.job-index }}
+  ```
+
+  （consumer 可在 `setup-pnpm-` 前加 repo 前綴，例如 clade 用 `clade-setup-pnpm-`；`strategy.job-index` 在沒有 matrix 的 job 展開為空字串，照寫即可）
+  - **理由**：同一台主機上的 runner 共用 home，`pnpm/action-setup` 預設把 self-installer 裝進共用的 `~/setup-pnpm`，並行 job 會互刪（§ 7 的同一類問題）。症狀是 install 階段 `ENOENT`／`ENOTEMPTY` 或 `pnpm: not found` 時好時壞。每趟獨立的 `dest` 讓並行 job 不再共用同一個目錄，這才是修法；退回 v5 只是繞開，不解決共用目錄
+  - **實證**：clade run 35469525376（2026-09-19）doctor 撞 ENOENT、lane4 撞 ENOTEMPTY；clade 自 2026-09-19 起每個 job 都用 v6.1.0＋per-run `dest`（`.github/workflows/validate.yml`、`ai-quota.yml`，斷言在 `test/clade-self-hosted-workflow.test.ts`）
+- **MUST** 升任何「會在 runner 上安裝/更新工具」的 action 大版之前，先問「這個 action 有沒有自我更新行為？它把東西裝到哪個路徑、並行 job 會不會共用？persistent runner 上它留下什麼？」——GitHub-hosted 綠燈**不是** self-hosted 也會綠的證據
+- 範本與完整 CI workflow 見 `vendor/snippets/cloudflare-workers/self-hosted-runner-ci.workflow.yml.template`（已是 v6 SHA-pin＋per-run `dest`）；toolchain 入口的基準形狀見 `vendor/snippets/ci-parity/toolchain-setup.template.yml`
 
 ### 7. 同一台機器上的 runner 共享 home，NEVER 在 job 執行中動共用目錄
 
@@ -130,7 +141,16 @@ gh api repos/<owner>/<repo>/actions/runs/<run-id>/jobs \
 - **NEVER** 用 `actions/cache` 存瀏覽器 binary（self-hosted 的 cache 走網路，比本機命中慢）
 - **NEVER** 在 job 裡清 `~/.cache/ms-playwright`（共享可變狀態，per § 7）
 
-本證據決定：persistent self-hosted runner 上要不要替下載型工具加一層快取機制——不要加。
+**已量到的實例**（都是「先量、再決定」的結果，不是通則；換 repo／換 runner 仍要各量一次）：
+
+| 步驟 | 量到什麼 | MUST |
+| --- | --- | --- |
+| `voidzero-dev/setup-vp` 的 `cache` | <consumer-i>（同 repo、同 runner）`cache: true` 77s、`cache: false` 22s；<consumer-b> setup-vp `cache: true` 110s | persistent self-hosted runner 上 `cache: false`。GitHub-hosted（`ubuntu-latest`）維持 cache |
+| `actions/setup-go` 的 `cache` | <consumer-b> 的「Post Setup Go」中位 101s（存 cache 的 post step 本身就是成本） | persistent self-hosted runner 上 `cache: false`。GitHub-hosted 維持 cache |
+| `supabase/setup-cli` | <consumer-b> run 35493941498 光下載 CLI tarball 就 19 分鐘；<consumer-b> 換 v3 後該步驟中位 234s → 9s | v3 SHA-pin（`45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1`）＋明確 `version:`，**NEVER** `latest`。版本 MUST 與產生 committed DB types 的 CLI 版本一致。**例外**：repo 的 `package.json` 有 `devEngines.packageManager` 時 v3 會紅——v3.0.1 在 `GITHUB_WORKSPACE` 跑 `npm view`，npm 回 `EBADDEVENGINES`（<consumer-i> commit `84b25b95`、run 35892796784，npm 11.19.0 vs pnpm 11.23.0），該 repo 改用 v1.7.1 SHA-pin（`ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1.7.1`）＋明確 `version:`。代價：v1 每趟把 tarball 下載到 `_temp`、不進 tool cache，網路慢的 runner 會很久（<consumer-b> 換 v3 前 234s 中位、最長 19 分鐘的就是這條路徑）。<consumer-b>、<consumer-e> 無 `devEngines`，走 v3 |
+| CI 內的 `supabase start` | <consumer-e> run 36214756229 的 Start Supabase 2300s，時間都花在拉 studio／logflare 等測試用不到的 image | 用 `-x` 排除用不到的服務。studio、logflare、vector 在 CI 通常可排除；imgproxy、edge-runtime、mailpit、realtime、storage 要先從測試碼與設定證明沒用到才排除 |
+
+本證據決定：persistent self-hosted runner 上要不要替下載型工具加一層快取機制——不要加（`actions/cache`、`setup-vp`／`setup-go` 的 `cache: true` 都算）。
 本證據不決定：GitHub-hosted runner 上要不要優化——**NEVER** 拿本節論證 `ubuntu-latest` 的 job 也不必量、不必改。
 
 ### 10. 信任分層：untrusted-execution job NEVER 落在 production-access runner
@@ -155,8 +175,8 @@ gh api repos/<owner>/<repo>/actions/runs/<run-id>/jobs \
 
 | 開脫（出處） | 現實 |
 | --- | --- |
-| 「`supabase-check`（pull_request，限定 paths）」（<consumer-h> `tasks/2026-09-16-runner-isolation-followup.md`，把 paths 當成範圍已受控） | `pull_request` 跑的是 PR merge commit（`GITHUB_SHA`，含 PR 的改動）上的 workflow 檔，`paths:` 與 workflow 內容都是 PR 可改的；而且 paths 命中的那一次，程式碼照樣在 prod 主機上跑 |
-| 「PR job 經 Docker 可觸及 supabase-runner 上的 production supabase-db … 依 decision … 接受」（<consumer-h> 77ada28 commit message） | 接受時評估的是「誰能開 PR」。風險不在人：`vp install` 之後整個 app 與全部 transitive deps 的 runtime code 都在那台跑，push main 時同樣發生。org 成員限定縮小的是人，不是供應鏈 |
+| 「`supabase-check`（pull_request，限定 paths）」（<consumer-i> `tasks/2026-09-16-runner-isolation-followup.md`，把 paths 當成範圍已受控） | `pull_request` 跑的是 PR merge commit（`GITHUB_SHA`，含 PR 的改動）上的 workflow 檔，`paths:` 與 workflow 內容都是 PR 可改的；而且 paths 命中的那一次，程式碼照樣在 prod 主機上跑 |
+| 「PR job 經 Docker 可觸及 supabase-runner 上的 production supabase-db … 依 decision … 接受」（<consumer-i> 77ada28 commit message） | 接受時評估的是「誰能開 PR」。風險不在人：`vp install` 之後整個 app 與全部 transitive deps 的 runtime code 都在那台跑，push main 時同樣發生。org 成員限定縮小的是人，不是供應鏈 |
 | 「省 minutes」（77ada28 把 `ubuntu-latest` 搬上 self-hosted 的理由） | 先量觸發頻率再談成本，下方指令 |
 
 量觸發頻率（逐 repo 跑，數字是全歷史 PR 數）：
@@ -165,7 +185,7 @@ gh api repos/<owner>/<repo>/actions/runs/<run-id>/jobs \
 gh api "repos/<owner>/<repo>/pulls?state=all&per_page=100" --paginate --jq '.[].number' | wc -l
 ```
 
-2026-09-16 快照（<client-b>，Free plan、`allow_forking=false`）：<consumer-h> 0、<consumer-e> 1、<consumer-b> 25。
+2026-09-16 快照（<client-b>，Free plan、`allow_forking=false`）：<consumer-i> 0、<consumer-e> 1、<consumer-b> 25。
 
 本證據決定：untrusted-execution job 從 prod 主機搬回 GitHub-hosted 時，要不要擔心 minutes——先量，量到近零就不用。
 本證據不決定：production-access runner 上要不要跑 untrusted-execution job——**NEVER** 拿「量到的頻率很高、minutes 不夠」論證搬回 prod 主機；不夠時改觸發方式（例如 `workflow_run`）或另建不具 production 存取的 runner。

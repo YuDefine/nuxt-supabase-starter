@@ -95,7 +95,7 @@ const profileEntries: Array<[string, ProfileDefinition]> = [
     },
   ],
   [
-    '<consumer-i>',
+    '<consumer-j>',
     {
       topology: unknownTopology,
       resources: {
@@ -106,14 +106,14 @@ const profileEntries: Array<[string, ProfileDefinition]> = [
     },
   ],
   [
-    '<consumer-j>',
+    '<consumer-k>',
     {
       topology: unknownTopology,
       resources: { ...unknownResources, databases: 'verified-absent' },
     },
   ],
   [
-    '<consumer-g>',
+    '<consumer-h>',
     {
       topology: unknownTopology,
       resources: {
@@ -124,14 +124,14 @@ const profileEntries: Array<[string, ProfileDefinition]> = [
     },
   ],
   [
-    '<consumer-f>',
+    '<consumer-g>',
     {
       topology: unknownTopology,
       resources: { ...unknownResources, databases: 'unknown' },
     },
   ],
   [
-    '<consumer-h>',
+    '<consumer-i>',
     {
       // Evidence 2026-09-29 (main + 18 linked worktrees, 1.41M entries on ext4): three trees
       // carry Pi clones under `.pi/git/**/.git`; no gitlink or .gitmodules, no

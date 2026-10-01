@@ -71,6 +71,9 @@ OPSX create / revise 會寫 canonical intent、binding 與投影。每次呼叫�
 
 `/wt` 建 worktree 時已由 `wt-helper add` 跑 `git merge --ff-only origin/main` 拉最新投影層，一般不需再手動 sync。
 
+已存在的 linked worktree 在 rebase／merge main 後，若 `sync-rules` 報 `local or modified file conflict`，先在該 worktree 跑 `node scripts/wt-helper.ts reconcile <slug>`（clade home 用 `node vendor/scripts/wt-helper.ts reconcile <slug>`），再重跑原同步命令；Git 帶入 tracked 投影時不會更新 gitignored 的 ownership receipt。
+`reconcile` 只更新 worktree 已擁有、main receipt 與 worktree clean HEAD bytes 相符的項目，main 保持唯讀；缺 worktree namespace receipt 是無害 skip（exit 0），local edit／缺 provenance／hash 不符仍受保護（exit 1）。缺整份 substrate 時走 `refresh-substrate`，操作與備份見 `vendor/snippets/wt-helper/README.md`。
+
 ## §5 Commit 階段：checkpoint → 批次整合 → /commit → 回收
 
 visibility（push、draft PR、integration 模式）見 [[worktree-default]] §5；就緒、觸發門檻與批次落地見 [[worktree-default.commit-ceremony]] §5。所有 skill-owned wt 同樣走就緒池。

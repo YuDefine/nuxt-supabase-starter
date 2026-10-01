@@ -45,7 +45,7 @@ Dev port 由 clade 集中分配：registry 分配、規約強制宣告、audit �
   ```
 
 - **MUST** Token 用 `cfat_*` account API token，**絕非** `cfut_*`（Worker token）或 `r_*`（cert.pem 簽發的 tunnel-scoped token）
-  - 來源：<consumer-i> `.env.local` 的 `CLOUDFLARE_API_KEY`
+  - 來源：<consumer-j> `.env.local` 的 `CLOUDFLARE_API_KEY`
   - 必備權限：`Cloudflare Tunnel:Edit`（account）+ `SSL and Certificates:Edit`（zone）+ `DNS:Edit`（zone）
   - **必要**：`SSL and Certificates:Edit` — plugin 必跑 `/zones/<id>/ssl/certificate_packs` GET 確認 edge cert，403 會 re-throw crash Nuxt（即使 Cloudflare Universal SSL 已涵蓋）
 

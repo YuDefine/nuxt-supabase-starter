@@ -83,16 +83,42 @@ checker 一律輸出 PASS 或 FAIL，四條全滿足才 PASS：
 
 ## 終止條件是「最後一輪 0 修改」，不是輪數用盡（MUST）
 
-**每一次**修改後那一版都要再經一顆 fresh checker——包含**最後一次**修改。迴圈只能終止於兩種狀態：
+**每一次**修改後那一版都要再經一顆 fresh checker——包含**最後一次**修改。迴圈只能終止於三種狀態：
 
 1. fresh checker 對一版**本輪 0 修改**的內容給出 PASS → 落地
-2. verify-only 輪仍有 blocker → 走 `escalation_action`，該版本不得落地
+2. 同一個 phase／同一份 spec 的**第一次** verify-only FAIL → 走 `escalation_action`，該版本不得落地
+3. 同一個 phase／同一份 spec 的**第二次** verify-only FAIL → plan-level review（見下節），該版本不得落地
 
 fix 輪上限用盡時**要追加一輪 verify-only checker**，讀修完 blocker 後的完整 diff。該輪結果只有 PASS 或 escalate，**verify-only 輪不再改任何檔**（再改就是又造出一版沒被檢查的內容）。verify-only 輪**不計入** fix 輪上限。
 
 **不要把剛修完 blocker 的那一版直接 commit / publish / handoff**，即使那筆修復很小、即使 gate 全綠、即使輪數已用盡。
 
 **只調高 fix 輪上限不算解決**：3 改 5 只是把「最後一次修改沒被檢查」平移到新的最後一輪。
+
+## 同一份 spec 第二次 verify-only FAIL → plan-level review（MUST）
+
+**違反字面就是違反精神。**
+
+```text
+同一個 phase／同一份 spec 第二次 verify-only FAIL，下一步是 plan-level review，NEVER 是下一個 implementation iteration。
+```
+
+- **計數跟著 spec 走，不跟著 owner 走**：換 owner、換 session、fix 輪歸零都**不**歸零 verify-only FAIL 次數。第一次 verify-only FAIL 走 `escalation_action` 時，交接物（HANDOFF／brief／tasks 檔）MUST 寫一行 `verify-only FAIL 1/2：<phase 或 spec 路徑>`；接手者開工前先查這一行，查到了就知道下一次 FAIL 不再換手。
+- **plan-level review 做什麼**：派 fresh-context reviewer 讀 spec 與歷次 checker finding，回答「這些 blocker 是不是同一個狀態空間的不同格子、spec 的邊界是不是讓 checker 可以無限找格子」。產出是**修訂後的 spec**（落在 spec 本身，保留歷次 finding 當證據），**NEVER** 是新 owner 或下一輪 fix。這一步走 [[verify-gate-chain]] 的 `ROLLBACK:<spec>`——不必先證明是 specification error，第二次 verify-only FAIL 本身就是觸發條件。
+- **review 之後**：spec 有改 → 修訂版是新 spec，計數從 0 重新開始。review 判定 spec 不需改 → 寫明理由才可再開 iteration，且這份 spec 下一次 verify-only FAIL 的 `escalation_action` 固定為 `ASK`（交人拍板），不再自審。
+
+| 藉口（逐字實錄） | 現實 |
+| --- | --- |
+| 「Fix the two blockers and land」（ACP plan §15.4 被否決的選項） | 那就是第 28 輪。checker 找到一格就 FAIL，實作要全部格子都對才 PASS——Phase 4 估約 600 格，逐輪補洞不收斂 |
+| 「調高 fix 輪上限」（TD-836 已排除） | 只平移最後一輪，spec 的邊界沒變 |
+| 「換 owner」（TD-836 已排除；`escalation_action` 預設 HANDOFF） | 新 owner fix 輪歸零重算，27 輪就是這樣累出來的，不是任何一個 owner 的失誤 |
+
+**Red Flags——發現自己在想這些就停，改走 plan-level review**：
+
+- 「這次的 blocker 跟上次不一樣」——不同格子，同一個狀態空間
+- 「每個 finding 都對，修掉就好」
+- 「只剩 N 個 blocker 了」
+- 「新接手，輪數從頭算」
 
 ## 為什麼
 

@@ -13,6 +13,7 @@
 | Best-practice / design completion | `bootstrap-project.ts` 的 `semantic-inspection` step | inspector 無 errors，`bp.skip=false`，`requiredPending`、`variantUnadopted`、`designPending` 都為空。`bp-scan` step 是 advisory 建議，exit 0 不證明採用已完成 |
 | Golden paths | `bootstrap-project.ts` 的 `golden-path` step | applicable rows `OK`；`N/A` 有 predicate |
 | Security policy | `node $CLADE_HOME/scripts/audit-security-policy.ts --consumers <path>` | `sections` 與 `invariants` 兩格 `0/n`；`freshness` 格 `1/1` 時 MUST 登 TD（首次 baseline 待跑）並在 registry 宣告 `scan-only`，**NEVER** 讀成通過 |
+| Truth root（宣告 `aixbdd`／`specformula` 時） | 依 `vendor/snippets/consumer-lifecycle/README.md` 放 `work-lifecycle.md`（有舊 TD 先處置進 `legacy-ids.json`；scaffold NEVER 代放），再 `node $CLADE_HOME/scripts/scaffold-consumer-truth.ts --consumer-path <path> --apply` 補 `owners.md`，最後 `node $CLADE_HOME/scripts/audit-registry-reality.ts --consumer <id> --json` | 輸出沒有 `capability-lifecycle-migration`／`capability-truth-root`；`specs/truth/work-lifecycle.md`＋`owners.md` 已 commit。其餘 `capability-*` finding 列入首件需求，不得捏造來消掉 |
 | Publish | `/clade-publish` 的 Step 1–9 | publish + target propagate 成功 |
 | Post-publish | target 再跑 readiness + `pnpm hub:check` | 兩者 exit 0 |
 | Gate playbook pack | `docs/playbooks/README.md` 含 `## Browser 分流`；`PROGRESS.md` + `GATE-TODOS.md` + 01–05 都在；`HANDOFF.md` 有 `## User-gate board` | 缺任一檔或 heading → 跑 `mint-gate-playbooks.ts`（缺才寫）。沒有這包不算 bootstrap 完成 |
@@ -20,7 +21,7 @@
 
 ## 需求交付證據
 
-- 所選 AI targets 的指引與 package scripts 一致指向 aixbdd 入口（`/specify` → `/tasks` → `/implement`）：每個所選 target 的 `<skills-root>` 實際有該組 skill，且 `node .clade/vendor/scripts/flow/flow.ts status --json` 跑得起來；只驗 skill 目錄存在不算。
+- 所選 AI targets 的指引與 package scripts 一致指向 aixbdd 入口（`work-route` 起手，lifecycle repo 以 `flow plan open` 鑄 `W-…`，再依序交 `/specify` → `/tasks` → `/implement`）：每個所選 target 的 `<skills-root>` 實際有該組 skill，且 `node .clade/vendor/scripts/flow/flow.ts status --json` 跑得起來；只驗 skill 目錄存在不算。
 - 任務包含首件需求時，沿同一 source/change/work 完成 create → instructions/materialize → 依風險選的測試／BDD → evidence/project → archive，附真實 commit 與 deploy track 狀態（沒部署就明示）。
 - <consumer-e> 重建演練：驗證資料保存於 playground 外，以正式 rescaffold 路徑重建；驗一件需 BDD 的行為、一件普通測試即可的低風險行為，以及修訂造成舊證據失效、重驗後才能 archive。修正一律回 clade／starter，再用相同答案重新產生。
 

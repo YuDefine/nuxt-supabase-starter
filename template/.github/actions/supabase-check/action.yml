@@ -1,6 +1,6 @@
 # 🔒 LOCKED — managed by clade · Source: vendor/actions/supabase-check/action.yml · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/actions/supabase-check/action.yml
 name: 'Supabase Schema Check'
-description: 'Cold-replay the repo migrations on a throwaway local Postgres, then assert three things: the committed database types match what the migrations produce, supabase db lint is clean at the configured level, and (when supabase/tests/ exists) the pgTAP suite passes. A fourth, advisory-only step runs pgbot lint (schema profile) against the same throwaway DB and emits ::warning:: annotations; it never affects the exit code. Never touches a dev, staging or production database — it starts its own stack on the runner, which is also what makes it verify that the migration chain replays from zero. Because it executes code a pull request can rewrite, the job itself MUST run on a runner with no production access (GitHub-hosted, or a self-hosted runner that hosts no production service); see clade rules/core/self-hosted-runner.md § 10. Assumes the caller has already checked out the repo, installed Node.js (actions/setup-node) and installed the Supabase CLI (supabase/setup-cli@v1) pinned to the same version that generated the committed types.'
+description: 'Cold-replay the repo migrations on a throwaway local Postgres, then assert three things: the committed database types match what the migrations produce, supabase db lint is clean at the configured level, and (when supabase/tests/ exists) the pgTAP suite passes. A fourth, advisory-only step runs pgbot lint (schema profile) against the same throwaway DB and emits ::warning:: annotations; it never affects the exit code. Never touches a dev, staging or production database — it starts its own stack on the runner, which is also what makes it verify that the migration chain replays from zero. Because it executes code a pull request can rewrite, the job itself MUST run on a runner with no production access (GitHub-hosted, or a self-hosted runner that hosts no production service); see clade rules/core/self-hosted-runner.md § 10. Assumes the caller has already checked out the repo, installed Node.js (actions/setup-node) and installed the Supabase CLI (supabase/setup-cli@v3) pinned to the same version that generated the committed types. Exception: if the repo package.json has devEngines.packageManager, setup-cli v3 fails with EBADDEVENGINES (it runs npm view in the workspace); use supabase/setup-cli v1.7.1 with an explicit version there, at the cost of re-downloading the CLI tarball on every run; see clade rules/core/self-hosted-runner.md section 9.'
 author: 'YuDefine/clade'
 
 inputs:
@@ -54,10 +54,10 @@ runs:
           exit 0
         fi
 
-        # CLI 由 caller 的 supabase/setup-cli@v1 提供。缺了就是 workflow 寫錯，
+        # CLI 由 caller 的 supabase/setup-cli@v3 提供。缺了就是 workflow 寫錯，
         # 不能 warn+skip —— 那會讓「gate 沒跑」與「gate 通過」在 UI 上長得一樣。
         if ! command -v supabase >/dev/null 2>&1; then
-          echo "::error::supabase CLI not found. Add a 'uses: supabase/setup-cli@v1' step before this action."
+          echo "::error::supabase CLI not found. Add a 'uses: supabase/setup-cli@v3' step before this action."
           echo "See vendor/snippets/supabase-ci/README.md for the full workflow template."
           exit 1
         fi

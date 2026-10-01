@@ -31,12 +31,13 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}
 | clade 中央倉，registry role=source-of-truth | 依 work-lifecycle 處理；不對它跑排除 source-of-truth 的 consumer audit，也不製造 consumer manifest |
 | 已 onboard 專案的新工作／續跑 | 檢查其實際 manifest 與所需 capability，定位本次 package |
 | 純措辭／設定，不改行為、權限、資料或部署語意 | 依 repo 流程直接實作與驗證，免 package |
-| bug 回報，出錯的行為已有 scenario | NOOP delta 加一條迴歸 scenario，再修；不發明新 truth |
-| bug 回報，出錯的行為沒有 scenario（只有舊測試或沒有測試） | 進下方 workflow：ADD delta 把當下正確的行為寫成 truth 與 scenario，再修；該區舊測試在 Phase 3 吸收 |
-| 分析發現缺陷要重構，行為不變 | 進下方 workflow：先確認（缺的以 ADD delta 補上）釘住現行行為的 scenario 且綠，再動結構；該區舊測試同一件工作吸收。行為要變就走「新增／修改／刪除既有行為」列 |
-| hotfix | 可以先修；同一 work id 留下補 scenario 的 open work，不以一支 unit／e2e 迴歸測試結案 |
+| bug 回報，出錯的是沒有 I/O 的純邏輯（計算、解析、格式化、邊界值） | 免 package：迴歸落 unit test，與修正同一個 commit；不在 `work_kind` 值域內 |
+| bug 回報，出錯的行為已有 scenario | `--kind bug-covered`：NOOP delta 指向被違反的不變量＋迴歸錨點（先紅再修）；不發明新 truth |
+| bug 回報，出錯的行為沒有 scenario（只有舊測試或沒有測試） | `--kind bug-uncovered`，進下方 workflow：ADD delta 把當下正確的行為寫成 truth 與 scenario，再修；該區舊測試在 Phase 3 吸收 |
+| 分析發現缺陷要重構，行為不變 | `--kind refactor`，進下方 workflow：先確認（缺的以 ADD delta 補上）釘住現行行為的 scenario 且綠，再動結構；該區舊測試同一件工作吸收。行為要變就走「新增／修改／刪除既有行為」列 |
+| hotfix | `flow plan open --hotfix` 先修：它帶一條「補迴歸 scenario（hotfix 先修）」open work，沒補完結不了案；補的時候以 `flow plan set-kind` 定為 `bug-covered` 或 `bug-uncovered`，不以一支 unit／e2e 迴歸測試結案 |
 | 一次性工作（不改行為） | 遵守該次授權，不強套完整流程 |
-| 新增／修改／刪除既有行為 | 進下方 workflow，完成已授權部分 |
+| 新增／修改／刪除既有行為 | `--kind behavior`，進下方 workflow，完成已授權部分 |
 
 宣告 aixbdd 的 consumer 裡，迴歸只有在受測單元沒有 I/O（純計算、解析、邊界值）時才落 unit test；帶 `clade-legacy-test` marker 的舊測試怎麼吸收、變紅時怎麼分岔，照 `clade-spec-workflow` skill 的 `rules/legacy-tests.md`，**每一次**進 bug、重構或 hotfix 列之前讀它。
 
@@ -72,7 +73,7 @@ transport 讀當前 runtime 的 `wt/SKILL.md`，可用 Form 3 `/wt <slug>: /<dow
 
 **提出方案或鑄新 work id 之前**，MUST 列出**每一份** active plan（lifecycle repo：`flow plan list`），對**每一份** Scope 與本次需求重疊的 plan 讀完 `plan.md` 的 Scope、Decisions 與 Open work。重疊就續跑那一份；部分重疊時，新 plan 的 Scope MUST 有分工表寫明哪一塊歸哪個 work id（`flow plan open` 的 entry gate 只擋同 slug）。
 
-已有 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:` 時，沿用 `specs/plans/<work-id>/`。新工作：repo 根有 `specs/truth/work-lifecycle.md` 時 MUST 先 `flow plan open` 鑄 `W-…`；沒有該檔的 consumer 才鑄 `NNN-<slug>`。不為補前提、轉 owner 或重試另開 package。
+已有 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:` 時，沿用 `specs/plans/<work-id>/`。新工作：repo 根有 `specs/truth/work-lifecycle.md` 時 MUST 先 `flow plan open` 鑄 `W-…`，並以 `--kind` 記錄上表判定的工作種類；值域、各種類的必要產物與迴歸錨點寫法見本 skill 根的 `rules/工作種類與必要產物.md`，**每一次**開 package 或改判之前讀它。manifest 宣告 `aixbdd`／`specformula` 卻沒有該檔，是要先修的前提而不是降級理由：照第 3 節第 3 步處理 truth root，再 `flow plan open`；**NEVER** 靜默改鑄 `NNN-<slug>`。只有兩側都沒宣告、且使用者沒有要採用 lifecycle 的 consumer 才鑄 `NNN-<slug>`。不為補前提、轉 owner 或重試另開 package。
 
 **Notion ticket 詢問（鑄新 work id 之前）**：確定是新需求／新 bug 要鑄 work id 時，先在 consumer 根跑 `node ~/offline/clade/vendor/scripts/lib/notion-hub.ts resolve --consumer-path .`（script 只在 clade 中央倉，consumer 沒有這份；不寫死任何 id）。由上而下取第一個成立的列：
 
@@ -96,6 +97,8 @@ transport 讀當前 runtime 的 `wt/SKILL.md`，可用 Form 3 `/wt <slug>: /<dow
 內部 `rules/.constitution/**` 是執行契約；專案 `.agents/constitution/**` 是治理 artifact。兩者不能互相替代。按當前 checkout 驗證 project artifact，不拿另一 worktree 的未提交檔冒充存在，也不把內部契約複製成 project constitution。
 
 ## 2. 載入真正可用的 owner
+
+MUST 先讀本 skill 根的 `rules/上游覆寫-lifecycle落點與doctor.md`，才載入下游 owner——**每一次**、下表每一列都一樣，含公開入口 specify、clarify、system-analysis、implement 與 bundle 內的內部流程。上游 owner 的原文是 pin 的上游版本，clade 的 lifecycle 落點（L）與 canonical doctor（D）調整只寫在那份檔：命中它寫明的判準就照覆寫列執行，沒命中照 owner 原文。**NEVER** 只讀 owner 的 `SKILL.md` 就開始寫 artifact——上游原文會建 `NNN-*` package、`truth-delta.md`、覆寫 lifecycle `plan.md`，也不跑 doctor。
 
 公開 skill 與內部流程是兩種合法交棒方式，先按下表定位，不能用頂層同名目錄缺席判內部流程不可用。
 
@@ -137,7 +140,7 @@ transport 讀當前 runtime 的 `wt/SKILL.md`，可用 Form 3 `/wt <slug>: /<dow
 
 1. 從所選 owner 的實際契約解析輸入（project artifact 按專案根、internal resources 按 owner 目錄），逐檔檢查。尚待該 owner 產出的檔案不是輸入前提。
 2. 缺投影或安裝：用 repo 的固定版本來源與既有投影／安裝 owner 補齊後重驗；不手改 generated projection、不從網路追最新版、不把 pinned internal flow 裝成公開 skill。
-3. 缺 project artifact：載入該 artifact owner 並執行其流程；constitution 走第 1 節，techstack 走 technical-research。既有 artifact 已回答的事項不重問，不代替 owner 捏造答案。
+3. 缺 project artifact：載入該 artifact owner 並執行其流程；constitution 走第 1 節，techstack 走 technical-research。truth root 分兩種：缺 `specs/truth/work-lifecycle.md` 是 **lifecycle 遷移**，不是補檔——`specs/truth/work-lifecycle.md` 是 lifecycle-repo marker（一存在，gate 擋新 TD、`docs/tech-debt.md` 凍結、舊 TD 只經 `specs/truth/legacy-ids.json` 解析），scaffold **NEVER** 代放；照 `~/offline/clade/vendor/snippets/consumer-lifecycle/README.md` 先把舊 TD 逐筆處置進 `legacy-ids.json`（或搬進 plan § Open work），處置量大或要 user 拍板時先停下回報，NEVER 為了開 W- plan 跳過。已是 lifecycle repo 只缺 `owners.md` 時，owner 是 `node ~/offline/clade/scripts/scaffold-consumer-truth.ts --consumer-path <consumer 根> --apply`：範本源固定、只建缺檔、NEVER 覆寫，建好的檔隨本次工作 commit。它印出的其餘缺口（`techstack.md`、`isa.yml`、acceptance feature）照本步交各自 owner。既有 artifact 已回答的事項不重問，不代替 owner 捏造答案。
 4. 前提通過後，實際執行候選 owner，查驗產出，重新判定下一步並繼續；「知道下一支是誰」不是本輪完成條件。
 5. 同一修復方式沒有新證據時不重複重試；修復 owner 循環、來源不可取得、必要工具無法使用、權限不足或需要外部狀態改變時，保留已做工作與原始錯誤，回報具體缺口及解除條件。仍可獨立完成的工作繼續。
 
@@ -181,7 +184,7 @@ transport 讀當前 runtime 的 `wt/SKILL.md`，可用 Form 3 `/wt <slug>: /<dow
 
 採 SpecFormula 時，上表 technical-research、api-plan、data-plan、implement、bdd 這幾步另依第 2 節 § SpecFormula 契約載入點 載入對應契約；那張表沒列到的步驟不載。
 
-Lifecycle package 的 `plan.md` 由 lifecycle owner 持有；分析寫 `system-analysis.md`，delta 意圖寫 `plan.md` 的 `## Truth delta`，不新建 `truth-delta.md`。對話裡的上游 NNN 範例不改變此落點。省略 UI／research／OpenAPI 等 artifact 時，在 `plan.md` 的 `## Decisions` 寫工作特定理由；尚未完成不叫省略。
+Lifecycle package 的 `plan.md` 由 lifecycle owner 持有；分析寫 `system-analysis.md`，delta 意圖寫 `plan.md` 的 `## Truth delta`，不新建 `truth-delta.md`（逐 owner 的覆寫見 `rules/上游覆寫-lifecycle落點與doctor.md`）。對話裡的上游 NNN 範例不改變此落點。工作種類決定的省略（例如 `bug-covered` 不要 `spec.md` 與 acceptance feature）由 gate 依 `work_kind` 判定，不寫 Decisions；其餘省略 UI／research／OpenAPI 等 artifact 時，在 `plan.md` 的 `## Decisions` 寫工作特定理由；尚未完成不叫省略。
 
 ## 5. 銜接 SpecFormula 與交付
 
@@ -207,7 +210,7 @@ Aixbdd 決定需求、Gherkin、DSL、設計與 tasks；SpecFormula 執行已對
 
 需要保留交接／阻塞診斷時記錄以下五欄到同 package，使用者只看影響結果的摘要：
 
-1. `需求類型:` 新需求／續跑／regression／hotfix／research／狀態查詢。
+1. `需求類型:` `work_kind` 的值（`behavior`／`bug-uncovered`／`bug-covered`／`refactor`，hotfix 另註）、續跑、research 或狀態查詢。
 2. `package 或免 package:` 唯一 work id 與路徑，或免 package 的具體理由。
 3. `下一支 skill:` 具名 owner、實際公開／內部入口，以及已執行或待解除的動作。
 4. `缺少的前提:` runtime、路徑／決策、已嘗試的修復與結果；全部查驗通過才填無。

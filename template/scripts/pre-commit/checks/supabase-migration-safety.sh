@@ -110,12 +110,14 @@ fi
 if ((${#out_of_order[@]} > 0)); then
   # origin/main 上 supabase/migrations/*.sql 的 latest timestamp
   # 不主動 fetch（避免拖慢 commit），用 local cached origin/main ref
+  # origin/main 還沒有任何 migration 時 grep 無輸出回 1；pipefail 下那會讓整支
+  # hook 在 set -e 中止、不印任何原因，所以這裡把「沒有」收斂成空字串。
   latest_on_main=""
   if git rev-parse --verify origin/main >/dev/null 2>&1; then
     latest_on_main=$(
       git ls-tree -r --name-only origin/main -- 'supabase/migrations/' 2>/dev/null \
         | awk -F/ '{print $NF}' \
-        | grep -oE '^[0-9]{14}' \
+        | { grep -oE '^[0-9]{14}' || true; } \
         | sort -n \
         | tail -1
     )

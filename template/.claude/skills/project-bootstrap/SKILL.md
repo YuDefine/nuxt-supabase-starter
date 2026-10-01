@@ -38,7 +38,7 @@ metadata:
 
 每一輪（腳本內**不**無限 loop）：
 
-1. 看：`node "$CLADE_HOME/scripts/inspect-new-project-round.ts" --consumer <target>`
+1. 看：`node "$CLADE_HOME/scripts/inspect-new-project-round.ts" --consumer <target> --first-commit`（`--first-commit` 在暫存複本上實際跑一次首次 commit 的 pre-commit；vendor 投影 bytes 與 consumer 身分每輪都驗）
 2. 記：機讀缺口進 `tasks/new-project-quality-loop.jsonl`；質性偏差（doc / cli / ai-guidance / disclosure）同一 schema 補一筆
 3. 修：**只改 clade 或 starter**。playground 當源頭改完不算
 4. 清：`node "$CLADE_HOME/scripts/rescaffold-playground.ts"`（會再 inspect）
@@ -240,11 +240,15 @@ cd <target-path> && pnpm check
 
 ### 新專案需求入口
 
+manifest 宣告 `aixbdd` 或 `specformula` 時，truth root 是建案的一部分。`specs/truth/work-lifecycle.md` 是 lifecycle-repo marker（一存在 gate 就擋新 TD、`docs/tech-debt.md` 凍結），scaffold NEVER 代放：`new`（沒有舊 TD）依 `vendor/snippets/consumer-lifecycle/README.md` 採用第一步放 marker（範本 `templates/work-lifecycle.md`）；`adopt` 的 repo 有舊 TD 時先照該 README 處置進 `specs/truth/legacy-ids.json` 再放。marker 在之後跑 `node "$CLADE_HOME/scripts/scaffold-consumer-truth.ts" --consumer-path <target-path> --apply` 補 `owners.md`（只建缺檔、NEVER 覆寫），兩檔一起提交進 consumer。truth 歸 consumer，不走 propagate。它印出的其餘缺口（`techstack.md`、`isa.yml`、acceptance feature）由首件需求經 `work-route` 交 owner skill 產出，NEVER 為了過 gate 捏造。
+
 宣告 `aixbdd` capability 的新產出與首件需求的交付證據，依 `references/completion-contract.md` § 需求交付證據；readiness READY 只結案建案檢查，不代替需求的交付證據。
 
 ## 7. Land 與 publish
 
-先提交 target repo 的 scaffold/onboarding commit，再提交 Clade registry/skill source。Clade worktree merge-back 後呼叫 `/clade-publish` 完成 publish + propagate；禁止在 worktree 內 publish。
+先提交 target repo 的 scaffold/onboarding commit，再提交 Clade registry/skill source。
+
+target repo 的首次提交**分兩筆**：先 `node "$CLADE_HOME/scripts/commit-projection-delivery.ts" --consumer <target-path>` 把 clade 管理的投影落成一筆 delivery commit（路徑判定與 propagate 同一支，內容由 clade 審過，同 propagate 的 delivery commit），再把業務骨架走 `/commit`（0-A 只審這一筆）。新 repo 的投影 commit 先落 `main`，業務骨架再開 PR——混成一筆時 0-A brief 塞不下，GitHub path filter 也只看前 300 個檔而不觸發 CI（2026-09-29 <client-a>：2751 檔一筆）。Clade worktree merge-back 後呼叫 `/clade-publish` 完成 publish + propagate；禁止在 worktree 內 publish。
 
 **registry entry 落地**：managed intake／`register-consumer` 把新 entry 寫進 `$CLADE_HOME/registry/consumers.json` 的 working tree（hub-sync 當下要讀到），但不 commit。`registry/**` 不在 main 登記簿 allowlist（`clade-home-worktree` § 本機 main 與 origin 的同步），所以只走 worktree＋PR：
 

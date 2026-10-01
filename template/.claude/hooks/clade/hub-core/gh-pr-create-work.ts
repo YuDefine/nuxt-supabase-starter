@@ -161,11 +161,74 @@ export type BodySource =
   | { kind: 'none' }
   | { kind: 'unknown' }
 
+// 命令位置上會再執行後面命令的 shell 關鍵字與 wrapper（它們的選項形狀各異，不逐一解析）。
+const WRAPPERS = new Set([
+  'if',
+  'then',
+  'elif',
+  'else',
+  'do',
+  'while',
+  'until',
+  '!',
+  '{',
+  '(',
+  'time',
+  'exec',
+  'nohup',
+  'sudo',
+  'doas',
+  'nice',
+  'ionice',
+  'timeout',
+  'xargs',
+  'stdbuf',
+  'setsid',
+  'builtin',
+])
+
 /** 一個 segment 若是 `gh … pr create …`，回傳 body 來源；不是就回 null。 */
 export function prCreateBody(seg: string): BodySource | null {
   const w = words(seg)
-  const gh = w.findIndex((x) => x.text === 'gh' || x.text.endsWith('/gh'))
-  if (gh === -1) return null
+  // 只認命令位置（容許前置 env/assignment）；參數或 echo 的文字不是 gh 指令。
+  let gh = 0
+  while (/^[A-Za-z_][A-Za-z_0-9]*=/.test(w[gh]?.text ?? '')) gh++
+  if (w[gh]?.text === 'env') {
+    gh++
+    while (gh < w.length) {
+      const arg = w[gh].text
+      if (
+        /^[A-Za-z_][A-Za-z_0-9]*=/.test(arg) ||
+        ['-i', '--ignore-environment', '-0', '--null'].includes(arg) ||
+        /^(-u.+|--unset=.+|-C.+|--chdir=.+)$/.test(arg)
+      ) {
+        gh++
+      } else if (['-u', '--unset', '-C', '--chdir'].includes(arg)) {
+        gh += 2
+      } else if (arg === '--') {
+        gh++
+        break
+      } else {
+        break
+      }
+    }
+  }
+  if (w[gh]?.text === 'command') {
+    gh++
+    while (w[gh]?.text === '-p' || w[gh]?.text === '--') gh++
+  }
+  const isGh = (text: string) => text === 'gh' || text.endsWith('/gh')
+  if (!isGh(w[gh]?.text ?? '')) {
+    // 命令位置是 shell 關鍵字、wrapper、subshell／group 或 env 不認得的選項：拆不準就退回舊的全段搜尋（寧可多擋）。
+    const lead = w[gh]?.text ?? ''
+    const opaque =
+      WRAPPERS.has(lead) ||
+      /^[({!]/.test(lead) ||
+      (w[gh - 1]?.text === 'env' && lead.startsWith('-'))
+    if (!opaque) return null
+    gh = w.findIndex((x, i) => i >= gh && isGh(x.text.replace(/^[({!]+/, '')))
+    if (gh === -1) return null
+  }
   const pr = w.findIndex((x, i) => i > gh && x.text === 'pr')
   if (pr === -1 || w[pr + 1]?.text !== 'create') return null
   const args = w.slice(pr + 2)

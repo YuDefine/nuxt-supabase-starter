@@ -17,6 +17,8 @@ metadata:
 
 Session 交接管理。四個 arg 依下方契約收工；Codex 先過下一節的 Codex boundary 判 bounded 還是 handoff 級。
 
+四種模式收工報告前跑 `node scripts/wt-helper.ts backlog --json`（clade 用 `vendor/scripts/wt-helper.ts`）。`exceeded: true` 時首段列出 `entries`，每棵一行 `slug`／`landedState`／`action`；`handoff-scan.ts` 同資料在 `worktreeBacklog.raw`。這是待處置清單，active claim 不列入，診斷不可用須明說；`in-worktree` 先正式 commit、`superseded` 先核對取代證據，NEVER 依此清單自動刪樹（TD-863）。
+
 ## Codex boundary（MUST 早於 Step 0.1 與任何 Herdr preflight）
 
 當前 host 是 Codex 時，先依 [[agent-routing]] § Dispatch data and transport boundary 判載體，判準與其他 runtime 相同：

@@ -48,6 +48,8 @@ Ad-hoc Form-1、`/version-upgrade` 等 skill-owned wt 同樣在完成點登記�
 
 舊單棵 `wt-helper merge-back` 保留供 caller 遷移，**不在正式 commit 前清理來源**。新的主流程使用 batch；使用者的「merge back」意圖走 manual batch。已登記批次的來源不得用 legacy 路徑落地或刪除。
 
+Legacy main 帶 unrelated dirty／staged WIP 時可用 `merge-back <slug> --patch`：只套 committed changeset，正套前核對重疊路徑並 `git apply --check`，不 stash、不 pre-sync、不碰 index。`--dry-run` 同樣只讀；source 有 WIP、main dirty 重疊或 patch 衝突就拒絕。成功只代表 main working tree pending commit，來源保留且不寫 landing marker；與 batch admission、正式 commit／驗收規約並行，NEVER 用它繞過現行 PR／batch 流程（TD-863）。
+
 下列 guard 仍約束 legacy stash 路徑與存量救援，不作為 batch 的搬運機制。
 
 ### Claim guard scope ⊇ bulk-stash scope（hard rule）

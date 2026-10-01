@@ -821,11 +821,22 @@ node "${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/work-loop-verdict.ts" \
 **`subagentsSpawned` 是唯一一個「不是累加就好」的欄位**：本輪 Step 0 的 `acquire` 回 `acquired` / `took-over` 時 MUST 從 **0** 起算（本輪派幾個就寫幾個），回 `reentrant` / `continued` 才是舊值 + 本輪新增（runner 模式第 2 輪起恆為 `continued`）。判定與理由在 Step 0 § 互斥鎖，**此處不複述**——但 **NEVER** 因為「schema 範例長得像單調遞增」就無條件累加，那會讓 Step 6.2 的 budget proxy 退化成跨 run 單調計數（門檻一旦跨過就永遠為真，[[TD-424]] 同型）。
 
 **Scratch 命名 contract：本輪寫進 `.clade/work-loop/` 的**每一個**中間檔 MUST 叫 `<tag>-r<N>.<ext>`**
-（`N` = 本輪 round），不是只有「看起來會留很久的那幾個」。state-write 的 sweep 依這個 marker 清掉
-`N < round-3` 的檔；**沒帶 `-r<N>` 的檔它一律不動**，於是永遠留著。2026-08-26 clade home 實測 291 檔
-22MB，其中五個 400KB 以上的分析中間檔彼此看不出誰還有效——agent glob 誤讀一個就是一次 context 事故。
-`state*` 與 `lock` / `stop` / `scan-latest.json` / `rounds.jsonl` / `unharvested.json` /
-`orphan-quarantine.json` 是執行狀態不是 scratch，sweep NEVER 碰它們。
+（`N` = 本輪 round；前綴形 `r<N>-<tag>.<ext>` 也認），不是只有「看起來會留很久的那幾個」。sweep
+（`work-loop-state-write.ts` `sweepScratch`）跑兩次：Step 7.3 的 state-write 清 `N < round-3`；runner
+輪末（child 已退出）再清 `N < round-1`，且帶 marker 的單檔 >1MB 一律刪（orphan／quarantine guard 即將
+觸發的輪改帶 `--keep-evidence`，不套 size-based 刪除，證據留給 attended reconciliation）。**沒帶 marker
+的檔與 `logs/round-*.log` 超過 30 天即刪**——不命名就只能活到變 legacy。`logs/round-*.log` 被清不影響
+`work-loop-cost-metrics.mjs`：runner 每輪把 round 分檔／收尾原因／訊號（`logClass`，口徑單一來源
+`work-loop-round-classify.mjs`）隨 ledger 行落進 `rounds.jsonl`，sweep 刪 log 前若 ledger 沒有該 log 的
+`logClass` 會先補一行 `backfill`，補不進去就不刪；cost-metrics 以 `rounds.jsonl` 為 round 資料來源。
+sweep 全程只用 `lstat`、symlink 一律跳過，任何單檔 stat／rm 失敗只計入 failed、NEVER 中斷 state write。2026-08-26 clade home 實測 291 檔
+22MB，2026-10-01 實跑輪後仍 147 檔 11MB（TD-675）——agent glob 誤讀一個就是一次 context 事故。
+
+**大型 dump（`flow status` 全量輸出這類 >1MB 的檔）MUST 落 scratchpad 或 OS tmp，NEVER 落本目錄**；
+落了也活不過輪末。`state*` 與 `lock` / `stop` / `logs/` / `scan-latest.json` / `scan-prev.json` /
+`rounds.jsonl` / `unharvested.json` / `orphan-quarantine.json` / `adhoc-mjs.jsonl` /
+`selfverify-cache.json` / `signal-probe-baseline.json` 是執行狀態不是 scratch，sweep NEVER 碰它們。
+sweep 刪 `.mjs` 前把檔名記進 `adhoc-mjs.jsonl`，`scripts/audit-flow-nodes.ts` 的 ad-hoc 計數讀它。
 
 **Iron Law：NEVER 直接覆寫 `state.json`。一律 temp → 驗 → 備份 → rename。** 這個檔是整個 loop 的**唯一**記憶載體（Step 1 Iron Law：不依賴對話記憶），寫壞它等於把 N 輪進度一次歸零，而失敗完全靜默——寫入工具照樣回成功，下一輪才在讀取端炸開。
 

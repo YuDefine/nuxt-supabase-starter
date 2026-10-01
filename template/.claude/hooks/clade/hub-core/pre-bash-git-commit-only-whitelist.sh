@@ -569,6 +569,16 @@ whitelisted() {
   case "$p" in
     *..*) return 1 ;;
   esac
+  # Use the target checkout's SoT, as clade-home-guard and main-sync do.
+  # A clade load failure must not fall back to the fleet whitelist.
+  if [ -f "$top/scripts/sync-rules.ts" ] && [ -f "$top/scripts/lib/register-paths.ts" ]; then
+    node --input-type=module -e '
+      import { pathToFileURL } from "node:url";
+      const { isRegisterPath } = await import(pathToFileURL(process.argv[1]).href);
+      process.exit(isRegisterPath(process.argv[2]) ? 0 : 1);
+    ' "$top/scripts/lib/register-paths.ts" "$p"
+    return $?
+  fi
   case "$p" in
     HANDOFF.md|ROADMAP.md|docs/tech-debt.md) return 0 ;;
     tasks/*|docs/discussions/*|docs/digests/*|docs/pitfalls/*|docs/archives/*) return 0 ;;
@@ -648,8 +658,9 @@ fi
 cat >&2 <<EOF
 ⛔ Commit blocked: \`git commit --only\` on ${branch} with paths outside the ad-hoc whitelist
 
-Ad-hoc \`--only\` on main/master is limited to the path whitelist in
-rules/core/commit.detail.md § \`--only\` 適用範圍. These paths are not on it
+Ad-hoc \`--only\` on main/master uses scripts/lib/register-paths.ts in
+clade home, or rules/core/commit.detail.md § \`--only\` 適用範圍 elsewhere.
+These paths are not on the target checkout's whitelist
 (resolved against the commit's cwd${prefix:+, prefix \`${prefix}\`}):
 
 $(printf '%b' "$blocked")

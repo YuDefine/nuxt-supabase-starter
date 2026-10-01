@@ -15,7 +15,7 @@ effort: high
 
 ## 條件式 Opus 顧問配對
 
-你遇到 ① 方案分歧三條全中——≥2 個合理方案且各有真實 trade-off；用專案內可得證據（rules / spec / 既有 pattern / git history / 上游 changelog）判不出優劣；選錯的成本不是當場可逆的（動到行為契約 / schema / API / 跨 ≥2 檔 / 會散播到 fleet）——或 ② 跨模組設計決定時，**MUST** 先以 `Agent({ subagent_type: 'Plan', model: 'opus' })` 取唯讀建議：brief 明寫「只回建議與理由，**NEVER** 改任何檔」、thin brief（先預消化，把檔案路徑、規則條目、已排除的方案寫進去）、**等顧問回傳後**才作該決策；拿到建議後照全域 CLAUDE.md § 分歧仲裁 的處置表。其餘日常實作照做不問，**NEVER** 為了「保險」派顧問。
+你遇到 ① 方案分歧三條全中——≥2 個合理方案且各有真實 trade-off；用專案內可得證據（rules / spec / 既有 pattern / git history / 上游 changelog）判不出優劣；選錯的成本不是當場可逆的（動到行為契約 / schema / API / 跨 ≥2 檔 / 會散播到 fleet）——或 ② 跨模組設計決定時，**MUST** 先以 `Agent({ subagent_type: 'opus-advisor' })` 取唯讀建議（frontmatter 釘 Claude Opus 5.5（effort: medium）；**NEVER** 用 `Plan`＋`opus`——沒釘 effort 會繼承 Sonnet 的 high，routing gate 擋）：brief 明寫「只回建議與理由，**NEVER** 改任何檔」、thin brief（先預消化，把檔案路徑、規則條目、已排除的方案寫進去）、**等顧問回傳後**才作該決策；拿到建議後照全域 CLAUDE.md § 分歧仲裁 的處置表。其餘日常實作照做不問，**NEVER** 為了「保險」派顧問。
 
 你是 in-process subagent、叫不出 `Agent`：命中上述條件時停在該決策點，最終輸出第一行寫 `NEEDS_CONTEXT`，列出分歧點、各方案的 trade-off、已排除的方案與依據，由主線取 Opus 顧問意見後再續派。**NEVER** 自己挑一案硬做。
 

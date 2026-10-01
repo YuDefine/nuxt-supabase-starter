@@ -1,5 +1,5 @@
 ---
-description: 開發規範（TDD, coding style, UI reuse）
+description: 開發規範（測試落點, coding style, UI reuse）
 paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'test/**/*.ts', 'packages/*/test/**/*.ts', 'shared/**/*.ts', 'packages/*/shared/**/*.ts', 'package.json']
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/development.md; edit canonical source -->
@@ -16,7 +16,7 @@ paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'server/**/*.ts', '
 
 # Development
 
-- **ALWAYS** TDD（Red → Green → Refactor）：實作前透過當前 runtime 的 skill 入口讀取並遵循 `test-driven-development` 全文；缺少該 skill 時回報能力缺口，不能把其他 runtime 的安裝路徑當成已載入。
+- 測試從哪裡來、落在哪一層，照 `testing-anti-patterns.md` § 測試從哪裡來（aixbdd）
 - **NEVER** `.skip` or comment out tests
 - **ALWAYS** Tailwind classes, NEVER manual CSS or hardcoded colors
 - **ALWAYS** Nuxt UI 語意色彩（見下方 Nuxt UI Color Mode 約束）

@@ -282,9 +282,13 @@ The tag shows which executor was used.
 
 **Batch handover**: after harvesting verified checkpoints (`batch checkpoint`, no full AI ceremony), register readiness (`batch ready`) and run `wt-helper batch status --trigger auto --workflow <已解析 workflow_model>`。**NEVER** 省略 `--workflow`。Trigger thresholds and landing follow commit skill `batch.md`. Worker push／draft PR obligations are in § After `/wt` completes; **NEVER** `gh pr ready` early just to get a green test signal — run `test:affected` in the source worktree. Cleanup belongs to the final commit workflow after verified landing.
 
-Form 1 work uses the same queue; the coordinator handles authorized landing without asking the user to type commands.
+Form 1 work uses the same queue; the coordinator handles authorized landing without asking the user to type commands. At Form 1 completion, register the verified checkpoint and evaluate the batch trigger in this turn; do not park a finished tree merely because there is no archive event (TD-863).
 
 ## Failure handling
+
+### Projection conflict after updating an existing worktree
+
+When a linked worktree reports `local or modified file conflict` from `sync-rules` after a rebase or merge from main, read [[worktree-default.detail]] §4, then run `node scripts/wt-helper.ts reconcile <slug>` in that worktree (clade home: `node vendor/scripts/wt-helper.ts reconcile <slug>`) and rerun the original sync command. The helper repairs existing ownership receipts only when main's receipt matches clean worktree HEAD bytes; protected local edits remain blocked. For missing substrate, use `refresh-substrate` as documented in the wt-helper cookbook.
 
 ### Claude subagent task failure
 
@@ -369,8 +373,13 @@ A completion report is a claim to verify. Inspect the checkpoint scope and accep
 
 ```bash
 node scripts/wt-helper.ts list                              # list session worktrees
+node scripts/wt-helper.ts reconcile <slug> [--json]          # repair existing projection receipts after rebase/merge from main
 node scripts/wt-helper.ts merge-back <slug>                 # legacy compatibility; preserves source for review
 node scripts/wt-helper.ts merge-back <slug> --dry-run       # preview blockers
+node scripts/wt-helper.ts merge-back <slug> --patch --dry-run  # legacy patch preview; main index untouched
+node scripts/wt-helper.ts backlog --json                   # read-only disposition queue; >3 warns
+node scripts/wt-helper.ts reclaim-stale                     # free stale dev-port slots only; trees untouched
+node scripts/wt-helper.ts reclaim-stale --remove-landed     # also cleanup in-history clean unclaimed sources
 node scripts/wt-helper.ts merge-back <slug> --auto-stash    # stash main blockers
 node scripts/wt-helper.ts land-pending <slug>               # alias for grandfathered worktrees
 node scripts/wt-helper.ts prune                             # remove merged ones interactively

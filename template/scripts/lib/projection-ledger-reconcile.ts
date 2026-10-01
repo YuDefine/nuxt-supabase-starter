@@ -270,23 +270,44 @@ function withProjectionLock<T>(root: string, namespace: string, run: () => T): T
  * already owned by main are rebased, leaving unknown files and conflicts alone.
  */
 export function reconcileLandedProjectionState(mainRoot: string, landedWorktree: string) {
-  const sourceDir = join(landedWorktree, '.clade', 'projections')
-  const targetDir = join(mainRoot, '.clade', 'projections')
+  return reconcileProjectionState({
+    targetRoot: mainRoot,
+    sourceRoot: landedWorktree,
+    targetLabel: 'main',
+    sourceLabel: 'landed',
+  })
+}
+
+function reconcileProjectionState({
+  targetRoot,
+  sourceRoot,
+  targetLabel,
+  sourceLabel,
+}: {
+  targetRoot: string
+  sourceRoot: string
+  targetLabel: 'main' | 'worktree'
+  sourceLabel: 'landed' | 'main'
+}) {
+  const sourceDir = join(sourceRoot, '.clade', 'projections')
+  const targetDir = join(targetRoot, '.clade', 'projections')
   if (!existsSync(sourceDir) || !existsSync(targetDir))
-    return { updated: 0, skipped: [] as string[] }
+    return { updated: 0, skipped: [] as string[], blocked: 0 }
   if (!lstatSync(sourceDir).isDirectory() || !lstatSync(targetDir).isDirectory())
     throw new Error('projection state directory must be a real directory')
   let updated = 0
+  let blocked = 0
   const skipped: string[] = []
   for (const name of readdirSync(sourceDir)
     .filter((entry) => LEDGER_NAME.test(entry))
     .toSorted()) {
     const namespace = name.split('.')[1]
-    withProjectionLock(mainRoot, namespace, () => {
+    withProjectionLock(targetRoot, namespace, () => {
       const sourcePath = join(sourceDir, name)
       const targetPath = join(targetDir, name)
       if (!existsSync(targetPath)) {
-        skipped.push(`${name}: main receipt is missing`)
+        // No target ownership exists in this namespace, so there is nothing to repair.
+        skipped.push(`${name}: ${targetLabel} receipt is missing`)
         return
       }
       if (!lstatSync(sourcePath).isFile() || !lstatSync(targetPath).isFile())
@@ -301,7 +322,7 @@ export function reconcileLandedProjectionState(mainRoot: string, landedWorktree:
         return !!landedHash && landedHash !== oldHash
       }
       const hashes = committedDiskHashes(
-        mainRoot,
+        targetRoot,
         Object.entries(target.files)
           .filter(([rel, oldHash]) => needsRebase(rel, oldHash))
           .filter(([rel]) => !target.sourceInputs || source.sourceInputs?.[rel])
@@ -311,14 +332,16 @@ export function reconcileLandedProjectionState(mainRoot: string, landedWorktree:
         const landedHash = source.files[rel]
         if (!needsRebase(rel, oldHash)) continue
         if (target.sourceInputs && !source.sourceInputs?.[rel]) {
-          skipped.push(`${name}:${rel}: landed receipt lacks required provenance`)
+          skipped.push(`${name}:${rel}: ${sourceLabel} receipt lacks required provenance`)
+          blocked++
           continue
         }
         const committed = hashes.get(rel)!
         if (committed.hash !== landedHash) {
           skipped.push(
-            `${name}:${rel}: ${committed.reason ?? 'landed hash differs from HEAD bytes'}`,
+            `${name}:${rel}: ${committed.reason ?? `${sourceLabel} hash differs from HEAD bytes`}`,
           )
+          blocked++
           continue
         }
         target.files[rel] = landedHash
@@ -341,5 +364,19 @@ export function reconcileLandedProjectionState(mainRoot: string, landedWorktree:
       }
     })
   }
-  return { updated, skipped }
+  return { updated, skipped, blocked }
+}
+
+/**
+ * Rebase carries main's tracked projections into a worktree, leaving its ignored
+ * receipt behind. The same receipt + clean HEAD proof applies in this direction;
+ * never rehash arbitrary committed files as if they were generated projections.
+ */
+export function reconcileRebasedProjectionState(worktreeRoot: string, mainRoot: string) {
+  return reconcileProjectionState({
+    targetRoot: worktreeRoot,
+    sourceRoot: mainRoot,
+    targetLabel: 'worktree',
+    sourceLabel: 'main',
+  })
 }

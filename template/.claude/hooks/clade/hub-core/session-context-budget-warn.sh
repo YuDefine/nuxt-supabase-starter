@@ -26,7 +26,7 @@
 # | `cc` / `ccw` | 300k | 500k | +100k |
 # | native work-loop runner child | 500k | 600k | +100k |
 #
-# gateway launcher（`ccg`／`ccx`）已從 clade 拆除（2026-09-29）：`ANTHROPIC_BASE_URL` 指向 gateway proxy（`http://127.0.0.1:8317`）的
+# gateway launcher（`ccg`／`ccx`）已從 clade 拆除（2026-09-29）：`ANTHROPIC_BASE_URL` 指向非官方 gateway proxy 的
 # session 不是 clade 的派工或收工入口，本 hook 對它不發 numeric 收工提示。歷史 transcript 的
 # ccx／ccg 分類仍由 audit 層保留，NEVER 從那裡刪除歷史歸因。
 #
@@ -93,10 +93,11 @@ if is_cursor_session; then
 fi
 
 detect_origin_launcher() {
-  if [ "${ANTHROPIC_BASE_URL:-}" = "http://127.0.0.1:8317" ]; then
-    echo gateway
-    return
-  fi
+  local base_url="${ANTHROPIC_BASE_URL:-}"
+  case "${base_url,,}" in
+    '' | https://api.anthropic.com | https://api.anthropic.com/* | https://api.anthropic.com:443 | https://api.anthropic.com:443/*) ;;
+    *) echo gateway; return ;;
+  esac
   if [ "${CLAUDE_CONFIG_DIR:-}" = "$HOME/.claude-work" ]; then
     echo ccw
     return
