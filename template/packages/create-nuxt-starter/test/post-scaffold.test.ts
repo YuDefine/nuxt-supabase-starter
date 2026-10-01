@@ -324,6 +324,30 @@ describe('sync-to-codex 解析', () => {
     expect(command).toContain('--no-health-check')
   })
 
+  it.each([
+    { scripts: ['init-consumer.mjs'], expected: 'init-consumer.mjs' },
+    { scripts: ['init-consumer.ts', 'init-consumer.mjs'], expected: 'init-consumer.ts' },
+  ])('deferred 指令解析本地 Clade initializer：$expected', ({ scripts, expected }) => {
+    const cladeRoot = join(TEST_DIR, 'clade')
+    const target = join(TEST_DIR, 'deferred-project')
+    mkdirSync(join(cladeRoot, 'scripts'), { recursive: true })
+    for (const script of scripts) {
+      writeFileSync(join(cladeRoot, 'scripts', script), '')
+    }
+
+    const command = buildDeferredCodexProjectionCommand(target, cladeRoot, {
+      auth: 'none',
+      dbSchema: 'supabase',
+      dbRuntime: 'cf-workers',
+      runtime: 'cf-workers',
+      framework: 'nuxt',
+      localHooks: [],
+    })
+
+    expect(command).toContain(`node '${join(cladeRoot, 'scripts', expected)}'`)
+    expect(command).not.toContain('git clone')
+  })
+
   it('managed scaffold 安裝成功後執行 canonical wrapper 並回報 generated', async () => {
     const cladeRoot = join(TEST_DIR, 'clade')
     const binDir = join(TEST_DIR, 'bin')

@@ -25,7 +25,7 @@
 | TD-020 | 選了 codex 的 scaffold 輸出靜默少掉 `.codex/` 與 `.agents/`                                              | high     | in-progress | 2026-09-11 |
 | TD-021 | Template CI `UX drift audit` 既有紅燈：`shared/types` 沒有 enum-like 定義就 fail                         | mid      | open        | 2026-09-28 |
 | TD-022 | repo root 的 Claude session 載不到 `commit-0a-reviewer` seat                                             | mid      | open        | 2026-09-28 |
-| TD-023 | Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback                                         | low      | open        | 2026-09-28 |
+| TD-023 | Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback                                         | low      | done        | 2026-09-28 |
 | TD-024 | Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict`                                               | mid      | done        | 2026-09-30 |
 | TD-025 | scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅 | mid      | done        | 2026-09-29 |
 
@@ -1001,6 +1001,7 @@ Template CI 的 Unit tests job 在 `Unit tests` step 之後跑 `vp run audit:ux-
 
 ## TD-023 — Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback
 
+**Status**: done（2026-09-30：deferred 指令已共用 initializer resolver，回歸測試通過）
 **Discovered**: 2026-09-28 — PR #13 0-A 第二輪（receipt `subagent-a094338120fbabd7e`）的 Minor，非阻擋
 
 ### Problem
@@ -1018,6 +1019,14 @@ scaffold-only 印出的延後投影指令會指到不存在的檔案。
 ### Acceptance
 
 - 只有 `init-consumer.mjs` 的 fixture Clade 下，deferred 指令引用 `.mjs` 且測試綠。
+
+### Verification（2026-09-30）
+
+- 修正前，只有 `.mjs` 的 fixture 測試失敗：deferred 指令仍引用不存在的 `.ts`。
+- 修正後，`template/packages/create-nuxt-starter/` 跑 `pnpm test test/post-scaffold.test.ts` → 45 passed；
+  涵蓋只有 `.mjs`、兩種 initializer 並存時優先 `.ts`，以及來源尚未 clone 時保留 `.ts`。
+- 同目錄 `pnpm typecheck` → exit 0；`template/` 對改動的 source/test 跑 `pnpm lint` 與
+  `pnpm format:check` → exit 0。
 
 ## TD-024 — Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict`
 

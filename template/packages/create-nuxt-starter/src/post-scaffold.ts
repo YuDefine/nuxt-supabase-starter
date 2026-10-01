@@ -1292,7 +1292,9 @@ export function buildDeferredCodexProjectionCommand(
     steps.push(`git clone https://github.com/YuDefine/clade.git ${shellQuote(sourceRoot)}`)
   }
   if (!existsSync(join(targetDir, '.claude', 'hub.json'))) {
-    const initArgs = buildInitConsumerArgs(join(sourceRoot, 'scripts', 'init-consumer.ts'), mods)
+    const initScript =
+      resolveCladeInitScript(sourceRoot) ?? join(sourceRoot, 'scripts', 'init-consumer.ts')
+    const initArgs = buildInitConsumerArgs(initScript, mods)
     steps.push(`node ${initArgs.map(shellQuote).join(' ')}`)
   }
   steps.push('pnpm install')
