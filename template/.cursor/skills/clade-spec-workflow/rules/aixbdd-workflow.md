@@ -18,7 +18,7 @@ paths: ['specs/plans/**', 'specs/truth/**', '.agents/constitution/**']
 
 aixbdd 切的是**職責**：PM 定義驗收標準，RD 落地成可執行系統。plan 是一次迭代的封裝（這次要改什麼），`specs/truth/**` 是系統當下的真相。aixbdd 產出可執行規格（`.feature` ＋ DSL），SpecFormula 執行它。
 
-**同一份 lifecycle 對 clade home 與每一個 consumer 生效。** package 是 `specs/plans/<work-id>/`，work id 由 `flow plan open` 鑄，`plan.md` 是 lifecycle 檔（結案後刪除，歷史走 git；這是 clade 適配）。差別只在 artifact 的**適用性**（CLI 工作沒有 UI 雛形、沒有 OpenAPI），每一個省略都要在 `plan.md` § Decisions 寫一行工作特定理由。「clade 是標準層不是產品」**不是**省略理由。`NNN-<slug>` 只剩未遷移 consumer 的過渡用途。契約全文見 `specs/truth/work-lifecycle.md`。
+**同一份 lifecycle 對 clade home 與每一個 consumer 生效。** package 是 `specs/plans/<work-id>/`，work id 由 `flow plan open` 鑄，`plan.md` 是 lifecycle 檔（結案後刪除，歷史走 git；這是 clade 適配）。差別只在 artifact 的**適用性**（CLI 工作沒有 UI 雛形、沒有 OpenAPI）：工作種類（`work_kind`）決定的省略由 gate 依種類判定，其餘每一個省略都要在 `plan.md` § Decisions 寫一行工作特定理由。「clade 是標準層不是產品」**不是**省略理由。`NNN-<slug>` 只剩未遷移 consumer 的過渡用途。契約全文見 `specs/truth/work-lifecycle.md`。
 
 ## 何時用 / 不用
 
@@ -28,7 +28,8 @@ aixbdd 切的是**職責**：PM 定義驗收標準，RD 落地成可執行系統
 | 只宣告 `specformula`，沒有 `aixbdd` | 執行層照 `specformula.md`；本檔不生效（自己手寫 `isa.yml` 與 `.feature` 是合法路徑） |
 | 只宣告 `aixbdd`，沒有 `specformula` | 合法——aixbdd 對 BDD techstack 不預設答案（`/technical-research` 三題必問的第一題就是它）。此時本檔生效、`specformula.md` 不生效 |
 | clade home（沒有 manifest，不是自己的 consumer） | ✅ 本檔全部條款生效——依據是 truth `specs/truth/work-lifecycle.md`，不是 capability 宣告 |
-| 一次性 hotfix、純設定調整、無驗收標準可寫的工作 | ❌ 不用。這是**逐件工作**的判定，NEVER 讀成某個 repo 整體豁免 |
+| hotfix（線上出事、要先修） | ✅ 用，允許先修：`flow plan open --hotfix` 會帶一條「補迴歸 scenario（hotfix 先修）」Open work，沒補完結不了案；補的時候依出錯的行為原本有沒有 scenario，以 `flow plan set-kind` 定為 `bug-covered` 或 `bug-uncovered` |
+| 純設定調整、無驗收標準可寫的工作；沒有 I/O 的純邏輯 bug（計算、解析、格式化、邊界值：迴歸落 unit test，與修正同一個 commit） | ❌ 不用。這是**逐件工作**的判定，NEVER 讀成某個 repo 整體豁免 |
 
 Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.clade/manifest.json` 優先，只有 canonical 缺席時才使用相容的 `.claude/hub.json`；兩份同時存在但內容衝突時 fail closed。判定一律使用 reader 的 `resolved` capabilities，NEVER 直接讀任一 runtime 的設定檔。
 
@@ -63,7 +64,7 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 
 ## NEVER
 
-1. **NEVER 在 plan package 之外寫 acceptance feature**。驗收 Gherkin 屬於 `specs/plans/<work-id>/features/acceptance/**`（未遷移 consumer：`specs/plans/NNN-<slug>/features/acceptance/**`）；拆解後的可執行 interface feature 才進 `specs/truth/features/**`。
+1. **NEVER 在 plan package 之外寫 acceptance feature**。驗收 Gherkin 屬於 `specs/plans/<work-id>/features/acceptance/**`（未遷移 consumer：`specs/plans/NNN-<slug>/features/acceptance/**`）；拆解後的可執行 interface feature 才進 `specs/truth/features/**`。修 bug 與重構的迴歸錨點寫進 truth 裡涵蓋該行為的既有介面 feature（加 Example 列或同檔加 Scenario，來源註解 `# 來源：work <work-id>`）——它是介面 feature 的現行行為，**不是** acceptance feature，plan 結案後仍留在 truth。
 2. **NEVER 用 spectra 詞彙描述 aixbdd 的產出**——`openspec/changes/`、`change`、`propose`、`archive` 在這條管線裡沒有對應物。混用會讓兩套流程的 skill 互相誤觸發。
 3. **NEVER 讓 `/bdd` 或 `/implement` 去補寫規格**。它們發現 feature 或 DSL 有缺口時 MUST 停下回交 `/dsl-refine`。
 4. **NEVER 在 `/implement` 未取得使用者同意前 git commit**——上游 SOP 的 Phase 5 明寫要先問。
@@ -91,8 +92,15 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 | `spec.md`、`checklists/requirements.md`、`features/acceptance/**`、`research.md`、`tasks.md`、`ui-plan.md`＋`ui/**` | 同名 | 同上游 |
 | — | `briefs/**`（派工 brief）、`evidence/**`（cucumber JSON report ＋ `receipts.jsonl`，供 `acceptance-verdicts.ts` 讀） | 主線／runner |
 
-`flow plan readiness` 對缺 `spec.md`、缺 acceptance feature、缺 `acceptance_command` 的 package 一律拒絕；省略理由只認 `plan.md` § Decisions。
+`flow plan readiness` 依 `plan.md` frontmatter 的 `work_kind` 決定要求集，**不**讀 § Decisions 的省略理由：`behavior`、`bug-uncovered` 與未宣告的 plan 要求完整集（`spec.md`、acceptance feature、`acceptance_command` 等）；`bug-covered` 與全部錨點都是 NOOP 的 `refactor` 改要求迴歸錨點，不要求 `spec.md` 與 acceptance feature。delta 形狀與種類不符時回 `kind-delta-mismatch`，改判走 `flow plan set-kind`。值域與要求集全文見 `specs/truth/work-lifecycle.md` § Package。
 
 ## Reference signal（不 block）
 
-aixbdd 側沒有專屬 audit script。落地程度由 `node scripts/audit-specformula-adoption.ts` 的 capability 宣告欄位間接反映——**NEVER** 把那張表讀成 aixbdd 的採用度，它量的是執行層。
+宣告即須完整覆蓋，既有 consumer 一律回補。宣告與實況的判準只住在 `scripts/lib/capability-truth-coverage.ts`，兩個入口共用：
+
+| 入口 | 量什麼 | 擋不擋 |
+| --- | --- | --- |
+| `node scripts/audit-registry-reality.ts --consumer <id>` R8 | truth root（`specs/truth/work-lifecycle.md`＋`owners.md`）、`techstack.md`、`isa.yml`（只限 specformula）、`specs/truth/features/**/*.feature` | error；publish gate 以 ratchet 擋新增 |
+| `node scripts/audit-specformula-adoption.ts` 的 aixbdd 表 | 上列＋`dsl.md`（刻意只進本表、不進 R8：缺它 work-route 仍能開 plan）、constitution、鏡射 skill、W／NNN plan 數 | 參考訊號，exit 0 |
+
+缺 `work-lifecycle.md` 報 `capability-lifecycle-migration`：`specs/truth/work-lifecycle.md` 是 lifecycle-repo marker（一存在，gate 擋新 TD、`docs/tech-debt.md` 凍結、舊 TD 只經 `specs/truth/legacy-ids.json` 解析），scaffold **NEVER** 代放——照 `vendor/snippets/consumer-lifecycle/README.md` 先把舊 TD 逐筆處置進 `legacy-ids.json`（或搬進 plan § Open work），再由 consumer 放 marker。已是 lifecycle repo 只缺 `owners.md` 報 `capability-truth-root`，用 `node ~/offline/clade/scripts/scaffold-consumer-truth.ts --consumer-path <consumer> --apply`（或 `audit-registry-reality --consumer <id> --scaffold`）補齊：只建缺檔、NEVER 覆寫、冪等。manifest 讀不出來（兩份衝突／schema 不過）報 `capability-manifest-unreadable`，fail closed。`techstack.md`、`isa.yml`、feature 由各自 owner skill 產出，NEVER 捏造。truth 歸 consumer，不走 propagate。

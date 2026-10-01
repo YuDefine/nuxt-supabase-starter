@@ -37,7 +37,7 @@ brief 裡每個指令的寫入落點 **MUST** 在該 dispatch 的 cwd 之內。�
 
 ## Runtime residency and native transport
 
-Routing Table 決定 executor，adapter 決定原生載體；能力不足只交 bounded phase，不能跨 runtime 代打。每條 change MUST 跑 `residency-classify.ts classify` 與 `record`；gate 依 [[agent-routing.pi-watch-protocol]]。
+Routing Table 決定 executor，adapter 決定原生載體；能力不足只交 bounded phase，不能跨 runtime 代打。**主線本身**也有席位：主持固定 Claude Opus 5.5（effort: medium）；範圍已定稿的實作 session 可用 Claude Sonnet 5.5（effort: high）起手，判斷時刻交 Opus——見 [[agent-routing.routing-table]] § 主線 residency；Workflow `agent()` 用 Sonnet 的條件與形狀見同檔 § Workflow 的 Sonnet `agent()`。每條 change MUST 跑 `residency-classify.ts classify` 與 `record`；gate 依 [[agent-routing.pi-watch-protocol]]。
 
 ## 停下來要人做之前
 

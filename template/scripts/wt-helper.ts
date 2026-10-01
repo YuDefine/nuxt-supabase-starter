@@ -17,6 +17,9 @@
  *                    landedReason, supersededBy, and dirty (uncommitted path
  *                    count in the session worktree). --no-landed-state skips
  *                    those four fields (they cost a diff + apply per tree).
+ *   reconcile <slug> [--json]
+ *                    After rebase, reconcile the worktree's ignored projection
+ *                    receipt against main's receipt and the worktree's clean HEAD.
  *   prune            Interactively remove worktrees whose branches are
  *                    already merged into main. Per-entry [y/N] confirm.
  *   cleanup <slug> [--dry-run]
@@ -136,8 +139,18 @@ import {
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isLockedProjectionPathFor } from './locked-projection.ts'
 import { isIgnorableWorktreeDrift, isToolManagedDrift } from './wip-dirty.ts'
-import { reconcileLandedProjectionState } from './lib/projection-ledger-reconcile.ts'
+import {
+  reconcileLandedProjectionState,
+  reconcileRebasedProjectionState,
+} from './lib/projection-ledger-reconcile.ts'
 import { runWtEnvBootstrap } from './lib/wt-env-bootstrap-runner.ts'
+import { landWorktreePatch } from './lib/wt-patch-landing.ts'
+import {
+  formatWorktreeBacklog,
+  WORKTREE_BACKLOG_LIMIT,
+  WORKTREE_STALE_DAYS,
+  type WorktreeBacklog,
+} from './lib/worktree-backlog.ts'
 import { normalizeUnsplitArgv, UnsplitArgvError, type FlagOptions } from './lib/argv-unsplit.ts'
 import {
   HOST_CONFIG_REMEDY,
@@ -177,6 +190,7 @@ import {
   recordedModuleChain,
   WT_TEARDOWN_JOURNAL_NAME,
 } from './preservation-policy.ts'
+import { enforceDiskAdmission } from './lib/disk-low-water.ts'
 
 interface WtOptions {
   json?: boolean
@@ -185,6 +199,7 @@ interface WtOptions {
   forceDiscardUncommitted?: boolean
   acceptLanded?: boolean
   dryRun?: boolean
+  patch?: boolean
   autoStash?: boolean
   includeWorktreeWip?: boolean
   cleanup?: boolean
@@ -332,6 +347,7 @@ function parseWorktreeList(porcelain) {
         head: entry.HEAD,
         branch: entry.branch || null,
         detached: Object.prototype.hasOwnProperty.call(entry, 'detached'),
+        ...(Object.prototype.hasOwnProperty.call(entry, 'locked') ? { locked: true } : {}),
       })
     }
   }
@@ -347,9 +363,9 @@ function parseWorktreeList(porcelain) {
  * 「main checkout 不在 main 上」時分岔 —— 這是長命 feature branch（`feat/*`、release
  * branch、fork 的預設分支不叫 main）的常態，不是邊角。
  *
- * 實證（2026-08-22 <consumer-h>）：main checkout 在 `feat/self-host-evlog-admin`
+ * 實證（2026-08-22 <consumer-i>）：main checkout 在 `feat/self-host-evlog-admin`
  * （領先 `main` 16 個 commit），`wt-helper add` 從 stale `main` fork 出來的 worktree
- * 缺 `openspec/`、`app/`、`DESIGN.md` —— 而 merge-back 會 land 回 `feat/...`。
+ * 缺應有的規格、`app/`、`DESIGN.md` —— 而 merge-back 會 land 回 `feat/...`。
  * 症狀出現在 worktree 內（檔案不見了），根因在 fork 端，中間隔了整個 session。
  *
  * 解析不出具名 branch（detached HEAD）時才回退 `main`：那時沒有「當前 branch」可用，
@@ -1041,10 +1057,15 @@ function hashUtf8(content: string) {
  * Missing paths are dropped: keeping them would claim ownership of files
  * the worktree never received (typically main-only dirty tracked files).
  */
-export function reconcileCopiedProjectionState(wtPath: string, consumerRoot?: string) {
+export function reconcileCopiedProjectionState(
+  wtPath: string,
+  consumerRoot?: string,
+  { branchChanged = new Set<string>() }: { branchChanged?: ReadonlySet<string> } = {},
+) {
   const dir = join(wtPath, '.clade', 'projections')
-  if (!existsSync(dir)) return { updated: 0 }
+  if (!existsSync(dir)) return { updated: 0, skipped: [] as string[] }
   let updated = 0
+  const skipped: string[] = []
   for (const name of readdirSync(dir)) {
     if (!name.endsWith('.json')) continue
     const path = join(dir, name)
@@ -1072,6 +1093,14 @@ export function reconcileCopiedProjectionState(wtPath: string, consumerRoot?: st
           state.sourceInputs = next
         }
         dirty = true
+        continue
+      }
+      // TD-1140 r1: a projection path the branch itself changed (merge-base..HEAD) is a
+      // hand edit committed on the worktree, not a projection output. Adopting its HEAD
+      // hash would claim it as owned and let the next sync-rules overwrite it silently;
+      // keep the copied (main) hash so the check surfaces it as a local conflict.
+      if (branchChanged.has(rel)) {
+        skipped.push(rel)
         continue
       }
       const tracked = spawnSync('git', ['cat-file', '-e', `HEAD:${rel}`], {
@@ -1123,7 +1152,7 @@ export function reconcileCopiedProjectionState(wtPath: string, consumerRoot?: st
     writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`)
     updated++
   }
-  return { updated }
+  return { updated, skipped }
 }
 
 /**
@@ -1138,11 +1167,20 @@ export function reconcileCopiedProjectionState(wtPath: string, consumerRoot?: st
 export function seedWorktreeCladeSubstrate(
   consumerRoot: string,
   wtPath: string,
-  { strict = false, log = console.log }: { strict?: boolean; log?: (line: string) => void } = {},
+  {
+    strict = false,
+    log = console.log,
+    branchChanged,
+  }: {
+    strict?: boolean
+    log?: (line: string) => void
+    /** Paths the worktree branch changed itself; reconcile keeps them unadopted. */
+    branchChanged?: ReadonlySet<string>
+  } = {},
 ) {
   // TD-1037: `.clade/runtime/`、`.clade/projections/`、`.clade/rules/` 與 `.codex/` 全部在
   // consumer .gitignore 內，而 `git worktree` fork 只帶 tracked 檔案 —— 新 worktree 因此
-  // 結構上不可能有它們。三個獨立現場（<consumer-a> / <consumer-f> / <consumer-j>）證實後果
+  // 結構上不可能有它們。三個獨立現場（<consumer-a> / <consumer-g> / <consumer-k>）證實後果
   // 相同：`sync-rules` 在 `.clade/runtime/hooks.json` 以 ENOENT 失敗（訊息 "canonical runtime
   // projection unavailable" 指不到根因），繞過它之後 `.clade/projections/*.json` 缺席又讓
   // ownership 判定把每個既有檔判成本地竄改。
@@ -1270,12 +1308,19 @@ export function seedWorktreeCladeSubstrate(
   // worktree seeded before the merge existed: the merge restores the ignored
   // children, and reconcile then clears a `delivery` marker that earlier drops
   // already invalidated.
+  const unadopted: string[] = []
   if (copiedProjections || copied.some((p) => p === '.agents' || p.startsWith('.agents/'))) {
     try {
-      const reconciled = reconcileCopiedProjectionState(wtPath, consumerRoot)
+      const reconciled = reconcileCopiedProjectionState(wtPath, consumerRoot, { branchChanged })
       if (reconciled.updated > 0) {
         log(
           `  clade-substrate: reconciled ${reconciled.updated} projection state file(s) to worktree disk`,
+        )
+      }
+      for (const rel of reconciled.skipped) {
+        unadopted.push(rel)
+        log(
+          `  clade-substrate: ${rel} changed on this branch — left unadopted (sync-rules --check will report it)`,
         )
       }
     } catch (e) {
@@ -1283,7 +1328,221 @@ export function seedWorktreeCladeSubstrate(
       console.error(`note: projection-state reconcile skipped: ${e?.message ?? e}`)
     }
   }
-  return { copied }
+  return { copied, unadopted }
+}
+
+function moveTree(src: string, dst: string) {
+  mkdirSync(dirname(dst), { recursive: true })
+  try {
+    renameSync(src, dst)
+  } catch (e) {
+    if (e?.code !== 'EXDEV') throw e
+    cpSync(src, dst, { recursive: true })
+    rmSync(src, { recursive: true, force: true })
+  }
+}
+
+function pruneCompletedSubstrateBackups(backup: string, log: (line: string) => void) {
+  const marker = '.refresh-complete'
+  try {
+    mkdirSync(backup, { recursive: true })
+    writeFileSync(join(backup, marker), '')
+    for (const entry of readdirSync(dirname(backup), { withFileTypes: true })) {
+      const previous = join(dirname(backup), entry.name)
+      if (!entry.isDirectory() || previous === backup || !existsSync(join(previous, marker)))
+        continue
+      rmSync(previous, { recursive: true })
+      log(`  refresh-substrate: pruned completed backup ${previous}`)
+    }
+  } catch (error) {
+    console.error(`warn: refresh-substrate backup pruning failed: ${error?.message ?? error}`)
+  }
+}
+
+/**
+ * TD-1140: re-seed a linked worktree's gitignored clade substrate from main.
+ *
+ * `seedWorktreeCladeSubstrate` never overwrites, so it only helps a worktree that
+ * has no substrate yet. A worktree forked before a clade upgrade and rebased onto
+ * the upgrade commit keeps the old ownership ledger while its tracked projection
+ * files move forward; `sync-rules --check` then reads every refreshed file as a
+ * local edit. This moves the stale substrate aside (into the worktree's own git
+ * dir, never the working tree) and runs the same seed + reconcile that `add` runs,
+ * so one ownership rule covers fork time and rebase time.
+ *
+ * Only gitignored paths main can supply are moved: a tracked `.agents/constitution/`
+ * stays put, only the ignored `.agents/<child>` entries are refreshed, and a path main
+ * lacks is kept rather than lost. Projection paths the branch changed itself
+ * (`merge-base..HEAD`) are left unadopted so sync-rules reports them instead of
+ * overwriting them. On a seed failure newly created substrate is removed and every
+ * moved tree is restored; if a restore
+ * itself fails, the error names the paths and the backup directory.
+ */
+export function refreshWorktreeCladeSubstrate(
+  consumerRoot: string,
+  wtPath: string,
+  {
+    dryRun = false,
+    log = console.log,
+    seed = seedWorktreeCladeSubstrate,
+    remove = rmSync,
+  }: {
+    dryRun?: boolean
+    log?: (line: string) => void
+    /** Test seam: the seed step, so the restore path can be exercised. */
+    seed?: typeof seedWorktreeCladeSubstrate
+    /** Test seam: deterministic rollback removal failures, including under root. */
+    remove?: typeof rmSync
+  } = {},
+) {
+  if (realpathSync(consumerRoot) === realpathSync(wtPath)) {
+    throw new Error(
+      `refresh-substrate is for linked worktrees; ${wtPath} is the main checkout, whose substrate is the source`,
+    )
+  }
+  if (!existsSync(join(consumerRoot, '.clade', 'projections'))) {
+    throw new Error(
+      `refresh-substrate: ${consumerRoot} has no .clade/projections — run write-mode sync-rules in main first`,
+    )
+  }
+  const ignoredIn = (root: string, rel: string) =>
+    spawnSync('git', ['check-ignore', '-q', rel], { cwd: root }).status === 0
+  // Move a path only when main can supply its replacement: seed skips a missing or
+  // non-ignored source, so moving it anyway would leave the worktree without that
+  // substrate (a missing `.clade/runtime` is the TD-1037 failure itself).
+  const suppliable = (rel: string) =>
+    existsSync(join(wtPath, rel)) &&
+    ignoredIn(wtPath, rel) &&
+    existsSync(join(consumerRoot, rel)) &&
+    ignoredIn(consumerRoot, rel)
+  const moves: string[] = []
+  const kept: string[] = []
+  const substratePaths = ['.clade/projections', '.clade/runtime', '.clade/rules', '.codex']
+  const absent = substratePaths.filter((rel) => !existsSync(join(wtPath, rel)))
+  for (const rel of substratePaths) {
+    if (suppliable(rel)) moves.push(rel)
+    else if (existsSync(join(wtPath, rel)) && ignoredIn(wtPath, rel)) kept.push(rel)
+  }
+  const agentsDir = join(wtPath, '.agents')
+  const agentsSrc = join(consumerRoot, '.agents')
+  if (!existsSync(agentsDir)) absent.push('.agents')
+  else if (existsSync(agentsSrc)) {
+    for (const entry of readdirSync(agentsSrc)) {
+      const rel = `.agents/${entry}`
+      if (!existsSync(join(wtPath, rel))) absent.push(rel)
+    }
+  }
+  if (existsSync(agentsDir)) {
+    if (ignoredIn(wtPath, '.agents')) {
+      if (suppliable('.agents')) moves.push('.agents')
+      else kept.push('.agents')
+    } else
+      for (const entry of readdirSync(agentsDir)) {
+        const rel = `.agents/${entry}`
+        if (suppliable(rel)) moves.push(rel)
+        else if (ignoredIn(wtPath, rel)) kept.push(rel)
+      }
+  }
+  if (dryRun) {
+    for (const rel of moves) log(`  refresh-substrate (dry-run): would move aside ${rel}`)
+    for (const rel of kept)
+      log(`  refresh-substrate (dry-run): would keep ${rel} (main cannot supply it)`)
+    return { backup: null, moved: moves, kept, copied: [] as string[], unadopted: [] as string[] }
+  }
+  // Projection paths this branch changed itself must not be adopted by reconcile.
+  const mainHead = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: consumerRoot,
+    encoding: 'utf8',
+  }).trim()
+  const base = spawnSync('git', ['merge-base', 'HEAD', mainHead], {
+    cwd: wtPath,
+    encoding: 'utf8',
+  })
+  const branchChanged = new Set<string>(
+    base.status === 0
+      ? execFileSync('git', ['diff', '--name-only', '-z', base.stdout.trim(), 'HEAD'], {
+          cwd: wtPath,
+          encoding: 'utf8',
+        })
+          .split('\0')
+          .filter(Boolean)
+      : [],
+  )
+  const gitDir = execFileSync('git', ['rev-parse', '--absolute-git-dir'], {
+    cwd: wtPath,
+    encoding: 'utf8',
+  }).trim()
+  const backup = join(
+    gitDir,
+    'clade-substrate-backup',
+    `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID()}`,
+  )
+  const moved: string[] = []
+  let seeded: ReturnType<typeof seedWorktreeCladeSubstrate>
+  try {
+    for (const rel of moves) {
+      moveTree(join(wtPath, rel), join(backup, rel))
+      moved.push(rel)
+    }
+    seeded = seed(consumerRoot, wtPath, { strict: true, branchChanged, log })
+    // Ownership states only the worktree held (main has no such ledger) are put back
+    // unchanged: dropping them would turn every file they own into a local conflict.
+    if (moved.includes('.clade/projections')) {
+      const oldDir = join(backup, '.clade/projections')
+      for (const name of readdirSync(oldDir)) {
+        const dst = join(wtPath, '.clade/projections', name)
+        if (existsSync(dst)) continue
+        cpSync(join(oldDir, name), dst, { recursive: true })
+        log(`  refresh-substrate: kept worktree-only .clade/projections/${name}`)
+      }
+    }
+  } catch (e) {
+    // Restore every moved path even if one of them fails, and never let a restore
+    // failure hide the seed error.
+    const failed: string[] = []
+    for (const rel of absent) {
+      try {
+        remove(join(wtPath, rel), { recursive: true, force: true })
+      } catch (cleanupErr) {
+        failed.push(`${rel} (${cleanupErr?.message ?? cleanupErr})`)
+      }
+    }
+    for (const rel of moved) {
+      try {
+        remove(join(wtPath, rel), { recursive: true, force: true })
+        moveTree(join(backup, rel), join(wtPath, rel))
+      } catch (restoreErr) {
+        failed.push(`${rel} (${restoreErr?.message ?? restoreErr})`)
+      }
+    }
+    if (failed.length === 0) throw e
+    throw new Error(
+      `refresh-substrate: seed failed (${e?.message ?? e}) and restoring ${failed.join(', ')} also failed — the previous substrate is at ${backup}; move those paths back by hand`,
+      { cause: e },
+    )
+  }
+  pruneCompletedSubstrateBackups(backup, log)
+  log(`  refresh-substrate: previous substrate kept at ${backup}`)
+  return { backup, moved, kept, copied: seeded.copied, unadopted: seeded.unadopted }
+}
+
+async function cmdRefreshSubstrate(slug, opts) {
+  const consumerRoot = findConsumerRoot()
+  const wtPath = slug ? findCleanupWorktree(consumerRoot, makeSlugSafe(slug)).path : findRepoTop()
+  // --json: stdout carries exactly one JSON object; progress goes to stderr.
+  const result = refreshWorktreeCladeSubstrate(consumerRoot, wtPath, {
+    dryRun: opts.dryRun,
+    log: opts.json ? (line) => console.error(line) : console.log,
+  })
+  if (opts.json) {
+    console.log(JSON.stringify({ worktree: wtPath, ...result }))
+    return
+  }
+  console.log(
+    opts.dryRun
+      ? `refresh-substrate (dry-run): ${result.moved.length} gitignored substrate path(s) in ${wtPath} would be re-seeded from ${consumerRoot}`
+      : `refresh-substrate: ${wtPath} re-seeded from ${consumerRoot} (moved ${result.moved.length}, copied ${result.copied.length}); run 'node scripts/sync-rules.ts --check' there to confirm`,
+  )
 }
 
 export function bootstrapWorktreeRuntime(
@@ -2664,6 +2923,9 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
         ADD_USAGE,
     )
   }
+  // 磁碟低水位准入：一棵新樹 ~0.9G＋install，/ 低於 block 級時不開（W-2026-10-01-disk-low-water-guard）。
+  // 只擋 add；cleanup／merge-back／batch 是釋放空間的那一側，永遠不呼叫。
+  enforceDiskAdmission('wt-helper add')
   const cleanSlug = makeSlugSafe(slug)
   const consumerRoot = findConsumerRoot()
   // Pre-clean stale .git/index.lock if any — see docs/tech-debt.md TD-145.
@@ -3618,11 +3880,90 @@ async function cmdList(opts) {
   }
 }
 
+// `landed: false` is the hook/board budget mode: only the ancestry check (one shared
+// `git branch --merged`) decides landed; patch-equivalence is reported as `unchecked`.
+export function collectWorktreeBacklog(
+  consumerRoot: string,
+  { landed: withLanded = true }: { landed?: boolean } = {},
+): WorktreeBacklog {
+  const now = Date.now()
+  const claims = readActiveClaimsObserved(consumerRoot)
+  if (claims.status === 'unknown')
+    return {
+      exceeded: false,
+      entries: [],
+      diagnostics: [`worktree backlog unknown: ${claims.reason}`],
+    }
+  const report: WorktreeBacklog = { exceeded: false, entries: [], diagnostics: [] }
+  const localHelper = ['scripts/wt-helper.ts', 'vendor/scripts/wt-helper.ts'].find((path) =>
+    existsSync(join(consumerRoot, path)),
+  )
+  const helper = `node ${shellQuote(localHelper ?? join(WT_HELPER_DIR, 'wt-helper.ts'))}`
+  for (const worktree of sessionWorktrees(consumerRoot)) {
+    if (claims.value.some((claim) => claim.worktree_path === worktree.path)) continue
+    try {
+      const row = enrichWorktree(consumerRoot, worktree, { landed: withLanded, now })
+      const landedState = withLanded
+        ? row.landedState
+        : row.mergedToMain
+          ? 'in-history'
+          : 'unchecked'
+      const ahead = branchAheadCount(consumerRoot, row.branch)
+      if (landedState === 'unknown' || ahead === null) {
+        report.diagnostics.push(
+          `worktree backlog unknown at ${row.path}: ${row.landedReason ?? 'ahead unreadable'}`,
+        )
+        continue
+      }
+      const landed = ['in-history', 'in-base', 'in-worktree', 'superseded'].includes(landedState)
+      // daysOld is rounded for display; the >7d boundary uses the actual timestamp.
+      const stale =
+        row.lastCommit !== null &&
+        now - Date.parse(row.lastCommit) > WORKTREE_STALE_DAYS * 86_400_000
+      if (!landed && !(ahead > 0 && stale)) continue
+      const slug = basename(row.path)
+      const action = landed
+        ? `${helper} cleanup ${shellQuote(slug)} --dry-run${landedState === 'in-worktree' ? '；先正式 commit main，保留來源' : ''}`
+        : `${helper} merge-back ${shellQuote(slug)} --patch --dry-run；batch 已認領時走 batch status`
+      report.entries.push({
+        path: row.path,
+        branch: row.branch,
+        slug,
+        landedState: landedState,
+        daysOld: row.daysOld,
+        ahead,
+        // Budget mode skips the per-tree status/superseded probes; null means "not read".
+        dirty: row.dirty ?? null,
+        supersededBy: row.supersededBy ?? [],
+        action,
+      })
+    } catch (error) {
+      report.diagnostics.push(
+        `worktree backlog unknown at ${worktree.path}: ${errorMessage(error)}`,
+      )
+    }
+  }
+  report.exceeded = report.entries.length > WORKTREE_BACKLOG_LIMIT
+  return report
+}
+
+export async function cmdBacklog(opts: { json?: boolean; noLandedState?: boolean } = {}) {
+  const report = collectWorktreeBacklog(findConsumerRoot(), { landed: !opts.noLandedState })
+  for (const diagnostic of report.diagnostics) console.error(diagnostic)
+  if (opts.json) console.log(JSON.stringify(report, null, 2))
+  else process.stdout.write(formatWorktreeBacklog(report))
+}
+
 async function cmdPrune() {
   const consumerRoot = findConsumerRoot()
   const wts = sessionWorktrees(consumerRoot)
-  const merged = mergedBranches(consumerRoot)
-  const candidates = wts.filter((w) => merged.has(w.branch.replace('refs/heads/', '')))
+  const claims = readActiveClaimsObserved(consumerRoot)
+  if (claims.status === 'unknown') throw new Error(`prune retained: ${claims.reason}`)
+  const candidates = wts.filter((w) => {
+    if (w.locked || claims.value.some((claim) => claim.worktree_path === w.path)) return false
+    const state = classifyLandedState(consumerRoot, w.branch.replace('refs/heads/', '')).landedState
+    return state === 'in-history' || state === 'in-base'
+  })
 
   if (candidates.length === 0) {
     console.log('No merged session worktrees to prune.')
@@ -3636,19 +3977,12 @@ async function cmdPrune() {
       .toLowerCase()
     if (ans === 'y' || ans === 'yes') {
       try {
-        assertNoHostConfigReferences(c.path)
+        probeLiveWriterCwd(c.path)
+        await cmdCleanup(basename(c.path), {})
       } catch (e) {
         console.error(`skip ${c.path}: ${e instanceof Error ? e.message : String(e)}`)
         continue
       }
-      git(['worktree', 'remove', c.path], { cwd: consumerRoot })
-      cleanupCodebaseMemoryIndex(c.path)
-      try {
-        git(['branch', '-d', branchName], { cwd: consumerRoot })
-      } catch {
-        console.error(`warn: branch ${branchName} could not be deleted; keep manually`)
-      }
-      console.log(`Removed ${c.path}`)
     } else {
       console.log(`Skipped ${c.path}`)
     }
@@ -3660,10 +3994,13 @@ async function cmdPrune() {
  *
  * Iterates dev-port holders, checks each worktree's staleness via enrichWorktree,
  * and deletes the dev-port JSON record for stale ones. Does NOT remove the
- * worktree directory — that's a separate cleanup step. Live holders are left
- * alone; unknown holders are reported but not touched.
+ * worktree directory unless `--remove-landed` is given: then an in-history source
+ * is also passed through cleanup after claim, writer, lock and WIP checks (TD-863).
+ * Agents run the bare form automatically when the port pool is full, so the
+ * default MUST stay slot-only. Live and unknown holders are retained.
+ * --dry-run changes neither slots nor trees.
  */
-async function cmdReclaimStale({ dryRun = false } = {}) {
+async function cmdReclaimStale({ dryRun = false, removeLanded = false } = {}) {
   const consumerRoot = findConsumerRoot()
   const declared = readDeclaredDevPorts(consumerRoot)
   if (declared.length === 0) {
@@ -3705,8 +4042,35 @@ async function cmdReclaimStale({ dryRun = false } = {}) {
     }
 
     const enriched = enrichWorktree(consumerRoot, w)
-    if (enriched.staleness === 'stale') {
+    if (enriched.staleness === 'stale' && !removeLanded) {
       release(h, enriched.mergedToMain ? 'merged' : `status: ${enriched.briefStatus}`)
+    } else if (enriched.staleness === 'stale') {
+      const claims = readActiveClaimsObserved(consumerRoot)
+      if (
+        claims.status === 'unknown' ||
+        claims.value.some((claim) => claim.worktree_path === w.path)
+      ) {
+        console.log(`  retain ${h.slug}: active claim or unreadable claims`)
+        continue
+      }
+      try {
+        if (w.locked) throw new Error('worktree is locked')
+        probeLiveWriterCwd(w.path)
+      } catch (error) {
+        console.error(`  retain ${h.slug}: ${errorMessage(error)}`)
+        continue
+      }
+      release(h, enriched.mergedToMain ? 'merged' : `status: ${enriched.briefStatus}`)
+      if (enriched.mergedToMain) {
+        try {
+          // Automatic removal needs stronger admission than an informational staleness verdict.
+          if (countWorktreeDirty(w.path) !== 0)
+            throw new Error('source has WIP or unreadable status')
+          await cmdCleanup(h.slug, { dryRun })
+        } catch (error) {
+          console.error(`  retain ${h.slug}: ${errorMessage(error)}`)
+        }
+      }
     } else if (enriched.staleness === 'live') {
       // Active session — do not touch
     } else {
@@ -4377,18 +4741,22 @@ function sweepSiblingChangeResidues(consumerRoot, slug) {
   for (const wt of wts) {
     if (wt.path === mainPath) continue
     if (wt.path.endsWith(`/${slug}`)) continue
-    const changeDir = join(wt.path, 'openspec', 'changes', slug)
+    const legacyRoot = join(wt.path, 'openspec', 'changes')
+    if (!existsSync(legacyRoot)) continue
+    const changePath = join('openspec', 'changes', slug)
+    const changeDir = join(wt.path, changePath)
     if (!existsSync(changeDir)) continue
     let dirty = 0
     try {
-      const status = execFileSync('git', ['status', '--porcelain', `openspec/changes/${slug}/`], {
+      const status = execFileSync('git', ['status', '--porcelain', '--', changePath], {
         cwd: wt.path,
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
       })
       dirty = status.split('\n').filter(Boolean).length
-    } catch {
-      dirty = 0
+    } catch (error) {
+      skipped.push({ path: wt.path, dirty: null, reason: errorMessage(error) })
+      continue
     }
     if (dirty === 0) {
       rmSync(changeDir, { recursive: true, force: true })
@@ -4411,7 +4779,9 @@ async function cmdSweepSiblings(slug) {
   }
   for (const s of skipped) {
     console.warn(
-      `sweep-siblings: SKIP ${s.path} — ${s.dirty} uncommitted file(s) in openspec/changes/${cleanSlug}/`,
+      s.dirty === null
+        ? `sweep-siblings: SKIP ${s.path} — status unknown for legacy change '${cleanSlug}': ${s.reason}`
+        : `sweep-siblings: SKIP ${s.path} — ${s.dirty} uncommitted file(s) in legacy change '${cleanSlug}'`,
     )
   }
   if (swept.length === 0 && skipped.length === 0) {
@@ -5231,8 +5601,8 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
   //      locked-projection.ts). Handwritten `.cursor/` 與 Cursor 自管目錄
   //      不在此列。main is SoT for generated files. Take main version.
   //
-  //   2. `openspec/changes/archive/**` paths: spectra-archive flow moves
-  //      change folders INTO archive (one-way). Wt has no legitimate
+  //   2. Legacy archive paths, only when that directory exists: the old
+  //      archive flow moved change folders INTO archive (one-way). Wt has no legitimate
   //      reason to disagree with main about archive contents. Take main.
   //
   // Both cases use the same mechanic: `git checkout --theirs <path>` (wt
@@ -5270,7 +5640,7 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
   }
 
   runResolvePass((p) => isLockedProjectionPathFor(wtPath, p), 'LOCKED projection', 'locked')
-  runResolvePass(isArchivePathConflict, 'openspec archive', 'archive')
+  runResolvePass((p) => isArchivePathConflict(p, wtPath), 'openspec archive', 'archive')
 
   // If auto-resolve cleared every conflict, finalize the merge commit.
   // mergeError may still be set even though `git status` is clean (e.g.
@@ -5334,8 +5704,8 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
   )
 }
 
-// Predicate for F2 auto-resolve: paths under `openspec/changes/archive/**`
-// are spectra-archive flow output. Main is SoT for archive contents — wt
+// Legacy archive output is eligible only in checkouts retaining its directory.
+// Main is SoT for archive contents — wt
 // branches should never claim authority over an archived change folder.
 // Match is path-prefix based (no date-format gating) so future archive
 // naming changes don't silently regress this predicate.
@@ -5344,8 +5714,10 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
 //   - LOCKED is a fixed projection set written by sync-rules / sync-vendor
 //   - Archive is a content domain written by spectra-archive flow
 //   - The reasons "main is SoT" differ; conflating obscures intent
-export function isArchivePathConflict(p) {
-  return p.startsWith('openspec/changes/archive/')
+export function isArchivePathConflict(p, repoRoot?: string) {
+  const archivePath = 'openspec/changes/archive/'
+  if (!p.startsWith(archivePath)) return false
+  return repoRoot === undefined || existsSync(join(repoRoot, archivePath))
 }
 
 // Preserve gitignored review artifacts from worktree before cleanup destroys
@@ -5666,6 +6038,23 @@ function findCleanupWorktree(consumerRoot, cleanSlug) {
   throw new Error(`No session worktree found for slug: ${cleanSlug}${extra}`)
 }
 
+async function cmdReconcile(slug: string, opts: WtOptions = {}) {
+  if (!slug) throw new Error('Usage: wt-helper reconcile <slug> [--json]')
+  const consumerRoot = findConsumerRoot()
+  const target = findCleanupWorktree(consumerRoot, makeSlugSafe(slug))
+  for (const root of [consumerRoot, target.path]) {
+    if (!existsSync(join(root, '.clade', 'projections')))
+      throw new Error(`projection receipt is missing in ${root}; run hub:sync to seed it first`)
+  }
+  const result = reconcileRebasedProjectionState(target.path, consumerRoot)
+  if (opts.json) console.log(JSON.stringify(result))
+  else {
+    console.log(`reconcile: updated ${result.updated} projection receipt(s) in ${target.path}`)
+    for (const reason of result.skipped) console.log(`reconcile: skipped: ${reason}`)
+  }
+  if (result.blocked > 0) process.exitCode = 1
+}
+
 async function cmdCleanup(
   slug,
   opts,
@@ -5833,7 +6222,7 @@ async function cmdCleanup(
   // 2026-08-22 於 <consumer-a> 實測：20 個 session worktree 有 8 個的髒檔 100% 屬於這一類。
   //
   // 豁免範圍嚴格等於 merge-back 的判準，**NEVER** 放寬成「髒檔一律豁免」：真 user WIP
-  // （未 commit 的 openspec 提案、`.env*.example`、scratch script）照舊擋 —— 另外 12 個
+  // （未 commit 的規格提案、`.env*.example`、scratch script）照舊擋 —— 另外 12 個
   // worktree 就是靠這條繼續被擋住的。
   const uncommittedObs = detectUncommittedWorktreeFiles(target.path)
   if (uncommittedObs.status === 'unknown') {
@@ -6163,11 +6552,6 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   const cleanSlug = makeSlugSafe(slug)
   const consumerRoot = findConsumerRoot()
   assertNoPublishInFlight('merge-back', { ...opts, targetRoot: consumerRoot })
-  // Pre-clean stale .git/index.lock if any — see docs/tech-debt.md TD-145.
-  const lockStatus = ensureNoStaleIndexLock(consumerRoot)
-  if (lockStatus.cleaned) {
-    console.error(`⚠ rm'd stale .git/index.lock — proceeding`)
-  }
   const target = findSessionWorktreeForSlug(consumerRoot, cleanSlug)
   if (!target) {
     if (opts.noopIfMissing) {
@@ -6179,6 +6563,31 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
 
   const branchName = target.branch.replace('refs/heads/', '')
   assertLegacyAllowed(consumerRoot, target.path)
+
+  if (opts.patch) {
+    if (opts.autoStash || opts.includeWorktreeWip || opts.acceptLanded || opts.workDone)
+      throw new Error(
+        '--patch cannot combine with --auto-stash, --include-worktree-wip, --accept-landed or --work-done',
+      )
+    const result = landWorktreePatch(consumerRoot, target.path, branchName, opts.dryRun)
+    console.log(`merge-back --patch${opts.dryRun ? ' dry-run' : ''}: ${result.reason}`)
+    console.log(`  ${result.paths.join('\n  ')}`)
+    console.log(
+      '  Source retained; 已落 main working tree 時，待正式 /commit；不寫 index 或 landing marker。',
+    )
+    return {
+      ...result,
+      slug: cleanSlug,
+      absorbed: false,
+      absorbedByOtherPath: result.reason === 'already-present',
+      cleanupDone: false,
+      stashRef: null,
+    }
+  }
+
+  // Patch mode does not use the index, including its lock; legacy squash still does.
+  const lockStatus = ensureNoStaleIndexLock(consumerRoot)
+  if (lockStatus.cleaned) console.error(`⚠ rm'd stale .git/index.lock — proceeding`)
 
   // TD-915: which card the claim goes to is decided HERE, before anything moves. The tail used to
   // read ambient CLADE_WORK_ID after the squash, and an ambient left over from another shell filed
@@ -7605,10 +8014,13 @@ function forwardToPeer(sub: string | undefined, rest: string[]): number | null {
 
 function printUsage(log = console.error) {
   log(
-    'Usage: wt-helper <add|detect-main-dirty|list|prune|reclaim-stale|cleanup|merge-back|resolve|land-pending|rescue|orphan-prune|sweep-siblings|dev|batch> [args]',
+    'Usage: wt-helper <add|detect-main-dirty|list|backlog|prune|reclaim-stale|reconcile|cleanup|merge-back|resolve|land-pending|rescue|orphan-prune|sweep-siblings|dev|refresh-substrate|batch> [args]',
   )
   log('')
   log("  dev [<alias>]             Start dev server on this worktree's allocated port")
+  log('')
+  log('  refresh-substrate [<slug>] Re-seed gitignored projection state from main after a rebase')
+  log('    [--dry-run] [--json]    (default: the worktree containing cwd)')
   log('')
   log('  add <slug>                Create worktree at ~/offline/<consumer>-wt/<slug>/')
   log('    --base <ref>            Fork from integration/… (local or origin/integration/…)')
@@ -7637,7 +8049,14 @@ function printUsage(log = console.error) {
     '  list [--json] [--no-landed-state]  Enumerate session worktrees with staleness + landedState',
   )
   log('  prune                     Interactively remove merged session worktrees')
-  log('  reclaim-stale [--dry-run] Free dev-port slots held by stale worktrees')
+  log(
+    '  backlog [--json] [--no-landed-state]  Read-only worktree accumulation report (>3, no active claims)',
+  )
+  log('  reclaim-stale [--dry-run] Free dev-port slots held by stale worktrees (trees untouched)')
+  log(
+    '    --remove-landed         also remove in-history clean unclaimed sources via cleanup (TD-863)',
+  )
+  log('  reconcile <slug> [--json] Reconcile projection receipts after rebase from main')
   log('  cleanup <slug>            Remove worktree (gated by --force +')
   log('                            --force-discard-unland; pre-checks both)')
   log('    --superseded-by <commit|file=commit|file=path>[,…] --reason <text>')
@@ -7649,6 +8068,9 @@ function printUsage(log = console.error) {
   log('    --json                  emit {slug,found,path,branch,consumerRoot}')
   log('  merge-back <slug>         Legacy squash into main; retain sources; flags:')
   log('    --dry-run               preview blockers + worktree WIP without acting')
+  log(
+    '    --patch                 Apply committed branch patch without touching main index; retain source',
+  )
   log('    --auto-stash            stash main blockers as wt-merge-block/<slug>/<ISO>')
   log(
     '    --origin <scheme>:<id>  name the WORK this tree serves (td:TD-787, notion:<uuid>).',
@@ -7698,6 +8120,8 @@ const VALUE_FLAGS = new Set([
   '--reason',
 ])
 const BOOLEAN_FLAGS = new Set([
+  '--patch',
+  '--remove-landed',
   '--json',
   '--force',
   '--force-discard-unland',
@@ -7753,8 +8177,10 @@ const SUBCOMMANDS = new Set([
   'add',
   'detect-main-dirty',
   'list',
+  'backlog',
   'prune',
   'reclaim-stale',
+  'reconcile',
   'cleanup',
   'merge-back',
   'resolve',
@@ -7763,6 +8189,7 @@ const SUBCOMMANDS = new Set([
   'orphan-prune',
   'sweep-siblings',
   'dev',
+  'refresh-substrate',
 ])
 // 會讀 `opts.dryRun` 的子指令；新增子指令支援 `--dry-run` 時 MUST 同步加進來，否則會被 main() 拒絕。
 const DRY_RUN_SUBCOMMANDS = new Set([
@@ -7771,6 +8198,7 @@ const DRY_RUN_SUBCOMMANDS = new Set([
   'land-pending',
   'dev',
   'reclaim-stale',
+  'refresh-substrate',
 ])
 
 async function main() {
@@ -7879,9 +8307,19 @@ async function main() {
     console.error(`error: \`${sub ?? ''}\` does not support --dry-run（未執行任何動作）`)
     process.exit(2)
   }
+  if (flags.has('--remove-landed') && sub !== 'reclaim-stale') {
+    console.error(`error: ${sub ?? ''} does not support --remove-landed（未執行任何動作）`)
+    process.exit(2)
+  }
+  if (flags.has('--patch') && !['merge-back', 'land-pending'].includes(sub)) {
+    console.error(`error: ${sub ?? ''} does not support --patch（未執行任何動作）`)
+    process.exit(2)
+  }
   const opts = {
+    patch: flags.has('--patch'),
     json: flags.has('--json'),
     noLandedState: flags.has('--no-landed-state'),
+    removeLanded: flags.has('--remove-landed'),
     force: flags.has('--force'),
     forceDiscardUnland: flags.has('--force-discard-unland'),
     forceDiscardUncommitted: flags.has('--force-discard-uncommitted'),
@@ -7925,14 +8363,20 @@ async function main() {
     case 'list':
       await cmdList(opts)
       return
+    case 'backlog':
+      await cmdBacklog(opts)
+      return
     case 'prune':
       await cmdPrune()
       return
     case 'reclaim-stale':
-      await cmdReclaimStale({ dryRun: opts.dryRun })
+      await cmdReclaimStale({ dryRun: opts.dryRun, removeLanded: opts.removeLanded })
       return
     case 'cleanup':
       await cmdCleanup(positional[0], opts)
+      return
+    case 'reconcile':
+      await cmdReconcile(positional[0], opts)
       return
     case 'merge-back':
       await cmdMergeBack(positional[0], opts)
@@ -7954,6 +8398,9 @@ async function main() {
       return
     case 'dev':
       await cmdDev(positional[0], opts)
+      return
+    case 'refresh-substrate':
+      await cmdRefreshSubstrate(positional[0], opts)
       return
     default:
       printUsage()

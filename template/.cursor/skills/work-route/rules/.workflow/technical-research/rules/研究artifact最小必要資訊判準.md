@@ -1,4 +1,4 @@
-<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@58960f8375d14d9c598eb2c350582917fe9b249c via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@bc8fdebe2d30db384f77911aaed81888ad03bf5f via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 # Rule 1 - `research.md` 的每個研究決策都必須完整保留標題、Decision、Rationale、Alternatives considered
 
 - Level: `MUST`

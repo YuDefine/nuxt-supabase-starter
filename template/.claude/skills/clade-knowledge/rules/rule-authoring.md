@@ -73,7 +73,7 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 
 判定「高違規」：已有對應 pitfall、或 oops / audit 訊號顯示同型違規 ≥2 次。三件套：
 
-1. **Iron Law**：一行絕對句（如 `NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST`），前置「**違反字面就是違反精神**」——砍掉整類「我有遵守精神」開脫。
+1. **Iron Law**：一行絕對句（如 `NO ROOT-CAUSE GUESS BEFORE A RELIABLE RED`），前置「**違反字面就是違反精神**」——砍掉整類「我有遵守精神」開脫。
 2. **Rationalization table**：一列一組「藉口 → 現實」。藉口**必須是逐字實錄**（從 pitfall 檔、session transcript、baseline 測試抽），不虛構假想藉口——虛構的堵不到真的洞。
 3. **Red Flags**：「發現自己在想 X = 停」清單，收錄違規**前兆**句式（「就這一次」「這個情況不一樣」「先做了再補」）。
 

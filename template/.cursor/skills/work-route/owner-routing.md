@@ -4,6 +4,7 @@
 
 ## 怎麼讀
 
+- **先讀覆寫再交棒**：本表決定誰執行；被交棒的 owner 執行前 MUST 先讀本 skill 根的 `rules/上游覆寫-lifecycle落點與doctor.md`（`SKILL.md` § 2），派出去的 executor 一樣要在 brief 裡帶這個路徑。命中該檔判準時，lifecycle 落點與 canonical doctor 照覆寫列做，不照 owner 上游原文。
 - **列**：routing table 的列 slug，或主線列。`mainline-contract`（契約／定稿）與 `mainline-analysis`（定位與裁決）不在 routing table 表內，是 `pi-routing-policy.ts` 記帳用的主線列：不外派，依據是 [[agent-routing]] § 派不派 的「規約／契約／對外定稿」與 routing table § 判不進任一列時。
 - **首跳**：該列的第一個載體與 effort，一律明寫。配額降級的後續各跳由 dispatcher 的 `next_step` 給出，不抄在這裡。
 - **effort 照 routing table**：首跳欄的 model 與 effort 就是 routing table 對該列的現值，Claude Opus 5.5 目前一律 `medium`。Charles 2026-09-25 的原則是 Opus 5.5 ≤ `medium`；owner 的 `SKILL.md` 明寫要高於 `medium` 只是開檔的前提，不會自己生效。要把某一列改成 `low` 或更高，先改 routing table 與 `vendor/scripts/pi-routing-policy.ts`（更高檔另要放寬 herdr helper 的 Opus 天花板），再改本表；在那之前一律照 routing table 的現值。**NEVER** 只改本表的檔位，也 **NEVER** 在派工當下自行抬檔或降檔。

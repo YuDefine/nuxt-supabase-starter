@@ -1,3 +1,4 @@
+// 🔒 LOCKED — managed by clade · Source: vendor/scripts/locked-projection.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/locked-projection.ts
 /**
  * locked-projection.ts — canonical regex for clade-managed projection paths.
  *
@@ -86,7 +87,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // Improvement-loop infra (.clade/)
       // `scripts` / `registry` 於 2026-08-24 補上（TD-639）：兩者都是 improvement-loop
       // 投影的整目錄（`.clade/scripts/` 五支 + `.clade/registry/consumers.json`），
-      // 抽查 <consumer-a> / <consumer-b> / ai-quota / <consumer-i> 四台，目錄內**沒有**任何 consumer
+      // 抽查 <consumer-a> / <consumer-b> / ai-quota / <consumer-j> 四台，目錄內**沒有**任何 consumer
       // 自家檔——與 `scripts/lib/` 那種混住的目錄不同，可以整目錄匹配。
       String.raw`\.clade/(bin|signals|vendor|scripts|registry)/`,
       // Vendored script entry points (scripts/)
@@ -100,11 +101,14 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       String.raw`scripts/(spectra-advanced|pre-commit|pre-push|checks)/`,
       // Dependencies installed beside the follow-up collector.
       String.raw`scripts/(tech-debt-status|flow/tech-debt-status|flow/nodes/lib/td-parse|flow/nodes/lib/contract)\.ts$`,
+      String.raw`scripts/flow/worktree-backlog\.ts$`,
+      // Exact audit helper targets; the remaining scripts/flow/ tree is consumer-owned.
+      String.raw`scripts/flow/(plan-gates|plan-delta|acceptance-verdicts|plan-paths)\.ts$`,
       // Vendored helpers under scripts/lib/ — MUST stay an explicit filename list.
       // NEVER widen to `scripts/lib/`: consumers author their own files there
       // (<consumer-a> `common.sh` / `read-infra-manifest.mjs`, <consumer-d> `vue-component-resolution.ts`),
       // and matching the whole dir would mark those clade-managed → auto-reset clobbers them.
-      String.raw`scripts/lib/(argv-unsplit|evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|json-unknown|safety-observation|worktree-dev-port|publish-in-flight|projection-ledger-reconcile|herdr-machine|host-config-refs|pane-cache-ttl)\.(mjs|mts|ts)$`,
+      String.raw`scripts/lib/(argv-unsplit|evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|json-unknown|safety-observation|worktree-dev-port|worktree-backlog|wt-patch-landing|publish-in-flight|projection-ledger-reconcile|herdr-machine|host-config-refs|pane-cache-ttl|disk-low-water)\.(mjs|mts|ts)$`,
       // json-unknown.ts 第二條 dest：vendor/review-rules/scan.ts 以
       // `../scripts/lib/json-unknown.ts` 解析到 vendor/scripts/lib/。
       // NEVER 放寬成 `vendor/scripts/lib/`——那個目錄在 clade home 是源。

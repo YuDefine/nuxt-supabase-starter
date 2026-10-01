@@ -21,7 +21,7 @@ paths:
 >
 > **本檔的觸發是具名時機，不是編輯檔案順帶載入**：`paths:` 只綁 pi dispatcher／routing gate 的 script
 > 與 agent 定義檔。2026-09-09 實測本檔 glob 的 session 命中率為 clade 6.4%（126/1965）／
-> <consumer-h> 2.9%（8/273）／<consumer-b> 11.4%（78/683）——**靠 auto-load 會讀不到**，主檔
+> <consumer-i> 2.9%（8/273）／<consumer-b> 11.4%（78/683）——**靠 auto-load 會讀不到**，主檔
 > § 必禁事項 的強制指針才是主要入口。重跑法：把本檔的 `paths:` 陣列寫成一份 probe sidecar 的
 > `{"probes":{"agent-routing.md":{"path":[…]}}}`，再跑
 > `node scripts/audit-rule-paths.ts --self --json --probes <sidecar>` 讀 `always-load` 列的

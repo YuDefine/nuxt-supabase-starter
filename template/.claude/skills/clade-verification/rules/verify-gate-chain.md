@@ -60,7 +60,7 @@ agent 執行修改後跑 gate chain，FAIL 時**解析 error output → 修正 �
 | 參數 | 預設值 | 說明 |
 | --- | --- | --- |
 | `max_iterations` | 5 | 跑 gate chain → fix → re-run 的最大輪數 |
-| `escalation_action` | `HANDOFF` | 超過上限時的行為：`HANDOFF`（寫 HANDOFF.md 交接）/ `ASK`（問 user）/ `STOP`（靜默停止並報告）/ `ROLLBACK:<artifact>`（退回上游 artifact 修 spec——只在判定 specification error 時用，見 § Error 解析規則） |
+| `escalation_action` | `HANDOFF` | 超過上限時的行為：`HANDOFF`（寫 HANDOFF.md 交接）/ `ASK`（問 user）/ `STOP`（靜默停止並報告）/ `ROLLBACK:<artifact>`（退回上游 artifact 修 spec——只在判定 specification error（見 § Error 解析規則）、或 [[checker-subagent]] 同一份 spec 第二次 verify-only FAIL 時用） |
 
 **禁止無上限迴圈。** 沒有宣告 `max_iterations` 的自主 iterate 視同違規。
 

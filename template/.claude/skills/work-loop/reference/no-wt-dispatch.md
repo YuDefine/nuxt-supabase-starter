@@ -41,5 +41,7 @@ commit 紀律（白名單 `--only` / 其餘 `/commit`）、scope-verify、三層
 
 ## 為什麼主線自己做，不改派 subagent
 
-clade home 的 worktree **subagent** 跑 `git` 會 permission denied（含 `git status` / `git log`，
-加 `dangerouslyDisableSandbox` 也一樣，[[TD-396]]），主線的 `git` 正常。本分支繞開它，不解它。
+這條分支當初的成因是 worktree **subagent** 的 `git` 被擋（[[TD-396]]）。2026-10-01 重驗（Claude Code 2.1.286）
+subagent 的 `git status` / `git log` / `git commit --only` 已可用，那個成因不再成立。
+本分支仍由主線親自進 worktree，是既有的 dispatch 契約（見 `specs/truth/accepted-limits.md` § worktree subagent commits by the main line）；
+是否放寬回 subagent 自己 commit，追蹤於 `specs/plans/W-2026-10-01-wt-subagent-self-commit-contract/plan.md`。

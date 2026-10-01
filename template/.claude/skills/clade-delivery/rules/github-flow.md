@@ -40,7 +40,7 @@ paths:
 | 這件工作**一個 PR 就完工**（只有一個切片） | 上面的「一刀一 branch 一 draft PR」，base 是 `main`；它轉 ready 那一刻就是「進 `main` 的最後一趟」，付 full |
 | 其他（2 個以上切片，平行或循序皆然） | 本節（預設） |
 
-不要把同一件工作的多個小步各自對 `main` 開 PR——每張 ready 的 main PR 都付一次六 shard full lane，而且與其他 main PR 搶同一組 6 個 slot（2026-09-22 實測：PR 從觸發到最後一個 shard 開跑的等待 p90 41.7 分，執行本身 5.3 分——慢的是佇列，不是測試）。兩步以上就開 integration。
+不要把同一件工作的多個小步各自對 `main` 開 PR——每張 ready 的 main PR 都付一次六 shard full lane，而且與其他 main PR 搶同一組 6 個 slot（2026-09-29 實測，21 趟 full lane：run 開始到最後一個 shard 開跑中位 0.5 分（最大 18.8）；單 shard 測試 step 中位 15.1 分（p90 31.6）；整趟 wall 中位 27.4 分（p90 40.2）——佇列等待不是主要成本，full lane 本身貴才是。中位等待只有半分鐘，但尾端仍會撞到 18.8 分）。full lane 每付一次就是近半小時的 wall、六個 shard 的算力，所以兩步以上仍然開 integration，整件工作只付一次。
 
 ### 三層，各付各的成本
 
@@ -54,14 +54,14 @@ paths:
 
 1. coordinator 從最新 `origin/main` 開 `integration/<work-id>` 並**立刻 push 上 origin**（切片 PR 要有 base；`wt-helper add --base integration/<work-id>` 開後續切片；第一棵 integration 仍從 landing base 分叉），**第一個切片併入後立刻**對 `main` 開 draft PR 並登記 `batch draft --kind visibility`。這一張就是整件工作的可見性；commit 列表就是切片清單。
 2. **每一個**切片併入之前，coordinator 都要先把 integration 同步到最新 `origin/main`（每次併入的前置，不是收尾動作）。
-3. **每一個**切片開工前都要宣告路徑（claim 的 `expected_paths`），且與**每一個**其他活切片的宣告路徑不相交。相交就序列化，或併成同一個切片。
+3. **每一個**切片開工前都要宣告路徑（claim 的 `expected_paths`），且與**每一個**其他活切片的宣告路徑不相交。相交就序列化，或併成同一個切片。序列化＝後一片等前一片併入之後，才以 `wt-helper add --base integration/<work-id>` 從已含前一片的 integration 開出；這樣的切片碰前一片碰過的路徑，`integration-merge.ts` 放行。兩片都從併入前的 integration 開出、又碰同一路徑，就是並行，工具拒收——後到的那片先 merge 最新的 integration 再送。
 4. 切片層跑 canonical check ＋ repo 在 CI 機械檢查裡跑的 typecheck，不要在每個切片各跑一次 `test:affected`／測試（N 個切片就是 N 次排 heavy gate slot）。`test:affected` 只在 integration 轉 ready 前跑一次。2026-09-21 實測兩個切片的 `test:affected` 在 heavy gate slot 各排了二十分鐘以上還沒輪到，是切片層最慢的一環，而 canonical check 只要 3 秒；Charles 當日拍板切片只付 canonical check。保護沒有少：紅了用切片 commit 列表二分，進 `main` 仍有完整 test-lane。typecheck 不能省成只跑 `vp check`：它的 typecheck 範圍不等於 CI `validate-manifests` 跑的 `tsconfig.clade.json`（2026-09-21 `scripts/main-sync.ts` 的 TS2534 通過 `vp check`、進了 main 才紅，之後每張 ready 的 PR 都帶這個紅，直到另開一張 PR 修掉）。
-5. 滾動訊號紅燈：coordinator 以上一次綠燈之後併入的切片為嫌疑範圍，紅因歸到切片就 `git revert` 該切片的 commit、把它退回 owner；不要讓整條 integration 等一個切片修好。
+5. 滾動訊號紅燈：coordinator 以上一次綠燈之後併入的切片為嫌疑範圍，紅因歸到切片就 `git revert` 該切片的 commit、把它退回 owner；之後序列化疊在它上面、路徑相交的切片要從新到舊一起 revert、一起退回。不要讓整條 integration 等一個切片修好。
 6. 切片 owner 對 `integration/<work-id>` 開 PR（做到一半先開 draft，完成後自己 `gh pr ready` 該切片 PR），不對 `main` 開 PR，也不自己 merge。落地一律由 coordinator 跑 `integration-merge.ts --pr <n>`（它驗 PR 狀態、機械檢查全綠、同步與路徑不相交）；不要在 GitHub 網頁或 `gh pr merge` 直接按掉切片 PR。切片 PR 不登記 `batch draft` receipt。
 
 ### 工具現況
 
-`wt-helper add --base integration/<work-id>` 從 integration 分支分叉（不帶 `--base` 從 landing base 分叉）。`integration-merge.ts` 不帶 `--pr` 是本機 `git merge --squash`，只留給沒有 PR 的舊切片。`wt-batch.ts` 的 `MAX_ACTIVE_IMPLEMENTATIONS` 排除 `phase=landed` 殘骸，同一 `workId` 的切片只算 1。
+`wt-helper add --base integration/<work-id>` 從 integration 分支分叉（不帶 `--base` 從 landing base 分叉）。`integration-merge.ts` 的路徑不相交檢查只比對切片分叉點之後 integration first-parent 上新增的 squash commit（排除 sync `origin/main` 帶進來的改動、rename 以新舊兩個路徑計），且該路徑從切片分叉點到 integration 現況仍有**淨變更**才算重疊——被 `git revert` 抵銷到淨變更為零的路徑（MUST 5 退回 owner 後原 branch 重送、疊在上面被 cascade revert 的切片）放行；仍被擋下時，錯誤訊息會要求切片 owner 先 merge 最新的 integration 再重送；不帶 `--pr` 是本機 `git merge --squash`，只留給沒有 PR 的舊切片。`wt-batch.ts` 的 `MAX_ACTIVE_IMPLEMENTATIONS` 排除 `phase=landed` 殘骸，同一 `workId` 的切片只算 1。
 
 ## 各事件的 test-lane
 
@@ -145,6 +145,31 @@ Draft 維持 draft 直到 review。slice **worker NEVER merge**、**NEVER** `gh 
 | 合併後 | 本機 `main` 由 dev node timer 對齊（下方 § 本機 main 與 origin 的對齊），合併者不另外動本機 main。盯該 merge SHA 的 staging；來源 worktree 走 `wt-helper cleanup`／`batch cleanup` |
 
 逐字禁令：**NEVER** 為了符合本節而把 draft 轉 ready 卻不補跑 CI；**NEVER** 用 `--admin` 或關閉 required check 過關；**NEVER** 把「合併不需授權」讀成「發版不需授權」；**NEVER** 為了等授權而把已滿足本節條件的 PR 丟回 Charles 或開 flow ask。
+
+## 發版的部署窗口（production）
+
+本節適用於**每一次**會觸發 production 的發版（tag push、`deploy-trigger-check.ts` 判定 `push-main`／`pr-merge` 的合併、手動 deploy workflow）。
+
+**窗口欄。** consumer 若有例行 production 部署窗口，在自己的 consumer-local 規約（`.clade/rules/**`）寫一行：
+
+```text
+部署窗口：<例行時段>（<為什麼是這個時段：流量低谷、現場無人操作、客服在線…>）
+```
+
+沒有這一行＝沒有例行窗口，只剩發版授權。**每一次**向 Charles 要發版授權時，請求裡寫明其中一種：
+
+| 請求寫 | 什麼時候 |
+| --- | --- |
+| `部署窗口：例行（<consumer 宣告的時段>）` | 在例行窗口內部署 |
+| `部署窗口：緊急例外（<Urgent 標記原文>）` | 該工作帶有效緊急標記，要在例行窗口外部署 |
+
+**緊急例外（Charles 2026-09-28 Q6=A）。** 帶有效緊急標記（`<YYYY-MM-DD> <charles|coordinator>【<語義名稱>】：「<出處逐字>」`，即 `flow open --urgent`、TD `**Urgent**:`、PR `Urgent:` 的同一格式）的工作，production 部署可以在例行窗口外進行。例外只免「等窗口」這一段等待，下面三件對緊急件逐字照舊：
+
+1. 發版仍是獨立授權（上方事件表「發版」列）；**每一次** production 資料寫入仍逐次取得 Charles 明確授權，並照授權附帶的條件（維護時段、備份）執行。
+2. tag push 或任何觸發 production 的動作之前，列出 `<上一個 tag>..main` 的**每一支** migration，逐支對到 0-A finalize 證據；缺的先補審，**NEVER** 以「PR 已合入」代替。
+3. consumer 的 `push_hold` 與 `workflow_model` 照舊。
+
+**NEVER** 把「緊急例外」讀成「這次可以不問」：它免的是窗口，不是授權、不是 migration 審查。缺有效緊急標記（沒有語義名稱或出處逐字、標記者不是 charles／coordinator、work 已 close）就照例行窗口，**NEVER** 由「客戶很急」這類自由文字自行認定。
 
 ## 證據綁定
 

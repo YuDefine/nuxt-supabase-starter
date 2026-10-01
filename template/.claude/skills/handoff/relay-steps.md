@@ -67,6 +67,8 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts done "$CLADE_WORK_ID" \
 
 ⛔ **`<routing-model>` NEVER 是 `sonnet`**（依 [dispatch-common.md](dispatch-common.md) § 3.2）：successor 判「還是主線複雜度」就 `opus`；判「只值 sonnet 等級」則兩條都行——`--launcher grok --model grok-4.7 --effort xhigh` 把位置交給 Grok successor，或本 session 留著、把那件事用 Grok worker 派掉。`relay-continuity` 那道限制只綁 Pi，**NEVER** 讀成 grok 不能當 successor。
 
+⛔ **主持者交棒（brief 的 frontmatter 是 `coordinator_brief: successor`）只能 `--launcher cc|ccw --model opus --effort medium`**：Grok successor 與上一條的其他選項都不適用，helper 以 `usage_error` 拒（`coordinator` skill § 主持者的 model）。
+
 ```bash
 node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \
   --route <routing-policy> --tier-basis <routing-conclusion> \

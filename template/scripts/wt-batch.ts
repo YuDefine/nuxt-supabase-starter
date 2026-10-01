@@ -199,11 +199,11 @@ export const trustedRepositoriesByConsumerId: ReadonlyMap<string, string> = new 
   ['<consumer-a>', '<client-a>/<consumer-a>'],
   ['<consumer-d>', 'YuDefine/<consumer-d>'],
   ['<consumer-b>', '<client-b>/<consumer-b>'],
-  ['<consumer-i>', 'YuDefine/<consumer-i>'],
   ['<consumer-j>', 'YuDefine/<consumer-j>'],
-  ['<consumer-g>', '<client-b>/<consumer-g>'],
-  ['<consumer-f>', '<client-b>/<consumer-f>'],
+  ['<consumer-k>', 'YuDefine/<consumer-k>'],
   ['<consumer-h>', '<client-b>/<consumer-h>'],
+  ['<consumer-g>', '<client-b>/<consumer-g>'],
+  ['<consumer-i>', '<client-b>/<consumer-i>'],
   ['<consumer-e>', '<client-b>/<consumer-e>'],
 ])
 function consumerIdForRoot(root: string): string {
@@ -1387,6 +1387,16 @@ const FLOW_SPINE_DIR = '.clade/flow'
 // Other flow state is not migrated and must retain the source.
 const isFlowSpinePath = (path: string) =>
   path === '.clade' || path === FLOW_SPINE_DIR || path === `${FLOW_SPINE_DIR}/events.jsonl`
+
+// Tool-regenerated residue a post-interruption `prepare` hook rewrites into the
+// tree: husky's `.husky/_/**` (self-ignored shims, never tracked, rebuilt by
+// `husky` on demand). Named allowlist — the `.husky` parent entry rides along
+// when `_` creates the subtree; any other path still retains. Used only by the
+// interrupted-removal resume; fresh capture keeps the strict spine check.
+const isToolRegeneratedPath = (path: string) =>
+  path === '.husky' || path === '.husky/_' || path.startsWith('.husky/_/')
+const isAdoptableResumeDrift = (path: string) =>
+  isFlowSpinePath(path) || isToolRegeneratedPath(path)
 
 const RESEALABLE_ADMIN_SUBPATHS = new Set(['COMMIT_EDITMSG', 'index', 'ORIG_HEAD', 'logs/HEAD'])
 // Drift paths are scoped as `worktrees/<id>/<subpath>` — the allowed set is
@@ -4374,7 +4384,7 @@ export function cleanupBatches(
                     // verified). The migrated state becomes the baseline;
                     // anything outside `.clade/flow/` still retains.
                     const drift = inventoryDiffPaths(current, removal.verifyInventory)
-                    if (drift.every(isFlowSpinePath)) {
+                    if (drift.every(isAdoptableResumeDrift)) {
                       const migration = migrateWorktreeFlowSpine(m.path)
                       if (!migration.ok)
                         throw new Error(
@@ -4555,7 +4565,7 @@ export function cleanupBatches(
                     // that landed in the quarantined tree's legacy spine
                     // migrate to main first, then the baseline re-seals.
                     const drift = inventoryDiffPaths(current, removal.verifyInventory)
-                    if (drift.every(isFlowSpinePath)) {
+                    if (drift.every(isAdoptableResumeDrift)) {
                       const migration = migrateWorktreeFlowSpine(removal.quarantine)
                       if (!migration.ok)
                         throw new Error(
@@ -5112,7 +5122,7 @@ export function cleanupBatches(
                     // trapped in the legacy worktree spine migrate to main
                     // first, then the baseline re-seals. Other paths retain.
                     const drift = inventoryDiffPaths(current, removal.verifyInventory)
-                    if (drift.every(isFlowSpinePath)) {
+                    if (drift.every(isAdoptableResumeDrift)) {
                       const migration = migrateWorktreeFlowSpine(b.path)
                       if (!migration.ok)
                         throw new Error(
@@ -5276,7 +5286,7 @@ export function cleanupBatches(
                     })()
                   if (!treeBaseline && !treeArchive && !treeRelocated) {
                     const drift = inventoryDiffPaths(current, removal.verifyInventory)
-                    if (drift.every(isFlowSpinePath)) {
+                    if (drift.every(isAdoptableResumeDrift)) {
                       const migration = migrateWorktreeFlowSpine(removal.quarantine)
                       if (!migration.ok)
                         throw new Error(

@@ -1,6 +1,6 @@
 ---
 description: Nuxt UI v3/v4 component / composable / theming / icon 必走 nuxt-ui-remote MCP；ban prescriptive synthesis
-paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'app.config.ts', 'nuxt.config.ts', 'specs/plans/**/spec.md', 'specs/plans/**/plan.md', 'specs/plans/**/design-review.md']
+paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'app.config.ts', 'nuxt.config.ts', 'DESIGN.md', 'packages/*/DESIGN.md', 'specs/plans/**/spec.md', 'specs/plans/**/plan.md', 'specs/plans/**/design-review.md']
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-ui-mcp.md; edit canonical source -->
 <!-- clade-targets: claude,codex,cursor -->
@@ -68,25 +68,54 @@ Query 來源：nuxt-ui-remote `search-components: select`, `get-component: UComm
 
 **選定之前**可對候選跑 impeccable `critique`（persona 與認知負擔評估），不要等實作完。
 
+**為什麼是強制 step**：實作後才發現「另一個組合體驗更好」，代價是整段重做。候選比較在 plan 階段做，成本是幾分鐘；在實作後做，成本是重寫。
+
+---
+
+## impeccable 在 Nuxt UI 專案（token 對照、落點、live）
+
+impeccable 的 playbook 是框架中立的，Nuxt UI 的 design system 放在它沒掃的位置。本節是 clade 側的對照；**NEVER** 改 `.claude/skills/impeccable/**` 來補（`npx skills add` 裝的，升版整包覆蓋）。專案自己的對照寫進 DESIGN.md——`impeccable context` 每個 session 都會讀它，這是上游正式的擴充點。
+
+### Token 來源對照（`document`／`extract` 必讀）
+
+`document` 的 Scan mode 找 CSS 變數、`tailwind.config`、CSS-in-JS、token 檔。Nuxt UI v4 專案的 token 不在這些地方，**MUST** 另外讀：
+
+| Nuxt UI 來源 | 內容 | 寫進 DESIGN.md |
+| --- | --- | --- |
+| `app.config.ts` `ui.colors` | 語意色 → Tailwind 色板名（`primary: 'emerald'`、`neutral: 'zinc'`） | frontmatter `colors`：**解析後的實際色值**。`--ui-primary` light 取該色板 500、dark 取 400；`--ui-text*`／`--ui-bg*` 取 neutral 各階（對照表以 nuxt-ui-remote `/docs/getting-started/theme/css-variables` 為準） |
+| `app.config.ts` `ui.<component>` 的 `slots`／`variants`／`defaultVariants` | 專案層的元件慣例 | Components 段，註明語意角色（主動作、次要動作、危險動作…） |
+| CSS 入口（`nuxt.config.ts` 的 `css`，通常 `app/assets/css/main.css`）的 `@theme` | 字型、自訂色、breakpoint | frontmatter `typography`／`colors`／`spacing` |
+| 同一支 CSS 的 `:root`／`.dark` 覆寫 `--ui-*` | `--ui-radius`（圓角全部由它推導）、`--ui-text*`、`--ui-bg*` 改指 | frontmatter `rounded` 用推導後的 `xs`…`3xl` 值；色值同上 |
+
+frontmatter 要放**解析後的值**，不是色板名：detector 的 design-system drift（`design-system-color`／`-radius`／`-font-size`）拿 DESIGN.md frontmatter 當基準比對，frontmatter 沒有 token 時整類規則零輸出。2026-09-27 實測（證據 clade `specs/plans/W-2026-09-26-impeccable-closed-loop/evidence/p10-nuxt-ui.md`）：沒有 DESIGN.md 時寫死的 `#fff`、`7px` 圓角、`text-[13.5px]` 全部 0 finding；補上 frontmatter 後三條都報出來。
+
+### 專科指令的落點
+
+`colorize`、`typeset`、`layout`、`bolder`／`quieter`、`polish` 要改的是**視覺語言**時，先改 theming 層，不在頁面上逐個蓋 class：
+
+- 語意色、元件預設樣式 → `app.config.ts` 的 `ui`
+- 字型、圓角基準、全站文字／背景階 → CSS 入口的 `@theme` 與 `--ui-*`
+- 單一畫面的版面、層級 → 頁面／元件本身，照 [[nuxt-ui-conventions]] 複製既有多數的 props 組合
+
+detector 抓不到繞過語意色的 Tailwind 色板（`bg-emerald-500`、`text-gray-500`）：那是 [[nuxt-review-bans]] #3／#8 的職責。改了 theming 層就是 token 變更，照 [[proactive-skills.design-checkpoint]] 跑 `document` 更新 DESIGN.md（commit 0-B.1 (c) 也會擋）。
+
 ### live 在 Nuxt 專案的接法
 
-live 的前提是「dev server with HMR **或一個靜態 HTML 檔**」。**Nuxt 專案走靜態 HTML 那條**：live 注入的是 `<script src="http://localhost:PORT/live.js">`，而 Nuxt 4 的 `app/app.vue` 是 Vue SFC——template 內沒有 `</body>` 可當 anchor，也不接受 `<script>` 標籤。改寫 HTML shell 只為了掛 live，是拿 SSR 輸出去換一個設計階段工具，不划算。
-
-讓 live 作用在 mockup 目錄：
+直接在 dev server 上跑，比真元件：`impeccable live-inject` 偵測到 Nuxt 會改走 adapter，寫一支 dev-only 的 `app/plugins/impeccable-live.client.ts` 在 hydrate 後掛 `live.js`，並把它加進 `.git/info/exclude`，不會進 diff。`live` 結束時 `live-inject --remove` 依 `.impeccable/live/inject-journal.json` 收掉。
 
 ```jsonc
-// .impeccable/live/config.json
-{
-  "files": ["design/mockups/**/*.html"],
-  "insertBefore": "</body>",
-  "commentSyntax": "html",
-  "cspChecked": true
-}
+// .impeccable/live/config.json（files 是偵測與 CSP 提示，不是實際插入點）
+{ "files": ["app/app.vue"], "insertBefore": "</body>", "commentSyntax": "html", "cspChecked": true }
 ```
 
-mockup 用 Tailwind CDN 寫近似版即可——這個階段比的是版面與互動模式，不是像素級的元件還原。真元件的 API 細節由上面的 query 負責、實作時驗。live 的 poll **MUST** 走背景任務，不要用短 timeout 阻塞 shell。
+- 有 `nuxt-security` 或 `routeRules` 設 CSP：`impeccable detect-csp` 能自動補 dev-only 的 `script-src`／`connect-src`，照 impeccable `live-setup.md` 的 consent 流程
+- dev server 冷啟動時第一次 hydrate 可能還沒完成，看不到 live 面板先等編譯完再重整，**NEVER** 據此判 adapter 失效
+- 還沒有頁面可跑（純設計階段）才用靜態 HTML mockup（`files: ["design/mockups/**/*.html"]`）
+- live 的 poll **MUST** 走背景任務，不要用短 timeout 阻塞 shell
 
-**為什麼是強制 step**：實作後才發現「另一個組合體驗更好」，代價是整段重做。候選比較在 plan 階段做，成本是幾分鐘；在實作後做，成本是重寫。
+### impeccable 升版後
+
+本節三段都依賴 impeccable 的行為（`document` 的掃描清單、detector 以 frontmatter 為基準、Nuxt live adapter）。升版照 clade `vendor/snippets/impeccable/README.md` § 升降版流程，其中的重驗步驟涵蓋本節。
 
 ---
 

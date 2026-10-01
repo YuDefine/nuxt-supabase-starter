@@ -188,6 +188,7 @@ PATROL_HELPER="$CLADE_HOME/vendor/scripts/herdr-patrol.ts"
 RECONCILE_HELPER="$CLADE_HOME/vendor/scripts/runtime-reconcile.ts"
 READY_HELPER="$CLADE_HOME/vendor/scripts/work-loop-ready-count.ts"
 SCAN_HELPER="$CLADE_HOME/vendor/scripts/work-loop-scan.ts"
+STATE_WRITE_HELPER="$CLADE_HOME/vendor/scripts/work-loop-state-write.ts"
 # worktree 母目錄，與 vendor/scripts/wt-helper.ts:779 的 `<repo>-wt` 慣例對齊（推導不寫死）。
 # 它必須進 --add-dir —— 見下方 PERM_MODE 註解。
 #
@@ -398,11 +399,18 @@ guard_runner_quarantine() {
 # 的 durable dispatch record 計數。`reported` 是「回報了 business outcome」，NEVER 讀成「已被收割」
 # —— 已回報而沒人收割正是 patrol 的 silent-idle，判定權在 patrol，不在這裡。
 append_round_ledger() {
-  local before="$1" after="$2" rc="$3" started="$4" log="$5" origin="$6"
+  local before="$1" after="$2" rc="$3" started="$4" log="$5" origin="$6" log_class
+  # logClass：round log 此刻是完整的，分類結果隨行落進 ledger——logs/round-*.log 30 天後會被 sweep 清掉，
+  # cost-metrics 靠這欄位（而不是 log 檔）跨期算 round 分檔／收尾原因／訊號。口徑單一來源在
+  # work-loop-round-classify.mjs。分類失敗給 null（cost-metrics 會把它算進 unrecoverable，不猜）。
+  log_class="$($NODE_PLAIN "$(dirname "$STATE_WRITE_HELPER")/work-loop-round-classify.mjs" --file "$log" 2>/dev/null)"
+  [ -n "$log_class" ] || log_class=null
   $NODE_PLAIN -e '
     const fs = require("node:fs")
     const path = require("node:path")
-    const [ledger, state, before, after, rc, started, log, origin, repo, wtParent] = process.argv.slice(1)
+    const [ledger, state, before, after, rc, started, log, origin, repo, wtParent, logClassRaw] = process.argv.slice(1)
+    let logClass = null
+    try { logClass = JSON.parse(logClassRaw) } catch { /* 分類失敗：不猜 */ }
     const readState = () => { try { return JSON.parse(fs.readFileSync(state, "utf8")) } catch { return {} } }
     const s = readState()
     const endedAt = new Date().toISOString()
@@ -441,9 +449,27 @@ append_round_ledger() {
       dispatched,
       reported,
       log: path.basename(log),
+      logClass,
     })}\n`)
-  ' "$ROUNDS_LEDGER" "$STATE" "$before" "$after" "$rc" "$started" "$log" "$origin" "$REPO" "$WT_PARENT" 2>/dev/null \
+  ' "$ROUNDS_LEDGER" "$STATE" "$before" "$after" "$rc" "$started" "$log" "$origin" "$REPO" "$WT_PARENT" "$log_class" 2>/dev/null \
     || echo "   ⚠ round ledger 寫入失敗（觀測面，不擋推進）"
+}
+
+# 輪末 scratch sweep（TD-675）。state-write 的 sweep 跑在 Step 7.3、child 還活著，只能保留最近
+# 幾輪；本輪落的大型 dump（2026-10-01 實跑輪 `flowstatus-r132.json` 4.6MB）永遠在保留窗內。
+# child 退出後這一輪已沒有讀者，所以輪末再掃一次：保留本輪與上一輪、帶 marker 的大檔一律刪。
+# 判準在 work-loop-state-write.ts `sweepScratch`。NEVER 讓它影響推進判定——失敗只印一行。
+#
+# **guard 即將觸發的輪不套 size-based 刪除**（`--keep-evidence`）：quarantine marker 已在、或 inFlight
+# 非 0／讀不出來，緊接著的 guard_runner_quarantine child-exit 必定 stop，那一輪的 >1MB 檔就是 attended
+# reconciliation 要讀的證據。預判條件與 guard 的進入條件同源（marker 檔、in_flight_count）。
+sweep_round_scratch() {
+  [ -f "$STATE_WRITE_HELPER" ] || return 0
+  local keep=() inflight
+  inflight="$(in_flight_count)"
+  if [ -f "$QUARANTINE_FILE" ] || [ "$inflight" != 0 ]; then keep=(--keep-evidence); fi
+  $NODE_PLAIN "$STATE_WRITE_HELPER" --sweep-only ${keep[@]+"${keep[@]}"} --state "$STATE" >/dev/null 2>&1 \
+    || echo "   ⚠ 輪末 scratch sweep 失敗（不擋推進）"
 }
 
 # 收尾時把「已回報 outcome 卻沒人收割」的 dispatch 拉出來。runner 的每一輪 child 都是新 process，
@@ -762,6 +788,7 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
   # **排在 quarantine guard 之前**：guard 命中會 break，排在它後面的 ledger 就永遠寫不到
   # 那一輪 —— 而 quarantine 輪正是最需要留下紀錄的一輪。
   append_round_ledger "$before" "$after" "$rc" "$round_started_iso" "$log" "$origin_id"
+  sweep_round_scratch
 
   # Mechanical ownership guard：不論 child exit code、round 是否前進、item cap 是否已滿，
   # process 一旦退出而 ledger 仍有 ownership，就不能用下一個 child 冒充原 owner 收割。
