@@ -150,3 +150,32 @@ node ~/offline/clade/scripts/audit-remote-env-version-drift.ts
 - 「量得到」表的 `宣告 platform` 欄是 `none` 的列（如 starter template 帶 `wrangler.jsonc`）沒有遠端，**NEVER** 當成遠端 drift relay
 - 宣告與檔案不一致（宣告 `self-host` 卻有 `wrangler.jsonc`）報 `unmeasurable`，**NEVER** 拿檔案值當遠端版本
 - 有 `drift` 就 **relay 給該 consumer 的 session**（`clade-role-and-todo-discipline.md` § Consumer 工作命中時 MUST relay），**NEVER** 只登記 HANDOFF
+
+---
+
+## Step M.7 — C′ 軸：self-hosted runner 上的預裝 binary（TD-724）
+
+workflow 在 self-hosted runner 上裸呼叫機器預裝的 CLI（沒有 setup step、沒有 lockfile）時，A／B／C 三軸都掃不到它。
+CI 紅燈的表面症狀讀起來像 migration 或程式寫壞（<consumer-b> 2026-08-28：supabase CLI 落後 44 個 minor，
+報 `cannot insert multiple commands into a prepared statement`），**MUST** 先跑：
+
+```bash
+node ~/offline/clade/scripts/audit-runner-toolchain-drift.ts                    # 靜態：誰在哪台 runner 裸呼叫什麼
+node ~/offline/clade/scripts/audit-runner-toolchain-drift.ts --probe --upstream # 串行 ssh <bin> --version（registry 的 probeArgs 可覆寫）＋ 比上游 latest（node 取釘的 major 的 LTS）
+```
+
+宣告面是 `registry/runner-toolchain.json`（runner 的 owner／labels／sshTarget，binary 的 upstream／setupUses）。
+`--probe` 對 prod 主機是跨機器 side effect：只在有授權的 session 跑，且腳本本身串行、一條 `--version`。
+
+| 狀態 | 動作 |
+| --- | --- |
+| `behind` | relay 給該 consumer 的 session 升級，或改用 setup action 釘版本；**NEVER** 在 clade 主線 ssh 上去升 |
+| `probe-failed`（`failure=connect`） | 修 ssh 連線或 sshTarget |
+| `probe-failed`（`failure=command`） | ssh 通了但遠端指令失敗：該 binary 不在 runner 上，或探測指令不對（改 registry 的 `probeArgs`，如 go 用 `version`） |
+| `probe-failed`（`failure=parse`） | 指令成功但輸出讀不出版本：看 `reason` 的輸出，補 `probeArgs` 或 `parseVersion` |
+| `undeclared-runner` | 在 `runners[]` 補這組標籤所在的 runner |
+| `unmeasurable` | 補 `sshTarget`，或帶 `--probe` |
+| `upstream-unknown` | 補 `upstream`，或帶 `--upstream` |
+| `repo-pinned` | 已回到 repo 宣告（setup action），歸 Outdated batch 掃 |
+
+- `unmeasurable`／`probe-failed`／`upstream-unknown` **NEVER** 讀成 current

@@ -37,12 +37,12 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --ori
 
 | 表 | machine 寫 | 人確認後 machine 寫 | 客戶 / 人寫（machine NEVER 碰） |
 | --- | --- | --- | --- |
-| ticket board | `狀態` `修復版本 >=` `上線日期` `Work ID` `所屬專案` `備註` `優先級` `PR` | — | `名稱` `類型` `提報人` `提報日期` `截止日期` `檔案和媒體` `驗收日期`（`名稱` `類型` `提報日期` 只在 machine 自己建票時給初值） |
+| ticket board | `狀態` `修復版本` `上線日期` `Work ID` `所屬專案` `備註` `優先級` `PR` | — | `名稱` `類型` `提報人` `提報日期` `截止日期` `附件` `驗收日期`（`名稱` `類型` `提報日期` 只在 machine 自己建票時給初值） |
 | 交付項目 | `狀態` `進度%` `Work ID` `專案` `里程碑` `原始 Ticket` | `預估完成日` | `Item`（建列時 machine 給初值，之後客戶可改字） |
 
-**每個欄位只有一個 writer**。`PR` 是選配欄（board 還沒建時 `release` 跳過並提示）。`提報日期` 是客戶提報日不是發版日；發版資訊寫 `修復版本 >=` + `上線日期`。
+**每個欄位只有一個 writer**。`PR` 是選配欄（board 還沒建時 `release` 跳過並提示）。`提報日期` 是客戶提報日不是發版日；發版資訊寫 `修復版本` + `上線日期`。
 
-狀態與 `類型` 選項名**不是**契約：Notion API 不能改 status 選項，所以每個 hub 在 registry 的 `ticketStatus` 把同一套生命週期（backlog / needs-engineer / needs-customer / in-progress / acceptance / done / archived）對映到自己的字；`類型` 同理，`ticketType` 把 bug / feature 對映到本 hub 的選項（未經 live schema 驗證前不宣告，`file` 會拒寫）。`交付項目.狀態` 是 API 建的 select，各 hub 相同：`待處理 / 進行中 / 待驗收 / 完成`。
+狀態與 `類型` 選項名**不是**契約：Notion API 不能改 status 選項，所以每個 hub 在 registry 的 `ticketStatus` 把同一套生命週期（backlog / needs-engineer / needs-customer / in-progress / acceptance / done / archived）對映到自己的字；`類型` 同理，`ticketType` 把 bug / feature 對映到本 hub 的選項（未經 live schema 驗證前不宣告，`file` 會拒寫）。`audit-notion-hub-schema` 對這兩欄：registry 宣告的字缺了、或 `類型` 不是 select 是 drift；live 多出 registry 未認領的選項只報 warn（不影響機器寫入、客戶可自加）。`交付項目.狀態` 是 API 建的 select，各 hub 相同：`待處理 / 進行中 / 待驗收 / 完成`。
 
 ## 生命週期 → Notion 寫入
 
@@ -78,7 +78,7 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --ori
 | CI run、merge commit、tag URL | 只留 flow artifacts | — |
 
 - `備註` 與票內文 **NEVER** 出現 github.com 連結，或 consumer prod 網域以外的網址；`notion-sync.ts` 寫入前拒絕（`customerFacingViolation`）。prod 網域取自 consumer `.claude/consumer-meta.json` 的 `deploy.prodUrl`（退回非 localhost 的 `NUXT_PUBLIC_SITE_URL`），沒宣告就拒寫。
-- `檔案和媒體` 是客戶欄，machine **NEVER** 寫——截圖一律進內文。
+- `附件` 是客戶欄，machine **NEVER** 寫——截圖一律進內文。
 
 ### needsDecision（script 不寫、回報給呼叫端問）
 

@@ -40,6 +40,7 @@ skill 開頭依輸入分流，**不要記四個 skill 名**。
 | **A. Repo-declared** | `package.json` / lockfile / workflow yaml / `.nvmrc` | ✅ commit | Outdated / Fleet / Skills mode |
 | **B. Machine-installed** | mise config / 全域 npm / `~/.local/bin` / `.mcp.json` | ❌ | **Machine mode** |
 | **C. Remote-deployed** | LXC / VM 上實際跑的版本 | ❌ | **不在本 skill**：`scripts/audit-remote-env-version-drift.ts` 出訊號，落地 relay 給該 consumer 的 session |
+| **C′. Runner-installed** | self-hosted runner 上被 workflow 裸呼叫的預裝 binary（`supabase` / `gh` / `docker` / `node`…） | ❌ | **不在本 skill**：`scripts/audit-runner-toolchain-drift.ts` 出訊號（machine-mode.md § Step M.7），升級 relay 給該 consumer |
 
 C 軸刻意留在外面：升遠端 staging / prod 的 runtime 是 consumer 的 production 動作，clade 主線
 替它動手正是 `.claude/skills/clade-home/rules/clade-role-and-todo-discipline.md` § 反模式 逐字禁止的那件事。
@@ -60,6 +61,7 @@ C 軸刻意留在外面：升遠端 staging / prod 的 runtime 是 consumer 的 
 | `/version-upgrade skills`，或提到 **skill** 上游 / 落後 / 新增（「supabase skill 上游更新了我們有跟嗎」「掃一下 skill 有沒有落後」） | clade home | **Skills** | § Skills · Step S.1 |
 | 提到 **submodule-tracked 上游**（「SpecFormula / aixbdd 上游動了」「specformula pin 落後」「audit-upstream-submodules 報落後」「fork 的 patch」「vendor/specformula」） | clade home | **Skills · submodule** | § Skills · Step S.1 的 submodule 段 → `docs/dev-guide.md` § 6.5 |
 | `/version-upgrade machine`，或提到**本機裝的東西**落後（「supabase cli 該升了嗎」「codebase-memory-mcp 有新版嗎」「mise 那堆工具掃一下」「全域 npm / claude-code 自己的版本」） | 任意（本機唯一） | **Machine** | § Machine · Step M.1 |
+| 提到 **self-hosted runner / staging / prod 機器上**預裝的 CLI 落後（「runner 上的 supabase cli 幾版」「migrate job 紅燈，是不是 CLI 太舊」） | 任意 | **C′ 訊號，不升版** | machine-mode.md § Step M.7 |
 | 無參數但 cwd = clade home | — | STOP + 問意圖 | 見下方 § Disambiguation |
 
 **「Fleet · Toolchain」與「Machine」都會被「Node 版本」這句話命中，MUST 先分辨再走。**

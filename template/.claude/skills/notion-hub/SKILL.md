@@ -9,6 +9,7 @@ description: "consumer 所屬 Notion hub 的唯一入口。Use when 看 board／
 
 當前 consumer 所屬 Notion hub（ticket board ＋ 客戶看的 `交付項目`；hub 可省略交付項目、把進度併進 board `進度%`，見規約）的**唯一入口**。規約在
 [[notion-work-coupling]]；本 skill 只承載**人主動發起**的六個意圖。
+跨 hub 架構與七階段速查見 clade home 的 `vendor/snippets/notion-hub/lifecycle.md`；機器契約仍以 coupling rule 與 registry 為準。
 
 **生命週期大半不在這裡。** `flow plan open`／`flow done` 成功後 `follow` 自動推進 ticket 狀態與
 交付項目 進度，`/commit` Step 6b 跑 `release`——**NEVER** 在本 skill 裡叫人「做完記得同步 Notion」。
@@ -121,7 +122,7 @@ consumer 要開始用 Notion 票、而 hub 或專案還不存在時用。座標�
 
 - `備註` 與票內文 **NEVER** 出現 github.com（PR／CI run／tag／merge commit）——PR 連結只進 `PR` 欄，其餘留在 flow artifacts。`notion-sync.ts` 會拒寫。
 - 客戶面的網址只放 consumer prod 網域的完整 URL；截圖放內文（`file` 的「問題畫面」、`release` 的「驗收畫面（<tag>）」）。
-- `檔案和媒體` 是客戶欄，機器 **NEVER** 寫；客戶側轉移（驗收中→完成、完成→封存）與 `預估完成日`（沒經人確認）**NEVER** 碰。
+- `附件` 是客戶欄，機器 **NEVER** 寫；客戶側轉移（驗收中→完成、完成→封存）與 `預估完成日`（沒經人確認）**NEVER** 碰。
 
 ## 常見坑
 

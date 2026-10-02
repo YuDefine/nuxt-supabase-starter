@@ -97,7 +97,7 @@ PR 只付 affected，`main` 上的紅會比以前多一種來源：affected 沒�
 | 可觀察 predicate | MUST |
 | --- | --- |
 | `main` 最新一趟非取消的 validate push run 紅，或 nightly issue 開著 | coordinator **當輪**處置，二擇一：派修（brief 帶紅檔與嫌疑 PR，修補 PR body 帶 `Fixes-Main: true`）或 `git revert` 嫌疑 PR 的 squash commit。嫌疑範圍＝上一次綠燈的 push（nightly 則是上一趟綠燈 nightly）之後落地的 PR |
-| `main` 紅期間 | merge-queue 的 main 紅凍結生效：只合 `Fixes-Main: true` 的 PR。**NEVER** 讓 `main` 紅著過夜等下一輪 |
+| `main` 紅期間 | merge-queue 的 main 紅凍結生效：只合 `Fixes-Main: true` 的 PR。凍結以「main tip 那個 commit 的 run 紅」判，不看 run 多老——紅 run 留在 tip 上就一直凍，不會過了 24 小時自己解凍讓一般 PR 疊上紅 `main`；tip 的新 push run 還沒跑完時，沿用最近一個 settled run 的結論——最後已知紅就照凍，不會趁空檔放行（24 小時截止只是讀不到 tip 時的退路）。所以凍結不會替你收尾，**NEVER** 讓 `main` 紅著過夜等下一輪 |
 
 ### Ready 之後的 push 紀律
 

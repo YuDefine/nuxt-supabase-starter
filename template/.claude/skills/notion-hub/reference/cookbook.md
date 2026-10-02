@@ -77,7 +77,7 @@ Notion API 硬限制（違反回 400 `validation_error`）：`code` block 的 `l
 
 ## 4. 附圖（client 截圖）方案 C：token_v2 抓原檔
 
-public API（ntn / MCP integration token）拿不到 in-app attachment：`檔案和媒體` 回 `files:[]`。要原檔走內部 API。Notion 現用 domain `app.notion.com`；`token_v2` 是 session secret，**NEVER** 印到 stdout / log / chat，寫檔 chmod 600。
+public API（ntn / MCP integration token）拿不到 in-app attachment：`附件`（files 欄）回 `files:[]`。要原檔走內部 API。Notion 現用 domain `app.notion.com`；`token_v2` 是 session secret，**NEVER** 印到 stdout / log / chat，寫檔 chmod 600。
 
 ```bash
 # Step 1 — 一次性取 token_v2 + notion_user_id（agent-browser persistent profile 需已登入 Notion）
