@@ -1,0 +1,13 @@
+// 資料模型總覽（逆向基準線）。逆向自 supabase/migrations/*.sql；程式碼是唯一事實來源。
+// 實體關聯：目前已展開的聚合只有 profiles，沒有跨表外鍵
+//   （profiles.id 刻意不加 FK：使用者由 Better Auth 管理，不在 Supabase auth.users）。
+//
+// 聚合檔對照（模組鍵＝檔名）：
+//   profiles.dbml  → profiles
+//
+// 尚未展開（見 specs/plans/001-baseline-reverse/coverage/）：audit_logs、evlog_events。
+// 全部聚合檔的資料表集合 MUST 與下列 Table 宣告一致（tools/check-truth.mjs 比對）。
+
+Table profiles {
+  id uuid [pk]
+}

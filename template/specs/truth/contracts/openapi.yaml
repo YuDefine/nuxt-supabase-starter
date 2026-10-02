@@ -1,0 +1,26 @@
+openapi: 3.1.0
+info:
+  title: nuxt-supabase-starter API（逆向基準線）
+  version: 0.0.0-baseline
+  license:
+    name: MIT
+  description: |
+    逆向自 `server/api/**` 的 HTTP 合約。程式碼是唯一事實來源；每個 operation 以 `x-source`
+    回指檔案與行號。模組鍵與 `features/backend/<模組>/`、`data/<模組>.dbml` 同名。
+    已展開的模組：profiles。其餘模組見 `specs/plans/001-baseline-reverse/coverage/`。
+servers:
+  - url: http://localhost:3000
+paths:
+  /api/v1/profiles:
+    $ref: './profiles.yaml#/paths/~1api~1v1~1profiles'
+  /api/v1/profiles/me:
+    $ref: './profiles.yaml#/paths/~1api~1v1~1profiles~1me'
+  /api/v1/profiles/{id}:
+    $ref: './profiles.yaml#/paths/~1api~1v1~1profiles~1{id}'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+      description: Better Auth 的 session cookie；定義同 profiles.yaml（入口檔需要自己的宣告才能讓 operation 的 security 解析）。

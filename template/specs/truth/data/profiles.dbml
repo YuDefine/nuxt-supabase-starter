@@ -1,0 +1,22 @@
+// profiles 聚合（逆向基準線）
+// x-source: supabase/migrations/20260313091145_create_profiles.sql:39-65,85
+
+Table profiles {
+  id uuid [pk, note: '對應 Better Auth 的 user id；無 FK（migration:36-38）']
+  display_name text [null, note: '顯示名稱']
+  avatar_url text [null, note: '頭像網址']
+  role text [not null, default: 'user', note: '角色。CHECK profiles_role_check：admin 或 user（migration:43-44）']
+  created_at timestamptz [not null, default: `now()`, note: '建立時間']
+  updated_at timestamptz [null, note: '最後更新時間；BEFORE UPDATE trigger set_profiles_updated_at 以 now() 填入（migration:62-65）']
+
+  indexes {
+    role [name: 'idx_profiles_role']
+  }
+
+  Note: '''
+    使用者個人資料。
+    x-source: supabase/migrations/20260313091145_create_profiles.sql:39-47
+    RLS：啟用但不建任何 policy（deny-all；migration:85）。授權由 server handler 負責，
+    server 端以 service-role 連線（BYPASSRLS）存取。
+    '''
+}
