@@ -21,7 +21,9 @@ prompt 只有一個指標：brief 檔的路徑。brief 才是完整指示（受�
 
 **最終回覆就是 review 輸出**，finalize 直接從你的 transcript 取出它，不經任何人轉述：
 
-- 以 `## Review Verdict` 開始（brief 要求的漏審清單放在它上面一行），每條 finding 一行，格式照 brief
+- **第一行必須是字面上的 `## Review Verdict`**（brief 要求的漏審清單放在它上面一行），每一輪都要寫，驗證輪只剩 `— resolved.` 列或 `- No findings.` 時也一樣。只有條列、沒有這行標題的回覆不是 verdict：finalize 判 exit 3、整輪作廢重審
+- 標題下每條 finding 一行，格式照 brief
+- 整份 review 寫在**最後一則訊息**、最後一次工具呼叫之後：finalize 只取最後一次工具結果之後的文字，開始寫 verdict 後再呼叫工具，前半段就不算數
 - brief 有列 semantic 規則時，另附 `## Semantic Verdict` 表
 - 不加前言、不加結語、不加「以上是我的 review」
 

@@ -39,13 +39,15 @@ skill 由 consumer manifest 的 `modules` 決定裝哪些（canonical `.clade/ma
 | --- | --- | --- |
 | 提案〔aixbdd〕 | `/specify` | lifecycle repo（有 `specs/truth/work-lifecycle.md`）：先 `flow plan open` 再填 `spec.md`。未遷移 consumer：建 `specs/plans/NNN-<slug>/` |
 | 澄清〔aixbdd〕 | `/clarify-over-specs` | 對 `spec.md` 的模糊處逐項收斂 |
-| 驗收 Gherkin〔aixbdd〕 | `/spec-by-example` → `/ui-plan` | 產 `features/acceptance/**` 與靜態雛形 |
-| 設計〔aixbdd〕 | `/technical-research`、`/system-analysis` | 定 techstack 與系統設計 |
+| 驗收 Gherkin〔aixbdd〕 | `/spec-by-example` | 產 `features/acceptance/**` |
+| 設計〔aixbdd〕 | `/technical-research`、`/system-analysis`（委派 `/api-plan`、`/data-plan`、`/ui-plan`） | 定 techstack 與系統設計；UI 需求在此產靜態雛形 |
 | 規格落地〔aixbdd〕 | `/dsl-refine` | 把句型寫進 `specs/truth/features/**` 與 `dsl.md` |
 | 拆任務〔aixbdd〕 | `/tasks` | 產 plan package 的 `tasks.md`；開工前 `flow open <slug> --origin tasks:<path>` |
 | 實作〔aixbdd〕 | `/implement`（`[BDD-GREEN]` 委派 `/bdd`） | 依 `tasks.md` 逐 phase 落 code 與測試 |
 | 人工檢查 | `/review scan`（＝`flow gates --repo-only`）看哪些卡等人判 | UI / 資料類 manual review |
 | 提交 | `/commit` | 依功能分組走品質閘門提交（所有 commit 的唯一入口） |
+
+〔aixbdd〕列的名稱是上游 skill 名。可直接叫的只有 `/specify`、`/clarify`、`/system-analysis`、`/implement` 與 `work-route`；`/clarify-over-specs`、`/spec-by-example`、`/ui-plan`、`/technical-research`、`/dsl-refine`、`/tasks`、`/bdd` 沒有同名 slash 入口，由 `work-route` 載入。
 
 不確定專案當前該走哪一站：先讀 `specs/plans/` 最新的 plan package 與它的 `tasks.md`，再按使用者目標接續。沒宣告 aixbdd 的 repo 整條主流程不適用——那裡的生命週期是「待辦來源 → `tasks/<date>-<slug>.md` → `/wt` → `/commit`」。
 

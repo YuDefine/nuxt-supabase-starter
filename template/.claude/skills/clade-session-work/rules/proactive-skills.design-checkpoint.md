@@ -131,8 +131,8 @@ Design 工作可能發現 spec 未涵蓋的問題。**每一次**發現都按下
 | 情境 | 動作 |
 | --- | --- |
 | critique／audit 發現 spec 未涵蓋的 UX 需求（如缺 empty state、缺 loading 狀態） | 回交 `/dsl-refine` 更新 truth feature；**NEVER** 就地改 `specs/truth/**` |
-| audit 發現需要新元件或新 API endpoint | 在當前 tasks 檔加一條 task；動到 API 契約時先改 `specs/api/**`（per [[specformula]] spec-first） |
-| Design 決策影響資料模型或 API schema | 依 [[knowledge-and-decisions]] 記 ADR（**NEVER** 在 `docs/decisions/` 開新檔）→ 由 owner skill 落 `specs/data/**` / `specs/truth/**` |
+| audit 發現需要新元件或新 API endpoint | 在當前 tasks 檔加一條 task；動到 API 契約時先改 `specs/truth/contracts/**`（per [[specformula]] spec-first） |
+| Design 決策影響資料模型或 API schema | 依 [[knowledge-and-decisions]] 記 ADR（**NEVER** 在 `docs/decisions/` 開新檔）→ 由 owner skill 落 `specs/truth/**`（runner 用的 DDL `specs/data/**` 從 DBML 衍生，同一個 commit 改） |
 | 修正範圍超出原工作 scope | 停下，通知使用者，可能需要另開一個 work item |
 
 ## Design Gate（交付人工檢查前的硬門檻）

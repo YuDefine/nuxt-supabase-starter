@@ -24,6 +24,10 @@ paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/*
 2. **commit 必須帶上 `skills-lock.json`**。安裝工具可能重算 lock 內所有 entry 的 `computedHash`；漏帶會讓 lock 與實際安裝不一致。
 3. **NEVER 讓 runtime skill source 是 symlink 指向未 tracked 的 target。** 判準是 target 內容是否進版控；runtime projection 的 symlink 例外必須由 adapter 明列。
 
+| 已明列的 projection symlink 例外 | 內容 |
+| --- | --- |
+| user 層 Claude 入口 | `~/.claude/skills/<name>` → `../../.agents/skills/<name>`，只限宣告 `global` 的 skill。由 `scripts/lib/user-claude-skill-links.ts` 隨 `user-runtime --audience user` 建立、接管、prune，state 在 `~/.clade/projections/claude.user-skill-links.json`；target 是 clade 投影產物，可由 canonical source 完整重生。同名實體目錄或指向別處的 symlink 不覆寫，報 `claude-skill-link-conflict` |
+
 ## 投放範圍宣告（clade-skill-scope）
 
 每支 canonical skill 與每個會渲染成 codex skill 的 command，在源檔與 `clade-targets` 並列宣告一行：
@@ -37,6 +41,8 @@ paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/*
 | 觸發條件 | 源檔出現該 marker；`global`＝只進 user-level、`project`＝只進 repo 內投影、`both`＝兩層都投 |
 | 消費端 | `scripts/lib/skill-scope.ts` 是唯一 parser；`runtime-capability-plan.ts`（`skillAudience`）、`projection-inventory.ts`（`collectPluginSkillSources` 固定 project 層）、`user-runtime.ts`（`--audience`／`root===cladeRoot` 推斷 `project`）各自接線 |
 | 觸發點 | user 層收 `global`＋`both`，project 層收 `project`＋`both`；未宣告預設 `both`（back-compat），`_validate-manifests.ts` 對未宣告 warn、對非法值／重複 marker 報 error |
+
+user 層的投影本體只寫 `~/.agents/skills`（Codex 讀）；Claude Code 只讀 `~/.claude/skills`，所以 `global` skill 另由上表的受管 symlink 接上。`both` 不建 user 層 Claude symlink：它在 project 層已投影給 Claude，而 Claude Code 同名 skill 由 personal 蓋過 project，user 層再放一份會讓舊版遮蔽 repo 內的新版。
 
 user-level 的同名 skill 與 repo 內投影同名是合法遮蔽：pi 採 project 版、略過 user 版。`sync-to-codex.ts` 的撞名分級據此分 managed（兩邊皆 clade 投影 → 摘要）／mixed（單邊 → fail）／unmanaged（雙邊手寫 → warn）；「clade 投影」的證據是 LOCKED banner 或 `.clade/projections/codex.{capabilities,rules}.json` 的 files 清單。
 
@@ -56,6 +62,29 @@ user-level 的同名 skill 與 repo 內投影同名是合法遮蔽：pi 採 proj
 | 觸發點 | 本節（paths-gated 於 skill 目錄）＋收容名單本身的 `charter` 欄 |
 
 報出來的每一支逐支判：基礎設施類登記進名單並寫 `why`；其餘搬進 clade plugin。**NEVER** 為了讓報告變乾淨把工作流類登記成 `infrastructure`，**也 NEVER** 讀成取消 user-level skill——基礎設施類刪掉就是真的沒地方放。
+
+## Skill 撰寫形式
+
+在 `capabilities/**/skills/<name>/` 新建 skill、或改既有 skill 的流程／判準／結構時，**MUST** 走 `/skill-engineering`（`hub-capabilities-skill-engineering`，global）：新建走 create lane，改版走 optimize lane（先過根因確認閘門，再出編排計畫）。產出形狀以該 skill 委派的 `skill-form-*` 為準：`SKILL.md` 只放最小可執行 SOP（`# SOP` → `## Phase N -- <名>` → 以 READ／THINK／WRITE／DELEGATE 開頭的 step），判準進 `rules/`、穩定輸出骨架進 `templates/`（骨架＋`.example`）、機械工作進 `scripts/`（PEP 723 單檔 Python），只在需要的 step 按需載入。clade 自己的 frontmatter 與 marker（`clade-targets`、`clade-skill-scope`、`clade-resources`、`metadata.clade`）照舊並存。
+
+| 情境 | 處理 |
+| --- | --- |
+| 純錯字、斷鏈、路徑改名，不動流程與判準 | 直接改，不必走 lane |
+| LOCKED mirror（`<!-- LOCKED: mirrored from … -->`） | 不在本節範圍；改上游再重生 |
+| 其餘新增或改版 | `/skill-engineering` |
+
+**NEVER** 用 `skill-creator`（含 Anthropic 內建 `anthropic-skills:skill-creator`）或任何 skill-creator 類工具產生或改寫 clade skill；它們把流程、判準、範例混在同一層，正是本節要消除的形狀。
+
+| 藉口 | 現實 |
+| --- | --- |
+| 「只是加一段說明，不算改流程」 | 新增的段落若會改變 agent 的行為，它就是判準，屬於 `rules/` 或某個 step；判不出歸屬就是該走 lane 的訊號 |
+| 「根因閘門要等確認，太慢」 | 閘門擋的是沒對齊預期就改寫；批次改版可合併成一份報告一次確認，**NEVER** 跳過 |
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 讀或寫 `capabilities/**/skills/**`、`.claude/skills/**`、`.agents/skills/**` 下的 skill 檔（本檔 `paths:`） |
+| 消費端 | 新建或改版 skill 的 session；commit 0-F（新增 skill／rule 的最佳實踐交叉比對） |
+| 觸發點 | 讀寫本檔 frontmatter `paths:` 列的 skill 路徑那一刻由 rules planner 載入（rule-authoring 合法觸發點 ④）；新建 skill 時 `/skill-engineering` 的 description 命中 |
 
 ## 來源與安裝邊界
 

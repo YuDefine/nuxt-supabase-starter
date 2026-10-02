@@ -163,6 +163,20 @@ Charles 於 2026-09-27 告知 cc 與 ccw **各有 USD 250 cloud session 專用 c
 
 **MUST** 經 `vendor/scripts/cloud-dispatch.ts dispatch` 派出（或對已在跑的 cloud session 跑 `adopt`）：它拒絕 model 未釘的 repo、把交付契約（固定 `cloud/` branch、draft PR、`Work:` 行）寫進 brief 開頭，並留下 record 與 `substrate: cloud` 的 flow span。**NEVER** 裸跑 `claude --cloud` 派工作——沒有 record 的 cloud session 沒有任何本機巡檢面看得到，派它的 session 一結束它就成了孤兒。裸跑還有第二個代價：不帶 `--ref` 時，只要 checkout 有未 commit 改動，CLI 就改成上傳本機 working tree 起 session——VM 沒有 origin、推不回成果，而且同一棵樹上別的 session 未 commit 的內容也一起送上雲。`dispatch` 一律帶 `--ref <base>`（拿不到 GitHub clone 就直接失敗、不上傳），並拒絕 base 領先 origin 的派出。收割看 GitHub（`herdr-patrol.ts --stalled` 的 CLOUD DISPATCHES 區塊與 `cloud-dispatch.ts patrol`），落地後 `cloud-dispatch.ts harvest` 關 span。brief 的資料邊界同 [[agent-routing.pi-watch-protocol]] § Dispatch 資料邊界：cloud 是另一個 runtime，secret 的值 **NEVER** 進 brief。指令、限制與收割形狀全文在 `vendor/snippets/cloud-dispatch/README.md`。
 
+### Claude Code Projects（beta）
+
+Projects（claude.ai/code、桌面 app 的 Code 分頁、手機 app；CLI 沒有）是 Anthropic 端的 coordinator 加上一批 cloud thread。它**不是** `cloud-dispatch.ts` 這個載體，也**不**取代主持者：thread 不進 record、patrol 或 flow spine；用量吃訂閱的 `five_hour`／`seven_day` 窗（官方文件：「same plan limits as your other Claude Code sessions and uses them faster」），不是上面那筆 cloud credit；新 project 的 thread 預設 Opus（effort: high）。
+
+| 可觀察 predicate | 判定 |
+| --- | --- |
+| Context 放了 2 個以上 repo | **NEVER**：多 repo 時任何 repo 的 `.claude/settings.json`（hooks、permission rules、`env`）都不套用，thread 只靠 auto mode 跑 |
+| Context 含 clade，或工作會動任何 repo 的 `.claude/**`、`CLAUDE.md`、`AGENTS.md` 等 clade 投影檔 | **NEVER**（同上方「不適合」的 clade 標準層） |
+| 要本機狀態、跨 repo、急件、commit 0-A | 不用 Projects，照上方載體表 |
+| 單一 consumer repo、工作形狀符合上方「適合 cloud」（自足、驗收全看 PR＋CI、不急）、該 repo 已裝 Claude GitHub App | 可用。照 cookbook § Claude Code Projects 開，Thread effort 改成 ≤ `medium`。開 project 或交新工作之前先跑 `probe-quota` 看該帳號兩窗的 `remainingPercent`：任一窗 < 30 不開新 thread（並 pause project），< 50 同時最多 1 條，兩窗都 ≥ 50 最多 3 條（沿用 Charles 2026-09-26 定的 cloud 門檻） |
+| thread 開出的 PR | 同 cloud 派工的 PR：0-A 在 desk 跑、merge 走 desk 的 merge 佇列；thread **NEVER** merge |
+
+開法、project instructions 範本與待驗清單在 `vendor/snippets/cloud-dispatch/README.md` § Claude Code Projects。
+
 ## Implementation readiness gate（實作派工前）
 
 派出去的是**實作**（brief 宣告 `stage: implement`，或 dispatcher 帶 `--implementation`）且 `CLADE_WORK_ID` 綁到一個 lifecycle package 時，dispatcher **MUST** 先跑 `node vendor/scripts/flow/flow.ts plan readiness <work-id>`；`ready=false` 就拒絕建 pane，findings 逐條指名缺的契約（`spec.md`、acceptance feature、`acceptance_command`、stale `truth_baseline`、undefined／ambiguous step）。缺的東西回到對應 spec owner，**NEVER** 交給 implementer 順手補——implementer 只能改被指派的實作與配套單元測試，acceptance feature、DSL、`spec.md` 在它手上是唯讀；主線收工時跑 `flow plan spec-integrity <work-id> --since <dispatch sha>`，那三類有改動就拒收，**即使它回報的測試全綠**。

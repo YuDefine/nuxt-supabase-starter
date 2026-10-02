@@ -119,7 +119,7 @@ GPT 與 Claude 主線模型都**字面遵守指令、不外推**（Anthropic pro
 
 Dirty working tree 有兩種來源，**兩種都要列進 baseline**：
 
-1. **主線操作型**：主線剛跑 OPSX intent 完成的 artifacts、剛寫進 `docs/tech-debt.md` 的 TD-NNN entry、未 commit 的 ROADMAP/HANDOFF 更新
+1. **主線操作型**：主線剛建的 plan package／tasks 檔、剛寫進 `docs/tech-debt.md` 的 TD-NNN entry、未 commit 的 ROADMAP/HANDOFF 更新
 2. **自動 hook 型**：`pnpm install` postinstall hook 觸發 `hub:bootstrap` → `sync-to-codex` 自動把 main branch 的 clade 更新同步進 worktree，產生 LOCKED projection diff（`.claude/` / `.agents/` / `AGENTS.md` / `CLAUDE.md` / `.claude/scripts/`，檔頭有 `🔒 LOCKED — managed by clade` banner）。主線沒主動操作但 working tree 仍 dirty
 
 派工前**MUST 跑**：
@@ -140,7 +140,7 @@ cat .claude/.hub-state.json | grep syncedAt     # 若新近時間戳 → 自動 
 
 主線操作產生：
 - `docs/tech-debt.md` (modify) — 主線剛新增 TD-064 entry
-- `openspec/changes/<change-name>/` (untracked) — 主線剛跑 OPSX intent 完成的 artifacts
+- `specs/plans/<work-id>/` (untracked) — 主線剛建的 plan package
 
 hub:bootstrap 自動同步產生（請完全忽略，與本次工作無關）：
 - `.claude/` `.agents/` `AGENTS.md` `CLAUDE.md` `.claude/scripts/` — 投影層由 clade 中央倉自動同步，檔頭有 🔒 LOCKED banner
@@ -214,7 +214,7 @@ Commit 完直接停手回報，**NEVER** 自己跑下一 phase。主線會在 co
 例外：
 
 - review wrapper（claude-review-safe.sh）與 WebSearch 不寫檔，本節不適用
-- 對 `claude` type subagent（如 OPSX intent 在 /wt 內派出的 wt subagent）規約相同（`🧹 chore: wt …` 前綴 + selective stage + self-check + hook 必跑），per worktree-default.md §5
+- 對 `claude` type subagent（如 /wt 內派出的 wt subagent）規約相同（`🧹 chore: wt …` 前綴 + selective stage + self-check + hook 必跑），per worktree-default.md §5
 
 ## 泛用 Dispatcher（pi-dispatch.ts）
 
@@ -458,21 +458,19 @@ Devin SWE-2 Max（`swe-2-max`，effort: max）**不是任何列的固定前綴**
 
 Controlled execution 在 Herdr owner 尚未綁定、且沒有已確認停止的 completion receipt 時維持 `owner-unresolved`。現有 launcher failure 回覆仍保留 pane，不能據此宣稱已停止或進入 fallback；先收回並核對該次執行的真實結果。
 
-## OPSX intent handoff
+## 需求建立 handoff
 
-需求建立與修訂經 `opsx` skill 的 `references/intent.md`；先查已有 change/work 身分，再形成有來源、驗收、impact 與 work plan 的 canonical intent。已授權的需求直接執行，缺少產品決議才送既有 decision queue。
+需求建立與修訂走 `/specify` 建 plan package（純技術工作走 `tasks/<date>-<slug>.md`）；先查已有 work id，再形成有來源、驗收、impact 與 work plan 的計畫。已授權的需求直接執行，缺少產品決議才送既有 decision queue。
 
-UI 詳細計畫走 `ui-detailed-planning` Opus 5.5，非 UI 計畫走 `detailed-planning` Opus 5.5；主線持有 quality gate，讀 draft、核對來源及驗收後自行修正。**NEVER** 把 cross-check / final check 的修補丟回 pi。每次 mutation 明確帶 repo、change_id 與預期 revision，create／revise 後回讀 binding 及 canonical source。UI scope 的設計與體驗驗收沿用既有 gate。
+UI 詳細計畫走 `ui-detailed-planning` Opus 5.5，非 UI 計畫走 `detailed-planning` Opus 5.5；主線持有 quality gate，讀 draft、核對來源及驗收後自行修正。**NEVER** 把 cross-check / final check 的修補丟回 pi。改完計畫回讀 plan package，確認落檔內容就是要的那一版。UI scope 的設計與體驗驗收沿用既有 gate。
 
-Canonical intent 的修改只走 OPSX command；生成 tasks.md 保持唯讀。
+## plan package work execution dispatch（具體做法）
 
-## OPSX work execution dispatch（具體做法）
-
-1. 以 OPSX inspect／instructions 讀 canonical work plan、work_spec_id、依賴、revision 與驗收政策；生成 tasks.md 保持唯讀。
+1. 讀 plan package 的 work plan、依賴與驗收政策；`tasks.md` 的勾選要附 evidence receipt（[[worktree-default]] §9.5）。
 2. 按工作角色選 bounded executor：UI view（含 Nuxt UI／Content）走 `ui-view-implementation` Opus 5.5（effort: medium）；Nuxt 本體走 `nuxt-core-implementation` Sonnet 5.5（effort: high）；Design Review 走 `design-review` Opus 5.5；UI 計畫走 `ui-detailed-planning` Opus 5.5；非 UI 實作走 `non-ui-implementation` Sonnet 5.5（effort: high）。Screenshot review 與項目符合性各走上表。
-3. 混合 UI／非 UI phase 先保存已做的 scoped checkpoint，再以 OPSX revise 明列各模型的檔案所有權與依賴，依新 revision 續跑。產品範圍未變沿既有授權處理；需要新產品決議時送既有 decision queue。
-4. 派工 brief 帶全部 scoped tasks、Plan-first、Commit Authorization、canonical change/work/attempt、revision 與 evidence 政策。非 UI worker 的 brief 明寫「禁止修改 view 層檔案；需要 view 改動時回報，由主持者依 UI view、Nuxt 本體兩類派工」。
-5. 收回後核對 scoped diff、checkpoint、每項工作的 evidence 與 current revision，執行 typecheck／相關測試；checkbox 或 process exit 0 不代替完成憑證。Design Review 與符合性 gate 由 Opus 5.5 完成後，carrier 才進後續既有收尾流程。
+3. 混合 UI／非 UI phase 先保存已做的 scoped checkpoint，再在 plan package 明列各模型的檔案所有權與依賴後續跑。產品範圍未變沿既有授權處理；需要新產品決議時送既有 decision queue。
+4. 派工 brief 帶全部 scoped tasks、Plan-first、Commit Authorization、work id 與 evidence 政策。非 UI worker 的 brief 明寫「禁止修改 view 層檔案；需要 view 改動時回報，由主持者依 UI view、Nuxt 本體兩類派工」。
+5. 收回後核對 scoped diff、checkpoint、每項工作的 evidence，執行 typecheck／相關測試；checkbox 或 process exit 0 不代替完成憑證。Design Review 與符合性 gate 由 Opus 5.5 完成後，carrier 才進後續既有收尾流程。
 
 ## screenshot-review Verify Mode Dispatch & Watch Protocol
 

@@ -15,7 +15,7 @@ paths:
 
 ## §7 升級路徑與 grandfathered worktree
 
-命名不符 `session/*` 的舊 worktree **grandfathered**，不強制重命名；`wt-helper list` / `prune` 只認 `session/` 前綴，新建一律走 `/wt`。V2 → V3 in-flight worktree 處置：ready archive → OPSX 在實作樹驗 gate、archive、commit bookkeeping，再由主持者序列落地；還在 implementation → 沿原身分接續；ad-hoc Form-1 → `wt-helper land-pending <slug>`（alias of merge-back，容忍 multi-commit branch）；內容已被 main 後續改寫取代 → `cleanup <slug> --superseded-by <commit|file=commit|file=path>[,…] --reason <text>`（逐檔證據，tip 釘在 `refs/wt-superseded/`，不丟內容）；過時不要 → `cleanup --force --force-discard-unland`（**永久砍 commit**）。Legacy `cross-session-block-*` stash 走 `stash-reconcile.ts`；HANDOFF drift 由 session-start `handoff-drift-scan.ts` 偵測，drift → `/handoff` refresh。
+命名不符 `session/*` 的舊 worktree **grandfathered**，不強制重命名；`wt-helper list` / `prune` 只認 `session/` 前綴，新建一律走 `/wt`。in-flight worktree 處置：已完成待落地 → 在實作樹跑完驗收與 commit bookkeeping，再由主持者序列落地；還在 implementation → 沿原 work id 接續；ad-hoc Form-1 → `wt-helper land-pending <slug>`（alias of merge-back，容忍 multi-commit branch）；內容已被 main 後續改寫取代 → `cleanup <slug> --superseded-by <commit|file=commit|file=path>[,…] --reason <text>`（逐檔證據，tip 釘在 `refs/wt-superseded/`，不丟內容）；過時不要 → `cleanup --force --force-discard-unland`（**永久砍 commit**）。Legacy `cross-session-block-*` stash 走 `stash-reconcile.ts`；HANDOFF drift 由 session-start `handoff-drift-scan.ts` 偵測，drift → `/handoff` refresh。
 
 ## §8 Stop hook 死鎖 fallback
 
@@ -36,15 +36,15 @@ Session 開頭判定要動 code 就 **SHOULD** 立刻打 `/wt <task>`，不要�
 
 ## §9.5 需求 artifacts 與證據持久性
 
-Canonical intent 與投影保留在實作 checkout，正式 evidence receipt 走 OPSX evidence command。每個 phase 完成後先回讀目前 revision 的證據與 gate，執行 project，再限定路徑 commit tracked artifacts。commit message 用合法 `📝 docs` type；未 commit 的檔案不會由 squash 帶回 main。
+plan package／tasks 檔與 evidence sidecar 保留在實作 checkout。每個 phase 完成後先回讀該 phase 的證據與 gate，再把 checkbox 與 sidecar 限定路徑 commit（artifact-tick）。commit message 用合法 `📝 docs` type；未 commit 的檔案不會由 squash 帶回 main。
 
-Legacy 原件以 OPSX history（path 或 legacy-change-id）回讀並確認 digest。未完需求先以 supersedes／provenance 建立承接關係，再 materialize；不執行 Spectra park／unpark，不手動勾 tasks.md 或寫 touched sidecar。GC 前確認證據儲存位置可從正式 checkout 回讀，不能只依 ephemeral worktree。
+Legacy `openspec/changes/` 原件唯讀回讀。未完需求先開新的 plan package 或 tasks 檔並寫明來源，再接續；不執行 spectra park／unpark，不替 legacy tasks.md 補勾或寫 touched sidecar。GC 前確認證據可從正式 checkout 回讀，不能只依 ephemeral worktree。
 
-history 回 corrupt／unsupported／truncated 時，先恢復可讀原件並核對內容與 digest；確認前不 create 承接 change、不 materialize。保留原件與具體 blocker，不能憑空補來源內容。
+legacy 原件讀不到或內容損毀時，先從 git history 恢復可讀原件並核對內容；確認前不開承接工作。保留原件與具體 blocker，不能憑空補來源內容。
 
-## §9.7.1 main 與 worktree 的投影分歧
+## §9.7.1 main 與 worktree 的 tasks 分歧
 
-每次看到 tasks.md 分歧，先分辨 canonical OPSX projection 與 legacy 原件。OPSX 由目前 revision 的同一 source／receipt 重建，不能合併 checkbox 宣告完成。legacy 的任何獨有內容都先保存並回讀 digest，再作承接；未確認身分、revision 與來源前，不以較舊時間、相同勾選數或 stash 標題捨棄任一份內容。
+每次看到 tasks.md 分歧，先分辨兩份各自的來源與 evidence receipt，不能合併 checkbox 宣告完成。任一份的獨有內容都先保存並回讀，再作承接；未確認身分與來源前，不以較舊時間、相同勾選數或 stash 標題捨棄任一份內容。
 
 `git diff HEAD -- <path>` 同時包含 staged 與 unstaged，逐項比較來源，不能只看 `--stat`。worktree 是隔離位置，不是較新證據的保證。
 
@@ -69,6 +69,6 @@ history 回 corrupt／unsupported／truncated 時，先恢復可讀原件並核�
 
 先檢查 main dirty 與活 claim，和持有者協調可落地的時點。`--auto-stash` 會捕捉全部 main dirty，不能把它當最小範圍操作。依 [[worktree-default.commit-ceremony]] dry-run／claim guard 放行後再執行，完成時檢查還原結果；有 conflict 就保留 stash 並依明示 recovery 處理。
 
-### §12.2 legacy archive 曾撞 sibling 副本
+### §12.2 落地撞 sibling worktree 的同名副本
 
-OPSX 按指定 repo／change 身分解析並執行 gate，不以 sibling worktree 的同名目錄阻擋。遇到同名歷史先 history 回讀來源與 digest，NEVER 刪除其他 worktree 的原件來讓新 archive 通過。未確認的 ownership 或來源衝突保持可見並回報。
+sibling worktree 有同名目錄或同名歷史時，先確認各自的來源與持有者，NEVER 刪除其他 worktree 的原件來讓自己的落地通過。未確認的 ownership 或來源衝突保持可見並回報。

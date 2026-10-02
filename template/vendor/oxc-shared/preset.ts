@@ -150,6 +150,8 @@ export const CLADE_VENDOR_EXCLUDES = [
   // aixbdd 同理：`vendor/aixbdd/` 是 git submodule（上游 repo 全文），mirror 只有 markdown
   // 與 template，落在 plugins/ 底下不進 lint 面。
   'vendor/aixbdd/**',
+  // AIxBDD 課程 repo（唯讀上游）：只有 CH2 skills 被鏡射，其餘是課程範例程式，修法不在 clade。
+  'vendor/aixbdd-course/**',
 ]
 
 /**
@@ -173,6 +175,8 @@ export const CLADE_MIRROR_EXCLUDES = [
   // 2026-09-08 實證：本目錄第一次落地當天就被一次 `vp fmt` 改寫（markdown 表格對齊 ＋
   // frontmatter 後補空行），22 個檔全數 drift，`sync-upstream-mirrors --check` 從 0 變 2。
   'capabilities/modules/capabilities/specformula/reference/**',
+  // 只排除 skills/**：plugin 根的 README／PIN.json 是 clade 寫的，照常檢查。
+  'capabilities/modules/capabilities/skill-engineering/skills/**',
 ]
 
 /**

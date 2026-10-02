@@ -21,6 +21,8 @@
 
 **每一個**下表的情境命中時都 MUST 主動走對應入口，不是只有「使用者明講」的那些。入口順序的硬約束（九步 MUST 依序、truth 只由 owner skill 寫）在 [[aixbdd-workflow]]，執行層契約在 [[specformula]]——本表只管「什麼時候該想到它」。
 
+表中名稱是上游 aixbdd 的 skill 名。只有 `/specify`、`/clarify`、`/system-analysis`、`/implement` 是可直接叫的 skill；其餘（`/clarify-over-specs`、`/spec-by-example`、`/ui-plan`、`/constitution`、`/technical-research`、`/api-plan`、`/data-plan`、`/dsl-refine`、`/tasks`、`/bdd`）沒有同名 slash 入口，觸發方式是叫 `work-route` 並說明情境，由它載入該 owner 的上游契約。
+
 ### Intake（PM 側）
 
 | 情境 | 觸發 | 說明 |
@@ -28,7 +30,7 @@
 | 收到新需求，要開始一次迭代 | `/specify` | 建 plan package，目錄命名依 `/specify` 的命名判準 |
 | 需求來源是外部文件（Notion URL、PDF、貼文） | 先讀取內容 → `/specify` | 提取結構化需求後才建 plan package |
 | `spec.md` 有模糊用詞（TBD、矛盾、缺驗收標準） | `/clarify-over-specs` | 逐項澄清，更新 `spec.md` |
-| 驗收標準要寫成可執行 Gherkin | `/spec-by-example` → `/ui-plan` | 產 `features/acceptance/**` 與靜態雛形 |
+| 驗收標準要寫成可執行 Gherkin | `/spec-by-example` | 產 `features/acceptance/**`；UI 雛形由 `/system-analysis` 委派 `/ui-plan` 產出 |
 | 要新增或調整 artifact 規則 | `/constitution` | 只在規則本身要動時 |
 
 ### Implementation（RD 側）
@@ -36,11 +38,11 @@
 | 情境 | 觸發 | 說明 |
 |---|---|---|
 | 要決定 BDD techstack / 測試策略 / 系統有哪些端 | `/technical-research` | 三題必問全部拍板才可寫 `research.md` |
-| 驗收 Gherkin 已定案，要拆系統設計 | `/system-analysis`（委派 `/api-plan`、`/data-plan`） | 產 plan 的 `plan.md` |
+| 驗收 Gherkin 已定案，要拆系統設計 | `/system-analysis`（委派 `/api-plan`、`/data-plan`、`/ui-plan`） | 產 plan 的 `plan.md` |
 | Gherkin 句型要落成可執行 DSL | `/dsl-refine` | 寫 `specs/truth/features/**` 與 `dsl.md` |
 | plan 要拆成可執行任務 | `/tasks` | 產 plan package 的 `tasks.md` |
 | 準備開始或繼續寫產品碼 | `/implement`（`[BDD-GREEN]` / `[BDD-REFACTOR]` 委派 `/bdd`） | 按 `tasks.md` 執行 |
-| 要動 `specs/api/**`、`specs/data/**` 或任何 `.feature` | spec-first：先改 spec 再改實作 | per [[specformula]] MUST 1，**每一個** operation 都適用 |
+| 要動 `specs/truth/contracts/**`、`specs/truth/data/**`、`specs/data/**` 或任何 `.feature` | spec-first：先改 spec 再改實作 | per [[specformula]] MUST 1，**每一個** operation 都適用 |
 | 實作中發現 feature 或 DSL 有缺口 | 停下回交 `/dsl-refine` | **NEVER** 就地補寫——那一行不會回到 truth |
 
 ### Session 編排

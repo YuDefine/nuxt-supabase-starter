@@ -254,6 +254,90 @@ review_build_dep_summary() {
   return 0
 }
 
+# 「比對 release 資產」豁免（W-2026-10-01-review-release-projection-exemption）：pinned consumer 的投影檔
+# 與 pinned release 自帶 projector 的輸出逐位元相等時，審它的 diff 沒有資訊量——整塊移出 changeset，
+# 只在 brief 的 projection 摘要段列「路徑數、驗證基準、方法與結果」。與 REVIEW_SUMMARY_ONLY_RE 不同：
+# 那條豁免的是「路徑長得像」（刻意不含投影層，投影層可能是手寫原始碼），這條豁免的是「可機械證明」。
+#
+# 驗證在 lib/projection-exemption.ts：consumer 不是 pinned、release 資產缺失、projector 失敗、任何檔不
+# 相等或驗不出 → 該檔（或全部）照原路徑審，NEVER 默默放行。`.clade/manifest.json`（pin 本身）永遠不豁免。
+# 豁免名單 NEVER 取自呼叫端給的檔：一律由 wrapper 對 $REPO_ROOT 重新驗證（受審樹就是 commit 的內容）。
+# REVIEW_PROJECTION_EXEMPT_FILE（oa-batches 對整張 PR 驗過的結果）只當「候選提示」——它列的路徑併入候選，
+# 是否豁免仍看這裡自己驗出的結果，偽造或過期的檔頂多多驗幾個路徑、換不到任何豁免。
+# REVIEW_PROJECTION_EXEMPT=0 關掉（只會減少豁免）。
+# 產出：PROJECTION_SUMMARY（摘要段，空檔＝沒有豁免）、RAW_DIFF 移除被豁免檔的區塊。
+review_apply_projection_exemption() {
+  PROJECTION_SUMMARY="$WORK_DIR/projection-exempt-summary.txt"
+  local exempt_paths="$WORK_DIR/projection-exempt-paths.txt"
+  local result="$WORK_DIR/projection-exempt.json"
+  : >"$PROJECTION_SUMMARY"
+  : >"$exempt_paths"
+  [ "${REVIEW_PROJECTION_EXEMPT:-1}" = 0 ] && return 0
+  local helper="${SCRIPT_DIR:-}/lib/projection-exemption.ts"
+  [ -f "$helper" ] || return 0
+  # 便宜的前置判定：只有 manifest 宣告 pinned 的 consumer 才值得跑 projector（秒級～十餘秒）。
+  grep -q '"pinned"' "$REPO_ROOT/.clade/manifest.json" 2>/dev/null || return 0
+  local cands="$WORK_DIR/projection-candidates.z"
+  cp "$REVIEWED_PATHS" "$cands" 2>/dev/null || return 0
+  if [ -n "${REVIEW_PROJECTION_EXEMPT_FILE:-}" ] && [ -s "$REVIEW_PROJECTION_EXEMPT_FILE" ]; then
+    node "$helper" hint "$REVIEW_PROJECTION_EXEMPT_FILE" >>"$cands" 2>/dev/null || true
+  fi
+  [ -s "$cands" ] || return 0
+  node "$helper" verify --tree "$REPO_ROOT" --paths-file "$cands" --out "$result" >/dev/null 2>"$WORK_DIR/projection-exempt.err" || return 0
+  node "$helper" render "$result" --paths-out "$exempt_paths" --summary-out "$PROJECTION_SUMMARY" || return 0
+  [ -s "$exempt_paths" ] || { : >"$PROJECTION_SUMMARY"; return 0; }
+
+  # 移除被豁免檔的區塊。非 ASCII 路徑在 `diff --git` 檔頭被 C-quote（`"a/\346…" "b/\346…"`），
+  # 先還原成原位元組再比對；還原失敗＝比不上＝該塊留在 changeset 照審（fail-safe）。
+  local filtered="$WORK_DIR/raw-filtered.diff" dropped_file="$WORK_DIR/projection-dropped"
+  LC_ALL=C awk -v exfile="$exempt_paths" -v dropfile="$dropped_file" '
+    function unq(s,   out, i, c, o, n, k) {
+      out = ""
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (c != "\\") { out = out c; continue }
+        c = substr(s, ++i, 1)
+        if (c ~ /[0-7]/) {
+          o = substr(s, i, 3); i += 2; n = 0
+          for (k = 1; k <= 3; k++) n = n * 8 + substr(o, k, 1)
+          out = out sprintf("%c", n)
+        } else if (c == "t") out = out "\t"
+        else if (c == "n") out = out "\n"
+        else out = out c
+      }
+      return out
+    }
+    # 只在 a、b 兩側同路徑（沒有 rename）時回路徑；任何對不上（含路徑本身含 " b/"）回空字串＝比不上＝照審。
+    function hdrpath(h,   rest, a, b, i, body, n, half) {
+      if (h ~ /^diff --git "a\/.*" "b\/.*"$/) {
+        rest = substr(h, 12)
+        i = index(rest, "\" \"b/")
+        if (i == 0) return ""
+        a = unq(substr(rest, 4, i - 4)); b = unq(substr(rest, i + 5, length(rest) - i - 5))
+        return (a == b) ? b : ""
+      }
+      rest = substr(h, 12)
+      if (substr(rest, 1, 2) != "a/") return ""
+      body = substr(rest, 3); n = length(body); half = (n - 3) / 2
+      if (half != int(half) || half < 1) return ""
+      if (substr(body, half + 1, 3) != " b/" || substr(body, 1, half) != substr(body, half + 4)) return ""
+      return substr(body, half + 4)
+    }
+    BEGIN { while ((getline l < exfile) > 0) ex[l] = 1; dropped = 0 }
+    /^diff --git / { skip = (hdrpath($0) in ex); if (skip) dropped++ }
+    !skip { print }
+    END { print dropped > dropfile }
+  ' "$RAW_DIFF" >"$filtered" || return 0
+  mv "$filtered" "$RAW_DIFF"
+  printf '  in this changeset: %s of those files appeared in the diff and were removed from it.\n' "$(cat "$dropped_file" 2>/dev/null || echo 0)" >>"$PROJECTION_SUMMARY"
+  if [ ! -s "$RAW_DIFF" ]; then
+    echo "[$REVIEW_SAFE_TAG] 錯誤：changeset 在移除 release 投影輸出後是空的——沒有任何需要審的檔，NEVER 對零行 diff 跑 review（會得到審了零行的通過）。把 pin 的 .clade/manifest.json 變更納入，或確認這個 commit 本來就不需要 0-A。exit 3" >&2
+    exit 3
+  fi
+  echo "[$REVIEW_SAFE_TAG] release 投影輸出（逐位元等於 pinned release projector 的產出）不進 changeset：" >&2
+  cat "$PROJECTION_SUMMARY" >&2
+}
+
 # Budget 兩輪篩選：原始碼先填、產物撿剩下的；一個原始碼檔都沒嵌到就 fail-loud
 # （exit 3）——那種 verdict 沒有鑑別力，NEVER 讓它以正常外觀輸出。
 # clade 投影層（.claude/rules|skills|agents|commands）同樣排在原始碼後面：它們的
@@ -266,6 +350,7 @@ review_build_dep_summary() {
 # （它的正確性由產生器與測試保證），混進 OMITTED 會讓每個動到 lockfile 的 commit 都卡在
 # 「漏審檔不能記 PASS」（實例：一份 17,567 行的 pnpm-lock、clade 的 2.9MB deps.json）。
 review_build_snapshot() {
+  review_apply_projection_exemption
   SNAPSHOT="$WORK_DIR/snapshot.diff"
   OMITTED="$WORK_DIR/omitted.txt"
   GENERATED_SUMMARY="$WORK_DIR/generated-summary.txt"
@@ -410,6 +495,15 @@ PROMPT_DEPSUM
       cat "$DEP_SUMMARY"
     fi
   fi
+  if [ -s "${PROJECTION_SUMMARY:-}" ]; then
+    printf '\nThese files also changed, but their content was mechanically verified against the pinned release (see below); their diffs are not embedded:\n'
+    cat "$PROJECTION_SUMMARY"
+    cat <<'PROMPT_PROJECTION'
+Do not run git diff on them and do not list them as unreviewed. Everything NOT
+listed here (including every path that is in the changeset above) is judged on
+its own diff as usual.
+PROMPT_PROJECTION
+  fi
   cat <<'PROMPT_BODY'
 
 Review that changeset for bugs, logic errors, security issues, and edge
@@ -466,6 +560,17 @@ Under that heading, write ONLY these bullet lines (and resolved lines for prior
 findings, if any). Any other prose, label or sub-heading under it makes the
 verdict unparseable and the round is rejected; put commentary under a
 different heading.
+
+The heading line itself is REQUIRED, every round, even when the reply is only
+resolved lines or `- No findings.`: write the literal line `## Review Verdict`
+on its own line before the first bullet. Bullet lines without that heading are
+not a verdict — the reply is discarded and the whole review is re-run. Write
+the complete review as your final message, after your last tool call; do not
+call any tool once you have started writing it. Your reply has this shape
+(shown indented here; write it unindented):
+
+    ## Review Verdict
+    - [Major] path/to/file.ts:42 — <finding>
 PROMPT_SUFFIX
   if [ -n "$SEMANTIC_LIST" ]; then
     cat <<'PROMPT_VERDICT'
@@ -821,13 +926,15 @@ function findingsFor(ledger, path, n) {
 const HEADING = /^(#{1,6})\s+(.+?)\s*$/
 const VERDICT_HEADING = /^(?:\*{1,2})?Review\s+Verdict\b(?!.*\b(?:previous|prior|earlier|last|old)\b)/i
 // 非 severity 的狀態列只在引用上一輪 finding 位置、明寫 resolved 且無否定字樣時略過；其他一律拒記。
-const LOCATION = /[^\s`'"()\[\]]+:\d+/g
+// 行號前可帶約略記號（`:≈1530`／`:~1530`，#708 r2 四條狀態列因此被當新 finding）；比對前一律去掉，兩輪寫不寫 ≈ 都對得上。
+const LOCATION = /[^\s`'"()\[\]]+:[≈~]?\d+/g
+const normLoc = (loc) => loc?.replace(/:[≈~](?=\d)/, ':')
 const PRIOR_LABEL = /^\s*(?:[-*+]\s+)?(?:\*{1,2})?Prior findings\b[^:：]*[:：](?:\*{1,2})?\s*$/i
 const SEVERITY = /^\s*[-*+]\s+(?:\*{1,2})?\[(Critical|Major|Minor)\](?:\*{1,2})?(?=\s|$)/i
-const CITE = /^\s*[-*+]\s+(?:\*{1,2})?\[(?:Critical|Major|Minor)\](?:\*{1,2})?\s+`?([^\s`]+:\d+)/i
+const CITE = /^\s*[-*+]\s+(?:\*{1,2})?\[(?:Critical|Major|Minor)\](?:\*{1,2})?\s+`?([^\s`]+:[≈~]?\d+)/i
 function priorCites(findingsFile) {
   if (!findingsFile || !existsSync(findingsFile)) return new Set()
-  return new Set(readFileSync(findingsFile, 'utf8').split('\n').map((l) => CITE.exec(l)?.[1]).filter(Boolean))
+  return new Set(readFileSync(findingsFile, 'utf8').split('\n').map((l) => normLoc(CITE.exec(l)?.[1])).filter(Boolean))
 }
 function countVerdict(text, prior = new Set(), round = 1) {
   // 狀態詞中英同一份：`— resolved.`／`: resolved`、中文 `— 已解決。`／`：已解決`／`已解決（…）`（#616 r3 中文狀態列曾整列計入）。
@@ -853,7 +960,7 @@ function countVerdict(text, prior = new Set(), round = 1) {
   // 驗證輪的另一種狀態列：說明後獨立收句 `Resolved.`（#603 r2）。
   const TRAILING_RESOLVED = /(?:^|[.;!?]\s+|[。；！？]\s*)resolved\.?\s*$/i
   const NEGATION = /\b(?:not|still|partially|remains?|regress\w*|broken|reopen\w*)\b/i
-  const citesPrior = (line) => (line.match(LOCATION) ?? []).some((loc) => prior.has(loc))
+  const citesPrior = (line) => (line.match(LOCATION) ?? []).some((loc) => prior.has(normLoc(loc)))
   const statusLine = (line) =>
     citesPrior(line) && (resolvedStatus(line) || (TRAILING_RESOLVED.test(line) && !RESOLVED_NEGATED.test(line) && !NEGATION.test(line)))
   const out = { critical: 0, major: 0, minor: 0 }
@@ -880,7 +987,7 @@ function countVerdict(text, prior = new Set(), round = 1) {
     if (sev) {
       sawParsedLine = true
       if (trailingResolvedStatus(raw, round)) continue
-      if (resolvedStatus(raw) && prior.has(CITE.exec(raw)?.[1])) continue
+      if (resolvedStatus(raw) && prior.has(normLoc(CITE.exec(raw)?.[1]))) continue
       out[sev[1].toLowerCase()] += 1
       continue
     }

@@ -1,11 +1,13 @@
 ---
 name: "clade-data"
-description: "Database, schema, storage, logging, and data-path rules. Use when changing persistence, migrations, queries, RLS, database environments, or application logging; also before running integration tests, needing a test or dev database, running any supabase CLI command, or deciding where the dev DB lives."
+description: "Database, schema, storage, logging, and data-path rules. Use when changing persistence, migrations, queries, RLS, database environments, or application logging; also before running integration tests, needing a test or dev database, running any supabase CLI command, or deciding where the dev DB lives. Also use when: 使用者描述 prod／staging 的 runtime 症狀（5xx、錯誤 toast、變慢、間歇、特定 user 異常）、要開始查原因時，在 grep code／查 codebase／派 Explore 之前."
 ---
 
 # clade-data
 
 逐條對照你接下來要做的事；條件成立才讀那一份，NEVER 先把整批讀進來。
+
+- READ 若使用者描述 prod／staging 的 runtime 症狀（5xx、錯誤 toast、變慢、間歇、特定 user 異常）、要開始查原因時，在 grep code／查 codebase／派 Explore 之前，先讀取 `rules/evlog-investigate.md`
 
 - READ 若要讀或改 `supabase/migrations/**/*.sql`、`server/utils/audit*.ts`、`packages/*/server/utils/audit*.ts`、`server/api/**/*.ts`、`packages/*/server/api/**/*.ts`，讀取 `rules/audit-schema.md`
 - READ 若要讀或改 `app/**/*.{vue,ts}`、`packages/*/app/**/*.{vue,ts}`、`server/**/*.ts`、`packages/*/server/**/*.ts`，讀取 `rules/database-access.md`

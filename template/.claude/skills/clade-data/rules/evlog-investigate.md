@@ -1,5 +1,6 @@
 ---
 description: prod runtime 問題用 evlog wide event 調查的協定（消費側；先查 evlog 再從 code 對因）
+moment: 使用者描述 prod／staging 的 runtime 症狀（5xx、錯誤 toast、變慢、間歇、特定 user 異常）、要開始查原因時，在 grep code／查 codebase／派 Explore 之前
 paths:
   - 'server/**'
   - 'packages/**/server/**'

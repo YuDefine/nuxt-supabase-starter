@@ -30,9 +30,9 @@ paths:
 
 進入本流程時要讀 commit skill 的 `batch.md`，包含命令、證據格式、衝突續跑與落地順序。無就緒 wt／待續跑批次時，普通 `/commit` 照常處理當前工作區。
 
-### OPSX 與 skill-owned worktree
+### 收尾 gate 與 skill-owned worktree
 
-Spectra archive gates 與 bookkeeping 在持有該 change 實作的 worktree 執行，完成後連同成果 checkpoint，再進就緒池。不要在看不到實作的 main 跑 archive gates，也不在 archive Step 0 刪來源。人工檢查、spec sync、sidecar 與 evidence 義務保留。
+驗收 gate 與 bookkeeping 在持有該工作實作的 worktree 執行，完成後連同成果 checkpoint，再進就緒池。不要在看不到實作的 main 跑驗收 gate，也不在落地前刪來源。人工檢查、spec sync、sidecar 與 evidence 義務保留。
 
 Ad-hoc Form-1、`/version-upgrade` 等 skill-owned wt 同樣在完成點登記就緒並評估批次條件。已授權的自動落地由主線執行；使用者明示保留的 wt 不納入自動回收。Worker 不因批次契約取得 push／publish／刪除來源的權限。
 

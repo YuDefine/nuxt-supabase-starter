@@ -1,6 +1,6 @@
 ---
 description: SpecFormula BDD/SDD 框架的 fleet 採用契約——spec-first 順序、embedded／PostgreSQL 資料源判定、framework-neutral HTTP／test-control seam、業務時鐘單一來源、hosted Supabase 的 SSL 阻斷
-paths: ['features/**', 'specs/api/**', 'specs/data/**', 'isa.yml', 'cucumber.cjs', 'server/routes/test/**', 'server/utils/time-service.ts', 'packages/*/server/routes/test/**', 'packages/*/server/utils/time-service.ts']
+paths: ['specs/truth/contracts/**', 'specs/truth/features/**', 'specs/truth/data/**', 'specs/api/**', 'specs/data/**', 'features/**', 'isa.yml', 'cucumber.cjs', 'server/routes/test/**', 'server/utils/time-service.ts', 'packages/*/server/routes/test/**', 'packages/*/server/utils/time-service.ts']
 ---
 <!-- Clade native rule; source: rules/core/specformula.md; edit canonical source -->
 
@@ -64,13 +64,31 @@ packages: ['vendor/specformula-ts/packages/*']
 
 四端點是 framework-neutral 的裸路徑契約。Nuxt 範本放 `server/routes/test/`（`server/api/**` 會多出 `/api/`）；其他 framework MUST 提供等價 adapter 與 guard 並記錄。需要登入的 scenario 才接 actor／token，業務讀取時間的 scenario 才接 freeze／restore；HTTP client MUST 打到實際處理被驗收 operation 的 server。
 
+## Truth 佈局
+
+SpecFormula 讀的三份 spec 跟 aixbdd 的 truth 共用同一套佈局。只宣告 `specformula` 的 consumer 也照這套，fleet 只有一種擺法。範例：`~/offline/aixbdd-MES-Benchmark/specs/`。
+
+| 內容 | 落點 | 是不是 truth | `isa.yml`／runner 怎麼讀 |
+| --- | --- | --- | --- |
+| API 合約（OpenAPI） | `specs/truth/contracts/`（可依模組拆檔，`openapi.yaml` 當 `$ref` 入口） | 是；宣告 aixbdd 時 owner 是 `/api-plan` | `config.api.resource_path: specs/truth/contracts` |
+| 資料模型 | `specs/truth/data/*.dbml` | 是；owner 是 `/data-plan` | 不直接讀 |
+| runner 用的 DDL＋`entity_to_table_mapping.yml` | `specs/data/` | **否**——從 DBML 衍生的產物，兩者在同一個 commit 改 | `config.data.source[].resource_path: specs/data` |
+| `.feature` | `specs/truth/features/backend/<模組>/`（前端是 `frontend/`） | 是；宣告 aixbdd 時 owner 是 `/dsl-refine` | `cucumber.cjs` 的 `paths` 直接指這裡 |
+| support／steps 程式碼 | `features/support/`、`features/steps/` | 否 | `cucumber.cjs` 的 `import` |
+
+- **NEVER** 在 `specs/truth/**` 之外放 `.feature` 副本——runner 讀的就是 truth 那一份，不複製、不同步。框架要求 feature 必須在設定檔目錄底下時（例：playwright-bdd），用進版控的相對目錄連結指回 truth。
+- **NEVER** 把 DDL 或 mapping 放進 `specs/truth/**`：那裡的資料模型只有 DBML 一份，truth 只能由 owner 寫。
+- **NEVER** 新建 `specs/api/`。既有的 `specs/api/**` 併進 `specs/truth/contracts/`，`isa.yml` 跟著改。
+
+上游 LOCKED skill（`specformula-api-spec`、`specformula-entity-spec`、`specformula-config`）的範例寫 `src/test/resources/specs/...`，那是上游 Java 範例的擺法。fleet 的落點以本表為準，NEVER 為了對齊範例去改 LOCKED 原文。
+
 ## Wiring
 
 最小接線（bootstrap、authenticator、四個 test route、time-service、guard middleware、CI job）全部有 template，逐檔在 `vendor/snippets/specformula/README.md` 的 template 表；安裝 SOP 六步同檔。本節不複製那些程式碼——它們會漂。
 
 ## MUST
 
-1. **spec-first**：**每一個**新增或修改的 API operation，都 MUST 先改 OpenAPI（`specs/api/`）與 `.feature`，再寫實作碼；只有 operation 會改變資料模型時才同步改 DDL（`specs/data/`）。API-only scenario 不得為了湊 entity 規格而捏造業務表。
+1. **spec-first**：**每一個**新增或修改的 API operation，都 MUST 先改 OpenAPI（`specs/truth/contracts/`）與 `.feature`（`specs/truth/features/backend/`），再寫實作碼；只有 operation 會改變資料模型時才同步改資料模型（truth 是 `specs/truth/data/*.dbml`，runner 讀的 DDL 在 `specs/data/`，兩者同一個 commit 改）。API-only scenario 不得為了湊 entity 規格而捏造業務表。
 2. **每一個** operation 的 OpenAPI `summary` MUST 在整份 spec 內唯一——`api_call` 與 `response_validate` 兩個指令都靠 `summary` 反查 operation，重複時查到哪一個由掃描順序決定。
 3. **每一處**業務時間讀取 MUST 走 consumer 的唯一 clock service；`POST /test/time` 凍結的必須就是該 service，不能凍結未被業務碼讀取的測試 helper。
 4. `/test/*` 四端點 MUST 由 framework 的 test-only guard 守住：明確 test flag **且**非 production 才放行，其餘一律 404。Nuxt recipe 的具體落點是 `server/middleware/00.test-routes-guard.ts`，其他 framework MUST 記錄等價 adapter 與 guard。
@@ -89,7 +107,7 @@ packages: ['vendor/specformula-ts/packages/*']
 | 反模式 | 為何錯 | 正解 |
 | --- | --- | --- |
 | `server/api/test/health.get.ts` | Nuxt 掛成 `/api/test/health`，契約要 `/test/health` | 放 `server/routes/test/health.get.ts` |
-| `isa.yml` 的 `resource_path` 寫成相對 isa.yml 的路徑 | 三個 reader 全部相對 **cwd** 解析 | 從 repo root 跑 `test:bdd`，路徑寫 `specs/api` / `specs/data` |
+| `isa.yml` 的 `resource_path` 寫成相對 isa.yml 的路徑 | 三個 reader 全部相對 **cwd** 解析 | 從 repo root 跑 `test:bdd`，路徑寫 `specs/truth/contracts` / `specs/data` |
 | 只裝 `pg` 沒裝 `better-sqlite3`，或在 consumer devDeps 補它 | index 靜態拉 `SqliteDataSource` → `ERR_MODULE_NOT_FOUND`；devDeps 那條看起來沒人用，下一次清依賴就被刪 | `pnpm-workspace.yaml` 的 `packageExtensions` 歸屬到 `@specformula/node`，條目上方註解理由與移除條件（[[code-style.toolchain]] § packageExtensions 條目契約）；`allowBuilds` 維持 `false`——只需套件存在 |
 
 ## Embedded fixture 的驗證邊界
