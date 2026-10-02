@@ -35,9 +35,6 @@ const PROJECTION_AND_VENDOR = [
   '.agents/**',
   '.codex/**',
   '.cursor/**',
-  // ↓ 與 preset 的 STAGED_ONLY_EXCLUDES 相同：根目錄 scripts/ 混放 clade vendor 腳本
-  'scripts/**',
-  'AGENTS.md',
   // ↓ 本專案的建置產物
   'dist/**',
   '.wrangler/**',
@@ -45,15 +42,33 @@ const PROJECTION_AND_VENDOR = [
   '**/database.types.ts',
 ]
 
-/** staged 檔是否落在上面的排除清單（只支援清單實際用到的形狀：目錄前綴、`**\/name`、單檔）。 */
+/**
+ * 只給 `staged` 過濾用的排除：根目錄 `scripts/` 混放 clade vendor 腳本，`AGENTS.md` 是 LOCKED 投影，
+ * 但專案自己也有 `scripts/` 與文件要 lint／fmt。與 preset 的 STAGED_ONLY_EXCLUDES 相同。
+ * **NEVER** 併進 `PROJECTION_AND_VENDOR`：那份會進 lint／fmt 的 ignorePatterns 與 `.oxfmtignore`，
+ * 專案自己的 `scripts/` 就永遠退出整倉 `vp check` 與 CI（vendor/oxc-shared/preset.ts 同一條禁令）。
+ */
+const STAGED_ONLY_EXCLUDES = ['scripts/**', 'AGENTS.md']
+
+/**
+ * staged 檔是否該濾掉（只支援清單實際用到的形狀：目錄前綴、`**\/name`、單檔）。
+ * 投影清單的單檔條目比對任意深度同名路徑（與 oxfmt／oxlint ignore 及 preset 一致）；
+ * staged-only 的單檔條目只比 repo root（`docs/AGENTS.md` 是業務檔）。
+ */
 function isExcluded(file: string): boolean {
   const rel = file.startsWith(process.cwd()) ? file.slice(process.cwd().length + 1) : file
-  const base = rel.slice(rel.lastIndexOf('/') + 1)
-  return PROJECTION_AND_VENDOR.some((pattern) => {
-    if (pattern.startsWith('**/')) return base === pattern.slice(3)
-    const dir = pattern.replace(/\/\*\*$/, '')
-    return rel === dir || rel.startsWith(`${dir}/`)
-  })
+  const matches = (pattern: string, anyDepth: boolean): boolean => {
+    if (pattern.endsWith('/**')) {
+      const dir = pattern.slice(0, -3)
+      return rel === dir || rel.startsWith(`${dir}/`)
+    }
+    const name = pattern.replace(/^\*\*\//, '')
+    return rel === name || (anyDepth && rel.endsWith(`/${name}`))
+  }
+  return (
+    PROJECTION_AND_VENDOR.some((pattern) => matches(pattern, true)) ||
+    STAGED_ONLY_EXCLUDES.some((pattern) => matches(pattern, false))
+  )
 }
 
 export default defineConfig({
