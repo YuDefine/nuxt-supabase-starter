@@ -364,11 +364,6 @@ export function generatePackageJson(
     basePkg.scripts['check:tools'] = 'vp check'
     basePkg.scripts.check = 'sh -c \'pnpm check:tools "$@" && exec pnpm typecheck "$@"\' --'
   }
-  if (selectedFeatureIds.includes('quality') && selectedFeatureIds.includes('git-hooks')) {
-    basePkg['lint-staged'] = {
-      '*.{js,ts,vue}': ['vp lint --fix', 'vp fmt --write'],
-    }
-  }
   // Prepare script: vp config (if quality) + husky (if git-hooks) + nuxt prepare
   const prepareParts: string[] = []
   if (selectedFeatureIds.includes('quality')) {

@@ -81,6 +81,14 @@ function expectCommand(
   }
 }
 
+/** 取出 `const <name> = [ ... ]` 陣列字面值裡所有單引號字串。 */
+function arrayLiterals(source: string, name: string): string[] {
+  const match = new RegExp(`const ${name} = \\[([^\\]]*)\\]`).exec(source)
+  if (!match) throw new Error(`找不到 const ${name} 陣列`)
+  const body = (match[1] ?? '').replace(/\/\/.*$/gm, '')
+  return [...body.matchAll(/'([^']+)'/g)].map((m) => m[1] as string)
+}
+
 describe('generated quality readiness', () => {
   for (const features of [
     [],
@@ -147,6 +155,56 @@ describe('generated quality readiness', () => {
     expect(pkg.scripts.check).toContain('pnpm typecheck')
     expect(pkg.scripts.check).not.toContain('pnpm test')
     expect(pkg.scripts.format).toBe('vp fmt --write --ignore-path .oxfmtignore')
-    expect(pkg['lint-staged']['*.{js,ts,vue}']).toEqual(['vp lint --fix', 'vp fmt --write'])
+    // 2026-09-29 <client-a>：lint-staged 對「全是投影檔」的 staged 組直接失敗，首次 commit 必擋。
+    // pre-commit 走 clade 的 runner（preset 過濾），不再產生 lint-staged。
+    expect(pkg['lint-staged']).toBeUndefined()
+    expect(pkg.devDependencies['lint-staged']).toBeUndefined()
+  })
+
+  it('pre-commit 優先走 clade runner，沒有 runner 才退回 vp staged', () => {
+    const root = scaffold(['quality', 'git-hooks'])
+    const hook = readFileSync(join(root, '.husky', 'pre-commit'), 'utf8')
+    expect(hook).toContain('scripts/pre-commit/runner.sh')
+    expect(hook).toContain('vp staged')
+    expect(hook).not.toContain('lint-staged')
+  })
+
+  it('base vite.config 的投影排除清單涵蓋 clade preset，staged-only 條目另列、不進 lint/fmt ignore', async () => {
+    const preset = await import('../../../vendor/oxc-shared/preset.ts')
+    const config = readFileSync(join(scaffold([]), 'vite.config.ts'), 'utf8')
+    const ignored = arrayLiterals(config, 'PROJECTION_AND_VENDOR')
+    const stagedOnly = arrayLiterals(config, 'STAGED_ONLY_EXCLUDES')
+    for (const pattern of preset.PROJECTION_EXCLUDES) {
+      expect(ignored, `PROJECTION_AND_VENDOR 缺 ${pattern}`).toContain(pattern)
+    }
+    expect(stagedOnly).toEqual(preset.STAGED_ONLY_EXCLUDES)
+    for (const pattern of preset.STAGED_ONLY_EXCLUDES) {
+      // 進了 ignorePatterns，專案自己的 scripts/ 就永遠退出整倉 vp check 與 CI
+      expect(ignored, `${pattern} 是 staged-only，NEVER 進 lint/fmt ignore`).not.toContain(pattern)
+    }
+  })
+
+  it('.oxfmtignore 與 vite.config 的 lint/fmt ignore 清單同步（fmt.ignorePatterns 不套用 file walking）', async () => {
+    const preset = await import('../../../vendor/oxc-shared/preset.ts')
+    const root = scaffold([])
+    const config = readFileSync(join(root, 'vite.config.ts'), 'utf8')
+    const oxfmtignore = readFileSync(join(root, '.oxfmtignore'), 'utf8')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#'))
+    for (const pattern of arrayLiterals(config, 'PROJECTION_AND_VENDOR')) {
+      expect(oxfmtignore, `.oxfmtignore 缺 ${pattern}（pnpm format 會改寫它）`).toContain(pattern)
+    }
+    for (const pattern of preset.PROJECTION_EXCLUDES) {
+      expect(oxfmtignore, `.oxfmtignore 缺 preset 的 ${pattern}`).toContain(pattern)
+    }
+    for (const pattern of preset.STAGED_ONLY_EXCLUDES) {
+      expect(oxfmtignore, `${pattern} 是 staged-only，NEVER 進 .oxfmtignore`).not.toContain(pattern)
+    }
+  })
+
+  it('git-hooks 沒選 quality（沒有 vp）時，pre-commit 不能無條件呼叫 vp', () => {
+    const hook = readFileSync(join(scaffold(['git-hooks']), '.husky', 'pre-commit'), 'utf8')
+    expect(hook).toMatch(/elif \[ -x node_modules\/\.bin\/vp \]/)
   })
 })

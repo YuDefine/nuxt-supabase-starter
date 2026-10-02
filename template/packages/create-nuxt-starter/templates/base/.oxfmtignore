@@ -1,9 +1,14 @@
 .claude/**
 .clade/**
+.spectra/**
 .agents/**
 .codex/**
 .cursor/**
 vendor/**
+specs/errors/**
+.github/actions/**
+commitlint.config.ts
+**/utils/assert-never.ts
 dist/**
 .wrangler/**
 node_modules/**
