@@ -118,6 +118,37 @@ export function isIgnorableWorktreeDrift(repoRoot, path, kind) {
 }
 
 /**
+ * 已落地樹的交付噪音（W-2026-10-01-worktree-accumulation-root-cause §3 C3／C4）：產生端寫進樹、
+ * 卻不屬於該樹工作的 bytes——主持者 brief（`tasks/`）、ledger 追加（`vendor/ledger/signals.jsonl`）、
+ * review GUI 舊建置產物（`vendor/review-gui-web/`）。
+ *
+ * **只給已落地的樹用**，而且 NEVER 讓它們被靜默丟掉：回收端（disk-hygiene）把這份清單原樣交給
+ * `wt-helper cleanup --discard-pathspec`，由 cleanup 先把命中的殘留存成 `refs/clade-residue/<slug>`
+ * 再移除。它**不**進 `isIgnorableWorktreeDrift`——merge-back／stop-wip-guard 對未落地的樹仍要擋。
+ * 比對規則同 `matchesDiscardPathspec`：逐字等於，或以 `<pathspec>/` 為前綴。
+ */
+export const LANDED_DELIVERY_NOISE_PATHSPECS = Object.freeze([
+  'tasks',
+  'vendor/ledger/signals.jsonl',
+  'vendor/review-gui-web',
+])
+
+/**
+ * porcelain path 是否落在任一 pathspec 內：逐字相等，或以 `<pathspec>/` 為前綴。
+ * 收合成目錄的 untracked 行（`tasks/x/`）只在整個目錄都在 pathspec 內時才算命中；
+ * 範圍比收合目錄窄的 pathspec 不命中（fail closed：寧可擋）。
+ * 帶引號的 path（porcelain 對特殊字元的轉義）一律不命中。
+ */
+export function matchesDiscardPathspec(path: string, pathspecs: readonly string[]): boolean {
+  if (path.startsWith('"')) return false
+  const p = path.endsWith('/') ? path.slice(0, -1) : path
+  return pathspecs.some((raw) => {
+    const spec = raw.replace(/\/+$/, '')
+    return spec.length > 0 && (p === spec || p.startsWith(`${spec}/`))
+  })
+}
+
+/**
  * git status --porcelain 的一行剝出 path。porcelain v1 格式：
  *   `XY <path>` 或 rename `XY <old> -> <new>`（取 new）。
  */
@@ -188,6 +219,49 @@ function invokedAsCli() {
   }
 }
 
+/**
+ * `--landed-noise-only <repoRoot>`：給 disk-hygiene 用的 fail-closed 判定。剔除可忽略漂移後，
+ * 剩下的 dirty 是否**全部**落在 LANDED_DELIVERY_NOISE_PATHSPECS 內。
+ * exit 0：是（含完全乾淨）；exit 1：有其他 dirty（stdout 列出）；exit 2：git 失敗（呼叫端保留）。
+ * rename 行兩端都要在清單內。
+ */
+function landedNoiseOnlyCli(repoRoot: string): number {
+  let out
+  try {
+    // --no-optional-locks：不回寫 index stat cache——disk-hygiene L3 以 gitdir/index 的 mtime 判
+    // git 靜置，判定本身不能把它刷新。
+    out = execFileSync('git', ['--no-optional-locks', 'status', '--porcelain'], {
+      cwd: repoRoot,
+      env: cwdScopedGitEnv,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch {
+    return 2
+  }
+  const rest = out
+    .split('\n')
+    .filter((line) => line.length >= 4)
+    .filter((line) => blockingPorcelainPaths(repoRoot, line).length > 0)
+    .filter((line) => {
+      const source = porcelainRenameSource(line)
+      return (
+        !matchesDiscardPathspec(porcelainPath(line), LANDED_DELIVERY_NOISE_PATHSPECS) ||
+        (source !== null && !matchesDiscardPathspec(source, LANDED_DELIVERY_NOISE_PATHSPECS))
+      )
+    })
+    .map(porcelainPath)
+  if (rest.length > 0) process.stdout.write(`${rest.join('\n')}\n`)
+  return rest.length > 0 ? 1 : 0
+}
+
+if (invokedAsCli() && process.argv[2] === '--landed-noise-pathspecs') {
+  process.stdout.write(`${LANDED_DELIVERY_NOISE_PATHSPECS.join(',')}\n`)
+  process.exit(0)
+}
+if (invokedAsCli() && process.argv[2] === '--landed-noise-only') {
+  process.exit(landedNoiseOnlyCli(process.argv[3] || process.cwd()))
+}
 if (invokedAsCli()) {
   const repoRoot = process.argv[2] || process.cwd()
   const wip = userDirtyPaths(repoRoot)

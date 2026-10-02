@@ -284,7 +284,7 @@ else
 ${cost_warn}
    判定層全文在 rules/core/session-tasks.context-budget.md（本提示是它的觸發錨）。
    per rules/core/session-tasks.md § Session context 預算：**NEVER 開新的大工作段**
-   （新的 change / 新的多檔重構 / 新的 spectra phase）；手上這件做完就收。
+   （新的 change / 新的多檔重構 / 新的 plan phase）；手上這件做完就收。
    **小 item 照做** —— 單檔文字修正、補一條 TD、勾一個 checkbox 不受本級限制。
    這一級不是叫你現在停：真正的 hard 收工線在 $((STRONG_AT / 1000))k。
    本提示只響這一次。

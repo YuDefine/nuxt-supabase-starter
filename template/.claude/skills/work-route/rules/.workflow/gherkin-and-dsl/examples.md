@@ -1,4 +1,4 @@
-<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@bc8fdebe2d30db384f77911aaed81888ad03bf5f via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@bc8fdebe2d30db384f77911aaed81888ad03bf5f, modified by clade (added this banner and clade metadata lines) via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 # 範例索引
 
 這個 skill 的完整示範不再集中塞在單一檔案，而是改成一個可直接閱讀的電商 spec package。

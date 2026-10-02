@@ -67,9 +67,11 @@ Status 沒有就緒 wt，也沒有待續跑批次時，回普通 `/commit`。所
 
 | `action` | MUST |
 | --- | --- |
-| `fix` | 修 `failures` 裡的 real，push **同一張** PR。**NEVER** 開第二張 PR |
-| `rerun-failed-shards` | `gh run rerun <id> --failed`。指令必須帶 `--failed` |
+| `fix` | 修 `failures` 裡的 real，push **同一張** PR。**NEVER** 開第二張 PR。帶 `rerun_blocked` 而無 real 時，見下一段：回報而非重跑 |
+| `rerun-failed-shards` | `node vendor/scripts/ci-rerun.ts <id>`（內部只下 `gh run rerun <id> --failed`，先讀 `run_attempt`）。**同一 run 最多自動 rerun 1 次**：`run_attempt` ≥ 2 它回 `RERUN-DENIED`，`ci-triage` 也不再給此 action |
 | `register-flaky` | 同一張 PR 同一支檔的**第二次** flaky：登記（`flow plan` 或 TD）並附 `register[].evidence`，**NEVER** 再重跑 |
+
+**同一 run 最多自動 rerun 1 次（單一 SoT：`vendor/scripts/lib/ci-rerun-cap.ts`）。** `run_attempt` ≥ 2 仍紅，`ci-triage` 回 `action=fix`＋`rerun_blocked`（全是 infra／flaky、沒有 real 可修）：**NEVER** 再 rerun，改走回報——infra 寫證據（job、runner、排隊逾時或 evict 紀錄）交主持者／runner-fleet 查容量，flaky 登記；只有 head 變了（新 push）才有新 run。這條對任何自動化一視同仁：merge 佇列、PR 分診、overflow、修補 child，以及你自己寫的 watch／監看迴圈——迴圈裡要重跑一律呼叫 `node vendor/scripts/ci-rerun.ts <run-id> [-R owner/repo]`，**NEVER** 在迴圈裡直接打 `gh run rerun`，也 **NEVER** 在迴圈外面套 `grep` 濾掉它印的 `RERUN-` 行（run 36880784865 就是這樣被無聲重跑到 attempt 50、72 小時燒 642 job-小時）。
 
 合併門檻不變：所有 shard 都通過才可落地。本節不改 0-A／0-B／0-C、不改 `batch ready`、不改六 shard 互斥聯集。
 
@@ -89,7 +91,7 @@ Status 沒有就緒 wt，也沒有待續跑批次時，回普通 `/commit`。所
 
 P1 基線（`specs/plans/W-2026-09-20-test-lane-overhaul/evidence/p1-pr-run-baseline.md`；複驗：`gh run list --workflow validate.yml --event pull_request -L 100 --json databaseId,conclusion,runAttempt`）裡，rerun 轉綠的 run 平均用了 2.9 個整趟 attempt。本證據決定：flaky／infra 用 `--failed` 而不是整輪 rerun。本證據不決定：要不要修 real——real 的 `action` 是 `fix`，與 runner 分鐘無關。
 
-**Red Flags**：發現自己正要打不帶 `--failed` 的 `gh run rerun`、正要 `git commit --allow-empty`、正要 force-push 只為重跑、或還沒打開 `ci-triage` 輸出就伸手推——停，回到本節第一句。
+**Red Flags**：發現自己正要打不帶 `--failed` 的 `gh run rerun`、正要對 `run_attempt` ≥ 2 的 run 再 rerun、正要 `git commit --allow-empty`、正要 force-push 只為重跑、或還沒打開 `ci-triage` 輸出就伸手推——停，回到本節第一句。
 
 ## 2. 準備隔離整合區
 
@@ -110,6 +112,20 @@ Prepare 已把整批差異呈現在 base 上的 index。中断後若已有部分
 helper 登記的 integration 同樣適用 Step 0-MR／0-Archive 的 trunk 人工 gate，不能因 branch 名稱而 skip。依每個 member 的 change 與 archive 對應檢查整批 readiness；有 blocker 就保留整批與來源，修正後重驗。若要排除未就緒成員，取消本批後重新登記其餘成員、prepare，再跑完整品質鏈。
 
 ## 3. 證據與正式落地
+
+### Integration worktree 的派工歸屬
+
+`prepare` 在建立 integration worktree 前，已把 `path`、`branch`、`phase` 與 `members[].workId`
+持久寫入 `<git-common-dir>/clade-wt-batch/state.json`。Herdr 與 Pi 共用 reader：沒有明示 `--work-id`
+與 ambient 時，先讀 claim，再以 worktree toplevel 的實際路徑及 branch 反查 batch journal。
+同一 work id 的多個來源去重後仍自動歸屬；`integrating`／`review`／`sealed`／尚未清理的 `landed`
+都可反查，`cleaned`／`cancelled` 不可。Integration 不需補 claim，避免把持久歸屬誤當活躍 writer 而擋住 cleanup。
+
+顯式合批包含多個不同 work id 時，reader 列出每個 `CLADE_WORK_ID=<id>` 候選，派工者依這次動作選定成員。
+Herdr slice 與 Pi call 會建立連到該成員的子卡；`--work-id` 會直接使用成員卡，成功派工可能把成員標 done。
+未選定仍沿用 `unattributed`，並診斷為多成員歧義；journal 損壞、版本不支援或讀不到則診斷為讀取失敗，退回現行派工。
+Herdr／Pi 在同一次派工重用反查結果。brief 宣告 `stage: implement` 或帶 `--implementation`，且歸屬工作有 lifecycle plan 時，
+specification-readiness gate 會核對該 plan；Pi 也核對明示 `--work-id`／execution ticket 的工作。未就緒時，在寫入派工紀錄前拒絕。
 
 ```bash
 node scripts/wt-helper.ts batch scope

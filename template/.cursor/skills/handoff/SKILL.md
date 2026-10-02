@@ -428,7 +428,7 @@ Step 3.1 audit **有任一條** wt 判為 `mergeBackSafety: ptb-unsafe` → **MU
 
 **MUST Read [dispatch-steps.md](dispatch-steps.md) § 2B.5 before proceeding**（user 在 詢問操作 選定下一步的當下就要讀）— 含 5 列 next-skill dispatch 表、判定條件三條、slug 解析、parent cwd 不動 invariant、人工驗收 dispatch 的 family 入口表。
 
-摘要：一律透過 Skill tool 內呼對應入口，**不要**輸出「請執行 cd ... && claude ...」oneliner；會寫 tracked file 的實作入口（`/implement`、`/bdd`）包進 `/wt <slug>: /<next-skill>`，read-only 與規格類（`/specify`、`/clarify-over-specs`、`/system-analysis`）直接內呼。
+摘要：一律透過 Skill tool 內呼對應入口，**不要**輸出「請執行 cd ... && claude ...」oneliner；會寫 tracked file 的實作入口（`/implement`）包進 `/wt <slug>: /<next-skill>`，read-only 與規格類（`/specify`、`/system-analysis`）直接內呼。`bdd` 與 `clarify-over-specs` 沒有 Skill tool 入口：`bdd` 由 `/implement` 委派，`clarify-over-specs` 由 `work-route` 載入。
 
 ### 2B.1.8 Tech-debt hygiene scan（hard rule — 防 tech-debt.md 堆積）
 

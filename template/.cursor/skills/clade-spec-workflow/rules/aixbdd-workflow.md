@@ -8,7 +8,7 @@ paths: ['specs/plans/**', 'specs/truth/**', '.agents/constitution/**']
 
 # aixbdd Workflow 標準
 
-> Upstream: <https://github.com/Waterball-Software-Academy/aixbdd>（Apache-2.0）。clade 端 `vendor/aixbdd/`（submodule），skill 鏡射到 `capabilities/modules/capabilities/aixbdd/skills/`。
+> Upstream: <https://github.com/Waterball-Software-Academy/aixbdd>（Apache-2.0）。clade 端 `vendor/aixbdd/`（submodule）。公開入口 `specify`、`clarify`、`system-analysis`、`implement` 鏡射到 `capabilities/modules/capabilities/aixbdd/skills/`，其餘上游 skill 鏡射到同 module 的 `references/upstream-skills/`，由 clade 自有的 `work-route` 載入。
 >
 > Cookbook：`~/offline/clade/vendor/snippets/aixbdd/`
 >
@@ -42,15 +42,19 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 | 1 | `/constitution` | 共同 | `.agents/constitution/**`（需要新增或調整規則時；此 gate 在 package 判定前執行） |
 | 2 | `/specify` | PM | lifecycle repo：`specs/plans/<work-id>/{spec.md,checklists/requirements.md}`，truth delta 意圖列寫進 `plan.md` § Truth delta（state=proposed）；未遷移 consumer：`specs/plans/NNN-<slug>/{spec.md,checklists/requirements.md,truth-delta.md}`。新需求永遠開新 work id，同一工作續跑同一份 |
 | 3 | `/clarify-over-specs` | PM | 更新 `spec.md`（選用） |
-| 4a | `/spec-by-example` → `/ui-plan` | PM | plan package 的 `features/acceptance/**`；UI 需求另產 `ui-plan.md` ＋靜態雛形 |
+| 4a | `/spec-by-example` | PM | plan package 的 `features/acceptance/**`；UI 需求另備可供 PM 確認的設計證據（design／review owner，**不是** `/ui-plan`） |
 | 4b | `/technical-research` | RD | plan `research.md` ＋ truth `specs/truth/techstack.md` |
-| 5 | PM 確認 Gherkin 與適用的 UI 雛形／review 後 handoff | PM → RD | —；UI 需求缺雛形或 review 才停在 PM confirmation gate，API-only 不建立 UI gate |
-| 6 | `/system-analysis`（委派 `/api-plan`、`/data-plan`） | RD | lifecycle repo：plan `system-analysis.md`（`plan.md` 是 lifecycle 檔，NEVER 覆寫）；未遷移 consumer：plan `plan.md`。只有 PM gate 通過後可進入 |
+| 5 | PM 確認 Gherkin 與適用的 UI 設計證據後 handoff | PM → RD | —；UI 需求缺設計證據或 review 才停在 PM confirmation gate，API-only 不建立 UI gate |
+| 6 | `/system-analysis`（委派 `/api-plan`、`/data-plan`、`/ui-plan`） | RD | lifecycle repo：plan `system-analysis.md`（`plan.md` 是 lifecycle 檔，NEVER 覆寫）；未遷移 consumer：plan `plan.md`。`/ui-plan` 讀分析 handoff 與本輪 truth delta 產 `ui/ui-plan.md`＋`ui/*.html`，改到使用者可見行為時回第 5 步。只有 PM gate 通過後可進入 |
 | 7 | `/dsl-refine` | RD | truth `specs/truth/features/{backend,frontend}/**` 的 feature 與 `dsl.md` |
 | 8 | `/tasks` | RD | plan `tasks.md` |
 | 9 | `/implement`（`[BDD-GREEN]` / `[BDD-REFACTOR]` 委派 `/bdd`） | RD | 產品碼與測試 |
 
 第 4 步的兩側**可以平行**，其餘 **MUST 序列**。`/truth-delta` 由 truth owner skill 自己呼叫，**NEVER** 手動執行。
+
+`/ui-plan` 的時序跟上游 `ui-plan/SKILL.md`（輸入含 system-analysis handoff 與 truth-delta），不跟上游 README 快速開始第 4 步（Charles 2026-09-27 裁決；兩者的矛盾待向上游回報）。**NEVER** 在 system-analysis 之前叫 `/ui-plan`。
+
+表中名稱一律是上游 skill 名。consumer 端只有 `/specify`、`/clarify`、`/system-analysis`、`/implement` 與 `work-route` 是可直接叫的 skill；`/constitution`、`/clarify-over-specs`、`/spec-by-example`、`/ui-plan`、`/technical-research`、`/api-plan`、`/data-plan`、`/dsl-refine`、`/tasks`、`/bdd`、`/truth-delta`、`/gherkin-and-dsl` 沒有同名 slash 入口，由 `work-route` 依它的 owner 表載入上游契約執行。
 
 **冷啟動入口**：一個沒有對話歷史的 Claude／Codex／Cursor task 收到新需求時，第一支 skill是 `work-route`——它先讀 `specs/truth/work-lifecycle.md` 與相關 truth，再判「續跑既有 work id」或「`flow plan open`」。純對話式規劃（user 只是在問、還沒要落地）**不寫 repo、不寫 flow**；user 明說要寫到外部草稿時，寫那個草稿、不鑄 work id。
 
@@ -78,7 +82,7 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 
 ## clade lifecycle 適配與入口
 
-上游 skill 以 `NNN-<slug>`、`plan.md`（系統分析）、`truth-delta.md` 為檔名假設。lifecycle repo 用同一套職責、不同的載體；skill（含 clade fork 上的 patch）判「這是不是 lifecycle package」的**唯一**判準：
+上游 skill 以 `NNN-<slug>`、`plan.md`（系統分析）、`truth-delta.md` 為檔名假設。lifecycle repo 用同一套職責、不同的載體；skill 判「這是不是 lifecycle package」的**唯一**判準（目前由 fork `clade/main` 上的 patch 承載，屬 § 上游最新為準 的待撤回存量，不是先例）：
 
 > package 內 `plan.md` 的 frontmatter **同時**含 `work_id:` 與 `truth_baseline:`。
 
@@ -89,10 +93,46 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 | `specs/plans/NNN-<slug>/` | `specs/plans/<work-id>/`（`flow plan open` 鑄） | work-lifecycle |
 | `truth-delta.md` | `plan.md` § Truth delta 表（`id／action／unit／reason／state`，`flow plan apply-delta` 機讀） | work-lifecycle |
 | `plan.md`（系統分析） | `system-analysis.md` | RD（`/system-analysis`） |
-| `spec.md`、`checklists/requirements.md`、`features/acceptance/**`、`research.md`、`tasks.md`、`ui-plan.md`＋`ui/**` | 同名 | 同上游 |
+| `spec.md`、`checklists/requirements.md`、`features/acceptance/**`、`research.md`、`tasks.md`、`ui/ui-plan.md`＋`ui/*.html` | 同名 | 同上游 |
 | — | `briefs/**`（派工 brief）、`evidence/**`（cucumber JSON report ＋ `receipts.jsonl`，供 `acceptance-verdicts.ts` 讀） | 主線／runner |
 
 `flow plan readiness` 依 `plan.md` frontmatter 的 `work_kind` 決定要求集，**不**讀 § Decisions 的省略理由：`behavior`、`bug-uncovered` 與未宣告的 plan 要求完整集（`spec.md`、acceptance feature、`acceptance_command` 等）；`bug-covered` 與全部錨點都是 NOOP 的 `refactor` 改要求迴歸錨點，不要求 `spec.md` 與 acceptance feature。delta 形狀與種類不符時回 `kind-delta-mismatch`，改判走 `flow plan set-kind`。值域與要求集全文見 `specs/truth/work-lifecycle.md` § Package。
+
+## clade overlay
+
+上游沒有而 clade 需要的行為，只走兩條 clade-owned 路徑，不改上游檔：
+
+- **同目錄 overlay**（registry `mirror.cladeOwnedFiles`，sync 不覆寫）：`specformula.md`。上游 `SKILL.md` 不會提到它們，入口是 `work-route` § 2 的 overlay 表；直接叫公開入口時由本表指路。執行下列 owner 時 MUST 一併讀該 overlay：
+
+| Owner | overlay | 何時套用 |
+| --- | --- | --- |
+| `/technical-research` | `specformula.md` | manifest 宣告 `specformula` capability 時：提供三題必問的 fleet 預設，供 techstack 選型確認 |
+| `/implement`、`/bdd` | `specformula.md` | 後端 BDD techstack 是 SpecFormula 時 |
+
+- **伴隨覆寫 rule**（registry `mirror.overridePointer`）：lifecycle 落點（L 族）與 canonical doctor（D 族）寫在 `work-route/rules/上游覆寫-lifecycle落點與doctor.md`，逐條列出被覆寫的上游原句（anchor）與判準，由 `scripts/audit-upstream-overrides.ts` 對 pin 的上游逐字核對。doctor 的「tasks 產出後跑一次、implement 每個 task 回寫 `[X]` 前各跑一次」只住在那份檔，這裡不另立 overlay 檔。
+
+overlay 只**追加**步驟，**NEVER** 改寫上游已定義的語意（Setup 何時建立、task 完成條件的既有項目）；要改上游語意就回報上游，不是寫 overlay。
+
+## 上游最新為準
+
+**觸發**：**每一次** bump aixbdd pin、跑 `sync-upstream-mirrors --only aixbdd`、在 fork `Charles5277/aixbdd` 的 `clade/main` 加 commit，或在 clade 源檔（`rules/**`、`capabilities/**`、`claude-md/**`、`vendor/snippets/**`、`specs/truth/**`）寫到 aixbdd 的 skill 名、步驟順序或產物檔名時。
+
+上游 `Waterball-Software-Academy/aixbdd` 的 `main` 最新版是 skill 名、步驟順序、產物檔名與 skill 行為的唯一準則。
+
+1. 上游退役或改名一支 skill 時，clade **每一個**源檔對它的引用 MUST 在同一次改動內改成上游現名與現行步驟，不是只改被發現的那一處。
+2. fork `clade/main` 相對上游 `main` 在 `.agents/skills/**` 的 diff MUST 為 0。clade 需要而上游沒有的行為，MUST 落在 clade 自有層：registry `mirror.cladeOwnedFiles`（例：各 owner 目錄的 `specformula.md` overlay）、`mirror.cladeOwnedSkillDirs`（`work-route`）、本檔或 `specs/truth/work-lifecycle.md`。**NEVER** 在 fork 上改寫上游 skill 檔，也 **NEVER** 在 rebase 到新上游時保留與上游衝突的改寫。
+3. 上游 README 與 skill 契約（`SKILL.md`、`rules/**`）對同一步驟寫法不同時，**NEVER** 自己挑一邊改 clade：維持 clade 現狀，把兩邊逐字列給 Charles 裁決。
+4. bump pin 或 re-mirror 之前 MUST 跑 `node scripts/audit-upstream-submodules.ts --only aixbdd`，讀「skill 層上游為準」一節：「fork patch 改到的上游 skill 檔」與「clade 源檔仍引用退役名」兩個數非 0 時，先逐檔處置（撤回、搬到 clade 自有層、或改引用）再 bump。
+
+| 藉口（逐字，出自 fork commit 訊息） | 現實 |
+| --- | --- |
+| 「Repos that do not match keep the upstream NNN behaviour unchanged, so this is upstream-compatible.」 | 條件式 patch 仍是改寫上游 skill 檔：上游下一次改同一段時它就是衝突來源，而上游不知道 fork 存在。predicate 守住的是非 clade repo，不是與上游的相容 |
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | informational — 不觸發任何東西（audit 永遠 exit 0；兩個「應為 0」的數由讀者照本節處置） |
+| 消費端 | 做 aixbdd pin bump、re-mirror 或 fork 改動的 agent；`node scripts/audit-upstream-submodules.ts` 的「skill 層上游為準」一節 |
+| 載入路徑 | consumer：本節（paths-gated 於 `specs/plans/**`、`specs/truth/**`、`.agents/constitution/**`）。clade home 不自動載入 `rules/core/`，案發時刻的載入點是該 audit 輸出裡指向本節的標題行（`version-upgrade` 的 `skills-mode.md` § S.1 逐字指名該 audit） |
 
 ## Reference signal（不 block）
 
@@ -104,3 +144,5 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 | `node scripts/audit-specformula-adoption.ts` 的 aixbdd 表 | 上列＋`dsl.md`（刻意只進本表、不進 R8：缺它 work-route 仍能開 plan）、constitution、鏡射 skill、W／NNN plan 數 | 參考訊號，exit 0 |
 
 缺 `work-lifecycle.md` 報 `capability-lifecycle-migration`：`specs/truth/work-lifecycle.md` 是 lifecycle-repo marker（一存在，gate 擋新 TD、`docs/tech-debt.md` 凍結、舊 TD 只經 `specs/truth/legacy-ids.json` 解析），scaffold **NEVER** 代放——照 `vendor/snippets/consumer-lifecycle/README.md` 先把舊 TD 逐筆處置進 `legacy-ids.json`（或搬進 plan § Open work），再由 consumer 放 marker。已是 lifecycle repo 只缺 `owners.md` 報 `capability-truth-root`，用 `node ~/offline/clade/scripts/scaffold-consumer-truth.ts --consumer-path <consumer> --apply`（或 `audit-registry-reality --consumer <id> --scaffold`）補齊：只建缺檔、NEVER 覆寫、冪等。manifest 讀不出來（兩份衝突／schema 不過）報 `capability-manifest-unreadable`，fail closed。`techstack.md`、`isa.yml`、feature 由各自 owner skill 產出，NEVER 捏造。truth 歸 consumer，不走 propagate。
+
+上游為準的訊號（skill 層偏離、mirror 與上游的差）不在上表：看 `node scripts/audit-upstream-submodules.ts --only aixbdd`（見上節）。上表量的是 consumer 的 truth／plan／鏡射 skill 覆蓋，**NEVER** 讀成 skill 層是否以上游為準。

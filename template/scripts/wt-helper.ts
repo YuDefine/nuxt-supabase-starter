@@ -42,7 +42,13 @@
  *                    commit touching it or a named replacement on main; the
  *                    tip is pinned in refs/wt-superseded/ first, and an event
  *                    is appended to <git-common-dir>/wt-superseded.jsonl
- *                    once the worktree is removed.
+ *                    once the worktree is removed. --discard-pathspec
+ *                    <path>[,…] lets dirty files under those literal paths
+ *                    through the uncommitted gate after saving them to
+ *                    refs/clade-residue/<slug> (+ ~/.cache/clade/wt-residue/);
+ *                    any other dirt still blocks. Build artifacts and
+ *                    oversized files are dropped, not saved.
+ *   residue-prune    Delete refs/clade-residue/* past the retention window.
  *   merge-back <slug> [--dry-run] [--auto-stash] [--no-cleanup] [--accept-landed]
  *                    Legacy squash into main; source retained until formal commit.
  *                    New workflows use `batch`. Pre-flight detects main-worktree
@@ -138,7 +144,11 @@ import {
 } from './claim-helper.ts'
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isLockedProjectionPathFor } from './locked-projection.ts'
-import { isIgnorableWorktreeDrift, isToolManagedDrift } from './wip-dirty.ts'
+import {
+  isIgnorableWorktreeDrift,
+  isToolManagedDrift,
+  matchesDiscardPathspec,
+} from './wip-dirty.ts'
 import {
   reconcileLandedProjectionState,
   reconcileRebasedProjectionState,
@@ -6055,6 +6065,225 @@ async function cmdReconcile(slug: string, opts: WtOptions = {}) {
   if (result.blocked > 0) process.exitCode = 1
 }
 
+/** `--discard-pathspec a,b` → ['a','b']；拒絕絕對路徑、`..`、glob 字元與空值（只收 repo 內的字面路徑）。 */
+export function parseDiscardPathspecs(raw) {
+  if (raw === undefined || raw === null) return []
+  const specs = String(raw)
+    .split(',')
+    .map((s) => s.trim().replace(/\/+$/, ''))
+  for (const spec of specs) {
+    if (!spec || spec.startsWith('/') || spec.split('/').includes('..') || /[*?[\]:!]/.test(spec))
+      throw new Error(
+        `cleanup --discard-pathspec 只收 repo 內的字面路徑（逗號分隔，不收 glob／絕對路徑／..）：'${spec}'`,
+      )
+  }
+  return specs
+}
+
+/** porcelain entry（rename 為 `a -> b`）是否整筆落在 pathspec 內；rename 兩端都要命中。 */
+function isDiscardedEntry(path, pathspecs) {
+  if (pathspecs.length === 0) return false
+  return path.split(' -> ').every((p) => matchesDiscardPathspec(p, pathspecs))
+}
+
+// residue 只存「人可能還要看」的東西。可重建的建置產物（舊 HEAD 的樹裡 `.gitignore` 沒蓋到的
+// `vendor/review-gui-web/.nuxt`、`.output` 等）直接丟、不進 object store：disk-hygiene 為了騰空間
+// 清樹，NEVER 反過來把大 blob 寫進 common dir 再被 ref 釘住（PR #726 0-A r1 Major）。
+const RESIDUE_BUILD_SEGMENTS = new Set([
+  '.nuxt',
+  '.output',
+  'node_modules',
+  '.vite',
+  '.turbo',
+  '.cache',
+])
+const RESIDUE_MAX_FILE_BYTES = 1024 * 1024
+const RESIDUE_MAX_TOTAL_BYTES = 16 * 1024 * 1024
+/** residue ref 的保留期（天）；計畫未定期限前採保守預設，`CLADE_WT_RESIDUE_RETENTION_DAYS` 可覆寫。 */
+const RESIDUE_RETENTION_DAYS_DEFAULT = 30
+
+function residueRetentionSeconds() {
+  const days = Number(process.env.CLADE_WT_RESIDUE_RETENTION_DAYS)
+  return (Number.isFinite(days) && days >= 0 ? days : RESIDUE_RETENTION_DAYS_DEFAULT) * 86_400
+}
+
+function residueRecordDir(consumerRoot) {
+  return join(
+    process.env.CLADE_WT_RESIDUE_DIR ?? join(homedir(), '.cache', 'clade', 'wt-residue'),
+    basename(consumerRoot),
+  )
+}
+
+/**
+ * 把 porcelain 路徑展開成實際要存的檔（目錄逐檔走），濾掉建置產物段與超過上限的檔。
+ * 不在磁碟上的路徑＝tracked 檔被刪，照收（`git add -A` 記成刪除）；目錄內被刪的 tracked 檔
+ * 由 `ls-files --deleted` 補回。回傳的 skipped 只是紀錄，不會被保存。
+ */
+export function planResidueFiles(
+  wtPath,
+  paths,
+  limits: { maxFileBytes?: number; maxTotalBytes?: number } = {},
+) {
+  const maxFile = limits.maxFileBytes ?? RESIDUE_MAX_FILE_BYTES
+  const maxTotal = limits.maxTotalBytes ?? RESIDUE_MAX_TOTAL_BYTES
+  const keep = new Set<string>()
+  const skipped: { path: string; reason: string }[] = []
+  let total = 0
+  const isBuild = (rel) => rel.split('/').some((seg) => RESIDUE_BUILD_SEGMENTS.has(seg))
+  const visit = (rel) => {
+    if (isBuild(rel)) {
+      skipped.push({ path: rel, reason: 'build-artifact' })
+      return
+    }
+    const abs = join(wtPath, rel)
+    let st
+    try {
+      st = lstatSync(abs)
+    } catch {
+      keep.add(rel)
+      return
+    }
+    if (st.isDirectory()) {
+      if (existsSync(join(abs, '.git'))) {
+        skipped.push({ path: rel, reason: 'nested-repo' })
+        return
+      }
+      for (const name of readdirSync(abs).toSorted()) visit(`${rel}/${name}`)
+      try {
+        const deleted = git(['ls-files', '--deleted', '-z', '--', rel], { cwd: wtPath })
+        for (const d of deleted.split('\0').filter(Boolean)) if (!isBuild(d)) keep.add(d)
+      } catch {
+        // 不是 tracked 目錄：沒有刪除可記
+      }
+      return
+    }
+    const size = st.isFile() ? st.size : 0
+    if (size > maxFile) {
+      skipped.push({ path: rel, reason: `too-large(${size})` })
+      return
+    }
+    if (total + size > maxTotal) {
+      skipped.push({ path: rel, reason: 'over-total-cap' })
+      return
+    }
+    total += size
+    keep.add(rel)
+  }
+  for (const p of paths) visit(p.replace(/\/+$/, ''))
+  return { files: [...keep].toSorted(), skipped, bytes: total }
+}
+
+/**
+ * 刪掉超過保留期的 `refs/clade-residue/*` 與對應紀錄檔（每次存 residue 時順手跑；
+ * `wt-helper residue-prune` 可單獨跑）。判準是 ref 指向那筆 commit 的 committer date。
+ */
+export function pruneCleanupResidue(consumerRoot, { now = Date.now() / 1000 } = {}) {
+  const cutoff = now - residueRetentionSeconds()
+  const pruned: string[] = []
+  let listing = ''
+  try {
+    listing = git(
+      ['for-each-ref', '--format=%(refname) %(committerdate:unix)', 'refs/clade-residue/'],
+      { cwd: consumerRoot },
+    )
+  } catch {
+    return pruned
+  }
+  for (const line of listing.split('\n').filter(Boolean)) {
+    const [ref, ts] = line.split(' ')
+    if (!(Number(ts) < cutoff)) continue
+    git(['update-ref', '-d', ref], { cwd: consumerRoot })
+    rmSync(
+      join(residueRecordDir(consumerRoot), `${ref.slice('refs/clade-residue/'.length)}.json`),
+      {
+        force: true,
+      },
+    )
+    pruned.push(ref)
+  }
+  return pruned
+}
+
+/**
+ * cleanup 前保存被 pathspec 放行的殘留（plan §3.1）：以暫時 index 在 HEAD 上疊這些路徑的
+ * working copy，寫成一筆 commit 掛在 `refs/clade-residue/<slug>`（不碰 stash stack、不動樹的 index）；
+ * 同 slug 已有、仍在保留期內的 residue 成為第二個 parent，不覆蓋掉。另寫
+ * `~/.cache/clade/wt-residue/<repo>/<slug>.json`（`CLADE_WT_RESIDUE_DIR` 可覆寫根目錄）。
+ * 建置產物與超過大小上限的檔不存（見 planResidueFiles，紀錄檔列為 skipped）；過期 residue 先 prune。
+ * 任何一步失敗就 throw——呼叫端在移除之前呼叫，失敗即整棵保留。
+ */
+function saveCleanupResidue(consumerRoot, wtPath, slug, branchName, entries) {
+  const paths = [...new Set(entries.flatMap((e) => e.path.split(' -> ')))]
+  const plan = planResidueFiles(wtPath, paths)
+  const pruned = pruneCleanupResidue(consumerRoot)
+  const scratch = mkdtempSync(join(tmpdir(), 'clade-residue-'))
+  const env = {
+    ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))),
+    GIT_INDEX_FILE: join(scratch, 'index'),
+    GIT_LITERAL_PATHSPECS: '1',
+    GIT_AUTHOR_NAME: 'clade-residue',
+    GIT_AUTHOR_EMAIL: 'clade-residue@localhost',
+    GIT_COMMITTER_NAME: 'clade-residue',
+    GIT_COMMITTER_EMAIL: 'clade-residue@localhost',
+  }
+  const ref = `refs/clade-residue/${slug}`
+  try {
+    const head = git(['rev-parse', 'HEAD'], { cwd: wtPath, env })
+    git(['read-tree', head], { cwd: wtPath, env })
+    for (let i = 0; i < plan.files.length; i += 500)
+      git(['add', '-A', '--', ...plan.files.slice(i, i + 500)], { cwd: wtPath, env })
+    const tree = git(['write-tree'], { cwd: wtPath, env })
+    let prev = ''
+    try {
+      prev = git(['rev-parse', '-q', '--verify', `${ref}^{commit}`], { cwd: wtPath, env })
+    } catch {
+      prev = ''
+    }
+    const message =
+      `clade-residue: ${slug} (${branchName})\n\n` +
+      `cleanup --discard-pathspec 移除前保存；worktree ${wtPath}\n` +
+      paths.map((p) => `- ${p}`).join('\n')
+    const commit = git(
+      ['commit-tree', tree, '-p', head, ...(prev ? ['-p', prev] : []), '-m', message],
+      { cwd: wtPath, env },
+    )
+    git(['update-ref', ref, commit], { cwd: wtPath, env })
+    const dir = residueRecordDir(consumerRoot)
+    mkdirSync(dir, { recursive: true })
+    const recordPath = join(dir, `${slug}.json`)
+    writeFileSync(
+      recordPath,
+      `${JSON.stringify(
+        {
+          slug,
+          branch: branchName,
+          worktree: wtPath,
+          head,
+          ref,
+          commit,
+          previous: prev || null,
+          paths,
+          skipped: plan.skipped.slice(0, 200),
+          skipped_total: plan.skipped.length,
+          saved_bytes: plan.bytes,
+          reason: 'cleanup --discard-pathspec',
+          saved_at: new Date().toISOString(),
+        },
+        null,
+        2,
+      )}\n`,
+    )
+    return { ref, commit, recordPath, skipped: plan.skipped.length, pruned }
+  } catch (error) {
+    throw new Error(
+      `cleanup retained ${wtPath}: residue 保存失敗（${errorMessage(error)}），未移除任何東西`,
+      { cause: error },
+    )
+  } finally {
+    rmSync(scratch, { recursive: true, force: true })
+  }
+}
+
 async function cmdCleanup(
   slug,
   opts,
@@ -6062,8 +6291,9 @@ async function cmdCleanup(
 ) {
   if (!slug)
     throw new Error(
-      'Usage: wt-helper cleanup <slug> [--dry-run] [--force] [--force-discard-unland] [--force-discard-uncommitted] [--allow-orphan-record] [--superseded-by <commit|file=commit|file=path>[,…] --reason <text>]',
+      'Usage: wt-helper cleanup <slug> [--dry-run] [--force] [--force-discard-unland] [--force-discard-uncommitted] [--discard-pathspec <path>[,…]] [--allow-orphan-record] [--superseded-by <commit|file=commit|file=path>[,…] --reason <text>]',
     )
+  const discardPathspecs = parseDiscardPathspecs(opts.discardPathspec)
   const declaring = opts.supersededBy !== undefined
   if (declaring && !String(opts.reason ?? '').trim())
     throw new Error('cleanup --superseded-by 需要 --reason <為什麼判定已被取代>')
@@ -6244,9 +6474,21 @@ async function cmdCleanup(
   const hostRefsObs = findHostConfigReferences(target.path)
   const hostRefs = hostRefsObs.status === 'known' ? hostRefsObs.value : []
   const isIgnorableDrift = (entry, kind) => isIgnorableWorktreeDrift(target.path, entry.path, kind)
-  const uncommitted = {
+  const uncommittedAll = {
     modified: uncommittedRaw.modified.filter((m) => !isIgnorableDrift(m, 'modified')),
     untracked: uncommittedRaw.untracked.filter((u) => !isIgnorableDrift(u, 'untracked')),
+  }
+  // --discard-pathspec：呼叫端**逐條點名**可丟的路徑（W-2026-10-01-worktree-accumulation-root-cause
+  // §3 C4）。只有落在 pathspec 內的 dirty 被放行，而且移除前先存成 refs/clade-residue/<slug>；
+  // 其餘 dirty 照舊擋——NEVER 退化成整棵 --force-discard-uncommitted。
+  const inDiscard = (entry) => isDiscardedEntry(entry.path, discardPathspecs)
+  const discarded = [
+    ...uncommittedAll.modified.filter(inDiscard),
+    ...uncommittedAll.untracked.filter(inDiscard),
+  ]
+  const uncommitted = {
+    modified: uncommittedAll.modified.filter((m) => !inDiscard(m)),
+    untracked: uncommittedAll.untracked.filter((u) => !inDiscard(u)),
   }
   const uncommittedCount = uncommitted.modified.length + uncommitted.untracked.length
   // git 不知道我們決定忽略這些檔，`git worktree remove` 照樣會因 dirty 而拒絕。
@@ -6282,8 +6524,12 @@ async function cmdCleanup(
       for (const f of superseded.uncovered) console.log(`    ✗ ${f}：沒有任何條目覆蓋`)
     }
     console.log(
-      `  uncommitted        blocking=${uncommittedCount} ignored(projection/tool-managed)=${toolManagedCount}`,
+      `  uncommitted        blocking=${uncommittedCount} ignored(projection/tool-managed)=${toolManagedCount}` +
+        (discardPathspecs.length
+          ? ` discard(pathspec, residue saved first)=${discarded.length}`
+          : ''),
     )
+    for (const d of discarded.slice(0, 10)) console.log(`    discard  ${d.path}`)
     if (uncommittedCount > 0) {
       for (const m of uncommitted.modified.slice(0, 10)) console.log(`    ${m.status}  ${m.path}`)
       for (const u of uncommitted.untracked.slice(0, 10)) console.log(`    ??  ${u.path}`)
@@ -6393,6 +6639,16 @@ async function cmdCleanup(
     ? pinSupersededTip(consumerRoot, cleanSlug, branchName, String(opts.reason).trim())
     : undefined
 
+  // 被 pathspec 放行的殘留先存，存不成就整棵保留（throw 在任何移除動作之前）。
+  if (discarded.length > 0) {
+    const residue = saveCleanupResidue(consumerRoot, target.path, cleanSlug, branchName, discarded)
+    console.log(
+      `cleanup: ${discarded.length} 筆 pathspec 殘留已存到 ${residue.ref}（${residue.commit.slice(0, 12)}）；紀錄 ${residue.recordPath}` +
+        (residue.skipped ? `；${residue.skipped} 筆建置產物／超量檔未保存` : '') +
+        (residue.pruned.length ? `；過期 residue 已清 ${residue.pruned.length} 筆` : ''),
+    )
+  }
+
   // Release per-worktree resources before the directory disappears — the
   // bootstrap script lives inside the worktree. No-op for consumers without it.
   teardownWorktreeSubmodules(target.path)
@@ -6411,7 +6667,8 @@ async function cmdCleanup(
   // 而拒絕移除，所以這裡必須補 --force。它只涵蓋 isToolManagedDrift 與
   // isLockedProjectionPathFor 認可的檔——真的 user WIP 早在 gate 就攔下了，走不到這裡。
   // forceDiscardUncommitted：gate 已由呼叫端授權丟棄 user WIP，git 同樣要 --force 才肯移除。
-  if (opts.force || opts.forceDiscardUncommitted || toolManagedCount > 0) {
+  // discarded.length > 0：殘留已存成 residue ref，git 仍視之為 dirty，同樣要 --force。
+  if (opts.force || opts.forceDiscardUncommitted || toolManagedCount > 0 || discarded.length > 0) {
     removeArgs.push('--force')
   }
   removeArgs.push(target.path)
@@ -6479,6 +6736,31 @@ async function cmdCleanup(
     }
   } catch {
     // best-effort claim cleanup; never block worktree removal
+  }
+  // C8：回收量測。移除已成功，這筆只是事實紀錄——寫不進去不影響 cleanup 結果。
+  try {
+    const { recordWorktreeReleased } = await import(
+      new URL('./work-inventory-store.ts', import.meta.url).href
+    )
+    recordWorktreeReleased(consumerRoot, {
+      path: resolve(target.path),
+      branch: branchName,
+      head: target.head ?? null,
+      slug: cleanSlug,
+      landed_evidence: ancestryMerged
+        ? 'ancestry'
+        : squashLanded
+          ? 'squash-marker'
+          : absorbedLanded
+            ? 'absorbed'
+            : prLanded
+              ? `merged-pr:#${mergedPr?.value?.pr ?? '?'}`
+              : supersededOk
+                ? 'superseded'
+                : 'none',
+    })
+  } catch (e) {
+    console.error(`note: work-asset release event skipped (fail-open): ${e?.message ?? e}`)
   }
   console.log(`Removed ${target.path}`)
 }
@@ -8062,6 +8344,18 @@ function printUsage(log = console.error) {
   log('    --superseded-by <commit|file=commit|file=path>[,…] --reason <text>')
   log('                            main later rewrote the hunks: per-file evidence,')
   log('                            tip pinned in refs/wt-superseded/ + event, then removed')
+  log('    --discard-pathspec <path>[,…]  dirty files under these literal paths do not block;')
+  log(
+    '                            saved to refs/clade-residue/<slug> first, other dirt still blocks',
+  )
+  log(
+    '                            (build artifacts like .nuxt/.output and files over the size cap are',
+  )
+  log('                            dropped, not saved)')
+  log('  residue-prune             Delete refs/clade-residue/* older than the retention window')
+  log(
+    '                            (CLADE_WT_RESIDUE_RETENTION_DAYS, default 30; cleanup also runs it)',
+  )
   log('  resolve <slug>            Print the session worktree path owning <slug> (exit 3 = none,')
   log('                            meaning main is authoritative). Same matcher merge-back uses,')
   log('                            so gates scan exactly the tree Step 0 will land.')
@@ -8118,6 +8412,7 @@ const VALUE_FLAGS = new Set([
   '--base',
   '--superseded-by',
   '--reason',
+  '--discard-pathspec',
 ])
 const BOOLEAN_FLAGS = new Set([
   '--patch',
@@ -8182,6 +8477,7 @@ const SUBCOMMANDS = new Set([
   'reclaim-stale',
   'reconcile',
   'cleanup',
+  'residue-prune',
   'merge-back',
   'resolve',
   'land-pending',
@@ -8347,6 +8643,7 @@ async function main() {
     workDone: flags.has('--work-done'),
     iKnowPublishIsRunning: flags.has('--i-know-publish-is-running'),
     verification: values['--verification'],
+    discardPathspec: values['--discard-pathspec'],
     supersededBy: Object.prototype.hasOwnProperty.call(values, '--superseded-by')
       ? values['--superseded-by']
       : undefined,
@@ -8378,6 +8675,12 @@ async function main() {
     case 'reconcile':
       await cmdReconcile(positional[0], opts)
       return
+    case 'residue-prune': {
+      const pruned = pruneCleanupResidue(findConsumerRoot())
+      console.log(`residue-prune: removed ${pruned.length} expired ref(s)`)
+      for (const ref of pruned) console.log(`  ${ref}`)
+      return
+    }
     case 'merge-back':
       await cmdMergeBack(positional[0], opts)
       return

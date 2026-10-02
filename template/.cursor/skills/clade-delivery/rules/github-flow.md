@@ -15,7 +15,7 @@ paths:
 
 # GitHub Flow 事件契約
 
-本檔是 Claude Code／Cursor／Codex／Pi 共用的平行切片作業契約。盤點 outstanding → 獨立切片各派一個 owner → **一刀一 branch 一 PR** → 盯該 PR 的 CI → 紅燈回原 owner。**預設開發模式是 § Integration branch（小步快跑）**：feature branch 開 PR 併入 `integration/<work-id>`，只付機械檢查；完整 test-lane 只在 `integration/<work-id>` → `main` 那一張 PR 上付一次。只有一個切片就完工的工作才直接對 `main` 開 PR。操作命令見 commit skill `batch.md`、[[worktree-default]] §5、[[gh-ci-watch]]。
+本檔是 Claude Code／Cursor／Codex／Pi 共用的平行切片作業契約。盤點 outstanding → 獨立切片各派一個 owner → **一刀一 branch 一 PR** → 盯該 PR 的 CI → 紅燈回原 owner。**預設開發模式是 § Integration branch（小步快跑）**：feature branch 開 PR 併入 `integration/<work-id>`，只付機械檢查；test-lane 只在 `integration/<work-id>` → `main` 那一張 PR 上付一次（affected；升全量時才是 full，見 § 各事件的 test-lane）。只有一個切片就完工的工作才直接對 `main` 開 PR。操作命令見 commit skill `batch.md`、[[worktree-default]] §5、[[gh-ci-watch]]。
 
 ## 事件與成本
 
@@ -37,10 +37,10 @@ paths:
 
 | 可觀察 predicate | 走哪條 |
 | --- | --- |
-| 這件工作**一個 PR 就完工**（只有一個切片） | 上面的「一刀一 branch 一 draft PR」，base 是 `main`；它轉 ready 那一刻就是「進 `main` 的最後一趟」，付 full |
+| 這件工作**一個 PR 就完工**（只有一個切片） | 上面的「一刀一 branch 一 draft PR」，base 是 `main`；它轉 ready 那一刻就是「進 `main` 的最後一趟」，付本 PR 的 affected（升全量才 full） |
 | 其他（2 個以上切片，平行或循序皆然） | 本節（預設） |
 
-不要把同一件工作的多個小步各自對 `main` 開 PR——每張 ready 的 main PR 都付一次六 shard full lane，而且與其他 main PR 搶同一組 6 個 slot（2026-09-29 實測，21 趟 full lane：run 開始到最後一個 shard 開跑中位 0.5 分（最大 18.8）；單 shard 測試 step 中位 15.1 分（p90 31.6）；整趟 wall 中位 27.4 分（p90 40.2）——佇列等待不是主要成本，full lane 本身貴才是。中位等待只有半分鐘，但尾端仍會撞到 18.8 分）。full lane 每付一次就是近半小時的 wall、六個 shard 的算力，所以兩步以上仍然開 integration，整件工作只付一次。
+不要把同一件工作的多個小步各自對 `main` 開 PR——每張 ready 的 main PR 都付一次 test-lane（affected 依選檔數取 1–6 shard，升全量時六 shard full），而且與其他 main PR 搶同一組 slot（2026-09-29 實測，21 趟 full lane：run 開始到最後一個 shard 開跑中位 0.5 分（最大 18.8）；單 shard 測試 step 中位 15.1 分（p90 31.6）；整趟 wall 中位 27.4 分（p90 40.2）——佇列等待不是主要成本，full lane 本身貴才是。中位等待只有半分鐘，但尾端仍會撞到 18.8 分）。每付一次就是一趟排隊加 shard 算力，所以兩步以上仍然開 integration，整件工作只付一次。
 
 ### 三層，各付各的成本
 
@@ -48,14 +48,14 @@ paths:
 | --- | --- | --- | --- |
 | 切片 → `integration/<work-id>` | slice owner 開 PR（`--base integration/<work-id>`），完成後轉 ready；coordinator 以 `node scripts/integration-merge.ts --integration <worktree> --slice <branch> --pr <n>` 由 GitHub squash 落地，一個切片一個 commit | 來源 worktree 內跑 canonical check ＋ repo 在 CI 機械檢查裡跑的 typecheck（clade：`pnpm exec vp check` ＋ `node node_modules/typescript-native/bin/tsc -p tsconfig.clade.json --noEmit`，動到 `vendor/scripts` 再加 `node node_modules/typescript-native/bin/tsc -p tsconfig.vendor.json --noEmit`）；該 PR 的 CI 機械檢查全綠（工具會驗） | 不跑 |
 | `integration/<work-id>` 每次 push | 每個切片 PR 落地就是一次 push；同 ref 的舊 run 由 workflow `concurrency` 取消。它那張對 `main` 的 PR 此時是 draft，不跑 test-lane | 無——非阻塞的滾動訊號 | 單一 job 的 `affected`（base＝這條 branch 上一次綠燈的 push——被 `concurrency` 取消的那幾趟因此一併涵蓋）；紅燈的嫌疑範圍＝上一次綠燈之後併入的切片 |
-| `integration/<work-id>` → `main` | 同一張 PR 轉 ready，走 `batch ready`／seal／`confirm-merged` | 轉 ready **之前** coordinator 在 integration worktree 跑一次 `test:affected`（base＝`origin/main`，經 heavy gate slot），綠了才 `gh pr ready`；之後是完整品質鏈 | **full lane 六 shard**，在這張 PR 上跑；整件工作只付這一次 |
+| `integration/<work-id>` → `main` | 同一張 PR 轉 ready，走 `batch ready`／seal／`confirm-merged` | 轉 ready **之前** coordinator 在 integration worktree 跑一次 `test:affected`（base＝`origin/main`，經 heavy gate slot），綠了才 `gh pr ready`；之後是完整品質鏈 | 本 PR 的 `affected`（升全量時 full lane 六 shard），在這張 PR 上跑；整件工作只付這一次 |
 
 ### MUST
 
 1. coordinator 從最新 `origin/main` 開 `integration/<work-id>` 並**立刻 push 上 origin**（切片 PR 要有 base；`wt-helper add --base integration/<work-id>` 開後續切片；第一棵 integration 仍從 landing base 分叉），**第一個切片併入後立刻**對 `main` 開 draft PR 並登記 `batch draft --kind visibility`。這一張就是整件工作的可見性；commit 列表就是切片清單。
 2. **每一個**切片併入之前，coordinator 都要先把 integration 同步到最新 `origin/main`（每次併入的前置，不是收尾動作）。
 3. **每一個**切片開工前都要宣告路徑（claim 的 `expected_paths`），且與**每一個**其他活切片的宣告路徑不相交。相交就序列化，或併成同一個切片。序列化＝後一片等前一片併入之後，才以 `wt-helper add --base integration/<work-id>` 從已含前一片的 integration 開出；這樣的切片碰前一片碰過的路徑，`integration-merge.ts` 放行。兩片都從併入前的 integration 開出、又碰同一路徑，就是並行，工具拒收——後到的那片先 merge 最新的 integration 再送。
-4. 切片層跑 canonical check ＋ repo 在 CI 機械檢查裡跑的 typecheck，不要在每個切片各跑一次 `test:affected`／測試（N 個切片就是 N 次排 heavy gate slot）。`test:affected` 只在 integration 轉 ready 前跑一次。2026-09-21 實測兩個切片的 `test:affected` 在 heavy gate slot 各排了二十分鐘以上還沒輪到，是切片層最慢的一環，而 canonical check 只要 3 秒；Charles 當日拍板切片只付 canonical check。保護沒有少：紅了用切片 commit 列表二分，進 `main` 仍有完整 test-lane。typecheck 不能省成只跑 `vp check`：它的 typecheck 範圍不等於 CI `validate-manifests` 跑的 `tsconfig.clade.json`（2026-09-21 `scripts/main-sync.ts` 的 TS2534 通過 `vp check`、進了 main 才紅，之後每張 ready 的 PR 都帶這個紅，直到另開一張 PR 修掉）。
+4. 切片層跑 canonical check ＋ repo 在 CI 機械檢查裡跑的 typecheck，不要在每個切片各跑一次 `test:affected`／測試（N 個切片就是 N 次排 heavy gate slot）。`test:affected` 只在 integration 轉 ready 前跑一次。2026-09-21 實測兩個切片的 `test:affected` 在 heavy gate slot 各排了二十分鐘以上還沒輪到，是切片層最慢的一環，而 canonical check 只要 3 秒；Charles 當日拍板切片只付 canonical check。保護沒有少：紅了用切片 commit 列表二分，進 `main` 仍有 PR 的 affected 與 nightly full。typecheck 不能省成只跑 `vp check`：它的 typecheck 範圍不等於 CI `validate-manifests` 跑的 `tsconfig.clade.json`（2026-09-21 `scripts/main-sync.ts` 的 TS2534 通過 `vp check`、進了 main 才紅，之後每張 ready 的 PR 都帶這個紅，直到另開一張 PR 修掉）。
 5. 滾動訊號紅燈：coordinator 以上一次綠燈之後併入的切片為嫌疑範圍，紅因歸到切片就 `git revert` 該切片的 commit、把它退回 owner；之後序列化疊在它上面、路徑相交的切片要從新到舊一起 revert、一起退回。不要讓整條 integration 等一個切片修好。
 6. 切片 owner 對 `integration/<work-id>` 開 PR（做到一半先開 draft，完成後自己 `gh pr ready` 該切片 PR），不對 `main` 開 PR，也不自己 merge。落地一律由 coordinator 跑 `integration-merge.ts --pr <n>`（它驗 PR 狀態、機械檢查全綠、同步與路徑不相交）；不要在 GitHub 網頁或 `gh pr merge` 直接按掉切片 PR。切片 PR 不登記 `batch draft` receipt。
 
@@ -65,26 +65,48 @@ paths:
 
 ## 各事件的 test-lane
 
-SoT 是 `.github/workflows/validate.yml` 的 `lane-plan` job（consumer 以自家 workflow 對應）；本表是它的人讀版。
+SoT 是 `.github/workflows/validate.yml` 的 `lane-plan` job（consumer 以自家 workflow 對應）；base＝`main` 的 PR 由 `scripts/test-lanes/pr-lane.ts` 判，coordinator 的 `merge-queue.ts` 讀同一份。本表是它們的人讀版。
 
 | 事件 | test-lane |
 | --- | --- |
-| PR，base＝`main`、非 draft | full lane 六 shard（`integration/<work-id>` → `main` 的最後一趟，或單切片工作的那張 PR） |
+| PR，base＝`main`、非 draft | `affected`（base＝PR base；shard 數依選到的測試檔數比例取 1–6）。選檔器升全量（`package.json`、lockfile、`tsconfig*`、執行期 harness，見 `scripts/test-lanes/affected.ts` 的 `FULL_ESCALATION_PATTERNS`）→ full lane 六 shard。PR 檔案清單取不到（compare 失敗或 ≥300 檔）→ full，不猜 |
+| PR，base＝`main`、非 draft，**純文件** | 不跑。純文件＝每個變更路徑（改名的舊路徑也算）都在 `HANDOFF.md`、`ROADMAP.md`、`docs/`、`tasks/`、`specs/plans/` 底下、是 `.md`，且不是**契約文件**——被測試點名讀取的文件（`scripts/test-lanes/deps.json` 觀測值；讀文件區超過 100 份的全 repo 掃描器不算點名）。例：`docs/tech-debt.md` 被 td-register 測試讀，是契約，照跑 affected |
 | PR，base＝`integration/**`，或任何 draft | 不跑（只付 vp-check／doctor／validate-manifests） |
-| PR 或 push，變更全在登記簿 allowlist（`HANDOFF.md`、`ROADMAP.md`、`docs/`、`tasks/`、`specs/plans/`、`vendor/ledger/`；改名的舊路徑也算，程式碼搬進 `docs/` 不算只動登記簿） | 不跑——登記簿同步是 push 的大宗，每筆各燒一次六 shard full 買不到任何訊號 |
-| push 到 `main` 或 `integration/**` | 單一 job 的 `affected`，base＝該 branch 上一次綠燈的 push（它不是 HEAD 的祖先才退回 push 之前的 SHA；新建 branch 用 `origin/main`）。full 已在進 `main` 的 PR 上付過，這一趟只驗上次綠燈之後落地的那幾步 |
-| nightly | full lane 六 shard；`main` 自上一趟綠燈 nightly 後沒動就跳過 |
+| push，變更全在登記簿 allowlist（`HANDOFF.md`、`ROADMAP.md`、`docs/`、`tasks/`、`specs/plans/`、`vendor/ledger/`；改名的舊路徑也算，程式碼搬進 `docs/` 不算只動登記簿） | 不跑——登記簿同步是 push 的大宗，每筆各燒一趟 test-lane 買不到任何訊號 |
+| push 到 `main` 或 `integration/**` | 單一 job 的 `affected`，base＝該 branch 上一次綠燈的 push（它不是 HEAD 的祖先才退回 push 之前的 SHA；新建 branch 用 `origin/main`）。只驗上次綠燈之後落地的那幾步——PR 上的 affected 是對 PR base 算的，squash 落在更新的 `main` 上，這一趟補驗兩者的交互 |
+| nightly | full lane 六 shard；`main` 自上一趟綠燈 nightly 後沒動就跳過。full 只留在這裡與升全量的 PR：affected 選檔漏掉的交互由它兜底 |
+
+### 分片權重：CI 實測 ledger
+
+六片是依逐檔耗時做確定性 bin-packing，六片 MUST 讀同一份權重。權重來源是 CI 實測滾動 ledger（artifact `test-timings-ledger`），不是本機跑出來的 `scripts/test-lanes/timings.json`——2026-09-29 實測 CI 耗時除以 committed 值中位 1.93 倍、最大 16.5 倍。
+
+| 環節 | 行為 |
+| --- | --- |
+| 產生 | 只有 `main` 上的 schedule／`workflow_dispatch` 完整跑：各片上傳 `test-timings-obs-<n>`（只列通過的檔），`test-timings-ledger` job 把它們併進上一版（每檔取最近 3 筆通過樣本的中位數、剔除已刪檔），上傳 `test-timings-ledger` 與標記 `test-timings-ledger-sha256-<hex>` |
+| 釘版 | `lane-plan` 取最新一份可信 ledger 的 run-id 與 sha256，六片下載後驗 digest，不符就在跑任何測試前 exit 2 |
+| 退回 | 取不到可信 ledger 時整趟退回 committed `timings.json`（它是 seed，不是權重的 SoT）；給了路徑卻讀不到或 digest 不符則 throw，不默默退回 |
+
+驗 ledger 有沒有在滾：同一張 PR 六片的 log 要印出同一個 sha256。ledger 只放逐檔耗時；shard 幾何的 SoT 仍是 `lane-capacity.json`。
 
 不要為了讓某張切片 PR 或 draft「也看得到綠燈」放寬本表——要測試訊號就在來源 worktree 跑 `test:affected`。
 
+### `main` 紅了
+
+PR 只付 affected，`main` 上的紅會比以前多一種來源：affected 沒選到、或與同時落地的另一張 PR 交互出錯。訊號來自 `main` 的 push `affected` 或 nightly（nightly 紅會開固定標題的 issue）。
+
+| 可觀察 predicate | MUST |
+| --- | --- |
+| `main` 最新一趟非取消的 validate push run 紅，或 nightly issue 開著 | coordinator **當輪**處置，二擇一：派修（brief 帶紅檔與嫌疑 PR，修補 PR body 帶 `Fixes-Main: true`）或 `git revert` 嫌疑 PR 的 squash commit。嫌疑範圍＝上一次綠燈的 push（nightly 則是上一趟綠燈 nightly）之後落地的 PR |
+| `main` 紅期間 | merge-queue 的 main 紅凍結生效：只合 `Fixes-Main: true` 的 PR。**NEVER** 讓 `main` 紅著過夜等下一輪 |
+
 ### Ready 之後的 push 紀律
 
-**ready 的 main PR 上，每一次 push 都是一趟六 shard full。** 被 `concurrency` 取消的 run 已跑掉的 shard 分鐘不會退回。
+**ready 的 main PR 上，每一次 push 都是一趟 test-lane（affected，升全量時六 shard full）。** 被 `concurrency` 取消的 run 已跑掉的 shard 分鐘不會退回。
 
 | 可觀察 predicate | MUST |
 | --- | --- |
 | ready 的 main PR CI 紅了 | 先照 [[commit]] `batch.md` § CI 紅燈處置 跑 `ci-triage`；修正在來源 worktree 跑 `test:affected`（base＝`origin/main`）綠了才 push，**一次 push 帶齊**這一輪的所有修正 |
-| 預期要修不只一輪，或要邊修邊看 CI | `gh pr ready --undo` 退回 draft（停止付 full），修完再 ready |
+| 預期要修不只一輪，或要邊修邊看 CI | `gh pr ready --undo` 退回 draft（停止付 test-lane），修完再 ready |
 | 只是 `main` 往前走了、PR 沒有衝突 | 不要為了「跟上 main」push 到 ready PR；squash 落地時 GitHub 會合在最新的 `main` 上，落地後的 push `affected` 驗那一步 |
 
 ready PR 上的 CI 不是試錯環境（「push 上去讓 CI 跑一下看看」）。
@@ -196,6 +218,7 @@ timer 只做 git 自己保證安全的動作：
 | 只落後 origin | 快轉（會覆寫本機未 commit 改動時 git 拒絕 → 記為 `refused`） |
 | 超前的 commit 全是 origin 已有內容（別處 rebase 後推上去，`git cherry` 全 `-`） | 丟掉重複 commit、對齊 origin，保留不衝突的本機改動 |
 | clade home | `main-sync --apply`（登記簿同步，見上方 § 遠端強制與本機契約） |
+| clade home 的 HEAD 比上次 user level 同步前進，且投影來源乾淨 | `user-runtime --audience user --apply`：寫 `~/.agents/skills` 與 `global` skill 的 `~/.claude/skills/<name>` 受管 symlink（非 publisher 的 dev node 只有這條路更新 user level）。同一個 HEAD 不重跑 apply；上次沒成功時每輪只跑 `--dry-run` 驗收，已無落差就清掉提醒 |
 | 本機有 origin 沒有的 commit（`unpushed`／`diverged`）、index 有已 stage 未 commit 的內容（`refused`） | 不動，回報到 SessionStart |
 | merge／rebase 進行中、`main` 在別棵 worktree checkout、publish／propagate 在跑（`skipped`） | 不動，下一輪再試；只記在 `last.json`，不回報 |
 
@@ -207,12 +230,13 @@ timer 只做 git 自己保證安全的動作：
 | `diverged` | 兩邊各有對方沒有的 commit | 本機獨有的 commit 帶進 PR；落地後下一輪 timer 對齊 |
 | `refused` | 本機未 commit 或已 stage 的改動擋住對齊 | 以精確路徑 commit 那些改動；下一輪 timer 對齊 |
 | `error` | fetch 或 git 量測失敗（網路、認證、repo 異常） | 在該 repo 跑 `git fetch origin` 看錯誤；timer 本身的健康看 `dev-node.ts doctor` |
+| `user level: <lagging／apply-failed／verify-failed／skip-dirty>` | clade HEAD 前進後的 user level 同步沒成功且 dry-run 驗收仍有落差；或投影來源未 commit 擋住同一個 HEAD 超過 24 小時（`skip-dirty`） | 照提醒跑 `node scripts/user-runtime.ts --audience user --dry-run` 看落差，修好後下一輪 timer 自動清掉 |
 
 只卡著 propagate 升版 commit（`🧹 chore: 升級 clade 至 v…`）的 repo 在 3 天內不回報——下一輪 propagate 會 rebase 重推。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | timer 判定 `unpushed`／`diverged`／`refused`／`error`（propagate 升版 commit 過 3 天才算）→ 寫入 `~/.local/state/clade/main-align/last.json` 的 `attention`，SessionStart 印出（consumer 內只印自己，clade home 印全部）。**不 block** |
+| 觸發條件 | timer 判定 `unpushed`／`diverged`／`refused`／`error`（propagate 升版 commit 過 3 天才算），或 user level 同步沒成功 → 寫入 `~/.local/state/clade/main-align/last.json` 的 `attention`，SessionStart 印出（consumer 內只印自己，clade home 印全部）。**不 block** |
 | 消費端 | SessionStart 的 `vendor/scripts/worktree-freshness.ts session-start`；timer 本身的健康由 `node scripts/dev-node.ts doctor --all` 的 `main-align timer`／`main-align last run` 兩步驗 |
 | 觸發點 | 本節（consumer 端投影為 `.claude/rules/github-flow.md`） |
 

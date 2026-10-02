@@ -47,12 +47,16 @@ onlyBuiltDependencies:
 ├── isa.yml                                   # ISA 設定檔（放 repo root）
 ├── cucumber.cjs
 ├── specs/
-│   ├── api/api-spec.yml                      # OpenAPI 3
-│   └── data/
+│   ├── truth/
+│   │   ├── contracts/openapi.yaml            # OpenAPI 3（可依模組拆檔，openapi.yaml 當 $ref 入口）
+│   │   ├── data/<模組>.dbml                   # 資料模型 truth；runner 不直接讀
+│   │   └── features/
+│   │       ├── backend/<模組>/<業務名>.feature # cucumber.cjs 的 paths 直接指這裡
+│   │       └── frontend/<模組>/                # 前端 feature
+│   └── data/                                 # 從 DBML 衍生的 runner 產物，不是 truth
 │       ├── schema.sql                        # DDL
 │       └── entity_to_table_mapping.yml
-├── features/
-│   ├── <業務名>.feature
+├── features/                                 # 只放程式碼，不放 .feature
 │   ├── support/{environment.ts,authenticator.ts}
 │   └── steps/                                # 只放 instruction_type: custom
 └── server/
@@ -61,15 +65,15 @@ onlyBuiltDependencies:
     └── routes/test/{health.get.ts,token.post.ts,time.post.ts,time.delete.ts}
 ```
 
-上游 Java 版把這些放 `src/test/resources/`。Nuxt 版一律相對 repo root——`IsaSpecReader` / `EntityDdlReader` / `ApiSpecReader` 用 `node:fs` 相對 **cwd** 解析路徑，沒有 classpath 的概念。
+佈局與 `rules/core/specformula.md` § Truth 佈局一致，落點以該表為準。上游 Java 版把這些放 `src/test/resources/`。Nuxt 版一律相對 repo root——`IsaSpecReader` / `EntityDdlReader` / `ApiSpecReader` 用 `node:fs` 相對 **cwd** 解析路徑，沒有 classpath 的概念。
 
 ## isa.yml 的 Nuxt 特定值
 
 ```yaml
 config:
   api:
-    resource_path: specs/api      # 相對 cwd，不是相對 isa.yml
-    project_path: specs/api       # 單 repo 時同值
+    resource_path: specs/truth/contracts   # 相對 cwd，不是相對 isa.yml
+    project_path: specs/truth/contracts    # 單 repo 時同值
     time_format: iso
   data:
     permission: isolated

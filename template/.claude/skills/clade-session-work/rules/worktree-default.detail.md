@@ -46,9 +46,9 @@ Phase 切換之間若需在 worktree 跑 **local-only** setup chore，主線 **M
 
 > **決定要 fork worktree 之後、送出 `wt-helper add` 之前，MUST 先讀 [[wt]] skill 的 `baseline-guard.md`**（SKILL.md Step 1 帶 MUST Read 指示；該 skill 由 hub-core plugin 提供，不在 consumer 的 `.claude/skills/` 下）—— unmerged / clean / dirty 三路分流、`--baseline-scope-paths` 的對齊要求、stash strategy 的隱性風險與 `rescue` 救援、bulk-capture 的還原三步驟都在那裡。
 
-### OPSX 建立需求同樣先隔離
+### 建 plan package／tasks 檔同樣先隔離
 
-OPSX create / revise 會寫 canonical intent、binding 與投影。每次呼叫前套用上面的 pre-fork baseline guard；已有 worktree 就沿用。既有來源先用 list / inspect 唯讀找身分，避免同名需求重建。
+`/specify` 建 plan package（`specs/plans/<work-id>/`）、新增 `tasks/<date>-<slug>.md` 都是寫入。每次動手前套用上面的 pre-fork baseline guard；已有 worktree 就沿用。先唯讀查既有 work id（`specs/plans/`、`flow`），避免同一件工作開第二份計畫。
 
 ## §3 Worktree 命名與位置
 
@@ -115,24 +115,24 @@ visibility（push、draft PR、integration 模式）見 [[worktree-default]] §5
 
 ## §9.5 需求與證據的持久性
 
-OPSX canonical intent、binding、投影與正式 evidence receipt 依各自儲存契約保留。每次 phase 完成後，先經 OPSX evidence command 寫入並回讀目前 revision，再 project 重建投影；tracked artifacts 在實作 worktree 限定路徑 commit。tasks.md 是投影，不能用手動勾選當完成證據。
+需求的載體是 plan package 或 `tasks/` 檔，證據的載體是 verify evidence sidecar（`.spectra/evidence/<work-slug>.jsonl`）。每次 phase 完成後，checkbox 與 sidecar 在實作 worktree 一起限定路徑 commit（契約見 [[commit]] § worktree 內唯一合法的 commit：artifact-tick）；只勾 checkbox、沒有對應 receipt，不算完成證據。
 
-Legacy 原件經 OPSX history 唯讀回讀；未完需求以 supersedes／provenance 接續，NEVER 再跑 park／unpark 或覆寫歷史。派工前確認實際 cwd，持久證據不能只留在會 GC 的 ephemeral worktree。
+Legacy `openspec/changes/` 原件唯讀保留；未完需求開新的 plan package 或 tasks 檔接續並寫明來源，NEVER 再跑 spectra park／unpark 或覆寫歷史。派工前確認實際 cwd，持久證據不能只留在會 GC 的 ephemeral worktree。
 
 > 詳見 [[worktree-default.troubleshooting]] §9.5。
 
 ## §9.7 Artifact Reading SOP — 讀進度前先查 active worktree
 
-讀 spectra change 進度（`tasks.md` / `openspec/changes/<slug>/` artifacts / WORKTREE-BRIEF.md）時 **MUST** 先查有沒有 active worktree：
+讀工作進度（plan package 或 `tasks/` 檔、legacy `openspec/changes/<slug>/` artifacts、WORKTREE-BRIEF.md）時 **MUST** 先查有沒有 active worktree：
 
 ```bash
 ls ~/offline/<consumer>-wt/<change-slug>/ 2>/dev/null || git worktree list
 ```
 
 - **有 active worktree** → 讀 worktree 內的 `tasks.md`（working truth）；main 的 `tasks.md` 是 fork-time snapshot，不代表當前進度
-- **無 active worktree** → 讀 main（change 尚未 `/wt` 物化，或已 merge-back）
+- **無 active worktree** → 讀 main（工作尚未 `/wt` 物化，或已 merge-back）
 
-只讀 main 會誤判「還沒開始實作」— 實際可能 worktree 已推進數個 phase。`/handoff` scan、`/spectra-ask` status check、主線 cross-check 都適用本 SOP。
+只讀 main 會誤判「還沒開始實作」— 實際可能 worktree 已推進數個 phase。`/handoff` scan、主線 cross-check 都適用本 SOP。
 
 ### §9.7.1 main 端出現 tasks.md 改動時，方向由 diff 判，不由本節外推
 

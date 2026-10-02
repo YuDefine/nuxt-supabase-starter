@@ -66,7 +66,7 @@ Dependabot 唯一的更新途徑是**開 PR**。不走 PR 流程的 consumer（�
 **進入 worktree 的兩條路**：
 
 1. 主線目前已在 worktree（cwd 名含 `-wt/`）→ 跳過 Step O.0、繼續 Step O.1
-2. 主線在 main → 跑 `/wt upgrade-deps-<YYYYMMDD>` ad-hoc Form-1（不對應 spectra change）。`wt-helper add` 會走 `--baseline-strategy stash` 把 main dirty 保留，fork 出 worktree 後主線 `cd` 進去
+2. 主線在 main → 跑 `/wt upgrade-deps-<YYYYMMDD>` ad-hoc Form-1（不對應 plan package）。`wt-helper add` 會走 `--baseline-strategy stash` 把 main dirty 保留，fork 出 worktree 後主線 `cd` 進去
 
 **禁止**直接在 main working tree 跑這個 mode — 升爆掉一條 package 整個 main 都會卡，bisect / rollback 成本爆增。
 

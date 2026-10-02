@@ -1,4 +1,4 @@
 {"file":"aixbdd-workflow.md","source":"rules/core/aixbdd-workflow.md","paths":["specs/plans/**","specs/truth/**",".agents/constitution/**"]}
 {"file":"decision-authoring.md","source":"rules/core/decision-authoring.md","paths":["HANDOFF.md","packages/*/HANDOFF.md","docs/tech-debt.md","packages/*/docs/tech-debt.md",".clade/work-loop/state.json"]}
 {"file":"legacy-tests.md","source":"rules/modules/capabilities/aixbdd/legacy-tests.md","paths":["**/*.test.*","**/*.spec.*","vitest.config.*","playwright.config.*","specs/plans/**"]}
-{"file":"specformula.md","source":"rules/core/specformula.md","paths":["features/**","specs/api/**","specs/data/**","isa.yml","cucumber.cjs","server/routes/test/**","server/utils/time-service.ts","packages/*/server/routes/test/**","packages/*/server/utils/time-service.ts"]}
+{"file":"specformula.md","source":"rules/core/specformula.md","paths":["specs/truth/contracts/**","specs/truth/features/**","specs/truth/data/**","specs/api/**","specs/data/**","features/**","isa.yml","cucumber.cjs","server/routes/test/**","server/utils/time-service.ts","packages/*/server/routes/test/**","packages/*/server/utils/time-service.ts"]}

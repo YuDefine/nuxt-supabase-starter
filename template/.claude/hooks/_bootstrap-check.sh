@@ -272,6 +272,30 @@ if [[ "${CLADE_WORKSPACE_READONLY:-}" == "1" ]]; then
   exit 0
 fi
 
+# linked worktree NEVER 自動修復：bootstrap-hub 會把**現在**的 clade 投影寫進 HEAD 較舊的樹，
+# 留下「HEAD 舊、working copy 新」的大批未 commit 投影檔（<consumer-a>-wt/auto-<consumer-a>-td-680：97 檔、
+# .hub-state.json checksums 被改寫），已落地的樹因此判成 dirty、回收器收不到
+# （W-2026-10-01-worktree-accumulation-root-cause §3 C3）。worktree 的投影跟著 branch 走：
+# 要新投影就把 main 併進 branch，或在 main checkout 修好後再開樹。
+# 只跳 tracked 投影的寫入：gitignored substrate（.agents、.codex、.clade/runtime、.clade/projections、
+# .clade/rules）plain `git worktree add` 的樹本來就沒有，寫進去也不會讓樹 dirty，照舊從 main 補齊
+# （seedLinkedWorktreeState＝sync-rules write mode 用的同一條路，只複製 ignored、既有不覆寫）。
+PROJECT_GIT_DIR=$(git -C "$PROJECT_ROOT" rev-parse --path-format=absolute --git-dir 2>/dev/null || true)
+PROJECT_COMMON_DIR=$(git -C "$PROJECT_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+if [[ -n "$PROJECT_GIT_DIR" && -n "$PROJECT_COMMON_DIR" && "$PROJECT_GIT_DIR" != "$PROJECT_COMMON_DIR" ]]; then
+  SEED_OUTPUT=$(cd "$PROJECT_ROOT" && CLADE_SEED_LIB="$CLADE_ROOT/scripts/lib/projection-worktree-seed.ts" node --input-type=module -e '
+    const { findLinkedWorktreeStateGap, seedLinkedWorktreeState } = await import(process.env.CLADE_SEED_LIB)
+    const gap = findLinkedWorktreeStateGap(process.cwd())
+    if (gap) {
+      const { copied } = await seedLinkedWorktreeState(process.cwd(), gap)
+      if (copied.length) console.log(`[clade] 已從 main 補齊 gitignored substrate：${copied.join(", ")}`)
+    }' 2>&1) || SEED_OUTPUT="[clade] ⚠ gitignored substrate 補齊失敗：${SEED_OUTPUT}"
+  [[ -n "$SEED_OUTPUT" ]] && echo "$SEED_OUTPUT" >&2
+  FIRST_ERROR=$(printf '%s\n' "$CHECK_OUTPUT" | grep -m1 '\[clade error\]' || true)
+  echo "[clade] 偵測到 drift / orphan，linked worktree 不自動修復（投影隨 branch：把 main 併進來即更新）${FIRST_ERROR:+: $FIRST_ERROR}" >&2
+  exit 0
+fi
+
 # drift / orphan 偵測到 → 嘗試自動修復
 # 第一行 MUST 帶上實際錯誤：Grok / 部分 harness 只展示 SessionStart stderr 的首行，
 # 只寫「自動修復中」會讓人以為 hook 卡死，真正的 conflict path 被截掉。

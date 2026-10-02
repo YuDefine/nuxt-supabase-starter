@@ -43,6 +43,8 @@ ASYNC_KEEPALIVE_CONTROL task=<task-id|none> owner=<owner> deadline=<ISO>. Status
 
 **async keepalive 只控制既有 async job 的生命週期，不承載原任務。**原任務含共享修改時，塞進 `prompt` 會讓 classifier 正確讀成「未來重新執行共享修改」，即使本意只是 keepalive。
 
+控制訊息的範圍句**只限定它自己那一件**，**NEVER** 寫成像整個 session 的範圍（「收割完即止」這種句尾）：收件者可能正在主持或接手，訊息還可能跟接手指標行併成同一則 prompt。Herdr 收割 wake（`herdr-session-handoff.ts` 的 `WAKE_SCOPE_LINE`）逐字寫明「只涵蓋這一件收割……你若正在主持或接手，收割後照原任務繼續」，CDB-48 的繼任主持者就是把舊句尾讀成整段接手範圍，收割一件就停。
+
 native completion notification 到達時要停掉對應 wakeup。`task=none` 的 job 沒有 harness task status 可查，但 **owner 自己的原生狀態面**（Herdr pane 的 `agent_status`、native delegation 的 idle notification）**是 allowlist 內的 liveness 確認**；被禁的是**讀 output / log / repo 猜進度**。deadline intervention 只准用 owner 的原生控制面（例如 `native cancellation control(owner)`）發出取消，並等待 native terminal notification；確認 terminal 前保留 ownership，不要收割、重派、記 fail-streak 或釋放 lock。
 
 ### deadline 怎麼取（MUST）

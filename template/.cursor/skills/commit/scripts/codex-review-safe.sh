@@ -44,7 +44,6 @@
 # 0-A.1 with `medium` (always, unless fast-path skips), and 0-A.2 with
 # `medium --findings <prior verdict>` (conditional — only when 0-A.1 surfaces
 # Critical/Major; a fresh-context Astra pass re-verifies each finding).
-# Other contexts (Spectra propose/apply) use medium.
 # See .claude/skills/commit/SKILL.md Step 0-A.
 #
 # TD-320 resolved (2026-08-02): this script now collects the working-tree

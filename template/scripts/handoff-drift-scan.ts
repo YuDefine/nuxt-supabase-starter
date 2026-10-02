@@ -5,8 +5,8 @@
  * handoff-drift-scan.ts — surface stale HANDOFF.md entries
  *
  * Per the worktree atomicity flow (worktree-default.md §5.5), worktree
- * branches accumulate commits until `/spectra-archive` runs `wt-helper
- * merge-back`. Between subagent commit and archive, HANDOFF.md often falls
+ * branches accumulate commits until they land (`wt-helper merge-back` or a
+ * squash PR). Between subagent commit and landing, HANDOFF.md often falls
  * behind: it says "P7 進行中" while the branch HEAD already has the P7
  * commits.
  *
@@ -23,7 +23,7 @@
  *   2. Branch HEAD has commits dated newer than HANDOFF.md mtime AND slug is mentioned
  *      → "HANDOFF mention stale: branch progressed since last entry"
  *   3. Worktree branch is fully merged to main but worktree still exists
- *      → "ready to absorb via /spectra-archive or wt-helper merge-back"
+ *      → "ready to clean up via wt-helper cleanup"
  *   4. Branch HEAD is far behind main (≥ threshold commits) AND no other trigger fires
  *      → "wt drift > N commits, merge-back will likely conflict; sync soon"
  *
@@ -464,7 +464,7 @@ function checkDrift(consumerRoot, worktree) {
       worktree,
       slug,
       drift: 'merged-but-not-cleaned',
-      message: `worktree branch is fully merged to main; run \`wt-helper cleanup ${slug} --force --force-discard-unland\` or absorb via /spectra-archive`,
+      message: `worktree branch is fully merged to main; run \`wt-helper cleanup ${slug} --force --force-discard-unland\``,
       commitDistanceBehind,
     }
   }
