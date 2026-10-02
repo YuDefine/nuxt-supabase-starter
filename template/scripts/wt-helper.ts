@@ -224,6 +224,8 @@ interface WtOptions {
   baselineStashName?: string
   show?: string
   taskSummary?: string
+  /** 預期落地方式（worktree 根治 C1）：pr｜batch｜none；預設 pr。寫進 resource.registered。 */
+  landing?: string
   /** `<scheme>:<id>` naming the work this worktree serves — `td:TD-787`, `notion:<uuid>`. */
   origin?: string
   workDone?: boolean
@@ -318,6 +320,18 @@ function findConsumerRoot(start = process.cwd()) {
   const commonDirRaw = git(['rev-parse', '--git-common-dir'], { cwd: dir })
   const commonDir = resolve(dir, commonDirRaw)
   return dirname(commonDir)
+}
+
+const LANDINGS = ['pr', 'batch', 'none'] as const
+
+/** `--landing`／`CLADE_WT_LANDING` → pr｜batch｜none；缺或不認得 → pr（PR 制是預設落地方式）。 */
+function normalizeLanding(raw: string | undefined): (typeof LANDINGS)[number] {
+  const value = String(raw ?? '')
+    .trim()
+    .toLowerCase()
+  return (LANDINGS as readonly string[]).includes(value)
+    ? (value as (typeof LANDINGS)[number])
+    : 'pr'
 }
 
 function makeSlugSafe(s) {
@@ -1047,7 +1061,7 @@ export function linkGitignoredRuntimeFiles(
 }
 
 const ADD_USAGE =
-  'Usage: wt-helper add <slug> --task-summary <text> [--base <ref>] [--expected-paths <comma>] [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>] [--skip-prefork-audit] [--include-unrelated-dirty]'
+  'Usage: wt-helper add <slug> --task-summary <text> [--landing pr|batch|none] [--base <ref>] [--expected-paths <comma>] [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>] [--skip-prefork-audit] [--include-unrelated-dirty]'
 
 function hashUtf8(content: string) {
   return createHash('sha256').update(content).digest('hex')
@@ -3583,6 +3597,9 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
         head,
         purpose: opts.taskSummary ?? null,
         purpose_confidence: opts.taskSummary ? 'confirmed' : 'unknown',
+        // worktree 根治 C1：誰開（dispatch）與預期怎麼落地，事件驅動回收與 C6 的 owner 判定要用。
+        dispatch_id: process.env.CLADE_DISPATCH_ID?.trim() || null,
+        landing: normalizeLanding(opts.landing ?? process.env.CLADE_WT_LANDING),
       },
       sources: [
         {
@@ -8406,6 +8423,7 @@ const VALUE_FLAGS = new Set([
   '--baseline-stash-name',
   '--show',
   '--task-summary',
+  '--landing',
   '--expected-paths',
   '--origin',
   '--verification',
@@ -8637,6 +8655,7 @@ async function main() {
     baselineStashName: values['--baseline-stash-name'],
     show: values['--show'],
     taskSummary: values['--task-summary'],
+    landing: values['--landing'],
     expectedPaths: values['--expected-paths'],
     origin: values['--origin'],
     base: values['--base'],
