@@ -98,6 +98,23 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 
 `flow plan readiness` 依 `plan.md` frontmatter 的 `work_kind` 決定要求集，**不**讀 § Decisions 的省略理由：`behavior`、`bug-uncovered` 與未宣告的 plan 要求完整集（`spec.md`、acceptance feature、`acceptance_command` 等）；`bug-covered` 與全部錨點都是 NOOP 的 `refactor` 改要求迴歸錨點，不要求 `spec.md` 與 acceptance feature。delta 形狀與種類不符時回 `kind-delta-mismatch`，改判走 `flow plan set-kind`。值域與要求集全文見 `specs/truth/work-lifecycle.md` § Package。
 
+## clade 伴隨：truth feature 接到可執行測試
+
+上游只規定 truth 佈局與 DSL 形狀；runner 怎麼讀 truth、未驗證的 feature 怎麼標、step 與 DSL 怎麼對帳，依 `~/offline/aixbdd-MES-Benchmark` 補成下列 MUST（括號是 `specs/plans/W-2026-10-02-aixbdd-benchmark-standard/plan.md` 對照表列號）。適用：本檔生效且 `specs/truth/features/**` 有 `.feature` 的 repo。設定步驟與範本在 cookbook `vendor/snippets/aixbdd/README.md` § 可執行測試接線。
+
+1. **runner 直接讀 truth**（B1）：**每一個** BDD runner 的 feature 來源 MUST 是 `specs/truth/features/<介面>/`。工具要求 feature 位在自己目錄底下時（playwright-bdd），用進版控的相對目錄連結指回 truth。**NEVER** 把 feature 複製到 `src/test/resources`、`e2e/features` 這類副本——副本一分岔，綠燈測的就不是 truth。
+2. **驗證狀態只有三種**（B2）：truth 的**每一支** feature MUST 落在下表其中一種。`@code-mismatch` 與每個疑點 MUST 掛 `# [need clarification] Q-<模組>-n …`，寫明實際行為與程式碼位置。
+
+   | 標示 | 意思 | runner |
+   | --- | --- | --- |
+   | 無標籤 | 有 step definition，已執行並通過 | 執行 |
+   | `@code-mismatch` | 規格寫規則原意，產品碼沒做到，執行會紅 | 執行；紅燈待裁決改碼或改規格 |
+   | `@unverified` | 從程式碼逆向補齊，句型可能沒有 step definition，未執行 | 預設排除（tag 過濾 `not @unverified`），NEVER 算進綠燈或覆蓋數 |
+
+   刻意把現有缺陷鎖成規格的 Rule，標題寫「現況鎖定，非期望行為」並掛 Q 註解，**不**標 `@code-mismatch`（它會通過）。
+3. **step 與 DSL 雙向機械對帳**（B4）：手寫 step definition 的**每一個**介面 MUST 在 CI 接一支檢查，四項任一不過就 exit 1：① 每個 step definition 在該介面 `dsl.md` 聯集（介面根＋各模組）恰好一列，每列句型恰有一個 step definition；② 語意欄標「未實作」的句型沒有 step definition，且只被 `@unverified` feature 使用；③ 產生器（如 `bddgen`）輸出 missing step 時判紅，不採信它的 exit 0；④ 產出 0 支 spec 或 0 個 scenario 判紅（路徑斷了也是 exit 0）。SpecFormula 路徑不手寫 step，改照 cookbook § dsl.md → dsl.yml 轉換規則。
+4. **三處同一組模組鍵**（B6）：`specs/truth/contracts/`、`specs/truth/features/backend/`、`specs/truth/features/frontend/` 的模組 MUST 用同一組鍵（同名的檔或目錄；`NN-` 前綴可選，用了就三處一致）。只存在其中一端的模組可以在別處缺席，**NEVER** 讓同一模組在不同處換名。
+
 ## clade overlay
 
 上游沒有而 clade 需要的行為，只走兩條 clade-owned 路徑，不改上游檔：
@@ -136,7 +153,7 @@ overlay 只**追加**步驟，**NEVER** 改寫上游已定義的語意（Setup �
 
 ## Reference signal（不 block）
 
-宣告即須完整覆蓋，既有 consumer 一律回補。宣告與實況的判準只住在 `scripts/lib/capability-truth-coverage.ts`，兩個入口共用：
+宣告即須完整覆蓋，既有 consumer 一律回補——truth 是空的 consumer 照 cookbook `vendor/snippets/aixbdd/baseline-reverse.md` 從程式碼逆向建基準線（B3）。宣告與實況的判準只住在 `scripts/lib/capability-truth-coverage.ts`，兩個入口共用：
 
 | 入口 | 量什麼 | 擋不擋 |
 | --- | --- | --- |
