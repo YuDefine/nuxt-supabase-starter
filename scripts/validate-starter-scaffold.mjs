@@ -219,22 +219,13 @@ export function formatReportRow(row) {
 async function loadScaffolderModules() {
   if (scaffolderModules) return scaffolderModules
 
+  // 直接叫 package 自己的 .bin/tsdown：script 改由 root 執行後不再經 `vp run`，
+  // 環境 PATH 不保證有 pnpm（CI 的 pnpm 由 vp env 管，只在 vp process tree 內可見）。
   runCommand(
-    'pnpm',
-    [
-      '--dir',
-      CREATE_PACKAGE_DIR,
-      'exec',
-      'tsdown',
-      'src/cli.ts',
-      'src/assemble.ts',
-      '--format',
-      'esm',
-      '--out-dir',
-      'dist',
-    ],
+    join(CREATE_PACKAGE_DIR, 'node_modules', '.bin', 'tsdown'),
+    ['src/cli.ts', 'src/assemble.ts', '--format', 'esm', '--out-dir', 'dist'],
     {
-      cwd: TEMPLATE_ROOT,
+      cwd: CREATE_PACKAGE_DIR,
     },
   )
 

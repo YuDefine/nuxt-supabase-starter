@@ -224,6 +224,11 @@ exit 0 且無輸出。實測 `bash template/scripts/pre-push/runner.sh` 為 exit
   `packages/create-nuxt-starter/test/scaffold-audit-regression.test.ts`。
 - 附帶修正一個 2026-08-19 起即恆紅的既有 fixture：`<consumer-a>` 是 registry 內真實 consumer，
   負向斷言改用不在 registry 的 `<consumer-x>`（僅 test fixture，未動 check 邏輯）。
+- CI 第一輪 `Fresh Scaffold Audit Gate` 紅：舊入口 `vp run` 會把 vp env 管理的 pnpm 注入 PATH，
+  `node` 直跑時 `pnpm --dir … exec tsdown` spawn 失敗（status null）。改為直接呼叫
+  `packages/create-nuxt-starter/node_modules/.bin/tsdown`（tsdown 是該 package 的 direct
+  devDep，install 後 .bin 必存在），不再依賴 ambient pnpm；lifecycle test 的 `bin/pnpm`
+  shim 同步改為在同一位置寫 tsdown stub。
 
 ### Verification（2026-10-03，本機）
 
@@ -237,6 +242,8 @@ exit 0 且無輸出。實測 `bash template/scripts/pre-push/runner.sh` 為 exit
 - `node ../scripts/validate-starter-scaffold.mjs`（於 `template/`）：4 preset 全過；
   跑完 `temp/validate-starter/` 不存在，`--keep` 後保留 4 個 fixture；scaffold 輸出的
   `scripts/` 無 `validate-starter.mjs`、`package.json.scripts` 無 `validate:starter`。
+- `.bin/tsdown` 直叫修正後上述全部重跑仍 PASS（lifecycle 8/8、4 preset、audit 10/10、
+  hygiene、vp check 242/270）。
 - PR CI 與 create-clean dry-run 另記於實作 PR；合入後依 Acceptance 結案。
 
 ### Acceptance
