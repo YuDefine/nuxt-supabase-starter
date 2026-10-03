@@ -18,7 +18,7 @@
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 
 const ROOT = process.cwd()
 const argv = new Set(process.argv.slice(2))
@@ -146,17 +146,30 @@ function checkNodeModules() {
  * void / NuxtHub D1 軌完全沒有 Supabase，卻仍被檢查「Supabase CLI 有沒有裝」、
  * 「本地 Supabase 有沒有跑」、「database.types.ts 產了沒」，於是首輪驗收固定吐三條
  * 與這個專案無關的 WARN —— 其中一條還給出 `supabase gen types --local` 這個在該軌
- * 永遠跑不動的修法。判不出來（缺 hub.json / 解析失敗）時回 true，維持原行為。
+ * 永遠跑不動的修法。判不出來（缺 manifest / 解析失敗）時回 true，維持原行為。
  */
+/**
+ * Consumer manifest：canonical 是 `.clade/manifest.json`；`.claude/hub.json` 只是舊 alias，
+ * 新 scaffold 不一定有（2026-10-03 AMMS：只有 canonical，首輪驗收固定報「缺檔」FAIL）。
+ */
+function manifestPath() {
+  const canonical = join(ROOT, '.clade', 'manifest.json')
+  return existsSync(canonical) ? canonical : join(ROOT, '.claude', 'hub.json')
+}
+
+function readManifest() {
+  return readJsonSafe(manifestPath())
+}
+
 function usesSupabase() {
-  const data = readJsonSafe(join(ROOT, '.claude', 'hub.json'))
+  const data = readManifest()
   const dbSchema = data?.modules?.['db-schema']
   if (typeof dbSchema !== 'string') return true
   return dbSchema.startsWith('supabase')
 }
 
 function usesSelfHostedSupabase() {
-  const data = readJsonSafe(join(ROOT, '.claude', 'hub.json'))
+  const data = readManifest()
   return data?.modules?.['db-runtime'] === 'supabase-self-hosted'
 }
 
@@ -173,33 +186,22 @@ function usesExistingServerDatabase() {
 }
 
 function checkHubJson() {
-  const p = join(ROOT, '.claude', 'hub.json')
+  const p = manifestPath()
+  const label = `${relative(ROOT, p)} 存在 + 合法`
   const data = readJsonSafe(p)
   if (!data) {
-    record(
-      'hub-json',
-      '.claude/hub.json 存在 + 合法',
-      'FAIL',
-      '缺檔或解析失敗',
-      'cd <projectDir> && pnpm hub:bootstrap',
-    )
+    record('hub-json', label, 'FAIL', '缺檔或解析失敗', 'cd <projectDir> && pnpm hub:bootstrap')
     return
   }
   const required = ['version', 'modules']
   const missing = required.filter((k) => !data[k])
   if (missing.length) {
-    record(
-      'hub-json',
-      '.claude/hub.json 存在 + 合法',
-      'FAIL',
-      `缺欄位: ${missing.join(', ')}`,
-      '重跑 init-consumer',
-    )
+    record('hub-json', label, 'FAIL', `缺欄位: ${missing.join(', ')}`, '重跑 init-consumer')
     return
   }
   record(
     'hub-json',
-    '.claude/hub.json 存在 + 合法',
+    label,
     'OK',
     `v${data.version}, modules=${Object.keys(data.modules).join('/')}`,
   )

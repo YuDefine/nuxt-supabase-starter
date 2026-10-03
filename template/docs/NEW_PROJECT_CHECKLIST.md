@@ -134,9 +134,9 @@ ls .claude/skills/ | sort
 全綠後（或 verify-starter 退出碼 = 0/2）：
 
 1. **設計脈絡**（首次必跑）：在 Claude Code session 內執行 `/impeccable teach` 產出 `.impeccable.md`
-2. **第一個需求**：`/opsx` 建立 OPSX change → 依 `pnpm opsx:list` 找到 change ID，再用 `pnpm opsx:status -- --change-id <chg_...>` 讀取 work plan
+2. **第一個需求**：在 Claude Code 跑 `/work-route`，由它判斷走哪條流程（clade bootstrap 後可用）
 3. **OAuth**（如選了 better-auth / nuxt-auth-utils）：去 provider console 申請 credentials → 填 `.env`（**人類執行，AI 不代填**）
-4. **完整教學**：先看 [QUICK_START](verify/QUICK_START.md)，再用 `/opsx` 建立第一個需求
+4. **完整教學**：先看 [QUICK_START](verify/QUICK_START.md)，再用 `/work-route` 開始第一個需求
 
 ## ⚠️ 常見問題
 
