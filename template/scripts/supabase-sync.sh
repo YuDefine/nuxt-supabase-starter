@@ -26,9 +26,16 @@ fi
 
 echo "Syncing supabase/ to $DEV_SSH_HOST..."
 
-rsync -az --timeout=30 \
-  "$LOCAL_SUPABASE/config.toml" \
-  "$DEV_SSH_HOST:$DEV_PROJECT_DIR/supabase/config.toml"
+# config.toml 是 per-host 事實（ports、project_id 前綴），NEVER 跟 migrations 一起推過去：
+# 本機 ports 覆蓋到共用 dev host，下次 restart 所有指向原 port 的 consumer 全斷（clade local-stack-config）。
+# dev host 的 config.toml 由該 host 上 `supabase init` 一次建立，之後只在那台改。
+if ! remote_exec "test -f $DEV_PROJECT_DIR/supabase/config.toml"; then
+  echo "❌ $DEV_SSH_HOST:$DEV_PROJECT_DIR/supabase/config.toml 不存在 —— dev host 還沒初始化。" >&2
+  echo "   在 dev host 跑一次：cd $DEV_PROJECT_DIR && supabase init，project_id 設成 repo 名，再 supabase start。" >&2
+  echo "   見 docs/playbooks/01-dev-database.md。" >&2
+  exit 1
+fi
+remote_exec "mkdir -p $DEV_PROJECT_DIR/supabase/migrations"
 
 test -f "$LOCAL_SUPABASE/seed.sql" && \
   rsync -az --timeout=30 "$LOCAL_SUPABASE/seed.sql" "$DEV_SSH_HOST:$DEV_PROJECT_DIR/supabase/seed.sql" || true

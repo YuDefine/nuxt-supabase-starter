@@ -19,18 +19,24 @@
 # 自架 stack 不在那個 project state 裡，容器再健康 CLI 也只會回
 # "supabase start is not running"。這就是 compose 模式存在的理由。
 
-# 從 .env 讀取 SUPABASE_MODE（若環境變數未設定）
-if [ -z "$SUPABASE_MODE" ] && [ -f "$(dirname "$0")/../../.env" ]; then
-  _mode=$(grep '^SUPABASE_MODE=' "$(dirname "$0")/../../.env" 2>/dev/null | cut -d'=' -f2-)
-  SUPABASE_MODE="${_mode:-local}"
-fi
-
-SUPABASE_MODE="${SUPABASE_MODE:-local}"
-DEV_SSH_HOST="${DEV_SSH_HOST:-}"
-DEV_PROJECT_DIR="${DEV_PROJECT_DIR:-}"
-
 _COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _PROJECT_ROOT="$(cd "$_COMMON_DIR/../.." && pwd)"
+
+# 環境變數優先，未設定才讀專案根目錄的 .env。
+# 路徑 MUST 從本檔位置推（`$0` 是呼叫端 scripts/*.sh，`$0/../../.env` 會指到 repo 外）；
+# 呼叫端多半 `set -u`，所以只能用 `${VAR:-}` 讀。三個變數都要讀：錯誤訊息承諾了「或在 .env 中設定」。
+_env_or_dotenv() {
+  local key="$1" value="${!1:-}"
+  if [ -z "$value" ] && [ -f "$_PROJECT_ROOT/.env" ]; then
+    value=$(grep "^${key}=" "$_PROJECT_ROOT/.env" 2>/dev/null | tail -1 | cut -d'=' -f2-)
+  fi
+  printf '%s' "$value"
+}
+
+SUPABASE_MODE="$(_env_or_dotenv SUPABASE_MODE)"
+SUPABASE_MODE="${SUPABASE_MODE:-local}"
+DEV_SSH_HOST="$(_env_or_dotenv DEV_SSH_HOST)"
+DEV_PROJECT_DIR="$(_env_or_dotenv DEV_PROJECT_DIR)"
 
 scaffold_answers_existing_server() {
   local answers="$_PROJECT_ROOT/.claude/scaffold-answers.json"

@@ -203,6 +203,76 @@ describe('generated quality readiness', () => {
     }
   })
 
+  it('base vite.config 的 fmt 風格與 fmt-only 排除等同 clade preset 的 fmtBase', async () => {
+    const preset = await import('../../../vendor/oxc-shared/preset.ts')
+    const root = scaffold([])
+    const config = readFileSync(join(root, 'vite.config.ts'), 'utf8')
+    const literal = /const FMT_STYLE = (\{[\s\S]*?\n\}) as const/.exec(config)?.[1]
+    if (!literal) throw new Error('找不到 const FMT_STYLE 物件')
+    const style = new Function(`return (${literal})`)()
+    const { ignorePatterns: presetIgnore, ...presetStyle } = preset.fmtBase
+    // 少一個選項 oxfmt 就退回自己的預設，scaffold 第一次 vp check 整片紅
+    expect(style).toEqual(presetStyle)
+
+    const fmtOnly = arrayLiterals(config, 'FMT_ONLY_EXCLUDES')
+    const projection = new Set<string>(preset.PROJECTION_EXCLUDES)
+    const locked = new Set<string>(preset.lockedScriptProjections())
+    const presetFmtOnly = presetIgnore.filter((p: string) => !projection.has(p) && !locked.has(p))
+    expect(fmtOnly).toEqual(presetFmtOnly)
+
+    const oxfmtignore = readFileSync(join(root, '.oxfmtignore'), 'utf8').split('\n')
+    for (const pattern of fmtOnly) {
+      expect(oxfmtignore, `.oxfmtignore 缺 ${pattern}`).toContain(pattern)
+    }
+  })
+
+  it('database 的 publishable key 帶 NUXT0054 suppression 與理由（doctor --max-warnings 0 不擋首輪）', () => {
+    const config = readFileSync(join(scaffold(['database']), 'nuxt.config.ts'), 'utf8')
+    expect(config).toMatch(
+      /doctor-disable-next-line nuxt\/runtime\/no-secret-in-public-config -- \S.*\n\s*key: process\.env\.SUPABASE_KEY,/,
+    )
+  })
+
+  it('database 的 supabase/config.toml 帶 project_id = 專案名（不讓 CLI 從 cwd 推導身分）', () => {
+    const config = readFileSync(join(scaffold(['database']), 'supabase', 'config.toml'), 'utf8')
+    expect(config).toMatch(/^project_id = "example-project"$/m)
+  })
+
+  it('scripts/lib/common.sh 在 set -u 呼叫端從專案根 .env 讀 remote 設定（環境變數優先）', () => {
+    const root = scaffold(['database'])
+    writeFileSync(
+      join(root, '.env'),
+      'SUPABASE_MODE=remote\nDEV_SSH_HOST=dev-host\nDEV_PROJECT_DIR=/opt/supabase-dev\n',
+    )
+    executable(
+      join(root, 'scripts', 'probe-common.sh'),
+      '#!/bin/bash\nset -euo pipefail\nsource "$(dirname "$0")/lib/common.sh"\necho "$SUPABASE_MODE|$DEV_SSH_HOST|$DEV_PROJECT_DIR"\n',
+    )
+    const env = { ...process.env, SUPABASE_MODE: '', DEV_SSH_HOST: '', DEV_PROJECT_DIR: '' }
+    const fromDotenv = spawnSync('bash', ['scripts/probe-common.sh'], {
+      cwd: root,
+      env,
+      encoding: 'utf8',
+    })
+    expect(fromDotenv.stderr).toBe('')
+    expect(fromDotenv.stdout.trim()).toBe('remote|dev-host|/opt/supabase-dev')
+    const override = spawnSync('bash', ['scripts/probe-common.sh'], {
+      cwd: root,
+      env: { ...env, DEV_SSH_HOST: 'from-env' },
+      encoding: 'utf8',
+    })
+    expect(override.stdout.trim()).toBe('remote|from-env|/opt/supabase-dev')
+  })
+
+  it('supabase-sync.sh 不把 host-local 的 config.toml 推到 dev host（clade local-stack-config）', () => {
+    const sync = readFileSync(join(scaffold(['database']), 'scripts', 'supabase-sync.sh'), 'utf8')
+    const transfers = sync
+      .split('\n')
+      .filter((line) => /\b(rsync|scp)\b/.test(line) || /^\s+"\$/.test(line))
+    expect(transfers.join('\n')).not.toMatch(/config\.toml/)
+    expect(sync).toContain('mkdir -p $DEV_PROJECT_DIR/supabase/migrations')
+  })
+
   it('git-hooks 沒選 quality（沒有 vp）時，pre-commit 不能無條件呼叫 vp', () => {
     const hook = readFileSync(join(scaffold(['git-hooks']), '.husky', 'pre-commit'), 'utf8')
     expect(hook).toMatch(/elif \[ -x node_modules\/\.bin\/vp \]/)
