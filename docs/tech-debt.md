@@ -58,7 +58,7 @@
 
 | TD     | 狀態              | 證據與剩餘事項                                                                                                                                                                                                |
 | ------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TD-008 | IN-FLIGHT — PR #8 | `docs/tech-debt.md` 的落點計畫與 `tasks/2026-09-26-td-008-validate-starter-placement-plan.md` 在 [PR #8](https://github.com/YuDefine/nuxt-supabase-starter/pull/8)；程式搬移仍待實作，且須保留 PR #5 的修正。 |
+| TD-008 | IN-FLIGHT — PR #28 | 落點計畫已由 PR #8 合入；程式實作（搬移、workflow、audit 訊號、輸出斷言）在 [draft PR #28](https://github.com/YuDefine/nuxt-supabase-starter/pull/28)，合入後依 Acceptance 結案。 |
 | TD-010 | IN-FLIGHT — PR #9 | Better Auth CSRF 例外及本機測試在 [PR #9](https://github.com/YuDefine/nuxt-supabase-starter/pull/9)；有效帳號與部署 host 驗收仍待補。                                                                         |
 | TD-017 | IN-FLIGHT — PR #5 | `validate-starter` 的 fixture 清理與 `--keep` 在 [PR #5](https://github.com/YuDefine/nuxt-supabase-starter/pull/5)；未合併前不結案。                                                                          |
 
