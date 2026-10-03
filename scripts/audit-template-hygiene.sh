@@ -448,7 +448,15 @@ check_maintenance_script_misplacement() {
     return 0
   fi
 
-  if grep -Eiq -- '(starter hygiene|sync-to-agents|create-clean|scaffolder maintenance)' <<< "${blob}"; then
+  # 內容訊號分兩層。單字命中的是只有維護腳本會參考的 meta repo 佈局：
+  # TEMPLATE_ROOT / FIXTURE_ROOT / temp/validate-starter——scaffold 出去的專案沒有
+  # template/ 這層，consumer runtime 腳本不會出現它們（validate-starter.mjs 搬走前
+  # 三個全中）。REPO_ROOT 與 create-nuxt-starter 各自都有正當 consumer 用法——
+  # templates/vite-hooks/pre-commit 的 _REPO_ROOT 指 consumer 自己的 repo 根、
+  # verify-starter.mjs 讀 sibling packages/create-nuxt-starter 判斷 starter-self——
+  # 只有兩者同時出現（解析 repo root 又參考 scaffolder package）才算維護用途。
+  if grep -Eiq -- '(starter hygiene|sync-to-agents|create-clean|scaffolder maintenance|TEMPLATE_ROOT|FIXTURE_ROOT|temp/validate-starter)' <<< "${blob}" \
+    || { grep -Fq -- 'REPO_ROOT' <<< "${blob}" && grep -Fq -- 'create-nuxt-starter' <<< "${blob}"; }; then
     add_finding \
       "maintenance-script-misplacement" \
       "root 維護腳本或 scaffolder tooling 不應放進會被 scaffold 帶走的 template/scripts/。" \

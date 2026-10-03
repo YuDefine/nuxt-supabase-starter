@@ -5,8 +5,8 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
-const TEMPLATE_ROOT = resolve(SCRIPT_DIR, '..')
-const REPO_ROOT = resolve(TEMPLATE_ROOT, '..')
+const REPO_ROOT = resolve(SCRIPT_DIR, '..')
+const TEMPLATE_ROOT = join(REPO_ROOT, 'template')
 const CREATE_PACKAGE_DIR = join(TEMPLATE_ROOT, 'packages', 'create-nuxt-starter')
 const FIXTURE_ROOT = join(TEMPLATE_ROOT, 'temp', 'validate-starter')
 

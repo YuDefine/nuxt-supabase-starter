@@ -1,6 +1,14 @@
 // clade-legacy-test: frozen=2026-09-28 — 舊測試：沒有對應 truth，不是 BDD 的慣例來源；工作碰到就吸收（clade-spec-workflow/rules/legacy-tests.md）
 import { spawnSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'pathe'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -130,6 +138,17 @@ describe('strip manifest create-clean gate', () => {
 
     expect(result.status).not.toBe(0)
     expect(result.stderr).toContain('malformed')
+  })
+
+  // TD-008：validate-starter 維護工具已搬到 repo root scripts/，create-clean 的輸入
+  // （template tree）不再帶這支腳本與它的 package command，輸出自然也不會有。
+  it('template seed no longer carries the validate-starter maintenance script or command', () => {
+    const templateRoot = join(import.meta.dirname, '..', '..', '..')
+
+    expect(existsSync(join(templateRoot, 'scripts', 'validate-starter.mjs'))).toBe(false)
+
+    const pkg = JSON.parse(readFileSync(join(templateRoot, 'package.json'), 'utf-8'))
+    expect(pkg.scripts?.['validate:starter']).toBeUndefined()
   })
 
   it('allows absent optional paths and reports them as skipped', () => {

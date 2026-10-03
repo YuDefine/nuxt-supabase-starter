@@ -13,7 +13,7 @@
 | ------ | -------------------------------------------------------------------------------------------------------- | -------- | ----------- | ---------- |
 | TD-004 | Spectra roadmap drift check 在 CI 的 structural diff                                                     | mid      | in-progress | 2026-05-10 |
 | TD-005 | meta-monorepo 下 pre-push checks 靜默 no-op                                                              | high     | in-progress | 2026-08-19 |
-| TD-008 | `validate-starter` 維護工具會被 scaffold 帶走                                                            | mid      | open        | 2026-08-19 |
+| TD-008 | `validate-starter` 維護工具會被 scaffold 帶走                                                            | mid      | in-progress | 2026-08-19 |
 | TD-010 | 參考 app email 登入被 nuxt-security CSRF 擋下                                                            | mid      | in-progress | 2026-08-24 |
 | TD-011 | clade 投影 auth 文件仍寫舊套件名                                                                         | low      | open        | 2026-08-24 |
 | TD-012 | `lint` script guard 吃不掉 pnpm 附加參數                                                                 | mid      | done        | 2026-08-29 |
@@ -181,10 +181,10 @@ exit 0 且無輸出。實測 `bash template/scripts/pre-push/runner.sh` 為 exit
 
 ## TD-008 — `validate-starter` 維護工具會被 scaffold 帶走
 
-**Status**: open
+**Status**: in-progress（程式實作完成並送 draft PR；本機驗收全綠，待 PR 合入與 CI 終態後結案）
 **Priority**: mid
 **Discovered**: 2026-08-19 — starter public hygiene L3 commands 審查
-**Location**: `template/scripts/validate-starter.mjs`、`template/package.json`、`template/presets/_base/strip-manifest.json`
+**Location**: `scripts/validate-starter-scaffold.mjs`、`.github/workflows/validate-starter.yml`、`template/package.json`、`scripts/audit-template-hygiene.sh`
 
 ### Problem
 
@@ -204,6 +204,40 @@ exit 0 且無輸出。實測 `bash template/scripts/pre-push/runner.sh` 為 exit
 目前 strip manifest 只支援檔案刪除，create-clean 另有 parser，因此不為單一維護 command 擴充 rewrite 契約。
 
 同時在 `scripts/audit-template-hygiene.sh` 與 fixture test 補上 `maintenance-script-misplacement` 覆蓋。
+
+### Implementation（2026-10-03）
+
+以 TD-017 合入後（PR #22，`99c9d970`）的版本搬移，保留 fixture 預設清理與 `--keep`：
+
+- `template/scripts/validate-starter.mjs` → `scripts/validate-starter-scaffold.mjs`；`SCRIPT_DIR` 落在 root
+  `scripts/`，`REPO_ROOT` 改指 repo root，`TEMPLATE_ROOT` 指 `root/template`，其餘派生路徑不變。
+- workflow 入口改為 `template/` 工作目錄下 `node ../scripts/validate-starter-scaffold.mjs`，
+  PR/push path filter 由舊檔改指 root 新檔。
+- 刪除 `template/package.json` 的 `validate:starter`；`verify:starter` 不動。
+- `maintenance-script-misplacement` 補兩層內容訊號：meta repo 佈局 token（`TEMPLATE_ROOT`／
+  `FIXTURE_ROOT`／`temp/validate-starter`）單獨命中即擋；`REPO_ROOT` 與 `create-nuxt-starter`
+  因各有正當 consumer 用法（`.vite-hooks` 的 `_REPO_ROOT`、`verify-starter.mjs` 的 starter-self
+  偵測）採複合判定，同時出現才算維護用途。fixture 正／負例含 `CLADE:VENDOR-SCRIPT` 例外。
+- scaffold 輸出斷言補在 `scaffold.test.ts`（無 `scripts/validate-starter.mjs`、無
+  `validate:starter` script）與 `strip-manifest.test.ts`（template seed 不再帶腳本與 command）。
+- TD-017 兩支回歸測試的路徑同步修正：`test/unit/scripts/validate-starter.test.ts`、
+  `packages/create-nuxt-starter/test/scaffold-audit-regression.test.ts`。
+- 附帶修正一個 2026-08-19 起即恆紅的既有 fixture：`<consumer-a>` 是 registry 內真實 consumer，
+  負向斷言改用不在 registry 的 `<consumer-x>`（僅 test fixture，未動 check 邏輯）。
+
+### Verification（2026-10-03，本機）
+
+- `bash scripts/audit-template-hygiene.test.sh`：10/10 PASS（新增 2 案）。
+- `bash scripts/audit-template-hygiene.sh`：PASS，template/ 無 finding。
+- `vp test run packages/create-nuxt-starter/test/strip-manifest.test.ts`：7/7 PASS。
+- `vp test run packages/create-nuxt-starter/test/scaffold.test.ts`：34/34 PASS；
+  `test/unit/scripts/validate-starter.test.ts`：8/8 PASS；
+  `packages/create-nuxt-starter/test/scaffold-audit-regression.test.ts`：5/5 PASS。
+- `pnpm typecheck`：PASS。`vp check`：PASS（242 fmt、270 lint）。
+- `node ../scripts/validate-starter-scaffold.mjs`（於 `template/`）：4 preset 全過；
+  跑完 `temp/validate-starter/` 不存在，`--keep` 後保留 4 個 fixture；scaffold 輸出的
+  `scripts/` 無 `validate-starter.mjs`、`package.json.scripts` 無 `validate:starter`。
+- PR CI 與 create-clean dry-run 另記於實作 PR；合入後依 Acceptance 結案。
 
 ### Acceptance
 

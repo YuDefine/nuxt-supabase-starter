@@ -32,7 +32,7 @@ function write(path: string, content: string, mode?: number) {
 function run(args: string[] = [], failure = '') {
   return spawnSync(
     process.execPath,
-    [join(repoRoot, 'template/scripts/validate-starter.mjs'), ...args],
+    [join(repoRoot, 'scripts/validate-starter-scaffold.mjs'), ...args],
     {
       encoding: 'utf8',
       env: {
@@ -49,11 +49,11 @@ beforeEach(() => {
   repoRoot = mkdtempSync(join(tmpdir(), 'validate-starter-lifecycle-'))
   fixtureRoot = join(repoRoot, 'template/temp/validate-starter')
   auditScript = join(repoRoot, 'scripts/vendor/evlog-adoption-audit.mjs')
-  const scriptDir = join(repoRoot, 'template/scripts')
+  const scriptDir = join(repoRoot, 'scripts')
   mkdirSync(scriptDir, { recursive: true })
   copyFileSync(
-    fileURLToPath(new URL('../../../scripts/validate-starter.mjs', import.meta.url)),
-    join(scriptDir, 'validate-starter.mjs'),
+    fileURLToPath(new URL('../../../../scripts/validate-starter-scaffold.mjs', import.meta.url)),
+    join(scriptDir, 'validate-starter-scaffold.mjs'),
   )
 
   // Keep the real CLI and filesystem lifecycle; replace only build/scaffold/audit dependencies.
