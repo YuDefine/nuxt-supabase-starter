@@ -406,13 +406,9 @@ export function generatePackageJson(
     delete basePkg.scripts['skills:update']
   }
 
-  // OPSX control-plane entrypoints (always available after clade bootstrap)
   basePkg.scripts['audit:ux-drift'] = 'node scripts/audit-ux-drift.ts'
-  const opsxCli = 'node .clade/vendor/scripts/opsx-control.ts'
-  basePkg.scripts['opsx:list'] = `${opsxCli} list`
-  basePkg.scripts['opsx:status'] = `${opsxCli} status`
-  basePkg.scripts['opsx:instructions'] = `${opsxCli} instructions`
-  basePkg.scripts['opsx:history'] = `${opsxCli} history`
+  // NEVER 再加 `opsx:*`：OPSX 控制面（`.clade/vendor/scripts/opsx-control.ts`）已在 clade
+  // f935988a8 刪除，留著只會讓新專案帶四條指向不存在檔案的 script。需求開工入口是 `/work-route`。
 
   // Apply admission after feature scripts have been assembled. Both branches forward
   // package-manager arguments and preserve the command's exit status.
@@ -430,7 +426,9 @@ export function generatePackageJson(
     }
   }
 
-  // Sort dependencies
+  // Sort scripts and dependencies：oxfmt 的 experimentalSortPackageJson.sortScripts 會排 scripts，
+  // 不先排好的話新專案第一次 vp check 就判 package.json 格式不符。
+  basePkg.scripts = sortObject(basePkg.scripts)
   basePkg.dependencies = sortObject(basePkg.dependencies)
   basePkg.devDependencies = sortObject(basePkg.devDependencies)
 
@@ -497,6 +495,11 @@ export function generateNuxtConfig(
     runtimeLines.push(`    },`)
     publicLines.push(`      supabase: {`)
     publicLines.push(`        url: process.env.SUPABASE_URL,`)
+    // publishable（anon）key 本來就給瀏覽器用；vite-doctor 的 NUXT0054 只看 key 名稱與前 120 字元有沒有
+    // `public`，對它是誤報。理由寫在 suppression 上，doctor 的 --max-warnings 0 才不會擋新專案首輪驗收。
+    publicLines.push(
+      `        // doctor-disable-next-line nuxt/runtime/no-secret-in-public-config -- publishable key，設計上公開給 client`,
+    )
     publicLines.push(`        key: process.env.SUPABASE_KEY,`)
     publicLines.push(`      },`)
   }
@@ -669,6 +672,8 @@ export function generateNuxtConfig(
     config = `import { voidPlugin } from 'void'\n\n${config}`
   }
 
+  // 佔位符換成空字串時會留下連續空行（例如沒有 nitro 設定時 `})` 前多兩行），oxfmt 會判格式不符
+  config = config.replace(/\n{3,}/g, '\n\n').replace(/\n\n(\}\)\n?)$/, '\n$1')
   writeFileSync(configPath, config)
 }
 
@@ -1171,7 +1176,7 @@ function copyScripts(targetDir: string, feats: string[], agentTargets: AgentRunt
 
   // Finally sync the full template scripts tree so Quick Start always inherits
   // the latest shared scripts and script templates. Retired Spectra writers are
-  // not part of a fresh consumer; OPSX runtime scripts arrive through clade.
+  // not part of a fresh consumer; clade runtime scripts arrive through clade bootstrap.
   copyDirectoryFiltered(
     join(STARTER_ROOT, 'scripts'),
     join(targetDir, 'scripts'),
@@ -1192,7 +1197,7 @@ function copyScripts(targetDir: string, feats: string[], agentTargets: AgentRunt
 }
 
 /**
- * Fresh consumers start on OPSX. Remove legacy Spectra runtime surfaces that
+ * Fresh consumers do not start on Spectra. Remove legacy Spectra runtime surfaces that
  * arrive through the starter repository's historical projections without
  * mutating those clade-managed source projections.
  */

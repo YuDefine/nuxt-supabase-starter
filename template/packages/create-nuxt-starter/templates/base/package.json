@@ -7,10 +7,6 @@
     "build": "nuxt build",
     "dev": "nuxt dev --dotenv .env -o",
     "doctor": "vite-doctor . --max-warnings 0",
-    "opsx:history": "node .clade/vendor/scripts/opsx-control.ts history",
-    "opsx:instructions": "node .clade/vendor/scripts/opsx-control.ts instructions",
-    "opsx:list": "node .clade/vendor/scripts/opsx-control.ts list",
-    "opsx:status": "node .clade/vendor/scripts/opsx-control.ts status",
     "prepare": "nuxt prepare",
     "preview": "nuxt preview"
   },
@@ -22,7 +18,6 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@fission-ai/openspec": "1.12.0",
     "@vue/compiler-sfc": "^3.5.31",
     "typescript": "^5.9.3",
     "vite-doctor": "0.0.10",

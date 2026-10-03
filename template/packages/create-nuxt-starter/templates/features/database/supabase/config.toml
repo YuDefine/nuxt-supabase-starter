@@ -1,3 +1,7 @@
+# 本機 Docker 資源與遠端 dev host 上 `supabase start` 的身分前綴；MUST 等於 repo 名。
+# 缺了 CLI 會從 cwd 目錄名推導（遠端 `/opt/supabase-dev` → `supabase-dev`），見 clade local-stack-config。
+project_id = "{{projectName}}"
+
 [api]
 enabled = true
 port = 54321
