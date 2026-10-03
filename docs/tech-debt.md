@@ -1110,7 +1110,7 @@ receipt（`src/scaffold-receipt.ts`）把磁碟上存在、但被 gitignore 擋�
 
 1. 未展開模組：dev-login、audit、observability、shared-utils（backend）；frontend 整個介面（auth、profile-page、admin-users、shell-and-demo）。清單與盤點葉檔見 `template/specs/plans/001-baseline-reverse/coverage/modules.md`。
 2. 沒有 Gherkin runner：repo 內沒有 `isa.yml`、沒有 `test:bdd`，所以 `profiles` 的 feature 全部 `@unverified`；規約 MUST 1–3（runner 讀 truth、預設排除 `@unverified`、`dsl.md` ↔ step 雙向對帳）尚未接線。
-3. `profiles` 的八個待釐清問題（`questions.md`）：種子使用者 id 不符 zod 4 `uuid()`（Q-profiles-1）最需要裁決；Q-profiles-8 記錄缺口——`POST /api/_dev/login` 不接受指定 id，`呼叫者是使用者` 句型只能「登入後取回實際 id 並綁定別名」，字面 UUID 的情境要改 dev-login 程式才可行（本 package 不動 `server/**`）。
+3. `profiles` 的九個待釐清問題（`questions.md`）：種子使用者 id 不符 zod 4 `uuid()`（Q-profiles-1）最需要裁決；Q-profiles-8 記錄缺口——`POST /api/_dev/login` 不接受指定 id，`呼叫者是使用者` 句型只能「登入後取回實際 id 並綁定別名」，字面 UUID 的情境要改 dev-login 程式才可行（本 package 不動 `server/**`）；Q-profiles-9 記錄另一個缺口——沒有任何機制讓 session 帶 `user.role`（`syncDevLoginRole` 是 no-op、`auth.config.ts` 無 admin plugin／`additionalFields.role`），所有 `角色為 "admin"` 的 Example 在角色機制決定前無法實作（已標 `[need clarification]`）。
 4. 這份 truth 放在 `template/specs/`，會被 scaffold 帶走；是否維持，或改為 meta 層專用，尚未裁決。
 
 ### Fix approach
@@ -1121,6 +1121,7 @@ receipt（`src/scaffold-receipt.ts`）把磁碟上存在、但被 gitignore 擋�
 
 - `coverage/modules.md` 沒有「未展開」列，或每個未展開列都有「刻意不補」理由。
 - runner 實跑：無標籤 feature 全綠、`@unverified` 被排除、產出的 scenario 數 > 0；雙向對帳 exit 0。
+- Q-profiles-9 有裁決（角色落 session 的機制）後，`dsl.md` 的 `呼叫者是使用者` 句型改寫為可實作並移除 admin Example 的 `[need clarification]`。
 - `node template/specs/plans/001-baseline-reverse/tools/check-truth.mjs` exit 0。
 
 ## Cross-repo pointers

@@ -20,6 +20,7 @@ Feature: 依 id 取得單筆 Profile
 
   Rule: admin 可以讀任意 profile
 
+    # [need clarification] Q-profiles-9 session 沒有角色機制，此 Example 的 admin Given 在現有程式碼下無法讓 session 取得 admin（requireRole／[id].get.ts 會判 403／404）。
     Example: admin 讀別人
       Given 呼叫者是使用者 "<管理員甲>"，角色為 "admin"
       When 呼叫 GET "/api/v1/profiles/<使用者甲>"
@@ -37,6 +38,7 @@ Feature: 依 id 取得單筆 Profile
 
   Rule: 不存在的 profile 與無權限的 profile 對外不可區分
 
+    # [need clarification] Q-profiles-9 session 沒有角色機制，此 Example 的 admin Given 在現有程式碼下無法讓 session 取得 admin（requireRole／[id].get.ts 會判 403／404）。
     Example: admin 讀不存在的 id
       Given 資料庫中沒有 profile "<不存在者>"
       And 呼叫者是使用者 "<管理員甲>"，角色為 "admin"
@@ -67,6 +69,7 @@ Feature: 依 id 取得單筆 Profile
     #   shared/schemas/profiles.ts:37 的 profileIdParamSchema 因此回 400。實測 zod 4.3.6 的 safeParse 回 false。
     # [need clarification] Q-profiles-8 字面 UUID 無法經 dev-login 取得 session（id 由 Better Auth 指派），此 Example 的 Given 在現有機制下無法實作。
 
+    # [need clarification] Q-profiles-9 session 沒有角色機制，此 Example 的 admin Given 在現有程式碼下無法讓 session 取得 admin（requireRole／[id].get.ts 會判 403／404）。
     Example: 用種子 id 查詢
       Given 呼叫者是使用者 "a1111111-1111-1111-1111-111111111111"，角色為 "admin"
       When 呼叫 GET "/api/v1/profiles/a1111111-1111-1111-1111-111111111111"
