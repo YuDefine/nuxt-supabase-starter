@@ -28,6 +28,7 @@
 | TD-023 | Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback                                         | low      | done        | 2026-09-28 |
 | TD-024 | Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict`                                               | mid      | done        | 2026-09-30 |
 | TD-025 | scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅 | mid      | done        | 2026-09-29 |
+| TD-026 | aixbdd B3 逆向基準線只展開 profiles，其餘模組與 Gherkin runner 接線未做                                  | mid      | open        | 2026-10-03 |
 
 ### 2026-09-27 origin/main 收斂接手 brief
 
@@ -1094,6 +1095,34 @@ receipt（`src/scaffold-receipt.ts`）把磁碟上存在、但被 gitignore 擋�
 - 回歸涵蓋安裝時位元組、安裝產生的 tracked 檔、`--no-install`、ignored 目錄與 negation、既有 repo 的 tracked ignored 檔，並逐筆核對 committed blob 的 hash。排序改用工具鏈要求的 `toSorted()`，package tsconfig 補 `ES2023` lib，與 Node 24 runtime 對齊。
 - Scaffolder `pnpm test`：236 passed / 2 skipped（既有 skipped 未變更）；package `pnpm run typecheck`、改動路徑 `pnpm run lint`／`pnpm run format:check` 通過；template `pnpm run doctor` 為 clean、零診斷。
 - PR #20 轉 ready 後，CI run `36703862581` 的兩個 receipt 案例因 runner 缺少 Git 作者／提交者身分而沒有 initial commit，`git show HEAD:...` 失敗。以 `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1` 本機重現相同 2 failed；Template CI 的 Unit tests 步驟提供 fixture 的 `GIT_AUTHOR_*`／`GIT_COMMITTER_*` 後，同環境原測試 4 passed，未修改測試或斷言。合併 main 後的相關 scaffold／更新策略／receipt 測試另驗 62 passed。
+
+## TD-026 — aixbdd B3 逆向基準線只展開 profiles，其餘模組與 Gherkin runner 接線未做
+
+**Status**: open
+**Priority**: mid
+**Discovered**: 2026-10-03 — clade `W-2026-10-02-aixbdd-benchmark-standard` B3；work `W-2026-10-02-nuxt-supabase-starter-aixbdd-b3`
+**Location**: `template/specs/truth/**`、`template/specs/plans/001-baseline-reverse/`
+
+### Problem
+
+`.clade/manifest.json` 宣告了 `aixbdd` 與 `specformula`，但 `specs/truth/` 原本是空的。B3 逆向基準線已建立 backend 試點模組 `profiles`
+（techstack、contracts、data、feature、`dsl.md`、覆蓋矩陣、`tools/`），其餘仍缺：
+
+1. 未展開模組：dev-login、audit、observability、shared-utils（backend）；frontend 整個介面（auth、profile-page、admin-users、shell-and-demo）。清單與盤點葉檔見 `template/specs/plans/001-baseline-reverse/coverage/modules.md`。
+2. 沒有 Gherkin runner：repo 內沒有 `isa.yml`、沒有 `test:bdd`，所以 `profiles` 的 feature 全部 `@unverified`；規約 MUST 1–3（runner 讀 truth、預設排除 `@unverified`、`dsl.md` ↔ step 雙向對帳）尚未接線。
+3. `profiles` 的九個待釐清問題（`questions.md`）：種子使用者 id 不符 zod 4 `uuid()`（Q-profiles-1）最需要裁決；Q-profiles-8 記錄缺口——`POST /api/_dev/login` 不接受指定 id，`呼叫者是使用者` 句型只能「登入後取回實際 id 並綁定別名」，字面 UUID 的情境要改 dev-login 程式才可行（本 package 不動 `server/**`）；Q-profiles-9 記錄另一個缺口——沒有任何機制讓 session 帶 `user.role`（`syncDevLoginRole` 是 no-op、`auth.config.ts` 無 admin plugin／`additionalFields.role`），所有 `角色為 "admin"` 的 Example 在角色機制決定前無法實作（已標 `[need clarification]`）。
+4. 這份 truth 放在 `template/specs/`，會被 scaffold 帶走；是否維持，或改為 meta 層專用，尚未裁決。
+
+### Fix approach
+
+先由使用者在 `/technical-research` 拍板各端 BDD runner（SpecFormula 或手寫 step），接線後依 `expansion-guide.md` 的固定決策逐模組展開；frontend 另開 `002-frontend-reverse`。
+
+### Acceptance
+
+- `coverage/modules.md` 沒有「未展開」列，或每個未展開列都有「刻意不補」理由。
+- runner 實跑：無標籤 feature 全綠、`@unverified` 被排除、產出的 scenario 數 > 0；雙向對帳 exit 0。
+- Q-profiles-9 有裁決（角色落 session 的機制）後，`dsl.md` 的 `呼叫者是使用者` 句型改寫為可實作並移除 admin Example 的 `[need clarification]`。
+- `node template/specs/plans/001-baseline-reverse/tools/check-truth.mjs` exit 0。
 
 ## Cross-repo pointers
 

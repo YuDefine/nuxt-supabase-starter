@@ -1,0 +1,209 @@
+openapi: 3.1.0
+info:
+  title: profiles 模組合約（逆向基準線）
+  version: 0.0.0-baseline
+servers:
+  - url: http://localhost:3000
+tags:
+  - name: profiles
+paths:
+  /api/v1/profiles:
+    get:
+      tags: [profiles]
+      security:
+        - sessionCookie: []
+      operationId: listProfiles
+      summary: Profile 列表（分頁＋display_name 模糊搜尋），僅 admin
+      x-source: server/api/v1/profiles/index.get.ts:21-85
+      x-authorization: 'requireRole(admin)；server/api/v1/profiles/index.get.ts:25'
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+          description: 'coerce 成數字；非正整數與非整數為 400。x-source: shared/schemas/profiles.ts:24'
+        - name: perPage
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+          description: 'x-source: shared/schemas/profiles.ts:25；上限來自 shared/schemas/pagination.ts:11'
+        - name: search
+          in: query
+          required: false
+          schema: { type: string }
+          description: >-
+            對 display_name 做 `ILIKE %search%`；空字串視為沒有搜尋條件。search 內的 `%`、`_`
+            不被跳脫（x-source: server/api/v1/profiles/index.get.ts:40-43）。
+      responses:
+        '200':
+          description: 依 created_at 由新到舊排序的一頁 profiles
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProfileListResponse' }
+        '400':
+          description: 查詢參數驗證失敗（訊息「查詢參數驗證失敗」）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: 未登入（訊息「未登入，請先登入」）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: 已登入但角色不是 admin（訊息「權限不足」）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500':
+          description: count 或 data 查詢失敗（訊息「查詢失敗，請稍後再試」）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /api/v1/profiles/me:
+    get:
+      tags: [profiles]
+      security:
+        - sessionCookie: []
+      operationId: getMyProfile
+      summary: 取得目前登入者自己的 Profile
+      x-source: server/api/v1/profiles/me.get.ts:17-52
+      x-authorization: 'requireAuth；server/api/v1/profiles/me.get.ts:20'
+      description: >-
+        靜態路由 `me` 與動態路由 `[id]` 並存，Nitro 以靜態路由優先
+        （x-source: server/api/v1/profiles/me.get.ts:17；對照 server/api/v1/profiles/[id].get.ts）。
+      responses:
+        '200':
+          description: 自己的 profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProfileResponse' }
+        '401':
+          description: 未登入
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: profiles 查無該 session user 的列（訊息「找不到您的 Profile」）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500':
+          description: 資料庫讀取錯誤（訊息「查詢失敗，請稍後再試」）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /api/v1/profiles/{id}:
+    get:
+      tags: [profiles]
+      security:
+        - sessionCookie: []
+      operationId: getProfileById
+      summary: 取得單筆 Profile；本人或 admin
+      x-source: server/api/v1/profiles/[id].get.ts:27-76
+      x-authorization: 'requireAuth ＋ handler 內 ownership 比對；server/api/v1/profiles/[id].get.ts:30,40'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: 'x-source: shared/schemas/profiles.ts:36-38。路由參數驗證在 ownership 檢查之前。'
+      responses:
+        '200':
+          description: 指定 profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProfileResponse' }
+        '400':
+          description: id 不是 UUID（訊息「路由參數驗證失敗」）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: 未登入
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: >-
+            非本人且非 admin，或資料庫查無此列；兩種情況對外訊息相同（「找不到指定的 Profile」），
+            刻意不用 403 避免洩漏存在性（x-source: server/api/v1/profiles/[id].get.ts:37-47）。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500':
+          description: 資料庫讀取錯誤（訊息「查詢失敗，請稍後再試」）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+      description: >-
+        Better Auth 的 session cookie（cookie 實際名稱由 Better Auth 決定，此處只表達「需要 session」；
+        x-source: server/utils/api-response.ts:40-54 讀的是 event.context.session）。
+  schemas:
+    Profile:
+      type: object
+      required: [id, display_name, avatar_url, role, created_at, updated_at]
+      x-source: shared/schemas/profiles.ts:13-20
+      properties:
+        id: { type: string, format: uuid }
+        display_name: { type: [string, 'null'] }
+        avatar_url: { type: [string, 'null'] }
+        role:
+          {
+            type: string,
+            description: '資料庫 CHECK 限 admin 或 user（見 data/profiles.dbml）；schema 本身只要求字串',
+          }
+        created_at: { type: string }
+        updated_at: { type: [string, 'null'] }
+    ProfileResponse:
+      type: object
+      required: [data]
+      x-source: shared/schemas/profiles.ts:41-43
+      properties:
+        data: { $ref: '#/components/schemas/Profile' }
+    PaginationMeta:
+      type: object
+      required: [page, perPage, total, totalPages]
+      x-source: shared/schemas/pagination.ts:13-18
+      properties:
+        page: { type: integer, minimum: 1 }
+        perPage: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+        totalPages:
+          {
+            type: integer,
+            minimum: 0,
+            description: 'total 為 0 時是 0，否則 ceil(total/perPage)；x-source: server/utils/api-response.ts:22',
+          }
+    ProfileListResponse:
+      type: object
+      required: [data, pagination]
+      x-source: shared/schemas/profiles.ts:46
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Profile' }
+        pagination: { $ref: '#/components/schemas/PaginationMeta' }
+    ErrorResponse:
+      type: object
+      x-source: server/utils/api-response.ts:40-71
+      description: >-
+        Nitro／evlog 的錯誤回應。確切 wire 形狀尚未對真伺服器驗證（現有測試以 mock 直接呼叫 handler），
+        見 questions.md Q-profiles-4。
+      properties:
+        statusCode: { type: integer }
+        statusMessage: { type: string }
+        message: { type: string }
+        data:
+          type: object
+          description: 'evlog createError 帶 why／fix；驗證失敗帶 issues（x-source: server/utils/validation.ts:30-36）'
+          properties:
+            why: { type: string }
+            fix: { type: string }
+            issues: { type: array, items: { type: object } }

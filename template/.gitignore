@@ -32,6 +32,8 @@ supabase/.temp/
 
 # Testing
 coverage/
+# specs 逆向基準線的覆蓋矩陣（specs/plans/**/coverage/）是追蹤文件，不是測試覆蓋率報告
+!specs/plans/**/coverage/
 playwright-report/
 test-results/
 blob-report/
