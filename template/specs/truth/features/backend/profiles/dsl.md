@@ -6,7 +6,8 @@
 
 ## id 別名
 
-feature 不直接寫 UUID，改用 `<別名>`（例如 `<使用者甲>`）；同一個別名在同一個 Example 內代表同一個 UUID，由 step 實作在每次執行時產生（合法的 UUID）。
+feature 不直接寫 UUID，改用 `<別名>`（例如 `<使用者甲>`）；同一個別名在同一個 Example 內代表同一個 UUID。UUID 的來源有兩種：出現在 `呼叫者是使用者` 的別名，其 id 是登入後 `POST /api/_dev/login` 回傳的實際使用者 id（`user.id`；路由不接受指定 id，由 Better Auth 指派）；其餘別名由 step 實作每次執行時產生合法的 UUID。
+同一個 Example 內，`資料庫中有以下 profiles` 與 `資料庫中沒有 profile` 的落地 MUST 延遲到第一個 `When` 才執行（此時所有 `呼叫者是使用者` 已綁定別名），以便 profiles 列使用登入取得的 id。
 別名出現在：Data Table 的 `id` 欄、句型參數、`呼叫 GET` 的路徑、`回應 data` 的值與 id 清單。唯一例外：驗證「出廠種子 id 不符 UUID」的 Rule 直接寫字面 id。
 
 ## Given 句型
@@ -16,7 +17,7 @@ feature 不直接寫 UUID，改用 `<別名>`（例如 `<使用者甲>`）；同
 | `資料庫中有以下 profiles` | 無 | `id`、`display_name`、`avatar_url`、`role`、`created_at`（皆對應 `profiles` 同名欄位） | `avatar_url` 預設為 NULL；`role` 預設為 user；`created_at` 預設為 now() | 未實作。`怎麼做`：把每一列寫入 `profiles` 資料表。`權威狀態落地`：`profiles` 中恰有這些列。 |
 | `資料庫中沒有 profile "{id}"` | `id`：id 別名。 | 不支援 | 無 | 未實作。`怎麼做`：確保 `profiles` 沒有該 id。`權威狀態落地`：`profiles.id` 不含該值。 |
 | `呼叫者未登入` | 無 | 不支援 | 無 | 未實作。`怎麼做`：之後的請求不帶 session cookie。 |
-| `呼叫者是使用者 "{id}"，角色為 "{角色}"` | `id`：id 別名或字面 UUID；`角色`：`admin`、`member` 等 session 角色字串。 | 不支援 | 無 | 未實作。`怎麼做`：以開發登入入口（`POST /api/_dev/login`）取得該身分的 session cookie，之後的請求都帶它。`權威狀態落地`：session 的使用者 id 與角色如所述。 |
+| `呼叫者是使用者 "{id}"，角色為 "{角色}"` | `id`：id 別名；`角色`：`admin`、`member` 等 session 角色字串。字面 UUID 不支援（見 Q-profiles-8）。 | 不支援 | 無 | 未實作。`怎麼做`：以別名導出 email（例如 `<別名>@test.local`，落在 `DEV_LOGIN_EMAIL_DOMAINS` 預設的 `test.local`），呼叫 `POST /api/_dev/login`（`email`、`as`＝角色；`as: admin` 的 email 須列入 `ADMIN_EMAIL_ALLOWLIST`），取回回應的 `user.id` 並綁定為該別名的 id，之後的請求都帶回應的 session cookie。`權威狀態落地`：session 的使用者 id 即別名綁定的 id，角色如所述。`前提`：Better Auth 的 user id 必須是 UUID，profiles 列才寫得進去（Q-profiles-6）。 |
 | `profiles 資料表的讀取會失敗` | 無 | 不支援 | 無 | 未實作。`怎麼做`：讓 `profiles` 的 SELECT 回傳資料庫錯誤（例如暫時撤銷 service-role 對該表的權限）。 |
 
 ## When 句型

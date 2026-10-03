@@ -14,7 +14,7 @@
 
 1. **BDD runner**：backend 與 frontend 各用哪個 Gherkin runner（`.clade/manifest.json` 已宣告 `specformula`，但 repo 內沒有 `isa.yml`、沒有 `test:bdd`）。由 `/technical-research` 三題必問由使用者拍板。
 2. runner 選定後才能做 SOP 步驟 13：runner 讀 truth（B1）、預設排除 `@unverified`、`dsl.md` ↔ step 雙向對帳（B4）。接線前 `check-truth.mjs` 只覆蓋 feature↔`dsl.md` 這一半。
-3. Q-profiles-1／3／5／6 的裁決（見 `questions.md`）。
+3. Q-profiles-1／3／5／6／8 的裁決（見 `questions.md`）。
 
 ## 展開的固定決策
 

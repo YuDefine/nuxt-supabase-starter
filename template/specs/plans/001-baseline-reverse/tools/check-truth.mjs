@@ -105,7 +105,6 @@ for (const f of dslFiles) {
       re: new RegExp(`^${esc}$`),
       unimplemented: /未實作/.test(m[2]),
       used: 0,
-      usedByVerified: false,
     })
   }
 }
@@ -149,7 +148,6 @@ for (const f of features) {
       continue
     }
     hits[0].used++
-    if (tags.has('@unverified') || tags.has('@code-mismatch')) hits[0].usedByVerified ||= false
     if (!tags.has('@unverified') && hits[0].unimplemented)
       fail(`④ ${rel(f)}: 句型標「未實作」卻被非 @unverified feature 使用：${m[1]}`)
   }

@@ -65,6 +65,7 @@ Feature: 依 id 取得單筆 Profile
     # [need clarification] Q-profiles-1 supabase/seed.sql 的 a1111111-1111-1111-1111-111111111111
     #   不符合 zod 4 的 uuid（第三、四組的版本與變體位元不合 RFC 4122）；
     #   shared/schemas/profiles.ts:37 的 profileIdParamSchema 因此回 400。實測 zod 4.3.6 的 safeParse 回 false。
+    # [need clarification] Q-profiles-8 字面 UUID 無法經 dev-login 取得 session（id 由 Better Auth 指派），此 Example 的 Given 在現有機制下無法實作。
 
     Example: 用種子 id 查詢
       Given 呼叫者是使用者 "a1111111-1111-1111-1111-111111111111"，角色為 "admin"

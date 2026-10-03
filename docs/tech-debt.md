@@ -1110,7 +1110,7 @@ receipt（`src/scaffold-receipt.ts`）把磁碟上存在、但被 gitignore 擋�
 
 1. 未展開模組：dev-login、audit、observability、shared-utils（backend）；frontend 整個介面（auth、profile-page、admin-users、shell-and-demo）。清單與盤點葉檔見 `template/specs/plans/001-baseline-reverse/coverage/modules.md`。
 2. 沒有 Gherkin runner：repo 內沒有 `isa.yml`、沒有 `test:bdd`，所以 `profiles` 的 feature 全部 `@unverified`；規約 MUST 1–3（runner 讀 truth、預設排除 `@unverified`、`dsl.md` ↔ step 雙向對帳）尚未接線。
-3. `profiles` 的七個待釐清問題（`questions.md`）：種子使用者 id 不符 zod 4 `uuid()`（Q-profiles-1）最需要裁決。
+3. `profiles` 的八個待釐清問題（`questions.md`）：種子使用者 id 不符 zod 4 `uuid()`（Q-profiles-1）最需要裁決；Q-profiles-8 記錄缺口——`POST /api/_dev/login` 不接受指定 id，`呼叫者是使用者` 句型只能「登入後取回實際 id 並綁定別名」，字面 UUID 的情境要改 dev-login 程式才可行（本 package 不動 `server/**`）。
 4. 這份 truth 放在 `template/specs/`，會被 scaffold 帶走；是否維持，或改為 meta 層專用，尚未裁決。
 
 ### Fix approach
