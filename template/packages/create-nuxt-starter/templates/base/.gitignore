@@ -32,3 +32,9 @@ logs
 !.env.example
 !.env.test
 
+
+# 本機 runtime 產物（scaffold 專案的 git hooks 走 .husky/_，.vite-hooks 是 vite-plus 本機產物）
+.vite-hooks/
+supabase/.temp/
+# 首輪暖機 marker：scaffold 寫、AI 暖機完刪，NEVER 入庫
+.claude/.first-run
