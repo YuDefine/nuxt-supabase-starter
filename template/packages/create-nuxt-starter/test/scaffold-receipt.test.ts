@@ -59,7 +59,10 @@ function expectSafeRelativePaths(receipt: ScaffoldReceipt): void {
   }
 }
 
-describe('scaffold receipt', () => {
+// 這組測試真的跑 assembleProject＋postScaffold（含 git init／initial commit），不是卡住，是真的要這麼久：
+// desk 負載 ~80（10 核）時 install 那條實測 139s，branch 與 origin/main 同條件整檔 199s／204s，
+// 預設 60s 會在高負載下假紅。比照 preset-scaffold-smoke／cli-evlog-preset 的明示 timeout。
+describe('scaffold receipt', { timeout: 300_000 }, () => {
   it('scaffold-only 在 pnpm install 當下，receipt 每筆 hash 都等於磁碟最終位元組，且隨 initial commit 進版控', async () => {
     const binDir = join(TEST_DIR, 'bin')
     const target = join(TEST_DIR, 'receipt-project')
