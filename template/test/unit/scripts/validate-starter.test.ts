@@ -32,12 +32,11 @@ function write(path: string, content: string, mode?: number) {
 function run(args: string[] = [], failure = '') {
   return spawnSync(
     process.execPath,
-    [join(repoRoot, 'template/scripts/validate-starter.mjs'), ...args],
+    [join(repoRoot, 'scripts/validate-starter-scaffold.mjs'), ...args],
     {
       encoding: 'utf8',
       env: {
         ...process.env,
-        PATH: `${join(repoRoot, 'bin')}:${process.env.PATH}`,
         CLADE_HOME: join(repoRoot, 'absent-clade'),
         VALIDATE_TEST_FAILURE: failure,
       },
@@ -49,15 +48,21 @@ beforeEach(() => {
   repoRoot = mkdtempSync(join(tmpdir(), 'validate-starter-lifecycle-'))
   fixtureRoot = join(repoRoot, 'template/temp/validate-starter')
   auditScript = join(repoRoot, 'scripts/vendor/evlog-adoption-audit.mjs')
-  const scriptDir = join(repoRoot, 'template/scripts')
+  const scriptDir = join(repoRoot, 'scripts')
   mkdirSync(scriptDir, { recursive: true })
   copyFileSync(
-    fileURLToPath(new URL('../../../scripts/validate-starter.mjs', import.meta.url)),
-    join(scriptDir, 'validate-starter.mjs'),
+    fileURLToPath(new URL('../../../../scripts/validate-starter-scaffold.mjs', import.meta.url)),
+    join(scriptDir, 'validate-starter-scaffold.mjs'),
   )
 
   // Keep the real CLI and filesystem lifecycle; replace only build/scaffold/audit dependencies.
-  write(join(repoRoot, 'bin/pnpm'), '#!/bin/sh\n[ "$VALIDATE_TEST_FAILURE" != "build" ]\n', 0o755)
+  // 腳本直接叫 create-nuxt-starter 的 .bin/tsdown，shim 就放在同一個位置：
+  // VALIDATE_TEST_FAILURE=build 時 exit 1，其餘直接 exit 0。
+  write(
+    join(repoRoot, 'template/packages/create-nuxt-starter/node_modules/.bin/tsdown'),
+    '#!/bin/sh\n[ "$VALIDATE_TEST_FAILURE" != "build" ]\n',
+    0o755,
+  )
   write(join(repoRoot, 'package.json'), '{"type":"module"}')
   write(
     join(repoRoot, 'template/packages/create-nuxt-starter/dist/cli.js'),

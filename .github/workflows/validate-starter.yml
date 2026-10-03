@@ -5,7 +5,7 @@ on:
     paths:
       - "template/packages/create-nuxt-starter/**"
       - "template/presets/**"
-      - "template/scripts/validate-starter.mjs"
+      - "scripts/validate-starter-scaffold.mjs"
       - "template/package.json"
       - "template/pnpm-lock.yaml"
       - ".github/workflows/validate-starter.yml"
@@ -14,7 +14,7 @@ on:
     paths:
       - "template/packages/create-nuxt-starter/**"
       - "template/presets/**"
-      - "template/scripts/validate-starter.mjs"
+      - "scripts/validate-starter-scaffold.mjs"
       - "template/package.json"
       - "template/pnpm-lock.yaml"
       - ".github/workflows/validate-starter.yml"
@@ -59,4 +59,4 @@ jobs:
         run: vp install
 
       - name: Validate starter scaffolds
-        run: vp run validate:starter
+        run: node ../scripts/validate-starter-scaffold.mjs

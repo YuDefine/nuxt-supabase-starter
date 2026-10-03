@@ -62,7 +62,6 @@
     "test:watch": "vp test --watch",
     "typecheck": "sh -c 'if test -x .clade/bin/clade-gate; then exec .clade/bin/clade-gate run typecheck -- nuxt typecheck \"$@\"; else exec nuxt typecheck \"$@\"; fi' --",
     "update": "nuxt upgrade && pnpm skills:update && pnpm update --latest",
-    "validate:starter": "node scripts/validate-starter.mjs",
     "verify:starter": "node scripts/verify-starter.mjs"
   },
   "dependencies": {

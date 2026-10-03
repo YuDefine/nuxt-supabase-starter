@@ -11,7 +11,7 @@ import {
   auditProject,
   evaluateCase,
   formatReportRow,
-} from '../../../scripts/validate-starter.mjs'
+} from '../../../../scripts/validate-starter-scaffold.mjs'
 
 const TEST_DIR = mkdtempSync(join(tmpdir(), 'scaffold-audit-regression-'))
 

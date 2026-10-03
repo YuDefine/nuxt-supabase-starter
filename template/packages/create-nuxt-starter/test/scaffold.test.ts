@@ -54,6 +54,9 @@ describe('scaffold: base-only (no features)', () => {
     expect(existsSync(join(targetDir, 'skills-lock.json'))).toBe(false)
     expect(existsSync(join(targetDir, '.agent', 'workflows'))).toBe(false)
     expect(existsSync(join(targetDir, 'scripts', 'spectra-advanced'))).toBe(false)
+    // TD-008：validate-starter 是 starter repo 的維護工具，已移到 root
+    // scripts/validate-starter-scaffold.mjs；scaffold 輸出不該再帶這支腳本。
+    expect(existsSync(join(targetDir, 'scripts', 'validate-starter.mjs'))).toBe(false)
     expect(existsSync(join(targetDir, '.claude', 'rules', 'spectra-workflow.md'))).toBe(false)
     expect(existsSync(join(targetDir, '.claude', 'rules', 'spectra-notion-coupling.md'))).toBe(
       false,
@@ -75,6 +78,7 @@ describe('scaffold: base-only (no features)', () => {
     expect(pkg.name).toBe('base-only')
     expect(pkg.packageManager).toBe('pnpm@11.24.0')
     expect(pkg.dependencies.nuxt).toBeDefined()
+    expect(pkg.scripts['validate:starter']).toBeUndefined()
   })
 
   it('nuxt.config has no feature modules', () => {

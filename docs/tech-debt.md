@@ -13,7 +13,7 @@
 | ------ | -------------------------------------------------------------------------------------------------------- | -------- | ----------- | ---------- |
 | TD-004 | Spectra roadmap drift check 在 CI 的 structural diff                                                     | mid      | in-progress | 2026-05-10 |
 | TD-005 | meta-monorepo 下 pre-push checks 靜默 no-op                                                              | high     | in-progress | 2026-08-19 |
-| TD-008 | `validate-starter` 維護工具會被 scaffold 帶走                                                            | mid      | open        | 2026-08-19 |
+| TD-008 | `validate-starter` 維護工具會被 scaffold 帶走                                                            | mid      | in-progress | 2026-08-19 |
 | TD-010 | 參考 app email 登入被 nuxt-security CSRF 擋下                                                            | mid      | in-progress | 2026-08-24 |
 | TD-011 | clade 投影 auth 文件仍寫舊套件名                                                                         | low      | open        | 2026-08-24 |
 | TD-012 | `lint` script guard 吃不掉 pnpm 附加參數                                                                 | mid      | done        | 2026-08-29 |
@@ -39,7 +39,7 @@
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | TD-004   | PR #7（`6b04da7f`）只合入失效診斷；`template-ci.yml` 仍呼叫退役的 roadmap task。PR #10 尚未合入；由 workflow owner 核對 Spectra 退役決定及 PR #10 落地結果。 |
 | TD-005   | `CLADE_PROJECT_ROOT` 接線仍由尚未合入的 PR #10 處理；合入後按本條 Acceptance 驗收。                                                                          |
-| TD-008   | `template/package.json` 仍有 `validate:starter`；PR #8 是未合入的規劃，尚無實作。                                                                            |
+| TD-008   | 維護腳本已搬到 root `scripts/validate-starter-scaffold.mjs`、`validate:starter` command 已刪、hygiene 防線已上線；實作在 draft PR #28，合入後依 Acceptance 結案。 |
 | TD-010   | `template/nuxt.config.ts` 尚無 `/api/auth/**` CSRF 例外；實作 PR #9 尚未合入，合入後仍需真實登入驗收。                                                       |
 | TD-011   | `template/.cursor/skills/clade-security/rules/auth.md` 仍寫舊套件名；須從 clade source 修正並散播。                                                          |
 | TD-014   | `template/.cursor/skills/design/SKILL.md` 仍有無解析說明的 `<maintainer-domain>`；須由 clade source 收斂。                                                   |
@@ -58,7 +58,7 @@
 
 | TD     | 狀態              | 證據與剩餘事項                                                                                                                                                                                                |
 | ------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TD-008 | IN-FLIGHT — PR #8 | `docs/tech-debt.md` 的落點計畫與 `tasks/2026-09-26-td-008-validate-starter-placement-plan.md` 在 [PR #8](https://github.com/YuDefine/nuxt-supabase-starter/pull/8)；程式搬移仍待實作，且須保留 PR #5 的修正。 |
+| TD-008 | IN-FLIGHT — PR #28 | 落點計畫已由 PR #8 合入；程式實作（搬移、workflow、audit 訊號、輸出斷言）在 [draft PR #28](https://github.com/YuDefine/nuxt-supabase-starter/pull/28)，合入後依 Acceptance 結案。 |
 | TD-010 | IN-FLIGHT — PR #9 | Better Auth CSRF 例外及本機測試在 [PR #9](https://github.com/YuDefine/nuxt-supabase-starter/pull/9)；有效帳號與部署 host 驗收仍待補。                                                                         |
 | TD-017 | IN-FLIGHT — PR #5 | `validate-starter` 的 fixture 清理與 `--keep` 在 [PR #5](https://github.com/YuDefine/nuxt-supabase-starter/pull/5)；未合併前不結案。                                                                          |
 
@@ -181,10 +181,10 @@ exit 0 且無輸出。實測 `bash template/scripts/pre-push/runner.sh` 為 exit
 
 ## TD-008 — `validate-starter` 維護工具會被 scaffold 帶走
 
-**Status**: open
+**Status**: in-progress（程式實作完成並送 draft PR；本機驗收全綠，待 PR 合入與 CI 終態後結案）
 **Priority**: mid
 **Discovered**: 2026-08-19 — starter public hygiene L3 commands 審查
-**Location**: `template/scripts/validate-starter.mjs`、`template/package.json`、`template/presets/_base/strip-manifest.json`
+**Location**: `scripts/validate-starter-scaffold.mjs`、`.github/workflows/validate-starter.yml`、`template/package.json`、`scripts/audit-template-hygiene.sh`
 
 ### Problem
 
@@ -204,6 +204,47 @@ exit 0 且無輸出。實測 `bash template/scripts/pre-push/runner.sh` 為 exit
 目前 strip manifest 只支援檔案刪除，create-clean 另有 parser，因此不為單一維護 command 擴充 rewrite 契約。
 
 同時在 `scripts/audit-template-hygiene.sh` 與 fixture test 補上 `maintenance-script-misplacement` 覆蓋。
+
+### Implementation（2026-10-03）
+
+以 TD-017 合入後（PR #22，`99c9d970`）的版本搬移，保留 fixture 預設清理與 `--keep`：
+
+- `template/scripts/validate-starter.mjs` → `scripts/validate-starter-scaffold.mjs`；`SCRIPT_DIR` 落在 root
+  `scripts/`，`REPO_ROOT` 改指 repo root，`TEMPLATE_ROOT` 指 `root/template`，其餘派生路徑不變。
+- workflow 入口改為 `template/` 工作目錄下 `node ../scripts/validate-starter-scaffold.mjs`，
+  PR/push path filter 由舊檔改指 root 新檔。
+- 刪除 `template/package.json` 的 `validate:starter`；`verify:starter` 不動。
+- `maintenance-script-misplacement` 補兩層內容訊號：meta repo 佈局 token（`TEMPLATE_ROOT`／
+  `FIXTURE_ROOT`／`temp/validate-starter`）單獨命中即擋；`REPO_ROOT` 與 `create-nuxt-starter`
+  因各有正當 consumer 用法（`.vite-hooks` 的 `_REPO_ROOT`、`verify-starter.mjs` 的 starter-self
+  偵測）採複合判定，同時出現才算維護用途。fixture 正／負例含 `CLADE:VENDOR-SCRIPT` 例外。
+- scaffold 輸出斷言補在 `scaffold.test.ts`（無 `scripts/validate-starter.mjs`、無
+  `validate:starter` script）與 `strip-manifest.test.ts`（template seed 不再帶腳本與 command）。
+- TD-017 兩支回歸測試的路徑同步修正：`test/unit/scripts/validate-starter.test.ts`、
+  `packages/create-nuxt-starter/test/scaffold-audit-regression.test.ts`。
+- 附帶修正一個 2026-08-19 起即恆紅的既有 fixture：`<consumer-a>` 是 registry 內真實 consumer，
+  負向斷言改用不在 registry 的 `<consumer-x>`（僅 test fixture，未動 check 邏輯）。
+- CI 第一輪 `Fresh Scaffold Audit Gate` 紅：舊入口 `vp run` 會把 vp env 管理的 pnpm 注入 PATH，
+  `node` 直跑時 `pnpm --dir … exec tsdown` spawn 失敗（status null）。改為直接呼叫
+  `packages/create-nuxt-starter/node_modules/.bin/tsdown`（tsdown 是該 package 的 direct
+  devDep，install 後 .bin 必存在），不再依賴 ambient pnpm；lifecycle test 的 `bin/pnpm`
+  shim 同步改為在同一位置寫 tsdown stub。
+
+### Verification（2026-10-03，本機）
+
+- `bash scripts/audit-template-hygiene.test.sh`：10/10 PASS（新增 2 案）。
+- `bash scripts/audit-template-hygiene.sh`：PASS，template/ 無 finding。
+- `vp test run packages/create-nuxt-starter/test/strip-manifest.test.ts`：7/7 PASS。
+- `vp test run packages/create-nuxt-starter/test/scaffold.test.ts`：34/34 PASS；
+  `test/unit/scripts/validate-starter.test.ts`：8/8 PASS；
+  `packages/create-nuxt-starter/test/scaffold-audit-regression.test.ts`：5/5 PASS。
+- `pnpm typecheck`：PASS。`vp check`：PASS（242 fmt、270 lint）。
+- `node ../scripts/validate-starter-scaffold.mjs`（於 `template/`）：4 preset 全過；
+  跑完 `temp/validate-starter/` 不存在，`--keep` 後保留 4 個 fixture；scaffold 輸出的
+  `scripts/` 無 `validate-starter.mjs`、`package.json.scripts` 無 `validate:starter`。
+- `.bin/tsdown` 直叫修正後上述全部重跑仍 PASS（lifecycle 8/8、4 preset、audit 10/10、
+  hygiene、vp check 242/270）。
+- PR CI 與 create-clean dry-run 另記於實作 PR；合入後依 Acceptance 結案。
 
 ### Acceptance
 

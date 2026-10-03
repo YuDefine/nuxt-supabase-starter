@@ -5,8 +5,8 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
-const TEMPLATE_ROOT = resolve(SCRIPT_DIR, '..')
-const REPO_ROOT = resolve(TEMPLATE_ROOT, '..')
+const REPO_ROOT = resolve(SCRIPT_DIR, '..')
+const TEMPLATE_ROOT = join(REPO_ROOT, 'template')
 const CREATE_PACKAGE_DIR = join(TEMPLATE_ROOT, 'packages', 'create-nuxt-starter')
 const FIXTURE_ROOT = join(TEMPLATE_ROOT, 'temp', 'validate-starter')
 
@@ -219,22 +219,13 @@ export function formatReportRow(row) {
 async function loadScaffolderModules() {
   if (scaffolderModules) return scaffolderModules
 
+  // 直接叫 package 自己的 .bin/tsdown：script 改由 root 執行後不再經 `vp run`，
+  // 環境 PATH 不保證有 pnpm（CI 的 pnpm 由 vp env 管，只在 vp process tree 內可見）。
   runCommand(
-    'pnpm',
-    [
-      '--dir',
-      CREATE_PACKAGE_DIR,
-      'exec',
-      'tsdown',
-      'src/cli.ts',
-      'src/assemble.ts',
-      '--format',
-      'esm',
-      '--out-dir',
-      'dist',
-    ],
+    join(CREATE_PACKAGE_DIR, 'node_modules', '.bin', 'tsdown'),
+    ['src/cli.ts', 'src/assemble.ts', '--format', 'esm', '--out-dir', 'dist'],
     {
-      cwd: TEMPLATE_ROOT,
+      cwd: CREATE_PACKAGE_DIR,
     },
   )
 

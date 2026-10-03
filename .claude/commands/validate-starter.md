@@ -34,17 +34,17 @@ clean baseline 只對 scaffold 輸出或 release 前的乾淨樹有意義。
 ### Phase 2: Scaffold 模擬（preset 全覆蓋）
 
 ```bash
-cd template && vp run validate:starter
+cd template && node ../scripts/validate-starter-scaffold.mjs
 ```
 
-`template/scripts/validate-starter.mjs` 會對每個 preset（`baseline` / `d-pattern-audit` /
+`scripts/validate-starter-scaffold.mjs` 會對每個 preset（`baseline` / `d-pattern-audit` /
 `nuxthub-ai` / `none`）跑 scaffold simulation，把輸出落在 `template/temp/validate-starter/`，
 並驗證 strip manifest 與 audit signal。
 
 ### Phase 3: Public hygiene
 
 ```bash
-node scripts/audit-template-hygiene.sh    # starter pollution 檢查
+bash scripts/audit-template-hygiene.sh    # starter pollution 檢查
 node scripts/audit-public-hygiene.mjs     # L3 commands / skills allowlist 檢查
 ```
 
@@ -74,7 +74,7 @@ grep -n "├──\|└──" template/docs/QUICK_START.md template/docs/CLAUDE
 | 階段                        | 狀態  | 備註 |
 | --------------------------- | ----- | ---- |
 | validate-starter.sh         | ✅/❌ |      |
-| validate:starter (scaffold) | ✅/❌ |      |
+| validate-starter-scaffold   | ✅/❌ |      |
 | audit-template-hygiene      | ✅/❌ |      |
 | audit-public-hygiene        | ✅/❌ |      |
 | 文件一致性                  | ✅/❌ |      |
