@@ -295,7 +295,25 @@ TS
     fail "CLADE:VENDOR-SCRIPT fixture exits 0"
   fi
 
-  pass "consumer runtime script and CLADE:VENDOR-SCRIPT marker stay clean"
+  # 小寫 template_root / fixture_root 是 consumer 腳本指自己範本目錄的合法命名——
+  # meta 路徑 token 採大小寫敏感比對後不得誤擋（0-A r1 Minor #3）。
+  root="$(new_fixture consumer-lowercase-roots)"
+  mkdir -p "${root}/template/scripts"
+  cat > "${root}/template/scripts/render-site.mjs" <<'MJS'
+#!/usr/bin/env node
+import { join } from 'node:path'
+
+const template_root = join(process.cwd(), 'templates')
+const fixture_root = join(template_root, 'fixtures')
+console.log(fixture_root)
+MJS
+
+  if ! output="$(run_audit "${root}" 2>&1)"; then
+    printf '%s\n' "${output}" >&2
+    fail "lowercase template_root/fixture_root consumer script exits 0"
+  fi
+
+  pass "consumer runtime script, CLADE:VENDOR-SCRIPT marker and lowercase *_root names stay clean"
 }
 
 # check_tenant_identifiers 前兩個迴圈命中就 return，投影面那半條若掛在函式尾端會被短路。

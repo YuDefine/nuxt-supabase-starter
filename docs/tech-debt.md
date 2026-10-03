@@ -39,7 +39,7 @@
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | TD-004   | PR #7（`6b04da7f`）只合入失效診斷；`template-ci.yml` 仍呼叫退役的 roadmap task。PR #10 尚未合入；由 workflow owner 核對 Spectra 退役決定及 PR #10 落地結果。 |
 | TD-005   | `CLADE_PROJECT_ROOT` 接線仍由尚未合入的 PR #10 處理；合入後按本條 Acceptance 驗收。                                                                          |
-| TD-008   | `template/package.json` 仍有 `validate:starter`；PR #8 是未合入的規劃，尚無實作。                                                                            |
+| TD-008   | 維護腳本已搬到 root `scripts/validate-starter-scaffold.mjs`、`validate:starter` command 已刪、hygiene 防線已上線；實作在 draft PR #28，合入後依 Acceptance 結案。 |
 | TD-010   | `template/nuxt.config.ts` 尚無 `/api/auth/**` CSRF 例外；實作 PR #9 尚未合入，合入後仍需真實登入驗收。                                                       |
 | TD-011   | `template/.cursor/skills/clade-security/rules/auth.md` 仍寫舊套件名；須從 clade source 修正並散播。                                                          |
 | TD-014   | `template/.cursor/skills/design/SKILL.md` 仍有無解析說明的 `<maintainer-domain>`；須由 clade source 收斂。                                                   |

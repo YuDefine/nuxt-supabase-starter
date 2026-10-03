@@ -455,7 +455,10 @@ check_maintenance_script_misplacement() {
   # templates/vite-hooks/pre-commit 的 _REPO_ROOT 指 consumer 自己的 repo 根、
   # verify-starter.mjs 讀 sibling packages/create-nuxt-starter 判斷 starter-self——
   # 只有兩者同時出現（解析 repo root 又參考 scaffolder package）才算維護用途。
-  if grep -Eiq -- '(starter hygiene|sync-to-agents|create-clean|scaffolder maintenance|TEMPLATE_ROOT|FIXTURE_ROOT|temp/validate-starter)' <<< "${blob}" \
+  # 大寫 meta 路徑 token 用大小寫敏感比對：consumer 腳本裡 `template_root`／`fixture_root`
+  # 是指向自己範本目錄的合法命名，不分大小寫會把正常 runtime 腳本誤擋。
+  if grep -Eiq -- '(starter hygiene|sync-to-agents|create-clean|scaffolder maintenance)' <<< "${blob}" \
+    || grep -Eq -- '(TEMPLATE_ROOT|FIXTURE_ROOT|temp/validate-starter)' <<< "${blob}" \
     || { grep -Fq -- 'REPO_ROOT' <<< "${blob}" && grep -Fq -- 'create-nuxt-starter' <<< "${blob}"; }; then
     add_finding \
       "maintenance-script-misplacement" \
