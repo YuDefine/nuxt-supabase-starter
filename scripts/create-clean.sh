@@ -339,6 +339,22 @@ info "套用 strip manifest..."
 run_strip_manifest "apply"
 
 # ---------------------------------------------------------------------------
+# 0b. 補一份空 review-rules baseline（零容忍武裝）
+# ---------------------------------------------------------------------------
+# strip 把維護倉的存量剔掉之後，scan.ts 對「baseline 不存在」會走 bootstrap
+# warn-only（pass: true 全放行）；檔案存在（即使空）= ratchet 武裝。這裡補寫
+# 空 baseline，`_meta` 與 scan.ts --write-baseline 在零違規 repo 的輸出同形。
+cat > review-rules-baseline.json <<'EOF'
+{
+  "_meta": {
+    "fileset": "all",
+    "layer": "all"
+  }
+}
+EOF
+success "寫入空 review-rules-baseline.json（ratchet 零容忍武裝）"
+
+# ---------------------------------------------------------------------------
 # Helper: 清空目錄但保留 .gitkeep
 # ---------------------------------------------------------------------------
 clean_dir() {

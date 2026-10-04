@@ -124,6 +124,15 @@ export function assembleProject(
     consumer: 'scaffolder',
   })
 
+  // strip 把維護倉的 ratchet 存量剔掉之後必須補回一份空 baseline：scan.ts 對
+  // 「review-rules-baseline.json 不存在」走 bootstrap warn-only（pass: true 全放行），
+  // 檔案存在（即使空）= ratchet 武裝——新專案才是真的零容忍起步。
+  // `_meta` 與 --write-baseline 在零違規 repo 的輸出同形。
+  writeFileSync(
+    join(targetDir, 'review-rules-baseline.json'),
+    `${JSON.stringify({ _meta: { fileset: 'all', layer: 'all' } }, null, 2)}\n`,
+  )
+
   // Codex must work in a fresh clone without a local Clade checkout. Project
   // rules and richer settings can be regenerated later by the managed wrapper.
   if (hasAgent(agentTargets, 'codex')) {
