@@ -50,7 +50,7 @@ globs:
 | `dogfood-business-code`           | dogfood 專案的頁面、API、seed、測試、copy、schema、tenant-specific workflow                                                           | 移到 root docs / examples / playground，或另開 change 設計為 starter-safe 範例    |
 | `dogfood-schema-hint`             | `template/supabase/**` 中出現特定客戶、業務域、tenant schema、private seed data 的痕跡                                                | 改成通用 starter schema，業務範例放 `template/.examples/` 並去識別化              |
 | `maintenance-script-misplacement` | root 維護腳本、release / validate / audit / scaffolder tooling 誤放進 `template/scripts/`                                             | 移到 repo root `scripts/`，`template/scripts/` 只保留 scaffold 後專案會用到的腳本 |
-| `public-hygiene-unaudited-command` | `template/.claude/` 或 `template/.cursor/` 內出現未經 L3 審查、未列在 `scripts/lib/public-hygiene-allowlist.json` 的 starter-owned command / skill | 走 change ceremony 判 disposition 後補進 allowlist；default 為 warning，`--strict` 才 fail |
+| `public-hygiene-unaudited-command` | `template/.claude/` 或 `template/.cursor/` 內出現未經 L3 審查、未列在 `scripts/lib/public-hygiene-allowlist.json` 的 starter-owned command / skill | 走 plan package 判 disposition 後補進 allowlist；default 為 warning，`--strict` 才 fail |
 | `public-hygiene-relocated-artifact` | 已 relocate 到 root meta 層的項目（如 `validate-starter`）重新出現在 `template/` | 刪除 `template/` 內該檔；維護者版本在 root `.claude/commands/` |
 | `public-hygiene-denied-artifact` | deny-list 上的項目出現在會被 scaffold 帶走的 `template/` | 移出 `template/`，或改放 root meta 層 |
 
@@ -103,7 +103,7 @@ prune，staged 的投影檔一律過檢查。
 在那之前預設留 warning 是因為：24 條未審 skills 若一開始就 fail-closed，唯一能讓 CI 轉綠的做法是把
 它們未經審查地塞進 `starter-owned-keep`——那正是上面 NEVER 的那條。
 
-### 新增 starter-owned command 的 ceremony
+### 新增 starter-owned command 的流程
 
 新加一個 `template/.claude/commands/<name>.md` **MUST** 同時：
 
@@ -127,7 +127,7 @@ prune，staged 的投影檔一律過檢查。
 
 ### Bypass
 
-不允許。任何例外都要走 change ceremony 加進 allowlist；**NEVER** 用 `--report-only` 讓 CI 轉綠。
+不允許。任何例外都要走 plan package 記錄 rationale 並加進 allowlist；**NEVER** 用 `--report-only` 讓 CI 轉綠。
 `--report-only` 只給本機探索用。
 
 ## Plan session 分流規則
