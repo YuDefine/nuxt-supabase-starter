@@ -34,8 +34,7 @@ applies-to: post-scaffold
 
 | 類別             | `.claude`                | `.cursor`                          | 狀態   | 說明                                                       |
 | ---------------- | ------------------------ | ---------------------------------- | ------ | ---------------------------------------------------------- |
-| `commands/*`     | 12                       | 15                                 | 可替代 | 原 12 份均有；另加 `cursor-spectra-*` 包裝指令做兼容橋接。 |
-| `spectra-*` 流程 | `commands/*.md` + skills | `cursor-spectra-*.md` + hooks 腳本 | 可替代 | 可運作，但依賴橋接腳本，不是原生等價。                     |
+| `commands/*`     | 10                       | 對應 `.cursor/commands/`           | 可替代 | Claude commands 均有對應 Cursor 版本。                     |
 
 ## 4) Agents（子代理說明）
 

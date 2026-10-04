@@ -494,28 +494,25 @@ describe('scaffold: void.cloud 接線', () => {
   })
 })
 
-describe('scaffold: first-run OPSX 暖機流程的可執行性', () => {
-  it('package.json 有 first-run 流程用到的 OPSX scripts', () => {
-    const targetDir = join(TEST_DIR, 'opsx-scripts')
-    assembleProject(targetDir, [], 'opsx-scripts')
+describe('scaffold: first-run 暖機流程的可執行性', () => {
+  it('package.json 有 first-run 流程用到的 flow script，退役控制面入口不再產出', () => {
+    const targetDir = join(TEST_DIR, 'flow-scripts')
+    assembleProject(targetDir, [], 'flow-scripts')
 
     const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
-    expect(pkg.devDependencies['@fission-ai/openspec']).toBe('1.12.0')
-    for (const name of ['opsx:status', 'opsx:list']) {
-      expect(pkg.scripts[name]).toBeDefined()
-      expect(pkg.scripts[name]).toContain('node .clade/vendor/scripts/opsx-control.ts')
+    expect(pkg.scripts['flow']).toBe('node .clade/vendor/scripts/flow/flow.ts')
+    expect(pkg.devDependencies['@fission-ai/openspec']).toBeUndefined()
+    for (const name of Object.keys(pkg.scripts)) {
+      expect(name.startsWith('spectra:') || name.startsWith('opsx:')).toBe(false)
+      expect(pkg.scripts[name]).not.toContain('opsx-control')
     }
-    expect(Object.keys(pkg.scripts).filter((name) => name.startsWith('spectra:'))).toEqual([])
   })
 
-  it('base OpenSpec 設定使用中性的 OPSX profile', () => {
-    const targetDir = join(TEST_DIR, 'opsx-config')
-    assembleProject(targetDir, [], 'opsx-config')
+  it('scaffold 輸出不帶 openspec 目錄', () => {
+    const targetDir = join(TEST_DIR, 'no-openspec')
+    assembleProject(targetDir, [], 'no-openspec')
 
-    const config = readFileSync(join(targetDir, 'openspec', 'config.yaml'), 'utf-8')
-    expect(config).toContain('schema: clade-control-plane-v1')
-    expect(config).toContain('node .clade/vendor/scripts/opsx-control.ts')
-    expect(config).not.toContain('schema: spec-driven')
+    expect(existsSync(join(targetDir, 'openspec'))).toBe(false)
   })
 })
 

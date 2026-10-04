@@ -5,7 +5,7 @@ globs:
   - template/**
   - scripts/**
   - .husky/**
-  - openspec/changes/**
+  - specs/plans/**
 ---
 
 # Starter Hygiene
@@ -79,7 +79,7 @@ prune，staged 的投影檔一律過檢查。
 
 | 層 | 內容 | SoT | 誰治理 |
 | --- | --- | --- | --- |
-| L1 | clade hub:sync 投影（rules / spectra skills / commands / agents / vendor scripts） | `template/.claude/.hub-state.json` 的 `checksums` | clade（`clade-starter-sanitization`） |
+| L1 | clade hub:sync 投影（rules / skills / commands / agents / vendor scripts） | `template/.claude/.hub-state.json` 的 `checksums` | clade（`clade-starter-sanitization`） |
 | L2 | clade plugin marketplace skills | plugin manifest | clade |
 | L3 | starter-owned commands 與 skills | `scripts/lib/public-hygiene-allowlist.json` | 本 repo |
 
@@ -96,7 +96,7 @@ prune，staged 的投影檔一律過檢查。
 
 未列在任何一段的 starter-owned 檔案視為 **unaudited**：default 出 warning、`--strict` 才 fail。
 這是刻意的 ratchet——`template/.claude/skills/` 的存量尚未逐條審查（歸後續
-`starter-public-hygiene-skills` change），先擋住 commands 層的再污染，不因存量而讓整條 gate 失效。
+`starter-public-hygiene-skills` 工作項），先擋住 commands 層的再污染，不因存量而讓整條 gate 失效。
 
 `starter-public-hygiene-skills` 把 skills 段填完之後，**MUST** 把
 `.github/workflows/public-hygiene.yml` 的 audit 那行改成 `node scripts/audit-public-hygiene.mjs --strict`。
@@ -107,7 +107,7 @@ prune，staged 的投影檔一律過檢查。
 
 新加一個 `template/.claude/commands/<name>.md` **MUST** 同時：
 
-1. 走 change ceremony 記錄該 command 的 disposition 判斷依據（personal context leak / 流程是否泛用 /
+1. 走 plan package 記錄該 command 的 disposition 判斷依據（personal context leak / 流程是否泛用 /
    scaffold 出去的 consumer 是否用得到）
 2. 把名稱補進 `scripts/lib/public-hygiene-allowlist.json` 對應段
 3. 若新增的是 relocate / deny 類，補一條 `scripts/audit-public-hygiene.test.sh` fixture
@@ -130,17 +130,17 @@ prune，staged 的投影檔一律過檢查。
 不允許。任何例外都要走 change ceremony 加進 allowlist；**NEVER** 用 `--report-only` 讓 CI 轉綠。
 `--report-only` 只給本機探索用。
 
-## Spectra session 分流規則
+## Plan session 分流規則
 
-開始 Spectra change 前先判斷 path 層級：
+開始一個 plan package 前先判斷 path 層級：
 
-- 只改 root meta：proposal / design / tasks 使用 repo root path 或從 `template/` cwd 表示為 `../...`，例如 `../.husky/pre-commit`、`../scripts/audit-template-hygiene.sh`。
+- 只改 root meta：spec / plan / tasks 使用 repo root path 或從 `template/` cwd 表示為 `../...`，例如 `../.husky/pre-commit`、`../scripts/audit-template-hygiene.sh`。
 - 只改 starter seed：path 以 `template/` cwd 為準，寫成 `app/**`、`server/**`、`supabase/**`、`docs/**` 等；這些內容會被 scaffold 帶走。
-- 同時改 root meta 與 `template/`：proposal、design、tasks 都 MUST 標註 path 層級，分清 root paths 與 template paths，並說明為什麼必須跨層。
-- 發現需求其實屬 strip manifest、create-clean output rewriting、scaffolder CLI behavior、validate-starter CI gate integration：本 rule 只負責邊界判斷，MUST 另開對應 change，不要塞進 starter hygiene 邊界工作。
+- 同時改 root meta 與 `template/`：spec、plan、tasks 都 MUST 標註 path 層級，分清 root paths 與 template paths，並說明為什麼必須跨層。
+- 發現需求其實屬 strip manifest、create-clean output rewriting、scaffolder CLI behavior、validate-starter CI gate integration：本 rule 只負責邊界判斷，MUST 另開對應 plan package，不要塞進 starter hygiene 邊界工作。
 - 需要保留 starter-only 內容在 `template/`：MUST 使用 `template/.starter/`、`template/.examples/` 或 `*.starter.md`，不要放在一般文件路徑假裝是使用者專案文件。
 
-判斷不清楚時，先把候選檔案列成 root meta / starter seed / follow-up 三欄；若同一個 task 同時混到多層且無法明確驗收，先調整 Spectra artifacts，不要直接實作。
+判斷不清楚時，先把候選檔案列成 root meta / starter seed / follow-up 三欄；若同一個 task 同時混到多層且無法明確驗收，先調整 plan package artifacts，不要直接實作。
 
 ## Reporting Format
 
@@ -157,7 +157,7 @@ rule、pre-commit hook、audit script、fixture test 的 starter hygiene violati
 問題: <一行說明違反的邊界或污染類型>
 證據: <檔案路徑；secret 僅列 pattern category 或 redacted 摘要>
 修正方式: <移出 template、改 placeholder、改到 .examples/.starter、或改名 *.starter.md>
-繞過方式: <只有在 Spectra artifact / PR / commit context 記錄明確 rationale 後，才允許使用維護者明示的 bypass；禁止靜默略過>
+繞過方式: <只有在 plan package / PR / commit context 記錄明確 rationale 後，才允許使用維護者明示的 bypass；禁止靜默略過>
 ```
 
 範例：
@@ -167,7 +167,7 @@ rule、pre-commit hook、audit script、fixture test 的 starter hygiene violati
 問題: 私人環境檔不能進入會被 scaffold 帶走的 template tree。
 證據: template/.env.local
 修正方式: 移除該檔；若使用者需要設定範本，改用 template/.env.example 並只保留 placeholder。
-繞過方式: 只有在 Spectra artifact / PR / commit context 記錄此檔為刻意保留且已去識別化後，才能使用維護者明示的 bypass。
+繞過方式: 只有在 plan package / PR / commit context 記錄此檔為刻意保留且已去識別化後，才能使用維護者明示的 bypass。
 ```
 
 Hook 與 audit script 新增或調整檢查時，MUST 先更新本 rule 的 check name 表，再同步 fixture；check name drift 視為 scanner error，應 fail closed。

@@ -59,7 +59,7 @@ pnpm db:diff     # 比對 schema drift（supabase db diff）
 ## 回饋迴路（給 Claude）
 
 1. `Read docs/FIXTURES.md` — 確認 sample 存在且與 seed 一致
-2. `/spectra-propose` 或 `[review:ui]` item 引用 sample 時，直接用上表 Email / UUID 前段 / display_name，禁止寫「某位使用者」「找一筆」
+2. `/specify` 或 `[review:ui]` item 引用 sample 時，直接用上表 Email / UUID 前段 / display_name，禁止寫「某位使用者」「找一筆」
 3. 若需新增 sample：**同時**更新 `supabase/seed.sql`（加 INSERT row）與本檔（加表格行 + 標 seed 行號）
 4. DB reset 後驗證：`pnpm db:reset` → 以 `admin@example.com` / `password123` 登入確認 seed 生效
 

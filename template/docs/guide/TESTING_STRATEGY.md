@@ -125,4 +125,4 @@ Unit 與 Component 兩層由 `vitest.config.ts` 切成兩個 Vitest project（`u
 - [`@nuxt/test-utils`](https://nuxt.com/docs/getting-started/testing)
 - [Playwright](https://playwright.dev/)
 - `docs/verify/TEST_DRIVEN_DEVELOPMENT.md` — Red → Green → Refactor 流程
-- `docs/manual-review-checklist.md` — Spectra 收尾的人工檢查清單
+- `docs/manual-review-checklist.md` — plan package 收尾的人工檢查清單

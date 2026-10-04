@@ -150,11 +150,7 @@ cd <專案目錄> && pnpm verify:starter
 ```
 
 ```bash
-cd <專案目錄> && pnpm spectra:roadmap
-```
-
-```bash
-cd <專案目錄> && pnpm spectra:claims
+cd <專案目錄> && pnpm flow who
 ```
 
 ```bash

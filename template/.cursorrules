@@ -1,18 +1,13 @@
-<!-- SPECTRA:START v1.0.2 -->
+# Spec-Driven Development
 
-# Spectra Instructions
-
-This project uses Spectra for Spec-Driven Development(SDD).
+This project uses plan packages for Spec-Driven Development (SDD).
 
 ## Directory Structure
 
-- **Specs**: `openspec/specs/` - Current truth, what IS built
-- **Changes**: `openspec/changes/` - Proposals, what SHOULD change
-- **Archive**: `openspec/changes/archive/` - Completed changes
-- **Config**: `openspec/config.yaml` - Project context and rules
+- **Truth**: `specs/truth/` - Current truth, what IS built
+- **Plans**: `specs/plans/` - Plan packages, what SHOULD change
+- **Tasks**: `tasks/` - Dated work records and evidence
 
 ## Workflow
 
-discuss? → propose → apply ⇄ ingest → archive
-
-<!-- SPECTRA:END -->
+clarify? → specify → implement

@@ -70,7 +70,7 @@ function usage() {
 }
 
 // hub-state.json 的 checksums key 形如 rules/x.md、commands/db-migration.md、
-// skills/spectra-apply/SKILL.md。取出 commands / skills 兩類的識別名。
+// skills/review-rules/SKILL.md。取出 commands / skills 兩類的識別名。
 function loadCladeManaged(root) {
   const statePath = join(root, 'template', '.claude', '.hub-state.json')
   const managed = { commands: new Set(), skills: new Set() }
@@ -108,7 +108,7 @@ function listEntries(dir, kind) {
     .filter(({ entry, isDir }) => (isDir ? true : entry.endsWith('.md')))
 }
 
-// .cursor/ 投影會把 clade-managed 的 spectra skill 改名成 cursor-spectra-*.md，
+// .cursor/ 投影會把 clade-managed 的 skill 改名成 cursor-*.md，
 // 名稱正規化後才對得上 hub-state 的識別名。
 function normalizeName(entry, kind) {
   const raw = kind === 'skills' ? entry : basename(entry, '.md')
@@ -145,7 +145,7 @@ function audit(opts) {
       const name = normalizeName(entry, target.kind)
       const relPath = `template/${target.dir}/${entry}`
 
-      // .cursor/ 把 clade-managed 的 skill（spectra-* / commit）投影成 command 檔，
+      // .cursor/ 把 clade-managed 的 skill 投影成 command 檔，
       // 所以 cursor surface 要同時比對 commands 與 skills 兩份 clade-managed 名單。
       const managedSets =
         target.surface === 'cursor'
@@ -225,7 +225,7 @@ function report(result, opts) {
       console.log(`證據: ${item.path}`)
       console.log(`修正方式: ${item.fix}`)
       console.log(
-        '繞過方式: 只有在 Spectra artifact / PR / commit context 記錄明確 rationale 後，才允許使用維護者明示的 bypass。',
+        '繞過方式: 只有在 plan package / PR / commit context 記錄明確 rationale 後，才允許使用維護者明示的 bypass。',
       )
       console.log('')
     }

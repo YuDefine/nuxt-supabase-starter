@@ -83,7 +83,7 @@ scanner_error() {
     "$1" \
     "$2" \
     "修正 hook / rule 對齊問題後重跑；若是 staged blob 問題，請重新 stage 或手動檢查該檔案。" \
-    "只有在 Spectra artifact / PR / commit context 記錄明確 rationale 後，才允許維護者明示 bypass。"
+    "只有在 plan package / PR / commit context 記錄明確 rationale 後，才允許維護者明示 bypass。"
 }
 
 verify_check_names() {
@@ -174,7 +174,7 @@ for path in "${staged_paths[@]}"; do
       "無法讀取 staged blob，starter hygiene hook 採 fail-closed。" \
       "${path} + staged blob read failure" \
       "重新 stage 該檔或手動檢查 staged 內容；必要時重跑 full-tree audit。" \
-      "只有在 Spectra artifact / PR / commit context 記錄明確 rationale 後，才允許維護者明示 bypass。"
+      "只有在 plan package / PR / commit context 記錄明確 rationale 後，才允許維護者明示 bypass。"
     continue
   fi
 

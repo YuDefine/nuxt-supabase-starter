@@ -135,9 +135,7 @@ design, design-retro
 
 ```
 design, design-retro, nuxt-auth-utils, pinia-store, review-archive,
-review-rules, review-screenshot, server-api, spectra, spectra-apply,
-spectra-archive, spectra-ask, spectra-audit, spectra-debug,
-spectra-discuss, spectra-ingest, spectra-propose, subagent-dev,
+review-rules, review-screenshot, server-api, subagent-dev,
 supabase-arch, supabase-migration, supabase-rls
 ```
 

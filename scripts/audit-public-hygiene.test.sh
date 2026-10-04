@@ -43,7 +43,7 @@ make_fixture() {
   "rulesProjection": "copy",
   "checksums": {
     "commands/db-migration.md": "0000000000000000",
-    "skills/spectra-apply/SKILL.md": "1111111111111111"
+    "skills/review-rules/SKILL.md": "1111111111111111"
   }
 }
 JSON
@@ -117,7 +117,7 @@ pass "case3: relocated artifact fails; --report-only still exits 0"
 # ---------------------------------------------------------------------------
 make_fixture clade_managed
 echo '# db-migration' > "${fixture}/template/.claude/commands/db-migration.md"
-echo '# spectra-apply' > "${fixture}/template/.cursor/commands/cursor-spectra-apply.md"
+echo '# review-rules' > "${fixture}/template/.cursor/commands/cursor-review-rules.md"
 run_audit "${fixture}" --json
 [[ ${audit_exit} -eq 0 ]] || fail "case4: expected exit 0, got ${audit_exit}"
 [[ "$(json_field "${tmp_root}/out.txt" clade_managed_count)" == "2" ]] \

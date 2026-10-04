@@ -148,7 +148,6 @@ Nuxt 4 + Vue 3 + TypeScript + Supabase + Nuxt UI + Tailwind CSS + Pinia + Better
 | [TECH_STACK.md](docs/TECH_STACK.md)              | 技術棧與選型理由          |
 | [SUPABASE_GUIDE.md](docs/SUPABASE_GUIDE.md)      | Supabase 入門與 RLS 詳解  |
 | [API_PATTERNS.md](template/docs/API_PATTERNS.md) | Server API 設計模式       |
-| [OPENSPEC.md](template/docs/OPENSPEC.md)         | Spectra 工作流程詳解      |
 
 </details>
 
@@ -192,7 +191,7 @@ Stack preset：`cloudflare-supabase`（預設）/ `cloudflare-nuxthub-ai` / `ver
 1. **[快速開始](docs/QUICK_START.md)**：clone、跑起來
 2. **[Supabase 入門](docs/SUPABASE_GUIDE.md)**：建立第一個資料表
 3. **[API 設計](template/docs/API_PATTERNS.md)**：寫你的第一個 CRUD API
-4. **[Spectra](template/docs/OPENSPEC.md)**：用 AI 輔助開發一個功能
+4. **[工作流程](template/docs/WORKFLOW.md)**：用 AI 輔助開發一個功能
 5. **[部署指南](template/docs/DEPLOYMENT.md)**：部署到 Cloudflare Workers
 
 ### 現有專案
@@ -212,7 +211,7 @@ Stack preset：`cloudflare-supabase`（預設）/ `cloudflare-nuxthub-ai` / `ver
 
 | 層 | 內容 | Source of truth |
 | --- | --- | --- |
-| L1 | clade hub:sync 投影的 rules / spectra skills / commands / agents | `template/.claude/.hub-state.json` |
+| L1 | clade hub:sync 投影的 rules / skills / commands / agents | `template/.claude/.hub-state.json` |
 | L2 | clade plugin marketplace skills | plugin manifest |
 | L3 | starter 自己維護的 commands 與 skills | `scripts/lib/public-hygiene-allowlist.json` |
 

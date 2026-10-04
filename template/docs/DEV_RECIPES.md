@@ -4,13 +4,12 @@ applies-to: post-scaffold
 related:
   - AGENTS.md
   - WORKFLOW.md
-  - OPENSPEC.md
-purpose: 把常見開發需求（加 entity / 加 page / 加 endpoint / 加 OAuth ...）打包成可直接套用的 spectra-propose 範本，AI 收到使用者描述後直接套用，不必每次重新規劃流程
+purpose: 把常見開發需求（加 entity / 加 page / 加 endpoint / 加 OAuth ...）打包成可直接套用的 `/specify` 範本，AI 收到使用者描述後直接套用，不必每次重新規劃流程
 ---
 
 # 開發場景 Recipes
 
-> 使用者描述開發需求時，AI 找對應 recipe → 直接以該 recipe 為基礎跑 `spectra-propose`，把使用者原描述塞進範本的「需求」欄位。每個 recipe 都標出涉及的 skill / rule / 必跑步驟。
+> 使用者描述開發需求時，AI 找對應 recipe → 直接以該 recipe 為基礎跑 `/specify`，把使用者原描述塞進範本的「需求」欄位。每個 recipe 都標出涉及的 skill / rule / 必跑步驟。
 
 ## 路由表（使用者描述關鍵字 → recipe）
 
@@ -38,7 +37,7 @@ purpose: 把常見開發需求（加 entity / 加 page / 加 endpoint / 加 OAut
 
 **涉及**：`supabase-migration` skill、`supabase-rls` skill、`.claude/rules/migration.md`、`.claude/rules/rls-policy.md`
 
-**Spectra-propose 範本**：
+**`/specify` 範本**：
 
 ```
 新增 <entity_name> 資料模型，欄位：<list>
@@ -81,7 +80,7 @@ pnpm typecheck
 
 **前置條件**：對應 entity（R1）已存在或同 change 一併建。
 
-**Spectra-propose 範本**：
+**`/specify` 範本**：
 
 ```
 新增 /<entity_name> 管理頁面，支援列表 / 新增 / 編輯 / 刪除
@@ -114,18 +113,16 @@ Implementation Risk Plan:
 **Design Checkpoint 必跑**：tasks.md 自動加 `## Design Review` block（hook 已處理），執行時：
 
 ```bash
-# spectra-apply 流程中：
-/design improve [<entity>/index.vue, <entity>/[id].vue]
-# 依診斷跑 targeted skills (layout / typeset / colorize / harden / clarify)
-/impeccable audit
-review-screenshot
+# /implement 流程中：
+# 依 proactive-skills rule 跑 design checkpoint
+/impeccable audit   # 視覺與 UX 稽核
 ```
 
 ## R3 — 加一個 server API endpoint
 
 **涉及**：`server-api` skill、`.claude/rules/api-patterns.md`、`.claude/rules/logging.md`
 
-**Spectra-propose 範本**：
+**`/specify` 範本**：
 
 ```
 新增 server/api/v1/<resource>/<action>.{method}.ts
@@ -152,7 +149,7 @@ Test plan:
 
 **警告**：RLS 改動 = Tier 3 review。**禁止** 用 MCP execute_sql，必走 migration。
 
-**Spectra-propose 範本**：
+**`/specify` 範本**：
 
 ```
 為 public.<table> 加 RLS policy：<role> 可 <action>
@@ -186,7 +183,7 @@ pnpm typecheck
 
 **前置條件**：使用者去 provider console 申請 credentials（**AI 不可代填**）。
 
-**Spectra-propose 範本**：
+**`/specify` 範本**：
 
 ```
 加 <Provider> OAuth 登入（Google / GitHub / LINE / Discord / ...）
@@ -220,7 +217,7 @@ Implementation Risk Plan:
 
 **涉及**：`server-api` skill、`.claude/rules/api-patterns.md`（Idempotency 段）
 
-**Spectra-propose 範本**：
+**`/specify` 範本**：
 
 ```
 接收 <provider> webhook，例：Stripe payment.succeeded、GitHub push
@@ -252,7 +249,7 @@ Test plan:
 | Self-hosted Node       | systemd timer / cron + curl | infra 設定                                         |
 | 必須以 DB state 為中心 | pg_cron + pg_net            | migration 啟用 extension                           |
 
-**Spectra-propose 範本**：
+**`/specify` 範本**：
 
 ```
 排程任務：每 <interval> 跑 <action>
@@ -273,7 +270,7 @@ Artifact sync: docs/api/<cron>.md、wrangler.toml / vercel.json
 
 **涉及**：`server-api` skill、`.claude/rules/api-patterns.md`
 
-**Spectra-propose 範本**：
+**`/specify` 範本**：
 
 ```
 整合 <vendor>（如 OpenAI / Anthropic / Stripe / Twilio）
@@ -305,7 +302,7 @@ Test plan:
 | 需 image transformation   | Supabase Storage（內建）或 Cloudflare Images |
 | 大檔（>100MB）+ Workers   | TUS resumable upload 直傳 R2                 |
 
-**Spectra-propose 範本**：
+**`/specify` 範本**：
 
 ```
 新增 <feature> 檔案上傳（圖片 / PDF / ...）
@@ -329,7 +326,7 @@ Test plan:
 
 **涉及**：`resend` skill（如有 Resend 整合）、`server-api`
 
-**Spectra-propose 範本**：
+**`/specify` 範本**：
 
 ```
 寄 <event> 通知信（例：歡迎信 / 訂單確認 / 密碼重設）
@@ -353,7 +350,7 @@ Implementation Risk Plan:
 | 語義 / RAG / embedding | pgvector + ivfflat                    |
 | 部署到 Workers + RAG   | Cloudflare Vectorize（替代 pgvector） |
 
-**Spectra-propose 範本**：
+**`/specify` 範本**：
 
 ```
 為 <entity> 加搜尋功能
@@ -375,7 +372,7 @@ Test plan:
 
 **涉及**：`@nuxtjs/i18n` 或 vue-i18n（看是否已安裝）
 
-**Spectra-propose 範本**：
+**`/specify` 範本**：
 
 ```
 支援多語系（zh-TW / en / ja / ...）
@@ -395,7 +392,7 @@ Artifact sync: app.config 加語言列表、navigation 加 locale switcher
 
 **涉及**：第三方（Stripe / 綠界 / 藍新）— webhook（R6）+ DB 訂單表（R1）
 
-**Spectra-propose 範本**（Stripe 為例）：
+**`/specify` 範本**（Stripe 為例）：
 
 ```
 整合 Stripe checkout + 訂閱
@@ -415,7 +412,7 @@ Artifact sync: docs/api/stripe-webhook.md、shared/schemas/stripe.ts
 
 **涉及**：`nuxt-charts`（Unovis）、`nuxt-ui`、`pinia-store`
 
-**Spectra-propose 範本**：
+**`/specify` 範本**：
 
 ```
 新增 /<dashboard> 頁，含 <chart-types> 視覺化 <metric>
@@ -443,11 +440,11 @@ Design Checkpoint: 必跑（chart 類最易出 layout / typography 偏差）
 
 ```bash
 # 看當前架構
-pnpm spectra:roadmap        # 看 active changes 確保不撞工
+pnpm flow who               # 看 work queue 確保不撞工
 git log --oneline -20       # 看最近改動 context
 ```
 
-**Spectra-propose 範本**：
+**`/specify` 範本**：
 
 ```
 重構 <area>：<motivation>
@@ -476,28 +473,25 @@ Artifact sync: 若改檔位 / 命名，docs 內 forward-link 必須同步更新
 
 → R1（orders entity）+ R2（admin CRUD page）+ R6（Stripe webhook）+ R8（Stripe API）+ R10（email）
 
-合成 spectra-propose：列為一個大 change（含多個 entity matrix），或拆成多個 change（每個 entity 一個）+ depends-on marker。
+合成 /specify：列為一個大 plan package（含多個 entity matrix），或拆成多個 plan package（每個 entity 一個）+ 依賴標註。
 
 > 「重構 auth 換掉 better-auth 改用 nuxt-auth-utils」
 
 → R15（重構） + R5（OAuth 重設定）+ migration（auth 表清理）
 
-這種 cross-cutting 重構建議：先 spectra-discuss 收斂方向 → 再 propose（含 phase plan）→ apply 分階段。
+這種 cross-cutting 重構建議：先 /clarify 收斂方向 → 再 /specify（含 phase plan）→ /implement 分階段。
 
 ## 套用 recipe 後的 next-step
 
-每個 recipe 完成 spectra-propose 後：
+每個 recipe 完成 /specify 後：
 
 ```bash
-# 1. 驗證 proposal 完整性
-pnpm spectra:roadmap
+# 1. 確認不撞工
+pnpm flow who
 
 # 2. 若 UI scope，跑 design checkpoint
-# (spectra-apply 過程會自動觸發)
+# (/implement 過程會自動觸發)
 
-# 3. 進 spectra-apply 開始實作
-# (Claude session 內: /spectra-apply <change>)
-
-# 4. 完成後 archive
-# (Claude session 內: /spectra-archive <change>)
+# 3. 進 /implement 開始實作
+# (Claude session 內: /implement <plan-slug>)
 ```

@@ -99,7 +99,6 @@ export function assembleProject(
   copyWorkflows(targetDir, selectedFeatureIds)
   copyVerifyDocs(targetDir, selectedFeatureIds)
   copyGatePlaybookPack(targetDir)
-  pruneRetiredSpectraAssets(targetDir)
 
   // 9. Apply database stack overlay before evlog preset files are layered on top.
   if (dbStack === 'nuxthub-d1') {
@@ -113,7 +112,6 @@ export function assembleProject(
   replacePlaceholders(targetDir, projectName)
 
   // 11. Apply evlog preset (overlay file set on top of starter template)
-  // 對應 spectra change add-evlog-baseline-and-scaffolder-preset-flag M3b.2.
   // baseline 是 default — starter template 自家已含 baseline wiring (M3b.1)，
   // 所以 baseline 套等於再次覆蓋（idempotent）。如需 d-pattern-audit / nuxthub-ai
   // 則 overlay 額外 file 進 target dir。
@@ -415,13 +413,9 @@ export function generatePackageJson(
     delete basePkg.scripts['skills:update']
   }
 
-  // OPSX control-plane entrypoints (always available after clade bootstrap)
   basePkg.scripts['audit:ux-drift'] = 'node scripts/audit-ux-drift.ts'
-  const opsxCli = 'node .clade/vendor/scripts/opsx-control.ts'
-  basePkg.scripts['opsx:list'] = `${opsxCli} list`
-  basePkg.scripts['opsx:status'] = `${opsxCli} status`
-  basePkg.scripts['opsx:instructions'] = `${opsxCli} instructions`
-  basePkg.scripts['opsx:history'] = `${opsxCli} history`
+  // clade flow spine CLI（vendored，bootstrap 後可用）
+  basePkg.scripts['flow'] = 'node .clade/vendor/scripts/flow/flow.ts'
 
   // Apply admission after feature scripts have been assembled. Both branches forward
   // package-manager arguments and preserve the command's exit status.
@@ -1179,13 +1173,8 @@ function copyScripts(targetDir: string, feats: string[], agentTargets: AgentRunt
   }
 
   // Finally sync the full template scripts tree so Quick Start always inherits
-  // the latest shared scripts and script templates. Retired Spectra writers are
-  // not part of a fresh consumer; OPSX runtime scripts arrive through clade.
-  copyDirectoryFiltered(
-    join(STARTER_ROOT, 'scripts'),
-    join(targetDir, 'scripts'),
-    new Set(['spectra-advanced']),
-  )
+  // the latest shared scripts and script templates.
+  copyDirectory(join(STARTER_ROOT, 'scripts'), join(targetDir, 'scripts'))
 
   // install-skills.sh MUST 在整棵 scripts/ 複製「之後」才產生：starter 自己的
   // `scripts/install-skills.sh` 是給 starter repo 用的完整清單，會蓋掉這裡依選擇的
@@ -1198,34 +1187,6 @@ function copyScripts(targetDir: string, feats: string[], agentTargets: AgentRunt
   if (!hasAgent(agentTargets, 'claude-code')) {
     rmSync(join(targetDir, 'scripts', 'install-skills.sh'), { force: true })
   }
-}
-
-/**
- * Fresh consumers start on OPSX. Remove legacy Spectra runtime surfaces that
- * arrive through the starter repository's historical projections without
- * mutating those clade-managed source projections.
- */
-function pruneRetiredSpectraAssets(targetDir: string): void {
-  const paths = [
-    'scripts/spectra-target-guard.ts',
-    'scripts/spectra-archive-sidecar.ts',
-    '.claude/commands/spectra',
-    '.cursor/commands/spectra',
-    '.agents/commands/spectra',
-    '.claude/rules/spectra-notion-coupling.md',
-    '.claude/rules/spectra-workflow.md',
-    '.cursor/rules/spectra-notion-coupling.mdc',
-    '.cursor/rules/spectra-workflow.mdc',
-    '.claude/hooks/post-edit-roadmap-sync.sh',
-    '.claude/hooks/post-propose-design-inject.sh',
-    '.claude/hooks/post-propose-journey-check.sh',
-    '.claude/hooks/pre-apply-journey-brief.sh',
-    '.claude/hooks/pre-archive-design-gate.sh',
-    '.claude/hooks/pre-archive-ux-gate.sh',
-    '.claude/hooks/pre-propose-ux-scan.sh',
-    '.claude/hooks/session-start-roadmap-sync.sh',
-  ]
-  for (const path of paths) rmSync(join(targetDir, path), { recursive: true, force: true })
 }
 
 function generateInstallSkillsScript(targetDir: string, feats: string[]): void {

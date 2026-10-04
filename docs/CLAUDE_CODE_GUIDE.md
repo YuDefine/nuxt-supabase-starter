@@ -16,14 +16,14 @@ related:
 
 這個範本預先配置了一套完整的 AI 開發工作流程，包含：
 
-| 類型      | 數量   | 說明                          |
-| --------- | ------ | ----------------------------- |
-| Commands  | 24 個  | 12 共用 + 12 Spectra          |
-| SubAgents | 4 個   | 自動執行特定任務的專家        |
-| Skills    | 43 個  | 26 通用 + 5 情境 + 12 Spectra |
-| Hooks     | 9 個   | Auto-Harness 自動化腳本       |
-| Rules     | 11 個  | 開發規範規則                  |
-| CLAUDE.md | 1 份   | 專案開發規範                  |
+| 類型      | 數量   | 說明                                 |
+| --------- | ------ | ------------------------------------ |
+| Commands  | 10 個  | `ship`、`canary`、`db-migration` 等  |
+| SubAgents | 5 個   | `code-review`、`opus-advisor` 等     |
+| Skills    | 70+ 個 | 通用 + SpecFormula 工作流程          |
+| Hooks     | 50 個  | Auto-Harness 自動化腳本              |
+| Rules     | -      | 開發規範規則（clade 投影）           |
+| CLAUDE.md | 1 份   | 專案開發規範                         |
 
 ---
 
@@ -92,15 +92,12 @@ See commitlint.config.js for types. Use /commit command.
 ```
 .claude/
 ├── settings.json                # Claude Code 設定（權限、hooks、MCP）
-├── commands/                    # 自定義指令（12 共用 + spectra/）
-│   ├── commit.md
+├── commands/                    # 自定義指令（10 個）
 │   ├── db-migration.md
 │   ├── doc-sync.md
-│   ├── validate-starter.md
 │   ├── guard.md / freeze.md / unfreeze.md
 │   ├── ship.md / canary.md / retro.md
-│   ├── sprint-status.md / second-opinion.md
-│   └── spectra/                 # 12 個 Spectra 指令
+│   └── sprint-status.md / second-opinion.md
 ├── agents/                      # SubAgents
 │   ├── check-runner.md
 │   ├── code-review.md
@@ -158,11 +155,11 @@ Commands 是可以用 `/指令` 觸發的工作流程。
 | `/sprint-status`    | Sprint 進度報告                           |
 | `/second-opinion`   | 取得第二意見                              |
 
-### Spectra 指令（12 個）
+### Plan package 工作流程
 
-包含 `propose`、`apply`、`archive`、`discuss`、`ask`、`ingest`、`debug`、`tdd`、`analyze`、`clarify`、`sync`、`verify` 共 12 個指令，涵蓋從提案到歸檔的完整 Spec-Driven Development 流程。
+spec → plan → tasks 的 Spec-Driven Development 流程由 `/specify`（建立 `specs/plans/<slug>/`）與 `/implement`（執行 plan package）承載；工作佇列與 session 狀態用 `pnpm flow` 查。
 
-詳細指令說明請參考 [OPENSPEC.md](../template/docs/OPENSPEC.md)。
+詳細說明請參考 [WORKFLOW.md](../template/docs/WORKFLOW.md)。
 
 ### 指令串接
 
@@ -172,7 +169,6 @@ Commands 是可以用 `/指令` 觸發的工作流程。
 TDD 完成（test-driven-development skill）→ 詢問 commit
 /commit → check-runner 完整檢查 → 分組 → 逐一 commit
 /db-migration 完成 → [Hook] 自動產生 TypeScript 類型
-Spectra apply 完成 → 詢問 commit
 Edit/Write .ts/.vue → [Hook] 自動執行 format + typecheck
 ```
 
@@ -285,19 +281,17 @@ model: haiku
 
 Hooks（又稱 Auto-Harness）是在特定工具執行前後自動觸發的腳本，用於自動化重複性工作和品質把關。
 
-### 內建的 Hooks（9 個）
+### 內建的 Hooks（節選）
 
 | Hook | 觸發時機 | 功能 |
 | --- | --- | --- |
 | `knowledge-search-reminder` | PreToolUse: 首次 Edit/Write .ts/.vue | 搜索 docs/solutions/ + docs/verify/，提醒參考既有知識 |
-| `pre-commit-review` | PreToolUse: `git commit` | 依變更量建議 Tier 1/2/3 review 深度 |
-| `pre-archive-design-gate` | PreToolUse: Skill(spectra-archive) | 阻擋未完成人工檢查或缺 Design Review 的 archive |
+| `pre-bash-git-commit-gate` | PreToolUse: `git commit` | commit 前置檢查與 review 深度建議 |
 | `post-migration-gen-types` | PostToolUse: `apply_migration` | 自動產生 TypeScript types |
 | `post-edit-typecheck` | PostToolUse: Edit/Write | 自動執行 format + typecheck |
 | `post-edit-ui-qa` | PostToolUse: Edit/Write UI 檔案 | 提醒截圖/QA 驗證 |
-| `post-propose-design-inject` | PostToolUse: Skill(spectra-propose) | 偵測 UI scope，提醒注入 Design Review tasks |
-| `init-code-graph` | SessionStart | 初始化程式碼知識圖譜 |
-| `stop-accumulate` | Stop | 知識萃取，提醒同步偏差 |
+| `session-start-*` | SessionStart | session 初始化（worktree brief、claim heartbeat 等） |
+| `stop-wip-guard` | Stop | 收尾守衛，提醒同步偏差 |
 
 ### Hooks 架構
 
@@ -383,9 +377,9 @@ Skills 是預先整理好的技術知識，讓 Claude 能正確使用各種框�
 | `pinia-store`        | 建立 Pinia Store 時 |
 | `supabase-arch`      | 架構決策時          |
 
-### Spectra Skills（12 個）
+### 工作流程 Skills
 
-12 個 skills（`spectra-*`），提供 Spec-Driven Development 工作流程支援。
+SpecFormula／plan package 工作流由 `specify`、`implement`、`work-route`、`work-loop`、`my` 等 skills 承載（詳見 [WORKFLOW.md](../template/docs/WORKFLOW.md)）。
 
 ### Skill 的結構
 
@@ -534,4 +528,4 @@ Skills 是根據上下文自動載入的。如果沒有觸發，可以明確提�
 - [Claude Code 官方文件](https://docs.anthropic.com/claude-code)
 - [skills.sh](https://skills.sh) - AI Skills 管理平台
 - [.claude/rules/meta-repo.md](../.claude/rules/meta-repo.md) - 本專案 root（meta 層）的規範；root `CLAUDE.md` 只是空殼入口
-- [OPENSPEC.md](../template/docs/OPENSPEC.md) - Spectra 工作流程
+- [WORKFLOW.md](../template/docs/WORKFLOW.md) - Plan package 工作流程

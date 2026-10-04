@@ -13,7 +13,7 @@ purpose: pnpm hub:check 偵測到 drift 時，AI 該怎麼判斷與處理。包�
 
 ## 背景
 
-`.claude/rules/`、`.claude/skills/`、部分 `.claude/hooks/`、`scripts/spectra-ux/*` 等檔案是 clade 中央倉（`~/offline/clade`）的投影，consumer 端帶 chmod 444 + checksum gate。
+`.claude/rules/`、`.claude/skills/`、部分 `.claude/hooks/` 等檔案是 clade 中央倉（`~/offline/clade`）的投影，consumer 端帶 chmod 444 + checksum gate。
 
 `pnpm hub:check` 比對 consumer 端檔案 checksum vs `.claude/.hub-state.json` 記錄的 clade 版本。不一致 → drift。
 
@@ -30,7 +30,7 @@ drift 來源有 4 類，**處理路徑完全不同**。先判斷類型再動手�
 │   └─ 是 → 場景 A
 │
 ├─ 2. consumer 端檔案被改過（且不在預期）？
-│   ├─ 跑 `git diff -- '.claude/rules/' '.claude/skills/' '.claude/hooks/' 'scripts/spectra-ux/'`
+│   ├─ 跑 `git diff -- '.claude/rules/' '.claude/skills/' '.claude/hooks/'`
 │   ├─ 看是 user / agent / SessionStart hook 改的
 │   └─ 是 → 場景 B 或 C（依改動性質）
 │
@@ -82,7 +82,7 @@ pnpm hub:check    # 應該全綠
 
 **徵兆**：
 
-- drift 路徑在 `.claude/rules/` / `.claude/skills/` / `.claude/hooks/` / `scripts/spectra-ux/`
+- drift 路徑在 `.claude/rules/` / `.claude/skills/` / `.claude/hooks/`
 - `git diff` 顯示 consumer 上**有** local 改動
 - 改動內容看起來是「想優化某個 rule」「想加一條 skill 範例」之類
 

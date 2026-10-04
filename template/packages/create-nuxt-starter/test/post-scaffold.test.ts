@@ -575,12 +575,11 @@ describe('first-run marker', () => {
     expect(readMarkerFn()).not.toContain('docs/AGENTS.md')
   })
 
-  it('instructions 使用 OPSX list entrypoint，不在空專案呼叫無 ID 的 status', () => {
+  it('instructions 使用 flow 入口，不在空專案呼叫需要 work id 的子命令', () => {
     const marker = readMarkerFn()
-    expect(marker).toContain('pnpm opsx:list')
-    expect(marker).toContain('pnpm opsx:status -- --change-id <chg_...>')
-    expect(marker).not.toMatch(/\(2\) pnpm opsx:status/)
-    expect(marker).not.toMatch(/pnpm spectra:|\/spectra-/)
+    expect(marker).toContain('pnpm flow who')
+    expect(marker).toContain('specs/plans/')
+    expect(marker).not.toMatch(/opsx|pnpm spectra:|\/spectra-/)
   })
 
   it('instructions 列的每一條 pnpm 指令都在 assemble 產生的 script 裡', () => {
@@ -751,7 +750,7 @@ describe('rewriteFirstGlanceDocsForDbHost', () => {
     const checklist = readFileSync(join(dir, 'docs', 'NEW_PROJECT_CHECKLIST.md'), 'utf8')
     expect(checklist).not.toContain('supabase stop && supabase start')
     expect(checklist).toContain(
-      '完整教學**：先看 [QUICK_START](verify/QUICK_START.md) 與 `docs/playbooks/01-dev-database.md`，再用 `/opsx` 建立第一個需求',
+      '完整教學**：先看 [QUICK_START](verify/QUICK_START.md) 與 `docs/playbooks/01-dev-database.md`，再用 `/specify` 建立第一個需求',
     )
     expect(checklist).toContain('localhost:3090')
     expect(checklist).not.toContain('localhost:3000')

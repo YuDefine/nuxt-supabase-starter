@@ -68,10 +68,9 @@ related:
 | -------------------------------------------------------------------- | ------------------------------------------ |
 | [Claude Code](https://claude.ai/code)                                | AI 編程助手                                |
 | [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫                       |
-| Commands（16 個）                                                    | 4 共用 + 12 Spectra                        |
-| SubAgents（3 個）                                                    | `check-runner`、`code-review`、`db-backup` |
-| [Skills](https://skills.sh)（通用 26 + 情境 5）                      | `nuxt-ui`、`vue`、`vueuse` 等 AI Skills    |
-| SDD Skills（12 個）                                                  | Spectra（`spectra-*`）                     |
+| Commands（10 個）                                                    | `ship`、`canary`、`retro`、`db-migration` 等 |
+| SubAgents                                                            | `code-review`、`opus-advisor` 等           |
+| [Skills](https://skills.sh)                                          | `nuxt-ui`、`vue`、`vueuse`、SpecFormula 等 AI Skills |
 
 ---
 
