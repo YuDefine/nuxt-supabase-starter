@@ -1,0 +1,8 @@
+{
+  "paths": {
+    "types": ["shared/types"],
+    "ui": ["app/pages", "app/components"],
+    "uiExtensions": [".vue"],
+    "server": ["server", "shared"]
+  }
+}

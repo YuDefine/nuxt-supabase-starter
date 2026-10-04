@@ -182,7 +182,10 @@ fi
 echo ""
 echo "[Phase 3b] retired spec-toolchain absence"
 
-for retired in openspec .spectra .spectra.yaml spectra-advanced.config.json \
+# 注意：spectra-advanced.config.json 不是退役資產——它是 locked
+# scripts/audit-ux-drift.ts 唯一認得的 live config 檔名（CONFIG_NAMES 雙名制），
+# CI 的 UX drift audit 步驟靠它定位 typesDirs；改名要等 clade 源端發版。
+for retired in openspec .spectra .spectra.yaml \
                scripts/spectra-target-guard.ts scripts/spectra-archive-sidecar.ts \
                docs/OPENSPEC.md; do
   if [ -e "$retired" ]; then
