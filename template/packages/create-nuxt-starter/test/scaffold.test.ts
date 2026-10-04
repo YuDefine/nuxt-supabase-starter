@@ -63,6 +63,8 @@ describe('scaffold: base-only (no features)', () => {
       false,
     )
     expect(existsSync(join(targetDir, '.scaffold-cleanup'))).toBe(false)
+    // review-rules-baseline.json 是 starter 自己的 review-rules ratchet 存量；新專案零存量起步。
+    expect(existsSync(join(targetDir, 'review-rules-baseline.json'))).toBe(false)
     expect(existsSync(join(targetDir, 'scripts', 'compress-skill-descriptions.sh'))).toBe(true)
     expect(existsSync(join(targetDir, 'scripts', 'templates', 'clean', 'README.md'))).toBe(true)
     expect(existsSync(join(targetDir, 'docs', 'playbooks', 'README.md'))).toBe(true)
