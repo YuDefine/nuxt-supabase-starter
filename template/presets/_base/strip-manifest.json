@@ -32,6 +32,12 @@
       "required": false
     },
     {
+      "path": "review-rules-baseline.json",
+      "reason": "starter-baseline-leak",
+      "consumers": ["create-clean", "scaffolder"],
+      "required": false
+    },
+    {
       "path": ".clade",
       "reason": "projection-metadata",
       "consumers": ["create-clean", "scaffolder"],

@@ -12,6 +12,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'pathe'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { applyStripManifest, loadStripManifest } from '../src/strip-manifest'
 
 const TEST_DIR = mkdtempSync(join(tmpdir(), 'strip-manifest-test-'))
 const ROOT_CREATE_CLEAN = join(
@@ -169,4 +170,60 @@ describe('strip manifest create-clean gate', () => {
     expect(result.status).toBe(0)
     expect(result.stdout).toContain('[strip] would skip: .spectra/claims')
   })
+
+  it('strips review-rules-baseline.json so the starter baseline cannot leak into scaffolded projects', () => {
+    writeText(join(TEST_DIR, 'template', 'review-rules-baseline.json'), '{}\n')
+    writeManifest({
+      schema_version: 1,
+      entries: [
+        {
+          path: 'review-rules-baseline.json',
+          reason: 'starter-baseline-leak',
+          consumers: ['create-clean', 'scaffolder'],
+          required: false,
+        },
+      ],
+    })
+
+    const result = runCreateCleanDryRun()
+
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('[strip] would strip: review-rules-baseline.json')
+  })
+})
+
+// starter 自己的 ratchet baseline（template/review-rules-baseline.json）是維護倉存量
+// 資料，不能跟著 scaffold 進新專案 —— 但新專案不能沒有 baseline 檔：scan.ts 對
+// 「檔案不存在」走 bootstrap warn-only（不擋違規）。零容忍由 consumer 端各自補寫的
+// 空 baseline 達成（assemble.ts／create-clean.sh，見 scaffold.test.ts），本檔只驗證
+// strip 這半邊。這裡直接吃真實的 presets/_base/strip-manifest.json，不走 fixture，
+// 證明兩個 consumer（create-clean 與 scaffolder）都會把它 strip 掉。
+describe('real strip manifest: review-rules-baseline.json', () => {
+  beforeEach(() => {
+    cleanTestDir()
+    mkdirSync(TEST_DIR, { recursive: true })
+  })
+
+  afterEach(cleanTestDir)
+
+  it('declares the entry for create-clean and scaffolder', () => {
+    const manifest = loadStripManifest()
+    const entry = manifest.entries.find((e) => e.path === 'review-rules-baseline.json')
+
+    expect(entry).toBeDefined()
+    expect(entry!.consumers).toEqual(expect.arrayContaining(['create-clean', 'scaffolder']))
+  })
+
+  for (const consumer of ['create-clean', 'scaffolder'] as const) {
+    it(`removes an existing baseline file for consumer ${consumer}`, () => {
+      const targetDir = join(TEST_DIR, `apply-${consumer}`)
+      writeText(join(targetDir, 'review-rules-baseline.json'), '{"_meta":{}}\n')
+      const manifest = loadStripManifest()
+
+      const result = applyStripManifest(targetDir, manifest, { consumer })
+
+      expect(result.stripped).toContain('review-rules-baseline.json')
+      expect(existsSync(join(targetDir, 'review-rules-baseline.json'))).toBe(false)
+    })
+  }
 })

@@ -66,6 +66,13 @@ describe('scaffold: base-only (no features)', () => {
       false,
     )
     expect(existsSync(join(targetDir, '.scaffold-cleanup'))).toBe(false)
+    // review-rules-baseline.json：維護倉的存量被 strip 後，scaffolder 會補一份
+    // 空 baseline——scan.ts 對「檔案不存在」走 bootstrap warn-only（不擋違規），
+    // 檔案存在（即使空）= ratchet 武裝，新專案才是真的零容忍起步。
+    const baselinePath = join(targetDir, 'review-rules-baseline.json')
+    expect(existsSync(baselinePath)).toBe(true)
+    const baseline = JSON.parse(readFileSync(baselinePath, 'utf-8')) as Record<string, unknown>
+    expect(Object.keys(baseline).filter((key) => key !== '_meta')).toEqual([])
     expect(existsSync(join(targetDir, 'scripts', 'compress-skill-descriptions.sh'))).toBe(true)
     expect(existsSync(join(targetDir, 'scripts', 'templates', 'clean', 'README.md'))).toBe(true)
     expect(existsSync(join(targetDir, 'docs', 'playbooks', 'README.md'))).toBe(true)
