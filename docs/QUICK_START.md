@@ -381,14 +381,14 @@ claude
 ### 用 AI 開發第一個功能
 
 ```bash
-# 使用 Spectra 工作流程
-> /spectra-propose
+# 建立 plan package（spec → plan → tasks）
+> /specify
 > 我需要一個待辦事項功能，使用者可以新增、編輯、刪除待辦事項...
 ```
 
-> 📖 詳細說明：[OPENSPEC.md](../template/docs/OPENSPEC.md)
+> 📖 詳細說明：[WORKFLOW.md](../template/docs/WORKFLOW.md)
 >
-> UI 功能的 tasks 會自動包含 Design Review 區塊，spectra-apply 執行時會觸發 `/design improve` + targeted design skills。
+> UI 功能的 plan tasks 會自動包含 Design Review 區塊，實作時會觸發對應 design skills。
 
 ---
 
@@ -421,7 +421,7 @@ supabase migration new <name>  # 建立新 migration
 | [SUPABASE_MCP.md](../template/docs/SUPABASE_MCP.md) | Supabase MCP 整合           |
 | [SUPABASE_GUIDE.md](./SUPABASE_GUIDE.md)            | Supabase 入門與 RLS         |
 | [WORKFLOW.md](../template/docs/WORKFLOW.md)         | SDD、TDD 開發流程           |
-| [OPENSPEC.md](../template/docs/OPENSPEC.md)         | Spectra 工作流程            |
+| [WORKFLOW.md](../template/docs/WORKFLOW.md)         | Plan package 工作流程       |
 | [API_PATTERNS.md](../template/docs/API_PATTERNS.md) | Server API 設計模式         |
 | [DEPLOYMENT.md](../template/docs/DEPLOYMENT.md)     | Cloudflare Workers 部署指南 |
 

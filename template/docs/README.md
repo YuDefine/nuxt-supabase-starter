@@ -78,7 +78,6 @@ applies-to: post-scaffold
 | `FAQ.md`                   | 常見問題                  |
 | `TROUBLESHOOTING.md`       | 疑難排解                  |
 | `DEPLOYMENT.md`            | 部署指南                  |
-| `OPENSPEC.md`              | OpenSpec / Spectra 工作流 |
 
 > Starter 展示文件（QUICK_START, FIRST_CRUD, READING_GUIDE, TECH_STACK, SUPABASE_GUIDE 等）位於 repo root `docs/`。
 

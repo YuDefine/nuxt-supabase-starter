@@ -24,5 +24,5 @@ pnpm dev
 - 開發流程：[docs/WORKFLOW.md](docs/WORKFLOW.md)
 - API 模式：[docs/API_PATTERNS.md](docs/API_PATTERNS.md)
 - 疑難排解：[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
-- Spectra 流程：[docs/OPENSPEC.md](docs/OPENSPEC.md)
+- 工作流程：[docs/WORKFLOW.md](docs/WORKFLOW.md)
 - 文件索引：[docs/README.md](docs/README.md)

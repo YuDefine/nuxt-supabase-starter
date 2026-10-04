@@ -16,11 +16,11 @@ ai-lookup: H3 標題即問題本身，使用者問句可直接 grep。問題型�
 
 ## 工具選擇類
 
-### Spectra vs Plan Mode：何時使用哪個？
+### Plan package vs 直接實作：何時使用哪個？
 
-**Spectra** 適合複雜功能（3+ 個檔案變更、需追蹤規格演進、多人協作），提供三階段流程（propose → apply → archive）與完整歸檔。**Plan Mode** 適合小修改、需求明確的場景。Bug 修復或緊急部署可直接實作。
+**Plan package**（`/specify` → `specs/plans/<slug>/`）適合複雜功能（3+ 個檔案變更、需追蹤規格演進、多人協作），提供 spec → plan → tasks 的明確驗收。**直接實作**適合小修改、需求明確的場景。Bug 修復或緊急部署可直接實作。
 
-詳細比較與指令說明請參考 [OPENSPEC.md](OPENSPEC.md)。
+詳細說明請參考 [WORKFLOW.md](WORKFLOW.md)。
 
 ---
 
@@ -53,7 +53,7 @@ pnpm docs:build  # 建置靜態網站
 | ----------- | ----- | ----------------------------------------- |
 | 通用 Skills | 26 個 | 全部第三方，`pnpm skills:update` 自動更新 |
 | 情境 Skills | 5 個  | 本地維護，手動更新                        |
-| SDD Skills  | 12 個 | Spectra（`spectra-*`）                    |
+| 工作流程 Skills | — | `specify`、`implement`、`work-route`、`my` 等 |
 
 **第三方 Skills 更新流程**：
 
@@ -81,7 +81,7 @@ pnpm docs:build  # 建置靜態網站
 - 複雜的程式碼生成與重構
 - 多檔案同時編輯
 - 資料庫 migration 設計
-- Spectra 結構化開發
+- plan package 結構化開發（/specify → /implement）
 
 | 方案       | 每月費用 | Opus 用量 | 適合                 |
 | ---------- | -------- | --------- | -------------------- |
@@ -97,7 +97,7 @@ pnpm docs:build  # 建置靜態網站
 
 | 類型         | 觸發方式                  | 用途         | 範例                                           |
 | ------------ | ------------------------- | ------------ | ---------------------------------------------- |
-| **Commands** | 使用者輸入 `/xxx`         | 執行特定流程 | `/commit`, `/db-migration`, `/spectra-propose` |
+| **Commands** | 使用者輸入 `/xxx`         | 執行特定流程 | `/commit`, `/db-migration`, `/specify` |
 | **Agents**   | 自動觸發或被 Command 呼叫 | 執行子任務   | check-runner, code-review, db-backup           |
 | **Skills**   | 自動偵測情境載入          | 提供專業知識 | supabase-rls, server-api                       |
 
@@ -407,7 +407,7 @@ pnpm db:types
 
 1. 刪除 `.claude/` 目錄
 2. 刪除 `.agents/` 目錄
-3. 刪除 `openspec/` 和 `.spectra/` 目錄
+3. 刪除 `specs/` 之外的 AI 工作流產物（依你需要）
 4. 核心 Nuxt + Supabase 功能不受影響
 
 **不需要 Sentry**：

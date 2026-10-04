@@ -6,7 +6,7 @@ prerequisites:
   - pnpm verify:starter 通過
 related:
   - SUPABASE_GUIDE.md
-  - ../template/docs/OPENSPEC.md
+  - ../template/docs/WORKFLOW.md
 ---
 
 # 建立你的第一個功能：書籤管理
@@ -458,4 +458,4 @@ describe('POST /api/v1/bookmarks', () => {
 | 3    | [ENVIRONMENT_VARIABLES.md](../template/docs/verify/ENVIRONMENT_VARIABLES.md) | 環境變數管理、GitHub Secrets             |
 | 4    | [TROUBLESHOOTING.md](../template/docs/TROUBLESHOOTING.md) | 25 個常見問題的系統化診斷                |
 
-> 💡 **提示**：使用 `/spectra-propose` 來規劃你的下一個功能，體驗 Spec-Driven Development 工作流程。
+> 💡 **提示**：使用 `/specify` 建立 plan package（`specs/plans/<slug>/`）來規劃你的下一個功能。

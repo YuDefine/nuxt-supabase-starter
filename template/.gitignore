@@ -42,10 +42,6 @@ blob-report/
 # Screenshots
 temp/
 
-# Spectra runtime state (keep .spectra.yaml and folder skeleton)
-.spectra/spectra.db
-.spectra/snapshots/
-
 # Logs
 *.log
 npm-debug.log*
@@ -78,7 +74,6 @@ yarn-error.log*
 .claude/.commit.lock.history/
 
 # Clade local runtime state
-openspec/.vector-search.db*
 
 .codex/
 .clade/runtime/
@@ -86,11 +81,6 @@ openspec/.vector-search.db*
 .clade/vendor/ledger/*.jsonl.lock
 
 # Codex 投影層（sync-to-codex.ts 從 .claude/ 產生，可重生 → 不進版控）
-
-.spectra/*
-!.spectra/evidence/
-
-.spectra/evidence/*.bak*
 
 .clade/flow/
 

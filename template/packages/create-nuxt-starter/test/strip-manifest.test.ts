@@ -157,7 +157,7 @@ describe('strip manifest create-clean gate', () => {
       schema_version: 1,
       entries: [
         {
-          path: '.spectra/claims',
+          path: '.clade/claims',
           reason: 'projection-metadata',
           consumers: ['create-clean'],
           required: false,
@@ -168,7 +168,7 @@ describe('strip manifest create-clean gate', () => {
     const result = runCreateCleanDryRun()
 
     expect(result.status).toBe(0)
-    expect(result.stdout).toContain('[strip] would skip: .spectra/claims')
+    expect(result.stdout).toContain('[strip] would skip: .clade/claims')
   })
 
   it('strips review-rules-baseline.json so the starter baseline cannot leak into scaffolded projects', () => {

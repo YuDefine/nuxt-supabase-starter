@@ -25,15 +25,14 @@ spec.md    plan.md     tasks.md    Red/Green   pnpm check
 
 ### Spec-Driven Development (SDD)
 
-對於較複雜的功能，使用 Spectra 工作流程：
+對於較複雜的功能，使用 plan package 工作流程（spec → plan → tasks）：
 
 ```
-/spectra-propose   # 建立變更提案（產生 proposal, design, tasks）
-/spectra-apply     # 執行任務清單
-/spectra-archive   # 歸檔完成的變更
+/specify     # 建立 plan package（產生 specs/plans/<slug>/ 的 spec、plan、tasks）
+/implement   # 執行 plan package 的任務清單
 ```
 
-> 📖 詳細說明見 [OPENSPEC.md](./OPENSPEC.md)
+完成的 plan package 留在 `specs/plans/`；規格真相收進 `specs/truth/`；工作佇列用 `pnpm flow who` 查。
 
 ### 資料存取：Client 讀、Server 寫
 
@@ -398,31 +397,28 @@ Claude Code 的 `/db-migration` 命令會引導你完成整個流程，包括：
 
 假設你要開發一個「待辦事項」功能：
 
-### 1. 使用 Spectra 建立變更提案
+### 1. 建立 plan package
 
 ```bash
-/spectra-propose
+/specify
 ```
 
 描述：「使用者可以建立、查看、更新、刪除待辦事項。每個待辦事項有標題、描述、完成狀態。使用者只能看到自己的待辦事項。」
 
-Claude 會產生 `proposal.md`、`design.md`、`tasks.md` 和 delta specs。
+Claude 會在 `specs/plans/add-todos/` 產生 spec、plan 與 tasks。
 
 ### 2. 執行任務
 
 ```bash
-/spectra-apply add-todos
+/implement add-todos
 ```
 
 Claude 會逐一執行任務，使用 TDD 流程。
 
-### 3. 歸檔變更
+### 3. 收尾
 
-```bash
-/spectra-archive add-todos
-```
-
-Claude 會將變更歸檔，並將 delta specs 合併到主 specs。
+Plan package 的 tasks 全部完成後，把驗收結果記回 `specs/plans/add-todos/`；
+規格有新增／變動時同步進 `specs/truth/`。
 
 ### 4. 自動檢查與提交
 
@@ -446,7 +442,7 @@ Claude 會將變更歸檔，並將 delta specs 合併到主 specs。
 | TDD 流程         | 詢問是否 commit                 | check 通過後   |
 | `/commit`        | **先**調用 check-runner         | 開始前強制     |
 | `/db-migration`  | 產生 TypeScript 類型            | 測試通過後     |
-| `/spectra-apply` | 調用 check-runner + 詢問 commit | 所有任務完成後 |
+| `/implement`     | 調用 check-runner + 詢問 commit | 所有任務完成後 |
 
 ### SubAgents
 

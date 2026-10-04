@@ -22,14 +22,13 @@ bash scripts/validate-starter.sh demo     # 指定驗證 demo 模式
 
 該 script 以 `template/` 為 root，涵蓋：
 
-- Phase 1 結構檢查（`.claude/`、`openspec/`、`app/`、`server/`、`docs/decisions/`）
+- Phase 1 結構檢查（`.claude/`、`app/`、`server/`、`docs/decisions/`）
 - Phase 2 `package.json` scripts 完備性
 - Phase 3 文件關鍵字一致性
-- Phase 3b Spectra / OpenSpec clean baseline
+- Phase 3b 退役 spec 工具鏈殘留檢查（openspec／spectra 不得存在）
 - Phase 4 mode-specific 檢查
 
-在**開發中的 repo** 跑會在 Phase 3b 出現 FAIL（active change dir 尚未 archive），那是預期的；
-clean baseline 只對 scaffold 輸出或 release 前的乾淨樹有意義。
+Phase 3b 一律要求退役工具鏈缺席；任何 openspec／spectra 路徑出現即 FAIL。
 
 ### Phase 2: Scaffold 模擬（preset 全覆蓋）
 

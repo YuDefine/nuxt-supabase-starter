@@ -75,8 +75,8 @@ for skill in design design-retro impeccable; do
 done
 
 echo ""
-echo "🔄 Spectra Skills:"
-ls -1 "$SKILLS_DIR" | grep "^spectra" | sed 's/^/  ✓ /'
+echo "🔄 Workflow Skills:"
+ls -1 "$SKILLS_DIR" | grep -E "^(specify|implement|clarify|work-|my$|spec-)" | sed 's/^/  ✓ /'
 
 echo ""
 echo "🛠️  其他 Skills:"

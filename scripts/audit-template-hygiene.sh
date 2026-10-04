@@ -195,7 +195,7 @@ check_private_env_path() {
       "私人環境檔不能進入會被 scaffold 帶走的 template tree。" \
       "${path} + private env path" \
       "移除該檔；若使用者需要設定範本，改用 template/.env.example 並只保留 placeholder。" \
-      "只有在 Spectra artifact / PR / commit context 記錄此檔為刻意保留且已去識別化後，才允許維護者明示 bypass。"
+      "只有在 plan package / PR / commit context 記錄此檔為刻意保留且已去識別化後，才允許維護者明示 bypass。"
   fi
 }
 
@@ -225,7 +225,7 @@ check_env_example_values() {
         ".env.example 只能保留 placeholder；敏感設定不能放入看似真實的值。" \
         "${path} + .env.example non-placeholder value category" \
         "把值改成 your_value_here、example、sk-xxxxx、localhost 或其他明確 placeholder。" \
-        "只有在 Spectra artifact / PR / commit context 記錄該值是去識別化範例後，才允許維護者明示 bypass。"
+        "只有在 plan package / PR / commit context 記錄該值是去識別化範例後，才允許維護者明示 bypass。"
       return 0
     fi
   done <<< "${blob}"
@@ -258,7 +258,7 @@ check_secret_like_content() {
       "template content 含疑似 secret，不能進入 starter seed。" \
       "${path} + ${category}" \
       "移除 secret，改用 placeholder，並保留去識別化後的內容。" \
-      "只有在 Spectra artifact / PR / commit context 記錄此值是無效範例且已去識別化後，才允許維護者明示 bypass。"
+      "只有在 plan package / PR / commit context 記錄此值是無效範例且已去識別化後，才允許維護者明示 bypass。"
   fi
 }
 
@@ -293,7 +293,7 @@ check_email_identifiers() {
       "template content 含非 placeholder email，可能把可識別使用者資料帶進 starter。" \
       "${path} + email address pattern" \
       "改用 user@example.com、admin@example.test 或其他明確範例 domain。" \
-      "只有在 Spectra artifact / PR / commit context 記錄該 email 為去識別化範例後，才允許維護者明示 bypass。"
+      "只有在 plan package / PR / commit context 記錄該 email 為去識別化範例後，才允許維護者明示 bypass。"
     return 0
   done < <(grep -Eio -- '[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}' <<< "${blob}" || true)
 }
@@ -315,7 +315,7 @@ check_tenant_identifiers() {
         "template content 含非 placeholder UUID，可能對應真實 tenant / org / user。" \
         "${path} + non-placeholder UUID pattern" \
         "改用 00000000-0000-0000-0000-000000000000、demo-tenant 或 example-org。" \
-        "只有在 Spectra artifact / PR / commit context 記錄該 identifier 為去識別化範例後，才允許維護者明示 bypass。"
+        "只有在 plan package / PR / commit context 記錄該 identifier 為去識別化範例後，才允許維護者明示 bypass。"
       return 0
     fi
   done < <(grep -Eio -- '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}' <<< "${blob}" || true)
@@ -332,7 +332,7 @@ check_tenant_identifiers() {
       "template content 含疑似真實 tenant / org / customer identifier。" \
       "${path} + tenant identifier assignment pattern" \
       "改用 demo-tenant、example-org、零值 UUID，或移到 template/.examples/ 並去識別化。" \
-      "只有在 Spectra artifact / PR / commit context 記錄該 identifier 為去識別化範例後，才允許維護者明示 bypass。"
+      "只有在 plan package / PR / commit context 記錄該 identifier 為去識別化範例後，才允許維護者明示 bypass。"
     return 0
   done < <(grep -Ei -- '(tenant|organization|org|customer|company)[_-]?(id|slug|key|name)?[[:space:]]*[:=][[:space:]]*["'\''][A-Za-z0-9][A-Za-z0-9._-]{5,}["'\'']' <<< "${blob}" || true)
 }
@@ -375,7 +375,7 @@ check_clade_projection_consumer_names() {
       "clade 投影面含真實 consumer 名，代表投影未去識別化（多半是 bootstrap 在本 repo 內跑過）。" \
       "${path} + real consumer identifier category" \
       "改用 <consumer-a> 這類去識別化 placeholder；若是 bootstrap 產物，先確認 template/package.json 的 postinstall self-detection 生效再重投影。" \
-      "只有在 Spectra artifact / PR / commit context 記錄該名稱為刻意保留後，才允許維護者明示 bypass。"
+      "只有在 plan package / PR / commit context 記錄該名稱為刻意保留後，才允許維護者明示 bypass。"
   fi
 }
 
@@ -384,7 +384,7 @@ check_starter_only_docs() {
   local blob="$2"
 
   [[ "${path}" == *.md ]] || return 0
-  [[ "${path}" == template/.claude/* || "${path}" == template/.agents/* || "${path}" == template/.codex/* || "${path}" == template/openspec/* ]] && return 0
+  [[ "${path}" == template/.claude/* || "${path}" == template/.agents/* || "${path}" == template/.codex/* ]] && return 0
   [[ "${path}" == template/docs/decisions/* || "${path}" == template/docs/rules/* ]] && return 0
   [[ "${path}" == template/.examples/* || "${path}" == template/.starter/* || "${path}" == *.starter.md ]] && return 0
 
@@ -394,7 +394,7 @@ check_starter_only_docs() {
       "一般 starter 文件含 starter-only / internal-only 標記文字，但檔案路徑未明確標記。" \
       "${path} + starter-only marker category" \
       "改名為 *.starter.md，或移入 template/.starter/ / template/.examples/。" \
-      "只有在 Spectra artifact / PR / commit context 記錄為刻意保留且路徑已補標記後，才允許維護者明示 bypass。"
+      "只有在 plan package / PR / commit context 記錄為刻意保留且路徑已補標記後，才允許維護者明示 bypass。"
   fi
 }
 
@@ -415,7 +415,7 @@ check_dogfood_business_code() {
       "template content 含 dogfood / business-specific keyword，不能污染 scaffold seed。" \
       "${path} + business-specific keyword category" \
       "移到 root docs / examples / playground，或另開 change 設計為 starter-safe 範例。" \
-      "只有在 Spectra artifact / PR / commit context 記錄該內容是去識別化 starter 範例後，才允許維護者明示 bypass。"
+      "只有在 plan package / PR / commit context 記錄該內容是去識別化 starter 範例後，才允許維護者明示 bypass。"
   fi
 }
 
@@ -431,7 +431,7 @@ check_dogfood_schema_hint() {
       "template Supabase schema / seed 含 tenant-specific 或 private seed hint。" \
       "${path} + dogfood schema hint category" \
       "改成通用 starter schema；業務範例移到 template/.examples/ 並去識別化。" \
-      "只有在 Spectra artifact / PR / commit context 記錄該 schema hint 是 starter-safe 範例後，才允許維護者明示 bypass。"
+      "只有在 plan package / PR / commit context 記錄該 schema hint 是 starter-safe 範例後，才允許維護者明示 bypass。"
   fi
 }
 
@@ -465,7 +465,7 @@ check_maintenance_script_misplacement() {
       "root 維護腳本或 scaffolder tooling 不應放進會被 scaffold 帶走的 template/scripts/。" \
       "${path} + maintenance script category" \
       "移到 repo root scripts/；template/scripts/ 只保留 scaffold 後專案會用到的腳本。" \
-      "只有在 Spectra artifact / PR / commit context 記錄該 script 是使用者專案 runtime 需要後，才允許維護者明示 bypass。"
+      "只有在 plan package / PR / commit context 記錄該 script 是使用者專案 runtime 需要後，才允許維護者明示 bypass。"
   fi
 }
 
@@ -574,10 +574,8 @@ scan_template_tree() {
       -o -path "${template_dir}/.codex" \
       -o -path "${template_dir}/.cursor" \
       -o -path "${template_dir}/.husky" \
-      -o -path "${template_dir}/.spectra" \
       -o -path "${template_dir}/.vite-hooks" \
       -o -path "${template_dir}/.wrangler" \
-      -o -path "${template_dir}/openspec" \
       -o -path "${template_dir}/node_modules" \
       -o -path "${template_dir}/.nuxt" \
       -o -path "${template_dir}/.output" \
@@ -617,7 +615,7 @@ print_report() {
       printf '問題: scanner error，starter hygiene audit 採 fail-closed。\n'
       printf '證據: %s\n' "${error}"
       printf '修正方式: 修正 scanner / rule / path 問題後重跑；若是檔案讀取問題，請手動檢查該檔案。\n'
-      printf '繞過方式: 只有在 Spectra artifact / PR / commit context 記錄明確 rationale 後，才允許維護者明示 bypass。\n\n'
+      printf '繞過方式: 只有在 plan package / PR / commit context 記錄明確 rationale 後，才允許維護者明示 bypass。\n\n'
     done
     printed=1
   fi

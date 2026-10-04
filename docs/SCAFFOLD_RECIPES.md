@@ -93,7 +93,7 @@ bash scripts/create-fast-project.sh temp/<NAME> \
 
 後續工作（不在 scaffold 範圍）：
 
-- 設計 org / membership 表（用 `/spectra-propose multi-tenant-foundation`）
+- 設計 org / membership 表（用 `/specify` 開 `multi-tenant-foundation` plan package）
 - 所有 RLS policy 加 `org_id` filter（見 `.claude/rules/rls-policy.md`）
 - API 取 org context：`getSupabaseWithContext(event)` + middleware 注入 `request.org`
 

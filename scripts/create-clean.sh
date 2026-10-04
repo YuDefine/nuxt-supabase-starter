@@ -20,9 +20,6 @@
 #   - package.json name/version/repository
 #   - .env（從 .env.example 重新產生，含新 secrets）
 #   - README.md（替換為新專案模板）
-#   - openspec/changes/（清空 active + archive）
-#   - openspec/project.md（替換為模板）
-#   - .spectra/（重置為乾淨骨架）
 #
 # Infrastructure（會被保留）：
 #   - app/layouts/          — 佈局
@@ -309,7 +306,7 @@ echo "  - 套用模板：README, app.vue, layouts, (home).vue, database.types.ts
 echo "  - 設定檔：wrangler.toml, supabase/config.toml, nuxt.config.ts → ${PROJECT_NAME}"
 echo "  - package.json name/version/repository"
 echo "  - .env（重新產生 secrets）"
-echo "  - openspec/, .spectra/, CLAUDE.md"
+echo "  - CLAUDE.md"
 echo "  - 移除 starter 專屬文件、壞掉的 symlinks"
 echo ""
 echo "以下內容將被保留："
@@ -556,58 +553,6 @@ fi
 # 15. 替換 README.md 為新專案模板
 # ---------------------------------------------------------------------------
 apply_template "README.md" "README.md"
-
-# ---------------------------------------------------------------------------
-# 16. 清空 openspec/changes/（active + archive）
-# ---------------------------------------------------------------------------
-info "清空 openspec changes..."
-openspec_removed=0
-
-# 移除 active changes（archive 以外的子目錄）
-for d in openspec/changes/*/; do
-  dir_name="$(basename "$d")"
-  if [ "$dir_name" != "archive" ]; then
-    rm -rf "$d"
-    openspec_removed=$((openspec_removed + 1))
-  fi
-done
-
-# 清空 archive 內容
-if [ -d "openspec/changes/archive" ]; then
-  archive_count=$(find openspec/changes/archive -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
-  if [ "$archive_count" -gt 0 ]; then
-    rm -rf openspec/changes/archive/*/
-    openspec_removed=$((openspec_removed + archive_count))
-  fi
-fi
-
-# 確保目錄結構存在
-touch openspec/changes/.gitkeep
-touch openspec/changes/archive/.gitkeep
-
-if [ "$openspec_removed" -gt 0 ]; then
-  success "清除 ${openspec_removed} 個 openspec changes"
-else
-  info "沒有 openspec changes 需要清除"
-fi
-
-# ---------------------------------------------------------------------------
-# 17. 替換 openspec/project.md 為模板
-# ---------------------------------------------------------------------------
-apply_template "openspec/project.md" "openspec/project.md"
-
-# ---------------------------------------------------------------------------
-# 18. 重置 .spectra/（保留必要骨架，移除 runtime 狀態）
-# ---------------------------------------------------------------------------
-if [ -d ".spectra" ]; then
-  find .spectra -mindepth 1 ! -name '.gitkeep' -exec rm -rf {} +
-  touch .spectra/.gitkeep
-  success "重置 .spectra/（保留 .gitkeep，移除 runtime 狀態）"
-else
-  mkdir -p .spectra
-  touch .spectra/.gitkeep
-  success "建立 .spectra/ 骨架（.gitkeep）"
-fi
 
 # ---------------------------------------------------------------------------
 # 20. 更新 nuxt.config.ts 中的 starter 名稱

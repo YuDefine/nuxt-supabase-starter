@@ -76,12 +76,6 @@ REQUIRED_PATHS=(
   ".claude/hooks"
   ".claude/skills"
   ".claude/settings.json"
-  ".spectra"
-  ".spectra.yaml"
-  "openspec/project.md"
-  "openspec/specs"
-  "openspec/changes/.gitkeep"
-  "openspec/changes/archive"
   "app/components"
   "app/composables"
   "app/stores"
@@ -99,7 +93,6 @@ REQUIRED_PATHS=(
   "test/unit"
   "supabase/migrations"
   "scripts/backup-supabase.sh"
-  "docs/templates/.github/workflows/ci.yml"
 )
 
 for path in "${REQUIRED_PATHS[@]}"; do
@@ -175,40 +168,32 @@ else
   fail "docs missing pnpm skills:list"
 fi
 
-if grep -q "spectra" docs/NEW_PROJECT_CHECKLIST.md 2>/dev/null; then
-  ok "docs mention spectra in checklist"
+if grep -q "specify" docs/NEW_PROJECT_CHECKLIST.md 2>/dev/null; then
+  ok "docs mention specify flow in checklist"
 else
-  fail "docs missing spectra in checklist"
+  fail "docs missing specify flow in checklist"
 fi
 
 # QUICK_START.md 已移至 repo root docs/，template 內不再有此檔案
 
 # ---------------------------------------------------------------------------
-# Phase 3b: Spectra/OpenSpec clean baseline（demo & clean 都需要）
+# Phase 3b: 退役 spec 工具鏈不得殘留（openspec / spectra 已移除）
 # ---------------------------------------------------------------------------
 echo ""
-echo "[Phase 3b] Spectra/OpenSpec clean baseline"
+echo "[Phase 3b] retired spec-toolchain absence"
 
-# openspec archive 應該只保留骨架
-check_path_empty "openspec/changes/archive" "openspec/changes/archive/"
-
-# 不應有 active openspec changes
-active_change_count=$(find openspec/changes -maxdepth 1 -mindepth 1 -type d ! -name 'archive' 2>/dev/null | wc -l | tr -d ' ')
-if [ "$active_change_count" -eq 0 ]; then
-  ok "no active openspec changes"
-else
-  fail "$active_change_count active openspec change dirs remain"
-fi
-
-# .spectra/spectra.db 不應存在
-if [ -f ".spectra/spectra.db" ]; then
-  fail ".spectra/spectra.db still exists"
-else
-  ok ".spectra/spectra.db removed"
-fi
-
-# .spectra/ 應維持 clean skeleton（只允許 .gitkeep）
-check_path_empty ".spectra" ".spectra/"
+# 注意：spectra-advanced.config.json 不是退役資產——它是 locked
+# scripts/audit-ux-drift.ts 唯一認得的 live config 檔名（CONFIG_NAMES 雙名制），
+# CI 的 UX drift audit 步驟靠它定位 typesDirs；改名要等 clade 源端發版。
+for retired in openspec .spectra .spectra.yaml \
+               scripts/spectra-target-guard.ts scripts/spectra-archive-sidecar.ts \
+               docs/OPENSPEC.md; do
+  if [ -e "$retired" ]; then
+    fail "retired spec-toolchain path still present: $retired"
+  else
+    ok "absent: $retired"
+  fi
+done
 
 # ---------------------------------------------------------------------------
 # Phase 4: 模式特定檢查
