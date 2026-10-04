@@ -94,7 +94,6 @@ openspec/.vector-search.db*
 
 .clade/flow/
 
-/screenshots/
 
 .clade/*
 !.clade/ai-control-plane/
@@ -117,3 +116,16 @@ openspec/.vector-search.db*
 !.agents/constitution/
 
 .codebase-memory/
+
+/screenshots/**/*.png
+/screenshots/**/*.jpg
+/screenshots/**/*.jpeg
+/screenshots/**/*.webp
+/screenshots/**/*.gif
+/screenshots/**/*.svg
+/screenshots/**/*.avif
+/screenshots/**/*.bmp
+/screenshots/**/*.tif
+/screenshots/**/*.tiff
+/screenshots/**/*.md
+/screenshots/**/*.json
