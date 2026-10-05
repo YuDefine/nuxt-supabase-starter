@@ -1,4 +1,10 @@
-import { describe, it, expect } from 'vite-plus/test'
+import { describe, it, expect, vi, beforeEach } from 'vite-plus/test'
+
+vi.mock('../../../../server/utils/supabase', () => ({
+  getServerSupabaseClient: vi.fn(),
+}))
+
+import { getServerSupabaseClient } from '../../../../server/utils/supabase'
 import {
   createPaginatedResponse,
   requireAuth,
@@ -6,6 +12,10 @@ import {
 } from '../../../../server/utils/api-response'
 
 describe('api-response', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   describe('createPaginatedResponse', () => {
     it('should create paginated response with correct structure', () => {
       const data = [{ id: 1 }, { id: 2 }]
@@ -70,58 +80,81 @@ describe('api-response', () => {
   })
 
   describe('requireRole', () => {
-    it('should not throw when user has the required role', () => {
-      const event = {
-        context: {
-          session: {
-            user: { id: 'user-1', role: 'admin' },
-          },
-        },
-      }
-
-      expect(() => requireRole(event as any, ['admin'])).not.toThrow()
+    const eventWithUser = (user: { id: string; role?: string }) => ({
+      context: { session: { user } },
     })
 
-    it('should not throw when user has one of the allowed roles', () => {
-      const event = {
-        context: {
-          session: {
-            user: { id: 'user-1', role: 'editor' },
-          },
-        },
-      }
+    const mockDbRole = (result: { data?: { role: string } | null; error?: unknown }) => {
+      const maybeSingle = vi.fn().mockResolvedValue(result)
+      const eq = vi.fn().mockReturnValue({ maybeSingle })
+      const select = vi.fn().mockReturnValue({ eq })
+      const from = vi.fn().mockReturnValue({ select })
+      vi.mocked(getServerSupabaseClient).mockReturnValue({ from } as never)
+      return { from, eq }
+    }
 
-      expect(() => requireRole(event as any, ['admin', 'editor'])).not.toThrow()
+    it('should not throw when the DB role is allowed', async () => {
+      // session 沒有 role 也沒關係：授權只看 DB profiles.role
+      mockDbRole({ data: { role: 'admin' } })
+
+      await expect(
+        requireRole(eventWithUser({ id: 'user-1' }) as never, ['admin']),
+      ).resolves.toBeUndefined()
     })
 
-    it('should throw 403 when user role is not in allowed roles', () => {
-      const event = {
-        context: {
-          session: {
-            user: { id: 'user-1', role: 'viewer' },
-          },
-        },
-      }
+    it('should ignore a forged session role and read the DB role', async () => {
+      // session.user.role 宣稱 admin 但 DB 是 user → 403
+      mockDbRole({ data: { role: 'user' } })
 
-      expect(() => requireRole(event as any, ['admin'])).toThrow()
+      await expect(
+        requireRole(eventWithUser({ id: 'user-1', role: 'admin' }) as never, ['admin']),
+      ).rejects.toMatchObject({ statusCode: 403 })
     })
 
-    it('should throw 401 when session is missing', () => {
-      const event = {
-        context: {},
-      }
+    it('should grant admin when the DB role is admin even if session has none', async () => {
+      mockDbRole({ data: { role: 'admin' } })
 
-      expect(() => requireRole(event as any, ['admin'])).toThrow()
+      await expect(
+        requireRole(eventWithUser({ id: 'user-1', role: 'user' }) as never, ['admin']),
+      ).resolves.toBeUndefined()
     })
 
-    it('should throw 401 when user is missing from session', () => {
-      const event = {
-        context: {
-          session: {},
-        },
-      }
+    it('should throw 403 when the profile row is missing', async () => {
+      mockDbRole({ data: null })
 
-      expect(() => requireRole(event as any, ['admin'])).toThrow()
+      await expect(
+        requireRole(eventWithUser({ id: 'user-1' }) as never, ['admin']),
+      ).rejects.toMatchObject({ statusCode: 403 })
+    })
+
+    it('should throw 403 when DB role is not in allowed roles', async () => {
+      mockDbRole({ data: { role: 'user' } })
+
+      await expect(
+        requireRole(eventWithUser({ id: 'user-1' }) as never, ['admin']),
+      ).rejects.toMatchObject({ statusCode: 403 })
+    })
+
+    it('should not throw when DB role matches one of the allowed roles', async () => {
+      mockDbRole({ data: { role: 'editor' } })
+
+      await expect(
+        requireRole(eventWithUser({ id: 'user-1' }) as never, ['admin', 'editor']),
+      ).resolves.toBeUndefined()
+    })
+
+    it('should throw 500 when the role lookup fails', async () => {
+      mockDbRole({ error: { code: '42P01', message: 'relation does not exist' } })
+
+      await expect(
+        requireRole(eventWithUser({ id: 'user-1' }) as never, ['admin']),
+      ).rejects.toMatchObject({ statusCode: 500 })
+    })
+
+    it('should throw 401 when session is missing', async () => {
+      await expect(requireRole({ context: {} } as never, ['admin'])).rejects.toMatchObject({
+        statusCode: 401,
+      })
     })
   })
 })

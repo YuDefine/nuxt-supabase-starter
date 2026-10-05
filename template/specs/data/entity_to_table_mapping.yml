@@ -1,0 +1,9 @@
+# .feature 實體名 → 資料庫表名（entity_setup / entity_validate 用）。
+# 與 schema.sql 同屬 runner 讀的 physical schema 投影，不是 truth。
+#
+# profiles 句型目前走 features/steps/profiles.steps.ts 的 custom step（延遲落地 +
+# 別名綁定 dev-login id，內建 entity_setup 做不到），mapping 仍登記供後續模組與
+# check-truth 對帳使用。
+
+entity_to_table_mapping:
+  - profiles: profiles

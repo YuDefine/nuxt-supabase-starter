@@ -3,8 +3,9 @@
 > **介面**：backend（`specs/truth/features/backend/`）。本檔是介面根：只收兩個以上模組的 feature 共用的句型，
 > 以及這些句型依賴的對照表；只被一個模組使用的句型放在該模組的 `<模組>/dsl.md`。
 > **測試邊界**：系統外（wire）。規格從 HTTP 進入完整啟動的 Nuxt／Nitro server，資料落在本機 Supabase（PostgreSQL）。
-> 驗證一律另開資料庫連線直讀資料表，不讀應用程式的記憶體物件。**目前沒有任何 runner 執行這些 feature**
-> （現有 Vitest 以 mock 直接呼叫 handler，邊界不同；見已知缺口）。
+> 驗證一律另開資料庫連線直讀資料表，不讀應用程式的記憶體物件。Runner 是 SpecFormula + Cucumber
+> （`pnpm test:bdd`；bootstrap 見 `features/support/environment.ts`，實際上線需先 `supabase start`
+> 並起 Nuxt dev server，見 `features/support/README` 與 TD-026）。
 > **合約來源**：HTTP 合約 `specs/truth/contracts/openapi.yaml`（以 operationId 或 HTTP 方法與路徑引用）；
 > 資料合約 `specs/truth/data/`（入口 `data-model.dbml`）。Better Auth 的 session 與 cookie 沒有獨立合約檔，這是已知缺口。
 > **合約同步**：code-first。合約由人依程式碼逆向寫成，程式碼出處記在 OpenAPI 的 `x-source` 與 DBML 的 Note；
@@ -16,7 +17,7 @@
 ## 資料前提
 
 測試資料庫的 schema 來自 `supabase/migrations/*.sql`（`supabase start` 套用）。`supabase/seed.sql` 是開發用種子資料；
-feature 的 Given 自行建立所需列，不依賴種子（種子的 id 不符合 UUID 驗證，見 `profiles` 模組 Q-profiles-1）。
+feature 的 Given 自行建立所需列，不依賴種子（TD-026 D1 起種子 id 已合 RFC 4122，可直接引用）。
 
 ## 跨模組共用句型
 

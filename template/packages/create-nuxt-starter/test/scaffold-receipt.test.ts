@@ -143,7 +143,9 @@ describe('scaffold receipt', () => {
       const blob = execFileSync('git', ['show', `HEAD:${rel}`], { cwd: target }).toString('utf8')
       expect(hashReceiptContent(blob), rel).toBe(hash)
     }
-  })
+    // TD-026 後 template 多了 vendored specformula 工作區與 BDD devDeps，
+    // scaffold 的 pnpm install 變重；並行 coverage 下已觀測到 63–91s，60s 預設不夠。
+  }, 180_000)
 
   // 沒在 scaffold 內 install（--no-install 或 install 失敗）時，首投影發生在之後補跑的
   // `pnpm install`；那時磁碟上是 initial commit 的位元組，已含 dbHost 等後段改寫。

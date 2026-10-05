@@ -18,7 +18,7 @@ import {
   profileResponseSchema,
   type ProfileResponse,
 } from '#shared/schemas/profiles'
-import { requireAuth } from '../../../utils/api-response'
+import { requireAuth, getDbRole } from '../../../utils/api-response'
 import { PGRST_NOT_FOUND } from '../../../utils/db-errors'
 import { PROFILE_SELECT_FIELDS } from '../../../utils/profile-fields'
 import { validateParam } from '../../../utils/validation'
@@ -34,10 +34,11 @@ export default defineEventHandler(async (event): Promise<ProfileResponse> => {
   const { id } = validateParam({ id: rawId }, profileIdParamSchema)
   log.set({ profileId: id })
 
-  // 只能讀自己的 profile；admin 可讀任意。
+  // 只能讀自己的 profile；admin 可讀任意（TD-026 D3：角色以 DB profiles.role
+  // 為準，不信任 session.user.role）。查自己是主路徑，不需要額外的角色查詢。
   // 回 404 而非 403 — 403 會告訴呼叫端「這個 id 存在」，讓任何登入者能枚舉
   // profile 是否存在。404 與「查無此人」對外不可區分。
-  if (user.id !== id && user.role !== 'admin') {
+  if (user.id !== id && (await getDbRole(event, user.id)) !== 'admin') {
     throw createError({
       status: 404,
       message: '找不到指定的 Profile',

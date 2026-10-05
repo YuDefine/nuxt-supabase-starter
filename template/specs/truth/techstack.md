@@ -27,8 +27,8 @@
 
 | 端 | 現行 runner | 測試策略（現況） | Gherkin runner |
 | --- | --- | --- | --- |
-| backend | Vitest（`unit` project，Node 環境） | handler 以 mock 的 Supabase client 與 `requireAuth` 直接呼叫；不起 HTTP、不連真資料庫 | **尚未接線**。`.clade/manifest.json` 宣告了 `specformula`，但 repo 內沒有 `isa.yml`、沒有 `test:bdd` script（見 coverage 與 tech-debt） |
+| backend | Vitest（`unit` project，Node 環境） | handler 以 mock 的 Supabase client 與 `requireAuth` 直接呼叫；不起 HTTP、不連真資料庫 | **SpecFormula + Cucumber**（TD-026 D5）：`pnpm test:bdd`，bootstrap `features/support/environment.ts`，custom step `features/steps/profiles.steps.ts`，wire 打到本機 dev server（`SPECFORMULA_TEST=1 pnpm dev`），fixture 直寫本機 Postgres |
 | frontend（元件） | Vitest（`nuxt` project，`@nuxt/test-utils`） | `mountSuspended()` 元件測試 | 尚未接線 |
 | frontend（端到端） | Playwright（`e2e/`，`chromium` ＋ `chromium-no-auth`） | 起 Nuxt、經瀏覽器操作；`auth.setup.ts` 以 `/api/_dev/login` 取得 session | 尚未接線（`playwright-bdd` 未安裝） |
 
-本檔不替使用者選擇 Gherkin runner：該選擇留給 `/technical-research` 三題必問，由使用者拍板。在拍板前，`specs/truth/features/**` 的 feature 一律標 `@unverified`。
+~~本檔不替使用者選擇 Gherkin runner~~ **已拍板（TD-026 D5）**：backend wire BDD 走 vendored SpecFormula（`vendor/specformula-ts`）＋ Cucumber.js；feature 無標籤 = 由 `pnpm test:bdd` 執行，`@unverified` 只留給 runner 尚無法表達的句型。前置條件：`supabase start` 起本機 Postgres、`SPECFORMULA_TEST=1 pnpm dev` 起 app（`features/support/README.md`）。

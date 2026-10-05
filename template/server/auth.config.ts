@@ -32,4 +32,12 @@ export default defineServerAuth({
     expiresIn: 60 * 60 * 24 * 7, // 7 天
     updateAge: 60 * 60 * 24, // 每 24 小時更新
   },
+
+  // TD-026 D1：profiles.id 是 Postgres uuid，Better Auth 預設的 32 字元英數
+  // generateId 寫不進去。指定 uuid 後由 crypto.randomUUID() 產 RFC 4122 v4 id。
+  advanced: {
+    database: {
+      generateId: 'uuid',
+    },
+  },
 })

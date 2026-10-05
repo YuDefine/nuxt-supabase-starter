@@ -35,7 +35,11 @@ import { z } from 'zod'
 import type { H3Event } from 'h3'
 import { createError, EvlogError } from 'evlog'
 
-const bodySchema = z.object({
+// TD-026 D4：刻意不接受 `id` —— 使用者身分一律由 Better Auth 簽發（generateId）。
+// 讓呼叫端指定 id 會使 fixture 與正式 auth 行為分歧（production 從不接受自選 id），
+// 也使測試能偽造「擁有任意 id」的身分，繞過 ownership 語意。fixture DSL 應把別名
+// 綁到 dev-login 實際回傳的 user.id，而不是把字面 UUID 塞進請求。
+export const bodySchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).optional(),
   name: z.string().min(1).optional(),

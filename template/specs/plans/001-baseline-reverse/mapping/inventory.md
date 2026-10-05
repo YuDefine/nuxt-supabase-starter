@@ -4,9 +4,9 @@
 
 | 方法 | 路徑 | 檔案 | 行數 |
 | --- | --- | --- | --- |
-| POST | `/api/_dev/login` | `server/api/_dev/login.post.ts` | 290 |
-| GET | `/api/v1/profiles/{id}` | `server/api/v1/profiles/[id].get.ts` | 77 |
-| GET | `/api/v1/profiles` | `server/api/v1/profiles/index.get.ts` | 86 |
+| POST | `/api/_dev/login` | `server/api/_dev/login.post.ts` | 294 |
+| GET | `/api/v1/profiles/{id}` | `server/api/v1/profiles/[id].get.ts` | 78 |
+| GET | `/api/v1/profiles` | `server/api/v1/profiles/index.get.ts` | 88 |
 | GET | `/api/v1/profiles/me` | `server/api/v1/profiles/me.get.ts` | 53 |
 
 ## 資料表（supabase/migrations/*.sql）
@@ -41,19 +41,24 @@
 | `test/unit/example.test.ts` | vitest(unit) | 1 |
 | `test/unit/scripts/validate-starter.test.ts` | vitest(unit) | 5 |
 | `test/unit/scripts/vue-component-resolution.test.ts` | vitest(unit) | 5 |
+| `test/unit/server/api/_dev/login-schema.test.ts` | vitest(unit) | 2 |
 | `test/unit/server/api/_dev/login.observability.dev.test.ts` | vitest(unit) | 4 |
 | `test/unit/server/api/_dev/login.post.test.ts` | vitest(unit) | 16 |
 | `test/unit/server/api/v1/profiles/[id].get.test.ts` | vitest(unit) | 7 |
+| `test/unit/server/api/v1/profiles/index-search.test.ts` | vitest(unit) | 3 |
 | `test/unit/server/api/v1/profiles/index.get.test.ts` | vitest(unit) | 5 |
 | `test/unit/server/api/v1/profiles/me.get.test.ts` | vitest(unit) | 3 |
 | `test/unit/server/api/v1/profiles/observability.test.ts` | vitest(unit) | 5 |
-| `test/unit/server/utils/api-response.test.ts` | vitest(unit) | 12 |
+| `test/unit/server/auth-config.test.ts` | vitest(unit) | 1 |
+| `test/unit/server/utils/api-response.test.ts` | vitest(unit) | 15 |
 | `test/unit/server/utils/audit.test.ts` | vitest(unit) | 8 |
 | `test/unit/server/utils/db-errors.test.ts` | vitest(unit) | 15 |
 | `test/unit/server/utils/drizzle.test.ts` | vitest(unit) | 8 |
+| `test/unit/server/utils/postgrest.test.ts` | vitest(unit) | 4 |
 | `test/unit/server/utils/supabase.test.ts` | vitest(unit) | 7 |
 | `test/unit/server/utils/validation.test.ts` | vitest(unit) | 10 |
 | `test/unit/shared/schemas/profiles.test.ts` | vitest(unit) | 22 |
+| `test/unit/supabase/seed.test.ts` | vitest(unit) | 2 |
 | `test/unit/vue-warn-guard.test.ts` | vitest(unit) | 2 |
 | `e2e/auth.spec.ts` | playwright | 8 |
 | `e2e/roles.example.spec.ts` | playwright | 4 |

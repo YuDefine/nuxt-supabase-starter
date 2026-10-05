@@ -20,6 +20,9 @@ vi.mock('../../../../../../server/utils/supabase', () => ({
 
 vi.mock('../../../../../../server/utils/api-response', () => ({
   requireAuth: vi.fn(() => ({ id: 'user-1', role: 'user' })),
+  // TD-026 D3：handler 的 admin 判定改走 getDbRole（DB profiles.role），
+  // 測試用 mock 提供 DB 角色；session.user.role 不再參與授權。
+  getDbRole: vi.fn(async () => 'user'),
 }))
 
 vi.mock('../../../../../../server/utils/validation', () => ({
@@ -35,7 +38,7 @@ vi.mock('../../../../../../shared/schemas/profiles', () => ({
 
 import { getRouterParam } from 'h3'
 import { profileResponseSchema } from '../../../../../../shared/schemas/profiles'
-import { requireAuth } from '../../../../../../server/utils/api-response'
+import { requireAuth, getDbRole } from '../../../../../../server/utils/api-response'
 import { getAuthedSupabase } from '../../../../../../server/utils/supabase'
 import { validateParam } from '../../../../../../server/utils/validation'
 import handler from '../../../../../../server/api/v1/profiles/[id].get'
@@ -87,6 +90,8 @@ describe('GET /api/v1/profiles/:id', () => {
     vi.mocked(getRouterParam).mockReturnValue(TARGET_ID)
     vi.mocked(validateParam).mockReturnValue({ id: TARGET_ID })
     vi.mocked(requireAuth).mockReturnValue(OWNER)
+    // mockClear 不移除 impl — 每個測試重設預設 DB 角色，admin 案例自行覆寫
+    vi.mocked(getDbRole).mockResolvedValue('user')
   })
 
   it('should return own profile', async () => {
@@ -101,6 +106,7 @@ describe('GET /api/v1/profiles/:id', () => {
 
   it('should allow admin to read any profile', async () => {
     vi.mocked(requireAuth).mockReturnValue(ADMIN)
+    vi.mocked(getDbRole).mockResolvedValue('admin')
     const { client } = mockClientReturning({ data: mockProfile, error: null })
     vi.mocked(getAuthedSupabase).mockReturnValue({ client, user: ADMIN })
 
