@@ -1,0 +1,35 @@
+{
+  "_meta": {
+    "fileset": "all",
+    "layer": "all"
+  },
+  "dark-mode-hardcoded-color": {
+    "app/pages/(home).vue": 1,
+    "packages/create-nuxt-starter/templates/base/app/pages/index.vue": 1,
+    "packages/create-nuxt-starter/templates/features/auth-nuxt-utils/app/layouts/auth.vue": 1,
+    "packages/create-nuxt-starter/templates/features/auth-nuxt-utils/app/pages/auth/login.vue": 1,
+    "packages/create-nuxt-starter/templates/features/auth/app/layouts/auth.vue": 1,
+    "packages/create-nuxt-starter/templates/features/auth/app/pages/auth/login.vue": 1,
+    "packages/create-nuxt-starter/templates/features/ui/app/layouts/default.vue": 1
+  },
+  "dark-mode-dark-prefix": {
+    "app/pages/(home).vue": 8,
+    "app/pages/demo.vue": 8
+  },
+  "dark-mode-semantic-color": {
+    "app/pages/(home).vue": 6,
+    "app/pages/auth/register.vue": 1,
+    "app/pages/demo.vue": 6,
+    "scripts/templates/auth/better-auth/app/pages/auth/register.vue": 1
+  },
+  "server-console-logging": {
+    "server/utils/audit.ts": 2
+  },
+  "colada-query-missing-signal-ts": {
+    "app/queries/profiles.ts": 3
+  },
+  "text-size-floor": {
+    "app/components/AppEmptyState.vue": 1,
+    "app/components/AppFormLayout.vue": 1
+  }
+}

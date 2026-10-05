@@ -12,7 +12,7 @@
 | ID     | Title                                                                                                    | Priority | Status      | Discovered |
 | ------ | -------------------------------------------------------------------------------------------------------- | -------- | ----------- | ---------- |
 | TD-004 | Spectra roadmap drift check 在 CI 的 structural diff                                                     | mid      | done        | 2026-05-10 |
-| TD-005 | meta-monorepo 下 pre-push checks 靜默 no-op                                                              | high     | in-progress | 2026-08-19 |
+| TD-005 | meta-monorepo 下 pre-push checks 靜默 no-op                                                              | high     | done        | 2026-08-19 |
 | TD-008 | `validate-starter` 維護工具會被 scaffold 帶走                                                            | mid      | done        | 2026-08-19 |
 | TD-010 | 參考 app email 登入被 nuxt-security CSRF 擋下                                                            | mid      | in-progress | 2026-08-24 |
 | TD-011 | clade 投影 auth 文件仍寫舊套件名                                                                         | low      | open        | 2026-08-24 |
@@ -45,7 +45,7 @@
 | TD-019 | 本次改 done | main `a245b8abd` scaffold-smoke run `37134789867` success（越過 placeholder scan 並跑完後續關卡）                                                                                                                                                                 |
 | TD-020 | 本次改 done | PR #14（`77020bac4`）合入最小三件檔；`scaffold.test.ts` 斷言 `.codex/config.toml`／`.agents/skills/commit/SKILL.md`；main Template CI Unit tests success                                                                                                          |
 | TD-021 | 本次改 done | clade 投影的 `audit-ux-drift.ts` 已改零 enum exit 0（檔頭「Exit: 0 clean (incl. type files that declare no enum)」）；run `37134789858` 的 `UX drift audit` step success（非 skipped）                                                                            |
-| TD-005 | 維持進行中  | hook 已接通；`template/review-rules-baseline.json` 不在 main，ratchet 目前 bootstrap warn-only（44 筆存量、6 條規則）。baseline 建立與受控阻擋驗證在配套實作 PR                                                                                                   |
+| TD-005 | 本次改 done | `template/review-rules-baseline.json` 隨本輪建立（`--write-baseline` 收斂 6 條規則 44 筆存量）；受控 `ubadge-size-ban` 違規實測 `review-rules-ratchet.sh` exit 2 阻擋；runner 全程有輸出且 exit 0                                                                 |
 | TD-010 | 維持進行中  | PR #9（`94ff9b54`）已合入；有效帳號登入與部署 host 驗收仍待補（需隔離測試帳號與實機，非本 worker 可驗）                                                                                                                                                           |
 | TD-011 | 維持 open   | `template/.cursor/skills/clade-security/rules/auth.md` 仍寫 `@onmax/nuxt-better-auth`；落點在 clade source                                                                                                                                                        |
 | TD-014 | 維持 open   | `<maintainer-domain>` 現 6 檔 12 處，仍無解析說明；落點在 clade source                                                                                                                                                                                            |
@@ -115,7 +115,7 @@ diff 指令；前置測試失敗使步驟跳過，即使走到該步驟，roadma
 
 耐久 brief（含完整重現與判準）：`~/.cache/clade/briefs/td-005-prepush-project-root.md`。
 
-**Status**: in-progress — [PR #10](https://github.com/YuDefine/nuxt-supabase-starter/pull/10) 的 `23fbbff6` 已接通 hook；ratchet 阻擋驗收仍未完成
+**Status**: done（2026-10-04：`template/review-rules-baseline.json` 已依 ratchet 存量程序建立（6 條規則、44 筆存量收斂）；受控違規實測阻擋成立，見下方 2026-10-04 驗收）
 **Priority**: high
 **Discovered**: 2026-08-19 — clade convention 對齊掃描
 **Location**: clade 的 `vendor/scripts/pre-push/runner.sh` 與各 `checks/*.sh`；consumer 端 `template/.vite-hooks/pre-push` 與 `template/scripts/templates/vite-hooks/pre-push`
@@ -141,9 +141,14 @@ exit 0 且無輸出。實測 `bash template/scripts/pre-push/runner.sh` 為 exit
 - `core.hooksPath=template/.vite-hooks/_`；安裝後的 dispatcher `template/.vite-hooks/_/pre-push`
   呼叫此 hook。本機實跑 dispatcher exit 0，有 Nuxt typecheck、ratchet 及 Vue checker 輸出；
   首次 branch push 的 pre-push hook 亦 exit 0。`vp check` exit 0。
-- **尚未達成阻擋驗收**：`template/review-rules-baseline.json` 不在 `origin/main`，ratchet 輸出
-  `bootstrap warn-only 模式`，目前無法證明違規會擋 push。owner：starter/coordinator；解除條件是
-  依 ratchet 的既有存量程序建立可追溯 baseline，並以受控違規驗證 pre-push 非零退出。
+- ~~尚未達成阻擋驗收~~ **2026-10-04 已解**：`template/review-rules-baseline.json` 由
+  `node vendor/review-rules/scan.ts --all --layer all --write-baseline` 建立（6 條規則、44 筆存量）。
+  受控驗證：暫存 `app/pages/td005-ratchet-probe.vue` 植入 `<UBadge size="xs">`（`ubadge-size-ban`）→
+  `CLADE_PROJECT_ROOT="$PWD/template" bash template/scripts/pre-push/checks/review-rules-ratchet.sh`
+  exit 2 並印出「baseline 0 → 實際 1」；移除後同指令 exit 0。未設 `CLADE_PROJECT_ROOT` 在 repo root
+  跑同一 check 仍 exit 0 零輸出（既有 consumer 行為不變）。
+  `CLADE_PROJECT_ROOT="$PWD/template" bash template/scripts/pre-push/runner.sh` 全程 exit 0，
+  nuxt typecheck、ratchet、nuxt-ui-mixed-slot、utable-slots、evlog-map-gate（strict 通過）均有輸出。
 - 舊 `.husky/pre-push` 仍在版控，但 `core.hooksPath` 指向 Vite+ dispatcher，Git 不會呼叫它；
   它不在本次 hook 接線的執行路徑，是否移除由後續維護者另案處理。
 
