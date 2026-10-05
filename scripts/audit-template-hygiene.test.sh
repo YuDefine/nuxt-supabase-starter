@@ -174,37 +174,81 @@ assert_template_cwd_root_detection() {
   pass "template cwd root detection scans repo template"
 }
 
+# 造 fixture 用的 salted hash 清單：與 template/scripts/public-tree-hygiene-tokens.json
+# 同格式（version 2 / sha256-16 / canary + 12-bit 前綴滑窗預篩），但 token 只用合成名。
+# 真名 NEVER 以明文進任何 tracked 檔（含測試），「真名 hash 命中被擋」用合成 token 驗。
+write_hash_tokens() {
+  local dest="$1"
+  shift
+  mkdir -p "$(dirname "${dest}")"
+  node -e '
+    const fs = require("node:fs"), crypto = require("node:crypto");
+    const MASK = 0xfff, ROLL = 16777619, CANARY = "public-tree-hygiene-canary";
+    const salt = "fixture-salt-0001";
+    const sha = (s) => crypto.createHash("sha256").update(salt + "\0" + s).digest("hex").slice(0, 16);
+    const roll = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (Math.imul(h, ROLL) + s.charCodeAt(i)) >>> 0; return h; };
+    const toks = process.argv.slice(2);
+    const w = toks.length ? Math.min(...toks.map((t) => t.length)) : 1;
+    const entries = toks.map((t) => ({ l: t.length, p: roll(t.slice(0, w)) & MASK, h: sha(t) }))
+      .sort((a, b) => a.l - b.l || a.h.localeCompare(b.h));
+    const empty = { w: 1, entries: [] };
+    const f = { version: 2, algo: "sha256-16", salt,
+      canary: { h: sha(CANARY), r: roll(CANARY) },
+      consumer: { w, entries }, personal: empty, literal: empty };
+    fs.writeFileSync(process.argv[1], JSON.stringify(f, null, 2) + "\n", "utf8");
+  ' "${dest}" "$@"
+}
+
 # clade 投影面那半條 real-tenant-identifier 走的是 pre-commit hook，不是 full-tree audit——
 # audit 的 find 清單把 template/.claude / .agents / .codex 整個 prune 掉（見 rule 的
 # 「clade 投影面的覆蓋邊界」）。hook 是 source 本 script 後逐檔呼叫 check 函式，所以這裡
 # 照 hook 的用法直接驗函式，而不是造 fixture 樹跑 audit（那樣永遠是 0 命中，測不到東西）。
 assert_clade_projection_consumer_names() {
-  local output
+  local root output
+  root="$(new_fixture clade-projection)"
+  # 合成 token：zzfk（4 碼，壓低 w 練多長度滑窗）、zzfakeconsumer、zz-fake-longname。
+  write_hash_tokens "${root}/template/scripts/public-tree-hygiene-tokens.json" \
+    zzfk zzfakeconsumer zz-fake-longname
+
   output="$(
     source "${AUDIT_SCRIPT}"
+    STARTER_HYGIENE_REPO_ROOT="${root}"
     set +e
     add_finding() { printf '%s|%s\n' "$1" "$3"; }
-    check_tenant_identifiers "template/.claude/rules/probe.md" "這條規約在 <consumer-b> 上實測過，另有 <consumer-b>-dev.example.com。"
-    check_tenant_identifiers "template/.claude/rules/snake.md" "DB clone <consumer-b>_wt_<slug> 不存在時要 fail loud。"
+    check_tenant_identifiers "template/.claude/rules/probe.md" "這條規約在 zzfakeconsumer 上實測過，另有 zzfakeconsumer-dev.example.com。"
+    check_tenant_identifiers "template/.claude/rules/snake.md" "DB clone zzfakeconsumer_wt_<slug> 不存在時要 fail loud。"
+    check_tenant_identifiers "template/.claude/rules/upper.md" "這條修法在 ZZFAKECONSUMER 上實測過。"
     check_tenant_identifiers "template/.claude/rules/case.md" "clone 自 YUDEFINE/nuxt-supabase-starter 即可。"
     check_tenant_identifiers "template/.claude/rules/org.md" "詳見 /yudefine-deploy Phase 1-10 runbook，跑在 YuDefine LXC 的 self-hosted runner。"
-    check_tenant_identifiers "template/.claude/rules/blog.md" "這條 hydration 修法在 <consumer-l> 上實測過。"
-    # <consumer-x> 刻意挑不在 registry 的字母：<consumer-a> 是真實 consumer（registry
-    # 內有它），拿它當 placeholder 會讓這條負向斷言在 2026-08-19 清單補上 <consumer-a>
-    # 之後恆紅。要測的是「placeholder 形狀不誤判」，不是某個具體字母。
-    check_tenant_identifiers "template/.claude/rules/ok.md" "這條規約在 <consumer-x> 上實測過。skill dir 是 _notion-<consumer-b>-board。"
-    check_tenant_identifiers "template/docs/prose.md" "這份 root 文件提到 <consumer-b>，不在投影面範圍內。"
+    check_tenant_identifiers "template/.claude/rules/embed.md" "xzzfakeconsumer 與 zzfakeconsumerx 都不是洩漏。"
+    check_tenant_identifiers "template/.claude/rules/ok.md" "這條規約在 <consumer-b> 上實測過。skill dir 是 _notion-<consumer-b>-board。"
+    check_tenant_identifiers "template/.claude/rules/notion.md" "全域 skill 目錄是 _notion-zzfakeconsumer-board。"
+    check_tenant_identifiers "template/docs/prose.md" "這份 root 文件提到 zzfakeconsumer，不在投影面範圍內。"
   )"
 
+  # 真名（hash 命中的合成 token）必須被擋。
   if ! grep -Fq "real-tenant-identifier|template/.claude/rules/probe.md" <<< "${output}"; then
     fail "clade projection real consumer name is blocked"
   fi
-  # 邊界把 `_` 當分隔字元，否則 `<consumer-b>_wt_<slug>` 這類 snake_case 洩漏會整批漏掉。
+  # 邊界把 `_` 當分隔字元，否則 `<真名>_wt_<slug>` 這類 snake_case 洩漏會整批漏掉。
   if ! grep -Fq "real-tenant-identifier|template/.claude/rules/snake.md" <<< "${output}"; then
     fail "snake_case consumer name is blocked"
   fi
+  # consumer 類比對是 ASCII 不分大小寫。
+  if ! grep -Fq "real-tenant-identifier|template/.claude/rules/upper.md" <<< "${output}"; then
+    fail "uppercase consumer name is blocked"
+  fi
+  # 去識別化 placeholder 是合法投影輸出，不能誤擋——這正是 v1.13.55 被擋的形狀。
   if grep -Fq "template/.claude/rules/ok.md" <<< "${output}"; then
     fail "placeholder + _notion-<consumer-b>-board must not false-positive"
+  fi
+  # _notion-*-board 例外是 hub-agnostic 的：目錄名裡含真名 token 一樣放行。
+  if grep -Fq "template/.claude/rules/notion.md" <<< "${output}"; then
+    fail "_notion-*-board directory name must not false-positive"
+  fi
+  # 英數黏著（左右無邊界）不算洩漏——token 不是 substring 比對。
+  if grep -Fq "template/.claude/rules/embed.md" <<< "${output}"; then
+    fail "alnum-adjacent non-token must not false-positive"
   fi
   if grep -Fq "template/docs/prose.md" <<< "${output}"; then
     fail "check must stay scoped to clade projection surfaces"
@@ -213,17 +257,36 @@ assert_clade_projection_consumer_names() {
   if grep -Fq "template/.claude/rules/case.md" <<< "${output}"; then
     fail "starter own GitHub org must not false-positive in any letter case"
   fi
-  # 裸 org 名（未接 repo 名）同樣是正當引用：skill 名 `/yudefine-deploy`、`YuDefine LXC`
-  # runner、`YuDefine fleet` 在投影面共 11 處，清單寫裸 `yudefine` 會把它們全判成洩漏。
+  # 裸 org 名（未接 repo 名）同樣是正當引用：`yudefine` 不是 consumer token，
+  # `/yudefine-deploy`、`YuDefine LXC`、`YuDefine fleet` 都不能誤擋。
   if grep -Fq "template/.claude/rules/org.md" <<< "${output}"; then
     fail "bare maintainer org must not false-positive"
   fi
-  # 但 org 名開頭的**真實 consumer**（registry 內的 <consumer-l>）仍必須被擋——
-  # 上一條放寬的是裸 org，不是任何以它開頭的字串。
-  if ! grep -Fq "real-tenant-identifier|template/.claude/rules/blog.md" <<< "${output}"; then
-    fail "consumer whose id starts with the maintainer org is still blocked"
-  fi
   pass "clade projection consumer names blocked, placeholders and non-projection paths pass"
+}
+
+# tokens 清單不存在時（propagate 尚未落地）這個 check 無法判定真假——fail-closed
+# 回 scanner_error，而不是像上次明文清單被洗掉那樣靜默假綠。
+assert_clade_projection_missing_tokens_fails_closed() {
+  local root output
+  root="$(new_fixture missing-tokens)"
+
+  output="$(
+    source "${AUDIT_SCRIPT}"
+    STARTER_HYGIENE_REPO_ROOT="${root}"
+    set +e
+    add_finding() { printf '%s|%s\n' "$1" "$3"; }
+    check_tenant_identifiers "template/.claude/rules/probe.md" "任意內容"
+    printf 'scanner_errors=%s\n' "${scanner_errors[@]:-}"
+  )"
+
+  if grep -Fq "real-tenant-identifier|template/.claude/rules/probe.md" <<< "${output}"; then
+    fail "missing tokens must not produce a finding"
+  fi
+  if ! grep -Fq "public-tree-hygiene-tokens.json" <<< "${output}"; then
+    fail "missing tokens file fails closed with scanner error"
+  fi
+  pass "missing tokens file fails closed"
 }
 
 # template/scripts/ 會被 scaffolder 整棵複製：維護倉專用腳本放進來一定流進使用者
@@ -319,13 +382,18 @@ MJS
 # check_tenant_identifiers 前兩個迴圈命中就 return，投影面那半條若掛在函式尾端會被短路。
 # 同一個檔同時有非 placeholder UUID 與真實 consumer 名時，兩則 finding 都必須出現。
 assert_tenant_check_does_not_short_circuit_projection() {
-  local output
+  local root output
+  root="$(new_fixture tenant-short-circuit)"
+  write_hash_tokens "${root}/template/scripts/public-tree-hygiene-tokens.json" \
+    zzfakeconsumer
+
   output="$(
     source "${AUDIT_SCRIPT}"
+    STARTER_HYGIENE_REPO_ROOT="${root}"
     set +e
     add_finding() { printf '%s|%s|%s\n' "$1" "$3" "$2"; }
     check_tenant_identifiers "template/.claude/rules/both.md" \
-      "tenant_id = \"8d2f9d4a-99b2-4dd8-99cb-f0f527c8895a\" —— 這條在 <consumer-b> 上實測過。"
+      "tenant_id = \"8d2f9d4a-99b2-4dd8-99cb-f0f527c8895a\" —— 這條在 zzfakeconsumer 上實測過。"
   )"
 
   if ! grep -Fq "non-placeholder UUID pattern" <<< "${output}"; then
@@ -342,7 +410,7 @@ assert_tenant_check_does_not_short_circuit_projection() {
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/starter-hygiene-test.XXXXXX")"
 
 # 下面每加一個 assert_* 呼叫就 +1；結尾用它核對沒有 case 被靜默跳過。
-EXPECTED_CASES=10
+EXPECTED_CASES=11
 
 assert_clean_fixture
 assert_private_env_fixture
@@ -351,6 +419,7 @@ assert_identifier_fixture
 assert_starter_only_doc_fixture
 assert_template_cwd_root_detection
 assert_clade_projection_consumer_names
+assert_clade_projection_missing_tokens_fails_closed
 assert_tenant_check_does_not_short_circuit_projection
 assert_maintenance_script_fixture
 assert_maintenance_script_negative_fixtures
