@@ -433,7 +433,9 @@ export function generatePackageJson(
     }
   }
 
-  // Sort dependencies
+  // Sort scripts and dependencies：oxfmt 的 experimentalSortPackageJson.sortScripts 會排 scripts，
+  // 不先排好的話新專案第一次 vp check 就判 package.json 格式不符。
+  basePkg.scripts = sortObject(basePkg.scripts)
   basePkg.dependencies = sortObject(basePkg.dependencies)
   basePkg.devDependencies = sortObject(basePkg.devDependencies)
 
@@ -500,6 +502,11 @@ export function generateNuxtConfig(
     runtimeLines.push(`    },`)
     publicLines.push(`      supabase: {`)
     publicLines.push(`        url: process.env.SUPABASE_URL,`)
+    // publishable（anon）key 本來就給瀏覽器用；vite-doctor 的 NUXT0054 只看 key 名稱與前 120 字元有沒有
+    // `public`，對它是誤報。理由寫在 suppression 上，doctor 的 --max-warnings 0 才不會擋新專案首輪驗收。
+    publicLines.push(
+      `        // doctor-disable-next-line nuxt/runtime/no-secret-in-public-config -- publishable key，設計上公開給 client`,
+    )
     publicLines.push(`        key: process.env.SUPABASE_KEY,`)
     publicLines.push(`      },`)
   }
@@ -672,6 +679,8 @@ export function generateNuxtConfig(
     config = `import { voidPlugin } from 'void'\n\n${config}`
   }
 
+  // 佔位符換成空字串時會留下連續空行（例如沒有 nitro 設定時 `})` 前多兩行），oxfmt 會判格式不符
+  config = config.replace(/\n{3,}/g, '\n\n').replace(/\n\n(\}\)\n?)$/, '\n$1')
   writeFileSync(configPath, config)
 }
 
