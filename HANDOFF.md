@@ -42,3 +42,11 @@ fleet 沒有同時具備 Cloudflare＋Sentry＋NUXT_APP_ENV 的 consumer（<cons
 - 已驗證：`bash scripts/audit-template-hygiene.test.sh` 11/11（新斷言：placeholder `<consumer-b>` 放行、合成真名 hash 命中被擋、缺清單 fail-closed）；用 propagate 同款清單對 1372 個投影面 tracked 檔實掃 0 命中；hook 三態實測——staged placeholder `SKILL.md` 放行、staged 真名被擋、缺清單被擋。`vp check` 綠；`tsc -p tsconfig.clade.json` 本 repo 無此設定檔（TS5058）。
 - 刻意語義：tokens 清單隨 propagate v1.13.55 落地；落地前 staged `template/.claude/**|/.agents/**|/.codex/**|AGENTS.md|CLAUDE.md` 變更會被 fail-closed 擋下（沒有清單等於沒有 gate），本 commit 不觸及 `template/` 不受影響。
 - 下一步與所有權：PR 0-A／ready／merge 與 clade v1.13.55 重跑 propagate 歸主持者；`template/**`（含 tokens 清單與 audit .ts 投影檔）歸 clade，NEVER 在 starter 端手改。真名 NEVER 以明文進任何 tracked 檔（測試只用合成 token）。
+
+## 2026-10-05 hygiene 掃描器 0-A r1 兩條 Minor 補強（fail-closed 驗證、_notion 例外收窄）
+
+- 工作指針：branch `session/2026-10-05-2234-starter-hygiene-minor-hardening`；修 #34 0-A r1 的 0C0M2m 兩條 Minor（verdict：`~/.cache/clade/coordinator/oa/nuxt-supabase-starter-34/batch-1.opus.out`）。本檔擁有者範圍：`scripts/audit-template-hygiene{,.test}.sh`、本檔。
+- Minor 1（清單驗證）：內嵌掃描器原本只驗 version/algo/salt/canary 與 consumer class 形狀，`consumer.entries` 為空或 entry 毀損（`l < w`、`p` 超出 12-bit mask、`h` 非 16-hex）會靜默當無命中放行。現對齊 `loadTokens`（SoT：clade `vendor/scripts/audit-public-tree-hygiene.ts`）的 `validClass`/`validEntry`：三類區段全驗，`consumer.entries` 為空 exit 2 → scanner_error fail-closed。
+- Minor 2（例外收窄）：`_notion-*-board` 原先用含 `-` 的貪婪 class 剝除任意名稱，真名藏在 `_notion-…-board` 路徑或 blob（含 `_notion-a-board-<真名>-board` 中段）會被整段吃掉。收窄為只放行 sanitize 產生的 placeholder label 形狀 `_notion-<(consumer|client)-[a-z0-9]+>-board`（對齊 `codeLabel` 的 `<consumer-x>`／`<client-x>` 空間）；真名留在目錄名裡就照常走 hash 比對擋下。
+- 已驗證：`bash scripts/audit-template-hygiene.test.sh` 12/12（新斷言：空 entries／三種壞 entry 各 fail-closed、`_notion-zzfakeconsumer-board` 與 `_notion-a-board-zzfakeconsumer-board` 被擋、`_notion-<consumer-b>-board`／`_notion-<client-a>-board` 放行）。本 worktree 無 tokens 清單（propagate 未落地本 branch），full-tree audit 對 `template/AGENTS.md|CLAUDE.md` fail-closed 是既有刻意行為；`vp check` 不適用於 repo root（無 package.json meta 層），`tsconfig.clade.json` 本 repo 無此檔（TS5058）。
+- 下一步與所有權：PR 0-A／ready／merge 歸主持者；`template/**` 歸 clade，NEVER 在 starter 端手改。
