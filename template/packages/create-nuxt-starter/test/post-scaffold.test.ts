@@ -25,6 +25,7 @@ import {
   rewriteEnvFilesForDbHost,
   rewriteFirstGlanceAuthDocs,
   rewriteFirstGlanceDocsForDbHost,
+  resolveEffectiveDevPort,
   rewriteGeneratedPort,
   maybeWriteRootReadme,
   stripOrphanPostMigrationHook,
@@ -424,6 +425,45 @@ describe('sync-to-codex 解析', () => {
     noPush: true,
     json: true,
   }
+
+  it('--dev-port auto：產出檔用 bootstrap 回報的實際登記號，不留 template 的 3000', async () => {
+    const cladeRoot = join(TEST_DIR, 'clade')
+    const binDir = join(TEST_DIR, 'bin')
+    const target = join(TEST_DIR, 'auto-port-project')
+    mkdirSync(join(cladeRoot, 'scripts'), { recursive: true })
+    mkdirSync(binDir, { recursive: true })
+    writeFileSync(join(binDir, 'pnpm'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+    writeFileSync(join(cladeRoot, 'scripts', 'init-consumer.ts'), '')
+    // stub 模擬 clade ready JSON 的 devPort 欄位（契約 SoT：clade
+    // specs/truth/contracts/consumer-update-policy.md，YuDefine/clade#825）；真 clade 的配號
+    // 由 clade 端 test/managed-dev-port-auto.test.ts 驗。只有 argv 真的帶 `--dev-port auto`
+    // 時才回報配到的號，順便釘住 argv 形狀。
+    writeFileSync(
+      join(cladeRoot, 'scripts', 'bootstrap-project.ts'),
+      [
+        "const i = process.argv.indexOf('--dev-port')",
+        "const devPort = process.argv[i + 1] === 'auto' ? 3070 : null",
+        "process.stdout.write(JSON.stringify({ consumerId: 'auto-port-project', effectivePolicy: 'pinned', release: '1.0.0', devPort }))",
+      ].join('\n'),
+    )
+    vi.stubEnv('CLADE_HOME', cladeRoot)
+    vi.stubEnv('PATH', `${binDir}:${process.env.PATH}`)
+    assembleProject(target, [], 'auto-port-project', ['claude-code'])
+
+    const outcome = await postScaffold(target, 'auto-port-project', TEST_DIR, managedCodexModules, {
+      ...managedCodexOpts,
+      repoId: 'fixture/auto-port-project',
+      devPort: 'auto',
+      agentTargets: ['claude-code'],
+    })
+
+    expect(outcome.managed?.ok).toBe(true)
+    expect(outcome.managed?.report?.devPort).toBe(3070)
+    const pkg = JSON.parse(readFileSync(join(target, 'package.json'), 'utf8')) as {
+      scripts: Record<string, string>
+    }
+    expect(pkg.scripts.dev).toMatch(/--port 3070\b/)
+  })
 
   it('clade 不可用時 codex 投影回報 deferred，不中止 scaffold', async () => {
     const binDir = join(TEST_DIR, 'bin')
@@ -1038,5 +1078,38 @@ describe('final scaffold formatting', () => {
       }),
     )
     expect(() => formatGeneratedProject(TEST_DIR)).toThrow()
+  })
+})
+
+describe('resolveEffectiveDevPort', () => {
+  const ok = (report?: Record<string, unknown>) => ({
+    ran: true,
+    ok: true,
+    report,
+    diagnostics: [],
+  })
+  it('明確給號直接用，不看 bootstrap 回報', () => {
+    expect(resolveEffectiveDevPort(3090, ok({ devPort: 3070 }))).toBe(3090)
+  })
+  it('auto 用 bootstrap 回報的整數號', () => {
+    expect(resolveEffectiveDevPort('auto', ok({ devPort: 3070 }))).toBe(3070)
+  })
+  it('auto 但舊版 clade 沒回報、回報非 1–65535 整數、或 bootstrap 失敗時不改寫', () => {
+    expect(resolveEffectiveDevPort('auto', ok({}))).toBeUndefined()
+    expect(resolveEffectiveDevPort('auto', ok({ devPort: null }))).toBeUndefined()
+    expect(resolveEffectiveDevPort('auto', ok({ devPort: '3070' }))).toBeUndefined()
+    expect(resolveEffectiveDevPort('auto', ok({ devPort: 0 }))).toBeUndefined()
+    expect(resolveEffectiveDevPort('auto', ok({ devPort: -1 }))).toBeUndefined()
+    expect(resolveEffectiveDevPort('auto', ok({ devPort: 65536 }))).toBeUndefined()
+    expect(
+      resolveEffectiveDevPort('auto', {
+        ran: true,
+        ok: false,
+        report: { devPort: 3070 },
+        diagnostics: [],
+      }),
+    ).toBeUndefined()
+    expect(resolveEffectiveDevPort('auto', undefined)).toBeUndefined()
+    expect(resolveEffectiveDevPort(undefined, ok({ devPort: 3070 }))).toBeUndefined()
   })
 })

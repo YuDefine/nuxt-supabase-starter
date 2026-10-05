@@ -1061,20 +1061,17 @@ export async function postScaffold(
     preCommitWired = await maybeWirePreCommit(cladeRoot, targetDir, opts.yes)
   }
 
+  // `--dev-port auto` 的實際號碼由 clade bootstrap 在 registry 鎖內配，回報在 ready JSON 的
+  // devPort（契約 SoT：clade specs/truth/contracts/consumer-update-policy.md，YuDefine/clade#825 起）；
+  // 沒有這一步時產出的 .env／Playwright／首讀文件會留著 3000，與 registry 登記的號不符。
+  const effectiveDevPort = resolveEffectiveDevPort(opts.devPort, managed)
+
   writeScaffoldAnswers(targetDir, opts.dbHost)
-  rewriteEnvFilesForDbHost(
-    targetDir,
-    opts.dbHost,
-    typeof opts.devPort === 'number' ? opts.devPort : undefined,
-  )
-  rewriteFirstGlanceDocsForDbHost(
-    targetDir,
-    opts.dbHost,
-    typeof opts.devPort === 'number' ? opts.devPort : undefined,
-  )
+  rewriteEnvFilesForDbHost(targetDir, opts.dbHost, effectiveDevPort)
+  rewriteFirstGlanceDocsForDbHost(targetDir, opts.dbHost, effectiveDevPort)
   rewriteFirstGlanceAuthDocs(targetDir)
   maybeWriteRootReadme(targetDir, projectName, opts.dbHost)
-  rewriteGeneratedPort(targetDir, typeof opts.devPort === 'number' ? opts.devPort : undefined)
+  rewriteGeneratedPort(targetDir, effectiveDevPort)
 
   // prune 只清 .claude/；settings/MCP strip 也只清 .claude/ + 根 .mcp.json。
   // 這裡一律重投影，不看 agentTargets（Round 29 leftover：沒選 cursor 仍留下
@@ -1391,6 +1388,26 @@ export function buildBootstrapProjectArgs(
   if (opts.noPush) args.push('--no-push')
   if (opts.offline) args.push('--offline')
   return args
+}
+
+/**
+ * 產出檔要寫的 dev port：明確給號就用它；`auto` 時用 managed bootstrap 回報的
+ * 實際登記號（舊版 clade 沒有這個欄位、回報不是 1–65535 的整數、或 bootstrap 沒成功時回 undefined，
+ * 產出檔維持 template 的 3000）。
+ */
+export function resolveEffectiveDevPort(
+  devPort: number | 'auto' | undefined,
+  managed: ManagedBootstrapResult | undefined,
+): number | undefined {
+  if (typeof devPort === 'number') return devPort
+  if (devPort !== 'auto' || !managed?.ok) return undefined
+  const reported = managed.report?.devPort
+  return typeof reported === 'number' &&
+    Number.isInteger(reported) &&
+    reported >= 1 &&
+    reported <= 65535
+    ? reported
+    : undefined
 }
 
 /** bootstrap --json 的 stdout：取最後一個可解析的 JSON object（前面可能有進度行）。 */

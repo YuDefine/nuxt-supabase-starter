@@ -13,3 +13,10 @@ dist/**
 .wrangler/**
 node_modules/**
 **/database.types.ts
+**/*.md
+coverage/**
+.nuxt/**
+.output/**
+pnpm-lock.yaml
+**/evlog.map.json
+.vite-doctor/**
