@@ -33,3 +33,12 @@ fleet 沒有同時具備 Cloudflare＋Sentry＋NUXT_APP_ENV 的 consumer（<cons
   2. **scaffold-smoke placeholder scan（TD-019）**：命中全部是 clade 投影檔。clade `vendor/scripts/preservation-profiles.ts:73`（consumer 名冊列）、`vendor/scripts/wt-batch.ts:195`（consumer→repo 對照列）是真資料，要 clade 決定投影時去識別化或改由 registry 讀入；`vendor/scripts/pre-push/runner.sh:55` 與 `vendor/scripts/pre-push/checks/{nuxt-typecheck,utable-slots,mutation-loading,data-perf-check,review-rules-ratchet,native-picker-ban,nuxt-ui-mixed-slot}.sh` 各一行註解，改成 `<consumer>` 即可。starter 端加 exclude 違反 TD-019 的 NEVER。
 - 剩餘步驟：(a) clade owner 修上述兩處、發版；(b) starter 升級 clade 後重跑 PR／main 的 Template CI 與 scaffold-smoke；scan 之後的 typecheck／test:unit／test／check 四關從未在 CI 跑過，可能再露紅燈。
 - 所有權：clade `vendor/scripts/**` 歸 clade owner；starter 端本 PR 不動投影檔。
+
+## 2026-10-05 starter hygiene real-tenant-identifier 投影面檢查改 salted-hash
+
+- 工作指針：branch `session/2026-10-05-2217-starter-hygiene-salted-hash`；修 clade propagate v1.13.55 被本 repo pre-commit `[Starter Hygiene] real-tenant-identifier` 誤擋（證據檔 `template/.claude/skills/work-loop/SKILL.md`）。relay 全文：`~/.cache/clade/coordinator/cdb175/starter-hygiene-relay.md`。
+- 根因：2026-10-03 public-repo history rewrite 把 `CONSUMER_NAMES` 明文清單洗成 `<consumer-x>` placeholder，check 從此只命中 placeholder（誤判）且永遠抓不到真名（漏抓），雙向失效；test fixture 被一致洗過所以照樣綠。
+- 改動（本檔擁有者範圍：`scripts/audit-template-hygiene{,.test}.sh`）：移除明文 regex，改為對 `template/scripts/public-tree-hygiene-tokens.json`（clade propagate 產生、與 `audit-public-tree-hygiene.ts` 同語義的 salted sha256-16 清單）做同等滑窗 hash 比對；掃描器以 `CONSUMER_TOKEN_SCANNER_JS` 內嵌於 audit script，只吃 consumer 類、保留單檔判定。清單缺失／毀損／canary 不符一律 scanner_error fail-closed。例外 hub-agnostic 化：`_notion-*-board` pattern（原例外是目錄名內嵌真名）與 `yudefine/nuxt-supabase-starter`。掃描對象含 path 本身（對齊 .ts）。
+- 已驗證：`bash scripts/audit-template-hygiene.test.sh` 11/11（新斷言：placeholder `<consumer-b>` 放行、合成真名 hash 命中被擋、缺清單 fail-closed）；用 propagate 同款清單對 1372 個投影面 tracked 檔實掃 0 命中；hook 三態實測——staged placeholder `SKILL.md` 放行、staged 真名被擋、缺清單被擋。`vp check` 綠；`tsc -p tsconfig.clade.json` 本 repo 無此設定檔（TS5058）。
+- 刻意語義：tokens 清單隨 propagate v1.13.55 落地；落地前 staged `template/.claude/**|/.agents/**|/.codex/**|AGENTS.md|CLAUDE.md` 變更會被 fail-closed 擋下（沒有清單等於沒有 gate），本 commit 不觸及 `template/` 不受影響。
+- 下一步與所有權：PR 0-A／ready／merge 與 clade v1.13.55 重跑 propagate 歸主持者；`template/**`（含 tokens 清單與 audit .ts 投影檔）歸 clade，NEVER 在 starter 端手改。真名 NEVER 以明文進任何 tracked 檔（測試只用合成 token）。

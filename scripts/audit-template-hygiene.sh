@@ -23,16 +23,103 @@ AUDIT_CHECKS=(
   maintenance-script-misplacement
 )
 
-# clade 投影面用的真實 consumer 名清單（check_clade_projection_consumer_names）。
+# clade 投影面的真實 consumer 名比對（check_clade_projection_consumer_names）。
 # check_dogfood_business_code 有另一份**刻意不同**的清單，理由寫在該函式上方。
 #
-# `<consumer-l>` 寫全名而不是裸 `yudefine`：裸 org 名在投影面是**正當出現**
-# （`YuDefine fleet 部署 SOP`、`/yudefine-deploy` skill 名、`YuDefine LXC` runner），
-# 它是發佈本 repo 的 GitHub org，不是租戶識別字——clade 的 buildFleetProfile 也基於
-# 同一個理由刻意不遮 maintainer org。裸名留在清單裡會把 11 處正當引用判成洩漏，
-# 而真正該抓的 `<consumer-l>`（registry 內的 consumer）用全名一樣抓得到。
-# 下方 check_dogfood_business_code 的清單早就寫著同一條理由，這裡原本沒跟上。
-CONSUMER_NAMES='<consumer-b>|<consumer-d>|<consumer-d>|<consumer-c>|<consumer-h>|<consumer-l>|<consumer-a>'
+# 明文真名清單不能存在於這個 public repo——清單本身就是客戶名單。2026-10-03 的
+# history rewrite 把舊 CONSUMER_NAMES 洗成 `<consumer-b>|...` placeholder 之後，這個
+# check 雙向失效：只命中去識別化 placeholder（誤判）、永遠抓不到真名（漏抓）。
+#
+# 正確機制 repo 裡已經有：clade propagate 產生的 salted hash 清單
+# `template/scripts/public-tree-hygiene-tokens.json`（與投影檔
+# template/scripts/audit-public-tree-hygiene.ts 同一份實作語義：sha256-16 全 token
+# 比對 + 12-bit 前綴滑窗預篩；consumer 類 token 左右邊界為非英數、ASCII 不分大小寫，
+# `_` / `-` 都算邊界）。hash 清單不明文、不怕 history rewrite。
+#
+# 本檔內嵌同等掃描，而不是直接跑投影的 audit .ts：(a) 這個 check 要的是「單一
+# staged blob」判定，--staged 掃的是整個 index、還帶 personal/literal 兩類，語義
+# 不同層；(b) 例外剝除（_notion-*-board、yudefine/nuxt-supabase-starter）要在掃描前
+# 對 blob 進行；(c) 只依賴 tokens 清單落地，不依賴投影 .ts 檔存在。清單缺失或毀損
+# （含 canary 不符＝hash 語義漂移）一律 scanner_error fail-closed——沒有清單等於
+# 沒有 gate，這正是上次靜默失效的形狀。
+#
+# 掃描器 exit：0 無命中 / 1 consumer token 命中 / 2 清單或環境錯誤。
+# 由 stdin 餵入已小寫、已剝例外的文字（path + blob）。
+CONSUMER_TOKEN_SCANNER_JS='
+const fs = require("node:fs");
+const crypto = require("node:crypto");
+const MASK = 0x0fff;
+const ROLL = 16777619;
+const CANARY = "public-tree-hygiene-canary";
+const die = (msg) => {
+  process.stderr.write("consumer-token-scan: " + msg + "\n");
+  process.exit(2);
+};
+const tokensPath = process.argv[1];
+if (!tokensPath) die("missing tokens path argument");
+let f;
+try {
+  f = JSON.parse(fs.readFileSync(tokensPath, "utf8"));
+} catch (err) {
+  die("cannot load tokens file: " + err.message);
+}
+if (!f || f.version !== 2 || f.algo !== "sha256-16") die("tokens version/algo mismatch");
+if (typeof f.salt !== "string" || f.salt.length < 8) die("tokens salt missing");
+const sha = (s) => crypto.createHash("sha256").update(f.salt + "\0" + s).digest("hex").slice(0, 16);
+const roll = (s) => {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(h, ROLL) + s.charCodeAt(i)) >>> 0;
+  return h;
+};
+if (!f.canary || f.canary.h !== sha(CANARY) || f.canary.r !== roll(CANARY)) die("canary mismatch");
+const cls = f.consumer;
+if (!cls || !Number.isInteger(cls.w) || !Array.isArray(cls.entries)) die("consumer class malformed");
+let text;
+try {
+  text = fs.readFileSync(0, "utf8");
+} catch (err) {
+  die("cannot read stdin: " + err.message);
+}
+const n = text.length;
+let hit = false;
+if (cls.entries.length > 0 && cls.w > 0 && cls.w <= n) {
+  const w = cls.w;
+  const bitmap = new Uint8Array(MASK + 1);
+  const byPrefix = new Map();
+  for (const e of cls.entries) {
+    let arr = byPrefix.get(e.p);
+    if (!arr) byPrefix.set(e.p, (arr = []));
+    arr.push(e);
+    bitmap[e.p] = 1;
+  }
+  let pow = 1;
+  for (let k = 1; k < w; k++) pow = Math.imul(pow, ROLL);
+  const lowerAscii = (s) => s.replace(/[A-Z]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) + 32));
+  const alnum = (c) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
+  const codes = new Uint16Array(n);
+  for (let i = 0; i < n; i++) {
+    const ch = text.charCodeAt(i);
+    codes[i] = ch >= 65 && ch <= 90 ? ch + 32 : ch;
+  }
+  let h = 0;
+  for (let k = 0; k < w; k++) h = (Math.imul(h, ROLL) + codes[k]) | 0;
+  for (let i = 0; ; i++) {
+    if (bitmap[h & MASK] === 1) {
+      const cands = byPrefix.get(h & MASK);
+      if (cands && (i === 0 || !alnum(codes[i - 1]))) {
+        for (const c of cands) {
+          if (i + c.l > n) continue;
+          if (i + c.l < n && alnum(codes[i + c.l])) continue;
+          if (c.h === sha(lowerAscii(text.slice(i, i + c.l)))) { hit = true; break; }
+        }
+      }
+    }
+    if (hit || i + w >= n) break;
+    h = (Math.imul((h - Math.imul(codes[i], pow)) | 0, ROLL) + codes[i + w]) | 0;
+  }
+}
+process.exit(hit ? 1 : 0);
+'
 
 finding_checks=()
 finding_problems=()
@@ -347,36 +434,62 @@ check_tenant_identifiers() {
 check_clade_projection_consumer_names() {
   local path="$1"
   local blob="$2"
-  local sanitized
+  local sanitized root tokens_path scan_status
 
   case "${path}" in
     template/.claude/*|template/.agents/*|template/.codex/*|template/AGENTS.md|template/CLAUDE.md) ;;
     *) return 0 ;;
   esac
 
-  # 先統一小寫再剝例外：偵測用的是 grep -i，例外字串若逐一列大小寫變體必然漏一種
-  # （`YUDEFINE/nuxt-supabase-starter` 就會漏），剝與比對的大小寫語義必須一致。
-  # 剝掉兩種已知的非 consumer-identity 出現：
-  #   `_notion-<consumer-b>-board`                全域 skill 的目錄名
-  #   `yudefine/nuxt-supabase-starter`    發佈本 starter 的 GitHub org + repo，正當引用
+  # tokens 清單由 clade propagate 寫進 template/scripts/；repo root 判定順序與
+  # resolve_repo_root 相同（env override → git toplevel），但要在函式被 source 後的
+  # 呼叫當下才解析——測試會在同一個 sourced shell 裡切不同 fixture root。
+  root="${STARTER_HYGIENE_REPO_ROOT:-${repo_root_override:-}}"
+  if [[ -z "${root}" ]]; then
+    root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  fi
+
+  tokens_path="${root:+${root}/}template/scripts/public-tree-hygiene-tokens.json"
+  if [[ -z "${root}" || ! -f "${tokens_path}" ]]; then
+    scanner_error \
+      "clade 投影面 consumer 比對缺 salted hash 清單（由 propagate 產生），沒有清單等於沒有 gate，採 fail-closed。" \
+      "${tokens_path}"
+    return 0
+  fi
+
+  # 先統一小寫再剝例外：掃描器對 consumer 類本來就是 ASCII 不分大小寫，剝與比對的
+  # 大小寫語義必須一致（`YUDEFINE/nuxt-supabase-starter` 這類變體才剝得掉）。
+  # 剝掉兩種已知的非 consumer-identity 出現（hub-agnostic，不含任何明文真名）：
+  #   `_notion-<名>-board`                  全域 skill 的目錄名，任何 consumer 都可能有一份
+  #   `yudefine/nuxt-supabase-starter`      發佈本 starter 的 GitHub org + repo，正當引用
   # 用 tr 而非 ${blob,,}：後者是 bash 4+ 專屬，macOS 內建 bash 3.2 會 bad substitution，
   # 而本檔另外三處小寫化本來就走 tr。
-  sanitized="$(printf '%s' "${blob}" | tr '[:upper:]' '[:lower:]')"
-  sanitized="${sanitized//_notion-<consumer-b>-board/}"
+  sanitized="$(printf '%s\n%s' "${path}" "${blob}" | tr '[:upper:]' '[:lower:]')"
+  sanitized="$(printf '%s' "${sanitized}" | sed -E 's/_notion-[a-z0-9._<>-]+-board//g')"
   sanitized="${sanitized//yudefine\/nuxt-supabase-starter/}"
 
-  # 邊界刻意只把英數算成識別字——`-` 與 `_` 都要當分隔字元：`<consumer-b>-dev.<domain>`、
-  # `gh-runner-<consumer-b>`、`<consumer-b>_wt_<slug>` 全是真實洩漏，任一符號留在邊界類別裡都會放掉它們
-  # （`db-preview-env.md` 的 `<consumer-b>_wt_<slug>` 就是把 `_` 放掉時漏掉的那一個）。
-  # sanitized 已全小寫，這裡不用 -i——用了反而讓「剝與比對同語義」的保證失效。
-  if grep -Eq -- "(^|[^a-z0-9])(${CONSUMER_NAMES})([^a-z0-9]|\$)" <<< "${sanitized}"; then
-    add_finding \
-      "real-tenant-identifier" \
-      "clade 投影面含真實 consumer 名，代表投影未去識別化（多半是 bootstrap 在本 repo 內跑過）。" \
-      "${path} + real consumer identifier category" \
-      "改用 <consumer-a> 這類去識別化 placeholder；若是 bootstrap 產物，先確認 template/package.json 的 postinstall self-detection 生效再重投影。" \
-      "只有在 plan package / PR / commit context 記錄該名稱為刻意保留後，才允許維護者明示 bypass。"
-  fi
+  # 邊界刻意只把英數算成識別字——`-` 與 `_` 都要當分隔字元，這與 clade sanitizeText 的
+  # `(?<![a-z0-9])TOKEN(?![a-z0-9])` 同語義：`<真名>-dev.<domain>`、`gh-runner-<真名>`、
+  # `<真名>_wt_<slug>` 全是真實洩漏，任一符號留在邊界類別裡都會放掉它們。
+  scan_status=0
+  printf '%s' "${sanitized}" | node -e "${CONSUMER_TOKEN_SCANNER_JS}" "${tokens_path}" || scan_status=$?
+
+  case "${scan_status}" in
+    0) ;;
+    1)
+      add_finding \
+        "real-tenant-identifier" \
+        "clade 投影面含真實 consumer 名，代表投影未去識別化（多半是 bootstrap 在本 repo 內跑過）。" \
+        "${path} + real consumer identifier category" \
+        "改用 <consumer-a> 這類去識別化 placeholder；若是 bootstrap 產物，先確認 template/package.json 的 postinstall self-detection 生效再重投影。" \
+        "只有在 plan package / PR / commit context 記錄該名稱為刻意保留後，才允許維護者明示 bypass。"
+      ;;
+    *)
+      scanner_error \
+        "consumer token 掃描器錯誤（exit ${scan_status}），starter hygiene 採 fail-closed。" \
+        "${path} + consumer token scan"
+      ;;
+  esac
 }
 
 check_starter_only_docs() {
@@ -406,7 +519,7 @@ check_dogfood_business_code() {
     return 0
   fi
 
-  # 這份清單刻意**不**共用 ${CONSUMER_NAMES}：`yudefine` 是發佈本 starter 的 GitHub org，
+  # 這份清單刻意**不**共用投影面那套 consumer token 比對：`yudefine` 是發佈本 starter 的 GitHub org，
   # 在 template/app/** 的 clone URL 與 docs 連結裡是正當出現（`(home).vue` 就有兩處），
   # 併進來會把 starter 自己的首頁判成 dogfood 污染。
   if [[ "${path}" =~ ^template/(app/pages|app/components|server|supabase|tests|test)/ ]] && grep -Eiq -- '(dogfood|<consumer-d>|<consumer-d>|<consumer-b>|<consumer-a>|procurement|workstation|inspection_equipment|school[-_]window)' <<< "${blob}"; then
