@@ -6,7 +6,8 @@
 // 回 404 不回 403：403 洩漏「這個端點存在」。兩個條件是 AND，不是 OR ——
 // 只看 NODE_ENV 會在 preview / staging build 漏；只看 flag 會在有人把
 // flag 帶進 production env 時漏。
-import { createError, defineEventHandler } from 'h3'
+import { defineEventHandler } from 'h3'
+import { createError } from 'evlog'
 
 export default defineEventHandler((event) => {
   const path = event.path ?? ''
@@ -17,6 +18,13 @@ export default defineEventHandler((event) => {
     process.env.NODE_ENV === 'production' || process.env.NUXT_ENV === 'production'
 
   if (!enabled || isProduction) {
-    throw createError({ statusCode: 404, statusMessage: 'Not Found' })
+    const log = useLogger(event)
+    log.set({ testControl: { denied: true, enabled, isProduction } })
+    throw createError({
+      status: 404,
+      message: 'Not Found',
+      why: 'The /test/* control plane only exists when SPECFORMULA_TEST=1 outside production.',
+      fix: 'Restart the dev server with SPECFORMULA_TEST=1, or remove the request.',
+    })
   }
 })

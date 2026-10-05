@@ -4,4 +4,8 @@
 // server/middleware/00.test-routes-guard.ts 擋成 404。
 import { defineEventHandler } from 'h3'
 
-export default defineEventHandler(() => ({ status: 'ok' }))
+export default defineEventHandler((event) => {
+  const log = useLogger(event)
+  log.set({ operation: 'test.health' })
+  return { status: 'ok' }
+})

@@ -11,8 +11,10 @@
 import { defineEventHandler } from 'h3'
 
 export default defineEventHandler(async (event) => {
+  const log = useLogger(event)
   const session = await getUserSession(event)
   if (session) {
     ;(event.context as { session?: unknown }).session = session
   }
+  log.set({ auth: { session: session ? 'present' : 'anonymous' } })
 })

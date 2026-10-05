@@ -6,6 +6,9 @@ import { defineEventHandler, getQuery } from 'h3'
 import { profileDbLog } from '../../utils/specformula-db-log'
 
 export default defineEventHandler((event) => {
+  const log = useLogger(event)
   const since = Number(getQuery(event).since ?? 0)
-  return { entries: profileDbLog.filter((entry) => entry.ts >= since) }
+  const entries = profileDbLog.filter((entry) => entry.ts >= since)
+  log.set({ operation: 'test.db_log', since, returned: entries.length })
+  return { entries }
 })
