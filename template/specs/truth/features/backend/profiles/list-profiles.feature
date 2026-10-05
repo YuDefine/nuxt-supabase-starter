@@ -54,13 +54,31 @@ Feature: Profile 列表（分頁與搜尋）
 
   Rule: search 內的 ILIKE 萬用字元與 PostgREST 語法字元會被移除
 
-    # TD-026 D2：search 先經 sanitizePostgrestSearch 移除 %、_、,.() 等字元再進 ilike。
+    # TD-026 D2：search 先經 sanitizePostgrestSearch 移除 %、_、*、\、,.() 等字元再進 ilike。
     # "%" 被移除後 sanitised 值為空 → 視為無搜尋條件 → 回傳全部三列。
     Example: search 為百分號
       Given 呼叫者是使用者 "<管理員甲>"，角色為 "admin"
       When 呼叫 GET "/api/v1/profiles?search=%25"
       Then 回應狀態碼為 200
       And 回應 pagination 為 page 1、perPage 20、total 3、totalPages 1
+
+    # `*` 在 PostgREST like/ilike 裡是萬用字元（等價 %）。「使*者」若沒被
+    # 移除會變成 %使%者% 命中「使用者」兩列；移除後是純文字「使者」→ 0 列。
+    Example: search 夾帶星號
+      Given 呼叫者是使用者 "<管理員甲>"，角色為 "admin"
+      When 呼叫 GET "/api/v1/profiles?search=使*者"
+      Then 回應狀態碼為 200
+      And 回應 data 的 id 依序為 ""
+      And 回應 pagination 為 page 1、perPage 20、total 0、totalPages 0
+
+    # `\` 是 LIKE 跳脫字元：尾隨的 \ 若進了 pattern 會吃掉結尾的 %
+    # （%使\% = 含「使」且以 % 結尾）→ 0 列；移除後是「使」→ 命中兩列。
+    Example: search 尾隨反斜線
+      Given 呼叫者是使用者 "<管理員甲>"，角色為 "admin"
+      When 呼叫 GET "/api/v1/profiles?search=使%5C"
+      Then 回應狀態碼為 200
+      And 回應 data 的 id 依序為 "<使用者乙>,<使用者甲>"
+      And 回應 pagination 為 page 1、perPage 20、total 2、totalPages 1
 
   Rule: 查詢參數不合法回 400
 
@@ -101,4 +119,14 @@ Feature: Profile 列表（分頁與搜尋）
       When 呼叫 GET "/api/v1/profiles"
       Then 回應狀態碼為 500
       And 回應錯誤訊息為 "角色查詢失敗"
+      And 回應不含 PostgREST 診斷欄位
+
+    # 角色查詢只讀 (id, role)：只留這兩個欄位可讀時授權仍通過，
+    # 失敗的是 list handler 自己的資料查詢 → 「查詢失敗，請稍後再試」。
+    Example: 資料查詢失敗
+      Given 呼叫者是使用者 "<管理員甲>"，角色為 "admin"
+      And profiles 資料表的資料讀取會失敗
+      When 呼叫 GET "/api/v1/profiles"
+      Then 回應狀態碼為 500
+      And 回應錯誤訊息為 "查詢失敗，請稍後再試"
       And 回應不含 PostgREST 診斷欄位

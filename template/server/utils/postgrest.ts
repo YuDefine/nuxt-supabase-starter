@@ -4,8 +4,8 @@
  * 清除使用者輸入中可能干擾 PostgREST filter 語法的特殊字元。
  */
 
-/** 移除 PostgREST filter 語法字元（,.(）) 和 ILIKE 萬用字元（%_） */
-const POSTGREST_SPECIAL_CHARS = /[,.()%_]/g
+/** 移除 PostgREST filter 語法字元（,.()）與 LIKE/ILIKE 萬用、跳脫字元（%_*\\） */
+const POSTGREST_SPECIAL_CHARS = /[,.()%_*\\]/g
 
 export function sanitizePostgrestSearch(input: string): string {
   return input.replace(POSTGREST_SPECIAL_CHARS, '')

@@ -12,16 +12,18 @@
 //   cookie         呼叫者 session cookie；未登入時為 null。
 //   response       最近一次 HTTP 回應 {status, body}。
 //   dbLogSince     請求發出前的時間戳，供 /test/db-log 斷言切割「這次請求」。
-//   faultInjected  讀取失敗注入已啟用（REVOKE SELECT）；After 負責復原。
+//   faultInjected  讀取失敗注入已啟用（整表 REVOKE，或只留 id/role 欄位
+//                  grant）；After 負責復原，中斷殘留由下一輪 BeforeAll 自愈。
 
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 
-import { After, AfterAll, Before, Given, Then, When } from '@cucumber/cucumber'
+import { After, AfterAll, Before, BeforeAll, Given, Then, When } from '@cucumber/cucumber'
 import type { DataTable } from '@cucumber/cucumber'
 import { Client } from 'pg'
 
 import { SPECFORMULA_BASE_URL, SPECFORMULA_DB } from '../support/environment.js'
+import { SEED_PROFILES } from '../support/seed-profiles.js'
 
 const DEV_LOGIN_PASSWORD = 'password123'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -177,17 +179,69 @@ async function flushFixtures(w: ProfilesWorld): Promise<void> {
   w.pendingDeletes = []
 }
 
+/**
+ * service_role 對 profiles 的權限正規態：只有 table-level SELECT、沒有
+ * column-level grant。兩種故障注入（整表 REVOKE、只留 id/role）都收斂回
+ * 這裡；BeforeAll 也呼叫它，補救「上一輪在 REVOKE 與 After 之間被中斷」
+ * 留下的殘缺權限（中斷後不必手動 GRANT）。
+ */
+async function resetProfileReadGrants(client: Client): Promise<void> {
+  // REVOKE 欄位級 grant 在權限不存在時只產生 warning，不會 error。
+  await client.query('REVOKE SELECT (id, role) ON public.profiles FROM service_role')
+  await client.query('GRANT SELECT ON public.profiles TO service_role')
+}
+
+/**
+ * 補回 seed.sql 的三列種子（ON CONFLICT 只校正 role —— TD-026 D3 起授權
+ * 只讀 profiles.role；display_name 等欄位保留 dev 端可能的修改）。
+ */
+async function ensureSeedProfiles(client: Client): Promise<void> {
+  for (const row of SEED_PROFILES) {
+    await client.query(
+      `INSERT INTO public.profiles (id, display_name, avatar_url, role)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role`,
+      [row.id, row.display_name, row.avatar_url, row.role],
+    )
+  }
+}
+
+// BDD 與 `SPECFORMULA_TEST=1 pnpm dev` 共用本機 supabase DB。scenario 需要
+// clean slate（列表斷言 total），所以每個 scenario 的 Before 仍清空
+// profiles —— 但清掉的列不能消失：開局先把整表快照進持久備份表
+// specformula_bdd.profiles_backup（不用 pg_temp —— process 被 SIGKILL 時
+// temp table 跟著連線消失，持久表讓下一輪開局還能補回殘留），收尾寫回。
+BeforeAll({ timeout: 30_000 }, async () => {
+  const client = await db()
+  await resetProfileReadGrants(client)
+  await client.query('CREATE SCHEMA IF NOT EXISTS specformula_bdd')
+  await client.query(
+    'CREATE TABLE IF NOT EXISTS specformula_bdd.profiles_backup (LIKE public.profiles)',
+  )
+  // 上一輪中斷留下的備份先補回 public.profiles，再重拍快照
+  await client.query(
+    `INSERT INTO public.profiles
+       SELECT * FROM specformula_bdd.profiles_backup
+       ON CONFLICT (id) DO NOTHING`,
+  )
+  await client.query('TRUNCATE specformula_bdd.profiles_backup')
+  // 種子保證存在（含被舊版清空、之後再也沒補回的 DB）再進快照
+  await ensureSeedProfiles(client)
+  await client.query('INSERT INTO specformula_bdd.profiles_backup SELECT * FROM public.profiles')
+})
+
 Before({ timeout: 30_000 }, async function () {
-  // 每個 scenario 從乾淨的 profiles 開始（含 seed 三列以外的任何殘留）
+  // 每個 scenario 從乾淨的 profiles 開始。整表已在 BeforeAll 快照、
+  // AfterAll 復原——這裡的清空不會吃掉 seed 或 dev 使用者的列。
   await (await db()).query('DELETE FROM public.profiles')
 })
 
 After({ timeout: 30_000 }, async function () {
   const w = world(this)
   const client = await db()
-  // 故障注入復原：無論 scenario 成敗都恢復 service_role 的 SELECT
+  // 故障注入復原：無論 scenario 成敗都把權限正規化
   if (w.faultInjected) {
-    await client.query('GRANT SELECT ON public.profiles TO service_role')
+    await resetProfileReadGrants(client)
     w.faultInjected = false
   }
   // 清掉本 scenario 落地過的列（含 flush 後插入的）
@@ -265,8 +319,23 @@ Given(
 
 Given('profiles 資料表的讀取會失敗', async function (this: unknown) {
   // 撤銷 service_role 對 profiles 的 SELECT —— app 的所有 PostgREST 讀取
-  // （含 TD-026 D3 的角色查詢）都會回 42501。After hook 負責 GRANT 復原。
-  await (await db()).query('REVOKE SELECT ON public.profiles FROM service_role')
+  // （含 TD-026 D3 的角色查詢）都會回 42501。先清 column-level grant 再撤
+  // table-level：欄位級 grant 是獨立授權，撤整表不會一併移除它。
+  // After hook 負責復原。
+  const client = await db()
+  await client.query('REVOKE SELECT (id, role) ON public.profiles FROM service_role')
+  await client.query('REVOKE SELECT ON public.profiles FROM service_role')
+  world(this).faultInjected = true
+})
+
+Given('profiles 資料表的資料讀取會失敗', async function (this: unknown) {
+  // 撤整表讀權、只留角色查詢需要的 (id, role) 欄位級 grant：角色查詢
+  // （select role + eq id）與 count 查詢（select id head）仍通過，但資料
+  // 查詢要讀其他欄位 → 42501，蓋到 handler 自己的資料查詢失敗分支。
+  // After hook 負責復原。
+  const client = await db()
+  await client.query('REVOKE SELECT ON public.profiles FROM service_role')
+  await client.query('GRANT SELECT (id, role) ON public.profiles TO service_role')
   world(this).faultInjected = true
 })
 
@@ -373,9 +442,39 @@ Then('profiles 資料表的資料列沒有被讀取', async function (this: unkn
   )
 })
 
-AfterAll(async () => {
-  if (dbClient) {
-    await dbClient.end()
+AfterAll({ timeout: 30_000 }, async () => {
+  const client = dbClient
+  if (!client) return
+  try {
+    // 還原 BeforeAll 拍的整表快照。備份表不存在代表 BeforeAll 沒跑到
+    // 快照段——直接跳過，免得先 DELETE 才發現沒東西可補。
+    const reg = await client.query<{ r: string | null }>(
+      `SELECT to_regclass('specformula_bdd.profiles_backup') AS r`,
+    )
+    if (reg.rows[0]?.r) {
+      await client.query('BEGIN')
+      try {
+        await client.query('DELETE FROM public.profiles')
+        await client.query(
+          'INSERT INTO public.profiles SELECT * FROM specformula_bdd.profiles_backup',
+        )
+        await client.query('TRUNCATE specformula_bdd.profiles_backup')
+        await client.query('COMMIT')
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {})
+        throw err
+      }
+    }
+    await ensureSeedProfiles(client)
+    // 驗收點：跑完後 seed admin 仍須是 admin（授權讀 profiles.role，
+    // 沒復原就讓整場跑紅，不靜默放過）
+    const { rows } = await client.query<{ role: string }>(
+      'SELECT role FROM public.profiles WHERE id = $1',
+      [SEED_PROFILES[0].id],
+    )
+    assert.equal(rows[0]?.role, 'admin', 'seed admin profile 未復原')
+  } finally {
+    await client.end()
     dbClient = null
   }
 })

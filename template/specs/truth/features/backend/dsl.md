@@ -17,7 +17,7 @@
 ## 資料前提
 
 測試資料庫的 schema 來自 `supabase/migrations/*.sql`（`supabase start` 套用）。`supabase/seed.sql` 是開發用種子資料；
-feature 的 Given 自行建立所需列，不依賴種子（TD-026 D1 起種子 id 已合 RFC 4122，可直接引用）。
+feature 的 Given 自行建立所需列，不依賴種子（TD-026 D1 起種子 id 已合 RFC 9562，可直接引用）。
 
 ## 跨模組共用句型
 

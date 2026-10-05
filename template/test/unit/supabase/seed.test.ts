@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vite-plus/test'
 import { z } from 'zod'
 
+import { SEED_PROFILES } from '../../../features/support/seed-profiles'
+
 const SEED_SQL = readFileSync(join(import.meta.dirname, '../../../supabase/seed.sql'), 'utf8')
 const uuidSchema = z.string().uuid()
 const UUID_PATTERN = /'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'/gi
@@ -37,5 +39,21 @@ describe('seed.sql', () => {
       // 同一 id 必須同時出現在 auth.users / auth.identities 區段（profiles 區段之前）
       expect(SEED_SQL.indexOf(`'${id}'`)).toBeLessThan(SEED_SQL.indexOf('public.profiles'))
     }
+  })
+
+  // profiles.steps.ts 的 BeforeAll/AfterAll 用 SEED_PROFILES 復原種子列——
+  // 與 seed.sql 漂移會讓執行期復原回不一致的值。
+  it('profiles INSERT rows match SEED_PROFILES (features/support/seed-profiles.ts)', () => {
+    const profilesSection = SEED_SQL.slice(SEED_SQL.indexOf('public.profiles'))
+    const rows = [
+      ...profilesSection.matchAll(/\('([0-9a-f-]{36})',\s*'([^']+)',\s*'([^']+)',\s*'(\w+)'\)/g),
+    ].map((m) => ({
+      id: m[1],
+      display_name: m[2],
+      avatar_url: m[3],
+      role: m[4],
+    }))
+
+    expect(rows).toEqual([...SEED_PROFILES])
   })
 })
