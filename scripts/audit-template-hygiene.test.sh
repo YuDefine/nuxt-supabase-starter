@@ -199,6 +199,25 @@ write_hash_tokens() {
   ' "${dest}" "$@"
 }
 
+# 與 write_hash_tokens 同格式，但 consumer class 由呼叫端給 raw JSON——
+# 專門造「清單毀損」fixture（空 entries、壞 entry），測掃描器 fail-closed。
+write_hash_tokens_raw_consumer() {
+  local dest="$1" consumer_json="$2"
+  mkdir -p "$(dirname "${dest}")"
+  node -e '
+    const fs = require("node:fs"), crypto = require("node:crypto");
+    const ROLL = 16777619, CANARY = "public-tree-hygiene-canary";
+    const salt = "fixture-salt-0001";
+    const sha = (s) => crypto.createHash("sha256").update(salt + "\0" + s).digest("hex").slice(0, 16);
+    const roll = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (Math.imul(h, ROLL) + s.charCodeAt(i)) >>> 0; return h; };
+    const empty = { w: 1, entries: [] };
+    const f = { version: 2, algo: "sha256-16", salt,
+      canary: { h: sha(CANARY), r: roll(CANARY) },
+      consumer: JSON.parse(process.argv[2]), personal: empty, literal: empty };
+    fs.writeFileSync(process.argv[1], JSON.stringify(f, null, 2) + "\n", "utf8");
+  ' "${dest}" "${consumer_json}"
+}
+
 # clade 投影面那半條 real-tenant-identifier 走的是 pre-commit hook，不是 full-tree audit——
 # audit 的 find 清單把 template/.claude / .agents / .codex 整個 prune 掉（見 rule 的
 # 「clade 投影面的覆蓋邊界」）。hook 是 source 本 script 後逐檔呼叫 check 函式，所以這裡
@@ -221,8 +240,9 @@ assert_clade_projection_consumer_names() {
     check_tenant_identifiers "template/.claude/rules/case.md" "clone 自 YUDEFINE/nuxt-supabase-starter 即可。"
     check_tenant_identifiers "template/.claude/rules/org.md" "詳見 /yudefine-deploy Phase 1-10 runbook，跑在 YuDefine LXC 的 self-hosted runner。"
     check_tenant_identifiers "template/.claude/rules/embed.md" "xzzfakeconsumer 與 zzfakeconsumerx 都不是洩漏。"
-    check_tenant_identifiers "template/.claude/rules/ok.md" "這條規約在 <consumer-b> 上實測過。skill dir 是 _notion-<consumer-b>-board。"
+    check_tenant_identifiers "template/.claude/rules/ok.md" "這條規約在 <consumer-b> 上實測過。skill dir 是 _notion-<consumer-b>-board，org 是 <client-a>，目錄 _notion-<client-a>-board。"
     check_tenant_identifiers "template/.claude/rules/notion.md" "全域 skill 目錄是 _notion-zzfakeconsumer-board。"
+    check_tenant_identifiers "template/.claude/rules/notionpath.md" "洩漏藏在目錄名中段：_notion-a-board-zzfakeconsumer-board。"
     check_tenant_identifiers "template/docs/prose.md" "這份 root 文件提到 zzfakeconsumer，不在投影面範圍內。"
   )"
 
@@ -239,12 +259,19 @@ assert_clade_projection_consumer_names() {
     fail "uppercase consumer name is blocked"
   fi
   # 去識別化 placeholder 是合法投影輸出，不能誤擋——這正是 v1.13.55 被擋的形狀。
+  # `<consumer-*>`／`<client-*>` 都是 sanitize 產生的 label，含它們的
+  # `_notion-<label>-board` 目錄名放行。
   if grep -Fq "template/.claude/rules/ok.md" <<< "${output}"; then
-    fail "placeholder + _notion-<consumer-b>-board must not false-positive"
+    fail "placeholder + _notion-<consumer-b>-board / _notion-<client-a>-board must not false-positive"
   fi
-  # _notion-*-board 例外是 hub-agnostic 的：目錄名裡含真名 token 一樣放行。
-  if grep -Fq "template/.claude/rules/notion.md" <<< "${output}"; then
-    fail "_notion-*-board directory name must not false-positive"
+  # `_notion-…-board` 例外只放行 placeholder label 形狀：目錄名裡出現真名 token
+  # 一樣要被 hash 命中擋下，不把整個目錄名剝掉（0-A r1 Minor）。
+  if ! grep -Fq "real-tenant-identifier|template/.claude/rules/notion.md" <<< "${output}"; then
+    fail "real consumer name inside _notion-*-board is blocked"
+  fi
+  # 貪婪剝除會把 `_notion-a-board-<真名>-board` 整段吃掉；收窄後中段真名仍命中。
+  if ! grep -Fq "real-tenant-identifier|template/.claude/rules/notionpath.md" <<< "${output}"; then
+    fail "real consumer name in the middle of _notion-a-board-*-board is blocked"
   fi
   # 英數黏著（左右無邊界）不算洩漏——token 不是 substring 比對。
   if grep -Fq "template/.claude/rules/embed.md" <<< "${output}"; then
@@ -287,6 +314,48 @@ assert_clade_projection_missing_tokens_fails_closed() {
     fail "missing tokens file fails closed with scanner error"
   fi
   pass "missing tokens file fails closed"
+}
+
+# consumer.entries 為空、或任一 entry 不符 loadTokens 的驗證（l >= w、p 在 mask 範圍、
+# h 是 /^[0-9a-f]{16}$/）時掃描器一律 exit 2 → check 回 scanner_error fail-closed。
+# 空清單讓這條 check 恆綠、壞 entry 代表清單被寫壞——都與缺檔同形狀（0-A r1 Minor）。
+assert_clade_projection_degraded_tokens_fail_closed() {
+  local root tokens output case_label consumer_json
+  root="$(new_fixture degraded-tokens)"
+  tokens="${root}/template/scripts/public-tree-hygiene-tokens.json"
+
+  for case_label in empty-entries bad-entry-length bad-entry-prefix bad-entry-hash; do
+    case "${case_label}" in
+      empty-entries)    consumer_json='{"w":4,"entries":[]}' ;;
+      bad-entry-length) consumer_json='{"w":4,"entries":[{"l":3,"p":1,"h":"0123456789abcdef"}]}' ;;
+      bad-entry-prefix) consumer_json='{"w":4,"entries":[{"l":4,"p":4096,"h":"0123456789abcdef"}]}' ;;
+      bad-entry-hash)   consumer_json='{"w":4,"entries":[{"l":4,"p":1,"h":"not-a-hex-hash"}]}' ;;
+    esac
+    write_hash_tokens_raw_consumer "${tokens}" "${consumer_json}"
+
+    output="$(
+      source "${AUDIT_SCRIPT}"
+      STARTER_HYGIENE_REPO_ROOT="${root}"
+      set +e
+      printf 'probe zzfakeconsumer' | node -e "${CONSUMER_TOKEN_SCANNER_JS}" "${tokens}" 2>/dev/null
+      printf 'scanner-exit=%s\n' "$?"
+      add_finding() { printf 'finding|%s|%s\n' "$1" "$3"; }
+      check_tenant_identifiers "template/.claude/rules/probe.md" "這條在 zzfakeconsumer 上實測過。"
+      printf 'scanner_errors=%s\n' "${scanner_errors[@]:-}"
+    )"
+
+    if grep -Fq 'finding|' <<< "${output}"; then
+      fail "${case_label}: degraded tokens must not produce a finding"
+    fi
+    if ! grep -Fq 'scanner-exit=2' <<< "${output}"; then
+      fail "${case_label}: embedded scanner must exit 2 on degraded tokens"
+    fi
+    if ! grep -Fq 'consumer token scan' <<< "${output}"; then
+      fail "${case_label}: degraded tokens must fail closed with scanner error"
+    fi
+  done
+
+  pass "empty or malformed consumer entries fail closed"
 }
 
 # template/scripts/ 會被 scaffolder 整棵複製：維護倉專用腳本放進來一定流進使用者
@@ -410,7 +479,7 @@ assert_tenant_check_does_not_short_circuit_projection() {
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/starter-hygiene-test.XXXXXX")"
 
 # 下面每加一個 assert_* 呼叫就 +1；結尾用它核對沒有 case 被靜默跳過。
-EXPECTED_CASES=11
+EXPECTED_CASES=12
 
 assert_clean_fixture
 assert_private_env_fixture
@@ -420,6 +489,7 @@ assert_starter_only_doc_fixture
 assert_template_cwd_root_detection
 assert_clade_projection_consumer_names
 assert_clade_projection_missing_tokens_fails_closed
+assert_clade_projection_degraded_tokens_fail_closed
 assert_tenant_check_does_not_short_circuit_projection
 assert_maintenance_script_fixture
 assert_maintenance_script_negative_fixtures

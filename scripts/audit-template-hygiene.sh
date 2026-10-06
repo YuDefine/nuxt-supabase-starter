@@ -38,9 +38,10 @@ AUDIT_CHECKS=(
 #
 # 本檔內嵌同等掃描，而不是直接跑投影的 audit .ts：(a) 這個 check 要的是「單一
 # staged blob」判定，--staged 掃的是整個 index、還帶 personal/literal 兩類，語義
-# 不同層；(b) 例外剝除（_notion-*-board、yudefine/nuxt-supabase-starter）要在掃描前
-# 對 blob 進行；(c) 只依賴 tokens 清單落地，不依賴投影 .ts 檔存在。清單缺失或毀損
-# （含 canary 不符＝hash 語義漂移）一律 scanner_error fail-closed——沒有清單等於
+# 不同層；(b) 例外剝除（`_notion-<consumer/client label>-board`、
+# yudefine/nuxt-supabase-starter）要在掃描前對 blob 進行；(c) 只依賴 tokens 清單落地，
+# 不依賴投影 .ts 檔存在。清單缺失或毀損（含 canary 不符＝hash 語義漂移、entries 為空
+# 或 entry 不符 loadTokens 驗證）一律 scanner_error fail-closed——沒有清單等於
 # 沒有 gate，這正是上次靜默失效的形狀。
 #
 # 掃描器 exit：0 無命中 / 1 consumer token 命中 / 2 清單或環境錯誤。
@@ -72,8 +73,21 @@ const roll = (s) => {
   return h;
 };
 if (!f.canary || f.canary.h !== sha(CANARY) || f.canary.r !== roll(CANARY)) die("canary mismatch");
+// 與 loadTokens 同一份驗證（validEntry + validClass）：三類區段任一毀損都視為
+// 清單毀損 fail-closed——部分寫壞的檔案不能只驗 consumer 就放過。
+const validEntry = (e) =>
+  !!e && Number.isInteger(e.l) && e.l > 0 &&
+  Number.isInteger(e.p) && e.p >= 0 && e.p <= MASK &&
+  typeof e.h === "string" && /^[0-9a-f]{16}$/.test(e.h);
+const validClass = (c) =>
+  !!c && Array.isArray(c.entries) && Number.isInteger(c.w) && c.w > 0 &&
+  c.entries.every((e) => validEntry(e) && e.l >= c.w);
+for (const k of ["consumer", "personal", "literal"]) {
+  if (!validClass(f[k])) die("tokens class malformed: " + k);
+}
 const cls = f.consumer;
-if (!cls || !Number.isInteger(cls.w) || !Array.isArray(cls.entries)) die("consumer class malformed");
+// 這支掃描器唯一的 gate 就是 consumer 名；entries 為空等於檢查恆綠，與缺檔同形狀。
+if (cls.entries.length === 0) die("consumer token list is empty");
 let text;
 try {
   text = fs.readFileSync(0, "utf8");
@@ -82,7 +96,7 @@ try {
 }
 const n = text.length;
 let hit = false;
-if (cls.entries.length > 0 && cls.w > 0 && cls.w <= n) {
+if (cls.w <= n) {
   const w = cls.w;
   const bitmap = new Uint8Array(MASK + 1);
   const byPrefix = new Map();
@@ -460,12 +474,17 @@ check_clade_projection_consumer_names() {
   # 先統一小寫再剝例外：掃描器對 consumer 類本來就是 ASCII 不分大小寫，剝與比對的
   # 大小寫語義必須一致（`YUDEFINE/nuxt-supabase-starter` 這類變體才剝得掉）。
   # 剝掉兩種已知的非 consumer-identity 出現（hub-agnostic，不含任何明文真名）：
-  #   `_notion-<名>-board`                  全域 skill 的目錄名，任何 consumer 都可能有一份
+  #   `_notion-<consumer-x>-board` 等       全域 skill 的目錄名，只放行 sanitize 產生的
+  #                                       placeholder label（`<consumer-*>`／`<client-*>`）。
+  #                                       真名出現在 `_notion-…-board` 路徑仍要被 hash
+  #                                       命中擋下，NEVER 用含 `-` 的貪婪 class 連名
+  #                                       帶姓剝掉（那會放掉 `_notion-a-board-<真名>-board`
+  #                                       這種真名藏在目錄名中段的洩漏）。
   #   `yudefine/nuxt-supabase-starter`      發佈本 starter 的 GitHub org + repo，正當引用
   # 用 tr 而非 ${blob,,}：後者是 bash 4+ 專屬，macOS 內建 bash 3.2 會 bad substitution，
   # 而本檔另外三處小寫化本來就走 tr。
   sanitized="$(printf '%s\n%s' "${path}" "${blob}" | tr '[:upper:]' '[:lower:]')"
-  sanitized="$(printf '%s' "${sanitized}" | sed -E 's/_notion-[a-z0-9._<>-]+-board//g')"
+  sanitized="$(printf '%s' "${sanitized}" | sed -E 's/_notion-<(consumer|client)-[a-z0-9]+>-board//g')"
   sanitized="${sanitized//yudefine\/nuxt-supabase-starter/}"
 
   # 邊界刻意只把英數算成識別字——`-` 與 `_` 都要當分隔字元，這與 clade sanitizeText 的
