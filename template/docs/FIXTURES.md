@@ -10,17 +10,17 @@
 
 | Email               | ID（UUID 前段） | Role  | 密碼          |
 | ------------------- | --------------- | ----- | ------------- |
-| `admin@example.com` | `a1111111-...`  | admin | `password123` |
-| `user1@example.com` | `b2222222-...`  | user  | `password123` |
-| `user2@example.com` | `c3333333-...`  | user  | `password123` |
+| `admin@example.com` | `11111111-...`  | admin | `password123` |
+| `user1@example.com` | `22222222-...`  | user  | `password123` |
+| `user2@example.com` | `33333333-...`  | user  | `password123` |
 
 ### Profiles（seed.sql 第 89–94 行）
 
 | ID（UUID 前段） | display_name | role  |
 | --------------- | ------------ | ----- |
-| `a1111111-...`  | 管理員       | admin |
-| `b2222222-...`  | 測試使用者一 | user  |
-| `c3333333-...`  | 測試使用者二 | user  |
+| `11111111-...`  | 管理員       | admin |
+| `22222222-...`  | 測試使用者一 | user  |
+| `33333333-...`  | 測試使用者二 | user  |
 
 > 完整 UUID：見 `template/supabase/seed.sql` 各 INSERT 區塊的 id 欄位。密碼以 `crypt('password123', gen_salt('bf'))` 儲存，登入時填明文 `password123`。
 

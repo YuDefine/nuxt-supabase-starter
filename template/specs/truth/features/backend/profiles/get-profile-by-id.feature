@@ -1,7 +1,6 @@
-@unverified
 Feature: 依 id 取得單筆 Profile
   # 從程式碼逆向。x-source: server/api/v1/profiles/[id].get.ts:27-76（operationId getProfileById）
-  # 整支 feature 標 @unverified：目前沒有 Gherkin runner（specs/truth/techstack.md § 測試）。
+  # 由 pnpm test:bdd（SpecFormula + Cucumber）執行；step 實作見 features/steps/profiles.steps.ts。
   # 既有 Vitest 對應：test/unit/server/api/v1/profiles/[id].get.test.ts、observability.test.ts（mock，非 wire）。
 
   Background:
@@ -20,32 +19,34 @@ Feature: 依 id 取得單筆 Profile
 
   Rule: admin 可以讀任意 profile
 
-    # [need clarification] Q-profiles-9 session 沒有角色機制，此 Example 的 admin Given 在現有程式碼下無法讓 session 取得 admin（requireRole／[id].get.ts 會判 403／404）。
+    # TD-026 D3：admin 判定讀 DB profiles.role（<管理員甲> 列的 role=admin），
+    # session 不攜帶也不被信任。
     Example: admin 讀別人
       Given 呼叫者是使用者 "<管理員甲>"，角色為 "admin"
       When 呼叫 GET "/api/v1/profiles/<使用者甲>"
       Then 回應狀態碼為 200
       And 回應 data 的 "display_name" 為 "測試使用者一"
 
-  Rule: 非本人且非 admin 回 404 而不是 403，且不查資料庫
+  Rule: 非本人且非 admin 回 404 而不是 403，且不查目標列
 
+    # TD-026 D3：授權的角色查詢（select=role）是允許的；斷言的是「目標資料列
+    # 沒有在授權失敗前被讀出」。
     Example: 一般使用者讀別人
       Given 呼叫者是使用者 "<使用者甲>"，角色為 "member"
       When 呼叫 GET "/api/v1/profiles/<管理員甲>"
       Then 回應狀態碼為 404
       And 回應錯誤訊息為 "找不到指定的 Profile"
-      And profiles 資料表沒有被查詢
+      And profiles 資料表的資料列沒有被讀取
 
   Rule: 不存在的 profile 與無權限的 profile 對外不可區分
 
-    # [need clarification] Q-profiles-9 session 沒有角色機制，此 Example 的 admin Given 在現有程式碼下無法讓 session 取得 admin（requireRole／[id].get.ts 會判 403／404）。
     Example: admin 讀不存在的 id
       Given 資料庫中沒有 profile "<不存在者>"
       And 呼叫者是使用者 "<管理員甲>"，角色為 "admin"
       When 呼叫 GET "/api/v1/profiles/<不存在者>"
       Then 回應狀態碼為 404
       And 回應錯誤訊息為 "找不到指定的 Profile"
-      And 回應錯誤的 data 含 why 與 fix
+      And 回應不含 PostgREST 診斷欄位
 
   Rule: 未登入回 401
 
@@ -63,19 +64,6 @@ Feature: 依 id 取得單筆 Profile
       Then 回應狀態碼為 400
       And 回應錯誤訊息為 "路由參數驗證失敗"
 
-  Rule: 出廠種子使用者的 id 無法通過 UUID 驗證（現況鎖定，非期望行為）
-    # [need clarification] Q-profiles-1 supabase/seed.sql 的 a1111111-1111-1111-1111-111111111111
-    #   不符合 zod 4 的 uuid（第三、四組的版本與變體位元不合 RFC 4122）；
-    #   shared/schemas/profiles.ts:37 的 profileIdParamSchema 因此回 400。實測 zod 4.3.6 的 safeParse 回 false。
-    # [need clarification] Q-profiles-8 字面 UUID 無法經 dev-login 取得 session（id 由 Better Auth 指派），此 Example 的 Given 在現有機制下無法實作。
-
-    # [need clarification] Q-profiles-9 session 沒有角色機制，此 Example 的 admin Given 在現有程式碼下無法讓 session 取得 admin（requireRole／[id].get.ts 會判 403／404）。
-    Example: 用種子 id 查詢
-      Given 呼叫者是使用者 "a1111111-1111-1111-1111-111111111111"，角色為 "admin"
-      When 呼叫 GET "/api/v1/profiles/a1111111-1111-1111-1111-111111111111"
-      Then 回應狀態碼為 400
-      And 回應錯誤訊息為 "路由參數驗證失敗"
-
   Rule: 資料庫讀取失敗回 500
 
     Example: 讀取 profiles 失敗
@@ -84,4 +72,4 @@ Feature: 依 id 取得單筆 Profile
       When 呼叫 GET "/api/v1/profiles/<使用者甲>"
       Then 回應狀態碼為 500
       And 回應錯誤訊息為 "查詢失敗，請稍後再試"
-      And 回應錯誤的 data 含 why 與 fix
+      And 回應不含 PostgREST 診斷欄位

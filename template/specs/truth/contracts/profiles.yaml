@@ -1,11 +1,8 @@
-openapi: 3.1.0
-info:
-  title: profiles 模組合約（逆向基準線）
-  version: 0.0.0-baseline
-servers:
-  - url: http://localhost:3000
-tags:
-  - name: profiles
+# profiles 模組合約片段（逆向基準線）——由 openapi.yaml 的 paths $ref 引入。
+# 刻意不帶 openapi:/info:/servers:/tags: 頂層欄位：SpecFormula 的 ApiSpecReader
+# 會把目錄裡每個帶 openapi 欄位的 YAML 當成獨立 spec 合併，帶了會造成
+# operation 重複（SPEC_API_OPERATION_DUPLICATE）。本檔單獨存在時是
+# contract fragment，完整 spec 入口一律走 openapi.yaml。
 paths:
   /api/v1/profiles:
     get:

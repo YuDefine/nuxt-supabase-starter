@@ -14,6 +14,7 @@ import {
   type ProfileListResponse,
 } from '#shared/schemas/profiles'
 import { requireRole, createPaginatedResponse } from '../../../utils/api-response'
+import { sanitizePostgrestSearch } from '../../../utils/postgrest'
 import { PROFILE_SELECT_FIELDS } from '../../../utils/profile-fields'
 import { validateQuery } from '../../../utils/validation'
 import { getAuthedSupabase } from '../../../utils/supabase'
@@ -21,8 +22,8 @@ import { getAuthedSupabase } from '../../../utils/supabase'
 export default defineEventHandler(async (event): Promise<ProfileListResponse> => {
   const log = useLogger(event)
   log.set({ operation: 'profiles.list' })
-  // 權限檢查：僅 admin 可查看列表
-  requireRole(event, ['admin'])
+  // 權限檢查：僅 admin 可查看列表（TD-026 D3：角色以 DB profiles.role 為準）
+  await requireRole(event, ['admin'])
 
   // 驗證查詢參數
   const query = validateQuery(getQuery(event), profileListQuerySchema)
@@ -36,10 +37,11 @@ export default defineEventHandler(async (event): Promise<ProfileListResponse> =>
 
   let dataQuery = client.from('profiles').select(PROFILE_SELECT_FIELDS)
 
-  // 搜尋條件
-  if (search) {
-    countQuery = countQuery.ilike('display_name', `%${search}%`)
-    dataQuery = dataQuery.ilike('display_name', `%${search}%`)
+  // 搜尋條件（TD-026 D2：先移除 PostgREST/ILIKE 特殊字元，防止 `%`、`_` 等被當萬用字元）
+  const sanitizedSearch = search ? sanitizePostgrestSearch(search) : ''
+  if (sanitizedSearch) {
+    countQuery = countQuery.ilike('display_name', `%${sanitizedSearch}%`)
+    dataQuery = dataQuery.ilike('display_name', `%${sanitizedSearch}%`)
   }
 
   // 分頁

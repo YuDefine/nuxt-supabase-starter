@@ -11,6 +11,8 @@ vi.mock('h3', async (importOriginal) => ({
 const mocks = vi.hoisted(() => ({
   requireAuth: vi.fn(),
   requireRole: vi.fn(),
+  // TD-026 D3：非本人存取的 admin 判定改走 getDbRole；測試預設 DB 角色為 user
+  getDbRole: vi.fn(async () => 'user'),
   getAuthedSupabase: vi.fn(),
   validateQuery: vi.fn(),
   validateParam: vi.fn(),
@@ -19,6 +21,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../../../../../server/utils/api-response', () => ({
   requireAuth: mocks.requireAuth,
   requireRole: mocks.requireRole,
+  getDbRole: mocks.getDbRole,
   createPaginatedResponse: (data: unknown, pagination: unknown) => ({ data, pagination }),
 }))
 vi.mock('../../../../../../server/utils/supabase', () => ({

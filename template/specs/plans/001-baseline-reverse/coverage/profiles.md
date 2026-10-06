@@ -4,9 +4,9 @@
 
 | 盤點葉檔 | 類型 | 對應 truth | 狀態 | 備註 |
 | --- | --- | --- | --- | --- |
-| `server/api/v1/profiles/index.get.ts` | 路由 | `features/backend/profiles/list-profiles.feature`、`contracts/profiles.yaml#listProfiles` | 逆向補齊 | |
-| `server/api/v1/profiles/me.get.ts` | 路由 | `get-my-profile.feature`、`getMyProfile` | 逆向補齊 | |
-| `server/api/v1/profiles/[id].get.ts` | 路由 | `get-profile-by-id.feature`、`getProfileById` | 逆向補齊 | |
+| `server/api/v1/profiles/index.get.ts` | 路由 | `features/backend/profiles/list-profiles.feature`、`contracts/profiles.yaml#listProfiles` | 逆向補齊 | runner 實跑通過（TD-026 D5） |
+| `server/api/v1/profiles/me.get.ts` | 路由 | `get-my-profile.feature`、`getMyProfile` | 逆向補齊 | runner 實跑通過 |
+| `server/api/v1/profiles/[id].get.ts` | 路由 | `get-profile-by-id.feature`、`getProfileById` | 逆向補齊 | runner 實跑通過 |
 | `supabase/migrations/20260313091145_create_profiles.sql` | 資料表 | `data/profiles.dbml` | 逆向補齊 | |
 | `test/unit/server/api/v1/profiles/index.get.test.ts` | 既有測試 | list-profiles | 既有覆蓋 | mock 測試，非 wire |
 | `test/unit/server/api/v1/profiles/me.get.test.ts` | 既有測試 | get-my-profile | 既有覆蓋 | 同上 |

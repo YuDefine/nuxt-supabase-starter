@@ -1,0 +1,70 @@
+# SpecFormula ISA 對應表（TD-026 D5 接線）
+#
+# 三個 reader（IsaSpecReader / EntityDdlReader / ApiSpecReader）用 node:fs 相對
+# cwd 解析路徑 —— `pnpm test:bdd` MUST 從 repo root 跑。
+#
+# ⚠️ db_type: postgresql 的連線由 features/support/environment.ts 提供，isa.yml
+#    不帶連線字串；一律指向 `supabase start` 起的本機 Postgres，NEVER hosted
+#    *.supabase.co（rules/core/specformula.md § NEVER 2）。
+
+config:
+  api:
+    resource_path: specs/truth/contracts
+    project_path: specs/truth/contracts
+    # iso | timestamp | epoch | date_only | time_only
+    time_format: iso
+
+  data:
+    permission: isolated
+    reuse: false
+    source:
+      - name: default
+        resource_path: specs/data
+        project_path: specs/data
+        db_type: postgresql
+        schema: public
+
+# ── 指令映射：Gherkin 句型 → ISA instruction_type ────────────────────────────
+# 內建六指令的標準句型。profiles 的 wire-oriented 句型（呼叫 GET、呼叫者是使用者、
+# 錯誤斷言等）由 features/steps/profiles.steps.ts 的 custom step 承接 —— 它們的
+# 語意（延遲 fixture 落地、dev-login cookie 會話、pg 故障注入）無法由內建指令表達，
+# 依 rules/core/specformula.md 走 custom step，NEVER 在這裡複寫同名句型。
+instructions:
+  - name: Time control
+    format: ^現在時間為 "(?P<time>[^"]+)"$
+    instruction_type: time_control
+
+  - name: Data preparation
+    format: ^準備一個(?P<entity>[一-鿿a-zA-Z0-9_]+), with table:$
+    instruction_type: entity_setup
+    data_format: data_table
+
+  - name: API call
+    format: ^\((?:No Actor|UID="(?P<userId>\$[\w.]+)")\) (?P<summary>.+?), call table:$
+    instruction_type: api_call
+    data_format: data_table
+
+  - name: API call (JSON)
+    format: ^\((?:No Actor|UID="(?P<userId>\$[\w.]+)")\) (?P<summary>.+?), call JSON:$
+    instruction_type: api_call
+    data_format: json
+
+  - name: Response validate
+    format: ^(?P<summary>.+?)\((?P<status_code>\d{3})\)回應,?\s*with table:$
+    instruction_type: response_validate
+    data_format: data_table
+
+  - name: Response validate (JSON)
+    format: ^(?P<summary>.+?)\((?P<status_code>\d{3})\)回應為,?\s*with JSON:$
+    instruction_type: response_validate
+    data_format: json
+
+  - name: Entity validate
+    format: ^應該存在一個(?P<entity>[一-鿿a-zA-Z0-9_]+), with table:$
+    instruction_type: entity_validate
+    data_format: data_table
+
+  - name: Entity non-existence validate
+    format: ^應該不存在一個(?P<entity>[一-鿿a-zA-Z0-9_]+), with table:$
+    instruction_type: entity_non_existence_validate
+    data_format: data_table

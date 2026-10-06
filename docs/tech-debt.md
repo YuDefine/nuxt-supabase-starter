@@ -28,7 +28,7 @@
 | TD-023 | Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback                                         | low      | done        | 2026-09-28 |
 | TD-024 | Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict`                                               | mid      | done        | 2026-09-30 |
 | TD-025 | scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅 | mid      | done        | 2026-09-29 |
-| TD-026 | aixbdd B3 逆向基準線只展開 profiles，其餘模組與 Gherkin runner 接線未做                                  | mid      | open        | 2026-10-03 |
+| TD-026 | aixbdd B3 逆向基準線只展開 profiles，其餘模組與 Gherkin runner 接線未做                                  | mid      | done        | 2026-10-03 |
 
 ### 2026-10-04 origin/main 對帳（基準 `a245b8abd`，M4 handoff-TD burn）
 
@@ -1120,7 +1120,7 @@ receipt（`src/scaffold-receipt.ts`）把磁碟上存在、但被 gitignore 擋�
 
 ## TD-026 — aixbdd B3 逆向基準線只展開 profiles，其餘模組與 Gherkin runner 接線未做
 
-**Status**: open
+**Status**: done（2026-10-05 D1–D5 落地：uuid id、search 跳脫、DB 角色、dev-login 維持不擴 id、SpecFormula+Cucumber runner 全綠 22 scenarios；其餘模組展開依 `expansion-guide.md` 為機械 follow-up）
 **Priority**: mid
 **Discovered**: 2026-10-03 — clade `W-2026-10-02-aixbdd-benchmark-standard` B3；work `W-2026-10-02-nuxt-supabase-starter-aixbdd-b3`
 **Location**: `template/specs/truth/**`、`template/specs/plans/001-baseline-reverse/`

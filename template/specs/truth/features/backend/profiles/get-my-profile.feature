@@ -1,7 +1,6 @@
-@unverified
 Feature: 取得自己的 Profile
   # 從程式碼逆向。x-source: server/api/v1/profiles/me.get.ts:17-52（operationId getMyProfile）
-  # 整支 feature 標 @unverified：目前沒有 Gherkin runner（specs/truth/techstack.md § 測試）。
+  # 由 pnpm test:bdd（SpecFormula + Cucumber）執行；step 實作見 features/steps/profiles.steps.ts。
   # 既有 Vitest 對應：test/unit/server/api/v1/profiles/me.get.test.ts（mock，非 wire）。
 
   Rule: 已登入者取得自己的 profile，回應只含固定的六個欄位
@@ -34,7 +33,7 @@ Feature: 取得自己的 Profile
       When 呼叫 GET "/api/v1/profiles/me"
       Then 回應狀態碼為 404
       And 回應錯誤訊息為 "找不到您的 Profile"
-      And 回應錯誤的 data 含 why 與 fix
+      And 回應不含 PostgREST 診斷欄位
 
   Rule: 資料庫讀取失敗回 500，且不洩漏資料庫診斷文字
 
@@ -44,4 +43,4 @@ Feature: 取得自己的 Profile
       When 呼叫 GET "/api/v1/profiles/me"
       Then 回應狀態碼為 500
       And 回應錯誤訊息為 "查詢失敗，請稍後再試"
-      And 回應錯誤的 data 含 why 與 fix
+      And 回應不含 PostgREST 診斷欄位

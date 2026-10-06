@@ -5,9 +5,11 @@
 //   ③ DBML 總覽（data-model.dbml）與聚合檔的資料表集合一致
 //   ④ feature 步驟與 dsl.md 對帳：每個步驟恰好對到一列句型；每列句型至少被一個 feature 使用；
 //      標「未實作」的句型只被 @unverified feature 使用（規約 MUST 3 ①②的 feature 端）
-//   ⑤ 每個 feature 的驗證狀態只有三種；@code-mismatch 與疑點必須掛 [need clarification] Q-…，且該 Q 在 questions.md
+//   ⑤ feature 驗證狀態：無標籤 = 由 SpecFormula runner 執行（TD-026 D5 起 `pnpm test:bdd` 是
+//      真 runner）；@unverified／@code-mismatch 仍合法但必須掛 [need clarification] Q-…，
+//      且該 Q 在 questions.md
 //   ⑥ 覆蓋矩陣：每列狀態合法，「刻意不補」附理由
-// step definition 端的對帳（規約 MUST 3 ①②③④ 的 runner 部分）要等 Gherkin runner 接線後才存在，見 coverage 的缺口列。
+// step definition 端對帳由 features/steps/profiles.steps.ts 承接（規約 MUST 3 的 runner 部分）。
 // 用法（任何 cwd）：node specs/plans/001-baseline-reverse/tools/check-truth.mjs
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
@@ -126,15 +128,14 @@ for (const f of features) {
       .join(' ')
       .match(/@[\w-]+/g) ?? [],
   )
-  // ⑤ 驗證狀態
+  // ⑤ 驗證狀態（TD-026 D5 起無標籤 = runner 會執行；@unverified 只留給句型
+  //    尚未實作、runner 無法表達的 feature）
   const status = ['@code-mismatch', '@unverified'].filter((t) => tags.has(t))
   if (status.length > 1) fail(`⑤ ${rel(f)}: @code-mismatch 與 @unverified 不可並存`)
-  if (tags.has('@code-mismatch') && !/\[need clarification\]/.test(text))
-    fail(`⑤ ${rel(f)}: @code-mismatch 缺 [need clarification] 註解`)
-  if (status.length === 0)
-    fail(
-      `⑤ ${rel(f)}: 沒有 runner 執行過，不可無標籤（本 package 的 feature 一律 @unverified 或 @code-mismatch）`,
-    )
+  if (status.length > 0 && !/\[need clarification\]/.test(text))
+    fail(`⑤ ${rel(f)}: @${status[0].slice(1)} 缺 [need clarification] 註解`)
+  if (tags.has('@unverified') && /@code-mismatch/.test(text))
+    fail(`⑤ ${rel(f)}: @unverified 內文不得再掛 @code-mismatch`)
   for (const q of new Set(text.match(/Q-[a-z0-9-]+-\d+/g) ?? [])) {
     if (!questionsText.includes(q)) fail(`⑤ ${rel(f)}: ${q} 不在 questions.md`)
   }

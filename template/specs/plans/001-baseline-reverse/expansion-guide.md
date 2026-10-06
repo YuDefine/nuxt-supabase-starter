@@ -12,9 +12,9 @@
 
 ## 待決（不由本 package 決定）
 
-1. **BDD runner**：backend 與 frontend 各用哪個 Gherkin runner（`.clade/manifest.json` 已宣告 `specformula`，但 repo 內沒有 `isa.yml`、沒有 `test:bdd`）。由 `/technical-research` 三題必問由使用者拍板。
-2. runner 選定後才能做 SOP 步驟 13：runner 讀 truth（B1）、預設排除 `@unverified`、`dsl.md` ↔ step 雙向對帳（B4）。接線前 `check-truth.mjs` 只覆蓋 feature↔`dsl.md` 這一半。
-3. Q-profiles-1／3／5／6／8 的裁決（見 `questions.md`）。
+1. ~~**BDD runner**~~ **已決（TD-026 D5，2026-10-05）**：backend 走 vendored SpecFormula + Cucumber.js（`pnpm test:bdd`）；`isa.yml`、`cucumber.cjs`、`features/support/environment.ts`、`features/steps/profiles.steps.ts` 已接線，22 scenarios 全綠。frontend 的 Gherkin runner 仍未接線。
+2. ~~runner 選定後才能做 SOP 步驟 13~~ 已做：runner 讀 truth（`cucumber.cjs` `paths` 直指 `specs/truth/features/backend/**`）、`tags: 'not @unverified and not @slow'`、`dsl.md` ↔ step 由 `check-truth.mjs` ④＋ `features/steps/` 實作對帳。
+3. ~~Q-profiles-1／3／5／6／8 的裁決~~ 已全部裁決並結清（見 `questions.md`；Q-profiles-2 留待寫入 endpoint 實作）。
 
 ## 展開的固定決策
 
