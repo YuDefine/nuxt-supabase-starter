@@ -3,7 +3,7 @@ description: Vitest multi-project test script 設計規範——禁止寫死 pat
 paths: ['package.json', 'vitest.config.ts', 'vite.config.ts']
 ---
 <!-- Clade native rule; source: rules/core/test-scripts.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Test Scripts
 
@@ -52,9 +52,14 @@ vitest 會依 `vitest.config.ts` 內各 project 的 `include` / `exclude` 自動
 直呼 `vp test run` 若未經 script 受閘，須在 wrapper 可用時改由 `clade-gate run test -- vp test run <path>` 執行。
 小範圍定點測試會走 light lane；wrapper 不存在的 CI／cloud 環境保持原本測試入口可執行，
 不因 Bash admission hook 缺少 wrapper 而硬擋。
-對 `node --test`／`vitest run` 的直呼，明確列出 1–5 個 `.test.*`／`.spec.*` 檔案仍屬
-定點測試；`2>&1` 等重導向及 `--reporter=dot`、`--test-name-pattern` 旗標不算測試檔。
-未指定檔案或列出超過 5 個檔案才按整套測試處理；resource-patrol 用相同的檔數門檻。
+`node --test`／`vitest run` 直呼一律經 `clade-gate run test -- <命令>`：明確列出 1–5 個
+`.test.*`／`.spec.*` 檔案由 gate 分到 light slot，不排 heavy；`2>&1` 等重導向及
+`--reporter=dot`、`--test-name-pattern` 旗標不算測試檔。未指定檔案或列出超過 5 個檔案按整套測試處理；
+resource-patrol 用相同的檔數門檻。wrapper 不存在的 CI／cloud 環境照舊可直跑。
+被派出的 worker（`CLADE_DISPATCH_ID` 非空）跑不帶 lane 的整套（`pnpm test`、`test:full`／`--lane=full`、
+`clade-gate run test -- <未列檔的 runner>`）會被擋；確要跑加 `CLADE_ALLOW_FULL_SUITE=1`
+（命令前綴、同一命令串 `export`、或 session 啟動環境——前一個 Bash call 裡 `export` 只有 gate 看得到、
+admission hook 看不到，仍會被擋）並在回報寫理由。
 
 ## NEVER
 
@@ -117,3 +122,5 @@ Consumer 在 `registry/consumers.json` 標 `improvement_loop_enabled: true` 時�
 ```
 
 **改 `package.json` 的 test/lint/typecheck script 前自查一句**：這行原本有 `.clade/bin/clade-gate run` 前綴嗎？有 → 改完它**必須**還在。
+
+機械檢查（本檔 `paths:` 命中時適用）：`node scripts/audit-test-scripts.ts` 掃 `package.json`／`vitest.config.ts` 的 test script 與 project 宣告一致性——改完跑一遍再走。

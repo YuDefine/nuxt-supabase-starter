@@ -15,7 +15,7 @@
  * 已知 runtime 詞彙表。新增 runtime **MUST** 只改這裡 —— 消費端（`VALID_EXECUTORS`
  * 等）一律從本表推導，NEVER 各自維護一份字串集合。
  */
-export const KNOWN_RUNTIMES = ['claude', 'codex', 'opencode', 'copilot', 'cursor'] as const
+export const KNOWN_RUNTIMES = ['claude', 'codex', 'opencode', 'copilot'] as const
 
 export type KnownRuntime = (typeof KNOWN_RUNTIMES)[number]
 export type Runtime = KnownRuntime | 'unknown'
@@ -37,7 +37,6 @@ const SESSION_PROBES: ReadonlyArray<readonly [KnownRuntime, readonly EnvKey[]]> 
   ['codex', ['CODEX_SESSION_ID', 'CODEX_THREAD_ID']],
   ['opencode', ['OPENCODE_SESSION_ID', 'OPENCODE_AGENT_ID']],
   ['copilot', ['COPILOT_AGENT_ID']],
-  ['cursor', ['CURSOR_SESSION_ID', 'CURSOR_CONVERSATION_ID']],
 ]
 
 const WEAK_PROBES: ReadonlyArray<readonly [KnownRuntime, readonly EnvKey[]]> = [
@@ -45,7 +44,6 @@ const WEAK_PROBES: ReadonlyArray<readonly [KnownRuntime, readonly EnvKey[]]> = [
   ['codex', ['CODEX_AGENT_NAME', 'CODEX_HOME']],
   ['opencode', ['OPENCODE_HOME']],
   ['copilot', ['GITHUB_COPILOT_CHAT']],
-  ['cursor', ['CURSOR_TRACE_ID', 'CURSOR_AGENT']],
 ]
 
 /** Session id 優先序只在已選定 runtime 內生效；禁止跨 runtime fallback。 */
@@ -54,7 +52,6 @@ const SESSION_ID_KEYS: Readonly<Record<KnownRuntime, readonly EnvKey[]>> = {
   codex: ['CODEX_SESSION_ID', 'CODEX_THREAD_ID'],
   opencode: ['OPENCODE_SESSION_ID', 'OPENCODE_AGENT_ID'],
   copilot: ['COPILOT_AGENT_ID'],
-  cursor: ['CURSOR_SESSION_ID', 'CURSOR_CONVERSATION_ID'],
 }
 
 function isKnown(v: string): v is KnownRuntime {

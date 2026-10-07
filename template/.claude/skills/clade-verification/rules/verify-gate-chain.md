@@ -3,7 +3,7 @@ description: 自主迴圈的驗證閘門鏈與停止條件——每個 iterate-u
 paths: ['**/*.ts', '**/*.vue', '**/*.tsx', 'tasks/**', 'specs/**', 'package.json', 'packages/*/package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']
 ---
 <!-- Clade native rule; source: rules/core/verify-gate-chain.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Verify Gate Chain（自主迴圈驗證標準）
 
@@ -26,7 +26,7 @@ Gate chain 是一組**有序、確定性、機器可判定**的驗證指令。�
 
 **PASS = L0–L2 全 exit 0。** L3 為 SHOULD（dev server 未起時 skip，不算 FAIL）。
 
-Claude Code／Codex／Cursor 每個產品入口分別確認具名驗證 handler 是否安裝、啟用並實際執行。只有 generic hook adapter 或設定檔時，修改後顯式執行 consumer 定義的 L0；phase 結束仍執行完整 L0–L2。沒有命令執行能力或拿不到 exit/result 證據時，該 gate 保持未驗證。
+Claude Code／Codex 每個產品入口分別確認具名驗證 handler 是否安裝、啟用並實際執行。只有 generic hook adapter 或設定檔時，修改後顯式執行 consumer 定義的 L0；phase 結束仍執行完整 L0–L2。沒有命令執行能力或拿不到 exit/result 證據時，該 gate 保持未驗證。
 
 ### Consumer verify-commands.md 範本
 

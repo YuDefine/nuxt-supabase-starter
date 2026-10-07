@@ -17,7 +17,7 @@
 # 偵測邏輯共用 vendor/scripts/checks/nuxt-ui-mixed-slot-detect.ts。
 #
 # 規約來源：
-#   - pitfall : docs/pitfalls/2026-07-06-nuxt-ui-named-slot-default-fallback-shadowing.md（TD-236）
+#   - pitfall : [[pitfall-nuxt-ui-named-slot-default-fallback-shadowing]]（TD-236）
 #
 # 由 ~/clade vendor/scripts/pre-commit/ 散播，請勿直接編輯 consumer 副本。
 

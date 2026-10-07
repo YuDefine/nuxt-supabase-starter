@@ -1,6 +1,6 @@
 <!-- Clade native rule; source: rules/core/agent-self-verification.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 ## Runtime adapter boundary
 
@@ -97,7 +97,7 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 > | 6 | worktree 內要先 `grep -i '<VAR>' .env.local` 確認，不要假設缺失就寫 `blocked on <VAR>` |
 > | 7 | capture 與 verification 要在同一個 operation round；驗證失敗 = 截圖作廢，修根因後重拍 |
 > | 8 | `[review:ui]` 既有 `[x]` 無 agent 自拍 evidence 一律視為 **false-green**，要無視 checkbox 自拍自驗 |
-> | 9 | commit 觸及 `.vue` / `.tsx` / `.jsx` / `.css` / `.scss` 後該 change **全部** UI 截圖視為 stale，要跑 `audit-screenshot-staleness.ts` 到 0 stale |
+> | 9 | change 改動 `.vue` / `.tsx` / `.jsx` / `.css` / `.scss` 後該 change **全部** UI 截圖視為 stale，要全部重拍（mtime 早於本 change UI 檔 mtime 的截圖逐張核對，無機械 audit） |
 > | 15 | 收尾前要跑 `flow plan check-close <work_id>` 取得 exit 0，不要逐項查過就當齊全，不要為了變綠改 checkbox 或 feature 檔 |
 
 11. **Negative search 不成立為證據（hard rule）**：下「零命中 / 不存在 / 只有 N 個」的結論前，要先用一個已知會命中的樣本驗過 pattern（known-positive control），並在結論裡寫出「此 pattern 對 `<已知樣本>` 命中」——寫不出來，零命中就不是證據。不要把「我 grep 過了」當成 absence 的證明：pattern 寫錯、資料形狀誤判、假設偷偷收窄範圍，輸出都是零命中。有 structured output（`--json` / `--format json`）時優先用它取代文字 grep；更前一步是先問「有沒有不需要數的判準」（例：gate 已設 `severity: CRITICAL,HIGH`，則輸出的每一條依定義都是 HIGH，根本不必數）。（per [[pitfall-narrow-grep-absence-treated-as-proof]]）

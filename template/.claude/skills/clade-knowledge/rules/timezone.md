@@ -3,7 +3,7 @@ description: 動到 instant 欄位、SQL 日期計算、Intl / toLocaleString �
 paths: ['**/*.sql', 'supabase/**', 'server/**', 'app/**', 'packages/**/server/**', 'packages/**/app/**', 'scripts/**', 'infrastructure/**']
 ---
 <!-- Clade native rule; source: rules/core/timezone.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Timezone 規約
 

@@ -11,7 +11,7 @@
 | `COMMIT_REPO` | 本次 ceremony 操作的 checkout 絕對路徑；不沿用其他 checkout 的 `CLAUDE_PROJECT_DIR` |
 | `COMMIT_RESOURCE_DIR` | 隨附資源實際所在目錄，由下方「執行依賴」的 resolver 取得；**NEVER** 直接假設等於 `COMMIT_SKILL_DIR` |
 | `CLADE_WORK_ID` | 這件工作的既有 flow work id，沿用 [[flow-work-tracking]] 的工作歸屬；不為每個 gate 另開一件工作 |
-| `COMMIT_RUNTIME` | 當前執行入口：`claude`、`codex`、`cursor`、`grok` 或 `devin`，不是模型名稱 |
+| `COMMIT_RUNTIME` | 當前執行入口：`claude`、`codex`、`grok` 或 `devin`，不是模型名稱 |
 | `COMMIT_SESSION_ID` | 當前原生 session 的確切識別；由該 runtime 的 session context／receipt 取得，不拿父 session、pane title 或模型名稱代填 |
 | `COMMIT_OWNER_TOKEN` | 本次成功 acquire receipt 的 owner token；首次 acquire 前尚無此值 |
 
@@ -23,7 +23,7 @@
 
 原生投影隨本 skill 交付 `scripts/commit-lock.mjs`、`scripts/0a-metrics.mjs`、`scripts/codex-review-safe.sh`、`scripts/claude-review-safe.sh`、`scripts/lib/review-common.sh`、`scripts/lib/lockfile-dep-summary.mjs`（review-common 的 lockfile 依賴差異摘要解析器）、`scripts/lib/projection-exemption.ts`（review-common 的 pinned release 投影輸出豁免驗證器）、`scripts/lib/review-verdict.ts`（ledger／coordinator 共用狀態判定）、`scripts/lib/review-subagent.sh`、`scripts/lib/review-subagent-transcript.mjs`（後兩支是 `claude-review-safe.sh` subagent carrier 的 `prepare`／`finalize` 依賴）與 `rules/` 下的兩份 review 政策。執行 Node script 使用 `node`，shell wrapper 使用 `bash`；交付檔不依賴 executable bit。
 
-資源只由原生投影（`.claude/`、`.agents/`、`.cursor/` 下的 `skills/commit/`）交付，三份 bytes 相同。從 hub-core plugin 載入的同名 skill 目錄**不帶**這些資源，所以 `COMMIT_SKILL_DIR` 不一定就是資源所在。進 Step 0-Lock 前先跑一次 resolver，把印出的絕對路徑當成 `COMMIT_RESOURCE_DIR` 的實值；下文 `scripts/…` 指令與 `rules/…` 連結都相對於它。
+資源只由原生投影（`.claude/`、`.agents/` 下的 `skills/commit/`）交付，兩份 bytes 相同。從 hub-core plugin 載入的同名 skill 目錄**不帶**這些資源，所以 `COMMIT_SKILL_DIR` 不一定就是資源所在。進 Step 0-Lock 前先跑一次 resolver，把印出的絕對路徑當成 `COMMIT_RESOURCE_DIR` 的實值；下文 `scripts/…` 指令與 `rules/…` 連結都相對於它。
 
 <!-- commit-resource-resolver:start -->
 ```bash
@@ -31,7 +31,7 @@
   : "${COMMIT_REPO:?COMMIT_REPO is not set (absolute path of the checkout this ceremony operates on)}"
   candidates=()
   [ -n "${COMMIT_SKILL_DIR:-}" ] && candidates+=("$COMMIT_SKILL_DIR")
-  for runtime in claude agents cursor; do
+  for runtime in claude agents; do
     candidates+=("$COMMIT_REPO/.$runtime/skills/commit")
   done
   seen=
@@ -58,11 +58,11 @@
 ```
 <!-- commit-resource-resolver:end -->
 
-候選依序是 `COMMIT_SKILL_DIR`（有設才算）與 `.claude`／`.agents`／`.cursor` 三份原生投影，取**第一個資源齊全**的；某份投影過期缺檔只在 stderr 印一行 `incomplete`，不擋住後面完整的那份。原生目錄名刻意寫成 `.$runtime/skills/commit`：Codex／Cursor 投影會把 `.claude` 開頭的 skills 路徑改寫成自家目錄，寫死字面路徑會讓那兩份投影裡的 `.claude` 候選消失。
+候選依序是 `COMMIT_SKILL_DIR`（有設才算）與 `.claude`／`.agents` 兩份原生投影，取**第一個資源齊全**的；某份投影過期缺檔只在 stderr 印一行 `incomplete`，不擋住後面完整的那份。原生目錄名刻意寫成 `.$runtime/skills/commit`：Codex 投影會把 `.claude` 開頭的 skills 路徑改寫成自家目錄，寫死字面路徑會讓該投影裡的 `.claude` 候選消失。
 
 非 0 退出就是投影缺口（沒有任何一份齊全，或 `COMMIT_REPO` 未設定）：停在 Step 0-Lock 回報 stderr 那一行，**NEVER** 改用 `capabilities/`、plugin cache 或其他 checkout 的檔案湊數。
 
-這些資源不包含整套中央工具鏈。選用 Pi review wrapper 前依 runner-safety 確認中央 runner、工具與認證；各 gate 引用的中央 security、Spectra、Notion、BP helper 則在該 gate 觸發時確認 `CLADE_HOME` 與實際 helper。資源存在只證明交付，不證明前置依賴可用或該 gate 已通過。
+這些資源不包含整套中央工具鏈。選用 Pi review wrapper 前依 runner-safety 確認中央 runner、工具與認證；各 gate 引用的中央 security、Notion、BP helper 則在該 gate 觸發時確認 `CLADE_HOME` 與實際 helper。資源存在只證明交付，不證明前置依賴可用或該 gate 已通過。
 
 ## 取得與續持
 
@@ -138,4 +138,4 @@ node "$COMMIT_RESOURCE_DIR/scripts/commit-lock.mjs" recover \
 
 每次 lifecycle receipt 記錄動作、checkout、work／runtime／session、結果與時間。每個 gate 另留來源／diff、實際 invocation、退出狀態及輸出位置；lock receipt 不代替 gate receipt。
 
-三端共用 CLI 的 fixture 通過只證明協定。各產品入口的原生身分取得、背景等待、詢問、通知與中斷接續，仍須逐入口留實際證據；缺證據列未驗，不由另一產品的成功外推。
+兩端共用 CLI 的 fixture 通過只證明協定。各產品入口的原生身分取得、背景等待、詢問、通知與中斷接續，仍須逐入口留實際證據；缺證據列未驗，不由另一產品的成功外推。

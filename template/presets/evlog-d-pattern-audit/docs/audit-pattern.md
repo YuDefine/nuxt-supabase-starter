@@ -17,7 +17,7 @@ DB-only 缺少 production monitoring stream，事件進 DB 後 ops 不一定看�
 ## 安裝 SOP
 
 1. 複製 `migration.sql` 到 `supabase/migrations/<timestamp>_create_audit_logs.sql`。
-2. 視 consumer 調整 schema：multi-tenant 必填 `tenant_id` 並使用 per-tenant chain；single-tenant 可移除 `tenant_id` 與 tenant RLS；<consumer-b> 可保留 `<consumer-b>.operation_logs` 命名但需補齊 D-pattern 欄位。
+2. 視 consumer 調整 schema：multi-tenant 必填 `tenant_id` 並使用 per-tenant chain；single-tenant 可移除 `tenant_id` 與 tenant RLS；TDMS 可保留 `tdms.operation_logs` 命名但需補齊 D-pattern 欄位。
 3. 複製 `helper.ts` 到 `server/utils/audit.ts`。
 4. 複製 `drain.ts` 到 `server/plugins/evlog-drain.ts`。
 5. 確認 consumer 已安裝並設定 evlog / Supabase server client。

@@ -8,7 +8,7 @@
 
 T3 主要 drain — `@evlog/nuxthub` Nuxt module 把 wide events 寫進 NuxtHub D1，自帶 cron retention。
 
-Reference: `docs/evlog-master-plan.md` § 3 + § 8.4 (<consumer-c>)
+Reference: `docs/evlog-master-plan.md` § 3 + § 8.4 (agentic-rag)
 
 **重要差異**：`@evlog/nuxthub` 是 **Nuxt module**（不是 import 一個 `createNuxtHubDrain` function）。安裝後：
 

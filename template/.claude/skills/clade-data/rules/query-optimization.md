@@ -3,7 +3,7 @@ description: 查詢優化、EXPLAIN、index 設計與 RLS 效能測量
 paths: ['supabase/migrations/**/*.sql', 'server/api/**/*.ts', 'packages/*/server/api/**/*.ts']
 ---
 <!-- Clade native rule; source: rules/modules/db-schema/supabase/query-optimization.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Query Optimization
 

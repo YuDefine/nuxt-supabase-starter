@@ -32,6 +32,8 @@
  * clade and the parser below only needs the `on:` block subset the fleet uses.
  */
 
+import { spawnSync } from 'node:child_process'
+
 export type DeployTriggerClass = 'push-main' | 'tag-v' | 'pr-merge' | 'manual'
 
 export interface WorkflowClassification {
@@ -627,6 +629,141 @@ export function deriveMainPushScope(
   if (productionMain) return 'production'
   if (stagingMain) return 'staging-only'
   return 'none'
+}
+
+/** deploy-trigger 判定用的同步 git runner（測試注入）。 */
+export type DeployScopeGit = (
+  cwd: string,
+  args: string[],
+) => { status: number | null; stdout: string }
+
+export const defaultDeployGit: DeployScopeGit = (cwd, args) => {
+  const r = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', timeout: 120_000 })
+  return { status: r.status, stdout: r.stdout ?? '' }
+}
+
+/** `git ls-tree <ref> -- .github/workflows`＋`git show <ref>:<檔>`；ref 讀不到 → null。 */
+function workflowsAtRef(
+  repoDir: string,
+  ref: string,
+  git: DeployScopeGit,
+): { file: string; raw: string }[] | null {
+  const list = git(repoDir, ['ls-tree', '-r', '--name-only', ref, '--', '.github/workflows'])
+  if (list.status !== 0) return null
+  const files: { file: string; raw: string }[] = []
+  for (const path of list.stdout
+    .split('\n')
+    .map((x) => x.trim())
+    .filter((x) => /\.ya?ml$/u.test(x))) {
+    const raw = git(repoDir, ['show', `${ref}:${path}`])
+    if (raw.status === 0) files.push({ file: path.split('/').pop() ?? path, raw: raw.stdout })
+  }
+  return files
+}
+
+/** `git ls-remote origin <ref>` 的 tip oid；多行時只認 ref 完全相符那行（`refs/heads/a` 會命中 `refs/heads/a/b` 的前綴）。 */
+function remoteRefTip(repoDir: string, ref: string, git: DeployScopeGit): string | null {
+  const r = git(repoDir, ['ls-remote', 'origin', ref])
+  if (r.status !== 0) return null
+  return (
+    r.stdout
+      .split('\n')
+      .map((l) => l.trim().split(/\s+/u))
+      .find(
+        ([oid, name]) => name === ref && typeof oid === 'string' && /^[0-9a-f]{40}$/u.test(oid),
+      )?.[0] ?? null
+  )
+}
+
+/** `mergedTreeWorkflows` 讀不到合併樹 workflows 的原因分類（呼叫端訊息用）。 */
+export type MergedTreeFailure =
+  /** merge ref 過時（base parent 停在舊 tip）且本機 merge-tree 算不出乾淨的合併樹（衝突或失敗）。 */
+  | 'stale-merge-failed'
+  /** merge ref／base tip／head 讀不到、head 不在 merge parents，或合併樹的 .github/workflows 讀不到。 */
+  | 'unreadable'
+
+export interface MergedTreeWorkflows {
+  files: { file: string; raw: string }[] | null
+  /** files 為 null 時的原因；讀到時為 null。 */
+  failure: MergedTreeFailure | null
+}
+
+/**
+ * merge ref 過時時的本機後備：算「head 合進現在的 base tip」的真實合併樹。
+ * `merge-tree --write-tree` 只把新樹寫進物件庫，不動 checkout 的 index／refs／working tree。
+ * 物件已在就不 fetch（`cat-file -e` 判存在）；衝突（exit≠0）或任何一步失敗 → null。
+ */
+function localMergedTreeOid(
+  repoDir: string,
+  pr: number,
+  headOid: string,
+  baseRef: string,
+  baseTip: string,
+  git: DeployScopeGit,
+): string | null {
+  const present = (oid: string, refspec: string) =>
+    git(repoDir, ['cat-file', '-e', oid]).status === 0 ||
+    (git(repoDir, ['fetch', '-q', 'origin', refspec]).status === 0 &&
+      git(repoDir, ['cat-file', '-e', oid]).status === 0)
+  if (!present(baseTip, `refs/heads/${baseRef}`) || !present(headOid, `refs/pull/${pr}/head`))
+    return null
+  const mt = git(repoDir, ['merge-tree', '--write-tree', baseTip, headOid])
+  const treeOid = mt.stdout.split('\n', 1)[0]?.trim()
+  if (mt.status !== 0 || !treeOid || !/^[0-9a-f]{40}$/u.test(treeOid)) return null
+  return treeOid
+}
+
+/**
+ * 合進 main 之後的 workflows：優先認 GitHub 算好的合併 commit `refs/pull/<n>/merge`
+ * （內容＝base＋head 的合併樹），parents 要含本 head、且非 head 的 parent 要等於 base branch
+ * 現在的 tip（`git ls-remote origin refs/heads/<base>`）才算新鮮——GitHub 對 test-merge 是懶算的，
+ * base 前移後舊 merge ref 還在，讀到的是舊樹、看不出後來才落地的 production push:main deploy。
+ * fetch 後立刻把 FETCH_HEAD 解析成固定 SHA、之後只讀那個 SHA——同 repo 的其他 fetch 會改寫 FETCH_HEAD。
+ * merge ref 的 base parent 對不上 base 現在的 tip（過時）→ 不直接放棄，改用本機
+ * `merge-tree --write-tree <baseTip> <headOid>` 算出的合併樹（`localMergedTreeOid`）。
+ * 讀不到 → `{ files: null, failure }`（→ 'unknown' 維持人工）：NEVER 退回
+ * 本 head 的樹，head 落後 main 時看不到 main 已有的 production deploy；NEVER 讀 checkout 的 working tree。
+ */
+export function mergedTreeWorkflows(
+  repoDir: string,
+  pr: number,
+  headOid: string,
+  baseRef: string | undefined,
+  git: DeployScopeGit,
+): MergedTreeWorkflows {
+  const fail = (failure: MergedTreeFailure): MergedTreeWorkflows => ({ files: null, failure })
+  const read = (ref: string): MergedTreeWorkflows => {
+    const files = workflowsAtRef(repoDir, ref, git)
+    return files === null ? fail('unreadable') : { files, failure: null }
+  }
+  if (!baseRef) return fail('unreadable')
+  if (git(repoDir, ['fetch', '-q', 'origin', `refs/pull/${pr}/merge`]).status !== 0)
+    return fail('unreadable')
+  const parents = git(repoDir, ['rev-list', '--parents', '-n', '1', 'FETCH_HEAD'])
+  if (parents.status !== 0) return fail('unreadable')
+  const [mergeOid, ...parentOids] = parents.stdout.trim().split(/\s+/u)
+  if (!mergeOid || !/^[0-9a-f]{40}$/u.test(mergeOid) || !parentOids.includes(headOid))
+    return fail('unreadable')
+  const baseTip = remoteRefTip(repoDir, `refs/heads/${baseRef}`, git)
+  if (!baseTip) return fail('unreadable')
+  if (parentOids.find((p) => p !== headOid) === baseTip) return read(mergeOid)
+  const treeOid = localMergedTreeOid(repoDir, pr, headOid, baseRef, baseTip, git)
+  return treeOid === null ? fail('stale-merge-failed') : read(treeOid)
+}
+
+/**
+ * 單張 PR 合進 main 之後的 main push deploy 範圍（merge-queue 與 PR 分診共用同一份判定）：
+ * workflows 讀不到或是空的 → 'unknown'，呼叫端維持人工。
+ */
+export function mergedTreeMainPushScope(
+  repoDir: string,
+  pr: number,
+  headOid: string,
+  baseRef: string | undefined,
+  git: DeployScopeGit = defaultDeployGit,
+): MainPushScope | 'unknown' {
+  const { files } = mergedTreeWorkflows(repoDir, pr, headOid, baseRef, git)
+  return files?.length ? deriveMainPushScope(files) : 'unknown'
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────

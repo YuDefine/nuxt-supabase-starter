@@ -8,7 +8,7 @@
 
 T3 必補：SSE / MCP / Durable Object 的 lifecycle 跨越 Nitro `afterResponse`，parent `useLogger(event)` 會在 stream / tool call 還沒結束時就 emit，後續 `log.set` 撞 sealed wide event。本 snippet 提供 fork-child + 手動 emit pattern。
 
-Reference: `docs/evlog-master-plan.md` § 8.4 + 已落地實例 <consumer-c> `server/api/chat.post.ts`
+Reference: `docs/evlog-master-plan.md` § 8.4 + 已落地實例 nuxt-edge-agentic-rag `server/api/chat.post.ts`
 
 ## 為什麼需要 child logger
 

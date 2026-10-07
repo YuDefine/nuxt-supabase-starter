@@ -3,7 +3,7 @@ description: Postgres Trigger 撰寫規範
 paths: ['supabase/migrations/**/*.sql']
 ---
 <!-- Clade native rule; source: rules/modules/db-schema/supabase/trigger.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Trigger
 

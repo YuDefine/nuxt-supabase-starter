@@ -2,8 +2,8 @@
 description: ad-hoc 工作的追蹤載體、唯讀與指定產物邊界、共享單檔紀律、session context 預算門檻
 ---
 <!-- Clade native rule; source: rules/core/session-tasks.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 # Session Tasks
 
@@ -16,7 +16,7 @@ description: ad-hoc 工作的追蹤載體、唯讀與指定產物邊界、共享
 | 已授權本機修改、當次可完成的 ad-hoc 工作 | 提交說明保存意圖與驗證即可；需要同 session 清單時才建 `tasks/<YYYY-MM-DD-HHMM>-<slug>.md` |
 | 需要跨 session 接續、決策或遷移 | **MUST** `node vendor/scripts/flow/flow.ts plan open <slug> --title '…'`，載體是 `specs/plans/<work-id>/plan.md` |
 
-任務後續取得實作授權時重新套用上表；唯讀交付不代替實作追蹤。拆得開的工作 **NEVER** 用共享單檔（例如 `tasks/todo.md`／`tasks/notes.md`）；一 session 一檔，只編輯自己的 task 檔。`HANDOFF.md`、`ROADMAP.md`、`docs/tech-debt.md`、`docs/pitfalls/**` 是本質共享登記簿，改它們前依 [[shared-file-concurrent-write]]。
+任務後續取得實作授權時重新套用上表；唯讀交付不代替實作追蹤。拆得開的工作 **NEVER** 用共享單檔（例如 `tasks/todo.md`／`tasks/notes.md`）；一 session 一檔，只編輯自己的 task 檔。`HANDOFF.md`、`ROADMAP.md`，以及未遷移 consumer 的 `docs/tech-debt.md` 是本質共享登記簿，改它們前依 [[shared-file-concurrent-write]]（lifecycle repo 的 `docs/tech-debt.md` 與 clade `docs/pitfalls/**` 已停寫）。
 
 命中實作列時，原生進度工具只呈現進度，不能替代 task 檔。session 結束時每個未完項 MUST 升級或刪除，二擇一；模板、升級路徑、work id、Herdr transport、收工契約與 pane 判定在 [[session-tasks.operations]]，首次碰 `tasks/**` 或寫收工訊息前 MUST Read。
 

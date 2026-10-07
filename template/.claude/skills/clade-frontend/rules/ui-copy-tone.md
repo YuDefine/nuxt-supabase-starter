@@ -3,7 +3,7 @@ description: UI 文案語氣硬規則——軟體開發範疇英文一律不顯�
 paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'app/**/*.ts', 'packages/*/app/**/*.ts', 'components/**', 'packages/*/components/**', 'pages/**', 'packages/*/pages/**', 'layouts/**', 'packages/*/layouts/**', 'i18n/**', 'packages/*/i18n/**', 'locales/**', 'packages/*/locales/**', 'specs/plans/**/design-review.md']
 ---
 <!-- Clade native rule; source: rules/core/ui-copy-tone.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # UI Copy Tone
 

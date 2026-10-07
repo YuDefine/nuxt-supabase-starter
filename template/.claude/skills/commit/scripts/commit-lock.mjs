@@ -14,7 +14,7 @@
  * recovery.  Age and PID are observations only.
  *
  * Usage:
- *   node commit-lock.mjs acquire --work-id ID --runtime claude|codex|cursor|grok|devin --session-id ID
+ *   node commit-lock.mjs acquire --work-id ID --runtime claude|codex|grok|devin --session-id ID
  *   node commit-lock.mjs renew --work-id ID --runtime R --session-id ID --owner-token TOKEN
  *   node commit-lock.mjs release --work-id ID --runtime R --session-id ID --owner-token TOKEN
  *   node commit-lock.mjs recover --work-id ID --runtime R --session-id ID \
@@ -39,7 +39,10 @@ import { createHash, randomBytes } from 'node:crypto'
 import { basename, dirname, resolve } from 'node:path'
 import { hostname, userInfo } from 'node:os'
 
-const RUNTIMES = new Set(['claude', 'codex', 'cursor', 'grok', 'devin'])
+const RUNTIMES = new Set(['claude', 'codex', 'grok', 'devin'])
+// 退役 runtime 不再接受新 identity，但既存 journal 必須仍然可讀可回復——
+// cursor 時代的 crash-recovery journal 不能因為退役而失效。
+const JOURNAL_RUNTIMES = new Set([...RUNTIMES, 'cursor'])
 const EMPTY_HASH = createHash('sha256').update(Buffer.alloc(0)).digest('hex')
 const STALE_MINUTES = Number.parseInt(process.env.COMMIT_LOCK_STALE_MINUTES || '30', 10)
 const USAGE = 'Usage: commit-lock.mjs {acquire|renew|release|status|recover} [options]'
@@ -202,8 +205,8 @@ function isValidIdentity(options, { ownerToken = false } = {}) {
 function assertIdentity(options, ownerToken = false) {
   if (!isValidIdentity(options, { ownerToken })) {
     const required = ownerToken
-      ? '--work-id, --runtime (claude|codex|cursor|grok|devin), --session-id, and --owner-token'
-      : '--work-id, --runtime (claude|codex|cursor|grok|devin), and --session-id'
+      ? '--work-id, --runtime (claude|codex|grok|devin), --session-id, and --owner-token'
+      : '--work-id, --runtime (claude|codex|grok|devin), and --session-id'
     fail(options, `explicit identity required: ${required}`, undefined, 2)
   }
 }
@@ -821,7 +824,7 @@ function validJournal(journal) {
     typeof journal.owner === 'object' &&
     typeof journal.owner.workId === 'string' &&
     journal.owner.workId.length > 0 &&
-    RUNTIMES.has(journal.owner.runtime) &&
+    JOURNAL_RUNTIMES.has(journal.owner.runtime) &&
     typeof journal.owner.sessionId === 'string' &&
     journal.owner.sessionId.length > 0 &&
     (journal.owner.ownerToken === null ||

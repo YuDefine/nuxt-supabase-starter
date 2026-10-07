@@ -3,7 +3,7 @@ description: 專案目前未使用的 Supabase 功能 — 引入前的決策與�
 paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'app/**/*.{ts,vue}', 'packages/*/app/**/*.{ts,vue}']
 ---
 <!-- Clade native rule; source: rules/modules/db-runtime/cf-workers/unused-features.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Unused Features Guardrails
 

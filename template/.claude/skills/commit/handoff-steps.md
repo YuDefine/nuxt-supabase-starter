@@ -55,7 +55,7 @@
 
 ## 5-E. 把 HANDOFF/ROADMAP 變更納入 commit（不 push）
 
-5-C/5-D 實際修改或建立的 carrier，**MUST** 在此處以已授權的精確 paths commit 進去，否則 Step 6-A 的 deploy commit 不含這次的交接狀態。沿 Step 0-Scope 核對歸屬；新建 carrier 先以具名 path 加入 index，再用 `--only`，不漏掉 untracked 文件。署名沿 SKILL.md Step 4 的實際身份政策。
+5-C/5-D 實際修改或建立的 carrier，**MUST** 在此處以已授權的精確 paths commit 進去，否則 Step 6-A 的 deploy commit 不含這次的交接狀態。沿 Step 0-Scope 核對歸屬；新建 carrier 先以具名 path 加入 index，再用 `--only`，不漏掉 untracked 文件。署名沿 `rules/分組與提交判準.md`（Step 4）Rule 5 的實際身份政策。
 
 ```bash
 # 只收 5-C/5-D 動到的檔。git add ＋ 裸 git commit 會把 index 裡別的東西一起帶走（含別

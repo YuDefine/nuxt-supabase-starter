@@ -7,7 +7,7 @@ paths:
   - 'packages/**/server/plugins/evlog-*.ts'
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/evlog/logging.sampling-redaction.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Logging — Sampling 與 redaction（全文）
 

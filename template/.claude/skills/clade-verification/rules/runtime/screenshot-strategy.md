@@ -1,6 +1,6 @@
 ---
-description: Screenshot strategy 規則——根據互動深度、跨裝置、跨瀏覽器與是否要沉澱成回歸測試，選擇 approved browser carrier 或 reproducible browser runner CLI
-paths: ['screenshots/**', 'tests/e2e/**', 'packages/*/tests/e2e/**', 'openspec/changes/**/design-review.md']
+description: Screenshot strategy 規則——根據互動深度、跨裝置、跨瀏覽器與是否要沉澱成回歸測試，選擇 target adapter carrier 或 reproducible runner CLI
+paths: ['screenshots/**', 'tests/e2e/**', 'packages/*/tests/e2e/**', 'specs/plans/**/design-review.md']
 ---
 <!-- Clade native rule; source: adapters/claude/instructions/rules/core/screenshot-strategy.md; edit canonical source -->
 <!-- clade-targets: claude -->

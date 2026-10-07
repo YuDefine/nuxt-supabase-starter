@@ -22,7 +22,7 @@
 | 類型 | 辨識方式 | Dispatch |
 | --- | --- | --- |
 | 需求引用 | 帶明確 carrier 路徑、work slug 或 flow work id | 走 3.1a 接續；保留原驗收與證據政策，不另開 ad-hoc 根工單 |
-| code task（有明確檔案路徑 / 行為描述） | 含 `server/` / `app/` / `scripts/` / `.vue` / `.ts` / `.mjs` 等路徑，或含動詞（「改」「加」「修」「移除」「重構」） | worktree 內直接實作：`/wt <slug>: <brief>`，brief 從條目萃取 |
+| code task（有明確檔案路徑 / 行為描述） | 含 `server/` / `app/` / `scripts/` / `.vue` / `.ts` / `.mjs` 等路徑，或含動詞（「改」「加」「修」「移除」「重構」） | worktree 內直接實作：交 `wt` 建立隔離環境並派出 brief，brief 從條目萃取 |
 | investigation / research | 含「調查」「確認」「檢查」「分析」「audit」 | 主線即時組直接執行（不需 worktree；read-heavy 者先過 [dispatch-topology.md](dispatch-topology.md) § 主線即時組的 pre-scan 前置判定），結果寫回對應條目 |
 | blocked / 需拍板 | 含「待 user」「待確認」「blocked」「需拍板」 | **NEVER 直接 skip** —— 走 [autonomy-predicate.md](autonomy-predicate.md) § Decision Packaging |
 | 模糊 / 無法判斷 | 以上皆不符 | 先跑唯讀調查補事實再重判（見 autonomy-predicate.md § 判不出來時的三步）；仍模糊 → packaging，**不是** skip |
@@ -87,3 +87,35 @@ machine check 分離把這件事結構化了，非 plan 路徑沒有那個結構
 - ❌「等 agents 完成再處理」— 扇出組滿 4 就是做主線即時組的時機，不是該等的時機。等 notification
   期間 **MUST** 繼續推進（investigation 類主線直接做、code task 類等扇出組空位）
 - ❌「先寫 HANDOFF status」— HANDOFF status 是 Step 7（四組皆空且 in-flight 歸零之後），不是中途的 exit ramp
+
+## Step 2 各 source 的掃描細節（主檔 Step 2 下推）
+
+> 主檔 pointer：Step 2 讀 `handoff`／`techdebt`／`roadmap`／`worktreeStash` source、要跑 `--run-selfverify`、或 `tech-debt-closed-bloat` 為 warn 時 MUST 讀本節。2026-10-06（TD-833 第 6 項）自主檔搬來；這些判準的本體只在本節，主檔只留觸發時機。
+
+- **`HANDOFF.md`** —— 掃 `## In Progress` / `## Blocked` / `## Next Steps` / `## Outstanding` / `## Follow-up`（heading 名因 consumer 而異，靠 `##` / `###` 辨識）。`- [ ]` 未勾項 = 一個 candidate；`- [x]` 跳過；純文字段落視為單一 candidate
+- **`docs/tech-debt.md`** —— 有 `specs/truth/work-lifecycle.md`（scan `techDebtHygiene.raw.retired: true`）時本來源**退場**：`raw.open[]` 等欄位刻意為空，不是「沒有債」—— 工作改由 `specs/plans/<work-id>/plan.md` 的 Open work 承載（`raw.plans[]`），**NEVER** 回頭整讀或改寫凍結的 `docs/tech-debt.md`。未遷移 consumer：**NEVER 整讀主檔**（fleet 各家主檔已在數百 KB 量級，整讀一次吃掉大半預算；當前值跑下方 `wc -c`）。從 `techDebtHygiene.raw` 取，優先序**四層**：`landed-pending-verification`（驗收）→ `stale`（>60d）→ `aging`（>14d）→ 其他 `open`。需要細節時用 `raw` 的 `lineNo` **定點 Read**（`offset` + `limit`）
+
+  **驗收排第一層不是偏好，是流量算術**：landed 條目的 Resolution 已經寫好，close 它的成本是「跑一次自驗」；開一條新 TD 的成本也差不多，但方向相反。驗收永遠排在新工作後面的迴圈，close 流量必定輸給 open 流量——2026-08-13 clade 實測近 7 天 opened 39 / closed 10，同期 landed 桶 16 條無一驗收。**NEVER** 把「landed 那條反正已經 land 了」讀成它不急：它佔著 open class 的位置，且它的 Resolution 每多放一天就多一分過期風險。
+
+  **`--run-selfverify` MUST 帶 `--selfverify-cache`**：全套一次 ~26 秒 / ~384KB 輸出，而 2026-08-06～13 的 round 70–75 **六輪 verdict 逐項相同**——每輪重跑換到的資訊量是 0 bit。快取 key =（audit script 內容 + `docs/tech-debt.md` 內容 + git HEAD），輸入不變就回上次結果並標 `cached: true`。實測冷跑 26s → 熱跑 **0.12s**；TD 檔一改立即失效（實測 0/47 命中），不是恆命中。
+
+  **`--run-selfverify` MUST 同時帶 `--selfverify-queue`**：`-until-` 條目的自驗現在也在掃描範圍內（它們的解凍條件先前**沒有任何東西**在評估——轉列那一刻就離開了所有佇列視野）。這個旗標把「probe 輸出跟上次比變了」送進待拍板佇列，**fire-once**：同一個變動只問一次，沒變就完全不出聲，所以它不會製造每輪重報。**NEVER** 因為「這輪 verdict 看起來都一樣」就省掉它——看起來一樣正是它要接的那半，人眼六輪逐項相同的同時 TD-280 的實際輸出已經從 6 none 變成 8 none。快取命中時它自動跳過（拿上一次的結果比基線等於拿基線跟自己比），不必手動判。
+
+  **NEVER 改成「N 輪跑一次」**：calendar-based skip 會讓真實改動落在跳過窗口內溜過去，然後搭著 propagate 散到全 registry consumer 才被發現。輸入不變時跳過在數學上無資訊損失，輪次計數跳過不是。**已知邊界**：48 條 probe 有一部分量的是**活狀態**（檔案數、目錄體積），git HEAD 涵蓋 repo 內變動但涵蓋不到 repo 外的環境漂移——所以它是 opt-in，判斷這一輪能不能接受這個邊界是呼叫端的責任。
+
+  **`blocked-attended-only` 一律跳過**（unattended）：它的定義就是「本迴圈拿不到出口」，撈進 candidate list 只會每輪重新判定一次再放棄。attended 模式照撈——那正是它等的東西。判準與防濫用見 clade `.claude/rules/local/tech-debt-hygiene.md` § Invariant 12。
+
+  **closedBloat 自動 rotate（不佔 5-item cap）**：`techDebtHygiene.checks` 含 `name: tech-debt-closed-bloat` 且 `status: warn` 時，**MUST** 跑 `node "${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/rotate-closed-bloat.ts"`（runner child 改逐字跑 `$ARGUMENTS` 的 `--rotate-helper-command`）。stdout `retired` 或 `noop` → 不寫檔、不重 scan。其餘非 `noop` 再 scan 一次。**NEVER** 把 rotate 當 candidate、**NEVER** `AskUserQuestion`。`work-loop-scan.ts` 本身 NEVER 寫檔。
+
+  ```bash
+  wc -c docs/tech-debt.md   # 上面兩個數字的來源。主檔隨 rotate / 新增增減，複跑取當前值
+  ```
+- **repo 根目錄 `ROADMAP.md`** `## Next Moves` 的 `###` 子段（存在時）
+- **`worktreeStash`** —— `mergedToMain: false` 的 wt 與每一筆 stash
+
+### 主檔 Step 2 判準的理由（判準本體在主檔，本節不複述）
+
+> 判準只有一份，在主檔 SKILL.md 標示的 Step；本節只放那些判準的理由與證據，不複述判準。判準的增修只落主檔。
+
+- **需求來源查詢**：`plans` 提供 carrier 路徑、slug 與對應 work id；`flow` 卡提供 outcome 與 stall 狀態。掃不到任何 carrier 表示此 repo 沒有進行中的結構化工作——那與讀取失敗是兩回事。
+- **Carrier association 改判 `plans`**：避免降級成 ad-hoc brief 而丟失 phase 結構與 evidence 收集。

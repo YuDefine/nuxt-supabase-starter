@@ -3,7 +3,7 @@ description: Server API 設計規範
 paths: ["server/api/**/*.ts", "packages/*/server/api/**/*.ts"]
 ---
 <!-- Clade native rule; source: rules/modules/runtime/cf-workers/api-patterns.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # API Patterns
 
@@ -40,10 +40,18 @@ Reference: `docs/api/API_DESIGN_GUIDE.md` — 完整 API 設計指南含進階�
 ### Abuse-control 層
 
 - **Rate limit**：**MUST** 對敏感 / 昂貴 / 可濫用端點（登入、OTP、密碼重設、匯出、寫入類）設 per-user + per-IP rate limit（`nuxt-security` rateLimiter 或自管 counter）。
-- **Quota 分母 MUST 可回落**：**每一個**以「目前有幾個 X」當上限的配額（storage 物件數、row count、KV key 數），設定前 **MUST** 回答「X 在正常流程結束後會不會消失或被排除？」——不會（被業務 row 引用、audit 永久保留、已完成訂單）就 **MUST** 改用時間窗、狀態排除，或在流程結束時回收，否則正常使用者用到第 N 次就永久 429。**MUST** 補 regression test 釘住「正常流程結束後仍可繼續操作」。修法細節見 `~/offline/clade/docs/pitfalls/2026-07-26-quota-counts-unreclaimed-resource.md`。
+- **Quota 分母 MUST 可回落**：**每一個**以「目前有幾個 X」當上限的配額（storage 物件數、row count、KV key 數），設定前 **MUST** 回答「X 在正常流程結束後會不會消失或被排除？」——不會（被業務 row 引用、audit 永久保留、已完成訂單）就 **MUST** 改用時間窗、狀態排除，或在流程結束時回收，否則正常使用者用到第 N 次就永久 429。**MUST** 補 regression test 釘住「正常流程結束後仍可繼續操作」。修法細節見 [[pitfall-quota-counts-unreclaimed-resource]]。
 - **CSRF protection**：cookie/session 認證的 browser-origin POST/PATCH/DELETE **MUST** 有 CSRF 防護（`nuxt-csurf` double-submit、或 SameSite + origin 檢查）；純 Authorization header 認證不受影響。
 
-**判斷準則**：寫 state-changing endpoint 時逐條問 — 這個 id 是**這個** user 的嗎（BOLA）？body 有沒有不該讓 client 設的欄位（BOPLA）？會不會太大？會不會被刷？配額分母會不會回落？是 cookie 認證的 browser mutation 嗎（CSRF）？
+### 未認證入口層（webhook、log／telemetry ingestion）
+
+沒有 session 的入口，身分與來源完整性只能來自 server 端持有的 secret 或 session，**NEVER** 來自 request 內容。
+
+- **Webhook 驗簽 MUST fail-closed**：驗簽 secret（`*_WEBHOOK_SECRET` 等）未設定時 **MUST** 拒絕請求（503，並 log 設定缺失），**NEVER** 跳過驗證放行。「沒設 secret 就不驗」等於任何人都能偽造來源事件；CI、`.env.example`、deploy template 只要漏設一處，fail-open 就在那個環境生效。
+- **驗簽前先限 body 大小**：HMAC 需要 raw body，**MUST** 先檢查 `content-length`（缺少或超過上限即 413）再讀 raw body，**NEVER** 先整包讀進記憶體再驗——未認證者能用大 body 耗盡記憶體。簽章比對 **MUST** constant-time（Node `crypto.timingSafeEqual`；Workers `crypto.subtle.verify`）。
+- **未認證的 log／telemetry ingestion NEVER 接受 client 宣稱的身分**：`user_id`、`email`、`actor`、`role` 等身分欄位 **MUST** 只取自 server 端 session（`getUserSession()` 或等價 helper）；沒有 session 就記成匿名，Zod schema **NEVER** 讓這些欄位從 body 傳入——否則任何人都能替任意使用者偽造登入／稽核事件。這類端點同樣 **MUST** 有 body 上限與 per-IP rate limit，錯誤回應 **NEVER** 帶 raw DB error。
+
+**判斷準則**：寫 state-changing endpoint 時逐條問 — 這個 id 是**這個** user 的嗎（BOLA）？body 有沒有不該讓 client 設的欄位（BOPLA）？會不會太大？會不會被刷？配額分母會不會回落？是 cookie 認證的 browser mutation 嗎（CSRF）？沒有 session 的入口，缺 secret 時會不會放行、身分是不是只取自 session？
 
 ## OpenAPI Metadata Convention
 
@@ -128,8 +136,8 @@ node scripts/audit-mutation-semantics.ts    # warn-only
 
 Audit table 命名、欄位、hash chain、RLS、helper 統一規約見：
 
-- **通用 D-pattern**：`db-schema/supabase/audit-schema.md`（<consumer-a> / <consumer-d> / <consumer-c> 用 `audit_logs` 表）
-- **<consumer-b> legacy**：`db-schema/supabase-self-hosted/audit-schema.md`（<consumer-b> 用 `<consumer-b>.operation_logs`）
+- **通用 D-pattern**：`db-schema/supabase/audit-schema.md`（走通用 schema 的 consumer 用 `audit_logs` 表）
+- **self-hosted legacy**：`db-schema/supabase-self-hosted/audit-schema.md`（`<consumer>.operation_logs` 形）
 
 Runtime module 不重複定義 schema；session agent 從 `db-schema/<variant>/audit-schema.md` 找完整規約。
 

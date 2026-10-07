@@ -3,7 +3,7 @@ description: 多欄位表單必用 UForm + Zod；input/textarea 必設 maxlength
 paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue']
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-form-validation.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Form 驗證規約
 

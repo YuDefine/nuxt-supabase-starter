@@ -3,7 +3,7 @@ description: 禁止原生 / 第三方 date / time / calendar picker，改用 Nux
 paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue']
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-ui-native-picker-ban.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # 禁止原生 / 第三方 Date / Time Picker（實作階段強制）
 

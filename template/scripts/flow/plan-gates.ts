@@ -98,7 +98,7 @@ export interface IntegrityResult {
 }
 
 /** 只有這些狀態算「還在進行中的同一件工作」，slug 重開時 resume 它。 */
-const LIVE_PLAN_STATUSES = new Set(['active', 'blocked', 'closing'])
+export const LIVE_PLAN_STATUSES = new Set(['active', 'blocked', 'closing'])
 
 const WORK_ID_RE = /^W-\d{4}-\d{2}-\d{2}-(.+)$/u
 

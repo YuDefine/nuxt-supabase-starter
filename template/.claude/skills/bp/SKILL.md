@@ -13,101 +13,39 @@ metadata:
 
 # bp — 最佳實踐落點路由
 
-clade 有 7 種資產落點。**分類負擔歸本 skill，不歸使用者**——使用者只需要講出那條實踐是什麼，落點由這裡判、講出理由、等確認。
+把一條最佳實踐判到 clade 的正確落點、回報理由、等確認後落地並散播；也負責列出新專案該套用的既有 convention，以及在 commit 時比對 staged diff 防重造輪子。落點是 skill 或某支 skill 的 `rules/` 時，skill 的形狀交給 `/skill-engineering` 把關。
 
-## Mode dispatch
+# SOP
 
-| Mode | 觸發 | 用途 |
-| --- | --- | --- |
-| `record`（預設） | `\bp <一句話>`、「記成最佳實踐」 | 判落點 → 回報 → 等確認 → 落地 |
-| `plan` | 「新專案該套哪些現成標準」 | 依 stack 列出該套用的既有 convention |
-| `check` | `/bp check`、commit gate 0-F 呼叫 | 對 staged diff 比對既有資產，防重造輪子 |
+## Phase 1 -- 判定 mode 與 session 位置
 
----
+1. READ 讀取使用者輸入，判定 record（預設：`\bp <一句話>`、「記成最佳實踐」，或 `/skill-engineering`、`/work-route` 交棒進來的一段判準或做法）、plan（新專案該套哪些標準）或 check（`/bp check`、commit 0-F）；plan 跳到 Phase 5，check 跳到 Phase 6。
+2. THINK 若目前在 consumer session，記下這是 Direction B 跨界（consumer session → clade 改源頭＋散播；使用者送 `\bp` 就是明確授權），Phase 4 結束時回到原 consumer 並明示已回來。
 
-## record
+## Phase 2 -- record：判定落點
 
-### Step 1 — 判定 session 位置
+1. THINK 先讀取 `rules/落點路由判準.md` 與 `references/落點與散播機制.md`，自答 Q1／Q2／Q3 並記下命中的列與 tie-breaker 答案，答不出的那題才整理成是非題問使用者。
+2. READ 若判到 `docs/`，讀取 clade `docs/README.md` 的子目錄准入 predicate，定出子目錄。
+3. THINK 依已載入規則收斂落點、要動的檔、觸發點與連帶項（conventions.json、audit signal、走 /oops 的 truth unit）；落點是新 skill、既有 skill 的流程或某支 skill 的 `rules/` 時，同時定出要走的 `/skill-engineering` lane 與目標 step。
 
-| 目前在 | 做法 |
-| --- | --- |
-| clade（`~/offline/clade`） | 直接往下走 |
-| consumer | 這是 Direction B 跨界（consumer session → clade 改源頭 + 散播）。使用者送 `\bp` **就是**明確授權，往下走；落地後 MUST 回到原 consumer 並明示已回來 |
+## Phase 3 -- record：回報並等確認
 
-### Step 2 — 問三個問題
+1. WRITE 先讀取 `templates/落點回報.md` 與 `templates/落點回報.example.md`，依骨架回報後停下。
+2. READ 讀取使用者確認或修正；未確認前不寫入任何檔，修正後回到 Phase 2 重判。
 
-**MUST 自己先答一遍**，答不出來的才問使用者。目標是使用者回是非題，不是回「該放哪一層」。
+## Phase 4 -- record：落地與散播
 
-| # | 問題 | 分支 |
-| --- | --- | --- |
-| Q1 | 誰需要知道？ | 全 consumer → `rules/core/`／某類 stack → `rules/modules/<group>/<variant>/`／只有 clade → clade 自己的 `.claude/rules/local/`（clade home 是 Claude session，這格是字面路徑不是投影）／**只有某一個 consumer → 該 consumer 自己的 `.clade/rules/` 或 `tasks/lessons.md`，不進 clade** |
-| Q2 | 何時需要知道？ | 每個 session → always-load rule／編輯特定檔時 → 帶 `paths:` 的 conditional rule／做特定任務時 → skill／查得到就好 → `vendor/snippets/` 或 `docs/` |
-| Q3 | 它是什麼形態？ | 判準 → rule／操作步驟 → skill 或 snippet／可執行 → `vendor/scripts/`／成因與退場條件 → `docs/rule-rationale/`／失敗案例 → `docs/pitfalls/`／**有 variant 與成熟度 → `registry/conventions.json`** |
+1. READ 若要動 rule、SKILL 或 snippet 措辭，讀取 clade `rules/core/rule-authoring.md` § 先分類失敗型態，再選形式。
+2. DELEGATE 若落點是新 skill，先寫 `evals/skills/<name>/cases.json`，再呼叫 `/skill-engineering` 走 create lane；若落點是既有 skill 的流程、判準或 `rules/`，呼叫 `/skill-engineering` 走 optimize lane，把確認版回報交給它當根因閘門的預期結果與落差輸入，不自己改 SKILL.md；本次 record 若是 `/skill-engineering` 逐 step 決策時交過來的，改把確認版回報交回那個 caller 的 optimize lane 落地，不另開一輪 `/skill-engineering`。
+3. WRITE 其餘落點依確認版寫入；新 audit script 先過 `propagate-maintenance-mode` 三問並補 `registry/audits.json` entry。
+4. DELEGATE 呼叫 `/clade-publish` 散播。
 
-Q1 最後一支是**不收**的出口：`\bp` 送進來的實踐若只對一個 consumer 有效，落點在該 consumer 自家，不是 clade。證據只有一次 session 的觀察 → `tasks/lessons.md`；已演進成穩定規約 → 該 consumer `.clade/rules/`。**NEVER** 因為使用者送了 `\bp` 就一定要在 clade 找一個落點塞進去。
+## Phase 5 -- plan：列出該套用的既有 convention
 
-Q3 最後一支最常被漏掉：**一條實踐若存在「推薦做法 vs 過渡做法」的分歧，它 MUST 進 `registry/conventions.json`**——那是唯一機讀的最佳實踐目錄，沒進去的條目 `plan` 與 `check` 兩個 mode 都抓不到，等於登記了卻不會被套用。
+1. DELEGATE 有 consumer manifest 時執行 `node ~/offline/clade/scripts/bp-scan.ts --plan --repo <目標 repo 絕對路徑>`；還沒有 manifest（溝通期）時執行 `node ~/offline/clade/scripts/bp-scan.ts --plan --json --modules '<modules JSON>'`。
+2. WRITE 把輸出的 convention、各自的 `rule_refs`／`snippet_refs`／`doc_ref` 與現況 adoption 逐條列成候選回報使用者，等逐條確認；本步只交候選清單給 consumer 自家 session，不對 consumer 業務檔動手。
 
-Q2 / Q3 判到 `docs/` 之後**還有一層**：落哪一個子目錄以 `docs/README.md` 為 SoT——它定義各子目錄的准入 predicate、三組易混淆目錄的判準與掃描面契約，設計上就是給本 skill 判落點用的。判到 `docs/` 就讀它，不憑目錄名字猜；也不把那些 predicate 複製進本檔（複本會漂移）。
+## Phase 6 -- check：比對 staged diff
 
-完整 Q1×Q2×Q3 對照表、縱向下推三分法（留原處 / `docs/rule-rationale/` / 新建 conditional rule）、以及各落點的散播機制，見 `references/placement-routing.md`，判不出來時讀它。
-
-### Step 3 — 回報，等確認
-
-**MUST** 用這個形狀回報，然後停下：
-
-```
-落點：<具體檔案路徑>
-理由：<一句話，對到 Q1/Q2/Q3 哪一支>
-要動的檔：<逐條列，含既有檔的哪一節>
-連帶：<要不要同時進 conventions.json / 補 audit signal / 補 pitfall>
-```
-
-**NEVER** 未經確認就寫入。這個 skill 存在的理由就是讓落點判斷可被當場推翻——自己落地就把可推翻性拿掉了。
-
-### Step 4 — 落地
-
-確認後才寫。寫完走 `/clade-publish`（**NEVER** 憑記憶重跑 publish 流程）。
-
-新增 rule 或 skill 時連帶：
-- 動 rule / SKILL / snippet 措辭前，先讀 `rules/core/rule-authoring.md` § 先分類失敗型態，再選形式
-- 新 skill **MUST** 先寫 `evals/skills/<name>/cases.json` 再寫 SKILL.md（EDD）
-- 新 audit script 先過 `propagate-maintenance-mode` 三問，並補 `registry/audits.json` entry
-
----
-
-## plan
-
-```bash
-node ~/offline/clade/scripts/bp-scan.ts --plan --repo <目標 repo 絕對路徑>
-# 尚無 hub.json（溝通期）時：
-node ~/offline/clade/scripts/bp-scan.ts --plan --json --modules '<hub.json modules JSON>'
-```
-
-有 hub.json 就讀它的 `modules`；沒有就餵 `--modules`。再對 clade `registry/conventions.json` 輸出這個 stack 該套用的 convention、各自的 `rule_refs` / `snippet_refs` / `doc_ref`，與現況 adoption。plugin/rule/skill 清單不在這裡——那是 `projectionPlan({ cladeRoot, manifest })`。
-
-**輸出是候選不是指令**：逐條跟使用者確認要不要套，**NEVER** 自行對 consumer 業務檔動手（per `clade-role-and-todo-discipline` § 反模式）。
-
-## check
-
-```bash
-node ~/offline/clade/scripts/bp-scan.ts --changed-only
-```
-
-對 staged diff 比對既有資產索引。輸出分兩類，**判讀方式不同**：
-
-| 類別 | 可靠度 | 怎麼處理 |
-| --- | --- | --- |
-| 未登記 / 無入向引用的新資產 | 機械精確 | 直接補登記或補引用 |
-| 主題詞命中的既有條目 | 有偽陽性 | 人工看一眼「這條是不是已經涵蓋我要做的事」 |
-
-**NEVER** 把第二類的命中講成「確定重複」——它是檢索提示，不是語意重複偵測。
-
----
-
-## 守則
-
-1. **NEVER 自行落地**。record mode 一律回報後等確認（Step 3）。
-2. **NEVER 把該進 memory 的東西寫進 clade 源檔**。純個人偏好 / 純事實指針 / 無法歸進任何規約檔的碎片 → memory（且 MUST 先問過使用者）。反過來，可以變成 rule / cookbook / snippet 的東西 **NEVER** 塞進 memory。
-3. **NEVER 只寫 rule 不接消費端**。新規約若沒有對應的 audit signal 或 gate，它只是一段沒人讀的文字；接不上消費端時要明講這條是純參考。
-4. **clade 主線不替 consumer 排實作**。`plan` mode 的輸出是給 consumer 自家 session 用的候選清單，不是 clade 主線的待辦。
+1. DELEGATE 執行 `node ~/offline/clade/scripts/bp-scan.ts --changed-only`。
+2. THINK 先讀取 `rules/check輸出判讀判準.md`，依兩類可靠度分別處置並回報；判定出既有資產沒涵蓋的新最佳實踐時回到 Phase 2。

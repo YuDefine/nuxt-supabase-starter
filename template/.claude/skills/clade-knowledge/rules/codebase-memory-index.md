@@ -1,5 +1,5 @@
 <!-- Clade native rule; source: rules/core/codebase-memory-index.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 # codebase-memory index
 
 跑 codebase-memory 的 index **MUST** 經 `scripts/cbm-index.sh`（clade 端為

@@ -3,7 +3,7 @@ description: 有 UI 的 consumer 定義或變更 i18n 涵蓋範圍、硬編碼�
 paths: ['DESIGN.md', 'docs/decisions/**', 'app/**/*.{vue,ts,tsx,jsx}', 'packages/*/app/**/*.{vue,ts,tsx,jsx}', 'components/**/*.{vue,ts,tsx,jsx}', 'packages/*/components/**/*.{vue,ts,tsx,jsx}', 'src/**/*.{vue,ts,tsx,jsx}', 'packages/*/src/**/*.{vue,ts,tsx,jsx}', 'i18n/**', 'packages/*/i18n/**', 'locales/**', 'packages/*/locales/**', 'server/**/*.ts', 'packages/*/server/**/*.ts']
 ---
 <!-- Clade native rule; source: rules/core/i18n-boundary.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # i18n Scope Boundary
 

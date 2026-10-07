@@ -4,7 +4,7 @@ paths: ['specs/truth/contracts/**', 'specs/truth/features/**', 'specs/truth/data
 ---
 <!-- Clade native rule; source: rules/core/specformula.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # SpecFormula 標準（fleet 唯一 SDD/BDD 框架）
 
@@ -27,7 +27,7 @@ SpecFormula 的 step definition 由 `isa.yml` 的 regex 動態生成：OpenAPI `
 | D1 或無資料庫服務（純 proxy、純靜態、純 CLI）且需要 API acceptance | ✅ 採用 `embedded`；以 API-only scenario 與 runtime 所需最小 fixture 驗證，不強造業務 entity |
 | 未知或未確認的 DB 類型 | ⚠️ 保持 unresolved；不得默認成 `embedded` 或「無 DB」 |
 | 需要對 **hosted** Supabase（`*.supabase.co`）跑 BDD | ❌ **目前不可行**，見下方 NEVER 第 2 條 |
-| 既有 consumer 已跑 spectra（legacy SDD） | 併存，新增的 API operation 走 SpecFormula；遷移節奏由該 consumer 自己決定 |
+| 既有 consumer 仍有 spectra／openspec 殘留（legacy SDD，2026-10-04 clade 源已移除） | 不新增 legacy 載體，新增的 API operation 走 SpecFormula；殘留清理各走該 consumer 自己的 PR（盤點見 `tasks/2026-10-04-openspec-purge/inventory.md`） |
 | clade home 自身的行為（CLI／檔案系統／read model 折疊） | ✅ 走 § clade 驗收執行——同一個框架、clade 自己的 instruction adapter；沒有 HTTP API 與業務 DB 可捏造 |
 | consumer 同時宣告 `aixbdd` | 上游流程層也生效：`.feature` 與 DSL 由 [`aixbdd-workflow.md`](./aixbdd-workflow.md) 的九步產出，本檔管它們怎麼跑。**兩個 capability 各自獨立**——只宣告 `specformula`、自己手寫 `isa.yml` 與 `.feature` 是合法路徑 |
 
@@ -66,13 +66,13 @@ packages: ['vendor/specformula-ts/packages/*']
 
 ## Truth 佈局
 
-SpecFormula 讀的三份 spec 跟 aixbdd 的 truth 共用同一套佈局。只宣告 `specformula` 的 consumer 也照這套，fleet 只有一種擺法。範例：`~/offline/aixbdd-MES-Benchmark/specs/`。
+SpecFormula 讀的三份 spec 跟 aixbdd 的 truth 共用同一套佈局。只宣告 `specformula` 的 consumer 也照這套，fleet 只有一種擺法。範例：`~/offline/aixbdd-MES-Benchmark/specs/`；標準出處與條款對照見 `specs/truth/aixbdd-benchmark.md`。
 
 | 內容 | 落點 | 是不是 truth | `isa.yml`／runner 怎麼讀 |
 | --- | --- | --- | --- |
 | API 合約（OpenAPI） | `specs/truth/contracts/`（可依模組拆檔，`openapi.yaml` 當 `$ref` 入口） | 是；宣告 aixbdd 時 owner 是 `/api-plan` | `config.api.resource_path: specs/truth/contracts` |
-| 資料模型 | `specs/truth/data/*.dbml` | 是；owner 是 `/data-plan` | 不直接讀 |
-| runner 用的 DDL＋`entity_to_table_mapping.yml` | `specs/data/` | **否**——從 DBML 衍生的產物，兩者在同一個 commit 改 | `config.data.source[].resource_path: specs/data` |
+| 資料模型 | `specs/truth/data/*.dbml` | 是；owner 是 `/data-plan`。DBML 宣告的**每一張**表與**每一個**欄都 MUST 在 migration 回放後的 DB 成立（hard）；DB 有、DBML 沒寫的表只報不擋 | 不直接讀；CI 由 `specformula-ddl-check.ts check` 對回放後的 DB 語意比對（忽略註解與格式） |
+| runner 用的 DDL＋`entity_to_table_mapping.yml` | `specs/data/` | **否**——physical schema（migration 回放後的 DB）的投影，寫法不限（手寫、`specformula-ddl-check.ts emit`、自家 reverse script 都行）；CI 在 BDD job 對回放後的 DB 語意比對 | `config.data.source[].resource_path: specs/data` |
 | `.feature` | `specs/truth/features/backend/<模組>/`（前端是 `frontend/`） | 是；宣告 aixbdd 時 owner 是 `/dsl-refine` | `cucumber.cjs` 的 `paths` 直接指這裡 |
 | support／steps 程式碼 | `features/support/`、`features/steps/` | 否 | `cucumber.cjs` 的 `import` |
 
@@ -88,7 +88,7 @@ SpecFormula 讀的三份 spec 跟 aixbdd 的 truth 共用同一套佈局。只�
 
 ## MUST
 
-1. **spec-first**：**每一個**新增或修改的 API operation，都 MUST 先改 OpenAPI（`specs/truth/contracts/`）與 `.feature`（`specs/truth/features/backend/`），再寫實作碼；只有 operation 會改變資料模型時才同步改資料模型（truth 是 `specs/truth/data/*.dbml`，runner 讀的 DDL 在 `specs/data/`，兩者同一個 commit 改）。API-only scenario 不得為了湊 entity 規格而捏造業務表。
+1. **spec-first**：**每一個**新增或修改的 API operation，都 MUST 先改 OpenAPI（`specs/truth/contracts/`）與 `.feature`（`specs/truth/features/backend/`），再寫實作碼；只有 operation 會改變資料模型時才同步改資料模型（truth 是 `specs/truth/data/*.dbml`，runner 讀的 DDL 在 `specs/data/`，兩者都由 BDD job 的 `specformula-ddl-check.ts check` 對 migration 回放後的 DB 比對）。API-only scenario 不得為了湊 entity 規格而捏造業務表。
 2. **每一個** operation 的 OpenAPI `summary` MUST 在整份 spec 內唯一——`api_call` 與 `response_validate` 兩個指令都靠 `summary` 反查 operation，重複時查到哪一個由掃描順序決定。
 3. **每一處**業務時間讀取 MUST 走 consumer 的唯一 clock service；`POST /test/time` 凍結的必須就是該 service，不能凍結未被業務碼讀取的測試 helper。
 4. `/test/*` 四端點 MUST 由 framework 的 test-only guard 守住：明確 test flag **且**非 production 才放行，其餘一律 404。Nuxt recipe 的具體落點是 `server/middleware/00.test-routes-guard.ts`，其他 framework MUST 記錄等價 adapter 與 guard。
@@ -101,6 +101,7 @@ SpecFormula 讀的三份 spec 跟 aixbdd 的 truth 共用同一套佈局。只�
 3. **NEVER 讓業務碼繞過唯一 clock service 直接讀取系統時間**。Nuxt 範本把 `new Date()` 集中在 `server/utils/time-service.ts`；其他 framework 由已記錄的等價 clock service 承接。
 4. **NEVER 在 `.feature` 裡寫死時間再期待它穩定**——要固定時間就用 `time_control` 指令，它會打 `POST /test/time`。
 5. **NEVER 把 `SPECFORMULA_TEST=1` 寫進 `.env.production*` 或任何 production deploy 設定**。
+6. **有 migration 的 repo（`supabase/migrations/` 有檔）NEVER 把 `specs/data` 套進 DB**（CI 的 `psql -f specs/data/*.sql` 或等價步驟）。BDD 的 DB 由 migration 建（`supabase start`／`db reset`）；範本 DDL 是 `CREATE TABLE IF NOT EXISTS`——真表已存在時靜默跳過、不存在時造出 migration 沒有的幻影表，兩種都讓 BDD 綠在一個 production 不存在的 schema 上。`specs/data` 與 DB 的一致性改由 `node --import tsx scripts/specformula-ddl-check.ts check` 在 `supabase start` 之後驗。沒有 migration 的 testcontainer／`embedded` 資料源例外：那裡 `specs/data` 就是唯一的 schema 來源。
 
 ## Anti-pattern
 
@@ -130,7 +131,7 @@ clade home 的 `test:bdd` 包一層 `vendor/specformula-clade/bin/run-bdd.ts`（
 
 ## Reference signal（不 block）
 
-`node scripts/audit-specformula-adoption.ts` 逐 consumer 印一列：`isa` / `features` 檔數 / `api` spec 檔數 / `ddl` 檔數 / `endpoints` / `guard` / `test:bdd` / `workspace` / `pin` / `orphans`。Nuxt 的時鐘檢查另列 `new Date(` 殘留數。DB 預期值來自有效 manifest 與 registry 的結構化 `tech_stack`；service 的 module `none` 只代表未套用該 DB module，不能據此認定沒有資料庫。設定未知或宣告衝突時保留 `UNKNOWN`；實際 runtime 與資料一致性仍由 consumer receipt 驗證。
+`node scripts/audit-specformula-adoption.ts` 另印 `specs/data` findings（範本 `users`／`orders` 殘留、CI 用 psql 套 `specs/data`、BDD job 缺 `specformula-ddl-check`），判準是 § Truth 佈局與 § NEVER 6。主表逐 consumer 印一列：`isa` / `features` 檔數 / `api` spec 檔數 / `ddl` 檔數 / `endpoints` / `guard` / `test:bdd` / `workspace` / `pin` / `orphans`。Nuxt 的時鐘檢查另列 `new Date(` 殘留數。DB 預期值來自有效 manifest 與 registry 的結構化 `tech_stack`；service 的 module `none` 只代表未套用該 DB module，不能據此認定沒有資料庫。設定未知或宣告衝突時保留 `UNKNOWN`；實際 runtime 與資料一致性仍由 consumer receipt 驗證。
 
 | 訊號契約 | `db_type` |
 | --- | --- |

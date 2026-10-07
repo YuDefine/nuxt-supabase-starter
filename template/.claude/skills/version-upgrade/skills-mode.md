@@ -102,7 +102,7 @@ node scripts/audit-skill-freshness.ts --changelog antfu/skills      # 整個 rep
 
 輸出該目錄 `CHANGELOG.md`、近 10 個 release、近 20 筆 commit。
 
-第三方 skill 變動多是內容改善，預設**跟**。「不跟」要具體理由，且 **MUST** 登一條 `docs/tech-debt.md` TD 記錄刻意留舊版的原因。
+第三方 skill 變動多是內容改善，預設**跟**。「不跟」要具體理由，且 **MUST** 登記刻意留舊版的原因：有 `specs/truth/work-lifecycle.md` 的 repo 寫進承載本次升版的 plan（Decisions 或 Open work）；未遷移 consumer 才登 `docs/tech-debt.md` TD。
 
 ## Step S.4 — 整合評估（上游新 skill vs 自家資產）
 
@@ -124,13 +124,14 @@ node scripts/audit-skill-freshness.ts --changelog antfu/skills      # 整個 rep
 | **KEEP** | 上游沒碰（self-hosted 拓樸 / 自家 preview env / 業務流程 / 部署形態特化） | 不動 |
 | **CONFLICT** | 自家寫的與上游**牴觸**（上游說 A、我們說 not A） | **MUST 停下來讓 user 拍板**，NEVER 主線自行選邊 |
 
-**判 DELETE 前 MUST 反查該檔是不是某條 pitfall 的唯一落地處**：
+**判 DELETE 前 MUST 反查該檔是不是某條踩坑教訓的唯一落地處**：
 
 ```bash
-rg -l '<主題關鍵字>' ~/offline/clade/docs/pitfalls/
+rg -l '<主題關鍵字>' ~/offline/clade/specs/truth/ ~/offline/clade/rules/
+rg '<主題關鍵字>' ~/offline/clade/specs/truth/legacy-ids.json   # 已退役的舊 pitfall 條目
 ```
 
-命中 pitfall 的段落一律降級為 SLIM 並保留。
+命中教訓的段落一律降級為 SLIM 並保留。
 
 ## Step S.5 — 落地
 

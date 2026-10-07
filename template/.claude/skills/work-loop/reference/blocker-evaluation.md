@@ -86,7 +86,7 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
    | 決策類型 | 辨識方式 | 自主處理 |
    | --- | --- | --- |
    | 未實作的 phase | carrier 有 `[not-started]` / `[planned]` phase 被標為 awaiting decision | 不是決策 — unblock + dispatch `/implement` 繼續實作 |
-   | 實作 findings（seed / UI / code / data） | tasks.md 有 `[finding]` 或 blocker 描述是技術問題 | 能修 → dispatch apply 修；複雜 → 登 TD-NNN + unblock 繼續推進 |
+   | 實作 findings（seed / UI / code / data） | tasks.md 有 `[finding]` 或 blocker 描述是技術問題 | 能修 → dispatch apply 修；複雜 → 寫進承載它的 plan 的 Open work（未遷移 consumer 才登 TD-NNN）+ unblock 繼續推進 |
    | Design Review / evidence / 驗證類 phase | 待決項是「排程」「何時跑」某個標準 phase | 不是決策 — 直接跑該 phase（Design Review 直接 dispatch，不問排程） |
    | 技術選型（A or B） | 待決項有具體技術選項、無商業影響 | 選最簡方案 + 在 tasks.md 記 `[decision: <選項> — work-loop 自決: <一行理由>]` |
    | 商業決策（pricing / scope / UX trade-off / 客戶需求確認） | 無法從 code / spec 推導、需 domain knowledge | → Step 3 |
@@ -110,7 +110,7 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
 
 **核心原則**：work-loop 的自主模式承諾「能自主決策的自主完成」。未實作的 phase、技術 findings、標準 phase（Design Review / evidence collection）**全部屬於自主範疇**，NEVER 因為被標記待決策就當真 — 先判斷是否真的需要 user、還是上一輪實作過度保守地標記了。
 
-**反例**：(1) 未實作的 phase 被標為待 user 決策 → 應直接 dispatch apply；(2) 技術 findings（seed 歸屬 + UI wiring）被標為 blocker → 應自行修或登 TD；(3) Design Review 被標為「需排程」→ 應直接跑。三項全部可自主解決，loop 不應停下。
+**反例**：(1) 未實作的 phase 被標為待 user 決策 → 應直接 dispatch apply；(2) 技術 findings（seed 歸屬 + UI wiring）被標為 blocker → 應自行修或寫進 plan Open work（未遷移 consumer 登 TD）；(3) Design Review 被標為「需排程」→ 應直接跑。三項全部可自主解決，loop 不應停下。
 
 
 Claude binding for this reference: use `AskUserQuestion` for attended blocker confirmation, in batches of at most 4. Map the source blocker options to the tool options and persist the answer before evaluating or dispatching the item; in `--unattended` / runner mode write the prescribed log and retain the blocker.

@@ -3,7 +3,7 @@ description: Consumer 維護 fixtures 檔（lifecycle repo：specs/truth/fixture
 paths: ['specs/truth/fixtures.md', 'docs/FIXTURES.md', 'docs/fixtures.md']
 ---
 <!-- Clade native rule; source: rules/core/fixtures-reference.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Fixtures Reference（hard rule）
 
@@ -47,7 +47,7 @@ seed 是這些值的機器權威。fixtures 檔只列 review 會引用的穩定 
 
 每條 fixtures 檔列出的 sample **MUST** 在 seed file 有對應 INSERT row。建議於條目旁標註 seed 行號或 anchor（如「seed.sql 第 N 行」或「seed.sql `-- kiosk_cards admin` anchor」）方便 cross-reference。
 
-當 `## N. Fixtures / Seed Plan` task 新增 sample 時，必須**同時更新** fixtures 檔與 `supabase/seed.sql`，否則 propose 階段 hygiene check 會撞「sample referenced but missing from seed」。
+當 `## N. Fixtures / Seed Plan` task 新增 sample 時，必須**同時更新** fixtures 檔與 `supabase/seed.sql`，否則 規劃階段（寫 plan package／tasks 時） hygiene check 會撞「sample referenced but missing from seed」。
 
 ## 遷移
 

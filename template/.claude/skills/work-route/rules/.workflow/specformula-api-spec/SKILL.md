@@ -3,7 +3,7 @@ name: specformula-api-spec
 description: 當要導入 SpecFormula、規劃新的 API、或調整 API Spec Schema 時載入此規格
 ---
 <!-- LOCKED: mirrored from SpecFormula/specformula-dev-framework@e5568250a2c0599983bce90fb08d548da35e1d64 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # SpecFormula API Spec 撰寫指南
 

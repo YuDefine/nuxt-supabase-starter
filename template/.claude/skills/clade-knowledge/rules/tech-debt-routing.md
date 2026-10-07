@@ -1,13 +1,15 @@
 ---
-description: Tech debt 路由規則——決定發現的 TD 該登在 clade 還是當前 consumer，以散播範圍與修法歸屬為準
+description: Tech debt 路由規則——決定發現的技術債該登在 clade 還是當前 consumer，以散播範圍與修法歸屬為準；登記載體依該 repo 是否為 lifecycle repo
 paths: ['docs/tech-debt.md', '**/docs/tech-debt.md']
 ---
 <!-- Clade native rule; source: rules/core/tech-debt-routing.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Tech Debt Routing
 
-先問「修法落在哪一層」，再決定 TD 登記位置。此規則優先於個別 skill 說明；TD 編號與 entry 格式見 [[follow-up-register]]，entry 的 `**自驗**` gate 寫法見 [[agent-self-verification]] § 驗收 gate MUST 收窄到本次觸及的範圍。
+先問「修法落在哪一層」，再決定登在哪個 repo。此規則優先於個別 skill 說明。
+
+**載體依目標 repo 分**（[[follow-up-register]]）：lifecycle repo（repo root 有 `specs/truth/work-lifecycle.md`，clade home 是其中之一）登進所屬 plan 的 § Open work，沒有所屬 plan 就 `flow plan open`，**NEVER** 新增 `docs/tech-debt.md` 條目；未遷移 consumer 登進自家 `docs/tech-debt.md` 的 `TD-NNN`。下表的「登在」指 repo，不指載體。TD 編號與 entry 格式見 [[follow-up-register]]，entry 的 `**自驗**` gate 寫法見 [[agent-self-verification]] § 驗收 gate MUST 收窄到本次觸及的範圍。
 
 ---
 
@@ -21,12 +23,12 @@ paths: ['docs/tech-debt.md', '**/docs/tech-debt.md']
 
 依答案路由：
 
-| 修法位置 | 散播後受惠 | TD 登在 |
+| 修法位置 | 散播後受惠 | 登在 |
 | --- | --- | --- |
-| clade `scripts/` / `vendor/` / `rules/` / `capabilities/core/` / `claude-md/core-snippets/` | 全部 consumer（散播後） | **clade `docs/tech-debt.md`** |
-| 單一 consumer 業務碼（自家 `server/` / `app/` / 自家 migration / 自家 nuxt.config） | 只該 consumer | **該 consumer `docs/tech-debt.md`** |
-| starter scaffolder（`packages/create-nuxt-starter/`） | 未來所有 scaffold 出的新專案 | **starter `docs/tech-debt.md`** |
-| 同時 clade + consumer 都要改 | 跨層 | **clade 為主、consumer 為輔**：clade TD 描述根因 + 散播計畫，consumer TD 描述本地後置動作（如 `pnpm hub:vendor:force` 後跑某個 backfill） |
+| clade `scripts/` / `vendor/` / `rules/` / `capabilities/core/` / `claude-md/core-snippets/` | 全部 consumer（散播後） | **clade**（plan § Open work） |
+| 單一 consumer 業務碼（自家 `server/` / `app/` / 自家 migration / 自家 nuxt.config） | 只該 consumer | **該 consumer** |
+| starter scaffolder（`packages/create-nuxt-starter/`） | 未來所有 scaffold 出的新專案 | **starter** |
+| 同時 clade + consumer 都要改 | 跨層 | **clade 為主、consumer 為輔**：clade 那條描述根因 + 散播計畫，consumer 那條描述本地後置動作（如 `pnpm hub:vendor:force` 後跑某個 backfill） |
 
 ---
 
@@ -43,9 +45,9 @@ paths: ['docs/tech-debt.md', '**/docs/tech-debt.md']
 
 - **MUST 同時寫 ceiling 與 upgrade path**，用 `→` 分隔。只寫「這裡之後要改」的裸 marker 不算——沒有 ceiling 就沒有「何時該動它」的判準，那就是永遠不會被處理的那種 marker
 - **NEVER 用裸 `TODO` / `FIXME` / `XXX` 承載這個角色**（fleet 掃描假陽性遠多於真陽性，獨特前綴才可收割）
-- **標記不取代登記**：跨 session 或會影響他人的缺口仍 MUST 進 `docs/tech-debt.md` 走本檔的決策流程。marker 承接的是「當下判斷還不值得開一條 TD entry，但忘了就再也找不回來」那一層
+- **標記不取代登記**：跨 session 或會影響他人的缺口仍 MUST 走本檔的決策流程登記（載體見檔頭）。marker 承接的是「當下判斷還不值得開一條 TD entry，但忘了就再也找不回來」那一層
 
-**收割**：`node scripts/harvest-td-markers.ts [--repo <path>]` 掃出所有 marker 輸出候選清單。它**只出清單、不寫 `docs/tech-debt.md`**；升級成正式 entry（過 `scripts/audit-tech-debt-hygiene.ts`）是人的判斷。
+**收割**：`node scripts/harvest-td-markers.ts [--repo <path>]` 掃出所有 marker 輸出候選清單。它**只出清單、不寫任何登記簿**；升級成正式登記（lifecycle repo：plan Open work；未遷移 consumer：TD entry，過 `scripts/audit-tech-debt-hygiene.ts`）是人的判斷。
 
 ## 為什麼一律先問 clade
 

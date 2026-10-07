@@ -3,7 +3,7 @@ description: patterns.json 機械 ban 清單的實作階段投影 — 寫 .vue /
 paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'app.config.ts', 'packages/*/app.config.ts', 'app/app.config.ts', 'packages/*/app/app.config.ts']
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-review-bans.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Nuxt Review Bans（實作階段強制）
 

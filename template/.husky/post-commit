@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+# 🔒 LOCKED — managed by clade · Source: vendor/husky/post-commit · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/husky/post-commit
+# CLADE:VENDOR-SCRIPT
+# 分組 commit 後只消耗已提交的受審路徑；immutable verdict receipt 保留。
+set -eu
+CLADE_REVIEW_BASELINE=$(git rev-parse --path-format=absolute --git-path clade-review-integrity.json)
+if [ ! -e "$CLADE_REVIEW_BASELINE" ]; then
+  exit 0
+fi
+CLADE_REVIEW_HOME="${CLADE_HOME:-$HOME/offline/clade}"
+node "$CLADE_REVIEW_HOME/vendor/scripts/lib/review-integrity-scope.ts" finish-commit \
+  --repo "$(git rev-parse --show-toplevel)" --baseline "$CLADE_REVIEW_BASELINE"

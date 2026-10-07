@@ -35,18 +35,22 @@ annotate() {
   fi
 }
 
+# 走到這裡代表 workflow 明寫了這個 action（本機則是 local.ts 在 workflow 裡找到它）＝已導入。
+# 引擎或 CLI 缺失是「沒有能力執行」，不是「沒有 applicable target」：fail-closed，
+# NEVER 印 skip 再 exit 0（checker-contract § Fail-closed Iron Law）。刪掉 gate.ts、少裝
+# @evlog/cli、propagate 不完整都屬於這種情況，一律 exit 2。
 if [ ! -f "$GATE_ENGINE" ]; then
-  annotate warning "gate.ts not found next to run.sh — consumer not yet propagated, skipping gate"
-  exit 0
+  annotate error "infrastructure-error: gate.ts not found next to run.sh — the vendored action is incomplete (re-run clade propagate); the gate did NOT run"
+  exit 2
 fi
 
 # @evlog/cli 宣告在哪個 package.json 取決於 app 根在哪：app 根 ≠ repo 根時
 # （starter 的 template/、monorepo 的 apps/web）依賴跟著 app 走，而 repo 根
-# 可能根本沒有 package.json。只看 repo 根會靜默 skip 掉整個 gate。
+# 可能根本沒有 package.json。只看 repo 根會把已導入的 app 誤判成沒宣告。
 #
 # 路徑 MUST 先 resolve 成絕對路徑再 require：`require('template/package.json')` 會被當成
-# 套件名去 node_modules 找，MODULE_NOT_FOUND 被 2>/dev/null 吞掉 → 判成「沒宣告」→ 整道
-# gate 靜默 skip。starter 在修正前就是這樣，CI 從沒真的跑過這道 gate。
+# 套件名去 node_modules 找，MODULE_NOT_FOUND 被 2>/dev/null 吞掉 → 判成「沒宣告」，
+# 而「沒宣告」是 exit 2：app 根在子目錄的 repo 會被誤擋。
 FIRST_CWD="$(printf '%s' "$INPUT_CWD" | head -1 | tr -d '[:space:]')"
 [ -z "$FIRST_CWD" ] && FIRST_CWD=.
 HAS_CLI=0
@@ -59,8 +63,8 @@ for candidate in "$FIRST_CWD/package.json" "./package.json"; do
 done
 
 if [ "$HAS_CLI" -eq 0 ]; then
-  annotate warning "@evlog/cli not declared in $FIRST_CWD/package.json or ./package.json — evlog map not yet adopted here, skipping gate. See vendor/snippets/evlog-map/README.md"
-  exit 0
+  annotate error "infrastructure-error: @evlog/cli not declared in $FIRST_CWD/package.json or ./package.json — the gate cannot run (pnpm add -D @evlog/cli, or remove this step from the workflow if evlog map is not adopted here). See vendor/snippets/evlog-map/README.md"
+  exit 2
 fi
 
 # 取本次變更檔清單。base-ref 抓不到（shallow clone / 首次 push）時退化成

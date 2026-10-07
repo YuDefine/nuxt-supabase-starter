@@ -1,10 +1,10 @@
 ---
 description: Screenshot strategy 規則——根據互動深度、跨裝置、跨瀏覽器與是否要沉澱成回歸測試，選擇 target adapter carrier 或 reproducible runner CLI
-paths: ['screenshots/**', 'tests/e2e/**', 'packages/*/tests/e2e/**', 'openspec/changes/**/design-review.md']
+paths: ['screenshots/**', 'tests/e2e/**', 'packages/*/tests/e2e/**', 'specs/plans/**/design-review.md']
 ---
 <!-- Clade native rule; source: rules/core/screenshot-strategy.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 ## Runtime adapter boundary
 
@@ -46,7 +46,7 @@ screenshots/<environment>/<topic>/
 
 | 類別 | 用途 | `<topic>` 約束 | 檔名約束 | 算驗收證據 |
 | --- | --- | --- | --- | --- |
-| **A. 人工檢查截圖** | 對應 spectra change tasks.md `## 人工檢查` 各 item | **MUST** = `<change-name>`（一字不差等於 `openspec/changes/<change-name>/` 目錄名） | **MUST** `#<item-id>[<variant>]-<descriptor>.<ext>`（見下節「檔名強制規範」） | ✅ 是 |
+| **A. 人工檢查截圖** | 對應工作載體 tasks.md `## 人工檢查` 各 item | **MUST** = `<work-id>`（一字不差等於 `specs/plans/<work-id>/` 目錄名或 task 檔 slug） | **MUST** `#<item-id>[<variant>]-<descriptor>.<ext>`（見下節「檔名強制規範」） | ✅ 是 |
 | **B. Ad-hoc / debug 截圖** | 探索、debug、screenshot review 視覺 QA、polish 過程觀察 | 自由語義（`debug-clock-overlap`、`live-preview-design-token`、`exploration-typography` 等） | 自由命名 | ❌ 否（資料夾名與 active change 不 match） |
 
 **禁止把兩類混在同一資料夾**（驗收讀端用資料夾名 + 檔名 id 配對 item）。
@@ -97,7 +97,7 @@ screenshots/<env>/<change-name>/_exploration/
 ❌ 8.1-home.png（缺 `#`）  clock-light.png（沒有 id）  #1_clock-light.png（`_` 不認）
 ```
 
-檔名首段 token 由 `^#?(\d+(?:\.\d+)?)[a-z]?(?=[-._])` 擷取；沒有讀端替 legacy 命名兜底，`audit-screenshot-staleness.ts` 把缺 `#N` 前綴的檔標成 LEGACY。
+檔名首段 token 由 `^#?(\d+(?:\.\d+)?)[a-z]?(?=[-._])` 擷取；沒有讀端替 legacy 命名兜底，缺 `#N` 前綴的檔不會被配對（無機械 audit，review 人工核對）。
 
 ## 截圖落檔（target adapter operation）
 

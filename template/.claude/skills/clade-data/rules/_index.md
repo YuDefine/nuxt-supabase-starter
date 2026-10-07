@@ -1,6 +1,7 @@
 {"file":"audit-schema.md","source":"rules/modules/db-schema/supabase/audit-schema.md","paths":["supabase/migrations/**/*.sql","server/utils/audit*.ts","packages/*/server/utils/audit*.ts","server/api/**/*.ts","packages/*/server/api/**/*.ts"]}
 {"file":"database-access.md","source":"rules/modules/db-runtime/cf-workers/database-access.md","paths":["app/**/*.{vue,ts}","packages/*/app/**/*.{vue,ts}","server/**/*.ts","packages/*/server/**/*.ts"]}
 {"file":"db-preview-env.md","source":"rules/core/db-preview-env.md","paths":["supabase/migrations/**/*.sql",".github/workflows/**/*.yml","docker-compose*.yml","infra/**/*","scripts/dev-session*","scripts/worktree-*","scripts/singleton*",".claude/consumer-meta.json"]}
+{"file":"declarative-schema.md","source":"rules/modules/db-schema/supabase/declarative-schema.md","paths":["supabase/schemas/**","supabase/config.toml"]}
 {"file":"evlog-adoption.catalogs.md","source":"rules/modules/capabilities/evlog/evlog-adoption.catalogs.md","paths":["server/**","packages/**/server/**","specs/plans/*evlog*/**"]}
 {"file":"evlog-adoption.decision.md","source":"rules/modules/capabilities/evlog/evlog-adoption.decision.md","paths":["specs/plans/**","nuxt.config.ts","packages/**/nuxt.config.ts","server/plugins/evlog-*.ts","packages/**/server/plugins/evlog-*.ts"]}
 {"file":"evlog-adoption.depth-gate.md","source":"rules/modules/capabilities/evlog/evlog-adoption.depth-gate.md","paths":["evlog.map.json","packages/**/evlog.map.json","specs/plans/**",".github/**","server/**","packages/**/server/**","app/pages/**","packages/**/app/pages/**"]}

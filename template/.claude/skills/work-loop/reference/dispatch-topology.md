@@ -27,17 +27,17 @@ plan package 實作／補件落哪一組看**這個 item 要不要起頁面**：
 
 1. item 需要 archive / merge-back / push → **main 組**
 2. item 需要 dev server 起頁面（收 evidence、重拍 stale 截圖、Design Review）→ **dev-port 組**
-3. item 只改 tracked code、走 `/wt` worktree → **扇出組**
+3. item 只改 tracked code、交 `wt` 開 worktree → **扇出組**
 4. item 主線用 Edit / Bash 就能做完 → **主線即時組**
 
 ## 扇出組：填滿 4，收一個補一個
 
 - dispatch 到第 4 個 in-flight 後停止 dispatch，主線改做 main 組 / dev-port 組 / 主線即時組
 - 每收到一個 `<task-notification>` 並走完收割 SOP，從扇出組**補一個**新的 dispatch
-- **≤ 4 只計扇出組的 dispatch**。dev-port 組的 `/wt` dispatch 另計（它自己的配額是 1），兩者不互佔——4 個扇出 in-flight 加 1 個 dev-port dispatch 是合法狀態
+- **≤ 4 只計扇出組的 dispatch**。dev-port 組的 `wt` dispatch 另計（它自己的配額是 1），兩者不互佔——4 個扇出 in-flight 加 1 個 dev-port dispatch 是合法狀態
 - `--unattended` 的 5-item cap 管的是**本輪處理總數**，不是併發數
 
-**`/wt` 不可用的 repo（產地 clade home 就是）扇出上限是 1**（執行者是主線本身）。上限變 1 **只改併發，不改工作量**：其餘判定照舊，item 也不會因此變成可跳過。
+**`wt` 不可用的 repo（產地 clade home 就是）扇出上限是 1**（執行者是主線本身）。上限變 1 **只改併發，不改工作量**：其餘判定照舊，item 也不會因此變成可跳過。
 
 ## dev-port 組：一次一個，等而不搶
 
@@ -128,7 +128,7 @@ exit code 契約的 SoT 是 [[agent-routing.pi-watch-protocol]] § 泛用 Dispat
 
 ## 併發上限是兩個，按載體選
 
-各自 worktree 的 `/wt` 扇出組上限 **4**；共用同一棵 working tree 的 session dispatch 上限 **2**（SKILL.md § 4a／§ dispatch 的三個不准）。兩者可同時生效，**NEVER** 挑數字小的那個套到另一種載體上。
+各自 worktree 的 `wt` 扇出組上限 **4**；共用同一棵 working tree 的 session dispatch 上限 **2**（SKILL.md § 4a／§ dispatch 的三個不准）。兩者可同時生效，**NEVER** 挑數字小的那個套到另一種載體上。
 
 ## 主線在做什麼
 
@@ -136,12 +136,29 @@ exit code 契約的 SoT 是 [[agent-routing.pi-watch-protocol]] § 泛用 Dispat
 
 1. 扇出組有未 dispatch 的 item 且扇出 in-flight < 4 → **先補滿**。dispatch 是非阻塞動作，**永遠優先於下面每一條**——先把並行度拉滿，主線再去做序列工作
 2. main 組還有 item → 做 main 組
-3. dev-port 組有 item 且 lease 可取 → dispatch 該 item（走 `/wt`，一次一個）
+3. dev-port 組有 item 且 lease 可取 → dispatch 該 item（交 `wt`，一次一個）
 4. 主線即時組還有 item → 做主線即時組
 5. 四組皆空 → 補件：重量 `blockers` ledger（[blocker-ledger.md](blocker-ledger.md) § 清 ledger 是正當工作），並檢查 HANDOFF 待辦段與 state 中 `failStreak` < 3 的 item 是否仍 actionable
 6. 補件也空且 in-flight > 0 → 等 notification（此時等待是收斂，不是閒置）
 
 四組皆空、補件也空、**且** in-flight ledger = 0 才是本輪結束。
+
+## 主檔 Step 3／4／5 判準的理由（判準本體在主檔，本節不複述）
+
+> 判準只有一份，在主檔 SKILL.md 標示的 Step；本節只放那些判準的理由與證據，不複述判準。判準的增修只落主檔。
+
+| 主檔位置 | 那條判準的理由／證據 |
+| --- | --- |
+| Step 3.1a carrier 接續 | 掃描的 `plans` source 名稱是既有 scan 的分類鍵。歷史保存與需求完成是兩種結果，保留 legacy 未完需求不等於完成它。大小或進度不構成略過理由，是因為 `/implement` 依 carrier 的 phase 結構管理步驟、pause 與 blocker，依 carrier 的下一個未勾 phase 推進可執行步驟即可 |
+| Step 3.1b blocked 分類 | 分類為 blocked 的 candidate 與 3.1a 的受阻需求走同一條路，所以兩邊共用 [blocker-ledger.md](blocker-ledger.md) 的查表 |
+| Step 4 § Runner child 的 background ownership | taskId 留不到下一輪：下一個 child 無法取得前一個 child 的 harness task ownership |
+| Step 4a 扇出上限 4 | `wt` 保證每個 worker 各有一棵樹，所以彼此不搶同一棵樹；共享 working tree 的 dispatch 是另一種載體（見本檔 § 併發上限是兩個，按載體選） |
+| Step 4a brief 內嵌護欄 | subagent 是 fresh context，天然免疫主線 compaction——把安全執行面下沉到 subagent 是本設計對 governance decay 最可靠的一道 |
+| Step 4b 共享 working tree 上限 2 | N session 搶同一 working tree 是把 usage 問題升級成 race 問題。`wt` 扇出組不受這條約束；兩個數字不是矛盾，是兩種載體，憑「哪個數字比較小就照哪個」選邊是讀錯 |
+| Step 4b packaging 同步寫 state | HANDOFF 有題而 state 沒有時，Step 2.7 讀不到它，等於退回該步存在之前的累積狀態 |
+| Step 4c Per-item task 追蹤 | user 看 task list 判斷 loop 在幹嘛，概括 task 提供零資訊 |
+| Step 4c pre-scan exit 不計 streak | 兩個計數器管的是 item 的工作 dispatch，不管蒐證段 |
+| Step 5 收割 | [harvest.md](harvest.md) 8 步的順序：驗收 → scope-verify → 高擴散半徑 change 的 checker subagent → 更新 progress → re-scan → 檢查新 actionable → 更新 ledger → 補滿扇出組 |
 
 
 Claude binding for this reference: run the explicitly described background dispatcher through `Bash(run_in_background=true)`, track its returned task id, consume terminal results with `TaskOutput`, and use the single `ScheduleWakeup` safety net. Preserve owner, deadline, in-flight state, and notification harvest.

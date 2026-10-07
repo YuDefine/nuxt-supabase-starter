@@ -6,7 +6,7 @@
 
 ## Host selection contract
 
-Choose a runner only when the current host provides a verified same-runtime runner and durable wakeup/receipt surface. Otherwise use an attended in-session round when supported; continuous or unattended execution is blocked and must retain durable state and ownership. Codex and Cursor readers must not execute the Claude commands below.
+Choose a runner only when the current host provides a verified same-runtime runner and durable wakeup/receipt surface. Otherwise use an attended in-session round when supported; continuous or unattended execution is blocked and must retain durable state and ownership. Codex readers must not execute the Claude commands below.
 
 ## Claude host adapter: concrete runner operations
 
@@ -231,3 +231,111 @@ runner process 的退出通知到達時 **MUST 主動回報，不等 user 問**�
 | 與 (d) 的關係 | **兩個都要**，不是二選一。round 通常 15–25 分 < 55 分，事件本身順帶維持 cache；但 round 卡住超過 55 分時，(d) 的 heartbeat 是唯一還會醒的東西 |
 
 **NEVER 改用 `CLAUDE_CODE_MESSAGING_SOCKET` 把結果 post 回主線的變體**，除非先驗掉主線 inbox socket bind 與 wire format（評估見 `${CLADE_HOME:-$HOME/offline/clade}/docs/discussions/2026-08-08-cross-session-messaging-evaluation.md`）。
+
+## 開場佇列檢查的理由（主檔 Step 0 下推）
+
+> 主檔 pointer：Step 0 § 開場佇列檢查。判準表留主檔；以下是理由與證據邊界。
+
+**理由**：attended 清算是佇列**唯一**的出口（unattended 只跑 `(a) prune`），route 到 runner 之後主線從不進 Step 2.7——佇列因此單調遞增（2026-08-12 實測積到 19 輪）。
+
+**清算是有界的**：幾個詢問操作就結束。runner 起跑時印的那一行待答提示不算出口：它印在 runner 的 log 裡，而打 runner 的前提就是 user 離開座位，佇列照樣積到 19 輪。
+
+本證據決定：待答題是否要在新工作 dispatch 前送達——要；答案未到時只阻擋依賴該答案的 item。
+本證據不決定：待辦由誰承載——清算完仍照 route 表判；把它當成選 in-session 的論據，會退回 [[pitfall-work-loop-in-session-default-has-no-context-headroom]] 的 context 空轉。
+
+## Runner child 的 decision-linked dispatch（主檔 Step 1.5 下推）
+
+> 主檔 pointer：本輪是 runner child，且 routing gate 阻擋 Read / Bash 後回傳 `decision_id` 時 MUST 讀本節。
+
+當本輪是 runner child，且 routing gate 阻擋 Read / Bash 後回傳 `decision_id`，該 dispatch 是 Step 1.5
+繼續執行的前置，不是可跨 round 收割的工作。依下表 first-match：
+
+| 可觀察 predicate | 執行形狀 |
+| --- | --- |
+| `$ARGUMENTS` 含 `--runner-child --linked-dispatch-mode foreground`，或 `WORK_LOOP_RUNNER_CHILD=1` | 在**同一個** `claude --print` process 用 foreground `Bash` 呼叫 dispatcher，timeout 600000；等待 exit `0/2/3/4` 後立刻按 routing receipt 分流，再繼續本輪 |
+| 非 runner child | 不適用本節，走主檔 Step 1.5 寫的一般路徑 |
+
+Foreground 路徑**不**寫 `inFlight`、不建 background task、也不 arm keepalive：結果已在同一 tool call
+回來，沒有未來 notification 可收割。主檔在這條路徑禁用 background 的原因：`claude --print` 回覆後
+process 退出，background task ownership 隨之消失；2026-08-14 某 consumer round 46 的 log 只留下
+`task ba6yk67mk`，state 停在 round 45。
+
+## runner.sh 的 inFlight mechanical fail-closed（主檔 Step 4 下推）
+
+> 主檔 pointer：Step 4 § Runner child 的 background ownership。同 process wait + harvest 契約留主檔。
+
+runner.sh 另有 mechanical fail-closed：起跑前、每次 child launch 前，以及 child 退出後都檢查
+`inFlight`。非空或不可解析時寫入持久 `orphan-quarantine.json`、輸出 `preexisting-inflight-quarantine`
+或 `child-exited-with-inflight`、保留 lock 檔並停止，**NEVER 起下一個 child**。process 退出後 lock
+的 heartbeat/pid lease 仍可能自然失效；startup marker gate 才負責禁止 retry。這道 guard 只防 orphan
+擴大，不取代主檔 Step 4 的同 process wait + harvest 契約。
+
+## runner 為什麼不走 `/handoff`、並行走哪個載體（主檔 Step 4b 下推）
+
+> 主檔 pointer：Step 4b。禁令本體與逐字反開脫留主檔；要在 runner 底下並行推進、或有人主張 relay／fanout 也算派出時 MUST 讀本節。
+
+主檔那條禁令的理由：`relay` 會把位置連同 coordinator 身分交給 successor，
+runner 迴圈就沒有主體了；且 `completeRelay()` 要求有 current pane 可交，headless runner child 沒有 pane
+時直接回 `relay_refused`。runner 只派 worker、不交位置：outcome 落 durable record，由後續輪次的 Step 2
+re-scan 或 `herdr-patrol.ts --stalled` 收。
+
+交位置與並行在 runner 底下有各自的載體：
+
+| 要的是 | 載體 | 誰能用 |
+| --- | --- | --- |
+| 並行推進多條 worker 工作 | 4a 的 `wt` 扇出組（≤4）、4b 的裸 dispatch（共享同一 working tree ≤2）、`Workflow` script 的 `parallel()` | **runner child 每一輪都可以** |
+| 把本 session 的位置交給下一個 | `/handoff` 的 `park` / `relay` / `fanout` / `next` | **只有 attended 收工時**——那本來就是它的場域 |
+
+`fanout` 看起來像「並行」是因為它同時做了兩件事：派 N 個 worker **並且**交出位置給 successor 收割。
+runner 要的只有前一半，而後一半由**下一輪 child 的 Step 0 准入**承擔（`harvestReady > 0` 就准入、
+該輪只做收割）——不需要任何 pane 交接。
+
+## 工具健檢（Step 2.5）探針非 0 的處置
+
+> 主檔 pointer：Step 2.5 任一探針回非 0 時 MUST 讀本節並照四步做完，缺一不可。
+
+**非 0 的處置**（四步，缺一不可）：
+
+0. **先確認探針路徑在本 repo 成立** —— 「探針寫錯路徑」與「工具真的死了」在 exit code 上**完全同形**，兩者都回非 0 + `MODULE_NOT_FOUND`。產地與投影的路徑不同（上表 main 列即為一例），照抄另一側的路徑會讓整組 item 被誤判成不可用。路徑確認無誤才進第 1 步
+1. 把該組標成**本輪不可用**，落進 state 的 `notes`，附**實際 stderr 首行**（不是「壞了」）
+2. 該組的 item **全部改走 § Decision packaging**，**NEVER** dispatch、**NEVER** 標 skip
+3. 修法若落在別的 repo（clade 投影層、上游工具）→ 修法本身也是一條 packaged 決策，
+   **NEVER** 在本 repo 手補投影檔繞過
+
+**實跑擋得住「檔案在但 import 死了」，擋不住「探針量錯檔」**，兩者輸出無法區分——所以第 0 步獨立存在。
+
+## unattended 的裝載準則與 runner-only flag 的理由（主檔 Step 0 § Flags）
+
+> 主檔 pointer：Step 0 § Flags 的 `--unattended` bullet 指向本節。判準本體在主檔，本節只放理由與證據，不複述判準；判準的增修只落主檔。
+
+- **裝載準則（同 Location／同 skill 併輪）**：理由是成本不是整齊——runner 每輪起全新 process，而 git snapshot 每輪變動使 always-load 段整段重付一次冷載（約 90k effective tokens），輪數減半即該固定成本減半（[[TD-433]]，前提實測 median 18.6 分 < 1h cache TTL）。反過來湊滿 cap，只會讓單輪失敗牽連無關 item。
+- **`--scan-helper-command`／`--rotate-helper-command`**：runner 以解析後的 clade checkout（`$CLADE_HOME`）把兩者展開成絕對路徑的完整命令。
+- **`--min-wakeup-seconds`**：其他 host 依自身 schema 與 harness wait 界限。帶了它就以它為準；短輪詢買不到 notification 沒給的東西（本檔 § 起 runner 的形狀與收尾契約 (d) 已逐字禁止輪詢進度）。
+
+## in-session `/loop` 的每輪收尾表（主檔 Step 0 § Continuous invocation 下推）
+
+> 主檔 pointer：從 `/loop` 呼叫時，**每一次**要排 wakeup 或結束 turn 之前 MUST 讀本節並逐列判。逐列判準只在本表；排 wakeup 的 Iron Law 本體在主檔 Step 0 § Continuous invocation，本節不複述。
+
+由上而下逐列判，first-match：
+
+  | 可觀察 predicate | 動作 |
+  | --- | --- |
+  | candidate list 還有**未 triage** 或**已判自主但未執行**的 item | **NEVER 排 wakeup。立刻接著跑下一輪**（同一個 turn 內連續跑，不睡） |
+  | in-flight ledger > 0，且扇出組還有空位 | **NEVER 排 wakeup。** 補 dispatch，或做主線即時組的工作 |
+  | in-flight ledger > 0，扇出組已滿、主線即時組已空 | 只有 adapter 提供已驗證 durable 喚醒時才排 notification safety net；timer 與 bounded wait 依 host schema/harness cadence |
+  | 尚未命中 Step 6、所有當前 item 都不可推進（completed / packaged / escalated / legal-skip），**且** in-flight = 0 | 只有已驗證 durable timer 才排 heartbeat；沒有 timer 就保存 state 並結束當前 turn，不假造 scheduled resume |
+  | Step 6 停止條件成立 | 取消該 adapter owned 喚醒，**不得**再排 heartbeat |
+
+  adapter 負責 durable 喚醒的 prompt/continuation binding；common 只要求原始 task、ownership 與 state 不重播，停止時取消 owned 喚醒。Claude adapter 可保留 dynamic prompt-preserving sentinel；其他 host 依自身 schema，不假造 timer。
+
+  反藉口實錄（「這輪做了 3 件夠了」「剩下的下一輪再做」等）在 [guardrails.md](guardrails.md) § D。
+
+## 主檔 Step 0／2／2.5 判準的理由（判準本體在主檔，本節不複述）
+
+> 判準只有一份，在主檔 SKILL.md 標示的 Step；本節只放那些判準的理由與證據，不複述判準。判準的增修只落主檔。
+
+- **Step 0 § 起 runner 的形狀與收尾契約，runner child 不讀**：那五條只在 attended 主線起 runner 的那一刻適用。
+- **Step 2 scan helper 的失敗判定**：helper 在單一 Node process 內完成 handoff-scan → repo-local 同目錄 temp → JSON parse → git common dir owner `consumerId` 驗證 → latest rotate 成 prev → atomic rename（完整理由見本檔 § scan helper 的原子邊界）。
+- **Step 2 scan 不准隔輪跑**：要省的是**同一輪內的重複**，不是輪次覆蓋率。
+- **Step 2 `SCAN-MISMATCH` 也算失敗**：它表示讀到別 repo 的掃描結果（unattended 下危害最大：無人在旁審視就照它推進待辦）。
+- **Step 2.5 探針要實跑**：scan 回的是**待辦**狀態，不是**工具**狀態。兩者無關：待辦清單完全正常，而推進它們要用的 launcher 早就死了。

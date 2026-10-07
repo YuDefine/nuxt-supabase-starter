@@ -3,7 +3,7 @@ description: Dev tunnel（vite-plugin-cloudflare-tunnel / cloudflared）跨 cons
 paths: ['nuxt.config.*', '.env', '.env.local', 'package.json']
 ---
 <!-- Clade native rule; source: rules/core/dev-tunnel-convention.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Dev Tunnel Convention（索引）
 

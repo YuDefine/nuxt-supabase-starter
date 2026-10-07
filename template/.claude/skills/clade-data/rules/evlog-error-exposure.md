@@ -11,7 +11,7 @@ paths:
   - 'packages/**/server/middleware/**'
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/evlog/evlog-error-exposure.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # evlog Error Exposure（why / fix / internal 的去處）
 
@@ -34,7 +34,7 @@ middleware、guard、或 handler 裡任何 `requireRole` / `getUserSession` **�
 
 ## 內部識別字的處置
 
-**post-auth 4xx 的 `why` 可以點名 schema / table**（`<consumer-b>.quotations` 這類）。不必為此重寫
+**post-auth 4xx 的 `why` 可以點名 schema / table**（`<consumer>.quotations` 這類）。不必為此重寫
 文案：schema 名稱從 API 路徑與 client bundle 本來就推得出來，防線是 auth 與 RLS，不是
 schema 匿名性；重寫只有編輯成本、零安全增益。
 

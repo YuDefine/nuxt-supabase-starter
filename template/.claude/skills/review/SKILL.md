@@ -7,49 +7,36 @@ description: "Use for review lifecycle work: human-gate checks or UI screenshot 
 
 # Review lifecycle（統一入口）
 
-`review` is the single public entry for the review support lifecycle. Choose one
-mode from the user's request, then read the corresponding legacy guide before
-acting; those guides retain the detailed contracts and are references, not
-independently discoverable skills.
+`review` 是 review 支援生命週期的統一入口：查有沒有卡等人判（scan）、UI 截圖取證與判定（screenshot），以及已退役的 archive／screenshots 歸檔。
 
-| Mode | Use when | Detailed guide |
-| --- | --- | --- |
-| `scan` | Check whether anything in this repo is waiting on a human | No guide: run `flow gates --repo-only --json` |
-| `screenshot` | Collect UI screenshots or execute a visual checklist | [screenshot guide](references/.legacy/review-screenshot/SKILL.md) and its evidence contract |
-| `archive` | Retired: do not append `docs/manual-review-archive.md`; completed items stay in the work package | [review archive guide](references/.legacy/review-archive/SKILL.md) |
-| `screenshots` | Retired: do not move topics into `_archive/` | [screenshot archive guide](references/.legacy/screenshots-archive/SKILL.md) |
+# SOP
 
-Screenshot evidence is collected by the named **Pi Gemini 3.8 Flash** worker
-(`screenshot-review-verify`, effort `high`; dispatch with
-`--model gemini --effort high --table-row screenshot-review-verify`); 截圖與 item 的符合性 gate 另交 **Claude Opus 5.5 · medium** (`screenshot-match-analysis`). The worker must not
-sign its own compliance result.
+## Phase 1 -- 判定 mode
 
-需要使用者拍板時，向使用者提問並等待回答；不要自行補完未決事項。
+1. THINK 依使用者請求判 scan（有沒有卡等人判）、screenshot（截圖、看畫面、跑 UI 檢查清單、UI 驗收或除錯截圖）、archive 或 screenshots（已退役，走 Phase 5）；product code review 交設定好的 code-review agent，Lighthouse／performance trace 交 browser-devtools。
 
-## Routing
+## Phase 2 -- scan
 
-- `/review scan` runs `node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --json`
-  from the consumer root (never with `CLADE_HOME`) and reports every card by
-  gate family; exit 2 from `--require-empty` means it could not tell, never "none".
-- `/review screenshot` collects evidence through the existing screenshot
-  worker and preserves every evidence limitation in the receipt.
-- `/review archive` does **not** write `docs/manual-review-archive.md`. Completed items stay in the work package; see the retired guide.
-- `/review screenshots` does **not** sweep topics into `_archive/`; it reports current top-level topics only.
+1. DELEGATE 在 consumer 根（不帶 `CLADE_HOME`）執行 `node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --json`，依 gate family 回報每一張卡；`--require-empty` exit 2 表示判不出來，不是「沒有」。
 
-If the request is a product code review, use the configured code-review agent.
-If it is a Lighthouse audit or performance trace breakdown, use the dedicated
-browser-devtools capability. This skill owns lifecycle evidence.
+## Phase 3 -- screenshot：取證
+
+1. THINK 先讀取 `rules/截圖取證與判定分工判準.md`，確認本次由 Pi Gemini 取證、Opus 判定，以及各自不可用時的處置。
+2. WRITE 先讀取 `templates/截圖取證brief.md` 與 `templates/截圖取證brief.example.md`，依種類（ad-hoc／人工檢查清單／除錯）寫出逐項 item、截圖輸出路徑、URL、ready signal 與允許操作，並指定 worker 讀取 `references/screenshot-worker-contract.md`。
+3. DELEGATE 主線直接執行 `node <clade-vendor>/scripts/pi-dispatch.ts --brief <absolute-brief.md> --cwd <consumer-root> --label <descriptive-label> --model gemini --effort high --route routing-table --tier-basis table-row --table-row screenshot-review-verify --workspace-access mutation`，依 agent-routing 的 Pi watch 收割 completion 與 evidence manifest。
+
+## Phase 4 -- screenshot：判定與回報
+
+1. DELEGATE 需要符合性 gate 時，把每張實際圖片路徑與完整 item 交給獨立 Opus 5.5 dispatch（`screenshot-match-analysis`）。
+2. THINK 先讀取 `rules/截圖證據可採性判準.md`，逐張覆核 manifest 的 `discriminating`，標 NON-EVIDENCE／UNREACHABLE。
+3. WRITE 回報摘要表、需人工確認項與截圖路徑（需要使用者拍板時，向使用者提問並等待回答，不自行補完未決事項）、`screenshots/<env>/<語義>/review.md` 位置；`verify:ui` 由主線依 watch protocol 呼叫 `verify-ui-receipt.ts`。
+
+## Phase 5 -- 已退役的 archive／screenshots
+
+1. THINK 先讀取 `rules/歸檔停寫判準.md`。
+2. WRITE archive：確認完成項已在 work package 打 `[x]`，回報「不再寫入 `docs/manual-review-archive.md`；結論在 `<carrier>`」後停止；screenshots：回報已停 rotate，列 `screenshots/<env>/` 頂層 topic，不搬檔。
 
 
-## Runtime 執行 — Claude Code
+## 提問載體 — Claude Code
 
-本 runtime 的合格視覺執行載體是 Claude Code `Agent` tool，`subagent_type: screenshot-review`。in-process dispatch 將 brief 放在 `prompt`；完成後由主線收取 JSON manifest，再依共同 evidence gate 判讀。
-
-**NEVER** 派 Pi 任一 model，也 **NEVER** 讓執行體再轉派或因 quota 不足降低獨立視覺判讀要求。工具不可用時回報阻擋，保留 gate 未完成。
-
-## Archive interaction
-
-When `/review archive` or `/review screenshots` requires a user choice, use
-Claude Code `AskUserQuestion` with every valid option and an explicit skip
-option, then wait for the answer before moving files. The question mechanism
-is only the runtime carrier of the shared interaction contract.
+Phase 4 需要使用者拍板時，以 Claude Code `AskUserQuestion` 列出每個有效選項與明確的略過選項，等回答後再往下。這只是共同提問義務在本 runtime 的載體。

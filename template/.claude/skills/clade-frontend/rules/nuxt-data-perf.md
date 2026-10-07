@@ -3,7 +3,7 @@ description: Nuxt data fetching 選用決策、Pinia Colada 最佳實踐、dedup
 paths: ['**/*.vue', 'app/**/*.ts', 'packages/*/app/**/*.ts', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'composables/**', 'packages/*/composables/**', 'queries/**', 'packages/*/queries/**', 'stores/**', 'packages/*/stores/**', 'nuxt.config.*', 'app.config.*']
 ---
 <!-- Clade native rule; source: rules/core/nuxt-data-perf.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Nuxt Data Fetching & Performance
 
@@ -129,7 +129,7 @@ export function useMasterCatalog() {
 
 **MUST** 改 composable 的 async 簽章前先 `rg -n 'await use[A-Z][A-Za-z]*\(\)' app/` 查呼叫端；**NEVER** 只憑 typecheck ＋ doctor 綠判定修好（只有空白 / loading 狀態的驗收測試抓得到）。診斷時 **NEVER 截斷擷取到的 body text**——截斷後只看得到 nav。
 
-> Pitfall：`docs/pitfalls/2026-09-07-usefetch-after-await-fix-changes-render-timing.md`
+> Pitfall：[[pitfall-usefetch-after-await-fix-changes-render-timing]]
 
 ### HR-9 CSRF-aware fetch MUST 走 library 官方入口，NEVER 覆寫 `globalThis.$fetch`
 
@@ -150,7 +150,7 @@ SFC 裡的 `$fetch` 是 `#build/fetch.mjs` 在 import 當下凍結的 `globalThi
 
 只在 production build 才炸的兩點：`nuxt-csurf` 在 production 改用 `__Host-csrf` + `secure: true`（`http://ip:port` 直連全 403；測試 harness MUST 同時接受 `csrf=` 與 `__Host-csrf=`）；`encryptSecret` 未設時每次 build 隨機——固定 `NUXT_CSURF_ENCRYPT_SECRET`，或在 `onResponseError` 攔 403 `EBADCSRFTOKEN` → reload。`ssr: false` 不影響 CSRF，但 `nuxt generate` / prerender 的靜態 shell 會讓它失效。
 
-> Pitfall：`docs/pitfalls/2026-09-07-nuxt-global-fetch-override-is-a-noop.md`
+> Pitfall：[[pitfall-nuxt-global-fetch-override-is-a-noop]]
 
 ## Should Rules（非 hard，但稽核會標）
 

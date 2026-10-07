@@ -95,7 +95,7 @@ cd ~/offline/clade
 node scripts/publish.ts patch
 node scripts/propagate.ts
 
-# 每個裝了 O1 的 consumer（例：<consumer-a>）：
+# 每個裝了 O1 的 consumer（例：perno）：
 cd ~/offline/<consumer>
 # 設新 env：走 rules/modules/runtime/cf-workers/secrets.md 正規路徑（GitHub Secret → deploy workflow），
 # 計畫性 rotation 不屬手動推送的例外。每個 env 各設三顆（值從 stdin 輸入，不進 argv）：

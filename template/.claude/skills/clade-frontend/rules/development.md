@@ -3,7 +3,7 @@ description: 開發規範（測試落點, coding style, UI reuse）
 paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'test/**/*.ts', 'packages/*/test/**/*.ts', 'shared/**/*.ts', 'packages/*/shared/**/*.ts', 'package.json']
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/development.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # UI Reuse
 
@@ -30,10 +30,7 @@ paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'server/**/*.ts', '
 - **ALWAYS** Nuxt UI 元件顯式寫出樣式 props（`color`, `variant`, `size`）— **NEVER** 依賴預設值。實作前先搜尋既有頁面中相同語義的用法，複製其 props 組合。詳見 `DESIGN.md` Component Convention Overview（若有）
 - **ALWAYS** `package.json` 的 `dev` / `dev:*` script 前綴 `NODE_OPTIONS=--dns-result-order=ipv4first` — Node 18+ 在 macOS 把 `localhost` 預設解到 `::1`，造成 dev server banner 印 IPv6 位址 + 瀏覽器走 IPv6 stack 訪問緩慢。Prefix 後 listhen / fetch resolve `localhost` 走 IPv4，banner 與訪問都回到 `127.0.0.1` 路徑。社群標準解（Node 官方 doc `--dns-result-order`）
 
-<!-- SPECTRA-UX:START v1.0.0 -->
-
 - **ALWAYS** `switch + assertNever` for enum / const-array / Zod-enum discrimination — **NEVER** `if/else if/else` chains on enum types。加新 enum 值時 compiler 會當場報錯，避免靜默漏 case。utility: `~/utils/assert-never`。離線稽核：`pnpm audit:ux-drift`。規則：[[ux-completeness]] Exhaustiveness Rule
-<!-- SPECTRA-UX:END -->
 
 # defineProps 型別約束
 
@@ -76,7 +73,7 @@ schema?: ZodType
 
 `schema?: ZodType` 會讓 `schema` 與其後的 `state` 都沒被宣告，包在外面的 `useValidatedForm` 恆為 false，整個 UForm + Zod 驗證層**從未執行過** — 而 typecheck / lint / test / 視覺四道全綠，唯一症狀是「表單留空送出什麼都沒發生」。
 
-靜態 grep 抓不到這個形狀（能篩的只有「有 `defineProps<` 且有外部 `import type`」，偽陽性極高），所以防線只能放在寫的當下。完整分析與 detection 見 clade `docs/pitfalls/2026-08-02-vue-defineprops-external-generic-type-silently-drops-props.md`。
+靜態 grep 抓不到這個形狀（能篩的只有「有 `defineProps<` 且有外部 `import type`」，偽陽性極高），所以防線只能放在寫的當下。完整分析與 detection 見 clade [[pitfall-vue-defineprops-external-generic-type-silently-drops-props]]。
 
 # Nuxt UI Color Mode 約束
 

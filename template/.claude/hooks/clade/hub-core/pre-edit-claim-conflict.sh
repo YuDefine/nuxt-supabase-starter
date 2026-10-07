@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # PreToolUse(Edit|Write) hook — 動筆之前，問一次 claim registry「這個檔已經有別人在做嗎」。
 #
-# 規約：rules/core/session-claims.md § 3.3（導出契約）。成因全文見
-# docs/pitfalls/2026-08-29-coordination-state-broadcast-because-no-consumer-reads-the-claim.md：
+# 規約：rules/core/session-claims.md § 3.3（導出契約）。成因（舊條目
+# pitfall-coordination-state-broadcast-because-no-consumer-reads-the-claim，specs/truth/legacy-ids.json）：
 # claim registry、契約、heartbeat、ownership journal 全部存在且在運作，而**沒有任何動作在動筆
 # 之前讀它**。於是持有者只剩兩個選擇——沉默（別人重工）或廣播（N-1 份 context 純浪費）。
 # 本 hook 是那個缺掉的消費端：衝突那一刻遞一行給衝突者，沒衝突時一個字都不送。
@@ -18,10 +18,14 @@
 # 都到不了 agent）。NEVER 補 permissionDecision：這是 warn，不是 block。爭用的正解是兩個
 # session 談，不是機器替其中一方否決另一方。
 #
-# fail-open 全程：jq 缺 / node 缺 / 不在 git tree / 查詢自己出錯 → silent exit 0。
+# fail-open 全程：jq 缺 / node 缺 / 不在 git tree / 不屬 fleet / 查詢自己出錯 → silent exit 0。
 # 協調訊號 NEVER 擋住寫入。
 
 set -uo pipefail
+
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || exit 0
+# shellcheck source=_skill-rule-reminder.sh
+. "$HOOK_DIR/_skill-rule-reminder.sh" 2>/dev/null || exit 0
 
 INPUT=$(cat)
 command -v jq >/dev/null 2>&1 || exit 0
@@ -66,13 +70,14 @@ REL="${FILE_PATH#"$TOPLEVEL"/}"
 case "$REL" in /*) exit 0 ;; esac
 
 # helper 的落點在 clade home 與 consumer 端**不同**：clade 的源檔在 vendor/scripts/，
-# 散播到 consumer 是 scripts/。兩個都問，NEVER 只寫其中一個 —— 只寫 vendor 的版本在
-# 全 13 個 consumer 上都會靜默 no-op，而 fail-open 的靜默與「查過了，沒衝突」完全同形。
-HELPER=""
-for cand in "$CONSUMER_ROOT/scripts/claim-helper.ts" "$CONSUMER_ROOT/vendor/scripts/claim-helper.ts"; do
-  [ -f "$cand" ] && { HELPER="$cand"; break; }
-done
-[ -n "$HELPER" ] || exit 0
+# 散播到 consumer 是 scripts/。兩個都問（trusted_fleet_helper 依序試），NEVER 只寫其中一個 ——
+# 只寫 vendor 的版本在全部 consumer 上都會靜默 no-op，而 fail-open 的靜默與「查過了，沒衝突」
+# 完全同形。
+#
+# 但 NEVER 從 $CONSUMER_ROOT 直接取：被改的檔可能在任何 repo 裡，從那裡找 claim-helper.ts 再
+# node 執行，就是把「Edit 一個檔」變成「執行那個 repo 自帶的程式碼」。只認 fleet（clade home／
+# registry consumer）main checkout 裡的那一份——威脅模型與判法見 _skill-rule-reminder.sh。
+HELPER=$(trusted_fleet_helper "$CONSUMER_ROOT" claim-helper.ts) || exit 0
 command -v node >/dev/null 2>&1 || exit 0
 
 OUT=$(cd "$CONSUMER_ROOT" && node "$HELPER" conflicts "$REL" --worktree "$TOPLEVEL" 2>/dev/null)

@@ -1,10 +1,10 @@
 ---
 description: 收 verify:ui / review:ui 視覺 evidence 的操作規約——截圖與驗證同一個 Bash call、(a)–(e) 五層驗證的 canonical pattern、seed fixture 必須進 seed.sql、worktree .env 先驗再宣稱缺、既有 [x] 要自拍佐證、UI 改動後全批重拍、`(deferred:)` failure trail 逐字範例、收尾前 receipt 齊全核對、截圖收集與符合性判定分兩步
-paths: ['screenshots/**', 'openspec/changes/**/tasks.md', 'app/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'e2e/**', 'packages/*/e2e/**', 'playwright.config.*', 'packages/**/app/**/*.vue']
+paths: ['screenshots/**', 'specs/plans/**/tasks.md', 'app/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'e2e/**', 'packages/*/e2e/**', 'playwright.config.*', 'packages/**/app/**/*.vue']
 ---
 <!-- Clade native rule; source: rules/core/agent-self-verification.screenshot-evidence.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 ## Runtime adapter boundary
 
@@ -94,17 +94,22 @@ archive / 收尾前，任何 `[review:ui]` 的既有 `[x]` 若無對應 agent �
 
 ## MUST 9 — UI 改動後 MUST 重拍所有受影響的 verify:ui 截圖
 
-commit 觸及 `.vue` / `.tsx` / `.jsx` / `.css` / `.scss` 檔後，該 change 的**全部** `[verify:ui]` / `[review:ui]` items 截圖視為 stale（不只被標 issue 的那張）。**MUST** 跑 `audit-screenshot-staleness.ts` 確認 0 stale，有 stale 全部重拍後才能 hand back user。適用任何 UI 改動，不限特定流程。
+該 change 改動 `.vue` / `.tsx` / `.jsx` / `.css` / `.scss` 檔後，該 change 的**全部** `[verify:ui]` / `[review:ui]` items 截圖視為 stale（不只被標 issue 的那張）。**MUST** 逐張核對截圖 mtime 與**該 change 改動的 UI 檔**最後一次寫入時間（無機械 staleness audit；`#N` 前綴配對由 review 人工核對），mtime 早於任一改動 UI 檔 mtime 的全部重拍後才能 hand back user。適用任何 UI 改動，不限特定流程。
+
+基準是「本 change 的 UI 檔」而不是「全 repo 最後一個 UI commit」：正常順序是改檔 → 截圖 → commit，截圖 mtime 本來就早於 commit 時間，拿 commit 時間（`%ct`）當基準會讓這個順序永遠判過期；別條 branch／別人的 UI commit 也不該讓本 change 的截圖過期。
 
 **Canonical pattern**：
 
 ```bash
-# 1. 跑 staleness audit
-node vendor/scripts/audit-screenshot-staleness.ts \
-  --repo <consumer-path> --active-only 2>&1
-# 2. 對每個 STALE item 依 target adapter 重拍
-# 3. 刪 LEGACY 無 #N 前綴舊圖
-# 4. 重跑 audit 確認 0 STALE
+# 1. 列出 screenshots/<env>/<work-id>/ 內 mtime 早於本 change 任一 UI 檔 mtime 的檔
+#    UI 檔＝merge-base 以來 commit 過的＋工作樹未 commit 的（已刪除的檔不計）
+base=$(git merge-base HEAD origin/main)
+ts=$({ git diff --name-only --diff-filter=d "$base" HEAD; git diff --name-only --diff-filter=d HEAD; git ls-files --others --exclude-standard; } \
+  | grep -E '\.(vue|tsx|jsx|css|scss)$' | sort -u | xargs -r stat -c %Y | sort -n | tail -1)
+[ -n "$ts" ] && find screenshots/<env>/<work-id> -name '*.png' -printf '%T@ %p\n' | awk -v t="$ts" '$1 < t {print $2}'
+# 2. 對每個 stale item 依 target adapter 重拍
+# 3. 刪缺 #N 前綴的舊圖
+# 4. 重列確認沒有 mtime 早於本 change UI 檔 mtime 的 [verify:ui]/[review:ui] 截圖
 # 5. 更新 (verified-ui:) annotation timestamps
 ```
 
@@ -158,4 +163,4 @@ Target adapter MUST provide the native browser operation for the authenticated f
 
 開 auth-protected URL 前 **MUST** 完成 pre-auth（port 3000 singleton + `__test-login?role=admin&email=...`），**NEVER** 截到空白頁後才開始診斷 auth。
 
-**載體**：由 selected runtime 的 browser adapter 開同一個 `__test-login` URL；若沒有已驗證的 browser adapter，保持 blocked。完整 cookbook 見對應 runtime adapter 的 auth reference。Pitfall ref: `docs/pitfalls/2026-06-24-browser-auth-blank-page-on-alt-port.md`。
+**載體**：由 selected runtime 的 browser adapter 開同一個 `__test-login` URL；若沒有已驗證的 browser adapter，保持 blocked。完整 cookbook 見對應 runtime adapter 的 auth reference。Pitfall ref: [[pitfall-agent-browser-auth-blank-page-on-alt-port]]。

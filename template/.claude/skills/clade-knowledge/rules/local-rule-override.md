@@ -3,7 +3,7 @@ description: Consumer 自有規約 override clade core rule 時的宣告慣例�
 paths: ['.clade/rules/**/*.md', '.claude/rules/local/**/*.md']
 ---
 <!-- Clade native rule; source: rules/core/local-rule-override.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Consumer local rule override declaration
 

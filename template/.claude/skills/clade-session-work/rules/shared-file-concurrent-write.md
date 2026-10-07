@@ -1,14 +1,15 @@
 ---
-description: 多個 session 同時寫同一個拆不開的登記簿檔（HANDOFF / tech-debt / pitfalls / ROADMAP）時的寫入紀律——什麼時候可以寫、寫之前要探測什麼、寫完要驗什麼
-paths: ['HANDOFF.md', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/pitfalls/**', 'packages/*/HANDOFF.md', 'packages/*/ROADMAP.md', 'packages/*/docs/tech-debt.md', 'packages/*/docs/pitfalls/**']
+description: 多個 session 同時寫同一個拆不開的登記簿檔（HANDOFF / ROADMAP / 未遷移 consumer 的 tech-debt）時的寫入紀律——什麼時候可以寫、寫之前要探測什麼、寫完要驗什麼
+paths: ['HANDOFF.md', 'ROADMAP.md', 'docs/tech-debt.md', 'packages/*/HANDOFF.md', 'packages/*/ROADMAP.md', 'packages/*/docs/tech-debt.md']
 ---
 <!-- Clade native rule; source: rules/core/shared-file-concurrent-write.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # 共享單檔的並行寫入
 
 [[session-tasks]] 用「一 session 一檔」解 lost update，那對 `tasks/` 有效。本檔管它解不掉的另一半：
-**本質共享、拆不開的登記簿**——`HANDOFF.md`、`ROADMAP.md`、`docs/tech-debt.md`、`docs/pitfalls/**`。
+**本質共享、拆不開的登記簿**——`HANDOFF.md`、`ROADMAP.md`，以及未遷移 consumer 的 `docs/tech-debt.md`。
+（lifecycle repo 的 `docs/tech-debt.md` 與 clade `docs/pitfalls/**` 已停寫，不再是任何人的寫入目標；見 clade `specs/truth/work-lifecycle.md` § Old carriers。）
 它們的價值來自「所有人讀同一份」，分檔等於取消這個檔存在的理由。
 
 **這條對每一個 consumer、每一個上列檔案生效**，不是只有 clade、也不是只有你手上那一個檔。

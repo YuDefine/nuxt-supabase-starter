@@ -25,32 +25,13 @@ set +e
 cwd=$(pwd -P 2>/dev/null) || exit 0
 [[ -d "$cwd" ]] || exit 0
 
-# Locate scripts/claim-helper.ts by walking up from cwd to the first dir
-# containing it. This handles both consumer-root invocation and session
-# worktree invocation (worktree shares git dir but not file tree).
-find_helper() {
-  local d="$1"
-  while [[ "$d" != "/" && -n "$d" ]]; do
-    if [[ -f "$d/scripts/claim-helper.ts" ]]; then
-      echo "$d/scripts/claim-helper.ts"
-      return 0
-    fi
-    d=$(dirname "$d")
-  done
-  return 1
-}
-
-# Try cwd first (main-worktree case), then git common dir parent (session
-# worktree case: cwd != main, but common dir resolves to main).
-helper=""
-helper=$(find_helper "$cwd")
-if [[ -z "$helper" ]]; then
-  common_dir=$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
-  if [[ -n "$common_dir" ]]; then
-    main_root=$(dirname "$common_dir")
-    helper=$(find_helper "$main_root")
-  fi
-fi
+# helper 只從 fleet 內的 repo 取（clade home／registry 登記的 consumer），而且取自它 main checkout
+# 的實體路徑——session worktree 與 main 共用同一份。判定與威脅模型見 _skill-rule-reminder.sh 的
+# trusted_fleet_helper。NEVER 改回從 cwd 往上找 `scripts/claim-helper.ts`：在一個 clone 下來的
+# 專案裡開 session，就會 node 執行它自帶的腳本。
+# shellcheck source=_skill-rule-reminder.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/_skill-rule-reminder.sh" 2>/dev/null || exit 0
+helper=$(trusted_fleet_helper "$cwd" claim-helper.ts) || exit 0
 
 [[ -n "$helper" ]] || exit 0
 command -v node >/dev/null 2>&1 || exit 0

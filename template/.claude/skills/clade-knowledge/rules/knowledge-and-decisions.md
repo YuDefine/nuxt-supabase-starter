@@ -3,7 +3,7 @@ description: 知識沉澱與決策記錄規則——lifecycle repo 把現行決�
 paths: ['docs/solutions/**', 'docs/decisions/**', 'specs/**', 'tasks/**']
 ---
 <!-- Clade native rule; source: rules/core/knowledge-and-decisions.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 # Knowledge Accumulation & Decision Records
 
 分支看 repo root 有沒有 `specs/truth/work-lifecycle.md`：有 = lifecycle repo；沒有 = 未遷移 consumer（見 [[consumer-docs-retirement]]）。

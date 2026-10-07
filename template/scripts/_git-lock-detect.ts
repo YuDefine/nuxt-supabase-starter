@@ -9,16 +9,21 @@
  *
  * Stale criteria — ALL must hold:
  *   - File exists at `<repoRoot>/.git/index.lock`
- *   - Size = 0 bytes (real active git holds it open with PID line content)
  *   - mtime older than `thresholdMs` (default 60s — in-progress git ops finish
  *     within 60s on any healthy mac)
  *   - No active git process **for this repo** (no other session writing).
  *     判定看的是行程的 binary（`pgrep -x git`）＋ 它的 cwd / `--git-dir` 是否落在本 repo，
  *     NEVER 看 `ps aux` 的整行 command line 文字 —— 見 `detectActiveGitProcesses` 的註解。
  *
- * NEVER touches non-empty lock or fresh lock — those are the safety boundary
- * against accidentally clearing an active git op. Active-process pids reported
- * so caller can log clearly.
+ * Size is NOT part of the criteria (TD-386): git writes the complete new index
+ * into `index.lock` (`DIRC` magic — a real stale lock was observed at 654 KB),
+ * not a PID stub. `size !== 0` therefore held for every lock a real git wrote,
+ * and the old check could only clean the narrow "created but never written"
+ * subset. 「持有者是否還活著」由上一條 active-process 判，不看檔案內容。
+ *
+ * NEVER touches a fresh lock or a lock with a live git holder — those are the
+ * safety boundary against accidentally clearing an active git op.
+ * Active-process pids reported so caller can log clearly.
  *
  * Zero-dep: only node:fs + node:child_process. No npm packages.
  */
@@ -39,8 +44,7 @@ interface GitLockOptions {
  *   cleaned: true                              — was stale, rm'd, safe to retry
  *   cleaned: false, reason: 'no-lock'          — no lock present
  *   cleaned: false, reason: 'fresh'            — lock < thresholdMs old
- *   cleaned: false, reason: 'non-empty'        — lock has content, treat active
- *   cleaned: false, reason: 'active-process'   — ps found `git` process; pids[] included
+ *   cleaned: false, reason: 'active-process'   — live git process scoped to this repo; pids[] included
  *   cleaned: false, reason: 'io-error'         — fs/ps internal error, included as err
  *
  * NEVER throws on I/O — wraps everything in try/catch so caller can be a one-liner.
@@ -99,8 +103,6 @@ function detectAndCleanStaleIndexLockAtPath(
     if (e && e.code === 'ENOENT') return { cleaned: false, reason: 'no-lock' }
     return { cleaned: false, reason: 'io-error', err: e?.message ?? String(e) }
   }
-
-  if (st.size !== 0) return { cleaned: false, reason: 'non-empty' }
 
   const ageMs = Date.now() - st.mtimeMs
   if (ageMs < thresholdMs) return { cleaned: false, reason: 'fresh', ageMs }

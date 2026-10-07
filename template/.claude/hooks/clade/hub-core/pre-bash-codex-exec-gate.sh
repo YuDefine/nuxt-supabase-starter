@@ -87,7 +87,7 @@ codex-exec gate: 派工一律走 Pi dispatcher，NEVER 直接執行 codex exec /
   node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
     --route <routing-table|claude-delegate-sub|fallback-chain|manual> \
     --tier-basis <table-row|five-conjunct|adjudication|delegate-sub|quota-fallback|manual> \
-    --table-row <row> --model <sol|gemini|grok-xai|grok-cursor> --effort <xhigh|high> \
+    --table-row <row> --model <sol|gemini|grok-xai> --effort <xhigh|high> \
     --label <descriptive-label>
 
 Sol／Grok 一律 xhigh、Gemini 一律 high；Astra／Luna 已禁用（2026-09-24）。非 UI implementation／decision／planning 用 Sol。

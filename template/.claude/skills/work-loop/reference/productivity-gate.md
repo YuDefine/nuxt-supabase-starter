@@ -30,6 +30,8 @@
 
 Tier A = `HANDOFF.md`、`tasks/*.md`、`docs/tech-debt.md`。本輪 `git diff <round-start-sha>..HEAD`：
 
+> `docs/tech-debt.md`、`docs/archives/**`、`*-bodies.md`、`docs/pitfalls/**` 是未遷移 consumer 的待辦與 rotate 落點。有 `specs/truth/work-lifecycle.md` 的 repo 由 `check-retired-carriers` 擋新 TD／pitfall／月份 archive（§ Old carriers），這幾組在那裡不再有新增；判定細節以 `vendor/scripts/work-loop-verdict.ts`（`TIER_A_GLOBS`）為準。
+
 1. 取 Tier A 的移除行集合 `R`、以及 `docs/archives/**` / `*-bodies.md` / `docs/pitfalls/**` 的
    新增行集合 `A`
 2. `r ∈ R` 若滿足下列任一，判定為**搬運**而非減量：與某個 `a ∈ A` 含相同 `TD-\d+` id；或與某個
@@ -113,3 +115,25 @@ SKILL.md Step 6.3 留的是一句話對照表。**機械 SoT 是 `vendor/scripts
 | P4 | 新決策 packaging | `awaiting[]` 新增**先前未出現過的 id** 的完整條目（含 options）。**單輪 P4 至多貢獻一次**——三條 packaging 不等於三輪份的生產 |
 
 **P2 是排除集而不是路徑白名單**：各 repo 的交付路徑不同，**NEVER** 用「本 repo 的交付路徑不在清單上」推論本輪非生產。
+
+## fingerprint 為什麼不准手算（主檔 Step 6.1 的理由）
+
+> 主檔 pointer：Step 6.1 指向本節。判準本體在主檔，本節只放理由與證據，不複述判準；判準的增修只落主檔。
+
+手算的 fingerprint 每一輪的輸入集合都由當輪的模型現場決定，於是「這一輪沒進度」與「這一輪算法跟上一輪不一樣」事後不可區分——而 no-progress 停止條件正是讀它。`computeFingerprint()` 吃的是 td token、handoff heading slug、task 勾選狀態、scan check 狀態、`plans` bucket、per-item failStreak。Step 0 那支 verdict 已經算過一次；Step 6.1 只是加上本輪的 scan JSON 再跑一次，直接讀兩個欄位。
+
+## 主檔 Step 0 准入、Step 6.2／6.3 判準的理由（判準本體在主檔，本節不複述）
+
+> 判準只有一份，在主檔 SKILL.md 標示的 Step；本節只放那些判準的理由與證據，不複述判準。判準的增修只落主檔。
+
+| 主檔位置 | 那條判準的理由／證據 |
+| --- | --- |
+| Step 0 § 開場准入判定：不准入是收工 | `debtReady == 0` 的意思是 **open TD 也沒了**（或只剩 `blocked-attended-only` / `wontfix-until-signal` / runner child 收不了尾的 publish 落點）。缺自驗 heading 不是 user-waiting，open TD 本身就是債（2026-08-20 某 consumer：158 條 open 只有 2 條有該 heading，runner 誤停）。其餘依據見本檔 § 准入 |
+| Step 6.2 「真正做完」的讀數 | `techDebtHygiene.raw` 的 `flow.actionableOpen` = open class 扣掉 `blocked-attended-only`（機制擋著）與 `wontfix-until-signal`（等外部 signal）。open 總數含結構性 open，拿它當判準的迴圈永遠不會停，而那看起來會像「還有很多事沒做」，不像「判準寫錯了」 |
+| Step 6.2 軟配額的例外 | **這不是禁止登記**：要掐斷的是「量測 → 登記 → 下輪再讀一次」的自循環（2026-08-13 實測近 7 天 opened 40 / closed 10） |
+| Step 6.2 改 status 不算進度 | 把 open 改標 `blocked-attended-only` 會當場讓停止條件成立——Invariant 12 是這一格的唯一防線 |
+| Step 6.2 寫停止前先清 `blockers` ledger | 誤入表的 item 不會出現在 candidate list 裡，所以「四組皆空」這個判準看不到它們 |
+| Step 6.2 in-flight 非空不是停止狀態 | background agent 完成後狀態會位移（實作中 → 收尾 → `work.done`） |
+| Step 6.3 `null` 是未判定 | 「判準沒涵蓋這個 repo」與「本輪沒交付」是兩件事，把前者當後者正是 2026-08-19 某 consumer r54 誤停的形狀 |
+| Step 6.3 P1–P4 對照表 | 主檔那張表是給人對照用的一句話版，與 script 不一致時以 script 為準並回報；entropy 過濾算法、排除集三類、closed-class token 集合、憑證三選一見本檔 § P1–P4 逐條定義 |
+| Step 6.3 與軟配額的關係 | 軟配額不足額的輪，P1–P4 的計入資格直接取消。N=2 的理由、包含關係的完整論證、反 Goodhart 防線見本檔前文各節 |

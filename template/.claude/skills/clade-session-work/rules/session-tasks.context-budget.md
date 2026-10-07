@@ -4,7 +4,7 @@ paths: ['tasks/**', 'HANDOFF.md', '.clade/work-loop/**']
 ---
 <!-- Clade native rule; source: rules/core/session-tasks.context-budget.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Session context 預算的判定層
 

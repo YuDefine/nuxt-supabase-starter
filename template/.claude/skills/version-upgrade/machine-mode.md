@@ -122,8 +122,10 @@ cp ~/.config/mise/config.toml "$(mktemp -t mise-config-before.XXXXXX)"
 ## Step M.5 — 落檔
 
 - 升了且驗過：不必登記
-- 升到一半失敗 / 被 rollback：**MUST** 登 `docs/tech-debt.md` TD，寫明卡在哪、停在哪個版本，**NEVER** 只在對話裡講
-- 查不出上游：**MUST** 登 TD，**NEVER** 猜一個 repo 填進 M.1.3
+- 升到一半失敗 / 被 rollback：**MUST** 登記，寫明卡在哪、停在哪個版本，**NEVER** 只在對話裡講
+- 查不出上游：**MUST** 登記，**NEVER** 猜一個 repo 填進 M.1.3
+
+登記落點：有 `specs/truth/work-lifecycle.md` 的 repo 寫進承載本次升版的 plan Open work（**NEVER** 新 TD）；未遷移 consumer 才登 `docs/tech-debt.md` TD。
 
 ---
 
@@ -135,7 +137,13 @@ cp ~/.config/mise/config.toml "$(mktemp -t mise-config-before.XXXXXX)"
 node ~/offline/clade/scripts/audit-remote-env-version-drift.ts
 ```
 
-六類輸出 **MUST** 分開讀：
+預設**不連任何遠端**。`deploy.hosts[]` 的 ssh 探測要明確帶 `--probe-hosts`（跨機器 side effect，只在有授權的 session 跑，同 § M.7 的 `--probe`；`pnpm audit:manual` 批次也不會觸發）：
+
+```bash
+node ~/offline/clade/scripts/audit-remote-env-version-drift.ts --probe-hosts [--official-compose <path>]
+```
+
+六類（Workers／宣告面）輸出 **MUST** 分開讀：
 
 | 類別 | 意思 | 動作 |
 | --- | --- | --- |
@@ -144,9 +152,20 @@ node ~/offline/clade/scripts/audit-remote-env-version-drift.ts
 | `ambiguous` | 同一個檔給出多個相異日期（top-level ＋ `[env.*]` 覆寫） | 先確定哪一個是 production；audit 不替你挑 |
 | `data-missing` | platform 有 probe 但這台沒有可讀的值 | 再分兩種：root 底下沒有設定檔（確認 config 位置或 platform 宣告）／有檔但缺欄位（補欄位） |
 | `undeclared` | `consumers-meta.json` 根本沒有這台的 entry | **漏登記，不是不部署**——補宣告 |
-| `unmeasurable` | 結構上量不到（self-host 的 `deploy` 區塊沒有主機識別欄位） | 補 schema 欄位，見 [[TD-1062]] |
+| `unmeasurable` | node runtime 版本結構上量不到（self-host 沒有 runtime probe；宣告與檔案不一致也歸此） | self-hosted Supabase 主機改看下面的 `hosts` 段：consumer 在 `.claude/consumer-meta.json` 補 `deploy.hosts[]`（`rules/core/consumer-meta.md` § 遠端主機）。補宣告不是升版，NEVER 影響 exit code |
 
-- `drift` 以外的五類 **NEVER** 讀成 aligned、**NEVER** 進 drift 分母
+第七類 `hosts`（`--probe-hosts` 才有；`deploy.hosts[]` 每台 `{ role, ssh, stack, composeDir }`，唯讀 `ssh <alias> cat <composeDir>/docker-compose.yml` 比官方 self-hosted compose 的 image tag）：
+
+| 狀態 | 意思 | 動作 |
+| --- | --- | --- |
+| `aligned` | image tag 與官方 compose 一致 | 無 |
+| `drift` | 有 image 與官方不同／缺／多 | relay 給該 consumer 的 session 升版，**NEVER** 從 clade ssh 進去改 |
+| `unreachable` | ssh 連不上（exit 255／逾時） | 修 ssh alias 或網路。**NEVER** 讀成 aligned |
+| `unreadable` | 連得上但讀不到 compose（缺 `composeDir`、檔不存在、stack 無 probe） | 補 `composeDir` 或確認路徑。**NEVER** 讀成 aligned |
+| `no-baseline` | 官方 compose 取不到（`gh api` 失敗） | 修 gh 認證或帶 `--official-compose <path>`。**NEVER** 讀成 aligned |
+| （未探測） | 有宣告但沒帶 `--probe-hosts` | 要量就在有授權的 session 帶旗標；未探測 **NEVER** 讀成 aligned |
+
+- `drift` 以外的五類（與 `hosts` 的 `unreachable`／`unreadable`／`no-baseline`／未探測）**NEVER** 讀成 aligned、**NEVER** 進 drift 分母
 - 「量得到」表的 `宣告 platform` 欄是 `none` 的列（如 starter template 帶 `wrangler.jsonc`）沒有遠端，**NEVER** 當成遠端 drift relay
 - 宣告與檔案不一致（宣告 `self-host` 卻有 `wrangler.jsonc`）報 `unmeasurable`，**NEVER** 拿檔案值當遠端版本
 - 有 `drift` 就 **relay 給該 consumer 的 session**（`clade-role-and-todo-discipline.md` § Consumer 工作命中時 MUST relay），**NEVER** 只登記 HANDOFF
@@ -156,7 +175,7 @@ node ~/offline/clade/scripts/audit-remote-env-version-drift.ts
 ## Step M.7 — C′ 軸：self-hosted runner 上的預裝 binary（TD-724）
 
 workflow 在 self-hosted runner 上裸呼叫機器預裝的 CLI（沒有 setup step、沒有 lockfile）時，A／B／C 三軸都掃不到它。
-CI 紅燈的表面症狀讀起來像 migration 或程式寫壞（<consumer-b> 2026-08-28：supabase CLI 落後 44 個 minor，
+CI 紅燈的表面症狀讀起來像 migration 或程式寫壞（某 consumer 2026-08-28：supabase CLI 落後 44 個 minor，
 報 `cannot insert multiple commands into a prepared statement`），**MUST** 先跑：
 
 ```bash

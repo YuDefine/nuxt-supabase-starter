@@ -56,7 +56,7 @@ node ~/offline/clade/vendor/scripts/rotate-handoff-done.ts --repo "$MAIN_WT_PATH
 
 ### 2B.1a Audit
 
-**MUST 落檔再 jq 取段，NEVER 讓 JSON 全文進 context**（<consumer-b> 實測 96 KB ≈ 27k tokens，其中 status=pass 的項目佔大半而它們本來就不需要判讀）：
+**MUST 落檔再 jq 取段，NEVER 讓 JSON 全文進 context**（某 consumer 實測 96 KB ≈ 27k tokens，其中 status=pass 的項目佔大半而它們本來就不需要判讀）：
 
 ```bash
 # MUST mktemp 唯一路徑 + 落檔後驗 consumerId（成因見下方「$SCAN 路徑與歸屬」）
@@ -74,7 +74,7 @@ jq -r '.. | objects | select(.status? and .name? and .status != "pass")
 
 #### $SCAN 路徑與歸屬（hard rule，park / next 共用）
 
-- **NEVER 用固定路徑**（`${TMPDIR:-/tmp}/handoff-scan.json` 或任何不含隨機段的名字）。`TMPDIR` 在本機未設 → 固定路徑等於**全機器所有 consumer 的所有 session 共用同一個檔**。2026-08-05 實證：<consumer-d> session 寫入後 48 秒被別 session 覆寫成 `clade`，第一次讀到的是 `<consumer-a>`，同時段 `/tmp/handoff-scan*.json` 還有 <consumer-b> 的產物。
+- **NEVER 用固定路徑**（`${TMPDIR:-/tmp}/handoff-scan.json` 或任何不含隨機段的名字）。`TMPDIR` 在本機未設 → 固定路徑等於**全機器所有 consumer 的所有 session 共用同一個檔**。2026-08-05 實證：某 consumer 的 session 寫入後 48 秒被別 session 覆寫成 `clade`，第一次讀到的又是另一個 consumer 的產物，同時段 `/tmp/handoff-scan*.json` 還有第三個 consumer 的產物。
 - **MUST 在讀任何一段之前先驗 `.consumerId`**，`SCAN-MISMATCH` 或 `MISSING` → **STOP**：整份 `$SCAN` 作廢，重跑上面的 block（**NEVER** 把它當「大致對」繼續判讀，也 NEVER 只重跑受影響的那一段）。
 - 危害不是「讀到舊資料」而是**拿別 repo 的事實對本 repo 下判斷**：health gate、human gates、tech-debt hygiene、worktree & stash audit 四段全部受影響，然後寫進本 repo 的 `HANDOFF.md`。最危險的是 **Step 3.2a 的 stash drop gate 是 MUST 主動 drop** —— 拿別 repo 的 stash 清單做本 repo 的刪除判定。
 - `handoff-scan.ts` 自身的 consumer 解析（`basename(dirname(git-common-dir))`，worktree 內也回主 repo）**無誤**，上面的 `EXPECT` 就是同一個算式 —— 壞的只有暫存檔路徑。
@@ -141,7 +141,7 @@ JSON 範例（節錄）：
 ### 2B.1d dead-section 處置（Tier A）
 
 `handoff-scan.ts` 的 `tier-a-dead-section` warn 指到這裡。它列的是 `HANDOFF.md` 與
-`tasks/*.md`（`tasks/archive/` 已排除 —— 那是搬走的**去處**，掃它等於掃自己的 sink）裡
+`tasks/*.md`（`tasks/archive/` 已排除 —— 那是未遷移 consumer 搬走的**去處**，掃它等於掃自己的 sink）裡
 **heading 標了結案、body 無未勾 todo、且 heading 未標防重做**的段，`>7d` 未動即 violation。
 
 **本 sub-step 不寫任何檔。** 它是 warn-only + 具名清單：死段散在 40+ 個檔、沒有單一 rotate
@@ -152,7 +152,7 @@ JSON 範例（節錄）：
 | --- | --- | --- |
 | **拆條** | 段裡其實是多件事，且還有沒收的（heading 說完成但正文提到待驗 / 待散播 / 待決策） | 把未完那幾件拆到 `## In Progress` / plan（有 `specs/truth/work-lifecycle.md` → `flow plan open` 或續跑既有 plan；未遷移 consumer 才 `docs/tech-debt.md`）/ 新的 `tasks/<date>-<slug>.md`，剩下的走「關條」 |
 | **關條** | 已 done，且 `git log --grep '<TD-NNN 或 slug>'` 查得到 | **直接刪整段**。NEVER 寫 archive narrative —— git history 是免費且完整的知識層（同 [[tech-debt-hygiene]] Invariant 7 § 處置是三選一） |
-| **知識語態重寫** | 段裡有真教訓**且**未被任何機械 gate 承載 | 走 `/oops`：clade home 寫 `specs/truth/`，未遷移 consumer 才寫 `docs/pitfalls/`（換語態，不是剪貼），原段同時刪掉 |
+| **知識語態重寫** | 段裡有真教訓**且**未被任何機械 gate 承載 | 走 `/oops` 寫 clade `specs/truth/`（換語態，不是剪貼；`docs/pitfalls/` 已退役，呼叫端遷移與否都不寫），原段同時刪掉 |
 | **不動（防重做 marker）** | heading 除了結案還明講「不要重做 / 不必重做 / 勿重做 / NEVER 重做 / 不必接續」 | **什麼都不做**。偵測器已自動豁免這一格，見下 |
 
 **防重做 marker 不算死段。** 這類段的存在目的就是擋住 fresh-context agent 重跑已完成的工作，
@@ -231,7 +231,7 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff next — flow gates_
 | **evidenceStale** | `tech-debt-evidence-stale:<TD-NNN>`（warn） | open TD 的 `Location` 路徑在 `Discovered` 之後被 commit 過 — 「敘述可能已不成立」候選。與 staleOpen 正交：staleOpen 問「放多久了」，本條問「還成不成立」 | **MUST 逐條讀該 entry 對照現況後才列 outstanding**，NEVER 直接把它當成待辦推給 user。三種結果：① 事情已做完 → 補 `### Resolution` + 改 `Status`，**不**列 outstanding；② 敘述過期但問題還在 → 更正敘述（保留原文供追溯），再列 outstanding；③ 確認仍成立 → 加 `**Last reviewed**: <today>`，照常列。**這是啟發式不是判決** — 路徑被動過也可能與該 TD 主題無關 |
 | **archivedRetained** | `tech-debt-archived-retained`（fail） | `docs/archives/tech-debt-closed-*.md` 內出現帶 re-activation 契約的 TD；trigger 留在 archive 裡，後續盤點看不見 | 依 §2B.1a 的 fail 契約停止；按 detail 的 TD id／archive path 搬回 `docs/tech-debt.md`。判準與 rotation 共用：`*-until-*`、`### 重訪條件` / `### Defer 條件`、`**Signal**:` 任一命中 |
 | **closedBloat** | `tech-debt-closed-bloat`（warn，closed TD ≥ 門檻時觸發） | done/resolved/wontfix 的 closed TD 仍躺 `docs/tech-debt.md` 主檔 | **MUST** 跑 `node "$HOME/offline/clade/vendor/scripts/rotate-closed-bloat.ts"`。stdout `retired` = clade home／已遷移 repo，**停**，不要寫 archive 或改 register。未遷移 consumer：搬全部 rotatable（noop 時 stdout 是 `noop`）。**NEVER** 詢問操作。Park 不執行 |
-| **entryOversize** | `tech-debt-entry-oversize`（warn，任一 open TD > `raw.oversizeThreshold` 行時觸發） | **open** TD 單條正文過長。rotate 只吃 closed，對 open 零覆蓋 — <consumer-b> 實測 4986 行主檔裡 4807 行是 open，主檔體積的長期成長全在這裡 | （未遷移 consumer 才適用）三選一：**拆條**（其實是 2 條以上的命題）/ **關條**（已 done / 已被機械 gate 承載 / wontfix）/ **知識語態重寫**（真教訓且未機械化 → `/oops`，主檔那條同時關掉）。目標每條 ≤10 行。逐條見 `raw.oversize[]`（含 `lines` / `overBy` / `lineNo`）。**依詢問操作讓 user 拍板**，user 選定才動檔。**NEVER 把正文下推到 `docs/archives/tech-debt-bodies.md`**（TD-495 改判撤銷，與 scan detail 一致）。**MUST 保留 metadata block 原封不動** — `audit-tech-debt-hygiene.ts` 的 Invariant 2 / 3 / 6 全靠它 |
+| **entryOversize** | `tech-debt-entry-oversize`（warn，任一 open TD > `raw.oversizeThreshold` 行時觸發） | **open** TD 單條正文過長。rotate 只吃 closed，對 open 零覆蓋 — 某 consumer 實測 4986 行主檔裡 4807 行是 open，主檔體積的長期成長全在這裡 | （未遷移 consumer 才適用）三選一：**拆條**（其實是 2 條以上的命題）/ **關條**（已 done / 已被機械 gate 承載 / wontfix）/ **知識語態重寫**（真教訓且未機械化 → `/oops`，主檔那條同時關掉）。目標每條 ≤10 行。逐條見 `raw.oversize[]`（含 `lines` / `overBy` / `lineNo`）。**依詢問操作讓 user 拍板**，user 選定才動檔。**NEVER 把正文下推到 `docs/archives/tech-debt-bodies.md`**（TD-495 改判撤銷，與 scan detail 一致）。**MUST 保留 metadata block 原封不動** — `audit-tech-debt-hygiene.ts` 的 Invariant 2 / 3 / 6 全靠它 |
 
 **closedBloat 的幅度由 script 一次搬完全部 rotatable 承載**，不再走 (A) 選項。
 
@@ -270,7 +270,7 @@ closedBloat 的 retained 例外的正文落 `$MAIN_WT_PATH/docs/archives/tech-de
 VPN／Tailscale 內網），CI 沒有那些東西。這類 script 因此進不了 `pnpm check`、進不了 workflow ——
 於是它們**寫好了、判定準確、卻沒有任何時刻會去跑它**。
 
-> 2026-08-28 實證（<consumer-a>）：`scripts/audit-notion-secrets.mjs` 已能抓出兩條 secret 明文只剩截斷值、
+> 2026-08-28 實證（某 consumer）：`scripts/audit-notion-secrets.mjs` 已能抓出兩條 secret 明文只剩截斷值、
 > exit 1、檔頭註解逐字寫過這個情境；`grep -rn "audit:notion-secrets"` 卻只命中 `package.json` 的
 > script entry —— 不在任何 gate、任何 workflow、任何 skill。規則有、偵測有、判定準，
 > 唯獨沒有觸發點，於是兩條 secret 的明文在世界上消失了一整天沒有人知道。

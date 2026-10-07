@@ -102,7 +102,7 @@ Session 交接管理。四個 arg 依下方契約收工；Codex 先過下一節�
 **有**（任一條成立）→ 進第二層：
 - 當前對話與已載入 task carrier 記錄顯示當前 session 任何 `in_progress` 或 `pending` task（該 inventory 是 per-session host state，可信）
 - 當前 chat 對話脈絡明顯顯示 user 正在 mid-task（我剛在做某事還沒收尾、user 剛交辦一個多步驟工作做到一半）
-- Stop hook 攔住但 acceptance 未滿足 + 處於 [[worktree-default.detail]] §8 死鎖（cwd 在 main + main 已 dirty）且當前 session 已自評不適合走 §7 分支 A（context 不寬裕 / 剩餘 work 不小 / 無法 selective stash）
+- Stop hook 攔住但 acceptance 未滿足 + 處於 [[wt]] 的 `rules/改tracked檔前先隔離判準.md` Rule 5 死鎖（cwd 在 main + main 已 dirty）且當前 session 已自評不適合走該 Rule 的「剩下的事可以隔離」出口（context 不寬裕 / 剩餘 work 不小 / 無法 selective stash）
 
 **沒有** → `next`：以上皆否（即使 working tree 髒、tasks/ 有別 session 的 unchecked、`specs/plans/**` 有別 session 的 active work，都仍走 `next` —— 那些屬於別 session 的責任）。
 
@@ -216,7 +216,7 @@ fi
    - 主要檔案路徑（讓接手者直接跳）
    - 目前做到哪裡 / 還剩什麼
    - 已踩過的坑（避免下一 session 重踩）
-   - **若來自 [[worktree-default.detail]] §8 死鎖**：額外加 Stop hook 攔點摘要、missing acceptance criterion、改過檔案的 selective stash ref（若有，例 `stash@{0}: <slug>-handoff`）、下一 session 接手指引（指名 carrier 路徑與剩下的 phase；實作先隔離 worktree，收尾先驗當前 evidence 與人的 gate）
+   - **若來自 [[wt]] 的 `rules/改tracked檔前先隔離判準.md` Rule 5 死鎖**：額外加 Stop hook 攔點摘要、missing acceptance criterion、改過檔案的 selective stash ref（若有，例 `stash@{0}: <slug>-handoff`）、下一 session 接手指引（指名 carrier 路徑與剩下的 phase；實作先隔離 worktree，收尾先驗當前 evidence 與人的 gate）
 3b. **spine 收尾（ambient `CLADE_WORK_ID` 非空時 MUST，空則整步跳過）**：二擇一，依**步驟 2 分類後是否還有要交接的殘工**判：
 
    ```bash
@@ -231,7 +231,7 @@ fi
 
    `--carrier` 必填，填**步驟 3 實際寫進去的那個落點**。**NEVER 在 (b) 的情況下走 (a)**，也 **NEVER** 用「剩下都是小事」跳過這一判——答案就是步驟 2 有沒有寫進 HANDOFF。沒有 ambient work 時 **NEVER** 為了留紀錄現鑄一個新 work。兩支指令都 **fail-open**：非 0 exit **NEVER** 擋 park 的其餘步驟。
 
-4. **清理 session-tasks**：所有未完項升級完成後 → 只 `mv` / 刪「當前 session 自己開的」`tasks/<date>-*.md`（依 `rules/core/session-tasks.md`「NEVER 動別人的 tasks 檔」）。若當前 session 從頭到尾沒開 tasks 檔，跳過此步。
+4. **清理 session-tasks**：所有未完項升級完成後 → 只處置「當前 session 自己開的」`tasks/<date>-*.md`：有 `specs/truth/work-lifecycle.md` → 刪（`git rm`）；未遷移 consumer 才 `mv tasks/archive/` 或刪（依 `rules/core/session-tasks.md`「NEVER 動別人的 tasks 檔」）。若當前 session 從頭到尾沒開 tasks 檔，跳過此步。
 
    接著掃**無主檔**：`tasks/` 內**檔名 timestamp 與 mtime 都** >7 天的 `<date>-*.md`（兩個條件都 MUST 驗）。有 `specs/truth/work-lifecycle.md` → 只刪 **已追蹤且與 HEAD 一致** 的過期檔（`git ls-files --error-unmatch -- <file>` 成功且 `git diff --quiet HEAD -- <file>`）；untracked 或 dirty 的留下，**NEVER** `mv tasks/archive/`。未遷移 consumer 才整檔 `mv tasks/archive/`。**只 `mv` 或刪，NEVER `Edit`、NEVER 代跑升級路徑**。SoT 在 `rules/core/session-tasks.operations.md` § 寫入規約補充（paths-gated，所以操作句寫在這裡）。
 
@@ -245,8 +245,8 @@ fi
    ```
 
    **接著掃 archivable**（收尾證據，優先於上面的年齡推定）：檔頭宣告了 `work_id:` 且該 work 在本 repo
-   flow spine 上真的跑完過（至少一個 interval span 收尾、無 in-flight、無 fail）的檔 → 同樣整檔
-   `mv tasks/archive/`，**不必等 7 天**。**NEVER 自己判**，清單一律讀 audit：
+   flow spine 上真的跑完過（至少一個 interval span 收尾、無 in-flight、無 fail）的檔 → 有 `specs/truth/work-lifecycle.md`
+   就刪（同上：只刪已追蹤且與 HEAD 一致的），未遷移 consumer 才整檔 `mv tasks/archive/`，**不必等 7 天**。**NEVER 自己判**，清單一律讀 audit：
 
    ```bash
    node ~/offline/clade/scripts/audit-stale-tasks.ts --consumer <consumer_id> --json \
@@ -309,11 +309,11 @@ heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消�
 | 判定 | 落點 |
 | --- | --- |
 | 兩條都中 | 留在 HANDOFF |
-| 只中前者（耐久知識，不會過期） | `specs/truth/` 或既有唯一機器 owner；未遷移 consumer 才寫 `docs/pitfalls/` / `docs/rule-rationale/` |
-| 只中後者（任務級細節，接手者不必先讀） | 該任務的 TD entry body，或 `tasks/<date>-<slug>.md` |
+| 只中前者（耐久知識，不會過期） | 有 `specs/truth/work-lifecycle.md` → `specs/truth/` 或既有唯一機器 owner；未遷移 consumer 才寫 `docs/rule-rationale/`。跨 consumer 的教訓一律走 `/oops`（寫 clade truth） |
+| 只中後者（任務級細節，接手者不必先讀） | 有 `specs/truth/work-lifecycle.md` → 承載該任務的 plan；未遷移 consumer 才寫該任務的 TD entry body。兩者都可用 `tasks/<date>-<slug>.md` |
 | 兩條都不中 | 刪 |
 
-**搬不是刪**：綁單一任務的坑進該任務的 plan，跨任務可復用的走 `/oops`。
+**搬不是刪**：綁單一任務的坑進該任務的 plan，跨任務可復用的走 `/oops`（寫 clade truth；`docs/pitfalls/` 已退役，呼叫端遷移與否都不寫）。
 
 **HANDOFF 沒有整檔 KB／行數門檻。** 活段太肥走 `section_max_kb` / `entry_max_lines`（換載體，不是 rotate 觸發）。
 
@@ -332,7 +332,7 @@ heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消�
 
 | Candidate 等級 | 動作 |
 | --- | --- |
-| 符合 `/oops` Mode B 四條件齊備（root cause / detection / fix / prevention） | dispatch `/oops`。有 `specs/truth/work-lifecycle.md` 時寫入 truth／plan，**NEVER** 新 pitfall 檔；未遷移 consumer 才走 `docs/pitfalls/` |
+| 符合 `/oops` Mode B 四條件齊備（root cause / detection / fix / prevention） | dispatch `/oops`，寫入 clade truth／plan。**NEVER** 新 pitfall 檔（`docs/pitfalls/` 已退役，呼叫端遷移與否都一樣） |
 | 工作習慣 / 流程更正（user 糾正做法、強調某流程） | dispatch `/oops` Mode B 輕量降級 → 寫 `<consumer>/tasks/lessons.md`（能變成規約的走規約源檔，不進 memory） |
 | 純個人偏好，無法歸進任何規約檔或 lessons | 先問 user 要不要寫進 memory，**取得同意才寫**；未同意就跳過 |
 | 只給當前 repo 的 self-improvement lesson | dispatch `/oops` Mode B 輕量降級 → 寫 `<consumer>/tasks/lessons.md` |
@@ -395,7 +395,7 @@ heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消�
 對每張卡 **MUST** 做三件事：
 
 1. **抽 blocker 原因**：讀卡片的 `question` / `why_now`，再讀 `work_id` 對應 carrier（`tasks/<date>-<slug>.md` 或 `specs/plans/<id>/tasks.md`）的未勾項。逐條列出每一個原因，**NEVER** 從 family 名或 HANDOFF 既有 narrative 推測。
-2. **辨識 startable 子集**（最關鍵）：一件工作有卡只代表它**含**至少一個等人的點，**不代表整件無事可做**。**MUST** 由 carrier 內容判斷是否有**不依賴那一題、可現在開工的 work**。有 startable 子集 → **提供 dispatch 選項**（`/wt <slug>` 只做不受阻的部分），**NEVER** 因整件有卡就當 user-bound 擱置。
+2. **辨識 startable 子集**（最關鍵）：一件工作有卡只代表它**含**至少一個等人的點，**不代表整件無事可做**。**MUST** 由 carrier 內容判斷是否有**不依賴那一題、可現在開工的 work**。有 startable 子集 → **提供 dispatch 選項**（交 `wt` 建立隔離環境，只做不受阻的部分），**NEVER** 因整件有卡就當 user-bound 擱置。
 3. **端出具體 user 決策**：`ruling` 卡的判斷題原樣端出（逐字、帶選項）；`external-action` 卡寫明**要人到場做什麼**；`exception` 卡寫明核准恢復／改派／abort 各會怎樣。**NEVER** 只寫「等 owner 拍板」這種無法行動的模糊句。純外部依賴（等 A 端 contract / 等別件工作）才真的擱置，但仍 **MUST** 明列在等什麼 signal。
 
 triage 結果併入 §2B.2 outstanding 清單（與 HANDOFF / plan（未遷移 consumer 為 tech-debt）/ ROADMAP 來源並列），進 §2B.3 serial/parallel 評估、§2B.4 推薦。
@@ -428,7 +428,7 @@ Step 3.1 audit **有任一條** wt 判為 `mergeBackSafety: ptb-unsafe` → **MU
 
 **MUST Read [dispatch-steps.md](dispatch-steps.md) § 2B.5 before proceeding**（user 在 詢問操作 選定下一步的當下就要讀）— 含 5 列 next-skill dispatch 表、判定條件三條、slug 解析、parent cwd 不動 invariant、人工驗收 dispatch 的 family 入口表。
 
-摘要：一律透過 Skill tool 內呼對應入口，**不要**輸出「請執行 cd ... && claude ...」oneliner；會寫 tracked file 的實作入口（`/implement`）包進 `/wt <slug>: /<next-skill>`，read-only 與規格類（`/specify`、`/system-analysis`）直接內呼。`bdd` 與 `clarify-over-specs` 沒有 Skill tool 入口：`bdd` 由 `/implement` 委派，`clarify-over-specs` 由 `work-route` 載入。
+摘要：一律透過 Skill tool 內呼對應入口，**不要**輸出「請執行 cd ... && claude ...」oneliner；會寫 tracked file 的實作入口（`/implement`）交 `wt` 建立隔離環境並在樹內續跑 `<next-skill>`，read-only 與規格類（`/specify`、`/system-analysis`）直接內呼。`bdd` 與 `clarify-over-specs` 沒有 Skill tool 入口：`bdd` 由 `/implement` 委派，`clarify-over-specs` 由 `work-route` 載入。
 
 ### 2B.1.8 Tech-debt hygiene scan（hard rule — 防 tech-debt.md 堆積）
 
@@ -534,7 +534,7 @@ node vendor/scripts/handoff-retire.ts --cwd "$MAIN_WT_PATH" --apply --json \
 
 它逐筆保存 branch bundle、staged／unstaged patch、status／ignored／submodule evidence 與排除 `.git` 的完整 worktree tree，驗證 archive 後重新讀 active claim、process cwd、HEAD、branch 與 status snapshot；任一改變就 retained。worktree 移除前 MUST 先通過既有 environment／submodule destroy lifecycle；teardown 失敗就 retained。批次持有的來源先由正式 batch cleanup／cancel 處理，不能用 retirement 偽造 landing。移除只允許 exact `git worktree remove --force <path>` 與 exact `git update-ref -d <ref> <head>`，remote refs、main 與明確排除項永不碰。
 
-`docs/archives/retired-work.jsonl` 是 durable tombstone；已退休 identity 不得再由任何 handoff mode 推回 continuation 清單。重跑同一 manifest 應是 no-op／retained，並受固定 maintenance budget 限制。
+`docs/archives/retired-work.jsonl` 是 durable tombstone（這個 archive 載體的退役與替代歸 `W-2026-09-20-non-lifecycle-archive-retire`，本 skill 不另換載體）；已退休 identity 不得再由任何 handoff mode 推回 continuation 清單。重跑同一 manifest 應是 no-op／retained，並受固定 maintenance budget 限制。
 
 輸出固定包含：
 
@@ -546,6 +546,17 @@ Retained: N
 ```
 
 成功移除項目不再寫回下一版 audit；retained 項目必須帶具體原因與下一個可觀察 landing signal。
+
+retained 理由含 `[cwd unreadable]` 時：`systemd --user`／`(sd-pam)`（cgroup 為 `user@<uid>.service/init.scope`）與 cwd 已刪除的 process 已由 helper 排除；`app.slice` 裡白名單 unit（`ssh-agent.service`、`gcr-ssh-agent.service`）的 member 在 (unit, MainPID, 啟動時間) 三元組核對通過後放行；其餘（非白名單或核對不過的 `app.slice` user service、session scope 的中介 process、容器內 process）是刻意 fail-closed，**NEVER** 用 `--force` 類旗標或殺掉 session 基礎設施繞過。
+
+退役 archive（`<repo>-retired/<date>/<entry>/`）的保存期限不靠 age：逐筆內容在別處都找得到才可刪。判定與刪除入口只能是：
+
+```bash
+node vendor/scripts/retired-archive.ts check --repo "$MAIN_WT_PATH" --json   # 唯讀：每筆 deletable 或 keep:<缺什麼>
+node vendor/scripts/retired-archive.ts prune --repo "$MAIN_WT_PATH" --apply [--only <entry>]
+```
+
+`prune --apply` 只刪 `deletable` 且滿 14 天（`--min-age-days`）的筆，並追加 `<root>/prune-log.jsonl`。keep 的筆 **NEVER** 用 `rm -rf` 處置；要放棄 keep 理由列的內容，先把逐筆理由交使用者拍板。
 
 ### 3.6 禁止行為
 

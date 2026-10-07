@@ -9,7 +9,7 @@ paths:
   - 'specs/plans/*evlog*/**'
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/evlog/evlog-adoption.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # evlog Adoption
 

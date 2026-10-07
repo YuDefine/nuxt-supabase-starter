@@ -3,7 +3,7 @@ description: PR-isolated DB preview environment capability + safety contract（�
 paths: ['supabase/migrations/**/*.sql', '.github/workflows/**/*.yml', 'docker-compose*.yml', 'infra/**/*', 'scripts/dev-session*', 'scripts/worktree-*', 'scripts/singleton*', '.claude/consumer-meta.json']
 ---
 <!-- Clade native rule; source: rules/core/db-preview-env.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # DB Preview Environment（capability + safety contract）
 
@@ -43,7 +43,7 @@ paths: ['supabase/migrations/**/*.sql', '.github/workflows/**/*.yml', 'docker-co
 
 > 凡 worktree 專屬的 backing service（DB clone、PostgREST sidecar、任何 per-worktree daemon），其**存在性檢查 MUST 綁在「起 dev server」這個動作上**，不能只綁在「建 worktree」那一刻 —— 後者是一次性的，服務會在之後消失（`reconcile` 清掉、手動清理、主機重啟）。缺席時 **MUST** fail-loud 或自動補建，**NEVER** 讓它留到 runtime 由 app 層錯誤代言。
 
-Fail-loud 的訊息 **MUST 點名 backing service 本身與修復指令**（例：`DB clone <consumer-b>_wt_<slug> 不存在 → node scripts/worktree-db.mjs create --slug <slug>`）。**NEVER** 只說「後端連線失敗」——那正是要避免的那層代言。
+Fail-loud 的訊息 **MUST 點名 backing service 本身與修復指令**（例：`DB clone <consumer>_wt_<slug> 不存在 → node scripts/worktree-db.mjs create --slug <slug>`）。**NEVER** 只說「後端連線失敗」——那正是要避免的那層代言。
 
 launcher 的「port LISTENING」判準對本問題恆為真（app 起得來、只是打不到 DB）。**NEVER** 拿「修復很便宜」當省略檢查的理由。跑 integration test、收 verify evidence 等預期 backing service 在的入口同樣適用。
 
@@ -92,7 +92,7 @@ channel 名字 **MUST 從該 sidecar 的 `PGRST_DB_CHANNEL` 讀，NEVER 猜**—
 - **NEVER** 讓 main push 直接觸發 staging migrate 而**跳過** schema-gate
 - **MUST** PR / push validation 用 disposable PG（schema-migration-gate 即可滿足）
 
-如果 consumer 目前 staging migrate 沒擋 schema-gate（即 main push 直接到 staging migrate 不經 throwaway diff），**MUST** 在 `docs/tech-debt.md` 開 TD 追蹤；不能無限延期。
+如果 consumer 目前 staging migrate 沒擋 schema-gate（即 main push 直接到 staging migrate 不經 throwaway diff），**MUST** 依 [[follow-up-register]] 登記追蹤（lifecycle repo：plan § Open work；未遷移 consumer：`docs/tech-debt.md` 的 TD）；不能無限延期。
 
 ### 3. Production data sanitization（必備條件）
 
@@ -163,7 +163,7 @@ Managed platform（Cloudflare Workers 等）自帶 per-version preview URL，缺
 - ❌ **兩條 change 同時改 schema 仍然互踩** —— 它們共用同一個 preview DB
 - ❌ **NEVER** 拿它當 § MUST 1 schema-migration-gate 的替代品
 
-**MUST** 宣告 `shared-preview-db` 的 consumer 另外具備 `diff-only` 等級的 schema migration gate；尚未具備時 **MUST** 在 `docs/tech-debt.md` 開 TD 追蹤，不能無限延期。
+**MUST** 宣告 `shared-preview-db` 的 consumer 另外具備 `diff-only` 等級的 schema migration gate；尚未具備時 **MUST** 依 [[follow-up-register]] 登記追蹤（lifecycle repo：plan § Open work；未遷移 consumer：`docs/tech-debt.md` 的 TD），不能無限延期。
 
 ### 適用前提（任一不滿足就不是這個變體）
 

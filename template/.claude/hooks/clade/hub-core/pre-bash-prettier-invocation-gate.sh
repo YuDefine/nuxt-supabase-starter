@@ -11,11 +11,11 @@
 #   package.json 的 prettier 鍵 / .prettierignore）與**直接安裝**（dependencies / devDependencies）。
 #   兩條都沒有攔到 binary：prettier@3.9.6 經 @nuxt/hints@1.1.4 的 transitive dep + .npmrc 的
 #   shamefully-hoist 躺在 node_modules/.bin/prettier（2026-08-28 registry-driven 掃描：
-#   <consumer-a>、<consumer-b>、nuxt-supabase-starter 命中，其餘 11 個 consumer 無 —— starter 命中代表
+#   兩個既有 consumer 與 nuxt-supabase-starter 命中，其餘 11 個 consumer 無 —— starter 命中代表
 #   每個新 scaffold 出來的 consumer 都繼承它）。而 prettier **不需要 config 就能運作**，
 #   所以禁 config 檔對它殺傷力是零。
-#   2026-08-28 <consumer-a> 實例：跑 --write，exit 0、零警告、整檔從單引號無分號改成雙引號加分號，
-#   586 行假 diff。全文見 docs/pitfalls/2026-08-28-banned-tool-binary-still-on-path.md。
+#   2026-08-28 某 consumer 實例：跑 --write，exit 0、零警告、整檔從單引號無分號改成雙引號加分號，
+#   586 行假 diff。舊條目 pitfall-banned-tool-binary-still-on-path（specs/truth/legacy-ids.json）。
 #
 # ⚠️ 這不是全面封鎖，是絆索：
 #   本 gate 只看得到 **Claude Code 的 Bash tool call**。user 在自己 terminal 手打 prettier
@@ -25,7 +25,7 @@
 #
 # 為什麼不接 pnpm check：
 #   binary 是 transitive dep，**移不掉**（@nuxt/hints 是 Nuxt 系的正常依賴），所以狀態型檢查
-#   會讓 <consumer-a> / <consumer-b> 的 CI 永久紅。永久紅的 gate 不是攔阻，是噪音 —— 而噪音會訓練所有人略過它。
+#   會讓命中 consumer 的 CI 永久紅。永久紅的 gate 不是攔阻，是噪音 —— 而噪音會訓練所有人略過它。
 #   攔阻要掛在**動作**上（有人正要跑它的那一刻），不是掛在**狀態**上（binary 存在與否）。
 #
 # 為什麼不換 shim：
@@ -145,7 +145,7 @@ binary 還在 node_modules/.bin/ 是因為它是 @nuxt/hints 的 transitive dep�
 不是因為這個 repo 允許用它。
 
 判準：rules/core/code-style.toolchain.md § 禁止所有 prettier config 檔
-成因：docs/pitfalls/2026-08-28-banned-tool-binary-still-on-path.md
+成因：舊條目 pitfall-banned-tool-binary-still-on-path（clade specs/truth/legacy-ids.json）
 
 只是要在文件裡寫下這個命令字串（不是真的要跑）：CLADE_ALLOW_PRETTIER=1 前綴放行。
 MSG

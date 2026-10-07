@@ -3,11 +3,11 @@ description: Supabase Migration 操作規範
 paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'packages/*/server/**/*.ts']
 ---
 <!-- Clade native rule; source: rules/modules/db-schema/supabase/migration.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Migration
 
-- **MUST** use `supabase migration new <name>` — **NEVER** create .sql manually
+- **每一個** migration 檔的檔名與 timestamp **MUST** 由 Supabase CLI 產生：`supabase migration new <name>`；已採用宣告式 schema 的 repo 也可用 `supabase db schema declarative sync`（產出是草稿，處置義務見 `declarative-schema.md`）— **NEVER** create .sql manually
 - **MUST** `SET search_path = ''` in ALL SECURITY DEFINER functions
 - **NEVER** put SECURITY DEFINER functions in exposed schemas（`public`）— 放在 private schema，僅透過 GRANT 開放
 - **MUST** use `WITH (security_invoker = true)` on ALL views — view 預設 bypass RLS（以 owner 權限執行），不加等於 RLS 失效
@@ -36,8 +36,8 @@ paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'packages/*/server/**/
 advisors 沒有文件化的 exit code 與輸出契約，所以**不做 hard gate**，但輸出 **MUST** 讀，處置義務逐條：
 
 - **每一條** security 類 finding（RLS disabled、policy exists but RLS disabled、security definer
-  view、`auth.users` 暴露、function `search_path` 未設等）**MUST** 當場修掉，或在
-  `docs/tech-debt.md` 登一條 entry 並在完成報告寫明編號
+  view、`auth.users` 暴露、function `search_path` 未設等）**MUST** 當場修掉，或依 [[follow-up-register]] 登記（lifecycle repo：plan § Open work；
+  未遷移 consumer：`docs/tech-debt.md` entry）並在完成報告寫明 work id 或編號
 - **「每一條」是字面意思**：advisors 回 5 條就要 5 條都有著落，**NEVER** 修最嚴重的那條就往下走，
   **NEVER** 只處理「跟本次 diff 相關」的那幾條
 - performance 類 finding（unindexed FK、unused index、`auth_rls_initplan`、multiple permissive
@@ -60,7 +60,7 @@ CI 用 `supabase db start` 在 runner 上起本機 stack，**NEVER** 讓 CI 連 
 ### MUST
 
 - **MUST** commit / push migration 前確認 timestamp 晚於 `origin/main` 上所有已存在的 migration
-- **MUST** 走 `supabase migration new`，**NEVER** 手寫 timestamp
+- **MUST** 由 CLI 產生檔名（見本檔開頭第一條），**NEVER** 手寫 timestamp
 - **MUST** 偵測到 out-of-order 時用 `git mv` rename 到當下 UTC timestamp 並重發版本
 
 ### NEVER
@@ -172,6 +172,8 @@ $$;
 6. **Expand-contract**：rename / drop / 改型別 **MUST** 分 expand（加新欄、雙寫）→ migrate（backfill、切讀新）→ contract（另一次部署才 drop 舊欄）。**NEVER** 在同一個 migration 內 rename / drop 仍被線上程式引用的欄位
 
 > 部署流程走哪條由 § Pending Migration 分類 決定；本 checklist 是 SQL 層手法。
+
+`declarative sync` 產生的 migration 受同一份 checklist 約束，見 `declarative-schema.md`。
 
 ## Data-Transform Migration Disposition
 

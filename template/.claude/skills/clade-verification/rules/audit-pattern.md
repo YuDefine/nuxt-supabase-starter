@@ -3,7 +3,7 @@ description: D-pattern audit 規範（DB outbox canonical + evlog derived stream
 paths: ['server/api/**/*.ts', 'packages/*/server/api/**/*.ts', 'server/utils/audit.ts', 'packages/*/server/utils/audit.ts', 'supabase/migrations/**/*.sql']
 ---
 <!-- Clade native rule; source: rules/core/audit-pattern.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Audit Pattern
 

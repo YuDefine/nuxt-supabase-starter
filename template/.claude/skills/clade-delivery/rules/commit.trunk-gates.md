@@ -1,11 +1,12 @@
 ---
-description: main / master 限定的人工檢查 commit hard gate 與 multi-session git hazard 交叉索引；觸及 work item carrier（tasks/**、specs/plans/**）時 path-scoped 載入
+description: main / master 限定的人工檢查 commit hard gate 與 multi-session git hazard 交叉索引；觸及 work item carrier（tasks/**、specs/plans/**、docs/plans/**）時 path-scoped 載入
 paths:
   - 'tasks/**'
   - 'specs/plans/**'
+  - 'docs/plans/**'
 ---
 <!-- Clade native rule; source: rules/core/commit.trunk-gates.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Commit — Trunk Gates（[[commit]] detail）
 
@@ -22,16 +23,16 @@ paths:
 | 危害點 | 既有規約 | Pitfall |
 | --- | --- | --- |
 | Ad-hoc `git add + git commit` 吃別 session staged WIP | [[commit.detail]] § Ad-hoc commit 必走 `git commit --only -- <paths>` | [[pitfall-consumer-ad-hoc-commit-eats-other-session-staged]] |
-| `git stash push` 不帶 pathspec → scope leak | [[worktree-default.detail]] §1（Stash strategy 隱性風險 / Anti-pattern 手動 selective baseline sync） | [[pitfall-git-stash-pathspec-scope-leak]] |
-| `publish.ts` auto-stash 把 tracked file 捲進 deploy commit | [[worktree-default.detail]] §1 + [[clade-publish]] § Step 3（分組 commit，禁 `--stash-untracked` 對 tracked dirty） | [[pitfall-publish-auto-stash-bundles-tracked-into-deploy-commit]] |
-| `publish.ts` flow 清掉別 session 的 parallel untracked file | [[worktree-default.detail]] §1（Pre-fork baseline guard） | [[pitfall-publish-flow-cleans-parallel-untracked]] |
-| Merge-back auto-stash 整批捲走別 session WIP | [[worktree-default.commit-ceremony]] §5.5（Legacy merge-back 與 stash 救援） | [[pitfall-merge-back-autostash-bulk-captures-other-session-wip]] |
+| `git stash push` 不帶 pathspec → scope leak | [[wt]] 的 `rules/fork前baseline判準.md` Rule 4（stash strategy 隱性風險）/ Rule 6（手寫 pathspec stash 做 selective baseline sync） | [[pitfall-git-stash-pathspec-scope-leak]] |
+| `publish.ts` auto-stash 把 tracked file 捲進 deploy commit | [[wt]] 的 `rules/fork前baseline判準.md` + [[clade-publish]] § Step 3（分組 commit，禁 `--stash-untracked` 對 tracked dirty） | [[pitfall-publish-auto-stash-bundles-tracked-into-deploy-commit]] |
+| `publish.ts` flow 清掉別 session 的 parallel untracked file | [[wt]] 的 `rules/fork前baseline判準.md`（Pre-fork baseline guard） | [[pitfall-publish-flow-cleans-parallel-untracked]] |
+| Merge-back auto-stash 整批捲走別 session WIP | [[wt]] 的 `rules/worktree保留與回收判準.md` Rule 3–6（Legacy merge-back 與 stash 救援） | [[pitfall-merge-back-autostash-bulk-captures-other-session-wip]] |
 
 已撞 mixed commit → [[commit.detail]] § Recovery from mixed commit (multi-session safety)；cross-session staged 偵測層 → commit SKILL `Step 0-Coord`。
 
 ## 人工檢查 Gate（main / master 限定，**hard rule**）
 
-當前 branch 為 `main` / `master` 且本次 `/commit` 觸及的 work item carrier（`tasks/<date>-<slug>.md` 或 `specs/plans/NNN-<slug>/tasks.md`）滿足下列**兩條件同時成立**時，未 ready 時 MUST 擋下 commit——但不是直接停下，走 /commit skill Step 0-MR 的 auto-triage：先推進主線可自行處理項，再以 `flow gates --repo-only --require-empty` 判定放行與否：
+當前 branch 為 `main` / `master` 且本次 `/commit` 觸及的 work item carrier（`tasks/<date>-<slug>.md` `specs/plans/NNN-<slug>/tasks.md` 或 `docs/plans/<id>/tasks.md`）滿足下列**兩條件同時成立**時，未 ready 時 MUST 擋下 commit——但不是直接停下，走 /commit skill Step 0-MR 的 auto-triage：先推進主線可自行處理項，再以 `flow gates --repo-only --require-empty` 判定放行與否：
 
 0. **該工作的實作 code 已 land 進 main** → 對應 worktree 已 merge-back（`wt-helper list --json` 的 `mergedToMain:true`）或已 cleanup。仍有未 land 的 worktree 帶著該工作的改動時，本 gate 對它判 **SKIP**
 1. 該 carrier 的 **非** `## 人工檢查` 段落含任一 `- [x]` → 已開始 / 完成實作
@@ -39,7 +40,7 @@ paths:
 
 只滿足其一不擋（尚未動工、或實作完且人工檢查全綠，都允許 commit）。判定流程、fail-fast 位置見當前 runtime 已投影的 commit skill Step 0-MR；`.claude/skills/commit/SKILL.md` 是 Claude 的交付位置。
 
-**擋的粒度是 pathspec 交集，不是 repo 級 freeze**：一件工作判 BLOCK，被 withheld 的是落在該 carrier 的路徑（`tasks/<date>-<slug>.md`，或 `specs/plans/NNN-<slug>/**`）；同一次 `/commit` 其餘 group 的 `git commit --only -- <pathspec>` 照常落地。pathspec 只接受具名檔或該 plan package 目錄以下的路徑——祖先目錄（`.`、`tasks`、`specs`、`specs/plans`）、glob、`:` magic、絕對路徑一律視為交集擋下，空 pathspec 恆擋。判定式與理由在 `capabilities/core/skills/commit/gates.md` § 0-MR「判定粒度」；其他 group 放行 **NEVER** 讀成該工作已驗收，auto-triage 對它一條沒少。
+**擋的粒度是 pathspec 交集，不是 repo 級 freeze**：一件工作判 BLOCK，被 withheld 的是落在該 carrier 的路徑（`tasks/<date>-<slug>.md`，、`specs/plans/NNN-<slug>/**` 或 `docs/plans/<id>/**`）；同一次 `/commit` 其餘 group 的 `git commit --only -- <pathspec>` 照常落地。pathspec 只接受具名檔或該 plan package 目錄以下的路徑——祖先目錄（`.`、`tasks`、`specs`、`specs/plans`、`docs`、`docs/plans`）、glob、`:` magic、絕對路徑一律視為交集擋下，空 pathspec 恆擋。判定式與理由在 `capabilities/core/skills/commit/gates.md` § 0-MR「判定粒度」；其他 group 放行 **NEVER** 讀成該工作已驗收，auto-triage 對它一條沒少。
 
 條件 0 只給普通 main 的歷史存量避免連坐無關變更；批次 integration 含來源實作，不能使用此 SKIP。
 

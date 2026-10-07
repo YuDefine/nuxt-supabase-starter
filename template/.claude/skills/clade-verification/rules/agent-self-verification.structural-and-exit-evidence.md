@@ -1,9 +1,9 @@
 ---
 description: MUST 11 的結構查詢與分頁兩種 negative-search 形態（graph／LSP 的 callers・references・in-degree 恆 0 與「真的沒有」同形；has_more 分頁的第一頁不是全集），以及 MUST 20 常駐義務的 exhibit 指針（三組對照見 TD-1059）
-paths: ['scripts/audit-reference-query-oracle.ts', 'test/fixtures/reference-oracle/**', 'packages/*/test/fixtures/reference-oracle/**', 'test/audit-reference-query-oracle.test.ts', 'packages/*/test/audit-reference-query-oracle.test.ts', 'vendor/scripts/run-evidence.ts', 'vendor/scripts/evidence-hook.ts', 'docs/pitfalls/2026-09-10-nuxt-autoimport-callers-have-zero-in-degree.md']
+paths: ['scripts/audit-reference-query-oracle.ts', 'test/fixtures/reference-oracle/**', 'packages/*/test/fixtures/reference-oracle/**', 'test/audit-reference-query-oracle.test.ts', 'packages/*/test/audit-reference-query-oracle.test.ts', 'vendor/scripts/run-evidence.ts', 'vendor/scripts/evidence-hook.ts']
 ---
 <!-- Clade native rule; source: rules/core/agent-self-verification.structural-and-exit-evidence.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # 結構查詢與 exit-code 證據（MUST 11 的下推全文 ＋ MUST 20 exhibit 指針）
 

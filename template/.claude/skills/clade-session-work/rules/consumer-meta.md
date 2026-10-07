@@ -3,7 +3,7 @@ description: 每個 consumer 自宣告 .claude/consumer-meta.json，描述 dev p
 paths: ['.claude/consumer-meta.json', 'registry/consumers-meta.json', 'registry/consumer-meta.schema.json', '.github/workflows/**']
 ---
 <!-- Clade native rule; source: rules/core/consumer-meta.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Consumer Meta（per-consumer 自宣告 + clade 聚合 snapshot）
 
@@ -110,7 +110,7 @@ fleet 的部署形態收斂成**三型**。新專案 **MUST** 貼齊其中一型
 **MUST** 用 `$comment` 寫明是哪一種：
 
 - **尚未定型** — 合法但不該長期停在這，沒有 type 的 consumer 拿不到任何 type-scoped 的能力
-- **不適用** — 該 consumer 不是 Nuxt app。實例：`<consumer-h>` 是 5 個 Go service 的 matrix build，無 preset、無 D1/Supabase 概念
+- **不適用** — 該 consumer 不是 Nuxt app。實例：某 consumer 是 5 個 Go service 的 matrix build，無 preset、無 D1/Supabase 概念
 
 **NEVER** 為了「讓每個 consumer 都有 type」而多開一個 enum 值容納單一特例——`null` + 明寫不適用的成本低得多。
 
@@ -126,6 +126,19 @@ fleet 的部署形態收斂成**三型**。新專案 **MUST** 貼齊其中一型
 `deploymentType` 的值域刻意與 `detectDeployMechanism()` 回傳值相同，直接比對。不符列進 audit 的「宣告 vs 實際」段；audit 不自動改，改哪邊由 consumer 決定，但**放著不處理不是選項**。
 
 `<consumer>/template` 這類 scaffold 範本**不驗部署形態**——它本身不部署，宣告 `none` 是正確的。
+
+## 遠端主機（`deploy.hosts[]`）
+
+把 self-hosted stack 部署到遠端主機的 consumer，**每一台**部署目標（prod／staging／dev）都 MUST 在 `deploy.hosts[]` 宣告一列——沒有這一列，C 軸（遠端實際在跑的版本）對那台是零覆蓋。
+
+| 欄位 | 內容 |
+| --- | --- |
+| `role` | `prod`／`staging`／`dev` |
+| `ssh` | operator 機器上解析得到的 ssh alias（`~/.ssh/config` 或 tailnet 名，例 `fc-supabase-prod`）；**NEVER** 寫密碼、key 或 IP:port 以外的憑證 |
+| `stack` | 主機上跑什麼；目前只有 `supabase-self-hosted`，新 stack 與它的 probe 同一次加 |
+| `composeDir` | 主機上 `docker-compose.yml` 所在目錄（例 `/opt/supabase`）；`supabase-self-hosted` 必填，缺了 audit 報 `unreadable` |
+
+讀者是 `scripts/audit-remote-env-version-drift.ts`：對每一列以唯讀 ssh（`cat <composeDir>/docker-compose.yml`）取 image tag，與官方 self-hosted compose 比對。ssh 不通報 `unreachable`、讀不到 compose 報 `unreadable`，兩者都 **NEVER** 讀成 aligned。audit 只出訊號；主機升版是 consumer 的 production 動作，relay 給該 consumer session。
 
 ## Adoption 順序
 

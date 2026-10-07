@@ -56,6 +56,17 @@ export function taskLabelProblem(raw: string | undefined, cwd = process.cwd()): 
   return null
 }
 
+/**
+ * 缺任務名稱時能不能在 TTY 上問人。沒有人在場的啟動（派工 child 有 `CLADE_DISPATCH_ID`、watch 機械開的
+ * park-resume 帶 `CLADE_NONINTERACTIVE_LAUNCH=1`）即使 stdin 是 TTY（`herdr pane run` 就是）也不得問——
+ * 沒有人會回答，問了就是無限阻塞。
+ */
+export function mayPromptForLabel(env: NodeJS.ProcessEnv, stdinIsTty: boolean): boolean {
+  if (!stdinIsTty) return false
+  if (env.CLADE_DISPATCH_ID?.trim()) return false
+  return env.CLADE_NONINTERACTIVE_LAUNCH !== '1'
+}
+
 export function taskName(label: string): string {
   return label
     .trim()
@@ -443,12 +454,26 @@ export async function main(): Promise<void> {
   const paneId = values.pane ?? process.env.HERDR_PANE_ID
   if (!paneId) throw new Error('Herdr caller 缺少 pane ID，停止啟動')
   const pane = readPane(requestDefaultHerdr, paneId)
+  const tabId = pane.tab_id as string
+  const tab = entity(requestDefaultHerdr(['tab', 'get', tabId]), 'tab')
   let label =
     values.label ??
     process.env.HERDR_TASK_LABEL ??
     (typeof pane.label === 'string' ? pane.label : '')
+  const mayPrompt = mayPromptForLabel(process.env, process.stdin.isTTY === true)
+  // 沒有人可問的啟動缺名稱時先用 Tab label（機械開的 tab 帶了工作名）；有人在場就問——多 pane 的 tab 名可能是別件工作的
+  if (
+    !mayPrompt &&
+    taskLabelProblem(label) &&
+    typeof tab.label === 'string' &&
+    !taskLabelProblem(tab.label)
+  )
+    label = tab.label
   if (taskLabelProblem(label)) {
-    if (!process.stdin.isTTY) throw new Error('未命名工作：啟動前設定 HERDR_TASK_LABEL 為任務名稱')
+    if (!mayPrompt)
+      throw new Error(
+        `未命名工作（${taskLabelProblem(label)}）：非互動啟動（派工／park-resume）不問名稱，啟動前設定 HERDR_TASK_LABEL 為任務名稱`,
+      )
     const input = createInterface({ input: process.stdin, output: process.stderr })
     try {
       label = (await input.question('這個工作叫什麼？（例如：修復登入失敗） ')).trim()
@@ -456,8 +481,6 @@ export async function main(): Promise<void> {
       input.close()
     }
   }
-  const tabId = pane.tab_id as string
-  const tab = entity(requestDefaultHerdr(['tab', 'get', tabId]), 'tab')
   const singlePane = tab.pane_count === 1
   const evidence = verifyVisibleIdentity(requestDefaultHerdr, {
     paneId,

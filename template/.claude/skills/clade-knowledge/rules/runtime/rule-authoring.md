@@ -10,4 +10,4 @@ paths: ['.clade/rules/**/*.md', '.claude/rules/**/*.md', '.claude/skills/**/*.md
 
 Claude receives the common authoring contract through semantic packages under `.claude/skills/clade-*`. Keep canonical edits in `rules/**/*.md` or consumer-local `.clade/rules/**/*.md`; package presence proves projection, while actual skill activation requires its own product evidence.
 
-Historical Claude evidence: the 2026-08-04 sandbox used the `InstructionsLoaded` hook to verify that a `server/**` glob is anchored at the projectRoot containing the `.claude/` instruction root, while `template/server/**` did not match. Preserve that as a Claude historical receipt; it does not establish Codex or Cursor loading.
+Historical Claude evidence: the 2026-08-04 sandbox used the `InstructionsLoaded` hook to verify that a `server/**` glob is anchored at the projectRoot containing the `.claude/` instruction root, while `template/server/**` did not match. Preserve that as a Claude historical receipt; it does not establish Codex loading.

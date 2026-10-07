@@ -14,7 +14,7 @@
  *   cp vendor/snippets/evlog-audit-signed/enricher.ts \
  *      packages/core/server/plugins/evlog-audit-enricher.ts
  *
- * **重大設計修正（M3a-<consumer-a> wave 4.5）**：
+ * **重大設計修正（M3a-perno wave 4.5）**：
  * 早期版本 dbChainEnricher 在 evlog:enrich 階段透過 `ctx.h3Event` 取 service-role client
  * 並 await DB query — 兩個問題：
  * 1. EnrichContext 不暴露 h3Event（type fail）
@@ -39,7 +39,7 @@ export default defineNitroPlugin((nitroApp) => {
       // 注意：evlog 內建 auditEnricher options 不接 ctx.h3Event；tenantId 必須由 audit()
       // helper 在 INSERT audit_logs 時就一起 set 進 wide event：
       //   useLogger(event).set({ audit: { tenantId: ... } })
-      // 此處留空（或對齊 <consumer-a> auth context 的 read 邏輯）
+      // 此處留空（或對齊 perno auth context 的 read 邏輯）
     }),
   )
 
@@ -48,7 +48,7 @@ export default defineNitroPlugin((nitroApp) => {
 })
 
 /**
- * 反模式（M3a-<consumer-a> wave 4.5 確認不可）：
+ * 反模式（M3a-perno wave 4.5 確認不可）：
  *
  * function dbChainEnricher() {
  *   return async (ctx: EnrichContext) => {

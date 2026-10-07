@@ -241,7 +241,7 @@ else
   # 那筆寫入不會進本 repo 的 journal（路徑不在樹裡），也不會進目標 repo 的 journal（hook 跑在
   # 這一邊），於是兩邊都沒有證據，`flow who` 對它只能回 `unknown`。
   #
-  # 2026-08-28 實測：一個 cwd 在 <consumer-b> 的 session 用絕對路徑寫了 clade 的 8 個檔，八個 clade
+  # 2026-08-28 實測：一個 cwd 在某 consumer 的 session 用絕對路徑寫了 clade 的 8 個檔，八個 clade
   # session 逐一誠實否認、三種探測管道（herdr pane 廣播 / ListAgents / transcript 目錄）全部
   # 打不到它，因為那三種問的都是「誰在這個 repo 工作」——那是「誰寫了這個檔」的代理。
   # 最後靠人工翻 transcript 的絕對路徑才指認到，耗掉四個 session 半小時並擋住兩條 merge-back
@@ -350,10 +350,15 @@ case "$last_s" in
 esac
 if [ "$now_s" -gt 0 ] && [ $((now_s - last_s)) -ge 300 ]; then
   : >"$stamp" 2>/dev/null || true
+  # helper 只從 fleet 內的 repo 取（clade home／registry 登記的 consumer），判定與威脅模型見
+  # _skill-rule-reminder.sh 的 trusted_fleet_helper。NEVER 改回直接拿 `$consumer_root/scripts/…`：
+  # consumer_root 是 session cwd 所在的 repo，agent `cd` 進一個 clone 下來的專案再 Edit 一個檔，
+  # 就會 node 執行那個 repo 自帶的 claim-helper.ts。不在 fleet → 不刷 heartbeat（那種 repo 沒有 claim）。
   helper=""
-  for cand in "$consumer_root/scripts/claim-helper.ts" "$consumer_root/vendor/scripts/claim-helper.ts"; do
-    [ -f "$cand" ] && helper=$cand && break
-  done
+  # shellcheck source=_skill-rule-reminder.sh
+  if . "$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/_skill-rule-reminder.sh" 2>/dev/null; then
+    helper=$(trusted_fleet_helper "$consumer_root" claim-helper.ts) || helper=""
+  fi
   # `refresh-by-cwd` 以 `process.cwd()` 比對 `worktree_path`，所以 node MUST 在寫入實際
   # 發生的那棵樹裡跑，NEVER 在 consumer_root 跑 —— 後者會讓每個 linked worktree 的 claim
   # 都刷不到自己那一份。背景執行 ＋ 全部輸出丟棄，維持本 hook 的靜默 / fail-open 契約。

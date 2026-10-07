@@ -11,32 +11,6 @@ case "$MODE" in
   *) exit 0 ;;
 esac
 
-# Cursor loads this Claude Code plugin hook, but Cursor routing is User Rules + optional
-# Pi dispatch — not this latch. Predicate MUST match vendor/scripts/lib/cursor-session.ts
-# (CURSOR_AGENT / CONVERSATION / SESSION / TRACE). Cursor shells do not export
-# CLAUDE_CODE_SESSION_ID, so minting a pending decision deadlocks the session.
-# Tests that spawn this wrapper MUST unset every Cursor probe to exercise the helper path.
-#
-# Contract (SoT for the Cursor half;
-# adapters/cursor/instructions/rules/core/agent-routing.md § Cursor 環境的 browser 載體
-# points here). Clade routing gate / Pi handshake NEVER blocks a Cursor main thread from
-# calling cursor-ide-browser:
-#   1. On a Cursor session, mint no Claude-Code decision at all (the early exit above).
-#   2. The browser_* and CallDynamicTool namespaces are always exempt from the Pi
-#      read-heavy-scan latch, Cursor or not.
-#   3. waive / dispatch --decision-id / fallback MUST run to completion with no
-#      CLAUDE_CODE_SESSION_ID in the environment.
-# Pinned by test/pi-routing-gate.test.ts and test/cursor-session.test.ts.
-is_cursor_session() {
-  [[ "${CURSOR_AGENT:-}" == "1" ]] && return 0
-  [[ -n "${CLAUDE_CODE_SESSION_ID:-}" ]] && return 1
-  [[ -n "${CURSOR_CONVERSATION_ID:-}" || -n "${CURSOR_SESSION_ID:-}" || -n "${CURSOR_TRACE_ID:-}" ]]
-}
-if is_cursor_session; then
-  cat >/dev/null
-  exit 0
-fi
-
 INPUT=$(cat)
 
 find_clade_root() {

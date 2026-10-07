@@ -31,7 +31,7 @@
 
 判準 1 **有輸出**時，`pnpm-workspace.yaml` 的 `allowBuilds` 對應條目改 `false`（明說不建置），**NEVER** 刪掉——缺條目時 pnpm 以 `ERR_PNPM_IGNORED_BUILDS` **exit 1**，而 `typecheck` / `lint` / `format` 都先跑 deps-status check（內部呼叫 `pnpm install`），三個 script 在跑到本體前就一起紅，症狀與成因完全脫鉤。`false` 是決定，缺條目是沒決定，pnpm 只接受前者。改用 `ignoredBuiltDependencies:` 無效（pnpm 11.24 實測會忽略它，並往 `allowBuilds` 寫回 `set this to true or false` 佔位）。
 
-2026-09 <consumer-e> 實證：09-09 移除 `better-sqlite3` 宣告（`0403915`）時它仍靠 db0 的 optional peer 被裝著，BDD 照綠；09-14 重生 lockfile 清掉那筆殘留（`ade3e10`）後套件真的消失，而 vendored `@specformula/node` 靜態 import 它——BDD 從那一筆起紅，三天後才被發現。判準 2 在第一步就看得到。SpecFormula consumer 可跑 `node ~/offline/clade/scripts/audit-specformula-adoption.ts --repo .` 看 `sqlite` 欄。
+2026-09 某 consumer 實證：09-09 移除 `better-sqlite3` 宣告（`0403915`）時它仍靠 db0 的 optional peer 被裝著，BDD 照綠；09-14 重生 lockfile 清掉那筆殘留（`ade3e10`）後套件真的消失，而 vendored `@specformula/node` 靜態 import 它——BDD 從那一筆起紅，三天後才被發現。判準 2 在第一步就看得到。SpecFormula consumer 可跑 `node ~/offline/clade/scripts/audit-specformula-adoption.ts --repo .` 看 `sqlite` 欄。
 
 細節見 [[pitfall-pnpm-allowbuilds-entry-removal-reddens-unrelated-scripts]]。
 
@@ -59,14 +59,14 @@ Dependabot 唯一的更新途徑是**開 PR**。不走 PR 流程的 consumer（�
 - **Outdated pre-scan**（Step O.1.5）：主線用 `dep-fleet-discover.ts` + `gh release view` 拿 changelog → 分類為 `bugfix` / `adaptation` / `feature` → 依分類決定 pi prompt 是否帶 `<changelog-block>`。
 - **Fleet brief**：被 § Fleet mode subagent 呼叫時，跳過 Step O.1（target / version 由 fleet brief 指定）、Step O.2.1 的 prompt 內嵌 BC clauses + callsites。詳見 § Pi prompt templates · Changelog-block 填充。
 
-## Step O.0 — Worktree gate（[[worktree-default]] §1）
+## Step O.0 — Worktree gate（[[wt]] 的 `rules/改tracked檔前先隔離判準.md` Rule 1）
 
 升 deps 會改 tracked code（`package.json` / lockfile / 必要時 source code），**MUST** 在 session worktree 內跑，不在 main working tree 直接動。
 
 **進入 worktree 的兩條路**：
 
 1. 主線目前已在 worktree（cwd 名含 `-wt/`）→ 跳過 Step O.0、繼續 Step O.1
-2. 主線在 main → 跑 `/wt upgrade-deps-<YYYYMMDD>` ad-hoc Form-1（不對應 plan package）。`wt-helper add` 會走 `--baseline-strategy stash` 把 main dirty 保留，fork 出 worktree 後主線 `cd` 進去
+2. 主線在 main → 交 `wt` 建立隔離環境（slug `upgrade-deps-<YYYYMMDD>`，ad-hoc、不對應 plan package）。main dirty 預設原封不動、新樹從 HEAD 乾淨分出；後續 Step O.1 起的指令一律以該樹的絕對路徑執行（`git -C <tree>`、`pnpm -C <tree>` 或交樹內 worker），主線 cwd 不切換（[[wt]] 的 `rules/改tracked檔前先隔離判準.md` Rule 3）
 
 **禁止**直接在 main working tree 跑這個 mode — 升爆掉一條 package 整個 main 都會卡，bisect / rollback 成本爆增。
 
@@ -102,7 +102,7 @@ Dependabot 唯一的更新途徑是**開 PR**。不走 PR 流程的 consumer（�
    "
    ```
 
-   後續 prompt builder 依此結果決定 `pnpm add <pkg>` 還是 `pnpm add -D <pkg>` — **NEVER** 預設 `-D`，否則會把 dependencies 套件靜默搬到 devDependencies（實證踩坑：<consumer-b> 第一次 run wrangler 被誤搬，commit 後才發現）。
+   後續 prompt builder 依此結果決定 `pnpm add <pkg>` 還是 `pnpm add -D <pkg>` — **NEVER** 預設 `-D`，否則會把 dependencies 套件靜默搬到 devDependencies（實證踩坑：某 consumer 第一次 run wrangler 被誤搬，commit 後才發現）。
 
 4. **分類版號差距**（從低風險到高風險升）：
    - **patch**（`1.2.3 → 1.2.4`）：通常安全
@@ -385,9 +385,9 @@ node ~/offline/clade/vendor/scripts/herdr-session-handoff.ts \
   --table-row version-upgrade-first-pass
 ```
 
-席位不可用時的處置依 [[agent-routing.routing-table]]（2026-09-29）：`version-upgrade-first-pass` 只有 **Claude Sonnet 5.5 high** 一格，`version-upgrade-research` 是 **Gemini 3.8 Flash high → Grok 4.7 xhigh（`grok-xai`；mutation 跳過 `grok-cursor`）**；兩列鏈走完都由**主線**接手，不是 blocker，也 **NEVER** 改派禁用 model。適用 Outdated 與 Fleet 的每一個 package dispatch。
+席位不可用時的處置依 [[agent-routing.routing-table]]（2026-09-29）：`version-upgrade-first-pass` 只有 **Claude Sonnet 5.5 high** 一格，`version-upgrade-research` 是 **Gemini 3.8 Flash high → Grok 4.7 xhigh（`grok-xai`）**；兩列鏈走完都由**主線**接手，不是 blocker，也 **NEVER** 改派禁用 model。適用 Outdated 與 Fleet 的每一個 package dispatch。
 
-這是workspace mutation dispatch。`version-upgrade-research` 經 Pi 時，Runtime quota／provider failure後，**每一個**retry都MUST逐字採用dispatcher payload的`next_step`（含`--retry-of`與`--workspace-access mutation`）；NEVER自行改派`grok-cursor`或任何 GPT seat。Linked worktree visibility與writable sandbox是兩個predicate，擴大cwd不會讓Cursor carrier合法。
+這是workspace mutation dispatch。`version-upgrade-research` 經 Pi 時，Runtime quota／provider failure後，**每一個**retry都MUST逐字採用dispatcher payload的`next_step`（含`--retry-of`與`--workspace-access mutation`）；NEVER自行改派任何 GPT seat。
 
 
 派出 mutation executor 後，立刻記錄 owner / deadline（deadline 取值依 [[agent-routing.keepalive-wake]] § deadline 怎麼取），並依 [[agent-routing.pi-watch-protocol]] 的 keepalive 規約維持單一控制生命週期。控制 turn 只准使用當前 runtime adapter 提供的 bounded completion transport 讀取狀態、重排同一 inert control 或排 lifecycle intervention；**NEVER** 放 upgrade prompt、讀 output tail或做 package mutation。收到 terminal completion 後先 claim task id，再讀結果並停止 wakeup。
@@ -517,7 +517,7 @@ bash <native-skills>/gh-ci-watch/scripts/gh-ci-watch.sh workflow <primary-ci-wor
   --commit "$(git rev-parse HEAD)"
 ```
 
-- `<primary-ci-workflow>.yml` 是 `.github/workflows/` 底下的**檔名**（通常 `ci.yml`，或 `_ci-reusable.yml` 被 caller 觸發的那條）。**NEVER 傳 workflow 的 display name 或自己想的簡稱** —— display name 與檔名無關且隨時可被編輯，傳錯時 script 會 exit 2 並列出可用清單（見 `/gh-ci-watch` § 場景 B）
+- `<primary-ci-workflow>.yml` 是 `.github/workflows/` 底下的**檔名**（通常 `ci.yml`，或 `_ci-reusable.yml` 被 caller 觸發的那條）。**NEVER 傳 workflow 的 display name 或自己想的簡稱** —— display name 與檔名無關且隨時可被編輯，傳錯時 script 會 exit 2 並列出可用清單（見 `/gh-ci-watch` 的 `rules/目標ref與場景選擇判準.md` Rule 2）
 - 用 runtime adapter 提供的 background execution surface 派出
 - Watcher 完成後走 active runtime policy 既定分流（success → 一行報完、failure → runtime-native question interface 二選一）
 

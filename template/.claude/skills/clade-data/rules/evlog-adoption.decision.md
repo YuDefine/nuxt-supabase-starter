@@ -8,7 +8,7 @@ paths:
   - 'packages/**/server/plugins/evlog-*.ts'
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/evlog/evlog-adoption.decision.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # evlog Adoption — 選型與 migration 順序（全文）
 
@@ -23,7 +23,7 @@ paths:
 | cf-workers | Supabase | baseline | — | T1 | `evlog-baseline` |
 | cf-workers | Supabase | hardening | — | T2 | （無；新 consumer 從 baseline 走） |
 | cf-workers | Supabase | D-pattern audit | — | T2 + O1 | `evlog-d-pattern-audit` |
-| cf-workers | Supabase（multi-package） | hardening 或 D-pattern | — | T2 + T4（+O1 視需要） | （無；<consumer-a>-specific） |
+| cf-workers | Supabase（multi-package） | hardening 或 D-pattern | — | T2 + T4（+O1 視需要） | （無；multi-package consumer 專屬） |
 | cf-workers | NuxtHub D1 | partial | ✅ | T3 | `evlog-nuxthub-ai` |
 
 ## 5 個 plan package template overview
@@ -32,7 +32,7 @@ paths:
 
 ### T1 — `evlog-adopt-cfworkers-supabase-baseline`
 
-depth 1 → 5。target：<consumer-d>。內含：
+depth 1 → 5。target：<consumer-1>。內含：
 - **queryable durable drain + drain pipeline**（Supabase 系 = Postgres drain；見 § Drain 選擇指引）
 - 5 件套 enricher（UA / RequestSize / Geo / TraceContext / tenant）
 - sampling + redaction policy
@@ -42,7 +42,7 @@ depth 1 → 5。target：<consumer-d>。內含：
 
 ### T2 — `evlog-adopt-cfworkers-supabase-hardening`
 
-depth 5 → 6+。targets：starter（template 自身）、<consumer-b>、<consumer-a>（不含 multi-package overlay）。內含：
+depth 5 → 6+。targets：starter（template 自身）、<consumer-2>、<consumer-3>（不含 multi-package overlay）。內含：
 - typed fields schema（5 個跨 endpoint 共用核心欄位）
 - source location enricher（vite plugin）
 - **client transport**
@@ -50,7 +50,7 @@ depth 5 → 6+。targets：starter（template 自身）、<consumer-b>、<consum
 
 ### T3 — `evlog-adopt-cfworkers-nuxthub-ai`
 
-NuxtHub D1 完整版。target：<consumer-c>。內含：
+NuxtHub D1 完整版。target：<consumer-4>。內含：
 - `@evlog/nuxthub` drain
 - Workers AI enricher
 - `createAILogger`：cost / token / tool / embed / moderation 子事件
@@ -59,16 +59,16 @@ NuxtHub D1 完整版。target：<consumer-c>。內含：
 
 ### T4 — `evlog-adopt-multi-package-paths`
 
-path layout overlay（不是 evlog feature）。targets：<consumer-a>（必）、starter scaffolder（選）。內含：
+path layout overlay（不是 evlog feature）。targets：<consumer-3>（必）、starter scaffolder（選）。內含：
 - `packages/*/server/**` 偵測
-- per-client env split（`.env.<client-a>` / `.env.shared`）
+- per-client env split（`.env.<client-1>` / `.env.shared`）
 - scaffolder template hooks
 
 可疊加 T2。
 
 ### O1 — `evlog-overlay-d-pattern-audit-signed`
 
-evlog audit overlay（疊在 D-pattern 之上）。target：<consumer-a>。內含：
+evlog audit overlay（疊在 D-pattern 之上）。target：<consumer-3>。內含：
 - evlog `signed()` hash chain（與 DB hash chain **不**共用 secret）
 - `auditEnricher()` 把 DB row 的 `auditEventId` / `prev_hash` / `hash` 帶進 evlog event
 - `auditOnly()` drain pipeline 分支
@@ -82,14 +82,14 @@ starter scaffolder 以 `--evlog-preset <name>` flag 選用：
 
 | Preset | 內含 = 哪些 T pre-applied | 適用情境 |
 | --- | --- | --- |
-| `evlog-baseline` | T1 全套（含 client transport） | 內部工具 / <consumer-d> 報告 / 教學系統 |
+| `evlog-baseline` | T1 全套（含 client transport） | 內部工具 / 影響力報告 / 教學系統 |
 | `evlog-d-pattern-audit` | T1 + O1（baseline + D-pattern + signed chain + outbox） | 多租戶 SaaS / 高合規（refund / billing / 政府報告） |
 | `evlog-nuxthub-ai` | T3 全套 | AI agent / RAG / agentic workflow |
 
 不獨立 preset 的：
 
 - T2 hardening：新 consumer 從 T1 直接開始就是 hardening 後狀態
-- T4 multi-package：multi-package 是 <consumer-a>-specific 演進路徑，新 consumer 預設 single-package
+- T4 multi-package：multi-package 是單一 consumer 的演進路徑，新 consumer 預設 single-package
 
 ## Drain 選擇指引
 
@@ -133,7 +133,7 @@ evlog 用於 production 的 consumer **MUST** 配一個 queryable durable drain 
 2. 加 source location vite plugin + sourceMaps upload
 3. 加 client transport（若 T1 沒含）
 
-### 從 depth 6 → 6+O1（<consumer-a>）
+### 從 depth 6 → 6+O1（multi-package consumer 實例）
 
 1. 加 `auditEnricher()`（從 D-pattern audit_logs row 帶欄位）
 2. 加 `signed()` chain（與 DB hash secret **不**共用）

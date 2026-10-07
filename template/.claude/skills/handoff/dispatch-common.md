@@ -40,18 +40,12 @@ Common text may retain literal tool names in incident evidence or protocol keys.
 command -v herdr
 ```
 
-再判呼叫者在不在 Herdr pane：
+失敗就 STOP；不得宣稱已交接或輸出「目前這裡收工」。
 
-| `HERDR_ENV` | 允許 | 拒絕 |
-| --- | --- | --- |
-| `= 1`（在 Herdr pane 內） | 全部：dispatch / relay / reclaim / complete / harvest | — |
-| 空（Cursor、一般 shell；Codex 已由本檔開頭分流） | create-only dispatch（`--cwd --label --prompt`／`--prompt-file`）**加上** harvest（`--coordinate`／`--coordinate-resume`）。可辨識 live runtime 時不帶 `--launcher`、原生繼承；辨識不到或 helper 不支援同 runtime 時 fail closed。只有 user 當次明確點名不同且受支援的 runtime 才帶 `--launcher`。拓樸永遠是 Tab／workspace，**忽略** inherited `HERDR_PANE_ID` | `--relay` / `--reclaim` / `--complete` / `--continue` / `--recover-orphan` / `--coordinate-claim` / `--parent-pane` → `not_in_herdr` |
+再判本 session 落在 [[session-tasks.operations]] § Runtime × mode matrix 的哪一列（看 `HERDR_ENV` 與 `CLADE_DISPATCH_ID`）。哪一格能用哪個 mode、helper 回什麼（`not_in_herdr`／`nested_dispatch_refused`／`successor_refused`／`usage_error`）、parent／child 各欠什麼，**只**以那張表為準；本節只留 handoff 派工專屬的 scoped summary，**NEVER** 在這裡另抄一份 runtime 流程。
 
-**NEVER** 在 Cursor 裡 `export HERDR_ENV=1` 或假裝自己是 focused pane。那會讓 split／reclaim 打到使用者當下盯著的工作。
-
-create-only 的成功 receipt 是 `dispatched`，**不是** `relay_dispatched`（沒有 predecessor pane 可交）。
-
-**Herdr 外的 main line 要交出位置（TD-1104）時用 `--successor`，不是一般 create-only。** 一般 create-only 派出去的是 coordinated child（帶 `CLADE_DISPATCH_ID`），它結構上開不了任何 pane——除了 relay 之外一律 `nested_dispatch_refused`。`--successor` 是 relay 的 create-only 對應：不注入 correlation env、不留待收割 record、延續同一個 work id，receipt 是 `successor_dispatched`（`predecessor: outside-herdr`）。本 session 還欠收割的 dispatch_id MUST 寫進 successor brief，由 successor `--coordinate-resume`。歸屬怎麼跟過去依前任而定：**Cursor** 派的 record 綁 `CURSOR_SESSION_ID`，successor pane 永遠對不上，所以 helper 在交棒當下以 relay claim 把它們轉給 successor 的 pane／session（receipt `predecessor: cursor`＋`transferred_dispatch_ids`；轉不完回 `successor_incomplete`，Cursor 不得站下）；其他 Herdr 外前任的 record 沒有 parent pane 也沒有 Cursor id，持有 dispatch_id 即為所有權證明，不需轉移。helper 在兩種情況回 `successor_refused`：本 session 是 coordinated child（欠 outcome，只能 `--relay` 把義務一起轉走）、或本 session 就是 Herdr pane（用 `--relay`，它還會轉 in-flight dispatch）。`command -v herdr` 失敗才 STOP；不得宣稱已交接或輸出「目前這裡收工」。identity-bound 在外部被拒時同樣不得輸出「目前這裡收工」。
+- **Herdr 外**（`HERDR_ENV` 空；Codex 已由本檔開頭分流）：沒有 `--relay`（`not_in_herdr`）；可用的是 create-only dispatch（`--cwd --label --prompt`／`--prompt-file`）、harvest、交出位置的 `--successor`（TD-1104），以及 matrix 該列允許的 `--bounded-leaf`。可辨識 live runtime 時不帶 `--launcher`、原生繼承（§ 3.1）；只有 user 當次明確點名不同且受支援的 runtime 才帶 `--launcher`。create-only 的成功 receipt 是 `dispatched`、`--successor` 的是 `successor_dispatched`，都**不是** `relay_dispatched`。交出位置時，本 session 欠收割的 dispatch_id MUST 寫進 successor brief，由 successor 以 `--coordinate-resume` 收割；Herdr 外前任的 record 沒有 parent pane，持有 dispatch_id 即為所有權證明，不需轉移。identity-bound 被拒時同樣不得輸出「目前這裡收工」。
+- **NEVER** 在 Herdr 外 `export HERDR_ENV=1` 或假裝自己是 focused pane。那會讓 split／reclaim 打到使用者當下盯著的工作。
 
 ### `CLADE_DISPATCH_ID` 分流（本 session 自己是不是被派出來的 child）
 
@@ -60,21 +54,21 @@ create-only 的成功 receipt 是 `dispatched`，**不是** `relay_dispatched`�
 | 空（main line session） | 照常 | 照常 |
 | 非空（coordinated child） | 照常——helper 對 relay 開了 nested 缺口 | **STOP，改走 `relay`** |
 
-`fanout` 的第一個動作是裸 dispatch，而 helper 對 coordinated child 的裸 dispatch 一律回 `nested_dispatch_refused`（`herdr-session-handoff.ts`，grep `status: 'nested_dispatch_refused'`；NEVER 在跨檔引用寫行號，用 grep 得到的唯一字串當錨點）。那道 guard 防的是**責任樹擴張**——一個還欠著 outcome 的 child 又生出更多工作。`relay` 是唯一缺口，因為它做的是相反的事：把位置橫向移交、自己站下來。
+`fanout` 的第一個動作是裸 dispatch，而 helper 對 coordinated child 的裸 dispatch 一律回 `nested_dispatch_refused`。那道 guard 防的是**責任樹擴張**——一個還欠著 outcome 的 child 又生出更多工作；`relay` 是唯一缺口，因為它把位置橫向移交、自己站下來。
 
 **NEVER** 為了讓 fanout 在 child 內跑起來而去取 `--recovery-token`：orphan recovery 的前提是 **parent 已死**，拿它繞過一道針對「parent 還活著」設計的 guard 是偽造前提。逐字反開脫：「反正 recovery token 拿得到」「這個 parent 大概也不會來收了」。
 
 本 session 若持有尚未回報的 `--complete` 義務（它是被 dispatch 出來的 child，而 coordinator 還在等 outcome），**MUST 先回報 outcome 再 relay**，不得把未結的 handshake 一起丟給 successor。
 
-> relay 開出來的 successor **不帶** `CLADE_DISPATCH_ID`（helper 刻意不注入 correlation env，見該檔 grep `TD-547` 的註解段），所以它是 main line、可以自由 fanout。`--successor` 開出來的同理（TD-1104）。被 fanout 派出去的 **worker 帶**該 env，因此 worker 只能 relay，不能再 fanout。
+> relay 與 `--successor` 開出來的 successor **不帶** `CLADE_DISPATCH_ID`（helper 刻意不注入 correlation env，見該檔 grep `TD-547` 的註解段），所以它是 main line、可以自由 fanout。被 fanout 派出去的 **worker 帶**該 env，因此 worker 只能 relay，不能再 fanout。
 
-**guard 的唯一另一個缺口是 `--bounded-leaf`（TD-1105）**：coordinated child 可以開**一層**有界葉節點——只限 readonly 的 gate-review row（由 `NATIVE_TABLE_ROW_POLICIES` × `GATE_OUTPUT_ROWS` 推導成 `BOUNDED_LEAF_ROWS`，目前只有 `code-review-opus`）且必須 `--coordinate`（開的人在同一個呼叫裡收割）。leaf 自己帶 correlation env 加上 `CLADE_DISPATCH_BOUNDED_LEAF=1`，record 記 `bounded_leaf: true`；它的裸 dispatch 照一般 guard 擋，再開 leaf 也回 `nested_dispatch_refused`，**`--relay` 也回 `nested_dispatch_refused`**——一般 child 的 relay 缺口是「把位置橫向交出去」，leaf 沒有位置，relay 只會鑄出一條不受 guard 約束的 main line。leaf 做不完就 `--complete blocked` 交還 coordinator；wake 沒送到時它的 `next_step` 是 `standby`（probe parent→在線叫醒→待命由 opener `--coordinate-resume` 收割），不是 relay——pending decision 已隨 `--complete` 進 completion record 與 decision 佇列，leaf 不需要也不能寫 tracked 檔。這不是責任樹擴張：leaf 不能寫它審的樹、跑完即回、不能再派（含 relay）。**NEVER** 為了讓一般工作過 guard 而把它包裝成 leaf——准入由 row 推導，flag 本身不開門。
+**guard 的唯一另一個缺口是 `--bounded-leaf`（TD-1105）**：只限 readonly gate-review row（`BOUNDED_LEAF_ROWS`，目前只有 `code-review-opus`）且必須 `--coordinate`；只開一層，leaf 再派（含 `--relay`）皆 `nested_dispatch_refused`，做不完就 `--complete blocked` 交還 coordinator——各格結果見上述 matrix。**NEVER** 為了讓一般工作過 guard 而把它包裝成 leaf——准入由 row 推導，flag 本身不開門。
 
 ### `--cwd` 指向既存工作區時的佔用探測（fail closed）
 
 上一節判「本 session 能不能派」，本節判「**目標能不能收**」。兩者互不替代。
 
-**觸發 predicate**：`--cwd` 指向的目錄**不是本 session 建立的**，且已存在——典型是 `<repo>-wt/<slug>` linked worktree、或任何非空的既有 checkout。本 session 剛用 `/wt` 建出來的乾淨 worktree 不觸發。
+**觸發 predicate**：`--cwd` 指向的目錄**不是本 session 建立的**，且已存在——典型是 `<repo>-wt/<slug>` linked worktree、或任何非空的既有 checkout。本 session 剛交 `wt` 建出來的乾淨 worktree 不觸發。
 
 命中就 **MUST 依序**跑三步，**任一步命中、或 ownership 判不出來 → NEVER 派，改走 [[concurrent-session-probe]] § 探測之後：協商**：
 
@@ -115,14 +109,14 @@ git -C <該 worktree> log -1 --format=%cr    # 最後一筆 commit 幾分鐘前�
 
 ## 2. 建 durable thin brief
 
-1. 從當前對話與已載入 task carrier 記錄與對話脈絡盤點**本 session**未完成工作、已驗 evidence、失敗 gate、安全邊界與下一個 bounded action。
+1. 從當前對話與已載入 task carrier 盤點**本 session**的未完成工作、證據、失敗 gate 與下一個 bounded action，**先把它們寫回該 work 的 plan.md § 進度**（commit；能 push 就 push），再盤點 brief 要帶的指針。盤點結果的落點是 plan.md，不是 brief。
 2. arg 後面帶了一句工作描述時，以該句作 brief 主題；沒帶才自行萃取主題。
-3. brief 必須落在接手 pane 讀得到的 tracked repo 路徑，優先更新本 session 自己的 `tasks/<timestamp>-<slug>.md`；已存在足夠完整的 task／HANDOFF 條目時可直接引用，不重複建立。
-4. brief 至少包含：repo 與 main checkout cwd、工作指針、目前狀態、已驗證 evidence、剩餘步驟、適用規約、安全／授權邊界、原 session 保留 runtime 的 ownership。
+3. brief 必須落在接手 pane 讀得到的 tracked repo 路徑。有 plan 的 work，進度只寫 plan.md § 進度，brief 只是指針檔；`tasks/<timestamp>-<slug>.md` 只留給沒有 plan 的 session 級工作。**NEVER** 讓 brief 或 `tasks/` 檔與 plan.md 並列成第二份進度 SoT——每棒各寫一份進度，下一棒就要比對哪一份才是現況（W-2026-10-03-work-relay-anti-dilution G1）。已存在足夠完整的 task／HANDOFF 條目時可直接引用，不重複建立。
+4. brief 至少包含：repo 與 main checkout cwd、plan.md 指針（沒有 plan 時改指本 session 的 `tasks/` 檔）、本棒差異（plan.md 還沒寫到、只屬於這次交接的事）、適用規約、安全／授權邊界、原 session 保留 runtime 的 ownership。狀態本體只在 plan.md。
 5. prompt 只指向 durable brief，並明寫「先讀 brief 與 repo 規約，再自行續跑；可修復的品質 gate 失敗（格式／lint／型別，`vp check` 只報格式就只對自己擁有的路徑跑 `pnpm exec vp check --fix <owned-paths>`，NEVER 全 repo `--fix`）就地修、重跑續接，不可修復才停，不向原 session 輪詢」（判準見 [[verify-gate-chain]] § 可修復的 gate 失敗不是停手理由）。
 6. worker brief（`fanout` 的每一份）**MUST** 寫明：做完自己那段卻留下殘工時，把殘工另寫一份 durable
    brief，並用 `--complete success --followup-brief <absolute-path>` 帶回來——見 § 6。
-   另 **MUST** 寫明切片契約（與 Cursor Project `CreateAgent` 同一結果）：自己的 branch、非空 committed diff 後開 **draft PR**、盯該 PR 的 CI、紅燈修同一張 PR、**NEVER** merge／**NEVER** 直推 `main`。**Integration 模式**（預設；[[github-flow]] § Integration branch）：同一個 work id 有 2 個以上切片時，worker push **該** branch 並對 `integration/<work-id>` 開 PR（`gh pr create --base integration/<work-id>`，做到一半先開 draft），盯該 PR 的 CI（只有機械檢查、不跑 test-lane）；在來源 worktree 跑完本機門檻（canonical check ＋ repo 在 CI 機械檢查裡跑的 typecheck；clade 是 `pnpm exec vp check` ＋ `node node_modules/typescript-native/bin/tsc -p tsconfig.clade.json --noEmit`，動到 vendor/scripts 再加 `node node_modules/typescript-native/bin/tsc -p tsconfig.vendor.json --noEmit`。兩條 tsc 以秒計、不必排 heavy gate slot。`test:affected` 仍由 coordinator 在 integration 轉 ready 前跑一次）且該 PR 的 CI 全綠後，自己 `gh pr ready` 該切片 PR，completion 回 coordinator，由 coordinator 以 `integration-merge.ts --pr <n>` 落地。切片 PR 不登記 `batch draft` receipt；**NEVER** 對 `main` 開 PR、**NEVER** 自己 merge。只有一個切片就完工的工作才走上面那條 base 為 `main` 的 draft PR。要 live shared DB 才 desk；隔離雲端 VM 需要 DB 時起該 VM 的 ephemeral 實例（[[db-topology-invariant]]）。Worker `--complete success` **不是** landing；coordinator 收件後才 `batch ready`／完整 `/commit`／條件式 `merge-unattended`。
+   另 **MUST** 寫明切片契約：自己的 branch、非空 committed diff 後開 **draft PR**、盯該 PR 的 CI、紅燈修同一張 PR、**NEVER** merge／**NEVER** 直推 `main`。**Integration 模式**（預設；[[github-flow]] § Integration branch）：同一個 work id 有 2 個以上切片時，worker push **該** branch 並對 `integration/<work-id>` 開 PR（`gh pr create --base integration/<work-id>`，做到一半先開 draft），盯該 PR 的 CI（只有機械檢查、不跑 test-lane）；在來源 worktree 跑完本機門檻（canonical check ＋ repo 在 CI 機械檢查裡跑的 typecheck；clade 是 `pnpm exec vp check` ＋ `node node_modules/typescript-native/bin/tsc -p tsconfig.clade.json --noEmit`，動到 vendor/scripts 再加 `node node_modules/typescript-native/bin/tsc -p tsconfig.vendor.json --noEmit`。兩條 tsc 以秒計、不必排 heavy gate slot。`test:affected` 仍由 coordinator 在 integration 轉 ready 前跑一次）且該 PR 的 CI 全綠後，自己 `gh pr ready` 該切片 PR，completion 回 coordinator，由 coordinator 以 `integration-merge.ts --pr <n>` 落地。切片 PR 不登記 `batch draft` receipt；**NEVER** 對 `main` 開 PR、**NEVER** 自己 merge。只有一個切片就完工的工作才走上面那條 base 為 `main` 的 draft PR。要 live shared DB 才 desk；隔離雲端 VM 需要 DB 時起該 VM 的 ephemeral 實例（[[db-topology-invariant]]）。Worker `--complete success` **不是** landing；coordinator 收件後才 `batch ready`／完整 `/commit`／條件式 `merge-unattended`。
 
 6b. worker brief **MUST** 同時寫明相反的那一半：**那段工作就是整件 work 的最後一步、沒有殘工**時，
    收尾改帶 `--work-done --verification '<一句可查證的實跑摘要>'`。helper 已經支援這兩個旗標，
@@ -141,8 +135,8 @@ git -C <該 worktree> log -1 --format=%cr    # 最後一筆 commit 幾分鐘前�
 7. brief 的**範圍**依 [[agent-routing.dispatch-execution]] § 派多少 判定：與被派工作構成串行鏈的環，預設一起寫進同一份 brief。
    brief 裡出現「X 由主線處理」「不要做 X」這類句子時，**MUST** 能具名說出主線做 X 需要 worker 沒有的什麼；
    說不出來就刪掉那句、把 X 寫進 brief。
-8. 寫 brief 的人 **MUST** 把每個「已驗證」主張指到 SoT（檔案路徑＋可重跑指令），**NEVER** 只 inline 結論。
-   同一份 brief 可以一半新一半舊；沒有指標時接手者分不出哪一半還成立，回讀成本等於沒有 brief（TD-717）。
+8. 「已驗證」主張連同 SoT 指標（檔案路徑＋可重跑指令）寫進 plan.md § 進度；brief 只指向那一段，**NEVER** 在 brief 重述結論。
+   同一份進度可以一半新一半舊；沒有指標時接手者分不出哪一半還成立，回讀成本等於沒有交接（TD-717）。
 
 **NEVER** 把完整 transcript、token、cookie、credential 或與工作無關的 dirty state 塞進 brief。
 
@@ -264,7 +258,7 @@ successor 繼承的是整個位置，所以「接手後仍需要」的範圍比�
 | workflow 明定 parked | 保留，receipt 寫 `retained: <owner + next landing event>` |
 | 已登記批次、尚未正式落地 | 保留来源與佇列，successor 依 commit skill `batch.md` 接手；換 session 不強制結批 |
 | 已登記批次且正式落地 | 主動跑 `wt-helper batch cleanup`；登記時的落地授權含安全回收，不重問 remove／retain，依結果逐來源記 removed／retained 原因 |
-| clean + 內容已在 main 或 origin/<base>（ancestry merged，或 `wt-helper cleanup <slug> --dry-run` 印 `verdict CLEAN`／`merged=Y`／`mergedPr(origin/<base>)=Y` 任一；「已在 origin/<base>、本機 main 尚未同步」算 `removed` 條件——clade 是 PR 制，origin 是落地權威，本機 main 由 `main-sync` 追上，gate 防的是內容遺失而 server 端已保存）+ 無 unique commit／WIP + 無 parking contract ＋ 無宿主設定引用（`--dry-run` 的 `host-config refs=0`；非 0 時先把 systemd unit／drop-in／crontab 改指 main 或刪掉，沒有 flag 可繞過，TD-1148） | **直接**以零 force flag 移除 worktree 與 branch（`wt-helper cleanup <slug>`），receipt 寫 `removed`；**NEVER** 先問 `remove`／`retain`——條件全中就是授權 |
+| clean + 內容已在 main 或 origin/<base>（ancestry merged，或 `wt-helper cleanup <slug> --dry-run` 印 `verdict CLEAN`／`merged=Y`／`mergedPr(origin/<base>)=Y` 任一；「已在 origin/<base>、本機 main 尚未同步」算 `removed` 條件——clade 是 PR 制，origin 是落地權威，本機 main 由 `main-sync` 追上，gate 防的是內容遺失而 server 端已保存）+ 無 unique commit／WIP + 無 parking contract ＋ 無宿主設定引用（`--dry-run` 的 `host-config refs=0`；非 0 時先把 systemd unit／drop-in／crontab 改指 main 或刪掉，沒有 flag 可繞過，TD-1148）＋ 無持有者在世的未過期 claim（`--dry-run` 的 `claim` 行 `holder=alive` 時無 flag 可繞——確認持有者已不在後 `claim-helper.ts drop <id>`；`self`／`dead` 放行，`unknown` 放行但留警告） | **直接**以零 force flag 移除 worktree 與 branch（`wt-helper cleanup <slug>`），receipt 寫 `removed`；**NEVER** 先問 `remove`／`retain`——條件全中就是授權 |
 | 零 force flag 的移除被擋，或上一列任一條件判不出 | fail closed 列 blocker；答案前停止收工訊息 |
 | dirty、未 fully merged、ownership 不明 | fail closed 列 blocker，**NEVER** 用 `--force` 代替判斷 |
 
@@ -278,12 +272,13 @@ helper receipt 中的 `retained: false` 只描述 child pane，**NEVER** 拿它�
 
 ### A. 有交出 pane（`relay` / `fanout` / `next` 派工後）
 
-成功事件是 helper 回傳 **`relay_dispatched`**（Herdr 內交棒）或 **`dispatched`**（Cursor／外部 create-only 派出 pane）。**不是**「successor 完成了工作」，那不再是本 session 的事。
+成功事件是 helper 回傳 **`relay_dispatched`**（Herdr 內交棒）、**`successor_dispatched`**（Herdr 外以 `--successor` 交出位置）或 **`dispatched`**（外部 create-only 派出 pane）。**不是**「successor 完成了工作」，那不再是本 session 的事。
 
 | 部件 | 契約 |
 | --- | --- |
-| 首行 | 內部 relay／fanout：逐字包含 `目前這裡收工；位置已交給 successor。` 外部 create-only：逐字包含 `目前這裡收工；已派出 successor pane。` |
+| 首行 | 內部 relay／fanout 與 Herdr 外 `--successor`：逐字包含 `目前這裡收工；位置已交給 successor。` 外部 create-only：逐字包含 `目前這裡收工；已派出 successor pane。` |
 | Relay receipt | 僅 `relay_dispatched`：successor workspace／tab／pane／runtime session、本 pane id、`predecessor_dispatch_id`、`relayed_dispatch_ids`（沒有就明寫「無」） |
+| Successor receipt | 僅 `successor_dispatched`：successor workspace／tab／pane／runtime session、`predecessor: outside-herdr`、寫進 successor brief 的未收割 dispatch_id（沒有就明寫「無」）。**NEVER** 填本 pane id（Herdr 外沒有） |
 | Dispatch receipt | 僅外部／bare `dispatched`：successor workspace／tab／pane／runtime session／`dispatch_id`。**NEVER** 填本 pane id 或 predecessor（沒有）。**MUST** 另註明本 pane 將自行關閉（§ 4 create-only 那列），**NEVER** 寫成「等 successor 回收」 |
 | Worker receipt | **只有 `fanout`**：逐筆列 dispatch_id、label、pane、在做什麼 |
 | 工作摘要 | durable brief 路徑與一句主題 |
@@ -312,8 +307,8 @@ helper receipt 中的 `retained: false` 只描述 child pane，**NEVER** 拿它�
 在收割那一刻就消失了——而它同時也是最容易發生的情況：worker 做完自己那段，順手發現一件它不該做
 或做不完的事。
 
-**worker 側（MUST）**：把殘工寫成 durable brief（tracked repo 路徑，至少含工作指針、已驗證 evidence、
-剩餘步驟、檔案所有權），再帶進 completion：
+**worker 側（MUST）**：先把證據與殘工步驟寫回 plan.md § 進度（沒有 plan 時寫進 brief 本身），再把殘工寫成
+durable brief（tracked repo 路徑，至少含 plan.md 指針、殘工差異、檔案所有權），帶進 completion：
 
 ```bash
 node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \
@@ -327,7 +322,7 @@ node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \
 
 殘工 brief 天生長成「已完成 ＋ 剩餘」兩段——那正是收工盤點的形狀，所以下一棒會把它讀成一題
 「現在該做什麼」而不是一份工作指令，然後零工作就把上一棒的 summary 原樣回報成 success
-（<consumer-a> 2026-09-03 同一輪兩次命中）。dispatch 時 helper 會在 prompt 最前面注入同一句，但
+（某 consumer 2026-09-03 同一輪兩次命中）。dispatch 時 helper 會在 prompt 最前面注入同一句，但
 **brief 檔本身也要有**：它會被獨立讀（relay successor 逐字帶路徑、收割者自己開檔看），
 那些場合沒有 helper 的注入。
 

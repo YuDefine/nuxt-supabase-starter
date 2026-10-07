@@ -11,7 +11,7 @@ paths:
 ---
 <!-- Clade native rule; source: rules/core/codebase-memory-index.freshness.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # codebase-memory index 保鮮的機械層
 
@@ -23,7 +23,7 @@ paths:
 | `post-bash-cbm-index-refresh.sh` / native PostToolUse | 比對當下 HEAD 與 provenance；已有索引且 working tree 乾淨時，背景更新過期索引 |
 | `session-start-cbm-index-check.sh` / native SessionStart | 同一健康判定，涵蓋人手動 commit、rebase / pull；缺索引、未知來源、dirty 或失敗時提示，同 session 狀態不變不重複 |
 
-上表的自動觸發以該產品入口已安裝、啟用並驗證 hook 為前提。Codex／Cursor 的 hook adapter
+上表的自動觸發以該產品入口已安裝、啟用並驗證 hook 為前提。Codex 的 hook adapter
 存在不代表這兩支 handler 已接通。沒有該入口的自動檢查證據時，agent 在首次使用圖譜前，
 從目前 repo 執行 `bash ~/offline/clade/capabilities/core/hooks/session-start-cbm-index-check.sh`，
 讀取提示再決定是否經 wrapper 更新；commit／rebase／pull 後若還要查圖譜，再做相同檢查。
@@ -35,5 +35,5 @@ Clade 不在預設位置時使用其實際 checkout 路徑。檢查程式缺席�
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | `session-start-cbm-index-check.sh` 在 index 落後 HEAD 或 DB 缺失 / 不可讀、dirty 或 provenance 不明時提示。**提示不 block**；已有索引且乾淨的過期 HEAD 自動背景刷新，缺索引仍由 bootstrap 或 wrapper 建立 |
-| 消費端 | 要用 `search_graph` / `trace_path` / `get_code_snippet` 的 agent（讀提示決定要不要先 index）；Claude hooks、Codex / Cursor 原生投影與 Pi extension 共用 `cbm-health.ts` |
-| 觸發點 | 本檔由共同 rules planner 交付到所選 runtime 的 `clade-knowledge` native skill package（Claude `.claude/skills/`、Codex `.agents/skills/`、Cursor `.cursor/skills/`）；clade home 經 `.claude/rules/local/` pointer。Package 投影與 skill 實際載入分別驗證 |
+| 消費端 | 要用 `search_graph` / `trace_path` / `get_code_snippet` 的 agent（讀提示決定要不要先 index）；Claude hooks、Codex 原生投影與 Pi extension 共用 `cbm-health.ts` |
+| 觸發點 | 本檔由共同 rules planner 交付到所選 runtime 的 `clade-knowledge` native skill package（Claude `.claude/skills/`、Codex `.agents/skills/`）；clade home 經 `.claude/rules/local/` pointer。Package 投影與 skill 實際載入分別驗證 |

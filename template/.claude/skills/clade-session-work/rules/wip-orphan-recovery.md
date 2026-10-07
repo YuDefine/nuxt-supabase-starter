@@ -3,11 +3,11 @@ description: 接手 interrupted session 或收到 dirty worktree 與失效 claim
 paths: ['HANDOFF.md', 'tasks/**']
 ---
 <!-- Clade native rule; source: rules/core/wip-orphan-recovery.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # WIP Orphan Recovery
 
-> Reference 檔。被 Stop hook（`stop-wip-guard.sh`）warn message 與 `handoff-drift-scan.ts` Trigger 5（`orphan-uncommitted-wip`）指向。預防層見 [[worktree-default]] §5、claim 機制見 [[session-claims]]、升級出口見 [[handoff]] / [[session-tasks]]。
+> Reference 檔。被 Stop hook（`stop-wip-guard.sh`）warn message 與 `handoff-drift-scan.ts` Trigger 5（`orphan-uncommitted-wip`）指向。預防層見 [[wt]] 的 `rules/worker契約.md` Rule 6、claim 機制見 [[session-claims]]、升級出口見 [[handoff]] / [[session-tasks]]。
 
 ## 什麼是 orphan WIP
 
@@ -28,7 +28,7 @@ Native startup event 與 `project-context` 之類的 context handler 不承載 o
 | 提醒（Layer 0） | Stop hook `stop-wip-guard.sh` | session 結束前 working tree 有 user WIP → **warn**（不阻擋），提醒有未 commit 改動。多 session 並行共用 working tree 是常態，dirty file 可能屬於別的 active session，不應 block |
 | 事後（Layer 2） | `handoff-drift-scan.ts` Trigger 5 `orphan-uncommitted-wip` | session-start drift scan 偵測「worktree dirty + claim 無效/過期」→ 列出待判 ownership 的候選；訊號名稱不等於 orphan 裁決。**有 active claim 的 dirty worktree 不報**（不擾動 live session） |
 
-表中的自動觸發描述適用於已安裝、啟用並觀測到具名 handler 執行的產品入口；現有 Claude Stop／SessionStart 接線不代表 Codex／Cursor 已有相同接線。沒有該證據的入口，在收尾時從目標 repo 執行 `node scripts/wip-dirty.ts`，接手時執行 `node scripts/handoff-drift-scan.ts --json` 並讀取結果；clade 自身的兩支路徑為 `vendor/scripts/`。前者 exit 1 表示有 user WIP，後者為 informational、exit 0 不代表沒有 finding。helper 缺席或執行失敗時保留「未驗證」狀態，再以本節接手 SOP 的 Git 與 claim 即時證據判斷。
+表中的自動觸發描述適用於已安裝、啟用並觀測到具名 handler 執行的產品入口；現有 Claude Stop／SessionStart 接線不代表 Codex 已有相同接線。沒有該證據的入口，在收尾時從目標 repo 執行 `node scripts/wip-dirty.ts`，接手時執行 `node scripts/handoff-drift-scan.ts --json` 並讀取結果；clade 自身的兩支路徑為 `vendor/scripts/`。前者 exit 1 表示有 user WIP，後者為 informational、exit 0 不代表沒有 finding。helper 缺席或執行失敗時保留「未驗證」狀態，再以本節接手 SOP 的 Git 與 claim 即時證據判斷。
 
 ## 接手 SOP（碰到 orphan WIP 時逐步跑）
 
@@ -39,7 +39,7 @@ Native startup event 與 `project-context` 之類的 context handler 不承載 o
 3. **完成度硬驗**：跑 `vp check`（fmt/lint）；視情況 typecheck / test。0 errors 是「可 commit」的硬門檻之一（warnings 多為既有、非阻擋）。
 4. **git log 脈絡比對**：對照 `tasks.md` / `proposal.md` / review issue，判斷這批 WIP 對應哪些 task / finding / issue（是「做完忘 commit」還是「做一半」）。
 5. **危險項識別（最關鍵）**：掃 dirty 清單有無：
-   - **跨 change 目錄刪除**（`D openspec/changes/<別的-change>/...`）→ 該 change 可能有自己 active worktree，刪除若 commit/merge 回 main 會**破壞別 change**。**MUST** `git -C <worktree> checkout HEAD -- <該目錄>` restore 保護，**NEVER** 連同 commit。
+   - **跨 plan package 刪除**（`D specs/plans/<別的-work-id>/...`）→ 該工作可能有自己 active worktree，刪除若 commit/merge 回 main 會**破壞別的工作**。**MUST** `git -C <worktree> checkout HEAD -- <該目錄>` restore 保護，**NEVER** 連同 commit。
    - **跨 session 檔**（不屬本批工作主題的檔）→ 比對 claim `expected_paths` / 另一 worktree，疑似別 session WIP 滲入 → 回報，不擅自處置。
 6. **收尾分流**：
    - **完成 + 驗過 + 無危險項** → selective commit（`git -C <worktree> commit --only -- <每個 scoped 檔>`，**禁止** `git add -A`）到 session branch。
@@ -48,7 +48,7 @@ Native startup event 與 `project-context` 之類的 context handler 不承載 o
 ## 禁止事項
 
 - **NEVER** 盲目 `git add -A` + commit 整批 orphan WIP — 先跑步驟 2-5 驗完成度 + 識別危險項
-- **NEVER** commit 跨 change 目錄刪除（破壞別 change 的 openspec artifacts）— 一律 restore 保護
+- **NEVER** commit 跨 plan package 刪除（破壞別的工作的 plan artifacts）— 一律 restore 保護
 - **NEVER** discard / `git checkout --` user WIP 而未回報 user（per [[commit]] WIP 處置禁令）
 - **NEVER** 對 active-claim 的 dirty worktree 當 orphan 處理 — 那是 live session 正在做（drift-scan Trigger 5 已排除，手動接手時也 MUST 先查 claim）
 - **NEVER** 假設 orphan WIP 是完成態 — 沒 commit message 的完成度自評，預設視為「待驗證」

@@ -28,16 +28,19 @@ if printf '%s' "$command" | grep -qE '(\s|^)--no-verify(\s|$)'; then
   exit 0
 fi
 
-# 定位 audit script — consumer 端在 scripts/，clade 端在 vendor/scripts/
+# 定位 audit script — consumer 端在 scripts/，clade 端在 vendor/scripts/。只從 fleet 內的 repo 取
+# （判定與威脅模型見 _skill-rule-reminder.sh 的 trusted_fleet_helper）：cwd 是 agent `cd` 得到的
+# 任意目錄，NEVER 直接執行它底下的腳本。
 audit_script=""
-for candidate in \
-  "scripts/review-checklist-audit.ts" \
-  "vendor/scripts/review-checklist-audit.ts"; do
-  if [ -f "$candidate" ]; then
-    audit_script="$candidate"
-    break
-  fi
-done
+# shellcheck source=_skill-rule-reminder.sh
+if . "$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/_skill-rule-reminder.sh" 2>/dev/null; then
+  audit_script=$(trusted_fleet_helper "$PWD" review-checklist-audit.ts) || audit_script=""
+fi
+# 這個 repo 帶著 audit script 卻不在 fleet：沒跑 audit 與「跑過了沒違規」同形，講一聲。
+if [ -z "$audit_script" ] &&
+  { [ -f scripts/review-checklist-audit.ts ] || [ -f vendor/scripts/review-checklist-audit.ts ]; }; then
+  printf '%s\n' 'review-checklist-audit 未執行：這個 repo 不是 clade registry 登記、且位於 clade home 父目錄下的 fleet 成員。' >&2
+fi
 
 # 執行 audit；缺少其中一支 validator 時仍繼續檢查其餘 validator。
 audit_output=""

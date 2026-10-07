@@ -357,6 +357,11 @@
       "id": "doc-sync",
       "title": "Bug 修正／行為變更的文件同步",
       "guidance": "行為變更的 diff 要檢查對應文件（README / docs/ / rules / cookbook / CHANGELOG 慣例）是否同步更新；有行為變更但文件未動 → fail 並指名該補哪份"
+    },
+    {
+      "id": "comment-test-conditional",
+      "title": "註解與測試的條件式判準",
+      "guidance": "只審本次 diff 新增或改到的行。新增註解：命中 code-style.md § 該刪的註解（C0 轉述 SSoT、C1 歷史敘事、C2 工作編號當理由、C3 行內日期、C4 翻譯 code、C5 注解掉的程式碼、C6 測試檔頭重述檔名）→ fail 並指名類別與該怎麼改；C0 先問該事實是否該進 SSoT。@followup[<id>]、結案改寫「（<id> 結案：…）」與指令型註解（@ts-expect-error、oxlint-disable 等）不算。新增 unit test：一列都不中 testing-anti-patterns.md § unit test 何時寫 的 U1–U4，或斷言對象是只給人讀的 prose、load-bearing 規約句（U5，應登記 rule-invariants）→ fail。刪測試：刪的是閘門類（U3）或某段產品碼唯一的行為測試 → fail。"
     }
   ]
 }

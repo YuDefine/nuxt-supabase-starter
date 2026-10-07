@@ -3,7 +3,7 @@ description: RLS Policy 撰寫規範
 paths: ['supabase/migrations/**/*.sql']
 ---
 <!-- Clade native rule; source: rules/modules/db-schema/supabase/rls-policy.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # RLS Policy
 

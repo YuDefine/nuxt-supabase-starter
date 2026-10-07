@@ -11,7 +11,7 @@ metadata:
     invocation: explicit
 ---
 <!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@bc8fdebe2d30db384f77911aaed81888ad03bf5f, modified by clade (added this banner and clade metadata lines) via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Gherkin And DSL
 

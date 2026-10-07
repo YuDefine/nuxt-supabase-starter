@@ -9,7 +9,7 @@
 #   REVIEW_SAFE_TAG      stderr 訊息前綴（"codex-review-safe" / "claude-review-safe"）
 #   REVIEW_SAFE_SCRIPT   rerun 指引裡的 script 檔名（basename）
 #   REPO_ROOT            受審 repo 根（git rev-parse --show-toplevel）
-#   CLADE_HOME           clade 中央倉路徑（完整性歸因器只認這裡，NEVER 受審 repo 內同名檔）
+#   CLADE_HOME           clade 中央倉路徑（逐檔 integrity helper 只認這裡，NEVER 受審 repo 內同名檔）
 #   FINDINGS             0-A.2 的上一輪 verdict 檔（可空字串）
 #   MAX_DIFF_LINES       embed budget（預設由呼叫端帶 CODEX_REVIEW_MAX_DIFF_LINES 展開）
 #   PATTERNS_JSON        semantic 規則檔（缺席 → 空 SEMANTIC_LIST＋warn，不 fail）
@@ -19,14 +19,11 @@
 #   REVIEW_OUTPUT_PATH   非空時 prompt 尾段要求 reviewer 把完整輸出逐字寫進該檔
 #                        （Herdr child 的 verdict 傳輸通道；codex 走 stdout 故留空）
 
-# TD-520：exit 6 完整性檢查是**事故偵測，不是安全邊界**。cursor 池沒有 read-only
-# enforcement（pi 的 `--tools` 約不到 Cursor 原生 Shell / Write / MCP），而同 UID
-# 下有 Shell 的對手可以竄改 baseline、劫持 PATH 上的 git 本身 —— 事後偵測對
-# adversarial injection 結構性無效（0-A.2 review 2026-08-19 定案）。本檢查真正
-# 接的三類：(1) 並行 session 在 review 期間的編輯／commit（實測發生率最高，
-# verdict 審的不是最終狀態，真陽性、重跑即可）、(2) 模型無惡意的誤寫事故、
-# (3) openai-codex 池 pi 層 enforcement 的回歸。對抗性場景的真修是 OS 層隔離
-# （bwrap，TD-520 處置節），不是這裡。
+# exit 6 完整性檢查是**事故偵測，不是安全邊界**。同 UID 下有 Shell 的對手
+# 可以竄改 baseline、劫持 PATH 上的 git 本身 —— 事後偵測對 adversarial injection
+# 結構性無效。本檢查真正接的三類：(1) 並行 session 在 review 期間的編輯／commit
+# （實測發生率最高，verdict 審的不是最終狀態，真陽性、重跑即可）、(2) 模型無惡意的
+# 誤寫事故、(3) openai-codex 池 pi 層 enforcement 的回歸。
 #
 # review_make_workdir — 建 WORK_DIR 並保證任何結束方式都移除它（TD-895）。
 #
@@ -86,6 +83,26 @@ review_snapshot_worktree() {
     GIT_INDEX_FILE="$index" git read-tree HEAD || return 1
   fi
   GIT_INDEX_FILE="$index" git add -A -- . || return 1
+  # `add -A` 受 .gitignore 約束：index 已 staged（`git add -f` 強制加入）但未被 HEAD
+  # track 的檔案不會進暫存 index —— frozen tree 少了它們、真 index 的 staged 集卻有，
+  # review-integrity-scope 的 checkStaged 會判「受審集外」整個拒審
+  # （實例：consumer repo 把截圖目錄整個 ignore，PR 以 add -f 強制加入截圖）。
+  # 把所有 staged 且仍存在於 worktree 的路徑 force-add 回暫存 index：未 ignore 的
+  # 路徑 add 結果與 add -A 相同屬 no-op；staged 刪除的路徑不能列入（--diff-filter=d）：
+  # 目錄改成 symlink（A symlink＋D 舊檔）時，`[ -e ]` 會跟著 symlink 判舊檔路徑存在，
+  # `git add` 再報 `pathspec ... is beyond a symbolic link` 讓 snapshot 失敗（exit 6）。
+  # 要維持的不變式是 frozen tree ⊇ staged 集，不是只補 ignore 命中的子集。
+  local staged_list="$index.staged" staged_forced=() staged_path
+  git diff --cached --name-only --no-renames --diff-filter=d -z >"$staged_list" || return 1
+  while IFS= read -r -d '' staged_path; do
+    if [ -e "$staged_path" ] || [ -L "$staged_path" ]; then
+      staged_forced+=("$staged_path")
+    fi
+  done <"$staged_list"
+  rm -f "$staged_list"
+  if ((${#staged_forced[@]})); then
+    GIT_INDEX_FILE="$index" git add -f -- "${staged_forced[@]}" || return 1
+  fi
   tree="$(GIT_INDEX_FILE="$index" git write-tree)" || return 1
   printf 'HEAD %s\ntree %s\n' "$head" "$tree"
   # core.quotePath=false：預設會把非 ASCII 路徑 C-quote 成 `"src/\346\270..."`，
@@ -102,55 +119,21 @@ review_snapshot_or_die() {
   fi
 }
 
-# Tracked changes: `git diff HEAD` covers staged and unstaged in one pass, so a
-# file carrying both doesn't get emitted as two separate blocks the reviewer has
-# to reconcile. An unborn HEAD (no commit yet) has no such baseline — fall back
-# to the two-command form there. Untracked files are rendered as diffs against
-# /dev/null so every block has the same shape — and binary files degrade to git's
-# own "Binary files ... differ" line instead of dumping bytes into the prompt.
-#
-# REVIEWED_PATHS 與 RAW_DIFF 同一批 git 呼叫、同一個時間點收——晚一步收就可能收到
-# review 期間才出現的路徑，那些檔從沒進過 prompt。涵蓋超出 embed budget 而被剔除
-# 的檔：它們沒進 prompt，但呼叫端接下來 commit 的是整個 working tree —— 這道 gate
-# 保護的是那個 commit，不只是 prompt 裡的位元組。
-#
-# 刪除檔一律 `--irreversible-delete`：只留 `deleted file mode` 檔頭，不嵌整份舊內容。
-# 被刪的碼不會再執行，能審的是「刪了什麼、誰還引用它」——檔頭（路徑）就夠 reviewer
-# 去查引用；整份舊內容只會把 brief 撐爆（PR #546：一支 600KB 的測試檔被拆成 9 支，
-# 刪除那一側單檔就超過 CLAUDE_REVIEW_BRIEF_MAX_BYTES，exit 9 無解）。
-#
-# 空 changeset = exit 3 不呼叫 reviewer：這支 script 只在有東西要審時才被喚起，
-# 收到空收集等於收集 bug —— 對零行 diff 跑 review 會得到 "No findings"，也就是
-# 一個審了零行的通過 gate。
+# RAW_DIFF、受審路徑與兩側內容基線都來自同一份 frozen tree。
+# 收集時逐檔驗當前內容與 frozen tree 一致，關閉 snapshot → diff 的觀測窗。
 review_collect_changeset() {
   RAW_DIFF="$WORK_DIR/raw.diff"
   REVIEWED_PATHS="$WORK_DIR/reviewed-paths.z"
-  : >"$RAW_DIFF"
-  : >"$REVIEWED_PATHS"
-
-  if git rev-parse --verify -q HEAD >/dev/null 2>&1; then
-    git diff HEAD --no-color --no-ext-diff --irreversible-delete >>"$RAW_DIFF" 2>/dev/null
-  else
-    git diff --cached --no-color --no-ext-diff --irreversible-delete >>"$RAW_DIFF" 2>/dev/null
-    git diff --no-color --no-ext-diff --irreversible-delete >>"$RAW_DIFF" 2>/dev/null
+  REVIEW_PROJECTIONS="$WORK_DIR/projections.txt"
+  local classifier="$CLADE_HOME/vendor/scripts/lib/review-integrity-scope.ts" rc=0
+  if [ ! -f "$classifier" ]; then
+    echo "[$REVIEW_SAFE_TAG] RESULT: 歸因器不存在：$classifier（exit 6）" >&2
+    exit 6
   fi
-
-  while IFS= read -r -d '' f; do
-    git diff --no-index --no-color --no-ext-diff -- /dev/null "$f" >>"$RAW_DIFF" 2>/dev/null || true
-  done < <(git ls-files --others --exclude-standard -z 2>/dev/null)
-
-  if git rev-parse --verify -q HEAD >/dev/null 2>&1; then
-    git diff HEAD --name-only --no-renames -z >>"$REVIEWED_PATHS" 2>/dev/null
-  else
-    git diff --cached --name-only --no-renames -z >>"$REVIEWED_PATHS" 2>/dev/null
-    git diff --name-only --no-renames -z >>"$REVIEWED_PATHS" 2>/dev/null
-  fi
-  git ls-files --others --exclude-standard -z >>"$REVIEWED_PATHS" 2>/dev/null
-
-  if [ ! -s "$RAW_DIFF" ]; then
-    echo "[$REVIEW_SAFE_TAG] 錯誤：working tree 無任何未提交變更（staged / unstaged / untracked 皆空）— 未呼叫 reviewer，exit 3" >&2
-    exit 3
-  fi
+  node "$classifier" capture --repo "$REPO_ROOT" \
+    --before "$WORK_DIR/worktree-before.txt" --baseline "$WORK_DIR/integrity.json" \
+    --reviewed "$REVIEWED_PATHS" --raw-diff "$RAW_DIFF" --projections "$REVIEW_PROJECTIONS" || rc=$?
+  [ "$rc" -eq 0 ] || exit "$rc"
 }
 
 # Generated / build-artifact 路徑。它們照樣在 changeset 裡（呼叫端接下來會 commit 它們），
@@ -351,6 +334,10 @@ review_apply_projection_exemption() {
 # 「漏審檔不能記 PASS」（實例：一份 17,567 行的 pnpm-lock、clade 的 2.9MB deps.json）。
 review_build_snapshot() {
   review_apply_projection_exemption
+  if [ -s "${REVIEW_PROJECTIONS:-$WORK_DIR/projections.txt}" ]; then
+    echo "[$REVIEW_SAFE_TAG] warn: clade 投影為 upstream-owned，不納入業務 review：" >&2
+    cat "$WORK_DIR/projections.txt" >&2
+  fi
   SNAPSHOT="$WORK_DIR/snapshot.diff"
   OMITTED="$WORK_DIR/omitted.txt"
   GENERATED_SUMMARY="$WORK_DIR/generated-summary.txt"
@@ -435,11 +422,10 @@ The complete changeset is embedded below between the CHANGESET markers. The
 caller collected it for you at launch time (tracked changes vs HEAD, plus every
 untracked file rendered as a diff against /dev/null).
 
-Paths under `.claude/rules/`, `.claude/skills/`, `.claude/agents/` and
-`.claude/commands/` are PROJECTIONS of the clade central repo. Their source of
-truth lives outside this repository. If you find a defect there, say so and name
-it as upstream-owned (clade) — **NEVER** tell this repository to edit them, the
-next sync would revert the change.
+Only the explicit upstream-owned projection list below is excluded from this
+review. Do not infer ownership from directory names: consumer-authored settings,
+hooks, local rules, actions, and nested vendor code in the embedded changeset
+must be reviewed like any other source.
 
 **NEVER** run `git diff`, `git status`, or `git ls-files` to re-collect it —
 everything you are asked to review is already in this prompt, and re-collecting
@@ -470,6 +456,10 @@ They are outside the scope of this review — do not run git diff on them. State
 that they went unreviewed in one line immediately ABOVE the `## Review Verdict`
 heading, and keep the verdict itself to files you actually saw.
 PROMPT_OMITTED
+  fi
+  if [ -s "$WORK_DIR/projections.txt" ]; then
+    printf '\nThese clade projections are upstream-owned and excluded from this business review. Do not report their content as findings for this repository:\n'
+    cat "$WORK_DIR/projections.txt"
   fi
   if [ -s "$GENERATED_SUMMARY" ]; then
     printf '\nThese generated / machine-produced files also changed; only their paths and diff sizes are listed:\n'
@@ -532,7 +522,7 @@ not bound your verdict.
 FINDINGS_BODY
   fi
   if [ "${REVIEW_ROUND_KIND:-}" = verify ]; then
-    printf '\nThis is verification round %s of at most %s for this change.\n' "$REVIEW_ROUND_N" "$REVIEW_MAX_ROUNDS"
+    printf '\nThis is verification round %s of at most %s for this change.\n' "$REVIEW_ROUND_N" "${REVIEW_ROUND_MAX:-$REVIEW_MAX_ROUNDS}"
     if [ "${REVIEW_ROUND_INCREMENT:-0}" = 1 ]; then
       echo 'The CHANGESET above is only the increment since the previous round'"'"'s snapshot, not the whole change.'
     else
@@ -588,69 +578,58 @@ PROMPT_OUTPUT
   fi
 }
 
-# Review 後的完整性檢查：after-snapshot → 與 before 比對 → 不一致時先歸因再判定
-# （2026-08-22）：原本的全樹二值比對讓 exit 6 在 consumer 上幾乎必然觸發 —— clade
-# bootstrap 每 20–40 分鐘 auto-commit 一次投影層，一次 review 要 5–15 分鐘，兩者
-# 必然賽跑。改由 lib/review-integrity-scope.ts 把差異歸因到路徑，兩層判定：
-#   (1) 受審 changeset 涉及的路徑（含超出 embed budget、只具名未嵌入的）→ 動到就扣住；
-#   (2) 其餘路徑 → 全部命中 `isLockedProjectionPathFor()` 才放行，出現任一非投影路徑
-#       就照舊扣住。歸因失敗（HEAD unborn 位移、porcelain 解析不出路徑、classifier
-#       不存在或自己出錯）一律當真訊號。
-#
-# 歸因器一律取 clade 中央倉那份，**NEVER** 取受審 repo 內的同名檔 —— 這一段只在
-# 「working tree 在 review 期間被改動」時執行，拿受審 repo 提供的檔去 `node` 執行，
-# 等於把 review 邊界外的任意程式碼執行權交給 changeset。
+# 受審檔 worktree／HEAD／mode + staged 子集是 gate；全樹差異只具名 warn。
+# helper 一律取中央倉，NEVER 執行受審 repo 的同名程式。
 review_verify_integrity() {
-  review_snapshot_or_die "$WORK_DIR/worktree-after.txt" after
-  if cmp -s "$WORK_DIR/worktree-before.txt" "$WORK_DIR/worktree-after.txt"; then
-    return 0
-  fi
-
   local classifier="$CLADE_HOME/vendor/scripts/lib/review-integrity-scope.ts"
-  local scope_out="" scope_rc=1
-  if [ -f "$classifier" ]; then
-    scope_out="$(node "$classifier" \
-      --repo "$REPO_ROOT" \
-      --before "$WORK_DIR/worktree-before.txt" \
-      --after "$WORK_DIR/worktree-after.txt" \
-      --reviewed "$REVIEWED_PATHS" 2>&1)"
-    scope_rc=$?
-  else
-    scope_out="歸因器不存在：$classifier"
+  if ! node "$classifier" verify --repo "$REPO_ROOT" --baseline "$WORK_DIR/integrity.json"; then
+    echo "[$REVIEW_SAFE_TAG] RESULT: 受審 changeset 完整性無法驗證 — verdict 不可信、已扣住不輸出（exit 6）" >&2
+    echo "[$REVIEW_SAFE_TAG] NEXT: 先檢視受審檔差異；定性為正當編輯後，需要隔離重跑時依 carrier 使用下列命令：" >&2
+    if [ -n "${REVIEW_SUBAGENT_NONCE:-}" ]; then
+      # prepare／finalize 分兩段；run 會在 prepare 返回時刪樹，只能 create／remove。
+      echo "[$REVIEW_SAFE_TAG]   SNAP=\$(node \$CLADE_HOME/vendor/scripts/review-snapshot.ts create --repo \"\$REPO_ROOT\" --base <merge-base> --stage HEAD)" >&2
+      echo "[$REVIEW_SAFE_TAG]   在 \$SNAP 內跑 $REVIEW_SAFE_SCRIPT prepare medium → 照 AGENT_CALL 派 reviewer → FINALIZE；finalize 之後 review-snapshot.ts remove \"\$SNAP\"（NEVER 用 run 包 prepare）" >&2
+    else
+      echo "[$REVIEW_SAFE_TAG]   node \$CLADE_HOME/vendor/scripts/review-snapshot.ts run --repo \"\$REPO_ROOT\" --base <merge-base> --stage HEAD -- bash \"\$CLADE_HOME/capabilities/core/scripts/$REVIEW_SAFE_SCRIPT\" medium" >&2
+    fi
+    echo "[$REVIEW_SAFE_TAG]   --stage 讓快照的 staged diff 等於 base..HEAD；未 commit 的 changeset 先 create、git apply --cached <自己的 patch>，完成後 remove。" >&2
+    echo "[$REVIEW_SAFE_TAG]   定性為蓄意 mutation 或定不出性時 NEVER 換場地重跑；NEVER 自動還原受審檔。" >&2
+    exit 6
   fi
+  if review_snapshot_worktree "$WORK_DIR/worktree-after.txt.index" >"$WORK_DIR/worktree-after.txt" 2>/dev/null; then
+    if ! cmp -s "$WORK_DIR/worktree-before.txt" "$WORK_DIR/worktree-after.txt"; then
+      node "$classifier" diagnose --repo "$REPO_ROOT" \
+        --before "$WORK_DIR/worktree-before.txt" --after "$WORK_DIR/worktree-after.txt" \
+        --reviewed "$REVIEWED_PATHS" || echo "[$REVIEW_SAFE_TAG] warn: 受審集外診斷失敗（unattributed）；逐檔 integrity 已通過" >&2
+    fi
+  else
+    echo "[$REVIEW_SAFE_TAG] warn: 全樹診斷 snapshot 失敗（unattributed）；逐檔 integrity 已通過" >&2
+  fi
+}
 
-  if [ "$scope_rc" -eq 0 ]; then
-    echo "[$REVIEW_SAFE_TAG] warn: working tree 在 review 期間被改動，但變更全部落在 clade 投影層、且不在受審 changeset 內 — verdict 照常輸出。" >&2
-    printf '%s\n' "$scope_out" | sed "s/^/[$REVIEW_SAFE_TAG]   /" >&2
-    echo "[$REVIEW_SAFE_TAG] 這些路徑由 clade bootstrap 管（chmod 444 + checksum gate + 自動還原），consumer 端不該有人手改；出現在這裡的預期來源是 bootstrap 自己的 auto-commit。" >&2
+# 每次保留 immutable receipt；只有完整、非 blocking verdict 啟用 staging guard。
+review_register_staging_baseline() {
+  local dir="${CLADE_DISPATCH_STATE_DIR:-$HOME/.cache/clade/dispatch}/review-integrity" baseline counts
+  mkdir -p "$dir" || exit 6
+  baseline="$dir/$(basename "$WORK_DIR").json"
+  cp "$WORK_DIR/integrity.json" "$baseline" || exit 6
+  echo "[$REVIEW_SAFE_TAG] STAGING_BASELINE: $baseline" >&2
+  counts=$(review_rounds counts --verdict "$1" --findings "${FINDINGS:-}") || exit 6
+  if [ -s "${OMITTED:-$WORK_DIR/omitted.txt}" ] || [ -n "${PR_FILTER:-}" ] \
+    || { [ "${ROUND_PART:-1/1}" != 1/1 ] && [ -z "${REVIEW_ROUND_LEDGER:-}" ]; } \
+    || { [ -n "${REVIEW_ROUND_LEDGER:-}" ] && [ "${REVIEW_ROUND_PASSED:-0}" != 1 ]; } \
+    || ! node -e 'const d=JSON.parse(process.argv[1]);process.exit(d.critical + d.major === 0 ? 0 : 1)' "$counts"; then
+    echo "[$REVIEW_SAFE_TAG] 本次 verdict 有 blocking findings 或 scope 未完整；未啟用 staging 基線。" >&2
     return 0
   fi
-
-  echo "[$REVIEW_SAFE_TAG] RESULT: working tree 在 review 期間被改動 — verdict 不可信、已扣住不輸出，NEVER 當作 0-A.1 通過（exit 6）" >&2
-  echo "[$REVIEW_SAFE_TAG] 歸因結果：" >&2
-  printf '%s\n' "$scope_out" | sed "s/^/[$REVIEW_SAFE_TAG]   /" >&2
-  echo "[$REVIEW_SAFE_TAG] 變更明細（git diff-tree before..after）：" >&2
-  local tree_before tree_after
-  tree_before="$(sed -n 's/^tree //p' "$WORK_DIR/worktree-before.txt" | head -1)"
-  tree_after="$(sed -n 's/^tree //p' "$WORK_DIR/worktree-after.txt" | head -1)"
-  if [ -n "$tree_before" ] && [ -n "$tree_after" ] && [ "$tree_before" != "$tree_after" ]; then
-    git diff-tree -r --name-status "$tree_before" "$tree_after" | head -40 >&2
-  fi
-  diff "$WORK_DIR/worktree-before.txt" "$WORK_DIR/worktree-after.txt" | head -20 >&2
-  echo "[$REVIEW_SAFE_TAG] 這是偵測控制不是 sandbox：只擋「受審 repo 被改」這一類。資料外洩、其他 repo/\$HOME 破壞、先改再還原（前後 snapshot 相同）都擋不住（TD-520）。" >&2
-  echo "[$REVIEW_SAFE_TAG] 可能來源：reviewer 被 prompt injection 帶去 mutation，或並行 session 的正當編輯。NEVER 自動還原（rules/core/commit.md WIP 處置禁令）—— 人工檢視上列明細定性後，重跑 review。" >&2
-  echo "[$REVIEW_SAFE_TAG] NEXT: 定性為並行 session 的正當編輯 → 別在 main 原樣重跑（會撞同一件事），改在隔離 worktree 內跑："  >&2
-  if [ -n "${REVIEW_SUBAGENT_NONCE:-}" ]; then
-    # subagent carrier 分 prepare／finalize 兩段，run 會在 prepare 返回時刪樹，只能 create／remove。
-    echo "[$REVIEW_SAFE_TAG]   SNAP=\$(node \$CLADE_HOME/vendor/scripts/review-snapshot.ts create --repo \"\$REPO_ROOT\" --base <merge-base> --stage HEAD)" >&2
-    echo "[$REVIEW_SAFE_TAG]   在 \$SNAP 內跑 $REVIEW_SAFE_SCRIPT prepare medium → 照 AGENT_CALL 派 reviewer → FINALIZE；finalize 之後 review-snapshot.ts remove \"\$SNAP\"（NEVER 用 run 包 prepare）" >&2
+  local guard_state
+  guard_state="$(node "$CLADE_HOME/vendor/scripts/lib/review-integrity-scope.ts" activate \
+    --repo "$REPO_ROOT" --baseline "$baseline")" || exit 6
+  if [ "$guard_state" = active ]; then
+    echo "[$REVIEW_SAFE_TAG] 已登記本審查 session 的 staging 基線；hook 只重驗該 session 的 staged 範圍與內容。" >&2
   else
-    echo "[$REVIEW_SAFE_TAG]   node \$CLADE_HOME/vendor/scripts/review-snapshot.ts run --repo \"\$REPO_ROOT\" --base <merge-base> --stage HEAD -- bash \"\$REPO_ROOT/.claude/scripts/$REVIEW_SAFE_SCRIPT\" <effort>" >&2
+    echo "[$REVIEW_SAFE_TAG] 審查 session 無可綁定身分（無 COMMIT_*、CLAUDE_CODE_SESSION_ID、CODEX_THREAD_ID、CLADE_DEVIN_SESSION_ID 或 CLADE_DISPATCH_SESSION_ID）；未啟用 staging guard——未綁定基線會對所有 session 與自動化 commit 生效 24h。" >&2
   fi
-  echo "[$REVIEW_SAFE_TAG]   （--stage 讓快照的 git diff --cached 等於 base..HEAD；漏帶它快照 index＝HEAD，送出的是空 changeset）" >&2
-  echo "[$REVIEW_SAFE_TAG]   （未 commit 的 changeset：先 create 一棵、在裡面 git apply --cached <自己的 patch>，跑完 remove；patch 取 git diff --cached -- <自己的路徑>）" >&2
-  echo "[$REVIEW_SAFE_TAG]   快照落 ~/.cache/clade/review-snap/（磁碟）且用完自動移除——NEVER 手寫 git worktree add 到 /tmp 或 scratchpad（TD-895）。判準與禁令見 skills/commit/gates.md § exit 6 處置。定性為蓄意 mutation 或定不出性時 NEVER 換場地重跑。" >&2
-  exit 6
 }
 
 # ── 0-A 輪數 ledger（T2：輪數上限由 wrapper 執行，不靠散文）──────────────────────
@@ -678,7 +657,11 @@ review_verify_integrity() {
 #   merge-base 沒動                                      → exit 13（covered：Minor 修補不開新輪；
 #                                                         門檻即 gates.md 大改動回扣的「超過 50 行或跨 5 檔以上」）
 #   其餘                                                 → 新一輪；第 2 輪起自動帶上一輪 verdict 進驗證模式
-#   新一輪 > REVIEW_MAX_ROUNDS（3）                      → exit 14 拒跑（拆 PR 或交人判）
+#   新一輪 > REVIEW_MAX_ROUNDS（5）＋該 PR 段的 grant 數 → exit 14 拒跑（拆 PR、交人判，或 Charles 授權後 rounds grant）
+#   grant（rounds grant）：Charles 授權的單 PR 例外輪，append 進 ledger.grants（by／evidence／granted_at／at_round），
+#     只認同 PR 號（--pr-number 必帶）、一張只放寬一輪、只在已到上限時可開；不歸零、不改舊輪。
+#     每張 PR 最多 REVIEW_MAX_GRANTS_PER_PR（2）張：再往上不是授權問題，是這張 PR 該拆。
+#     NEVER 加任何 env 或旗標能不留紀錄地提高上限——上限只能經 ledger 裡的 grant 紀錄放寬。
 #   帶 --include／--exclude 的輪（round.filter 非空）只審了子集：收齊也不算通過（passed 為假、
 #     不能 covered 後續 head、不當增量基準）。同 head 換篩選（含改成不篩選）→ 同輪號重開，不耗輪數；
 #     同 head 同篩選已收齊且 Critical＋Major＝0 → partial（不帶篩選補一次完整輪才可 merge）
@@ -691,15 +674,17 @@ review_verify_integrity() {
 #   prepare 之後同輪號被重開（新 head、換篩選、批界位移）時，舊 prepare 的 finalize 仍過得了自己的快照完整性，
 #   只靠輪號對應會把它的 verdict 記成新 head／新篩選的通過證據——不一致就拒記（exit 2）。
 # `rounds cover`：判定為 covered 時把 head 記進通過輪的 covered_heads（merge-queue 的 passed 只認記錄）。
-REVIEW_MAX_ROUNDS=3
+# `rounds cover --no-reviewable <hash> --projections <N>`：切批後 0 批（比較範圍只有 clade 投影）時把該輪記成無可審檔的通過。
+REVIEW_MAX_ROUNDS=5
+REVIEW_MAX_GRANTS_PER_PR=2
 
 review_rounds_dir() {
   printf '%s\n' "${CLADE_REVIEW_ROUNDS_DIR:-${CLADE_DISPATCH_STATE_DIR:-$HOME/.cache/clade/dispatch}/review-rounds}"
 }
 
-# review_rounds <plan|open|cover|record|passed|show|count> [--flag value ...] → stdout JSON（exit 0），用法錯誤 exit 2
+# review_rounds <plan|open|cover|record|passed|show|count|recount|grant> [--flag value ...] → stdout JSON（exit 0），用法錯誤 exit 2
 review_rounds() {
-  node --input-type=module -e "$REVIEW_ROUNDS_JS" "$(review_rounds_dir)" "$REVIEW_MAX_ROUNDS" "$(dirname -- "${BASH_SOURCE[0]}")/review-verdict.ts" "$@"
+  node --input-type=module -e "$REVIEW_ROUNDS_JS" "$(review_rounds_dir)" "$REVIEW_MAX_ROUNDS" "$(dirname -- "${BASH_SOURCE[0]}")/review-verdict.ts" "$REVIEW_MAX_GRANTS_PER_PR" "$@"
 }
 
 REVIEW_ROUNDS_JS="$(cat <<'JS'
@@ -709,9 +694,10 @@ import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync,
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-const [dir, maxArg, verdictModule, cmd, ...rest] = process.argv.slice(1)
+const [dir, maxArg, verdictModule, maxGrantsArg, cmd, ...rest] = process.argv.slice(1)
 const { trailingResolvedStatus } = await import(pathToFileURL(verdictModule).href)
 const MAX_ROUNDS = Number(maxArg)
+const MAX_GRANTS_PER_PR = Number(maxGrantsArg)
 // gates.md 大改動回扣：「累計修正超過 50 行或跨 5 檔以上」要重驗；未到門檻即 covered。
 const COVER_MAX_LINES = 50
 const COVER_MAX_FILES = 4
@@ -747,6 +733,17 @@ function mine(round) {
 }
 function scoped(ledger) {
   return ledger.rounds.filter(mine)
+}
+// 人類授權的例外輪只屬於明寫的那一張 PR：沒帶 --pr-number 的呼叫端一張都不認。
+function grantsFor(ledger) {
+  return PR_NO ? (ledger.grants ?? []).filter((g) => String(g.pr) === String(PR_NO)) : []
+}
+function maxRounds(ledger) {
+  return MAX_ROUNDS + grantsFor(ledger).length
+}
+function grantCommand() {
+  if (opt.mode !== 'pr' || !PR_NO) return null
+  return `.claude/scripts/claude-review-safe.sh rounds grant --mode pr --branch ${opt.branch} --pr-number ${PR_NO} --by charles --evidence '<flow id 或 Charles 原話出處>'`
 }
 function roundFile(path, n, suffix, pr = PR_NO) {
   return `${path.replace(/\.json$/, '')}${pr ? `-pr${pr}` : ''}-r${n}-${suffix}`
@@ -845,7 +842,8 @@ function decide(ledger) {
   const pr = opt.mode === 'pr'
   const rounds = scoped(ledger)
   const last = rounds.at(-1)
-  const base_ = { max_rounds: MAX_ROUNDS, part, head, filter: FILTER || null }
+  const max = maxRounds(ledger)
+  const base_ = { max_rounds: max, part, head, filter: FILTER || null }
   if (!last) return { ...base_, action: 'review', round: 1, kind: 'discovery', reuse: false }
   const state = roundState(last)
   if (last.head === head) {
@@ -893,9 +891,9 @@ function decide(ledger) {
         reason: `round ${last.n} 已通過（Critical＋Major＝0），自該 head 起累計 ${inc.lines} 行／${inc.files} 檔，未達重驗門檻（>${COVER_MAX_LINES} 行或 ≥${COVER_MAX_FILES + 1} 檔）` }
   }
   const n = last.n + 1
-  if (n > MAX_ROUNDS)
-    return { ...base_, action: 'refuse', round: n, last_round: last.n, last_blocking: state.blocking,
-      reason: `第 ${n} 輪超過上限 ${MAX_ROUNDS}（round ${last.n}：${state.passed ? '已通過但之後增量超過重驗門檻' : `Critical＋Major ${state.blocking} 條`}）` }
+  if (n > max)
+    return { ...base_, action: 'refuse', round: n, last_round: last.n, last_blocking: state.blocking, grant_command: grantCommand(),
+      reason: `第 ${n} 輪超過上限 ${max}${max > MAX_ROUNDS ? `（${MAX_ROUNDS}＋Charles 授權 ${max - MAX_ROUNDS} 輪）` : ''}（round ${last.n}：${state.passed ? '已通過但之後增量超過重驗門檻' : `Critical＋Major ${state.blocking} 條`}）` }
   return { ...base_, action: 'review', round: n, kind: 'verify', reuse: false, ...nextBasis(last, base, pr) }
 }
 function nextBasis(prev, base, pr) {
@@ -917,6 +915,39 @@ function findingsFor(ledger, path, n) {
   return out
 }
 
+// cover --no-reviewable <檔案清單 hash> --projections <N>：oa-batches 切批後 0 批——這一輪的比較範圍只有 wrapper 不審的
+// clade 投影（upstream-owned／pinned release 投影輸出），沒有檔可以派 reviewer。把這個 head 記成一輪「無可審檔」的通過，
+// merge-queue 的 passed 才有記錄可認；不記的話這個 head 永遠開不了輪。
+// 上一輪還有 Critical／Major 時不記：沒有 reviewer 驗過它們，投影變動不是修補的證據——回 blocked，修完 push 新 head。
+function recordNoReviewable(ledger, path, d) {
+  if (FILTER) fail('--no-reviewable 不能與 --filter 併用：帶篩選的輪是部分審查')
+  const existing = scoped(ledger).findLast((r) => r.n === d.round)
+  const fresh = !existing || d.restart
+  if (!fresh && Object.values(existing.parts ?? {}).some((p) => p.status === 'verdict'))
+    fail(`ledger round ${d.round} 在此 head 已有批的 verdict：NEVER 用「無可審檔」蓋掉 reviewer 的 verdict`)
+  const from = fresh ? d.findings_from ?? null : existing.findings_from ?? null
+  const prior = from ? scoped(ledger).findLast((r) => r.n === from && r !== existing) : null
+  const blocking = prior ? roundState(prior).blocking : 0
+  if (blocking > 0) {
+    d.action = 'blocked'
+    d.blocking = blocking
+    d.reason = `round ${prior.n} 的 Critical＋Major ${blocking} 條還沒有 reviewer 驗過，這個 head 相對它的變動只有 clade 投影——投影變動不是修補的證據；修完 push 新 head 再 prepare`
+    return
+  }
+  const projections = Number(opt.projections || 0)
+  const verdictFile = roundFile(path, d.round, 'p1of1.md')
+  writeFileSync(verdictFile, `<!-- oa-batches：本輪沒有派 reviewer。head ${d.head} 的比較範圍 ${projections} 檔全是 wrapper 不審的 clade 投影（檔案清單 sha256 ${opt['no-reviewable']}）。 -->\n## Review Verdict\n- No findings.\n`)
+  if (existing) ledger.rounds = ledger.rounds.filter((r) => r !== existing)
+  ledger.rounds.push({ n: d.round, kind: fresh ? d.kind : existing.kind, head: d.head, base: opt.base || null,
+    increment_base: (fresh ? d.increment_base : existing.increment_base) ?? null, findings_from: from, opened_at: now, part_total: 1,
+    parts: { '1/1': { status: 'verdict', critical: 0, major: 0, minor: 0, verdict_file: verdictFile, at: now, files: opt['no-reviewable'] } },
+    no_reviewable: { projections, files: opt['no-reviewable'] },
+    ...(PR_NO ? { pr: Number(PR_NO) } : {}) })
+  d.action = 'no-reviewable'
+  d.verdict_file = verdictFile
+  d.reason = `round ${d.round}：比較範圍 ${projections} 檔全是 clade 投影，沒有可審的檔，未派 reviewer，記為通過`
+}
+
 // countVerdict：只算 `## Review Verdict` 段的新 finding；`## Prior Findings Status` 段不計。
 // Review Verdict 段內 `…: resolved.`／`— resolved.` 形狀的行只在「引用了上一輪 finding 的位置」時才當狀態列略過：
 // 光看措辭會把寫成 `- [Major] x — resolved.` 的新 finding 算成 0（discovery 輪根本沒有上一輪可 resolve）。
@@ -932,9 +963,21 @@ const normLoc = (loc) => loc?.replace(/:[≈~](?=\d)/, ':')
 const PRIOR_LABEL = /^\s*(?:[-*+]\s+)?(?:\*{1,2})?Prior findings\b[^:：]*[:：](?:\*{1,2})?\s*$/i
 const SEVERITY = /^\s*[-*+]\s+(?:\*{1,2})?\[(Critical|Major|Minor)\](?:\*{1,2})?(?=\s|$)/i
 const CITE = /^\s*[-*+]\s+(?:\*{1,2})?\[(?:Critical|Major|Minor)\](?:\*{1,2})?\s+`?([^\s`]+:[≈~]?\d+)/i
+// 被計數的 finding 列底下縮排（≥2 格或一個 tab、且比該列更深）的 `- …` 子條列是它的續行，不是新 finding（曾因此整輪 review 作廢）。
+// 只認「剛被計數的 finding 列」之後的續行：resolved 狀態列（含被略過的 `[sev] … resolved`）底下的子條列不開放——
+// 否定詞檢查只看狀態列本身，開放續行會讓 `- a.ts:1 — resolved.` 後接 `  - b.ts:2 還是壞的` 被靜默吞成 0 finding（0-A fail-open）。
+// 頂層亂行、No findings 底下的子條列、狀態列底下的子條列照舊報錯（fail-closed）。
+const NESTED_BULLET = /^(?:\t|\s{2,})[-*+]\s+\S/
+// tab 展開成 4 欄再比深度，與 parent 的縮排同一把尺。
+const indentOf = (line) => /^\s*/.exec(line)[0].replace(/\t/g, '    ').length
+// 上一輪沒寫行號的 finding（`- [Major] vendor/scripts/x.ts — …`、`- [Major] .agents/skills/{a,b}/SKILL.md — …`）：
+// 位置就是 severity 後到破折號前的整段路徑字樣。只認這個形狀，且本輪狀態列 MUST 逐字引用同一段（#502 r4：
+// 批 2–8 每批都把這兩條 `— resolved.` 狀態列計成 Major 2）。
+const CITE_BARE = /^\s*[-*+]\s+(?:\*{1,2})?\[(?:Critical|Major|Minor)\](?:\*{1,2})?\s+`?([^\s`:]*[/.][^\s`:]*)`?\s+[—–]\s/i
+const citeOf = (line) => normLoc(CITE.exec(line)?.[1]) ?? CITE_BARE.exec(line)?.[1]
 function priorCites(findingsFile) {
   if (!findingsFile || !existsSync(findingsFile)) return new Set()
-  return new Set(readFileSync(findingsFile, 'utf8').split('\n').map((l) => normLoc(CITE.exec(l)?.[1])).filter(Boolean))
+  return new Set(readFileSync(findingsFile, 'utf8').split('\n').map(citeOf).filter(Boolean))
 }
 function countVerdict(text, prior = new Set(), round = 1) {
   // 狀態詞中英同一份：`— resolved.`／`: resolved`、中文 `— 已解決。`／`：已解決`／`已解決（…）`（#616 r3 中文狀態列曾整列計入）。
@@ -943,8 +986,10 @@ function countVerdict(text, prior = new Set(), round = 1) {
   const RESOLVED =
     /(?:^\s*[-*+]\s+(?:\*{1,2})?\[(?:Critical|Major|Minor)\](?:\*{1,2})?\s*|[:：—–]|\s-)\s*(?:resolved\b|已解決)(?:\s*[（(][^）)]*[）)])?(?:[.;。；,，!！]|\s*$)/i
   // 整行只擋明寫未解決的窄形狀（oa-batches.ts 的 RESOLVED_NEGATED 逐字同一份）。
+  // 裸字 unresolved 只認述語／狀態詞形式（remains／is／still／left … unresolved、`: unresolved`、句尾或標點前）；
+  // 當形容詞修飾名詞（`the unresolved wording`）不算未解決。
   const RESOLVED_NEGATED =
-    /\b(?:not|un|partially|mostly|still)[\s-]*resolved\b|\bunresolved\b|(?:未|尚未|並未|沒有?|部分(?:已)?)解決/i
+    /\b(?:not|partially|mostly|still)[\s-]*resolved\b|\bun[\s-]+resolved\b|\b(?:remains?|remained|is|are|was|were|still|left|stays?)\s+(?:still\s+)?unresolved\b|(?:[:：—–]|\s-)\s*unresolved\b|\bunresolved\s*(?:[.,;:!?。，；：！？)）—–]|\s-\s|$)|(?:未|尚未|並未|沒有?|部分(?:已)?)解決/i
   // 寬否定／仍未修字樣只看狀態句（第一句）：狀態詞之後的說明常順帶寫到「still record」「新增回歸測試鎖住」「仍會被 guard 擋下」。
   // oa-batches.ts 的 STATUS_NEGATION 逐字同一份（test/oa-batches-count-verdict.test.ts 抽兩檔原文比對並逐詞對拍）。
   const STATUS_NEGATION =
@@ -968,9 +1013,11 @@ function countVerdict(text, prior = new Set(), round = 1) {
   let sawVerdict = false
   let sawParsedLine = false
   let verdictLevel = 0
+  let parentIndent = -1
   for (const [index, raw] of text.split('\n').entries()) {
     const h = HEADING.exec(raw)
     if (h) {
+      parentIndent = -1
       if (VERDICT_HEADING.test(h[2])) {
         inVerdict = true
         sawVerdict = true
@@ -984,11 +1031,14 @@ function countVerdict(text, prior = new Set(), round = 1) {
     }
     if (!inVerdict || !raw.trim()) continue
     const sev = SEVERITY.exec(raw)
+    if (!sev && parentIndent >= 0 && NESTED_BULLET.test(raw) && indentOf(raw) > parentIndent) continue
+    parentIndent = -1
     if (sev) {
       sawParsedLine = true
       if (trailingResolvedStatus(raw, round)) continue
-      if (resolvedStatus(raw) && prior.has(normLoc(CITE.exec(raw)?.[1]))) continue
+      if (resolvedStatus(raw) && prior.has(citeOf(raw))) continue
       out[sev[1].toLowerCase()] += 1
+      parentIndent = indentOf(raw)
       continue
     }
     if (/^\s*(?:[-*+]\s+)?No (?:new )?findings\.?\s*$/i.test(raw)) {
@@ -1009,7 +1059,11 @@ function countVerdict(text, prior = new Set(), round = 1) {
 }
 
 const now = new Date().toISOString()
-if (cmd === 'plan') {
+if (cmd === 'counts') {
+  const verdict = readFileSync(need('verdict'), 'utf8')
+  if (!/^## Review Verdict\s*$/m.test(verdict)) fail('missing Review Verdict')
+  process.stdout.write(`${JSON.stringify(countVerdict(verdict, priorCites(opt.findings)))}\n`)
+} else if (cmd === 'plan') {
   const path = ledgerPath()
   const ledger = load(path)
   const d = decide(ledger)
@@ -1042,6 +1096,8 @@ if (cmd === 'plan') {
     } else if (d.action === 'covered') {
       const round = scoped(ledger).findLast((r) => r.n === d.round)
       round.covered_heads = [...new Set([...(round.covered_heads ?? []), d.head])]
+    } else if (cmd === 'cover' && opt['no-reviewable'] && d.action === 'review') {
+      recordNoReviewable(ledger, path, d)
     }
     return d
   })
@@ -1080,6 +1136,21 @@ if (cmd === 'plan') {
     return { round: n, part, ...counts, ...roundState(round), ledger: path }
   })
   process.stdout.write(`${JSON.stringify(out)}\n`)
+} else if (cmd === 'unrecord') {
+  // record 之後的後續步驟失敗（staging baseline 登記 exit 6）時的回滾：把該批退回 prepared，
+  // 該輪就不再 complete／passed，ledger 不留「通過」卻沒有 receipt／verdict 輸出的輪。
+  // 只退 record 剛寫的那一批；退回後同 head 重跑沿用該輪號（沒收齊的輪重開不耗輪數）。
+  const path = need('ledger')
+  const n = Number(need('round'))
+  const part = opt.part || '1/1'
+  const out = withLock(path, (ledger) => {
+    const round = scoped(ledger).findLast((r) => r.n === n)
+    const slot = round?.parts?.[part]
+    if (!slot || slot.status !== 'verdict') fail(`ledger ${path} round ${n} 第 ${part} 批沒有可回滾的 verdict`)
+    round.parts[part] = { status: 'prepared', at: now, ...(slot.files ? { files: slot.files } : {}) }
+    return { round: n, part, ...roundState(round), ledger: path }
+  })
+  process.stdout.write(`${JSON.stringify(out)}\n`)
 } else if (cmd === 'passed') {
   // merge 前的 0-A 證據：這個 head 是某個通過輪的 head，或被通過輪 covered。
   opt.mode = 'pr'
@@ -1096,6 +1167,59 @@ if (cmd === 'plan') {
   // 唯讀：用 record 同一份 countVerdict 重算一份 verdict（--findings-file＝上一輪 verdict，給狀態列的位置比對）。
   // 不讀寫 ledger；拿來對拍 oa-batches 的顯示計數、重算舊輪誤計。
   process.stdout.write(`${JSON.stringify(countVerdict(readFileSync(need('verdict'), 'utf8'), priorCites(opt['findings-file'])))}\n`)
+} else if (cmd === 'recount') {
+  // 判準修正後重算已存 verdict：讀 ledger 該輪該批記的 verdict_file，用 record 同一份 countVerdict
+  // （同一份上一輪 findings 與輪號）重算。預設 dry-run 只印新舊計數；--apply 才寫回，並在該批留 recounts 稽核紀錄。
+  // NEVER 手動扣分：數字只能來自重跑 countVerdict，不接受外部給的計數。
+  const path = ledgerPath()
+  const n = Number(need('round'))
+  const part = need('part')
+  const apply = opt.apply === 'yes'
+  if (opt.apply && !apply) fail(`--apply 只接受 yes，收到 ${opt.apply}`)
+  const reason = apply ? need('reason').trim() : opt.reason || null
+  if (apply && !reason) fail('--reason is required')
+  const run = (ledger) => {
+    const round = scoped(ledger).findLast((r) => r.n === n)
+    if (!round) fail(`ledger ${path} 沒有 round ${n}`)
+    const slot = round.parts?.[part]
+    if (slot?.status !== 'verdict') fail(`ledger round ${n} 第 ${part} 批沒有已記的 verdict`)
+    if (opt.head && round.head !== opt.head) fail(`ledger round ${n} 開在 head ${round.head}，不是 --head ${opt.head}`)
+    const counts = countVerdict(readFileSync(slot.verdict_file, 'utf8'), priorCites(round.findings_file), round.n)
+    const before = { critical: slot.critical, major: slot.major, minor: slot.minor }
+    const changed = ['critical', 'major', 'minor'].some((k) => before[k] !== counts[k])
+    if (apply && changed) {
+      slot.recounts = [...(slot.recounts ?? []), { at: now, before, after: counts, reason }]
+      Object.assign(slot, counts)
+    }
+    return { round: n, part, head: round.head, verdict_file: slot.verdict_file, before, after: counts, changed,
+      applied: apply && changed, ...roundState(round), ledger: path }
+  }
+  process.stdout.write(`${JSON.stringify(apply ? withLock(path, run) : run(load(path)))}\n`)
+} else if (cmd === 'grant') {
+  // Charles 授權的單 PR 例外輪：只 append 紀錄，不動任何一輪。上限＝MAX_ROUNDS＋該 PR 段的 grant 數。
+  if (opt.mode !== 'pr') fail('grant 只限 PR 模式（--mode pr）')
+  if (!PR_NO) fail('grant 必帶 --pr-number（例外輪只屬於那一張 PR）')
+  if (need('by') !== 'charles') fail(`grant 只收 --by charles（收到 ${opt.by}）：例外輪只有 Charles 能授權`)
+  const evidence = need('evidence').trim()
+  if (!evidence) fail('--evidence is required')
+  const path = ledgerPath()
+  const out = withLock(path, (ledger) => {
+    const rounds = ledger.rounds.filter((r) => r.pr != null && String(r.pr) === String(PR_NO))
+    if (!rounds.length)
+      fail(`ledger ${path} 沒有 PR #${PR_NO} 的輪：PR 號對不上（branch ${opt.branch}），grant 不寫`)
+    if (grantsFor(ledger).length >= MAX_GRANTS_PER_PR)
+      fail(`PR #${PR_NO} 已有 ${grantsFor(ledger).length} 張 grant，達上限 ${MAX_GRANTS_PER_PR}：不再授權，這張 PR 該拆`)
+    const last = scoped(ledger).at(-1)
+    const max = maxRounds(ledger)
+    if (last.n < max)
+      fail(`PR #${PR_NO} 目前 round ${last.n}，上限 ${max} 還沒到：grant 只在撞上限時開（一張放寬一輪，NEVER 預先疊加）`)
+    if (!roundState(last).complete)
+      fail(`PR #${PR_NO} round ${last.n} 還沒收齊 verdict：沒收齊的輪換 head 重開不耗輪數，不需要 grant（一張放寬一輪，NEVER 預先疊加）`)
+    const grant = { pr: Number(PR_NO), by: 'charles', evidence, granted_at: now, at_round: last.n, max_before: max }
+    ledger.grants = [...(ledger.grants ?? []), grant]
+    return { action: 'granted', ...grant, max_rounds: max + 1, ledger: path }
+  })
+  process.stdout.write(`${JSON.stringify(out)}\n`)
 } else if (cmd === 'show') {
   const path = ledgerPath()
   process.stdout.write(`${JSON.stringify({ ledger: path, ...load(path) }, null, 2)}\n`)
@@ -1130,6 +1254,7 @@ review_open_round() {
   action="$(_round_field action)"
   REVIEW_ROUND_LEDGER="$(_round_field ledger)"
   REVIEW_ROUND_N="$(_round_field round)"
+  REVIEW_ROUND_MAX="$(_round_field max_rounds)"
   case "$action" in
     reviewed|covered)
       if [ "$action" = reviewed ] && [ "$(_round_field blocking)" != 0 ] && [ -n "$(_round_field blocking)" ]; then
@@ -1148,10 +1273,11 @@ review_open_round() {
       # PR 號分段與「改走 oa-batches.ts prepare」只對 PR 模式成立；working-tree 模式（/commit）的 ledger key 是 HEAD，沒有 PR 號可分。
       local split=""
       [ "$mode" = pr ] && split="（輪數依 PR 號分段，新 PR＝新的一段）"
-      echo "[$REVIEW_SAFE_TAG] NEXT: 同一份改動審了 $REVIEW_MAX_ROUNDS 輪仍未收斂——拆成可獨立驗收的新 PR${split}，或把最後一輪 verdict 交人判（--complete blocked）。NEVER 刪改 ledger（$REVIEW_ROUND_LEDGER）、關 PR 把同一份改動重開、或 rebase 來重置輪數。" >&2
+      echo "[$REVIEW_SAFE_TAG] NEXT: 同一份改動審了 ${REVIEW_ROUND_MAX:-$REVIEW_MAX_ROUNDS} 輪仍未收斂——拆成可獨立驗收的新 PR${split}，或把最後一輪 verdict 交人判（--complete blocked）。NEVER 刪改 ledger（$REVIEW_ROUND_LEDGER）、關 PR 把同一份改動重開、或 rebase 來重置輪數。" >&2
       if [ "$mode" = pr ] && [ -z "${PR_NUMBER:-}" ]; then
         echo "[$REVIEW_SAFE_TAG] 若這是重用舊 branch 名的另一張 PR 卻繼承了舊 PR 的輪數：呼叫端沒帶 --pr-number，改走 oa-batches.ts prepare（它會帶）。" >&2
       fi
+      [ -n "$(_round_field grant_command)" ] && echo "[$REVIEW_SAFE_TAG] Charles 已授權例外輪時：$(_round_field grant_command)（一張只放寬一輪、只限本 PR，紀錄留在 ledger）" >&2
       exit 14 ;;
     review) ;;
     *)
@@ -1180,7 +1306,7 @@ review_open_round() {
       exit 2
     fi
   fi
-  echo "[$REVIEW_SAFE_TAG] 0-A round ${REVIEW_ROUND_N}/${REVIEW_MAX_ROUNDS}（${REVIEW_ROUND_KIND}，第 ${ROUND_PART:-1/1} 批${FINDINGS:+，帶上一輪 findings}）ledger $REVIEW_ROUND_LEDGER" >&2
+  echo "[$REVIEW_SAFE_TAG] 0-A round ${REVIEW_ROUND_N}/${REVIEW_ROUND_MAX:-$REVIEW_MAX_ROUNDS}（${REVIEW_ROUND_KIND}，第 ${ROUND_PART:-1/1} 批${FINDINGS:+，帶上一輪 findings}）ledger $REVIEW_ROUND_LEDGER" >&2
 }
 
 # review_context_head_ok <expect-sha> <pr-head> — HEAD 是 oa-batches 的 context commit 才回 0：
@@ -1208,7 +1334,7 @@ review_context_head_ok() {
 }
 
 # review_embed_round_increment — working-tree 模式的驗證輪只嵌上一輪 snapshot 之後的增量。
-# REVIEWED_PATHS 不動：完整性檢查保護的是接下來要 commit 的整棵樹，不只增量。
+# REVIEWED_PATHS 不動：完整性檢查保護完整受審集，不只嵌入的增量。
 # 上一輪的 tree 物件被 gc 掉就退回完整 changeset（多審不少審）。PR 模式的增量由快照基準決定。
 review_embed_round_increment() {
   REVIEW_ROUND_INCREMENT=0
@@ -1230,6 +1356,7 @@ review_embed_round_increment() {
 # review_record_round <verdict-file> — verdict 通過完整性與身分核對之後才記進 ledger。
 # 記錄失敗不改 exit code：ledger 缺這筆只會讓 merge 前的 0-A 判定 fail closed（沒有通過記錄）。
 review_record_round() {
+  REVIEW_ROUND_PASSED=0
   [ -n "${REVIEW_ROUND_LEDGER:-}" ] || return 0
   local out
   if out="$(review_rounds record --ledger "$REVIEW_ROUND_LEDGER" --round "$REVIEW_ROUND_N" \
@@ -1237,6 +1364,7 @@ review_record_round() {
     ${REVIEW_ROUND_FILTER:+--filter "$REVIEW_ROUND_FILTER"} \
     ${REVIEW_ROUND_OPENED_AT:+--opened-at "$REVIEW_ROUND_OPENED_AT"} \
     ${REVIEW_ROUND_PART_FILES:+--part-files "$REVIEW_ROUND_PART_FILES"})"; then
+    REVIEW_ROUND_PASSED=$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).passed ? "1" : "0")' "$out")
     echo "[$REVIEW_SAFE_TAG] ROUND: $(node -e '
       const d = JSON.parse(process.argv[1])
       const state = d.passed ? "本輪通過（Critical＋Major＝0）" : d.complete && d.partial && !d.blocking ? "本輪只審了篩選子集（Critical＋Major＝0）：不帶篩選補完整輪才可 merge" : d.blocking ? `本輪 Critical＋Major ${d.blocking} 條：修補後再跑同一指令，wrapper 自動開驗證輪` : "本輪其他批尚未收齊"
@@ -1245,4 +1373,21 @@ review_record_round() {
   else
     echo "[$REVIEW_SAFE_TAG] warn: verdict 未記進輪數 ledger（$REVIEW_ROUND_LEDGER；原因見上一行 review_rounds）；merge 前的 0-A 判定會看不到這一輪" >&2
   fi
+}
+
+# record 與 staging baseline 登記是一個單位：登記失敗（exit 6）時把剛記的那一批退回 prepared，
+# NEVER 留下 ledger 已記通過、卻沒有 receipt／verdict 輸出的輪（merge 前的 0-A 判定會讀成已審過）。
+# 回傳登記步驟的 exit code；呼叫端照 verdict 流程中止，不得再寫 receipt／印 verdict。
+review_record_round_and_register() {
+  local rc=0
+  review_record_round "$1"
+  (review_register_staging_baseline "$1") || rc=$?
+  if [ "$rc" -ne 0 ] && [ -n "${REVIEW_ROUND_LEDGER:-}" ]; then
+    if review_rounds unrecord --ledger "$REVIEW_ROUND_LEDGER" --round "$REVIEW_ROUND_N" --part "${ROUND_PART:-1/1}" >/dev/null; then
+      echo "[$REVIEW_SAFE_TAG] staging baseline 登記失敗（exit $rc）：已把本批 verdict 退出輪數 ledger（round $REVIEW_ROUND_N 第 ${ROUND_PART:-1/1} 批），修好後同 head 重跑 finalize／prepare" >&2
+    else
+      echo "[$REVIEW_SAFE_TAG] staging baseline 登記失敗（exit $rc）且 ledger 回滾也失敗：$REVIEW_ROUND_LEDGER 的 round $REVIEW_ROUND_N 可能留著通過紀錄，NEVER 當作 0-A 通過，需人工處置" >&2
+    fi
+  fi
+  return "$rc"
 }

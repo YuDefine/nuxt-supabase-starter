@@ -3,7 +3,7 @@ description: UI 錯誤訊息必須本地化（繁體中文），禁止直接顯�
 paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue']
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-error-localization.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # UI 錯誤訊息本地化
 

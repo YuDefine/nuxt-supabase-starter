@@ -27,6 +27,16 @@ set -u
 PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 STATE_JSON="$PROJECT_ROOT/.claude/.hub-state.json"
 
+# cloud VM（Claude Code cloud session 帶 CLAUDE_CODE_REMOTE，值為 `true`）：repo 是 shallow clone、
+# 沒有 tag、HOME=/root、沒有 ~/offline/clade、沒有其他 worktree。逐段判定（證據在 clade
+# specs/plans/W-2026-10-07-clade-cloud-hook-remote-guard/evidence/）：
+#   保留：0 cbm auto-index（binary 不在就靜默）、0.5 temp 壓力（df 量的是 VM 自己的磁碟）
+#   跳過：1.5 publish-status（沒有 tag → 誤報「publish bump 未完成」）、orphan WIP 掃描（掃本機 worktree）
+#   改一行：3 找不到 clade repo——VM 本來就沒有中央倉，原本 exit 1 叫人 clone；投影以 repo 已 commit 的為準
+#   只回報：4 找得到 clade（setup script 自己 clone 的）時照查 drift，但不自動修復——修復會把投影改動夾進 session 的 PR
+IS_CLOUD=0
+case "${CLAUDE_CODE_REMOTE:-}" in '' | 0 | false) ;; *) IS_CLOUD=1 ;; esac
+
 # ─────────────────────────────────────────────────────────
 # 0. codebase-memory-mcp auto-index（fire-and-forget）
 # ─────────────────────────────────────────────────────────
@@ -140,6 +150,7 @@ find_clade_root() {
 # 個一秒把它拿掉。離線 / 逾時會自動降級跳過該級，不會誤報。
 
 maybe_publish_status() {
+  ((IS_CLOUD)) && return 0
   [[ -f "$PROJECT_ROOT/registry/consumers.json" ]] || return 0
   [[ -f "$PROJECT_ROOT/scripts/publish-status.ts" ]] || return 0
   node "$PROJECT_ROOT/scripts/publish-status.ts" --quiet --repo "$PROJECT_ROOT" 2>&1 \
@@ -162,6 +173,7 @@ maybe_publish_status
 maybe_orphan_wip() {
   local name="handoff-drift-scan.ts" scan=""
   local common cache tmp pid deadline
+  ((IS_CLOUD)) && return 0
   for scan in "$PROJECT_ROOT/vendor/scripts/$name" "$PROJECT_ROOT/scripts/$name"; do
     [[ -f "$scan" ]] || continue
     common=$(git -C "$PROJECT_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 0
@@ -231,6 +243,10 @@ fi
 # ─────────────────────────────────────────────────────────
 
 if ! CLADE_ROOT=$(find_clade_root); then
+  if ((IS_CLOUD)); then
+    echo "[clade] cloud: skipped 投影 drift 檢查（VM 沒有 clade 中央倉；投影以 repo 已 commit 的版本為準）" >&2
+    exit 0
+  fi
   cat >&2 <<EOF
 
 [clade] ✘ 找不到 clade repo
@@ -269,6 +285,12 @@ fi
 if [[ "${CLADE_WORKSPACE_READONLY:-}" == "1" ]]; then
   FIRST_ERROR=$(printf '%s\n' "$CHECK_OUTPUT" | grep -m1 '\[clade error\]' || true)
   echo "[clade] 偵測到 drift / orphan，readonly session 不自動修復（CLADE_WORKSPACE_READONLY=1）${FIRST_ERROR:+: $FIRST_ERROR}" >&2
+  exit 0
+fi
+# cloud VM 同樣只回報（理由見檔頭 cloud 段）。
+if ((IS_CLOUD)); then
+  FIRST_ERROR=$(printf '%s\n' "$CHECK_OUTPUT" | grep -m1 '\[clade error\]' || true)
+  echo "[clade] 偵測到 drift / orphan，cloud session 不自動修復（CLAUDE_CODE_REMOTE）${FIRST_ERROR:+: $FIRST_ERROR}" >&2
   exit 0
 fi
 

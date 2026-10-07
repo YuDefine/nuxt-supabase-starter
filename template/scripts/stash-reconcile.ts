@@ -8,7 +8,7 @@ const pad2 = (n) => String(n).padStart(2, '0')
  *
  * Surfaces git stash entries created by clade workflows:
  *   - `wt-merge-block/<slug>/<ISO>` — main-worktree blockers stashed by
- *     `wt-helper merge-back --auto-stash` (rules/core/worktree-default.md §5.5)
+ *     `wt-helper merge-back --auto-stash` ([[wt]] `rules/worktree保留與回收判準.md` Rule 3–6)
  *   - `wt-baseline/<slug>/<ISO>` / `wt-final-baseline/<slug>/<ISO>` — pre-fork
  *     baseline snapshots from `wt-helper add --baseline-strategy stash` (the
  *     applied content is also pinned as `refs/wt-baseline/<slug>/<ISO>`, so
@@ -19,7 +19,7 @@ const pad2 = (n) => String(n).padStart(2, '0')
  *     consumer flow when stash pop fails post-write (scripts/propagate.ts)
  *   - `clade-publish: <free-form>` — manual stash from clade-publish skill
  *     when stashing parallel-session WIP before publish
- *   - spectra-apply phase suffixes (`-baseline-drift`, `-p7-wip`,
+ *   - legacy spectra-apply phase suffixes (`-baseline-drift`, `-p7-wip`,
  *     `-conflict-snapshot-with-markers`, `-shared-files`,
  *     `-perf-eval-tasks-bleed`) — stale once the change is archived
  *
@@ -28,7 +28,7 @@ const pad2 = (n) => String(n).padStart(2, '0')
  * working tree — commit via `/commit` with selective
  * stage; do NOT `git add -A`.
  *
- * Default: write a markdown report at `.spectra/stash-reconcile-<YYYY-MM-DD-HHMM>.md`
+ * Default: write a markdown report at `.clade/stash/stash-reconcile-<YYYY-MM-DD-HHMM>.md`
  * with one section per matched stash entry, including:
  *   - stash ref (`stash@{N}`)
  *   - parsed slug + ISO timestamp (where available)
@@ -201,11 +201,11 @@ function parseNamespace(message) {
   if (publishPre) {
     return { kind: 'clade-publish-pre', slug: publishPre[1], iso: publishPre[1] }
   }
-  // spectra-apply phase suffixes: <slug>-<phase-suffix>
+  // legacy spectra-apply phase suffixes: <slug>-<phase-suffix>
   for (const suf of NAMESPACED_SUFFIXES) {
     if (message.endsWith(suf)) {
       const slug = message.slice(0, -suf.length)
-      return { kind: `spectra-apply${suf}`, slug, iso: null }
+      return { kind: `legacy-apply${suf}`, slug, iso: null }
     }
   }
   return { kind: 'unknown', slug: null, iso: null }
@@ -224,27 +224,38 @@ function hasPinnedBaselineRef(consumerRoot, slug, iso) {
   }
 }
 
-function isArchivedChange(consumerRoot, slug) {
-  if (!slug) return false
-  try {
-    const archivePath = join(consumerRoot, 'openspec', 'changes', 'archive', slug)
-    return existsSync(archivePath)
-  } catch {
-    return false
-  }
+// P0-7：stash sidecar 與本 script 的報告落點是 `.clade/stash/`；`.spectra/` 是舊落點。
+//
+// sidecar **兩邊都讀、不搬**：寫入與刪除端是 clade home 的 `scripts/publish.ts`，它改寫到新落點
+// 之前仍往 `.spectra/` 寫，publish 收尾也在那裡刪。讀取端若先把檔搬走，publish 會在舊位置找不到
+// 檔、刪不掉，新位置就留下一份沒有 stash 的孤兒 sidecar。同一個 tag 兩邊都有時新落點優先。
+const STASH_DIR_REL = join('.clade', 'stash')
+const LEGACY_STASH_DIR_REL = '.spectra'
+
+function stashSidecarDirs(consumerRoot) {
+  return [join(consumerRoot, STASH_DIR_REL), join(consumerRoot, LEGACY_STASH_DIR_REL)]
+}
+
+// 目錄自帶 `.gitignore`（內容 `*`）：不依賴 consumer 端 `.gitignore` 是否已收 `.clade/*`。
+function ensureStashDir(consumerRoot) {
+  const dir = join(consumerRoot, STASH_DIR_REL)
+  mkdirSync(dir, { recursive: true })
+  const ignore = join(dir, '.gitignore')
+  if (!existsSync(ignore)) writeFileSync(ignore, '*\n', 'utf8')
+  return dir
 }
 
 // Sidecar metadata 由 publish.ts Phase 1 auto-stash flow 寫入：
-// .spectra/stash-meta-<stashTag>.json 含 pid / cwd / gitUser / fileList / mtimes /
+// stash-meta-<stashTag>.json 含 pid / cwd / gitUser / fileList / mtimes /
 // suspectedTasksFile / sessionLabel — 解決「stash 無人認領要 grep 猜內容」根因。
 // 沒 sidecar 的 stash 視為 orphan（pre-Phase-1 創建 或 第三方 git stash 留下）。
 function loadStashSidecar(consumerRoot, stashMessage) {
-  const spectraDir = join(consumerRoot, '.spectra')
-  if (!existsSync(spectraDir)) return null
   // sidecar 檔名取 stashTag（== stash message）對應 .json
   // publish.ts 用 `clade-publish-pre-<ISO-FILESAFE>` 作 tag，message 直接等於 tag
-  const candidate = join(spectraDir, `stash-meta-${stashMessage}.json`)
-  if (!existsSync(candidate)) return null
+  const candidate = stashSidecarDirs(consumerRoot)
+    .map((dir) => join(dir, `stash-meta-${stashMessage}.json`))
+    .find((p) => existsSync(p))
+  if (!candidate) return null
   try {
     const raw = readFileSync(candidate, 'utf8')
     const parsed = JSON.parse(raw)
@@ -270,21 +281,20 @@ function deleteStashSidecar(sidecar) {
 // 2026-05-21 v1.4.7 publish 留下 13:31:22.568Z sidecar but stash already popped），
 // 或 stash 被別處 manual drop 但 sidecar 沒一起清。
 function listOrphanSidecars(consumerRoot, allStashes) {
-  const spectraDir = join(consumerRoot, '.spectra')
-  if (!existsSync(spectraDir)) return []
-  let files
-  try {
-    files = readdirSync(spectraDir)
-  } catch {
-    return []
-  }
   const stashMessages = new Set(allStashes.map((s) => s.message))
   const orphans = []
-  for (const f of files) {
-    if (!f.startsWith('stash-meta-') || !f.endsWith('.json')) continue
-    const stashTag = f.replace(/^stash-meta-/, '').replace(/\.json$/, '')
-    if (!stashMessages.has(stashTag)) {
-      const fullPath = join(spectraDir, f)
+  for (const dir of stashSidecarDirs(consumerRoot)) {
+    let files
+    try {
+      files = readdirSync(dir)
+    } catch {
+      continue
+    }
+    for (const f of files) {
+      if (!f.startsWith('stash-meta-') || !f.endsWith('.json')) continue
+      const stashTag = f.replace(/^stash-meta-/, '').replace(/\.json$/, '')
+      if (stashMessages.has(stashTag)) continue
+      const fullPath = join(dir, f)
       let parsed = null
       try {
         parsed = JSON.parse(readFileSync(fullPath, 'utf8'))
@@ -327,18 +337,6 @@ function recommendAction(consumerRoot, ref, files, namespace) {
       return {
         action: 'drop',
         reason: `pinned as refs/wt-baseline/${namespace.slug}/${namespace.iso}`,
-      }
-    }
-  }
-
-  // Kind-specific shortcut: spectra-apply phase stash whose change is archived
-  // is presumed stale (defaults to view-diff rather than drop, since user may
-  // still want to inspect content before discarding).
-  if (namespace && namespace.kind?.startsWith('spectra-apply')) {
-    if (isArchivedChange(consumerRoot, namespace.slug)) {
-      return {
-        action: 'view-diff',
-        reason: `change '${namespace.slug}' is archived — inspect before drop`,
       }
     }
   }
@@ -497,7 +495,7 @@ function formatHandoffSection(consumerRoot, entries) {
     `> Generated ${new Date().toISOString()} by stash-reconcile.ts --sweep-orphans --handoff-format`,
   )
   lines.push(
-    `> 這些 stash 沒對應 .spectra/stash-meta-<tag>.json sidecar，owner 未知。`,
+    `> 這些 stash 沒對應 stash-meta-<tag>.json sidecar（.clade/stash/ 或舊落點 .spectra/），owner 未知。`,
     `> 逐筆判斷 → apply / drop（**禁止盲 drop**，先 \`git stash show -p <ref>\` 確認）。`,
     '',
   )
@@ -637,7 +635,7 @@ async function main() {
       return
     }
     if (orphans.length === 0) {
-      console.log('✓ no orphan sidecars — all .spectra/stash-meta-*.json have backing stashes')
+      console.log('✓ no orphan sidecars — all stash-meta-*.json have backing stashes')
       process.exit(0)
     }
     console.log(`Found ${orphans.length} orphan sidecar(s) (no backing stash):`)
@@ -756,8 +754,7 @@ async function main() {
   }
 
   const md = formatMarkdown(consumerRoot, entries)
-  const reportDir = join(consumerRoot, '.spectra')
-  mkdirSync(reportDir, { recursive: true })
+  const reportDir = ensureStashDir(consumerRoot)
   const now = new Date()
   const fname = `stash-reconcile-${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}-${pad2(now.getHours())}${pad2(now.getMinutes())}.md`
   const fpath = join(reportDir, fname)

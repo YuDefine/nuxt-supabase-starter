@@ -104,14 +104,15 @@ _default_lock_dir() {
 LOCK_DIR=${CLADE_GATE_LOCK_DIR:-$(_default_lock_dir)}
 [ "$mode" = status ] || mkdir -p "$LOCK_DIR" 2>/dev/null || exec "$@"
 
-# 上限 clamp（8）與 CI 併發設定的 SoT：scripts/test-lanes/lane-capacity.json
-# runner.heavyGateSlotsMax——改這裡的 clamp 時同步那個檔（test/lane-capacity-sot.test.ts 擋漂移）。
+# 上限 clamp（heavy 20、light 8）與 CI 併發設定的 SoT：scripts/test-lanes/lane-capacity.json
+# runner.heavyGateSlotsMax／lightGateSlotsMax——改這裡的 clamp 時同步那個檔（test/lane-capacity-sot.test.ts 擋漂移）。
+# heavy clamp 要涵蓋該主機的 host-cap（容量比例判準 Rule 4）；只改 .env 而 clamp 沒放寬，值會被靜默壓回 clamp。
 SLOTS=${CLADE_HEAVY_GATE_SLOTS:-2}
 case "$SLOTS" in
   '' | *[!0-9]*) SLOTS=2 ;;
 esac
 [ "$SLOTS" -lt 1 ] && SLOTS=1
-[ "$SLOTS" -gt 8 ] && SLOTS=8
+[ "$SLOTS" -gt 20 ] && SLOTS=20
 
 LIGHT_SLOTS=${CLADE_LIGHT_GATE_SLOTS:-2}
 case "$LIGHT_SLOTS" in
@@ -372,7 +373,7 @@ if [ "$GATE_CLASS" = heavy ]; then
   record_holder "$REPO_LOCK"
 fi
 
-# 掃描 slot 1..N，取到第一個空的就持有。fd 11..18 對應 slot 1..8。
+# 掃描 slot 1..N，取到第一個空的就持有。fd 11..30 對應 slot 1..20。
 acquire_slot() {
   local i fd
   for i in $(seq 1 "$ACTIVE_SLOTS"); do

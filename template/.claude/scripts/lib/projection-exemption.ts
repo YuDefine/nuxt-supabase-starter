@@ -32,12 +32,13 @@ import {
   readdirSync,
   readFileSync,
   readlinkSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export interface ReleaseBasis {
@@ -150,6 +151,36 @@ function treeFiles(tree: string): string[] {
   return files
 }
 
+/**
+ * symlink 在暫存樹內的實際落點：target 逐段走，已存在的段交給 realpath（OS 跟隨 symlink 鏈），
+ * 不存在的段才字面接上。不能整串交給 `resolve()`：它先把 `s/..` 字面抵銷，`s` 本身是 symlink 時
+ * 算出的位置與實際寫入位置不同。
+ */
+function landingOf(link: string): string {
+  const target = readlinkSync(link)
+  let cur = isAbsolute(target) ? sep : realpathSync(dirname(link))
+  for (const part of target.split(sep)) {
+    if (part === '' || part === '.') continue
+    const next = join(cur, part)
+    cur = existsSync(next) ? realpathSync(next) : next
+  }
+  return cur
+}
+
+/**
+ * 暫存樹裡落點在暫存樹外的 symlink：projector 寫入時會穿過它改到暫存樹外的真實檔。
+ * 回傳第一個逃逸的 `<rel> → <target>`，沒有就回 null。
+ */
+function symlinkEscape(scratch: string, links: string[]): string | null {
+  const root = realpathSync(scratch)
+  for (const rel of links) {
+    const inside = relative(root, landingOf(join(scratch, rel)))
+    if (inside === '' || (!inside.startsWith('..') && !isAbsolute(inside))) continue
+    return `${rel} → ${readlinkSync(join(scratch, rel))}`
+  }
+  return null
+}
+
 function copyEntry(from: string, to: string): void {
   mkdirSync(dirname(to), { recursive: true })
   const stat = lstatSync(from)
@@ -200,12 +231,16 @@ export async function verifyProjectionExemption(input: {
   const removable = candidates.filter((p) => !NEVER_EXEMPT.test(p) && existsOnTree(tree, p))
   const removed = new Set(removable)
   const scratch = mkdtempSync(join(tmpdir(), 'projection-exempt-'))
+  const links: string[] = []
   try {
     for (const rel of treeFiles(tree)) {
       // index 裡有、工作樹已刪（plain rm）的檔：沒有東西可複製，不是整個豁免的失敗。
       if (removed.has(rel) || !existsOnTree(tree, rel)) continue
+      if (lstatSync(join(tree, rel)).isSymbolicLink()) links.push(rel)
       copyEntry(join(tree, rel), join(scratch, rel))
     }
+    const escape = symlinkEscape(scratch, links)
+    if (escape !== null) return disabled(candidates, `受審樹的 symlink 指向暫存樹外：${escape}`)
     // projector 認 consumer 身分靠 git remote（registry 比對）；暫存樹自成一個空 repo。
     execFileSync('git', ['-C', scratch, 'init', '-q'], { stdio: 'ignore' })
     if (input.remoteUrl) {
@@ -339,12 +374,29 @@ export async function realDeps(): Promise<ExemptionDeps> {
   const { policy, projection } = await loadCladeLibs()
   const home = cladeHomeOf()
   const registryText = readFileSync(join(home, 'registry', 'consumers.json'), 'utf8')
-  // repo 可見度快取是 gitignored：linked worktree 沒有，沿 git-common-dir 回主 checkout 找。
-  const visibilityPath = [home, mainCheckoutOf(home)]
+  // repo 可見度快取是 gitignored：linked worktree 沒有（或只有部分），沿 git-common-dir 回主
+  // checkout 找。每個落點都讀、逐 repo 合併（與 repo-visibility.ts 的 readVisibilityCache 同一個
+  // 優先序：本樹先於主 checkout、新落點 `.clade/` 先於舊落點 `.spectra/`）——只取第一個存在的檔，
+  // 該檔沒收的 repo 會被判成查無可見度，與受管 runtime 那條路的結果分岔。
+  const visibilityCaches = [home, mainCheckoutOf(home)]
     .filter((h): h is string => h !== null)
-    .map((h) => join(h, '.spectra', 'repo-visibility-cache.json'))
-    .find((p) => existsSync(p))
-  const visibilityCacheText = visibilityPath ? readFileSync(visibilityPath, 'utf8') : null
+    .flatMap((h) => [
+      join(h, '.clade', 'repo-visibility-cache.json'),
+      join(h, '.spectra', 'repo-visibility-cache.json'),
+    ])
+    .filter((p) => existsSync(p))
+    .map((p) => {
+      try {
+        const parsed: unknown = JSON.parse(readFileSync(p, 'utf8'))
+        return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {}
+      } catch {
+        return {}
+      }
+    })
+  const visibilityCacheText =
+    visibilityCaches.length > 0
+      ? JSON.stringify(Object.assign({}, ...visibilityCaches.toReversed()))
+      : null
   return {
     steps: projection.PROJECTOR_STEPS.map((s) => `${s.script} ${s.args.join(' ')}`),
     readPin: (tree) => {

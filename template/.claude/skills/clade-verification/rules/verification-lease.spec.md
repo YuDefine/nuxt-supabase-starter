@@ -3,8 +3,8 @@ description: verification lease 的機制規格——五元組欄位、lease 檔
 paths: ['.claude/consumer-meta.json', 'scripts/dev-session*', 'scripts/dev-singleton*', 'nuxt.config.*', 'packages/**/nuxt.config.*']
 ---
 <!-- Clade native rule; source: rules/core/verification-lease.spec.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 # Verification Lease — 機制規格
 
@@ -139,7 +139,6 @@ dev server，服務的仍然是別的 code，一樣會讓 evidence 拍到錯的�
 | --- | --- |
 | `claude` | `CLAUDE_SESSION_ID` → `CLAUDE_CODE_SESSION_ID` → `CLAUDE_CONVERSATION_ID` |
 | `codex` | `CODEX_SESSION_ID` → `CODEX_THREAD_ID` |
-| `cursor` | `CURSOR_SESSION_ID` → `CURSOR_CONVERSATION_ID` |
 | `opencode` / `copilot` | 依 `vendor/scripts/lib/detect-runtime.ts` 的該 runtime session keys；自動探測仍需對應 runtime 實測 |
 | `human` | verification lease 沿用 `human`；獨立 DB lease 使用 `human:<worktree hash>` |
 

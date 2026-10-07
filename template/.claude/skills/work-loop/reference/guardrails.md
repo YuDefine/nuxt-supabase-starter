@@ -10,7 +10,7 @@
 
 ## A. 執行面（16 條）
 
-1. **不搶 working tree** —— tracked code 改動一律走 `/wt <slug>` worktree subagent；主線只做唯讀調查與單檔文字編輯
+1. **不搶 working tree** —— tracked code 改動一律交 `wt` 建立隔離環境、由 worktree subagent 執行；主線只做唯讀調查與單檔文字編輯
 2. **落地 main 的 commit 看路徑，不是一律 `--only`** —— 路徑全在 `rules/core/commit.detail.md` § `--only` 適用範圍白名單（HANDOFF / tech-debt / tasks / artifact-tick 等）→ `git commit --only -m "…" -- <paths>`。任一路徑不在白名單（source / migration / plugin / 任何程式碼）→ **MUST** invoke `/commit`。兩種都 **NEVER** `git add` + `git commit` 兩段式（會吞掉別 session 預 stage 的內容）。work-loop / unattended / 「護欄寫過一律 `--only`」**NEVER** 是跳過 `/commit` 的理由；卡人工檢查 → packaging，**NEVER** 用 `--only` 繞 0-A
 3. **每個 item 獨立 commit** —— 不把多個 item 的改動混進同一 commit
 4. **不 force push** —— 所有 git 操作 safe，無 `--force`
@@ -60,7 +60,7 @@
 
 ---
 
-## C. Dispatch 內嵌段（逐字貼進每個 `/wt` brief）
+## C. Dispatch 內嵌段（逐字貼進每個交 `wt` 派出的 brief）
 
 **MUST 逐字複製以下區塊到 brief**，**NEVER** 改寫成「照護欄做」這種 by-reference 指示——subagent 讀不到本檔。
 
@@ -147,6 +147,13 @@
 - state 檔的 `awaiting[]` 有題目尚未送達、本輪是 attended，而你正要進 Step 3 分類
 - 已收到 Charles 的答案，但還沒寫進 `decisions` 就開始 dispatch
 - 這輪還沒 Read 過本檔
+
+## 主檔 Step 1.5 判準的理由（判準本體在主檔，本節不複述）
+
+> 判準只有一份，在主檔 SKILL.md 標示的 Step；本節只放那些判準的理由與證據，不複述判準。判準的增修只落主檔。
+
+- **每輪 re-read 護欄**：compaction 抹掉的正是「上一輪剛讀過」的那份 context，而且不會通知——你會覺得自己記得。re-read 的成本是 1KB，漏讀的成本是把不可逆動作當成可自主動作做掉。
+- **每輪 Routing re-read**：loop 是 dispatch 量的主要來源，檔位選擇每一輪都在發生。`--tier-basis` 各值與對 `--model` 的約束見 [[agent-routing]] § Claude 委派的 model 檔位 的 `--tier-basis` 段。
 
 
 Claude binding for this reference: `AskUserQuestion` is available only in attended mode. Use it for specific shared-action consent with the complete scope in the recommended option; never call it from `--unattended` or a `claude --print` runner child.

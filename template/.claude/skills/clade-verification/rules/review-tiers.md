@@ -1,9 +1,9 @@
 ---
 description: Review tiers 規則——依變更規模與風險決定規格／實作一致性審查與獨立 code review 的最低要求
-paths: ['openspec/changes/**', 'specs/plans/**', 'specs/truth/**', '.claude/agents/**', '.codex/agents/**', '.cursor/agents/**', 'supabase/migrations/**/*.sql', 'server/database/migrations/**/*.sql', 'packages/*/supabase/migrations/**/*.sql', 'packages/*/server/database/migrations/**/*.sql']
+paths: ['specs/plans/**', 'specs/truth/**', '.claude/agents/**', '.codex/agents/**', 'supabase/migrations/**/*.sql', 'server/database/migrations/**/*.sql', 'packages/*/supabase/migrations/**/*.sql', 'packages/*/server/database/migrations/**/*.sql']
 ---
 <!-- Clade native rule; source: rules/core/review-tiers.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Review Tiers
 
@@ -47,6 +47,7 @@ paths: ['openspec/changes/**', 'specs/plans/**', 'specs/truth/**', '.claude/agen
 - Binding constraints（spec / plan 的 exact values、formats、元件間關係）**逐字**複製進 prompt 當注意力鏡頭；不要用開放式「check all uses」灌水
 - Diff 走**檔案**交付（commit list + stat + full diff 打包一檔）；範圍 BASE 用開工前記錄的 commit，**NEVER `HEAD~1`**（多 commit 工作會被靜默截斷）
 - 不叫 reviewer 重跑 implementer 已跑且附 evidence 的測試——report 就是 test evidence；缺 evidence 是 finding，不是重跑理由
+- **寫明受審 repo 根目錄**：reviewer 的 cwd 是派它那個 session 起手的目錄，不一定是受審的那棵樹（主線在 main checkout 起手、審 linked worktree 是常態）。prompt MUST 給受審 repo 根的絕對路徑，並要求 changeset 以外的讀檔一律用該根底下的絕對路徑；漏了，reviewer 讀到別棵 checkout，報出「引用的檔不存在」這類誤判。快照的 ref 同理：`review-snapshot.ts --stage <ref>` 在受審 repo 解析，NEVER 在快照裡解析（快照的 `HEAD` 是 `--base`）
 
 **Reviewer 端**：
 

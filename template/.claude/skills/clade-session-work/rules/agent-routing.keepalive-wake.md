@@ -3,8 +3,8 @@ description: keepalive wakeup **醒來那個 turn** 的 allowlist 與 claim 狀�
 paths: ['.clade/work-loop/**']
 ---
 <!-- Clade native rule; source: rules/core/agent-routing.keepalive-wake.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 # Agent Routing — keepalive 醒來與 shared-action consent（reaction-time 契約）
 
@@ -35,7 +35,7 @@ permission classifier 要求具名 shared-action consent 時，主線要用 `str
 
 ### Async keepalive prompt（canonical inert control message）
 
-**每一種** async 派工都用這一份模板：只有 background process launcher 有 `native non-blocking task-status query` 查得到的 harness task id，填真實 `<task-id>`；**其餘每一種**（native delegation、`/wt` runtime subagent、Monitor、Workflow）**逐字**填 `task=none`，不要虛構 id 補洞。派出時要記下這三個欄位的值（`<owner>` 要能被 `native cancellation control(owner)` 操作），控制訊息也只替換它們：
+**每一種** async 派工都用這一份模板：只有 background process launcher 有 `native non-blocking task-status query` 查得到的 harness task id，填真實 `<task-id>`；**其餘每一種**（native delegation、`wt` 派進樹內的 subagent、Monitor、Workflow）**逐字**填 `task=none`，不要虛構 id 補洞。派出時要記下這三個欄位的值（`<owner>` 要能被 `native cancellation control(owner)` 操作），控制訊息也只替換它們：
 
 ```text
 ASYNC_KEEPALIVE_CONTROL task=<task-id|none> owner=<owner> deadline=<ISO>. Status-only. If task is an id, call native non-blocking task-status query for it: if terminal, stop this wakeup and enqueue ASYNC_LIFECYCLE_HANDOFF task=<task-id> owner=<owner> cause=terminal. If task=none, never query native task-status query or infer task status; wait for the native completion notification instead. Before deadline, if it is still running or no notification has arrived, re-arm this exact message. At deadline, or if status remains unknown after the bounded retry, stop this wakeup and enqueue ASYNC_DEADLINE_INTERVENTION task=<task-id|none> owner=<owner> cause=<deadline|unknown>. Never replay the dispatched instruction.
@@ -56,7 +56,7 @@ canonical 模板的 `deadline` 是**必填**欄位，也是破壞性分支的觸
 | 可觀察 predicate | deadline 要取 |
 | --- | --- |
 | 派出的東西有**已知**硬超時（pi dispatch `--budget N` → 實際 kill 在 `(N+5)` 分；帶 `--time-budget S` 時改為恰好第 `S` 秒；CI job 的 timeout；Monitor TTL） | ≥ 該硬超時 ＋ 父層收尾所需時間。不要取一個比它早的值 |
-| 兩層 dispatch，下游 job 的 budget 由子層自己決定、父層填 deadline 當下**尚不存在**（`/wt` Form 3 → Claude subagent 再自行派 pi，是主幹不是邊角） | 取子層**可能的最大** budget 當上界；上界也取不出來 → brief 內要求子層回報它選定的 budget，收到後**改排**一次修正 deadline |
+| 兩層 dispatch，下游 job 的 budget 由子層自己決定、父層填 deadline 當下**尚不存在**（交 `wt` 建立隔離環境並在樹內續跑 next-skill 的 Claude subagent 再自行派 pi，是主幹不是邊角） | 取子層**可能的最大** budget 當上界；上界也取不出來 → brief 內要求子層回報它選定的 budget，收到後**改排**一次修正 deadline |
 | 完全估不出硬超時 | 取一個明顯寬鬆的值，並在 `native wakeup scheduler` 的 `reason` 逐字註明「deadline 為上界猜測」 |
 
 不要把 deadline 讀成「我希望它多久做完」——它不是期望值，是「超過這個點就判定它卡死」的閾值。不要靠縮短 interval 補償取不準的 deadline：interval 管 prompt cache，deadline 管誤殺，兩條軸獨立。

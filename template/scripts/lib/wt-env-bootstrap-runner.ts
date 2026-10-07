@@ -18,7 +18,7 @@
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 
 export interface WtEnvBootstrapRunResult {
   status?: number | null
@@ -58,6 +58,13 @@ export interface WtEnvBootstrapOptions {
  *   ready    clone + sidecar 都在
  *
  * `created` **不是**可放行狀態 —— sidecar 缺席時 app 起得來、打不到 DB，正是要擋的形狀。
+ *
+ * 三態同時是 `ensure` 的回傳值域，**不只 `status` 探針**：`ensure` 成功（exit 0）也可能回
+ * `created`。容量不足而 consumer 選擇降級時（reference impl：連線 admission 滿了），它留下
+ * clone、不起 sidecar，並在回傳帶 `sidecarDeferred: true`／`deferredReason`／`admission`。
+ * 被停放（park）的 sidecar 之後由 `status` 回報的也是 `created`。呼叫端 NEVER 把
+ * 「`ensure` 沒 throw」讀成「REST 可用」—— 要看 `status === 'ready'`；`describeEnsureResult`
+ * 是把這件事印給人看的單一出口。
  */
 export type BackingServiceState = 'absent' | 'created' | 'ready'
 
@@ -131,6 +138,9 @@ export function resolveWtEnvBootstrapScript(worktreePath: string): string | null
  *
  *     node scripts/wt-env-bootstrap.ts <ensure|destroy|status> --worktree <path> --json
  *
+ * `park` 是同一 CLI 形狀的**選配**第四個指令（只停 sidecar、保留 clone），不經本函式 ——
+ * 見 `parkBackingService()`：沒實作它的 consumer 是 no-op，不是契約錯誤。
+ *
  * A script that parses none of those arguments exits 2 on every invocation, so
  * `add` degrades to a warning and `cleanup` fails outright, leaving the
  * worktree undeleted. Anything occupying this filename **MUST** implement that
@@ -181,6 +191,125 @@ export function runWtEnvBootstrap(
 }
 
 const VALID_STATES = new Set<BackingServiceState>(['absent', 'created', 'ready'])
+
+/**
+ * `ensure` 回傳的使用者面狀態行（`wt-helper add`、batch prepare 印的就是這幾行）。
+ *
+ * 第一行固定是 `backing-service: <status> …`，一行可判讀、可 grep —— 建樹的人（與 `wt` skill
+ * 寫 WORKTREE-BRIEF 環境段的那一步）讀它，NEVER 需要再跑一次 `status`。`ready` 只有這一行；
+ * 其他狀態多兩行：缺的是哪個 service、通用補建指令。
+ *
+ * 補建指令只寫契約 CLI，NEVER 寫 consumer 專屬的處置（先騰容量、改 ceiling 等）——那是
+ * consumer local rule 的事，這裡寫了就會對沒有那套機制的 consumer 說錯話。
+ *
+ * 回 `[]` = 此 consumer 沒有 per-worktree 拓樸（`ensure` 回 null），或回傳既沒有可辨識的
+ * `status` 也沒有 `dbName`——呼叫端什麼都不印。只有 `dbName` 的舊 shim 印 `unknown`。
+ */
+export function describeEnsureResult(raw: unknown, worktreePath: string): string[] {
+  const o = (raw ?? {}) as Record<string, unknown>
+  const state = (o.status ?? o.state) as BackingServiceState
+  const str = (v: unknown) => (typeof v === 'string' && v ? v : undefined)
+  const dbName = str(o.dbName)
+  if (!VALID_STATES.has(state)) {
+    // 舊 shim 只回 dbName／supabaseUrl、沒有 status：照舊印它有的，不推定狀態。
+    return dbName
+      ? [`backing-service: unknown db=${dbName} url=${str(o.supabaseUrl) ?? '(none)'}`]
+      : []
+  }
+  const head = [`backing-service: ${state}`]
+  if (dbName) head.push(`db=${dbName}`)
+  if (state === 'ready') {
+    head.push(`url=${str(o.supabaseUrl) ?? '(none)'}`)
+    return [head.join(' ')]
+  }
+  if (o.sidecarDeferred === true) {
+    head.push('sidecar=deferred')
+    const reason = str(o.deferredReason)
+    if (reason) head.push(`reason=${reason}`)
+  }
+  const admission =
+    o.admission && typeof o.admission === 'object' && Object.keys(o.admission).length > 0
+      ? `；admission ${JSON.stringify(o.admission)}`
+      : ''
+  return [
+    head.join(' '),
+    state === 'created'
+      ? `  DB clone 在、REST／Storage sidecar 未起：這棵樹目前打不到 REST${admission}`
+      : `  DB clone 不存在：這棵樹目前沒有可用的 dev DB${admission}`,
+    `  補建：node ${ensureScriptRel(worktreePath)} ensure --worktree ${JSON.stringify(worktreePath)} --json`,
+  ]
+}
+
+/** 補建指令要印的 shim 路徑（相對 worktree）：以實際解析到的那一支為準，解析不到退回 `.ts`。 */
+function ensureScriptRel(worktreePath: string): string {
+  try {
+    const script = resolveWtEnvBootstrapScript(worktreePath)
+    if (script) return relative(worktreePath, script)
+  } catch {
+    // 兩支並存等契約錯誤由 `ensure` 自己報；這裡只是提示行。
+  }
+  return 'scripts/wt-env-bootstrap.ts'
+}
+
+const PARK_TIMEOUT_MS = 60_000
+
+export interface BackingServiceParkResult {
+  /**
+   * parked       consumer 回報已停放（或本來就沒在跑）
+   * unsupported  此 consumer 沒有 shim，或 shim 沒實作 `park` —— no-op
+   * failed       shim 實作了 `park` 但這次失敗；`detail` 是它的 stderr
+   */
+  status: 'parked' | 'unsupported' | 'failed'
+  detail?: string
+}
+
+/**
+ * 停放一棵樹的 backing service：只停 sidecar、**保留 clone**（`destroy` 是連 clone 一起刪）。
+ *
+ * 用在「工作已落地、樹卻還留著」的那一格：`batch cleanup` 對 landed 批次因 preservation
+ * 留住來源或整合區時，sidecar 原本跟著留住，一棵佔一格連線 admission，直到滿載後連新樹都
+ * 開不了。停放可逆 —— 持有者重跑 `ensure` 即恢復。
+ *
+ * `park` 是選配指令。**NEVER throw**：它是落地後的釋放，任何失敗都不該回頭弄壞已完成的
+ * cleanup；沒實作的 consumer（stderr 明寫不認得這個指令）回 `unsupported`，與「沒有
+ * per-worktree 拓樸」同樣是 no-op。其他非 0 一律 `failed`——實作了 `park` 的 shim 以 usage 類
+ * 錯誤失敗時，sidecar 還在跑，呼叫端要看得到。實作永遠取自 `scriptRoot`（main checkout），理由同
+ * `WtEnvBootstrapOptions.scriptRoot`。
+ */
+export function parkBackingService(
+  worktreePath: string,
+  opts: WtEnvBootstrapOptions = {},
+): BackingServiceParkResult {
+  const scriptRoot = opts.scriptRoot ?? worktreePath
+  let script: string | null
+  try {
+    script = resolveWtEnvBootstrapScript(scriptRoot)
+  } catch (e) {
+    return { status: 'failed', detail: (e as Error)?.message ?? String(e) }
+  }
+  if (!script) return { status: 'unsupported' }
+  const run = (opts.spawnSyncImpl ?? spawnSync) as WtEnvBootstrapRunner
+  let result: WtEnvBootstrapRunResult
+  try {
+    result = run(process.execPath, [script, 'park', '--worktree', worktreePath, '--json'], {
+      cwd: scriptRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      // 呼叫端持有 batch operation lock：卡住的 shim NEVER 能擋住之後每一個 batch 操作。
+      timeout: PARK_TIMEOUT_MS,
+    })
+  } catch (e) {
+    return { status: 'failed', detail: `spawn failed: ${(e as Error)?.message ?? e}` }
+  }
+  if (result.status !== 0) {
+    const stderr = result.stderr?.trim() || `exit ${result.status}`
+    // reference impl 對未知指令回 exit 1 ＋ `E_USAGE … Unknown command: park`。只認「明寫不認得
+    // 指令」這一種：exit code 與 `E_USAGE` 本身都不夠——認得 park 的 shim 也會以它們回報別的錯。
+    const unsupported = /unknown (sub)?command/i.test(stderr)
+    return unsupported ? { status: 'unsupported' } : { status: 'failed', detail: stderr }
+  }
+  return { status: 'parked' }
+}
 
 function toProbe(raw: unknown): BackingServiceProbe {
   const o = (raw ?? {}) as Record<string, unknown>

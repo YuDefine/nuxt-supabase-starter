@@ -11,7 +11,7 @@ paths:
   - 'wrangler.jsonc'
 ---
 <!-- Clade native rule; source: rules/core/service-url-locality.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Service URL Locality（server 端與 client 端讀的是兩個不同的值）
 

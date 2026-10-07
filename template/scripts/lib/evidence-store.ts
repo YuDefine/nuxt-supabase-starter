@@ -3,8 +3,12 @@
 /**
  * evidence-store — sidecar-first evidence resolver for manual-review annotations.
  *
- * Evidence lives in `.spectra/evidence/<change>.jsonl` (append-only, one JSON
+ * Evidence lives in `docs/evidence/<change>.jsonl` (append-only, one JSON
  * object per line). Same-itemId records: last-write-wins on read.
+ * Reads also merge the retired `.spectra/evidence/<change>.jsonl` so receipts
+ * written before the 2026-10 openspec purge stay visible; writes never go
+ * back there (`.spectra/` is not gitignored in repos onboarded after the
+ * purge — writing there would leave un-ignored runtime state, starter#32).
  *
  * Dual-track: sidecar takes precedence; inline annotations in tasks.md are
  * the fallback for in-flight changes that haven't migrated yet.
@@ -112,18 +116,29 @@ interface EvidenceCliValues {
 // }
 
 /**
- * Resolve the sidecar file path for a change.
+ * Resolve the sidecar file path for a change (write target and primary read).
  * @param {string} repoRoot
  * @param {string} changeName
  * @returns {string}
  */
 export function sidecarPath(repoRoot, changeName) {
+  return join(repoRoot, 'docs', 'evidence', `${assertSafeChangeName(changeName)}.jsonl`)
+}
+
+/**
+ * Pre-purge sidecar location. Read-only fallback for receipts written before
+ * the 2026-10 openspec purge; nothing writes here anymore.
+ * @param {string} repoRoot
+ * @param {string} changeName
+ * @returns {string}
+ */
+export function legacySidecarPath(repoRoot, changeName) {
   return join(repoRoot, '.spectra', 'evidence', `${assertSafeChangeName(changeName)}.jsonl`)
 }
 
 /**
- * Spectra change names are slugs. Reject anything that could escape
- * `.spectra/evidence/` — `--write` appends to whatever path this resolves to,
+ * Change names are slugs. Reject anything that could escape
+ * `docs/evidence/` — `--write` appends to whatever path this resolves to,
  * so an unvalidated `../` would create or grow JSONL files outside the
  * intended directory.
  * @param {string} changeName
@@ -142,7 +157,10 @@ export function assertSafeChangeName(changeName) {
 }
 
 /**
- * Read all evidence records from sidecar. Returns [] if file doesn't exist.
+ * Read all evidence records for a change: legacy `.spectra/evidence/` sidecar
+ * merged with the current `docs/evidence/` sidecar (new-path records appended
+ * last, so they win downstream last-write-wins dedup). Returns [] if neither
+ * file exists.
  * @param {string} repoRoot
  * @param {string} changeName
  * @returns {Array<object>}
@@ -154,23 +172,29 @@ export function assertSafeChangeName(changeName) {
 export const RETIRED_KINDS: ReadonlySet<string> = new Set(['awaiting-user-decision'])
 
 export function readSidecar(repoRoot, changeName) {
-  const p = sidecarPath(repoRoot, changeName)
-  if (!existsSync(p)) return []
-  const content = readFileSync(p, 'utf8')
-  const records = []
-  for (const line of content.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    try {
-      const record = JSON.parse(trimmed)
-      // 已退役的 kind 在舊 sidecar 裡仍可能有記錄（append-only，不回寫）：略過，NEVER 讓它炸或被當成證據。
-      if (RETIRED_KINDS.has(record?.kind)) continue
-      records.push(record)
-    } catch {
-      // skip malformed lines
+  const readOne = (p) => {
+    if (!existsSync(p)) return []
+    const records = []
+    for (const line of readFileSync(p, 'utf8').split('\n')) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      try {
+        const record = JSON.parse(trimmed)
+        // 已退役的 kind 在舊 sidecar 裡仍可能有記錄（append-only，不回寫）：略過，NEVER 讓它炸或被當成證據。
+        if (RETIRED_KINDS.has(record?.kind)) continue
+        records.push(record)
+      } catch {
+        // skip malformed lines
+      }
     }
+    return records
   }
-  return records
+  // Legacy first so same-key records from the new path win on downstream
+  // last-write-wins dedup.
+  return [
+    ...readOne(legacySidecarPath(repoRoot, changeName)),
+    ...readOne(sidecarPath(repoRoot, changeName)),
+  ]
 }
 
 /**

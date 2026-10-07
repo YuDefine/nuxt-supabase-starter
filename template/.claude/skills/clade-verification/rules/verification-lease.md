@@ -1,5 +1,5 @@
 <!-- Clade native rule; source: rules/core/verification-lease.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Verification Lease
 

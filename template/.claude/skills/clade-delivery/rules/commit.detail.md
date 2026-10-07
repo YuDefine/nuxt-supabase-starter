@@ -3,7 +3,7 @@ description: Commit 全文規約（gate 清單、Single Session Lock、WIP 處�
 paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**', '.clade/work-loop/**']
 ---
 <!-- Clade native rule; source: rules/core/commit.detail.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Commit（全文）
 
@@ -30,7 +30,7 @@ paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**', '.clade/work-loop/**']
 
 ## Single Session Lock
 
-**同時只能有一個 session 跑 `/commit`**。三端共用 `.claude/scripts/commit-lock.mjs` 與相容鎖路徑 `.claude/.commit.lock`；路徑不表示持有者必為 Claude。**Step 0-Lock MUST 先讀 commit skill 的 `runtime-lifecycle.md` 全文**，以明確 work／runtime／session 取得 owner token；各 gate 邊界與 Git mutation 前續持，退出時先收回會寫入的背景工作，再以原 tuple 與 token 釋放。
+**同時只能有一個 session 跑 `/commit`**。兩端共用 `.claude/scripts/commit-lock.mjs` 與相容鎖路徑 `.claude/.commit.lock`；路徑不表示持有者必為 Claude。**Step 0-Lock MUST 先讀 commit skill 的 `runtime-lifecycle.md` 全文**，以明確 work／runtime／session 取得 owner token；各 gate 邊界與 Git mutation 前續持，退出時先收回會寫入的背景工作，再以原 tuple 與 token 釋放。
 
 鎖的年齡、失聯或 CLI PID 消失只供診斷，不自動授權接管。重入須匹配原 owner；恢復須確認原 ceremony 已結束、有恢復授權，並核對精確 lock snapshot。缺身分、token、能力或證據時保留現況與 blocker，**NEVER** 自行 `rm` 鎖檔。互斥不替代以下 WIP、品質或發版 gate。
 
@@ -98,21 +98,21 @@ uncommitted 變更
 
 ### Artifact-tick（hard rule）
 
-只保存 work item carrier 進度的 artifact-tick，路徑限定**兩條**——該工作的 tasks 檔與它的 verify evidence sidecar `.spectra/evidence/<work-slug>.jsonl`：
+只保存 work item carrier 進度的 artifact-tick，路徑限定**兩條**——該工作的 tasks 檔與它的 verify evidence sidecar `docs/evidence/<work-slug>.jsonl`：
 
 ```bash
 git commit --only -m "📝 docs(tasks): phase N done (<work-slug>)" -- \
-  tasks/<date>-<work-slug>.md .spectra/evidence/<work-slug>.jsonl
+  tasks/<date>-<work-slug>.md docs/evidence/<work-slug>.jsonl
 # plan package 版本：
 # git commit --only -m "📝 docs(tasks): phase N done (<work-slug>)" -- \
-#   specs/plans/NNN-<work-slug>/tasks.md .spectra/evidence/<work-slug>.jsonl
+#   specs/plans/NNN-<work-slug>/tasks.md docs/evidence/<work-slug>.jsonl
 ```
 
 **每一個** phase-tick commit 都 **MUST** 同時帶 tasks 檔與該工作的 evidence sidecar，不是只帶其中一個、也不是只有「有跑 verify 的那一次」才帶——sidecar 檔不存在時（該工作尚未產生任何 receipt）才可以省略那條路徑。
 
-`merge-back --squash` 只帶 committed changes 回 main，未 commit 的 checkbox 留在 worktree working tree → main 的 tasks 檔永遠是 `[ ]` → impl-gate 誤判；sidecar 沒一起 commit 則 checkbox 回到 main、receipt 留在 worktree 被 GC，兩者走不同運輸機制就是 [[TD-394]] 的成因。操作細節與時機見 [[worktree-default]] §9.5.1（該節是執行面 SoT，本節是「worktree 內能不能 commit」的契約 SoT）。
+`merge-back --squash` 只帶 committed changes 回 main，未 commit 的 checkbox 留在 worktree working tree → main 的 tasks 檔永遠是 `[ ]` → impl-gate 誤判；sidecar 沒一起 commit 則 checkbox 回到 main、receipt 留在 worktree 被 GC，兩者走不同運輸機制就是 [[TD-394]] 的成因。操作細節與時機見 [[wt]] 的 `rules/讀進度前先查worktree判準.md` Rule 4（該規則是執行面 SoT，本節是「worktree 內能不能 commit」的契約 SoT）。
 
-**NEVER** 把上述兩條路徑以外的檔搭這條例外的便車：同一個 commit 混進 tasks 檔與 `.spectra/evidence/<work-slug>.jsonl` 以外的路徑，就不再是 artifact-tick，回到上一條禁令。**NEVER** 把 `.spectra/` 底下其他子目錄（`snapshots/` / `touched/` / `stash-meta-*.json`）讀成也在白名單內——白名單只有 `.spectra/evidence/`，其餘仍被 `.spectra/*` ignore。
+**NEVER** 把上述兩條路徑以外的檔搭這條例外的便車：同一個 commit 混進 tasks 檔與 `docs/evidence/<work-slug>.jsonl` 以外的路徑，就不再是 artifact-tick，回到上一條禁令。2026-10 openspec purge 前寫進 `.spectra/evidence/` 的 in-flight receipt 在過渡期仍可一起帶進 tick；`.spectra/` 其餘子目錄（`snapshots/` / `touched/` / `stash-meta-*.json`）**NEVER** 在白名單內。
 - **NEVER** 用 `git stash push` 不加 `-u` — 漏掉 untracked 新檔
 - **NEVER** stash pop 撞 conflict 時用 `git checkout --` / `git restore` 「清理」 — 會永久毀掉 main 既有 WIP
 
@@ -150,7 +150,7 @@ working tree / git index 是 **process-wide shared state**——多 session 並�
 
 ### `--only` 限的是路徑，不是內容（hard rule）
 
-`--only` 重建 staged 時，對每個列出的路徑是從 **worktree** 拿該檔**完整**的當前內容——包含別 session 寫在同一個檔案裡、還沒 commit 的部分。共用檔（`docs/tech-debt.md` / `HANDOFF.md` / `ROADMAP.md` / `CLAUDE.md` / i18n locale）正是最常被多 session 同時寫的那幾個。
+`--only` 重建 staged 時，對每個列出的路徑是從 **worktree** 拿該檔**完整**的當前內容——包含別 session 寫在同一個檔案裡、還沒 commit 的部分。共用檔（`HANDOFF.md` / `ROADMAP.md` / 未遷移 consumer 的 `docs/tech-debt.md` / `CLAUDE.md` / i18n locale）正是最常被多 session 同時寫的那幾個。
 
 - **MUST** commit 前跑 `git diff -- <paths>` 看實際會帶走什麼；出現不是自己寫的段落 → 依 § Recovery from mixed commit 處置，**NEVER** 直接 commit 下去
 - **NEVER** 用裸 `git commit --amend` 改 message——`--amend` 重新 commit **當前 staged index**，等於把 `--only` 的保護整個放掉（實測：同一情境下 commit 從 1 檔變 26 檔）。要改 message **MUST** 帶 `--only`：
@@ -195,17 +195,19 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 撞到 mixed commit / commit scope drift（`git show --stat HEAD` 含預期外 file）後，agent **MUST**：
 
 1. **STOP + 列現狀**（動 git history 前先看清楚：`git log` / `git reflog` / 活躍 session 偵測 / `git stash list`）
-2. **持有者是前景 agent session，且已授權協調並有可用通道 → MUST 先對話再拍板**：送達精確 session，詢問該筆 commit 的範圍與接手意願。Herdr 已驗證可用時使用 `herdr agent prompt <對方 pane_id> "<四項>"`。**這一步排在下一步之前**；持有者是 unattended runner、身分不明、缺通道或缺本次協調授權時，保留原因，不假裝已送達。逐字範本見 `vendor/snippets/concurrent-session-probe/README.md` § 探測之後：協商（negotiate）
+2. **持有者是前景 agent session，且已授權協調並有可用通道 → MUST 先對話再拍板**：送達精確 session，詢問該筆 commit 的範圍與接手意願。對方是 Claude session 時用 `SendMessage`（`ListAgents` 取名稱，送「<四項>」）；非 Claude runtime 且 Herdr 已驗證可用時才用 `herdr agent prompt <對方 pane_id> "<四項>"`。**這一步排在下一步之前**；持有者是 unattended runner、身分不明、缺通道或缺本次協調授權時，保留原因，不假裝已送達。逐字範本見 `vendor/snippets/concurrent-session-probe/README.md` § 探測之後：協商（negotiate）
 3. **以當前 runtime 的提問介面或對話給 user 拍板**，選項至少含：(A) **接受 mixed commit + 登記 cleanup**（最安全）、(B) **立即 reset/rebase 修復**（user **MUST** 對 race risk 知情同意）、(C) **等並行 session 收斂再評估**。本任務已有同一具體處置的答案就沿用，不重問
 4. **NEVER** 自行跑 `git reset --soft HEAD~N` / `git rebase -i HEAD~N`（**任何 relative reference**）— `HEAD~N` 在 race window 內可能指到別 session 的 commit（多次實證）
 5. user 選 (B) → **MUST** 用 **specific SHA reference** 且**先**建 backup tag 保險；**NEVER** 在並行 session 活躍時跑 `git rebase` split mixed commit
-6. 撞坑後亦 **MUST** 在 [`docs/pitfalls/`](../../docs/pitfalls/) 對應 entry 加 regression evidence section
+6. 撞坑後亦 **MUST** 留下 regression evidence，落點依 repo 分：
+   - lifecycle repo（repo root 有 `specs/truth/work-lifecycle.md`）：記進承載這次處置的 plan（`specs/plans/<work-id>/evidence/`）；同型已是驗證過的復發教訓時走 `/oops` 補進 truth 或本節。`docs/pitfalls/` 已停寫，**NEVER** 再往舊 entry 追加段落
+   - 未遷移 consumer：記進自家 `docs/tech-debt.md` 承載這次處置的 TD entry（附事故 commit SHA 與處置結果；還沒有對應 TD 就依 [[follow-up-register]] 開一條）。**NEVER** 寫回 clade `docs/pitfalls/`
 
 完整 6 步操作流程 + 命令塊 + backup tag 模板：`~/offline/clade/vendor/snippets/git-recovery/README.md`；cross-ref [[pitfall-consumer-ad-hoc-commit-eats-other-session-staged]] § Regression Evidence。
 
 ### Fleet sweep 升級規約
 
-跨多檔工作（fleet sweep / dep migration / 跨檔 refactor）**SHOULD** 走 worktree（per [[worktree-default]]），main working tree 完全不動 — 從機制上避開 staged race，每 worktree 各自獨立 index。
+跨多檔工作（fleet sweep / dep migration / 跨檔 refactor）**SHOULD** 走 worktree（per [[wt]] 的 `rules/改tracked檔前先隔離判準.md` Rule 1），main working tree 完全不動 — 從機制上避開 staged race，每 worktree 各自獨立 index。
 
 ### 隔離 worktree ≠ 繞過 /commit（hard rule）
 
@@ -227,11 +229,11 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 
 | 路徑 | 說明 |
 | --- | --- |
-| `HANDOFF.md`、`ROADMAP.md`、`docs/tech-debt.md` | 跨 session 狀態檔 |
+| `HANDOFF.md`、`ROADMAP.md`、`docs/tech-debt.md`（未遷移 consumer） | 跨 session 狀態檔 |
 | `tasks/**`、`docs/discussions/**`、`docs/digests/**` | session-scoped 與討論紀錄 |
-| `docs/pitfalls/**`、`docs/archives/**` | 事後紀錄與 rotate 產物 |
+| `docs/pitfalls/**`、`docs/archives/**`（未遷移 consumer） | 事後紀錄與 rotate 產物。lifecycle repo 兩者都停寫（`specs/truth/work-lifecycle.md` § Old carriers），白名單只為存量的修改與刪除保留 |
 | `vendor/snippets/**/*.md` | cookbook / pressure scenario 散文 |
-| `tasks/**/*.md`、`specs/plans/**/tasks.md`<br>`.spectra/evidence/<work-slug>.jsonl` | worktree phase-tick 專用，**兩條一起**（見 § worktree 內唯一合法的 commit：artifact-tick） |
+| `tasks/**/*.md`、`specs/plans/**/tasks.md`<br>`docs/evidence/<work-slug>.jsonl` | worktree phase-tick 專用，**兩條一起**（見 § Artifact-tick（hard rule）） |
 
 **白名單外的一切改動 MUST 走 `/commit`**，包含但不限於：`rules/**`、`scripts/**`、`vendor/scripts/**`、`capabilities/**`、`claude-md/**`、`registry/**`、任何 source code。改動落在白名單內外**混合**時，整批走 `/commit`——**NEVER** 拆成「白名單那半用 `--only` 先送」。
 
@@ -298,7 +300,7 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 
 **核心命題**：把 stash 的處置權完全綁在 user 身上，前提是 user 會去看。**那個前提對不會人工看 stash 的
 user 不成立**，結果是 stash 單調遞增、owner 資訊隨時間流失，最後沒有任何人有能力判斷能不能刪
-（<consumer-a> 2026-08-02 實證：一個 session 內 6 → 10 條，全由自動化流程建立，10 條裡 9 條無 sidecar metadata）。
+（某 consumer 2026-08-02 實證：一個 session 內 6 → 10 條，全由自動化流程建立，10 條裡 9 條無 sidecar metadata）。
 
 因此 `git stash drop` **不是**絕對禁令，而是**綁機械判準的條件動作**。
 
@@ -356,6 +358,7 @@ user 不成立**，結果是 stash 單調遞增、owner 資訊隨時間流失，
 - **不確定就先驗，NEVER 拿 commit 當測試**：`echo '<你要用的 header>' | npx commitlint`。理由不是「省一次重打」——header 解析失敗時 commitlint 報的是 **`subject may not be empty`**（per [[pitfall-commitlint-emoji-type-mismatch-reports-subject-empty]]），訊息指向 subject 而真因在 emoji，照著訊息改會愈改愈遠；而 `--only` 的路徑清單長時，重打整條指令本身就是漏掉某個 path 的入口
 - **所有 uncommitted 變更都納入候選盤點**，逐組依 § WIP 處置決策樹確認授權與所有權後提交。使用者指名範圍持續有效；他人的活躍 WIP 與未解歸屬先協調，不以「全包」取代交接證據，也不默默遺漏候選檔。
 - **純機械正名（識別字替換）MUST 獨立 commit，NEVER 與語意編輯混合**——正名 sweep 時看到措辭問題「順手修掉」會讓整個 commit 失去 evidence-inert 豁免資格：驗證器（`audit-tech-debt-hygiene.ts`）逐 token 比對，宣告的替換以外只要有一個 token 不同就不算 inert，該 commit 觸及的每一條 TD 都照常進覆核佇列。語意編輯另開一筆 commit 即可，兩筆可以在同一次 `/commit` 分組裡
+- **送 commit 前自檢新增的註解與測試**：新增註解命中 [[code-style]] § 該刪的註解（C0–C6）就改、新增 unit test 一列都不中 [[testing-anti-patterns]] § unit test 何時寫（U1–U4）就不寫；0-A 會照同一份判準審（`comment-test-conditional` semantic verdict）
 - **`.gitignore` 變更**：只允許保留 Clade 管理的 installation artifact / runtime state ignore 條目（例如 `.claude/.commit.lock`、`codex/`）；其他變更**MUST** `git stash push -- .gitignore` 並寫入 `HANDOFF.md`（**NEVER** `git checkout .gitignore` 直接還原）
 - **`.env` / 敏感檔案**：警告使用者但仍由使用者決定是否 commit，**NEVER** 自行跳過
 - **每一個 finding 都要處置**：review 的缺失、行號漂移與純舊碼依 skill `gates.md` § 0-A 的同一份分流。當次引入或受當次變更加劇的問題修完再驗；純舊碼須有「未觸碰／無因果／登記」三項證據，不混入本次 commit，也不靜默跳過。Lint／typecheck／test／doctor 的必要 gates 仍要求全綠，登 TD 不會使失敗 gate 變成通過。
@@ -444,7 +447,7 @@ git fetch origin main --tags && git rev-list --count <tag>..origin/main
 
 **NEVER 用「CI 會抓到」跳過打 tag 前的同步**——CI 抓到了，抓的是**那棵舊樹**上的真實失敗：
 具名 test、具體行號、可重現。與真實回歸完全同形，所以正確的反射（去查那幾條 test）方向是錯的，
-而且愈查愈確信。（2026-08-23 <consumer-b> `v1.269.1`，tag 落後 22 個 commit，4 個 test file 紅；
+而且愈查愈確信。（2026-08-23 某 consumer `v1.269.1`，tag 落後 22 個 commit，4 個 test file 紅；
 同一棵樹的 `v1.269.3` 全綠。）
 
 修法與完整成因：[[pitfall-tag-cut-from-stale-commit]]。

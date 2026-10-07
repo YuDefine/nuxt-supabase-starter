@@ -11,7 +11,7 @@ paths:
   - 'packages/**/app/pages/**'
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/evlog/evlog-adoption.depth-gate.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # evlog Adoption — Depth 自評與 coverage gate（全文）
 
@@ -70,7 +70,7 @@ Depth 表量**裝了什麼**，`evlog map` 量**每個 entry point 用了沒有*
 | **suppression 不扣分** | 把 check 全部 `disable` 掉 → **score 100** / suppressed 2 | disabled check 轉成 `n/a`，從分母移除 |
 | **check 不驗欄位有沒有到達 runtime** | 大量 `createError({ …, why, fix })` 全部滿分，但呼叫點解析到的是 **h3 的 `createError`**，它根本不讀這兩個欄位 → 欄位寫了就被丟掉 | `structured-errors` 是 AST 原始碼比對，不解析 callee 實際 resolve 到誰。**route 級零失敗也擋不住這一種**——它連 runtime 都沒碰到 |
 
-因此 gate 的判定 **MUST** 用 **route 級零失敗 + 零 suppression**，**NEVER** 用全域分數當 boolean（`vendor/actions/evlog-map-gate/gate.mjs` 的 `strict` 模式；`--mode min-score` 是它的別名）。第四條連 route 級判定都擋不住：**gate 全綠不證明欄位到達過任何地方**，要實跑斷言 response 與 NDJSON，見 [[evlog-error-exposure]] § 完成證明。
+因此 gate 的判定 **MUST** 用 **route 級零失敗 + 零 suppression**，**NEVER** 用全域分數當 boolean（`vendor/actions/evlog-map-gate/gate.ts` 的 `strict` 模式；`--mode min-score` 是它的別名）。第四條連 route 級判定都擋不住：**gate 全綠不證明欄位到達過任何地方**，要實跑斷言 response 與 NDJSON，見 [[evlog-error-exposure]] § 完成證明。
 
 ### Gate（兩道，都走 strict）
 
@@ -80,6 +80,8 @@ Depth 表量**裝了什麼**，`evlog map` 量**每個 entry point 用了沒有*
 | --- | --- | --- |
 | commit | `/commit` 0-E gate | 補一行 `log.set` 是 5 秒 |
 | CI | `.github/actions/evlog-map-gate` | push 後被擋是一輪來回 |
+
+CI 那個 job 在 gate 之前另跑上游的 `evloghq/action`，把結果放上 PR（check run、job summary、comment），並擋既有 entry point 的 check 由 pass 變 fail。它是報告，不是第三道 gate：它比的是 PR base 與全域分數，新增的 entry point 帶缺口、`fail` 改成 disable 註解都不擋，所以 PR comment 顯示滿分時上表的 CI gate 仍可能紅，以 gate 為準。接法與版本對齊見 `vendor/snippets/evlog-map/README.md` § PR 報告（evloghq/action）。
 
 CI 那一道另有本機入口 `.github/actions/evlog-map-gate/local.ts`：照 CI workflow 的 mode／cwd 跑 CI 同一支 `run.sh`，work-route 在 task 標 done 前、pre-push 在推出去前各跑一次（見 `vendor/snippets/evlog-map/README.md` § Gate）。它與 CI 同判定，CI 還在 ratchet 的 repo 本機也是 ratchet —— 推向 strict 仍照下一段。
 

@@ -1,5 +1,5 @@
 ---
-description: 人工檢查（Manual Review）主檔——核心 invariant、Item Kind Marker、annotation schema、Parent State Derivation、Post-Edit Gate；有 active spectra change（動 openspec/changes/**）時載入
+description: 人工檢查（Manual Review）主檔——核心 invariant、Item Kind Marker、annotation schema、[discuss] walkthrough、Parent State Derivation、Post-Edit Gate；有進行中的 work item（動 tasks/**、specs/plans/**）或在整理 screenshots 時載入
 paths: ['tasks/**', 'specs/plans/**', 'screenshots/**']
 ---
 <!-- Clade native rule; source: adapters/claude/instructions/rules/core/manual-review.md; edit canonical source -->

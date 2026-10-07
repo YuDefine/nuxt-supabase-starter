@@ -18,7 +18,7 @@
 #
 # 起跑前先跑 quarantine、互斥鎖門檻、preflight 與待辦源健康門檻：任一不過就
 # **完全不啟動**，理由落在 $LOG_DIR/preflight.log。preflight 省的不是第 4 輪起的
-# 重複失敗，是全部那幾十輪 —— 2026-08-10 <consumer-b> 因 headless 權限閘門連續拒絕，空轉
+# 重複失敗，是全部那幾十輪 —— 2026-08-10 某 consumer 因 headless 權限閘門連續拒絕，空轉
 # 99 輪、零待辦被修改。互斥鎖命中（exit 6）是「已有 runner 在跑」，不是故障。
 #
 # 停止：state 檔出現 stoppedReason，或達 --max-rounds，或連續 2 輪 exit≠0，
@@ -139,7 +139,7 @@ case "$CLADE_HOME" in
 esac
 export CLADE_HOME
 
-# 無人值守 runner 只支援 Claude host（TD-445；SKILL.md § Host 支援）。在 Codex／Cursor session 裡
+# 無人值守 runner 只支援 Claude host（TD-445；SKILL.md § Host 支援）。在 Codex session 裡
 # 被叫起來時直接拒絕並指向 in-session 用法，NEVER 改起別端 process 代跑——Codex 那一格是規約禁止
 # （rules/core/agent-routing.pi-watch-protocol.md：agent NEVER 以 codex CLI 起 worker）。
 # 辨識沿用 detect-runtime.ts 的單一詞彙表；只認顯式 CLADE_RUNTIME 或 session id 這類強訊號，
@@ -159,7 +159,7 @@ process.stdout.write(explicit || detectSessionId(process.env, runtime) ? runtime
   exit 2
 }
 case "$HOST_RUNTIME" in
-  codex|cursor)
+  codex)
     printf '%s\n' \
       "ERROR: work-loop runner.sh (unattended mode) supports the Claude host only; detected host: $HOST_RUNTIME." \
       "Use in-session mode instead: invoke the work-loop skill inside your own $HOST_RUNTIME session (SKILL.md § Host 支援)." >&2
@@ -206,7 +206,7 @@ SKIP_PREFLIGHT=0
 # 3 是下限側的保守值 —— 低於它時一輪的固定成本（冷載 + scan + 分類）多半換不到一個 item。
 MIN_READY=3
 # `ScheduleWakeup` / `Monitor` 的 interval 下限（秒）。CLAUDE.md 已有長等待規約，但 2026-08-12
-# 量測到 197 次呼叫（<consumer-b> 2.10 次/輪）證明無人值守下遵守不穩，所以在 runner 層把數字下沉進
+# 量測到 197 次呼叫（某 consumer 2.10 次/輪）證明無人值守下遵守不穩，所以在 runner 層把數字下沉進
 # 每輪的 prompt —— 它出現在 user turn，比冷載一次的規約大聲。
 MIN_WAKEUP=1200
 # acceptEdits 是刻意的預設：runner 要能無人值守跑，但 bypassPermissions 會連
@@ -463,13 +463,22 @@ append_round_ledger() {
 # **guard 即將觸發的輪不套 size-based 刪除**（`--keep-evidence`）：quarantine marker 已在、或 inFlight
 # 非 0／讀不出來，緊接著的 guard_runner_quarantine child-exit 必定 stop，那一輪的 >1MB 檔就是 attended
 # reconciliation 要讀的證據。預判條件與 guard 的進入條件同源（marker 檔、in_flight_count）。
+#
+# **起跑時也掃一次**（`sweep_round_scratch startup`，排在互斥鎖門檻之後、preflight 之前）：只掛在輪末的話，
+# 一輪都起不來的 runner（preflight 就 exit 3／4）永遠掃不到，目錄只增不減。判準與輪末相同，前提是
+# 「沒有活著的輪在讀這些檔」——所以只在 run_lock_gate **確認鎖未被持有**（`LOCK_CONFIRMED_FREE=1`）時掃；
+# 鎖狀態未知（helper 缺席、status 失敗、輸出無法解析）時 gate 仍放行起跑，但 NEVER 掃。
+# NEVER 挪到互斥鎖門檻之前：別的 runner／attended 輪正在跑時，它本輪的大檔還有讀者。
 sweep_round_scratch() {
   [ -f "$STATE_WRITE_HELPER" ] || return 0
-  local keep=() inflight
+  local keep=() inflight out
   inflight="$(in_flight_count)"
   if [ -f "$QUARANTINE_FILE" ] || [ "$inflight" != 0 ]; then keep=(--keep-evidence); fi
-  $NODE_PLAIN "$STATE_WRITE_HELPER" --sweep-only ${keep[@]+"${keep[@]}"} --state "$STATE" >/dev/null 2>&1 \
-    || echo "   ⚠ 輪末 scratch sweep 失敗（不擋推進）"
+  out="$($NODE_PLAIN "$STATE_WRITE_HELPER" --sweep-only ${keep[@]+"${keep[@]}"} --state "$STATE" 2>/dev/null)" || {
+    echo "   ⚠ scratch sweep 失敗（不擋推進）"
+    return 0
+  }
+  if [ "${1:-}" = startup ]; then echo "scratch sweep（起跑）：${out#SWEEP_OK }"; fi
 }
 
 # 收尾時把「已回報 outcome 卻沒人收割」的 dispatch 拉出來。runner 的每一輪 child 都是新 process，
@@ -518,7 +527,7 @@ print_runner_summary() {
 # 起跑前把「這個 runner 跑得起來嗎」問完。不過就 exit≠0 且**一輪都不跑**。
 #
 # 為什麼是前置探針而不是斷路器：斷路器要先燒掉 N 輪才會跳，而失敗模式是**起跑當下就已經
-# 確定**的（權限閘門不會在第 4 輪改變主意）。2026-08-10 <consumer-b> 空轉 99 輪的成本，前置探針能
+# 確定**的（權限閘門不會在第 4 輪改變主意）。2026-08-10 某 consumer 空轉 99 輪的成本，前置探針能
 # 全額省下，斷路器只省得到後面那 96 輪。
 #
 # 探針誤判過嚴時走 `--skip-preflight`，NEVER 靠拿掉探針本身解決。
@@ -655,7 +664,7 @@ run_ready_gate() {
   fi
 
   if [ "$ready" -lt "$MIN_READY" ]; then
-    echo "== 待辦枯竭：ready=$ready < ${MIN_READY}，需 attended 補彈藥（跑 attended /work-loop 清算 awaiting[]，或補 HANDOFF / tech-debt 條目）"
+    echo "== 待辦枯竭：ready=$ready < ${MIN_READY}，需 attended 補彈藥（跑 attended /work-loop 清算 awaiting[]，或補 plan Open work；未遷移 repo 補 HANDOFF / tech-debt 條目）"
     printf '%s\tready-gate\tready=%s min=%s\n' "$(TZ=Asia/Taipei date +'%Y-%m-%dT%H:%M:%S%z')" "$ready" "$MIN_READY" \
       >> "$LOG_DIR/preflight.log" 2>/dev/null || true
     exit 4
@@ -668,8 +677,12 @@ run_ready_gate() {
 # bash 重寫 heartbeat 窗口或 pid 存活。helper 缺席或輸出無法解析時放行：門是優化，
 # NEVER 讓它變成起不了 runner 的新故障。
 #
+# 放行分兩種，`LOCK_CONFIRMED_FREE` 把它們分開：status 明確回 `held:false` 才設 1；其餘放行路徑
+# 鎖的狀態未知，維持 0。會刪檔的起跑 sweep 只認 1。
+#
 # --dry-run 略過（只印指令，不該拒絕）。--skip-preflight 不略過——鎖被持有不是
 # 探針誤判，兩者是不同 failure class。
+LOCK_CONFIRMED_FREE=0
 run_lock_gate() {
   [ "$DRY_RUN" = 1 ] && return 0
   [ -f "$LOCK_HELPER" ] || { echo "⚠ 找不到 lock helper，略過互斥鎖門檻"; return 0; }
@@ -681,7 +694,7 @@ run_lock_gate() {
   }
   held="$($NODE_PLAIN -e 'try{const s=JSON.parse(process.argv[1]);console.log(s.held===true?"true":s.held===false?"false":"NaN")}catch{console.log("NaN")}' "$json" 2>/dev/null)"
   case "$held" in
-    false) return 0 ;;
+    false) LOCK_CONFIRMED_FREE=1; return 0 ;;
     true) ;;
     *) echo "⚠ lock status 輸出無法解析，略過互斥鎖門檻"; return 0 ;;
   esac
@@ -706,6 +719,11 @@ if ! guard_runner_quarantine startup; then
 fi
 
 run_lock_gate
+if [ "$LOCK_CONFIRMED_FREE" = 1 ]; then
+  sweep_round_scratch startup
+elif [ "$DRY_RUN" != 1 ]; then
+  echo "scratch sweep（起跑）：略過——鎖狀態未確認"
+fi
 select_unattended_helper
 
 if [ "$DRY_RUN" = 1 ] || [ "$SKIP_PREFLIGHT" = 1 ]; then

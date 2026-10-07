@@ -72,8 +72,16 @@ function parseArgs(argv) {
     else if (a === '--changed-files') out.changedFiles = argv[++i]
     else if (a === '--cwd') out.cwds.push(argv[++i])
     else if (a === '--mode') out.mode = argv[++i]
-    else if (a === '--min-score') out.minScore = Number(argv[++i])
-    else if (a === '--today') out.today = argv[++i]
+    else if (a === '--min-score') {
+      // 缺值／非數字經 Number() 會變 NaN，任何拿它做的比較恆為 false ＝ 永遠通過。
+      // 判不出來就拒絕（exit 2），NEVER 帶著 NaN 往下走。
+      const raw = argv[++i]
+      if (raw === undefined || !/^(100|[1-9]?\d)$/.test(raw)) {
+        process.stderr.write(`--min-score must be an integer 0-100 (got: ${raw ?? '<missing>'})\n`)
+        process.exit(2)
+      }
+      out.minScore = Number(raw)
+    } else if (a === '--today') out.today = argv[++i]
     else {
       process.stderr.write(`unknown flag: ${a}\n`)
       process.exit(2)
@@ -376,12 +384,15 @@ async function evaluateRoot({ repoRoot, cwd, label, opts, changed }) {
   // ── ratchet 模式 ──────────────────────────────────────────────────────────
   const baselinePath = resolve(scanCwd, opts.baseline)
   if (!existsSync(baselinePath)) {
+    // ratchet 的判定全部相對 baseline：沒有 baseline 就沒有東西可比，不是「通過」。
+    // 這裡若放行，刪掉或漏交 evlog.map.json 就成了繞過棘輪的方法。
     annotate(
-      'warning',
-      `${label}找不到 baseline ${opts.baseline} —— 尚未導入 evlog map，跳過 gate。` +
+      'error',
+      `${label}找不到 baseline ${opts.baseline} —— ratchet 模式沒有 baseline 無法判定，gate 未通過。` +
+        `跑 \`npx evlog map\` 產生並 commit，或把 workflow 的 mode 改成 strict（不需要 baseline）。` +
         `導入方式見 vendor/snippets/evlog-map/README.md`,
     )
-    return true
+    return false
   }
   const baseline = readJson(baselinePath)
   if (baseline.parseError) {

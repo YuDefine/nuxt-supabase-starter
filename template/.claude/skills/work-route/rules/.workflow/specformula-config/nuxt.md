@@ -53,7 +53,7 @@ onlyBuiltDependencies:
 │   │   └── features/
 │   │       ├── backend/<模組>/<業務名>.feature # cucumber.cjs 的 paths 直接指這裡
 │   │       └── frontend/<模組>/                # 前端 feature
-│   └── data/                                 # 從 DBML 衍生的 runner 產物，不是 truth
+│   └── data/                                 # physical schema（migration 回放後）的投影，runner 讀；不是 truth
 │       ├── schema.sql                        # DDL
 │       └── entity_to_table_mapping.yml
 ├── features/                                 # 只放程式碼，不放 .feature
@@ -103,8 +103,8 @@ config:
 ## 怎麼跑
 
 ```bash
-supabase start
-psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -f specs/data/schema.sql
+supabase start                       # migration 回放；schema 只從這裡來，NEVER psql 套 specs/data
+node --import tsx scripts/specformula-ddl-check.ts check   # specs/data 與 DBML 對回放後的 DB 比對
 
 SPECFORMULA_TEST=1 pnpm dev          # terminal 1
 pnpm test:bdd                        # terminal 2，從 repo root

@@ -3,7 +3,7 @@
 
 # Preset: evlog-baseline
 
-T1 全套（drain pipeline + Sentry drain + 5 件套 enricher + sampling/redaction + client transport）。適用：內部工具 / <consumer-d> 報告 / 教學系統。對應 master plan § 2.3。
+T1 全套（drain pipeline + Sentry drain + 5 件套 enricher + sampling/redaction + client transport）。適用：內部工具 / SROI 報告 / 教學系統。對應 master plan § 2.3。
 
 ## 安裝步驟
 

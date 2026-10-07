@@ -1,9 +1,9 @@
 ---
-description: Follow-up Register 規則——跨 session 接續開或續跑 plan；舊 TD 結構僅給未遷移 consumer；主動消化節奏
+description: Follow-up Register 規則——deferred 併回同一 work 的 Open work，新工作才 flow plan open；舊 TD 結構僅給未遷移 consumer；主動消化節奏
 paths: ['tasks/**', 'specs/plans/**', 'docs/tech-debt.md']
 ---
 <!-- Clade native rule; source: rules/core/follow-up-register.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Follow-up Register
 
@@ -13,19 +13,22 @@ tasks 檔內的「DEFERRED / LOCAL BLOCKED / follow-up」註記活不過那個 s
 
 ## 直接登記（強制）
 
-tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local blocked、tech debt、operation note、跨工作 follow-up）時，**MUST 在寫下那行註記的同一次編輯內**開或續跑同一份 plan：
+tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local blocked、tech debt、operation note、跨工作 follow-up）時，**MUST 在寫下那行註記的同一次編輯內**依下表落進 plan。「進行中的 work」指當下 `CLADE_WORK_ID`、tasks 檔頭的 `work_id:`、或你正在推進的那份 `specs/plans/<work-id>/plan.md`：
 
-```bash
-node vendor/scripts/flow/flow.ts plan open <slug> --title '<一句話>'
-```
+| 可觀察 predicate | MUST |
+| --- | --- |
+| 這一項源自某個進行中的 work（它的殘工、它發現的缺口、它延後的一步） | 在**同一份** `specs/plans/<work-id>/plan.md` 的 `## Open work` 加一條，寫明下一步與可觀察的完成條件。**NEVER** 為它另開 plan |
+| 它不屬於任何進行中的 work，而且確實要做 | `node vendor/scripts/flow/flow.ts plan open <slug> --title '<一句話>'`，這是開新 plan 唯一的入口 |
+| 判斷後它不值得做 | 不登記。在當下的 commit message 或 plan § Decisions 寫一句放棄理由 |
 
-回指 `specs/plans/<work-id>/plan.md`（或 `plan:<work-id>`）。舊 `TD-NNN` 只經 `specs/truth/legacy-ids.json` 解析，**NEVER** 同時往 `docs/tech-debt.md` 雙寫。
+回指 `specs/plans/<work-id>/plan.md`（或 `plan:<work-id>`）。舊 `TD-NNN` 只經 `specs/truth/legacy-ids.json` 解析，**NEVER** 往 `docs/tech-debt.md` 或 `HANDOFF.md` 登記新條目（`HANDOFF.md` 只留 W- 指標行，[[handoff]] § Lifecycle repo）。
 
 未遷移 consumer（沒有 `specs/truth/work-lifecycle.md`）仍用既有 `TD-NNN` register，直到 consumer 遷移完成。
 
 **禁止事項**：
 
-- **NEVER** 只寫自由文字（「LOCAL BLOCKED: ...」「DEFERRED: ...」「待後續處理」）而不開 plan 或（未遷移 consumer）TD entry
+- **NEVER** 只寫自由文字（「LOCAL BLOCKED: ...」「DEFERRED: ...」「待後續處理」）而不落進 plan Open work 或（未遷移 consumer）TD entry
+- **NEVER** 用「開一份新 plan 比較乾淨」繞過併回同一 work——同一件事拆成兩份 plan，close 時兩份都結不了
 - **NEVER** 把登記推到「收尾時一起補」，**NEVER** 因為「沒有 hook 擋我」就往後推
 - tasks 檔裡既有的 `@followup[TD-NNN]` marker **不必**改寫，讀到時當成舊 id 引用即可
 
@@ -74,9 +77,9 @@ node vendor/scripts/flow/flow.ts plan open <slug> --title '<一句話>'
 
 **沒有機器替你擋這一條**，義務落在寫下註記的當下（§ 直接登記）。另外：
 
-1. 每個 ID 對應主清單的有效 entry，或既有 closed archive 的唯一終態憑證；重複 ID、未知狀態、缺 Reason 的關單都是不合規
-2. 未結案 entry 保留 Problem / Fix approach / Acceptance；已結案憑證保留 ID、Status、Resolution 或 Reason，以及可核對的證據
-3. 等待外部條件、部分完成與已落地待驗收**仍是未結案工作**，保留在主清單。active 工作只從主清單產生
+1. （未遷移 consumer）每個 ID 對應主清單的有效 entry，或既有 closed archive 的唯一終態憑證；重複 ID、未知狀態、缺 Reason 的關單都是不合規
+2. （未遷移 consumer）未結案 entry 保留 Problem / Fix approach / Acceptance；已結案憑證保留 ID、Status、Resolution 或 Reason，以及可核對的證據
+3. （未遷移 consumer）等待外部條件、部分完成與已落地待驗收**仍是未結案工作**，保留在主清單。active 工作只從主清單產生
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
@@ -88,7 +91,7 @@ node vendor/scripts/flow/flow.ts plan open <slug> --title '<一句話>'
 
 ## 主動消化
 
-每個 repo 的 HANDOFF 只保留當前交接、必要決策與阻塞；已有 TD 的工作用 ID 指針連到唯一入口。tech-debt 每條保留問題、影響、下一個動作及驗收，等待項附責任人或可觀察觸發條件。
+每個 repo 的 HANDOFF 只保留當前交接、必要決策與阻塞。lifecycle repo 的工作用 work id 指針連到該 plan，Open work 每條保留下一步與完成條件；未遷移 consumer 已有 TD 的工作用 ID 指針連到唯一入口，tech-debt 每條保留問題、影響、下一個動作及驗收。等待項附責任人或可觀察觸發條件。以下第 1–3 步的 TD 操作只適用未遷移 consumer；lifecycle repo 收工時更新 plan Open work，結案走 `flow plan close`。
 
 1. **收工時**：commit、handoff、work-loop 完成相關工作後，核對實際驗收證據，更新對應 TD 的狀態及精簡結論；同步移除 HANDOFF 的完成流水帳與重複背景。狀態改成結案的同一次改動，處置 code 裡指向該 ID 的每一個 `@followup` marker（做法見 [[code-style]] § 註解）。
 2. **移出前**：執行 `node .clade/vendor/scripts/flow/flow.ts sources --apply`，回讀該 ID 的關卡結果。clade 自身使用 `vendor/scripts/flow/flow.ts`。關卡未完成就保留來源，移除文字不作為完成證據。

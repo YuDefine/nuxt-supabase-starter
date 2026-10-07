@@ -1,9 +1,9 @@
 ---
-description: 'CI workflow 撰寫規約——外部 GitHub Action 的 uses: MUST SHA-pin；動 .github/workflows 或 .github/actions 時載入'
+description: 'CI workflow 撰寫規約——外部 GitHub Action 的 uses: MUST SHA-pin、CI 三層分工（PR 只跑必要、e2e 在合併後、commit 前 0-A）；動 .github/workflows 或 .github/actions 時載入'
 paths: ['.github/workflows/**', '.github/actions/**']
 ---
 <!-- Clade native rule; source: rules/core/ci-workflow.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 # CI Workflow 撰寫規約
 
 ## External action MUST SHA-pin
@@ -31,7 +31,7 @@ paths: ['.github/workflows/**', '.github/actions/**']
 
 ## CI / test workflow MUST cancel superseded runs on the same ref
 
-**適用範圍**：lint、typecheck、test、validate 這類**驗證** workflow（本 repo 的 `validate.yml` 是原型）。**不適用**：會部署 staging / production、或被另一條 workflow 用「同 SHA success」當 gate 的 workflow。
+**適用範圍**：lint、typecheck、test、validate 這類**驗證** workflow。**不適用**：會部署 staging / production、或被另一條 workflow 用「同 SHA success」當 gate 的 workflow。
 
 單槽 self-hosted runner 上，同 ref 連續 push 若每條 run 都跑完，**最新 SHA 會排在已過期 SHA 後面**，HEAD 可能要等半小時才開始跑。過期 SHA 的結果不能當最新 candidate 的綠燈。
 
@@ -51,6 +51,26 @@ concurrency:
 - **NEVER** 用同一個 concurrency group 蓋住 callee 自己也會被獨立 trigger 的 reusable workflow——會互殺。見 [[pitfall-reusable-ci-concurrency-collision]]
 - 同一條 run 裡的 matrix shard（例如 `test-lanes` 1/6…6/6）**不是**「前面步驟」，**NEVER** 為了縮短排隊取消其他 shard。它們測的是不同檔；concurrency 取消的是**過期 SHA 的整條 run**
 
+**例外——只限 clade 自身的 `.github/workflows/validate.yml`**：`push`（`main`／`integration/**`）不開 `cancel-in-progress`，只有 `pull_request` 開；`group` 照上方不變。clade 的 main 連續落地的間隔短於一趟 validate，push 一取消，每一趟都在跑到一半時被下一趟殺掉，main 上沒有任何一趟跑完；而它的 affected lane 以「該 branch 上一次綠燈的 push」為 base，綠燈不前進，要測的範圍只會越滾越大。`group` 仍含 `github.ref`，所以同 ref 一次只跑一趟、排隊中的舊 run 仍被最新一趟頂掉，HEAD 最多等一趟。這個例外成立的前提是沒有任何 workflow 以同 SHA 的 validate success 當放行條件。consumer 的驗證 workflow **不適用**本例外，照上方 YAML。
+
 `gh-ci-watch` 在 run 被取消時會改追 superseding run（同 workflow + 同 branch、較新 `createdAt`）。那是監看側的補救，**不能**代替 workflow 自己取消過期 run。
 
 `audit-ci-toolchain-parity.ts`（[[ci-toolchain-parity]]）只檢查三個 toolchain 入口 action 的 SHA-pin，是本檔的子集；全部外部 action 的權威來源是本檔與 `audit-ci-workflow-safety.ts`。
+
+## CI 三層分工
+
+**每一個** repo（clade 與**每一個** registry consumer）的驗證分三層，各層跑什麼由觸發時刻決定：
+
+| 層 | 時刻 | 跑什麼 |
+| --- | --- | --- |
+| commit 前 | agent 下 `git commit` 之前 | commit 0-A：fresh-context reviewer，見 [[commit]]（`commit.detail.md`）與 `.claude/scripts/claude-review-safe.sh` |
+| 合併前 | `pull_request`，或不限 branch 的 `push` | lint、typecheck、unit test。consumer 跑**全量** unit（實測 1–8 分）；clade 的範圍見 [[github-flow]] § 各事件的 test-lane |
+| 合併後 | `push` 到 `main`（含由它接出的 `workflow_run`，`branches: [main]`） | 全量 unit 與 e2e。tag／deploy、`schedule` 可以**再**跑一次，但不能是唯一一次 |
+
+- **每一個**合併前會跑的 workflow 組合 **MUST** 含 lint 與 typecheck 步驟
+- 合併前 lane **NEVER** 跑 e2e——`playwright test`、`test:e2e`、`test:bdd`、`cypress run`、要起 server 或 DB 的 BDD 都算。它是整條 CI 最慢、最常 flaky 的一段，放在 PR 上每次 push 都付一次
+- repo 有 unit test（`package.json` 的 `test` script＋`*.test.*`／`*.spec.*`）時，**每一個** consumer **MUST** 在合併前與 push `main` 各跑一次全量；沒有 unit test 不必為了 CI 補寫（何時寫見 [[testing-anti-patterns]] § unit test 何時寫）
+- repo 有 e2e 設定（`playwright.config.*`、`cucumber.cjs`）時，**MUST** 有 push `main` 觸發得到的 job 跑它——只接在 tag／deploy 之後，等於每次合併都沒驗；`workflow_run` 接 e2e 時 **MUST** 寫 `branches: [main]`——沒寫的話 PR 那一趟 CI 完成也會觸發它，e2e 等於又回到合併前
+- 本節只管**哪一層跑什麼**：把 e2e／全量 unit 換到合併後時，job 的 `timeout-minutes` 與測試逾時照搬原值，**NEVER** 趁搬家放寬逾時
+
+機械偵測：`node scripts/audit-ci-three-tier.ts`（單 repo 有 finding exit 1；`--all-consumers` warn-only，接在 `/clade-health` enforcement 段）。workflow 是 consumer 自治區，命中 relay 給該 consumer 的 session 修。

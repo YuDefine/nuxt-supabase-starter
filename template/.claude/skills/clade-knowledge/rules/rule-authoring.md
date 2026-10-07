@@ -4,14 +4,14 @@ paths: ['.clade/rules/**/*.md', '.claude/rules/**/*.md', '.claude/skills/**/*.md
 ---
 <!-- Clade native rule; source: rules/core/rule-authoring.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 # Rule Authoring（規約措辭工程）
 
 ## Canonical source and native delivery boundary
 
-Central rules are authored in `rules/**/*.md`; consumer-local rules are authored in `.clade/rules/**/*.md`. Each selected rule is packaged into one semantically named native skill under `.claude/skills/clade-*`, `.agents/skills/clade-*`, or `.cursor/skills/clade-*`: `SKILL.md` carries discovery metadata, `rules/_index.md` carries scope metadata, and `rules/**/*.md` carries complete bodies. These are generated delivery surfaces, so editing them never changes the canonical source. Rule delivery must not install an automatic injection hook or a single catch-all rule skill; a shared rule keeps its obligation in the common source and records target-specific mechanics in the matching adapter fragment.
+Central rules are authored in `rules/**/*.md`; consumer-local rules are authored in `.clade/rules/**/*.md`. Each selected rule is packaged into one semantically named native skill under `.claude/skills/clade-*`, or `.agents/skills/clade-*`: `SKILL.md` carries discovery metadata, `rules/_index.md` carries scope metadata, and `rules/**/*.md` carries complete bodies. These are generated delivery surfaces, so editing them never changes the canonical source. Rule delivery must not install an automatic injection hook or a single catch-all rule skill; a shared rule keeps its obligation in the common source and records target-specific mechanics in the matching adapter fragment.
 
 **核心命題**：規約文字是塑形 agent 行為的 code，不是散文。形式選錯的規約看起來嚴謹、實測反效果——對「輸出形狀」問題用禁止句，違規率比不寫指引還高。本規則對**每一次** rule / SKILL.md / brief / snippet 的撰寫與修改生效，不是只有大改版才適用。
 
@@ -114,7 +114,7 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 `paths:` 的 glob 錨在 target adapter 的 **projectRoot**（也就是該 runtime instruction root 所在的專案層），不是任意 git repo root。這對**每一支**帶 `paths:` 的 rule 生效，不是只有動到 monorepo 的那幾支。三條硬規約：
 
 1. **不要寫 `template/` 前綴**。template-based consumer（`nuxt-supabase-starter`）的投影落點是 `template/.claude/rules/`，它的 project root 就是 `template/` —— 寫 `server/**` 才命中，`template/server/**` 永不命中。
-2. **每一條 source-tree top-level entry 都要配 `packages/*/<entry>` 變體**。monorepo consumer（<consumer-a> 等）的 `.claude/` 在 repo root，nested package 的檔案只有這個變體抓得到。source-tree top-level 的判定清單是 `scripts/audit-rule-paths-monorepo.ts` 的 `SOURCE_TREE_DIRS`。
+2. **每一條 source-tree top-level entry 都要配 `packages/*/<entry>` 變體**。monorepo consumer（`packages/*` 型）的 `.claude/` 在 repo root，nested package 的檔案只有這個變體抓得到。source-tree top-level 的判定清單是 `scripts/audit-rule-paths-monorepo.ts` 的 `SOURCE_TREE_DIRS`。
 3. **不要靠肉眼判這兩條**。`node scripts/audit-rule-paths-monorepo.ts` 是 SoT，`WARN` = 缺 monorepo 變體、`DEAD` = 寫了 `template/` 前綴。它已是 publish blocking gate。
 
 **不要拿 grep 回 0 當「規約已生效」**：要驗載入走 target adapter 的 loader／receipt（[[pitfall-skill-invoke-does-not-trigger-paths-gate]] § Detection）；沒有 receipt 時不宣稱已載入。
@@ -124,6 +124,8 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 **每一條**被宣告給 target 的 rule 都要出現在該 target 的具名 native skill package，不以另一個 runtime 的檔案或 AGENTS 摘要代替；不得由檔案存在性冒充載入 receipt。每個 target adapter 都要對無 `paths:`、合法 `paths:`、空白或 malformed `paths:` 宣告 packaging policy；malformed 必須 fail closed，不得降成無 scope 或靜默略過。合法 scope 保留在 `rules/_index.md` 供選讀。
 
 完成 rule 增修後要實跑 `node scripts/audit-codex-rule-coverage.ts --root <consumer>`（Codex）與 target adapter 指定的 projection audit。ownership state 與 audit output 是 derived evidence，不要手改。
+
+Codex 端真正接受規約的證據走 acceptance receipt：消費端實作留下的收據放 `docs/evidence/codex-acceptance/**.json`，schema 由 `node scripts/audit-codex-acceptance.ts` 驗證（validate.yml CI 層跑同一支）；receipt 的最高觀察等級停在 `discovered` 不算 accepted。
 
 ## 可變事實指 SoT，不 inline（MUST）
 
@@ -182,7 +184,7 @@ Skill / rule 內容擺哪一層，決定 agent 讀不讀得到。三層資訊梯
 - **Pointer 措辭準則**：必讀材料擺在弱措辭 pointer 後（「詳見 X」「參考 Y」）＝variance bug——有時讀有時不讀。修法**先改 pointer 措辭**（明寫「何時要讀、讀哪一段」），措辭修不動才把內容 inline 回來。
 - **Sequence-cut 順序**（防 premature completion——agent 看得到後續步驟時提前宣告完成）：先 sharpen completion criterion（可勾稽、含證據要求；便宜且局部）；criterion 已收斂到底**且實際觀察到 rush** 才拆步驟；拆分只有跨**真 context boundary**（subagent dispatch，後續步驟真的不可見）才有效——inline Skill invoke 擋不住，後續步驟仍在同一 context。
 - **Hard / soft dependency**：缺了會產出**錯誤結果**的前置才放 explicit setup pointer；缺了只是變鈍的用一般 prose 帶過，保持 token-light。
-- **橫向落點**（這份資產該是 rule / skill / snippet / rationale doc 哪一種）要走 `/bp` skill 的 `references/placement-routing.md`，不要憑印象挑目錄。
+- **橫向落點**（這份資產該是 rule / skill / snippet / rationale doc 哪一種）要走 `/bp` skill 的 `rules/落點路由判準.md`，不要憑印象挑目錄。
 
 ## Invocation 成本模型（skill frontmatter）
 
@@ -198,7 +200,7 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 
 **Callee 要保持 model-invoked**（僅限 clade 自撰的 skill）：被其他 skill 以 Skill tool 呼叫的 skill，`disable-model-invocation: true` 會連 orchestrator 的呼叫一起擋掉。設定前要先 grep 全 skill / rule 確認無跨檔 Skill-tool 呼叫。
 
-**上游鏡像 skill 不適用本條**：帶 `LOCKED: mirrored from` banner 的 skill（例如 aixbdd）以上游為準，不要為了符合本條改鏡像檔或它的 `metadata.clade.invocation`。上游 skill 交給一支 explicit skill（例如 `specify` 的「DELEGATE 呼叫 `/clarify`」）時，停下來請使用者手動執行，不是繞過 `disable-model-invocation`。
+**上游鏡像 skill 不適用本條**：帶 `LOCKED: mirrored from` banner 的 skill（例如 aixbdd）以上游為準，不要為了符合本條改鏡像檔或它的 `metadata.clade.invocation`。上游 skill 交給一支 explicit skill（例如 `specify` 的「DELEGATE 呼叫 `/clarify`」）時，**NEVER** 由模型自己呼叫或讀檔照跑——那是繞過 `disable-model-invocation`。specify 鏈（`specify`／`clarify`／`system-analysis`／`implement`）由**派工者代打**（Charles 2026-10-06，TD-1043 修訂範圍 A）。派工者是主持者，或依 work-route 第 4 節輪到該 owner 的主線 session；主線不在 work-route 流程內 **NEVER** 自行代打。做法：派工 brief 第一行寫 `/<skill> <一句範圍>`，helper 以使用者 slash 指令打進 pane；中途要 `/clarify` 時由派工者 `--continue` 送同形狀的第一行，問題先從 repo 查證後作答。其他 explicit skill（`version-upgrade`）仍停下來請使用者手動執行。
 
 ## Token 紀律
 
@@ -218,9 +220,9 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 
   | 文件 | 讀者要做的決定 | 收斂形狀 |
   | --- | --- | --- |
-  | pitfall | 認出自己正踩同一個坑並修掉 | Symptom / Root cause / Detection（可執行命令）/ Prevention 各自收斂；重現敘事只留能導出 detection 的那幾步 |
+  | 踩坑紀錄（`/oops` 寫進的 truth 單位或 rule §） | 認出自己正踩同一個坑並修掉 | Symptom / Root cause / Detection（可執行命令）/ Prevention 各自收斂；重現敘事只留能導出 detection 的那幾步 |
   | `HANDOFF.md` entry | 接手 | 現況 + 下一個動作 + 卡在哪，各一到兩句 |
-  | `docs/tech-debt.md` TD entry | 判斷該不該做 | Class / Location + 一句話問題 + 一句話代價 |
+  | plan § Open work 項（未遷移 consumer：`docs/tech-debt.md` TD entry） | 判斷該不該做 | Class / Location + 一句話問題 + 一句話代價 |
   | subagent brief | 開工 | 具體路徑 + 相關規約條目 + 驗收標準 |
 
   不要拿「內容都是真的」當保留篇幅的理由——真但不改變任何決定的段落，成本由每一個讀者付。

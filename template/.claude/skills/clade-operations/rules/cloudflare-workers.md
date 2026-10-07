@@ -3,7 +3,7 @@ description: Cloudflare Workers / NuxtHub gating + wrangler.jsonc 格式統一 +
 paths: ['wrangler.{toml,jsonc}', 'void.json', 'nuxt.config.*', 'package.json', '.github/workflows/**/*.yml']
 ---
 <!-- Clade native rule; source: rules/core/cloudflare-workers.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Cloudflare Workers / NuxtHub Configuration
 
@@ -74,7 +74,6 @@ NuxtHub (`@nuxthub/core`) 唯一的作用是 Track A 上 Cloudflare 原生 bindi
   |---|---|---|
   | Claude | `.claude/skills/void/` + `.claude/skills/migrate-vite-cloudflare-to-void/` | `void init --agents` writes `.claude/settings.json` (or `settings.local.json`) |
   | Codex | `.agents/skills/void/` + `.agents/skills/migrate-vite-cloudflare-to-void/` | **MUST** follow and verify the printed `codex mcp add void -- npx void mcp` registration against the actual Codex MCP surface; initializer success alone does not prove MCP delivery |
-  | Cursor | `.agents/skills/void/` + `.agents/skills/migrate-vite-cloudflare-to-void/` | `void init --agents` writes `.cursor/mcp.json` |
 
   These paths and behaviors come from the official Void package's published coding-agent integration guide and agent implementation in the official package tarball (`void@0.10.13`, [npm registry package](https://registry.npmjs.org/void/-/void-0.10.13.tgz)); preserve the consumer's selected target set and do not claim runtime invocation from configuration presence alone.
 - **MUST** 後續 void CLI / config / runtime helper / `env.ts` / migration 等通用知識**走 official `void` skill 或 `void mcp`** (`search_docs` / `get_page docs/<path>.md`)；**NEVER** 從 consumer-side rule / project-specific note 複製 void CLI 命令當權威 — 那些 cache 容易跟 void 升版 drift
@@ -95,7 +94,7 @@ NuxtHub (`@nuxthub/core`) 唯一的作用是 Track A 上 Cloudflare 原生 bindi
 
 #### MUST NOT
 
-- **MUST NOT** `void@^0.8.x` 用配置 1（`["nodejs_compat", "nodejs_als"]` 不含 `no_nodejs_compat_v2`）— legacy SDK 會撞 worker upload err 10021。這是 0.8 限定 workaround，**不得**套用成 current void 0.10 的通則。詳見 [pitfall doc](../../docs/pitfalls/2026-05-25-void-cloud-voidjson-compat-flags-10021.md)
+- **MUST NOT** `void@^0.8.x` 用配置 1（`["nodejs_compat", "nodejs_als"]` 不含 `no_nodejs_compat_v2`）— legacy SDK 會撞 worker upload err 10021。這是 0.8 限定 workaround，**不得**套用成 current void 0.10 的通則。詳見 [[pitfall-void-cloud-voidjson-compat-flags-10021]]
 - **MUST NOT** legacy `void@0.8.x` 的 `appType: "framework"` consumer 用配置 2（純 v2）— 同樣撞 `#t` error。這條限制不得無版本區分地套到 current void
 - **MUST NOT** 在 void SDK ≥0.10 的 consumer 保留 `patch-void-deploy.ts` 或 unenv patch；這些 workaround 只屬 legacy void 0.8
 - **MUST NOT** 用 nitro `cloudflare.nodeCompat` 取代平台 compatibility config；legacy 0.8 以 void.json 為準，current void 依 official integration 的 wrangler / void config 契約
@@ -335,7 +334,7 @@ Track 判定：根目錄有 `void.json` 且 `package.json` 含 `void` dep → Tr
 
 ### § 7.3 — Fleet 現況
 
-現況以 `scripts/audit-wrangler-config.ts`（`ci.self_hosted_pnpm_cache`、`void.legacy_token_auth`）輸出為準；<consumer-k> 的 `.github/workflows/deploy.yml` 是 current void.cloud + OIDC reference。
+現況以 `scripts/audit-wrangler-config.ts`（`ci.self_hosted_pnpm_cache`、`void.legacy_token_auth`）輸出為準；某 consumer 的 `.github/workflows/deploy.yml` 是 current void.cloud + OIDC reference。
 
 ## § 8 — Cloudflare 操作工具：`cf` CLI（hard rule）
 

@@ -1,15 +1,17 @@
 ---
-description: Testing anti-patterns to avoid — mock 濫用、test-only production methods、不完整 mock、E2E fixture 寫死絕對日期、測試碼品質低於生產碼、測試結構契約
+description: Testing anti-patterns to avoid — mock 濫用、test-only production methods、不完整 mock、unit test 何時寫（U1–U5）、E2E fixture 寫死絕對日期、測試碼品質低於生產碼、測試結構契約、測試逾時紅（負載假紅、放寬逾時數值）
 paths:
   [
     'test/**/*.ts',
     'packages/*/test/**/*.ts',
     'e2e/**/*.ts', 'packages/*/e2e/**/*.ts',
+    'vitest.config.*', 'packages/*/vitest.config.*',
+    'playwright.config.*', 'packages/*/playwright.config.*',
     '.github/workflows/**',
   ]
 ---
 <!-- Clade native rule; source: rules/core/testing-anti-patterns.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Testing Anti-Patterns
 
@@ -357,7 +359,7 @@ FOR 每一個「可對同一 parent entity 重複寫入」的 amount / quantity 
     斷言聚合結果仍滿足該不變量。
 ```
 
-spec 範例：`可出貨數量 = 進料數量 - 報廢數量 - 已出貨數量`（<consumer-b> `shipment-return` spec）。
+spec 範例：`可出貨數量 = 進料數量 - 報廢數量 - 已出貨數量`（某 consumer 的 `shipment-return` spec）。
 
 **Test shape：static fixture**，直接帶已累積的 history rows（`[{hours: 112}, {hours: 8}]`），斷言 available 是 120 而不是 232；不需連續呼叫 N 次。
 
@@ -411,6 +413,27 @@ Mock setup longer than test logic, or mocks missing methods real components have
 | resolved capability 含 `aixbdd`，`work_kind` 不要求 acceptance feature（`bug-covered`、全 NOOP 的 `refactor`） | 不寫新 acceptance feature；迴歸錨點照 `flow plan readiness` 的要求集 |
 | `aixbdd-workflow.md` 判 ❌ 的逐件工作（沒有 I/O 的純邏輯 bug 等） | 迴歸 unit test 與修正同一個 commit |
 | resolved capability 不含 `aixbdd` | 本段不生效；照該 repo 自己的測試規約 |
+
+## unit test 何時寫（MUST）
+
+aixbdd 與非 aixbdd repo 都適用。**每一支**新增的 unit test MUST 命中下表至少一列；一列都不中就不寫：
+
+| # | 可觀察 predicate | 寫什麼 |
+| --- | --- | --- |
+| U1 | 受測單元沒有 I/O（HTTP、DB、檔案、子行程、瀏覽器、時鐘），且有 ≥2 條分支或邊界值 | 純邏輯 unit，只測分支與邊界 |
+| U2 | 修 bug，且 [`aixbdd-workflow.md`](./aixbdd-workflow.md) 判該 bug 不走 scenario | 一支迴歸 unit，與修正同一個 commit |
+| U3 | 受測物是**閘門**：hook、gate、audit 的 exit code 決定放行或擋下 | 至少一條「該擋的擋下」＋一條「該放的放行」，走真實 CLI |
+| U4 | 字串是**機器消費的錨點**：有非測試程式碼解析它（heading、marker、frontmatter key、跨檔常數） | 對解析結果斷言，不對原文 prose 斷言 |
+
+下列任一成立就不寫：
+
+- 斷言對象是只給人讀的 prose（rule／skill／doc 措辭）→ 措辭品質走 `rule-pressure-test.ts` micro-test 或 review
+- **U5**：斷言對象是 load-bearing 規約句（[[rule-authoring]] § load-bearing 句登記 的收錄判準）→ 登記進 clade 的 `registry/rule-invariants.json`，不寫測試
+- 已有 scenario 或另一支測試驗同一個可觀察結果
+- 只斷言 mock 自己的回傳，或只驗 type 已保證的形狀
+- 呼叫端的整合測試已驗到同一行為，再替內部 helper 補一支
+
+刪既有測試時反過來用同一張表：一列都不中、又不是該行為唯一的測試，才刪。**NEVER** 刪閘門類（U3）測試，**NEVER** 刪某段產品碼唯一的行為測試（aixbdd consumer 的對應條款見 [[legacy-tests]] NEVER 2）。
 
 ## 測試結構契約
 
@@ -469,7 +492,7 @@ E2E 不用「跑了幾條」或 coverage % 當 KPI——真正會出事的是失
 node vendor/scripts/audit-risk-path-coverage.ts        # findings exit 0；掃描失敗 exit 2
 ```
 
-diff 命中上列五類時，檢查作用中的 plan packages（status 為 active／blocked／closing）有 § Risk paths **且引用的測試檔真的存在**；舊 `openspec/changes/` 存在時才保留相容掃描。**findings 不升成 blocking**——它們是 review 的對話起點；掃描失敗回 exit 2，不得當成檢查通過。**綠燈不代表「風險路徑覆蓋足夠」**（只證明有宣告、檔在）。baseline 近 0 是預期值，不要因為「一片紅」就把它關掉或降級。
+diff 命中上列五類時，檢查作用中的 plan packages（status 為 active／blocked／closing）有 § Risk paths **且引用的測試檔真的存在**。**findings 不升成 blocking**——它們是 review 的對話起點；掃描失敗回 exit 2，不得當成檢查通過。**綠燈不代表「風險路徑覆蓋足夠」**（只證明有宣告、檔在）。baseline 近 0 是預期值，不要因為「一片紅」就把它關掉或降級。
 
 ## E2E fixture 的時間錨點 MUST 相對於執行當下
 
@@ -544,3 +567,23 @@ seedConversation({ updatedAt: daysAgo(60) })  // 更早
 **3. 動手前把假設清單交給第二雙眼睛**；沒有人可問時派 fresh-context checker 讀清單（[[checker-subagent]]）。
 
 **4. 修完要補迴歸測試把它封死**——第 1 步那個測試留下來就是。宣告 aixbdd 的 consumer：行為迴歸落在 scenario（經 work-route，NOOP 或 ADD delta），只有沒有 I/O 的純邏輯才落 unit test——判準與舊測試的吸收見 `clade-spec-workflow` skill 的 `rules/legacy-tests.md`。
+
+## 測試逾時紅：先跑 main 比對，NEVER 放寬數字
+
+本節對**每一個**因逾時而紅的測試生效——`timed out`、`spawnSync` 回 `status: null`、dispatch 轉成 `transport_error`、fixture 等不到時序都算；本機 gate 與 PR CI 都算；`vitest.config.*` 的全域 `testTimeout` 也算。
+
+**Iron Law**：違反字面就是違反精神。`NO TIMEOUT RAISED BY HAND — COMPARE AGAINST MAIN FIRST`
+
+1. **同一台、同負載下跑 main 的同一支測試**（`git worktree add --detach <dir> origin/main` 後跑同一條指令），記下兩邊耗時與當下 `uptime` 的 load1／核數。
+2. **main 也紅＝負載假紅**：**NEVER** 改數字。在 PR body 或 tasks 檔記一行（測試名、兩邊耗時、load1／核數），待負載降下重跑或交 PR CI 判。
+3. **main 綠、branch 紅＝你的改動讓它變慢**：查慢在哪，不是調門檻。
+4. **只有等另一個行程的時間預算可以隨負載伸縮**（`spawnSync`／`execFile` 的 `timeout`、dispatch 等 child 回報、等 dev server 起來）：改寫成 `loadScaledTimeout(<閒置量到的值>)`——node:test 用 `vendor/scripts/lib/load-scaled-timeout.ts`，vitest 照 `~/offline/clade/vendor/snippets/load-scaled-timeout/` 複製。它依每核 load1 放大、封頂 4 倍、放大時印倍率。閒置下就超過原值時，那是 base 寫錯，量閒置值寫進 helper 的 base，同樣不是手改數字。
+5. 送出前跑 `node ~/offline/clade/scripts/audit-test-timeout-widening.ts --repo .`：它列出本 branch 對 merge-base 的 diff 裡「逾時數值調大且沒走 `loadScaledTimeout`」的行（`widened`：等子行程的預算改走 helper，其餘還原），以及 helper 包住整支測試逾時的行（`helper-on-test-timeout`：it()／test() 第三參數、測試層 `{ timeout }`、config 的 `testTimeout`——還原成固定值）。
+
+| 藉口（逐字實錄） | 現實 |
+| --- | --- |
+| 「滿載 CI 下過緊的 spawnSync／dispatch 時間預算放寬」 | 只在滿載下過緊＝負載問題，不是門檻問題——第 1 條的 main 比對會給同一個答案。spawn／dispatch 要伸縮就走 helper，寫死的大數字在負載降下後照樣留著，蓋掉日後真的變慢 |
+| 「subtest timeout 15s／nested spawnSync 3s 在 CI 滿載下過緊，放寬」 | subtest 的 15s 包住的是整支測試，不是子行程；放寬它就是吸收所有變慢。只有內層 `spawnSync` 那個 3s 屬第 4 條 |
+| 「stabilize unit-test timeouts」 | 15s→20s 移走的是門檻，不是不穩定；下一次滿載要 30s，數字只會往上走 |
+
+**Red Flags**——發現自己在想這些就停，回第 1 條：「先放寬讓 gate 綠，之後再收回」「只是多給幾秒」「CI 那台本來就慢」「這支本來就 flaky」。

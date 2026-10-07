@@ -3,7 +3,7 @@ description: SECURITY.md 安全憲法的形狀契約（五段固定、不變量�
 paths: ['SECURITY.md', 'packages/*/SECURITY.md', 'server/middleware/**', 'packages/*/server/middleware/**', 'supabase/migrations/**/*.sql', 'server/database/migrations/**/*.sql', 'packages/*/supabase/migrations/**/*.sql', 'packages/*/server/database/migrations/**/*.sql']
 ---
 <!-- Clade native rule; source: rules/core/security-policy.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Security policy（SECURITY.md 安全憲法）
 

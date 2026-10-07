@@ -3,11 +3,11 @@ description: Supabase audit table schema 慣例（audit_logs）
 paths: ["supabase/migrations/**/*.sql", "server/utils/audit*.ts", "packages/*/server/utils/audit*.ts", "server/api/**/*.ts", "packages/*/server/api/**/*.ts"]
 ---
 <!-- Clade native rule; source: rules/modules/db-schema/supabase/audit-schema.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Audit Schema Conventions（supabase variant）
 
-通用 `audit_logs` 表名 + D-pattern hash chain 慣例。適用 <consumer-a> / <consumer-d> / <consumer-c> 等 Supabase Cloud / self-hosted 走通用 schema 的 consumer。
+通用 `audit_logs` 表名 + D-pattern hash chain 慣例。適用 Supabase Cloud / self-hosted 走通用 schema 的 consumer。
 
 ## 表名與基本欄位
 

@@ -3,7 +3,7 @@ description: 實作 Nuxt UI component 前強制 grep 既有同語義用法、複
 paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue']
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-ui-conventions.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Nuxt UI 專案慣例一致性（實作階段強制）
 

@@ -21,7 +21,7 @@
 | 來源 | 何時落地 | 怎麼 commit |
 | --- | --- | --- |
 | plan package 需求 | 原實作 wt 的驗收 gate 完成並 checkpoint 後 | 登記就緒；達批次條件才 invoke 一次 `/commit` |
-| 非 plan / Form-1 | harvest 驗收後 | 登記就緒；達批次條件才 invoke 一次 `/commit` |
+| 非 plan（ad-hoc 隔離環境） | harvest 驗收後 | 登記就緒；達批次條件才 invoke 一次 `/commit` |
 
 每次收割與 session 接手跑 `wt-helper batch status --trigger auto --workflow <workflow_model>`：達 `batch.md` 的 auto 門檻（`pr-merge-based` 1 件、`trunk-based` 4 件 distinct work id）自動提交；不足時繼續開發。手動 `/commit`／merge back 無最低件數，dependency／drained／stop 提前結批。單純交接不結批。批次在隔離整合區審查，落地後由 commit skill cleanup，**NEVER** 收一個 wt 就重跑一遍完整 `/commit`。
 
@@ -51,7 +51,7 @@ ledger 移除照做、2h hang 上限照算。8 步 SOP 的 scope-verify / checke
 ### 每收到一個 notification → 立即處理（收割 SOP）
 
 1. **驗收 agent 結果**：`git -C <worktree> log --oneline` + `git -C <worktree> status --short` + 讀 `WORKTREE-BRIEF.md` 的 Progress / frontmatter status——agent 的完成宣稱是未驗證主張（per [[agent-routing.dispatch-execution]] § Subagent 回報契約），MUST 有 commit 佐證
-   - **主線自走 worktree 時（SKILL.md § `/wt` 不可用時的 dispatch 形狀）這一步不放寬**：commit
+   - **主線自走 worktree 時（[no-wt-dispatch.md](no-wt-dispatch.md) § `wt` 不可用時的 dispatch 形狀）這一步不放寬**：commit
      照樣要有，只是由主線在 worktree 內產生。要放棄的是「讀 agent 的完成宣稱」那一半——
      沒有 agent 可讀，也沒有未驗證主張要拆穿；`git log` 與 `git status --short` 兩條照跑
 2. **驗 scope**：`node "${CLADE_HOME:-$HOME/offline/clade}/scripts/scope-verify.ts" --repo <repo> --scope '<brief 宣告的每一條路徑>'`。scope 外的**實質**改動 → `git checkout HEAD -- <file>` revert 後 re-run 該 agent 交付的驗證（per [[subagent-scope-discipline]]）。subagent 自報「No changes outside scope」是未驗證主張，**NEVER** 採信

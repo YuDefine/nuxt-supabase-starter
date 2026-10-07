@@ -9,10 +9,13 @@
 # 判定全在 vendor/scripts/worktree-freshness.ts（只比 tree hash、不 fetch、不跑完整 diff；
 # 可回收清單讀快取、過期才背景 refresh）。本 hook 只負責找到那支 script——與 review
 # wrapper 同一個解析順序：CLADE_HOME 優先，CLADE_RUNTIME_FROM_REPO=1 時本樹優先。
+# cloud VM（CLAUDE_CODE_REMOTE 有值）整支跳過：VM 是單一 shallow clone，沒有 main 與 linked worktree
+# 可比（證據在 clade specs/plans/W-2026-10-07-clade-cloud-hook-remote-guard/evidence/）。
 # 讀不到 / 跑不動一律靜默（fail-open）：SessionStart 的噪音成本高於漏報一次。
 
 set -uo pipefail
 cat > /dev/null
+case "${CLAUDE_CODE_REMOTE:-}" in '' | 0 | false) ;; *) exit 0 ;; esac
 
 ROOT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 HOME_SCRIPT="${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/worktree-freshness.ts"

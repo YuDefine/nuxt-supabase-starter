@@ -8,17 +8,17 @@ paths:
   - 'vendor/scripts/dev-session*'
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-dev-watch.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Nuxt Dev Watch
 
-**核心命題**：clade governance 依 consumer 設定產生治理目錄（`.claude/` / `.agents/` / `.codex/` / `.cursor/` / `.clade/`），含大量檔案。chokidar 預設 watch consumer cwd 全部 → nuxt main process fd 用量爆衝 → libuv `uv_spawn` 對 nitropack `handlersMeta` 的 esbuild worker spawn 撞 `EBADF` cascade，dev server 完全 paralyze。clade 必須提供 baseline ignore，consumer 對齊即可。
+**核心命題**：clade governance 依 consumer 設定產生治理目錄（`.claude/` / `.agents/` / `.codex/` / `.clade/`），含大量檔案。chokidar 預設 watch consumer cwd 全部 → nuxt main process fd 用量爆衝 → libuv `uv_spawn` 對 nitropack `handlersMeta` 的 esbuild worker spawn 撞 `EBADF` cascade，dev server 完全 paralyze。clade 必須提供 baseline ignore，consumer 對齊即可。
 
 > Cookbook 範本：`vendor/snippets/nuxt-dev-watch/`。
 >
 > Audit signal：`scripts/audit-nuxt-dev-watch.ts`。
 >
-> Pitfall：`docs/pitfalls/2026-05-28-nuxt-chokidar-watch-fd-exhaustion-ebadf.md`。
+> Pitfall：[[pitfall-nuxt-chokidar-watch-fd-exhaustion-ebadf]]。
 
 ## MUST
 
@@ -38,7 +38,6 @@ paths:
 - `.claude/**`
 - `.agents/**`
 - `.codex/**`
-- `.cursor/**`
 - `.clade/**`
 - `.spectra/**`（legacy，spectra 退場前的 consumer 仍有殘留目錄）
 

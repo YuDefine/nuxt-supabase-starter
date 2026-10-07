@@ -4,8 +4,8 @@ paths: ['rules/core/**', 'vendor/scripts/**', 'capabilities/core/**', 'claude-md
 ---
 <!-- Clade native rule; source: rules/core/checker-subagent.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 # Checker Subagent（高擴散半徑改動複核）
 

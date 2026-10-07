@@ -3,7 +3,7 @@ description: 資料庫存取模式（Supabase client/server 分工）
 paths: ["app/**/*.{vue,ts}", "packages/*/app/**/*.{vue,ts}", "server/**/*.ts", "packages/*/server/**/*.ts"]
 ---
 <!-- Clade native rule; source: rules/modules/db-runtime/cf-workers/database-access.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Database Access Pattern
 

@@ -3,7 +3,7 @@ description: Playwright E2E webServer MUST CI-safe — 優先 @nuxt/test-utils g
 paths: ['playwright.config.ts', 'playwright.config.js', '**/playwright.config.ts']
 ---
 <!-- Clade native rule; source: rules/core/playwright-webserver.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Playwright webServer 必 CI-safe
 

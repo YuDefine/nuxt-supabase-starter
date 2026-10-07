@@ -3,7 +3,7 @@ description: Consumer dev server port 中央分配 + audit（避免跨 consumer 
 paths: ['package.json', 'nuxt.config.ts', 'registry/consumers.json', 'registry/consumers.schema.json']
 ---
 <!-- Clade native rule; source: rules/core/dev-port-allocation.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Dev Port 中央分配
 
@@ -45,7 +45,7 @@ Dev port 由 clade 集中分配：registry 分配、規約強制宣告、audit �
   ```
 
 - **MUST** Token 用 `cfat_*` account API token，**絕非** `cfut_*`（Worker token）或 `r_*`（cert.pem 簽發的 tunnel-scoped token）
-  - 來源：<consumer-j> `.env.local` 的 `CLOUDFLARE_API_KEY`
+  - 來源：某 consumer `.env.local` 的 `CLOUDFLARE_API_KEY`
   - 必備權限：`Cloudflare Tunnel:Edit`（account）+ `SSL and Certificates:Edit`（zone）+ `DNS:Edit`（zone）
   - **必要**：`SSL and Certificates:Edit` — plugin 必跑 `/zones/<id>/ssl/certificate_packs` GET 確認 edge cert，403 會 re-throw crash Nuxt（即使 Cloudflare Universal SSL 已涵蓋）
 
@@ -85,7 +85,7 @@ Dev port 由 clade 集中分配：registry 分配、規約強制宣告、audit �
 
 ### 4. Worktree 維度
 
-同一 consumer 的 N 個 worktree（[[worktree-default]]）各跑 dev，會撞 §1 那個唯一的 registry port。
+同一 consumer 的 N 個 worktree（[[wt]] 的 `rules/改tracked檔前先隔離判準.md` Rule 1）各跑 dev，會撞 §1 那個唯一的 registry port。
 
 分配規則：**worktree 的 port = 各宣告 port + 一個 worktree 專屬 offset N**。N 依序取自兩個池：
 
@@ -98,7 +98,8 @@ band 存在是為了讓「分不到號碼就退回 base port」永遠不必發�
 - **MUST** main working tree 維持 §1 的顯式宣告不變 — `package.json` 的 `--port <base 字面數字>` 一個字都不改。offset 只存在於 worktree，由 `wt-helper` 在 `wt-helper add` 時分配
 - **MUST** 分配與讀取都走 `vendor/scripts/lib/worktree-dev-port.ts`（唯一 SoT），**NEVER** 在任何消費端自己算一份
 - **NEVER** 手動挑 worktree port。`pickDevPortOffset`（base 池）與 `pickBandPortOffset`（band）同時排除：超出 `[base, base+9]`、撞到本 consumer 另一個宣告 port、已被 sibling worktree 佔用。宣告多個 port 的 consumer 帶寬較窄
-- Offset 記錄在 `~/.cache/clade/dev-port/<consumer>/<slug>.json`，**不**寫進 repo；worktree 目錄消失即釋放
+- Offset 記錄在 `~/.cache/clade/dev-port/<consumer>/<basename>--<sha256(resolve(wtPath))>.json`（equal-basename 姊妹樹各持一筆；舊 `<basename>.json` 共享檔名仍認得、只讀不覆寫——讀不出或屬於別人的內容略過並留 note，本樹的 pre-schema `{wtPath, offset}` claim 在下次分配時升格保留原 offset、兌現不了就隔離），**不**寫進 repo；worktree 目錄消失即釋放，`releaseWorktreeDevPorts` 做明確刪除
+- 分配／釋放由同目錄 `.allocation.lock` 序列化：鎖記持有人 pid，holder 已死的殘鎖自動接手，讀不出持有人的 NEVER 搶——busy 錯誤會附移除指引；紀錄寫入走 staging→link 的 atomic publish
 - 兩池都用盡時 `wt-helper dev` **fail-loud 拒絕啟動**，**NEVER** fallback 到 base port — 那正是本節要防的撞車
 - **NEVER** 用 `pnpm <script> -- --port <N>` 起 worktree 的 dev server（多出來的 `--` 會讓 Nuxt
   丟掉 port，落回 script 寫死的 base port，見 §1）；正確寫法是 `pnpm <script> --port <N>`

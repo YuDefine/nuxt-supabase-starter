@@ -8,7 +8,7 @@
 /**
  * evlog client identity helper — setIdentity / clearIdentity 黏 auth state
  *
- * Source: clade docs/evlog-master-plan.md § 5 (post-M3a-<consumer-d> 重寫)
+ * Source: clade docs/evlog-master-plan.md § 5 (post-M3a-yuntech 重寫)
  *
  * 重要：evlog/nuxt module **自動處理**：
  * - server-side `/api/_evlog/ingest` handler 註冊（透過 ModuleOptions.transport.endpoint）

@@ -1,10 +1,10 @@
 ---
 description: Session task 與 merge／publish 遇到其他 writer 時的四層 contention probe；常駐 [[session-tasks]] 只留 fail-closed 摘要
-paths: ['tasks/**', 'HANDOFF.md', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/pitfalls/**', '.clade/claims/**', '.clade/flow/**']
+paths: ['tasks/**', 'HANDOFF.md', 'ROADMAP.md', 'docs/tech-debt.md', '.clade/claims/**', '.clade/flow/**']
 ---
 <!-- Clade native rule; source: rules/core/session-tasks.concurrent-writers.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Session Tasks — concurrent writers
 

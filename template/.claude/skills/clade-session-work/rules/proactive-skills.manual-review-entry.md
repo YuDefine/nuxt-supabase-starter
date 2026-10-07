@@ -3,8 +3,8 @@ description: 進入 tasks.md `## 人工檢查` 階段的入口規約——auto-t
 paths: ['tasks/**', 'specs/plans/**', 'screenshots/**']
 ---
 <!-- Clade native rule; source: rules/core/proactive-skills.manual-review-entry.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 # Proactive Skills — 人工檢查入口
 
@@ -13,7 +13,7 @@ paths: ['tasks/**', 'specs/plans/**', 'screenshots/**']
 ## Auto-triage + `flow gates`
 
 1. 逐條讀 pending leaf item 的 annotation，判斷阻塞原因並自行推進：
-   - `（fix-requested）` → dispatch `/wt` 修 code → merge-back → 重拍截圖 → strip annotation
+   - `（fix-requested）` → 交 `wt` 建立隔離環境修 code → merge-back → 重拍截圖 → strip annotation
    - evidence missing → 走 [[agent-self-verification]] fallback chain 收 evidence
    - `（issue:）` 未 triage → triage issue 走 (A)-(E) 路由；結論要人接手才 `flow ask`（[[manual-review]] § 要人接手的結論：開卡，不寫 annotation）
 
@@ -45,7 +45,7 @@ paths: ['tasks/**', 'specs/plans/**', 'screenshots/**']
 1. 該 consumer 對應 `.env*` 有 `TUNNEL_HOSTNAME=<host>` → `https://<host>/<path>`。tunnel 本來就是真 HTTPS 公開 origin，優先用它
 2. `http://localhost:<port>` **只給 agent 自己探測**，不要出現在給人的 item 敘述裡
 
-沒有 tunnel（`.env*` 無 `TUNNEL_HOSTNAME`）時 `[review:ui]` **沒有可給人的 host**：propose 階段就向使用者提出「先替此 consumer 設 tunnel」；該驗收若不需要人的判斷（主觀視覺、真機、收信這類只能人做的不算），也可以改成 `[verify:*]` 由 agent 跑。**NEVER** 退回 localhost，**NEVER** 加 `@no-manual-review-check[no-tunnel-configured]` 繞過。
+沒有 tunnel（`.env*` 無 `TUNNEL_HOSTNAME`）時 `[review:ui]` **沒有可給人的 host**：規劃階段（寫 plan package／tasks 時）就向使用者提出「先替此 consumer 設 tunnel」；該驗收若不需要人的判斷（主觀視覺、真機、收信這類只能人做的不算），也可以改成 `[verify:*]` 由 agent 跑。**NEVER** 退回 localhost，**NEVER** 加 `@no-manual-review-check[no-tunnel-configured]` 繞過。
 
 ## `[discuss]` items 不在人眼驗收主流程
 

@@ -77,9 +77,6 @@ export function unknownReason(
 export type WorktreeKind =
   | 'merged'
   | 'merged-with-wip'
-  | 'archived-change'
-  | 'active-stale'
-  | 'active-fresh'
   | 'unlanded-unknown'
   | 'unlanded-content-landed'
   | 'unlanded-partial'

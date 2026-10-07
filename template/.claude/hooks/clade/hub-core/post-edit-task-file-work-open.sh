@@ -28,6 +28,7 @@ FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_response.fileP
 [ -z "$FILE_PATH" ] && exit 0
 
 # `tasks/<something>.md`, excluding the two single-file exceptions the rule names.
+# (`tasks/archive/` only exists in consumers not yet migrated to the plan/truth lifecycle.)
 case "$FILE_PATH" in
   */tasks/*.md | tasks/*.md) ;;
   *) exit 0 ;;

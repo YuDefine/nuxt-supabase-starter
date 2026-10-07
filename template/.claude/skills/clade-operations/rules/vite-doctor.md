@@ -3,7 +3,7 @@ description: 動到 nuxt.config / vite.config / package.json scripts / doctor pr
 paths: ['nuxt.config.*', 'vite.config.*', 'package.json', 'vendor/doctor-shared/**', 'packages/**/nuxt.config.*', 'packages/**/package.json']
 ---
 <!-- Clade native rule; source: rules/core/vite-doctor.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Vite Doctor（framework diagnostic scanner）
 

@@ -33,14 +33,12 @@ stash audit 的寫入欄位。**`park` / `next` 都會走到 Step 3**，本檔�
 | `mergedToMain: true` + `userWip: 0` | `merged` | `cleanup` — `node vendor/scripts/wt-helper.ts cleanup <slug>` |
 | `mergedToMain: true` + `userWip > 0` | `merged-with-wip` | `verify-then-cleanup` — **NEVER 直接 cleanup**。先走 [[wip-orphan-recovery]] 的 SOP（git status 攤平 → 半成品痕跡掃描 → 完成度硬驗 → git log 脈絡 → 危險項識別 → 收尾分流），確認 WIP 去留後才 cleanup |
 | `mergedToMain: false` + 該 work 的 flow 卡已 `done` | `done-work` | `verify-then-cleanup` — 工作已收尾但 branch 未 merged-into-main，先 `git log -1 <branch>` 檢視 commits 是否已含在 squash；若是 → `wt-helper cleanup <slug>` |
-| `mergedToMain: false` + 該 work 的 flow 卡仍 active + `daysOld > 7` | `active-stale` | `merge-back-or-resume` — 依 mergeBackSafety 分流（`landable` → 驗收後登記就緒；`ptb-*` → Step 2B.4.5） |
-| `mergedToMain: false` + change 仍 active + `daysOld <= 7` | `active-fresh` | `keep` — 在用中；若需 land 仍依 mergeBackSafety 分流 |
-| `mergedToMain: false` + 兩個 change 目錄都不在 + `aheadCount > 0` + `contentLanded: 'no' \| 'unknown'` | `unlanded` | `merge-back-or-resume` — branch 有未進 main 的 commit，`git log --oneline main..<branch>` 檢視後決定 merge-back 或續做 |
+| `mergedToMain: false` + `aheadCount > 0` + `contentLanded: 'no' \| 'unknown'` | `unlanded` | `merge-back-or-resume` — branch 有未進 main 的 commit，`git log --oneline main..<branch>` 檢視後決定 merge-back 或續做 |
 | 同上 + `contentLanded: 'yes'` | `unlanded-content-landed` | `verify-then-cleanup` — ancestry 說未 land，但候選 commit 的**內容已 100% 在 main**（squash-merge 的常態）。**NEVER 對它跑 merge-back** |
 | 同上 + `contentLanded: 'partial'` | `unlanded-partial` | `merge-back-or-resume` — 一部分內容已在 main。**MUST 逐檔人工比對，NEVER 整包 merge-back** —— 已落地那半在 main 上可能更新，整包套會覆蓋掉它 |
-| `mergedToMain: false` + 兩個 change 目錄都不在 + `aheadCount === 0` + `userWip > 0` | `orphan-with-wip` | `verify-then-cleanup` — 沒有 commit 會遺失，但未 commit 檔會。**MUST** 先走 [[wip-orphan-recovery]] SOP |
-| `mergedToMain: false` + 兩個 change 目錄都不在 + `aheadCount === 0` + `userWip === 0` | `orphan` | `cleanup` — 0 ahead + 0 WIP，無 commit 可遺失（可證，非啟發式） |
-| `mergedToMain: false` + 兩個 change 目錄都不在 + `aheadCount` 取不到 | `unlanded-unknown` | `verify-then-cleanup` — 取值失敗，**NEVER** 當成空 branch；先手動 `git log --oneline main..<branch>` 確認 |
+| `mergedToMain: false` + `aheadCount === 0` + `userWip > 0` | `orphan-with-wip` | `verify-then-cleanup` — 沒有 commit 會遺失，但未 commit 檔會。**MUST** 先走 [[wip-orphan-recovery]] SOP |
+| `mergedToMain: false` + `aheadCount === 0` + `userWip === 0` | `orphan` | `cleanup` — 0 ahead + 0 WIP，無 commit 可遺失（可證，非啟發式） |
+| `mergedToMain: false` + `aheadCount` 取不到 | `unlanded-unknown` | `verify-then-cleanup` — 取值失敗，**NEVER** 當成空 branch；先手動 `git log --oneline main..<branch>` 確認 |
 | 任一條件 + `hasActiveClaim: true` + `userWip > 0` | `active-session-wip` | `keep` — 有活著的 session claim，未 commit 內容屬該 session。**NEVER** 當 orphan 接手，per [[wip-orphan-recovery]] 禁止事項第一條；原判定留在 `underlyingKind` |
 | 任一條件 + `hasActiveClaim: true` + `userWip === 0` | `active-session-claimed` | `keep` — 有活著的 session claim，此刻剛好 0 檔未 commit。**`userWip` 是瞬時值，NEVER 讀成「這條 worktree 沒有主人」**；原判定留在 `underlyingKind` |
 
@@ -77,7 +75,7 @@ audit 寫進 HANDOFF.md 時每條 wt 後綴 `(mergeBackSafety: <landable|ptb-rec
 
 ### 3.2 Stash audit
 
-讀同一次 handoff-scan 輸出的 `worktreeStash.raw.stashes[]`（script 內部代跑 `stash-reconcile.ts --include-all --json`，並對 `.spectra/stash-meta-*.json` sidecar 做雙向比對）。
+讀同一次 handoff-scan 輸出的 `worktreeStash.raw.stashes[]`（script 內部代跑 `stash-reconcile.ts --include-all --json`，並對 `stash-meta-*.json` sidecar（`.clade/stash/`，舊落點 `.spectra/`）做雙向比對）。
 
 對 `raw.stashes[*]` **每一筆**寫入 audit 段（不過濾 archived-only 或 stale>7d；user 要求「所有 stash 都有狀況與下一步建議」）：
 - ref（`stash@{N}`）

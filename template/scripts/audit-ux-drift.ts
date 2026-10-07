@@ -46,8 +46,10 @@
  * another enum on the same subject is dropped (see dropSubsumed) — enum value
  * sets overlap heavily.
  *
- * Configuration: reads `spectra-advanced.config.json` (or legacy `spectra-ux.config.json`)
- * from the project root. Falls back to Nuxt-style defaults when no config is present.
+ * Configuration: reads `ux-drift.config.json` from the project root; the retired
+ * spectra-era names `spectra-advanced.config.json` and `spectra-ux.config.json`
+ * still resolve as transitional fallbacks. Falls back to Nuxt-style defaults
+ * when no config is present.
  *
  * Usage:
  *   node scripts/audit-ux-drift.ts             # full repo scan (default)
@@ -61,8 +63,8 @@
  * Suppress per-file: `// ux-drift-audit: ignore <EnumName>`
  *
  * See the `ux-completeness` rule (§ Exhaustiveness Rule). Its projected path depends on the
- * agent: `.claude/rules/ux-completeness.md` (Claude Code); Codex and Cursor get their own
- * projection under `.agents/` / `.cursor/rules/`. Source: clade `rules/core/ux-completeness.md`.
+ * agent: `.claude/rules/ux-completeness.md` (Claude Code); Codex gets its own projection under
+ * `.agents/`. Source: clade `rules/core/ux-completeness.md`.
  */
 
 import { spawnSync } from 'node:child_process'
@@ -142,14 +144,19 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 // Maximum directory levels to walk upward when hunting for a project root
-// marker (spectra-advanced.config.json or .git). 8 is generous enough for deeply
+// marker (ux-drift.config.json or .git). 8 is generous enough for deeply
 // nested scripts/ layouts while still failing fast on malformed installs.
 const MAX_WALK_DEPTH = 8
 
-// Prefer the current name; keep legacy name as fallback (matches claims-lib.ts
-// dual-name resolution kept from the spectra-ux → spectra-advanced rename; both names are
-// legacy read-path values — consumers still hold either file, so NEVER drop one).
-const CONFIG_NAMES = ['spectra-advanced.config.json', 'spectra-ux.config.json']
+// Prefer the current (post-spectra) name; the two spectra-era names stay as
+// transitional read-paths — consumers still hold either file (and <consumer-a>'s
+// custom paths.types lives in one), so NEVER drop a name while a fleet
+// checkout can still contain it. Order is priority order.
+const CONFIG_NAMES = [
+  'ux-drift.config.json',
+  'spectra-advanced.config.json',
+  'spectra-ux.config.json',
+]
 
 function resolveConfigPath(dir: string): string | null {
   for (const name of CONFIG_NAMES) {
@@ -160,10 +167,10 @@ function resolveConfigPath(dir: string): string | null {
 }
 
 function findRepoRoot(): string {
-  // Prefer spectra-advanced.config.json as the root marker — it's the canonical
-  // anchor for "where spectra-advanced was installed". This handles nested project
-  // layouts (e.g. starter templates inside a parent monorepo) where .git
-  // would walk past the actual project root.
+  // Prefer the audit config file as the root marker — it's the canonical
+  // anchor for "where the clade-managed tooling was installed". This handles
+  // nested project layouts (e.g. starter templates inside a parent monorepo)
+  // where .git would walk past the actual project root.
   let dir = __dirname
   for (let i = 0; i < MAX_WALK_DEPTH; i++) {
     if (resolveConfigPath(dir)) return dir
@@ -185,7 +192,11 @@ function findRepoRoot(): string {
 const repoRoot = cli.repo ?? findRepoRoot()
 
 const DEFAULT_CONFIG: ScanConfig = {
-  typesDirs: ['shared/types', 'packages/*/shared/types'],
+  // `shared/schemas` sits beside `shared/types` in most of the fleet (8/13
+  // consumers hold the dir; <consumer-j>'s deleted config listed it explicitly,
+  // as does <consumer-d>'s). Dropping it on config loss silently removed
+  // those enums from the audit — see the <consumer-j>#16 0-A Major.
+  typesDirs: ['shared/types', 'shared/schemas', 'packages/*/shared/types'],
   uiDirs: ['app/pages', 'app/components', 'app'],
   uiExtensions: ['.vue', '.ts', '.tsx', '.jsx'],
   serverDirs: ['server', 'shared'],
@@ -1081,7 +1092,7 @@ function emitText(report: Report): void {
       '✗ No tracked type files found in configured types dirs.\n' +
         `  Searched: ${config.typesDirs.join(', ')}\n` +
         '  This likely means the config is missing or typesDirs points to a wrong path.\n' +
-        '  Fix: create spectra-advanced.config.json with correct paths.types, or verify the default typesDirs match your project layout.',
+        '  Fix: create ux-drift.config.json with correct paths.types, or verify the default typesDirs match your project layout.',
     )
     return
   }
@@ -1129,7 +1140,7 @@ function emitText(report: Report): void {
   console.log('  3. Suppress: add `// ux-drift-audit: ignore <EnumName>` near handler')
   console.log()
   console.log(
-    'See the ux-completeness rule — Exhaustiveness Rule (.claude/rules/ux-completeness.md; Codex/Cursor: its projection under .agents/ or .cursor/rules/)',
+    'See the ux-completeness rule — Exhaustiveness Rule (.claude/rules/ux-completeness.md; Codex: its projection under .agents/)',
   )
 }
 

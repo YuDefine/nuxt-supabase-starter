@@ -3,7 +3,7 @@ description: Cloudflare Workers secret 管理規約 — single source of truth =
 paths: [".github/workflows/**/*.yml", "wrangler.toml", "wrangler.jsonc"]
 ---
 <!-- Clade native rule; source: rules/modules/runtime/cf-workers/secrets.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Cloudflare Workers Secrets
 

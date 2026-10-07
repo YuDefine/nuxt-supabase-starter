@@ -18,7 +18,7 @@ paths:
   ]
 ---
 <!-- Clade native rule; source: rules/core/code-style.toolchain.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Code Style — 工具鏈治理
 
@@ -114,8 +114,8 @@ oxfmt 不會自動讀 `.oxfmtignore`（fallback 只有 `.prettierignore` / `.git
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 命令位置出現 prettier × 目標 repo 有 `.oxfmtignore` / `.claude/hub.json` / `package.json` 依賴 `vite-plus` → **exit 2 擋下**。逃生門 `CLADE_ALLOW_PRETTIER=1`（給「只是要在文件裡寫下這個字串」用） |
-| 消費端 | 已安裝該 Claude hook 的 Bash tool call（consumer 與 clade home）；回歸測試 `test/pre-bash-prettier-invocation-gate.test.ts`。Codex／Cursor 的原生攔截接線另行驗證，規約投影本身不代表已安裝 hook |
-| 觸發點 | 本節 `rules/core/code-style.toolchain.md`，依 frontmatter paths 由各 runtime adapter 交付；成因與 fleet 掃描見 `docs/pitfalls/2026-08-28-banned-tool-binary-still-on-path.md` |
+| 消費端 | 已安裝該 Claude hook 的 Bash tool call（consumer 與 clade home）；回歸測試 `test/pre-bash-prettier-invocation-gate.test.ts`。Codex 的原生攔截接線另行驗證，規約投影本身不代表已安裝 hook |
+| 觸發點 | 本節 `rules/core/code-style.toolchain.md`，依 frontmatter paths 由各 runtime adapter 交付；成因與 fleet 掃描見 [[pitfall-banned-tool-binary-still-on-path]] |
 
 ### 禁止依賴全域 vite-plus（hard rule）
 
@@ -202,7 +202,7 @@ node scripts/audit-ci-toolchain-parity.ts --target-node 24
 CI workflow 要拆 step 跑各別 npm script，每個 script 自帶必要 flag：
 
 ```yaml
-# ✅ 正確 — <consumer-b> 模式（mirror this pattern in all consumers）
+# ✅ 正確 — fleet 標準模式（mirror this pattern in all consumers）
 - name: Format check
   run: vp run format:check       # 帶 --ignore-path .oxfmtignore
 
@@ -259,7 +259,7 @@ rm -rf node_modules && pnpm install     # 這次才會真的 resolve 並改寫 l
 
 ```yaml
 # @specformula/node 的 index 靜態 import SqliteDataSource → better-sqlite3，vendored tgz 沒宣告。
-# 移除條件：上游改 lazy import 或宣告 optional peer 並重新 vendor（<consumer-e> TD-0xx）。
+# 移除條件：上游改 lazy import 或宣告 optional peer 並重新 vendor（某 consumer 的 TD-0xx）。
 packageExtensions:
   "@specformula/node":
     dependencies:
@@ -391,7 +391,7 @@ runner 的 `checks/vp-staged.sh` 經 `scripts/pre-commit/staged-targets.ts` 讀 
 **heavy job 一律經 `clade-gate run <label> -- <cmd>` 才受閘。** 光把 label 加進 `CLADE_HEAVY_GATES` 不會讓任何東西受閘。
 systemd user manager 可用、job 是 heavy 且 `agent-workloads.slice` 為 loaded 時，`gate-slot.sh` 透過 `systemd-run --user --scope --slice=agent-workloads.slice` 把 job 放進 agent slice；desk 的 `registry/dev-nodes.json` 宣告 `CPUWeight=10`、`IOWeight=10`、不設 `CPUQuota`，由 `dev-node.ts bootstrap` 產生 unit，`doctor` 同時比對 unit 檔與 live 值。zenbook 未宣告 CPU budget；`--slice=` 可隱式建立已 loaded 的 slice，因此 loaded 不代表 unit 檔存在或符合 SoT。
 
-systemd 252 以上時，每個 gate scope（heavy 與 light）都另帶 `-p CPUWeight=idle`（cgroup `cpu.idle`）：gate 只拿互動 session 沒在用的 CPU，機器滿載時 herdr、agent TUI 的喚醒延遲不再被測試／typecheck 拖長，閒置時批次照樣吃滿全部核心。nice 只在同一個 cgroup 內比較，對兄弟 scope 無效，所以降權**必須**落在 scope 層。systemd 低於 252 不認得 `idle`，此時不帶這個屬性、scope 維持預設權重。`ops/` 下的背景批次 unit（deps-retrace、disk-hygiene、main-align、dev-lease-reaper、agent-placement）同理設 `CPUWeight=idle`，既有的 `Nice=10` 擋不住它們跟 herdr-server 等兄弟 unit 搶 CPU。
+systemd 252 以上時，每個 gate scope（heavy 與 light）都另帶 `-p CPUWeight=idle`（cgroup `cpu.idle`）：gate 只拿互動 session 沒在用的 CPU，機器滿載時 herdr、agent TUI 的喚醒延遲不再被測試／typecheck 拖長，閒置時批次照樣吃滿全部核心。nice 只在同一個 cgroup 內比較，對兄弟 scope 無效，所以降權**必須**落在 scope 層。systemd 低於 252 不認得 `idle`，此時不帶這個屬性、scope 維持預設權重。`ops/` 下的背景批次 unit（deps-retrace、timings-reseed、disk-hygiene、main-align、dev-lease-reaper、agent-placement）同理設 `CPUWeight=idle`，既有的 `Nice=10` 擋不住它們跟 herdr-server 等兄弟 unit 搶 CPU。
 
 `PreToolUse:Bash` 的防漏 hook 只攔 shell 指令位置上的重型工具直呼（例如 `pnpm exec vue-tsc`、
 整套 `vitest`）；引號和 heredoc 的文字不是命令。`pnpm check`、`pnpm test`、`vp check`

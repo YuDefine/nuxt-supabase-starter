@@ -16,80 +16,15 @@ disable-model-invocation: true
 
 # /guide — hub skill 地圖
 
-不確定該用哪個 skill 時打 `/guide`。本 skill 是 router：描述每個 skill 的適用場景與銜接關係，本身不執行任何工作。讀完後直接 invoke 對應 skill。
+不確定該用哪個 skill 時打 `/guide`：把使用者的處境對到本 repo 實際裝了的一支 skill，直接交給它；本 skill 不執行任何工作。
 
-## 先看這個：本表分層，不是每一支你都裝了
+# SOP
 
-skill 由 consumer manifest 的 `modules` 決定裝哪些（canonical `.clade/manifest.json`，legacy `.claude/hub.json` 仍可讀）。下表的條目帶標記時，**只有宣告對應 module 的 repo 才有那支 skill**——沒宣告就是打了也不存在，不是壞掉：
+## Phase 1 -- 確認本 repo 實際裝了哪些 skill
 
-| 標記 | 需要 manifest 宣告 | 沒宣告的 repo |
-| --- | --- | --- |
-| 〔aixbdd〕 | `modules.capabilities` 含 `"aixbdd"` | 沒有 `/specify`、`/tasks`、`/implement` 這條需求管線。待辦走 `tasks/` + HANDOFF / tech-debt / ROADMAP，`/work-loop` 照樣能跑 |
-| 〔specformula〕 | `modules.capabilities` 含 `"specformula"` | 沒有 `.feature` / `isa.yml` 的 BDD 執行層 |
-| 〔nuxt〕 | `modules.framework` = `"nuxt"` | 沒有 Nuxt 專用的稽核與 dev 工具 |
-| 〔node〕 | `modules.ecosystem` 含 `"node"` | 沒有 `/version-upgrade`（它綁 npm/pnpm，不是綁 Nuxt） |
+1. READ 讀取當前 repo 的 consumer manifest（`.clade/manifest.json`，legacy `.claude/hub.json`）的 `modules`，記下宣告了哪些 capabilities、framework 與 ecosystem。
 
-無標記的是 hub-core，每個 consumer 都有。**NEVER** 因為本表列了某支就斷定這裡裝了它——以該 repo 的 manifest 為準。
+## Phase 2 -- 把使用者處境對到一支 skill
 
-## 主流程（idea → shipped）
-
-一條 change 的完整生命週期，依序銜接：
-
-| 階段 | Skill | 這一站做什麼 |
-| --- | --- | --- |
-| 提案〔aixbdd〕 | `/specify` | lifecycle repo（有 `specs/truth/work-lifecycle.md`）：先 `flow plan open` 再填 `spec.md`。未遷移 consumer：建 `specs/plans/NNN-<slug>/` |
-| 澄清〔aixbdd〕 | `/clarify-over-specs` | 對 `spec.md` 的模糊處逐項收斂 |
-| 驗收 Gherkin〔aixbdd〕 | `/spec-by-example` | 產 `features/acceptance/**` |
-| 設計〔aixbdd〕 | `/technical-research`、`/system-analysis`（委派 `/api-plan`、`/data-plan`、`/ui-plan`） | 定 techstack 與系統設計；UI 需求在此產靜態雛形 |
-| 規格落地〔aixbdd〕 | `/dsl-refine` | 把句型寫進 `specs/truth/features/**` 與 `dsl.md` |
-| 拆任務〔aixbdd〕 | `/tasks` | 產 plan package 的 `tasks.md`；開工前 `flow open <slug> --origin tasks:<path>` |
-| 實作〔aixbdd〕 | `/implement`（`[BDD-GREEN]` 委派 `/bdd`） | 依 `tasks.md` 逐 phase 落 code 與測試 |
-| 人工檢查 | `/review scan`（＝`flow gates --repo-only`）看哪些卡等人判 | UI / 資料類 manual review |
-| 提交 | `/commit` | 依功能分組走品質閘門提交（所有 commit 的唯一入口） |
-
-〔aixbdd〕列的名稱是上游 skill 名。可直接叫的只有 `/specify`、`/clarify`、`/system-analysis`、`/implement` 與 `work-route`；`/clarify-over-specs`、`/spec-by-example`、`/ui-plan`、`/technical-research`、`/dsl-refine`、`/tasks`、`/bdd` 沒有同名 slash 入口，由 `work-route` 載入。
-
-不確定專案當前該走哪一站：先讀 `specs/plans/` 最新的 plan package 與它的 `tasks.md`，再按使用者目標接續。沒宣告 aixbdd 的 repo 整條主流程不適用——那裡的生命週期是「待辦來源 → `tasks/<date>-<slug>.md` → `/wt` → `/commit`」。
-
-## On-ramps（從症狀進入）
-
-- **遇到 bug / 異常行為** → 先查根因（`/wt` 隔離後調查）；動到規格才回 `/specify`〔aixbdd〕
-- **要看 UI 畫面 / 截圖驗證** → `/review screenshot`（統一截圖入口；第一手是 Pi `--model gemini --effort high`，見該 skill）
-- **專案還沒有可重跑的 app control／feature map** → `/verification create`（建立 consumer-owned `verify-<app>` skill）
-- **既有 verification skill／feature map 要對帳 source 與 live behavior** → `/verification maintain`（`clean` 是零 branch／零 commit／零 PR 的成功結果）
-- **要動 code 而還在 main working tree** → `/wt`（開 worktree 隔離；`/wt A: ... B: ...` 可並行多條 task）
-- **implementation plan 內有多個獨立 task 想並行** → 讀 `capabilities/core/references/implement-executor/`（同 session 派 subagent；跨 change 的並行仍走 `/wt`）
-- **session 要收尾 / 交接** → `/handoff`（有 in-progress 工作寫交接；沒有則整理 HANDOFF.md 推薦 outstanding）
-- **要把待辦無人值守推完**（plan package / tasks 檔 / HANDOFF / tech-debt / ROADMAP）→ `/work-loop`（自主推進 loop；一次性任務不適用）
-- **外部新資訊要改需求** →〔aixbdd〕lifecycle repo 開新的 `W-…` package；未遷移 consumer 才開 `NNN-<slug>`。舊 plan package 是歷史，**NEVER** 回頭覆寫
-- **問規格內容** → 直接讀 `specs/truth/**`（對非 owner skill 唯讀）與該 plan package 的 `spec.md`
-- **安全視角掃 changed code** → `/security-review`
-
-## 歸檔
-
-`/review archive` 與 `/review screenshots` **不再**是必做 archive：
-
-- `/review archive` — 不寫 `docs/manual-review-archive.md`；完成項留在 work package
-- `/review screenshots` — 不 rotate；不要把 topic 搬進 `_archive/`
-
-`retired-work.jsonl` 是 live 機器謂詞，照常寫入。
-
-## 品質 / 稽核類（standalone）
-
-- `/impeccable` — UI 設計與修改閉環（無參數時依 critique 快照、git 變更與 detector 推下一支指令；閉環規約見 design-checkpoint）
-- `/nuxt-data-audit`〔nuxt〕 — 審計 Nuxt data-fetching 模式與效能 golden path
-- `/nuxt-data-audit schema`〔nuxt〕 — 偵測 client-server schema mismatch（review 前 / archive 前跑）
-
-## User-invoked（model 不會自動觸發，要自己記得）
-
-以下 skill 已設 `disable-model-invocation`——model 看不到它們的 description，**必須手動打指令**：
-
-- `/version-upgrade`〔node〕 — 單 consumer outdated batch 或跨 fleet 單套件 sweep 升級（副作用大，故不讓 model 自主觸發）
-- `/vite-tunnel`〔nuxt〕 — 建 Cloudflare Named Tunnel 給 dev server（跨裝置 OAuth / webhook 測試）
-- `/guide` — 本 skill
-
-## Commit 相關邊界
-
-- 一般 commit 一律 `/commit`（多閘門品質流程）
-- plan package 檔案的專屬 commit **同樣走 `/commit`**，在 argument 寫明「只 commit `specs/plans/<NNN-slug>/` 與該工作觸動的實作檔」——`/spectra-commit` 等 spectra 家族在 [[proactive-skills]] § Sub-skill 禁用清單上，不改派
-- 兩者都用 `git commit --only` 隔離別 session 的 staged 內容——不要繞過 skill 手打 `git add + git commit`
+1. THINK 先讀取 `rules/skill路由判準.md`，排除 manifest 沒宣告的 module 標記列，再依使用者描述選主流程、症狀入口、user-invoked 或 commit 其中一列。
+2. DELEGATE 直接 invoke 選定的 skill；選中 user-invoked 那幾支時，改為告訴使用者要手動打的指令。

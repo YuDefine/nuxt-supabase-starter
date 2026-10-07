@@ -3,19 +3,19 @@ description: Nuxt 導航 loading 回饋 golden path — app.vue 必掛 NuxtLoadi
 paths: ['app/app.vue', 'packages/*/app/app.vue', 'app/pages/**/*.vue', 'packages/*/app/pages/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'app/plugins/**/*.ts', 'packages/*/app/plugins/**/*.ts', 'app/composables/use*Loading*.ts', 'packages/*/app/composables/use*Loading*.ts', 'app/stores/ui.ts', 'packages/*/app/stores/ui.ts']
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/page-loading-golden-path.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Nuxt 導航 Loading Golden Path（實作階段強制）
 
 最常見的兩個破洞：`app.vue` 沒掛 `<NuxtLoadingIndicator>`（路由切換零回饋），以及頁面用頂層 **blocking `await useFetch`** 抓主資料（卡住 route `setup()`，頁面自己的 skeleton 沒機會顯示，使用者盯空白）。
 
-Reference impl = <consumer-b>（`app/app.vue` + `app/plugins/page-loading.client.ts` + `app/composables/usePageLoading.ts` + `app/stores/ui.ts`），但不含它自刻 bar 與硬編碼 `bg-gray-*` 的 warts。Cookbook：`~/offline/clade/vendor/snippets/nuxt-page-loading/`。與 [[nuxt-ui-mcp]]、[[nuxt-ui-conventions]]、[[development]] § Nuxt UI Color Mode 並列，範圍不重疊。
+Reference impl 檔案形狀 = `app/app.vue` + `app/plugins/page-loading.client.ts` + `app/composables/usePageLoading.ts` + `app/stores/ui.ts`（去識別化後的既有 consumer 實作；不含它自刻 bar 與硬編碼 `bg-gray-*` 的 warts）。Cookbook：`~/offline/clade/vendor/snippets/nuxt-page-loading/`。與 [[nuxt-ui-mcp]]、[[nuxt-ui-conventions]]、[[development]] § Nuxt UI Color Mode 並列，範圍不重疊。
 
 ## 三層架構（Tier 1/2 是 MUST，Tier 3 OPTIONAL）
 
 ### Tier 1（MUST）— `<NuxtLoadingIndicator />`
 
-`app.vue` 的 `<UApp>` 內、`<NuxtLayout>` 前掛 `<NuxtLoadingIndicator />`。**MUST NOT** 自刻 top progress bar 跟它重複（<consumer-b> 的 `GlobalLoadingBar` 是反例）。
+`app.vue` 的 `<UApp>` 內、`<NuxtLayout>` 前掛 `<NuxtLoadingIndicator />`。**MUST NOT** 自刻 top progress bar 跟它重複（既有 consumer 的 `GlobalLoadingBar` 是反例）。
 
 ### Tier 2（MUST）— 非阻塞 fetch + in-content loading
 

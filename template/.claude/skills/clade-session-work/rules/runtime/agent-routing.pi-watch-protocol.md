@@ -1,6 +1,6 @@
 ---
 description: claude native dispatch and watch controls；具名模型與 UI 角色由共通 routing table 決定
-paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', '.claude/agents/**', 'screenshots/**/progress.json']
+paths: ['specs/plans/**/tasks.md', 'specs/plans/**/design.md', '.claude/agents/**', 'screenshots/**/progress.json']
 ---
 <!-- Clade native rule; source: adapters/claude/instructions/rules/core/agent-routing.pi-watch-protocol.md; edit canonical source -->
 

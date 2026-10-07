@@ -1,6 +1,6 @@
 ---
 description: Codex 模型經 Pi machine dispatch 提出問題時的攔截、評估、代答或升級 protocol；觸及工作計畫 / screenshot 情境時 path-scoped 載入
-paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', '.claude/agents/**', 'screenshots/**/progress.json']
+paths: ['specs/plans/**/tasks.md', 'specs/plans/**/design.md', '.claude/agents/**', 'screenshots/**/progress.json']
 ---
 <!-- Clade native rule; source: adapters/claude/instructions/rules/core/agent-routing.pi-input-intercept.md; edit canonical source -->
 

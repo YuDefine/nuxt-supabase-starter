@@ -12,7 +12,7 @@ paths:
   - 'scripts/register-consumer.ts'
 ---
 <!-- Clade native rule; source: rules/core/golden-path-onboarding.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Golden Path Onboarding
 

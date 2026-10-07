@@ -36,7 +36,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -131,16 +131,6 @@ function activeWorkDirs(cwd: string) {
     )
   }
 
-  const legacyRoot = join(cwd, 'openspec', 'changes')
-  if (existsSync(legacyRoot)) {
-    roots.push(legacyRoot)
-    dirs.push(
-      ...readdirSync(legacyRoot)
-        .filter((name) => name !== 'archive')
-        .map((name) => join(legacyRoot, name))
-        .filter((path) => statSync(path).isDirectory()),
-    )
-  }
   return { roots, dirs }
 }
 
@@ -286,9 +276,7 @@ if (invokedAsCli()) {
     const report = {
       status: 'infrastructure-error',
       scope: {
-        roots: [join(process.cwd(), 'specs/plans'), join(process.cwd(), 'openspec/changes')].filter(
-          existsSync,
-        ),
+        roots: [join(process.cwd(), 'specs/plans')].filter(existsSync),
         patterns: ['*/{system-analysis,design,proposal,plan}.md'],
         mode: 'filesystem',
       },

@@ -1,6 +1,6 @@
 <!-- Clade native rule; source: rules/core/threshold-remediation.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 # Threshold Remediation（門檻處置的幅度紀律）
 
@@ -29,7 +29,7 @@ every session always-load。
 
 - **NEVER 調門檻當處置**——那是放寬管自己的判定基準，且不解決成長率。
 - **NEVER 用「本輪先降一部分、剩下的下輪再說」收工**：下一輪讀到的是「已在門檻內」，沒有任何欄位
-   記得還欠多少。要分批 MUST 當輪就把剩餘量寫進 `docs/tech-debt.md` 或 `HANDOFF.md`，帶具體數字。
+   記得還欠多少。要分批 MUST 當輪就把剩餘量寫進承載這件事的 plan § Open work（lifecycle repo，見 [[follow-up-register]] § 直接登記）或 `docs/tech-debt.md`／`HANDOFF.md`（未遷移 consumer），帶具體數字。
 - **NEVER 把「warn 不見了」當驗收**：warn 的消失只證明跨過那一格，本規約要的是餘裕。
 
 ## Red Flags（發現自己在想這些 = 停下來重算）

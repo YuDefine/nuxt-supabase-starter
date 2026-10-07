@@ -9,7 +9,7 @@ description: "Commit, CI, release, and repository delivery rules. Use when commi
 
 - READ 若要讀或改 `.github/workflows/**`、`.github/actions/**`，讀取 `rules/ci-workflow.md`
 - READ 若要讀或改 `HANDOFF.md`、`tasks/**`、`.clade/claims/**`、`.clade/work-loop/**`，讀取 `rules/commit.detail.md`
-- READ 若要讀或改 `tasks/**`、`specs/plans/**`，讀取 `rules/commit.trunk-gates.md`
+- READ 若要讀或改 `tasks/**`、`specs/plans/**`、`docs/plans/**`，讀取 `rules/commit.trunk-gates.md`
 - READ 若要讀或改 `vendor/scripts/wt-batch.ts`、`capabilities/core/skills/commit/**`、`capabilities/core/skills/wt/**`、`capabilities/core/skills/handoff/**`、`capabilities/core/skills/gh-ci-watch/**`、`.github/workflows/**` 等 8 處（全表見 rules/_index.md），讀取 `rules/github-flow.md`
 - READ 若要讀或改 `.github/workflows/**`、`registry/consumers.json`，讀取 `rules/self-hosted-runner.md`
 

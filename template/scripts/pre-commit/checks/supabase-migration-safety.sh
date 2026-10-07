@@ -14,7 +14,10 @@
 #   2) Out-of-order timestamp 檢查
 #      新增 / rename 的 migration timestamp 必須晚於 origin/main 上的 latest
 #      （supabase db push 預設拒絕 out-of-order，會讓 production deploy 紅燈）
-#   3) supabase db lint --level warning（warn-only，不擋 commit）
+#   3) 新增 migration 的風險分類（warn-only）：跑 classify-migrations.ts，非 online_safe 且
+#      檔內沒有 `-- Migration risk:` header 時警告——分類從 deploy 前提早到 commit，
+#      與 migration 是 `migration new` 手寫還是 declarative 產生無關
+#   4) supabase db lint --level warning（warn-only，不擋 commit）
 
 set -euo pipefail
 
@@ -200,7 +203,48 @@ EOF
   fi
 fi
 
-# 3) supabase db lint（warn-only）
+# 3) 新增 migration 的風險分類（warn-only，排在 db lint 前：lint 可能因 Docker 未起而很慢）
+# classifier 用 clade canonical 優先（`--unannotated` 是新旗標，consumer 的舊 vendor 副本不認得），
+# 否則 repo 內副本；clade root 找法鏡射 clade-projection-drift.sh。找不到、沒有 node 或副本
+# 太舊就跳過——deploy 前的分類仍是 hard gate，這裡只是提早提醒。
+added_migrations=()
+while IFS= read -r -d '' file; do
+  added_migrations+=("$file")
+done < <(git diff --cached --name-only --diff-filter=A -z -- 'supabase/migrations/*.sql')
+
+if ((${#added_migrations[@]} > 0)) && command -v node >/dev/null 2>&1; then
+  clade_root="${CLADE_HOME:-}"
+  for candidate in "$HOME/clade" "$HOME/offline/clade"; do
+    [[ -n "$clade_root" ]] && break
+    [[ -d "$candidate" ]] && clade_root="$candidate"
+  done
+  classifier=""
+  for candidate in ${clade_root:+"$clade_root/vendor/scripts/classify-migrations.ts"} \
+    vendor/scripts/classify-migrations.ts scripts/classify-migrations.ts; do
+    if [[ -f "$candidate" ]]; then
+      classifier="$candidate"
+      break
+    fi
+  done
+  unannotated=""
+  [[ -n "$classifier" ]] \
+    && unannotated=$(node "$classifier" --unannotated "${added_migrations[@]}" 2>/dev/null || true)
+  if [[ -n "$unannotated" ]]; then
+    cat <<EOF >&2
+
+⚠️  新增 migration 分類非 online_safe，且缺 \`-- Migration risk:\` header（不擋 commit；deploy 前仍是 hard gate）：
+$unannotated
+
+   在 SQL 檔頭補三行（格式見 rules/modules/db-schema/supabase/migration.md § Pending Migration 分類）：
+     -- Migration risk: <分類>
+     -- Root cause: <觸發高風險分類的原因>
+     -- Lock strategy: <lock_timeout／concurrent／maintenance window 或無鎖理由>
+
+EOF
+  fi
+fi
+
+# 4) supabase db lint（warn-only）
 if command -v supabase >/dev/null 2>&1; then
   echo "🔍 supabase db lint --level warning..."
   if ! supabase db lint --level warning 2>/dev/null; then

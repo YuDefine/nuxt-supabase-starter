@@ -201,7 +201,7 @@ cat >&2 <<'MSG'
   真的要在舊 commit 上打 tag（hotfix release）才用：CLADE_ALLOW_STALE_TAG=1 git push origin <tag>
 
   規約：rules/core/commit.detail.md § Tag 位置（release hard gate）
-  Pitfall：docs/pitfalls/2026-08-23-tag-cut-from-stale-commit.md
+  Pitfall：[[pitfall-tag-cut-from-stale-commit]]
 MSG
 
 exit 1

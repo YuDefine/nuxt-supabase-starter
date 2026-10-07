@@ -13,18 +13,22 @@
 #                        補 pre-commit staged 版的盲區——歷史既有違規）
 #   - data-perf-check   偵測 nuxt.config.* 才跑（全站掃 .vue setup context raw $fetch）
 #   - evlog-map-gate     CI workflow 有 evlog-map-gate 步驟才跑（照 CI 的 mode／cwd，判定與 CI 同一支）
+#   - test-typecheck     opt-in：CLADE_PREPUSH_TEST_TYPECHECK 非空才跑（=1 → typecheck:tests，
+#                        0／false／no／off 報設定錯誤，其他值 = script 名）；docs-only push（*.md / docs/**）跳過，
+#                        refs 算不出 fail-open 照跑；排在平行 checks 之後序列執行（TD-644）
 #
 # 為什麼 typecheck 放 pre-push 不放 pre-commit：
 #   vue-tsc / nuxi typecheck 不支援單檔 typecheck（nuxt/cli #407），
 #   每次 commit 跑 full project typecheck 太慢。pre-push 階段一次性擋住，
 #   兼顧 DX 與正確性。
 #
-# 為什麼不跑 test-tsconfig：
-#   v0.3.10 曾加入該 check，數據顯示 5 家 consumer 中有 test/tsconfig.json
-#   的 3 家裡 2/3 baseline 紅（test code 充滿 mock/fixture/cast，type drift
-#   是常態不是 bug）。pre-push 是擋壞 production 的階段，test type drift 不
-#   屬於 production safety；且 nuxt typecheck 已涵蓋 app/server type safety。
-#   test typecheck 改放 CI（informational），不在 hook 階段擋。
+# 為什麼 test typecheck 是 opt-in 而非預設 check：
+#   v0.3.10 曾無條件加入 test-tsconfig check，數據顯示 5 家 consumer 中有
+#   test/tsconfig.json 的 3 家裡 2/3 baseline 紅（test code 充滿 mock/fixture/cast，
+#   type drift 是常態不是 bug）。預設開會讓 baseline 還沒收斂的 consumer 被擋死，
+#   所以做成 consumer 端 .husky/pre-push 逐家 opt-in（<consumer-a> TD-644 裁決：
+#   changed-paths gate——code push 跑全量、docs-only push 跳過、refs 算不出
+#   fail-open 照跑；CI 的獨立 typecheck-tests job 保留作最後防線）。
 #
 # 為什麼並行跑（2026-07-26）：
 #   8 個 check 彼此獨立（typecheck 寫 .nuxt/，其餘皆唯讀掃描，無共享寫入），
@@ -406,6 +410,85 @@ else
   echo "[clade pre-push] path filter: 算不出 changed paths（新 branch 首推 / 手動執行 / 只推 tag）→ 全部照跑"
 fi
 
+# --- test-typecheck（opt-in；所有平行 checks 跑完後才序列執行）----------------
+# CLADE_PREPUSH_TEST_TYPECHECK 控制（consumer 在 .husky/pre-push 設定即啟用）：
+#   未設定／空字串 → 不跑（行為與本段加入前逐位元相同）；要關就 unset
+#   1              → pnpm run typecheck:tests（預設 script）
+#   0／false／no／off（大小寫不拘）→ 設定錯誤：直接擋下並說明，NEVER 當 script 名
+#                    （否則每次 push 都變成一次看不出原因的 `pnpm run 0` 失敗）
+#   其他非空值     → 視為 script 名，pnpm run <值>
+#
+# 啟用時沿用上方 path filter 的結果：CHANGED_FILE 裡每個 changed path 都是
+# docs-only（*.md 或 docs/**）才跳過——.md 進不了 typecheck 圖；其餘情形
+# （含算不出 changed paths）一律 fail-open 照跑並印出原因。命中後仍是全量
+# typecheck，不對單檔做（vue-tsc / nuxi typecheck 不支援單檔）。
+#
+# 刻意排在平行 checks **之後**序列跑、不進 CHECKS 陣列：typecheck:tests 單輪
+# peak RSS 實測約 2.6 GiB（<consumer-a> TD-644 量測），與 nuxt-typecheck（old-space
+# 上限 6 GiB）並行會疊加記憶體需求，高負載時有被拖住或 OOM 的實測前科。
+# 啟動時就驗：等到所有平行 checks 跑完才報設定錯誤，會白白浪費整輪 check 的時間。
+validate_test_typecheck_spec() {
+  local spec="${CLADE_PREPUSH_TEST_TYPECHECK:-}"
+  [[ -n "$spec" ]] || return 0
+  # 大小寫組合直接寫進 pattern：`${spec,,}` 是 bash 4+ 語法，macOS 預設 bash 3.2 會報
+  # bad substitution，而本函式每次 push 都會被呼叫（沒設該變數也一樣）。
+  case "$spec" in
+    0 | [Ff][Aa][Ll][Ss][Ee] | [Nn][Oo] | [Oo][Ff][Ff])
+      echo "[clade pre-push] ✗ CLADE_PREPUSH_TEST_TYPECHECK=$spec 不是合法值：0／false／no／off 不代表關閉，會被當成 script 名（pnpm run $spec）。要停用請 unset 該變數（或設成空字串）；要啟用請設 1 或指定 script 名。" >&2
+      return 2
+      ;;
+  esac
+}
+
+# $1 = fg 時前景跑（序列 debug 模式：沒有 TERM trap，前景才收得到 ^C）；
+# 預設背景跑 + wait：並行模式的 TERM trap 要等前景指令結束才執行，而且只殺
+# `pids` 裡的子樹——前景的 pnpm 既不會被殺、wait 之後也沒人複查 PREPUSH_INTERRUPTED。
+run_test_typecheck() {
+  local mode="${1:-bg}"
+  local spec="${CLADE_PREPUSH_TEST_TYPECHECK:-}"
+  [[ -n "$spec" ]] || return 0
+  local script='typecheck:tests'
+  [[ "$spec" == '1' ]] || script="$spec"
+
+  if [[ "$PATH_FILTER_ACTIVE" == '1' ]]; then
+    local p all_docs=1
+    while read -r p; do
+      [[ -n "$p" ]] || continue
+      case "$p" in
+        *.md | docs/*) ;;
+        *) all_docs=0; break ;;
+      esac
+    done < "$CHANGED_FILE"
+    if [[ "$all_docs" == '1' ]]; then
+      echo "⏭  [clade pre-push] test-typecheck skipped — docs-only push（changed paths 全部是 *.md / docs/**）"
+      return 0
+    fi
+  else
+    echo "[clade pre-push] test-typecheck: 算不出 changed paths → fail-open 照跑"
+  fi
+
+  echo "[clade pre-push] ── test-typecheck ──"
+  echo "🔍 test typecheck (pnpm run $script)..."
+  # typecheck:tests 峰值約 2.6 GiB，與 CI 的 typecheck-tests job 同額上限。
+  if [[ "$mode" == 'fg' ]]; then
+    NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--max-old-space-size=4096" pnpm run "$script"
+    return
+  fi
+  NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--max-old-space-size=4096" pnpm run "$script" &
+  local tt_pid=$! tt_wait_rc=0
+  pids+=("$tt_pid")
+  wait "$tt_pid" || tt_wait_rc=$?
+  # wait 會被 TERM trap 打斷而提前返回（rc>128）：旗標成立就不能把 pnpm 的 rc 當結果，
+  # 否則 typecheck 剛好通過時中斷被吞成 exit 0。
+  if [[ "${PREPUSH_INTERRUPTED:-0}" == 1 ]]; then
+    PREPUSH_TT_RUNNING=1
+    prepush_exit_interrupted
+  fi
+  return "$tt_wait_rc"
+}
+
+validate_test_typecheck_spec || exit $?
+
 # --- 序列模式（debug）-----------------------------------------------------
 if [[ -n "${CLADE_PREPUSH_SERIAL:-}" ]]; then
   for i in "${!CHECKS[@]}"; do
@@ -416,6 +499,8 @@ if [[ -n "${CLADE_PREPUSH_SERIAL:-}" ]]; then
     fi
     bash "$CHECKS_DIR/$name.sh"
   done
+  # test-typecheck（opt-in）：序列模式照舊 fail-fast，set -e 直接帶它的 exit code 出場
+  run_test_typecheck fg
   exit 0
 fi
 
@@ -425,8 +510,64 @@ RUN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/clade-prepush.XXXXXX")"
 # 讓每次 push 在 TMPDIR 留一個 refs 檔。兩個都要清。
 trap 'rm -rf "$RUN_DIR"; rm -f "$REFS_FILE" "$CHANGED_FILE"' EXIT
 
+# 被外部 timeout／kill（SIGTERM，例如 propagate 的 bounded push）時，各 check 的
+# 輸出還 buffer 在 $RUN_DIR、verdict 也還沒印——照預設死亡的話，呼叫端只看得到
+# path filter 那行，「哪支 check 沒跑完／跑到哪」完全沒有證據。
+# 趁 TERM→KILL 的寬限期把仍在跑的 check 與其 partial output 倒到 stderr。
+# RUN_DIR／CHECKS／pids 都是檔案級全域，trap 觸發當下拿得到值（見 shell-script-safety）。
+#
+# dump 用中斷當下的快照，不看殺完之後的 .rc。子行程先死時 wrapper 會先寫
+# .rc=143；事後用「有沒有 .rc」判斷，會把仍在跑的 check 當成已完成而漏報。
+#
+# NEVER 在 trap 裡 dump 完就 exit。bash 5.3.9 實測：SIGTERM 打在 `wait` 中時 trap 會跑、
+# 輸出也印得出來，但 trap 裡的 `exit 143` 不會結束 shell——`wait` 繼續等還活著的 check，
+# 寬限期耗完就被 SIGKILL，呼叫端有時收不到那幾行。trap 只設旗標，並按 spawn 時記下來的
+# pid 殺子樹（NEVER process group：呼叫端多半在同一個 group），讓 `wait` 立刻返回，
+# 回到主流程再倒輸出並 exit。
+PREPUSH_INTERRUPTED=0
+PREPUSH_OPEN_IDX=()
 pids=()
+prepush_kill_tree() {
+  local pid="$1" child
+  for child in $(pgrep -P "$pid" 2>/dev/null); do
+    prepush_kill_tree "$child"
+  done
+  kill -TERM "$pid" 2>/dev/null || true
+}
+prepush_on_term() {
+  # 第二次 TERM 不得重拍快照：第一次殺子樹時 wrapper 可能已經寫上 .rc。
+  [[ "$PREPUSH_INTERRUPTED" == 1 ]] && return
+  PREPUSH_INTERRUPTED=1
+  PREPUSH_OPEN_IDX=()
+  local i
+  for i in "${!CHECKS[@]}"; do
+    [[ -f "$RUN_DIR/$i.rc" ]] && continue
+    PREPUSH_OPEN_IDX+=("$i")
+  done
+  local pid
+  for pid in "${pids[@]+"${pids[@]}"}"; do
+    prepush_kill_tree "$pid"
+  done
+}
+# 中斷收尾：兩個等待點共用（平行 checks 的 wait 迴圈、序列跑的 test-typecheck）。
+PREPUSH_TT_RUNNING=0
+prepush_exit_interrupted() {
+  echo "" >&2
+  echo "[clade pre-push] ✗ 被外部訊號中斷（SIGTERM/SIGINT；多半是呼叫端 timeout）" >&2
+  local i name
+  for i in "${PREPUSH_OPEN_IDX[@]+"${PREPUSH_OPEN_IDX[@]}"}"; do
+    name="${CHECKS[$i]}"
+    echo "[clade pre-push] ── $name（中斷時仍在執行） ──" >&2
+    [[ -f "$RUN_DIR/$i.out" ]] && tail -n 20 "$RUN_DIR/$i.out" >&2
+  done
+  # test-typecheck 輸出直接 stream、沒有 buffer 檔可 tail，只標明它被中斷。
+  [[ "$PREPUSH_TT_RUNNING" == 1 ]] && echo "[clade pre-push] ── test-typecheck（中斷時仍在執行） ──" >&2
+  exit 143
+}
+trap prepush_on_term TERM INT
+
 for i in "${!CHECKS[@]}"; do
+  [[ "$PREPUSH_INTERRUPTED" == 1 ]] && break
   name="${CHECKS[$i]}"
   if [[ -n "${SKIP_MSG[$i]}" ]]; then
     printf '%s\n' "${SKIP_MSG[$i]}" >"$RUN_DIR/$i.out"
@@ -445,17 +586,31 @@ done
 
 for pid in "${pids[@]}"; do
   wait "$pid" || true
+  [[ "$PREPUSH_INTERRUPTED" == 1 ]] && break
 done
+
+[[ "$PREPUSH_INTERRUPTED" == 1 ]] && prepush_exit_interrupted
 
 failed_names=()
 for i in "${!CHECKS[@]}"; do
   name="${CHECKS[$i]}"
-  [[ -f "$RUN_DIR/$i.out" ]] && cat "$RUN_DIR/$i.out"
+  # 每段輸出前印 check 名當標界：並行模式把輸出 buffer 到這裡才回放，沒有標界的
+  # 話下游（propagate 的失敗擷取）只能拿到合併尾段，無法歸屬到失敗的那支 check。
+  if [[ -s "$RUN_DIR/$i.out" ]]; then
+    echo "[clade pre-push] ── $name ──"
+    cat "$RUN_DIR/$i.out"
+  fi
   rc="$(cat "$RUN_DIR/$i.rc" 2>/dev/null || echo 1)"
   if [[ "$rc" != "0" ]]; then
     failed_names+=("$name (exit $rc)")
   fi
 done
+
+# test-typecheck（opt-in）：此刻只剩它在跑，輸出不進 RUN_DIR 直接 stream——
+# 45s+ 的 check 即時看得到進度，比跑完才回放 buffer 好用。
+tt_rc=0
+run_test_typecheck || tt_rc=$?
+[[ "$tt_rc" == 0 ]] || failed_names+=("test-typecheck (exit $tt_rc)")
 
 if [[ ${#failed_names[@]} -gt 0 ]]; then
   echo "" >&2

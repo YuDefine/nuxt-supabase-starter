@@ -3,7 +3,7 @@ description: 顯示值完整性——統計 / metric / aggregate 顯示給使用
 paths: ['server/**/*.ts', 'packages/*/server/**/*.ts', 'app/composables/**/*.ts', 'packages/*/app/composables/**/*.ts']
 ---
 <!-- Clade native rule; source: rules/core/display-value-integrity.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Display Value Integrity
 

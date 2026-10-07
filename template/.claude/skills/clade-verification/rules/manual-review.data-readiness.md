@@ -1,10 +1,10 @@
 ---
-description: Manual Review data-readiness 規約——propose 階段準備驗收資料的 hard rule、[review:ui] 純功能驗證 step actionability、`@no-manual-review-check` marker schema、截圖檔名配對；寫 proposal.md / tasks.md 時 path-scoped 載入
+description: Manual Review data-readiness 規約——規劃階段（寫 plan package／tasks 時）準備驗收資料的 hard rule、[review:ui] 純功能驗證 step actionability、`@no-manual-review-check` marker schema、截圖檔名配對；寫 proposal.md / tasks.md 時 path-scoped 載入
 paths: ['tasks/**', 'specs/plans/**', 'screenshots/**']
 ---
 <!-- Clade native rule; source: rules/core/manual-review.data-readiness.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 ## Runtime adapter boundary
 
@@ -18,7 +18,7 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 
 ## Pre-Review Data Readiness（hard rule）
 
-寫 `## 人工檢查` 項目時，**MUST** 把驗收所需資料當成 item 的一部分**在 propose 階段就準備好**：交給使用者的瞬間，他已能照 step 直接跑。marker 誤標時先依 [[manual-review.evidence]] § `[review:ui]` 收斂原則改 marker。
+寫 `## 人工檢查` 項目時，**MUST** 把驗收所需資料當成 item 的一部分**在 規劃階段就準備好**：交給使用者的瞬間，他已能照 step 直接跑。marker 誤標時先依 [[manual-review.evidence]] § `[review:ui]` 收斂原則改 marker。
 
 ### 禁止的模糊指代
 
@@ -31,7 +31,7 @@ propose / ingest 階段命中即視為違反，**MUST** 改寫。
 
 ### 必填三件事
 
-每條 `[review:ui]` / `[verify:ui]` item **MUST** 在 propose 階段同時做到：
+每條 `[review:ui]` / `[verify:ui]` item **MUST** 在 規劃階段同時做到：
 
 1. **Sample inline 引用** — item 描述內**直接寫具體 sample identifier**（PK `WR-9001` / UUID / business key `card_uid=04A1B2C3` / `staff email=admin@example.com` 等），讓 user 一眼看出該操作哪一筆
 2. **多步驟驗收條列 Step** — 含 1+ 個分支、互斥狀態、對稱驗證、多角色切換時，**MUST** 拆 `#N.M` scoped sub-items；每個 sub-item = 單一可執行 step（打開哪頁 → 點哪裡 → 應看到什麼）
@@ -89,9 +89,9 @@ assertion-bearing `[verify:ui]` item **MUST** 能對應到一個**機械可判�
    1. consumer `.env*` 有 `TUNNEL_HOSTNAME=<host>` → `https://<host>/<path>`（HTTPS-only feature 也只能用 tunnel 驗）
    2. `http://localhost:<port>/<path>` **只給 agent 自己探測**，**NEVER** 出現在 `[review:ui]` item 裡（使用者手機上的 localhost 指向裝置自己）
 
-   沒有 tunnel（`.env*` 無 `TUNNEL_HOSTNAME`）時 `[review:ui]` **沒有可給人的 host**：propose 階段就向使用者提出「先替此 consumer 設 tunnel」；該驗收若不需要人的判斷（主觀視覺、真機、收信這類只能人做的不算），也可以改成 `[verify:*]` 由 agent 跑。**NEVER** 退回 localhost，**NEVER** 加 `@no-manual-review-check[no-tunnel-configured]` 繞過。
+   沒有 tunnel（`.env*` 無 `TUNNEL_HOSTNAME`）時 `[review:ui]` **沒有可給人的 host**：規劃階段就向使用者提出「先替此 consumer 設 tunnel」；該驗收若不需要人的判斷（主觀視覺、真機、收信這類只能人做的不算），也可以改成 `[verify:*]` 由 agent 跑。**NEVER** 退回 localhost，**NEVER** 加 `@no-manual-review-check[no-tunnel-configured]` 繞過。
 
-   Multi-app consumer 依 change 觸碰的 app 反推 `.env.<app>`，找不到 app hint **MUST** 在 propose 階段問清楚。**NEVER** 在同一 item 同時列兩層 URL。解析 SOP 見 `~/offline/clade/vendor/snippets/tunnel-url-for-review/README.md`；`UI_URL_LOCALHOST_WITH_TUNNEL_AVAILABLE` pattern 會攔 localhost。
+   Multi-app consumer 依 change 觸碰的 app 反推 `.env.<app>`，找不到 app hint **MUST** 在 規劃階段問清楚。**NEVER** 在同一 item 同時列兩層 URL。解析 SOP 見 `~/offline/clade/vendor/snippets/tunnel-url-for-review/README.md`；`UI_URL_LOCALHOST_WITH_TUNNEL_AVAILABLE` pattern 會攔 localhost。
 2. **逐步動作 sub-items** — 用 `#N.M` scoped 拆，每條 sub-item 一個原子動作（開 X → 輸入 Y / 點 Z → 確認 W）。**禁止**流程式描述（例「刷卡 → 進入毛刺 → 操作完成 → 自動回 standby」整條塞在 parent line）
 3. **預期觀察具體化** — 每步寫清楚「應看到什麼 / 不應看到什麼」（具體 toast 文字、badge 狀態、欄位值、route 變化），**禁止**寫「畫面正常」「狀態正確」「操作完成」這類模糊驗收
 4. **UI 元素 MUST 用使用者可見文字指代** — 用畫面上實際看得到的文字（button label、tab 名稱、卡片標題、placeholder；動態 label 用 zh-TW 翻譯而非 i18n key；icon-only 用位置 + 圖示語義），**NEVER** 用 codebase 內部識別符（component name、CSS class、test-id、API endpoint、DB 欄位名如 `total_quantity`）、spec template heading（`Resolved Questions` / `Decision <N>`）、propose 寫作內部詞（`zero-location copy`）、或半中半英詞（「未設 vending 位置」）。寫之前先打開頁面確認；要 cross-reference schema 概念時用中文 gloss（「取料機位置 (`vending_location`)」）
@@ -99,9 +99,9 @@ assertion-bearing `[verify:ui]` item **MUST** 能對應到一個**機械可判�
 ### 反例
 
 ```markdown
-❌ - [ ] #6.1 [review:ui] 開 `https://<consumer-b>-dev.<maintainer-domain>/parts` →「刀片」→ 搜尋 `WDHT063006-G-ECP330`
+❌ - [ ] #6.1 [review:ui] 開 `https://<consumer>-dev.example.com/parts` →「刀片」→ 搜尋 `WDHT063006-G-ECP330`
    （`/parts` 預設不是刀片 tab，檢驗起點沒寫完）
-✅ - [ ] #6.1 [review:ui] 開 `https://<consumer-b>-dev.<maintainer-domain>/parts?tab=tool_inserts` →「刀片」→ 搜尋 `WDHT063006-G-ECP330`
+✅ - [ ] #6.1 [review:ui] 開 `https://<consumer>-dev.example.com/parts?tab=tool_inserts` →「刀片」→ 搜尋 `WDHT063006-G-ECP330`
 
 ❌ - [ ] #3.2 [review:ui] 開 `/reports/costs` 採購價格 tab，在 `SupplierComparison` selector 選 `成本報表測試耗材 A`，點 `匯出 PDF`
 ✅ - [ ] #3.2 [review:ui] 開 `/reports/costs`、點頂部「採購價格」tab → 找到「供應商比較」卡片 → 品項 selector 選「成本報表測試耗材 A」→ 點「匯出 PDF」→ 下載檔至少 2 個 supplier rows、最低價那列有「最低價」badge

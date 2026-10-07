@@ -6,7 +6,7 @@
 # `supabase start` on the desk", but native rule projection only loads it when
 # the clade-data skill is invoked. An agent running tests never invokes it, tries
 # `supabase start`, and gets a bare permission denial with no path forward
-# (2026-09-24, <consumer-b>). This hook fires at the exact failure point with the reason.
+# (2026-09-24, observed in one consumer). This hook fires at the exact failure point with the reason.
 #
 # Scope: consumers whose .clade/manifest.json declares
 # modules["db-runtime"] == "supabase-self-hosted". Isolated cloud VMs are the

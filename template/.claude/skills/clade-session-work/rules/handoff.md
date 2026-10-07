@@ -3,8 +3,8 @@ description: Handoff 規則——當 session 尚有未完成的 work item、bloc
 paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 ---
 <!-- Clade native rule; source: rules/core/handoff.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 # Handoff
 
@@ -14,10 +14,10 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 
 ## Lifecycle repo（repo root 有 `specs/truth/work-lifecycle.md`）
 
-本節優先於下方的建議格式、生命週期、歷史段路由與銜接段，也優先於 [[decision-authoring]] 要求寫進 `HANDOFF.md` 的 `- [ ]` 條目；下方沒被本節改到的（claim、接手順序、transport）照舊。
+本節優先於下方的建議格式、生命週期、歷史段路由與銜接段，也優先於 [[my]] 的 `rules/待拍板條目寫法.md` 要求寫進 `HANDOFF.md` 的 `- [ ]` 條目；下方沒被本節改到的（claim、接手順序、transport）照舊。
 
 - `HANDOFF.md` 是現役工作的 view，不是待辦簿。**每一個**頂層項（檔內任何 `##` 段底下、欄 0 的 `-`／`*`／`1.` bullet）**MUST** 指向本 repo 一份現役 plan（`W-YYYY-MM-DD-<slug>`，`specs/plans/<該 id>/plan.md` 未 close），**NEVER** 寫未勾的 `- [ ]`（FR-028）。**沒有段落豁免**：`## Ready for review`、`## Awaiting Charles`、baseline snapshot block 底下的 bullet 一樣算
-- `Ready for review` 條目與拍板題 **NEVER** 寫成 `HANDOFF.md` 的 `- [ ]`：用 `flow ask --category review`（三欄照 [[decision-authoring]] § `Ready for review` 的三欄寫進題目）或 `flow ask --category ruling` 直接進待拍板佇列，所屬 plan § Open work 記一行
+- `Ready for review` 條目與拍板題 **NEVER** 寫成 `HANDOFF.md` 的 `- [ ]`：用 `flow ask --category review --human-only <理由>`（agent 自己驗得了的不鑄題；三欄照 [[my]] 的 `rules/待拍板條目寫法.md` Rule 6 寫進題目）或 `flow ask --category ruling` 直接進待拍板佇列，所屬 plan 的 Open work 段記一行
 - baseline snapshot block（`## Worktree & Stash Audit` 之類）**不**留在 `HANDOFF.md`：snapshot 寫進所屬 plan 的 `evidence/`，或不存、要時實跑產生；`HANDOFF.md` 只留指向該 plan 的 W- 指標行
 - 進行中、被擋、下一步的細節寫進該 plan 的 § Open work，`HANDOFF.md` 只留一行指標：`- W-2026-10-01-checkout-retry — 等金流商回覆，見 plan Open work`
 - 沒有 plan 可指的待辦，先 `flow plan open` 開 plan 或續跑既有 plan，再寫指標
@@ -31,7 +31,7 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 - session 結束時仍有進行中的 work item（flow 卡未 `done`）
 - 被 `/clear`、context window、或外部中斷打斷
 - 有未 commit 的 WIP 需要之後接續
-- 工作轉交給其他 agent / runtime（Claude、Codex、Copilot、Cursor、subagent）
+- 工作轉交給其他 agent / runtime（Claude、Codex、Copilot、subagent）
 - 使用者明確要求留下交接
 
 ## 建議格式
@@ -43,7 +43,7 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 
 ## In Progress
 
-- [ ] 正在做什麼（change 名稱、task 編號、主要檔案）
+- [ ] 正在做什麼（work id／plan package 路徑、task 編號、主要檔案）
 - 目前做到哪裡、剩下什麼
 
 ## Blocked
@@ -164,7 +164,7 @@ git for-each-ref "refs/wt-baseline/<slug>/" --format='%(refname)'
 
 ## Outstanding actionability hygiene
 
-**核心命題**：HANDOFF.md `## Outstanding` / `## Next Steps` / handoff `next` § 2B.4 推薦下一 session（含 remote-control session、並行 Codex / Cursor session、人類 user）動工時，**MUST** inline 必要 actionable detail；禁止「by reference」handoff（只列 candidate 名稱 + 1-line summary + 指向 audit/scan/decision doc，要 receiver 自己 grep 還原 context）。
+**核心命題**：HANDOFF.md `## Outstanding` / `## Next Steps` / handoff `next` § 2B.4 推薦下一 session（含 remote-control session、並行 Codex session、人類 user）動工時，**MUST** inline 必要 actionable detail；禁止「by reference」handoff（只列 candidate 名稱 + 1-line summary + 指向 audit/scan/decision doc，要 receiver 自己 grep 還原 context）。
 
 ### 適用範圍
 

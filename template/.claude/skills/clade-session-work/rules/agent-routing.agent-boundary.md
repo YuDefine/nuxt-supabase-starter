@@ -4,7 +4,7 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/**', '.clade/**']
 ---
 <!-- Clade native rule; source: rules/core/agent-routing.agent-boundary.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Agent Routing — agent / user boundary
 

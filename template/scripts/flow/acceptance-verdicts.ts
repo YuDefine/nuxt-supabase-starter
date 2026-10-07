@@ -299,14 +299,92 @@ export interface EvidenceVerdict {
   title: string
   verdict: MachineVerdict
   at: string
-  /** report 檔的 mtime（ms，含小數）：比先後用它，`at` 只到毫秒。 */
+  /**
+   * 這筆判決的時間（ms，含小數）：比先後用它，`at` 只到毫秒。來源依序是 report 內容的
+   * `start_timestamp`（真的 run 時間）→ 乾淨追蹤檔的 git 最後 commit 時間（只到秒，且是 run 時間的
+   * 上界，所以再扣 1 秒，見 `reportRevisedMs`）→ mtime；同刻且全部檔名都帶 red／green 時再加
+   * 序號偏移（< 1ms）。三種時鐘混在同一條軸上，只有同來源的比較才精確。
+   * `verdicts` 也可能含合成的 `pending` indeterminate 列，其 `report` 是原因說明而不是路徑。
+   */
   atMs: number
   report: string
+  /** 檔名的 red／green 序號（0／1），沒有為 null；只在同刻平手時有意義。 */
+  stage?: number | null
+}
+
+/** report 內容自己帶的 run 時間（cucumber messages 系列的 `start_timestamp`，feature／element 層皆認）。 */
+function reportRunMs(json: unknown): number | null {
+  let best: number | null = null
+  const see = (value: unknown): void => {
+    if (typeof value !== 'string') return
+    const ms = Date.parse(value)
+    if (Number.isFinite(ms) && (best === null || ms > best)) best = ms
+  }
+  if (!Array.isArray(json)) return null
+  for (const feature of json as Record<string, unknown>[]) {
+    see(feature?.start_timestamp)
+    const elements = Array.isArray(feature?.elements) ? feature.elements : []
+    for (const element of elements as Record<string, unknown>[]) see(element?.start_timestamp)
+  }
+  return best
+}
+
+/** commit 時間（秒精度、run 時間的上界）換成 run 時間估計時扣掉的量。 */
+const COMMIT_TIME_SKEW_MS = 1000
+
+/**
+ * 一份 report 檔的 run 時間，依序：內容帶的 run 時間 → git 最後 commit 時間（檔已追蹤且工作樹乾淨）
+ * → mtime。**NEVER** 一律用 mtime：checkout／clone 之後同一 commit 的檔 mtime 全相同，
+ * 先紅後綠的先後會被抹平。
+ *
+ * commit 時間不是 run 時間：它只到秒，且是 run 時間的上界。證據與 plan／feature 修訂放在同一個
+ * commit 時兩者 commit 時間相同，`>=` 的新鮮度比較會把那份可能更舊的證據算成新，所以 commit 來源
+ * 扣 1 秒——與修訂同 commit 的證據算舊，之後另一個 commit 補上的證據才算新。
+ */
+function reportRevisedMs(repoRoot: string, file: string, content: number | null): number {
+  if (content !== null) return content
+  const mtime = statSync(file).mtimeMs
+  const rel = toPosix(relative(repoRoot, file))
+  try {
+    const dirty = execFileSync('git', ['status', '--porcelain', '--', rel], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+    if (dirty) return mtime
+    const ct = execFileSync('git', ['log', '-1', '--format=%ct', '--', rel], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+    return ct ? Number(ct) * 1000 - COMMIT_TIME_SKEW_MS : mtime
+  } catch {
+    return mtime
+  }
+}
+
+/**
+ * 檔名裡的明確序號：`red` 先於 `green`（先紅後綠是 plan 驗收的既定慣例命名）。
+ * 只用來拆「時間完全相同」的平手；沒有這種字眼回 null。
+ */
+function stageRank(path: string): number | null {
+  const tokens = basenameOf(path)
+    .toLowerCase()
+    .split(/[^a-z0-9]+/u)
+  if (tokens.includes('red')) return 0
+  if (tokens.includes('green')) return 1
+  return null
 }
 
 /**
  * plan `evidence/` 底下每一份 cucumber JSON 的每一筆結果，不合併、不挑最新——
  * 先紅後綠要看歷史，最新判決由呼叫端自己挑。
+ *
+ * 先後依 report 的 run 時間（見 `reportRevisedMs`）；時間相同、且平手的每一份 report 檔名都帶
+ * red／green 序號時，再看序號。只有部分 report 帶序號不算數：沒序號的那份與誰先誰後都沒有依據，
+ * **NEVER** 把它當成 red 或 green 的同級去拆平手。
+ * 仍判不出先後、且判決不同的，**不默默取較差者**：補一筆 `pending` 的 indeterminate 判決
+ * （report 欄寫明是哪幾份平手），讓呼叫端印出明確原因。
  */
 export function readEvidenceVerdicts(
   repoRoot: string,
@@ -319,9 +397,10 @@ export function readEvidenceVerdicts(
   )) {
     const path = toPosix(relative(repoRoot, file))
     try {
-      const results = parseCucumberJson(JSON.parse(readFileSync(file, 'utf8')))
-      // legacy cucumber JSON 不帶 run 時間；report 檔的 mtime 就是那次 run 寫下它的時間。
-      const atMs = statSync(file).mtimeMs
+      const json: unknown = JSON.parse(readFileSync(file, 'utf8'))
+      const results = parseCucumberJson(json)
+      const stage = stageRank(path)
+      const atMs = reportRevisedMs(repoRoot, file, reportRunMs(json))
       const at = new Date(atMs).toISOString()
       for (const result of results) {
         verdicts.push({
@@ -331,6 +410,7 @@ export function readEvidenceVerdicts(
           at,
           atMs,
           report: path,
+          stage,
         })
       }
       reports.push({ path, results: results.length, read_error: null })
@@ -338,7 +418,71 @@ export function readEvidenceVerdicts(
       reports.push({ path, results: 0, read_error: (error as Error).message })
     }
   }
+  applyStageOrder(verdicts)
+  verdicts.push(...indeterminateTies(verdicts))
   return { verdicts, reports }
+}
+
+/** 兩個 report uri 是不是同一支 feature 的不同寫法（相等、互為 `/` 對齊的尾段、或只剩檔名的那種）。 */
+function uriEquivalent(a: string, b: string): boolean {
+  if (a === b) return true
+  const tail = (long: string, short: string): boolean =>
+    short.includes('/') ? long.endsWith(`/${short}`) : basenameOf(long) === short
+  return a.length >= b.length ? tail(a, b) : tail(b, a)
+}
+
+function sameScenario(a: EvidenceVerdict, b: EvidenceVerdict): boolean {
+  return a.title === b.title && uriEquivalent(a.uri, b.uri)
+}
+
+/**
+ * 同一 scenario、同一時刻、來自不同 report 的平手：**每一份**都有 red／green 序號才用序號拆
+ * （偏移 < 1ms，不會越過任何真實時間差）。任何一份沒序號就維持平手，交給 `indeterminateTies`。
+ */
+function applyStageOrder(verdicts: EvidenceVerdict[]): void {
+  const snapshot = verdicts.map((v) => ({ v, atMs: v.atMs }))
+  for (const { v, atMs } of snapshot) {
+    const tied = snapshot.filter((o) => o.atMs === atMs && sameScenario(o.v, v))
+    if (new Set(tied.map((o) => o.v.report)).size < 2) continue
+    if (tied.some((o) => typeof o.v.stage !== 'number')) continue
+    v.atMs = atMs + v.stage! * 0.001
+  }
+}
+
+/** 同一 scenario 在最新時刻有多份 report 且判決不同 → 先後不明，補一筆 pending 說明原因。 */
+function indeterminateTies(verdicts: EvidenceVerdict[]): EvidenceVerdict[] {
+  // 分組與 `reportUriMatches` 一致：同一支 feature 的不同寫法（repo-relative、plan-relative、尾段）
+  // 算同一個 scenario，不能因為 uri 字串不同就各自落單。
+  const seen = new Set<string>()
+  const out: EvidenceVerdict[] = []
+  for (const anchor of verdicts) {
+    const group = verdicts.filter((v) => sameScenario(v, anchor))
+    const groupKey = group
+      .map((v) => `${v.report}\0${v.uri}\0${v.title}`)
+      .toSorted()
+      .join('\n')
+    if (seen.has(groupKey)) continue
+    seen.add(groupKey)
+    const top = Math.max(...group.map((v) => v.atMs))
+    const tied = group.filter((v) => v.atMs === top)
+    if (new Set(tied.map((v) => v.report)).size < 2) continue
+    if (new Set(tied.map((v) => v.verdict)).size < 2) continue
+    const first = tied[0]!
+    const reason = `indeterminate: ${[...new Set(tied.map((v) => v.report))].join(', ')} share the same run time (${first.at}) with different verdicts; order them by naming every one red/green or giving the report a start_timestamp`
+    // 每種 uri 寫法各補一筆：`readAcceptanceVerdicts` 是逐 uri 比對的，只補一種寫法會漏掉另一種。
+    for (const uri of new Set(tied.map((v) => v.uri))) {
+      out.push({
+        ...first,
+        uri,
+        stage: null,
+        // 略晚於平手那一刻：latestVerdict 的同刻「取最差」不能把 failed 挑回來蓋掉這筆。
+        atMs: top + 0.0005,
+        verdict: 'pending',
+        report: reason,
+      })
+    }
+  }
+  return out
 }
 
 /** 候選判決裡最新的那一筆；同一刻（同一份 report）有多筆時取最差。 */

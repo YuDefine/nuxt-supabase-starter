@@ -8,8 +8,8 @@
 /**
  * SSE / MCP child request logger（基於 evlog createRequestLogger）
  *
- * Source: clade docs/evlog-master-plan.md § 8.4 (<consumer-c> T3)
- *         <consumer-c> TD-057 已實證 pattern
+ * Source: clade docs/evlog-master-plan.md § 8.4 (agentic-rag T3)
+ *         agentic-rag TD-057 已實證 pattern
  *
  * 使用：
  *   cp vendor/snippets/evlog-mcp-sse-child-logger/child-logger.ts \
@@ -22,7 +22,7 @@
  * - 解法：fork 出獨立 child request logger，stream settle 時再 emit + drain
  *
  * 應用場景：
- * - SSE chat stream（<consumer-c> TD-057 已實作）
+ * - SSE chat stream（agentic-rag TD-057 已實作）
  * - MCP tool session（多輪 tool call 跨 stream）
  * - Durable Object alarm callback（lifecycle 與 fetch 分離）
  */
@@ -63,7 +63,7 @@ export function forkChildLogger<T extends object = Record<string, unknown>>(
   )
 
   // 真實 FieldContext = DeepPartial<Omit<T, keyof InternalFields>> & InternalFields；
-  // 單一 assertion：set 的 payload 與 Partial<T> 不對齊（M3a-<consumer-c> 修正）
+  // 單一 assertion：set 的 payload 與 Partial<T> 不對齊（M3a-agentic-rag 修正）
   const childFields: Parameters<typeof child.set>[0] = {
     operation: options.operation,
     _parentRequestId: typeof parentCtx.requestId === 'string' ? parentCtx.requestId : undefined,
@@ -92,7 +92,7 @@ export async function emitChildLogger(
   if (!emitted) return // 已 emit 過（重複呼叫）
 
   // 對 child 跑 enricher → drain pipeline（手動觸發 evlog hook chain）
-  // <consumer-c> 自家 `runStreamLogDrain` 是 nitro hook 的 wrapper；
+  // agentic-rag 自家 `runStreamLogDrain` 是 nitro hook 的 wrapper；
   // 不同 consumer 可能命名不同
   const drainPromise = runChildLogDrain(event, emitted)
 
@@ -111,7 +111,7 @@ export async function emitChildLogger(
 // 不是 evlog 公開 API；nitro 不會自動對 child wide event 跑 hooks，
 // 所以要自己呼叫 enricher / drain（與 nitro plugin 用的同一條 pipeline）
 //
-// 真實 hook payload shape（M3a-<consumer-c> 修正）：
+// 真實 hook payload shape（M3a-agentic-rag 修正）：
 //   evlog:enrich → EnrichContext { event, request, headers, response }
 //   evlog:drain → DrainContext { event, request, headers }
 // 早期版本傳 `{ event, h3Event }` — h3Event 不在 type 內，且其他 drain（Sentry / PostHog / Axiom）
@@ -175,7 +175,7 @@ function getSafeHeaders(event: H3Event): Record<string, string> {
 }
 
 /**
- * 使用範例（SSE chat stream，<consumer-c> 風格）
+ * 使用範例（SSE chat stream，agentic-rag 風格）
  *
  * export default defineEventHandler(async (event) => {
  *   const log = useLogger(event)  // parent request log

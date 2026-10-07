@@ -4,6 +4,11 @@ import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 
 import { MACHINE_LABEL_PATTERN, peerMachineLabels, sshRun } from './herdr-machine.ts'
+import {
+  claudeConfigDirName,
+  claudePoolAccounts,
+  resolveClaudeLauncher,
+} from './claude-account-registry.ts'
 
 /** Shared prompt-cache boundary for census, continuation, and coordinator wake. */
 export const DEFAULT_TTL_MINUTES = 60
@@ -17,12 +22,31 @@ function encodeProjectDir(cwd: string): string {
   return cwd.replace(/[^A-Za-z0-9-]/g, '-')
 }
 
+/**
+ * `cc`（池入口）啟動的 child transcript 落在池內任一帳號的 config dir，但只收一個 dir
+ * 字串的呼叫端（舊 helper 的 model 驗證、successor 首輪等待）無法表達「搜全池」。
+ * 池入口的 transcript dir 用這個虛擬 basename 表示：它永不指向真實目錄（NEVER 拿來
+ * 當可寫路徑），`transcriptPathIn` 認得它並對每個池帳號的 configDir 展開搜尋。
+ */
+const CLAUDE_POOL_TRANSCRIPT_DIR = '.claude-pool-transcripts'
+
+function poolTranscriptSentinel(): string {
+  return resolve(homedir(), CLAUDE_POOL_TRANSCRIPT_DIR)
+}
+
 /** Locate a transcript by live session UUID, even when the cwd encoding differs. */
 export function transcriptPathIn(
   configDir: string,
   cwd: string,
   sessionId: string,
 ): string | undefined {
+  if (configDir === poolTranscriptSentinel()) {
+    for (const account of claudePoolAccounts()) {
+      const path = transcriptPathIn(resolve(homedir(), account.configDir), cwd, sessionId)
+      if (path) return path
+    }
+    return undefined
+  }
   const projects = resolve(configDir, 'projects')
   const file = `${sessionId}.jsonl`
   const direct = resolve(projects, encodeProjectDir(cwd), file)
@@ -40,9 +64,25 @@ export function transcriptPathIn(
   return undefined
 }
 
-/** Child transcript account, independent of the dispatcher's CLAUDE_CONFIG_DIR. */
+/**
+ * Child transcript account, independent of the dispatcher's CLAUDE_CONFIG_DIR.
+ * 池入口 `cc` 回傳 sentinel（見 CLAUDE_POOL_TRANSCRIPT_DIR）——transcript 在哪個帳號的
+ * dir 取決於 admission 實挑結果，只能搜全池；釘選 launcher 回各自帳號的真實 dir。
+ */
 export function childTranscriptConfigDir(launcher: string): string {
-  return launcher === 'ccw' ? resolve(homedir(), '.claude-work') : resolve(homedir(), '.claude')
+  if (resolveClaudeLauncher(launcher)?.kind === 'pool') return poolTranscriptSentinel()
+  return resolve(homedir(), claudeConfigDirName(launcher))
+}
+
+/**
+ * `cc`（池入口）啟動的 child 實際落在池內任一帳號的 config dir——record 只有 `cc`，
+ * transcript 要按池內每個 dir 找；釘選 launcher 只搜自己那個 dir。
+ */
+function transcriptSearchDirs(launcher: string): string[] {
+  const resolved = resolveClaudeLauncher(launcher)
+  return resolved?.kind === 'pin'
+    ? [resolved.account.configDir]
+    : claudePoolAccounts().map((account) => account.configDir)
 }
 
 export function transcriptPathFor(
@@ -50,7 +90,12 @@ export function transcriptPathFor(
   cwd: string,
   sessionId: string,
 ): string | undefined {
-  return transcriptPathIn(childTranscriptConfigDir(launcher), cwd, sessionId)
+  const home = homedir()
+  for (const dir of transcriptSearchDirs(launcher)) {
+    const path = transcriptPathIn(resolve(home, dir), cwd, sessionId)
+    if (path) return path
+  }
+  return undefined
 }
 
 export interface CacheTouchRecord {
@@ -82,11 +127,13 @@ export function lastCacheTouchMs(
       // Unreadable transcript: no age.
     }
   } else {
-    const dir = record.launcher === 'ccw' ? '"$HOME/.claude-work"' : '"$HOME/.claude"'
+    const dirs = transcriptSearchDirs(record.launcher)
+      .map((dir) => `"$HOME/${dir}"`)
+      .join(' ')
     // Compare peer mtime with its own clock, then re-anchor to ours to avoid cross-node drift.
     const probe = sshRun(
       machine,
-      `f=$(ls ${dir}/projects/*/${sessionId}.jsonl 2>/dev/null | head -1); [ -n "$f" ] && m=$({ stat -c %Y "$f" 2>/dev/null || stat -f %m "$f"; }) && echo "$m $(date +%s)"`,
+      `f=$(ls ${dirs}/projects/*/${sessionId}.jsonl 2>/dev/null | head -1); [ -n "$f" ] && m=$({ stat -c %Y "$f" 2>/dev/null || stat -f %m "$f"; }) && echo "$m $(date +%s)"`,
       { timeout: 15_000 },
     )
     const [mtime, peerNow] = probe.stdout.trim().split(/\s+/).map(Number)

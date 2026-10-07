@@ -1,14 +1,14 @@
 <!-- Clade native rule; source: rules/core/agent-routing.md; edit canonical source -->
 # Agent Routing
 
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 **核心命題**：工作按角色與能力選 executor，再判是否派工；寬掃／背景／隔離／有份量的獨立平行軌才派，主線能完成預設留主線。
 
-具體 model、effort、workspace access 與硬禁令只以 [[agent-routing.routing-table]] 為 SoT；查表前 MUST Read 該檔。**禁用**（Charles 2026-09-24；GPT 全面退場 2026-09-29）：Astra／Fable／Haiku、所有 GPT、Sonnet 5 以下，以及 Cursor Composer 2.5、Devin Fusion——任何列、fallback、額度耗盡備援都 **NEVER** 派；Sonnet 5.5 只限 Routing Table 標它的列與 delegate-sub 的兩個接手點。Grok 4.7 一律 xhigh，Gemini 3.8 Flash 一律 high，Claude Sonnet 5.5 一律 high。實作列（非 UI 實作、Nuxt 本體、commit 0-C fix-verify、升版首輪）走 Claude Sonnet 5.5（effort: high）；計畫／裁決列、UI view 實作（含 Nuxt UI／Content）、Design Review、UI 詳細計畫、截圖項目符合性判定與 code review 走 Claude Opus 5.5（effort: medium）；screenshot review 與掃描類走 Gemini 3.8 Flash high。Devin SWE-2 Max 是任意 Pi 列與 Sonnet／計畫／裁決六列的**可選**載體，只限不急、緩慢也不堵塞的任務（desk 與已登入的 zenbook 皆可）；四個 UI／設計類 Claude-only 列（`ui-view-implementation`、`design-review`、`ui-detailed-planning`、`screenshot-match-analysis`）符合 cloud 條件時預設走 cloud session，cloud 同時在飛上限跟派出帳號額度掛鉤——載體混搭判準在 [[agent-routing.dispatch-execution]] § Cloud session 載體。唯讀定位搜尋走 `code-locate` 列（Gemini high → Grok xhigh → 主線），`Explore` subagent 一律被 gate 攔。Claude Opus 5.5 預設 medium；同一問題已在 medium 失敗一次或修法只修到一層、且有可跑的檢查時，才可 `--tier-basis stall-escalation --retry-of <label>` 開 high，`max` 永不開。鏈只在 provider／quota／runtime 不可用時前進，鏈走完由 `dispatch-fallback`（Claude Opus 5.5（effort: low））或主線接手，依列而定。
+具體 model、effort、workspace access 與硬禁令只以 [[agent-routing.routing-table]] 為 SoT；查表前 MUST Read 該檔。**禁用**（Charles 2026-09-24；GPT 全面退場 2026-09-29）：Astra／Fable／Haiku、所有 GPT、Sonnet 5 以下，以及 Cursor Composer 2.5、Devin Fusion——任何列、fallback、額度耗盡備援都 **NEVER** 派；Sonnet 5.5 只限 Routing Table 標它的列與 delegate-sub 的兩個接手點。Grok 4.7 一律 xhigh，Gemini 3.8 Flash 一律 high，Claude Sonnet 5.5 一律 high。實作列（非 UI 實作、Nuxt 本體、commit 0-C fix-verify、升版首輪）走 Claude Sonnet 5.5（effort: high）；計畫／裁決列、UI view 實作（含 Nuxt UI／Content）、Design Review、UI 詳細計畫、截圖項目符合性判定與 code review 走 Claude Opus 5.5（effort: medium）；screenshot review 與掃描類走 Gemini 3.8 Flash high。Devin SWE-2 Max 是任意 Pi 列與 Sonnet／計畫／裁決六列的**可選**載體，只限不急、緩慢也不堵塞的任務（desk 與已登入的 zenbook 皆可）；cloud session 是所有 Claude 列的合法載體（Sonnet 四列、計畫／裁決列、UI／設計類四列、`dotclaude-authoring`；commit 0-A 只認 reviewer subagent，不在內）：內容符合 cloud 條件就預設走 cloud，用 Opus 還是 Sonnet、effort 多少照該列，**NEVER** 以 cloud 為由限制 model；Pi 列不改派 cloud，禁用 model 與 `max` 照舊；cloud 不設併發上限，唯一硬門是 0-A reviewer 席位守門——載體混搭判準在 [[agent-routing.dispatch-execution]] § Cloud session 載體。唯讀定位搜尋走 `code-locate` 列（Gemini high → Grok xhigh → 主線），`Explore` subagent 一律被 gate 攔。Claude Opus 5.5 預設 medium；同一問題已在 medium 失敗一次或修法只修到一層、且有可跑的檢查時，才可 `--tier-basis stall-escalation --retry-of <label>` 開 high，`max` 永不開。鏈只在 provider／quota／runtime 不可用時前進，鏈走完由 `dispatch-fallback`（Claude Opus 5.5（effort: low））或主線接手，依列而定。
 
-**GPT 不是派工目標**（2026-09-29）：Pi 的 GPT tier 退役、Herdr `--launcher cx` 拒派、Claude Code 不承載 GPT，任何 runtime 都 **NEVER** 為 Routing Table 的列派 GPT worker。Codex 當主線 runtime 的 adapter 保留（Charles 2026-09-29）；它自己的 native subagent 載體依下方 § Dispatch data and transport boundary 的「短任務 vs handoff 級」判，身分無法驗證的 Codex origin 一律 fail closed。
+**GPT 不是派工目標**（2026-09-29）：Pi 的 GPT tier 退役、Claude Code 不承載 GPT，任何 runtime 都 **NEVER** 為 Routing Table 的列派 GPT worker——Herdr `--launcher cx` 只收 `--route manual --tier-basis manual`（手動派工與 relay 交棒，2026-09-30 恢復），其他任何 route／tier-basis 的 cx 一律拒派。Codex 當主線 runtime 的 adapter 保留（Charles 2026-09-29）；它自己的 native subagent 載體依下方 § Dispatch data and transport boundary 的「短任務 vs handoff 級」判，身分無法驗證的 Codex origin 一律 fail closed。
 
 ## commit 0-A reviewer（常設）
 
@@ -62,7 +62,7 @@ dispatch／resume／retry／bridge MUST 傳 model／effort／route／tier-basis�
 
 ## External web retrieval
 
-主線 **NEVER** 直接呼叫 Claude Code 內建的 `WebSearch` 或 `WebFetch`。External-web 執行鏈是 bare Gemini high → Grok 4.7 xhigh（`grok-xai` → `grok-cursor`）→ 鏈尾 `dispatch-fallback` subagent（Claude Opus 5.5（effort: low），由它呼叫內建工具）；query／公開 URL 只入 hash，credential／signed token／private network／secret material fail closed，改用 authenticated first-party connector／redacted source。**例外清單是窮舉的**；**唯一的一般 waiver** 是 user 明確要求 direct built-in 且 receipt 綁原 tool kind 與 candidate。IDE browser 依 target-native adapter contract；**NEVER** 因 clade routing gate、`agent-browser` 措辭、或 § External web retrieval 的「NEVER 直接 WebSearch」改走 Playwright / `agent-browser`；**NEVER** 套本節去擋 IDE browser；**NEVER 拿本規約的 rationale 推翻本規約的字面。**
+主線 **NEVER** 直接呼叫 Claude Code 內建的 `WebSearch` 或 `WebFetch`。External-web 執行鏈是 bare Gemini high → Grok 4.7 xhigh（`grok-xai`）→ 鏈尾 `dispatch-fallback` subagent（Claude Opus 5.5（effort: low），由它呼叫內建工具）；query／公開 URL 只入 hash，credential／signed token／private network／secret material fail closed，改用 authenticated first-party connector／redacted source。**例外清單是窮舉的**；**唯一的一般 waiver** 是 user 明確要求 direct built-in 且 receipt 綁原 tool kind 與 candidate。**NEVER 拿本規約的 rationale 推翻本規約的字面。**
 
 ## 主線靜默上限（所有 dispatch 通用）
 

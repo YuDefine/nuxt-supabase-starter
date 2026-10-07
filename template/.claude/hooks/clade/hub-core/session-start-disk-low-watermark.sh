@@ -25,6 +25,10 @@
 # worktree 時 timer 照跑、service 每次失敗，2026-09-22～24 兩支同時停擺兩天，沒有任何東西出聲。
 # 只問 `is-failed`（unit 不存在／非 systemd 主機回非 failed → 靜默），與低水位無關、各自一行。
 #
+# cloud VM（CLAUDE_CODE_REMOTE 有值）整支跳過：門檻（/ 25G）是照本機的磁碟與回收手段訂的（刻意高於 publish
+# preflight 的 15G，告警先於擋路），VM 整顆只有約 30G 可用，裝完依賴就可能越線，而提示的回收手段
+# （disk-hygiene、cleanup-stale-tmp、user timer）VM 裡都沒有。證據在 clade specs/plans/W-2026-10-07-clade-cloud-hook-remote-guard/evidence/。
+#
 # 可覆寫：CLADE_DISK_WARN_ROOT_GB（預設 25）、CLADE_DISK_WARN_TMP_GB（預設 8）、
 #         CLADE_DISK_SYSTEMCTL（預設 systemctl，測試換 stub；設成空字串就不查回收服務）、
 #         CLADE_DISK_DF（預設 df，測試換 stub）、CLADE_DISK_TMP_CAPACITY（預設
@@ -33,6 +37,7 @@
 
 set -uo pipefail
 cat > /dev/null
+case "${CLAUDE_CODE_REMOTE:-}" in '' | 0 | false) ;; *) exit 0 ;; esac
 
 ROOT_GB=${CLADE_DISK_WARN_ROOT_GB:-25}
 TMP_GB=${CLADE_DISK_WARN_TMP_GB:-8}

@@ -17,7 +17,7 @@ paths:
 ---
 <!-- Clade native rule; source: rules/core/agent-self-verification.claim-cross-check.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Agent Self-Verification — 宣稱交叉核對（MUST 1 / 4 / 10 / 12 / 13 / 14）
 

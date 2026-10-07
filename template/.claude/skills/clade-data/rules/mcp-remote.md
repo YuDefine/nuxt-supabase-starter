@@ -3,7 +3,7 @@ description: 遠端 Supabase MCP 使用限制
 paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'packages/*/server/**/*.ts']
 ---
 <!-- Clade native rule; source: rules/modules/db-runtime/cf-workers/mcp-remote.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # MCP Remote Database
 

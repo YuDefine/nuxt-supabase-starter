@@ -23,7 +23,7 @@
 
 0-A.1 一般 review 與 0-A.2 深度 review 都由 Opus 5.5 medium 執行，每一輪都是新的 fresh-context reviewer，兩份 receipt 各自記 requested／observed。複審 MUST 由合格席執行，NEVER 降級成主線自審、worker、cloud CI 或其他模型。
 
-**Opus 不可用時 gate 保持未達成**並記錄 pending review——wrapper exit 4（account_unavailable）、11（account_unverifiable，量不到）、Herdr carrier 的 exit 3（review 沒跑成）都屬此類；subagent carrier 的 exit 3 是交付問題，照 `gates.md` § 0-A.1 重跑 finalize 或重跑 prepare 拿新 nonce；exit 8（model verification 為 `unverified`／`mismatch`）扣住 verdict，gate 保持未完成；**NEVER** 用其他模型、另一個 fresh agent 或主線自審補位；**NEVER** worker 或 Charles 代簽；**NEVER** 拿 cloud CI success 代替。exit 2（本地用法／依賴錯誤）、6（snapshot drift）、9（brief 無法安全交付）、10（本 session 是 leaf）是**本地或完整性問題**，照各自處置修正後重跑，不讀成 reviewer 不可用。exit 13／14 是輪數 ledger 的判定（沿用前一輪證據／第 4 輪拒跑），處置見 `gates.md` § 0-A.1 exit 表。
+**Opus 不可用時 gate 保持未達成**並記錄 pending review——wrapper exit 4（account_unavailable）、11（account_unverifiable，量不到）、Herdr carrier 的 exit 3（review 沒跑成）都屬此類；subagent carrier 的 exit 3 是交付問題，照 `gates.md` § 0-A.1 重跑 finalize 或重跑 prepare 拿新 nonce；exit 8（model verification 為 `unverified`／`mismatch`）扣住 verdict，gate 保持未完成；**NEVER** 用其他模型、另一個 fresh agent 或主線自審補位；**NEVER** worker 或 Charles 代簽；**NEVER** 拿 cloud CI success 代替。exit 2（本地用法／依賴錯誤）、6（snapshot drift）、9（brief 無法安全交付）、10（本 session 是 leaf）是**本地或完整性問題**，照各自處置修正後重跑，不讀成 reviewer 不可用。exit 13／14 是輪數 ledger 的判定（沿用前一輪證據／第 6 輪拒跑），處置見 `gates.md` § 0-A.1 exit 表。
 
 effort 恆 `medium`（Opus family cap）。**NEVER** 嘗試抬高——沒有 high／max 路徑，裁決需求也不升檔。`codex-review-safe.sh`（原 Astra carrier）整支 exit 2 拒跑；`CLAUDE_REVIEW_SEAT=fable` 同樣 exit 2，不靜默改 opus。
 

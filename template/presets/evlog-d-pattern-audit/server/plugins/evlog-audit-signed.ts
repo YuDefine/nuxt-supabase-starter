@@ -74,7 +74,7 @@ export default defineNitroPlugin((nitroApp) => {
 
     // serverSupabaseServiceRole 預設要 H3 event 拿 cookie / runtime config；drain 階段沒 H3 event。
     // 這裡傳 empty object hack — 對 service-role client 而言只要 SUPABASE_URL / service-role key
-    // 從 env 拿即可。Consumer 若有自家 singleton（如 <consumer-a> 的 useServiceClient()）建議改用，更乾淨。
+    // 從 env 拿即可。Consumer 若有自家 singleton（如 perno 的 useServiceClient()）建議改用，更乾淨。
     const client = serverSupabaseServiceRole({} as Parameters<typeof serverSupabaseServiceRole>[0])
 
     // 依 tenant 分組（不同 tenant chain 互不影響）

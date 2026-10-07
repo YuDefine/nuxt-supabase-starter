@@ -2,43 +2,18 @@
 # codex-review-safe.sh — cross-model code review via Pi openai-codex
 #
 # Engine: Pi `openai-codex` with a deterministic `read,grep,find,ls` allowlist.
-# The caller freezes the working-tree snapshot before model execution. On the
-# default (openai-codex) pool the runtime cannot obtain write/edit/bash/MCP
-# tools, which keeps prompt injection from escaping into mutations or side
-# effects. Historical Sol Cursor isolation (retired for Astra): on `--pool cursor` that allowlist is NOT enforced (TD-520): Cursor
-# native tools (Shell / Write / MCP / WebFetch / Subagent) stay available and
-# their executions do not enter the pi events log.
-#
-# Since TD-524 the cursor pool no longer runs under the caller's own UID with a
-# live filesystem: `runPi` spawns it inside bubblewrap with the audited
-# repo bound read-only, $HOME replaced by a tmpfs, and an auth.json filtered
-# down to the cursor credential. Repo mutation is refused by the kernel rather
-# than detected afterwards, and ~/.ssh, sibling repos and the codex/xai refresh
-# tokens are not in the namespace to reach. The sandbox is mandatory: if bwrap
-# is missing the run is REFUSED (errorClass `sandbox-unavailable`), never
-# downgraded to a bare spawn.
-#
-# Since TD-533 the sandbox also no longer keeps the network. The run enters a
-# network namespace whose only route is a host-side filter: DNS answers nothing
-# outside the Cursor API hostnames, and TLS connections are cut unless the
-# ClientHello SNI matches them. Enforcement is in the kernel's routing, so it
-# covers the SDK's in-process tools too — not just shell children, which is all
-# Cursor's own sandbox option reaches. Missing namespace = REFUSED
-# (errorClass `egress-unavailable`), never downgraded to an open network.
-#
-# What that still does not cover: the Cursor API itself is a permitted
-# destination, and the model's prompt reaches Cursor's servers by construction.
-# The allowlist bounds where the material can go, not who ultimately sees it.
+# The caller freezes the working-tree snapshot before model execution. The
+# runtime cannot obtain write/edit/bash/MCP tools, which keeps prompt injection
+# from escaping into mutations or side effects.
 #
 # The worktree integrity check below (exit 6) remains a DETECTION control for
-# accidents, concurrent-session edits, and default-pool enforcement
+# accidents, concurrent-session edits, and pi-layer enforcement
 # regressions — NOT a security boundary. Coverage is the repo worktree only.
 # Legacy Codex CLI config and credentials are never read, copied, or moved by
 # this script.
 #
 # Usage:
 #   .claude/scripts/codex-review-safe.sh [low|medium]
-# Legacy --pool cursor is rejected: Astra has no verified Cursor model.
 #
 # Default reasoning_effort = medium. The commit 0-A flow calls this twice:
 # 0-A.1 with `medium` (always, unless fast-path skips), and 0-A.2 with
@@ -55,7 +30,8 @@
 # in the 2026-07-22 context-exhaustion incident codex chose
 # `git diff HEAD --unified=100 -- <file>` per file on its own, inflating a
 # ~2,600-line diff to ~16,000 lines — 62% of the blowup that swallowed the
-# verdict (docs/pitfalls/2026-07-22-codex-max-review-context-exhaustion-no-verdict.md).
+# verdict (legacy id pitfall-codex-max-review-context-exhaustion-no-verdict,
+# resolved via specs/truth/legacy-ids.json).
 #
 # Embed budget: CODEX_REVIEW_MAX_DIFF_LINES (default 6000 lines), enforced at
 # whole-file granularity — a file whose diff doesn't fit is dropped intact and
@@ -164,34 +140,15 @@ case "$REASONING" in
 esac
 shift || true  # tolerate no args after reasoning
 
-# --pool cursor：保留舊參數以明確拒跑；Astra 尚無已驗證 Cursor model。
-#
-# 換池 MUST 走這裡而不是另派一次泛用 codex-dispatch：這支 script 的價值在它自己
-# 凍結 changeset、自己組 prompt（含 `## Review Verdict` 與 Semantic Verdict 表的
-# 格式契約）。ad-hoc dispatch 產出不帶那份契約，過不了 gates.md § 0-A.1 的機械
-# 檢查 —— 抓得到 bug，卻不算 gate 通過。
-#
-# 同檔換池不是降檔（per rules/core/agent-routing.dispatch-execution.md § 配額耗盡時的 fallback 紀律）。
-#
-# 安全邊界差異（TD-520 / TD-524）：cursor 池上 pi 的 `--tools` 白名單無效 —— sdk 層
-# 三條 enforcement 路徑已查證皆不可行（@cursor/sdk LocalAgentOptions 無工具白名單可設；
-# `--cursor-mode plan` 是 prompt guidance；`PI_CURSOR_SANDBOX=1` 本環境直接拒跑）。
-# 真修在 OS 層：TD-524 起 cursor 池一律跑在 bwrap 內，受審 repo 唯讀綁入、$HOME 換成
-# tmpfs、憑證只掛 cursor 一把。**read-only 現在是核心拒絕，不再是 exit 6 事後補償。**
-# 未被涵蓋的仍是外洩（sandbox 保留網路），判斷依據是你餵進去的材料敏感度。
 POOL="default"
 PI_POOL_ARGS=(--model gpt-6-astra)
 if [ "${1:-}" = "--pool" ]; then
   POOL="${2:-}"
   shift 2 || true
   case "$POOL" in
-    cursor)
-      echo "[codex-review-safe] Astra Cursor model is unavailable; review gate remains unmet (exit 4)." >&2
-      exit 4
-      ;;
     default) ;;
     *)
-      echo "[codex-review-safe] 錯誤：未知的 --pool $POOL（可用：cursor）" >&2
+      echo "[codex-review-safe] 錯誤：未知的 --pool $POOL（可用：default）" >&2
       exit 2
       ;;
   esac
@@ -228,31 +185,6 @@ if [ "$#" -gt 0 ]; then
   echo "[codex-review-safe] 錯誤：遷移到 Pi 後不接受額外 runtime flags；收到：$*" >&2
   exit 1
 fi
-# TD-534 上層門檻：repo 身分由 runtime 的下層擋（所有 cursor 派工都過），本層擋的是
-# 「repo 是我們的、但這個 branch 上是第三方 PR」。兩層都要——下層拿不到「這批 changeset
-# 從哪來」的語意，上層漏掉 codex-dispatch 的 cursor tier。
-#
-# 判定失敗就拒跑，**NEVER** 印個警告繼續：警告的預設結果是照跑，而這道門檻的整個用途
-# 就是改掉那個預設。門檻檔缺席（consumer 尚未散播）時同樣拒跑 cursor 池——「檢查不存在」
-# 與「檢查通過」在外部無法區分，fail-open 會讓這道門檻在最需要它的機器上靜靜消失。
-if [ "$POOL" = "cursor" ]; then
-  CURSOR_ORIGIN_GATE="$CLADE_HOME/vendor/scripts/lib/cursor-material-origin.ts"
-  if [ ! -f "$CURSOR_ORIGIN_GATE" ]; then
-    echo "[codex-review-safe] 錯誤：--pool cursor 拒跑，找不到材料來源門檻 $CURSOR_ORIGIN_GATE（TD-534）" >&2
-    exit 7
-  fi
-  if ! ORIGIN_VERDICT=$(node --input-type=module -e '
-    const m = await import(process.argv[1])
-    const v = m.assertFleetAuthored(process.argv[2])
-    if (!v.allowed) { process.stderr.write(v.reason + "\n"); process.exit(1) }
-  ' "$CURSOR_ORIGIN_GATE" "$REPO_ROOT" 2>&1); then
-    echo "[codex-review-safe] 錯誤：--pool cursor 拒跑，材料來源門檻未過（TD-534）" >&2
-    echo "[codex-review-safe]   $ORIGIN_VERDICT" >&2
-    echo "[codex-review-safe]   第三方材料 MUST 走 default 池。" >&2
-    exit 7
-  fi
-fi
-
 REVIEW_SAFE_TAG="codex-review-safe"
 REVIEW_SAFE_SCRIPT="codex-review-safe.sh"
 REVIEW_SANDBOX_NOTE='MCP tools are rejected by this sandbox — do not attempt them.'

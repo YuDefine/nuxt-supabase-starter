@@ -36,7 +36,7 @@
  * Exit code：命中且非 --warn-only → 1；讀檔失敗 → 2（infrastructure error）；否則 0。
  * 輸出契約見 rules/core/checker-contract.md § REQUIRED output contract。
  *
- * Pitfall: docs/pitfalls/2026-07-06-nuxt-ui-named-slot-default-fallback-shadowing.md（TD-236）
+ * Pitfall: [[pitfall-nuxt-ui-named-slot-default-fallback-shadowing]]（TD-236）
  * 由 ~/clade vendor/scripts/checks/ 散播，請勿直接編輯 consumer 副本。
  */
 

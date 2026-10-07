@@ -1,0 +1,14 @@
+{
+  "schema": "verification-maintenance/v1",
+  "outcome": "{{OUTCOME}}",
+  "target": "{{TARGET_PATH}}",
+  "source_coverage": { "covered": "{{SOURCE_COVERED}}", "total": "{{FEATURE_TOTAL}}" },
+  "live_coverage": { "covered": "{{LIVE_COVERED}}", "total": "{{FEATURE_TOTAL}}" },
+  "changed_paths": ["{{CHANGED_PATH}}"],
+  "product_gaps": ["{{PRODUCT_GAP}}"],
+  "unreachable": ["{{UNREACHABLE_ROUTE_AND_PREREQUISITE}}"],
+  "branch_created": "{{BRANCH_CREATED}}",
+  "commit_created": "{{COMMIT_CREATED}}",
+  "pr_created": "{{PR_CREATED}}",
+  "evidence": ["{{EVIDENCE_REFERENCE}}"]
+}

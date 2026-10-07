@@ -4,7 +4,7 @@
 /**
  * handoff-drift-scan.ts — surface stale HANDOFF.md entries
  *
- * Per the worktree atomicity flow (worktree-default.md §5.5), worktree
+ * Per the worktree atomicity flow ([[wt]] `rules/worktree保留與回收判準.md` Rule 3), worktree
  * branches accumulate commits until they land (`wt-helper merge-back` or a
  * squash PR). Between subagent commit and landing, HANDOFF.md often falls
  * behind: it says "P7 進行中" while the branch HEAD already has the P7
@@ -329,6 +329,18 @@ function daysBetween(fromMs, toMs) {
   return Math.floor((toMs - fromMs) / 86400000)
 }
 
+/**
+ * plan/truth repo（有 `specs/truth/work-lifecycle.md`）以 git 為歷史，`docs/archives/` 是退役
+ * 載體——完成的敘事直接刪，不搬月檔。
+ * 判準與 `rotate-handoff-done.ts` 的 `isPlanTruthRepo` 同一條；本檔會投影到 consumer，
+ * 所以不 import 它、就地判。
+ */
+function narrativeSink(consumerRoot, month) {
+  return existsSync(join(consumerRoot, 'specs', 'truth', 'work-lifecycle.md'))
+    ? 'delete it (git history keeps the record; decisions still in force belong in the owning plan)'
+    : `rotate to docs/archives/${month}-handoff-narrative.md`
+}
+
 function checkHandoffHealth(consumerRoot, thresholds, now = Date.now()) {
   const handoffPath = join(consumerRoot, 'HANDOFF.md')
   if (!existsSync(handoffPath)) {
@@ -371,7 +383,7 @@ function checkHandoffHealth(consumerRoot, thresholds, now = Date.now()) {
       const month = s.date.slice(0, 7)
       warnings.push({
         drift: 'narrative-section-stale',
-        message: `"## ${s.title}" is completed narrative ${s.ageDays}d old (threshold ${thresholds.narrative_age_days}d) — rotate to docs/archives/${month}-handoff-narrative.md unless the section contains a never-rotate marker (anti-redo / deferred)`,
+        message: `"## ${s.title}" is completed narrative ${s.ageDays}d old (threshold ${thresholds.narrative_age_days}d) — ${narrativeSink(consumerRoot, month)} unless the section contains a never-rotate marker (anti-redo / deferred)`,
       })
     } else if (
       s.kind === 'active' &&
@@ -581,7 +593,7 @@ async function main() {
   }
 
   console.error(
-    `  Tip: run \`/handoff\` to enter Mode B Health Gate (rotate completed narrative → docs/archives/<YYYY-MM>-handoff-narrative.md).`,
+    `  Tip: run \`/handoff\` to enter Mode B Health Gate (completed narrative → ${narrativeSink(consumerRoot, '<YYYY-MM>')}).`,
   )
 }
 

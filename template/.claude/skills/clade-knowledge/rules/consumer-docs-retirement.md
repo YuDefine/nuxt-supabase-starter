@@ -3,7 +3,7 @@ description: Consumer 零 docs 目錄與 truth 准入——lifecycle repo 不得
 paths: ['docs/**', '**/docs/**', 'specs/truth/**']
 ---
 <!-- Clade native rule; source: rules/core/consumer-docs-retirement.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Consumer docs 退役與 truth 准入
 

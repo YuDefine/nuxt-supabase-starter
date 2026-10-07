@@ -38,8 +38,10 @@ runs:
       run: |
         set -euo pipefail
         # 判定本體在 run.sh：本機的 local.ts 也呼叫同一支，CI 與本機只有一份邏輯。
+        # workflow 明寫了這個 action（mode 必填）＝已導入。此時引擎缺失是安裝不完整，
+        # 不是「尚未導入」：fail-closed，NEVER 印 skip 再 exit 0（checker-contract § Fail-closed Iron Law）。
         if [ ! -f "$GITHUB_ACTION_PATH/run.sh" ]; then
-          echo "::warning::run.sh not found next to action.yml — consumer not yet propagated, skipping gate"
-          exit 0
+          echo "::error::infrastructure-error: run.sh not found next to action.yml — the vendored action is incomplete (re-run clade propagate); the gate did NOT run"
+          exit 2
         fi
         bash "$GITHUB_ACTION_PATH/run.sh"

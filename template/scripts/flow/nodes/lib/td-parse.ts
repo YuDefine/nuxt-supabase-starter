@@ -18,6 +18,14 @@ export const DEBT_PARKED_STATUS = /blocked-attended-only|wontfix-until-signal/i
 export const SELF_VERIFY_HEADING = /^#{2,6}\s*自驗/
 export const ACCEPTANCE_PREDICATE =
   /\*\*(驗收|Acceptance|Unblock predicate|解凍 predicate)\*\*\s*[:：]/i
+/**
+ * `### Acceptance`／`### 驗收` 標題段——fleet register 裡驗收條件更常見的寫法（行內
+ * `**Acceptance**:` 是 clade 自己的習慣）。`Acceptance` 帶 word boundary（`Acceptance
+ * criteria` 算、`Acceptancecriteria` 不算）；`驗收` 同 `自驗` 走前綴（`驗收條件`／
+ * `驗收（…）` 算）。層級要 capture：標題段需帶內容才算證據，段的範圍由下一個同級或更淺
+ * 標題界定。
+ */
+export const ACCEPTANCE_HEADING = /^(#{2,6})\s*(?:Acceptance\b|驗收)/i
 export const LOCATION_LINE = /^(?:[-*+]\s+)?\*\*Location\*\*\s*[:：]/
 export const STATUS_LINE = /^(?:[-*+]\s+)?\*\*Status\*\*\s*[:：]\s*(.*)$/
 /**
@@ -41,7 +49,10 @@ export interface TdEntry {
   location: string
   /** `**Parent**: TD-NNN`, when the entry states one. NEVER inferred from prose links. */
   parent: string | null
-  /** A 自驗 heading or an acceptance predicate — either counts as an evidence carrier. */
+  /**
+   * A 自驗 heading, an inline acceptance predicate, or a non-empty `### Acceptance`／`### 驗收`
+   * section — each counts as an evidence carrier.
+   */
   hasEvidence: boolean
   needsPublish: boolean
   isOpen: boolean
@@ -105,12 +116,18 @@ export function parseTdRegister(source: string): TdEntry[] {
     let hasEvidence = false
     let needsPublish = false
 
-    for (const line of visible.slice(section.start + 1, end)) {
+    const bodyLines = visible.slice(section.start + 1, end)
+    for (const [i, line] of bodyLines.entries()) {
       const st = STATUS_LINE.exec(line)
       if (st) status = st[1]
       const pa = PARENT_LINE.exec(line)
       if (pa) parent = pa[1]
       if (SELF_VERIFY_HEADING.test(line) || ACCEPTANCE_PREDICATE.test(line)) hasEvidence = true
+      if (!hasEvidence) {
+        const acceptance = ACCEPTANCE_HEADING.exec(line)
+        if (acceptance && sectionHasContent(bodyLines, i + 1, acceptance[1].length))
+          hasEvidence = true
+      }
       if (LOCATION_LINE.test(line)) {
         location = line
         if (PUBLISH_REQUIRED_PATH.test(line)) needsPublish = true
@@ -138,6 +155,26 @@ export function parseTdRegister(source: string): TdEntry[] {
   }
 
   return entries
+}
+
+/**
+ * Whether the `#{level}` heading at `lines[from - 1]` opens a section with real content: at
+ * least one non-empty line that is neither a heading nor a `---` separator, before the next
+ * heading of the same or a shallower level. Deeper headings are the section's own subsections —
+ * skipped, not content. An empty `### Acceptance` is a leftover template slot, not evidence.
+ * Scans the metadata-visible copy: fenced examples and comments are already blanked out.
+ */
+function sectionHasContent(lines: string[], from: number, level: number): boolean {
+  for (let i = from; i < lines.length; i++) {
+    const heading = /^(#{1,6})(?:\s|$)/.exec(lines[i])
+    if (heading) {
+      if (heading[1].length <= level) return false
+      continue
+    }
+    const text = lines[i].trim()
+    if (text !== '' && text !== '---') return true
+  }
+  return false
 }
 
 /** Highest TD number present, or 0. The `r*-tdmax` family existed only to answer this. */

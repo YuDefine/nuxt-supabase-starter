@@ -5,8 +5,8 @@
 # /commit itself lands with `git commit --only -- <files>` plus a
 # `Via: /commit` trailer (SKILL.md Step 4). That path MUST pass.
 # Work-loop HANDOFF / tech-debt short commits are the whitelist.
-# Product landings on main without Via are the 2026-08-24/25 <consumer-a>
-# incident (5 commits, push blocked by provenance-gate).
+# Product landings on main without Via are the 2026-08-24/25 incident
+# in one consumer (5 commits, push blocked by provenance-gate).
 #
 # Session branches (worktree deferred-landing) pass — not main.
 #
@@ -84,6 +84,12 @@
 # a guard against mistakes, not against an adversary.
 
 set -euo pipefail
+
+# fleet_repo_root（可信 checkout 判定，見下方 whitelisted()）。載入失敗 → 函式不存在 →
+# 帶 clade 標記檔的 checkout 判不出身分，一律判白名單外（見 is_clade_home_checkout 的 2）；
+# NEVER 因此改去 import 目標 checkout 的程式碼，也 NEVER 落到 fleet 白名單。
+# shellcheck source=_skill-rule-reminder.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/_skill-rule-reminder.sh" 2>/dev/null || true
 
 input=$(cat)
 
@@ -562,6 +568,27 @@ expand_tilde() {
   esac
 }
 
+# The code is imported from "$1", so "$1" itself MUST be the trusted root —
+# not merely share its git-common-dir: a directory with a `.git` file whose
+# gitdir points into the clade home's .git/worktrees/ resolves to the clade
+# common dir while carrying its own scripts/lib/register-paths.ts.
+#
+# 0 = clade home, 1 = not clade home, 2 = cannot tell (the helper file did not
+# load). A linked worktree of the clade home is 1 by design: its
+# register-paths.ts lives in a tree that a copied `.git` file can impersonate,
+# so it gets the fleet whitelist. Git refuses to check one branch out twice, so
+# this only arises while the main checkout itself is off main/master.
+is_clade_home_checkout() {
+  local hit real
+  declare -F fleet_repo_root >/dev/null || return 2
+  real=$(cd -P -- "$1" 2>/dev/null && pwd -P) || return 1
+  if hit=$(fleet_repo_root "$1"); then
+    [ "$hit" = "clade"$'\t'"$real" ]
+    return
+  fi
+  return 1
+}
+
 whitelisted() {
   local p="$1"
   [ -z "$p" ] && return 1
@@ -571,13 +598,30 @@ whitelisted() {
   esac
   # Use the target checkout's SoT, as clade-home-guard and main-sync do.
   # A clade load failure must not fall back to the fleet whitelist.
+  # Only when the target IS the clade home (identity by real path, via
+  # fleet_repo_root): the commit target can be any repo — `git -C <dir>`, or
+  # an Edit that main_commit_allowlisted asks about — and importing its
+  # scripts/lib/register-paths.ts would run that repo's code. The marker
+  # files prove nothing; any repo can ship them. A lookalike gets the fleet
+  # whitelist below.
   if [ -f "$top/scripts/sync-rules.ts" ] && [ -f "$top/scripts/lib/register-paths.ts" ]; then
-    node --input-type=module -e '
-      import { pathToFileURL } from "node:url";
-      const { isRegisterPath } = await import(pathToFileURL(process.argv[1]).href);
-      process.exit(isRegisterPath(process.argv[2]) ? 0 : 1);
-    ' "$top/scripts/lib/register-paths.ts" "$p"
-    return $?
+    local is_home=0
+    is_clade_home_checkout "$top" || is_home=$?
+    case "$is_home" in
+      0)
+        node --input-type=module -e '
+          import { pathToFileURL } from "node:url";
+          const { isRegisterPath } = await import(pathToFileURL(process.argv[1]).href);
+          process.exit(isRegisterPath(process.argv[2]) ? 0 : 1);
+        ' "$top/scripts/lib/register-paths.ts" "$p"
+        return $?
+        ;;
+      1) ;;
+      *)
+        echo "pre-bash-git-commit-only-whitelist: _skill-rule-reminder.sh did not load; cannot tell whether $top is the clade home" >&2
+        return 1
+        ;;
+    esac
   fi
   case "$p" in
     HANDOFF.md|ROADMAP.md|docs/tech-debt.md) return 0 ;;

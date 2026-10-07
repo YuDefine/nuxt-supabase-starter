@@ -1,7 +1,7 @@
 <!-- Clade native rule; source: rules/core/output-hygiene.md; edit canonical source -->
 # Output Hygiene — 別把內部過程變成讀者的負擔
 
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 對外輸出（PR / commit message / code comment / Slack / 文件 / 跨團隊訊息）只該讓讀者最快理解「**現況 + 為什麼**」。
 

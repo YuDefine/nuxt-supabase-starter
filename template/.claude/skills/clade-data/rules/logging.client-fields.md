@@ -13,7 +13,7 @@ paths:
   - 'packages/**/nuxt.config.ts'
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/evlog/logging.client-fields.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Logging — Client transport 與 typed fields（全文）
 

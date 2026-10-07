@@ -1,0 +1,7 @@
+{
+  "name": "clade-pulls-review",
+  "private": true,
+  "dependencies": {
+    "pulls.review": "0.3.0"
+  }
+}

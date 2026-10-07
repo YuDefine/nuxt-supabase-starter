@@ -3,7 +3,7 @@ description: Overlay 元件（USlideover/UModal/UDrawer）body 必用 #body slot
 paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue']
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-overlay-slot.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Overlay 元件 slot 與寬度規約
 

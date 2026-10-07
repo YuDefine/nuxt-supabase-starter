@@ -108,7 +108,7 @@ resume 造成的中央 registry `update_policy.kind` 改動屬於 clade，回報
 
 | 基礎 | 出處 |
 | --- | --- |
-| Worktree gate | [[worktree-default]] §1，wt-helper 開 / merge-back。**機械檢查點見下方 § Worktree gate（fail-closed）** |
+| Worktree gate | [[wt]] 的 `rules/改tracked檔前先隔離判準.md` Rule 1，wt-helper 開 / merge-back。**機械檢查點見本檔下方「Worktree gate（fail-closed）」一節** |
 | Pi 派工模板 | `vendor/snippets/pi-upgrade-prompts/{first-pass,research}.md`（authoring source），SKILL.md § Pi prompt templates 是 plugin cache 副本 |
 | Pi watch protocol | [[agent-routing.pi-watch-protocol]] |
 | Selective stage on main | 一律 `git add package.json <lockfile>` + 額外指定檔，**NEVER** `git add -A` |
@@ -128,7 +128,7 @@ exit 0 才可繼續。exit 2（cwd 在 main working tree）**MUST** 停下開 wo
 **NEVER** 加 `|| true`、**NEVER** 改判成 warning、**NEVER** 因為「這次只改兩個檔」跳過。
 gate 沒有 `--allow-main` escape hatch，這是刻意的。
 
-> 這條在 2026-07-29 之前只是文字規約，實測擋不住：<consumer-b> 的 sweep 在 main 生出 per-package
+> 這條在 2026-07-29 之前只是文字規約，實測擋不住：某 consumer 的 sweep 在 main 生出 per-package
 > 迴圈跑起來，`git add package.json` 撈走另一個 session 未 commit 的 `pnpm version patch`，
 > 同時 `.git/index.lock` 讓對方的 `git commit` 直接失敗（TD-277）。commit message 的
 > `wt ` 前綴當時**不**保證真的在 worktree——接上 gate 之後才保證。
@@ -154,7 +154,7 @@ gate 沒有 `--allow-main` escape hatch，這是刻意的。
 每次 Fleet sweep **必須**全部滿足：
 
 - ✅ 變動一對一對應上游 release 列出的 BC（rename / removal / signature change / config schema 變更）— 找不到對應 clause 的改動，不准帶進來
-- ✅ 每個 consumer 各自開 worktree（per [[worktree-default]]），不在 main 直接動
+- ✅ 每個 consumer 各自開 worktree（per [[wt]] 的 `rules/改tracked檔前先隔離判準.md` Rule 1），不在 main 直接動
 - ✅ 每個 consumer 一個 atomic commit，依該 consumer `registry/consumers.json` 的 `workflow_model` 走（trunk-based 直接 push、pr-merge-based 開 PR）
 - ✅ 一次 sweep 只處理「**一個套件 × 一個 target version**」，不跨多套件 / 多 release 混在同一 sweep
 - ✅ Toolchain sweep（pnpm / Node 自身）額外一條：target **MUST 是 `latest` dist-tag 指到的版本**，pre-release tag 一律不進 fleet（toolchain 壞掉是全 consumer 同時無法 build，不像單一套件只影響用到它的地方）
@@ -176,26 +176,26 @@ gate 沒有 `--allow-main` escape hatch，這是刻意的。
 
 ## § Fleet MCP server 釘版：chrome-devtools-mcp（2026-09-30 Charles 拍板）
 
-clade 沒有 fleet MCP entry 的共同來源：`chrome-devtools-mcp` entry 是各 consumer 手放在自家 tracked 的 `.mcp.json` 與 `.cursor/mcp.json`（不在 `.clade/runtime/mcp.json`，投影器不產它）。所以釘版由 clade 在這裡定**唯一版本**，各 consumer 各自落地，不各 repo 各自選版。
+clade 沒有 fleet MCP entry 的共同來源：`chrome-devtools-mcp` entry 是各 consumer 手放在自家 tracked 的 `.mcp.json`（不在 `.clade/runtime/mcp.json`，投影器不產它）。所以釘版由 clade 在這裡定**唯一版本**，各 consumer 各自落地，不各 repo 各自選版。
 
-- **目前 fleet 版本：`chrome-devtools-mcp@1.10.1`**。entry 形狀一律 `"command": "npx", "args": ["-y", "chrome-devtools-mcp@1.10.1"]`，`.mcp.json` 與 `.cursor/mcp.json` 兩處同值
+- **目前 fleet 版本：`chrome-devtools-mcp@1.10.1`**。entry 形狀一律 `"command": "npx", "args": ["-y", "chrome-devtools-mcp@1.10.1"]`，`.mcp.json` 同值
 - **NEVER** `@latest`、range（`@^1`、`@1.x`）或不帶版本：npx 每次啟動都可能拉到不同版本，fleet 內同一工具行為不一致、壞版上游一發就全 fleet 同時中
-- **允許的差異只有一條**：<consumer-a> 帶 `--headless`（`["-y", "chrome-devtools-mcp@1.10.1", "--headless"]`）。其他 consumer 要加旗標 → 先改本節再落地，**NEVER** 在 consumer 端自行分岔
+- **允許的差異只有一條**：其中一個 consumer 帶 `--headless`（`["-y", "chrome-devtools-mcp@1.10.1", "--headless"]`）。其他 consumer 要加旗標 → 先改本節再落地，**NEVER** 在 consumer 端自行分岔
 - **升版一律 fleet 一次升**：先改本節的「目前 fleet 版本」，同一個 target 版本 sweep 所有帶 entry 的 consumer（仍受上方准入條件約束：一個套件 × 一個 target version、每 consumer 一個 atomic commit、依 `workflow_model` 落地，`update_policy: pinned` 的 consumer 也照改——它 pin 的是 clade release，不是這個 entry）。**NEVER** 單一 consumer 先升
 - **每次升版記錄**：在下表追加一列（日期、版本、理由／上游 changelog 連結、rollout 清單路徑）
 - 沒有 entry 的 consumer 不因本節新增 entry；要不要裝 chrome-devtools-mcp 是該 consumer 自己的事，裝了就照本節形狀
 
 | 日期 | 版本 | 理由 | rollout |
 | --- | --- | --- | --- |
-| 2026-09-30 | 1.10.1 | 由 `@latest` 改為釘版（<consumer-j> TD-021；當日 npm `latest` dist-tag） | `tasks/2026-09-30-mcp-pin/rollout.md` |
+| 2026-09-30 | 1.10.1 | 由 `@latest` 改為釘版（某 consumer 的 TD-021；當日 npm `latest` dist-tag） | `tasks/2026-09-30-mcp-pin/rollout.md` |
 
 ---
 
 # § Pi prompt templates（兩 mode 共享）
 
-> **Authoring source**：`~/offline/clade/vendor/snippets/pi-upgrade-prompts/{first-pass,research}.md`（clade-only，不散播）。下方 § A § B inline 是 plugin cache 副本，**改其中一處時兩邊都要同步**。未來會由 TD-129 dispatch script 機械化渲染。
+> **Authoring source**：`~/offline/clade/vendor/snippets/pi-upgrade-prompts/{first-pass,research}.md`（clade-only，不散播）。下方 § A § B inline 是 plugin cache 副本，**改其中一處時兩邊都要同步**——改完跑 `node vendor/scripts/version-upgrade-template-drift-audit.ts` 驗證兩份仍一致。未來會由 TD-129 dispatch script 機械化渲染。
 
-First-pass與research的**每一份**生成prompt都MUST包含`workspace_access: mutation`段；這是carrier capability，不是任務摘要。Dispatcher首跳用`--workspace-access mutation`，每一個retry照exit payload保留該值並排除所有`*-cursor`。
+First-pass與research的**每一份**生成prompt都MUST包含`workspace_access: mutation`段；這是carrier capability，不是任務摘要。Dispatcher首跳用`--workspace-access mutation`，每一個retry照exit payload保留該值。
 
 ## § A — First-pass 派工 prompt（per-package）
 
@@ -216,7 +216,7 @@ First-pass與research的**每一份**生成prompt都MUST包含`workspace_access:
 
 ## Workspace Capability
 
-`workspace_access: mutation`。這份 brief 會修改 working tree、lockfile、Git index 並建立 commit；dispatcher 與每一個 quota fallback 都 **MUST** 保留 `--workspace-access mutation`。**NEVER** 選 `grok-cursor` 或 `sol-cursor`；它們只承接 readonly inspection／review。
+`workspace_access: mutation`。這份 brief 會修改 working tree、lockfile、Git index 並建立 commit；dispatcher 與每一個 quota fallback 都 **MUST** 保留 `--workspace-access mutation`。
 
 你在 worktree `<wt-path>`（branch `<branch>`）跑。Package manager 是 `<PM>`。
 
@@ -325,7 +325,7 @@ Release: <release_url>
 
 ## Workspace Capability
 
-`workspace_access: mutation`。這份 brief 會修改 working tree、lockfile、Git index 並建立 commit；dispatcher 與每一個 quota fallback 都 **MUST** 保留 `--workspace-access mutation`。**NEVER** 選 `grok-cursor` 或 `sol-cursor`；它們只承接 readonly inspection／review。
+`workspace_access: mutation`。這份 brief 會修改 working tree、lockfile、Git index 並建立 commit；dispatcher 與每一個 quota fallback 都 **MUST** 保留 `--workspace-access mutation`。
 
 Medium 已經失敗一次。失敗 tail：
 
@@ -396,12 +396,11 @@ WHY_STUCK: <一句話為什麼即使查到資訊也卡住>
 - **NEVER** 主線自己改 `package.json` 或在升版階段（Step O.2）跑 `pnpm add` / `pnpm install`（升版全程委派給 pi / subagent）。**例外**：Step O.3.2.c post-merge-back `pnpm install` 是 setup chore，不是升版動作；以及 provider／配額不可用、該 package 的執行鏈走完（[outdated-mode.md](outdated-mode.md) § O.2.2）時由主線照同一份 per-package brief 接手升版——品質失敗不適用這條，見下一條
 - **NEVER** first-pass 失敗就直接問使用者 — 必須先自動升 research（`version-upgrade-research` 列，見 `outdated-mode.md` § O.2.4；靠研究不靠抬 effort）
 - **NEVER** research 也**品質失敗**就主線自己接手 — 必須 runtime-native question interface 讓使用者選（provider／配額不可用走完鏈才是主線接手，那不是品質失敗）
-- **NEVER** 把正在審查的 mutation carrier 先說成允許再在同一個決策反悔；若 carrier 是 `grok-cursor`，該 carrier 單一結論必須是拒絕，允許的 route 仍是 `grok-xai`。
 - runtime-native question interface 分成兩個能力判定：沒有 structured question 但普通對話與 exec session 可用時，直接在當前對話詢問使用者，**NEVER** 換 runtime；使用者已選 retry 但沒有可驗證的 background execution/completion surface 時，只阻擋依賴該 dispatch 的步驟、保留 worktree 與 durable task，**NEVER** 宣稱整個互動不可用。
-- **NEVER** 把 merge-back 當「下一步」丟給 user 自己跑（per [[worktree-default]] §5）
+- **NEVER** 把 merge-back 當「下一步」丟給 user 自己跑（per [[wt]] 的 `rules/就緒池交接判準.md` Rule 5）
 - pi 派工 prompt 第一行 MUST 含 `[DELEGATED-BY-CLAUDE-CODE]` marker（codex 端 Runtime Gate 驗證此 marker 存在）
 - **NEVER** 派 pi 時把 sandbox 換成 `read-only` / `workspace-write`（會擋 MCP）
-- **NEVER** 把上列Pi sandbox mode與`workspace_access`混為一談：version-upgrade一律是`mutation`，fallback排除每一個`*-cursor`；Cursor readonly security boundary不為升版放寬
+- **NEVER** 把上列Pi sandbox mode與`workspace_access`混為一談：version-upgrade一律是`mutation`
 - **NEVER** `git add -A` / `git add .` 在 main — 一律 selective stage
 
 Mode-specific 禁止事項見 [outdated-mode.md](outdated-mode.md)、[fleet-mode.md](fleet-mode.md)、[skills-mode.md](skills-mode.md) 與 [machine-mode.md](machine-mode.md) 尾段。
@@ -409,7 +408,7 @@ Mode-specific 禁止事項見 [outdated-mode.md](outdated-mode.md)、[fleet-mode
 # 相關規約
 
 - [[clade-role-and-todo-discipline]] § upstream-driven dep migration — carve-out 觸發判定 stub（准入條件 SoT 在本檔 § Fleet mode carve-out 准入）
-- [[worktree-default]] §1, §5 — worktree gate + skill-owned lifecycle
+- [[wt]] 的 `rules/改tracked檔前先隔離判準.md` Rule 1、`rules/就緒池交接判準.md` Rule 2 — worktree gate + skill-owned lifecycle
 - Parallel Subagent Fan-out（user-global runtime policy）+ [[agent-routing.dispatch-execution]] § Subagent 回報契約 — Fleet mode 長駐 subagent + thin brief + 4-status 規約
 - [[agent-routing.pi-watch-protocol]] — pi 派工 + watch + Runtime Gate marker
 - [[commit]] — Outdated mode main 端 selective stage 後的 `/commit` 收尾流程

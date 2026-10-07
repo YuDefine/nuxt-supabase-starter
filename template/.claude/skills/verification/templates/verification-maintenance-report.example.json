@@ -1,0 +1,17 @@
+{
+  "schema": "verification-maintenance/v1",
+  "outcome": "clean",
+  "target": "<skills-root>/verify-notes",
+  "source_coverage": { "covered": 5, "total": 5 },
+  "live_coverage": { "covered": 5, "total": 5 },
+  "changed_paths": [],
+  "product_gaps": [],
+  "unreachable": [],
+  "branch_created": false,
+  "commit_created": false,
+  "pr_created": false,
+  "evidence": [
+    "artifacts/verify/2026-10-05T0930/create-save.png",
+    "artifacts/verify/2026-10-05T0930/manifest.json"
+  ]
+}

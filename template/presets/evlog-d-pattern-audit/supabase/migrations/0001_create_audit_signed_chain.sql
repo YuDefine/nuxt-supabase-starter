@@ -4,7 +4,7 @@
 -- to: presets/evlog-d-pattern-audit/supabase/migrations/0001_create_audit_signed_chain.sql
 -- do not edit consumer-side; modify clade vendor snippet then re-propagate
 
--- O1: audit_signed_chain — <consumer-a> O1 overlay 的 evlog signed chain 持久化
+-- O1: audit_signed_chain — perno O1 overlay 的 evlog signed chain 持久化
 -- Source: clade docs/evlog-master-plan.md § 12.3
 --
 -- 與 D-pattern audit_logs 的關係：
@@ -13,7 +13,7 @@
 --   audit_chain_drift (alert)     ← auditDiff cron 偵測 drift 寫進這
 --
 -- 設計原則（lock 13）：
--- 1. 與 audit_logs 完全分檔，不對 <consumer-a> production schema 加 column
+-- 1. 與 audit_logs 完全分檔，不對 perno production schema 加 column
 -- 2. event_id 是 PRIMARY KEY 也是 FK ON DELETE RESTRICT — audit_logs 不可被刪
 -- 3. evlog_hash secret 與 audit_logs hash secret 獨立；rotation 只動本表
 -- 4. evlog_prev_hash 指向同 tenant 上一筆 audit_signed_chain row 的 evlog_hash

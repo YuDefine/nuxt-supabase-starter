@@ -68,3 +68,6 @@ run_check clade-projection-drift
 
 # 10) consumer-carriers — 擋已退役 consumer 重建 docs/、lifecycle repo 新開 TD（#412 C2）
 run_check consumer-carriers
+
+# 11) review-integrity — 最後檢查，包含 vp-staged 可能改寫的 index
+run_check review-integrity

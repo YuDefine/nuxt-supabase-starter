@@ -1259,8 +1259,9 @@ export function gitExcludedRootsForArchive(
   // at the prefix cannot reproduce the pair without the actual trash
   // tree. (`commondir` cannot bind the move: its `../..` back-link
   // resolves to the common dir's parent once the admin dir is relocated
-  // beside it.) Anything else at the name stays in the inventory and
-  // fails verification as drift.
+  // beside it.) Anything else at the name stays in the inventory; its drift
+  // fails verification only when it is the source's own relocated admin dir
+  // (isSourcePrivateGitPath), or for a main-checkout source.
   const trashedMetadata = existsSync(common)
     ? readdirSync(common, { withFileTypes: true })
         .filter((entry) => entry.isDirectory() && entry.name.startsWith('.clade-trashed-meta-'))
@@ -2132,6 +2133,7 @@ function restoreAndCompare(
   expected: SourceInventory,
   options: InventoryOptions,
   gitDriftPrefixes?: string[],
+  gitDriftOptions: GitDriftOptions = {},
 ): SourceInventory {
   const actual = restoredInventory(archive, options)
   const expectedExternalSymlinks = new Set(expected.externalSymlinks)
@@ -2146,12 +2148,11 @@ function restoreAndCompare(
     throw new Error(
       `Offline restore contains symlinks outside the restored root: ${actual.externalSymlinks.join(', ')}`,
     )
-  // Git archives compare source-privately: shared-mutable paths (a fetch
-  // landing mid-capture, a pruned object) are tolerated, everything else —
-  // the source's own worktrees/<id>/** admin dir, config, info — must be
-  // carried byte-exact.
+  // Git archives compare source-privately (isSourcePrivateGitPath): only the
+  // source's own admin dir and the Git files that change how the restored
+  // repository is read must match; config matches by projection.
   if (gitDriftPrefixes !== undefined) {
-    const drift = gitInventoryDrift(expected, actual, gitDriftPrefixes)
+    const drift = gitInventoryDrift(expected, actual, gitDriftPrefixes, gitDriftOptions)
     if (drift.length)
       throw new Error(
         `Offline restore drops source-private Git state: ${drift.slice(0, 3).join(', ')}`,
@@ -2186,6 +2187,28 @@ function restoreAndCompare(
   )
 }
 
+// Closure checks only need the exit status. fsck writes one line per dangling
+// object to stdout; a large common dir exceeds execFileSync's 1 MiB default
+// and the spawn dies ENOBUFS even when the repository is intact. stdout is
+// discarded. stderr stays bounded so a real failure still names itself, and a
+// non-zero exit still fails closed.
+const GIT_VERIFY_STDERR_MAX_BUFFER = 128 * 1024 * 1024
+
+function assertGitCommand(args: string[], env: NodeJS.ProcessEnv = isolatedGitEnv): void {
+  const result = spawnSync('git', args, {
+    env,
+    maxBuffer: GIT_VERIFY_STDERR_MAX_BUFFER,
+    stdio: ['ignore', 'ignore', 'pipe'],
+  })
+  if (result.error === undefined && result.status === 0) return
+  const stderr = Buffer.isBuffer(result.stderr)
+    ? result.stderr.toString('utf8').trim()
+    : String(result.stderr ?? '').trim()
+  const detail =
+    result.error !== undefined ? result.error.message : stderr || `exit ${String(result.status)}`
+  throw new Error(detail, { cause: result.error })
+}
+
 function verifyRestoredNestedGitClosure(archive: string, options: InventoryOptions): void {
   if (options.allowNestedRepositories !== true) return
   withRestoredArchive(archive, (restored) => {
@@ -2193,14 +2216,8 @@ function verifyRestoredNestedGitClosure(archive: string, options: InventoryOptio
     for (const repo of nestedRepositoryPaths(restored, inventory)) {
       assertContainedNestedGitStorage(repo, restored)
       try {
-        execFileSync('git', ['-C', repo, 'rev-list', '--objects', '--all', '--reflog'], {
-          env: isolatedGitEnv,
-          stdio: ['ignore', 'ignore', 'pipe'],
-        })
-        execFileSync('git', ['-C', repo, 'fsck', '--full', '--strict'], {
-          env: isolatedGitEnv,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        })
+        assertGitCommand(['-C', repo, 'rev-list', '--objects', '--all', '--reflog'])
+        assertGitCommand(['-C', repo, 'fsck', '--full', '--strict'])
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error)
         throw new Error(`Offline restored nested Git closure verification failed: ${detail}`, {
@@ -2220,32 +2237,56 @@ function assertInventoryStable(
     throw new Error(`${label} changed during preservation capture`)
 }
 
-// Common-dir state sibling sessions legitimately move while a capture or a
-// resume's live comparison runs — none of it is private to the source being
-// cleaned, cleanup never deletes it, and the restored-closure checks (HEAD
-// reachability, fsck, worktree relink) prove the archive is still sufficient
-// without pinning these bytes:
-//   objects/**      — content-addressed; a concurrent fetch adds, a gc
-//                     repacks or prunes, and mtimes freshen without a byte of
-//                     the source's own state moving (TD-1097, RUSH-50).
-//   refs/**, packed-refs — sibling branches/tags move on any fetch or push;
-//                     the source's own head is separately pinned by the
-//                     receipt's recorded rev-parse value.
-//   logs/**         — reflogs are shared append-only protocol state; a remote
-//                     fetch writes logs/refs/remotes/** continuously.
-//   root scratch    — FETCH_HEAD/index/COMMIT_EDITMSG/*_HEAD/…: with a linked
-//                     worktree source these are the MAIN checkout's staging
-//                     files (the source's own admin state lives under
-//                     worktrees/<id>/ and stays strict); with a main-checkout
-//                     source they are the same mutable names, and HEAD
-//                     identity is still enforced by the receipt's head
-//                     compare — never by this file's bytes.
-//   worktrees/<other>/** — another checkout's admin dir. Siblings are already
-//                     excluded from capture and live walks; an entry only
-//                     appears when an archive predates an exclusion or a
-//                     sibling was pruned between capture and compare — either
-//                     way not this source's drift.
-const SHARED_GIT_SCRATCH_ROOT = new Set([
+// Which common-dir paths must survive byte-exact. Cleanup removes exactly two
+// things — the source tree and its own `worktrees/<id>` admin dir (both are
+// renamed into trash) — and never touches the rest of the common dir, so the
+// archive only has to prove what restore needs from it. That set is an
+// allowlist; everything else in the common dir is shared state that sibling
+// sessions move while a capture or a resume's live comparison runs, and its
+// drift is never this source's loss (the snapshot is still archived — only
+// drift is tolerated):
+//   worktrees/<own>/** — the source's admin dir (HEAD, index, gitdir, …).
+//   .clade-trashed-meta-<own id>-* — that same admin dir after a teardown
+//                     moved it beside the common dir; a sibling's relocation
+//                     is not ours.
+//   info/**, hooks/**, description, commondir — change how Git reads the
+//                     restored repository (sparse-checkout, exclude, hook
+//                     behaviour). A linked source's submodule gitdirs live
+//                     under its own worktrees/<id>/modules; the common
+//                     modules/** belongs to the main checkout.
+//   config          — strict by projection, not bytes: every session writes
+//                     it (`push -u`, `worktree add`, remote tracking), and
+//                     Git replaces it by lock+rename, so any archived version
+//                     is whole. Only the keys that change how the repository
+//                     or this source's branch is read must match —
+//                     gitConfigProjection. A resume after a teardown that
+//                     deleted the branch fails here on purpose.
+// Everything else is tolerated: objects/refs/logs/packed-refs (fetch, gc,
+// pushes — the source head is pinned by the receipt's rev-parse and the
+// restored-closure checks prove reachability), root scratch such as
+// FETCH_HEAD/index/*_HEAD/shallow (the MAIN checkout's staging files for a
+// linked source), sibling `worktrees/<name>/**`, and clade tool state that
+// every session appends or rewrites (clade-work-inventory, clade-ledger,
+// clade-main-writes.jsonl, sg-reviewed-shas, wt-superseded.jsonl, …).
+// Naming those one by one retained every landed source whenever a new tool
+// started writing beside them.
+// All of this assumes a linked-worktree source. A main-checkout source (no
+// own admin dir) carries the common dir inside the tree cleanup would delete,
+// so there only the long-standing shared set — objects/refs/logs, root
+// scratch, sibling worktrees/** and the two clade journals — is tolerated and
+// everything else, config included, stays byte-exact. (worktrees/** matches
+// the pre-allowlist classifier, whose `!path.startsWith('worktrees/') ||
+// own.some(…)` already tolerated every admin dir when own was empty.)
+const SOURCE_PRIVATE_GIT_ROOT = new Set(['info', 'hooks', 'description', 'commondir'])
+const MAIN_CHECKOUT_SHARED_ROOT = new Set([
+  'objects',
+  'refs',
+  'logs',
+  'clade-work-inventory',
+  'clade-ledger',
+  'worktrees',
+])
+const MAIN_CHECKOUT_SHARED_SCRATCH = new Set([
   'HEAD',
   'index',
   'COMMIT_EDITMSG',
@@ -2263,50 +2304,174 @@ const SHARED_GIT_SCRATCH_ROOT = new Set([
   'packed-refs',
 ])
 
-export function isSharedGitMutablePath(path: string): boolean {
-  const top = path.split('/', 1)[0]
-  if (top === 'objects' || top === 'refs' || top === 'logs') return true
-  return !path.includes('/') && SHARED_GIT_SCRATCH_ROOT.has(path)
+/**
+ * `sourceName` is the source worktree's basename: teardown names the moved
+ * admin dir `.clade-trashed-meta-<admin id>-<source basename>-<uuid>`, and
+ * matching both parts keeps a sibling whose id merely extends ours out.
+ * Without it every `.clade-trashed-meta-<admin id>-*` counts as ours.
+ */
+export function isSourcePrivateGitPath(
+  path: string,
+  ownMetadataPrefixes: string[] = [],
+  sourceName?: string,
+): boolean {
+  const top = path.split('/', 1)[0]!
+  if (ownMetadataPrefixes.length === 0)
+    return !(
+      MAIN_CHECKOUT_SHARED_ROOT.has(top) ||
+      (!path.includes('/') && MAIN_CHECKOUT_SHARED_SCRATCH.has(path))
+    )
+  if (ownMetadataPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`)))
+    return true
+  if (top === 'config' || SOURCE_PRIVATE_GIT_ROOT.has(top)) return true
+  return ownMetadataPrefixes.some((prefix) =>
+    top.startsWith(`.clade-trashed-meta-${basename(prefix)}-${sourceName ? `${sourceName}-` : ''}`),
+  )
+}
+
+// core.* covers repository format and how the restored tree is read
+// (autocrlf, eol, sparseCheckout, hooksPath, attributesFile); filter.* and
+// lfs.* drive smudge/clean. Sessions rewrite these with the same values
+// (husky's hooksPath), which the projection's value compare ignores.
+const CONFIG_PROJECTION_KEY = /^(?:core|extensions|submodule|filter|lfs)\..+$/
+
+/**
+ * The config keys restore depends on, in file order: repository format,
+ * submodules, and the given branches' tracking sections. `undefined` when
+ * Git cannot parse the file — callers treat that as drift.
+ */
+export function gitConfigProjection(configPath: string, branches: string[]): string | undefined {
+  let listed: string
+  try {
+    listed = execFileSync('git', ['config', '--file', configPath, '--list', '-z'], {
+      encoding: 'utf8',
+      env: isolatedGitEnv,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch {
+    return undefined
+  }
+  return listed
+    .split('\0')
+    .filter((entry) => {
+      const key = entry.split('\n', 1)[0]!
+      return (
+        CONFIG_PROJECTION_KEY.test(key) ||
+        branches.some(
+          (branch) =>
+            key.startsWith(`branch.${branch}.`) &&
+            !key.slice(`branch.${branch}.`.length).includes('.'),
+        )
+      )
+    })
+    .join('\0')
+}
+
+/**
+ * Whether the config a Git archive carries projects to the live common dir's
+ * config for this source's branch. Any failure to read either side is a
+ * mismatch.
+ */
+function archivedGitConfigMatchesLive(archive: string, common: string, sourceRoot: string) {
+  const sandbox = mkdtempSync(join(tmpdir(), 'clade-preservation-config-'))
+  try {
+    const archived = join(sandbox, 'config')
+    writeFileSync(
+      archived,
+      execFileSync('tar', ['--extract', '--to-stdout', '--file', archive, 'config'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }),
+    )
+    // Full ref, not --short: an ambiguous name (a tag of the same name)
+    // shortens to `heads/<name>`, which names no config section.
+    // A detached HEAD has no branch section to protect; an unreadable HEAD
+    // (tree already in trash) cannot name one, so it is a mismatch.
+    if (!gitValue(sourceRoot, ['rev-parse', '--verify', '-q', 'HEAD'])) return false
+    // `symbolic-ref -q` exits 1 on a detached HEAD; gitValue would rethrow.
+    const symbolic = spawnSync('git', ['symbolic-ref', '-q', 'HEAD'], {
+      cwd: sourceRoot,
+      encoding: 'utf8',
+      env: isolatedGitEnv,
+    })
+    const ref = symbolic.status === 0 ? symbolic.stdout.trim() : ''
+    const branches = ref.startsWith('refs/heads/') ? [ref.slice('refs/heads/'.length)] : []
+    const archivedProjection = gitConfigProjection(archived, branches)
+    return (
+      archivedProjection !== undefined &&
+      archivedProjection === gitConfigProjection(join(common, 'config'), branches)
+    )
+  } catch {
+    return false
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true })
+  }
+}
+
+export interface GitDriftOptions {
+  /** Asked once, only when `config` bytes differ; true tolerates that drift. */
+  configProjectionMatches?: () => boolean
+  /** The source worktree's basename — see isSourcePrivateGitPath. */
+  sourceName?: string
 }
 
 /**
  * Per-path drift between two Git-dir inventories (capture-time vs live, or
- * archive vs live). A path counts as drift only when it is source-private:
- * anything NOT shared-mutable, and inside `worktrees/` only the caller's own
- * admin dir (given as common-relative `ownMetadataPrefixes`, e.g.
- * `worktrees/<id>`). Every other `worktrees/<name>` entry is sibling state
- * and tolerated. Returns the drifted path list — empty means compatible.
+ * archive vs live). A path counts as drift only when it is source-private
+ * (isSourcePrivateGitPath; the caller's own admin dir is given as
+ * common-relative `ownMetadataPrefixes`, e.g. `worktrees/<id>`). `config`
+ * byte drift is forgiven when `configProjectionMatches` says the restore-
+ * relevant keys still agree. Returns the drifted path list — empty means
+ * compatible.
  */
 export function gitInventoryDrift(
   expected: Pick<SourceInventory, 'entries'>,
   actual: Pick<SourceInventory, 'entries'>,
   ownMetadataPrefixes: string[] = [],
+  options: GitDriftOptions = {},
 ): string[] {
-  const identity = (entry: InventoryEntry) => JSON.stringify(inventoryIdentityEntry(entry, true))
+  // uid/gid are not dropped bytes. comparableInventory already ignores them,
+  // and restore does not pass --same-owner: a root-owned worktrees/<id>/index
+  // extracts as the cleanup user with the same digest. Content, mode, and
+  // type stay strict — the index is not transient.
+  const identity = (entry: InventoryEntry) => {
+    const fields = inventoryIdentityEntry(entry, true)
+    delete fields.uid
+    delete fields.gid
+    return JSON.stringify(fields)
+  }
   const expectedBy = new Map(expected.entries.map((entry) => [entry.path, identity(entry)]))
   const actualBy = new Map(actual.entries.map((entry) => [entry.path, identity(entry)]))
-  const isPrivate = (path: string) =>
-    !isSharedGitMutablePath(path) &&
-    (!path.startsWith('worktrees/') ||
-      ownMetadataPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`)))
   const drift: string[] = []
   for (const path of new Set([...expectedBy.keys(), ...actualBy.keys()])) {
-    if (expectedBy.get(path) !== actualBy.get(path) && isPrivate(path)) drift.push(path)
+    if (expectedBy.get(path) === actualBy.get(path)) continue
+    if (!isSourcePrivateGitPath(path, ownMetadataPrefixes, options.sourceName)) continue
+    // A main-checkout source (no own admin dir) loses the common dir with the
+    // tree, so its archived config is the only copy and stays byte-exact.
+    if (
+      path === 'config' &&
+      ownMetadataPrefixes.length > 0 &&
+      expectedBy.has(path) &&
+      actualBy.has(path) &&
+      options.configProjectionMatches?.() === true
+    )
+      continue
+    drift.push(path)
   }
   return drift
 }
 
 /**
- * The git-dir counterpart of assertInventoryStable: shared-mutable and
- * sibling-metadata churn never counts as drift, everything else does.
+ * The git-dir counterpart of assertInventoryStable: only source-private drift
+ * (isSourcePrivateGitPath) fails it.
  */
 export function assertGitInventoryStable(
   expected: Pick<SourceInventory, 'entries'>,
   actual: Pick<SourceInventory, 'entries'>,
   label: string,
   ownMetadataPrefixes: string[] = [],
+  options: GitDriftOptions = {},
 ): void {
-  const drift = gitInventoryDrift(expected, actual, ownMetadataPrefixes)
+  const drift = gitInventoryDrift(expected, actual, ownMetadataPrefixes, options)
   if (drift.length)
     throw new Error(
       `${label} changed during preservation capture (${drift.slice(0, 3).join(', ')})`,
@@ -2472,9 +2637,9 @@ function verifyRestoredGitLayout(
           throw new Error(
             `Offline restored Git resolves a worktree outside the restore: ${effectiveWorktree}`,
           )
-        execFileSync('git', ['-C', worktree, 'status', '--porcelain'], {
-          env: { ...isolatedGitEnv, CLADE_PRESERVATION_OFFLINE_VERIFY: '1' },
-          stdio: ['ignore', 'pipe', 'pipe'],
+        assertGitCommand(['-C', worktree, 'status', '--porcelain'], {
+          ...isolatedGitEnv,
+          CLADE_PRESERVATION_OFFLINE_VERIFY: '1',
         })
         const restoredHead = execFileSync(
           'git',
@@ -2497,18 +2662,9 @@ function verifyRestoredGitLayout(
 }
 
 function verifyRestoredGitObjects(gitDirectory: string, expectedHead: string): void {
-  execFileSync('git', ['--git-dir', gitDirectory, 'cat-file', '-e', `${expectedHead}^{commit}`], {
-    env: isolatedGitEnv,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-  execFileSync('git', ['--git-dir', gitDirectory, 'rev-list', '--objects', '--all', '--reflog'], {
-    env: isolatedGitEnv,
-    stdio: ['ignore', 'ignore', 'pipe'],
-  })
-  execFileSync('git', ['--git-dir', gitDirectory, 'fsck', '--full', '--strict'], {
-    env: isolatedGitEnv,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+  assertGitCommand(['--git-dir', gitDirectory, 'cat-file', '-e', `${expectedHead}^{commit}`])
+  assertGitCommand(['--git-dir', gitDirectory, 'rev-list', '--objects', '--all', '--reflog'])
+  assertGitCommand(['--git-dir', gitDirectory, 'fsck', '--full', '--strict'])
 }
 
 // The recorded `gitdir:` text names `<admin>/modules/<chain>`. The chain
@@ -2649,10 +2805,10 @@ export function verifyPreservationArchive(
       if (Boolean(currentGitInventory) !== Boolean(receipt.inventory.git)) return false
       // The live common dir is compared against what the ARCHIVE actually
       // holds (the tar is sha-bound to the receipt), not a stale capture-time
-      // digest: shared-mutable churn — a concurrent fetch moving FETCH_HEAD,
-      // logs/refs/**, objects — must not retain an unrelated landed source
-      // (RUSH-50). The source's own `worktrees/<id>/**` admin dir and every
-      // non-shared path still compare byte-exact.
+      // digest: churn outside the source-private allowlist — a concurrent
+      // fetch moving FETCH_HEAD, logs/refs/**, objects, clade tool state —
+      // must not retain an unrelated landed source (RUSH-50). Only
+      // isSourcePrivateGitPath paths compare byte-exact; config by projection.
       if (currentGitInventory && receipt.archives.git && receipt.inventory.git) {
         if (
           !existsSync(receipt.archives.git.path) ||
@@ -2673,7 +2829,15 @@ export function verifyPreservationArchive(
           const ownPrefixes = gitWorktreeMetadataRoots(sourcePath, currentGitCommonDir!).map(
             (metadataRoot) => relative(currentGitCommonDir!, metadataRoot),
           )
-          if (gitInventoryDrift(archivedGit, currentGitInventory, ownPrefixes).length) return false
+          const gitArchivePath = receipt.archives.git.path
+          if (
+            gitInventoryDrift(archivedGit, currentGitInventory, ownPrefixes, {
+              configProjectionMatches: () =>
+                archivedGitConfigMatchesLive(gitArchivePath, currentGitCommonDir!, sourcePath),
+              sourceName: basename(sourcePath),
+            }).length
+          )
+            return false
         }
       }
       const currentWorktree = inventoryTree(sourcePath, options)
@@ -2785,12 +2949,15 @@ function gitArchive(
   // re-inventoried instead, and only source-private paths must match what
   // the capture walked: shared-mutable churn (a fetch landing between walk
   // and tar, a pack pruned mid-read) never retains, while a dropped admin
-  // file or config still fails closed. The returned inventory is the
+  // file or a changed config projection still fails closed. The returned inventory is the
   // archive's own — the receipt records what the bytes provably contain.
   const ownPrefixes = gitWorktreeMetadataRoots(root, common).map((metadataRoot) =>
     relative(common, metadataRoot),
   )
-  const restored = restoreAndCompare(destination, inventory, gitOptions, ownPrefixes)
+  const restored = restoreAndCompare(destination, inventory, gitOptions, ownPrefixes, {
+    configProjectionMatches: () => archivedGitConfigMatchesLive(destination, common, root),
+    sourceName: basename(root),
+  })
   if (!expectedHead) throw new Error('Git preservation cannot verify an unborn HEAD')
   verifyRestoredGitClosure(destination, restored, expectedHead, options)
   return {
@@ -2923,7 +3090,14 @@ export function captureAndVerify(options: {
       )
         return true
       const archivedGit = restoredInventory(parsed.archives.git.path, gitMetadataOptions)
-      return gitInventoryDrift(archivedGit, gitInventory, gitOwnPrefixes).length === 0
+      const gitArchivePath = parsed.archives.git.path
+      return (
+        gitInventoryDrift(archivedGit, gitInventory, gitOwnPrefixes, {
+          configProjectionMatches: () =>
+            archivedGitConfigMatchesLive(gitArchivePath, gitCommonDir!, sourceRoot),
+          sourceName: basename(sourceRoot),
+        }).length === 0
+      )
     }
     const archiveMatches = !(
       parsed.profile.id !== options.profile.id ||
@@ -2964,13 +3138,21 @@ export function captureAndVerify(options: {
         inventoryTree(sourceRoot, metadataOptions),
         'Source inventory',
       )
-      if (gitCommonDir && gitInventory)
+      if (gitCommonDir && gitInventory) {
+        const gitArchivePath = parsed.archives.git?.path
         assertGitInventoryStable(
           gitInventory,
           inventoryTree(gitCommonDir, gitMetadataOptions, gitExcludedRoots),
           'Git inventory',
           gitOwnPrefixes,
+          {
+            configProjectionMatches: () =>
+              gitArchivePath !== undefined &&
+              archivedGitConfigMatchesLive(gitArchivePath, gitCommonDir, sourceRoot),
+            sourceName: basename(sourceRoot),
+          },
         )
+      }
       syncDirectoryAndParents(complete)
       return parsed
     }
@@ -3017,13 +3199,21 @@ export function captureAndVerify(options: {
         gitMetadataOptions,
       )
     assertInventoryStable(inventory, inventoryTree(sourceRoot, metadataOptions), 'Source inventory')
-    if (gitCommonDir && gitInventory)
+    if (gitCommonDir && gitInventory) {
+      const gitArchivedPath = gitArchiveResult?.path
       assertGitInventoryStable(
         gitInventory,
         inventoryTree(gitCommonDir, gitMetadataOptions, gitExcludedRoots),
         'Git inventory',
         gitOwnPrefixes,
+        {
+          configProjectionMatches: () =>
+            gitArchivedPath !== undefined &&
+            archivedGitConfigMatchesLive(gitArchivedPath, gitCommonDir, sourceRoot),
+          sourceName: basename(sourceRoot),
+        },
       )
+    }
     const receipt: PreservationReceipt = {
       schemaVersion: PRESERVATION_SCHEMA_VERSION,
       operationId: generation,

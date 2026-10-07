@@ -3,7 +3,7 @@ description: 錯誤處理規範（Server 驗證 + Client 顯示）
 paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'server/**/*.ts', 'packages/*/server/**/*.ts']
 ---
 <!-- Clade native rule; source: rules/core/error-handling.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Error Handling
 

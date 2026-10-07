@@ -3,7 +3,7 @@ description: 耦合與內聚的三層分工——import cycle / barrel 的 gate 
 paths: ['**/*.{ts,tsx,mts,cts,vue}']
 ---
 <!-- Clade native rule; source: rules/core/coupling-cohesion.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Coupling & Cohesion
 
@@ -43,6 +43,10 @@ SOLID 在 functional TS 語境的可測子集：只收 S（內聚）、O（shotg
 函式體內出現 `// Validation` / `// Calculation` / `// Persist` 這類分段標籤時，每個被標籤的區塊
 MUST 抽成具名函式，讓上層函式讀起來是一份目錄而不是實作。區塊順序 MUST 讓呼叫端由上往下讀就能
 跟上故事——先做什麼、再做什麼，不要先跳進細節。
+
+### 註解在轉述 SSoT = 隱性耦合
+
+註解抄了 registry／rule／schema 已有的事實，SSoT 一改它就靜默過期。處置與判準見 [[code-style]] § SSoT 優先 與 C0。
 
 ### 參數順序有歧義時包成參數物件
 

@@ -3,7 +3,7 @@ description: nuxt-security 模組設定 baseline — CSP、headers、CSRF 共用
 paths: ['nuxt.config.ts']
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-security.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Nuxt Security Baseline
 
@@ -104,7 +104,7 @@ routeRules: {
 
 部署到 Cloudflare 的 site，zone 開啟 Web Analytics **Automatic Setup**（default 開）時，Cloudflare 會在所有 HTML 注入 `https://static.cloudflareinsights.com/beacon.min.js` 並 POST 到 `https://cloudflareinsights.com/cdn-cgi/rum`；CSP 未白名單這兩個 host 就會持續報 CSP violation。所以 baseline `connect-src` 已含 `https://cloudflareinsights.com`，`script-src`（若 enable）**MUST** 含 `https://static.cloudflareinsights.com`，不論當前部署平台。關閉 zone 的 Automatic Setup 會影響整個 zone 與 production analytics，**不推薦**。
 
-對應 pitfall：`docs/pitfalls/2026-05-24-cloudflareinsights-beacon-csp-blocked.md`。
+對應 pitfall：[[pitfall-cloudflareinsights-beacon-csp-blocked]]。
 
 ## CF Workers 相容性
 

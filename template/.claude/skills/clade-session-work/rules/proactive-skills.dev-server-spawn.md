@@ -3,8 +3,8 @@ description: Dev Server Auto-Spawn 規約——agent 自起 dev server 的持久
 paths: ['scripts/dev-session*', 'vendor/scripts/dev-session*', '.claude/consumer-meta.json', 'nuxt.config.*']
 ---
 <!-- Clade native rule; source: rules/core/proactive-skills.dev-server-spawn.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 # Dev Server Auto-Spawn（agent 自起，不要叫 user cd）
 
@@ -52,12 +52,12 @@ paths: ['scripts/dev-session*', 'vendor/scripts/dev-session*', '.claude/consumer
 
 ## In-process tunnel consumer：review 未 merge 的 worktree change（hard rule）
 
-部分 consumer 的 dev tunnel 是 **in-process plugin**（`vite-plugin-cloudflare-tunnel` 寫在 `nuxt.config.ts`，tunnel 跟 nuxt dev process **綁死**；典型：<consumer-b> / co-purchase）。review 未 merge 的 worktree change 正解 = 把唯一的 dev-session 指向**那個 worktree 的 cwd**（`dev-session --cwd <wt>`，一次一 worktree）；完整 SOP：`~/offline/clade/vendor/snippets/inprocess-tunnel-worktree-review/README.md`。
+部分 consumer 的 dev tunnel 是 **in-process plugin**（`vite-plugin-cloudflare-tunnel` 寫在 `nuxt.config.ts`，tunnel 跟 nuxt dev process **綁死**；典型：數個 self-hosted consumer）。review 未 merge 的 worktree change 正解 = 把唯一的 dev-session 指向**那個 worktree 的 cwd**（`dev-session --cwd <wt>`，一次一 worktree）；完整 SOP：`~/offline/clade/vendor/snippets/inprocess-tunnel-worktree-review/README.md`。
 
 判別「我是哪型」（grep dev script + nuxt.config）：
 
 ```bash
-# A 型（<consumer-a> 型）：dev script 有獨立 tunnel 子命令（concurrently 包 dev-tunnel.mjs / cloudflared）
+# A 型（external tunnel）：dev script 有獨立 tunnel 子命令（concurrently 包 dev-tunnel.mjs / cloudflared）
 node -e "console.log(require('./package.json').scripts.dev)" | grep -E 'dev-tunnel|cloudflared|concurrently.*tunnel'
 # B 型（in-process 型）：tunnel 在 nuxt.config，dev script 無獨立 tunnel 子命令
 grep -l 'cloudflareTunnel\|vite-plugin-cloudflare-tunnel' nuxt.config.* 2>/dev/null
@@ -72,6 +72,6 @@ grep -l 'cloudflareTunnel\|vite-plugin-cloudflare-tunnel' nuxt.config.* 2>/dev/n
 
 ## Dev-port 池滿與 backing service 缺席
 
-**Dev-port 池滿時**：先跑 `wt-helper reclaim-stale` 釋放 stale slot（三層判定見 [[worktree-default]] §6），**NEVER** 把池滿當 blocker 退回 user。reclaim 後仍滿才問（attended）或 packaging（unattended）。
+**Dev-port 池滿時**：先跑 `wt-helper reclaim-stale` 釋放 stale slot（三層判定見 [[wt]] 的 `wt-helper指令.md`「維護」段），**NEVER** 把池滿當 blocker 退回 user。reclaim 後仍滿才問（attended）或 packaging（unattended）。
 
 **採用 per-worktree backing service（DB clone / PostgREST sidecar）的 consumer**：起 dev server **MUST** 先驗那些服務存在，缺席時 fail-loud 並點名服務與修復指令。全文見 [[db-preview-env]] § 缺席側。

@@ -1,398 +1,55 @@
 ---
 name: wt
-description: "Use when 使用者要開 worktree（隔離環境跑 task 不影響主 working tree），或並行做多條 task（/wt A: ... B: ...）。NOT for 發布散播（走 clade-publish）、提交已完成工作（走 commit），NOT for 只是要切 branch。"
+description: "開隔離 worktree 並在裡面派工的內部工具：建立或接續 `<consumer>-wt/<slug>/`、寫 WORKTREE-BRIEF、依 routing table 選執行者派工、驗收後交給 commit 批次落地。Use when work-route、handoff、work-loop 等呼叫端已判定這件工作要隔離，或使用者明確要求開 worktree。要不要隔離由呼叫端判斷，本 skill 不判斷。NOT for 發布散播（走 clade-publish）、提交已完成工作（走 commit）、只是要切 branch。"
 license: MIT
 metadata:
   author: clade
-  version: "4.0"
+  version: "5.1"
   clade:
     permission_tier: action
 ---
 
 <!-- clade-skill-scope: both -->
 
-# /wt — orchestrate worktree task lifecycle
+# wt
 
-`/wt` builds an isolated implementation worktree and routes execution per Step 1.8. The worker validates behavior and saves scoped checkpoints. The coordinator verifies the result, registers readiness and evaluates the shared batch queue. Read commit skill `batch.md` before readiness registration or landing. The batch runs one full `/commit` in an isolated integration worktree, lands the reviewed result, then safely removes its sources.
+呼叫端（`work-route` §0、`handoff` Mode B、`work-loop`）已判定要隔離；本 skill 建立或接續 worktree、派工、驗收、交 commit 批次落地，不重判。
 
-Ready sources remain recoverable while a batch waits or fails review. Main receives formally reviewed commits; worker checkpoint creation is not formal review.
+# SOP
 
-The user's only follow-up action is the actual 人工檢查 decision（GUI 的 OK / Issue / Skip）。After that decision, the coordinator marks the work done and invokes `/commit` itself. If either workflow step requires a separate clean session, use [[session-tasks.operations]] § Herdr session transport and return the dispatch receipt; **NEVER** ask the user to open main or type either invocation.
+brief 與回報照 `templates/` 骨架複製結構、參考同名 `.example.md` 改寫填位。
 
-## When to invoke
+## Phase 1 -- 建立或接續 worktree
 
-Whenever a coding task (write, edit, refactor, migration prep) or investigation task (analysis, debugging, auditing) is about to start from the main worktree. `/wt` makes per-task worktree isolation cheap.
+1. READ 讀取呼叫端給的任務、slug、`work_id`、允許路徑、下游 skill（若有）與 cwd。
+2. THINK READ 若要判新建、接續或停下，讀取 `rules/接續或新建判準.md`；接續跳到第 6 步。
+3. THINK READ 若要新建，讀取 `rules/fork前baseline判準.md` 定 baseline 參數。
+4. DELEGATE 逐一執行 `wt-helper.ts add`（`wt-helper指令.md` § 建立），取得各樹路徑與 branch。
+5. READ 讀取 `add` 輸出的 `backing-service:` 狀態行（同節）；沒有就記「無」。
+6. WRITE 新建照 `templates/worktree-brief.md` 在樹根寫 `WORKTREE-BRIEF.md`；接續照第 2 步判準 Rule 2。
 
-Step 1.8 selects the executor from the shared routing table and uses that model’s supported transport. Nuxt UI／Content, Nuxt core and other UI views have separate implementation rows.
+## Phase 2 -- 選定執行者並派工
 
-**Do not invoke `/wt`** in these cases:
+1. THINK 讀取 routing table（`agent-routing.routing-table`），逐任務選定列、model、effort、載體，回報一行 `Routing: <task> → <row> / <model> / <effort> / <載體>`；判不進任何一列的由主線在該樹內做。
+2. WRITE 照 `templates/worker-brief.md` 逐個派出任務寫 worker brief；有下游 skill 時任務段選「在本樹內呼叫該 skill」的變體。
+3. DELEGATE 依載體派工，同一則訊息排好等待機制；指令與等待方式讀 `派工載體.md` 對應節。
 
-- The work is read-only AND trivial (quick grep, log inspection, code explanation that writes nothing and doesn't need structured evidence collection).
-- The operation is main-bound by design (clade publish / propagate).
-- The work item already owns an existing implementation checkout; resolve that source instead of creating a second implementation tree.
-- cwd is already inside a session worktree (`git rev-parse --git-dir` contains `/worktrees/`). The current worktree is the workspace; do not nest.
+## Phase 3 -- 驗收成果並交給批次落地
 
-## Invocation forms
+1. READ 收到完成通知後，讀取 worker 回報、該樹 `git log main..HEAD` 與 `git status`、brief 驗收標準。
+2. THINK READ 若要驗收，讀取 `rules/成果驗收判準.md`；READ 若要保留或回收來源，讀取 `rules/worktree保留與回收判準.md`。
+3. DELEGATE READ 若來源通過驗收，讀取 `rules/就緒池交接判準.md`，依序跑 `batch checkpoint`、`batch ready`、`batch status --trigger auto --workflow <workflow_model>`（`wt-helper指令.md` § 批次）；命中觸發條件時呼叫 `/commit`。
+4. WRITE 照 `templates/wt-report.md` 向呼叫端彙整回報，列出每棵保留中的樹與理由。
 
-### Form 1 — single ad-hoc task
+## SOP 之外（hook／brief 提示）
 
-```
-/wt <task description>
-```
-
-The skill derives a short slug from the task description (lowercased, kebab-case, trimmed to roughly 40 chars). If the user prefers an explicit slug, they MAY prefix the description with `<slug>:` — e.g., `/wt lru-cache: refactor the cache layer to use LRU eviction`.
-
-### Form 2 — parallel multi-task
-
-```
-/wt
-A: <task A description>
-B: <task B description>
-C: <task C description>
-```
-
-Or single line: `/wt A: task A B: task B`.
-
-Each labeled task becomes its own worktree + executor, subject to routing. Workers run concurrently and checkpoint inside their worktrees. The coordinator harvests completed tasks into the batch queue; a failure in one task does not block other eligible members.
-
-Labels are arbitrary identifiers (A/B/C/feat-x/test-y). The skill normalizes them into slugs.
-
-### Form 3 — dispatch a named next-skill (internal, used by `/handoff` Mode B)
-
-```
-/wt <slug>: /<next-skill> <args>
-```
-
-Example:
-
-```
-/wt fix-auth: /implement 繼續 tasks/2026-09-07-fix-auth.md 的下一個未勾 phase
-/wt evlog-dpattern: /implement 繼續 specs/plans/012-evlog-dpattern/tasks.md
-```
-
-Invoked by `/handoff` §2B.5; the subagent inside the worktree runs `<next-skill>` as its first action.
-
-### Form 4 — Resume interrupted worktree
-
-```
-/wt resume <slug>
-```
-
-Dispatches a new subagent into an existing worktree whose previous session was interrupted. The subagent reads `WORKTREE-BRIEF.md` at the worktree root for full task context (description, thin brief, progress checklist) and continues from the next unchecked Progress item.
-
-If no worktree exists at the expected path for `<slug>`, error with guidance: "No worktree found for slug `<slug>`. Use `/wt <task>` to create a new one."
-
-To discover available worktrees for resume, run `node scripts/wt-helper.ts list` — the output shows task summary and status for worktrees that have a brief.
-
-## Per-task lifecycle
-
-For each task in the invocation, `/wt` SHALL execute the following sequence. With parallel tasks, steps 2–4 run concurrently across tasks; step 1 runs sequentially (one `wt-helper add` at a time). Harvest checkpoints into the ready pool; batch review, landing and cleanup follow commit skill `batch.md`.
-
-### Step 0 — Resume detection
-
-Before creating a new worktree, check if one already exists at the expected path:
-
-1. Derive the slug from the task description (or from the explicit `resume <slug>` form).
-2. Compute the expected worktree path: `<consumer-parent>/<consumer-name>-wt/<slug>/`.
-3. If the path exists AND contains `WORKTREE-BRIEF.md`:
-   - Read the brief file.
-   - Run `git -C <worktree-path> log main..HEAD --oneline` to see completed commits.
-   - Run `git -C <worktree-path> status --short` to see uncommitted work.
-   - **Skip Step 1 entirely** — do NOT call `wt-helper add`.
-   - Proceed to Step 1.5 (update the brief's `last_updated` timestamp) and Step 2 (dispatch a resume subagent with the brief content + git status as context).
-4. If the path exists but has no brief, fall through to the existing "already exists" error from `wt-helper add`.
-5. If the path does not exist and the invocation is Form 4 (`/wt resume <slug>`), error: "No worktree found for slug `<slug>`."
-6. If the path does not exist, proceed to Step 1 normally.
-
-### Step 1 — Build the worktree (with pre-fork baseline guard)
-
-**MUST Read [baseline-guard.md](baseline-guard.md) before running `wt-helper add`** — 含 unmerged / clean / dirty 三路策略分流、`--baseline-scope-paths` 的對齊要求、stash strategy 的隱性風險與 `rescue` 救援、`--include-unrelated-dirty` 的 bulk-capture 語意與還原三步驟。四條契約（預設不 capture / 帶 WIP 要顯式 flag / 傳了 flag 不准宣稱 main 沒被動到 / 不准手寫 pathspec stash）在 [[worktree-default]] §1。
-
-`/wt` 預設從 committed baseline 開乾淨 worktree，main dirty 留在原處。確實需要既有 WIP 時，先依 baseline-guard.md 判定授權範圍，再顯式選擇 scoped capture；不把別 session WIP 當新任務 baseline。
-
-```bash
-node scripts/wt-helper.ts add <slug> \
-  --task-summary "<一句話：這棵樹要做什麼>" \
-  --precheck-baseline \
-  --baseline-strategy stash
-```
-
-Run from the main worktree's cwd. The helper:
-
-- Detects main dirty paths（modified / untracked / unmerged）via `git status --porcelain`：
-  - **Unmerged 非空** → STOP，refuse to fork. User must resolve conflicts first.
-  - **Clean** → fork directly（no stash needed）.
-  - **Dirty 非空** → default leaves that WIP on main; capture requires explicit flags under baseline-guard.md.
-- Normalizes the slug.
-- Creates branch `session/<YYYY-MM-DD-HHMM>-<slug>` from the landing base (`main`). With `--base integration/<work-id>` (or `origin/integration/<work-id>`) it forks from that integration branch instead; any other ref is rejected — see [[github-flow]] § Integration branch › 工具現況.
-- Materializes the worktree at `<consumer-parent>/<consumer-name>-wt/<slug>/`.
-- Fast-forwards to the chosen base's remote-tracking ref (`origin/main`, or `origin/integration/<work-id>` under `--base`) if present; when it cannot fast-forward it only warns `could not fast-forward merge …` and leaves the worktree on the fork point.
-
-Capture the worktree absolute path (the helper prints `cd <path>` and `Branch: <branch>` — parse them, or derive them from the consumer-root + slug convention).
-
-### Step 1.5 — Write WORKTREE-BRIEF.md
-
-After the worktree is created (Step 1) and before dispatching the subagent (Step 2), write `WORKTREE-BRIEF.md` at the worktree root using the Write tool. This persists the full task context so interrupted sessions can seamlessly resume.
-
-The file is already excluded from git tracking via `wt-helper`'s per-worktree `$GIT_DIR/info/exclude` setup.
-
-Template:
-
-```markdown
----
-slug: <slug>
-branch: <session-branch-name>
-consumer: <consumer-name>
-created: <current ISO date>
-base_sha: <output of git -C <worktree-path> rev-parse HEAD>
-status: in-progress
-last_updated: <current ISO date>
----
-
-# Task
-
-<original task description verbatim from the /wt invocation>
-
-# Context
-
-<thin brief prepared by the parent session: file paths to touch, rules to
-follow, acceptance criteria. This is the same context that goes into the
-subagent prompt — duplicated here for persistence across session boundaries.>
-
-# Progress
-
-- [ ] <planned step 1>
-- [ ] <planned step 2>
-...
-
-# Recovery
-
-If you are a new session resuming this worktree:
-1. Run `git log main..HEAD --oneline` to see completed commits
-2. Run `git status` to see uncommitted work
-3. Continue from the next unchecked Progress item above
-4. Follow the worker contract in the `/wt` skill § After `/wt` completes (selective `git add -- <files>`, no `git add -A`, no `git push origin main`, own draft PR)
-```
-
-**Progress section**: Decompose the task into concrete steps if possible. If the task is too vague to decompose upfront, write a single item `- [ ] Complete task` — the subagent will refine the checklist as it works.
-
-**For resume (Step 0 detected existing worktree)**: Do NOT overwrite the existing brief. Instead, update only the `last_updated` frontmatter field via Edit tool.
-
-### Step 1.8 — Executor routing
-
-Classify the work using the shared routing table, then select its supported transport. Explicit invocation flags select a carrier within that row’s model and capability requirements.
-
-**Invocation override flags** (parsed from args before slug/task extraction):
-
-- `/wt --claude <task>` → force Claude subagent (Step 2)
-- `/wt --pi <task>` (`--codex` is an accepted alias) → force Pi (Step 2-pi)
-- No flag → auto-classify below
-
-**Auto-classification** (check in order, first match wins):
-
-1. **UI or Nuxt implementation** → select the matching shared table row by the work being implemented:
-   - Nuxt framework, modules and runtime logic → `nuxt-core-implementation`: Claude Sonnet 5.5（effort: high） via the `sonnet-implementer` subagent or a Herdr Claude child (Devin SWE-2 Max only when the dispatcher names it; never the default); GPT is retired (2026-09-29).
-   - UI views, including Nuxt UI component assembly／Nuxt Content → `ui-view-implementation`: Claude Opus 5.5（effort: medium） via native Claude Code／Herdr; no fallback.
-   - A main line that meets the selected row’s model and tool requirements implements directly. Otherwise use the bounded phase transport in [[agent-routing]]; preserve the worktree and work identity.
-   - Design review, UI planning and screenshot work use their own named rows. File extensions and UI keywords help locate the work but do not select its model.
-
-2. **Analysis/debug work** → **Pi via pi-dispatch.ts** (Step 2-pi-investigate)
-   - Task description contains investigation keywords: `analyze`, `analysis`, `debug`, `investigate`, `audit`, `scan`, `trace`, `why`, `root cause`, `分析`, `除錯`, `調查`, `掃描`, `追蹤`, `為什麼`
-
-3. **Non-UI coding work** → **Pi via the Pi dispatcher** (Step 2-pi)
-   - Everything else: refactoring, adding tests, implementing features, fixing bugs, migrations, config changes, etc.
-
-**Form-specific overrides**:
-- Form 3 (`/wt <slug>: /<next-skill>`): use a carrier that can invoke the next skill; each implementation phase still follows its named routing row.
-- Form 4 (`/wt resume <slug>`): read WORKTREE-BRIEF.md and route the remaining work by its current role.
-- Form 2 (parallel multi-task): each task independently classified; mixed executors in the same invocation is fine
-
-After classification, report the routing decision to the user before dispatching:
-
-```
-Routing: <task> → <table-row> / <model> / <effort> / <transport> (<reason>)
-```
-
-### Step 2 — Dispatch a Claude subagent into the worktree
-
-**MUST Read [dispatch-claude.md](dispatch-claude.md) before dispatching** — 含 Agent tool 參數、subagent prompt template（fresh + resume + form 3 variants）、baseline notice、contract。
-
-摘要：`Agent(name: "wt-<slug>", prompt: <template>)` 派 subagent 進 worktree，cwd 透過 prompt 指定。Parent cwd 不動。Thin brief MUST 由 parent 預消化。
-
-**Same message as the dispatch**: 記下 Agent name/id 與 deadline（deadline 取值依 [[agent-routing.keepalive-wake]] § deadline 怎麼取），排 [[agent-routing.keepalive-wake]] § Async keepalive prompt 的 canonical `ASYNC_KEEPALIVE_CONTROL task=none owner=<owner> deadline=<ISO>...`。這條路徑沒有可查 harness task id，**NEVER** 放原 `/wt` input、偽造 task id 或用 `TaskOutput` 推斷狀態。deadline 到達走 `TaskStop(owner)` intervention，terminal notification 前保留 ownership。
-
-### Step 2-pi — Pi dispatch into worktree (non-UI coding)
-
-**MUST Read [dispatch-pi.md](dispatch-pi.md) § Step 2-pi before dispatching** — 含 brief template（Task/Context/Plan-first/Git Baseline/Scope guard/View-layer guard/Commit Authorization）、`Pi dispatcher` 指令、effort 分級表、Watch Protocol。
-
-摘要：寫 brief 到 `/tmp/wt-pi-<slug>-prompt.md` → `Pi dispatcher` background dispatch → Watch Protocol（1500s safety net）。
-
-### Step 2-pi-investigate — Pi analysis/debug into worktree
-
-**MUST Read [dispatch-pi.md](dispatch-pi.md) § Step 2-pi-investigate before dispatching** — 含 investigation 分類（debug/analysis）、`pi-dispatch.ts` 參數、template 選擇、JSON evidence 解析。
-
-摘要：`pi-dispatch.ts --template <template>` 走 pi-offload，產出 structured JSON evidence → 寫入 WORKTREE-BRIEF.md `# Findings`。
-
-### Step 3 — Wait for completion
-
-**All paths — keepalive first**: worktree tasks routinely run past an hour. Before ending the dispatch turn，follow [[agent-routing]] § 主線靜默上限：Claude subagent 用 `ASYNC_KEEPALIVE_CONTROL task=none owner=<agent-name-or-id> deadline=<ISO>`；pi background Bash 用既有 1500s `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=<owner> deadline=<ISO>`，不另加第二條。兩者都只承載控制面，**NEVER** 重播原任務；完成時停止。
-
-**Claude subagent path** (Step 2): The Agent tool call returns when the subagent finishes — that describes how the result arrives, **not** what the mainline does meanwhile. Parse its report to determine success vs. failure.
-
-**Pi coding path** (Step 2-pi): Wait for `<task-notification>`. On completion, read stdout and verify:
-
-1. **Phase boundary**: `git -C <worktree-path> log --oneline main..HEAD` — should have commits with `🧹 chore: wt <slug>` format
-2. **View-layer drift double-check**:
-   ```bash
-   git -C <worktree-path> diff main..HEAD --name-only \
-     -- '*.vue' '*.tsx' '*.jsx' '*.css' '*.scss' \
-        'app/pages/**' 'app/components/**' 'app/layouts/**' \
-        'pages/**' 'components/**' 'layouts/**' 'views/**'
-   ```
-   Any hit → AskUserQuestion: [1] reset + redispatch / [2] accept + mainline fixes view parts / [3] abort
-3. **Scope discipline**: `git -C <worktree-path> diff main..HEAD --name-only` vs. brief's scope declaration
-
-**Pi investigation path** (Step 2-pi-investigate): Wait for `<task-notification>`. On completion, parse dispatcher's stdout JSON. Exit code 0 → read `result` field for structured evidence. Write findings into WORKTREE-BRIEF.md `# Findings` section.
-
-For all paths, verify commits exist (if applicable):
-
-```bash
-git -C <worktree-path> log --oneline main..HEAD
-```
-
-### Step 4 — Report (no squash, no cleanup)
-
-After all tasks in the invocation have either completed (subagent committed) or failed (worktree preserved with whatever WIP exists), emit one aggregated report:
-
-```
-✅ A (lru-cache) [pi]: committed — 5 files, 2 commits on branch session/<date>-lru-cache
-   <one-line summary from pi stdout>
-   pending: archive in source, then register batch readiness
-✅ B (csv-tests) [claude]: subagent committed — 2 files added on branch session/<date>-csv-tests
-✅ C (perf-audit) [pi:analyze]: JSON result — 8 findings, status: pass
-   findings written to WORKTREE-BRIEF.md # Findings
-❌ D (node-upgrade) [pi]: pi fail — pnpm install exited 1
-   worktree preserved at ~/offline/<consumer>-wt/node-upgrade/
-   branch: session/<date>-node-upgrade
-
-Ready / blocked worktrees: <counts from batch status>; report each retained path and reason
-```
-
-The tag shows which executor was used.
-
-**Batch handover**: after harvesting verified checkpoints (`batch checkpoint`, no full AI ceremony), register readiness (`batch ready`) and run `wt-helper batch status --trigger auto --workflow <已解析 workflow_model>`。**NEVER** 省略 `--workflow`。Trigger thresholds and landing follow commit skill `batch.md`. Worker push／draft PR obligations are in § After `/wt` completes; **NEVER** `gh pr ready` early just to get a green test signal — run `test:affected` in the source worktree. Cleanup belongs to the final commit workflow after verified landing.
-
-Form 1 work uses the same queue; the coordinator handles authorized landing without asking the user to type commands. At Form 1 completion, register the verified checkpoint and evaluate the batch trigger in this turn; do not park a finished tree merely because there is no archive event (TD-863).
-
-## Failure handling
-
-### Projection conflict after updating an existing worktree
-
-When a linked worktree reports `local or modified file conflict` from `sync-rules` after a rebase or merge from main, read [[worktree-default.detail]] §4, then run `node scripts/wt-helper.ts reconcile <slug>` in that worktree (clade home: `node vendor/scripts/wt-helper.ts reconcile <slug>`) and rerun the original sync command. The helper repairs existing ownership receipts only when main's receipt matches clean worktree HEAD bytes; protected local edits remain blocked. For missing substrate, use `refresh-substrate` as documented in the wt-helper cookbook.
-
-### Claude subagent task failure
-
-Subagent reports failure or exits without commits. Preserve the worktree and branch; report the path. Recovery:
-
-- Re-run the subagent in the same worktree by passing the worktree path explicitly to a new Agent invocation, or
-- `wt-helper cleanup <slug> --force --force-discard-unland` to discard the worktree and start fresh via `/wt`.
-
-### Pi task failure
-
-Pi exits with non-zero or `<task-notification status=failed>`. Preserve the worktree and branch; report the error tail from stdout/stderr.
-
-Recovery options:
-
-- **Retry with adjusted brief**: fix the issue in the brief (scope, paths, instructions), write a new prompt file, re-dispatch the `Pi dispatcher` into the same worktree (it already exists, no need for `wt-helper add`).
-- **Switch to Claude**: re-dispatch as Claude subagent via `/wt --claude resume <slug>` (Claude picks up from WORKTREE-BRIEF.md).
-- **Discard**: `wt-helper cleanup <slug> --force --force-discard-unland`.
-
-For Pi investigation failures (Step 2-pi-investigate), exit code 2 (business fail) means the investigation ran but didn't meet acceptance criteria — read `result` JSON for details. Exit code 3 (mechanical failure) means Pi itself broke — check `/tmp/pi-<label>-stderr.log`. Exit code 4 (quota) means rate limited — wait or switch to Claude.
-
-### Batch integration conflicts
-
-Batch integration conflicts are resolved in the isolated integration worktree, then `wt-helper batch resume` continues. Sources remain intact; see commit skill `batch.md`.
-
-## After `/wt` completes
-
-Worktree(s) hold committed work on their session branches. Main's working tree is untouched.
-
-The coordinator's next actions:
-
-1. Complete the work item's acceptance gates and carrier bookkeeping in the source worktree, then checkpoint the result.
-2. Verify scope, evidence and writer handover; register all authorized ready sources via `wt-helper batch ready`.
-3. Evaluate the batch trigger and invoke `/commit` when due; preserve the queue across session handover.
-
-`/wt` **worker** MUST:
-
-- Stage selectively (`git add -- <files-you-actually-changed>`); **NEVER** `git add -A` / `git add .`
-- Once the session branch has a non-empty committed diff: push **that** branch and open a **draft** PR (integration mode targets `integration/<work-id>`; see [[worktree-default]] §5), then watch its CI
-- Fix red CI on the **same** branch and PR
-
-`/wt` **worker** does NOT:
-
-- `batch ready` or start the full `/commit` quality chain
-- Squash, `gh pr merge`, or `batch merge-unattended`
-- `git push origin main`
-- Cleanup worktrees
-- Commit on main
-
-Worker **MUST** push **that** session branch, open or update its own draft PR, register `batch draft --kind visibility`, and watch that PR's CI ([[github-flow]]); while the PR is a draft that CI is mechanical checks only, never the test lanes. **Integration mode** (the default when one work id has 2+ slices; [[github-flow]] § Integration branch): the worker still pushes that branch and watches CI, but the PR's base is `integration/<work-id>` (mechanical checks only, no test lanes) and it registers **no** `batch draft` receipt. It runs the local gate in its source worktree (canonical check plus the typecheck CI runs as a mechanical check — in clade `pnpm exec vp check` and `node node_modules/typescript-native/bin/tsc -p tsconfig.clade.json --noEmit`, plus `node node_modules/typescript-native/bin/tsc -p tsconfig.vendor.json --noEmit` when vendor/scripts changed; these take seconds and need no heavy gate slot; `test:affected` is still run once by the coordinator on integration before the PR to `main` turns ready), marks the slice PR ready once its CI is green, and returns completion to the coordinator, who lands it with `integration-merge.ts --pr <n>`. The worker **never** opens a PR against `main` and **never** merges. On completion, return `workId`, repository, PR, branch, checkpoint SHA, scope, evidence, and writer-release, then **stop writing the source**. Worker done is not landing.
-
-Coordinator push after review is limited to delivering the formal HEAD onto the existing PR head. Ready, merge, and main push stay with the named coordinator.
-
-## Edge cases
-
-### Degenerate form: `/wt <single-token>` with no description and no `:`
-
-If the user types just `/wt fix-auth` (no description, no `:`-prefixed next-skill), prompt the user to clarify whether they want:
-
-- An ad-hoc task in a new worktree (ask for the task description).
-- A long-lived worktree session (`/wt` does not create these; suggest `node scripts/wt-helper.ts add fix-auth --task-summary "<一句話>"` + opening a fresh session in the resulting path).
-
-Do NOT silently build a worktree with no task.
-
-### cwd already inside a session worktree
-
-If `git rev-parse --git-dir` shows `/worktrees/`, refuse to invoke `/wt`. The current worktree IS the workspace. Tell the user: "Already inside worktree <name>; do the work here. Use `/wt` only from the main worktree."
-
-### Subagent commits but you can't tell if the task fully succeeded
-
-A completion report is a claim to verify. Inspect the checkpoint scope and acceptance evidence, confirm terminal outcome and writer release, then register readiness. Missing evidence or ambiguous ownership retains the source outside the ready pool.
-
-## Related rules
-
-- [[worktree-default]] — full rule baseline (§1 invariant, §5 mechanic, §6 tools).
-- [[agent-routing.pi-watch-protocol]] — Pi dispatch standard, Watch Protocol, Plan-first / Git baseline / Commit Authorization hard rules.
-- [[handoff]] — Mode B dispatch path that invokes `/wt <slug>: /<next-skill>`.
-- [[session-tasks]] — shared `<YYYY-MM-DD-HHMM>-<slug>` naming convention.
-- [[scope-discipline]] — when a `/wt` task drifts beyond its slug's scope, open a separate `/wt` task or return to `/specify` for an authorized scope revision.
-- [[pi-offload]] — template registry for analysis/debug dispatch (`~/offline/clade/vendor/snippets/pi-offload/`).
-
-## Maintenance commands
-
-```bash
-node scripts/wt-helper.ts list                              # list session worktrees
-node scripts/wt-helper.ts reconcile <slug> [--json]          # repair existing projection receipts after rebase/merge from main
-node scripts/wt-helper.ts merge-back <slug>                 # legacy compatibility; preserves source for review
-node scripts/wt-helper.ts merge-back <slug> --dry-run       # preview blockers
-node scripts/wt-helper.ts merge-back <slug> --patch --dry-run  # legacy patch preview; main index untouched
-node scripts/wt-helper.ts backlog --json                   # read-only disposition queue; >3 warns
-node scripts/wt-helper.ts reclaim-stale                     # free stale dev-port slots only; trees untouched
-node scripts/wt-helper.ts reclaim-stale --remove-landed     # also cleanup in-history clean unclaimed sources
-node scripts/wt-helper.ts merge-back <slug> --auto-stash    # stash main blockers
-node scripts/wt-helper.ts land-pending <slug>               # alias for grandfathered worktrees
-node scripts/wt-helper.ts prune                             # remove merged ones interactively
-node scripts/wt-helper.ts cleanup <slug> --force --force-discard-unland  # discard worktree + commits
-node scripts/wt-helper.ts cleanup <slug> --superseded-by <commit|file=commit|file=path>[,…] --reason <text>  # main later rewrote the unlanded hunks
-node scripts/stash-reconcile.ts                             # plan recovery for wt-merge-block/* stashes
-```
-
-Use `node scripts/wt-helper.ts batch status --trigger manual --workflow <workflow_model>` and commit skill `batch.md` for requested merge back. The coordinator runs the full batch commit and cleanup; archive prepares its source first.
-
-`cleanup --force --force-discard-unland` permanently loses the branch's commits; use it only to discard unwanted worktrees. When the branch is "unlanded" only because main later rewrote the same hunks (content superseded, not lost), use `cleanup <slug> --superseded-by … --reason …` instead: every unlanded file needs evidence on main, the tip is pinned in `refs/wt-superseded/`, and nothing is removed unless all files are covered.
+- READ 若自己是被派進 worktree 的 worker，讀取 `rules/worker契約.md`。
+- READ 若在 main 要改 tracked 檔，讀取 `rules/改tracked檔前先隔離判準.md`。
+- READ 若要讀工作進度檔，讀取 `rules/讀進度前先查worktree判準.md`。
+- 維護、復原讀 `wt-helper指令.md` 對應節。
 
 # Runtime adapter: Claude
 Use Claude's qualified main line for UI implementation and visual judgement. Bind host question, Agent, completion notification, TaskStop and keepalive operations to the native Claude tools; these bindings do not authorize changing the shared worktree gates.
 
 Claude bindings: dispatch uses the named `Agent` operation; completion arrives through native notification. Use `TaskStop` only after the deadline intervention and wait for terminal notification. Use `ScheduleWakeup` only for the inert control prompt, and stop it on terminal evidence. User choices use `AskUserQuestion`.
+A worktree operation counts as executed only with the Claude session/pane identity and its completion receipt attached; the `Agent` ephemeral-worktree path is a historical observation, not a supported transport.

@@ -3,8 +3,8 @@ description: 人工檢查（Manual Review）主檔——核心 invariant、Item 
 paths: ['tasks/**', 'specs/plans/**', 'screenshots/**']
 ---
 <!-- Clade native rule; source: rules/core/manual-review.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 ## Runtime adapter boundary
 
@@ -175,7 +175,7 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 
 ### Evidence payload 走 sidecar（hard rule）
 
-寫**任何一條**新 evidence annotation 時：payload **MUST** 進 sidecar（`.spectra/evidence/<work-slug>.jsonl`），行內 **MUST** 只留 `(<kind>: <ISO>)` 短 marker。適用 **每一個** annotation kind，不是只有 `verified-ui`。
+寫**任何一條**新 evidence annotation 時：payload **MUST** 進 sidecar（`docs/evidence/<work-slug>.jsonl`），行內 **MUST** 只留 `(<kind>: <ISO>)` 短 marker。適用 **每一個** annotation kind，不是只有 `verified-ui`。
 
 寫入一律用 `vendor/scripts/lib/evidence-store.ts --write`——它寫完 sidecar 會把該貼進行內的短 marker 印到 stdout，**原樣**貼上即可。**NEVER** 自己另編時間戳，**NEVER** 先貼 marker 再補 sidecar（順序顛倒時 parser 計 `malformed`）。
 
@@ -187,7 +187,7 @@ session owner 判定某 pending item 的球在人手上時，**MUST** 開一張 
 | --- | --- | --- |
 | triage `（issue:）` 結論為 route **(E)**（false positive／修法已落地，等人重評） | `flow ask --question '<一句判斷題>' --option '<短標籤> :: <後果>' ... --recommended '<短標籤>' --why '<理由>' --work-id <W> --carrier <tasks 檔>` | `ruling` |
 | 純商業決策／production 授權，packet 已備妥 | 同上；packet 的路徑放進 `--carrier` | `ruling` |
-| implementation 卡**外部 blocker**（等人到場、等帳號、等別家交付） | `flow ask --category human-action --step '<要人做的動作>' ...`；dispatched child 走 `--complete blocked` | `external-action` |
+| implementation 卡**外部 blocker**（等人到場、等帳號、等別家交付） | `flow ask --category human-action --human-only <理由> --step '<要人做的動作>' ...`（理由清單見 [[my]] `rules/待拍板條目寫法.md`；agent 做得了的不鑄）；dispatched child 走 `--complete blocked` | `external-action` |
 
 **MUST NOT** 翻 checkbox、**MUST NOT** strip 既有 `（issue:）`、**MUST NOT** 在 (A)–(D) 結論時開卡（那些情境球仍在 session owner）、**MUST NOT** 用開卡規避其實 actionable 的 item——可走 (A)/(B)/(C) 路徑就 **MUST** 走。
 

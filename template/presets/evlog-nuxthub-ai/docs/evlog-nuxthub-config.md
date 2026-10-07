@@ -8,7 +8,7 @@
 /**
  * @evlog/nuxthub 安裝 — NuxtHub D1 storage + 自動 retention cron
  *
- * Source: clade docs/evlog-master-plan.md § 3 + § 8.4 (<consumer-c>)
+ * Source: clade docs/evlog-master-plan.md § 3 + § 8.4 (agentic-rag)
  *
  * 使用：
  *   1. pnpm add @evlog/nuxthub
@@ -20,7 +20,7 @@
  * - 加 cron handler /api/_cron/evlog-cleanup
  * - 加 retention 配置選項
  *
- * 對 T3（<consumer-c>）是預設 baseline；其他 NuxtHub consumer 可選裝。
+ * 對 T3（agentic-rag）是預設 baseline；其他 NuxtHub consumer 可選裝。
  */
 
 export default defineNuxtConfig({
@@ -88,7 +88,7 @@ export default defineNuxtConfig({
  */
 
 /**
- * 並存 Sentry：T3 (<consumer-c>) 目前無 Sentry，但若要加：
+ * 並存 Sentry：T3 (agentic-rag) 目前無 Sentry，但若要加：
  *
  * 1. pnpm add @sentry/nuxt
  * 2. 加 server/plugins/evlog-sentry-drain.ts（見 evlog-sentry-drain/ snippet）

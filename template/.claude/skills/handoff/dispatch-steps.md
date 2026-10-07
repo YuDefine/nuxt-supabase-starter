@@ -85,10 +85,10 @@ User 透過詢問操作選定下一步 outstanding（含明確的 next-skill 與
 
 | Next-skill 類型 | brief 要寫的入口 |
 | --- | --- |
-| 實作／修訂（會寫 tracked file） | `/wt <slug>: /implement`；brief 指名 carrier 路徑與剩下的 phase，保留原驗收政策 |
+| 實作／修訂（會寫 tracked file） | 交 `wt` 建立隔離環境並在樹內續跑 `/implement`；brief 指名 carrier 路徑與剩下的 phase，保留原驗收政策 |
 | 驗證／收尾 | 先驗 carrier 的 evidence annotation、人工 gate 及活 owner；依 checkout workflow 合回與 commit，最後回讀結果 |
 | 唯讀查詢（讀規格、盤點） | 直接讀 `specs/**` 與 carrier；`specs/truth/**` 對非 owner skill 維持唯讀 |
-| 不在表上的 skill | 評估後決定：若不寫 tracked file 直接 dispatch；若會寫則包進 `/wt <slug>: /<next-skill>` 走 worktree |
+| 不在表上的 skill | 評估後決定：若不寫 tracked file 直接 dispatch；若會寫則交 `wt` 建立隔離環境並在樹內續跑該 skill |
 
 **判定條件**：
 
@@ -96,9 +96,9 @@ User 透過詢問操作選定下一步 outstanding（含明確的 next-skill 與
 - `next` 的寫入動作（§2B.1 / §2B.1.5）透過 Step 1.5 的 `$MAIN_WT_PATH` 已落到 main worktree absolute path，與 cwd 無關
 - 派工的 `--cwd` **MUST** 是 `$MAIN_WT_PATH`（main checkout 絕對路徑），與本 session 當下 cwd 無關；本 session 在 linked worktree 也不必先 `cd`
 
-**Slug 解析**：`/wt <slug>: /<next-skill> <change-name>` 的 `<slug>` 由 change-name 直接帶入（wt-helper 自動 normalize per [[worktree-default]] §3）。
+**Slug 解析**：交 `wt` 建立隔離環境時的 `<slug>` 由 change-name 直接帶入（wt-helper 自動 normalize，見 [[wt]] 的 `wt-helper指令.md`「建立」段）。
 
-**Parent cwd 不動 invariant**：`/wt` Form 3 內部用 subagent 進 worktree 跑 next-skill，主線（當前 chat session）cwd 全程在 main worktree，per [[worktree-default]] §1。
+**Parent cwd 不動 invariant**：`wt` 在樹內續跑 next-skill 時用 subagent 進 worktree，主線（當前 chat session）cwd 全程在 main worktree，per [[wt]] 的 `rules/改tracked檔前先隔離判準.md` Rule 3。
 
 **人工驗收 dispatch scope rule**：把球交給 user 之前 **MUST** 引用 §2B.1.7 的 `flow gates` 結果。依卡片 family 走不同入口：
 
@@ -110,5 +110,5 @@ User 透過詢問操作選定下一步 outstanding（含明確的 next-skill 與
 | `external-action` / `exception` 卡 | 先走 SKILL §2B.2.5 抽原因、辨識 startable 子集 | 依 triage 結果 |
 | 沒有卡片，tasks.md 的 `[review:ui]` 或已有 `(verified-ui:)` 的 `[verify:ui]` leaf evidence 已齊 | user 判通過／有問題／跳過 | 在對話端逐項展示；依原話寫回 checkbox（[[proactive-skills.manual-review-entry]] 第 4 步） |
 | 沒有卡片，但 evidence 缺 / issue 未 triage | agent 補 evidence 或 triage | 主線跑 verify channel（[[manual-review.backend]] § `[verify:*]` flow） |
-| 沒有卡片，實作未完 | 依 carrier 繼續實作 | `planInventory` 可做桶的 `next`（claim → plan show → `/implement`）；必要時 `/wt <slug>: /implement`（依 §2B.5 隔離 worktree） |
+| 沒有卡片，實作未完 | 依 carrier 繼續實作 | `planInventory` 可做桶的 `next`（claim → plan show → `/implement`）；必要時交 `wt` 建立隔離環境並在樹內續跑 `/implement`（依 §2B.5 隔離 worktree） |
 | 沒有卡片，只剩 `[discuss]` | 收尾 walkthrough | [[manual-review]] § `[discuss]` walkthrough |

@@ -3,7 +3,7 @@ description: 認證相關程式碼（login, session, user, auth）
 paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'server/**/*.ts', 'packages/*/server/**/*.ts']
 ---
 <!-- Clade native rule; source: rules/modules/auth/better-auth/auth.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Auth
 

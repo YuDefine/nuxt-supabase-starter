@@ -63,9 +63,15 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}
 
 **判定優先序**（不是 first-match）：先分唯讀與寫入，再看是否已有本工作擁有的 worktree（有就沿用）。parallel-slices 的「不另開第二棵」只約束單一切片，**NEVER** 讀成同一個 work_id 只能有一棵 worktree。dirty-main 門檻只限制共享 main 的寫入，不阻止唯讀檢查。dirty paths 歸屬或 writer ownership 不明時先交既有 owner 釐清，未確認前不寫。main-bound 例外只適用發布操作本身，要改 source／test／文件仍先走隔離。
 
-**work_id-before-worktree**：先沿用本工作的 `work_id`；沒有就交 work identity owner 依 repo 契約取得／鑄造後才建立或進入工作樹（`wt-helper add` 可在同一流程鑄造並綁定）。不把 slug 當 work_id，不為取得識別在 dirty main 先寫 package，沒有可用流程就列阻塞；同一工作不另鑄第二個識別。
+**work_id-before-worktree**：先沿用本工作的 `work_id`；沒有就交 work identity owner 依 repo 契約取得／鑄造後才建立或進入工作樹（`wt-helper add` 可在同一流程鑄造並綁定）。不把 slug 當 work_id，不為取得識別在 dirty main 先寫 package，沒有可用流程就列阻塞；同一工作不另鑄第二個識別。身分歸屬依序判定：
 
-transport 讀當前 runtime 的 `wt/SKILL.md`，可用 Form 3 `/wt <slug>: /<downstream> <args>` 保留原候選；交棒攜帶 work_id、package、允許路徑、writer owner 與續跑位置。**NEVER** 用 stash、reset 或 commit 藏掉未知 WIP；帶入既有 WIP 要先確認所有權與授權，交 `wt` owner 依 baseline guard 處理。
+| 情境 | 做法 |
+| --- | --- |
+| 被主持者派出（`CLADE_DISPATCH_ID` 非空） | 沿用 dispatch 帶來的 `CLADE_WORK_ID`；本 pane 範圍外的**新** work 不自己鑄，回報主持者由它開 plan 並派 |
+| 已有本工作的 work id，要拆子工作 | 子工作 `flow open <slug>`：ambient `CLADE_WORK_ID` 有 dispatch record 或本 worktree claim 佐證時自動 `work.link` 到 ambient；確定不是子工作才加 `--no-parent` |
+| `flow open` 印「未自動掛到 ambient」 | ambient 沒佐證（多半是別張卡殘留的 shell）。確認真是子工作才照它印的 `flow link … --parent …` 手動掛；**NEVER** 為了掛上去改 export 別的 id |
+
+transport 交 `wt` 建立隔離環境，並在樹內續跑原下游候選；交棒攜帶 work_id、package、允許路徑、writer owner 與續跑位置。**NEVER** 用 stash、reset 或 commit 藏掉未知 WIP；帶入既有 WIP 要先確認所有權與授權，交 `wt` owner 依 baseline guard 處理。
 
 ## 1. 定位同一工作與規則
 
@@ -86,7 +92,7 @@ transport 讀當前 runtime 的 `wt/SKILL.md`，可用 Form 3 `/wt <slug>: /<dow
 | `configured: true`，使用者已在需求裡明說要／不要開票 | 不問，直接照下方「要」／「不要」處理 |
 | `configured: true`，以上都不成立 | 鑄 work id **之前**問一次「要不要為這件工作建 Notion ticket」，附選項（推薦排第一）。`hub.delivery` 為 null（board-only hub）時問題 MUST 點明「不建票，客戶在 Notion 上看不到這件工作」 |
 
-「要」→ 照 `notion-hub` skill § 3 跑 `node ~/offline/clade/vendor/scripts/notion-sync.ts file --title "<客戶看得懂的一句話>" --kind bug|feature --slug <slug>`，由它建票並鑄 work id（照做它印的 `export CLADE_WORK_ID=…`）；lifecycle repo 接著以 `flow plan open <slug> --work-id <該 id>` 開 package，**NEVER** 另鑄第二個 id。「不要」→ 照上段原流程鑄 work id。這是鑄 id 時的一次性詢問，不是同步步驟；之後的 ticket 推進照 `notion-work-coupling` 跟隨 flow。
+「要」→ 照 `notion-hub` skill Phase 4（工程師建票）跑 `node ~/offline/clade/vendor/scripts/notion-sync.ts file --title "<客戶看得懂的一句話>" --kind bug|feature --slug <slug>`，由它建票並鑄 work id（照做它印的 `export CLADE_WORK_ID=…`）；lifecycle repo 接著以 `flow plan open <slug> --work-id <該 id>` 開 package，**NEVER** 另鑄第二個 id。「不要」→ 照上段原流程鑄 work id。這是鑄 id 時的一次性詢問，不是同步步驟；之後的 ticket 推進照 `notion-work-coupling` 跟隨 flow。
 
 本次要調整 project constitution，或下一 owner 必讀的 constitution 缺失時，載入本 skill 的 `rules/.constitution/SKILL.md` 及其要求的資源，由該 owner 做最小增量處理。已授權工作中的可確定前提直接補齊；會改需求、權限或高影響規則時，只問具體缺口。
 
@@ -113,9 +119,41 @@ MUST 先讀本 skill 根的 `rules/上游覆寫-lifecycle落點與doctor.md`，�
 | tasks、bdd、truth-delta | `rules/.workflow/<owner>/SKILL.md` |
 | clarify-over-specs | 優先當前 runtime 已安裝公開入口；未提供時用 `rules/.workflow/clarify-over-specs/SKILL.md` |
 | specformula-config、specformula-api-spec、specformula-entity-spec、specformula-feature | `rules/.workflow/<owner>/SKILL.md`；只由下方 § SpecFormula 契約載入點 的宿主 owner 載入，不單獨成步 |
-| specify、clarify、system-analysis、implement | 當前 runtime 的公開入口與必要 resources |
+| specify、clarify、system-analysis、implement | 當前 runtime 的公開入口與必要 resources；Claude 端這四支模型呼叫不了，照下方 § explicit 入口由本 agent 代打 |
 
-本 skill 根：Claude `.claude/skills/work-route/`、Codex `.agents/skills/work-route/`、Cursor `.cursor/skills/work-route/`。內部流程由 `clade-workflow-bundles` 隨本 skill 投影到 `.` 開頭的目錄（避免被 runtime 列成公開 skill），多數搜尋工具預設不掃，所以一律照上表明確路徑讀取，**NEVER** 用搜尋結果為空判定不存在。只讀本步入口及它明列的必讀資源。
+### explicit 入口由本 agent 代打
+
+specify、clarify、system-analysis、implement 在 Claude 端帶 `disable-model-invocation`：`Skill` 工具會拒絕，也 **NEVER** 讀它們的檔照跑。第 4 節依 package 產物狀態輪到其中一支時，本 agent 就是派工者：派一個本機 session，brief 第一行寫 `/<skill> <一句範圍>`，由 dispatcher 當成使用者指令送進去；收到它的結果後查驗產出，回第 4 節重新判定下一步。**NEVER** 停下來請使用者親打。
+
+| 可觀察 predicate | 處理 |
+| --- | --- |
+| 第 4 節判定下一步是這四支之一，package 已鑄出、本步前提已過，本 session 不是被派出的（`CLADE_DISPATCH_ID` 為空） | 代打派出，brief 照下方「brief 必寫」 |
+| 同上，但本 session 是被派出的（`CLADE_DISPATCH_ID` 非空） | dispatcher 拒絕巢狀派工（`nested_dispatch_refused`）。以 `--complete blocked --decision` 交回派工者，寫明要代打哪一支、package 路徑與範圍；**NEVER** 自己再派 |
+| 輪到 clarify，先前代打 specify 的 pane 還在 | `--continue <pane>` 送第一行 `/clarify <範圍>` |
+| 輪到 clarify，那個 pane 已收回，或是跨 session 續跑 | 新派一個本機 session，第一行 `/clarify <範圍>` |
+| 還沒過第 0–1 節（沒有 work id、沒有 package），或第 4 節判定的下一步不是這四支 | **NEVER** 代打；先完成本入口該步 |
+| dispatcher 不可用（不在 Herdr、transport 失敗） | 保留 brief 並回報 blocker；**NEVER** 改成自己讀檔照跑 |
+
+**brief 必寫**（被代打的 session 不經本入口第 2 節，這些它自己走不到）：
+
+- 第一行 `/<skill> <一句範圍>`，400 字以內；其他位置 **NEVER** 再以斜線形式點名這四支（dispatcher 會拒收）
+- package 路徑、範圍停在這一支、需求缺口先從 repo 查證後作答，查不到的標 `NEEDS CLARIFICATION` 回報
+- `rules/上游覆寫-lifecycle落點與doctor.md` 的路徑（L 落點與 doctor 覆寫）
+- 該 owner 的 clade overlay：implement 帶 `implement/specformula.md`（與 implement 的 `SKILL.md` 同目錄），並帶 `owner-routing.md` 的路徑（task 外派的列與首跳）
+
+**派法**：以本 repo 的 session dispatcher（`herdr-session-handoff.ts`）開**本機** session，`--cwd` 是該 work 的 worktree，帶 `--coordinate`（派工者等它回報；不帶時它收到的指示是「派工者已收工」，不會回報）。argv（本 repo 沒有 `coordinator` skill 時照此拼，不必另找規約）：
+
+```text
+node <vendor>/scripts/herdr-session-handoff.ts --cwd <該 work 的 worktree> --coordinate \
+  --model claude-opus-5-5 --effort medium \
+  --route routing-table --tier-basis table-row --table-row <列> --prompt-file <brief>
+```
+
+`<列>` 照 `owner-routing.md`：specify／clarify 是 `mainline-contract`，system-analysis 是 `detailed-planning`，implement 入口是 `mainline-analysis`；dispatcher 只在 brief 第一行是代打指令、且列與該 skill 相符時收主線列，**NEVER** 改填 `--route manual`。第一行超過 400 字、或要派到 peer 機器，dispatcher 都會拒收（第一行只留一句範圍、細節放第二行起；peer 機器改在該機本地派）。clade 的 `coordinator` skill `rules/派工判準.md` Rule 11 有同一份 argv 與範例。
+
+代打只換「誰敲指令」：高影響需求缺口與 Gherkin 的 PM 確認仍照第 4 節停下來問。
+
+本 skill 根：Claude `.claude/skills/work-route/`、Codex `.agents/skills/work-route/`。內部流程由 `clade-workflow-bundles` 隨本 skill 投影到 `.` 開頭的目錄（避免被 runtime 列成公開 skill），多數搜尋工具預設不掃，所以一律照上表明確路徑讀取，**NEVER** 用搜尋結果為空判定不存在。只讀本步入口及它明列的必讀資源。
 
 **clade overlay 只從本表走得到。** 三個 owner 各有一份 clade-owned 的 `specformula.md`，上游 `SKILL.md` 不會提到：bundle 內的 `rules/.workflow/bdd/specformula.md`、`rules/.workflow/technical-research/specformula.md`，以及公開入口 implement 目錄的 `implement/specformula.md`（與 implement 的 `SKILL.md` 同目錄）。載入這三個 owner 時 MUST 一併讀它，依該檔的適用條件套用（bdd 那份在後端 BDD techstack 是 SpecFormula 時不手寫 step definition；technical-research 那份給三題必問的 fleet 預設；implement 那份把 Phase 3 的三個 marker 改落在規格檔）。**NEVER** 因上游入口沒列就略過。
 

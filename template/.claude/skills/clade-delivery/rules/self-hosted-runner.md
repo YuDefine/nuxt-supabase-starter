@@ -3,7 +3,7 @@ description: Self-hosted GitHub Actions runner 的標籤設計、job 路由契�
 paths: ['.github/workflows/**', 'registry/consumers.json']
 ---
 <!-- Clade native rule; source: rules/core/self-hosted-runner.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Self-Hosted Runner 標籤設計與職責分工
 
@@ -145,10 +145,10 @@ gh api repos/<owner>/<repo>/actions/runs/<run-id>/jobs \
 
 | 步驟 | 量到什麼 | MUST |
 | --- | --- | --- |
-| `voidzero-dev/setup-vp` 的 `cache` | <consumer-i>（同 repo、同 runner）`cache: true` 77s、`cache: false` 22s；<consumer-b> setup-vp `cache: true` 110s | persistent self-hosted runner 上 `cache: false`。GitHub-hosted（`ubuntu-latest`）維持 cache |
-| `actions/setup-go` 的 `cache` | <consumer-b> 的「Post Setup Go」中位 101s（存 cache 的 post step 本身就是成本） | persistent self-hosted runner 上 `cache: false`。GitHub-hosted 維持 cache |
-| `supabase/setup-cli` | <consumer-b> run 35493941498 光下載 CLI tarball 就 19 分鐘；<consumer-b> 換 v3 後該步驟中位 234s → 9s | v3 SHA-pin（`45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1`）＋明確 `version:`，**NEVER** `latest`。版本 MUST 與產生 committed DB types 的 CLI 版本一致。**例外**：repo 的 `package.json` 有 `devEngines.packageManager` 時 v3 會紅——v3.0.1 在 `GITHUB_WORKSPACE` 跑 `npm view`，npm 回 `EBADDEVENGINES`（<consumer-i> commit `84b25b95`、run 35892796784，npm 11.19.0 vs pnpm 11.23.0），該 repo 改用 v1.7.1 SHA-pin（`ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1.7.1`）＋明確 `version:`。代價：v1 每趟把 tarball 下載到 `_temp`、不進 tool cache，網路慢的 runner 會很久（<consumer-b> 換 v3 前 234s 中位、最長 19 分鐘的就是這條路徑）。<consumer-b>、<consumer-e> 無 `devEngines`，走 v3 |
-| CI 內的 `supabase start` | <consumer-e> run 36214756229 的 Start Supabase 2300s，時間都花在拉 studio／logflare 等測試用不到的 image | 用 `-x` 排除用不到的服務。studio、logflare、vector 在 CI 通常可排除；imgproxy、edge-runtime、mailpit、realtime、storage 要先從測試碼與設定證明沒用到才排除 |
+| `voidzero-dev/setup-vp` 的 `cache` | <consumer-1>（同 repo、同 runner）`cache: true` 77s、`cache: false` 22s；<consumer-2> setup-vp `cache: true` 110s | persistent self-hosted runner 上 `cache: false`。GitHub-hosted（`ubuntu-latest`）維持 cache |
+| `actions/setup-go` 的 `cache` | <consumer-2> 的「Post Setup Go」中位 101s（存 cache 的 post step 本身就是成本） | persistent self-hosted runner 上 `cache: false`。GitHub-hosted 維持 cache |
+| `supabase/setup-cli` | <consumer-2> run 35493941498 光下載 CLI tarball 就 19 分鐘；<consumer-2> 換 v3 後該步驟中位 234s → 9s | v3 SHA-pin（`45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1`）＋明確 `version:`，**NEVER** `latest`。版本 MUST 與產生 committed DB types 的 CLI 版本一致。**例外**：repo 的 `package.json` 有 `devEngines.packageManager` 時 v3 會紅——v3.0.1 在 `GITHUB_WORKSPACE` 跑 `npm view`，npm 回 `EBADDEVENGINES`（<consumer-1> commit `84b25b95`、run 35892796784，npm 11.19.0 vs pnpm 11.23.0），該 repo 改用 v1.7.1 SHA-pin（`ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1.7.1`）＋明確 `version:`。代價：v1 每趟把 tarball 下載到 `_temp`、不進 tool cache，網路慢的 runner 會很久（<consumer-2> 換 v3 前 234s 中位、最長 19 分鐘的就是這條路徑）。<consumer-2>、<consumer-3> 無 `devEngines`，走 v3 |
+| CI 內的 `supabase start` | <consumer-3> run 36214756229 的 Start Supabase 2300s，時間都花在拉 studio／logflare 等測試用不到的 image | 用 `-x` 排除用不到的服務。studio、logflare、vector 在 CI 通常可排除；imgproxy、edge-runtime、mailpit、realtime、storage 要先從測試碼與設定證明沒用到才排除 |
 
 本證據決定：persistent self-hosted runner 上要不要替下載型工具加一層快取機制——不要加（`actions/cache`、`setup-vp`／`setup-go` 的 `cache: true` 都算）。
 本證據不決定：GitHub-hosted runner 上要不要優化——**NEVER** 拿本節論證 `ubuntu-latest` 的 job 也不必量、不必改。
@@ -170,13 +170,13 @@ gh api repos/<owner>/<repo>/actions/runs/<run-id>/jobs \
 - **MUST** untrusted-execution job 的 `runs-on` 只落在 GitHub-hosted（`ubuntu-latest`），或**不具 production 存取**的 self-hosted runner（能力標籤，例如 `supabase-ci`）
 - **MUST** production-access runner 只接同時滿足兩條的 job：觸發受限（tag，或 `workflow_dispatch` 加 ref guard；**NEVER** 是 `pull_request` / `pull_request_target` / push branch）、只執行 repo 內的腳本而不安裝依賴（migrate、deploy）。本條只管 workflow 檔寫了什麼；GitHub 端誰能把 job 排上那台、production secret 對誰可見，見 § 13
 - **MUST** 在 untrusted-execution job 的 `runs-on` 上方留註解，指明它**為什麼不能**用 prod 主機的標籤——沒有這行註解的 `ubuntu-latest` 會被後人改成 self-hosted
-- **NEVER** 讓位置標籤兼作能力標籤（per § 3）：`supabase` 在 <client-b> fleet 的意思是「production supabase-db 所在主機」，不是「有 docker、可起拋棄式 stack」。沒有不具 production 存取的能力標籤時，job 先用 `ubuntu-latest`，**NEVER** 借 prod 主機的標籤
+- **NEVER** 讓位置標籤兼作能力標籤（per § 3）：`supabase` 在 <client-1> fleet 的意思是「production supabase-db 所在主機」，不是「有 docker、可起拋棄式 stack」。沒有不具 production 存取的能力標籤時，job 先用 `ubuntu-latest`，**NEVER** 借 prod 主機的標籤
 - **NEVER** 拿 `paths:` 過濾、private repo、org 成員限定當作緩解——下表逐條說明
 
 | 開脫（出處） | 現實 |
 | --- | --- |
-| 「`supabase-check`（pull_request，限定 paths）」（<consumer-i> `tasks/2026-09-16-runner-isolation-followup.md`，把 paths 當成範圍已受控） | `pull_request` 跑的是 PR merge commit（`GITHUB_SHA`，含 PR 的改動）上的 workflow 檔，`paths:` 與 workflow 內容都是 PR 可改的；而且 paths 命中的那一次，程式碼照樣在 prod 主機上跑 |
-| 「PR job 經 Docker 可觸及 supabase-runner 上的 production supabase-db … 依 decision … 接受」（<consumer-i> 77ada28 commit message） | 接受時評估的是「誰能開 PR」。風險不在人：`vp install` 之後整個 app 與全部 transitive deps 的 runtime code 都在那台跑，push main 時同樣發生。org 成員限定縮小的是人，不是供應鏈 |
+| 「`supabase-check`（pull_request，限定 paths）」（<consumer-1> `tasks/2026-09-16-runner-isolation-followup.md`，把 paths 當成範圍已受控） | `pull_request` 跑的是 PR merge commit（`GITHUB_SHA`，含 PR 的改動）上的 workflow 檔，`paths:` 與 workflow 內容都是 PR 可改的；而且 paths 命中的那一次，程式碼照樣在 prod 主機上跑 |
+| 「PR job 經 Docker 可觸及 supabase-runner 上的 production supabase-db … 依 decision … 接受」（<consumer-1> 77ada28 commit message） | 接受時評估的是「誰能開 PR」。風險不在人：`vp install` 之後整個 app 與全部 transitive deps 的 runtime code 都在那台跑，push main 時同樣發生。org 成員限定縮小的是人，不是供應鏈 |
 | 「省 minutes」（77ada28 把 `ubuntu-latest` 搬上 self-hosted 的理由） | 先量觸發頻率再談成本，下方指令 |
 
 量觸發頻率（逐 repo 跑，數字是全歷史 PR 數）：
@@ -185,12 +185,12 @@ gh api repos/<owner>/<repo>/actions/runs/<run-id>/jobs \
 gh api "repos/<owner>/<repo>/pulls?state=all&per_page=100" --paginate --jq '.[].number' | wc -l
 ```
 
-2026-09-16 快照（<client-b>，Free plan、`allow_forking=false`）：<consumer-i> 0、<consumer-e> 1、<consumer-b> 25。
+2026-09-16 快照（<client-1>，Free plan、`allow_forking=false`）：<consumer-1> 0、<consumer-3> 1、<consumer-2> 25。
 
 本證據決定：untrusted-execution job 從 prod 主機搬回 GitHub-hosted 時，要不要擔心 minutes——先量，量到近零就不用。
 本證據不決定：production-access runner 上要不要跑 untrusted-execution job——**NEVER** 拿「量到的頻率很高、minutes 不夠」論證搬回 prod 主機；不夠時改觸發方式（例如 `workflow_run`）或另建不具 production 存取的 runner。
 
-**<client-b> 現況**：org 內沒有 GitHub-hosted 選項，untrusted-execution job 一律落 `runs-on: [self-hosted, linux, gh-runner-lxc, X64, supabase-ci]`。`supabase-ci` 只掛在單一 runner，所以它**同時是跨 repo mutex**；`supabase`（production supabase-db 所在）仍是 prod 主機標籤，上面那條 NEVER 不放寬。
+**<client-1> 現況**：org 內沒有 GitHub-hosted 選項，untrusted-execution job 一律落 `runs-on: [self-hosted, linux, gh-runner-lxc, X64, supabase-ci]`。`supabase-ci` 只掛在單一 runner，所以它**同時是跨 repo mutex**；`supabase`（production supabase-db 所在）仍是 prod 主機標籤，上面那條 NEVER 不放寬。
 
 - **NEVER** 把 `supabase-ci` 掛到第二個 runner，除非同時導入 per-job port 隔離——同一個 dockerd 上兩個 stack 會撞預設 port，mutex 靜默失效
 - **MUST** 每個落 `supabase-ci` 的 supabase 類 job 在 setup-cli 之後第一步跑 `supabase stop --all --no-backup || true`，cleanup `if: always()` 跑 `supabase stop --no-backup || true`（timeout 時 cleanup 可能沒跑完）
@@ -203,6 +203,9 @@ node $CLADE_HOME/scripts/audit-runner-trust-boundary.ts                  # fleet
 node $CLADE_HOME/scripts/audit-runner-trust-boundary.ts --repo <path>    # 單一 repo
 ```
 
+prod 標籤以外的 deploy runner 也會被 PR job 搭上：PR 觸發的 self-hosted job，其 `runs-on` labels 是某個 deploy-secret job labels 的超集時，任何能跑 PR job 的 runner 也一定能跑那個 deploy job。這個形狀由
+`node $CLADE_HOME/scripts/audit-security-rule-consumption.ts --all-consumers` 的 `pr-job-shares-deploy-runner` 出訊號（warn-only）。
+
 prod 主機標籤預設 `supabase`；別的 fleet 用不同標籤時，在該 repo `.clade/manifest.json` 宣告 `runners.prodHostLabels`，或跑時帶 `--prod-label <label>`。
 
 ### 11. Deploy 私鑰只活在 job 內：寫進 `$RUNNER_TEMP`，`always()` 收尾刪除
@@ -212,8 +215,11 @@ prod 主機標籤預設 `supabase`；別的 fleet 用不同標籤時，在該 re
 - **MUST** 私鑰寫進 `$RUNNER_TEMP`，用 `install -m 600 /dev/null <path>` 先建 600 的空檔再 `printf` 進去
   （避免 umask 造成的可讀窗口）
 - **MUST** 最後一個 step `if: always()` 刪掉它。`RUNNER_TEMP` 在 job 起訖自動清空只是兜底（job 被 kill 時結束清空不會跑），**兩個都要**
-- **MUST** `ssh` / `scp` / `rsync -e ssh` 一律帶 `-o BatchMode=yes -o StrictHostKeyChecking=yes`，host key 用
-  `ssh-keyscan -H <host> >> ~/.ssh/known_hosts` 事先釘。`known_hosts` 是唯一允許寫進 `~/.ssh` 的東西——它不是 secret
+- **MUST** `ssh` / `scp` / `rsync -e ssh` 一律帶 `-o BatchMode=yes -o StrictHostKeyChecking=yes`，host key 事先釘：
+  在可信網路對目標主機 `ssh-keyscan -H <host>` 一次、人工核對 fingerprint 後存進 repo variable（例：`vars.<REPO>_DEPLOY_KNOWN_HOSTS`；
+  host 公鑰不是 secret，放 secret 也可），job 內只從那個值寫進 `~/.ssh/known_hosts`。`known_hosts` 是唯一允許寫進 `~/.ssh` 的東西——它不是 secret
+- **NEVER** 在 job 內 `ssh-keyscan` 取 host key，`… || true` 更糟：job 內掃描是 trust-on-first-use，每一次 run 都信任「當下回應那個 IP 的機器」，
+  DNS／LAN 被劫持時 deploy 私鑰與後續送出的 production secret 直接交給對方；`|| true` 再把掃描失敗吞掉，結果等同 `StrictHostKeyChecking no`
 - **NEVER** `echo "$KEY" > ~/.ssh/<name>`、`cat > ~/.ssh/config`、或任何把 secret 寫進 `$HOME` 的形式。「我有 `always()` 刪」不豁免：kill / timeout 時 `$HOME` 內的檔會留下，`$RUNNER_TEMP` 還有下一次清空
 - **NEVER** `StrictHostKeyChecking no` / `UserKnownHostsFile /dev/null`——那把 deploy 私鑰交給任何能回應那個 IP 的機器
 - **NEVER** 用 `ssh-agent` 當「不落盤」的替代並就此不清：agent socket 同樣是同 uid 可達，且 agent 行程會活過 job
@@ -224,13 +230,15 @@ REQUIRED 的兩個 step（deploy 本體夾中間）：
       - name: Materialize deploy key (job-scoped)
         env:
           DEPLOY_KEY: ${{ secrets.<REPO>_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ vars.<REPO>_DEPLOY_KNOWN_HOSTS }}
         # 私鑰 NEVER 寫進 ~/.ssh：runner 的 $HOME 跨 job 存活（§ 7），落盤不刪等於留給下一個 job。
         # $RUNNER_TEMP 每個 job 起訖清空，末尾再 always() 刪。
         run: |
           install -m 600 /dev/null "$RUNNER_TEMP/deploy_key"
           printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/deploy_key"
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          ssh-keyscan -H "${{ vars.<REPO>_DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          # host key 是事先核對過 fingerprint 的固定值，NEVER 在 job 內 ssh-keyscan（TOFU）
+          printf '%s\n' "$KNOWN_HOSTS" >> ~/.ssh/known_hosts
 
       # ... rsync / ssh 步驟，每一個都帶：
       #   -i "$RUNNER_TEMP/deploy_key" -o BatchMode=yes -o StrictHostKeyChecking=yes
@@ -270,7 +278,7 @@ variant 判定進 `registry/conventions.json` 的 `deploy-key-custody`，由 `co
 - **NEVER** 讓 runner user（或 `runner` group）讀得到 GitHub App 私鑰、PAT 檔或任何「能再簽出 token」的材料。
   `/etc/gh-runner/*.pem` 這類檔 **MUST** `0600 root:root`，放在 runner 不在的宿主（JIT 架構：Proxmox 宿主，CT 只收 JIT config）
 - **NEVER** 對接 untrusted job 的 runner 容器或 self-hosted job 掛宿主 `docker.sock`。掛 socket（含 `:ro`，見
-  pitfall `~/offline/clade/docs/pitfalls/2026-08-05-docker-sock-ro-mount-gives-zero-api-protection.md`）＝宿主 root，宿主 `$HOME` 的 `~/.config/gh/hosts.yml`、
+  pitfall [[pitfall-docker-sock-ro-mount-gives-zero-api-protection]]）＝宿主 root，宿主 `$HOME` 的 `~/.config/gh/hosts.yml`、
   `~/.ssh` 全進 job 射程；需要 Docker 時用 rootless／DinD sidecar 或 VM 隔離
 - **MUST** 在以上任何一項被發現「已暴露過」時輪替該憑證，並照 [[secret-custody]] 把新值存回保管處（Notion secrets 頁的對應列等）。
   只刪檔不輪替 = 假設過去沒有 job 讀過它，這個假設沒有證據能支持
@@ -280,7 +288,7 @@ variant 判定進 `registry/conventions.json` 的 `deploy-key-custody`，由 `co
 | 「那台是我自己的機器，token 是我登入時留的，不是 CI 的」 | 排程不管 token 是誰留的。job 用的是同一個 uid，`cat ~/.config/gh/hosts.yml` 不需要任何權限提升 |
 | 「token 在容器 env，不在 `$HOME`，不算 § 12」 | job 讀 env 比讀檔更容易；§ 12 管的是 job 讀得到的面，不是路徑 |
 | 「私鑰是 `640 root:runner`，不是 world-readable」 | job 就是 `runner` group 的成員；group-readable 對 job 等同 world-readable |
-| 「沒有入侵證據」 | 2026-09 <client-b> 事件實查：sudo 紀錄、持久化、outbound 全乾淨，但**走 docker socket 的動作沒有任何日誌**。沒證據是查不到的上限，不是安全的下限 |
+| 「沒有入侵證據」 | 2026-09 <client-1> 事件實查：sudo 紀錄、持久化、outbound 全乾淨，但**走 docker socket 的動作沒有任何日誌**。沒證據是查不到的上限，不是安全的下限 |
 | 「job 已經取消了，程式碼沒跑」 | `cancelled` 只代表最終狀態。取消前已完成的 step（`vp install` 的 install script）照樣跑過；重跑的 attempt 2 也可能在「已取消」的 run 底下重新起跑。以下方 SOP 查 step 級證據 |
 
 主機端沒有自動 gate，用下方 § 暴露盤點 SOP 逐台唯讀盤點。`scripts/audit-runner-trust-boundary.ts` 只抓 repo 內看得到的兩種形狀（self-hosted job 碰到 `docker.sock`、workflow 裡的 token 字面值），它綠燈對主機端的 env／檔案權限／容器掛載零訊號。
@@ -307,10 +315,10 @@ variant 判定進 `registry/conventions.json` 的 `deploy-key-custody`，由 `co
 
 | 能力 | 狀態（2026-09 快照） | 已實證時 | 未實證前 |
 | --- | --- | --- | --- |
-| branch protection / rulesets | **不可用**：`…/branches/main/protection`、`…/rulesets` 在 <client-b>、<client-a> 都回 403「Upgrade to GitHub Pro」 | — | 見下方信任錨 |
-| environment deployment branch policy | **已實證有強制**：<consumer-a> run 33353051087（main 手動 dispatch）被擋「Branch "main" is not allowed to deploy to production」 | #5 MUST 全做 | — |
-| runner group selected workflows（#4） | **未實證**。GitHub 文件只在 Enterprise 版本寫到；<client-a> API 接受設定。驗證點：pin 之後該 org 第一次 tag run，prod job 落地成功，且查得到一次非 pin workflow 被拒 | #4 算一層防線 | #4 照樣設定，但 **NEVER** 算進防線：repo 的防護只算 #1、#2、#3、#5、#6。首次 tag run 的 prod job 停在 queued 時，先查 `job_workflow_ref` 是否對上 pin；**NEVER** 自行把 `restricted_to_workflows` 改成 `false` 當排除手段——那會把隔離退回只剩標籤，要 Charles 拍板 |
-| environment secret（#6） | **未實證**。驗證點：建一個無害的 environment secret，由宣告該 environment 的 job 讀出非空值（只印長度） | production secret **MUST** 只放 environment secret，並刪掉 repo 層同名 secret | **MUST** 先跑上述驗證。驗證前 production secret 仍在 repo 層，這是已知缺口：**MUST** 在該 consumer 的 `docs/tech-debt.md` 登記一條，**NEVER** 在 ADR / followup / workflow 註解寫成「由 environment secret 注入」 |
+| branch protection / rulesets | **不可用**：`…/branches/main/protection`、`…/rulesets` 在 <client-1>、<client-2> 都回 403「Upgrade to GitHub Pro」 | — | 見下方信任錨 |
+| environment deployment branch policy | **已實證有強制**：<consumer-4> run 33353051087（main 手動 dispatch）被擋「Branch "main" is not allowed to deploy to production」 | #5 MUST 全做 | — |
+| runner group selected workflows（#4） | **未實證**。GitHub 文件只在 Enterprise 版本寫到；<client-2> API 接受設定。驗證點：pin 之後該 org 第一次 tag run，prod job 落地成功，且查得到一次非 pin workflow 被拒 | #4 算一層防線 | #4 照樣設定，但 **NEVER** 算進防線：repo 的防護只算 #1、#2、#3、#5、#6。首次 tag run 的 prod job 停在 queued 時，先查 `job_workflow_ref` 是否對上 pin；**NEVER** 自行把 `restricted_to_workflows` 改成 `false` 當排除手段——那會把隔離退回只剩標籤，要 Charles 拍板 |
+| environment secret（#6） | **未實證**。驗證點：建一個無害的 environment secret，由宣告該 environment 的 job 讀出非空值（只印長度） | production secret **MUST** 只放 environment secret，並刪掉 repo 層同名 secret | **MUST** 先跑上述驗證。驗證前 production secret 仍在 repo 層，這是已知缺口：**MUST** 依 [[follow-up-register]] 在該 consumer 登記一條（lifecycle repo：plan § Open work；未遷移 consumer：`docs/tech-debt.md`），**NEVER** 在 ADR / followup / workflow 註解寫成「由 environment secret 注入」 |
 
 能力表的狀態以實證翻轉：某個 org 驗到了，就在 cookbook 的驗證紀錄補上 run ID；**NEVER** 用另一個 org 的結果推論這一個。
 
@@ -321,8 +329,8 @@ variant 判定進 `registry/conventions.json` 的 `deploy-key-custody`，由 `co
 
 | 開脫（逐字，出處） | 現實 |
 | --- | --- |
-| 「job 定義取自受 main branch 保護的 reusable workflow」（<consumer-a> ADR `2026-07-10-<client-a>-unified-github-runner.md`，PR #97 版） | Free private repo 的 branch protection API 回 403，main 沒有任何保護；可信度等於寫權限 |
-| 「DB 帳密由 GitHub production environment secret 注入」（<consumer-a> `tasks/2026-09-26-prod-deploy-runner-followup.md`） | 實查 `…/environments/production/secrets` → `total_count: 0`，全部在 repo 層；repo secret 對任何分支的任何 job 可見 |
+| 「job 定義取自受 main branch 保護的 reusable workflow」（<consumer-4> ADR `2026-07-10-unified-github-runner.md`，PR #97 版） | Free private repo 的 branch protection API 回 403，main 沒有任何保護；可信度等於寫權限 |
+| 「DB 帳密由 GitHub production environment secret 注入」（<consumer-4> `tasks/2026-09-26-prod-deploy-runner-followup.md`） | 實查 `…/environments/production/secrets` → `total_count: 0`，全部在 repo 層；repo secret 對任何分支的任何 job 可見 |
 
 production migrate 的 job 形狀（沒有 `--include-all`：先對齊、ledger 預檢、再嚴格 push）、runner 註冊與 group PATCH 指令、caller / callee 範本、secret 搬遷步驟、驗證紀錄都在 `vendor/snippets/prod-runner-admission/README.md`。
 

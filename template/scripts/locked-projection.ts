@@ -87,11 +87,15 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // Improvement-loop infra (.clade/)
       // `scripts` / `registry` 於 2026-08-24 補上（TD-639）：兩者都是 improvement-loop
       // 投影的整目錄（`.clade/scripts/` 五支 + `.clade/registry/consumers.json`），
-      // 抽查 <consumer-a> / <consumer-b> / ai-quota / <consumer-j> 四台，目錄內**沒有**任何 consumer
+      // 抽查 <consumer-a> / <consumer-b> / ai-quota / <consumer-k> 四台，目錄內**沒有**任何 consumer
       // 自家檔——與 `scripts/lib/` 那種混住的目錄不同，可以整目錄匹配。
       String.raw`\.clade/(bin|signals|vendor|scripts|registry)/`,
       // Vendored script entry points (scripts/)
-      String.raw`scripts/(wt-helper|codex-worktree-trust|wt-batch|wt-unattended-merge|preservation-policy|preservation-profiles|preservation-inventory|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|audit-risk-path-coverage|audit-clade-leak|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|dev-singleton|dev-router|dev-session|herdr-visible-identity|db-lease|db-reset-peer-coordination|ownership-journal|shell-safety-check|run-evidence|cbm-health|evidence-hook|install-tool-evidence|control-plane-projection-validate)\.(mjs|mts|ts)$`,
+      String.raw`scripts/(wt-helper|codex-worktree-trust|wt-batch|wt-unattended-merge|preservation-policy|preservation-profiles|preservation-inventory|pulls-review|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|legacy-tests|audit-risk-path-coverage|audit-clade-leak|audit-public-tree-hygiene|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|dev-singleton|dev-router|dev-session|herdr-visible-identity|db-lease|db-reset-peer-coordination|ownership-journal|shell-safety-check|run-evidence|cbm-health|evidence-hook|install-tool-evidence|control-plane-projection-validate|specformula-ddl-check)\.(mjs|mts|ts)$`,
+      // pulls-review.ts 鎖相依用的 manifest 與 lockfile（非 .mjs/.ts 家族，故單列一條）
+      String.raw`scripts/pulls-review\.(package\.json|pnpm-lock)$`,
+      // PUBLIC consumer 的 salted hash 清單（propagate 的 consumer-sanitize 階段生成，非 vendor 源檔）
+      String.raw`scripts/public-tree-hygiene-tokens\.json$`,
       // Heavy-gate 併發閘門（bash helper，非 .mjs/.ts 家族，故單列一條）
       String.raw`scripts/gate-slot\.sh$`,
       // codebase-memory index 的 lock + MemoryMax wrapper（同上，bash helper 單列一條）
@@ -108,7 +112,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // NEVER widen to `scripts/lib/`: consumers author their own files there
       // (<consumer-a> `common.sh` / `read-infra-manifest.mjs`, <consumer-d> `vue-component-resolution.ts`),
       // and matching the whole dir would mark those clade-managed → auto-reset clobbers them.
-      String.raw`scripts/lib/(argv-unsplit|evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|json-unknown|safety-observation|worktree-dev-port|worktree-backlog|wt-patch-landing|publish-in-flight|projection-ledger-reconcile|herdr-machine|host-config-refs|pane-cache-ttl|disk-low-water)\.(mjs|mts|ts)$`,
+      String.raw`scripts/lib/(argv-unsplit|evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|json-unknown|safety-observation|worktree-dev-port|worktree-backlog|wt-patch-landing|publish-in-flight|projection-ledger-reconcile|herdr-machine|host-config-refs|pane-cache-ttl|disk-low-water|claude-account-registry)\.(mjs|mts|ts)$`,
       // json-unknown.ts 第二條 dest：vendor/review-rules/scan.ts 以
       // `../scripts/lib/json-unknown.ts` 解析到 vendor/scripts/lib/。
       // NEVER 放寬成 `vendor/scripts/lib/`——那個目錄在 clade home 是源。
@@ -129,10 +133,10 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       String.raw`specs/errors/`,
       // Snippets / shared presets
       String.raw`vendor/(snippets|oxc-shared|doctor-shared|review-rules|husky)/`,
-      // prepare-commit-msg 掛載點 —— 逐檔列出，**NEVER** 放寬成 `\.husky/`：
+      // vendor hook 掛載點 —— 逐檔列出，**NEVER** 放寬成 `\.husky/`：
       // consumer 的 commit-msg / pre-commit / pre-push 是 init-consumer 寫的自家檔，
       // 整個目錄標成 clade-managed 會讓 auto-reset 把它們清掉。
-      String.raw`\.husky/prepare-commit-msg$`,
+      String.raw`\.husky/(prepare-commit-msg|post-commit)$`,
       // GitHub vendored actions
       String.raw`\.github/actions/`,
       // Utility files —— dest 是 `join(consumerRoot, manifest.paths.utils ?? 'utils',
@@ -196,7 +200,7 @@ function isCursorGeneratedProjection(repoRoot, p) {
 const CLADE_OWN_SOURCE_RE = new RegExp(
   '^(' +
     [
-      String.raw`vendor/(snippets|oxc-shared|doctor-shared|review-rules)/`,
+      String.raw`vendor/(snippets|oxc-shared|doctor-shared|review-rules|husky)/`,
       // clade home 的源檔在 `vendor/utils/assert-never.ts`。上面那條放寬成
       // `(?:[^/]+/)*utils/assert-never\.ts$` 之後，源檔自己也會命中 LOCKED_PROJECTION_RE
       // —— 沒有這一列，clade home 會把自己的源檔當投影過濾掉，改動不再算 user WIP。
@@ -211,10 +215,6 @@ const CLADE_OWN_SOURCE_RE = new RegExp(
       String.raw`AGENTS\.md$`,
       String.raw`CLAUDE\.md$`,
       String.raw`commitlint\.config\.ts$`,
-      // clade home 的 Cursor 主線 residency / routing overlay。
-      // `.cursor/` 整目錄在 consumer 是 sync-to-cursor 生成物，但這兩檔是源。
-      String.raw`\.cursor/rules/cursor-model-residency\.mdc$`,
-      String.raw`\.cursor/rules/cursor-grok-routing\.mdc$`,
       // clade 自治區規約：`.claude/rules/local/**` 是**手寫源檔**，clade home 就是它的 SoT
       // （consumer 端的 `local/` 也完全自管，per clade-source-routing § 例外）。
       // LOCKED_PROJECTION_RE 為 consumer 的 `.claude/rules/` 投影而收整個前綴，沒有這一列

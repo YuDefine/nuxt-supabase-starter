@@ -3,8 +3,8 @@ description: 多 session 並行下「哪些路徑屬於別 session 還活著的�
 paths: ['.clade/claims/**', 'HANDOFF.md', 'capabilities/core/hooks/pre-bash-ownership-stamp.sh', 'scripts/claim-helper.ts', 'vendor/scripts/claim-helper.ts', 'vendor/scripts/ownership-journal.ts', 'vendor/scripts/flow/who.ts', '.clade/ownership/**', 'capabilities/core/hooks/post-tool-ownership-journal.sh', 'capabilities/core/hooks/pre-edit-claim-conflict.sh']
 ---
 <!-- Clade native rule; source: rules/core/session-claims.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 # Session Claims
 
@@ -17,9 +17,9 @@ paths: ['.clade/claims/**', 'HANDOFF.md', 'capabilities/core/hooks/pre-bash-owne
 ```json
 {
   "session_id": "...",
-  "agent": "claude-code|codex|cursor",
+  "agent": "claude-code|codex",
   "started_at": "<iso>",
-  "consumer": "<consumer-b>",
+  "consumer": "<consumer-id>",
   "worktree_path": "/Users/.../<consumer>-wt/<slug>",
   "branch": "session/<date>-<slug>",
   "change_id": "<slug>",
@@ -86,7 +86,7 @@ node scripts/claim-helper.ts add --change-id main-session-wip \
 
 | 分類 | 證據 | 允許的動作 |
 | --- | --- | --- |
-| `other-live` | journal 記到寫入者，且**兩個存活訊號任一說活著** | 等待**只准對這一類成立**。有 pane 就先 `herdr agent prompt` 談，per [[clade-role-and-todo-discipline]]。**NEVER** 代它 stash / commit |
+| `other-live` | journal 記到寫入者，且**兩個存活訊號任一說活著** | 等待**只准對這一類成立**。先談：Claude session 用 `SendMessage`，非 Claude 的 pane 才 `herdr agent prompt`，per [[clade-role-and-todo-discipline]]。**NEVER** 代它 stash / commit |
 | `orphan` | journal 記到寫入者，且**兩個訊號都說死** | **NEVER 盲等**。轉 adjudicate：自己 `git commit --only -- <path>` 落地或 stash |
 | `unknown` | journal 沒有這個檔，或兩個訊號**沒有同時成立死亡** | 承接 `other` 今天的**全部**禁令。**NEVER sweep**、**NEVER** 讀成 `orphan` |
 

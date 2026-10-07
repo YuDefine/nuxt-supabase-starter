@@ -8,7 +8,7 @@
 
 T3 必補：把 AI SDK 呼叫（`generateText` / `streamText` / tool call / moderation / embedding）的 cost / token / duration 灌進 wide event 的 `ai.*` 欄位。
 
-Reference: `docs/evlog-master-plan.md` § 8.4 (<consumer-c> T3)
+Reference: `docs/evlog-master-plan.md` § 8.4 (agentic-rag T3)
 
 ## 釐清：evlog 沒有 createAILogger
 
@@ -101,9 +101,9 @@ embedding 的「cost > 門檻才 keep」這類自訂條件走 Nitro `evlog:emit:
 
 snippet 的 helper 都已避開上述欄位。
 
-## 與 <consumer-c> 的對應
+## 與 nuxt-edge-agentic-rag 的對應
 
-<consumer-c> 既有 chat.post.ts 已經有自家 `createRequestLogger` SSE child logger（見 `evlog-mcp-sse-child-logger/`）；本 snippet 補的是 AI SDK 呼叫的 cost / token / tool 欄位灌入。兩個 snippet 並用：
+agentic-rag 既有 chat.post.ts 已經有自家 `createRequestLogger` SSE child logger（見 `evlog-mcp-sse-child-logger/`）；本 snippet 補的是 AI SDK 呼叫的 cost / token / tool 欄位灌入。兩個 snippet 並用：
 
 ```
 useLogger(event)  →  AI SDK 呼叫  →  recordAIGeneration（本 snippet）

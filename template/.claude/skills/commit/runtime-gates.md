@@ -1,17 +1,17 @@
 # Commit gate 執行與證據契約
 
 
-進入 ceremony 的 Step 0-Transport 時讀本檔。每一道 gate 的觸發與判準仍由 SKILL.md、gates.md 及其引用的共通政策決定；下表定義三端如何交付可核對的執行結果。
+進入 ceremony 的 Step 0-Transport 時讀本檔。每一道 gate 的觸發與判準仍由 SKILL.md、gates.md 及其引用的共通政策決定；下表定義兩端如何交付可核對的執行結果。
 
-## 三端載體
+## 兩端載體
 
-| 操作 | Claude Code | Codex | Cursor |
-| --- | --- | --- | --- |
-| 讀檔、取得 diff、執行 CLI | 當前 catalog 的讀檔與 shell 工具 | 當前 catalog 的讀檔與 exec 工具 | 當前 catalog 的讀檔與 terminal 工具 |
-| 獨立 reviewer | 實際可派且通過 review-policy 的原生 agent 或已授權 CLI | 實際可派且通過 review-policy 的原生 agent 或已授權 CLI | 實際可派且通過 review-policy 的原生 agent 或已授權 CLI，另遵守本入口 residency 政策 |
-| 等待、收回、取消 | 對該次呼叫回傳的原生 agent／process handle 操作 | 分辨 agent id、exec session id 與 running cell id，再呼叫各自工具 | 對該次呼叫回傳的 task／process handle 操作 |
-| 人類決策 | 可用詢問工具；缺席時在對話中等待回答 | 可用詢問工具；缺席時在對話中等待回答 | 可用詢問工具；缺席時在對話中等待回答 |
-| 瀏覽與通知 | 已連接且本次已授權的工具 | 已連接且本次已授權的工具 | 已連接且本次已授權的工具，遵守本入口 browser 政策 |
+| 操作 | Claude Code | Codex |
+| --- | --- | --- |
+| 讀檔、取得 diff、執行 CLI | 當前 catalog 的讀檔與 shell 工具 | 當前 catalog 的讀檔與 exec 工具 |
+| 獨立 reviewer | 實際可派且通過 review-policy 的原生 agent 或已授權 CLI | 實際可派且通過 review-policy 的原生 agent 或已授權 CLI |
+| 等待、收回、取消 | 對該次呼叫回傳的原生 agent／process handle 操作 | 分辨 agent id、exec session id 與 running cell id，再呼叫各自工具 |
+| 人類決策 | 可用詢問工具；缺席時在對話中等待回答 | 可用詢問工具；缺席時在對話中等待回答 |
+| 瀏覽與通知 | 已連接且本次已授權的工具 | 已連接且本次已授權的工具 |
 
 以上列的是能力角色，工具名稱與參數取自本次 catalog；不是對產品功能的存在性宣告。每個 CLI 先解析成實際存在的絕對路徑並確認依賴可執行。本 skill 宣告的隨附資源、`COMMIT_SKILL_DIR` 與資源所在的 `COMMIT_RESOURCE_DIR` 見 runtime-lifecycle；中央 helper 另驗實際安裝，不由 Markdown 已送達推論依賴也已安裝。需要的載體不可用時，依該 gate 已定義的替代路徑處置；無替代就留下未完成結果。
 
@@ -19,7 +19,7 @@
 
 每筆結果包含 `gate`、`work_id`、`checkout`、`runtime`、`session_id`、受測 base／snapshot／paths、實際 invocation、handle（有非同步執行時）、終態與 exit、輸出位置、verdict，以及引用的授權（需要人類決策時）。未觸發的 gate 記 predicate 與判定輸入；失敗或未取得終態不能記成 skipped。持鎖 token 留在本地 owner receipt，不進這份可分享記錄。
 
-| Gate | 輸入與執行者（三端相同責任） | 完成輸出與失敗處置 | 證據 |
+| Gate | 輸入與執行者（兩端相同責任） | 完成輸出與失敗處置 | 證據 |
 | --- | --- | --- | --- |
 | 0-Lock／續持 | 主線帶真實 work／runtime／session、checkout 呼叫共同 lock CLI | acquire／renew 成功；拒絕即停止新的 gate 與 Git mutation | owner receipt；恢復另有精確 hash、原 owner、原因與授權 |
 | 0-Coord／0-Scope | 主線讀 index、WIP、活動線索與既有 scope 授權，查證 ownership | 可提交候選與 withheld 範圍分明；未明內容保留並協調 | status、diff、所有權依據、協調結果、必要時的精確 stash SHA |

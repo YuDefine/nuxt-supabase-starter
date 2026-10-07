@@ -3,7 +3,7 @@ description: Supabase Storage 使用規範（上傳、signed URL、policy、清�
 paths: ['server/api/**/*.ts', 'packages/*/server/api/**/*.ts', 'supabase/migrations/**/*.sql']
 ---
 <!-- Clade native rule; source: rules/modules/db-runtime/cf-workers/storage.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Storage
 

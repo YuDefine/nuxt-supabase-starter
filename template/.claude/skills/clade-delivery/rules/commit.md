@@ -1,5 +1,5 @@
 <!-- Clade native rule; source: rules/core/commit.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Commit
 
@@ -20,7 +20,7 @@
 
 1. **repo 存在 `.husky/pre-commit` → `git commit` MUST 使用可持續執行並取回終態的 command handle。**
    在當前 runtime 的工具 catalog 確認啟動、等待與取消介面；取得 handle 後沿用它收回結果。
-   Claude 的 `run_in_background` 是該端參數，Codex／Cursor 使用自己實際提供的介面。
+   Claude 的 `run_in_background` 是該端參數，Codex 使用自己實際提供的介面。
    缺少持續執行能力時回報缺口；timeout 或沒有結果時先查原 invocation 的狀態，不另起一次 commit。
    前景呼叫被 tool timeout kill 時 index 已 staged 而 commit 沒落地，照「commit 失敗」的外觀重跑是在不同的起始狀態上再跑一次。**NEVER** 用「這個 repo 的 hook 平常很快」略過。
 
@@ -62,7 +62,7 @@
 
 ### 推理層禁令
 
-- **mixed commit 的 Recovery：持有者是前景 agent session，且已授權協調並有可用通道 → MUST 先對話再拍板**：對精確 session 送達、詢問該筆 commit 的範圍與接手意願（Herdr 已驗證可用時 `herdr agent prompt <對方 pane_id> "<四項>"`）；持有者是 unattended runner、身分不明、缺通道或缺本次協調授權時，保留原因、不假裝已送達。全文與四項範本見 [[commit.detail]] § Recovery 步驟 2
+- **mixed commit 的 Recovery：持有者是前景 agent session，且已授權協調並有可用通道 → MUST 先對話再拍板**：對精確 session 送達、詢問該筆 commit 的範圍與接手意願（對方是 Claude session 用 `SendMessage`；非 Claude runtime 且 Herdr 已驗證可用時才 `herdr agent prompt <對方 pane_id> "<四項>"`）；持有者是 unattended runner、身分不明、缺通道或缺本次協調授權時，保留原因、不假裝已送達。全文與四項範本見 [[commit.detail]] § Recovery 步驟 2
 - **NEVER** 以「這變更看起來壞掉了 / 不該存在 / 不在 scope，是否要還原？」徵詢使用者 — 唯一允許的選項是 `git stash` + `HANDOFF.md`，照「WIP 阻礙處理」流程走
 - **NEVER** 把「revert / restore / discard」包裝成「清理」「重置」「回到乾淨狀態」「對齊規約」「修正狀態」等委婉說法繞過上述禁令
 - **NEVER** 拿其他 rule（例 manual-review.md `[discuss]` 應 user walkthrough）當理由還原 hook 自動產出 — 先保留現狀、查歸屬與既有授權，未解衝突再以當前提問介面請使用者決定（詳見 `scope-discipline.md`「Rule 衝突解法」）

@@ -3,7 +3,7 @@ description: Optional truth-layers 規則——適用於有明確 persistence / 
 paths: ['specs/**', 'tasks/**', 'ROADMAP.md', 'docs/decisions/**', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'shared/**/*.ts', 'packages/*/shared/**/*.ts', 'src/**/*.ts', 'app/**/*.vue', 'packages/*/app/**/*.vue']
 ---
 <!-- Clade native rule; source: rules/core/truth-layers.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Truth Layers
 

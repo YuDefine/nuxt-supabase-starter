@@ -3,8 +3,8 @@ description: consumer 宣告 notion.hub 時適用。症狀：自己發現 prod �
 paths: ['tasks/**', 'specs/plans/**', '.claude/consumer-meta.json', 'registry/notion-hubs.json', 'vendor/scripts/notion-sync.ts', 'vendor/scripts/lib/notion-hub.ts', 'vendor/scripts/lib/notion-stage.ts', 'vendor/scripts/flow/notion-follow.ts', 'scripts/audit-notion-hub-schema.ts']
 ---
 <!-- Clade native rule; source: rules/core/notion-work-coupling.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 # Work Item ↔ Notion Hub 耦合
 
@@ -97,7 +97,7 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --ori
 
 ## 執行機制
 
-- **Runtime**：確定性 script（`notion-sync.ts`、`lib/notion-hub.ts resolve`、`scripts/audit-notion-hub-schema.ts`）主線直接跑；自由形式的 Notion 讀寫一律 `ntn api`（**NEVER** Notion MCP／WebFetch；唯一 MCP 例外是 provision 整頁複製模板或入口頁用 `notion-duplicate-page`——public API 沒有 duplicate，其餘 move／改名／改 view 仍走 `ntn api`，見 notion-hub skill § 6），依 [[agent-routing]] 〔`notion-ops`〕列派工（執行鏈以該列為準），**NEVER** 主線第一手自己跑。transport 是 `lib/notion-client.ts` 直接呼叫 Notion HTTPS API（token 取自 `ntn login` 的 auth 檔；同一份 API version / timeout / sidecar），不經 `ntn` CLI 子行程。
+- **Runtime**：確定性 script（`notion-sync.ts`、`lib/notion-hub.ts resolve`、`scripts/audit-notion-hub-schema.ts`）主線直接跑；自由形式的 Notion 讀寫一律 `ntn api`（**NEVER** Notion MCP／WebFetch；唯一 MCP 例外是 provision 整頁複製模板或入口頁用 `notion-duplicate-page`——public API 沒有 duplicate，其餘 move／改名／改 view 仍走 `ntn api`，見 notion-hub skill Phase 7（開 hub／加專案）），依 [[agent-routing]] 〔`notion-ops`〕列派工（執行鏈以該列為準），**NEVER** 主線第一手自己跑。transport 是 `lib/notion-client.ts` 直接呼叫 Notion HTTPS API（token 取自 `ntn login` 的 auth 檔；同一份 API version / timeout / sidecar），不經 `ntn` CLI 子行程。
 - **寫入前**：script 用 `hub.fields` 對 data source 現況做 schema 檢查，缺欄位就以「疑似 schema drift」中止，**NEVER** 猜。常駐對帳跑 `node scripts/audit-notion-hub-schema.ts`（exit 1 = drift，2 = 讀不到 live schema，n/a **NEVER** 讀成 0 drift）；drift → 補 registry `fields`／`ticketType`，**NEVER** 改 `FIELDS` 或在 script 分支。
 - **失敗模式**：所有寫入是絕對值 SET；讀失敗中止；寫入 timeout 留 marker 在 `<consumer>/.clade/notion-sync-pending/` 不自動重試，`notion-sync.ts pending` 列出、下一個自然觸發點重跑（重跑 idempotent）。
 - **Work ID 是對帳鍵**：ticket 與 交付項目 都存 `Work ID` = `<consumerId>/<workId>`（`lib/notion-hub.ts` `encodeWorkKey` / `parseWorkKey`；flow work id 只在單一 repo 內唯一，而 projectCode 可被多個 repo 共用），反查時再限定本專案 relation。reconcile / scan 先用它精確對，找不到才退回標題關鍵字（模糊、有 false positive）。
@@ -105,7 +105,7 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --ori
 ## Consumer 採用
 
 ```jsonc
-"notion": { "hub": "fc", "projectCode": "<consumer-b>" }
+"notion": { "hub": "fc", "projectCode": "<consumer-id>" }
 ```
 
 - consumer-self 決策（per [[consumer-meta]] § Adoption），**NEVER** 由 clade 主線替 consumer 填。

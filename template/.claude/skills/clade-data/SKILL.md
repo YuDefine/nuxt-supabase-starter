@@ -12,6 +12,7 @@ description: "Database, schema, storage, logging, and data-path rules. Use when 
 - READ 若要讀或改 `supabase/migrations/**/*.sql`、`server/utils/audit*.ts`、`packages/*/server/utils/audit*.ts`、`server/api/**/*.ts`、`packages/*/server/api/**/*.ts`，讀取 `rules/audit-schema.md`
 - READ 若要讀或改 `app/**/*.{vue,ts}`、`packages/*/app/**/*.{vue,ts}`、`server/**/*.ts`、`packages/*/server/**/*.ts`，讀取 `rules/database-access.md`
 - READ 若要讀或改 `supabase/migrations/**/*.sql`、`.github/workflows/**/*.yml`、`docker-compose*.yml`、`infra/**/*`、`scripts/dev-session*`、`scripts/worktree-*` 等 8 處（全表見 rules/_index.md），讀取 `rules/db-preview-env.md`
+- READ 若要讀或改 `supabase/schemas/**`、`supabase/config.toml`，讀取 `rules/declarative-schema.md`
 - READ 若要讀或改 `server/**`、`packages/**/server/**`、`specs/plans/*evlog*/**`，讀取 `rules/evlog-adoption.catalogs.md`
 - READ 若要讀或改 `specs/plans/**`、`nuxt.config.ts`、`packages/**/nuxt.config.ts`、`server/plugins/evlog-*.ts`、`packages/**/server/plugins/evlog-*.ts`，讀取 `rules/evlog-adoption.decision.md`
 - READ 若要讀或改 `evlog.map.json`、`packages/**/evlog.map.json`、`specs/plans/**`、`.github/**`、`server/**`、`packages/**/server/**` 等 8 處（全表見 rules/_index.md），讀取 `rules/evlog-adoption.depth-gate.md`

@@ -22,7 +22,9 @@ To update the action: edit in clade, bump clade version (`node scripts/publish.t
 notify-deploy:
   if: always()
   needs: [ci, deploy]
-  runs-on: ubuntu-latest
+  # No runner is prescribed here: reuse the label(s) this repo's other jobs already run on
+  # (a GitHub-hosted label, or your self-hosted label set). See "Runner requirements" below.
+  runs-on: <your-runner>
   steps:
     # ⚠️ Required: vendored local actions need the repo checked out before they resolve.
     # Without this step the runner errors out with:
@@ -53,7 +55,7 @@ In v1.157~v1.159 this exact rule was violated three times across 4 consumer repo
 
 If you add a new vendored action under `vendor/actions/<name>/`, the audit covers it automatically — `listVendoredActionNames()` enumerates the directory.
 
-Runner requirements: `jq` and `curl` available. GitHub-hosted runners ship both. Self-hosted runners must install them.
+Runner requirements: `jq` and `curl` available. GitHub-hosted runners ship both. Self-hosted runners must install them. The example above deliberately leaves `runs-on` as a placeholder — runner labels differ per consumer (GitHub-hosted vs. each org's self-hosted label set), and a copied label the repo has no runner for leaves the notify job queued forever instead of failing.
 
 ## Inputs
 

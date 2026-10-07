@@ -1,6 +1,6 @@
 <!-- Clade native rule; source: rules/core/proactive-skills.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 # Proactive Skill Orchestra
 
 所有 SDD（SpecFormula / aixbdd）入口與 Design skill 應在適當情境下**主動調用**，不需使用者手動指定。此規則優先於個別 SKILL.md 的指示。
@@ -51,7 +51,7 @@
 |---|---|---|
 | session 結束仍有未完工作、或要交棒 | `/handoff`（`park` / `relay` / `fanout` / `next`） | 四個 arg 全部以本 session 收工結束 |
 | 待辦要自主推進（HANDOFF / tech-debt / ROADMAP） | `/work-loop` | |
-| 一條工作要開隔離 worktree | `/wt` | |
+| 一條工作要開隔離 worktree | 交 `wt` 建立（或接續）隔離環境 | 要不要隔離由呼叫端判斷（aixbdd consumer 由 `work-route` §0） |
 | 動 UI 檔或寫 design artifact | Design Checkpoint | 見 [[proactive-skills.design-checkpoint]] |
 
 ### Completion
@@ -82,7 +82,7 @@
 
 所有 SDD / design workflow 都受 [[scope-discipline]] 約束：範圍外檔案不順手改、途中發現其他問題**不修但必登記**、未知變更先回報不自行清場、不得在 subagent 內執行 `git reset --hard` / `git checkout --` / `git clean`。
 
-登記出口（always-load 備份，完整表在 [[scope-discipline]]）：技術債 → per [[follow-up-register]]（未遷移 consumer 為 `docs/tech-debt.md` 的 `TD-NNN`）；當前 session 未完 → `HANDOFF.md`；未來工作 → `ROADMAP.md`；規格漏項 → 停下回交 truth owner skill，**NEVER** 就地補寫；架構決策 → 落點依 [[knowledge-and-decisions]]（lifecycle repo：它約束的 truth 單位；未遷移 consumer：當下工作的 plan／spec，**NEVER** 在 `docs/decisions/` 開新檔）。
+登記出口（always-load 備份，完整表在 [[scope-discipline]]）：技術債 → per [[follow-up-register]]（未遷移 consumer 為 `docs/tech-debt.md` 的 `TD-NNN`）；當前 session 未完 → `HANDOFF.md`（lifecycle repo：plan § Open work＋W- 指標行，[[handoff]] § Lifecycle repo）；未來工作 → `ROADMAP.md`（lifecycle repo：plan § Open work）；規格漏項 → 停下回交 truth owner skill，**NEVER** 就地補寫；架構決策 → 落點依 [[knowledge-and-decisions]]（lifecycle repo：它約束的 truth 單位；未遷移 consumer：當下工作的 plan／spec，**NEVER** 在 `docs/decisions/` 開新檔）。
 
 ## Handoff Hygiene
 

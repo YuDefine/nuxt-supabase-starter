@@ -1,9 +1,9 @@
 ---
-description: 寫 code 當下的 TypeScript 語法限制（type stripping 擋不掉的三條）、副檔名與 import specifier 規則、命名與註解（機器擋不住的那一半）、用 vp 命令驗證；工具鏈設定治理在 code-style.toolchain
+description: 寫 code 當下的 TypeScript 語法限制（type stripping 擋不掉的三條）、副檔名與 import specifier 規則、命名與註解（SSoT 優先、該刪的註解 C0–C6；機器擋不住的那一半）、用 vp 命令驗證；工具鏈設定治理在 code-style.toolchain
 paths: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts}']
 ---
 <!-- Clade native rule; source: rules/core/code-style.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 > **工具鏈治理在 [[code-style.toolchain]]**（動 `vite.config.*` / `package.json` / `tsconfig*.json` /
 > `.github/workflows/**` / `.husky/**` / 任何 `rc` 或 ignore 檔時適用；沒看到那份規約時 MUST 先開它）。
@@ -200,6 +200,32 @@ if ((e.status === 'active' && e.score >= 80) || e.override) { ... }
 const eligible = e.status === 'active' && e.score >= PASSING_SCORE
 if (eligible || e.override) { ... }
 ```
+
+### SSoT 優先（MUST）
+
+寫註解前先問：這件事該不該是資料、常數或 schema？是 → 放進 SSoT（registry、json、常數模組、schema description、rule 條文），code 讀它，不寫註解。註解在補 SSoT 的缺，就是隱性耦合（[[coupling-cohesion]]）：SSoT 一改，註解靜默過期。
+
+**保留判準 K（唯一出處）**：why 在 repo 其他地方查不到才留，而且寫得出失效條件。寫不出失效條件的 why，多半其實是 what。
+
+### 該刪的註解（C0–C6）
+
+寫新註解時不寫這幾類；改到既有程式碼時，順手處置被改到的那幾行：
+
+| # | 類別 | 處置 |
+| --- | --- | --- |
+| C0 | **轉述 SSoT**：內容在 rules／spec／registry／routing table／schema 找得到原文，不只是指向它 | 依序：(a) code 自己 hardcode 了 SSoT 該管的事實 → 改成 code 讀 SSoT，刪註解（這是結構修正）；(b) SSoT 沒有這份事實 → 搬進 SSoT，註解縮成 `見 <path> § <heading>` 或刪；(c) 只剩指針 → 保留 |
+| C1 | **歷史敘事**：講過去發生什麼（`historically`、`used to`、`以前`、`原本`、`曾經`），不是 code 現在為什麼這樣 | 刪；裡面有現在仍成立的 why → 改寫成現在式 |
+| C2 | **工作編號當理由**：`TD-`／`#PR`／`W-`／`plan:` 編號，去掉編號後沒有 why | 刪編號；剩下沒有 why 就整行刪 |
+| C3 | **行內日期**：`YYYY-MM-DD` 不是 `@followup` 的移除條件 | 刪日期 |
+| C4 | **翻譯 code**：重述下一行在做什麼 | 刪，或把那段抽成具名 helper |
+| C5 | **注解掉的程式碼** | 刪；歷史在 git |
+| C6 | 測試檔頭描述「這支測試在測什麼」，檔名與 `describe` 已說明 | 刪 |
+
+不屬於 C 類、**NEVER** 當冗餘刪：
+
+- 下方「值得寫的三種」，含 `@followup[<id>]`（marker 換行到下一行的寫法也算）與結案改寫「（<id> 結案：<移除條件>）」
+- **指令型註解**：`@ts-expect-error`、`@ts-ignore`、`oxlint-disable*`、`eslint-disable*`、`/* @__PURE__ */`、`/// <reference`、`# shellcheck disable`、`// @vitest-environment` 等改變型別檢查、lint 或打包行為的註解
+- **不寫就會被改壞的 why**：安全邊界、競態、外部系統怪癖、刻意不做某事的理由。判準：刪掉後，一個沒讀過 git log 的人會不會把這段改回錯的樣子；會 → 留，但改寫成現在式、去掉歷史與編號
 
 ### 寫了就 MUST 100% 對
 

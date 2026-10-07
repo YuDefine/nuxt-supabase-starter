@@ -8,7 +8,7 @@
 /**
  * evlog enricher stack template — wide event 上下文欄位 5 件套
  *
- * Source: clade docs/evlog-master-plan.md § 4 (post-M3a-<consumer-b> wave 3 重設計)
+ * Source: clade docs/evlog-master-plan.md § 4 (post-M3a-TDMS wave 3 重設計)
  *
  * 使用：
  *   cp vendor/snippets/evlog-enrichers-stack/enrichers.ts \
@@ -65,7 +65,7 @@ export default defineNitroPlugin((nitroApp) => {
   // sampling.keep[{kind: 'audit'}] type 不接（TailSamplingCondition 只接
   // status/duration/path），故走 'evlog:emit:keep' Nitro hook：對 audit-class
   // event mutate ctx.shouldKeep = true。
-  // 詳見 master plan § 14「audit forceKeep wiring」row（M3a-<consumer-d> wave 5）。
+  // 詳見 master plan § 14「audit forceKeep wiring」row（M3a-yuntech wave 5）。
   // 影響：sampling.rates.info < 100 時，audit-class events 仍 100% keep；
   // 不 wire 此 hook = audit event 走一般 sampling rate（會被 drop）。
   nitroApp.hooks.hook('evlog:emit:keep', (ctx) => {

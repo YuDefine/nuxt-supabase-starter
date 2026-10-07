@@ -12,7 +12,7 @@ paths:
   - 'packages/*/app/plugins/evlog-*.ts'
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/evlog/evlog-investigate.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # evlog Investigate（prod 問題的調查反射）
 
@@ -30,7 +30,7 @@ agent 的預設反射是 code-first（grep / codebase-memory-mcp），對 runtim
 2. **看被改物件自己的 mtime 與旁邊的備份檔**：`ls -la --time-style=full-iso <目錄>/`，mtime 落在事件前數十秒、或旁邊有 `.bak-<日期>` / `.orig` / `~` 鄰居 → 幾乎確定是人為修改，`diff -u <config>.bak-* <config>` 讀出改了什麼（檔案回答意圖，daemon log 只回答動作）
 3. **問 user**：「這台機器上剛才是不是你（或你的另一個 session）做了 X？」
 
-**NEVER** 把本節讀成「先問 user 再調查」（前兩步 agent 自己做完，第三步才問人，[[agent-self-verification]]）。**NEVER** 因為主機層答不出「誰做的」就繼續加深鑑識——`/var/log/auth.log` 可能不存在、Portainer CE 不記 audit log，該退回本節換更便宜的問題（`docs/pitfalls/2026-08-08-infra-change-attribution-skips-concurrent-session-check.md`）。
+**NEVER** 把本節讀成「先問 user 再調查」（前兩步 agent 自己做完，第三步才問人，[[agent-self-verification]]）。**NEVER** 因為主機層答不出「誰做的」就繼續加深鑑識——`/var/log/auth.log` 可能不存在、Portainer CE 不記 audit log，該退回本節換更便宜的問題（[[pitfall-infra-change-attribution-skips-concurrent-session-check]]）。
 
 ## Investigation-first 協定（每一個 prod runtime 症狀都適用）
 

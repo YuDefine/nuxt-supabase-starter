@@ -4,7 +4,7 @@ paths: ['**/*.test.*', '**/*.spec.*', 'vitest.config.*', 'playwright.config.*', 
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/aixbdd/legacy-tests.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # 舊測試收編（aixbdd consumer）
 
@@ -29,6 +29,8 @@ paths: ['**/*.test.*', '**/*.spec.*', 'vitest.config.*', 'playwright.config.*', 
 | 其餘行為測試 | 以上皆非 | 保留並 `legacy-tests.ts mark --frozen <分類完成日>` |
 
 分完之後舊測試照常在 CI 裡跑，直到被吸收。
+
+凍結管的是「被工作碰到才吸收」；主動清倉（一次刪掉多餘測試）與新增 unit test 的條件，判準見 [[testing-anti-patterns]] § unit test 何時寫，NEVER 2 照樣適用。
 
 ## MUST
 

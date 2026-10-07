@@ -4,7 +4,7 @@ paths: ['specs/plans/**', 'specs/truth/**', '.agents/constitution/**']
 ---
 <!-- Clade native rule; source: rules/core/aixbdd-workflow.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # aixbdd Workflow 標準
 
@@ -56,7 +56,7 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 
 表中名稱一律是上游 skill 名。consumer 端只有 `/specify`、`/clarify`、`/system-analysis`、`/implement` 與 `work-route` 是可直接叫的 skill；`/constitution`、`/clarify-over-specs`、`/spec-by-example`、`/ui-plan`、`/technical-research`、`/api-plan`、`/data-plan`、`/dsl-refine`、`/tasks`、`/bdd`、`/truth-delta`、`/gherkin-and-dsl` 沒有同名 slash 入口，由 `work-route` 依它的 owner 表載入上游契約執行。
 
-**冷啟動入口**：一個沒有對話歷史的 Claude／Codex／Cursor task 收到新需求時，第一支 skill是 `work-route`——它先讀 `specs/truth/work-lifecycle.md` 與相關 truth，再判「續跑既有 work id」或「`flow plan open`」。純對話式規劃（user 只是在問、還沒要落地）**不寫 repo、不寫 flow**；user 明說要寫到外部草稿時，寫那個草稿、不鑄 work id。
+**冷啟動入口**：一個沒有對話歷史的 Claude／Codex task 收到新需求時，第一支 skill是 `work-route`——它先讀 `specs/truth/work-lifecycle.md` 與相關 truth，再判「續跑既有 work id」或「`flow plan open`」。純對話式規劃（user 只是在問、還沒要落地）**不寫 repo、不寫 flow**；user 明說要寫到外部草稿時，寫那個草稿、不鑄 work id。
 
 ## MUST
 
@@ -69,7 +69,7 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 ## NEVER
 
 1. **NEVER 在 plan package 之外寫 acceptance feature**。驗收 Gherkin 屬於 `specs/plans/<work-id>/features/acceptance/**`（未遷移 consumer：`specs/plans/NNN-<slug>/features/acceptance/**`）；拆解後的可執行 interface feature 才進 `specs/truth/features/**`。修 bug 與重構的迴歸錨點寫進 truth 裡涵蓋該行為的既有介面 feature（加 Example 列或同檔加 Scenario，來源註解 `# 來源：work <work-id>`）——它是介面 feature 的現行行為，**不是** acceptance feature，plan 結案後仍留在 truth。
-2. **NEVER 用 spectra 詞彙描述 aixbdd 的產出**——`openspec/changes/`、`change`、`propose`、`archive` 在這條管線裡沒有對應物。混用會讓兩套流程的 skill 互相誤觸發。
+2. **NEVER 用舊 SDD 生命週期詞彙描述 aixbdd 的產出**——`change`、`propose`、`archive` 在這條管線裡沒有對應物。混用會讓兩套流程的 skill 互相誤觸發。
 3. **NEVER 讓 `/bdd` 或 `/implement` 去補寫規格**。它們發現 feature 或 DSL 有缺口時 MUST 停下回交 `/dsl-refine`。
 4. **NEVER 在 `/implement` 未取得使用者同意前 git commit**——上游 SOP 的 Phase 5 明寫要先問。
 
@@ -100,7 +100,7 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 
 ## clade 伴隨：truth feature 接到可執行測試
 
-上游只規定 truth 佈局與 DSL 形狀；runner 怎麼讀 truth、未驗證的 feature 怎麼標、step 與 DSL 怎麼對帳，依 `~/offline/aixbdd-MES-Benchmark` 補成下列 MUST（括號是 `specs/plans/W-2026-10-02-aixbdd-benchmark-standard/plan.md` 對照表列號）。適用：本檔生效且 `specs/truth/features/**` 有 `.feature` 的 repo。設定步驟與範本在 cookbook `vendor/snippets/aixbdd/README.md` § 可執行測試接線。
+上游只規定 truth 佈局與 DSL 形狀；runner 怎麼讀 truth、未驗證的 feature 怎麼標、step 與 DSL 怎麼對帳，依 `~/offline/aixbdd-MES-Benchmark` 補成下列 MUST（括號是 `specs/truth/aixbdd-benchmark.md` 對照表列號）。適用：本檔生效且 `specs/truth/features/**` 有 `.feature` 的 repo。設定步驟與範本在 cookbook `vendor/snippets/aixbdd/README.md` § 可執行測試接線。
 
 1. **runner 直接讀 truth**（B1）：**每一個** BDD runner 的 feature 來源 MUST 是 `specs/truth/features/<介面>/`。工具要求 feature 位在自己目錄底下時（playwright-bdd），用進版控的相對目錄連結指回 truth。**NEVER** 把 feature 複製到 `src/test/resources`、`e2e/features` 這類副本——副本一分岔，綠燈測的就不是 truth。
 2. **驗證狀態只有三種**（B2）：truth 的**每一支** feature MUST 落在下表其中一種。`@code-mismatch` 與每個疑點 MUST 掛 `# [need clarification] Q-<模組>-n …`，寫明實際行為與程式碼位置。
@@ -157,9 +157,9 @@ overlay 只**追加**步驟，**NEVER** 改寫上游已定義的語意（Setup �
 
 | 入口 | 量什麼 | 擋不擋 |
 | --- | --- | --- |
-| `node scripts/audit-registry-reality.ts --consumer <id>` R8 | truth root（`specs/truth/work-lifecycle.md`＋`owners.md`）、`techstack.md`、`isa.yml`（只限 specformula）、`specs/truth/features/**/*.feature` | error；publish gate 以 ratchet 擋新增 |
+| `node scripts/audit-registry-reality.ts --consumer <id>` R8 | truth root（`specs/truth/work-lifecycle.md`＋`owners.md`）、`techstack.md`、`isa.yml`（只限 specformula）、`specs/truth/features/**/*.feature` | error；publish gate 以 ratchet 擋新增。registry 列帶 `capability_bootstrap_pending`（只由 `bootstrap-project` 建案時寫入）時，`techstack.md`／`isa.yml`／feature 三項降 warn，各項一進 consumer checkout 的 HEAD 歷史即失去豁免；lifecycle／truth-root 照報 error |
 | `node scripts/audit-specformula-adoption.ts` 的 aixbdd 表 | 上列＋`dsl.md`（刻意只進本表、不進 R8：缺它 work-route 仍能開 plan）、constitution、鏡射 skill、W／NNN plan 數 | 參考訊號，exit 0 |
 
-缺 `work-lifecycle.md` 報 `capability-lifecycle-migration`：`specs/truth/work-lifecycle.md` 是 lifecycle-repo marker（一存在，gate 擋新 TD、`docs/tech-debt.md` 凍結、舊 TD 只經 `specs/truth/legacy-ids.json` 解析），scaffold **NEVER** 代放——照 `vendor/snippets/consumer-lifecycle/README.md` 先把舊 TD 逐筆處置進 `legacy-ids.json`（或搬進 plan § Open work），再由 consumer 放 marker。已是 lifecycle repo 只缺 `owners.md` 報 `capability-truth-root`，用 `node ~/offline/clade/scripts/scaffold-consumer-truth.ts --consumer-path <consumer> --apply`（或 `audit-registry-reality --consumer <id> --scaffold`）補齊：只建缺檔、NEVER 覆寫、冪等。manifest 讀不出來（兩份衝突／schema 不過）報 `capability-manifest-unreadable`，fail closed。`techstack.md`、`isa.yml`、feature 由各自 owner skill 產出，NEVER 捏造。truth 歸 consumer，不走 propagate。
+缺 `work-lifecycle.md` 報 `capability-lifecycle-migration`：`specs/truth/work-lifecycle.md` 是 lifecycle-repo marker（一存在，gate 擋新 TD、`docs/tech-debt.md` 凍結、舊 TD 只經 `specs/truth/legacy-ids.json` 解析），沒有任何 TD 條目的新專案由 `bootstrap-project` 的 capability-products 步驟直接放（已登記的補跑 `--capability-only`）；有舊 TD 的 repo，scaffold 與人手 **NEVER** 代放——照 `vendor/snippets/consumer-lifecycle/README.md` 先把舊 TD 逐筆處置進 `legacy-ids.json`（或搬進 plan § Open work），再由 consumer 放 marker。已是 lifecycle repo 只缺 `owners.md` 報 `capability-truth-root`，用 `node ~/offline/clade/scripts/scaffold-consumer-truth.ts --consumer-path <consumer> --apply`（或 `audit-registry-reality --consumer <id> --scaffold`）補齊：只建缺檔、NEVER 覆寫、冪等。manifest 讀不出來（兩份衝突／schema 不過）報 `capability-manifest-unreadable`，fail closed。`techstack.md`、`isa.yml`、feature 由各自 owner skill 產出，NEVER 捏造。truth 歸 consumer，不走 propagate。
 
 上游為準的訊號（skill 層偏離、mirror 與上游的差）不在上表：看 `node scripts/audit-upstream-submodules.ts --only aixbdd`（見上節）。上表量的是 consumer 的 truth／plan／鏡射 skill 覆蓋，**NEVER** 讀成 skill 層是否以上游為準。

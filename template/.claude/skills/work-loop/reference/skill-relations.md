@@ -27,7 +27,7 @@ cd ~/offline/<consumer> && \
 | work-loop-summary.ts | 把上面那份 scan 壓成十餘行摘要（只列非 pass 的 check）。**要回頭看 scan 就讀它，NEVER 重跑 scan** |
 | work-loop-state-write.ts | Step 7.3 落 state 的唯一寫入路徑（patch 淺層合併 + 原子換檔 + round 不得倒退）。**NEVER** 每輪自己生成一支 write-state script |
 | /implement | 需求接續與 evidence 收集；條件依 SKILL.md § 3.1a |
-| /wt | worktree 建立 + dispatch subagent |
+| wt | worktree 建立 + dispatch subagent |
 | /handoff | 不直接調用（本 skill 自動化 handoff `next` 的「盤點 → 推薦 → 執行」，unattended 下把 AskUserQuestion 換成 packaging） |
 | **/goal** | **attended 版姊妹**：user 在場、要逐項拍板 dispatch 優先序（見 [[goal-mode]]）。想逐項拍板 → 用 /goal 不用本 skill |
 | **/loop**（內建） | interval 盲跑某 prompt/命令、stateless 無 verifier。「每 N 分鐘重跑 X」→ /loop；「狀態驅動推進待辦」→ 本 skill |

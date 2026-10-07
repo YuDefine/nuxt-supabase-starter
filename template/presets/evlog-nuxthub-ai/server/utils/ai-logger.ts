@@ -8,7 +8,7 @@
 /**
  * AI SDK + evlog wide event 整合（convention，非 evlog API）
  *
- * Source: clade docs/evlog-master-plan.md § 8.4 (<consumer-c> T3)
+ * Source: clade docs/evlog-master-plan.md § 8.4 (agentic-rag T3)
  *
  * 使用：
  *   cp vendor/snippets/evlog-ai-sdk-logger/ai-logger.ts \
@@ -31,7 +31,7 @@ import type { RequestLogger } from 'evlog'
 
 // AI helpers 接受任何 logger（typed 或 untyped）— `AILogFields & Record<string, unknown>` 表示
 // 同時接受 ai.* typed fields + ad-hoc 欄位（避免 ReturnType<typeof useLogger> 縮成
-// RequestLogger<Record<string, unknown>>，後者拒絕 { ai: ... } literal）（M3a-<consumer-c> 修正）
+// RequestLogger<Record<string, unknown>>，後者拒絕 { ai: ... } literal）（M3a-agentic-rag 修正）
 type Logger = RequestLogger<AILogFields & Record<string, unknown>>
 
 // ── 共用 AI 欄位 schema（typed fields candidate；T2 升級可改 evlog typed fields）
@@ -133,7 +133,7 @@ export function recordEmbedding(
 }
 
 /**
- * 使用範例（<consumer-c> 的 chat.post.ts 簡化版）
+ * 使用範例（agentic-rag 的 chat.post.ts 簡化版）
  *
  * import { useLogger } from 'evlog'
  * import { generateText } from 'ai'

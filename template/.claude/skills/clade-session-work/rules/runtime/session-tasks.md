@@ -111,7 +111,7 @@ runner entrypoint 用來宣告**執行身分**的 marker——值由誰設、設
 
 ## Claude writer forensics
 
-The shared ownership probe runs first. When the available evidence identifies a Claude writer, use this legacy transcript and process sequence to investigate that writer. Transcript filename matches are candidates only; verify an actual write tool event, the exact target path, and its timestamp. This corpus does not cover Codex, Cursor, or human editors.
+The shared ownership probe runs first. When the available evidence identifies a Claude writer, use this legacy transcript and process sequence to investigate that writer. Transcript filename matches are candidates only; verify an actual write tool event, the exact target path, and its timestamp. This corpus does not cover Codex or human editors.
 
 ### Claude transcript / Herdr / runner 探測
 

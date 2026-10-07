@@ -14,7 +14,7 @@ paths:
   - 'packages/**/server/plugins/**'
 ---
 <!-- Clade native rule; source: rules/core/deploy-env-identity.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Deploy Env Identity（部署身分取自注入，不取自 build mode）
 

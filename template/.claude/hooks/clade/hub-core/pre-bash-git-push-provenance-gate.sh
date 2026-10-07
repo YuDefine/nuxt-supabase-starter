@@ -178,7 +178,7 @@ review gate:
 
 $(printf '%b' "$blocked_commits")
 ${baseline_note}
-Fix: run \`/commit\` (or in a clean worktree: \`/wt <slug>: /commit\`).
+Fix: run \`/commit\` (or hand the work to \`wt\` to open a clean worktree and run /commit inside it).
 The \`Via: /commit\` trailer is added automatically by /commit Step 4/5.
 
 Ad-hoc commits (≤5 files or doc-only) do not need /commit provenance.

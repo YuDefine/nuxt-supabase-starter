@@ -15,3 +15,10 @@ SKILL.md Step 0 § 互斥鎖 的 exit 表、Iron Law、rationalization table 與
 ## 析取判準（TD-424）
 
 判準是**析取**——`heartbeat 在 45min 窗口內` **或** `pid 存活`，任一成立即為 active。只看 `$$` 的合取判準在 in-session 模式下恆判 stale，鎖形同虛設（[[TD-424]]）。
+
+## 釋放與 orphan quarantine（主檔 Step 0 § 互斥鎖 的理由）
+
+> 主檔 pointer：Step 0 § 互斥鎖 的「釋放」bullet 指向本節。判準本體在主檔，本節只放理由與證據，不複述判準；判準的增修只落主檔。
+
+- **釋放為什麼等 attended reconciliation**：runner 保留持久 lock 檔供診斷，但 heartbeat/pid lease 仍可能在 process 退出後失效；`orphan-quarantine.json` 的 startup gate 才是禁止自動 retry 的機械保證。
+- **歸零為什麼綁 `acquire` 的回傳**：這讓 Step 6.2 budget proxy 的兩半（`subagentsSpawned` 與 `lock timestamp`）字面共用同一個窗口定義。把續跑讀成新 run，兩半同時變成死碼；反過來每輪都累加，budget proxy 退化成跨 run 單調計數（門檻一旦跨過就永遠為真，[[TD-424]] 同型）。成因、TD-424 的析取判準、以及「為什麼歸零不能掛在 `runner.sh` 起跑」見本檔前文。

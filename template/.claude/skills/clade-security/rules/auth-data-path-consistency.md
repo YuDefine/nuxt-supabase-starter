@@ -3,7 +3,7 @@ description: Auth 策略與資料存取路徑一致性——防止混合 auth �
 paths: ['app/**/*.ts', 'packages/*/app/**/*.ts', 'app/**/*.vue', 'packages/*/app/**/*.vue', 'supabase/migrations/**/*.sql', 'server/api/**/*.ts', 'server/utils/**/*.ts', 'packages/*/server/api/**/*.ts', 'packages/*/server/utils/**/*.ts']
 ---
 <!-- Clade native rule; source: rules/core/auth-data-path-consistency.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Auth–Data Path 一致性
 

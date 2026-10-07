@@ -1,8 +1,8 @@
 # Schema 同步檢查 — Reference
 
-> 本檔是 commit skill Step 1（schema 同步檢查）的完整執行細節。主檔（SKILL.md）只留觸發判定；
+> 本檔是 commit skill Step 1（schema 同步檢查）的完整執行細節。觸發判定在 `rules/schema觸發判準.md`（SKILL.md Step 1 每次必讀）；
 > 判定為 HAS 時 MUST 先完整讀本檔再繼續。**只有使用 Supabase migrations 的 repo 會走到這裡** ——
-> 沒有 `supabase/migrations/` 的 repo 在主檔就已經分流掉，不需要讀本檔。
+> 沒有 `supabase/migrations/` 的 repo 在觸發判定就已經分流掉，不需要讀本檔。
 
 ## 為什麼要檢查
 
@@ -145,12 +145,13 @@ supabase db advisors --local 2>/dev/null || echo "SKIP: CLI < v2.81.3，改用 M
 
 - **每一條** security 類 finding（RLS disabled、policy exists but RLS disabled、security definer
   view、auth.users 暴露、function search_path 未設等）**MUST** 在本次 commit 當場修掉，或在
-  `docs/tech-debt.md` 登一條 entry 並在完成報告寫明編號。**兩者都沒有就不准進 Step 2。**
+  承載本次工作的 plan 的 Open work 登一列（沒有 `specs/truth/work-lifecycle.md` 的 consumer 才在
+  `docs/tech-debt.md` 登一條 entry）並在完成報告寫明位置或編號。**兩者都沒有就不准進 Step 2。**
 - **performance 類 finding**（unindexed FK、unused index、auth_rls_initplan、multiple permissive
   policies）純參考，不強制處置。
 
 **「每一條」是字面意思，不是「處理最嚴重的那條」也不是「處理本次 diff 相關的那條」。**
-advisors 回 5 條 security finding 就要 5 條都有著落（修掉或登 TD），**NEVER** 修一條就往下走。
+advisors 回 5 條 security finding 就要 5 條都有著落（修掉或登記，落點同上），**NEVER** 修一條就往下走。
 
 > 為什麼不把 advisors 交給 Dashboard：官方文件把 advisors 定位成 Dashboard 巡檢面板，那個擺法的
 > 前提是 hosted 專案——self-hosted Studio 沒有這兩個面板，照抄官方等於這個訊號沒有任何消費端。

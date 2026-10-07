@@ -6,7 +6,7 @@
  *
  * 對應 `rules/core/shell-script-safety.md`（consumer 端由
  * `clade-code-quality` skill 的 `rules/shell-script-safety.md` lazy-load）與
- * `docs/pitfalls/2026-08-27-sudo-wrapping-self-elevating-script-breaks-user-toolchain.md`。
+ * [[pitfall-sudo-wrapping-self-elevating-script-breaks-user-toolchain]]。
  *
  * ## 為什麼判定住在 vendor/（而不是 clade 的 scripts/）
  *

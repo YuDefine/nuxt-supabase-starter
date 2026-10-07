@@ -1,5 +1,5 @@
 ---
-description: Routing Table 的取證層——Cursor readonly sandbox 為什麼擋掉每一個 mutation dispatch（含兩句最常見的開脫與 Red Flags）、grok 擴權的取證狀態、以及「拿數字當降檔理由」的三個陷阱（aggregate 跑分、配額權重 5:2.5:1、class-conditional 差距）。改 Routing Table 任一列、動 pi-routing-*.ts / pi-dispatch.ts，或要拿任何數字支持一次降檔／轉列時 path-scoped 載入；判準本身在 [[agent-routing.routing-table]]，本檔只承載理由與實證
+description: Routing Table 的取證層——grok 擴權的取證狀態、以及「拿數字當降檔理由」的三個陷阱（aggregate 跑分、配額權重 5:2.5:1、class-conditional 差距）。改 Routing Table 任一列、動 pi-routing-*.ts / pi-dispatch.ts，或要拿任何數字支持一次降檔／轉列時 path-scoped 載入；判準本身在 [[agent-routing.routing-table]]，本檔只承載理由與實證
 paths:
   [
     '.claude/rules/agent-routing.md',
@@ -10,8 +10,8 @@ paths:
   ]
 ---
 <!-- Clade native rule; source: rules/core/agent-routing.routing-table-rationale.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 # Agent Routing — Routing Table 的取證層
 
@@ -19,27 +19,6 @@ paths:
 > 六維 effort、`--route` / `--tier-basis` / `--table-row` 的 MUST），這裡只放它們的理由與實證——
 > 那些內容每一份 always-load 都要付 bytes，而它們發作的時刻是「你正在改這張表」或
 > 「你正要拿一個數字去支持降檔」，兩者都是 path-scoped 抓得到的。
-
-## Cursor sandbox 與 mutation
-
-判準（**任何 workspace mutation dispatch NEVER 選 `*-cursor`**）在 [[agent-routing.routing-table]] § Pi 派工的 workspace capability 與路徑可見性。
-機制：`buildCursorSandboxArgv()` 對 root、cwd 與額外 bind 全用 `--ro-bind`；`pi-dispatch.ts` 在
-Cursor admission fail closed，mutation chain 計算時直接跳過所有 `*-cursor`，capability 無法判定時
-也不猜成 readonly。
-
-即使 brief 的所有檔案都在 cwd 內、linked common gitdir 也已可見，答案仍相同：
-
-| 開脫句 | 現實 |
-| --- | --- |
-| 「多掛主 gitdir」 | 只解 linked worktree 的 Git visibility，不會把任何 readonly bind 變 writable。 |
-| 「這次 mutation 完全在 cwd 內」 | cwd 本身也是 `--ro-bind`；路徑在可見集合內與 carrier 有寫權是兩件事。 |
-
-**Red Flags**：發現自己把錯誤讀成「mount 缺一條」、準備加 writable bind、或準備先派 Cursor 等
-EROFS 再 fallback → 停；回到 `workspace_access` 分類，讓 dispatcher 在派工前排除 carrier。
-
-實證邊界見 `docs/pitfalls/2026-08-30-cursor-readonly-sandbox-cannot-carry-worktree-mutation.md`。
-`*-cursor` 讀不到 cwd 以外路徑（空 tmpfs `$HOME` / `/tmp`，回傳與真結果同形的全 missing 表）的
-成因與實測在 `docs/archives/tech-debt-closed-2026-08.md` § TD-541。
 
 ## grok 擴權的取證狀態
 

@@ -3,7 +3,7 @@ description: shell script 的身分與清理生命週期——自己呼叫 sudo 
 paths: ['**/*.sh', 'ops/**', 'deploy/**', 'scripts/**']
 ---
 <!-- Clade native rule; source: rules/core/shell-script-safety.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Shell script safety
 
@@ -44,7 +44,7 @@ node scripts/shell-safety-check.ts <你剛寫的檔>     # 命中 exit 1，乾�
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 三條件全中（內部 `sudo` × user-level toolchain × 缺 guard）。**warn-only，不 block** |
-| 消費端 | 執行上方自驗的 agent；Claude hook `capabilities/core/hooks/post-edit-shell-safety.sh`（PostToolUse `Edit|Write`）；clade 的 `scripts/audit-sudo-euid-guard.ts` fleet 掃描。三者共用 `vendor/scripts/shell-safety-check.ts`（consumer 投影為 `scripts/shell-safety-check.ts`）。Codex／Cursor 的事件接線須另有實測證據 |
+| 消費端 | 執行上方自驗的 agent；Claude hook `capabilities/core/hooks/post-edit-shell-safety.sh`（PostToolUse `Edit|Write`）；clade 的 `scripts/audit-sudo-euid-guard.ts` fleet 掃描。三者共用 `vendor/scripts/shell-safety-check.ts`（consumer 投影為 `scripts/shell-safety-check.ts`）。Codex 的事件接線須另有實測證據 |
 | 觸發點 | 本檔 frontmatter 的 paths，由各 runtime adapter 交付 |
 
 ## 2. `trap` body 引用的變數 MUST 在 trap 執行當下真的拿得到值
@@ -143,6 +143,6 @@ kill_tree() { for c in $(pgrep -P "$1"); do kill_tree "$c"; done; kill -TERM "$1
 | 消費端 | 下複合 shell 指令的 agent；撰寫 dev/test 腳本的人 |
 | 觸發點 | 本檔 frontmatter 的 paths；agent 直接下的一次性指令由本節正文承接，不經 paths |
 
-> Pitfall：`docs/pitfalls/2026-09-07-pkill-f-pattern-kills-issuing-shell.md`
+> Pitfall：[[pitfall-pkill-f-pattern-kills-issuing-shell]]
 
 > Cookbook 範本：`~/offline/clade/vendor/snippets/shell-script-safety/`。

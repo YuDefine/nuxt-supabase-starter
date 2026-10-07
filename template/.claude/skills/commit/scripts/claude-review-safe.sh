@@ -94,7 +94,7 @@
 #      finalize；本地拒絕，未呼叫 Herdr helper
 #   13 不需再審（輪數 ledger）：同內容同一批已有 verdict，或上一輪通過且之後累計增量未達
 #      重驗門檻（≤50 行且 <5 檔）——0-A 證據沿用那一輪，review 沒跑
-#   14 輪數上限：同一份改動第 4 輪，review 沒跑——拆 PR 或交人判，NEVER 刪 ledger 重置
+#   14 輪數上限：同一份改動第 6 輪，review 沒跑——拆 PR 或交人判，NEVER 刪 ledger 重置
 #
 # 輪數 ledger（判定表在 lib/review-common.sh § 0-A 輪數 ledger）：每次開審前判輪，第 2 輪起
 # 自動帶上一輪 verdict 進驗證模式；verdict 通過完整性與身分核對後才記進 ledger。
@@ -114,6 +114,9 @@
 #       lib/review-subagent.sh 檔頭。
 #   .claude/scripts/claude-review-safe.sh rounds plan|cover|passed|show --mode pr|worktree --branch <b> ...
 #       輪數 ledger 查詢（JSON）：oa-batches 切批前 plan（covered 時 cover 落記錄）、merge-queue 合併前 passed
+#   .claude/scripts/claude-review-safe.sh rounds grant --mode pr --branch <b> --pr-number <n> --by charles --evidence <出處>
+#       Charles 授權的單 PR 例外輪：append 一筆 grant 進 ledger，該 PR 段上限＋1（只在已撞上限時收；
+#       evidence 缺、by 不是 charles、PR 號對不上一律 exit 2）。這是放寬上限的唯一入口，沒有 env／旗標替代
 # effort 只接受 medium——Opus family ceiling 就是 medium，沒有低檔需求、
 # high/max 由 wrapper 直接拒絕（exit 2），NEVER 靜默降檔或抬檔。
 
@@ -183,10 +186,11 @@ case "${1:-}" in
   rounds)
     # 輪數 ledger 的查詢（oa-batches 切批前、merge-queue 合併前用）；寫入只發生在開審、收 verdict，
     # 以及 cover（判定為 covered 時把 head 記成通過輪的 covered_heads，merge-queue 只認記錄）。
+    # grant 是唯一的人類授權寫入：Charles 授權的例外輪留紀錄在 ledger.grants。
     shift
     case "${1:-}" in
-      plan|cover|passed|show) ;;
-      *) echo "[claude-review-safe] 錯誤：rounds 只接受 plan|cover|passed|show；收到 ${1:-<空>}" >&2; exit 2 ;;
+      plan|cover|passed|show|grant) ;;
+      *) echo "[claude-review-safe] 錯誤：rounds 只接受 plan|cover|passed|show|grant；收到 ${1:-<空>}" >&2; exit 2 ;;
     esac
     # shellcheck source=lib/review-common.sh
     . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/review-common.sh"
@@ -627,6 +631,7 @@ if [ "$rc" -eq 15 ] || [ "$STATUS" = "account_unavailable" ]; then
     const probes = receipt.account_preflight?.probes ?? []
     const label = (r) => r === "quota-exhausted" ? "額度耗盡"
       : r === "missing-oauth" ? "該 launcher 無 OAuth 憑證（未登入）"
+      : r === "oauth-expired" ? "OAuth session 已失效（需重新 /login）"
       : /^subscription-/.test(r ?? "") ? "訂閱非 active"
       : /^profile-http-/.test(r ?? "") ? "帳號驗證被拒"
       : "未知原因"
@@ -937,8 +942,8 @@ fi
 review_verify_integrity
 
 VERDICT_SHA="$(sha256sum "$VERDICT_OUT" | cut -d' ' -f1)"
+review_record_round_and_register "$VERDICT_OUT" || exit $?
 write_review_receipt 0
-review_record_round "$VERDICT_OUT"
 
 cat "$VERDICT_OUT"
 exit 0

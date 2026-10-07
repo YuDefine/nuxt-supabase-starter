@@ -3,7 +3,7 @@ description: Scope discipline 規則——不擴散、必登記、不擅改他�
 paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisions/**', 'HANDOFF.md']
 ---
 <!-- Clade native rule; source: rules/core/scope-discipline.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Scope Discipline
 
@@ -23,9 +23,9 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 
 | 發現類型 | 登記位置 | 做法 |
 | --- | --- | --- |
-| 技術債 / bug / 邊界情況 | `docs/tech-debt.md` | 建 `TD-NNN` entry，並在當前 change `tasks.md` 加 `@followup[TD-NNN]` |
-| session 尚未完成的 WIP / blocker | `HANDOFF.md` | 留下目前狀態、阻擋原因、下一步 |
-| 未來要做但尚未開工的工作 | repo 根目錄 `ROADMAP.md` `## Next Moves` | 以 `high/mid/low` + 依賴關係記錄 |
+| 技術債 / bug / 邊界情況 | lifecycle repo：所屬 plan 的 § Open work（沒有 plan 就 `flow plan open`）；未遷移 consumer：`docs/tech-debt.md` | lifecycle repo 在 code 裡回指 `plan:<work-id>`；未遷移 consumer 建 `TD-NNN` entry，並在當前 change `tasks.md` 加 `@followup[TD-NNN]`（[[follow-up-register]]） |
+| session 尚未完成的 WIP / blocker | lifecycle repo：plan § Open work＋`HANDOFF.md` 一行 W- 指標（[[handoff]] § Lifecycle repo）；未遷移 consumer：`HANDOFF.md` | 留下目前狀態、阻擋原因、下一步 |
+| 未來要做但尚未開工的工作 | lifecycle repo：所屬 plan 的 § Open work，或 `flow plan open`；未遷移 consumer：repo 根目錄 `ROADMAP.md` `## Next Moves` | 以 `high/mid/low` + 依賴關係記錄 |
 | 當前工作本身的 scope 漏項 | 當前 tasks 檔加一條；動到規格時回交 truth owner skill | **NEVER** 就地改 `specs/truth/**` |
 | 架構層級決策 | 落點依 [[knowledge-and-decisions]]（lifecycle repo：它約束的 truth 單位；未遷移 consumer：當下工作的 plan／spec，**NEVER** 在 `docs/decisions/` 開新檔） | 用 ADR 格式記錄 |
 
@@ -90,7 +90,7 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 | 「gate 紅了，這次 commit 過不了」 | 先對預定 commit tree 與 gate 基線查因；新檔或 staged-only 不能直接排除 |
 | 「問一下比較安全」 | 過度 escalate 與正確 escalate 在 transcript 上長得一模一樣，差別只在當時有沒有可跑而沒跑的探測 |
 
-> 對應 pitfall [[pitfall-mechanically-decidable-conflict-escalated-to-user]]（<consumer-b> 實例）：可探測的衝突要自己探測決策，不交給 user。
+> 對應 pitfall [[pitfall-mechanically-decidable-conflict-escalated-to-user]]（某 consumer 實例）：可探測的衝突要自己探測決策，不交給 user。
 
 「rule A 規定 X，但現況被 hook／別 session 做成 Z，所以該 revert 對齊 rule A」這條推理鏈是非法的：rule 衝突時預設保留現狀，當前 session 沒有 rule 仲裁權。
 
@@ -102,9 +102,9 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 
 此時 **MUST** 先跑 [[session-tasks]] § 並行爭用 的 Step 0 判出持有者性質，再依下列**三個固定選項**處置。順序是規約的一部分：**A0 排在 A / B 之前**，A / B 只在 A0 判定不適用、或 A0 已送出而爭用未解時才輪到。查不到持有者時保留 WIP；沒有通道或本次訊息授權時，回報這個具體缺口，不假裝已經協調。
 
-- **A0. 先跟持有者對話**（持有者是**前景 agent session**，且已取得協調授權並有可用通道時 MUST 先走）— 以當前通道送達精確 session；Herdr 通道已驗證可用時使用 `herdr agent prompt <對方 pane_id> "<四項>"`，不把它當所有 runtime 都有的 API。四項內容與逐字範本見 [[concurrent-session-probe]] § 探測之後：協商（negotiate）。依對方回覆分流：對方說它正要 land → 等它落地再重跑當前 flow；對方說那批無主 → 進 A；對方說它要接手 → 進 B，且 TD 內文 MUST 寫明接手者是誰。送出後 MUST 指名等到哪一個可觀察事件（對方回覆、或那幾個檔不再 dirty），上限 5 分鐘，逾時升級路徑同該 cookbook。持有者是 **unattended runner**、判不出持有者、缺通道或缺本次協調授權時，A0 不執行，保留具體原因再看 A / B
+- **A0. 先跟持有者對話**（持有者是**前景 agent session**，且已取得協調授權並有可用通道時 MUST 先走）— 以當前通道送達精確 session：對方是 Claude session 用 `SendMessage`（`ListAgents` 取名稱）；非 Claude runtime 且 Herdr 通道已驗證可用時才用 `herdr agent prompt <對方 pane_id> "<四項>"`，不把它當所有 runtime 都有的 API。四項內容與逐字範本見 [[concurrent-session-probe]] § 探測之後：協商（negotiate）。依對方回覆分流：對方說它正要 land → 等它落地再重跑當前 flow；對方說那批無主 → 進 A；對方說它要接手 → 進 B，且登記內文 MUST 寫明接手者是誰。送出後 MUST 指名等到哪一個可觀察事件（對方回覆、或那幾個檔不再 dirty），上限 5 分鐘，逾時升級路徑同該 cookbook。持有者是 **unattended runner**、判不出持有者、缺通道或缺本次協調授權時，A0 不執行，保留具體原因再看 A / B
 - **A. 馬上修，回 flow 繼續** — 在當前 session 直接編輯該 WIP 檔，原 flow（`/commit` / `/handoff` / 等）繼續走完。前提：A0 已送出且對方不反對（或 A0 不適用），且 user 確認該編輯不會跟別 session 的修改互踩（或別 session 已結束）
-- **B. 登 TD，放棄當前 flow** — 把問題寫進 `docs/tech-debt.md`（編號 `TD-NNN`），當前 flow **立即中止**（commit 不繼續、archive 不繼續），等別 session 結束後由 user 決定何時處理；已成功 commit 的 group 保留不動
+- **B. 登 TD，放棄當前 flow** — 把問題依 [[follow-up-register]] 登記（lifecycle repo：所屬 plan 的 § Open work；未遷移 consumer：`docs/tech-debt.md` 的 TD-NNN），當前 flow **立即中止**（commit 不繼續、archive 不繼續），等別 session 結束後由 user 決定何時處理；已成功 commit 的 group 保留不動
 
 **A0 的等待終點是單一布林：對方 land 了沒有。** 回覆或詢問持有者時 **NEVER** 帶 commit 顆粒（拆幾筆、哪一筆先 land、哪一批先解誰的阻塞）——下游 publish 帶全部 commit、`/commit` Step 3 自理分組，對顆粒零依賴。判準：對方拿這句話會做出不同的動作嗎？不會就刪。
 

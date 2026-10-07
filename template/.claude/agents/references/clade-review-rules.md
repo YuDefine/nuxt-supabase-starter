@@ -110,9 +110,9 @@ node vendor/scripts/checks/mutation-loading-detect.ts $(git diff --name-only <ba
 
 | 禁止使用 / 必查項 | 位置 | 說明 |
 | --- | --- | --- |
-| 針對 `import/no-cycle` 的 disable comment | 全部原始碼 | cycle 只有兩條合法路徑：當場修，或登 TD 記錄修法。`// oxlint-disable-next-line import/no-cycle` 出現在 diff 裡一律擋——它把 error 級 gate 降成無聲。 |
+| 針對 `import/no-cycle` 的 disable comment | 全部原始碼 | cycle 只有兩條合法路徑：當場修，或登記修法（有 `specs/truth/work-lifecycle.md` 的 repo 寫 plan Open work，未遷移 consumer 才登 TD）。`// oxlint-disable-next-line import/no-cycle` 出現在 diff 裡一律擋——它把 error 級 gate 降成無聲。 |
 | 同一 discriminant 在 **≥3 個不同檔**各有一條 switch | `app/**`、`server/**`、`shared/**`、`packages/**` | 加一個 variant 要改 N 處，OCP 意義下的真違規，收斂成單一 map / strategy 表。discriminant 指 `type` / `kind` / `status` / `variant` / `mode` / `state`。**單檔內的 exhaustive switch 是慣用法，NEVER 當違規報**；判定前先確認那幾條 switch 吃的是不是同一個 union（不同 union 撞 prop 名是已知 false positive）。 |
-| 既有 cycle 在 20 檔以下卻把規則降 `warn` | `vite.config.ts` | 降級只有一個合法情境：既有 cycle 涉及 **> 20 檔**的結構性 cycle，且同時登 TD 記錄涉及檔數與收斂計畫。20 檔以下降級 = 用 config 繞過 gate。 |
+| 既有 cycle 在 20 檔以下卻把規則降 `warn` | `vite.config.ts` | 降級只有一個合法情境：既有 cycle 涉及 **> 20 檔**的結構性 cycle，且同時登記涉及檔數與收斂計畫（lifecycle repo 寫 plan Open work，未遷移 consumer 登 TD）。20 檔以下降級 = 用 config 繞過 gate。 |
 
 **Reviewer 檢查方式**：
 
@@ -273,3 +273,13 @@ Reviewer 補判斷機械層看不到的：
 - workaround 註解缺 `@followup[<id>]`（`plan:<work-id>` 或未遷移 consumer 的 `TD-NNN`）
 - diff 把 TD／plan 標成結案，卻沒動指向它的 `@followup` marker
 - 重述下一行名字的註解（`// 新增項目` 接 `function addItem()`）與步驟編號旁白（`// 6. 錯誤處理`）——只報本次 diff 新增或改到的行
+
+## 註解與測試的條件式判準
+
+> enforcement: semantic(comment-test-conditional)
+
+只看本次 diff 新增或改到的行。判準全文在 [[code-style]] § SSoT 優先、§ 該刪的註解（C0–C6）與 [[testing-anti-patterns]] § unit test 何時寫（U1–U5），本段不重抄：
+
+- 新增註解命中 C0–C6 → fail，指名類別；C0 先判該事實該不該進 SSoT（code 讀 SSoT＋刪註解，或把事實搬進 SSoT）
+- 新增 unit test 一列都不中 U1–U4，或斷言只給人讀的 prose／load-bearing 規約句 → fail
+- 刪掉閘門類（U3）測試，或某段產品碼唯一的行為測試 → fail

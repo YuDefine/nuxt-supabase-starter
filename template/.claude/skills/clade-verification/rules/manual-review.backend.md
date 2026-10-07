@@ -3,8 +3,8 @@ description: Manual Review backend 規約——backend-only change 特別規約 
 paths: ['server/**/*.ts', 'packages/*/server/**/*.ts', 'test/**/*.ts', 'packages/*/test/**/*.ts', 'e2e/**/*.ts', 'packages/*/e2e/**/*.ts', 'supabase/**']
 ---
 <!-- Clade native rule; source: rules/core/manual-review.backend.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 ## Runtime adapter boundary
 
@@ -83,7 +83,7 @@ Verify channel baseline 是 consumer 端**已預先 ready** 的 codebase 層長�
 | `verify:api` | `__test-login` 或等價 session bypass route，可讓 curl / ofetch 建立 role session |
 | `verify:ui` | canonical seed data 覆蓋 final-state URL 所需 entity，**且該 fixture 在 verify 連的 dev DB 實際可查得到**——remote db-runtime（非 `supabase-local`）的 `seed.sql` 檔有 ≠ dev DB 有，見下方 § Seed-file ≠ dev-DB |
 
-Visual verifier 撞 baseline 缺屬 Fail-Fast UNCERTAIN，agent **NEVER** 補 seed、patch auth、或升級成 mutation runner。Baseline 不完整時登記到 consumer 的 `ROADMAP.md` / `docs/tech-debt.md` / infra change，**NEVER** 降低 verification channel。
+Visual verifier 撞 baseline 缺屬 Fail-Fast UNCERTAIN，agent **NEVER** 補 seed、patch auth、或升級成 mutation runner。Baseline 不完整時依 [[follow-up-register]] 登記到 consumer（lifecycle repo：plan § Open work；未遷移 consumer：`ROADMAP.md` / `docs/tech-debt.md`）或 infra change，**NEVER** 降低 verification channel。
 
 #### Seed-file ≠ dev-DB（remote db-runtime 的 fixture baseline，hard rule）
 
@@ -143,7 +143,7 @@ Helper 掃描 priority：**repo root canonical → repo root legacy → repo roo
 
 ##### Scaffold 行為
 
-Detection 確認 missing **且**有對應 auth-module 的 cookbook template 時，agent **MUST** scaffold，**NEVER** 要求 user 走 Google OAuth + DevTools 複製 cookie。沒有 template 時 **relay 給該 consumer 的 session 決定 opt-in**，**NEVER** 只登記 `docs/tech-debt.md` 就結束。
+Detection 確認 missing **且**有對應 auth-module 的 cookbook template 時，agent **MUST** scaffold，**NEVER** 要求 user 走 Google OAuth + DevTools 複製 cookie。沒有 template 時 **relay 給該 consumer 的 session 決定 opt-in**，**NEVER** 只登記一條 follow-up（plan Open work 或 `docs/tech-debt.md`）就結束。
 
 ### `[review:ui]` flow（真的需要人）
 

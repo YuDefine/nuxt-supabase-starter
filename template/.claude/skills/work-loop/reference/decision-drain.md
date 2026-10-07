@@ -4,7 +4,7 @@
 > Runtime split: state, ownership, approval, and completion obligations are shared. Literal Claude tool names or runner commands in this reference are Claude host bindings; other hosts MUST use their adapter fragment or retain the dependent operation blocked.
 
 
-> 主檔 pointer：Step 2.7 MUST 先完整讀本檔再執行，**每一輪都讀**。
+> 主檔 pointer：Step 2.7 MUST 先完整讀本檔再執行，**每一輪都讀**。Iron Law、Mode 分岔與三步的判準本體只在本檔，主檔不另存一份。
 
 本步是把 packaging 累積的待答題端到 Charles 面前的唯一出口；產出是「佇列歸零」，不是「問了幾題」。
 
@@ -17,6 +17,8 @@
 **NEVER** 從經過時間、沒有工具、delivery receipt、或缺少 `awaiting[]` 條目推導答案；已送達但尚未回答的題目保持 pending，NEVER 重複發問。
 
 順序是「**先清算，後開工**」，不是「邊做邊找機會問」。**判準是 mode，不是題數、不是急迫性。**
+
+Charles 在場的那一段**正是**他準備離開座位的那一段——把問題留到「做完手上這件再問」，多數時候等同留到他已經走了。佇列剩 1 題和剩 9 題同一條規則；「這幾條都不急」不構成延後。
 
 ---
 

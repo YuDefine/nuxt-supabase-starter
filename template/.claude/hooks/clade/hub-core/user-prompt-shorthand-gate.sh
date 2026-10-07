@@ -25,7 +25,7 @@ if hit '\\do-all([^[:alnum:]-]|$)'; then
   append '⛔ 偵測到 \do-all — MUST 立刻 Skill invoke: do-all 再開工（三步流程 + Red Flags 在 skill 裡，NEVER 憑記憶跑）。主線是預設，外派要講得出命中哪一條外派清單。'
 fi
 if hit '\\nx([^[:alnum:]-]|$)'; then
-  append '📍 偵測到 \nx — 先判收工再作答：命中收工 predicate → Herdr 內 invoke /handoff relay <task pointer>（多件可平行則 /handoff fanout）；不在 Herdr（Cursor）走 create-only dispatch（--cwd --label --prompt-file，不要 --relay）。否則給 2–4 個排序過的選項（每項一句後果）。NEVER 給排程型建議（N 週後再回頭）。'
+  append '📍 偵測到 \nx — 先判收工再作答：命中收工 predicate → invoke /handoff（relay／可平行則 fanout）；本 session 能用哪個 mode（Herdr 外、被派出的 child）查 session-tasks.operations.md § Runtime × mode matrix，NEVER 憑記憶。否則給 2–4 個排序過的選項（每項一句後果）。NEVER 給排程型建議（N 週後再回頭）。'
 fi
 if hit '\\my([^[:alnum:]-]|$)'; then
   append '📍 偵測到 \my — MUST 立刻 Skill invoke: my 再開工。佇列一律走 node ~/offline/clade/vendor/scripts/flow/flow.ts pending，NEVER 自己 grep 任何檔（spine 上 flow ask 開的題 grep 不到）。編號依 §QnX：只有「要我拍板」那類編 Qn，其餘 bullet。末尾現況量測 MUST 當下實跑。'

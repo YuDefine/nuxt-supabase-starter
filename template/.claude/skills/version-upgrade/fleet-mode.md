@@ -160,7 +160,7 @@ docs-only 命中（`.agents/skills/**`、`docs/`、`README.md`）不進 code mod
   "from_version": "^4.7.1",
   "to_version": "4.8.0",
   "consumer_path": "<consumer 絕對路徑，取自 clade 的 consumers.local>",
-  "consumer_id": "<consumer-a>",
+  "consumer_id": "<consumer-id>",
   "workflow_model": "trunk-based",
   "release_url": "https://github.com/nuxt/ui/releases/tag/v4.8.0",
   "field": "dependencies",
@@ -236,7 +236,7 @@ Brief JSON：`/tmp/dep-fleet-brief-<pkg-slug>-<consumer-id>.json`
    - 讀 `~/offline/clade/capabilities/modules/ecosystem/node/skills/version-upgrade/outdated-mode.md`（Outdated mode 步驟）+ `~/offline/clade/capabilities/modules/ecosystem/node/skills/version-upgrade/SKILL.md` § Pi prompt templates
    - 跳過 Step O.1（target / version 由 brief 取）
    - 跑 Step O.2.1：用 § A first-pass 模板 + brief 內 BC 渲染 `<changelog-block>` + brief 內 callsites
-   - 跑 Step O.2.2：dispatch（`version-upgrade-first-pass`，Claude Sonnet 5.5 high；載體與處方照 outdated-mode.md O.2.2），繼承Outdated mode唯一的workspace mutation contract；研究重試經 Pi 時每一個fallback照dispatcher payload排除所有`*-cursor`
+   - 跑 Step O.2.2：dispatch（`version-upgrade-first-pass`，Claude Sonnet 5.5 high；載體與處方照 outdated-mode.md O.2.2），繼承Outdated mode唯一的workspace mutation contract；研究重試經 Pi 時每一個fallback照dispatcher payload
    - 等 first-pass 回報（in-process `sonnet-implementer` 當回合收；Herdr child 照 `herdr-session-handoff` completion 收割）
    - 失敗 → 照 Step O.2.4 升 `version-upgrade-research`（Gemini 3.8 Flash high，用 § B 模板；靠研究不靠抬 effort）
    - research 也失敗 → 不要 runtime-native question interface，直接 STOP + 回報 orchestrator
@@ -246,7 +246,7 @@ Brief JSON：`/tmp/dep-fleet-brief-<pkg-slug>-<consumer-id>.json`
    - 先 read consumer 的 commitlint 設定（`commitlint.config.{js,ts,mjs,cjs}` / `.commitlintrc.*` / `package.json` 內 `commitlint`）
    - 偵測限制：`type-enum` 允許清單、自定 `subject-has-chinese` plugin、`body-max-line-length` / `header-max-length`
    - 生 commit msg 必 **同時通過** worktree branch 跟 consumer main 的 commit-msg hook
-   - 範例：<consumer-c> 用 `🧹 chore: 升級 @nuxt/ui ^4.7.0 → 4.8.0`；<consumer-a> 可用 `⬆️ chore: upgrade @nuxt/ui ^4.7.1 → 4.8.0`
+   - 範例：某 consumer 用 `🧹 chore: 升級 @nuxt/ui ^4.7.0 → 4.8.0`；另一個 consumer 用 `⬆️ chore: upgrade @nuxt/ui ^4.7.1 → 4.8.0`
 7. 回報 stdout 結尾：
    \`\`\`
    FLEET_SUBAGENT_RESULT: SUCCESS | PARTIAL | FAILURE

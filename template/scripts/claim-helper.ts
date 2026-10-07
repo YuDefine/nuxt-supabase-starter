@@ -19,6 +19,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   rmSync,
   statSync,
@@ -35,6 +36,7 @@ import {
   type Observed,
 } from './lib/safety-observation.ts'
 import { isLockedProjectionPathFor } from './locked-projection.ts'
+import { detectSessionId } from './lib/detect-runtime.ts'
 import {
   type Attribution,
   lastWriterByPath,
@@ -379,6 +381,298 @@ export function findClaimByWorktreeObserved(consumerPath, worktreePath): Observe
   return known(hit)
 }
 
+/**
+ * Session identity keys read from a process's environ: cross-runtime session ids plus the
+ * pane seat. Equal value = same session domain. `HERDR_TAB_ID` is deliberately absent —
+ * a tab can host several panes; the pane is the session seat.
+ */
+const SESSION_MARKER_KEYS: readonly string[] = [
+  'HERDR_PANE_ID',
+  'CLADE_DEVIN_SESSION_ID',
+  'CLADE_DISPATCH_SESSION_ID',
+  'CLAUDE_SESSION_ID',
+  'CLAUDE_CODE_SESSION_ID',
+  'CLAUDE_CONVERSATION_ID',
+  'CODEX_SESSION_ID',
+  'CODEX_THREAD_ID',
+  'OPENCODE_SESSION_ID',
+  'OPENCODE_AGENT_ID',
+  'COPILOT_AGENT_ID',
+  'CURSOR_SESSION_ID',
+  'CURSOR_CONVERSATION_ID',
+]
+
+/**
+ * What counts as "the caller's own side".
+ *
+ * `keys` — the calling process and every ancestor, as `pid:starttime` keys: the same identity
+ * the ownership journal records for a writer (`pid` + `pid_start`, `/proc/<pid>/stat`
+ * field 22).
+ *
+ * `markers` — session identity key/value pairs in the caller's own environ. Processes the
+ * session spawned (MCP servers, LSP, background jobs) are not the caller's ancestors, but
+ * they inherit its environment, so an equal marker value is same-session evidence.
+ *
+ * `roots` — `pid:starttime` of caller + ancestors that carry a marker. A spawned process
+ * whose environ was stripped can no longer match on its own env, but its ancestor chain
+ * still passes through one of these.
+ *
+ * `null` from `selfScope` when /proc is unavailable: no ancestry means "self" cannot be
+ * proven by process state at all.
+ */
+export interface SelfScope {
+  keys: Set<string>
+  markers: ReadonlyMap<string, string>
+  roots: Set<string>
+}
+
+function procEnviron(procRoot: string, pid: number): Map<string, string> | null {
+  let raw: string
+  try {
+    raw = readFileSync(join(procRoot, String(pid), 'environ'), 'utf8')
+  } catch {
+    return null
+  }
+  const out = new Map<string, string>()
+  for (const kv of raw.split('\0')) {
+    const eq = kv.indexOf('=')
+    if (eq > 0) out.set(kv.slice(0, eq), kv.slice(eq + 1))
+  }
+  return out
+}
+
+function sharesMarker(
+  env: Map<string, string> | null,
+  markers: ReadonlyMap<string, string>,
+): boolean {
+  if (!env) return false
+  for (const [k, v] of markers) if (env.get(k) === v) return true
+  return false
+}
+
+function procStatTail(stat: string): string[] {
+  return stat.slice(stat.lastIndexOf(') ') + 2).split(/\s+/)
+}
+
+/** Does `pid`'s ancestor chain pass through any `pid:starttime` in `roots`. */
+function descendsFromRoots(procRoot: string, pid: number, roots: Set<string>): boolean {
+  let cur: number | null = pid
+  for (let depth = 0; cur !== null && cur > 1 && depth < 64; depth++) {
+    let stat: string
+    try {
+      stat = readFileSync(join(procRoot, String(cur), 'stat'), 'utf8')
+    } catch {
+      return false
+    }
+    const tail = procStatTail(stat)
+    if (roots.has(`${cur}:${tail[19]}`)) return true
+    const ppid = Number(tail[1])
+    cur = Number.isFinite(ppid) ? ppid : null
+  }
+  return false
+}
+
+function selfScope(env: NodeJS.ProcessEnv = process.env): SelfScope | null {
+  if (!existsSync('/proc/self/stat')) return null
+  const markers = new Map<string, string>()
+  for (const k of SESSION_MARKER_KEYS) {
+    const v = env[k]?.trim()
+    if (v) markers.set(k, v)
+  }
+  const keys = new Set<string>()
+  const roots = new Set<string>()
+  let pid: number | null = process.pid
+  for (let depth = 0; pid !== null && pid > 1 && depth < 64; depth++) {
+    let stat: string
+    try {
+      stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+    } catch {
+      break
+    }
+    const tail = procStatTail(stat)
+    const key = `${pid}:${tail[19]}`
+    keys.add(key)
+    if (markers.size > 0 && sharesMarker(procEnviron('/proc', pid), markers)) roots.add(key)
+    const ppid = Number(tail[1])
+    pid = Number.isFinite(ppid) ? ppid : null
+  }
+  return { keys, markers, roots }
+}
+
+/** The caller's own session ids, for matching journal `session_id`. */
+function selfSessionIds(env: NodeJS.ProcessEnv = process.env): Set<string> {
+  const out = new Set<string>()
+  const sid = detectSessionId(env)
+  if (sid) out.add(sid)
+  for (const k of ['CLADE_DISPATCH_SESSION_ID', 'CLADE_DEVIN_SESSION_ID']) {
+    const v = env[k]?.trim()
+    if (v) out.add(v)
+  }
+  return out
+}
+
+export interface ClaimHolderVerdict {
+  verdict: 'self' | 'dead' | 'alive' | 'unknown'
+  why: string
+}
+
+function canonicalPath(path: string): string {
+  try {
+    return realpathSync(path)
+  } catch {
+    return path.replace(/\/+$/, '')
+  }
+}
+
+/**
+ * 非本 session、cwd 落在 `treePath` 底下的行程（pid＋cmdline）。這個訊號不看 harness：
+ * Codex、只用 Bash 寫的 session、開著沒動的 pane 都不進 ownership journal，但它們的
+ * shell 一定還站在樹裡。/proc 讀不到的行程跳過——別人的行程本來就讀不到，那個盲區由
+ * journal 訊號補。
+ *
+ * 「本 session」含呼叫端祖先（`self.keys`），也含 session 衍生行程（MCP／LSP／背景
+ * job）：environ 帶相同 session marker，或祖先鏈經過帶 marker 的祖先（`self.roots`，
+ * env 被清掉的衍生行程仍認得回來）。`selfSeen` 記是否見過本 session 的行程站在樹內。
+ */
+function foreignCwdHolders(
+  treePath: string,
+  self: SelfScope | null,
+  procRoot = '/proc',
+): { foreign: { pid: number; cmd: string }[]; selfSeen: boolean } {
+  const root = canonicalPath(treePath)
+  const prefix = `${root}/`
+  let pids: string[]
+  try {
+    pids = readdirSync(procRoot).filter((n) => /^\d+$/.test(n))
+  } catch {
+    return { foreign: [], selfSeen: false }
+  }
+  const foreign: { pid: number; cmd: string }[] = []
+  let selfSeen = false
+  for (const pid of pids) {
+    let cwd: string
+    let stat: string
+    try {
+      cwd = readlinkSync(join(procRoot, pid, 'cwd'))
+      stat = readFileSync(join(procRoot, pid, 'stat'), 'utf8')
+    } catch {
+      continue
+    }
+    if (cwd !== root && !cwd.startsWith(prefix)) continue
+    const start = procStatTail(stat)[19]
+    if (self?.keys.has(`${pid}:${start}`)) {
+      selfSeen = true
+      continue
+    }
+    if (
+      self &&
+      self.markers.size > 0 &&
+      (sharesMarker(procEnviron(procRoot, Number(pid)), self.markers) ||
+        descendsFromRoots(procRoot, Number(pid), self.roots))
+    ) {
+      selfSeen = true
+      continue
+    }
+    let cmd = ''
+    try {
+      cmd = readFileSync(join(procRoot, pid, 'cmdline'), 'utf8')
+        .replaceAll('\0', ' ')
+        .trim()
+    } catch {
+      // 行程剛結束；pid 仍是證據。
+    }
+    foreign.push({ pid: Number(pid), cmd: cmd.slice(0, 120) })
+  }
+  return { foreign, selfSeen }
+}
+
+/**
+ * 「這張未過期 claim 的持有者還在不在推進這棵樹」——`wt-helper cleanup` 移除前的判定。
+ *
+ * 兩個正面證據，任一成立即 `alive`：
+ * - 有非本 session 的行程 cwd 在樹內（刪掉就是刪掉活 session 的 cwd）；本 session 含
+ *   呼叫端祖先與 session 衍生行程，見 `foreignCwdHolders`
+ * - ownership journal 記在這棵樹的寫者（claim 開出之後）中，有非呼叫端 session、
+ *   非呼叫端祖先者 `writerLiveness` 為 alive
+ *
+ * 其餘：寫者皆判死 → `dead`；只有自己（同 session id、祖先 pid、或本 session 行程）
+ * 的證據 → `self`；任一寫者判不出、或沒有任何寫入證據 → `unknown`。
+ * 呼叫端只擋 `alive`：claim 不帶持有者身分，正常的 add → Bash 寫入 → merge-back → cleanup
+ * 本來就沒有 journal 證據，把 `unknown` 也擋下會讓每一次收尾都卡到手動 drop。
+ */
+export function claimHolderVerdict(
+  consumerRoot: string,
+  claim: Claim,
+  {
+    journal = readJournal(consumerRoot),
+    sessions,
+    self = selfScope(),
+    ownIds = selfSessionIds(),
+    procRoot = '/proc',
+  }: {
+    journal?: ReturnType<typeof readJournal>
+    sessions?: Set<string> | null
+    self?: SelfScope | null
+    ownIds?: Set<string>
+    procRoot?: string
+  } = {},
+): ClaimHolderVerdict {
+  let selfCwd = false
+  if (claim.worktree_path) {
+    const cwds = foreignCwdHolders(claim.worktree_path, self, procRoot)
+    if (cwds.foreign.length > 0)
+      return {
+        verdict: 'alive',
+        why: `行程 cwd 仍在樹內：${cwds.foreign
+          .slice(0, 3)
+          .map((p) => `pid ${p.pid} ${p.cmd}`)
+          .join('；')}`,
+      }
+    selfCwd = cwds.selfSeen
+  }
+  const tree = claim.worktree_path ? canonicalPath(claim.worktree_path) : null
+  // 留 60 秒給 hook 落檔與時鐘抖動：claim 開出前一刻的寫入一樣是持有者的。
+  const since = Date.parse(claim.started_at) - 60_000
+  const writers = new Map<string, (typeof journal)[number]>()
+  for (const e of journal) {
+    if (!tree || !e.worktree || canonicalPath(e.worktree) !== tree) continue
+    if (Number.isFinite(since) && Date.parse(e.ts) < since) continue
+    writers.set(`${e.pid}:${e.pid_start}:${e.session_id}`, e)
+  }
+  if (writers.size === 0)
+    return selfCwd
+      ? { verdict: 'self', why: '站在樹內的行程都屬於呼叫端 session；journal 無寫入證據' }
+      : { verdict: 'unknown', why: 'ownership journal 沒有這張 claim 開出後在這棵樹的寫入證據' }
+  let selfSeen = false
+  let unknownWhy: string | null = null
+  // `writerLiveness` 的 doc 要求呼叫端 hoist 一次 herdr probe 注入，不要每位寫者各探一次。
+  const liveSessions = sessions === undefined ? liveSessionIds() : sessions
+  for (const e of writers.values()) {
+    if (
+      ownIds.has(e.session_id) ||
+      (self && e.pid !== null && self.keys.has(`${e.pid}:${e.pid_start}`))
+    ) {
+      selfSeen = true
+      continue
+    }
+    const live = writerLiveness(e, { sessions: liveSessions })
+    if (live.verdict === 'alive')
+      return { verdict: 'alive', why: `session ${e.session_id} pid ${e.pid}：${live.why}` }
+    if (live.verdict === 'unknown')
+      unknownWhy ??= `session ${e.session_id} pid ${e.pid}：${live.why}`
+  }
+  if (unknownWhy) return { verdict: 'unknown', why: unknownWhy }
+  if (selfSeen || selfCwd)
+    return {
+      verdict: 'self',
+      why: '這棵樹的其餘證據都屬於呼叫端 session，非本 session 的寫者皆已死',
+    }
+  return {
+    verdict: 'dead',
+    why: '這棵樹的每一個寫者 process 都已結束且 herdr 不再列出其 session',
+  }
+}
+
 export function pathsClaimedByOthers(consumerPath, mySessionId) {
   const result = []
   let journal: ReturnType<typeof readJournal>
@@ -422,7 +716,7 @@ export function pathsClaimedByOthers(consumerPath, mySessionId) {
  *
  * 本 TD 的整個前提是「宣告型欄位實測不被維護」：17 個 claim 的 `expected_paths` 全 `[]`，
  * 於是 `classifyDirtyPaths` 的 claim 比對**永遠比不中**，`otherSession` 恆為空——
- * `rules/core/worktree-default.commit-ceremony.md` 已經量到這個後果（<consumer-a> 3 個 active claim
+ * [[wt]] 的 `rules/worktree保留與回收判準.md` Rule 4 已經寫明這個後果（實測：<consumer-a> 3 個 active claim
  * 的 `expected_paths` 全空，88 條 unclaimed dirty 被 bulk-stash 捲走而 guard 零告警）。
  *
  * 而 `--task-summary` 那條用「改成必填」解決，這條**不能照抄**：開 worktree 的當下根本還不

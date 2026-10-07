@@ -3,7 +3,7 @@ description: Dev-login routes must stay local-only while giving screenshot revie
 paths: ['server/routes/auth/**/*dev-login*.ts', 'server/routes/auth/**/*test-login*.ts', 'server/api/_dev/**/*.ts', 'packages/*/server/routes/auth/**/*dev-login*.ts', 'packages/*/server/routes/auth/**/*test-login*.ts', 'packages/*/server/api/_dev/**/*.ts', 'e2e/**/*.ts', 'packages/*/e2e/**/*.ts', 'test/e2e/**/*.ts', 'packages/*/test/e2e/**/*.ts', 'tests/e2e/**/*.ts', 'packages/*/tests/e2e/**/*.ts']
 ---
 <!-- Clade native rule; source: rules/modules/auth/better-auth/dev-login.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Dev-login
 
@@ -22,9 +22,11 @@ Dev-login routes are local/test-only auth bypasses for screenshot automation, E2
 - **MUST** emit a structured server-side dev-login log containing route, email, requested `as`, resolved role, action, and environment.
 - **MUST** mark any persistent rows created by dev-login with a dev/test provider marker such as `provider='dev-login'`, `provider='test'`, or `provider_id='e2e-*'`.
 - **MUST** add or update focused tests for the guard, role resolution, email handling, session payload, and open-redirect rejection.
-- **MUST** normalize IPv6 zone-id before comparing against any loopback allowlist (e.g. `Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])`). On macOS, h3 `getRequestIP(event)` returns IPv6 with zone-id (`::1%lo0`); strict Set comparison fails and the gate falls through to 404. Use `ip.replace(/%.*$/, '')` (or equivalent normalization) before the lookup. See `docs/pitfalls/2026-05-18-macos-ipv6-zone-id-loopback-gate.md`.
+- **MUST** normalize IPv6 zone-id before comparing against any loopback allowlist (e.g. `Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])`). On macOS, h3 `getRequestIP(event)` returns IPv6 with zone-id (`::1%lo0`); strict Set comparison fails and the gate falls through to 404. Use `ip.replace(/%.*$/, '')` (or equivalent normalization) before the lookup. See [[pitfall-macos-ipv6-zone-id-loopback-gate]].
 - **MUST** keep the loopback allowlist greppable (`isLoopbackRequest` / `LOOPBACK_IPS` or equivalent named constant) when the gate restricts request origin. `resolveDevLoginContract()` derives the `loopbackOnly` flag from exactly these source signals, and dispatchers use it to decide whether a one-click login link can exist at all. An inlined, unnamed IP comparison reads as "no gate" to tooling, which then renders a link that always 404s.
-- **MUST** treat a loopback gate as a deliberate trade-off, not a free hardening step: it makes that specific route unusable from a public `-dev.` origin, because the tunnel reaches it as an external source IP. Local screenshot review and E2E can keep using a loopback-gated local route.
+- **MUST** treat a loopback check as a local-contract convenience, **never** as an access boundary. A tunnel agent on the same host (`cloudflared`, in-process `cloudflareTunnel`, any reverse proxy) connects to the origin over loopback: on a built Nitro node server `getRequestIP(event)` returns `127.0.0.1` for tunnel traffic, and under `nuxt dev` (Nuxt 4.5) it returns `null` for every request, so a Host-header fallback passes as soon as the tunnel rewrites Host (`httpHostHeader: localhost`). Measured 2026-10-01; see `~/offline/clade/docs/conventions/dev-login.md` § 同主機 tunnel 與 loopback 判定.
+- **MUST** require a shared-secret header (`x-dev-login-token`, compared constant-time against a server-only env) on the loopback-gated local route and on any other route that mints a session for an arbitrary or privileged identity, whenever the dev server can be reached through a tunnel or the code cannot rule that out. `import.meta.dev` and the loopback check may stay as additional conditions, never as the only ones. **Precedence:** the one exception is the token-less GET `/auth/_dev-login` fixture route in the bullet below, which stays the accepted contract until `docs/decisions/2026-08-21-review-gui-skip-auth-inspect.md` is superseded (re-decision pending: fixture accounts do not isolate data when the dev DB is a prod dump). The exception covers only that route minting the fixture session it names; every other session-minting route, `/auth/__test-login` included, follows this MUST.
+- **NEVER** treat "IP unavailable" as local, and **NEVER** use the Host header as the fallback "is local" signal. **NEVER** accept the token from a GET query string.
 - **MUST** serve GET `/auth/_dev-login` on the public `-dev.` origin, without a loopback gate, so a browser click can mint the fixture session (`as` + `e2e-<role>@dev.local`) and honor `redirect=`. After minting the session, **MUST** `sendRedirect` to that path. `redirect` **MUST** be the complete inspect start for that item (path + specified query / route params), the same rule for every consumer. POST `/api/_dev/login` is not a clickable 開啟畫面. See `docs/decisions/2026-08-21-review-gui-skip-auth-inspect.md`.
 
 ## NEVER
@@ -49,7 +51,7 @@ Dev-login routes are local/test-only auth bypasses for screenshot automation, E2
 ## Decision Reference
 
 完整 canonical decision matrix（route path / method / guard / params / DB mode / audit / naming / open redirect）+
-per-variant TypeScript skeletons + per-consumer migration plan：見 clade `docs/archives/openspec-discussions/dev-login-canonical-design.md`。
+per-variant TypeScript skeletons + per-consumer migration plan：見 clade `docs/conventions/dev-login-canonical-design.md`。
 
 ## Screenshot Integration
 

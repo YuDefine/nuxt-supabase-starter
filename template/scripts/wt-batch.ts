@@ -14,6 +14,7 @@ import {
   readFileSync,
   readSync,
   readdirSync,
+  readlinkSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -32,14 +33,14 @@ import {
   type UnattendedMergeAuthorization,
   type UnattendedWorld,
 } from './wt-unattended-merge.ts'
-import { runWtEnvBootstrap } from './lib/wt-env-bootstrap-runner.ts'
+import { parkBackingService, runWtEnvBootstrap } from './lib/wt-env-bootstrap-runner.ts'
 import {
   assertNoPublishInFlight,
   detectPublishInFlight,
   type ProcessProbe,
 } from './lib/publish-in-flight.ts'
 import { findClaimByWorktreeObserved, readActiveClaimsObserved } from './claim-helper.ts'
-import { blockingPorcelainPaths } from './wip-dirty.ts'
+import { blockingPorcelainPaths, parseDiscardPathspecs } from './wip-dirty.ts'
 import { errorMessage } from './lib/safety-observation.ts'
 import {
   captureAndVerify,
@@ -138,6 +139,13 @@ export interface BatchLifecycle {
    * instead of skipping it.
    */
   afterRemove?: (main: string, path: string, extraRoots?: string[]) => void
+  /**
+   * Stop a retained tree's backing service while keeping everything needed to
+   * bring it back (the owner re-runs `ensure`). Invoked by `batch cleanup` for
+   * every tree of a landed batch that the pass could not remove. Returns the
+   * outcome label; MUST NOT throw — a failed park never undoes a cleanup.
+   */
+  park?: (main: string, path: string) => { status: string; detail?: string }
 }
 export type PreservationProfileResolver = (
   sourcePath: string,
@@ -184,6 +192,26 @@ function remoteGitEnv(): NodeJS.ProcessEnv {
     delete env[key]
   return env
 }
+const REMOVAL_RECONCILE_MARKER = '; requires reconciliation'
+const LEGACY_ERROR_PREFIX = /^(?:\w*Error: )+/
+
+/** One operator-facing layer. Journals on disk can still carry `String(error)`
+ *  prefixes (`TypeError: `, `Error: `, …) and a recorded trash clause. Peel both.
+ *  Append the preserved-bytes clause only when that path exists now — a recorded
+ *  path is not evidence the copy is still there. The raw journal string stays
+ *  on `Error.cause`, not in this text. */
+export function removalConcernText(concern: string, trash?: string): string {
+  let text = concern.trim().replace(LEGACY_ERROR_PREFIX, '')
+  text = text.replace(/; preserved bytes at [^;]+/g, '')
+  const preserved = trash && existsSync(trash) ? `; preserved bytes at ${trash}` : ''
+  const markerAt = text.indexOf(REMOVAL_RECONCILE_MARKER)
+  if (markerAt === -1) return `${text}${REMOVAL_RECONCILE_MARKER}${preserved}`
+  return `${text.slice(0, markerAt)}${REMOVAL_RECONCILE_MARKER}${preserved}`
+}
+
+export function removalReconciliationError(concern: string, trash?: string): Error {
+  return new Error(removalConcernText(concern, trash), { cause: new Error(concern) })
+}
 // Keep the approved repository IDs in the vendor source: a consumer's tracked
 // registry projection can be changed by the same contributor who changes its meta.
 // Each entry mirrors registry/consumers.json consumer_id → repo_id and MUST be
@@ -199,12 +227,12 @@ export const trustedRepositoriesByConsumerId: ReadonlyMap<string, string> = new 
   ['<consumer-a>', '<client-a>/<consumer-a>'],
   ['<consumer-d>', 'YuDefine/<consumer-d>'],
   ['<consumer-b>', '<client-b>/<consumer-b>'],
-  ['<consumer-j>', 'YuDefine/<consumer-j>'],
   ['<consumer-k>', 'YuDefine/<consumer-k>'],
-  ['<consumer-h>', '<client-b>/<consumer-h>'],
-  ['<consumer-g>', '<client-b>/<consumer-g>'],
+  ['<consumer-l>', 'YuDefine/<consumer-l>'],
   ['<consumer-i>', '<client-b>/<consumer-i>'],
-  ['<consumer-e>', '<client-b>/<consumer-e>'],
+  ['<consumer-h>', '<client-b>/<consumer-h>'],
+  ['<consumer-j>', '<client-b>/<consumer-j>'],
+  ['<consumer-f>', '<client-b>/<consumer-f>'],
 ])
 function consumerIdForRoot(root: string): string {
   const metaPath = join(root, '.claude', 'consumer-meta.json')
@@ -244,6 +272,32 @@ export function profileResolverForRoot(root: string): PreservationProfileResolve
 }
 const defaultPreservationProfile: PreservationProfileResolver = (sourcePath, archiveRoot) =>
   preservationProfileFor(consumerIdForRoot(sourcePath), sourcePath, archiveRoot)
+/**
+ * Whether any live process has its cwd inside `path`. `unknown` when /proc is
+ * not readable at all — callers treating a tree as idle MUST NOT read that as
+ * `none`.
+ */
+export function processCwdInside(path: string, procRoot = '/proc'): 'some' | 'none' | 'unknown' {
+  let pids: string[]
+  let target: string
+  try {
+    pids = readdirSync(procRoot).filter((name) => /^\d+$/.test(name))
+    target = realpathSync(path)
+  } catch {
+    return 'unknown'
+  }
+  for (const pid of pids) {
+    let cwd: string
+    try {
+      cwd = readlinkSync(join(procRoot, pid, 'cwd'))
+    } catch {
+      continue // exited, or another user's process
+    }
+    if (cwd === target || cwd.startsWith(`${target}/`)) return 'some'
+  }
+  return 'none'
+}
+
 const defaultLifecycle: BatchLifecycle = {
   bootstrap: (_main, path) => {
     runWtEnvBootstrap(path, 'ensure')
@@ -254,6 +308,7 @@ const defaultLifecycle: BatchLifecycle = {
       throw new Error('Backing resources remain; retain worktree')
   },
   removed: () => {},
+  park: (main, path) => parkBackingService(path, { scriptRoot: main }),
 }
 export type BatchTrigger = 'auto' | 'manual' | 'dependency' | 'drained' | 'stop'
 export interface ReadySource {
@@ -263,6 +318,8 @@ export interface ReadySource {
   workId: string
   evidence: string
   evidenceHash: string
+  /** Batch-owned copy under `<dir>/evidence/<hash>`, read only once `evidence` is gone. */
+  evidenceCopy?: string
   authorized: true
   released: true
   retain?: string
@@ -366,12 +423,16 @@ export interface WorktreeBatch {
     head?: string
     tree: string
     evidence: string
+    evidenceCopy?: string
     hash: string
-    artifacts: { path: string; hash: string }[]
+    artifacts: { path: string; hash: string; copy?: string }[]
   }
   /** TD-1011: evidence of gates that ran and missed; a batch holding any never seals. */
   unmetGates?: { name: string; reason: string; path: string; hash: string }[]
   cancellationReason?: string
+  /** Integration HEAD when the batch was cancelled; `batch cleanup --cancelled` removes the
+   *  integration tree only while it still sits there. Absent on legacy journals. */
+  cancelledHead?: string
   landedHead?: string
   /** Wall-clock stamps of the lifecycle transitions (H4): `reviewAt` is the
    *  latest entry into review, so `sealedAt - reviewAt` is the seal wait of
@@ -508,6 +569,53 @@ const hashFile = (path: string) => {
     closeSync(fd)
   }
   return hash.digest('hex')
+}
+/**
+ * Callers often hand evidence from a session scratchpad that disappears with the session, which
+ * left every later gate reporting `evidence missing` with no exit. Registration copies the bytes
+ * into the batch directory, content-addressed; `evidenceHashOf` falls back to that copy only once
+ * the caller's file is gone, so an edited original still invalidates.
+ */
+function persistEvidence(c: Context, path: string, hash = hashFile(path)): string {
+  const dir = join(c.dir, 'evidence')
+  const stored = join(dir, hash)
+  if (existsSync(stored) && hashFile(stored) === hash) return stored
+  mkdirSync(dir, { recursive: true })
+  const tmp = `${stored}.${process.pid}.tmp`
+  writeFileSync(tmp, readFileSync(path))
+  syncFile(tmp)
+  renameSync(tmp, stored)
+  if (hashFile(stored) !== hash) throw new Error(`Evidence changed while persisting: ${path}`)
+  return stored
+}
+/**
+ * Evidence copies are read only through the ready queue and unfinished batches. A cleaned batch,
+ * or a cancelled one whose integration tree is gone, releases its copies; anything else still
+ * referenced stays. Compared by content hash so a differently spelled batch dir never orphans a
+ * live copy. Runs under the batch lock, like every `persistEvidence` call.
+ */
+function pruneEvidenceCopies(c: Context, s: State): string[] {
+  const dir = join(c.dir, 'evidence')
+  if (!existsSync(dir)) return []
+  const keep = new Set<string>()
+  const add = (copy?: string) => copy && keep.add(basename(copy))
+  for (const m of s.ready) add(m.evidenceCopy)
+  for (const b of s.batches) {
+    if (b.phase === 'cleaned' || (b.phase === 'cancelled' && b.removed.includes(b.path))) continue
+    for (const m of b.members) add(m.evidenceCopy)
+    add(b.seal?.evidenceCopy)
+    for (const artifact of b.seal?.artifacts ?? []) add(artifact.copy)
+  }
+  const released: string[] = []
+  for (const name of readdirSync(dir)) {
+    if (!/^[0-9a-f]{64}$/.test(name) || keep.has(name)) continue
+    rmSync(join(dir, name), { force: true })
+    released.push(join(dir, name))
+  }
+  return released
+}
+function evidenceHashOf(path: string, copy?: string): string {
+  return !existsSync(path) && copy ? hashFile(copy) : hashFile(path)
 }
 const fullRef = (branch: string) => (branch.startsWith('refs/') ? branch : `refs/heads/${branch}`)
 const objectIdPattern = /^[0-9a-f]{40}$/i
@@ -2535,13 +2643,24 @@ function assertMain(c: Context) {
  * flip and projection residue never block ready/prepare/land, and cleanup may
  * discard them exactly as wt-helper cleanup does.
  */
-function sourceProblem(c: Context, m: ReadySource): string | undefined {
+/**
+ * `requireEvidence: false` is for cleanup of a landed batch: the evidence authorized landing, and
+ * landing is already proven, so a vanished evidence file must not retain the source forever.
+ */
+function sourceProblem(
+  c: Context,
+  m: ReadySource,
+  {
+    requireEvidence = true,
+    discard = [],
+  }: { requireEvidence?: boolean; discard?: readonly string[] } = {},
+): string | undefined {
   const wt = worktrees(c.main).find((w) => w.path === m.path)
   if (!wt) return 'source worktree missing'
   if (wt.locked) return 'source locked'
   if (wt.branch !== m.branch || head(m.path) !== m.head)
     return 'source HEAD changed; register again after verification'
-  const blocking = blockingDirtyPaths(m.path)
+  const blocking = blockingDirtyPaths(m.path, discard)
   if (blocking.length) return `source has uncommitted work: ${describeBlocking(blocking)}`
   const claimObs = findClaimByWorktreeObserved(c.main, m.path)
   if (claimObs.status === 'unknown') return `source claim unknown: ${claimObs.reason}`
@@ -2554,8 +2673,10 @@ function sourceProblem(c: Context, m: ReadySource): string | undefined {
     )
   )
     return 'source has an active claim; owner must release it'
+  if (!requireEvidence) return undefined
   try {
-    if (hashFile(m.evidence) !== m.evidenceHash) return 'source evidence changed'
+    if (evidenceHashOf(m.evidence, m.evidenceCopy) !== m.evidenceHash)
+      return 'source evidence changed'
   } catch {
     return 'source evidence missing'
   }
@@ -2729,13 +2850,15 @@ export function registerReady(
       )
     const evidence = realpathSync(resolve(cwd, options.evidence))
     if (!readFileSync(evidence).length) throw new Error('Evidence must be nonempty')
+    const evidenceHash = hashFile(evidence)
     const m: ReadySource = {
       path,
       branch: wt.branch,
       head: head(path),
       workId: options.workId,
       evidence,
-      evidenceHash: hashFile(evidence),
+      evidenceHash,
+      evidenceCopy: persistEvidence(c, evidence, evidenceHash),
       authorized: true,
       released: true,
       retain: options.retain,
@@ -2801,18 +2924,27 @@ export function unreadySource(cwd: string, source: string, reason: string) {
  * residue (verifyDepsBeforeRun flip) and clade projection drift must not block
  * them; every other dirty path remains a hard refusal.
  */
-function blockingDirtyPaths(path: string): string[] {
+function porcelainAll(path: string): string {
   // NOT the shared `git()` helper: it .trim()s stdout, which eats the first
   // porcelain line's leading X-status space and shifts its path one char.
   // Untracked files are listed individually so a collapsed `?? dir/` never
   // lets a projection-looking directory hide a real file inside it.
-  const out = execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], {
+  return execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], {
     cwd: path,
     env: isolatedGitEnv,
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe'],
   })
-  return blockingPorcelainPaths(path, out)
+}
+/** Dirty paths `--discard-pathspec` lets through: blocking without the pathspecs, not with them. */
+function discardedDirtyPaths(path: string, discard: readonly string[]): string[] {
+  if (discard.length === 0) return []
+  const out = porcelainAll(path)
+  const kept = new Set(blockingPorcelainPaths(path, out, discard))
+  return blockingPorcelainPaths(path, out).filter((p) => !kept.has(p))
+}
+function blockingDirtyPaths(path: string, discard: readonly string[] = []): string[] {
+  return blockingPorcelainPaths(path, porcelainAll(path), discard)
 }
 function describeBlocking(blocking: string[]): string {
   const more = blocking.length > 10 ? ` (+${blocking.length - 10} more)` : ''
@@ -3519,7 +3651,8 @@ export function sealBatch(cwd: string, evidencePath: string, batchId?: string) {
     )
       throw new Error('Review requires all changes staged')
     const evidence = realpathSync(resolve(cwd, evidencePath)),
-      receipt = parseJsonRecord(readFileSync(evidence, 'utf8'), evidence)
+      receipt = parseJsonRecord(readFileSync(evidence, 'utf8'), evidence),
+      evidenceHash = hashFile(evidence)
     const tree = git(b.path, ['write-tree'])
     const members = b.members.map((m) => ({ path: m.path, workId: m.workId, head: m.head }))
     if (
@@ -3528,7 +3661,7 @@ export function sealBatch(cwd: string, evidencePath: string, batchId?: string) {
       JSON.stringify(receipt.members) !== JSON.stringify(members)
     )
       throw new Error('Review receipt does not match base, tree and batch members')
-    const artifacts: { path: string; hash: string }[] = []
+    const artifacts: { path: string; hash: string; copy?: string }[] = []
     const unmet: NonNullable<WorktreeBatch['unmetGates']> = []
     if (!isRecord(receipt.gates)) throw new Error('Review receipt requires gate records')
     for (const name of ['simplify', 'review', 'checks', 'human']) {
@@ -3566,7 +3699,7 @@ export function sealBatch(cwd: string, evidencePath: string, batchId?: string) {
       const path = realpathSync(resolve(dirname(evidence), gate.evidence))
       if (!readFileSync(path).length || hashFile(path) !== gate.hash)
         throw new Error(`Gate ${name} evidence missing, empty or changed`)
-      artifacts.push({ path, hash: gate.hash })
+      artifacts.push({ path, hash: gate.hash, copy: persistEvidence(c, path, gate.hash) })
     }
     if (unmet.length) {
       delete b.seal
@@ -3582,7 +3715,8 @@ export function sealBatch(cwd: string, evidencePath: string, batchId?: string) {
       head: clean(b.path) && head(b.path) !== b.base ? head(b.path) : undefined,
       tree,
       evidence,
-      hash: hashFile(evidence),
+      evidenceCopy: persistEvidence(c, evidence, evidenceHash),
+      hash: evidenceHash,
       artifacts,
     }
     b.phase = 'sealed'
@@ -3593,10 +3727,11 @@ export function sealBatch(cwd: string, evidencePath: string, batchId?: string) {
 }
 function formalHead(c: Context, b: WorktreeBatch) {
   integration(c, b)
-  if (!b.seal || hashFile(b.seal.evidence) !== b.seal.hash)
+  if (!b.seal || evidenceHashOf(b.seal.evidence, b.seal.evidenceCopy) !== b.seal.hash)
     throw new Error('Review evidence missing or changed')
   for (const artifact of b.seal.artifacts)
-    if (hashFile(artifact.path) !== artifact.hash) throw new Error('Gate evidence changed')
+    if (evidenceHashOf(artifact.path, artifact.copy) !== artifact.hash)
+      throw new Error('Gate evidence changed')
   if (!clean(b.path))
     throw new Error('Integration must contain formal commits and no uncommitted work')
   const tip = head(b.path)
@@ -3765,10 +3900,9 @@ function verifyMergeReceipt(
   c: Context,
   b: WorktreeBatch,
   tip: string,
-  receiptPath: string,
+  receipt: MergeReceipt,
   remotePr: RemotePrProbe = defaultRemotePrProbe,
 ): MergeReceipt {
-  const receipt = readMergeReceipt(c.cwd, receiptPath)
   if (receipt.source_head !== tip)
     throw new Error('Merge receipt source_head does not match the reviewed formal HEAD')
   if (receipt.reviewed_base !== b.base)
@@ -3790,16 +3924,53 @@ function verifyMergeReceipt(
   const parents = git(c.main, ['rev-list', '--parents', '-n', '1', receipt.merge_sha]).split(/\s+/)
   if (parents.length !== 2)
     throw new Error('Merge receipt merge SHA must be a single-parent squash commit')
-  if (parents[1] !== b.base)
-    throw new Error('Merge parent is not the reviewed base; refresh and re-review the candidate')
+  const mergeParent = parents[1]!
   const candidateTree = git(c.main, ['rev-parse', `${tip}^{tree}`])
   if (receipt.candidate_tree !== candidateTree)
     throw new Error('Merge receipt candidate tree does not match the reviewed formal HEAD')
-  const mergeTree = git(c.main, ['rev-parse', `${receipt.merge_sha}^{tree}`])
-  if (mergeTree !== candidateTree)
-    throw new Error(
-      'Merged tree does not match the reviewed candidate; binary, rename or file mode drift is retained',
-    )
+  if (mergeParent === b.base) {
+    const mergeTree = git(c.main, ['rev-parse', `${receipt.merge_sha}^{tree}`])
+    if (mergeTree !== candidateTree)
+      throw new Error(
+        'Merged tree does not match the reviewed candidate; binary, rename or file mode drift is retained',
+      )
+  } else {
+    // origin/main advanced between review and merge: the squash commit's parent is the newer
+    // main, so equality with the candidate tree can no longer hold. The merge is still bound
+    // to the review — its parent must descend from the reviewed base, the paths it touches
+    // must be exactly the reviewed set, and every touched path must carry the candidate's
+    // content (binary, rename and file mode included).
+    try {
+      git(c.main, ['merge-base', '--is-ancestor', b.base, mergeParent])
+    } catch {
+      throw new Error(
+        'Merge parent does not descend from the reviewed base; refresh and re-review the candidate',
+      )
+    }
+    const reviewed = diffPaths(c, b.base, tip).toSorted()
+    const introduced = diffPaths(c, mergeParent, receipt.merge_sha).toSorted()
+    if (reviewed.length !== introduced.length || reviewed.some((p, i) => p !== introduced[i]))
+      throw new Error(
+        'Merged commit does not introduce exactly the reviewed paths; drift is retained',
+      )
+    const drift = git(c.main, [
+      '--literal-pathspecs',
+      'diff',
+      '--no-renames',
+      '--name-only',
+      '-z',
+      tip,
+      receipt.merge_sha,
+      '--',
+      ...reviewed,
+    ])
+      .split('\0')
+      .filter(Boolean)
+    if (drift.length)
+      throw new Error(
+        `Merged content differs from the reviewed candidate at ${drift.slice(0, 10).join(', ')}; binary, rename or file mode drift is retained`,
+      )
+  }
   const reviewedPatchId = patchId(c.main, b.base, tip)
   if (receipt.content_patch_id !== reviewedPatchId)
     throw new Error('Merge receipt content patch does not match the reviewed candidate')
@@ -3809,6 +3980,59 @@ function verifyMergeReceipt(
   assertReceiptReusesDraft(c, b, receipt, remote.headRef)
   return receipt
 }
+/** `confirm-merged` may also resolve a cancelled batch for landed reconcile — but only through
+ *  an explicit `--batch` id; implicit resolution still sees live batches only. */
+function landingBatch(c: Context, s: State, reconcile: boolean, batchId?: string): WorktreeBatch {
+  if (batchId === undefined) return active(c, s)
+  const prefixed = (b: WorktreeBatch) => batchId !== '' && b.id.startsWith(batchId)
+  // A live batch always wins the prefix; cancelled ids extend the search only for
+  // confirm-merged reconcile and never turn a live match ambiguous.
+  const live = s.batches.filter((b) => prefixed(b) && isLiveBatch(b))
+  if (live.length === 1) return live[0]!
+  if (live.length > 1) throw new Error(`Batch id ${batchId} is ambiguous`)
+  if (!reconcile) throw new Error(`No live batch ${batchId}`)
+  const cancelled = s.batches.filter((b) => prefixed(b) && b.phase === 'cancelled')
+  if (cancelled.length === 1) return cancelled[0]!
+  throw new Error(
+    cancelled.length
+      ? `Batch id ${batchId} is ambiguous among cancelled batches`
+      : `No live or cancelled batch ${batchId}`,
+  )
+}
+/** A cancelled batch keeps its seal record: it is the only seal-time proof of what was
+ *  reviewed. Journals cancelled before the record survived — or a batch cancelled from
+ *  review before ever sealing — carry none, and no receipt can prove a head was the
+ *  reviewed candidate, so reconcile refuses outright. The branch's current head and the
+ *  pre-seal `review-<tip>` pin are mutable after cancellation and never qualify. */
+function proveCancelledCandidate(c: Context, b: WorktreeBatch, candidate: string): string {
+  const seal = b.seal
+  if (!seal)
+    throw new Error(
+      `Cancelled batch ${b.id} has no surviving seal record; a merge receipt cannot prove a reviewed head`,
+    )
+  try {
+    git(c.main, ['rev-parse', '--verify', `${candidate}^{commit}`])
+  } catch {
+    throw new Error('Cancelled batch candidate head is not a commit in the main repository')
+  }
+  // `seal.head` pins the exact formal head when the seal recorded one; without it the
+  // reviewed content binds by tree — a same-tree head is still the sealed candidate.
+  const proven = seal.head
+    ? candidate === seal.head
+    : git(c.main, ['rev-parse', `${candidate}^{tree}`]) === seal.tree
+  if (!proven)
+    throw new Error(
+      `Merge receipt head ${candidate} is not the sealed candidate of cancelled batch ${b.id}; reconcile refused`,
+    )
+  if (candidate === b.base)
+    throw new Error('Cancelled batch candidate carried no commits over its reviewed base')
+  try {
+    git(c.main, ['merge-base', '--is-ancestor', b.base, candidate])
+  } catch {
+    throw new Error('Cancelled batch candidate head does not descend from its reviewed base')
+  }
+  return candidate
+}
 function landSealedBatch(
   cwd: string,
   landing: { kind: 'trunk' } | { kind: 'pr'; receipt: string; remotePr?: RemotePrProbe },
@@ -3816,18 +4040,21 @@ function landSealedBatch(
 ) {
   const c = context(cwd)
   return mutate(c, (s) => {
-    const b = active(c, s, batchId)
-    if (b.phase !== 'sealed') throw new Error('Batch must be sealed after /commit gates')
-    const tip = formalHead(c, b)
-    verifyMembers(c, b)
+    const b = landingBatch(c, s, landing.kind === 'pr', batchId)
+    const reconcile = landing.kind === 'pr' && b.phase === 'cancelled'
+    if (!reconcile && b.phase !== 'sealed')
+      throw new Error('Batch must be sealed after /commit gates')
+    if (landing.kind === 'pr' && b.workflow !== 'pr-merge-based')
+      throw new Error('Trunk workflow does not accept a PR merge receipt')
+    const receipt = landing.kind === 'pr' ? readMergeReceipt(c.cwd, landing.receipt) : undefined
+    const tip = reconcile ? proveCancelledCandidate(c, b, receipt!.source_head) : formalHead(c, b)
+    if (!reconcile) verifyMembers(c, b)
     if (landing.kind === 'pr') {
-      if (b.workflow !== 'pr-merge-based')
-        throw new Error('Trunk workflow does not accept a PR merge receipt')
       b.mergeReceipt = verifyMergeReceipt(
         c,
         b,
         tip,
-        landing.receipt,
+        receipt!,
         landing.remotePr ?? defaultRemotePrProbe,
       )
     } else {
@@ -3845,6 +4072,13 @@ function landSealedBatch(
     b.landedHead = tip
     b.phase = 'landed'
     stamp(b, 'landedAt')
+    if (reconcile) {
+      // A yield-blocked batch carries a waiting record and a blockedSources row; landing
+      // ends the wait, so the member work ids must not stay resumable on a landed batch.
+      const memberWorkIds = new Set(b.members.map((member) => member.workId))
+      s.blockedSources = (s.blockedSources ?? []).filter((row) => !memberWorkIds.has(row.workId))
+      delete b.waiting
+    }
     save(c, s)
     return b
   })
@@ -3868,20 +4102,29 @@ export function previewCleanupBatches(
   cwd: string,
   resolveProfile: PreservationProfileResolver = defaultPreservationProfile,
   detect: ProcessProbe = detectPublishInFlight,
+  scope: { cancelled?: boolean; discardPathspecs?: readonly string[] } = {},
 ) {
+  const discard = scope.discardPathspecs ?? []
   const c = context(cwd)
   assertNoPublishInFlight('batch cleanup', c.main, false, detect)
   const profileResolver =
     resolveProfile === defaultPreservationProfile ? profileResolverForRoot(c.main) : resolveProfile
   const state = readState(c)
   return state.batches
-    .filter((b) => b.phase === 'landed')
+    .filter(
+      (b) => b.phase === 'landed' || (scope.cancelled === true && cancelledIntegrationPending(b)),
+    )
     .map((b) => {
       const members: CleanupPreviewRow[] = []
-      let landedProblem: string | undefined
+      const cancelled = b.phase === 'cancelled'
+      const integrationHead = integrationHeadFor(b)
+      let landedProblem: string | undefined = integrationHead
+        ? undefined
+        : 'batch recorded no integration head and the tree is gone; retained'
       const landedCommit = b.mergeReceipt?.merge_sha ?? b.landedHead!
       try {
-        git(c.main, ['merge-base', '--is-ancestor', landedCommit, 'refs/heads/main'])
+        if (!cancelled && !landedProblem)
+          git(c.main, ['merge-base', '--is-ancestor', landedCommit, 'refs/heads/main'])
       } catch (error) {
         landedProblem =
           (error as { status?: number }).status === 1
@@ -3890,7 +4133,7 @@ export function previewCleanupBatches(
       }
       const currentWorktrees = worktrees(c.main)
       const claimsObs = readActiveClaimsObserved(c.main)
-      for (const m of b.members) {
+      for (const m of cancelled ? [] : b.members) {
         if (b.removed.includes(m.path)) {
           members.push({
             path: m.path,
@@ -3913,7 +4156,7 @@ export function previewCleanupBatches(
           reason = `another removal is still journaled for ${b.removing.path}`
         if (!reason && wt && !removal) {
           try {
-            reason = sourceProblem(c, m)
+            reason = sourceProblem(c, m, { requireEvidence: false, discard })
           } catch (error) {
             reason = errorMessage(error)
           }
@@ -3969,7 +4212,7 @@ export function previewCleanupBatches(
               )
                 reason = 'removal journal has no verified preservation receipt'
               else if (removal?.removalConcern)
-                reason = `${removal.removalConcern}; requires reconciliation`
+                reason = removalConcernText(removal.removalConcern, removal.trash)
             } catch (error) {
               reason = errorMessage(error)
             }
@@ -3996,7 +4239,7 @@ export function previewCleanupBatches(
         const removal = b.removing?.path === b.path ? b.removing : undefined
         const retiredArchive =
           !wt && !removal && !existsSync(b.path)
-            ? retiredByHandoff(c, b.path, b.branch, b.landedHead!)
+            ? retiredByHandoff(c, b.path, b.branch, integrationHead!)
             : undefined
         if (retiredArchive) {
           const claim = findClaimByWorktreeObserved(c.main, b.path)
@@ -4013,7 +4256,7 @@ export function previewCleanupBatches(
           else {
             try {
               validateProfile(profile)
-              if (wt?.locked || (wt && (!clean(b.path) || head(b.path) !== b.landedHead)))
+              if (wt?.locked || (wt && (!clean(b.path) || head(b.path) !== integrationHead)))
                 integrationReason = 'Integration has new work, lock or active owner'
               else if (!wt && !removal && !hasVerifiedPreservation(b, b.path, profile))
                 integrationReason =
@@ -4045,8 +4288,18 @@ export function cleanupBatches(
   lifecycle: BatchLifecycle = defaultLifecycle,
   detect: ProcessProbe = detectPublishInFlight,
   resolveProfile: PreservationProfileResolver = defaultPreservationProfile,
-  scope: { batchIds?: string[] } = {},
+  scope: {
+    batchIds?: string[]
+    cancelled?: boolean
+    discardPathspecs?: readonly string[]
+    saveResidue?: ResidueSaver
+  } = {},
 ) {
+  const discard = scope.discardPathspecs ?? []
+  if (discard.length && !scope.saveResidue)
+    throw new Error(
+      '--discard-pathspec needs a residue saver; run it through wt-helper batch cleanup',
+    )
   const c = context(cwd)
   const cleanupLifecycle: BatchLifecycle = { ...defaultLifecycle, ...lifecycle }
   const profileResolver =
@@ -4061,16 +4314,34 @@ export function cleanupBatches(
       removed: string[]
       retained: { path: string; reason: string }[]
       preserved: { path: string; archive: string }[]
+      parked?: { path: string; status: string; detail?: string }[]
     }[] = []
+    // Batches whose landed commit was verified on main this pass — the only
+    // ones whose retained trees are safe to park below.
+    const landedVerified = new Set<string>()
     for (const b of s.batches.filter(
       (candidate) =>
-        candidate.phase === 'landed' && (!scope.batchIds || scope.batchIds.includes(candidate.id)),
+        (candidate.phase === 'landed' ||
+          (scope.cancelled === true && cancelledIntegrationPending(candidate))) &&
+        (!scope.batchIds || scope.batchIds.includes(candidate.id)),
     )) {
       const result = {
         batch: b.id,
         removed: [] as string[],
         retained: [] as { path: string; reason: string }[],
         preserved: [...(b.preserved ?? [])],
+      }
+      // A cancelled batch keeps its member sources for re-registration; only the integration
+      // tree is reclaimed, and its head is pinned before the branch goes.
+      const cancelled = b.phase === 'cancelled'
+      const integrationHead = integrationHeadFor(b)
+      if (!integrationHead) {
+        result.retained.push({
+          path: b.path,
+          reason: 'batch recorded no integration head and the tree is gone; retained',
+        })
+        results.push(result)
+        continue
       }
       const landedCommit = b.mergeReceipt?.merge_sha ?? b.landedHead!
       // `merge-base --is-ancestor` is a query here, not an assertion: exit 1
@@ -4080,7 +4351,8 @@ export function cleanupBatches(
       // head was recorded, and that one batch must not abort the queue.
       let landedProblem: string | undefined
       try {
-        git(c.main, ['merge-base', '--is-ancestor', landedCommit, 'refs/heads/main'])
+        if (!cancelled)
+          git(c.main, ['merge-base', '--is-ancestor', landedCommit, 'refs/heads/main'])
       } catch (error) {
         landedProblem =
           (error as { status?: number }).status === 1
@@ -4094,9 +4366,10 @@ export function cleanupBatches(
         results.push(result)
         continue
       }
+      if (!cancelled) landedVerified.add(b.id)
       try {
         let updated = 0
-        for (const donor of [b.path, ...b.members.map((member) => member.path)]) {
+        for (const donor of cancelled ? [] : [b.path, ...b.members.map((member) => member.path)]) {
           const projectionState = reconcileLandedProjectionState(c.main, donor)
           updated += projectionState.updated
           for (const reason of projectionState.skipped)
@@ -4115,7 +4388,7 @@ export function cleanupBatches(
       // The batch lock is held for the whole loop and nothing here writes a claim,
       // so one read serves every member instead of one directory scan each.
       const claimsObs = readActiveClaimsObserved(c.main)
-      for (const [index, m] of b.members.entries()) {
+      for (const [index, m] of (cancelled ? [] : b.members).entries()) {
         if (settled(b, m.path)) continue
         if (b.removing && b.removing.path !== m.path) {
           result.retained.push({
@@ -4149,7 +4422,7 @@ export function cleanupBatches(
           const provenTree = registeredWorktreePath(c, m.branch)
           restoreOwned(c, cleanupLifecycle, provenTree, m.branch, [])
           try {
-            reason ||= sourceProblem(c, m)
+            reason ||= sourceProblem(c, m, { requireEvidence: false, discard })
           } catch (error) {
             // A half-detached tree whose normalize was skipped or failed
             // makes `git status` throw — retain rather than abort the batch.
@@ -4737,7 +5010,15 @@ export function cleanupBatches(
                       )
                     }
                   }
-                  const sourceProblemAfterCapture = sourceProblem(c, m)
+                  // Saved under writer ownership, right before the last re-check that still
+                  // lets these paths through, so the residue is what teardown destroys.
+                  const discarded = discardedDirtyPaths(m.path, discard)
+                  if (discarded.length)
+                    scope.saveResidue!(c.main, m.path, basename(m.path), m.branch, discarded)
+                  const sourceProblemAfterCapture = sourceProblem(c, m, {
+                    requireEvidence: false,
+                    discard,
+                  })
                   if (sourceProblemAfterCapture) throw new Error(sourceProblemAfterCapture)
                   detachedNow = asDetachedList(cleanupLifecycle.destroy(c.main, m.path))
                 }
@@ -4746,7 +5027,10 @@ export function cleanupBatches(
                 // names so the retained worktree stays functional.
                 try {
                   if (!removal || sourceRestoredToArchive) {
-                    const postDestroyProblem = sourceProblem(c, m)
+                    const postDestroyProblem = sourceProblem(c, m, {
+                      requireEvidence: false,
+                      discard,
+                    })
                     if (postDestroyProblem) throw new Error(postDestroyProblem)
                   }
                   requireKnownNoClaim(
@@ -4841,16 +5125,11 @@ export function cleanupBatches(
               // after a late-write report. Re-run the deleted-handle scan,
               // then a recorded removal concern still retains the entry:
               // clearing the journal requires explicit reconciliation, not
-              // an automatic pass. The bytes still live under the journaled
-              // trash path when one was recorded.
+              // an automatic pass. Name the journaled trash path only while
+              // that directory still exists.
               cleanupLifecycle.afterRemove?.(c.main, m.path, removalScanRoots(c, removal.trash))
               if (removal.removalConcern)
-                throw new Error(
-                  `${removal.removalConcern}; requires reconciliation` +
-                    (removal.trash && existsSync(removal.trash)
-                      ? `; preserved bytes at ${removal.trash}`
-                      : ''),
-                )
+                throw removalReconciliationError(removal.removalConcern, removal.trash)
               delete b.removing
             }
             git(c.main, ['update-ref', `refs/clade/batches/${b.id}/${index}`, m.head])
@@ -4873,7 +5152,7 @@ export function cleanupBatches(
             !existsSync(m.path) &&
             !existsSync(b.removing.quarantine)
           ) {
-            b.removing.removalConcern = String(error)
+            b.removing.removalConcern = removalConcernText(errorMessage(error), b.removing.trash)
             try {
               save(c, s)
             } catch {
@@ -4896,11 +5175,13 @@ export function cleanupBatches(
             m.branch,
             b.removing?.path === m.path ? (b.removing.detachedPointers ?? []) : [],
           )
-          result.retained.push({ path: m.path, reason: String(error) })
+          result.retained.push({ path: m.path, reason: errorMessage(error) })
         }
       }
-      if (b.members.every((m) => settled(b, m.path))) {
+      if (cancelled || b.members.every((m) => settled(b, m.path))) {
         try {
+          if (cancelled)
+            git(c.main, ['update-ref', `refs/clade/batches/${b.id}/integration`, integrationHead])
           let removal = b.removing?.path === b.path ? b.removing : undefined
           const currentWorktrees = worktrees(c.main)
           const wt = currentWorktrees.find((w) => w.path === b.path)
@@ -4911,7 +5192,7 @@ export function cleanupBatches(
             !wt &&
             !removal &&
             !existsSync(b.path) &&
-            retiredByHandoff(c, b.path, b.branch, b.landedHead!)
+            retiredByHandoff(c, b.path, b.branch, integrationHead)
           if (retiredArchive) {
             requireKnownNoClaim(c.main, b.path, 'Integration has new work, lock or active owner')
             const ref = `refs/heads/${b.branch}`
@@ -4919,11 +5200,14 @@ export function cleanupBatches(
               throw new Error('Integration branch checked out elsewhere; retained')
             cleanupLifecycle.removed(c.main, b.path)
             if (git(c.main, ['for-each-ref', '--format=%(refname)', ref]))
-              git(c.main, ['update-ref', '-d', ref, b.landedHead!])
+              git(c.main, ['update-ref', '-d', ref, integrationHead])
             b.preserved = [...(b.preserved ?? []), { path: b.path, archive: retiredArchive }]
-            b.phase = 'cleaned'
-            stamp(b, 'closedAt')
-            s.ready = s.ready.filter((m) => !claimsMember(b, m.path))
+            if (cancelled) b.removed.push(b.path)
+            else {
+              b.phase = 'cleaned'
+              stamp(b, 'closedAt')
+              s.ready = s.ready.filter((m) => !claimsMember(b, m.path))
+            }
             save(c, s)
             result.preserved = [...(b.preserved ?? [])]
             results.push(result)
@@ -4982,7 +5266,7 @@ export function cleanupBatches(
               if (
                 (!removal && wt?.locked) ||
                 (!removal && !clean(b.path)) ||
-                (!removal && head(b.path) !== b.landedHead)
+                (!removal && head(b.path) !== integrationHead)
               )
                 throw new Error('Integration has new work, lock or active owner')
               if (!removal)
@@ -5452,7 +5736,7 @@ export function cleanupBatches(
                 // detaches so the retained worktree stays functional.
                 try {
                   if (!removal || sourceRestoredToArchive) {
-                    if (!existsSync(b.path) || !clean(b.path) || head(b.path) !== b.landedHead)
+                    if (!existsSync(b.path) || !clean(b.path) || head(b.path) !== integrationHead)
                       throw new Error(
                         'Integration changed during writer handoff or has active owner',
                       )
@@ -5549,16 +5833,11 @@ export function cleanupBatches(
               }
             } else if (removal) {
               // Same both-paths-gone resume: re-scan held handles, then a
-              // recorded removal concern still requires reconciliation, with
-              // the journaled trash path surfaced for inspection.
+              // recorded removal concern still requires reconciliation. Name
+              // the journaled trash path only while that directory still exists.
               cleanupLifecycle.afterRemove?.(c.main, b.path, removalScanRoots(c, removal.trash))
               if (removal.removalConcern)
-                throw new Error(
-                  `${removal.removalConcern}; requires reconciliation` +
-                    (removal.trash && existsSync(removal.trash)
-                      ? `; preserved bytes at ${removal.trash}`
-                      : ''),
-                )
+                throw removalReconciliationError(removal.removalConcern, removal.trash)
               delete b.removing
             }
             cleanupLifecycle.removed(c.main, b.path)
@@ -5567,13 +5846,16 @@ export function cleanupBatches(
               git(c.main, ['rev-parse', '--verify', ref])
               if (worktrees(c.main).some((other) => other.branch === ref))
                 throw new Error('Integration branch checked out elsewhere; retained')
-              git(c.main, ['update-ref', '-d', ref, b.landedHead!])
+              git(c.main, ['update-ref', '-d', ref, integrationHead])
             } catch (error) {
               if (git(c.main, ['for-each-ref', '--format=%(refname)', ref])) throw error
             }
-            b.phase = 'cleaned'
-            stamp(b, 'closedAt')
-            s.ready = s.ready.filter((m) => !claimsMember(b, m.path))
+            if (cancelled) b.removed.push(b.path)
+            else {
+              b.phase = 'cleaned'
+              stamp(b, 'closedAt')
+              s.ready = s.ready.filter((m) => !claimsMember(b, m.path))
+            }
             save(c, s)
           })
         } catch (error) {
@@ -5583,7 +5865,7 @@ export function cleanupBatches(
             !existsSync(b.path) &&
             !existsSync(b.removing.quarantine)
           ) {
-            b.removing.removalConcern = String(error)
+            b.removing.removalConcern = removalConcernText(errorMessage(error), b.removing.trash)
             try {
               save(c, s)
             } catch {
@@ -5603,11 +5885,53 @@ export function cleanupBatches(
             `refs/heads/${b.branch}`,
             b.removing?.path === b.path ? (b.removing.detachedPointers ?? []) : [],
           )
-          result.retained.push({ path: b.path, reason: String(error) })
+          result.retained.push({ path: b.path, reason: errorMessage(error) })
         }
       }
       result.preserved = [...(b.preserved ?? [])]
       results.push(result)
+    }
+    // The work is on main, so a tree this pass could not remove (preservation
+    // profile, residue, a problem to inspect) no longer needs its backing
+    // service running — yet it kept one, and every such sidecar holds a
+    // connection-admission slot until no new tree can be provisioned at all.
+    // Park is reversible: the tree, its clone and its env block stay, and
+    // `ensure` brings the sidecar back. A tree someone may be serving from
+    // right now is skipped: a live claim, claims that cannot be read, or any
+    // process whose cwd is inside it (an owner who re-ran `ensure` in a
+    // retained tree without a claim — a pane, a dev server).
+    for (const result of results) {
+      if (!landedVerified.has(result.batch) || !cleanupLifecycle.park) continue
+      const b = s.batches.find((candidate) => candidate.id === result.batch)
+      if (!b) continue
+      const candidates = [
+        ...b.members.filter((m) => !settled(b, m.path)).map((m) => m.path),
+        ...(b.phase === 'landed' ? [b.path] : []),
+      ]
+      for (const path of candidates) {
+        if (!existsSync(path)) continue
+        const claim = findClaimByWorktreeObserved(c.main, path)
+        if (claim.status === 'unknown' || claim.value) continue
+        if (processCwdInside(path) !== 'none') continue
+        let outcome: { status: string; detail?: string }
+        try {
+          outcome = cleanupLifecycle.park(c.main, path)
+        } catch (error) {
+          outcome = { status: 'failed', detail: errorMessage(error) }
+        }
+        if (outcome.status === 'unsupported') continue
+        ;(result.parked ??= []).push({ path, ...outcome })
+        console.log(
+          `batch cleanup: backing service ${outcome.status} for retained ${path}` +
+            (outcome.detail ? ` (${outcome.detail})` : ''),
+        )
+      }
+    }
+    try {
+      for (const path of pruneEvidenceCopies(c, s))
+        console.log(`batch cleanup: released evidence copy ${path}`)
+    } catch (error) {
+      console.log(`batch cleanup: evidence copy prune skipped: ${errorMessage(error)}`)
     }
     return results
   })
@@ -5636,7 +5960,8 @@ export function assertLegacyAllowed(cwd: string, sourcePath: string) {
  *   - the batch is `landed` and its landed commit is an ancestor of refs/heads/main — the
  *     registered head's content is in main through the batch landing;
  *   - the source is still a worktree of the member's branch, its HEAD differs from the
- *     registered head and descends from it (it advanced; it did not rewrite what landed);
+ *     registered head and did not rewrite what landed: it descends from the registered head,
+ *     builds on the landed commit (rebased onto main after landing), or is itself on main;
  *   - no removal is journaled for the member.
  * No retirement tombstone is written: the source is alive. The registered head is pinned at
  * refs/clade/batches/<id>/<index> like a removed member's, and re-registration goes through
@@ -5675,9 +6000,16 @@ export function releaseBatchSource(cwd: string, source: string, reason: string) 
     const sourceHead = head(path)
     if (sourceHead === m.head)
       throw new Error('source is still at its registered head; batch cleanup removes it normally')
-    if (!ancestor(m.head, sourceHead))
+    // A source rebased onto main after landing no longer descends from its registered head, yet it
+    // builds on the landed commit (or adds nothing beyond main) — it did not rewrite what landed.
+    // The registered head is pinned below either way, and the tree is kept.
+    if (
+      !ancestor(m.head, sourceHead) &&
+      !ancestor(landedCommit, sourceHead) &&
+      !ancestor(sourceHead, 'refs/heads/main')
+    )
       throw new Error(
-        `registered head ${m.head} is not an ancestor of the source head ${sourceHead}; the source rewrote landed history`,
+        `registered head ${m.head} is not an ancestor of the source head ${sourceHead}, which neither builds on landed commit ${landedCommit} nor is on main; the source rewrote landed history`,
       )
     git(c.main, ['update-ref', `refs/clade/batches/${b.id}/${index}`, m.head])
     const row = { path, head: m.head, sourceHead, reason, at: new Date().toISOString() }
@@ -5688,6 +6020,25 @@ export function releaseBatchSource(cwd: string, source: string, reason: string) 
   })
 }
 /** Cancellation releases the queue, retaining every source and the integration for inspection. */
+function integrationHeadIfPresent(path: string): string | undefined {
+  try {
+    return existsSync(path) ? head(path) : undefined
+  } catch {
+    return undefined
+  }
+}
+/**
+ * The head a cleanup may remove the integration tree at: the landed head, or for a cancelled
+ * batch the head recorded at cancellation (legacy journals: the tree's current head — the
+ * preservation archive and the pinned `refs/clade/batches/<id>/integration` keep its content).
+ */
+function integrationHeadFor(b: WorktreeBatch): string | undefined {
+  return b.phase === 'cancelled'
+    ? (b.cancelledHead ?? integrationHeadIfPresent(b.path))
+    : b.landedHead
+}
+const cancelledIntegrationPending = (b: WorktreeBatch) =>
+  b.phase === 'cancelled' && !b.removed.includes(b.path)
 export function cancelBatch(cwd: string, reason: string, batchId?: string) {
   if (!reason.trim()) throw new Error('Cancellation requires a reason')
   const c = context(cwd)
@@ -5696,7 +6047,9 @@ export function cancelBatch(cwd: string, reason: string, batchId?: string) {
     b.phase = 'cancelled'
     stamp(b, 'closedAt')
     b.cancellationReason = reason
-    delete b.seal
+    b.cancelledHead = integrationHeadIfPresent(b.path)
+    // The seal record survives cancellation: it is the only seal-time proof
+    // `confirm-merged --batch` can bind a merge receipt's source head to.
     // Members must explicitly re-register after correction; cancellation cannot silently resubmit them.
     s.ready = s.ready.filter((m) => !b.members.some((source) => source.path === m.path))
     save(c, s)
@@ -5728,7 +6081,8 @@ export function yieldBlockedBatch(
     b.phase = 'cancelled'
     stamp(b, 'closedAt')
     b.cancellationReason = waiting.reason
-    delete b.seal
+    b.cancelledHead = integrationHeadIfPresent(b.path)
+    // The seal record survives cancellation — see cancelBatch.
     s.ready = s.ready.filter((m) => !b.members.some((source) => source.path === m.path))
     const blocked = s.blockedSources ?? []
     s.blockedSources = [
@@ -5823,7 +6177,8 @@ export function mergeUnattendedBatch(
       batch.phase = 'cancelled'
       stamp(batch, 'closedAt')
       batch.cancellationReason = waiting.reason
-      delete batch.seal
+      batch.cancelledHead = integrationHeadIfPresent(batch.path)
+      // The seal record survives cancellation — see cancelBatch.
       state.ready = state.ready.filter(
         (row) => !batch.members.some((member) => member.path === row.path),
       )
@@ -5886,7 +6241,7 @@ function rejectUnknownFlags(rest: string[], allowed: Set<string>) {
 }
 
 export const BATCH_USAGE =
-  'batch: checkpoint | draft | retire-draft | retire-merged | ready | unready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | confirm-merged | cleanup [--dry-run] | release-source | cancel | recover-lock'
+  'batch: checkpoint | draft | retire-draft | retire-merged | ready | unready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | confirm-merged | cleanup [--dry-run] [--cancelled] [--discard-pathspec <path>[,…]] | release-source | cancel | recover-lock'
 
 /** Landing closes with cleanup of that batch (方案 6). Cleanup is fail-closed
  *  and never undoes the landing: a refusal (publish in flight, lock, anything
@@ -5911,9 +6266,19 @@ function landThenCleanup(
     }
   }
 }
+/** Saves the dirty paths `--discard-pathspec` named under `refs/clade-residue/<slug>` before
+ *  removal; supplied by wt-helper, which owns the residue format. Throws to retain the source. */
+export type ResidueSaver = (
+  main: string,
+  path: string,
+  slug: string,
+  branch: string,
+  paths: string[],
+) => unknown
 export interface BatchCleanupDeps {
   detect?: ProcessProbe
   resolveProfile?: PreservationProfileResolver
+  saveResidue?: ResidueSaver
 }
 
 export function runBatchCommand(
@@ -6096,13 +6461,32 @@ export function runBatchCommand(
         lifecycle,
         cleanupDeps,
       )
-    case 'cleanup':
-      rejectUnknownFlags(rest, new Set(['--dry-run']))
-      if (positionals(new Set()).length)
-        throw new BatchUsageError('Usage: wt-helper batch cleanup [--dry-run]')
+    case 'cleanup': {
+      rejectUnknownFlags(rest, new Set(['--dry-run', '--cancelled', '--discard-pathspec']))
+      if (positionals(new Set(['--discard-pathspec'])).length)
+        throw new BatchUsageError(
+          'Usage: wt-helper batch cleanup [--dry-run] [--cancelled] [--discard-pathspec <path>[,…]]',
+        )
+      let discardPathspecs: string[] = []
+      if (rest.includes('--discard-pathspec')) {
+        try {
+          discardPathspecs = parseDiscardPathspecs(required('--discard-pathspec'))
+        } catch (error) {
+          throw new BatchUsageError(errorMessage(error))
+        }
+      }
+      const cancelled = rest.includes('--cancelled')
       return rest.includes('--dry-run')
-        ? previewCleanupBatches(cwd, cleanupDeps.resolveProfile, cleanupDeps.detect)
-        : cleanupBatches(cwd, lifecycle, cleanupDeps.detect, cleanupDeps.resolveProfile)
+        ? previewCleanupBatches(cwd, cleanupDeps.resolveProfile, cleanupDeps.detect, {
+            cancelled,
+            discardPathspecs,
+          })
+        : cleanupBatches(cwd, lifecycle, cleanupDeps.detect, cleanupDeps.resolveProfile, {
+            cancelled,
+            discardPathspecs,
+            saveResidue: cleanupDeps.saveResidue,
+          })
+    }
     case 'release-source': {
       rejectUnknownFlags(
         rest.filter((token) => token.startsWith('--')),

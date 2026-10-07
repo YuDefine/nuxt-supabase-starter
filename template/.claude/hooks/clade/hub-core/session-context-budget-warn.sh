@@ -77,21 +77,6 @@ set -euo pipefail
 
 payload=$(cat)
 
-# Cursor 主線沒有 CLAUDE_CODE_SESSION_ID，也不走本 hook 的收工／relay 契約。
-# 提示會叫人 /handoff，那條在 Cursor 是禁令；靜默 skip，fail-open。
-# Predicate 對齊 vendor/scripts/lib/cursor-session.ts。
-is_cursor_session() {
-  [ "${CURSOR_AGENT:-}" = "1" ] && return 0
-  [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && return 1
-  [ -n "${CURSOR_CONVERSATION_ID:-}" ] && return 0
-  [ -n "${CURSOR_SESSION_ID:-}" ] && return 0
-  [ -n "${CURSOR_TRACE_ID:-}" ] && return 0
-  return 1
-}
-if is_cursor_session; then
-  exit 0
-fi
-
 detect_origin_launcher() {
   local base_url="${ANTHROPIC_BASE_URL:-}"
   case "${base_url,,}" in
@@ -274,7 +259,8 @@ ${cost_strong}
    1. 先把殘工派出去 —— 1 件（含多件但彼此 serial）走 /handoff relay 一次交出整個
       位置；N 件可平行走 /handoff fanout，各派一個 worker pane 再交棒給 successor。
       兩者的 successor 都以 fresh context 續跑，本 session 隨即收工。
-   2. 派不出去的才寫進 tasks/<date>-<slug>.md（或 HANDOFF.md / docs/tech-debt.md），
+   2. 派不出去的才寫進 tasks/<date>-<slug>.md（或 HANDOFF.md / 該 work 的 plan Open work；
+      沒有 specs/truth/work-lifecycle.md 的 consumer 才寫 docs/tech-debt.md），
       且逐條寫明派不出去的具體外部條件。
    3. 收工。NEVER 用「context 還夠」「只差最後一步」續跑 —— 那正是這條要擋的。
 EOF

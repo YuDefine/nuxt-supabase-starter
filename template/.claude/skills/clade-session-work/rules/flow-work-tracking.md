@@ -6,8 +6,8 @@ paths:
 ---
 <!-- Clade native rule; source: rules/core/flow-work-tracking.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 # flow work 生命週期契約
 
@@ -17,15 +17,19 @@ paths:
 
 一次 dispatch 通常是 **span**，不是 work：relay / fanout 預設沿用 `CLADE_WORK_ID`。只有明確建立 parent relation（有 relation receipt）時才有帶 `parent_work_id` 的 child work；不要從 fanout 數量推導 work 階層，也不要把明確的 `work.link` / child-work relation 壓平。
 
-`WorkState` 六態，推導優先序 **終態 > done > in-flight > failed > settled**：
+`WorkState` 八態，推導優先序 **終態 > done > in-flight > failed > settled**；`held`／`stale-held` 只覆寫 `settled`（讀取端附加持有者，見下）：
 
 | state | 意思 |
 | --- | --- |
 | `in-flight` | 有 span 在跑 |
 | `failed` | 最近一次 span 失敗，且沒人接手 |
-| `settled` | 沒 span 在跑、也沒人宣稱做完 —— **刻意不是終態**，它就是「完成了沒」這一問的答案本身 |
+| `held` | 沒 span 在跑，但還有人持有：直接 child 在跑或自身 `held`（純 fold 回推，parent 因此不是 `settled`），或本機的 `/commit` lock、未過期／有活 session 的 worktree claim、未終態且未超過 24h 的 dispatch record（只有讀取端 `flow status`／`brief`／`pending` 探測，不進 fold）。共用 main 樹不算 claimed worktree |
+| `stale-held` | 只有過期 claim 的 worktree 還有未提交檔、樹裡沒有活 session：不在跑也不能當 `settled`，要人 reclaim 或 land |
+| `settled` | 沒 span 在跑、也沒人宣稱做完、也沒有持有者 —— **刻意不是終態**，它就是「完成了沒」這一問的答案本身 |
 | `done` | 有人宣稱做完並附了憑證 |
 | `accepted` / `dropped` | 終態，只有人（或客戶）能寫 |
+
+`flow open <slug>` 在 ambient `CLADE_WORK_ID` **被佐證**時自動 `work.link` 到它：佐證是 `CLADE_DISPATCH_ID` 的 dispatch record 帶同一個 work id，或當前**非 main** worktree 上的 claim 全部綁同一個 work id 且該卡在 spine 上仍活著（main 樹是所有 session 共用，claim 不算證據）。不成立就不 link、stderr 印 `flow link` 手動指令；`--no-parent` 明確不 link。
 
 `done` 之後又出現新 span → 回 `in-flight`。那是驗收退回重做的自然表達，**NEVER** 為此新增 reopen 事件。
 
@@ -77,7 +81,7 @@ paths:
 | 入口 | 鑄名者 | fail 姿勢 |
 | --- | --- | --- |
 | `/handoff relay` / `fanout` | 不鑄，繼承 env；無 ambient 時 adapter 用 label 降級鑄名 | fail-open |
-| `/wt`（`wt-helper add`） | 用必填 `--task-summary` 鑄名並印 `export CLADE_WORK_ID=…` | fail-open |
+| `wt`（`wt-helper add`） | 用必填 `--task-summary` 鑄名並印 `export CLADE_WORK_ID=…` | fail-open |
 | `notion-hub` 認領客戶票 | 每一張認領的 ticket 都鑄一個，`origin_ref: notion:<uuid>`——不是只處理第一張 | fail-open |
 | `notion-sync.ts file`（工程師發現即建票） | 建票後由 script 自己 `flow open --origin notion:<uuid>` 並把 work_id 寫回票的 `Work ID` | fail-closed：票已建但 flow open 失敗 → 印出補跑指令 |
 | `notion-hub` 問客戶 | 已有 work item 就沿用；沒有就等客戶回覆後走認領客戶票那一列 | fail-open |
@@ -119,29 +123,50 @@ paths:
 
 ## 可重驗的驗收：`flow done --verify-cmd`
 
-`--verification '<摘要>'` 記的是「當時驗過了」；`--verify-cmd '<指令>'` 多留一條**現在還能再跑一次**的指令。帶了指令的完成宣稱，`flow sources --apply --reverify` 對帳時機器代跑一次：
+`--verification '<摘要>'` 記的是「當時驗過了」；`--verify-cmd '<指令>'` 多留一條**現在還能再跑一次**的指令。完成宣稱**預設要附可重驗證據**，由機器收；人只看要親眼看的畫面（Charles 2026-10-03）。宣告完成時依證據型別選一條：
+
+| 完成宣稱的證據 | `flow done` 帶什麼 | 誰收 |
+| --- | --- | --- |
+| PR merged／CI 綠／commit 在 main 上／檔案在 main 的樹裡 | `--verify-cmd 'flow check <kind> …'`（內建檢查，見下） | 機器：當場量＋每趟 `sources --apply` 重驗 |
+| 測試綠等其他唯讀指令 | `--verify-cmd '<任意唯讀 bash>'` | 機器，但只在 operator 帶 `--reverify` 的那趟 |
+| 只有 Charles 看得了／判得了（他的帳號或裝置、畫面品味） | `--human-review '<看什麼、在哪>'` ＋ `--human-only <理由>`（缺或不在清單就拒收；agent 從 loopback 驗得了的不算；`taste` 要帶存在的 `--evidence`，且 work 有 plan 驗收 feature 時改寫成 `@human` scenario 走 ui-judgement） | Charles（進 `flow pending` 預設佇列；機器 NEVER 代收） |
+| `notion:` origin | 照舊 | 客戶（見下一節） |
+| 只有散文 | 只有 `--verification` | 沒有人：歸 agent，`flow pending --audience all` 看得到；補上前兩列之一重新 `flow done` |
+
+內建檢查（`vendor/scripts/flow/verify-check.ts`；`flow check` 列出用法）：`pr-merged <N|owner/repo#N>`、`ci-green <N|owner/repo#N>`、`commit-landed <sha> [<ref>]`、`file-exists <path> [<ref>]`，可用 ` && ` 串接。它們是 clade 的程式碼、行程內執行、不經 shell，spine 上的字串只提供參數——所以例行對帳可以跑。squash merge 的 PR 用 `pr-merged`，**NEVER** 用 worktree 的 sha 寫 `commit-landed`（那個 sha 永遠不會進 main）。
+
+重驗結果：
 
 | 指令結果 | spine 落什麼 | 之後 |
 | --- | --- | --- |
 | exit 0 | `work.accept`（`accepted_by: 'machine-reverify'`、`actor: 'system'`） | 不再問人 |
 | exit ≠ 0（且不是 126/127、輸出不帶環境錯誤簽名） | `work.reopened`（`cause: 'evidence_insufficient'`，reason 帶 exit code 與輸出尾巴） | 回到 agent 手上修——NEVER 變成問人的卡 |
-| 跑不起來／逾時（126、127、spawn 失敗、signal、依賴沒裝、輸出帶環境錯誤簽名如 `command not found`／`Cannot find module`） | 什麼都不寫 | 照舊排驗收列問人。**判不出來 NEVER 翻成通過，也 NEVER 翻成沒過** |
+| 跑不起來／量不到（126、127、spawn 失敗、signal、依賴沒裝、環境錯誤簽名；內建檢查的 gh 沒登入、網路、CI 還在跑） | 什麼都不寫 | 留在 agent 側等下一趟。**判不出來 NEVER 翻成通過，也 NEVER 翻成沒過** |
 
+- **`flow done` 當場量內建檢查**：現在就不成立 → 拒收這次完成宣稱（證據成立後再宣告）；成立且是候選 → 同一條 machine-reverify 當場收下；量不到 → 照收，交給之後的對帳。內建檢查寫錯形狀（kind 打錯、參數不對、混了 shell 語法）→ 拒收，**NEVER** 退回當任意 bash。
 - **指令 MUST 唯讀**（唯讀檢查：測試、lint、`test -f`、`git status` 這類）。它會在 operator 的 repo root 原樣執行；寫東西、動服務、`rm` 一律 NEVER。
-- **執行是 opt-in**：`verify_cmd` 是 spine payload 裡的字串，任何能寫 spine 的 agent 都寫得進去，所以 `sources --apply` 預設**只列出不跑**，帶 `--reverify` 的那趟才真的執行。NEVER 讓例行對帳路徑（hook、cron、無 `--reverify` 的 `--apply`）執行這些指令。
+- **任意 bash 的執行是 opt-in**：`verify_cmd` 是 spine payload 裡的字串，任何能寫 spine 的 agent 都寫得進去，所以 `sources --apply` 對任意 bash 預設**只列出不跑**，帶 `--reverify` 的那趟才真的執行。NEVER 讓例行對帳路徑（hook、cron、無 `--reverify` 的 `--apply`）執行任意 bash；例行路徑只跑內建檢查。
 - **dry-run NEVER 跑指令**——dry-run 的承諾是什麼都不動。
 - 時限 120 秒，逾時歸「跑不起來」；同一宣稱（同 work_id＋done_ts＋指令）15 分鐘內不重跑（`.clade/flow/reverify-attempts.json` 退避窗，本機狀態，壞了只代表退避失效）。
-- **只有散文 verification 的件 NEVER 自動收**——猜一段話算不算「現在仍為真」正是這個設計要避免的事。
+- **只有散文 verification 的件 NEVER 自動收**——猜一段話算不算「現在仍為真」正是這個設計要避免的事。它們不進 Charles 的佇列，是因為球在 agent 手上（補證據），不是因為被收了。
+- **帶 `--human-review` 的件 NEVER 由機器收**：PR merged 只證明程式碼進了 main，不證明畫面對。
 - 寫裁決前重讀 spine：`done_ts` 變了（reopen／重新宣告）、dispatch 還在飛、或已不具候選資格 → 該輪不寫。NEVER 用「再跑一次指令」代替重讀。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | `flow done` 帶內建檢查且當場不成立 → 拒收（exit 1）；只帶散文 → stderr 一行提示、照收但歸 agent。重驗 exit 0 → `work.accept`、exit≠0 → `work.reopened` |
+| 消費端 | 打 `flow done` 的 agent（當下 stderr／拒收訊息）；`buildDecisionQueue`／`flow pending` 的驗收列分眾（`acceptAudienceOf`）；`flow sources --apply` 的重驗對帳 |
+| 觸發點 | 失敗輸出：`flow done` 的拒收訊息與散文提示印出 `--verify-cmd 'flow check …'`／`--human-review` 的改法；本節由 `paths:`（`vendor/scripts/flow/**`）帶入 |
 
 ## 驗收權歸實際擁有它的人
 
 | work 類型 | 驗收者 | 怎麼落 spine |
 | --- | --- | --- |
 | `notion:` origin | **客戶**（board 狀態欄本來就是他們的驗收介面） | `notion-hub` 對帳驗收讀到客戶側狀態進終態 → emit `work.accept {accepted_by: 'customer', reason: <狀態值>}` |
-| 其餘全部（`td:` / `tasks:` / `handoff:` / `im:`） | 人，經 `flow accept <id> --reason` | `reason` 必填 |
+| 帶 `--human-review` | 人（Charles），經 `flow accept <id> --reason` 或 `flow pending` 的驗收卡 | `reason` 必填 |
+| 其餘全部（`td:` / `tasks:` / `handoff:` / `im:`） | 機器重驗（上一節）或已出版的 landing 證據；只有散文的歸 agent 補證據 | `accepted_by: 'machine-reverify'`／landing |
 
-`work.accept` / `work.drop` **NEVER** 由 agent 代按（landing 證據自動 accept 見 [[decision-authoring]]）。
+`work.accept` / `work.drop` **NEVER** 由 agent 代按（landing 證據自動 accept 見 [[my]] 的 `rules/待拍板條目寫法.md` Rule 8；machine-reverify 見上一節）。這兩條是僅有的自動收路徑。
 
 ## spine 可信的是「發生過」，MUST 實跑的是「現在是」
 

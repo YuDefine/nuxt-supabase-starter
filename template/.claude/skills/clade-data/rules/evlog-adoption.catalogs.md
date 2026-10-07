@@ -6,7 +6,7 @@ paths:
   - 'specs/plans/*evlog*/**'
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/evlog/evlog-adoption.catalogs.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # evlog Adoption — Catalogs（全文）
 
@@ -45,7 +45,7 @@ paths:
 
 ### MUST NOT
 
-- **MUST NOT** 在 catalog prefix 加 consumer namespace（**禁止** `<consumer-b>.auth.X` / `<consumer-a>.billing.X`）— 破壞 cross-consumer 聚合語意
+- **MUST NOT** 在 catalog prefix 加 consumer namespace（**禁止** `<consumer>.auth.X` / `<consumer>.billing.X`）— 破壞 cross-consumer 聚合語意
 - **MUST NOT** 在測試檔 hard-code error code 字串（用 `errors.X.code` 或 `catalog.X.code`，否則 catalog 改名測試漏網）
 - **MUST NOT** 在 `declare module 'evlog'` 寫進 `*.test.ts` / `*.spec.ts`（測試檔的 augmentation 不會散播到 production type space，反而誤導 IDE）
 - **MUST NOT** 在 enricher 內 `throw billingErrors.X()`（enricher 失敗會破整個 wide event；catalog error 限 endpoint handler 層）

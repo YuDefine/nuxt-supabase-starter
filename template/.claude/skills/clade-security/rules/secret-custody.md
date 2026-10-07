@@ -1,5 +1,5 @@
 <!-- Clade native rule; source: rules/core/secret-custody.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Secret Custody（secret 值到手時的既定動作）
 

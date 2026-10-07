@@ -3,8 +3,8 @@ description: UX 完整性規則——定義 "feature complete"、強制列舉 us
 paths: ['tasks/**', 'specs/plans/**', 'app/**/*.vue', 'packages/*/app/**/*.vue', 'shared/types/**/*.ts', 'packages/*/shared/types/**/*.ts', 'supabase/migrations/**']
 ---
 <!-- Clade native rule; source: rules/core/ux-completeness.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
-<!-- clade-adapters: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
+<!-- clade-adapters: claude,codex -->
 
 # UX Completeness
 
@@ -92,7 +92,7 @@ paths: ['tasks/**', 'specs/plans/**', 'app/**/*.vue', 'packages/*/app/**/*.vue',
 - **Review tier**：Tier 1 / 2 / 3，決定後續 review、audit、screenshot review 強度
 - **Contract / failure paths**：success / empty / conflict / unauthorized / third-party fail 等要如何處理
 - **Test plan**：至少交代 unit / integration / e2e / screenshot / manual evidence 中哪些會做
-- **Artifact sync**：除了 code 外，`tasks.md`、`ROADMAP.md`、`HANDOFF.md`、`docs/tech-debt.md`、docs / reports 還要同步哪些
+- **Artifact sync**：除了 code 外，`tasks.md`、plan § Open work、`HANDOFF.md`（未遷移 consumer 另有 `ROADMAP.md`、`docs/tech-debt.md`）、docs / reports 還要同步哪些
 
 ### Scope-sensitive 要求
 
@@ -119,7 +119,7 @@ paths: ['tasks/**', 'specs/plans/**', 'app/**/*.vue', 'packages/*/app/**/*.vue',
 
 ## Route Coverage（write endpoint ↔ UI caller）
 
-API 做了但 UI 忘了呼叫 = feature 只交付一半。propose 階段的 `## Affected Entity Matrix` 每個 **write action**（create / update / delete / archive — 對應 POST / PATCH / PUT / DELETE）**MUST** 在 `## User Journeys` 有至少一個 journey 覆蓋該 action 的 UI 入口（按鈕、表單送出、swipe action 等）。
+API 做了但 UI 忘了呼叫 = feature 只交付一半。規劃階段（寫 plan package／tasks 時）的 `## Affected Entity Matrix` 每個 **write action**（create / update / delete / archive — 對應 POST / PATCH / PUT / DELETE）**MUST** 在 `## User Journeys` 有至少一個 journey 覆蓋該 action 的 UI 入口（按鈕、表單送出、swipe action 等）。
 
 Server-only 例外（**MUST** 在 action 列旁標 `server-only: <reason>`）：
 
@@ -343,7 +343,7 @@ function getBindingIcon(cardType: NfcCardType): string {
 | UI 檔編輯期間 | `capabilities/core/hooks/post-edit-ui-qa.sh`（PostToolUse） | 中途提醒 design / screenshot review，不要等到收尾才檢查 |
 | 交付人工檢查之前 | Design Gate（[[proactive-skills.design-checkpoint]] § Design Gate） | 缺設計審查證據的 UI 工作不得交付 |
 | 交付人工檢查之前 | `node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --require-empty`（cwd = consumer repo） | exit 3 才可把卡片交給 user，逐張列 family；exit 2 = 判不出來 |
-| 寫下任何 follow-up 註記的當下 | 在 `docs/tech-debt.md` 開 `TD-NNN` entry（[[follow-up-register]]） | 同一次編輯內完成 |
+| 寫下任何 follow-up 註記的當下 | 依 [[follow-up-register]] 登記（lifecycle repo：所屬 plan 的 § Open work；未遷移 consumer：`docs/tech-debt.md` 的 `TD-NNN` entry） | 同一次編輯內完成 |
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |

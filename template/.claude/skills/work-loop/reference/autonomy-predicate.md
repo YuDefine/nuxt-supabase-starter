@@ -45,7 +45,7 @@
 | --- | --- | --- |
 | 1 | **單 repo scope** | 條目文字不含其他 consumer 名（對照 `${CLADE_HOME:-$HOME/offline/clade}/registry/consumers.json` 的 `id` 清單）、不含「全 fleet」「所有 consumer」「散播」 |
 | 2 | **動標準層要走完整散播** | 落在 `rules/`、`capabilities/core/`、`CLAUDE.md`、`vendor/`（clade 端）或帶 `🔒 LOCKED` banner 的檔**可以改**，但 **MUST** 改完走 `/clade-publish` Step 1–9 散播完畢，**NEVER** 改完擱著。做不到就 packaging |
-| 3 | **不需開新 change** | 條目不含「需 propose」「要開 change」；且預估涉及檔案 ≤5、不動 schema / API / 行為契約 |
+| 3 | **不需開新 plan package** | 條目不含「需開 plan package」「要 `/specify`」；且預估涉及檔案 ≤5、不動 schema / API / 行為契約（舊條目寫「需 propose」「要開 change」視同需開 plan package；spectra change 已退役，**NEVER** 據此去開 spectra change 或請人授權 change 名稱） |
 | 4 | **可逆** | 產出落在 worktree branch、本 repo commit、或**可 revert + 重新 publish 的散播**。**不含**：prod 部署、刪除 branch / tag / 遠端資料、任何花錢的 API 呼叫、`--force` 類操作 |
 | 5 | **Actionability 足夠** | 通過 `rules/core/handoff.md` § Outstanding actionability hygiene——有 audit 來源 + 檔案 list + target 形狀 + scope boundary。**或**：缺的部分能靠一次唯讀調查補齊 |
 | 6 | **無決策標記** | `flow gates` 沒有它的 `ruling` 卡；文字不含指向 user 的問句、不含「拍板 / 決策 / confirm / 二選一 / A 或 B / 待 user」、未標 `@charles` |
@@ -86,7 +86,7 @@
 
 把 blocker 的**具體事實**查清楚，不是複述條目原文。至少要有：
 
-- 這條實際卡在什麼（缺決策 / 缺外部依賴 / 缺權限 / 規模需開 change）
+- 這條實際卡在什麼（缺決策 / 缺外部依賴 / 缺權限 / 規模需開 plan package）
 - 涉及的具體檔案路徑與行號
 - 已知的約束（既有 rule / spec / 上游 changelog 講了什麼）
 

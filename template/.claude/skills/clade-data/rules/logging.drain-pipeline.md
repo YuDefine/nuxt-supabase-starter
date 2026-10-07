@@ -7,7 +7,7 @@ paths:
   - 'packages/**/nuxt.config.ts'
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/evlog/logging.drain-pipeline.md; edit canonical source -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # Logging — Drain pipeline 與 enricher（全文）
 

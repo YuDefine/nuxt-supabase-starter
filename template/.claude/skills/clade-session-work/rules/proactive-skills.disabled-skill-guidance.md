@@ -13,7 +13,7 @@ paths:
 ---
 <!-- Clade native rule; source: rules/core/proactive-skills.disabled-skill-guidance.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 # 禁用 skill 的「不引導」義務
 

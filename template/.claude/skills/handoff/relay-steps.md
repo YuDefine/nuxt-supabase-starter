@@ -16,6 +16,14 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 | 1 | `relay` |
 | N ≥ 2 | `fanout`（見 [fanout-steps.md](fanout-steps.md)） |
 
+**被派出的 pane 先判這一題**（`CLADE_DISPATCH_ID` 非空、因 context 將盡要交棒）：
+
+| 可觀察 predicate | 動作 |
+| --- | --- |
+| 有 plan.md、主持者是活的（dispatch 有 parent pane、wake 能送達） | **NEVER** 自 relay。把進度寫回 plan.md § 進度、commit＋push，再 `--complete relay-request --plan <plan.md>`；主持者的 watch 收割本 pane（`harvest-relay`），以同 work id、同 worktree、plan 指針另開下一棒 |
+| helper 拒收並印 `self_relay`（沒有 parent pane、主持者冷或不在線）、沒有 plan.md、repo 有 push_hold、或本 session 是 Charles 自開 pane | 照本檔自 relay；brief 仍只寫 plan 指針與本棒差異 |
+| helper 拒收但沒印 `self_relay`（branch 沒 push、plan.md 沒變動） | 補齊材料（寫回 plan.md、commit＋push）再報一次，不改走自 relay |
+
 「1 件」包含**多件但彼此 serial** 的情況：動同一批檔、有 phase 依賴、共享 mutex 資源的工作 **MUST** 合併成一份 brief 走 relay，由 successor 依序推進，**NEVER** 拆成 N 個 worker 同時跑。
 
 本條是 [[agent-routing.dispatch-execution]] § 派多少 的實例。該節多管一種本條字面擋不住的形狀：把 serial 鏈切成「worker ＋ 主線自己留著後半段」——沒有第二個 worker，本條不會 fire。
@@ -29,7 +37,7 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 依 [dispatch-common.md](dispatch-common.md) § 2，**外加**兩項 relay 專屬內容：
 
 - brief **MUST** 寫明「你是繼任者，不是被派出去做一件子工作的 worker」，以及本 session 交棒的理由（context 耗盡／工作已全部移交）。
-- 本 session 若手上還有 in-flight dispatch，brief **MUST** 逐個列出它們的 dispatch id、在做什麼、預期什麼 outcome。helper 會把 coordinator 身分轉過去，但**它轉的是權限，不是脈絡**。
+- 本 session 若手上還有 in-flight dispatch，brief **MUST** 逐個列出它們的 dispatch id（指針即可）。在做什麼、預期什麼 outcome 已在 dispatch record（`label`、brief 路徑）與 flow，successor 依 id 自取；**NEVER** 在 brief 重述它們的脈絡或進度。
 
 ## 1.5 spine 收尾（ambient `CLADE_WORK_ID` 非空時 MUST，空則整步跳過）
 
@@ -67,7 +75,7 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts done "$CLADE_WORK_ID" \
 
 ⛔ **`<routing-model>` NEVER 是 `sonnet`**（依 [dispatch-common.md](dispatch-common.md) § 3.2）：successor 判「還是主線複雜度」就 `opus`；判「只值 sonnet 等級」則兩條都行——`--launcher grok --model grok-4.7 --effort xhigh` 把位置交給 Grok successor，或本 session 留著、把那件事用 Grok worker 派掉。`relay-continuity` 那道限制只綁 Pi，**NEVER** 讀成 grok 不能當 successor。
 
-⛔ **主持者交棒（brief 的 frontmatter 是 `coordinator_brief: successor`）只能 `--launcher cc|ccw --model opus --effort medium`**：Grok successor 與上一條的其他選項都不適用，helper 以 `usage_error` 拒（`coordinator` skill § 主持者的 model）。
+⛔ **主持者交棒（brief 的 frontmatter 是 `coordinator_brief: successor`）只能 `--launcher cc|cc2|cc3 --model opus --effort medium`**（`cc3`＝`~/.claude-3` 帳號，只限本機、不走額度 admission）：Grok successor 與上一條的其他選項都不適用，helper 以 `usage_error` 拒（`coordinator` skill § 主持者的 model）。
 
 ```bash
 node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \

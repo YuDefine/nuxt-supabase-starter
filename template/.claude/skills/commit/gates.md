@@ -1,7 +1,7 @@
 # Commit Quality Gates — Reference
 
 
-> 本檔是 commit skill 品質閘門的完整執行細節。主檔（SKILL.md）含流程概覽與 pointer；觸發特定 gate 時 MUST 先完整讀本檔對應 § 再繼續。
+> 本檔是 commit skill 品質閘門的完整執行細節。主檔（SKILL.md）只有步驟順序，各步判準在 `rules/`；觸發特定 gate 時 MUST 先完整讀本檔對應 § 再繼續。
 
 ## 受控交付的 evidence binding
 
@@ -15,7 +15,7 @@ Critical／Major 深度複審仍逐步執行。換 pane／另開 session 只是�
 
 ## § 0-Coord: Cross-Session Staged Pollution Detection
 
-`commit-lock` 只擋同時兩個 `/commit`；**不**擋「commit 跑時別 session 在跑 publish / propagate / wt-helper add / rescue-consumer」造成 staged 區意外污染（已實證 3 條 incident，見 `docs/pitfalls/2026-05-{14,18,22}-*.md`）。Step 0-Coord 跑 3 個 detection signal **warn-only**，命中先探測具體持有者、確認範圍與當前可用的協調通道；未解的決策才交給使用者。
+`commit-lock` 只擋同時兩個 `/commit`；**不**擋「commit 跑時別 session 在跑 publish / propagate / wt-helper add / rescue-consumer」造成 staged 區意外污染（2026-05-14／18／22 已實證 3 條 incident）。Step 0-Coord 跑 3 個 detection signal **warn-only**，命中先探測具體持有者、確認範圍與當前可用的協調通道；未解的決策才交給使用者。
 
 ### Signal 1: `.git/index.lock` mtime < 60 秒
 
@@ -38,17 +38,15 @@ fi
 
 ### Signal 2: publish.ts untracked stash sidecar
 
-`scripts/publish.ts` 的 `--stash-untracked` flow 跑時會在 `.spectra/stash-meta-<tag>.json` 落 sidecar（含 pid / cwd / fileList），publish 完成才 cleanup。看到 sidecar 代表 publish 流程**還在跑或崩潰未收尾**。
+`scripts/publish.ts` 的 `--stash-untracked` flow 跑時會在 `.clade/stash/stash-meta-<tag>.json` 落 sidecar（舊落點 `.spectra/` 過渡期仍掃）（含 pid / cwd / fileList），publish 完成才 cleanup。看到 sidecar 代表 publish 流程**還在跑或崩潰未收尾**。
 
 ```bash
 REPO_ROOT=$(git rev-parse --show-toplevel)
-SIDECARS=("$REPO_ROOT"/.spectra/stash-meta-*.json)
-if [[ -f "${SIDECARS[0]}" ]]; then
-  for f in "${SIDECARS[@]}"; do
-    [[ -f "$f" ]] || continue
-    echo "SIGNAL_2_HIT: publish stash sidecar=$f"
-  done
-fi
+SIDECARS=("$REPO_ROOT"/.clade/stash/stash-meta-*.json "$REPO_ROOT"/.spectra/stash-meta-*.json)
+for f in "${SIDECARS[@]}"; do
+  [[ -f "$f" ]] || continue
+  echo "SIGNAL_2_HIT: publish stash sidecar=$f"
+done
 ```
 
 **解讀**：任一 sidecar 存在 → 別 session 的 publish flow 仍未收尾；commit 時若擴大 staging 範圍可能跟 publish 的 auto-stash pop 撞 conflict。
@@ -88,7 +86,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 建議處置（mitigation hint）：
   1. 等 60 秒後重跑 /commit（最常見：別 session 馬上結束就乾淨了）
-  2. 跑 git status / git stash list / ls .spectra/ 確認別 session 真實狀態
+  2. 跑 git status / git stash list / ls .clade/stash/ 確認別 session 真實狀態
   3. 確認別 session 沒在跑後再繼續
 ```
 
@@ -132,11 +130,10 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
    ```bash
    { git diff --name-only HEAD; git ls-files --others --exclude-standard; } \
-     | grep -E '^(tasks/[^/]+\.md|specs/plans/[^/]+/tasks\.md)$' \
-     | sort -u
+     | node ~/offline/clade/vendor/scripts/commit-mr-gate.ts extract
    ```
 
-   結果為空 → 輸出 `⏭️ 0-MR 跳過（本次變更未觸及任何進行中的 work item carrier）`，進入 Step 0。
+   `extract` 認 `tasks/<X>.md`、`specs/plans/<X>/tasks.md`、`docs/plans/<X>/tasks.md`，與 step 6 `intersect` 接受的 carrier 前綴同源（**NEVER** 在流程裡另寫一份 grep pattern）。結果為空 → 輸出 `⏭️ 0-MR 跳過（本次變更未觸及任何進行中的 work item carrier）`，進入 Step 0。
 
 3. **批次 integration 直接進 step 4**，不得因來源未 land 而 SKIP；普通 main 模式才依下列規則查來源：
 
@@ -196,7 +193,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
       node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --require-empty
       ```
 
-      - **exit 3** → 改跑 `--json`，輸出 `✅ 0-MR auto-triage 完成，等人 <N> 張`，逐張列 family ＋ 判斷題，釋放 lock
+      - **exit 3** → 改跑 `--json`，輸出 `✅ 0-MR auto-triage 完成，等人 <N> 張`，逐張列 family ＋ 判斷題，釋放 lock。要讀 diff 才能判的那幾張，照 [[my]] 的 `rules/待拍板條目寫法.md` Rule 22 各附一行閱讀指令
       - **exit 0** → 沒有任何卡片，但 blocker 仍在 → 剩下的若是 evidence 已齊的 `[review:ui]` 或已有 `(verified-ui:)` 的 `[verify:ui]` leaf，釋放 lock 並在 chat 逐項交給 user（[[proactive-skills.manual-review-entry]] 第 4 步）；其餘是主線的球：繼續 auto-triage，或釋放 lock ＋ 如實報告卡在哪幾個 leaf
       - **exit 2** → 釋放 lock，回報判不出來的原因
 
@@ -204,27 +201,29 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
    3. **NEVER** 自動勾任何 `[review:ui]` 的 `- [ ]`、**NEVER** 提議跳過 gate、**NEVER** 提議 stash 走 `tasks.md`
 
-6. **批次模式** auto-triage 後仍有 blocker → 保留 integration 與全部來源，停止 seal／land；修復後重驗。單成員／獨立 workId 的 Charles-only leftover 只停該來源：`batch yield-blocked` 讓出 active slot，**NEVER** 凍結其他獨立切片。合批內一成員 blocked 則整批不落地；要讓其他成員先走必須 cancel 後重組，不能切掉幾個 artifacts 卻帶走該來源 code。需排除未就緒來源時 cancel 後重登記合格來源再 prepare。**普通 main 模式** auto-triage 跑完後 blocker list 仍非空 → 把每件 BLOCK 工作的 carrier 路徑（`tasks/<X>.md`，或整個 `specs/plans/<X>/**`）記為 **withheld scope**，輸出 `⏸️ 0-MR 保留 <X>（pending=<n>；withheld: <carrier 路徑>）`，**進入 Step 0**（不是停下）。withheld scope 由後面兩步消費：
+6. **批次模式** auto-triage 後仍有 blocker → 保留 integration 與全部來源，停止 seal／land；修復後重驗。單成員／獨立 workId 的 Charles-only leftover 只停該來源：`batch yield-blocked` 讓出 active slot，**NEVER** 凍結其他獨立切片。合批內一成員 blocked 則整批不落地；要讓其他成員先走必須 cancel 後重組，不能切掉幾個 artifacts 卻帶走該來源 code。需排除未就緒來源時 cancel 後重登記合格來源再 prepare。**普通 main 模式** auto-triage 跑完後 blocker list 仍非空 → 把每件 BLOCK 工作的 carrier 路徑（`tasks/<X>.md`，或整個 `specs/plans/<X>/**`／`docs/plans/<X>/**`）記為 **withheld scope**，輸出 `⏸️ 0-MR 保留 <X>（pending=<n>；withheld: <carrier 路徑>）`，**進入 Step 0**（不是停下）。withheld scope 由後面兩步消費：
 
    - **Step 3 分組**：withheld scope 內的路徑不進任何 group（分組唯一的機械排除）。它們留在 working tree，Step 5-A 照「仍有 uncommitted 變更」登記進 HANDOFF，並寫明卡在哪件工作的哪幾個 leaf。
    - **Step 4 每個 group commit 前**：
 
      ```bash
      node ~/offline/clade/vendor/scripts/commit-mr-gate.ts intersect \
-       --block <X> [--block <Y>] -- <該 group 的 pathspec>
+       --block <carrier X> [--block <carrier Y>] -- <該 group 的 pathspec>
      ```
+
+     `--block` 傳 withheld carrier 路徑（`tasks/<date>-<slug>.md`、`specs/plans/<slug>` 或 `docs/plans/<slug>`，結尾 `/**` 會剝掉），**不是**工作名 slug；非 carrier 形狀 helper 以 exit 2 拒收。
 
      exit 0 → 該 group 照常 `git commit --only -- <pathspec>`。exit 1 → stdout 列出的路徑落在 withheld scope，**該 group NEVER commit**；把那些路徑移出 group 後重跑，剩餘路徑才 commit。stdout 印 `pathspec-empty`（`--` 後沒有路徑，等同不帶 `--only` 的 `git commit -a`）→ 整個 dirty set 視為交集，**NEVER** 放行。
 
-     **pathspec 只接受具名檔或該 plan package 目錄以下的路徑。** withheld 路徑的祖先目錄（`.`、`tasks`、`specs`、`specs/plans`，含尾斜線、含 `..`）、含 glob 字元 `* ? [`、以 `:` 開頭的 pathspec magic、絕對路徑，這四種會讓 git 把 withheld 檔一起收進 commit，helper 判定不了就一律視為交集（stdout 印該路徑、stderr 印 `pathspec-<ancestor|glob|magic|absolute>`，exit 1）。把 group 的 pathspec 改寫成逐一具名檔再重跑，**NEVER** 用 `-- .` / `-- tasks` 這種寫法「一次帶出」。
+     **pathspec 只接受具名檔或該 plan package 目錄以下的路徑。** withheld 路徑的祖先目錄（`.`、`tasks`、`specs`、`specs/plans`、`docs`、`docs/plans`，含尾斜線、含 `..`）、含 glob 字元 `* ? [`、以 `:` 開頭的 pathspec magic、絕對路徑，這四種會讓 git 把 withheld 檔一起收進 commit，helper 判定不了就一律視為交集（stdout 印該路徑、stderr 印 `pathspec-<ancestor|glob|magic|absolute>`，exit 1）。把 group 的 pathspec 改寫成逐一具名檔再重跑，**NEVER** 用 `-- .` / `-- tasks` 這種寫法「一次帶出」。
 
    blocker list 空 → 輸出 `✅ 0-MR 通過`，進入 Step 0。
 
 ### 判定粒度：pathspec 交集，不是 repo 級 freeze（TD-897）
 
-批次來源已完成必要驗收才入 ready；integration 在 main 落地前再走本 gate。Blocker 會保留整批，不以 pathspec 切除 carrier 後放行來源 code。普通 main 的歷史存量仍用 pathspec 交集，避免無關工作的 carrier 狀態連坐其他工作。每筆正式 commit 依 SKILL.md Step 4 使用具名 pathspec。
+批次來源已完成必要驗收才入 ready；integration 在 main 落地前再走本 gate。Blocker 會保留整批，不以 pathspec 切除 carrier 後放行來源 code。普通 main 的歷史存量仍用 pathspec 交集，避免無關工作的 carrier 狀態連坐其他工作。每筆正式 commit 依 `rules/分組與提交判準.md`（Step 4）使用具名 pathspec。
 
-實證（<consumer-a> 2026-09-03）：三件工作實作已 land、worktree 已 cleanup，人工檢查各剩 4–6 個 user-bound leaf（LINE LIFF 實機、production APPLY 授權）。repo 級 freeze 下 main 上任何 `/commit` 都落不了地，被連坐的是 `scripts/ai-control-plane/phase-6a-gate5-driver.ts` 這類與三件工作無關的檔。pathspec 交集下同一個 dirty set：三件工作的 carrier 被 withheld、其餘 group 照常 commit，三件工作的 auto-triage 一樣跑、一條 item 沒少。
+實證（某 consumer 2026-09-03）：三件工作實作已 land、worktree 已 cleanup，人工檢查各剩 4–6 個 user-bound leaf（LINE LIFF 實機、production APPLY 授權）。repo 級 freeze 下 main 上任何 `/commit` 都落不了地，被連坐的是 `scripts/ai-control-plane/phase-6a-gate5-driver.ts` 這類與三件工作無關的檔。pathspec 交集下同一個 dirty set：三件工作的 carrier 被 withheld、其餘 group 照常 commit，三件工作的 auto-triage 一樣跑、一條 item 沒少。
 
 普通 main 的 withheld scope 只認 carrier 路徑，不另建 work→實作檔平行索引。批次來源映射由固定 members 與 source HEAD 承載，未通過不能 seal／land。
 
@@ -286,7 +285,7 @@ node --experimental-strip-types "$CLADE_ROOT/vendor/scripts/security-precommit.t
 
 High / Critical finding → 停止本次 commit。每一條 **MUST** 先走 `security-evidence finding`
 （Severity / Confidence / Coverage / Proof Gap 判讀），verdict 是 `accept` 或
-`needs more validation` 才登 TD 並修；`unsupported` 記進 report 不修。
+`needs more validation` 才登記 follow-up（有 `specs/truth/work-lifecycle.md` 的 repo 寫 plan Open work，未遷移 consumer 才登 TD）並修；`unsupported` 記進 report 不修。
 **NEVER** 看到 High 標籤就直接改 code。
 
 ### 0-S.3 Codex Security：**NEVER** 在 pre-commit
@@ -301,8 +300,8 @@ High / Critical finding → 停止本次 commit。每一條 **MUST** 先走 `sec
 | 觀察 | 數字 |
 | --- | --- |
 | clade 唯一成功（分母收斂到 5） | 37m05s / $24.58 / 31.4M input token / 0 findings |
-| <consumer-a>（分母沒收斂：14 檔請求 → 6,330） | $15 只推進 22/6,330，線性外推整個 repo ≈ $4,300 USD |
-| <consumer-b> / <consumer-a> 合計 | 16 次，0 次成功 |
+| 另一個 consumer（分母沒收斂：14 檔請求 → 6,330） | $15 只推進 22/6,330，線性外推整個 repo ≈ $4,300 USD |
+| 兩個 consumer 合計 | 16 次，0 次成功 |
 
 **NEVER** 用「拉高 `--max-cost`」或「改排在 nightly」處理跑不完——兩者都建立在
 「成本可預估」的前提上，而分母沒收斂時那個前提不成立。
@@ -342,13 +341,43 @@ gate 自己的可用度跑 `node scripts/audit-security-gate-readiness.ts`（war
 3. 0-A.1 出 Critical／Major 時，修正後進 0-A.2 深度 review——同一席（Opus 5.5 medium）以新的 fresh context 對修復後 snapshot 再審一輪。
 4. Findings 由主線匯合、查證與修正；各軸的背景 reviewer 不同時寫受審檔。
 
+0-A 等待期間 NEVER 編輯受審 changeset 內的檔；可觀察後果是逐檔內容／HEAD／mode 不符 → exit 6 重跑。
+受審集外變動只具名 warn，不能因此把外來 WIP 一起 stage。wrapper 每次保留逐檔 immutable receipt；
+只有完整 scope、無 Critical／Major 且輪數 ledger 通過時，才把有效 24 小時的 active
+基線登記在本 worktree 的 git dir，綁定審查 session；有該 session 的 commit lock 時另綁其 owner token。
+審查 session 的身分依序取自 `COMMIT_RUNTIME`+`COMMIT_SESSION_ID`、`CLAUDE_CODE_SESSION_ID`、
+`CODEX_THREAD_ID`、`CLADE_DEVIN_SESSION_ID`、`CLADE_DISPATCH_SESSION_ID`；全部缺席時基線
+綁不到 owner，wrapper 不安裝 active guard（未綁定的基線會對所有 commit 生效 24h），
+verdict 與 immutable receipt 不受影響。
+其他 session 與無 session 的自動化 commit 不受此 guard 影響，也不消耗 owner 的基線。
+pre-commit hook 對 owner 只驗 `staged ⊆ 受審集`，
+以及每個 staged entry 的內容與 mode 等於受審版本；不驗 worktree 或 HEAD 的逐路徑漂移。
+未 staged 的 baseline 路徑即使含外來 WIP 並再次改動，也不阻擋本組 commit。
+超集、內容不符、基線到期或讀不到即 abort。post-commit 只消耗已提交的受審路徑，支援逐組 commit；
+`STAGING_BASELINE:` 的 immutable receipt 不改寫。合法 fast-path 沒有新 review 基線。
+最後一組 commit 落地後，依 `rules/分組與提交判準.md`（Step 4）Rule 6 的 `complete --reason` 正常收尾，
+釋放未提交的外來 WIP 並保留 closure receipt；commit lock 釋放或換代也使該次 guard 自動失效。
+取消 changeset、要提交修訂後的受審內容、approval 到期或 post-commit 失敗時，用下列命令結束 active guard；
+它保留原基線與具名原因的 closure receipt，並使原 approval 失效。修訂後仍需重新 review，
+NEVER 手動刪基線或把 release 當成品質 gate 通過。
+
+```bash
+node "$CLADE_HOME/vendor/scripts/lib/review-integrity-scope.ts" release \
+  --repo "$REPO_ROOT" \
+  --baseline "$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-path clade-review-integrity.json)" \
+  --reason '<取消／修訂／到期／post-commit 失敗的具體原因>'
+```
+
+Consumer 自家的 runtime settings、local rules、hooks、composite actions 與 nested vendor
+必須納入 review；投影排除使用 repo-aware ownership 判斷，混住目錄另驗 frozen blob 的 LOCKED banner。
+
 ### 0-A.0 — simplify（主線，永遠先跑）
 
 對本次變更檢查 reuse、精簡、效率與抽象層次，完成必要修正後再凍結 review snapshot。當前入口提供已安裝 `simplify` skill 時由主線直接呼叫；缺少原生 invocation API 時讀取可用技能全文依其契約執行，沒有技能時由主線明確覆核上述四軸並記錄結果。不虛構 `Skill` 工具或宣稱呼叫過未執行的技能。
 
 技能內部的委派仍受當前 routing 與授權約束；主線不外包一層只為重新呼叫同一技能，也不手抄其 fan-out 結構。收到結果後只摘要修正與 deferred 項，deferred 依來源 repo 的 HANDOFF 契約登記，立即判 fast-path／啟動下一步，不等使用者重複授權。不轉貼整份中間報告。
 
-Fast-path 的三條件以 SKILL.md 的同一份定義為準：diff <20 行、只含允許的 doc/config、無敏感路徑，三條全中才能跳過 0-A.1／0-A.2；0-A.0、0-B 的觸發判定與 0-C 仍執行。
+Fast-path 的三條件以 `rules/品質檢查判準.md` Rule 3 的同一份定義為準：diff <20 行、只含允許的 doc/config、無敏感路徑，三條全中才能跳過 0-A.1／0-A.2；0-A.0、0-B 的觸發判定與 0-C 仍執行。
 
 ### 0-A.1 — 獨立 review（並行軸 A）
 
@@ -385,7 +414,7 @@ exit code 與 Herdr carrier 同一張表（下表各列照用；4／10／11 是�
 | Scope 缺檔／截斷、缺 verdict／Semantic Verdict id、workspace 綁定失敗 | 對應範圍未被完整 review；修復取證後再執行，不能記 PASS |
 | Snapshot 漂移／不明 mutation | 先查具體 diff 與歸屬；已確認為合法並行工作可移至隔離 fixture 後重跑，不明或非預期 mutation 保留現場並處理授權，不自動覆寫 |
 | exit 13（輪數 ledger：此內容已有 verdict，或上一輪通過且之後的增量未達重驗門檻） | 不是 reviewer 不可用：RESULT 行是「不需再審」→ 0-A 證據沿用它指名的那一輪，照常推進；RESULT 行是「已審過且有 Critical／Major」→ 0-A 未通過，修完換內容再審（同內容重擲不產生新證據） |
-| exit 14（輪數上限：同一份改動第 4 輪） | review 沒跑、gate 未完成：拆成可獨立驗收的範圍，或把最後一輪 verdict 交人判；NEVER 刪改 ledger、換 branch 或 rebase 重置輪數 |
+| exit 14（輪數上限：同一份改動第 6 輪） | review 沒跑、gate 未完成：拆成可獨立驗收的範圍，或把最後一輪 verdict 交人判；NEVER 刪改 ledger、換 branch 或 rebase 重置輪數 |
 | 完整結果，無 issue | 0-A.1 通過，0-A.2 不觸發 |
 | 只有 Minor／Info | 逐項修復並驗證，0-A.2 不觸發 |
 | 含 Critical／Major | 逐項修復後進 0-A.2；修法本身是新的受審範圍 |
@@ -419,7 +448,7 @@ PRE-EXISTING — 未觸碰：<file>:<line>（舉證本次 diff 不含此檔／�
 
 兩條舉證缺一不可：只證「沒碰到」不夠——本次變更可能讓一條原本走不到的舊路徑變成熱路徑；只證「無因果」也不夠——那是純舊碼判定的結論，不是它的前提。
 
-登記走 `docs/tech-debt.md` 開 TD（跨 session 要追）或 `HANDOFF.md`（下一 session 就會碰），**NEVER** 只在 chat 講一句。「已經跟 user 說了」不算登記——chat 不是 session 之間的傳遞介面。
+登記走承載它的 plan 的 Open work（跨 session 要追；沒有 `specs/truth/work-lifecycle.md` 的 consumer 才在 `docs/tech-debt.md` 開 TD）或 `HANDOFF.md`（下一 session 就會碰），**NEVER** 只在 chat 講一句。「已經跟 user 說了」不算登記——chat 不是 session 之間的傳遞介面。
 
 ### 0-A.2 — 深度 review（條件觸發）
 
@@ -438,11 +467,11 @@ DISMISSED — 反證：<file>:<line> ／ <契約或規則條文的具體出處>
 
 先驗每條反證再判通過。無反證的 dismissal 保留為 real issue，沿原 severity 處理；模型／effort 的名稱不能代替查證。有 real issue 時主線修復並跑相關驗證；無 real issue 或全部有反證時完成該階段。
 
-**輪數上限由 wrapper 執行**（working tree 以 HEAD、PR 以 branch 上的同一張 PR（PR 號）為一份改動；最多 3 輪，第 4 輪 exit 14）——判定表在 `scripts/lib/review-common.sh` § 0-A 輪數 ledger。帶 `--include`／`--exclude` 篩選的輪只是部分審查，收齊也不算 0-A 通過。
+**輪數上限由 wrapper 執行**（working tree 以 HEAD、PR 以 branch 上的同一張 PR（PR 號）為一份改動；最多 5 輪，第 6 輪 exit 14）——判定表在 `scripts/lib/review-common.sh` § 0-A 輪數 ledger。帶 `--include`／`--exclude` 篩選的輪只是部分審查，收齊也不算 0-A 通過。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | 同一份改動已有 verdict 的內容再審、或上一輪通過後增量 ≤50 行且 <5 檔 → exit 13；第 4 輪 → exit 14 拒跑 |
+| 觸發條件 | 同一份改動已有 verdict 的內容再審、或上一輪通過後增量 ≤50 行且 <5 檔 → exit 13；第 6 輪 → exit 14 拒跑 |
 | 消費端 | 跑 0-A 的主線（上方 exit 表）；coordinator `oa-batches.ts prepare`（切批前判輪）與 `merge-queue.ts`（合併前查 `rounds passed`） |
 | 觸發點 | 本節（commit skill `gates.md` § 0-A，每次 0-A 必讀） |
 
@@ -470,7 +499,11 @@ Fast-path 不填未執行的 reviewer；`escalated` 的 `--reviewer` 記實際�
 
 **未完成的 gate 不產生通過匯合行，也不進 commit。** Reviewer 不可用、配額不足、缺隔離／身份／完整輸出都不能以主線自審或其他模型補位。發現自己正用「另一個 fresh agent」代替合格 reviewer、或用啟動成功代替完成，就是回上表補證據的時刻。
 
-Heavy gate 的 `exit 75` 代表 `gate-slot.sh` 等不到 slot、inner command 尚未執行；不是 typecheck／OOM 的證據。依 [[pitfall-heavy-gate-exit-75-reads-as-typecheck-failure]] 查實際 holder 與執行輸出，不能用增大 heap 或等待參數修錯層。
+Heavy gate 的 `exit 75` 代表 `gate-slot.sh` 拿不到 slot、inner command 沒跑：`try` 模式（post-edit hook）取不到 repo lock 或 slot 就**立刻** 75；`wait` 模式（pre-push、手動 typecheck）等滿 `CLADE_GATE_WAIT_TIMEOUT`（預設 3600s，值非數字時退回 1800s；以 `gate-slot.sh` 的 `WAIT_TIMEOUT=` 那行為準，檔頭註解的 1800 已過時）才 75。兩者都不是 typecheck／OOM 的證據，不能用增大 heap 或等待參數修錯層。依序查：
+
+1. `pnpm typecheck 2>&1 | grep -c "error TS"` 非 0 才是真型別錯
+2. `bash scripts/gate-slot.sh status`（clade home 是 `vendor/scripts/gate-slot.sh`）找 holder——它用持鎖時同一套 lock 目錄解析（`CLADE_GATE_LOCK_DIR` → `$XDG_RUNTIME_DIR` → `/run/user/<uid>` → `/tmp`），逐行印 `pid`／`etime`。**NEVER** 自己拼 `${XDG_RUNTIME_DIR:-/tmp}` 去 `fuser`：service／daemon 情境沒有 XDG，那個路徑會落在 slot 實際不在的 `/tmp`，被讀成「沒有 holder」
+3. `ps -o pid,ppid,etime,time -p <pid>`：elapsed 以小時計、CPU time 只有數十秒、PPID=1 = 死 session 留下的孤兒，`kill` 後 lock 隨 fd 釋放
 
 ---
 
@@ -483,7 +516,7 @@ Heavy gate 的 `exit 75` 代表 `gate-slot.sh` 等不到 slot、inner command �
 **觸發**：候選中有 UI 檔（`.vue`、`.css`／`.scss`、`.html`、`.tsx`／`.jsx`，含 untracked 新增），且該檔所屬 package／app 或其祖先目錄（含 repo 根）有 `PRODUCT.md`、`DESIGN.md` 或 `.impeccable/config.json` 任一採用標記。每個 UI 檔獨立判定；兄弟 package 的標記不算。只有副檔名命中、沒有適用標記的 UI 檔，記 `⏭️ 0-B.1 跳過（未採用 impeccable）`；不得因缺 launcher 永久擋住它。已採用但 launcher 缺失才是安裝 blocker。
 
 ```bash
-# 從 repo 根執行；worktree 的 skill 投影可能未版控，依序查三端投影、
+# 從 repo 根執行；worktree 的 skill 投影可能未版控，依序查兩端投影、
 # linked worktree 的 common Git dir 所在主 checkout，以及安裝於 user home 的 skill。
 ROOT=$(git rev-parse --show-toplevel)
 COMMON=$(git rev-parse --path-format=absolute --git-common-dir)
@@ -491,7 +524,6 @@ IMP=
 for candidate in \
   "$ROOT/.claude/skills/impeccable/scripts/impeccable" \
   "$ROOT/.agents/skills/impeccable/scripts/impeccable" \
-  "$ROOT/.cursor/skills/impeccable/scripts/impeccable" \
   "$(dirname "$COMMON")/.claude/skills/impeccable/scripts/impeccable" \
   "$HOME/.claude/skills/impeccable/scripts/impeccable"; do
   if [ -x "$candidate" ]; then IMP=$candidate; break; fi
@@ -584,31 +616,58 @@ printf '%s\0' "${CHANGED[@]}" | grep -zE '(^|/)DESIGN\.md$' || true
 
 **並行啟動**：0-A.1 的 snapshot 已凍結且有可收回的背景 handle 時，同回合啟動 0-C；各軸回報後匯合。缺非同步能力時依 review-policy 的同步執行契約，所有檢查仍要完成。
 
-**在 primary checkout 以外跑 0-C 時（隔離發版 worktree、batch 整合區），先讓那棵樹具備測試環境，再跑**：worktree 一律由 `/wt`（`wt-helper add`）建立，它會跑 consumer 的 env／DB bootstrap。**NEVER** 用裸 `git worktree add` 建要跑 0-C 的樹：gitignored 的 `.env*` 不會跟過去，per-worktree DB clone 也不會建立，整合測試會以「環境錯誤」大量失敗。也 **NEVER** 從 primary checkout 複製 `.env.local`，它的 managed DB block 指向 primary 自己的 clone。self-hosted Supabase consumer 的 DB 在遠端 LXC，desk 上 **NEVER** `supabase start`，拓樸與 reset 路徑見 `clade-data` skill 的 `db-topology-invariant`。已經手動建好的樹，照 consumer 的 bootstrap 補建（<consumer-b>：`node scripts/wt-env-bootstrap.ts ensure --worktree <abs>`，分支要符合 `session/YYYY-MM-DD-HHMM-<slug>`）。同一棵樹的 `pnpm check` 與 `pnpm test` **NEVER** 平行跑：check 裡的 lint／prepare 會觸發 postinstall 並重建 `.nuxt/`，同時進行的 test 會出現 `TSCONFIG_ERROR` 假失敗。
+**在 primary checkout 以外跑 0-C 時（隔離發版 worktree、batch 整合區），先讓那棵樹具備測試環境，再跑**：worktree 一律交 `wt` 建立（底層是 `wt-helper add`），它會跑 consumer 的 env／DB bootstrap。**NEVER** 用裸 `git worktree add` 建要跑 0-C 的樹：gitignored 的 `.env*` 不會跟過去，per-worktree DB clone 也不會建立，整合測試會以「環境錯誤」大量失敗。也 **NEVER** 從 primary checkout 複製 `.env.local`，它的 managed DB block 指向 primary 自己的 clone。self-hosted Supabase consumer 的 DB 在遠端 LXC，desk 上 **NEVER** `supabase start`，拓樸與 reset 路徑見 `clade-data` skill 的 `db-topology-invariant`。已經手動建好的樹，照 consumer 的 bootstrap 補建（例：`node scripts/wt-env-bootstrap.ts ensure --worktree <abs>`，分支要符合 `session/YYYY-MM-DD-HHMM-<slug>`）。同一棵樹的 `pnpm check` 與 `pnpm test` **NEVER** 平行跑：check 裡的 lint／prepare 會觸發 postinstall 並重建 `.nuxt/`，同時進行的 test 會出現 `TSCONFIG_ERROR` 假失敗。
 
-跑下列指令確保 **format / lint / typecheck / test / doctor 全部 0 errors + 0 warnings + 0 test failures**：
+**repo 的 `package.json` `scripts.verify` 指向 gate 收據入口（指令含 `gate-receipt-run-all`；clade 的 `pnpm verify`，T3a／PR #517）時，0-C 的 check／測試／doctor 走這一個入口**，不逐條手打。沒有這支入口的 repo——包含 `verify` 另有他用、或只有 `verify:<別的>` 的 repo——照下方逐條指令跑，行為不變：
+
+```bash
+if node -e "process.exit(/gate-receipt-run-all/.test(require('./package.json').scripts?.verify??'')?0:1)"; then
+  pnpm verify              # check → test:affected → doctor，預設序跑
+fi
+```
+
+- **沿用收據**：`pnpm check`、`pnpm test:affected`（不帶額外參數）、`pnpm run doctor` 綠燈後各留一張 24 小時的本機收據，鍵是 worktree 的 Git blob hash、選中的 affected 測試與其觀測依賴、gate 實作與設定、gate 名、Node 版本。同一內容重跑同一 gate 會印 `沿用收據 <key>（<時間>、<秒數> 秒）` 並 exit 0——**這一行就是該 gate 的通過證據**，照貼即可。內容、依賴或 gate 設定一變收據就不命中、自動實跑，所以收據只對產生它的那份內容有效，不必為了「保險」例行加 `--no-receipt`。
+- **強制實跑**：`pnpm verify --no-receipt` 或 `CLADE_GATE_NO_RECEIPT=1`。`CI=true` 永遠實跑，CI 不認本機收據；本機收據也不取代 PR CI 的廣範圍回歸。
+- **平行入口**：`pnpm verify --parallel` 三個 gate 同時跑。預設序跑，是因為共享主機的 gate slot 下平行實測比序跑慢（PR #517 量測）；只在 slot 空閒、要壓縮等待時用。下面「同一棵樹的 `pnpm check` 與 `pnpm test` **NEVER** 平行跑」管的是**手動**並行；`--parallel` 是收據入口自己提供的平行模式，沒有這支入口的 repo 沒有這條路。
+- **失敗輸出**：每個 gate 的完整 log 在 `~/.cache/clade/gate-logs/`；終端每個 gate 一行摘要，失敗的 gate 印 log 路徑與最後 40 行。任一 gate 失敗整體非 0，照本節 fix-verify loop 修完重跑（修過的內容收據不命中，會實跑）。
+- `verify` 跑的仍是下列同一組 gate，本節其餘判準（`test:affected` 判讀、doctor 必裝與零警告、派工 worker 的測試命令）逐條照舊。
+
+沒有收據入口時，跑下列指令確保 **format / lint / typecheck / test / doctor 全部 0 errors + 0 warnings + 0 test failures**：
 
 ```bash
 pnpm check
 ```
 
-**同一次 commit 已經被 CI-only 失敗打回過第二次**時，別再逐發修——**MUST** 讀 `~/offline/clade/vendor/snippets/ci-parity/`，它有本機重現 CI 條件的 checklist 與兩個 consumer 的實際 churn 案例（<consumer-b> 曾為此連發六個修復 commit）。
+**同一次 commit 已經被 CI-only 失敗打回過第二次**時，別再逐發修——**MUST** 讀 `~/offline/clade/vendor/snippets/ci-parity/`，它有本機重現 CI 條件的 checklist 與兩個 consumer 的實際 churn 案例（某 consumer 曾為此連發六個修復 commit）。
 
-**接著無條件跑一次測試**（多數 consumer 的 `check` 只有 format/lint/typecheck，**CI 才跑完整 test**，本地不補跑就會在 push 後才看到測試失敗）：
+**接著無條件跑一次測試**（多數 consumer 的 `check` 只有 format/lint/typecheck，**CI 才跑完整 test**，本地不補跑就會在 push 後才看到測試失敗）。主線（非派工）跑整套：
 
 ```bash
 pnpm test          # 或 vp test run / pnpm test:unit，依 consumer 設定
 ```
 
-**repo 宣告了 `test:affected` 時，0-C 跑的是它，不是 `pnpm test`**（2026-09-16，W-2026-09-16-test-suite-runtime-diet）：
+**repo 宣告了 `test:affected` 時，0-C 跑的是它，不是 `pnpm test`**（2026-09-16，W-2026-09-16-test-suite-runtime-diet）；被派出的 worker 在沒有 `test:affected` 的 repo 跑不了整套，照下方「派工 worker 的測試命令」：
 
 ```bash
 if node -e "const s=require('./package.json').scripts; process.exit(s['test:affected']?0:1)"; then
   pnpm test:affected -- --base="$(git merge-base HEAD origin/main 2>/dev/null || git rev-parse HEAD~1)"
+elif [ -n "${CLADE_DISPATCH_ID:-}" ]; then
+  : # 派工 worker：跑下方「派工 worker 的測試命令」，整套交 PR CI
 else
   pnpm test
 fi
 ```
+
+**派工 worker（`CLADE_DISPATCH_ID` 非空）的測試命令**：Bash admission hook 與 `bin/clade-gate` 都擋下不帶 lane 的整套（`pnpm test`、`test:full`、`--lane=full`、`clade-gate run test -- <未列檔的 runner>`），整套回歸由 PR CI 覆蓋。`test:affected` 本身是 lane 所以照跑；沒有它時，0-C 的測試部分是跑本次 diff 相關的測試檔（依 repo 已有的 script 選形式，明確列 1–5 檔走 light slot）：
+
+```bash
+pnpm test:file <本次 diff 相關的測試檔>          # repo 有 test:file script
+pnpm test -- <測試檔或目錄>                      # runner 吃 positional filter（vitest 系）
+pnpm test:<lane>                               # repo 宣告的 lane（`test:full` 不算）
+node bin/clade-gate run test -- <runner> <測試檔>  # 沒有合適 script 時直呼 runner
+```
+
+**NEVER** 為了過 0-C 把 `CLADE_ALLOW_FULL_SUITE=1` 當常態通路——它是逐案例外放行，用了要在回報寫明理由。改動面大到定點測試蓋不住時，回報寫明「廣範圍回歸交 PR CI」，push 後看 CI 結果。
 
 `test:affected` 是 repo 在 `package.json` **明文宣告**的 lane 入口：它從 diff（staged ＋ working tree ＋ base 以來的 range）反查
 「哪些測試引用了改到的檔」，改到共用設定（runner／lockfile／tsconfig）時自動升 full。clade 的 runner 對 `package.json`
@@ -625,7 +684,7 @@ fi
 **純文件 diff（只改 `.md`）也照跑**：clade 有百餘支測試讀真實 `rules/ docs/ capabilities/` 內容，lane 會把它們選出來；
 選出 0 支時 runner 印 `No affected tests found`，那才是「這次沒有測試該跑」的合法結論。
 
-**NEVER 先判斷 `pnpm check` 有沒有涵蓋 test 再決定跑不跑。** 本步驟原本用 `/test|vitest/.test(scripts.check)` 做這個判斷，比對的是整條 `&&` 串接命令的字串，於是任何**名字裡帶 `test`** 的 sibling script 都會誤觸——實測 <consumer-a> 的 `check:dual-test-config` / `check:e2e-paths` 與 <consumer-c> 的 `check:test-roots` 全部中招，三者都跟跑測試無關。誤觸 → 「必須額外跑」的條件不成立 → 補跑被跳過 → 0-C 在零測試覆蓋下判綠，且因為兩個分支都不 exit non-zero，判錯跟判對外觀完全一樣（<consumer-a> v0.103.0 實際踩到：兩條既有測試已紅，0-C 沒抓到）。
+**NEVER 先判斷 `pnpm check` 有沒有涵蓋 test 再決定跑不跑。** 本步驟原本用 `/test|vitest/.test(scripts.check)` 做這個判斷，比對的是整條 `&&` 串接命令的字串，於是任何**名字裡帶 `test`** 的 sibling script 都會誤觸——實測兩個 consumer 中招：一家的 `check:dual-test-config` / `check:e2e-paths`、另一家的 `check:test-roots`，三者都跟跑測試無關。誤觸 → 「必須額外跑」的條件不成立 → 補跑被跳過 → 0-C 在零測試覆蓋下判綠，且因為兩個分支都不 exit non-zero，判錯跟判對外觀完全一樣（某 consumer 實際踩到：兩條既有測試已紅，0-C 沒抓到）。
 
 `check` 真的已含 test 時這裡會重跑一次；**重跑的成本遠低於靜默不跑**，且沒有啟發式就沒有判錯的可能。對應 [[pitfall-check-includes-test-substring-false-positive]]、TD-311。
 
@@ -664,7 +723,7 @@ pnpm run doctor
 
 Doctor health score < 100 或 exit code ≠ 0 → **MUST block commit**，修復後重跑直到 health score 100/100 + 0 warnings + exit 0。**即使 warning 是既有、非本次 diff 引入**也必須修——每次 /commit 順手把既有 doctor warning 修掉，保持零警告 baseline。典型修法：移除 dead imports、修正 re-export 路徑、打斷 import cycles、套用 `readValidatedBody` 取代 raw body read。**NEVER** 以「非我引入」「既有 debt」為由跳過 doctor warning — 0-C gate 不區分新舊，一律全綠。
 
-> **oxfmt batched false-positive**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅但 single-file `vp fmt --check <path>` 通過，是 batched bug 不是 format issue — **先**跑一次 `pnpm format`（vp fmt --write）再重跑 check 通常就過。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（依 runtime 的 rules 投影 / `AGENTS.md` / `CLAUDE.md` / `.clade/vendor/**`）試圖讓 oxfmt 滿意 — 那是 governance violation。clade 中央倉 release flow 已在 `scripts/publish.ts` 主流程加 stable fmt pre-stage（兩輪 `vp fmt --write` + `vp fmt --check`），consumer 端 commit 流程不需再背 workaround SOP。詳見 `docs/pitfalls/2026-05-18-oxfmt-batched-check-false-positive.md`。
+> **oxfmt batched false-positive**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅但 single-file `vp fmt --check <path>` 通過，是 batched bug 不是 format issue — **先**跑一次 `pnpm format`（vp fmt --write）再重跑 check 通常就過。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（依 runtime 的 rules 投影 / `AGENTS.md` / `CLAUDE.md` / `.clade/vendor/**`）試圖讓 oxfmt 滿意 — 那是 governance violation。clade 中央倉 release flow 已在 `scripts/publish.ts` 主流程加 stable fmt pre-stage（兩輪 `vp fmt --write` + `vp fmt --check`），consumer 端 commit 流程不需再背 workaround SOP。舊條目：`pitfall-oxfmt-batched-check-false-positive`（`flow plan legacy` 解析）。
 
 失敗時進入 loop：修復 → `pnpm format`（裸打 `vp fmt` 必須加 `--ignore-path .oxfmtignore`） → 重跑上述步驟 → 直到全綠。loop 的執行者依下方「fix loop 的 pi offload」規則決定（**預設背景 pi**；例外才主線直修）。
 
@@ -723,7 +782,7 @@ Worker brief 帶具體 failures、命令、允許檔案、禁止修改的主線�
 2. diff 觸及 `rules/core/**` / `rules/modules/**` / `vendor/snippets/**`（標準層有變 → docs 可能需同步）
 3. diff 觸及 `scripts/audit-*` 或 `scripts/*-audit.*`（audit signal 變更 → `registry/audits.json` 的 `cadence` / `consumers` 或 `docs/dev-guide.md` 可能需更新）
 4. diff 觸及 `[packages/<pkg>/]{server/api,server/utils,server/routes,app/components,app/pages,composables}/**` 或 `[packages/<pkg>/]nuxt.config.ts`（業務碼 / 框架設定有變 → consumer docs/ 可能需對齊；**consumer-repo 專用**，在 clade home 結構性不命中）
-5. diff 含 bug fix（commit message 含 `fix` type）→ pitfall 覆蓋檢查
+5. diff 觸及 `specs/truth/**`（truth unit 有變 → docs 引用可能需同步）
 
 ```bash
 DIFF_FILES=$(git diff --name-only HEAD)
@@ -739,10 +798,9 @@ HAS_AUDIT=$(echo "$DIFF_FILES" | grep -E '^scripts/(audit-[^/]*|[^/]*-audit)\.(t
 # 保留給投影出去的 consumer 使用，不要因本 repo 零命中刪除。
 HAS_BIZ=$(echo "$DIFF_FILES" | grep -E '^(packages/[^/]+/)?(server/(api|utils|routes)|app/(components|pages)|composables)/' | head -1)
 HAS_CONFIG=$(echo "$DIFF_FILES" | grep -E '^(packages/[^/]+/)?nuxt\.config\.(ts|js)$' | head -1)
-# fix type 在 Step 3 分組後才能判，0-D 先用 diff 中有無 pitfall-related file 近似
-HAS_PITFALL_REF=$(echo "$DIFF_FILES" | grep -E '^docs/pitfalls/' | head -1)
+HAS_TRUTH=$(echo "$DIFF_FILES" | grep -E '^specs/truth/' | head -1)
 
-if [[ -z "$HAS_DOC$HAS_RULES$HAS_SNIPPETS$HAS_AUDIT$HAS_BIZ$HAS_CONFIG$HAS_PITFALL_REF" ]]; then
+if [[ -z "$HAS_DOC$HAS_RULES$HAS_SNIPPETS$HAS_AUDIT$HAS_BIZ$HAS_CONFIG$HAS_TRUTH" ]]; then
   echo "⏭️ 0-D 跳過（diff 無 doc-relevant 變更）"
 else
   echo "0-D 觸發：需要 doc alignment 檢查"
@@ -751,18 +809,18 @@ fi
 
 ### 檢查 A — Cross-reference 驗證（機械化）
 
-掃 `docs/` 中所有 `[[...]]` cross-ref，驗證 target 存在（rules/core/ 檔名、pitfall id、memory name）：
+掃 `docs/` 中所有 `[[...]]` cross-ref，驗證 target 存在（rules 檔名、`specs/truth/legacy-ids.json` 的舊 id、memory name）：
 
 ```bash
 grep -rn '\[\[' docs/ --include="*.md" 2>/dev/null \
   | sed -E 's/.*\[\[([^]]+)\]\].*/\1/' \
   | sort -u \
   | while read ref; do
-    # 嘗試 match rules/core/<ref>.md、docs/pitfalls/*<ref>*.md、或 memory
+    # 嘗試 match rules/core/<ref>.md、legacy-ids 的舊 id（pitfall-<slug>／TD-NNN）、或 memory
     found=0
     [[ -f "rules/core/${ref}.md" ]] && found=1
     [[ -f "rules/modules/${ref}.md" ]] && found=1
-    ls docs/pitfalls/*"${ref}"*.md 2>/dev/null | head -1 | grep -q . && found=1
+    grep -qF "\"${ref}\":" specs/truth/legacy-ids.json 2>/dev/null && found=1
     [[ $found -eq 0 ]] && echo "BROKEN_REF: [[${ref}]]"
   done
 ```
@@ -785,23 +843,9 @@ grep -rnoE '`[a-zA-Z][a-zA-Z0-9._/-]+\.(md|mjs|ts|mts|sh|json|yml|yaml)`' docs/ 
 
 `STALE_PATH` → 修正路徑（檔案已搬/改名）或移除引用。
 
-### 檢查 C — Pitfall 覆蓋對齊（diff 含 bug fix 時）
+### 檢查 C — 已退役
 
-若 diff 觸及了某 pitfall 的 `prevention.ref` 指向的檔案：
-
-```bash
-for pit in docs/pitfalls/*.md; do
-  refs=$(grep -A1 'ref:' "$pit" 2>/dev/null | grep -v '^--$' | sed -E 's/.*ref: *"?([^"]+)"?.*/\1/' | head -5)
-  for r in $refs; do
-    base=$(echo "$r" | sed 's/#.*//')
-    if echo "$DIFF_FILES" | grep -qF "$base"; then
-      echo "PITFALL_TOUCH: $(basename $pit) ref=$base — 檢查 prevention.status 是否需更新"
-    fi
-  done
-done
-```
-
-命中 `PITFALL_TOUCH` → **MUST** 讀該 pitfall 的 `prevention:` 段，確認 status 是否因本次修改需更新（`open` → `implemented`、或 `implemented` 但行為已改需補 regression-evidence）。
+原本比對 `docs/pitfalls/*.md` 的 `prevention.ref`。pitfall 載體已隨 W-2026-09-23-backlog-carrier-reform 退役，prevention 改由承載它的 plan Open work 追蹤，`flow plan check-close` 會擋未處置的列——本檢查不再跑。
 
 ### 檢查 D — 受眾文件忠實度（review-level，非機械化）
 
@@ -822,10 +866,9 @@ done
 ### 修復 loop
 
 檢查 A/B 的 `BROKEN_REF` / `STALE_PATH` → 修 → 重跑驗證 → 直到 0 issues。
-檢查 C 的 `PITFALL_TOUCH` → 更新 status/evidence → 不需重跑（人工判斷）。
 檢查 D 的受眾缺口 → 補 doc → format（`pnpm format`）→ 確認。
 
-通過後輸出 `✅ 0-D 通過（doc alignment: N ref OK, M path OK, pitfall K/K 對齊{, 受眾文件已補齊}）`。
+通過後輸出 `✅ 0-D 通過（doc alignment: N ref OK, M path OK{, 受眾文件已補齊}）`。
 
 ### 紀律禁止項
 
@@ -843,7 +886,10 @@ CI 的 `evlog-map-gate` action 是最後一道；0-E 是第一道。差別在成
 本次 diff（tracked modified + untracked 新增）含**任一** entry point 檔案：
 
 ```bash
-git status --porcelain | awk '{print $NF}' | grep -E \
+# NEVER 用 `git status --porcelain | awk '{print $NF}'`：含空格的路徑會被加引號並截成最後一段，
+# rename 行只留新路徑的尾段——那類檔的改動不會觸發 0-E，而輸出看起來完全正常。
+# core.quotePath=false：非 ASCII 路徑不被加引號，`$` 結尾的 alternatives 才比得到。
+{ git -c core.quotePath=false diff --name-only HEAD; git -c core.quotePath=false ls-files --others --exclude-standard; } | sort -u | grep -E \
   '(server/(api|routes|middleware|tasks)/|app/pages/|pages/|app/.*/route\.ts$|app/.*/page\.tsx$|middleware\.ts$)'
 ```
 
@@ -870,7 +916,7 @@ npx evlog map --no-write --json 2>/dev/null \
 
 `zero-routes` → **不是滿分，是什麼都沒掃到**。CLI 這時會回報 score 100，那個 100 是假的。**MUST block commit**，除非 repo 內有有效的明文放行單（Step 3 的 gate 會自己判定，見下）。
 
-**Nuxt layer monorepo 的正解**（<consumer-a> 型：各 layer 有 `nuxt.config.ts` + `server/api/`，但沒有 `package.json`）—— `@evlog/cli` 靠 `package.json` 定位 project root，補上去就掃得到：
+**Nuxt layer monorepo 的正解**（layer-monorepo 型：各 layer 有 `nuxt.config.ts` + `server/api/`，但沒有 `package.json`）—— `@evlog/cli` 靠 `package.json` 定位 project root，補上去就掃得到：
 
 ```bash
 # 1. 每個 layer 補一份 private package.json
@@ -925,7 +971,8 @@ structured-errors、audit、error-handling 五類 check）。本次 diff 動到 
 ```bash
 # MUST mktemp 唯一路徑——固定路徑是全機器所有 consumer 共用，多 session 會互相覆寫
 CHANGED="$(mktemp -t evlog-map-changed.XXXXXXXXXX)"
-git status --porcelain | awk '{print $NF}' > "$CHANGED"
+# 一行一個 repo-relative 路徑（gate.ts 的 --changed-files 格式）；core.quotePath=false 讓非 ASCII 路徑不被跳脫
+{ git -c core.quotePath=false diff --name-only HEAD; git -c core.quotePath=false ls-files --others --exclude-standard; } | sort -u > "$CHANGED"
 node .github/actions/evlog-map-gate/gate.ts \
   --baseline evlog.map.json \
   --changed-files "$CHANGED" \

@@ -6,7 +6,7 @@ paths: ['scripts/**/*', 'vendor/scripts/**/*', '.github/workflows/**/*', 'packag
 
 # Checker Contract
 
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 
 Mechanical checker 的綠燈是一項可重現的 contract claim：它只證明輸出明寫的 scope 已被完整執行，不能把「沒有執行」包裝成「沒有違規」。本規約對**每一支** mechanical checker、**每一個**安全／contract gate、**每一條** CI check entry 與**每一份**既有債務 allowlist 生效。
 
@@ -73,7 +73,7 @@ completeness: <complete|partial|unknown>
 
 下游命中即退出，上游收 SIGPIPE(141)，`pipefail` 讓 pipeline 回非零 → 命中被判成沒命中（fail-open）。只在上游輸出超過 pipe buffer（~64KB）時發生，小樣本測試永遠正常。
 
-存量掃 `node ~/offline/clade/scripts/audit-gate-coverage.ts` § 4。實證見 `~/offline/clade/docs/pitfalls/2026-07-25-grep-q-pipefail-sigpipe-false-negative.md`。
+存量掃 `node ~/offline/clade/scripts/audit-gate-coverage.ts` § 4。實證見 [[pitfall-grep-q-pipefail-sigpipe-false-negative]]。
 
 ### 上游具副作用時，提前退出命令會把它腰斬
 
@@ -95,7 +95,7 @@ head -20 "$OUT"
 - **想限制輸出量時先重導向到檔案再讀**，不要對可能具副作用的命令直接 `| head` / `| sed q` / `| grep -m1`
 - **寫先刪後建的流程時，把刪除延後到重建材料備妥之後**（或先寫 staging 再 atomic rename），讓中斷點不落在「舊的沒了、新的沒來」
 
-實證見 `~/offline/clade/docs/pitfalls/2026-07-31-sigpipe-truncates-side-effecting-script.md`。
+實證見 [[pitfall-sigpipe-truncates-side-effecting-script]]。
 
 ## 執行載體（檔案存在 ≠ 有東西會執行它）
 

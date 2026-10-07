@@ -10,7 +10,7 @@ metadata:
     invocation: explicit
 ---
 <!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@bc8fdebe2d30db384f77911aaed81888ad03bf5f, modified by clade (added this banner and clade metadata lines) via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
-<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-targets: claude,codex -->
 > clade 覆寫：clade lifecycle repo（本次 plan package 的 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:`）或適用 canonical doctor 的 clade consumer：執行本 skill 前先讀 `work-route` skill 根下的 `rules/上游覆寫-lifecycle落點與doctor.md`，命中該檔判準的條目以該檔為準，未命中照本檔原文。
 
 # Tasks Skill
