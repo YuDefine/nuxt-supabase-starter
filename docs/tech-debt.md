@@ -973,7 +973,7 @@ Template CI 的 Unit tests job 在 `Unit tests` step 之後跑 `vp run audit:ux-
 ```
 
 `template/shared/types/` 只有 `pagination.ts`、`profiles.ts`，沒有 enum-like 定義；
-`template/spectra-advanced.config.json` 存在。main 上這一步一直是 skipped，因為前一步
+`template/ux-drift.config.json`（原 `spectra-advanced.config.json`，2026-10-08 改名）存在。main 上這一步一直是 skipped，因為前一步
 `Unit tests` 先紅了（run `36357036651` 等）。PR #13 修好那一步之後，這個紅燈才第一次被執行到
 （PR run `36357476335`）。在 PR head 本機跑 `vp run audit:ux-drift` 也一樣紅，PR diff 沒碰該 script、
 `shared/types` 或 config，所以這是既有問題，不是 PR #13 造成的。coordinator 2026-09-28 裁決視為既有紅燈照樣合入 PR #13。
@@ -984,7 +984,7 @@ Template CI 的 Unit tests job 在 `Unit tests` step 之後跑 `vp run audit:ux-
 
 - clade `audit-ux-drift.ts` 對「零 enum 的專案」fail-closed：若 starter 沒有 enum 是合法狀態，
   修法在 clade（零 enum 時回報 skip／pass 而非 exit 2），starter 端 **NEVER** 直接改投影檔。
-- 若 audit 的前提是「專案必有 enum-like 定義」：修法在 starter 的 `spectra-advanced.config.json`
+- 若 audit 的前提是「專案必有 enum-like 定義」：修法在 starter 的 `ux-drift.config.json`
   `paths.types` 指向或 CI step 條件，另開 change 設計。
 
 ### Acceptance
