@@ -271,7 +271,8 @@ describe('agent runtime selection', () => {
       readFileSync(join(targetDir, '.claude', 'skills', 'commit', 'SKILL.md'), 'utf8'),
     )
     expect(existsSync(join(targetDir, '.claude', 'skills', 'commit', 'SKILL.md'))).toBe(true)
-    expect(existsSync(join(targetDir, '.cursor', 'hooks.json'))).toBe(true)
+    // clade 已退役 cursor 投影（v1.13.58 起不再產生 .cursor/hooks.json），starter 不得帶回來
+    expect(existsSync(join(targetDir, '.cursor', 'hooks.json'))).toBe(false)
     expect(existsSync(join(targetDir, '.claude', 'settings.json'))).toBe(true)
     expect(existsSync(join(targetDir, 'scripts', 'install-skills.sh'))).toBe(false)
 
