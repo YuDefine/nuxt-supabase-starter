@@ -120,7 +120,7 @@ GPT 與 Claude 主線模型都**字面遵守指令、不外推**（Anthropic pro
 Dirty working tree 有兩種來源，**兩種都要列進 baseline**：
 
 1. **主線操作型**：主線剛建的 plan package／tasks 檔、剛寫進 plan § Open work 的項目（未遷移 consumer：`docs/tech-debt.md` 的 TD-NNN entry）、未 commit 的 ROADMAP/HANDOFF 更新
-2. **自動 hook 型**：`pnpm install` postinstall hook 觸發 `hub:bootstrap` → `sync-to-codex` 自動把 main branch 的 clade 更新同步進 worktree，產生 LOCKED projection diff（`.claude/` / `.agents/` / `AGENTS.md` / `CLAUDE.md` / `.claude/scripts/`，檔頭有 `🔒 LOCKED — managed by clade` banner）。主線沒主動操作但 working tree 仍 dirty
+2. **自動 hook 型**：`pnpm install` postinstall hook 觸發 `hub:bootstrap` → canonical runtime 投影自動把 main branch 的 clade 更新同步進 worktree，產生 LOCKED projection diff（`.claude/` / `.agents/` / `AGENTS.md` / `CLAUDE.md` / `.claude/scripts/`，檔頭有 `🔒 LOCKED — managed by clade` banner）。主線沒主動操作但 working tree 仍 dirty
 
 派工前**MUST 跑**：
 

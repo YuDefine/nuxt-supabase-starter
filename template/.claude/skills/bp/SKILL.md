@@ -9,7 +9,6 @@ metadata:
     permission_tier: draft
 ---
 
-<!-- clade-skill-scope: both -->
 
 # bp — 最佳實踐落點路由
 

@@ -9,7 +9,6 @@ metadata:
     permission_tier: action
 ---
 
-<!-- clade-skill-scope: both -->
 
 # wt
 

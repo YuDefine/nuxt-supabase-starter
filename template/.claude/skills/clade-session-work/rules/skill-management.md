@@ -24,54 +24,23 @@ paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/*
 2. **commit 必須帶上 `skills-lock.json`**。安裝工具可能重算 lock 內所有 entry 的 `computedHash`；漏帶會讓 lock 與實際安裝不一致。
 3. **NEVER 讓 runtime skill source 是 symlink 指向未 tracked 的 target。** 判準是 target 內容是否進版控；runtime projection 的 symlink 例外必須由 adapter 明列。
 
-| 已明列的 projection symlink 例外 | 內容 |
-| --- | --- |
-| user 層 Claude 入口 | `~/.claude/skills/<name>` → `../../.agents/skills/<name>`，只限宣告 `global` 的 skill。由 `scripts/lib/user-claude-skill-links.ts` 隨 `user-runtime --audience user` 建立、接管、prune，state 在 `~/.clade/projections/claude.user-skill-links.json`；target 是 clade 投影產物，可由 canonical source 完整重生。同名實體目錄或指向別處的 symlink 不覆寫，報 `claude-skill-link-conflict` |
+## User level 不歸 clade 管
 
-## 投放範圍宣告（clade-skill-scope）
+clade 只投影到 consumer repo（與 clade home 自己）。`~/.claude/skills/`、`~/.agents/skills/`、`~/.codex/` 等 user-level 目錄由使用者自行維護，clade **NEVER** 產生、覆寫或稽核其中內容。
 
-每支 canonical skill 與每個會渲染成 codex skill 的 command，在源檔與 `clade-targets` 並列宣告一行：
-
-```html
-<!-- clade-skill-scope: global|project|both -->
-```
-
-| 欄位 | 內容 |
-| --- | --- |
-| 觸發條件 | 源檔出現該 marker；`global`＝只進 user-level、`project`＝只進 repo 內投影、`both`＝兩層都投 |
-| 消費端 | `scripts/lib/skill-scope.ts` 是唯一 parser；`runtime-capability-plan.ts`（`skillAudience`）、`projection-inventory.ts`（`collectPluginSkillSources` 固定 project 層）、`user-runtime.ts`（`--audience`／`root===cladeRoot` 推斷 `project`）各自接線 |
-| 觸發點 | user 層收 `global`＋`both`，project 層收 `project`＋`both`；未宣告預設 `both`（back-compat），`_validate-manifests.ts` 對未宣告 warn、對非法值／重複 marker 報 error |
-
-user 層的投影本體只寫 `~/.agents/skills`（Codex 讀）；Claude Code 只讀 `~/.claude/skills`，所以 `global` skill 另由上表的受管 symlink 接上。`both` 不建 user 層 Claude symlink：它在 project 層已投影給 Claude，而 Claude Code 同名 skill 由 personal 蓋過 project，user 層再放一份會讓舊版遮蔽 repo 內的新版。
-
-user-level 的同名 skill 與 repo 內投影同名是合法遮蔽：pi 採 project 版、略過 user 版。`sync-to-codex.ts` 的撞名分級據此分 managed（兩邊皆 clade 投影 → 摘要）／mixed（單邊 → fail）／unmanaged（雙邊手寫 → warn）；「clade 投影」的證據是 LOCKED banner 或 `.clade/projections/codex.{capabilities,rules}.json` 的 files 清單。
-
-## User level skill 的收容範圍
-
-`~/.claude/skills/` 不經 publish／propagate／conformance，是全機器唯一沒有主人的 skill 來源。它**只收基礎設施類**；跨專案工作流 **MUST** 走 clade plugin（`capabilities/<package>/skills/<name>/`）。判準是一個可回答的問題：
-
-| 這支 skill 描述的是什麼 | 落點 |
-| --- | --- |
-| 這台機器與外部基礎設施（主機、NAS、runner、遠端服務、本機工具） | user level，並登記進 `registry/user-level-skills.json` |
-| 行為綁定某個 repo 的內容，或跨專案共用的工作流 | clade plugin |
-
-| REQUIRED 欄位 | 內容 |
-| --- | --- |
-| 觸發條件 | `~/.claude/skills/<name>/SKILL.md` 存在、不是指回 native target 的 symlink、不與 clade plugin 撞名，且不在 `registry/user-level-skills.json` |
-| 消費端 | `scripts/sync-to-codex.ts`（user level）報告的「未登記的 user-level skill」段與 stderr 一行 warn——只報不擋、不影響投影 |
-| 觸發點 | 本節（paths-gated 於 skill 目錄）＋收容名單本身的 `charter` 欄 |
-
-報出來的每一支逐支判：基礎設施類登記進名單並寫 `why`；其餘搬進 clade plugin。**NEVER** 為了讓報告變乾淨把工作流類登記成 `infrastructure`，**也 NEVER** 讀成取消 user-level skill——基礎設施類刪掉就是真的沒地方放。
+user-level 與 repo 內投影同名是合法遮蔽：pi 採 project 版、略過 user 版。`scripts/runtime-health.ts` 的撞名分級據此分 managed（兩邊皆 clade 投影 → 摘要）／mixed（單邊 → fail）／unmanaged（雙邊手寫 → warn）；「clade 投影」的證據是 LOCKED banner 或 `.clade/projections/codex.{capabilities,rules}.json` 的 files 清單。user-level 殘留的舊 clade 投影（退役前寫進 `~/.agents/skills/` 的那批）由使用者刪除，**NEVER** 為它恢復 user-level 投影。
 
 ## Skill 撰寫形式
 
-在 `capabilities/**/skills/<name>/` 新建 skill、或改既有 skill 的流程／判準／結構時，**MUST** 走 `/skill-engineering`（`hub-capabilities-skill-engineering`，global）：新建走 create lane，改版走 optimize lane（先過根因確認閘門，再出編排計畫）。產出形狀以該 skill 委派的 `skill-form-*` 為準：`SKILL.md` 只放最小可執行 SOP（`# SOP` → `## Phase N -- <名>` → 以 READ／THINK／WRITE／DELEGATE 開頭的 step），判準進 `rules/`、穩定輸出骨架進 `templates/`（骨架＋`.example`）、機械工作進 `scripts/`（PEP 723 單檔 Python），只在需要的 step 按需載入。clade 自己的 frontmatter 與 marker（`clade-targets`、`clade-skill-scope`、`clade-resources`、`metadata.clade`）照舊並存。
+在 `capabilities/**/skills/<name>/` 新建 skill、或改既有 skill 的流程／判準／結構時，**MUST** 走 `/skill-engineering`（`hub-capabilities-skill-engineering`）：新建走 create lane，改版走 optimize lane（先過根因確認閘門，再出編排計畫）。產出形狀以該 skill 委派的 `skill-form-*` 為準：`SKILL.md` 只放最小可執行 SOP（`# SOP` → `## Phase N -- <名>` → 以 READ／THINK／WRITE／DELEGATE 開頭的 step），判準進 `rules/`、穩定輸出骨架進 `templates/`（骨架＋`.example`）、機械工作進 `scripts/`（PEP 723 單檔 Python），只在需要的 step 按需載入。clade 自己的 frontmatter 與 marker（`clade-targets`、`clade-resources`、`metadata.clade`）照舊並存。
 
 | 情境 | 處理 |
 | --- | --- |
 | 純錯字、斷鏈、路徑改名，不動流程與判準 | 直接改，不必走 lane |
 | LOCKED mirror（`<!-- LOCKED: mirrored from … -->`） | 不在本節範圍；改上游再重生 |
 | 其餘新增或改版 | `/skill-engineering` |
+
+**閘門要送到人面前。** 根因報告或編排計畫現在就等 user 確認、而 user 不在場（被派出的 worker、relay、unattended）時，**MUST** 用 `flow ask` 送上佇列，一份報告一題，報告路徑寫進 `--question` 或 `--why`，`--carrier` 指向承接答案的 plan 或 tasks 檔；**NEVER** 只把報告標成「待確認」留在 plan 或 tasks 裡——不在佇列上的題目沒有人會看見。plan 已定好先後、還沒輪到的批次不在此列，輪到時先對照現況重驗報告再送。
 
 **NEVER** 用 `skill-creator`（含 Anthropic 內建 `anthropic-skills:skill-creator`）或任何 skill-creator 類工具產生或改寫 clade skill；它們把流程、判準、範例混在同一層，正是本節要消除的形狀。
 
@@ -83,7 +52,7 @@ user-level 的同名 skill 與 repo 內投影同名是合法遮蔽：pi 採 proj
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 讀或寫 `capabilities/**/skills/**`、`.claude/skills/**`、`.agents/skills/**` 下的 skill 檔（本檔 `paths:`） |
-| 消費端 | 新建或改版 skill 的 session；commit 0-F（新增 skill／rule 的最佳實踐交叉比對） |
+| 消費端 | 新建或改版 skill 的 session（user 不在場時把閘門報告 `flow ask` 送上 `/decisions` 佇列）；commit 0-F（新增 skill／rule 的最佳實踐交叉比對） |
 | 觸發點 | 讀寫本檔 frontmatter `paths:` 列的 skill 路徑那一刻由 rules planner 載入（rule-authoring 合法觸發點 ④）；新建 skill 時 `/skill-engineering` 的 description 命中 |
 
 ## 來源與安裝邊界
@@ -91,6 +60,20 @@ user-level 的同名 skill 與 repo 內投影同名是合法遮蔽：pi 採 proj
 Clade-managed skill 的共同來源在選用 plugin 的 `capabilities/<package>/skills/<name>/`，單端差異在相應 adapter。Consumer 自有與第三方安裝內容先依既有 ownership／安裝紀錄辨認來源；**NEVER** 因它位於 `.claude/skills/` 就把同名內容自動接管為 generator-owned。遷移來源位置需保存原內容、明確 adoption 與可恢復紀錄。
 
 node_modules-backed symlink 只有在 adapter 明列、且 fresh setup 能重建時才可例外。Clade capability planner 拒絕 plugin source 中的 symlink；legacy installer 的例外不能用來放行此 planner 的拒絕。
+
+## 投放範圍宣告（clade-visibility）
+
+skill 預設投進所有選用該 plugin 的 consumer。要收窄時在 SKILL.md 與 `clade-targets` 並列宣告一行：
+
+```html
+<!-- clade-visibility: private|clade-home -->
+```
+
+| 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | `private`＝public consumer 不投（例：綁維護者帳號的 `yudefine-deploy`、維護者個人工作流 `reply-article`／`meeting-notes`）；`clade-home`＝任何 consumer 都不投，只有 clade home 自投影收（例：含內部主機／報價資料的 `ci-runners`、`presale`、`estimate-hours`） |
+| 消費端 | `scripts/lib/runtime-capability-plan.ts`（consumer 投影跳過；`buildCanonicalCapabilityPlan` 帶 `cladeHome` 才收 `clade-home`）；`vendor/scripts/audit-clade-leak.ts` 的 `MAINTAINER_ONLY_SKILLS` 是第二層對帳 |
+| 觸發點 | 本節；`test/skill-visibility-clade-home.test.ts` 釘住三支 clade-home skill 不進 consumer 投影 |
 
 ## 驗證入口與覆蓋邊界
 

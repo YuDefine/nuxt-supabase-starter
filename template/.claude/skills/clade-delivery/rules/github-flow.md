@@ -227,7 +227,6 @@ timer 的處置表：
 | rescue ref 推不上 origin | 不 reset（也不丟內容），回報到 SessionStart；下一輪重試 |
 | 本機有 origin 沒有的 commit但 working tree dirty／已 stage（`refused`） | 不動——reset 會吃掉未 commit 的內容。回報到 SessionStart |
 | clade home | `main-sync --apply`（登記簿同步，見上方 § 遠端強制與本機契約） |
-| clade home 的 HEAD 比上次 user level 同步前進，且投影來源乾淨 | `user-runtime --audience user --apply`：寫 `~/.agents/skills` 與 `global` skill 的 `~/.claude/skills/<name>` 受管 symlink（非 publisher 的 dev node 只有這條路更新 user level）。同一個 HEAD 不重跑 apply；上次沒成功時每輪只跑 `--dry-run` 驗收，已無落差就清掉提醒 |
 | merge／rebase 進行中、`main` 在別棵 worktree checkout、publish／propagate 在跑（`skipped`） | 不動，下一輪再試；只記在 `last.json`，不回報 |
 
 回報出現在 SessionStart：`🔀 本機 main 有 N 處無法自動對齊 origin`。
@@ -237,11 +236,10 @@ timer 的處置表：
 | `unpushed`／`diverged` | 本機有 origin 沒有的 commit 且 rescue 未完成——多半是 `refs/rescue/<date>-<sha>` 推不上 origin，或 origin 是 public repo（rescue ref 留本機、不推） | 手動照同一規則收：`git fetch origin && git update-ref refs/rescue/$(date +%F)-$(git rev-parse --short=9 main) main && git push origin 'refs/rescue/*:refs/rescue/*'`（origin 是 public 時 **NEVER** 推——先審內容，走 PR），下一輪 timer 對齊；或把 commit 帶進 PR |
 | `refused` | 本機未 commit 或已 stage 的改動擋住對齊 | 把改動 commit 到 session branch／rescue branch——**NEVER 進 main**（hook 會擋）；下一輪 timer 對齊 |
 | `error` | fetch、push 或 git 量測失敗（網路、認證、repo 異常） | 在該 repo 跑 `git fetch origin` 看錯誤；timer 本身的健康看 `dev-node.ts doctor` |
-| `user level: <lagging／apply-failed／verify-failed／skip-dirty>` | clade HEAD 前進後的 user level 同步沒成功且 dry-run 驗收仍有落差；或投影來源未 commit 擋住同一個 HEAD 超過 24 小時（`skip-dirty`） | 照提醒跑 `node scripts/user-runtime.ts --audience user --dry-run` 看落差，修好後下一輪 timer 自動清掉 |
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | timer 判定 `unpushed`／`diverged`（rescue 未成；propagate 升版 commit 過 3 天才算）／`refused`／`error`，或 user level 同步沒成功 → 寫入 `~/.local/state/clade/main-align/last.json` 的 `attention`，SessionStart 印出（consumer 內只印自己，clade home 印全部）。**不 block** |
+| 觸發條件 | timer 判定 `unpushed`／`diverged`（rescue 未成；propagate 升版 commit 過 3 天才算）／`refused`／`error` → 寫入 `~/.local/state/clade/main-align/last.json` 的 `attention`，SessionStart 印出（consumer 內只印自己，clade home 印全部）。**不 block** |
 | 消費端 | SessionStart 的 `vendor/scripts/worktree-freshness.ts session-start`；timer 本身的健康由 `node scripts/dev-node.ts doctor --all` 的 `main-align timer`／`main-align last run` 兩步驗 |
 | 觸發點 | 本節（consumer 端投影為 `.claude/rules/github-flow.md`） |
 

@@ -3,7 +3,6 @@ name: cf-cli
 description: 'Use when 查詢或異動 Cloudflare 帳號資源（D1/KV/R2/DNS/zone/tunnel/Worker secret/cache/browser-run），或把 wrangler / curl 帳號操作改寫成 cf。NOT for deploy / dev / tail / types（走 wrangler）。'
 ---
 
-<!-- clade-skill-scope: project -->
 
 # cf CLI
 

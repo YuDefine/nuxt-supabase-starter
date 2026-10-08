@@ -2,7 +2,7 @@
 
 一個 release → 命中的 consumer 全部升版 + 套用 BC 修正 + 各自 commit。主線負責 fetch / 解析 / 掃描 / 編排 / 聚合；每個命中 consumer 一個長駐 subagent 在自己 worktree 內跑 Outdated mode 的 changelog-aware 子流程。toolchain（pnpm / Node 自身）走本檔末 § Toolchain sweep 分支。
 
-**不適用**：單 consumer 升版（走 Outdated mode）、framework major migration、無公開 changelog 的內部套件、一次升多個套件（SKILL.md § Fleet mode carve-out 准入（SoT））。
+**不適用**：單 consumer 升版（走 Outdated mode）、framework major migration、無公開 changelog 的內部套件、一次升多個套件（`rules/fleet准入與釘版判準.md` Rule 1（Fleet mode carve-out 准入 SoT））。
 
 ## Step F.1 — Preflight clade-only + 解析觸發 input
 
@@ -46,7 +46,7 @@ node vendor/scripts/dep-fleet-discover.ts --pkg "<pkg>" [--version <ver>]
 gh release view v<target_version> --repo <owner>/<repo> --json body,name,tagName,publishedAt > /tmp/dep-fleet-release-<pkg-slug>.json
 ```
 
-`gh` 不行才依 `web-search` external-web row 抓公開 changelog。只讀 release notes；issues / PRs 是 research 派工（SKILL.md § B）的事。
+`gh` 不行才依 `web-search` external-web row 抓公開 changelog。只讀 release notes；issues / PRs 是 research 派工（`references/pi-prompt-templates.md` § B）的事。
 
 ### F.2.2 LLM 解析 release notes → 結構化
 
@@ -81,7 +81,7 @@ gh release view v<target_version> --repo <owner>/<repo> --json body,name,tagName
 
 ### F.2.3 Carve-out 條件自查
 
-**MUST** 逐條自查 SKILL.md § Fleet mode carve-out 准入（SoT），另加一條：
+**MUST** 逐條自查 `rules/fleet准入與釘版判準.md` Rule 1（Fleet mode carve-out 准入 SoT），另加一條：
 
 - ✅ 若 sweep 會重寫 hit consumer `package.json` 的 `test` / `lint` / `typecheck` script（換工具 / 改命令）：原本有 `.clade/bin/clade-gate run <gate> --` 前綴的，**MUST** 只換 `--` 後面的內層命令、保留前綴（per [[test-scripts]] § MUST：重寫已包 clade-gate 的 script 時保留前綴）。主線在 land 前 `git -C <consumer-path> show <commit_sha> -- package.json` 抽查前綴沒被整行覆蓋
 
@@ -233,7 +233,7 @@ Brief JSON：`/tmp/dep-fleet-brief-<pkg-slug>-<consumer-id>.json`
 1. `cd <consumer_path>`
 2. 開 worktree：`node scripts/wt-helper.ts add upgrade-<pkg-slug>-<YYYYMMDD> --task-summary "upgrade <pkg> to <version>" --baseline-strategy stash`
 3. 跑 version-upgrade § Outdated mode changelog-aware 子流程：
-   - 讀 `~/offline/clade/capabilities/modules/ecosystem/node/skills/version-upgrade/outdated-mode.md`（Outdated mode 步驟）+ `~/offline/clade/capabilities/modules/ecosystem/node/skills/version-upgrade/SKILL.md` § Pi prompt templates
+   - 讀 `~/offline/clade/capabilities/modules/ecosystem/node/skills/version-upgrade/outdated-mode.md`（Outdated mode 步驟）+ `~/offline/clade/capabilities/modules/ecosystem/node/skills/version-upgrade/references/pi-prompt-templates.md`（Pi prompt templates）
    - 跳過 Step O.1（target / version 由 brief 取）
    - 跑 Step O.2.1：用 § A first-pass 模板 + brief 內 BC 渲染 `<changelog-block>` + brief 內 callsites
    - 跑 Step O.2.2：dispatch（`version-upgrade-first-pass`，Claude Sonnet 5.5 high；載體與處方照 outdated-mode.md O.2.2），繼承Outdated mode唯一的workspace mutation contract；研究重試經 Pi 時每一個fallback照dispatcher payload

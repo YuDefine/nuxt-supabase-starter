@@ -3,7 +3,6 @@ name: review
 description: "Use for review lifecycle work: human-gate checks or UI screenshot evidence. Not for archiving (retired), product code review, or Lighthouse analysis."
 ---
 
-<!-- clade-skill-scope: both -->
 
 # Review lifecycle（統一入口）
 

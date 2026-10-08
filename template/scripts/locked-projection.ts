@@ -194,7 +194,7 @@ function isCursorGeneratedProjection(repoRoot, p) {
  * —— `vendor/snippets/**` 在這裡是被 propagate 讀的那一份，是最不該被當成可再生內容的東西。
  *
  * 這裡只收「已驗證在 clade home 為源檔」的項，NEVER 直接鏡射整個 `LOCKED_PROJECTION_RE`：
- * `.claude/**`（clade home 消費自家 hub skill 的 symlink）與 `.github/actions/`
+ * `.claude/**`（clade home 消費自家 hub skill 的 symlink）、`.agents/**`（Codex 投影）與 `.github/actions/`
  * （clade 自己的源在 `vendor/actions/`）在 clade home 仍然是投影，照舊過濾。
  */
 const CLADE_OWN_SOURCE_RE = new RegExp(
@@ -228,6 +228,10 @@ const CLADE_OWN_SOURCE_RE = new RegExp(
       // `checkout --theirs`。hub skill 的 symlink（bp / handoff / …）與 sync 重產的
       // version-upgrade 等目錄仍是投影，NEVER 放寬成整個 `.claude/skills/`。
       String.raw`\.claude/skills/(clade-home|clade-publish|clade-health|coordinator)/`,
+      // 這三支的源檔已搬到 `.agents/skills/<name>/`（`.claude/skills/<name>` 是指過去的 symlink，
+      // git 只追蹤實體路徑）。LOCKED_PROJECTION_RE 收整個 `.agents/` 前綴，沒有這一列 merge-back
+      // 會把它們的源檔當投影 `checkout --theirs`。其餘 `.agents/skills/*` 仍是 Codex 投影。
+      String.raw`\.agents/skills/(clade-publish|clade-health|coordinator)/`,
       String.raw`\.claude/hooks/clade-home-guard\.ts$`,
     ].join('|') +
     ')',

@@ -121,7 +121,7 @@ export const PROJECTION_EXCLUDES = [
   '.github/actions/**',
   'commitlint.config.ts',
   '**/utils/assert-never.ts',
-  // Agent 投影面：`.agents/` `.codex/` 由 scripts/sync-to-codex.ts 生成，`.cursor/` 由
+  // Agent 投影面：`.agents/` `.codex/` 由 Codex runtime 投影（projectRuntime）生成，`.cursor/` 由
   // scripts/sync-to-cursor.ts 生成（2026-08-24 起，先前是人工快照）。三者與上面四條同性質
   // —— consumer 端是產生物，裡面的 lint / fmt 違規只能回 clade 修。先前它們只躺在下面的
   // lintBase / fmtBase.ignorePatterns，沒進這份清單，所以讀 PROJECTION_EXCLUDES 的 staged
@@ -315,7 +315,7 @@ export function isProjectionPath(file: string): boolean {
  * 同一批手寫清單裡的 `codex/` 沒有搬過來：已廢止目錄（`gitignore-governance.ts` 的
  * `DEPRECATED_ENTRIES`）。
  *
- * `AGENTS.md`：sync-to-codex 產出、consumer 端 chmod 444 的 LOCKED 檔。TD-777 當時判
+ * `AGENTS.md`：Codex runtime 投影（projectRuntime）產出、consumer 端 chmod 444 的 LOCKED 檔。TD-777 當時判
  * 「`fmtBase.ignorePatterns` 的 `**\/*.md` 已蓋到」而不收——但那只在 consumer 的 fmt
  * ignore **展開了 `fmtBase.ignorePatterns`** 時成立；consumer 自訂 fmt ignore 沒帶
  * `**\/*.md` 時，`vp fmt` 會真的去寫這個 444 檔 → EACCES → 整個 commit 掛掉

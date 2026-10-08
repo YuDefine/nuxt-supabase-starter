@@ -25,13 +25,12 @@
 #   tool-call JSON。user 在自己 terminal 打 codex 不產生 tool call、不產生那個 JSON，
 #   hook 根本不會被 exec。這不是「設定成不擋」，是物理上碰不到。
 #
-# 不會誤擋 sync-to-codex.ts 與 security-scan.ts：
-#   scripts/sync-to-codex.ts 的 execFile('codex', ['debug','prompt-input']) 與
-#   scripts/security-scan.ts 的 spawnSync('codex', ['login','status']) 都是 Node 進程內
+# 不會誤擋 security-scan.ts：
+#   scripts/security-scan.ts 的 spawnSync('codex', ['login','status']) 是 Node 進程內
 #   的子進程 spawn，不經過 shell、不經過 Bash tool——本 hook 只看得到外層命令字串
-#   （node scripts/sync-to-codex.ts …），對它 fork 出來的子進程完全無知。
-#   **這兩處刻意不列白名單**：列了反而是真正的繞道口（任何命令只要帶上那串字就放行）。
-#   未來做「完備性檢查」的人請不要把它們加進來。
+#   （node scripts/security-scan.ts …），對它 fork 出來的子進程完全無知。
+#   **這處刻意不列白名單**：列了反而是真正的繞道口（任何命令只要帶上那串字就放行）。
+#   未來做「完備性檢查」的人請不要把它加進來。
 #
 # 子命令白名單而非裸 codex 比對：`codex login` / `codex debug` / `codex --version`
 # 是本機操作與診斷，不是派工，一律放行。
@@ -63,7 +62,7 @@ esac
 #   pgrep -af "codex exec"       → codex 不在命令位置（前面是引號）
 #   grep -rn 'codex exec' docs/  → 同上
 #   codex login status           → 子命令不在白名單
-#   node scripts/sync-to-codex.ts → 命令位置是 node
+#   node scripts/security-scan.ts --out tmp/codex-security → 命令位置是 node
 printf '%s' "$cmd" | LC_ALL=C perl -0777 -e '
   my $c = <>;
   $c = "" unless defined $c;

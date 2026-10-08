@@ -8,7 +8,6 @@ disable-model-invocation: true
 effort: medium
 ---
 
-<!-- clade-skill-scope: project -->
 
 本 skill 會改本機配置與外部 Cloudflare 資源。載入 skill 不代表已授權 DNS、token、OAuth provider 或對外開放；依本次既有授權執行，缺資源決策或帳號授權時才詢問。
 

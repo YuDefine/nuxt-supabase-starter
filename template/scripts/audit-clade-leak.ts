@@ -285,14 +285,22 @@ const PLACEHOLDER_USER_RE = /^(?:<|\.{2,}|\$|\{|%|YOUR|your\b)/
 // 不同：前三支靠 propagate 對 PUBLIC repo 移除整個 modules.maintenance 就能擋，而它住在
 // hub-runtime-cf-workers —— 公開 consumer 真的需要那個 plugin。所以真正的排除在
 // runtime-capability-plan.ts 的 `clade-visibility: private` 標記，本名單只是第二層對帳。
+// estimate-hours／presale／ci-runners 帶報價與內部主機資料，由 `clade-visibility: clade-home` 擋在
+// 所有 consumer 之外（private 也不收），同樣列進來對帳。
 // project-bootstrap 同理（住在 hub-framework-nuxt，寫死 fleet 內部 consumer 名）：標記只擋新投影，
 // 標記前已投進公開 consumer 的殘留靠本名單抓。
+// reply-article／meeting-notes 是維護者個人工作流（回覆對象、Gemini／Notion 設定），同樣標 private。
 const MAINTAINER_ONLY_SKILLS = [
   'oops',
   'improvement-loop',
   'review-rules',
   'yudefine-deploy',
+  'estimate-hours',
+  'presale',
+  'ci-runners',
   'project-bootstrap',
+  'reply-article',
+  'meeting-notes',
 ]
 
 // 已退役 generator 留下的 metadata 檔。`sync-to-agents` 於 v1.4.315 更名為

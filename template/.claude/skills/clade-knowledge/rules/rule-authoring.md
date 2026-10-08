@@ -192,7 +192,15 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 
 **適用 `disable-model-invocation: true`**：高副作用儀式型（publish / deploy 類）、低頻手動流程——這類即使 description 寫得再精準，也不該讓 model 自主觸發引爆副作用。
 
-**選錯邊訊號**：model-invoked 但長期沒被自動觸發過；user-invoked 但 user 常忘記它存在。
+**選錯邊訊號**：model-invoked 但長期沒被自動觸發過；user-invoked 但 user 常忘記它存在。前者有數據：
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | `node scripts/audit-skill-usage.ts`（預設近 30 天，回掃本機所有 Claude 設定目錄的 transcript）列出 model-invoked、`Skill` tool＋slash＋讀檔＝0 的 skill 為 undertrigger 候選（靠 hook 印 `READ` 載入的 skill 算有在用），並標出拿 glob 當觸發詞的 description；其餘 skill 只列次數：informational — 不觸發任何東西 |
+| 消費端 | 跑 `clade-health layers` 的 session：退役或刪減前 **MUST** 在每台機器（desk＋zenbook）各跑一次，全部為 0 才算沒人用；再對每支候選逐支判——改 description 走 `/skill-engineering` optimize lane、改 `disable-model-invocation: true`、或退役 |
+| 觸發點 | script 輸出的候選段直接印本節位置（rule-authoring 合法觸發點 ③）；`clade-health` 的 `layers` 訊號表登記它 |
+
+報告沒掃 Codex transcript，subagent transcript 也算進去；讀檔欄排除兩種 transcript：同一份也改了該 skill 的，以及一份讀了很多支 skill 的掃描型（稽核、盤點；門檻見 script 的 `SWEEP_MIN_SKILLS`）。
 
 **One trigger per branch（description 觸發詞紀律）**：model-invoked description 內每個觸發詞對應一個**真正不同**的使用分支；同一分支的同義改寫（「截圖」「看畫面」「幫我看 UI」寫三次）是 duplication，要 collapse 成一個。description 開頭前置該 skill 的 leading word，invocation 工作靠它完成。
 

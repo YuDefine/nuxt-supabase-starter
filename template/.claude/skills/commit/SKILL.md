@@ -10,7 +10,6 @@ metadata:
 effort: high
 ---
 
-<!-- clade-skill-scope: both -->
 
 ## User Input
 

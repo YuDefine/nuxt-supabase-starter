@@ -42,6 +42,14 @@ MISSING=""
 for d in "$SKILLS_DIR"/*/; do
   [ -e "${d%/}" ] || continue
   name=$(basename "${d%/}")
+  # clade 自用 local skill（clade-publish／clade-health／coordinator）的本體住 .agents/skills/<name>，
+  # .claude/skills/<name> 是指過去的 symlink。它不是 hub 投影，
+  # NEVER 進 deny（deny 對 attended 也生效）；邊界改由 .claude/hooks/clade-home-guard.ts 的 ask 補。
+  if [ -L "${d%/}" ]; then
+    case "$(readlink "${d%/}")" in
+      *.agents/skills/*) continue ;;
+    esac
+  fi
   if [ ! -L "${d%/}" ]; then
     printf '%s\n' "$PROJECTED" | grep -qxF "$name" || continue
   fi

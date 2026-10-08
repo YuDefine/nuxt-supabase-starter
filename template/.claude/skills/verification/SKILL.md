@@ -3,7 +3,6 @@ name: verification
 description: "Use for verification setup or maintenance. Not for product implementation or acceptance."
 ---
 
-<!-- clade-skill-scope: both -->
 
 # Verification infrastructure
 

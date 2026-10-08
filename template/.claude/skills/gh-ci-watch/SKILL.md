@@ -8,7 +8,6 @@ metadata:
     permission_tier: read-only
 ---
 
-<!-- clade-skill-scope: both -->
 
 # /gh-ci-watch — GitHub Actions 與 PR 狀態的監看 / 查詢唯一入口
 

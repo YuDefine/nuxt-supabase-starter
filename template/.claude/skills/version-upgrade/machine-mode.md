@@ -3,7 +3,7 @@
 管的是**裝在這台機器上、沒有 git 載體**的版本：mise 管的工具、`~/.local/bin` 的手裝
 binary、全域 npm 套件（含 agent runtime 自己）、MCP server。
 
-主檔的 Worktree gate、Pi 模板、selective stage、三層 verify 都不適用（沒有 git 載體）。本 mode 自己的三條：
+`rules/A軸共用紀律判準.md` 的 Worktree gate、Pi 模板、selective stage、三層 verify 都不適用（沒有 git 載體）。本 mode 自己的三條：
 
 1. **一次一個工具，序列執行**：共用同一個 `PATH`／`~/.local/bin`／mise config，並行會互相覆蓋
 2. **升之前先記下現版號**，那是唯一的 rollback 座標

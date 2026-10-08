@@ -9,7 +9,6 @@ metadata:
     permission_tier: action
 ---
 
-<!-- clade-skill-scope: both -->
 
 # /handoff
 
@@ -321,28 +320,13 @@ heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消�
 
 ### 2B.0 Session-end pitfall sweep（呼叫 /oops Mode C；`/oops` 屬 maintenance/full capability，repo 沒有它時跳過整段並繼續 2B.1）
 
-在動 HANDOFF.md 前，先回顧當前 chat session transcript 掃 missed lessons。觸發訊號：
-
-- user 糾正 Claude 的訊號（「不對」「不是這樣」「不要這樣做」「重做」「應該先 X」）
-- session 中解過的 cryptic runtime error 或 stack trace
-- 升 npm 套件大版 / 動 evlog / Supabase RLS / Cloudflare Workers config / nuxt-security / Better Auth / supabase-js 過程中發現的非預期行為
-- 跨 consumer 散播某 fix 過程中發現新的 contract 變更
-
-對每個 candidate **MUST** 判斷分流：
-
-| Candidate 等級 | 動作 |
-| --- | --- |
-| 符合 `/oops` Mode B 四條件齊備（root cause / detection / fix / prevention） | dispatch `/oops`，寫入 clade truth／plan。**NEVER** 新 pitfall 檔（`docs/pitfalls/` 已退役，呼叫端遷移與否都一樣） |
-| 工作習慣 / 流程更正（user 糾正做法、強調某流程） | dispatch `/oops` Mode B 輕量降級 → 寫 `<consumer>/tasks/lessons.md`（能變成規約的走規約源檔，不進 memory） |
-| 純個人偏好，無法歸進任何規約檔或 lessons | 先問 user 要不要寫進 memory，**取得同意才寫**；未同意就跳過 |
-| 只給當前 repo 的 self-improvement lesson | dispatch `/oops` Mode B 輕量降級 → 寫 `<consumer>/tasks/lessons.md` |
-| 一次性 typo / 純業務邏輯 bug / 純設計問題 | 跳過（不該成為 pitfall 也不該佔 memory 槽位） |
+在動 HANDOFF.md 前，呼叫 `/oops` Mode C 回顧當前 chat session transcript 掃 missed lessons。觸發訊號與每個 candidate 的分流都以 `/oops` 為準（Mode C 步驟 1 列訊號、`mode-b-create.md` § 落點判定列落點），本節不另列。**NEVER** 新 pitfall 檔（`docs/pitfalls/` 已退役，呼叫端遷移與否都一樣）。
 
 若 sweep 為空（無 candidate）→ 一句話宣告「無 missed lesson」繼續 2B.1。
 
 **禁止行為**：
 
-- ❌ 把 sweep candidate 一次塞給 user 讓他選哪些要記 — 主動分流後直接 dispatch，user 看結果（唯一例外是上表的 memory 列：寫 memory 一律先問）
+- ❌ 把 sweep candidate 一次塞給 user 讓他選哪些要記 — 主動分流後直接 dispatch，user 看結果（唯一例外是落點判定的 memory 列：寫 memory 一律先問）
 - ❌ 把 candidate 暫存到 HANDOFF.md `outstanding` 段 — sweep 是 session 內 cleanup，不該變成跨 session 待辦
 - ❌ 強推 candidate 升級到 pitfall — 不符四條件就降級或跳過，不硬塞
 

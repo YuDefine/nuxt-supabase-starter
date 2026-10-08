@@ -3,7 +3,6 @@ name: wrangler
 description: "Use before running Wrangler deploy, dev, tail, or types for Cloudflare Workers. Account resources (D1, KV, R2, DNS, secrets) use the cf CLI."
 ---
 
-<!-- clade-skill-scope: project -->
 
 # Wrangler CLI
 

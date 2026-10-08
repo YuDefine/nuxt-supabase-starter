@@ -199,7 +199,7 @@ test -f <skills-root>/<name>/SKILL.md
 
 ## 與 Fleet mode carve-out 的關係
 
-第三方 skill sweep 屬 [[clade-role-and-todo-discipline]] § upstream-driven dep migration carve-out，准入比照 SKILL.md § Fleet mode carve-out 准入（SoT），「一個套件 × 一個 target version」讀作「**一個 source repo × 一次同步**」，多個 source NEVER 混成一個 commit。
+第三方 skill sweep 屬 [[clade-role-and-todo-discipline]] § upstream-driven dep migration carve-out，准入比照 `rules/fleet准入與釘版判準.md` Rule 1（Fleet mode carve-out 准入 SoT），「一個套件 × 一個 target version」讀作「**一個 source repo × 一次同步**」，多個 source NEVER 混成一個 commit。
 
 
 Runtime substitutions: each target adapter binds `<runtime-target>` for audit selection and `<runtime-agent>` for the shared `npx skills add` CLI. Do not infer either value from the lock file.

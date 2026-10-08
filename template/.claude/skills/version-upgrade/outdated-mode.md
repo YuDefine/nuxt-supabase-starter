@@ -57,7 +57,7 @@ Dependabot 唯一的更新途徑是**開 PR**。不走 PR 流程的 consumer（�
 
 **Changelog-aware sub-mode**：兩種觸發路徑：
 - **Outdated pre-scan**（Step O.1.5）：主線用 `dep-fleet-discover.ts` + `gh release view` 拿 changelog → 分類為 `bugfix` / `adaptation` / `feature` → 依分類決定 pi prompt 是否帶 `<changelog-block>`。
-- **Fleet brief**：被 § Fleet mode subagent 呼叫時，跳過 Step O.1（target / version 由 fleet brief 指定）、Step O.2.1 的 prompt 內嵌 BC clauses + callsites。詳見 § Pi prompt templates · Changelog-block 填充。
+- **Fleet brief**：被 § Fleet mode subagent 呼叫時，跳過 Step O.1（target / version 由 fleet brief 指定）、Step O.2.1 的 prompt 內嵌 BC clauses + callsites。詳見 `references/pi-prompt-templates.md` · Changelog-block 填充。
 
 ## Step O.0 — Worktree gate（[[wt]] 的 `rules/改tracked檔前先隔離判準.md` Rule 1）
 
@@ -349,14 +349,14 @@ npm items 的
 
 ### O.2.1 寫 prompt 到 `/tmp/pi-upgrade-<pkg>-prompt.md`
 
-用 § Pi prompt templates · § A first-pass 模板（O.2.2 派 Claude Sonnet 5.5 `--effort high`）。**MUST** 內含：
+用 `references/pi-prompt-templates.md` · § A first-pass 模板（O.2.2 派 Claude Sonnet 5.5 `--effort high`）。**MUST** 內含：
 - `[DELEGATED-BY-CLAUDE-CODE]` marker（第一行，per [[agent-routing.pi-watch-protocol]] § Pi 派工的標準流程）
 - 目標 package 名 + current version → target version + **正確的 install flag**
 - Git Baseline 段（per pi-watch-protocol § Git Baseline；列當前 worktree 內所有 main fork 過來的 in-flight 變更 path，**不要列死**——每個 consumer / 每次 fork 都不同，主線跑 `git status --porcelain` 動態抓）
 - Commit Authorization 段（per pi-watch-protocol § Commit Authorization；message format `🧹 chore: wt upgrade-<pkg>-<from>→<to>`，subagent 端需讀 commitlint config 調整）
 - 失敗時的回報格式
 
-**`<changelog-block>` 填充**（`adaptation` / `feature+adaptation` 才填，其他留空）：完全復用 § Pi prompt templates · Changelog-block 填充格式，callsites 來源為 O.1.5.4 的 `rg` 結果（而非 Fleet mode 的 codebase-memory-mcp）。`adaptation` 的 pi 工作範圍擴大到 callsite 檔：Commit Authorization 加 `git add <callsite-files>`。
+**`<changelog-block>` 填充**（`adaptation` / `feature+adaptation` 才填，其他留空）：完全復用 `references/pi-prompt-templates.md` · Changelog-block 填充格式，callsites 來源為 O.1.5.4 的 `rg` 結果（而非 Fleet mode 的 codebase-memory-mcp）。`adaptation` 的 pi 工作範圍擴大到 callsite 檔：Commit Authorization 加 `git add <callsite-files>`。
 
 **`feature`（無 BC）的 `<changelog-block>` 填充**：只含 feature 摘要段（informational），**不**含 callsites 或「動手範圍」段 — 告知 pi 這個版本有新功能但升版只需 bump，不必改 source code。
 
@@ -405,7 +405,7 @@ node ~/offline/clade/vendor/scripts/herdr-session-handoff.ts \
 
 ### O.2.4 升 research（first-pass 失敗自動觸發）
 
-寫 prompt 到 `/tmp/pi-upgrade-<pkg>-research-prompt.md`，用 § Pi prompt templates · § B research 模板。**MUST** 內含：
+寫 prompt 到 `/tmp/pi-upgrade-<pkg>-research-prompt.md`，用 `references/pi-prompt-templates.md` · § B research 模板。**MUST** 內含：
 
 - `[DELEGATED-BY-CLAUDE-CODE]` marker
 - First-pass 派工的失敗 tail（≤ 50 行）+ pi 自報的失敗原因

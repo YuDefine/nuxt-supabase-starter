@@ -12,7 +12,6 @@ metadata:
 disable-model-invocation: true
 ---
 
-<!-- clade-skill-scope: both -->
 
 # /guide — hub skill 地圖
 

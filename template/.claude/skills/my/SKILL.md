@@ -9,7 +9,6 @@ metadata:
     permission_tier: draft
 ---
 
-<!-- clade-skill-scope: both -->
 
 # `\my` — 待拍板佇列的 chat 互動版本
 

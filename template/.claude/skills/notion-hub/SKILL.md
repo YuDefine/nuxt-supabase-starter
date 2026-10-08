@@ -3,7 +3,6 @@ name: notion-hub
 description: "所有 Notion 讀寫的唯一入口（ntn api；NEVER WebFetch／Notion MCP）。Use when 看 board／進度、評估或認領客戶票、在 prod 發現問題要建票、建決策題問客戶拍板、問客戶驗收了沒、為新客戶／新專案開 hub，或任何查找／讀取／修改 Notion 頁面的請求——使用者給 Notion 連結、要搜尋相關頁面、問「Notion 上有哪些文件要改」、要在頁面插入或修改內容。NOT for 生命週期狀態同步（由 notion-sync 跟隨 flow 事件推進）、會議錄音寫入 Notion（用 meeting-notes）、clade 內部待拍板題（走 flow ask）。"
 ---
 
-<!-- clade-skill-scope: both -->
 
 # notion-hub
 

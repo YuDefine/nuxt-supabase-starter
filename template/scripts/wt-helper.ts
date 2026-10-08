@@ -249,6 +249,9 @@ interface WtOptions {
   checkout?: string
 }
 
+/** `planCheckoutBranch`／`checkedOutWorktree` 注入的 git runner 只帶 cwd；具名型別避開 consumer doctor TS0002。 */
+type GitRunOptions = { cwd?: string }
+
 function git(args, opts = {}) {
   const out = execFileSync('git', args, {
     encoding: 'utf8',
@@ -3151,7 +3154,7 @@ export function nuxtTypeArtifactRemediation(wtPath: string): string | null {
 export function planCheckoutBranch(
   consumerRoot: string,
   branch: string,
-  run: (args: string[], opts?: object) => string = git,
+  run: (args: string[], opts?: GitRunOptions) => string = git,
 ): { localExists: boolean } {
   if (!branch.trim() || /\s|^-/u.test(branch)) {
     throw new Error(`--checkout 需要一個 branch 名稱（收到 "${branch}"）`)
@@ -3200,7 +3203,7 @@ export function planCheckoutBranch(
 function checkedOutWorktree(
   consumerRoot: string,
   branch: string,
-  run: (args: string[], opts?: object) => string,
+  run: (args: string[], opts?: GitRunOptions) => string,
 ): string | null {
   let out: string
   try {
