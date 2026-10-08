@@ -168,6 +168,20 @@ paths:
 
 `work.accept` / `work.drop` **NEVER** 由 agent 代按（landing 證據自動 accept 見 [[my]] 的 `rules/待拍板條目寫法.md` Rule 8；machine-reverify 見上一節）。這兩條是僅有的自動收路徑。
 
+## 待拍板題的前提消失：過時掃描
+
+一題掛在佇列上，前提卻已不存在（PR 合掉、工作 drop、同一個 dispatch 早就續跑完），**不靠人逐題查證**：coordinator watch 每 10 分鐘對全 fleet 仍掛著的 `decision.request` 跑一次過時判定（`vendor/scripts/lib/decision-stale-sweep.ts`，判定本身在 `flow/decision-staleness.ts`）。
+
+| 信心 | 條件 | 處置 |
+| --- | --- | --- |
+| `stale` | 參照物（提問者 `--ref` 宣告的、dispatch label 上的 PR、TD、同 dispatch 的續跑／裁決、work 終局）在**題目問出之後**才終局 | 自動 `decision.dismiss`，`dismissed_by: stale-sweep`，reason 帶證據 |
+| `suspect` | 看起來過時但不到代人寫掉：問 Charles 的題靠推論判出、只有題目內文提到的 PR、PR 沒合就關、有來源檔（carrier）的題 | 不寫掉；標記進各 repo `.clade/flow/decision-staleness.json`，`flow pending`／`\my` 把它排到同區段最後並印 `⏳ 疑似過時` |
+
+- 「問出之後才終局」是地基：題目寫「PR #12 已合入，要不要 revert」時，那個合入是前提不是過時證據。明確 `--ref` 同樣適用。
+- 量測（`gh`、`git`）只在 watch 側做；PR 的 MERGED 永久快取，OPEN 與 CLOSED（可能被 reopen）快取 15 分鐘。查不到一律當未終局。
+- 發問時用 `flow ask --ref` 宣告前提，過時才收得掉；沒有任何可核對參照的題 `flow ask` 會在 stderr 提醒。
+- 單跑：`node vendor/scripts/lib/decision-stale-sweep.ts [--apply] [--json]`（不加 `--apply` 只報告）。
+
 ## spine 可信的是「發生過」，MUST 實跑的是「現在是」
 
 spine 是**事件流**：它記錄「某個時刻有人做了什麼、宣稱了什麼」。它 **NEVER** 是系統的當前狀態快照——沒有任何事件會在世界改變時自己跟著改。

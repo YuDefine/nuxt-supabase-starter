@@ -28,6 +28,7 @@ cd ~/offline/clade && node vendor/scripts/flow/flow.ts pending
 - 區段順序：`要我拍板` → `要我驗收` → `要我動手` → `不在本 repo` → `loop 結構性推不動` → `未分類` → `卡住、等人動手` → 最後一行現況量測（當下實跑，例：`clade: dirty 7 / worktree 21　<consumer-id>: stash 3`；全乾淨時是 `全 roster 乾淨：無 dirty、無 worktree、無 stash、無 lock`）。
 - `Qn` 只出現在 `要我拍板` 與 `要我驗收`，編號連續；其餘為 bullet。題目子行可能有 `A./B.` 選項（推薦那條帶「（推薦）」）、`⚠` 警示、`✎` 寫法評語、`→` 動作／步驟、`答案落到：<carrier>`、`可回：X／Y`（僅動手桶）、`span <span_id>`。
 - 每題行首的 `[<repo>]` 就是 `flow answer --repo` 要逐字照抄的值。
+- 帶 `⏳ 疑似過時：<證據>` 子行的題排在同一區段最後：watch 的過時掃描判它前提可能已消失、但信心不到代寫掉（問 Charles 的題、題目內文才提到的 PR、有來源檔等）。多半不用答；查證屬實就照子行給的 `flow dismiss` 寫掉。被機器自動下架的題 `dismissed_by` 是 `stale-sweep`，reason 以「前提已不存在（<規則>）」起頭。
 - exit 0 = 佇列有東西；**exit 2 = 佇列空**（印 `佇列是空的。`），不是錯誤。
 
 ## ask
@@ -80,6 +81,7 @@ cd ~/offline/<consumer-id> && node ~/offline/clade/vendor/scripts/flow/flow.ts a
 | `--audience charles\|coordinator` | 選填，預設 `charles` | `coordinator` 不進人的預設佇列，也不受 admission 表限制 |
 | `--deadline D --deadline-basis B` | 選填，成對 | 有期限的題排最前（72 小時內到期）；basis 必填 |
 | `--dedupe-key K` | 選填 | 同一件事的第二次發問併進同一張卡 |
+| `--ref pr:<N>｜pr:<repo>#<N>｜td:TD-<N>` | 選填，可重複 | 這題的前提依附在哪個 PR／TD 上。它在**題目問出之後**終局（合入、關閉、結案），watch 的過時掃描就自動把這題下架；問出之前就已終局的算前提，不算證據。涉 production／花費／政策的題只標不寫。沒有任何可核對參照（`--ref`、dispatch、題目裡的 PR／TD）時 stderr 會提醒，不擋 |
 | `--supersede <span>` | 被「已有答案」拒收且現況變了才帶 | 指到拒收句列出的那一題才放行；記在 `payload.supersedes` |
 | `--options 'A,B'` | 舊寫法 | 以逗號切選項，選項本文含逗號時會切壞；用可重複的 `--option` |
 | `--question-page`／`--question-page-label` | 已退役 | 帶了直接被拒 |
