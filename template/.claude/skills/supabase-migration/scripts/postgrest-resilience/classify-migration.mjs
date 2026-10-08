@@ -9,11 +9,89 @@ if (!file) {
 }
 
 const sql = fs.readFileSync(file, 'utf8')
-const statements = sql
-  .replace(/--.*$/gm, '')
-  .split(';')
-  .map((statement) => statement.trim())
-  .filter(Boolean)
+const statements = splitStatements(sql)
+
+// 陳述式切分：認得註解（-- 與巢狀 /* */）、單引號字串、雙引號識別字、dollar-quoted body（$$ 與 $tag$），
+// 只在頂層 ; 切。classify 比對用 masked（字串內容與 dollar body 抹掉），避免 function body 內的文字誤觸規則；
+// 顯示用 text（保留原文）。
+function splitStatements(source) {
+  const parts = []
+  let text = ''
+  let masked = ''
+  const flush = () => {
+    if (text.trim()) parts.push({ text: text.trim(), masked: masked.trim() })
+    text = ''
+    masked = ''
+  }
+  const dollarTag = /\$([A-Za-z_][A-Za-z0-9_]*)?\$/y
+  let i = 0
+  while (i < source.length) {
+    const ch = source[i]
+    if (source.startsWith('--', i)) {
+      const end = source.indexOf('\n', i)
+      i = end === -1 ? source.length : end
+      continue
+    }
+    if (source.startsWith('/*', i)) {
+      let depth = 1
+      let j = i + 2
+      while (j < source.length && depth > 0) {
+        if (source.startsWith('/*', j)) {
+          depth++
+          j += 2
+        } else if (source.startsWith('*/', j)) {
+          depth--
+          j += 2
+        } else j++
+      }
+      text += ' '
+      masked += ' '
+      i = j
+      continue
+    }
+    if (ch === "'" || ch === '"') {
+      const backslashEscapes =
+        ch === "'" && /[eE]/.test(source[i - 1] ?? '') && !/\w/.test(source[i - 2] ?? '')
+      let j = i + 1
+      while (j < source.length) {
+        if (backslashEscapes && source[j] === '\\') j += 2
+        else if (source[j] === ch && source[j + 1] === ch) j += 2
+        else if (source[j] === ch) break
+        else j++
+      }
+      const literal = source.slice(i, j + 1)
+      text += literal
+      masked += ch === "'" ? "''" : literal
+      i = j + 1
+      continue
+    }
+    if (ch === '$' && !/[\w$]/.test(source[i - 1] ?? '')) {
+      dollarTag.lastIndex = i
+      const open = dollarTag.exec(source)
+      if (open) {
+        const close = source.indexOf(open[0], i + open[0].length)
+        const end = close === -1 ? source.length : close + open[0].length
+        text += source.slice(i, end)
+        masked += `${open[0]} ${open[0]}`
+        i = end
+        continue
+      }
+    }
+    if (ch === ';') {
+      flush()
+      i++
+      continue
+    }
+    text += ch
+    masked += ch
+    i++
+  }
+  flush()
+  return parts
+}
+
+const VERSIONED_CREATE_FUNCTION =
+  /^\s*create\s+(function|procedure)\s+(?:(?:"[^"]+"|\w+)\s*\.\s*)?(?:"[^"]*_v\d+"|\w*_v\d+)\s*\(/i
 
 const rules = [
   {
@@ -53,6 +131,20 @@ const rules = [
     reason: 'Dropping exposed RPC signatures can break PostgREST clients during rollout.',
   },
   {
+    id: 'expand-contract-replace-function',
+    severity: 'expand_contract_required',
+    pattern: /^\s*create\s+or\s+replace\s+(function|procedure)\b/i,
+    reason:
+      'Replacing an exposed RPC in place changes behavior or signature under live clients; ship a new versioned function first, then contract.',
+  },
+  {
+    id: 'expand-contract-revoke',
+    severity: 'expand_contract_required',
+    pattern: /^\s*revoke\b/i,
+    reason:
+      'Revoking privileges removes access PostgREST roles may still rely on; migrate callers first (expand/contract).',
+  },
+  {
     id: 'online-create-index-concurrently',
     severity: 'online_safe',
     pattern: /\bcreate\s+(unique\s+)?index\s+concurrently\b/i,
@@ -69,6 +161,41 @@ const rules = [
     severity: 'online_safe',
     pattern: /\balter\s+table\b[\s\S]*\badd\s+column\b(?![\s\S]*\bnot\s+null\b)/i,
     reason: 'Adding a nullable column is generally backward-compatible.',
+  },
+  {
+    id: 'online-create-function-versioned',
+    severity: 'online_safe',
+    pattern: VERSIONED_CREATE_FUNCTION,
+    reason:
+      'Creating a new versioned function (name ends in _vN) cannot overload an exposed RPC; existing signatures are untouched.',
+  },
+  {
+    id: 'expand-contract-create-function',
+    severity: 'expand_contract_required',
+    pattern:
+      /^\s*create\s+(function|procedure)\b(?!\s+(?:(?:"[^"]+"|\w+)\s*\.\s*)?(?:"[^"]*_v\d+"|\w*_v\d+)\s*\()/i,
+    reason:
+      'A new overload of an exposed function name makes PostgREST RPC calls ambiguous (PGRST203); use a versioned name (_v2) or confirm the name is unused, and annotate the migration risk.',
+  },
+  {
+    id: 'expand-contract-grant-public',
+    severity: 'expand_contract_required',
+    pattern: /^\s*grant\b[\s\S]*\bto\b[\s\S]*\b(anon|public)\b/i,
+    reason:
+      'Granting to anon/public widens access for unauthenticated roles; needs reviewer attention.',
+  },
+  {
+    id: 'online-grant',
+    severity: 'online_safe',
+    pattern: /^\s*grant\b/i,
+    reason:
+      'Granting to authenticated roles is additive; it only widens what the target role can reach.',
+  },
+  {
+    id: 'online-comment-on',
+    severity: 'online_safe',
+    pattern: /^\s*comment\s+on\b/i,
+    reason: 'COMMENT ON only changes catalog descriptions (PostgREST OpenAPI text), not behavior.',
   },
   {
     id: 'online-create-table',
@@ -90,11 +217,11 @@ function highest(severities) {
   return severities.toSorted((a, b) => rank[b] - rank[a])[0]
 }
 
-const findings = statements.map((statement, index) => {
-  const matched = rules.filter((rule) => rule.pattern.test(statement))
+const findings = statements.map(({ text, masked }, index) => {
+  const matched = rules.filter((rule) => rule.pattern.test(masked))
   return {
     index: index + 1,
-    statement: statement.replace(/\s+/g, ' ').slice(0, 220),
+    statement: text.replace(/\s+/g, ' ').slice(0, 220),
     classification: highest(matched.map((rule) => rule.severity)),
     rules: matched.map(({ id, severity, reason }) => ({ id, severity, reason })),
   }

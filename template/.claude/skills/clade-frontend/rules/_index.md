@@ -1,3 +1,4 @@
+{"file":"agent-devtools.md","source":"rules/modules/framework/nuxt/agent-devtools.md","paths":["nuxt.config.*","pnpm-workspace.yaml"]}
 {"file":"development.md","source":"rules/modules/framework/nuxt/development.md","paths":["app/**/*.{vue,ts}","packages/*/app/**/*.{vue,ts}","server/**/*.ts","packages/*/server/**/*.ts","test/**/*.ts","packages/*/test/**/*.ts","shared/**/*.ts","packages/*/shared/**/*.ts","package.json"]}
 {"file":"display-value-integrity.md","source":"rules/core/display-value-integrity.md","paths":["server/**/*.ts","packages/*/server/**/*.ts","app/composables/**/*.ts","packages/*/app/composables/**/*.ts"]}
 {"file":"drag-interaction.md","source":"rules/core/drag-interaction.md","paths":["**/composables/**rag*.ts","**/composables/**ove*.ts","**/composables/**esize*.ts","**/composables/**ort*.ts","**/components/**rag*.vue","**/composables/*schedule*/**","**/composables/*calendar*/**"]}

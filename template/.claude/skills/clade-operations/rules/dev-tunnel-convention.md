@@ -1,5 +1,5 @@
 ---
-description: Dev tunnel（vite-plugin-cloudflare-tunnel / cloudflared）跨 consumer convention 索引 — zone-in-account、token scope、restart-loop 防護、冷/熱載入量測四題彙整，各指向權威 § + cookbook + pitfall cross-link
+description: Dev tunnel（vite-plugin-cloudflare-tunnel / cloudflared）跨 consumer convention 索引 — zone-in-account、token scope、restart-loop 防護、冷/熱載入量測四題彙整，各指向權威 § + cookbook + pitfall cross-link；§ 6 要掛 dev tunnel 就必須掛 Cloudflare Access，否則撤 tunnel
 paths: ['nuxt.config.*', '.env', '.env.local', 'package.json']
 ---
 <!-- Clade native rule; source: rules/core/dev-tunnel-convention.md; edit canonical source -->
@@ -7,7 +7,7 @@ paths: ['nuxt.config.*', '.env', '.env.local', 'package.json']
 
 # Dev Tunnel Convention（索引）
 
-Dev tunnel（`vite-plugin-cloudflare-tunnel` 或手動 `cloudflared`）的 org convention 與失敗模式。§ 2–4 的完整規約與理由在 [[dev-port-allocation]] § 2.5–2.7，本檔每節只留一行 Convention（編輯 `.env*`／`nuxt.config.*` 時不一定載入該檔）與入口；§ 1 與 § 5 是本檔獨有的規約本體。
+Dev tunnel（`vite-plugin-cloudflare-tunnel` 或手動 `cloudflared`）的 org convention 與失敗模式。§ 2–4 的完整規約與理由在 [[dev-port-allocation]] § 2.5–2.7，本檔每節只留一行 Convention（編輯 `.env*`／`nuxt.config.*` 時不一定載入該檔）與入口；§ 1、§ 5、§ 6 是本檔獨有的規約本體。
 
 ## § 1 — Zone 必在當前 account 內（multi-account misdirection）
 
@@ -68,3 +68,25 @@ p.on('response', r => {
 - Hostname convention：§ 1 / [[dev-port-allocation]] § 2.5
 
 **Pitfall**：[[pitfall-cdn-cache-ignores-accept-breaks-vite-css-module-mime]]
+
+## § 6 — 要掛 dev tunnel 就必須掛 Cloudflare Access，否則撤 tunnel
+
+**Convention**：**每一個** consumer 的 dev server 要掛 tunnel，前提是該 tunnel hostname 掛了 Cloudflare Access；沒有 Access 就先撤掉 dev server tunnel（Charles 2026-10-07）。合法狀態只有兩種——「hostname 有 Access」或「沒有 tunnel」，**NEVER** 有「先開著之後再補 Access」。
+
+**為什麼**：tunnel 會把偽造 `Origin: http://localhost:<port>` 的外部請求送進 dev server；Nuxt DevTools v4（devframe）的 node 端工具在授權開著時仍讀得到 `runtimeConfig` 裡的 secret。Access 在 Cloudflare 邊緣就把沒登入的請求轉走，請求到不了 origin。
+
+**判定（只認邊緣探測）**：「有沒有 Access」**MUST** 只用 `vendor/snippets/agent-devtools/access-probe.mjs` 的 `probeAccess(hostname)` 判定——對 `https://<hostname>/__devtools/__mcp` 與 `https://<hostname>/` 各發一個不帶憑證、不跟轉址的請求，**兩條**都轉址到 `*.cloudflareaccess.com` 才是 `access`。其餘一律當作沒有：`530`、`200`、`403`（含 service-token-only policy）、逾時、DNS 失敗。**NEVER** 用人工宣告的旗標、設定檔註記或「我記得有掛」代替探測。
+
+**撤 tunnel 的可觀察結果**：consumer 的 `.env*` 不再有 `TUNNEL_HOSTNAME` 等 tunnel 設定，dev server 啟動時不開 tunnel，dev 走 localhost。Cloudflare 端的 tunnel 物件與 DNS record 要不要一併刪除不在本節範圍。
+
+**webhook bypass**：Access app 只替外部 webhook 路徑（例如 LINE）開 bypass 算符合本節。**每一個** tunnel hostname 的 bypass **MUST** 只涵蓋外部 webhook 路徑，DevTools 端點（`/__devtools/**`）與站台根路徑 **NEVER** 在 bypass 內——蓋到其中之一，探測就不是 `access`。bypass 路徑上的端點 **MUST** 自己驗證來源（例如 webhook 簽章）。需要 webhook 的 consumer **NEVER** 以此為由保留未掛 Access 的 tunnel。手機一樣經 Access 登入使用，**NEVER** 為手機另開 bypass。
+
+**執行期兜底（Nuxt DevTools v4）**：`TUNNEL_HOSTNAME` 有值、tunnel 真的要開時，`nuxt.config.ts` 在啟動前探一次（≤ 3s，NEVER throw）；不是 `access` 就 `vite.devtools: false` 並印原因與兩個處置（補 Access／撤 tunnel）。這是**唯一**的關閉條件：**每一個** consumer 的範本 **NEVER** 以「綁非 loopback host（`--host`／`NUXT_HOST`）」關 DevTools——沒有 tunnel 的區網由 token 授權與 MCP bearer 承擔（[[agent-devtools]]）。resilient wrapper fallback 純 localhost 時視為沒有 tunnel，不探測。範本：`vendor/snippets/agent-devtools/`。
+
+**稽核**：`node scripts/dev-port-audit.ts --markdown`（clade 端）的「Agent devtools」段逐 consumer 報 tunnel hostname 的探測結果；有 tunnel 而不是 `access` 即 FAIL。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | `dev-port-audit.ts` 對有 `TUNNEL_HOSTNAME` 的 consumer 探測為 `no-access`／`unreachable` → 該列 FAIL、exit 1；dev server 啟動時探測不是 `access` → DevTools 關閉並印一行原因 |
+| 消費端 | 主持者（把 FAIL 的 consumer 派出去補 Access 或撤 tunnel、relay 時帶現況列）；設 tunnel 的 consumer session |
+| 觸發點 | 本節 paths-gated 於 `nuxt.config.*`、`.env`、`.env.local`（設 tunnel 的那一刻）；`dev-port-audit.ts` 的 FAIL 輸出直接印本節位置 |

@@ -29,6 +29,8 @@ commit 0-A 的唯一合格 reviewer 是 fresh-context **Claude Opus 5.5（effort
 
 **命中即主線自己做**：少量讀取、規約／契約／對外定稿、安全／不可逆動作、session gate，以及複驗自己剛做完的東西。定稿措辭，**措辭的語氣與抽象層級一致性外包不了**。具名 threshold（第 3 個 readonly Bash、第 5 個 textual Read、首次 Read 501+ 行）依 reference 結案；不要把 threshold 當 generic「少量」豁免。
 
+**第二條主線（Charles 2026-10-08）**：命中「有份量的獨立平行軌」，而那條軌**本身就是主線形狀**——要主線席位才做得了（主線級判斷、看圖／實機驗證、跑 `work-route`／`presale` 這類多階段 skill、途中要問 user），任何 subagent 列都接不下——且它與當前主線的四條 parallel rubric（檔案不重疊、無 phase 依賴、無共享 mutex、可獨立驗證）全成立 → **MUST 當下**開 Herdr pane 當新主線平行開工，當前主線繼續自己那條；載體見 § Dispatch data and transport boundary。rubric 任一不中就是 serial，留在當前主線依序做。逐字反開脫：「要看圖驗證／要主線判斷，所以主線自己做」——那只證明它需要**一條**主線，不證明需要**這一條**，兩件都留在這條主線就是把平行工作串行化；「先 fork 試試」——fork／subagent 被 routing gate 落到 delegate 檔位，主線形狀的工作 **NEVER** 塞 subagent。已經撞到 gate 就 `[waive] --reason second-main-line --note "<pane label>"`，接著開 pane。
+
 命中多條條件時先問能否由一個 worker 完成整條資料依賴鏈；可以就派一個，**NEVER** 一條 task 配一個 agent 地拆。brief 與回報依 [[agent-routing.dispatch-execution]]，派出後依 [[agent-routing.pi-watch-protocol]]。
 
 派顧問／分析型 subagent 的 brief **MUST** 逐字含「結論寫在最終輸出，NEVER 只用 SendMessage 回覆主線」。側通道訊息沒有時效保證；subagent 的最終輸出才有。主線在宣告「這支 agent 沒有產出」之前 **MUST** 先讀它的 transcript；runtime 顯示的閒置狀態不是產出訊號（TD-679）。各 runtime 的 transcript 位置與原生訊號見 adapter。
@@ -55,6 +57,7 @@ Iron Law：本 session 做得到的動作與查得出的決策 NEVER 交 user。
 | --- | --- |
 | 本 turn 內收得回來、不需要 successor 的 bounded 工作——review、裁決、掃描，**也含**短的實作／改檔（改一支 skill、補一段規約） | 該 runtime 的 in-process subagent（工具名只寫在該 runtime 的 adapter），前景等結果；要寫檔且怕撞主線就用 subagent 自帶的 worktree 隔離。**NEVER** 開 Herdr pane |
 | successor 交棒（relay／fanout）、主持分工、長時間 background、必須隔離 port／環境、主線 runtime 叫不出同家族 subagent | Herdr session |
+| 第二條主線（§ 派不派） | Herdr session 當新主線：`herdr-session-handoff.ts` 裸 dispatch（**不** `--relay`，當前主線不收工）、自己一棵 worktree，model／effort 照 [[agent-routing.routing-table]] § 主線 residency，`--table-row` 填該工作主體所在列。派完照 `session-tasks.operations` § 派工生命週期責任 驗到原任務已接手就回自己那條，**NEVER** 輪詢它；新主線直接對 user 負責、收工前 `--complete`，原主線收工時 `--reclaim` 或交 successor 繼承 |
 
 逐字反開脫：「要留 model 身分 receipt，所以開 pane」——subagent transcript 記得到每則訊息的 model，commit 0-A 的 `prepare`／`finalize` 就是從那裡核對的。「這列寫 Herdr carrier，所以開 pane」——Routing Table 的載體欄列的是**可用**載體，長短判準優先於它。
 

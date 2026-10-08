@@ -143,16 +143,16 @@ Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工�
 | `--tier-basis delegate-sub` | 經 `pi-dispatch.ts` admission，Grok 4.7 xhigh（照 [[agent-routing.routing-table]] § delegate-sub） |
 | Routing Table 首跳是 Gemini／Grok 的任何 Pi 列 | 經 `pi-dispatch.ts` admission，照原列的 model、effort、pool 與 fallback 鏈派送；不得改派 Devin 或其他 pane 跳過首跳 |
 | Sonnet 四列（`non-ui-implementation`／`nuxt-core-implementation`／`commit-0c-fix-verify`／`version-upgrade-first-pass`）本 turn 收得回的件 | in-process `sonnet-implementer`（Claude Sonnet 5.5，effort: high）；handoff 級／長時間的照上方 cloud ＞ Devin ＞ 本機 pane |
-| PR 0-A 修補（`pr-0a-fix`）、rebase 與其他要推回既有 PR branch 的修補，該 PR 是某筆 `cloud-dispatch.ts` record 的 branch 開的，且 `followup` 沒拒送 | 交回**原** cloud session：`cloud-dispatch.ts followup <cloud_id> --pr <N> --reason pr-0a-fix --message-file <findings>`。`idle`、VM 已回收的 session 都推得回同一個 PR，rebase 後 `--force-with-lease` 推自己的 branch 也成立（2026-10-07 實測，證據在 cookbook）。`followup` 拒送（session 已 archive、已收割、已 handover、claude.ai 查無、`--pr` 不是這筆 record 的 PR）、送出 45 分鐘（`FOLLOWUP_STALE_MINUTES`）PR 仍沒有新 commit、或同一張 PR 已送滿 2 輪（`FOLLOWUP_MAX_PER_PR`）→ 先 `cloud-dispatch.ts handover <cloud_id> --pr <N> --reason …` 再退本機 pane：handover 確認 session 不在 running 才寫入，exit 2 就不退（cloud session 准 `--force-with-lease`，兩邊會在同一個 branch 競推），寫入後 `followup` 一律拒送。主持者自動加派以載體 `cloud-followup` 照這列走 |
-| 其他要推回既有 PR branch 的修補（本機 pane 開的 PR、別筆 record 的 PR、上一列退下來的） | **NEVER** 新開 cloud session：它的 credential 只推得了自己的 working branch；走本機 pane |
+| PR 0-A 修補（`pr-0a-fix`）、rebase 與其他要推回既有 PR branch 的修補，該 PR 是某筆 `cloud-dispatch.ts` record 的 branch 開的，且 `followup` 沒拒送 | 交回**原** cloud session：`cloud-dispatch.ts followup <cloud_id> --pr <N> --reason pr-0a-fix --message-file <findings>`。`idle`、VM 已回收的 session 都推得回同一個 PR，rebase 後 `--force-with-lease` 推自己的 branch 也成立（2026-10-07 實測，證據在 cookbook）。`followup` 拒送（session 已 archive、已收割、已 handover、claude.ai 查無、`--pr` 不是這筆 record 的 PR）、送出 45 分鐘（`FOLLOWUP_STALE_MINUTES`）PR 仍沒有新 commit、或同一張 PR 已送滿 2 輪（`FOLLOWUP_MAX_PER_PR`）→ 先 `cloud-dispatch.ts handover <cloud_id> --pr <N> --reason …` 再退本機 pane：handover 確認 session 不在 running 才寫入，exit 2 就不退（cloud session 准 `--force-with-lease`，兩邊會在同一個 branch 競推），寫入後 `followup` 一律拒送；退下來的本機 pane 帶 `--local-reason cloud-handback`。主持者自動加派以載體 `cloud-followup` 照這列走 |
+| 其他要推回既有 PR branch 的修補（本機 pane 開的 PR、別筆 record 的 PR） | **cloud on-branch**：`cloud-dispatch.ts dispatch --on-branch <branch> --pr <N> [--expect-head <sha>] …`。單一 writer 由派前門查（每個節點的未收割 cloud record、Herdr dispatch、worktree checkout、claim），派工者不必先查。拒派時照 stdout 的 `code` 處置：`pr-branch-has-live-writer` → 本機 pane 帶 `--local-reason pr-branch-has-live-writer`；`writer-undeterminable` → 本機 pane 帶 `--local-reason other:writer-undeterminable`（**NEVER** 當成沒有 writer 重派 cloud）；`use-followup` → 訊息指出原 record 時改走上一列，訊息寫「找不到原 record」時本機 pane 帶 `--local-reason other:cloud-branch-without-record`；`cloud-admission-refused` → 本機 pane 帶 `--local-reason cloud-admission-refused`；`pr-not-open`／`head-ref-mismatch` → 重查 PR 現況再決定 |
 | commit 0-A | **NEVER** cloud：0-A 只認 `claude-review-safe.sh` 的 subagent carrier |
 
 **適合 cloud** 要硬條件全中、工作形狀也對：
 
 - **硬條件**（缺一就不能派，`cloud-dispatch.ts` 會擋其中幾條）：工作在**單一 GitHub repo** 內做得完；base 已 push 到 origin；派出帳號的 `--ref` preflight 判 GitHub App 已安裝（網頁看得到 repo、org 端裝了 App 都不算；判定方式見 cookbook）。repo **不必**釘 model：launch 的 `--model`／`--effort` 蓋過 repo 的 `.claude/settings.json`（2026-10-06 實測），只有沒帶列也沒帶旗標的派出才要求 repo 釘 routing table 的 Claude model（Opus 5.5 ≤ `medium` 或 `claude-sonnet-5-5`／`high`，與旗標同一份白名單）。
 - **工作形狀**：自足（brief 讀完就做得完）、驗收全在 PR＋CI 看得到。本機驗證越重（大測試矩陣、build、e2e）越划算——那些負載整包留在 VM。急件與非急件用同一條：緊急度只影響排序與 patrol 輪詢（急件的 record 每輪先查），代價是中途無法對話，所以只放行 brief 自足的急件。
-- **不適合**：跨 repo、要本機狀態（dev server、DB lease、未 push 的 commit、secret、Herdr／pi seat、systemd、實體硬體）、要推回既有 PR branch 的修補（含 `pr-0a-fix`；原 cloud session 自己開的 PR 走上表 `followup` 列，不新開 session）、commit 0-A、要來回問答（cloud 回不了訊）。命中任一 → 本機 pane（或主線自己做）。clade 標準層（`rules/**`、`vendor/**` 等會散播的源檔）**不再整層排除**：散播只走 `clade-publish`，cloud 只產 draft PR，落地前照樣過 0-A 與 publish gate（Charles 2026-10-06）；clade 端「要本機狀態」的具體例子是要 live Herdr／coordinator 快取（`~/.cache/clade/**`）驗證的、要 ssh peer 的、要動 consumer 投影或跑 propagate 的、要 systemd／timer 的。
-- 自動派工（`coordinator-ready.ts` `cloudShapeProblem`）只看得到件的標題與寫入路徑，以字樣比對判「要本機狀態」：命中留本機，沒命中才排 cloud；誤判由上面的硬條件、pane 退路與 PR 驗收兜底。
+- **不適合**：跨 repo、要本機狀態（dev server、DB lease、未 push 的 commit、secret、Herdr／pi seat、systemd、實體硬體）、單一 writer 不成立的 PR 修補（`--on-branch` 派前門回 `pr-branch-has-live-writer` 或 `writer-undeterminable`；原 cloud session 自己開的 PR 走上表 `followup` 列，不新開 session）、commit 0-A、要來回問答（cloud 回不了訊）。命中任一 → 本機 pane（或主線自己做）。clade 標準層（`rules/**`、`vendor/**` 等會散播的源檔）**不再整層排除**：散播只走 `clade-publish`，cloud 只產 draft PR，落地前照樣過 0-A 與 publish gate（Charles 2026-10-06）；clade 端「要本機狀態」的具體例子是要 live Herdr／coordinator 快取（`~/.cache/clade/**`）驗證的、要 ssh peer 的、要動 consumer 投影或跑 propagate 的、要 systemd／timer 的。
+- 自動派工（`coordinator-ready.ts` `cloudShapeProblem`）只看得到件的標題與寫入路徑，以字樣比對判「要本機狀態」：命中留本機，沒命中才排 cloud；誤判由上面的硬條件、pane 退路與 PR 驗收兜底。PR 修補不走字樣比對，由前提檢查判（`prFixCloudProblem` 讀巡檢快照的逐節點觀測，交給與派前門同一個 `singleWriterVerdict`）：過 → on-branch cloud；不過 → 本機 pane，理由碼由 fanout 透傳。
 
 **cloud 先扣派出帳號的 cloud credit，扣完改扣該帳號的訂閱 weekly 窗**（Charles 2026-10-06，取代 09-28「與訂閱窗口無關」）。不設併發上限、不設總量預算、不設 weekly 保留百分比（Charles：「R7 不應該設上限」「用光沒關係 用光我 upgrade」）。admission 只擋兩件：帳號不可判定（要 cc1|cc2|cc3），以及下面的 0-A reviewer 席位守門。
 
@@ -166,7 +166,28 @@ Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工�
 
 機械閘在 `vendor/scripts/cloud-dispatch.ts dispatch`：在飛數（該帳號尚未 `harvest` 的 record；未帶帳號的 adopted record 計入每個帳號）與 credit 用盡標記只回報、不拒派（標記是啟動失敗訊息顯示 credit／billing 耗盡時留下的通知，`credit-reset --account <帳號>` 清除）。launch 因帳號 `five_hour`／`seven_day`（或 credit）用盡而失敗時，自動輪替池內下一個帳號（有額度者先）；每個帳號都失敗才停派並列 `reviewer-seat-hold` 待處置。`--ref` 被拒也輪替（Claude GitHub App 逐帳號安裝）：記住該帳號 × repo 6 小時、期間不再排它，池內帳號全部被拒才失敗，之後的 dry-run 直接拒派、改走本機 pane。**NEVER** 用任何方式繞過它拒派的結果。派出帳號在 cc1／cc2／cc3 之間選有額度且在飛較少的那個，以 `dispatch --account cc1|cc2|cc3` 明確指定；`adopt` 也帶 `--account` 讓 record 歸屬到帳號。不指定時只接受能從 `CLAUDE_CONFIG_DIR` 辨認出的池帳號。
 
-每輪有 handoff 級的 Claude 原生列就緒件時，主持者先跑 cloud dry-run admission 選帳號；若不派 cloud，在載體分佈旁記錄具體拒派條件（例如工作要本機狀態、`--ref` 被拒、0-A reviewer 席位守門）。
+每輪有 handoff 級的 Claude 原生列就緒件時，主持者先跑 cloud dry-run admission 選帳號。
+
+**本機載體的理由碼**：**每一件**經 `herdr-session-handoff.ts` 開本機 pane 或派 Devin 的 mutation 派工（Claude、Devin），都帶 `--local-reason <code>` 說明為什麼沒走 cloud。值與語意以 `~/offline/clade/specs/truth/data/dispatch-carrier.md` § 本機載體的理由碼為準：
+
+| 值 | 用在 |
+| --- | --- |
+| `pr-branch-has-live-writer` | PR 修補的 branch 上已有其他 writer |
+| `needs-local-state` | 要本機才有的狀態（未推的 commit、本機服務、檔案） |
+| `needs-interactive-qa` | 要人在本機互動驗收 |
+| `cross-repo` | 一件工作要寫多個 repo |
+| `cloud-admission-refused` | cloud 派工器拒派（帳號、額度、席位、旗標失效等） |
+| `zero-a` | commit 0-A 審查 |
+| `cloud-handback` | cloud session 停手、改由本機接手 |
+| `other:<text>` | 不屬上列；`<text>` 1–80 字、不含換行 |
+
+`coordinator`（交棒、relay、successor、`--coordinate`）、`unspecified`、`not-applicable` 由派工器自動寫，派工者不給。沒帶值不擋派：派工器記 `unspecified`，該件進 patrol／snapshot 的 `unspecified` 清單；值拼錯（含明寫 `unspecified`／`not-applicable`）exit 2、不派出。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 近 7 天 `unspecified` 件數 > 0 → patrol／snapshot 摘要逐件列出。不擋派；2026-10-21 依分佈另案決定要不要改成缺值拒派 |
+| 消費端 | 主持者讀摘要，回頭補問該件為什麼沒走 cloud；`delivery-metrics.ts` 的 cloud 占比報表按理由碼分組 |
+| 觸發點 | 失敗輸出：`herdr-session-handoff.ts` 回應 JSON 的 `local_reason_warning`（缺值時）與拼錯時的 `usage_error`（列出可用值）；摘要：`herdr-patrol.ts`／`coordinator-snapshot.ts` 的 `unspecified` 清單 |
 
 **Devin 續接**：Devin session 不能 `--continue`，要續做一律開新 session 帶 durable brief。
 

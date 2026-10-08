@@ -68,6 +68,7 @@ consumer 的 runtime 事實（dev port、auth provider、DB、deploy platform、
 兩個 schema 有少數欄位有**交叉約束**：
 
 - `consumers.json workflow_model='trunk-based'` ⇒ `consumer-meta.deploy.deployTrigger` 應為 `push-main` 或 `tag-v`
+- `consumers.json workflow_model='pr-merge-based'` ⇒ `consumer-meta.deploy.deployTrigger` 應為 `pr-merge`、`tag-v`、`manual` 或 `none`；`push-main` 報錯（PR 合併制下宣告 main push 即部署，Step 6-Gate 會讀成無人值守發版）
 - `consumer-meta.deploy.deployTrigger` ⇒ 必須等於 production deploy workflow 的實際觸發（`deploy-trigger-check.ts` 先讀 `on:`；同檔混 production 與 non-production job 時再以 production job 的 `if:` 收窄，讀不成 ref 清單就 fail-closed）
 - `consumers.json capabilities.preview_db` ⇒ `consumer-meta.database.previewEnvCapability` 應一致
 

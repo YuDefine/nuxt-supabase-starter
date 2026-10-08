@@ -7,6 +7,7 @@ description: "Frontend, interaction, accessibility, localization, and UX integri
 
 逐條對照你接下來要做的事；條件成立才讀那一份，NEVER 先把整批讀進來。
 
+- READ 若要讀或改 `nuxt.config.*`、`pnpm-workspace.yaml`，讀取 `rules/agent-devtools.md`
 - READ 若要讀或改 `app/**/*.{vue,ts}`、`packages/*/app/**/*.{vue,ts}`、`server/**/*.ts`、`packages/*/server/**/*.ts`、`test/**/*.ts`、`packages/*/test/**/*.ts` 等 9 處（全表見 rules/_index.md），讀取 `rules/development.md`
 - READ 若要讀或改 `server/**/*.ts`、`packages/*/server/**/*.ts`、`app/composables/**/*.ts`、`packages/*/app/composables/**/*.ts`，讀取 `rules/display-value-integrity.md`
 - READ 若要讀或改 `**/composables/**rag*.ts`、`**/composables/**ove*.ts`、`**/composables/**esize*.ts`、`**/composables/**ort*.ts`、`**/components/**rag*.vue`、`**/composables/*schedule*/**` 等 7 處（全表見 rules/_index.md），讀取 `rules/drag-interaction.md`

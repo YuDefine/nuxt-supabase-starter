@@ -344,6 +344,8 @@ export interface RemotePrState {
   base: string
   headSha: string
   headRef: string
+  /** GitHub `state`（open／closed）；缺省＝探測端沒回報，superseded 出口會因此拒絕。 */
+  state?: string
 }
 export type RemotePrProbe = (query: { repository: string; pr: number }) => RemotePrState
 export interface CheckpointReceipt {
@@ -355,6 +357,25 @@ export interface CheckpointReceipt {
   scope: string[]
   at: string
 }
+export type DraftRetirement =
+  | DraftRetirementAbandoned
+  | { status: 'retired'; repository: string; mergeSha: string; at: string }
+  // 舊 draft 為 CLOSED 未合，由 supersededBy 這張 MERGED PR 取代；mergeSha／headRef 是取代 PR 的。
+  | {
+      status: 'superseded'
+      repository: string
+      mergeSha: string
+      at: string
+      supersededBy: number
+      supersededHeadRef: string
+    }
+export type DraftRetirementAbandoned = {
+  status: 'abandoned'
+  repository: string
+  at: string
+  // 放棄當下來源樹的狀態：已不存在，或存在但乾淨且沒有 origin/main 之外的 commit。
+  sourceState: 'missing' | 'clean'
+}
 export type DraftPrReceipt = {
   workId: string
   source: string
@@ -362,7 +383,7 @@ export type DraftPrReceipt = {
   head: string
   pr: number
   at: string
-  retirement?: { status: 'retired'; repository: string; mergeSha: string; at: string }
+  retirement?: DraftRetirement
 } & ({ kind: 'visibility' } | { kind: 'discussion'; discussant: string; question: string })
 export interface MergeAttemptJournal {
   operationId: string
@@ -2995,6 +3016,26 @@ function workIdFile(workId: string): string {
 function isNonemptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
+function isDraftRetirement(r: unknown): r is DraftRetirement {
+  if (
+    !isRecord(r) ||
+    typeof r.repository !== 'string' ||
+    !r.repository.includes('/') ||
+    typeof r.at !== 'string'
+  )
+    return false
+  const hasMergeSha = typeof r.mergeSha === 'string' && objectIdPattern.test(r.mergeSha)
+  if (r.status === 'retired') return hasMergeSha
+  if (r.status === 'abandoned') return r.sourceState === 'missing' || r.sourceState === 'clean'
+  return (
+    r.status === 'superseded' &&
+    hasMergeSha &&
+    typeof r.supersededBy === 'number' &&
+    Number.isInteger(r.supersededBy) &&
+    r.supersededBy > 0 &&
+    isNonemptyString(r.supersededHeadRef)
+  )
+}
 export function parseDraftPrReceipt(value: unknown): DraftPrReceipt {
   if (!isRecord(value)) throw new Error('Invalid draft receipt; preserve it for recovery')
   if (
@@ -3015,15 +3056,7 @@ export function parseDraftPrReceipt(value: unknown): DraftPrReceipt {
     head: value.head,
     pr: value.pr,
     at: value.at,
-    ...(isRecord(value.retirement) &&
-    value.retirement.status === 'retired' &&
-    typeof value.retirement.repository === 'string' &&
-    value.retirement.repository.includes('/') &&
-    typeof value.retirement.mergeSha === 'string' &&
-    objectIdPattern.test(value.retirement.mergeSha) &&
-    typeof value.retirement.at === 'string'
-      ? { retirement: value.retirement as DraftPrReceipt['retirement'] }
-      : {}),
+    ...(isDraftRetirement(value.retirement) ? { retirement: value.retirement } : {}),
   }
   if (value.retirement !== undefined && !base.retirement)
     throw new Error('Invalid draft retirement; preserve it for recovery')
@@ -3084,10 +3117,11 @@ export function retireDraftPr(
   cwd: string,
   workId: string,
   remotePr: RemotePrProbe = defaultRemotePrProbe,
+  options: { supersededBy?: number; abandoned?: boolean } = {},
 ) {
   if (!workId.trim()) throw new BatchUsageError('Required --work-id')
   const c = context(cwd)
-  return mutate(c, () => {
+  return mutate(c, (s) => {
     const file = join(c.dir, 'drafts', workIdFile(workId))
     if (!existsSync(file)) throw new Error(`No draft receipt for ${workId}`)
     const receipt = readDraft(file)
@@ -3096,6 +3130,11 @@ export function retireDraftPr(
     if (receipt.retirement) return receipt
     const repository = githubRepositoryFromRemote(c.main)
     if (!repository) throw new Error('Cannot verify this checkout against a GitHub repository')
+    if (options.abandoned && options.supersededBy !== undefined)
+      throw new BatchUsageError('--abandoned and --superseded-by are mutually exclusive')
+    if (options.abandoned) return retireAbandonedDraft(c, s, file, receipt, repository, remotePr)
+    if (options.supersededBy !== undefined)
+      return retireSupersededDraft(c, s, file, receipt, repository, options.supersededBy, remotePr)
     const remote = remotePr({ repository, pr: receipt.pr })
     if (
       !remote.merged ||
@@ -3124,17 +3163,188 @@ export function retireDraftPr(
         at: new Date().toISOString(),
       },
     }
-    const auditDir = join(c.dir, 'draft-retirements')
-    mkdirSync(auditDir, { recursive: true })
-    const auditFile = `${workIdFile(workId).slice(0, -5)}-${receipt.pr}.json`
-    if (existsSync(join(auditDir, auditFile)))
-      throw new Error(
-        'Draft retirement audit already exists but receipt is active; reconcile before retry',
-      )
-    writeJsonDurable(auditDir, auditFile, retired)
-    writeJsonDurable(dirname(file), basename(file), retired)
-    return retired
+    return writeDraftRetirement(c, file, retired)
   })
+}
+function writeDraftRetirement(c: Context, file: string, retired: DraftPrReceipt): DraftPrReceipt {
+  const auditDir = join(c.dir, 'draft-retirements')
+  mkdirSync(auditDir, { recursive: true })
+  const auditFile = `${workIdFile(retired.workId).slice(0, -5)}-${retired.pr}.json`
+  if (existsSync(join(auditDir, auditFile)))
+    throw new Error(
+      'Draft retirement audit already exists but receipt is active; reconcile before retry',
+    )
+  writeJsonDurable(auditDir, auditFile, retired)
+  writeJsonDurable(dirname(file), basename(file), retired)
+  return retired
+}
+/**
+ * 舊 draft PR 為 CLOSED 未合、由另一張 MERGED PR 取代時的受控出口。四項全過才寫 retirement：
+ * ① 舊 draft 確為 closed 且未合（已合的走一般 retire-draft）；② 取代 PR 是本 repo main 上的 MERGED PR，
+ * merge commit 是 origin/main 祖先；③ 取代 PR 的 head tree 等於綁住該 draft 的 sealed batch 的 seal tree；
+ * 任一不過就拒絕，receipt 與 batch 原樣保留。
+ */
+function retireSupersededDraft(
+  c: Context,
+  s: State,
+  file: string,
+  receipt: DraftPrReceipt,
+  repository: string,
+  supersededBy: number,
+  remotePr: RemotePrProbe,
+): DraftPrReceipt {
+  if (!Number.isInteger(supersededBy) || supersededBy <= 0 || supersededBy === receipt.pr)
+    throw new BatchUsageError('--superseded-by must be a positive PR number other than the draft')
+  const old = remotePr({ repository, pr: receipt.pr })
+  if (old.repository.toLowerCase() !== repository.toLowerCase() || old.pr !== receipt.pr)
+    throw new Error(`PR #${receipt.pr} identity does not match this draft; receipt retained`)
+  if (old.merged)
+    throw new Error(
+      `Draft PR #${receipt.pr} is MERGED, not superseded; use retire-draft without --superseded-by. Receipt retained`,
+    )
+  if (old.state !== 'closed')
+    throw new Error(
+      `Draft PR #${receipt.pr} is not verified CLOSED (state ${old.state ?? 'unknown'}); receipt retained`,
+    )
+  const next = remotePr({ repository, pr: supersededBy })
+  if (
+    !next.merged ||
+    next.repository.toLowerCase() !== repository.toLowerCase() ||
+    next.pr !== supersededBy ||
+    next.base !== 'main' ||
+    !objectIdPattern.test(next.mergeSha) ||
+    !objectIdPattern.test(next.headSha) ||
+    !isNonemptyString(next.headRef)
+  )
+    throw new Error(
+      `Superseding PR #${supersededBy} is not a verified MERGED PR into main; receipt retained`,
+    )
+  try {
+    git(c.main, ['merge-base', '--is-ancestor', next.mergeSha, 'refs/remotes/origin/main'])
+  } catch {
+    throw new Error(
+      `Superseding PR #${supersededBy} merge commit is not an origin/main ancestor; receipt retained`,
+    )
+  }
+  const bound = s.batches.filter(
+    (b) =>
+      isLiveBatch(b) &&
+      b.seal?.tree &&
+      (b.draftBindings ?? []).some(
+        (binding) => binding.workId === receipt.workId && binding.pr === receipt.pr,
+      ),
+  )
+  if (bound.length !== 1)
+    throw new Error(
+      `Expected exactly one live sealed batch bound to draft PR #${receipt.pr} of ${receipt.workId}, found ${bound.length}; receipt retained`,
+    )
+  const sealTree = bound[0]!.seal!.tree
+  let headTree: string
+  try {
+    headTree = git(c.main, ['rev-parse', `${next.headSha}^{tree}`])
+  } catch {
+    throw new Error(
+      `Superseding PR #${supersededBy} head ${next.headSha} is not available locally; fetch it, then retry. Receipt retained`,
+    )
+  }
+  if (headTree !== sealTree)
+    throw new Error(
+      `Superseding PR #${supersededBy} head tree ${headTree} does not match the sealed batch tree ${sealTree}; receipt retained`,
+    )
+  return writeDraftRetirement(c, file, {
+    ...receipt,
+    retirement: {
+      status: 'superseded',
+      repository,
+      mergeSha: next.mergeSha.toLowerCase(),
+      at: new Date().toISOString(),
+      supersededBy,
+      supersededHeadRef: next.headRef,
+    },
+  })
+}
+/**
+ * 沒有接替 PR 的放棄出口：PR 為 CLOSED 未合，且沒有活的 batch 綁著它，且來源樹不存在，
+ * 或存在但乾淨、HEAD 沒有 origin/main 之外的 commit（不會因 retire 而遺失未保存內容）才標 abandoned。
+ */
+function retireAbandonedDraft(
+  c: Context,
+  s: State,
+  file: string,
+  receipt: DraftPrReceipt,
+  repository: string,
+  remotePr: RemotePrProbe,
+): DraftPrReceipt {
+  const old = remotePr({ repository, pr: receipt.pr })
+  if (old.repository.toLowerCase() !== repository.toLowerCase() || old.pr !== receipt.pr)
+    throw new Error(`PR #${receipt.pr} identity does not match this draft; receipt retained`)
+  if (old.merged)
+    throw new Error(
+      `Draft PR #${receipt.pr} is MERGED, not abandoned; use retire-draft without --abandoned. Receipt retained`,
+    )
+  if (old.state !== 'closed')
+    throw new Error(
+      `Draft PR #${receipt.pr} is not verified CLOSED (state ${old.state ?? 'unknown'}); receipt retained`,
+    )
+  const bound = s.batches.find(
+    (b) =>
+      isLiveBatch(b) &&
+      (b.draftBindings ?? []).some(
+        (binding) => binding.workId === receipt.workId && binding.pr === receipt.pr,
+      ),
+  )
+  if (bound)
+    throw new Error(
+      `Draft PR #${receipt.pr} is still bound to live batch ${bound.id}; use --superseded-by or cancel the batch. Receipt retained`,
+    )
+  const tree = worktrees(c.main).find(
+    (w) => w.path === receipt.source && existsSync(w.path) && w.branch === receipt.branch,
+  )
+  let sourceState: 'missing' | 'clean' = 'missing'
+  if (tree) {
+    if (!clean(tree.path))
+      throw new Error(`Draft source ${tree.path} has uncommitted work; receipt retained`)
+    const ahead = Number(git(tree.path, ['rev-list', '--count', 'refs/remotes/origin/main..HEAD']))
+    if (ahead !== 0)
+      throw new Error(
+        `Draft source ${tree.path} has ${ahead} commit(s) ahead of origin/main; receipt retained`,
+      )
+    sourceState = 'clean'
+  } else if (existsSync(receipt.source)) {
+    throw new Error(
+      `Draft source ${receipt.source} exists but is not the registered worktree of ${receipt.branch}; receipt retained`,
+    )
+  }
+  return writeDraftRetirement(c, file, {
+    ...receipt,
+    retirement: {
+      status: 'abandoned',
+      repository,
+      at: new Date().toISOString(),
+      sourceState,
+    },
+  })
+}
+// 被取代的 draft：receipt 已 retire（superseded），其 binding 改以取代 PR 對帳。
+function supersededDraftMatches(
+  c: Context,
+  draft: BatchDraftBinding,
+  receipt: MergeReceipt,
+  headRef: string,
+): boolean {
+  const file = join(c.dir, 'drafts', workIdFile(draft.workId))
+  if (!existsSync(file)) return false
+  const stored = readDraft(file)
+  const r = stored.retirement
+  return (
+    stored.workId === draft.workId &&
+    stored.pr === draft.pr &&
+    r?.status === 'superseded' &&
+    r.supersededBy === receipt.pr &&
+    r.supersededHeadRef === headRef &&
+    r.mergeSha === receipt.merge_sha.toLowerCase() &&
+    r.repository.toLowerCase() === receipt.repository.toLowerCase()
+  )
 }
 function draftBindingFor(c: Context, workId: string): BatchDraftBinding | undefined {
   const receipt = draftReceiptFor(c, workId)
@@ -3160,6 +3370,7 @@ function assertReceiptReusesDraft(
         return binding ? [binding] : []
       })
   for (const draft of bindings) {
+    if (draft.pr !== receipt.pr && supersededDraftMatches(c, draft, receipt, headRef)) continue
     if (draft.pr !== receipt.pr)
       throw new Error(
         `Draft PR #${draft.pr} already exists for ${draft.workId}; ready and merge must reuse it, receipt names #${receipt.pr}. Source and integration retained`,
@@ -3827,7 +4038,7 @@ function defaultRemotePrProbe(query: { repository: string; pr: number }): Remote
         'api',
         `repos/${query.repository}/pulls/${query.pr}`,
         '--jq',
-        '{merged:.merged,mergeSha:.merge_commit_sha,base:.base.ref,repository:.base.repo.full_name,pr:.number,headSha:.head.sha,headRef:.head.ref}',
+        '{merged:.merged,mergeSha:(.merge_commit_sha // ""),base:.base.ref,repository:.base.repo.full_name,pr:.number,headSha:.head.sha,headRef:.head.ref,state:.state}',
       ],
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
     )
@@ -3857,6 +4068,7 @@ function defaultRemotePrProbe(query: { repository: string; pr: number }): Remote
     base: parsed.base,
     headSha: parsed.headSha.toLowerCase(),
     headRef: parsed.headRef,
+    ...(typeof parsed.state === 'string' ? { state: parsed.state.toLowerCase() } : {}),
   }
 }
 export function githubRepositoryFromRemote(main: string): string | undefined {
@@ -6241,7 +6453,7 @@ function rejectUnknownFlags(rest: string[], allowed: Set<string>) {
 }
 
 export const BATCH_USAGE =
-  'batch: checkpoint | draft | retire-draft | retire-merged | ready | unready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | confirm-merged | cleanup [--dry-run] [--cancelled] [--discard-pathspec <path>[,…]] | release-source | cancel | recover-lock'
+  'batch: checkpoint | draft | retire-draft [--superseded-by <pr> | --abandoned] | retire-merged | ready | unready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | confirm-merged | cleanup [--dry-run] [--cancelled] [--discard-pathspec <path>[,…]] | release-source | cancel | recover-lock'
 
 /** Landing closes with cleanup of that batch (方案 6). Cleanup is fail-closed
  *  and never undoes the landing: a refusal (publish in flight, lock, anything
@@ -6355,10 +6567,21 @@ export function runBatchCommand(
       })
     }
     case 'retire-draft': {
-      rejectUnknownFlags(rest, new Set(['--work-id']))
-      if (positionals(new Set(['--work-id'])).length)
-        throw new BatchUsageError('Usage: wt-helper batch retire-draft --work-id <id>')
-      return retireDraftPr(cwd, required('--work-id'))
+      rejectUnknownFlags(rest, new Set(['--work-id', '--superseded-by', '--abandoned']))
+      if (positionals(new Set(['--work-id', '--superseded-by'])).length)
+        throw new BatchUsageError(
+          'Usage: wt-helper batch retire-draft --work-id <id> [--superseded-by <pr> | --abandoned]',
+        )
+      return retireDraftPr(
+        cwd,
+        required('--work-id'),
+        undefined,
+        rest.includes('--superseded-by')
+          ? { supersededBy: Number(required('--superseded-by')) }
+          : rest.includes('--abandoned')
+            ? { abandoned: true }
+            : {},
+      )
     }
     case 'retire-merged': {
       rejectUnknownFlags(rest, new Set())
