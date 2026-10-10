@@ -56,20 +56,20 @@ beforeEach(() => {
   )
 
   // Keep the real CLI and filesystem lifecycle; replace only build/scaffold/audit dependencies.
-  // 腳本直接叫 create-nuxt-starter 的 .bin/tsdown，shim 就放在同一個位置：
+  // 腳本直接叫 create-nuxt-starter 的 .bin/vp pack，shim 就放在同一個位置：
   // VALIDATE_TEST_FAILURE=build 時 exit 1，其餘直接 exit 0。
   write(
-    join(repoRoot, 'template/packages/create-nuxt-starter/node_modules/.bin/tsdown'),
+    join(repoRoot, 'template/packages/create-nuxt-starter/node_modules/.bin/vp'),
     '#!/bin/sh\n[ "$VALIDATE_TEST_FAILURE" != "build" ]\n',
     0o755,
   )
   write(join(repoRoot, 'package.json'), '{"type":"module"}')
   write(
-    join(repoRoot, 'template/packages/create-nuxt-starter/dist/cli.js'),
+    join(repoRoot, 'template/packages/create-nuxt-starter/dist/cli.mjs'),
     'export function buildSelectionsFromArgs(args) { return { ...args, features: [] } }',
   )
   write(
-    join(repoRoot, 'template/packages/create-nuxt-starter/dist/assemble.js'),
+    join(repoRoot, 'template/packages/create-nuxt-starter/dist/assemble.mjs'),
     `import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 export function assembleProject(targetDir, features, projectName) {

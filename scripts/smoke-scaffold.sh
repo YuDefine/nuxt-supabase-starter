@@ -11,7 +11,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 CLI_DIR="$ROOT_DIR/template/packages/create-nuxt-starter"
-CLI_DIST="$CLI_DIR/dist/cli.js"
+CLI_DIST="$CLI_DIR/dist/cli.mjs"
 CLI_SRC="$CLI_DIR/src/cli.ts"
 
 TARGET_INPUT="${1:-}"

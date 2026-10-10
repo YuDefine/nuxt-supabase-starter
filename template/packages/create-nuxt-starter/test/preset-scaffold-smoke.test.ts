@@ -2,7 +2,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'pathe'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vite-plus/test'
 import { assembleProject } from '../src/assemble'
 import { buildSelectionsFromArgs } from '../src/cli'
 import { PRESETS, type PresetId } from '../src/presets'

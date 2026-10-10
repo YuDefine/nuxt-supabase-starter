@@ -11,7 +11,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'pathe'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vite-plus/test'
 import { applyStripManifest, loadStripManifest } from '../src/strip-manifest'
 
 const TEST_DIR = mkdtempSync(join(tmpdir(), 'strip-manifest-test-'))

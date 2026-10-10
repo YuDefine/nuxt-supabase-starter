@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { execFile as execFileCb } from 'node:child_process'
 import { join } from 'pathe'
 import { promisify } from 'node:util'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vite-plus/test'
 import { assembleProject } from '../src/assemble'
 import { buildSelectionsFromArgs } from '../src/cli'
 
