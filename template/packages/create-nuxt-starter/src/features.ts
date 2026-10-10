@@ -215,9 +215,9 @@ export const featureModules: FeatureModule[] = [
     incompatible: ['testing-vitest'],
     dependencies: ['quality'],
     devPackages: {
-      '@nuxt/test-utils': '^4.0.0',
+      '@nuxt/test-utils': '^4.3.3',
       '@playwright/test': '^1.58.2',
-      '@vitest/coverage-v8': '^4.1.2',
+      '@vitest/coverage-v8': '^5.0.1',
       '@vue/test-utils': '^2.4.6',
       'happy-dom': '^20.8.4',
     },
@@ -236,8 +236,8 @@ export const featureModules: FeatureModule[] = [
     incompatible: ['testing-full'],
     dependencies: ['quality'],
     devPackages: {
-      '@nuxt/test-utils': '^4.0.0',
-      '@vitest/coverage-v8': '^4.1.2',
+      '@nuxt/test-utils': '^4.3.3',
+      '@vitest/coverage-v8': '^5.0.1',
       '@vue/test-utils': '^2.4.6',
       'happy-dom': '^20.8.4',
     },
@@ -320,7 +320,7 @@ export const featureModules: FeatureModule[] = [
     default: true,
     group: 'quality',
     devPackages: {
-      'vite-plus': '^0.1.21',
+      'vite-plus': '^1.0.0',
     },
     packages: {},
     templateDir: 'features/quality',

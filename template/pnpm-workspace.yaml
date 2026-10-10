@@ -1,7 +1,8 @@
 catalog:
-  vite: npm:@voidzero-dev/vite-plus-core@^0.1.21
-  vite-plus: 0.1.21
-  vitest: npm:@voidzero-dev/vite-plus-test@^0.1.21
+  vite: npm:@voidzero-dev/vite-plus-core@1.0.0
+  vite-plus: 1.0.0
+  vitest: 5.0.1
+  '@vitest/coverage-v8': 5.0.1
 packages:
   - 'packages/*'
   - 'vendor/specformula-ts/packages/*'
@@ -28,8 +29,14 @@ allowBuilds:
   workerd: true
 
 overrides:
-  vite: 'catalog:'
-  vitest: 'catalog:'
+  vite@*: 'catalog:'
+  vitest@*: 'catalog:'
+  # vitest-environment-nuxt@2.0.0 的 `@nuxt/test-utils: ^4.0.0` dep 若放行會解析出
+  # 4.0.x，它的 vitest-environment.mjs 仍靜態 import vitest 5 已移除的
+  # `vitest/environments` 子路徑（forks worker 啟動時炸 resolve）。釘到 4.3.3+
+  # 讓 env 套件與直接 devDep 共用同一份 4.3.3，順便消滅 test-utils@4.0.0 ↔
+  # vitest-environment-nuxt@1.0.1 的循環殘留。
+  '@nuxt/test-utils@*': '^4.3.3'
 peerDependencyRules:
   allowAny:
     - vite

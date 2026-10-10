@@ -12,7 +12,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'pathe'
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test'
 import { applyCatalogFlags, buildSelectionsFromArgs } from '../src/cli'
 import { findCladeRoot } from '../src/post-scaffold'
 import { QUESTION_CATALOG, applicableQuestions, missingYesFlags } from '../src/question-catalog'
@@ -31,7 +31,7 @@ import { QUESTION_CATALOG, applicableQuestions, missingYesFlags } from '../src/q
  *    default 由 catalog 宣告為 pinned（未提供政策時不得由測試或呼叫端代填）。
  * 2. normalizer：managed（register）流程未給政策 → pinned；明確 subscribed → subscribed；
  *    非法值在 selections 階段就拒絕。
- * 3. CLI process：spawn 真 `dist/cli.js`。CLADE_HOME 指向測試自建的 fake clade —
+ * 3. CLI process：spawn 真 `dist/cli.mjs`。CLADE_HOME 指向測試自建的 fake clade —
  *    scripts/*.ts 全是 argv recorder（記錄 script 名、argv、cwd 後 exit 0），
  *    不在測試裡重寫 registry/manifest writer；starter→clade 的 argv 就是被測的 seam。
  *    - managed 新建與 adopt 未給政策 → 交付呼叫帶 `--update-policy pinned`
@@ -44,7 +44,7 @@ import { QUESTION_CATALOG, applicableQuestions, missingYesFlags } from '../src/q
  *      （exit≠0、目錄不存在、零 clade 呼叫）
  *    - CLADE_HOME 指定但來源不可用 → 不得 fallback 真 home
  *
- * Build prerequisite：process 層跑 `dist/cli.js`。dist 由 `pnpm run build`（tsdown）
+ * Build prerequisite：process 層跑 `dist/cli.mjs`。dist 由 `pnpm run build`（vp pack）
  * 產生；beforeAll 只在 dist 缺席或 src/ 下任一檔較新時重建（cli.ts 的 bundle
  * 依賴圖全部在 src/ 內：assemble、prompts、post-scaffold、question-catalog 等
  * 改了都要重建，不能只看 cli.ts）。與 cli-evlog-preset.e2e.test.ts 同慣例，
@@ -52,7 +52,7 @@ import { QUESTION_CATALOG, applicableQuestions, missingYesFlags } from '../src/q
  */
 
 const PKG_ROOT = resolve(import.meta.dirname, '..')
-const CLI = join(PKG_ROOT, 'dist', 'cli.js')
+const CLI = join(PKG_ROOT, 'dist', 'cli.mjs')
 const SRC_DIR = join(PKG_ROOT, 'src')
 const ROOT = mkdtempSync(join(tmpdir(), 'consumer-update-policy-'))
 
@@ -318,16 +318,16 @@ function distIsStale(): boolean {
 }
 
 beforeAll(() => {
-  // Build prerequisite：dist/cli.js 必須存在且不比 src/ 任何檔舊。失敗直接炸在
+  // Build prerequisite：dist/cli.mjs 必須存在且不比 src/ 任何檔舊。失敗直接炸在
   // hook，不讓任何測試因 artifact 缺席或過期而誤過。
   if (!distIsStale()) return
-  execFileSync('npx', ['tsdown', 'src/cli.ts', '--format', 'esm', '--out-dir', 'dist'], {
+  execFileSync('npx', ['vp', 'pack', 'src/cli.ts', '--format', 'esm', '--out-dir', 'dist'], {
     cwd: PKG_ROOT,
     stdio: 'ignore',
     timeout: 300_000,
   })
   if (!existsSync(CLI)) {
-    throw new Error('build prerequisite 失敗：pnpm run build 後仍缺 dist/cli.js')
+    throw new Error('build prerequisite 失敗：pnpm run build 後仍缺 dist/cli.mjs')
   }
 }, 320_000)
 

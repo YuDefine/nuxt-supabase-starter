@@ -120,3 +120,4 @@ yarn-error.log*
 /screenshots/**/*.md
 /screenshots/**/*.json
 
+.vitest/

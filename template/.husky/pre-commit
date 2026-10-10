@@ -1,3 +1,0 @@
-#!/usr/bin/env sh
-
-bash scripts/pre-commit/runner.sh

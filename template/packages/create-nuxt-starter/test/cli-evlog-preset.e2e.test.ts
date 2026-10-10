@@ -3,10 +3,10 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'pathe'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test'
 
 /**
- * 端到端：跑真正的 `dist/cli.js`，不是直呼 `assembleProject`。
+ * 端到端：跑真正的 `dist/cli.mjs`，不是直呼 `assembleProject`。
  *
  * 其他 scaffold 測試都從 `buildSelectionsFromArgs()` 起跳，所以 citty 的 argv
  * parsing、`--evlog-preset` 的 enum validation、以及 `--yes` 是否真的繞過
@@ -26,7 +26,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
  */
 
 const PKG_ROOT = resolve(import.meta.dirname, '..')
-const CLI = join(PKG_ROOT, 'dist', 'cli.js')
+const CLI = join(PKG_ROOT, 'dist', 'cli.mjs')
 const TEST_DIR = mkdtempSync(join(tmpdir(), 'cli-evlog-e2e-'))
 
 function cleanTestDir() {
@@ -54,7 +54,7 @@ const YES_LOCAL = [
 ] as const
 
 beforeAll(() => {
-  execFileSync('npx', ['tsdown', 'src/cli.ts', '--format', 'esm', '--out-dir', 'dist'], {
+  execFileSync('npx', ['vp', 'pack', 'src/cli.ts', '--format', 'esm', '--out-dir', 'dist'], {
     cwd: PKG_ROOT,
     stdio: 'ignore',
     timeout: 300_000,
@@ -63,7 +63,7 @@ beforeAll(() => {
 
 afterAll(cleanTestDir)
 
-describe('dist/cli.js --evlog-preset (end-to-end)', () => {
+describe('dist/cli.mjs --evlog-preset (end-to-end)', () => {
   it('baseline 產出 evlog plugin 三件套與 identity helper', { timeout: 120_000 }, () => {
     const result = runCli(['e2e-baseline', ...YES_LOCAL, '--evlog-preset', 'baseline'])
     expect(result.status).toBe(0)
@@ -129,7 +129,7 @@ describe('dist/cli.js --evlog-preset (end-to-end)', () => {
   })
 })
 
-describe('dist/cli.js 的落點只看實際 cwd（TD-007 回歸）', () => {
+describe('dist/cli.mjs 的落點只看實際 cwd（TD-007 回歸）', () => {
   it('PWD 指向 starter 套件目錄時，專案仍建在 spawn 指定的 cwd', { timeout: 120_000 }, () => {
     const isolated = mkdtempSync(join(tmpdir(), 'cli-cwd-regression-'))
     // 刻意重現 bug 情境：shell 曾 cd 到 starter 套件目錄，PWD 停在那；
