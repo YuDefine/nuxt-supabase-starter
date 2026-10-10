@@ -22,7 +22,7 @@
     "@vue/compiler-sfc": "^3.5.31",
     "typescript": "^5.9.3",
     "vite-doctor": "0.0.10",
-    "vite-plus": "^1.0.0",
+    "vite-plus": "1.0.0",
     "vue-tsc": "^3.2.5"
   },
   "engines": {

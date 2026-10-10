@@ -11,7 +11,7 @@
   ],
   "type": "module",
   "scripts": {
-    "build": "vp pack src/cli.ts --format esm --out-dir dist",
+    "build": "vp pack src/cli.ts src/assemble.ts --format esm --out-dir dist",
     "dev": "tsx src/cli.ts",
     "start": "node dist/cli.mjs",
     "test": "vp test run",

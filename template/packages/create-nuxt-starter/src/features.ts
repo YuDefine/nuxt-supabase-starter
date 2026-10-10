@@ -217,9 +217,10 @@ export const featureModules: FeatureModule[] = [
     devPackages: {
       '@nuxt/test-utils': '^4.3.3',
       '@playwright/test': '^1.58.2',
-      '@vitest/coverage-v8': '^5.0.1',
+      '@vitest/coverage-v8': '5.0.1',
       '@vue/test-utils': '^2.4.6',
       'happy-dom': '^20.8.4',
+      vitest: '5.0.1',
     },
     packages: {},
     nuxtModules: ['@nuxt/test-utils/module'],
@@ -237,9 +238,10 @@ export const featureModules: FeatureModule[] = [
     dependencies: ['quality'],
     devPackages: {
       '@nuxt/test-utils': '^4.3.3',
-      '@vitest/coverage-v8': '^5.0.1',
+      '@vitest/coverage-v8': '5.0.1',
       '@vue/test-utils': '^2.4.6',
       'happy-dom': '^20.8.4',
+      vitest: '5.0.1',
     },
     packages: {},
     nuxtModules: ['@nuxt/test-utils/module'],
@@ -320,7 +322,7 @@ export const featureModules: FeatureModule[] = [
     default: true,
     group: 'quality',
     devPackages: {
-      'vite-plus': '^1.0.0',
+      'vite-plus': '1.0.0',
     },
     packages: {},
     templateDir: 'features/quality',
