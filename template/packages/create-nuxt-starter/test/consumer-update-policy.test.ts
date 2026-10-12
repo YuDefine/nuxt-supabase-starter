@@ -321,11 +321,15 @@ beforeAll(() => {
   // Build prerequisite：dist/cli.mjs 必須存在且不比 src/ 任何檔舊。失敗直接炸在
   // hook，不讓任何測試因 artifact 缺席或過期而誤過。
   if (!distIsStale()) return
-  execFileSync('npx', ['vp', 'pack', 'src/cli.ts', '--format', 'esm', '--out-dir', 'dist'], {
-    cwd: PKG_ROOT,
-    stdio: 'ignore',
-    timeout: 300_000,
-  })
+  execFileSync(
+    'npx',
+    ['vp', 'pack', 'src/cli.ts', 'src/assemble.ts', '--format', 'esm', '--out-dir', 'dist'],
+    {
+      cwd: PKG_ROOT,
+      stdio: 'ignore',
+      timeout: 300_000,
+    },
+  )
   if (!existsSync(CLI)) {
     throw new Error('build prerequisite 失敗：pnpm run build 後仍缺 dist/cli.mjs')
   }

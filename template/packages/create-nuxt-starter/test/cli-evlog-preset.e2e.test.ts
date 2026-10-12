@@ -72,13 +72,19 @@ function distIsStale(): boolean {
 
 beforeAll(() => {
   // Build prerequisite：dist/cli.mjs 必須存在且不比 src/ 任何檔舊。只在過期時重建——
-  // 無條件 pack（--clean 先清 dist）會與同 suite 其他測試檔的 CLI spawn 併發互踩。
+  // 無條件 pack（--clean 先清 dist）會讓每次執行都可能與同 suite 其他測試檔的 CLI spawn 互踩；
+  // 只在過期時重建把窗口縮到「src 剛改過的第一次執行」。該情況下 consumer-update-policy 也會
+  // 同時判定過期並各自 pack，競態仍在——需要確定性時先手動 `pnpm run build` 再跑測試。
   if (!distIsStale()) return
-  execFileSync('npx', ['vp', 'pack', 'src/cli.ts', '--format', 'esm', '--out-dir', 'dist'], {
-    cwd: PKG_ROOT,
-    stdio: 'ignore',
-    timeout: 300_000,
-  })
+  execFileSync(
+    'npx',
+    ['vp', 'pack', 'src/cli.ts', 'src/assemble.ts', '--format', 'esm', '--out-dir', 'dist'],
+    {
+      cwd: PKG_ROOT,
+      stdio: 'ignore',
+      timeout: 300_000,
+    },
+  )
   if (!existsSync(CLI)) {
     throw new Error('build prerequisite 失敗：vp pack 後仍缺 dist/cli.mjs')
   }
