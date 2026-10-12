@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Interactive CLI to scaffold a Nuxt + Supabase project with selectable features",
   "bin": {
-    "create-nuxt-starter": "./dist/cli.js"
+    "create-nuxt-starter": "./dist/cli.mjs"
   },
   "files": [
     "dist",
@@ -11,9 +11,9 @@
   ],
   "type": "module",
   "scripts": {
-    "build": "tsdown src/cli.ts --format esm --out-dir dist",
+    "build": "vp pack src/cli.ts src/assemble.ts --format esm --out-dir dist",
     "dev": "tsx src/cli.ts",
-    "start": "node dist/cli.js",
+    "start": "node dist/cli.mjs",
     "test": "vp test run",
     "typecheck": "tsc --noEmit"
   },
@@ -26,10 +26,9 @@
   },
   "devDependencies": {
     "@types/node": "^25.0.0",
-    "tsdown": "^0.12.5",
     "tsx": "^4.19.0",
     "typescript": "^5.9.3",
-    "vite-plus": "^0.1.21",
-    "vitest": "^4.1.2"
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
   }
 }

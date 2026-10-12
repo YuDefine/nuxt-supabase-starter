@@ -219,18 +219,18 @@ export function formatReportRow(row) {
 async function loadScaffolderModules() {
   if (scaffolderModules) return scaffolderModules
 
-  // 直接叫 package 自己的 .bin/tsdown：script 改由 root 執行後不再經 `vp run`，
+  // 直接叫 package 自己的 .bin/vp pack：script 改由 root 執行後不再經 `vp run`，
   // 環境 PATH 不保證有 pnpm（CI 的 pnpm 由 vp env 管，只在 vp process tree 內可見）。
   runCommand(
-    join(CREATE_PACKAGE_DIR, 'node_modules', '.bin', 'tsdown'),
-    ['src/cli.ts', 'src/assemble.ts', '--format', 'esm', '--out-dir', 'dist'],
+    join(CREATE_PACKAGE_DIR, 'node_modules', '.bin', 'vp'),
+    ['pack', 'src/cli.ts', 'src/assemble.ts', '--format', 'esm', '--out-dir', 'dist'],
     {
       cwd: CREATE_PACKAGE_DIR,
     },
   )
 
-  const assemble = await import(pathToFileURL(join(CREATE_PACKAGE_DIR, 'dist', 'assemble.js')).href)
-  const cli = await import(pathToFileURL(join(CREATE_PACKAGE_DIR, 'dist', 'cli.js')).href)
+  const assemble = await import(pathToFileURL(join(CREATE_PACKAGE_DIR, 'dist', 'assemble.mjs')).href)
+  const cli = await import(pathToFileURL(join(CREATE_PACKAGE_DIR, 'dist', 'cli.mjs')).href)
   scaffolderModules = {
     assembleProject: assemble.assembleProject,
     buildSelectionsFromArgs: cli.buildSelectionsFromArgs,

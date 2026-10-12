@@ -62,7 +62,7 @@ function walk(dir) {
 function processFile(file) {
   const content = readFileSync(file, 'utf8')
   // 偵測既有 frontmatter — 容錯處理：
-  //   - UTF-8 BOM（﻿）
+  //   - UTF-8 BOM（U+FEFF）
   //   - CRLF（---\r\n）
   //   - LF（---\n）
   //   - 檔案恰好只有 `---` 三字（極少見但可能）

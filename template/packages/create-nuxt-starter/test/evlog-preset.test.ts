@@ -2,7 +2,7 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'pathe'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vite-plus/test'
 import { applyEvlogPreset, describeEvlogPreset } from '../src/evlog-preset'
 
 const TEST_DIR = mkdtempSync(join(tmpdir(), 'evlog-test-'))

@@ -1,8 +1,13 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig } from 'vite-plus'
 import { testBase } from '../../vendor/oxc-shared/preset.ts'
 
 export default defineConfig({
   test: {
+    // Vitest v4 compatibility: preserve mock call history.
+    // Remove after tests no longer rely on calls from setup or earlier tests.
+    // https://viteplus.dev/guide/vitest-v5#remove-unneeded-compatibility-settings
+    // https://vitest.dev/guide/migration/#clearmocks-is-enabled-by-default
+    clearMocks: false,
     include: ['test/**/*.test.ts'],
     exclude: [...testBase.exclude, 'templates/**'],
     // 這個套件的多數測試會跑一次完整 `assembleProject`（複製數百個檔案 + 套 overlay

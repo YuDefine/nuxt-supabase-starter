@@ -72,7 +72,7 @@ function isMonorepoRoot(dir: string): boolean {
 }
 
 // NEVER 拿 process.env.PWD 當判準：`PWD` 由 shell 維護，子程序原封繼承呼叫者 shell 的值，
-// spawnSync 的 `cwd` 選項不會改寫它。從 starter repo 內用工具呼叫 dist/cli.js 時，CLI 會
+// spawnSync 的 `cwd` 選項不會改寫它。從 starter repo 內用工具呼叫 dist/cli.mjs 時，CLI 會
 // 誤判「在 starter monorepo 裡」並把專案改建到 repo root，而不是呼叫者指定的目錄（TD-007）。
 // 真正的 npm / pnpm 呼叫路徑另有 INIT_CWD，那條保留。
 function detectMonorepoRoot(): string | undefined {
