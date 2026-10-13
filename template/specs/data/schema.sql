@@ -6,7 +6,7 @@
 
 CREATE TABLE IF NOT EXISTS profiles (
     id          UUID PRIMARY KEY,
-    display_name TEXT NOT NULL,
+    display_name TEXT,
     avatar_url  TEXT,
     role        TEXT NOT NULL DEFAULT 'user'
                 CHECK (role IN ('admin', 'user')),
