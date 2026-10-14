@@ -1,5 +1,17 @@
 # HANDOFF
 
+## 2026-10-13 Supabase Select 2026 relay（派工 2647a111330ee09c）
+
+- 範圍：`template/` 是 source of truth，PR 只動 template 內檔＋`.github/workflows/template-e2e.yml`。
+- `template-e2e.yml` setup-cli pin `2.117.0 → 2.119.0`（fleet 統一釘版；註解一併更新）。
+- `template/package.json` `@supabase/supabase-js` `^2.100.0 → ^2.117.3`（lock 解析 2.117.3；W3C tracing 需 ≥2.112.0）。
+- `template/.env.example` 補新制 key 說明：`SUPABASE_KEY`←`sb_publishable_…`、`SUPABASE_SECRET_KEY`←`sb_secret_…`（名不變換值；本機 `supabase status -o env` 取 `PUBLISHABLE_KEY`／`SECRET_KEY`）。
+- `template/.claude/skills/supabase` 0.1.2 → 上游 v0.1.9（`skills-lock.json` hash 同步）。
+- `template/specs/data/schema.sql` 修一筆 spec drift：`profiles.display_name` NOT NULL → nullable（DB＝migration＝dbml 三方一致 nullable，spec 寫錯）。
+- `template/app/types/database.types.ts` 以本機 CLI 2.119.0 對 migration 回放 stack 重產。
+- 驗證：`supabase start`（CLI 2.119.0）＋ `specformula-ddl-check` ✅＋ `nuxt typecheck` 綠；ddl-check 目前無 workflow 步驟呼叫（本 relay brief 不要求加）。
+- 主機層不適用：starter 無自有 Supabase 主機。
+
 ## 2026-09-28 starter Q160／Q161／TD-004 後續指針
 
 本檔位於維護倉根目錄；scaffold 的 `HANDOFF.md` 來源是 `template/HANDOFF.md`。
