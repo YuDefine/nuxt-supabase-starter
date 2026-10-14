@@ -5,7 +5,7 @@ backend wire BDD：`specs/truth/features/backend/**/*.feature` 經 `features/ste
 
 ## 前置
 
-1. 本機 Supabase：`supabase start`（套用 migrations + seed）。DB port 預設 54322，
+1. 本機 Supabase：`supabase start`（套用 migrations + seed）。DB port 預設 54342，
    被佔用時改 `supabase/config.toml` 的 `db.port` 並用 `SPECFORMULA_DB_PORT` 告訴 runner。
 2. `.env`：從 `.env.example` 複製並填入本機值（`SUPABASE_URL`、`SUPABASE_SECRET_KEY`、
    `BETTER_AUTH_SECRET` 等）。
@@ -23,7 +23,7 @@ pnpm test:bdd
 ```
 
 環境變數：`SPECFORMULA_BASE_URL`（預設 `http://127.0.0.1:3020`）、
-`SPECFORMULA_DB_HOST/PORT/NAME/USER/PASSWORD`（預設 127.0.0.1:54322 postgres/postgres）。
+`SPECFORMULA_DB_HOST/PORT/NAME/USER/PASSWORD`（預設 127.0.0.1:54342 postgres/postgres）。
 
 ## 結構
 

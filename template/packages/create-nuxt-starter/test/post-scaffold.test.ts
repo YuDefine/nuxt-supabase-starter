@@ -666,11 +666,11 @@ describe('rewriteEnvFilesForDbHost', () => {
     mkdirSync(dir, { recursive: true })
     writeFileSync(
       join(dir, '.env.example'),
-      '# --- Supabase ---\nSUPABASE_URL=http://127.0.0.1:54321\nDATABASE_URL=postgres://postgres:postgres@127.0.0.1:54322/postgres\nNUXT_PUBLIC_SITE_URL=http://localhost:3000\n',
+      '# --- Supabase ---\nSUPABASE_URL=http://127.0.0.1:54321\nDATABASE_URL=postgres://postgres:postgres@127.0.0.1:54342/postgres\nNUXT_PUBLIC_SITE_URL=http://localhost:3000\n',
     )
     writeFileSync(
       join(dir, '.env.test'),
-      'SUPABASE_URL=http://127.0.0.1:54321\nDATABASE_URL=postgres://postgres:postgres@127.0.0.1:54322/postgres\n',
+      'SUPABASE_URL=http://127.0.0.1:54321\nDATABASE_URL=postgres://postgres:postgres@127.0.0.1:54342/postgres\n',
     )
     rewriteEnvFilesForDbHost(dir, 'existing-server', 3090)
     const example = readFileSync(join(dir, '.env.example'), 'utf8')
@@ -679,7 +679,7 @@ describe('rewriteEnvFilesForDbHost', () => {
     expect(example).toContain('http://localhost:3090')
     const envTest = readFileSync(join(dir, '.env.test'), 'utf8')
     expect(envTest).not.toContain('127.0.0.1:54321')
-    expect(envTest).not.toContain('127.0.0.1:54322')
+    expect(envTest).not.toContain('127.0.0.1:54342')
     expect(envTest).toContain('不要填本機 Docker')
   })
 
