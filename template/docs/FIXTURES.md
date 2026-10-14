@@ -40,7 +40,7 @@ _待補_：scaffold 後依業務新增（例：work order ID、tenant key、enti
 | Local Supabase URL   | `http://localhost:54321`                                  |
 | Supabase Studio      | `http://localhost:54323`                                  |
 | Inbucket（測試信箱） | `http://localhost:54324`                                  |
-| DB 連線（直連）      | `postgresql://postgres:postgres@localhost:54322/postgres` |
+| DB 連線（直連）      | `postgresql://postgres:postgres@localhost:54342/postgres` |
 
 > Port 以 `supabase status` 輸出為準；若有改動請同步更新此表。
 

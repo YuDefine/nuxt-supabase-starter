@@ -56,7 +56,7 @@ Starter 現在直接安裝 `drizzle-orm`、`postgres`、`drizzle-kit`，但它�
 
 ```bash
 # local direct Postgres
-DATABASE_URL=postgres://postgres:postgres@127.0.0.1:54322/postgres
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:54342/postgres
 
 # optional override for privileged Drizzle queries
 ADMIN_DATABASE_URL=postgres://postgres:<password>@db.<project>.supabase.co:6543/postgres

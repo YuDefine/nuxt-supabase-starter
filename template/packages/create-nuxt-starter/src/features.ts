@@ -68,7 +68,7 @@ export const featureModules: FeatureModule[] = [
       SUPABASE_URL: 'http://127.0.0.1:54321',
       SUPABASE_KEY: '# Supabase anon/public key',
       SUPABASE_SECRET_KEY: '# Supabase service role key',
-      DATABASE_URL: 'postgres://postgres:postgres@127.0.0.1:54322/postgres',
+      DATABASE_URL: 'postgres://postgres:postgres@127.0.0.1:54342/postgres',
       ADMIN_DATABASE_URL: '# Optional: direct Drizzle URL override (fallback to DATABASE_URL)',
       DATABASE_POOL_MAX: '# Optional: Drizzle connection pool size (default 10)',
     },

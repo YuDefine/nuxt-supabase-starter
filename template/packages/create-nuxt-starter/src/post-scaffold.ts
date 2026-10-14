@@ -173,7 +173,7 @@ function writeScaffoldAnswers(targetDir: string, dbHost: DbHost | undefined): vo
 }
 
 const LOCAL_SUPABASE_URL = 'http://127.0.0.1:54321'
-const LOCAL_DATABASE_URL = 'postgres://postgres:postgres@127.0.0.1:54322/postgres'
+const LOCAL_DATABASE_URL = 'postgres://postgres:postgres@127.0.0.1:54342/postgres'
 
 /** existing-server：第一眼不要寫本機 Docker。this-machine 維持 CLI 預設埠。 */
 export function rewriteEnvFilesForDbHost(
@@ -183,7 +183,7 @@ export function rewriteEnvFilesForDbHost(
 ): void {
   if (dbHost !== 'existing-server') return
   const envTestComment =
-    '# existing-server：測試 env 連已在跑的伺服器；不要填本機 Docker 54321 / 54322。CI e2e 另設 workflow env。\n'
+    '# existing-server：測試 env 連已在跑的伺服器；不要填本機 Docker 54321 / 54342。CI e2e 另設 workflow env。\n'
   for (const name of ['.env.example', '.env', '.env.test'] as const) {
     const path = join(targetDir, name)
     if (!existsSync(path)) continue
@@ -201,7 +201,7 @@ export function rewriteEnvFilesForDbHost(
       )
       .replace(
         '# --- Supabase ---',
-        '# --- Supabase ---\n# 連到已在跑的伺服器；不要填本機 Docker 54321 / 54322',
+        '# --- Supabase ---\n# 連到已在跑的伺服器；不要填本機 Docker 54321 / 54342',
       )
     if (name === '.env.test' && !after.includes('不要填本機 Docker')) {
       after = envTestComment + after

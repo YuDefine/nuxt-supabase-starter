@@ -31,7 +31,7 @@ const BASE_URL = process.env.SPECFORMULA_BASE_URL ?? 'http://127.0.0.1:3020'
 // 本機 `supabase start` 的 Postgres。NEVER 填 hosted *.supabase.co。
 export const SPECFORMULA_DB = {
   host: process.env.SPECFORMULA_DB_HOST ?? '127.0.0.1',
-  port: Number(process.env.SPECFORMULA_DB_PORT ?? 54322),
+  port: Number(process.env.SPECFORMULA_DB_PORT ?? 54342),
   database: process.env.SPECFORMULA_DB_NAME ?? 'postgres',
   username: process.env.SPECFORMULA_DB_USER ?? 'postgres',
   password: process.env.SPECFORMULA_DB_PASSWORD ?? 'postgres',

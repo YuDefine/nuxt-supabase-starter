@@ -21,7 +21,7 @@ vi.mock('drizzle-orm/postgres-js', () => ({
 
 import { closeAdminDrizzle, useAdminDrizzle } from '../../../../server/utils/drizzle'
 
-const VALID_URL = 'postgres://postgres:postgres@127.0.0.1:54322/postgres'
+const VALID_URL = 'postgres://postgres:postgres@127.0.0.1:54342/postgres'
 
 function poolOptions(callIndex = 0) {
   return mockPostgres.mock.calls[callIndex]?.[1] as

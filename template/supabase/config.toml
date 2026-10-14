@@ -26,7 +26,9 @@ enabled = false
 
 [db]
 # Port to use for the local database URL.
-port = 54322
+# 刻意不用 Supabase CLI 預設的 54322：同一台機器上其他 Supabase 專案（fleet 預設都是 54322）
+# 會占住它，照預設值連線會連到別的專案的資料庫。.env.example 的 DATABASE_URL 與此值同步。
+port = 54342
 # Port used by db diff command to initialize the shadow database.
 shadow_port = 54320
 # Maximum amount of time to wait for health check when starting the local database.

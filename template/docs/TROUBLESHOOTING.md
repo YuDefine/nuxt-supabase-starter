@@ -70,7 +70,7 @@ open -a Docker          # macOS 啟動 Docker Desktop
 supabase start          # 等 Docker 完全啟動後再執行
 ```
 
-### 1b. Port 衝突（54321 / 54322）
+### 1b. Port 衝突（54321 / 54342）
 
 **問題：** 回報 port 已被佔用。
 
@@ -78,7 +78,7 @@ supabase start          # 等 Docker 完全啟動後再執行
 
 ```bash
 lsof -i :54321
-lsof -i :54322
+lsof -i :54342
 ```
 
 - 問題存在：顯示佔用 port 的 process 及 PID

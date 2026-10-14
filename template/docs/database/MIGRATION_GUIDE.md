@@ -16,7 +16,7 @@ Supabase 使用本機 Docker 執行開發環境（`supabase start`）。
 | Host        | Port  | 服務             |
 | ----------- | ----- | ---------------- |
 | `localhost` | 54321 | Kong API Gateway |
-| `localhost` | 54322 | PostgreSQL       |
+| `localhost` | 54342 | PostgreSQL       |
 | `localhost` | 54323 | Studio           |
 | `localhost` | 54324 | Inbucket (Email) |
 

@@ -173,7 +173,7 @@ related:
 │                                         │
 │  Docker (supabase start)                │
 │  ┌─────────────────────────────────┐   │
-│  │ PostgreSQL          :54322      │   │
+│  │ PostgreSQL          :54342      │   │
 │  │ Supabase API        :54321      │   │
 │  │ Supabase Studio     :54323      │   │
 │  │ Mailpit (Email)     :54324      │   │
