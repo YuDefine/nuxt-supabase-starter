@@ -1,5 +1,5 @@
 // clade-legacy-test: frozen=2026-09-28 — 舊測試：沒有對應 truth，不是 BDD 的慣例來源；工作碰到就吸收（clade-spec-workflow/rules/legacy-tests.md）
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { execFile as execFileCb } from 'node:child_process'
 import { join } from 'pathe'
@@ -85,10 +85,8 @@ describe('NuxtHub D1 local migration smoke', () => {
         targetDir,
       )
 
+      // 行為通道：migration 套用後 evlog_events 查得到；不再對 SQL 原文做 toContain（註解可滿足它）
       expect(stdout).toContain('count')
-      expect(
-        readFileSync(join(targetDir, 'server/database/migrations/0002_evlog_events.sql'), 'utf-8'),
-      ).toContain('CREATE TABLE IF NOT EXISTS evlog_events')
     },
     240_000,
   )
