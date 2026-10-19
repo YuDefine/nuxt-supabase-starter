@@ -96,19 +96,6 @@ Keys are required. Without stable keys, Vue cannot track item positions and anim
 For cascading list animations, pass the index to JavaScript hooks and compute delay per item.
 
 ```vue
-<template>
-  <TransitionGroup
-    tag="ul"
-    :css="false"
-    @before-enter="onBeforeEnter"
-    @enter="onEnter"
-  >
-    <li v-for="(item, index) in items" :key="item.id" :data-index="index">
-      {{ item.name }}
-    </li>
-  </TransitionGroup>
-</template>
-
 <script setup>
 function onBeforeEnter(el) {
   el.style.opacity = 0
@@ -125,4 +112,17 @@ function onEnter(el, done) {
   }, delay)
 }
 </script>
+
+<template>
+  <TransitionGroup
+    tag="ul"
+    :css="false"
+    @before-enter="onBeforeEnter"
+    @enter="onEnter"
+  >
+    <li v-for="(item, index) in items" :key="item.id" :data-index="index">
+      {{ item.name }}
+    </li>
+  </TransitionGroup>
+</template>
 ```

@@ -57,6 +57,12 @@ Don't avoid abstraction entirely, but be mindful of component depth in frequentl
 </template>
 
 <!-- UserCard.vue - Flattened, uses native elements -->
+<script setup>
+defineProps({
+  user: Object
+})
+</script>
+
 <template>
   <div class="card">
     <div class="card-header">
@@ -67,12 +73,6 @@ Don't avoid abstraction entirely, but be mindful of component depth in frequentl
     </div>
   </div>
 </template>
-
-<script setup>
-defineProps({
-  user: Object
-})
-</script>
 
 <style scoped>
 /* Styles that would have been in Card, CardHeader, etc. */

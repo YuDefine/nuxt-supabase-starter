@@ -16,10 +16,18 @@ echo ""
 
 # Antfu Skills
 echo "📦 Antfu Skills..."
-for skill in nuxt vue vueuse-functions vitest vue-best-practices vitepress pinia vue-testing-best-practices; do
+for skill in nuxt vue vueuse-functions vitest vitepress pinia; do
   npx skills add antfu/skills@$skill $COPY_FLAGS
 done
 echo "  ✓ Antfu Skills 完成"
+echo ""
+
+# Vue 官方 Skills（vuejs-ai/skills；antfu/skills #39 已移除 vendored 版，2026-10-20 改追真上游）
+echo "📦 Vue Skills（vuejs-ai）..."
+for skill in vue-best-practices vue-testing-best-practices; do
+  npx skills add vuejs-ai/skills@$skill $COPY_FLAGS
+done
+echo "  ✓ Vue Skills 完成"
 echo ""
 
 # Onmax Nuxt Skills
