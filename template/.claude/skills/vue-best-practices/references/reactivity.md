@@ -174,16 +174,6 @@ const total = computed(() =>
 
 **BAD:**
 ```vue
-<template>
-  <li v-for="item in items.filter(item => item.active)" :key="item.id">
-    {{ item.name }}
-  </li>
-
-  <li v-for="item in getSortedItems()" :key="item.id">
-    {{ item.name }}
-  </li>
-</template>
-
 <script setup>
 import { ref } from 'vue'
 
@@ -196,6 +186,16 @@ function getSortedItems() {
   return [...items.value].sort((a, b) => a.name.localeCompare(b.name))
 }
 </script>
+
+<template>
+  <li v-for="item in items.filter(item => item.active)" :key="item.id">
+    {{ item.name }}
+  </li>
+
+  <li v-for="item in getSortedItems()" :key="item.id">
+    {{ item.name }}
+  </li>
+</template>
 ```
 
 **GOOD:**
