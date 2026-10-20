@@ -41,7 +41,17 @@ fi
 
 # 分類顯示
 echo "🎯 Antfu Skills:"
-for skill in vue vueuse-functions nuxt vitest vue-best-practices vitepress pinia vue-testing-best-practices; do
+for skill in vue nuxt vitest vitepress pinia; do
+  if [ -d "$SKILLS_DIR/$skill" ]; then
+    echo "  ✓ $skill"
+  else
+    echo "  ✗ $skill (未安裝)"
+  fi
+done
+
+echo ""
+echo "🎯 Vue 官方 / VueUse Skills:"
+for skill in vue-best-practices vue-testing-best-practices vueuse-functions; do
   if [ -d "$SKILLS_DIR/$skill" ]; then
     echo "  ✓ $skill"
   else

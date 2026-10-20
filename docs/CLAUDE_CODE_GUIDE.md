@@ -351,21 +351,23 @@ Skills 是預先整理好的技術知識，讓 Claude 能正確使用各種框�
 
 全部為第三方 Skills，透過 `scripts/install-skills.sh` 安裝至 `.claude/skills/`：
 
-| Skill                                           | 來源                    | 用途                 |
-| ----------------------------------------------- | ----------------------- | -------------------- |
-| `nuxt`、`vue`、`vueuse-functions`               | `antfu/skills`          | 核心框架             |
-| `vitest`、`vue-best-practices`                  | `antfu/skills`          | 測試最佳實踐         |
-| `pinia`、`vue-testing-best-practices`           | `antfu/skills`          | 狀態管理與測試       |
-| `vitepress`                                     | `antfu/skills`          | 文件網站             |
-| `document-writer`、`motion`、`nuxt-better-auth` | `onmax/nuxt-skills`     | 文件、動畫、認證     |
-| `nuxt-content`、`nuxt-modules`、`nuxthub`       | `onmax/nuxt-skills`     | 內容、模組、部署     |
-| `reka-ui`、`ts-library`、`vueuse`               | `onmax/nuxt-skills`     | 元件、函式庫、工具   |
-| `nuxt-ui`、`contributing`                       | `nuxt/ui`               | UI 元件與貢獻指南    |
-| `supabase-postgres-best-practices`              | `supabase/agent-skills` | Postgres 效能最佳化  |
-| `test-driven-development`                       | `obra/superpowers`      | TDD 工作流程         |
-| `find-skills`                                   | `vercel-labs/skills`    | 搜尋與發現 skills    |
-| `create-evlog-*`（3 個）                        | `hugorcd/evlog`         | Observability 適配器 |
-| `review-logging-patterns`                       | `hugorcd/evlog`         | 日誌模式審查         |
+| Skill                                              | 來源                    | 用途                 |
+| -------------------------------------------------- | ----------------------- | -------------------- |
+| `nuxt`、`vue`                                      | `antfu/skills`          | 核心框架             |
+| `vitest`                                           | `antfu/skills`          | 測試最佳實踐         |
+| `pinia`                                            | `antfu/skills`          | 狀態管理             |
+| `vitepress`                                        | `antfu/skills`          | 文件網站             |
+| `vue-best-practices`、`vue-testing-best-practices` | `vuejs-ai/skills`       | Vue 最佳實踐與測試   |
+| `vueuse-functions`                                 | `vueuse/skills`         | VueUse 函式參考      |
+| `document-writer`、`motion`、`nuxt-better-auth`    | `onmax/nuxt-skills`     | 文件、動畫、認證     |
+| `nuxt-content`、`nuxt-modules`、`nuxthub`          | `onmax/nuxt-skills`     | 內容、模組、部署     |
+| `reka-ui`、`ts-library`、`vueuse`                  | `onmax/nuxt-skills`     | 元件、函式庫、工具   |
+| `nuxt-ui`、`contributing`                          | `nuxt/ui`               | UI 元件與貢獻指南    |
+| `supabase-postgres-best-practices`                 | `supabase/agent-skills` | Postgres 效能最佳化  |
+| `test-driven-development`                          | `obra/superpowers`      | TDD 工作流程         |
+| `find-skills`                                      | `vercel-labs/skills`    | 搜尋與發現 skills    |
+| `create-evlog-*`（3 個）                           | `hugorcd/evlog`         | Observability 適配器 |
+| `review-logging-patterns`                          | `hugorcd/evlog`         | 日誌模式審查         |
 
 ### 情境觸發 Skills（5 個）
 

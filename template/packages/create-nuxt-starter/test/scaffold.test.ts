@@ -423,6 +423,27 @@ describe('scaffold: Better Auth 模組身分', () => {
     expect(installSkills).not.toMatch(/onmax\/nuxt-skills@\$skill[\s\S]*?\bvueuse\b/)
     expect(installSkills).toContain('vueuse-functions')
   })
+
+  it('install-skills.sh 的 Vue skills 指向真上游（vuejs-ai／vueuse），不再綁 antfu/skills', () => {
+    const targetDir = join(TEST_DIR, 'vue-skills-source')
+    assembleProject(targetDir, resolveFeatureDependencies(['pinia']), 'vue-skills-src')
+
+    const installSkills = readFileSync(join(targetDir, 'scripts', 'install-skills.sh'), 'utf-8')
+    expect(installSkills).toContain('vuejs-ai/skills@$skill')
+    expect(installSkills).toContain('npx skills add vueuse/skills@vueuse-functions')
+    expect(installSkills).toMatch(
+      /for skill in vue-best-practices vue-testing-best-practices; do\n\s+npx skills add vuejs-ai\/skills@\$skill/,
+    )
+
+    // antfu 迴圈只剩 antfu/skills 實際提供的 skill
+    const antfuLoop = installSkills.match(
+      /for skill in ([^\n]+); do\n\s+npx skills add antfu\/skills@\$skill/,
+    )
+    expect(antfuLoop).not.toBeNull()
+    const antfuNames = antfuLoop![1].split(' ')
+    expect(antfuNames).toEqual(['nuxt', 'vue', 'vitest', 'pinia', 'vitepress'])
+    expect(installSkills).not.toMatch(/antfu\/skills@(vue-best-practices|vue-testing-best-practices|vueuse-functions)/)
+  })
 })
 
 describe('scaffold: Better Auth and security CSRF boundary', () => {

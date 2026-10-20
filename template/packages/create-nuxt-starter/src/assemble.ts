@@ -1218,10 +1218,10 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
     '',
   ]
 
-  // Antfu Skills — always: nuxt, vue, vitest, vue-best-practices, vue-testing-best-practices
-  const antfuSkills = ['nuxt', 'vue', 'vitest', 'vue-best-practices', 'vue-testing-best-practices']
-  // vueuse-functions is useful even without vueuse feature (it's a reference)
-  antfuSkills.push('vueuse-functions')
+  // Antfu Skills — always: nuxt, vue, vitest, vitepress (+ pinia 條件)
+  // vue-best-practices / vue-testing-best-practices / vueuse-functions 已不在 antfu/skills
+  // （antfu/skills #39 移除 vendored 版），改從真上游裝，見下方兩段。
+  const antfuSkills = ['nuxt', 'vue', 'vitest']
   if (has(feats, 'pinia')) antfuSkills.push('pinia')
   // vitepress for docs (always useful)
   antfuSkills.push('vitepress')
@@ -1235,13 +1235,31 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
   lines.push('echo ""')
   lines.push('')
 
+  // VueUse 官方 Skill — always（即使沒選 vueuse feature 也是有用的參考）
+  lines.push('# VueUse 官方 Skill（vueuse/skills；antfu/skills #39 已移除 vendored 版）')
+  lines.push('echo "📦 VueUse Skill..."')
+  lines.push('npx skills add vueuse/skills@vueuse-functions $COPY_FLAGS')
+  lines.push('echo "  ✓ VueUse Skill 完成"')
+  lines.push('echo ""')
+  lines.push('')
+
+  // Vue 官方 Skills — always
+  lines.push('# Vue 官方 Skills（vuejs-ai/skills；antfu/skills #39 已移除 vendored 版）')
+  lines.push('echo "📦 Vue Skills（vuejs-ai）..."')
+  lines.push('for skill in vue-best-practices vue-testing-best-practices; do')
+  lines.push('  npx skills add vuejs-ai/skills@$skill $COPY_FLAGS')
+  lines.push('done')
+  lines.push('echo "  ✓ Vue Skills 完成"')
+  lines.push('echo ""')
+  lines.push('')
+
   // Onmax Nuxt Skills — conditional
   // 每一項都必須是 `onmax/nuxt-skills` 現存的 skill 目錄。上游會刪 skill，而
   // `npx skills add` 對不存在的名字只會噴一行錯誤就往下跑（迴圈不中斷），
   // 於是 setup script 看起來成功、skill 卻沒裝。2026-08-24 逐一以
   // GitHub contents API 驗過：nuxthub / reka-ui / motion 存在；
   // `vueuse` 與 `nuxt-better-auth` 已被上游移除（404），故不再列入。
-  // vueuse 的替代覆蓋是 antfu/skills@vueuse-functions（上面無條件安裝）。
+  // vueuse 的替代覆蓋是 vueuse/skills@vueuse-functions（上面無條件安裝）。
   const onmaxSkills: string[] = []
   if (has(feats, 'deploy-cloudflare')) onmaxSkills.push('nuxthub')
   if (has(feats, 'ui')) onmaxSkills.push('reka-ui', 'motion')
