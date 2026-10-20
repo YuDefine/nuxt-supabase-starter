@@ -442,7 +442,9 @@ describe('scaffold: Better Auth 模組身分', () => {
     expect(antfuLoop).not.toBeNull()
     const antfuNames = antfuLoop![1].split(' ')
     expect(antfuNames).toEqual(['nuxt', 'vue', 'vitest', 'pinia', 'vitepress'])
-    expect(installSkills).not.toMatch(/antfu\/skills@(vue-best-practices|vue-testing-best-practices|vueuse-functions)/)
+    expect(installSkills).not.toMatch(
+      /antfu\/skills@(vue-best-practices|vue-testing-best-practices|vueuse-functions)/,
+    )
   })
 })
 
