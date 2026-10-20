@@ -47,14 +47,16 @@ npx skills add <registry>@<skill-name> --agent claude-code --copy -y
 
 ## 已安裝的 Skills 分類
 
-### 核心框架（Antfu Skills）
+### 核心框架（Antfu／Vue 官方／VueUse Skills）
 
-| Skill                            | 來源            | 用途               |
-| -------------------------------- | --------------- | ------------------ |
-| `nuxt`、`vue`、`vueuse-functions` | `antfu/skills`  | 核心框架知識       |
-| `vitest`、`vue-best-practices`   | `antfu/skills`  | 測試最佳實踐       |
-| `pinia`、`vue-testing-best-practices` | `antfu/skills` | 狀態管理與測試 |
-| `vitepress`                      | `antfu/skills`  | 文件網站           |
+| Skill                                              | 來源              | 用途               |
+| -------------------------------------------------- | ----------------- | ------------------ |
+| `nuxt`、`vue`                                      | `antfu/skills`    | 核心框架知識       |
+| `vitest`                                           | `antfu/skills`    | 測試最佳實踐       |
+| `pinia`                                            | `antfu/skills`    | 狀態管理           |
+| `vitepress`                                        | `antfu/skills`    | 文件網站           |
+| `vue-best-practices`、`vue-testing-best-practices` | `vuejs-ai/skills` | Vue 最佳實踐與測試 |
+| `vueuse-functions`                                 | `vueuse/skills`   | VueUse 函式參考    |
 
 ### Nuxt 生態系（Onmax Skills）
 
