@@ -44,6 +44,7 @@ Charles 交代完任務會離開一陣子；這件工作中途可能換好幾個
 - 停放等 Charles 回答（park-ask，或停放理由提到 Charles）→ 記一棒、標「等你」並推播；接班活過來就自動解除。停放等事件（park-wait 等）只記一棒。停放列被答案直接結案（沒開接班）→ 關列，不推播。
 - 收工（收割、close 類）→ session 追蹤關列並推播「完成」；work 追蹤只記一棒，整件完成由 flow spine 判（終態且沒有 session 在跑），完成時推播結論。結論來源依序：completion summary → session digest 的最後一則 assistant 文字 → 前幾棒留下的結論。
 - 不經自動處置的關閉（手動關 pane、cloud 自動收割、撞額度後 pane 被收、session 自行結束）→ 消失兜底：上一輪點名看得到、本輪該載體來源完整卻看不到時判 `vanished`。有完成證據（completion summary 或收割）才結案推「完成」；沒有就標**失聯**：列不關、推播 ⚠️、狀態列與看板計入「失聯」，**NEVER** 當成 Charles 自己關掉而靜默結案（2026-10-25：23 件做到一半的委託因此斷追）。同一個 session 再被點名看到（接回）就解除；Charles 看過結論要結案跑 `tracked-session.ts done <id|關鍵字>`，誤結案要接回跑 `reopen <id> [--pane] [--machine]`。cloud 來源平常常是 partial，兜底可能很晚或不發；Remote Control 載體沒有消失兜底。
+- 失聯自動接續（watch 每輪，消失兜底之後）：本機的 session 追蹤列失聯、工作沒被冷續接接走時，watch 讀它 transcript 的最後一則回覆——做到一半（含停在工具呼叫中途）→ 寫 `tracked-lost` 等待列，下一輪接回（prompt cache 還熱且原帳號有額度就同 session `--resume`，否則 digest 冷續接），接班改綁到本列；在問你或交回 → 標「等你」推 🙋（題目不進 `/my`，接回 session 再答）；完工回報 → 結案推 ✅（誤判 `reopen`）；暫緩或在等自己掛的事件 → 不動。同一個 session 只自動接一次，接回後又斷就留給 Charles；失聯超過 6 小時不接。**Charles 要刻意關掉的 pane MUST 先標記**：按 Esc 中斷、`/exit` 退出，或關之前跑 `tracked-session.ts done`／`unmark`——沒標記就消失一律當成當掉，會被接回並沿用原權限模式（判不出手動關閉，2026-10-25 定）。
 - 已知缺口：自開 pane 自己跑 `/handoff relay` 交棒時，接班 session 不經 watch，委託帳跟不到接班（舊 session 消失後照上一條標失聯）；要繼續追就在接班 session 送 `/track`。
 - 推播沒進佇列時，該推播的那一刻不動帳，下一輪兜底重判。
 

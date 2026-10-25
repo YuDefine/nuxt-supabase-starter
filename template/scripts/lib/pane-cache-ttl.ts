@@ -34,19 +34,25 @@ function poolTranscriptSentinel(): string {
   return resolve(homedir(), CLAUDE_POOL_TRANSCRIPT_DIR)
 }
 
+/** 搜池內每個帳號的 config dir 找 session 的 transcript，連同它所在帳號的釘選指令；找不到回 undefined。 */
+export function poolTranscriptOf(
+  cwd: string,
+  sessionId: string,
+): { path: string; account: string } | undefined {
+  for (const account of claudePoolAccounts()) {
+    const path = transcriptPathIn(resolve(homedir(), account.configDir), cwd, sessionId)
+    if (path) return { path, account: account.command }
+  }
+  return undefined
+}
+
 /** Locate a transcript by live session UUID, even when the cwd encoding differs. */
 export function transcriptPathIn(
   configDir: string,
   cwd: string,
   sessionId: string,
 ): string | undefined {
-  if (configDir === poolTranscriptSentinel()) {
-    for (const account of claudePoolAccounts()) {
-      const path = transcriptPathIn(resolve(homedir(), account.configDir), cwd, sessionId)
-      if (path) return path
-    }
-    return undefined
-  }
+  if (configDir === poolTranscriptSentinel()) return poolTranscriptOf(cwd, sessionId)?.path
   const projects = resolve(configDir, 'projects')
   const file = `${sessionId}.jsonl`
   const direct = resolve(projects, encodeProjectDir(cwd), file)
