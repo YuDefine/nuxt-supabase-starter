@@ -2,18 +2,16 @@
 # Rule 1 - 每次 maintain 只選一個 outcome，照其 Git／PR 行為收尾
 
 - Level: `MUST`
-- 每次只能選一個：
+- 每次只能選一個，由上而下取第一個命中的列：
 
-| Outcome | 必要條件 | Git／PR 行為 |
-| --- | --- | --- |
-| `clean` | 每個 feature 都有 source + live coverage，沒有值得落地的 map／harness diff | **現況結果**：不建 branch、不 commit、不開 PR；dirty verification diff 必須為零 |
-| `changed` | 已 live re-prove 的 doc、map 或 owned harness correction | 只包含 target verification skill；依 consumer `workflow_model` 建一個 PR，或以 selective commit 落 trunk |
-| `blocked` | coverage 無法完成，或 proven correction 無法安全落地 | 不開 PR；列出已覆蓋範圍、blocker 與 preserved evidence |
+評估：first-match；以上皆非 → O*
 
-- 收尾動作：
-  - `clean`：確認 target dir 無 diff；不建 branch、不 commit、不開 PR。
-  - `changed`：重新讀每個 changed file；只落 target dir；依 workflow model 建一個 PR 或 selective commit。
-  - `blocked`：不開 PR；保留 evidence 與 scratch run summary，不把 scratch notes commit。
+| id | predicate | Outcome | Git／PR 收尾動作 |
+| --- | --- | --- | --- |
+| O1 | coverage 無法完成，或 proven correction 無法安全落地 | `blocked` | 不開 PR；列已覆蓋範圍、blocker 與 preserved evidence；scratch run summary 保留但不 commit |
+| O2 | 有已 live re-prove 的 doc、map 或 owned harness correction | `changed` | 重讀每個 changed file；只落 target verification skill dir；依 consumer `workflow_model` 建一個 PR 或 selective commit 落 trunk |
+| O3 | 每個 feature 都有 source + live coverage，且沒有值得落地的 map／harness diff | `clean` | **現況結果**：確認 target dir 無 diff（dirty verification diff 為零）；不建 branch、不 commit、不開 PR |
+| O* | 以上皆非 | `blocked` | 同 O1，回報判不出 outcome 的原因 |
 
 ## Good Example
 

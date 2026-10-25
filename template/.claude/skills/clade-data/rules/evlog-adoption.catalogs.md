@@ -6,7 +6,7 @@ paths:
   - 'specs/plans/*evlog*/**'
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/evlog/evlog-adoption.catalogs.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # evlog Adoption — Catalogs（全文）
 

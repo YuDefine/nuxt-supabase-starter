@@ -1,8 +1,10 @@
 ---
 name: security-evidence
 description: >-
-  Use when 要判一則 Codex Security finding 是真漏洞還是假警報（finding mode），或上線前要分清 repo /
-  staging / production 各層還缺哪些安全證據（map mode）。NOT for 修 code、跑掃描、寫 SECURITY.md。
+  Use when 要判一則安全掃描
+  finding（/security-review、security-guidance、claude-security、security-scan.ts
+  等任一掃描器）是真漏洞還是假警報（finding mode），或上線前要分清 repo / staging / production
+  各層還缺哪些安全證據（map mode）。NOT for 修 code、跑掃描、寫 SECURITY.md。
 metadata:
   clade:
     permission_tier: read
@@ -12,18 +14,18 @@ effort: high
 
 # security-evidence
 
-判一則 Codex Security finding 是真漏洞還是假警報（finding mode），或在上線前把 repo／staging／production／第三方／營運各層還缺哪些安全證據攤開（map mode）。本 skill 只產出判讀、驗證計畫與 TD 登記，不改 code、不跑掃描、不碰 production。
+判一則安全掃描 finding 是真漏洞還是假警報（finding mode，不綁特定掃描器），或在上線前把 repo／staging／production／第三方／營運各層還缺哪些安全證據攤開（map mode）。本 skill 只產出判讀、驗證計畫與 TD 登記，不改 code、不跑掃描、不碰 production。
 
 # SOP
 
 ## Phase 1 -- 判定 mode 並備齊判讀依據
 
 1. THINK 先讀取 `rules/mode判定判準.md`，依使用者帶進來的材料判 `finding` 或 `map`；多則 finding 時列出各則標題與位置，問先處理哪一則。
-2. READ 讀取 target 的 `SECURITY.md`（沒有就先告知 Confidence 會被壓低）、finding 原文（`<output_dir>/findings.json` 該條與 `report.md` 對應段）與 `coverage.json` 的 Coverage；讀 code 只讀被點名的檔與它的直接 caller／callee。
+2. READ 讀取 target 的 `SECURITY.md`（沒有就先告知 Confidence 會被壓低）、finding 原文（掃描器輸出裡該條的完整段落）與掃描器宣告的 Coverage（掃了哪些檔／範圍；掃描器沒給就記 `Unknown`），並記下產出這則 finding 的掃描器與 model；讀 code 只讀被點名的檔與它的直接 caller／callee。
 
 ## Phase 2 -- finding：分小步取得 context
 
-1. READ 向使用者要完整 finding 原文（summary、檔案與行號、attack path、validation notes、Severity、Confidence、remediation、Coverage），不接受只有標題的轉述；缺段就逐項列出缺什麼並等回覆。
+1. READ 向使用者要完整 finding 原文（summary、檔案與行號、attack path、validation notes、Severity、Confidence、remediation、Coverage、產出它的掃描器與 model），不接受只有標題的轉述；缺段就逐項列出缺什麼並等回覆。
 2. READ 確認產生這則 finding 的 repository、commit 或 branch 與掃描範圍；有 repo 存取權就唯讀查證被點名的檔，沒有就告知 code 主張只能標 `Report-Supplied`；target 不明確時等回覆。
 3. WRITE 用白話重述要審的安全主張（攻擊者、需要的存取、動作、失效的控制、拿到的敏感結果、具體影響），請使用者確認這就是要審的主張後再往下。
 4. READ 只問會改變 verdict 的最少外部事實（production RLS、storage 權限、IAM、路由暴露、feature flag、部署拓樸、webhook 設定、路徑是否可達），不問 secret 值；拿不到的記為 Proof Gap。
@@ -51,7 +53,7 @@ effort: high
 
 ## Phase 6 -- 依 verdict 登記
 
-1. WRITE 若 finding verdict 為 `accept` 或 `needs more validation`，或 map 有 P0／P1 項目，先讀取 `templates/security-finding-TD.md` 與 `templates/security-finding-TD.example.md`，每項登一條：repo 有 `specs/truth/work-lifecycle.md` 的寫進承載它的 plan Open work，未遷移 consumer 才登 TD（自家 `docs/tech-debt.md`）；`### 自驗` 寫 Proof Gap 的取得方式與修完後的 `security-scan.ts verify` 指令。
+1. WRITE 若 finding verdict 為 `accept` 或 `needs more validation`，或 map 有 P0／P1 項目，先讀取 `templates/security-finding-TD.md` 與 `templates/security-finding-TD.example.md`，每項登一條：repo 有 `specs/truth/work-lifecycle.md` 的寫進承載它的 plan Open work，未遷移 consumer 才登 TD（自家 `docs/tech-debt.md`）；`### 自驗` 寫 Proof Gap 的取得方式與修完後對修正檔重跑的 `security-scan.ts path --path <file>` 指令。
 2. WRITE 若 finding verdict 為 `unsupported`，只把結論寫進本次 review 報告，不開 TD、不改 code。
 
 

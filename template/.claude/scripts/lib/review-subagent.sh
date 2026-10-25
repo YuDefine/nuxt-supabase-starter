@@ -63,6 +63,52 @@ review_subagent_resolve_type() {
   fi
 }
 
+# session 叫得出 hub-core plugin 的 agent 嗎：project（含 settings.local）或使用者層級 settings
+# 的 enabledPlugins 有 `hub-core@*` 為 true，且 plugin 安裝目錄裡真的有這份 agent 定義
+# （pinned 在 agent 出現之前的版本沒有）。enable 看 settings 而不看 installed_plugins 的
+# projectPath：consumer 的 worktree 與主 checkout 共用同一份 settings.json，projectPath 卻不同。
+review_subagent_plugin_visible() {
+  local project="$1" config="$2"
+  node -e '
+    const fs = require("fs")
+    const path = require("path")
+    const [project, config, agent] = process.argv.slice(1)
+    const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")) } catch { return null } }
+    const enabled = [
+      path.join(project, ".claude", "settings.json"),
+      path.join(project, ".claude", "settings.local.json"),
+      path.join(config, "settings.json"),
+    ].some((f) => Object.entries(readJson(f)?.enabledPlugins || {}).some(([k, v]) => k.startsWith("hub-core@") && v === true))
+    if (!enabled) process.exit(1)
+    const roots = []
+    for (const [k, entries] of Object.entries(readJson(path.join(config, "plugins", "installed_plugins.json"))?.plugins || {})) {
+      if (!k.startsWith("hub-core@") || !Array.isArray(entries)) continue
+      for (const e of entries) if (typeof e?.installPath === "string") roots.push(e.installPath)
+    }
+    process.exit(roots.some((r) => fs.existsSync(path.join(r, "agents", agent + ".md"))) ? 0 : 1)
+  ' "$project" "$config" "$REVIEW_SUBAGENT_TYPE" 2>/dev/null
+}
+
+# prepare 開工前（凍結 changeset 之前）確認 session 叫得出 reviewer：裸名投影與 hub-core plugin
+# 都不在時 Agent tool 兩個名字都回 not found，prepare 照跑只會留下派不出去的 AGENT_CALL。
+# 典型是 starter 這類只把 agent 投影到子目錄（template/.claude/agents/）的 repo，從 root 起 session。
+review_subagent_check_loadable() {
+  local project config
+  project="$(review_subagent_session_project)"
+  [ -n "$project" ] || project="$REPO_ROOT"
+  config="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  [ -f "$project/.claude/agents/${REVIEW_SUBAGENT_TYPE}.md" ] && return 0
+  [ -f "$config/agents/${REVIEW_SUBAGENT_TYPE}.md" ] && return 0
+  review_subagent_plugin_visible "$project" "$config" && return 0
+  {
+    echo "[claude-review-safe] 錯誤：本 session 載不到 ${REVIEW_SUBAGENT_TYPE} agent 定義，AGENT_CALL 派不出去"
+    echo "  session project：$project"
+    echo "  找過：$project/.claude/agents/${REVIEW_SUBAGENT_TYPE}.md、$config/agents/${REVIEW_SUBAGENT_TYPE}.md、enabledPlugins 的 ${REVIEW_SUBAGENT_PLUGIN_TYPE}"
+    echo "  → 從有投影的目錄起 Claude Code session（例如 starter 的 template/），或把 agent 投影到這個 project root 後重開 session，再跑 prepare"
+  } >&2
+  return 2
+}
+
 review_subagent_prepare() {
   local nonce prompt agent_model agent_type fallback_type
   agent_type="$(review_subagent_resolve_type)"
@@ -96,6 +142,10 @@ PROMPT
     printf 'REVIEW_SUBAGENT_BRIEF=%q\n' "$BRIEF"
     printf 'REVIEW_SUBAGENT_BRIEF_BYTES=%q\n' "$BRIEF_BYTES"
     printf 'REVIEW_SUBAGENT_REVIEWED_PATHS=%q\n' "$REVIEWED_PATHS"
+    # 上一輪 verdict 檔（--findings 帶入，或 review_open_round 從 ledger 補上）。finalize 是另一個行程，
+    # 不寫就讀不到：review_register_staging_baseline 拿空 FINDINGS 數 verdict，把 reviewer 標 resolved
+    # 的上一輪列算回 Major（2026-10-12 mattpocock #1609 r3）。
+    printf 'REVIEW_SUBAGENT_FINDINGS=%q\n' "${FINDINGS:-}"
     printf 'REVIEW_SUBAGENT_SEAT=%q\n' "$REVIEW_SEAT"
     printf 'REVIEW_ROUND_LEDGER=%q\n' "${REVIEW_ROUND_LEDGER:-}"
     printf 'REVIEW_ROUND_N=%q\n' "${REVIEW_ROUND_N:-}"
@@ -215,6 +265,8 @@ review_subagent_finalize() {
   REVIEW_SAFE_SCRIPT="claude-review-safe.sh"
   # shellcheck source=review-common.sh
   . "$SCRIPT_DIR/lib/review-common.sh"
+  # 還原 prepare 當時的上一輪 verdict 檔（舊 state 沒這欄＝空，與修補前行為相同）。
+  FINDINGS="${REVIEW_SUBAGENT_FINDINGS:-}"
   if [ ! -d "$REPO_ROOT" ]; then
     {
       echo "[claude-review-safe] 錯誤：受審 repo 已不存在（$REPO_ROOT）——prepare 之後被移除，多半是在 review-snapshot.ts run 的快照裡跑了 prepare"

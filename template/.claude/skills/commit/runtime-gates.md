@@ -1,17 +1,17 @@
 # Commit gate 執行與證據契約
 
 
-進入 ceremony 的 Step 0-Transport 時讀本檔。每一道 gate 的觸發與判準仍由 SKILL.md、gates.md 及其引用的共通政策決定；下表定義兩端如何交付可核對的執行結果。
+進入 ceremony 的 Step 0-Transport 時讀本檔。每一道 gate 的觸發與判準仍由 SKILL.md、gates.md 及其引用的共通政策決定；下表定義如何交付可核對的執行結果。
 
-## 兩端載體
+## 載體
 
-| 操作 | Claude Code | Codex |
-| --- | --- | --- |
-| 讀檔、取得 diff、執行 CLI | 當前 catalog 的讀檔與 shell 工具 | 當前 catalog 的讀檔與 exec 工具 |
-| 獨立 reviewer | 實際可派且通過 review-policy 的原生 agent 或已授權 CLI | 實際可派且通過 review-policy 的原生 agent 或已授權 CLI |
-| 等待、收回、取消 | 對該次呼叫回傳的原生 agent／process handle 操作 | 分辨 agent id、exec session id 與 running cell id，再呼叫各自工具 |
-| 人類決策 | 可用詢問工具；缺席時在對話中等待回答 | 可用詢問工具；缺席時在對話中等待回答 |
-| 瀏覽與通知 | 已連接且本次已授權的工具 | 已連接且本次已授權的工具 |
+| 操作 | Claude Code |
+| --- | --- |
+| 讀檔、取得 diff、執行 CLI | 當前 catalog 的讀檔與 shell 工具 |
+| 獨立 reviewer | 實際可派且通過 review-policy 的原生 agent 或已授權 CLI |
+| 等待、收回、取消 | 對該次呼叫回傳的原生 agent／process handle 操作 |
+| 人類決策 | 可用詢問工具；缺席時在對話中等待回答 |
+| 瀏覽與通知 | 已連接且本次已授權的工具 |
 
 以上列的是能力角色，工具名稱與參數取自本次 catalog；不是對產品功能的存在性宣告。每個 CLI 先解析成實際存在的絕對路徑並確認依賴可執行。本 skill 宣告的隨附資源、`COMMIT_SKILL_DIR` 與資源所在的 `COMMIT_RESOURCE_DIR` 見 runtime-lifecycle；中央 helper 另驗實際安裝，不由 Markdown 已送達推論依賴也已安裝。需要的載體不可用時，依該 gate 已定義的替代路徑處置；無替代就留下未完成結果。
 
@@ -19,12 +19,12 @@
 
 每筆結果包含 `gate`、`work_id`、`checkout`、`runtime`、`session_id`、受測 base／snapshot／paths、實際 invocation、handle（有非同步執行時）、終態與 exit、輸出位置、verdict，以及引用的授權（需要人類決策時）。未觸發的 gate 記 predicate 與判定輸入；失敗或未取得終態不能記成 skipped。持鎖 token 留在本地 owner receipt，不進這份可分享記錄。
 
-| Gate | 輸入與執行者（兩端相同責任） | 完成輸出與失敗處置 | 證據 |
+| Gate | 輸入與執行者 | 完成輸出與失敗處置 | 證據 |
 | --- | --- | --- | --- |
 | 0-Lock／續持 | 主線帶真實 work／runtime／session、checkout 呼叫共同 lock CLI | acquire／renew 成功；拒絕即停止新的 gate 與 Git mutation | owner receipt；恢復另有精確 hash、原 owner、原因與授權 |
 | 0-Coord／0-Scope | 主線讀 index、WIP、活動線索與既有 scope 授權，查證 ownership | 可提交候選與 withheld 範圍分明；未明內容保留並協調 | status、diff、所有權依據、協調結果、必要時的精確 stash SHA |
 | 0-MR／Archive | 主線執行 branch／pathspec／人工檢查與 archive 判定 | 按 gates.md withheld 受阻 paths；不足的 archive 狀態不入庫 | 判定命令、change 名、交集與 readiness／coupling 輸出 |
-| 0-S | 主線對敏感 paths 呼叫已安裝的 security scanner | 讀 exit 與 failure_class；工具故障只能走 security-scan.md 的明確授權分支 | report、coverage、ledger；未掃描授權時保留該文件要求的兩種記號 |
+| 0-S | 主線對敏感 paths 跑 0-S.1 確定性掃描與 0-S.2 `/security-review`；0-S.3 scanner 是 operator 補掃，`/commit` 不呼叫 | 0-S.1／0-S.2 依 gates.md 擋；沒有放行路徑，不帶 `Security-Scan: unscanned` trailer 或 `0-S UNSCANNED` 條目 | 0-S.1 輸出、0-S.2 findings 處置；operator 補掃的 report、coverage、ledger 由 operator 另行 commit |
 | 0-A.0 | 主線先執行 simplify | 完成修正才凍結 review snapshot | simplify 結果、變更後 snapshot |
 | 0-A.1 | 唯一合格獨立 reviewer：fresh-context Claude Opus 5.5 medium；主線核對資格與結果 | 完整 verdict 與全部 finding；缺資格、缺覆蓋或 snapshot 漂移時未通過；Opus 不可用保持未完成 | review-policy 各欄、真實 dispatch／session、requested／observed model 與 model_verification(_reason)、完整輸出 |
 | 0-A.2 | Critical／Major 觸發時由同一席（Opus 5.5 medium）以新的 fresh context 對修復後 snapshot 深度複審 | 深度 review 完成才通過；Opus reviewer 不可用或配額耗盡時保持未完成，不是合法 skip | 深度 reviewer 身份、snapshot／verdict、逐條 finding 處置與修正依據 |

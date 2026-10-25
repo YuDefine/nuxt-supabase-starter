@@ -104,8 +104,8 @@ function resolveBase(explicit: string | undefined, cwd: string) {
 
 function changedFiles(base: string, cwd: string) {
   // three-dot：拿的是 base 之後這條線上的改動，不含 base 自己往前跑的部分
-  const out = git(['diff', '--name-only', `${base}...HEAD`], cwd)
-  return out.split('\n').filter(Boolean)
+  const out = git(['diff', '--name-only', '-z', `${base}...HEAD`], cwd)
+  return out.split('\0').filter(Boolean)
 }
 
 export function classifyRiskPaths(files: string[]) {

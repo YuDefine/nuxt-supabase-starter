@@ -3,11 +3,13 @@ description: Cloudflare Workers secret 管理規約 — single source of truth =
 paths: [".github/workflows/**/*.yml", "wrangler.toml", "wrangler.jsonc"]
 ---
 <!-- Clade native rule; source: rules/modules/runtime/cf-workers/secrets.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Cloudflare Workers Secrets
 
 **Single source of truth = GitHub repo secret**。所有 worker runtime 用的 secret 一律走 GitHub Actions + `cloudflare/wrangler-action@v3` 的 `secrets:` input 推進 worker。
+
+適用範圍：**Track A**（wrangler-action deploy）。Track B（void.cloud）runtime secret 走 `void secret put` 平台端預設、**不**經 GH Actions，不適用本檔（分流規約見 cloudflare-workers § 7.2）。
 
 ## MUST
 

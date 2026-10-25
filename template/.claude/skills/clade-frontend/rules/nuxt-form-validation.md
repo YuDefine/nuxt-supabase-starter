@@ -3,7 +3,7 @@ description: 多欄位表單必用 UForm + Zod；input/textarea 必設 maxlength
 paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue']
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-form-validation.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Form 驗證規約
 
@@ -24,6 +24,14 @@ paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'components/**/*.vue', 'packa
 ## UFormField（MUST）
 
 必填欄位的 `<UFormField>` **MUST** 有 `name` 屬性（讓 UForm 把 Zod 錯誤對應到欄位）+ `required`（UI 星號）。
+
+## create／edit 共用一份欄位定義
+
+同一個 resource 同時有新增與編輯表單時，欄位清單（name、label、輸入型別、必填、選項）只定義一份，兩個表單的 render、送出 body 的組裝、編輯時把 record 回填成 form state 都從它推導。**NEVER** 新增與編輯各寫一份——加欄位時漏改其中一份，編輯表單就會把那個欄位送成空值。欄位定義不取代 Zod：`UForm` 的 `:schema` 仍 **MUST** 是同一份 Zod schema。
+
+編輯時把 record 回填成 form state、以及組送出 body，都 **MUST** 只取欄位定義列出的 key，**NEVER** 把整筆 record spread 進 form state——`id`、時間戳與 server 端才該寫的欄位會跟著被送回 endpoint。
+
+表單要附檔案、且與純 JSON 共用同一支 endpoint 時，server 依 `Content-Type` 分流、把 FormData 依 Zod shape 轉型後過同一份 schema；最小示意見 `vendor/snippets/multipart-zod-body/`。
 
 ## placeholder 不代 label
 

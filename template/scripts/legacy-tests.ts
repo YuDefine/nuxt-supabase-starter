@@ -79,7 +79,7 @@ export class UsageError extends Error {}
 export class RecordRemovedError extends UsageError {}
 
 function git(root: string, args: string[]): string {
-  const r = spawnSync('git', ['-c', 'core.quotePath=false', ...args], {
+  const r = spawnSync('git', args, {
     cwd: root,
     encoding: 'utf8',
     maxBuffer: 256 * 1024 * 1024,
@@ -169,25 +169,32 @@ export function creationDates(root: string): { dates: Map<string, Created>; shal
     '--reverse',
     '--format=%x01%H %as',
     '--name-status',
+    '-z',
     '-M',
     '--diff-filter=ADR',
     'HEAD',
   ])
   let date = ''
   let bound = false
-  for (const line of out.split('\n')) {
-    if (!line) continue
-    if (line.startsWith('\x01')) {
-      const [sha, d] = line.slice(1).split(' ')
+  // -z：`<header>\0\n<STATUS>\0<path>\0…`，R／C 是 `R100\0<old>\0<new>\0`；每個 token 的開頭都是 header 或 status。
+  const fields = out.split('\0')
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i] ?? ''
+    if (field.startsWith('\x01')) {
+      const [sha, d] = field.slice(1).split(' ')
       date = d ?? ''
       bound = boundaries.has(sha ?? '')
       continue
     }
-    const [status, a, b] = line.split('\t')
-    if (!status || !a) continue
+    const status = field.replace(/^\n/, '')
+    if (!status) continue
+    const a = fields[++i]
+    if (!a) continue
     if (status === 'A') dates.set(a, { date, bound })
     else if (status === 'D') dates.delete(a)
-    else if (status.startsWith('R') && b) {
+    else if (status.startsWith('R')) {
+      const b = fields[++i]
+      if (!b) continue
       dates.set(b, dates.get(a) ?? { date, bound })
       dates.delete(a)
     }
@@ -254,10 +261,12 @@ export function sealCommit(root: string): string | null {
 function markerTouchedSince(root: string, seal: string): Set<string> {
   const touched = new Set<string>()
   const pick = (out: string) => {
-    for (const line of out.split('\n')) if (line) touched.add(line)
+    for (const line of out.split('\0')) if (line) touched.add(line)
   }
-  pick(git(root, ['log', '-M', `-G${MARKER_KEY}:`, '--format=', '--name-only', `${seal}..HEAD`]))
-  pick(git(root, ['diff', '-M', `-G${MARKER_KEY}:`, '--name-only', 'HEAD']))
+  pick(
+    git(root, ['log', '-M', `-G${MARKER_KEY}:`, '--format=', '--name-only', '-z', `${seal}..HEAD`]),
+  )
+  pick(git(root, ['diff', '-M', `-G${MARKER_KEY}:`, '--name-only', '-z', 'HEAD']))
   return touched
 }
 

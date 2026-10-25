@@ -4,8 +4,6 @@
 
 本檔是 [relay-steps.md](relay-steps.md) 與 [fanout-steps.md](fanout-steps.md) 的共用底座：preflight、durable thin brief 紀律、runtime cleanup、parent worktree lifecycle、收工訊息契約。兩支只寫各自差異，**NEVER** 在自己的檔內重述本檔內容。
 
-**Codex boundary：Codex upstream MUST 先過 [SKILL.md](SKILL.md) § Codex boundary。** bounded 工作留在 `collaboration.spawn_agent`、不進本檔；handoff 級工作照本檔全部條款執行，successor 原樣繼承 `cx`。native subagent 本身不進本檔。
-
 ## 0.1 Value-first dispatch gate（四種模式共用）
 
 在 `park` 登記、`relay`、`fanout`、`next` 的每一條接續路徑上，先判這件事是否仍值得開新 session。只有下列至少一條成立，才是可 dispatch 的 continuation candidate：
@@ -44,7 +42,7 @@ command -v herdr
 
 再判本 session 落在 [[session-tasks.operations]] § Runtime × mode matrix 的哪一列（看 `HERDR_ENV` 與 `CLADE_DISPATCH_ID`）。哪一格能用哪個 mode、helper 回什麼（`not_in_herdr`／`nested_dispatch_refused`／`successor_refused`／`usage_error`）、parent／child 各欠什麼，**只**以那張表為準；本節只留 handoff 派工專屬的 scoped summary，**NEVER** 在這裡另抄一份 runtime 流程。
 
-- **Herdr 外**（`HERDR_ENV` 空；Codex 已由本檔開頭分流）：沒有 `--relay`（`not_in_herdr`）；可用的是 create-only dispatch（`--cwd --label --prompt`／`--prompt-file`）、harvest、交出位置的 `--successor`（TD-1104），以及 matrix 該列允許的 `--bounded-leaf`。可辨識 live runtime 時不帶 `--launcher`、原生繼承（§ 3.1）；只有 user 當次明確點名不同且受支援的 runtime 才帶 `--launcher`。create-only 的成功 receipt 是 `dispatched`、`--successor` 的是 `successor_dispatched`，都**不是** `relay_dispatched`。交出位置時，本 session 欠收割的 dispatch_id MUST 寫進 successor brief，由 successor 以 `--coordinate-resume` 收割；Herdr 外前任的 record 沒有 parent pane，持有 dispatch_id 即為所有權證明，不需轉移。identity-bound 被拒時同樣不得輸出「目前這裡收工」。
+- **Herdr 外**（`HERDR_ENV` 空）：沒有 `--relay`（`not_in_herdr`）；可用的是 create-only dispatch（`--cwd --label --prompt`／`--prompt-file`）、harvest、交出位置的 `--successor`（TD-1104），以及 matrix 該列允許的 `--bounded-leaf`。可辨識 live runtime 時不帶 `--launcher`、原生繼承（§ 3.1）；只有 user 當次明確點名不同且受支援的 runtime 才帶 `--launcher`。create-only 的成功 receipt 是 `dispatched`、`--successor` 的是 `successor_dispatched`，都**不是** `relay_dispatched`。交出位置時，本 session 欠收割的 dispatch_id MUST 寫進 successor brief，由 successor 以 `--coordinate-resume` 收割；Herdr 外前任的 record 沒有 parent pane，持有 dispatch_id 即為所有權證明，不需轉移。identity-bound 被拒時同樣不得輸出「目前這裡收工」。
 - **NEVER** 在 Herdr 外 `export HERDR_ENV=1` 或假裝自己是 focused pane。那會讓 split／reclaim 打到使用者當下盯著的工作。
 
 ### `CLADE_DISPATCH_ID` 分流（本 session 自己是不是被派出來的 child）
@@ -154,11 +152,11 @@ receipt 的 `pane_label_applied` **為 `false`，或這個欄位根本不存在*
 
 ### 3.1 Launcher inherit（relay / fanout / 任何 identity-bound dispatch）
 
-user **沒**點名別的 launcher 時，successor／worker MUST 用**當前這格實際在跑的 runtime**。進入本 Herdr 分支的 helper 從 live process identity 重判：`cc → cc`、`ccw → ccw`、`grok → grok`、`cx → cx`；Pi 只依下方 continuity 契約。這是 handoff 的 runtime affinity hard rule：**agent-routing、工作類型、模型能力、成本與 repo 預設都無權覆蓋**。**NEVER** 沒點名就在 relay、fanout worker 或外部 create-only handoff 上帶 `--launcher`。
+user **沒**點名別的 launcher 時，successor／worker MUST 用**當前這格實際在跑的 runtime**。進入本 Herdr 分支的 helper 從 live process identity 重判：`cc → cc`、`ccw → ccw`（`grok` 2026-10-21 退場）；Pi 只依下方 continuity 契約。這是 handoff 的 runtime affinity hard rule：**agent-routing、工作類型、模型能力、成本與 repo 預設都無權覆蓋**。**NEVER** 沒點名就在 relay、fanout worker 或外部 create-only handoff 上帶 `--launcher`。
 
 當前 runtime 無法辨識，或 helper 不支援建立同 runtime successor 時，**MUST fail closed**：保留 brief 與 pane、回報 blocker。**NEVER** fallback 到 `cc`／`ccw`，也 NEVER 把「至少派得出去」當成跨 runtime 的授權。
 
-verified native-Codex evidence 命中時繼承 `cx`；只有 `CODEX_THREAD_ID` 而 process evidence 判不出時 helper fail closed。`PI_CODING_AGENT=true` 加非空 `PI_SESSION_ID` 代表 Pi runtime（launcher `pi`），不是 Codex；Pi successor 使用 `pi --session-id <fresh-id>` 並走 exact-session ownership gate。
+`PI_CODING_AGENT=true` 加非空 `PI_SESSION_ID` 代表 Pi runtime（launcher `pi`）；Pi successor 使用 `pi --session-id <fresh-id>` 並走 exact-session ownership gate。
 
 gateway launcher（`ccg`／`ccx`）已從 clade 拆除（2026-09-29）：`ANTHROPIC_BASE_URL` 指向本機 proxy（`http://127.0.0.1:8317`）的 session helper 判為無法辨識、fail closed（`unsupported_launcher`），**NEVER** 建立 gateway successor；`--launcher ccg|ccx` 回 `usage_error`。
 
@@ -167,8 +165,6 @@ gateway launcher（`ccg`／`ccx`）已從 clade 拆除（2026-09-29）：`ANTHRO
 | 可觀察 predicate | launcher |
 | --- | --- |
 | `PI_CODING_AGENT=true` 且 `PI_SESSION_ID` 非空 | `pi` |
-| live native-Codex evidence | `cx`（bounded 工作已在檔頭 Codex boundary 分流到 `collaboration.spawn_agent`） |
-| `CODEX_THREAD_ID` 非空但 process evidence 判不出 | helper fail closed（`codex_native_dispatch_forbidden`）；不建立 Herdr pane |
 | `ANTHROPIC_BASE_URL=http://127.0.0.1:8317`（已拆除的 gateway） | 無法辨識，`unsupported_launcher`，不建立 pane |
 | 沒有 live runtime identity，才退到 `CLADE_CLAUDE_LAUNCHER` 或 `CLAUDE_CONFIG_DIR` | 退路，不是優先 |
 
@@ -179,7 +175,7 @@ gateway launcher（`ccg`／`ccx`）已從 clade 拆除（2026-09-29）：`ANTHRO
 | user 白紙黑字點名另一個**仍支援的 Herdr successor launcher**（例如「用 ccw 接手」） | `--relay --launcher <那個>` |
 | user 白紙黑字點名另一個仍支援的 Herdr launcher，且這次是 create-only | create-only `--launcher <那個>` |
 
-沒點名就不要帶 `--launcher`。user 說「handoff／relay／fanout」本身**不等於**授權換 runtime；必須在當次要求中明確點名目標 launcher。`--launcher` 只覆蓋 successor／child 的 binary 與相容 marker，**不改** current pane 的簽署身分——誰能簽 relay 仍由 `HERDR_ENV`、current pane、exact runtime session 驗證。`--launcher ccg|ccx` 一律回 `usage_error`；身分無法驗證的 Codex origin 帶 `--launcher` 也照樣 fail closed。
+沒點名就不要帶 `--launcher`。user 說「handoff／relay／fanout」本身**不等於**授權換 runtime；必須在當次要求中明確點名目標 launcher。`--launcher` 只覆蓋 successor／child 的 binary 與相容 marker，**不改** current pane 的簽署身分——誰能簽 relay 仍由 `HERDR_ENV`、current pane、exact runtime session 驗證。`--launcher ccg|ccx` 一律回 `usage_error`。
 
 `--reclaim` / `--complete` / `--continue` / `--adjudicate` / `--recover-orphan` / `--coordinate-claim` / `--parent-pane` **NEVER** 帶 `--launcher`。
 
@@ -187,9 +183,8 @@ gateway launcher（`ccg`／`ccx`）已從 clade 拆除（2026-09-29）：`ANTHRO
 
 | 藉口 | 現實 |
 | --- | --- |
-| 「這格 `CLADE_CLAUDE_LAUNCHER=ccw`，relay 繼承它才對」 | 那是 W1 被派出來時注入的。當前若有 live Pi identity，繼承 marker 會把目前工作交錯 runtime；當前若是 Codex，successor 繼承的是 `cx` |
+| 「這格 `CLADE_CLAUDE_LAUNCHER=ccw`，relay 繼承它才對」 | 那是 W1 被派出來時注入的。當前若有 live Pi identity，繼承 marker 會把目前工作交錯 runtime |
 | 「帶 `--launcher` 才能簽 relay／改了簽署身分」 | 簽署仍是 `HERDR_ENV` + current pane + exact runtime session。`--launcher` 只選 successor binary |
-| 「這件 Codex 工作不長，但開 cx successor 比較乾淨」 | 本 turn 收得回來就是 `collaboration.spawn_agent`；開 pane 只留給 handoff 級工作（[[agent-routing]] § Dispatch data and transport boundary） |
 | 「agent-routing 判這類工作更適合 cc／ccw」 | routing 可決定 bounded executor，不能改 handoff successor／worker 的 runtime affinity；要跨 runtime 必須由 user 當次明示 |
 | 「當前 runtime 辨識不到，先 fallback 到 ccw 至少能接」 | 辨識失敗是 blocker，不是授權；handoff 必須 fail closed |
 
@@ -197,30 +192,22 @@ gateway launcher（`ccg`／`ccx`）已從 clade 拆除（2026-09-29）：`ANTHRO
 
 `--model` 走 [[agent-routing]] 查表，本節只關掉一個具名落點。
 
-**判定落在「sonnet 等級」時，那件事屬於 Grok 4.7 xhigh（delegate-sub 鏈首），不是 `sonnet`。** 每次判定算出「這件事只值 sonnet」欄位就被填成 `sonnet` —— 2026-09-09 實測連續五筆全部這樣填，而且全部配 `--route manual`，因為沒有任何政策列產得出那個 model。helper 自 2026-09-10 起直接拒收（`refuseRetiredClaudeTier`，`usage_error`；2026-09-24 起 Fable／Haiku 也一併拒收）。
+**判定落在「sonnet 等級」時，那件事屬於 delegate-sub，不是 Herdr pane 的 `sonnet`。** 每次判定算出「這件事只值 sonnet」欄位就被填成 `sonnet` —— 2026-09-09 實測連續五筆全部這樣填，而且全部配 `--route manual`，因為沒有任何政策列產得出那個 model。helper 自 2026-09-10 起直接拒收（`refuseRetiredClaudeTier`，`usage_error`；2026-09-24 起 Fable／Haiku 也一併拒收）。
 
-**Grok 4.7 有兩條 transport，都受支援**（2026-09-11 更正，見本節末撤回）：
-
-| transport | 指令 | 買到什麼 | 代價 |
-| --- | --- | --- | --- |
-| Herdr pane | `--launcher grok --model grok-4.7 --effort xhigh` | 佔一個 pane（預設分割當前 Tab；`--new-tab`、無當前 pane、或 cwd 屬別的 workspace 時改開 Tab）、在 Herdr 看得到、人可中途介入；進 `--relay` 的 in-flight 轉移與 § 4 比對 gate | 不過 ledger / quota chain / workspace-access admission |
-| Pi worker | `pi-dispatch.ts --model grok-xai --effort xhigh --route claude-delegate-sub --tier-basis delegate-sub --workspace-access <readonly\|mutation> --brief <brief.md> --label <slug>` | route/tier-basis、quota chain、workspace-access admission、ledger 全套 | 不佔 pane，也不進 `--relay` 轉移；人只能事後讀 log |
+**delegate-sub 的載體（2026-10-21 起）**：xAI 退訂（Charles 2026-10-06）後 Grok 的兩條 transport——Herdr `--launcher grok` 與 Pi `--model grok-xai`——都已退場（helper 對 `--launcher grok` 回 `usage_error`、dispatcher 對 `grok-xai` exit 1），`DELEGATE_SUB_CHAIN` 為空，鏈尾即首跳（[[agent-routing.routing-table]] § delegate-sub）：
 
 | 你手上這件事 | MUST |
 | --- | --- |
-| fanout worker，判定是 sonnet 等級 | 依上表挑一條。**要人看得見／可能要中途介入 → pane；要 admission 與 ledger → Pi worker。** 講不出挑哪條的理由就挑 Pi worker（預設值，帳留得下來） |
+| 判定是 sonnet 等級、要改檔 | in-process `Agent({ subagent_type: 'sonnet-implementer' })`，brief 帶一行 `routing-row: delegate-sub`（Claude Sonnet 5.5（effort: high），frontmatter 釘死） |
+| 判定是 sonnet 等級、唯讀 | in-process `Agent({ subagent_type: 'dispatch-fallback' })`（Claude Opus 5.5（effort: low），frontmatter 釘死） |
 | relay successor，判定「還是主線複雜度」 | `--model opus`。successor 接手的是整個主線位置，要 mutation 也要判斷，本來就不該降檔 |
-| relay successor，判定「只值 sonnet 等級」 | 兩條都行：`--relay --launcher grok --model grok-4.7 --effort xhigh` 把位置交給 Grok；或本 session 留著、把那件事用上表的 Grok worker 派掉。交出位置的前提仍是「有人要接手主線」，不是「有工作沒做完」 |
+| relay successor，判定「只值 sonnet 等級」 | 不交出位置：本 session 留著，把那件事照上兩列 in-process 派掉。交出位置的前提仍是「有人要接手主線」，不是「有工作沒做完」 |
 | 任何一格想填 `sonnet` | 回上表重判。**NEVER** 因為 helper 要求明確 `--model` 就在 Claude 值域裡挑一個 —— 那正是上述五筆的成因逐字 |
 
-**relay successor NEVER 是 Pi seat**：`--launcher pi` 只在 predecessor 本身已是已驗證 Pi runtime 時成立（`herdr-session-handoff.ts` 的 relay-continuity）。**這條只綁 Pi**——relay receipt 上只有 `launcher === 'pi'` 會標 `admission: 'relay-continuity'`。**NEVER** 把它讀成 grok 也不能 relay。
+**relay successor NEVER 是 Pi seat**：`--launcher pi` 只在 predecessor 本身已是已驗證 Pi runtime 時成立（`herdr-session-handoff.ts` 的 relay-continuity）。
 
-> **已撤回（2026-09-11）：「Herdr pane 的 model 值域是 Claude-only」與「Claude 主線 relay 給 grok 這條路不存在」。**
-> 兩句都是事實錯誤，而且與本檔 § 3.1 runtime affinity 表自己列的 `grok → grok` 互相矛盾。
-> 反證：`herdr-session-handoff.ts` 的 `Launcher` 型別含 `grok`、`agentKindForLauncher` 給它獨立
-> `AgentKind`、`selectionValidForLauncher` 對它放行 `grok-4.6` / `grok-4.6-build`、`--help` 的 usage
-> 字串印著 `grok`；同日 `herdr api snapshot` 有 `source: herdr:grok` 的 live pane。
-> **NEVER** 因為別處還留著舊說法就複述它——看到就改掉。
+> **歷史（2026-09-11〜2026-10-21）**：Grok 4.7 曾有 Herdr pane（`--launcher grok`）與 Pi worker（`grok-xai`）兩條 transport，
+> 2026-09-11 撤回過「Herdr pane 的 model 值域是 Claude-only」的錯誤說法。兩條 transport 已隨 xAI 退訂一併退場。
 
 ## 4. Runtime cleanup
 
@@ -317,7 +304,7 @@ node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \
 
 **那份 brief 的首段 MUST 逐字帶上這一句**（TD-908）：
 
-> 本 brief 是**工作指令**，不是待辦盤點。`\nx` / `\my` / 收工判定不適用於剛被派出的 pane——
+> 本 brief 是**工作指令**，不是待辦盤點。`/nx` / `/my` / 收工判定不適用於剛被派出的 pane——
 > 即使 brief 讀起來像「已完成 ＋ 剩餘」清單也一樣。MUST 先把 brief 的每一項實際做完再回報。
 
 殘工 brief 天生長成「已完成 ＋ 剩餘」兩段——那正是收工盤點的形狀，所以下一棒會把它讀成一題

@@ -3,7 +3,7 @@ description: Tech debt 路由規則——決定發現的技術債該登在 clade
 paths: ['docs/tech-debt.md', '**/docs/tech-debt.md']
 ---
 <!-- Clade native rule; source: rules/core/tech-debt-routing.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Tech Debt Routing
 

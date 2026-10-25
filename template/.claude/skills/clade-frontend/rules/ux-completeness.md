@@ -3,8 +3,8 @@ description: UX 完整性規則——定義 "feature complete"、強制列舉 us
 paths: ['tasks/**', 'specs/plans/**', 'app/**/*.vue', 'packages/*/app/**/*.vue', 'shared/types/**/*.ts', 'packages/*/shared/types/**/*.ts', 'supabase/migrations/**']
 ---
 <!-- Clade native rule; source: rules/core/ux-completeness.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 # UX Completeness
 
@@ -319,6 +319,8 @@ function getBindingIcon(cardType: NfcCardType): string {
 | Unauthorized | 權限不足時的導向或提示                     |
 
 存在任一 state 未處理 = Design Gate 不通過。
+
+資料源還沒接上、先用示範資料渲染的畫面 **MUST** 明顯標示「示範資料」，資料源接上後自動改顯示真實資料；**NEVER** 讓示範數字看起來像真的。
 
 ## 心智模型清單
 

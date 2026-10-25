@@ -8,11 +8,9 @@
 #
 # 跟 pre-commit 同名 check 的分工：
 #   - pre-commit checks/nuxt-ui-mixed-slot.sh : 只掃本次 staged *.vue（blocking，最接近犯錯時點）
-#   - pre-push  checks/nuxt-ui-mixed-slot.sh  : 掃全 repo *.vue（blocking 回溯型；2026-07-06
-#                                               全 fleet 掃描基線 0 hit，可直接 blocking）
+#   - pre-push  checks/nuxt-ui-mixed-slot.sh  : 掃全 repo *.vue（blocking 回溯型；fleet 基線 0 hit）
 #
-# 實證：<consumer-b> /reports/daily-machining 空白 18 天（pitfall:
-# 2026-07-06-nuxt-ui-named-slot-default-fallback-shadowing，TD-236）。
+# 規約來源：pitfall [[pitfall-nuxt-ui-named-slot-default-fallback-shadowing]]
 #
 # Auto-detect：偵測 nuxt.config.* 存在才跑；非 Nuxt repo 自動 no-op（exit 0）。
 #

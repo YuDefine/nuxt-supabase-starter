@@ -7,7 +7,7 @@
 
 | 標記 | 需要 manifest 宣告 | 沒宣告的 repo |
 | --- | --- | --- |
-| 〔aixbdd〕 | `modules.capabilities` 含 `"aixbdd"` | 沒有 `work-route` 與它載入的需求管線（`/specify`、`/clarify`、`/system-analysis`、`/implement`）。待辦走 `tasks/` + HANDOFF / tech-debt / ROADMAP，`/work-loop` 照樣能跑 |
+| 〔aixbdd〕 | `modules.capabilities` 含 `"aixbdd"` | 沒有 `work-route` 與它載入的需求管線（`/specify`、`/clarify`、`/system-analysis`、`/implement`）。待辦走 `tasks/` + HANDOFF / tech-debt / ROADMAP，`/coordinator` 的自動加派照樣收得到 |
 | 〔specformula〕 | `modules.capabilities` 含 `"specformula"` | 沒有 `.feature` / `isa.yml` 的 BDD 執行層 |
 | 〔nuxt〕 | `modules.framework` = `"nuxt"` | 沒有 Nuxt 專用的稽核與 dev 工具 |
 | 〔node〕 | `modules.ecosystem` 含 `"node"` | 沒有 `/version-upgrade`（它綁 npm/pnpm，不是綁 Nuxt） |
@@ -33,7 +33,7 @@
 
 - Level: `MUST`
 - 〔aixbdd〕repo 開始或續做需求、bug、重構時，入口是 `work-route`：它分類需求、定位同一份工作、開 plan package，並依產物載入 owner。
-- 可直接叫的只有 `work-route`、`/specify`、`/clarify`、`/system-analysis`、`/implement`。`clarify-over-specs`、`spec-by-example`、`technical-research`、`api-plan`、`data-plan`、`ui-plan`、`dsl-refine`、`tasks`、`bdd` 是由 `work-route` 載入的內部 owner，沒有同名 slash 入口，**NEVER** 叫使用者手打。
+- 可直接叫的只有 `work-route`、`/interview`、`/specify`、`/clarify`、`/system-analysis`、`/implement`。`/interview` 是 `work-route` 前段的唯讀需求訪談：使用者想先把需求談清楚時用，確認版摘要交回 `work-route`。`clarify-over-specs`、`spec-by-example`、`technical-research`、`api-plan`、`data-plan`、`ui-plan`、`dsl-refine`、`tasks`、`bdd` 是由 `work-route` 載入的內部 owner，沒有同名 slash 入口，**NEVER** 叫使用者手打。
 - 生命週期各站與 owner（〔aixbdd〕）：
 
 | 階段 | owner | 這一站做什麼 |
@@ -82,7 +82,7 @@ modules.capabilities 含 aixbdd；使用者：「我要做一個新需求」→ 
 | 要動 code 而還在 main working tree | 交 `wt` 建立隔離環境（每條 task 一棵 worktree，多條可並行） |
 | implementation plan 內有多個獨立 task 想並行 | 讀 `capabilities/core/references/implement-executor/`（同 session 派 subagent；跨 change 的並行仍交 `wt` 各自建立隔離環境） |
 | session 要收尾 / 交接 | `/handoff`（有 in-progress 工作寫交接；沒有則整理 HANDOFF.md 推薦 outstanding） |
-| 要把待辦無人值守推完（plan package / tasks 檔 / HANDOFF / tech-debt / ROADMAP） | `/work-loop`（自主推進 loop；一次性任務不適用） |
+| 要把待辦無人值守推完（plan package / tasks 檔 / HANDOFF / tech-debt / ROADMAP） | `/coordinator`（watch 自動加派；單件執行走 `/work-route`） |
 | 外部新資訊要改需求 | 〔aixbdd〕lifecycle repo 經 `work-route` 開新的 `W-…` package；未遷移 consumer 才開 `NNN-<slug>`。舊 plan package 是歷史，**NEVER** 回頭覆寫 |
 | 問規格內容 | 直接讀 `specs/truth/**`（對非 owner skill 唯讀）與該 plan package 的 `spec.md` |
 | 安全視角掃 changed code | `/security-review` |
@@ -103,7 +103,7 @@ modules.capabilities 含 aixbdd；使用者：「我要做一個新需求」→ 
 - 這個例子是壞的，因為 guide 自己複寫了 archive 契約，與 review 漂移時無人發現。
 
 ```text
-guide：/review archive 要寫 docs/manual-review-archive.md，截圖 rotate 進 _archive/
+guide：/review archive 要停寫歸檔（不再寫 docs/manual-review-archive.md，結論留在 work package），截圖 rotate 進 _archive/
 ```
 
 # Rule 4 - user-invoked skill 要告訴使用者手動打的指令，不由 model 觸發

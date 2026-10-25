@@ -12,7 +12,7 @@
 | `merge: CLEAN` | 可合併（必要 check 全過、無衝突） |
 | `merge: BLOCKED` | 必要 check 未過或必要 review 未到；看 `checks` 裡哪條不是 `SUCCESS` |
 | `merge: UNSTABLE` | 非必要 check 紅；照紅燈先比最後綠燈判是不是這張 PR 造成的 |
-| `merge: BEHIND` | 只是 `main` 往前走、沒有衝突；**NEVER** 為了跟上 `main` 推 ready PR（[[github-flow]] § Ready 之後的 push 紀律） |
+| `merge: BEHIND` | 只是 `main` 往前走、沒有衝突；**NEVER** 為了跟上 `main` 推 ready PR，包括 `gh pr update-branch` 與手動 `git merge origin/main`：每個 merge commit 都多燒一整趟 CI，只有 `DIRTY` 才 merge `main`（[[github-flow]] § Ready 之後的 push 紀律） |
 | `merge: DIRTY` | 與 `main` 衝突。優先在來源 worktree `git fetch origin && git merge origin/main` 解衝突後一般 push（不需 force）；要 rebase 才用 `--force-with-lease=<branch>:<剛驗證的遠端 SHA>`，且須主持者授權。force 的具體條件以 [[github-flow]] 為準 |
 | `merge: UNKNOWN` | GitHub 還在算（剛 push 或剛有人合進 `main`），30 秒後再查一次，**NEVER** 據以判定 |
 

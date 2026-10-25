@@ -3,6 +3,8 @@
 
 ## Finding 證據審查：{{FINDING_TITLE}}
 
+- 掃描器／model 來源：{{SCANNER_AND_MODEL}}
+
 ### 白話摘要
 
 - 攻擊者：{{ATTACKER}}

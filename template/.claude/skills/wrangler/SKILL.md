@@ -6,28 +6,22 @@ description: "Use before running Wrangler deploy, dev, tail, or types for Cloudf
 
 # Wrangler CLI
 
-Your knowledge of Wrangler CLI flags, config fields, and subcommands may be outdated. Prefer retrieval over pre-training for Wrangler tasks.
+模型記得的 Wrangler 旗標、config 欄位與子指令可能已過時；寫或審 Wrangler 指令與 config 前一律先查專案安裝的版本與最新文件，不靠記憶。
 
-## Retrieval Sources
+# SOP
 
-Fetch the latest information before writing or reviewing Wrangler commands and config.
+## Phase 1 -- 確認專案的 wrangler 版本與文件
 
-- Wrangler docs: `https://developers.cloudflare.com/workers/wrangler/`
-- Cloudflare Workers docs: `https://developers.cloudflare.com/workers/`
-- Local schema: `node_modules/wrangler/config-schema.json`
+1. READ 讀取 `package.json`、lockfile 與 deploy scripts，確認專案用的 package manager 與宣告的 wrangler 版本。
+2. DELEGATE 用專案本機的 wrangler 查版本與說明（pnpm 專案：`pnpm exec wrangler --version`、`pnpm exec wrangler <子指令> --help`）；已宣告但未安裝就還原專案依賴，未宣告就經專案的依賴流程選定相容版本後再安裝。
+3. READ 讀取 Wrangler 文件（`https://developers.cloudflare.com/workers/wrangler/`）、Workers 文件（`https://developers.cloudflare.com/workers/`）與本機 schema `node_modules/wrangler/config-schema.json` 中本次要用的指令或欄位。
 
-## First Step
+## Phase 2 -- 判定操作歸屬
 
-Use the project's package manager and locally installed Wrangler. Check `package.json`, the lockfile, and the deployment scripts, then query that binary's version and help (for a pnpm project: `pnpm exec wrangler --version`). If the declared dependency is not installed, restore the project dependencies. If no dependency is declared, select a compatible version through the project's dependency workflow before installing it.
+1. THINK 讀取 `rules/工具邊界判準.md`，判定本次操作留在 wrangler 或轉 `cf-cli` skill；帳號資源的查詢與異動轉 `cf-cli` 後，本 skill 只處理剩下的 wrangler 部分。
 
-## Key Guidelines
+## Phase 3 -- 修改 config 並驗證
 
-- Prefer `wrangler.jsonc` over TOML for newer configuration support.
-- Keep the project’s tested `compatibility_date`; validate affected runtime behavior when changing it.
-- Run `wrangler types` after config changes.
-- Run the project’s typecheck/tests and `wrangler deploy --dry-run` with the intended config and environment before deploy. The [deploy dry run](https://developers.cloudflare.com/workers/wrangler/commands/workers/#deploy) compiles without deploying; live bindings and production behavior still need their own verification.
-- Use environments for staging and production.
-
-## 帳號資源操作走 `cf` CLI
-
-D1 / KV / R2 / Vectorize / Queues / DNS / Worker secret 等帳號資源的查詢與異動 **MUST** 走 `cf-cli` skill，**NEVER** 用 `wrangler d1|kv|r2|secret|...` 子指令改打遠端。wrangler 只留給 deploy、`wrangler dev`、`wrangler tail`、`wrangler types`、config 驗證、查 dev server 的本機資料（`--local`），以及 CI workflow 內的步驟（D1 migration、`pre-migration-bookmark.sh` 等；邊界見 `cloudflare-workers.md` § 8）。
+1. READ 讀取 `rules/Config與部署前驗證判準.md`。
+2. WRITE 依已載入規則修改 `wrangler.jsonc`。
+3. DELEGATE 依已載入規則跑 `wrangler types`、專案 typecheck／tests，以及指定 config 與 environment 的 `wrangler deploy --dry-run`；任一失敗就修正後從本 step 重跑，全過才 deploy；部署後依已載入規則實際呼叫受影響的 endpoint 驗證。

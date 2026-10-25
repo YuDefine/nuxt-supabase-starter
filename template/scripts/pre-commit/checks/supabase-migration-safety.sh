@@ -92,14 +92,15 @@ while IFS= read -r -d '' file; do
   out_of_order+=("$file")
 done < <(git diff --cached --name-only --diff-filter=AR -z -- 'supabase/migrations/*.sql')
 
-# Merge commit false-positive 防護（TD-190）：merge in progress（MERGE_HEAD 存在）
+# Merge commit false-positive 防護：merge in progress（MERGE_HEAD 存在）
 # 時，staged diff（vs HEAD）含 merge 帶進來的 origin/main 既有 migration，
 # --diff-filter=AR 會把它們當「新增」→ 全判 out-of-order（含 latest 自己）。
 # 把已存在於 origin/main 的路徑從候選集合 exclude，只檢查真正本地新增 / rename 的檔案。
 if ((${#out_of_order[@]} > 0)) \
   && git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 \
   && git rev-parse --verify origin/main >/dev/null 2>&1; then
-  main_migration_paths=$(git ls-tree -r --name-only origin/main -- 'supabase/migrations/' 2>/dev/null || true)
+  # `-z | tr`：路徑不被 core.quotePath 跳脫，才對得上上面 `diff -z` 讀到的 $f。
+  main_migration_paths=$(git ls-tree -r -z --name-only origin/main -- 'supabase/migrations/' 2>/dev/null | tr '\0' '\n' || true)
   filtered=()
   for f in "${out_of_order[@]}"; do
     if grep -qxF "$f" <<<"$main_migration_paths"; then
@@ -118,7 +119,8 @@ if ((${#out_of_order[@]} > 0)); then
   latest_on_main=""
   if git rev-parse --verify origin/main >/dev/null 2>&1; then
     latest_on_main=$(
-      git ls-tree -r --name-only origin/main -- 'supabase/migrations/' 2>/dev/null \
+      git ls-tree -r -z --name-only origin/main -- 'supabase/migrations/' 2>/dev/null \
+        | tr '\0' '\n' \
         | awk -F/ '{print $NF}' \
         | { grep -oE '^[0-9]{14}' || true; } \
         | sort -n \

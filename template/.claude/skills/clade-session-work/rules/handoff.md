@@ -3,8 +3,8 @@ description: Handoff 規則——當 session 尚有未完成的 work item、bloc
 paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 ---
 <!-- Clade native rule; source: rules/core/handoff.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 # Handoff
 
@@ -31,7 +31,7 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 - session 結束時仍有進行中的 work item（flow 卡未 `done`）
 - 被 `/clear`、context window、或外部中斷打斷
 - 有未 commit 的 WIP 需要之後接續
-- 工作轉交給其他 agent / runtime（Claude、Codex、Copilot、subagent）
+- 工作轉交給其他 agent / runtime（Claude、Copilot、subagent）
 - 使用者明確要求留下交接
 
 ## 建議格式
@@ -89,7 +89,7 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 | `specs/plans/<work-id>/plan.md` | 需要接續的工作 | 結案刪除；歷史在 git |
 | `.clade/claims/**` | 即時 ownership / heartbeat | 短期、機器維護 |
 | `docs/archives/<YYYY-MM>-handoff-narrative.md` | 僅未遷移 consumer：從 HANDOFF rotate 過來的已完成 narrative | 長期、month-bucket append-only |
-| `docs/archives/<YYYY-MM>-<topic>.md` | 一次性 wave / 主題盤點成果（既有用途） | 長期 |
+| `docs/archives/<YYYY-MM>-<topic>.md` | 僅未遷移 consumer：一次性 wave / 主題盤點成果（既有用途） | 長期 |
 | 決策與會重現的教訓 | 落點依 [[knowledge-and-decisions]]：lifecycle repo 為它約束的 `specs/truth/**` 單位；未遷移 consumer 為當下工作的 plan／spec（既有 `docs/solutions/**`、`docs/decisions/**` 只原地更新，**NEVER** 開新檔） | 長期 |
 | `ROADMAP.md`（repo 根目錄） | 未來工作排序與優先度 | 持續維護 |
 
@@ -164,7 +164,7 @@ git for-each-ref "refs/wt-baseline/<slug>/" --format='%(refname)'
 
 ## Outstanding actionability hygiene
 
-**核心命題**：HANDOFF.md `## Outstanding` / `## Next Steps` / handoff `next` § 2B.4 推薦下一 session（含 remote-control session、並行 Codex session、人類 user）動工時，**MUST** inline 必要 actionable detail；禁止「by reference」handoff（只列 candidate 名稱 + 1-line summary + 指向 audit/scan/decision doc，要 receiver 自己 grep 還原 context）。
+**核心命題**：HANDOFF.md `## Outstanding` / `## Next Steps` / handoff `next` § 2B.4 推薦下一 session（含 remote-control session、並行 session、人類 user）動工時，**MUST** inline 必要 actionable detail；禁止「by reference」handoff（只列 candidate 名稱 + 1-line summary + 指向 audit/scan/decision doc，要 receiver 自己 grep 還原 context）。
 
 ### 適用範圍
 
@@ -180,17 +180,17 @@ git for-each-ref "refs/wt-baseline/<slug>/" --format='%(refname)'
 
 **MUST** inline 4 件事（或提供完整 pasteable prompt 含這 4 件事）：
 
-1. **Audit / scan / decision 來源 + 行號**：`docs/audit/<file>.md` 哪一段或 `docs/decisions/<file>.md` 哪一節
+1. **Audit / scan / decision 來源 + 行號**：`specs/plans/<work-id>/evidence/<file>.md` 哪一段，或 `specs/truth/**` 對應單位的 Decision 段
 2. **Pattern + 涉及檔案 list**：具體 file path 列表 + 識別 token（callsite shape / class / function name / migration timestamp）
 3. **Target API / 結構**：抽出 / 重構 / 遷移後的 component / function / module / schema signature
 4. **Scope boundary**：要動哪些檔、不動哪些檔（per scope-discipline）；同 file 內哪些 callsite 在 scope 哪些不在
 
 ### 禁止寫作 anti-pattern
 
-- ❌ 「Candidate X — 取代 N callsites，詳見 docs/audit/Y.md」— 指向 doc 但不 inline，receiver 必須 round-trip
+- ❌ 「Candidate X — 取代 N callsites，詳見 specs/plans/<work-id>/evidence/Y.md」— 指向 doc 但不 inline，receiver 必須 round-trip
 - ❌ 「跑 `/specify <slug>`」— bare argument，收到的 session 要自己 investigate；如有 9 條 candidate 還要 receiver 挑哪一條
 - ❌ 「從 high impact 第一條開始」— 不指定 candidate identifier
-- ❌ 「Audit 結論詳見 `docs/audit/X.md`」當作 HANDOFF 唯一指引 — implicit pointer 不算 inline
+- ❌ 「Audit 結論詳見 `specs/plans/<work-id>/evidence/X.md`」當作 HANDOFF 唯一指引 — implicit pointer 不算 inline
 
 範例：「C1 `<AppStatusBadge>` extraction」要寫出 audit 來源與行號、pattern 片段與 8 個檔的完整路徑、`<AppStatusBadge :status :color-map :label-map />` 這類 target API 與落點、以及「動哪些 callsite／不動哪些 UBadge usage」；只寫 bare slug 讓 receiver 自己去 grep audit doc 就是不夠。
 

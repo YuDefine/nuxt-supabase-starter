@@ -104,9 +104,9 @@ node vendor/scripts/checks/mutation-loading-detect.ts $(git diff --name-only <ba
 
 ## 耦合與內聚（coupling-cohesion）
 
-> enforcement: audit(audit-coupling-cohesion.ts)（gate 由 `vp lint` 的兩條 oxlint 規則承擔，皆 error 級，不經 patterns.json；shotgun surgery 是 reviewer 語意判斷，無對應 patterns.json semantic id）
+> enforcement: audit(audit-coupling-cohesion.ts)（gate 由 `vp lint` 的兩條 oxlint 規則承擔，皆 error 級，不經 patterns.json；shotgun surgery 與設計警訊是 reviewer 語意判斷，無對應 patterns.json semantic id）
 
-規約見 `.claude/rules/coupling-cohesion.md`。機械層擋 cycle 與 barrel，本段是 reviewer 補三項機械層抓不到或不該擋的判斷。
+規約見 `.claude/rules/coupling-cohesion.md`。機械層擋 cycle 與 barrel，本段是 reviewer 補三項機械層抓不到或不該擋的判斷；另外逐列對照該規約 § 以 agent 為前提的設計警訊 的八項判準，命中者列進報告。
 
 | 禁止使用 / 必查項 | 位置 | 說明 |
 | --- | --- | --- |
@@ -160,7 +160,7 @@ grep -En "'import/no-cycle':\s*'warn'" vite.config.ts
 
 > enforcement: semantic(doc-sync)
 
-若本次變更包含 `🐛 fix` 類型的 commit，檢查是否已更新 `docs/verify/PRODUCTION_BUG_PATTERNS.md`。
+若本次變更包含 `🐛 fix` 類型的 commit，檢查是否已更新 `PRODUCTION_BUG_PATTERNS.md`（lifecycle repo 在 `specs/truth/docs/verify/`，未遷移 consumer 在 `docs/verify/`；見 `/doc-sync`）。
 
 ## Nuxt a11y 採用一致性
 
@@ -283,3 +283,4 @@ Reviewer 補判斷機械層看不到的：
 - 新增註解命中 C0–C6 → fail，指名類別；C0 先判該事實該不該進 SSoT（code 讀 SSoT＋刪註解，或把事實搬進 SSoT）
 - 新增 unit test 一列都不中 U1–U4，或斷言只給人讀的 prose／load-bearing 規約句 → fail
 - 刪掉閘門類（U3）測試，或某段產品碼唯一的行為測試 → fail
+- diff 新增或改到 `clade-source-assert: <code> — <reason>` marker（檔首 10 行；`source-assert-gate` 放行時會印 notice）→ 審理由是否成立：`no-behavior-channel` 要真的沒有可 mount／呼叫／執行的入口，`declarative` 要被讀的檔是純宣告式資產；測試對象明明能 mount 或 import 執行卻掛 marker → fail。P 類斷言數增加但沒有 marker 會被機械閘門擋下，不必在此重審

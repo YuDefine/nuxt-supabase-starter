@@ -47,6 +47,22 @@ export interface WtEnvBootstrapOptions {
    * Defaults to `worktreePath`, preserving provisioning behaviour.
    */
   scriptRoot?: string
+  /**
+   * Provisioning-side counterpart of `scriptRoot`: the tree's own shim still runs
+   * first (it may legitimately differ from main's — `add --checkout` of a branch
+   * that edits the shim, env/sidecar steps that track the tree's base), and only
+   * when it dies with `E_BRANCH_SLUG` — it cannot recognise its own branch name,
+   * e.g. a `cloud/*` PR branch forked before `f3d842e12` taught the slug form —
+   * is the command re-run once with this checkout's shim (normally the main
+   * checkout). The match is the shim's `--json` `errorCode`, never a substring of
+   * its stderr. `ensure` raises `E_BRANCH_SLUG` from `resolveTarget`, before any
+   * resource is written, so the retry cannot double-provision. Any other failure
+   * stays fail-closed, and so does a fallback checkout that ships no shim (the
+   * original error is rethrown). A successful retry's object result carries
+   * `fallbackScriptRoot` so callers can point repair commands at the shim that
+   * actually worked. Ignored when it equals the effective `scriptRoot`.
+   */
+  slugFallbackRoot?: string
 }
 
 /**
@@ -153,6 +169,37 @@ export function runWtEnvBootstrap(
   command: string,
   opts: WtEnvBootstrapOptions = {},
 ) {
+  const fallback = opts.slugFallbackRoot
+  if (!fallback || fallback === (opts.scriptRoot ?? worktreePath)) {
+    return runWtEnvBootstrapOnce(worktreePath, command, opts)
+  }
+  try {
+    return runWtEnvBootstrapOnce(worktreePath, command, opts)
+  } catch (err) {
+    if ((err as { errorCode?: string })?.errorCode !== 'E_BRANCH_SLUG') throw err
+    // fallback checkout 沒有 shim → 回 null；NEVER 讓它吞掉原本的 E_BRANCH_SLUG（fail-closed）。
+    const retried = runWtEnvBootstrapOnce(worktreePath, command, { ...opts, scriptRoot: fallback })
+    if (retried === null) throw err
+    return retried && typeof retried === 'object' && !Array.isArray(retried)
+      ? { ...retried, fallbackScriptRoot: fallback }
+      : retried
+  }
+}
+
+/** shim 的 `--json` 失敗輸出是 stderr 上的一行 JSON（含 `errorCode`）；解不出來回 undefined。 */
+function shimErrorCode(stderr: string): string | undefined {
+  for (const line of stderr.split('\n').toReversed()) {
+    try {
+      const code = JSON.parse(line.trim())?.errorCode
+      if (typeof code === 'string') return code
+    } catch {
+      // 不是 JSON 行（人讀的 trace 等）：往前找。
+    }
+  }
+  return undefined
+}
+
+function runWtEnvBootstrapOnce(worktreePath: string, command: string, opts: WtEnvBootstrapOptions) {
   // `--worktree` names the target, so the implementation may live in another
   // checkout; only the resolution root moves, never the tree being acted on.
   const scriptRoot = opts.scriptRoot ?? worktreePath
@@ -174,13 +221,16 @@ export function runWtEnvBootstrap(
     // complaint it means the script does not implement this CLI at all, which
     // is a different repair than a genuine provisioning failure (TD-348).
     const contractMismatch = result.status === 2 || /unknown (arg|option|command)/i.test(stderr)
-    throw new Error(
-      `Worktree env bootstrap ${command} failed: ${stderr}` +
-        (contractMismatch
-          ? `\n  ${script} does not implement the required CLI ` +
-            `\`<ensure|destroy|status> --worktree <path> --json\`. Either implement it or ` +
-            `rename the file — this filename is reserved for that contract (TD-348).`
-          : ''),
+    throw Object.assign(
+      new Error(
+        `Worktree env bootstrap ${command} failed: ${stderr}` +
+          (contractMismatch
+            ? `\n  ${script} does not implement the required CLI ` +
+              `\`<ensure|destroy|status> --worktree <path> --json\`. Either implement it or ` +
+              `rename the file — this filename is reserved for that contract (TD-348).`
+            : ''),
+      ),
+      { errorCode: shimErrorCode(result.stderr ?? '') },
     )
   }
   try {
@@ -236,8 +286,25 @@ export function describeEnsureResult(raw: unknown, worktreePath: string): string
     state === 'created'
       ? `  DB clone 在、REST／Storage sidecar 未起：這棵樹目前打不到 REST${admission}`
       : `  DB clone 不存在：這棵樹目前沒有可用的 dev DB${admission}`,
-    `  補建：node ${ensureScriptRel(worktreePath)} ensure --worktree ${JSON.stringify(worktreePath)} --json`,
+    `  補建：node ${ensureScriptCommandPath(o, worktreePath)} ensure --worktree ${JSON.stringify(worktreePath)} --json`,
   ]
+}
+
+/**
+ * 補建指令的 shim 路徑。`ensure` 是靠 `slugFallbackRoot` 才成功的，樹自己的 shim 認不得
+ * 自己的分支，照它補建必再撞 `E_BRANCH_SLUG`——此時指向實際跑成功的那支（絕對路徑）。
+ */
+function ensureScriptCommandPath(o: Record<string, unknown>, worktreePath: string): string {
+  const root = o.fallbackScriptRoot
+  if (typeof root === 'string' && root) {
+    try {
+      const script = resolveWtEnvBootstrapScript(root)
+      if (script) return script
+    } catch {
+      // 契約錯誤由 `ensure` 自己報；退回樹內路徑。
+    }
+  }
+  return ensureScriptRel(worktreePath)
 }
 
 /** 補建指令要印的 shim 路徑（相對 worktree）：以實際解析到的那一支為準，解析不到退回 `.ts`。 */
@@ -401,13 +468,33 @@ export function probeBackingService(
   }
 
   const run = (opts.spawnSyncImpl ?? spawnSync) as WtEnvBootstrapRunner
-  let result: WtEnvBootstrapRunResult
-  try {
-    result = run(process.execPath, [script, 'status', '--worktree', worktreePath, '--json'], {
-      cwd: worktreePath,
+  const runStatus = (scriptPath: string, cwd: string) =>
+    run(process.execPath, [scriptPath, 'status', '--worktree', worktreePath, '--json'], {
+      cwd,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     })
+  let result: WtEnvBootstrapRunResult
+  try {
+    result = runStatus(script, worktreePath)
+    // 與 `runWtEnvBootstrap` 的 slugFallbackRoot 同契約：`status` 也走 resolveTarget，樹自己的
+    // shim 認不得自己的分支（E_BRANCH_SLUG）時 status 先於 ensure 就失敗，preflight 會在補建前
+    // 以 applicable:false 退出。只認 JSON errorCode，只重跑一次，fallback 沒有 shim 就維持原結果。
+    const fallback = opts.slugFallbackRoot
+    if (
+      result.status !== 0 &&
+      fallback &&
+      fallback !== worktreePath &&
+      shimErrorCode(result.stderr ?? '') === 'E_BRANCH_SLUG'
+    ) {
+      let fallbackScript: string | null = null
+      try {
+        fallbackScript = resolveWtEnvBootstrapScript(fallback)
+      } catch {
+        // fail-open：fallback 的 shim 檔名有問題等同沒有 fallback。
+      }
+      if (fallbackScript) result = runStatus(fallbackScript, fallback)
+    }
   } catch (e) {
     return { applicable: false, skipReason: `spawn failed: ${(e as Error)?.message ?? e}` }
   }

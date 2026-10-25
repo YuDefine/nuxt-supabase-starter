@@ -3,7 +3,7 @@ description: 多個 session 同時寫同一個拆不開的登記簿檔（HANDOFF
 paths: ['HANDOFF.md', 'ROADMAP.md', 'docs/tech-debt.md', 'packages/*/HANDOFF.md', 'packages/*/ROADMAP.md', 'packages/*/docs/tech-debt.md']
 ---
 <!-- Clade native rule; source: rules/core/shared-file-concurrent-write.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # 共享單檔的並行寫入
 
@@ -15,6 +15,10 @@ paths: ['HANDOFF.md', 'ROADMAP.md', 'docs/tech-debt.md', 'packages/*/HANDOFF.md'
 **這條對每一個 consumer、每一個上列檔案生效**，不是只有 clade、也不是只有你手上那一個檔。
 
 `git` 對「另一個 session 整檔覆寫、把你的段落沖掉」零訊號，而 [[commit.detail]] § Verify hard rule 都發生在 commit 之後；覆寫發生在你 Read 與 Write 之間。
+
+## TD 重驗不寫 `docs/tech-debt.md`
+
+TD 重驗的結論不是「本 PR 修了 code」時（過時、重複、卡外部依賴、仍成立但不修），**每一個**未遷移 consumer 都 MUST 改交 `tasks/td-triage/` 決策檔、**NEVER** 為此寫 `docs/tech-debt.md`（[[follow-up-register]] § 重驗結論交決策檔）。一檔一件不會互撞，寫回 register 由套用器批次做一次，下面的 predicate 只管仍需直接寫該檔的人。
 
 ## 寫之前：兩條可觀察 predicate
 

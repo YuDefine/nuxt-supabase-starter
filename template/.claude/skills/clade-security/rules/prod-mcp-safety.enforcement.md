@@ -1,16 +1,15 @@
 ---
-description: prod Supabase MCP 封鎖的逐端設定表（Claude `permissions.deny` / Codex `disabled_tools`）、只能 deny NEVER allow-or-ask 的逐字禁令、server 端 `read_only=true` 的版本條件與 `tools/list` 驗收、整批交易語義（任一端封鎖未證實則全部零寫入）、違反後果實證與偵測入口。觸發是「正在新增／啟用／同步 prod MCP 連線」，綁得到設定檔故 path-scoped
+description: prod Supabase MCP 封鎖的逐端設定表（Claude `permissions.deny`）、只能 deny NEVER allow-or-ask 的逐字禁令、server 端 `read_only=true` 的版本條件與 `tools/list` 驗收、整批交易語義（任一端封鎖未證實則全部零寫入）、違反後果實證與偵測入口。觸發是「正在新增／啟用／同步 prod MCP 連線」，綁得到設定檔故 path-scoped
 paths:
   [
     '.mcp.json',
     '.claude/settings.json',
     '.claude/settings.local.json',
-    '.codex/config.toml',
   ]
 ---
 <!-- Clade native rule; source: rules/core/prod-mcp-safety.enforcement.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Prod MCP 封鎖的逐端設定與交易語義
 
@@ -23,7 +22,6 @@ paths:
 | 產品入口 | 封鎖設定 |
 | --- | --- |
 | Claude Code | `.claude/settings.json` 的 `permissions.deny`：`mcp__prod-supabase__execute_sql`、`mcp__prod-supabase__apply_migration`；同時檢查 `.claude/settings.local.json` |
-| Codex | `.codex/config.toml` 的 `[mcp_servers.prod-supabase]`：`disabled_tools = ["execute_sql", "apply_migration"]`；保留其他既有封鎖項 |
 | 其他入口 | 保持連線未啟用，先取得該入口的原生封鎖證據 |
 
 Claude settings 中這兩個工具 **只能**放 `deny`，**NEVER** 放 `allow` 或 `ask`。`allow` 允許執行；`ask` 仍可經批准執行，都不等於封鎖。其他 runtime 同樣 **NEVER** 以 approval prompt 或一次人工同意代替工具封鎖。

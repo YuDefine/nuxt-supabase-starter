@@ -96,10 +96,47 @@ export function readTeardownJournal(privateGitDir: string): {
 export type EvidenceState = 'declared-present' | 'verified-absent' | 'unknown'
 export type InventoryEntryType = 'file' | 'directory' | 'symlink' | 'hardlink' | 'special'
 
+export type ResourceField = 'databases' | 'volumes' | 'sidecars' | 'secrets'
+export type ResourceAdapterName = 'in-tree-archive' | 'worktree-db' | 'local-supabase'
+/**
+ * Which resource fields each registered adapter may be claimed for. A profile claim names a
+ * capability; the per-worktree verdict is computed by preservation-resource-adapters.ts.
+ */
+export const RESOURCE_ADAPTER_FIELDS: Record<ResourceAdapterName, readonly ResourceField[]> = {
+  'in-tree-archive': ['secrets'],
+  'worktree-db': ['databases', 'sidecars', 'volumes'],
+  'local-supabase': ['databases', 'sidecars', 'volumes'],
+}
+/**
+ * Registry capability a consumer must declare before a profile may claim the adapter. `worktree-db`
+ * reads a per-worktree DB topology (`.claude/worktree-db.json`); only a `preview_db: clone-sidecar`
+ * consumer has one, anything else makes every probe fail `E_NO_TOPOLOGY` and the claim wrong.
+ */
+export const ADAPTER_REQUIRED_CAPABILITY: Partial<
+  Record<ResourceAdapterName, { key: string; value: string }>
+> = {
+  'worktree-db': { key: 'preview_db', value: 'clone-sidecar' },
+}
+
 export interface ConsumerProfile {
   id: string
   version: number
   roots: { source: string; forbidden?: string[] }
+  /**
+   * Adapter claims for declared-present resources. An adapter can only lower retention for a
+   * field the consumer already declares present; it never rewrites present into absent.
+   */
+  resourceAdapters?: Partial<Record<ResourceField, ResourceAdapterName>>
+  /**
+   * `registry/consumers.json` `capabilities` of this consumer, filled where the registry exists
+   * (clade home). Absent in a consumer projection, where the claim check is skipped.
+   */
+  declaredCapabilities?: Record<string, string>
+  /**
+   * Plain local Supabase CLI consumers (`local-supabase` adapter): the `project_id` of the main
+   * checkout's `supabase/config.toml`. A tree sharing it shares main's stack and owns nothing.
+   */
+  localSupabase?: { canonicalProjectId: string }
   topology: {
     nestedRepositories: EvidenceState
     submodules: EvidenceState
@@ -112,6 +149,14 @@ export interface ConsumerProfile {
     sidecars: EvidenceState
     secrets: EvidenceState
   }
+  /**
+   * Entry names (any depth) the consumer declares rebuildable from tracked inputs, such as
+   * `node_modules`. The worktree inventory skips them, so neither the archive nor the verify
+   * passes carry them. Everything else, ignored files included, stays fully preserved.
+   * Bumping the profile `version` is how a policy change retires receipts captured under the
+   * old coverage.
+   */
+  rebuildable?: string[]
   filesystem: {
     externalSymlinks: EvidenceState
     /**
@@ -171,6 +216,11 @@ export interface InventoryOptions {
    * and a rewritten worktree file is real drift.
    */
   excludeGitTransientState?: boolean
+  /**
+   * Worktree walks only: skip every entry with one of these names at any depth (the profile's
+   * `rebuildable` names). Ignored for a Git-dir walk, where such a name is real Git content.
+   */
+  excludeNames?: string[]
 }
 
 export function inventoryOptionsFromProfile(profile: ConsumerProfile): InventoryOptions {
@@ -181,6 +231,7 @@ export function inventoryOptionsFromProfile(profile: ConsumerProfile): Inventory
     allowExternalSymlinks: profile.filesystem.externalSymlinks === 'declared-present',
     allowNestedRepositories: profile.topology.nestedRepositories === 'declared-present',
     expectedProfile: { id: profile.id, version: profile.version },
+    ...(profile.rebuildable?.length ? { excludeNames: [...profile.rebuildable] } : {}),
   }
 }
 
@@ -223,7 +274,16 @@ export interface PreservationReceipt {
   operationId: string
   policy: { id: string; version: number }
   profile: { id: string; version: number }
-  source: { path: string; generation: string; gitCommonDir?: string; head?: string }
+  source: {
+    path: string
+    generation: string
+    gitCommonDir?: string
+    head?: string
+    /** Linked source's own `worktrees/<id>` admin dir id; null for a main checkout. */
+    ownAdminId?: string | null
+    /** Closure scope recorded at capture; absent means repository-wide (older receipts). */
+    closureScope?: 'source' | 'repository'
+  }
   inventory: {
     digest: string
     entries: number
@@ -308,6 +368,22 @@ function isCompletedReceipt(value: unknown): value is PreservationReceipt {
     source.generation.length > 0 &&
     (source.gitCommonDir === undefined || typeof source.gitCommonDir === 'string') &&
     (source.head === undefined || gitObjectId(source.head)) &&
+    (source.ownAdminId === undefined ||
+      source.ownAdminId === null ||
+      (typeof source.ownAdminId === 'string' &&
+        source.ownAdminId.length > 0 &&
+        source.ownAdminId !== '.' &&
+        source.ownAdminId !== '..' &&
+        !source.ownAdminId.includes('/') &&
+        !source.ownAdminId.includes('\\'))) &&
+    (source.closureScope === undefined ||
+      source.closureScope === 'source' ||
+      source.closureScope === 'repository') &&
+    (source.closureScope !== 'source' || typeof source.ownAdminId === 'string') &&
+    (source.closureScope !== 'repository' ||
+      source.ownAdminId === undefined ||
+      source.ownAdminId === null) &&
+    (hasGit || (source.ownAdminId === undefined && source.closureScope === undefined)) &&
     hasGit === (gitArchiveSection !== undefined) &&
     hasGit === (gitInventory !== undefined) &&
     hasGit === (source.head !== undefined) &&
@@ -518,6 +594,208 @@ function metadataFor(
   }
 }
 
+// Tree-wide metadata capture. `metadataFor` spawns one process per entry, which
+// is fine for the few entries a live-event adjudication re-checks but not for a
+// whole worktree (a `node_modules` tree is tens of thousands of entries). The
+// inventory walk instead hands every entry path to `getfattr`/`getfacl` in a
+// few batches and maps each dump block back to its path, producing the same
+// digest the per-entry call would have produced. Explicit paths (not `-R`) keep
+// the per-entry semantics exactly — `-R` skips symlinks found in subdirectories
+// and would silently turn their metadata into an empty digest.
+const METADATA_BATCH_MAX_PATHS = 1024
+const METADATA_BATCH_MAX_ARG_BYTES = 96 * 1024
+
+function metadataDigestOf(text: string): string {
+  return createHash('sha256').update(Buffer.from(text, 'latin1')).digest('hex')
+}
+
+// `# file:` headers quote a backslash and every non-printable byte as `\ooo`.
+// Works on latin1 strings (one char per byte) so it is locale independent.
+function unquoteDumpPath(quoted: string): string {
+  let out = ''
+  for (let index = 0; index < quoted.length; index++) {
+    const char = quoted[index]
+    if (char === '\\') {
+      const octal = quoted.slice(index + 1, index + 4)
+      if (/^[0-7]{3}$/.test(octal)) {
+        out += String.fromCharCode(Number.parseInt(octal, 8) & 0xff)
+        index += 3
+        continue
+      }
+      if (quoted[index + 1] === '\\') {
+        out += '\\'
+        index += 1
+        continue
+      }
+    }
+    out += char
+  }
+  return out
+}
+
+// Splits one batch's dump into `key -> per-entry normalized text`, where the
+// text is byte-for-byte what `metadataDigest` hashes for that single path.
+function parseMetadataDump(output: string, kind: 'acl' | 'xattr'): Map<string, string> {
+  const blocks = new Map<string, string>()
+  const headers = [...output.matchAll(/^# file: (.*)\n/gm)]
+  headers.forEach((header, index) => {
+    const bodyStart = (header.index ?? 0) + header[0].length
+    const bodyEnd = index + 1 < headers.length ? (headers[index + 1].index ?? 0) : output.length
+    let body = output.slice(bodyStart, bodyEnd)
+    // getfacl prints `# owner:`/`# group:`/`# flags:` comments after the file
+    // header; the per-entry call omits them via --omit-header.
+    if (kind === 'acl') body = body.replace(/^# .*\n/gm, '')
+    const key = unquoteDumpPath(header[1])
+    if (blocks.has(key)) throw new Error(`duplicate ${kind} dump block`)
+    blocks.set(key, body)
+  })
+  return blocks
+}
+
+function metadataBatchDigests(paths: string[], kind: 'acl' | 'xattr'): Map<string, string> {
+  const command = kind === 'acl' ? 'getfacl' : 'getfattr'
+  const args =
+    kind === 'acl'
+      ? ['--absolute-names', '--numeric']
+      : ['--absolute-names', '--dump', '--no-dereference', '--match=-']
+  const output = execFileSync(command, [...args, ...paths], {
+    encoding: 'latin1',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    maxBuffer: 1 << 30,
+  })
+  const wanted = new Map(paths.map((path) => [Buffer.from(path, 'utf8').toString('latin1'), path]))
+  const digests = new Map<string, string>()
+  for (const [key, body] of parseMetadataDump(output, kind)) {
+    const path = wanted.get(key)
+    // Explicit arguments mean every block belongs to a requested path; a
+    // stray block is a header-decoding mismatch, never a tolerable extra.
+    if (path === undefined) throw new Error(`unrequested ${kind} dump block`)
+    digests.set(path, metadataDigestOf(body))
+  }
+  for (const path of paths) {
+    if (digests.has(path)) continue
+    // getfattr prints nothing for an entry without attributes (the empty
+    // per-entry digest); getfacl always prints at least the base entries.
+    if (kind === 'acl') throw new Error(`missing ${kind} dump block`)
+    digests.set(path, metadataDigestOf(''))
+  }
+  return digests
+}
+
+function pathVanished(path: string): boolean {
+  try {
+    lstatSync(path)
+    return false
+  } catch (error) {
+    return (error as { code?: string }).code === 'ENOENT'
+  }
+}
+
+function metadataBatches(paths: string[]): string[][] {
+  const batches: string[][] = []
+  let batch: string[] = []
+  let batchBytes = 0
+  for (const path of paths) {
+    const bytes = Buffer.byteLength(path) + 1
+    if (
+      batch.length > 0 &&
+      (batch.length >= METADATA_BATCH_MAX_PATHS ||
+        batchBytes + bytes > METADATA_BATCH_MAX_ARG_BYTES)
+    ) {
+      batches.push(batch)
+      batch = []
+      batchBytes = 0
+    }
+    batch.push(path)
+    batchBytes += bytes
+  }
+  if (batch.length > 0) batches.push(batch)
+  return batches
+}
+
+// Digests every path, one `getfattr`/`getfacl` process per batch. A failing
+// batch is retried on its own: first without the entries that no longer exist
+// (only when `tolerateVanished`, see below), then entry by entry, so one bad
+// entry never costs more than its own batch. A path missing from the result
+// vanished after the walk listed it.
+//
+// `tolerateVanished` mirrors `walk`'s Git-dir tolerance: a concurrent gc may
+// delete an entry after its lstat, and the capture window for that is now the
+// whole walk rather than one entry. The entry is simply not live anymore, and
+// the post-capture stability pass compares against the surviving view. A
+// worktree walk keeps failing closed on a vanished entry.
+function treeMetadataDigests(
+  paths: string[],
+  kind: 'acl' | 'xattr',
+  tolerateVanished: ReadonlySet<string> | undefined,
+): Map<string, string> {
+  const digests = new Map<string, string>()
+  for (const batch of metadataBatches(paths)) {
+    try {
+      for (const [path, digest] of metadataBatchDigests(batch, kind)) digests.set(path, digest)
+      continue
+    } catch {
+      // Fall through to the narrower retries below.
+    }
+    const live = tolerateVanished
+      ? batch.filter((path) => !tolerateVanished.has(path) || !pathVanished(path))
+      : batch
+    if (live.length > 0 && live.length < batch.length) {
+      try {
+        for (const [path, digest] of metadataBatchDigests(live, kind)) digests.set(path, digest)
+        continue
+      } catch {
+        // Fall through to the per-entry call.
+      }
+    }
+    for (const path of live) {
+      try {
+        digests.set(path, metadataDigest(path, kind))
+      } catch (error) {
+        if (tolerateVanished?.has(path) && pathVanished(path)) continue
+        throw error
+      }
+    }
+  }
+  return digests
+}
+
+// Attaches acl/xattr digests after the walk. Rebuilds each entry so the digest
+// keys keep the position `metadataFor` gave them (after `mtimeMs`, before
+// `digest`/`target`): the inventory digest is a JSON.stringify of the entries,
+// so key order is part of the identity.
+function attachTreeMetadata(root: string, entries: InventoryEntry[], options: InventoryOptions) {
+  if (!options.acl && !options.xattr) return
+  const paths = entries.map((entry) => join(root, entry.path))
+  // The root itself must exist; only entries below it may disappear mid-walk.
+  const tolerateVanished = options.excludeGitTransientState
+    ? new Set(paths.filter((path) => path !== root))
+    : undefined
+  const acl = options.acl ? treeMetadataDigests(paths, 'acl', tolerateVanished) : undefined
+  const xattr = options.xattr ? treeMetadataDigests(paths, 'xattr', tolerateVanished) : undefined
+  const kept: InventoryEntry[] = []
+  entries.forEach((entry, index) => {
+    if (acl && !acl.has(paths[index])) return
+    if (xattr && !xattr.has(paths[index])) return
+    const { path, type, mode, size, allocatedBytes, uid, gid, mtimeMs, ...rest } = entry
+    kept.push({
+      path,
+      type,
+      mode,
+      size,
+      allocatedBytes,
+      uid,
+      gid,
+      mtimeMs,
+      ...(acl ? { aclDigest: acl.get(paths[index]) } : {}),
+      ...(xattr ? { xattrDigest: xattr.get(paths[index]) } : {}),
+      ...rest,
+    })
+  })
+  entries.length = 0
+  for (const entry of kept) entries.push(entry)
+}
+
 // Git's transient namespace inside a Git directory. A `<name>.lock` entry is
 // the lockfile protocol's staging file: its bytes become repository content
 // only by rename onto the real path, which a later inventory observes as
@@ -567,6 +845,7 @@ function walk(
       excludedRoots.some((excluded) => absolute === excluded || absolute.startsWith(`${excluded}/`))
     )
       continue
+    if (!options.excludeGitTransientState && options.excludeNames?.includes(child.name)) continue
     const path = relative(root, absolute)
     // Transient names are skipped before lstat: a lockfile that disappears
     // between readdir and stat cannot abort the walk, and one that persists
@@ -597,7 +876,6 @@ function walk(
       uid: stat.uid,
       gid: stat.gid,
       mtimeMs: stat.mtimeMs,
-      ...metadataFor(absolute, options),
     }
     try {
       if (type === 'file') {
@@ -720,10 +998,10 @@ export function inventoryTree(
       uid: rootStat.uid,
       gid: rootStat.gid,
       mtimeMs: rootStat.mtimeMs,
-      ...metadataFor(resolved, options),
     },
   ]
   walk(resolved, resolved, entries, new Map(), options, resolvedExclusions)
+  attachTreeMetadata(resolved, entries, options)
   const externalSymlinks = entries
     .filter((entry) => entry.type === 'symlink')
     .filter((entry) => {
@@ -769,28 +1047,62 @@ export function validateProfile(profile: ConsumerProfile): void {
     throw new Error('Preservation profile identity is incomplete')
   if (!profile.roots.source || !profile.retention.destination || !profile.retention.owner)
     throw new Error('Preservation profile must declare source, destination and owner')
-  const states = [
-    profile.topology.nestedRepositories,
-    profile.topology.submodules,
-    profile.topology.sharedGitObjects,
-    profile.topology.lfs,
-    profile.resources.databases,
-    profile.resources.volumes,
-    profile.resources.sidecars,
-    profile.resources.secrets,
-    profile.filesystem.externalSymlinks,
-    profile.filesystem.specialFiles,
-    profile.filesystem.acl,
-    profile.filesystem.xattr,
+  const evidence: Array<[string, EvidenceState]> = [
+    ['topology.nestedRepositories', profile.topology.nestedRepositories],
+    ['topology.submodules', profile.topology.submodules],
+    ['topology.sharedGitObjects', profile.topology.sharedGitObjects],
+    ['topology.lfs', profile.topology.lfs],
+    ['resources.databases', profile.resources.databases],
+    ['resources.volumes', profile.resources.volumes],
+    ['resources.sidecars', profile.resources.sidecars],
+    ['resources.secrets', profile.resources.secrets],
+    ['filesystem.externalSymlinks', profile.filesystem.externalSymlinks],
+    ['filesystem.specialFiles', profile.filesystem.specialFiles],
+    ['filesystem.acl', profile.filesystem.acl],
+    ['filesystem.xattr', profile.filesystem.xattr],
   ]
+  const states = evidence.map(([, state]) => state)
   if (states.some((state) => !['declared-present', 'verified-absent', 'unknown'].includes(state)))
     throw new Error('Preservation profile contains an invalid evidence state')
-  if (states.some((state) => state === 'unknown'))
+  if (profile.declaredCapabilities !== undefined)
+    for (const name of new Set(Object.values(profile.resourceAdapters ?? {}))) {
+      const required = ADAPTER_REQUIRED_CAPABILITY[name]
+      if (required && profile.declaredCapabilities[required.key] !== required.value)
+        throw new Error(
+          `Preservation profile ${profile.id}: claim mismatch — adapter ${name} requires registry ` +
+            `capability ${required.key}=${required.value}, registry declares ` +
+            `${profile.declaredCapabilities[required.key] ?? 'nothing'}`,
+        )
+    }
+  const unknownFields = evidence.filter(([, state]) => state === 'unknown').map(([field]) => field)
+  if (unknownFields.length > 0)
     throw new Error(
-      'Preservation profile contains unknown evidence; destructive transitions retain the source',
+      `Preservation profile ${profile.id} contains unknown evidence (${unknownFields.join(', ')}); ` +
+        'destructive transitions retain the source. Resolve each field from an inventory on the ' +
+        'owning host and fill the consumer entry in preservation-profiles.ts (the <consumer-j> ' +
+        'entry documents the evidence format); until then the source may only be retired via ' +
+        'handoff-retire',
     )
-  if (Object.values(profile.resources).some((state) => state !== 'verified-absent'))
-    throw new Error('Resource preservation adapters are required before a source can be removed')
+  // Presence is no longer a blanket block: a field passes this static check when a registered
+  // adapter claims it. Whether the source may actually be removed is decided per worktree by
+  // assertResourcesReleased (preservation-resource-adapters.ts), which never queries from here.
+  const unresolvedResources = evidence
+    .filter(([field, state]) => field.startsWith('resources.') && state !== 'verified-absent')
+    .map(([field]) => field)
+    .filter((field) => {
+      const name = profile.resourceAdapters?.[field.slice('resources.'.length) as ResourceField]
+      return !(
+        name !== undefined &&
+        Object.hasOwn(RESOURCE_ADAPTER_FIELDS, name) &&
+        RESOURCE_ADAPTER_FIELDS[name].includes(field.slice('resources.'.length) as ResourceField)
+      )
+    })
+  if (unresolvedResources.length > 0)
+    throw new Error(
+      `Preservation profile ${profile.id} has resources no preservation adapter can capture yet ` +
+        `(${unresolvedResources.join(', ')}); resource preservation adapters are required before ` +
+        'a source can be removed (specs/plans/W-2026-09-29-preservation-resource-adapters)',
+    )
 }
 
 /**
@@ -1788,7 +2100,7 @@ function assertNoNestedRepositories(inventoryRoot: string, inventory: SourceInve
 }
 
 function gitlinkPaths(sourceRoot: string): string[] {
-  const result = spawnSync('git', ['ls-files', '-s'], {
+  const result = spawnSync('git', ['ls-files', '-s', '-z'], {
     cwd: sourceRoot,
     encoding: 'utf8',
     env: isolatedGitEnv,
@@ -1801,7 +2113,7 @@ function gitlinkPaths(sourceRoot: string): string[] {
       `Git preservation probe failed (ls-files -s): ${String(result.stderr ?? '').trim()}`,
     )
   const paths: string[] = []
-  for (const line of (result.stdout ?? '').split('\n')) {
+  for (const line of (result.stdout ?? '').split('\0')) {
     if (!line.startsWith('160000 ')) continue
     const tab = line.indexOf('\t')
     if (tab === -1) continue
@@ -1821,6 +2133,7 @@ function reachableGitlinkPaths(repo: string): string[] {
       '--all',
       '--reflog',
       '--raw',
+      '-z',
       '--root',
       '-m',
       '--no-abbrev',
@@ -1840,11 +2153,17 @@ function reachableGitlinkPaths(repo: string): string[] {
       `Git preservation probe failed (log --raw): ${String(result.stderr ?? '').trim()}`,
     )
   const paths: string[] = []
-  for (const line of (result.stdout ?? '').split('\n')) {
-    const modes = line.match(/^:(\d{6}) (\d{6}) /)
-    if (!modes || (modes[1] !== '160000' && modes[2] !== '160000')) continue
-    const tab = line.indexOf('\t')
-    const changedPaths = tab === -1 ? [] : line.slice(tab + 1).split('\t')
+  // --raw -z：`:<mode> <mode> <sha> <sha> <STATUS>\0<path>\0`，R／C 後面接兩個路徑（old、new）。
+  const fields = (result.stdout ?? '').split('\0')
+  for (let i = 0; i < fields.length; i++) {
+    const meta = (fields[i] ?? '').replace(/^\n/, '')
+    const modes = meta.match(/^:(\d{6}) (\d{6}) /)
+    if (!modes) continue
+    const status = meta.slice(meta.lastIndexOf(' ') + 1)
+    const pathCount = status.startsWith('R') || status.startsWith('C') ? 2 : 1
+    const changedPaths = fields.slice(i + 1, i + 1 + pathCount)
+    i += pathCount
+    if (modes[1] !== '160000' && modes[2] !== '160000') continue
     paths.push(
       modes[2] === '160000'
         ? (changedPaths.at(-1) ?? '<unknown>')
@@ -2050,12 +2369,20 @@ function assertGitConfigClosure(
   }
 }
 
+interface TarCannotStatTolerance {
+  /** Whether a vanished member may be dropped (shared, non-source-private). */
+  tolerable(member: string): boolean
+  /** Called once when at least one `Cannot stat` member was tolerated. */
+  onTolerated(): void
+}
+
 function createTar(
   archive: string,
   root: string,
   args: string[] = ['.'],
   fileList?: string[],
   tolerateFileChange = false,
+  cannotStatTolerance?: TarCannotStatTolerance,
 ): void {
   try {
     execFileSync(
@@ -2083,7 +2410,14 @@ function createTar(
           ? ['--null', '--verbatim-files-from', '--no-recursion', '--files-from', '-']
           : args),
       ],
-      { input: fileList ? fileList.join('\0') + '\0' : undefined, stdio: ['pipe', 'pipe', 'pipe'] },
+      {
+        input: fileList ? fileList.join('\0') + '\0' : undefined,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        // Diagnostics are parsed below (file-changed, Cannot stat, byte
+        // totals); localize tar so the whitelist does not depend on the
+        // operator's LC_ALL.
+        env: { ...process.env, LC_ALL: 'C' },
+      },
     )
   } catch (error) {
     const failed = error as { status?: number | null; stderr?: unknown }
@@ -2093,7 +2427,23 @@ function createTar(
         : failed.stderr instanceof Uint8Array
           ? Buffer.from(failed.stderr).toString('utf8')
           : ''
+    // EPIPE means tar closed its stdin before consuming the whole member list
+    // (killed, or died on a byte-level error before reading it): the archive
+    // is truncated, so no drift/Cannot-stat whitelist below may excuse it, and
+    // Node's bare `spawnSync tar EPIPE` would hide tar's own status and
+    // diagnostics. Whether this is raised or a plain exit status depends on
+    // whether tar died before or after the parent's stdin write.
+    if ((error as NodeJS.ErrnoException).code === 'EPIPE')
+      throw new Error(
+        `Command failed: tar exited before consuming its --files-from list (EPIPE; status=${failed.status ?? 'null'}, signal=${(failed as { signal?: unknown }).signal ?? 'none'})${stderr.trim() ? `: ${stderr.trim()}` : ''}`,
+        { cause: error },
+      )
     if (tolerateFileChange && gitTarDriftTolerated(failed.status, stderr)) return
+    if (
+      cannotStatTolerance &&
+      gitTarCannotStatTolerated(failed.status, stderr, cannotStatTolerance)
+    )
+      return
     throw error
   }
 }
@@ -2482,18 +2832,105 @@ export function assertGitInventoryStable(
 // mid-capture unlink or freshen race (sg-hook scratch, pruned objects). The
 // caller re-walks and retries against a fresh inventory; a byte-level failure
 // (permission, real stat error on a stable file) still aborts.
+// tar prefixes every diagnostic line with `argv[0]: ` — `tar`, an absolute
+// path, `gtar` — so the whitelist compares suffixes, never literal equality.
+function gitTarBenignLine(text: string): boolean {
+  return (
+    text.length === 0 ||
+    text.startsWith('Total bytes written:') ||
+    text.endsWith(': file changed as we read it') ||
+    text.endsWith(': Cannot stat: No such file or directory') ||
+    text.endsWith(': Exiting with failure status due to previous errors')
+  )
+}
+
 function gitTarCannotStatDrift(status: number | null | undefined, stderr: string): boolean {
   if (status !== 1 && status !== 2) return false
-  return stderr.split('\n').every((line) => {
+  return stderr.split('\n').every((line) => gitTarBenignLine(line.trim()))
+}
+
+// GNU tar's `escape` quoting for member names in diagnostics: C escapes for
+// control bytes and backslash, three-digit octal for non-ASCII bytes. A name
+// that does not decode cleanly cannot be classified — callers treat
+// undefined as source-private (fail closed).
+const TAR_DIAGNOSTIC_ESCAPE: Record<string, number> = {
+  a: 0x07,
+  b: 0x08,
+  f: 0x0c,
+  n: 0x0a,
+  r: 0x0d,
+  t: 0x09,
+  v: 0x0b,
+  '\\': 0x5c,
+}
+
+function tarUnquoteName(name: string): string | undefined {
+  if (!name.includes('\\')) return name
+  const bytes: number[] = []
+  for (let index = 0; index < name.length; index++) {
+    const code = name.charCodeAt(index)
+    if (code !== 0x5c) {
+      // escape-style quoting never emits a raw non-ASCII byte: one inside a
+      // name with escapes means the name was not produced by this quoting.
+      if (code > 0x7f) return undefined
+      bytes.push(code)
+      continue
+    }
+    const escape = name[++index]
+    if (escape === undefined) return undefined
+    const escaped = TAR_DIAGNOSTIC_ESCAPE[escape]
+    if (escaped !== undefined) {
+      bytes.push(escaped)
+      continue
+    }
+    if (escape >= '0' && escape <= '7') {
+      const octal = name.slice(index, index + 3)
+      if (!/^[0-7]{3}$/.test(octal)) return undefined
+      bytes.push(parseInt(octal, 8))
+      index += 2
+      continue
+    }
+    return undefined
+  }
+  return Buffer.from(bytes).toString('utf8')
+}
+
+const TAR_CANNOT_STAT_LINE = /^(\S*tar): ([\s\S]*): Cannot stat: No such file or directory$/
+
+// The in-place alternative to the re-walk retry: a `Cannot stat`
+// failure is tolerable only when EVERY vanished member the diagnostics name
+// is shared, non-source-private churn — a pruned object, a sibling's
+// logs/refs file, packed-refs mid-rewrite. A vanished source-private member,
+// a name the parser cannot decode, a diagnostic outside the whitelist, or a
+// signal kill all stay on the retry/hard-fail path. `onTolerated` marks the
+// archive as built over vanished members so the caller can re-walk a later
+// closure failure instead of aborting.
+function gitTarCannotStatTolerated(
+  status: number | null | undefined,
+  stderr: string,
+  tolerance: TarCannotStatTolerance,
+): boolean {
+  if (status !== 1 && status !== 2) return false
+  let tolerated = false
+  for (const line of stderr.split('\n')) {
     const text = line.trim()
-    return (
-      text.length === 0 ||
-      text.startsWith('Total bytes written:') ||
-      text.endsWith(': file changed as we read it') ||
-      text.endsWith(': Cannot stat: No such file or directory') ||
-      text === 'Exiting with failure status due to previous errors'
-    )
-  })
+    // A `Cannot stat` line names the vanished member — classify it before
+    // falling back to the shared benign whitelist (whose suffix rules would
+    // otherwise swallow the line unclassified).
+    const match = TAR_CANNOT_STAT_LINE.exec(text)
+    if (match) {
+      const member = tarUnquoteName(match[2]!)
+      if (member === undefined || !tolerance.tolerable(member)) return false
+      tolerated = true
+      continue
+    }
+    // A Cannot-stat-shaped line whose program prefix is not tar's cannot be
+    // classified — fail closed rather than guess its member.
+    if (text.endsWith(': Cannot stat: No such file or directory')) return false
+    if (!gitTarBenignLine(text)) return false
+  }
+  if (tolerated) tolerance.onTolerated()
+  return tolerated
 }
 
 function compareAndInventory(
@@ -2519,11 +2956,60 @@ function compareAndInventory(
   restoreAndCompare(archive, expected, options)
 }
 
+/**
+ * What a Git archive's inventory digest, receipt head, and closure scope are
+ * expected to be. `ownAdminIds` is the capture-time list proven against live
+ * metadata; `ownAdminId`/`closureScope` are receipt claims that
+ * restoredClosureAdminIds cross-checks against the restored archive before
+ * they are ever trusted — a cleanup-time re-verify must not learn the scope
+ * from the live `.git` pointer, which may already be gone.
+ */
+interface RestoredGitExpectation {
+  digest: string
+  entries: number
+  head: string
+  ownAdminIds?: string[]
+  ownAdminId?: string | null
+  closureScope?: 'source' | 'repository'
+}
+
+// The admin dirs a source-scoped closure reads. A receipt's scope claim is
+// never trusted on its own: 'source' requires its admin dir in the archive
+// (its HEAD is rev-parsed later, inside the closure), 'repository' requires
+// the null pairing — anything else fails closed.
+function restoredClosureAdminIds(restored: string, expected: RestoredGitExpectation): string[] {
+  if (expected.ownAdminIds !== undefined) return expected.ownAdminIds
+  const scope = expected.closureScope ?? 'repository'
+  if (scope === 'repository') {
+    if (expected.ownAdminId !== undefined && expected.ownAdminId !== null)
+      throw new Error('repository-scoped receipt carries an own admin id')
+    return []
+  }
+  if (scope !== 'source') throw new Error(`unknown receipt closure scope: ${String(scope)}`)
+  const ownAdminId = expected.ownAdminId
+  if (
+    typeof ownAdminId !== 'string' ||
+    ownAdminId.length === 0 ||
+    ownAdminId === '.' ||
+    ownAdminId === '..' ||
+    ownAdminId.includes('/') ||
+    ownAdminId.includes('\\')
+  )
+    throw new Error('source-scoped receipt carries an invalid own admin id')
+  const admin = join(restored, 'worktrees', ownAdminId)
+  if (!existsSync(admin) || !lstatSync(admin).isDirectory())
+    throw new Error(
+      `source-scoped receipt's own admin dir is absent from the archive: worktrees/${ownAdminId}`,
+    )
+  return [ownAdminId]
+}
+
 function verifyRestoredGitClosure(
   archive: string,
   expected: SourceInventory,
   expectedHead: string,
   options: InventoryOptions,
+  adminIds: string[] = [],
 ): void {
   withRestoredArchive(archive, (restored) => {
     const inventory = inventoryTree(restored, { ...options, excludeGitTransientState: true })
@@ -2533,7 +3019,7 @@ function verifyRestoredGitClosure(
     isolateRestoredGitConfig(restored, restored)
     assertGitClosureLocal(restored, restored, restored, inventory)
     try {
-      verifyRestoredGitObjects(restored, expectedHead)
+      verifyRestoredGitObjects(restored, expectedHead, adminIds)
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
       throw new Error(`Offline restored Git closure verification failed: ${detail}`, {
@@ -2545,7 +3031,7 @@ function verifyRestoredGitClosure(
 
 function verifyRestoredGitClosureDigest(
   archive: string,
-  expected: { digest: string; entries: number; head: string },
+  expected: RestoredGitExpectation,
   options: InventoryOptions,
 ): void {
   withRestoredArchive(archive, (restored) => {
@@ -2558,8 +3044,9 @@ function verifyRestoredGitClosureDigest(
     assertGitConfigClosure(restored, inventory, [restored])
     isolateRestoredGitConfig(restored, restored)
     assertGitClosureLocal(restored, restored, restored, inventory)
+    const adminIds = restoredClosureAdminIds(restored, expected)
     try {
-      verifyRestoredGitObjects(restored, expected.head)
+      verifyRestoredGitObjects(restored, expected.head, adminIds)
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
       throw new Error(`Offline restored Git closure verification failed: ${detail}`, {
@@ -2574,7 +3061,7 @@ function verifyRestoredGitLayout(
   gitArchivePath: string,
   sourcePath: string,
   sourceCommon: string,
-  expectedGit: { digest: string; entries: number; head: string },
+  expectedGit: RestoredGitExpectation,
   options: InventoryOptions,
 ): void {
   withRestoredArchive(worktreeArchive, (worktree) =>
@@ -2637,7 +3124,7 @@ function verifyRestoredGitLayout(
           throw new Error(
             `Offline restored Git resolves a worktree outside the restore: ${effectiveWorktree}`,
           )
-        assertGitCommand(['-C', worktree, 'status', '--porcelain'], {
+        assertGitCommand(['-C', worktree, 'status', '--porcelain', '-z'], {
           ...isolatedGitEnv,
           CLADE_PRESERVATION_OFFLINE_VERIFY: '1',
         })
@@ -2650,7 +3137,11 @@ function verifyRestoredGitLayout(
           throw new Error(
             `Offline restored Git HEAD mismatch: expected ${expectedGit.head}, got ${restoredHead}`,
           )
-        verifyRestoredGitObjects(restoredGit, expectedGit.head)
+        verifyRestoredGitObjects(
+          restoredGit,
+          expectedGit.head,
+          restoredClosureAdminIds(restoredGit, expectedGit),
+        )
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error)
         throw new Error(`Offline restored Git layout verification failed: ${detail}`, {
@@ -2661,10 +3152,134 @@ function verifyRestoredGitLayout(
   )
 }
 
-function verifyRestoredGitObjects(gitDirectory: string, expectedHead: string): void {
+const OBJECT_ID_PATTERN = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
+
+// The OIDs a linked-source archive must close over: the receipt head,
+// every position the source's own HEAD reflog recorded, and every
+// per-worktree ref (refs/bisect, refs/worktree, refs/rewritten — the ref
+// namespaces that die with the worktree). Sibling refs, sibling reflogs,
+// packed-refs, and the rest of the object store are shared-mutable churn:
+// they are never heads, so a mid-capture sibling race cannot retain a landed
+// source, while a missing source-private ref still fails.
+function sourceScopedGitHeads(
+  gitDirectory: string,
+  expectedHead: string,
+  adminIds: string[],
+): string[] {
+  const heads = new Set<string>([expectedHead])
+  const oid = (value: string | undefined) => {
+    if (value && OBJECT_ID_PATTERN.test(value) && !/^0+$/.test(value)) heads.add(value)
+  }
+  for (const id of adminIds) {
+    const admin = join(gitDirectory, 'worktrees', id)
+    const reflog = join(admin, 'logs', 'HEAD')
+    if (existsSync(reflog))
+      for (const line of readFileSync(reflog, 'utf8').split('\n')) {
+        const [from, to] = line.split(' ')
+        oid(from)
+        oid(to)
+      }
+    const ownRefs = join(admin, 'refs')
+    if (existsSync(ownRefs)) {
+      const walkRefs = (directory: string): void => {
+        for (const child of readdirSync(directory, { withFileTypes: true })) {
+          const entry = join(directory, child.name)
+          if (child.isDirectory()) walkRefs(entry)
+          else if (child.isFile()) {
+            const value = readFileSync(entry, 'utf8').trim()
+            // A loose ref is a full object id or a symref; anything else is
+            // corruption the closure must not skip over.
+            if (!value.startsWith('ref:') && !OBJECT_ID_PATTERN.test(value))
+              throw new Error(`malformed source-private ref ${relative(gitDirectory, entry)}`)
+            oid(value)
+          }
+        }
+      }
+      walkRefs(ownRefs)
+    }
+    const packed = join(admin, 'packed-refs')
+    if (existsSync(packed))
+      for (const line of readFileSync(packed, 'utf8').split('\n')) {
+        if (line.startsWith('#') || line.startsWith('^')) continue
+        oid(line.split(' ', 1)[0])
+      }
+  }
+  return [...heads]
+}
+
+// The archive's own `worktrees/<id>` HEAD must resolve to the receipt head —
+// the same rev-parse verifyRestoredGitLayout runs on the restored worktree,
+// done here from the Git archive alone so a cleanup-time re-verify needs no
+// live `.git` pointer.
+function assertRestoredSourceHead(
+  gitDirectory: string,
+  adminIds: string[],
+  expectedHead: string,
+): void {
+  for (const id of adminIds) {
+    const result = spawnSync(
+      'git',
+      ['--git-dir', join(gitDirectory, 'worktrees', id), 'rev-parse', '--verify', 'HEAD'],
+      { env: isolatedGitEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    )
+    const resolved = (result.stdout ?? '').trim()
+    if (result.error === undefined && result.status === 0 && resolved === expectedHead) continue
+    const detail = result.error?.message ?? String(result.stderr ?? '').trim()
+    throw new Error(
+      `restored worktrees/${id} HEAD does not resolve to the captured head ${expectedHead}` +
+        (detail ? `: ${detail}` : ''),
+      { cause: result.error },
+    )
+  }
+}
+
+function verifyRestoredGitObjects(
+  gitDirectory: string,
+  expectedHead: string,
+  adminIds: string[] = [],
+): void {
   assertGitCommand(['--git-dir', gitDirectory, 'cat-file', '-e', `${expectedHead}^{commit}`])
-  assertGitCommand(['--git-dir', gitDirectory, 'rev-list', '--objects', '--all', '--reflog'])
-  assertGitCommand(['--git-dir', gitDirectory, 'fsck', '--full', '--strict'])
+  // A main-checkout source loses the whole common dir with the tree, so its
+  // closure stays repository-wide. A linked source's own admin dir dies
+  // with the tree while the rest of the common dir lives on — only the
+  // source's own assets must close there.
+  if (!adminIds.length) {
+    assertGitCommand(['--git-dir', gitDirectory, 'rev-list', '--objects', '--all', '--reflog'])
+    assertGitCommand(['--git-dir', gitDirectory, 'fsck', '--full', '--strict'])
+    return
+  }
+  assertRestoredSourceHead(gitDirectory, adminIds, expectedHead)
+  const heads = sourceScopedGitHeads(gitDirectory, expectedHead, adminIds)
+  assertGitCommand([
+    '--git-dir',
+    gitDirectory,
+    'rev-list',
+    '--objects',
+    '--end-of-options',
+    ...heads,
+  ])
+  // Neither rev-list nor fsck reads index blobs when given explicit heads, and
+  // a staged blob can exist only in the source's own `worktrees/<id>/index`
+  // — it dies with the worktree whenever the working file differs from it.
+  for (const id of adminIds)
+    assertGitCommand([
+      '--git-dir',
+      join(gitDirectory, 'worktrees', id),
+      'rev-list',
+      '--objects',
+      '--indexed-objects',
+    ])
+  // fsck still walks every object file for corruption (--full): the scope
+  // only chooses the reachability roots, not the integrity coverage.
+  assertGitCommand([
+    '--git-dir',
+    gitDirectory,
+    'fsck',
+    '--full',
+    '--strict',
+    '--end-of-options',
+    ...heads,
+  ])
 }
 
 // The recorded `gitdir:` text names `<admin>/modules/<chain>`. The chain
@@ -2872,6 +3487,8 @@ export function verifyPreservationArchive(
         {
           ...receipt.inventory.git,
           head: receipt.source.head!,
+          ownAdminId: receipt.source.ownAdminId,
+          closureScope: receipt.source.closureScope,
         },
         options,
       )
@@ -2881,7 +3498,12 @@ export function verifyPreservationArchive(
           receipt.archives.git.path,
           sourcePath,
           receipt.source.gitCommonDir,
-          { ...receipt.inventory.git, head: receipt.source.head! },
+          {
+            ...receipt.inventory.git,
+            head: receipt.source.head!,
+            ownAdminId: receipt.source.ownAdminId,
+            closureScope: receipt.source.closureScope,
+          },
           options,
         )
     }
@@ -2900,6 +3522,7 @@ function gitArchive(
   excludedRoots: string[] = [],
   expectedInventory?: SourceInventory,
   expectedHead?: string,
+  verify?: (restored: SourceInventory) => void,
 ): { path: string; digest: string; bytes: number; inventory: SourceInventory } | undefined {
   if (!common) return undefined
   const gitOptions: InventoryOptions = { ...options, excludeGitTransientState: true }
@@ -2909,62 +3532,102 @@ function gitArchive(
   if (inventory.specialFiles.length || inventory.externalSymlinks.length)
     throw new Error('Git common directory contains unsupported special files or external symlinks')
   if (!inventory.entries.length) return undefined
+  const ownPrefixes = gitWorktreeMetadataRoots(root, common).map((metadataRoot) =>
+    relative(common, metadataRoot),
+  )
+  const adminIds = ownPrefixes
+    .filter((prefix) => prefix.startsWith('worktrees/'))
+    .map((prefix) => prefix.slice('worktrees/'.length))
+    .filter((id) => id.length > 0 && !id.includes('/'))
+  const sourceName = basename(root)
   // A member that vanished between the walk and tar's own stat (`Cannot
   // stat`) or changed under its feet is concurrent-sibling churn — most
-  // often hook scratch and pruned objects (RUSH-50). Re-walk and retry
-  // against a fresh inventory; a vanished source-private file still fails
-  // the archived-vs-intended drift check below.
-  for (let attempt = 0; ; attempt++) {
+  // often hook scratch and pruned objects (RUSH-50). When every vanished
+  // member is non-source-private the archive is kept in place: shared
+  // churn is never this source's loss, and the source-scoped closure below
+  // still proves the receipt head. A vanished source-private member keeps
+  // the re-walk retry; a byte-level failure (permission, real stat error)
+  // still aborts.
+  for (let closureAttempt = 0; ; closureAttempt++) {
+    let toleratedVanishedMember = false
+    for (let attempt = 0; ; attempt++) {
+      try {
+        createTar(
+          destination,
+          common,
+          [],
+          inventory.entries.map((entry) => entry.path || '.'),
+          true,
+          {
+            tolerable: (member) => !isSourcePrivateGitPath(member, ownPrefixes, sourceName),
+            onTolerated: () => {
+              toleratedVanishedMember = true
+            },
+          },
+        )
+        break
+      } catch (error) {
+        const failed = error as { status?: number | null; stderr?: unknown }
+        const stderr =
+          typeof failed.stderr === 'string'
+            ? failed.stderr
+            : failed.stderr instanceof Uint8Array
+              ? Buffer.from(failed.stderr).toString('utf8')
+              : ''
+        if (attempt >= 2 || !gitTarCannotStatDrift(failed.status, stderr)) throw error
+        inventory = walkLive()
+        if (inventory.specialFiles.length || inventory.externalSymlinks.length)
+          throw new Error(
+            'Git common directory contains unsupported special files or external symlinks',
+            { cause: error },
+          )
+        if (!inventory.entries.length) return undefined
+      }
+    }
+    syncFile(destination)
+    // tar --compare is skipped for Git archives: it diffs live stat data —
+    // including file mtime — against members, and Git's own lockfile/object
+    // freshening makes that race (TD-1097). The archive is restored and
+    // re-inventoried instead, and only source-private paths must match what
+    // the capture walked: shared-mutable churn (a fetch landing between walk
+    // and tar, a pack pruned mid-read) never retains, while a dropped admin
+    // file or a changed config projection still fails closed. The returned inventory is the
+    // archive's own — the receipt records what the bytes provably contain.
+    const restored = restoreAndCompare(destination, inventory, gitOptions, ownPrefixes, {
+      configProjectionMatches: () => archivedGitConfigMatchesLive(destination, common, root),
+      sourceName,
+    })
+    if (!expectedHead) throw new Error('Git preservation cannot verify an unborn HEAD')
     try {
-      createTar(
-        destination,
-        common,
-        [],
-        inventory.entries.map((entry) => entry.path || '.'),
-        true,
-      )
-      break
+      verifyRestoredGitClosure(destination, restored, expectedHead, options, adminIds)
+      verify?.(restored)
     } catch (error) {
-      const failed = error as { status?: number | null; stderr?: unknown }
-      const stderr =
-        typeof failed.stderr === 'string'
-          ? failed.stderr
-          : failed.stderr instanceof Uint8Array
-            ? Buffer.from(failed.stderr).toString('utf8')
-            : ''
-      if (attempt >= 2 || !gitTarCannotStatDrift(failed.status, stderr)) throw error
-      inventory = walkLive()
-      if (inventory.specialFiles.length || inventory.externalSymlinks.length)
+      // The tar list is a pre-walked inventory: a sibling that advances a ref
+      // after the walk lands the new ref bytes in the archive but not the
+      // object they name, and the restored closure then reports a bad object
+      // for a ref that is valid live; a tolerated shared vanish is the same
+      // class of race — a moved pack or packed-refs reappears under a fresh
+      // walk. Re-archive only when the live common dir actually moved or a
+      // shared member was tolerated away; an unchanged inventory with no
+      // tolerated vanish means the closure failure is real and fails closed.
+      if (closureAttempt >= 2) throw error
+      const fresh = walkLive()
+      if (fresh.specialFiles.length || fresh.externalSymlinks.length)
         throw new Error(
           'Git common directory contains unsupported special files or external symlinks',
           { cause: error },
         )
-      if (!inventory.entries.length) return undefined
+      if (!fresh.entries.length) return undefined
+      if (fresh.digest === inventory.digest && !toleratedVanishedMember) throw error
+      inventory = fresh
+      continue
     }
-  }
-  syncFile(destination)
-  // tar --compare is skipped for Git archives: it diffs live stat data —
-  // including file mtime — against members, and Git's own lockfile/object
-  // freshening makes that race (TD-1097). The archive is restored and
-  // re-inventoried instead, and only source-private paths must match what
-  // the capture walked: shared-mutable churn (a fetch landing between walk
-  // and tar, a pack pruned mid-read) never retains, while a dropped admin
-  // file or a changed config projection still fails closed. The returned inventory is the
-  // archive's own — the receipt records what the bytes provably contain.
-  const ownPrefixes = gitWorktreeMetadataRoots(root, common).map((metadataRoot) =>
-    relative(common, metadataRoot),
-  )
-  const restored = restoreAndCompare(destination, inventory, gitOptions, ownPrefixes, {
-    configProjectionMatches: () => archivedGitConfigMatchesLive(destination, common, root),
-    sourceName: basename(root),
-  })
-  if (!expectedHead) throw new Error('Git preservation cannot verify an unborn HEAD')
-  verifyRestoredGitClosure(destination, restored, expectedHead, options)
-  return {
-    path: destination,
-    digest: sha256File(destination),
-    bytes: lstatSync(destination).size,
-    inventory: restored,
+    return {
+      path: destination,
+      digest: sha256File(destination),
+      bytes: lstatSync(destination).size,
+      inventory: restored,
+    }
   }
 }
 
@@ -3018,6 +3681,10 @@ export function captureAndVerify(options: {
         relative(gitCommonDir, metadataRoot),
       )
     : []
+  const gitOwnAdminIds = gitOwnPrefixes
+    .filter((prefix) => prefix.startsWith('worktrees/'))
+    .map((prefix) => prefix.slice('worktrees/'.length))
+    .filter((id) => id.length > 0 && !id.includes('/'))
   const gitInventory = gitCommonDir
     ? inventoryTree(gitCommonDir, gitMetadataOptions, gitExcludedRoots)
     : undefined
@@ -3119,17 +3786,19 @@ export function captureAndVerify(options: {
     if (archiveMatches) {
       compareAndInventory(parsed.archives.worktree.path, sourceRoot, inventory, metadataOptions)
       if (parsed.archives.git && gitCommonDir) {
-        verifyRestoredGitClosureDigest(
-          parsed.archives.git.path,
-          { ...parsed.inventory.git!, head: capturedHead! },
-          gitMetadataOptions,
-        )
+        const expectedGit = {
+          ...parsed.inventory.git!,
+          head: capturedHead!,
+          ownAdminId: parsed.source.ownAdminId,
+          closureScope: parsed.source.closureScope,
+        }
+        verifyRestoredGitClosureDigest(parsed.archives.git.path, expectedGit, gitMetadataOptions)
         verifyRestoredGitLayout(
           parsed.archives.worktree.path,
           parsed.archives.git.path,
           sourceRoot,
           gitCommonDir,
-          { ...parsed.inventory.git!, head: capturedHead! },
+          expectedGit,
           gitMetadataOptions,
         )
       }
@@ -3184,20 +3853,26 @@ export function captureAndVerify(options: {
       gitExcludedRoots,
       gitInventory,
       capturedHead,
+      // The layout check belongs inside gitArchive's retry loop: a tolerated
+      // `Cannot stat` race can also move the ref the restored worktree HEAD
+      // needs, and that failure must re-walk rather than abort.
+      gitCommonDir
+        ? (restored) =>
+            verifyRestoredGitLayout(
+              worktreeArchive,
+              gitArchivePath,
+              sourceRoot,
+              gitCommonDir,
+              {
+                digest: restored.digest,
+                entries: restored.entryCount,
+                head: capturedHead!,
+                ownAdminIds: gitOwnAdminIds,
+              },
+              gitMetadataOptions,
+            )
+        : undefined,
     )
-    if (gitArchiveResult && gitCommonDir)
-      verifyRestoredGitLayout(
-        worktreeArchive,
-        gitArchiveResult.path,
-        sourceRoot,
-        gitCommonDir,
-        {
-          digest: gitArchiveResult.inventory.digest,
-          entries: gitArchiveResult.inventory.entryCount,
-          head: capturedHead!,
-        },
-        gitMetadataOptions,
-      )
     assertInventoryStable(inventory, inventoryTree(sourceRoot, metadataOptions), 'Source inventory')
     if (gitCommonDir && gitInventory) {
       const gitArchivedPath = gitArchiveResult?.path
@@ -3224,6 +3899,18 @@ export function captureAndVerify(options: {
         generation,
         gitCommonDir,
         head: capturedHead,
+        // The receipt records which closure scope proved this archive so a
+        // later re-verify (after the live .git pointer is gone) repeats the
+        // same scope — cross-checked against the archive's bytes, never
+        // trusted on the claim alone.
+        ...(gitCommonDir
+          ? {
+              ownAdminId: gitOwnAdminIds[0] ?? null,
+              closureScope: (gitOwnAdminIds.length ? 'source' : 'repository') as
+                | 'source'
+                | 'repository',
+            }
+          : {}),
       },
       inventory: {
         digest: inventory.digest,

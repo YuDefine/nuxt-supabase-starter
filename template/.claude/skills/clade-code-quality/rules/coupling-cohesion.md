@@ -1,9 +1,9 @@
 ---
-description: 耦合與內聚的三層分工——import cycle / barrel 的 gate 判讀、server 碼跨界 import、跨檔重複 discriminant switch、audit 表的 NO-SCAN 語意、Review 層函式契約、第三方 SDK 邊界
+description: 耦合與內聚的三層分工——import cycle / barrel 的 gate 判讀、server 碼跨界 import、跨檔重複 discriminant switch、audit 表的 NO-SCAN 語意、Review 層函式契約、第三方 SDK 邊界、以 agent 為前提的設計警訊
 paths: ['**/*.{ts,tsx,mts,cts,vue}']
 ---
 <!-- Clade native rule; source: rules/core/coupling-cohesion.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Coupling & Cohesion
 
@@ -52,6 +52,21 @@ MUST 抽成具名函式，讓上層函式讀起來是一份目錄而不是實作
 
 `fn(user, true, 3)` 這種位置參數，caller 對不到第 2、第 3 個是什麼時，MUST 改成參數物件。
 **NEVER** 把參數個數寫成 0–2 的硬門檻——§ 為什麼 gate 只有兩條規則 已用對照專案否決 `max-params`。
+
+### 以 agent 為前提的設計警訊
+
+前提：下一個改這段 code 的是 agent——只看得到它開過的檔、照最近的範例抄、走能編譯的最短路徑。從一個檔看起來對的改動，MUST 對整個 repo 也對。diff 命中下表任一列判準時，MUST 照處置改形狀，或在 review 報告寫出保留理由。
+
+| 警訊 | 可觀察判準 | 處置 |
+| --- | --- | --- |
+| 淺模組 | caller 要依序呼叫同一模組的多個 export 才完成一件事；或公開選項暴露內部階段、實作選擇 | 收成一個介面背後藏住流程；深模組 ≠ 深呼叫鏈 |
+| 資訊洩漏 | 同一個表示法、wire／storage 型別或協定細節出現在 ≥2 個模組，改它要連動多檔；或 re-export transport 型別 | 在邊界 parse 成 domain 型別，細節留在一個模組內；第三方 SDK 見 § 第三方邊界 |
+| 時序分解 | 模組依執行順序切（load／validate／transform／save 各一檔），同一份 invariant 在多個邊界重複檢查 | 依擁有的知識分組；不同時刻執行、保護同一決策的函式屬同一模組 |
+| Pass-through | 函式把同形狀參數原封轉給另一個函式，沒加 policy、轉接或新抽象 | 刪掉，或把責任移到能完成操作的模組 |
+| 多寫入者 | ≥2 個模組寫同一份 state，或各自持有一份副本 | 每份 state 一個 owner，其他模組讀它或請 owner 改 |
+| 兩種做法 | 同一件事有 ≥2 條受支援的寫法，diff 又新增其中一條的 caller | 只留一條；同一次改動把 caller 移走並刪掉其他條 |
+| 可 import 的內部 | 模組外的檔 import 了該模組的內部檔（非公開入口） | 讓外部 import 內部時 build 失敗（package `exports`、目錄邊界 lint） |
+| 手動同步清單 | ≥2 處列同一組項目，新增一項要改每一處 | 留一份、其餘由它推導；推導不了就讓兩份不一致時 build 失敗。註解轉述 SSoT 見上一節 |
 
 ## Gate 判讀
 

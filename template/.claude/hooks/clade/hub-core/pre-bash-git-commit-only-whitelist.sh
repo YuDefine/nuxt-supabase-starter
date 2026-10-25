@@ -4,7 +4,7 @@
 #
 # /commit itself lands with `git commit --only -- <files>` plus a
 # `Via: /commit` trailer (SKILL.md Step 4). That path MUST pass.
-# Work-loop HANDOFF / tech-debt short commits are the whitelist.
+# HANDOFF / tech-debt short commits are the whitelist.
 # Product landings on main without Via are the 2026-08-24/25 incident
 # in one consumer (5 commits, push blocked by provenance-gate).
 #
@@ -715,7 +715,7 @@ Whitelist (HANDOFF / tech-debt / tasks / artifact-tick / …) still uses
 \`git commit --only\`. Session-branch commits inside a worktree are not
 this gate — only main/master.
 
-Work-loop is not an exception. Packaging if /commit hits 人工檢查;
+Packaging if /commit hits 人工檢查;
 NEVER --only around 0-A.
 EOF
   exit 2

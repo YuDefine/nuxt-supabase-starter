@@ -1,4 +1,4 @@
-<!-- LOCKED: mirrored from SpecFormula/specformula-dev-framework@e5568250a2c0599983bce90fb08d548da35e1d64 via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- LOCKED: mirrored from SpecFormula/specformula-dev-framework@6234c444175969e7145cd41ff19f2ce0be01474f, modified by clade (added this banner and clade metadata lines) via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 
 # TimeControl 指令
 

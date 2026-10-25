@@ -3,8 +3,8 @@ description: Manual Review data-readiness 規約——規劃階段（寫 plan pa
 paths: ['tasks/**', 'specs/plans/**', 'screenshots/**']
 ---
 <!-- Clade native rule; source: rules/core/manual-review.data-readiness.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 ## Runtime adapter boundary
 

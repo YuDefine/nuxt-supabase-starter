@@ -40,14 +40,14 @@ S=$(jq -r '.hub.ticketStatus["needs-customer"]' /tmp/hub.json); K=$(jq -r '.hub.
 timeout 60 ntn api -X PATCH "/v1/pages/<page-id>" -d "{\"properties\":{\"$K\":{\"status\":{\"name\":\"$S\"}}}}" < /dev/null
 ```
 
-客戶面欄位能寫什麼見 `rules/客戶面證據判準.md`。
+客戶面欄位能寫什麼見 `rules/客戶面證據判準.md`。把票 PATCH 成 done／archived 會被 `pre-bash-notion-ticket-status-gate.sh` 擋下；有使用者當輪逐張列票號的確認時才在指令前綴加 `CLADE_NOTION_CUSTOMER_TRANSITION_OK=<page-id>`（同判準 Rule 2）。
 
 ### 頁面內容（Phase 8）
 
-寫入前 MUST 先確認寫入目標屬於本 hub（`rules/頁面歸屬判準.md` Rule 2）：
+寫入前 MUST 先過寫入 gate（判定見 `rules/頁面歸屬判準.md` § 寫入 gate）：
 
 ```bash
-node ~/offline/clade/vendor/scripts/notion-scope.ts owner <page-or-block-id> --consumer-path . < /dev/null | jq '.results[0].inConsumerHub'   # 不是 true 就停
+node ~/offline/clade/vendor/scripts/notion-scope.ts owner <page-or-block-id> --consumer-path . < /dev/null | jq '.results[0].inConsumerHub'   # 依寫入 gate 的 N 表分流
 ```
 
 ```bash
@@ -106,10 +106,17 @@ Notion API 硬限制（違反回 400 `validation_error`）：`code` block 的 `l
 public API（ntn / MCP integration token）拿不到 in-app attachment：`附件`（files 欄）回 `files:[]`。要原檔走內部 API。Notion 現用 domain `app.notion.com`；`token_v2` 的 secret 處置見 `rules/Notion執行者與ntn呼叫判準.md` Rule 6。
 
 ```bash
-# Step 1 — 一次性取 token_v2 + notion_user_id（agent-browser persistent profile 需已登入 Notion）
-agent-browser --session notion-token open https://app.notion.com
-agent-browser --session notion-token wait --load networkidle
-umask 077; agent-browser --session notion-token state save /tmp/notion_state.json >/dev/null
+# Step 1 — 一次性取 token_v2 + notion_user_id
+# 常駐登入 profile 在 desk：Step 1–3 在 desk 的**同一個** bash session 跑（Step 3 要用 Step 2 的
+# $JAR／$PAGE／$SPACE／$USERID；他機把三步整段包進一次 `ssh desk bash -s`，結束後
+# `scp desk:/tmp/ticket_img.png <本機路徑>` 取回）。profile 用 `profile-index.sh notion.com` 解析；
+# 沒登入就先走 cookbook § 人工登入交接（~/offline/clade/vendor/snippets/agent-browser/README.md）。
+# 每個指令都帶同一組 --profile。
+AB="agent-browser --session notion-token --profile $HOME/.agent-browser/profile-<x>"
+$AB close; $AB open https://app.notion.com && $AB wait --load networkidle
+# 確認 Chrome 用的就是這個 profile（cookbook § 開啟後驗證）；不是 OK 就停，不要 state save
+bash ~/offline/clade/vendor/snippets/agent-browser/verify-session.sh notion-token $HOME/.agent-browser/profile-<x> || exit 1
+umask 077; $AB state save /tmp/notion_state.json >/dev/null; $AB close
 node --input-type=module <<'NODE'
 import { readFileSync, writeFileSync } from 'node:fs'
 const state = JSON.parse(readFileSync('/tmp/notion_state.json', 'utf8'))
@@ -166,12 +173,15 @@ timeout 60 ntn api -X PATCH "/v1/pages/<副本>" -d '{"properties":{"title":{"ti
 # 3) 找出副本的 board／專案／里程碑 database 與 data source（Main 的「全專案共用資料庫」列底下）
 timeout 60 ntn api "/v1/blocks/<共用資料庫頁>/children?page_size=100" < /dev/null   # child_database → GET /v1/databases/<id> 取 data_sources[0].id
 # 4) 專案主檔建一列（名稱、專案代碼）→ 記 rowId
-# 5) 「專案標準架構」列改名成專案頁 → 裡面「專案管理」就是入口頁（ticketPageId），照 B-3 把 Ticket view 篩成本專案
+# 5) 「專案標準架構」列再 duplicate 一份留作本 hub 的專案範本 → registry hubs.<key>.projectTemplate = {pageId, ticketPageId}
+# 6) 原「專案標準架構」改名成專案頁 → 裡面「專案管理」就是入口頁（ticketPageId），照 B-3 把 Ticket view 篩成本專案
 
-# B. 既有 hub 加專案：複製同 hub 已有的入口頁（registry projects.<任一>.ticketPageId）
-# 1) notion-duplicate-page {page_id: <同 hub 的 ticketPageId>}；linked view 仍指向同一張 board（board 不在被複製的子樹裡）
-# 2) 專案主檔建列 → rowId；副本 move 到專案頁底下、改名「專案管理（<CODE>）」
-# 3) 入口頁 Ticket view 改篩本專案：讀出 filter，把 relation contains 換成新 rowId 再寫回
+# B. 既有 hub 加專案：複製該 hub 的專案範本（registry hubs.<key>.projectTemplate.pageId）；
+#    沒有 projectTemplate 才退回複製同 hub 已有的入口頁（projects.<任一>.ticketPageId）
+# 1) notion-duplicate-page {page_id: <projectTemplate.pageId>}；linked view 仍指向同一張 board（board 不在被複製的子樹裡）
+#    Notion MCP 不在場時（public API 沒有 duplicate）→ 請 Charles 在 UI 點一次 Duplicate，其餘照常走 ntn api
+# 2) 專案主檔建列 → rowId；副本 move 到 Main、改名成專案頁，「專案管理」改名「專案管理（<CODE>）」
+# 3) 入口頁 Ticket view 篩本專案：讀出 filter，有 relation contains 就換成新 rowId，沒有就 append 一條；sort 指向不存在欄（view query 400）一併移除
 timeout 60 ntn api "/v1/blocks/<入口頁>/children" < /dev/null                          # child_database id
 timeout 60 ntn api /v1/views database_id==<該 child_database id> < /dev/null          # view ids
 V=$(mktemp -d)                                                                         # 每次 provision 自己的暫存目錄
@@ -181,7 +191,7 @@ timeout 60 ntn api -X PATCH /v1/views/<view-id> -d @"$V/view-patch.json" < /dev/
 # C. 登記＋驗證
 #   registry/notion-hubs.json：A 新增整個 hub（ticketStatus／ticketType／fields 照 Org 模板＝fc 同一套字）；
 #   B 只加 projects.<CODE> = {pageId, rowId, ticketPageId}
-CLADE_HOME=<clade 樹> node scripts/audit-notion-hub-schema.ts --hub <key>                 # 必須 ok
+CLADE_HOME=<clade 樹> node scripts/audit-notion-hub-schema.ts --hub <key>                 # 必須 ok（含 entry-* 入口頁 view 檢查）
 CLADE_HOME=<clade 樹> node vendor/scripts/notion-intake.ts --hub <key>                    # 讀得到、歸屬對
 ```
 

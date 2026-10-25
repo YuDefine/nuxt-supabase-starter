@@ -10,10 +10,10 @@ T3 全套（NuxtHub D1 drain + AI SDK convention + SSE/MCP child logger）。適
 1. `pnpm add evlog@^2.16.0 @evlog/nuxthub @nuxthub/core ai @ai-sdk/anthropic`
 2. cp 本目錄全部檔案到對應路徑
 3. `nuxt.config.ts` `modules` 加 `@evlog/nuxthub` + 套下方範例（含 D1 binding + retention）
-4. AI endpoint 內呼叫 `recordAIGeneration` / `recordToolCall` / `recordModeration` / `recordEmbedding`
+4. AI endpoint 依 SDK 套 `createAILogger(log).wrap()`（AI SDK）或 `createNativeAITrace`（原生 SDK，請求結束 `log.set({ ai: trace.finish() })`）
 5. SSE / MCP endpoint 改用 `forkChildLogger` + `emitChildLogger` pattern
 6. Better Auth `createAuthMiddleware` 內注入 evlog identity
-7. `wrangler dev --region apac` 觸發 chat endpoint，D1 應有 row + `event.ai.cost_usd` 落地
+7. `wrangler dev --region apac` 觸發 chat endpoint，D1 應有 row + `event.ai.estimatedCost` 落地
 
 ## nuxt.config.ts pre-applied 範例
 

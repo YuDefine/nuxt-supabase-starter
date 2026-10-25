@@ -7,8 +7,7 @@
 #
 # 跟 pre-commit 同名 check 的分工：
 #   - pre-commit checks/utable-slots.sh : 只掃本次 staged *.vue（blocking，最接近犯錯時點）
-#   - pre-push  checks/utable-slots.sh  : 掃全 repo *.vue（blocking 回溯型；2026-07-25
-#                                         全 fleet 掃描基線 0 hit，可直接 blocking）
+#   - pre-push  checks/utable-slots.sh  : 掃全 repo *.vue（blocking 回溯型；fleet 基線 0 hit）
 #
 # Auto-detect：偵測 nuxt.config.* 存在才跑；非 Nuxt repo 自動 no-op（exit 0）。
 #

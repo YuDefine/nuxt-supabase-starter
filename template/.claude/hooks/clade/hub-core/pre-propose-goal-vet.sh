@@ -12,7 +12,7 @@
 #
 # warn/inject，NEVER block：規約要的是「這條件 agent 驗不驗得了」的判斷，
 # 不是禁止提 goal。exit 2 會把一個合法動作變成不可能。
-# jq 缺 / 解析失敗 → silent exit 0（fail-open，同 user-prompt-shorthand-gate.sh）。
+# jq 缺 / 解析失敗 → silent exit 0（fail-open）。
 
 set -uo pipefail
 

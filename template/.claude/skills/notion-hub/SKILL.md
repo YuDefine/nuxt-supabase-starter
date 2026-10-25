@@ -1,6 +1,6 @@
 ---
 name: notion-hub
-description: "所有 Notion 讀寫的唯一入口（ntn api；NEVER WebFetch／Notion MCP）。Use when 看 board／進度、評估或認領客戶票、在 prod 發現問題要建票、建決策題問客戶拍板、問客戶驗收了沒、為新客戶／新專案開 hub，或任何查找／讀取／修改 Notion 頁面的請求——使用者給 Notion 連結、要搜尋相關頁面、問「Notion 上有哪些文件要改」、要在頁面插入或修改內容。NOT for 生命週期狀態同步（由 notion-sync 跟隨 flow 事件推進）、會議錄音寫入 Notion（用 meeting-notes）、clade 內部待拍板題（走 flow ask）。"
+description: "所有 Notion 讀寫的唯一入口（ntn api；NEVER WebFetch／Notion MCP）。Use when 看 board／進度、認領或建客戶票、建決策題問客戶、問驗收、開 hub，或給 Notion 連結要查找／讀取／修改頁面。NOT for 狀態同步（notion-sync）、會議錄音寫入（meeting-notes）、clade 內部待拍板題（flow ask）。"
 ---
 
 
@@ -34,10 +34,11 @@ description: "所有 Notion 讀寫的唯一入口（ntn api；NEVER WebFetch／N
 
 ## Phase 5 -- 問客戶（決策題 ticket）
 
-1. THINK 先讀取 `rules/決策題撰寫判準.md`，確認符合開決策題的條件（只問一句就改在既有票留 comment），並一次萃取需求標題、拍板題與 code pointer。
+1. THINK 先讀取 `rules/決策題撰寫判準.md`，確認符合開決策題的條件（只問一句就改在既有票留 comment），並一次萃取需求標題、拍板題與 code pointer；再讀取 `reply-article` skill 根下的 `rules/對外提問完整性判準.md`，依它排定拍板題順序、把處置題對象寫成類別，並逐個選項推演到客戶答完就能動工。
 2. WRITE 先讀取 `templates/客戶決策題ticket.md` 與 `templates/客戶決策題ticket.example.md`，再讀取 `rules/客戶面證據判準.md`，依骨架組出 4 段內容與接手 prompt。
-3. DELEGATE 經〔`notion-ops`〕先以 `ntn api "/v1/data_sources/<board>" < /dev/null` 重撈 schema，再依 `references/ntn-cookbook.md` § 建決策題票建頁（`類型` 用 `hub.ticketType.feature`，bug 修正類改用 `hub.ticketType.bug`）；拿到 page id 後回填接手 prompt【第一步】，已有 work item 時再跑 `notion-sync.ts open --work <id> --ticket <page>`。
-4. WRITE 先讀當前 repo `HANDOFF.md` 的格式，append 同步條目（ticket URL＋page id、N 題、接手方式），再回報 ticket URL、題數、HANDOFF 位置與接手方式。
+3. DELEGATE 建頁前派 `question-reviewer` 審查（省略 `model`），brief 寫明組好的票面內容、上述判準檔的絕對路徑與回覆者身分；Blocker 修完再審一次，最多兩輪，仍有分歧就整理成排序選項交給 Charles；審查席不可用時主線依同一份判準自審，回報寫明「未經審查席」。
+4. DELEGATE 經〔`notion-ops`〕先以 `ntn api "/v1/data_sources/<board>" < /dev/null` 重撈 schema，再依 `references/ntn-cookbook.md` § 建決策題票建頁（`類型` 用 `hub.ticketType.feature`，bug 修正類改用 `hub.ticketType.bug`）；拿到 page id 後回填接手 prompt【第一步】，已有 work item 時再跑 `notion-sync.ts open --work <id> --ticket <page>`。
+5. WRITE 先讀當前 repo `HANDOFF.md` 的格式，append 同步條目（ticket URL＋page id、N 題、接手方式），再回報 ticket URL、題數、HANDOFF 位置與接手方式。
 
 ## Phase 6 -- 對帳驗收
 
@@ -46,7 +47,7 @@ description: "所有 Notion 讀寫的唯一入口（ntn api；NEVER WebFetch／N
 
 ## Phase 7 -- 開 hub／加專案
 
-1. THINK 先讀取 `rules/hub-provision判準.md`，判新客戶（複製 Org 模板）或既有 hub 加專案（複製同 hub 入口頁）；目前在 consumer session 就 relay 給 clade 主線並停止。
+1. THINK 先讀取 `rules/hub-provision判準.md`，判新客戶（複製 Org 模板）或既有 hub 加專案（複製該 hub 的專案範本）；目前在 consumer session 就 relay 給 clade 主線並停止。
 2. DELEGATE 依 `references/ntn-cookbook.md` § Provision 執行複製、移動、改名與 view filter，逐步讀回確認。
 3. WRITE 登記 `registry/notion-hubs.json`，再 DELEGATE `audit-notion-hub-schema.ts --hub <key>` 與 `notion-intake.ts --hub <key>`，兩者都必須 ok。
 
@@ -54,4 +55,4 @@ description: "所有 Notion 讀寫的唯一入口（ntn api；NEVER WebFetch／N
 
 1. DELEGATE 找頁面執行 `node ~/offline/clade/vendor/scripts/notion-scope.ts search --query <關鍵字> --consumer-path .`，使用者給了連結或 id 執行 `notion-scope.ts owner <連結或 id>… --consumer-path .`，取得每頁歸屬；**NEVER** 直接用 `ntn api /v1/search` 的結果。
 2. THINK 先讀取 `rules/頁面歸屬判準.md`，只用範圍內的頁面回答與歸納；要讀內文時經〔`notion-ops`〕依 `references/ntn-cookbook.md` § 讀取 dump 到檔。
-3. DELEGATE 要寫入時先對寫入目標再跑一次 `notion-scope.ts owner <id> --consumer-path .`，`inConsumerHub` 為 `true`（或 consumer 未宣告 hub、且使用者已確認該頁歸屬）才經〔`notion-ops`〕依 `references/ntn-cookbook.md` § 寫入 寫入，並讀回確認。
+3. DELEGATE 要寫入時先過 `rules/頁面歸屬判準.md` § 寫入 gate（對寫入目標跑 `notion-scope.ts owner`），放行才經〔`notion-ops`〕依 `references/ntn-cookbook.md` § 寫入 寫入，並讀回確認。

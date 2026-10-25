@@ -26,6 +26,14 @@ fi
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 [ -n "$REPO_ROOT" ] || exit 0
 
+# clade home 的 session 清單在 specs/sessions/，consumer 在 tasks/（_session-task-dir.sh）
+TASK_DIR=tasks
+if [ -f "$HOOK_DIR/_session-task-dir.sh" ]; then
+  # shellcheck source=_session-task-dir.sh
+  . "$HOOK_DIR/_session-task-dir.sh"
+  TASK_DIR="$(session_task_dir "$REPO_ROOT")"
+fi
+
 # hook stdin 是 JSON；只取 source，解不出來就當 startup（照常提示，不靜默）
 SOURCE=""
 if [ ! -t 0 ]; then
@@ -34,14 +42,14 @@ fi
 
 TODAY="$(date +%Y-%m-%d)"
 HAS_TODAY=0
-if compgen -G "$REPO_ROOT/tasks/${TODAY}-*.md" > /dev/null 2>&1; then HAS_TODAY=1; fi
+if compgen -G "$REPO_ROOT/${TASK_DIR}/${TODAY}-*.md" > /dev/null 2>&1; then HAS_TODAY=1; fi
 
 if [ "$SOURCE" = "compact" ]; then
   [ "$HAS_TODAY" -eq 1 ] && exit 0
   {
-    echo "[session-tasks] auto-compact 剛發生，而本 repo 今天還沒有 tasks/${TODAY}-*.md。"
+    echo "[session-tasks] auto-compact 剛發生，而本 repo 今天還沒有 ${TASK_DIR}/${TODAY}-*.md。"
     echo "  compact 會丟掉 session 狀態，task 檔是跨 compact 的主要狀態載體 —— 續做前先補一份："
-    echo "  Write tasks/${TODAY}-HHMM-<slug>.md（規約：rules/core/session-tasks.md）"
+    echo "  Write ${TASK_DIR}/${TODAY}-HHMM-<slug>.md（規約：rules/core/session-tasks.md）"
   } 2>&1 | cap_output >&2
   exit 0
 fi
@@ -52,9 +60,12 @@ fi
 
 {
   echo "[session-tasks] 開始任何 ad-hoc 工作（debug／配置調整／單檔 fix／勘查）前，"
-  echo "  MUST 先 Write tasks/${TODAY}-HHMM-<slug>.md 再動手（一 session 一檔，NEVER 共享單檔）。"
-  if [ ! -d "$REPO_ROOT/tasks" ]; then
-    echo "  本 repo 尚無 tasks/ —— 目錄不存在**不代表**未採用本規約，直接建即可。"
+  echo "  MUST 先 Write ${TASK_DIR}/${TODAY}-HHMM-<slug>.md 再動手（一 session 一檔，NEVER 共享單檔）。"
+  if [ ! -d "$REPO_ROOT/${TASK_DIR}" ]; then
+    echo "  本 repo 尚無 ${TASK_DIR}/ —— 目錄不存在**不代表**未採用本規約，直接建即可。"
+  fi
+  if [ "$TASK_DIR" != tasks ]; then
+    echo "  clade home 的 tasks/ 已退場：session 清單寫 ${TASK_DIR}/，NEVER 再寫 tasks/。"
   fi
   echo "  規約全文：rules/core/session-tasks.md（Claude 投影在 .claude/skills/clade-session-work/rules/session-tasks.md）"
 } 2>&1 | cap_output >&2

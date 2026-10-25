@@ -21,7 +21,11 @@ if command -v jq >/dev/null 2>&1; then
 fi
 
 # Not a git push → pass
-if ! printf '%s' "$command" | grep -qE '^\s*(git|rtk\s+git)\s+push\b'; then
+# Leading `NAME=value` assignments are part of the push: the pre-push
+# ahead-ownership gate has the pusher prefix `CLADE_PUSH_MAIN_AHEAD="$(…)"`,
+# and that declared push is still a push to main this gate must judge.
+env_prefix="([A-Za-z_][A-Za-z0-9_]*=(\"[^\"]*\"|'[^']*'|[^[:space:]]*)[[:space:]]+)*"
+if ! printf '%s' "$command" | grep -qE "^\s*${env_prefix}(git|rtk\s+git)\s+push\b"; then
   exit 0
 fi
 
@@ -91,7 +95,7 @@ for sha in $new_commits; do
   fi
 
   # Count files changed by this commit
-  file_count=$(git diff-tree --no-commit-id --name-only -r "$sha" 2>/dev/null | wc -l | tr -d ' ')
+  file_count=$(git diff-tree --no-commit-id --name-only -r -z "$sha" 2>/dev/null | tr -cd '\0' | wc -c | tr -d ' ')
 
   # Small commits (≤5 files) → ad-hoc, pass without provenance
   if [ "$file_count" -le 5 ]; then
@@ -129,7 +133,10 @@ for sha in $new_commits; do
     break
   done
 
-  has_code=$(git diff-tree --no-commit-id --name-only -r "$sha" 2>/dev/null \
+  # `-z | tr '\0' '\n'`：路徑不被 `core.quotePath` 跳脫（中文路徑否則帶引號、`^(\.claude|…)/` 前綴比對與
+  # `git show "$sha:$path"` 都落空），每行一個已解碼路徑。
+  has_code=$(git diff-tree --no-commit-id --name-only -r -z "$sha" 2>/dev/null \
+    | tr '\0' '\n' \
     | grep -vE '^(\.claude|\.agents|\.codex|\.clade|\.spectra|vendor)/' \
     | while IFS= read -r path; do
         # Drop `scripts/<name>` when clade projects a `vendor/scripts/<name>` of the same name.
@@ -152,7 +159,13 @@ for sha in $new_commits; do
         # `.github/actions/<name>` (from vendor/actions/) and a root `commitlint.config.ts`
         # (from vendor/commitlint/) are the two that got through on 2026-08-22.
         # Read the blob at $sha, not the worktree: the point is what this commit contains.
-        if git show "$sha:$path" 2>/dev/null | head -5 | grep -qF 'LOCKED — managed by clade'; then
+        # A deleted path has no blob at $sha, so ask the blob it deleted ($sha^): when clade
+        # retires a projection, the upgrade commit removes it and clade no longer ships a
+        # same-named vendor/scripts entry, leaving the pre-deletion header as the only owner
+        # record (dispatch 9e4859f3).
+        blob_rev="$sha"
+        git cat-file -e "$sha:$path" 2>/dev/null || blob_rev="$sha^"
+        if git show "$blob_rev:$path" 2>/dev/null | head -5 | grep -qF 'LOCKED — managed by clade'; then
           continue
         fi
 

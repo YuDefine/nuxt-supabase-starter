@@ -46,7 +46,7 @@ NAME=$(basename -- "$FILE_PATH")
 is_linked_worktree_dir "$DIR"
 [ $? = 1 ] || exit 0
 
-git -C "$DIR" ls-files --error-unmatch -- "$NAME" >/dev/null 2>&1 || exit 0
+git -C "$DIR" ls-files -z --error-unmatch -- "$NAME" >/dev/null 2>&1 || exit 0
 
 TOP=$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null) || exit 0
 PREFIX=$(git -C "$DIR" rev-parse --show-prefix 2>/dev/null) || exit 0

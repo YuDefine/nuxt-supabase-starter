@@ -18,8 +18,8 @@
 #     --coordinate --bounded-leaf
 #   --table-row 讓 helper 對照 NATIVE_TABLE_ROW_POLICIES 機械拒絕任何非
 #   opus/medium/readonly 的偏離；family ceiling（opus ≤ medium）是第二層。
-#   launcher 預設 cc（CLAUDE_REVIEW_LAUNCHER=ccw 顯式切工作帳號），account_unavailable
-#   由 helper 內建的帳號 fallback 承接。
+#   launcher 每次顯式傳（CLAUDE_REVIEW_LAUNCHER=cc|ccw，不給預設；缺值或非 cc|ccw 在派工前
+#   exit 2、helper 零呼叫），account_unavailable 由 helper 內建的帳號 fallback 承接。
 #   --bounded-leaf（TD-1105）讓 dispatched worker（帶 CLADE_DISPATCH_ID）也能開這一格：
 #   helper 只對 readonly gate-review row＋--coordinate 放行巢狀一層，leaf 自己再派仍拒。
 #   helper 回 nested_dispatch_refused（本 session 自己就是 leaf）→ exit 10「交回
@@ -102,10 +102,11 @@
 # Usage（[PR 旗標]＝--pr-branch <b> --pr-head <sha> --pr-base <merge-base> [--part n/N]
 #  [--pr-number <n>]（輪數依 PR 號分段，重用 branch 名的新 PR 不繼承舊輪）
 #  [--pr-filter <desc>]（這一輪只審篩選子集：收齊也不算通過，merge-queue 不認）
-#  [--part-files <sha256>]（該批檔案清單 hash：同 head 沿用某批 verdict 前比對，批界位移就重審該批），
+#  [--part-files <sha256>]（該批檔案清單 hash：同 head 沿用某批 verdict 前比對，批界位移就重審該批）
+#  [--pr-independent yes]（本 head 已通過時另開獨立輪：新 reviewer、不帶前輪 findings、審完整 diff），
 #  coordinator 的 oa-batches.ts 帶；不帶＝working-tree 模式）:
-#   .claude/scripts/claude-review-safe.sh [medium] [--findings <prior verdict file>] [PR 旗標]
-#       Herdr carrier——只給叫不出 Claude subagent 的 runtime（Codex、Pi…）；
+#   CLAUDE_REVIEW_LAUNCHER=<cc|ccw> .claude/scripts/claude-review-safe.sh [medium] [--findings <prior verdict file>] [PR 旗標]
+#       Herdr carrier——只給叫不出 Claude subagent 的 runtime（Codex、Pi…）；launcher 必填（缺值 exit 2）；
 #       Claude Code（含 Herdr 派出的 worker）誤用時 exit 12
 #   .claude/scripts/claude-review-safe.sh prepare [medium] [--findings <prior verdict file>] [PR 旗標]
 #   .claude/scripts/claude-review-safe.sh finalize <work-dir>
@@ -117,6 +118,12 @@
 #   .claude/scripts/claude-review-safe.sh rounds grant --mode pr --branch <b> --pr-number <n> --by charles --evidence <出處>
 #       Charles 授權的單 PR 例外輪：append 一筆 grant 進 ledger，該 PR 段上限＋1（只在已撞上限時收；
 #       evidence 缺、by 不是 charles、PR 號對不上一律 exit 2）。這是放寬上限的唯一入口，沒有 env／旗標替代
+#   .claude/scripts/claude-review-safe.sh rounds findings --mode pr --branch <b> [--pr-number <n>] [--round <n>] [--part <i/N>]
+#       唯讀：列出該輪各批 verdict 實際被計數的 finding、指紋與裁決狀態
+#   .claude/scripts/claude-review-safe.sh rounds adjudicate --mode pr --branch <b> --pr-number <n> --round <n> [--part <i/N>] --finding <指紋> --verdict false-positive --by <裁決者> --evidence <證據>
+#       主線把某條 reviewer Major 裁決為假：append 進該輪該批 adjudications，gate 以「原始 Critical＋Major 減已裁決 Major」判定
+#       （只剩假 Major 的輪＝通過，不再逼出下一輪）；沒有裁決紀錄的 Major 照舊計入。Critical 不收；指紋對不上、缺 by／evidence、
+#       by 是 reviewer 自己、重複裁決一律 exit 2 且不寫 ledger。原始計數與 verdict 檔不動
 # effort 只接受 medium——Opus family ceiling 就是 medium，沒有低檔需求、
 # high/max 由 wrapper 直接拒絕（exit 2），NEVER 靜默降檔或抬檔。
 
@@ -187,10 +194,11 @@ case "${1:-}" in
     # 輪數 ledger 的查詢（oa-batches 切批前、merge-queue 合併前用）；寫入只發生在開審、收 verdict，
     # 以及 cover（判定為 covered 時把 head 記成通過輪的 covered_heads，merge-queue 只認記錄）。
     # grant 是唯一的人類授權寫入：Charles 授權的例外輪留紀錄在 ledger.grants。
+    # adjudicate 把主線裁決為假的 Major 記進該輪該批（只疊在原始計數上，不改計數）；findings 唯讀列出可裁決的指紋。
     shift
     case "${1:-}" in
-      plan|cover|passed|show|grant) ;;
-      *) echo "[claude-review-safe] 錯誤：rounds 只接受 plan|cover|passed|show|grant；收到 ${1:-<空>}" >&2; exit 2 ;;
+      plan|cover|passed|show|grant|findings|adjudicate) ;;
+      *) echo "[claude-review-safe] 錯誤：rounds 只接受 plan|cover|passed|show|grant|findings|adjudicate；收到 ${1:-<空>}" >&2; exit 2 ;;
     esac
     # shellcheck source=lib/review-common.sh
     . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/review-common.sh"
@@ -214,12 +222,17 @@ fi
 # 帶它的呼叫端是舊 brief／舊 skill，直接拒絕而不是靜默改成 opus——那樣它會以為自己
 # 拿到的是它要的那一席。
 REVIEW_SEAT="${CLAUDE_REVIEW_SEAT:-opus}"
-# 派 reviewer 用的 Claude 帳號：預設 cc（個人帳號）。ccw 只在顯式 CLAUDE_REVIEW_LAUNCHER=ccw
-# 時使用——不是每台機器都登入了工作帳號（zenbook 2026-09-24 沒有 ~/.claude-work 憑證，
-# 寫死 ccw 讓 0-A 以 missing-oauth 回 account_unavailable，Charles 拍板改用 cc）。
-REVIEW_LAUNCHER="${CLAUDE_REVIEW_LAUNCHER:-cc}"
+# 派 reviewer 用的 Claude 帳號：每次顯式傳，不給預設（Charles 2026-09-24「launcher 每次傳參、
+# 不給預設」；CDB-490 2026-10-16 裁決改實作）。預設 cc 會讓 launcher 選擇在呼叫端看不見——
+# zenbook 沒有 ~/.claude-work 憑證時寫死 ccw 以 missing-oauth 回 account_unavailable，反過來
+# 寫死 cc 同樣會在只登入工作帳號的機器上踩到。缺值在派工前 exit 2。
+# 只約束 Herdr carrier：subagent carrier（prepare／finalize）跑在派它的 session 的帳號上，
+# 不派 launcher，行為不變（缺值沿用 cc 當 receipt 標記）。
+REVIEW_LAUNCHER="${CLAUDE_REVIEW_LAUNCHER:-}"
+if [ -z "$REVIEW_LAUNCHER" ] && [ "$CARRIER_MODE" != "herdr" ]; then REVIEW_LAUNCHER=cc; fi
 case "$REVIEW_LAUNCHER" in
   cc|ccw) ;;
+  '') echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_LAUNCHER 必填（cc|ccw，不給預設）；例：CLAUDE_REVIEW_LAUNCHER=cc bash <claude-review-safe.sh> medium" >&2; exit 2 ;;
   *) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_LAUNCHER 只接受 cc|ccw；收到 $REVIEW_LAUNCHER" >&2; exit 2 ;;
 esac
 case "$REVIEW_SEAT" in
@@ -247,10 +260,10 @@ fi
 shift || true
 
 FINDINGS=""
-PR_BRANCH="" PR_HEAD="" PR_BASE="" ROUND_PART="1/1" PR_NUMBER="" PR_FILTER="" PART_FILES=""
+PR_BRANCH="" PR_HEAD="" PR_BASE="" ROUND_PART="1/1" PR_NUMBER="" PR_FILTER="" PART_FILES="" PR_INDEPENDENT=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --findings|--pr-branch|--pr-head|--pr-base|--part|--pr-number|--pr-filter|--part-files)
+    --findings|--pr-branch|--pr-head|--pr-base|--part|--pr-number|--pr-filter|--part-files|--pr-independent)
       if [ "$#" -lt 2 ] || [ -z "$2" ]; then
         echo "[claude-review-safe] 錯誤：$1 需要一個值" >&2
         exit 2
@@ -264,6 +277,9 @@ while [ "$#" -gt 0 ]; do
         --pr-number) PR_NUMBER="$2" ;;
         --pr-filter) PR_FILTER="$2" ;;
         --part-files) PART_FILES="$2" ;;
+        --pr-independent)
+          [ "$2" = yes ] || { echo "[claude-review-safe] 錯誤：--pr-independent 只接受 yes" >&2; exit 2; }
+          PR_INDEPENDENT=yes ;;
       esac
       shift 2 ;;
     *)
@@ -286,8 +302,8 @@ if [ -n "$PR_BRANCH$PR_HEAD$PR_BASE" ] && { [ -z "$PR_BRANCH" ] || [ -z "$PR_HEA
   echo "[claude-review-safe] 錯誤：--pr-branch／--pr-head／--pr-base 要一起帶（PR 模式的輪數 ledger key）" >&2
   exit 2
 fi
-if [ -n "$PR_NUMBER$PR_FILTER$PART_FILES" ] && [ -z "$PR_BRANCH" ]; then
-  echo "[claude-review-safe] 錯誤：--pr-number／--pr-filter／--part-files 只在 PR 模式有意義（要一起帶 --pr-branch／--pr-head／--pr-base）" >&2
+if [ -n "$PR_NUMBER$PR_FILTER$PART_FILES$PR_INDEPENDENT" ] && [ -z "$PR_BRANCH" ]; then
+  echo "[claude-review-safe] 錯誤：--pr-number／--pr-filter／--part-files／--pr-independent 只在 PR 模式有意義（要一起帶 --pr-branch／--pr-head／--pr-base）" >&2
   exit 2
 fi
 case "$PR_NUMBER" in
@@ -307,6 +323,9 @@ if [ "$CARRIER_MODE" = "prepare" ]; then
     echo "[claude-review-safe] 錯誤：prepare 只給 Claude Code 主線用（CLAUDE_CODE_SESSION_ID 為空）；叫不出 Claude subagent 的 runtime 改跑無子命令的 Herdr carrier" >&2
     exit 2
   fi
+  # shellcheck source=lib/review-subagent.sh
+  . "$SCRIPT_DIR/lib/review-subagent.sh"
+  review_subagent_check_loadable || exit 2
   # review-snapshot.ts run 在命令結束時刪快照；prepare 一返回樹就沒了，finalize 要 cd 回受審樹
   # 拍 after snapshot，必定失敗。subagent carrier 的隔離跑法只能是 create／remove 包住兩段。
   if [ -n "${CLADE_REVIEW_SNAPSHOT:-}" ] \
@@ -337,6 +356,8 @@ else
 fi
 PATTERNS_JSON="$REPO_ROOT/vendor/review-rules/patterns.json"
 MAX_DIFF_LINES="${CODEX_REVIEW_MAX_DIFF_LINES:-6000}"
+# 依據見下方「brief 總量上限」註解；lib/review-common.sh 的 dep 摘要上限計入此預算，所以在 source 前先解出。
+BRIEF_MAX_BYTES="${CLAUDE_REVIEW_BRIEF_MAX_BYTES:-358400}"
 
 # shellcheck source=lib/review-common.sh
 . "$SCRIPT_DIR/lib/review-common.sh"
@@ -379,7 +400,7 @@ INLINE_MAX_BYTES="${CLAUDE_REVIEW_INLINE_PROMPT_MAX_BYTES:-100000}"
 # 實測交付量上加約 7% headroom 的保守定值；超過此量級連「跑得完」的實證
 # 都沒有，維持 fail-closed。調高前需要能觀察壓縮的證據（例：child
 # transcript 無 compaction 事件，或 brief 檔尾埋 canary 要求回報）。
-BRIEF_MAX_BYTES="${CLAUDE_REVIEW_BRIEF_MAX_BYTES:-358400}"
+# BRIEF_MAX_BYTES 在上方 review_build_snapshot 之前就已解出（dep 摘要的 byte 上限要扣它）。
 BRIEF_MAX_LINE_CHARS="${CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS:-2000}"
 check_pos_int() {
   # check_pos_int <env-name> <resolved-value>；非正整數 → exit 2（本地用法錯誤）

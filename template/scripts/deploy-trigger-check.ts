@@ -158,6 +158,7 @@ interface JobInfo {
   name: string | null
   environment: string | null
   ifExpr: string | null
+  hasPermissions: boolean
 }
 
 /**
@@ -364,7 +365,10 @@ function parseJobs(raw: string): JobInfo[] {
     if (indent === jobIndent) {
       flush()
       const id = splitKey(line.trim())?.key ?? line.trim()
-      current = { info: { id, name: null, environment: null, ifExpr: null }, lines: [] }
+      current = {
+        info: { id, name: null, environment: null, ifExpr: null, hasPermissions: false },
+        lines: [],
+      }
     } else if (current) {
       current.lines.push(line)
     }
@@ -391,6 +395,7 @@ function fillJob(info: JobInfo, lines: string[]): JobInfo {
     }
     const inline = /^[|>][-+]?$/.test(kv.value) ? '' : kv.value
     if (kv.key === 'name') info.name = unquote(inline) || null
+    if (kv.key === 'permissions') info.hasPermissions = true
     if (kv.key === 'if') info.ifExpr = [inline, ...nested].join(' ').trim() || null
     if (kv.key === 'environment') {
       const envName = nested.map((l) => splitKey(l)).find((n) => n?.key === 'name')?.value
@@ -519,6 +524,34 @@ function listValues(node: Node, key: string): string[] | null {
   return out
 }
 
+/** Like `listValues`, but entries may hold spaces (`workflows: ['CI / Deploy']`): split on commas outside quotes. */
+function listValuesQuoted(node: Node, key: string): string[] | null {
+  const child = childNamed(node, key)
+  if (!child) return null
+  const out: string[] = []
+  const inline = stripLineComment(child.value)
+    .trim()
+    .replace(/^\[|\]$/g, '')
+  if (inline !== '') {
+    let quote: string | null = null
+    let start = 0
+    for (let i = 0; i <= inline.length; i++) {
+      const ch = inline[i]
+      if (quote) {
+        if (ch === quote) quote = null
+      } else if (ch === "'" || ch === '"') quote = ch
+      else if (ch === ',' || i === inline.length) {
+        const item = unquote(inline.slice(start, i).trim())
+        if (item) out.push(item)
+        start = i + 1
+      }
+    }
+  }
+  for (const item of child.children)
+    if (item.key === '-' && item.value) out.push(unquote(stripLineComment(item.value).trim()))
+  return out
+}
+
 // ── declared vs derived ──────────────────────────────────────────────────
 
 export type Verdict = 'confirmed-push-main' | 'needs-approval'
@@ -613,22 +646,588 @@ export function checkDeployTrigger(
 
 export type MainPushScope = 'staging-only' | 'production' | 'none'
 
+// ── capability-based main-push scope ─────────────────────────────────────
+//
+// Question: after this PR lands on the base branch, can a push there deploy
+// production? Names and keywords are claims, not capabilities (a neutral
+// `ci.yml` can run `wrangler deploy`; a deploy-named file can be tag-only), so
+// the verdict is read off what the workflow is *able* to do: GitHub Actions
+// cannot deploy without a credential, and a composite action sees no `secrets`
+// context, so the calling workflow's permissions and secrets bound the damage.
+// Everything fails closed — anything unreadable, dynamic or unlisted is
+// treated as production. Design record: specs/plans/W-2026-10-18-deploy-scope-ci-misclass/research.md.
+
+const SCOPE_RANK: Record<MainPushScope, number> = { none: 0, 'staging-only': 1, production: 2 }
+const maxScope = (a: MainPushScope, b: MainPushScope): MainPushScope =>
+  SCOPE_RANK[a] >= SCOPE_RANK[b] ? a : b
+
+/** Secrets that cannot deploy anything: the token itself and notification webhooks. */
+const BENIGN_SECRET_RE = /^(?:GITHUB_TOKEN|DISCORD_(?:[A-Z0-9_]*_)?WEBHOOK_URL)$/
+/** Write scopes that only touch PR metadata — not code, packages, pages, deployments or the OIDC token. */
+const SAFE_WRITE = new Set(['checks', 'statuses', 'pull-requests', 'issues'])
+const NONPROD_SEG_RE = /(?:^|_)(?:STAGING|PREVIEW|DEV|TEST|E2E)(?:_|$)/
+const PROD_SEG_RE = /(?:^|_)(?:PROD|PRODUCTION|LIVE)(?:_|$)/
+/** Narrower than NON_PROD_RE on purpose: `nightly` is a cadence, `canary` is live traffic, `example` is too broad. */
+const NONPROD_NAME_RE = /staging|preview|sandbox/i
+/** Platforms that deploy from a git integration — no workflow shows it. */
+const GIT_INTEGRATION_PLATFORMS = new Set(['vercel', 'netlify', 'cloudflare-pages'])
+const NON_PROD_HOST_ROLES = new Set(['dev', 'staging', 'preview', 'test'])
+
+const DEPLOY_CMD_RE = new RegExp(
+  [
+    String.raw`\bwrangler\s+(?:deploy|publish|pages\s+deploy|versions\s+upload|d1\b[^\n]*--remote)`,
+    String.raw`cloudflare/wrangler-action`,
+    String.raw`\bvercel\b[^\n]*--prod`,
+    String.raw`\bnetlify\s+deploy`,
+    String.raw`\b(?:flyctl|fly)\s+deploy`,
+    String.raw`\bfirebase\s+deploy`,
+    String.raw`\bsupabase\s+(?:db\s+push|functions\s+deploy|link|migration\s+up)`,
+    String.raw`actions/deploy-pages`,
+    String.raw`peaceiris/actions-gh-pages`,
+    String.raw`\bgh-pages\b`,
+    String.raw`\bkubectl\s+(?:apply|set\s+image|rollout)`,
+    String.raw`\bhelm\s+(?:upgrade|install)`,
+    String.raw`\bdocker\s+push`,
+    String.raw`\bdocker(?:\s+|-)compose\b[^\n]*\bup\b`,
+    String.raw`(?:^|[\s;&|(\`])(?:ssh|scp|rsync)\s`,
+    String.raw`appleboy/(?:ssh|scp)-action`,
+    String.raw`\bgh\s+workflow\s+run`,
+    String.raw`createWorkflowDispatch|/dispatches\b`,
+    String.raw`\bgit\s+push\b`,
+    String.raw`\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:deploy|release|publish)\b`,
+  ].join('|'),
+  'im',
+)
+
+export interface ScopeFile {
+  /** Repo-relative path (`.github/actions/x/action.yml`) or workflow basename. */
+  path: string
+  raw: string
+}
+
+/** The `deploy` block of `.claude/consumer-meta.json`, as far as the scope check reads it. */
+export interface DeclaredDeploy {
+  deployTrigger?: string | null
+  mainPushScope?: string | null
+  platform?: string | null
+  hosts?: { role?: string }[] | null
+}
+
+export interface MainPushScopeOptions {
+  /** `.github/actions/**` action files. Absent ⇒ any local `uses: ./.github/actions/…` is unreadable ⇒ production. */
+  actions?: ScopeFile[]
+  /** Base-tip `deploy` block: its declared values are a floor, never a ceiling. */
+  deploy?: DeclaredDeploy | null
+  /** false ⇒ report the workflows' own verdict (the CLI compares it to the declaration, so it must not include it). */
+  applyFloor?: boolean
+  /** Branch the PR merges into; unknown ⇒ both `main` and `master` are tried. */
+  branch?: string
+}
+
+/** A declaration can only raise the scope: the PR (or the consumer) cannot talk its way down. */
+export function declaredScopeFloor(deploy: DeclaredDeploy | null | undefined): MainPushScope {
+  if (!deploy) return 'none'
+  let floor: MainPushScope = 'none'
+  if (deploy.deployTrigger === 'push-main' || deploy.deployTrigger === 'pr-merge')
+    floor = 'production'
+  const declared = deploy.mainPushScope
+  if (declared === 'production' || declared === 'staging-only') floor = maxScope(floor, declared)
+  if (deploy.platform && GIT_INTEGRATION_PLATFORMS.has(deploy.platform)) floor = 'production'
+  return floor
+}
+
+/**
+ * `DEV_*`/`E2E_*` secrets only mean "not production" when a separate non-prod host exists; a
+ * single host shared by prod and dev (<consumer-d>) makes a `DEV_` name a label, not a boundary.
+ */
+function nonProdCredsTrusted(deploy: DeclaredDeploy | null | undefined): boolean {
+  return !!deploy?.hosts?.some((h) => h.role !== undefined && NON_PROD_HOST_ROLES.has(h.role))
+}
+
+function stripLineComment(line: string): string {
+  if (/^\s*#/.test(line)) return ''
+  let quote: string | null = null
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (quote) {
+      if (ch === quote) quote = null
+    } else if (ch === "'" || ch === '"') quote = ch
+    else if (ch === '#' && i > 0 && /\s/.test(line[i - 1])) return line.slice(0, i)
+  }
+  return line
+}
+
+/** For text scans only (keyword/command hits); capability scans read the raw text, comments included. */
+function stripComments(raw: string): string {
+  return raw.split('\n').map(stripLineComment).join('\n')
+}
+
+function workflowNameOf(file: string, raw: string): string {
+  const name = scalarAtRoot(raw, 'name')
+  return (name ? stripLineComment(name).trim() : '') || `.github/workflows/${file}`
+}
+
+// ── reachability: can a push to the base branch start this workflow? ─────
+
+function globToRegExp(pattern: string): RegExp | null {
+  let out = ''
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i]
+    if (ch === '*') {
+      if (pattern[i + 1] === '*') {
+        out += '.*'
+        i++
+      } else out += '[^/]*'
+    } else if (ch === '?' || ch === '+') out += ch
+    else if (ch === '[') {
+      const end = pattern.indexOf(']', i + 1)
+      if (end === -1) return null
+      out += pattern.slice(i, end + 1)
+      i = end
+    } else out += ch.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
+  }
+  try {
+    return new RegExp(`^${out}$`)
+  } catch {
+    return null
+  }
+}
+
+/** GitHub filter semantics: patterns in order, a later `!` pattern excludes, a later plain one re-includes. */
+function filterAdmits(patterns: string[], candidate: string): boolean | null {
+  let admitted = false
+  for (const p of patterns) {
+    const negated = p.startsWith('!')
+    const re = globToRegExp(negated ? p.slice(1) : p)
+    if (!re) return null
+    if (re.test(candidate)) admitted = !negated
+  }
+  return admitted
+}
+
+/** Does a `branches`/`branches-ignore` pair admit the branch? Unreadable ⇒ true. */
+function branchesAdmit(node: Node, candidates: string[]): boolean {
+  const branches = listValues(node, 'branches')
+  const ignore = listValues(node, 'branches-ignore')
+  if ((branches !== null && branches.length === 0) || (ignore !== null && ignore.length === 0))
+    return true
+  if (branches === null && ignore === null) return true
+  return candidates.some((c) => {
+    if (branches !== null) return filterAdmits(branches, c) !== false
+    return filterAdmits(ignore ?? [], c) !== true
+  })
+}
+
+interface WorkflowReach {
+  /** Starts on a branch push (or another event a merge can cause) without any other workflow running first. */
+  direct: boolean
+  /** `workflow_run` upstream names, when the only way in is a chained run on this branch. */
+  upstream: string[] | null
+}
+
+const ALWAYS_REACHABLE_EVENTS = [
+  'check_suite',
+  'check_run',
+  'status',
+  'deployment',
+  'deployment_status',
+  'repository_dispatch',
+]
+
+function workflowReach(raw: string, candidates: string[]): WorkflowReach {
+  const on = findOnNode(raw)
+  // A trigger block this parser cannot read must not read as "never fires".
+  const flowMap = (v: string) => /\{\s*[^}\s]/.test(v) // `{}` (no filters) is fine; `{ branches: … }` is not parsed
+  if (!on || flowMap(on.value) || on.children.some((c) => flowMap(c.value)))
+    return { direct: true, upstream: null }
+  const events = eventNames(on)
+  let direct = ALWAYS_REACHABLE_EVENTS.some((e) => events.has(e))
+
+  if (events.has('push')) {
+    const push = childNamed(on, 'push')
+    const filtered = !!push && (hasChild(push, 'branches') || hasChild(push, 'branches-ignore'))
+    const tagsOnly =
+      !!push && !filtered && (hasChild(push, 'tags') || hasChild(push, 'tags-ignore'))
+    if (!tagsOnly && (!push || !filtered || branchesAdmit(push, candidates))) direct = true
+  }
+
+  // A merged PR fires `pull_request: closed` workflows just as a push does.
+  for (const key of ['pull_request', 'pull_request_target']) {
+    const pr = childNamed(on, key)
+    const types = pr ? listValues(pr, 'types') : null
+    if (types?.includes('closed')) direct = true
+  }
+
+  let upstream: string[] | null = null
+  if (events.has('workflow_run')) {
+    const wr = childNamed(on, 'workflow_run')
+    const names = wr ? listValuesQuoted(wr, 'workflows') : null
+    if (!wr || !names || names.length === 0) direct = true
+    else if (branchesAdmit(wr, candidates)) upstream = names
+  }
+  return { direct, upstream }
+}
+
+/** Least fixed point: a chained `workflow_run` is reachable only when its upstream is. */
+function reachableWorkflows(files: { file: string; raw: string }[], candidates: string[]) {
+  const reach = files.map((f) => workflowReach(f.raw, candidates))
+  const names = files.map((f) => workflowNameOf(f.file, f.raw))
+  const reachable = reach.map((r) => r.direct)
+  for (let changed = true; changed;) {
+    changed = false
+    reach.forEach((r, i) => {
+      if (reachable[i] || !r.upstream) return
+      const unknownUpstream = r.upstream.some((u) => !names.includes(u))
+      const upstreamReachable = r.upstream.some((u) =>
+        names.some((n, j) => n === u && reachable[j]),
+      )
+      if (unknownUpstream || upstreamReachable) {
+        reachable[i] = true
+        changed = true
+      }
+    })
+  }
+  return files.filter((_, i) => reachable[i])
+}
+
+// ── closure: the workflow plus everything it calls from this tree ────────
+
+const LOCAL_USES_RE = /^\s*(?:-\s+)?uses:\s*['"]?(\.[^\s'"#]*)/gm
+
+function closureOf(
+  wf: { file: string; raw: string },
+  files: { file: string; raw: string }[],
+  actions: ScopeFile[],
+): { text: string; unreadable: boolean } {
+  const seen = new Set<string>([`.github/workflows/${wf.file}`])
+  const parts = [wf.raw]
+  let unreadable = false
+  const queue = [wf.raw]
+  while (queue.length > 0) {
+    const raw = queue.pop() ?? ''
+    for (const m of raw.matchAll(LOCAL_USES_RE)) {
+      const target = m[1].replace(/^\.\//, '').replace(/\/+$/, '')
+      if (seen.has(target)) continue
+      seen.add(target)
+      let found: string | undefined
+      if (target.startsWith('.github/workflows/'))
+        found = files.find((f) => `.github/workflows/${f.file}` === target)?.raw
+      else if (target.startsWith('.github/actions/'))
+        found = actions.find(
+          (a) => a.path === `${target}/action.yml` || a.path === `${target}/action.yaml`,
+        )?.raw
+      if (found === undefined) unreadable = true
+      else {
+        parts.push(found)
+        queue.push(found)
+      }
+    }
+  }
+  return { text: parts.join('\n'), unreadable }
+}
+
+// ── capability facts, read off raw text (comments included: errors go strict) ─
+
+function secretNames(text: string): { names: Set<string>; dynamic: boolean } {
+  const names = new Set<string>()
+  for (const m of text.matchAll(/\bsecrets\.([A-Za-z_][A-Za-z0-9_]*)/g)) names.add(m[1])
+  const dynamic =
+    /\bsecrets\s*\[|toJSON\(\s*secrets\s*\)|^\s*secrets:\s*inherit\b|\bsecrets\s*(?:\}\}|[|&,)])/m.test(
+      text,
+    )
+  return { names, dynamic }
+}
+
+/** True when any `permissions:` block grants something a push-triggered run could deploy with. */
+function permissionsEscalate(text: string): boolean {
+  const lines = text.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^(\s*)permissions:\s*(.*)$/.exec(stripLineComment(lines[i]))
+    if (!m) continue
+    const inline = m[2].trim()
+    const grants: [string, string][] = []
+    if (inline === 'write-all') return true
+    if (inline === 'read-all' || inline === '{}') continue
+    if (inline.startsWith('{')) {
+      for (const pair of inline.replace(/[{}]/g, '').split(',')) {
+        const kv = splitKey(pair.trim())
+        if (kv) grants.push([kv.key, kv.value])
+      }
+    } else if (inline !== '') return true
+    else {
+      for (let j = i + 1; j < lines.length; j++) {
+        const next = stripLineComment(lines[j])
+        if (next.trim() === '') continue
+        if (next.length - next.trimStart().length <= m[1].length) break
+        const kv = splitKey(next.trim())
+        if (kv) grants.push([kv.key, kv.value])
+      }
+    }
+    for (const [scope, level] of grants) {
+      if (level === 'read' || level === 'none') continue
+      if (level === 'write' && SAFE_WRITE.has(scope)) continue
+      return true
+    }
+  }
+  return false
+}
+
+/** Every `environment:` in the closure: static literal name, or null when dynamic or unreadable. */
+function environmentsOf(text: string): (string | null)[] {
+  const lines = text.split('\n')
+  const out: (string | null)[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^(\s*)(?:-\s+)?environment:\s*(.*)$/.exec(stripLineComment(lines[i]))
+    if (!m) continue
+    let value = m[2].trim()
+    if (value === '') {
+      for (let j = i + 1; j < lines.length; j++) {
+        const next = stripLineComment(lines[j])
+        if (next.trim() === '') continue
+        if (next.length - next.trimStart().length <= m[1].length) break
+        const kv = splitKey(next.trim())
+        if (kv?.key === 'name') value = kv.value
+      }
+    }
+    value = unquote(value)
+    out.push(value === '' || value.includes('${{') || /^[{[]/.test(value) ? null : value)
+  }
+  return out
+}
+
+/**
+ * GitHub-hosted runner images: fresh VMs with no standing credentials. An explicit list, not a
+ * `ubuntu-*` prefix: a self-hosted runner registered as `ubuntu-prod` would match the prefix and
+ * still be a persistent host.
+ */
+const HOSTED_RUNNER_RE =
+  /^(?:ubuntu-(?:latest|slim|\d{2}\.\d{2})(?:-arm)?|windows-(?:latest|11-arm|\d{4}(?:-vs\d{4})?)|macos-(?:latest|\d{2})(?:-(?:intel|large|xlarge))?)$/
+/** Labels of the ephemeral CI runner pool (docs/golden-paths/self-hosted-ci-runners.md): JIT runners, no standing prod credentials. */
+const CI_POOL_LABELS = new Set(['ci-build', 'gh-runner-lxc'])
+/** Persistent hosts that run the real database/service (`docker exec supabase-db`, `pm2`, `systemctl`). */
+// Add a new persistent host's label here, or staging-named workflows on it are not held to the strict host-command check.
+const PERSISTENT_HOST_LABELS = new Set(['supabase'])
+/**
+ * Labels that exclude every persistent host: GitHub schedules a job on any runner whose labels
+ * include the job's labels, so `[self-hosted, Linux, X64]` can land on the `supabase` box. Only a
+ * label no persistent host carries (the <client-a> shared pool's `<client-a>-selfhosted`) rules it out.
+ */
+// Add a label here only after confirming no persistent host registers it (docs/golden-paths/self-hosted-ci-runners.md).
+const NON_PERSISTENT_LABELS = new Set(['<client-a>-selfhosted'])
+
+/**
+ * Host-side commands that act on whatever runs on the runner's own host (the production service
+ * and database on a persistent self-hosted box). Harmless on a fresh VM, a deploy on a shared host.
+ */
+const SERVICE_CTL_CMD_SRC = [
+  String.raw`\bpm2\s+(?:reload|restart|start|stop|delete|deploy)`,
+  String.raw`\bsystemctl\s+(?:restart|reload|start|stop|enable)`,
+  String.raw`\bservice\s+\S+\s+(?:restart|reload|start|stop)`,
+]
+/** Service control on the runner's own host: a deploy wherever it runs, not a test. */
+const SERVICE_CTL_CMD_RE = new RegExp(SERVICE_CTL_CMD_SRC.join('|'), 'im')
+const HOST_CMD_RE = new RegExp(
+  [
+    ...SERVICE_CTL_CMD_SRC,
+    String.raw`\bdocker(?:\s+compose|-compose)?\s+(?:exec|restart|start|stop|rm|run)\b`,
+    String.raw`\bpsql\b`,
+  ].join('|'),
+  'im',
+)
+
+/**
+ * Where the closure's jobs run. `credential-free`: every `runs-on:` is a GitHub-hosted image or
+ * the ephemeral CI pool. `dynamic`: some `runs-on:` is an expression or empty — the runner (and so
+ * the reach) is unknown. `shared`: a static label set outside the credential-free set — bare
+ * `self-hosted`, the persistent `supabase` host, custom labels, `group:` — that host may already
+ * hold production credentials (`~/.ssh`, docker socket, a logged-in CLI) and may be the very box
+ * the production deploy runs on.
+ */
+type RunnerClass = 'credential-free' | 'shared' | 'dynamic'
+
+/** The label tokens of every `runs-on:` in the text, one list per occurrence. */
+function runsOnTokens(text: string): string[][] {
+  const lines = text.split('\n')
+  const out: string[][] = []
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^(\s*)(?:-\s+)?runs-on:\s*(.*)$/.exec(stripLineComment(lines[i]))
+    if (!m) continue
+    const parts = [m[2]]
+    for (let j = i + 1; j < lines.length; j++) {
+      const next = stripLineComment(lines[j])
+      if (next.trim() === '') continue
+      if (next.length - next.trimStart().length <= m[1].length) break
+      parts.push(next.trim())
+    }
+    out.push(
+      parts
+        .join(' ')
+        .replace(/[[\],'"]/g, ' ')
+        .split(/\s+/)
+        .filter((t) => t !== '' && t !== '-'),
+    )
+  }
+  return out
+}
+
+function isPoolRunner(tokens: string[]): boolean {
+  return (
+    tokens.includes('self-hosted') &&
+    tokens.some((t) => CI_POOL_LABELS.has(t)) &&
+    !tokens.some((t) => PERSISTENT_HOST_LABELS.has(t))
+  )
+}
+
+/**
+ * Some job may run on a persistent host that holds the real database/service. Fail closed: a label
+ * set that does not rule the host out (bare `self-hosted`, `[self-hosted, Linux, X64]`, a custom
+ * label) can be scheduled onto it, so it counts as persistent.
+ */
+function onPersistentHost(text: string): boolean {
+  return runsOnTokens(text).some((tokens) => {
+    if (tokens.length > 0 && tokens.every((t) => HOSTED_RUNNER_RE.test(t))) return false
+    if (tokens.some((t) => PERSISTENT_HOST_LABELS.has(t))) return true
+    if (isPoolRunner(tokens)) return false
+    return !tokens.some((t) => NON_PERSISTENT_LABELS.has(t))
+  })
+}
+
+function runnerClass(text: string): RunnerClass {
+  let cls: RunnerClass = 'credential-free'
+  for (const tokens of runsOnTokens(text)) {
+    if (tokens.length === 0 || tokens.some((t) => t.includes('$'))) return 'dynamic'
+    if (tokens.every((t) => HOSTED_RUNNER_RE.test(t))) continue
+    if (!isPoolRunner(tokens)) cls = 'shared'
+  }
+  return cls
+}
+
+/** One workflow's main-push verdict, the criterion that decided it, and the runner-sharing risk. */
+export interface WorkflowScopeVerdict {
+  file: string
+  /** Deploy-trigger scope: what a main push makes this workflow deploy. The only input to the merge gates. */
+  scope: MainPushScope
+  /** The criterion that decided `scope` (named so a declaration conflict can point at it). */
+  basis: string
+  /**
+   * A non-production verdict whose jobs run on a persistent/shared self-hosted runner: the job does not
+   * deploy production, but the host it runs on may hold production credentials. Runner isolation is a
+   * separate fix; this flag never raises `scope`.
+   */
+  runnerSharedWithProduction: boolean
+}
+
+function workflowScope(
+  wf: { file: string; raw: string },
+  files: { file: string; raw: string }[],
+  actions: ScopeFile[],
+  trustNonProdCreds: boolean,
+): Omit<WorkflowScopeVerdict, 'file'> {
+  const { text, unreadable } = closureOf(wf, files, actions)
+  const runner = runnerClass(text)
+  const verdict = (scope: MainPushScope, basis: string) => ({
+    scope,
+    basis,
+    runnerSharedWithProduction: scope !== 'production' && runner === 'shared',
+  })
+  if (unreadable) return verdict('production', 'local uses: target unreadable')
+  // An expression `runs-on:` can pick any runner, the production host included: no verdict below holds.
+  if (runner === 'dynamic') return verdict('production', 'dynamic or empty runs-on')
+  const plain = stripComments(text)
+  const cmd = DEPLOY_CMD_RE.test(plain)
+  const word = DEPLOY_RE.test(plain)
+  // On a shared host, service/database commands act on what that host runs — possibly production.
+  const hostCmd = runner === 'shared' && HOST_CMD_RE.test(plain)
+  // Staging name and non-prod secrets do not downgrade a deploy on the real host: service control
+  // anywhere on a shared runner, and any host command (docker exec, psql, docker run --network host)
+  // on a runner that may be a persistent host (labels that do not rule it out). Whether a container
+  // or socket is a throwaway CI one cannot be read reliably from shell text, so no command-shape
+  // guess: a workflow that wants `staging-only` with such commands pins its runner away from the
+  // persistent host (`<client-a>-selfhosted`), where `runnerSharedWithProduction` carries the risk.
+  const hostBlocksStaging =
+    runner === 'shared' &&
+    (SERVICE_CTL_CMD_RE.test(plain) || (onPersistentHost(text) && HOST_CMD_RE.test(plain)))
+  const { names, dynamic } = secretNames(text)
+  const envs = environmentsOf(text)
+  const envProd = envs.some((e) => e === null || !NONPROD_NAME_RE.test(e))
+
+  const jobs = parseJobs(wf.raw)
+  const declared =
+    /^permissions:/m.test(wf.raw) || (jobs.length > 0 && jobs.every((j) => j.hasPermissions))
+  const tokenSafe = !dynamic && !permissionsEscalate(text)
+  const benignOnly = [...names].every((n) => BENIGN_SECRET_RE.test(n))
+  const nonProdOnly = [...names].every(
+    (n) => BENIGN_SECRET_RE.test(n) || (NONPROD_SEG_RE.test(n) && !PROD_SEG_RE.test(n)),
+  )
+  const inert = tokenSafe && declared && benignOnly && envs.length === 0
+  const tokenOnly = tokenSafe && !declared && benignOnly && envs.length === 0
+  const nonProdCred = tokenSafe && trustNonProdCreds && nonProdOnly
+
+  if (inert && !cmd && !hostCmd)
+    return verdict('none', 'read-only token, no secrets, no deploy command')
+
+  const stagingByName = NONPROD_NAME_RE.test(`${wf.file} ${scalarAtRoot(wf.raw, 'name') ?? ''}`)
+  const staging =
+    stagingByName &&
+    !hostBlocksStaging &&
+    !envProd &&
+    !dynamic &&
+    nonProdOnly &&
+    // The file's own text only: composite actions shared with the production workflow
+    // legitimately say "production" (descriptions, case labels); their credentials are
+    // already bounded by the closure-wide secret/environment checks above.
+    !/\b(?:prod|production|live)\b/i.test(stripComments(wf.raw)) &&
+    !/\b(?:deployments|pages):\s*write\b/.test(text)
+  if (staging) return verdict('staging-only', 'staging name, non-prod secrets/environment only')
+  if (envProd) return verdict('production', 'environment: production (or dynamic environment)')
+  if ((tokenOnly || nonProdCred) && !cmd && !word && !hostCmd)
+    return verdict(
+      'none',
+      nonProdCred
+        ? 'non-prod secrets only, no deploy command'
+        : 'token only, no deploy command or word',
+    )
+  const why = [
+    dynamic && 'dynamic secrets',
+    !tokenSafe && !dynamic && 'permissions escalate',
+    !nonProdOnly && `secrets ${[...names].filter((n) => !BENIGN_SECRET_RE.test(n)).join(',')}`,
+    nonProdOnly &&
+      !benignOnly &&
+      !trustNonProdCreds &&
+      'non-prod secrets without a declared non-prod host',
+    cmd && 'deploy command',
+    hostCmd && 'host service/database command on a shared runner',
+    !cmd && word && 'deploy/release/publish word',
+  ].filter(Boolean)
+  return verdict('production', why.join('; ') || 'no non-production criterion matched')
+}
+
+/**
+ * Main-push deploy scope of a workflow set: the worst verdict among the workflows a push to
+ * the base branch can reach, raised to the declared floor. `files` are `.github/workflows/*`
+ * basenames; pass the tree's `.github/actions/**` action files in `opts.actions`.
+ */
 export function deriveMainPushScope(
   files: { file: string; raw: string }[],
-): MainPushScope | 'unknown' {
-  let stagingMain = false
-  let productionMain = false
-  for (const wf of files) {
-    if (!DEPLOY_RE.test(wf.file) && !DEPLOY_RE.test(wf.raw.slice(0, 400))) continue
-    const classes = classifyWorkflowTriggers(wf.raw)
-    if (!classes.includes('push-main')) continue
-    if (NON_PROD_RE.test(wf.file) || NON_PROD_RE.test(wf.raw.slice(0, 400))) stagingMain = true
-    else productionMain = true
-  }
-  if (productionMain && stagingMain) return 'production'
-  if (productionMain) return 'production'
-  if (stagingMain) return 'staging-only'
-  return 'none'
+  opts: MainPushScopeOptions = {},
+): MainPushScope {
+  let scope: MainPushScope = opts.applyFloor === false ? 'none' : declaredScopeFloor(opts.deploy)
+  for (const r of reachableScopes(files, opts)) scope = maxScope(scope, r.scope)
+  return scope
+}
+
+/** Per-workflow verdicts for the workflows a push can reach — what `deriveMainPushScope` takes the max of. */
+export function reachableScopes(
+  files: { file: string; raw: string }[],
+  opts: MainPushScopeOptions = {},
+): WorkflowScopeVerdict[] {
+  const candidates = opts.branch ? [opts.branch] : [...MAIN_BRANCHES]
+  const actions = opts.actions ?? []
+  const trust = nonProdCredsTrusted(opts.deploy)
+  return reachableWorkflows(files, candidates).map((wf) => ({
+    file: wf.file,
+    ...workflowScope(wf, files, actions, trust),
+  }))
 }
 
 /** deploy-trigger 判定用的同步 git runner（測試注入）。 */
@@ -648,17 +1247,62 @@ function workflowsAtRef(
   ref: string,
   git: DeployScopeGit,
 ): { file: string; raw: string }[] | null {
-  const list = git(repoDir, ['ls-tree', '-r', '--name-only', ref, '--', '.github/workflows'])
+  const list = git(repoDir, ['ls-tree', '-r', '--name-only', '-z', ref, '--', '.github/workflows'])
   if (list.status !== 0) return null
   const files: { file: string; raw: string }[] = []
-  for (const path of list.stdout
-    .split('\n')
-    .map((x) => x.trim())
-    .filter((x) => /\.ya?ml$/u.test(x))) {
+  for (const path of list.stdout.split('\0').filter((x) => /\.ya?ml$/u.test(x))) {
     const raw = git(repoDir, ['show', `${ref}:${path}`])
     if (raw.status === 0) files.push({ file: path.split('/').pop() ?? path, raw: raw.stdout })
   }
   return files
+}
+
+/** `git ls-tree -r --name-only <ref> -- .github/actions`＋`git show`：只收 action.yml／action.yaml；讀不到 → null。 */
+function actionsAtRef(repoDir: string, ref: string, git: DeployScopeGit): ScopeFile[] | null {
+  const list = git(repoDir, ['ls-tree', '-r', '--name-only', '-z', ref, '--', '.github/actions'])
+  if (list.status !== 0) return null
+  const out: ScopeFile[] = []
+  for (const path of list.stdout.split('\0').filter((x) => /(?:^|\/)action\.ya?ml$/u.test(x))) {
+    const raw = git(repoDir, ['show', `${ref}:${path}`])
+    if (raw.status !== 0) return null
+    out.push({ path, raw: raw.stdout })
+  }
+  return out
+}
+
+/** `.github/workflows`＋`.github/actions` 兩棵子樹的 tree entry（內容變動 ⇒ oid 變動）；讀不到 → null。 */
+function githubSubtrees(repoDir: string, ref: string, git: DeployScopeGit): string | null {
+  // git-path-z-exempt: 只比對兩個固定 ASCII 子樹 entry（含 tree oid）的整份輸出是否相等，從不拆路徑
+  const r = git(repoDir, ['ls-tree', ref, '--', '.github/workflows', '.github/actions'])
+  return r.status === 0 ? r.stdout.trim() : null
+}
+
+/** base tip 的 `.claude/consumer-meta.json` 的 `deploy` 區塊：沒有這個檔 → null；讀得到卻壞掉 → 'unreadable'。 */
+function baseDeployAt(
+  repoDir: string,
+  ref: string,
+  git: DeployScopeGit,
+): DeclaredDeploy | null | 'unreadable' {
+  const probe = git(repoDir, [
+    'ls-tree',
+    '--name-only',
+    '-z',
+    ref,
+    '--',
+    '.claude/consumer-meta.json',
+  ])
+  if (probe.status !== 0) return 'unreadable'
+  if (probe.stdout.trim() === '') return null
+  const raw = git(repoDir, ['show', `${ref}:.claude/consumer-meta.json`])
+  if (raw.status !== 0) return 'unreadable'
+  try {
+    const meta: unknown = JSON.parse(raw.stdout)
+    const deploy =
+      meta !== null && typeof meta === 'object' ? (meta as { deploy?: unknown }).deploy : undefined
+    return deploy !== null && typeof deploy === 'object' ? (deploy as DeclaredDeploy) : null
+  } catch {
+    return 'unreadable'
+  }
 }
 
 /** `git ls-remote origin <ref>` 的 tip oid；多行時只認 ref 完全相符那行（`refs/heads/a` 會命中 `refs/heads/a/b` 的前綴）。 */
@@ -686,6 +1330,14 @@ export interface MergedTreeWorkflows {
   files: { file: string; raw: string }[] | null
   /** files 為 null 時的原因；讀到時為 null。 */
   failure: MergedTreeFailure | null
+  /** 合併樹 `.github/actions/**` 的 action 檔（composite action 的內部是 deploy 能力判定的一部分）。 */
+  actions: ScopeFile[]
+  /** 合併樹的 `.github/workflows`／`.github/actions` 子樹跟 base tip 不同（PR 改了 CI 本身）。 */
+  githubChanged: boolean
+  /** base tip 的 consumer-meta `deploy`（宣告值只能當下限）；沒有檔 → null、壞檔 → 'unreadable'。 */
+  baseDeploy: DeclaredDeploy | null | 'unreadable'
+  /** PR 的 base branch（可達性判定用）。 */
+  baseRef: string | undefined
 }
 
 /**
@@ -731,10 +1383,29 @@ export function mergedTreeWorkflows(
   baseRef: string | undefined,
   git: DeployScopeGit,
 ): MergedTreeWorkflows {
-  const fail = (failure: MergedTreeFailure): MergedTreeWorkflows => ({ files: null, failure })
-  const read = (ref: string): MergedTreeWorkflows => {
+  const fail = (failure: MergedTreeFailure): MergedTreeWorkflows => ({
+    files: null,
+    failure,
+    actions: [],
+    githubChanged: false,
+    baseDeploy: null,
+    baseRef,
+  })
+  const read = (ref: string, baseTip: string): MergedTreeWorkflows => {
     const files = workflowsAtRef(repoDir, ref, git)
-    return files === null ? fail('unreadable') : { files, failure: null }
+    const actions = actionsAtRef(repoDir, ref, git)
+    const merged = githubSubtrees(repoDir, ref, git)
+    const base = githubSubtrees(repoDir, baseTip, git)
+    if (files === null || actions === null || merged === null || base === null)
+      return fail('unreadable')
+    return {
+      files,
+      failure: null,
+      actions,
+      githubChanged: merged !== base,
+      baseDeploy: baseDeployAt(repoDir, baseTip, git),
+      baseRef,
+    }
   }
   if (!baseRef) return fail('unreadable')
   if (git(repoDir, ['fetch', '-q', 'origin', `refs/pull/${pr}/merge`]).status !== 0)
@@ -746,24 +1417,88 @@ export function mergedTreeWorkflows(
     return fail('unreadable')
   const baseTip = remoteRefTip(repoDir, `refs/heads/${baseRef}`, git)
   if (!baseTip) return fail('unreadable')
-  if (parentOids.find((p) => p !== headOid) === baseTip) return read(mergeOid)
+  if (parentOids.find((p) => p !== headOid) === baseTip) return read(mergeOid, baseTip)
   const treeOid = localMergedTreeOid(repoDir, pr, headOid, baseRef, baseTip, git)
-  return treeOid === null ? fail('stale-merge-failed') : read(treeOid)
+  return treeOid === null ? fail('stale-merge-failed') : read(treeOid, baseTip)
+}
+
+/** 合併樹的判定值：多出兩種維持人工的結果——'unknown'（讀不到）與 'workflow-changed'（PR 改了 CI 本身）。 */
+export type MergedTreeScope = MainPushScope | 'unknown' | 'workflow-changed'
+
+/**
+ * 合併樹 → main push deploy 範圍（merge-queue 與 PR 分診共用同一份判定）。順序是 fail-closed 的：
+ * workflows 讀不到或是空的 → 'unknown'；PR 改了 `.github/workflows`／`.github/actions` →
+ * 'workflow-changed'（判定吃的是合併樹，PR 能同時改動 CI 與判定的輸入，改動本身要人看）；base tip 的
+ * consumer-meta 壞掉 → 'unknown'；其餘走能力判定，宣告值只當下限。
+ */
+export function scopeOfMergedTree(merged: MergedTreeWorkflows): MergedTreeScope {
+  if (!merged.files?.length) return 'unknown'
+  if (merged.githubChanged) return 'workflow-changed'
+  if (merged.baseDeploy === 'unreadable') return 'unknown'
+  return deriveMainPushScope(merged.files, {
+    actions: merged.actions,
+    deploy: merged.baseDeploy,
+    branch: merged.baseRef,
+  })
 }
 
 /**
- * 單張 PR 合進 main 之後的 main push deploy 範圍（merge-queue 與 PR 分診共用同一份判定）：
- * workflows 讀不到或是空的 → 'unknown'，呼叫端維持人工。
+ * `scopeOfMergedTree` 的判據明細（給分診資訊列）：判 production 的 workflow 與判據，以及
+ * 不部署正式機但跑在與正式機共用 runner 上的 workflow。合併樹不走能力判定（unknown／workflow-changed）時兩者皆空。
  */
+export function mergedTreeScopeDetail(merged: MergedTreeWorkflows): {
+  production: { file: string; basis: string }[]
+  runnerShared: string[]
+} {
+  if (!merged.files?.length || merged.githubChanged || merged.baseDeploy === 'unreadable')
+    return { production: [], runnerShared: [] }
+  const verdicts = reachableScopes(merged.files, {
+    actions: merged.actions,
+    deploy: merged.baseDeploy,
+    branch: merged.baseRef,
+  })
+  return {
+    production: verdicts
+      .filter((v) => v.scope === 'production')
+      .map(({ file, basis }) => ({ file, basis })),
+    runnerShared: verdicts.filter((v) => v.runnerSharedWithProduction).map((v) => v.file),
+  }
+}
+
+/** 單張 PR 合進 main 之後的 main push deploy 範圍（讀合併樹＋`scopeOfMergedTree`）。 */
 export function mergedTreeMainPushScope(
   repoDir: string,
   pr: number,
   headOid: string,
   baseRef: string | undefined,
   git: DeployScopeGit = defaultDeployGit,
-): MainPushScope | 'unknown' {
-  const { files } = mergedTreeWorkflows(repoDir, pr, headOid, baseRef, git)
-  return files?.length ? deriveMainPushScope(files) : 'unknown'
+): MergedTreeScope {
+  return scopeOfMergedTree(mergedTreeWorkflows(repoDir, pr, headOid, baseRef, git))
+}
+
+/**
+ * Declared `mainPushScope` vs the workflows' own verdict: null when they agree (or nothing is declared);
+ * otherwise the workflows whose verdict exceeds the declaration (derived higher) or, when derived is lower,
+ * every reachable workflow — so the output names the file and the criterion behind the disagreement.
+ */
+export function mainPushScopeConflict(
+  declared: string | null,
+  derived: MainPushScope,
+  workflows: WorkflowScopeVerdict[],
+): {
+  declared: string
+  derived: MainPushScope
+  workflows: { file: string; scope: MainPushScope; basis: string }[]
+} | null {
+  if (declared !== 'none' && declared !== 'staging-only' && declared !== 'production') return null
+  if (declared === derived) return null
+  const above = workflows.filter((w) => SCOPE_RANK[w.scope] > SCOPE_RANK[declared])
+  const cited = above.length > 0 ? above : workflows
+  return {
+    declared,
+    derived,
+    workflows: cited.map(({ file, scope, basis }) => ({ file, scope, basis })),
+  }
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────
@@ -788,12 +1523,14 @@ async function main(argv: string[]) {
 
   let declared: string | null = null
   let declaredMainPushScope: string | null = null
+  let declaredDeploy: DeclaredDeploy | null = null
   const metaPath = join(repo, '.claude/consumer-meta.json')
   if (existsSync(metaPath)) {
     try {
       const meta = JSON.parse(readFileSync(metaPath, 'utf8'))
       declared = meta?.deploy?.deployTrigger ?? null
       declaredMainPushScope = meta?.deploy?.mainPushScope ?? null
+      declaredDeploy = meta?.deploy ?? null
     } catch {
       declared = null
     }
@@ -812,12 +1549,45 @@ async function main(argv: string[]) {
     }
   }
 
+  const actions: ScopeFile[] = []
+  const walk = (rel: string) => {
+    const abs = join(repo, rel)
+    if (!existsSync(abs)) return
+    for (const entry of readdirSync(abs, { withFileTypes: true })) {
+      const child = `${rel}/${entry.name}`
+      if (entry.isDirectory()) walk(child)
+      else if (/^action\.ya?ml$/.test(entry.name)) {
+        try {
+          actions.push({ path: child, raw: readFileSync(join(repo, child), 'utf8') })
+        } catch {
+          // unreadable action — a workflow that uses it then reads as production
+        }
+      }
+    }
+  }
+  walk('.github/actions')
+
   const check = checkDeployTrigger(declared, deriveDeployTrigger(files))
-  const mainPushScope = deriveMainPushScope(files)
+  const scopeOpts = { actions, deploy: declaredDeploy, applyFloor: false } as const
+  const mainPushScope = deriveMainPushScope(files, scopeOpts)
+  const workflows = reachableScopes(files, scopeOpts)
+  const runnerShared = workflows.filter((w) => w.runnerSharedWithProduction).map((w) => w.file)
+  const conflict = mainPushScopeConflict(declaredMainPushScope, mainPushScope, workflows)
 
   if (asJson) {
     process.stdout.write(
-      `${JSON.stringify({ ...check, declaredMainPushScope, derivedMainPushScope: mainPushScope }, null, 2)}\n`,
+      `${JSON.stringify(
+        {
+          ...check,
+          declaredMainPushScope,
+          derivedMainPushScope: mainPushScope,
+          runnerSharedWithProduction: runnerShared,
+          mainPushScopeConflict: conflict,
+          mainPushWorkflows: workflows,
+        },
+        null,
+        2,
+      )}\n`,
     )
   } else {
     process.stdout.write(
@@ -827,7 +1597,12 @@ async function main(argv: string[]) {
         `status=${check.status}\n` +
         `detail=${check.detail}\n` +
         `declaredMainPushScope=${declaredMainPushScope ?? 'undeclared'}\n` +
-        `derivedMainPushScope=${mainPushScope}\n`,
+        `derivedMainPushScope=${mainPushScope}\n` +
+        `runnerSharedWithProduction=${runnerShared.join(',') || 'none'}\n` +
+        workflows.map((w) => `workflow ${w.file}: ${w.scope} (${w.basis})\n`).join('') +
+        (conflict
+          ? `mainPushScopeConflict: declared ${conflict.declared}, derived ${conflict.derived} — ${conflict.workflows.map((w) => `${w.file} (${w.basis})`).join('; ')}\n`
+          : ''),
     )
   }
 

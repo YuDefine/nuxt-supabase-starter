@@ -3,7 +3,7 @@ description: Consumer dev server port 中央分配 + audit（避免跨 consumer 
 paths: ['package.json', 'nuxt.config.ts', 'registry/consumers.json', 'registry/consumers.schema.json']
 ---
 <!-- Clade native rule; source: rules/core/dev-port-allocation.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Dev Port 中央分配
 
@@ -92,6 +92,8 @@ Dev port 由 clade 集中分配：registry 分配、規約強制宣告、audit �
 1. **base 池** `[1, 9]` —— registry 把各 base 排成 +10 間距，中間這 9 個號碼天然屬於它
 2. **worktree band** —— registry `dev_ports.worktree_band`，4200–4899 區每個 consumer 各 50 個號碼
 
+band 的讀取來源是 **clade home 的 `registry/consumers.json`**（`readRegistryWorktreeBand`），投影到 consumer 的 `.clade/registry/consumers.json` 只在 clade home 不在這台機器時當退路——複本會過期、public repo 也沒有複本，NEVER 為了讓 consumer 讀得到 band 而投影整份名冊（TD-274）。`batch prepare` 預設**不**在 bootstrap 配 dev-port（`wt-helper dev` 首跑才配、格滿 fail-loud）；批次真的要起 dev server 才帶 `--needs-dev-server`，此時配不到就 fail-closed。
+
 band 存在是為了讓「分不到號碼就退回 base port」永遠不必發生——退回的 dev server 起得來、health check 過，服務的卻是別條 worktree 的 code。
 
 - **MUST** worktree 內用 `node vendor/scripts/wt-helper.ts dev [<alias>]` 起 dev server，**NEVER** 在 worktree 內跑 `pnpm dev`（那會吃 `package.json` 寫死的 base port，直接撞 main）
@@ -116,7 +118,7 @@ Tunnel hostname 是 per-consumer 單一資源（§2.5）；N 個 worktree 共用
 
 - **MUST** worktree 要開 tunnel 就走 `dev.perWorktreeTunnel` opt-in（`consumer-meta.json`），由 `vendor/scripts/wt-env-sync.ts` 改寫成 `<slug>.<host>` / `<name>-<slug>`。前提是 consumer 有涵蓋 `*.<host>` 的 DNS record 與憑證，沒有就起不來
 - **NEVER** 沒開 opt-in 就在 worktree 內啟 tunnel——`wt-helper add` 複製來的 `.env.local` 含 token，**存在不代表可以用**
-- `wt-helper add` / `dev` 偵測到「有 tunnel key 但沒 opt-in」只 warn；worktree owner 要嘛 opt-in，要嘛註解掉那幾個 key
+- 沒 opt-in 時手動跑 `wt-env-sync` 複製進 worktree 的 `.env*` 會移除 `TUNNEL_HOSTNAME`／`TUNNEL_NAME`，resilient wrapper 在 linked worktree 讀到共用 hostname 也會自關 tunnel（[[dev-tunnel-convention]] § 7）。**尚未涵蓋** `wt-helper add`：它用自己的 `copyEnvSyncFiles()` 逐字複製，新開的樹仍帶共用 `TUNNEL_*`；`wt-helper add` / `dev` 偵測到「有 tunnel key 但沒 opt-in」只 warn——worktree owner 要嘛 opt-in，要嘛刪掉那幾個 key
 
 ## 自治區（規約不強制）
 

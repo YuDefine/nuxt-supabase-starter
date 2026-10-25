@@ -8,6 +8,8 @@
 #   bash scripts/pre-push/runner.sh
 #
 # Auto-detect 啟用哪些 check：
+#   - ahead-ownership   只看 push refs：打 default branch 且 ahead>0 時要求
+#                        推的人以 CLADE_PUSH_MAIN_AHEAD 宣告 rev-list 雜湊
 #   - nuxt-typecheck     偵測 nuxt.config.* 才跑
 #   - native-picker-ban  偵測 nuxt.config.* 才跑（全站掃 .vue，回溯型；
 #                        補 pre-commit staged 版的盲區——歷史既有違規）
@@ -15,35 +17,27 @@
 #   - evlog-map-gate     CI workflow 有 evlog-map-gate 步驟才跑（照 CI 的 mode／cwd，判定與 CI 同一支）
 #   - test-typecheck     opt-in：CLADE_PREPUSH_TEST_TYPECHECK 非空才跑（=1 → typecheck:tests，
 #                        0／false／no／off 報設定錯誤，其他值 = script 名）；docs-only push（*.md / docs/**）跳過，
-#                        refs 算不出 fail-open 照跑；排在平行 checks 之後序列執行（TD-644）
+#                        refs 算不出 fail-open 照跑；排在平行 checks 之後序列執行
 #
 # 為什麼 typecheck 放 pre-push 不放 pre-commit：
-#   vue-tsc / nuxi typecheck 不支援單檔 typecheck（nuxt/cli #407），
+#   vue-tsc / nuxi typecheck 不支援單檔 typecheck，
 #   每次 commit 跑 full project typecheck 太慢。pre-push 階段一次性擋住，
 #   兼顧 DX 與正確性。
 #
 # 為什麼 test typecheck 是 opt-in 而非預設 check：
-#   v0.3.10 曾無條件加入 test-tsconfig check，數據顯示 5 家 consumer 中有
-#   test/tsconfig.json 的 3 家裡 2/3 baseline 紅（test code 充滿 mock/fixture/cast，
-#   type drift 是常態不是 bug）。預設開會讓 baseline 還沒收斂的 consumer 被擋死，
-#   所以做成 consumer 端 .husky/pre-push 逐家 opt-in（<consumer-a> TD-644 裁決：
-#   changed-paths gate——code push 跑全量、docs-only push 跳過、refs 算不出
+#   test code 充滿 mock/fixture/cast，type drift 是常態不是 bug；預設開會讓 baseline
+#   還沒收斂的 consumer 被擋死，所以做成 consumer 端 .husky/pre-push 逐家 opt-in
+#   （changed-paths gate——code push 跑全量、docs-only push 跳過、refs 算不出
 #   fail-open 照跑；CI 的獨立 typecheck-tests job 保留作最後防線）。
 #
-# 為什麼並行跑（2026-07-26）：
+# 為什麼並行跑：
 #   8 個 check 彼此獨立（typecheck 寫 .nuxt/，其餘皆唯讀掃描，無共享寫入），
-#   序列跑等於把每個 check 的耗時相加。<consumer-b> 2026-07-26 實測序列 ≈ 98s，其中
-#   nuxt-typecheck 57.9s + review-rules-ratchet 39.2s 佔 99%，其餘五項合計
-#   < 0.6s。當時 propagate.ts 的 push timeout 是 120s，序列跑的餘裕薄到會被機器
-#   負載變異衝破（v1.4.340 / .341 / .342 連續三版在 propagate 內 timeout，
-#   每次都要事後手動補跑）。並行後 wall time 由最慢的單一 check 決定。
-#
-#   ⚠ 上面那組數字是 2026-07-26 的量測，**已經過期**：<consumer-b> 2026-09-07 重量得
-#   暖路徑單跑 nuxt-typecheck 2m29s、冷路徑 push 全程 9m22s wall / 4m26s user，
-#   差 2.5–9 倍（TD-995）。註解裡寫死的效能基準沒有任何東西會讓它過期報錯 ——
-#   讀到這裡要據此做決定之前 MUST 自己重量一次，NEVER 直接引用這些數字。
-#   push timeout 現在也不是單一常數：全域 NETWORK_PUSH_TIMEOUT_MS 300s，
-#   逐 consumer 由 registry/consumers.json 的 push_timeout_ms 覆寫（<consumer-b> 900s）。
+#   序列跑等於把每個 check 的耗時相加，而 nuxt-typecheck 與 review-rules-ratchet 佔了
+#   幾乎全部，序列跑的餘裕薄到會被機器負載變異衝破 propagate 的 push timeout。
+#   並行後 wall time 由最慢的單一 check 決定。
+#   push timeout 不是單一常數：全域 NETWORK_PUSH_TIMEOUT_MS，逐 consumer 由
+#   registry/consumers.json 的 push_timeout_ms 覆寫。耗時數字不寫進註解（沒有東西會讓
+#   它過期報錯）；要據此決策 MUST 先自己重量一次。
 #
 #   設計對齊 scripts/lib/gate-runner.ts：**全部跑完**才報告，不第一個失敗
 #   就中止——一次 push 就看到所有問題，不必修一條重跑一次。8 個 check 全數
@@ -88,6 +82,7 @@ export CLADE_PREPUSH_REFS_FILE="$REFS_FILE"
 # 宣告順序 = 輸出順序（並行執行，但輸出仍依此序印出，讓 log 可預期）
 CHECKS=(
   tag-position          # push 帶 tag 時驗 tag 不落後 default branch（blocking；無 tag 則零成本 no-op）
+  ahead-ownership       # push default branch 攜帶 ahead commit 時要求推者先列舉宣告（TD-614）
   nuxt-typecheck        # full project typecheck（auto-detect nuxt.config）
   native-picker-ban     # 全站掃 .vue（auto-detect nuxt.config；非 Nuxt repo 自動 no-op）
   data-perf-check       # 全站掃 .vue setup context raw $fetch（auto-detect nuxt.config）
@@ -107,10 +102,9 @@ for name in "${CHECKS[@]}"; do
 done
 
 # --- path relevance（決定哪幾支 check 與本次 push 無關）-----------------------
-# 8 支 check 原本只靠 auto-detect nuxt.config.* 決定跑不跑，沒有一支看 diff 範圍：推一筆
-# 只動 docs/** 的 commit 照樣跑一次 full project typecheck ＋ 6 支全站 .vue 掃描。<consumer-a>
-# 2026-08-29 實測：12 筆純文件 commit 分兩次 push，每次 >14 分鐘，而 diff 裡一個 .ts /
-# .vue 都沒有——那些 check 在結構上不可能有發現。
+# 8 支 check 只靠 auto-detect nuxt.config.* 決定跑不跑，沒有一支看 diff 範圍：推一筆
+# 只動 docs/** 的 commit 照樣跑一次 full project typecheck ＋ 6 支全站 .vue 掃描，而 diff
+# 裡一個 .ts / .vue 都沒有時，那些 check 在結構上不可能有發現，所以另看 diff 範圍。
 #
 # 命中 = 整支照原樣跑（全站掃描不變）；不命中 = 整支 skip。
 # NEVER 把本段讀成「只掃 diff 內的那幾個檔」：native-picker-ban / mutation-loading /
@@ -138,7 +132,9 @@ compute_changed_paths() {
     # remote_sha 全 0 = remote 尚無該 ref（新 branch 首推）→ 沒有 diff base，fail-open
     [[ -z "${remote_sha:-}" || "$remote_sha" == "$ZERO_SHA" ]] && return 1
     git rev-parse --quiet --verify "${remote_sha}^{commit}" >/dev/null 2>&1 || return 1
-    git diff --name-only "$remote_sha" "$local_sha" || return 1
+    # `-z | tr`：路徑不被 core.quotePath 跳脫（中文路徑否則帶引號，後面的 glob／docs/ 比對與
+    # review-rules scan 全落空）。CHANGED_FILE 仍是一行一筆。pipefail 下 git 失敗 → 管線失敗 → return 1。
+    git diff -z --name-only "$remote_sha" "$local_sha" | tr '\0' '\n' || return 1
   done < "$REFS_FILE"
   # 只推 tag（沒有任何 branch ref）→ 不做 path skip
   [[ "$saw_branch" == 1 ]] || return 1
@@ -147,8 +143,8 @@ compute_changed_paths() {
 # 每支 check 的 path relevance globs（bash `[[ str == pat ]]` 語意，`*` 會跨 `/`）。
 relevance_globs() {
   case "$1" in
-    # 與 path 無關：push 帶不帶 tag 才是它的判準，維持永遠跑
-    tag-position) echo '*' ;;
+    # 與 path 無關：push 帶不帶 tag／打不打 default branch 才是它們的判準，維持永遠跑
+    tag-position|ahead-ownership) echo '*' ;;
     nuxt-typecheck)
       echo '*.ts *.tsx *.mts *.cts *.vue nuxt.config.* */nuxt.config.* package.json */package.json tsconfig*.json */tsconfig*.json' ;;
     # 五支全站 .vue 掃描。detector 本身被改動時也要跑：新 detector 會在既有存量上有新發現。
@@ -167,8 +163,8 @@ relevance_globs() {
 # --- nuxt-typecheck 專屬：clade managed `.ts` 不算 typecheck-relevant ---------------
 # propagate 推的「升級 clade」sync commit 幾乎每筆都改到 `.ts`，但那些是 `scripts/**`、
 # `vendor/{scripts,review-rules,...}/**` 這類 clade 投影檔：consumer 的 `.nuxt/tsconfig.json`
-# include 不含它們（2026-09-24 實測 W-2026-09-16-delivery-throughput H3），近 25 筆 sync commit
-# 有 72–84% 的 typecheck-relevant 檔只落在這類，卻每筆都排一次 heavy slot 跑完整 typecheck。
+# include 不含它們，不排除就會讓大部分 sync commit 的 typecheck-relevant 檔只落在這類，
+# 卻每筆都排一次 heavy slot 跑完整 typecheck。
 #
 # managed 的判定依據是**投影時注入的 LOCKED banner**（`scripts/lib/vendor-banner.ts`
 # `VENDOR_BANNER_SIGNATURE`），不是源檔手寫的 `// CLADE:VENDOR-SCRIPT`：後者約 1/3 vendor
@@ -424,8 +420,8 @@ fi
 # typecheck，不對單檔做（vue-tsc / nuxi typecheck 不支援單檔）。
 #
 # 刻意排在平行 checks **之後**序列跑、不進 CHECKS 陣列：typecheck:tests 單輪
-# peak RSS 實測約 2.6 GiB（<consumer-a> TD-644 量測），與 nuxt-typecheck（old-space
-# 上限 6 GiB）並行會疊加記憶體需求，高負載時有被拖住或 OOM 的實測前科。
+# peak RSS 約 2.6 GiB，與 nuxt-typecheck（old-space
+# 上限 6 GiB）並行會疊加記憶體需求，高負載時會被拖住或 OOM。
 # 啟動時就驗：等到所有平行 checks 跑完才報設定錯誤，會白白浪費整輪 check 的時間。
 validate_test_typecheck_spec() {
   local spec="${CLADE_PREPUSH_TEST_TYPECHECK:-}"
@@ -443,6 +439,15 @@ validate_test_typecheck_spec() {
 # $1 = fg 時前景跑（序列 debug 模式：沒有 TERM trap，前景才收得到 ^C）；
 # 預設背景跑 + wait：並行模式的 TERM trap 要等前景指令結束才執行，而且只殺
 # `pids` 裡的子樹——前景的 pnpm 既不會被殺、wait 之後也沒人複查 PREPUSH_INTERRUPTED。
+# 補透傳 fallback shim（ensure-gate-shim.sh）；檔案缺席（舊投影）或補不成 → 回傳非 0，呼叫端照舊 fail closed。
+clade_ensure_gate_shim_here() {
+  local f
+  f="$(dirname "${BASH_SOURCE[0]}")/ensure-gate-shim.sh"
+  [[ -f "$f" ]] || return 1
+  # shellcheck source=ensure-gate-shim.sh
+  source "$f" && clade_ensure_gate_shim
+}
+
 run_test_typecheck() {
   local mode="${1:-bg}"
   local spec="${CLADE_PREPUSH_TEST_TYPECHECK:-}"
@@ -468,13 +473,77 @@ run_test_typecheck() {
   fi
 
   echo "[clade pre-push] ── test-typecheck ──"
+  # 裸寫 `.clade/bin/clade-gate run …` 的 script 在沒有 shim 的新 clone（cloud session VM、CI
+  # checkout）只會回 `sh: .clade/bin/clade-gate: not found`，看不出是 gitignored 投影缺席。
+  # 裸寫就在被呼叫的 script 本身 → 去掉 shim 前綴直跑原命令並印警告，與 guard 形同義（品質檢查照跑，
+  # 只少准入與 signal）；cloud VM 沒有 clade 可跑投影，fail closed 只會讓 cloud session 推不出去。
+  # 裸寫在轉呼的內層 script → 改不動：`.clade/` 被 gitignore 時補一支透傳 fallback shim 讓它照跑（ensure-gate-shim.sh）；補不成（沒被 ignore、舊投影缺檔）才 fail closed 並印出可行動的修法——NEVER 因為 shim 缺席就略過 typecheck。
+  # guard 形（含 `test -x`）在 shim 缺席時會 fallback 直跑原命令，不走這條。
+  # 逐個呼叫點判定（跟著 pnpm／npm／yarn 轉呼最多 3 層）：呼叫緊接在 `test -x <shim>`／`[ -x <shim> ]`
+  # 的 `; then`／`&&` 之後才算有 guard。判定同 scripts/audit-gate-coverage.ts 的 unguardedShim，
+  # 改一邊要改另一邊（vendor/scripts/pre-push/runner.sh 與 checks/nuxt-typecheck.sh 各有一份）。
+  local shim_js
+  IFS= read -r -d '' shim_js <<'JS' || true
+const s = require('./package.json').scripts || {}
+const call = /(^|[\s&;|('"])(?:\.\/)?\.clade\/bin\/clade-gate\s+run\s/g
+const guard = /(?:\btest\s+-x\s+\S*clade-gate|\[\[?\s+-x\s+\S*clade-gate\s+\]\]?)\s*(?:&&|;\s*then)\s*(?:exec)?$/
+const deleg = /(?:&&|^|\|\||;|\(|['"])\s*(?:pnpm|npm|yarn)\s+(?:run\s+)?([\w:.@/-]+)/g
+const bad = (t) => [...t.matchAll(call)].some((m) => !guard.test(t.slice(0, m.index + m[1].length).trimEnd()))
+const seen = new Set()
+function walk(name, depth) {
+  const t = s[name]
+  if (typeof t !== 'string' || seen.has(name)) return ''
+  seen.add(name)
+  if (bad(t)) return name
+  if (depth >= 3) return ''
+  for (const m of t.matchAll(deleg)) { const hit = walk(m[1], depth + 1); if (hit) return hit }
+  return ''
+}
+const hit = walk(process.argv[1], 0)
+// 第三欄＝去掉裸 shim 前綴後的原命令：只在裸寫就在被呼叫的那支 script、去掉後再無裸呼叫時給，
+// 否則留空（內層裸寫改不動，照舊 fail closed）。
+const bare = /(^|[\s&;|('"])(?:\.\/)?\.clade\/bin\/clade-gate\s+run\s+\S+\s+--\s+/g
+const direct = hit === process.argv[1] ? s[hit].replace(bare, '$1').trim() : ''
+if (hit) process.stdout.write(hit + '\t' + s[hit] + '\t' + (direct && !bad(direct) ? direct : ''))
+JS
+  local unguarded direct
+  local -a tt_cmd=(pnpm run "$script")
+  unguarded="$(node -e "$shim_js" "$script" 2>/dev/null || true)"
+  direct="${unguarded#*$'\t'}"
+  direct="${direct#*$'\t'}"
+  if [[ -n "$unguarded" && -n "$direct" && ! -x .clade/bin/clade-gate ]]; then
+    {
+      echo "[clade pre-push] ⚠ test-typecheck：package.json 的 $script script 直呼 .clade/bin/clade-gate，但這個 clone 沒有該檔（gitignored 投影）"
+      echo "[clade pre-push]   改直跑原命令（typecheck 照跑，只少准入與 signal）：$direct"
+      echo "[clade pre-push]   根治：node <clade>/vendor/scripts/install-clade-gate.ts <consumer> 把裸寫改成 arg-safe guard。"
+    } >&2
+    tt_cmd=(pnpm exec sh -c "$direct")
+  elif [[ -n "$unguarded" && ! -x .clade/bin/clade-gate ]] && clade_ensure_gate_shim_here; then
+    # 裸寫在轉呼的內層（改不動）：補一支透傳 shim 讓它照跑，不 fail closed。
+    unguarded="${unguarded%$'\t'*}"
+    {
+      echo "[clade pre-push] ⚠ test-typecheck：package.json 的 ${unguarded%%$'\t'*} script 直呼 .clade/bin/clade-gate，但這個 clone 沒有該檔（gitignored 投影）"
+      echo "[clade pre-push]   已補透傳 fallback shim .clade/bin/clade-gate（typecheck 照跑，只少准入與 signal；propagate 會換成真的）。"
+      echo "[clade pre-push]   根治：node <clade>/vendor/scripts/install-clade-gate.ts <consumer> 把裸寫改成 arg-safe guard。"
+    } >&2
+  elif [[ -n "$unguarded" && ! -x .clade/bin/clade-gate ]]; then
+    unguarded="${unguarded%$'\t'*}"
+    {
+      echo "[clade pre-push] ✗ test-typecheck：package.json 的 ${unguarded%%$'\t'*} script 直呼 .clade/bin/clade-gate，但這個 clone 沒有該檔"
+      echo "[clade pre-push]   script: ${unguarded#*$'\t'}"
+      echo "[clade pre-push]   .clade/bin/clade-gate 是 gitignored 投影，cloud session VM 與 CI 新 clone 不存在。"
+      echo "[clade pre-push]   修法（在 clade 跑）：node <clade>/vendor/scripts/install-clade-gate.ts <consumer> 改成 arg-safe guard；"
+      echo "[clade pre-push]   形狀見 vendor/snippets/clade-gate-package-scripts/README.md。typecheck 不會被略過，這裡是擋下並說明。"
+    } >&2
+    return 1
+  fi
   echo "🔍 test typecheck (pnpm run $script)..."
   # typecheck:tests 峰值約 2.6 GiB，與 CI 的 typecheck-tests job 同額上限。
   if [[ "$mode" == 'fg' ]]; then
-    NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--max-old-space-size=4096" pnpm run "$script"
+    NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--max-old-space-size=4096" "${tt_cmd[@]}"
     return
   fi
-  NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--max-old-space-size=4096" pnpm run "$script" &
+  NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--max-old-space-size=4096" "${tt_cmd[@]}" &
   local tt_pid=$! tt_wait_rc=0
   pids+=("$tt_pid")
   wait "$tt_pid" || tt_wait_rc=$?

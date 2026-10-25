@@ -1,20 +1,18 @@
 <!-- Clade native rule; source: rules/core/agent-routing.md; edit canonical source -->
 # Agent Routing
 
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 **核心命題**：工作按角色與能力選 executor，再判是否派工；寬掃／背景／隔離／有份量的獨立平行軌才派，主線能完成預設留主線。
 
-具體 model、effort、workspace access 與硬禁令只以 [[agent-routing.routing-table]] 為 SoT；查表前 MUST Read 該檔。**禁用**（Charles 2026-09-24；GPT 全面退場 2026-09-29）：Astra／Fable／Haiku、所有 GPT、Sonnet 5 以下，以及 Cursor Composer 2.5、Devin Fusion——任何列、fallback、額度耗盡備援都 **NEVER** 派；Sonnet 5.5 只限 Routing Table 標它的列與 delegate-sub 的兩個接手點。Grok 4.7 一律 xhigh，Gemini 3.8 Flash 一律 high，Claude Sonnet 5.5 一律 high。實作列（非 UI 實作、Nuxt 本體、commit 0-C fix-verify、升版首輪）走 Claude Sonnet 5.5（effort: high）；計畫／裁決列、UI view 實作（含 Nuxt UI／Content）、Design Review、UI 詳細計畫、截圖項目符合性判定與 code review 走 Claude Opus 5.5（effort: medium）；screenshot review 與掃描類走 Gemini 3.8 Flash high。Devin SWE-2 Max 是任意 Pi 列與 Sonnet／計畫／裁決六列的**可選**載體，只限不急、緩慢也不堵塞的任務（desk 與已登入的 zenbook 皆可）；cloud session 是所有 Claude 列的合法載體（Sonnet 四列、計畫／裁決列、UI／設計類四列、`dotclaude-authoring`；commit 0-A 只認 reviewer subagent，不在內）：內容符合 cloud 條件就預設走 cloud，用 Opus 還是 Sonnet、effort 多少照該列，**NEVER** 以 cloud 為由限制 model；Pi 列不改派 cloud，禁用 model 與 `max` 照舊；cloud 不設併發上限，唯一硬門是 0-A reviewer 席位守門——載體混搭判準在 [[agent-routing.dispatch-execution]] § Cloud session 載體。唯讀定位搜尋走 `code-locate` 列（Gemini high → Grok xhigh → 主線），`Explore` subagent 一律被 gate 攔。Claude Opus 5.5 預設 medium；同一問題已在 medium 失敗一次或修法只修到一層、且有可跑的檢查時，才可 `--tier-basis stall-escalation --retry-of <label>` 開 high，`max` 永不開。鏈只在 provider／quota／runtime 不可用時前進，鏈走完由 `dispatch-fallback`（Claude Opus 5.5（effort: low））或主線接手，依列而定。
+具體 model、effort、執行鏈、載體（Devin／cloud／Herdr）與硬禁令只以 [[agent-routing.routing-table]] 為 SoT；**選 model 或 effort 前 MUST Read 該檔**，**NEVER** 憑本段記憶派。**禁用**（Charles 2026-09-24；GPT 全面退場 2026-09-29；Gemini、Codex 訂閱到期退場 2026-10-08；xAI 退訂、2026-10-21 落實）：Astra／Fable／Haiku 4.5 以下、所有 GPT、Gemini、xAI Grok（Pi `grok-xai`、Herdr `--launcher grok`）、Sonnet 5 以下，以及 Cursor Composer 2.5、Devin Fusion、Herdr `cx`——任何列、fallback、額度耗盡備援都 **NEVER** 派；Sonnet 5.5 只限 Routing Table 標它的列與 delegate-sub 的兩個接手點，Haiku 5.5 只限 `haiku-locator`（code-locate）一個唯讀 subagent 席位；Opus 5.5 `max` 永不開；`Explore` subagent 一律被 gate 攔。實作列（非 UI 實作、Nuxt 本體、commit 0-C fix-verify、升版首輪）走 Claude Sonnet 5.5（effort: high）；計畫／裁決列、UI view 實作（含 Nuxt UI／Content）、Design Review、UI 詳細計畫、截圖項目符合性判定與 code review 走 Claude Opus 5.5（effort: medium）；screenshot review、掃描類、web-search、notion-ops 與文案草稿走 `dispatch-fallback` subagent（Claude Opus 5.5（effort: low）；Pi 已無可派 model）。cloud session 是所有 Claude 列的合法載體（commit 0-A 除外），用 Opus 還是 Sonnet 照該列，**NEVER** 以 cloud 為由限制 model；Pi 列不改派 cloud——載體混搭判準在 [[agent-routing.dispatch-execution]] § Cloud session 載體。
 
-**GPT 不是派工目標**（2026-09-29）：Pi 的 GPT tier 退役、Claude Code 不承載 GPT，任何 runtime 都 **NEVER** 為 Routing Table 的列派 GPT worker——Herdr `--launcher cx` 只收 `--route manual --tier-basis manual`（手動派工與 relay 交棒，2026-09-30 恢復），其他任何 route／tier-basis 的 cx 一律拒派。Codex 當主線 runtime 的 adapter 保留（Charles 2026-09-29）；它自己的 native subagent 載體依下方 § Dispatch data and transport boundary 的「短任務 vs handoff 級」判，身分無法驗證的 Codex origin 一律 fail closed。
+**GPT 不是派工目標**（2026-09-29）：Pi 的 GPT tier 退役、Claude Code 不承載 GPT，任何 runtime 都 **NEVER** 為 Routing Table 的列派 GPT worker——Herdr `--launcher cx` 隨 Codex 訂閱到期（2026-10-08）一律拒派，手動派工與 relay 交棒也不在例外。Codex runtime 已於 2026-10-18 移除（見 [[agent-routing.routing-table]] § 禁用），沒有 Codex 主線。
 
 ## commit 0-A reviewer（常設）
 
 commit 0-A 的唯一合格 reviewer 是 fresh-context **Claude Opus 5.5（effort: medium）**（`code-review-opus` 列）：Claude Code runtime（含 Herdr 派出的 Claude worker）跑 `claude-review-safe.sh prepare medium` → 照它印的 AGENT_CALL 派 `commit-0a-reviewer` subagent → 跑它印的 FINALIZE，verdict 只認 finalize 的 stdout；叫不出 Claude subagent 的 runtime 才跑無子命令的 `claude-review-safe.sh medium`（Herdr child）。Claude Code 誤用無子命令入口時 wrapper 以 exit 12 本地拒絕，`CLADE_DISPATCH_ID`／`--bounded-leaf` 不豁免。**沒有備援席**：Opus 額度耗盡或量不到時 gate 保持未完成、等額度恢復；舊 worktree 的 wrapper／helper 不認得 opus seat 時先 rebase 最新 main，不行就停在 0-A 之前 push 分支並回報「待 Opus seat 0-A」。**NEVER** 派 Astra／Fable／任何其他 reviewer，**NEVER** 主線自審補位；receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。
-
-> 2026-09-23～24 的「Opus 5.5 暫時覆寫」已撤銷（Charles 2026-09-24）：`OPUS_55_OVERRIDE_ACTIVE` 為 `false`，routing gate 回到原判武裝 latch；覆寫期間「不外派、主線全包」的條款全部失效，照 [[agent-routing.routing-table]] 派工。
 
 ## 派不派（先於派給誰）
 
@@ -25,11 +23,11 @@ commit 0-A 的唯一合格 reviewer 是 fresh-context **Claude Opus 5.5（effort
 - 角色不符：主線不是這個工作類別的合格 executor。
 - 寬掃：需讀 5 個以上檔案或整棵目錄才能回答，產出是事實表／統計。
 - 有份量的獨立平行軌：至少兩條互不依賴、且每條預估需 10+ tool calls。
-- 長時間 background job，或必須隔離 worktree／port／環境。
+- 長時間 background job（預估 > 20 分鐘，載體見 § Dispatch data and transport boundary），或必須隔離 worktree／port／環境。
 
 **命中即主線自己做**：少量讀取、規約／契約／對外定稿、安全／不可逆動作、session gate，以及複驗自己剛做完的東西。定稿措辭，**措辭的語氣與抽象層級一致性外包不了**。具名 threshold（第 3 個 readonly Bash、第 5 個 textual Read、首次 Read 501+ 行）依 reference 結案；不要把 threshold 當 generic「少量」豁免。
 
-**第二條主線（Charles 2026-10-08）**：命中「有份量的獨立平行軌」，而那條軌**本身就是主線形狀**——要主線席位才做得了（主線級判斷、看圖／實機驗證、跑 `work-route`／`presale` 這類多階段 skill、途中要問 user），任何 subagent 列都接不下——且它與當前主線的四條 parallel rubric（檔案不重疊、無 phase 依賴、無共享 mutex、可獨立驗證）全成立 → **MUST 當下**開 Herdr pane 當新主線平行開工，當前主線繼續自己那條；載體見 § Dispatch data and transport boundary。rubric 任一不中就是 serial，留在當前主線依序做。逐字反開脫：「要看圖驗證／要主線判斷，所以主線自己做」——那只證明它需要**一條**主線，不證明需要**這一條**，兩件都留在這條主線就是把平行工作串行化；「先 fork 試試」——fork／subagent 被 routing gate 落到 delegate 檔位，主線形狀的工作 **NEVER** 塞 subagent。已經撞到 gate 就 `[waive] --reason second-main-line --note "<pane label>"`，接著開 pane。
+**「第二條主線」（Charles 2026-10-08）**：命中「有份量的獨立平行軌」，而那條軌**本身就是主線形狀**——要主線席位才做得了（主線級判斷、看圖／實機驗證、跑 `work-route`／`presale` 這類多階段 skill、途中要問 user），任何 subagent 列都接不下——且它與當前主線的四條 parallel rubric（檔案不重疊、無 phase 依賴、無共享 mutex、可獨立驗證）全成立 → **MUST 當下**開 Herdr pane 當新主線平行開工，當前主線繼續自己那條；載體見 § Dispatch data and transport boundary。rubric 任一不中就是 serial，留在當前主線依序做。逐字反開脫：「要看圖驗證／要主線判斷，所以主線自己做」——那只證明它需要**一條**主線，不證明需要**這一條**，兩件都留在這條主線就是把平行工作串行化；「先 fork 試試」——fork／subagent 被 routing gate 落到 delegate 檔位，主線形狀的工作 **NEVER** 塞 subagent。已經撞到 gate 就 `[waive] --reason second-main-line --note "<pane label>"`，接著開 pane。
 
 命中多條條件時先問能否由一個 worker 完成整條資料依賴鏈；可以就派一個，**NEVER** 一條 task 配一個 agent 地拆。brief 與回報依 [[agent-routing.dispatch-execution]]，派出後依 [[agent-routing.pi-watch-protocol]]。
 
@@ -51,25 +49,26 @@ Iron Law：本 session 做得到的動作與查得出的決策 NEVER 交 user。
 
 每份 brief MUST 列 paths、命令與外部服務；清單外回報、NEVER 自取；secret／個資／private URL／signed material 不進 brief。寫入落點不在該 dispatch cwd 的指令不是「列了就准跑」——那是回報項，不是執行項（TD-782）。詳見 [[agent-routing.pi-watch-protocol]] § Dispatch 資料邊界 與 § Brief 措辭紀律。
 
-**載體依任務長短判，不依任務類別判（Charles 2026-09-27）。** runtime 派同家族 model 時（Claude Code 派 Claude、Codex 派 GPT）：
+**載體依任務長短判，不依任務類別判（Charles 2026-09-27）；長短以派出前的預估分鐘數判，界線 20 分鐘（Charles 2026-10-20）。** 估法見 [[agent-routing.dispatch-execution]] § 派多少 第 5 點：單次 bounded 工作預設 ≤ 20 分鐘，多單位的 brief 估不出才當 > 20 分鐘。runtime 派同家族 model 時（Claude Code 派 Claude）：
 
 | 可觀察 predicate | 載體 |
 | --- | --- |
-| 本 turn 內收得回來、不需要 successor 的 bounded 工作——review、裁決、掃描，**也含**短的實作／改檔（改一支 skill、補一段規約） | 該 runtime 的 in-process subagent（工具名只寫在該 runtime 的 adapter），前景等結果；要寫檔且怕撞主線就用 subagent 自帶的 worktree 隔離。**NEVER** 開 Herdr pane |
-| successor 交棒（relay／fanout）、主持分工、長時間 background、必須隔離 port／環境、主線 runtime 叫不出同家族 subagent | Herdr session |
-| 第二條主線（§ 派不派） | Herdr session 當新主線：`herdr-session-handoff.ts` 裸 dispatch（**不** `--relay`，當前主線不收工）、自己一棵 worktree，model／effort 照 [[agent-routing.routing-table]] § 主線 residency，`--table-row` 填該工作主體所在列。派完照 `session-tasks.operations` § 派工生命週期責任 驗到原任務已接手就回自己那條，**NEVER** 輪詢它；新主線直接對 user 負責、收工前 `--complete`，原主線收工時 `--reclaim` 或交 successor 繼承 |
+| 預估 ≤ 20 分鐘、不需要 successor 的 bounded 工作——review、裁決、掃描，**也含**短的實作／改檔（改一支 skill、補一段規約） | 該 runtime 的 in-process subagent（工具名只寫在該 runtime 的 adapter），前景等結果；要寫檔且怕撞主線就用 subagent 自帶的 worktree 隔離。**NEVER** 開 Herdr pane |
+| 預估 > 20 分鐘的工作（**含**一份 brief 裝多個各要跑全量驗證的單位） | Herdr session，`herdr-session-handoff.ts` 帶 `--coordinate --non-blocking`：child `--complete` 叫醒主線，主線 `--coordinate-resume` 收割。等待期間主線照 § 主線靜默上限 排 keepalive——閒置 ≥ TTL 的主線不會被 child 叫醒（`coordinator_wake=skipped:cache_ttl_expired`） |
+| successor 交棒（relay／fanout）、主持分工、必須隔離 port／環境、主線 runtime 叫不出同家族 subagent | Herdr session |
+| 「第二條主線」（§ 派不派） | Herdr session 當新主線：`herdr-session-handoff.ts` 裸 dispatch 帶 `--main-line`（**不** `--relay`，當前主線不收工）、自己一棵 worktree，model／effort 照 [[agent-routing.routing-table]] § 主線 residency，`--table-row` 填該工作主體所在列。派完照 `session-tasks.operations` § 派工生命週期責任 驗到原任務已接手就回自己那條，**NEVER** 輪詢它；新主線直接對 user 負責；它拿的是 uncoordinated brief（**NEVER** `--complete`，收工走 `/handoff relay`），它 idle 不擋原主線收工（patrol `main-line-idle`，多半是在等 user）；它的 pane 寫明做完或交棒後，owner 才 `--adjudicate` 收割（helper 存 scrollback 並關 pane），否則留著或交 successor 繼承（`session-tasks.operations` Runtime × mode matrix 裸 dispatch 格）。`--main-line` 只限本列判準，NEVER 拿來替一般 worker 免除收割提醒 |
 
-逐字反開脫：「要留 model 身分 receipt，所以開 pane」——subagent transcript 記得到每則訊息的 model，commit 0-A 的 `prepare`／`finalize` 就是從那裡核對的。「這列寫 Herdr carrier，所以開 pane」——Routing Table 的載體欄列的是**可用**載體，長短判準優先於它。
+逐字反開脫：「背景 subagent 做完會通知我，所以長一點沒關係」——通知抵達時主線早已過 TTL，而且 subagent 無法續派、無法收割中間成果；> 20 分鐘就開 pane（2026-10-19 某 consumer：一支 subagent 包 56 句 stepdef，跑了 2.5 小時以上沒回來，主線閒置超過 TTL）。「要留 model 身分 receipt，所以開 pane」——subagent transcript 記得到每則訊息的 model，commit 0-A 的 `prepare`／`finalize` 就是從那裡核對的。「這列寫 Herdr carrier，所以開 pane」——Routing Table 的載體欄列的是**可用**載體，長短判準優先於它。
 
 dispatch／resume／retry／bridge MUST 傳 model／effort／route／tier-basis／workspace access；NEVER inherit 或 quota fallback 降檔；回報依 dispatch-execution 的 4-status、scope verify、receipt 核實。實作派工綁 lifecycle package 時先過 `flow plan readiness`，判準與 implementer 的唯讀邊界在 [[agent-routing.dispatch-execution]] § Implementation readiness gate。 brief 叫 pane 呼叫的 skill 以**目標端投影 frontmatter** 判可不可呼叫，見同檔 § Skill invocability gate。
 
 ## External web retrieval
 
-主線 **NEVER** 直接呼叫 Claude Code 內建的 `WebSearch` 或 `WebFetch`。External-web 執行鏈是 bare Gemini high → Grok 4.7 xhigh（`grok-xai`）→ 鏈尾 `dispatch-fallback` subagent（Claude Opus 5.5（effort: low），由它呼叫內建工具）；query／公開 URL 只入 hash，credential／signed token／private network／secret material fail closed，改用 authenticated first-party connector／redacted source。**例外清單是窮舉的**；**唯一的一般 waiver** 是 user 明確要求 direct built-in 且 receipt 綁原 tool kind 與 candidate。**NEVER 拿本規約的 rationale 推翻本規約的字面。**
+主線 **NEVER** 直接呼叫 Claude Code 內建的 `WebSearch` 或 `WebFetch`：PreToolUse `pre-tool-routing-gate.sh`（`pi-routing-gate.ts`）機械攔下並導向 `web-search` 列（[[agent-routing.routing-table]]；credential／signed token／private URL 直接拒，改用 authenticated first-party connector／redacted source）。**例外清單是窮舉的**；**唯一的一般 waiver** 是 user 明確要求 direct built-in 且 receipt 綁原 tool kind 與 candidate。**NEVER 拿本規約的 rationale 推翻本規約的字面。**
 
 ## 主線靜默上限（所有 dispatch 通用）
 
-有未收尾 async work 時，相鄰 assistant turn 間隔 NEVER 超過 55 分鐘；派出時同訊息 MUST 留 1,500–1,800 秒 notification-only inert keepalive（具名 180 秒例外），記 owner／deadline／task id，不猜 deadline、不重複 wakeup。completion／deadline／unknown 依 [[agent-routing.keepalive-wake]]；控制 turn NEVER 讀 repo／log 猜狀態或做無關 mutation。
+有未收尾 async work 時，相鄰 assistant turn 間隔 NEVER 超過 55 分鐘；派出時同訊息 MUST 留 1,500–1,800 秒 notification-only inert keepalive（具名 180 秒例外），記 owner／deadline／task id，不猜 deadline、不重複 wakeup。completion／deadline／unknown 依 [[agent-routing.keepalive-wake]]；控制 turn NEVER 讀 repo／log 猜狀態或做無關 mutation。Claude Code 由 hub-core Stop hook `stop-async-keepalive-gate.sh` 機械提醒：背景 subagent 或 Herdr `--non-blocking` 派工在飛、卻沒排 keepalive 就停，擋一次（第二次停降為 warn）。
 
 ## 必禁事項
 

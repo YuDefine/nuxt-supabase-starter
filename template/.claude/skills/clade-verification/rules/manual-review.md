@@ -3,8 +3,8 @@ description: 人工檢查（Manual Review）主檔——核心 invariant、Item 
 paths: ['tasks/**', 'specs/plans/**', 'screenshots/**']
 ---
 <!-- Clade native rule; source: rules/core/manual-review.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 ## Runtime adapter boundary
 

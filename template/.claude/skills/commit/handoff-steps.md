@@ -5,7 +5,7 @@
 
 ## 5-B. 收集下一步資訊
 
-從本次 session 脈絡、`git log`、`docs/tech-debt.md`、repo 根目錄 `ROADMAP.md` 的 Next Moves 萃取（涵蓋 plan package 與自由任務）：
+從本次 session 脈絡、`git log`、承載它的 plan § Open work（未遷移 consumer 另含 `docs/tech-debt.md`）、repo 根目錄 `ROADMAP.md` 的 Next Moves 萃取（涵蓋 plan package 與自由任務）：
 
 - **In Progress**：正在進行但未完結的工作（plan package / tasks 檔 / 自由任務皆可，含進度描述）
 - **Blocked**：被什麼擋住、需要什麼才能繼續（無則省略此區塊）

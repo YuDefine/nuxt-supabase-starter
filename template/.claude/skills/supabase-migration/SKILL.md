@@ -7,100 +7,43 @@ description: >-
 
 # Supabase Migration 規範
 
-核心規則（`supabase migration new`、search_path、SECURITY DEFINER 不放 exposed schema、view `security_invoker`、不改已 apply 的 migration、MCP 禁 DDL、reset → lint → gen types → typecheck、advisors、expand-contract）在 `rules/modules/db-schema/supabase/migration.md`，本 skill 不複述，只補實作細節。
+核心規則（`supabase migration new`、search_path、SECURITY DEFINER 不放 exposed schema、view `security_invoker`、不改已 apply 的 migration、timestamp 契約、MCP 禁 DDL、reset → lint → gen types → typecheck、advisors、pending migration 分類、expand-contract）在 `rules/modules/db-schema/supabase/migration.md`，本 skill 不複述，只補實作細節。
 
 > **PR-isolated DB preview env / schema diff gate / production data sanitization** 規約見 `rules/core/db-preview-env.md`（capability + safety contract）與 `rules/modules/db-runtime/supabase-self-hosted/preview-env.md`（self-host 實作層 + image trip-wires）。Cookbook 範本：`vendor/snippets/db-preview-env/`。
 
-## MCP 與 DDL
+# SOP
 
-remote MCP（`mcp__remote-supabase__apply_migration` / `execute_sql`）**NEVER** 跑 DDL：它以 `supabase_admin` 建物件，CI/CD 的 `postgres` role 之後改不動。remote MCP 只用於 SELECT、除錯、檢查 owner。上游 `supabase` skill 說用 `execute_sql` 改 schema 再生成 migration，指的是**本機** local DB 迭代，照做沒問題。
+## Phase 1 -- 建立 migration 檔
 
-## SECURITY DEFINER 落地形態
+1. READ 讀取 module rule `rules/modules/db-schema/supabase/migration.md`（或 runtime 已交付的同名規約；改 `supabase/migrations/**/*.sql` 時已自動載入就不重讀）。
+2. DELEGATE 執行 `supabase migration new <topic>` 產生檔名；一個 migration 只放一個主題。
 
-```sql
--- private schema 放實作 + 明確 GRANT
-CREATE FUNCTION your_schema.safe_func() ... SECURITY DEFINER SET search_path = '' ...;
-GRANT EXECUTE ON FUNCTION your_schema.safe_func TO authenticated;
-```
+## Phase 2 -- 撰寫 DDL
 
-需要透過 PostgREST（Data API）呼叫時，在 `public` 建 thin wrapper（`SECURITY INVOKER`）呼叫
-private schema 的實作，**NEVER** 直接把 `SECURITY DEFINER` 函式放進 `public`。
+1. READ 讀取 `rules/DDL撰寫慣例判準.md`。
+2. WRITE 需要 `SECURITY DEFINER` 函式時，讀取 `templates/security-definer-function.md` 與 `templates/security-definer-function.example.md` 撰寫；要讓 PostgREST（Data API）呼叫時，再讀取 `templates/public-thin-wrapper.md` 與 `templates/public-thin-wrapper.example.md` 在 `public` 建 wrapper。
+3. WRITE 其餘 DDL 依已載入規則撰寫；RLS policy 的內容設計轉 `supabase-rls` skill。
 
-一個 migration 保持單一主題。
+## Phase 3 -- 本機驗證
 
-## Migration Timestamp Immutability（hard rule）
+1. DELEGATE 依 module rule 對**每一個**新增或修改的 migration 跑 reset → lint → gen types → typecheck，再跑 `supabase db advisors` 並逐條處置 security 類 finding。
+2. DELEGATE 檢查有沒有 migration 被改名：
 
-Migration 檔名的 timestamp prefix 是 `supabase_migrations.version` 的 identity key。Remote DB apply 後，該 timestamp 就是**不可變的**。
+   ```bash
+   git diff --cached --diff-filter=R -- 'supabase/migrations/' | grep -q . && echo "BLOCK: migration renamed" || echo "OK"
+   ```
 
-### MUST
+   印 `BLOCK` 時 STOP，把檔名還原成 main 上的檔名，不 commit 新 timestamp（判準見 `migration.md` § Timestamp 不可變）。
 
-- 已 commit 進 main **且** remote DB 已 apply 的 migration **NEVER** rename / delete / regenerate timestamp
-- Worktree 內跑 `supabase db reset` / `supabase migration new` 後 **MUST** 驗證既有 migration 檔名未變（`ls supabase/migrations/ | head` 比對 main）
-- 發現 worktree 內 migration 檔名與 main 不同 → **STOP**，還原成 main 的檔名，不 commit 新 timestamp
+## Phase 4 -- Production 韌性分類與 gate（self-host production）
 
-### NEVER
+1. DELEGATE 執行 `node scripts/postgrest-resilience/classify-migration.mjs <migration.sql>`（本 skill 目錄下的投影資源）；找不到投影資源時 **NEVER** 改用其他 runtime 的路徑猜一個，回報標準未送達並保留 evidence 要求。
+2. THINK 讀取 `rules/Production韌性分類判準.md`，依分類器的 `overall` 決定 online、expand-contract 或 hard stop。
+3. DELEGATE online 路線部署時執行 `node scripts/postgrest-resilience/ready-watch.mjs --url=<admin-ready-url>` 與 `node scripts/postgrest-resilience/smoke-runner.mjs --endpoint=<name=url>`，保存 `/ready`、smoke summary 與 PostgREST logs 作為 evidence。
 
-- **NEVER** 在 worktree 重新 `supabase migration new <已存在的 migration 名>` — 會產生新 timestamp 取代舊的
-- **NEVER** 手動 rename migration 檔案的 timestamp prefix — 即使 SQL 內容完全相同
-- **NEVER** 假設「local db:reset 過了 = remote 也會過」— local 從 scratch apply 不知道 remote 的 `supabase_migrations` 記錄
+## Phase 5 -- 疑難排解
 
-### 偵測
-
-```bash
-# commit 前檢查有無 migration rename
-git diff --cached --diff-filter=R -- 'supabase/migrations/' | grep -q . && echo "BLOCK: migration renamed" || echo "OK"
-```
-
-timestamp 一變，`db push` 就報 `Remote migration versions not found in local migrations directory`，而 local `db:reset` 從 scratch 照樣成功（[[pitfall-migration-rename-breaks-remote-db-push]]）。
-
-## Production Resilience Classification
-
-Self-host Supabase production migration 前，先分類 migration 風險：
-
-| Classification | Examples | Required action |
-| --- | --- | --- |
-| `online_safe` | add nullable column, create table, create function v2, create index concurrently, add FK/check `NOT VALID` | 可在線上跑，但仍需 PostgREST `/ready` gate 與 smoke |
-| `expand_contract_required` | rename/drop column, change type, drop function signature, replace exposed RPC | 拆成 expand → app rollout → contract，不可一次 deploy |
-| `maintenance_required` | unavoidable `ACCESS EXCLUSIVE`, table rewrite, large blocking DML, non-concurrent hot-table index | hard stop；需 rollback/maintenance decision |
-
-規則：
-
-- **NEVER** 宣稱所有 migration 都能零停機。
-- **NEVER** 把 app code retry/session fix 當成 migration safety。
-- **MUST** 區分 PostgREST schema cache reload 與 DB lock；split surface 不能解除同一張 table 的 blocking lock。
-- **MUST** 在 self-host production deploy 保存 `/ready` evidence、traffic smoke summary、PostgREST logs。
-- 可用 clade script prototype，來源 `capabilities/modules/db-runtime/supabase-self-hosted/scripts/postgrest-resilience/`，由本 skill 的 resource declaration 投影到各 runtime 的 skill-local `scripts/postgrest-resilience/`。
-- `classify-migration.mjs <migration.sql>`、`ready-watch.mjs --url=<admin-ready-url>`、`smoke-runner.mjs --endpoint=<name=url>` 均從該 skill-local 目錄以 Node 執行；找不到投影資源時 **NEVER** 改用其他 runtime 的路徑猜一個，回報標準未送達並保留 evidence 要求。
-
-## Schema 規範
-
-Schema 邊界見 `supabase-arch` skill。命名一律 snake_case：表名複數（`tool_inserts`）、欄位（`created_at`）、函式（`get_user_role`）、enum（`user_role`）。
-
-## Sequence 同步
-
-當使用 INSERT 直接指定 ID 匯入資料時，sequence 不會自動更新：
-
-```sql
-SELECT setval(
-  'your_schema.table_name_id_seq',
-  (SELECT COALESCE(MAX(id), 0) + 1 FROM your_schema.table_name),
-  false
-);
-```
-
-## 參考資料
-
-| 檔案                                                               | 內容                  |
-| ------------------------------------------------------------------ | --------------------- |
-| [references/function-template.md](references/function-template.md) | DB 函式模板           |
-| [references/troubleshooting.md](references/troubleshooting.md)     | 疑難排解 + Owner 修復 |
-
-## 檢查清單（規約之外）
-
-- [ ] 表格／函式引用使用 schema 前綴
-- [ ] Production migration 已分類：online-safe / expand-contract / maintenance-required
-- [ ] Self-host production reload 有 PostgREST `/ready` gate 與 smoke evidence
-- [ ] RLS 已設定（如適用）
+1. READ 執行或部署遇錯時，讀取 `rules/疑難排解與Owner修復判準.md` 依症狀處置；owner 修復是 MCP 跑 DDL 的唯一例外，只照該 rule 的四步做。
 
 
 ## Claude host contract

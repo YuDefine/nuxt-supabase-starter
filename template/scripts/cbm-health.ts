@@ -22,7 +22,7 @@ function git(repo: string, args: string[]) {
   return result.status === 0 ? result.stdout.trim() : null
 }
 function snapshot(repo: string) {
-  const status = git(repo, ['status', '--porcelain'])
+  const status = git(repo, ['status', '--porcelain', '-z'])
   return {
     head: git(repo, ['rev-parse', 'HEAD']),
     dirty: status === null ? null : status.length > 0,

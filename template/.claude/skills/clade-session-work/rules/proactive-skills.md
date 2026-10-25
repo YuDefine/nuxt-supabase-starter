@@ -1,27 +1,20 @@
 <!-- Clade native rule; source: rules/core/proactive-skills.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 # Proactive Skill Orchestra
 
 所有 SDD（SpecFormula / aixbdd）入口與 Design skill 應在適當情境下**主動調用**，不需使用者手動指定。此規則優先於個別 SKILL.md 的指示。
 
-> 本檔是 trigger 主規則（無 frontmatter，每個 session 必載入）。詳細場景規約拆到 path-scoped reference：
+> 本檔是 trigger 主規則（無 frontmatter），由 `clade-session-work` skill 的 READ 載入（規劃、派工、開 worktree、收工時）。詳細場景規約拆到 path-scoped reference：
 >
 > - 動 UI 檔（`app/**/*.vue` / `components/**` / `pages/**` / `layouts/**`）或寫 design artifact：[`proactive-skills.design-checkpoint.md`](./proactive-skills.design-checkpoint.md)
 > - 走到 `## 人工檢查` 階段、要把卡片交給人：[`proactive-skills.manual-review-entry.md`](./proactive-skills.manual-review-entry.md)
-
-## 原則
-
-1. **診斷驅動**——先理解問題再選工具，不盲目跑所有 skill
-2. **內建而非附加**——Design 是實作的一部分，不是完成後的美化步驟
-3. **來源無關**——不論規格書來自 Notion、文件、對話或 plan file，流程一致
-4. **自主但透明**——主動調用 skill 時簡要告知使用者正在做什麼
 
 ## SDD 入口自主觸發
 
 **每一個**下表的情境命中時都 MUST 主動走對應入口，不是只有「使用者明講」的那些。入口順序的硬約束（九步 MUST 依序、truth 只由 owner skill 寫）在 [[aixbdd-workflow]]，執行層契約在 [[specformula]]——本表只管「什麼時候該想到它」。
 
-表中名稱是上游 aixbdd 的 skill 名。只有 `/specify`、`/clarify`、`/system-analysis`、`/implement` 是可直接叫的 skill；其餘（`/clarify-over-specs`、`/spec-by-example`、`/ui-plan`、`/constitution`、`/technical-research`、`/api-plan`、`/data-plan`、`/dsl-refine`、`/tasks`、`/bdd`）沒有同名 slash 入口，觸發方式是叫 `work-route` 並說明情境，由它載入該 owner 的上游契約。
+表中名稱是上游 aixbdd 的 skill 名。`/specify`、`/clarify`、`/system-analysis`、`/implement` 是 explicit skill，模型不自行呼叫：由派工者代打（[[rule-authoring]] § Invocation 成本模型），主線只在 work-route 流程輪到該 owner 時照流程進行；其餘（`/clarify-over-specs`、`/spec-by-example`、`/ui-plan`、`/constitution`、`/technical-research`、`/api-plan`、`/data-plan`、`/dsl-refine`、`/tasks`、`/bdd`）沒有同名 slash 入口，觸發方式是叫 `work-route` 並說明情境，由它載入該 owner 的上游契約。
 
 ### Intake（PM 側）
 
@@ -50,8 +43,8 @@
 | 情境 | 觸發 | 說明 |
 |---|---|---|
 | session 結束仍有未完工作、或要交棒 | `/handoff`（`park` / `relay` / `fanout` / `next`） | 四個 arg 全部以本 session 收工結束 |
-| 待辦要自主推進（HANDOFF / tech-debt / ROADMAP） | `/work-loop` | |
-| 一條工作要開隔離 worktree | 交 `wt` 建立（或接續）隔離環境 | 要不要隔離由呼叫端判斷（aixbdd consumer 由 `work-route` §0） |
+| 待辦要自主推進（plan package / HANDOFF / tech-debt） | `/coordinator`（watch 自動加派） | 單件執行走 `/work-route` |
+| 一條工作要開隔離 worktree | 交 `wt` 建立（或接續）隔離環境 | 要不要隔離由呼叫端判斷（aixbdd consumer 由 `work-route` Phase 2） |
 | 動 UI 檔或寫 design artifact | Design Checkpoint | 見 [[proactive-skills.design-checkpoint]] |
 
 ### Completion
@@ -62,19 +55,19 @@
 
 ### Sub-skill 禁用清單（永不觸發）
 
-| Sub-skill | 規則 | 替代方式 |
-|---|---|---|
-| `spectra-commit` | **NEVER** 主動觸發 | 走 `rules/core/commit.md` 規範的標準 commit 工序（含 hooks / 訊息格式） |
-| `spectra-propose` | **NEVER** 主動觸發 | `/specify` 建 plan package；純技術工作走 `tasks/<date>-<slug>.md` |
-| `spectra-apply` | **NEVER** 主動觸發 | `/implement` 按 plan package 的 `tasks.md` 執行 |
-| `spectra-archive` | **NEVER** 主動觸發 | `flow` 卡標 done ＋ `/commit`；plan package 本身就是歷史，不搬動 |
-| `spectra-discuss` | **NEVER** 主動觸發 | `/clarify-over-specs`（規格模糊）或依 [[knowledge-and-decisions]] 記 ADR（架構取捨） |
-| `spectra-ingest` | **NEVER** 主動觸發 | 停下回交 truth owner skill（`/dsl-refine` 等），**NEVER** 就地補寫規格 |
-| `spectra-analyze` / `spectra-clarify` / `spectra-ask` / `spectra-debug` | **NEVER** 主動觸發 | `/clarify-over-specs`、`/system-analysis`、直接讀 `specs/truth/**` |
-| `opsx` | **NEVER** 主動觸發 | 上列各條的替代入口 |
-| `/design` | **NEVER** 主動觸發（2026-09-27 退役，hub-core 已刪） | 無參數 `impeccable` 推下一支指令；閉環見 [[proactive-skills.design-checkpoint]] |
+下列 skill **NEVER** 主動觸發。本表由 `scripts/audit-disabled-skill-guidance.ts` 與其 test 現場解析（首欄每列以 `` `name` `` 開頭），列名格式勿動；`/design` 以 slash 形列名，audit 只認呼叫形。clade 的 SDD 層是 SpecFormula ＋ aixbdd（[[specformula]] / [[aixbdd-workflow]]），本表給由上游 `spectra init` 帶入這些 skill 的 consumer 用。
 
-**原因**：clade 的 SDD 層是 SpecFormula ＋ aixbdd（[[specformula]] / [[aixbdd-workflow]]）；本清單是給由上游 `spectra init` 帶入這些 skill 的 consumer 用的。`/design` 是 clade 自建的 design orchestrator，挑下一支 impeccable 指令的職責已由 impeccable 無參數模式取代；以 slash 形列名，audit 只認呼叫形，不把一般的 design 字樣當引導。
+| Sub-skill | 替代方式 |
+|---|---|
+| `spectra-commit` | `rules/core/commit.md` 的標準 commit 工序 |
+| `spectra-propose` | `/specify` 建 plan package；純技術工作走 `tasks/<date>-<slug>.md` |
+| `spectra-apply` | `/implement` 按 plan package 的 `tasks.md` 執行 |
+| `spectra-archive` | `flow` 卡標 done ＋ `/commit`；plan package 本身就是歷史，不搬動 |
+| `spectra-discuss` | `/clarify-over-specs`（規格模糊）或依 [[knowledge-and-decisions]] 記 ADR（架構取捨） |
+| `spectra-ingest` | 停下回交 truth owner skill（`/dsl-refine` 等），**NEVER** 就地補寫規格 |
+| `spectra-analyze` / `spectra-clarify` / `spectra-ask` / `spectra-debug` | `/clarify-over-specs`、`/system-analysis`、直接讀 `specs/truth/**` |
+| `opsx` | 上列各條的替代入口 |
+| `/design` | 2026-09-27 退役（hub-core 已刪）；無參數 `impeccable` 推下一支指令，閉環見 [[proactive-skills.design-checkpoint]] |
 
 **禁用不只管「不觸發」，也管「不引導」**——任何 skill / rule / snippet / script 輸出 NEVER 出現叫人去跑清單上那支 skill 的句子。合法與違規的語境分界表、audit 訊號與 REQUIRED 欄位在 [[proactive-skills.disabled-skill-guidance]]（path-scoped：碰 `rules/**` / `capabilities/**/skills/**` / `vendor/snippets/**` / `scripts/**` 時載入）。
 
@@ -82,16 +75,7 @@
 
 所有 SDD / design workflow 都受 [[scope-discipline]] 約束：範圍外檔案不順手改、途中發現其他問題**不修但必登記**、未知變更先回報不自行清場、不得在 subagent 內執行 `git reset --hard` / `git checkout --` / `git clean`。
 
-登記出口（always-load 備份，完整表在 [[scope-discipline]]）：技術債 → per [[follow-up-register]]（未遷移 consumer 為 `docs/tech-debt.md` 的 `TD-NNN`）；當前 session 未完 → `HANDOFF.md`（lifecycle repo：plan § Open work＋W- 指標行，[[handoff]] § Lifecycle repo）；未來工作 → `ROADMAP.md`（lifecycle repo：plan § Open work）；規格漏項 → 停下回交 truth owner skill，**NEVER** 就地補寫；架構決策 → 落點依 [[knowledge-and-decisions]]（lifecycle repo：它約束的 truth 單位；未遷移 consumer：當下工作的 plan／spec，**NEVER** 在 `docs/decisions/` 開新檔）。
-
-## Handoff Hygiene
-
-符合以下情況，**MUST** 建立或更新 `HANDOFF.md`（內容要求與接手流程見 [`handoff.md`](./handoff.md)）：
-
-- session 結束時仍有進行中的 work item
-- 有未 commit 的 WIP
-- 有 blocker 需要下一個 session 接手
-- 工作移交給其他 agent / runtime
+登記出口（技術債、未完工作、未來工作、規格漏項、架構決策）的落點表在 [[scope-discipline]] § 意外發現的登記路徑；規格漏項停下回交 truth owner skill，**NEVER** 就地補寫。session 結束的交棒走 `/handoff`（[[session-tasks]]）。
 
 ## Manual Review
 
@@ -105,7 +89,7 @@
 
 ## Review Tiers / Screenshot Strategy
 
-詳見 [[review-tiers]]、[[screenshot-strategy]]。
+詳見 [[review-tiers]]、[[screenshot-strategy]]。收到 0-A 以外的 review 回覆（`/code-review`、`code-review` agent、規格審查、顧問回覆）時，每則 finding 照 [[review-tiers]] § 裁決端落桶。
 
 ### Browser Worktree Verify Auth（hard rule）
 

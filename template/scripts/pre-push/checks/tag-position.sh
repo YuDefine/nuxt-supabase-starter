@@ -8,7 +8,6 @@
 #   tag-triggered deploy workflow 檢出的是 tag 那棵樹。tag 落後 main 時，CI 會忠實地測一棵
 #   舊的樹，於是紅在具名 test + 具體行號 + 可重現——與真實回歸**完全同形**。沒有任何訊號
 #   指向 tag 位置：git 不警告 tag 落後，CI 也不比對 tag 與 branch head。
-#   （2026-08-23 <consumer-b> v1.269.1，tag 落後 main 22 個 commit，4 個 test file 紅。）
 #
 # 為什麼在 pre-push 而不是「打 tag 那一刻」：
 #   git 沒有 pre-tag hook。pre-push 是機械上最接近的可執行點，且 abort 時 tag **尚未到達
@@ -175,6 +174,9 @@ if [[ "$ahead" != "0" ]]; then
   或同一批推（本 gate 認得同批的 branch ref，不會擋）：
 
     git push --atomic origin main <tag>
+
+  推 default branch 的那一步要帶 ahead 宣告：ahead-ownership check 擋下時會印
+  列舉與宣告的指令。
 
 MSG
   exit 1

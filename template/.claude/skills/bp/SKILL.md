@@ -1,6 +1,6 @@
 ---
 name: bp
-description: 把一條最佳實踐登記進 clade 的正確落點，或查新專案該套用哪些既有標準。Use when 使用者送 `\bp`、說「這個記成最佳實踐」「這條規範收進 clade」，或問新專案該套哪些現成標準。NOT for 寫進 memory，NOT for 散播既有改動（走 clade-publish）。
+description: 把一條最佳實踐登記進 clade 的正確落點，或查新專案該套用哪些既有標準。Use when 使用者送 `/bp`、說「這個記成最佳實踐」「這條規範收進 clade」，或問新專案該套哪些現成標準。NOT for 寫進 memory，NOT for 散播既有改動（走 clade-publish）。
 license: MIT
 metadata:
   author: clade
@@ -18,8 +18,8 @@ metadata:
 
 ## Phase 1 -- 判定 mode 與 session 位置
 
-1. READ 讀取使用者輸入，判定 record（預設：`\bp <一句話>`、「記成最佳實踐」，或 `/skill-engineering`、`/work-route` 交棒進來的一段判準或做法）、plan（新專案該套哪些標準）或 check（`/bp check`、commit 0-F）；plan 跳到 Phase 5，check 跳到 Phase 6。
-2. THINK 若目前在 consumer session，記下這是 Direction B 跨界（consumer session → clade 改源頭＋散播；使用者送 `\bp` 就是明確授權），Phase 4 結束時回到原 consumer 並明示已回來。
+1. READ 讀取使用者輸入，判定 record（預設：`/bp <一句話>`、「記成最佳實踐」，或 `/skill-engineering`、`/work-route` 交棒進來的一段判準或做法）、plan（新專案該套哪些標準）或 check（`/bp check`、commit 0-F）；plan 跳到 Phase 5，check 跳到 Phase 6。
+2. THINK 若目前在 consumer session，記下這是 Direction B 跨界（consumer session → clade 改源頭＋散播；使用者送 `/bp` 就是明確授權），Phase 4 結束時回到原 consumer 並明示已回來。
 
 ## Phase 2 -- record：判定落點
 

@@ -3,11 +3,11 @@ description: SECURITY.md 安全憲法的形狀契約（五段固定、不變量�
 paths: ['SECURITY.md', 'packages/*/SECURITY.md', 'server/middleware/**', 'packages/*/server/middleware/**', 'supabase/migrations/**/*.sql', 'server/database/migrations/**/*.sql', 'packages/*/supabase/migrations/**/*.sql', 'packages/*/server/database/migrations/**/*.sql']
 ---
 <!-- Clade native rule; source: rules/core/security-policy.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Security policy（SECURITY.md 安全憲法）
 
-`SECURITY.md` 是這個 repo 安全不變量的 SoT。Codex Security 掃描（`$CLADE_HOME/scripts/security-scan.ts`）在 target 有它時自動當 `--knowledge-base` 餵入；沒有它，掃描只看語法——程式碼裡的「刪除專案」是漏了授權還是正常功能，只有憲法答得出來。
+`SECURITY.md` 是這個 repo 安全不變量的 SoT。Claude 安全掃描（`$CLADE_HOME/scripts/security-scan.ts`）在 target 有它時讓 scanner 先讀它、ledger 記 `security_md_sha`；沒有它，掃描只看語法——程式碼裡的「刪除專案」是漏了授權還是正常功能，只有憲法答得出來。
 
 ## 五段固定結構（REQUIRED，順序固定）
 
@@ -24,12 +24,14 @@ paths: ['SECURITY.md', 'packages/*/SECURITY.md', 'server/middleware/**', 'packag
 ## 條件句
 
 - 這個 repo 沒有 `SECURITY.md` → 先從 `$CLADE_HOME/vendor/snippets/security-policy/` 的範本（`user-owned` 或 `tenant-scoped`）建一份，再動 Tier 3 路徑
-- `SECURITY.md` 的任一條不變量改了 → 上一次 `security-scan.ts baseline` 即過期（audit 以 ledger 的 `security_md_sha` 判），下一次 Tier 3 commit 前重跑
+- `SECURITY.md` 的任一條不變量改了 → 之前的掃描結果即過期（audit 以 ledger 最近一筆有效掃描的 `security_md_sha` 判），operator 對 Tier 3 路徑以 `node $CLADE_HOME/scripts/security-scan.ts path --path <file> …` 補掃（0-S.3 不在 pre-commit，見 commit gates § 0-S.3），ledger 才出現新 `security_md_sha` 的有效掃描
+- 填 `## 身分與授權模型` 與 `enforced by` → **每一條**授權規則只歸一層，**NEVER** 同一條在 RLS 與 handler 各寫一份（兩份會漂移，掃描器也只對標註的那層找反證）：identity 不是 Supabase Auth（better-auth、nuxt-auth-utils）→ RLS 只有 deny-all，租戶隔離與動作權限都標 `handler`，**NEVER** 標 `rls`；identity 是 Supabase Auth → 租戶隔離標 `rls`，細粒度動作權限仍標 `handler`。tenant-scoped 範本兩種變體都有
+- 攻擊入口有機器對機器的 API token（整合方、排程、外部系統呼叫）→ 不變量 **MUST** 含一條 token 保管：每個呼叫方各發一把、DB 只存 sha256 雜湊、可單把撤銷、記 `lastUsedAt`、比對用 constant-time（等長 digest 上 `crypto.timingSafeEqual`）— enforced by: handler。**NEVER** 以一個共用 env secret 當所有呼叫方的 token，也 **NEVER** 用 `===` 比對 secret——共用 secret 外洩時無法只撤銷一方、也查不出是誰在用
 - 掃描報告的每一條 finding → 先走 `security-evidence finding`（Severity / Confidence / Coverage / Proof Gap）判讀，再登 TD；wrapper 只掃不修
 
 ## 精簡
 
-每段只寫掃描器判斷需要的事實：範例、教學、逐 endpoint 的 handler 描述都不放——它是 `--knowledge-base`，每個字都進 prompt。
+每段只寫掃描器判斷需要的事實：範例、教學、逐 endpoint 的 handler 描述都不放——掃描器把它整份讀進 prompt，每個字都佔 context。
 
 CI runner 的信任邊界（哪些 job 碰得到持有 production 存取的 runner）不在本憲法的五段裡，判準見 [[self-hosted-runner]] § 10。
 

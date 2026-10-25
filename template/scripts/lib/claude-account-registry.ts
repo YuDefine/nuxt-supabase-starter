@@ -14,9 +14,9 @@
 
 export interface ClaudePoolAccount {
   /** 池內唯一 id，新 record 的 `account`／`slot` 欄位寫這個。 */
-  id: 'claude-1' | 'claude-2' | 'claude-3'
+  id: 'claude-1' | 'claude-2' | 'claude-3' | 'claude-4' | 'claude-5'
   /** 釘選這個帳號的指令名（zsh function／`--launcher`／`CLADE_CLAUDE_LAUNCHER`）。 */
-  command: 'cc1' | 'cc2' | 'cc3'
+  command: 'cc1' | 'cc2' | 'cc3' | 'cc4' | 'cc5'
   /** `CLAUDE_CONFIG_DIR` 相對 `$HOME` 的 basename。 */
   configDir: string
   /** ai-quota collector config 裡的帳號 id。 */
@@ -47,6 +47,20 @@ export const CLAUDE_POOL_ACCOUNTS: readonly ClaudePoolAccount[] = [
     quotaId: 'claude-3',
     statusline: 'cc3',
   },
+  {
+    id: 'claude-4',
+    command: 'cc4',
+    configDir: '.claude-4',
+    quotaId: 'claude-4',
+    statusline: 'cc4',
+  },
+  {
+    id: 'claude-5',
+    command: 'cc5',
+    configDir: '.claude-5',
+    quotaId: 'claude-5',
+    statusline: 'cc5',
+  },
 ]
 
 export type ClaudeAccountId = ClaudePoolAccount['id']
@@ -68,9 +82,13 @@ const ACCOUNT_ALIASES: Record<string, ClaudeAccountId> = {
   cc1: 'claude-1',
   cc2: 'claude-2',
   cc3: 'claude-3',
+  cc4: 'claude-4',
+  cc5: 'claude-5',
   'claude-1': 'claude-1',
   'claude-2': 'claude-2',
   'claude-3': 'claude-3',
+  'claude-4': 'claude-4',
+  'claude-5': 'claude-5',
   'claude-main': 'claude-1',
   'claude-work': 'claude-2',
 }
@@ -117,6 +135,15 @@ export function claudeAccountByConfigDir(
  */
 export function resolveClaudeAccount(name: string | undefined | null): ClaudeAccountId | null {
   return name ? (ACCOUNT_ALIASES[name] ?? null) : null
+}
+
+/**
+ * Claude 件唯一的額度守門判準：帳號某一窗已見底（剩餘 0）就不派——派上去只會立刻撞窗停住。這不是保留線：
+ * 沒有任何「留給誰」的數字，只要還有一點額度就派。讀不到（null／undefined）fail closed，NEVER 當成足夠。
+ * 自動派（coordinator-auto-dispatch）、manual fanout、helper 的 launch admission 全部讀這一支。
+ */
+export function claudeFloorUsable(floor: number | null | undefined): boolean {
+  return typeof floor === 'number' && floor > 0
 }
 
 /** launcher 名解析：`cc` = 池入口；`ccw`／`ccN`／`claude-N` = 釘選某帳號。 */

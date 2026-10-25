@@ -42,24 +42,30 @@ fi
 # 只看今天建立的檔：舊檔的堆積由 audit-stale-tasks.ts 事後稽核，Stop hook 每次都唸
 # 別 session 的舊檔會變成背景噪音。task 檔多半已 commit，所以這段不能放在下面的
 # wip-dirty 檢查之後——乾淨 working tree 同樣需要這個提示。
-if [ -d tasks ]; then
-  today=$(date +%Y-%m-%d)
-  today_tasks=$(find tasks -maxdepth 1 -name "${today}-*.md" 2>/dev/null || true)
-  if [ -n "$today_tasks" ]; then
-    # 已遷移 lifecycle 的 repo（specs/truth/work-lifecycle.md 存在）不再有 tech-debt／
-    # tasks/archive/ 這兩個落點：未完項併進 plan Open work，做完的檔直接刪。
-    # 未遷移的 consumer 維持舊指示，fleet 遷移完才一起拿掉（W-2026-09-20-consumer-lifecycle-migration）。
-    if [ -f specs/truth/work-lifecycle.md ]; then
-      disposition='對每個未完項併進所屬 plan 的 Open work（specs/plans/<work-id>/plan.md）或直接刪；全部勾完的檔直接 git rm，不搬到 tasks/archive/。'
-    else
-      disposition='對每個未完項升級（HANDOFF / tech-debt / ROADMAP）或直接刪，再 mv 到 tasks/archive/。'
-    fi
-    cat >&2 <<EOF
+# clade home 的 session 清單在 specs/sessions/，consumer 在 tasks/（_session-task-dir.sh）
+task_dir=tasks
+if . "$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/_session-task-dir.sh" 2>/dev/null; then
+  task_dir=$(session_task_dir "$PWD")
+fi
+today_tasks=""
+today=$(date +%Y-%m-%d)
+if [ -d "$task_dir" ]; then
+  today_tasks=$(find "$task_dir" -maxdepth 1 -name "${today}-*.md" 2>/dev/null || true)
+fi
+if [ -n "$today_tasks" ]; then
+  # 已遷移 lifecycle 的 repo（specs/truth/work-lifecycle.md 存在）不再有 tech-debt／
+  # tasks/archive/ 這兩個落點：未完項併進 plan Open work，做完的檔直接刪。
+  # 未遷移的 consumer 維持舊指示，fleet 遷移完才一起拿掉（W-2026-09-20-consumer-lifecycle-migration）。
+  if [ -f specs/truth/work-lifecycle.md ]; then
+    disposition='對每個未完項併進所屬 plan 的 Open work（specs/plans/<work-id>/plan.md）或直接刪；全部勾完的檔直接 git rm，不搬到 tasks/archive/。'
+  else
+    disposition='對每個未完項升級（HANDOFF / tech-debt / ROADMAP）或直接刪，再 mv 到 tasks/archive/。'
+  fi
+  cat >&2 <<EOF
 ⚠️ 今日的 task 檔尚未歸檔：
 $(printf '%s\n' "$today_tasks")
    ${disposition}
 EOF
-  fi
 fi
 
 # 定位 wip-dirty helper — consumer 端 scripts/，clade 端 vendor/scripts/（只認 fleet 成員）

@@ -9,8 +9,8 @@ metadata:
   clade:
     invocation: explicit
 ---
-<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@bc8fdebe2d30db384f77911aaed81888ad03bf5f, modified by clade (added this banner and clade metadata lines) via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
-<!-- clade-targets: claude,codex -->
+<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@8f4dfa7c96aa2d64ed5866d02ee20a23e71c040d, modified by clade (added this banner and clade metadata lines) via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- clade-targets: claude,agents -->
 > clade 覆寫：clade lifecycle repo（本次 plan package 的 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:`）或適用 canonical doctor 的 clade consumer：執行本 skill 前先讀 `work-route` skill 根下的 `rules/上游覆寫-lifecycle落點與doctor.md`，命中該檔判準的條目以該檔為準，未命中照本檔原文。
 
 # Truth Delta
@@ -23,7 +23,6 @@ metadata:
 
 1. READ 讀取呼叫者 handoff、當前 plan package 路徑、truth root、truth owner 名稱、已檢查或已修改的 truth 規格清單，以及既有 `truth-delta.md` 內容。
 2. READ 讀取 `rules/Truth變更分類與粒度判準.md`，確認 owner section、動作分類、語意單元粒度與 NOOP 記錄規則。
-   - 命中 clade lifecycle repo 判準（本次 plan package 的 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:`；判準只看那兩個鍵，NEVER 用 repo 名、manifest 或其他檔案推斷）時，本輪 truth 變更的載體是 `plan.md` 的 `## Truth delta` 表（欄位固定 `id`、`action`、`unit`、`reason`、`state`，`state` ∈ `proposed` / `applied` / `withdrawn`）：NEVER 建立 `truth-delta.md`，Phase 1 步驟 3、4 與 Phase 3 的 owner section 操作全部改對該表的列進行。新寫入的列 `state` 一律 `proposed`。
 3. READ 若 `truth-delta.md` 尚不存在，讀取 `templates/truth-delta.md` 與 `templates/truth-delta.example.md`，確認初始化骨架與完成樣貌。
 4. WRITE 若 `truth-delta.md` 尚不存在，於當前 plan package 建立該檔案，並填入 plan package、truth root 與四個 truth owner section。
 

@@ -4,8 +4,8 @@ paths: ['.clade/rules/**/*.md', '.claude/rules/**/*.md', '.claude/skills/**/*.md
 ---
 <!-- Clade native rule; source: rules/core/rule-authoring.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 # Rule Authoring（規約措辭工程）
 
@@ -89,7 +89,7 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 
 - **新規約 / 改措辭前先跑 baseline（SHOULD）**：無規約下用誘發情境跑一次，確認失敗真的存在。對照組沒失敗 → 不要寫這條規約（沒有要修的東西，寫了只燒 token）。
 - **情境只能觸發你要測的那一條規約**：同時命中第二條規約而兩者指向不同動作，正解就變歧義、pass 率變雜訊。寫完情境自問「還有哪條規約會被這段描述叫醒？」
-- **對照組沒失敗有三種成因，別混為一談**：(a) 規約沒有要修的東西 → 不要寫；(b) 規約教的是**模型原本沒有的選項**（如「有 codex 這個 runtime 可以派」），無規約時模型根本無從違反 → 對照組**必然**通過，此類規約要改測反方向才有鑑別力；(c) **情境餵了真實場景不自帶的判定素材**（predicate 的答案自報在題目裡、gate 的存在被逐字聲明）→ 量到的是「答案給了會不會用」，不是「會不會自己去判」，對照組通過是**量測失真**不是失敗不存在。誤判成 (a) 會刪掉有效規約。
+- **對照組沒失敗有三種成因，別混為一談**：(a) 規約沒有要修的東西 → 不要寫；(b) 規約教的是**模型原本沒有的選項**（如「有 pi 這個 dispatcher 可以派」），無規約時模型根本無從違反 → 對照組**必然**通過，此類規約要改測反方向才有鑑別力；(c) **情境餵了真實場景不自帶的判定素材**（predicate 的答案自報在題目裡、gate 的存在被逐字聲明）→ 量到的是「答案給了會不會用」，不是「會不會自己去判」，對照組通過是**量測失真**不是失敗不存在。誤判成 (a) 會刪掉有效規約。
 - **(c) 的判定與處置**：手上有同型失敗的**真實 telemetry**（ledger / transcript / audit 訊號）而對照組通過時，**先懷疑 (c)**——真實 telemetry > 合成情境。判別法：把題目裡的自報聲明刪掉還原真實資訊條件，刪了正解就變灰 = 在 harness 量測邊界外（見 `vendor/snippets/rule-authoring/README.md` § 兩支 harness 分工）。此時規約仍可寫，但要做到：(i) 理由**引 telemetry、不引 scenario**；(ii) scenario 檔頭明寫「本情境量不到 X」；(iii) 形式偏向**把推導變查表**。
 - **(c) 不是 Iron Law 的豁免口**：沒有真實 telemetry 與對照組**矛盾**時，「情境可能餵了答案」不能單獨當保留規約的理由。見 `docs/rule-rationale/rule-authoring.md` § 對照組成因 (c)。
 - **高風險措辭一律 micro-test**：≥5 reps 新鮮 context + 無指引對照組，逐個人工讀 flagged match（template 回聲與引用反例會偽裝成命中）。**Variance 本身是指標**：5 reps 出 5 種解讀 = 措辭沒綁住，先收斂形式再加字。
@@ -123,9 +123,8 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 
 **每一條**被宣告給 target 的 rule 都要出現在該 target 的具名 native skill package，不以另一個 runtime 的檔案或 AGENTS 摘要代替；不得由檔案存在性冒充載入 receipt。每個 target adapter 都要對無 `paths:`、合法 `paths:`、空白或 malformed `paths:` 宣告 packaging policy；malformed 必須 fail closed，不得降成無 scope 或靜默略過。合法 scope 保留在 `rules/_index.md` 供選讀。
 
-完成 rule 增修後要實跑 `node scripts/audit-codex-rule-coverage.ts --root <consumer>`（Codex）與 target adapter 指定的 projection audit。ownership state 與 audit output 是 derived evidence，不要手改。
+完成 rule 增修後要實跑 target adapter 指定的 projection audit。ownership state 與 audit output 是 derived evidence，不要手改。
 
-Codex 端真正接受規約的證據走 acceptance receipt：消費端實作留下的收據放 `docs/evidence/codex-acceptance/**.json`，schema 由 `node scripts/audit-codex-acceptance.ts` 驗證（validate.yml CI 層跑同一支）；receipt 的最高觀察等級停在 `discovered` 不算 accepted。
 
 ## 可變事實指 SoT，不 inline（MUST）
 
@@ -200,7 +199,7 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 | 消費端 | 跑 `clade-health layers` 的 session：退役或刪減前 **MUST** 在每台機器（desk＋zenbook）各跑一次，全部為 0 才算沒人用；再對每支候選逐支判——改 description 走 `/skill-engineering` optimize lane、改 `disable-model-invocation: true`、或退役 |
 | 觸發點 | script 輸出的候選段直接印本節位置（rule-authoring 合法觸發點 ③）；`clade-health` 的 `layers` 訊號表登記它 |
 
-報告沒掃 Codex transcript，subagent transcript 也算進去；讀檔欄排除兩種 transcript：同一份也改了該 skill 的，以及一份讀了很多支 skill 的掃描型（稽核、盤點；門檻見 script 的 `SWEEP_MIN_SKILLS`）。
+subagent transcript 也算進去；讀檔欄排除兩種 transcript：同一份也改了該 skill 的，以及一份讀了很多支 skill 的掃描型（稽核、盤點；門檻見 script 的 `SWEEP_MIN_SKILLS`）。
 
 **One trigger per branch（description 觸發詞紀律）**：model-invoked description 內每個觸發詞對應一個**真正不同**的使用分支；同一分支的同義改寫（「截圖」「看畫面」「幫我看 UI」寫三次）是 duplication，要 collapse 成一個。description 開頭前置該 skill 的 leading word，invocation 工作靠它完成。
 
@@ -208,11 +207,11 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 
 **Callee 要保持 model-invoked**（僅限 clade 自撰的 skill）：被其他 skill 以 Skill tool 呼叫的 skill，`disable-model-invocation: true` 會連 orchestrator 的呼叫一起擋掉。設定前要先 grep 全 skill / rule 確認無跨檔 Skill-tool 呼叫。
 
-**上游鏡像 skill 不適用本條**：帶 `LOCKED: mirrored from` banner 的 skill（例如 aixbdd）以上游為準，不要為了符合本條改鏡像檔或它的 `metadata.clade.invocation`。上游 skill 交給一支 explicit skill（例如 `specify` 的「DELEGATE 呼叫 `/clarify`」）時，**NEVER** 由模型自己呼叫或讀檔照跑——那是繞過 `disable-model-invocation`。specify 鏈（`specify`／`clarify`／`system-analysis`／`implement`）由**派工者代打**（Charles 2026-10-06，TD-1043 修訂範圍 A）。派工者是主持者，或依 work-route 第 4 節輪到該 owner 的主線 session；主線不在 work-route 流程內 **NEVER** 自行代打。做法：派工 brief 第一行寫 `/<skill> <一句範圍>`，helper 以使用者 slash 指令打進 pane；中途要 `/clarify` 時由派工者 `--continue` 送同形狀的第一行，問題先從 repo 查證後作答。其他 explicit skill（`version-upgrade`）仍停下來請使用者手動執行。
+**上游鏡像 skill 不適用本條**：帶 `LOCKED: mirrored from` banner 的 skill（例如 aixbdd）以上游為準，不要為了符合本條改鏡像檔或它的 `metadata.clade.invocation`。上游 skill 交給一支 explicit skill（例如 `specify` 的「DELEGATE 呼叫 `/clarify`」）時，**NEVER** 由模型自己呼叫或讀檔照跑——那是繞過 `disable-model-invocation`。specify 鏈（`specify`／`clarify`／`system-analysis`／`implement`）由**派工者代打**（Charles 2026-10-06，TD-1043 修訂範圍 A）。派工者是主持者，或依 work-route Phase 6（`rules/依產物推進判準.md`）輪到該 owner 的主線 session；主線不在 work-route 流程內 **NEVER** 自行代打。做法：派工 brief 第一行寫 `/<skill> <一句範圍>`，helper 以使用者 slash 指令打進 pane；中途要 `/clarify` 時由派工者 `--continue` 送同形狀的第一行，問題先從 repo 查證後作答。其他 explicit skill（`version-upgrade`）仍停下來請使用者手動執行。
 
 ## Token 紀律
 
-- 對 always-load rule（frontmatter 無 `paths:`）加段落前，先考慮 conditional-load 或併入既有 §；預算 gate：`scripts/audit-always-load-budget.ts`（cap 以該 script 為準）。
+- 對 always-load rule（frontmatter 無 `paths:`）加段落前，先考慮 conditional-load 或併入既有 §；單檔上限 gate：`scripts/audit-always-load-budget.ts` 的 per-file（cap 以該 script 為準）。rule 本文投影後由 `clade-<family>` skill 按需讀取，不計入 per-consumer 常駐；常駐計的是 inject 型 snippet、skill／agent description，以及 rule `moment:` 併進 `clade-<family>` description 的文字——加 `moment:` 前同樣要過這個 gate。
 - **always-load 是 zero-sum 面，加段落前先答一句「這一段有沒有可判定的觸發條件」**：該段的 NEVER / MUST 只在**特定檔案類型或特定 flow** 下才會被違反 → 它屬於 conditional，要併進**既存**的 path-scoped 姊妹檔（`rules/core/<topic>.<sub>.md`），always-load 端只留同編號 stub ＋ **具名時機**的必讀指針（「開始收截圖 evidence 之前」「派一個實作 phase 之前」這種，不是「詳見」）。答案是「每一次派工前都要判」這種無觸發條件的，才留 always-load。
 
   **不要為了騰空間新開一支寬 glob 的 conditional 檔**——`paths:` 的成本是「包」不是「支」（見下一條），把常駐成本從 cached prefix 搬到 nested_memory 是更貴的方向。併進既存姊妹檔不新增注入包。
@@ -280,7 +279,7 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 
 ### Model Grader 未校準時的措辭紀律
 
-不要用「codex review 過了」「checker 判 pass」當成品質已驗證的憑據；可以寫「codex review 未提出問題」，不要寫「已通過品質檢驗」。校準答案卷在 `vendor/snippets/rule-authoring/critique-shadowing-corpus.md`；**同意率達 90% 之前，上表四條 Model 列一律維持「未校準」字樣**，改掉時要附同意率數字。
+不要用「review 過了」「checker 判 pass」當成品質已驗證的憑據；可以寫「review 未提出問題」，不要寫「已通過品質檢驗」。校準答案卷在 `vendor/snippets/rule-authoring/critique-shadowing-corpus.md`；**同意率達 90% 之前，上表四條 Model 列一律維持「未校準」字樣**，改掉時要附同意率數字。
 
 ### 第一版預期是錯的
 

@@ -11,7 +11,7 @@ paths:
   - 'packages/**/app/pages/**'
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/evlog/evlog-adoption.depth-gate.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # evlog Adoption — Depth 自評與 coverage gate（全文）
 

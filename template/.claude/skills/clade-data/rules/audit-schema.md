@@ -3,7 +3,7 @@ description: Supabase audit table schema 慣例（audit_logs）
 paths: ["supabase/migrations/**/*.sql", "server/utils/audit*.ts", "packages/*/server/utils/audit*.ts", "server/api/**/*.ts", "packages/*/server/api/**/*.ts"]
 ---
 <!-- Clade native rule; source: rules/modules/db-schema/supabase/audit-schema.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Audit Schema Conventions（supabase variant）
 

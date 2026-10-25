@@ -29,7 +29,8 @@ SCAN_ENGINE="$PROJECT_ROOT/vendor/review-rules/scan.ts"
 [[ -f "$PATTERNS_FILE" ]] || exit 0
 [[ -f "$SCAN_ENGINE" ]] || exit 0
 
-STAGED=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | sed '/^$/d' || true)
+# 只判空／非空；`-z | tr` 讓 `$(…)` 不吃 NUL，且 quotePath 不影響結果。
+STAGED=$(git diff --cached -z --name-only --diff-filter=ACM 2>/dev/null | tr '\0' '\n' | sed '/^$/d' || true)
 [[ -z "$STAGED" ]] && exit 0
 
 rc=0

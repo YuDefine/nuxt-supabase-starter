@@ -55,6 +55,7 @@ const pad2 = (n) => String(n).padStart(2, '0')
  */
 
 import { execFileSync } from 'node:child_process'
+import { readGitStatus, unquoteGitPath } from './lib/git-status-z.ts'
 import {
   existsSync,
   mkdirSync,
@@ -371,16 +372,15 @@ function recommendAction(consumerRoot, ref, files, namespace) {
 
   if (files.length === 0) return { action: 'view-diff', reason: 'no files in stash (corrupted?)' }
 
-  let statusRaw = ''
+  const dirtyPaths = new Set<string>()
   try {
-    statusRaw = gitRaw(['status', '--porcelain'], { cwd: consumerRoot })
+    for (const e of readGitStatus(consumerRoot)) {
+      dirtyPaths.add(e.path)
+      if (e.origPath !== undefined) dirtyPaths.add(e.origPath)
+    }
   } catch {}
-  const dirtyPaths = new Set()
-  for (const line of statusRaw.split('\n')) {
-    if (line.length < 4) continue
-    dirtyPaths.add(line.slice(3))
-  }
-  const conflicts = files.filter((f) => dirtyPaths.has(f.path))
+  // `files` 來自 `git stash show --stat`（人讀輸出，非 ASCII 路徑帶引號跳脫），還原後才比得中 `-z` 的路徑。
+  const conflicts = files.filter((f) => dirtyPaths.has(unquoteGitPath(f.path)))
   if (conflicts.length > 0) {
     return {
       action: 'view-diff',

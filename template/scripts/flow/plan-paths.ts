@@ -12,7 +12,9 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
-export const PLAN_ROOT = 'specs/plans'
+import { PLAN_ROOT } from './close-commit.ts'
+
+export { PLAN_ROOT, planCloseHeader, planCloseTrailer } from './close-commit.ts'
 export const TRUTH_ROOT = 'specs/truth'
 export const LEGACY_MAP = 'specs/truth/legacy-ids.json'
 

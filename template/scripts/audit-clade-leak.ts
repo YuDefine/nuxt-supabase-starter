@@ -24,10 +24,11 @@
  * 直接 grep `template/.claude/` 內 clade-managed checksums 列出的所有檔，
  * 任何 forbidden token / maintainer-only skill 殘留 → exit 1。
  *
- * 執行載體（per `rules/core/checker-contract.md` § 執行載體）：**沒有**自動觸發點。
- * 唯一消費端是 `pnpm audit:manual`（registry/audits.json 宣告 cadence `on-demand`
- * / consumers `["npm-script"]` / blocking false）。**不要**把檔頭寫成「CI gate」——
- * starter CI 從未跑過它，那是願望不是現況（TD-273）。
+ * 執行載體（per `rules/core/checker-contract.md` § 執行載體）：clade 的 `scripts/propagate.ts` 對
+ * **每一個 PUBLIC consumer** 在 sanitize 之後、commit 之前強制跑一次（`runPublicLeakAudit`），
+ * violation 或 audit error 都停下該 consumer 的散播（registry/audits.json：cadence
+ * `per-propagate`、blocking true）。另一個消費端是手動的 `pnpm audit:manual`。
+ * starter CI **沒有**跑它——NEVER 把檔頭寫成「CI gate」（TD-273）。
  *
  * Fleet 名冊 token 是「**自身以外**的 consumer 名」：`selfAliases()` 依 repo 目錄名 /
  * `package.json` name / git remote 判出這個 repo 自己是誰，把對應 token 從清單移除，
@@ -41,6 +42,8 @@
  *   2. `template/.claude/` checksums 列出的所有檔：grep forbidden tokens
  *      （consumer name 別名 + personal redaction needles + home-path regex；
  *      consumer 名冊只在 clade home 載得到，見 `IDENTITY`）
+ *   2c. 整棵 repo（tracked＋未 ignore 的 untracked）的本機絕對路徑：執行者的 home 前綴，
+ *      與任何 username 的 fleet 佈局路徑（`<home>/offline/…`）
  *   3. 已退役 generator 的 `{,template/}.{agents,codex}/.sync-manifest.json`：
  *      **從 git object 讀**（該檔已不在 worktree，leak 只存在於 index/HEAD）
  *
@@ -58,11 +61,9 @@
  *   node vendor/scripts/audit-clade-leak.ts --self <token>     # 額外指定「這是我自己的名字」
  *                                                              # （可重複；自動偵測判不出時用）
  *
- * 觸發點：**手動**（`pnpm audit:manual`）。
- *   ⚠️ 本檔曾聲稱「starter CI（GitHub Actions）作 mandatory job」——2026-07-26 查證
- *   為不實：starter 的 `.github/workflows/` 與 `package.json` 皆無此 job，
- *   `propagate.ts` 也沒有呼叫它（只有一句註解）。宣告已改為 on-demand，
- *   接上真實消費端要走 TD-273。
+ * 觸發點：propagate 的 PUBLIC consumer 路徑（強制、blocking），與手動的 `pnpm audit:manual`。
+ *   2026-10-08 之前只有手動那一條：`propagate.ts` 沒有呼叫它，所以投影檔帶出去的 fleet
+ *   路徑要等有人想到手動跑才看得見。
  *
  *   `--all-consumers` 掃 **visibility == PUBLIC** 的 consumer（走
  *   `scripts/lib/repo-visibility.ts`，與 propagate 判去敏感化的同一個來源）。
@@ -73,7 +74,7 @@
  */
 
 import { execFile } from 'node:child_process'
-import { existsSync, realpathSync } from 'node:fs'
+import { existsSync, readdirSync, realpathSync } from 'node:fs'
 import { lstat, readFile } from 'node:fs/promises'
 import { homedir, userInfo } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
@@ -255,6 +256,7 @@ async function loadFleetIdentity(cladeRoot) {
 
 async function resolveIdentity(cladeRoot) {
   const fleet = await loadFleetIdentity(cladeRoot)
+  const maintainerOnly = await resolveMaintainerOnlySkills(cladeRoot)
   const personal = new Set([
     ...derivePersonalNeedles(),
     ...(await deriveEmailNeedles()),
@@ -266,13 +268,13 @@ async function resolveIdentity(cladeRoot) {
     // 長的排前面，命中時 token 讀起來是最具體的那條
     personalNeedles: Array.from(personal).toSorted((a, b) => b.length - a.length),
     rosterSource: fleet.source,
-    notices: fleet.notices,
+    notices: [...fleet.notices, ...maintainerOnly.notices],
   }
 }
 
 // 上面那份是逐字 needle，只認**執行者自己**的 username。這條 regex 補「任意 username ×
-// 兩平台」，來源是 `vendor/signals/redact.mjs` 的 `home-path` pattern（同一份語義，
-// 那邊已在 signal payload 上用了很久）。兩者並存：needle 命中時 token 可讀
+// 兩平台」。它比 `vendor/signals/redact.ts` 的 `home-path` 寬：redact 為了讀回可還原，同一段
+// 路徑只改寫第一個家目錄；稽核要抓每一個可能的 username，所以路徑中段的也算。兩者並存：needle 命中時 token 可讀
 // （`/Users/<you>/offline/`），regex 負責兜住 needle 蓋不到的 username。
 const HOME_PATH_RE = /\/(?:Users|home)\/([^/\s"']+)/g
 
@@ -281,27 +283,68 @@ const HOME_PATH_RE = /\/(?:Users|home)\/([^/\s"']+)/g
 // rules/manual-review.backend.md 與 rules/session-claims.md。
 const PLACEHOLDER_USER_RE = /^(?:<|\.{2,}|\$|\{|%|YOUR|your\b)/
 
-// yudefine-deploy 綁 maintainer 的 Cloudflare 帳號與 Notion secrets 頁（TD-1066）。它與前三支
-// 不同：前三支靠 propagate 對 PUBLIC repo 移除整個 modules.maintenance 就能擋，而它住在
-// hub-runtime-cf-workers —— 公開 consumer 真的需要那個 plugin。所以真正的排除在
-// runtime-capability-plan.ts 的 `clade-visibility: private` 標記，本名單只是第二層對帳。
-// estimate-hours／presale／ci-runners 帶報價與內部主機資料，由 `clade-visibility: clade-home` 擋在
-// 所有 consumer 之外（private 也不收），同樣列進來對帳。
-// project-bootstrap 同理（住在 hub-framework-nuxt，寫死 fleet 內部 consumer 名）：標記只擋新投影，
-// 標記前已投進公開 consumer 的殘留靠本名單抓。
-// reply-article／meeting-notes 是維護者個人工作流（回覆對象、Gemini／Notion 設定），同樣標 private。
-const MAINTAINER_ONLY_SKILLS = [
+// maintainer-only skill 名單 = 基線 ∪ 隨附 JSON ∪（clade home 才有的）即時推導。
+// 名單的真相源是 SKILL.md 的 `<!-- clade-visibility: private | clade-home -->` 標記：
+// `scripts/sync-maintainer-only-skills.ts` 把推導結果寫成 `vendor/scripts/maintainer-only-skills.json`，
+// propagate 對 PUBLIC consumer 隨本檔一起投影到 `scripts/maintainer-only-skills.json`，本檔以 dirname 讀同層。
+// consumer 副本沒有 `scripts/lib/`，推導不可用，所以靠這份 JSON；clade home 則另外即時推導，
+// 在 JSON 還沒重生的窗口內先抓到漏補。
+// 基線只留推導不出來的：
+//   1. 沒有標記、靠 plugin 層排除的 oops／improvement-loop／review-rules
+//      （propagate 對 PUBLIC repo 整個移除 modules.maintenance）。
+//   2. 標記前已投進公開 consumer 的殘留（project-bootstrap）——標記只擋新投影，殘留靠這份抓。
+// 舊 consumer 還沒收到 JSON 時只用基線（行為同升級前，直到下次 propagate）。
+const BASELINE_MAINTAINER_ONLY_SKILLS = [
   'oops',
   'improvement-loop',
   'review-rules',
-  'yudefine-deploy',
-  'estimate-hours',
-  'presale',
-  'ci-runners',
   'project-bootstrap',
-  'reply-article',
-  'meeting-notes',
 ]
+const MAINTAINER_ONLY_MANIFEST_NAME = 'maintainer-only-skills.json'
+
+let MAINTAINER_ONLY_SKILLS = [...BASELINE_MAINTAINER_ONLY_SKILLS]
+
+// JSON 缺檔＝尚未收到（舊 consumer）或 clade home 之外的情境，不印 notice（否則每個 consumer 每輪都噪音）；
+// 檔案存在卻讀不懂＝覆蓋面縮減，印 notice（NEVER 靜默）。
+async function readMaintainerOnlyManifest() {
+  const manifestPath = join(dirname(fileURLToPath(import.meta.url)), MAINTAINER_ONLY_MANIFEST_NAME)
+  if (!existsSync(manifestPath)) return { skills: [], notice: null }
+  try {
+    const parsed = JSON.parse(await readFile(manifestPath, 'utf8'))
+    if (!Array.isArray(parsed?.skills) || parsed.skills.some((x) => typeof x !== 'string' || !x)) {
+      throw new Error('skills 不是非空字串陣列')
+    }
+    return { skills: parsed.skills, notice: null }
+  } catch (err) {
+    return {
+      skills: [],
+      notice: `${MAINTAINER_ONLY_MANIFEST_NAME} 讀取失敗（${String(err.message).split('\n')[0]}）— 只用基線名單`,
+    }
+  }
+}
+
+// lib 只在 clade home 有：檔案不存在＝consumer 副本，不推導；檔案存在卻載入／執行失敗＝維持基線＋JSON 並印 notice。
+async function resolveMaintainerOnlySkills(cladeRoot) {
+  const notices = []
+  const fromManifest = await readMaintainerOnlyManifest()
+  if (fromManifest.notice) notices.push(fromManifest.notice)
+  let derived = []
+  const libPath = join(cladeRoot, 'scripts', 'lib', 'runtime-capability-plan.ts')
+  if (existsSync(libPath)) {
+    try {
+      const mod = await import(pathToFileURL(libPath).href)
+      derived = await mod.deriveMaintainerOnlySkills(cladeRoot)
+    } catch (err) {
+      notices.push(
+        `maintainer-only skill 標記推導載入失敗（${err.message.split('\n')[0]}）— 只用基線名單與 ${MAINTAINER_ONLY_MANIFEST_NAME}`,
+      )
+    }
+  }
+  MAINTAINER_ONLY_SKILLS = Array.from(
+    new Set([...BASELINE_MAINTAINER_ONLY_SKILLS, ...fromManifest.skills, ...derived]),
+  )
+  return { derived: derived.length > 0, notices }
+}
 
 // 已退役 generator 留下的 metadata 檔。`sync-to-agents` 於 v1.4.315 更名為
 // `sync-to-codex`（commit b05efa9a）時 writer 被一併移除但沒人發現，而
@@ -547,9 +590,13 @@ function scanForbiddenTokens(text, tokenRegexes) {
 // 該路徑在 git 裡不存在（tracked 與否都算，untracked 由呼叫端另外查磁碟）。
 async function readTrackedBlob(repoRoot, rel) {
   try {
-    const { stdout } = await execFileAsync('git', ['ls-files', '--error-unmatch', '--', rel], {
-      cwd: repoRoot,
-    })
+    const { stdout } = await execFileAsync(
+      'git',
+      ['ls-files', '-z', '--error-unmatch', '--', rel],
+      {
+        cwd: repoRoot,
+      },
+    )
     if (!stdout.trim()) return null
   } catch {
     return null // 非 tracked
@@ -571,17 +618,128 @@ const TEXTUAL_REL_RE = /\.(md|mjs|cjs|js|mts|cts|ts|json|jsonc|sh|bash|zsh|yml|y
 // 洩漏，掃它只會製造假陽性。
 async function listTrackedUnder(repoRoot, prefixes) {
   try {
-    const { stdout } = await execFileAsync('git', ['ls-files', '--', ...prefixes], {
+    const { stdout } = await execFileAsync('git', ['ls-files', '-z', '--', ...prefixes], {
       cwd: repoRoot,
       maxBuffer: 64 * 1024 * 1024,
     })
-    return stdout
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean)
+    return stdout.split('\0').filter(Boolean)
   } catch {
     return []
   }
+}
+
+// maintainer 機器上的 fleet 佈局（`<home>/offline/<consumer>`）：任何 username 都算，因為
+// 這個形狀本身就是「從 clade 維護者的機器帶出來的路徑」，不是 consumer 自己的內容。
+const FLEET_HOME_PATH_RE = /\/(?:Users|home)\/([^/\s"'`]+)\/offline\/[^\s"'`)]*/g
+const HOME_PATH_GREP = String.raw`/(Users|home)/[^/[:space:]]+`
+
+/**
+ * (2c) 整棵 repo 的本機絕對路徑。
+ *
+ * scope (2)/(2b) 只看 `.claude/` checksums 與 `.clade/**`，而 vendor 投影落在 `scripts/`、
+ * `vendor/`、`.github/` 等任何地方。2026-10-08 實例：投影檔 `scripts/lib/dev-workspace.ts` 的註解
+ * 帶著 maintainer 的 fleet 路徑，帶名冊跑本 audit 是 0 violations。
+ *
+ * 只報兩種：執行者自己的 home 前綴（`IDENTITY.personalNeedles`），與任何 username 的 fleet
+ * 佈局路徑。其他 `/home/<x>/…`（CI runner、container user、文件範例）在 consumer 自己的檔裡
+ * 很常見，整棵樹照 HOME_PATH_RE 全報只會讓這條規則被關掉。
+ *
+ * 一次 `git grep` 掃 tracked＋未 ignore 的 untracked（下一次 commit 會帶進去的檔）；讀的是
+ * working tree，所以 propagate 寫完、commit 之前跑就能擋下。
+ */
+async function scanTreeForLocalPaths(repoRoot) {
+  let stdout = ''
+  try {
+    ;({ stdout } = await execFileAsync(
+      'git',
+      ['grep', '-I', '-n', '-z', '--untracked', '-E', HOME_PATH_GREP, '--', '.'],
+      { cwd: repoRoot, maxBuffer: 256 * 1024 * 1024 },
+    ))
+  } catch (err) {
+    // exit 1 = 0 命中；其餘（不是 git repo、grep 失敗）回報成 error，NEVER 讀成乾淨。
+    if (err?.code === 1) return { hits: [], error: null }
+    return { hits: [], error: `tree path scan failed (${String(err?.message).split('\n')[0]})` }
+  }
+  const hits = []
+  for (const record of stdout.split('\n')) {
+    const [path, line, text] = record.split('\0')
+    if (!path || text === undefined) continue
+    const tokens = new Set()
+    for (const needle of IDENTITY.personalNeedles) if (text.includes(needle)) tokens.add(needle)
+    FLEET_HOME_PATH_RE.lastIndex = 0
+    for (const m of text.matchAll(FLEET_HOME_PATH_RE)) {
+      if (!PLACEHOLDER_USER_RE.test(m[1])) tokens.add(m[0])
+    }
+    for (const token of tokens) hits.push({ path: `${path}:${line}`, token })
+  }
+  return { hits, error: null }
+}
+
+/** 目錄底下（遞迴）有任何檔案或 symlink 就 true；只有空目錄骨架回 false。讀不了的目錄保守當有內容。 */
+function dirHasAnyFile(dir) {
+  let entries
+  try {
+    entries = readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return true
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) return true
+    if (dirHasAnyFile(join(dir, entry.name))) return true
+  }
+  return false
+}
+
+// private skill 會投影進客戶 org 的私有 repo（客戶成員看得到），定價與內部效率數據 NEVER 跟著過去：
+// 定價留在 clade-home 的 estimate-quote，工時數值留在 clade 倉的 registry/estimate-hours/。
+// 「加成」單獨出現會誤中一般中文（「加成 catalog 題」），只比對定價用語的完整詞。
+const PRIVATE_SKILL_PRICING_RE = /NT\$|時薪|成本加成|加成價|折讓/gu
+const PRIVATE_VISIBILITY_RE = /<!--\s*clade-visibility:\s*private\s*-->/u
+
+function listFilesUnder(dir) {
+  const out = []
+  let entries
+  try {
+    entries = readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return out
+  }
+  for (const entry of entries) {
+    const abs = join(dir, entry.name)
+    if (entry.isDirectory()) out.push(...listFilesUnder(abs))
+    else if (entry.isFile()) out.push(abs)
+  }
+  return out
+}
+
+/** 掃 `<skillsRoot>/<name>/` 中宣告 `clade-visibility: private` 的 skill，回傳定價字樣命中。 */
+export async function scanPrivateSkillPricing(repoRoot, skillsRoots) {
+  const hits = []
+  for (const root of skillsRoots) {
+    let names
+    try {
+      names = readdirSync(root, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of names) {
+      const skillDir = join(root, entry.name)
+      const entryFile = join(skillDir, 'SKILL.md')
+      if (!existsSync(entryFile)) continue
+      if (!PRIVATE_VISIBILITY_RE.test(await readFile(entryFile, 'utf8'))) continue
+      for (const abs of listFilesUnder(skillDir)) {
+        if (!TEXTUAL_REL_RE.test(abs)) continue
+        const text = await readFile(abs, 'utf8')
+        const found = new Set(text.match(PRIVATE_SKILL_PRICING_RE) ?? [])
+        for (const term of found)
+          hits.push({
+            path: abs.replace(repoRoot + '/', ''),
+            token: `pricing term in private skill: ${term}`,
+          })
+      }
+    }
+  }
+  return hits
 }
 
 async function auditOneRoot(repoRoot, selfFlags = []) {
@@ -596,13 +754,24 @@ async function auditOneRoot(repoRoot, selfFlags = []) {
     : join(repoRoot, '.agents', 'skills')
   for (const name of MAINTAINER_ONLY_SKILLS) {
     const skillDir = join(agentsSkillsRoot, name)
-    if (existsSync(skillDir)) {
+    // 只剩空目錄骨架（prune 刪檔不刪目錄）沒有任何內容可洩漏；NEVER 讓它把整個 PUBLIC consumer 卡在 audit。
+    if (existsSync(skillDir) && dirHasAnyFile(skillDir)) {
       violations.push({
         path: skillDir.replace(repoRoot + '/', ''),
         token: `maintainer-only skill: ${name}`,
       })
     }
   }
+
+  // (1b) private skill 不得帶定價字樣（見 scanPrivateSkillPricing）。PUBLIC consumer 收不到 private skill，
+  // 這裡只在對單一 private consumer 手動跑時有作用；fleet 層的把關在 main 掃 clade 源檔那一段。
+  const base = existsSync(join(repoRoot, 'template')) ? join(repoRoot, 'template') : repoRoot
+  violations.push(
+    ...(await scanPrivateSkillPricing(repoRoot, [
+      join(base, '.claude', 'skills'),
+      join(base, '.agents', 'skills'),
+    ])),
+  )
 
   // (2) hub-state checksums 列出的所有檔 grep forbidden token
   const state = await loadHubStateFiles(repoRoot)
@@ -658,6 +827,11 @@ async function auditOneRoot(repoRoot, selfFlags = []) {
       violations.push({ path: rel, token })
     }
   }
+
+  // (2c) 整棵樹的本機絕對路徑（說明見 scanTreeForLocalPaths）
+  const treeScan = await scanTreeForLocalPaths(repoRoot)
+  if (treeScan.error) errors.push(treeScan.error)
+  violations.push(...treeScan.hits)
 
   // (3) 已退役 generator 的 metadata 檔 —— git object 與磁碟都要看
   for (const rel of RETIRED_MANIFEST_RELS) {
@@ -731,6 +905,29 @@ async function main() {
     for (const v of res.violations) violations.push({ ...v, path: `${label}${v.path}` })
     for (const e of res.errors) errors.push(`${label}${e}`)
     selfExcluded.push({ root: basename(root), tokens: res.selfExcluded })
+  }
+
+  // private skill 會投影進客戶 org 的私有 repo（不在上面的 PUBLIC 掃描面），所以定價字樣在 clade 源檔就擋。
+  if (opts.allConsumers) {
+    const cladeRoot = resolve(scriptDir, '..', '..')
+    // skills 目錄可在 capabilities/<tier>/skills，也可在 capabilities/modules/<group>/<variant>/skills。
+    const skillsRoots = []
+    const walk = (dir) => {
+      let entries
+      try {
+        entries = readdirSync(dir, { withFileTypes: true })
+      } catch {
+        return
+      }
+      for (const d of entries) {
+        if (!d.isDirectory()) continue
+        if (d.name === 'skills') skillsRoots.push(join(dir, d.name))
+        else walk(join(dir, d.name))
+      }
+    }
+    walk(join(cladeRoot, 'capabilities'))
+    for (const v of await scanPrivateSkillPricing(cladeRoot, skillsRoots))
+      violations.push({ ...v, path: `clade/${v.path}` })
   }
 
   // Output

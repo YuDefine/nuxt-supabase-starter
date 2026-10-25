@@ -6,8 +6,6 @@ SKILL.md § 2B.3 / 2B.4 / 2B.4.5 / 2B.5 的完整規約：outstanding 的 serial
 
 **`next` 也收工。** 本檔的表格決定的是「下一步該用哪一支 skill、要不要 worktree」，**不是**「在本 session 內把它跑完」——盤點完、user 選定後，選中的工作寫進 durable brief 交給 pane 執行，本 session 隨即收工（1 件走 [relay-steps.md](relay-steps.md)、N 件可平行走 [fanout-steps.md](fanout-steps.md)）。
 
-**Codex 先過 [SKILL.md](SKILL.md) § Codex boundary**：user 選定的工作若本 turn 收得回來，以 `collaboration.spawn_agent` 派出、upstream 收割且不收工；handoff 級的工作照本檔派給 pane 後收工。
-
 唯一的例外是**當場做得完的單一 bounded action**（改一行 typo、補一條 pointer、勾一個 checkbox）：直接做掉再收工，不值得為它開一個 pane。**NEVER** 拿這個例外去涵蓋「反正我順手跑完 `/implement` 比較快」——那是完整的一件工作，該派出去。
 
 ### 2B.3 Serial vs Parallel 評估

@@ -3,8 +3,8 @@ description: 收 verify:ui / review:ui 視覺 evidence 的操作規約——截�
 paths: ['screenshots/**', 'specs/plans/**/tasks.md', 'app/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'e2e/**', 'packages/*/e2e/**', 'playwright.config.*', 'packages/**/app/**/*.vue']
 ---
 <!-- Clade native rule; source: rules/core/agent-self-verification.screenshot-evidence.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 ## Runtime adapter boundary
 
@@ -46,7 +46,7 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 
 Reviewer 的 model 選擇依 [[agent-routing]] 當前 Routing Table 與對應 adapter。**NEVER 在本檔複寫該列的 model 選擇**；缺合格執行者時保持驗收未完成。
 
-派 subagent / codex / visual verifier 前，主線 **MUST**：
+派 subagent / visual verifier 前，主線 **MUST**：
 
 1. **Read tasks / brief 抽具體 path**（檔案 / URL / DOM）
 2. **Pre-verify baseline**：依 [[manual-review.backend]] § Pre-verify baseline 假設確認 dev-login route / fixture / seed 存在

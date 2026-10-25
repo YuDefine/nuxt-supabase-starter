@@ -3,7 +3,7 @@ description: Cloudflare Workers / NuxtHub gating + wrangler.jsonc 格式統一 +
 paths: ['wrangler.{toml,jsonc}', 'void.json', 'nuxt.config.*', 'package.json', '.github/workflows/**/*.yml']
 ---
 <!-- Clade native rule; source: rules/core/cloudflare-workers.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Cloudflare Workers / NuxtHub Configuration
 
@@ -19,7 +19,7 @@ NuxtHub (`@nuxthub/core`) 唯一的作用是 Track A 上 Cloudflare 原生 bindi
 |---|---|---|
 | **Track A (wrangler-action)** | Cloudflare D1 / KV / R2 / AI | **MUST** 在 `package.json` 帶 `@nuxthub/core` + 在 `nuxt.config.ts` `modules` 登記 + 設 `hub: { db: 'sqlite', ... }` + server code 用 `hubDatabase()` / `hubKV()` / `hubBlob()` |
 | **Track A (wrangler-action)** | Supabase / Postgres / 純外部 DB | **MUST NOT** 帶 `@nuxthub/core` |
-| **Track B (void.cloud)** | D1（void 自家 provision）| **MUST NOT** 帶 `@nuxthub/core`；自己寫 `server/utils/db.ts` 包 `createDb(env.DB)` + `server/utils/blob.ts` 包 R2 raw binding（範本見 `/yudefine-deploy` Phase 5）|
+| **Track B (void.cloud)** | D1（void 自家 provision）| **MUST NOT** 帶 `@nuxthub/core`；自己寫 `server/utils/db.ts` 包 `createDb(env.DB)` + `server/utils/blob.ts` 包 R2 raw binding（範本見 `/yudefine-deploy` `rules/Track遷移判準.md` Rule 4）|
 | **Track B (void.cloud)** | 純外部 DB（罕見）| **MUST NOT** 帶 `@nuxthub/core`（同上） |
 
 ### MUST NOT
@@ -73,7 +73,6 @@ NuxtHub (`@nuxthub/core`) 唯一的作用是 Track A 上 Cloudflare 原生 bindi
   | runtime | official skill projection | MCP delivery |
   |---|---|---|
   | Claude | `.claude/skills/void/` + `.claude/skills/migrate-vite-cloudflare-to-void/` | `void init --agents` writes `.claude/settings.json` (or `settings.local.json`) |
-  | Codex | `.agents/skills/void/` + `.agents/skills/migrate-vite-cloudflare-to-void/` | **MUST** follow and verify the printed `codex mcp add void -- npx void mcp` registration against the actual Codex MCP surface; initializer success alone does not prove MCP delivery |
 
   These paths and behaviors come from the official Void package's published coding-agent integration guide and agent implementation in the official package tarball (`void@0.10.13`, [npm registry package](https://registry.npmjs.org/void/-/void-0.10.13.tgz)); preserve the consumer's selected target set and do not claim runtime invocation from configuration presence alone.
 - **MUST** 後續 void CLI / config / runtime helper / `env.ts` / migration 等通用知識**走 official `void` skill 或 `void mcp`** (`search_docs` / `get_page docs/<path>.md`)；**NEVER** 從 consumer-side rule / project-specific note 複製 void CLI 命令當權威 — 那些 cache 容易跟 void 升版 drift
@@ -278,7 +277,7 @@ Track 判定：根目錄有 `void.json` 且 `package.json` 含 `void` dep → Tr
 
 各 consumer 現況以 `scripts/audit-wrangler-config.ts` 輸出為準。新 consumer 依 § 1 矩陣決定派別。改派必須同步：
 
-- 改 Track A → B：移除 `@nuxthub/core` + 建 void.json + 加 voidPlugin + 寫 `server/utils/db.ts` + `blob.ts` helper + 改 deploy.yml 走 `pnpm run void:deploy` + GitHub OIDC（詳見 `/yudefine-deploy` Phase 1-10 runbook）
+- 改 Track A → B：移除 `@nuxthub/core` + 建 void.json + 加 voidPlugin + 寫 `server/utils/db.ts` + `blob.ts` helper + 改 deploy.yml 走 `pnpm run void:deploy` + GitHub OIDC（詳見 `/yudefine-deploy` Phase 6 runbook）
 - 改 Supabase → D1（Track A）：補 `@nuxthub/core` + 改 `hub: {}` config + 跑 audit 重驗
 - 跑 audit script 重驗（`scripts/audit-wrangler-config.ts`）必須 0 violation 才算改派完成
 
@@ -328,7 +327,9 @@ Track 判定：根目錄有 `void.json` 且 `package.json` 含 `void` dep → Tr
 
   - Track A（wrangler-action）：CF token 走 `cloudflare/wrangler-action@v3` 的 `apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}`
   - Track B（void.cloud）：GitHub OIDC + `VOID_PROJECT`（link state 不在 CI，slug 必顯式給）
-- **MUST** runtime app secret（DB URL / session secret 等）由 user 在平台端預設一次（Track B：`void secret put <NAME>`；Track A：依 [[secrets]]），**不**從 GH Actions 注入 runtime secret
+- **MUST** runtime app secret（DB URL / session secret 等）依 deploy track 分流：
+  - **Track A**：SoT = GitHub repo secret，deploy 時經 `wrangler-action` `secrets:` 注入 worker——全流程照 [[secrets]]；**NEVER** 手動推（`wrangler secret put` / `cf workers secrets`），bootstrap／incident 唯一例外見該檔
+  - **Track B**：由 user 在平台端預設一次（`void secret put <NAME>`），**不**從 GH Actions 注入 runtime secret
 
 完整 workflow 範本見 `~/offline/clade/vendor/snippets/cloudflare-workers/self-hosted-runner-ci.workflow.yml.template`。
 

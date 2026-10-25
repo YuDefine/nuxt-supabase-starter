@@ -10,7 +10,7 @@
  *   ok      ≥ warn
  *   warn    < CLADE_DISK_WARN_GB（預設 25）     入口放行、stderr 一行警告
  *   block   < CLADE_DISK_BLOCK_GB（預設 15）    新樹／新 pane／publish／security-scan exit 75
- *   reclaim < CLADE_DISK_RECLAIM_GB（預設 8）   同 block，另由 disk-hygiene 跑緊急 worktree 回收
+ *   reclaim < CLADE_DISK_RECLAIM_GB（預設 14）   同 block，另由 disk-hygiene 跑緊急 worktree 回收
  *
  * 門檻是絕對 GiB：要保護的是一次 publish gate／一棵新樹要寫的 bytes，那由工作量決定，
  * 不隨磁碟大小縮放。量 `/` 與 `$HOME` 所在檔案系統，取較緊者；`/tmp` 不算——它是固定大小
@@ -43,7 +43,7 @@ export interface DiskThresholds {
   reclaimGiB: number
 }
 
-export const DEFAULT_THRESHOLDS: DiskThresholds = { warnGiB: 25, blockGiB: 15, reclaimGiB: 8 }
+export const DEFAULT_THRESHOLDS: DiskThresholds = { warnGiB: 25, blockGiB: 15, reclaimGiB: 14 }
 export const DISK_ADMISSION_EXIT = 75 // EX_TEMPFAIL：等空間回來再試
 const GIB = 1024 ** 3
 

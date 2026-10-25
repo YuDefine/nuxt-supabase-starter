@@ -1,12 +1,12 @@
 <!-- Clade native rule; source: rules/core/threshold-remediation.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 # Threshold Remediation（門檻處置的幅度紀律）
 
 **核心命題**：任何 audit 門檻（HANDOFF size / lines、TD entry oversize、closedBloat、per-section budget、
 lint warning 數、bundle size…）報超標時，處置的驗收標準是**清掉超標量**，不是「壓回門檻附近」。
-every session always-load。
+適用時機是 audit 報超標的那一刻；由 `clade-code-quality` skill 的 READ 載入，audit 報超標而尚未讀過本檔時 MUST 先 Read。
 
 **Iron Law：超過門檻 NEVER 只修到略低於門檻，一律全面處理。違反字面就是違反精神——
 「這樣就沒有 warn 了」不是達標，達標是「這個量已經不再逼近門檻」。**

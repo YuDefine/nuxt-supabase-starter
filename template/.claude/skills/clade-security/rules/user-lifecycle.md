@@ -1,9 +1,9 @@
 ---
 description: User lifecycle 規範（soft-delete / suspend / hard-delete 的 FK 策略與 guard pattern）
-paths: ['server/api/**/user*', 'packages/*/server/api/**/user*', 'server/api/**/admin/user*', 'packages/*/server/api/**/admin/user*', 'supabase/migrations/**/*.sql', 'server/database/migrations/**/*.sql', 'packages/*/server/database/migrations/**/*.sql']
+paths: ['server/api/**/user*', 'packages/*/server/api/**/user*', 'server/api/**/member*', 'server/api/**/member*/**', 'packages/*/server/api/**/member*', 'packages/*/server/api/**/member*/**', 'server/api/**/admin/user*', 'packages/*/server/api/**/admin/user*', 'supabase/migrations/**/*.sql', 'server/database/migrations/**/*.sql', 'packages/*/server/database/migrations/**/*.sql']
 ---
 <!-- Clade native rule; source: rules/core/user-lifecycle.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # User Lifecycle
 
@@ -48,6 +48,8 @@ Reference: `vendor/snippets/user-lifecycle/README.md`（variant 決策樹 + 範�
 
 Guard 5 非 pre-check 而是 post-action side-effect；其餘 4 道在 mutation 前 fail-fast。
 
+**成員角色變更與移出組織同樣套 guard**：降級角色、移出組織的 endpoint **MUST** 在 mutation 前擋下兩種情況——actor 降級或移出自己（403），以及降級或移出組織內最後一位 owner（403，須先轉移）。只在刪人時擋、改角色不擋，最後一位 owner 被降成 member 後組織就沒有人能管理。
+
 Template: `vendor/snippets/user-lifecycle/delete-guard.ts.template`
 
 ## Auth Layer Enforcement
@@ -71,7 +73,13 @@ Guard 5「session invalidation」的具體做法**取決於 session 是否可由
 
 這條 per-request 重驗（查 user **是否存在**）跟 § Auth Layer Enforcement 的 suspend check（查 `suspended_at`）是**不同檢查**，但 status-based + stateless 同時成立時**可合併成單一 query** 避免每請求兩次 DB round-trip：select `suspended_at` → row 不存在 = deleted → 401；`suspended_at` 有值 = suspended → 403。
 
+**Revocable store 開了 cookie cache 時**（Better Auth `session.cookieCache`）：cache 有效期間 server 不查 session 表，revoke 要等 cache 過期才生效。`session.expiresIn` 與 `session.cookieCache.maxAge` **MUST** 在設定檔明寫、不靠預設；cookieCache `maxAge` 就是 delete/suspend 後舊 session 的最長殘留時間，**MUST** 以分鐘計且遠小於 session 期限——兩者設成一樣長，即時 revoke 形同沒做。
+
 Template: `vendor/snippets/user-lifecycle/user-validation.ts.template`（stateless cookie session 專用）
+
+## Audit events（帳號與成員異動）
+
+帳號建立／停用／刪除、平台角色變更、成員加入／移出組織、組織角色變更，**每一種**都 **MUST** 寫 audit event，機制照 [[audit-pattern]]（與業務 mutation 同一個 transaction）。欄位：actor id、target user id、organization id（平台層異動為 null）、action、before／after（只放變動的授權相關欄位，如 role、status）。before／after **MUST** 經集中一處的敏感欄位黑名單過濾（密碼雜湊、token、2FA secret 與備援碼，以及 [[audit-pattern]] 禁入的 PII），**NEVER** 由各 handler 自己挑欄位。
 
 ## MUST
 

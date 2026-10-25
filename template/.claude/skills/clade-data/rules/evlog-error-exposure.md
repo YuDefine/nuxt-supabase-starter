@@ -11,7 +11,7 @@ paths:
   - 'packages/**/server/middleware/**'
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/evlog/evlog-error-exposure.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # evlog Error Exposure（why / fix / internal 的去處）
 

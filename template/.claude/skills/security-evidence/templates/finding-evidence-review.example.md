@@ -3,6 +3,8 @@
 
 ## Finding 證據審查：GET /api/orders/:id 未檢查訂單擁有者
 
+- 掃描器／model 來源：`/security-review`（commit 0-S.2，Claude Opus 5.5）
+
 ### 白話摘要
 
 - 攻擊者：任何一個有帳號、已登入的一般使用者

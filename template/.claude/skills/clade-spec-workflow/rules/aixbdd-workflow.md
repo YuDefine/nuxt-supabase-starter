@@ -4,7 +4,7 @@ paths: ['specs/plans/**', 'specs/truth/**', '.agents/constitution/**']
 ---
 <!-- Clade native rule; source: rules/core/aixbdd-workflow.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # aixbdd Workflow 標準
 
@@ -56,7 +56,7 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 
 表中名稱一律是上游 skill 名。consumer 端只有 `/specify`、`/clarify`、`/system-analysis`、`/implement` 與 `work-route` 是可直接叫的 skill；`/constitution`、`/clarify-over-specs`、`/spec-by-example`、`/ui-plan`、`/technical-research`、`/api-plan`、`/data-plan`、`/dsl-refine`、`/tasks`、`/bdd`、`/truth-delta`、`/gherkin-and-dsl` 沒有同名 slash 入口，由 `work-route` 依它的 owner 表載入上游契約執行。
 
-**冷啟動入口**：一個沒有對話歷史的 Claude／Codex task 收到新需求時，第一支 skill是 `work-route`——它先讀 `specs/truth/work-lifecycle.md` 與相關 truth，再判「續跑既有 work id」或「`flow plan open`」。純對話式規劃（user 只是在問、還沒要落地）**不寫 repo、不寫 flow**；user 明說要寫到外部草稿時，寫那個草稿、不鑄 work id。
+**冷啟動入口**：一個沒有對話歷史的 Claude task 收到新需求時，第一支 skill是 `work-route`——它先讀 `specs/truth/work-lifecycle.md` 與相關 truth，再判「續跑既有 work id」或「`flow plan open`」。純對話式規劃（user 只是在問、還沒要落地）**不寫 repo、不寫 flow**；user 明說要寫到外部草稿時，寫那個草稿、不鑄 work id。
 
 ## MUST
 
@@ -119,7 +119,7 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 
 上游沒有而 clade 需要的行為，只走兩條 clade-owned 路徑，不改上游檔：
 
-- **同目錄 overlay**（registry `mirror.cladeOwnedFiles`，sync 不覆寫）：`specformula.md`。上游 `SKILL.md` 不會提到它們，入口是 `work-route` § 2 的 overlay 表；直接叫公開入口時由本表指路。執行下列 owner 時 MUST 一併讀該 overlay：
+- **同目錄 overlay**（registry `mirror.cladeOwnedFiles`，sync 不覆寫）：`specformula.md`。上游 `SKILL.md` 不會提到它們，入口是 `work-route` 的 `rules/owner載入位置判準.md`（Rule 3 clade overlay）；直接叫公開入口時由本表指路。執行下列 owner 時 MUST 一併讀該 overlay：
 
 | Owner | overlay | 何時套用 |
 | --- | --- | --- |
@@ -149,7 +149,7 @@ overlay 只**追加**步驟，**NEVER** 改寫上游已定義的語意（Setup �
 | --- | --- |
 | 觸發條件 | informational — 不觸發任何東西（audit 永遠 exit 0；兩個「應為 0」的數由讀者照本節處置） |
 | 消費端 | 做 aixbdd pin bump、re-mirror 或 fork 改動的 agent；`node scripts/audit-upstream-submodules.ts` 的「skill 層上游為準」一節 |
-| 載入路徑 | consumer：本節（paths-gated 於 `specs/plans/**`、`specs/truth/**`、`.agents/constitution/**`）。clade home 不自動載入 `rules/core/`，案發時刻的載入點是該 audit 輸出裡指向本節的標題行（`version-upgrade` 的 `skills-mode.md` § S.1 逐字指名該 audit） |
+| 載入路徑 | consumer：本節（paths-gated 於 `specs/plans/**`、`specs/truth/**`、`.agents/constitution/**`）。clade home 不自動載入 `rules/core/`，案發時刻的載入點是該 audit 輸出裡指向本節的標題行（`version-upgrade` 的 `phases/skills.md` § S.1 逐字指名該 audit） |
 
 ## Reference signal（不 block）
 

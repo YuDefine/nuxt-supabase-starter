@@ -1,6 +1,6 @@
-# A 軸共用紀律判準（Outdated／Fleet）
+# A 軸共用紀律判準（有 git 載體的範圍）
 
-觸發點：SKILL.md「Worktree gate」步（mode 拍板為 Outdated 或 Fleet，跑任何 `pnpm add`／`git add`／`git commit` 之前）。
+觸發點：SKILL.md Step 0.4（Worktree gate；Phase 是 B、C、D、F、F-routine、K 或 T，跑任何 `pnpm add`／`pnpm update`／`git add`／`git commit` 之前）。
 
 # Rule 1 - A 軸共用基礎：模板、watch protocol、selective stage、commit msg
 
@@ -9,7 +9,7 @@
 | 基礎 | 出處 |
 | --- | --- |
 | Worktree gate | [[wt]] 的 `rules/改tracked檔前先隔離判準.md` Rule 1，wt-helper 開 / merge-back。**機械檢查點見本檔 Rule 2** |
-| Pi 派工模板 | `vendor/snippets/pi-upgrade-prompts/{first-pass,research}.md`（authoring source），`references/pi-prompt-templates.md` 是 plugin cache 副本 |
+| 派工模板 | `templates/first-pass.md`、`templates/research.md`（唯一來源） |
 | Pi watch protocol | [[agent-routing.pi-watch-protocol]] |
 | Selective stage on main | 一律 `git add package.json <lockfile>` + 額外指定檔，**NEVER** `git add -A` |
 | Commit msg（commitlint-aware） | subagent / pi 端讀 consumer commitlint config 後生 compliant msg |
@@ -34,9 +34,9 @@ git add -A && git commit
 
 - Level: `MUST`
 
-**本條只管 A 軸的兩個 mode（Outdated / Fleet）。** Skills mode 與 Machine mode 不動 `package.json` / lockfile，gate 對它們零適用——**NEVER** 為了「保險」對一個不產生檔案改動的操作開 worktree，那沒有隔離作用，只讓你以為有。
+**本條只管 Phase B、C、D、F、F-routine、K、T**（與範圍無關：`skills.fleet` 的範圍也是 `fleet`，但它是 Phase S）。Phase S、M、P 不動 `package.json` / lockfile，gate 對它們零適用——**NEVER** 為了「保險」對一個不產生檔案改動的操作開 worktree，那沒有隔離作用，只讓你以為有。
 
-Mode 分流拍板後、跑**任何** `pnpm add` / `git add` / `git commit` 之前，**MUST** 先跑：
+route 拍板後、跑**任何** `pnpm add` / `pnpm update` / `git add` / `git commit` 之前，**MUST** 先跑：
 
 ```bash
 node ~/offline/clade/vendor/scripts/wt-gate.ts --for version-upgrade
@@ -67,22 +67,22 @@ node ~/offline/clade/vendor/scripts/wt-gate.ts --for version-upgrade → exit 2 
 node ~/offline/clade/vendor/scripts/wt-gate.ts --for version-upgrade || true
 ```
 
-# Rule 3 - Outdated 與 Fleet 共同的禁止事項
+# Rule 3 - Phase B–D 與 Phase F 共同的禁止事項
 
 - Level: `MUST`
 
-- **NEVER** 在 main working tree 跑 — Outdated 與 Fleet 都受此規約，由 `wt-gate.ts` fail-closed 強制（見本檔 Rule 2）
-- **NEVER** 主線自己改 `package.json` 或在升版階段（Step O.2）跑 `pnpm add` / `pnpm install`（升版全程委派給 pi / subagent）。**例外**：Step O.3.2.c post-merge-back `pnpm install` 是 setup chore，不是升版動作；以及 provider／配額不可用、該 package 的執行鏈走完（[outdated-mode.md](outdated-mode.md) § O.2.2）時由主線照同一份 per-package brief 接手升版——品質失敗不適用這條，見下一條
-- **NEVER** first-pass 失敗就直接問使用者 — 必須先自動升 research（`version-upgrade-research` 列，見 `outdated-mode.md` § O.2.4；靠研究不靠抬 effort）
+- **NEVER** 在 main working tree 跑 — 有 git 載體的每一個 Phase 都受此規約，由 `wt-gate.ts` fail-closed 強制（見本檔 Rule 2）
+- **NEVER** 主線自己改 `package.json` 或在升版階段（Phase C）跑 `pnpm add` / `pnpm install`（升版全程委派給 pi / subagent）。**例外**：[phases/consumer-batch.md](../phases/consumer-batch.md) § Step D.1 正式落地後在 main 跑的 package manager install 是對齊依賴的 setup chore，不是升版動作；以及 provider／配額不可用、該 package 的執行鏈走完（[phases/consumer-batch.md](../phases/consumer-batch.md) § C.2）時由主線照同一份 per-package brief 接手升版——品質失敗不適用這條，見下一條
+- **NEVER** first-pass 失敗就直接問使用者 — 必須先自動升 research（`version-upgrade-research` 列，見 `phases/consumer-batch.md` § C.4；靠研究不靠抬 effort）
 - **NEVER** research 也**品質失敗**就主線自己接手 — 必須 runtime-native question interface 讓使用者選（provider／配額不可用走完鏈才是主線接手，那不是品質失敗）
 - runtime-native question interface 分成兩個能力判定：沒有 structured question 但普通對話與 exec session 可用時，直接在當前對話詢問使用者，**NEVER** 換 runtime；使用者已選 retry 但沒有可驗證的 background execution/completion surface 時，只阻擋依賴該 dispatch 的步驟、保留 worktree 與 durable task，**NEVER** 宣稱整個互動不可用。
 - **NEVER** 把 merge-back 當「下一步」丟給 user 自己跑（per [[wt]] 的 `rules/就緒池交接判準.md` Rule 5）
-- pi 派工 prompt 第一行 MUST 含 `[DELEGATED-BY-CLAUDE-CODE]` marker（codex 端 Runtime Gate 驗證此 marker 存在）
+- pi 派工 prompt 第一行 MUST 含 `[DELEGATED-BY-CLAUDE-CODE]` marker
 - **NEVER** 派 pi 時把 sandbox 換成 `read-only` / `workspace-write`（會擋 MCP）
 - **NEVER** 把上列Pi sandbox mode與`workspace_access`混為一談：version-upgrade一律是`mutation`
 - **NEVER** `git add -A` / `git add .` 在 main — 一律 selective stage
 
-Mode-specific 禁止事項見 [outdated-mode.md](outdated-mode.md)、[fleet-mode.md](fleet-mode.md)、[skills-mode.md](skills-mode.md) 與 [machine-mode.md](machine-mode.md) 尾段。
+各 Phase 的禁止事項見 [phases/consumer-batch.md](../phases/consumer-batch.md)、[phases/fleet.md](../phases/fleet.md)、[phases/skills.md](../phases/skills.md) 與 [phases/machine.md](../phases/machine.md) 尾段。
 
 ## Good Example
 

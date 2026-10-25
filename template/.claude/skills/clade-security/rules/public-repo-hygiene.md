@@ -4,7 +4,7 @@ paths: ['.github/workflows/**', '.husky/**', 'HANDOFF.md', 'tasks/**', 'scripts/
 ---
 <!-- Clade native rule; source: rules/core/public-repo-hygiene.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Public Repo Hygiene（自寫檔的洩漏 gate）
 

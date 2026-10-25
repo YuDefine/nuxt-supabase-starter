@@ -14,7 +14,7 @@ description: "Use for verification setup or maintenance. Not for product impleme
 
 ## Phase 1 -- 判定 mode 與定位 target
 
-1. READ 找 `<skills-root>/verify-*/SKILL.md`（`<skills-root>` 依 runtime：Claude `.claude/skills/`、Codex `.agents/skills/`；找不到該目錄就回報標準未送達，不猜一個）。
+1. READ 找 `<skills-root>/verify-*/SKILL.md`（`<skills-root>` 依 runtime：Claude `.claude/skills/`、Pi `.agents/skills/`；找不到該目錄就回報標準未送達，不猜一個）。
 2. THINK 零個 → create（Phase 2）；一個且要更新或重跑 → maintain（Phase 5）；多個 → 請使用者指定，不靠名稱相似度猜。只收集 UI 截圖交 `/review` screenshot；implementation 與規格對帳讀 `specs/truth/**` 與該 work 的 carrier 自行對帳，動到規格回交 truth owner skill。
 
 ## Phase 2 -- create：訪談 repo

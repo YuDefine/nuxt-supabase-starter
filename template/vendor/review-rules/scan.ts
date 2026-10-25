@@ -26,6 +26,8 @@
  *   --all             掃 git ls-files（全 tracked 檔；預設，--staged/--all 未給時走這個）
  *   --layer           只跑指定 layer 的規則；entry 缺 layer 欄位視為 pre-commit（向後相容
  *                     既有規則）；'all' 不過濾（預設）
+ *   --root <dir>      指定 consumerRoot（預設：本檔所在的 `<root>/vendor/review-rules/` 往上兩層）。
+ *                     patterns.json、baseline、git 檔案清單都以它為基準
  *   --ratchet         讀 <root>/review-rules-baseline.json（{ruleId: {file: count}}），
  *                     實際命中數 > baseline（缺 entry 視為 0）才算違規；只回報「新增」的部分
  *   --write-baseline  把當前命中數寫成新 baseline；命中數為 0 時寫入空 {}（檔案存在=武裝）
@@ -34,6 +36,7 @@
  * fileGlob 支援：
  *   - 舊有精確字串：`*.vue`（後綴匹配）、`app.config.*`（任意深度 basename 匹配，沿用
  *     既有 review-rules-ban.sh 行為，不經泛化引擎，避免既有 9 條規則行為漂移）
+ *   - `{a,b}` 大括號展開（例：`*.{ts,mts}` 後綴形式）；不支援巢狀
  *   - 目錄前綴泛化：`server/**`、`shared/**`、`app/**`、`server/api/**` 等——`**` 展開為
  *     任意路徑深度、`*` 為單一路徑段；另外會自動嘗試剝除 `packages/<name>/` 與 `template/`
  *     前綴後再比對一次，涵蓋 monorepo / starter template 變體（比照 nuxt-review-bans.md
@@ -49,9 +52,13 @@
  *     跟 `exclude` 的路徑層排除不同層次）
  *   - `multiLine`: true（顯式指定跨行 tag 展平；未給則用 needsMultiLine() 對 `<Tag...` 形式
  *     pattern 的既有 heuristic 自動判斷，行為與舊 review-rules-ban.sh 一致）
+ *   - `ratchet`: "when-baselined" | "off"（缺省 = 現行為：baseline 缺 key 視為 0）。
+ *       "when-baselined"：baseline 有該 ruleId 的 key 才進 ratchet 比對；沒有 key 只印「規則未武裝，
+ *         N 筆存量」、不計超額。`--write-baseline` 永遠寫 key（零命中寫 `{}`）。
+ *       "off"：永不進 ratchet 比對、`--write-baseline` 不寫 key（只在非 ratchet 模式出聲）。
  *   - `matchComments`: true（pattern 本來就要比對註解，例如 `} // end`、prose 規則）。未給時
  *     比對前先把註解遮成空白（見 maskComments()），`excludePattern` 仍對原始行比對——
- *     逐行 opt-out 標記（`<!-- raw-img -->`、`// heavy-lib-ok`）本身就是註解（TD-719）
+ *     逐行 opt-out 標記（`<!-- raw-img -->`、`// heavy-lib-ok`）本身就是註解
  *
  * 路徑基準一律是 **consumerRoot**（本檔所在的 `<consumerRoot>/vendor/review-rules/` 往上兩層），
  * 不是 git toplevel——monorepo 子目錄 consumer 兩者不同，見 resolveConsumerRoot() 的註解。
@@ -82,7 +89,7 @@ class UsageError extends Error {}
 
 // 本檔會落在 consumer repo 的 `vendor/` 下，被對方的 `noImplicitAny` typecheck 涵蓋。
 // 參數與資料結構 **MUST** 各自帶 inline 結構型別，否則散播後直接讓 consumer 的
-// typecheck 紅燈（<consumer-a> 2026-07-31 實證，同 commitlint.config.ts 的既有註記）。
+// typecheck 紅燈（同 commitlint.config.ts 的既有註記）。
 // clade 中央倉自己沒有 typecheck script，這類缺陷只會在 consumer 端才炸。
 type Rule = {
   id: string
@@ -98,6 +105,7 @@ type Rule = {
   excludePattern?: string
   multiLine?: boolean
   matchComments?: boolean
+  ratchet?: string
 }
 
 type Hit = { file: string; line: number; text: string }
@@ -112,6 +120,7 @@ type Violation = {
   text: string
   message?: string
   fix?: string
+  ratchet?: string
 }
 
 /** `{ ruleId: { file: 命中數 } }` */
@@ -132,9 +141,18 @@ function escapeRegExpChar(ch: string) {
 /** 把泛化 glob（`**`＝任意路徑深度、`*`＝單一路徑段）轉成錨定 RegExp。 */
 function globToRegExp(glob: string) {
   let src = ''
+  let inBrace = false
   for (let i = 0; i < glob.length; i++) {
     const ch = glob[i] ?? ''
-    if (ch === '*' && glob[i + 1] === '*') {
+    if (ch === '{' && glob.indexOf('}', i) > i) {
+      src += '(?:'
+      inBrace = true
+    } else if (ch === '}' && inBrace) {
+      src += ')'
+      inBrace = false
+    } else if (ch === ',' && inBrace) {
+      src += '|'
+    } else if (ch === '*' && glob[i + 1] === '*') {
       if (glob[i + 2] === '/') {
         src += '(?:.*/)?'
         i += 2
@@ -211,7 +229,7 @@ function extractTags(content: string) {
   return tags
 }
 
-// ---------- 註解遮蔽（TD-719） ----------
+// ---------- 註解遮蔽 ----------
 //
 // 原始字串比對讓「警告不要用 X」這句註解與使用 X 同形——對被禁 token 最安全的文件化方式
 // 被計成違規。這裡把註解字元換成空白、保留換行，所以行號、欄位與非註解內容逐位元不變。
@@ -374,6 +392,7 @@ function scan(rules: Rule[], files: string[], readFile: ReadFile): Violation[] {
         severity: rule.severity,
         section: rule.section,
         layer: rule.layer || 'pre-commit',
+        ratchet: rule.ratchet,
         file: h.file,
         line: h.line,
         text: h.text,
@@ -400,9 +419,20 @@ function loadBaseline(baselinePath: string): Baseline {
   }
 }
 
-function buildBaselineFromViolations(violations: Violation[]): Baseline {
+/**
+ * `ratchet:"off"` 的規則不進 baseline；`armWhenBaselined` 給的規則表裡每條 `"when-baselined"`
+ * 都寫 key（零命中寫 `{}`）——key 存在本身就是該規則的武裝訊號。
+ */
+function buildBaselineFromViolations(
+  violations: Violation[],
+  armWhenBaselined: Rule[] = [],
+): Baseline {
   const baseline: Baseline = {}
+  for (const rule of armWhenBaselined) {
+    if (rule.ratchet === 'when-baselined') baseline[rule.id] = {}
+  }
   for (const v of violations) {
+    if (v.ratchet === 'off') continue
     const byFile = (baseline[v.ruleId] ??= {})
     byFile[v.file] = (byFile[v.file] || 0) + 1
   }
@@ -412,13 +442,15 @@ function buildBaselineFromViolations(violations: Violation[]): Baseline {
 function writeBaselineFile(
   baselinePath: string,
   baseline: Baseline,
-  scope: { fileset: string; layer: string },
+  scope: { fileset: string; layer: string; rules: string[] },
 ) {
   // 空 baseline 也寫入 {}——「檔案存在」= ratchet 武裝訊號（零容忍）；
   // 檔案不存在 = bootstrap warn-only（見 main 的 ratchet 分支）。
   //
   // `_meta` 記錄寫入時的掃描範圍，讓 baseline 自我描述。ruleId 不會是 `_meta`，
   // 所以 compareRatchet 的查表不受影響；ruleCount 另外扣掉。
+  // `_meta.rules` 記錄寫入當下掃過的 rule id：零違規的規則不會出現在 baseline keys，沒有這份
+  // 名冊就分不出「這條規則收斂過、零違規」與「這條規則是之後才散播進來的」。
   const payload = { _meta: { ...scope }, ...baseline }
   writeFileSync(baselinePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
   return { written: true, empty: Object.keys(baseline).length === 0 }
@@ -427,7 +459,7 @@ function writeBaselineFile(
 /**
  * baseline 裡指向已不存在檔案的 (ruleId, file)。ratchet 只比「實際 > baseline」，所以死 entry
  * 永遠不會被消耗、也不擋任何東西 —— 它讓「debt 隨 rename 搬家」與「debt 真的清掉」在檔案內容上
- * 同形，而 rename 的那一趟搬過去的存量全被判成新增（TD-762：`/flow` → `/board` 那次 30 項）。
+ * 同形，而 rename 的那一趟搬過去的存量全被判成新增（例：目錄改名一趟搬走的整批存量）。
  * 只出聲、不改 exit code：刪不刪由看得懂那次 rename 的人判。
  */
 function findDeadEntries(baseline: Baseline | null, exists: (file: string) => boolean) {
@@ -453,11 +485,47 @@ function printDeadEntries(dead: { ruleId: string; file: string; baseline: number
   )
 }
 
-/** 只回報「實際命中數 > baseline」的 (ruleId, file) — 既有存量違規（≤ baseline）不報。 */
+/**
+ * 收斂範圍外的 rule id：不在 baseline keys、也不在 `_meta.rules` 名冊。
+ * 新 ratchet 規則散播進來時，既有 consumer 的 baseline 沒收斂過它，該規則下的每一處存量都被
+ * 判成新增 —— 訊息讀起來像「你剛弄壞了東西」。這份名單只用來把成因說出口，不改判定。
+ * 舊格式 baseline（沒有 `_meta.rules`）只能靠 keys 判斷：零違規的規則會被列入，故訊息用
+ * 「未確認收斂」而不是「新規則」。
+ */
+function findUnconvergedRules(baseline: Baseline | null, rules: Rule[]) {
+  const keys = new Set(Object.keys(baseline ?? {}).filter((k) => k !== '_meta'))
+  const meta = (baseline as Record<string, unknown> | null)?.['_meta']
+  const metaRules = isRecord(meta) && Array.isArray(meta.rules) ? (meta.rules as unknown[]) : null
+  const covered = new Set<string>([...keys, ...(metaRules ?? []).map(String)])
+  return {
+    hasRuleRoster: metaRules !== null,
+    unconverged: rules.map((r) => r.id).filter((id) => !covered.has(id)),
+  }
+}
+
+/**
+ * 只回報「實際命中數 > baseline」的 (ruleId, file) — 既有存量違規（≤ baseline）不報。
+ *
+ * 規則級 `ratchet` 欄位（缺欄位＝現行為，baseline 缺 key 視為 0）：
+ *   - "off"：整條略過
+ *   - "when-baselined"：baseline 沒有該 ruleId 的 key → 不比對，只記進 `unarmed`（規則尚未被
+ *     這個 repo 收編；寫入 key 的那一刻才武裝）
+ */
 function compareRatchet(baseline: Baseline | null, violations: Violation[]) {
   const actual = buildBaselineFromViolations(violations)
+  const modeByRule = new Map<string, string | undefined>(
+    violations.map((v): [string, string | undefined] => [v.ruleId, v.ratchet]),
+  )
   const overages: { ruleId: string; file: string; baseline: number; actual: number }[] = []
+  const unarmed: { ruleId: string; count: number }[] = []
   for (const [ruleId, fileCounts] of Object.entries(actual)) {
+    if (modeByRule.get(ruleId) === 'when-baselined' && !Object.hasOwn(baseline ?? {}, ruleId)) {
+      unarmed.push({
+        ruleId,
+        count: Object.values(fileCounts).reduce((sum, n) => sum + n, 0),
+      })
+      continue
+    }
     for (const [file, count] of Object.entries(fileCounts)) {
       const baselineCount = baseline?.[ruleId]?.[file] ?? 0
       if (count > baselineCount) {
@@ -465,7 +533,16 @@ function compareRatchet(baseline: Baseline | null, violations: Violation[]) {
       }
     }
   }
-  return overages
+  return { overages, unarmed }
+}
+
+function printUnarmed(unarmed: { ruleId: string; count: number }[]) {
+  for (const u of unarmed) {
+    process.stderr.write(
+      `ℹ️  [${u.ruleId}] 規則未武裝（review-rules-baseline.json 沒有此 ruleId 的 key），${u.count} 筆存量不計超額。` +
+        `跑 --write-baseline 收編存量、寫入此規則的 key 後即武裝。\n`,
+    )
+  }
 }
 
 // ---------- git helpers ----------
@@ -478,10 +555,11 @@ function compareRatchet(baseline: Baseline | null, violations: Violation[]) {
 //   ① patternsPath 永遠找不到（走 § patterns.json 不存在的靜默出口，與「尚未 propagate」同形）
 //   ② 掃描範圍變成整個 monorepo（含 consumer 目錄外的檔）
 //   ③ `DEFAULT_EXCLUDE_RE` 的 `^vendor/` 對 `template/vendor/…` 失效 → cookbook 註解誤觸規則
-// 三者一起壞，而輸出上看起來只是「這個 consumer 還沒收到 patterns.json」（TD-428）。
+// 三者一起壞，而輸出上看起來只是「這個 consumer 還沒收到 patterns.json」。
 //
 // script 位置是唯一與 consumer 根目錄綁定的事實：本檔恆在 `<consumerRoot>/vendor/review-rules/`。
-function resolveConsumerRoot() {
+function resolveConsumerRoot(rootArg?: string) {
+  if (rootArg) return resolve(rootArg)
   return resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 }
 
@@ -497,7 +575,7 @@ const DEFAULT_EXCLUDE_RE = /^(vendor|node_modules)\//
  * `vendor/` 底下的 `.vue` 是源檔不是投影，要掃就得明確納入。
  *
  * 做成 opt-in flag 而不是改 `DEFAULT_EXCLUDE_RE` 的語意：後者是 fleet-wide 行為改動，會讓每個
- * consumer 的 cookbook 範例註解開始誤觸規則（TD-428 那條註解記的正是這個失敗）。沒傳 flag 的
+ * consumer 的 cookbook 範例註解開始誤觸規則。沒傳 flag 的
  * 呼叫端 —— 也就是所有 consumer —— 行為逐位元不變。
  */
 function excluded(file: string, include: string[]): boolean {
@@ -560,6 +638,20 @@ function printHuman(violations: Violation[]) {
   }
 }
 
+function printUnconvergedHint(
+  overages: { ruleId: string }[],
+  unconverged: string[],
+  hasRuleRoster: boolean,
+) {
+  const hit = [...new Set(overages.map((o) => o.ruleId))].filter((id) => unconverged.includes(id))
+  if (hit.length === 0) return
+  process.stderr.write(
+    `ℹ️  下列規則不在 baseline 的收斂範圍內（${hasRuleRoster ? '_meta.rules 與 keys 皆無' : '舊格式 baseline 無 _meta.rules，keys 無此規則'}）：${hit.join('、')}\n` +
+      '  這些「新增」多半是規則散播進來前就存在的存量，不是你剛弄壞的。請審視違規後由 consumer 跑\n' +
+      '  --write-baseline 重新收斂（NEVER 不看就整批放行；真正新增的違規要修掉）。\n',
+  )
+}
+
 function printRatchetReport(
   overages: { ruleId: string; file: string; baseline: number; actual: number }[],
 ) {
@@ -581,7 +673,7 @@ function usage() {
 
 用法：
   node scan.mjs [--staged|--all] [--layer pre-commit|ratchet|all] [--ratchet]
-                [--include <glob>]... [--write-baseline] [--json] [--help]
+                [--include <glob>]... [--root <dir>] [--write-baseline] [--json] [--help]
   node scan.mjs --relevant-from <file> [--layer ...]   # 這批 changed paths 值不值得掃（exit 0=值得 / 3=不值得）
 
 範例：
@@ -630,13 +722,19 @@ function main() {
     throw new UsageError('--relevant-from 需要一個檔案路徑參數')
   }
 
-  const consumerRoot = resolveConsumerRoot()
+  const rootIdx = argv.indexOf('--root')
+  const rootArg = rootIdx >= 0 ? (argv[rootIdx + 1] ?? '') : ''
+  if (rootIdx >= 0 && !rootArg) {
+    throw new UsageError('--root 需要一個目錄參數')
+  }
+
+  const consumerRoot = resolveConsumerRoot(rootArg || undefined)
   const patternsPath = join(consumerRoot, 'vendor', 'review-rules', 'patterns.json')
 
   if (!existsSync(patternsPath)) {
     // 訊息 **MUST 帶找過的絕對路徑**：這條出口原本是為「consumer 尚未 propagate」設計的，
     // 但任何路徑解析失誤都走同一條，兩種狀態的輸出逐字相同 → 稽核端只能猜，而它猜的那句
-    // （「尚未 propagate」）在路徑失誤時是錯的（TD-428）。印出路徑讓兩者可區分。
+    // （「尚未 propagate」）在路徑失誤時是錯的。印出路徑讓兩者可區分。
     if (wantJson) {
       process.stdout.write(
         `${JSON.stringify({ skipped: true, reason: 'vendor/review-rules/patterns.json not found', patternsPath, consumerRoot })}\n`,
@@ -693,11 +791,21 @@ function main() {
         `⚠️  review-rules-baseline.json 不存在——bootstrap warn-only 模式（${violations.length} 筆存量違規暫不擋）。跑 --write-baseline 收斂存量後即武裝 ratchet。\n`,
       )
     } else {
-      const overages = compareRatchet(oldBaseline, violations)
+      const { overages, unarmed } = compareRatchet(oldBaseline, violations)
       const deadEntries = findDeadEntries(oldBaseline, (f) => existsSync(join(consumerRoot, f)))
-      ratchetResult = { overages, pass: overages.length === 0, deadEntries }
-      // json 與人讀模式都印在 stderr：死 entry 不改判定，但呼叫端只看 exit code 時它仍要出聲
+      const { unconverged, hasRuleRoster } = findUnconvergedRules(oldBaseline, rules)
+      ratchetResult = {
+        overages,
+        pass: overages.length === 0,
+        deadEntries,
+        unarmed,
+        unconvergedRules: unconverged,
+      }
+      // json 與人讀模式都印在 stderr：死 entry、未武裝規則、未收斂規則不改判定，但呼叫端只看
+      // exit code 時它們仍要出聲
       printDeadEntries(deadEntries)
+      printUnarmed(unarmed)
+      printUnconvergedHint(overages, unconverged, hasRuleRoster)
     }
   }
 
@@ -715,8 +823,12 @@ function main() {
       )
       process.exit(2)
     }
-    const newBaseline = buildBaselineFromViolations(violations)
-    const result = writeBaselineFile(baselinePath, newBaseline, { fileset, layer })
+    const newBaseline = buildBaselineFromViolations(violations, rules)
+    const result = writeBaselineFile(baselinePath, newBaseline, {
+      fileset,
+      layer,
+      rules: rules.map((r) => r.id).toSorted(),
+    })
     writeBaselineResult = {
       path: baselinePath,
       ruleCount: Object.keys(newBaseline).length,
@@ -760,9 +872,8 @@ function main() {
   // 用 execFile / `| jq` 讀 `--json`）Node 的寫入是非同步的 —— 大輸出會在中途被砍斷，留下一段
   // 語法不完整的 JSON。設 `exitCode` 讓 event loop 自然收尾，行為等價但輸出完整。
   //
-  // 實證（2026-08-06 work-loop round 30）：<consumer-b> 573 筆違規 / <consumer-a> 同級的 `--json` 經 execFile
-  // 讀回來恆為 108KB 出頭並 `Unterminated string`，而違規數小的 consumer 全部正常 —— 失敗與否
-  // 只取決於輸出大小，所以它在小 repo 上永遠測不出來。
+  // 違規數大的 consumer 的 `--json` 經 execFile 讀回來會被截斷並 `Unterminated string`，
+  // 而違規數小的全部正常 —— 失敗與否只取決於輸出大小，所以它在小 repo 上永遠測不出來。
   if (ratchetResult) {
     process.exitCode = ratchetResult.pass ? 0 : 2
     return

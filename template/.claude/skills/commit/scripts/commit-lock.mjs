@@ -14,7 +14,7 @@
  * recovery.  Age and PID are observations only.
  *
  * Usage:
- *   node commit-lock.mjs acquire --work-id ID --runtime claude|codex|grok|devin --session-id ID
+ *   node commit-lock.mjs acquire --work-id ID --runtime claude|grok|devin --session-id ID
  *   node commit-lock.mjs renew --work-id ID --runtime R --session-id ID --owner-token TOKEN
  *   node commit-lock.mjs release --work-id ID --runtime R --session-id ID --owner-token TOKEN
  *   node commit-lock.mjs recover --work-id ID --runtime R --session-id ID \
@@ -26,6 +26,7 @@
  */
 
 import {
+  existsSync,
   linkSync,
   mkdirSync,
   readdirSync,
@@ -35,14 +36,15 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
+import { spawn } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
-import { basename, dirname, resolve } from 'node:path'
-import { hostname, userInfo } from 'node:os'
+import { basename, dirname, join, resolve } from 'node:path'
+import { homedir, hostname, userInfo } from 'node:os'
 
-const RUNTIMES = new Set(['claude', 'codex', 'grok', 'devin'])
+const RUNTIMES = new Set(['claude', 'grok', 'devin'])
 // 退役 runtime 不再接受新 identity，但既存 journal 必須仍然可讀可回復——
-// cursor 時代的 crash-recovery journal 不能因為退役而失效。
-const JOURNAL_RUNTIMES = new Set([...RUNTIMES, 'cursor'])
+// cursor、codex 時代的 crash-recovery journal 不能因為退役而失效。
+const JOURNAL_RUNTIMES = new Set([...RUNTIMES, 'cursor', 'codex'])
 const EMPTY_HASH = createHash('sha256').update(Buffer.alloc(0)).digest('hex')
 const STALE_MINUTES = Number.parseInt(process.env.COMMIT_LOCK_STALE_MINUTES || '30', 10)
 const USAGE = 'Usage: commit-lock.mjs {acquire|renew|release|status|recover} [options]'
@@ -205,8 +207,8 @@ function isValidIdentity(options, { ownerToken = false } = {}) {
 function assertIdentity(options, ownerToken = false) {
   if (!isValidIdentity(options, { ownerToken })) {
     const required = ownerToken
-      ? '--work-id, --runtime (claude|codex|grok|devin), --session-id, and --owner-token'
-      : '--work-id, --runtime (claude|codex|grok|devin), and --session-id'
+      ? '--work-id, --runtime (claude|grok|devin), --session-id, and --owner-token'
+      : '--work-id, --runtime (claude|grok|devin), and --session-id'
     fail(options, `explicit identity required: ${required}`, undefined, 2)
   }
 }
@@ -581,6 +583,43 @@ function createPayload(options) {
   }
 }
 
+/**
+ * acquire 成功後把「這件工作正在這台、這棵樹」寫成一筆只含位置的 `work.checkpoint`，別台用
+ * `flow where` 才看得到。走 clade home 的 flow CLI（它先確認該 spine 上有這件 work），detached、
+ * 不等結果：telemetry NEVER 擋 commit。`CLADE_AUTO_CHECKPOINT=0` 關掉。
+ */
+function recordCheckpoint(options) {
+  if (process.env.CLADE_AUTO_CHECKPOINT === '0') return
+  const flow = join(
+    process.env.CLADE_HOME || join(homedir(), 'offline', 'clade'),
+    'vendor',
+    'scripts',
+    'flow',
+    'flow.ts',
+  )
+  if (!existsSync(flow)) return
+  try {
+    spawn(
+      process.execPath,
+      [
+        flow,
+        'work',
+        'checkpoint',
+        options.workid,
+        '--checkout',
+        options.repo,
+        '--actor',
+        `commit-lock:${options.runtime}`,
+        '--substrate',
+        'git',
+      ],
+      { cwd: options.repo, detached: true, stdio: 'ignore' },
+    ).unref()
+  } catch {
+    // fail-open
+  }
+}
+
 function acquire(options) {
   assertIdentity(options)
   const paths = pathsFor(options.repo)
@@ -634,6 +673,7 @@ function acquire(options) {
     lock: payload,
     ...snapshotHashes(null, afterRaw),
   })
+  recordCheckpoint(options)
   if (options.json) emit(options, receipt)
   else {
     console.log('[/commit lock] ✓ acquired')

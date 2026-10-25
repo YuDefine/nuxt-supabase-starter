@@ -3,7 +3,7 @@ description: 資料庫存取模式（Supabase client/server 分工）
 paths: ["app/**/*.{vue,ts}", "packages/*/app/**/*.{vue,ts}", "server/**/*.ts", "packages/*/server/**/*.ts"]
 ---
 <!-- Clade native rule; source: rules/modules/db-runtime/cf-workers/database-access.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Database Access Pattern
 
@@ -12,7 +12,7 @@ paths: ["app/**/*.{vue,ts}", "packages/*/app/**/*.{vue,ts}", "server/**/*.ts", "
 > **這條預設綁 `modules.auth`**：consumer manifest（`.clade/manifest.json`）的 `modules.auth` 是 `better-auth` 或 `nuxt-auth-utils` 時，Supabase 不簽 JWT，瀏覽器的 `useSupabaseClient()` **恆以 `anon` role 存取**，登入與否都一樣 —— 要讓 client 讀得到就得把表開成 `TO public`，等於對任何持有 publishable key 的人公開。那些 auth stack 下 client 直讀**不是**預設：讀寫一律走 `/api/v1/*`，client 端 Supabase 只留 Storage（bucket policy 獨立）。見 [[auth-data-path-consistency]] § Auth 策略與資料路徑的合法組合。
 > **Helper 名依 `modules.auth` 而異**：本檔以 `getSupabaseWithContext(event)` 為 canonical 名。當 consumer manifest（`.clade/manifest.json`）的 `modules.auth` 是 `better-auth` 或 `nuxt-auth-utils` 時，等價 helper 是 **`getAuthedSupabase(event)`** —— 那些 auth stack 下 Supabase 不簽 JWT，`auth.uid()` 恆 null，helper 只驗 session 不做授權，名字必須說實話。兩者回傳形狀相同（`{ client, user }`）。見 [[auth-data-path-consistency]] § Server 側：RLS policy 的前提條件。
 - **Privileged system tasks**: `getServerSupabaseClient()` 僅用於 audit logging、backfill、資料修復、背景工作
-- **Optional transactional query layer**: `server/utils/drizzle.ts` 僅用於 service 層 / 系統任務；**NEVER** 讓 Drizzle 接管 migration、RLS、trigger
+- **Drizzle（`server/utils/drizzle.ts`）**: 用不用、是預設路徑還是選用層，依部署 runtime 與 `modules.auth` 查 [[auth-data-path-consistency]] § 資料存取層選型；**NEVER** 讓 Drizzle 接管 migration、RLS、trigger
 - **Client-side writes are architecture exceptions** — 只有在 proposal / ADR 明確記錄並同時滿足下列條件時，才可從 client 使用 `.insert()` / `.update()` / `.delete()` / `.upsert()`：
   - RLS policy 能完整表達 tenant / user scope 與所有授權規則
   - GRANT 只開必要 schema / table / operation，不給寬權限
@@ -91,8 +91,7 @@ WHERE state = 'idle' AND state_change < now() - interval '5 minutes';
 
 ## Drizzle 使用邊界
 
-- `drizzle.config.ts` 與 `server/utils/drizzle.ts` 是**選用能力**，不是預設 handler 路徑
-- **MUST** 繼續用 Supabase CLI 管 migration，**NEVER** 讓 `drizzle-kit generate/push` 成為正式 schema 變更來源
+- 用不用 Drizzle、`drizzle-kit` 哪些指令可以用，判準在 [[auth-data-path-consistency]] § 資料存取層選型，本節只管連線方式
 - 若用 `postgres-js` 直連 Supavisor，**MUST** `prepare: false`
 - 遠端 / 雲端建議使用 pooler port `6543`；本地 Supabase 直連預設 `54322`
 
@@ -104,6 +103,8 @@ WHERE state = 'idle' AND state_change < now() - interval '5 minutes';
 - **MUST** 用 `@supabase/supabase-js` client 走 HTTP → PostgREST
 - **NEVER** 嘗試直接 Postgres TCP 連線（`pg` / `postgres` node driver）— Edge runtime 不支援持久 socket
 - **30 秒 CPU 限制**（付費 plan）— 任何 query 超過數百 ms 都會嚴重佔用 budget
+- **request 範圍外取 DB MUST 從 `env` 建 client**：queue consumer、`scheduled`（cron）、`waitUntil` 延後工作沒有可用的 `event`，**NEVER** 在這些入口呼叫 request-scoped helper（`getSupabaseWithContext(event)`、`useEvent()`）。D1 用一支接 `env` 的 helper（例如 `dbFromEnv(env)` 回 `drizzle(env.DB, { schema })`）；Supabase 走上方 Privileged system tasks 的 server client。
+- **binding 缺失 MUST 在 helper 入口就丟出可行動的錯誤**：helper 先 duck-type 檢查 binding（D1：物件存在且有 `prepare` 與 `batch` 函式），不符時 throw 一個點名 binding 名稱與 `wrangler.{toml,jsonc}` 對應段的錯誤；**NEVER** 讓 `undefined` 傳到第一次查詢才炸成 `Cannot read properties of undefined`。
 
 ### Node.js runtime（Vercel / Nuxt Hub）
 

@@ -3,7 +3,7 @@ description: Scope discipline 規則——不擴散、必登記、不擅改他�
 paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisions/**', 'HANDOFF.md']
 ---
 <!-- Clade native rule; source: rules/core/scope-discipline.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Scope Discipline
 
@@ -41,7 +41,7 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 - **hook / automation 自動產出的 working tree 變動**：
   - pre-commit / post-commit / sync-vendor 等 hook 自動建立 / 刪除 / 移動的檔案或目錄
   - hook 自動寫入的 annotation（例：`(claude-discussed: ...)`、`(verified-*: ...)`、`@followup[TD-NNN]`）
-  - hook 自動觸發的 archive directory（`docs/archives/<YYYY-MM>-*.md`、`screenshots/<env>/_archive/`）
+  - hook 自動觸發的 archive directory（未遷移 consumer 的 `docs/archives/<YYYY-MM>-*.md`、`screenshots/<env>/_archive/`）
   - hook 自動 propagate 到 spec.md / rule 投影層的內容
   - chmod 設定的 LOCKED projection 改動
 
@@ -102,7 +102,7 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 
 此時 **MUST** 先跑 [[session-tasks]] § 並行爭用 的 Step 0 判出持有者性質，再依下列**三個固定選項**處置。順序是規約的一部分：**A0 排在 A / B 之前**，A / B 只在 A0 判定不適用、或 A0 已送出而爭用未解時才輪到。查不到持有者時保留 WIP；沒有通道或本次訊息授權時，回報這個具體缺口，不假裝已經協調。
 
-- **A0. 先跟持有者對話**（持有者是**前景 agent session**，且已取得協調授權並有可用通道時 MUST 先走）— 以當前通道送達精確 session：對方是 Claude session 用 `SendMessage`（`ListAgents` 取名稱）；非 Claude runtime 且 Herdr 通道已驗證可用時才用 `herdr agent prompt <對方 pane_id> "<四項>"`，不把它當所有 runtime 都有的 API。四項內容與逐字範本見 [[concurrent-session-probe]] § 探測之後：協商（negotiate）。依對方回覆分流：對方說它正要 land → 等它落地再重跑當前 flow；對方說那批無主 → 進 A；對方說它要接手 → 進 B，且登記內文 MUST 寫明接手者是誰。送出後 MUST 指名等到哪一個可觀察事件（對方回覆、或那幾個檔不再 dirty），上限 5 分鐘，逾時升級路徑同該 cookbook。持有者是 **unattended runner**、判不出持有者、缺通道或缺本次協調授權時，A0 不執行，保留具體原因再看 A / B
+- **A0. 先跟持有者對話**（持有者是**前景 agent session**，且已取得協調授權並有可用通道時 MUST 先走）— 以當前通道送達精確 session：對方是 Claude session 用 `SendMessage`（`ListAgents` 取名稱）；非 Claude runtime 且 Herdr 通道已驗證可用時才用 `herdr agent prompt <對方 pane_id> "<四項>"`，不把它當所有 runtime 都有的 API。四項內容與逐字範本見 [[concurrent-session-probe]] § 探測之後：協商（negotiate）。依對方回覆分流：對方說它正要 land → 先過 [[concurrent-session-probe]] `[0]` 冗餘檢查（`[0]` 在該節，判準表在其後 § 送訊息 MUST 用單引號 heredoc）：這趟輸出會被對方覆蓋就省略這趟，當前 flow 視為中止、剩餘步驟交給對方（`[0]` 逐條列出）並收工，不再進 A／B、不另登記；不會被覆蓋才等它落地再重跑當前 flow；對方說那批無主 → 進 A；對方說它要接手 → 進 B，且登記內文 MUST 寫明接手者是誰。送出後 MUST 指名等到哪一個可觀察事件（對方回覆、或那幾個檔不再 dirty），上限 5 分鐘，逾時升級路徑同該 cookbook。持有者是 **unattended runner**、判不出持有者、缺通道或缺本次協調授權時，A0 不執行，保留具體原因再看 A / B
 - **A. 馬上修，回 flow 繼續** — 在當前 session 直接編輯該 WIP 檔，原 flow（`/commit` / `/handoff` / 等）繼續走完。前提：A0 已送出且對方不反對（或 A0 不適用），且 user 確認該編輯不會跟別 session 的修改互踩（或別 session 已結束）
 - **B. 登 TD，放棄當前 flow** — 把問題依 [[follow-up-register]] 登記（lifecycle repo：所屬 plan 的 § Open work；未遷移 consumer：`docs/tech-debt.md` 的 TD-NNN），當前 flow **立即中止**（commit 不繼續、archive 不繼續），等別 session 結束後由 user 決定何時處理；已成功 commit 的 group 保留不動
 
@@ -138,6 +138,27 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 - `rm -rf` 批次刪除 `specs/**`、`tasks/**`、`screenshots/**` 等 user-authored 或 hook-authored 內容
 - `cp -f` / `cp --remove-destination`、`echo >` / `cat >` / `tee` 覆蓋 tracked 檔
 - `sed -i` / `awk -i inplace` / `perl -i` 覆寫未授權內容；合法編輯依 [[commit]] 的範圍與可審查 diff 契約
+
+### 外部資源的破壞性 CLI
+
+適用於**每一個**會刪除或覆寫 repo 外狀態的 CLI 指令：drop／truncate 表或 schema、對 remote 環境套 migration 或 reset DB、purge cache、刪 bucket／namespace／database／repo、批次刪資料。prod DB 的讀寫另依 [[prod-access]] 的授權表，本節不擴大也不縮小它。
+
+每一次執行前依序做完三步，少一步就不執行：
+
+1. **唯讀預覽**：用該 CLI 的 dry-run／plan／list 列出會毀掉什麼（環境、資源名、筆數）；CLI 沒有唯讀預覽就用 list／describe 自己列。預覽本身有寫入副作用時不算預覽（同 § 停手定義 第 1 點）
+2. **明說不可逆**：回報寫明哪些無法復原、有沒有備份可回、回得到哪個時間點
+3. **針對這一個動作取得確認**：授權對象是「這個環境的這個資源的這個動作」；同類的下一個動作重新取得。派工 pane 走 `--complete blocked --decision-for charles`，題目帶第 1 步的預覽摘要
+
+- **NEVER** 用 `--yes`／`--force`／`--auto-approve`／`yes |` 這類略過 CLI 確認的手段跳過第 3 步。第 3 步確認後、非互動環境必須帶確認旗標才跑得動時才帶，並在回報寫明依的是哪一次確認
+- 「整理一下」「清乾淨」「重來一次」不是破壞授權，屬 § 話術關鍵詞
+
+### agent 跑 CLI：參數給齊，不停在互動 prompt
+
+agent 呼叫的**每一個** CLI 都 **MUST** 用旗標或參數給齊會被問的值（目標環境、專案／帳號、資源名、輸出格式、要不要安裝依賴），讓它從頭跑到尾不等輸入：
+
+1. 先跑 `--help` 找對應旗標；有 `--non-interactive`／`--no-input`／`CI=1` 之類的模式就開
+2. 指令逾時沒有輸出、或輸出最後一行是問句或選單，就是停在 prompt：中止，查旗標補齊後重跑。**NEVER** 用 `yes |` 或管線餵預設值頂過去——那等於替使用者選了沒看過的選項
+3. 唯一不由 agent 補的值是上節第 3 步的破壞確認：那個答案來自使用者
 
 ### 總原則
 
@@ -190,11 +211,11 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 
 **可觀察 predicate**：agent 正在產出的文字含「是否需要」「要不要做」「可以考慮排除」「scope 可能不包含」等措辭，且對象是已有 decision artifact 的 feature → 停，讀 decision artifact 確認。
 
-## 交付物必須是可追蹤檔案
+## 交付物形式
 
-User 要求報告、分析、比較、盤點等輸出時，交付物 **MUST** 是一個有路徑的檔案（`.md` / `.json` / `.csv`），**NEVER** 是 chat 訊息裡的 inline 文字。
+交付形式依 [[session-tasks]] 載體表：明示唯讀或只要求對話交付時，直接在對話交付；已授權寫檔且內容需要長期保存或跨 repo 共享時，寫成有路徑的檔案，並在 chat 回報路徑與一句摘要。
 
-正確 recipe：
+寫檔時的 recipe：
 1. 以當前可用的檔案編輯工具寫到 `docs/` 或 `tasks/` 或 user 指定位置
 2. 在 chat 回報路徑 + 一句話摘要
 3. 需要跨 repo 共享時，指定單一 owner repo + 用 diff 或 snapshot 機械比對

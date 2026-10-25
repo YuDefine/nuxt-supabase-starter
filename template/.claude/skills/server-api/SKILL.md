@@ -1,148 +1,24 @@
 ---
 name: server-api
-description: "Use for Nuxt or Nitro server API routes, defineEventHandler, request validation, or server-side auth data access."
+description: "Use when adding or changing Nitro API handlers, including request validation and server-side data access. Not for frontend global state."
 ---
 
 
-# Server API 設計規範
+# Server API
 
-依實際安裝的 Nuxt／DB／auth 模組選用。Supabase helper（`requireRole`、`getSupabaseWithContext` 等）是 consumer 自己實作的函式，使用前查其來源與授權行為。
+`requireRole`、`getSupabaseWithContext`／`getAuthedSupabase` 等 helper 是 consumer 自己實作的函式，使用前查其來源與授權行為。回應 envelope 與錯誤碼照 consumer 已安裝的 runtime 規約 `api-patterns`（與該 repo 自己宣告的 envelope），本 skill 不另訂；這裡只放與預設不同的慣例，以及列表、搜尋、聚合端點的查詢契約。
 
-## Client 端寫入預設走 Server API
+# SOP
 
-Client 端（`app/` 目錄）的**讀取**路徑依 consumer manifest（canonical `.clade/manifest.json`；canonical 缺席的未遷移 consumer 讀 legacy `.claude/hub.json`）的 `modules.auth` 而定：
+## Phase 1 -- 判定 auth stack 與資料路徑
 
-- `modules.auth` 是 **Supabase Auth**（`supabase-self-hosted`）→ 預設只透過 `useSupabaseClient<Database>()` 執行 `.select()` 查詢。
-- `modules.auth` 是 **`nuxt-auth-utils` / `better-auth`** → Supabase 不簽 JWT，瀏覽器的 `useSupabaseClient()` **恆以 `anon` role 存取**，登入與否都一樣 —— 要讓 client 讀得到就得把表開成 `TO public`，等於對任何持有 publishable key 的人公開。那些 auth stack 下 client 直讀**不是**預設：**讀寫都走 `/api/v1/*`**，client 端 Supabase 只留 Storage（bucket policy 獨立）。見 [[auth-data-path-consistency]] § Auth 策略與資料路徑的合法組合。
+1. READ 讀取 consumer manifest（canonical `.clade/manifest.json`；canonical 缺席的未遷移 consumer 讀 legacy `.claude/hub.json`）的 `modules.auth` 與 `server/utils/` 的 helper 實作。
+2. THINK 依 [[auth-data-path-consistency]] § Auth 策略與資料路徑的合法組合、已安裝的 db-runtime 規約（`database-access` 或 `database`）與 runtime 規約 `api-patterns`，決定讀寫路徑、helper 名、授權層與回應 envelope。
 
-所有寫入操作預設必須透過 Server API（`/api/v1/*`）：
+## Phase 2 -- 契約與 handler
 
-```typescript
-// ❌ 預設不允許 — client 端直接寫入
-const client = useSupabaseClient<Database>();
-await client.from("posts").insert({ title: "Hello" });
-
-// ✅ 正確 — 透過 Server API
-await $fetch("/api/v1/posts", {
-  method: "POST",
-  body: { title: "Hello" },
-});
-```
-
-Client 端寫入是架構例外，只有在 proposal / ADR 明確記錄並同時滿足下列條件時，才可在 client 使用 `.insert()` / `.update()` / `.delete()` / `.upsert()`：
-
-- RLS policy 能完整表達 tenant / user scope 與所有授權規則
-- GRANT 只開必要 schema / table / operation，不給寬權限
-- 不需要 `service_role`、server-only secret、跨表 transaction、workflow transition、audit-chain、storage upload 或外部 API
-- 不涉及角色 / 權限、薪資、簽核、出勤、稽核、批次修復等敏感流程
-- 有 focused tests 驗證 allow path、deny path、tenant isolation 與 RLS 失敗時的 UI/錯誤處理
-
-## 契約來源
-
-新增 API 時，request/response schema 請定義在 `shared/schemas/`，並由同一個模組導出衍生型別。
-
-- `shared/schemas/*.ts`：Zod schema + 衍生型別
-- `shared/types/*.ts`：相容轉發或 UI/view-model 型別，**不是**新的 request/response 真相來源
-
-## 選填欄位的 Null 慣例（Hard Rule）
-
-**接收 user input 的選填欄位 MUST 用 `.nullish()`，NEVER 只用 `.optional()`。**
-
-```typescript
-// ❌ 錯誤 — 只接受 string | undefined
-const schema = z.object({
-  return_notes: z.string().trim().max(500).optional(),
-})
-// Client 送 { return_notes: null } → 400 ZodError
-```
-
-```typescript
-// ✅ 正確 — 接受 string | null | undefined（同時涵蓋 .nullable() + .optional()）
-const schema = z.object({
-  return_notes: z.string().trim().max(500).nullish(),
-})
-```
-
-`.optional()` 不接受 `null`，而 form binding 常送 `value.trim() || null`、DB nullable 欄位的真實值也是 null。
-
-
-
-| 欄位來源                                       | 慣例           |
-| ---------------------------------------------- | -------------- |
-| 選填的 user input（form / textarea / select）  | `.nullish()`   |
-| Server 內部 default 帶入（不從 client 收）     | `.optional()`  |
-| 必填欄位（required = true）                    | 不加任何修飾   |
-| Discriminator union 內部欄位                   | 看 union shape |
-
-新增接 user input 的 schema 後 **MUST** 寫 boundary test 涵蓋 `null` / `undefined` / `''` / 字串值（`testing-anti-patterns.md` Anti-Pattern 6），並 trace 真實 client code 確認送什麼。Review 時 `rg -n "z\.string\(\).*\.optional\(\)" shared/schemas/ server/api/` 逐筆比對 client 是否會送 null。
-
-## 目錄結構
-
-```
-server/api/
-├── v1/                       # 版本化業務 API
-│   └── resources/
-│       ├── index.get.ts      # GET /api/v1/resources（列表）
-│       ├── index.post.ts     # POST /api/v1/resources（新增）
-│       └── [id]/
-│           ├── index.get.ts     # GET /api/v1/resources/:id
-│           ├── index.patch.ts   # PATCH /api/v1/resources/:id
-│           └── index.delete.ts  # DELETE /api/v1/resources/:id
-├── auth/                     # 認證 API
-└── admin/                    # 管理員 API
-```
-
-### 命名規範
-
-- **檔案名稱**：`index.<method>.ts` 格式
-- **路徑參數**：有意義的名稱（`[resourceId]` 優於 `[id]`）
-- **API 版本**：`/api/v1/` 前綴
-
-## 權限檢查
-
-```typescript
-import { requireRole } from "~~/server/utils/supabase";
-
-const user = await requireRole(event, ["admin", "manager"]);
-
-// 角色階層：admin → manager → staff
-```
-
-## 回應格式
-
-| 類型 | 格式                                                                 |
-| ---- | -------------------------------------------------------------------- |
-| 列表 | `{ data: items, pagination: { page, pageSize, total, totalPages } }` |
-| 單筆 | `{ data: item }`                                                     |
-| 新增 | status 201 + `{ data: newItem }`                                     |
-| 刪除 | `{ data: { id, deleted_at, hard_deleted } }`                         |
-
-## 錯誤類型
-
-| 狀態碼 | 使用情境                    |
-| ------ | --------------------------- |
-| 400    | 請求格式錯誤、驗證失敗      |
-| 401    | 未認證                      |
-| 403    | 無權限                      |
-| 404    | 資源不存在                  |
-| 409    | 資源衝突（unique key 違反） |
-| 500    | 伺服器內部錯誤              |
-
-## 參考資料
-
-| 檔案                                                     | 內容                       |
-| -------------------------------------------------------- | -------------------------- |
-| [references/api-template.md](references/api-template.md) | 完整 API 模板 + Zod Schema |
-| [references/pagination.md](references/pagination.md)     | 分頁、搜尋、排序、操作日誌 |
-
-## 檢查清單
-
-- [ ] 使用 `index.<method>.ts` 命名
-- [ ] 在 `shared/schemas/` 定義 request/response schema 與衍生型別
-- [ ] 開頭進行權限檢查（requireRole）
-- [ ] 使用 getValidatedQuery / readValidatedBody 驗證輸入
-- [ ] 使用 getSupabaseWithContext 取得資料庫連線（`modules.auth` 為 better-auth / nuxt-auth-utils 時等價名為 `getAuthedSupabase`）
-- [ ] **授權寫在 handler，不假設 RLS 會過濾**——上述 helper 回的都是 service-role client。先驗角色／操作權限；資料屬於個別使用者或 tenant 時，再以 ownership 或查詢條件限制資料範圍。判準見 [[auth-data-path-consistency]] § Server 側
-- [ ] 回傳前使用 response schema `parse()`
-- [ ] 回傳統一格式（`{ data, pagination? }`）
-- [ ] 新增操作設定 201 狀態碼
+1. READ 讀取 `rules/API慣例判準.md`。
+2. READ 若要新增或修改列表、搜尋或聚合端點，先讀取 `rules/列表查詢契約判準.md`，再照它定這類端點的 query 參數、篩選、搜尋跳脫與分頁回應欄位。
+3. WRITE 依已載入規則在 `shared/schemas/` 定義 request／response schema，在 `server/api/v1/` 實作 handler。
+4. WRITE 接 user input 的 schema 依已載入規則補 boundary test；DELEGATE `rg -n "z\.string\(\).*\.optional\(\)" shared/schemas/ server/api/`，逐筆比對 client 是否會送 null。
+5. READ 回頭逐條對照已載入規則；不符就修正。

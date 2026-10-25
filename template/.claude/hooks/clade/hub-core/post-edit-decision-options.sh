@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# clade — 待拍板條目載體（HANDOFF.md／docs/tech-debt.md／work-loop state）的兩個時間點：
+# clade — 待拍板條目載體（HANDOFF.md／docs/tech-debt.md）的兩個時間點：
 #
 #   無引數（PostToolUse Edit|Write）：寫完一條待拍板條目的當下，就地判「這題是 ruling 但沒有選項」。
 #   `pre-edit`（PreToolUse Edit|Write）：動筆之前，每個 session 第一次遞一行
 #       `READ <my skill>/rules/待拍板條目寫法.md`（條目該長什麼形狀的正本）。
 #
 # 兩個模式放在同一支，是因為「哪些檔是待拍板載體」只能有一份判準：`decision_carrier_kind`。
-# 拆成兩支 hook 就是兩份 case，遲早一支認得 state.json、另一支不認得。
+# 拆成兩支 hook 就是兩份 case，遲早一支認得某個載體、另一支不認得。
 #
 # 為什麼 lint 是 PostToolUse 而不是靠既有的兩道：`flow sources` 的 lint 與 ingest 端的
 # `ask-options` 退回都是對的，也都太晚——到那時題目已經在 Charles 手機上長成一個空白
@@ -17,7 +17,7 @@
 # decision-sources.ts 的同一組 scanner 與 decisions.ts 的 OPTIONS_REQUEST_TEXT。
 # NEVER 在這支腳本裡自己解析 markdown —— 第二份 matcher 遲早與佇列給出不同答案，
 # 而不一致的那一次會教讀者「這個提示是雜訊」。lint 只跑 decision-lint 有 scanner 的
-# HANDOFF.md 與 docs/tech-debt.md；work-loop state 只進 `pre-edit` 提醒。
+# HANDOFF.md 與 docs/tech-debt.md。
 #
 # 提醒的去重：marker 在 `${TMPDIR:-/tmp}/clade-decision-authoring-read/<session_id>.seen`
 # （與 pre-read-image-cost-warn.sh 同一種 per-session state 目錄慣例）。只在真的印出時寫
@@ -34,12 +34,11 @@ FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_response.fileP
 
 [ -z "$FILE_PATH" ] && exit 0
 
-# 待拍板載體的唯一判準。work-loop state 的路徑與 decision-sources.ts 的 scanWorkLoopState 同一個。
+# 待拍板載體的唯一判準。
 decision_carrier_kind() {
   case "$1" in
     *HANDOFF.md) echo handoff ;;
     *docs/tech-debt.md) echo tech-debt ;;
-    .clade/work-loop/state.json | */.clade/work-loop/state.json) echo work-loop ;;
   esac
 }
 
@@ -80,7 +79,6 @@ if [ "$MODE" = "pre-edit" ]; then
   exit 0
 fi
 
-[ "$KIND" = "work-loop" ] && exit 0
 [ -f "$FILE_PATH" ] || exit 0
 
 ROOT="${CLADE_PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$(pwd)}}"

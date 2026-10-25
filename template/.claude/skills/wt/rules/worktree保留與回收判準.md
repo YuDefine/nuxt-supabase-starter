@@ -36,7 +36,7 @@ worktree `git status` clean → `git worktree remove ~/offline/clade-wt/auth-ref
 - Level: `MUST`
 - `cleanup` 因有 uncommitted 改動而拒絕時，**NEVER** 急著加 `--force-discard-uncommitted`：先 `wt-helper rescue --show <ref>` 看 patch，救完再 cleanup。
 - `cleanup --force --force-discard-unland` 會**永久砍掉** branch 上的 commit；只在呼叫端或使用者確認這份成果不要時使用，執行前同樣先 `wt-helper rescue` 確認 pre-fork baseline 內容沒有混入別人的 in-flight 工作（見 [[pitfall-pre-fork-baseline-hides-in-flight-feature]]）。
-- branch 只是因為 main 後來改寫了相同 hunk 而顯示「未落地」（內容被取代、不是遺失）時，改用 `cleanup <slug> --superseded-by <commit|file=commit|file=path>[,…] --reason <text>`：每個未落地檔都要有 main 上的證據，tip 會釘在 `refs/wt-superseded/`，只要有一個檔沒被覆蓋就不移除任何東西。
+- branch 只是因為 main 後來改寫了相同 hunk 而顯示「未落地」（內容被取代、不是遺失）時，改用 `cleanup <slug> --superseded-by <commit|file=commit|file=path>[,…] --reason <text>`：每個未落地檔都要有 main 上的證據（本機 main／landing base，或已 fetch 的 `origin/<base>`——本機 main 落後 origin 時，只在 origin 上的 commit／取代檔也算；不 fetch，兩邊都沒有就不成立），tip 會釘在 `refs/wt-superseded/`，只要有一個檔沒被覆蓋就不移除任何東西。
 - `reclaim-stale` 預設只釋放過期的 dev-port slot，不動樹；加 `--remove-landed` 才會清理「已在 main 歷史中、乾淨、無人認領」的來源。`prune` 只處理已合入的 `session/` 樹，且逐一互動確認。
 - 指令細節讀 `wt-helper指令.md`。
 

@@ -1,8 +1,9 @@
 ---
-description: Testing anti-patterns to avoid — mock 濫用、test-only production methods、不完整 mock、unit test 何時寫（U1–U5）、E2E fixture 寫死絕對日期、測試碼品質低於生產碼、測試結構契約、測試逾時紅（負載假紅、放寬逾時數值）
+description: Testing anti-patterns to avoid — mock 濫用、test-only production methods、不完整 mock、unit test 何時寫（U1–U5）、E2E fixture 寫死絕對日期、測試碼品質低於生產碼、抄本測試（期望值在測試裡重算）、刪除或合併既有測試、孤兒測試（沒被 CI 收進去）、測試結構契約、測試逾時紅（負載假紅、放寬逾時數值）
 paths:
   [
     'test/**/*.ts',
+    '**/*.{test,spec}.{ts,tsx,js,mjs,cjs,mts,cts}',
     'packages/*/test/**/*.ts',
     'e2e/**/*.ts', 'packages/*/e2e/**/*.ts',
     'vitest.config.*', 'packages/*/vitest.config.*',
@@ -11,7 +12,7 @@ paths:
   ]
 ---
 <!-- Clade native rule; source: rules/core/testing-anti-patterns.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Testing Anti-Patterns
 
@@ -399,6 +400,69 @@ BEFORE 宣告一條測試寫完:
     STOP - 先讓它變好改，再讓它綠。
 ```
 
+## Anti-Pattern 9: 抄本測試
+
+**The violation:**
+
+```typescript
+// ❌ BAD: 期望值是產品算式的副本——算式寫錯，兩邊一起錯，測試照綠
+test('VIP 結帳套折扣再扣折價券', () => {
+  const expected = 1000 * (1 - VIP_DISCOUNT) - 50
+  expect(checkoutTotal(1000, { vip: true, coupon: 50 })).toBe(expected)
+})
+```
+
+測試裡重寫一份產品的計算邏輯，再拿產品輸出跟這份副本比。折扣率、捨入、套用順序寫錯時，副本是照同一份理解寫的，錯得一模一樣，測試永遠綠。極端形式是整支測試沒有呼叫任何產品碼——拿副本對副本。
+
+**The fix:**
+
+```typescript
+// ✅ GOOD: 期望值是寫死的已知答案（規格表、人工算過一次的值）
+test('VIP 結帳套折扣再扣折價券', () => {
+  expect(checkoutTotal(1000, { vip: true, coupon: 50 })).toBe(800)
+})
+```
+
+合法的期望值來源只有三種：寫死的已知答案、規格表上的值、**刻意不同**的算法（例：產品用公式，測試用暴力窮舉逐一加總當 oracle）。第三種不是抄本：兩種算法要錯在同一個地方，機率低到它真的能抓錯。
+
+把同一條規則換個寫法重算——同樣的常數、同樣的分界，只是改成整數運算、拆成更小單位、換成查表——**不是**刻意不同的算法，是抄本。要掃大量組合時，期望值用寫死的表（從規格或既有系統輸出取得、逐列可追溯），或改斷言不依賴算式的性質（單調、分界兩側連續、已知錨點），**NEVER** 在測試裡生成期望值。
+
+### Gate Function
+
+```
+BEFORE 寫下任何一個期望值:
+  Ask: "這個值從哪裡來？"
+
+  IF 寫死的已知答案、規格表、刻意不同的算法:
+    OK
+
+  IF 測試裡有產品算式的副本（同樣的常數、同樣的運算順序）:
+    STOP - 這是抄本。換成寫死的已知答案。
+
+  IF 整支測試沒有呼叫任何產品碼:
+    STOP - 抄本的強訊號：它測的是自己。
+
+  IF 判不出來:
+    改壞產品邏輯（例：把折扣率 0.15 改成 0.16），跑這支測試。
+    沒轉紅 = 抄本（或根本沒測到）。還原後再處置。
+```
+
+「改壞產品邏輯會不會紅」與 § unit test 何時寫 的刪除證據是同一個動作。
+
+### Red flags
+
+- 測試檔裡出現產品的費率、折扣、門檻、權重常數
+- `const expected = …` 的右邊是一段算式，而不是一個值
+- 期望值用 `import` 進來的產品常數組出來
+- 測試裡有一個 `expectedXxx()` 函式，參數跟產品函式一樣
+
+| 藉口（逐字實錄） | 現實 |
+| --- | --- |
+| 「獨立 oracle：以『半小時』為單位做整數運算，避免浮點誤差」 | 費率、分界、捨入全是從產品碼抄來的；換成整數只換了運算，沒換理解。費率抄錯，兩邊一起錯 |
+| 「另有 7 個手算錨點驗證 oracle」 | 錨點只驗到錨點那幾格；其餘 90 幾格的期望值仍是副本生出來的 |
+
+與 AP1 的差別：AP1 斷言的是 mock 自己的回傳；抄本測試斷言的是測試自己算的值。與 § 對設定檔原文的斷言 的差別：那裡釘的是原始碼長相；抄本釘的是同一份理解，算式等價改寫照綠、算錯也照綠。
+
 ## When Mocks Become Too Complex
 
 Mock setup longer than test logic, or mocks missing methods real components have → consider an integration test with real components.
@@ -429,11 +493,39 @@ aixbdd 與非 aixbdd repo 都適用。**每一支**新增的 unit test MUST 命�
 
 - 斷言對象是只給人讀的 prose（rule／skill／doc 措辭）→ 措辭品質走 `rule-pressure-test.ts` micro-test 或 review
 - **U5**：斷言對象是 load-bearing 規約句（[[rule-authoring]] § load-bearing 句登記 的收錄判準）→ 登記進 clade 的 `registry/rule-invariants.json`，不寫測試
+- **P 類**：測試 `readFileSync` 讀 repo 內的 `.vue .ts .tsx .js .mjs .md` 再對原文 `toContain`／`toMatch`（釘原始碼長相，不是行為）→ 改成 mount／呼叫／跑 CLI 斷言輸出。機械層是 `source-assert-delta` 閘門（`vendor/scripts/checks/source-assert-gate.ts`，pre-commit `--staged`、CI `--against`）：P 類斷言數比 base 增加就擋，新增檔與 legacy 凍結檔同一套；確實沒有行為通道才在檔首 10 行寫 `clade-source-assert: <no-behavior-channel|declarative> — <reason>`，0-A 審理由；marker 數由 `scripts/audit-source-assert-markers.ts` 計數
 - 已有 scenario 或另一支測試驗同一個可觀察結果
 - 只斷言 mock 自己的回傳，或只驗 type 已保證的形狀
 - 呼叫端的整合測試已驗到同一行為，再替內部 helper 補一支
 
+### 刪除或合併既有測試：先取得刪除證據
+
 刪既有測試時反過來用同一張表：一列都不中、又不是該行為唯一的測試，才刪。**NEVER** 刪閘門類（U3）測試，**NEVER** 刪某段產品碼唯一的行為測試（aixbdd consumer 的對應條款見 [[legacy-tests]] NEVER 2）。
+
+「是不是唯一的測試」不靠看起來像不像判。**每一次**刪除或合併既有測試（unit、整合、e2e 都算），動手前先做破壞驗證：
+
+1. 改壞要刪的那支所保護的產品碼——它比留下的測試多驗的那個判斷（例：`expiresAt < now` 改成 `expiresAt <= now`）
+2. 跑接手測試，確認**轉紅**
+3. 還原，跑同一條指令確認全綠
+
+接手測試沒轉紅 = 要刪的那支是這個判斷唯一的保護，適用上面的 **NEVER**。先補一支改壞時會轉紅的接手測試、重做三步，才可刪。多支接手測試同時轉紅時，列出實際轉紅的即可。
+
+**合併**：合併前每一支原測試各自保護的判斷，各改壞一次；每一次合併後那支都要轉紅。
+
+**一次要清很多組**：逐組做。拿到刪除證據的那幾組照常刪或合併，沒拿到的留著，在 PR body 列出沒處理的組與原因。**NEVER** 因為時限內做不完全部就整批不刪，也 **NEVER** 為了趕完跳過證據先刪。
+
+**刪除證據**寫進刪除該測試的 commit message 或 PR body（與 § 測試逾時紅 第 2 條同一種載體），最少三項：改壞了哪個檔的哪個判斷、轉紅的接手測試名稱、還原後跑的指令與結果。
+
+被保護的產品碼在受保護路徑（`.github/workflows/` 等）時，照 § 對設定檔原文的斷言 第 2 條在 repo 外的複本上做三步。
+
+不需要破壞驗證的只有兩種：
+
+- 產品功能在同一個改動裡一併移除——刪除理由寫「功能已移除」
+- aixbdd 吸收路徑（`[BDD-REMOVE]`）——證據沿用 scenario 先紅再綠，見 [[legacy-tests]]
+
+| 藉口（逐字實錄） | 現實 |
+| --- | --- |
+| 「比對：案例數不得少於基準，覆蓋率不得低於基準」 | 覆蓋率只說那行被執行過，不說有斷言會因它改錯而轉紅；案例數更只是計數。答案要改壞那個判斷才拿得到 |
 
 ## 測試結構契約
 
@@ -524,6 +616,7 @@ seedConversation({ updatedAt: daysAgo(60) })  // 更早
 - 把 workflow 實際會執行到的測試目錄（`e2e/**`、`test/**`、`packages/*/test/**`）列進 paths filter
 - 順帶檢查 `workflow_run` 鏈：下游 workflow 的觸發條件是上游**跑了**，上游沒被觸發時下游同樣不動
 - 不要只憑「我 push 了而且沒看到紅燈」判定修好 —— 先確認**真的有 run 被建立**（`gh run list --limit 3` 看 SHA 對不對）
+- **每一支**留在 repo 的測試檔，要嘛被自動觸發（push、pull_request、schedule 等，不含只有 `workflow_dispatch`）的 CI 指令經 runner 設定收進去執行，要嘛照 § 刪除或合併既有測試：先取得刪除證據 刪掉。沒有 runner 收、被 exclude、所屬 runner 設定沒被 CI 跑、只在手動 workflow 跑，都是孤兒——它永遠綠，因為它從來沒跑。查法：`node "${CLADE_HOME:-$HOME/offline/clade}/scripts/audit-orphan-tests.ts" --repo .`（warn-only；判不了的檔另列 `indeterminate`，不算孤兒也不算已涵蓋）
 
 ## 對設定檔原文的斷言，標的是行為本身
 
@@ -559,6 +652,8 @@ seedConversation({ updatedAt: daysAgo(60) })  // 更早
 ## Bug 診斷紀律：重現先於推理
 
 **`NO ROOT-CAUSE GUESS BEFORE A RELIABLE RED`。**「這個一看就知道是什麼問題」「先改改看比較快」都不算遵守。
+
+下列四條的逐步做法（迴圈建構順序、縮小重現、觀測、seam 判斷、收尾清單）在 `diagnose` skill。
 
 **1. 能穩定重現之前，不推測根因。** 先建一個「一跑就紅、修好就綠」的環境（註定失敗的測試、直接打 API、瀏覽器腳本、`git bisect`），且它**快**（幾秒內）又**穩**（每次錯誤訊息一致；時好時壞＝**還沒重現**）。
 

@@ -11,11 +11,11 @@ paths:
   - 'tasks/**'
 ---
 <!-- Clade native rule; source: rules/core/github-flow.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # GitHub Flow 事件契約
 
-本檔是 Claude Code／Codex／Pi 共用的平行切片作業契約。盤點 outstanding → 獨立切片各派一個 owner → **一刀一 branch 一 PR** → 盯該 PR 的 CI → 紅燈回原 owner。**預設開發模式是 § Integration branch（小步快跑）**：feature branch 開 PR 併入 `integration/<work-id>`，只付機械檢查；test-lane 只在 `integration/<work-id>` → `main` 那一張 PR 上付一次（affected；升全量時才是 full，見 § 各事件的 test-lane）。只有一個切片就完工的工作才直接對 `main` 開 PR。操作命令見 commit skill `batch.md`、[[wt]] 的 `rules/worker契約.md` Rule 6（slice owner 可見性）與 `rules/就緒池交接判準.md`（coordinator 就緒／落地）、[[gh-ci-watch]]。
+本檔是 Claude Code／Pi 共用的平行切片作業契約。盤點 outstanding → 獨立切片各派一個 owner → **一刀一 branch 一 PR** → 盯該 PR 的 CI → 紅燈回原 owner。**預設開發模式是 § Integration branch（小步快跑）**：feature branch 開 PR 併入 `integration/<work-id>`，只付機械檢查；test-lane 只在 `integration/<work-id>` → `main` 那一張 PR 上付一次（affected；升全量時才是 full，見 § 各事件的 test-lane）。只有一個切片就完工的工作才直接對 `main` 開 PR。操作命令見 commit skill `batch.md`、[[wt]] 的 `rules/worker契約.md` Rule 6（slice owner 可見性）與 `rules/就緒池交接判準.md`（coordinator 就緒／落地）、[[gh-ci-watch]]。
 
 ## 事件與成本
 
@@ -127,11 +127,11 @@ ready PR 上的 CI 不是試錯環境（「push 上去讓 CI 跑一下看看」�
 5. `gh pr view <session-branch> --json number,isDraft,headRefName`：`isDraft` 為 true、head 就是該 session branch。不要省略 branch。
 6. 立刻盯**該 PR head SHA** 的 CI（`/gh-ci-watch`）。
 7. CI 紅燈：同一 owner、同一張 PR 上修再 push；不要為同一切片開第二張 PR。
-8. 用該 PR 號跑 `batch draft --kind visibility` 把可見性 receipt 持久登記。create／push 失敗就不要寫 receipt。同一 branch／PR 已綁在另一個 work id 的有效 receipt 上時 `batch draft` 會拒絕（綁錯），用 PR 的 `Work:` id 或先 `batch retire-draft` 舊的。PR 合入後 `batch retire-merged` 一次 retire 指向已合 PR 的 receipt。討論 draft 才用 `--kind discussion`（或舊的 `--discussant`＋`--question`）。
+8. 用該 PR 號跑 `batch draft --kind visibility` 把可見性 receipt 持久登記。create／push 失敗就不要寫 receipt。同一 branch／PR 已綁在另一個 work id 的有效 receipt 上時 `batch draft` 會拒絕（綁錯），用 PR 的 `Work:` id 或先 `batch retire-draft` 舊的。PR 合入後 `batch retire-merged` 一次 retire 指向已合 PR 的 receipt；只想收其中幾張時加 `--work-id <id>[,<id>…]`（可重複；點名的 id 沒有 receipt 就整個拒絕、什麼都不 retire）。討論 draft 才用 `--kind discussion`（或舊的 `--discussant`＋`--question`）。
 
 Draft 維持 draft 直到 review。slice **worker NEVER merge**、**NEVER** `gh pr ready`、**NEVER** 為了看得見而 merge-back。空 branch／只有 WIP **NEVER** 開 PR。具名 coordinator 在 [[commit]] 批次 `merge-unattended` 的機械 predicate 全成立，或下方 § Coordinator 直接合併 的條件全成立，且沒有有效 do-not-merge hold 時 squash；那不是 worker 權限，也不是把所有 agent 當 coordinator。
 
-原生派工載體不同、結果相同：Claude 交 `wt` 建立隔離環境並派工，或用 Herdr fanout；Codex 的 bounded 工作用 native subagent、handoff 級工作可開 Herdr session（判準同 [[agent-routing]] § Dispatch data and transport boundary）。
+原生派工載體：Claude 交 `wt` 建立隔離環境並派工，或用 Herdr fanout（判準同 [[agent-routing]] § Dispatch data and transport boundary）。
 
 ### 討論 draft（可選、較嚴）
 
@@ -164,8 +164,8 @@ Draft 維持 draft 直到 review。slice **worker NEVER merge**、**NEVER** `gh 
 | 落地授權 | 該 work item 的落地授權（`batch ready --authorize-landing` 所依據的工作授權）仍有效、未被撤回；已撤回就停。沒有 batch 時查：`flow status <work id>` 不是 `dropped`／`parked`，以及該 work 的授權載體（plan.md 或派工 brief 的授權段）沒有被改寫成停止或撤回。合併不需逐張授權，**不等於**撤回過的工作也能合 |
 | 部署 | 合併前跑 `deploy-trigger-check.ts`；合併會觸發 production（`derived=push-main` 或 `pr-merge`）或 `status` 不是 `confirmed` 時停，另問**發版**授權——發版仍是獨立授權（上方事件表「發版」列），本節只解除合併的授權 |
 | head 釘住 | 仍是 draft 就先 `gh pr ready <N>` 並等 CI 補跑轉綠，再以 `gh pr merge <N> --squash --match-head-commit <已審 head SHA>` 合併；head 在審查後前移就停，先重驗受影響範圍（§ 證據綁定） |
-| 批次 | 該 PR 屬 active batch 時合併前確認 `origin/main` 仍是 seal 的 `reviewed_base`（不是就先 reseal），合併後 MUST 走 `batch confirm-merged`（receipt 規格見 [[commit]] `batch.md`）；沒有 batch 時完成報告 MUST 寫齊 § 證據綁定 的 receipt 欄位（repository、PR、reviewed head／base、candidate tree、merge SHA、squash 方法，以及 candidate tree 對 merge tree 的比對與 stable patch-id）；缺任一欄不算落地，**NEVER** 只記 PR 號與 merge SHA |
-| 合併後 | 本機 `main` 由 dev node timer 對齊（下方 § 本機 main 與 origin 的對齊），合併者不另外動本機 main。盯該 merge SHA 的 staging；來源 worktree 走 `wt-helper cleanup`／`batch cleanup` |
+| 批次 | 該 PR 屬 active batch 時合併前確認 `origin/main` 仍是 seal 的 `reviewed_base`（不是就先 reseal；只前移登記簿——`base..parent` 的每個路徑都在 `register-paths.ts` allowlist——時 `confirm-merged` 照收、不必 reseal，其餘前移仍先 reseal），合併後 MUST 走 `batch confirm-merged`（receipt 規格見 [[commit]] `batch.md`）。PR **已經**在 GitHub 合入、事後才發現 main 前移過非登記簿路徑或該批停在 `review` 從未 seal 時，對帳入口是 `batch confirm-merged --reconcile-merged`：只解除「前移須 reseal」與「必須 sealed」兩關，GitHub MERGED、merge SHA／head 一致、路徑集、逐檔內容、重放 tree 與 patch-id 照驗，batch 記上 `reconciledMerged`；它是事後對帳，**NEVER** 拿來在合併前跳過 reseal；沒有 batch 時完成報告 MUST 寫齊 § 證據綁定 的 receipt 欄位（repository、PR、reviewed head／base、candidate tree、merge SHA、squash 方法，以及 candidate tree 對 merge tree 的比對與 stable patch-id）；缺任一欄不算落地，**NEVER** 只記 PR 號與 merge SHA |
+| 合併後 | 本機 `main` 由 dev node timer 對齊（下方 § 本機 main 與 origin 的對齊），合併者不另外動本機 main。盯該 merge SHA 的 staging；來源 worktree 走 `wt-helper cleanup`／`batch cleanup`（中斷後的 integration 樹只多出 `node_modules`／commit-lock 殘留時，`landed`、乾淨且 HEAD 仍是落地 head 的才會被收，判準見 [[commit]] `batch.md` § 4） |
 
 逐字禁令：**NEVER** 為了符合本節而把 draft 轉 ready 卻不補跑 CI；**NEVER** 用 `--admin` 或關閉 required check 過關；**NEVER** 把「合併不需授權」讀成「發版不需授權」；**NEVER** 為了等授權而把已滿足本節條件的 PR 丟回 Charles 或開 flow ask。
 
@@ -206,7 +206,7 @@ Required checks 必須綁定實際受測 revision。workflow 路徑條件或 ski
 
 private repo **不上** GitHub rulesets、branch protection、merge queue：不為此升 GitHub Pro，也不為此改公開。本機唯一 landing owner、squash-only merge method，以及 `batch confirm-merged` receipt，就是強制契約。不要把缺遠端保護列成剩餘工作或能力缺口，也不要宣稱遠端 required checks 已強制。公開 repo 若之後要開遠端強制，另行決定。
 
-**登記簿同步（唯一直推 `main`、唯一非 squash 的具名例外）。** PR 制 repo 的共享本機 `main` 若承載必須當下可見的登記簿類檔案（handoff、tech-debt、tasks、plan 結案），要由**一支工具**負責同步：內容差**每一個**路徑都在該 repo 宣告的 allowlist 內才放行，以 merge commit 收斂、不碰 working tree、push 前驗遠端未移動。allowlist 不得含規約、skill、script、CI、truth 或任何會被散播／執行的路徑；不要手動 `git push origin main` 代替該工具，也不要擴 allowlist 來放行一筆本來該走 PR 的 commit。clade home 的實作是 `scripts/main-sync.ts`，判準在其 `.claude/skills/clade-home/rules/clade-home-worktree.md` § 本機 main 與 origin 的同步；沒有這類共享登記簿的 repo 不適用本段。
+**登記簿同步（唯一直推 `main`、唯一非 squash 的具名例外）。** PR 制 repo 的共享本機 `main` 若承載必須當下可見的登記簿類檔案（handoff、tech-debt、tasks、plan 結案），要由該 repo **具名的登記簿工具**負責同步（共用同一份 allowlist 與同一套合併引擎）：內容差**每一個**路徑都在該 repo 宣告的 allowlist 內才放行，以 merge commit 收斂、不碰 working tree、push 前驗遠端未移動。allowlist 不得含規約、skill、script、CI、truth 或任何會被散播／執行的路徑；不要手動 `git push origin main` 代替該工具，也不要擴 allowlist 來放行一筆本來該走 PR 的 commit。clade home 的具名工具是 `scripts/register-land.ts`（worktree branch 上的登記簿 commit → origin/main，取 integration lock、push 被拒就重合重推）與 `scripts/main-sync.ts`（本機 main 的收斂；W4 前仍承接 main checkout 上的 `commit --only`），兩者共用 `scripts/lib/register-paths.ts` 的 allowlist，判準在其 `.claude/skills/clade-home/rules/clade-home-worktree.md` § 本機 main 與 origin 的同步；沒有這類共享登記簿的 repo 不適用本段。
 
 ## 本機 main 與 origin 的對齊
 
@@ -221,11 +221,13 @@ timer 的處置表：
 | 本機 main 的狀態 | timer 做的事 |
 | --- | --- |
 | 只落後 origin | 快轉（會覆寫本機未 commit 改動時 git 拒絕 → 記為 `refused`） |
+| 快轉或 reset 會被撞上目標新增路徑的 untracked 檔擋下（git「would be overwritten」） | 這些檔**全部**與目標 ref 同路徑 blob 逐位元組相同 → 刪掉再對齊（刪前逐檔重算 hash；回報列出刪了哪些）；任何一個不同 → 整筆 `refused`、一個都不刪，rescue 情形也不建 rescue ref。dry-run 只報不刪 |
 | 超前的 commit 全是 origin 已有內容（別處 rebase 後推上去，`git cherry` 全 `-`） | 丟掉重複 commit、對齊 origin，保留不衝突的本機改動 |
 | 本機有 origin 沒有的 commit（`unpushed`／`diverged`）、working tree 乾淨 | **rescue＋reset**：本機 main 存進 `refs/rescue/<YYYY-MM-DD>-<sha>` 並推上 origin，然後 `reset --keep origin/<branch>`（main 未 checkout 時改走 CAS update-ref；push 到 reset 之間出現的未 commit 改動由 reset 前的 status 重查與 `--keep` 的原子拒絕擋下，撞上目標路徑的 untracked 檔也原封保留）。內容不丟——取回：`git fetch origin '+refs/rescue/*:refs/rescue/*'` 後從該 ref 開 branch 進 PR |
 | consumer 的 origin 是 public repo（或 visibility 判不出） | rescue ref 留在本機、不 push 不 reset——未審 commit 一推上公開 origin 就是對外發佈，且 `refs/rescue/*` 沒有清理機制。回報到 SessionStart 需人工：先審內容，該進 PR 的走 PR |
 | rescue ref 推不上 origin | 不 reset（也不丟內容），回報到 SessionStart；下一輪重試 |
-| 本機有 origin 沒有的 commit但 working tree dirty／已 stage（`refused`） | 不動——reset 會吃掉未 commit 的內容。回報到 SessionStart |
+| 本機有 origin 沒有的 commit但 working tree dirty／已 stage（`refused`） | 不動——reset 會吃掉未 commit 的內容（純 clade 投影殘留例外，見下一列）。回報到 SessionStart |
+| 本機 main dirty（`refused`），且**同時**成立：每個 dirty／untracked 路徑都是該 consumer 的 clade-managed 投影檔（`isLockedProjectionPathFor`，非路徑前綴推論）、沒有活程序的 cwd 在該 checkout 內、這些檔最新 mtime 超過 6 小時 | **wip rescue＋對齊**（`wip-rescued`）：把改動存成本機 ref `refs/rescue/dirty-<YYYY-MM-DD>-<短sha>`（暫存 index＋`commit-tree`＋`update-ref`，不動 HEAD／index；撞名加後綴、NEVER 覆寫；**NEVER push**——untracked 檔可能含機密，且它不是 branch，`git push --all` 碰不到，也 NEVER 對 `refs/rescue/dirty-*` 下 glob push），逐檔比對一致才還原這些路徑，再走上面「只落後」（或 rescue＋reset）那格。部分暫存、unmerged、任何一條不成立 → 照舊 `refused`。通知留在 `last.json` 的 `attention`（ref 還在、3 天內）供 SessionStart 顯示；確認沒要留的內容後 `git update-ref -d <ref>` |
 | clade home | `main-sync --apply`（登記簿同步，見上方 § 遠端強制與本機契約） |
 | merge／rebase 進行中、`main` 在別棵 worktree checkout、publish／propagate 在跑（`skipped`） | 不動，下一輪再試；只記在 `last.json`，不回報 |
 
@@ -233,7 +235,7 @@ timer 的處置表：
 
 | 回報 | 意思 | 處置 |
 | --- | --- | --- |
-| `unpushed`／`diverged` | 本機有 origin 沒有的 commit 且 rescue 未完成——多半是 `refs/rescue/<date>-<sha>` 推不上 origin，或 origin 是 public repo（rescue ref 留本機、不推） | 手動照同一規則收：`git fetch origin && git update-ref refs/rescue/$(date +%F)-$(git rev-parse --short=9 main) main && git push origin 'refs/rescue/*:refs/rescue/*'`（origin 是 public 時 **NEVER** 推——先審內容，走 PR），下一輪 timer 對齊；或把 commit 帶進 PR |
+| `unpushed`／`diverged` | 本機有 origin 沒有的 commit 且 rescue 未完成——多半是 `refs/rescue/<date>-<sha>` 推不上 origin，或 origin 是 public repo（rescue ref 留本機、不推） | 手動照同一規則收：`git fetch origin && r=refs/rescue/$(date +%F)-$(git rev-parse --short=9 main) && git update-ref "$r" main && git push origin "$r:$r"`（只推這一個 ref；**NEVER** 用 `refs/rescue/*` glob 推——會連 `refs/rescue/dirty-*` 一起送出，見上方 dirty 自救列）（origin 是 public 時 **NEVER** 推——先審內容，走 PR），下一輪 timer 對齊；或把 commit 帶進 PR |
 | `refused` | 本機未 commit 或已 stage 的改動擋住對齊 | 把改動 commit 到 session branch／rescue branch——**NEVER 進 main**（hook 會擋）；下一輪 timer 對齊 |
 | `error` | fetch、push 或 git 量測失敗（網路、認證、repo 異常） | 在該 repo 跑 `git fetch origin` 看錯誤；timer 本身的健康看 `dev-node.ts doctor` |
 
@@ -251,7 +253,7 @@ timer 的處置表：
 | --- | --- |
 | 觸發條件 | `node scripts/audit-repo-merge-settings.ts` exit 1（有 repo 沒開，印 `gh repo edit <repo> --delete-branch-on-merge`）；exit 2 是讀不到設定，不要讀成已開。warn-only，不接 publish gate |
 | 消費端 | `scripts/bootstrap-project.ts` 的 `repo-merge-settings` step（新 consumer onboarding）；`/clade-health full` 掃存量 |
-| 觸發點 | 本節（consumer 端投影為 `.claude/rules/github-flow.md`）；開設定的操作在 `project-bootstrap` skill § 4 |
+| 觸發點 | 本節（consumer 端投影為 `.claude/rules/github-flow.md`）；開設定的操作在 `project-bootstrap` skill Phase 5（判讀在 `rules/完成契約證據矩陣.md` Rule 3） |
 
 驗證 CI 的綠燈是**最新 candidate 那條 run**。同 ref 被更新的 SHA 取代後，過期 run 必須由 workflow `concurrency` 取消，不得繼續佔 self-hosted runner 讓 HEAD 排隊。寫法與 deploy/gate 例外見 [[ci-workflow]] § CI / test workflow MUST cancel superseded runs on the same ref。
 

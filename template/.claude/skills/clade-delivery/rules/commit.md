@@ -1,5 +1,5 @@
 <!-- Clade native rule; source: rules/core/commit.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Commit
 
@@ -9,18 +9,18 @@
 
 ## 強制載入指針（thin pointer；全文在 [[commit.detail]]）
 
-本檔常駐 commit 的強制入口與 WIP 處置禁令；其餘全文（gate 清單、Single Session Lock、WIP 處置決策樹、ad-hoc `--only` 紀律與 Verify／Recovery、路徑白名單、Stash 自動處置 gate、分組與訊息規範、Tag 位置）在 [[commit.detail]]。
+本檔（由 `clade-delivery` skill 的 READ 載入）放 commit 的強制入口與 WIP 處置禁令；其餘全文（gate 清單、Single Session Lock、WIP 處置決策樹、ad-hoc `--only` 紀律與 Verify／Recovery、路徑白名單、Stash 自動處置 gate、分組與訊息規範、Tag 位置）在 [[commit.detail]]。
 
 **下任何 `git commit` / `git add` / `git stash` / `git tag` / `git push --tags` / `git push origin v<版本>` / `/commit` 之前，MUST 先讀 [[commit.detail]]**。Unattended coordinator squash **仍走 `/commit`**（完整品質鏈、formal HEAD CI、`batch merge-unattended` 機械 predicate）。不經 helper 的 coordinator 直接合併（不需要 Charles 逐張授權）見 [[github-flow]] § Coordinator 直接合併。
 
-## pre-commit hook 三條紀律（always-load；hook 是 fleet 預設形態）
+## pre-commit hook 三條紀律（hook 是 fleet 預設形態）
 
 三條各綁一個**下指令當下看得到**的 predicate，**每一個**有 `.husky/pre-commit` 的 repo 都適用——
 不是只有「hook 看起來很慢」的那些，也不是只對最後一次 commit。
 
 1. **repo 存在 `.husky/pre-commit` → `git commit` MUST 使用可持續執行並取回終態的 command handle。**
    在當前 runtime 的工具 catalog 確認啟動、等待與取消介面；取得 handle 後沿用它收回結果。
-   Claude 的 `run_in_background` 是該端參數，Codex 使用自己實際提供的介面。
+   Claude 的 `run_in_background` 是該端參數。
    缺少持續執行能力時回報缺口；timeout 或沒有結果時先查原 invocation 的狀態，不另起一次 commit。
    前景呼叫被 tool timeout kill 時 index 已 staged 而 commit 沒落地，照「commit 失敗」的外觀重跑是在不同的起始狀態上再跑一次。**NEVER** 用「這個 repo 的 hook 平常很快」略過。
 
@@ -36,7 +36,7 @@
 
 > 成因見 [[pitfall-pre-commit-hook-outlives-tool-timeout-and-rewrites-staged-files]]。
 
-## 禁止事項 — WIP 處置禁令（嚴格；always-load，NEVER 下推）
+## 禁止事項 — WIP 處置禁令（嚴格，NEVER 下推）
 
 **完全禁止任何會丟失 WIP 的動作，包括「向使用者建議」這些動作**：
 
@@ -53,7 +53,7 @@
 
 以下動作功能上等同破壞性 git 命令，**MUST** 視同 WIP 處置禁令範圍：
 
-- **NEVER** `mv <git-tracked-path> <elsewhere>` / `mv <elsewhere> <git-tracked-path>` 反向 hook 工作（例：把 `screenshots/<env>/_archive/*` 搬回頂層、把 `docs/archives/*` 搬回主檔）
+- **NEVER** `mv <git-tracked-path> <elsewhere>` / `mv <elsewhere> <git-tracked-path>` 反向 hook 工作（例：把 `screenshots/<env>/_archive/*` 搬回頂層、把（未遷移 consumer 的）`docs/archives/*` 搬回主檔）
 - **NEVER** `rm -rf <specs/**>` / `rm -rf <tasks/**>` / `rm -rf <screenshots/**>` 等批次刪除含 user-authored / hook-authored 內容的目錄
 - **NEVER** `cp --remove-destination` / `cp -f` 覆蓋 git-tracked 檔案
 - **NEVER** 用 `sed -i` / `awk -i inplace` / `perl -i` 隱藏 git-tracked 檔案的覆寫；授權編輯使用當前 runtime 可審查 diff 的編輯工具，腳本批次編輯同樣先確認範圍、保留原內容並驗 diff
@@ -83,7 +83,7 @@
 
 En：`revert` / `undo` / `rollback` / `roll back` / `reset` / `discard` / `drop` / `restore` / `clean up` / `go back` / `undo this` / `fix the state` / `align with` / `move X back to Y` / `restore X to original`
 
-> **本節是關鍵詞表的 SoT**（always-load）；[[scope-discipline]] § 話術關鍵詞 引用本表，停手定義四步在該檔。
+> **本節是關鍵詞表的 SoT**；[[scope-discipline]] § 話術關鍵詞 引用本表，停手定義四步在該檔。
 
 ### 工作檔丟棄的授權
 

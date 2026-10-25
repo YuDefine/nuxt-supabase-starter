@@ -8,32 +8,34 @@
 // Single source of truth for Nuxt consumer vite-doctor rule severity.
 // Follows the same import+override pattern as vendor/oxc-shared/preset.ts.
 //
-// Consumer usage (nuxt.config.ts):
+// 兩條讀取路徑，吃不同形狀 —— 不要混用：
 //
-//   import { doctorConfig } from './vendor/doctor-shared/preset'
+//   1. `pnpm run doctor`（CLI，CI gate）→ `vendor/doctor-shared/run.mjs` 用 `--config` 交給 CLI。
+//      CLI 只讀 `--config <path>` 的 default export 或 repo 根的 `doctor.config.json`，
+//      **不讀 nuxt.config.ts**。形狀：`rules` / `exclude` 在頂層（`doctorCliConfig`）。
+//        - consumer 根沒有 `doctor.config.*` → run.mjs 直接載入本檔的 default export
+//        - consumer 根只有 `doctor.config.json` → run.mjs 把它疊在本檔 baseline 上（rules 逐條覆蓋、exclude 追加）
+//        - consumer 根有 `doctor.config.{ts,mts,mjs,js,cjs}` → 用它（整份取代，要保留 baseline 就 spread）
+//        覆寫範例 `doctor.config.ts`：
 //
-//   export default defineNuxtConfig({
-//     modules: [
-//       ['vite-doctor/nuxt', doctorConfig],
-//     ],
-//   })
+//            import { doctorCliConfig, doctorRules } from './vendor/doctor-shared/preset'
+//            export default {
+//              ...doctorCliConfig,
+//              rules: { ...doctorRules, 'nuxt-image/prefer-nuxtimg': 'off' },
+//            }
 //
-// To override a rule per-consumer:
+//   2. Nuxt module（`vite-doctor/nuxt`，dev / build 時的 Nuxt 整合）→ nuxt.config.ts。
+//      形狀：`{ config: { rules, exclude } }`（`doctorConfig`）。
 //
-//   import { doctorConfig, doctorRules } from './vendor/doctor-shared/preset'
+//        import { doctorConfig } from './vendor/doctor-shared/preset'
+//        export default defineNuxtConfig({
+//          modules: [['vite-doctor/nuxt', doctorConfig]],
+//        })
 //
-//   export default defineNuxtConfig({
-//     modules: [
-//       ['vite-doctor/nuxt', {
-//         config: {
-//           rules: { ...doctorRules, 'nuxt-ui/prefer-u-button': 'off' },
-//         },
-//       }],
-//     ],
-//   })
+// 覆寫 module 這條不影響 `pnpm run doctor`；要讓 CI gate 生效，改 doctor.config.ts。
 
 // Rule IDs MUST match vite-doctor's registered plugin namespaces (verified against
-// vite-doctor@0.0.1). vite-doctor silently ignores unknown keys, so a mis-namespaced
+// vite-doctor@0.1.0). vite-doctor silently ignores unknown keys, so a mis-namespaced
 // id leaves the rule at its built-in default instead of the severity set here. The
 // namespaces are NOT uniformly `nuxt/<category>/<rule>`: image / scripts / ui / content
 // / better-auth / nuxthub / vueuse rules live under their own top-level namespace.
@@ -166,9 +168,18 @@ export const DOCTOR_UPSTREAM_MIRROR_EXCLUDES = [
   'vendor/aixbdd/**',
 ]
 
+/** `vite-doctor/nuxt` module options（nuxt.config.ts 用；`rules` / `exclude` 包在 `config` 內）。 */
 export const doctorConfig = {
   config: {
     rules: doctorRules,
     exclude: DOCTOR_UPSTREAM_MIRROR_EXCLUDES,
   },
 }
+
+/** vite-doctor CLI `--config` 吃的形狀（`rules` / `exclude` 在頂層）。run.mjs 的預設設定檔。 */
+export const doctorCliConfig = {
+  rules: doctorRules,
+  exclude: DOCTOR_UPSTREAM_MIRROR_EXCLUDES,
+}
+
+export default doctorCliConfig

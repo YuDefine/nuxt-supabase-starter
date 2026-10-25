@@ -24,7 +24,7 @@
  *   --catalog-json <file>：以 `dump-catalog` 的輸出取代連 DB（測試與離線重現用）
  *   node scripts/specformula-ddl-check.ts dump-catalog [--db-url <url>] [--schema public]
  *
- * DB 連線走 `psql`（CI runner 與 supabase 本機環境都有），預設 `postgresql://postgres:postgres@127.0.0.1:54342/postgres`
+ * DB 連線走 `psql`（CI runner 與 supabase 本機環境都有），預設 `postgresql://postgres:postgres@127.0.0.1:54322/postgres`
  * ——只讀 catalog（`information_schema`／`pg_catalog`），NEVER 寫入。
  */
 
@@ -34,7 +34,7 @@ import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-export const DEFAULT_DB_URL = 'postgresql://postgres:postgres@127.0.0.1:54342/postgres'
+export const DEFAULT_DB_URL = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
 
 /* ------------------------------------------------------------------ 型別 */
 
@@ -471,7 +471,7 @@ export function parseDbml(text: string, file = '<dbml>'): DbmlTable[] {
         nested += (s.match(/\{/g) ?? []).length - (s.match(/\}/g) ?? []).length
         continue
       }
-      if (/^(indexes|Note|note|checks)\s*[:{]/.test(s) || /^(indexes|checks)\s*$/.test(s)) {
+      if (/^(indexes|note|checks)\s*[:{]/i.test(s) || /^(indexes|checks)\s*$/i.test(s)) {
         if (s.includes('{')) nested += (s.match(/\{/g) ?? []).length - (s.match(/\}/g) ?? []).length
         continue
       }

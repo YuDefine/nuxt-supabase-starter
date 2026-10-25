@@ -18,7 +18,7 @@ CLADE_WORK_ID=<work-id> node scripts/wt-helper.ts add <slug> \
 
 上例是「先檢查 main、不帶任何 WIP」的預設形狀：`--precheck-baseline --baseline-strategy stash` 不帶 `--include-unrelated-dirty` 時 main dirty 原封不動、新樹從 HEAD 乾淨分出，但 helper 會先查 unmerged 與別 session claim。完全不帶 baseline 旗標也是乾淨 fork，只是**跳過**這兩道檢查。要帶 WIP 的形狀見 `rules/fork前baseline判準.md`。
 
-work id 用 ambient `CLADE_WORK_ID=<work-id>` 帶進（`W-…` 不是 `--origin` 收的 scheme）；呼叫端沒給 slug 時，由任務一句話取 2–4 個英文 kebab-case 字當 slug。
+work id 用 ambient `CLADE_WORK_ID=<work-id>` 帶進（`W-…` 不是 `--origin` 收的 scheme）；有 work id 時建樹後會在背景送一筆只含位置的 `flow work checkpoint`（fail-open，`CLADE_AUTO_CHECKPOINT=0` 關閉）；呼叫端沒給 slug 時，由任務一句話取 2–4 個英文 kebab-case 字當 slug。
 
 命名與位置（`wt-helper add` 自動處理，不必另問 branch 名稱）：
 
@@ -41,7 +41,7 @@ work id 用 ambient `CLADE_WORK_ID=<work-id>` 帶進（`W-…` 不是 `--origin`
 
 helper 的行為：
 
-- **只有帶 `--precheck-baseline` 時**才先跑 `detect-main-dirty`：unmerged 非空就分流（安全殘留自動標 resolved，真衝突停下拒 fork）；dirty 路徑屬於另一個 active session 的 claim → STOP 拒 fork；clean 直接 fork；其餘 dirty 依所選策略處理（沒給 `--baseline-strategy` 時是 `warn`，有 dirty 就停下列報告）。不帶 `--precheck-baseline` 時以上都不跑，直接從 HEAD fork。
+- **只有帶 `--precheck-baseline` 時**才做 fork 前檢查，判定與 `detect-main-dirty --json` 印的 `recommended_strategy` 同一套；代碼對動作見 `rules/fork前baseline判準.md` Rule 2。不帶 `--precheck-baseline` 時不做任何檢查，直接從 HEAD fork。
 - branch 命名 `session/<YYYY-MM-DD-HHMM>-<slug>`，從 `main`（或 `--base` 指定的 integration branch）分出。
 - worktree 建在 `<consumer-parent>/<consumer-name>-wt/<slug>/`；能 fast-forward 到 `origin/main`（或 `origin/integration/<work-id>`）就前進，不能時只警告 `could not fast-forward merge …` 並停在 fork 點。
 - 成功時印出 `Path: <path>`、`Branch: <branch>` 與 `Handoff: {"cwd":…,"branch":…}`，由此取得樹的絕對路徑與 branch；並在 stderr 印出 `export CLADE_WORK_ID=<work-id>`。
@@ -61,10 +61,10 @@ consumer 有 per-worktree backing service（隔離的 dev DB clone 與它的 RES
 
 狀態是 `created` 或 `absent` 時，下面緊接兩行：缺的是哪個 service（deferred 時附 consumer 回報的 admission 數字），以及通用補建指令 `補建：node scripts/wt-env-bootstrap.<ts|mjs> ensure --worktree "<path>" --json`（副檔名是該 repo 實際有的那一支）。補建仍回不到 `ready` 時怎麼處置（騰容量、改走別條路）是 consumer 的事，讀該 consumer 的 local rule，本檔不寫。
 
-偵測 main dirty（建立前的 sanity check）：
+偵測 main dirty 並取 baseline 策略（建立前；代碼對動作見 `rules/fork前baseline判準.md` Rule 2）：
 
 ```bash
-node scripts/wt-helper.ts detect-main-dirty --json
+node scripts/wt-helper.ts detect-main-dirty --json [--baseline-scope-paths <comma>]   # 讀 recommended_strategy
 ```
 
 ## 批次
@@ -106,7 +106,7 @@ node scripts/wt-helper.ts batch status --trigger auto --workflow <workflow_model
 
 | 動作 | 指令 | 說明 |
 | --- | --- | --- |
-| 列出 session worktree | `node scripts/wt-helper.ts list [--json] [--no-landed-state]` | 含 staleness 與 landedState；有 brief 的樹會顯示任務摘要與狀態 |
+| 列出 session worktree | `node scripts/wt-helper.ts list [--json] [--no-landed-state]` | 含 staleness 與 landedState；有 brief 的樹會顯示任務摘要與狀態。detached HEAD 的樹也會列出：`--json` 列 `branch: null`、`detached: true`、`head`、`dirty`（無 `staleness`／`landedState`），消費端 MUST 先判 `detached` 再讀 `branch` |
 | 找 slug 對應的樹 | `node scripts/wt-helper.ts resolve <slug> [--json]` | 印出持有該 slug 的樹路徑；exit 3 代表沒有，main 為權威 |
 | 累積報告 | `node scripts/wt-helper.ts backlog --json` | 唯讀處置佇列；超過 3 棵會警告 |
 | 就緒池現況 | `node scripts/wt-helper.ts batch status --trigger manual --workflow <workflow_model>` | 使用者要求 merge back 時的入口；落地由 `/commit` 依 `batch.md` 執行 |

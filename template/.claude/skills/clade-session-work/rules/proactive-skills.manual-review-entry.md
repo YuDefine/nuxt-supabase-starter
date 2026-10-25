@@ -3,8 +3,8 @@ description: 進入 tasks.md `## 人工檢查` 階段的入口規約——auto-t
 paths: ['tasks/**', 'specs/plans/**', 'screenshots/**']
 ---
 <!-- Clade native rule; source: rules/core/proactive-skills.manual-review-entry.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 # Proactive Skills — 人工檢查入口
 
@@ -28,7 +28,7 @@ paths: ['tasks/**', 'specs/plans/**', 'screenshots/**']
    - **exit 2** → 判不出來；回報原因，不要當成 exit 0
    - 不要自判有沒有等人的事、不要跳過這條指令
 
-3. exit 3 → 在 chat 逐張列 family ＋ 判斷題，依使用者原話落判定：`ui-judgement` 卡（plan package 的 `@human` 場景）跑 `flow receipt`；`ruling` 卡跑 `flow answer`；`acceptance` 卡同樣跑 `flow answer <span> --answer '<原話>'`（驗收合成題，`\my` 同一條路徑，判決記成人的回答）。`external-action`／`exception` 卡：`flow ask --category human-action` 發出、帶選項的題同樣 `flow answer`；其餘依使用者選的那一項跑 `--json` 卡上該選項的 `options[].command`（例：blocked 工作的 `flow dismiss <span> --reason '<原話>'`、持有者不見的「改派／放棄」交回 coordinator）。**NEVER** 由 agent 自己跑 `flow accept`／`flow drop`——那是代按（[[flow-work-tracking]]）。
+3. exit 3 → 在 chat 逐張列 family ＋ 判斷題，依使用者原話落判定：`ui-judgement` 卡（plan package 的 `@human` 場景）跑 `flow receipt`；`ruling` 卡跑 `flow answer`；`acceptance` 卡同樣跑 `flow answer <span> --answer '<原話>'`（驗收合成題，`/my` 同一條路徑，判決記成人的回答）。`external-action`／`exception` 卡：`flow ask --category human-action` 發出、帶選項的題同樣 `flow answer`；其餘依使用者選的那一項跑 `--json` 卡上該選項的 `options[].command`（例：blocked 工作的 `flow dismiss <span> --reason '<原話>'`、持有者不見的「改派／放棄」交回 coordinator）。**NEVER** 由 agent 自己跑 `flow accept`／`flow drop`——那是代按（[[flow-work-tracking]]）。
 4. **tasks.md 的 `[review:ui]` 或已有 `(verified-ui:)` 的 `[verify:ui]` leaf 不會變成卡片**（`flow gates` 的 `ui-judgement` 只收 plan package 的 `@human` scenario），所以不受第 2 步 exit code 約束：第 1 步推完後仍 pending、且 evidence 已齊的 leaf，在 chat 逐項展示截圖／證據交給 user，再依原話照 [[manual-review]] § 核心規則第 3–6 步寫回 tasks.md（OK → `[x]`；有問題 → `[ ]` ＋ `（issue: <原話>）`；skip → `[x]` ＋ `（skip）`）。evidence 未齊的 leaf 仍是 agent 的球，**NEVER** 交給 user。
 
 ## `[review:ui]` item 敘述內文的 URL

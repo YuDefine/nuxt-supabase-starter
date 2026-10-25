@@ -1,9 +1,9 @@
 <!-- Clade native rule; source: rules/core/secret-custody.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Secret Custody（secret 值到手時的既定動作）
 
-> 無 frontmatter 是刻意的（unconditional always-load）：觸發事件「secret 值到你手上」沒有對應的檔案路徑，加 `paths:` 會讓本規約永遠不載入。
+> 無 frontmatter 是刻意的：觸發事件「secret 值到你手上」沒有對應的檔案路徑，加 `paths:` 會讓本規約永遠不載入；實際由 `clade-security` skill 的 READ 載入（碰 secret、token、credential 時）。
 
 ## 觸發
 
@@ -21,14 +21,17 @@
 ## 保管處 allowlist
 
 指定保管處 = repo 文件明寫的那個位置（典型：Notion secrets 頁的對應列、密碼管理器條目、
-`gh secret set` 的 GitHub Secrets）。判定法：在 `HANDOFF.md` / `docs/` / `.clade/rules/` 搜尋
+`gh secret set` 的 GitHub Secrets）。Notion 憑證頁先跑 `node ~/offline/clade/vendor/scripts/lib/notion-hub.ts resolve --consumer-path .`，
+讀 `secrets.repoUrl`（本 repo，consumer-meta `notion.secretPageId`）與 `secrets.orgUrl`（客戶 org 層，hub `secretsPageId`）；
+輸出 `configured:false`（repo 沒宣告 notion）或欄位為 null 時，改用下面的判定法；resolve 丟錯代表 hub／projectCode 宣告壞了，
+先修宣告（見 [[consumer-meta]]），不要把它當成「沒有保管處」。判定法：在 `HANDOFF.md` / `docs/` / `.clade/rules/` 搜尋
 「MUST 同步改 X」「完整值在 X」這類句子，X 就是保管處；尚未遷移的來源同時查 `.claude/rules/`。
 
 **寫入保管處不算洩漏。** 洩漏禁令的射程是 **repo 內的檔案、commit message、你的對話輸出**；保管處是那條禁令要保護的目的地。
 
 ## Iron Law：NEVER 把 secret 管理退回給 user
 
-你有 CLI / API 路徑做得到的事，**MUST 自己做完**：寫保管處、設 GitHub secret、同步兩邊、更新變更紀錄。
+通則見 [[agent-routing]] § 停下來要人做之前；本節只列 secret 領域的退回形式。CLI / API 做得到的 **MUST 自己做完**：寫保管處、設 GitHub secret、同步兩邊、更新變更紀錄。
 
 **NEVER** 用下列任一形式把它退回：
 

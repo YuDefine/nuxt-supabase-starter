@@ -1,16 +1,15 @@
 // 🔒 LOCKED — managed by clade · Source: vendor/scripts/pre-commit/staged-targets.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/pre-commit/staged-targets.ts
 // CLADE:VENDOR-SCRIPT
 //
-// staged-targets — `checks/vp-staged.sh` 與 `vendor/oxc-shared/preset.ts` 之間的橋（TD-777）
+// staged-targets — `checks/vp-staged.sh` 與 `vendor/oxc-shared/preset.ts` 之間的橋
 //
 // stdin：NUL 分隔的 staged 路徑（`git diff --cached --name-only -z`）
 // stdout：NUL 分隔、**沒有**被 preset `isStagedExcluded` 排除的路徑
 // exit 0：成功（輸出可能是空的——那代表全部被排除，是合法結果）
 // exit 2：橋接失敗（找不到 preset / import 失敗 / 匯出形狀不對 / 排除清單是空的）
 //
-// 為什麼要這一層：bash 讀不到 TS 匯出。TD-777 之前 `vp-staged.sh` 自己手寫一份
-// `CLADE_MANAGED_PREFIXES`，與 preset 的 `PROJECTION_EXCLUDES` 雙向漂移，而它才是 fleet
-// 實際執行的那份。現在 shell 不再持有任何路徑清單，判定一律回到 preset。
+// 為什麼要這一層：bash 讀不到 TS 匯出，shell 若自己持有路徑清單就會與 preset 的
+// `PROJECTION_EXCLUDES` 雙向漂移。shell 不持有任何路徑清單，判定一律回到 preset。
 //
 // **失敗 MUST loud**：靜默拿到空清單＝整個過濾失效，而那在輸出上與「這次沒有投影檔要濾」
 // 同形。所以任何一步不對都 exit 2，NEVER 退回「全部放行」或「全部排除」。

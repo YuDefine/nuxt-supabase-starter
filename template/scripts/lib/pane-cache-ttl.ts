@@ -108,14 +108,89 @@ export interface CacheTouchRecord {
 /** 讀檔尾上限：最後一筆 user／assistant 紀錄通常在尾端數 KB 內，找不到就退回 mtime。 */
 export const CONVERSATION_TAIL_BYTES = 256 * 1024
 
+/** harness 旁觀者（side agent）塞進 session 的提醒：不是 Charles、也不是 session 自己的工作。 */
+const SIDE_AGENT_NOTE_RE = /^\s*Here is a note offered by a side agent:/
+
+function userPromptText(rec: Record<string, unknown>): string | null {
+  const message = rec.message
+  if (typeof message !== 'object' || message === null) return null
+  const content = (message as Record<string, unknown>).content
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return null
+  // tool_result 是工作中途，不是新的一則提示
+  if (content.some((b) => typeof b === 'object' && b !== null && b.type === 'tool_result'))
+    return null
+  const text = content.find((b) => typeof b === 'object' && b !== null && b.type === 'text')
+  return text && typeof text.text === 'string' ? text.text : ''
+}
+
+/**
+ * side agent 提醒回合的行號（提醒本身＋session 對它的回應，直到下一則真的提示）。這一輪會刷新
+ * prompt cache，但不是對話進度：算成活動的話，冷 pane 在 TTL 過後被一則提醒拉回暖，回應還會蓋掉
+ * 原本「Q2–Q7 等你回」的最後一句。census 的閒置與最後一句 MUST 跳過這些行；prompt cache 的
+ * touch（lastCacheTouch 系列）不跳，因為這一輪真的碰過 cache。
+ */
+export function sideAgentExchangeLines(lines: readonly string[]): Set<number> {
+  const skip = new Set<number>()
+  let inside = false
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (!line.includes('"user"') && !line.includes('"assistant"')) continue
+    let rec: unknown
+    try {
+      rec = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (typeof rec !== 'object' || rec === null) continue
+    const entry = rec as Record<string, unknown>
+    if (entry.type !== 'user' && entry.type !== 'assistant') continue
+    if (entry.isSidechain === true) continue
+    if (entry.type === 'user' && entry.isMeta !== true && entry.isCompactSummary !== true) {
+      const prompt = userPromptText(entry)
+      if (prompt !== null) inside = SIDE_AGENT_NOTE_RE.test(prompt)
+    }
+    if (inside) skip.add(i)
+  }
+  return skip
+}
+
+/**
+ * 視窗內有沒有看到任何一則真的提示（user 文字，非 tool_result／meta／compact summary）。沒有的話
+ * 視窗被一整輪工具呼叫填滿，提醒本身已捲出去，sideAgentExchangeLines 無從判斷。
+ */
+export function windowHasPromptBoundary(lines: readonly string[]): boolean {
+  for (const line of lines) {
+    if (!line.includes('"user"')) continue
+    let rec: unknown
+    try {
+      rec = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (typeof rec !== 'object' || rec === null) continue
+    const entry = rec as Record<string, unknown>
+    if (entry.type !== 'user' || entry.isSidechain === true) continue
+    if (entry.isMeta === true || entry.isCompactSummary === true) continue
+    if (userPromptText(entry) !== null) return true
+  }
+  return false
+}
+
 /**
  * Claude Code 的「Compacted while idle」、summary、system 類紀錄會改寫 transcript 而刷新 mtime，
  * 但沒有任何人說話，prompt cache 也沒被碰：閒置要以最後一筆**對話**紀錄（user／assistant，
- * 不含 compact summary／meta／sidechain）的 timestamp 為準。
+ * 不含 compact summary／meta／sidechain）的 timestamp 為準。`skipSideAgent` 另跳過 side agent
+ * 提醒回合（census 的對話活動用；prompt cache 的 touch 不傳，因為那一輪真的碰過 cache）。
  */
-export function lastConversationTimestampMs(lines: Iterable<string>): number | undefined {
+export function lastConversationTimestampMs(
+  lines: Iterable<string>,
+  options: { skipSideAgent?: boolean } = {},
+): number | undefined {
   const all = Array.isArray(lines) ? lines : [...lines]
+  const sideAgent = options.skipSideAgent ? sideAgentExchangeLines(all) : new Set<number>()
   for (let i = all.length - 1; i >= 0; i--) {
+    if (sideAgent.has(i)) continue
     const line = all[i]
     if (!line.includes('"user"') && !line.includes('"assistant"')) continue
     let entry: unknown

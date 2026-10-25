@@ -1,9 +1,9 @@
 ---
 description: 顯示值完整性——統計 / metric / aggregate 顯示給使用者的數字必須等於它宣稱的東西
-paths: ['server/**/*.ts', 'packages/*/server/**/*.ts', 'app/composables/**/*.ts', 'packages/*/app/composables/**/*.ts']
+paths: ['server/**/*.ts', 'packages/*/server/**/*.ts', 'app/composables/**/*.ts', 'packages/*/app/composables/**/*.ts', 'app/utils/**/*.ts', 'packages/*/app/utils/**/*.ts', 'app/**/*.vue', 'packages/*/app/**/*.vue']
 ---
 <!-- Clade native rule; source: rules/core/display-value-integrity.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Display Value Integrity
 
@@ -11,7 +11,7 @@ paths: ['server/**/*.ts', 'packages/*/server/**/*.ts', 'app/composables/**/*.ts'
 
 這族失敗**不會 throw、不進 error log、test 全綠**——數字長得像個合理的數字，只有讀它的人會發現不對，而且通常是在拿它做完決策之後。所以它不能靠 runtime 訊號接住，只能在寫 query 的當下逐條檢查。
 
-本規約對**每一個**產生使用者可見數字的 query / composable / handler 生效，不是只有 dashboard 那幾支；一個 API 回傳的欄位最後被畫成數字，它就在範圍內。以下五條彼此獨立，命中哪條套哪條。
+本規約對**每一個**產生使用者可見數字的 query / composable / handler 生效，不是只有 dashboard 那幾支；一個 API 回傳的欄位最後被畫成數字，它就在範圍內。以下各條彼此獨立，命中哪條套哪條。
 
 ## 一個 metric 一個計算來源（MUST）
 
@@ -85,6 +85,27 @@ const { count } = await supabase
 
 同一條的另一半：畫面上有「本月」這種期間詞、但**沒有**讓使用者切換期間的控制項時，`getFullYear()` / `getMonth()` 這類硬編碼當期寫法不算違反本條；一旦加了期間選擇器，那些硬編碼就是下一個 label 說謊的地方。
 
+## 格式化走單一 formatter（MUST）
+
+**Predicate**：畫面或匯出檔上出現貨幣、數字、百分比或日期。
+
+**每一處**都 **MUST** 經過專案共用的 formatter（例：`app/utils/format.ts`），由它帶 locale、幣別（混單位欄位照上一條的 discriminator 取幣別）與 `timeZone`（[[timezone]] Must 2）。**NEVER** 在模板寫死 `$`＋`toLocaleString()`——幣別或 locale 一變就得全站搜尋，漏掉的那幾處會繼續冠著錯的符號；不帶 locale 的 `toLocaleString()` 跟著執行環境走，SSR 與瀏覽器還會各給一種格式。
+
+## 聚合位置：時間分桶在 server（MUST）
+
+**Predicate**：圖表或報表依日／週／月分桶。
+
+分桶 **MUST** 在 server／SQL 做，bucket 邊界以業務時區（或使用者時區）計算（`date_trunc` 套在 `AT TIME ZONE` 之後，見 [[timezone]]）。**NEVER** 把原始資料列撈到前端用 JS 分桶——撈回來的列數受列表上限截斷，合計少了也不會報錯；而且每個瀏覽器以自己的時區切日界，同一張圖在不同人眼中不一樣。區間內沒有資料的 bucket 也 **MUST** 由 server 回 0（SQL 以 `generate_series` 之類補齊），**NEVER** 讓那個 bucket 缺席——前端折線會直接連過空檔，看起來像沒有中斷。
+
+## CSV 匯出（MUST）
+
+**Predicate**：畫面提供「匯出 CSV」。
+
+- 欄位與表頭＝使用者目前看得到的欄位與它們的顯示 label；值也用畫面上的顯示值（狀態寫標籤，不寫 enum 代碼）。**NEVER** 直接把 DB row 序列化成 CSV——會帶出畫面沒有的內部欄位。
+- 範圍＝**目前篩選條件下的全部結果**，不是當前這一頁。資料量大時由 server 產檔或分批取完；有上限而截斷時，檔案與畫面都要寫明只匯出了前 N 筆。
+- 檔頭加 UTF-8 BOM（Excel 開中文才不會亂碼）。
+- 以 `=`、`+`、`-`、`@`、tab、CR 開頭的儲存格值前面加 `'`，防公式注入。
+
 ## 稽核
 
 ```bash
@@ -97,7 +118,7 @@ node scripts/audit-display-value-integrity.ts --consumer <path>
 
 **消費端**：clade 主線跑 fleet 稽核時讀（`pnpm audit:manual`）、consumer 主線在編輯統計 / 查詢檔時由本規約的 `paths` gate 載入後自行對照。
 
-**NEVER** 拿它回 0 當「本規約已遵守」——它偵測不到上面第一、三、四、五條的任何一條，那四條沒有可 grep 的形狀。
+**NEVER** 拿它回 0 當「本規約已遵守」——它只量裸 aggregate；其餘各條都沒有可 grep 的形狀，它一條也偵測不到。
 
 ## 與其他規約的邊界
 

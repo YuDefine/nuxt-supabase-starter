@@ -1,9 +1,9 @@
 ---
-description: 開發規範（測試落點, coding style, UI reuse）
+description: 開發規範（測試落點, coding style, UI reuse, server 模組不靠頂層副作用）
 paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'test/**/*.ts', 'packages/*/test/**/*.ts', 'shared/**/*.ts', 'packages/*/shared/**/*.ts', 'package.json']
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/development.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # UI Reuse
 
@@ -108,3 +108,19 @@ Nuxt UI 內建 color mode 處理，**禁止**自行指定 Tailwind 硬編碼色�
 - `--ui-primary` 等 CSS 變數中可使用 `black` / `white`
 - Nuxt UI 元件的 `color` prop：`color="neutral"`, `color="error"` 等
 - 系統回饋元件（UAlert, toast）使用語意 color：`color="error"`, `color="success"`
+
+# Server 模組不靠頂層副作用
+
+Nitro（nitropack 2.x，2.13.5 實查 `dist/rollup/index.mjs` 的 `treeshake.moduleSideEffects`）把 Nitro runtime 與 `nitro.options.moduleSideEffects` 白名單（預設只有 polyfill）以外的**所有** server module 當成無副作用。結果：別的檔 import 這個 module 時，build 只留下被用到的 export，**頂層的呼叫敘述被整段丟掉**。dev server 不 tree-shake，所以 dev 正常、production build 才壞，症狀是 runtime 查不到註冊項（registry 空的、handler 沒掛上、設定沒套用）。
+
+- **NEVER** 在 `server/utils/**`、`server/lib/**`、`shared/**` 這類被 import 的 module 頂層用呼叫建立狀態（`registerX(...)`、`for (...) register(...)`、`init()`、`setup()`）
+- 需要先註冊才能查的 registry：包一個冪等的 `ensureRegistered()`（已註冊就直接 return），**每個**對外 accessor 開頭都先呼叫；或改在 `server/plugins/*.ts` 啟動時註冊（Nitro plugin 由 Nitro 自己 import 並呼叫，不會被 tree-shake）
+- 加進 `nitro.moduleSideEffects` 白名單只用在第三方 polyfill 類，**NEVER** 拿來救自家 module——白名單是路徑前綴，漏一條就靜默失效
+
+Detection（在 consumer root 跑；`defineRouteMeta` 等編譯期 macro 不算）：
+
+```bash
+cd server && rg -n '^((for|while)\s*\(|[A-Za-z_$][\w$.]*\()' -g '*.ts' -g '!plugins/**' -g '!api/**' -g '!routes/**' -g '!middleware/**' -g '!tasks/**' -g '!**/*.{test,spec}.ts' . | grep -v defineRouteMeta
+```
+
+改完 MUST 用 production build（`nuxt build` 後跑 `.output`）驗證註冊項查得到，**NEVER** 只看 dev server。

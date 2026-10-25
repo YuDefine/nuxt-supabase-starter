@@ -1,0 +1,44 @@
+# 🔒 LOCKED — managed by clade · Source: vendor/actions/source-assert-delta/action.yml · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/actions/source-assert-delta/action.yml
+name: 'Source-Assert Delta Gate'
+description: 'Fail a PR that adds "read source file, assert on its text" (P-class) test assertions, by comparing P-class assertion counts against the merge-base via vendor/scripts/checks/source-assert-gate.ts. Assumes the caller has already checked out the repo with fetch-depth: 0 (or enough history to reach the base ref).'
+author: 'YuDefine/clade'
+
+inputs:
+  base-ref:
+    description: 'Ref to compare against (merge-base with HEAD). Defaults to origin/<PR base branch>, then origin/main.'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Run source-assert delta gate
+      shell: bash
+      env:
+        INPUT_BASE_REF: ${{ inputs.base-ref }}
+        PR_BASE_REF: ${{ github.base_ref }}
+      run: |
+        set -euo pipefail
+
+        GATE=""
+        for candidate in scripts/checks/source-assert-gate.ts vendor/scripts/checks/source-assert-gate.ts; do
+          if [ -f "$candidate" ]; then GATE="$candidate"; break; fi
+        done
+        if [ -z "$GATE" ]; then
+          echo "::warning::source-assert-gate.ts not found — consumer not yet propagated, skipping"
+          exit 0
+        fi
+
+        BASE="${INPUT_BASE_REF:-}"
+        if [ -z "$BASE" ]; then
+          BASE="origin/${PR_BASE_REF:-main}"
+        fi
+        if ! git rev-parse --verify --quiet "$BASE" >/dev/null; then
+          git fetch --no-tags --depth=200 origin "${BASE#origin/}" || true
+        fi
+        if ! git merge-base HEAD "$BASE" >/dev/null 2>&1; then
+          echo "::warning::cannot resolve merge-base(HEAD, $BASE) — checkout needs fetch-depth: 0; skipping"
+          exit 0
+        fi
+
+        node "$GATE" --against "$BASE"

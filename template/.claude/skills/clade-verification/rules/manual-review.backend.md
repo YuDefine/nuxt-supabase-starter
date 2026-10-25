@@ -3,8 +3,8 @@ description: Manual Review backend 規約——backend-only change 特別規約 
 paths: ['server/**/*.ts', 'packages/*/server/**/*.ts', 'test/**/*.ts', 'packages/*/test/**/*.ts', 'e2e/**/*.ts', 'packages/*/e2e/**/*.ts', 'supabase/**']
 ---
 <!-- Clade native rule; source: rules/core/manual-review.backend.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 ## Runtime adapter boundary
 
@@ -143,7 +143,7 @@ Helper 掃描 priority：**repo root canonical → repo root legacy → repo roo
 
 ##### Scaffold 行為
 
-Detection 確認 missing **且**有對應 auth-module 的 cookbook template 時，agent **MUST** scaffold，**NEVER** 要求 user 走 Google OAuth + DevTools 複製 cookie。沒有 template 時 **relay 給該 consumer 的 session 決定 opt-in**，**NEVER** 只登記一條 follow-up（plan Open work 或 `docs/tech-debt.md`）就結束。
+Detection 確認 missing **且**有對應 auth-module 的 cookbook template 時，agent **MUST** scaffold，**NEVER** 要求 user 走 Google OAuth + DevTools 複製 cookie。沒有 template 時 **relay 給該 consumer 的 session 決定 opt-in**，**NEVER** 只登記一條 follow-up（plan Open work；未遷移 consumer：`docs/tech-debt.md`）就結束。
 
 ### `[review:ui]` flow（真的需要人）
 

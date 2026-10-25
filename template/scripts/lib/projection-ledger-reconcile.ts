@@ -13,6 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { join } from 'node:path'
+import { parseGitStatusZ } from './git-status-z.ts'
 
 type ProjectionState = {
   schemaVersion: 1
@@ -86,6 +87,99 @@ const PATHSPEC_CHUNK = 500
  * 一跑二十分鐘（2026-09-29 desk 實測）。判定與 reason 與逐檔版本一致。
  */
 function committedDiskHashes(root: string, rels: string[]): Map<string, CommittedHash> {
+  const result = committedDiskHashesAtHead(root, rels)
+  // merge 進行中（MERGE_HEAD 存在）HEAD 不是 baseline：merge 帶進來的投影已 stage、與 HEAD
+  // 不同。HEAD 判不過的路徑另以 MERGE_HEAD 再驗一次；無 MERGE_HEAD 時結果與原本逐項相同。
+  const retry = rels.filter((rel) => {
+    const value = result.get(rel)
+    return (
+      value?.hash === null &&
+      (value.reason === 'index or worktree is dirty' ||
+        value.reason === 'disk bytes differ from HEAD')
+    )
+  })
+  if (retry.length === 0) return result
+  for (const [rel, hash] of mergeHeadDiskHashes(root, retry)) result.set(rel, { hash })
+  return result
+}
+
+/**
+ * MERGE_HEAD 版：磁碟逐 byte ＝ `MERGE_HEAD:<path>`，且 index 也是那個 blob（衝突檔取 stage 3
+ * 即 MERGE_HEAD 側）才回 hash。不是 merge 自己結果的 staged 改動（index blob ≠ MERGE_HEAD
+ * blob）、skip-worktree／assume-unchanged、untracked 一律不回（fail-closed，由呼叫端維持原
+ * reason）。非 merge 狀態（rev-parse MERGE_HEAD 失敗）回空 map。
+ */
+function mergeHeadDiskHashes(root: string, rels: string[]): Map<string, string> {
+  const out = new Map<string, string>()
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')),
+  )
+  const git = (args: string[], input?: Buffer) =>
+    execFileSync('git', args, {
+      cwd: root,
+      env,
+      input,
+      maxBuffer: 1024 * 1024 * 1024,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+  try {
+    git(['rev-parse', '-q', '--verify', 'MERGE_HEAD^{commit}'])
+    const prefix = git(['rev-parse', '--show-prefix']).toString('utf8').trim()
+    for (let i = 0; i < rels.length; i += PATHSPEC_CHUNK) {
+      const chunk = rels.slice(i, i + PATHSPEC_CHUNK)
+      const specs = chunk.map((rel) => `:(literal)${rel}`)
+      // ls-files 路徑相對 cwd（＝ root），與 rel 同基準
+      const staged = new Map<string, Array<{ oid: string; stage: string }>>()
+      for (const record of git(['ls-files', '-s', '-z', '--', ...specs])
+        .toString('utf8')
+        .split('\0')) {
+        if (!record) continue
+        const [meta = '', path = ''] = record.split('\t')
+        const [, oid = '', stage = ''] = meta.split(' ')
+        staged.set(path, [...(staged.get(path) ?? []), { oid, stage }])
+      }
+      const tags = new Map<string, string>()
+      for (const record of git(['ls-files', '-v', '-z', '--', ...specs])
+        .toString('utf8')
+        .split('\0')) {
+        if (record.length > 2 && !tags.has(record.slice(2)))
+          tags.set(record.slice(2), record.slice(0, 2))
+      }
+      const batch = git(
+        ['cat-file', '--batch'],
+        Buffer.from(chunk.map((rel) => `MERGE_HEAD:${prefix}${rel}\n`).join('')),
+      )
+      let offset = 0
+      for (const rel of chunk) {
+        const newline = batch.indexOf(0x0a, offset)
+        if (newline < 0) break
+        const header = batch.subarray(offset, newline).toString('utf8').split(' ')
+        if (header[1] !== 'blob') {
+          offset = newline + 1
+          continue
+        }
+        const size = Number(header[2])
+        const committed = batch.subarray(newline + 1, newline + 1 + size)
+        offset = newline + 1 + size + 1
+        const entries = staged.get(rel) ?? []
+        const unmerged = entries.some((entry) => entry.stage !== '0')
+        const indexOid = unmerged
+          ? entries.find((entry) => entry.stage === '3')?.oid
+          : entries.length === 1
+            ? entries[0].oid
+            : undefined
+        if (indexOid !== header[0] || tags.get(rel) !== (unmerged ? 'M ' : 'H ')) continue
+        const disk = readFileSync(join(root, rel))
+        if (disk.equals(committed)) out.set(rel, createHash('sha256').update(disk).digest('hex'))
+      }
+    }
+  } catch {
+    // 查證失敗不是證據：保留 HEAD 路徑的 reason
+  }
+  return out
+}
+
+function committedDiskHashesAtHead(root: string, rels: string[]): Map<string, CommittedHash> {
   const result = new Map<string, CommittedHash>()
   if (rels.length === 0) return result
   const env = Object.fromEntries(
@@ -121,16 +215,13 @@ function committedDiskHashes(root: string, rels: string[]): Map<string, Committe
     prefix = git(['rev-parse', '--show-prefix']).toString('utf8').trim()
     for (let i = 0; i < pending.length; i += PATHSPEC_CHUNK) {
       const specs = pending.slice(i, i + PATHSPEC_CHUNK).map((rel) => `:(literal)${rel}`)
-      const status = git(['status', '--porcelain=v1', '-z', '-uall', '--', ...specs])
-        .toString('utf8')
-        .split('\0')
-      for (let j = 0; j < status.length; j++) {
-        const record = status[j]
-        if (record.length < 4) continue
-        dirty.add(record.slice(3).slice(prefix.length))
-        // rename／copy 的下一筆是原路徑，兩邊都算 dirty
-        if ('RC'.includes(record[0]) || 'RC'.includes(record[1]))
-          dirty.add((status[++j] ?? '').slice(prefix.length))
+      const status = parseGitStatusZ(
+        git(['status', '--porcelain=v1', '-z', '-uall', '--', ...specs]).toString('utf8'),
+      )
+      for (const { path, origPath } of status) {
+        dirty.add(path.slice(prefix.length))
+        // rename／copy 的來源端也算 dirty
+        if (origPath !== undefined) dirty.add(origPath.slice(prefix.length))
       }
       for (const record of git(['ls-files', '-v', '-z', '--', ...specs])
         .toString('utf8')
@@ -162,10 +253,18 @@ function committedDiskHashes(root: string, rels: string[]): Map<string, Committe
     return result
   }
   let offset = 0
+  let truncated = false
   for (const rel of clean) {
-    const newline = batch.indexOf(0x0a, offset)
+    const newline = truncated ? -1 : batch.indexOf(0x0a, offset)
+    // Truncated output makes every remaining path unverifiable: wrapping offset
+    // to 0 would re-parse earlier headers and compare the wrong blob's bytes.
+    if (newline < 0) {
+      truncated = true
+      result.set(rel, fail(new Error('cat-file --batch output is truncated')))
+      continue
+    }
     const header = batch.subarray(offset, newline).toString('utf8').split(' ')
-    if (newline < 0 || header[1] !== 'blob') {
+    if (header[1] !== 'blob') {
       result.set(rel, fail(new Error(`HEAD:${rel} is ${header.at(-1) ?? 'unreadable'}`)))
       offset = newline + 1
       continue

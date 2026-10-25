@@ -4,6 +4,8 @@
 - Level: `MUST`
 - 渲染的唯一來源是 Phase 1 **最後一次** `flow pending` 的輸出（推進過新題就是 `ask` 之後重跑的那一次）；題目的順序、分桶與編號照它，**NEVER** 重排、併桶或改分類。
 - 需要補上下文時**加在該題底下**，不要重排。
+- 題來自別台機器時，`flow pending` 在 repo 標籤後帶機器名（`[<consumer-id>@zenbook]`），渲染時原樣保留；輸出最上面的 `⚠ 讀不到 peer …` 行逐字渲染給 Charles（那代表那台的題這次看不到，NEVER 當成沒有題）。
+- `flow pending` 每題底下的 `span <id>` 與 `答案落到：<carrier>` 是給 agent 對應答案用的，**NEVER** 渲染給 Charles（`rules/待拍板條目寫法.md` Rule 4 的附註層）。`Qn` ↔ span ↔ repo 的對應，Phase 3 第 1 步從同一份 `flow pending` 輸出讀。
 - **NEVER** 只讀 `HANDOFF.md` 就作答——它與 state 檔會漂，這正是 `flow pending` 存在的理由。
 - 結尾的現況量測照用 `flow pending` 最後那一行（當下實跑，格式如 `clade: dirty 2 / worktree 3　<consumer-id>: dirty 3`，全乾淨時是 `全 roster 乾淨：…`）。**NEVER** 引用 `HANDOFF.md` 裡寫死的量測數字——過期的 dirty 數與新鮮的長得一模一樣。
 
@@ -50,7 +52,6 @@ Q2 （原本的 Q1）…
 Q1  [clade] stale worktree 要現在收嗎？  0m  [本輪從對話撈出]
       A. 現在回收（推薦）
       B. 留到下一輪
-      span 9d2f…41
 ```
 
 ## Bad Example
@@ -120,8 +121,6 @@ Q4  NAS 的 USB 備份碟要換新的
 Q3  [<consumer-id>] 打卡頁改成先選班別再打卡  5.1h
       A. 通過
       B. 退回
-      答案落到：HANDOFF.md
-      span 1b77…0c
 ```
 
 ## Bad Example
@@ -166,16 +165,16 @@ Q3  [<consumer-id>] NAS 的 USB 備份碟要換新的（要我動手）
 回 Q1A Q2A 即可結案。
 ```
 
-# Rule 6 - `要我動手` 桶帶選項的列只印 `可回：X／Y` 與 span，NEVER 加字母
+# Rule 6 - `要我動手` 桶帶選項的列只印 `可回：X／Y`，NEVER 加字母
 
 - Level: `MUST`
-- 「要我動手」桶裡帶選項的列，`flow pending` 在 bullet 下印 `可回：X／Y` 與 `span <id>`（**不加字母**）；渲染時照原樣保留。
+- 「要我動手」桶裡帶選項的列，`flow pending` 在 bullet 下印 `可回：X／Y` 與 `span <id>`（**不加字母**）；渲染時保留 `可回：` 那行，`span` 行照 Rule 1 不渲染。
 - **NEVER** 替它加 A／B 字母或 `Qn` 編號——字母讀起來就是一題 `Qn`，而這一桶仍是 bullet。
 - Charles 回了其中一個字，照 Phase 3 對那個 span 跑 `flow answer`（`--answer` 帶他回的那個字）。
 
 ## Good Example
 
-- 這個例子是好的，因為動手列保持 bullet，只印可回的字與 span。
+- 這個例子是好的，因為動手列保持 bullet，只印可回的字。
 
 ```md
 要我動手（1）
@@ -183,7 +182,6 @@ Q3  [<consumer-id>] NAS 的 USB 備份碟要換新的（要我動手）
   - [<consumer-id>] <consumer-id> 跑 dep batch：範圍？  登記於 1.0h 前
     → Charles 在 <consumer-id> 親自打 /version-upgrade → Outdated mode
     可回：只跑 patch／patch＋minor／這輪不跑
-    span 5a90…e3
 ```
 
 ## Bad Example
@@ -200,7 +198,7 @@ Q4  <consumer-id> 跑 dep batch：範圍？
 # Rule 7 - 佇列全空就一句話講完，NEVER 硬湊
 
 - Level: `MUST`
-- `flow pending` exit 2（印 `佇列是空的。`）且 Phase 1 第 3 步沒有從對話撈出任何待決策點時，用一句話回覆佇列為空，並附上現況量測那一行。
+- `flow pending` exit 4（`FLOW_CLI_CONTRACT=2`；印 `佇列是空的。`）且 Phase 1 第 3 步沒有從對話撈出任何待決策點時，用一句話回覆佇列為空，並附上現況量測那一行。
 - **NEVER** 為了「看起來有東西」把 agent 自己做得掉的事、已執行的事或進度回報湊成題目或 bullet。
 
 ## Good Example

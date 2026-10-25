@@ -6,8 +6,8 @@ paths:
 ---
 <!-- Clade native rule; source: rules/core/flow-work-tracking.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 # flow work 生命週期契約
 
@@ -133,7 +133,7 @@ paths:
 | `notion:` origin | 照舊 | 客戶（見下一節） |
 | 只有散文 | 只有 `--verification` | 沒有人：歸 agent，`flow pending --audience all` 看得到；補上前兩列之一重新 `flow done` |
 
-內建檢查（`vendor/scripts/flow/verify-check.ts`；`flow check` 列出用法）：`pr-merged <N|owner/repo#N>`、`ci-green <N|owner/repo#N>`、`commit-landed <sha> [<ref>]`、`file-exists <path> [<ref>]`，可用 ` && ` 串接。它們是 clade 的程式碼、行程內執行、不經 shell，spine 上的字串只提供參數——所以例行對帳可以跑。squash merge 的 PR 用 `pr-merged`，**NEVER** 用 worktree 的 sha 寫 `commit-landed`（那個 sha 永遠不會進 main）。
+內建檢查（`vendor/scripts/flow/verify-check.ts`；`flow check` 列出用法）：`pr-merged <N|owner/repo#N>`、`ci-green <N|owner/repo#N>`、`commit-landed <sha> [<ref>]`、`file-exists <path> [<ref>]`、`work-done <work_id>`（本 repo spine 上 done／accepted，或 origin 預設分支上有它的 `plan close` commit 且 package 已不在；drop 與查無都歸量不到），可用 ` && ` 串接。它們是 clade 的程式碼、行程內執行、不經 shell，spine 上的字串只提供參數——所以例行對帳可以跑。squash merge 的 PR 用 `pr-merged`，**NEVER** 用 worktree 的 sha 寫 `commit-landed`（那個 sha 永遠不會進 main）。
 
 重驗結果：
 
@@ -175,7 +175,7 @@ paths:
 | 信心 | 條件 | 處置 |
 | --- | --- | --- |
 | `stale` | 參照物（提問者 `--ref` 宣告的、dispatch label 上的 PR、TD、同 dispatch 的續跑／裁決、work 終局）在**題目問出之後**才終局 | 自動 `decision.dismiss`，`dismissed_by: stale-sweep`，reason 帶證據 |
-| `suspect` | 看起來過時但不到代人寫掉：問 Charles 的題靠推論判出、只有題目內文提到的 PR、PR 沒合就關、有來源檔（carrier）的題 | 不寫掉；標記進各 repo `.clade/flow/decision-staleness.json`，`flow pending`／`\my` 把它排到同區段最後並印 `⏳ 疑似過時` |
+| `suspect` | 看起來過時但不到代人寫掉：問 Charles 的題靠推論判出、只有題目內文提到的 PR、PR 沒合就關、有來源檔（carrier）的題 | 不寫掉；標記進各 repo `.clade/flow/decision-staleness.json`，`flow pending`／`/my` 把它排到同區段最後並印 `⏳ 疑似過時` |
 
 - 「問出之後才終局」是地基：題目寫「PR #12 已合入，要不要 revert」時，那個合入是前提不是過時證據。明確 `--ref` 同樣適用。
 - 量測（`gh`、`git`）只在 watch 側做；PR 的 MERGED 永久快取，OPEN 與 CLOSED（可能被 reopen）快取 15 分鐘。查不到一律當未終局。

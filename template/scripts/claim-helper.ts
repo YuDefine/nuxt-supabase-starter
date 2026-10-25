@@ -13,7 +13,7 @@
  * 詳細契約見 rules/core/session-claims.md。
  */
 
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import {
   existsSync,
   mkdirSync,
@@ -64,6 +64,9 @@ export interface Claim {
    * it required, that would make `isClaim` reject the existing files instead of the new ones.
    */
   work_id?: string | null
+  /** The session currently holding the claim — relay transfer (`lib/claim-transfer.ts`) moves it
+   * to the successor while `session_id` keeps naming the file's original claimer. */
+  holder_claude_session_id?: string
   last_heartbeat: string
   expires_at: string
 }
@@ -341,24 +344,25 @@ export function readActiveClaimsObserved(
   return known(claims)
 }
 
-export function pruneExpired(consumerPath) {
+export function pruneExpired(consumerPath, { dryRun = false } = {}) {
   const dir = claimsDir(consumerPath)
-  if (!existsSync(dir)) return 0
-  let dropped = 0
-  for (const name of readdirSync(dir)) {
-    if (!name.endsWith('.json') || name.startsWith('.')) continue
-    try {
-      const claim = JSON.parse(readFileSync(join(dir, name), 'utf8'))
-      if (isExpired(claim)) {
-        rmSync(join(dir, name), { force: true })
-        dropped++
+  const files: string[] = []
+  if (existsSync(dir)) {
+    for (const name of readdirSync(dir)) {
+      if (!name.endsWith('.json') || name.startsWith('.')) continue
+      const path = join(dir, name)
+      let expired = true
+      try {
+        expired = isExpired(JSON.parse(readFileSync(path, 'utf8')))
+      } catch {
+        // 讀不出的登記檔視同可清（與刪除分支同一判準）
       }
-    } catch {
-      rmSync(join(dir, name), { force: true })
-      dropped++
+      if (!expired) continue
+      files.push(path)
+      if (!dryRun) rmSync(path, { force: true })
     }
   }
-  return dropped
+  return { count: files.length, files }
 }
 
 export function findClaimByWorktree(
@@ -673,6 +677,126 @@ export function claimHolderVerdict(
   }
 }
 
+export interface TreeClaimRelease {
+  status: 'dropped' | 'kept' | 'none'
+  session_id?: string
+  why: string
+}
+
+/**
+ * holder 已宣告終局（派工 `--complete`、`--reclaim` 關掉 pane）時釋放這棵樹的 claim。
+ *
+ * 樹的 cleanup 被拒（例如 PR 還沒合）時，claim 不釋放就會掛到 24h TTL，期間每一道「有活 claim
+ * 就保留」的守門都把死 holder 當活的。這裡只擋 `alive`（別的 session
+ * 的行程站在樹內、或 journal 有活的非本 session 寫者）——與 `wt-helper cleanup` 同一條線：
+ * `self`／`dead`／`unknown` 都放行，因為呼叫端本身就是終局的證據。
+ */
+export function releaseTreeClaim(
+  treePath: string,
+  verdictOpts: Parameters<typeof claimHolderVerdict>[2] = {},
+): TreeClaimRelease {
+  const top = gitToplevel(treePath) ?? treePath
+  const root = findConsumerRoot(top)
+  if (!root) return { status: 'none', why: `不在 git 樹內：${treePath}` }
+  const want = canonicalPath(top)
+  const claim = readActiveClaims(root, { includeExpired: true }).find(
+    (c) => c.worktree_path && canonicalPath(c.worktree_path) === want,
+  )
+  if (!claim) return { status: 'none', why: `沒有 claim 指向 ${top}` }
+  const holder = claimHolderVerdict(root, claim, verdictOpts)
+  if (holder.verdict === 'alive')
+    return { status: 'kept', session_id: claim.session_id, why: holder.why }
+  dropClaim(root, claim.session_id)
+  return { status: 'dropped', session_id: claim.session_id, why: holder.why }
+}
+
+/** 本機 herdr 每個 agent pane 的 cwd／foreground_cwd（canonical）；查詢失敗回 null。 */
+export function livePaneCwds(herdrBin = 'herdr'): string[] | null {
+  try {
+    const res = spawnSync(herdrBin, ['agent', 'list'], {
+      encoding: 'utf8',
+      timeout: 15_000,
+      maxBuffer: 4 * 1024 * 1024,
+    })
+    if ((res.status ?? 1) !== 0) return null
+    const agents = JSON.parse(res.stdout ?? '')?.result?.agents
+    if (!Array.isArray(agents)) return null
+    const out: string[] = []
+    for (const a of agents)
+      for (const c of [a?.cwd, a?.foreground_cwd])
+        if (typeof c === 'string' && c) out.push(canonicalPath(c))
+    return out
+  } catch {
+    return null
+  }
+}
+
+export interface ReapRow {
+  session_id: string
+  worktree_path: string | null
+  work_id: string | null
+  age_min: number
+  heartbeat_age_min: number
+  tree: 'present' | 'missing' | 'unscoped'
+  verdict: ClaimHolderVerdict['verdict']
+  why: string
+  action: 'drop' | 'keep'
+}
+
+/**
+ * 存量盤點：逐張未過期 claim 判 holder。只有「樹已不在」或 holder `dead`（每個寫者行程都已結束
+ * 且 herdr 不再列出其 session）才標 `drop`；`unknown`／`alive`／`self` 一律 `keep`。
+ * `apply` 為 false 時只回傳列，不動任何檔。
+ */
+export function reapClaims(
+  consumerPath: string,
+  {
+    apply = false,
+    now = Date.now(),
+    herdrBin = 'herdr',
+    paneCwds = livePaneCwds(herdrBin),
+  }: { apply?: boolean; now?: number; herdrBin?: string; paneCwds?: string[] | null } = {},
+): ReapRow[] {
+  const journal = readJournal(consumerPath)
+  const sessions = liveSessionIds()
+  const rows: ReapRow[] = []
+  for (const claim of readActiveClaims(consumerPath)) {
+    // 沒有 worktree_path 的 claim（`claim-helper add` 未帶 --worktree-path）是路徑型 claim，
+    // 樹在不在無從判起：一律保留，不能當成「樹已不在」丟掉。
+    const unscoped = !claim.worktree_path
+    const present = Boolean(claim.worktree_path && existsSync(claim.worktree_path))
+    const tree = claim.worktree_path ? canonicalPath(claim.worktree_path) : null
+    // herdr pane 的 cwd 不一定落成 /proc 裡看得到的行程（pane 開著、agent 閒置）；那也是活 holder。
+    const pane =
+      paneCwds === null
+        ? 'herdr agent list 查不到，判不出有沒有 pane 站在樹內'
+        : tree && paneCwds.some((c) => c === tree || c.startsWith(`${tree}/`))
+          ? 'herdr 仍有 pane 的 cwd 在樹內'
+          : null
+    const holder = unscoped
+      ? { verdict: 'unknown' as const, why: 'claim 沒有 worktree_path，判不出樹在不在' }
+      : !present
+        ? { verdict: 'dead' as const, why: '樹已不在' }
+        : pane
+          ? { verdict: paneCwds === null ? ('unknown' as const) : ('alive' as const), why: pane }
+          : claimHolderVerdict(consumerPath, claim, { journal, sessions })
+    const action = !unscoped && (!present || holder.verdict === 'dead') ? 'drop' : 'keep'
+    if (apply && action === 'drop') dropClaim(consumerPath, claim.session_id)
+    rows.push({
+      session_id: claim.session_id,
+      worktree_path: claim.worktree_path,
+      work_id: claim.work_id ?? null,
+      age_min: Math.round((now - Date.parse(claim.started_at)) / 60_000),
+      heartbeat_age_min: Math.round((now - Date.parse(claim.last_heartbeat)) / 60_000),
+      tree: unscoped ? 'unscoped' : present ? 'present' : 'missing',
+      verdict: holder.verdict,
+      why: holder.why,
+      action,
+    })
+  }
+  return rows
+}
+
 export function pathsClaimedByOthers(consumerPath, mySessionId) {
   const result = []
   let journal: ReturnType<typeof readJournal>
@@ -924,10 +1048,15 @@ export function formatClaimConflict(c: ClaimConflict, now = Date.now()): string 
   const work = c.work_id ? `work ${c.work_id}` : 'work 未歸屬'
   const what = c.task_summary ?? c.change_id ?? '(claim 沒寫 task_summary)'
   const verb = c.via === 'declared' ? '宣告為工作範圍' : '實際寫入過'
-  const probe = c.pane_id
-    ? `先 herdr agent prompt ${c.pane_id} 協商`
-    : `先 node vendor/scripts/flow/flow.ts who 找持有者`
-  return `⚠ ${c.path} 在 ${age} 前被 ${who}（${work}：${what}）${verb} [via=${c.via}]——${probe}，或確認該 claim 已停用（node vendor/scripts/claim-helper.ts drop ${c.session_id}）`
+  // Claude first: a pane id comes from the writer's HERDR_PANE_ID at write time and goes stale
+  // when a session moves panes, so the herdr prompt is the fallback, not the default address.
+  const talk = c.pane_id
+    ? `Claude session 先 SendMessage（名稱從 ListAgents 取），非 Claude 才 herdr agent prompt ${c.pane_id}`
+    : `先 node vendor/scripts/flow/flow.ts who 找持有者，Claude session 用 SendMessage 協商`
+  // No "or drop it" as an equal option, and no `drop <id>`: the claim's id is genSessionId()'s,
+  // not the harness id `herdr agent list` shows, so a reader checking it by hand always reads the
+  // session signal as absent. `reap` runs § 3.1's two-signal verdict itself and only lists by default.
+  return `⚠ ${c.path} 在 ${age} 前被 ${who}（${work}：${what}）${verb} [via=${c.via}]——當活的處理並先告知使用者；${talk}；判停用不要手查 id，跑 node vendor/scripts/claim-helper.ts reap（§ 3.1 process 與 session 兩訊號同時缺席才標 WOULD DROP）`
 }
 
 /**
@@ -1241,9 +1370,34 @@ if (invokedAsCli()) {
         for (const row of rows) console.log(formatClaimConflict(row))
       }
       process.exit(rows.length > 0 ? 3 : 0)
+    } else if (cmd === 'reap') {
+      // 預設 dry-run：只列不動。`--apply` 才 drop，且只 drop 樹已不在或 holder `dead` 的那幾張。
+      const flags = parseFlags(rest)
+      const herdrBin = typeof flags['herdr-bin'] === 'string' ? flags['herdr-bin'] : undefined
+      const rows = reapClaims(consumerPath, { apply: flags.apply === true, herdrBin })
+      if (flags.json === true) {
+        console.log(JSON.stringify(rows))
+      } else {
+        for (const r of rows)
+          console.log(
+            `${r.action === 'drop' ? (flags.apply === true ? 'DROPPED' : 'WOULD DROP') : 'keep'}\t${r.session_id}\t${r.worktree_path ?? '-'}\tage=${r.age_min}m hb=${r.heartbeat_age_min}m\t${r.verdict}：${r.why}`,
+          )
+        console.log(
+          `active ${rows.length}，${flags.apply === true ? 'dropped' : 'would drop'} ${rows.filter((r) => r.action === 'drop').length}`,
+        )
+      }
     } else if (cmd === 'prune') {
-      const n = pruneExpired(consumerPath)
-      console.log(`pruned ${n} expired claim(s)`)
+      // 預設真刪（人是明示跑 prune 的）；`--dry-run` 只列不動，排程端用它跑 report-only。
+      const flags = parseFlags(rest)
+      const { count, files } = pruneExpired(consumerPath, {
+        dryRun: flags['dry-run'] !== undefined,
+      })
+      if (flags['dry-run'] !== undefined) {
+        for (const f of files) console.log(`would prune\t${f}`)
+        console.log(`would prune ${count} expired claim(s)`)
+      } else {
+        console.log(`pruned ${count} expired claim(s)`)
+      }
     } else if (cmd === 'refresh-by-cwd') {
       // Used by SessionStart hook: walks up to find consumer root, then
       // matches claim by worktree_path === current cwd (the actual session
@@ -1257,7 +1411,7 @@ if (invokedAsCli()) {
       console.log(`refreshed: ${refreshed.session_id} (expires ${refreshed.expires_at})`)
     } else {
       console.error(
-        'usage: claim-helper [list|add|refresh|refresh-by-cwd|drop|prune|conflicts] ...',
+        'usage: claim-helper [list|add|refresh|refresh-by-cwd|drop|prune|reap [--apply] [--json] [--herdr-bin <path>]|conflicts] ...',
       )
       process.exit(1)
     }

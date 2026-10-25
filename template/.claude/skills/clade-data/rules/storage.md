@@ -1,9 +1,9 @@
 ---
-description: Supabase Storage 使用規範（上傳、signed URL、policy、清理）
+description: Supabase Storage 與 Cloudflare R2 使用規範（上傳、物件 key、signed URL、policy、清理）
 paths: ['server/api/**/*.ts', 'packages/*/server/api/**/*.ts', 'supabase/migrations/**/*.sql']
 ---
 <!-- Clade native rule; source: rules/modules/db-runtime/cf-workers/storage.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Storage
 
@@ -22,8 +22,9 @@ Template 預設**未使用** Supabase Storage。若專案要引入檔案上傳�
 
 - **Client 直接上傳**：**NEVER** — 所有上傳必須經過 `server/api/**/upload.post.ts`，由 server 用 service_role 代寫
 - **Server 上傳模式**：`supabase.storage.from(bucket).upload(path, file, { contentType, upsert })`
-- **檔名產生**：**MUST** 用 server 端產生（`{entity_id}/{timestamp}-{random}.{ext}`），**NEVER** 信任前端傳來的檔名 — 防止 path traversal 與覆寫攻擊
-- **MIME 驗證**：**MUST** 在 server 端驗證 `file.type` + `file.size`，不要只靠 bucket 設定
+- **物件 key**：**MUST** 由 server 產生 `<namespace>/<uuid><ext>`（namespace 是 server 常數或已授權的 entity id，`ext` 由白名單 MIME 對應），**NEVER** 取自前端檔名 — 防止 path traversal 與覆寫攻擊；組好的 key **MUST** 再拒絕 `.`／`..` 路徑段與開頭 `/`。Supabase Storage 與 R2 同一套
+- **MIME 驗證**：**MUST** 在 server 端驗證 `file.type` + `file.size`，不要只靠 bucket 設定；MIME 白名單與大小上限 **MUST** 是程式常數（R2 沒有 bucket 端的對應設定，常數是唯一一道）
+- **儲存錯誤**：backend 錯誤 **MUST** 包成專屬 error class（帶 operation 與 key），handler 依它回使用者可讀訊息，**NEVER** 把 R2／Supabase Storage 的原始錯誤訊息回給 client。同時支援兩種 backend 的專案，key 產生、MIME／大小檢查與錯誤包裝放在同一層 storage helper，handler 不直接碰 `env.BUCKET` 或 `supabase.storage`
 - **Cloudflare Workers 上傳限制**：單一 request body ≤100MB，大檔需改用 resumable upload（TUS 協定）或直傳 R2
 
 ## Public vs Signed URL
@@ -83,6 +84,8 @@ if (dbError) {
 ```
 
 **NEVER** 先寫 DB 再 upload — DB insert 成功後若 upload 失敗，會留下無檔案的 row。
+
+一次上傳多個檔時，把每個成功上傳的 path 收進 cleanup 清單，DB 寫入丟錯**或回傳空結果**（`data` 為 `null`、0 rows）都要整批 `remove()`；刪除本身失敗只 log，不蓋掉原錯誤（通則見 `runtime/*/api-patterns.md` § Idempotency 與 Retry）。
 
 ## 檔案清理（避免孤兒檔案）
 

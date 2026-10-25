@@ -6,7 +6,7 @@ paths:
   - 'docs/plans/**'
 ---
 <!-- Clade native rule; source: rules/core/commit.trunk-gates.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Commit — Trunk Gates（[[commit]] detail）
 
@@ -34,7 +34,7 @@ paths:
 
 當前 branch 為 `main` / `master` 且本次 `/commit` 觸及的 work item carrier（`tasks/<date>-<slug>.md` `specs/plans/NNN-<slug>/tasks.md` 或 `docs/plans/<id>/tasks.md`）滿足下列**兩條件同時成立**時，未 ready 時 MUST 擋下 commit——但不是直接停下，走 /commit skill Step 0-MR 的 auto-triage：先推進主線可自行處理項，再以 `flow gates --repo-only --require-empty` 判定放行與否：
 
-0. **該工作的實作 code 已 land 進 main** → 對應 worktree 已 merge-back（`wt-helper list --json` 的 `mergedToMain:true`）或已 cleanup。仍有未 land 的 worktree 帶著該工作的改動時，本 gate 對它判 **SKIP**
+0. **該工作的實作 code 已 land 進 main** → 對應 worktree 已 merge-back（`wt-helper list --json` 的 `mergedToMain:true`；`detached: true` 的列沒有 branch，另以 `head` 判）或已 cleanup。仍有未 land 的 worktree 帶著該工作的改動時，本 gate 對它判 **SKIP**
 1. 該 carrier 的 **非** `## 人工檢查` 段落含任一 `- [x]` → 已開始 / 完成實作
 2. 該 carrier 的 `## 人工檢查` 段落含任一 `- [ ]` → 人工檢查未完成
 

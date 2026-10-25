@@ -15,10 +15,16 @@
  *
  *   | 判不出的東西 | 結果 |
  *   | --- | --- |
- *   | body 含 `$` 展開且字面上沒有 `Work:` 行 | 放行 |
+ *   | body 含 `$` 展開且字面上沒有 `Work:` 行（`$(cat <<'EOF' … EOF)` 本文看得到，照字面判，不算判不出） | 放行 |
  *   | `--body-file -`、`--body-file "$X"`、檔案讀不到 | 放行 |
  *   | `--fill`／`--fill-first`／`--fill-verbose`／`--template`／`--web`（body 來自 commit／模板／瀏覽器）| 放行 |
  *   | stdin 不是 JSON、解析丟例外 | 放行 |
+ *
+ * 缺 `Work:` 行時先推導 work id（`deriveWorkId`：`CLADE_WORK_ID` → 本樹的 claim → branch 改到的唯一一份
+ * plan.md frontmatter）。推得出且 body 來自看得到的 `--body-file` 檔（一般檔、realpath 在 cwd 或系統 tmpdir 底下、
+ * 指令沒有 `cd`／`pushd`／`env -C`／`--chdir`、id 是單純 token）→ 直接把 `Work:` 行補進檔案、放行；
+ * 其餘（`--body` 字面、heredoc）擋下並把推出的那一行印成可貼的改法；推不出就擋並印取得 work id 的指令
+ * heredoc 照字面判，缺行就擋，NEVER 當成判不出放行（放行出去的 PR 沒有主人、修補件派不出去）。
  *
  * 逃生門：`CLADE_ALLOW_NO_WORK=1` 放行（非 clade 工作、上游 repo 的 PR）。
  *
@@ -29,8 +35,10 @@
  *   | 觸發點 | 工具事件 hook：`pre-bash-gh-pr-create-work-gate.sh`（fleet）與 `.claude/hooks/clade-home-guard.ts`（clade home）在 `gh pr create` 那一刻判定；訊息由 test/gh-pr-create-work.test.ts 釘住 |
  */
 
-import { readFileSync } from 'node:fs'
-import { isAbsolute, resolve } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { appendFileSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const WORK_LINE_RE = /^[ \t]*Work(?:[ \t]*id)?[ \t]*[:：][ \t]*\S/mu
@@ -47,7 +55,7 @@ const FAIL_OPEN_FLAGS = new Set([
 ])
 
 /** 指令切段（`&&` `||` `;` `|` 換行），尊重引號；heredoc 本文不切（`$(cat <<EOF … EOF)` 在引號內整段保留）。 */
-function segments(cmd: string): string[] {
+export function segments(cmd: string): string[] {
   const out: string[] = []
   let cur = ''
   let q: '"' | "'" | null = null
@@ -114,7 +122,7 @@ function segments(cmd: string): string[] {
 }
 
 /** segment → words（去引號）；回傳每個 word 是否含未加單引號的 `$`（變數／命令替換）。 */
-function words(seg: string): { text: string; dynamic: boolean }[] {
+export function words(seg: string): { text: string; dynamic: boolean }[] {
   const out: { text: string; dynamic: boolean }[] = []
   let cur = ''
   let has = false
@@ -162,7 +170,7 @@ export type BodySource =
   | { kind: 'unknown' }
 
 // 命令位置上會再執行後面命令的 shell 關鍵字與 wrapper（它們的選項形狀各異，不逐一解析）。
-const WRAPPERS = new Set([
+export const WRAPPERS = new Set([
   'if',
   'then',
   'elif',
@@ -253,35 +261,204 @@ export function prCreateBody(seg: string): BodySource | null {
   return body
 }
 
+/**
+ * `$(cat <<'EOF' … EOF)` 命令替換：heredoc 本文就在指令字面上，照字面判。分隔字加引號（本文不展開），
+ * 或本文沒有 `$`，才算看得到；其餘展開仍判不出。
+ */
+export function literalHeredocBody(text: string): string | null {
+  const m =
+    /^\$\(\s*cat\s+<<-?\s*(['"]?)([A-Za-z_]\w*)\1[ \t]*\n([\s\S]*?)\n[ \t]*\2[ \t]*\n?\s*\)$/u.exec(
+      text.trim(),
+    )
+  if (!m) return null
+  return m[1] || !m[3]!.includes('$') ? m[3]! : null
+}
+
+export interface WorkProblem {
+  why: string
+  /** body 來自這個看得到的檔（絕對路徑）：推得出 work id 時可以直接補行。 */
+  file?: string
+}
+
+/** 違規時回傳原因與 body 檔（給 deny 訊息與自動補行用），否則 null。 */
+export function ghPrCreateWorkProblem(
+  cmd: string,
+  cwd: string,
+  readFile: (path: string) => string = (p) => readFileSync(p, 'utf8'),
+): WorkProblem | null {
+  if (!/\bgh\b[\s\S]*\bpr\b[\s\S]*\bcreate\b/u.test(cmd)) return null
+  for (const seg of segments(cmd)) {
+    const body = prCreateBody(seg)
+    if (!body || body.kind === 'unknown') continue
+    if (body.kind === 'none') return { why: '沒有 --body／--body-file' }
+    if (body.kind === 'text') {
+      if (WORK_LINE_RE.test(body.text)) continue
+      if (body.dynamic && literalHeredocBody(body.text) === null) continue
+      return { why: body.dynamic ? '--body 的 heredoc 沒有 Work: 行' : '--body 沒有 Work: 行' }
+    }
+    if (body.dynamic || body.path === '-' || !body.path) continue
+    const file = isAbsolute(body.path) ? body.path : resolve(cwd, body.path)
+    let text: string
+    try {
+      text = readFile(file)
+    } catch {
+      continue
+    }
+    if (!WORK_LINE_RE.test(text)) return { why: `--body-file ${body.path} 沒有 Work: 行`, file }
+  }
+  return null
+}
+
 /** 違規時回傳原因字串（給 deny 訊息用），否則 null。 */
 export function ghPrCreateWorkViolation(
   cmd: string,
   cwd: string,
   readFile: (path: string) => string = (p) => readFileSync(p, 'utf8'),
 ): string | null {
-  if (!/\bgh\b[\s\S]*\bpr\b[\s\S]*\bcreate\b/u.test(cmd)) return null
-  for (const seg of segments(cmd)) {
-    const body = prCreateBody(seg)
-    if (!body || body.kind === 'unknown') continue
-    if (body.kind === 'none') return '沒有 --body／--body-file'
-    if (body.kind === 'text') {
-      if (WORK_LINE_RE.test(body.text) || body.dynamic) continue
-      return '--body 沒有 Work: 行'
-    }
-    if (body.dynamic || body.path === '-' || !body.path) continue
-    let text: string
+  return ghPrCreateWorkProblem(cmd, cwd, readFile)?.why ?? null
+}
+
+export interface DerivedWork {
+  id: string
+  /** 從哪裡推出來的（印給 agent 看）。 */
+  basis: string
+}
+
+export interface DeriveDeps {
+  git?: (args: string[], cwd: string) => string | null
+  readFile?: (path: string) => string
+  readDir?: (path: string) => string[]
+}
+
+/** hook 上限 10s、超時視為非阻擋（fail-open）：推導最多 3 次 git 呼叫，合計須遠小於上限，逾時一律當推不出而擋下。 */
+export const GIT_TIMEOUT_MS = 2_000
+
+const defaultGit = (args: string[], cwd: string): string | null => {
+  const r = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', timeout: GIT_TIMEOUT_MS })
+  return r.status === 0 ? r.stdout : null
+}
+
+const PLAN_PATH_RE = /^specs\/plans\/[^/]+\/plan\.md$/u
+
+/**
+ * 缺 `Work:` 行時推 work id：`CLADE_WORK_ID` → 本樹的 claim（`<repo>/.clade/claims/*.json` 的 worktree_path）→
+ * branch 相對預設分支改到的 plan.md，frontmatter `work_id` 只有一個時採用。推不出（或 plan 有多個）回 null，
+ * NEVER 另鑄——鑄出來的 id 對不到任何 plan，等於沒有主人。
+ */
+export function deriveWorkId(
+  cwd: string,
+  env: NodeJS.ProcessEnv = process.env,
+  deps: DeriveDeps = {},
+): DerivedWork | null {
+  const fromEnv = env.CLADE_WORK_ID?.trim()
+  if (fromEnv) return { id: fromEnv, basis: 'CLADE_WORK_ID' }
+  const git = deps.git ?? defaultGit
+  const readFile = deps.readFile ?? ((p: string) => readFileSync(p, 'utf8'))
+  const readDir = deps.readDir ?? ((p: string) => readdirSync(p))
+  try {
+    const [commonDir, top] = (
+      git(['rev-parse', '--path-format=absolute', '--git-common-dir', '--show-toplevel'], cwd) ?? ''
+    )
+      .trim()
+      .split('\n')
+    if (!commonDir || !top) return null
+    const claims = join(dirname(commonDir), '.clade', 'claims')
+    let names: string[] = []
     try {
-      text = readFile(isAbsolute(body.path) ? body.path : resolve(cwd, body.path))
+      names = readDir(claims).filter((n) => n.endsWith('.json'))
     } catch {
-      continue
+      /* 沒有 claim 目錄：往下推 plan */
     }
-    if (!WORK_LINE_RE.test(text)) return `--body-file ${body.path} 沒有 Work: 行`
+    for (const n of names) {
+      try {
+        const c = JSON.parse(readFile(join(claims, n))) as {
+          worktree_path?: unknown
+          work_id?: unknown
+        }
+        if (c.worktree_path === top && typeof c.work_id === 'string' && c.work_id.trim())
+          return { id: c.work_id.trim(), basis: `claim ${n}` }
+      } catch {
+        /* 壞的 claim 不算 */
+      }
+    }
+    const base =
+      (git(['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'], top) ?? '').trim() ||
+      'origin/main'
+    const changed = (git(['diff', '--name-only', '-z', `${base}...HEAD`], top) ?? '')
+      .split('\0')
+      .filter((f) => PLAN_PATH_RE.test(f))
+    const ids = new Set<string>()
+    for (const f of changed) {
+      try {
+        const id = /^work_id:[ \t]*["']?([^\s"']+)/mu.exec(readFile(join(top, f)))?.[1]
+        if (id && id !== '-') ids.add(id)
+      } catch {
+        /* 刪掉的 plan 不算 */
+      }
+    }
+    if (ids.size === 1)
+      return { id: [...ids][0]!, basis: `branch 改到的 plan（${changed.join('、')}）` }
+  } catch {
+    /* 推不出就照拒建 */
   }
   return null
 }
 
-export function denyMessage(why: string, env: NodeJS.ProcessEnv = process.env): string {
-  const work = env.CLADE_WORK_ID?.trim() || '<work-id>'
+/**
+ * 兩個入口（fleet hook、clade-home-guard）共用的一次判定：沒違規 → `{}`；body 檔缺行且推得出 → 補進檔案、
+ * 回 `note`；其餘回 `deny`（推得出時訊息帶推出的那一行）。
+ */
+export function ghPrCreateWorkGate(
+  cmd: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv = process.env,
+  deps: DeriveDeps & { append?: (path: string, text: string) => void } = {},
+): { deny?: string; note?: string } {
+  const problem = ghPrCreateWorkProblem(cmd, cwd, deps.readFile)
+  if (!problem) return {}
+  const derived = deriveWorkId(cwd, env, deps)
+  if (derived && problem.file && appendableBodyFile(cmd, cwd, problem.file, derived.id)) {
+    try {
+      ;(deps.append ?? appendFileSync)(problem.file, `\nWork: ${derived.id}\n`)
+      return {
+        note: `ℹ gh pr create：${problem.why}，已依 ${derived.basis} 補上 \`Work: ${derived.id}\``,
+      }
+    } catch {
+      /* 寫不進去：照擋，訊息帶推出的那一行 */
+    }
+  }
+  return { deny: denyMessage(problem.why, env, derived) }
+}
+
+const WORK_ID_RE = /^[A-Za-z0-9._-]+$/u
+/** 會讓相對路徑對不到的目錄轉向：`cd`、`pushd`、`env -C <dir>`／`--chdir`。 */
+const REDIRECTS_CWD_RE = /(^|[;&|(\s])(cd|pushd)\s|(^|\s)(-C|--chdir)([\s=]|$)/u
+
+/**
+ * hook 跑在指令（與權限確認）之前，補行等於替 agent 先寫檔：只在範圍收得住時才寫——
+ * id 是單純 token、指令裡沒有 `cd`（否則相對路徑對不到）、body 檔是一般檔（不追 symlink），
+ * realpath 落在 cwd 底下或系統 tmpdir 底下。其餘一律改成拒建並印要補的那一行。
+ */
+function appendableBodyFile(cmd: string, cwd: string, file: string, id: string): boolean {
+  if (!WORK_ID_RE.test(id) || REDIRECTS_CWD_RE.test(cmd)) return false
+  try {
+    if (!lstatSync(file).isFile()) return false
+    const real = realpathSync(file)
+    return [cwd, tmpdir()].some((root) => {
+      const r = realpathSync(root)
+      return real.startsWith(r.endsWith(sep) ? r : r + sep)
+    })
+  } catch {
+    return false
+  }
+}
+
+export function denyMessage(
+  why: string,
+  env: NodeJS.ProcessEnv = process.env,
+  derived: DerivedWork | null = null,
+): string {
+  const work = derived?.id || env.CLADE_WORK_ID?.trim() || '<work-id>'
   const owner = env.CLADE_DISPATCH_ID?.trim()
     ? env.CLADE_DISPATCH_ID.trim()
     : env.CLAUDE_SESSION_ID?.trim()
@@ -291,6 +468,9 @@ export function denyMessage(why: string, env: NodeJS.ProcessEnv = process.env): 
     `⛔ gh pr create：${why}。PR body MUST 帶兩行，讓 PR 從開立那一刻就有機器可讀的主人（主人消失時 triage 才派得了修補）：\n` +
     `  Work: ${work}\n` +
     `  Owner: ${owner}\n` +
+    (derived
+      ? `Work id 依 ${derived.basis} 推得；把上面兩行加進 body 末尾後重跑。`
+      : `推不出 work id（沒有 CLADE_WORK_ID、本樹沒有 claim、branch 沒改到唯一一份 plan.md）。`) +
     `沒有 work id → 先 node vendor/scripts/flow/flow.ts open <slug> 取得。非 clade 工作的 PR → CLADE_ALLOW_NO_WORK=1 前綴放行。`
   )
 }
@@ -306,14 +486,15 @@ function main() {
   const cmd = typeof input.tool_input?.command === 'string' ? input.tool_input.command : ''
   if (!cmd) return
   if (/(^|[\s;&|])CLADE_ALLOW_NO_WORK=1\s/u.test(cmd)) return
-  let why: string | null
+  let verdict: { deny?: string; note?: string }
   try {
-    why = ghPrCreateWorkViolation(cmd, input.cwd || process.cwd())
+    verdict = ghPrCreateWorkGate(cmd, input.cwd || process.cwd())
   } catch {
     return
   }
-  if (!why) return
-  process.stderr.write(`${denyMessage(why)}\n`)
+  if (verdict.note) process.stderr.write(`${verdict.note}\n`)
+  if (!verdict.deny) return
+  process.stderr.write(`${verdict.deny}\n`)
   process.exitCode = 2
 }
 

@@ -24,7 +24,7 @@
 //     },
 //   })
 //
-// fleet 的 pre-commit 只收斂到一條路徑（TD-776，2026-09-22）：hook 呼叫
+// fleet 的 pre-commit 只收斂到一條路徑：hook 呼叫
 // `bash scripts/pre-commit/runner.sh` → `checks/vp-staged.sh`，它經
 // `scripts/pre-commit/staged-targets.ts` 讀本檔的 `isStagedExcluded` 決定哪些 staged 檔
 // 進 `vp lint` / `vp fmt`。**NEVER** 在 hook 另外呼叫 `vp staged` / `lint-staged`——那會讓
@@ -53,11 +53,10 @@
 //   `vp lint` / `vp fmt` 對「輸入路徑全被 ignore」回 **exit 1**，而投影層本來就在上面兩個
 //   ignorePatterns 內。所以只要 staged 檔裡有一個投影檔、而 hook 沒把它濾掉，整個
 //   pre-commit 就掛 —— 症狀是 `No files found to lint`，看起來像路徑打錯，不像被 ignore。
-//   手寫平行清單必然漂移：nuxt-supabase-starter 的 staged filter 排了 `.claude/skills/`
-//   `.agents/` `.codex/` 卻漏掉 `vendor/`，連續擋掉 clade v1.4.388 / v1.4.389 / v1.4.409
-//   三次交付（TD-310）。這裡的 `PROJECTION_EXCLUDES` 一改，所有讀它的 consumer 自動跟上。
+//   手寫平行清單必然漂移：漏掉 `vendor/` 的 staged filter 會讓 propagate 的每一次
+//   交付 commit 都被擋。這裡的 `PROJECTION_EXCLUDES` 一改，所有讀它的 consumer 自動跟上。
 //
-//   `.agents/` `.codex/` `.cursor/` 也在這份清單裡（2026-08-24 起），所以 staged filter
+//   `.agents/` `.codex/` `.cursor/` 也在這份清單裡，所以 staged filter
 //   **NEVER** 再另外維護一份 agent 投影目錄的手寫陣列。
 //
 // Why a preset (not inline rule duplication):
@@ -78,20 +77,18 @@ import { fileURLToPath } from 'node:url'
  * make; leaving it to each consumer means whichever consumer forgets to
  * re-inline the list gets a red CI it has no way to resolve locally.
  *
- * 2026-07-28: that is exactly how `nuxt-supabase-starter` Template CI broke on
- * `vp fmt --check` over `vendor/snippets/manual-review-enforcement/patterns.json`
- * — <consumer-k> and co-purchase had each independently patched `vendor/**`
- * into their own vite.config.ts, which hid the gap instead of closing it.
- * `scripts/audit-governance-drift.ts` check 10 now fails on any config that
- * re-inlines one of these, so the next gap surfaces before a consumer does.
+ * Patching `vendor/**` into each consumer's own vite.config.ts hides the gap
+ * instead of closing it. `scripts/audit-governance-drift.ts` check 10 fails on
+ * any config that re-inlines one of these, so a gap surfaces before a consumer
+ * hits it.
  *
  * clade itself is the source of truth for `vendor/`, so its own vite.config.ts
  * filters `vendor/**` back out — that one exception is deliberate and local.
  *
- * 2026-08-24 (TD-626): the three agent projection dirs joined this list. They had
- * been sitting only in lintBase/fmtBase.ignorePatterns, which the `staged` filter
- * never reads — so every consumer hand-wrote its own parallel copy, the exact
- * drift the comment at the top of this file exists to ban.
+ * The three agent projection dirs (`.agents/` `.codex/` `.cursor/`) are listed
+ * here, not only in lintBase/fmtBase.ignorePatterns: the `staged` filter never
+ * reads those, so every consumer would hand-write its own parallel copy, the
+ * exact drift the comment at the top of this file exists to ban.
  */
 export const PROJECTION_EXCLUDES = [
   '.claude/**',
@@ -104,7 +101,7 @@ export const PROJECTION_EXCLUDES = [
   // repo root 與 `<paths.utils>` 的 LOCKED 投影（`scripts/lib/vendor-targets.ts`：
   // `vendor/actions/<name>/*` → `.github/actions/<name>/*`、`vendor/commitlint/` →
   // `commitlint.config.ts`、`vendor/utils/assert-never.ts` → `<utils>/assert-never.ts`）。
-  // 2026-09-28 <consumer-f>：只 spread 本清單、自家風格是雙引號的 consumer，pre-commit `vp fmt`
+  // 只 spread 本清單、自家風格是雙引號的 consumer，pre-commit `vp fmt`
   // 先把還原後的正版投影改成雙引號，`sync-vendor --check --staged` 再判 drift → 任何
   // stage 到它們的 commit 都過不了 hook。清單以 `listProjectionUniverse()` 為準，
   // `test/preset-projection-universe.test.ts` 逐一比對，NEVER 手列猜測。
@@ -122,10 +119,10 @@ export const PROJECTION_EXCLUDES = [
   'commitlint.config.ts',
   '**/utils/assert-never.ts',
   // Agent 投影面：`.agents/` `.codex/` 由 Codex runtime 投影（projectRuntime）生成，`.cursor/` 由
-  // scripts/sync-to-cursor.ts 生成（2026-08-24 起，先前是人工快照）。三者與上面四條同性質
-  // —— consumer 端是產生物，裡面的 lint / fmt 違規只能回 clade 修。先前它們只躺在下面的
-  // lintBase / fmtBase.ignorePatterns，沒進這份清單，所以讀 PROJECTION_EXCLUDES 的 staged
-  // filter 看不到它們，每個 consumer 只好各自手寫一份平行清單（TD-626）。
+  // scripts/sync-to-cursor.ts 生成。三者與上面四條同性質
+  // —— consumer 端是產生物，裡面的 lint / fmt 違規只能回 clade 修。它們若只躺在下面的
+  // lintBase / fmtBase.ignorePatterns、不進這份清單，讀 PROJECTION_EXCLUDES 的 staged
+  // filter 就看不到，每個 consumer 只好各自手寫一份平行清單。
   '.agents/**',
   '.codex/**',
   '.cursor/**',
@@ -171,21 +168,21 @@ export const CLADE_MIRROR_EXCLUDES = [
   // `reference/**` 是 mirror.extraDirs 的落點（specformula-docs 的 Gherkin/ISA .mdx）。
   // **NEVER 把這一列併回上面那列的 `skills/**` 去猜一個共同前綴**：plugin 根底下還有
   // clade 自己寫的 README / PIN.json，整個 plugin 排除掉會連它們一起放生。
-  // 2026-09-08 實證：本目錄第一次落地當天就被一次 `vp fmt` 改寫（markdown 表格對齊 ＋
-  // frontmatter 後補空行），22 個檔全數 drift，`sync-upstream-mirrors --check` 從 0 變 2。
+  // 不排除的話，一次 `vp fmt` 就會改寫它們（markdown 表格對齊 ＋ frontmatter 後補空行），
+  // 讓 `sync-upstream-mirrors --check` 全數判 drift。
   'capabilities/modules/capabilities/specformula/reference/**',
   // 只排除 skills/**：plugin 根的 README／PIN.json 是 clade 寫的，照常檢查。
   'capabilities/modules/capabilities/skill-engineering/skills/**',
 ]
 
 /**
- * Shipped-template lint 規則子集（TD-1003）—— `scripts/audit-shipped-template-lint.ts`
+ * Shipped-template lint 規則子集 —— `scripts/audit-shipped-template-lint.ts`
  * 餵給 vite-doctor `--rules` 的 rule id 清單。
  *
  * 為什麼需要它：`vendor/snippets/**` 在 `CLADE_VENDOR_EXCLUDES` 內（template 刻意不完整，
  * 全套 lint 會假陽性爆炸），於是 clade 自己的 `vp check` 對出貨 template 結構性 0 命中 ——
  * 但同一份檔經 vendor-targets 投影進每個 non-public consumer，由 consumer 的 vite-doctor
- * 擋（2026-09-07 <consumer-b> 實測：`time-service.template.ts` 的
+ * 擋（例：`time-service.template.ts` 的
  * `globalThis as unknown as FrozenHolder` 觸發 TS0001，擋掉該 repo 每一次 /commit）。
  * 本子集是「在 publish 前置先現形」的那道檢查。
  *
@@ -205,7 +202,7 @@ export const CLADE_MIRROR_EXCLUDES = [
  * 關掉的 gate 就是一個不存在的 gate。
  */
 export const SHIPPED_TEMPLATE_LINT_RULES = [
-  // TS0001 — 鏈式 type assertion 製造型別證據。觸發 TD-1003 的實際條目。
+  // TS0001 — 鏈式 type assertion 製造型別證據。出貨 template 實際命中過。
   'typescript/evidence/no-chained-type-assertions',
   // TS0004 — generic 簽名讓 caller 自選 result type，同屬型別證據製造家族。
   'typescript/evidence/no-caller-chosen-result-type',
@@ -263,7 +260,7 @@ export function toRepoRelative(file: string): string {
  * 這個 staged 檔路徑是不是投影層（LOCKED、chmod 444、consumer 端改不動）。
  *
  * **先相對化到 repo root，再做前綴比對** —— NEVER 對原始字串做 `includes('/' + dir)`
- * 片段比對。2026-08-28（TD-770）：舊實作是
+ * 片段比對。反例實作是
  * `file.startsWith(dir) || file.includes('/' + dir)`，而 lint-staged 餵進來的是絕對
  * 路徑。checkout 落在 `~/vendor/<repo>` / `~/.claude/<repo>` 這類**祖先目錄同名**的位置
  * 時，`includes('/vendor/')` 對**每一個**業務檔為真 → 全部被當投影排除 → `vp lint` /
@@ -275,12 +272,12 @@ export function toRepoRelative(file: string): string {
  * 這是刻意取捨不是漏修 —— starter 真的有 `template/vendor/`、`template/.claude/`、
  * `scripts/vendor/` 三處巢狀投影，與假想的業務目錄 `app/vendor/` 在路徑形狀上不可區分。
  * 多濾一個業務目錄的症狀是 loud（那些檔沒過 lint）；漏濾一個投影目錄的症狀是整個
- * pre-commit 被 `No files found to lint` exit 1 擋死（TD-310 / TD-670）。
+ * pre-commit 被 `No files found to lint` exit 1 擋死。
  *
  * 型別必須寫成 TS 註記，NEVER 只留 JSDoc `@param {string}`：本檔副檔名是 `.ts`，
  * JSDoc 型別只有 `.js` 檔（allowJs + checkJs）才會被採納。consumer 端跑
  * `noImplicitAny` 的 typecheck 時，未標註的參數一律 TS7006，投影過去就把對方的
- * pre-push 擋死（v1.11.86 實際擋住 <consumer-a>）。
+ * pre-push 擋死。
  *
  * @param file staged 檔路徑（相對或絕對皆可）
  */
@@ -304,22 +301,19 @@ export function isProjectionPath(file: string): boolean {
  *   ignorePatterns，放進去等於 consumer 的整倉 `vp check` / CI 從此看不到自家 script。
  * - 它**要**留在 staged 過濾：propagate 的 delivery commit 帶的是整批投影 script，
  *   pre-commit 對它們跑 `vp lint --fix` + `vp fmt` 再 `git add`，任何一次改寫都會把
- *   偏離源檔的內容 commit 進投影（v1.4.349 實證同型：sanitize 改寫後 fmt 想改就整個
+ *   偏離源檔的內容 commit 進投影（sanitize 改寫後 fmt 想改就整個
  *   commit 掛掉）。consumer 端判不出「`scripts/` 底下哪幾支是投影」—— 那份清單只在
  *   clade 的 vendor-targets，`.claude/.hub-state.json` 只記 plugin scripts —— 所以只能
  *   整個目錄排除。代價：consumer 自家 `scripts/` 的檔在 commit 當下不跑 lint / fmt，
  *   靠整倉 `vp check`（CI / pre-push）兜住。
  *
- * 2026-09-22（TD-777）前這條只躺在 `vp-staged.sh` 的手寫 `CLADE_MANAGED_PREFIXES`，
- * 與 `PROJECTION_EXCLUDES` 雙向漂移（缺 `.spectra/` `.cursor/`、`.claude/` 只列 5 個子目錄）。
- * 同一批手寫清單裡的 `codex/` 沒有搬過來：已廢止目錄（`gitignore-governance.ts` 的
+ * `codex/` 不在這份清單：已廢止目錄（`gitignore-governance.ts` 的
  * `DEPRECATED_ENTRIES`）。
  *
- * `AGENTS.md`：Codex runtime 投影（projectRuntime）產出、consumer 端 chmod 444 的 LOCKED 檔。TD-777 當時判
- * 「`fmtBase.ignorePatterns` 的 `**\/*.md` 已蓋到」而不收——但那只在 consumer 的 fmt
+ * `AGENTS.md`：Codex runtime 投影（projectRuntime）產出、consumer 端 chmod 444 的 LOCKED 檔。不能只靠
+ * `fmtBase.ignorePatterns` 的 `**\/*.md` 蓋到：那只在 consumer 的 fmt
  * ignore **展開了 `fmtBase.ignorePatterns`** 時成立；consumer 自訂 fmt ignore 沒帶
- * `**\/*.md` 時，`vp fmt` 會真的去寫這個 444 檔 → EACCES → 整個 commit 掛掉
- * （PR #175 0-A；與 `scripts/` 的 v1.4.349 同型）。它與 `scripts/**` 同屬「只有
+ * `**\/*.md` 時，`vp fmt` 會真的去寫這個 444 檔 → EACCES → 整個 commit 掛掉。它與 `scripts/**` 同屬「只有
  * staged 過濾需要」的排除——`AGENTS.md` 不能進 `PROJECTION_EXCLUDES`：那份清單會
  * 展開進 lintBase.ignorePatterns，而 repo root 的 `AGENTS.md` 在 **clade 自己**是
  * 手寫源檔（本檔 AGENTS.md 不是 sync 產物），整倉 lint 還是要看得到它。
@@ -328,7 +322,7 @@ export function isProjectionPath(file: string): boolean {
 export const STAGED_ONLY_EXCLUDES = ['scripts/**', 'AGENTS.md']
 
 /**
- * consumer `scripts/` 底下由 clade 投影的 LOCKED 檔（TD-1133），給 `fmtBase.ignorePatterns` 用。
+ * consumer `scripts/` 底下由 clade 投影的 LOCKED 檔，給 `fmtBase.ignorePatterns` 用。
  *
  * 投影落在 consumer 自家的 `scripts/`，被 consumer **自己那一版** oxfmt 檢查。oxfmt 跨版本
  * 對同一段源碼的要求互斥（空 `for` 條件：vite-plus 0.2 要 `; ; )`、1.0 rc 要 `; ;)`），
@@ -418,7 +412,7 @@ const stagedOnlyPrefixes = STAGED_ONLY_EXCLUDES.map((p) => p.replace(/\/\*\*$/, 
 /**
  * pre-commit staged 過濾的**唯一**判定式：投影層（`PROJECTION_EXCLUDES`）∪ `STAGED_ONLY_EXCLUDES`。
  *
- * fleet 的兩個讀者都走這一支，NEVER 各自組 filter（TD-776 / TD-777）：
+ * fleet 的兩個讀者都走這一支，NEVER 各自組 filter：
  *   - `scripts/pre-commit/checks/vp-staged.sh`（經 `scripts/pre-commit/staged-targets.ts` 橋接）——
  *     fleet 收斂後唯一會執行的 pre-commit 路徑
  *   - 下方的 `stagedBase`（`vp staged` 路徑，收斂前的過渡期讀者）
@@ -440,12 +434,11 @@ export function isStagedExcluded(file: string): boolean {
  * 為什麼一定要濾：`vp lint` / `vp fmt` 對「輸入路徑**全部**被 ignore」回 exit 1，訊息是
  * `No files found to lint`，長得像路徑打錯。而 `propagate.ts` 走
  * `git commit --only -- <clade-paths>`，它 commit 的**必然全是投影檔** —— 沒濾的 consumer
- * 每一趟 propagate 都站在觸發線上（2026-08-26 v1.11.84：co-purchase 整個 pre-commit 掛，
- * propagate 回 failed，TD-670）。
+ * 每一趟 propagate 都站在觸發線上（整個 pre-commit 掛，propagate 回 failed）。
  *
  * **NEVER 在這裡加 `'*.md'` 那一格**：`fmtBase.ignorePatterns` 含 `'**\/*.md'`，所以
  * markdown 對 `vp fmt` 永遠是空輸入 → 每次純 md commit 都 exit 1。那不是投影層的洞，
- * 是同一個空輸入語義的另一個入口（2026-08-26 實測 <consumer-c> 就有這一格）。
+ * 是同一個空輸入語義的另一個入口。
  *
  * glob 不含 `*.d.ts` 的排除是刻意的：`.d.ts` 在 `lintBase.ignorePatterns` 內、卻不在
  * `fmtBase` 內，所以它要進 fmt、不能進 lint。
@@ -457,7 +450,7 @@ export function isStagedExcluded(file: string): boolean {
  * 逐個檔名加引號再串成一條命令的引數列。
  *
  * lint-staged 把回傳字串交給 string-argv 依空白拆 —— 含空白的路徑不加引號就被拆成
- * 兩個不存在的檔（TD-770 第 2 條）。consumer 的舊手寫 config 普遍用 `JSON.stringify`
+ * 兩個不存在的檔。consumer 的舊手寫 config 普遍用 `JSON.stringify`
  * 加這層引號，換裝到 `stagedBase` 時不能把它掉了。
  *
  * 用 `JSON.stringify` 而非手動包單引號：它同時逃逸引號與反斜線，對 string-argv 的
@@ -476,7 +469,7 @@ export const stagedBase = {
     if (fmtable.length > 0) cmds.push(`vp fmt ${quoteArgs(fmtable)}`)
     // 全被濾掉時回**空陣列** —— lint-staged 對空任務列的語義就是「這格沒事做」，照過。
     // NEVER 回 `['true']`：那是一個 shell 依賴（原生 Windows 無 coreutils 就失敗），
-    // 而它換來的只是語義上看起來明確一點（TD-770 第 3 條）。
+    // 而它換來的只是語義上看起來明確一點。
     return cmds
   },
 }
@@ -505,14 +498,14 @@ export const lintBase = {
     '@typescript-eslint/no-unused-vars': 'warn',
     eqeqeq: ['error', 'always'],
     'no-await-in-loop': 'off',
-    // 2026-05-31: newer oxlint (CI via unpinned setup-vp@v1) surfaces
-    // unicorn/consistent-function-scoping in an on-category; local oxlint 1.63.0
-    // does not yet. clade/consumer scripts use nested helpers by design
+    // Newer oxlint (CI via unpinned setup-vp@v1) surfaces
+    // unicorn/consistent-function-scoping in an on-category; older local oxlint
+    // does not. clade/consumer scripts use nested helpers by design
     // (e.g. `function git` in publish.ts / wt-helper.ts) — this rule is
     // stylistic noise here. Explicit pin off prevents CI lint drift on oxlint
     // version bumps (same pattern as no-underscore-dangle below).
     'unicorn/consistent-function-scoping': 'off',
-    // <consumer-a> 2026-05-14: oxlint ^0.1.21 patch upgrade flipped this from warn→error.
+    // A patch oxlint upgrade has flipped this from warn→error.
     // Explicit pin keeps `_serviceClient` / fixture private prefix conventions
     // from breaking CI lint gate on lockfile regen. `allow` covers:
     //   __dirname / __filename — Node ESM reconstructions (via fileURLToPath)
@@ -602,7 +595,7 @@ export const fmtBase = {
     // 投影面（`.claude/` `.clade/` `vendor/` `.agents/` `.codex/` `.cursor/`）
     // 一律由 PROJECTION_EXCLUDES 帶入 —— consumer 不必在自己的 fmt.ignorePatterns 再列一次。
     ...PROJECTION_EXCLUDES,
-    // consumer `scripts/` 底下的 LOCKED 投影（TD-1133）：格式由 clade 負責，consumer 的 oxfmt
+    // consumer `scripts/` 底下的 LOCKED 投影：格式由 clade 負責，consumer 的 oxfmt
     // 版本與 clade 不同時兩邊要求互斥。見 `lockedScriptProjections` 的註解。
     ...lockedScriptProjections(),
   ],
@@ -627,7 +620,7 @@ export const VITEST_DEFAULT_EXCLUDE = ['**/node_modules/**', '**/.git/**']
  * Agent runtime 在 consumer working tree 留下的 cache／投影目錄。
  *
  * 這裡面的「測試檔」**不是這個 repo 的測試** —— `.pi/git/` 底下是 Pi 為了做 code review
- * 而 clone 的**外部 repo 全文**（實測 2026-09-10：<consumer-h> 的 `.pi/git/` 有 114 MB、
+ * 而 clone 的**外部 repo 全文**（例：<consumer-h> 的 `.pi/git/` 有 114 MB、
  * 578 支測試檔，全部屬於 `github.com/YuDefine/clade`，而該 repo 自有測試檔為 **0**）。
  * 跑它們的結果是 107 失敗 → `vp test` exit 1，而紅綠取決於「這棵樹有沒有被 Pi clone 過」。
  *
@@ -636,17 +629,16 @@ export const VITEST_DEFAULT_EXCLUDE = ['**/node_modules/**', '**/.git/**']
  * `git` 不是 `.git` —— 差一個點，`**\/.git/**` 完全不命中。**NEVER** 以為「vitest 本來就會
  * 跳過 git 目錄」。
  *
- * **NEVER 期待 `.gitignore` 會順便解掉它**：vitest 不讀 `.gitignore`。TD-1053 的 review 那一面
+ * **NEVER 期待 `.gitignore` 會順便解掉它**：vitest 不讀 `.gitignore`。review 那一面
  * 是靠治理層的 gitignore 條目解的（`git ls-files --others --exclude-standard` 吃 gitignore），
  * test 這一面**沒有**共用機制，它要的是 `test.exclude`。兩面同根因、不同修法。
  *
- * 逐台實測的命中面（2026-09-10，`*.{test,spec}.{ts,js}` 計數）：
- * `.pi/` 五台全中（408–592 支）、`.clade/` <consumer-a> 4 支、`.claude/` <consumer-b> 60 支。
- * `vendor/` 三台皆 0，**刻意不列** —— clade 自己的 `vendor/` 是真源碼不是投影，
+ * 各 consumer 的命中面（`*.{test,spec}.{ts,js}`）：`.pi/` 全中、`.clade/` 與 `.claude/` 各有零星。
+ * `vendor/` 皆 0，**刻意不列** —— clade 自己的 `vendor/` 是真源碼不是投影，
  * 列進去會把 clade 本身的測試面挖掉一塊。
  */
 export const AGENT_CACHE_TEST_EXCLUDES = [
-  // Pi 的 repo cache（TD-1053 的主因）。用 `.pi/**` 而非 `.pi/git/**`：cache 佈局是 Pi 的
+  // Pi 的 repo cache（本清單的主因）。用 `.pi/**` 而非 `.pi/git/**`：cache 佈局是 Pi 的
   // 實作細節，釘死子路徑等於把別人的內部結構寫進我們的 gate。
   '**/.pi/**',
   // 以下與 PROJECTION_EXCLUDES 同一批投影面。裡面若有測試，那是**產生它的那個 repo** 的測試，

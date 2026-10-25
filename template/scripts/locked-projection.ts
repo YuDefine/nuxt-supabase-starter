@@ -30,9 +30,9 @@
  *     leftovers, and unlocking them requires still recognising the path (TD-1000).
  *   - Snippets / shared presets: `vendor/snippets/`, `vendor/oxc-shared/`
  *   - GitHub Composite Actions vendored at `.github/actions/`
- *   - Top-level projection paths: `AGENTS.md`, `CLAUDE.md` (sync-rules rewrites
- *     an existing CLAUDE.md to its shell, currently with zero snippet blocks;
- *     repo-aware classification also guards against unsynced manual edits)
+ *   - Top-level projection paths: `AGENTS.md`, `CLAUDE.md` (CLAUDE.md is retired:
+ *     sync-rules deletes a shell-only CLAUDE.md so Claude Code falls back to
+ *     AGENTS.md; repo-aware classification also guards against unsynced manual edits)
  *   - utility: `utils/assert-never.ts`
  *
  * Symlink 模式決策（2026-06-11）：consumer `.claude/rules/*.md` 改為絕對路徑
@@ -56,6 +56,11 @@ const LOCKED_BANNER_SIGNATURE = '🔒 LOCKED — managed by clade'
 const CLAUDE_MD_SHELL = '# CLAUDE.md\n'
 const CLAUDE_SNIPPET_BLOCK_RE =
   /<!-- CLADE:SNIPPET:([A-Za-z0-9_.-]+):START -->[\s\S]*?<!-- CLADE:SNIPPET:\1:END -->/g
+
+function isShellOnlyClaudeMd(content) {
+  return content.replace(CLAUDE_SNIPPET_BLOCK_RE, '').trim() === CLAUDE_MD_SHELL.trim()
+}
+
 const cwdScopedGitEnv = Object.fromEntries(
   Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')),
 )
@@ -91,11 +96,13 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // 自家檔——與 `scripts/lib/` 那種混住的目錄不同，可以整目錄匹配。
       String.raw`\.clade/(bin|signals|vendor|scripts|registry)/`,
       // Vendored script entry points (scripts/)
-      String.raw`scripts/(wt-helper|codex-worktree-trust|wt-batch|wt-unattended-merge|preservation-policy|preservation-profiles|preservation-inventory|pulls-review|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|legacy-tests|audit-risk-path-coverage|audit-clade-leak|audit-public-tree-hygiene|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|dev-singleton|dev-router|dev-session|herdr-visible-identity|db-lease|db-reset-peer-coordination|ownership-journal|shell-safety-check|run-evidence|cbm-health|evidence-hook|install-tool-evidence|control-plane-projection-validate|specformula-ddl-check)\.(mjs|mts|ts)$`,
+      String.raw`scripts/(wt-helper|wt-batch|wt-unattended-merge|preservation-policy|preservation-profiles|preservation-inventory|preservation-resource-adapters|retired-ledger|pulls-review|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|legacy-tests|audit-risk-path-coverage|audit-clade-leak|audit-public-tree-hygiene|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|dev-singleton|dev-router|dev-session|herdr-visible-identity|db-lease|db-reset-peer-coordination|prod-sql|ownership-journal|shell-safety-check|run-evidence|cbm-health|evidence-hook|install-tool-evidence|control-plane-projection-validate|specformula-ddl-check)\.(mjs|mts|ts)$`,
       // pulls-review.ts 鎖相依用的 manifest 與 lockfile（非 .mjs/.ts 家族，故單列一條）
       String.raw`scripts/pulls-review\.(package\.json|pnpm-lock)$`,
       // PUBLIC consumer 的 salted hash 清單（propagate 的 consumer-sanitize 階段生成，非 vendor 源檔）
       String.raw`scripts/public-tree-hygiene-tokens\.json$`,
+      // audit-clade-leak.ts 以 dirname 讀同層的 maintainer-only skill 名單（vendor-targets 投影，源在 vendor/scripts/）
+      String.raw`scripts/maintainer-only-skills\.json$`,
       // Heavy-gate 併發閘門（bash helper，非 .mjs/.ts 家族，故單列一條）
       String.raw`scripts/gate-slot\.sh$`,
       // codebase-memory index 的 lock + MemoryMax wrapper（同上，bash helper 單列一條）
@@ -107,12 +114,15 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       String.raw`scripts/(tech-debt-status|flow/tech-debt-status|flow/nodes/lib/td-parse|flow/nodes/lib/contract)\.ts$`,
       String.raw`scripts/flow/worktree-backlog\.ts$`,
       // Exact audit helper targets; the remaining scripts/flow/ tree is consumer-owned.
-      String.raw`scripts/flow/(plan-gates|plan-delta|acceptance-verdicts|plan-paths)\.ts$`,
+      String.raw`scripts/flow/(plan-gates|plan-delta|acceptance-verdicts|plan-paths|close-commit)\.ts$`,
       // Vendored helpers under scripts/lib/ — MUST stay an explicit filename list.
       // NEVER widen to `scripts/lib/`: consumers author their own files there
       // (<consumer-a> `common.sh` / `read-infra-manifest.mjs`, <consumer-d> `vue-component-resolution.ts`),
       // and matching the whole dir would mark those clade-managed → auto-reset clobbers them.
-      String.raw`scripts/lib/(argv-unsplit|evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|json-unknown|safety-observation|worktree-dev-port|worktree-backlog|wt-patch-landing|publish-in-flight|projection-ledger-reconcile|herdr-machine|host-config-refs|pane-cache-ttl|disk-low-water|claude-account-registry)\.(mjs|mts|ts)$`,
+      String.raw`scripts/lib/(argv-unsplit|evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|workspace-choice|workspace-repo-profile|json-unknown|safety-observation|worktree-dev-port|worktree-backlog|wt-patch-landing|publish-in-flight|projection-ledger-reconcile|herdr-machine|machine-cpu|host-config-refs|pane-cache-ttl|disk-low-water|claude-account-registry|register-paths|git-status-z|dev-slots)\.(mjs|mts|ts)$`,
+      // dev-session.ts 的 `slots` 命令引用的 dev server 判定（散到 consumer 的 scripts/lib/dev-resource/）。
+      // 同上：NEVER 放寬成整個 `scripts/lib/dev-resource/` 目錄，只收明列的檔名。
+      String.raw`scripts/lib/dev-resource/tree-cost\.ts$`,
       // json-unknown.ts 第二條 dest：vendor/review-rules/scan.ts 以
       // `../scripts/lib/json-unknown.ts` 解析到 vendor/scripts/lib/。
       // NEVER 放寬成 `vendor/scripts/lib/`——那個目錄在 clade home 是源。
@@ -197,6 +207,10 @@ function isCursorGeneratedProjection(repoRoot, p) {
  * `.claude/**`（clade home 消費自家 hub skill 的 symlink）、`.agents/**`（Codex 投影）與 `.github/actions/`
  * （clade 自己的源在 `vendor/actions/`）在 clade home 仍然是投影，照舊過濾。
  */
+/** 本體搬到 `.agents/skills/<name>/` 的 clade home local skill（`.claude/skills/<name>` 是指過去的 symlink）。新增時 guard 的 `LOCAL_SKILL_SOURCE_RE` 一起補。 */
+const AGENTS_LOCAL_SKILLS =
+  'clade-publish|clade-health|coordinator|hook-authoring|claude-credit-manager|tailscale-admin|claude-account-pool'
+
 const CLADE_OWN_SOURCE_RE = new RegExp(
   '^(' +
     [
@@ -227,12 +241,12 @@ const CLADE_OWN_SOURCE_RE = new RegExp(
       // 會把 clade-home 的判準全文（`.claude/skills/clade-home/rules/**`）與它的 guard 當投影
       // `checkout --theirs`。hub skill 的 symlink（bp / handoff / …）與 sync 重產的
       // version-upgrade 等目錄仍是投影，NEVER 放寬成整個 `.claude/skills/`。
-      String.raw`\.claude/skills/(clade-home|clade-publish|clade-health|coordinator)/`,
-      // 這三支的源檔已搬到 `.agents/skills/<name>/`（`.claude/skills/<name>` 是指過去的 symlink，
+      String.raw`\.claude/skills/(clade-home|` + AGENTS_LOCAL_SKILLS + String.raw`)/`,
+      // 這幾支的源檔已搬到 `.agents/skills/<name>/`（`.claude/skills/<name>` 是指過去的 symlink，
       // git 只追蹤實體路徑）。LOCKED_PROJECTION_RE 收整個 `.agents/` 前綴，沒有這一列 merge-back
       // 會把它們的源檔當投影 `checkout --theirs`。其餘 `.agents/skills/*` 仍是 Codex 投影。
-      String.raw`\.agents/skills/(clade-publish|clade-health|coordinator)/`,
-      String.raw`\.claude/hooks/clade-home-guard\.ts$`,
+      String.raw`\.agents/skills/(` + AGENTS_LOCAL_SKILLS + String.raw`)/`,
+      String.raw`\.claude/hooks/(clade-home-guard|claude-credit-keyword)\.ts$`,
     ].join('|') +
     ')',
 )
@@ -307,12 +321,16 @@ function isClaudeMdBannerOnly(repoRoot) {
   try {
     current = readFileSync(join(repoRoot, 'CLAUDE.md'), 'utf8')
   } catch {
-    return false
+    // sync-rules deletes a shell-only CLAUDE.md. That deletion is generated only
+    // when HEAD held nothing but the shell and the index has not staged other text.
+    const head = gitClaudeMd(repoRoot, 'HEAD')
+    const staged = gitClaudeMd(repoRoot, ':0')
+    return head !== null && isShellOnlyClaudeMd(head) && (staged === null || staged === head)
   }
 
   let unmerged
   try {
-    unmerged = execFileSync('git', ['ls-files', '-u', '--', 'CLAUDE.md'], {
+    unmerged = execFileSync('git', ['ls-files', '-z', '-u', '--', 'CLAUDE.md'], {
       cwd: repoRoot,
       env: cwdScopedGitEnv,
       encoding: 'utf8',

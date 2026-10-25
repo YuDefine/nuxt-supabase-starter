@@ -4,7 +4,7 @@
 
 Routing: A (herdr-usage-table-row) → non-ui-implementation / claude-sonnet-5-5 / high / in-process subagent
 Routing: B (batch-doc-threshold) → dotclaude-authoring / claude-opus-5-5 / medium / Herdr child
-Routing: C (pi-dispatch-latency) → read-heavy-scan / gemini / high / Pi dispatcher
+Routing: C (pi-dispatch-latency) → read-heavy-scan / dispatch-fallback / low / in-process subagent
 
 ### 任務狀態
 

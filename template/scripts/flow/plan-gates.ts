@@ -40,6 +40,7 @@ import {
   type WorkKind,
 } from './plan-delta.ts'
 import { PLAN_ROOT, TRUTH_ROOT, hashTruth } from './plan-paths.ts'
+import { readGitStatus } from '../lib/git-status-z.ts'
 
 /** 每一條拒絕理由。`code` 穩定、被測試與入口比對；`path` 指到看得見的東西；`detail` 給人。 */
 export interface GateFinding {
@@ -233,8 +234,8 @@ export function checkLifecycleLayout(root: string, workId: string): GateFinding[
   if (existsSync(join(root, LIFECYCLE_CONTRACT))) {
     const base = firstAdd ?? 'HEAD'
     const before = new Set(
-      gitLines(root, ['ls-tree', '-d', '--name-only', `${base}:${PLAN_ROOT}`]).filter((n) =>
-        NNN_PACKAGE_RE.test(n),
+      gitLines(root, ['ls-tree', '-z', '-d', '--name-only', `${base}:${PLAN_ROOT}`], true).filter(
+        (n) => NNN_PACKAGE_RE.test(n),
       ),
     )
     const plansDir = join(root, PLAN_ROOT)
@@ -454,6 +455,165 @@ export function runAcceptanceDryRun(opts: { root: string; command: string; timeo
   }
 }
 
+/** plan 宣告的 acceptance runner。`cucumber`（預設）＝`--dry-run` 契約；`playwright-bdd`＝`bddgen` ＋ `--list`。 */
+export const ACCEPTANCE_RUNNERS = ['cucumber', 'playwright-bdd'] as const
+export type AcceptanceRunner = (typeof ACCEPTANCE_RUNNERS)[number]
+
+export function parseAcceptanceRunner(raw: string | null | undefined): AcceptanceRunner {
+  const value = raw?.trim()
+  if (!value) return 'cucumber'
+  if ((ACCEPTANCE_RUNNERS as readonly string[]).includes(value)) return value as AcceptanceRunner
+  throw new Error(`unknown acceptance_runner "${value}"; allowed: ${ACCEPTANCE_RUNNERS.join(', ')}`)
+}
+
+/** close 側 verdict 缺漏的提示：playwright-bdd 沒有 cucumber CLI，但它的 reporter 出同形狀的 JSON。 */
+const PLAYWRIGHT_BDD_EVIDENCE_HINT =
+  " (playwright-bdd: point `cucumberReporter('json', { outputFile })` at that directory)"
+
+type AcceptanceCheck = ReturnType<typeof runAcceptanceDryRun>
+
+function emptyCheck(error: string): AcceptanceCheck {
+  return { ok: false, error, scenarios: 0, ran: [], unresolved: [] }
+}
+
+/** 找 step 所在 scenario 的 tag（含 Feature 層）；找不到回空集合。 */
+function scenarioTagsAt(root: string, uri: string, line: number): Set<string> {
+  let lines: string[]
+  try {
+    lines = readFileSync(join(root, uri), 'utf8').split(/\r?\n/u)
+  } catch {
+    return new Set()
+  }
+  const tagsAbove = (index: number): string[] => {
+    const out: string[] = []
+    for (let i = index - 1; i >= 0; i -= 1) {
+      const text = lines[i]!.trim()
+      if (text.startsWith('@')) out.push(...text.split(/\s+/u).filter((t) => t.startsWith('@')))
+      else if (text !== '' && !text.startsWith('#')) break
+    }
+    return out
+  }
+  const tags = new Set<string>()
+  let scenarioAt = -1
+  for (let i = Math.min(line, lines.length) - 1; i >= 0; i -= 1) {
+    if (/^\s*(Scenario|Scenario Outline|Example)\b/u.test(lines[i]!)) {
+      scenarioAt = i
+      break
+    }
+  }
+  if (scenarioAt >= 0) for (const t of tagsAbove(scenarioAt)) tags.add(t)
+  const featureAt = lines.findIndex((l) => /^\s*Feature\b/u.test(l))
+  if (featureAt >= 0) for (const t of tagsAbove(featureAt)) tags.add(t)
+  return tags
+}
+
+interface PlaywrightSpec {
+  file: string
+  title: string
+  tags: string[]
+}
+
+function collectPlaywrightSpecs(suite: unknown, out: PlaywrightSpec[] = []): PlaywrightSpec[] {
+  const node = suite as Record<string, unknown>
+  for (const spec of (Array.isArray(node?.specs) ? node.specs : []) as Record<string, unknown>[]) {
+    out.push({
+      file: String(spec?.file ?? ''),
+      title: String(spec?.title ?? '').trim(),
+      tags: Array.isArray(spec?.tags) ? spec.tags.map(String) : [],
+    })
+  }
+  for (const child of Array.isArray(node?.suites) ? node.suites : [])
+    collectPlaywrightSpecs(child, out)
+  return out
+}
+
+/**
+ * playwright-bdd 的 readiness：同一個 `DryRunResult` 形狀，不同的探針。
+ *
+ * 契約：`<acceptance_command> --list --reporter=json` 先跑 `bddgen`（缺 step 時 exit 1 並印
+ * `Missing step definitions: N` 與每條 snippet 的 `Step:`／`From: <feature>:<line>:<col>`），再由
+ * `playwright test --list` 列出 scenario。`acceptance_command` 因此 MUST 是「bddgen && playwright test」
+ * 這一類會先產生 spec 的入口（例：`pnpm test:bdd:frontend <模組>`）。**NEVER** 只用 `playwright test`
+ * 當入口——它不重跑 bddgen，undefined step 會被舊的 `.features-gen` 蓋過去。
+ *
+ * `@human` 場景沒有可執行的 step，與 cucumber 路徑一致：它的 missing step 不擋。
+ */
+export function runPlaywrightBddCheck(opts: {
+  root: string
+  command: string
+  timeoutMs?: number
+}): AcceptanceCheck {
+  const dir = mkdtempSync(join(tmpdir(), 'clade-readiness-'))
+  const report = join(dir, 'list.json')
+  try {
+    const run = spawnSync('sh', ['-c', `${opts.command} --list --reporter=json`], {
+      cwd: opts.root,
+      encoding: 'utf8',
+      timeout: opts.timeoutMs ?? 120_000,
+      env: { ...process.env, PLAYWRIGHT_JSON_OUTPUT_FILE: report },
+    })
+    const output = `${run.stderr ?? ''}\n${run.stdout ?? ''}`
+    if (/Missing step definitions?:\s*\d+/u.test(output)) {
+      const unresolved: DryRunStep[] = []
+      const snippet =
+        /(Given|When|Then|And|But)\(\s*(['"`])((?:\\.|(?!\2).)*)\2[\s\S]*?\/\/ Step:[^\n]*\n\s*\/\/ From:\s*(\S+?):(\d+)(?::\d+)?\n/gu
+      for (const m of output.matchAll(snippet)) {
+        const uri = normalizeReportUri(opts.root, m[4]!)
+        const line = Number(m[5])
+        if (scenarioTagsAt(opts.root, uri, line).has('@human')) continue
+        unresolved.push({
+          status: 'undefined',
+          keyword: m[1]!,
+          name: m[3]!,
+          line,
+          uri,
+          scenario: '',
+        })
+      }
+      if (unresolved.length > 0) return { ok: true, error: null, scenarios: 0, ran: [], unresolved }
+      // 抓得到 header 卻沒有可歸責的 snippet：格式變了，或缺的全是 `@human`（bddgen 仍會中止，列不出 scenario）。
+      // 兩者都照實失敗，NEVER 吞成通過。
+      return emptyCheck(
+        /\bFrom:/u.test(output)
+          ? 'bddgen aborted on @human-only missing steps; exclude @human from bddgen (config `tags: "not @human"`)'
+          : 'bddgen reported missing step definitions but no snippet could be read',
+      )
+    } else if (run.status !== 0 || !existsSync(report)) {
+      const tail = output.trim().split('\n').slice(-5).join(' | ')
+      return emptyCheck(
+        `playwright-bdd list produced no JSON (exit ${run.status ?? 'null'})${tail ? `: ${tail}` : ''}`,
+      )
+    }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(readFileSync(report, 'utf8'))
+    } catch (error) {
+      return emptyCheck(`playwright list JSON is unreadable: ${(error as Error).message}`)
+    }
+    const suites = (parsed as Record<string, unknown>)?.suites
+    if (!Array.isArray(suites)) return emptyCheck('playwright list JSON has no suites array')
+    const specs = suites.flatMap((suite) => collectPlaywrightSpecs(suite))
+    // 產生的 spec 檔 `<feature path>.spec.{js,ts}` 與 feature 同路徑；去掉後綴即 repo-relative feature uri。
+    const ran = specs.map((spec) => ({
+      uri: normalizeReportUri(opts.root, spec.file.replace(/\.spec\.[cm]?[jt]s$/u, '')),
+      title: spec.title,
+    }))
+    return { ok: true, error: null, scenarios: ran.length, ran, unresolved: [] }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+/** readiness 依 plan 宣告的 runner 分派；兩條路徑回同一個形狀。 */
+export function runAcceptanceCheck(opts: {
+  root: string
+  command: string
+  runner: AcceptanceRunner
+  timeoutMs?: number
+}): AcceptanceCheck {
+  return opts.runner === 'playwright-bdd' ? runPlaywrightBddCheck(opts) : runAcceptanceDryRun(opts)
+}
+
 function tagNames(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value
@@ -571,7 +731,17 @@ export function checkReadiness(
     })
   }
 
-  // 3. acceptance_command
+  // 3. acceptance_command ＋ runner
+  let runner: AcceptanceRunner = 'cucumber'
+  try {
+    runner = parseAcceptanceRunner(readFrontmatterField(planText, 'acceptance_runner'))
+  } catch (error) {
+    findings.push({
+      code: 'acceptance-runner-invalid',
+      path: `${planRel}:frontmatter.acceptance_runner`,
+      detail: (error as Error).message,
+    })
+  }
   const acceptanceCommand = readFrontmatterField(planText, 'acceptance_command')
   if (!acceptanceCommand) {
     findings.push({
@@ -579,7 +749,8 @@ export function checkReadiness(
       path: `${planRel}:frontmatter.acceptance_command`,
       detail:
         'add `acceptance_command: <shell command>` to the plan frontmatter — the runnable entry that ' +
-        "executes this package's acceptance scenarios; readiness appends `--dry-run --format json:<tmp>` to it",
+        "executes this package's acceptance scenarios; readiness appends `--dry-run --format json:<tmp>` to it " +
+        '(or, with `acceptance_runner: playwright-bdd`, `--list --reporter=json` to a `bddgen && playwright test` entry)',
     })
   }
 
@@ -604,15 +775,20 @@ export function checkReadiness(
 
   // 5. DSL 解析度（真的跑一次）；regression 另外要求每一個錨點都在這次 run 裡
   if (acceptanceCommand && opts.runAcceptance !== false) {
-    const dry = runAcceptanceDryRun({ root, command: acceptanceCommand, timeoutMs: opts.timeoutMs })
+    const dry = runAcceptanceCheck({
+      root,
+      command: acceptanceCommand,
+      runner,
+      timeoutMs: opts.timeoutMs,
+    })
     if (!dry.ok) {
       findings.push({
         code: 'acceptance-command-failed',
         path: `${planRel}:frontmatter.acceptance_command`,
-        detail: `\`${acceptanceCommand}\`: ${dry.error}`,
+        detail: `\`${acceptanceCommand}\` (${runner}): ${dry.error}`,
       })
     } else {
-      if (dry.scenarios === 0) {
+      if (dry.scenarios === 0 && dry.unresolved.length === 0) {
         findings.push({
           code: 'acceptance-report-empty',
           path: `${planRel}:frontmatter.acceptance_command`,
@@ -624,7 +800,9 @@ export function checkReadiness(
           code:
             step.status === 'ambiguous' ? 'acceptance-step-ambiguous' : 'acceptance-step-undefined',
           path: `${step.uri}:${step.line}`,
-          detail: `${step.status} step in "${step.scenario}": ${step.keyword}${step.name}`,
+          detail: step.scenario
+            ? `${step.status} step in "${step.scenario}": ${step.keyword}${step.name}`
+            : `${step.status} step: ${step.keyword} ${step.name}`,
         })
       }
       if (set === 'regression') {
@@ -884,7 +1062,7 @@ export function checkAcceptanceClose(
       findings.push({
         code: 'acceptance-verdict-missing',
         path: `${planRel}/${scenario.feature}`,
-        detail: `scenario "${scenario.title}" has no machine verdict; run the acceptance command and keep its cucumber JSON under ${planRel}/evidence/`,
+        detail: `scenario "${scenario.title}" has no machine verdict; run the acceptance command and keep its cucumber JSON under ${planRel}/evidence/${PLAYWRIGHT_BDD_EVIDENCE_HINT}`,
       })
       continue
     }
@@ -950,7 +1128,7 @@ export function checkRegressionAnchorsClose(
       findings.push({
         code: 'truth-scenario-verdict-missing',
         path: anchor.feature,
-        detail: `${label} has no verdict; run it and keep the cucumber JSON under ${planRel}/evidence/`,
+        detail: `${label} has no verdict; run it and keep the cucumber JSON under ${planRel}/evidence/${PLAYWRIGHT_BDD_EVIDENCE_HINT}`,
       })
       continue
     }
@@ -983,7 +1161,7 @@ export function checkRegressionAnchorsClose(
       findings.push({
         code: 'regression-anchor-never-red',
         path: anchor.feature,
-        detail: `${label} has no failed verdict before its pass; keep the red run's cucumber JSON under ${planRel}/evidence/ — a scenario that never failed has not shown it catches the bug`,
+        detail: `${label} has no failed verdict before its pass; keep the red run's cucumber JSON under ${planRel}/evidence/${PLAYWRIGHT_BDD_EVIDENCE_HINT} — a scenario that never failed has not shown it catches the bug`,
       })
     }
   }
@@ -1040,13 +1218,16 @@ function integritySurfaces(workId: string, contractPath: string | null): Integri
   ]
 }
 
-function gitLines(root: string, args: string[]): string[] {
+/** `nul`：args 已帶 `-z`，輸出以 `\0` 切（路徑不被 `core.quotePath` 跳脫、也不吃 `\r`）。 */
+function gitLines(root: string, args: string[], nul = false): string[] {
   try {
-    return execFileSync('git', args, {
+    const out = execFileSync('git', args, {
       cwd: root,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     })
+    if (nul) return out.split('\0').filter(Boolean)
+    return out
       .split('\n')
       .map((l) => l.replace(/\r$/u, ''))
       .filter(Boolean)
@@ -1065,22 +1246,29 @@ function gitLines(root: string, args: string[]): string[] {
 export function checkSpecIntegrity(root: string, workId: string, since: string): IntegrityResult {
   const contractPath = seededContractPath(root, workId, since)
   const surfaces = integritySurfaces(workId, contractPath)
-  const committed = gitLines(root, [
-    'diff',
-    '--name-only',
-    ...(contractPath ? ['--no-renames'] : []),
-    `${since}..HEAD`,
-    '--',
-  ])
-  const worktree = gitLines(root, [
-    'status',
-    '--porcelain',
-    ...(contractPath ? ['--no-renames', '--untracked-files=all'] : []),
-  ])
-    // porcelain 的前兩欄是狀態碼、第三欄是空白。**NEVER** 先 trim 整行再 slice(3)——
-    // ` M path` 被 trim 成 `M path` 之後，slice(3) 吃掉的是路徑的第一個字元。
-    .map((line) => line.slice(3).trim())
-    .map((p) => (p.includes(' -> ') ? p.split(' -> ')[1]!.trim() : p))
+  const committed = gitLines(
+    root,
+    [
+      'diff',
+      '--name-only',
+      '-z',
+      ...(contractPath ? ['--no-renames'] : []),
+      `${since}..HEAD`,
+      '--',
+    ],
+    true,
+  )
+  // `readGitStatus`（`-z`）：路徑不被 `core.quotePath` 跳脫，rename 的 `path` 是新路徑。
+  // 讀不到就當沒有未提交改動（與 `gitLines` 同一條 fail-open；committed 那側照樣檢查）。
+  let worktree: string[] = []
+  try {
+    worktree = readGitStatus(root, {
+      untracked: contractPath ? 'all' : 'normal',
+      noRenames: Boolean(contractPath),
+    }).map((e) => e.path)
+  } catch {
+    worktree = []
+  }
   const seen = new Map<string, string>()
   for (const rel of committed) seen.set(rel, `committed in ${since}..HEAD`)
   for (const rel of worktree) {

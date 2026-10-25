@@ -3,7 +3,7 @@ description: Supabase Migration 操作規範
 paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'packages/*/server/**/*.ts']
 ---
 <!-- Clade native rule; source: rules/modules/db-schema/supabase/migration.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Migration
 
@@ -12,10 +12,14 @@ paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'packages/*/server/**/
 - **NEVER** put SECURITY DEFINER functions in exposed schemas（`public`）— 放在 private schema，僅透過 GRANT 開放
 - **MUST** use `WITH (security_invoker = true)` on ALL views — view 預設 bypass RLS（以 owner 權限執行），不加等於 RLS 失效
 - **NEVER** modify or delete applied migrations
-- **NEVER** use MCP `execute_sql` for DDL — `supabase_admin` owner breaks CI/CD。唯一例外：修 `must be owner of table` 時，由同一條 MCP 連線 `ALTER ... OWNER TO postgres` 並補 `schema_migrations` 記錄（步驟見 `supabase-migration` skill 的 troubleshooting reference）
+- **NEVER** use MCP `execute_sql` for DDL — `supabase_admin` owner breaks CI/CD。唯一例外：修 `must be owner of table` 時，由同一條 MCP 連線 `ALTER ... OWNER TO postgres` 並補 `schema_migrations` 記錄（步驟見 `supabase-migration` skill 的 `rules/疑難排解與Owner修復判準.md`）
 - **MUST** use `bigint GENERATED ALWAYS AS IDENTITY` for new table primary keys — **NEVER** `bigserial`（SQL 標準，避免 sequence ownership 問題）
 - Existing tables using `bigserial` **SHALL NOT** be migrated（風險高、收益低）
 - **每一個** migration 檔新增或修改後都 **MUST** 依 runtime variant 跑 reset → lint → gen types → typecheck，**不是只處理最後一個**（具體命令見對應 `db-runtime/<variant>` rule，例如 self-hosted 走 `pnpm db:reset` / `pnpm db:lint` / `pnpm db:types`；local docker 走 `supabase db reset` / `supabase db lint` / `supabase gen types typescript --local`）
+- **生成型別檔（`supabase gen types` 的輸出）NEVER 手改**：型別不對就改 migration 再重生；手改會在下一次重生時被蓋掉，且期間 typecheck 驗的是假的 schema
+- **API 驗證 schema MUST 綁在生成型別上**：寫入用的 Zod schema 以 `z.ZodType<TablesInsert<'x'>>`／`TablesUpdate<'x'>`（或等價的型別斷言）與生成型別連結，讓上一條的 gen types → typecheck 能抓到欄位漂移；**NEVER** 寫一份與生成型別毫無編譯期連結的平行 Zod
+- 寫入後要觸發非同步副作用（寄信、通知、索引、webhook）時，事件與業務資料 **MUST** 在同一個 transaction（RPC 或 pgmq）寫入，派送與冪等判準見 [[audit-pattern]] § Domain events（非同步副作用）
+- **看到 `relation … does not exist` / `column … does not exist` / `PGRST204` / `PGRST205` 先診斷，NEVER 先 migrate 或 reset**：先跑唯讀檢查——`supabase migration list`（local 與 remote 的套用差異）與 `supabase db diff`（schema 與 migration 歷史的 drift，不帶 `-f` 只印不寫；已採用宣告式 schema 的 repo 改用 `declarative-schema.md` 第 4 步的 `sync --no-apply` 判 drift）。有未套 migration 才套；有 drift 先補 migration；兩者都乾淨才往 code、schema cache 或連錯環境方向查
 - **MUST** run `supabase db advisors`（CLI v2.81.3+；版本不足退 MCP `get_advisors`）並**逐條**處置 security 類 finding — 見下方 § Lint 與 advisors 的處置義務
 
 
@@ -68,6 +72,16 @@ CI 用 `supabase db start` 在 runner 上起本機 stack，**NEVER** 讓 CI 連 
 - **NEVER** 在 `supabase db push` 加 `--include-all` flag — 永久關掉 supabase 的 out-of-order 保護，任何後續漂移都會默默放行
 - **NEVER** 為了「保留 commit 順序」而手改 migration 檔 timestamp — 用 `supabase migration new` 重生
 
+### Timestamp 不可變
+
+Migration 檔名的 timestamp prefix 是 `supabase_migrations.version` 的 identity key；remote DB apply 之後就不可變。上方「rename 到當下 UTC timestamp」只適用於**尚未 apply 到任何 remote** 的 migration。
+
+- 已 commit 進 main **且** remote DB 已 apply 的 migration **NEVER** rename、delete 或 regenerate timestamp——即使 SQL 內容完全相同
+- Worktree 內跑 `supabase db reset`／`supabase migration new` 後 **MUST** 比對既有 migration 檔名與 main 相同；不同就 STOP、還原成 main 的檔名，不 commit 新 timestamp
+- **NEVER** 在 worktree 重新 `supabase migration new <已存在的 migration 名>`——會產生新 timestamp 取代舊的
+- **NEVER** 假設「local `db:reset` 過了 = remote 也會過」：local 從 scratch apply，不知道 remote 的 `supabase_migrations` 記錄；timestamp 一變，`db push` 就報 `Remote migration versions not found in local migrations directory`（[[pitfall-migration-rename-breaks-remote-db-push]]）
+- commit 前偵測：`git diff --cached --diff-filter=R -- 'supabase/migrations/' | grep -q . && echo "BLOCK: migration renamed" || echo "OK"`
+
 ### 例外：catalog-alignment stub（多 repo 共用一台 Postgres）
 
 多個 repo 共用同一台 Postgres 時 `supabase_migrations.schema_migrations` 整個 DB 一份，remote 會出現本 repo 沒有的 version，`supabase db push` 以 `Remote migration versions not found in local migrations directory` 整批拒絕。解法是補一個**同名、零 SQL** 的對齊檔，version **MUST 逐字等於** remote 那筆——**這是 § MUST 第 3 條「rename 到當下 UTC timestamp」的唯一例外**，pre-commit hook 也放行。豁免條件**兩條都要成立**：檔案含 `CLADE:CATALOG-ALIGNMENT-STUB` marker，且不含任何非註解、非空白行。
@@ -111,7 +125,7 @@ node vendor/scripts/classify-migrations.ts --migrations-dir supabase/migrations
 -- Lock strategy: <lock_timeout、concurrent／分階段做法、maintenance window 或無鎖理由>
 ```
 
-Header 是部署決策證據，不能覆寫分類器結果。`maintenance_required` 仍 **MUST** hard stop，完成 rollback／maintenance decision 後才可核准。
+Header 是部署決策證據，不能覆寫分類器結果。`maintenance_required` 與 `review_required` 仍 **MUST** hard stop，完成 rollback／maintenance／review decision 後才可核准；宣告值不是合法等級時分類器以 `review_required` 處理。
 
 ## Schema 暴露策略
 
@@ -120,13 +134,15 @@ Template 預設只使用 `public` schema，並被 PostgREST 自動暴露為 Data
 需要不被 PostgREST 暴露的 `SECURITY DEFINER` function、system-level helper 或 audit / internal log 表時，新增 private schema：
 
 ```sql
--- 1. 建 schema
+-- 1. 建 schema（不加進 exposed schemas：Cloud 是 Dashboard → API Settings，self-hosted 是 PGRST_DB_SCHEMAS；
+--    PostgREST 只看那份清單）
 create schema if not exists core;
 
--- 2. 不要 grant usage 給 anon/authenticated（保持不暴露）
--- 預設 role 沒有 usage → PostgREST 看不到
+-- 2. 給會呼叫 core 物件的 role USAGE（RLS policy 內的 helper 與下方 INVOKER wrapper 都以
+--    caller 身分解析 core.*，沒有 USAGE 會 permission denied）。USAGE 不等於暴露，core 仍不進 Data API
+grant usage on schema core to authenticated;
 
--- 3. 在 core 中 create function
+-- 3. 在 core 中 create function；function EXECUTE 預設給 PUBLIC，先收回再明確授權
 create or replace function core.fn_helper(...)
 returns ...
 language plpgsql
@@ -134,20 +150,23 @@ security definer
 set search_path = ''
 as $$ ... $$;
 
--- 4. 需要讓 client 呼叫時，在 public 建薄 wrapper
+revoke execute on function core.fn_helper from public, anon;
+grant execute on function core.fn_helper to authenticated;
+
+-- 4. 需要讓 client 呼叫時，在 public 建薄 wrapper（SECURITY INVOKER，RLS 在 caller 身分下執行；
+--    權限檢查放在 core 的實作內）。public 的新 function 由 Supabase default privileges 自動給
+--    anon / authenticated EXECUTE，GRANT 不會縮小範圍，MUST 先 revoke
 create or replace function public.fn_helper_wrapper(...)
 returns ...
-language plpgsql
+language sql
 security invoker
+set search_path = ''
 as $$
-begin
-  -- 權限檢查
-  if not (select auth.role() = 'authenticated') then
-    raise exception 'unauthorized';
-  end if;
-  return core.fn_helper(...);
-end;
+  select core.fn_helper(...);
 $$;
+
+revoke execute on function public.fn_helper_wrapper from public, anon;
+grant execute on function public.fn_helper_wrapper to authenticated;
 ```
 
 ### 暴露多個 schema（Dashboard 設定）

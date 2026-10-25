@@ -3,7 +3,7 @@ description: PR-isolated DB preview environment capability + safety contract（�
 paths: ['supabase/migrations/**/*.sql', '.github/workflows/**/*.yml', 'docker-compose*.yml', 'infra/**/*', 'scripts/dev-session*', 'scripts/worktree-*', 'scripts/singleton*', '.claude/consumer-meta.json']
 ---
 <!-- Clade native rule; source: rules/core/db-preview-env.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # DB Preview Environment（capability + safety contract）
 
@@ -126,7 +126,7 @@ channel 名字 **MUST 從該 sidecar 的 `PGRST_DB_CHANNEL` 讀，NEVER 猜**—
 
 **MUST** commit / PR 描述標出 migration 風險分類；reviewer **MUST** 對 `expand-contract` / `maintenance-required` 拍板才能 merge / tag。
 
-自動分類工具：`vendor/scripts/postgrest-migration-risk.mjs`（配 `postgrest-ready-gate.mjs`、`postgrest-smoke.mjs`），可串 `workflow_dispatch` input 做成手動 gate。
+自動分類工具：`vendor/scripts/postgrest-resilience/classify-migration.ts`（配 `ready-watch.ts`、`smoke-runner.ts`），可串 `workflow_dispatch` input 做成手動 gate。
 
 ### 6. 主幹 deploy gate
 

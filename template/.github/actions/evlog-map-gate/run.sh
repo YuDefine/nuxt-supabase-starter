@@ -70,10 +70,38 @@ fi
 # 取本次變更檔清單。base-ref 抓不到（shallow clone / 首次 push）時退化成
 # 空清單 —— gate.ts 會警告並跳過「觸及的 entry point 必須滿分」那條判定，
 # 但全域分與 suppressed 兩條仍照跑。
+#
+# base-ref「抓得到」不等於「跟 HEAD 有 merge base」：同一 job 前一步（evloghq/action 的
+# baseline 掃描）會 `git fetch --depth=1 origin <base>`，在 fetch-depth: 0 的完整 clone 裡把
+# origin/<base> 變成 .git/shallow 登記的無父 graft。base 已前進（PR 的 merge ref 建在較舊的
+# base 上）時，這個 tip 不在 HEAD 的祖先鏈上、parent 又被截斷 → `git diff <base>...HEAD`
+# 報 `fatal: <base>...HEAD: no merge base`（exit 128）。
+# 處置依序：忽略 shallow graft 再試（物件仍在 ODB，離線、不動 repo）→ 真 shallow 就 unshallow
+# → 仍無 merge base 就 fail-closed exit 2 並印可行動訊息，NEVER 靜默退化成空清單。
 CHANGED_FILES="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/evlog-map-changed.XXXXXX")"
-trap 'rm -f "$CHANGED_FILES"' EXIT
+NO_SHALLOW_FILE="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/evlog-map-noshallow.XXXXXX")"
+trap 'rm -f "$CHANGED_FILES" "$NO_SHALLOW_FILE"' EXIT
 if git rev-parse --verify "$INPUT_BASE_REF" >/dev/null 2>&1; then
-  git diff --name-only --diff-filter=ACMR "$INPUT_BASE_REF"...HEAD > "$CHANGED_FILES"
+  # 空 GIT_SHALLOW_FILE ＝ 讓這個 git 行程看不到 graft（只作用於前綴的那一條命令）
+  SHALLOW_ENV="$NO_SHALLOW_FILE"
+  if git merge-base "$INPUT_BASE_REF" HEAD >/dev/null 2>&1; then
+    SHALLOW_ENV=""
+  elif GIT_SHALLOW_FILE="$NO_SHALLOW_FILE" git merge-base "$INPUT_BASE_REF" HEAD >/dev/null 2>&1; then
+    annotate warning "'$INPUT_BASE_REF' has no merge base with HEAD only because an earlier step shallow-fetched it (.git/shallow graft); comparing with the graft ignored"
+  elif [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = true ] \
+    && git fetch --no-tags --unshallow origin >/dev/null 2>&1 \
+    && git merge-base "$INPUT_BASE_REF" HEAD >/dev/null 2>&1; then
+    SHALLOW_ENV=""
+    annotate warning "repository was shallow; ran 'git fetch --unshallow' so '$INPUT_BASE_REF' has a merge base with HEAD"
+  else
+    annotate error "infrastructure-error: '$INPUT_BASE_REF' and HEAD have no merge base (shallow=$(git rev-parse --is-shallow-repository 2>/dev/null || echo unknown)) — the per-entry-point check cannot be computed and the gate did NOT run. Checkout with fetch-depth: 0 and do not shallow-fetch the base branch before this step; or set base-ref to the branch this change was cut from"
+    exit 2
+  fi
+  if [ -n "$SHALLOW_ENV" ]; then
+    GIT_SHALLOW_FILE="$SHALLOW_ENV" git diff --name-only --diff-filter=ACMR "$INPUT_BASE_REF"...HEAD > "$CHANGED_FILES"
+  else
+    git diff --name-only --diff-filter=ACMR "$INPUT_BASE_REF"...HEAD > "$CHANGED_FILES"
+  fi
 else
   annotate warning "base ref '$INPUT_BASE_REF' not resolvable — checkout with fetch-depth: 0 to enable the per-entry-point check"
   : > "$CHANGED_FILES"

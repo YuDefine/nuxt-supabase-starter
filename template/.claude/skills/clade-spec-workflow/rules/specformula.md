@@ -4,7 +4,7 @@ paths: ['specs/truth/contracts/**', 'specs/truth/features/**', 'specs/truth/data
 ---
 <!-- Clade native rule; source: rules/core/specformula.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # SpecFormula 標準（fleet 唯一 SDD/BDD 框架）
 
@@ -96,7 +96,7 @@ SpecFormula 讀的三份 spec 跟 aixbdd 的 truth 共用同一套佈局。只�
 
 ## NEVER
 
-1. **NEVER 手寫 step definition 去接 `isa.yml` 已涵蓋的六個內建指令**（`time_control` / `entity_setup` / `api_call` / `response_validate` / `entity_validate` / `entity_non_existence_validate`）。要新句型就在 `isa.yml` 加 `format` regex，框架沒有的行為才用 `instruction_type: custom`；手寫的會撞成 ambiguous step。
+1. **NEVER 手寫 step definition 去接 `isa.yml` 已涵蓋的六個內建指令**（`time_control` / `entity_setup` / `api_call` / `response_validate` / `entity_validate` / `entity_non_existence_validate`）。新的業務句型先在 `dsl.md` 立列、轉寫成 `dsl.yml` 的 `dsl_steps`（宣告 aixbdd 時；`.feature` 只用 `dsl.md` 已立列的句型）；`isa_steps` 找不到可用的 ISA 指令才在 `isa.yml` 加 `format` regex，框架做不到的才用 `instruction_type: custom`；手寫的會撞成 ambiguous step。**NEVER** 把業務句型直接註冊成 `isa.yml` 的 `instructions[]` 來跳過 `dsl.yml`。
 2. **NEVER 讓 `isa.yml` 的 `db_type: postgresql` 指向 hosted Supabase**（`db.<ref>.supabase.co`、pooler endpoint、任何要求 TLS 的 endpoint）。`JdbcDataSourceConfig` **沒有 `ssl`、沒有 `connectionString`**，連線會直接被拒。PostgreSQL consumer MUST 使用每個 repo 實際核准的隔離測試 DB endpoint；`127.0.0.1:54322` 只能作為該 repo 已確認的 `supabase start` 設定範例，不能由 fleet 標準無條件覆寫。
 3. **NEVER 讓業務碼繞過唯一 clock service 直接讀取系統時間**。Nuxt 範本把 `new Date()` 集中在 `server/utils/time-service.ts`；其他 framework 由已記錄的等價 clock service 承接。
 4. **NEVER 在 `.feature` 裡寫死時間再期待它穩定**——要固定時間就用 `time_control` 指令，它會打 `POST /test/time`。
@@ -117,7 +117,7 @@ SpecFormula 讀的三份 spec 跟 aixbdd 的 truth 共用同一套佈局。只�
 
 ## clade 驗收執行（CLI／檔案系統／投影）
 
-clade 的公開邊界不是 HTTP API：是 CLI（`flow`、`wt-helper`、`herdr-session-handoff`、`publish`／`propagate`）、檔案系統（spine `events.jsonl`、`.clade/projections`、manifest）與 read model 折疊。內建六指令對它們零覆蓋，所以 clade 用**同一個框架的 plugin 機制**接自己的 instruction adapter：`vendor/specformula-clade/`（`SpecFormulaPlugin`，由 `loadSpecFormulaPlugins()` 載入，`isa.yml` 在 clade root）。指令族固定四類——**建暫存 repo 並用真 CLI 產出 spine**（Given）、**在暫存 repo 跑 CLI 並捕捉 JSON**（When）、**對 JSON 路徑斷言**（Then）、**檔案系統斷言／擾動**（Then／When，含「刪檔」「改成不可讀」）。實際 `instruction_type` 名稱與 payload 以 `vendor/specformula-clade/README.md` 為 SoT，本節不 inline。
+clade 的公開邊界不是 HTTP API：是 CLI（`flow`、`wt-helper`、`herdr-session-handoff`、`publish`／`propagate`）、檔案系統（spine `events.jsonl`、`.clade/projections`、manifest）與 read model 折疊。內建六指令對它們零覆蓋，所以 clade 用**同一個框架的 plugin 機制**接自己的 instruction adapter：`vendor/specformula-clade/`（`SpecFormulaPlugin`，由 `loadSpecFormulaPlugins()` 載入，`isa.yml` 在 clade root）。指令族固定四類——**建暫存 repo 並用真 CLI 產出 spine**（Given）、**在暫存 repo 跑 CLI 並捕捉 JSON**（When）、**對 JSON 路徑斷言**（Then）、**檔案系統斷言／擾動**（Then／When，含「刪檔」「改成不可讀」）。實際 `instruction_type` 名稱與 payload 以 `vendor/specformula-clade/src/` 的 plugin 定義為 SoT，本節不 inline。
 
 | MUST | 為什麼 |
 | --- | --- |
@@ -128,6 +128,8 @@ clade 的公開邊界不是 HTTP API：是 CLI（`flow`、`wt-helper`、`herdr-s
 | cucumber JSON report 落到 plan 的 `evidence/`，讓 `vendor/scripts/flow/acceptance-verdicts.ts` 讀到 | 驗收結果不進 verdict 契約，close gate 就看不到它 |
 
 clade home 的 `test:bdd` 包一層 `vendor/specformula-clade/bin/run-bdd.ts`（pnpm 會把裸 `--` 轉給 cucumber-js，吃掉 readiness 的 `--dry-run`）；consumer 端照 § API surface。
+
+**入口路徑語意（clade home）**：`pnpm test:bdd -- <路徑>` 給了任何存在的 feature 路徑（`.feature` 檔、`:行號`、目錄）就**只**跑那些路徑，取代 `cucumber.cjs` 的整套 truth，不疊加；沒給路徑跑整個 truth；自帶 `--config` 時照該設定檔（`scripts/affected-truth-features.ts`）。所以 plan 的 `acceptance_command` 寫成「acceptance 目錄＋幾個 truth 模組」就只驗那幾處。run-bdd.ts 只屬 clade home，不投影到 consumer。釘住它的是 `test/run-bdd-entry-paths.test.ts`。
 
 ## Reference signal（不 block）
 

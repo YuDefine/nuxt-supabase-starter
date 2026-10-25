@@ -1,10 +1,10 @@
 ---
 description: keepalive wakeup **醒來那個 turn** 的 allowlist 與 claim 狀態機、以及 permission classifier 要求 specific shared-action consent 時的 structured user-input surface 形狀；兩者都是 reaction-time 契約，不參與「派不派 / 派給誰 / deadline 填多少」的派出決策。本檔**不會**在派工當下自動載入——收到 keepalive wakeup、或 classifier 要求具名 consent 的那一刻，要依 [[agent-routing]] § 主線靜默上限 的強制指針主動 Read
-paths: ['.clade/work-loop/**']
+paths: ['.clade/keepalive/**']
 ---
 <!-- Clade native rule; source: rules/core/agent-routing.keepalive-wake.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 # Agent Routing — keepalive 醒來與 shared-action consent（reaction-time 契約）
 
@@ -65,8 +65,8 @@ canonical 模板的 `deadline` 是**必填**欄位，也是破壞性分支的觸
 
 ### `/loop` dynamic 是唯一 prompt-preserving 分支
 
-由 `/loop` dynamic mode 自我續跑的 wakeup 要保留同一份 `/loop` prompt；autonomous dynamic loop 使用 harness 指定的 `<<autonomous-loop-dynamic>>` sentinel（**逐字寫錯就等於默默放掉這個分支**，改動前先對照 `native wakeup scheduler` tool description 的 `prompt` 欄位；混用警告見 rationale）。這一支的目的就是下一輪繼續執行 loop，不要套 inert control message。反方向也成立：`runner.sh`、work-loop background dispatch、pi safety net 都是 async keepalive，不要因原任務來自 `/work-loop` 就保留原 prompt。
+由 `/loop` dynamic mode 自我續跑的 wakeup 要保留同一份 `/loop` prompt；autonomous dynamic loop 使用 harness 指定的 `<<autonomous-loop-dynamic>>` sentinel（**逐字寫錯就等於默默放掉這個分支**，改動前先對照 `native wakeup scheduler` tool description 的 `prompt` 欄位；混用警告見 rationale）。這一支的目的就是下一輪繼續執行 loop，不要套 inert control message。反方向也成立：coordinator 背景派工、pi safety net 都是 async keepalive，不要因原任務來自某個 loop 就保留原 prompt。
 
 ### 邊界
 
-keepalive 是監看既有 async job，與 `\do-all` 主線閒置禁令、全域「不要把工作往後放」都**不衝突**；它也不是多醒幾次或醒來順便輪詢進度的理由。
+keepalive 是監看既有 async job，與 `/do-all` 主線閒置禁令、全域「不要把工作往後放」都**不衝突**；它也不是多醒幾次或醒來順便輪詢進度的理由。

@@ -3,7 +3,7 @@ description: Supabase 宣告式 schema（supabase/schemas + pg-delta）的採用
 paths: ['supabase/schemas/**', 'supabase/config.toml']
 ---
 <!-- Clade native rule; source: rules/modules/db-schema/supabase/declarative-schema.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # 宣告式 schema（pg-delta）
 
@@ -15,7 +15,7 @@ fleet 標準仍是 `supabase migration new` 手寫 migration；宣告式 schema 
 
 | 可觀察 predicate | 判定 |
 | --- | --- |
-| `supabase/schemas/` 存在，**且** `docs/decisions/` 有採用紀錄 | 已採用：schema 檔是 source of truth，走本檔 |
+| `supabase/schemas/` 存在，**且**有採用紀錄（lifecycle repo：約束它的 `specs/truth/**` 單位 Decision 段；未遷移 consumer：既有 `docs/decisions/`） | 已採用：schema 檔是 source of truth，走本檔 |
 | config.toml 有 `[experimental.pgdelta] enabled = true` 但沒有 `supabase/schemas/` | **未採用**——新版 `supabase init` 樣板會自帶這段。照 `migration.md` 走 `supabase migration new` |
 | `supabase/schemas/` 存在但沒有採用紀錄 | 停下問 owner；**NEVER** 自行當成 source of truth 或自行刪除 |
 

@@ -3,7 +3,7 @@ description: Nuxt 導航 loading 回饋 golden path — app.vue 必掛 NuxtLoadi
 paths: ['app/app.vue', 'packages/*/app/app.vue', 'app/pages/**/*.vue', 'packages/*/app/pages/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'app/plugins/**/*.ts', 'packages/*/app/plugins/**/*.ts', 'app/composables/use*Loading*.ts', 'packages/*/app/composables/use*Loading*.ts', 'app/stores/ui.ts', 'packages/*/app/stores/ui.ts']
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/page-loading-golden-path.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Nuxt 導航 Loading Golden Path（實作階段強制）
 

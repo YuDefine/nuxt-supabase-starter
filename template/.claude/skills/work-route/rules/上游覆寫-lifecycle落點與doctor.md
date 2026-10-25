@@ -1,5 +1,11 @@
 # 上游 aixbdd 覆寫：lifecycle 落點與 canonical doctor
 
+觸發點：`SKILL.md` Phase 4 step 1（每一次載入下游 owner 之前）；被派出的 executor 由 brief 帶本檔路徑。
+
+# Rule 1 - 載入 owner 前先判 L／D／P，命中就照覆寫列執行
+
+- Level: `MUST`
+
 clade 對上游 aixbdd owner 只做加法：上游檔維持 pin 的原文，clade 的調整全部寫在本檔。每一列寫明被覆寫的上游原句（anchor）與判準：
 
 - 判準命中 → 照該列「覆寫後怎麼做」，該列 anchor 那句上游原文在命中範圍內不適用
@@ -7,10 +13,11 @@ clade 對上游 aixbdd owner 只做加法：上游檔維持 pin 的原文，clad
 
 anchor 由 `scripts/audit-upstream-overrides.ts` 對 pin 的 `vendor/aixbdd/.agents/skills/**` 逐字核對；上游改了那句，稽核會 exit 非零並指名該列，該列要重新核對後才能推 pin。本檔沒有列到的上游句子一律照原文。
 
-## 判準
+判準：
 
 - **L｜lifecycle 落點**：本次 plan package 的 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:` 兩個鍵。判準只看這兩個鍵；**NEVER** 用 repo 名、manifest、`specs/truth/**` 是否存在或任何其他檔案推斷。
 - **D｜canonical doctor**：repo 的 `.claude/hub.json` `modules.capabilities` 含 `aixbdd`，也就是適用 fleet canonical doctor 契約的 clade consumer。doctor 命令依 repo 已確認的 package manager、workspace root、技術棧與既有 canonical project check 決定；**NEVER** 把 `pnpm run doctor` 當跨 repo 預設，也 **NEVER** 用固定 exit 0 的包裝器或 no-op 代替。
+- **P｜派工時長**：範圍與 D 相同（repo 的 `.claude/hub.json` `modules.capabilities` 含 `aixbdd`）；這些 consumer 都投影了 clade 的 `agent-routing` 規約，派工載體以它的 § 派多少 估時為準。
 
 命中 L 時，下表的「L 落點」指這五點：
 
@@ -22,7 +29,25 @@ anchor 由 `scripts/audit-upstream-overrides.ts` 對 pin 的 `vendor/aixbdd/.age
 
 `flow` 的 specification-readiness 與 close gate 會機械擋下：package 內出現 `truth-delta.md`、lifecycle repo 在本工作期間新增 `specs/plans/NNN-*` 目錄、`plan.md` 原有的 `work_id`／`truth_baseline` frontmatter 消失。被擋就照上面五點修，**NEVER** 為了過 gate 改 frontmatter。
 
-## L 族覆寫
+## Good Example
+
+- 這個例子是好的，因為只看 `plan.md` frontmatter 的兩個鍵判 L，命中就把 package 落在 `flow plan open` 鑄出的目錄、delta 寫進 `plan.md`。
+
+```text
+plan.md frontmatter 有 work_id 與 truth_baseline → 命中 L → owner 用 specs/plans/<work-id>/，truth delta 寫 plan.md 的 ## Truth delta，不建 truth-delta.md
+```
+
+## Bad Example
+
+- 這個例子是壞的，因為用 repo 名或 `specs/truth/**` 是否存在推斷 L，或為了過 gate 改 frontmatter。
+
+```text
+repo 有 specs/truth/ 就當命中 L；gate 擋下 truth-delta.md 後改刪 plan.md 的 truth_baseline 讓它過
+```
+
+# Rule 2 - L 族覆寫：命中 L 的 owner 照右欄做，不照上游 anchor
+
+- Level: `MUST`
 
 | owner skill | 上游 anchor（檔＋原句逐字） | 判準 | 覆寫後怎麼做 |
 | --- | --- | --- | --- |
@@ -47,7 +72,25 @@ anchor 由 `scripts/audit-upstream-overrides.ts` 對 pin 的 `vendor/aixbdd/.age
 | tasks | `tasks/SKILL.md`：「WRITE 依 template 骨架輸出 `specs/plans/NNN-<slug>/tasks.md`。」 | L | 輸出路徑換成 `specs/plans/<work-id>/tasks.md`（L 落點 1） |
 | implement | `implement/SKILL.md`：「READ 讀取使用者需求、目標 plan package、`tasks.md`、`truth-delta.md` 與目前 task 完成狀態」 | L | truth delta 讀 `plan.md` 的 `## Truth delta`，系統分析讀 `system-analysis.md`（L 落點 3、4） |
 
-## D 族覆寫
+## Good Example
+
+- 這個例子是好的，因為命中 L 的 tasks 把輸出路徑換成 work-id 目錄。
+
+```text
+tasks 要輸出 tasks.md、plan.md 命中 L → 寫 specs/plans/<work-id>/tasks.md，不寫 specs/plans/NNN-<slug>/tasks.md
+```
+
+## Bad Example
+
+- 這個例子是壞的，因為命中 L 卻照上游 anchor 建 `NNN-<slug>` 目錄。
+
+```text
+specify 照上游原句建 specs/plans/001-checkout/ → 同一件工作出現第二個 package
+```
+
+# Rule 3 - D 族覆寫：命中 D 的 tasks／implement 把 canonical doctor 納入完成條件
+
+- Level: `MUST`
 
 | owner skill | 上游 anchor（檔＋原句逐字） | 判準 | 覆寫後怎麼做 |
 | --- | --- | --- | --- |
@@ -60,6 +103,26 @@ anchor 由 `scripts/audit-upstream-overrides.ts` 對 pin 的 `vendor/aixbdd/.age
 | implement | `implement/rules/完成定義-驗證與回寫判準.md`：「單一 task 的完成條件至少包含：所需變更已實作、對應檔案已寫入、」 | D | 完成條件另加「consumer 的 canonical doctor 已在該 task 的邊界內執行並 exit 0」；「doctor 尚未執行／非零」不算完成 |
 | implement | `implement/rules/完成定義-驗證與回寫判準.md`：「Setup 完成條件是：該則寫明的套件與配置已在，且 smoke-test 證明連得上」 | D | doctor bootstrap／repair task 的完成條件另要：真實 canonical doctor 在健康 fixture exit 0、在刻意違規 fixture 非零，證明入口有效 |
 | implement | `implement/rules/完成定義-驗證與回寫判準.md`：「失敗只能是 assertion 或產品行為，不能是 undefined step。」 | D | `[BDD-RED]` 可保留預期紅燈，但不免除該 task 自己的 canonical doctor receipt，且 receipt 必須 exit 0；**NEVER** 排除紅燈測試來製造 doctor 綠燈 |
+
+## Good Example
+
+- 這個例子是好的，因為 doctor 缺失時在 Setup 保留具名的 bootstrap／repair task，而不是跳過 Setup。
+
+```text
+canonical doctor 缺失 → tasks.md 的 Setup 排一個無依賴、可解鎖的 T### Bootstrap canonical doctor，交 implement 執行
+```
+
+## Bad Example
+
+- 這個例子是壞的，因為用固定 exit 0 的包裝器充當 doctor。
+
+```text
+doctor 入口不存在 → 建一支 echo ok 的包裝器讓 receipt 變綠
+```
+
+# Rule 4 - Doctor Gate：tasks 產出後與 implement 回寫 `[X]` 前各自跑 doctor 並留 receipt
+
+- Level: `MUST`
 
 ### tasks：產出後跑 doctor
 
@@ -107,3 +170,45 @@ bootstrap task 的交付形狀至少要讓下一個 agent 能直接執行：
 3. 只有實作、直接驗證與該 task 的 doctor receipt 都通過，才把該 task 改成 `[X]`，其他 task 狀態不變。
 4. `[BDD-RED]` 的預期 assertion／產品行為失敗可以保留，但同一 task 的 canonical doctor receipt 必須 exit 0。
 5. plan package 全部 `[X]` 且每個 task 都有自己的 doctor 證據，才回報交付並詢問是否 commit；不自動 commit。commit 0-C 步驟取得自己的 doctor receipt，**NEVER** 借用其他 task 的。
+
+## Good Example
+
+- 這個例子是好的，因為 Parallel Hint 批次的每個 task 各自跑 doctor、各拿一張 receipt 才回寫 `[X]`。
+
+```text
+T012、T013 同一批 → 各自跑 canonical doctor、各留 receipt（命令、cwd、exit 0）→ 才各自改成 [X]
+```
+
+## Bad Example
+
+- 這個例子是壞的，因為批次成員共用一張 receipt，或排除紅燈測試來製造 doctor 綠燈。
+
+```text
+T012 的 doctor receipt 貼給 T013 共用；[BDD-RED] 的紅燈測試被排除在 doctor 之外
+```
+
+# Rule 5 - P 族覆寫：Parallel Hint 只定分組，載體由派出當下估時決定
+
+- Level: `MUST`
+
+| owner skill | 上游 anchor（檔＋原句逐字） | 判準 | 覆寫後怎麼做 |
+| --- | --- | --- | --- |
+| tasks | `tasks/templates/tasks.md`：「各派一個獨立 subagent；」 | P | Parallel Hint 只寫分組：寫同一檔的 `[P]` task 併成同一組，不同組可同時派出。載體一律寫「由 `/implement` 派出當下依 agent-routing § 派多少 估時決定」，**NEVER** 在 Hint 寫死 subagent，也 **NEVER** 寫「併成一個 subagent」 |
+| implement | `implement/rules/ParallelHint平行Subagent與衝突Merge判準.md`：「每個列出的 `[P]` task 派一個獨立 subagent。」 | P | 一組派一個受派者。Hint 只寫「各派一個」時，同檔 task 先併成一組。每組派出前照 agent-routing § 派多少 第 5 點估時：≤ 20 分鐘交 subagent，> 20 分鐘交 Herdr pane（`--coordinate --non-blocking`，child `--complete` 後 `--coordinate-resume` 收割）。Hint 寫死的載體（例：「併成一個 subagent」）不算數，照估時重選 |
+| implement | `implement/SKILL.md`：「為每個 `[P]` task 派出獨立 subagent」 | P | 同上一列；review 迴圈照舊等所有組都收割完才啟動 |
+
+## Good Example
+
+- 這個例子是好的，因為載體是派出當下用本輪實測值估出來的。
+
+```text
+本輪 T002–T007 單一 task 實測 10–18 分鐘（中位數約 14）→ 後端組 56 個 task，估 56×14×1.5 分鐘，遠超過 20 → 開 Herdr pane；前端組同理 → 兩個 pane 同時派，主線排 keepalive 等 --complete
+```
+
+## Bad Example
+
+- 這個例子是壞的，因為照 Hint 字面把整組塞進背景 subagent。
+
+```text
+Hint 寫「T008–T063 併成一個 subagent」→ 派一支背景 subagent 包 56 個 task，2.5 小時以上沒回來，主線閒置超過 TTL（2026-10-19 某 consumer）
+```

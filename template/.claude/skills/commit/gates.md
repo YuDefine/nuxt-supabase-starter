@@ -255,8 +255,15 @@ Tier 3 判定：migration / schema / auth / permission / RLS / raw SQL / billing
 任一類別命中就觸發；純 docs、一般業務邏輯與非敏感重構跳過。本判定涵蓋本次 `/commit` 的
 **每一個** changed path，不只主線 agent 自己改的檔。Unattended merge **不**偷換 scanner、**不**略過本 gate；0-S.2 無法執行時 gate 保持未完成，缺能力仍 block。
 
-觸發後依序跑 **0-S.1 → 0-S.2**，兩層都在本機十秒級內結束。
-**NEVER** 在 pre-commit 啟動 Codex Security——理由、實證與它的兩個合法用法在 § 0-S.3。
+觸發後依序跑 **0-S.1 → 0-S.2**：0-S.1 是秒級的確定性掃描，0-S.2 是分鐘級的 `/security-review`，兩層都在本機跑、不花外部配額。
+**NEVER** 在 pre-commit 啟動 0-S.3 掃描器——理由與合法用法在 § 0-S.3。
+
+security-guidance plugin（SG）在背景對編輯與 `git commit`／`git push` 做 advisory review，**不是** 0-S 的一層：
+SG 沒出聲 **≠** 0-S 通過，Tier 3 命中照樣跑 0-S.1 與 0-S.2。SG 回報的 finding 與 0-S.2 的一樣，**MUST** 先走
+`security-evidence finding` 判讀再決定修不修，**NEVER** 看到 High 就直接改 code。
+
+上線前或事件驅動的深度稽核（claude-security plugin 的 Scan codebase）不在 commit 路徑：誰能發起、從哪條主線發起，
+見 `agent-routing.routing-table.md`〔`deep-security-audit`〕；**NEVER** 在 `/commit` 內點火，也 **NEVER** 拿它代替 0-S 或 0-A。
 
 ### 0-S.1 確定性掃描（秒級，缺工具不擋）
 
@@ -288,35 +295,17 @@ High / Critical finding → 停止本次 commit。每一條 **MUST** 先走 `sec
 `needs more validation` 才登記 follow-up（有 `specs/truth/work-lifecycle.md` 的 repo 寫 plan Open work，未遷移 consumer 才登 TD）並修；`unsupported` 記進 report 不修。
 **NEVER** 看到 High 標籤就直接改 code。
 
-### 0-S.3 Codex Security：**NEVER** 在 pre-commit
+### 0-S.3 Claude 安全掃描：**NEVER** 在 pre-commit
 
-它的範圍不由呼叫端決定。`working-tree` 模式的 `--paths-file` 只用來建私有快照
-（`scripts/security-scan.ts:310`），傳給 scanner 的參數只有 `--working-tree`（`:657`），
-範圍靠 scanner 自己去 diff 那個快照。推導成功就跑得完，失敗就是整個 repo，
-而 `--max-cost` 只能讓它在燒完錢時停下、不能讓它少做事。
+`scripts/security-scan.ts`（headless Claude Code，預設 Claude Opus 5.5 medium）對**呼叫端給定的檔案清單**
+做較深的安全掃描：`path --path …`、`working-tree --paths-file …`、`diff --base <parent> --head <commit>`。
+它是 operator 明確執行的補掃與歷史補掃工具，不在 commit 路徑上：0-S.1／0-S.2 已是本 gate 的 hard 層，
+多一趟分鐘級、要花帳號額度的掃描不換來 commit 當下需要的判定。
 
-2026-09-07 fleet ledger 實測，41 次掃描成功 2 次：
+Codex Security（2026-09-07 fleet 實測 41 次只成功 2 次、分母不收斂）隨 Codex 訂閱 2026-10-08 到期退場，
+`baseline`／`hook`／`setup`／`preflight`／`verify` 模式一律拒跑。
 
-| 觀察 | 數字 |
-| --- | --- |
-| clade 唯一成功（分母收斂到 5） | 37m05s / $24.58 / 31.4M input token / 0 findings |
-| 另一個 consumer（分母沒收斂：14 檔請求 → 6,330） | $15 只推進 22/6,330，線性外推整個 repo ≈ $4,300 USD |
-| 兩個 consumer 合計 | 16 次，0 次成功 |
-
-**NEVER** 用「拉高 `--max-cost`」或「改排在 nightly」處理跑不完——兩者都建立在
-「成本可預估」的前提上，而分母沒收斂時那個前提不成立。
-
-它剩下兩個合法用法，**都不在 commit 路徑上**：
-
-- `path --path <relative> [--path ...]`：唯一真的把範圍交給呼叫端的模式
-  （`:645-647` 直接傳 `--path`，不建快照）。2026-09-07 實跑 `preflight (0/2 files)`，
-  分母就是請求的檔數。
-- `baseline`：由 operator 明確執行的完整 repository 掃描，
-  `node "$CLADE_ROOT/scripts/security-scan.ts" baseline --target <repo> --max-cost <見 security-scan.md>`。
-  它不會因一般 commit 自動啟動，也不由 path scan 冒充。
-
-兩者的 exit 分流、`failure_class` 放行契約與 `--max-cost` 怎麼給，見
-[security-scan.md](security-scan.md)。
+exit 分流、`failure_class` 診斷（無放行路徑）與 `--max-cost` 怎麼給，見 [security-scan.md](security-scan.md)。
 
 Git pre-commit hook 只跑快速 LOCKED drift check。
 
@@ -399,25 +388,60 @@ bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" prepare medium
 2. subagent 回來後跑 `FINALIZE` 那一行。它從本 session 的 subagent transcript 核對 nonce 歸屬、agent type、每則 assistant 的 observed model 與 effort、唯讀工具面、brief 是否逐行讀完；effort 缺席或非 medium 時 exit 8、扣住 verdict。
 3. **verdict 只來自 finalize 的 stdout。** subagent 的回覆是它交給 finalize 的原料，**NEVER** 由主線轉述、摘錄或拼接成 verdict——主線是受審改動的 producer。
 
-exit code 與 Herdr carrier 同一張表（下表各列照用；4／10／11 是帳號與巢狀派工的結論，subagent carrier 不會產生）。`finalize` 回 exit 3 且 RESULT 寫「WORK_DIR 保留」＝還沒派 subagent 就跑了 finalize，補派後重跑同一行即可；其餘 exit 3 是 reviewer 沒跑完或沒讀完 brief，重跑 `prepare` 拿新 nonce 再派。
 
 **使用該 CLI 前 MUST 完整讀 [runner-safety.md](runner-safety.md)**；`COMMIT_RESOURCE_DIR` 的取得方式與依賴檢查見 runtime-lifecycle。其他載體同樣要提供完整 snapshot、唯讀／隔離、真實 identity、完整 verdict 與對應來源。工具白名單不受底層 runtime 執行時，必須由核准的 OS 隔離承接，不能只相信參數名字。
 
-| 實際結果 | 動作 |
-| --- | --- |
-| 啟動／等待中 | 記錄 handle 與 owner，透過本端完成事件或 bounded wait 收回同一工作；並行推進其他軸，不能重播命令代替等待 |
-| 配額耗盡／reviewer 沒跑成（exit 4 account_unavailable，stderr 的 `NEXT_STEP_JSON:` 行是它的可機讀版；或 exit 3 review 未跑成） | 保留逐字 RESULT 行與 exit code 作為不可用證據——沒有備援席，gate 保持未完成並記錄 pending review，NEVER 用其他模型或主線自審補位。exit 11（account_unverifiable）是「量不到」不是「耗盡」：wrapper 的 RESULT／NEXT 行會印出 receipt 路徑與 `retry_after_ms`（有的話）——receipt **不帶** `retry_after_ms`＝沒有 ETA，交 coordinator 決定而不是自行腦補時間；有 ETA 則依它重試。也 NEVER 讀成 account_unavailable。exit 2／6 **不是**不可用，照各自原因修正後重跑 |
-| exit 12（Claude Code runtime 以無子命令呼叫 wrapper，本地拒絕 Herdr carrier） | 不是 reviewer 不可用，NEVER 判 gate pending：改走 `prepare` → 逐字照 `AGENT_CALL` 呼叫 `Agent` → `FINALIZE`。呼叫端其實不是 Claude Code（例如從 Claude Bash 起、繼承了 `CLAUDE_CODE_SESSION_ID` 的 codex exec）時，以 `env -u CLAUDE_CODE_SESSION_ID` 呼叫改走 Herdr carrier |
-| exit 10（helper `nested_dispatch_refused`：本 session 不得開 reviewer child） | 不是 reviewer 不可用，NEVER 判 gate pending：把 0-A 交回 coordinator 代跑，gate 保持未完成直到拿回帶 receipt 的 verdict。**NEVER** 改走 headless `claude -p`——無 receipt 的 verdict 不得當 gate 證據（[review-policy.md](review-policy.md)） |
-| exit 8（`model_verification` 有界重讀後仍 `unverified`，或 `mismatch`） | 身分歸屬不成立：verdict 扣住不採，gate 保持未完成並記錄 pending review；receipt 的 `model_verification_reason` 區分「無法核實」與「核實不符」，NEVER 把 unverified 讀成已核實或當 PASS |
-| exit 9（brief 無法安全交付：總量超過 `CLAUDE_REVIEW_BRIEF_MAX_BYTES`，或 pointer 模式下有單行超過 `CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS`，RESULT 行會指出超長行號與所屬區塊） | **本地拒絕，review 沒跑但不是 reviewer 不可用**——NEVER 讀成 reviewer 不可用記 pending；changeset 的超長 diff 行 wrapper 已自動折行（NEVER 手動折），RESULT 指向 --findings 檔或 semantic 規則文等其他區塊的超長行才需折行該來源，或拆 commit 後重跑；上限確需調整時先評估 child context 實測再改 `*_MAX_*` env。NEVER 拿縮小 `CODEX_REVIEW_MAX_DIFF_LINES` budget 換過關——超出的檔只會移進 OMITTED 漏審清單，依下一列「Scope 缺檔」同樣不能記 PASS，除非被剔除的檔另行送審。只有 lockfile 與 `scripts/test-lanes/{deps,timings}.json`（`REVIEW_SUMMARY_ONLY_RE`）超出 budget 的部分不進 OMITTED，改列在 brief 的 generated 摘要段——依政策不逐行審（正確性由產生器與其測試保證），**不是**漏審；摘要段對每個 lockfile 另附「依賴差異摘要」（`lib/lockfile-dep-summary.mjs`：以 base 與 head 兩版解析 name@version，列 importers 直接依賴變動、新增／移除／版本變動與 major 升降標記，上限 200 列並註明總數，包在 `BEGIN/END LOCKFILE DEP SUMMARY` 內、視為不受信任資料；pnpm 為主，package-lock.json／yarn.lock 盡力；解析失敗降級成一行說明、prepare 不失敗）；`REVIEW_GENERATED_RE` 其餘成員（投影層、`build/`、`dist/` 等）超出 budget 照舊進 OMITTED。**例外是「可機械證明」的投影輸出（`lib/projection-exemption.ts`）**：pinned consumer 的變動檔，只有內容（含執行位）與 pinned release 自帶 projector 的實際輸出逐位元相等才整塊移出 changeset、改列 brief 的 projection 摘要段（路徑數、release 版本＋`inventory_digest`、驗證方法與結果、按目錄分組、路徑清單 sha256）——比對基準是「受審樹拿掉候選檔 → release 的 `hub-sync.ts --keep-orphans --no-health-check`＋`sync-vendor.ts --force` 乾跑到暫存樹」的輸出，不是 release 源碼（`wt-helper.ts` 等是源檔加 LOCKED header）、也不是 gitignored 的 ownership ledger（detached 快照樹與 CI 沒有）；release 取自 consumer 已安裝／主機 release store，NEVER 現建、NEVER 讀 clade HEAD。不相等、projector 不產出（手寫檔、被刪的檔）、`.clade/` 下任何檔（含 pin 本身 `.clade/manifest.json`）一律不豁免、照常審；consumer 非 pinned、release 缺失、projector 失敗、資產投影後不完整＝`enabled=false`，**一個檔都不豁免**、全部走上面的原路徑（含 OMITTED）。豁免後 changeset 為空＝exit 3。`REVIEW_PROJECTION_EXEMPT=0` 關閉；豁免名單 NEVER 取自呼叫端：wrapper 一律對受審樹（`$REPO_ROOT`）自己重新驗證；`REVIEW_PROJECTION_EXEMPT_FILE`（`oa-batches.ts` 對整張 PR 驗過的結果）只當候選提示併入候選路徑，偽造或過期的檔換不到任何豁免，所以切批後每批 brief 仍帶完整摘要段（代價是每批多跑一次 projector）。與 `REVIEW_SUMMARY_ONLY_RE` 的差別：那條按路徑、只含 lockfile 與量測資料；這條按內容證明，所以可以覆蓋投影層而不會把手寫內容當成審過。刪除檔（含驗證輪的增量）只嵌 `deleted file mode` 檔頭。放得進剩餘 budget 的產生檔仍整段嵌入、照樣計入 `CLAUDE_REVIEW_BRIEF_MAX_BYTES` 與單行長度上限 |
-| Scope 缺檔／截斷、缺 verdict／Semantic Verdict id、workspace 綁定失敗 | 對應範圍未被完整 review；修復取證後再執行，不能記 PASS |
-| Snapshot 漂移／不明 mutation | 先查具體 diff 與歸屬；已確認為合法並行工作可移至隔離 fixture 後重跑，不明或非預期 mutation 保留現場並處理授權，不自動覆寫 |
-| exit 13（輪數 ledger：此內容已有 verdict，或上一輪通過且之後的增量未達重驗門檻） | 不是 reviewer 不可用：RESULT 行是「不需再審」→ 0-A 證據沿用它指名的那一輪，照常推進；RESULT 行是「已審過且有 Critical／Major」→ 0-A 未通過，修完換內容再審（同內容重擲不產生新證據） |
-| exit 14（輪數上限：同一份改動第 6 輪） | review 沒跑、gate 未完成：拆成可獨立驗收的範圍，或把最後一輪 verdict 交人判；NEVER 刪改 ledger、換 branch 或 rebase 重置輪數 |
-| 完整結果，無 issue | 0-A.1 通過，0-A.2 不觸發 |
-| 只有 Minor／Info | 逐項修復並驗證，0-A.2 不觸發 |
-| 含 Critical／Major | 逐項修復後進 0-A.2；修法本身是新的受審範圍 |
+0-A 的 exit code 與結果處置只有這一份（`review-policy.md`、`runner-safety.md` 只指向這裡）。subagent carrier 與 Herdr carrier 共用本表；A2、A3、A4 是帳號與巢狀派工的結論，subagent carrier 不會產生。
+
+評估：first-match；以上皆非 → A*
+
+| id | 實際結果 | 動作 |
+| --- | --- | --- |
+| A0 | 啟動／等待中 | 記錄 handle 與 owner，等本端完成事件收回同一工作 [^A0] |
+| A1 | exit 12（Claude Code runtime 無子命令呼叫 wrapper） | 改走 `prepare` → 逐字 `AGENT_CALL` → `FINALIZE` [^A1] |
+| A2 | exit 10（helper `nested_dispatch_refused`） | 0-A 交回 coordinator 代跑，gate 未完成 [^A2] |
+| A3 | exit 4（`account_unavailable`），或 Herdr carrier exit 3（review 沒跑成） | gate 未完成，記 pending review，保留 RESULT 行 [^A3] |
+| A4 | exit 11（`account_unverifiable`） | receipt 有 `retry_after_ms` 依它重試，沒有交 coordinator [^A4] |
+| A5 | subagent carrier 的 `finalize` exit 3，RESULT 寫「WORK_DIR 保留」 | 補派 subagent，重跑同一行 `FINALIZE` [^A5] |
+| A6 | subagent carrier 的 `finalize` exit 3，其他 RESULT | 重跑 `prepare` 拿新 nonce 再派 [^A6] |
+| A8 | exit 8（`model_verification` 為 `unverified`／`mismatch`） | verdict 扣住，gate 未完成，記 pending review [^A8] |
+| A9 | exit 9（brief 無法安全交付） | 依 RESULT 指的區塊折行該來源或拆 commit 後重跑 [^A9] |
+| A10 | exit 6（review 期間 working tree 被改動） | 讀 stderr 歸因 → `runner-safety.md` § exit 6 |
+| A11 | exit 2（本地用法／依賴錯誤） | 照 RESULT 修正後重跑 |
+| A12 | exit 13，RESULT「不需再審」 | 0-A 證據沿用它指名的那一輪，照常推進 |
+| A13 | exit 13，RESULT「已審過且有 Critical／Major」 | 0-A 未通過；修完換內容再審 [^A13] |
+| A14 | exit 14（同一份改動第 6 輪） | 拆成可獨立驗收的範圍，或把最後一輪 verdict 交人判 [^A14] |
+| A15 | Scope 缺檔／截斷、缺 verdict／Semantic Verdict id、workspace 綁定失敗 | 修復取證後重跑，不記 PASS |
+| A16 | Snapshot 漂移／不明 mutation | 查具體 diff 與歸屬後再定 [^A16] |
+| A17 | 完整結果，無 issue | 0-A.1 通過，0-A.2 不觸發 |
+| A18 | 只有 Minor／Info | 逐項修復並驗證，0-A.2 不觸發 |
+| A19 | 含 Critical／Major | 逐項修復後進 0-A.2 [^A19] |
+| A* | 其他 exit、RESULT 讀不出 | gate 未完成，STOP 回報 RESULT 行與 exit code |
+
+[^A0]: 並行推進其他軸，不能重播命令代替等待。
+[^A1]: 不是 reviewer 不可用。呼叫端其實不是 Claude Code（例如從 Claude Bash 起、繼承了 `CLAUDE_CODE_SESSION_ID` 的其他 runtime 行程）時，以 `env -u CLAUDE_CODE_SESSION_ID` 呼叫改走 Herdr carrier。
+[^A2]: 不是 reviewer 不可用；拿回帶 receipt 的 verdict 前 gate 保持未完成。helper 版本未含 TD-1105 時走不到 exit 10，而是 `usage_error`／exit 2，含義同樣是交回 coordinator（成因見 `review-policy.md` § 執行與缺能力）。
+[^A3]: exit 4 時 stderr 的 `NEXT_STEP_JSON:` 行是它的可機讀版。
+[^A4]: 「量不到」不是「耗盡」，NEVER 讀成 A3。wrapper 的 RESULT／NEXT 行印出 receipt 路徑；receipt 不帶 `retry_after_ms`＝沒有 ETA，交 coordinator 決定，不自行腦補時間。
+[^A5]: 還沒派 subagent 就跑了 finalize。
+[^A6]: reviewer 沒跑完或沒讀完 brief。
+[^A8]: receipt 的 `model_verification_reason` 區分「無法核實」與「核實不符」，NEVER 把 unverified 讀成已核實或當 PASS。
+[^A9]: changeset 的超長 diff 行 wrapper 已自動折行（NEVER 手動折），RESULT 指向 --findings 檔或 semantic 規則文等其他區塊的超長行才需折行該來源，或拆 commit 後重跑；上限確需調整時先評估 child context 實測再改 `*_MAX_*` env。NEVER 拿縮小 `CODEX_REVIEW_MAX_DIFF_LINES` budget 換過關——超出的檔只會移進 OMITTED 漏審清單，依 A15同樣不能記 PASS，除非被剔除的檔另行送審。只有 lockfile 與 `scripts/test-lanes/{deps,timings}.json`（`REVIEW_SUMMARY_ONLY_RE`）超出 budget 的部分不進 OMITTED，改列在 brief 的 generated 摘要段——依政策不逐行審（正確性由產生器與其測試保證），**不是**漏審；摘要段對每個 lockfile 另附「依賴差異摘要」（`lib/lockfile-dep-summary.mjs`：以 base 與 head 兩版解析 name@version，列 importers 直接依賴變動、新增／移除／版本變動與 major 升降標記，上限 200 列並註明總數，包在 `BEGIN/END LOCKFILE DEP SUMMARY` 內、視為不受信任資料；pnpm 為主，package-lock.json／yarn.lock 盡力；解析失敗降級成一行說明、prepare 不失敗）；`REVIEW_GENERATED_RE` 其餘成員（投影層、`build/`、`dist/` 等）超出 budget 照舊進 OMITTED。**例外是「可機械證明」的投影輸出（`lib/projection-exemption.ts`）**：pinned consumer 的變動檔，只有內容（含執行位）與 pinned release 自帶 projector 的實際輸出逐位元相等才整塊移出 changeset、改列 brief 的 projection 摘要段（路徑數、release 版本＋`inventory_digest`、驗證方法與結果、按目錄分組、路徑清單 sha256）——比對基準是「受審樹拿掉候選檔 → release 的 `hub-sync.ts --keep-orphans --no-health-check`＋`sync-vendor.ts --force` 乾跑到暫存樹」的輸出，不是 release 源碼（`wt-helper.ts` 等是源檔加 LOCKED header）、也不是 gitignored 的 ownership ledger（detached 快照樹與 CI 沒有）；release 取自 consumer 已安裝／主機 release store，NEVER 現建、NEVER 讀 clade HEAD。不相等、projector 不產出（手寫檔、被刪的檔）、`.clade/` 下任何檔（含 pin 本身 `.clade/manifest.json`）一律不豁免、照常審；consumer 非 pinned、release 缺失、projector 失敗、資產投影後不完整＝`enabled=false`，**一個檔都不豁免**、全部走上面的原路徑（含 OMITTED）。豁免後 changeset 為空＝exit 3。`REVIEW_PROJECTION_EXEMPT=0` 關閉；豁免名單 NEVER 取自呼叫端：wrapper 一律對受審樹（`$REPO_ROOT`）自己重新驗證；`REVIEW_PROJECTION_EXEMPT_FILE`（`oa-batches.ts` 對整張 PR 驗過的結果）只當候選提示併入候選路徑，偽造或過期的檔換不到任何豁免，所以切批後每批 brief 仍帶完整摘要段（代價是每批多跑一次 projector）。與 `REVIEW_SUMMARY_ONLY_RE` 的差別：那條按路徑、只含 lockfile 與量測資料；這條按內容證明，所以可以覆蓋投影層而不會把手寫內容當成審過。刪除檔（含驗證輪的增量）只嵌 `deleted file mode` 檔頭。放得進剩餘 budget 的產生檔仍整段嵌入、照樣計入 `CLAUDE_REVIEW_BRIEF_MAX_BYTES` 與單行長度上限
+[^A13]: 同內容重擲不產生新證據。
+[^A14]: review 沒跑、gate 未完成。NEVER 刪改 ledger、換 branch 或 rebase 重置輪數。
+[^A16]: 已確認為合法並行工作可移至隔離 fixture 後重跑；不明或非預期 mutation 保留現場並處理授權，不自動覆寫。
+[^A19]: 修法本身是新的受審範圍。
+
+不論命中哪一列，下表每條都要遵守：
+
+評估：all-match（逐條檢查，命中就套用）
+
+| id | 條件 | 約束 |
+| --- | --- | --- |
+| AC1 | A3、A4、A8 | **NEVER** 用其他模型、另一個 fresh agent 或主線自審補位 |
+| AC2 | A1、A2、A9、A10、A11、A12 | **NEVER** 讀成 reviewer 不可用而記 pending |
+| AC3 | 任何一列 | **NEVER** 改走 headless `claude -p`，無 receipt 的 verdict 不得當 gate 證據 |
+| AC4 | 任何一列 | Cloud CI success、worker 或 Charles 代簽都不代替 0-A |
 
 **Severity 以 reviewer 的輸出為準，NEVER 由主線自行降級來避開 0-A.2。** 缺少完整 `## Semantic Verdict` 表或適用 id 時，review 未完成。宣告通過須附實際 reviewer 與 snapshot／結果指標，不用預設模型名字填模板。
 
@@ -490,10 +514,32 @@ node "$COMMIT_RESOURCE_DIR/scripts/0a-metrics.mjs" record \
   --diff-lines <行數> --diff-files <檔數> \
   --critical N --major N --minor N --info N \
   --a2 <true|false> --dismissed N --dismissed-unsubstantiated N \
+  --fixed <severity>=N,… --wrong <severity>=N,… \
+  --intentional <severity>=N,… --didnt-matter <severity>=N,… \
   --screenshot <pass|skip> --doc <aligned|skip>
 ```
 
 Fast-path 不填未執行的 reviewer；`escalated` 的 `--reviewer` 記實際跑 0-A.2 深度 review 者（Opus 5.5 medium）。`--dismissed-unsubstantiated` 是反證不足被保留為 real issue 的條數。`blocked` 記「gate 觸發但因外部原因沒跑完」（如 Opus reviewer 配額耗盡）：MUST 提供非空 `--blocked-reason`，`--reviewer` 可省，findings 記已觀察到的部分——pending review 要留遙測記錄，不能整筆消失。Recorder 的參數檢查不證明 review 真有執行，須同時保留各軸原始 receipt；參數矛盾時修正流程或記錄，不能填假值讓它通過。舊 `--codex` CLI／歷史記錄是相容資料，不要求新入口冒充該模型組合；含 `+fable` 的舊 mode 與 `--adjudicator`／`--a2-deferral-*` 參數已退役，CLI 會拒收。
+
+**作者回應四分類**（`--fixed`／`--wrong`／`--intentional`／`--didnt-matter`）：findings 非 0 時 **MUST** 帶，在本匯合點記——此時修復、0-A.2 dismissal 與裁決都已定案。值是 `<severity>=N` 以逗號串接（省略的 severity 為 0）；每個 severity 的四類加總必須等於該 severity 的 finding 數，recorder 不符就拒收。分類記的是**作者對該則 finding 的判斷**，不是處置：本表不改上方結果表的處置，照修的 finding 仍照修。**每一則** finding 依下表判定：
+
+評估：first-match；以上皆非 → R*
+
+| id | 可觀察 predicate | 類別 |
+| --- | --- | --- |
+| R1 | 該則 Major 在輪數 ledger 有 `rounds adjudicate --verdict false-positive` 紀錄（`rounds findings` 列出的同一指紋）；或 0-A.2 對它出了 `DISMISSED — 反證` 且反證已驗過；或 Critical 以外、ledger 收不進裁決的 finding（Minor／Info），作者在回報附了 `<file>:<line>` 或契約出處的反證 | `wrong` |
+| R2 | 作者在回報或 commit message 說明這是刻意的設計，並指出意圖的出處（spec、程式註解、決策紀錄） | `intentional` |
+| R3 | 作者明說這則成立但不值得修（照政策修了也一樣記這類），或三類分流判為**純舊碼**、已登記 TD／HANDOFF 延後；且理由不是前兩類 | `didnt-matter` |
+| R4 | 本次改動依該則 finding 做了修改 | `fixed` |
+| R* | 以上皆非 | 不帶分類（recorder 記「未記錄」），回報中列出該則 |
+
+`wrong` 只認 R1 的證據：已驗反證的 dismissal 一定歸 `wrong`，所以 `--wrong` 總數不得少於 `dismissed − dismissed-unsubstantiated`（recorder 會拒收）；主線覺得 reviewer 錯了但沒有裁決紀錄或反證，**NEVER** 記 `wrong`。四類都不帶的列記為「未記錄」，`summary` 單獨計數、不算進比例；findings 非 0 卻沒帶時 recorder 照收但在 stderr 警告——相容舊呼叫端，不代表可以省略。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | informational — 不觸發任何東西 |
+| 消費端 | `W-2026-10-18-review-quality-loop` S4（Minor／Info 政策重評）讀 `summary` 的依 severity 分布，分出 reviewer 是報錯（`wrong`）還是報了沒價值的東西（`didnt-matter`，含判為純舊碼延後的）。分類記判斷不記處置，`fixed` 不等於實際修掉的件數（照政策修了的 `didnt-matter`／`intentional` 也有改） |
+| 觸發點 | 本節的 record 步驟（commit skill `gates.md` § 0-A/B/C/D 並行匯合，每次 0-A 必讀） |
 
 本地 `.clade/0a-metrics.jsonl` 是閾值評估依據；`summary` 的歷史數據與本次結果分開。Fast-path 與大改動門檻的變更需據分佈判定，不憑單次觀感調整。
 
@@ -602,7 +648,7 @@ printf '%s\0' "${CHANGED[@]}" | grep -zE '(^|/)DESIGN\.md$' || true
 
 **不觸發**：純 `<script>` / `<style>` 微調、composable / store / API 純邏輯、測試、文件、設定檔、單純重構不影響視覺輸出。
 
-**Dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，確認真實圖片存取、視覺品質資格、fresh context 與可用載體；brief 帶完整 item、截圖、互動證據與 0-B.1 的 (a)(b) 輸出，依本檔 native 操作段執行。取證走 `screenshot-review-verify` Gemini 3.8 Flash high；Design Review 與截圖符合性由 fresh Claude Opus 5.5（effort: medium） 讀實際圖片後完成。取證與判定分開 dispatch；兩列無 fallback，Opus 5.5 無法執行時帶實際原因保留 0-B.2 未完成——主線是 maker，**NEVER** 主線自判或換其他模型補位（review-policy.md）。
+**Dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，確認真實圖片存取、視覺品質資格、fresh context 與可用載體；brief 帶完整 item、截圖、互動證據與 0-B.1 的 (a)(b) 輸出，依本檔 native 操作段執行。取證走 `screenshot-review-verify`（載體 `dispatch-fallback`，Claude Opus 5.5（effort: low））；Design Review 與截圖符合性由 fresh Claude Opus 5.5（effort: medium） 讀實際圖片後完成。取證與判定分開 dispatch；兩列無 fallback，Opus 5.5 無法執行時帶實際原因保留 0-B.2 未完成——主線是 maker，**NEVER** 主線自判或換其他模型補位（review-policy.md）。
 
 **並行啟動**：有真實並行載體時，0-A.1 啟動後同回合啟動已觸發的 0-B.2；收回 findings 後與 0-A.1／0-C 匯合修正。缺並行能力時依 review-policy 記錄同步載體限制，不略過視覺 gate。
 
@@ -1006,7 +1052,7 @@ git add evlog.map.json
 
 ### 紀律禁止項
 
-- **NEVER** 用 `// evlog-map-disable-next-line` 讓 gate 轉綠而不寫理由 —— disable 是登記豁免，不是過 gate 的手段；gate 的第三條判定就是為了擋這個
+- **NEVER** 用 `// evlog-map-disable-next-line` 讓 gate 轉綠而不寫理由 —— disable 是登記豁免，不是過 gate 的手段；strict 的「零 suppression」判定就是為了擋這個
 - **NEVER** 以「這個 gap 是既有的、非本次 diff 引入」跳過 —— strict 判定看的是**整個 repo**，既有 gap 同樣要補。「不是我引入的」不是出路
 - **NEVER** 為了讓 commit 過去而把 `--mode` 降回 `ratchet` —— 降級是 repo 級決策，MUST 先登記 TD 並讓 user 拍板，不是單次 commit 的逃生門
 - **NEVER** 手改 `evlog.map.json` 讓分數對得上 —— baseline MUST 由 `npx evlog map` 重新產生

@@ -1,9 +1,9 @@
 ---
 description: Commit 全文規約（gate 清單、Single Session Lock、WIP 處置決策樹、main worktree 預設位置、ad-hoc `git commit --only` 紀律與 Verify / Recovery、路徑白名單、trunk hard gate、Stash 自動處置 gate、分組與訊息規範、Tag 位置 release hard gate）；always-load 的薄 pointer 在 [[commit]]，觸發時機是「下任何 git commit / git add / git stash / git tag / git push --tags / git push origin v<版本> / /commit 之前」，由 [[commit]] 的 MUST-Read 指針叫醒
-paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**', '.clade/work-loop/**']
+paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**']
 ---
 <!-- Clade native rule; source: rules/core/commit.detail.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Commit（全文）
 
@@ -17,7 +17,7 @@ paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**', '.clade/work-loop/**']
 
 - **0-A** 程式碼審查：simplify 序跑第一，再執行獨立 review；唯一合格 reviewer 是 fresh-context Claude Opus 5.5（effort: medium）（`code-review-opus` 列；Claude Code 主線跑 `claude-review-safe.sh prepare medium` → AGENT_CALL → FINALIZE），Critical／Major 條件觸發同一席的 fresh-context 深度複審（0-A.2）；修正由主線匯合後執行。Reviewer 品質、transport／隔離與配額處置依 commit skill `gates.md` § 0-A 的同一份政策；fresh context 與模型資格分開驗證。**沒有備援席**（Charles 2026-09-24：Astra、Fable 禁用）：Opus 額度耗盡或 reviewer／隔離能力不可用時，保留未達成及待補範圍，主線自審或其他模型補位都不算該 gate 通過。receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。
   **NEVER** 以「既有問題」「不在本次 scope」「建議性質」靜默跳過 review finding；依同一份 0-A 政策逐條處置、記錄裁決與未達 gate。
-- **0-B** UI Design Review（條件觸發）：`.vue` 模板 + 頁面/元件/佈局/互動/樣式變更時由 Gemini 3.8 Flash 收截圖，再由 Opus 5.5 做 Design Review
+- **0-B** UI Design Review（條件觸發）：`.vue` 模板 + 頁面/元件/佈局/互動/樣式變更時由 `screenshot-review-verify` 列的載體（`dispatch-fallback`，Claude Opus 5.5（effort: low）；Pi Grok 2026-10-21 退場）收截圖，再由 Opus 5.5 做 Design Review
 - **0-C** format / lint / typecheck / test / doctor 全綠：執行 check 後無條件跑明確的 test command，不由 script 名稱猜測覆蓋；`scripts.doctor` **必裝**（缺裝 = block commit）。命令與格式檢查的處置依 skill `gates.md` § 0-C。
 - **0-D** Doc Alignment（條件觸發）：diff 觸及 docs / rules / snippets / audit script / 業務碼 / bug fix 時，檢查 cross-ref / 路徑引用 / pitfall status / 三方受眾文件忠實度（含 VitePress sidebar）四面向
 - **0-E** evlog map 覆蓋率（條件觸發）：diff 觸及 entry point（`server/{api,routes,middleware,tasks}/` / pages / Next route handler）時跑 gate；`@evlog/cli` **必裝**（缺裝 = block commit，比照 doctor）。判定是 **strict：整個 repo 的每一個 entry point 零失敗 check、零 suppression**，**不是**只看本次 diff 觸及的那幾個 —— 既有 gap 一律要補
@@ -30,7 +30,7 @@ paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**', '.clade/work-loop/**']
 
 ## Single Session Lock
 
-**同時只能有一個 session 跑 `/commit`**。兩端共用 `.claude/scripts/commit-lock.mjs` 與相容鎖路徑 `.claude/.commit.lock`；路徑不表示持有者必為 Claude。**Step 0-Lock MUST 先讀 commit skill 的 `runtime-lifecycle.md` 全文**，以明確 work／runtime／session 取得 owner token；各 gate 邊界與 Git mutation 前續持，退出時先收回會寫入的背景工作，再以原 tuple 與 token 釋放。
+**同時只能有一個 session 跑 `/commit`**。各 runtime 共用 `.claude/scripts/commit-lock.mjs` 與相容鎖路徑 `.claude/.commit.lock`；路徑不表示持有者必為 Claude。**Step 0-Lock MUST 先讀 commit skill 的 `runtime-lifecycle.md` 全文**，以明確 work／runtime／session 取得 owner token；各 gate 邊界與 Git mutation 前續持，退出時先收回會寫入的背景工作，再以原 tuple 與 token 釋放。
 
 鎖的年齡、失聯或 CLI PID 消失只供診斷，不自動授權接管。重入須匹配原 owner；恢復須確認原 ceremony 已結束、有恢復授權，並核對精確 lock snapshot。缺身分、token、能力或證據時保留現況與 blocker，**NEVER** 自行 `rm` 鎖檔。互斥不替代以下 WIP、品質或發版 gate。
 
@@ -195,7 +195,7 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 撞到 mixed commit / commit scope drift（`git show --stat HEAD` 含預期外 file）後，agent **MUST**：
 
 1. **STOP + 列現狀**（動 git history 前先看清楚：`git log` / `git reflog` / 活躍 session 偵測 / `git stash list`）
-2. **持有者是前景 agent session，且已授權協調並有可用通道 → MUST 先對話再拍板**：送達精確 session，詢問該筆 commit 的範圍與接手意願。對方是 Claude session 時用 `SendMessage`（`ListAgents` 取名稱，送「<四項>」）；非 Claude runtime 且 Herdr 已驗證可用時才用 `herdr agent prompt <對方 pane_id> "<四項>"`。**這一步排在下一步之前**；持有者是 unattended runner、身分不明、缺通道或缺本次協調授權時，保留原因，不假裝已送達。逐字範本見 `vendor/snippets/concurrent-session-probe/README.md` § 探測之後：協商（negotiate）
+2. **持有者是前景 agent session，且已授權協調並有可用通道 → MUST 先對話再拍板**：送達精確 session，詢問該筆 commit 的範圍與接手意願。對方是 Claude session 時用 `SendMessage`（`ListAgents` 取名稱，送「<四項>」）；非 Claude runtime 且 Herdr 已驗證可用時才用 `herdr agent prompt <對方 pane_id> "<四項>"`。**這一步排在下一步之前**；持有者是 unattended runner、身分不明、缺通道或缺本次協調授權時，保留原因，不假裝已送達。逐字範本見 `vendor/snippets/concurrent-session-probe/README.md` § 探測之後：協商（negotiate）；對方回「正要 land」時先過 cookbook `[0]` 冗餘檢查（`[0]` 在該節，判準表在其後 § 送訊息 MUST 用單引號 heredoc）：省略的只是**自己打算重跑的冪等動作**（如 publish、同一份 build）而非延後；mixed commit 已在 HEAD、對方 land 不會覆蓋它，所以本 recovery 不省略——第 3 步 user 拍板與 (A) 的 cleanup 登記照走
 3. **以當前 runtime 的提問介面或對話給 user 拍板**，選項至少含：(A) **接受 mixed commit + 登記 cleanup**（最安全）、(B) **立即 reset/rebase 修復**（user **MUST** 對 race risk 知情同意）、(C) **等並行 session 收斂再評估**。本任務已有同一具體處置的答案就沿用，不重問
 4. **NEVER** 自行跑 `git reset --soft HEAD~N` / `git rebase -i HEAD~N`（**任何 relative reference**）— `HEAD~N` 在 race window 內可能指到別 session 的 commit（多次實證）
 5. user 選 (B) → **MUST** 用 **specific SHA reference** 且**先**建 backup tag 保險；**NEVER** 在並行 session 活躍時跑 `git rebase` split mixed commit
@@ -219,7 +219,7 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 - **NEVER** 以「main 髒」為由自行繞過 batch 登記與正式品質流程
 - **NEVER** 用隔離 worktree + raw `git commit` + `git push origin main` 繞過 0-A
 
-判別走下節的路徑白名單，**NEVER** 靠「這批算不算小」自評；`\do-all` / 時間壓力 **NEVER** 是跳 gate 的理由。work-loop / unattended / 「護欄說一律 `--only`」同樣不是。實證：[[pitfall-isolated-worktree-raw-commit-push-bypasses-commit-gate]]
+判別走下節的路徑白名單，**NEVER** 靠「這批算不算小」自評；`/do-all` / 時間壓力 **NEVER** 是跳 gate 的理由。unattended / coordinator 自動加派 / 「護欄說一律 `--only`」同樣不是。實證：[[pitfall-isolated-worktree-raw-commit-push-bypasses-commit-gate]]
 
 ### `--only` 適用範圍 = 路徑白名單（hard rule）
 
@@ -237,9 +237,34 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 
 **白名單外的一切改動 MUST 走 `/commit`**，包含但不限於：`rules/**`、`scripts/**`、`vendor/scripts/**`、`capabilities/**`、`claude-md/**`、`registry/**`、任何 source code。改動落在白名單內外**混合**時，整批走 `/commit`——**NEVER** 拆成「白名單那半用 `--only` 先送」。
 
-**work-loop 不是例外。** HANDOFF / tech-debt 短更走本表 `--only`；merge-back 與收割後的產品落地走 **user 觸發的** `/commit`（全包，含當時 index 上別人已 staged 的檔）。**NEVER** 對那批跑 ad-hoc `--only` 只收「自己的」幾檔。護欄原文若寫「一律 `--only`」，以本節為準。機械層：`pre-bash-git-commit-only-whitelist.sh` 在 main 上擋白名單外的 `--only`（`/commit` 的 `Via: /commit` trailer 放行）。
+**無人值守推進（coordinator child）不是例外。** HANDOFF / tech-debt 短更走本表 `--only`；merge-back 與收割後的產品落地走 **user 觸發的** `/commit`（全包，含當時 index 上別人已 staged 的檔）。**NEVER** 對那批跑 ad-hoc `--only` 只收「自己的」幾檔。護欄原文若寫「一律 `--only`」，以本節為準。機械層：`pre-bash-git-commit-only-whitelist.sh` 在 main 上擋白名單外的 `--only`（`/commit` 的 `Via: /commit` trailer 放行）。
 
 **「純 typo」不是跨路徑的例外**。它只在白名單路徑內成立，且僅限散文本身的錯字。**NEVER** 拿它包裝：規約措辭修正（改的是 MUST / NEVER 的語意）、程式識別字重命名、註解以外的任何程式碼改動——這三類即使一個字元也走 `/commit`。
+
+### 推 default branch 前 MUST 列舉並宣告 ahead 範圍（pre-push ahead-ownership gate）
+
+shared 本機 `main` 上可能躺著別 session 已落地、尚未推出去的 commit（ad-hoc whitelist commit、別批已 land 未 push 的內容）。`git push` 對它們**沒有任何提示**——不列舉就推等於把它們靜默帶上 origin（clade TD-614 的實例形狀）。commit 層沒有可靠的歸屬欄位（session trailer 涵蓋不全、author 全 fleet 同一身分），所以閘門的形式是**強制列舉**，不是比對作者：
+
+`git push` 打到 default branch 且 `remote..local` 有 ahead commit 時，pre-push 的 `ahead-ownership` check（`vendor/scripts/pre-push/checks/ahead-ownership.sh`）會擋下，要求先列舉範圍再帶著雜湊宣告重推：
+
+```bash
+git log --oneline origin/<default>..<要推的 tip>          # MUST 逐筆看清將推上去的內容
+CLADE_PUSH_MAIN_AHEAD="$(git rev-list origin/<default>..<要推的 tip> | git hash-object --stdin)" \
+  git push origin <local>:<default>
+```
+
+- 宣告值綁的是**整份** ahead 清單：少看一筆、remote 前移、tip 換過都對不上，每次 push 都要重算
+- 列舉輸出裡出現**不是本 session 產生的** commit → **NEVER 代推**：先查歸屬（`git show <sha>`、`batch status`、`refs/rescue/*`），該誰的讓誰推；無主物回報協調
+- 具名工具推 main 不走這條：propagate（`CLADE_PROPAGATE`）自帶 path-based ahead 分類，`CLADE_ALLOW_MAIN_COMMIT` 是工具身分標記（`flow publish-answers` 的 trunk-based 路徑先驗本機與 origin 對齊、只 commit 單一決策紀錄檔，再帶它推）——兩者豁免
+- `/commit` 的 push（Step 6-A 發版串、Step 6-B push main）同樣要宣告：範本在 commit skill 的 `rules/push-main發版判準.md`、`rules/停在push-main判準.md`、`release-push.md`，都是「先列舉、再帶宣告推」的形狀
+- 帶了宣告仍被擋 = 雜湊對不上（宣告之後 remote 前移或 tip 換過）：`git fetch origin` 後重新列舉，**NEVER** 沿用舊值
+- default branch 首推（remote_sha 全零）、刪除 ref、不打 default branch 的 push 不受本 gate 約束
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | `git push` 攜帶 default branch 的 ahead commit 且未帶 `CLADE_PUSH_MAIN_AHEAD` 宣告 → blocking，check exit 1 |
+| 消費端 | push 被擋下的 session——依失敗輸出列舉 ahead、認得每一筆才帶宣告重推；陌生 commit 走「NEVER 代推」的查歸屬流程 |
+| 觸發點 | 失敗輸出（類型③）：`ahead-ownership.sh` 擋下時尾段直接印回本節位置 `rules/core/commit.detail.md § 推 default branch 前 MUST 列舉並宣告 ahead 範圍` |
 
 ## 程式化區段編輯的定界（hard rule）
 
@@ -307,8 +332,8 @@ user 不成立**，結果是 stash 單調遞增、owner 資訊隨時間流失，
 ### 放行判準（兩條機械條件全中才可 drop）
 
 1. **內容可重生**：`git stash show --stat <ref>` 列出的**每一個**檔都落在可重生投影層 ——
-   `.claude/**`、`.codex/**`、`.clade/**`、`AGENTS.md`、`CLAUDE.md`、`.npmrc`、`skills-lock.json`
-   （這些由 `pnpm hub:bootstrap` 重生）。**有任何一個檔不在此清單就不算命中**
+   `.claude/**`、`.agents/skills/**`、`.clade/**`、`AGENTS.md`、`CLAUDE.md`、`.npmrc`、`skills-lock.json`
+   （這些由 `pnpm hub:bootstrap` 重生；`.agents/constitution/**` 等其他 `.agents/` 子樹是 consumer 自己寫的，不在清單內）。**有任何一個檔不在此清單就不算命中**
 2. **來源已消失**：stash message 內的 slug 對應的 worktree **已不存在**（`git worktree list` 查不到）。
    slug 解析不出來時，退回時間門檻：**建立逾 24 小時**
 3. **兩條機械放行全中即可 drop**：內容可重生 + 來源已消失。**NEVER** 再 append `docs/archives/stash-dropped.md`（已停寫）。替代墓碑載體 **NEEDS CLARIFICATION**，本輪不發明新格式；drop 當下 git 物件可從 reflog 取回直到過期，那不是拍板後的替代載體。
@@ -358,7 +383,7 @@ user 不成立**，結果是 stash 單調遞增、owner 資訊隨時間流失，
 - **不確定就先驗，NEVER 拿 commit 當測試**：`echo '<你要用的 header>' | npx commitlint`。理由不是「省一次重打」——header 解析失敗時 commitlint 報的是 **`subject may not be empty`**（per [[pitfall-commitlint-emoji-type-mismatch-reports-subject-empty]]），訊息指向 subject 而真因在 emoji，照著訊息改會愈改愈遠；而 `--only` 的路徑清單長時，重打整條指令本身就是漏掉某個 path 的入口
 - **所有 uncommitted 變更都納入候選盤點**，逐組依 § WIP 處置決策樹確認授權與所有權後提交。使用者指名範圍持續有效；他人的活躍 WIP 與未解歸屬先協調，不以「全包」取代交接證據，也不默默遺漏候選檔。
 - **純機械正名（識別字替換）MUST 獨立 commit，NEVER 與語意編輯混合**——正名 sweep 時看到措辭問題「順手修掉」會讓整個 commit 失去 evidence-inert 豁免資格：驗證器（`audit-tech-debt-hygiene.ts`）逐 token 比對，宣告的替換以外只要有一個 token 不同就不算 inert，該 commit 觸及的每一條 TD 都照常進覆核佇列。語意編輯另開一筆 commit 即可，兩筆可以在同一次 `/commit` 分組裡
-- **送 commit 前自檢新增的註解與測試**：新增註解命中 [[code-style]] § 該刪的註解（C0–C6）就改、新增 unit test 一列都不中 [[testing-anti-patterns]] § unit test 何時寫（U1–U4）就不寫；0-A 會照同一份判準審（`comment-test-conditional` semantic verdict）
+- **送 commit 前自檢新增的註解與測試**：新增註解命中 [[code-style]] § 該刪的註解（C0–C6）就改、新增 unit test 一列都不中 [[testing-anti-patterns]] § unit test 何時寫（U1–U4）就不寫；0-A 會照同一份判準審（`comment-test-conditional` semantic verdict）；讀原始碼比字串的測試由 `source-assert-delta` pre-commit 機械擋（見 [[testing-anti-patterns]] § unit test 何時寫 P 類）
 - **`.gitignore` 變更**：只允許保留 Clade 管理的 installation artifact / runtime state ignore 條目（例如 `.claude/.commit.lock`、`codex/`）；其他變更**MUST** `git stash push -- .gitignore` 並寫入 `HANDOFF.md`（**NEVER** `git checkout .gitignore` 直接還原）
 - **`.env` / 敏感檔案**：警告使用者但仍由使用者決定是否 commit，**NEVER** 自行跳過
 - **每一個 finding 都要處置**：review 的缺失、行號漂移與純舊碼依 skill `gates.md` § 0-A 的同一份分流。當次引入或受當次變更加劇的問題修完再驗；純舊碼須有「未觸碰／無因果／登記」三項證據，不混入本次 commit，也不靜默跳過。Lint／typecheck／test／doctor 的必要 gates 仍要求全綠，登 TD 不會使失敗 gate 變成通過。

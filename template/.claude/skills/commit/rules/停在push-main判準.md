@@ -37,14 +37,14 @@
 
 | Step 6-Gate 輸出 | 本步驟動作 |
 | --- | --- |
-| `status=confirmed` **且** `derived=` 不是 `push-main` | 直接 `git push origin main` |
+| `status=confirmed` **且** `derived=` 不是 `push-main` | 直接照 Rule 3 的形狀 push main |
 | 其餘全部：`status=mismatch` / `undeclared` / `unconfirmable`，或 `derived=push-main`，或 `deploy-trigger-check.ts` 不存在 | **NEVER 先 push**，先照下面取得授權 |
 
 第二個條件（`derived` 不是 `push-main`）不能省：`declared=pr-merge` + `derived=push-main` 會拿到 `status=confirmed` 卻仍被送進 6-B，而那種拓樸下 main push 就是部署。
 
 未確認時 **MUST** 先透過本入口的使用者詢問介面取得下列選擇，**NEVER** 先推了再問。沒有專用工具時直接提問；同一範圍已有明確回答時沿用，不重問：
 
-- **`[1] 授權 push main`** → 明確告知「本 repo 推不出 main push 會不會觸發部署」後才 `git push origin main`，接著往下走發版提問
+- **`[1] 授權 push main`** → 明確告知「本 repo 推不出 main push 會不會觸發部署」後才照 Rule 3 的形狀 push main，接著往下走發版提問
 - **`[2] 先不 push`** → 停在 local commit。**MUST** 在 Step 5 的 HANDOFF 登記「已 commit 未 push」：哪幾個 commit、卡在哪一格（`status=` / `detail=` 原文照抄）、下一步要補的是宣告還是 workflow
 
 **NEVER 把「使用者沒有回應」讀成 `[1]`。** 這條沒有安全預設值 —— 未確認形狀的預設值是「可能對 production 跑 migration」。
@@ -70,9 +70,20 @@
 
 - Level: `MUST`
 
+pre-push 的 `ahead-ownership` check 會擋下沒有宣告 ahead 範圍的 main push（`rules/core/commit.detail.md` § 推 default branch 前 MUST 列舉並宣告 ahead 範圍），所以先列舉、再帶宣告推：
+
 ```bash
-git push origin main
+git fetch origin main
+git log --oneline origin/main..HEAD     # MUST 逐筆認得將推上去的每一筆
 ```
+
+清單裡有**不是本 session 產生的** commit → 停在這裡照該節查歸屬，**NEVER** 代推。每一筆都認得才推：
+
+```bash
+CLADE_PUSH_MAIN_AHEAD="$(git rev-list origin/main..HEAD | git hash-object --stdin)" git push origin main
+```
+
+帶了宣告仍被 `ahead-ownership` 擋下 = 列舉之後 remote 前移或 tip 換過：重跑上面的 `git fetch` 與 `git log` 再推，**NEVER** 沿用舊的宣告值。
 
 `git push origin main` 完成後（6-B.0 判定可直接推，或使用者選了 `[1]`），發版尚未取得明確授權時 **MUST** 透過本入口的使用者詢問介面取得下列選擇；沒有專用工具時直接提問。既有同範圍發版授權持續有效：
 

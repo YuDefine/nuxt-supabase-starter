@@ -8,36 +8,20 @@ description: >-
 
 # Supabase 架構決策指南
 
-資料存取路徑（寫入走 Server API；client 直讀是否合法取決於 `modules.auth`）以 db-runtime 規約與 `server-api` skill 為準，本 skill 只做架構選型。
+本 skill 只做架構選型：新功能該走 Server API、Postgres RPC、Edge Function、Trigger、pg_cron 或 Realtime。資料存取路徑（寫入走 Server API；client 直讀是否合法取決於 `modules.auth`）以 db-runtime 規約與 `server-api` skill 為準；migration SQL 交 `supabase-migration`，policy 內容交 `supabase-rls`。
 
-## Schema 邊界
+# SOP
 
-- **core / auth**: 授權相關（user_roles、allowed_emails、user_preferences、enum、函式）
-- **app / 專案名稱**: 業務資料表
-- **public**: 不存放業務資料；SDK 查詢使用 `client.schema('core')` 或 `client.schema('app')`
+## Phase 1 -- 收斂需求特徵
 
-## 快速決策表
+1. READ 讀取功能需求，以及 consumer manifest（`.clade/manifest.json`）的 `modules.auth` 與 `modules.db-runtime`。
+2. THINK 列出需求的特徵：是否呼叫第三方 API、是否接收外部 Webhook、是否處理檔案、是否碰金鑰、是否批次、是否跨表寫入、是否需要即時更新或排程。
 
-| 場景                 | 方案                        |
-| -------------------- | --------------------------- |
-| 簡單 CRUD            | Server API（client 直讀依 `modules.auth`） |
-| 跨表交易             | Postgres RPC                |
-| 第三方 API           | Edge Function               |
-| Webhook              | Edge Function               |
-| 排程任務（DB 內部）  | pg_cron                     |
-| 排程任務（外部邏輯） | Edge Function + Cron        |
-| 即時更新             | SDK + Realtime              |
-| 複雜統計             | Materialized View + pg_cron |
-| 權限繞過             | RPC (Security Definer)      |
-| 檔案處理             | Edge Function (Stream)      |
-| 敏感金鑰             | Edge Function (環境變數)    |
+## Phase 2 -- 判定技術路線
 
-需要更詳細的決策指引？→ [references/decision-tree.md](references/decision-tree.md)
+1. THINK 讀取 `rules/功能路由決策樹.md`，依 Phase 1 的特徵由上而下比對，第一個命中的分支即採用，並記下被跳過的較前分支與跳過理由。
 
-## 檢查清單
+## Phase 3 -- 輸出建議並做安全檢查
 
-### 安全性
-
-- [ ] RLS First：所有 Table 預設開啟 RLS
-- [ ] Never Trust Client：前端資料在 DB/Edge 層驗證
-- [ ] Service Role：僅在 Edge Function 或 RPC 內部使用
+1. READ 讀取 `rules/Schema邊界與安全檢查判準.md`。
+2. WRITE 輸出選定路線、命中的分支編號、schema 落點與已載入規則的逐條安全檢查結果；不符的項目寫成要修的設計點，不帶過。

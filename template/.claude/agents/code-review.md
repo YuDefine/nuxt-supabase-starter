@@ -194,6 +194,8 @@ git diff main...HEAD
 - ⚠️ **修正後可合併** - 有 X 個必須修正的問題
 - ❌ **需要重大修改** - 有架構或安全問題
 
+> 主線處置（commit 0-A 除外）：本報告每則 finding 依 `clade-verification` skill 的 `rules/review-tiers.md` § 裁決端落進 Act on／Consider／Noted／Dismissed 四桶。
+
 ````
 
 ## 嚴重程度定義

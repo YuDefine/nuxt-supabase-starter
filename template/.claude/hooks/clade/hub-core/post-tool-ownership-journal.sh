@@ -125,20 +125,22 @@ rows=""
 tab=$(printf '\t')
 # 一棵樹的時間窗內 dirty 路徑 → rows（journal_dir<TAB>tree<TAB>rel）。
 scan_tree() {
-  local tree=$1 jdir=$2 candidates line cand m
-  candidates=$(git -C "$tree" status --porcelain=v1 --untracked-files=all 2>/dev/null) || return 0
-  while IFS= read -r line; do
+  local tree=$1 jdir=$2 line cand m _orig
+  # `--ignore-submodules=all`：submodule 在 porcelain 裡只是一個目錄列，下面的 `[ -f ]` 本來就
+  # 會丟掉它，submodule 內的檔也從不出現在父樹的輸出。不加這個旗標，git 會對每個 submodule
+  # 各 spawn 一次 `git status`，在每個 Bash 之後白付這筆成本（clade 3 個 submodule 約 40ms）。
+  # `-z`：路徑原樣（NUL 分隔、不被 `core.quotePath` 跳脫成 `"\346…"`），含空白 / 中文的路徑也記得到。
+  # rename / copy 在 `-z` 下是 `R  new\0old\0`：被寫到的是 new，緊跟的 old 欄位讀掉丟棄。
+  # git 失敗 → process substitution 吐空 → 不記任何列，與原本 `|| return 0` 同效。
+  while IFS= read -r -d '' line; do
     [ ${#line} -gt 3 ] || continue
     cand=${line#???}
-    # rename 行是 `R  old -> new`，被寫到的是 new。
-    case "$cand" in
-      *' -> '*) cand=${cand##* -> } ;;
+    case "${line:0:2}" in
+      *R* | *C*) IFS= read -r -d '' _orig || true ;;
     esac
-    # porcelain 對含空白 / 特殊字元的路徑加引號；這種路徑跳過而不猜，寧可漏記。
-    # journal 自己的目錄也跳過 —— 本 hook 每次都會動它，記進去等於每個 Bash 都宣稱自己
+    # journal 自己的目錄跳過 —— 本 hook 每次都會動它，記進去等於每個 Bash 都宣稱自己
     # 持有 journal，而那是所有 session 共寫的檔。
     case "$cand" in
-      '"'*) continue ;;
       .clade/ownership/*) continue ;;
     esac
     [ -f "$tree/$cand" ] || continue
@@ -146,9 +148,7 @@ scan_tree() {
     [ "$m" -ge "$stamp_s" ] 2>/dev/null || continue
     rows="$rows$jdir$tab$tree$tab$cand
 "
-  done <<EOF
-$candidates
-EOF
+  done < <(git -C "$tree" status --porcelain=v1 -z --untracked-files=all --ignore-submodules=all 2>/dev/null)
 }
 # 命令字串提及的路徑 → 各自所在 git 樹的 toplevel（每行一棵，去重，不含本 session 的樹，
 # 最多 8 棵）。目錄先去重、`rev-parse` 最多跑 32 次：一條帶大量絕對路徑的命令（長檔案清單、

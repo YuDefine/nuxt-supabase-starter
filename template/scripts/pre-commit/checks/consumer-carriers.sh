@@ -16,7 +16,7 @@
 # propagate 的 delivery commit 由 CLADE_PROPAGATE=1 放行（同 clade-projection-drift.sh）。
 # 缺 node / detector 未散播 → soft-skip exit 0。
 #
-# 判準來源：W-2026-09-20-consumer-lifecycle-migration spec FR-018／FR-025／FR-026；cookbook vendor/snippets/consumer-lifecycle/
+# 判準來源：cookbook vendor/snippets/consumer-lifecycle/
 #
 # 由 ~/clade vendor/scripts/pre-commit/ 散播，請勿直接編輯 consumer 副本。
 

@@ -300,6 +300,45 @@
       "pattern": "<(?:Lazy)?U(?:Button|Input|InputNumber|Select|SelectMenu|Textarea|Checkbox|Radio|Switch)\\b[^>]*size=\"xs\"",
       "message": "可點擊元件的 size 下限是 sm，禁 xs。理由比 UBadge 那條更強：UBadge 只是讀不清楚，可點擊元件的 xs 是觸控目標過小，屬可用性缺陷。",
       "fix": "移除 size prop（吃預設）或顯式寫 sm / md / lg。密集版面要省空間就調 padding 與間距，NEVER 縮點擊目標。"
+    },
+    {
+      "id": "comment-ssot-restatement-suspect",
+      "section": 11,
+      "ratchet": "off",
+      "severity": "warning",
+      "layer": "pre-commit",
+      "fileGlob": "**/*.{ts,mts,js,mjs}",
+      "matchComments": true,
+      "pattern": "(?:(?:^|[\\s;,{}()])(?://|/\\*)|^\\s*\\*)(?=[^\\n]{70,})[^\\n]*?(?:§|\\brules/|\\.md\\b|\\bregistry/)",
+      "excludePattern": "@followup|結案|@ts-expect-error|@ts-ignore|@ts-nocheck|oxlint-disable|eslint-disable|@vitest-environment|@__PURE__|/// <reference|shellcheck",
+      "message": "C0 疑似：註解帶 §／rules/／.md／registry/ 指針，去掉指針後仍有長篇內容，可能是在轉述 SSoT。regex 只能抓疑似，誤報率高，不進 ratchet（ratchet:\"off\"）；最終由 0-A 的 comment-test-conditional 判。",
+      "fix": "先問該事實是否該進 SSoT：(a) code 自己 hardcode 了 SSoT 該管的事實 → 改成 code 讀 SSoT 並刪註解；(b) SSoT 沒有 → 搬進 SSoT，註解縮成 `見 <path> § <heading>`；(c) 只剩指針 → 保留。見 code-style.md § 該刪的註解 C0。"
+    },
+    {
+      "id": "comment-work-id-as-reason",
+      "section": 11,
+      "ratchet": "when-baselined",
+      "severity": "warning",
+      "layer": "pre-commit",
+      "fileGlob": "**/*.{ts,mts,js,mjs}",
+      "matchComments": true,
+      "pattern": "(?:(?:^|[\\s;,{}()])(?://|/\\*)|^\\s*\\*)[^\\n]*?(?:\\bTD-\\d+|\\bW-\\d{4}-\\d{2}-\\d{2}|(?<![\\w&/])#\\d{1,5}\\b)",
+      "excludePattern": "@followup|\\b(?:TD-\\d+|W-\\d{4}-\\d{2}-\\d{2}[\\w-]*|plan:[\\w-]+)\\]|\\b(?:TD-\\d+|W-\\d{4}-\\d{2}-\\d{2}[\\w-]*)\\s*結案|結案[:：]|@ts-expect-error|@ts-ignore|@ts-nocheck|oxlint-disable|eslint-disable|@vitest-environment|@__PURE__|/// <reference|shellcheck",
+      "message": "C2：註解拿 TD-／#PR／W-／plan: 編號當理由。去掉編號後沒有 why，編號只會在工作結案後變成死連結。",
+      "fix": "刪編號；剩下沒有 why 就整行刪。仍有未完工作改用 `@followup[<id>]`；結案改寫用「（<id> 結案：<移除條件>）」。見 code-style.md § 該刪的註解 C2。"
+    },
+    {
+      "id": "comment-inline-date",
+      "section": 11,
+      "ratchet": "when-baselined",
+      "severity": "warning",
+      "layer": "pre-commit",
+      "fileGlob": "**/*.{ts,mts,js,mjs}",
+      "matchComments": true,
+      "pattern": "(?:(?:^|[\\s;,{}()])(?://|/\\*)|^\\s*\\*)[^\\n]*?(?<![\\w-])20\\d{2}-\\d{2}-\\d{2}(?![\\w-])",
+      "excludePattern": "@followup|\\b(?:TD-\\d+|W-\\d{4}-\\d{2}-\\d{2}[\\w-]*|plan:[\\w-]+)\\]|\\b(?:TD-\\d+|W-\\d{4}-\\d{2}-\\d{2}[\\w-]*)\\s*結案|結案[:：]|@ts-expect-error|@ts-ignore|@ts-nocheck|oxlint-disable|eslint-disable|@vitest-environment|@__PURE__|/// <reference|shellcheck",
+      "message": "C3：註解帶行內日期 YYYY-MM-DD，且不是 `@followup` 的移除條件。日期講的是過去發生什麼，不是 code 現在為什麼這樣。",
+      "fix": "刪日期。裡面有現在仍成立的 why → 改寫成現在式。見 code-style.md § 該刪的註解 C3。"
     }
   ],
   "semantic": [
@@ -361,7 +400,7 @@
     {
       "id": "comment-test-conditional",
       "title": "註解與測試的條件式判準",
-      "guidance": "只審本次 diff 新增或改到的行。新增註解：命中 code-style.md § 該刪的註解（C0 轉述 SSoT、C1 歷史敘事、C2 工作編號當理由、C3 行內日期、C4 翻譯 code、C5 注解掉的程式碼、C6 測試檔頭重述檔名）→ fail 並指名類別與該怎麼改；C0 先問該事實是否該進 SSoT。@followup[<id>]、結案改寫「（<id> 結案：…）」與指令型註解（@ts-expect-error、oxlint-disable 等）不算。新增 unit test：一列都不中 testing-anti-patterns.md § unit test 何時寫 的 U1–U4，或斷言對象是只給人讀的 prose、load-bearing 規約句（U5，應登記 rule-invariants）→ fail。刪測試：刪的是閘門類（U3）或某段產品碼唯一的行為測試 → fail。"
+      "guidance": "只審本次 diff 新增或改到的行。新增註解：命中 code-style.md § 該刪的註解（C0 轉述 SSoT、C1 歷史敘事、C2 工作編號當理由、C3 行內日期、C4 翻譯 code、C5 注解掉的程式碼、C6 測試檔頭重述檔名）→ fail 並指名類別與該怎麼改；C0 先問該事實是否該進 SSoT。@followup[<id>]、結案改寫「（<id> 結案：…）」與指令型註解（@ts-expect-error、oxlint-disable 等）不算。新增 unit test：一列都不中 testing-anti-patterns.md § unit test 何時寫 的 U1–U4，或斷言對象是只給人讀的 prose、load-bearing 規約句（U5，應登記 rule-invariants）→ fail。刪測試：刪的是閘門類（U3）或某段產品碼唯一的行為測試 → fail。讀原始碼比字串的 P 類測試不靠本規則攔：機械層是 `vendor/scripts/checks/source-assert-gate.ts`（delta，pre-commit＋CI）；本規則只審它的逃生口 marker `clade-source-assert:` 的理由是否成立。"
     }
   ]
 }

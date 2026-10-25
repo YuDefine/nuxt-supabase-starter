@@ -11,13 +11,14 @@
 #   - vp-staged                 永遠跑（vite-plus 官方推薦的 staged-file 工作流）
 #   - supabase-migration-safety 偵測 supabase/migrations/*.sql 才跑
 #   - native-picker-ban         偵測 staged *.vue 才跑（無 .vue 自動 no-op）
-#   - review-rules-ban          偵測 staged *.vue 才跑（patterns.json 驅動，無 .vue 自動 no-op）
+#   - review-rules-ban          有 staged 新增／修改檔且有 patterns.json 才跑（副檔名由各規則 fileGlob 決定）
 #   - data-perf-check           偵測 staged *.vue 才跑（setup context raw $fetch anti-pattern）
 #   - consumer-carriers         已退役 docs/ 或 lifecycle repo 才啟用（否則 no-op）
+#   - source-assert-delta       有 staged 測試檔且 P 類（讀原始碼比字串）斷言數比 HEAD 增加才擋（否則 no-op）
+#   - td-priority               staged docs/tech-debt.md 新增或改寫 `**Priority**:` 行才擋（否則 no-op）
 #
 # 重型檢查（nuxt typecheck、test tsconfig）放 pre-push runner，不在 pre-commit 跑。
-# 來源：vue-tsc / nuxi typecheck 不支援單檔 typecheck（issue #407），
-#       2026 主流 best practice 把 typecheck 移到 pre-push 階段。
+# 原因：vue-tsc / nuxi typecheck 不支援單檔 typecheck，只能整專案跑，所以放 pre-push 階段。
 #
 # 由 ~/clade vendor/scripts/pre-commit/ 散播，請勿直接編輯 consumer 副本。
 
@@ -48,7 +49,7 @@ run_check supabase-migration-safety
 # 3) native picker ban — 由 check 內部 auto-detect（無 staged *.vue 直接跳）
 run_check native-picker-ban
 
-# 4) review rules ban — patterns.json 驅動（無 staged *.vue 或無 patterns.json 直接跳）
+# 4) review rules ban — patterns.json 驅動（無 staged 新增／修改檔或無 patterns.json 直接跳）
 run_check review-rules-ban
 
 # 5) data-perf check — 偵測 staged .vue 中 setup context raw $fetch（無 staged .vue 直接跳）
@@ -63,11 +64,17 @@ run_check nuxt-ui-mixed-slot
 # 8) utable-slots — 偵測 staged .vue 在 UTable 內漏掉 cell slot 的 -cell 後綴
 run_check utable-slots
 
-# 9) clade-projection-drift — 擋 staged 的 clade 投影檔被本地改過（TD-582）
+# 9) clade-projection-drift — 擋 staged 的 clade 投影檔被本地改過
 run_check clade-projection-drift
 
-# 10) consumer-carriers — 擋已退役 consumer 重建 docs/、lifecycle repo 新開 TD（#412 C2）
+# 10) consumer-carriers — 擋已退役 consumer 重建 docs/、lifecycle repo 新開 TD
 run_check consumer-carriers
 
-# 11) review-integrity — 最後檢查，包含 vp-staged 可能改寫的 index
+# 11) source-assert-delta — 擋新增「讀原始碼比字串」的測試斷言（P 類，對 HEAD 比斷言數 delta）
+run_check source-assert-delta
+
+# 12) td-priority — 擋 docs/tech-debt.md 加回 TD 等級欄位（等級只看 fleet 看板）
+run_check td-priority
+
+# 13) review-integrity — 最後檢查，包含 vp-staged 可能改寫的 index
 run_check review-integrity

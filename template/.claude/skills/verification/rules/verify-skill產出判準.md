@@ -3,7 +3,7 @@
 
 - Level: `MUST`
 - 建立 `<skills-root>/verify-<app>/`（`SKILL.md`、`features/README.md`、`features/<feature>.md`；`scripts/` 只有 repo 真的需要 helper 才建立）。
-- `.agents/`、`.codex/` 是投影面，NEVER 直接把 canonical source 寫進那些目錄。現有 `sync-to-codex` 負責跨 runtime 投影。
+- canonical 只有一份：當前 runtime 的 `<skills-root>`（Claude `.claude/skills/`、Pi `.agents/skills/`）下、由 consumer track 的 `verify-<app>/`。**NEVER** 再手寫一份到另一個 runtime 的 skill 根，也 **NEVER** 寫進帶 `🔒 LOCKED — managed by clade` banner 的 clade 投影 skill。
 - `<skills-root>` 指該 runtime 的 skill 根目錄；**NEVER** 在別的 runtime 上照抄 Claude 的字面路徑；找不到該目錄就回報標準未送達，不猜一個。
 
 ## Good Example
@@ -16,10 +16,10 @@
 
 ## Bad Example
 
-- 這個例子是壞的，因為直接寫進投影面。
+- 這個例子是壞的，因為在另一個 runtime 的 skill 根手寫第二份，兩份沒有 canonical 來源可對帳。
 
 ```text
-.agents/skills/verify-<consumer-id>/SKILL.md、.codex/skills/verify-<consumer-id>/SKILL.md（手寫，沒有 canonical 來源）
+.claude/skills/verify-<consumer-id>/SKILL.md 與 .agents/skills/verify-<consumer-id>/SKILL.md 各手寫一份
 ```
 
 # Rule 2 - `verify-<app>/SKILL.md` 六段依序齊全

@@ -1,13 +1,13 @@
 ---
-description: Dev tunnel（vite-plugin-cloudflare-tunnel / cloudflared）跨 consumer convention 索引 — zone-in-account、token scope、restart-loop 防護、冷/熱載入量測四題彙整，各指向權威 § + cookbook + pitfall cross-link；§ 6 要掛 dev tunnel 就必須掛 Cloudflare Access，否則撤 tunnel
+description: Dev tunnel（vite-plugin-cloudflare-tunnel / cloudflared）跨 consumer convention 索引 — zone-in-account、token scope、restart-loop 防護、冷/熱載入量測四題彙整，各指向權威 § + cookbook + pitfall cross-link；§ 6 要掛 dev tunnel 就必須掛 Cloudflare Access，否則撤 tunnel；§ 7 linked worktree 不得接上共用 named tunnel
 paths: ['nuxt.config.*', '.env', '.env.local', 'package.json']
 ---
 <!-- Clade native rule; source: rules/core/dev-tunnel-convention.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Dev Tunnel Convention（索引）
 
-Dev tunnel（`vite-plugin-cloudflare-tunnel` 或手動 `cloudflared`）的 org convention 與失敗模式。§ 2–4 的完整規約與理由在 [[dev-port-allocation]] § 2.5–2.7，本檔每節只留一行 Convention（編輯 `.env*`／`nuxt.config.*` 時不一定載入該檔）與入口；§ 1、§ 5、§ 6 是本檔獨有的規約本體。
+Dev tunnel（`vite-plugin-cloudflare-tunnel` 或手動 `cloudflared`）的 org convention 與失敗模式。§ 2–4 的完整規約與理由在 [[dev-port-allocation]] § 2.5–2.7，本檔每節只留一行 Convention（編輯 `.env*`／`nuxt.config.*` 時不一定載入該檔）與入口；§ 1、§ 5、§ 6、§ 7 是本檔獨有的規約本體。
 
 ## § 1 — Zone 必在當前 account 內（multi-account misdirection）
 
@@ -90,3 +90,25 @@ p.on('response', r => {
 | 觸發條件 | `dev-port-audit.ts` 對有 `TUNNEL_HOSTNAME` 的 consumer 探測為 `no-access`／`unreachable` → 該列 FAIL、exit 1；dev server 啟動時探測不是 `access` → DevTools 關閉並印一行原因 |
 | 消費端 | 主持者（把 FAIL 的 consumer 派出去補 Access 或撤 tunnel、relay 時帶現況列）；設 tunnel 的 consumer session |
 | 觸發點 | 本節 paths-gated 於 `nuxt.config.*`、`.env`、`.env.local`（設 tunnel 的那一刻）；`dev-port-audit.ts` 的 FAIL 輸出直接印本節位置 |
+
+## § 7 — worktree：linked worktree 的 dev server 不得接上共用 named tunnel
+
+**Convention**：一個 consumer 只有一個共用 tunnel hostname（§ 1）。linked worktree 的 dev server **MUST** 不帶這個 hostname 啟動——要嘛沒有 tunnel（預設），要嘛走 `dev.perWorktreeTunnel` opt-in 拿自己的 `<slug>.<host>`。**NEVER** 逐字沿用共用的 `TUNNEL_HOSTNAME`／`TUNNEL_NAME` 在 worktree 啟 tunnel。
+
+**為什麼**：worktree 的 `.env.local` 從 main 複製（`wt-helper add` 的 `copyEnvSyncFiles()`，或手動跑 `wt-env-sync`）；逐字沿用時，worktree 的 `nuxt dev` 會對同一個 named tunnel 起 cloudflared，連到它的 connector 與 main 的並存，Cloudflare 把請求分給兩邊（約一分鐘即可能分走 main 的流量）。事件：某 consumer 的 worktree 啟動 dev 後，接上了該 consumer 共用的 dev tunnel hostname（2026-10-12）。
+
+**三層防線**（任一層都不取代其他層）：
+
+| 層 | 行為 | 落點 |
+| --- | --- | --- |
+| 複製 | 沒開 `dev.perWorktreeTunnel` 時，複製進 worktree 的 `.env*` **MUST** 移除 `TUNNEL_HOSTNAME`／`TUNNEL_NAME` 宣告行（其餘逐字不動）；開了才改寫成 `<slug>.<host>`／`<name>-<slug>` | `vendor/scripts/wt-env-sync.ts`（**尚未涵蓋** `wt-helper add`：它用自己的 `copyEnvSyncFiles()` 逐字複製、不呼叫 `wt-env-sync`，新開的樹仍帶共用 `TUNNEL_*`，只剩啟動層擋；殘工見 `specs/plans/W-2026-10-12-linked-worktree-dev-server-named-tunnel-wt-env-s/followup-wt-helper-env-copy.md`） |
+| 啟動 | resilient wrapper 偵測到 linked worktree（往上找到的 `.git` 是檔案且 `gitdir:` 含 `/worktrees/`）而 hostname 不是該樹自己的 `<slug>.<host>`（讀得到 main 的共用 hostname 時只認 `<slug>.<共用 host>`）→ 視同沒有 tunnel（plugin、`allowedHosts`、`origin`、`hmr` 全關）並印一行原因 | `vendor/snippets/dev-tunnel-resilient/` 的 `dev-tunnel-worktree-guard` 段 |
+| 規約 | worktree 要 tunnel **MUST** 先確認 consumer 有涵蓋 `*.<host>` 的 DNS 與憑證，再開 opt-in；**NEVER** 為了讓 tunnel 起來而手動把共用 hostname 貼回 worktree 的 `.env*`；**NEVER** 代 consumer 開 opt-in 欄位 | [[dev-port-allocation]] § Tunnel 在 worktree 內 |
+
+**既有與 `wt-helper add` 新開的 worktree**：已複製過的 `.env.local` 不會被事後改寫（`wt-env-sync` 不加 `--force` 會跳過），`wt-helper add` 開的樹在殘工落地前也逐字帶著共用 `TUNNEL_*`。要找出仍帶共用 hostname 的樹，唯讀跑 `node vendor/scripts/worktree-census.ts` 後逐樹 grep `^\s*(export\s+)?TUNNEL_(HOSTNAME|NAME)\s*=`；處置（刪行或 opt-in）由該樹 owner 做，**NEVER** 從別的 session 代改。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | `wt-env-sync` 複製 `.env*` 且 consumer 未 opt-in；或 wrapper 在 linked worktree 讀到非 per-worktree 的 `TUNNEL_HOSTNAME` |
+| 消費端 | 開 worktree 跑 dev server 的 session；主持者（掃描既有樹並派 owner 清理） |
+| 觸發點 | 本節 paths-gated 於 `nuxt.config.*`、`.env`、`.env.local`；`wt-env-sync` 與 wrapper 在動作當下印一行原因 |

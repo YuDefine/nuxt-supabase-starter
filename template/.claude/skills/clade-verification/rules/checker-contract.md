@@ -1,12 +1,12 @@
 ---
 description: 新增或修改 mechanical checker、CI gate、contract checker、allowlist 時套用；防止 scope 不透明、依賴缺失誤判綠燈與 canonical check 漂移
-paths: ['scripts/**/*', 'vendor/scripts/**/*', '.github/workflows/**/*', 'package.json', 'pnpm-workspace.yaml']
+paths: ['scripts/**/*', 'vendor/scripts/**/*', '.github/workflows/**/*', 'package.json', 'pnpm-workspace.yaml', 'capabilities/core/hooks/**/*']
 ---
 <!-- Clade native rule; source: rules/core/checker-contract.md; edit canonical source -->
 
 # Checker Contract
 
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 Mechanical checker 的綠燈是一項可重現的 contract claim：它只證明輸出明寫的 scope 已被完整執行，不能把「沒有執行」包裝成「沒有違規」。本規約對**每一支** mechanical checker、**每一個**安全／contract gate、**每一條** CI check entry 與**每一份**既有債務 allowlist 生效。
 
@@ -119,6 +119,20 @@ Gate、checker、composite action 的檔案存在，不代表有東西會呼叫�
 把上表套到 clade 全部既有閘門後的實測清單（每個閘門的型態／載體／fail-open 條件／繞過方式）在
 `~/offline/clade/docs/enforcement-matrix.md`。要依賴某個閘門兜底之前先在那份對照，不要憑
 「我們有這支 script」推論它會執行。
+
+## 上線前看它紅一次（載體接上 ≠ 判定會觸發）
+
+**每一支**新寫或改了判定邏輯的 checker、hook、CI gate、audit signal，宣告上線之前在本機跑三次，三次的指令與輸出貼進交付證據：
+
+| 跑 | 輸入 | 應得 |
+| --- | --- | --- |
+| 1 | 現況 | pass（或 signal 的正常 verdict） |
+| 2 | 植入一個它存在就是為了擋的具體違規：暫存檔、fixture，或 scratch copy 裡改一行 | fail／non-zero，輸出點名那個違規；signal 類輸出非預設值的 verdict |
+| 3 | 還原 | 回到第 1 跑的結果 |
+
+第 2 跑的違規同時寫成一條負向測試，之後的改動弄壞判定時 CI 會紅。植入後先 `git diff`（或對原檔 `diff`）確認改動真的落在被掃的路徑上，再信那次紅。只看過綠燈的 checker 只證明了它不誤報，沒證明它會報。
+
+實證：`flow who` 上線後對 dirty path 只輸出過 `unknown`，三個 pane 把它當量測結果引用 4 次（[[pitfall-provenance-hook-never-loaded-in-its-own-repo]]）；歸屬欄位只在不需要歸屬的分支寫入，要守的那條分支一筆紀錄都沒有（[[pitfall-attribution-only-remedy-never-fires-on-the-branch-it-guards]]）。
 
 ## 判準綁事實，不綁命名或結構慣例
 

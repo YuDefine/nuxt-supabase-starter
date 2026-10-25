@@ -126,8 +126,7 @@ import {
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
-import { fileURLToPath } from 'node:url'
-import { extendCodexWorktreeHookTrust } from './codex-worktree-trust.ts'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createInterface } from 'node:readline/promises'
 import {
   classifyDirtyPaths,
@@ -146,6 +145,7 @@ import {
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isLockedProjectionPathFor } from './locked-projection.ts'
 import {
+  allLandedLedgerAppend,
   countUserDirty,
   isIgnorableWorktreeDrift,
   isToolManagedDrift,
@@ -158,6 +158,7 @@ import {
 } from './lib/projection-ledger-reconcile.ts'
 import { describeEnsureResult, runWtEnvBootstrap } from './lib/wt-env-bootstrap-runner.ts'
 import { landWorktreePatch } from './lib/wt-patch-landing.ts'
+import { readGitStatus, renderGitStatusLines } from './lib/git-status-z.ts'
 import {
   formatWorktreeBacklog,
   WORKTREE_BACKLOG_LIMIT,
@@ -271,6 +272,115 @@ export { runWtEnvBootstrap }
 // 所以復原指令的路徑一律由本檔自身位置推出。
 const WT_HELPER_DIR = dirname(fileURLToPath(import.meta.url))
 
+/**
+ * 動態 import 一個「clade home 與 consumer 擺在不同位置」的 vendor script（`flow/emit.ts`、
+ * `work-inventory-store.ts`…）。clade home 它們是 `vendor/scripts/` 底下的 sibling；consumer 的
+ * wt-helper 在 `scripts/`，這些檔住在 gitignored 投影 `.clade/vendor/scripts/`——只認 sibling 會讓
+ * `add` 的 flow work open 與 work-asset 登記在 consumer 上永遠 `Cannot find module` 然後 fail-open
+ * （W-2026-10-08-consumer-wt-helper-flow-fail-open）。
+ *
+ * 解析順序：sibling → 本檔所在樹的 `.clade/vendor/scripts/` → 呼叫端指定 consumer root 的
+ * `.clade/vendor/scripts/`（linked worktree 內跑 main 的 wt-helper 副本時）。都找不到才丟，
+ * 呼叫端照舊 fail-open。
+ */
+export async function importVendorScript(rel: string, consumerRoot?: string) {
+  const candidates = [
+    join(WT_HELPER_DIR, rel),
+    join(WT_HELPER_DIR, '..', '.clade', 'vendor', 'scripts', rel),
+    ...(consumerRoot ? [join(consumerRoot, '.clade', 'vendor', 'scripts', rel)] : []),
+  ]
+  const found = candidates.find((candidate) => existsSync(candidate))
+  if (!found) {
+    throw new Error(`Cannot find module '${rel}' (tried ${candidates.join(', ')})`)
+  }
+  return await import(pathToFileURL(found).href)
+}
+
+/**
+ * `add` 的 work id 來源決定（CDB-388）。明確來源 NEVER 輸給 ambient `$CLADE_WORK_ID`：
+ * ambient 是上一個 shell／前任 pane 殘留的環境，`--checkout` 指到的 PR body `Work:` 與
+ * `--origin` 才是「這棵樹為了哪件工作而開」的明確宣告。
+ *
+ *   1. `--checkout` 的 open PR body 恰有一個 `Work:` → 採它（與 ambient 不同時警告）
+ *   2. `--origin` 有效、ambient 的 work.open origin 已知且不同 → 不沿用 ambient，改鑄 --origin 的卡
+ *   3. 其餘 → 照舊（ambient 優先，沒有才鑄）
+ *
+ * 純函式：呼叫端負責查 PR body 與 ambient origin，查不到一律傳空，照舊行為。
+ */
+export type AddWorkSource =
+  | { kind: 'default' }
+  | { kind: 'pr-work'; workId: string; warning: string | null }
+  | { kind: 'origin-over-ambient'; warning: string }
+
+export function decideAddWorkSource({
+  ambient,
+  origin,
+  ambientOrigin,
+  prWorkIds,
+  checkoutBranch,
+}: {
+  ambient: string | null
+  /** 已驗過 scheme 的 `--origin`；無效或沒給傳 null。 */
+  origin: string | null
+  ambientOrigin: string | null
+  prWorkIds: string[]
+  checkoutBranch: string | null
+}): AddWorkSource {
+  const uniquePr = [...new Set(prWorkIds)]
+  if (uniquePr.length === 1) {
+    const workId = uniquePr[0]!
+    return {
+      kind: 'pr-work',
+      workId,
+      warning:
+        ambient && ambient !== workId
+          ? `warn: ambient CLADE_WORK_ID=${ambient} 與 --checkout ${checkoutBranch} 的 PR body Work: ${workId} 衝突；採 PR 的 ${workId}（ambient 多半是前任 pane 殘留的環境）`
+          : null,
+    }
+  }
+  if (ambient && origin && ambientOrigin && ambientOrigin !== origin) {
+    return {
+      kind: 'origin-over-ambient',
+      warning: `warn: ambient CLADE_WORK_ID=${ambient}（origin ${ambientOrigin}）與 --origin ${origin} 衝突；採明確的 --origin，另鑄 ${origin} 的卡，不沿用 ambient`,
+    }
+  }
+  return { kind: 'default' }
+}
+
+const PR_WORK_TRAILER = /^Work:\s*(W-\d{4}-\d{2}-\d{2}-[\w.-]+)/gmu
+
+/** open PR（head = branch）body 的 `Work:` trailer。gh 不可用／沒有 PR 一律回空（fail-open）。 */
+export function readPrWorkIds(consumerRoot: string, branch: string): string[] {
+  try {
+    const raw = execFileSync(
+      'gh',
+      ['pr', 'list', '--head', branch, '--state', 'open', '--json', 'body', '--limit', '5'],
+      { cwd: consumerRoot, encoding: 'utf8', timeout: 15_000, stdio: ['ignore', 'pipe', 'ignore'] },
+    )
+    const rows: unknown = JSON.parse(raw)
+    if (!Array.isArray(rows)) return []
+    return rows.flatMap((row: unknown) => {
+      const body = (row as { body?: unknown } | null)?.body
+      return typeof body === 'string' ? [...body.matchAll(PR_WORK_TRAILER)].map((m) => m[1]!) : []
+    })
+  } catch {
+    return []
+  }
+}
+
+/** ambient work id 的 `work.open` origin_ref；spine 讀不到或沒有就 null。 */
+async function readWorkOrigin(consumerRoot: string, workId: string): Promise<string | null> {
+  try {
+    const { readEvents } = await importVendorScript('flow/emit.ts', consumerRoot)
+    const open = (
+      readEvents(consumerRoot) as { work_id?: string; kind?: string; payload?: any }[]
+    ).find((e) => e.kind === 'work.open' && e.work_id === workId && e.payload?.origin_ref)
+    return open ? String(open.payload.origin_ref) : null
+  } catch {
+    return null
+  }
+}
+
 // 本檔在自己那棵樹裡的相對位置（clade `vendor/scripts` / consumer `scripts`）。
 // **MUST 在 module load 當下算**，不能等到要印訊息時才算：merge-back 的收尾訊息印在
 // `cmdCleanup` 之後，而本檔若是 worktree 的副本在跑，那時自己的目錄已經被刪了，
@@ -354,6 +464,20 @@ function makeSlugSafe(s) {
     .replace(/^-|-$/g, '')
   if (!cleaned) throw new Error(`Slug normalizes to empty: ${JSON.stringify(s)}`)
   return cleaned
+}
+
+/**
+ * 目錄／branch 尾段是否就是這個（已 `makeSlugSafe` 小寫化的）slug。
+ *
+ * `makeSlugSafe` 先 `toLowerCase()`，但 consumer 名帶大寫時，auto-dispatch 開出的樹目錄與 branch
+ * 保留大寫（`<consumer-f>-wt/auto-<consumer-f>-td-010`、`session/…-auto-<consumer-f>-td-010`）。尾段比對若逐字比，
+ * 這些樹用任何寫法的 slug 都找不到（`No session worktree found for slug: auto-<consumer-f>-td-010`）。
+ * 兩邊都小寫後比；`suffix` 帶前導的 `/` 或 `-`。
+ */
+function endsWithSlug(value, suffix, cleanSlug) {
+  return String(value ?? '')
+    .toLowerCase()
+    .endsWith(`${suffix}${cleanSlug}`)
 }
 
 const pad2 = (n) => String(n).padStart(2, '0')
@@ -450,6 +574,21 @@ function sessionWorktrees(cwd) {
 }
 
 /**
+ * `<consumer>-wt/` 底下 detached HEAD 的樹（review wt、rebase 中斷、`git checkout --detach` 後留下的樹）。
+ *
+ * `sessionWorktrees` 只認 `refs/heads/session/*`，detached 樹沒有 branch 因此整個被濾掉：
+ * `list` 看不到它、`merge-back` 對它回「找不到 worktree」——成因被藏起來。這份只給需要
+ * 「看見它並講清楚」的呼叫點（`list`、`merge-back` 的錯誤路徑）用；`prune`／`backlog`／
+ * `dev-port` 要的是有 branch 可判 landed 的樹，**NEVER** 改吃這份。
+ */
+function detachedSessionWorktrees(cwd) {
+  const out = git(['worktree', 'list', '--porcelain'], { cwd })
+  return parseWorktreeList(out).filter(
+    (w) => !w.branch && basename(dirname(w.path)).endsWith('-wt'),
+  )
+}
+
+/**
  * 一個 change slug 對應到哪一棵 session worktree —— **這是全 fleet 唯一的那份 matcher**。
  *
  * 為什麼要是唯一的：merge-back 入口用它決定「要把哪一棵樹 merge-back 進 main」，
@@ -464,7 +603,8 @@ export function findSessionWorktreeForSlug(consumerRoot, cleanSlug) {
   const wts = sessionWorktrees(consumerRoot)
   return (
     wts.find(
-      (w) => w.path.endsWith(`/${cleanSlug}`) && w.branch && w.branch.endsWith(`-${cleanSlug}`),
+      (w) =>
+        endsWithSlug(w.path, '/', cleanSlug) && w.branch && endsWithSlug(w.branch, '-', cleanSlug),
     ) ?? null
   )
 }
@@ -534,6 +674,7 @@ import {
   devPortStateDir,
   pickDevPortOffset as pickDevPortOffsetIn,
   planWorktreeDevPorts,
+  readRegistryWorktreeBand,
   readWorktreeDevPorts,
   releaseWorktreeDevPorts,
   type WorktreePortBand,
@@ -650,22 +791,11 @@ function devPortExhaustedReport(consumerRoot, declared) {
  */
 
 /**
- * This consumer's worktree band from the projected registry, or null when it
- * declares none (then only the base+1..base+9 pool exists).
+ * This consumer's worktree band, or null when it declares none (then only the
+ * base+1..base+9 pool exists). Source order lives in `readRegistryWorktreeBand`.
  */
 function readWorktreeBand(root): WorktreePortBand | null {
-  try {
-    const reg = JSON.parse(readFileSync(join(root, '.clade', 'registry', 'consumers.json'), 'utf8'))
-    const list = Array.isArray(reg) ? reg : (reg.consumers ?? [])
-    const entry = list.find((c) => c.consumer_id === basename(root))
-    const band = entry?.dev_ports?.worktree_band
-    if (!Array.isArray(band) || band.length !== 2 || !band.every(Number.isInteger)) return null
-    // 逐項取出再組 tuple。`return band` 交出去的是 `any[]`，而 `WorktreePortBand` 是
-    // `[number, number]` —— 長度保證在 runtime 檢查裡，型別系統看不到，所以要在這裡收窄。
-    return [band[0], band[1]]
-  } catch {
-    return null
-  }
+  return readRegistryWorktreeBand(root)
 }
 
 /**
@@ -1095,6 +1225,31 @@ function hashUtf8(content: string) {
 }
 
 /**
+ * runtime hook ledger（`.clade/projections/hooks.json`）沒有 `files`，擁有權記在
+ * `targets.<t>.entries[id].marker`。main 的 native 設定檔（`.claude/settings.json`）可能有
+ * 尚未 commit 的註冊（典型：plugin→native 遷移 apply 後、consumer commit 前），worktree 卻
+ * checkout 自 HEAD；拷過來的 ledger 仍宣稱擁有那些 entry，`sync-rules --check` 就以
+ * `deleted managed hook conflict` 擋下該樹的每一次 commit。native 檔裡找不到 marker 的
+ * entry 丟掉擁有權——同 `files` 對缺檔的處理，下一次 apply 會重算。回傳是否有改動。
+ */
+function reconcileCopiedHookLedger(wtPath: string, state: any): boolean {
+  const targets = state?.targets
+  if (!targets || typeof targets !== 'object' || state.files !== undefined) return false
+  let dirty = false
+  for (const target of Object.values<any>(targets)) {
+    if (!target || typeof target.path !== 'string' || !target.entries) continue
+    const abs = join(wtPath, target.path)
+    const raw = existsSync(abs) && statSync(abs).isFile() ? readFileSync(abs, 'utf8') : ''
+    for (const [id, entry] of Object.entries<any>(target.entries)) {
+      if (typeof entry?.marker !== 'string' || raw.includes(entry.marker)) continue
+      delete target.entries[id]
+      dirty = true
+    }
+  }
+  return dirty
+}
+
+/**
  * After copying gitignored `.clade/projections` from main, rewrite `files`
  * hashes to the worktree's actual bytes.
  *
@@ -1124,6 +1279,11 @@ export function reconcileCopiedProjectionState(
     try {
       state = JSON.parse(readFileSync(path, 'utf8'))
     } catch {
+      continue
+    }
+    if (reconcileCopiedHookLedger(wtPath, state)) {
+      writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`)
+      updated++
       continue
     }
     if (!state || typeof state !== 'object' || typeof state.files !== 'object' || !state.files)
@@ -1279,6 +1439,19 @@ export function cladeBinShimSeedPaths(consumerRoot: string, wtPath?: string): st
       }
     }
   }
+  // `pnpm flow` 是 `node .clade/vendor/scripts/flow/flow.ts`（hub-scripts.ts），不經 `.clade/bin` shim，
+  // 但同樣 gitignored、linked worktree fork 不帶——少了它 worktree 內 `pnpm flow` 起手 MODULE_NOT_FOUND
+  // （W-2026-10-08-consumer-wt-helper-flow-fail-open）。把它當閉包的另一個入口，走同一套 seed 單位。
+  const flowEntry = join(consumerRoot, '.clade', 'vendor', 'scripts', 'flow', 'flow.ts')
+  try {
+    if (statSync(flowEntry).isFile()) {
+      queue.push(flowEntry)
+      const unit = shimDepSeedUnit(consumerRoot, flowEntry)
+      if (unit) units.add(unit)
+    }
+  } catch {
+    // main 沒投影 flow（clade home、或投影尚未散播）：沒有東西可種。
+  }
   // 落點統一映射回 consumer 空間：wt 側 bin（tracked 舊版）resolve 出來的是
   // worktree 路徑，但供應源永遠是 main——缺件判缺席、閉包遞移都看 main 那份。
   const toConsumerAbs = (absPath: string) => {
@@ -1408,15 +1581,6 @@ export function seedWorktreeCladeSubstrate(
       if (spawnSync('git', ['check-ignore', '-q', rel], { cwd: consumerRoot }).status !== 0)
         continue
       cpSync(src, dst, { recursive: true })
-      if (rel === '.codex') {
-        try {
-          log(`  ${extendCodexWorktreeHookTrust(wtPath).reason}`)
-        } catch (error) {
-          console.error(
-            `warn: Codex worktree hook trust unchanged: ${error instanceof Error ? error.message : String(error)}`,
-          )
-        }
-      }
       if (rel === '.clade/projections') copiedProjections = true
       copied.push(rel)
       log(`  clade-substrate: copied ${rel} from main (gitignored, worktree cannot check it out)`)
@@ -1816,7 +1980,10 @@ export function copyEnvSyncFiles(
 export function bootstrapWorktreeRuntime(
   consumerRoot: string,
   wtPath: string,
-  { strict = false } = {},
+  {
+    strict = false,
+    devPort = 'allocate',
+  }: { strict?: boolean; devPort?: 'allocate' | 'defer' } = {},
 ) {
   const log = strict ? console.error : console.log
   setupBriefExclude(wtPath)
@@ -1882,12 +2049,20 @@ export function bootstrapWorktreeRuntime(
   // 記 note 放行，槽位留下次 `wt-helper dev`（ensure 路徑）再配。
   let devPortRecord = null
   let devPortSkipped = false
-  try {
-    devPortRecord = allocateWorktreeDevPorts(consumerRoot, wtPath)
-  } catch (e) {
-    if (strict) throw e
+  if (devPort === 'defer') {
+    // O2：不需要 dev server 的樹（batch 整合樹預設）不佔格——也就不會因為 band 滿載而
+    // 讓整個 prepare 在 strict 下 throw。`wt-helper dev` 首跑 fail-loud 地分配，需要時
+    // 才付這筆成本。
     devPortSkipped = true
-    console.error(`note: dev-port allocation skipped: ${e?.message ?? e}`)
+    log(`  dev-port: deferred — 'wt-helper dev' allocates a slot on first use`)
+  } else {
+    try {
+      devPortRecord = allocateWorktreeDevPorts(consumerRoot, wtPath)
+    } catch (e) {
+      if (strict) throw e
+      devPortSkipped = true
+      console.error(`note: dev-port allocation skipped: ${e?.message ?? e}`)
+    }
   }
   if (devPortRecord) {
     const shown = devPortRecord.ports.map((p) => `${p.alias}=${p.port}`).join(' ')
@@ -1896,7 +2071,7 @@ export function bootstrapWorktreeRuntime(
     // by then the worktree that needed the warning is the one that cannot get a
     // slot, and its work stalls at whatever step needed a dev server.
     const declared = readDeclaredDevPorts(consumerRoot)
-    const capacity = devPortCapacity(declared)
+    const capacity = devPortCapacity(declared, readWorktreeBand(consumerRoot))
     const held = devPortHolders(consumerRoot).length
     if (capacity > 0 && held >= capacity - 1) {
       console.error(
@@ -1922,7 +2097,9 @@ export function bootstrapWorktreeRuntime(
   // `ensure` 沒 throw 不等於 REST 可用：容量不足時 consumer 可以回 `created`＋`sidecarDeferred`
   // 而不失敗。這幾行是建樹的人唯一看得到的狀態，NEVER 退回只印 dbName → url（deferred 時
   // url 是 undefined，印出來的 `→ undefined` 看不出這棵樹沒有 REST）。
-  const envBootstrap = runWtEnvBootstrap(wtPath, 'ensure')
+  // 樹自己的 shim 先跑；只在它認不得自己的分支名（E_BRANCH_SLUG，例如 base 早於
+  // `f3d842e12` 的 `cloud/*` PR 分支）時，才改用主 checkout 的 shim 重跑一次。
+  const envBootstrap = runWtEnvBootstrap(wtPath, 'ensure', { slugFallbackRoot: consumerRoot })
   for (const line of describeEnsureResult(envBootstrap, wtPath)) log(`  ${line}`)
 }
 
@@ -2018,6 +2195,25 @@ function treeWritableCredentials(root: string, ownerUid: number) {
 function mapsPathname(line: string): string {
   const match = line.match(/^\s*(?:\S+\s+){5}(.*)$/)
   return match ? match[1] : ''
+}
+
+// This process and its ancestors (the shell, the agent that launched it). A caller standing
+// inside the tree it is asked to remove shows up as a live writer; the refusal stays — the tree
+// is occupied — but naming the caller turns "who is writing?" into "move your cwd".
+function callerLineage(): Set<string> {
+  const lineage = new Set<string>()
+  let pid = String(process.pid)
+  while (/^\d+$/.test(pid) && pid !== '0' && !lineage.has(pid)) {
+    lineage.add(pid)
+    try {
+      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+      // pid (comm) state ppid …; comm may contain spaces and parens, so anchor on the last ')'.
+      pid = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1] ?? '0'
+    } catch {
+      break
+    }
+  }
+  return lineage
 }
 
 export function probeLiveWriterCwd(path: string) {
@@ -2118,7 +2314,13 @@ export function probeLiveWriterCwd(path: string) {
           )
         continue
       }
-      if (occupies(cwd)) throw new Error(`live writer cwd occupies ${path}`)
+      if (occupies(cwd))
+        throw new Error(
+          `live writer cwd occupies ${path}` +
+            (callerLineage().has(pid)
+              ? ' (that writer is this command itself or one of its ancestors — run it from outside the tree; `batch cleanup --batch <id>` names the batch from there)'
+              : ''),
+        )
       let fds: string[]
       try {
         fds = readdirSync(`${taskDir}/fd`)
@@ -2340,21 +2542,42 @@ export function teardownWorktreeSubmodules(
       cause: error,
     })
   }
-  const paths = before
+  const entries = before
     .split('\n')
     // `submodule status` appends ` (<describe>)` for initialized modules;
     // the path must match .gitmodules, not the decorated column.
-    .map((line) =>
-      line
+    .map((line) => ({
+      // A leading `-` is an uninitialized module: nothing to deinit.
+      initialized: !line.trim().startsWith('-'),
+      path: line
         .trim()
         .replace(/^[-+U]?[0-9a-f]+\s+/, '')
         .replace(/\s+\([^)]*\)$/, ''),
-    )
-    .filter(Boolean)
-  if (before) {
+    }))
+    .filter((entry) => entry.path)
+  const paths = entries.map((entry) => entry.path)
+  // Deinit only what is initialized and name the paths: `deinit --all` over an
+  // empty (uninitialized) submodule directory makes git run its "local
+  // modifications" check against the superproject, so any dirty superproject
+  // file refuses a teardown that has nothing to detach. Local files left in an
+  // uninitialized module directory still fail closed in the plain-directory
+  // check below.
+  //
+  // `status --recursive` also lists nested submodules by full path, but the
+  // top-level `deinit` only matches gitlinks in the superproject index (a
+  // nested path fails with "pathspec did not match"). Deinit the parent and the
+  // nested entries drop out of the `after` status, so keep top-level paths only.
+  const initializedPaths = entries
+    .filter((entry) => entry.initialized)
+    .map((entry) => entry.path)
+    .filter((path, _index, all) => !all.some((other) => path.startsWith(`${other}/`)))
+  if (initializedPaths.length) {
     try {
-      execFileSync('git', ['submodule', 'deinit', '--all'], {
+      execFileSync('git', ['submodule', 'deinit', '--', ...initializedPaths], {
         cwd: wtPath,
+        // Paths after `--` are pathspecs: a name containing `*`, `?` or `[`
+        // must not glob-match other submodules.
+        env: { ...process.env, GIT_LITERAL_PATHSPECS: '1' },
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
       })
@@ -3220,6 +3443,35 @@ function checkedOutWorktree(
 }
 
 /**
+ * consumer 主 checkout 缺 `.clade/runtime/hooks.json`（gitignored、worktree fork 帶不走）時回缺口訊息，否則 null。
+ *
+ * `.clade/runtime/` 存在卻缺 hooks.json 時，`seedWorktreeCladeSubstrate` 照樣複製出半套 substrate，
+ * 從它 fork 的樹一 commit 就被 sync-rules 以 ENOENT 擋住。擇「開樹當下明確失敗」而不是「add 順手觸發投影」：add 不該替 consumer 主 checkout
+ * 寫投影（擴權，且失敗要連帶回滾已開的樹）；缺口的修復屬 propagate／sync-rules，訊息直接指到。
+ * 只在 `.clade/runtime/` 存在時判（目錄都沒有＝尚未投影過的 consumer，沒有東西可複製也沒有半套狀態）；
+ * hooks.json 若已 tracked，fork 自帶，不算缺。
+ */
+export function consumerRuntimeSubstrateGap(consumerRoot: string): string | null {
+  const runtimeDir = join(consumerRoot, '.clade', 'runtime')
+  if (!existsSync(runtimeDir)) return null
+  if (existsSync(join(runtimeDir, 'hooks.json'))) return null
+  const tracked = spawnSync('git', ['ls-files', '-z', '--', '.clade/runtime/hooks.json'], {
+    cwd: consumerRoot,
+    encoding: 'utf8',
+  })
+  if (tracked.status === 0 && tracked.stdout.trim()) return null
+  let present: string[] = []
+  try {
+    present = readdirSync(runtimeDir)
+  } catch {}
+  return (
+    `${consumerRoot}/.clade/runtime/hooks.json 不存在（目錄裡只有 ${present.join('、') || '（空）'}）：` +
+    `worktree 無法 checkout 這個 gitignored substrate，從這份主 checkout 開出的樹 commit 時 sync-rules 會以 ENOENT 失敗。\n` +
+    `  修復：先補齊主 checkout 的 runtime 投影（在 clade home 對此 consumer 跑 propagate，或從同 commit 的另一台複製 .clade/runtime/），再重開樹`
+  )
+}
+
+/**
  * 開樹前保證這個 consumer 的 gitignored 投影（`.clade/vendor`…）齊全：peer 的 consumer checkout 只靠 git
  * 拿到 tracked 內容，`.clade/vendor` 只有 propagate／`pnpm hub:vendor` 會寫，缺了的話 consumer 自己的
  * `scripts/wt-helper.ts` 在 module 載入就 ERR_MODULE_NOT_FOUND（W-2026-10-07-zenbook-consumer-projection-gap）。
@@ -3280,6 +3532,8 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   enforceDiskAdmission('wt-helper add')
   const cleanSlug = makeSlugSafe(slug)
   const consumerRoot = findConsumerRoot()
+  const runtimeGap = consumerRuntimeSubstrateGap(consumerRoot)
+  if (runtimeGap) throw new Error(`placement_refused: ${runtimeGap}`)
   requireConsumerProjection(consumerRoot)
   // Pre-clean stale .git/index.lock if any — see docs/tech-debt.md TD-145.
   const lockStatus = ensureNoStaleIndexLock(consumerRoot)
@@ -3470,10 +3724,7 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
       }
       const strategy = opts.baselineStrategy || 'warn'
       if (strategy === 'commit') {
-        const scopePaths = String(opts.baselineScopePaths || '')
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
+        const scopePaths = parseScopePaths(opts.baselineScopePaths)
         if (scopePaths.length === 0) {
           const dirtyPreview = [
             ...dirty.modified.map((m) => `  ${m.status}  ${m.path}`),
@@ -3521,10 +3772,7 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
         // capture anything — the fork starts clean from HEAD and does not need
         // main's WIP. Capture is opt-in (--include-unrelated-dirty for all), never
         // the silent default.
-        const scopePaths = String(opts.baselineScopePaths || '')
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
+        const scopePaths = parseScopePaths(opts.baselineScopePaths)
         if (scopePaths.length > 0) {
           // No safe scoped stash: `git stash push -u -- <pathspec>` leaks the full
           // tracked working tree (the -u snapshot ignores pathspec — see
@@ -3685,11 +3933,14 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
         const baselinePaths = new Set()
 
         try {
-          const untrackedTree = git(['ls-tree', '-r', `${pendingBaselineRef}^3`, '--name-only'], {
-            cwd: consumerRoot,
-          })
+          const untrackedTree = git(
+            ['ls-tree', '-r', '-z', `${pendingBaselineRef}^3`, '--name-only'],
+            {
+              cwd: consumerRoot,
+            },
+          )
           untrackedTree
-            .split('\n')
+            .split('\0')
             .filter(Boolean)
             .forEach((p) => baselinePaths.add(p))
         } catch (untrackedErr) {
@@ -3704,11 +3955,11 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
 
         try {
           const trackedDiff = git(
-            ['diff', '--name-only', `${pendingBaselineRef}^1`, pendingBaselineRef],
+            ['diff', '--name-only', '-z', `${pendingBaselineRef}^1`, pendingBaselineRef],
             { cwd: consumerRoot },
           )
           trackedDiff
-            .split('\n')
+            .split('\0')
             .filter(Boolean)
             .forEach((p) => baselinePaths.add(p))
         } catch (trackedErr) {
@@ -3789,7 +4040,39 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   // invocations can see this worktree is active. expected_paths starts empty;
   // SessionStart heartbeat hook refreshes; cleanup / successful merge-back
   // drops the claim. See rules/core/session-claims.md.
+  // CDB-388：明確來源（--checkout PR 的 Work:、--origin）先於 ambient CLADE_WORK_ID 決定，
+  // 且要在 writeClaim 之前——claim 的 work_id 在那一刻定案，事後 bind 不會覆蓋已有的 id。
+  let ambientWorkId = process.env.CLADE_WORK_ID?.trim() || null
+  let addWorkSource: AddWorkSource = { kind: 'default' }
   try {
+    let explicitOrigin = String(opts.origin ?? '').trim() || null
+    if (explicitOrigin) {
+      const { parseRef } = await importVendorScript('flow/answer.ts', consumerRoot)
+      if (!parseRef(explicitOrigin)?.scheme) explicitOrigin = null
+    }
+    addWorkSource = decideAddWorkSource({
+      ambient: ambientWorkId,
+      origin: explicitOrigin,
+      ambientOrigin:
+        ambientWorkId && explicitOrigin ? await readWorkOrigin(consumerRoot, ambientWorkId) : null,
+      prWorkIds: checkoutBranch ? readPrWorkIds(consumerRoot, checkoutBranch) : [],
+      checkoutBranch,
+    })
+  } catch (e) {
+    console.error(`note: work id source check skipped (fail-open): ${e?.message ?? e}`)
+  }
+  if (addWorkSource.kind === 'pr-work') {
+    if (addWorkSource.warning) console.error(addWorkSource.warning)
+    ambientWorkId = addWorkSource.workId
+  } else if (addWorkSource.kind === 'origin-over-ambient') {
+    console.error(addWorkSource.warning)
+    ambientWorkId = null
+  }
+  const priorEnvWorkId = process.env.CLADE_WORK_ID
+  try {
+    // writeClaim 的 work_id 預設讀 ambient env：明確來源勝出時要蓋掉它（pr-work 直接帶值，
+    // origin-over-ambient 暫時拿掉 env，讓後面鑄出的卡可以 bind 進空槽）。
+    if (addWorkSource.kind === 'origin-over-ambient') delete process.env.CLADE_WORK_ID
     // `--expected-paths` had a field and a reader and no flag: `opts.expectedPaths` was never
     // assigned by the arg parser, so every claim ever written here got `[]`. That is the other
     // half of "22/22 empty" — the half that no amount of discipline would have fixed (TD-794 刀 4).
@@ -3809,12 +4092,18 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
       change_id: cleanSlug,
       expected_paths: expectedPaths,
       task_summary: opts.taskSummary ?? null,
+      ...(addWorkSource.kind === 'pr-work' ? { work_id: addWorkSource.workId } : {}),
     })
     console.log(`  Claim: ${claim.session_id} (.clade/claims/${claim.session_id}.json)`)
     if (claim.work_id) console.log(`  Work:  ${claim.work_id}`)
     warnOnClaimOverlap(consumerRoot, expectedPaths, wtPath)
   } catch (e) {
     console.error(`note: claim write skipped: ${e.message ?? e}`)
+  } finally {
+    if (addWorkSource.kind === 'origin-over-ambient') {
+      if (priorEnvWorkId === undefined) delete process.env.CLADE_WORK_ID
+      else process.env.CLADE_WORK_ID = priorEnvWorkId
+    }
   }
 
   bootstrapWorktreeRuntime(consumerRoot, wtPath)
@@ -3834,13 +4123,14 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   // Fail-open by construction: the spine module is clade-home-only (wt-helper itself is projected
   // into every consumer, `vendor/scripts/flow/` is not), so the import is dynamic and every
   // failure path is a warn. NEVER let this gate worktree creation — the tree is already on disk.
-  const ambientWorkId = process.env.CLADE_WORK_ID?.trim()
+  // ambientWorkId 在 writeClaim 前已依明確來源決定（CDB-388）：PR Work: 勝出時它就是 PR 的 id，
+  // origin 衝突時為 null（走下面的鑄卡分支）。
   let associatedWorkId = ambientWorkId ?? null
   if (ambientWorkId) {
     console.error(`export CLADE_WORK_ID=${ambientWorkId}`)
   } else {
     try {
-      const { openWork } = await import(new URL('./flow/emit.ts', import.meta.url).href)
+      const { openWork } = await importVendorScript('flow/emit.ts', consumerRoot)
       const workSlug = String(opts.taskSummary ?? '')
         .toLowerCase()
         .replace(/[^a-z0-9-]+/g, '-')
@@ -3867,9 +4157,7 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
        * A bad scheme degrades to 未歸屬 with a loud line. NEVER let it abort: the worktree is
        * already on disk, and a telemetry mint that takes the transport down inverts the contract.
        */
-      const { parseRef, REF_SCHEMES } = await import(
-        new URL('./flow/answer.ts', import.meta.url).href
-      )
+      const { parseRef, REF_SCHEMES } = await importVendorScript('flow/answer.ts', consumerRoot)
       let origin = String(opts.origin ?? '').trim() || null
       if (origin && !parseRef(origin)?.scheme) {
         console.error(
@@ -3920,12 +4208,45 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
       console.error(`note: flow work open skipped (fail-open): ${e?.message ?? e}`)
     }
   }
+  // 新樹的位置進 spine（只寫位置，step 沿用前一筆）：別台用 `flow where` 才看得到這件工作在哪台、
+  // 哪棵樹。走 clade home 的 flow CLI（它先確認該 spine 上有這件 work），detached、fail-open。
+  if (associatedWorkId && process.env.CLADE_AUTO_CHECKPOINT !== '0') {
+    const flowCli = join(
+      process.env.CLADE_HOME || join(homedir(), 'offline', 'clade'),
+      'vendor',
+      'scripts',
+      'flow',
+      'flow.ts',
+    )
+    if (existsSync(flowCli))
+      try {
+        spawn(
+          process.execPath,
+          [
+            flowCli,
+            'work',
+            'checkpoint',
+            associatedWorkId,
+            '--checkout',
+            resolve(wtPath),
+            '--actor',
+            opts.agent ?? 'claude-code',
+            '--substrate',
+            'git',
+          ],
+          { cwd: consumerRoot, detached: true, stdio: 'ignore' },
+        ).unref()
+      } catch (e) {
+        console.error(`note: flow work checkpoint skipped (fail-open): ${e?.message ?? e}`)
+      }
+  }
   // Register the carrier only after worktree creation and flow/claim receipts have
   // succeeded. This is an annotation, never a second lifecycle authority: inventory
   // uses it to explain why this path/branch existed after the session disappears.
   try {
-    const { appendInventoryEvent, assetIdFor } = await import(
-      new URL('./work-inventory-store.ts', import.meta.url).href
+    const { appendInventoryEvent, assetIdFor } = await importVendorScript(
+      'work-inventory-store.ts',
+      consumerRoot,
     )
     const head = git(['rev-parse', 'HEAD'], { cwd: wtPath })
     const observationKey = `worktree:${resolve(wtPath)}:${branch}`
@@ -4080,11 +4401,75 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   })
 }
 
+/** `--baseline-scope-paths` 的逗號清單。 */
+function parseScopePaths(raw) {
+  return String(raw || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+/**
+ * fork 前 baseline 策略的機械判定；代碼對動作表在 wt skill 的 `rules/fork前baseline判準.md` Rule 2。
+ * `scopePaths` 是呼叫端要帶進新樹的路徑（檔案或目錄前綴）；不給＝不帶任何 main WIP。
+ * first-match：讀不到狀態 → 不安全的 unmerged → 走 `--precheck-baseline` 的路上有他人 session 的
+ * dirty（`add` 會 STOP）→ 不帶 WIP → main 乾淨 → 要帶的路徑有 dirty → 要帶卻一條都對不上。
+ * 可自動標 resolved 的 unmerged 在 `add` 裡會變成 modified，所以一起算進 path 分類；這時回
+ * `auto-resolve-fork`，並用 `baseline_strategy` 指出 auto-resolve 之後 `add` 要帶的 strategy
+ * （不帶 WIP 走 `stash`＝不捕捉、乾淨 fork；帶 WIP 走 `commit`）——不帶 strategy 的 `add` 預設
+ * `warn`，遇到剛標 resolved 的路徑必 throw。
+ */
+export function recommendBaselineStrategy(consumerRoot, dirty, scopePaths: string[] = []) {
+  if (dirty.error) return { recommended_strategy: 'unknown', reason: dirty.error }
+  const { safe, unsafe } = classifyUnmergedSafety(consumerRoot, dirty.conflicted)
+  if (unsafe.length > 0) return { recommended_strategy: 'stop-unsafe', unsafe }
+  const paths = [...dirty.modified, ...dirty.untracked, ...safe].map((entry) => entry.path)
+  // 只有帶 `--precheck-baseline` 的 add（auto-resolve、commit-scope）會做他人 session 檢查。
+  if (safe.length > 0 || scopePaths.length > 0) {
+    const { otherSession } = classifyDirtyPaths(consumerRoot, paths)
+    if (otherSession.length > 0)
+      return {
+        recommended_strategy: 'stop-other-session',
+        other_session: otherSession.map((o) => o.path),
+      }
+  }
+  if (scopePaths.length === 0)
+    return safe.length > 0
+      ? { recommended_strategy: 'auto-resolve-fork', safe, baseline_strategy: 'stash' }
+      : { recommended_strategy: 'fork-clean' }
+  if (paths.length === 0) return { recommended_strategy: 'fork-clean' }
+  const inScope = (path) =>
+    scopePaths.some((scope) => {
+      const prefix = scope.replace(/\/+$/, '')
+      return path === prefix || path.startsWith(`${prefix}/`)
+    })
+  const scopeIn = paths.filter(inScope)
+  const scopeOut = paths.filter((path) => !inScope(path))
+  if (scopeIn.length === 0)
+    return { recommended_strategy: 'ambiguous', scope_in: [], scope_out: scopeOut }
+  return safe.length > 0
+    ? {
+        recommended_strategy: 'auto-resolve-fork',
+        safe,
+        baseline_strategy: 'commit',
+        scope_in: scopeIn,
+        scope_out: scopeOut,
+      }
+    : { recommended_strategy: 'commit-scope', scope_in: scopeIn, scope_out: scopeOut }
+}
+
 async function cmdDetectMainDirty(opts) {
   const consumerRoot = findConsumerRoot()
   const dirty = detectMainDirty(consumerRoot)
   if (opts.json) {
-    console.log(JSON.stringify(dirty, null, 2))
+    const scopePaths = parseScopePaths(opts.baselineScopePaths)
+    console.log(
+      JSON.stringify(
+        { ...dirty, ...recommendBaselineStrategy(consumerRoot, dirty, scopePaths) },
+        null,
+        2,
+      ),
+    )
     return
   }
   const total = dirty.modified.length + dirty.untracked.length + dirty.conflicted.length
@@ -4195,6 +4580,30 @@ function enrichWorktree(
 }
 
 /**
+ * detached 樹的 `list` 列：沒有 branch 名，gate 改以 HEAD commit 當 rev（與 cleanup 同一套）。
+ * NEVER 把空字串或 sha 塞進 `branch` 欄位流進 ancestry／merged-PR 判定——`branch` 固定 null，
+ * 以 `detached: true` 與 `head` 表示。
+ */
+function enrichDetachedWorktree(consumerRoot, w, { now = Date.now() }: { now?: number } = {}) {
+  let lastCommitSec = 0
+  try {
+    lastCommitSec = parseInt(git(['log', '-1', '--format=%ct', w.head], { cwd: consumerRoot }), 10)
+  } catch {}
+  const lastCommitMs = Number.isFinite(lastCommitSec) ? lastCommitSec * 1000 : 0
+  return {
+    path: w.path,
+    branch: null,
+    detached: true as const,
+    head: w.head,
+    lastCommit: lastCommitMs ? new Date(lastCommitMs).toISOString() : null,
+    daysOld: lastCommitMs ? Math.floor((now - lastCommitMs) / 86_400_000) : null,
+    mergedToMain: isAncestorOfLandingBase(consumerRoot, w.head),
+    // merged 只描述 HEAD commit；樹裡未 commit 的 WIP 要靠 dirty 才看得到（與 branch 列同一判準）。
+    dirty: countWorktreeDirty(w.path),
+  }
+}
+
+/**
  * session worktree 內的 user WIP 筆數（含 untracked）；讀不到回 null。
  *
  * 剔除可忽略漂移（投影殘留、tool-managed drift）——與 cleanup 的 uncommitted gate 同一份判準。
@@ -4211,6 +4620,9 @@ async function cmdList(opts) {
   const enriched = wts.map((w) =>
     enrichWorktree(consumerRoot, w, { landed: !opts.noLandedState }),
   ) as any[]
+  const now = Date.now()
+  for (const w of detachedSessionWorktrees(consumerRoot))
+    enriched.push(enrichDetachedWorktree(consumerRoot, w, { now }))
 
   if (opts.json) {
     console.log(JSON.stringify(enriched, null, 2))
@@ -4235,6 +4647,16 @@ async function cmdList(opts) {
     // target by age or status and frees nothing, because most worktrees created
     // after the band filled never held a slot at all.
     const portTag = offset === undefined ? '' : `, dev-port +${offset}`
+    if (w.detached) {
+      const sha = String(w.head ?? '').slice(0, 12)
+      const merged = w.mergedToMain
+        ? `, merged${w.dirty ? `, dirty ${w.dirty}` : w.dirty === null ? ', dirty ?' : ''}`
+        : ''
+      console.log(`(detached ${sha})  (${ageLabel} ago${merged}${portTag}, detached HEAD)`)
+      console.log(`  ${w.path}`)
+      console.log(`  detached HEAD：先 git -C ${w.path} checkout <branch> 才能 merge-back`)
+      continue
+    }
     console.log(`${w.branch}  (${ageLabel} ago${mergedTag}${portTag})`)
     console.log(`  ${w.path}`)
     if (w.taskSummary) {
@@ -4246,7 +4668,7 @@ async function cmdList(opts) {
 
   const declared = readDeclaredDevPorts(consumerRoot)
   if (declared.length > 0) {
-    const capacity = devPortCapacity(declared)
+    const capacity = devPortCapacity(declared, readWorktreeBand(consumerRoot))
     const held = holderBySlug.size
     const suffix = held >= capacity ? ' — exhausted; land one to free a slot' : ''
     console.log(`\ndev-port slots: ${held}/${capacity} held${suffix}`)
@@ -4483,28 +4905,20 @@ const UNMERGED_XY = new Set(['DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU'])
 // for callers (merge-back entry) that need to decide commit-vs-stash-vs-stop
 // before fork creates a worktree blind to main's working state.
 //
-// IMPORTANT: same parsing constraint as detectMergeBlockers — cannot use the
-// `git()` helper because it trims output, eating the leading space in porcelain
-// XY format (e.g., ` M README.md` → `M README.md`) and breaking column parsing.
+// 走 `readGitStatus`（`-z`）：非 ASCII 路徑不被 `core.quotePath` 跳脫，rename 的 `path` 是新路徑。
 function detectMainDirty(consumerRoot) {
-  let statusRaw = ''
+  let entries
   try {
-    statusRaw = execFileSync('git', ['status', '--porcelain'], {
-      cwd: consumerRoot,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-  } catch {
-    return { modified: [], untracked: [], conflicted: [] }
+    entries = readGitStatus(consumerRoot)
+  } catch (error) {
+    // `error` 只給 recommendBaselineStrategy 判「工具壞了」；既有呼叫端只讀三個陣列，行為不變。
+    return { modified: [], untracked: [], conflicted: [], error: String(error?.message ?? error) }
   }
 
   const modified = []
   const untracked = []
   const conflicted = []
-  for (const line of statusRaw.split('\n')) {
-    if (line.length < 4) continue
-    const status = line.slice(0, 2)
-    const path = line.slice(3)
+  for (const { code: status, path } of entries) {
     if (UNMERGED_XY.has(status)) {
       conflicted.push({ path, status })
     } else if (status === '??') {
@@ -4622,39 +5036,35 @@ function gitSelectiveCommit(consumerRoot, scopePaths, message) {
 // Detect files in main's working tree that would block `git merge --squash <branch>`:
 // any branch-modified path that is either staged/unstaged-modified or untracked in main.
 //
-// IMPORTANT: cannot use the `git()` helper here — it trims output which would eat
-// the leading space in porcelain format (e.g., ` M README.md` → `M README.md`),
-// breaking the column-precise XY/space/path parsing.
+// 走 `readGitStatus`（`-z`）：不依賴 `git()` helper 的 trim，也不被 `core.quotePath` 影響。
 function detectMergeBlockers(consumerRoot, branchName) {
   let branchFiles = []
   try {
     const base = resolveLandingBase(consumerRoot)
-    const out = git(['diff', '--name-only', `${base}...${branchName}`], { cwd: consumerRoot })
-    branchFiles = out.split('\n').filter(Boolean)
+    // `-z`：與下面 status 的不跳脫路徑同一個編碼，非 ASCII 檔名才對得上。
+    const out = git(['diff', '--name-only', '-z', `${base}...${branchName}`], { cwd: consumerRoot })
+    branchFiles = out.split('\0').filter(Boolean)
   } catch {
     return []
   }
   if (branchFiles.length === 0) return []
 
-  let statusRaw = ''
+  let entries
   try {
-    statusRaw = execFileSync('git', ['status', '--porcelain'], {
-      cwd: consumerRoot,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
+    entries = readGitStatus(consumerRoot)
   } catch {
     return []
   }
 
   const modifiedSet = new Set()
   const untrackedSet = new Set()
-  for (const line of statusRaw.split('\n')) {
-    if (line.length < 4) continue
-    const status = line.slice(0, 2)
-    const path = line.slice(3)
-    if (status === '??') untrackedSet.add(path)
-    else modifiedSet.add(path)
+  for (const { code, path, origPath } of entries) {
+    if (code === '??') untrackedSet.add(path)
+    else {
+      modifiedSet.add(path)
+      // rename／copy 的來源端也是 main 上被動過的路徑。
+      if (origPath !== undefined) modifiedSet.add(origPath)
+    }
   }
 
   const blockers = []
@@ -4672,28 +5082,18 @@ function detectMergeBlockers(consumerRoot, branchName) {
 // the worktree's working tree (applied from stash, never committed) and
 // vanished on cleanup.
 function detectUncommittedWorktreeFiles(wtPath): Observed<UncommittedFiles> {
-  let statusRaw = ''
+  let entries
   try {
-    statusRaw = execFileSync('git', ['status', '--porcelain', '-z'], {
-      cwd: wtPath,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
+    entries = readGitStatus(wtPath)
   } catch (error) {
     return toUnknown(`uncommitted status unreadable at ${wtPath}: ${errorMessage(error)}`)
   }
   // `-z`：路徑不 quote（不帶 -z 時非 ASCII 路徑會變成 "\351\251\227…"，--discard-pathspec 與
-  // isIgnorableWorktreeDrift 都比不中）。rename／copy 在 -z 下是 `XY new\0orig\0`，
-  // 這裡照舊組回 `orig -> new`，下游以 ' -> ' 拆。
+  // isIgnorableWorktreeDrift 都比不中）。rename／copy 下游以 `orig -> new` 字串拆（' -> '）。
   const modified = []
   const untracked = []
-  const fields = statusRaw.split('\0')
-  for (let i = 0; i < fields.length; i++) {
-    const field = fields[i]
-    if (field.length < 4) continue
-    const status = field.slice(0, 2)
-    let path = field.slice(3)
-    if (status.includes('R') || status.includes('C')) path = `${fields[++i]} -> ${path}`
+  for (const { code: status, path: newPath, origPath } of entries) {
+    const path = origPath === undefined ? newPath : `${origPath} -> ${newPath}`
     if (status === '??') untracked.push({ path })
     else modified.push({ path, status })
   }
@@ -4756,8 +5156,8 @@ function detectUnlandedFiles(consumerRoot, branchName) {
     const landingBase = resolveLandingBase(consumerRoot)
     const base = git(['merge-base', landingBase, branchName], { cwd: consumerRoot }).trim()
     if (!base) return []
-    const out = git(['diff', '--name-only', `${base}...${branchName}`], { cwd: consumerRoot })
-    branchFiles = out.split('\n').filter(Boolean)
+    const out = git(['diff', '--name-only', '-z', `${base}...${branchName}`], { cwd: consumerRoot })
+    branchFiles = out.split('\0').filter(Boolean)
   } catch {
     return []
   }
@@ -4836,18 +5236,29 @@ export function verifySupersededDeclaration(consumerRoot, branchName, unlanded, 
       return false
     }
   }
-  // 「main 上晚於 branch」：在 main（或 landing base）上，且不在 branch 自己的 history 裡。
+  // 證據 ref：本機 main／landing base，加上已 fetch 的 origin/<base>。clade 與 consumer 的本機
+  // main 常落後 origin（clade-main-align 對齊被 refused 時尤甚），只認本機 ref 會把 origin/main
+  // 上的取代 commit／取代檔誤判成「不在 main 上」。remote-tracking ref 只在存在時才加（不 fetch、
+  // 不出網路）；判不出的 ref 一律不納入，維持 fail-closed。
+  const evidenceRefs = [
+    ...new Set(
+      ['main', landingBase, `origin/${landingBase}`, 'origin/main'].filter(
+        (ref) => ref === 'main' || ref === landingBase || commitOf(ref) !== null,
+      ),
+    ),
+  ]
+  // 「main 上晚於 branch」：在 main／landing base（含 origin 側）上，且不在 branch 自己的 history 裡。
   const notLaterOnMain = (sha) => {
-    if (!isAncestor(sha, 'main') && !isAncestor(sha, landingBase))
-      return `${sha.slice(0, 9)} 不在 main／${landingBase} 上`
+    if (!evidenceRefs.some((ref) => isAncestor(sha, ref)))
+      return `${sha.slice(0, 9)} 不在 ${evidenceRefs.join('／')} 上`
     if (isAncestor(sha, branchName))
       return `${sha.slice(0, 9)} 已在 ${branchName} 的 history 裡，不是晚於 branch 的演進`
     return null
   }
   const touched = (sha) =>
     new Set(
-      git(['diff-tree', '--no-commit-id', '--name-only', '-r', '-m', '--root', sha], { cwd })
-        .split('\n')
+      git(['diff-tree', '--no-commit-id', '--name-only', '-z', '-r', '-m', '--root', sha], { cwd })
+        .split('\0')
         .filter(Boolean),
     )
   for (const spec of specs) {
@@ -4890,12 +5301,16 @@ export function verifySupersededDeclaration(consumerRoot, branchName, unlanded, 
       errors.push(`${file}=${target}：取代檔不能是它自己（main 改寫過它就給那個 commit）`)
       continue
     }
-    try {
-      git(['cat-file', '-e', `main:${target}`], { cwd })
-      covered.set(file, { by: target, kind: 'path' })
-    } catch {
-      errors.push(`${target}：不存在於 main`)
-    }
+    const inRef = evidenceRefs.some((ref) => {
+      try {
+        git(['cat-file', '-e', `${ref}:${target}`], { cwd })
+        return true
+      } catch {
+        return false
+      }
+    })
+    if (inRef) covered.set(file, { by: target, kind: 'path' })
+    else errors.push(`${target}：不存在於 main`)
   }
   const uncovered = unlanded.filter((file) => !covered.has(file))
   return {
@@ -5406,10 +5821,15 @@ export function resetSquashResidue(consumerRoot: string, paths: string[]) {
  * 所以 merge-back 只在空 index 上 squash；讀不到就拋出，呼叫端 **NEVER** 把失敗當成空。
  */
 export function readMainStagedEntries(consumerRoot: string): string[] {
-  return git(['diff', '--cached', '--name-status', '--no-renames'], { cwd: consumerRoot })
-    .split('\n')
-    .map((line) => line.trim())
+  // `--name-status -z` 是 `STATUS\0path\0`（--no-renames 下沒有 R/C 的雙路徑）；還原成既有的 `M\tpath` 列形狀。
+  const fields = git(['diff', '--cached', '--name-status', '--no-renames', '-z'], {
+    cwd: consumerRoot,
+  })
+    .split('\0')
     .filter(Boolean)
+  const entries: string[] = []
+  for (let i = 0; i + 1 < fields.length; i += 2) entries.push(`${fields[i]}\t${fields[i + 1]}`)
+  return entries
 }
 
 /**
@@ -5681,15 +6101,11 @@ export function detectAbsorbedByOtherPath(consumerRoot, branchName, baseRef = 'H
   }
   if (!mergeBase) return { absorbed: false, reason: 'merge-base-unreadable', ...empty }
 
-  const nameOnly = (args) =>
-    git(args, { cwd: consumerRoot })
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean)
+  const nameOnly = (args) => git(args, { cwd: consumerRoot }).split('\0').filter(Boolean)
 
   let changedPaths
   try {
-    changedPaths = nameOnly(['diff', '--name-only', mergeBase, branchName])
+    changedPaths = nameOnly(['diff', '--name-only', '-z', mergeBase, branchName])
   } catch (e) {
     return {
       absorbed: false,
@@ -5706,7 +6122,7 @@ export function detectAbsorbedByOtherPath(consumerRoot, branchName, baseRef = 'H
   // 不把 changedPaths 當 pathspec 傳給 git —— changeset 大時會撞到 argv 長度上限。
   let differing = changedPaths
   try {
-    const treeDiff = new Set(nameOnly(['diff', '--name-only', branchName, baseRef]))
+    const treeDiff = new Set(nameOnly(['diff', '--name-only', '-z', branchName, baseRef]))
     differing = changedPaths.filter((p) => treeDiff.has(p))
   } catch {
     differing = changedPaths
@@ -5855,8 +6271,10 @@ export function classifyLandedState(
   try {
     // --no-renames：rename 偵測只列新路徑，base 碰舊路徑（或反之）就對不上（0-A r1 Minor）
     const paths = new Set(
-      git(['diff', '--no-renames', '--name-only', mergeBase, branchName], { cwd: consumerRoot })
-        .split('\n')
+      git(['diff', '--no-renames', '--name-only', '-z', mergeBase, branchName], {
+        cwd: consumerRoot,
+      })
+        .split('\0')
         .filter(Boolean),
     )
     // 不把 paths 當 pathspec 傳：changeset 大時會撞 argv 上限（同 detectAbsorbedByOtherPath）
@@ -5865,16 +6283,19 @@ export function classifyLandedState(
       [
         'log',
         '--no-renames',
-        '--format=%x00%h %s',
+        '-z',
+        '--format=%x01%h %s',
         '--name-only',
         '--no-decorate',
         `${mergeBase}..${baseRef}`,
       ],
       { cwd: consumerRoot, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 },
     )
-    for (const block of log.split('\0').filter((b) => b.trim())) {
-      const [head, ...files] = block.split('\n')
-      if (files.some((f) => paths.has(f.trim()))) supersededBy.push(head.trim())
+    // `-z`：每個 commit 以 %x01 起頭；`header\0\n<first path>\0<path>\0…`，第一個路徑前固定帶一個 `\n`。
+    for (const block of log.split('\x01').filter((b) => b.trim())) {
+      const [head, first = '', ...rest] = block.split('\0')
+      const files = [first.replace(/^\n/, ''), ...rest]
+      if (files.some((f) => paths.has(f))) supersededBy.push(head.trim())
     }
   } catch {
     return unknown('base-history-unreadable')
@@ -5908,11 +6329,9 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
   }
 
   const readConflicted = () => {
-    const raw = git(['status', '--porcelain'], { cwd: wtPath })
-    return raw
-      .split('\n')
-      .filter((line) => /^(UU|AA|DD|AU|UA|UD|DU) /.test(line))
-      .map((line) => line.slice(3).trim())
+    return readGitStatus(wtPath)
+      .filter((e) => UNMERGED_XY.has(e.code))
+      .map((e) => e.path)
   }
 
   let conflicted = readConflicted()
@@ -6342,14 +6761,15 @@ function carryEvidenceDir(src, dstRoot, relDir, slug) {
 function findCleanupWorktree(consumerRoot, cleanSlug) {
   const wts = sessionWorktrees(consumerRoot)
   const sessionHit = wts.find(
-    (w) => w.path.endsWith(`/${cleanSlug}`) && w.branch && w.branch.endsWith(`-${cleanSlug}`),
+    (w) =>
+      endsWithSlug(w.path, '/', cleanSlug) && w.branch && endsWithSlug(w.branch, '-', cleanSlug),
   )
   if (sessionHit) return sessionHit
 
   const all = parseWorktreeList(git(['worktree', 'list', '--porcelain'], { cwd: consumerRoot }))
   const mainPath = resolve(consumerRoot)
   const candidates = all.filter((w) => {
-    if (!w.path.endsWith(`/${cleanSlug}`)) return false
+    if (!endsWithSlug(w.path, '/', cleanSlug)) return false
     if (resolve(w.path) === mainPath) return false
     const branch = (w.branch || '').replace(/^refs\/heads\//, '')
     if (branch.startsWith('integration/')) return false
@@ -6839,6 +7259,19 @@ async function cmdCleanup(
   const hostRefsObs = findHostConfigReferences(target.path)
   const hostRefs = hostRefsObs.status === 'known' ? hostRefsObs.value : []
   const isIgnorableDrift = (entry, kind) => isIgnorableWorktreeDrift(target.path, entry.path, kind)
+  // 已落地樹專屬：ledger 純追加且已在 landing base → 不算 WIP（與 worktree-freshness 共用
+  // allLandedLedgerAppend（wip-dirty）；NEVER 併進 isIgnorableWorktreeDrift，merge-back 靠它擋未落地的樹）。
+  // 算進 toolManagedCount 讓 `worktree remove` 補 --force——這些行已逐字在 base 上，移除不丟 bytes。
+  let landedLedgerBaseRef: string | null = null
+  if (branchMerged) {
+    const remoteBase = `origin/${landingBase}`
+    try {
+      git(['rev-parse', '--verify', '--quiet', `${remoteBase}^{commit}`], { cwd: consumerRoot })
+      landedLedgerBaseRef = remoteBase
+    } catch {
+      landedLedgerBaseRef = landingBase
+    }
+  }
   const uncommittedAll = {
     modified: uncommittedRaw.modified.filter((m) => !isIgnorableDrift(m, 'modified')),
     untracked: uncommittedRaw.untracked.filter((u) => !isIgnorableDrift(u, 'untracked')),
@@ -6851,10 +7284,21 @@ async function cmdCleanup(
     ...uncommittedAll.modified.filter(inDiscard),
     ...uncommittedAll.untracked.filter(inDiscard),
   ]
-  const uncommitted = {
+  const uncommittedPending = {
     modified: uncommittedAll.modified.filter((m) => !inDiscard(m)),
     untracked: uncommittedAll.untracked.filter((u) => !inDiscard(u)),
   }
+  // 剩下的 dirty 全是「ledger 純追加且已在 base」才整批放行（all-or-nothing，見 wip-dirty）。
+  const landedLedgerOnly =
+    landedLedgerBaseRef !== null &&
+    uncommittedPending.untracked.length === 0 &&
+    allLandedLedgerAppend(
+      target.path,
+      uncommittedPending.modified.map((m) => ({ code: m.status, path: m.path })),
+      landedLedgerBaseRef,
+    )
+  const landedLedgerCount = landedLedgerOnly ? uncommittedPending.modified.length : 0
+  const uncommitted = landedLedgerOnly ? { modified: [], untracked: [] } : uncommittedPending
   const uncommittedCount = uncommitted.modified.length + uncommitted.untracked.length
   // git 不知道我們決定忽略這些檔，`git worktree remove` 照樣會因 dirty 而拒絕。
   // 只放行 gate 而不讓 remove 帶 --force，等於把同一個失敗從 gate 挪到 remove。
@@ -6906,6 +7350,7 @@ async function cmdCleanup(
     }
     console.log(
       `  uncommitted        blocking=${uncommittedCount} ignored(projection/tool-managed)=${toolManagedCount}` +
+        (landedLedgerCount ? ` (landed-ledger-append=${landedLedgerCount})` : '') +
         (discardPathspecs.length
           ? ` discard(pathspec, residue saved first)=${discarded.length}`
           : ''),
@@ -7064,11 +7509,14 @@ async function cmdCleanup(
     )
   }
 
-  // Release per-worktree resources before the directory disappears — the
-  // bootstrap script lives inside the worktree. No-op for consumers without it.
+  // Release per-worktree resources before the directory disappears. Teardown runs the
+  // main checkout's shim, never the removed tree's own copy (same as destroyWorktreeRuntime):
+  // a tree forked before a slug form existed cannot recognise its own branch (E_BRANCH_SLUG)
+  // and would never be releasable. No-op for consumers without a shim.
   teardownWorktreeSubmodules(target.path)
   const envCleanup = runWtEnvBootstrap(target.path, 'destroy', {
     allowOrphanRecord: opts.allowOrphanRecord,
+    scriptRoot: consumerRoot,
   })
   if (envCleanup?.status === 'orphan-recorded' && !opts.allowOrphanRecord) {
     throw new Error(
@@ -7088,6 +7536,13 @@ async function cmdCleanup(
   }
   removeArgs.push(target.path)
   git(removeArgs, { cwd: consumerRoot })
+  // 契約 § 5.3：樹回收連帶釋放 dev port，單棵 cleanup 與 batch 路徑（cleanupRemovedWorktreeRuntime）一致；
+  // 不依賴下一次配置時 collectSiblingOffsets 順手清。
+  try {
+    releaseWorktreeDevPorts(consumerRoot, target.path)
+  } catch (e) {
+    console.error(`warn: dev-port release failed for ${cleanSlug}: ${e?.message ?? e}`)
+  }
   if (supersededPin) {
     recordSupersededCleanup(
       consumerRoot,
@@ -7154,8 +7609,9 @@ async function cmdCleanup(
   }
   // C8：回收量測。移除已成功，這筆只是事實紀錄——寫不進去不影響 cleanup 結果。
   try {
-    const { recordWorktreeReleased } = await import(
-      new URL('./work-inventory-store.ts', import.meta.url).href
+    const { recordWorktreeReleased } = await importVendorScript(
+      'work-inventory-store.ts',
+      consumerRoot,
     )
     recordWorktreeReleased(consumerRoot, {
       path: resolve(target.path),
@@ -7251,6 +7707,18 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   assertNoPublishInFlight('merge-back', { ...opts, targetRoot: consumerRoot })
   const target = findSessionWorktreeForSlug(consumerRoot, cleanSlug)
   if (!target) {
+    // detached 樹沒有 branch 可 land：不是「找不到」，也不是 `--noop-if-missing` 該吞的缺席。
+    const detached = detachedSessionWorktrees(consumerRoot).find((w) =>
+      endsWithSlug(w.path, '/', cleanSlug),
+    )
+    if (detached) {
+      throw new Error(
+        `merge-back STOP（main 沒有被動過）：worktree ${detached.path} 是 detached HEAD ` +
+          `（${String(detached.head).slice(0, 12)}），沒有 branch 可 land。` +
+          `先 \`git -C ${detached.path} checkout <branch>\`（或 \`switch -c <new-branch>\`）再 merge-back；` +
+          `確定要丟棄則走 \`wt-helper cleanup ${cleanSlug}\`。`,
+      )
+    }
     if (opts.noopIfMissing) {
       console.log(`merge-back: no session worktree for ${cleanSlug} (no-op)`)
       return { absorbed: false, slug: cleanSlug, reason: 'no-worktree' }
@@ -7912,11 +8380,10 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   }
 
   // squash 前的快照：失敗時分辨「squash 動過哪些路徑」與「本來就在 main 上的別人 WIP」。
-  const statusBefore = git(['status', '--porcelain'], { cwd: consumerRoot })
+  const statusBefore = renderGitStatusLines(readGitStatus(consumerRoot))
   const stagedBefore = new Set(
-    git(['diff', '--cached', '--name-only'], { cwd: consumerRoot })
-      .split('\n')
-      .map((line) => line.trim())
+    git(['diff', '--cached', '--name-only', '-z'], { cwd: consumerRoot })
+      .split('\0')
       .filter(Boolean),
   )
   let squashError = null
@@ -7927,7 +8394,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   }
 
   // Check for conflict markers in working tree.
-  const statusAfter = git(['status', '--porcelain'], { cwd: consumerRoot })
+  const statusAfter = renderGitStatusLines(readGitStatus(consumerRoot))
   const conflicted = statusAfter
     .split('\n')
     .filter((line) => /^(UU|AA|DD|AU|UA|UD|DU) /.test(line))
@@ -7964,10 +8431,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
     // 2026-08-28 loss read as a clean failure.
     let restoreDrift: string[]
     try {
-      restoreDrift = porcelainDrift(
-        statusBefore,
-        git(['status', '--porcelain'], { cwd: consumerRoot }),
-      )
+      restoreDrift = porcelainDrift(statusBefore, renderGitStatusLines(readGitStatus(consumerRoot)))
     } catch (e) {
       restoreDrift = [`(status unreadable after restore: ${e?.message ?? e})`]
     }
@@ -7976,10 +8440,11 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
     const squashScope = new Set(squashTouched)
     try {
       const base = git(['merge-base', 'HEAD', branchName], { cwd: consumerRoot })
-      for (const p of git(['diff', '--name-only', '--no-renames', base, branchName], {
+      // `-z`：drift 列來自 `readGitStatus`（不跳脫），scope 必須是同一個編碼才比得中。
+      for (const p of git(['diff', '--name-only', '-z', '--no-renames', base, branchName], {
         cwd: consumerRoot,
-      }).split('\n')) {
-        if (p.trim()) squashScope.add(p.trim())
+      }).split('\0')) {
+        if (p) squashScope.add(p)
       }
     } catch {}
     const restoreNote = restoreDriftNote(restoreDrift, squashScope)
@@ -8006,7 +8471,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
       // Status re-check is authoritative — git stash pop with conflicts exits 1
       // AND leaves UU entries, but exit code alone isn't reliable across git
       // versions. The UU paths are the actual breakage signal.
-      const statusAfterPop = git(['status', '--porcelain'], { cwd: consumerRoot })
+      const statusAfterPop = renderGitStatusLines(readGitStatus(consumerRoot))
       popUnmerged = statusAfterPop
         .split('\n')
         .filter((line) => /^(UU|AA|DD|AU|UA|UD|DU) /.test(line))
@@ -8218,8 +8683,10 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   if (stashRef) {
     let stashedFileCount = null
     try {
-      stashedFileCount = git(['stash', 'show', '--name-only', 'stash@{0}'], { cwd: consumerRoot })
-        .split('\n')
+      stashedFileCount = git(['stash', 'show', '--name-only', '-z', 'stash@{0}'], {
+        cwd: consumerRoot,
+      })
+        .split('\0')
         .filter(Boolean).length
     } catch {
       stashedFileCount = null
@@ -8358,14 +8825,12 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   let othersStaged = []
   try {
     const changeset = new Set(
-      git(['diff', '--name-only', 'HEAD', branchName], { cwd: consumerRoot })
-        .split('\n')
-        .map((line) => line.trim())
+      git(['diff', '--name-only', '-z', 'HEAD', branchName], { cwd: consumerRoot })
+        .split('\0')
         .filter(Boolean),
     )
-    const allStaged = git(['diff', '--cached', '--name-only'], { cwd: consumerRoot })
-      .split('\n')
-      .map((line) => line.trim())
+    const allStaged = git(['diff', '--cached', '--name-only', '-z'], { cwd: consumerRoot })
+      .split('\0')
       .filter(Boolean)
     for (const p of allStaged) {
       if (stagedBefore.has(p) && !changeset.has(p)) othersStaged.push(p)
@@ -8439,7 +8904,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
       stashRef ? `blockers stashed as ${stashRef}` : null,
     ].filter(Boolean)
     try {
-      const { markWorkDone } = await import(new URL('./flow/emit.ts', import.meta.url).href)
+      const { markWorkDone } = await importVendorScript('flow/emit.ts', consumerRoot)
       // `substrate` is a closed enum in vendor/signals/schema.json and `git` is the honest
       // member: the observable act this claim is about is the squash. NEVER invent a
       // `wt-helper` value here — the validator rejects unknown members, and a rejected write
@@ -8779,6 +9244,7 @@ function printUsage(log = console.error) {
   log('                            (default threshold: 50 tracked changes;')
   log('                            override via WT_PREFORK_AUDIT_THRESHOLD env var).')
   log("  detect-main-dirty         Report main's dirty paths; pairs with --json.")
+  log('    [--baseline-scope-paths <comma>]  with --json: recommended_strategy for these paths')
   log(
     '  list [--json] [--no-landed-state]  Enumerate session worktrees with staleness + landedState',
   )
@@ -8821,7 +9287,9 @@ function printUsage(log = console.error) {
   log(
     '    --origin <scheme>:<id>  name the WORK this tree serves (td:TD-787, notion:<uuid>).',
     '                            Without it — and without an ambient $CLADE_WORK_ID — the card',
-    '                            is minted but marked 未歸屬 (TD-787).',
+    '                            is minted but marked 未歸屬 (TD-787). An explicit --origin that',
+    "                            differs from the ambient work's origin, or an open PR's `Work:`",
+    '                            (via --checkout), outranks ambient $CLADE_WORK_ID; warns (CDB-388).',
     "    --work-done             file a flow `work.done` claim for the worktree claim's work id",
   )
   log(
@@ -8911,6 +9379,7 @@ const BATCH_VALUE_FLAGS = new Set([
   '--authorization',
   '--world',
   '--receipt',
+  '--out',
 ])
 const BATCH_BOOLEAN_FLAGS = new Set([
   '--authorize-landing',
@@ -9000,7 +9469,11 @@ async function main() {
         process.cwd(),
         rest,
         {
-          bootstrap: (root, path) => bootstrapWorktreeRuntime(root, path, { strict: true }),
+          bootstrap: (root, path, opts) =>
+            bootstrapWorktreeRuntime(root, path, {
+              strict: true,
+              devPort: opts?.needsDevServer ? 'allocate' : 'defer',
+            }),
           destroy: releaseWorktreeRuntime,
           restore: (_main, path, detached) => reattachWorktreeSubmodules(path, detached),
           removed: cleanupRemovedWorktreeRuntime,

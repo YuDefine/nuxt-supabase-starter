@@ -3,7 +3,7 @@ description: 寫 code 當下的 TypeScript 語法限制（type stripping 擋不�
 paths: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts}']
 ---
 <!-- Clade native rule; source: rules/core/code-style.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 > **工具鏈治理在 [[code-style.toolchain]]**（動 `vite.config.*` / `package.json` / `tsconfig*.json` /
 > `.github/workflows/**` / `.husky/**` / 任何 `rc` 或 ignore 檔時適用；沒看到那份規約時 MUST 先開它）。

@@ -1,7 +1,7 @@
 # /commit Step 6-A 推送順序、失敗復原與 tag 觸發確認
 
 
-> 本檔是 Step 6-A 的 branch 分頁。發版授權（Step 6-Gate）在 `rules/發版授權判準.md`，6-A 的串接命令在 `rules/push-main發版判準.md`；本檔只放 main 先、tag 後的理由與邊界、序列中途失敗的七格復原、推 tag 後的觸發確認。**6-A 串接命令任一步失敗時 MUST 讀 § 序列中途失敗的復原並從失敗那一步接著做**；**Step 6-Gate 的 `derived=` 是 `tag-v`／`ambiguous` 時，推 tag 之後 MUST 讀 § 推 tag 後的觸發確認**。串接命令一次成功且 `derived=` 是其他值時不需要讀本檔。
+> 本檔是 Step 6-A 的 branch 分頁。發版授權（Step 6-Gate）在 `rules/發版授權判準.md`，6-A 的串接命令在 `rules/push-main發版判準.md`；本檔只放 main 先、tag 後的理由與邊界、序列中途失敗的續跑判定（`release-resume.mjs`）、推 tag 後的觸發確認。**6-A 串接命令任一步失敗時 MUST 讀 § 序列中途失敗的復原並從失敗那一步接著做**；**Step 6-Gate 的 `derived=` 是 `tag-v`／`ambiguous` 時，推 tag 之後 MUST 讀 § 推 tag 後的觸發確認**。串接命令一次成功且 `derived=` 是其他值時不需要讀本檔。
 
 ## 推送順序：無條件 main 先、tag 後
 
@@ -44,71 +44,60 @@ wall time 由最慢的單一 check 決定（某 consumer 2026-09-07 實測暖路
 
 ## 序列中途失敗的復原
 
-**序列中途失敗的復原**（七格都要會）。**先問一句：這個版本號的 tag 已經推出去了嗎**
-（`git ls-remote --tags origin "v<版本>"`，有輸出就是已公開）——沒公開的 tag 怎麼刪重打都是本機
-的事，已公開的 tag 是對外物件，**NEVER** 拿下面任何一格當作刪遠端 tag 的授權（唯一的例外是本檔 § 推 tag 後的觸發確認
-開頭那段 2026-06-03 的「tag 推出去了但 workflow 沒觸發」，那裡刪並重推的是**同一個 SHA 上的同名
-tag**，內容不變）。
+6-A 串接命令任一步失敗時，先跑判定，再照代碼從失敗的那一步接著做：
 
-**下面每一格都適用的一條**：`pnpm version` 跑在 `&&` 串**之前**，所以進到任何一格時版本號都已經
-bump 過了——**NEVER 因為「重跑一次比較乾淨」而再 bump 一次**。每一格都是**從失敗的那一步接著做**，
-只有明寫「改用下一個版本號」的那幾格才重新 bump。
+```bash
+node "$COMMIT_RESOURCE_DIR/scripts/release-resume.mjs" --repo "$COMMIT_REPO" [--push-error <上一趟 push 的 stderr 存檔>]
+```
 
-- **`git commit --only` 這一步就失敗**（典型：pre-commit gate 擋下，某 consumer 實測）→ 版本號
-  **還在 working tree 上**（見上面那條共通規則）。照 gate 的訊息修好之後，只重跑
-  `git commit --only … && git push origin main && git tag … && git push origin …` 這一串。**修正若動到 `package.json` 以外的檔**，
-  那個 `--only … -- package.json` 的 pathspec 會把它們留在 working tree（下一趟 push 多半再被同一支
-  gate 擋下）——**MUST** 決定它們要不要一起進 deploy commit，要就把路徑加進 pathspec，不要就先另外
-  commit 掉。**若 `git commit --only` 的失敗訊息是「nothing to commit」或「no changes added to commit」**（後者出現在 `package.json` 已 commit、但別的檔還 dirty 時），代表上一趟其實已經 commit
-  成功了（版本號已在 HEAD、不在 working tree）——這一格的前提不成立，**MUST** 跳到下一格從
-  `git push origin main` 接著做。
-- **`git push origin main` 這一步失敗**（競態／權限／網路／被某支 pre-push check 擋下）→ 此時
-  tag 還沒打、什麼都還沒公開，沒有對外的東西要救。但 deploy commit **已經建好了**——從頭重跑Step 6-A
-  會再建一個 `🚀 deploy:` commit 並跳掉一個版本號，正好製造 Step 6-B 警告的「main 上有發布 vX 卻沒有
-  tag」。**MUST 從失敗的那一步接著做**：照錯誤訊息修好之後跑 `git push origin main && git tag "v{新版本號}" && git push origin "v{新版本號}"`。
-  **這一串沒有 commit 那一節，所以 `rules/push-main發版判準.md`（Step 6-A）Rule 2 那條「tip 必須是這次的 deploy commit」不再由 `&&` 保證——
-  接之前 MUST 自己跑一次 `git log -1 --format=%s`**。修 pre-push check 通常會多出新的 commit，
-  那時 tip 已經不是 deploy commit 了：要嘛把修正 squash 進 deploy commit，要嘛接受 tag 打在新的
-  tip（deploy commit 訊息仍寫著同一個版本號，內容多了那次修正——可以，但 MUST 是你**知道**的選擇）。
-  競態（remote 有新 commit）**MUST** `git pull --rebase` 後再接這一串，**NEVER** 用 `--force`
-  （會把別人的 commit 從 remote 抹掉）。
-- **main 已上、推 tag 失敗（權限／網路）** → 主線沒有分叉，**直接重推 tag** 即可，**NEVER** 為了
-  「趕快觸發部署」改回 tags-first。**NEVER 把這一格讀成「部署還沒開始，慢慢來」**：走到 6-A 的
-  一般路徑是 `confirmed-push-main`，那個形狀下**剛才那次 main push 就是部署**（見 Step 6-Gate 的
-  判定表）——tag 在這裡是紀錄，不是觸發器。重推之前若 remote main 又前進了，會落到下面「被
-  `tag-position` 以落後擋下」那一格。
-- **`git tag` 這一步就失敗**（exit 128：同名 tag 本機已存在，多半是上一趟沒收乾淨）→ 此時 main
-  已上、tag 沒建，**NEVER** 直接「重推 tag」（那會把本機那個指向舊 commit 的同名 tag 推出去）。
-  先 `git ls-remote --tags origin "v<版本>"` 問 remote——**`git show-ref` 只看得到本機，答不了這一題**。
-  remote 沒有 → 是廢棄的本機殘留，`git tag -d` 後重打；remote 已經有 → 這個版本號已經發過，
-  **MUST** 改用下一個版本號（`pnpm version patch --no-git-tag-version` 重跑Step 6-A——**NEVER 漏掉那個旗標**，裸 `pnpm version` 會順手建 commit 與 tag，正好把你送回這一格），**NEVER** 刪遠端 tag 去讓路。
-  main 上那個沒有 tag 的 `🚀 deploy: … v<舊版本>` commit **MUST** 照下面最後一格的做法留一行說明。
-- **main 已上、推 tag 被 `tag-position` 以外的 pre-push check 擋下** → tag-only 那趟會把 8 支全跑
-  （見上段），所以擋你的可能是 lint / typecheck / ratchet 任何一支。**MUST 照那支自己的訊息修好
-  再推 tag**，**NEVER** 用 `--no-verify` 繞過（main 已經公開，這時候放行等於讓 tag 指向一棵沒
-  過 gate 的樹）。**修正若產生了新的 commit（修 lint / typecheck 幾乎必然如此），MUST 先
-  `git push origin main` 把它們推上去，再推 tag**——tag 要指向的就是修完之後的那棵樹。
-  推完 main 之後若 remote main 又被別人前進了，才落到下面「被 `tag-position` 以落後擋下」那一格；
-  **NEVER 帶著本機未推的 commit 直接走進那一格**，它的 `git merge --ff-only origin/main` 在那個
-  狀態下必定回 `Not possible to fast-forward`。
-- **main 已上、`git tag` 也成功，但推 tag 被 remote 以 `! [rejected] … (already exists)` 拒絕**
-  → 這個版本號的 tag **已經在 remote 上**（`tag-position` 只看本機與 `origin/<default branch>`
-  的關係，不看 remote 有沒有同名 tag，所以它會放行）。成因典型是先前某趟 `--tags` 殘留、或
-  另一個 clone／worktree 已經推過。**NEVER** 反覆重推（會一直被同一個理由拒絕），**NEVER**
-  刪遠端 tag 讓路——**MUST** 改用下一個版本號（同樣帶 `--no-git-tag-version`）重跑Step 6-A，並照下面最後一格的做法替 main 上那個
-  沒有 tag 的 `🚀 deploy: … v<舊版本>` commit 留一行說明。
-- **main 已上、但推 tag 被 `tag-position` 以「落後」擋下** → 代表**別的 session 在你推 main 與推
-  tag 之間又 push 了 main**（那本身違反 deploy-gate 的「發版窗口內不 push main」——窗口從**發版序列自己的那一次 main push** 起算，見上面那段與 `vendor/snippets/deploy-gate/README.md` § 操作規約）。
-  正解是**在新的 HEAD 上重跑一次發版序列**：`git tag -d "v<舊版本>"`（本機那個沒公開的，刪掉）
-  → `git fetch origin main && git merge --ff-only origin/main`（**先併進來，否則下一步 push 必被
-  non-fast-forward 拒絕**）→ `pnpm version patch --no-git-tag-version` → 新的 deploy commit →
-  push main → 打**新版本號**的 tag → 推 tag；那些插進來的 commit 就一起出這一版。
-  main 上會留下一個沒有對應 tag 的 `🚀 deploy: 發布新版本 v<舊版本>` commit——**MUST** 在新的
-  deploy commit 訊息或 HANDOFF 裡寫一行「v<舊版本> 未發版，內容併入 v<新版本>」，否則下一個
-  接手的人會照 Step 6-B 的理由誤判已發版。
-  **NEVER** `git tag -d` 之後把**同一個版本號**重打在別人的 commit 上（版本號與內容從此對不起來），
-  **NEVER** 用 `CLADE_ALLOW_STALE_TAG` 過關——那個逃生口只留給「刻意在舊 commit 上打 hotfix
-  release tag」，把它用在這裡就是拿它繞過一個你其實看得懂的攔阻。
+script 會先 fetch `origin/main`，查 package.json 版本、最近的 `🚀 deploy:` commit、本機與 remote 的 `v<版本>` tag，最後一行印 `resume_from=<代碼>`。推 tag 失敗時把 stderr 存檔用 `--push-error` 帶進去，它才分得出「被 `tag-position` 以外的 check 擋下」。連不上 remote（網路斷）時加 `--no-fetch`：改用本機的 `origin/main`，remote tag 查不到就印 `remote_tag=unreachable` 照本機狀態判。代碼集合以 script 為唯一定義，本表只把代碼對到動作。
+
+評估：first-match；以上皆非 → RR*
+
+| id | `resume_from` | 動作 |
+| --- | --- | --- |
+| RR1 | `tag-published` | 不用續；`derived=` 是 `tag-v`／`ambiguous` 時照 § 推 tag 後的觸發確認 |
+| RR2 | `next-version` | `pnpm version patch --no-git-tag-version` 後重跑 6-A [^RR2] |
+| RR3 | `retry-commit` | 照 gate 訊息修好，重跑 `rules/push-main發版判準.md` Rule 1 串接命令 [^RR3] |
+| RR4 | `retry-push-main` | 先跑 `git log -1 --format=%s` 確認 tip，再跑 push main → 打 tag → 推 tag [^RR4] |
+| RR5 | `push-main-then-tag` | 先推 main（帶 ahead 宣告），再打 tag／推 tag [^RR5] |
+| RR6 | `rerun-on-new-head` | `git tag -d` 舊 tag → ff 併 `origin/main` → 下一個版本號重跑 6-A [^RR6] |
+| RR7 | `retag-local` | `git tag -d "v<版本>"` 刪本機殘留，重打 tag 後推 tag |
+| RR8 | `fix-check-then-push-tag` | 照那支 check 的訊息修；修出新 commit 就重跑判定，否則推 tag |
+| RR9 | `push-tag` | 本機沒有 tag 就打，然後推 tag |
+| RR11 | `confirm-tip` | `git log --format='%h %an %s' <deploy_commit>..HEAD` 逐筆認歸屬。`remote_only_commits` > 0 → `git pull --rebase` 後換下一個版本號重跑 6-A；否則全是本 session 為這次發版做的修正 → 照 RR5 推 main（若有未推）、在 HEAD 打 tag、推 tag；有任何別人的 commit → `git tag -d` 本機殘留後換下一個版本號重跑 6-A [^RR11] |
+| RR10 | `not-in-release` | STOP：找不到本版號的 deploy commit，回報 script 輸出 |
+| RR* | `unknown`、其他值、exit 非 0 | STOP，回報 script 的 stdout／stderr |
+
+[^RR2]: remote 已經有這個版本號的 tag，且不是本次 deploy commit：可能是 `git tag` 撞到殘留、或推 tag 被 `! [rejected] … (already exists)` 拒絕。`tag-position` 不看 remote 有沒有同名 tag，所以後者它會放行。
+[^RR3]: 修正動到 `package.json` 以外的檔時，`--only … -- package.json` 的 pathspec 會把它們留在 working tree，下一趟 push 多半被同一支 gate 擋下。要一起進 deploy commit 就加進 pathspec，不要就先另外 commit。
+[^RR4]: 這一串沒有 commit 那一節，「tip 必須是這次的 deploy commit」不再由 `&&` 保證。修 pre-push check 多半會多出 commit：要嘛 squash 進 deploy commit，要嘛接受 tag 打在新的 tip，但 MUST 是你知道的選擇。被 `ahead-ownership` 擋下＝列舉之後 remote 前移或 tip 換過：`git fetch origin main`，重跑 `git log --oneline origin/main..HEAD` 逐筆認得再推；有不是本 session 產生的 commit 就停下，照 `rules/core/commit.detail.md` § 推 default branch 前 MUST 列舉並宣告 ahead 範圍 查歸屬。remote 有新 commit 時先 `git pull --rebase`。
+[^RR5]: tag 要指向修完之後的那棵樹。帶著本機未推的 commit 直接走 RR6，`git merge --ff-only origin/main` 必定回 `Not possible to fast-forward`。
+[^RR11]: HEAD 已不是 deploy commit（推 main 之後又修了 commit、或 RR6 ff 併入別人的 commit 後中斷），或 main 已上之後兩邊各有 commit。git 拓樸分不出 `deploy..HEAD` 是誰的，所以 script 不給推 tag 的代碼；這正是 RC7 要擋的情形。
+[^RR6]: 代表別的 session 在你推 main 與推 tag 之間又推了 main（本身違反 deploy-gate 的「發版窗口內不 push main」，見 `vendor/snippets/deploy-gate/README.md` § 操作規約）。那些插進來的 commit 一起出新版。
+
+不論命中哪一列，下表每條都要遵守：
+
+評估：all-match（逐條檢查，命中就套用）
+
+| id | 條件 | 約束 |
+| --- | --- | --- |
+| RC1 | 任何一列 | **NEVER** 再 bump 一次版本號；只有 RR2、RR6、RR11 改用下一個版本號 [^RC1] |
+| RC2 | 任何一列 | **NEVER** 刪遠端 tag 讓路 [^RC2] |
+| RC3 | 任何一列 | **NEVER** 用 `--no-verify` 繞過 pre-push check |
+| RC4 | 任何一列 | **NEVER** 用 `CLADE_ALLOW_STALE_TAG` 過關 [^RC4] |
+| RC5 | 要推 main | **NEVER** `--force`；main push 一律帶 `CLADE_PUSH_MAIN_AHEAD` 宣告 |
+| RC6 | RR2、RR6、RR11 換版號 | 替沒有 tag 的舊 deploy commit 留一行說明 [^RC6] |
+| RC7 | RR6、RR7、RR11 刪本機 tag 後 | **NEVER** 把同一個版本號重打在別人的 commit 上 |
+| RC8 | 改用下一個版本號 | `pnpm version` 必帶 `--no-git-tag-version` [^RC8] |
+| RC9 | 推 tag 失敗而 main 已上 | **NEVER** 改回 tags-first [^RC9] |
+
+[^RC1]: `pnpm version` 跑在 `&&` 串之前，進到任何一列時版本號都已經 bump 過了。
+[^RC2]: 已公開的 tag 是對外物件。唯一例外是 § 推 tag 後的觸發確認 開頭那段 2026-06-03 的情形：刪並重推的是同一個 SHA 上的同名 tag，內容不變。
+[^RC4]: 那個逃生口只留給「刻意在舊 commit 上打 hotfix release tag」。
+[^RC6]: 在新 deploy commit 訊息或 HANDOFF 寫「v<舊版本> 未發版，內容併入 v<新版本>」；否則下一個接手的人會照 Step 6-B 的理由，把 main 上那個 `🚀 deploy: … v<舊版本>` 誤判成已發版。
+[^RC8]: 裸 `pnpm version` 會順手建 commit 與 tag，正好又撞上同名 tag。
+[^RC9]: 走到 6-A 的一般路徑是 `confirmed-push-main`，剛才那次 main push 就是部署（見 Step 6-Gate 的判定表），tag 在這裡是紀錄，不是觸發器。
 
 ## 推 tag 後的觸發確認
 

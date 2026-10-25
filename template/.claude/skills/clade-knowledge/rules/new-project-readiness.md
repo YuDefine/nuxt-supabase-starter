@@ -3,7 +3,7 @@ description: 新專案（scaffold / init / 從 starter 灌進既有 repo）期�
 paths: ['.claude/consumer-meta.json', '.clade/manifest.json', '.claude/hub.json', 'wrangler.{toml,jsonc}', '.gitignore', 'package.json', 'nuxt.config.*']
 ---
 <!-- Clade native rule; source: rules/core/new-project-readiness.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 # New Project Readiness
 
 **新專案期間撞到的每一個報錯 / 阻礙 / 體驗不佳處，要修到「下一個新專案不會再遇到」才算完成。
@@ -53,6 +53,12 @@ paths: ['.claude/consumer-meta.json', '.clade/manifest.json', '.claude/hub.json'
 | `capability.truth-root` | 2026-10-03 某 consumer：onboarding 時 manifest 宣告了 `aixbdd`／`specformula`（`init-consumer.ts` 只推斷 `evlog`，這兩項照 starter 自身的 `template/.clade/manifest.json` 加上），建案流程卻沒有任何一步放 lifecycle 兩檔或提示產物，登記後 `audit-registry-reality` R8 報 4 項 error、擋 clade publish。源頭修：`bootstrap-project.ts` 的 `capability-products` step 直接帶 lifecycle 兩檔、在 registry 自動設 `capability_bootstrap_pending`（techstack／isa／features 降 warn，產物落地自動解除）、自動 `flow ask` 送 specify 進待決佇列。本 check 只擋 lifecycle／truth-root；三項產物列在 JSON `pending`，NEVER 捏造 |
 | `package.doctor.dependency`／`package.doctor.installed`／`package.doctor.adapter` | 同日另一 consumer：doctor script 存在，但 vite-doctor binary 缺席；檢查依賴宣告、本地可執行檔與 script 引用的投影入口 |
 | `registry.dev-port` | 2026-10-03 某 consumer：starter 以 `--dev-port auto` 交給 managed bootstrap，那條路徑把 auto 當成「沒給」——registry 列沒有 `dev_ports`、dev script 停在 nuxt 預設 3000；standalone 路徑有配號、managed 沒有，兩邊沒有任何訊號。比對登記號與 dev server 實際綁的 port（判準共用 `lib/dev-port-allocation.ts` 的 `devServerPort`：`--port`／`-p`、沿 `pnpm`／`npm run`／`yarn`／`nr` 轉呼、`PORT=` 前綴、`--dotenv` 指定檔與 `.env`、`nuxt.config` `devServer.port`）；standalone bootstrap 登記到號時由 `devPortScriptStep` 把 `--port` 補進 dev script，managed 由 starter 依 ready JSON 的 `devPort` 改寫——缺 `dev_ports` 的既有列重跑 `--dev-port auto` 會補號（兩條路徑同義） |
+
+| `ci.pull-request-workflow` | 2026-10-08 某 consumer：以 `pending_onboard` 登記後從未建 CI，[[golden-path-onboarding]] 把「沒有 workflow」判 N/A 放行；PR 的 check rollup 永遠是空的，0-A 的「CI 綠才審」等不到綠，兩檔的清殘留 PR 合不進去。算數的觸發是 `pull_request` 或不限 branch 的 `push`（PR 分支的 push 與 PR head 同 SHA）；只在 main 跑的 push 不在 PR head 上掛 check。convention `consumer-baseline-ci` |
+| `package.script-targets` | 2026-10-03 某 consumer：starter 寫進四條 `opsx:*` → `.clade/vendor/scripts/opsx-control.ts`，該檔早在 clade f935988a8 刪除；script 名稱在，`pnpm run` 才 MODULE_NOT_FOUND |
+| `quality.fmt-clean`／`quality.fmt-installed` | 同日同一 consumer：scaffold 的 vite.config `fmt` 只帶 ignorePatterns，oxfmt 退回雙引號加分號，新專案一出生 151 檔格式不符；工具在不等於能過，只有實跑擋得住。宣告了 vite-plus 卻沒有可執行的 vp 時另記 installed，否則跳過與通過長得一樣 |
+| `package.doctor.clean` | 同日同一 consumer：`package.doctor.*` 全綠，`pnpm run doctor` 實跑 exit 1（NUXT0054 publishable key 誤報、NITRO0008）。實跑時關掉 pnpm 的 verify-deps-before-run，gate 不得有安裝副作用 |
+| `supabase.project-id` | 同日同一 consumer：starter database 模板沒有 `project_id`，遠端 dev host 上 `supabase start` 會從 cwd 推導身分（[[local-stack-config]]） |
 
 新增 check 時要同時在這張表補一列：check 存在的正當性來自它擋掉過什麼，
 不要加一條沒有事故對應的 check。

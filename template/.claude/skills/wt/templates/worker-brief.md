@@ -22,7 +22,7 @@ routing-row: {{ROUTING_ROW}}
   `{{WORKER_CONTRACT_PATH}}` 填 worker 在這棵樹裡實際讀得到的 `wt` skill 規則路徑，派工前先確認存在。
   依序取第一個存在者：
   - consumer（Claude Code）：`.claude/skills/wt/rules/worker契約.md`
-  - consumer（Codex）：`.agents/skills/wt/rules/worker契約.md`
+  - consumer（`.agents` 投影）：`.agents/skills/wt/rules/worker契約.md`
   - clade home：`capabilities/core/skills/wt/rules/worker契約.md`
   三者都不存在時填 clade home 的絕對路徑 `~/offline/clade/capabilities/core/skills/wt/rules/worker契約.md`。
   NEVER 把契約條文抄進本 brief；`rules/worker契約.md` 是唯一正本。

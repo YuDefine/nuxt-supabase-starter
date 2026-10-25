@@ -3,7 +3,7 @@ description: Follow-up Register 規則——deferred 併回同一 work 的 Open 
 paths: ['tasks/**', 'specs/plans/**', 'docs/tech-debt.md']
 ---
 <!-- Clade native rule; source: rules/core/follow-up-register.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Follow-up Register
 
@@ -42,7 +42,6 @@ tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local
 ## TD-001 — <title>
 
 **Status**: open
-**Priority**: low
 **Discovered**: <date> — <來源>
 **Location**: <path (symbols)>
 
@@ -51,7 +50,7 @@ tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local
 ### Acceptance
 ```
 
-`## Index` 表列 ID / Title / Priority / Status / Discovered / Owner。Problem / Fix approach 必填且具體，**NEVER** 為湊一條寫空洞 entry。
+`## Index` 表列 ID / Title / Status / Discovered / Owner。Problem / Fix approach 必填且具體，**NEVER** 為湊一條寫空洞 entry。
 
 ### Status 欄位語意
 
@@ -62,14 +61,11 @@ tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local
 | `done` | 已驗證完成，關卡回讀成功後退出主清單；歷史憑證可滿足 archive gate |
 | `wontfix` | 明確放棄；**必須** 寫 Reason。archive gate 允許 |
 
-### Priority 欄位語意
+### 等級只看 fleet 看板
 
-| Priority | 意義 |
-| --- | --- |
-| `critical` | 影響正式使用者或阻擋功能。下一個 sprint 必解 |
-| `high` | 影響開發體驗或未來功能。Quarterly 內解 |
-| `mid` | 有機會就解 |
-| `low` | 留存備忘，時間允許即解 |
+TD 條目與 Index 表都**不帶**等級欄位。優先級（P0–P3）唯一的寫入與讀取處是 fleet 看板上該條目的列 `td:<repo>:TD-n`：預設 P3，要往上拉由 Charles 點名、在看板設定或開 P1 群組。**NEVER** 在 TD 加回 `**Priority**:` 行——`vendor/scripts/checks/td-priority-gate.ts` 在 pre-commit 與 CI 擋下 `docs/tech-debt.md` 新增或改寫的這種行，刪除放行。
+
+合約條文 ID 與優先級分開寫：行首 `Milestone` 那種 `P1-M2-A2` 是客戶簽署的條文 ID，原樣保留；文中要講優先級時寫「P1 級」或 P1 群組編號 `P1-x`，**NEVER** 寫成等級欄位或把條文 ID 當等級。
 
 ---
 
@@ -93,7 +89,7 @@ tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local
 
 每個 repo 的 HANDOFF 只保留當前交接、必要決策與阻塞。lifecycle repo 的工作用 work id 指針連到該 plan，Open work 每條保留下一步與完成條件；未遷移 consumer 已有 TD 的工作用 ID 指針連到唯一入口，tech-debt 每條保留問題、影響、下一個動作及驗收。等待項附責任人或可觀察觸發條件。以下第 1–3 步的 TD 操作只適用未遷移 consumer；lifecycle repo 收工時更新 plan Open work，結案走 `flow plan close`。
 
-1. **收工時**：commit、handoff、work-loop 完成相關工作後，核對實際驗收證據，更新對應 TD 的狀態及精簡結論；同步移除 HANDOFF 的完成流水帳與重複背景。狀態改成結案的同一次改動，處置 code 裡指向該 ID 的每一個 `@followup` marker（做法見 [[code-style]] § 註解）。
+1. **收工時**：commit、handoff 或 coordinator 收割完成相關工作後，核對實際驗收證據，更新對應 TD 的狀態及精簡結論；同步移除 HANDOFF 的完成流水帳與重複背景。狀態改成結案的同一次改動，處置 code 裡指向該 ID 的每一個 `@followup` marker（做法見 [[code-style]] § 註解）。
 2. **移出前**：執行 `node .clade/vendor/scripts/flow/flow.ts sources --apply`，回讀該 ID 的關卡結果。clade 自身使用 `vendor/scripts/flow/flow.ts`。關卡未完成就保留來源，移除文字不作為完成證據。
 3. **關單後（未遷移 consumer）**：執行 `node .clade/vendor/scripts/rotate-closed-bloat.ts --all-closed` 移入 closed archive。Clade home 與已遷移 repo 該 script 回 `retired`，**NEVER** 再寫月份 closed archive 或改 `docs/tech-debt.md`。等待訊號與未知狀態保留，不用歸檔數宣稱實際欠帳減少。它在 stderr 列出的 `followup marker 仍指向這批已結案的 id` 是第 1 步漏掉的行，逐行處置完才算關單完成；印 `掃描失敗` 時自己跑 `git grep -n '@followup\['` 補查。
 4. **開工時**：主件優先；從既有掃描挑一個不衝突、無活躍認領的同主題小批次，查證已完成／重複項或可局部回復的小修。涉及客戶承諾、安全、資料完整性、schema/API、憑證或正式部署的決策回到其既有授權流程；其餘大型工作保留具體接手入口。
@@ -106,6 +102,21 @@ tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local
 | 消費端 | 正在關單的 agent（第 1、3 步）；clade `/clade-health enforcement`／`full`，命中 relay 給該 consumer |
 | 觸發點 | 本節（paths-gated 於 `docs/tech-debt.md`、`specs/plans/**`）＋ [[code-style]] § 註解（paths-gated 於程式碼檔） |
 
+## 重驗結論交決策檔（未遷移 consumer）
+
+**每一個**未遷移 consumer、**每一條** TD 的重驗，只要結論不是「本 PR 修了 code」——過時、與另一條重複、卡外部依賴、仍成立但這次不修——都 MUST 只新增一份決策檔 `tasks/td-triage/<TD>-<dispatch id 或 work id>.json`（格式見 clade 倉 `vendor/snippets/td-triage/README.md`），PR 只帶這一份檔。
+
+- **NEVER** 為了上述四種結論改（未遷移 consumer 的）`docs/tech-debt.md`：同一個 repo 的這種 PR 各改一次同一個大檔，只能逐張合，cloud session 也寫不進大檔
+- 本 PR 修了 code 時，照 § 主動消化 第 1 步在同一個 PR 更新該 TD 條目，不交決策檔
+- 決策檔由 coordinator `watch` 自動觸發批次套用：每輪對 `td-decision-pending` 的 repo 背景跑 `td-triage-apply.ts --repo <repo> --open-pr` 開 draft PR 寫回 register 並刪檔（`--no-auto-pr` 關閉；失敗進待處置 `td-apply-failed`、PR 被關閉未合進 `td-apply-closed`，待處置列帶手動重跑指令）。沒有 watch 時由主持者手動跑 `node ~/offline/clade/vendor/scripts/td-triage-apply.ts --repo <repo> --open-pr`；**NEVER** 在交決策檔的 PR 裡自己跑套用
+- 交出前跑 `node ~/offline/clade/vendor/scripts/td-triage-apply.ts --repo <本 worktree> --dry-run tasks/td-triage/<檔>.json`，exit 0 才開 PR；套用器也投影在 consumer 的 `.clade/vendor/scripts/td-triage-apply.ts`，本機沒有 clade checkout 時改跑投影路徑，兩邊都沒有才在 PR body 寫明沒跑
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 決策檔已合入 origin 但未套用 → `coordinator-ready` 對該 TD 回 `td-decision-pending` hold，不重派；套用器任一筆驗證失敗 → 整批不寫、exit 1 |
+| 消費端 | 處理 TD 的 worker（auto-dispatch 的 TD brief 逐字帶這條路）；主持者跑 `--open-pr` 批次套用 |
+| 觸發點 | 本節（paths-gated 於 `docs/tech-debt.md`）＋ `vendor/scripts/lib/coordinator-auto-dispatch.ts` 的 TD brief 第 ②③④ 條路 |
+
 ## Session-start Surfacing
 
 主清單的 actionable-open 條目由 `flow sources --apply` 每輪對帳成 work 卡，停滯的由 `flow status --stalled` 在 session 開頭出聲。讀不到清單時明示掃描不可用，**NEVER** 把它當清空。
@@ -113,7 +124,7 @@ tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local
 | 欄位 | 契約 |
 | --- | --- |
 | 觸發條件 | `flow status --stalled` exit 3（有停滯）時印進 session 開頭；不阻擋 SessionStart |
-| 消費端 | 當前 session 依 § 主動消化 處理一個安全小批次；commit／handoff／work-loop 收工同步清理相關項 |
+| 消費端 | 當前 session 依 § 主動消化 處理一個安全小批次；commit／handoff／coordinator 收割同步清理相關項 |
 | 觸發點 | 本規則（paths-gated）；session 開頭只注入停滯清單 |
 
 ---

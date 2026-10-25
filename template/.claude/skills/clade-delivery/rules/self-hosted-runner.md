@@ -3,7 +3,7 @@ description: Self-hosted GitHub Actions runner 的標籤設計、job 路由契�
 paths: ['.github/workflows/**', 'registry/consumers.json']
 ---
 <!-- Clade native rule; source: rules/core/self-hosted-runner.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Self-Hosted Runner 標籤設計與職責分工
 
@@ -90,7 +90,7 @@ Persistent runner（LXC / VM，跨 job 保留檔案系統）上，會自我更�
 
   （consumer 可在 `setup-pnpm-` 前加 repo 前綴，例如 clade 用 `clade-setup-pnpm-`；`strategy.job-index` 在沒有 matrix 的 job 展開為空字串，照寫即可）
   - **理由**：同一台主機上的 runner 共用 home，`pnpm/action-setup` 預設把 self-installer 裝進共用的 `~/setup-pnpm`，並行 job 會互刪（§ 7 的同一類問題）。症狀是 install 階段 `ENOENT`／`ENOTEMPTY` 或 `pnpm: not found` 時好時壞。每趟獨立的 `dest` 讓並行 job 不再共用同一個目錄，這才是修法；退回 v5 只是繞開，不解決共用目錄
-  - **實證**：clade run 35469525376（2026-09-19）doctor 撞 ENOENT、lane4 撞 ENOTEMPTY；clade 自 2026-09-19 起每個 job 都用 v6.1.0＋per-run `dest`（`.github/workflows/validate.yml`、`ai-quota.yml`，斷言在 `test/clade-self-hosted-workflow.test.ts`）
+  - **實證**：clade run 35469525376（2026-09-19）doctor 撞 ENOENT、lane4 撞 ENOTEMPTY；clade 自 2026-09-19 起每個 job 都用 v6.1.0＋per-run `dest`（`.github/workflows/validate.yml`、`dashboard.yml`，斷言在 `test/clade-self-hosted-workflow.test.ts`）
 - **MUST** 升任何「會在 runner 上安裝/更新工具」的 action 大版之前，先問「這個 action 有沒有自我更新行為？它把東西裝到哪個路徑、並行 job 會不會共用？persistent runner 上它留下什麼？」——GitHub-hosted 綠燈**不是** self-hosted 也會綠的證據
 - 範本與完整 CI workflow 見 `vendor/snippets/cloudflare-workers/self-hosted-runner-ci.workflow.yml.template`（已是 v6 SHA-pin＋per-run `dest`）；toolchain 入口的基準形狀見 `vendor/snippets/ci-parity/toolchain-setup.template.yml`
 

@@ -10,7 +10,7 @@ paths:
   - 'packages/**/app/plugins/evlog-*.ts'
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/evlog/evlog-stream-extend.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # evlog Extend 標準（讀端 + 進階 hook）
 

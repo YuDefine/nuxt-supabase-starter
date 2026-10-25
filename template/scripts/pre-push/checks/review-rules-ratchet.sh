@@ -15,11 +15,18 @@
 # 掃描 / glob matching / baseline 比對全部收斂在 scan.ts（pre-commit / pre-push / CI /
 # audit 四入口共用，見 scan.ts 檔頭）。
 #
-# review-rules-baseline.json 不存在時，baseline 視為全空（等同零容忍——任何既有違規都算
-# 「新增」）；第一次導入 ratchet 的 consumer 應先跑
+# review-rules-baseline.json 不存在時，scan.ts 走 bootstrap warn-only：印出存量筆數但不擋 push，
+# 寫入 baseline（含空 {}）後 ratchet 才武裝。第一次導入 ratchet 的 consumer 應先跑
 #   node vendor/review-rules/scan.ts --all --layer all --write-baseline
 # 收斂當前存量再啟用本 check。全 fleet 歸零後可移除 baseline 檔，把本 check 改成純
 # blocking（拿掉 --ratchet，直接吃 severity 擋）。
+#
+# 並非每條規則都在 baseline 存在時就武裝——patterns.json 規則可帶 `ratchet` 欄位：
+#   - 缺欄位（既有規則）  : baseline 缺該 ruleId 的 key 視為 0，任何命中都算新增
+#   - "when-baselined"    : baseline 有該 ruleId 的 key 才比對；沒有 key 只印「規則未武裝」不擋
+#                           （註解規則 C2／C3 逐家收編用；寫入 key 的那一刻才武裝）
+#   - "off"               : 永不進 ratchet 比對，也不寫進 baseline（C0 疑似規則）
+# 語意全文見 scan.ts 檔頭。
 #
 # 由 ~/clade vendor/scripts/pre-push/ 散播，請勿直接編輯 consumer 副本。
 

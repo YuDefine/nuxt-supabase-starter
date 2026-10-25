@@ -7,7 +7,7 @@ paths:
   - 'packages/**/server/plugins/evlog-*.ts'
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/evlog/logging.sampling-redaction.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Logging — Sampling 與 redaction（全文）
 
@@ -98,5 +98,7 @@ audit drain 的 PII 過濾走 evlog root export 的 `auditRedactPreset`，在 au
 | `req.geo.country` | ✅ 保留 | ✅ 保留（非 PII） | ✅ 保留 |
 | `cf-ip*` headers | ❌ enricher 不准抓 | ❌ | ❌ |
 | LLM raw prompt / output | ✅ 保留（短 TTL） | ❌ redact | — |
+
+`evlog.redact` 只管 log 輸出。寫進 DB 的 domain event payload 不經過它，同一份分層（audit chain 欄）要在 emit 端入 DB 前逐欄套用，並截斷單欄長度——見 [[audit-pattern]] § Domain events。
 
 review 抓 `redact` 不存在，或 `redact: { paths: [...] }` 缺 `password` 與 `token|authorization` 任一 → 🔴 Critical。`redact: true` 視為啟用 builtins，不算缺 core redaction。

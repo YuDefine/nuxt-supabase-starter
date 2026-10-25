@@ -3,7 +3,7 @@ description: Dev-login routes must stay local-only while giving screenshot revie
 paths: ['server/routes/auth/**/*dev-login*.ts', 'server/routes/auth/**/*test-login*.ts', 'server/api/_dev/**/*.ts', 'packages/*/server/routes/auth/**/*dev-login*.ts', 'packages/*/server/routes/auth/**/*test-login*.ts', 'packages/*/server/api/_dev/**/*.ts', 'e2e/**/*.ts', 'packages/*/e2e/**/*.ts', 'test/e2e/**/*.ts', 'packages/*/test/e2e/**/*.ts', 'tests/e2e/**/*.ts', 'packages/*/tests/e2e/**/*.ts']
 ---
 <!-- Clade native rule; source: rules/modules/auth/better-auth/dev-login.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Dev-login
 

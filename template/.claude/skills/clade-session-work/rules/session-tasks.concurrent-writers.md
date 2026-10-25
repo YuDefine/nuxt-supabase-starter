@@ -4,7 +4,7 @@ paths: ['tasks/**', 'HANDOFF.md', 'ROADMAP.md', 'docs/tech-debt.md', '.clade/cla
 ---
 <!-- Clade native rule; source: rules/core/session-tasks.concurrent-writers.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Session Tasks — concurrent writers
 
@@ -21,12 +21,34 @@ paths: ['tasks/**', 'HANDOFF.md', 'ROADMAP.md', 'docs/tech-debt.md', '.clade/cla
 
 ## 分類後直接行動
 
-| 分類 | 判準 | 動作 |
+本節是爭用判定的唯一正本；clade-publish、commit 等呼叫端只指向這裡，補充自己流程專屬的動作時以下方 id 為鍵，**NEVER** 重新推導分類。
+
+先逐列讀 probe 1 的 `flow who --json`。`rows` 每列的 `verdict` 由 `vendor/scripts/flow/who.ts` 算出，同列的 `action` 是具名指令：
+
+評估：first-match；以上皆非 → OW*
+
+| id | `flow who` 該列 | 動作 |
 | --- | --- | --- |
-| unattended runner | live runner／child 且入口證據確認 unattended | 不搶、不 stash、不代 commit、不搶 publish；登記需求後讓位 |
-| 前景 agent session | session 身分與現況確認前景工作，且已查 writer | 用 runtime coordination / Herdr 協調；若即將落地，等到具名落地事件 |
-| 人類正在編輯 | 直接的人類寫入證據 | 仍在寫則保留；已停且有既有授權才可分組提交 |
-| unknown | 以上任一層無法確認 | 保留 WIP，不 commit／restore／discard／stash；繼續獨立可做的工作 |
+| OW1 | `blind: true` | 整份無鑑別力，所有列走 probe 2–4，依 CW 表分類 |
+| OW2 | `verdict=mine` | 照該列 `action` 自己落地 |
+| OW3 | `verdict=orphan` | **NEVER** 盲等；照 `action` adjudicate：`git commit --only -- <path>` 落地或 stash [^OW3] |
+| OW4 | `verdict` 是 `other-live`、`unknown`、`locked`、`claimed`、`transcript-evidence`、`mtime-window-contested` | 走 probe 2–4，依 CW 表分類 [^OW4] |
+| OW* | 其他值、欄位缺、指令非 0 | 當 CW* |
+
+[^OW3]: 兩個獨立訊號都說寫入者已不在，等它等不到任何事件。2026-08-26 實測：gate 對一個已經 commit 完並退出的持有者盲等，三個 session 互等約兩小時。
+[^OW4]: `unknown` 承接未知的全部禁令，**NEVER** 讀成 `orphan`，也 **NEVER** 因為 `unknown` 佔多數就當 `orphan` 處理。Bash、Codex、人手改的檔都落 `unknown`，journal 對它們本來就盲。
+
+評估：first-match；以上皆非 → CW*
+
+| id | 分類 | 判準 | 動作 |
+| --- | --- | --- | --- |
+| CW1 | unattended runner | live runner／child 且入口證據確認 unattended | 不搶、不 stash、不代 commit、不搶 publish；登記需求後讓位 |
+| CW2 | 前景 agent session，正要落地 | session 身分與現況確認前景工作、已查 writer，且寫入在收斂中 | 先協調 [^CW2]；不會被覆蓋才等到具名落地事件 |
+| CW3 | 前景 agent session，停在半成品 | 同 CW2 的身分確認，但協調後對方沒回應或回覆無主 | 依呼叫端流程處置（publish 走 A／B，見該 skill） |
+| CW4 | 人類正在編輯 | 直接的人類寫入證據 | 仍在寫則保留；已停且有既有授權才可分組提交 |
+| CW* | unknown | 以上任一層無法確認 | 保留 WIP，不 commit／restore／discard／stash；繼續獨立可做的工作 |
+
+[^CW2]: 用 runtime coordination／Herdr 協調；即將落地時先過 [[concurrent-session-probe]] `[0]` 冗餘檢查（`[0]` 在 § 探測之後：協商，判準表在其後 § 送訊息 MUST 用單引號 heredoc；冪等共享工作的輸出會被對方覆蓋就省略這趟）。
 
 `agent_status: idle`、空 query、pane 無回應、或查不到同名 process NEVER 等於收手。寫「等」時必須綁定可觀察事件（例如 branch 落地、process exit 或 coordination reply）；不能把「等對方收手」當處置。
 

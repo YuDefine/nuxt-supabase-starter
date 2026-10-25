@@ -3,8 +3,8 @@ description: UI 工作的 impeccable 修改閉環（找問題 → 專科修 → 
 paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'app/**/*.ts', 'packages/*/app/**/*.ts', 'components/**', 'packages/*/components/**', 'pages/**', 'packages/*/pages/**', 'layouts/**', 'packages/*/layouts/**', 'specs/plans/**', 'docs/specs/**/spec.md']
 ---
 <!-- Clade native rule; source: rules/core/proactive-skills.design-checkpoint.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 # Proactive Skills — Design Checkpoint（impeccable 修改閉環）
 
@@ -24,7 +24,7 @@ paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'app/**/*.ts', 'packages/*/ap
 | --- | --- |
 | `NO_PRODUCT_MD` | `impeccable init` 建 PRODUCT.md |
 | 有 code、沒有 DESIGN.md | `impeccable document` 從 code 反推 |
-| `MANUAL_DETECTOR_REQUIRED`（這個 runtime 沒有自動 detector hook，例如 Codex） | 收尾前手動跑一次 `impeccable detect --json <變更的 UI 檔>` |
+| `MANUAL_DETECTOR_REQUIRED`（這個 runtime 沒有自動 detector hook） | 收尾前手動跑一次 `impeccable detect --json <變更的 UI 檔>` |
 
 ## 閉環三階段
 
@@ -87,7 +87,7 @@ N.5 在**所有修正完成後**才跑。中途停下時提示使用者：恢復
 
 ## design-review.md（Design Gate 證據）
 
-位置：plan package 為 `specs/plans/<work-id>/design-review.md`；ad-hoc 為 `docs/design-review/<slug>.md`。檔名固定（`residency-classify`、[[nuxt-ui-mcp]] 的 paths 與既有紀錄都認它）。內容記閉環，不貼 critique 全文：
+位置：`specs/plans/<work-id>/design-review.md`。沒有 plan package 的 ad-hoc 設計審查，先 `node vendor/scripts/flow/flow.ts plan open <slug> --title '…'` 開一個再寫；**NEVER** 在 `docs/design-review/` 新增檔（[[consumer-docs-retirement]]）。未遷移 consumer 既有的 `docs/design-review/<slug>.md` 只可原地更新，遷移時處置。檔名固定（`residency-classify`、[[nuxt-ui-mcp]] 的 paths 與既有紀錄都認它）。內容記閉環，不貼 critique 全文：
 
 ```markdown
 # Design Review: <work item>

@@ -74,7 +74,7 @@ parent useLogger(event)         ← 自動 emit (afterResponse)
 streamLog (forked child)        ← 手動 emit (onStreamSettled)
   ├─ operation: 'web-chat-sse-stream'
   ├─ _parentRequestId
-  ├─ ai.cost_usd / ai.tool_calls （見 evlog-ai-sdk-logger）
+  ├─ ai.estimatedCost / ai.tools （見 evlog-ai-sdk-logger）
   └─ stream lifecycle metrics
 ```
 
@@ -86,7 +86,7 @@ streamLog (forked child)        ← 手動 emit (onStreamSettled)
 
 | 檔案 | 職責 |
 | --- | --- |
-| `evlog-ai-sdk-logger/ai-logger.ts` | 提供 `recordAIGeneration` / `recordToolCall` — 灌 ai.* 欄位 |
+| `evlog-ai-sdk-logger/` | AI SDK 用 `evlog/ai` 的 `createAILogger`、原生 SDK 用 `createNativeAITrace` — 灌 ai.* 欄位 |
 | 本 snippet | 提供 child logger lifecycle |
 
 組合：
@@ -94,7 +94,7 @@ streamLog (forked child)        ← 手動 emit (onStreamSettled)
 ```ts
 const streamLog = forkChildLogger(event, { operation: 'web-chat-sse-stream' })
 const aiResult = await generateText({...})
-recordAIGeneration(streamLog, { ... })  // 灌進 child logger
+streamLog.set({ ai: trace.finish() })  // 原生 SDK 累加器；灌進 child logger
 emitChildLogger(event, streamLog)
 ```
 
@@ -121,4 +121,4 @@ dev 階段的 await 不影響功能，但 production Workers 必須 waitUntil。
 
 - **無 SSE / MCP / Durable Object**
 - **stream lifecycle 在 afterResponse 之內結束**：parent log 已夠
-- **單一 quick AI call（無 stream）**：parent log + `recordAIGeneration` 即可，不需 child
+- **單一 quick AI call（無 stream）**：parent log + `log.set({ ai: trace.finish() })` 即可，不需 child

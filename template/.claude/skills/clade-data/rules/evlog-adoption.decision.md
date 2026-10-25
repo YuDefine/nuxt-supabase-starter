@@ -8,7 +8,7 @@ paths:
   - 'packages/**/server/plugins/evlog-*.ts'
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/evlog/evlog-adoption.decision.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # evlog Adoption — 選型與 migration 順序（全文）
 

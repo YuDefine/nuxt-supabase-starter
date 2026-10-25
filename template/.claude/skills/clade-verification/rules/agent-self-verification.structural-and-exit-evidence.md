@@ -3,7 +3,7 @@ description: MUST 11 的結構查詢與分頁兩種 negative-search 形態（gra
 paths: ['scripts/audit-reference-query-oracle.ts', 'test/fixtures/reference-oracle/**', 'packages/*/test/fixtures/reference-oracle/**', 'test/audit-reference-query-oracle.test.ts', 'packages/*/test/audit-reference-query-oracle.test.ts', 'vendor/scripts/run-evidence.ts', 'vendor/scripts/evidence-hook.ts']
 ---
 <!-- Clade native rule; source: rules/core/agent-self-verification.structural-and-exit-evidence.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # 結構查詢與 exit-code 證據（MUST 11 的下推全文 ＋ MUST 20 exhibit 指針）
 

@@ -3,7 +3,7 @@ description: Consumer 維護 fixtures 檔（lifecycle repo：specs/truth/fixture
 paths: ['specs/truth/fixtures.md', 'docs/FIXTURES.md', 'docs/fixtures.md']
 ---
 <!-- Clade native rule; source: rules/core/fixtures-reference.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Fixtures Reference（hard rule）
 

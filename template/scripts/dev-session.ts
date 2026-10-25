@@ -50,6 +50,7 @@
  *   node scripts/dev-session.ts list                 # 列所有 dev-* session + health
  *   node scripts/dev-session.ts sweep [--dry-run] [--leases-only]    # 回收 TTL 已過的 agent 租約（沒人爭用也收；心跳斷不收）＋清掉 dev 已退出的 dev-* tab
  *                     --leases-only：只回收租約、不清 dead-tab（dev node 的 clade-dev-lease-reaper.timer 每 5 分鐘跑這個）
+ *   node scripts/dev-session.ts slots [--json]       # 唯讀：本機 resident dev server 實況計數（hostCap、每格 owner／port／cwd／Pss），不起不停任何東西
  *
  * 常用 opts：
  *   --consumer-meta <path>   讀 consumer_id / dev.ports / auth.portPinned / dev.leaseMode
@@ -94,7 +95,7 @@ import {
 import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 import { basename, join, resolve, isAbsolute } from 'node:path'
-import { tmpdir } from 'node:os'
+import { cpus, tmpdir } from 'node:os'
 import { detectHolderKind, detectSessionId } from './lib/detect-runtime.ts'
 import {
   probeBackingService,
@@ -106,7 +107,9 @@ import {
   taskName,
   verifyVisibleIdentity,
 } from './herdr-visible-identity.ts'
-import { chooseDevWorkspace } from './lib/dev-workspace.ts'
+import { chooseDevWorkspace, labelBelongsToOtherRepo } from './lib/dev-workspace.ts'
+import { buildSlots, computeHostCap, parseLsofListeners, summarizeSlots } from './lib/dev-slots.ts'
+import { readHostMem, sampleProcs } from './lib/dev-resource/tree-cost.ts'
 // 分配模型的 SoT。base 池寬度 NEVER 在本檔另外定義一次——第二份常數與分配器漂開時，
 // 回收會殺到合法的 dev server。
 import { DEV_PORT_BAND } from './lib/worktree-dev-port.ts'
@@ -366,6 +369,7 @@ function parse(argv) {
     noLease: false,
     dryRun: false,
     leasesOnly: false,
+    json: false,
   }
   const sep = argv.indexOf('--')
   const head = sep === -1 ? argv : argv.slice(0, sep)
@@ -419,6 +423,9 @@ function parse(argv) {
       case '--leases-only':
         o.leasesOnly = true
         break
+      case '--json':
+        o.json = true
+        break
       case '-h':
       case '--help':
         o._.push('help')
@@ -444,6 +451,25 @@ function readConsumerMeta(p) {
   }
 }
 
+/**
+ * `cwd` 所在 repo 的主 checkout 絕對路徑；不在 git 樹內或判不出來時回 undefined。
+ *
+ * `git rev-parse --git-common-dir` 在 main 回 `<repo>/.git`、在 linked worktree 回
+ * `<main-repo>/.git/worktrees/<slug>`；兩者截到最後一段 `/.git` 的父層即 main worktree。
+ */
+function mainCheckoutRoot(cwd) {
+  const commonDir = sh('git', [
+    '-C',
+    cwd,
+    'rev-parse',
+    '--path-format=absolute',
+    '--git-common-dir',
+  ])
+  if (!commonDir) return undefined
+  const gitIdx = commonDir.lastIndexOf('/.git')
+  return gitIdx > 0 ? commonDir.slice(0, gitIdx) : undefined
+}
+
 function resolveConsumerId(o, meta) {
   // key 名以 registry/consumer-meta.schema.json 為準：`consumerId`（camelCase）。
   // 曾經只讀 snake_case，對每一份符合 schema 的 manifest 都恆為 undefined，於是靜默
@@ -461,21 +487,8 @@ function resolveConsumerId(o, meta) {
   // --consumer-meta 的指令會靜默操作錯的 lease：release 釋放不到、conflict 偵測不到，
   // 跨 worktree 的 lease 隔離形同虛設（2026-07-26 <consumer-a> 實證：worktree 內 `stop` 後
   // /tmp/<consumer-a>-verification-lease.json 原封不動殘留）。 fixed-temp-path-exempt: 2026-07-26 事故的現場路徑，改寫等於竄改事故紀錄
-  //
-  // `--git-common-dir` 在 main 回 `<repo>/.git`、在 linked worktree 回
-  // `<main-repo>/.git/worktrees/<slug>`；兩者的 dirname 往上找到 `.git` 的父層即 main worktree。
-  const commonDir = sh('git', [
-    '-C',
-    o.cwd,
-    'rev-parse',
-    '--path-format=absolute',
-    '--git-common-dir',
-  ])
-  if (commonDir) {
-    // 去掉結尾的 /.git（linked worktree 會是 .../.git/worktrees/<slug>，先截到 .git）
-    const gitIdx = commonDir.lastIndexOf('/.git')
-    if (gitIdx > 0) return basename(commonDir.slice(0, gitIdx))
-  }
+  const mainRoot = mainCheckoutRoot(o.cwd)
+  if (mainRoot) return basename(mainRoot)
 
   const top = sh('git', ['-C', o.cwd, 'rev-parse', '--show-toplevel'])
   if (top) return basename(top)
@@ -490,17 +503,8 @@ function resolveConsumerId(o, meta) {
  */
 function resolveRepoRoots(o) {
   const roots = []
-  const commonDir = sh('git', [
-    '-C',
-    o.cwd,
-    'rev-parse',
-    '--path-format=absolute',
-    '--git-common-dir',
-  ])
-  if (commonDir) {
-    const gitIdx = commonDir.lastIndexOf('/.git')
-    if (gitIdx > 0) roots.push(commonDir.slice(0, gitIdx))
-  }
+  const mainRoot = mainCheckoutRoot(o.cwd)
+  if (mainRoot) roots.push(mainRoot)
   const top = sh('git', ['-C', o.cwd, 'rev-parse', '--show-toplevel'])
   if (top) roots.push(top)
   if (!roots.length) roots.push(o.cwd)
@@ -1004,20 +1008,54 @@ function devProcessAlive(paneId) {
 }
 
 /**
+ * 這個 cwd 所在 repo 的主 checkout 名（＝派工端 `repoWorkspaceLabel` 給 workspace 的名）；
+ * 不在 git 樹內回 null。`git worktree list` 第一行是 main checkout，linked worktree 也
+ * 認回同一個 repo 名。
+ */
+function repoLabelOf(path, memo) {
+  if (memo.has(path)) return memo.get(path)
+  let label = null
+  try {
+    const listing = execFileSync('git', ['-C', path, 'worktree', 'list', '--porcelain'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+    const mainCheckout = /^worktree (.+)$/mu.exec(listing)?.[1]
+    if (mainCheckout) label = basename(mainCheckout.trim())
+  } catch {
+    label = null
+  }
+  memo.set(path, label)
+  return label
+}
+
+/**
  * 這台 dev server 的 Tab 該落在哪個 workspace；null = 沒有夠格的既有 workspace。
  *
  * herdr 的清單取不到時一律回 null（caller 會退回「建新 workspace」而非硬塞進當前
  * workspace）——猜錯歸屬正是本函式要修的病。
+ *
+ * workspace 層排除與派工端同規則：label 可證明屬於別的 repo（它有 pane 坐在那個 repo
+ * 裡、且 label 等於那個 repo 的主 checkout 名）的 workspace 不算候選——即使它誤放著
+ * 一個 cwd 落在本 repo 的 pane。使用者自訂、對不上任何 repo 的 label 不在此列。
  */
 function resolveDevWorkspaceId(consumerId, repoRoots) {
   const workspaces = herdrJson(['workspace', 'list'])?.result?.workspaces
   if (!Array.isArray(workspaces)) return null
   const panes = herdrJson(['pane', 'list'])?.result?.panes
+  const memo = new Map()
+  const roots = repoRoots.filter(Boolean)
   return chooseDevWorkspace({
     workspaces,
     panes: Array.isArray(panes) ? panes : [],
     consumerId,
     repoRoots,
+    excludeWorkspace: (workspace, ownPanes) =>
+      labelBelongsToOtherRepo(workspace, ownPanes, {
+        roots,
+        wantedLabels: [consumerId],
+        repoLabelOf: (path) => repoLabelOf(path, memo),
+      }),
   }).workspaceId
 }
 
@@ -1387,8 +1425,11 @@ function enforceLeaseOrExit(o, meta, consumerId, lid) {
  * 沒有 per-worktree 拓樸的 consumer（絕大多數）在第一個 probe 就 `applicable:false` 退出，
  * 零行為改變。探針自身故障同樣走這條 —— tooling 面 fail-open，NEVER 因工具壞掉擋住開發。
  */
-function preflightBackingService(o) {
-  const probe = probeBackingService(o.cwd)
+export function preflightBackingService(o) {
+  // `status` 與 `ensure` 都走 shim 的 resolveTarget：樹自己的 shim 認不得分支名（E_BRANCH_SLUG）時
+  // 兩者同樣失敗，所以 probe 與補建後的重 probe 都要帶同一個 fallback，否則 preflight 在補建前就退出。
+  const slugFallbackRoot = mainCheckoutRoot(o.cwd)
+  const probe = probeBackingService(o.cwd, { slugFallbackRoot })
   if (!probe.applicable) return
   if (probe.state === 'ready') return
 
@@ -1397,13 +1438,15 @@ function preflightBackingService(o) {
 
   let ensureErr: string | null = null
   try {
-    runWtEnvBootstrap(o.cwd, 'ensure')
+    // 樹自己的 shim 先跑；認不得自己的分支名（E_BRANCH_SLUG，如 base 早於 slug 支援的
+    // cloud/* 分支）才改用主 checkout 的 shim 重跑一次 —— 同 wt-helper add / batch bootstrap。
+    runWtEnvBootstrap(o.cwd, 'ensure', { slugFallbackRoot })
   } catch (e) {
     ensureErr = (e as Error)?.message ?? String(e)
   }
 
   // ensure 的 exit 0 只代表「指令沒失敗」，不代表 service 真的起來了 —— 重新 probe 才算驗證。
-  const after = ensureErr ? probe : probeBackingService(o.cwd)
+  const after = ensureErr ? probe : probeBackingService(o.cwd, { slugFallbackRoot })
   if (!ensureErr && after.applicable && after.state === 'ready') {
     out(
       `✓ backing service 已補建：${after.dbName ?? svc}${after.port ? ` (port ${after.port})` : ''}`,
@@ -1830,6 +1873,78 @@ function cmdList() {
   }
 }
 
+/** LEASE_DIR 下所有 verification lease（讀不到／壞檔略過）。slots 只看，不改。 */
+function readAllLeases() {
+  const leases = []
+  let names = []
+  try {
+    names = readdirSync(LEASE_DIR)
+  } catch {
+    return leases
+  }
+  for (const name of names) {
+    if (!name.endsWith('-verification-lease.json')) continue
+    try {
+      leases.push(JSON.parse(readFileSync(join(LEASE_DIR, name), 'utf8')))
+    } catch {
+      /* 壞檔或剛被刪：略過 */
+    }
+  }
+  return leases
+}
+
+function fmtKiB(kib) {
+  return kib >= 1024 * 1024
+    ? `${(kib / 1024 / 1024).toFixed(2)} GiB`
+    : `${Math.round(kib / 1024)} MiB`
+}
+
+/**
+ * 唯讀：本機 resident dev server 的實況計數（spec C1／C6）。
+ * 計數以進程＋port 在聽為準，不是 lease 檔張數；lease 只用來標 owner class。
+ */
+function cmdSlots(o) {
+  const mem = readHostMem()
+  const cores = cpus().length
+  const hostCap = computeHostCap({ memTotalKiB: mem?.totalKiB ?? 0, cores })
+  const raw = sh('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-F', 'pn'])
+  const slots = buildSlots({
+    procs: sampleProcs(),
+    listeners: parseLsofListeners(raw ?? ''),
+    leases: readAllLeases(),
+    now: Date.now(),
+    reclaimReason: (lease, now) => leaseReclaimable(lease, now),
+  })
+  const report = summarizeSlots(slots, hostCap)
+  if (o.json) {
+    out(JSON.stringify({ hostMemTotalKiB: mem?.totalKiB ?? null, cores, ...report }, null, 2))
+    return
+  }
+  out(
+    `resident dev server ${report.count} / hostCap ${hostCap}${report.overCap ? '（超額）' : ''}` +
+      `  [human ${report.byOwner.human}  agent ${report.byOwner.agent}  unleased ${report.byOwner.unleased}]`,
+  )
+  for (const s of slots) {
+    const ttl =
+      s.ttlRemainingMs === null
+        ? ''
+        : s.ttlRemainingMs < 0
+          ? '  TTL 已過'
+          : `  TTL 剩 ${fmtDuration(s.ttlRemainingMs)}`
+    const state = s.leaseState ? `  [${s.leaseState}]` : ''
+    out(
+      `  :${s.port}  ${s.owner.padEnd(8)} ${fmtKiB(s.pssKiB).padStart(9)}  pid ${s.pid}` +
+        `  ${s.consumerId ?? '-'}  ${s.cwd ?? '-'}${ttl}${state}`,
+    )
+  }
+  if (report.perServerPssP90KiB !== null) {
+    out(
+      `每格 Pss p90 ${fmtKiB(report.perServerPssP90KiB)}` +
+        (report.enoughForCalibration ? '' : '（不足 3 格，不可拿來校準 perServerPss）'),
+    )
+  }
+}
+
 /** 兩次讀到的是不是同一份租約（中間 holder 續租 / 別人接手都會改掉其中一欄）。 */
 function sameLease(a, b) {
   return (
@@ -2124,6 +2239,8 @@ async function main() {
       return cmdList()
     case 'sweep':
       return cmdSweep(o)
+    case 'slots':
+      return cmdSlots(o)
     default:
       return cmdLaunch(o) // 無 subcommand = launch
   }

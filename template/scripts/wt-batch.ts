@@ -21,11 +21,12 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { hostname, tmpdir } from 'node:os'
+import { homedir, hostname, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isRecord, parseJsonRecord, parseJsonWith } from './lib/json-unknown.ts'
+import { isRegisterPath, PROVEN_NON_GATE } from './lib/register-paths.ts'
 import {
   evaluateUnattendedAdmission,
   parseUnattendedMergeAuthorization,
@@ -40,7 +41,8 @@ import {
   type ProcessProbe,
 } from './lib/publish-in-flight.ts'
 import { findClaimByWorktreeObserved, readActiveClaimsObserved } from './claim-helper.ts'
-import { blockingPorcelainPaths, parseDiscardPathspecs } from './wip-dirty.ts'
+import { readGitStatus } from './lib/git-status-z.ts'
+import { blockingStatusPaths, parseDiscardPathspecs } from './wip-dirty.ts'
 import { errorMessage } from './lib/safety-observation.ts'
 import {
   captureAndVerify,
@@ -62,9 +64,18 @@ import {
   type InventoryEntry,
   type InventoryOptions,
   type PreservationReceipt,
+  type ResourceAdapterName,
   type SourceInventory,
 } from './preservation-policy.ts'
 import { preservationProfileFor } from './preservation-profiles.ts'
+import { readRetirementRows } from './retired-ledger.ts'
+import {
+  assertResourcesReleased,
+  defaultResourceAdapters,
+  productionWorktreeDbEvidence,
+  resourceVerdict,
+  type ResourceAdapterSet,
+} from './preservation-resource-adapters.ts'
 import { reconcileLandedProjectionState } from './lib/projection-ledger-reconcile.ts'
 
 // clade keeps flow beside this file; consumers receive the same modules under
@@ -89,7 +100,11 @@ const [
 ])
 
 export interface BatchLifecycle {
-  bootstrap: (main: string, path: string) => void
+  /**
+   * `needsDevServer` 為真才在 bootstrap 配 dev-port 並於格滿時 fail-closed；否則延後到
+   * `wt-helper dev` 首跑（O2：不需 dev server 的批次不該被 band 容量擋下）。
+   */
+  bootstrap: (main: string, path: string, opts?: { needsDevServer?: boolean }) => void
   /**
    * Tear down runtime state while exclusive ownership is held. Returns the
    * worktree-relative paths of every checkout `.git` the teardown detached
@@ -298,9 +313,9 @@ export function processCwdInside(path: string, procRoot = '/proc'): 'some' | 'no
   return 'none'
 }
 
-const defaultLifecycle: BatchLifecycle = {
-  bootstrap: (_main, path) => {
-    runWtEnvBootstrap(path, 'ensure')
+export const defaultLifecycle: BatchLifecycle = {
+  bootstrap: (main, path) => {
+    runWtEnvBootstrap(path, 'ensure', { slugFallbackRoot: main })
   },
   destroy: (main, path) => {
     const result = runWtEnvBootstrap(path, 'destroy', { scriptRoot: main })
@@ -328,7 +343,9 @@ export interface MergeReceipt {
   repository: string
   pr: number
   base: 'main'
-  merge_method: 'squash'
+  /** `squash` = single-parent commit; `merge` = GitHub merge commit whose second parent is the
+   *  reviewed head (repos that disallow squash can only land a PR this way). */
+  merge_method: 'squash' | 'merge'
   merged: true
   source_head: string
   reviewed_base: string
@@ -437,6 +454,8 @@ export interface WorktreeBatch {
   cursor: number
   phase: 'integrating' | 'review' | 'sealed' | 'landed' | 'cleaned' | 'cancelled'
   bootstrapped?: boolean
+  /** `batch prepare --needs-dev-server`：bootstrap 時必須配到 dev-port，配不到就 fail-closed。 */
+  needsDevServer?: boolean
   pending?: { before: string; tree?: string }
   refresh?: { base: string; before: string; tree?: string }
   origin_advanced_during_review?: number
@@ -460,6 +479,10 @@ export interface WorktreeBatch {
    *  the candidate that was actually sealed. Absent on legacy journals. */
   timeline?: BatchTimeline
   mergeReceipt?: MergeReceipt
+  /** Set when `confirm-merged --reconcile-merged` recorded the landing: `unsealed` — the record
+   *  stopped at review and never sealed; `advancedBase` — main moved past the reviewed base on
+   *  non-register paths, so the reseal gate was lifted. Absent on a normal sealed landing. */
+  reconciledMerged?: { unsealed: boolean; advancedBase: boolean }
   unattendedAuthorization?: UnattendedMergeAuthorization
   mergeAttempt?: MergeAttemptJournal
   stagingReceipt?: StagingReceipt
@@ -485,8 +508,16 @@ export interface WorktreeBatch {
     // after destroy — journaled so an interrupted removal resumes against
     // the same baseline. Absent on legacy journals: fall back to the
     // pre-teardown archive inventory.
+    //
+    // In memory these hold the full per-file inventories; on disk they ride
+    // in content-addressed sidecars (`removal-baselines/<sha256>.json`) and
+    // state.json keeps only the hash (`verifyInventorySha`／`verifyGitSha`).
+    // A journal written before the sidecar split carries the inline
+    // inventory and still resumes — the next save moves it out.
     verifyInventory?: SourceInventory
     verifyGit?: SourceInventory
+    verifyInventorySha?: string
+    verifyGitSha?: string
     // Worktree-relative `.git.clade-detached*` paths this teardown renamed
     // aside — the exact restore list, so rollback never renames a
     // pre-existing file that merely shares the prefix.
@@ -578,6 +609,14 @@ const git = (cwd: string, args: string[], input?: string) =>
  * path: a filename that legitimately starts with a space is otherwise handed on in a
  * spelling that names no file, which is the same failure `-z` was adopted to prevent.
  */
+const gitRaw = (cwd: string, args: string[]) =>
+  execFileSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    env: isolatedGitEnv,
+    maxBuffer: 256 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
 const hashBuffer = Buffer.allocUnsafe(8 * 1024 * 1024)
 // Streams so multi-GB retire archives hash without loading into memory.
 const hashFile = (path: string) => {
@@ -799,14 +838,69 @@ function isState(value: unknown): value is State {
   const state = value as Partial<State>
   return state.version === 1 && Array.isArray(state.ready) && Array.isArray(state.batches)
 }
-function readState(c: Context): State {
+const BASELINE_SIDECAR_DIR = 'removal-baselines'
+function readBaselineSidecar(c: Context, sha: string): SourceInventory {
+  const file = join(c.dir, BASELINE_SIDECAR_DIR, `${sha}.json`)
+  let raw: string
+  try {
+    raw = readFileSync(file, 'utf8')
+  } catch (error) {
+    throw new Error(
+      `Removal baseline sidecar ${file} unreadable; preserve state for recovery (${errorMessage(error)})`,
+      { cause: error },
+    )
+  }
+  if (createHash('sha256').update(raw).digest('hex') !== sha)
+    throw new Error(`Removal baseline sidecar ${file} fails its hash; preserve state for recovery`)
+  const parsed: unknown = JSON.parse(raw)
+  if (!isSourceInventory(parsed))
+    throw new Error(
+      `Removal baseline sidecar ${file} is not a source inventory; preserve state for recovery`,
+    )
+  return parsed
+}
+function isSourceInventory(value: unknown): value is SourceInventory {
+  if (!isRecord(value)) return false
+  return (
+    typeof value.root === 'string' &&
+    Array.isArray(value.entries) &&
+    value.entries.every((entry) => isRecord(entry) && typeof entry.path === 'string') &&
+    typeof value.logicalBytes === 'number' &&
+    typeof value.allocatedBytes === 'number' &&
+    typeof value.entryCount === 'number' &&
+    typeof value.digest === 'string' &&
+    Array.isArray(value.externalSymlinks) &&
+    Array.isArray(value.specialFiles)
+  )
+}
+/** Rehydrate sidecar-backed baselines so the removal paths keep seeing full inventories. */
+function hydrateRemovalBaselines(c: Context, s: State): State {
+  for (const b of s.batches) {
+    const removing = b.removing
+    if (!removing) continue
+    if (removing.verifyInventorySha && !removing.verifyInventory)
+      removing.verifyInventory = readBaselineSidecar(c, removing.verifyInventorySha)
+    if (removing.verifyGitSha && !removing.verifyGit)
+      removing.verifyGit = readBaselineSidecar(c, removing.verifyGitSha)
+  }
+  return s
+}
+/**
+ * Only the `mutate` lock holder hydrates the sidecar baselines: `save` prunes
+ * unreferenced sidecars right after renaming state.json, so an unlocked reader
+ * that followed an old state.json to a pruned sidecar would fail at random.
+ * Unlocked readers (status, list, legacy checks) never use the per-file
+ * baselines and see only the hashes.
+ */
+function readState(c: Context, hydrate = false): State {
   const file = join(c.dir, 'state.json')
   if (!existsSync(file)) return { version: 1, ready: [], batches: [] }
-  return parseJsonWith(
+  const state = parseJsonWith(
     readFileSync(file, 'utf8'),
     isState,
     'Invalid batch state; preserve it for recovery',
   )
+  return hydrate ? hydrateRemovalBaselines(c, state) : state
 }
 function syncFile(path: string): void {
   const fd = openSync(path, 'r')
@@ -856,8 +950,57 @@ function writeJsonDurable(dir: string, name: string, value: unknown) {
   renameSync(file, join(dir, name))
   syncDirectoryAndParents(dir)
 }
+/** Durable content-addressed write; returns the sha256 the state journal keeps. */
+function writeBaselineSidecar(c: Context, inventory: SourceInventory): string {
+  const raw = JSON.stringify(inventory)
+  const sha = createHash('sha256').update(raw).digest('hex')
+  const dir = join(c.dir, BASELINE_SIDECAR_DIR)
+  mkdirSync(dir, { recursive: true })
+  const target = join(dir, `${sha}.json`)
+  if (existsSync(target)) return sha
+  const tmp = join(dir, `${sha}-${randomUUID()}.tmp`)
+  writeFileSync(tmp, raw, { flag: 'wx' })
+  syncFile(tmp)
+  renameSync(tmp, target)
+  syncDirectoryAndParents(dir)
+  return sha
+}
+/** state.json view: per-file baselines swapped for their sidecar hashes. */
+function stateWithoutInlineBaselines(c: Context, s: State): { state: State; keep: Set<string> } {
+  const keep = new Set<string>()
+  const batches = s.batches.map((b) => {
+    const removing = b.removing
+    if (!removing || (!removing.verifyInventory && !removing.verifyGit)) {
+      if (removing?.verifyInventorySha) keep.add(removing.verifyInventorySha)
+      if (removing?.verifyGitSha) keep.add(removing.verifyGitSha)
+      return b
+    }
+    const { verifyInventory, verifyGit, ...rest } = removing
+    if (verifyInventory) rest.verifyInventorySha = writeBaselineSidecar(c, verifyInventory)
+    if (verifyGit) rest.verifyGitSha = writeBaselineSidecar(c, verifyGit)
+    if (rest.verifyInventorySha) keep.add(rest.verifyInventorySha)
+    if (rest.verifyGitSha) keep.add(rest.verifyGitSha)
+    return { ...b, removing: rest }
+  })
+  return { state: { ...s, batches }, keep }
+}
+function pruneBaselineSidecars(c: Context, keep: Set<string>): void {
+  const dir = join(c.dir, BASELINE_SIDECAR_DIR)
+  if (!existsSync(dir)) return
+  for (const name of readdirSync(dir)) {
+    const sha = /^([0-9a-f]{64})\.json$/.exec(name)?.[1]
+    if (sha && keep.has(sha)) continue
+    try {
+      rmSync(join(dir, name), { force: true })
+    } catch {
+      // Best effort: an orphan sidecar is harmless and pruned on a later save.
+    }
+  }
+}
 function save(c: Context, s: State) {
-  writeJsonDurable(c.dir, 'state.json', s)
+  const { state, keep } = stateWithoutInlineBaselines(c, s)
+  writeJsonDurable(c.dir, 'state.json', state)
+  pruneBaselineSidecars(c, keep)
 }
 function isLiveBatch(b: WorktreeBatch): boolean {
   return !['landed', 'cleaned', 'cancelled'].includes(b.phase)
@@ -931,7 +1074,7 @@ function mutate<T>(c: Context, fn: (s: State) => T): T {
     // A recovery which started between the first check and acquisition owns this handshake.
     if (existsSync(recovery))
       throw new Error('Batch lock recovery in progress; retry after recovery completes')
-    return fn(readState(c))
+    return fn(readState(c, true))
   } finally {
     rmSync(lock)
   }
@@ -997,9 +1140,57 @@ function batchBase(c: Context, b: Pick<WorktreeBatch, 'workflow'>): string {
 function recordOriginAdvance(b: WorktreeBatch): void {
   b.origin_advanced_during_review = (b.origin_advanced_during_review ?? 0) + 1
 }
-function assertBatchBase(c: Context, b: WorktreeBatch): string {
+/**
+ * origin/main 前移是否仍可放行：`proven` 為空一律拒收；否則前移路徑每一項都必須在 `proven`
+ * 內，且與候選路徑不相交（目錄前綴也算相交）。前移沒有任何變更路徑（空 commit）時，
+ * 在非空 `proven` 下視為放行——它沒有動到任何 gate 輸入。
+ */
+export function batchBaseAdvanceAllowed(
+  advanced: readonly string[],
+  candidate: readonly string[],
+  proven: ReadonlySet<string>,
+): boolean {
+  if (proven.size === 0) return false
+  return advanced.every(
+    (path) => proven.has(path) && candidate.some((mine) => pathsOverlap(path, mine)) === false,
+  )
+}
+function candidatePaths(c: Context, b: WorktreeBatch): string[] {
+  const nameOnly = (cwd: string, args: string[]) =>
+    execFileSync('git', ['diff', '--name-only', '--no-renames', '-z', ...args], {
+      cwd,
+      encoding: 'utf8',
+      env: isolatedGitEnv,
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+      .split('\0')
+      .filter(Boolean)
+  return [
+    ...new Set([...diffPaths(c, b.base, head(b.path)), ...nameOnly(b.path, ['--cached', b.base])]),
+  ]
+}
+function originAdvanceProven(
+  c: Context,
+  b: WorktreeBatch,
+  current: string,
+  proven: ReadonlySet<string>,
+): boolean {
+  if (b.workflow !== 'pr-merge-based' || proven.size === 0) return false
+  try {
+    git(c.main, ['merge-base', '--is-ancestor', b.base, current])
+  } catch {
+    return false
+  }
+  return batchBaseAdvanceAllowed(diffPaths(c, b.base, current), candidatePaths(c, b), proven)
+}
+export function assertBatchBase(
+  c: Context,
+  b: WorktreeBatch,
+  proven: ReadonlySet<string> = PROVEN_NON_GATE,
+): string {
   const current = batchBase(c, b)
-  if (current !== b.base) {
+  if (current !== b.base && originAdvanceProven(c, b, current, proven) === false) {
     if (b.workflow === 'pr-merge-based') recordOriginAdvance(b)
     throw new Error('Main advanced: refresh the batch before restarting review')
   }
@@ -1055,20 +1246,13 @@ const hashMatches = (path: string, digest: string) => {
   }
 }
 // handoff-retire archives and removes a released landed-batch source on its own
-// path, and its manifest row is the only trace that survives. Accept that row as
-// preservation only when it names this exact source and every archived file
-// still hashes to what retire recorded.
+// path, and its tombstone row (flow spine; legacy `retired-work.jsonl` rows stay
+// readable) is the only trace that survives. Accept that row as preservation
+// only when it names this exact source and every archived file still hashes to
+// what retire recorded.
 function retiredByHandoff(c: Context, path: string, branch: string, sourceHead: string) {
-  const manifest = join(c.main, 'docs', 'archives', 'retired-work.jsonl')
-  if (!existsSync(manifest)) return undefined
   const ref = fullRef(branch)
-  for (const line of readFileSync(manifest, 'utf8').split('\n').toReversed()) {
-    let row: Record<string, unknown>
-    try {
-      row = parseJsonRecord(line)
-    } catch {
-      continue
-    }
+  for (const row of readRetirementRows({ cwd: c.main, skipInvalid: true }).toReversed()) {
     const original = row.original,
       archive = row.archive,
       files = row.files
@@ -1096,19 +1280,33 @@ function retiredByHandoff(c: Context, path: string, branch: string, sourceHead: 
   }
   return undefined
 }
+/** Adapters whose evidence lives outside the tree and is judged before any archive is taken. */
+const OUT_OF_TREE_ADAPTERS: ResourceAdapterName[] = ['worktree-db', 'local-supabase']
+/** Archive the batch journal recorded for `path`; the caller verifies it separately. */
+function preservedArchive(b: WorktreeBatch, path: string): string | undefined {
+  return b.preserved?.findLast((entry) => entry.path === path)?.archive
+}
 function hasVerifiedPreservation(
   b: WorktreeBatch,
   path: string,
   profile: ConsumerProfile,
+  resourceAdapters: ResourceAdapterSet = defaultResourceAdapters(),
 ): boolean {
   try {
     validateProfile(profile)
   } catch {
     return false
   }
-  const archive = b.preserved?.findLast((entry) => entry.path === path)?.archive
+  const archive = preservedArchive(b, path)
   if (!archive) return false
-  return verifyPreservationArchive(archive, path, inventoryOptionsFromProfile(profile))
+  if (!verifyPreservationArchive(archive, path, inventoryOptionsFromProfile(profile))) return false
+  // The in-tree secret verdict holds at the moment the archive is verified. This function is
+  // shared by preview and cleanup so a dry-run never says removed where the real run retains.
+  return (
+    resourceVerdict(profile, { sourcePath: path, archive, treeExists: false }, resourceAdapters, {
+      only: ['in-tree-archive'],
+    }).status === 'released'
+  )
 }
 function comparableInventory(inventory: Pick<SourceInventory, 'entries'>, gitDir = false): string {
   return JSON.stringify(
@@ -1526,6 +1724,18 @@ const isToolRegeneratedPath = (path: string) =>
   path === '.husky' || path === '.husky/_' || path.startsWith('.husky/_/')
 const isAdoptableResumeDrift = (path: string) =>
   isFlowSpinePath(path) || isToolRegeneratedPath(path)
+// Package-manager and commit-lock residue a post-interruption command (pnpm install, a
+// commit attempt inside the quarantined tree) rewrites. Regenerable and git-ignored, but
+// broader than the strict allowlist above, so it is adopted only for an integration tree
+// that is git clean and whose head is the landed head: nothing unique can sit in it.
+const isInstallResiduePath = (path: string) =>
+  path === 'node_modules' ||
+  path.startsWith('node_modules/') ||
+  path.endsWith('/node_modules') ||
+  path.includes('/node_modules/') ||
+  path === '.claude/.commit.lock' ||
+  path === '.claude/.commit.lock.history' ||
+  path.startsWith('.claude/.commit.lock.history/')
 
 const RESEALABLE_ADMIN_SUBPATHS = new Set(['COMMIT_EDITMSG', 'index', 'ORIG_HEAD', 'logs/HEAD'])
 // Drift paths are scoped as `worktrees/<id>/<subpath>` — the allowed set is
@@ -1639,7 +1849,7 @@ function adminResealSafe(root: string, expectedHead: string | undefined): boolea
   if (!expectedHead) return false
   try {
     if (git(root, ['rev-parse', 'HEAD']) !== expectedHead) return false
-    return git(root, ['status', '--porcelain']) === ''
+    return git(root, ['status', '--porcelain', '-z']) === ''
   } catch {
     return false
   }
@@ -1859,13 +2069,25 @@ const QUARANTINE_WATCHER = String.raw`
 const { watch, readdirSync, statSync, lstatSync, appendFileSync, writeFileSync } = require('node:fs')
 const { join } = require('node:path')
 const [root, out, ...extra] = process.argv.slice(1)
+// stderr is redirected to a file the caller reads: the exit status alone
+// cannot tell a refused inotify/fd quota from any other startup failure.
+const die = (status, why, e) => {
+  try {
+    process.stderr.write(
+      'watcher-fail ' + why + (e ? ' code=' + (e.code ?? '?') + ' msg=' + String(e.message ?? e).slice(0, 200) : '') + '\n',
+    )
+  } catch {
+    // stderr is diagnostics only; the exit status still forces a retain.
+  }
+  process.exit(status)
+}
 const emit = (line) => {
   try {
     appendFileSync(out, line + '\n')
-  } catch {
+  } catch (e) {
     // A lost append invalidates the log silently; the caller must retain,
     // so the watcher dies rather than authorize deletion on partial data.
-    process.exit(3)
+    die(3, 'append-failed', e)
   }
 }
 try {
@@ -1936,8 +2158,8 @@ try {
         try {
           if (cst.isDirectory()) attach(p)
           else if (cst.isFile() && cst.nlink > 1) attachFile(p, cst)
-        } catch {
-          process.exit(2)
+        } catch (e) {
+          die(2, 'attach-in-event', e)
         }
         if (eventType === 'rename') kind = 'C'
       } catch {
@@ -1972,7 +2194,7 @@ try {
   // No watch attached at all (e.g. a symlinked root skipped above) means
   // the observation boundary never formed — refuse rather than emit READY
   // and let the caller remove blind.
-  if (watched.size === 0) process.exit(2)
+  if (watched.size === 0) die(2, 'no-watch-attached')
   writeFileSync(out, 'READY\n')
   const parent = process.ppid
   const born = Date.now()
@@ -1992,28 +2214,147 @@ try {
     }
     if (!parentAlive || Date.now() - born > 1800000) process.exit(0)
   }, 5)
-} catch {
-  process.exit(2)
+} catch (e) {
+  die(2, 'startup', e)
 }
 `
 
-function observeQuarantineWrites(
-  quarantine: string,
-  extraRoots: string[] = [],
-): {
+// Quota-class failures (another lane on the same uid holding the inotify /
+// fd / process budget) clear on their own; anything else will not.
+const OBSERVER_QUOTA_CODES = ['ENOSPC', 'EMFILE', 'ENFILE', 'EAGAIN', 'ENOMEM']
+
+type WriteObserver = {
   events: () => string[]
   flush: (since: number) => void
   stop: () => void
-} {
-  const out = join(tmpdir(), `clade-wt-watch-${randomUUID()}.log`)
-  const child = spawn(
-    process.execPath,
-    ['-e', QUARANTINE_WATCHER, quarantine, out, ...extraRoots],
-    {
-      stdio: 'ignore',
-    },
+}
+
+export interface ObserverStartOptions {
+  readyTimeoutMs?: number
+  maxAttempts?: number
+  retryDelayMs?: number
+  // Test seams: an alternative watcher program and node binary.
+  watcherSource?: string
+  execPath?: string
+}
+
+type ObserverStartFailure =
+  | { kind: 'spawn-failed'; spawnError?: string; elapsedMs: number }
+  | { kind: 'exited-before-ready'; exit: string; stderr: string; elapsedMs: number }
+  | { kind: 'ready-timeout'; timeoutMs: number; stderr: string; elapsedMs: number }
+
+function readProcFile(path: string): string {
+  try {
+    return readFileSync(path, 'utf8').trim()
+  } catch {
+    return '?'
+  }
+}
+
+// The only host facts that separate "quota refused" from "slow": inotify
+// ceilings and the fd limit. Usage is not sampled (it needs a /proc sweep).
+function observerHostLimits(): string {
+  const nofile = /^Max open files\s+(\S+)/m.exec(readProcFile('/proc/self/limits'))?.[1] ?? '?'
+  return (
+    `inotify max_user_instances=${readProcFile('/proc/sys/fs/inotify/max_user_instances')}` +
+    ` max_user_watches=${readProcFile('/proc/sys/fs/inotify/max_user_watches')}` +
+    ` nofile=${nofile}`
   )
+}
+
+export function describeObserverStartFailure(failure: ObserverStartFailure): string {
+  const prefix = 'ownership handoff cannot observe quarantine writes; retain worktree'
+  const suffix = ` after ${failure.elapsedMs}ms; host ${observerHostLimits()}`
+  switch (failure.kind) {
+    case 'spawn-failed':
+      return (
+        `${prefix} [spawn-failed: no watcher pid` +
+        `${failure.spawnError ? `, ${failure.spawnError}` : ' (OS rejected the spawn; EAGAIN/EMFILE/ENFILE/ENOENT class)'}` +
+        `]${suffix}`
+      )
+    case 'exited-before-ready':
+      return (
+        `${prefix} [watcher-exited-before-ready: ${failure.exit}; ` +
+        `stderr=${failure.stderr || '(empty)'}]${suffix}`
+      )
+    case 'ready-timeout':
+      return (
+        `${prefix} [ready-timeout: watcher alive but no READY within ${failure.timeoutMs}ms; ` +
+        `stderr=${failure.stderr || '(empty)'}]${suffix}`
+      )
+  }
+}
+
+function isTransientObserverFailure(failure: ObserverStartFailure): boolean {
+  if (failure.kind === 'spawn-failed') return failure.spawnError === undefined
+  if (failure.kind === 'ready-timeout') return false
+  return OBSERVER_QUOTA_CODES.some((code) => failure.stderr.includes(`code=${code}`))
+}
+
+export function observeQuarantineWrites(
+  quarantine: string,
+  extraRoots: string[] = [],
+  options: ObserverStartOptions = {},
+): WriteObserver {
+  const maxAttempts = options.maxAttempts ?? 3
   const pause = new Int32Array(new SharedArrayBuffer(4))
+  for (let attempt = 1; ; attempt++) {
+    const started = startQuarantineObserver(quarantine, extraRoots, options, pause)
+    if ('observer' in started) return started.observer
+    if (attempt >= maxAttempts || !isTransientObserverFailure(started.failure))
+      throw new Error(describeObserverStartFailure(started.failure))
+    // Bounded retry for quota-class refusals only: a lane that held the
+    // budget a moment ago has usually released it. A failure that persists
+    // still surfaces with its cause and retains the worktree.
+    Atomics.wait(pause, 0, 0, (options.retryDelayMs ?? 200) * attempt)
+  }
+}
+
+function startQuarantineObserver(
+  quarantine: string,
+  extraRoots: string[],
+  options: ObserverStartOptions,
+  pause: Int32Array,
+): { observer: WriteObserver } | { failure: ObserverStartFailure } {
+  const out = join(tmpdir(), `clade-wt-watch-${randomUUID()}.log`)
+  const errPath = `${out}.err`
+  const begun = Date.now()
+  let spawnError: string | undefined
+  let child: ReturnType<typeof spawn> | undefined
+  // The caller blocks the event loop, so the watcher's stderr goes to a file
+  // the synchronous path can read instead of a pipe it cannot drain.
+  const errFd = openSync(errPath, 'w')
+  try {
+    child = spawn(
+      options.execPath ?? process.execPath,
+      ['-e', options.watcherSource ?? QUARANTINE_WATCHER, quarantine, out, ...extraRoots],
+      { stdio: ['ignore', 'ignore', errFd] },
+    )
+    child.once('error', (error) => {
+      spawnError = errorMessage(error)
+    })
+  } catch (error) {
+    spawnError = errorMessage(error)
+  } finally {
+    closeSync(errFd)
+  }
+  const cleanupFiles = () => {
+    for (const path of [out, errPath]) {
+      try {
+        rmSync(path, { force: true })
+      } catch {
+        // Best-effort teardown of the event log.
+      }
+    }
+  }
+  const kill = () => {
+    try {
+      child?.kill()
+    } catch {
+      // Best-effort teardown of the watcher.
+    }
+  }
+  const stderrText = () => readProcFile(errPath).replace(/\s+/g, ' ').slice(0, 400)
   const lines = (): string[] => {
     try {
       return readFileSync(out, 'utf8').split('\n')
@@ -2021,34 +2362,65 @@ function observeQuarantineWrites(
       return []
     }
   }
+  const pid = child?.pid
   // The caller blocks the event loop with synchronous work, so child exit
   // notifications are unreliable; /proc state is a synchronous ground truth.
   const alive = (): boolean => {
-    if (child.pid === undefined) return false
+    if (pid === undefined) return false
     try {
-      const stat = readFileSync(`/proc/${child.pid}/stat`, 'utf8')
+      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
       const state = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[0]
       return state !== 'Z' && state !== 'X'
     } catch {
       return false
     }
   }
-  const dead = () => new Error('quarantine write observer exited during handoff; retain worktree')
+  // A zombie keeps its wait status in /proc/<pid>/stat field 52 until the
+  // event loop reaps it; it is the only synchronous source of exit code/signal.
+  const exitDescription = (): string => {
+    if (pid !== undefined) {
+      try {
+        const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+        const status = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[49])
+        if (Number.isInteger(status)) {
+          const signal = status & 0x7f
+          return signal ? `signal=${signal}` : `exit=${status >> 8}`
+        }
+      } catch {
+        // Already reaped — fall through to the ChildProcess fields.
+      }
+    }
+    if (child?.signalCode) return `signal=${child.signalCode}`
+    if (child?.exitCode !== null && child?.exitCode !== undefined) return `exit=${child.exitCode}`
+    return 'exit status unavailable (reaped)'
+  }
   const ready = () => lines()[0] === 'READY'
-  const deadline = Date.now() + 10_000
+  const timeoutMs = options.readyTimeoutMs ?? 10_000
+  const deadline = begun + timeoutMs
   while (!ready()) {
     if (!alive() || Date.now() > deadline) break
     Atomics.wait(pause, 0, 0, 10)
   }
   if (!ready()) {
-    try {
-      child.kill()
-    } catch {
-      // Best-effort teardown of the watcher.
-    }
-    throw new Error('ownership handoff cannot observe quarantine writes; retain worktree')
+    const elapsedMs = Date.now() - begun
+    const wasAlive = alive()
+    const failure: ObserverStartFailure =
+      pid === undefined
+        ? { kind: 'spawn-failed', spawnError, elapsedMs }
+        : wasAlive
+          ? { kind: 'ready-timeout', timeoutMs, stderr: stderrText(), elapsedMs }
+          : {
+              kind: 'exited-before-ready',
+              exit: exitDescription(),
+              stderr: stderrText(),
+              elapsedMs,
+            }
+    kill()
+    cleanupFiles()
+    return { failure }
   }
-  return {
+  const dead = () => new Error('quarantine write observer exited during handoff; retain worktree')
+  const observer: WriteObserver = {
     events: () => {
       if (!alive()) throw dead()
       return lines().filter((line) => line && line !== 'READY' && !line.startsWith('TICK '))
@@ -2070,21 +2442,12 @@ function observeQuarantineWrites(
       throw new Error('quarantine write observer unresponsive; retain worktree')
     },
     stop: () => {
-      try {
-        child.kill()
-      } catch {
-        // Best-effort teardown of the watcher.
-      }
-      try {
-        rmSync(out, { force: true })
-      } catch {
-        // Best-effort teardown of the event log.
-      }
+      kill()
+      cleanupFiles()
     },
   }
+  return { observer }
 }
-
-type WriteObserver = ReturnType<typeof observeQuarantineWrites>
 
 function removeWorktreeAfterVerification(
   cwd: string,
@@ -2156,6 +2519,23 @@ function removeWorktreeAfterVerification(
   const obs = observer ?? observeQuarantineWrites(observedRoot, metadataRoots)
   const inventoryNames = new Set(expectedInventory.entries.map((entry) => entry.path))
   inventoryNames.add('.git')
+  // A `<name>.lock` directly under a worktree's private Git metadata root is
+  // the lockfile protocol's staging file: a reader that merely refreshes the
+  // index (a status poller, an editor, an MCP indexer) takes `index.lock` and
+  // rolls it back without touching `index`. Its bytes become repository
+  // content only by rename onto the real name, and that rename arrives as its
+  // own event on the real name — still adjudicated below — so a vanished lock
+  // is not writer activity. The Git preservation inventory already excludes
+  // these names for the same reason (`isTransientGitPath`); a lock that is
+  // still present when judged (live holder), or one frozen into the trashed
+  // metadata, keeps flagging.
+  const transientAdminLock = (event: string): boolean => {
+    const rest = event.slice(2).trimEnd()
+    const p = event[0] === 'M' ? rest.slice(rest.indexOf(' ') + 1) : rest
+    const name = basename(p)
+    if (!name.endsWith('.lock') || !metadataRoots.includes(dirname(p))) return false
+    return !lstatPresent(p) && !lstatPresent(join(trashMeta(dirname(p)), name))
+  }
   // Teardown legitimately removes this worktree's own metadata root
   // wholesale (`deinit`, `worktree remove`) — including `gitdir`, which the
   // archive excludes — so deletes under it are exempt; real drift still
@@ -2173,6 +2553,7 @@ function removeWorktreeAfterVerification(
     event: string,
     journalByRoot: Map<string, ReturnType<typeof readTeardownJournal>>,
   ): boolean => {
+    if (transientAdminLock(event)) return false
     const kind = event[0]
     const rest = event.slice(2).trimEnd()
     // M events carry the event-time mtime (`M <mtimeMs|?> <path>`); C/D are
@@ -2375,6 +2756,7 @@ function removeWorktreeAfterVerification(
     // move-in, and a non-self D is a foreign unlink or move-out —
     // inventory names included, since cleanup itself deletes nothing.
     const suspicious = (event: string): boolean => {
+      if (transientAdminLock(event)) return false
       const kind = event[0]
       if (kind === 'M' || kind === 'C') return true
       if (kind !== 'D') return false
@@ -2652,7 +3034,7 @@ function removalScanRoots(c: Context, trash?: string): string[] {
   return roots
 }
 function clean(cwd: string) {
-  return !git(cwd, ['status', '--porcelain', '--untracked-files=all'])
+  return !git(cwd, ['status', '--porcelain', '-z', '--untracked-files=all'])
 }
 function assertMain(c: Context) {
   if (git(c.main, ['symbolic-ref', 'HEAD']) !== 'refs/heads/main')
@@ -2791,6 +3173,69 @@ function assertDisjointFromLive(
       )
   }
 }
+export interface StaleMergedBatch {
+  id: string
+  phase: WorktreeBatch['phase']
+  prs: number[]
+  /** Runnable closure: cancel the dead batch, then reclaim its trees. */
+  close: string[]
+}
+/** An integrating/review batch whose every bound draft PR is already MERGED into main has
+ *  nothing left to review: its content is in main, so it can neither conflict with a new
+ *  batch nor be sealed. The evidence must be bound to the batch's own content: the PR's head
+ *  is the bound member's head (a PR merged at an earlier head says nothing about commits the
+ *  batch has since gained) and its merge commit is reachable from the fetched origin/main.
+ *  A batch without bindings, a probe or Git failure, or any PR not so proven keeps the batch
+ *  live (fail closed). */
+function mergedMemberPrs(c: Context, b: WorktreeBatch, remotePr: RemotePrProbe): number[] | null {
+  if (b.phase !== 'integrating' && b.phase !== 'review') return null
+  const bindings = b.draftBindings ?? []
+  if (bindings.length === 0) return null
+  const repository = githubRepositoryFromRemote(c.main)
+  if (!repository) return null
+  try {
+    for (const binding of bindings) {
+      const member = b.members.find((m) => m.workId === binding.workId)
+      const remote = remotePr({ repository, pr: binding.pr })
+      if (
+        !member ||
+        !remote.merged ||
+        remote.base !== 'main' ||
+        remote.pr !== binding.pr ||
+        remote.repository.toLowerCase() !== repository.toLowerCase() ||
+        remote.headRef !== binding.headBranch ||
+        remote.headSha.toLowerCase() !== member.head.toLowerCase() ||
+        !objectIdPattern.test(remote.mergeSha)
+      )
+        return null
+      git(c.main, ['merge-base', '--is-ancestor', remote.mergeSha, 'refs/remotes/origin/main'])
+    }
+  } catch {
+    return null
+  }
+  return [...new Set(bindings.map((binding) => binding.pr))]
+}
+function staleMergedBatches(
+  c: Context,
+  s: State,
+  remotePr: RemotePrProbe = defaultRemotePrProbe,
+): StaleMergedBatch[] {
+  return s.batches.flatMap((b) => {
+    const prs = mergedMemberPrs(c, b, remotePr)
+    if (!prs) return []
+    return [
+      {
+        id: b.id,
+        phase: b.phase,
+        prs,
+        close: [
+          `wt-helper.ts batch cancel --batch ${b.id} --reason 'member PR ${prs.map((pr) => `#${pr}`).join(', ')} already MERGED'`,
+          'wt-helper.ts batch cleanup --cancelled',
+        ],
+      },
+    ]
+  })
+}
 /** A member is done once removed, or released with its source kept (TD-1095). */
 function settled(b: WorktreeBatch, path: string): boolean {
   return b.removed.includes(path) || (b.released ?? []).some((r) => r.path === path)
@@ -2807,10 +3252,21 @@ function claimsMember(b: WorktreeBatch, path: string): boolean {
 export function listBatches(cwd: string): WorktreeBatch[] {
   return readState(context(cwd)).batches
 }
+/** `/commit` Step 0-Batch 的主分流；代碼對動作表在 commit skill 的 `rules/批次入口判準.md` Rule 3。
+ *  first-match：接續在途批 → 準備新批 → 有就緒但未達門檻 → 普通 /commit。只欠 cleanup 的批可與任何
+ *  route 疊加，另列在 `cleanupPending`，不進 first-match（否則一個保留不清的批會永遠遮住 prepare）。 */
+export type BatchEntryRoute = 'resume-active' | 'prepare' | 'return-to-dev' | 'plain-commit'
+function batchEntryRoute(s: State, readyCount: number, shouldPrepare: boolean): BatchEntryRoute {
+  if (s.batches.some(isLiveBatch)) return 'resume-active'
+  if (shouldPrepare) return 'prepare'
+  if (readyCount > 0) return 'return-to-dev'
+  return 'plain-commit'
+}
 export function batchStatus(
   cwd: string,
   trigger: BatchTrigger = 'auto',
   workflow: WorktreeBatch['workflow'] = 'pr-merge-based',
+  remotePr?: RemotePrProbe,
 ) {
   if (!triggers.has(trigger)) throw new Error('Unknown batch trigger')
   if (!['trunk-based', 'pr-merge-based'].includes(workflow)) throw new Error('Unknown workflow')
@@ -2827,18 +3283,26 @@ export function batchStatus(
   ]
   const unattributedCount = countedIds.filter((id) => !id).length
   const activeImplementationCount = new Set(countedIds.filter(Boolean)).size
+  const shouldPrepare = triggerReached(trigger, ready, workflow)
   return {
+    route: batchEntryRoute(s, readyCount, shouldPrepare),
+    cleanupPending: s.batches
+      .filter((b) => b.phase === 'landed' || cancelledIntegrationPending(b))
+      .map((b) => b.id),
     readyCount,
     trigger,
     workflow,
     autoThreshold: autoThreshold(workflow),
-    shouldPrepare: triggerReached(trigger, ready, workflow),
+    shouldPrepare,
     shouldPrioritizeLanding: readyCount >= MAX_ACTIVE_IMPLEMENTATIONS,
     activeImplementationCount,
     unattributedCount,
     maxActiveImplementations: MAX_ACTIVE_IMPLEMENTATIONS,
     overActiveCap: activeImplementationCount > MAX_ACTIVE_IMPLEMENTATIONS,
     drafts: listDrafts(c),
+    /** Live batches whose bound PRs are all MERGED: they no longer block prepare; run `close`.
+     *  Probing is one GitHub query per binding, so it only runs when the caller passes a probe. */
+    staleMerged: remotePr ? staleMergedBatches(c, s, remotePr) : [],
     ready,
     invalid: rows.filter((r) => r.reason),
     batches: s.batches.map((b) => (b.timeline ? { ...b, timings: batchTimings(b) } : b)),
@@ -2945,27 +3409,22 @@ export function unreadySource(cwd: string, source: string, reason: string) {
  * residue (verifyDepsBeforeRun flip) and clade projection drift must not block
  * them; every other dirty path remains a hard refusal.
  */
-function porcelainAll(path: string): string {
-  // NOT the shared `git()` helper: it .trim()s stdout, which eats the first
-  // porcelain line's leading X-status space and shifts its path one char.
+function statusEntries(path: string) {
   // Untracked files are listed individually so a collapsed `?? dir/` never
   // lets a projection-looking directory hide a real file inside it.
-  return execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], {
-    cwd: path,
-    env: isolatedGitEnv,
-    encoding: 'utf8',
-    stdio: ['pipe', 'pipe', 'pipe'],
-  })
+  // readGitStatus always passes `-z`: isolatedGitEnv drops any global core.quotePath,
+  // so without it non-ASCII paths come back octal-escaped and never match the projection list.
+  return readGitStatus(path, { env: isolatedGitEnv, untracked: 'all' })
 }
 /** Dirty paths `--discard-pathspec` lets through: blocking without the pathspecs, not with them. */
 function discardedDirtyPaths(path: string, discard: readonly string[]): string[] {
   if (discard.length === 0) return []
-  const out = porcelainAll(path)
-  const kept = new Set(blockingPorcelainPaths(path, out, discard))
-  return blockingPorcelainPaths(path, out).filter((p) => !kept.has(p))
+  const entries = statusEntries(path)
+  const kept = new Set(blockingStatusPaths(path, entries, discard))
+  return blockingStatusPaths(path, entries).filter((p) => !kept.has(p))
 }
 function blockingDirtyPaths(path: string, discard: readonly string[] = []): string[] {
-  return blockingPorcelainPaths(path, porcelainAll(path), discard)
+  return blockingStatusPaths(path, statusEntries(path), discard)
 }
 function describeBlocking(blocking: string[]): string {
   const more = blocking.length > 10 ? ` (+${blocking.length - 10} more)` : ''
@@ -2993,8 +3452,8 @@ export function checkpointSource(
   const scope =
     options.scope && options.scope.length
       ? options.scope
-      : git(path, ['diff', '--name-only', `${head(c.main)}...HEAD`])
-          .split('\n')
+      : gitRaw(path, ['diff', '--name-only', '-z', `${head(c.main)}...HEAD`])
+          .split('\0')
           .filter(Boolean)
   const receipt: CheckpointReceipt = {
     workId: options.workId,
@@ -3412,8 +3871,8 @@ export function recordDraftPr(
   const wt = worktrees(c.main).find((w) => w.path === path)
   if (!wt?.branch || path === c.main) throw new Error('Draft requires a source linked worktree')
   assertNoBlockingDirty(path, 'draft')
-  const changed = git(path, ['diff', '--name-only', `${fetchOriginMain(c)}...HEAD`])
-    .split('\n')
+  const changed = gitRaw(path, ['diff', '--name-only', '-z', `${fetchOriginMain(c)}...HEAD`])
+    .split('\0')
     .filter(Boolean)
   if (changed.length === 0) throw new Error('Draft requires a discussable independent diff')
   const receipt: DraftPrReceipt =
@@ -3479,6 +3938,7 @@ export function recordDraftPr(
 export function retireMergedDrafts(
   cwd: string,
   remotePr: RemotePrProbe = defaultRemotePrProbe,
+  options: { workIds?: readonly string[] } = {},
 ): {
   retired: { workId: string; pr: number }[]
   kept: { workId: string; pr: number; reason: string }[]
@@ -3486,7 +3946,13 @@ export function retireMergedDrafts(
   const c = context(cwd)
   const retired: { workId: string; pr: number }[] = []
   const kept: { workId: string; pr: number; reason: string }[] = []
-  for (const receipt of listDrafts(c)) {
+  const receipts = listDrafts(c)
+  // `--work-id` narrows the sweep to named drafts; a mistyped id is an error rather than an
+  // empty result that reads as "nothing to retire".
+  const named = options.workIds
+  const missing = (named ?? []).filter((id) => !receipts.some((receipt) => receipt.workId === id))
+  if (missing.length) throw new Error(`No draft receipt for ${missing.join(', ')}`)
+  for (const receipt of receipts.filter((r) => !named || named.includes(r.workId))) {
     try {
       retireDraftPr(cwd, receipt.workId, remotePr)
       retired.push({ workId: receipt.workId, pr: receipt.pr })
@@ -3553,10 +4019,10 @@ function integrate(
         )
       }
     }
-    if (git(b.path, ['ls-files', '-u'])) throw new Error('Unresolved integration conflicts')
+    if (git(b.path, ['ls-files', '-u', '-z'])) throw new Error('Unresolved integration conflicts')
     if (
-      git(b.path, ['diff', '--name-only']) ||
-      git(b.path, ['ls-files', '--others', '--exclude-standard'])
+      git(b.path, ['diff', '--name-only', '-z']) ||
+      git(b.path, ['ls-files', '--others', '--exclude-standard', '-z'])
     )
       throw new Error('Stage the complete conflict resolution before resuming')
     const tree = git(b.path, ['write-tree'])
@@ -3590,7 +4056,7 @@ function integrate(
   // Only the batch-owned branch is moved; all source checkpoint refs remain untouched.
   git(b.path, ['reset', '--soft', b.base])
   if (!b.bootstrapped) {
-    lifecycle.bootstrap(c.main, b.path)
+    lifecycle.bootstrap(c.main, b.path, { needsDevServer: b.needsDevServer === true })
     b.bootstrapped = true
   }
   b.phase = 'review'
@@ -3603,7 +4069,12 @@ export function prepareBatch(
   trigger: BatchTrigger,
   workflow: 'trunk-based' | 'pr-merge-based' = 'pr-merge-based',
   lifecycle: BatchLifecycle = defaultLifecycle,
-  options: { groupWorkIds?: string[]; expectWorkIds?: string[] } = {},
+  options: {
+    groupWorkIds?: string[]
+    expectWorkIds?: string[]
+    needsDevServer?: boolean
+    remotePr?: RemotePrProbe
+  } = {},
 ) {
   if (!triggers.has(trigger)) throw new Error('Unknown batch trigger')
   if (!['trunk-based', 'pr-merge-based'].includes(workflow)) throw new Error('Unknown workflow')
@@ -3688,7 +4159,14 @@ export function prepareBatch(
     if (!triggerReached(trigger, members, workflow)) return null
     assertMain(c)
     const base = workflow === 'pr-merge-based' ? fetchOriginMain(c) : head(c.main)
-    if (live.length) assertDisjointFromLive(c, live, base, members)
+    // A batch whose member PRs already merged is in main (and in `base`): it cannot collide.
+    if (live.length) {
+      const stale = new Set(
+        staleMergedBatches(c, s, options.remotePr ?? defaultRemotePrProbe).map((row) => row.id),
+      )
+      const blocking = live.filter((other) => !stale.has(other.id))
+      if (blocking.length) assertDisjointFromLive(c, blocking, base, members)
+    }
     const id = randomUUID(),
       branch = `codex/batch-${id}`
     const b: WorktreeBatch = {
@@ -3704,6 +4182,7 @@ export function prepareBatch(
       phase: 'integrating',
       removed: [],
       timeline: { preparedAt: new Date().toISOString() },
+      ...(options.needsDevServer ? { needsDevServer: true } : {}),
     }
     s.batches.push(b)
     save(c, s)
@@ -3737,8 +4216,8 @@ export function refreshBatch(cwd: string, resume = false, batchId?: string) {
       if (
         ![b.refresh.before, b.refresh.base].includes(head(b.path)) ||
         git(b.path, ['write-tree']) !== b.refresh.tree ||
-        git(b.path, ['diff', '--name-only']) ||
-        git(b.path, ['ls-files', '--others', '--exclude-standard'])
+        git(b.path, ['diff', '--name-only', '-z']) ||
+        git(b.path, ['ls-files', '--others', '--exclude-standard', '-z'])
       )
         throw new Error('Refresh candidate changed; preserve it for inspection')
       git(b.path, ['reset', '--soft', b.refresh.base])
@@ -3753,8 +4232,8 @@ export function refreshBatch(cwd: string, resume = false, batchId?: string) {
       if (b.workflow === 'pr-merge-based') recordOriginAdvance(b)
       git(c.main, ['merge-base', '--is-ancestor', b.base, base])
       if (
-        git(b.path, ['diff', '--name-only']) ||
-        git(b.path, ['ls-files', '--others', '--exclude-standard'])
+        git(b.path, ['diff', '--name-only', '-z']) ||
+        git(b.path, ['ls-files', '--others', '--exclude-standard', '-z'])
       )
         throw new Error('Stage integration changes before refreshing')
       const tree = git(b.path, ['write-tree'])
@@ -3793,9 +4272,9 @@ export function refreshBatch(cwd: string, resume = false, batchId?: string) {
       }
     }
     if (
-      git(b.path, ['ls-files', '-u']) ||
-      git(b.path, ['diff', '--name-only']) ||
-      git(b.path, ['ls-files', '--others', '--exclude-standard'])
+      git(b.path, ['ls-files', '-u', '-z']) ||
+      git(b.path, ['diff', '--name-only', '-z']) ||
+      git(b.path, ['ls-files', '--others', '--exclude-standard', '-z'])
     )
       throw new Error('Stage resolved refresh before continuing')
     b.refresh.tree = git(b.path, ['write-tree'])
@@ -3824,9 +4303,9 @@ export function reviewBatch(cwd: string, batchId?: string) {
       throw error
     }
     if (
-      git(b.path, ['ls-files', '-u']) ||
-      git(b.path, ['diff', '--name-only']) ||
-      git(b.path, ['ls-files', '--others', '--exclude-standard'])
+      git(b.path, ['ls-files', '-u', '-z']) ||
+      git(b.path, ['diff', '--name-only', '-z']) ||
+      git(b.path, ['ls-files', '--others', '--exclude-standard', '-z'])
     )
       throw new Error('Stage the complete candidate and resolve conflicts before restarting review')
     const tip = head(b.path)
@@ -3857,8 +4336,8 @@ export function sealBatch(cwd: string, evidencePath: string, batchId?: string) {
       throw error
     }
     if (
-      git(b.path, ['diff', '--name-only']) ||
-      git(b.path, ['ls-files', '--others', '--exclude-standard'])
+      git(b.path, ['diff', '--name-only', '-z']) ||
+      git(b.path, ['ls-files', '--others', '--exclude-standard', '-z'])
     )
       throw new Error('Review requires all changes staged')
     const evidence = realpathSync(resolve(cwd, evidencePath)),
@@ -4001,7 +4480,7 @@ function readMergeReceipt(cwd: string, path: string): MergeReceipt {
     !Number.isSafeInteger(receipt.pr) ||
     receipt.pr <= 0 ||
     receipt.base !== 'main' ||
-    receipt.merge_method !== 'squash' ||
+    (receipt.merge_method !== 'squash' && receipt.merge_method !== 'merge') ||
     typeof receipt.source_head !== 'string' ||
     typeof receipt.reviewed_base !== 'string' ||
     typeof receipt.candidate_tree !== 'string' ||
@@ -4014,13 +4493,13 @@ function readMergeReceipt(cwd: string, path: string): MergeReceipt {
     !objectIdPattern.test(receipt.content_patch_id)
   )
     throw new Error(
-      'Invalid merge receipt; require repository, positive pr, merged squash onto main, reviewed head/base, candidate tree, merge SHA and content patch',
+      'Invalid merge receipt; require repository, positive pr, merged squash or merge commit onto main, reviewed head/base, candidate tree, merge SHA and content patch',
     )
   return {
     repository: receipt.repository,
     pr: receipt.pr,
     base: 'main',
-    merge_method: 'squash',
+    merge_method: receipt.merge_method,
     merged: true,
     source_head: receipt.source_head.toLowerCase(),
     reviewed_base: receipt.reviewed_base.toLowerCase(),
@@ -4114,13 +4593,16 @@ function verifyMergeReceipt(
   tip: string,
   receipt: MergeReceipt,
   remotePr: RemotePrProbe = defaultRemotePrProbe,
+  options: { advancedBase?: boolean } = {},
 ): MergeReceipt {
   if (receipt.source_head !== tip)
     throw new Error('Merge receipt source_head does not match the reviewed formal HEAD')
   if (receipt.reviewed_base !== b.base)
     throw new Error('Merge receipt reviewed_base does not match the sealed batch base')
   if (receipt.merge_sha === receipt.source_head)
-    throw new Error('Merge receipt merge SHA must differ from source_head for squash merge')
+    throw new Error(
+      'Merge receipt merge SHA must differ from source_head for a squash or merge commit',
+    )
   assertMain(c)
   try {
     git(c.main, ['rev-parse', '--verify', `${receipt.merge_sha}^{commit}`])
@@ -4134,7 +4616,14 @@ function verifyMergeReceipt(
     throw new Error('Merge receipt merge SHA is not reachable from main; sources are retained')
   }
   const parents = git(c.main, ['rev-list', '--parents', '-n', '1', receipt.merge_sha]).split(/\s+/)
-  if (parents.length !== 2)
+  if (receipt.merge_method === 'merge') {
+    // A merge-commit landing: first parent is main before the merge, second parent must be the
+    // reviewed head itself — that is what ties the merge commit to the sealed candidate.
+    if (parents.length !== 3)
+      throw new Error('Merge receipt merge SHA must be a two-parent merge commit')
+    if (parents[2] !== tip)
+      throw new Error('Merge commit second parent is not the reviewed formal HEAD')
+  } else if (parents.length !== 2)
     throw new Error('Merge receipt merge SHA must be a single-parent squash commit')
   const mergeParent = parents[1]!
   const candidateTree = git(c.main, ['rev-parse', `${tip}^{tree}`])
@@ -4159,6 +4648,13 @@ function verifyMergeReceipt(
         'Merge parent does not descend from the reviewed base; refresh and re-review the candidate',
       )
     }
+    // Only the register allowlist (main-sync's own pushes) may move between review and merge;
+    // any other advance — code included — needs a refresh and re-review. `--reconcile-merged`
+    // lifts exactly this gate for a PR GitHub already merged (the landing cannot be undone):
+    // the path-set, content-drift, replay-tree and patch-id proofs below still have to hold.
+    const advanced = diffPaths(c, b.base, mergeParent)
+    if (!options.advancedBase && advanced.some((p) => isRegisterPath(p) === false))
+      throw new Error('Merge parent is not the reviewed base; refresh and re-review the candidate')
     const reviewed = diffPaths(c, b.base, tip).toSorted()
     const introduced = diffPaths(c, mergeParent, receipt.merge_sha).toSorted()
     if (reviewed.length !== introduced.length || reviewed.some((p, i) => p !== introduced[i]))
@@ -4182,11 +4678,33 @@ function verifyMergeReceipt(
       throw new Error(
         `Merged content differs from the reviewed candidate at ${drift.slice(0, 10).join(', ')}; binary, rename or file mode drift is retained`,
       )
+    // Equivalence proof for the advanced base: replaying the reviewed change (base..tip) onto
+    // the merge parent must reproduce the squash commit's own tree. A conflict, a Git failure
+    // or any other tree means the merge is not the reviewed content on the newer main.
+    let replayed: string
+    try {
+      replayed = git(c.main, [
+        'merge-tree',
+        '--write-tree',
+        '--merge-base',
+        b.base,
+        mergeParent,
+        tip,
+      ]).split('\n')[0]!
+    } catch {
+      throw new Error(
+        'Reviewed candidate does not replay cleanly onto the merge parent; refresh and re-review the candidate',
+      )
+    }
+    if (replayed !== git(c.main, ['rev-parse', `${receipt.merge_sha}^{tree}`]))
+      throw new Error(
+        'Merged tree is not the reviewed candidate replayed onto the merge parent; drift is retained',
+      )
   }
   const reviewedPatchId = patchId(c.main, b.base, tip)
   if (receipt.content_patch_id !== reviewedPatchId)
     throw new Error('Merge receipt content patch does not match the reviewed candidate')
-  if (patchId(c.main, `${receipt.merge_sha}^`, receipt.merge_sha) !== reviewedPatchId)
+  if (patchId(c.main, mergeParent, receipt.merge_sha) !== reviewedPatchId)
     throw new Error('Merged commit content patch does not match the reviewed candidate')
   const remote = verifyRemotePr(c, receipt, remotePr)
   assertReceiptReusesDraft(c, b, receipt, remote.headRef)
@@ -4245,22 +4763,63 @@ function proveCancelledCandidate(c: Context, b: WorktreeBatch, candidate: string
   }
   return candidate
 }
+/** `confirm-merged --reconcile-merged` on a batch whose record stopped at `review`: there is no
+ *  seal, so the only candidate evidence is the integration branch itself. The tip must be a clean
+ *  formal commit chain over the batch base; verifyMergeReceipt then binds it to the merge by
+ *  source head, candidate tree and patch-id, and GitHub must report the PR MERGED at that head. */
+function unsealedMergedTip(c: Context, b: WorktreeBatch): string {
+  integration(c, b)
+  if (!clean(b.path))
+    throw new Error('Integration must contain formal commits and no uncommitted work')
+  const tip = head(b.path)
+  if (tip === b.base) throw new Error('Integration carries no commits over its reviewed base')
+  try {
+    git(b.path, ['merge-base', '--is-ancestor', b.base, tip])
+  } catch {
+    throw new Error('Integration head does not descend from the batch base')
+  }
+  return tip
+}
 function landSealedBatch(
   cwd: string,
-  landing: { kind: 'trunk' } | { kind: 'pr'; receipt: string; remotePr?: RemotePrProbe },
+  landing:
+    | { kind: 'trunk' }
+    | { kind: 'pr'; receipt: string; remotePr?: RemotePrProbe; reconcileMerged?: boolean },
   batchId?: string,
 ) {
   const c = context(cwd)
   return mutate(c, (s) => {
     const b = landingBatch(c, s, landing.kind === 'pr', batchId)
     const reconcile = landing.kind === 'pr' && b.phase === 'cancelled'
-    if (!reconcile && b.phase !== 'sealed')
-      throw new Error('Batch must be sealed after /commit gates')
-    if (landing.kind === 'pr' && b.workflow !== 'pr-merge-based')
-      throw new Error('Trunk workflow does not accept a PR merge receipt')
+    const reconcileMerged = landing.kind === 'pr' && landing.reconcileMerged === true
+    // A review-phase record that never sealed is admitted only through the explicit reconcile.
+    const unsealed = reconcileMerged && !reconcile && b.phase === 'review' && !b.seal
+    if (!reconcile && !unsealed && b.phase !== 'sealed')
+      throw new Error(
+        reconcileMerged
+          ? 'Batch must be sealed or an unsealed review record for --reconcile-merged'
+          : 'Batch must be sealed after /commit gates',
+      )
     const receipt = landing.kind === 'pr' ? readMergeReceipt(c.cwd, landing.receipt) : undefined
-    const tip = reconcile ? proveCancelledCandidate(c, b, receipt!.source_head) : formalHead(c, b)
-    if (!reconcile) verifyMembers(c, b)
+    // A trunk batch lands by fast-forward, so a squash receipt (which rewrites the reviewed
+    // commits) stays refused. A merge-commit receipt keeps them as the second parent and is
+    // the only way to land in a repo that forbids squash; verifyMergeReceipt binds it.
+    if (
+      landing.kind === 'pr' &&
+      b.workflow !== 'pr-merge-based' &&
+      receipt?.merge_method !== 'merge'
+    )
+      throw new Error(
+        'Trunk workflow does not accept a PR merge receipt unless merge_method is merge (merge commit)',
+      )
+    const tip = reconcile
+      ? proveCancelledCandidate(c, b, receipt!.source_head)
+      : unsealed
+        ? unsealedMergedTip(c, b)
+        : formalHead(c, b)
+    // The reconcile entry closes a landing GitHub already performed; the sources are re-checked
+    // by cleanup before anything is removed, so a moved source must not strand the record.
+    if (!reconcile && !reconcileMerged) verifyMembers(c, b)
     if (landing.kind === 'pr') {
       b.mergeReceipt = verifyMergeReceipt(
         c,
@@ -4268,7 +4827,17 @@ function landSealedBatch(
         tip,
         receipt!,
         landing.remotePr ?? defaultRemotePrProbe,
+        { advancedBase: reconcileMerged },
       )
+      if (reconcileMerged) {
+        const mergeParent = git(c.main, ['rev-parse', `${receipt!.merge_sha}^1`])
+        b.reconciledMerged = {
+          unsealed,
+          advancedBase:
+            mergeParent !== b.base &&
+            diffPaths(c, b.base, mergeParent).some((p) => isRegisterPath(p) === false),
+        }
+      }
     } else {
       assertMain(c)
       if (b.workflow !== 'trunk-based')
@@ -4303,197 +4872,313 @@ export function confirmMergedBatch(
   receipt: string,
   remotePr: RemotePrProbe = defaultRemotePrProbe,
   batchId?: string,
+  options: { reconcileMerged?: boolean } = {},
 ) {
-  return landSealedBatch(cwd, { kind: 'pr', receipt, remotePr }, batchId)
+  return landSealedBatch(
+    cwd,
+    { kind: 'pr', receipt, remotePr, reconcileMerged: options.reconcileMerged },
+    batchId,
+  )
+}
+
+/** Builds the receipt `confirm-merged` reads from a merged PR number: GitHub supplies merge SHA,
+ *  head and base; the batch supplies the reviewed base; tree and patch id come from local Git.
+ *  It only assembles evidence — `confirm-merged` still re-proves every field against the sealed
+ *  batch and GitHub, so a receipt generated for the wrong batch or PR is refused there, not here. */
+export function buildMergeReceipt(
+  cwd: string,
+  pr: number,
+  options: { batchId?: string; remotePr?: RemotePrProbe } = {},
+): MergeReceipt {
+  if (!Number.isSafeInteger(pr) || pr <= 0) throw new BatchUsageError('Required positive --pr')
+  const c = context(cwd)
+  assertMain(c)
+  const b = landingBatch(c, readState(c), true, options.batchId)
+  const repository = githubRepositoryFromRemote(c.main)
+  if (!repository) throw new Error('origin is not a GitHub remote; cannot build a merge receipt')
+  const remote = (options.remotePr ?? defaultRemotePrProbe)({ repository, pr })
+  if (!remote.merged) throw new Error('GitHub PR is not merged; no merge receipt to build')
+  if (remote.base !== 'main') throw new Error('GitHub PR base is not main; sources are retained')
+  if (!objectIdPattern.test(remote.mergeSha) || !objectIdPattern.test(remote.headSha))
+    throw new Error('GitHub PR did not return a merge SHA and head')
+  fetchOriginMain(c)
+  for (const sha of [remote.mergeSha, remote.headSha]) {
+    try {
+      git(c.main, ['rev-parse', '--verify', `${sha}^{commit}`])
+    } catch {
+      throw new Error(`Commit ${sha} is not in the main repository; fetch it and retry`)
+    }
+  }
+  const parents = git(c.main, ['rev-list', '--parents', '-n', '1', remote.mergeSha]).split(/\s+/)
+  return {
+    repository: remote.repository,
+    pr: remote.pr,
+    base: 'main',
+    merge_method: parents.length === 3 && parents[2] === remote.headSha ? 'merge' : 'squash',
+    merged: true,
+    source_head: remote.headSha,
+    reviewed_base: b.base,
+    candidate_tree: git(c.main, ['rev-parse', `${remote.headSha}^{tree}`]),
+    merge_sha: remote.mergeSha,
+    content_patch_id: patchId(c.main, b.base, remote.headSha),
+  }
+}
+export function writeMergeReceipt(
+  cwd: string,
+  pr: number,
+  options: { batchId?: string; out?: string; remotePr?: RemotePrProbe } = {},
+) {
+  const receipt = buildMergeReceipt(cwd, pr, options)
+  const out = resolve(cwd, options.out ?? defaultMergeReceiptPath(receipt))
+  mkdirSync(dirname(out), { recursive: true })
+  writeFileSync(out, JSON.stringify(receipt, null, 2) + '\n')
+  return {
+    receipt: out,
+    next: `wt-helper batch confirm-merged --receipt ${out}${options.batchId ? ` --batch ${options.batchId}` : ''}`,
+    ...receipt,
+  }
+}
+function defaultMergeReceiptPath(receipt: MergeReceipt): string {
+  return join(
+    homedir(),
+    '.cache',
+    'clade',
+    'coordinator',
+    'receipts',
+    `${receipt.repository.replace('/', '-')}-${receipt.pr}.json`,
+  )
 }
 
 type CleanupPreviewRow = { path: string; action: 'removed' | 'preserved'; reason: string }
 
+/** A named `--batch <id>` that matches no cleanup candidate is an error, not an empty result:
+ *  an empty list reads as "nothing to reclaim" and hides a mistyped id or a batch that is not
+ *  landed yet (or was already cleaned). */
+function assertNamedBatchesFound(
+  named: readonly string[] | undefined,
+  candidates: readonly { id: string }[],
+) {
+  const missing = (named ?? []).filter((id) => !candidates.some((b) => b.id === id))
+  if (missing.length)
+    throw new Error(
+      `batch cleanup: no landed batch ${missing.join(', ')} (not landed yet, already cleaned up, or mistyped id; --cancelled admits cancelled batches pending integration cleanup)`,
+    )
+}
 /** Read-only admission forecast. Runtime preservation and writer probes run only during cleanup. */
 export function previewCleanupBatches(
   cwd: string,
   resolveProfile: PreservationProfileResolver = defaultPreservationProfile,
   detect: ProcessProbe = detectPublishInFlight,
-  scope: { cancelled?: boolean; discardPathspecs?: readonly string[] } = {},
+  scope: {
+    batchIds?: string[]
+    cancelled?: boolean
+    discardPathspecs?: readonly string[]
+    resourceAdapters?: ResourceAdapterSet
+  } = {},
 ) {
   const discard = scope.discardPathspecs ?? []
+  const resourceAdapters = scope.resourceAdapters ?? defaultResourceAdapters()
   const c = context(cwd)
   assertNoPublishInFlight('batch cleanup', c.main, false, detect)
   const profileResolver =
     resolveProfile === defaultPreservationProfile ? profileResolverForRoot(c.main) : resolveProfile
   const state = readState(c)
-  return state.batches
-    .filter(
-      (b) => b.phase === 'landed' || (scope.cancelled === true && cancelledIntegrationPending(b)),
-    )
-    .map((b) => {
-      const members: CleanupPreviewRow[] = []
-      const cancelled = b.phase === 'cancelled'
-      const integrationHead = integrationHeadFor(b)
-      let landedProblem: string | undefined = integrationHead
-        ? undefined
-        : 'batch recorded no integration head and the tree is gone; retained'
-      const landedCommit = b.mergeReceipt?.merge_sha ?? b.landedHead!
-      try {
-        if (!cancelled && !landedProblem)
-          git(c.main, ['merge-base', '--is-ancestor', landedCommit, 'refs/heads/main'])
-      } catch (error) {
-        landedProblem =
-          (error as { status?: number }).status === 1
-            ? `landed commit ${landedCommit} is not an ancestor of refs/heads/main; batch retained — check whether main was rewritten or the journal recorded the wrong landed head/merge sha, reconcile the batch, then retry cleanup`
-            : `could not verify landed commit ${landedCommit} against refs/heads/main; batch retained — resolve the underlying git error, then retry cleanup: ${errorMessage(error)}`
+  const candidates = state.batches.filter(
+    (b) =>
+      (b.phase === 'landed' || (scope.cancelled === true && cancelledIntegrationPending(b))) &&
+      (!scope.batchIds || scope.batchIds.includes(b.id)),
+  )
+  assertNamedBatchesFound(scope.batchIds, candidates)
+  return candidates.map((b) => {
+    const members: CleanupPreviewRow[] = []
+    const cancelled = b.phase === 'cancelled'
+    const integrationHead = integrationHeadFor(b)
+    let landedProblem: string | undefined = integrationHead
+      ? undefined
+      : 'batch recorded no integration head and the tree is gone; retained'
+    const landedCommit = b.mergeReceipt?.merge_sha ?? b.landedHead!
+    try {
+      if (!cancelled && !landedProblem)
+        git(c.main, ['merge-base', '--is-ancestor', landedCommit, 'refs/heads/main'])
+    } catch (error) {
+      landedProblem =
+        (error as { status?: number }).status === 1
+          ? `landed commit ${landedCommit} is not an ancestor of refs/heads/main; batch retained — check whether main was rewritten or the journal recorded the wrong landed head/merge sha, reconcile the batch, then retry cleanup`
+          : `could not verify landed commit ${landedCommit} against refs/heads/main; batch retained — resolve the underlying git error, then retry cleanup: ${errorMessage(error)}`
+    }
+    const currentWorktrees = worktrees(c.main)
+    const claimsObs = readActiveClaimsObserved(c.main)
+    for (const m of cancelled ? [] : b.members) {
+      if (b.removed.includes(m.path)) {
+        members.push({
+          path: m.path,
+          action: 'removed',
+          reason: 'already removed in batch journal',
+        })
+        continue
       }
-      const currentWorktrees = worktrees(c.main)
-      const claimsObs = readActiveClaimsObserved(c.main)
-      for (const m of cancelled ? [] : b.members) {
-        if (b.removed.includes(m.path)) {
-          members.push({
-            path: m.path,
-            action: 'removed',
-            reason: 'already removed in batch journal',
-          })
-          continue
+      if ((b.released ?? []).some((row) => row.path === m.path)) {
+        members.push({ path: m.path, action: 'preserved', reason: 'source released by batch' })
+        continue
+      }
+      let reason = landedProblem ?? m.retain
+      const removal = b.removing?.path === m.path ? b.removing : undefined
+      const wt = currentWorktrees.find((row) => row.path === m.path)
+      const quarantineWorktree = removal
+        ? currentWorktrees.find((row) => row.path === removal.quarantine)
+        : undefined
+      if (!reason && b.removing && !removal)
+        reason = `another removal is still journaled for ${b.removing.path}`
+      if (!reason && wt && !removal) {
+        try {
+          reason = sourceProblem(c, m, { requireEvidence: false, discard })
+        } catch (error) {
+          reason = errorMessage(error)
         }
-        if ((b.released ?? []).some((row) => row.path === m.path)) {
-          members.push({ path: m.path, action: 'preserved', reason: 'source released by batch' })
-          continue
-        }
-        let reason = landedProblem ?? m.retain
-        const removal = b.removing?.path === m.path ? b.removing : undefined
-        const wt = currentWorktrees.find((row) => row.path === m.path)
-        const quarantineWorktree = removal
-          ? currentWorktrees.find((row) => row.path === removal.quarantine)
+      }
+      let branchHead: string | undefined
+      try {
+        branchHead = git(c.main, ['rev-parse', '--verify', m.branch])
+      } catch {
+        // A previously deleted branch is permitted if preservation proves the source.
+      }
+      if (!reason && branchHead && branchHead !== m.head) reason = 'source branch advanced'
+      if (!reason && claimsObs.status === 'unknown') reason = `claims unknown: ${claimsObs.reason}`
+      if (
+        !reason &&
+        claimsObs.status === 'known' &&
+        claimsObs.value.some(
+          (cl) =>
+            cl.worktree_path === m.path ||
+            cl.worktree_path === removal?.quarantine ||
+            cl.branch === m.branch ||
+            cl.branch === m.branch.replace('refs/heads/', ''),
+        )
+      )
+        reason = 'source has an active claim'
+      const retiredArchive =
+        !reason && !wt && !removal && !existsSync(m.path)
+          ? retiredByHandoff(c, m.path, m.branch, m.head)
           : undefined
-        if (!reason && b.removing && !removal)
-          reason = `another removal is still journaled for ${b.removing.path}`
-        if (!reason && wt && !removal) {
+      if (
+        !reason &&
+        retiredArchive &&
+        branchHead &&
+        currentWorktrees.some((other) => other.branch === m.branch)
+      )
+        reason = 'Source branch checked out elsewhere; retained'
+      if (!reason && !retiredArchive) {
+        const profile = profileResolver(m.path, join(c.dir, 'preservation'))
+        if (!profile) reason = 'preservation profile missing; source retained'
+        else {
           try {
-            reason = sourceProblem(c, m, { requireEvidence: false, discard })
+            validateProfile(profile)
+            assertResourcesReleased(
+              profile,
+              {
+                sourcePath: m.path,
+                branch: m.branch,
+                archive: preservedArchive(b, m.path),
+                treeExists: Boolean(wt),
+              },
+              resourceAdapters,
+              { only: OUT_OF_TREE_ADAPTERS },
+            )
+            if (!wt && !removal && !hasVerifiedPreservation(b, m.path, profile, resourceAdapters))
+              reason = 'source worktree missing and no verified preservation receipt'
+            else if (removal && !wt && !quarantineWorktree && existsSync(removal.quarantine))
+              reason = 'removal quarantine is not a registered worktree; retain for inspection'
+            else if (
+              removal &&
+              !wt &&
+              !quarantineWorktree &&
+              !existsSync(removal.quarantine) &&
+              !hasVerifiedPreservation(b, m.path, profile, resourceAdapters)
+            )
+              reason = 'removal journal has no verified preservation receipt'
+            else if (removal?.removalConcern)
+              reason = removalConcernText(removal.removalConcern, removal.trash)
           } catch (error) {
             reason = errorMessage(error)
           }
         }
-        let branchHead: string | undefined
-        try {
-          branchHead = git(c.main, ['rev-parse', '--verify', m.branch])
-        } catch {
-          // A previously deleted branch is permitted if preservation proves the source.
-        }
-        if (!reason && branchHead && branchHead !== m.head) reason = 'source branch advanced'
-        if (!reason && claimsObs.status === 'unknown')
-          reason = `claims unknown: ${claimsObs.reason}`
-        if (
-          !reason &&
-          claimsObs.status === 'known' &&
-          claimsObs.value.some(
-            (cl) =>
-              cl.worktree_path === m.path ||
-              cl.worktree_path === removal?.quarantine ||
-              cl.branch === m.branch ||
-              cl.branch === m.branch.replace('refs/heads/', ''),
-          )
-        )
-          reason = 'source has an active claim'
-        const retiredArchive =
-          !reason && !wt && !removal && !existsSync(m.path)
-            ? retiredByHandoff(c, m.path, m.branch, m.head)
-            : undefined
-        if (
-          !reason &&
-          retiredArchive &&
-          branchHead &&
-          currentWorktrees.some((other) => other.branch === m.branch)
-        )
-          reason = 'Source branch checked out elsewhere; retained'
-        if (!reason && !retiredArchive) {
-          const profile = profileResolver(m.path, join(c.dir, 'preservation'))
-          if (!profile) reason = 'preservation profile missing; source retained'
-          else {
-            try {
-              validateProfile(profile)
-              if (!wt && !removal && !hasVerifiedPreservation(b, m.path, profile))
-                reason = 'source worktree missing and no verified preservation receipt'
-              else if (removal && !wt && !quarantineWorktree && existsSync(removal.quarantine))
-                reason = 'removal quarantine is not a registered worktree; retain for inspection'
-              else if (
-                removal &&
-                !wt &&
-                !quarantineWorktree &&
-                !existsSync(removal.quarantine) &&
-                !hasVerifiedPreservation(b, m.path, profile)
-              )
-                reason = 'removal journal has no verified preservation receipt'
-              else if (removal?.removalConcern)
-                reason = removalConcernText(removal.removalConcern, removal.trash)
-            } catch (error) {
-              reason = errorMessage(error)
-            }
-          }
-        }
-        members.push({
-          path: m.path,
-          action: reason ? 'preserved' : 'removed',
-          reason:
-            reason ??
-            (retiredArchive
-              ? 'verified handoff-retire archive'
-              : 'cleanup admission passed; runtime checks pending'),
-        })
       }
-      let integrationReason = landedProblem
-      if (
-        !integrationReason &&
-        members.some((m) => m.action === 'preserved' && !settled(b, m.path))
-      )
-        integrationReason = 'one or more members retained'
-      if (!integrationReason) {
-        const wt = currentWorktrees.find((row) => row.path === b.path)
-        const removal = b.removing?.path === b.path ? b.removing : undefined
-        const retiredArchive =
-          !wt && !removal && !existsSync(b.path)
-            ? retiredByHandoff(c, b.path, b.branch, integrationHead!)
-            : undefined
-        if (retiredArchive) {
-          const claim = findClaimByWorktreeObserved(c.main, b.path)
-          const branch = `refs/heads/${b.branch}`
-          if (
-            claim.status === 'unknown' ||
-            claim.value ||
-            currentWorktrees.some((other) => other.branch === branch)
-          )
-            integrationReason = 'Integration has new work, lock or active owner'
-        } else {
-          const profile = profileResolver(b.path, join(c.dir, 'preservation'))
-          if (!profile) integrationReason = 'preservation profile missing; source retained'
-          else {
-            try {
-              validateProfile(profile)
-              if (wt?.locked || (wt && (!clean(b.path) || head(b.path) !== integrationHead)))
+      members.push({
+        path: m.path,
+        action: reason ? 'preserved' : 'removed',
+        reason:
+          reason ??
+          (retiredArchive
+            ? 'verified handoff-retire archive'
+            : 'cleanup admission passed; runtime checks pending'),
+      })
+    }
+    let integrationReason = landedProblem
+    if (!integrationReason && members.some((m) => m.action === 'preserved' && !settled(b, m.path)))
+      integrationReason = 'one or more members retained'
+    if (!integrationReason) {
+      const wt = currentWorktrees.find((row) => row.path === b.path)
+      const removal = b.removing?.path === b.path ? b.removing : undefined
+      const retiredArchive =
+        !wt && !removal && !existsSync(b.path)
+          ? retiredByHandoff(c, b.path, b.branch, integrationHead!)
+          : undefined
+      if (retiredArchive) {
+        const claim = findClaimByWorktreeObserved(c.main, b.path)
+        const branch = `refs/heads/${b.branch}`
+        if (
+          claim.status === 'unknown' ||
+          claim.value ||
+          currentWorktrees.some((other) => other.branch === branch)
+        )
+          integrationReason = 'Integration has new work, lock or active owner'
+      } else {
+        const profile = profileResolver(b.path, join(c.dir, 'preservation'))
+        if (!profile) integrationReason = 'preservation profile missing; source retained'
+        else {
+          try {
+            validateProfile(profile)
+            assertResourcesReleased(
+              profile,
+              {
+                sourcePath: b.path,
+                branch: b.branch,
+                archive: preservedArchive(b, b.path),
+                treeExists: Boolean(wt),
+              },
+              resourceAdapters,
+              { only: OUT_OF_TREE_ADAPTERS },
+            )
+            if (wt?.locked || (wt && (!clean(b.path) || head(b.path) !== integrationHead)))
+              integrationReason = 'Integration has new work, lock or active owner'
+            else if (
+              !wt &&
+              !removal &&
+              !hasVerifiedPreservation(b, b.path, profile, resourceAdapters)
+            )
+              integrationReason =
+                'integration worktree missing and no verified preservation receipt'
+            else {
+              const claim = findClaimByWorktreeObserved(c.main, b.path)
+              if (claim.status === 'unknown' || claim.value)
                 integrationReason = 'Integration has new work, lock or active owner'
-              else if (!wt && !removal && !hasVerifiedPreservation(b, b.path, profile))
-                integrationReason =
-                  'integration worktree missing and no verified preservation receipt'
-              else {
-                const claim = findClaimByWorktreeObserved(c.main, b.path)
-                if (claim.status === 'unknown' || claim.value)
-                  integrationReason = 'Integration has new work, lock or active owner'
-              }
-            } catch (error) {
-              integrationReason = errorMessage(error)
             }
+          } catch (error) {
+            integrationReason = errorMessage(error)
           }
         }
       }
-      return {
-        batch: b.id,
-        members,
-        integration: {
-          path: b.path,
-          action: integrationReason ? ('preserved' as const) : ('removed' as const),
-          reason: integrationReason ?? 'cleanup admission passed; runtime checks pending',
-        },
-      }
-    })
+    }
+    return {
+      batch: b.id,
+      members,
+      integration: {
+        path: b.path,
+        action: integrationReason ? ('preserved' as const) : ('removed' as const),
+        reason: integrationReason ?? 'cleanup admission passed; runtime checks pending',
+      },
+    }
+  })
 }
 export function cleanupBatches(
   cwd: string,
@@ -4505,9 +5190,11 @@ export function cleanupBatches(
     cancelled?: boolean
     discardPathspecs?: readonly string[]
     saveResidue?: ResidueSaver
+    resourceAdapters?: ResourceAdapterSet
   } = {},
 ) {
   const discard = scope.discardPathspecs ?? []
+  const resourceAdapters = scope.resourceAdapters ?? defaultResourceAdapters()
   if (discard.length && !scope.saveResidue)
     throw new Error(
       '--discard-pathspec needs a residue saver; run it through wt-helper batch cleanup',
@@ -4531,12 +5218,14 @@ export function cleanupBatches(
     // Batches whose landed commit was verified on main this pass — the only
     // ones whose retained trees are safe to park below.
     const landedVerified = new Set<string>()
-    for (const b of s.batches.filter(
+    const cleanupCandidates = s.batches.filter(
       (candidate) =>
         (candidate.phase === 'landed' ||
           (scope.cancelled === true && cancelledIntegrationPending(candidate))) &&
         (!scope.batchIds || scope.batchIds.includes(candidate.id)),
-    )) {
+    )
+    assertNamedBatchesFound(scope.batchIds, cleanupCandidates)
+    for (const b of cleanupCandidates) {
       const result = {
         batch: b.id,
         removed: [] as string[],
@@ -4699,7 +5388,23 @@ export function cleanupBatches(
           })
           continue
         }
-        if (!wt && !removal && !hasVerifiedPreservation(b, m.path, profile)) {
+        try {
+          assertResourcesReleased(
+            profile,
+            {
+              sourcePath: m.path,
+              branch: m.branch,
+              archive: preservedArchive(b, m.path),
+              treeExists: Boolean(wt),
+            },
+            resourceAdapters,
+            { only: OUT_OF_TREE_ADAPTERS },
+          )
+        } catch (error) {
+          result.retained.push({ path: m.path, reason: errorMessage(error) })
+          continue
+        }
+        if (!wt && !removal && !hasVerifiedPreservation(b, m.path, profile, resourceAdapters)) {
           result.retained.push({
             path: m.path,
             reason: 'source worktree missing and no verified preservation receipt',
@@ -4718,7 +5423,7 @@ export function cleanupBatches(
           !wt &&
           !quarantineWorktree &&
           !existsSync(removal.quarantine) &&
-          !hasVerifiedPreservation(b, m.path, profile)
+          !hasVerifiedPreservation(b, m.path, profile, resourceAdapters)
         ) {
           result.retained.push({
             path: m.path,
@@ -4780,6 +5485,20 @@ export function cleanupBatches(
                   receipt = preserveWorktree(c, b, m.path, profile)
                   expectedInventory = inventoryTree(m.path, inventoryOptionsFromProfile(profile))
                 }
+                // The archive was just verified (or journaled): the in-tree secret verdict
+                // holds now, before any teardown or removal below.
+                assertResourcesReleased(
+                  profile,
+                  {
+                    sourcePath: m.path,
+                    branch: m.branch,
+                    archive: receipt.archives.worktree.path,
+                    treeExists: Boolean(wt),
+                    integrityOnly: true,
+                  },
+                  resourceAdapters,
+                  { only: ['in-tree-archive'] },
+                )
                 if (!removal) save(c, s)
                 // A source on a journaled removal is post-teardown: either
                 // still in the detached state the baseline describes, or
@@ -5428,7 +6147,18 @@ export function cleanupBatches(
           const profile = profileResolver(b.path, join(c.dir, 'preservation'))
           if (!profile) throw new Error('preservation profile missing; source retained')
           validateProfile(profile)
-          if (!wt && !removal && !hasVerifiedPreservation(b, b.path, profile))
+          assertResourcesReleased(
+            profile,
+            {
+              sourcePath: b.path,
+              branch: b.branch,
+              archive: preservedArchive(b, b.path),
+              treeExists: Boolean(wt),
+            },
+            resourceAdapters,
+            { only: OUT_OF_TREE_ADAPTERS },
+          )
+          if (!wt && !removal && !hasVerifiedPreservation(b, b.path, profile, resourceAdapters))
             throw new Error('integration worktree missing and no verified preservation receipt')
           if (removal && !wt && !quarantineWorktree && existsSync(removal.quarantine))
             throw new Error(
@@ -5439,7 +6169,7 @@ export function cleanupBatches(
             !wt &&
             !quarantineWorktree &&
             !existsSync(removal.quarantine) &&
-            !hasVerifiedPreservation(b, b.path, profile)
+            !hasVerifiedPreservation(b, b.path, profile, resourceAdapters)
           )
             throw new Error('removal journal has no verified preservation receipt')
           const quarantinePresent = Boolean(
@@ -5537,6 +6267,18 @@ export function cleanupBatches(
                   expectedInventory = inventoryTree(b.path, inventoryOptionsFromProfile(profile))
                   save(c, s)
                 }
+                assertResourcesReleased(
+                  profile,
+                  {
+                    sourcePath: b.path,
+                    branch: b.branch,
+                    archive: receipt.archives.worktree.path,
+                    treeExists: Boolean(wt),
+                    integrityOnly: true,
+                  },
+                  resourceAdapters,
+                  { only: ['in-tree-archive'] },
+                )
                 // Same post-teardown baseline rule as the member path: a
                 // journaled source is either still detached (baseline) or
                 // fully restored to the pre-teardown archive state, and a
@@ -5618,7 +6360,18 @@ export function cleanupBatches(
                     // trapped in the legacy worktree spine migrate to main
                     // first, then the baseline re-seals. Other paths retain.
                     const drift = inventoryDiffPaths(current, removal.verifyInventory)
-                    if (drift.every(isAdoptableResumeDrift)) {
+                    // Install/lock residue is adopted only when nothing unique can live in the tree:
+                    // a landed (not cancelled) batch — cleanup already proved the landed commit is
+                    // an ancestor of main — whose tree is git clean at the landed head.
+                    const residueAdoptable =
+                      !cancelled && clean(b.path) && head(b.path) === integrationHead
+                    if (
+                      drift.every(
+                        (path) =>
+                          isAdoptableResumeDrift(path) ||
+                          (residueAdoptable && isInstallResiduePath(path)),
+                      )
+                    ) {
                       const migration = migrateWorktreeFlowSpine(b.path)
                       if (!migration.ok)
                         throw new Error(
@@ -5782,7 +6535,18 @@ export function cleanupBatches(
                     })()
                   if (!treeBaseline && !treeArchive && !treeRelocated) {
                     const drift = inventoryDiffPaths(current, removal.verifyInventory)
-                    if (drift.every(isAdoptableResumeDrift)) {
+                    // Same landed-and-clean rule as the restored-in-place site above.
+                    const residueAdoptable =
+                      !cancelled &&
+                      clean(removal.quarantine) &&
+                      head(removal.quarantine) === integrationHead
+                    if (
+                      drift.every(
+                        (path) =>
+                          isAdoptableResumeDrift(path) ||
+                          (residueAdoptable && isInstallResiduePath(path)),
+                      )
+                    ) {
                       const migration = migrateWorktreeFlowSpine(removal.quarantine)
                       if (!migration.ok)
                         throw new Error(
@@ -6453,7 +7217,7 @@ function rejectUnknownFlags(rest: string[], allowed: Set<string>) {
 }
 
 export const BATCH_USAGE =
-  'batch: checkpoint | draft | retire-draft [--superseded-by <pr> | --abandoned] | retire-merged | ready | unready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | confirm-merged | cleanup [--dry-run] [--cancelled] [--discard-pathspec <path>[,…]] | release-source | cancel | recover-lock'
+  'batch: checkpoint | draft | retire-draft [--superseded-by <pr> | --abandoned] | retire-merged [--work-id <id>[,<id>…]] | ready | unready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | merge-receipt --pr <n> [--batch <id>] [--out <path>] | confirm-merged --receipt <file> [--batch <id>] [--reconcile-merged] [--no-cleanup] | cleanup [--dry-run] [--cancelled] [--batch <id>] [--discard-pathspec <path>[,…]] | release-source | cancel | recover-lock'
 
 /** Landing closes with cleanup of that batch (方案 6). Cleanup is fail-closed
  *  and never undoes the landing: a refusal (publish in flight, lock, anything
@@ -6491,6 +7255,8 @@ export interface BatchCleanupDeps {
   detect?: ProcessProbe
   resolveProfile?: PreservationProfileResolver
   saveResidue?: ResidueSaver
+  /** Test seam. `batch cleanup` defaults to the production worktree-db evidence. */
+  resourceAdapters?: ResourceAdapterSet
 }
 
 export function runBatchCommand(
@@ -6584,9 +7350,22 @@ export function runBatchCommand(
       )
     }
     case 'retire-merged': {
-      rejectUnknownFlags(rest, new Set())
-      if (rest.length) throw new BatchUsageError('Usage: wt-helper batch retire-merged')
-      return retireMergedDrafts(cwd)
+      rejectUnknownFlags(rest, new Set(['--work-id']))
+      const usage = 'Usage: wt-helper batch retire-merged [--work-id <id>[,<id>…]]'
+      if (positionals(new Set(['--work-id'])).length) throw new BatchUsageError(usage)
+      const ids = rest.flatMap((token, i) => {
+        if (token !== '--work-id') return []
+        const arg = rest[i + 1]
+        // A flag with no value, or another flag in the value slot, is a usage error.
+        if (arg === undefined || arg.startsWith('--')) throw new BatchUsageError(usage)
+        const named = arg
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean)
+        if (!named.length) throw new BatchUsageError(usage)
+        return named
+      })
+      return retireMergedDrafts(cwd, undefined, ids.length ? { workIds: ids } : {})
     }
     case 'ready':
       return registerReady(cwd, rest[0] ?? cwd, {
@@ -6608,7 +7387,12 @@ export function runBatchCommand(
       return unreadySource(cwd, source[0]!, reason)
     }
     case 'status':
-      return batchStatus(cwd, trigger(), workflow())
+      return batchStatus(
+        cwd,
+        trigger(),
+        workflow(),
+        rest.includes('--stale-merged') ? defaultRemotePrProbe : undefined,
+      )
     case 'prepare':
       return prepareBatch(cwd, trigger(), workflow(), lifecycle, {
         groupWorkIds: (value('--group-work-ids') ?? '')
@@ -6619,6 +7403,7 @@ export function runBatchCommand(
           .split(',')
           .map((id) => id.trim())
           .filter(Boolean),
+        needsDevServer: rest.includes('--needs-dev-server'),
       })
     case 'resume':
       return resumeBatch(cwd, lifecycle, batchId())
@@ -6676,19 +7461,34 @@ export function runBatchCommand(
         },
       })
     }
+    case 'merge-receipt': {
+      rejectUnknownFlags(
+        rest.filter((token) => token.startsWith('--')),
+        new Set(['--pr', '--batch', '--out']),
+      )
+      return writeMergeReceipt(cwd, Number(required('--pr')), {
+        batchId: batchId(),
+        out: value('--out'),
+      })
+    }
     case 'confirm-merged':
       return landThenCleanup(
         cwd,
-        confirmMergedBatch(cwd, required('--receipt'), undefined, batchId()),
+        confirmMergedBatch(cwd, required('--receipt'), undefined, batchId(), {
+          reconcileMerged: rest.includes('--reconcile-merged'),
+        }),
         rest.includes('--no-cleanup'),
         lifecycle,
         cleanupDeps,
       )
     case 'cleanup': {
-      rejectUnknownFlags(rest, new Set(['--dry-run', '--cancelled', '--discard-pathspec']))
-      if (positionals(new Set(['--discard-pathspec'])).length)
+      rejectUnknownFlags(
+        rest,
+        new Set(['--dry-run', '--cancelled', '--batch', '--discard-pathspec']),
+      )
+      if (positionals(new Set(['--discard-pathspec', '--batch'])).length)
         throw new BatchUsageError(
-          'Usage: wt-helper batch cleanup [--dry-run] [--cancelled] [--discard-pathspec <path>[,…]]',
+          'Usage: wt-helper batch cleanup [--dry-run] [--cancelled] [--batch <id>] [--discard-pathspec <path>[,…]]',
         )
       let discardPathspecs: string[] = []
       if (rest.includes('--discard-pathspec')) {
@@ -6699,15 +7499,28 @@ export function runBatchCommand(
         }
       }
       const cancelled = rest.includes('--cancelled')
+      // `--batch <id>` names the batch from outside its tree: a caller whose cwd sits inside the
+      // integration tree is itself the live writer the removal probe refuses, so the only way
+      // to reclaim that tree is to run from elsewhere — and to name which batch is meant.
+      const batchIds = rest.includes('--batch') ? [required('--batch')] : undefined
+      // Preview and the real run share one adapter set, so a dry-run never reports removed
+      // where the real run retains. Without the worktree-db scripts the evidence is undefined
+      // and the worktree-db adapter retains.
+      const resourceAdapters =
+        cleanupDeps.resourceAdapters ?? defaultResourceAdapters(productionWorktreeDbEvidence())
       return rest.includes('--dry-run')
         ? previewCleanupBatches(cwd, cleanupDeps.resolveProfile, cleanupDeps.detect, {
+            batchIds,
             cancelled,
             discardPathspecs,
+            resourceAdapters,
           })
         : cleanupBatches(cwd, lifecycle, cleanupDeps.detect, cleanupDeps.resolveProfile, {
+            batchIds,
             cancelled,
             discardPathspecs,
             saveResidue: cleanupDeps.saveResidue,
+            resourceAdapters,
           })
     }
     case 'release-source': {

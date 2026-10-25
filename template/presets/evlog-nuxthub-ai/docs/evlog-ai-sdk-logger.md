@@ -4,70 +4,86 @@
 <!-- to: presets/evlog-nuxthub-ai/docs/evlog-ai-sdk-logger.md -->
 <!-- do not edit consumer-side; modify clade vendor snippet then re-propagate -->
 
-# evlog AI SDK Logger（convention，非 evlog API）
+# evlog LLM trace cookbook（AI SDK 與原生 SDK 兩條路徑）
 
-T3 必補：把 AI SDK 呼叫（`generateText` / `streamText` / tool call / moderation / embedding）的 cost / token / duration 灌進 wide event 的 `ai.*` 欄位。
+把每次 LLM 呼叫的 provider／model／token／finishReason／cost／tool 結果灌進請求 wide event 的 `ai.*` 欄位。
+兩條路徑的欄位名一致，以 `evlog/ai` 的 `AIEventData`（camelCase）為準，**NEVER** 維護平行 schema。
+規約本文：`rules/modules/capabilities/ai-agent/ai-agent.md`（宣告 `modules.capabilities` 含 `ai-agent` 才投影）。
 
-Reference: `docs/evlog-master-plan.md` § 8.4 (agentic-rag T3)
-
-## 釐清：evlog 沒有 createAILogger
-
-evlog **沒有** `createAILogger` 這個函式。本 snippet 是 convention：在現有 `useLogger(event)` 上掛 `ai.*` 欄位 + 用 `log.info('ai.tool_call', ...)` 發子事件。
-
-優點：
-- 共享 enricher / drain / sampling / redaction 配置
-- cost / token 與 user / route / tenant 在同一筆 wide event
-- 不是新 logger 種類，認知成本低
-
-## 4 個 helper
-
-| Helper | 用途 |
+| 你的 consumer 怎麼打模型 | 用哪一段 |
 | --- | --- |
-| `recordAIGeneration(log, result)` | generateText / streamText 落地後加 ai.* 欄位 |
-| `recordToolCall(log, name, ms, success)` | 每次 tool 執行 emit `ai.tool_call` 子事件 |
-| `recordModeration(log, result)` | moderation outcome；flagged 時 emit `ai.moderation_flagged` warn |
-| `recordEmbedding(log, result)` | embedding query；cost > $0.001 才 keep（自家 sample） |
+| AI SDK（`ai` + `@ai-sdk/<provider>`） | § 1 `evlog/ai` |
+| 原生 SDK（`@anthropic-ai/sdk`、`@google/genai`、`openai`…） | § 2 `ai-logger.ts` 累加器 |
 
-`AILogFields` interface 列出共用 schema — T2 升級可改 evlog typed fields。
+兩條都有時（例：原生 SDK 打模型、`ai` 只做 UI 串流），依**實際打模型的 SDK** 選段，不是依套件名單。
 
-## 安裝 SOP
+## 1. AI SDK 路徑：直接用 `evlog/ai`
 
-1. 確認 consumer 已裝 `evlog`、AI SDK（`ai` + provider，例如 `@ai-sdk/openai` / `@ai-sdk/anthropic`）。
-2. 複製 `ai-logger.ts` 到 `server/utils/ai-logger.ts`。
-3. 在 AI endpoint（例：`server/api/chat.post.ts`）import 後使用：
-   ```ts
-   import { recordAIGeneration, recordToolCall } from '~/server/utils/ai-logger'
-   ```
-4. dev 觸發 chat endpoint，到 Sentry / NuxtHub D1 看 `event.ai.cost_usd` / `event.ai.tool_calls` 都進來了。
-
-## Cost 計算
-
-`costUsd` 由 consumer 自己計算（evlog 不知道 model pricing）。建議：
+evlog 2.29 起有 subpath `evlog/ai`，匯出 `createAILogger`／`createAIMiddleware`。
 
 ```ts
-const PRICING = { // 範例值；依 provider 現行價目表填
-  'gpt-4o-mini': { prompt: 0.15 / 1_000_000, completion: 0.6 / 1_000_000 },
-  'claude-haiku-4-5': { prompt: 0.8 / 1_000_000, completion: 4 / 1_000_000 },
-  '@cf/meta/llama-3-8b-instruct': { prompt: 0, completion: 0 }, // Workers AI free tier
-}
+import { createAILogger } from 'evlog/ai'
 
-function estimateCost(model: string, usage: { promptTokens: number; completionTokens: number }) {
+const ai = createAILogger(log) // log = useLogger(event)
+const result = streamText({ model: ai.wrap(openai('gpt-4o-mini')), prompt, tools })
+```
+
+`wrap()` 自動把 token、tool 執行、`estimatedCost` 寫進同一筆 wide event。隱私選項：
+
+| 選項 | 規定 |
+| --- | --- |
+| `prompt`、`output` capture | **MUST NOT** 開啟（預設 `false`，保持） |
+| `toolInputs` capture | 預設 `false`；要開 MUST 同時給遮罩 `transform` |
+
+peer 依賴 `ai` `>=6.0.168 <8.0.0`。
+
+## 2. 原生 SDK 路徑：`ai-logger.ts` 累加器
+
+複製 `ai-logger.ts` 到 `server/utils/ai-logger.ts`（`sync-evlog-presets` 的 `evlog-nuxthub-ai` preset 也會複製；不 import `evlog`）。
+
+```ts
+const trace = createNativeAITrace({ estimateCost }) // estimateCost 必填：consumer 自有價目表
+// 每輪 LLM 呼叫後
+trace.recordCall({ provider, model, usage: { inputTokens, outputTokens }, finishReason })
+// 每次 tool 執行後
+trace.recordTool({ name, durationMs, success })
+// 請求結束（finally）只寫一次
+log.set({ ai: trace.finish() })
+```
+
+- 多輪的 token 為各輪加總；`finish()` 回同一份物件。
+- 失敗輪 `recordCall({ provider, model, error })`，`finish()` 帶 `error`。
+- 欄位名子集：`provider`、`model`、`inputTokens`、`outputTokens`、`cacheReadTokens`、`finishReason`、`error`、`tools[]`（`name`、`durationMs`、`success`、`error`）、`estimatedCost`；由 `test/ai-agent-native-trace-snippet.test.ts` 釘住。
+- consumer 現有欄位若是 `latencyMs`／`costUsd`，改名為 `msToFinish`／`estimatedCost`（改名不改語意，屬 consumer 端 relay）。
+
+### 價目函式
+
+`estimatedCost` 由 consumer 自己的價目表算（evlog 不知道 model pricing）；範例值依 provider 現行價目表填：
+
+```ts
+const PRICING: Record<string, { input: number; output: number }> = {
+  'gpt-4o-mini': { input: 0.15 / 1_000_000, output: 0.6 / 1_000_000 },
+  'claude-haiku-4-5': { input: 0.8 / 1_000_000, output: 4 / 1_000_000 },
+}
+const estimateCost = (model: string, u: { inputTokens: number; outputTokens: number }) => {
   const p = PRICING[model]
-  if (!p) return undefined
-  return p.prompt * usage.promptTokens + p.completion * usage.completionTokens
+  return p ? p.input * u.inputTokens + p.output * u.outputTokens : undefined
 }
 ```
+
+## PII / 安全（兩條路徑共同）
+
+**MUST NOT** 寫進 `event.ai.*`：raw prompt、raw output、embedding vector、API key。prompt／output 是 PII 且撐大 wide event；需要重現時走短 TTL 的 server-side log，不進 wide event，更不進 audit chain。
 
 ## Sampling 策略（高量 AI consumer）
 
 | 子事件 | 採樣 | 理由 |
 | --- | --- | --- |
-| 主 generateText 落地 | 100% | wide event 的 ai.* 欄位是核心，不採樣 |
-| `ai.tool_call` 子事件 | 100% | tool 失敗 / latency outlier 必須看到 |
-| `ai.embedding` | cost > $0.001 才 keep | 高量 batch embed 量太大，自家 filter |
-| `ai.moderation_flagged` | 100% | 合規必須有 |
+| 主 LLM 呼叫的 `ai.*` 欄位 | 100% | wide event 的 `ai.*` 是核心，不採樣 |
+| tool 子事件 | 100% | tool 失敗／latency outlier 必須看到 |
+| embedding | cost > $0.001 才 keep | 高量 batch 量太大，走 Nitro `evlog:emit:keep` hook 自訂條件 |
 
-進 nuxt.config.ts `evlog.sampling`（evlog 2.27 型別：`rates` 是依 level 的 0–100 百分比，沒有依 route 的 head sampling；依 route 保留用 `keep`）：
+進 `nuxt.config.ts` `evlog.sampling`（evlog 2.27 型別：`rates` 是依 level 的 0–100 百分比，沒有依 route 的 head sampling；依 route 保留用 `keep`）：
 
 ```ts
 sampling: {
@@ -80,56 +96,28 @@ sampling: {
 }
 ```
 
-`keep` 各條件是 OR，命中任一條就繞過 `rates`。**NEVER** 只寫 `/api/chat/**`：evlog 的 `**` 要求前面那個 `/` 存在，`/api/chat/**` **不**匹配 `/api/chat` 本身，而 chat endpoint 多半就是 `server/api/chat.post.ts`——那條路由的 info 事件會落回 `rates.info: 10`，約九成被丟。brace（`/api/chat{,/**}`）也不支援，兩條都不匹配。上述行為在 evlog 2.29.0 `matchesPattern` 實測。
-
-embedding 的「cost > 門檻才 keep」這類自訂條件走 Nitro `evlog:emit:keep` hook。
-
-## PII / 安全（強制條件）
-
-**MUST NOT** 把以下寫進 `event.ai.*`：
-
-| 不可寫 | 理由 |
-| --- | --- |
-| Raw prompt（user query 全文） | PII risk + wide event size 撐爆 |
-| Raw output（model 完整回答） | 同上 |
-| Embedding vector | 高維 array，wide event 不適合 |
-| API key / model token | secret leak |
-
-**正解**：
-- prompt / output → 短 TTL server log（`evlog/fs` 寫 dev、production 不寫）
-- 真正需要 prompt 重現 → audit pattern + 短 TTL envelope（不進 audit DB）
-
-snippet 的 helper 都已避開上述欄位。
-
-## 與 nuxt-edge-agentic-rag 的對應
-
-agentic-rag 既有 chat.post.ts 已經有自家 `createRequestLogger` SSE child logger（見 `evlog-mcp-sse-child-logger/`）；本 snippet 補的是 AI SDK 呼叫的 cost / token / tool 欄位灌入。兩個 snippet 並用：
-
-```
-useLogger(event)  →  AI SDK 呼叫  →  recordAIGeneration（本 snippet）
-                  ↓
-                  createRequestLogger child（mcp-sse-child-logger）
-                  ↓
-                  SSE stream lifecycle log
-```
+`keep` 各條件是 OR，命中任一條就繞過 `rates`。**NEVER** 只寫 `/api/chat/**`：evlog 的 `**` 要求前面那個 `/` 存在，`/api/chat/**` **不**匹配 `/api/chat` 本身，而 chat endpoint 多半就是 `server/api/chat.post.ts`——那條路由的 info 事件會落回 `rates.info: 10`，約九成被丟。brace（`/api/chat{,/**}`）也不支援。上述行為在 evlog 2.29.0 `matchesPattern` 實測。
 
 ## 與其他 snippet 的關係
 
-- `evlog-mcp-sse-child-logger/`：本 snippet 的 helpers 也適用 child logger（傳 `streamLog` 而非 parent log）
-- `evlog-nuxthub-drain/`：`event.ai.*` 欄位寫進 D1 `_evlog.data` JSONB
+- `evlog-mcp-sse-child-logger/`：SSE／MCP 子 logger；把 `streamLog` 當 `log` 傳給 `createAILogger(streamLog)` 或 `log.set({ ai: trace.finish() })` 即可
+- `evlog-nuxthub-drain/`：`event.ai.*` 寫進 D1 `_evlog.data` JSONB
 - `evlog-sentry-drain/`：`event.ai.*` 在 Sentry Logs 顯示為 attributes
 
 ## Consumer onboarding checklist
 
-- [ ] `server/utils/ai-logger.ts` 已就位
-- [ ] AI endpoint 都呼叫 `recordAIGeneration` / `recordToolCall`（grep `recordAI` 看覆蓋率）
-- [ ] cost 計算函式（`estimateCost` 或自家版）已 import 並餵進 `costUsd`
-- [ ] PII：raw prompt / output 沒進 `event.ai.*`（review 抽幾筆 wide event 看 attributes）
-- [ ] sampling 已配（高量 AI consumer 必降 embedding 量）
-- [ ] dev：chat endpoint 觸發後 Sentry / D1 看到 `event.ai.cost_usd`、`event.ai.tool_calls`
+- [ ] 依實際打模型的 SDK 選 § 1 或 § 2
+- [ ] 每個 LLM 呼叫處都寫 `ai.*`（AI SDK：`wrap`；原生：請求結束 `log.set({ ai: trace.finish() })` 一次）
+- [ ] `estimatedCost` 有值（價目表已涵蓋白名單內每個 model）
+- [ ] `prompt`／`output` capture 沒開、`toolInputs` 有遮罩；抽幾筆 wide event 確認沒有原文
+- [ ] sampling 已配
+- [ ] dev：chat endpoint 觸發後 Sentry／D1 看到 `event.ai.inputTokens`、`event.ai.estimatedCost`、`event.ai.tools`
 
-## 何時不該用此 snippet
+## 從舊版遷移
 
-- **無 AI SDK call**：consumer 不跑 LLM，本 snippet 多餘
+舊版 snippet 的 `AILogFields`／`recordAIGeneration`／`recordToolCall`／`recordModeration`／`recordEmbedding`（snake_case 欄位）已移除。import 過它們的 consumer（`server/utils/ai-logger.ts`）下次 preset 同步會被覆寫而斷：改用 § 1 或 § 2，欄位 `prompt_tokens`→`inputTokens`、`completion_tokens`→`outputTokens`、`cost_usd`→`estimatedCost`、`finish_reason`→`finishReason`、`tool_calls`→`tools`。
+
+## 何時不該用
+
+- **無 LLM 呼叫**：consumer 不跑 LLM，多餘
 - **AI 量極小**（< 10/day）：cost 觀測不重要，省略亦可
-- **直接呼叫 provider HTTP API（不走 AI SDK）**：本 snippet 假設 `ai` package；自家 wrapper 可參考但要改 import

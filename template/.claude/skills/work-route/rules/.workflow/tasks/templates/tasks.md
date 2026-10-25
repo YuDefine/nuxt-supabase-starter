@@ -1,4 +1,4 @@
-<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@bc8fdebe2d30db384f77911aaed81888ad03bf5f, modified by clade (added this banner and clade metadata lines) via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@8f4dfa7c96aa2d64ed5866d02ee20a23e71c040d, modified by clade (added this banner and clade metadata lines) via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
 # Tasks: {{FEATURE_NAME}}
 
 **Plan Package**: `{{PLAN_PACKAGE}}`
@@ -7,17 +7,10 @@
 ## Task Binding Contract
 
 - 每個**開發任務**都必須對應 `truth-delta.md` 中的 ADD / MODIFY / DELETE / NOOP 語意。
-- Phase 1 `Setup` 只做本輪新增技術的基礎建設、技術環境與最後的 smoke-test；canonical doctor 缺失或非零時，即使本輪沒有新增技術，也保留一個 doctor bootstrap／repair Setup task；不寫 DSL 語意、不寫產品行為。
+- Phase 1 `Setup` 只做本輪新增技術的基礎建設、技術環境與最後的 smoke-test；不寫 DSL 語意、不寫產品行為。
 - Phase 2 `Foundational` 只建立後續實作程式、測試共用元件、入口、fixture、helper 與落點骨架。
 - Phase 3 `Test Alignment & Implementation` 的目的：在寫產品碼之前，先把本輪所有受影響 DSL 的自動化測試對齊最新版 truth。
 - Truth 參照必須使用 `specs/truth/**` 路徑；plan 參照才使用當前 plan package 內相對路徑。
-
-## Doctor Gate
-
-- `tasks.md` 產出後必須執行 consumer 的 canonical doctor，並保存命令、cwd、package manager／workspace root、exit code、狀態（`pass`／`needs-repair`／`blocked`）與失敗摘要。
-- doctor 非零或入口缺失時，tasks artifact 仍可完成產出，但必須在 Setup 建立一個具名、無後續依賴且可解鎖的 bootstrap／repair task；交 `/implement` 執行並重新跑 doctor，不能在 `/tasks` 越權修復，也不能用 no-op 或固定 exit 0 的替代品。
-- 若 doctor 依賴後續 task，必須重排依賴或把入口初始化前移；不得在當前 task 偷修後續責任。
-- `[BDD-RED]` 的預期 assertion／產品行為失敗是測試層狀態，不是 canonical doctor 失敗；保留該測試與紅燈證據，並另外取得 doctor 自己的 exit 0 receipt。
 
 ## Phase 1: Setup
 

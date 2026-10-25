@@ -1,9 +1,9 @@
 ---
 description: 實作 Nuxt UI component 前強制 grep 既有同語義用法、複製多數 props 組合；慣例一致性在實作時對齊，不等 review 才抓
-paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue']
+paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'app/app.config.ts', 'packages/*/app/app.config.ts', 'app.config.ts']
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-ui-conventions.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Nuxt UI 專案慣例一致性（實作階段強制）
 
@@ -24,8 +24,15 @@ paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'pages/**/*.vue', 'packages/*
 - 既有頁面之間本身不一致 → 以**最多頁面採用**的寫法為準
 - 新增一種既有沒有的語義角色 → 採用該專案 DESIGN.md 的 Components 段（語意角色對照見 [[nuxt-ui-mcp]] § Token 來源對照）決定，並在 commit message / PR 留言說明新增的角色
 
+## Dashboard 外殼與主題
+
+- 有側欄的 dashboard 版型 **MUST** 用 `UDashboardGroup`（`unit="rem"`）＋`UDashboardSidebar`（`resizable`＋`collapsible`），**NEVER** 自刻側欄寬度拖拉與收合。卡片與 panel 的間距在 `app.config.ts` 的 `ui.<component>.slots` 統一設定，不在每頁用 class 各寫一次。外殼上的互動狀態見 [[dashboard-shell]]。
+- 專案提供多套主題切換時：主題名稱 **MUST** 存 cookie（`useCookie`），讓 SSR 首屏就套對主題；只存 localStorage 會先渲染預設主題再閃成使用者的主題。換主題時以預設 `ui` 設定為底、整份重組後替換 `appConfig.ui`，**NEVER** 把新主題 deep-merge 進目前的值——上一個主題有、新主題沒有的 key 會殘留。
+- 自訂主題 **MUST** 同時定義亮色與暗色兩組變數。
+
 ## 禁止事項
 
+- **NEVER** 在元件寫死色碼（`#1e40af`、`text-[#…]`、`bg-[rgb(…)]`）——一律用語義色（`primary`、`neutral`、`text-muted` 等），換主題或切暗色時寫死的顏色不會跟著變
 - **NEVER** 不 grep 就直接寫 Nuxt UI component 的 `color` / `variant` / `size`
 - **NEVER** 依賴預設值（「不寫 size 就是 md 吧」）— 顯式寫出，跟既有多數一致
 - **NEVER** 新增元件用法時跳過語義角色判定（「只是一個小 badge」）

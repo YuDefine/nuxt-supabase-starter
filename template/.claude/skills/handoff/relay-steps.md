@@ -1,8 +1,6 @@
 # Relay Mode — `/handoff relay`
 
-**Codex 先過 [SKILL.md](SKILL.md) § Codex boundary**：bounded GPT 工作留在 `collaboration.spawn_agent`，不走本分支；handoff 級的整個位置交接照本檔執行。
-
-把**本 session 的整個位置**交給另一個可獨立續跑的 Herdr interactive pane，然後收工；successor runtime 依 [dispatch-common.md](dispatch-common.md) § 3.1 **原樣繼承當前 session**（`cc → cc`、`ccw → ccw`、`grok → grok`、`cx → cx`）。只有 user 當次明確點名不同且受支援的 launcher 才可覆蓋；工作 routing 不構成授權。
+把**本 session 的整個位置**交給另一個可獨立續跑的 Herdr interactive pane，然後收工；successor runtime 依 [dispatch-common.md](dispatch-common.md) § 3.1 **原樣繼承當前 session**（`cc → cc`、`ccw → ccw`、`grok → grok`）。只有 user 當次明確點名不同且受支援的 launcher 才可覆蓋；工作 routing 不構成授權。
 
 成功事件是 helper 回傳 **`relay_dispatched`**，代表 successor 已 live、已收到 brief、durable 轉移已落盤。**不是**「successor 完成了工作」——那不再是本 session 的事。
 
@@ -16,7 +14,7 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 | 1 | `relay` |
 | N ≥ 2 | `fanout`（見 [fanout-steps.md](fanout-steps.md)） |
 
-**被派出的 pane 先判這一題**（`CLADE_DISPATCH_ID` 非空、因 context 將盡要交棒）：
+**被派出的 pane 先判這一題**（`CLADE_DISPATCH_ID` 非空、要交棒）。交棒理由只有三種：交棒 profile 越過 hard tier、品質退化、同一問題糾正 ≥2 次；壓縮 profile 下 context 大小**不是**理由，寫回 plan.md 並 commit 後續做（席位→profile 表在 `session-tasks.context-budget`）：
 
 | 可觀察 predicate | 動作 |
 | --- | --- |
@@ -34,10 +32,11 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 
 ## 1. 建 durable thin brief
 
-依 [dispatch-common.md](dispatch-common.md) § 2，**外加**兩項 relay 專屬內容：
+依 [dispatch-common.md](dispatch-common.md) § 2，**外加**三項 relay 專屬內容：
 
-- brief **MUST** 寫明「你是繼任者，不是被派出去做一件子工作的 worker」，以及本 session 交棒的理由（context 耗盡／工作已全部移交）。
+- brief **MUST** 寫明「你是繼任者，不是被派出去做一件子工作的 worker」，以及本 session 交棒的理由（交棒 profile 越過 hard tier／品質退化／同一問題糾正 ≥2 次／工作已全部移交）。
 - 本 session 若手上還有 in-flight dispatch，brief **MUST** 逐個列出它們的 dispatch id（指針即可）。在做什麼、預期什麼 outcome 已在 dispatch record（`label`、brief 路徑）與 flow，successor 依 id 自取；**NEVER** 在 brief 重述它們的脈絡或進度。
+- brief 交代 PR 收尾時 **MUST** 寫成「ready → 本 head CI 綠 → 0-A finalize → `merge-queue.ts <pr>:<head>`」（coordinator skill `rules/0A與merge佇列判準.md` Rule 1），有主持者就寫「PR 開好交主持者 0-A／merge」。consumer 的 `workflow_model: trunk-based` 只決定自動批次門檻與 base，**NEVER** 讀成「開了 PR 綠了就合」。brief **NEVER** 寫出 `gh pr merge` 指令——helper 以 `self_merge_brief` 拒收（主持者繼任 brief 除外）；要禁止就寫「NEVER 自己 merge」。2026-10-20 #2160 的手寫 relay 寫了「trunk-based 的綠了用 `gh pr merge --rebase`」，三張 consumer PR 因此沒過 0-A 就合入。
 
 ## 1.5 spine 收尾（ambient `CLADE_WORK_ID` 非空時 MUST，空則整步跳過）
 

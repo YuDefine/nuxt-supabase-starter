@@ -3,7 +3,7 @@ description: Nuxt DevTools v4（devframe）＋ medula 讓 agent 經 MCP 讀寫�
 paths: ['nuxt.config.*', 'pnpm-workspace.yaml']
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/agent-devtools.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Agent DevTools（Nuxt DevTools v4／devframe＋medula）
 

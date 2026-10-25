@@ -17,8 +17,7 @@ cd "$PROJECT_ROOT"
 # 本檔所有 pnpm exec 一律經這裡：關掉 verify-deps-before-run。clade 散播的 .npmrc 設了
 # `verify-deps-before-run=install`，裸 `pnpm exec` 會在 package.json 有變時先跑完整 install
 # ＋postinstall bootstrap（含 sync-rules 寫檔）——commit 當中改工作樹，且一次 4–7 分鐘。
-# propagate 的 delivery commit 必然改 package.json，於是 <consumer-b> 連三趟在 300s 逾時被砍
-# （2026-09-27 v1.13.37，W-2026-09-27-precommit-vp-staged-pnpm-exec-install）。
+# propagate 的 delivery commit 必然改 package.json，整段會在 300s 逾時被砍。
 # 依賴不齊是 install 的事，pre-commit 只用已裝好的 vp。
 pnpm_exec() {
   pnpm --config.verify-deps-before-run=false exec "$@"
@@ -33,8 +32,7 @@ fi
 
 # 哪些 staged 檔不該被 lint/fmt（clade 投影層 ＋ 只有 pre-commit 需要的排除）的判定**不在本檔**：
 # 一律經 ../staged-targets.ts 讀 vendor/oxc-shared/preset.ts 的 `isStagedExcluded`。
-# NEVER 在這裡手寫路徑清單——TD-777 之前本檔的 `CLADE_MANAGED_PREFIXES` 就是那份平行清單，
-# 與 preset 的 PROJECTION_EXCLUDES 雙向漂移（缺 .spectra/ .cursor/、.claude/ 只列 5 個子目錄）。
+# NEVER 在這裡手寫路徑清單：平行清單會與 preset 的 PROJECTION_EXCLUDES 雙向漂移。
 #
 # 橋接失敗 MUST 非零退出：拿不到清單時「全部放行」會把投影檔送進 lint/fmt，
 # 「全部排除」會讓整個 check 靜默變成 no-op，兩者在輸出上都像正常。
@@ -104,6 +102,6 @@ if ((${#fmt_targets[@]} > 0)); then
   # -f：fmt_targets 全部來自「已 staged」清單，這一步只是把 formatter 剛改過的內容收回 staged
   # 區，不會憑空 stage 使用者沒選的路徑。不帶 -f 時，只要清單裡有「已 tracked 但同時被
   # .gitignore 命中」的檔（ignore 規則在檔案進版控之後才加就會這樣，git status 看不出來），
-  # git add 就整個 fail、pre-commit exit 1，該 consumer 的 commit 永久做不成（TD-313）。
+  # git add 就整個 fail、pre-commit exit 1，該 consumer 的 commit 永久做不成。
   git add -f -- "${fmt_targets[@]}"
 fi

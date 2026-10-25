@@ -3,7 +3,7 @@ description: shell script 的身分與清理生命週期——自己呼叫 sudo 
 paths: ['**/*.sh', 'ops/**', 'deploy/**', 'scripts/**']
 ---
 <!-- Clade native rule; source: rules/core/shell-script-safety.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Shell script safety
 
@@ -44,7 +44,7 @@ node scripts/shell-safety-check.ts <你剛寫的檔>     # 命中 exit 1，乾�
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 三條件全中（內部 `sudo` × user-level toolchain × 缺 guard）。**warn-only，不 block** |
-| 消費端 | 執行上方自驗的 agent；Claude hook `capabilities/core/hooks/post-edit-shell-safety.sh`（PostToolUse `Edit|Write`）；clade 的 `scripts/audit-sudo-euid-guard.ts` fleet 掃描。三者共用 `vendor/scripts/shell-safety-check.ts`（consumer 投影為 `scripts/shell-safety-check.ts`）。Codex 的事件接線須另有實測證據 |
+| 消費端 | 執行上方自驗的 agent；Claude hook `capabilities/core/hooks/post-edit-shell-safety.sh`（PostToolUse `Edit|Write`）；clade 的 `scripts/audit-sudo-euid-guard.ts` fleet 掃描。三者共用 `vendor/scripts/shell-safety-check.ts`（consumer 投影為 `scripts/shell-safety-check.ts`） |
 | 觸發點 | 本檔 frontmatter 的 paths，由各 runtime adapter 交付 |
 
 ## 2. `trap` body 引用的變數 MUST 在 trap 執行當下真的拿得到值

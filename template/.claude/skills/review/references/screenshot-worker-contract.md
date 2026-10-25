@@ -1,6 +1,6 @@
 # Screenshot evidence contract
 
-由 `review` skill 的 screenshot lane 的 Pi Gemini 3.8 Flash worker 讀取並執行。只收集與檢查 evidence；截圖 vs item 的最終符合性由另一個 Opus 5.5 dispatch 判定；該列無 fallback，Opus 無法執行時的處置依 skill（commit 0-B 保持未完成）。本 worker 不再轉派。以下 PASS／FAIL 是收集狀態，不代替符合性 gate。
+由 `review` skill 的 screenshot lane 的取證 worker（`dispatch-fallback` subagent，Claude Opus 5.5（effort: low）；2026-10-08 前為 Gemini 3.8 Flash、2026-10-21 前為 Pi Grok 4.7 xhigh）讀取並執行。只收集與檢查 evidence；截圖 vs item 的最終符合性由另一個 Opus 5.5 dispatch 判定；該列無 fallback，Opus 無法執行時的處置依 skill（commit 0-B 保持未完成）。本 worker 不再轉派。以下 PASS／FAIL 是收集狀態，不代替符合性 gate。
 
 ## 你會收到
 
@@ -13,7 +13,7 @@
 
 完整決策規則見 [[screenshot-strategy]]。
 
-速記：**預設 `agent-browser`**（自管 persistent-profile Chromium，繼承該 profile 的登入 cookie），下列情境切 Playwright CLI：
+速記：**預設 `agent-browser` headless**（工具與在哪台機器跑的判準見 `~/offline/clade/vendor/snippets/agent-browser/README.md` 開頭指向的 § Browser control surface），下列情境切 Playwright CLI：
 
 - 需要調整視窗大小（響應式 / 多 breakpoint）
 - 需要跨瀏覽器（Safari / Firefox）
@@ -24,7 +24,7 @@
 
 ### 0. agent-browser 環境準備（MUST）
 
-`agent-browser` 用自管 persistent-profile Chromium（`~/.agent-browser/config.json` 自動讀取），不需要 CDP 環境變數或 `--profile` flag。每個 Bash tool call 是獨立的 `agent-browser <subcommand>`，多步用 `&&` 串：
+`agent-browser` 自己起 Chromium，不需要 CDP 環境變數。`~/.agent-browser/config.json` 只放 `--no-sandbox`、**不設預設 profile**：不帶 `--profile` 時每個 session 用暫存 profile——**只限**本機 `127.0.0.1` dev server 走下方 dev-login 取證；其他網站一律用 desk 的現成 profile（`profile-main`／`profile-yudefine`，判準見 `~/offline/clade/adapters/claude/instructions/rules/core/screenshot-strategy.md` § Browser control surface 的 Profile 條）。需要既有登入狀態時，同一個 session 的**每個**指令都帶同一組 `--profile`（見 cookbook § 呼叫慣例），漏帶一次瀏覽器就會被重開成 `about:blank`。每個 Bash tool call 是獨立的 `agent-browser <subcommand>`，多步用 `&&` 串：
 
 ```bash
 agent-browser --session ssr get url
@@ -65,7 +65,7 @@ done
 
 ### 2. 登入處理（多數情況不需要 dev-login route）
 
-`agent-browser` 連的是自管 persistent-profile Chromium，繼承該 profile 的 cookie / session。**多數情況直接打目標 URL 就會帶著登入狀態**。
+不帶 `--profile` 的 session 是暫存 profile，開頭沒有任何登入狀態；session 存活期間 dev-login 建立的 cookie 會一直有效。帶了常駐 `--profile` 時才會繼承該 profile 的登入。
 
 判斷流程：
 
@@ -196,7 +196,7 @@ agent-browser --session ssr eval "localStorage.setItem('nuxt-color-mode','light'
 - **MUST** `mkdir -p` 確保目錄存在
 - **MUST** `agent-browser screenshot <path>` 永遠帶 explicit path
 - **NEVER** 直接存到 `screenshots/`、`screenshots/local/`、`screenshots/<env>/_archive/`、專案根目錄、`temp/`
-- **NEVER** 在 `screenshots/<env>/_archive/` 下建立新資料夾 — `_archive/` 只給 `/screenshots-archive` skill 寫入
+- **NEVER** 在 `screenshots/<env>/_archive/` 下建立或寫入任何檔案（歸檔已退役）
 
 ### A 類：人工檢查截圖
 
@@ -297,6 +297,20 @@ mkdir -p screenshots/local/<semantic-topic>/dark
 `<semantic-topic>` 例：`debug-clock-overlap`、`live-preview-design-token`、`exploration-typography`
 
 B 類資料夾不會被 review:ui 載入（預期行為）。
+
+## 拍前 gate
+
+每張截圖（一般截圖與 Verify Mode 都一樣）照下列 gate checklist 依序逐關過，任一關不過即停、走該列出口，**NEVER** 跳關或換順序；各關的細節在指向的節。
+
+| id | 檢查 | 不過時的出口 |
+| --- | --- | --- |
+| G1 | `agent-browser --session <s> get url` 落在預期 host（`localhost:<port>`／staging／production），且不是登入頁 | 一般截圖：停下回報主 session；Verify Mode：`UNCERTAIN` |
+| G2 | `agent-browser --session <s> wait --load networkidle` 完成 | 同 G1 |
+| G3 | § 拍前 Emptiness Preflight 未命中疑似空狀態（命中刻意驗證空狀態的例外則直接過）[^G3] | 一般截圖：§ 空資料解決流程；Verify Mode：`UNCERTAIN`，不補資料 |
+| G4 | final-state readiness：`wait --text`／`wait "<css>"`／`wait --fn` 命中具體 signal；Verify Mode 細節見 § Verify Mode 必做動作 2 | 不拍成 final；Verify Mode：`UNCERTAIN(content-not-rendered)` |
+| G5 | 以上全過 → `screenshot` | — |
+
+[^G3]: Emptiness 排在 readiness 之前：整頁缺 baseline 時 readiness 只會等到逾時，先判空才能直接導向補資料，不白等 15s。
 
 ## 拍前 Emptiness Preflight
 
@@ -408,9 +422,7 @@ console.log("clients:", clientScripts.map(k=>k.replace(/^dev:/,"")).join(","));
 1. **判斷截圖目標** — 根據描述推斷需要截圖的頁面/狀態
    - UI 項目 → 導航到對應頁面
    - 非 UI 項目（`pnpm check`、`console.log`）→ 用 CLI 驗證，標註「非 UI 項目」，跳過後續步驟
-2. **跑 Emptiness Preflight**（見上節「拍前 Emptiness Preflight」）
-   - 命中疑似空狀態 → 執行「空資料解決流程」，**NEVER** 跳過此步驟硬拍
-   - 未命中 → 繼續 Step 3
+2. **過 § 拍前 gate**（G1–G4）；下面指令示範的就是 G1→G2→G4→G5，G3 Emptiness Preflight 插在 `get url` 之後、`wait --text` 之前
 3. **執行截圖**（依 color mode 設定）：
 
    **指定單一 mode 時**（每個 Bash call 一個語義動作，用 `&&` 串）：
@@ -504,7 +516,7 @@ Verify Mode **MUST NOT** 執行 mutation、form fill、click sequence、multi-ro
 
    逾時（15s）signal 仍未命中 → **MUST NOT** 把空殼當 final 拍。標 `UNCERTAIN(content-not-rendered)`，拍一張 **diagnostic** 到 `screenshots/<env>/<work-id>/_exploration/#<N>-content-not-rendered.png`（**非** final path、**不**寫 `(verified-ui:)`），progress 記：waited 15s / expected signal / 最後 DOM observation / loading-busy-row-text samples / diagnostic path，讓主線判斷是 seed / query / auth / UI-fallback 哪一類。
 
-   與 **Emptiness Preflight 正交**：emptiness = 整頁 / 資料集缺 baseline（硬拍無效）；readiness = 頁面不空但 item 要驗的**局部 final-state 內容**是否到。執行順序：host / login check → `wait --load` → **readiness gate（本步）** → Emptiness Preflight → capture or UNCERTAIN。
+   與 **Emptiness Preflight 正交**：emptiness = 整頁 / 資料集缺 baseline（硬拍無效）；readiness = 頁面不空但 item 要驗的**局部 final-state 內容**是否到。執行順序見 § 拍前 gate（本步是 G4，排在 G3 Emptiness Preflight 之後）。
 
 3. **截 final-state screenshot**
 
@@ -657,7 +669,7 @@ Verify mode **MUST** 在 `screenshots/<env>/<work-id>/progress.json` 寫入並�
 
 ## 平行 / 隔離 session
 
-UI 驗收工作需要多個 Gemini screenshot-review worker 並行時，每個 subagent 用不同的 `--session` 名隔離（各 session 自己的 tab，agent-browser 原生隔離）：
+UI 驗收工作需要多個 screenshot-review worker 並行時，每個 subagent 用不同的 `--session` 名隔離（各 session 自己的 tab，agent-browser 原生隔離）：
 
 ```bash
 agent-browser --session change-A open "..." \
@@ -794,11 +806,11 @@ for (const bp of BREAKPOINTS) {
 
 ## 清理
 
-agent-browser daemon 設計上常駐（保持後續呼叫快），**不需要**手動關閉。完成後：
+完成後：
 
 - dev server 是你啟動的 → `kill <pid>` 停止
 - dev server 是原本在跑的 → **不要停止**
-- agent-browser daemon → 不動，下次截圖直接複用
+- 自己開過的每個 session → `agent-browser --session <s> close`，再用 `agent-browser session list` 確認沒有留下（同一個 Claude session 的 Chrome 共用 cgroup `pids.max`，留著會讓後續啟動失敗；見 cookbook § 並行）
 
 ## Guardrails
 

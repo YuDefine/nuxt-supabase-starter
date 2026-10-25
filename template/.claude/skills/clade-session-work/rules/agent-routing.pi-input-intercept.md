@@ -1,16 +1,16 @@
 ---
-description: Codex 模型經 Pi machine dispatch 提出問題時的攔截、評估、代答或升級 protocol；觸及工作計畫 / screenshot 情境時 path-scoped 載入
+description: Pi 模型經 Pi machine dispatch 提出問題時的攔截、評估、代答或升級 protocol；觸及工作計畫 / screenshot 情境時 path-scoped 載入
 paths: ['specs/plans/**/tasks.md', 'specs/plans/**/design.md', '.claude/agents/**', 'screenshots/**/progress.json']
 ---
 <!-- Clade native rule; source: rules/core/agent-routing.pi-input-intercept.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
-# Agent Routing — Codex Input Intercept Protocol
+# Agent Routing — Pi Input Intercept Protocol
 
 ## 核心命題
 
-Pi machine dispatch 使用ephemeral `--no-session` JSON mode，沒有Codex CLI `exec resume`語意。Codex模型需要釐清時，prompt要求它在final response輸出`## Question`；主線收割dispatcher結果後先判斷能否代答，再把「原brief＋已確認答案」組成一份新brief重新dispatch。
+Pi machine dispatch 使用ephemeral `--no-session` JSON mode，沒有 session resume 語意。Pi 模型需要釐清時，prompt要求它在final response輸出`## Question`；主線收割dispatcher結果後先判斷能否代答，再把「原brief＋已確認答案」組成一份新brief重新dispatch。
 
 **持有該 dispatch 的主線是攔截層**：答案可由既有證據直接推導就代答；需要產品、業務、架構或風險拍板才升級給user。重派是新的Pi session，routing metadata與`--retry-of`仍完整落ledger。
 
@@ -88,7 +88,7 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
 ## Q&A Log
 
 ```markdown
-## Codex Input Intercept Log — <topic>-<slug>
+## Pi Input Intercept Log — <topic>-<slug>
 
 ### Q1 (auto-responded)
 - **Dispatch**: <prior-label>
@@ -109,7 +109,6 @@ Log讓代答可審計，也讓問題密度成為brief品質訊號。
 
 | 場景 | 處理 |
 | --- | --- |
-| `codex-review-safe.sh` | 問問題代表review prompt或snapshot不足；修prompt後重新跑wrapper，不走coding dispatcher。 |
 | External web retrieval routing（WebSearch／WebFetch） | 問題罕見；補足查詢條件後以新label重派。 |
 | Runtime quota | exit 4不是input intercept；依quota fallback紀律處理。 |
 | Pi spawn／protocol故障且無assistant text | exit 3機械故障；不要捏造問題或答案。 |

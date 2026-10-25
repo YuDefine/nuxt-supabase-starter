@@ -11,7 +11,7 @@ paths:
   - 'packages/**/server/utils/**/*.ts'
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/evlog/logging.error-contract.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Logging — Error contract（全文）
 

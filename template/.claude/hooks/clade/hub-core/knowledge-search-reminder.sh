@@ -11,7 +11,7 @@
 # - 不阻擋（exit 0），純提醒
 #
 # 出口是 JSON stdout 的 `hookSpecificOutput.additionalContext`，**不是**裸 stdout。
-# 2026-08-06 work-loop round 31 四通道實測（TD-427 step 1）：PreToolUse 上裸 stdout、stderr、
+# 2026-08-06 四通道實測（TD-427 step 1）：PreToolUse 上裸 stdout、stderr、
 # `permissionDecisionReason` 三者都**到不了 agent**，只有 `additionalContext` 會被注入成
 # system-reminder。
 #

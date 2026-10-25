@@ -12,7 +12,7 @@ paths:
 ---
 <!-- Clade native rule; source: rules/core/agent-routing.dispatch-execution.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Agent Routing — dispatch 執行期（brief 範圍・plan mode・配額鏈・回報契約）
 
@@ -36,6 +36,10 @@ paths:
 3. **預設把整條鏈寫進同一份 brief 交給同一個受派者**。要切在鏈中間，MUST 能具名指出：留下的第一環是哪一環、它需要主線或 user 的什麼。講不出來 = 沒有留的理由 = 整條交出去（鏡像 [[agent-routing]] § 派不派 的 Iron Law「講不出命中哪一條就自己做」）。
 4. 切點若是「需 user 拍板」的環，考慮把**拍板問題本身**也寫進 brief 讓受派者到點回報，而不是主線閒置守在那一環前面。
 
+5. **範圍定了，接著估時長選載體**：單次 bounded 工作（一次 review、裁決、掃描、一個單位的改檔）預設 ≤ 20 分鐘，不必估。一份 brief 裝多個單位時：預估分鐘數 ＝ 本 session 已完成的同類單位實測耗時中位數 × 單位數 × 1.5，每個單位要跑的全量驗證（typecheck、doctor、整套測試）算進單位耗時；同類單位一個都還沒做過＝估不出 → 當 > 20 分鐘。≤ 20 分鐘交 in-process subagent，> 20 分鐘交 Herdr pane（[[agent-routing]] § Dispatch data and transport boundary 載體表）。時長只決定載體，**不**構成切鏈的理由——為了塞進 subagent 而在沒有合法切點的地方切，就違反第 3 點。
+
+**Red flag**：一份 brief 列了十幾個 task，卻準備交給 subagent。先算第 5 點；2026-10-19 某 consumer 每個 task 實測 10–18 分鐘，56 個 task 裝進一支 subagent，跑了 2.5 小時以上。
+
 **Red flag**：發現自己在 brief 裡寫「不要做 X，X 由主線處理」，當場問一句「主線做 X 需要什麼 worker 沒有的東西」。答不出具體事實 = 慣性佔位，刪掉那句、把 X 寫進 brief。
 
 **本節 NEVER 產生新的派工**——它只調整一次已授權派工的 brief 範圍，**受派者數量不變、冷載次數不變**，因此套不上過度外派的成本模型。反而是切在鏈中間才製造第二次交接（回報 → 主線續跑 → 可能再派），更接近過度外派的形狀。
@@ -58,9 +62,10 @@ Plan mode 的契約是「不對 repo 做任何改動」。Pi dispatch 的 ledger
 `[dispatch]` 補救要先落 brief 檔——那條路徑在 plan mode 結構上不可執行。`pi-routing-gate.ts` 自
 `096ad5ea1` 起讀 `permission_mode`：plan mode 的 `Plan` dispatch 直接放行不 mint decision，其餘
 `subagent_type` 照常 arm，block 訊息指名唯一可跑的 `[waive] --reason plan-mode-readonly`。放行**不**
-解除既有 latch。`Explore` 自 2026-09-28 起不再放行（任何 mode）：gate 自己把 `prompt` 落成 brief
-（`~/.claude/clade-routing-gate/briefs/`，homedir，理由同上方 Pi ledger），所以 `code-locate` 的
-`[dispatch]` 在 plan mode 也可逐字照跑。**NEVER** 為了走 `[dispatch]`
+解除既有 latch。`Explore` 不再放行（任何 mode）：gate 的阻擋訊息直接指名 `code-locate` 列的
+修法——`Agent({ subagent_type: 'haiku-locator', prompt: 'routing-row: code-locate\n<same search>' })`，
+brief 是 prompt 字串不落檔，所以在 plan mode 也逐字照跑；其 JSON 回覆落檔後交
+`verify-code-locate.ts` 機械複驗。**NEVER** 為了走 `[dispatch]`
 而在 plan mode 寫 brief 檔繞過 harness，**也 NEVER** 把該 latch 回報成 deadlock。
 
 ## 配額邊界（決策層）
@@ -84,11 +89,11 @@ NEVER 憑印象選 model**——記不得鏈長什麼樣不是問題，payload �
 
 本檔只留 payload **算不出來**的判斷：
 
-- **NEVER** 派禁用 model 接手（所有 GPT（含 Astra）、Claude Fable／Haiku、Sonnet 5 以下、Composer 2.5、Devin Fusion；Sonnet 5.5 只坐表列它的位置）——鏈上每一跳都在 [[agent-routing.routing-table]] 裡，表外沒有「再試一個」
-- **Sonnet 列與 decision／planning 列的鏈尾是主線**：該 Claude 席位不可用時主線（Claude Opus 5.5（effort: medium））自己做；**NEVER** 把 cx 或任何 GPT 當接手者。品質失敗不前進鏈：delegate-sub 的 Grok 產出不合格升一次 `sonnet-implementer`（Sonnet 5.5（effort: high）），仍不合格回主線；Sonnet 列的品質失敗照 [[agent-routing.routing-table]] § Sonnet 列品質失敗 處置。
+- **NEVER** 派禁用 model 接手（所有 GPT（含 Astra）、Gemini、Claude Fable／Haiku 4.5 以下、Sonnet 5 以下、Composer 2.5、Devin Fusion；Sonnet 5.5 與 Haiku 5.5 只坐表列它的位置）——鏈上每一跳都在 [[agent-routing.routing-table]] 裡，表外沒有「再試一個」
+- **Sonnet 列與 decision／planning 列的鏈尾是主線**：該 Claude 席位不可用時主線（Claude Opus 5.5（effort: medium））自己做；**NEVER** 把 cx 或任何 GPT 當接手者。品質失敗不前進鏈：delegate-sub 的 Pi 產出不合格（Pi 有可派 model 時）升一次 `sonnet-implementer`（Sonnet 5.5（effort: high）），仍不合格回主線；Sonnet 列的品質失敗照 [[agent-routing.routing-table]] § Sonnet 列品質失敗 處置。
 - **NEVER** 拿 `--effort low` 重試當配額應對——配額按 **model** 記，同一個 model 撞的是同一個 limit
 - **輸出本身就是 gate 的工作，鏈的終點 NEVER 是主線自審**。判準見
-  `vendor/scripts/pi-routing-policy.ts` 的 `GATE_OUTPUT_ROWS`（`code-review-opus`）——那一組與本檔 § NEVER 降檔的形狀 第一條同源，**MUST 一起改**
+  `vendor/scripts/pi-routing-policy.ts` 的 `GATE_OUTPUT_ROWS`（`code-review-opus`）——那一組與本檔 § NEVER 降檔的形狀 的「輸出本身就是品質或安全 gate」條同源，**MUST 一起改**
   ——「下游機械消費」是同節的**另一**條（結構化輸出不構成降檔理由），不是 `GATE_OUTPUT_ROWS` 建模的那條。
   產出 changeset 的主線不能回頭自審；review 席只有 Claude Opus 5.5（effort: medium），額度耗盡時 gate 維持未達成。
   其餘非 gate row 才按各列鏈尾處置。
@@ -115,11 +120,11 @@ MUST 先讀那一節**，本 pointer 不複述。
 2. **Report 是未驗證主張**：subagent 完成回報（含「no changes outside scope」「tests pass」「已自我 review」）一律當 claim——主線 MUST 用 `git status --short` + `git diff` 核實實際改動範圍 = brief 宣告 scope，scope 外 substantive change 一律 revert。subagent 自報的設計說詞（「per YAGNI 略過」「刻意簡化」）**不得**降級任何 review finding 的嚴重度——那是實作者替自己打分。
 3. **File handoffs**：brief／report／diff 超過 ~30 行的內容走**檔案路徑**傳遞，不貼進 dispatch prompt 或回報訊息——貼文會常駐主線 context、每 turn 重讀。dispatch prompt 五要素：定位一行、brief 檔路徑、跨 task interfaces、歧義裁決、report 檔路徑＋回報契約（單一事件實錄見 rationale）。
 4. **Model 與 effort 顯式指定**：**每一個** dispatch 都 MUST 把 model 與 effort 當成兩個獨立決策，不靠靜默繼承——省略 = 繼承主線（通常最貴檔 × 最深推理），機械掃描型 subagent 拿主線的 xhigh 跑就是效能過剩。選檔預設，依序判：
-   - **先過 Routing Table**：非 UI 工作命中 [[agent-routing.routing-table]] § 工作類別對照 已 route 給 Pi 的類別 → 依該列的 model / effort 派工（`mechanical-fanout`、`read-heavy-scan`、`notion-ops` 首跳 `gemini high`），**NEVER** 用 Claude subagent 接 Pi 列（Routing Table 本身列明 native Claude 的列——Sonnet 四列走 `sonnet-implementer`、decision／planning 走 Opus——不在此限）。唯讀**定位**搜尋（找檔／找符號／回 `file:line` ＋結論，不回檔案原文）走 `code-locate` 列，**NEVER** 派 `Explore` subagent——gate 在任何 model、任何 mode 都攔它，並印出可照跑的 `--table-row code-locate` 指令。其餘 Claude subagent 只留給 Claude 例外（需 claude.ai-connected 的非 Notion MCP——Notion 一律 `ntn api`，NEVER 走此例外——、判讀／治理型分析、user 明確指定）。Devin SWE-2 Max（effort: max）是任意 Pi 列與 Sonnet／decision／planning 六列的可選載體（不預設；Sonnet 四列預設 Claude Sonnet 5.5（effort: high）），只限不急、緩慢也不堵塞的任務；各載體怎麼混搭見本檔 § Cloud session 載體
+   - **先過 Routing Table**：非 UI 工作命中 [[agent-routing.routing-table]] § 工作類別對照 已 route 給 Pi 的類別 → 依該列的 model / effort 派工（2026-10-21 `grok-xai` 退場後 `mechanical-fanout`、`read-heavy-scan`、`notion-ops` 等 Pi 列皆空鏈，首跳即鏈尾 `dispatch-fallback` subagent），**NEVER** 用鏈尾以外的 Claude subagent 接 Pi 列（Routing Table 本身列明 native Claude 的列——Sonnet 四列走 `sonnet-implementer`、decision／planning 走 Opus——不在此限）。唯讀**定位**搜尋（找檔／找符號／回 `file:line` ＋結論，不回檔案原文）走 `code-locate` 列，**NEVER** 派 `Explore` subagent——gate 在任何 model、任何 mode 都攔它，並印出可照跑的 `--table-row code-locate` 指令。其餘 Claude subagent 只留給 Claude 例外（需 claude.ai-connected 的非 Notion MCP——Notion 一律 `ntn api`，NEVER 走此例外——、判讀／治理型分析、user 明確指定）。Devin SWE-2 Max（effort: max）是任意 Pi 列與 Sonnet／decision／planning 六列的可選載體（不預設；Sonnet 四列預設 Claude Sonnet 5.5（effort: high）），只限不急、緩慢也不堵塞的任務；各載體怎麼混搭見本檔 § Cloud session 載體
    - **UI 實作**：Nuxt 本體用 Claude Sonnet 5.5（effort: high），UI view（含 Nuxt UI／Content）用 Opus 5.5（effort: medium），依 [[agent-routing]] § Runtime residency and native transport 的角色與工具判定；**NEVER** 用機械掃描／一般 native delegation 檔位承接 UI phase。原 session 保持 change-level orchestration。
-   - **effort 選檔**：effort 跟著 model 走（`TIER_EFFORT`）——Grok 4.7 一律 `xhigh`，Gemini 3.8 Flash 一律 `high`，Claude Sonnet 5.5 一律 `high`，Claude Opus 5.5 預設 `medium`（鏈尾 `dispatch-fallback` 為 `low`，由 frontmatter 固定）；同一問題已在 `medium` 失敗一次或修法只修到一層、且有可跑的檢查時，才可 `--tier-basis stall-escalation --retry-of <label>` 開 `high`（只限 Claude launcher，見 [[agent-routing.routing-table]]），`max` 永不開；dispatcher 對不符的 effort exit 1。**帶得了 effort 參數的入口**（pi `--effort` / `-c model_reasoning_effort`、Workflow `agent()` 的 `effort`、具名 agent type 的 frontmatter）**MUST** 顯式帶；native delegation 的 model／effort 欄位以本次 tool schema 為準。schema 有可用欄位時依已選檔位填入；schema 不提供欄位時記錄實際繼承限制，不能宣稱已指定。各 runtime 的欄位與繼承條件見 target adapter
+   - **effort 選檔**：effort 跟著 model 走（`TIER_EFFORT`／`CLAUDE_MODEL_EFFORT`）——Claude Sonnet 5.5 一律 `high`，Claude Haiku 5.5 一律 `low`（`haiku-locator`，由 frontmatter 固定），Claude Opus 5.5 預設 `medium`（鏈尾 `dispatch-fallback` 為 `low`，由 frontmatter 固定）；同一問題已在 `medium` 失敗一次或修法只修到一層、且有可跑的檢查時，才可 `--tier-basis stall-escalation --retry-of <label>` 開 `high`（只限 Claude launcher，見 [[agent-routing.routing-table]]），`max` 永不開；dispatcher 對不符的 effort exit 1。**帶得了 effort 參數的入口**（pi `--effort` / `-c model_reasoning_effort`、Workflow `agent()` 的 `effort`、具名 agent type 的 frontmatter）**MUST** 顯式帶；native delegation 的 model／effort 欄位以本次 tool schema 為準。schema 有可用欄位時依已選檔位填入；schema 不提供欄位時記錄實際繼承限制，不能宣稱已指定。各 runtime 的欄位與繼承條件見 target adapter
    - model 選檔原則「**turn count beats token price**」：brief 內含完整 code 的純轉錄型工作才用最低檔；review 型依 diff 的大小／風險選檔（為什麼見 rationale）。
-5. **中間產物不進主線**：外派出去的 task，主線只讀對方寫回的 report 檔，**NEVER** 為了「確認它做對」把該 task 碰過的原始檔重讀一遍——那把省下來的 context 原封不動加回來，而且重讀的是同一批事實，換不到新判斷。第 2 條的 scope verify 照舊 MUST 跑：看**改了哪些檔**（`git status --short` / `git diff --stat`）跟重讀檔案內容是兩件事。
+5. **中間產物不進主線**：外派出去的 task，主線只讀對方寫回的 report 檔，**NEVER** 為了「確認它做對」把該 task 碰過的原始檔重讀一遍——那把省下來的 context 原封不動加回來，而且重讀的是同一批事實，換不到新判斷。「Report 是未驗證主張」的 scope verify 照舊 MUST 跑：看**改了哪些檔**（`git status --short` / `git diff --stat`）跟重讀檔案內容是兩件事。
 
 N ≥ 3 個 dispatch 的 findings 要收斂進同一個 synthesis 時，reducer 的五步形狀、group key 准入表與 guard 表在 `~/offline/clade/vendor/snippets/fan-in-reduction/`。**這不是規約**——micro-test 顯示寫成 MUST 買不到東西，見 rationale § fan-in reducer 量到什麼。
 
@@ -129,19 +134,19 @@ Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工�
 
 | 載體 | 省什麼 | 負載落在哪 |
 | --- | --- | --- |
-| cloud session | 開發機 CPU（唯一真正卸掉本機負載的載體） | Anthropic VM；先扣派出帳號（cc1／cc2／cc3）的 cloud credit，扣完改扣該帳號的訂閱 `seven_day`／`five_hour` 窗（Charles 2026-10-06） |
+| cloud session | 開發機 CPU（唯一真正卸掉本機負載的載體） | Anthropic VM；先扣派出帳號（cc1／cc2／cc3／cc4）的 cloud credit，扣完改扣該帳號的訂閱 `seven_day`／`five_hour` 窗（Charles 2026-10-06） |
 | Devin `swe-2-max` | Claude 額度（免費） | 派出的那台開發機：工具指令在本機跑 |
-| Pi（Grok 4.7、Gemini Flash） | 不省 | 派出的那台開發機 |
+| Pi（2026-10-21 起無可派 model） | 不省 | 派出的那台開發機 |
 
-**每輪就緒工作一次平行混搭派完**，逐件照下表由上往下判（第一列先攔下短任務），不排「先 A 用完才輪 B」的序：
+**每輪就緒工作一次平行混搭派完**，逐件照下表由上往下判（「本 turn 收得回來的 bounded 工作」那列先攔下短任務），不排「先 A 用完才輪 B」的序：
 
 | 可觀察 predicate（先查 [[agent-routing.routing-table]] 列定 model 家族） | 載體 |
 | --- | --- |
 | 本 turn 收得回來的 bounded 工作——review、裁決、定位搜尋，也含短的實作／改檔（Claude-only 列，含 `dotclaude-authoring`；Pi 列照下方 Pi 列判） | in-process subagent（判準見 [[agent-routing]] § Dispatch data and transport boundary）；**NEVER** 為它開 cloud 或 Herdr pane |
-| 任何 Claude 列（Sonnet 四列、UI／設計類四列 `ui-view-implementation`／`design-review`／`ui-detailed-planning`／`screenshot-match-analysis`、`dotclaude-authoring`、`implementation-decision`／`detailed-planning`），內容符合下方「適合 cloud」且 cloud admission 放行 | **cloud**（預設；急件與非急件同一個判準）。走不走 cloud 看**內容**適不適合在 cloud 做完，**不看**該列用哪個 model（Charles 2026-10-06）；model／effort 照該列，由 `cloud-dispatch.ts` 逐件帶 `--model`／`--effort`（Sonnet 列 `claude-sonnet-5-5 high`、其餘 `claude-opus-5-5 medium`） |
+| 任何 Claude 列（Sonnet 四列、UI／設計類四列 `ui-view-implementation`／`design-review`／`ui-detailed-planning`／`screenshot-match-analysis`、`implementation-decision`／`detailed-planning`），內容符合下方「適合 cloud」且 cloud admission 放行（`dotclaude-authoring`、`code-review-opus` 與 in-process 列恆不上 cloud，拒派碼 `cloud-excluded-row`） | **cloud**（預設；急件與非急件同一個判準）。走不走 cloud 看**內容**適不適合在 cloud 做完，**不看**該列用哪個 model（Charles 2026-10-06）；model／effort 照該列，由 `cloud-dispatch.ts` 逐件帶 `--model`／`--effort`（Sonnet 列 `claude-sonnet-5-5 high`、其餘 `claude-opus-5-5 medium`）。同一輪的 cloud 件不分帳號全部並行送出（同帳號也並行，只受本機 launch 槽＝核數約束），**NEVER** 帳號內序列。**例外**：有開發機低於**該設備的安全線**時，這列的新件依 P0→P3 先補本機 pane 到預估達線，其餘才給 cloud（coordinator `派工判準.md` Rule 6 第 2a 點）。安全線逐台定在 `THROUGHPUT_POLICY.fill.machines`（未列名的設備用 `fill.cpuBusyTarget`／`fill.memAvailableMinPct`），CPU、RAM 任一到線就算滿：CPU 看「兩輪探測間的 CPU 使用率＋（本輪已放權重＋最近 `fill.recentRounds` 輪剛派件數）÷核數」達該設備的 `cpuBusyTarget`，RAM 看可用比例 ≤ 該設備的 `memAvailableMinPct` 或記憶體 PSI `some avg60` ≥ `fill.memPressureMaxAvg60`；探測失敗或讀不到負載的機器不填。全部在飛件數只進放置排序，**NEVER** 單獨讓機器被判滿（跑了一陣子的件已反映在負載上；Charles 2026-10-14）。0-A carrier（`oa-review`：clade 與 consumer 的非 draft、CI 綠、本 head 未審的 PR）沒被釘住時照同一條線放到低於安全線、有該 repo checkout 的機器；只有要審的 branch 在本機的樹還有未推工作才釘本機，放置說明寫明理由 |
 | 上一列的件不符合「適合 cloud」、或 cloud 派不出，且屬 handoff 級／長時間／需隔離環境 | 載體偏好 cloud（卸 CPU）＞ Devin ＞ 本機 pane：Devin 適用列的非急件先補 Devin `swe-2-max`（desk，或已 `devin auth status` 登入的 zenbook），其餘走本機 `cc` Herdr pane（Sonnet 列 `--model claude-sonnet-5-5 --effort high`，其餘 Claude Opus 5.5（effort: medium）） |
-| `--tier-basis delegate-sub` | 經 `pi-dispatch.ts` admission，Grok 4.7 xhigh（照 [[agent-routing.routing-table]] § delegate-sub） |
-| Routing Table 首跳是 Gemini／Grok 的任何 Pi 列 | 經 `pi-dispatch.ts` admission，照原列的 model、effort、pool 與 fallback 鏈派送；不得改派 Devin 或其他 pane 跳過首跳 |
+| delegate-sub 委派 | 現況空鏈：readonly → in-process `dispatch-fallback`、mutation → in-process `sonnet-implementer`（brief 帶 `routing-row: delegate-sub`）（照 [[agent-routing.routing-table]] § delegate-sub）；Pi 恢復可派 model 時經 `pi-dispatch.ts` admission |
+| Routing Table 的 Pi 列（`web-search`、`mechanical-fanout` 等） | 現況空鏈：in-process 鏈尾載體（`dispatch-fallback` 或主線）；Pi 恢復可派 model 時經 `pi-dispatch.ts` admission，照原列的 model、effort、pool 與 fallback 鏈派送；不得改派 Devin 或其他 pane 跳過首跳 |
 | Sonnet 四列（`non-ui-implementation`／`nuxt-core-implementation`／`commit-0c-fix-verify`／`version-upgrade-first-pass`）本 turn 收得回的件 | in-process `sonnet-implementer`（Claude Sonnet 5.5，effort: high）；handoff 級／長時間的照上方 cloud ＞ Devin ＞ 本機 pane |
 | PR 0-A 修補（`pr-0a-fix`）、rebase 與其他要推回既有 PR branch 的修補，該 PR 是某筆 `cloud-dispatch.ts` record 的 branch 開的，且 `followup` 沒拒送 | 交回**原** cloud session：`cloud-dispatch.ts followup <cloud_id> --pr <N> --reason pr-0a-fix --message-file <findings>`。`idle`、VM 已回收的 session 都推得回同一個 PR，rebase 後 `--force-with-lease` 推自己的 branch 也成立（2026-10-07 實測，證據在 cookbook）。`followup` 拒送（session 已 archive、已收割、已 handover、claude.ai 查無、`--pr` 不是這筆 record 的 PR）、送出 45 分鐘（`FOLLOWUP_STALE_MINUTES`）PR 仍沒有新 commit、或同一張 PR 已送滿 2 輪（`FOLLOWUP_MAX_PER_PR`）→ 先 `cloud-dispatch.ts handover <cloud_id> --pr <N> --reason …` 再退本機 pane：handover 確認 session 不在 running 才寫入，exit 2 就不退（cloud session 准 `--force-with-lease`，兩邊會在同一個 branch 競推），寫入後 `followup` 一律拒送；退下來的本機 pane 帶 `--local-reason cloud-handback`。主持者自動加派以載體 `cloud-followup` 照這列走 |
 | 其他要推回既有 PR branch 的修補（本機 pane 開的 PR、別筆 record 的 PR） | **cloud on-branch**：`cloud-dispatch.ts dispatch --on-branch <branch> --pr <N> [--expect-head <sha>] …`。單一 writer 由派前門查（每個節點的未收割 cloud record、Herdr dispatch、worktree checkout、claim），派工者不必先查。拒派時照 stdout 的 `code` 處置：`pr-branch-has-live-writer` → 本機 pane 帶 `--local-reason pr-branch-has-live-writer`；`writer-undeterminable` → 本機 pane 帶 `--local-reason other:writer-undeterminable`（**NEVER** 當成沒有 writer 重派 cloud）；`use-followup` → 訊息指出原 record 時改走上一列，訊息寫「找不到原 record」時本機 pane 帶 `--local-reason other:cloud-branch-without-record`；`cloud-admission-refused` → 本機 pane 帶 `--local-reason cloud-admission-refused`；`pr-not-open`／`head-ref-mismatch` → 重查 PR 現況再決定 |
@@ -149,22 +154,41 @@ Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工�
 
 **適合 cloud** 要硬條件全中、工作形狀也對：
 
-- **硬條件**（缺一就不能派，`cloud-dispatch.ts` 會擋其中幾條）：工作在**單一 GitHub repo** 內做得完；base 已 push 到 origin；派出帳號的 `--ref` preflight 判 GitHub App 已安裝（網頁看得到 repo、org 端裝了 App 都不算；判定方式見 cookbook）。repo **不必**釘 model：launch 的 `--model`／`--effort` 蓋過 repo 的 `.claude/settings.json`（2026-10-06 實測），只有沒帶列也沒帶旗標的派出才要求 repo 釘 routing table 的 Claude model（Opus 5.5 ≤ `medium` 或 `claude-sonnet-5-5`／`high`，與旗標同一份白名單）。
+- **硬條件**（缺一就不能派，`cloud-dispatch.ts` 會擋其中幾條）：工作在**單一 GitHub repo** 內做得完；base 已 push 到 origin；派出帳號的 `--ref` preflight 判 GitHub App 已安裝（網頁看得到 repo、org 端裝了 App 都不算；判定方式見 cookbook）。**目標 repo 在 origin 預設分支的 `.claude/settings.json` 放行驗收要的指令類**：git 寫入（`git add`、`git commit`、`git push -u origin cloud/*`）、該 repo 語言的測試指令（有 tracked 的 `go.mod` → `go test`；root `package.json` 有 `test` script → `pnpm install`＋`pnpm test`／`pnpm run test`），且 pre-push 鏈沒有裸呼 gitignored 的 `.clade/bin/clade-gate`（cloud checkout 沒有）。cloud 恆為 `default` 權限模式，缺了只會 `BLOCKED: environment`。機械判定（`vendor/scripts/lib/coordinator-cloud-allow.ts` `cloudAllowRefusal`，planner、`briefSourceProblem`、fanout `cloudProblems`、`cloud-dispatch.ts dispatch` 的 new-branch 派前門四處同一份）：缺 → 改判本機，理由碼 `needs-local-state`、機讀拒絕碼 `cloud-allow-missing`；讀不到 repo 或 origin ref 時不判（NEVER 當成缺 allow）。補法：clade 的 permissions 基線（`scripts/lib/permissions-allow-baseline.ts`）散播給 consumer，不在派工時手補。repo **不必**釘 model：launch 的 `--model`／`--effort` 蓋過 repo 的 `.claude/settings.json`（2026-10-06 實測），只有沒帶列也沒帶旗標的派出才要求 repo 釘 routing table 的 Claude model（Opus 5.5 ≤ `medium` 或 `claude-sonnet-5-5`／`high`，與旗標同一份白名單）。
+- **全程不需人類授權**（硬條件；Charles 2026-10-13：「派到 cloud 的都是 bypass 不用人類授權的任務」）：cloud session 恆為 `default` 權限模式，bypass 旗標與 `permissions.defaultMode` 都不生效（`cloud-dispatch.ts` `launchCommand`，2026-10-08 實測）；一停在權限框就停到有人去 claude.ai 點，follow-up 訊息答不了。派工前逐條對這件的任務與驗收，**任一條成立就不適合 cloud**，改派 Devin 或本機 pane：
+
+  | 可觀察 predicate（看任務與驗收的文字） | cloud 上會怎樣 | 本機載體的理由碼 |
+  | --- | --- | --- |
+  | 要互動 session／TTY：寫著「互動 session」「互動 TTY」，或驗收點名 Claude Code 內建 slash command（`/model`、`/effort`、`/compact`、`/permissions`、`/fast`、`/rewind`、`/statusline`）、`claude -p` | 沒有可敲字的終端機，只能回 `BLOCKED: needs-charles`（clade #1723 M-UI 兩次派出都是這樣） | `needs-interactive-qa` |
+  | 點名 clone 目錄外的路徑（`/tmp/…`、`~/…`、`$HOME/…`、`$TMPDIR/…`、`/home/<user>/…`、`/etc/…`、`/var/…`、`/root/…`）或 `.git/` 內的檔 | 檔案工具對這些路徑的動作跳權限框（2026-10-12 session 停在 `Write .git/COMMIT_MSG_TMP`） | `needs-local-state` |
+  | 驗收要的指令不在目標 repo origin 預設分支的 `permissions.allow`，或命中 `ask` | 上一條硬條件：`BLOCKED: environment` 或權限框 | `needs-local-state` |
+  | 要人當場核可才續做（production 寫入、對外發送、付費操作的確認） | 中途無法對話，停在提問 | `needs-interactive-qa` |
+
+  准入的總閘是 `cloudUnattendedRefusal`（同檔；planner、`briefSourceProblem`、fanout `cloudProblems`、`cloud-dispatch.ts dispatch` 派前門共用），預設不派，命中任一帶拒派碼並退本機載體：`cloud-excluded-row`（排除列）、`cloud-needs-human`（候選或 TD 標了 needs-human）、`cloud-prev-blocked`（前輪同件 cloud 卡在權限框／scope）、`cloud-protected-path`（任務文字或寫入路徑點名 `.claude/`、`.agents/`、`.husky/`、`.git/`）、`cloud-cross-repo`（點名 dispatch repo 以外的 repo）、`cloud-needs-attended`（要登入、OAuth、prod 驗證、secrets、UI 驗收）、`cloud-needs-local-state`（本機狀態字樣）。受保護路徑、跨 repo 路徑與 backtick 指令**出現即拒**，不分肯定句或禁令句（「NEVER 動 `.claude/`」「`.claude/` 不要動」「改 `.claude/x` 讓它不要誤擋」都拒）；機械層不猜禁令子句，含這類禁令行的 brief 退本機載體。
+
+  前兩列機械判定（`vendor/scripts/lib/coordinator-cloud-allow.ts`）：planner 與 `briefSourceProblem` 經 `sourceLocalSignal`（互動 session 看整段來源文字；slash command、`claude -p`、路徑只看 Location／Acceptance 範圍）；`cloud-dispatch.ts dispatch`（new-branch 與 on-branch、含 `--dry-run`）與 fanout `cloudProblems`（`.agents/skills/coordinator/scripts/fanout.ts`，`brief.ts` 驗 brief 時同一支）經 `humanAuthGate` 看 brief 的 `## 要做的事`／`## 驗收` 兩段，拒派 exit 2，stdout 的 `code` 是 `cloud-needs-interactive-session` 或 `cloud-path-outside-workdir`，自動加派照碼退 pane。只認明確片語，保守誤判由 pane 退路兜底；任務其實不必碰該路徑時改寫 brief data 重新產生。後兩列派工前判不到，由派工者照本表判。session 執行期自己挑的動作（例如把 commit message 寫進 `.git/`、暫存檔寫到 `/tmp`）由 `capabilities/core/hooks/pre-tool-cloud-workdir-gate.sh` 在 cloud VM 內當場 deny 並印替代做法（PreToolUse，只在 `CLAUDE_CODE_REMOTE` 為真時動作；只認常見寫入入口，見檔頭 threat model），cloud-worker brief 的禁令（`git commit -F -`、NEVER 寫 `.git/` 與 clone 目錄外、互動步驟停下回報）再兜一層，漏網的才到 patrol `session-needs-action`。**NEVER** 用改 `.claude/settings*.json`、加 bypass 旗標或放寬 allow 讓這類件上 cloud。
+
+  | REQUIRED 欄位 | 內容 |
+  | --- | --- |
+  | 觸發條件 | 來源文字或 brief 任務段命中上表前兩列的片語 → planner 不排 cloud（提議帶 `local_reason`）、`dispatch` exit 2 不派出 |
+  | 消費端 | planner（`coordinator-ready.ts` `cloudShape`）與自動加派執行器（`CLOUD_FALLBACK_REASON` 把拒絕碼換成理由碼後退 pane）；手動派工的主持者讀 stderr 改派 |
+  | 觸發點 | 失敗輸出：`cloud-dispatch.ts dispatch` 拒派時 stderr 印原因與改派方式、stdout 印機讀 `code`；patrol `session-needs-action` 列的處置文字指回本段 |
+
 - **工作形狀**：自足（brief 讀完就做得完）、驗收全在 PR＋CI 看得到。本機驗證越重（大測試矩陣、build、e2e）越划算——那些負載整包留在 VM。急件與非急件用同一條：緊急度只影響排序與 patrol 輪詢（急件的 record 每輪先查），代價是中途無法對話，所以只放行 brief 自足的急件。
-- **不適合**：跨 repo、要本機狀態（dev server、DB lease、未 push 的 commit、secret、Herdr／pi seat、systemd、實體硬體）、單一 writer 不成立的 PR 修補（`--on-branch` 派前門回 `pr-branch-has-live-writer` 或 `writer-undeterminable`；原 cloud session 自己開的 PR 走上表 `followup` 列，不新開 session）、commit 0-A、要來回問答（cloud 回不了訊）。命中任一 → 本機 pane（或主線自己做）。clade 標準層（`rules/**`、`vendor/**` 等會散播的源檔）**不再整層排除**：散播只走 `clade-publish`，cloud 只產 draft PR，落地前照樣過 0-A 與 publish gate（Charles 2026-10-06）；clade 端「要本機狀態」的具體例子是要 live Herdr／coordinator 快取（`~/.cache/clade/**`）驗證的、要 ssh peer 的、要動 consumer 投影或跑 propagate 的、要 systemd／timer 的。
+- **不適合**：上面「全程不需人類授權」任一列成立的件、跨 repo、要本機狀態（dev server、DB lease、未 push 的 commit、secret、Herdr／pi seat、systemd、實體硬體；TD／HANDOFF 來源文字明示要 live 主機、prod、ssh、本機 worktree 的件，planner 以 `liveSourceSignal` 機械判，TD 條目全文、HANDOFF／plan 條目文字都看）、單一 writer 不成立的 PR 修補（`--on-branch` 派前門回 `pr-branch-has-live-writer` 或 `writer-undeterminable`；原 cloud session 自己開的 PR 走上表 `followup` 列，不新開 session）、commit 0-A、要來回問答（cloud 回不了訊）。命中任一 → 本機 pane（或主線自己做）。clade 標準層（`rules/**`、`vendor/**` 等會散播的源檔）**不再整層排除**：散播只走 `clade-publish`，cloud 只產 draft PR，落地前照樣過 0-A 與 publish gate（Charles 2026-10-06）；clade 端「要本機狀態」的具體例子是要 live Herdr／coordinator 快取（`~/.cache/clade/**`）驗證的、要 ssh peer 的、要動 consumer 投影或跑 propagate 的、要 systemd／timer 的。
 - 自動派工（`coordinator-ready.ts` `cloudShapeProblem`）只看得到件的標題與寫入路徑，以字樣比對判「要本機狀態」：命中留本機，沒命中才排 cloud；誤判由上面的硬條件、pane 退路與 PR 驗收兜底。PR 修補不走字樣比對，由前提檢查判（`prFixCloudProblem` 讀巡檢快照的逐節點觀測，交給與派前門同一個 `singleWriterVerdict`）：過 → on-branch cloud；不過 → 本機 pane，理由碼由 fanout 透傳。
 
-**cloud 先扣派出帳號的 cloud credit，扣完改扣該帳號的訂閱 weekly 窗**（Charles 2026-10-06，取代 09-28「與訂閱窗口無關」）。不設併發上限、不設總量預算、不設 weekly 保留百分比（Charles：「R7 不應該設上限」「用光沒關係 用光我 upgrade」）。admission 只擋兩件：帳號不可判定（要 cc1|cc2|cc3），以及下面的 0-A reviewer 席位守門。
+**cloud 先扣派出帳號的 cloud credit，扣完改扣該帳號的訂閱 weekly 窗**（Charles 2026-10-06，取代 09-28「與訂閱窗口無關」）。不設併發上限、不設總量預算、不設 weekly 保留百分比（Charles：「R7 不應該設上限」「用光沒關係 用光我 upgrade」）。admission 只擋兩件：帳號不可判定（要 cc1|cc2|cc3|cc4），以及下面的 0-A reviewer 席位守門。
 
 **0-A reviewer 席位守門（唯一的硬門）**：commit 0-A reviewer 固定是 Claude Opus 5.5（effort: medium）、只能跑在本機 Claude 帳號上，cloud **NEVER** 讓它沒有任何可用帳號。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | 池內（cc1／cc2／cc3）沒有任何帳號讀得到且 `five_hour`、`seven_day` 皆 > 0 → 拒派該件。全數用盡與「有帳號讀不到或額度快照過期」都算：讀不到視為未知，保守停派。只要有一個帳號確認有額度就放行，不留百分比 |
+| 觸發條件 | 池內（cc1／cc2／cc3／cc4）沒有任何帳號讀得到且 `five_hour`、`seven_day` 皆 > 0 → 拒派該件。全數用盡與「有帳號讀不到或額度快照過期」都算：讀不到視為未知，保守停派。只要有一個帳號確認有額度就放行，不留百分比 |
 | 消費端 | `cloud-dispatch.ts dispatch` 的 admission（`reviewerSeatGuard`，讀值來自 `readDispatchQuota`，新鮮度門檻同 `claude-account-preflight.ts` `MAX_QUOTA_AGE_MS`）；`coordinator-ready.ts` 選 cloud 載體前以快照的池讀值判同一條，停派後照載體偏好往 Devin／本機 pane 退 |
 | 觸發點 | 失敗輸出：`dispatch` 拒派訊息，以及 `cloud-dispatch.ts patrol`／`herdr-patrol.ts --stalled` 的 `reviewer-seat-hold` 待處置列（列出各帳號窗口與被停派的件）。處置：請 Charles upgrade 或等窗口重置，額度恢復後重派即自動解除；**NEVER** 繞過守門派出 |
 
-機械閘在 `vendor/scripts/cloud-dispatch.ts dispatch`：在飛數（該帳號尚未 `harvest` 的 record；未帶帳號的 adopted record 計入每個帳號）與 credit 用盡標記只回報、不拒派（標記是啟動失敗訊息顯示 credit／billing 耗盡時留下的通知，`credit-reset --account <帳號>` 清除）。launch 因帳號 `five_hour`／`seven_day`（或 credit）用盡而失敗時，自動輪替池內下一個帳號（有額度者先）；每個帳號都失敗才停派並列 `reviewer-seat-hold` 待處置。`--ref` 被拒也輪替（Claude GitHub App 逐帳號安裝）：記住該帳號 × repo 6 小時、期間不再排它，池內帳號全部被拒才失敗，之後的 dry-run 直接拒派、改走本機 pane。**NEVER** 用任何方式繞過它拒派的結果。派出帳號在 cc1／cc2／cc3 之間選有額度且在飛較少的那個，以 `dispatch --account cc1|cc2|cc3` 明確指定；`adopt` 也帶 `--account` 讓 record 歸屬到帳號。不指定時只接受能從 `CLAUDE_CONFIG_DIR` 辨認出的池帳號。
+機械閘在 `vendor/scripts/cloud-dispatch.ts dispatch`：在飛數（該帳號尚未 `harvest` 的 record；未帶帳號的 adopted record 計入每個帳號）與 credit 用盡標記只回報、不拒派（標記是啟動失敗訊息顯示 credit／billing 耗盡時留下的通知，`credit-reset --account <帳號>` 清除）。launch 因帳號 `five_hour`／`seven_day`（或 credit）用盡而失敗時，自動輪替池內下一個帳號（有額度者先）；每個帳號都失敗才停派並列 `reviewer-seat-hold` 待處置。`--ref` 被拒也輪替（Claude GitHub App 逐帳號安裝）：記住該帳號 × repo 6 小時、期間不再排它，池內帳號全部被拒才失敗，之後的 dry-run 直接拒派、改走本機 pane。**NEVER** 用任何方式繞過它拒派的結果。派出帳號在 cc1／cc2／cc3／cc4 之間選有額度且在飛較少的那個，以 `dispatch --account cc1|cc2|cc3|cc4` 明確指定；`adopt` 也帶 `--account` 讓 record 歸屬到帳號。不指定時只接受能從 `CLAUDE_CONFIG_DIR` 辨認出的池帳號。
 
 每輪有 handoff 級的 Claude 原生列就緒件時，主持者先跑 cloud dry-run admission 選帳號。
 
@@ -173,8 +197,8 @@ Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工�
 | 值 | 用在 |
 | --- | --- |
 | `pr-branch-has-live-writer` | PR 修補的 branch 上已有其他 writer |
-| `needs-local-state` | 要本機才有的狀態（未推的 commit、本機服務、檔案） |
-| `needs-interactive-qa` | 要人在本機互動驗收 |
+| `needs-local-state` | 要本機才有的狀態（未推的 commit、本機服務、檔案）；也用於目標 repo 的 cloud allow 缺口（`cloud-allow-missing`）、來源文字明示 live 環境，與任務點名 clone 目錄外或 `.git/` 內路徑（`cloud-path-outside-workdir`） |
+| `needs-interactive-qa` | 要人在本機互動驗收；也用於 cloud 派前門判這件要互動 session（`cloud-needs-interactive-session`） |
 | `cross-repo` | 一件工作要寫多個 repo |
 | `cloud-admission-refused` | cloud 派工器拒派（帳號、額度、席位、旗標失效等） |
 | `zero-a` | commit 0-A 審查 |
@@ -234,7 +258,7 @@ brief 叫 pane 呼叫的 skill，可不可呼叫由**目標端投影 SKILL.md �
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | brief 以指名形式叫 Claude child 呼叫目標端 `disable-model-invocation: true` 的 skill → Herdr dispatch exit 15 `skill_not_invocable`，零 pane、零 record；CLI exit 1 |
-| 消費端 | 正在派工的主線（拒絕訊息附 `flow ask` 範本）；`\my` 承接改開的拍板題 |
+| 消費端 | 正在派工的主線（拒絕訊息附 `flow ask` 範本）；`/my` 承接改開的拍板題 |
 | 觸發點 | 本節（決定派工、寫 brief 前 MUST Read 本檔）；判定式在 `vendor/scripts/lib/brief-skill-invocability.ts` |
 
 ## 必禁事項 — Dispatch 入口（原在 `agent-routing.md` § 必禁事項）
@@ -242,7 +266,7 @@ brief 叫 pane 呼叫的 skill，可不可呼叫由**目標端投影 SKILL.md �
 | NEVER | 說明 |
 | --- | --- |
 | **NEVER** 印「請開啟Codex CLI」「Stop here」「請貼prompt」這類純文字handoff訊息要使用者手動切 | 主線必須自己以背景dispatcher派Pi模型 |
-| **已 route 給 Pi 的工作，NEVER** 直接執行 `codex` binary（含 `codex exec`／`codex review`／`codex exec resume`）代替 dispatcher，或把它當 Pi 故障 fallback | 該工作沿用 `vendor/scripts/pi-dispatch.ts` 或專用 Pi wrapper 的 admission、receipt 與 fallback。原生 Codex session、已授權 native subagent 與明確要求的 Codex 產品驗證，由 target adapter 依各自 scope 和本次 tool schema 執行；模型名字本身不決定 transport。 |
+| **已 route 給 Pi 的工作，NEVER** 直接執行 `codex` binary（含 `codex exec`／`codex review`／`codex exec resume`）代替 dispatcher，或把它當 Pi 故障 fallback | 該工作沿用 `vendor/scripts/pi-dispatch.ts` 或專用 Pi wrapper 的 admission、receipt 與 fallback。已授權 native subagent 由 target adapter 依各自 scope 和本次 tool schema 執行；模型名字本身不決定 transport。 |
 | **NEVER** 嘗試`codex:rescue`／`codex:setup`plugin路線 | 已驗證無法使用、已全清（含`/assign`） |
 | **NEVER** 把 UI view phase 派給未具該項視覺品質資格的 executor，或以 Pi 機械列／一般 native delegation 代替 qualified bounded phase | UI 的 residency 與資格判定見 § Runtime residency and native transport；非 view phase 的 dispatch prompt 仍 MUST 含「禁止改 view 層檔案」硬指令，缺這條 runtime 容易順手改到 .vue / .tsx |
 | **NEVER** 讓 Claude subagent 當 pi 的**薄中介**——派出 pi 卻不自跑 Pi Watch Protocol，把死活判定留給上一層 | 判準是**誰持有 pi 的生命週期**，不是「有沒有經過 subagent」。薄中介的兩個已驗證失敗模式見 rationale（同 §）。完整持有生命週期的形狀（該層編排者自派自 watch）見 [[agent-routing.pi-watch-protocol]] § Dispatch 入口禁令（下推三列） 的編排者列 |

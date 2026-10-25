@@ -1,5 +1,6 @@
 // 🔒 LOCKED — managed by clade · Source: vendor/scripts/lib/wt-patch-landing.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/lib/wt-patch-landing.ts
 import { execFileSync, spawnSync } from 'node:child_process'
+import { readGitStatus } from './git-status-z.ts'
 
 function git(cwd: string, args: string[]) {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
@@ -7,13 +8,10 @@ function git(cwd: string, args: string[]) {
 
 /** Both rename endpoints matter: overwriting the old name is also a collision. */
 function dirtyPaths(cwd: string): string[] {
-  const records = git(cwd, ['status', '--porcelain=v1', '-z', '--untracked-files=all']).split('\0')
   const paths: string[] = []
-  for (let i = 0; i < records.length; i++) {
-    const record = records[i]
-    if (!record) continue
-    paths.push(record.slice(3))
-    if (/[RC]/.test(record.slice(0, 2))) paths.push(records[++i])
+  for (const { path, origPath } of readGitStatus(cwd, { untracked: 'all' })) {
+    paths.push(path)
+    if (origPath !== undefined) paths.push(origPath)
   }
   return paths
 }

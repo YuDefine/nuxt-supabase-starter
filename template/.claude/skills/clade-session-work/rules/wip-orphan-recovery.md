@@ -3,7 +3,7 @@ description: 接手 interrupted session 或收到 dirty worktree 與失效 claim
 paths: ['HANDOFF.md', 'tasks/**']
 ---
 <!-- Clade native rule; source: rules/core/wip-orphan-recovery.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # WIP Orphan Recovery
 
@@ -28,7 +28,7 @@ Native startup event 與 `project-context` 之類的 context handler 不承載 o
 | 提醒（Layer 0） | Stop hook `stop-wip-guard.sh` | session 結束前 working tree 有 user WIP → **warn**（不阻擋），提醒有未 commit 改動。多 session 並行共用 working tree 是常態，dirty file 可能屬於別的 active session，不應 block |
 | 事後（Layer 2） | `handoff-drift-scan.ts` Trigger 5 `orphan-uncommitted-wip` | session-start drift scan 偵測「worktree dirty + claim 無效/過期」→ 列出待判 ownership 的候選；訊號名稱不等於 orphan 裁決。**有 active claim 的 dirty worktree 不報**（不擾動 live session） |
 
-表中的自動觸發描述適用於已安裝、啟用並觀測到具名 handler 執行的產品入口；現有 Claude Stop／SessionStart 接線不代表 Codex 已有相同接線。沒有該證據的入口，在收尾時從目標 repo 執行 `node scripts/wip-dirty.ts`，接手時執行 `node scripts/handoff-drift-scan.ts --json` 並讀取結果；clade 自身的兩支路徑為 `vendor/scripts/`。前者 exit 1 表示有 user WIP，後者為 informational、exit 0 不代表沒有 finding。helper 缺席或執行失敗時保留「未驗證」狀態，再以本節接手 SOP 的 Git 與 claim 即時證據判斷。
+表中的自動觸發描述適用於已安裝、啟用並觀測到具名 handler 執行的產品入口。沒有該證據的入口，在收尾時從目標 repo 執行 `node scripts/wip-dirty.ts`，接手時執行 `node scripts/handoff-drift-scan.ts --json` 並讀取結果；clade 自身的兩支路徑為 `vendor/scripts/`。前者 exit 1 表示有 user WIP，後者為 informational、exit 0 不代表沒有 finding。helper 缺席或執行失敗時保留「未驗證」狀態，再以本節接手 SOP 的 Git 與 claim 即時證據判斷。
 
 ## 接手 SOP（碰到 orphan WIP 時逐步跑）
 

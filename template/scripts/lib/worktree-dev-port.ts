@@ -44,6 +44,7 @@ import {
   type Stats,
 } from 'node:fs'
 import { createHash, randomUUID } from 'node:crypto'
+import { homedir } from 'node:os'
 import { basename, isAbsolute, join, resolve } from 'node:path'
 
 export interface DeclaredDevPort {
@@ -453,6 +454,48 @@ export function devPortCapacity(
     if (offset === null) return used.size
     used.add(offset)
   }
+}
+
+/**
+ * 這個 consumer 的 worktree band。**讀 clade home 的 registry**（唯一 SoT），投影到
+ * consumer 的 `.clade/registry/consumers.json` 只當 clade home 不在這台機器時的退路。
+ *
+ * 為什麼不能只讀投影複本：① public repo 與 TD-274 之後的 consumer 根本沒有那份複本，
+ * band 讀成 null、容量掉回 base 池 4–9 格（<consumer-a> 在 batch prepare 因此提前耗盡）；
+ * ② 有複本的 consumer，複本停在上次 propagate——band 搬家後舊複本會把新 worktree 配進
+ * 已經屬於別人的號段。投影整份名冊給 consumer 補不了 ①（TD-274 洩漏面），所以反向處理：
+ * 讀的一方去找 SoT。
+ *
+ * clade home 的 registry 有這個 consumer 的 entry 就以它為準（含「沒宣告 band」＝ null，
+ * NEVER 再退回可能過期的複本）；讀不到或沒有該 entry 才試下一個來源。
+ */
+export function readRegistryWorktreeBand(
+  consumerRoot: string,
+  opts: { env?: NodeJS.ProcessEnv; home?: string } = {},
+): WorktreePortBand | null {
+  const env = opts.env ?? process.env
+  const cladeHome = env.CLADE_HOME?.trim() || join(opts.home ?? homedir(), 'offline', 'clade')
+  const consumerId = basename(consumerRoot)
+  const sources = [
+    join(cladeHome, 'registry', 'consumers.json'),
+    join(consumerRoot, '.clade', 'registry', 'consumers.json'),
+  ]
+  for (const source of sources) {
+    let entry: { dev_ports?: { worktree_band?: unknown } } | undefined
+    try {
+      const reg = JSON.parse(readFileSync(source, 'utf8'))
+      const list = Array.isArray(reg) ? reg : (reg?.consumers ?? [])
+      entry = list.find((c: { consumer_id?: string }) => c?.consumer_id === consumerId)
+    } catch {
+      continue
+    }
+    if (!entry) continue
+    const band = entry.dev_ports?.worktree_band
+    if (!Array.isArray(band) || band.length !== 2 || !band.every(Number.isInteger)) return null
+    // 逐項取出再組 tuple：長度保證在 runtime 檢查裡，型別系統看不到。
+    return [band[0] as number, band[1] as number]
+  }
+  return null
 }
 
 /**

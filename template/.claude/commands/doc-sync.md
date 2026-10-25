@@ -1,5 +1,5 @@
 ---
-description: 同步更新 docs/verify/ 文件，確保文件反映當前系統狀態
+description: 同步更新驗證文件目錄（lifecycle repo：specs/truth/docs/verify/；未遷移：docs/verify/），確保文件反映當前系統狀態
 ---
 
 
@@ -11,11 +11,18 @@ $ARGUMENTS
 
 ## Outline
 
-更新 `docs/verify/` 目錄下的文件，確保反映系統的當前狀態。
+更新驗證文件目錄下的文件，確保反映系統的當前狀態。目錄位置看 repo root 有沒有 `specs/truth/work-lifecycle.md`（[[consumer-docs-retirement]]）：
+
+| repo | 驗證文件目錄 |
+| --- | --- |
+| lifecycle repo（有 `specs/truth/work-lifecycle.md`） | `specs/truth/docs/verify/`；新增檔前 `specs/truth/owners.md` 的 `specs/truth/docs/**` 列要寫明准入條件與更新責任。**NEVER** 在 `docs/verify/` 新增或修改檔 |
+| 未遷移 consumer | `docs/verify/`，只可原地更新既有檔，**NEVER** 新增檔；遷移時 `git mv` 到 `specs/truth/docs/verify/` |
+
+以下 `<verify>/` 指上表的目錄。
 
 ### Step 1: 識別需要更新的文件
 
-先讀 consumer 自己的 `docs/verify/README.md` 取得當前文件清單（各 consumer 結構不同），再依最近的變更類型對照需要更新的檔案。下表只是常見對應的示意，檔名以 README 為準，**禁止**照這張表的假設清單直接更新：
+先讀 consumer 自己的 `<verify>/README.md` 取得當前文件清單（各 consumer 結構不同），再依最近的變更類型對照需要更新的檔案。下表只是常見對應的示意，檔名以 README 為準，**禁止**照這張表的假設清單直接更新：
 
 | 變更類型      | 對應文件                                            |
 | ------------- | --------------------------------------------------- |
@@ -33,7 +40,7 @@ $ARGUMENTS
 
 ### Step 3: 更新文件
 
-遵循 docs/verify/ 的寫作原則：
+遵循 `<verify>/` 的寫作原則：
 
 #### ✅ 正確寫法
 
@@ -59,7 +66,7 @@ $ARGUMENTS
 
 ### Step 5: 更新 README
 
-如果新增了文件或變更了結構，更新 `docs/verify/README.md` 的目錄。
+如果新增了文件或變更了結構，更新 `<verify>/README.md` 的目錄。
 
 ### Step 6: 完成報告
 

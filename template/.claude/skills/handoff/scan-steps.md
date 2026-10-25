@@ -183,7 +183,7 @@ node ~/offline/clade/vendor/scripts/handoff-scan.ts --json 2>/dev/null
 
 Outstanding 推薦（§2B.2 / §2B.3 / §2B.4 / §2B.5）**MUST** 引用 `raw.gates`，**NEVER** 從 `HANDOFF.md` 既有 narrative 或 `tasks.md` leaf count 推測有沒有等人的事。
 
-把 `raw.gates` 依 family 寫入 `$MAIN_WT_PATH/HANDOFF.md`（標題沿用舊名，下游 `work-loop-verdict.ts` / `rotate-handoff-done.ts` 依它定位）：
+把 `raw.gates` 依 family 寫入 `$MAIN_WT_PATH/HANDOFF.md`（標題沿用舊名，下游 `rotate-handoff-done.ts` 依它定位）：
 
 ```markdown
 ## Review-gui Readiness

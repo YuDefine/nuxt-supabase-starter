@@ -1,0 +1,70 @@
+# work-route owner 執行者紀錄
+
+觸發點：`SKILL.md` Phase 4 step 4（每一次交棒給 owner 之前）。
+
+# Rule 1 - 每一次交棒前查本表決定執行者，並帶上覆寫路徑
+
+- Level: `MUST`
+
+每一步交棒前查下方對照表：這個 owner（或 owner 內的這類工作）對到 [[agent-routing.routing-table]] 的哪一列、首跳是哪個 model 與 effort。本表只做「owner → 列」的對照；model、effort、鏈、硬禁令的 SoT 仍是 routing table。查到 routing table 的列之後照它的硬禁令與 [[agent-routing]] § 派不派 執行，不以本表代替。表上沒有的 model 或 effort 不自行挑；本表沒列到的工作，照 routing table § 判不進任一列時。
+
+怎麼讀：
+
+- **先讀覆寫再交棒**：本表決定誰執行；被交棒的 owner 執行前 MUST 先讀本 skill 根的 `rules/上游覆寫-lifecycle落點與doctor.md`（`SKILL.md` Phase 4 step 1），派出去的 executor 一樣要在 brief 裡帶這個路徑。命中該檔判準時，lifecycle 落點與 canonical doctor 照覆寫列做，不照 owner 上游原文。
+- **列**：routing table 的列 slug，或主線列。`mainline-contract`（契約／定稿）與 `mainline-analysis`（定位與裁決）不在 routing table 表內，是 `pi-routing-policy.ts` 記帳用的主線列：不外派，依據是 [[agent-routing]] § 派不派 的「規約／契約／對外定稿」與 routing table § 判不進任一列時。
+- **首跳**：該列的第一個載體與 effort，一律明寫。配額降級的後續各跳由 dispatcher 的 `next_step` 給出，不抄在這裡。
+- **effort 照 routing table**：首跳欄的 model 與 effort 就是 routing table 對該列的現值，Claude Opus 5.5 目前一律 `medium`。Charles 2026-09-25 的原則是 Opus 5.5 ≤ `medium`；owner 的 `SKILL.md` 明寫要高於 `medium` 只是開檔的前提，不會自己生效。要把某一列改成 `low` 或更高，先改 routing table 與 `vendor/scripts/pi-routing-policy.ts`（更高檔另要放寬 herdr helper 的 Opus 天花板），再改本表；在那之前一律照 routing table 的現值。**NEVER** 只改本表的檔位，也 **NEVER** 在派工當下自行抬檔或降檔。
+- **explicit 入口的代打**：`specify`、`clarify`、`system-analysis`、`implement` 在 Claude 端模型呼叫不了。輪到它們時由主線當派工者代打派出（`rules/owner載入位置判準.md` Rule 2）；這是 transport，不是外派判定——executor 仍是該列的首跳 model 與 effort。argv 一律照該 owner 在本表的列申報：`--route routing-table --tier-basis table-row --table-row <列>`（`specify`／`clarify` 是 `mainline-contract`，`system-analysis` 是 `detailed-planning`，`implement` 入口是 `mainline-analysis`）。主線列只在 brief 第一行是代打指令、且列與該 skill 相符時被 dispatcher 接受（對不上或非代打都回 `usage_error`）；`--continue` 續送不帶列，沿用該 pane 原 record；**NEVER** 改填 `--route manual`——判定已經發生，填 manual 會讓它從 routing 指標消失。被派出的 session（`CLADE_DISPATCH_ID` 非空）不能再派，交回派工者代打。
+- **主線列**（`mainline-*`）：一律由主線自己做，不外派。首跳欄寫的是 Claude Code 主線的 model 與 effort（routing table 的主線定義）；其他 runtime 的主線同樣自己做這些步驟。
+- **Claude Opus 5.5・medium 的列**：Claude Code 主線自己就是合格 executor，照 § 派不派 預設自己做；review 類 gate（`code-review-opus`）例外，產出 changeset 的那條線不審自己，一律交 fresh-context reviewer。非 Claude 主線依 adapter 交 Claude carrier。
+- **Claude Sonnet 5.5・high 的列**：Claude Code 主線派 in-process `sonnet-implementer`（brief 含 `routing-row: <列>`），要隔離走 Herdr `--model claude-sonnet-5-5 --effort high --route routing-table --tier-basis table-row --table-row <列>`。載體偏好與 Devin 預設照 [[agent-routing.routing-table]] § Devin SWE-2 Max 的「四列的 Devin 預設」。外派實作綁 lifecycle package 時先過 `flow plan readiness`。
+- **原 Pi 列（Gemini 2026-10-08、Grok 2026-10-21 退場，Pi 已無可派 model）**：首跳是該列鏈尾載體——`web-search`／`read-heavy-scan`／`screenshot-review-verify` 等交 in-process `dispatch-fallback` subagent（Claude Opus 5.5・low，frontmatter 釘死），主線不自己做；routing gate 武裝的 decision 由這次 Agent 呼叫解掉。
+- **唯讀列**（`detailed-planning`、`implementation-decision`、`web-search`、`read-heavy-scan`）：executor 只回內容，artifact 由主線寫入。
+
+`wt`、`clade-onboard`、`project-bootstrap`、`clade-publish` 是 session gate 或不可逆動作，一律主線（Claude Opus 5.5・medium），不外派。
+
+| owner／工作 | 列 | 首跳 | 附註 |
+| --- | --- | --- | --- |
+| work-route 本身：定位工作、前提修復、呈現 PM 確認 | `mainline-analysis` | Claude Opus 5.5・medium | |
+| `constitution` | `mainline-contract` | Claude Opus 5.5・medium | |
+| `specify` | `mainline-contract` | Claude Opus 5.5・medium | 與使用者確認需求；Claude 端由主線代打派出 |
+| `clarify`、`clarify-over-specs` | `mainline-contract` | Claude Opus 5.5・medium | 與使用者問答；Claude 端 `clarify` 由主線代打（specify 的 pane 還在就 `--continue`，否則新派） |
+| `spec-by-example` | `mainline-contract` | Claude Opus 5.5・medium | |
+| `technical-research`：決策與 techstack 定稿（含選定 SpecFormula 時的 `specformula-config`） | `mainline-contract` | Claude Opus 5.5・medium | |
+| `technical-research`：外部網路查證 | `web-search` | Claude Opus 5.5・low（`dispatch-fallback`） | 主線不直接呼叫內建 WebSearch／WebFetch |
+| `technical-research`：大量讀既有 codebase 抽固定欄位 | `read-heavy-scan` | Claude Opus 5.5・low（`dispatch-fallback`） | |
+| UI 需求確認用的設計雛形與實作後修改閉環（impeccable） | `ui-view-implementation` | Claude Opus 5.5・medium | UI 檔位實測中；改檔位先改 routing table |
+| 設計品質判讀 | `design-review` | Claude Opus 5.5・medium | UI 檔位實測中；改檔位先改 routing table |
+| UI 截圖取證 | `screenshot-review-verify` | Claude Opus 5.5・low（`dispatch-fallback`） | 主線直接派 `dispatch-fallback`；取證與判定分兩次 |
+| 截圖與驗收項目的符合性判定 | `screenshot-match-analysis` | Claude Opus 5.5・medium | UI 檔位實測中；改檔位先改 routing table |
+| `system-analysis` | `detailed-planning` | Claude Opus 5.5・medium | 寫 `system-analysis.md`；Claude 端由主線代打派出 |
+| `api-plan`（含 `specformula-api-spec`） | `mainline-contract` | Claude Opus 5.5・medium | truth `contracts/**` 定稿 |
+| `data-plan`（含 `specformula-entity-spec`） | `mainline-contract` | Claude Opus 5.5・medium | truth `data/**` 與 entity spec 定稿 |
+| `truth-delta` | `mainline-contract` | Claude Opus 5.5・medium | |
+| `ui-plan` | `ui-detailed-planning` | Claude Opus 5.5・medium | UI 檔位實測中；改檔位先改 routing table |
+| `dsl-refine`、`gherkin-and-dsl` | `mainline-contract` | Claude Opus 5.5・medium | topology audit 由主線直接跑 |
+| `tasks` | `detailed-planning` | Claude Opus 5.5・medium | 主線寫 `tasks.md` |
+| `implement`：選 task、派工與收回、實跑驗證、回寫 `[X]`、`[BDD-GREEN]`／`[BDD-REFACTOR]` 委派 `bdd` | `mainline-analysis` | Claude Opus 5.5・medium | 被派出的 task 照下列各列；Claude 端 `implement` 入口由主線代打派出 |
+| `implement`：非 UI 實作——Setup／Foundational、`[CODE-REMOVE]`、`[REGRESSION]`、Phase 3 `[BDD-ALIGN]`（寫 `dsl.yml` 的 `isa_steps`，含 `specformula-feature`）／`[BDD-REMOVE]`／`[BDD-RED]`（只用 `dsl.md` 業務句型）、SpecFormula 安裝接線（`specformula-config`） | `non-ui-implementation` | Claude Sonnet 5.5・high | Nuxt 框架或模組本體改填 `nuxt-core-implementation`（同檔位）；BDD 標記的語意要變就回交 `dsl-refine` |
+| `implement`：UI view | `ui-view-implementation` | Claude Opus 5.5・medium | UI 檔位實測中；改檔位先改 routing table |
+| `implement`：Phase 3 review | `code-review-opus` | Claude Opus 5.5・medium | 不走 Pi、沒有 fallback；額度耗盡時 gate 保持未完成 |
+| `bdd` 的 `red`／`green`／`refactor`（含 `specformula-config`；`red` 就地補 `dsl.yml` 時含 `specformula-feature`） | `non-ui-implementation` | Claude Sonnet 5.5・high | 語意要變就回交 `dsl-refine` |
+| 實作中的根因或方案裁決 | `implementation-decision` | Claude Opus 5.5・medium | |
+| commit 0-A | `code-review-opus` | Claude Opus 5.5・medium | 照 `claude-review-safe.sh` 的 AGENT_CALL／FINALIZE |
+| commit 0-C fix-verify | `commit-0c-fix-verify` | Claude Sonnet 5.5・high | |
+
+## Good Example
+
+- 這個例子是好的，因為照 owner 那一列決定執行者與首跳，並把覆寫路徑帶進外派 brief。
+
+```text
+交棒 implement 外派的非 UI task → 查本表 `non-ui-implementation`（Claude Sonnet 5.5・high）→ 派 sonnet-implementer，brief 含 routing-row 與 rules/上游覆寫-lifecycle落點與doctor.md 路徑
+```
+
+## Bad Example
+
+- 這個例子是壞的，因為在派工當下自行抬檔，或自行挑表上沒有的 model。
+
+```text
+non-ui-implementation 這次「比較難」→ 自己改派 Opus 5.5・xhigh，沒先改 routing table
+```

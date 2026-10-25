@@ -4,10 +4,11 @@
 - 前提：multi-session 共用 main；staged 區、branch HEAD、partial WIP 與 ignored artifacts 都會跨 session 滲漏。因此凡會改 tracked 檔的工作，都必須先在隔離環境裡做，先保存並驗證成果，再由批次 `/commit` 落地。
 - 只要動作會寫入 tracked 檔——實作、修正、重構、新增、編輯、部署準備、migration、設定寫入、建 plan package 或 tasks 檔都算——**MUST** 在獨立 worktree 內執行，**NEVER** 直接在 main 改。
 - 只有明示唯讀的工作（grep、log、audit、history 查詢、解釋）可以留在 main。
-- 尚未隔離時，把工作交 `wt` 建立隔離環境（或依呼叫端自己的流程，例如 `work-route` §0、`handoff` Mode B、`work-loop`）。**要不要隔離、隔離成什麼形狀，由呼叫端判斷**；本檔只規定「改 tracked 檔前必須已經隔離」與下列禁令。
+- 尚未隔離時，把工作交 `wt` 建立隔離環境（或依呼叫端自己的流程，例如 `work-route` Phase 2、`handoff` Mode B、coordinator 派出的 child）。**要不要隔離、隔離成什麼形狀，由呼叫端判斷**；本檔只規定「改 tracked 檔前必須已經隔離」與下列禁令。
 - 已經在 worktree 內（`git rev-parse --git-dir` 含 `/worktrees/`）→ 這棵樹就是工作區，**NEVER** 疊建第二棵。
 - main 上其他 session 的 WIP **NEVER** stash、覆寫或猜測清理。
 - worktree、branch、archive、落地的具體載體由 target adapter 提供；缺少已驗證的載體時保留 blocker，**NEVER** 改用另一個 runtime 的命令形狀硬做。
+- 樹內啟 dev server 時 **NEVER** 對共用 named tunnel 開 tunnel：沒 opt-in `dev.perWorktreeTunnel` 的 consumer，worktree 沒有 tunnel（`wt-helper add` 目前仍逐字複製 `TUNNEL_HOSTNAME`／`TUNNEL_NAME`、只有手動 `wt-env-sync` 會移除，樹內帶著也 **NEVER** 拿來啟 tunnel；規約 `rules/core/dev-tunnel-convention.md` § 7）。
 - flow 事件：未顯式覆寫時，寫入端與讀端共用 main checkout 的 `.clade/flow/events.jsonl`；linked worktree 找不到可用的 main checkout 時，寫入端回報失敗，不把事件寫回待刪的樹。
 
 ## Good Example

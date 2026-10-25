@@ -1,6 +1,6 @@
 ---
 name: wt
-description: "開隔離 worktree 並在裡面派工的內部工具：建立或接續 `<consumer>-wt/<slug>/`、寫 WORKTREE-BRIEF、依 routing table 選執行者派工、驗收後交給 commit 批次落地。Use when work-route、handoff、work-loop 等呼叫端已判定這件工作要隔離，或使用者明確要求開 worktree。要不要隔離由呼叫端判斷，本 skill 不判斷。NOT for 發布散播（走 clade-publish）、提交已完成工作（走 commit）、只是要切 branch。"
+description: "開隔離 worktree 並在裡面派工的內部工具：建立或接續 `<consumer>-wt/<slug>/`、寫 WORKTREE-BRIEF、依 routing table 選執行者派工、驗收後交給 commit 批次落地。Use when work-route、handoff、coordinator child 等呼叫端已判定這件工作要隔離，或使用者明確要求開 worktree。要不要隔離由呼叫端判斷，本 skill 不判斷。NOT for 發布散播（走 clade-publish）、提交已完成工作（走 commit）、只是要切 branch。"
 license: MIT
 metadata:
   author: clade
@@ -12,7 +12,7 @@ metadata:
 
 # wt
 
-呼叫端（`work-route` §0、`handoff` Mode B、`work-loop`）已判定要隔離；本 skill 建立或接續 worktree、派工、驗收、交 commit 批次落地，不重判。
+呼叫端（`work-route` Phase 2、`handoff` Mode B、coordinator 派出的 child）已判定要隔離；本 skill 建立或接續 worktree、派工、驗收、交 commit 批次落地，不重判。
 
 # SOP
 

@@ -12,7 +12,7 @@ paths:
   - 'packages/*/app/plugins/evlog-*.ts'
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/evlog/evlog-investigate.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # evlog Investigate（prod 問題的調查反射）
 

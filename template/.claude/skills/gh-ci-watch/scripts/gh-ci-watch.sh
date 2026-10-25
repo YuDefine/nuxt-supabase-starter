@@ -73,6 +73,44 @@ default_since() {
 
 command -v gh >/dev/null 2>&1 || { echo "RESULT: UNAVAILABLE (gh CLI not found)"; exit 2; }
 
+# gh run list／gh run view --log／--log-failed 經全機節流閘（vendor/scripts/gh-throttle.ts）：
+# 別的行程（oa-batches、merge-queue、其他 agent）撞到 secondary rate limit 時寫的共用 cooldown，
+# 這裡也會讀到並等它結束，不會各打各的。找不到 gh-throttle.ts 或 node（非 clade 機器、consumer 沒投影）
+# 時退回直接呼叫 gh，行為與之前相同。
+GH_THROTTLE=""
+# node 要能直接跑 .ts（type stripping；process.features.typescript 非空）才用 gh-throttle，
+# 舊 node 會對 .ts 噴 syntax error，不探測就會讓每次 gh 呼叫都失敗。
+if command -v node >/dev/null 2>&1 && node -e 'process.exit(process.features.typescript ? 0 : 1)' >/dev/null 2>&1; then
+  _gct_self="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)"
+  for _gct_cand in \
+    "${CLADE_HOME:+$CLADE_HOME/vendor/scripts/gh-throttle.ts}" \
+    "${_gct_self:+$_gct_self/../../../vendor/scripts/gh-throttle.ts}"; do
+    if [[ -n "$_gct_cand" && -f "$_gct_cand" ]]; then GH_THROTTLE="$_gct_cand"; break; fi
+  done
+  unset _gct_self _gct_cand
+fi
+# gh_t <gh 子命令…>：等槽或等 cooldown 會超過本腳本的 deadline 時 gh-throttle 回 exit 75、不執行 gh
+# （輸出帶 `gh-throttle:` 前綴，is_rate_limited 會收，走 sleep_until_reset 最多睡 60 秒後重試，
+# 直到 check_deadline 回 WATCH_TIMEOUT）。
+# GH_T_CAP 非空時改用該固定秒數當 --max-wait：Phase 3 結論已知，不該再為證據查詢等到 deadline。
+gh_t() {
+  if [[ -z "$GH_THROTTLE" ]]; then gh "$@"; return; fi
+  local left=$(( DEADLINE - $(now_epoch) ))
+  (( left < 1 )) && left=1
+  [[ -n "${GH_T_CAP:-}" ]] && left="$GH_T_CAP"
+  node "$GH_THROTTLE" --max-wait "$left" -- gh "$@"
+}
+# gh_t_log：stdout 原樣轉出；失敗時把 gh-throttle 的 cooldown 說明行也印到 stdout（其餘 stderr 照舊丟棄）。
+gh_t_log() {
+  local err rc
+  { err=$(gh_t "$@" 2>&1 1>&3 3>&-); } 3>&1
+  rc=$?
+  if (( rc != 0 )); then
+    printf '%s\n' "$err" | grep '^gh-throttle:' | sed 's/^/[watch] /' || true
+  fi
+  return "$rc"
+}
+
 DEADLINE=$(( $(now_epoch) + TIMEOUT ))
 ERRS=0
 RUN_ID=""
@@ -104,7 +142,7 @@ bump_err() { # $1 = context, $2 = raw output
 # reset 晚於 deadline 時只睡到 deadline，交給 check_deadline 回 WATCH_TIMEOUT。
 # core 額度沒用完卻被擋＝secondary rate limit，GitHub 不給 reset，至少等 60 秒。
 is_rate_limited() { # $1 = gh 的輸出
-  printf '%s' "$1" | grep -qiE 'rate limit|HTTP 429|HTTP 403: (API rate|You have exceeded)'
+  printf '%s' "$1" | grep -qiE 'rate limit|HTTP 429|HTTP 403: (API rate|You have exceeded)|^gh-throttle:'
 }
 sleep_until_reset() {
   local core remaining reset now wait
@@ -214,7 +252,7 @@ if [[ "$MODE" == "workflow" ]]; then
     LISTARGS=(-w "$TARGET" -L 20)
     [[ -n "$BRANCH" ]] && LISTARGS+=(-b "$BRANCH")
     [[ -n "$COMMIT" ]] && LISTARGS+=(-c "$COMMIT")
-    OUT=$(gh run list ${RARGS[@]+"${RARGS[@]}"} "${LISTARGS[@]}" \
+    OUT=$(gh_t run list ${RARGS[@]+"${RARGS[@]}"} "${LISTARGS[@]}" \
       --json databaseId,createdAt \
       --jq "[.[] | select(.createdAt >= \"$SINCE\")] | sort_by(.createdAt) | last | .databaseId // empty" 2>&1)
     rc=$?
@@ -303,7 +341,7 @@ find_successor() { # $1 = 要釘的 commit（可空）
   # 100 是 gh 單頁上限；被擠出去的結果是「找不到 → cancelled」（fail-closed），不會變成假綠燈。
   local args=(-w "$WF_NAME" -b "$HEAD_BRANCH" -e "$EVENT" -L 100) rows rc id sha repo
   [[ -n "$1" ]] && args+=(-c "$1")
-  rows=$(gh run list ${RARGS[@]+"${RARGS[@]}"} "${args[@]}" \
+  rows=$(gh_t run list ${RARGS[@]+"${RARGS[@]}"} "${args[@]}" \
     --json databaseId,createdAt,headSha,workflowDatabaseId \
     --jq "[.[] | select(.workflowDatabaseId == $WF_ID) | select(.createdAt >= \"$CREATED\") | select(.databaseId != $RUN_ID)] | sort_by(.createdAt) | reverse | .[] | [.databaseId, .headSha] | @tsv" 2>&1); rc=$?
   if [[ $rc -ne 0 ]]; then
@@ -413,9 +451,14 @@ while IFS=$'\t' read -r JNAME JCONC JSTART JEND; do
   printf '%s | %s | %s\n' "$JNAME" "$JCONC" "$DUR"
 done
 
+# Phase 3 起結論已知：evidence／last-green／failed-log 查詢各最多等 45 秒（不再吃 deadline 剩餘時間），
+# 讓 RESULT 印出後腳本迅速結束；等不到就印 cooldown 說明行、該段留空。
+GH_T_CAP=45
+
 if [[ -n "$EVIDENCE" ]]; then
   echo "--- evidence: grep -E '$EVIDENCE' (first 40) ---"
-  gh run view ${RARGS[@]+"${RARGS[@]}"} "$RUN_ID" --log 2>/dev/null | grep -E "$EVIDENCE" | head -40
+  # 第二個 -e 讓 gh_t_log 的 cooldown 說明行穿過 evidence 過濾，空結果才看得到原因
+  gh_t_log run view ${RARGS[@]+"${RARGS[@]}"} "$RUN_ID" --log 2>/dev/null | grep -E -e "$EVIDENCE" -e '^\[watch\] gh-throttle:' | head -40
 fi
 
 if [[ "$CONCLUSION" != "success" ]]; then
@@ -429,7 +472,7 @@ if [[ "$CONCLUSION" != "success" ]]; then
   if [[ -n "$HEAD_BRANCH" ]] && ! git rev-parse --verify --quiet "refs/tags/$HEAD_BRANCH" >/dev/null 2>&1; then
     LG_ARGS+=(-b "$HEAD_BRANCH")
   fi
-  LAST_GREEN=$(gh run list ${RARGS[@]+"${RARGS[@]}"} "${LG_ARGS[@]}" \
+  LAST_GREEN=$(gh_t run list ${RARGS[@]+"${RARGS[@]}"} "${LG_ARGS[@]}" \
     --json headSha,createdAt,url --jq '.[0] | select(.) | [.headSha, .createdAt, .url] | @tsv' 2>/dev/null || true)
   if [[ -n "$LAST_GREEN" ]]; then
     IFS=$'\t' read -r LG_SHA LG_AT LG_URL <<<"$LAST_GREEN"
@@ -439,7 +482,7 @@ if [[ "$CONCLUSION" != "success" ]]; then
     echo "LAST_GREEN: unknown（gh 查無 success run，或查詢失敗）"
   fi
   echo "--- failed logs (first 200 lines) ---"
-  gh run view ${RARGS[@]+"${RARGS[@]}"} "$RUN_ID" --log-failed 2>/dev/null | head -200
+  gh_t_log run view ${RARGS[@]+"${RARGS[@]}"} "$RUN_ID" --log-failed 2>/dev/null | head -200
 fi
 echo "=== END ==="
 

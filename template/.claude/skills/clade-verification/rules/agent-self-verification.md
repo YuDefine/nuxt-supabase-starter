@@ -1,6 +1,6 @@
 <!-- Clade native rule; source: rules/core/agent-self-verification.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 ## Runtime adapter boundary
 
@@ -8,9 +8,9 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 
 # Agent Self-Verification
 
-**核心命題**：agent 完成 evidence 收集是**預設職責**，**禁止**把可自動化的驗證（dev login / 截圖 / API round-trip / test / DB query）踢回 user。User handoff 是**最後手段** — 必須主線跑完已知 fallback chain 仍失敗才行。
+**核心命題**：agent 完成 evidence 收集是**預設職責**，可自動化的驗證（dev login / 截圖 / API round-trip / test / DB query）**禁止**踢回 user；handoff 判準（Iron Law）以 [[agent-routing]] § 停下來要人做之前 為準，本檔只管 verify-channel 的 fallback chain。
 
-此規則優先於個別 skill 內嵌的「請 user 確認」捷徑指示；every session always-load。
+此規則優先於個別 skill 內嵌的「請 user 確認」捷徑指示；由 `clade-verification` skill 的 READ 載入（測試、review、收 evidence、宣稱完成時）。
 
 ## Browser 載體邊界
 
@@ -26,7 +26,7 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 
 **結論形式是「沒有 X」時，要先對量測工具做一次陽性對照**——用一個**已知存在**的目標跑**同一條指令**，確認它回得出非空。**回空就是工具壞了，不是「沒有 X」。** 對照沒跑，那個「沒有」不是證據，不要拿它當任何動作的前提（起 publish、判 lane 空、判沒人在跑、判無違規）。
 
-這條排在所有具名處方（`find -L`、比對 `exe` 不比對 `comm` 等）之前：它不要求事先知道那個坑。「指令跑完、沒報錯、回空」與工具壞掉在 stdout 上完全同形。
+這條排在所有具名處方（`find -L`、比對 `exe` 不比對 `comm` 等）之前：它不要求事先知道那個坑。「指令跑完、沒報錯、回空」與工具壞掉在 stdout 上完全同形。結論裡 MUST 寫出「此 pattern 對 `<已知樣本>` 命中」，寫不出來零命中就不是證據；不要把「我 grep 過了」當成 absence 的證明（pattern 寫錯、資料形狀誤判、假設偷偷收窄範圍，輸出都是零命中）。有 structured output（`--json` / `--format json`）時優先用它取代文字 grep；更前一步先問「有沒有不需要數的判準」。（per [[pitfall-narrow-grep-absence-treated-as-proof]]）
 
 **誠實邊界**：陽性對照證的是**工具活著**，不是 **pattern 寫對**——它擋不住「工具對目標 A 有效、對目標 B 無效」。不要把對照通過讀成「這次的查詢是對的」。
 
@@ -59,7 +59,7 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 
 ### NEVER
 
-對下列場景**禁止**直接 handoff user（真需 user 親手做的，例如真機刷卡，標 `(deferred-user-only: <reason>)`；`flow` 的 decision source 與 work-loop ready count 讀這個標記）：
+對下列場景**禁止**直接 handoff user（真需 user 親手做的，例如真機刷卡，標 `(deferred-user-only: <reason>)`；`flow` 的 decision source 與 coordinator 就緒池讀這個標記）：
 
 > **場景 1–3（缺 session cookie／缺 visual evidence／撞 baseline functional gap）的處置路徑全文在
 > [[agent-self-verification.screenshot-evidence]] § NEVER — 禁止直接 handoff user 的三個
@@ -100,27 +100,11 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 > | 9 | change 改動 `.vue` / `.tsx` / `.jsx` / `.css` / `.scss` 後該 change **全部** UI 截圖視為 stale，要全部重拍（mtime 早於本 change UI 檔 mtime 的截圖逐張核對，無機械 audit） |
 > | 15 | 收尾前要跑 `flow plan check-close <work_id>` 取得 exit 0，不要逐項查過就當齊全，不要為了變綠改 checkbox 或 feature 檔 |
 
-11. **Negative search 不成立為證據（hard rule）**：下「零命中 / 不存在 / 只有 N 個」的結論前，要先用一個已知會命中的樣本驗過 pattern（known-positive control），並在結論裡寫出「此 pattern 對 `<已知樣本>` 命中」——寫不出來，零命中就不是證據。不要把「我 grep 過了」當成 absence 的證明：pattern 寫錯、資料形狀誤判、假設偷偷收窄範圍，輸出都是零命中。有 structured output（`--json` / `--format json`）時優先用它取代文字 grep；更前一步是先問「有沒有不需要數的判準」（例：gate 已設 `severity: CRITICAL,HIGH`，則輸出的每一條依定義都是 HIGH，根本不必數）。（per [[pitfall-narrow-grep-absence-treated-as-proof]]）
+11. **Negative search 不成立為證據（hard rule）**：總則見上方 § 否定命題 MUST 先做陽性對照（零命中前先過 known-positive control）。
 
     **時間窗查詢**（`docker logs` / `docker events` / `journalctl` 的 `--since` / `--until`）裸 wall clock 以主機本地時區解讀。每次要：(a) 先用寬鬆窗撈一筆 known-positive control 再收窄；(b) 絕對時間帶時區後綴，寫不出就用相對時間（`--since 30m`）。（見 [[pitfall-docker-logs-absolute-time-parsed-as-host-local-timezone]]）
 
-17. **診斷型指令不要串接後截斷（hard rule）**：判準是**失敗訊息會不會被截掉**，不是輸出長不長。publish / audit / gate / lock acquire 這類「失敗時我要讀原因」的指令，要全量落檔再挑著看，前置檢查與主指令分開跑。
-
-    ```bash
-    # ❌ 錯誤在頭、stack 在尾；pipeline exit 屬於 tail（幾乎恆 0）；前面的 ✓ 漂進同一視窗
-    node scripts/_validate-manifests.ts && node scripts/publish.ts patch 2>&1 | tail -5
-
-    # ✅ 全量落檔；exit code 是主指令自己的
-    node scripts/publish.ts patch > /tmp/pub.log 2>&1; echo "exit=$?"; tail -6 /tmp/pub.log
-    ```
-
-    | 讀到自己在想 | 現實 |
-    | --- | --- |
-    | 「輸出太長，tail 一下」 | 錯誤訊息在頭，tail 正好丟掉要讀的那段 |
-    | 「反正有 ✓ 就是過了」 | ✓ 可能是 `&&` 前面那條印的 |
-    | 「exit 0 就是成功」 | `cmd \| tail` 的 exit 屬於 tail |
-
-    **Red Flag**：正要把 publish / audit / gate 接到 `\| tail` / `\| head`，或用 `&&` 把前置檢查和主指令串成一行再截斷。純查詢（`git log \| head -5`）不在本條。副作用指令被 `head` 腰斬是另一條，見 MUST 4 與 [[pitfall-sigpipe-truncates-side-effecting-script]]。（per [[pitfall-chained-command-tail-truncation-hides-failure]]／[[TD-461]]）
+17. **診斷型指令不要串接後截斷（hard rule）**：已併入 MUST 22（全量落檔、不進 pipeline；編號保留）。
 
 18. **拿計數 / 探針當證據前要過三條前提（hard rule）**：MUST 11 管零命中，本條管**非零**的那一半——
     數字印出來、exit 0、量級合理，量的卻不是命題問的東西。**每一次**把數字寫進結論、`### 自驗`、
@@ -133,8 +117,7 @@ The obligations, predicates, evidence schema, failure handling, and review timin
     - **(b) 判定單位要與命題單位同級。** 命題問「幾**處**」時，`rg -l` / `comm` 這類以整個檔為
       單位的指令只能當粗篩，判準要用逐 occurrence 的 `rg -o` 或直接跑 test。
 
-    - **(c) 探針寫進 `### 自驗` 之前要先跑一次 control**：餵一個已知非空的輸入確認印得出結果，
-      再量預期為 0 的那一次；壞探針與真陰性同為 exit 0、stdout 空。不要憑記憶推論某 flag
+    - **(c) 探針寫進 `### 自驗` 之前要先跑一次 control**（原則同 § 否定命題）。不要憑記憶推論某 flag
       會不會被 shell wrapper 吃掉——改寫是形狀相依的。
 
     | 讀到自己在想 | 現實 |
@@ -157,7 +140,7 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 
     展示層 wrapper 不只省略還會替換（被測命令沒執行，卻印出像是命令錯誤的訊息與自己的 exit code），
     且對不同命令形狀表現不同，不要靠「上次用它沒問題」推論。沒有 hook 會攔這一條。
-    MUST 17 管截斷、本條管替換。實證見 [[TD-1059]] 與 [[agent-self-verification.structural-and-exit-evidence]]。
+    MUST 22（含併入的 17）管截斷與歸屬、本條管替換。實證見 [[TD-1059]] 與 [[agent-self-verification.structural-and-exit-evidence]]。
 
 21. **檢查的判讀要由檢查結果產生（hard rule）**：為警告或攔截寫驗證指令時，結論字串（「安全」「乾淨」
     「沒人在寫」）要只在檢查結果成立時才出現——讓非預期結果自己非零退出、擋下後續動作，或只印
@@ -165,12 +148,12 @@ The obligations, predicates, evidence schema, failure handling, and review timin
     而它印在證據下面，是讀者最後讀到的一行。
 
     ```bash
-    # ❌ 結論寫死：上一行印出 ` M docs/tech-debt.md`，最後一行仍是 (empty=safe)，寫入照跑
-    git status --porcelain docs/tech-debt.md; echo "(empty=safe)"; python3 - <<'EOF' …
+    # ❌ 結論寫死：上一行印出 ` M ROADMAP.md`，最後一行仍是 (empty=safe)，寫入照跑
+    git status --porcelain ROADMAP.md; echo "(empty=safe)"; python3 - <<'EOF' …
     # ❌ 同形：`git status --porcelain` 不論 dirty 與否都回 0，接 `&&`／`||` 的結論一樣無條件
     git status --porcelain HANDOFF.md || echo "(clean)"
     # ✅ 非預期結果自己擋下寫入；git 本身失敗另有分支（空輸出不等於乾淨）
-    st=$(git status --porcelain -- docs/tech-debt.md) || exit 2; [ -z "$st" ] || { echo "OCCUPIED: $st"; exit 1; }; python3 - <<'EOF' …
+    st=$(git status --porcelain -- ROADMAP.md) || exit 2; [ -z "$st" ] || { echo "OCCUPIED: $st"; exit 1; }; python3 - <<'EOF' …
     ```
 
     把 `(empty=safe)` 換成更精確的措辭也沒用——問題不在措辭，換一句更準的話仍然無條件印出。
@@ -187,9 +170,9 @@ The obligations, predicates, evidence schema, failure handling, and review timin
     ```
 
     `${PIPESTATUS[0]}` 是次選——它要求記得在**下一行立刻取**，比「不要進 pipeline」多一個失效點。
-    本條是 MUST 17 的無限定版：17 管「失敗訊息會不會被截掉」，本條管「exit code 歸屬」，typecheck、
-    `git push --dry-run`、稽核這類不在 17 射程內的載體一律由本條接。
-    （per [[pitfall-pipeline-exit-code-attributed-to-wrong-command]]／[[TD-707]]）
+
+    **MUST 17 併入於此（截斷）**：判準是**失敗訊息會不會被截掉**，不是輸出長不長。publish / audit / gate / lock acquire 這類「失敗時我要讀原因」的指令，全量落檔再挑著看（`tail -6 "$log"`），前置檢查與主指令分開跑——`a && b 2>&1 | tail -5` 的錯誤在頭、stack 在尾，tail 丟掉要讀的那段，前面的 ✓ 還可能是 `&&` 前面那條印的。**Red Flag**：正要把 publish / audit / gate 接到 `| tail` / `| head`，或用 `&&` 串前置檢查再截斷。純查詢（`git log | head -5`）不在本條；副作用指令被 `head` 腰斬見 MUST 4 與 [[pitfall-sigpipe-truncates-side-effecting-script]]。
+    （per [[pitfall-pipeline-exit-code-attributed-to-wrong-command]]／[[TD-707]]／[[pitfall-chained-command-tail-truncation-hides-failure]]／[[TD-461]]）
 
 23. **改動注入子行程環境變數時 MUST 帶該變數重跑測試（hard rule）**：判準是**環境的出生時間 vs
     改動的落地時間**——測試 env／fixture env 早於那行注入改動建立時，跑綠**不算數**。

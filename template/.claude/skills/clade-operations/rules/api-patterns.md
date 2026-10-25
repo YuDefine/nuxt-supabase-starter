@@ -3,7 +3,7 @@ description: Server API 設計規範
 paths: ["server/api/**/*.ts", "packages/*/server/api/**/*.ts"]
 ---
 <!-- Clade native rule; source: rules/modules/runtime/cf-workers/api-patterns.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # API Patterns
 
@@ -31,11 +31,14 @@ Reference: `docs/api/API_DESIGN_GUIDE.md` — 完整 API 設計指南含進階�
 
 - **Object-level authorization（BOLA / IDOR）**：**MUST** 對 request 帶的每個 resource id（`:id`、body 內 `targetId` 等）驗證當前使用者有權存取**該筆** row（ownership / tenant / role scope），**NEVER** 只因為 id 存在就回傳 / 修改。做法：scope 條件放進 WHERE（`.eq('tenant_id', user.tenantId)` / `.eq('owner_id', user.id)`），或先 fetch 再比對。
 - **Property-level authorization（BOPLA / mass assignment）**：**MUST** 用明確的欄位 allowlist 決定可讀 / 可寫欄位，**NEVER** 把 `readBody()` 整包 spread 進 `.update()` / `.insert()`。做法：Zod `.pick()` 或手動列欄位，防止偷塞 `role` / `is_admin` / `tenant_id` / `price` / `status`，也防止 response over-exposure。
+  - **讀取方向同樣要 allowlist**：**每一個**回傳 resource row 的 endpoint（列表與單筆都算）**MUST** 在回應前依該 resource（必要時依角色）的可讀欄位 allowlist 剝除其餘欄位；response schema `parse()` 管形狀，allowlist 管「這個呼叫者能看哪些欄」，兩者並存，**NEVER** 以其中一個代替另一個。只在單筆 endpoint 剝、列表 endpoint 整包回傳，等於 allowlist 不存在。
+- **「公開」只放行讀取方法**：resource 或 route 的 public／anonymous 旗標 **MUST** 只讓 `GET`／`HEAD` 跳過認證；`POST`／`PUT`／`PATCH`／`DELETE` 不論旗標為何都 **MUST** 要求 session 或 API token。共用的 auth helper 若先檢查 public 旗標就 `return`，**MUST** 同時判斷 HTTP method——「這個 resource 是公開的」只代表任何人能讀，**NEVER** 代表任何人能改或刪。
 
 ### Input-shape 層
 
 - **Request body size limit**：**MUST** 設上限（Nitro `routeRules` maxBodySize 或檢查 `content-length`）；大檔走 Storage signed upload（見 `db-runtime/*/database.md`）。
 - **Zod 驗證所有輸入** — schema 同時是 input-shape gate 與 BOPLA allowlist。
+- **列表筆數 MUST 由 server 夾住**：**每一個**列表 endpoint 的 `limit`／`pageSize` **MUST** 在 server 端有預設值與上限（Zod `.default(50).max(200)` 這一級；數字依資源訂，但兩個都要有），內部查詢（event store、log 查詢）同樣夾。**NEVER** 讓「沒帶參數」等於不設上限。
 
 ### Abuse-control 層
 
@@ -90,7 +93,7 @@ Workers 專屬：CPU 30 秒上限（長任務改 Queue / Cron Trigger）、記�
 
 ## Mutation 語意完整性
 
-本節管「**請求成功了，但沒做到使用者以為的事**」——三條都不 throw、前端收到 2xx 顯示已儲存，實際狀態與畫面分歧。
+本節管「**請求成功了，但沒做到使用者以為的事**」——四條都不 throw、前端收到 2xx 顯示已儲存，實際狀態與畫面分歧。
 
 ### Partial update NEVER 用 truthy 判斷欄位有沒有提供
 
@@ -120,6 +123,21 @@ const q = await getValidatedQuery(event, z.object({ status: z.string().optional(
 
 前端的 `max` / `min` / `disabled` / 日期範圍 **NEVER** 構成 gate。**每一條**寫進產品規格的業務上限（試用天數、方案額度、單筆數量上限、有效期限、可選日期範圍）都 **MUST** 在 server handler 內驗證，最短落點是 Zod（`z.number().int().max(N)`、`z.coerce.date().refine(...)`）。**NEVER** 只寫在前端 composable。字串長度見 `framework/nuxt/nuxt-form-validation.md` § maxlength。
 
+### 批次匯入 MUST 逐列回報結果
+
+**每一個**批次匯入 endpoint 都 **MUST**：
+
+- 用 Zod 限定筆數下限與上限（`z.array(row).min(1).max(1000)` 這一級；上限依資源訂）
+- 逐列驗證、逐列寫入或逐列判定，一列失敗不讓整批靜默消失
+- 回應帶 `{ imported, skipped, errors: [{ row, message }] }`，`imported + skipped` **MUST** 等於送入筆數，每一個被跳過的列都在 `errors` 裡有一筆
+- `message` **MUST** 是使用者看得懂的句子（「第 12 列：email 已存在」），**NEVER** 回原始 `err.message`——那會洩漏 constraint 名、欄位名與 SQL 片段
+
+```ts
+// ❌ 回 200 + { ok: true }，跳過幾列、為什麼跳過都看不到
+// ✅
+return { data: { imported: 98, skipped: 2, errors: [{ row: 12, message: '第 12 列：email 已存在' }, { row: 40, message: '第 40 列：缺少名稱' }] } }
+```
+
 ### 稽核
 
 ```bash
@@ -130,7 +148,7 @@ node scripts/audit-mutation-semantics.ts    # warn-only
 
 **消費端**：clade 主線 fleet 稽核（`pnpm audit:manual`）、consumer 主線由本檔 `paths` gate 載入後自行對照。
 
-它只量得到前兩條的形狀，**第三條本 script 零訊號**，**NEVER** 把回 0 讀成三條都遵守了。
+它只量得到前兩條的形狀，**第三、四條本 script 零訊號**，**NEVER** 把回 0 讀成四條都遵守了。
 
 ## Audit Logs
 
@@ -146,6 +164,8 @@ Runtime module 不重複定義 schema；session agent 從 `db-schema/<variant>/a
 ## Idempotency 與 Retry
 
 需要冪等保證：金額 / 扣庫存 / 送通知等副作用不可重複的操作、外部系統整合（付款、email、webhook）、批次匯入（按兩下）。實作：(1) unique constraint + `ON CONFLICT`（最簡單）；(2) client 傳 `idempotency_key`（UUID），server 驗證去重；(3) 同 user + 同 action 短時間去重。
+
+**檔案上傳＋DB 寫入沒有共同 transaction**：handler 要先上傳物件、再寫 DB 時，**MUST** 把本次每一個已上傳的物件 key 收進 cleanup 清單；DB 寫入丟錯**或回傳空結果**（0 rows、`null`、沒有 `RETURNING` 列）都 **MUST** 刪掉清單內的物件再回錯誤，刪除本身失敗只 log、不蓋掉原錯誤。**NEVER** 只在 throw 路徑清、漏掉「沒丟錯但沒寫進去」的路徑。Supabase Storage 的順序與範例見 `db-runtime/cf-workers/storage.md` § 上傳失敗的 Rollback。
 
 | 錯誤類型 | 可 retry？ | 做法 |
 | --- | --- | --- |

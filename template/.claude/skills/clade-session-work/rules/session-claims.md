@@ -3,8 +3,8 @@ description: 多 session 並行下「哪些路徑屬於別 session 還活著的�
 paths: ['.clade/claims/**', 'HANDOFF.md', 'capabilities/core/hooks/pre-bash-ownership-stamp.sh', 'scripts/claim-helper.ts', 'vendor/scripts/claim-helper.ts', 'vendor/scripts/ownership-journal.ts', 'vendor/scripts/flow/who.ts', '.clade/ownership/**', 'capabilities/core/hooks/post-tool-ownership-journal.sh', 'capabilities/core/hooks/pre-edit-claim-conflict.sh']
 ---
 <!-- Clade native rule; source: rules/core/session-claims.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 # Session Claims
 
@@ -17,13 +17,14 @@ paths: ['.clade/claims/**', 'HANDOFF.md', 'capabilities/core/hooks/pre-bash-owne
 ```json
 {
   "session_id": "...",
-  "agent": "claude-code|codex",
+  "agent": "claude-code",
   "started_at": "<iso>",
   "consumer": "<consumer-id>",
   "worktree_path": "/Users/.../<consumer>-wt/<slug>",
   "branch": "session/<date>-<slug>",
   "change_id": "<slug>",
   "expected_paths": ["server/api/foo/**", "layers/bar/**"],
+  "task_summary": "<一句話：這個 session 在做什麼；沒寫為 null>",
   "work_id": "W-2026-08-29-<slug>",
   "last_heartbeat": "<iso>",
   "expires_at": "<iso, started+24h>"
@@ -32,6 +33,7 @@ paths: ['.clade/claims/**', 'HANDOFF.md', 'capabilities/core/hooks/pre-bash-owne
 
 - `session_id` 純 ID（由 `claim-helper.ts` 生成；含 timestamp + random + hostname 片段）
 - `expected_paths` 是這個 session 預期會碰的檔案 glob（可空，越精確越好）。**實務上幾乎恆為 `[]`** —— 所以讀 claim 的那一側 **MUST** 走 § 3.3 的導出值，**NEVER** 只讀這個欄位就下「這棵樹沒碰任何檔」的結論
+- `task_summary` 是這個 session 在做什麼的一句話（`claim-helper.ts` 的 `--task-summary`；沒給為 `null`）。除了 `claim-helper` 自己的列表輸出，任務進度條（`vendor/scripts/lib/taskbar/claims.ts`）也讀它當列標題；沒寫時標題退回 `change_id`、registry 名稱、session id。讀側 **NEVER** 把它當必填
 - `work_id` 是這個 session 正在執行的 flow work item。由 `writeClaim()` 從 ambient `CLADE_WORK_ID` 自動帶入 —— **NEVER** 改成要每個呼叫端記得傳：`expected_paths` 就是那樣變成全空的。舊 claim 沒有這個欄位是正常態，讀側 **NEVER** 把它當必填
 - `expires_at` = `last_heartbeat + 24h`；過期 claim 視為失活，prune 階段會自動刪
 
@@ -46,6 +48,8 @@ paths: ['.clade/claims/**', 'HANDOFF.md', 'capabilities/core/hooks/pre-bash-owne
 | **每次 Edit / Write 寫檔**（throttle ≥5 分鐘） | refresh `last_heartbeat` + `expires_at` | PostToolUse hook `post-tool-ownership-journal.sh` |
 | `wt-helper cleanup <slug>` | drop claim | `wt-helper.ts` |
 | merge-back 的來源 lifecycle | 只有實際 cleanup 成功才 drop；squash／staging 成功不證明來源已回收 | `wt-helper.ts` 的 cleanup receipt |
+| 派工 holder 終局：`--complete success\|failed\|unknown`（不帶 followup brief）、`--reclaim` 關掉 pane | 對 holder 的樹跑 `releaseTreeClaim`：別的 session 的行程仍站在樹內（`alive`）就保留，其餘 drop。`--reclaim` 的呼叫端是 opener 不是 holder，不帶 self 身分（opener 站在樹內也算 `alive`）；relay 前任 stub 的回收不釋放（successor 接手同一棵樹） | `herdr-session-handoff.ts` |
+| 存量盤點 | `claim-helper.ts reap` 預設 dry-run；`--apply` 只 drop 樹已不在或 holder `dead` 的 claim，無 `worktree_path`、herdr 查不到 pane、`unknown`／`alive`／`self` 一律保留 | 手動 |
 | 過期超過 24h | prune | `claim-helper.ts prune`（手動 / cron） |
 
 **heartbeat 的寫者 MUST 是 hook，NEVER 是 model**（SessionStart 只證明開過，PostToolUse 才證明還在推進；由 model 記得 refresh 的欄位不會被維護）。
@@ -99,7 +103,7 @@ node scripts/claim-helper.ts add --change-id main-session-wip \
 
 **任一訊號說活著就是 `other-live`**；兩個都說死才是 `orphan`；其餘全部 `unknown`（hook 是 fail-open，單靠證據缺席會把「hook 壞了」誤讀成「全員陣亡」）。
 
-- **NEVER** 拿「unknown 太多、gate 太吵」當理由改成單訊號判死或放寬 `unknown` 的禁令；也 **NEVER** 為了湊出 `orphan` 偽造 session 清單（它是參數不是環境變數）。Bash / Codex / 人手寫的檔常駐在 `unknown`
+- **NEVER** 拿「unknown 太多、gate 太吵」當理由改成單訊號判死或放寬 `unknown` 的禁令；也 **NEVER** 為了湊出 `orphan` 偽造 session 清單（它是參數不是環境變數）。Bash / 人手寫的檔常駐在 `unknown`
 - **session presence 比對的是 session id，NEVER 是 pane**（pane 會被下一棒接手）
 
 ### 3.3 `expected_paths` 由 journal 導出
@@ -161,6 +165,10 @@ node scripts/claim-helper.ts add --change-id main-session-wip \
 
 **NEVER 用「提高召回」當理由把 `mtime-diff` 收進來**——實測它大多歸錯 session；要改善召回就修上游（讓 Bash 寫入說得出路徑）。**NEVER 讓 hook 補 `permissionDecision`**（爭用的正解是兩個 session 談），也 **NEVER** 在命中時塞整段來源溯及。導出值一律不回寫（`test/claim-conflict-consumer.test.ts` 釘住）。
 
+**那一行是衝突當下唯一進 context 的規約**（clade home 不自動載入 `rules/core/`），所以它 MUST 自帶三件事：當活的處理並先告知使用者；Claude session 先 `SendMessage`、非 Claude 才 `herdr agent prompt`；判停用交 `claim-helper.ts reap`（它自己跑 § 3.1 兩訊號判死、預設只列），**NEVER** 在文案印 `drop <session-id>`——claim 的 id 是 `genSessionId()` 生的，與 `herdr agent list` 的 harness session id 不同 namespace，照它手查一定查不到、會把 session 訊號誤讀成缺席。**NEVER** 把 `drop` 寫成與協商並列的選項——2026-10-19 有 session 照舊文案只憑「pane 不在 `herdr pane list`」單一訊號判死並 drop 別人的 claim，也沒先告知使用者。文案裡的 pane 取自 journal 寫入當下的 `HERDR_PANE_ID`，session 換過 pane 後會過期，只能當 fallback 地址。
+
+已知誤報：自我排除只認 worktree（claim 與 harness 的 session id 不同 namespace），同一個 session 先後在兩棵樹寫入時，自己在 A 樹的 `derived-hook` 會在 B 樹被當成別人的 claim 警告。偵測：`jq -r 'select(.attribution=="hook")|[.session_id,.worktree]|@tsv' .clade/ownership/journal.jsonl | sort -u | cut -f1 | uniq -d`（同一 session id 出現在 ≥2 棵樹）。修法候選見 plan `W-2026-10-19-claim-conflict-hint-two-signal` Open work。
+
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 目標路徑落在別人活 claim 的 `declared` 或 `derived-hook` 範圍內 → 遞一行（最多 3 行）。**warn-only，NEVER block** |
@@ -214,6 +222,8 @@ node scripts/claim-helper.ts refresh <session-id>
 node scripts/claim-helper.ts refresh-by-cwd     # 由 SessionStart hook 跑
 node scripts/claim-helper.ts drop <session-id>
 node scripts/claim-helper.ts prune              # 清過期
+node scripts/claim-helper.ts reap [--apply] [--json] [--herdr-bin <path>]
+                                                # 存量盤點（預設 dry-run）；判準見 § 2 drop 時機表
 node scripts/claim-helper.ts conflicts <repo-relative-path> [--worktree <abs>] [--json]
                                                 # 動筆前的一路徑查詢（§ 3.4）。exit 3 = 有衝突，
                                                 # 0 = 沒有。3 而不是 1：查詢失敗與查到衝突

@@ -28,45 +28,56 @@ main 有 3 個 dirty 檔，不確定是誰的。
 → 先全部帶過去比較安全：`wt-helper add fix-auth ... --include-unrelated-dirty`
 ```
 
-# Rule 2 - 送出 `wt-helper add` 前依 main 狀態走三路分流
+# Rule 2 - 送出 `wt-helper add` 前依 `recommended_strategy` 分流
 
 - Level: `MUST`
-- 先以 `wt-helper detect-main-dirty --json`（或 `add` 帶 `--precheck-baseline`，helper 會在 fork 前跑同一個偵測）看 main working tree（modified／untracked／unmerged），主線依偵測結果與呼叫端是否交來 carrier 決定策略。**不帶 `--precheck-baseline` 的 `add` 不做任何偵測**，main 有 unmerged 時 MUST 帶上它：
-  - **Unmerged 非空** → helper 跑 `classifyUnmergedSafety` 再分：
-    - **Safe-resolvable**（檔內無 conflict markers，且沒有 merge／rebase／cherry-pick 進行中的狀態）→ helper 自動 `git add <paths>` 標 resolved 後繼續。stale UU 只是 index 殘留，沒有資料風險。
-    - **Unsafe**（上述任一條件命中）→ **STOP**，拒絕 fork，逐條列出 unsafe path 與原因。**NEVER** 自動處理真衝突或中段 merge——任何動作都可能丟資料。
-    - Unmerged 不一律 STOP 的理由：helper 的兩條 safety check 對 stale UU 的誤判極低，對真衝突仍是 fail-safe。
-  - **Clean** → 直接 fork。
-  - **Dirty 非空** → 預設不帶（Rule 1）：不帶 baseline 旗標，或帶 `--precheck-baseline --baseline-strategy stash`（不加 `--include-unrelated-dirty`，main 原封不動，另外多做 unmerged 與別 session claim 檢查——後者命中會 STOP）。確實要帶時依呼叫端路徑三選一：
-    - **有 carrier 的工作**（`tasks/<date>-<slug>.md` 或 `specs/plans/<work-id>/`）→ **commit-then-fork**：主線從 carrier 的 scope 段與已知影響面萃取 scope-in 路徑，確認實作 checkout，帶 `--task-summary "<一句話>" --precheck-baseline <slug> --baseline-strategy commit --baseline-scope-paths <comma>`。helper 只 stage scope-in 路徑、在 main 提交 `baseline: <slug> pre-fork sync` 後再 fork；scope-out（跨 session WIP）留在 main 不動。
-    - **無 change context、但要帶其中幾條 WIP 的 ad-hoc 任務** → 同樣走 **commit-then-fork**，`--baseline-scope-paths` 只列要帶的那幾條（`git stash -u` 會無視 pathspec，stash 沒有安全的 scoped 版本，helper 會拒絕 `stash`＋scope-paths）。
-    - **main 上全部 dirty 確實都屬於這次 fork** → **bulk stash-apply**：帶 `--precheck-baseline --baseline-strategy stash --include-unrelated-dirty`（語意與回報義務見 Rule 5）。helper 在 main 跑 `git stash push -u -m wt-baseline/<slug>/<ISO>`，fork 後在新樹 `git stash apply`，再把 stash sha **pin 到永久 ref `refs/wt-baseline/<slug>/<ISO>`**，最後 `git stash drop`（物件仍可達）。pin 防止 cleanup 後 baseline 永久消失，可用 `wt-helper rescue` 列出救回。
-    - **Ambiguous**（scope-in 為空但 scope-out 非空，或 carrier scope、影響面、dirty 清單三個來源都對不上）→ **STOP**，回使用者拍策略。**NEVER** 主線自己猜。
+- 先決定要不要帶 main WIP（Rule 1：預設不帶）。要帶時，主線從 carrier（`tasks/<date>-<slug>.md` 或 `specs/plans/<work-id>/`）的 scope 段與已知影響面萃取 scope-in 路徑（Rule 3）；ad-hoc 任務只列要帶的那幾條。
+- 跑 `wt-helper detect-main-dirty --json [--baseline-scope-paths <comma>]`，讀 `recommended_strategy` 分流。不帶 WIP 就不給 `--baseline-scope-paths`。判定由 helper 的 `recommendBaselineStrategy` 算，本表只把代碼對到動作。
+
+評估：first-match；以上皆非 → F*
+
+| id | predicate | 動作 |
+| --- | --- | --- |
+| F1 | 使用者原話說 main 上全部 dirty 都屬於這次 fork | bulk stash：`--precheck-baseline --baseline-strategy stash --include-unrelated-dirty` [^F1] |
+| F2 | `recommended_strategy=stop-unsafe` | STOP，逐條列 helper 印的 `unsafe` path 與原因 [^F2] |
+| F7 | `recommended_strategy=stop-other-session` | STOP，逐條列 helper 印的 `other_session` path；等該 session 落地或協調後重跑。claim 確定 stale 才 `claim-helper.ts drop <session-id>` [^F7] |
+| F3 | `recommended_strategy=auto-resolve-fork` | `add` 帶 `--precheck-baseline --baseline-strategy <baseline_strategy>`（`commit` 時再帶同一組 `--baseline-scope-paths`），helper 自動標 resolved 後 fork [^F3] |
+| F4 | `recommended_strategy=fork-clean` | `wt-helper add`，不帶 baseline flag |
+| F5 | `recommended_strategy=commit-scope` | `--precheck-baseline <slug> --baseline-strategy commit --baseline-scope-paths <comma>` [^F5] |
+| F6 | `recommended_strategy=ambiguous` | STOP，回使用者拍策略 |
+| F* | `unknown`、其他值、欄位缺、指令非 0 | STOP，回報 helper 原始輸出 |
+
+[^F1]: 判斷題，helper 不判；語意與回報義務見 Rule 4、Rule 5。helper 在 main 跑 `git stash push -u -m wt-baseline/<slug>/<ISO>`，fork 後在新樹 `git stash apply`，把 stash sha pin 到永久 ref `refs/wt-baseline/<slug>/<ISO>` 後 `git stash drop`，可用 `wt-helper rescue` 救回。
+[^F2]: 檔內有 conflict markers，或有 merge／rebase／cherry-pick 進行中。任何自動動作都可能丟資料，NEVER 自動處理真衝突或中段 merge。
+[^F7]: 只在要走 `--precheck-baseline` 的路（F3、F5）才判；`add` 在同一處會拒 fork，把別人的 WIP 混進新樹的 baseline 不可逆。
+[^F3]: stale UU 只是 index 殘留（檔內無 marker、無進行中的操作），沒有資料風險。不帶 `--precheck-baseline` 的 `add` 不做任何偵測。標 resolved 後那些路徑變成 modified，不帶 strategy 的 `add` 預設 `warn` 會拒；所以 helper 用 `baseline_strategy` 指出接著走哪條：`stash`＝不帶 WIP、乾淨 fork，`commit`＝照 `scope_in` 帶（同 F5）。
+[^F5]: helper 只 stage scope-in 路徑、在 main 提交 `baseline: <slug> pre-fork sync` 後再 fork；scope-out（跨 session WIP）留在 main 不動。`git stash -u` 會無視 pathspec，stash 沒有安全的 scoped 版本，helper 會拒絕 `stash`＋scope-paths。
+
 - 建立指令的完整參數讀 `wt-helper指令.md` § 建立；四種情境的完整 trace 與 scope filter 細節在 `~/offline/clade/vendor/snippets/worktree-baseline/`。
 
 ## Good Example
 
-- 這個例子是好的，因為它依 carrier 有無選策略，並在三來源對不上時停下。
+- 這個例子是好的，因為它照 helper 的代碼走，對不上時停下。
 
 ```md
-任務 A：有 `specs/plans/W-2026-10-01-auth/`，main dirty 中 2 條落在 scope-in。
-→ commit-then-fork，`--baseline-scope-paths server/auth/token.ts,server/auth/session.ts`
+任務 A：有 `specs/plans/W-2026-10-01-auth/`，`--baseline-scope-paths` 帶 carrier 影響面 → `recommended_strategy=commit-scope`（2 條落在 scope-in）。
+→ F5，`--baseline-scope-paths server/auth/token.ts,server/auth/session.ts`
 
 任務 B：ad-hoc，main dirty 有 1 條使用者剛手改、這次要用到的 config（另有 5 條無關）。
-→ commit-then-fork，`--baseline-scope-paths config/app.ts`，其餘 5 條留在 main；worker brief 的 Git baseline 段列出 fork 後樹內的狀態。
+→ 只帶 `config/app.ts` → `commit-scope` → F5，其餘 5 條留在 main；worker brief 的 Git baseline 段列出 fork 後樹內的狀態。
 
-任務 C：carrier scope 寫 `server/billing/**`，main dirty 卻全在 `app/pages/**`。
-→ Ambiguous，STOP，問使用者要不要帶、帶哪些。
+任務 C：carrier scope 寫 `server/billing/`，main dirty 卻全在 `app/pages/` → `recommended_strategy=ambiguous`。
+→ F6，STOP，問使用者要不要帶、帶哪些。
 ```
 
 ## Bad Example
 
-- 這個例子是壞的，因為 unmerged 有真衝突仍被「順手」處理，而且對不上的情況被主線自行判定。
+- 這個例子是壞的，因為 helper 已判 `stop-unsafe` 仍「順手」處理，`ambiguous` 又被主線自行判定。
 
 ```md
-main 有 UU 檔，檔內還有 `<<<<<<<`。
+`recommended_strategy=stop-unsafe`（UU 檔內還有 `<<<<<<<`）
 → 先 `git add` 標掉再 fork，反正 worktree 用不到。
-main dirty 和 carrier 對不上 → 猜應該是要帶的，全用 stash 帶過去。
+`recommended_strategy=ambiguous` → 猜應該是要帶的，全用 stash 帶過去。
 ```
 
 # Rule 3 - `--baseline-scope-paths` 必須對齊 carrier 列出的每一條 scope-in 路徑
@@ -120,8 +131,9 @@ carrier 影響面：server/auth/token.ts、server/auth/session.ts、test/auth/to
   } | sort -u | grep -vE '^(\.agents/|\.codex/|\.claude/|AGENTS\.md$|CLAUDE\.md$)'
 
   # 復原：先從 <ref> 取（2-parent 的 untracked 也在這裡）；3-parent 的 untracked 從 ^3 取
-  git checkout <ref> -- <paths>
-  git checkout <ref>^3 -- <paths>   # 只對 3-parent ref、且檔案是 untracked 時
+  # CLADE_ALLOW_WIP_RESTORE=1：wip-destructive-git hook 對「從明確 ref 還原」的逃生門，只認該段指令
+  CLADE_ALLOW_WIP_RESTORE=1 git checkout <ref> -- <paths>
+  CLADE_ALLOW_WIP_RESTORE=1 git checkout <ref>^3 -- <paths>   # 只對 3-parent ref、且檔案是 untracked 時
   ```
 
 ## Good Example
@@ -216,7 +228,7 @@ git status --short
   - 有來源 worktree 的每個 archive，**MUST** 在來源內完成 gates 與 bookkeeping；follow-up fix 同樣留在來源。
   - 正式批次從一開始就在隔離整合區 review；gate halt 時保留該整合區繼續修，**NEVER** 把 candidate 搬進 main。
   - 已在 main 完成的 solo bookkeeping 沿用原路徑；需要多步修正時先進隔離 worktree。
-- 本檔的 fork 判斷要把這個窗口算進去：看到 main 上有疑似 archive batch 的 dirty，先當成「別人的未落地成果」處理（Rule 2 的 Ambiguous），不要當無主 dirty 帶走。
+- 本檔的 fork 判斷要把這個窗口算進去：看到 main 上有疑似 archive batch 的 dirty，先當成「別人的未落地成果」處理（照 Rule 2 F6 停下），不要當無主 dirty 帶走。
 
 ## Good Example
 

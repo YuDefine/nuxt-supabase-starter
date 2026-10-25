@@ -10,8 +10,7 @@
 # 本 hook **只偵測、不修正**：permission mode 是啟動 flag，session 中途改不了；靜默升權
 # 也不該做。輸出走 stdout 注入 context，agent 讀到就主動告知 user 重開。
 #
-# 不報的情況（fail-open）：非 Herdr pane、work-loop runner child（刻意用 acceptEdits）、
-# 找不到 claude 祖先行程、/proc 與 ps 都讀不到祖先。
+# 不報的情況（fail-open）：非 Herdr pane、找不到 claude 祖先行程、/proc 與 ps 都讀不到祖先。
 
 set -uo pipefail
 
@@ -19,8 +18,6 @@ cat > /dev/null
 
 # 只在 Herdr pane 內判斷——pane 是 dispatch / relay 的落點，也是手打 claude 的地方。
 [ -n "${HERDR_PANE_ID:-}" ] || exit 0
-# work-loop runner child 刻意跑 acceptEdits，per runner.sh --permission-mode acceptEdits。
-[ "${WORK_LOOP_RUNNER_CHILD:-}" = "1" ] && exit 0
 if [ ! -r /proc/self/stat ] && ! command -v ps >/dev/null 2>&1; then
   exit 0
 fi

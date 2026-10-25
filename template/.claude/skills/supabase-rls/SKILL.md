@@ -14,56 +14,22 @@ INSERT + SELECT + UPDATE 三個 policy、`user_metadata` 不可用於授權判�
 只是認證不是授權。**遇到上述主題 MUST 讀官方 skill，本檔不是它的替代品。**
 
 自家的 policy 撰寫規範（GRANT 先於 RLS、`AS RESTRICTIVE` 疊加、`FORCE ROW LEVEL SECURITY`、
-JWT staleness）在 rule `db-schema/supabase/rls-policy.md`，那是 paths-gated 規約，改
+JWT staleness、service_role isolation）在 rule `db-schema/supabase/rls-policy.md`，那是 paths-gated 規約，改
 `supabase/migrations/**/*.sql` 時自動載入。
 
-## 核心原則
+# SOP
 
-### 使用 Helper 函式
+## Phase 1 -- 界定 policy 需求與分工
 
-建議建立 helper 函式取代直接查表：
+1. READ 讀取目標表、會讀寫它的角色、每個 operation（SELECT／INSERT／UPDATE／DELETE）的存取需求，以及這張表由 client 直讀還是只由 server 讀；需求碰到上方導言列的通用陷阱時，讀取官方 `supabase` skill 對應段落。
+2. READ 讀取 module rule `db-schema/supabase/rls-policy.md`（改 `supabase/migrations/**/*.sql` 時已自動載入就不重讀）。
 
-```sql
--- ✅ 使用 helper
-your_schema.current_user_role()
-your_schema.current_user_id()
+## Phase 2 -- 撰寫 policy
 
--- ❌ 直接查表（效能差）
-SELECT role FROM your_schema.user_roles WHERE id = auth.uid()
-```
+1. READ 讀取 `rules/Policy自家慣例判準.md`。
+2. WRITE 讀取 `templates/rls-policies.md` 與 `templates/rls-policies.example.md`，在同一支 migration 中寫 ENABLE（FORCE 依 `rls-policy.md` 的條件）、GRANT 與每個 operation 的 policy。
 
-### RLS 開啟原則
+## Phase 3 -- 驗證
 
-```sql
-ALTER TABLE your_schema.new_table ENABLE ROW LEVEL SECURITY;
-ALTER TABLE your_schema.new_table FORCE ROW LEVEL SECURITY;
-```
-
-## 常見問題（自家專屬；通用陷阱見官方 skill）
-
-| 症狀                     | 原因                                    | 解法                                                        |
-| ------------------------ | --------------------------------------- | ----------------------------------------------------------- |
-| 查詢回傳空陣列           | RLS 未開放讀取                          | 檢查 SELECT policy 與對應 `GRANT`（見 `rls-policy.md`）      |
-| privileged 寫入被 RLS 擋 | 誤用 request-scoped user client         | 用專屬 factory 建 service_role client，見下方 § service_role |
-
-## service_role：NEVER 寫進 policy
-
-**NEVER** 在 policy 內加 `(SELECT auth.role()) = 'service_role'` 當 bypass 條件：`service_role`
-具備 `BYPASSRLS`，這個條件沒有保護作用，只會讓人誤以為 privileged write path 由 policy 控制
-（`auth.role()` 也已 deprecated，目標 role 用 `TO` 子句）。privileged 寫入的邊界靠 server-side
-isolation，見 rule `db-schema/supabase/rls-policy.md` § service_role 與 privileged client isolation。
-
-## 參考資料
-
-| 檔案                                               | 內容                   |
-| -------------------------------------------------- | ---------------------- |
-| [references/templates.md](references/templates.md) | Policy 模板 + 角色階層 |
-
-## 檢查清單
-
-- [ ] Policy 內**沒有** `service_role` bypass 條件（見上節）
-- [ ] 使用 helper 函式而非直接查表
-- [ ] INSERT/UPDATE/DELETE 都有對應 policy
-- [ ] 同一支 migration 有對應的 `GRANT`（RLS 在 table privilege 之後才評估）
-- [ ] `pnpm db:lint` 無警告
-- [ ] 官方 `supabase` skill 的 Security checklist 走過一遍（views / SECURITY DEFINER / storage / JWT）
+1. DELEGATE 跑 `pnpm db:lint`，輸出非空就修正後重跑。
+2. READ 走一遍官方 `supabase` skill 的 Security checklist（views／SECURITY DEFINER／storage／JWT），再逐條對照已載入規則；不符就回 Phase 2 修正。

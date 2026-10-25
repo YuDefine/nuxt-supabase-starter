@@ -4,10 +4,9 @@
 #
 # clade-projection-drift (pre-commit, staged) — 擋「staged 的 clade vendor 投影檔內容被本地改過」
 #
-# 擋的是 TD-582 那個失敗型態：consumer 端的人（或 agent）把 `scripts/audit-ux-drift.ts`
+# 擋的失敗型態：consumer 端的人（或 agent）把 `scripts/audit-ux-drift.ts`
 # 這類投影檔當自家檔案改、測、commit，下一次 propagate 用 checksum 判 drift 後直接覆寫回
-# 源檔版本 —— 沒有衝突、沒有警告，commit message 只寫「升級 clade 至 vX.Y.Z」。
-# 2026-08-22 實犯：一整輪 +863/-60 的修正（含 19 則回歸測試）在 40 分鐘後被 `-398` 靜默還原。
+# 源檔版本 —— 沒有衝突、沒有警告，commit message 只寫「升級 clade 至 vX.Y.Z」，整輪修正（含回歸測試）靜默消失。
 #
 # 判定範圍是**本次 staged 的投影檔**，NEVER 整倉 vendor drift：
 #   - PUBLIC repo（starter / <consumer-c>）在 sync-vendor 之後還會跑 consumer-sanitize

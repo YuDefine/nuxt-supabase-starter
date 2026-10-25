@@ -9,8 +9,8 @@ metadata:
   clade:
     invocation: explicit
 ---
-<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@bc8fdebe2d30db384f77911aaed81888ad03bf5f, modified by clade (added this banner and clade metadata lines) via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
-<!-- clade-targets: claude,codex -->
+<!-- LOCKED: mirrored from Waterball-Software-Academy/aixbdd@8f4dfa7c96aa2d64ed5866d02ee20a23e71c040d, modified by clade (added this banner and clade metadata lines) via scripts/sync-upstream-mirrors.ts — edit upstream, never here -->
+<!-- clade-targets: claude,agents -->
 > clade 覆寫：clade lifecycle repo（本次 plan package 的 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:`）或適用 canonical doctor 的 clade consumer：執行本 skill 前先讀 `work-route` skill 根下的 `rules/上游覆寫-lifecycle落點與doctor.md`，命中該檔判準的條目以該檔為準，未命中照本檔原文。
 
 # DSL Refine
@@ -22,7 +22,6 @@ metadata:
 ## Phase 1 -- 對齊 acceptance、系統介面與 feature truth
 
 1. READ 讀取使用者要求、目標 plan package 的 `features/acceptance/**`、`plan.md`、`truth-delta.md`、`specs/truth/techstack.md`、相關 UI plan，以及受影響介面的既有功能模組、feature、模組 DSL 與介面根共用 DSL。
-   - 命中 clade lifecycle repo 判準（本次 plan package 的 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:`）時，`plan.md` 是 lifecycle 檔：系統分析內容改讀同 package 的 `system-analysis.md`，本輪 truth delta 改讀 `plan.md` 的 `## Truth delta` 表，該 package 沒有 `truth-delta.md`。判準只看那兩個 frontmatter 鍵，NEVER 用 repo 名、manifest 或其他檔案存在與否推斷。
 2. THINK 從 `plan.md`、truth-delta 與現有 feature truth 辨識本次涉及的前端、後端或其他系統介面，以及各介面既有 feature/dsl 是否需要 ADD / MODIFY / DELETE。
 3. WRITE 向使用者回報本輪辨識出的介面、預計新增/修改/刪除的 truth feature files 與 DSL 範圍。
 

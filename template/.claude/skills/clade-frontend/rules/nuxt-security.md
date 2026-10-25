@@ -1,9 +1,9 @@
 ---
-description: nuxt-security 模組設定 baseline — CSP、headers、CSRF 共用值與 per-consumer 擴充規範
-paths: ['nuxt.config.ts']
+description: nuxt-security 模組設定 baseline — CSP、headers、CSRF 共用值與 per-consumer 擴充規範；設定對外 origin（auth callback、付款回呼）與寫 route middleware 時的信任邊界
+paths: ['nuxt.config.ts', 'app/middleware/**/*.ts', 'packages/*/app/middleware/**/*.ts']
 ---
 <!-- Clade native rule; source: rules/modules/framework/nuxt/nuxt-security.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Nuxt Security Baseline
 
@@ -99,6 +99,19 @@ routeRules: {
 - 加新 `/mcp/**` 或 `/api/auth/**` 路由前**MUST** 確認：要嘛 Bearer token、要嘛 GET-only 且不存取 session
 
 新增 webhook endpoint 時 **MUST** 對照 `server/api/webhooks/**`（及 `**/webhook.{post,get}.ts`）與 `nuxt.config.ts` 的 csurf 例外，對不上就必定 403；部署後 `curl -X POST` 驗收一次。
+
+## 對外 origin
+
+組對外絕對 URL（OAuth callback、付款回呼、信件內連結、better-auth `baseURL`／`trustedOrigins`）時：
+
+- origin **MUST** 取自設定（`runtimeConfig` 的 site URL 或等價 env）；production 沒設定就 throw，**NEVER** fallback 到 request
+- **NEVER** 從 `Host`、`X-Forwarded-Host` 或 `getRequestURL(event)` 推 origin——送一個偽造 Host 的請求，重設密碼信與 callback 就指向攻擊者的網域
+- dev 環境可以 fallback 到 `http://localhost:<port>`，條件寫成 `import.meta.dev`，不是「沒設定時」
+
+## Route middleware 與 server guard
+
+- `app/middleware/**` 只負責導頁（未登入導登入頁、權限不足導無權限頁），**NEVER** 當授權——直接打 API 不經過它。它擋的每一頁背後的 API **MUST** 有 server guard，偵測見 [[auth-data-path-consistency]] § 偵測
+- SSR 階段 route middleware 或 plugin 要打自家需 session 的 API 時，**MUST** 用 `useRequestFetch()`（或 `useFetch`）轉發 cookie；**NEVER** 在這裡直接 `$fetch`——SSR 的 `$fetch` 不帶使用者 cookie，server 端看到的是未登入，首屏閃登入頁或資料空白
 
 ## Cloudflare Web Analytics beacon
 

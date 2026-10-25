@@ -4,7 +4,7 @@ paths: ['**/*.test.*', '**/*.spec.*', 'vitest.config.*', 'playwright.config.*', 
 ---
 <!-- Clade native rule; source: rules/modules/capabilities/aixbdd/legacy-tests.md; edit canonical source -->
 
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # 舊測試收編（aixbdd consumer）
 

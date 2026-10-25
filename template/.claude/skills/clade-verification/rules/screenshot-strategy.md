@@ -3,8 +3,8 @@ description: Screenshot strategy 規則——根據互動深度、跨裝置、�
 paths: ['screenshots/**', 'tests/e2e/**', 'packages/*/tests/e2e/**', 'specs/plans/**/design-review.md']
 ---
 <!-- Clade native rule; source: rules/core/screenshot-strategy.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 ## Runtime adapter boundary
 

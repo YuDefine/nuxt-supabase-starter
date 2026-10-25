@@ -34,6 +34,19 @@
  *
  *   node .claude/scripts/0a-metrics.mjs summary [--repo /absolute/repo] [--last 20]
  *
+ * 作者回應四分類（findings 非 0 時 gates.md 規定 MUST 帶；沒帶仍收、stderr 警告；給了任一個就 MUST 把每則 finding 都分完）：
+ *   --fixed minor=2 --wrong major=1 --intentional info=1 --didnt-matter minor=1
+ *   值是 `<severity>=N` 以逗號串接（critical／major／minor／info，省略的 severity 為 0）。
+ *   每個 severity 的四類加總 MUST 等於該 severity 的 finding 數；Critical＋Major 的 `wrong` MUST ≥
+ *   有反證的 dismissal（dismissed − dismissed-unsubstantiated）。判定依據見 commit skill
+ *   gates.md § 0-A/B/C/D 並行匯合。沒給四類的列記 `responses: null`，與沒有這個欄位的
+ *   舊列一樣在 summary 標「未記錄」，NEVER 當成 0 算進比例。
+ *   - 觸發條件：informational — 不觸發任何東西
+ *   - 消費端：W-2026-10-18-review-quality-loop S4（Minor／Info 政策重評）讀 summary 的
+ *     依 severity 分布，判斷 reviewer 是報錯（wrong）還是報了沒價值的東西（didnt-matter）
+ *     ——分類記作者判斷不記處置，fixed 不等於實際修掉的件數
+ *   - 觸發點：commit skill gates.md § 0-A/B/C/D 並行匯合的 record 步驟（每次 0-A 必讀）
+ *
  * `record` 會印出 0-A/B/C/D 的匯合行——這是刻意的結構耦合：匯合行只能由本
  * script 產出，漏跑就沒有那行輸出，比「規約寫 MUST 呼叫」更難靜默漏掉。
  *
@@ -60,6 +73,15 @@ const REVIEW_MODES = ['independent', 'escalated', 'fast-path-skip', 'blocked']
 // 跨模型裁決退役後跟著退場的參數——留在 CLI 上任何一個都能把「其實沒有
 // 裁決者」記成好像有。
 const RETIRED_ARGS = ['adjudicator', 'a2-deferral-receipt', 'a2-deferral-work-id']
+
+const SEVERITIES = ['critical', 'major', 'minor', 'info']
+// 作者對每則 finding 的回應。CLI 旗標是 `--didnt-matter`，ledger 欄位用底線。
+const RESPONSE_KINDS = [
+  ['fixed', 'fixed'],
+  ['wrong', 'wrong'],
+  ['intentional', 'intentional'],
+  ['didnt-matter', 'didnt_matter'],
+]
 
 function parseArgs(argv) {
   const out = {}
@@ -142,6 +164,50 @@ function choice(v, field, values, fallback) {
     die(`--${field} 只接受 ${values.join(' | ')}，收到 ${JSON.stringify(value)}`)
   }
   return value
+}
+
+function severityCounts(v, field) {
+  const out = Object.fromEntries(SEVERITIES.map((s) => [s, 0]))
+  const seen = new Set()
+  for (const part of String(v).split(',')) {
+    const m = part.trim().match(/^([a-z]+)=(.*)$/)
+    if (!m || !SEVERITIES.includes(m[1])) {
+      die(`--${field} 的格式是 <${SEVERITIES.join('|')}>=N，以逗號串接，收到 ${JSON.stringify(v)}`)
+    }
+    if (seen.has(m[1])) die(`--${field} 的 ${m[1]} 重複出現，收到 ${JSON.stringify(v)}`)
+    seen.add(m[1])
+    out[m[1]] = num(m[2], `${field} ${m[1]}`)
+  }
+  return out
+}
+
+// 給了任一類就要求每則 finding 都分完；一類都沒給回傳 null（未記錄，不是 0）。
+function responses(args, findings, dismissed, unsubstantiated) {
+  if (RESPONSE_KINDS.every(([flag]) => args[flag] === undefined)) return null
+  const out = Object.fromEntries(
+    RESPONSE_KINDS.map(([flag, key]) => [
+      key,
+      args[flag] === undefined
+        ? Object.fromEntries(SEVERITIES.map((s) => [s, 0]))
+        : severityCounts(args[flag], flag),
+    ]),
+  )
+  for (const s of SEVERITIES) {
+    const classified = RESPONSE_KINDS.reduce((n, [, key]) => n + out[key][s], 0)
+    if (classified !== findings[s]) {
+      die(
+        `${s} 的作者回應加總 ${classified} ≠ --${s} ${findings[s]}——四類給了就要把每則 finding 都分完`,
+      )
+    }
+  }
+  // 0-A.2 dismissal 只針對 Critical／Major，Minor／Info 的 wrong 不能拿來湊數。
+  const wrong = out.wrong.critical + out.wrong.major
+  if (wrong < dismissed - unsubstantiated) {
+    die(
+      `--wrong critical+major ${wrong} 少於有反證的 dismissal ${dismissed - unsubstantiated}——已驗反證的 dismissal 依判定順序歸 wrong`,
+    )
+  }
+  return out
 }
 
 function identity(args, field) {
@@ -265,6 +331,14 @@ function record(args) {
     ? choice(args.doc, 'doc', ['aligned', 'skip'], 'skip')
     : (args.doc ?? 'skip')
 
+  const response = responses(args, findings, dismissed, unsubstantiated)
+  // gates.md 規定 findings 非 0 時 MUST 帶四類；仍收（舊呼叫端相容）但出聲，免得新列與舊列一樣靜默記成「未記錄」。
+  if (response === null && SEVERITIES.some((s) => findings[s] > 0)) {
+    process.stderr.write(
+      '⚠ findings 非 0 但沒帶 --fixed／--wrong／--intentional／--didnt-matter：本列記為「未記錄」，S4 資料會缺這筆（gates.md § 作者回應四分類）\n',
+    )
+  }
+
   const row = {
     ts: new Date().toISOString(),
     repo: repoName(cwd),
@@ -283,6 +357,7 @@ function record(args) {
     a2_triggered: a2,
     dismissed,
     dismissed_unsubstantiated: unsubstantiated,
+    responses: response,
     screenshot,
     doc,
     anomaly: args.anomaly ?? null,
@@ -382,6 +457,7 @@ function summary(args) {
   console.log(
     `dismissed          ${dismissed}，其中無反證被翻回 ${unsub}${dismissed > 0 ? `（${Math.round((unsub / dismissed) * 100)}%）` : ''}`,
   )
+  printResponses(rows)
   console.log('')
   console.log('diff 規模 vs finding 數（每列一次 0-A）：')
   console.log('  lines  files  findings  a2')
@@ -391,6 +467,31 @@ function summary(args) {
       `  ${String(r.diff_lines).padStart(5)}  ${String(r.diff_files).padStart(5)}  ${String(f).padStart(8)}  ${r.a2_triggered ? '✓' : ' '}`,
     )
   }
+}
+
+// 只有記了四類的列進比例；舊列（沒有 responses 欄）與新的未記錄列（null）單獨計數。
+function printResponses(rows) {
+  const recorded = rows.filter((r) => r.responses)
+  const unrecorded = rows.filter((r) => !r.responses)
+  const findingsOf = (r) => SEVERITIES.reduce((n, s) => n + (r.findings?.[s] ?? 0), 0)
+  const unrecordedFindings = unrecorded.reduce((n, r) => n + findingsOf(r), 0)
+  console.log('')
+  console.log(
+    `作者回應           已記錄 ${recorded.length} 列 / 未記錄 ${unrecorded.length} 列（${unrecordedFindings} 則 finding，不計入下列比例）`,
+  )
+  if (recorded.length === 0) return
+  const count = (key, sevs) =>
+    recorded.reduce((n, r) => n + sevs.reduce((m, s) => m + (r.responses[key]?.[s] ?? 0), 0), 0)
+  const line = (label, sevs) => {
+    const counts = RESPONSE_KINDS.map(([flag, key]) => [flag, count(key, sevs)])
+    const total = counts.reduce((n, [, c]) => n + c, 0)
+    const body = counts
+      .map(([flag, c]) => `${flag} ${c}${total > 0 ? `（${Math.round((c / total) * 100)}%）` : ''}`)
+      .join(' / ')
+    console.log(`  ${label.padEnd(9)}${String(total).padStart(4)} 則：${body}`)
+  }
+  line('整體', SEVERITIES)
+  for (const s of SEVERITIES) line(s, [s])
 }
 
 const [cmd, ...rest] = process.argv.slice(2)

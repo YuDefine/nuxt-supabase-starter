@@ -1,9 +1,9 @@
 ---
-description: D-pattern audit 規範（DB outbox canonical + evlog derived stream + hash anchor）
+description: D-pattern audit 規範（DB outbox canonical + evlog derived stream + hash anchor），以及業務寫入觸發的非同步副作用（domain events：寄信、webhook、索引、通知）要怎麼落 DB、派送、重試與 replay
 paths: ['server/api/**/*.ts', 'packages/*/server/api/**/*.ts', 'server/utils/audit.ts', 'packages/*/server/utils/audit.ts', 'supabase/migrations/**/*.sql']
 ---
 <!-- Clade native rule; source: rules/core/audit-pattern.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Audit Pattern
 
@@ -119,6 +119,45 @@ await auditDeny(event, {
 | hash trigger 失敗 | rollback | 無 row | 不送 | 整個 request fail |
 | evlog drain 失敗 | commit | 有 row | miss / retry | 業務成功，monitoring warn |
 | hash chain race | retry / block | 不允許錯鏈 | 不送 | advisory lock 或 retry 解 |
+
+## Domain events（非同步副作用）
+
+業務寫入成功後要觸發的副作用（寄信、打 webhook、更新搜尋索引、推通知）走 domain event。它和 audit 是兩件事：audit 記「發生過什麼」，domain event 驅動「接著要做什麼」；**NEVER** 拿其中一個代替另一個。conventions 目錄條目是 `registry/conventions.json` 的 `domain-events`。
+
+### 寫入：與業務同一次提交
+
+event row **MUST** 與業務寫入一起提交，理由與上方 DB outbox 相同——業務 commit 了、event 沒寫到，副作用就永遠不會發生。
+
+| DB | 同一次提交的做法 | 派送 |
+| --- | --- | --- |
+| Supabase／Postgres | SQL RPC 內同一 transaction 寫業務 row 與 event outbox row（或在同一 transaction 內 `pgmq.send`） | outbox dispatcher（`FOR UPDATE SKIP LOCKED` 認領）或 pgmq consumer |
+| Cloudflare D1 | `db.batch([業務寫入, event insert])` 同批提交；**NEVER** 分兩次 `await` 寫 | 有 Queue binding → `send` 只帶 event id；沒有 binding → `ctx.waitUntil()` 在同一個 request 內 inline 派送 |
+
+上方 § MUST「dispatcher state 只能放 Postgres」管的是 audit drain；D1 consumer 的 domain event 與 delivery 表以 D1 為事實來源，不受該條限制。
+
+- **沒設 Queue binding 時行為 MUST 仍然正確**：event row 已在 DB，inline 派送失敗只是留下未成功的 delivery 紀錄，由下方 replay（或排程補跑）補上；**NEVER** 讓「沒有 queue」退化成不寫 event 或吞掉錯誤。
+- **payload 入 DB 前 MUST 欄位級 redact 並截斷單欄長度**（例如單欄 8KB）：event 表不經 evlog 的 `redact`，PII 分層照 [[logging.sampling-redaction]] § PII 分層的 audit chain 欄套用。
+
+### 派送：訊息只帶 id
+
+- Queue／pgmq 訊息 **MUST** 只帶 event id，handler 從 DB 讀 payload——訊息內容不是事實來源，DB row 才是。
+- **壞訊息直接 ack 丟棄並 log**（沒有 id、id 查不到 row、格式不符）：retry 不會讓它變好，只會塞住佇列。**handler 執行失敗才 retry**。
+
+### 冪等：每個 (event, handler) 一列 delivery
+
+- **MUST** 有 delivery 表，`(event_id, handler_name)` unique；每次執行 upsert 累加 `attempts`、記 `last_error`，成功時寫 `delivered_at`。
+- handler 執行前 **MUST** 先查該列，已成功就跳過——佇列是 at-least-once，重送是常態不是例外。
+- `handler_name` 是冪等 key，**MUST** 是寫死的穩定字串；**NEVER** 從函式名、檔案路徑或 bundle 後的識別字推導（改名或 minify 後，已成功的 handler 會被當成沒跑過而重跑）。
+
+### 命名與訂閱
+
+- event 名 **MUST** 是 `<entity>.<action>`（`invoice.paid`）或 `<entity>.<field>.<action>`（`user.email.changed`），過去式動作、全小寫。
+- 訂閱支援 `*`（單段）與 `**`（多段）萬用字元；同一個 handler 訂多個 event 時，冪等仍以 `(event_id, handler_name)` 計。
+
+### Replay
+
+- replay endpoint **MUST** 限 superuser，且只重跑**尚未成功**的 handler（delivery 列沒有 `delivered_at`，或訂閱了該 event 卻根本沒有 delivery 列）；**NEVER** 提供「整個 event 全部重跑」的捷徑——已寄出的信、已打出的 webhook 會再發一次。
+- replay 本身是敏感操作，**MUST** 寫 audit（照上方 Handler 標準流程；被拒時走 `auditDeny()`）。
 
 ## Review 檢查
 

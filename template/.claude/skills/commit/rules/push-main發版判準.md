@@ -7,7 +7,14 @@
 - 包含 `feat` → `pnpm version minor --no-git-tag-version`
 - 只有 `fix` 或其他 → `pnpm version patch --no-git-tag-version`
 
-建立 deploy commit：
+先列舉這次會推上 main 的範圍——pre-push 的 `ahead-ownership` check 會擋下沒有宣告 ahead 範圍的 main push（`rules/core/commit.detail.md` § 推 default branch 前 MUST 列舉並宣告 ahead 範圍）：
+
+```bash
+git fetch origin main
+git log --oneline origin/main..HEAD     # MUST 逐筆認得：Step 4 的分組 commit、Step 5 的 HANDOFF/ROADMAP commit
+```
+
+清單裡有**不是本 session 產生的** commit → 停在這裡照該節查歸屬，**NEVER** 代推。每一筆都認得才建立 deploy commit 並推出去（串裡的宣告值在 deploy commit 建好之後才算，所以涵蓋它）：
 
 ```bash
 git commit --only -m "$(cat <<'EOF'
@@ -19,10 +26,12 @@ git commit --only -m "$(cat <<'EOF'
 Via: /commit
 EOF
 )" -- package.json &&      # pnpm-lock.yaml 若一起 bump 就一併列進 pathspec
-  git push origin main &&
+  CLADE_PUSH_MAIN_AHEAD="$(git rev-list origin/main..HEAD | git hash-object --stdin)" git push origin main &&
   git tag "v{新版本號}" &&
   git push origin "v{新版本號}"
 ```
+
+本檔與 `release-push.md` 其餘各處寫「`git push origin main`」時，指的都是上面帶 `CLADE_PUSH_MAIN_AHEAD` 宣告的這一行。帶了宣告仍被 `ahead-ownership` 擋下 = 列舉之後 remote 前移或 tip 換過：重跑上面的 `git fetch` 與 `git log` 再推，**NEVER** 沿用舊的宣告值。
 
 `--only` 與 `&&` 兩件都不是風格：
 
@@ -34,8 +43,8 @@ EOF
 - 這個例子是好的，因為整條 `&&` 串一次貼，commit 失敗就不會打 tag。
 
 ```md
-含 `feat` → `pnpm version minor --no-git-tag-version` → 照樣板一次貼上
-`git commit --only … -- package.json && git push origin main && git tag "v1.8.0" && git push origin "v1.8.0"`。
+含 `feat` → `pnpm version minor --no-git-tag-version` → `git log --oneline origin/main..HEAD` 逐筆認得 → 照樣板一次貼上
+`git commit --only … -- package.json && CLADE_PUSH_MAIN_AHEAD="$(…)" git push origin main && git tag "v1.8.0" && git push origin "v1.8.0"`。
 ```
 
 ## Bad Example

@@ -2,9 +2,10 @@
 
 - Level: `MUST`
 - 主線直接跑：`vendor/scripts/notion-sync.ts`、`vendor/scripts/lib/notion-hub.ts resolve`、`scripts/audit-notion-hub-schema.ts`。它們的寫入範圍、授權轉移表、schema 檢查、sidecar 都寫死在 script 裡。
-- 自由形式的 Notion 讀寫（查詢、讀頁／blocks、comment、建頁、PATCH）走 Routing Table〔`notion-ops`〕：Pi `--model gemini --effort high` → `grok-xai` xhigh → 鏈尾 `dispatch-fallback`（Opus 5.5 low）。
+- 自由形式的 Notion 讀寫（查詢、讀頁／blocks、comment、建頁、PATCH）走 Routing Table〔`notion-ops`〕：空鏈（Pi Grok 2026-10-21 退場），首跳即鏈尾 `dispatch-fallback`（Claude Opus 5.5（effort: low））。
 - **NEVER** 主線第一手自己跑 `ntn`。
 - 狀態轉移一律經 `notion-sync.ts`（file／open／follow／progress／done／release／eta／reconcile），它帶授權表、客戶面證據守門、regression 偵測與 sidecar；**NEVER** 自己 PATCH 狀態繞過 script。唯一例外是問客戶時把票設成 needs-customer（`references/ntn-cookbook.md` § 寫入）。
+- 機械層：`pre-bash-notion-ticket-status-gate.sh`（PreToolUse:Bash）擋下把票 PATCH 成 done／archived 的 `ntn api`／`curl`；needs-customer、驗收中與 `notion-sync.ts` 不受影響。被擋時照訊息走，授權條件見 `rules/客戶面證據判準.md` Rule 2；**NEVER** 改用 MCP、腳本檔或變數組 body 避開它。
 
 ## Good Example
 

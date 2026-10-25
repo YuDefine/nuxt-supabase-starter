@@ -17,23 +17,41 @@
 #
 # 對應 TD-378。fail-open：拿不到 transcript / 讀不到 usage → 靜默 exit 0。
 #
-# ## Launcher profile（Charles 2026-08-31 拍板）
+# ## 視窗 profile 表
 #
-# 門檻是 launcher 的絕對 token profile，不是 context window 百分比：
+# 先依**生效視窗**（`CLAUDE_CODE_AUTO_COMPACT_WINDOW`）查已核准的 profile，再依 launcher 判級距：
 #
-# | launcher | soft | hard | hard repeat |
-# | --- | ---: | ---: | ---: |
-# | `cc` / `ccw` | 300k | 500k | +100k |
-# | native work-loop runner child | 500k | 600k | +100k |
+# | 生效視窗 | profile | 提示 |
+# | --- | --- | --- |
+# | `300000` | compact（非主持席：互動主線、派工 child、Fable） | 一級：壓縮觸發點前 32k（300k 時 235k） |
+# | `600000` | handoff（主持席） | cc／ccw：soft 300k、hard 500k、hard 後每 +100k |
+# | 其他值或未設 | handoff，訊息附一行「不在已核准 profile 表」 | 同上 |
+#
+# compact profile 的數字由視窗推出，不另寫一份：Claude Code 的觸發點是 `視窗 − 20k − 13k`
+# （plan evidence/2026-10-21-探測P1-P5.md § P1），提示線再往前留 32k 緩衝。這段緩衝不是保證——
+# 觸發判定比的是「目前 context＋待送訊息」，一個大工具結果可以直接越過提示線；真正的保險是
+# PreCompact 落盤（`pre-compact-snapshot.sh`）。
+#
+# compact profile 不交棒：壓縮會原地發生，提示只叫 session 在下一個自然斷點把進度寫回 plan.md 並
+# commit，然後續做。所以這個 profile 沒有 relay 文案——300k 視窗下 500k／600k 根本到不了。
 #
 # gateway launcher（`ccg`／`ccx`）已從 clade 拆除（2026-09-29）：`ANTHROPIC_BASE_URL` 指向非官方 gateway proxy 的
-# session 不是 clade 的派工或收工入口，本 hook 對它不發 numeric 收工提示。歷史 transcript 的
+# session 不是 clade 的派工或收工入口，本 hook 對它不發 numeric 提示。歷史 transcript 的
 # ccx／ccg 分類仍由 audit 層保留，NEVER 從那裡刪除歷史歸因。
 #
-# soft 的語義是「不要開新的大工作段，小 item 照做」；hard 才是「現在收工」。
+# handoff profile 的 soft 語義是「不要開新的大工作段，小 item 照做」；hard 才是「現在收工」。
 #
-# native runner child 每輪是 `claude --print` 起的全新 process，跨輪不累積，起始載入是固定成本，
-# 所以 native profile 才能放寬成 500k/600k。
+# ## 越過 soft tier 後的出口
+#
+# 只寫「不開大工作段」而不寫殘工去處，session 做完手上那件就會停著等 user。所以兩級提示都明寫
+# 出口，且依身分分流：
+#
+# - 主線（`CLADE_DISPATCH_ID` 空）：仍有殘工就**自己** `/handoff relay`／`fanout`，NEVER 停下問
+#   user 要不要交棒。
+# - 被派出的 child（`CLADE_DISPATCH_ID` 非空）：回報主持（`--complete relay-request --plan`），
+#   由主持另開下一棒 —— 權威在 handoff skill `relay-steps.md` § 0，本檔只是觸發錨。
+#   env 被剝掉時倒向主線文案：child 照做會自 relay，那條路 helper 仍會接（relay 對 child 開了缺口），
+#   方向是「多一棒沒經主持」而不是「停著沒人管」。
 #
 # 提示門檻與**分類器**門檻 NEVER 綁在一起：`audit-session-context-budget.ts` 的 >200k 是事後
 # 統計切點，不是 agent 行為門檻。分類定義改了，本 profile 不必跟著改；反之亦然。
@@ -58,9 +76,11 @@
 # 是 auto-compact 觸發點、不是成本模型的基準。要對齊的是**狀態列的分母**
 # （`~/.claude/statusline.sh`，user 個人檔），不是本檔。
 #
-# **NEVER 加回 env 覆寫**（本檔 2026-08-06 前有 `CLADE_CTX_WARN_TIER1` / `TIER2`）：門檻是
-# 「判定 agent 行為合不合格的數值」，per autonomy-predicate predicate 7 只有 user 能放寬。
+# **NEVER 加回門檻數字的 env 覆寫**（本檔 2026-08-06 前有 `CLADE_CTX_WARN_TIER1` / `TIER2`）：門檻是
+# 「判定 agent 行為合不合格的數值」，per coordinator `rules/自主推進判準.md` Rule 2（不放寬約束自身的門檻）只有 user 能放寬。
 # 一個 env 變數等於把那道閂交給每個 session 自己 —— 而會想調鬆它的，正是已經超標的那個。
+# `CLAUDE_CODE_AUTO_COMPACT_WINDOW` 不是這種破口：它只**選**上表已核准的 profile，值不在表上就退回
+# handoff profile；要新增一個視窗值（例如 D14 的 250k）或改任何門檻數字，仍然只有改本檔一途。
 #
 # ## 為什麼 exit 2
 #
@@ -69,7 +89,7 @@
 # exit 2 才是 `Shows stderr to Claude; the tool already ran`。工具已經跑完，exit 2 在
 # PostToolUse **不撤銷也不阻擋任何東西** —— 它是唯一能把訊息送到收件人手上的出口。
 #
-# 這是 2026-08-06 work-loop round 26 修的：本檔原本 exit 0，所以自 v1.4.x 上線以來每一次
+# 這是 2026-08-06 修的：本檔原本 exit 0，所以自 v1.4.x 上線以來每一次
 # 提示都只寫進 debug log。TD-378 § baseline 二 當時把「hook 已落地、行為沒有改變」讀成
 # 「訊號存在、被忽略」—— 實際上訊號從來沒送達。**NEVER 改回 exit 0。**
 
@@ -91,21 +111,25 @@ detect_origin_launcher() {
 }
 
 LAUNCHER=$(detect_origin_launcher)
+# gateway 起源（已拆除的 ccg／ccx）不是 clade 入口：不發 numeric 提示。
+[ "$LAUNCHER" != gateway ] || exit 0
+
+WINDOW="${CLAUDE_CODE_AUTO_COMPACT_WINDOW:-}"
+PROFILE=handoff
+PROFILE_NOTE=""
 WARN_AT=300000
 STRONG_AT=500000
 STRONG_STEP=100000
-
-# gateway 起源（已拆除的 ccg／ccx）不是 clade 入口：不發 numeric 收工提示。
-case "$LAUNCHER" in
-  gateway)
-    exit 0
+case "$WINDOW" in
+  300000)
+    PROFILE=compact
+    # 觸發點＝視窗 − 33k；提示線再早 32k（見檔頭 § 視窗 profile 表）
+    COMPACT_AT=$((WINDOW - 33000))
+    WARN_AT=$((COMPACT_AT - 32000))
     ;;
-  cc | ccw)
-    # work-loop runner child 每輪是全新 process，native Claude 才有空間把門檻放寬到 500k/600k。
-    if [ "${WORK_LOOP_RUNNER_CHILD:-}" = "1" ]; then
-      WARN_AT=500000
-      STRONG_AT=600000
-    fi
+  600000) ;;
+  *)
+    PROFILE_NOTE="   （生效視窗 ${WINDOW:-未設} 不在已核准 profile 表，按交棒 profile 判定）"
     ;;
 esac
 
@@ -130,10 +154,11 @@ extract() {
 # 2. Herdr 派出去的顧問 pane（`herdr-session-handoff.ts --advisory`）—— 它的產出是一份建議，
 #    沒有殘工可派；env marker 由 dispatch 端注入。
 #
-# 3. Fable 系列主線（`claude-fable-*`）—— 2026-09-02 Charles 拍板：Fable 主線不受本線約束。
+# 3. Fable 系列主線（`claude-fable-*`）—— 2026-09-02 Charles 拍板：Fable 主線不受**收工**線約束。
+#    只豁免 handoff profile；compact profile 的提示不是收工線，Fable 照樣收。
 #
-# **這三條 NEVER 是「env 覆寫門檻」的破口**（見上面那條 NEVER）：它們與 runner-child marker
-# 同型 —— 宣告的是**執行身分**，不是門檻數值。兩組門檻數字仍然寫死在本檔、仍然只有改本檔
+# **這三條 NEVER 是「env 覆寫門檻」的破口**（見上面那條 NEVER）：它們宣告的是**執行身分**，
+# 不是門檻數值。兩組門檻數字仍然寫死在本檔、仍然只有改本檔
 # 一途。**NEVER** 反過來拿本節論證「所以門檻也可以由 env 調」。
 #
 # 逐字反開脫：「我這個主線 session 現在做的事很像顧問（只是讀 code 給建議）」—— 不算。
@@ -168,8 +193,8 @@ session=$(extract session_id)
 # 整條非 0，`|| true` 是必要的，NEVER 拿掉。
 model=$(tail -c 524288 "$transcript" 2>/dev/null |
   grep -o '"model":"[^"]*"' | tail -1 | sed 's/.*:"//; s/"$//') || true
-case "$model" in
-  claude-fable*) exit 0 ;;
+case "$PROFILE:$model" in
+  handoff:claude-fable*) exit 0 ;;
 esac
 
 # 只讀尾端 —— transcript 可以到幾百 MB，整檔掃會讓每次 tool call 都付一次 IO。
@@ -212,42 +237,92 @@ case "$ctx" in
 esac
 
 # 已響過的最高級距（絕對 token 值，不是 tier 序號 —— hard tier 之後依 launcher repeat 步長各算一級）。
-if [ "$ctx" -ge "$STRONG_AT" ]; then
+# compact profile 只有一級。
+if [ "$PROFILE" = compact ]; then
+  if [ "$ctx" -ge "$WARN_AT" ]; then
+    level=$WARN_AT
+  else
+    level=0
+  fi
+elif [ "$ctx" -ge "$STRONG_AT" ]; then
   level=$(((ctx - STRONG_AT) / STRONG_STEP * STRONG_STEP + STRONG_AT))
 elif [ "$ctx" -ge "$WARN_AT" ]; then
   level=$WARN_AT
 else
-  exit 0
+  level=0
 fi
 
 # 同一級距只提示一次 —— 每次 tool call 都響的提示會被整段忽略
 # （同 TD-369 / TD-370 記的「恆亮 gate 訓練人跳過」失效形狀）。
 state_dir="${TMPDIR:-/tmp}/clade-ctx-budget"
-mkdir -p "$state_dir" 2>/dev/null || exit 0
 state_file="$state_dir/${session:-unknown}.level"
 seen=$(cat "$state_file" 2>/dev/null || echo 0)
 case "$seen" in
   '' | *[!0-9]*) seen=0 ;;
 esac
 
+# 壓縮（autocompact／`/compact`）後同一 session_id 的 C 會往下掉：已響級距跟著降到現在的級距，
+# 之後再漲過門檻才會再響。下降這一刻本身不響 —— 降到的那一級先前已經響過。兩個 profile 都要
+# 走到這裡（compact profile 低於 WARN_AT 時 level 也是 0）。**NEVER** 改回「只升不降」，也
+# NEVER 在 level 算出來之前就對低於門檻的 C 提早 exit：壓縮後的 session 會從此收不到任何級距提示。
+if [ "$level" -lt "$seen" ]; then
+  if [ "$level" -eq 0 ]; then
+    rm -f "$state_file" 2>/dev/null || true
+  else
+    printf '%s' "$level" >"$state_file" 2>/dev/null || true
+  fi
+  exit 0
+fi
 [ "$level" -gt "$seen" ] || exit 0
+mkdir -p "$state_dir" 2>/dev/null || exit 0
 printf '%s' "$level" >"$state_file" 2>/dev/null || true
 
 ctx_k=$((ctx / 1000))
 
-# Native in-session 保留原成本論述；runner child 與 gateway profile 改用各自成立的 headroom 語義。
-if [ "${WORK_LOOP_RUNNER_CHILD:-}" = "1" ]; then
-  cost_strong="   runner child 每輪 process 全新；剩餘 headroom 保留給本輪交棒，不帶到下一輪。"
-  cost_warn="   起始載入是固定成本，${ctx_k}k 之後才是本輪真正堆上去的量。"
-elif [ "$LAUNCHER" = "cc" ] || [ "$LAUNCHER" = "ccw" ]; then
-  cost_strong="   此 session 的 context 已超過本 launcher 的 hard tier。"
-  cost_warn="   此 launcher 的收工線在 $((STRONG_AT / 1000))k；先停止開大工作，才留得下交棒空間。"
-else
-  cost_strong="   剩餘 headroom 只供 durable brief 與 relay/fanout；NEVER 用 /compact 或續做消耗它。"
-  cost_warn="   此 launcher 的收工線在 $((STRONG_AT / 1000))k；先停止開大工作，才留得下交棒空間。"
+if [ "$PROFILE" = compact ]; then
+  cat >&2 <<EOF
+⚠️ session context 已達 ${ctx_k}k（profile=compact：視窗 $((WINDOW / 1000))k，約 $((COMPACT_AT / 1000))k 原地自動壓縮）。
+   在下一個自然斷點把進度寫回 plan.md § 進度（沒有 plan 就寫該工作的 tasks 檔）並 commit，然後續做。
+   NEVER 因 context 大小交棒或停下等 user：壓縮會原地發生，PreCompact hook 會先落盤工作狀態。
+   壓縮前這段區間 NEVER 開始 publish、0-A 鏈或 relay 這類原子程序；已在跑的照做到可切點。
+   判定層全文在 rules/core/session-tasks.context-budget.md（本提示是它的觸發錨）。本提示只響這一次。
+EOF
+  exit 2
 fi
 
-if [ "$ctx" -ge "$STRONG_AT" ]; then
+# 出口依身分分流（見檔頭 § 越過 soft tier 後的出口）。
+soft_exit=""
+if [ -n "${CLADE_DISPATCH_ID:-}" ]; then
+  relay_exit="   你是被派出的 child（dispatch ${CLADE_DISPATCH_ID}）：仍有殘工 → 回報主持，NEVER 自 relay、NEVER 停著等 user。
+   進度寫回 plan.md § 進度、commit＋push，再
+   node ~/offline/clade/vendor/scripts/herdr-session-handoff.ts --complete relay-request --plan <plan.md>
+   由主持另開下一棒。沒有 plan.md、repo 有 push_hold、或 helper 拒收時印 self_relay／
+   指示改走 /handoff relay，才自己 /handoff relay（判定表：handoff skill relay-steps.md § 0）。"
+else
+  relay_exit="   仍有殘工 → MUST 自己交棒：1 件（或彼此 serial）走 /handoff relay，N 件可平行走 /handoff fanout。
+   NEVER 停下來等 user 處理、NEVER 把「要不要 relay」當題目問 user —— 交棒就是這一級的預設出口。
+   真的要 user 拍板的題目寫進 brief 的待決段，隨棒交出去。沒有殘工就直接收工。"
+fi
+[ -z "$relay_exit" ] || soft_exit="   手上這件（含它的驗證）做完之後：
+${relay_exit}"
+
+cost_strong="   此 session 的 context 已超過本 launcher 的 hard tier。"
+cost_warn="   此 launcher 的收工線在 $((STRONG_AT / 1000))k；先停止開大工作，才留得下交棒空間。"
+if [ -n "$PROFILE_NOTE" ]; then
+  cost_strong="${cost_strong}
+${PROFILE_NOTE}"
+  cost_warn="${cost_warn}
+${PROFILE_NOTE}"
+fi
+
+if [ "$ctx" -ge "$STRONG_AT" ] && [ -n "${CLADE_DISPATCH_ID:-}" ] && [ -n "$relay_exit" ]; then
+  cat >&2 <<EOF
+🔴 session context 已達 ${ctx_k}k（launcher=${LAUNCHER}；hard tier $((STRONG_AT / 1000))k）。
+${cost_strong}
+   現在就交棒，不再開新的工作段；不可分割的單一驗證迴圈跑完即停。
+${relay_exit}
+EOF
+elif [ "$ctx" -ge "$STRONG_AT" ]; then
   cat >&2 <<EOF
 🔴 session context 已達 ${ctx_k}k（launcher=${LAUNCHER}；hard tier $((STRONG_AT / 1000))k）。
 ${cost_strong}
@@ -270,9 +345,10 @@ else
 ${cost_warn}
    判定層全文在 rules/core/session-tasks.context-budget.md（本提示是它的觸發錨）。
    per rules/core/session-tasks.md § Session context 預算：**NEVER 開新的大工作段**
-   （新的 change / 新的多檔重構 / 新的 plan phase）；手上這件做完就收。
+   （新的 change / 新的多檔重構 / 新的 plan phase）。
    **小 item 照做** —— 單檔文字修正、補一條 TD、勾一個 checkbox 不受本級限制。
    這一級不是叫你現在停：真正的 hard 收工線在 $((STRONG_AT / 1000))k。
+${soft_exit}
    本提示只響這一次。
 EOF
 fi

@@ -19,6 +19,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { isAbsolute, join, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { readGitStatus } from '../lib/git-status-z.ts'
 
 export type MachineVerdict = 'passed' | 'failed' | 'pending' | 'skipped'
 export type HumanVerdict = 'pass' | 'fail' | 'skip'
@@ -346,7 +347,7 @@ function reportRevisedMs(repoRoot: string, file: string, content: number | null)
   const mtime = statSync(file).mtimeMs
   const rel = toPosix(relative(repoRoot, file))
   try {
-    const dirty = execFileSync('git', ['status', '--porcelain', '--', rel], {
+    const dirty = execFileSync('git', ['status', '--porcelain', '-z', '--', rel], {
       cwd: repoRoot,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -512,7 +513,7 @@ export function fileRevisedAtMs(repoRoot: string, rel: string): number | null {
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim()
     if (ct) best = Number(ct) * 1000
-    const dirty = execFileSync('git', ['status', '--porcelain', '--', rel], {
+    const dirty = execFileSync('git', ['status', '--porcelain', '-z', '--', rel], {
       cwd: repoRoot,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -541,13 +542,8 @@ export function planRevisedAt(repoRoot: string, planRel: string): string | null 
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim()
     if (ct) best = Number(ct) * 1000
-    const dirty = execFileSync('git', ['status', '--porcelain', '--', ...paths], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    })
-    for (const line of dirty.split('\n').filter(Boolean)) {
-      const file = join(repoRoot, line.slice(3).trim())
+    for (const { path } of readGitStatus(repoRoot, { pathspec: paths })) {
+      const file = join(repoRoot, path)
       if (existsSync(file)) best = Math.max(best, statSync(file).mtimeMs)
     }
   } catch {

@@ -1,94 +1,24 @@
 ---
 name: pinia-store
 description: >-
-  Pinia store 架構規範。觸發：app/stores/**/*.ts、defineStore、全域狀態管理。NOT for server 端
-  狀態或 API route 設計（走 server-api），NOT for 單一元件內的區域狀態（直接用 ref/reactive）。
+  Use when 新增或修改 Pinia store。NOT for server 端狀態或 API handler（走 server-api），NOT for
+  單一元件內的區域狀態（直接用 ref／reactive）。
 ---
 
 
-# Pinia Store 架構規範
+# Pinia Store
 
-## 目錄結構
+標準 setup store、`storeToRefs`、命名 `use<Name>Store` 照 Pinia 官方寫法即可；本 skill 只放與預設不同的慣例。
 
-```
-app/stores/
-├── userPreferences.ts   # 使用者偏好設定
-├── auth.ts              # 認證狀態
-└── ui.ts                # UI 全域狀態
-```
+# SOP
 
-## Store 模板
+## Phase 1 -- 判定是否需要全域 store
 
-使用 Composition API 語法：
+1. READ 讀取任務需求與 `app/stores/` 既有 store。
+2. THINK 判定狀態歸屬：單一元件內的狀態用 ref／reactive，server 資料的寫入與授權轉 server-api skill；確認本次是新增、修改，還是補登入後的全域初始化。
 
-```typescript
-import { defineStore } from 'pinia'
+## Phase 2 -- 撰寫與自查
 
-export const useMyStore = defineStore('my-store', () => {
-  const items = ref<Item[]>([])
-  const isLoading = ref(false)
-  const error = ref<Error | null>(null)
-
-  const itemCount = computed(() => items.value.length)
-
-  async function loadItems() {
-    isLoading.value = true
-    error.value = null
-    try {
-      const data = await $fetch('/api/v1/items')
-      items.value = data
-    } catch (e) {
-      error.value = e as Error
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  return {
-    items,
-    isLoading,
-    error,
-    itemCount,
-    loadItems,
-  }
-})
-```
-
-## 命名規範
-
-- Store 函式：`use<Name>Store`
-- Store ID：`kebab-case`
-
-```typescript
-// ✅
-export const useUserPreferencesStore = defineStore('user-preferences', ...)
-// ❌
-export const userPreferencesStore = defineStore('preferences', ...)
-```
-
-## 使用方式
-
-```vue
-<script setup lang="ts">
-  const store = useMyStore()
-
-  // 解構保持響應性
-  const { items, isLoading } = storeToRefs(store)
-  const { loadItems } = store
-</script>
-```
-
-## 重要原則
-
-- Setup store 回傳所有 state refs，讓 Pinia 接管 SSR hydration、devtools 與 plugins；業務更新集中在 actions。參見 [Pinia Setup Stores](https://pinia.vuejs.org/core-concepts/#setup-stores)。
-- 避免在 Store 中使用 `useState`，使用 `ref` 替代
-- 錯誤處理：try/catch + error state + finally 重設 loading
-- **Pinia Colada loading 欄位**：`useMutation()` 的 `status` 是 data-state（尚無結果時為 `'pending'`），**NEVER** 拿來當 loading；mutation loading 用 `isLoading` / `asyncStatus === 'loading'`，`status` 留給 success/error 判斷。query 的 `status === 'pending'`（首載無資料）則是對的。完整 canonical pattern 見 golden path `page-loading-golden-path` Tier 2.5
-
-## 參考資料
-
-| 檔案                                             | 內容                                   |
-| ------------------------------------------------ | -------------------------------------- |
-| [references/patterns.md](references/patterns.md) | Plugin 自動初始化、Composable 包裝模式 |
-
-需要全域初始化時建立對應 Plugin（見 references/patterns.md）。
+1. READ 讀取 `rules/Store慣例判準.md`。
+2. WRITE 依已載入規則新增或修改 `app/stores/<name>.ts`；需要登入後自動載入時，依規則建立 `app/plugins/<name>-init.client.ts`。
+3. READ 回頭逐條對照已載入規則；不符就修正。

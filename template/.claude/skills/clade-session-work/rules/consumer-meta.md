@@ -3,7 +3,7 @@ description: 每個 consumer 自宣告 .claude/consumer-meta.json，描述 dev p
 paths: ['.claude/consumer-meta.json', 'registry/consumers-meta.json', 'registry/consumer-meta.schema.json', '.github/workflows/**']
 ---
 <!-- Clade native rule; source: rules/core/consumer-meta.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Consumer Meta（per-consumer 自宣告 + clade 聚合 snapshot）
 
@@ -54,6 +54,7 @@ consumer 的 runtime 事實（dev port、auth provider、DB、deploy platform、
 | `vendor/snippets/dev-auth/` cookbook 是否該推薦 | `auth.devSigninEnabled === false && auth.portPinned === true` |
 | `audit-ux-drift.ts` 截圖驗證 | `dev.ports[].port` + `verification.smokePaths` |
 | `notion-work-coupling.md` 判斷 work item 生命週期該不該推 Notion（ticket 狀態 + 客戶時程頁 交付項目） | `notion.hub` + `notion.projectCode`（座標在 `registry/notion-hubs.json`） |
+| `secret-custody.md § 保管處 allowlist` 找本 repo 的 Notion 憑證頁 | `notion.secretPageId`（project 層）＋ hub 的 `secretsPageId`（org 層）；經 `notion-hub.ts resolve` 的 `secrets.repoUrl`／`secrets.orgUrl` 取連結（專案頁是 `projectUrl`） |
 
 讀者**MUST** 從 `registry/consumers-meta.json` snapshot 讀，**NEVER** 直接讀 consumer repo 的 `.claude/consumer-meta.json`（避免每個工具都 path-resolve consumer absolute path）。
 

@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // 🔒 LOCKED — managed by clade · Source: vendor/scripts/wip-dirty.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/wip-dirty.ts
 // wip-dirty.ts — 列出一個 repo working tree 內「user WIP」dirty paths，
-// 即 git status --porcelain 過濾掉可忽略漂移後剩下的檔。
+// 即 `git status --porcelain=v1 -z` 過濾掉可忽略漂移後剩下的檔。
+//
+// 本檔自己跑的 status 一律帶 `-z`，交給 lib/git-status-z.ts 解析：不帶 `-z` 時非 ASCII 路徑被
+// `core.quotePath` 跳脫成 `"\346…"`，對不上投影清單，非 ASCII 檔名的投影殘留會被當成 user WIP。
 //
 // 「可忽略漂移」的單一判準是 `isIgnorableWorktreeDrift`（本檔）：
 //   1. clade-managed projection 殘留 — isLockedProjectionPathFor（locked-projection.ts），
@@ -31,9 +34,10 @@
 //   - exit 1：有 user WIP；exit 0：乾淨 / 全 projection/tool-managed / 非 git repo（fail-open）
 
 import { execFileSync } from 'node:child_process'
-import { readFileSync, realpathSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readGitStatus, type GitStatusEntry } from './lib/git-status-z.ts'
 import { isLockedProjectionPathFor } from './locked-projection.ts'
 
 // 這裡的 git 呼叫一律以 cwd 定位 repo：剝掉繼承的 `GIT_*`（hook 內常帶 GIT_DIR／GIT_INDEX_FILE），
@@ -41,6 +45,9 @@ import { isLockedProjectionPathFor } from './locked-projection.ts'
 const cwdScopedGitEnv = Object.fromEntries(
   Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')),
 )
+// 唯讀判定（計數、disk-hygiene）不讓 `git status` 回寫 index：那會刷新 gitdir mtime（推遲
+// disk-hygiene 的靜置窗），也會與樹裡的活寫入者搶 index.lock。
+const readOnlyGitEnv = { ...cwdScopedGitEnv, GIT_OPTIONAL_LOCKS: '0' }
 
 // Tool-managed drift gate: drift that **wt-helper itself created** and that
 // **must never land on main**. Excluded from the WIP gate entirely — neither
@@ -73,6 +80,13 @@ const cwdScopedGitEnv = Object.fromEntries(
 const TOOL_MANAGED_SETTING_LINE = {
   '.npmrc': /^verify-deps-before-run=(warn|install)$/m,
   'pnpm-workspace.yaml': /^verifyDepsBeforeRun:[ \t]*(warn|install)$/m,
+}
+
+// `applyToolManagedFlip` 只翻 warn→install 方向（與 isToolManagedDrift 的方向敏感一致）；
+// 行形狀比照 wt-helper cmdAdd 的「Flip verify-deps-before-run」區塊。
+const TOOL_MANAGED_WARN_LINE = {
+  '.npmrc': /^verify-deps-before-run=warn[ \t]*$/m,
+  'pnpm-workspace.yaml': /^verifyDepsBeforeRun:[ \t]*warn[ \t]*$/m,
 }
 
 export function isToolManagedDrift(wtPath, filePath) {
@@ -195,7 +209,8 @@ export function isIgnorableWorktreeDrift(repoRoot, path, kind) {
 
 /**
  * 已落地樹的交付噪音（W-2026-10-01-worktree-accumulation-root-cause §3 C3／C4）：產生端寫進樹、
- * 卻不屬於該樹工作的 bytes——主持者 brief（`tasks/`）、ledger 追加（`vendor/ledger/signals.jsonl`）、
+ * 卻不屬於該樹工作的 bytes——主持者 brief 與 session 清單（consumer 的 `tasks/`；clade home 的
+ * `specs/coordinator/`、`specs/sessions/`）、ledger 追加（`vendor/ledger/signals.jsonl`）、
  * review GUI 舊建置產物（`vendor/review-gui-web/`）。
  *
  * **只給已落地的樹用**，而且 NEVER 讓它們被靜默丟掉：回收端（disk-hygiene）把這份清單原樣交給
@@ -205,9 +220,103 @@ export function isIgnorableWorktreeDrift(repoRoot, path, kind) {
  */
 export const LANDED_DELIVERY_NOISE_PATHSPECS = Object.freeze([
   'tasks',
+  'specs/coordinator',
+  'specs/sessions',
   'vendor/ledger/signals.jsonl',
   'vendor/review-gui-web',
 ])
+
+/**
+ * 已落地樹的 append-only ledger（同為落地專屬噪音，**不**進 `isIgnorableWorktreeDrift`）：
+ * 樹裡的 `vendor/ledger/{signals,candidates,outcomes}.jsonl` 只比 HEAD 多了追加行，而那些行
+ * 已逐字存在於 landing base（`origin/main`）上的同一份檔——內容沒有任何會隨樹消失的 bytes，
+ * 於是不算待救的 user WIP。只有 `blockingStatusPaths`／`countUserDirty` 在呼叫端**明確帶
+ * `landedBaseRef`**（呼叫端已證明該樹 merged／squash-merged）時才放行；merge-back／stop-wip-guard
+ * 走不帶 base 的 `userDirtyPaths`，未落地的樹上同樣的追加行照舊判 dirty。
+ */
+export const LANDED_LEDGER_APPEND_PATHS = Object.freeze([
+  'vendor/ledger/signals.jsonl',
+  'vendor/ledger/candidates.jsonl',
+  'vendor/ledger/outcomes.jsonl',
+])
+
+/** porcelain XY 碼是否為純修改（` M`／`M `／`MM`）；刪除、新增、rename、衝突都不是。 */
+export function isPlainModifiedCode(code: string): boolean {
+  return code === ' M' || code === 'M ' || code === 'MM'
+}
+
+/**
+ * `filePath` 是否為 ledger 的「純追加且已在 `baseRef`」：路徑在 LANDED_LEDGER_APPEND_PATHS、
+ * `git diff HEAD` 沒有任何 `-` 行、至少一條 `+` 行、且每條 `+` 行都逐字存在於 `baseRef:<同檔>`。
+ * 任何一步讀不到（git 失敗、base 沒有該檔）一律 false（fail closed：寧可算 dirty）。
+ * 不看樹是否已落地——那是呼叫端的前置條件（見 LANDED_LEDGER_APPEND_PATHS 註解）。
+ */
+export function isLandedLedgerAppendOnly(
+  wtPath: string,
+  filePath: string,
+  baseRef: string,
+): boolean {
+  if (!LANDED_LEDGER_APPEND_PATHS.includes(filePath)) return false
+  let diff: string
+  let baseText: string
+  try {
+    diff = execFileSync(
+      'git',
+      ['diff', 'HEAD', '--no-color', '--no-ext-diff', '-U0', '--', filePath],
+      {
+        cwd: wtPath,
+        env: readOnlyGitEnv,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: 256 * 1024 * 1024,
+      },
+    )
+    baseText = execFileSync('git', ['show', `${baseRef}:${filePath}`], {
+      cwd: wtPath,
+      env: readOnlyGitEnv,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      maxBuffer: 256 * 1024 * 1024,
+    })
+  } catch {
+    return false
+  }
+  const added: string[] = []
+  let inHunk = false
+  for (const line of diff.split('\n')) {
+    if (line.startsWith('@@')) {
+      inHunk = true
+      continue
+    }
+    if (!inHunk) continue
+    if (line.startsWith('-')) return false
+    if (line.startsWith('+')) added.push(line.slice(1))
+  }
+  if (added.length === 0) return false
+  const baseLines = new Set(baseText.split('\n'))
+  return added.every((line) => baseLines.has(line))
+}
+
+/**
+ * 剩下的 dirty **全部**是「ledger 純追加且已在 base」才回 true（空陣列回 false）。
+ * all-or-nothing：混著任何其他 dirty 就整批不放行、計數照舊——NEVER 為了回收放寬 dirty 條件。
+ * freshness 的計數與 `wt-helper cleanup` 的 uncommitted gate 都呼叫這一支，不各寫一份。
+ */
+export function allLandedLedgerAppend(
+  wtPath: string,
+  entries: readonly { code: string; path: string; origPath?: string }[],
+  baseRef: string,
+): boolean {
+  return (
+    entries.length > 0 &&
+    entries.every(
+      (entry) =>
+        entry.origPath === undefined &&
+        isPlainModifiedCode(entry.code) &&
+        isLandedLedgerAppendOnly(wtPath, entry.path, baseRef),
+    )
+  )
+}
 
 /** `--discard-pathspec a,b` → ['a','b']；拒絕絕對路徑、`..`、glob 字元與空值（只收 repo 內的字面路徑）。 */
 export function parseDiscardPathspecs(raw: unknown): string[] {
@@ -240,8 +349,8 @@ export function matchesDiscardPathspec(path: string, pathspecs: readonly string[
 }
 
 /**
- * git status --porcelain 的一行剝出 path。porcelain v1 格式：
- *   `XY <path>` 或 rename `XY <old> -> <new>`（取 new）。
+ * 不帶 `-z` 的 porcelain 一行剝出 path：`XY <path>` 或 rename `XY <old> -> <new>`（取 new）。
+ * 只給 `onlyToolManagedDrift` 這條 stdin 介面用（見該函式）；本檔自己跑的 status 一律 `-z`。
  */
 function porcelainPath(line) {
   const body = line.slice(3) // 剝 2 char 狀態碼 + 1 space
@@ -249,85 +358,204 @@ function porcelainPath(line) {
   return arrow >= 0 ? body.slice(arrow + 4) : body
 }
 
-/** rename 行的來源 path（非 rename 回 null）。 */
-function porcelainRenameSource(line) {
-  const body = line.slice(3)
-  const arrow = body.indexOf(' -> ')
-  return arrow >= 0 ? body.slice(0, arrow) : null
+/** 單筆 status entry 是否仍會擋 gate（剔除可忽略漂移與呼叫端點名可丟的路徑）。 */
+function entryBlocks(
+  repoRoot: string,
+  entry: GitStatusEntry,
+  discardPathspecs: readonly string[],
+): boolean {
+  const source = entry.origPath ?? null
+  // 呼叫端逐條點名可丟的路徑：rename 兩端都要落在 pathspec 內才放行。
+  if (
+    discardPathspecs.length > 0 &&
+    matchesDiscardPathspec(entry.path, discardPathspecs) &&
+    (source === null || matchesDiscardPathspec(source, discardPathspecs))
+  )
+    return false
+  const kind = entry.code === '??' ? 'untracked' : 'modified'
+  if (!isIgnorableWorktreeDrift(repoRoot, entry.path, kind)) return true
+  // rename 兩端都要可忽略：`R  src/real.ts -> .claude/rules/x.md` 的目的端是投影，
+  // 但來源端是一筆真的刪除，只看目的端會把它一起藏掉。
+  return source !== null && !isIgnorableWorktreeDrift(repoRoot, source, kind)
 }
 
 /**
- * 把 `git status --porcelain` 輸出過濾成仍會擋 gate 的 paths（剔除可忽略漂移）。
- * 取得 porcelain 的方式（fail-open / fail-closed）由呼叫端決定，過濾只有這一份。
+ * 把 status entries（`readGitStatus`）過濾成仍會擋 gate 的 paths（剔除可忽略漂移）。
+ * 取得 status 的方式（fail-open / fail-closed）由呼叫端決定，過濾只有這一份。
  */
-export function blockingPorcelainPaths(
+export function blockingStatusPaths(
   repoRoot,
-  porcelainOut,
+  entries: readonly GitStatusEntry[],
   discardPathspecs: readonly string[] = [],
-) {
+  landedBaseRef?: string,
+): string[] {
+  const blocking = entries.filter((entry) => entryBlocks(repoRoot, entry, discardPathspecs))
+  // 已落地樹專屬（呼叫端明確帶 landedBaseRef）：剩下的 dirty **全部**都是「ledger 純追加且已在 base」
+  // 才整批放行；混著任何其他 dirty 就照原本計數（NEVER 為了回收放寬 dirty 條件）。
+  // 刻意放在 isIgnorableWorktreeDrift 之外：它是 merge-back／stop-wip-guard 的共用判準，不能放寬。
+  if (landedBaseRef && allLandedLedgerAppend(repoRoot, blocking, landedBaseRef)) return []
+  return blocking.map((entry) => entry.path)
+}
+
+/**
+ * 「髒項全部是 tool-managed drift」的單一判準（auto-dispatch 的 syncPrTree 類守門共用）：
+ * porcelain 每一行都是 modified 類、且 `isToolManagedDrift` 為真。untracked／rename／
+ * 真實編輯有一條就回 false；空輸入回 true（沒有髒項）。
+ * 收的是**不帶 `-z`** 的換行格式：呼叫端是 ssh 對端的 shell pipeline（`printf | wip-dirty
+ * --tool-managed-only`），對端可能跑舊版。tool-managed 檔名全是 ASCII，被跳脫的非 ASCII 行
+ * 對不上任何一支 → 回 false（判成有進度／不還原），方向是 fail closed。
+ * 與 `isIgnorableWorktreeDrift` 不同：投影殘留、hook 區塊 drift 在這裡**不算**可忽略——
+ * 這個判定餵給「還原後快轉」的流程，只放行能安全 `git checkout` 還原的 flip。
+ */
+export function onlyToolManagedDrift(repoRoot, porcelainOut) {
   return porcelainOut
     .split('\n')
     .filter((line) => line.length >= 4)
-    .filter((line) => {
-      // 呼叫端逐條點名可丟的路徑：rename 兩端都要落在 pathspec 內才放行。
-      const renamed = porcelainRenameSource(line)
-      if (
-        discardPathspecs.length > 0 &&
-        matchesDiscardPathspec(porcelainPath(line), discardPathspecs) &&
-        (renamed === null || matchesDiscardPathspec(renamed, discardPathspecs))
+    .every((line) => line.slice(0, 2) !== '??' && isToolManagedDrift(repoRoot, porcelainPath(line)))
+}
+
+/**
+ * `--apply-tool-managed` 的本體：`--restore-tool-managed` 把 flip 檔還原成 HEAD 的值
+ * （main 刻意的 `warn`），快轉沿用樹的 syncPrTree 類流程要在快轉後把 cmdAdd bootstrap
+ * 的 flip 種回去——worktree 要 `install`，依賴不同步時下一條 pnpm run 才會自修而不是
+ * 只警告（剛快轉進來的 commit 又最可能動到 lockfile）。
+ * 判準與 wt-helper cmdAdd「Flip verify-deps-before-run」區塊同一份：yaml 有這個 key 就
+ * 只翻 yaml（yaml 是 SoT，有 key 時 NEVER 動 .npmrc）；yaml 沒 key 才翻 .npmrc；已是
+ * install／是其它值／檔不存在 → 不動任何東西。成功（含無需翻）exit 0；讀寫失敗 exit 2。
+ * 無條件跑在快轉後——也順便把修好前就停在 warn 的沿用樹治回 install。
+ */
+function applyToolManagedFlip(repoRoot: string): number {
+  try {
+    const yamlPath = join(repoRoot, 'pnpm-workspace.yaml')
+    const yamlText = existsSync(yamlPath) ? readFileSync(yamlPath, 'utf8') : null
+    if (yamlText !== null && /^verifyDepsBeforeRun:/m.test(yamlText)) {
+      if (TOOL_MANAGED_WARN_LINE['pnpm-workspace.yaml'].test(yamlText))
+        writeFileSync(
+          yamlPath,
+          yamlText.replace(
+            TOOL_MANAGED_WARN_LINE['pnpm-workspace.yaml'],
+            'verifyDepsBeforeRun: install',
+          ),
+        )
+      return 0
+    }
+    const npmrcPath = join(repoRoot, '.npmrc')
+    if (!existsSync(npmrcPath)) return 0
+    const content = readFileSync(npmrcPath, 'utf8')
+    if (TOOL_MANAGED_WARN_LINE['.npmrc'].test(content))
+      writeFileSync(
+        npmrcPath,
+        content.replace(TOOL_MANAGED_WARN_LINE['.npmrc'], 'verify-deps-before-run=install'),
       )
-        return false
-      const kind = line.slice(0, 2) === '??' ? 'untracked' : 'modified'
-      if (!isIgnorableWorktreeDrift(repoRoot, porcelainPath(line), kind)) return true
-      // rename 兩端都要可忽略：`R  src/real.ts -> .claude/rules/x.md` 的目的端是投影，
-      // 但來源端是一筆真的刪除，只看目的端會把它一起藏掉。
-      const source = porcelainRenameSource(line)
-      return source !== null && !isIgnorableWorktreeDrift(repoRoot, source, kind)
-    })
-    .map(porcelainPath)
+    return 0
+  } catch {
+    return 2
+  }
+}
+
+/**
+ * `--restore-tool-managed` 的本體：porcelain 髒項**全部**是 tool-managed drift 時，
+ * 逐檔 `git checkout HEAD --` 還原（index＋worktree 都回 HEAD，staged flip 也收掉），exit 0。
+ * 有任何其它髒項 → 不動任何檔、exit 1（全有或全無）；git／還原失敗 → exit 2。
+ */
+function restoreToolManagedDrift(repoRoot: string, porcelainOut: string): number {
+  const lines = porcelainOut.split('\n').filter((line) => line.length >= 4)
+  if (!onlyToolManagedDrift(repoRoot, porcelainOut)) return 1
+  for (const line of lines) {
+    try {
+      execFileSync('git', ['checkout', 'HEAD', '--', porcelainPath(line)], {
+        cwd: repoRoot,
+        env: cwdScopedGitEnv,
+        stdio: ['ignore', 'ignore', 'pipe'],
+      })
+    } catch {
+      return 2
+    }
+  }
+  return 0
+}
+
+/**
+ * `--restore-projection-drift` 的分類：porcelain（不帶 `-z` 的換行格式，同 `onlyToolManagedDrift`）每一行
+ * 拆成「可還原」與「擋住」兩堆。可還原＝已追蹤、只有修改／刪除的狀態碼，且路徑是 clade-managed 投影
+ * （`isLockedProjectionPathFor`，與 merge-back／wip-dirty 同一份判準）或 tool-managed flip。
+ * untracked／rename／staged-add／衝突一律擋住（沒有 HEAD 版本可還原，或還原會丟東西）。
+ * 被 quotePath 跳脫的非 ASCII 路徑對不上投影清單 → 落在擋住那堆，方向是 fail closed。
+ */
+export function classifyRestorableDrift(
+  repoRoot: string,
+  porcelainOut: string,
+): { restorable: string[]; blocking: string[] } {
+  const restorable: string[] = []
+  const blocking: string[] = []
+  for (const line of porcelainOut.split('\n').filter((l) => l.length >= 4)) {
+    const path = porcelainPath(line)
+    const tracked = /^[ MDT]{2}$/u.test(line.slice(0, 2))
+    if (
+      tracked &&
+      (isLockedProjectionPathFor(repoRoot, path) || isToolManagedDrift(repoRoot, path))
+    )
+      restorable.push(path)
+    else blocking.push(path)
+  }
+  return { restorable, blocking }
+}
+
+/**
+ * `--restore-projection-drift` 的本體：髒項**全部**是投影漂移（clade-managed 投影或 tool-managed flip）時，
+ * 逐檔 `git checkout HEAD --` 還原（index＋worktree 都回 HEAD），exit 0。
+ * 夾帶任何其它髒項 → 不動任何檔（全有或全無）、stdout 逐行印出擋住的路徑、exit 1；git／還原失敗 exit 2。
+ * 還原只是回到 HEAD：投影本來就由 propagate 重生，NEVER 因此丟掉非投影改動。
+ */
+function restoreProjectionDrift(repoRoot: string, porcelainOut: string): number {
+  const { restorable, blocking } = classifyRestorableDrift(repoRoot, porcelainOut)
+  if (blocking.length > 0) {
+    process.stdout.write(`${blocking.join('\n')}\n`)
+    return 1
+  }
+  for (const path of restorable) {
+    try {
+      execFileSync('git', ['checkout', 'HEAD', '--', path], {
+        cwd: repoRoot,
+        env: cwdScopedGitEnv,
+        stdio: ['ignore', 'ignore', 'pipe'],
+      })
+    } catch {
+      return 2
+    }
+  }
+  return 0
 }
 
 /**
  * 回傳 repoRoot working tree 內非可忽略漂移的 dirty paths。
  * 非 git repo / git 失敗 → 回空陣列（fail-open，呼叫端不該因 infra 故障誤判）。
- * 需要 fail-closed 的 gate（wt-batch checkpoint/draft）自行跑 porcelain，
- * 再交給同一支 `blockingPorcelainPaths` 過濾。
+ * 需要 fail-closed 的 gate（wt-batch checkpoint/draft）自行跑 `-z` status，
+ * 再交給同一支 `blockingStatusPaths` 過濾。
  */
 export function userDirtyPaths(repoRoot) {
-  let out
+  let entries
   try {
-    out = execFileSync('git', ['status', '--porcelain'], {
-      cwd: repoRoot,
-      env: cwdScopedGitEnv,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    })
+    entries = readGitStatus(repoRoot, { env: cwdScopedGitEnv })
   } catch {
     return []
   }
-  return blockingPorcelainPaths(repoRoot, out)
+  return blockingStatusPaths(repoRoot, entries)
 }
 
 /**
- * 一棵樹的 user WIP 筆數：`git status --porcelain` 剔除可忽略漂移後剩下的行數。
+ * 一棵樹的 user WIP 筆數：status 剔除可忽略漂移後剩下的筆數。
  * 讀不到 status 回 null（「沒讀到」NEVER 當成 0——呼叫端拿 `=== 0` 判可回收）。
+ * `landedBaseRef` 只給**已證明 merged／squash-merged** 的樹帶（見 LANDED_LEDGER_APPEND_PATHS）。
  */
-export function countUserDirty(repoRoot): number | null {
-  let out
+export function countUserDirty(repoRoot, landedBaseRef?: string): number | null {
+  let entries
   try {
-    out = execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], {
-      cwd: repoRoot,
-      // 計數是唯讀判定，呼叫端含 SessionStart／census：不讓 `git status` 回寫 index——那會刷新
-      // gitdir mtime（推遲 disk-hygiene 的靜置窗），也會與樹裡的活寫入者搶 index.lock。
-      env: { ...cwdScopedGitEnv, GIT_OPTIONAL_LOCKS: '0' },
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      maxBuffer: 256 * 1024 * 1024,
-    })
+    entries = readGitStatus(repoRoot, { env: readOnlyGitEnv, untracked: 'all' })
   } catch {
     return null
   }
-  return blockingPorcelainPaths(repoRoot, out).length
+  return blockingStatusPaths(repoRoot, entries, [], landedBaseRef).length
 }
 
 // CLI mode — 給 bash hook 用（exit code 表示有無 user WIP）。
@@ -351,31 +579,13 @@ function invokedAsCli() {
  * rename 行兩端都要在清單內。
  */
 function landedNoiseOnlyCli(repoRoot: string): number {
-  let out
+  let entries
   try {
-    // --no-optional-locks：不回寫 index stat cache——disk-hygiene L3 以 gitdir/index 的 mtime 判
-    // git 靜置，判定本身不能把它刷新。
-    out = execFileSync('git', ['--no-optional-locks', 'status', '--porcelain'], {
-      cwd: repoRoot,
-      env: cwdScopedGitEnv,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
+    entries = readGitStatus(repoRoot, { env: readOnlyGitEnv })
   } catch {
     return 2
   }
-  const rest = out
-    .split('\n')
-    .filter((line) => line.length >= 4)
-    .filter((line) => blockingPorcelainPaths(repoRoot, line).length > 0)
-    .filter((line) => {
-      const source = porcelainRenameSource(line)
-      return (
-        !matchesDiscardPathspec(porcelainPath(line), LANDED_DELIVERY_NOISE_PATHSPECS) ||
-        (source !== null && !matchesDiscardPathspec(source, LANDED_DELIVERY_NOISE_PATHSPECS))
-      )
-    })
-    .map(porcelainPath)
+  const rest = blockingStatusPaths(repoRoot, entries, LANDED_DELIVERY_NOISE_PATHSPECS)
   if (rest.length > 0) process.stdout.write(`${rest.join('\n')}\n`)
   return rest.length > 0 ? 1 : 0
 }
@@ -386,6 +596,36 @@ if (invokedAsCli() && process.argv[2] === '--landed-noise-pathspecs') {
 }
 if (invokedAsCli() && process.argv[2] === '--landed-noise-only') {
   process.exit(landedNoiseOnlyCli(process.argv[3] || process.cwd()))
+}
+// `--tool-managed-only <repoRoot>`：stdin 收 `git status --porcelain` 輸出（呼叫端可先自行
+// 過濾，例如排除 append-only ledger），每一行髒項都是 tool-managed drift 時 stdout 印
+// `tool-managed-only` 並 exit 0；有其它髒項 exit 1。
+// 用固定 marker 而不只靠 exit code：對端跑的若是舊版 wip-dirty，不認得 flag 會把它當
+// repoRoot、fail-open exit 0；比對 marker 才能區分「支援」與「舊版誤判乾淨」。
+if (invokedAsCli() && process.argv[2] === '--tool-managed-only') {
+  const repoRoot = process.argv[3] || process.cwd()
+  if (onlyToolManagedDrift(repoRoot, readFileSync(0, 'utf8'))) {
+    process.stdout.write('tool-managed-only\n')
+    process.exit(0)
+  }
+  process.exit(1)
+}
+// `--restore-tool-managed <repoRoot>`：stdin 同上；全為 tool-managed drift 才還原（見
+// `restoreToolManagedDrift`），否則不動任何檔。
+if (invokedAsCli() && process.argv[2] === '--restore-tool-managed') {
+  process.exit(restoreToolManagedDrift(process.argv[3] || process.cwd(), readFileSync(0, 'utf8')))
+}
+// `--restore-projection-drift <repoRoot>`：stdin 同上；髒項全為 clade-managed 投影或 tool-managed flip 才
+// 還原（見 `restoreProjectionDrift`），否則不動任何檔並在 stdout 列出擋住的路徑（exit 1）。
+// 舊版對端不認得 flag 時落進預設 CLI、fail-open exit 0 不還原——呼叫端的第二次 porcelain 複核仍會擋下。
+if (invokedAsCli() && process.argv[2] === '--restore-projection-drift') {
+  process.exit(restoreProjectionDrift(process.argv[3] || process.cwd(), readFileSync(0, 'utf8')))
+}
+// `--apply-tool-managed <repoRoot>`：快轉後把 worktree 的 verifyDepsBeforeRun flip 種回去
+// （見 `applyToolManagedFlip`）。舊版 wip-dirty 不認得 flag 時落進下面的預設 CLI、
+// fail-open exit 0 不種——沿用照樣成功，只是那棵樹停在 warn（不更壞）。
+if (invokedAsCli() && process.argv[2] === '--apply-tool-managed') {
+  process.exit(applyToolManagedFlip(process.argv[3] || process.cwd()))
 }
 if (invokedAsCli()) {
   const repoRoot = process.argv[2] || process.cwd()

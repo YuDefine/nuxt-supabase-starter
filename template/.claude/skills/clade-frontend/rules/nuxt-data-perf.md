@@ -3,7 +3,7 @@ description: Nuxt data fetching 選用決策、Pinia Colada 最佳實踐、dedup
 paths: ['**/*.vue', 'app/**/*.ts', 'packages/*/app/**/*.ts', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'composables/**', 'packages/*/composables/**', 'queries/**', 'packages/*/queries/**', 'stores/**', 'packages/*/stores/**', 'nuxt.config.*', 'app.config.*']
 ---
 <!-- Clade native rule; source: rules/core/nuxt-data-perf.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Nuxt Data Fetching & Performance
 
@@ -42,6 +42,8 @@ paths: ['**/*.vue', 'app/**/*.ts', 'packages/*/app/**/*.ts', 'server/**/*.ts', '
 | 同一 key 的**冪等**重複觸發（連點同一個 refresh 按鈕、多元件共用同 key 同時掛載） | `dedupe: 'defer'` | 回傳既有 promise，不重複打 |
 | key 會隨輸入變動的 query | **`defer` 無效**，改用 debounce | 每次 key 不同 → `_asyncDataPromises[key]` 不存在 → 該分支永遠不執行 |
 | Pinia Colada `useQuery` | 同 key 自動 dedup（內建） | UI 端按鈕**仍 MUST** 綁 `isLoading` / `asyncStatus === 'loading'` 做 disable |
+
+表中「搜尋框、篩選、分頁」那列的 `cancel` 一樣只對同 key 生效。所以 server 分頁表格的 `useAsyncData` key **MUST** 是穩定值（endpoint＋表格實例名＋排序後的固定參數），會變的 page／sort／search／filters 放進 `watch`，**NEVER** 拼進 key——key 一變，舊請求不會被取消，`data` 也換成新 key 那份（取回前是空的），每翻一頁表格就閃空；key 若混進 client 才有的值（localStorage 的 pageSize、`Date.now()`），hydration 時算出的 key 與 SSR payload 的 key 對不上，首屏會在 client 再抓一次。表格狀態的其他判準見 [[data-table]]。
 
 **NEVER 對搜尋框加 `dedupe: 'defer'`**——它會回傳**舊關鍵字**的 promise。**`dedupe` 用量為 0 不構成違規**，稽核時 MUST 逐個 call site 對照上表。真正該防的是**請求放大**：無 debounce 的輸入框、迴圈內逐筆 await 的 N+1、in-flight 不 abort 的舊請求（取消要省頻寬需 HR-6）。
 
@@ -335,7 +337,7 @@ async function handleSubmit() {
 
 - **pre-commit gate**：`vendor/scripts/pre-commit/checks/data-perf-check.sh`（掃 staged `.vue`）
 - **pre-push gate**：`vendor/scripts/pre-push/checks/data-perf-check.sh`（掃**全 repo** `.vue`，warn-only 回溯型）
-- **資源層 pattern**：`vendor/review-rules/patterns.json` 的 `fontsource-bare-import` / `lazy-atomic-component`（由 `vendor/review-rules/scan.mjs` 於 pre-commit / pre-push / CI 三層執行）
+- **資源層 pattern**：`vendor/review-rules/patterns.json` 的 `fontsource-bare-import` / `lazy-atomic-component`（由 `vendor/review-rules/scan.ts` 於 pre-commit / pre-push / CI 三層執行）
 - **review-layer**：`capabilities/core/agents/references/clade-review-rules.md` § Nuxt 效能規約
 
 ## Self-check Gate（Enforcement Layer 1）

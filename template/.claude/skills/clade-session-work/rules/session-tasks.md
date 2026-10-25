@@ -2,8 +2,8 @@
 description: ad-hoc 工作的追蹤載體、唯讀與指定產物邊界、共享單檔紀律、session context 預算門檻
 ---
 <!-- Clade native rule; source: rules/core/session-tasks.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 # Session Tasks
 
@@ -22,9 +22,9 @@ description: ad-hoc 工作的追蹤載體、唯讀與指定產物邊界、共享
 
 ## Session context 預算
 
-先依 target adapter 確認實際 runtime、launcher、量測口徑與已核准 profile；不可借另一 runtime 的門檻或 model 名稱宣稱豁免。**Iron Law：適用 hard tier 是收工線；soft tier 是限制新大工作段。** 超過 soft tier 後 MUST 不開新的 tasks 檔、多檔重構、新實作 phase 或尚未載入的 skill；手上驗收與小 item 仍可完成。超過 hard tier 後 MUST 保存狀態並按 [[session-tasks.operations]] 收工；壓縮不重設 hard-tier 義務。
+先依 target adapter 確認實際 runtime、launcher、量測口徑，再依生效視窗查已核准 profile（席位→profile 表只在 [[session-tasks.context-budget]]）；不可借另一 runtime 的門檻或 model 名稱宣稱豁免。**壓縮 profile 的義務是重置前落盤**：提示出現就在下一個自然斷點寫回進度並 commit，然後續做，NEVER 因 context 大小交棒。**交棒 profile 的 Iron Law：適用 hard tier 是收工線；soft tier 是限制新大工作段。** 超過 soft tier 後 MUST 不開新的 tasks 檔、多檔重構、新實作 phase 或尚未載入的 skill；手上驗收與小 item 仍可完成；手上這件做完仍有殘工時 MUST 依身分主動交棒（[[session-tasks.context-budget]] § 越過 soft tier 後的出口），**NEVER** 停下等 user 處理。超過 hard tier 後 MUST 保存狀態並按 [[session-tasks.operations]] 收工；交棒 profile 下壓縮不重設 hard-tier 義務。
 
-兩級語義與 Iron Law 以本節為準；主判準的可觀察 predicate 表在 [[session-tasks.context-budget]]；runtime 的原生命令、hook 與 marker 由 adapter 承載。`paths:` 不是「收工」觸發錨；hard-tier 提示出現時依具名時機主動 Read。
+交棒 profile 的兩級語義與 Iron Law 以本節為準；主判準的可觀察 predicate 表在 [[session-tasks.context-budget]]；runtime 的原生命令、hook 與 marker 由 adapter 承載。`paths:` 不是「收工」觸發錨；hard-tier 提示出現時依具名時機主動 Read。
 
 ## 並行爭用
 
@@ -32,4 +32,4 @@ description: ad-hoc 工作的追蹤載體、唯讀與指定產物邊界、共享
 
 ## 真相層與回報
 
-task 檔只承載當前 session 的授權、進度、證據與未完項。長期契約在 `specs/truth/`（或既有唯一機器 owner）。跨 session 工作接續同一份 plan。`HANDOFF.md` 是從 flow + active plan 生成的 view。follow-up 依 [[follow-up-register]]。**「等」是 [[session-tasks.concurrent-writers]] § 分類後直接行動 表中的一種處置，NEVER 是「判不出來」的同義詞。** Herdr 不可用時，**降級掉的是「對方是誰」，NEVER 是「所以可以 escalate 了」**；本規則不把短期 task 註記冒充長期登記，也不因 task 檔存在就宣稱工作完成。
+task 檔只承載當前 session 的授權、進度、證據與未完項，而且只存在這台機器：**每一次**改 task 檔的進度、卡點或下一步，同一步 MUST 送 `node ~/offline/clade/vendor/scripts/flow/flow.ts work checkpoint [<work-id>] --step '…' [--blocked-on '…'] [--next '…']`，別台用 `flow where <work-id>` 查、死 session 的殘留用 `flow orphans` 查；卡在外部 PR 時 `--blocked-on` 寫 `pr:<owner>/<repo>#<N>`、`--next` 寫解除後那一步，PR 終局時 `flow orphans` 與 SessionStart 會列出來喚醒。長期契約在 `specs/truth/`（或既有唯一機器 owner）。跨 session 工作接續同一份 plan。`HANDOFF.md` 是從 flow + active plan 生成的 view。follow-up 依 [[follow-up-register]]。**「等」是 [[session-tasks.concurrent-writers]] § 分類後直接行動 表中的一種處置，NEVER 是「判不出來」的同義詞。** Herdr 不可用時，**降級掉的是「對方是誰」，NEVER 是「所以可以 escalate 了」**；本規則不把短期 task 註記冒充長期登記，也不因 task 檔存在就宣稱工作完成。

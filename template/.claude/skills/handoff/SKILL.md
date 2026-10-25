@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Session 交接與 bounded delegation。Use when `/handoff` 要登記進度、在支援的 runtime 交給 successor，或由 Codex upstream 派 native bounded work。NOT for 單純 commit 收尾（走 `/commit`）。
+description: Session 交接。Use when `/handoff` 要登記進度，或在支援的 runtime 交給 successor。NOT for 單純 commit 收尾（走 `/commit`）。
 license: MIT
 metadata:
   author: clade
@@ -14,17 +14,9 @@ metadata:
 
 > Runtime host-specific relay/fanout restrictions and launcher/tool bindings are supplied by the selected runtime adapter. The shared rules below define durable handoff semantics and fail-closed boundaries.
 
-Session 交接管理。四個 arg 依下方契約收工；Codex 先過下一節的 Codex boundary 判 bounded 還是 handoff 級。
+Session 交接管理。四個 arg 依下方契約收工。
 
 四種模式收工報告前跑 `node scripts/wt-helper.ts backlog --json`（clade 用 `vendor/scripts/wt-helper.ts`）。`exceeded: true` 時首段列出 `entries`，每棵一行 `slug`／`landedState`／`action`；`handoff-scan.ts` 同資料在 `worktreeBacklog.raw`。這是待處置清單，active claim 不列入，診斷不可用須明說；`in-worktree` 先正式 commit、`superseded` 先核對取代證據，NEVER 依此清單自動刪樹（TD-863）。
-
-## Codex boundary（MUST 早於 Step 0.1 與任何 Herdr preflight）
-
-當前 host 是 Codex 時，先依 [[agent-routing]] § Dispatch data and transport boundary 判載體，判準與其他 runtime 相同：
-
-- **本 turn 收得回來的 bounded GPT 工作**：依當前 schema 使用 `collaboration.spawn_agent`，**NEVER** 為它開 Herdr pane。同一個 upstream Codex task 保留 change、user 對話、驗收與收尾責任；一件 serial work 派一個，互不依賴的多件才平行派；upstream 等待、收割 outcome、驗 scope 後繼續。被派出的 native subagent 只完成 brief 內 bounded work 並回報 parent，自己不 invoke `relay`／`fanout`。
-- **handoff 級、主持分工級、長時間的獨立工作**：照下方 relay／fanout／next 的 Herdr 流程，與其他 runtime 相同；successor 原樣繼承 `cx`。
-- 身分無法驗證的 Codex origin（`CODEX_THREAD_ID` 在但 process evidence 判不出）由 helper 回 `codex_native_dispatch_forbidden`，**NEVER** 以 `--launcher` 或偽造 env 繞過。
 
 ## Step 0.1 — Value-first continuation gate（四種模式共用）
 
@@ -58,7 +50,7 @@ Session 交接管理。四個 arg 依下方契約收工；Codex 先過下一節�
 
 ### 可觀察 predicate（用訊號，NEVER 憑感覺估）
 
-門檻取 [[session-tasks]] § Session context 預算的 launcher profile（數字的 SoT 是 `session-context-budget-warn.sh` 的 profile 表）。`ccg`／`ccx` 已拆除、不是可用 launcher：gateway session 的 handoff fail closed，不自行改派其他 runtime；只有 user 明確點名時才可改交仍支援的 launcher。會進入共用 Herdr 流程的 runtime 原生繼承當前 session（`cc → cc`、`ccw → ccw`、`cx → cx`），工作 routing 不得覆蓋。判定材料只認下列三種**在 transcript 裡看得到**的訊號：
+門檻取 [[session-tasks]] § Session context 預算的 launcher profile（數字的 SoT 是 `session-context-budget-warn.sh` 的 profile 表）。`ccg`／`ccx` 已拆除、不是可用 launcher：gateway session 的 handoff fail closed，不自行改派其他 runtime；只有 user 明確點名時才可改交仍支援的 launcher。會進入共用 Herdr 流程的 runtime 原生繼承當前 session（`cc → cc`、`ccw → ccw`），工作 routing 不得覆蓋。判定材料只認下列三種**在 transcript 裡看得到**的訊號：
 
 1. `session-context-budget-warn` hook 已在本 session 響過（它逐字報「session context 已達 Nk」）
 2. user 在訊息裡明講了 context 用量（「目前已經 43%」「快滿了」）
@@ -67,7 +59,7 @@ Session 交接管理。四個 arg 依下方契約收工；Codex 先過下一節�
 三者皆無 → 視為未過門檻，照 Step 1 正常判。**NEVER** 因為「感覺跑很久了」就自行判定過門檻，
 也 **NEVER** 因為「還沒看到 hook」就無視 user 明講的百分比。
 
-**身分豁免照 [[session-tasks]] § 身分豁免**（in-process subagent、Herdr 顧問 pane `CLADE_ADVISORY_SESSION=1`、Fable 系列主線不改道）。**NEVER** 從工作性質自評身分。
+**身分豁免**：in-process subagent 與 Herdr 顧問 pane（`CLADE_ADVISORY_SESSION=1`）不改道；hook 另留的 Fable 系列主線豁免因 Fable 已禁用（2026-09-24）不會觸發（判準在 `capabilities/core/hooks/session-context-budget-warn.sh` 的身分豁免段）。**NEVER** 從工作性質自評身分。
 
 ### 分流
 
@@ -256,7 +248,7 @@ fi
 5. **Worktree & Stash audit**：跑 **Step 3 共用 audit block**（見下文）。park 為「靜默寫入」—— audit 段寫進 HANDOFF.md，但**不**在 chat 訊息輸出 audit 全文或摘要（避免雜訊干擾當前 session 交接收尾）。
 6. **回報**：一句話總結升級數量（如「升級 3 到 HANDOFF / 1 到 plan / 砍 2」；未遷移 consumer 寫「1 到 tech-debt」）。**禁止**追加「下一步建議」或「要不要繼續做 X」。Audit 因為靜默不出現在回報；user 想看走 HANDOFF.md。
 
-## HANDOFF 寫回契約（park / next / work-loop 共用）
+## HANDOFF 寫回契約（park / next 共用）
 
 依 `follow-up-register.md` § 主動消化，同步驗證並關閉本次完成的工作，回讀 flow 關卡後移出主清單：有 `specs/truth/work-lifecycle.md` → 在承載它的 plan 標 Open work／`flow plan apply-delta`，**NEVER** 改 `docs/tech-debt.md` 的 Status；未遷移 consumer 才關 TD。HANDOFF 移除完成流水帳，已有 plan／TD 的未完項只保留指針。等待訊號、部分完成及未驗收工作保留具體接手入口。
 
@@ -266,7 +258,7 @@ fi
 
 `- [ ] <一句話說要做什麼> — <檔案路徑或指令>`
 
-work-loop 掃描時 `- [ ]` 未勾項 = 一個 candidate，純文字段落只算**一個** candidate。寫五件事就寫五行。
+coordinator 就緒池掃描時 `- [ ]` 未勾項 = 一個 candidate，純文字段落只算**一個** candidate。寫五件事就寫五行。
 
 ### 2. 結案段的 checkbox MUST 全部是 `- [x]`
 
@@ -320,7 +312,7 @@ heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消�
 
 ### 2B.0 Session-end pitfall sweep（呼叫 /oops Mode C；`/oops` 屬 maintenance/full capability，repo 沒有它時跳過整段並繼續 2B.1）
 
-在動 HANDOFF.md 前，呼叫 `/oops` Mode C 回顧當前 chat session transcript 掃 missed lessons。觸發訊號與每個 candidate 的分流都以 `/oops` 為準（Mode C 步驟 1 列訊號、`mode-b-create.md` § 落點判定列落點），本節不另列。**NEVER** 新 pitfall 檔（`docs/pitfalls/` 已退役，呼叫端遷移與否都一樣）。
+在動 HANDOFF.md 前，呼叫 `/oops` Mode C 回顧當前 chat session transcript 掃 missed lessons。觸發訊號與每個 candidate 的分流都以 `/oops` 為準（Mode C 的 Phase 4 step 1 列訊號、oops 的 `rules/新增條目准入判準.md` Rule 3 落點判定表列落點），本節不另列。**NEVER** 新 pitfall 檔（`docs/pitfalls/` 已退役，呼叫端遷移與否都一樣）。
 
 若 sweep 為空（無 candidate）→ 一句話宣告「無 missed lesson」繼續 2B.1。
 
@@ -513,12 +505,12 @@ Planner 的安全集合只有下列形狀：
 ```bash
 node vendor/scripts/handoff-retire.ts --cwd "$MAIN_WT_PATH" --apply --json \
   --value-first no-demand-no-risk-no-blocker \
-  --archive-root "$RETIRE_ARCHIVE" --manifest "$RETIRE_MANIFEST"
+  --archive-root "$RETIRE_ARCHIVE"
 ```
 
 它逐筆保存 branch bundle、staged／unstaged patch、status／ignored／submodule evidence 與排除 `.git` 的完整 worktree tree，驗證 archive 後重新讀 active claim、process cwd、HEAD、branch 與 status snapshot；任一改變就 retained。worktree 移除前 MUST 先通過既有 environment／submodule destroy lifecycle；teardown 失敗就 retained。批次持有的來源先由正式 batch cleanup／cancel 處理，不能用 retirement 偽造 landing。移除只允許 exact `git worktree remove --force <path>` 與 exact `git update-ref -d <ref> <head>`，remote refs、main 與明確排除項永不碰。
 
-`docs/archives/retired-work.jsonl` 是 durable tombstone（這個 archive 載體的退役與替代歸 `W-2026-09-20-non-lifecycle-archive-retire`，本 skill 不另換載體）；已退休 identity 不得再由任何 handoff mode 推回 continuation 清單。重跑同一 manifest 應是 no-op／retained，並受固定 maintenance budget 限制。
+退休 durable tombstone 寫進 flow spine（`.clade/flow/events.jsonl`，`kind: other` point、`payload.marker: worktree.retire`；讀寫入口 `vendor/scripts/retired-ledger.ts`），**NEVER** 再追加 `docs/archives/retired-work.jsonl`——舊檔只讀，歷史列照舊被讀者讀入（`--manifest` 只指舊檔位置，可省略）。spine 寫不進去（含 `CLADE_FLOW_OFF=1`）時該筆 retained、來源不動。已退休 identity 不得再由任何 handoff mode 推回 continuation 清單。重跑同一 manifest 應是 no-op／retained，並受固定 maintenance budget 限制。
 
 輸出固定包含：
 
@@ -552,7 +544,6 @@ node vendor/scripts/retired-archive.ts prune --repo "$MAIN_WT_PATH" --apply [--o
 
 ## Output contract
 
-- Codex bounded 分支：upstream 保留責任；native subagent receipt 只證明 bounded work 已回報，**NEVER** 宣稱 successor 已接手或「目前這裡收工」。Codex 走 relay／fanout 時套用下列同一份契約
 - `relay` / `fanout`：成功 = durable brief 已存在 + helper 回傳 `relay_dispatched` + （fanout）`relayed_dispatch_ids` 已逐筆比對通過 + runtime cleanup 已盤點 + parent worktree lifecycle 已 `removed`／具名 `retained`；完成訊息首行逐字包含「目前這裡收工」，之後不再工作或輪詢。`relay_refused`／`transport_error` 保留 pane 且不得假裝完成（見 [dispatch-common.md](dispatch-common.md) § 5）
 - park：成功 = **進入條件已滿足**（user 顯式打 `park`，或裸 `/handoff` 已取得 user 允許）+ HANDOFF.md / plan（未遷移 consumer 為 tech-debt）/ ROADMAP 有對應寫入 + tasks 檔已清 + Step 3 audit 已靜默寫入 HANDOFF.md `## Worktree & Stash Audit` 段；訊息只含升級摘要（不含 audit）。**未取得允許就寫入 = 失敗**，即使檔案內容正確
 - next：成功 = 2B.0–2B.5 每一個 sub-step 都照各自段落執行完（含 2B.2.5 的每一張卡主動 triage、2B.1.9 不存在時明講跳過）+ 盤點訊息與詢問操作已發出 + user 選定後 2B.5 dispatch 已完成

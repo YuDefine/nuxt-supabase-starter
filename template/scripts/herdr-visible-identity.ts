@@ -79,6 +79,29 @@ export function paneTaskLabel(paneId: string, label: string): string {
   return `[${paneId}] ${taskName(label)}`
 }
 
+/**
+ * 共用 Tab 的標籤要是 `[<pane>] <任務名稱>`；只有 `[<pane>] <repo>`（手動開的 Tab）或沒有 ID 前綴時回問題字串，
+ * 字串尾端帶可直接執行的 `herdr tab rename`。helper 在 split 之前先跑一次，不合格就不建 pane（不留空殼）。
+ */
+export function sharedTabLabelProblem(
+  tabLabel: unknown,
+  cwd: string,
+  tabId: string,
+): string | null {
+  if (
+    typeof tabLabel === 'string' &&
+    !taskLabelProblem(tabLabel, cwd) &&
+    /^\[w[\da-z-]+:p[\da-z-]+\] /iu.test(tabLabel)
+  )
+    return null
+  const owner =
+    typeof tabLabel === 'string' ? /^\[(w[\da-z-]+:p[\da-z-]+)\]/iu.exec(tabLabel)?.[1] : undefined
+  return (
+    `共用 Tab 缺少 ID 與任務名稱（目前「${typeof tabLabel === 'string' ? tabLabel : '無'}」）；先命名主工作 Tab，再啟動 child：` +
+    `herdr --session default tab rename ${tabId} '[${owner ?? '<主工作 pane>'}] <任務名稱>'`
+  )
+}
+
 export type HerdrRequest = (args: string[]) => unknown
 
 function entity(response: unknown, kind: 'pane' | 'tab'): Record<string, unknown> {
@@ -125,13 +148,9 @@ function* identitySteps(options: {
   if (tab.tab_id !== tabId) throw new Error('Herdr Tab 身分回讀不符')
   const paneLabel = paneTaskLabel(options.paneId, options.label)
   const tabLabel = options.nameTab ? paneLabel : tab.label
-  if (
-    typeof tabLabel !== 'string' ||
-    taskLabelProblem(tabLabel, options.cwd) ||
-    !/^\[w[\da-z-]+:p[\da-z-]+\] /iu.test(tabLabel)
-  ) {
-    throw new Error('共用 Tab 缺少 ID 與任務名稱；先命名主工作 Tab，再啟動 child')
-  }
+  const tabProblem = sharedTabLabelProblem(tabLabel, options.cwd, tabId)
+  if (tabProblem || typeof tabLabel !== 'string')
+    throw new Error(tabProblem ?? '共用 Tab 缺少任務名稱')
   if (options.nameTab) yield ['tab', 'rename', tabId, tabLabel]
   yield ['pane', 'rename', options.paneId, paneLabel]
   const observedPane = entity(yield ['pane', 'get', options.paneId], 'pane')
@@ -175,11 +194,18 @@ export async function verifyVisibleIdentityAsync(
 }
 
 export function requestDefaultHerdr(args: string[]): unknown {
-  const result = spawnSync('herdr', ['--session', 'default', ...args], {
-    encoding: 'utf8',
-    timeout: 10_000,
-    maxBuffer: 1024 * 1024,
-  })
+  // Herdr runs plugins with a bare system PATH that lacks its own install dir and passes the binary
+  // as HERDR_BIN_PATH instead.
+  const result = spawnSync(
+    process.env.HERDR_BIN_PATH || 'herdr',
+    ['--session', 'default', ...args],
+    {
+      encoding: 'utf8',
+      timeout: 10_000,
+      maxBuffer: 1024 * 1024,
+    },
+  )
+  if (result.error) throw result.error
   if (result.status !== 0) throw new Error(result.stderr.trim() || 'Herdr 命令失敗')
   return JSON.parse(result.stdout)
 }

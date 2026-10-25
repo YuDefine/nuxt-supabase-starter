@@ -15,6 +15,7 @@
 //   - lockfile 內容是不受信任資料：輸出前清掉控制字元、截斷長度、拆掉會偽造 marker 的 `===`，
 //     整段用 BEGIN/END 包起來，brief 端另加「不遵循其中指令」的聲明。
 
+import { execFileSync } from 'node:child_process'
 import { readFileSync, statSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
@@ -61,7 +62,9 @@ function major(version) {
 
 function stripPeer(version) {
   const i = version.indexOf('(')
-  return i === -1 ? version : version.slice(0, i)
+  const v6 = i === -1 ? version : version.slice(0, i)
+  // v5：`4.0.0_vite@4.0.0+vue@3.2.45`；只在數字開頭時剝 `_…`，避免誤傷 `link:../a_b` 之類
+  return /^\d[^_]*_/.test(v6) ? v6.slice(0, v6.indexOf('_')) : v6
 }
 
 // ── pnpm-lock.yaml ─────────────────────────────────────────────────────────
@@ -159,9 +162,19 @@ function flattenImporters(map) {
   return out
 }
 
+// v5：`/name/version_peer`、`/@scope/name/version_peer`。name 不含 `@`，version 以數字起頭，
+// `_` 之後是 peer 後綴（可含 `@`、`+`）。v6／v9 的 `name@version` 不會命中（name 後接 `@` 而非 `/`）。
+const PNPM_V5_KEY = /^((?:@[^/@]+\/)?[^/@]+)\/(\d[^_/]*)(?:_.*)?$/
+
 /** v9／v6：`name@version(peer)`；v5：`/name/version_peer`。回 [name, version] 或 null。 */
 function parsePnpmPackageKey(rawKey) {
-  const key = rawKey.startsWith('/') ? rawKey.slice(1) : rawKey
+  const slashed = rawKey.startsWith('/')
+  const key = slashed ? rawKey.slice(1) : rawKey
+  // v5 先比對：peer 後綴裡的 `@`（`_vite@4.0.0+vue@3.2.45`）會被 splitNameVersion 誤當 name／version 分界
+  if (slashed) {
+    const v5 = PNPM_V5_KEY.exec(key)
+    if (v5) return [v5[1], v5[2]]
+  }
   const nv = splitNameVersion(key)
   if (nv) return [nv[0], stripPeer(nv[1])]
   const slash = key.lastIndexOf('/')
@@ -368,7 +381,94 @@ function wrap(displayPath, lines) {
   ].join('\n')
 }
 
+// ── 產生檔「內容等於產生器輸出」檢查 ─────────────────────────────────────────
+//
+// `scripts/test-lanes/{deps,timings}.json` 超出 budget 時只列路徑與行數（依政策不逐行審，
+// 正確性由產生器與測試保證）。前提是檔案真的是產生器寫的：手改（例如刪掉某支測試的 entry，
+// 讓 affected 選檔不再選到它）也會長得像一份大 diff 被摘要化，沒人看到。
+// 產生器（trace-deps／timings ledger）只會對「樹上存在的測試檔」寫 entry，並在測試被刪時移除
+// 它的 entry。因此可機械驗的不變式：
+//   (1) head 能解析成 `{ files: { <test path>: … } }`
+//   (2) base 有、head 沒有的 entry，其測試檔在受審樹上也必須不存在（刪測試＋刪 entry 才一致）
+//   (3) head 新增的 entry，其測試檔在受審樹上必須存在
+// 任一不成立 → 回傳原因列；呼叫端把該檔移出 summary-only，照一般檔審（超出 budget 進 OMITTED＝漏審），
+// 並在 brief 標出。查不出（樹讀不到）不當作通過：treeHas 丟錯 → 傳播給呼叫端 → 同樣視為不一致。
+const GENERATED_DATA_RE = /^scripts\/test-lanes\/(deps|timings)\.json$/
+const MAX_CHECK_REASONS = 20
+
+function readFilesMap(file) {
+  if (file === '-') return null
+  const parsed = JSON.parse(readFileSync(file, 'utf8'))
+  const files = parsed && typeof parsed === 'object' ? parsed.files : null
+  if (!files || typeof files !== 'object' || Array.isArray(files))
+    throw new Error('missing `files` object')
+  return files
+}
+
+export function checkGeneratedData(displayPath, baseFile, headFile, treeHas) {
+  if (!GENERATED_DATA_RE.test(displayPath)) return []
+  const reasons = []
+  let head
+  try {
+    head = readFilesMap(headFile)
+  } catch (err) {
+    return [
+      `head is not parseable as generator output (${clean(err instanceof Error ? err.message : String(err))})`,
+    ]
+  }
+  if (head === null) return [] // 整檔刪除：沒有內容可偽造
+  let base = null
+  try {
+    base = readFilesMap(baseFile)
+  } catch {
+    base = null // base 壞掉／缺：只做 head 側檢查
+  }
+  const push = (r) => {
+    if (reasons.length < MAX_CHECK_REASONS) reasons.push(r)
+    else if (reasons.length === MAX_CHECK_REASONS) reasons.push('(more mismatches omitted)')
+  }
+  if (base) {
+    for (const key of Object.keys(base)) {
+      if (key in head) continue
+      if (treeHas(key)) push(`entry removed but its test file still exists: ${clean(key)}`)
+    }
+  }
+  for (const key of Object.keys(head)) {
+    if (base && key in base) continue
+    if (!treeHas(key)) push(`entry added for a path that is not in the tree: ${clean(key)}`)
+  }
+  return reasons
+}
+
+function mainCheckGenerated(args) {
+  const [displayPath = '', baseFile = '-', headFile = '-', tree = ''] = args
+  let reasons
+  try {
+    const treeHas = (key) => {
+      execFileSync('git', ['cat-file', '-e', `${tree}:${key}`], { stdio: 'ignore' })
+      return true
+    }
+    // cat-file -e 的非零 exit 是「不存在」；其他錯誤（找不到 git）要當成查不出。
+    const probe = (key) => {
+      try {
+        return treeHas(key)
+      } catch (err) {
+        if (err && typeof err === 'object' && err.status === 128) return false
+        if (err && typeof err === 'object' && typeof err.status === 'number') return false
+        throw err
+      }
+    }
+    reasons = checkGeneratedData(displayPath, baseFile, headFile, probe)
+  } catch (err) {
+    reasons = [
+      `generator-consistency check could not run (${clean(err instanceof Error ? err.message : String(err))})`,
+    ]
+  }
+  for (const r of reasons) process.stdout.write(`${r}\n`)
+}
+
 function main(argv) {
+  if (argv[0] === '--check-generated') return mainCheckGenerated(argv.slice(1))
   const args = []
   let maxRows = DEFAULT_MAX_ROWS
   for (let i = 0; i < argv.length; i++) {

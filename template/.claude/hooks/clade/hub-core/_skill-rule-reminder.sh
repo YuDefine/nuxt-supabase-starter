@@ -158,3 +158,18 @@ trusted_fleet_helper() {
   done
   return 1
 }
+
+# ── 路徑 → skill 入口對照（P1 hook 機制的單一來源）─────────────────────────────────
+# skill_for_repo_path <repo_rel_path>
+#   改到某類路徑時該先讀哪支 skill 的入口：命中印 `<skill>\t<一句事實>`，沒命中不印。
+#   對照只活在這裡（hook-authoring 提醒注入型 Rule 5）；pre-edit-skill-path-reminder.sh 讀它、
+#   NEVER 另抄一份。入口固定是 skill 的 SKILL.md（Rule 1：命中多份 rule 時只遞一份入口）。
+#   新增一列＝這類路徑有 skill 承接、且 description 本身帶路徑詞；症狀觸發的 skill
+#   （rls-performance 等）不進表（batch-3 編排計畫 D4）。
+skill_for_repo_path() {
+  case "$1" in
+    app/stores/*.ts) printf 'pinia-store\t%s\n' 'app/stores 下是 Pinia store' ;;
+    server/api/*.ts) printf 'server-api\t%s\n' 'server/api 下是 Nitro API handler' ;;
+  esac
+  return 0
+}

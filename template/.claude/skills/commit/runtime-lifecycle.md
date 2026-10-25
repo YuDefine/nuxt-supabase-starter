@@ -11,7 +11,7 @@
 | `COMMIT_REPO` | 本次 ceremony 操作的 checkout 絕對路徑；不沿用其他 checkout 的 `CLAUDE_PROJECT_DIR` |
 | `COMMIT_RESOURCE_DIR` | 隨附資源實際所在目錄，由下方「執行依賴」的 resolver 取得；**NEVER** 直接假設等於 `COMMIT_SKILL_DIR` |
 | `CLADE_WORK_ID` | 這件工作的既有 flow work id，沿用 [[flow-work-tracking]] 的工作歸屬；不為每個 gate 另開一件工作 |
-| `COMMIT_RUNTIME` | 當前執行入口：`claude`、`codex`、`grok` 或 `devin`，不是模型名稱 |
+| `COMMIT_RUNTIME` | 當前執行入口：`claude`、`grok` 或 `devin`，不是模型名稱 |
 | `COMMIT_SESSION_ID` | 當前原生 session 的確切識別；由該 runtime 的 session context／receipt 取得，不拿父 session、pane title 或模型名稱代填 |
 | `COMMIT_OWNER_TOKEN` | 本次成功 acquire receipt 的 owner token；首次 acquire 前尚無此值 |
 
@@ -21,7 +21,7 @@
 
 ## 執行依賴
 
-原生投影隨本 skill 交付 `scripts/commit-lock.mjs`、`scripts/0a-metrics.mjs`、`scripts/codex-review-safe.sh`、`scripts/claude-review-safe.sh`、`scripts/lib/review-common.sh`、`scripts/lib/lockfile-dep-summary.mjs`（review-common 的 lockfile 依賴差異摘要解析器）、`scripts/lib/projection-exemption.ts`（review-common 的 pinned release 投影輸出豁免驗證器）、`scripts/lib/review-verdict.ts`（ledger／coordinator 共用狀態判定）、`scripts/lib/review-subagent.sh`、`scripts/lib/review-subagent-transcript.mjs`（後兩支是 `claude-review-safe.sh` subagent carrier 的 `prepare`／`finalize` 依賴）與 `rules/` 下的兩份 review 政策。執行 Node script 使用 `node`，shell wrapper 使用 `bash`；交付檔不依賴 executable bit。
+原生投影隨本 skill 交付 `scripts/commit-lock.mjs`、`scripts/0a-metrics.mjs`、`scripts/release-resume.mjs`（Step 6-A 續跑點判定）、`scripts/claude-review-safe.sh`、`scripts/lib/review-common.sh`、`scripts/lib/lockfile-dep-summary.mjs`（review-common 的 lockfile 依賴差異摘要解析器）、`scripts/lib/projection-exemption.ts`（review-common 的 pinned release 投影輸出豁免驗證器）、`scripts/lib/review-verdict.ts`（ledger／coordinator 共用狀態判定）、`scripts/lib/review-subagent.sh`、`scripts/lib/review-subagent-transcript.mjs`（後兩支是 `claude-review-safe.sh` subagent carrier 的 `prepare`／`finalize` 依賴）與 `rules/` 下的兩份 review 政策。執行 Node script 使用 `node`，shell wrapper 使用 `bash`；交付檔不依賴 executable bit。
 
 資源只由原生投影（`.claude/`、`.agents/` 下的 `skills/commit/`）交付，兩份 bytes 相同。從 hub-core plugin 載入的同名 skill 目錄**不帶**這些資源，所以 `COMMIT_SKILL_DIR` 不一定就是資源所在。進 Step 0-Lock 前先跑一次 resolver，把印出的絕對路徑當成 `COMMIT_RESOURCE_DIR` 的實值；下文 `scripts/…` 指令與 `rules/…` 連結都相對於它。
 
@@ -39,7 +39,7 @@
     [ -f "$candidate/scripts/commit-lock.mjs" ] || continue
     seen=1
     missing=
-    for rel in scripts/commit-lock.mjs scripts/0a-metrics.mjs scripts/codex-review-safe.sh \
+    for rel in scripts/commit-lock.mjs scripts/0a-metrics.mjs scripts/release-resume.mjs \
       scripts/claude-review-safe.sh scripts/lib/review-common.sh scripts/lib/lockfile-dep-summary.mjs scripts/lib/projection-exemption.ts scripts/lib/review-verdict.ts \
       scripts/lib/review-subagent.sh scripts/lib/review-subagent-transcript.mjs \
       rules/review-tiers.md rules/security-policy.md; do
@@ -58,7 +58,7 @@
 ```
 <!-- commit-resource-resolver:end -->
 
-候選依序是 `COMMIT_SKILL_DIR`（有設才算）與 `.claude`／`.agents` 兩份原生投影，取**第一個資源齊全**的；某份投影過期缺檔只在 stderr 印一行 `incomplete`，不擋住後面完整的那份。原生目錄名刻意寫成 `.$runtime/skills/commit`：Codex 投影會把 `.claude` 開頭的 skills 路徑改寫成自家目錄，寫死字面路徑會讓該投影裡的 `.claude` 候選消失。
+候選依序是 `COMMIT_SKILL_DIR`（有設才算）與 `.claude`／`.agents` 兩份原生投影，取**第一個資源齊全**的；某份投影過期缺檔只在 stderr 印一行 `incomplete`，不擋住後面完整的那份。原生目錄名刻意寫成 `.$runtime/skills/commit`：`.agents` 投影會把 `.claude` 開頭的 skills 路徑改寫成自家目錄，寫死字面路徑會讓該投影裡的 `.claude` 候選消失。
 
 非 0 退出就是投影缺口（沒有任何一份齊全，或 `COMMIT_REPO` 未設定）：停在 Step 0-Lock 回報 stderr 那一行，**NEVER** 改用 `capabilities/`、plugin cache 或其他 checkout 的檔案湊數。
 
@@ -74,7 +74,7 @@ node "$COMMIT_RESOURCE_DIR/scripts/commit-lock.mjs" acquire \
   --runtime "$COMMIT_RUNTIME" --session-id "$COMMIT_SESSION_ID" --json
 ```
 
-成功 receipt 才表示取得互斥。**鎖不替代 WIP 所有權、品質閘門或發版授權**。接著依 SKILL.md 的順序執行 0-Coord、0-Scope 與後續 gates。
+成功 receipt 才表示取得互斥。**鎖不替代 WIP 所有權、品質閘門或發版授權**。帶 `--work-id` 的成功 acquire 會在背景送一筆只含位置的 `flow work checkpoint`（機器、checkout、branch、HEAD；fail-open，`CLADE_AUTO_CHECKPOINT=0` 關閉），別台 `flow where <work>` 據此知道這件 work 在哪棵樹。接著依 SKILL.md 的順序執行 0-Coord、0-Scope 與後續 gates。
 
 每次開始下一個 gate、收回背景 gate 結果，以及進入 Git mutation 前，使用同一 tuple 與 token 續持：
 
@@ -102,12 +102,15 @@ node "$COMMIT_RESOURCE_DIR/scripts/commit-lock.mjs" release \
 
 收尾文字依當下已有的 receipt 選擇：
 
-| 已取得的證據 | 可回報的現況 |
-|---|---|
-| commit 已驗證，writer 仍 running／終態未知 | commit 已建立；writer `<handle>` 尚未收回，鎖保留，流程尚未結束 |
-| writer 終態與最後內容核對已完成，release receipt 成功 | commit 與最後核對已完成，背景工作已收回，自己的鎖已釋放 |
+評估：first-match；以上皆非 → L*
 
-預定執行的 wait／cancel／release 只寫成下一步；不能把其預期結果填進第二列。取消本 ceremony 工作後仍要取得終態，取消請求本身不證明已停止。
+| id | 已取得的證據 | 可回報的現況 |
+|---|---|---|
+| L1 | commit 已驗證，writer 仍 running／終態未知 | commit 已建立；writer `<handle>` 尚未收回，鎖保留，流程尚未結束 |
+| L2 | writer 終態與最後內容核對已完成，release receipt 成功 | commit 與最後核對已完成，背景工作已收回，自己的鎖已釋放 |
+| L* | 以上皆非 | 只回報已取得的 receipt，流程尚未結束 |
+
+預定執行的 wait／cancel／release 只寫成下一步；不能把其預期結果填進 L2。取消本 ceremony 工作後仍要取得終態，取消請求本身不證明已停止。
 
 保留 release receipt。拒絕釋放時保持原鎖與失敗證據，**NEVER** 改用 `rm`、省略身分或改填持有者身分繞過。
 
@@ -118,6 +121,7 @@ node "$COMMIT_RESOURCE_DIR/scripts/commit-lock.mjs" release \
 | 同一 work／runtime／session，保有原 token | acquire 帶同一 `--owner-token` 重入；核對先前 gate 的來源／diff 是否仍有效，接回已啟動的工作，不以重入 receipt 宣稱先前 gates 已通過 |
 | 其他持有者仍在 | 用當前可用且已授權的協調通道聯絡，讓持有者自行完成退出與 release；沒有通道則回報持有者與缺口 |
 | 只有 timeout、舊 heartbeat、失聯或 CLI PID 已消失 | 只能判為需要調查；這些訊號都不構成接管授權 |
+| `flow status`／`flow pending` 把 lock 列成 stale-held（owner session 已不在本機 Claude 名冊與 herdr） | 同上：是「去查」的訊號，不是接管授權。`lastHeartbeatAt` 只在 gate 邊界 renew 時更新，量的是 gate 進度不是存活；判存活看 `sessionId`（`vendor/scripts/lib/commit-lock-owner.ts`） |
 | 原 ceremony 已確認結束，且本次有恢復授權 | 讀取 status 的當前 `lockHash`；canonical lock 缺席但有中斷 guard 時取 `emptyLockHash`。記錄確認方式、授權與原因，以本次恢復者自己的 work／runtime／session 核對同一快照 |
 | session 已變、token 遺失、legacy／corrupt owner 或 ownership 不明 | 保留現況，先查證原 ceremony 與恢復授權；不偽造舊 session 或從鎖檔抄 token 冒充原持有者 |
 
@@ -138,4 +142,4 @@ node "$COMMIT_RESOURCE_DIR/scripts/commit-lock.mjs" recover \
 
 每次 lifecycle receipt 記錄動作、checkout、work／runtime／session、結果與時間。每個 gate 另留來源／diff、實際 invocation、退出狀態及輸出位置；lock receipt 不代替 gate receipt。
 
-兩端共用 CLI 的 fixture 通過只證明協定。各產品入口的原生身分取得、背景等待、詢問、通知與中斷接續，仍須逐入口留實際證據；缺證據列未驗，不由另一產品的成功外推。
+共用 CLI 的 fixture 通過只證明協定。各產品入口的原生身分取得、背景等待、詢問、通知與中斷接續，仍須逐入口留實際證據；缺證據列未驗，不由另一產品的成功外推。

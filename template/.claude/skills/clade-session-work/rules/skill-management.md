@@ -1,10 +1,10 @@
 ---
 description: 新增、安裝或同步 skill 時，辨認 canonical source、runtime projection、版控與 ownership 邊界
-paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/**', '.codex/skills/**', 'capabilities/**/skills/**', 'scripts/install-skills.sh', 'skills-lock.json']
+paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/**', 'capabilities/**/skills/**', 'scripts/install-skills.sh', 'skills-lock.json']
 ---
 <!-- Clade native rule; source: rules/core/skill-management.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 # Skill 管理
 
@@ -12,7 +12,7 @@ paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/*
 
 | 層 | 角色 | 版控 |
 | --- | --- | --- |
-| canonical skill source | **真相層** | **MUST 進版控**（含第三方 skill——上游可能 force-push 或刪除） |
+| canonical skill source | **真相層** | **MUST 進版控**（clade 自家與 consumer 自有 skill；第三方 skill 的本體與版控依 § 第三方 skill 安裝契約） |
 | runtime projection | generator 產生的投影 | **MUST 遵守該 runtime 的 ignore / ownership 契約** |
 | `skills-lock.json` | 各 skill 的 source 與 computedHash | **MUST 進版控** |
 
@@ -24,11 +24,42 @@ paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/*
 2. **commit 必須帶上 `skills-lock.json`**。安裝工具可能重算 lock 內所有 entry 的 `computedHash`；漏帶會讓 lock 與實際安裝不一致。
 3. **NEVER 讓 runtime skill source 是 symlink 指向未 tracked 的 target。** 判準是 target 內容是否進版控；runtime projection 的 symlink 例外必須由 adapter 明列。
 
+## 第三方 skill 安裝契約
+
+`skills-lock.json` 管的第三方 skill（`npx skills add` 裝的），安裝形態、版控、換版指令**只在本節定義**；`version-upgrade` Phase S（skills）、`vendor/snippets/*/README.md`、`scripts/install-skills.sh` 的註解一律指向這裡，不各自重述。
+
+| 項目 | 契約 |
+| --- | --- |
+| 安裝形態 | `npx skills add … --agent <runtime-agent…> --copy -y`：每個 runtime 的 skills 目錄各寫一份實體目錄。同一 skill 要給多個 runtime 就把 `--agent` 全列（例：`--agent claude-code codex`），漏列的那份會停在舊版 |
+| 版控 | `<skills-root>/<name>/` 的第三方本體可完全由 lock＋install script 重現，照 consumer 既有慣例 gitignore；**MUST 進版控**的是 `scripts/install-skills.sh` 與 `skills-lock.json` |
+| 安裝清單 | `scripts/install-skills.sh` 是重建機器的依據：新增、改名、移除 skill 都**先改它**再跑安裝 |
+| 換版 | lock 條目有 `ref`（釘 tag／branch）→ `npx skills add https://github.com/<owner>/<repo>/tree/<新 ref>/<skill-dir> --agent … --copy -y`，原生覆寫、不必先 `rm -rf`，`ref` 更新為新值。無 `ref`（追 default branch）→ `npx skills add <owner>/<repo>@<name> --agent … --copy -y`；well-known 網域 source 用完整 URL（`https://www.<domain>`），不支援 `@skill` 選取 |
+| `ref` | 釘版的條目 lock **MUST 帶 `ref`**。沒有 `ref` 的條目，`experimental_install` 還原時追 HEAD 並改寫 lock hash，不可重現 |
+| CLI 版本 | 以下行為以 skills CLI **≥ 1.7.2** 實測；更舊版本的 `update` 在雙路徑下會 skipping，不在契約內 |
+
+三個會誤用的指令：
+
+| 指令 | 實際行為 |
+| --- | --- |
+| `npx skills add <owner>/<repo>@<name>`（對有 `ref` 的條目） | 覆寫成功，但 lock 的 `ref` 被丟掉＝解除釘版。**NEVER** 用在釘版條目，用 `/tree/<ref>` 形式 |
+| `npx skills update` | lock 有 `ref` 時永遠回「up to date」不動；無 `ref` 且 CLI ≥ 1.7.2 才換檔。**NEVER** 單憑它的輸出判定已更新，事後用 audit 驗 |
+| `npx skills experimental_install` | 依 lock＋`ref` 逐檔還原，但不建 `.claude/skills`、不驗 `computedHash`。不能取代 install script |
+
+`rm -rf <skills-root>/<name>` 只用於清上游已併掉或移除的舊 skill 目錄（Phase S S.2、S.5.3），不是更新手段。`npx skills add` 對失敗的 source 仍 exit 0，裝完 **MUST** 用 `audit-skill-freshness.ts` 與 `<skills-root>/<name>/SKILL.md` 存在與否驗證。
+
+形態翻轉（第三方本體改 `.agents/skills` 單一本體＋`.claude/skills` symlink）排在 W-2026-09-28-runtime-single-source Phase 2 的 consumer gitignore／ownership 翻轉 propagate 之後；翻轉前仍適用上表，且 **NEVER** 提早改成 symlink（會違反上表「安裝形態」的每個 runtime 各寫一份實體目錄）。實測依據見 `specs/plans/W-2026-10-09-skill-p0-plan-package-urgent/evidence/2026-10-10-h1-no-copy-install-and-update.md`、`…/2026-10-10-h2-lock-restore-experimental-install.md`。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 讀寫 `scripts/install-skills.sh`、`skills-lock.json`、`.agents/skills/**`、`.claude/skills/**`、`.gitignore`（本檔 `paths:`），或 `version-upgrade` Phase S 的安裝／換版步驟 |
+| 消費端 | 新增、更新、移除第三方 skill 的 session；`scripts/audit-skill-freshness.ts` 的結果判讀 |
+| 觸發點 | 本檔 `paths:` 命中那一刻由 rules planner 載入；Phase S S.2、S.5 的 step 逐字指向本節 |
+
 ## User level 不歸 clade 管
 
-clade 只投影到 consumer repo（與 clade home 自己）。`~/.claude/skills/`、`~/.agents/skills/`、`~/.codex/` 等 user-level 目錄由使用者自行維護，clade **NEVER** 產生、覆寫或稽核其中內容。
+clade 只投影到 consumer repo（與 clade home 自己）。`~/.claude/skills/`、`~/.agents/skills/` 等 user-level 目錄由使用者自行維護，clade **NEVER** 產生、覆寫或稽核其中內容。
 
-user-level 與 repo 內投影同名是合法遮蔽：pi 採 project 版、略過 user 版。`scripts/runtime-health.ts` 的撞名分級據此分 managed（兩邊皆 clade 投影 → 摘要）／mixed（單邊 → fail）／unmanaged（雙邊手寫 → warn）；「clade 投影」的證據是 LOCKED banner 或 `.clade/projections/codex.{capabilities,rules}.json` 的 files 清單。user-level 殘留的舊 clade 投影（退役前寫進 `~/.agents/skills/` 的那批）由使用者刪除，**NEVER** 為它恢復 user-level 投影。
+user-level 與 repo 內投影同名是合法遮蔽：pi 採 project 版、略過 user 版。`scripts/runtime-health.ts` 的撞名分級據此分 managed（兩邊皆 clade 投影 → 摘要）／mixed（單邊 → fail）／unmanaged（雙邊手寫 → warn）；「clade 投影」的證據是 LOCKED banner 或 `.clade/projections/agents.{capabilities,rules}.json`（未經 agents 投影的 consumer 仍是舊名 `codex.*`）的 files 清單。user-level 殘留的舊 clade 投影（退役前寫進 `~/.agents/skills/` 的那批）由使用者刪除，**NEVER** 為它恢復 user-level 投影。
 
 ## Skill 撰寫形式
 
@@ -71,9 +102,9 @@ skill 預設投進所有選用該 plugin 的 consumer。要收窄時在 SKILL.md
 
 | 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | `private`＝public consumer 不投（例：綁維護者帳號的 `yudefine-deploy`、維護者個人工作流 `reply-article`／`meeting-notes`）；`clade-home`＝任何 consumer 都不投，只有 clade home 自投影收（例：含內部主機／報價資料的 `ci-runners`、`presale`、`estimate-hours`） |
+| 觸發條件 | `private`＝public consumer 不投（例：綁維護者帳號的 `yudefine-deploy`、維護者個人工作流 `reply-article`／`meeting-notes`、只帶估算方法且數值留在 clade 倉的 `estimate-hours`）；`clade-home`＝任何 consumer 都不投，只有 clade home 自投影收（例：含內部主機／報價資料的 `ci-runners`、`presale`、`estimate-quote`） |
 | 消費端 | `scripts/lib/runtime-capability-plan.ts`（consumer 投影跳過；`buildCanonicalCapabilityPlan` 帶 `cladeHome` 才收 `clade-home`）；`vendor/scripts/audit-clade-leak.ts` 的 `MAINTAINER_ONLY_SKILLS` 是第二層對帳 |
-| 觸發點 | 本節；`test/skill-visibility-clade-home.test.ts` 釘住三支 clade-home skill 不進 consumer 投影 |
+| 觸發點 | 本節；`test/skill-visibility-clade-home.test.ts` 釘住三支 clade-home skill 不進 consumer 投影；`audit-clade-leak.ts` 另掃 private skill 投影不得含定價字樣 |
 
 ## 驗證入口與覆蓋邊界
 
@@ -81,7 +112,7 @@ skill 預設投進所有選用該 plugin 的 consumer。要收窄時在 SKILL.md
 
 | 驗證面 | 實際入口與判讀 |
 | --- | --- |
-| Clade plugin source 與 target 計畫 | 在 consumer project root 跑 `node <clade-root>/scripts/project-runtime-capabilities.ts --clade-root <clade-root> --targets claude,codex --visibility <private或public> --dry-run`；visibility 先查證。此入口同時規劃 skills／commands／agents，以共享 namespace 查碰撞，error 或 ownership 衝突保留 blocked |
+| Clade plugin source 與 target 計畫 | 在 consumer project root 跑 `node <clade-root>/scripts/project-runtime-capabilities.ts --clade-root <clade-root> --targets claude,agents --visibility <private或public> --dry-run`；visibility 先查證。此入口同時規劃 skills／commands／agents，以共享 namespace 查碰撞，error 或 ownership 衝突保留 blocked |
 | 本次投影是否仍需變更 | 讀 dry-run 的 `appliedChanges`；名稱雖含 applied，dry-run 只表示預計異動。非零代表尚待 apply／對帳，不是已同步。合法 apply 後重跑應為零；native 載入仍另驗 |
 | 第三方安裝與 lock | 依已安裝 installer 的實際 lock/hash 定義驗 `skills-lock.json` 與來源，將內容和 lock 一起提交。此 capability planner 不驗第三方 lock 的 computedHash；缺少該驗證時明列未驗，不報全綠 |
 | Fleet ownership 與 tracking | `node <clade-root>/scripts/audit-governance-drift.ts` 的 check13 逐 target 讀 capability ownership state，核對產物 hash、canonical source/hash 與來源 tracked 狀態。`native_ownership` 的 `incomplete` 使 check13 失敗；`absent` 只表示尚無 adoption 證據，保留 legacy tracking 檢查，不算 native 已接入。此檢查不驗第三方 lock computedHash，也不取代當前 manifest 的完整 projection plan |
@@ -89,4 +120,4 @@ skill 預設投進所有選用該 plugin 的 consumer。要收窄時在 SKILL.md
 
 這些檢查由新增／更新 skill 的 session 消費。來源宣告未審、能力未驗或必要入口缺少時，MUST 把受影響 target 列為未完成；不能把不存在的「逐 runtime audit」當成已通過的驗收。
 
-check13 的 native ownership finding 由既有 governance audit／clade-health 消費，讀到漂移就修 canonical source／投影或明確 adoption，不覆寫未知所有權。`absent` 是 informational — 不觸發任何東西；它不能被彙總成兩端已驗證。
+check13 的 native ownership finding 由既有 governance audit／clade-health 消費，讀到漂移就修 canonical source／投影或明確 adoption，不覆寫未知所有權。`absent` 是 informational — 不觸發任何東西；它不能被彙總成各 target 已驗證。

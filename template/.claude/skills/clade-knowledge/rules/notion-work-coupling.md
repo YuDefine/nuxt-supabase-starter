@@ -1,10 +1,10 @@
 ---
-description: consumer 宣告 notion.hub 時適用。症狀：自己發現 prod 問題不知道要不要開票、工作做完或發版了但 Notion 狀態還停在舊值、想把 PR 或截圖當證據給客戶、客戶時程頁（交付項目）看不到這件工作、不知道某個 work item 對應哪張 ticket、Notion 現況與 git 實況對不上、拿不準該不該去碰 Notion、想在 skill 或文件裡寫 Notion 座標或狀態名。座標一律 registry/notion-hubs.json、欄位名一律 lib/notion-hub.ts FIELDS、寫入一律 notion-sync.ts
+description: consumer 宣告 notion.hub 時適用。症狀：自己發現 prod 問題不知道要不要開票、工作做完或發版了但 Notion 狀態還停在舊值、想把 PR 或截圖當證據給客戶、客戶時程頁（交付項目）看不到這件工作、不知道某個 work item 對應哪張 ticket、Notion 現況與 git 實況對不上、拿不準該不該去碰 Notion、被告知「可以標完成／結案」想直接改票狀態、想在 skill 或文件裡寫 Notion 座標或狀態名。座標一律 registry/notion-hubs.json、欄位名一律 lib/notion-hub.ts FIELDS、寫入一律 notion-sync.ts
 paths: ['tasks/**', 'specs/plans/**', '.claude/consumer-meta.json', 'registry/notion-hubs.json', 'vendor/scripts/notion-sync.ts', 'vendor/scripts/lib/notion-hub.ts', 'vendor/scripts/lib/notion-stage.ts', 'vendor/scripts/flow/notion-follow.ts', 'scripts/audit-notion-hub-schema.ts']
 ---
 <!-- Clade native rule; source: rules/core/notion-work-coupling.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 # Work Item ↔ Notion Hub 耦合
 
@@ -19,6 +19,8 @@ consumer 屬於某個 Notion hub 時，ticket 狀態與客戶時程頁（`交付
 | **交付項目**（在 `開發時程追蹤` 頁） | 客戶看的工作清單：一列 = 一個 work item 或合約交付項 | 客戶 | machine（`狀態` / `進度%` / `Work ID` / relation）；`預估完成日` 是**人確認後**才寫 |
 
 **交付項目 是選填表**：hub 可以把進度併進 ticket board（board 的 `進度%` 欄 ＋ 時程頁上唯讀的 board view），這時 registry 省略該 hub 的 `delivery`。下文所有「交付項目 進度%」在這種 hub 一律改寫 ticket 的 board `進度%`（跟 ticket 轉移同一次 PATCH、只往前；`progress` 指令寫絕對值），`eta` / `reconcile` 不適用，承諾日期留在 board 的 `dueDate` 欄（registry `fields.board.dueDate`；fc 是 `預估完成日`）由人維護。主檔 `專案`／`里程碑` 的 `進度%` 是 Notion 端 rollup、machine 不寫；`FIELDS.project/milestone.deliveries` 只在有 交付項目 的 hub 有意義，這種 hub 的 rollup 來源由 hub 擁有者在 Notion 上改指 board 或移除。沒有 ticket 的工作在這種 hub 不會出現在客戶面——需要客戶看見就先 `file` 建票。
+
+交付項目 表也是 presale 簽約後的落點：`notion-sync.ts contract` 把已簽合約該 Milestone 的 `D-xx` 逐項建成交付項目列（`presale` skill `rules/簽約後交棒判準.md`）。目前沒有 hub 啟用它，`contract` 一律走「沒有 交付項目，跳過」；這不是死碼，**NEVER** 據此移除——第一個要讓客戶看合約交付進度的 hub 開表並在 registry 宣告 `delivery` 時才會走到。
 
 `任務` 層**不投影**：`- [ ] N.M` 那層 task 留在 carrier，NEVER 同步到 Notion。
 
@@ -60,7 +62,7 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --ori
 
 ### 掛載點（MUST）
 
-- **發現即建票**：工程師在 prod／資料裡發現問題、或決定做一個功能時，**先** `file` 再動手——它同時鑄 work id，之後的推進全部自動。從 work-route 進來的新需求／新 bug 由 work-route § 1 在鑄 work id 前問一次要不要建票（board-only hub 點明不建票客戶看不到），不另加步驟。
+- **發現即建票**：工程師在 prod／資料裡發現問題、或決定做一個功能時，**先** `file` 再動手——它同時鑄 work id，之後的推進全部自動。從 work-route 進來的新需求／新 bug 由 work-route Phase 3（`rules/鑄workid前Notion詢問判準.md`）在鑄 work id 前問一次要不要建票（board-only hub 點明不建票客戶看不到），不另加步驟。
 - **flow 事件自動跟隨**：`flow plan open` 與 `flow done` 成功後，flow 以 detached 子行程觸發 `follow`（fail-open，未宣告 hub 的 repo 零成本；`CLADE_NOTION_FOLLOW=0` 關閉）。**NEVER** 在 work-route 或任何 skill 裡加「記得同步 Notion」步驟——Notion 跟隨 flow，不是 flow 呼叫 Notion。
 
 - **`flow open` 之後、動第一個檔之前**：跑 `open`。
@@ -115,8 +117,45 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --ori
 
 consumer 宣告 `notion.hub` 即等同授權流程在**machine 欄位 + 授權轉移表**內自動推進；表外的（客戶側轉移、`預估完成日`、改客戶欄）仍需當次明確授權。
 
+### 客戶側轉移的當次授權（acceptance → done、done → archived）
+
+**每一張**要寫成 done／archived 的票都 MUST 兩項同時成立，缺一項那張票就停在 acceptance：
+
+1. **使用者當輪逐張確認**：使用者當輪的訊息逐張列出票號（或 page id）與目標狀態；或 agent 先逐張列出「票號、標題、現況 → 目標狀態」，使用者當輪對那張清單回覆確認。
+2. **寫入逐張帶放行標記**：指令帶 `CLADE_NOTION_CUSTOMER_TRANSITION_OK=<page-id>[,<page-id>…]`，逐張列出被改的 page id。
+
+下列三種都不是當次授權，**NEVER** 據以把票寫成 done／archived：
+
+| 收到的東西 | 為什麼不算 | 該做什麼 |
+| --- | --- | --- |
+| 泛稱：「可以標完成」「處理完就結案」「消化完的單子就標記完成」 | 沒有逐張票號，哪幾張符合是 agent 自己判的 | 逐張列出候選票請使用者當輪確認；確認前不寫 |
+| 先前輪次、別的 session、brief 或 handoff 轉述的同意 | 不是當輪，使用者確認的不是眼前這份清單 | 同上 |
+| 「內容已消化進規格書／雛形／計畫」 | 那是開發側收下了需求，不是客戶驗收過成果 | 對應的最遠狀態是 acceptance（`notion-sync.ts` 推得到），不是 done |
+
+使用者不在場的 session（派工 pane、loop、排程）拿不到當輪確認：把候選清單寫進回報，**NEVER** 寫入。
+
+機械層：`capabilities/core/hooks/pre-bash-notion-ticket-status-gate.sh`（PreToolUse:Bash）在 `ntn api`／`curl` 對 `/v1/pages/<id>` 的 PATCH 把 status／select 設成任一 hub 的 done／archived 字時擋下，放行標記沒列到那張 page id 照擋。它是絆索不是牆（body 由變數組出、option id、MCP 等形狀擋不到，見判定檔 `notion-ticket-status-guard.ts` 檔頭「已知缺口」）；**NEVER** 把「hook 沒擋」讀成「這次寫入已獲授權」，標記是 agent 的逐張聲明，授權只來自上面第 1 項。
+
+**Good Example**：
+
+```text
+使用者：「FC #132、#133 客戶昨天驗收過了，標完成。」
+→ 當輪逐張列了票號與目標狀態 → 兩張各自帶標記寫入：
+  CLADE_NOTION_CUSTOMER_TRANSITION_OK=<#132 page id> timeout 60 ntn api -X PATCH "/v1/pages/<#132 page id>" -d … < /dev/null
+```
+
+**Bad Example**（2026-10-13 實例）：
+
+```text
+使用者：「也消化到規格書跟雛形後的單子就可以標記完成」
+→ agent 自己判定 FC #132–135 四張「已消化」，主線直接 ntn api PATCH 設成完成
+```
+
+壞在三處：泛稱指示沒有逐張票號；「已消化進規格書／雛形」對應 acceptance 不是 done；客戶沒驗收過，票卻在客戶看得到的看板上顯示完成。正確做法是把四張推到 acceptance（或維持現況），列出清單問使用者哪幾張客戶已驗收。
+
 ## Cross-ref
 
 - 授權轉移與欄位所有權：`vendor/scripts/lib/notion-hub.ts`（`COLUMN_OWNERSHIP` `MACHINE_TICKET_TRANSITIONS`）
+- 客戶側轉移守門：`capabilities/core/hooks/notion-ticket-status-guard.ts`（判定、已知缺口）＋ `pre-bash-notion-ticket-status-gate.sh`
 - 階段推導：`vendor/scripts/lib/notion-stage.ts`；hook 在 `vendor/scripts/flow/notion-follow.ts`
 - work item 開卡 / origin：[[flow-work-tracking]]；發版 / tag：[[commit]] Step 5、Step 6b

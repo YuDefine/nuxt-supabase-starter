@@ -20,9 +20,9 @@ description: "Use for review lifecycle work: human-gate checks or UI screenshot 
 
 ## Phase 3 -- screenshot：取證
 
-1. THINK 先讀取 `rules/截圖取證與判定分工判準.md`，確認本次由 Pi Gemini 取證、Opus 判定，以及各自不可用時的處置。
+1. THINK 先讀取 `rules/截圖取證與判定分工判準.md`，確認本次由 `dispatch-fallback` 取證、Opus 判定，以及各自不可用時的處置。
 2. WRITE 先讀取 `templates/截圖取證brief.md` 與 `templates/截圖取證brief.example.md`，依種類（ad-hoc／人工檢查清單／除錯）寫出逐項 item、截圖輸出路徑、URL、ready signal 與允許操作，並指定 worker 讀取 `references/screenshot-worker-contract.md`。
-3. DELEGATE 主線直接執行 `node <clade-vendor>/scripts/pi-dispatch.ts --brief <absolute-brief.md> --cwd <consumer-root> --label <descriptive-label> --model gemini --effort high --route routing-table --tier-basis table-row --table-row screenshot-review-verify --workspace-access mutation`，依 agent-routing 的 Pi watch 收割 completion 與 evidence manifest。
+3. DELEGATE 主線直接派 `Agent({ subagent_type: 'dispatch-fallback' })`（省略 `model`；frontmatter 釘 Claude Opus 5.5（effort: low）；只有 plugin 投影時寫 `hub-core:dispatch-fallback`），prompt 帶 brief 絕對路徑與 consumer 根，收回 evidence manifest（`screenshot-review-verify` 列；Pi Grok 2026-10-21 退場，該列空鏈）。
 
 ## Phase 4 -- screenshot：判定與回報
 

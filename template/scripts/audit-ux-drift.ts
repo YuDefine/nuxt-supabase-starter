@@ -255,8 +255,8 @@ function gitList(dir: string, exts: string[]): string[] {
 function gitTouchedFiles(): Set<string> {
   const touched = new Set<string>()
   const diffArgs = [
-    ['diff', '--name-only', 'HEAD'],
-    ['diff', '--cached', '--name-only'],
+    ['diff', '--name-only', '-z', 'HEAD'],
+    ['diff', '--cached', '--name-only', '-z'],
   ]
   for (const args of diffArgs) {
     const result = spawnSync('git', args, {
@@ -264,7 +264,7 @@ function gitTouchedFiles(): Set<string> {
       encoding: 'utf-8',
     })
     if (result.status === 0 && result.stdout) {
-      for (const line of result.stdout.split('\n').filter(Boolean)) {
+      for (const line of result.stdout.split('\0').filter(Boolean)) {
         touched.add(resolve(repoRoot, line))
       }
     }

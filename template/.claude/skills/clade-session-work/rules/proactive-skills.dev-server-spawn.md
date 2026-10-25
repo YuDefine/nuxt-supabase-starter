@@ -3,8 +3,8 @@ description: Dev Server Auto-Spawn 規約——agent 自起 dev server 的持久
 paths: ['scripts/dev-session*', 'vendor/scripts/dev-session*', '.claude/consumer-meta.json', 'nuxt.config.*']
 ---
 <!-- Clade native rule; source: rules/core/proactive-skills.dev-server-spawn.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 # Dev Server Auto-Spawn（agent 自起，不要叫 user cd）
 

@@ -3,7 +3,7 @@ description: Vitest multi-project test script 設計規範——禁止寫死 pat
 paths: ['package.json', 'vitest.config.ts', 'vite.config.ts']
 ---
 <!-- Clade native rule; source: rules/core/test-scripts.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Test Scripts
 
@@ -96,14 +96,16 @@ admission hook 看不到，仍會被擋）並在回報寫理由。
 
 ## Advisory：包 clade-gate 收 signal（improvement-loop enabled consumer）
 
-Consumer 在 `registry/consumers.json` 標 `improvement_loop_enabled: true` 時，`.clade/bin/clade-gate` 會由 propagate 寫入。本檔規範的 `test` / `test:<project>` / `test:file` 等 script 建議 wrap 一層 `.clade/bin/clade-gate run test --` 讓 dev cycle 進 signal ledger（不只是 git pre-commit 那一次）。
+Consumer 在 `registry/consumers.json` 標 `improvement_loop_enabled: true` 時，`.clade/bin/clade-gate` 會由 propagate 寫入。本檔規範的 `test` / `test:<project>` / `test:file` 等 script 建議 wrap 一層 `clade-gate run test --` 讓 dev cycle 進 signal ledger（不只是 git pre-commit 那一次）。
+
+`.clade/bin/clade-gate` 是 gitignored 投影，cloud session VM／CI 的新 clone 沒有它，所以 **MUST 包成 arg-safe guard，NEVER 裸寫 `.clade/bin/clade-gate run …`**（裸寫在新 clone 回 `not found`）：
 
 ```diff
 -"test": "vp test run --coverage",
-+"test": ".clade/bin/clade-gate run test -- vp test run --coverage",
++"test": "sh -c 'if test -x .clade/bin/clade-gate; then exec .clade/bin/clade-gate run test -- vp test run --coverage \"$@\"; else exec vp test run --coverage \"$@\"; fi' --",
 ```
 
-`lint` / `typecheck` 同理。詳細採用收益 + 快速 diff + anti-pattern：見 `vendor/snippets/clade-gate-package-scripts/README.md`。
+`lint` / `typecheck` 同理。`node vendor/scripts/install-clade-gate.ts <consumer>` 會直接產這個形狀。詳細採用收益 + 快速 diff + anti-pattern：見 `vendor/snippets/clade-gate-package-scripts/README.md`。
 
 採用由 consumer 的 session 決定，clade 稽核命中時 **MUST relay 給它**。
 
@@ -112,15 +114,15 @@ Consumer 在 `registry/consumers.json` 標 `improvement_loop_enabled: true` 時�
 **要不要採用** clade-gate 是 advisory（上一段，consumer 自治區決定）；但**一旦某個 `test` / `lint` / `typecheck` script 已經包了 `.clade/bin/clade-gate run <gate> --` 前綴**，後續任何「換 lint/test/typecheck 工具」「重寫該 script 命令」的操作（含跨 consumer fleet sweep、tooling migration、scaffold 重生）**MUST 只替換 wrapper `--` 後面的內層命令、保留前綴**，**NEVER** 整行覆蓋把前綴一起丟掉。
 
 ```diff
-# ✅ 正確：換 lint 工具 oxlint → vp lint，只換 `--` 後面的內層命令
--"lint": ".clade/bin/clade-gate run lint -- oxlint .",
-+"lint": ".clade/bin/clade-gate run lint -- vp lint --deny-warnings",
+# ✅ 正確：換 lint 工具 oxlint → vp lint，guard 與 gate 前綴原樣保留，兩個分支的內層命令一起換
+-"lint": "sh -c 'if test -x .clade/bin/clade-gate; then exec .clade/bin/clade-gate run lint -- oxlint . \"$@\"; else exec oxlint . \"$@\"; fi' --",
++"lint": "sh -c 'if test -x .clade/bin/clade-gate; then exec .clade/bin/clade-gate run lint -- vp lint --deny-warnings \"$@\"; else exec vp lint --deny-warnings \"$@\"; fi' --",
 
 # ❌ 錯誤：整行重寫，clade-gate 前綴消失 → instrumentation 退化、dev signal 整片盲區
--"lint": ".clade/bin/clade-gate run lint -- oxlint .",
+-"lint": "sh -c 'if test -x .clade/bin/clade-gate; then exec .clade/bin/clade-gate run lint -- oxlint . \"$@\"; else exec oxlint . \"$@\"; fi' --",
 +"lint": "vp lint --deny-warnings",
 ```
 
-**改 `package.json` 的 test/lint/typecheck script 前自查一句**：這行原本有 `.clade/bin/clade-gate run` 前綴嗎？有 → 改完它**必須**還在。
+**改 `package.json` 的 test/lint/typecheck script 前自查一句**：這行原本有 `.clade/bin/clade-gate run` 前綴嗎？有 → 改完它**必須**還在（guard 與兩個分支的 `"$@"` 一併保留）。
 
 機械檢查（本檔 `paths:` 命中時適用）：`node scripts/audit-test-scripts.ts` 掃 `package.json`／`vitest.config.ts` 的 test script 與 project 宣告一致性——改完跑一遍再走。

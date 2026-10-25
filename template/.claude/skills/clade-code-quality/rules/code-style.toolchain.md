@@ -18,7 +18,7 @@ paths:
   ]
 ---
 <!-- Clade native rule; source: rules/core/code-style.toolchain.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Code Style — 工具鏈治理
 
@@ -78,7 +78,7 @@ paths:
 
 #### `.oxfmtignore`（clade-managed，承接原 `.prettierignore` 用途）
 
-`.oxfmtignore` 由 `scripts/lib/oxfmtignore-governance.ts` 在 `pnpm hub:bootstrap` 時生成，**只能**保留 clade-managed LOCKED projections（`.claude/rules/`、`.claude/skills/`、`.claude/hooks/`、`.claude/agents/`、`.claude/commands/`、`.agents/`、`.codex/`）的條目。**禁止**手動加其他條目（業務排除寫 `vite.config.ts` override），也**禁止**刪除（bootstrap 會重建）。
+`.oxfmtignore` 由 `scripts/lib/oxfmtignore-governance.ts` 在 `pnpm hub:bootstrap` 時生成，**只能**保留 clade-managed LOCKED projections（`.claude/rules/`、`.claude/skills/`、`.claude/hooks/`、`.claude/agents/`、`.claude/commands/`、`.agents/`、legacy `.codex/` 殘留）的條目。**禁止**手動加其他條目（業務排除寫 `vite.config.ts` override），也**禁止**刪除（bootstrap 會重建）。
 
 oxfmt 不會自動讀 `.oxfmtignore`（fallback 只有 `.prettierignore` / `.gitignore`），所以**所有 `vp fmt` 調用入口都必須顯式帶 `--ignore-path .oxfmtignore`**。clade 散播的 `format` / `format:check` script 已預埋：
 
@@ -114,7 +114,7 @@ oxfmt 不會自動讀 `.oxfmtignore`（fallback 只有 `.prettierignore` / `.git
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 命令位置出現 prettier × 目標 repo 有 `.oxfmtignore` / `.claude/hub.json` / `package.json` 依賴 `vite-plus` → **exit 2 擋下**。逃生門 `CLADE_ALLOW_PRETTIER=1`（給「只是要在文件裡寫下這個字串」用） |
-| 消費端 | 已安裝該 Claude hook 的 Bash tool call（consumer 與 clade home）；回歸測試 `test/pre-bash-prettier-invocation-gate.test.ts`。Codex 的原生攔截接線另行驗證，規約投影本身不代表已安裝 hook |
+| 消費端 | 已安裝該 Claude hook 的 Bash tool call（consumer 與 clade home）；回歸測試 `test/pre-bash-prettier-invocation-gate.test.ts`。規約投影本身不代表已安裝 hook |
 | 觸發點 | 本節 `rules/core/code-style.toolchain.md`，依 frontmatter paths 由各 runtime adapter 交付；成因與 fleet 掃描見 [[pitfall-banned-tool-binary-still-on-path]] |
 
 ### 禁止依賴全域 vite-plus（hard rule）
@@ -429,13 +429,13 @@ hook 對不含重型工具候選字串的 Bash 指令直接走快速路徑；需
 三個要點缺一還是壞的：整條包進 `sh -c '…'` 且**結尾的 `--`** 讓附加參數變成位置參數；
 **兩個分支都要 `"$@"`**；`exec` 讓 exit code 與訊號直接穿透。
 
-**不需要 fallback 的 repo 用直呼形式**（`.clade/bin/clade-gate run test -- vp test`）。**不要為了「看起來比較安全」給每個 repo 都加 guard**。
+**consumer 的 `.clade/bin/clade-gate` 是 gitignored 投影，MUST 一律用上面的 guard 形，NEVER 裸寫 `.clade/bin/clade-gate run …`**：cloud session VM 與 CI 的新 clone 沒有該檔，裸寫只回 `sh: .clade/bin/clade-gate: not found`，pre-push 的 typecheck 整條掛掉。guard 在 shim 缺席時直跑原命令——品質檢查照跑，只少准入與 signal，不是放行。只有 shim 本身就 tracked 在 repo 內的 repo（clade 自己的 `node bin/clade-gate run …`）才用直呼。`node vendor/scripts/install-clade-gate.ts <consumer>` 產的就是 guard 形，並把舊版寫下的裸寫就地升級；env 前綴、`&&` 串接這類複合命令它只列出、不改，請人手寫 guard。
 
-壞形狀只在 `pnpm test <檔名>` 時炸，錯誤是 `sh: 1: Syntax error: word unexpected`，看不出真因——靠稽核抓：`node scripts/audit-gate-coverage.ts` § 3b 逐 consumer 印四條 script（含 `test:e2e:*` 變體，`:ui` 除外）的受閘狀態（`✗ 未受閘` / `⚠ 吃不掉參數`），`pnpm build:xxx` 這種轉呼往下解一層以上，間接寫法不誤報。
+壞形狀只在 `pnpm test <檔名>` 時炸，錯誤是 `sh: 1: Syntax error: word unexpected`，看不出真因——靠稽核抓：`node scripts/audit-gate-coverage.ts` § 3b 逐 consumer 印四條 script（含 `test:e2e:*` 變體，`:ui` 除外）的受閘狀態（`✗ 未受閘` / `⚠ 吃不掉參數` / `⚠ 缺 shim 會炸`），`pnpm build:xxx` 這種轉呼往下解一層以上，間接寫法不誤報。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | 任一 consumer 的 heavy script 已定義但未經 `clade-gate run <label>`（表格 `✗ 未受閘`），或有受閘但 guard 是裸 `if … fi`（表格 `⚠ 吃不掉參數`）→ 進該 audit 的 Warnings 段。**warn-only，不 block**：改 script 是 consumer 自治區的動作，擋 clade 自己的 publish 是錯的施力點（同 `audit-lockfile-staleness`） |
+| 觸發條件 | 任一 consumer 的 heavy script 已定義但未經 `clade-gate run <label>`（表格 `✗ 未受閘`），有受閘但 guard 是裸 `if … fi`（表格 `⚠ 吃不掉參數`），或有受閘卻裸呼 `.clade/bin/clade-gate`、呼叫點不在 `test -x` guard 之下（表格 `⚠ 缺 shim 會炸`；重型入口以外的 script 如 `lint` 同樣進 Warnings）→ 進該 audit 的 Warnings 段。**warn-only，不 block**：改 script 是 consumer 自治區的動作，擋 clade 自己的 publish 是錯的施力點（同 `audit-lockfile-staleness`） |
 | 消費端 | `/clade-health enforcement`（每輪跑 `node scripts/audit-gate-coverage.ts`）；findings 進 HANDOFF 稽核段並 relay 給對應 consumer 的 session |
 | 觸發點 | 本節 `rules/core/code-style.toolchain.md`，依 frontmatter paths 由各 runtime adapter 交付 |
 

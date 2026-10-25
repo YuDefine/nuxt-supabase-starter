@@ -3,7 +3,7 @@ description: 動到 instant 欄位、SQL 日期計算、Intl / toLocaleString �
 paths: ['**/*.sql', 'supabase/**', 'server/**', 'app/**', 'packages/**/server/**', 'packages/**/app/**', 'scripts/**', 'infrastructure/**']
 ---
 <!-- Clade native rule; source: rules/core/timezone.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
+<!-- clade-targets: claude,agents -->
 
 # Timezone 規約
 
@@ -18,7 +18,7 @@ DB 存 UTC instant，顯示層轉 local。所有中間層不做隱式轉換，�
 
 1. **Instant 欄位一律 `timestamptz`**。純日曆日期用 `date`。`timestamp`（無時區）只用於外部系統同步表且 MUST 搭配 `COMMENT ON COLUMN` 宣告 TZ 語意
 2. **`Intl.DateTimeFormat` / `toLocaleString` / `toLocaleDateString` 每次呼叫都 MUST 帶 `{ timeZone }` 參數**——不依賴 process `TZ`
-3. **API instant 一律 RFC 3339（帶 `Z` 或 offset）**。date-only 用 `YYYY-MM-DD` string，不轉 `Date`
+3. **API instant 一律 RFC 3339（帶 `Z` 或 offset）**。date-only 用 `YYYY-MM-DD` string，不轉 `Date`（Nuxt UI 日期元件的最小示意見 `vendor/snippets/nuxt-calendar-field/`）
 4. **DB function 的 business day 計算用 `AT TIME ZONE` + half-open range**（`>= starts_at AND < ends_at`），禁止 `BETWEEN`
 5. **`timestamp → timestamptz` migration MUST 顯式 `USING ... AT TIME ZONE`**，帶原欄位的 TZ 語意
 6. **設定固定牆鐘時間的排程前 MUST 先實查三個 TZ**：live host TZ、service 自己的 `TZ`（systemd unit / container env）、scheduler 本身的 timezone 設定——三者可以互不相同。**NEVER** 先假設 runtime 是 UTC 再人工換算時刻。同一個 task **MUST** 只有一個 scheduler owner；驗 production trigger **MUST** 讀實際的 JSON task response，**NEVER** 把 SPA fallback 的 HTTP 200 當成執行成功

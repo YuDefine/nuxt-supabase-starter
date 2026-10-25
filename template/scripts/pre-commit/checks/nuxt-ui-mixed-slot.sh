@@ -10,14 +10,13 @@
 #   - pre-commit checks/nuxt-ui-mixed-slot.sh : 只掃本次 staged *.vue（blocking，最接近犯錯時點）
 #   - pre-push  checks/nuxt-ui-mixed-slot.sh  : 掃全 repo *.vue（blocking 回溯型；fleet 基線 0 hit）
 #
-# 實證：<consumer-b> /reports/daily-machining 空白 18 天（commit 5aa52e92 重構成 named slots
-# 但留一個 slideover 在 template 外）。typecheck / lint / console 全綠。
+# typecheck / lint / console 全綠，只有頁面全空才看得出來。
 #
 # Auto-detect：只掃本次 commit staged 的 *.vue；無 staged .vue 直接跳過（no-op exit 0）。
 # 偵測邏輯共用 vendor/scripts/checks/nuxt-ui-mixed-slot-detect.ts。
 #
 # 規約來源：
-#   - pitfall : [[pitfall-nuxt-ui-named-slot-default-fallback-shadowing]]（TD-236）
+#   - pitfall : [[pitfall-nuxt-ui-named-slot-default-fallback-shadowing]]
 #
 # 由 ~/clade vendor/scripts/pre-commit/ 散播，請勿直接編輯 consumer 副本。
 

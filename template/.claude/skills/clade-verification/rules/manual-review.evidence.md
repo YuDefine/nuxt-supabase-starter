@@ -3,8 +3,8 @@ description: Manual Review evidence 規約——寫 / 審 tasks.md 的 ## 人工
 paths: ['tasks/**', 'specs/plans/**']
 ---
 <!-- Clade native rule; source: rules/core/manual-review.evidence.md; edit canonical source -->
-<!-- clade-targets: claude,codex -->
-<!-- clade-adapters: claude,codex -->
+<!-- clade-targets: claude,agents -->
+<!-- clade-adapters: claude -->
 
 # Manual Review — Evidence & Authoring Schema
 

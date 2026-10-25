@@ -6,154 +6,26 @@ description: "Use when crawling a website with Cloudflare Browser Rendering /cra
 
 # Cloudflare Website Crawler
 
-Crawl a site through Cloudflare Browser Rendering's `/crawl` endpoint via the `cf` CLI and save pages as local markdown.
+經 Cloudflare Browser Rendering 的 `/crawl` endpoint 爬整站，存成本機 markdown。建立與輪詢走 `cf` CLI（`cf-cli` skill）；分頁下載是 script 內的 HTTP client（`cloudflare-workers.md` § 8）。`scripts/crawl.py` 以本 skill 目錄為基準。
 
-## Arguments (`/cf-crawl <url> …`)
+# SOP
 
-- First positional: URL (ask if missing)
-- `--limit N` / `-l N`: max pages (default 20; the API's own default is 10)
-- `--depth N` / `-d N`: max depth (default 100000)
-- `--include "p1,p2"` / `--exclude "p1,p2"`: URL patterns (`*` excludes `/`, `**` includes it; exclude wins)
-- `--no-render`: static HTML fetch, faster and cheaper, misses JS-rendered content
-- `--merge`: combine output into one markdown file
-- `--output DIR` / `-o DIR`: output dir (default `.crawl-output`)
-- `--source sitemaps|links|all`: page discovery (default all)
-- `--since DATE`: only pages modified since DATE (ISO date or Unix seconds) → API `modifiedSince` (`date -d "2026-03-10" +%s` on Linux, `date -j -f "%Y-%m-%d" "2026-03-10" +%s` on macOS)
+## Phase 1 -- 解析引數與前置檢查
 
-## Step 1: Credentials and `cf`
+1. READ 讀取 `/cf-crawl <url> …` 的引數；缺 URL 就問使用者。
+2. DELEGATE `command -v cf`；不存在就請使用者依 `cf-cli` skill Phase 1 經 mise 安裝（NEVER `npm i -g`）並停止。
+3. READ 讀取 `rules/引數對應與終態判準.md`；要查 API 欄位或預設值時，讀取 `references/crawl-API參數表.md`。
 
-Starting and polling go through the `cf` CLI (`cf-cli` skill); Step 4's paging loop is an in-script client and stays on the HTTP API (`cloudflare-workers.md` § 8). `command -v cf` must succeed; otherwise ask the user to install it (see `cf-cli` skill — via mise, never `npm i -g`) and stop.
+## Phase 2 -- 建立 crawl job
 
-Need `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (token permission "Browser Rendering - Edit"); `cf` reads both from the environment. Check env first, then `.env`, `.env.local`, `~/.env`:
+1. DELEGATE `uv run scripts/crawl.py start --url <url> [--limit N] [--depth N] [--include p1,p2] [--exclude p1,p2] [--no-render] [--source all|sitemaps|links] [--since <日期|Unix 秒>]`，只帶使用者給的旗標；印出的結果是 job ID。exit 3 表示缺憑證：轉告缺少的變數、請使用者補進專案 `.env` 後停止；exit 1 且訊息指向 token 權限時，請使用者給 token 加上 `Browser Rendering - Edit` 權限後停止。
 
-```bash
-if [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-  for envfile in .env .env.local "$HOME/.env"; do
-    if [ -f "$envfile" ]; then
-      eval "$(grep -E '^CLOUDFLARE_(ACCOUNT_ID|API_TOKEN)=' "$envfile" | sed 's/^/export /')"
-    fi
-  done
-fi
-```
+## Phase 3 -- 輪詢至終態
 
-Still missing or empty → ask the user to add both to the project `.env` and stop.
+1. DELEGATE 每 5 秒跑 `uv run scripts/crawl.py status --job <JOB_ID>`（印 `{"status","finished","total"}`，憑證與 `start` 同源），直到 status 不再是 `running`。
+2. THINK 依已載入規則判讀終態，決定取回或回報失敗。
 
-## Step 2: Start the crawl
+## Phase 4 -- 取回並保存
 
-```bash
-cf browser-run crawl create --body '{
-  "url": "<TARGET_URL>",
-  "limit": <NUMBER_OF_PAGES>,
-  "formats": ["markdown"]
-}'
-```
-
-Fill the body from the parsed arguments, adding only what the user passed: `--depth` → `depth`, `--source` → `source`, `--no-render` → `"render": false`, `--include`／`--exclude` → `"options": { "includePatterns": [...], "excludePatterns": [...] }`, `--since` → `"modifiedSince": <UNIX_TIMESTAMP>` (see Core Parameters). The printed result is the job ID.
-
-## Step 3: Poll every 5 seconds
-
-```bash
-cf browser-run crawl get <JOB_ID> --limit 1 | jq -r '"Status: \(.status) | Finished: \(.finished)/\(.total)"'
-```
-
-Statuses: `running`, `completed`, `cancelled_due_to_timeout` (7-day limit), `cancelled_due_to_limits`, `errored`.
-
-## Step 4: Retrieve and save
-
-Records page with `?status=completed&limit=50&cursor=<CURSOR>`; with `modifiedSince`, `?status=skipped` lists unchanged pages, and robots-blocked URLs show `"status": "disallowed"`.
-
-```bash
-# Create output directory
-mkdir -p .crawl-output
-
-# Fetch and save all pages
-python3 -c "
-import json, os, re, sys, urllib.request
-
-account_id = os.environ['CLOUDFLARE_ACCOUNT_ID']
-api_token = os.environ['CLOUDFLARE_API_TOKEN']
-job_id = '<JOB_ID>'
-base = f'https://api.cloudflare.com/client/v4/accounts/{account_id}/browser-rendering/crawl/{job_id}'
-outdir = '.crawl-output'
-os.makedirs(outdir, exist_ok=True)
-
-cursor = None
-total_saved = 0
-
-while True:
-    url = f'{base}?status=completed&limit=50'
-    if cursor:
-        url += f'&cursor={cursor}'
-
-    req = urllib.request.Request(url, headers={
-        'Authorization': f'Bearer {api_token}'
-    })
-    with urllib.request.urlopen(req) as resp:
-        data = json.load(resp)
-
-    records = data.get('result', {}).get('records', [])
-    if not records:
-        break
-
-    for rec in records:
-        page_url = rec.get('url', '')
-        md = rec.get('markdown', '')
-        if not md:
-            continue
-        # Convert URL to filename
-        name = re.sub(r'https?://', '', page_url)
-        name = re.sub(r'[^a-zA-Z0-9]', '_', name).strip('_')[:120]
-        filepath = os.path.join(outdir, f'{name}.md')
-        with open(filepath, 'w') as f:
-            f.write(f'<!-- Source: {page_url} -->\n\n')
-            f.write(md)
-        total_saved += 1
-
-    cursor = data.get('result', {}).get('cursor')
-    if cursor is None:
-        break
-
-print(f'Saved {total_saved} pages to {outdir}/')
-"
-```
-
-## Parameter Reference
-
-### Core Parameters
-
-| Parameter       | Type    | Default    | Description                                               |
-| --------------- | ------- | ---------- | --------------------------------------------------------- |
-| `url`           | string  | (required) | Starting URL to crawl                                     |
-| `limit`         | number  | 10         | Max pages to crawl (up to 100,000)                        |
-| `depth`         | number  | 100,000    | Max link depth from starting URL                          |
-| `formats`       | array   | ["html"]   | Output formats: `html`, `markdown`, `json`                |
-| `render`        | boolean | true       | `true` = headless browser, `false` = fast HTML fetch      |
-| `source`        | string  | "all"      | Page discovery: `all`, `sitemaps`, `links`                |
-| `maxAge`        | number  | 86400      | Cache validity in seconds (max 604800)                    |
-| `modifiedSince` | number  | -          | Unix timestamp; only crawl pages modified after this time |
-
-### Options Object
-
-| Parameter              | Type    | Default | Description                                    |
-| ---------------------- | ------- | ------- | ---------------------------------------------- |
-| `includePatterns`      | array   | []      | Wildcard patterns to include (`*` and `**`)    |
-| `excludePatterns`      | array   | []      | Wildcard patterns to exclude (higher priority) |
-| `includeSubdomains`    | boolean | false   | Follow links to subdomains                     |
-| `includeExternalLinks` | boolean | false   | Follow external links                          |
-
-### Advanced Parameters
-
-| Parameter             | Type   | Description                                                |
-| --------------------- | ------ | ---------------------------------------------------------- |
-| `jsonOptions`         | object | AI-powered structured extraction (prompt, response_format) |
-| `authenticate`        | object | HTTP basic auth (username, password)                       |
-| `setExtraHTTPHeaders` | object | Custom headers for requests                                |
-| `rejectResourceTypes` | array  | Skip: image, media, font, stylesheet                       |
-| `userAgent`           | string | Custom user agent string                                   |
-| `cookies`             | array  | Custom cookies for requests                                |
-
-## Notes
-
-- Respects robots.txt including crawl-delay
-- Free plan: 10 minutes of browser time per day; results kept 14 days; max 10 MB per page
-- Use `render: false` for static sites to save browser time
+1. DELEGATE `uv run scripts/crawl.py fetch --job <JOB_ID> [--output <dir>] [--merge]`（`--output` 預設 `.crawl-output`；`--merge` 合併成 `<dir>/crawl.md`）。
+2. WRITE 依 script 印出的 JSON 回報 `saved`、`skipped`、`disallowed` 與 `output` 路徑。
