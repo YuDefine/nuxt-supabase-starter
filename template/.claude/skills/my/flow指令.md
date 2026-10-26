@@ -1,11 +1,11 @@
 
 # `flow` 指令查表（`/my` 用）
 
-本檔只收 `/my` 會用到的五個子命令。指令與旗標以 `node vendor/scripts/flow/flow.ts --help` 及 `vendor/scripts/flow/flow.ts` 的實作為準；判準（什麼時候問、怎麼寫選項、失敗怎麼處置）不在本檔，見 `rules/`。
+本檔只收 `/my` 會用到的七個子命令。指令與旗標以 `node vendor/scripts/flow/flow.ts --help` 及 `vendor/scripts/flow/flow.ts` 的實作為準；判準（什麼時候問、怎麼寫選項、失敗怎麼處置）不在本檔，見 `rules/`。
 
 共同前提：
 
-- `pending`／`answer`／`revise` **在 clade checkout 執行**（`cd ~/offline/clade`，或設 `CLADE_HOME`）。`ask` 例外：它把題目寫進**當前 cwd 所屬 repo** 的 spine（在 linked worktree 會改寫到該 repo main checkout），沒有 `--repo`，所以 MUST 在**該題所屬 repo 的 checkout** 執行（例：`<consumer-id>` 的題 `cd ~/offline/<consumer-id> && node ~/offline/clade/vendor/scripts/flow/flow.ts ask …`）；在 clade 跑會把別 repo 的題標成 `[clade]`、答案落到 clade 的 carrier。`flow` 以 `CLADE_HOME`，否則以 cwd 的 `git rev-parse --show-toplevel` 當根目錄；fleet roster 與 `--repo` 名稱解析都從這個根讀：roster＝`consumers.local` ∪ `registry/consumers.json` 上本機有 checkout 的 consumer（含 `pending_onboard`），所以沒跑過 `bootstrap-consumers-local.ts` 的機器也讀得到全部已登記的 repo。在 consumer 目錄跑 `pending`（那裡兩個來源都沒有）會印 `⚠ 找不到 <consumer>/consumers.local，只能看這一個 repo` 並只列那一個 repo。
+- `pending`／`answer`／`revise`／`dismiss`／`ask-options` **在 clade checkout 執行**（`cd ~/offline/clade`，或設 `CLADE_HOME`）。`ask` 例外：它把題目寫進**當前 cwd 所屬 repo** 的 spine（在 linked worktree 會改寫到該 repo main checkout），沒有 `--repo`，所以 MUST 在**該題所屬 repo 的 checkout** 執行（例：`<consumer-id>` 的題 `cd ~/offline/<consumer-id> && node ~/offline/clade/vendor/scripts/flow/flow.ts ask …`）；在 clade 跑會把別 repo 的題標成 `[clade]`、答案落到 clade 的 carrier。`flow` 以 `CLADE_HOME`，否則以 cwd 的 `git rev-parse --show-toplevel` 當根目錄；fleet roster 與 `--repo` 名稱解析都從這個根讀：roster＝`consumers.local` ∪ `registry/consumers.json` 上本機有 checkout 的 consumer（含 `pending_onboard`），所以沒跑過 `bootstrap-consumers-local.ts` 的機器也讀得到全部已登記的 repo。在 consumer 目錄跑 `pending`（那裡兩個來源都沒有）會印 `⚠ 找不到 <consumer>/consumers.local，只能看這一個 repo` 並只列那一個 repo。
 - 下文的 `flow` 都是 `node vendor/scripts/flow/flow.ts` 的簡寫。
 
 ## pending
@@ -30,7 +30,7 @@ cd ~/offline/clade && FLOW_CLI_CONTRACT=2 node vendor/scripts/flow/flow.ts pendi
 - `Qn` 只出現在 `要我拍板` 與 `要我驗收`，編號連續；其餘為 bullet。題目子行可能有 `A./B.` 選項（推薦那條帶「（推薦）」）、`⚠` 警示、`✎` 寫法評語、`→` 動作／步驟、`答案落到：<carrier>`、`可回：X／Y`（僅動手桶）、`span <span_id>`。
 - 每題行首的 `[<repo>]` 就是 `flow answer --repo` 要逐字照抄的值。題來自別台機器時寫成 `[<repo>@<機器>]`：`--repo` 只填 `@` 前面的 repo 名，`flow answer` 會自己對那台落答。
 - 跨機：預設也併入 peer（`~/.config/clade/herdr-peers` 列的機器）的佇列，每台 ssh 並行、逾時 8 秒；`span_id` 去重、本機優先；`--json` 多帶 `peers: [{ machine, ok, error?, count }]`，每列帶 `machine`。**讀不到的 peer 會在輸出最上面印 `⚠ 讀不到 peer <機器>：<原因>`**——那代表那台的題這次看不到，不是那台沒有題；整體為空但有 peer 讀不到時 exit 6（不是 4）。
-- 帶 `⏳ 疑似過時：<證據>` 子行的題排在同一區段最後：watch 的過時掃描判它前提可能已消失、但信心不到代寫掉（問 Charles 的題、題目內文才提到的 PR、有來源檔等）。多半不用答；查證屬實就照子行給的 `flow dismiss` 寫掉。被機器自動下架的題 `dismissed_by` 是 `stale-sweep`，reason 以「前提已不存在（<規則>）」起頭。
+- 帶 `⏳ 疑似過時：<證據>` 子行的題排在同一區段最後：watch 的過時掃描判它前提可能已消失、但信心不到代寫掉（問 Charles 的題、題目內文才提到的 PR、有來源檔等）。多半不用答；查證屬實就照子行給的 `flow dismiss` 寫掉——子行那行指令沒帶 `--apply`，照抄時 MUST 補上（見 § dismiss）。被機器自動下架的題 `dismissed_by` 是 `stale-sweep`，reason 以「前提已不存在（<規則>）」起頭。
 - 閒置 ≥72h 又沒有近期重驗紀錄的題**不會出現在這份清單**，只在結尾印一行 `⏸ 另有 N 題閒置 …，未列出`（`--json` 在 `recheck_due`）。那是主持者的工作：`flow recheck` 列清單、逐題查現況後 `flow recheck <span> --conclusion still-needed|obsolete|premise-changed --source … --evidence … --actor …`；仍需拍板才放行，過時就寫掉附證據，前提改變就改題。判準見 coordinator skill 的 `rules/向Charles提問判準.md` Rule 5。/my 的 agent NEVER 為了讓題目出現而自己記一筆 `still-needed`——重驗要查過現況才算。
 - 退出碼照 `FLOW_CLI_CONTRACT=2`（每次呼叫前綴，NEVER export）：exit 0 = 佇列有東西；**exit 4 = 佇列空**（印 `佇列是空的。`），不是錯誤；exit 6 = 讀得到的部分是空、但有 peer 讀不到（不能報空）；exit 2 = 指令打錯。沒帶前綴時回舊碼（空＝2、peer 讀不到＝3）並在 stderr 多印一行 `flow: deprecated-exit`。
 
@@ -109,7 +109,7 @@ cd ~/offline/<consumer-id> && node ~/offline/clade/vendor/scripts/flow/flow.ts a
 
 寫入前的兩道拒絕（只對問 Charles 的題，exit 1；處置見 `rules/待拍板條目寫法.md` Rule 23）：同一 repo 同一 carrier 14 天內已有 Charles 的答案 → 印出既有答案與日期；cwd 的 repo 在 clade 旁邊卻不在 roster 上 → 印三條改法。
 
-輸出：一行 JSON `{"span_id": "...", "work_id": "..."}`——**記下 `span_id`**，Phase 2 要用它標 `[本輪從對話撈出]`。在 linked worktree 裡執行時，落點會改寫到 main checkout 的共用 spine，stdout 多帶 `spine`／`rerouted_from`，stderr 印一行說明。
+輸出：一行 JSON `{"span_id": "...", "work_id": "..."}`——**記下 `span_id`**，Phase 2 第 2 步要用它標 `[本輪從對話撈出]`。在 linked worktree 裡執行時，落點會改寫到 main checkout 的共用 spine，stdout 多帶 `spine`／`rerouted_from`，stderr 印一行說明。
 
 ## answer
 
@@ -187,3 +187,34 @@ cd ~/offline/clade && node vendor/scripts/flow/flow.ts publish-answers --repo <n
 | `--apply` | 送出時必帶 | 帶 `FLOW_CLI_CONTRACT=2` 前綴時，不帶 `--apply` 只列出每筆紀錄的 `file`、`spans`、`pure` 與該 repo 的 `policy`，不 commit、不 push；沒帶前綴的過渡期，不帶 `--apply` **仍會送出**，要只列得用舊名 `--dry-run`（規則同 `answer`） |
 
 輸出：JSON `{ dry_run, records: [{ repo, file, policy, state, reason, detail, spans, commit?, pr_url? }] }`。exit 0 = 全部送出或沒有東西要送；**exit 3 = 有 `unpublished`**，逐筆照 `rules/回答落檔判準.md` Rule 9 處置。只提交「整個 diff 都是決策紀錄」的 carrier；檔上有別的未提交改動就不動。
+
+## ask-options
+
+```bash
+cd ~/offline/clade && node vendor/scripts/flow/flow.ts ask-options '<span_id>' [--repo <name>]
+```
+
+| 旗標 | 必填性 | 作用 |
+| --- | --- | --- |
+| `<span_id>` | 必填（positional） | `flow pending` 該題的 `span` 行 |
+| `--repo <name>`／`--repo-root <path>` | 題目有 `[<repo>]` 前綴、且不是 `[clade]` 時必填 | 解析同 `answer`（`@<機器>` 前綴只填 repo 名）。沒帶就寫進 **cwd 所屬 repo** 的 spine：別 repo 的題會回 `no-such-decision`，stderr 印持有那題的 repo 名，補上 `--repo` 重跑 |
+| `--actor A` | 選填，預設 `charles` | 留言者 |
+
+`flow pending` 對「沒給選項也沒說要填什麼」的題印的就是這支指令（`要選項：…` 那行不帶 `--repo`，照抄時依題目的 `[repo]` 補上）。它替 Charles 對出題者留一筆「請補選項」的 clarification（文字固定，不由人打），**不會當場產生選項**：選項要等出題的 session 或主持者補上，補完的題在下一次 `flow pending` 才帶選項出現。不在預演／`--apply` 契約內，跑了就寫。輸出：一行 JSON `{"written": true, "span_id": "..."}`；失敗時 exit 1、`written:false` 帶 `reason`（`already-resolved` 代表那題已經答掉）。
+
+## dismiss
+
+```bash
+cd ~/offline/clade && node vendor/scripts/flow/flow.ts dismiss '<span_id>' \
+  --reason '<為什麼寫掉，附查證證據>' [--repo <name>] [--actor <誰>] --apply
+```
+
+| 旗標 | 必填性 | 作用 |
+| --- | --- | --- |
+| `<span_id>` | 必填（positional） | `flow pending` 該題的 `span` 行 |
+| `--reason '<why>'` | 必填 | 寫掉的理由與查證證據，缺了直接拒 |
+| `--repo <name>`／`--repo-root <path>` | 題目有 `[<repo>]` 前綴時必填 | 照佇列上那題的 `repo` 欄位，解析同 `answer` |
+| `--actor A` | 選填，預設 `human` | 寫掉的人 |
+| `--apply` | 寫入時必帶 | 帶 `FLOW_CLI_CONTRACT=2` 前綴時，不帶 `--apply` 只預演——**照樣回 `ok:true`、exit 0，但什麼都沒寫**，所以 `ok:true` 不能當成「已寫掉」；沒帶前綴的過渡期，不帶 `--apply` 仍會寫入（印 `flow: deprecated-default`）。規則同 `answer` |
+
+把重複、過時或已在別處結案的題寫掉。帶 `⏳ 疑似過時` 子行的題，子行給的整行指令沒帶 `--apply`，照抄時 MUST 補上。輸出：一行 JSON，`ok:false` 時 exit 1。寫掉後重跑 `flow pending` 確認那題消失才算寫掉。什麼時候可以寫掉見 `rules/分組討論判準.md`。

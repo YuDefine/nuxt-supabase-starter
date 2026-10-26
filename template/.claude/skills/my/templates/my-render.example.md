@@ -1,37 +1,57 @@
 
-要我拍板（2）
+<!-- ===== 〈分組總覽〉範例 ===== -->
 
-Q1  [<consumer-1>] 客戶補件前，#74 要等範例再做，還是先做依欄位名稱對應的通用 CSV／Excel 差異匯入？  44.6h
-      A. 等範例再做（推薦）
-      B. 先做通用匯入
-      補充：客戶上週說範例「這週會給」，目前還沒收到
+佇列現在有要你拍板 8 題、要你驗收 1 題、要你動手 2 件，另有 1 件狀態列。我先查過前提：<consumer-1> #74 的 PR 還沒合，這幾題仍然有效；Q6 與 Q2 問的是同一件事。以下分成 5 組：
 
-Q2  [clade] clade-wt/old-sync 已併回 main 且 14 天沒動，要現在回收嗎？  0m  [本輪從對話撈出]
-      A. 現在回收（推薦）
-      B. 留到下一輪批次
+**A. 擋住別人，建議先談（3 題）**
+這組在決定 <consumer-1> #74 能不能往下做、main 的紅怎麼處理，有推薦的建議照推薦。
+- Q1 [<consumer-1>] #74 等範例再做，還是先做通用匯入：建議 A，等範例
+- Q2 [<consumer-1>] #74 要不要先開 draft PR 給客戶看：⚠ 沒給選項也沒說要填什麼——這題現在答不了
+- Q8 [clade] main 連三輪紅，修環境還是暫停接 main：建議 A，修環境  [本輪從對話撈出]
 
-要我驗收（1）
+**B. 快速組：都有推薦，看完按一下就結（4 題）**
+這組都是小決定，推薦已經查過。
+- Q4 [clade] clade-wt/old-sync 要現在回收嗎：建議 A，現在回收
+- Q5 [<consumer-3>] 簽核逾時提醒：建議 A，維持每天提醒
+- Q7 [clade] stash 丟棄的證據放哪：建議 A，只留 git 物件
+- Q9 [<consumer-2>] 打卡頁改成先選班別再打卡（驗收）：建議通過
 
-Q3  [<consumer-2>] 打卡頁改成先選班別再打卡  5.1h
-      A. 通過
-      B. 退回
+**C. 建議寫掉（2 題）**
+這幾題問的事已經發生或已經答過，你點頭我才寫掉。
+- Q3 [<consumer-2>] KPI 測試 commit 要不要放行：那筆 commit 已經在 main 上
+- Q6 [<consumer-1>] #74 要不要先給客戶看：跟 Q2 是同一件事
 
-要我動手（2）
+**D. 動手組，要你到場或動帳號（2 件）**
+- [<consumer-2>] <consumer-2> 跑 dep batch：範圍？  登記於 1.0h 前
+- [<consumer-3>] NAS 的 USB 備份碟要換新的  登記於 26.3h 前
 
-  - [<consumer-2>] <consumer-2> 跑 dep batch：範圍？  登記於 1.0h 前  [本輪從對話撈出]
-    → Charles 在 <consumer-2> 親自打 /version-upgrade → Outdated mode
-    可回：只跑 patch／patch＋minor／這輪不跑
-  - [<consumer-3>] NAS 的 USB 備份碟要換新的  登記於 26.3h 前
-    → 到機房把 NAS 第 2 槽的 USB 碟換成新碟，回來後跑一次 backup verify
+**E. 狀態組，不用回答、知道就好（1 件）**
+卡住、等人動手：
+- [<consumer-1>] CI 卡在 runner 配額  5.2h
+  → 等 runner 槽空出來，不需要你做決定
 
-loop 結構性推不動（1）
+clade: dirty 7 / worktree 21　<consumer-2>: untracked 5 / worktree 16
 
-  - [<consumer-4>] coordinator 自動加派連續 3 輪撞同一個 deploy.prodUrl 缺值  登記於 114.7h 前
-    → consumer-meta.json 的 deploy.prodUrl 要由人補上正式網址
+建議從 **A 組**開始：Q8 的 main 紅擋住其他 PR 合入。A 組可以直接回「Q1 A、Q8 A」；Q2 要先補選項，也可以逐題問我細節。你要從哪組開始？
 
-clade: dirty 7 / worktree 21　<consumer-2>: untracked 5 / worktree 16 / stash 3　<consumer-1>: dirty 4 / worktree 12
+<!-- ===== 〈單組討論〉範例 ===== -->
 
-回 Q1A Q2A Q3通過 即可結案；「要我動手」帶 `可回：` 的列回那個字即可。
+**第 A 組：擋住別人（3 題）**
 
-<!-- 全空時的完整輸出（取代以上所有區段）： -->
-佇列是空的，對話裡也沒有待你決定的事。（全 roster 乾淨：無 dirty、無 worktree、無 stash、無 lock）
+**Q8 [clade] main 連三輪紅，要修環境還是暫停接 main？**
+現況：
+- 最近一次跑完的 main（15:19）紅在 test-lanes (6/6)，之後幾輪被取消或還在跑
+- 修 umask 的 PR #2541 已開，但它自己的 CI 還有 3 個 failure
+  - **A. 修環境（推薦）**：保留路由，#2541 修掉 umask 依賴、加大磁碟；main 在那之前會繼續紅
+  - B. 暫停接 main：main 立刻止血，修完才回來分攤
+我的看法：A 是終局；要 main 今天就止血可以答「B，然後 A」。
+
+**Q2 [<consumer-1>] #74 要不要先開 draft PR 給客戶看？**
+現況：
+- 佇列上這題沒有選項；#74 的分支目前只有匯入骨架
+這題佇列上沒有選項，我已請出題者補（`flow ask-options`），補上之前先不答。
+
+可以一次回，例如「Q1 A、Q8 A」；有要細談的就單獨問那一題。
+
+<!-- 落答回報範例： -->
+第 A 組落了 Q1、Q8，重跑佇列確認已消失，現在剩 7 題。修環境的後續（#2541、加磁碟）已交給主持者。接下來是第 B 組，四題都有推薦，我直接列出來。

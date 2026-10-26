@@ -24,7 +24,7 @@
 
 ### 0. agent-browser 環境準備（MUST）
 
-`agent-browser` 自己起 Chromium，不需要 CDP 環境變數。`~/.agent-browser/config.json` 只放 `--no-sandbox`、**不設預設 profile**：不帶 `--profile` 時每個 session 用暫存 profile——**只限**本機 `127.0.0.1` dev server 走下方 dev-login 取證；其他網站一律用 desk 的現成 profile（`profile-main`／`profile-yudefine`，判準見 `~/offline/clade/adapters/claude/instructions/rules/core/screenshot-strategy.md` § Browser control surface 的 Profile 條）。需要既有登入狀態時，同一個 session 的**每個**指令都帶同一組 `--profile`（見 cookbook § 呼叫慣例），漏帶一次瀏覽器就會被重開成 `about:blank`。每個 Bash tool call 是獨立的 `agent-browser <subcommand>`，多步用 `&&` 串：
+`agent-browser` 自己起 Chromium，不需要 CDP 環境變數。`~/.agent-browser/config.json` 只放 `--no-sandbox`、**不設預設 profile**：不帶 `--profile` 時每個 session 用暫存 profile——**只限**本機 `127.0.0.1` dev server 走下方 dev-login 取證；其他網站一律用 desk 桌面 Chrome 的 profile（`--profile Main`／`--profile cc2-YuDefine`，判準見 `~/offline/clade/adapters/claude/instructions/rules/core/screenshot-strategy.md` § Browser control surface 的 Profile 條）。需要既有登入狀態時，同一個 session 的**每個**指令都帶同一組 `--profile`（見 cookbook § 呼叫慣例），漏帶一次瀏覽器就會被重開成 `about:blank`。每個 Bash tool call 是獨立的 `agent-browser <subcommand>`，多步用 `&&` 串：
 
 ```bash
 agent-browser --session ssr get url

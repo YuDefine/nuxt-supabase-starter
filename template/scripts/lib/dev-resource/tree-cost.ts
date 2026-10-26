@@ -1,6 +1,6 @@
 // 🔒 LOCKED — managed by clade · Source: vendor/scripts/lib/dev-resource/tree-cost.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/lib/dev-resource/tree-cost.ts
 /**
- * 每棵 worktree 的執行期資源成本量測（W-2026-10-18-parallel-worktree-runtime-cost）。
+ * 每棵 worktree 的執行期資源成本量測。
  *
  * 純判定＋唯讀 IO：進程歸屬樹、dev server 辨識、node_modules 實佔（hardlink 分帳）。
  * NEVER 殺進程、NEVER 刪檔。IO 讀 /proc 與 lstat，測試以 `procRoot`（假 /proc 目錄）／暫存樹注入。

@@ -1,7 +1,6 @@
 // 🔒 LOCKED — managed by clade · Source: vendor/scripts/lib/dev-slots.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/lib/dev-slots.ts
 /**
- * dev server 主機並行額度（slot）的實況計數與 owner class 判定
- * （W-2026-10-18-parallel-worktree-runtime-cost spec C1／C6，實作項 I1）。
+ * dev server 主機並行額度（slot）的實況計數與 owner class 判定。
  *
  * 純判定：進程樣本、listener 表、lease 清單都由 caller 注入；本檔不讀 /proc、不跑 lsof、不碰 lease 檔。
  * 唯讀——NEVER 在這裡殺進程或改 lease。dev server 辨識與 Pss 取樣與 `tree-cost` 同源
@@ -11,7 +10,7 @@
  * | --- | --- |
  * | 觸發條件 | informational — 不觸發任何東西（I2 才把 `hostCap` 接進 `start`／`wait`） |
  * | 消費端 | `node vendor/scripts/dev-session.ts slots [--json]`；I2 的滿額判定、巡檢摘要 `--json` 接線 |
- * | 觸發點 | 失敗輸出：`slots --help` 與 spec C6（`specs/plans/W-2026-10-18-parallel-worktree-runtime-cost/spec.md`） |
+ * | 觸發點 | 失敗輸出：`slots --help` |
  */
 
 import { isDevServerArgv, type ProcSample } from './dev-resource/tree-cost.ts'

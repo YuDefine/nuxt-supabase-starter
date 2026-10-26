@@ -17,6 +17,22 @@ Central rules are authored in `rules/**/*.md`; consumer-local rules are authored
 
 操作 SOP 與模板見 cookbook `vendor/snippets/rule-authoring/`。
 
+## 新規則先問能不能寫成檢查（MUST，在分類失敗型態之前）
+
+文字規約要靠 agent 自己判斷才守得住，遵守率就是運氣；能寫成機械檢查的義務，寫成檢查，規約只留一行 pointer。每新增或加寬一條 MUST／NEVER，動筆前在同一次改動內答完三題，答案寫在條文旁或 commit／PR 內文：
+
+1. **違規能不能用 predicate 判？** predicate 的輸入是檔案、diff、exit code、事件 payload、ledger 或 live API 這類可觀察事實（篩選條件見 `hook-authoring` skill `rules/該不該做成hook與型別判定.md` 的 Rule 1–5：重複證據、predicate 機械可判、事件時機正確、失敗處置明確、不製造背景噪音）。答得出 → 寫成 hook、lint rule、audit 不變量或 gate，條文縮成一行 pointer 指到它。
+2. **已有載體時，違規是因為缺條文還是覆蓋不全？** 同一義務被糾正第 2 次以上，先查載體漏了哪個入口、哪類對象，補覆蓋面或加不變量 audit；**NEVER** 在載體旁再疊一條文字規則。
+3. **本質需判斷（措辭好不好、方案好不好、要不要問人）才走文字形式。** 條文寫明為什麼判不出 predicate，再進下一節挑形式。
+
+只有第 3 題成立的規約才進 § 先分類失敗型態；前兩題成立卻選了文字規則，等於把偏好留給 agent 猜。
+
+**Good Example**：「待拍板題要有前提、選項、推薦」拆成 lint 可驗的欄位（前提句、`Qn` 附選項或要給值、推薦句、續行行數），欄位缺漏由 lint 擋；條文只剩 pointer，其餘措辭品質留給判斷型文字。
+
+**Bad Example**：同一類違規被糾正兩次，各補一條 NEVER 到 skill rules，載體入口沒補。NEVER 牆越長越沒有資訊量，違規入口照舊沒人擋。
+
+參考資料（盤點與糾正排名，會隨重跑更新，不 inline 數字）：`specs/plans/W-2026-10-18-rules-as-facts-gates/evidence/must-never-inventory.md`（條文三分類）、`specs/plans/W-2026-10-18-rules-as-facts-gates/evidence/correction-top10.md`（被糾正最多且可機械化的義務）。
+
 ## 先分類失敗型態，再選形式（MUST）
 
 寫任何規約段之前，先回答「baseline 失敗長什麼樣」，按表選形式：

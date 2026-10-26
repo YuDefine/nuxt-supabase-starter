@@ -16,6 +16,7 @@
  * 所以任何故障的方向都是「照舊卡框」而不是「多放行」。字串比對型：不承諾完整語意，只認下列常見形狀；
  * 談論指令的文字不會被誤放（只看 Bash 的 command 本身，且整條指令必須落在清單形狀內）。
  * 不承諾：清單內的 repo script（`node scripts/<x>.ts`、`pnpm test`）自己做什麼——放行的是呼叫，不是被呼叫檔的內容。
+ * 唯一例外是 `SCRIPT_ARG_POLICY` 列名的 script（預設會寫、只有特定旗標才唯讀，如 `fleet-main-align.ts` 必帶 `--dry-run`）。
  *
  * 不放行（照舊走權限框，由 settings 或人決定）：
  * - shell 組合與展開：未加引號的 `; | & > < $ \` ( ) { } \ ~`、glob 的 `* ? [ ]`、換行、雙引號內的 `$`／反引號／`\`／`* ? [ ]`、
@@ -50,7 +51,7 @@
  */
 
 import { readFileSync, statSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { posix, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export interface CloudAllow {
@@ -329,8 +330,10 @@ function pnpmAllow(rest: string[]): string | null {
 
 function nodeAllow(rest: string[], cwd: string): string | null {
   if (rest[0] === '--test')
+    // test runner 以子行程跑每個檔，`invokedAsCli()` 為真且不帶旗標：SCRIPT_ARG_POLICY 列的腳本一律不收。
+    // operand 相對於 `cd <dir> &&` 改過的 cwd、policy key 相對 repo root，而 hook 的 cwd 不保證是 repo root：以檔名比，寧可多擋同名檔
     return rest.every((x) =>
-      x.startsWith('-') ? NODE_TEST_FLAGS.has(flagName(x)) : isRepoPath(x),
+      x.startsWith('-') ? NODE_TEST_FLAGS.has(flagName(x)) : isRepoPath(x) && !isPolicyScript(x),
     ) && flagsClean(rest)
       ? 'node --test'
       : null
@@ -349,8 +352,25 @@ function nodeAllow(rest: string[], cwd: string): string | null {
   if (VP_WRAPPER.test(script))
     return a[0] !== undefined && VP_SUBCOMMANDS.has(a[0]) && flagsClean(a) ? 'vp shim' : null
   if (!SCRIPT_PATH.test(script)) return null
+  // `scripts/./x.ts`、`scripts//x.ts` 與 `scripts/x.ts` 是同一支檔：政策以正規化後的路徑查，免得換寫法繞過
+  const policy = SCRIPT_ARG_POLICY[posix.normalize(script)]
+  if (policy && !policy(a)) return null
   return flagsClean(a) ? 'repo script' : null
 }
+
+/**
+ * 預設會寫狀態、只有特定旗標才唯讀的 repo script：旗標組合綁死，不對時不表態。
+ * `fleet-main-align.ts`：不帶 `--dry-run` 會 ff／reset／rescue-push 各 consumer 的 main 並寫 last.json（逐行核對：
+ * `--dry-run` 只 fetch、量測、跑 `main-sync --check`／`dev-node self-heal --check`，不 push、不 reset、不寫 state）。
+ */
+const SCRIPT_ARG_POLICY: Record<string, (args: string[]) => boolean> = {
+  'scripts/fleet-main-align.ts': (a) =>
+    a.includes('--dry-run') && a.every((x) => x === '--dry-run' || x === '--json'),
+}
+
+/** operand 的檔名是否與 SCRIPT_ARG_POLICY 列管的腳本同名（不依賴 cwd 或 repo root 的猜測）。 */
+const isPolicyScript = (operand: string) =>
+  Object.keys(SCRIPT_ARG_POLICY).some((k) => posix.basename(k) === posix.basename(operand))
 
 /** 單一指令（已去掉 `cd … &&` 前綴）的判定。 */
 function judgeTokens(t: string[], cwd: string): string | null {

@@ -111,12 +111,12 @@ public API（ntn / MCP integration token）拿不到 in-app attachment：`附件
 # $JAR／$PAGE／$SPACE／$USERID；他機把三步整段包進一次 `ssh desk bash -s`，結束後
 # `scp desk:/tmp/ticket_img.png <本機路徑>` 取回）。profile 用 `profile-index.sh notion.com` 解析；
 # 沒登入就先走 cookbook § 人工登入交接（~/offline/clade/vendor/snippets/agent-browser/README.md）。
-# 每個指令都帶同一組 --profile。
-AB="agent-browser --session notion-token --profile $HOME/.agent-browser/profile-<x>"
-$AB close; $AB open https://app.notion.com && $AB wait --load networkidle
+# 開頭 export session 與 profile（桌面 Chrome 的 profile 名稱），之後每個指令都沿用。
+export AGENT_BROWSER_SESSION=notion-token AGENT_BROWSER_PROFILE='<桌面 profile 名稱>'
+agent-browser close; agent-browser open https://app.notion.com && agent-browser wait --load networkidle
 # 確認 Chrome 用的就是這個 profile（cookbook § 開啟後驗證）；不是 OK 就停，不要 state save
-bash ~/offline/clade/vendor/snippets/agent-browser/verify-session.sh notion-token $HOME/.agent-browser/profile-<x> || exit 1
-umask 077; $AB state save /tmp/notion_state.json >/dev/null; $AB close
+bash ~/offline/clade/vendor/snippets/agent-browser/verify-session.sh notion-token '<桌面 profile 名稱>' || exit 1
+umask 077; agent-browser state save /tmp/notion_state.json >/dev/null; agent-browser close
 node --input-type=module <<'NODE'
 import { readFileSync, writeFileSync } from 'node:fs'
 const state = JSON.parse(readFileSync('/tmp/notion_state.json', 'utf8'))

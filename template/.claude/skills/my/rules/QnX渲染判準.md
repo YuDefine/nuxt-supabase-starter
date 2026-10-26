@@ -1,38 +1,36 @@
 
-# Rule 1 - 渲染直接用 `flow pending` 的輸出，順序與分類 NEVER 改
+# Rule 1 - 題目內容與編號只取自 `flow pending`；分組只改呈現順序，NEVER 改題面、選項或分類
 
 - Level: `MUST`
-- 渲染的唯一來源是 Phase 1 **最後一次** `flow pending` 的輸出（推進過新題就是 `ask` 之後重跑的那一次）；題目的順序、分桶與編號照它，**NEVER** 重排、併桶或改分類。
-- 需要補上下文時**加在該題底下**，不要重排。
+- 題目內容的唯一來源是 Phase 1 **最後一次** `flow pending` 的輸出（推進過新題就是 `ask` 之後重跑的那一次）：題面、選項、推薦、桶別（要我拍板／要我驗收／要我動手…）與 `Qn` 編號都照它。
+- 分組（`rules/分組討論判準.md`）只決定**哪幾題放在一起、哪一組先談**；**NEVER** 為了分組改寫題面、增刪選項、換推薦，或把一題改成別的桶（例：把 `要我動手` 的列編成 `Qn`）。
+- 分組總覽與單組討論裡的題號沿用該次 `flow pending` 的 `Qn`（同一組裡號碼不連續是正常的）；討論途中重跑 `flow pending` 驗證落地時**不重編**已給 Charles 看過的號碼，只有重出分組總覽時才換成新的編號，並在總覽第一句說「題號已照最新佇列重編」。
+- 需要補上下文時**加在該題底下**（現況、選項各自的後果、推薦理由），不改題目那一行。
 - 題來自別台機器時，`flow pending` 在 repo 標籤後帶機器名（`[<consumer-id>@zenbook]`），渲染時原樣保留；輸出最上面的 `⚠ 讀不到 peer …` 行逐字渲染給 Charles（那代表那台的題這次看不到，NEVER 當成沒有題）。
-- `flow pending` 每題底下的 `span <id>` 與 `答案落到：<carrier>` 是給 agent 對應答案用的，**NEVER** 渲染給 Charles（`rules/待拍板條目寫法.md` Rule 4 的附註層）。`Qn` ↔ span ↔ repo 的對應，Phase 3 第 1 步從同一份 `flow pending` 輸出讀。
+- `flow pending` 每題底下的 `span <id>` 與 `答案落到：<carrier>` 是給 agent 對應答案用的，**NEVER** 渲染給 Charles（`rules/待拍板條目寫法.md` Rule 4 的附註層）。`Qn` ↔ span ↔ repo 的對應，Phase 2 第 1 步從同一份 `flow pending` 輸出讀。
 - **NEVER** 只讀 `HANDOFF.md` 就作答——它與 state 檔會漂，這正是 `flow pending` 存在的理由。
-- 結尾的現況量測照用 `flow pending` 最後那一行（當下實跑，格式如 `clade: dirty 2 / worktree 3　<consumer-id>: dirty 3`，全乾淨時是 `全 roster 乾淨：…`）。**NEVER** 引用 `HANDOFF.md` 裡寫死的量測數字——過期的 dirty 數與新鮮的長得一模一樣。
+- 分組總覽結尾的現況量測照用 `flow pending` 最後那一行（當下實跑，格式如 `clade: dirty 2 / worktree 3　<consumer-id>: dirty 3`，全乾淨時是 `全 roster 乾淨：…`）。**NEVER** 引用 `HANDOFF.md` 裡寫死的量測數字——過期的 dirty 數與新鮮的長得一模一樣。
 
 ## Good Example
 
-- 這個例子是好的，因為題目順序與分桶照 `flow pending`，補充的上下文掛在該題底下，量測用當下那一行。
+- 這個例子是好的，因為題號沿用 `flow pending`，分組只把連動題放在一起，補充的上下文掛在題目底下，量測用當下那一行。
 
 ```md
-要我拍板（2）
-
-Q1  [<consumer-id>] 舊 sync 腳本要刪還是包相容層？  3.2h
-      A. 包相容層（推薦）
-      B. 直接刪
-      補充：兩台客戶機的 cron 還指著舊檔
-Q2  …
+A. 擋住別人，建議先談（2 題）：決定 #2548 能不能送 0-A
+  - Q12 [clade] #2548 第一件改歸 agent？ 建議 A（照 PR 改歸）
+  - Q13 [clade] #2548 第二件改歸 agent？ 建議 A（照 PR 改歸）
 
 clade: worktree 2　<consumer-id>: dirty 3 / stash 1
 ```
 
 ## Bad Example
 
-- 這個例子是壞的，因為它依自己的判斷重排成「重要的先講」，並抄了 HANDOFF 裡寫死的量測數字。
+- 這個例子是壞的，因為它為了分組把題號重編成組內連號、把動手列改成 `Qn`，並抄了 HANDOFF 裡寫死的量測數字。
 
 ```md
-最重要的先講：
-Q1 （原本的 Q2）…
-Q2 （原本的 Q1）…
+A 組
+  Q1（原 Q12）#2548 第一件改歸 agent？ A. 照 PR 改歸 B. 維持原樣 C. 再議
+  Q2（原「要我動手」的 NAS 換碟）要不要換？
 
 現況（取自 HANDOFF.md）：<consumer-id> dirty 12
 ```
@@ -71,6 +69,7 @@ Q1  [clade] stale worktree 要現在收嗎？  0m
 - 兩者的編號**連續**跑過去：`要我驗收` 那組接著 `要我拍板` 的最後一號往下編，**NEVER** 在第二組重新從 `Q1` 起算——「回 `Q1A Q2通過`」才是一個平坦的命名空間。
 - 其餘狀態類一律 bullet，**NEVER** 編號：`要我動手`（`human-action`，含舊 `irreversible`）、`不在本 repo`、`loop 結構性推不動`，以及 `未分類`、`卡住、等人動手`。
 - `flow pending` 已經照這條渲染——**NEVER** 自己替狀態類加號碼。
+- 分組（`rules/分組討論判準.md` Rule 2）後，`要我動手` 進動手組、其餘四桶進狀態組，兩組都維持 bullet 並保留桶名，**NEVER** 因為分組而丟掉任何一桶。
 
 ## Good Example
 

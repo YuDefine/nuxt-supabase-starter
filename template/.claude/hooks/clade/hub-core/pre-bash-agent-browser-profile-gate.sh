@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# PreToolUse:Bash hook — 擋對已綁 profile 的 agent-browser session 下沒帶同一個 --profile 的指令（block，exit 2）
+# PreToolUse:Bash hook — 擋 agent-browser 用錯 profile（漏帶／換 profile、目錄路徑當 profile、
+# 全新 session 不帶 --profile 開外部網址；block，exit 2）
 #
 # 判定全在同目錄的 pre-bash-agent-browser-profile-gate.ts；本檔只做快篩與錯誤分支出口。
 # 為什麼、threat model、gate 型別、E1～E6 錯誤分支表、繞行場景，見該檔檔頭。
@@ -19,7 +20,7 @@ case "$input" in
 esac
 
 degraded() {
-  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"agent-browser profile gate 故障未判定（%s）：同一個 session 的每個指令 MUST 帶同一個 --profile，否則 Chrome 會被換成暫存 profile。"}}\n' "$1"
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"agent-browser profile gate 故障未判定（%s）：每個 agent-browser 指令 MUST 帶同一個桌面 Chrome profile 名稱 --profile <名稱>（本機 dev server 除外），NEVER 用目錄路徑當 profile。"}}\n' "$1"
   exit 0
 }
 

@@ -158,6 +158,77 @@ export function parseTdRegister(source: string): TdEntry[] {
 }
 
 /**
+ * Entries for registers that list a TD ONLY in the Index table (`| ID | Title | Status | … |`),
+ * with no `## TD-` heading. `parseTdRegister` cannot see them, so a consumer that registers this
+ * way was invisible to the coordinator's TD scan.
+ *
+ * Read-only view for scanners: an ID that already has a heading (`headingIds`, default: parsed
+ * from `source`) is skipped — the heading carries the full entry and wins. Row entries carry no
+ * body, so `hasEvidence` is false and `needsPublish` false: they surface as candidates that the
+ * brief gate refuses (`no-brief-source`) rather than being dispatched on a title alone.
+ * `start`/`end` are the row's line range and `text` is the row verbatim; NEVER feed these to the
+ * byte-exact move paths (`td-inject`, `planRotate`) — they are not section ranges.
+ */
+export function parseTdIndexRows(
+  source: string,
+  headingIds: ReadonlySet<string> = new Set(parseTdRegister(source).map((e) => e.id)),
+): TdEntry[] {
+  const lines = source.split('\n')
+  const visible = metadataLines(source)
+  const cells = (line: string): string[] =>
+    line
+      .trim()
+      .replace(/^\||\|$/g, '')
+      .split('|')
+      .map((c) => c.trim())
+  const entries: TdEntry[] = []
+  const seen = new Set<string>()
+  let cols: { id: number; title: number; status: number } | null = null
+
+  for (const [i, line] of visible.entries()) {
+    if (!/^\s*\|/.test(line)) {
+      cols = null
+      continue
+    }
+    const row = cells(line)
+    if (cols === null) {
+      const names = row.map((c) => c.replace(/[*`]/g, '').trim().toLowerCase())
+      const id = names.indexOf('id')
+      const status = names.indexOf('status')
+      if (id >= 0 && status >= 0) cols = { id, title: names.indexOf('title'), status }
+      continue
+    }
+    if (row.every((c) => /^:?-{2,}:?$/.test(c))) continue
+    const idMatch = /^(?:\*\*)?\[?(TD-\d+)\b/.exec(row[cols.id] ?? '')
+    if (!idMatch) continue
+    const id = idMatch[1]
+    if (headingIds.has(id) || seen.has(id)) continue
+    seen.add(id)
+
+    const statusCell = row[cols.status] ?? ''
+    const token = parseTechDebtStatus(`**Status**: ${statusCell}`)
+    const isParked = token !== null && /blocked-attended-only|(?:-until(?:-|$))/i.test(token)
+    const title = cols.title >= 0 ? (row[cols.title] ?? '') : ''
+    entries.push({
+      id,
+      title: `${id}${title ? ` — ${title}` : ''}`,
+      status: statusCell,
+      location: '',
+      parent: null,
+      hasEvidence: false,
+      needsPublish: false,
+      isOpen: token !== null && DEBT_OPEN_STATUS.test(token) && !isParked,
+      isParked,
+      isClosed: isTerminalStatus(token),
+      start: i,
+      end: i + 1,
+      text: lines[i],
+    })
+  }
+  return entries
+}
+
+/**
  * Whether the `#{level}` heading at `lines[from - 1]` opens a section with real content: at
  * least one non-empty line that is neither a heading nor a `---` separator, before the next
  * heading of the same or a shallower level. Deeper headings are the section's own subsections —

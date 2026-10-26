@@ -246,7 +246,7 @@ const CLADE_OWN_SOURCE_RE = new RegExp(
       // git 只追蹤實體路徑）。LOCKED_PROJECTION_RE 收整個 `.agents/` 前綴，沒有這一列 merge-back
       // 會把它們的源檔當投影 `checkout --theirs`。其餘 `.agents/skills/*` 仍是 Codex 投影。
       String.raw`\.agents/skills/(` + AGENTS_LOCAL_SKILLS + String.raw`)/`,
-      String.raw`\.claude/hooks/(clade-home-guard|claude-credit-keyword)\.ts$`,
+      String.raw`\.claude/hooks/(clade-home-guard|claude-credit-keyword|paid-run-gate)\.ts$`,
     ].join('|') +
     ')',
 )

@@ -3,8 +3,8 @@
 //
 // td-priority-gate — 擋 `docs/tech-debt.md` 加回 TD 等級欄位（`**Priority**:` 行）的**唯一**判定式
 //
-// TD 不帶等級欄位，等級只看 fleet 看板 `td:<repo>:TD-n`（W-2026-10-22-td-priority-field-retire；
-// 規約 rules/core/follow-up-register.md § 等級只看 fleet 看板）。消費端共用這一份，NEVER 各寫一份判準：
+// TD 不帶等級欄位，等級只看 fleet 看板 `td:<repo>:TD-n`（規約
+// rules/core/follow-up-register.md § 等級只看 fleet 看板）。消費端共用這一份，NEVER 各寫一份判準：
 //   - pre-commit：`scripts/pre-commit/checks/td-priority.sh` → 本檔 `--staged`
 //   - CI：composite action `td-priority-gate` → 本檔 `--against <ref>`
 //   - clade home：`.husky/pre-commit`（--staged）與 validate.yml（--against origin/main）
@@ -89,7 +89,7 @@ function mergeBase(root: string, ref: string): string {
 
 /**
  * `--staged` 比 index 與 merge-base(HEAD, origin/main)，與 CI 的 `--against origin/main` 同一基準：
- * branch 上先刪後還原成 main 的內容不是「加回」（#2350 把刪除拆出時撞到）。預設分支先看 origin/HEAD，
+ * branch 上先刪後還原成 main 的內容不是「加回」（把刪除拆到另一筆 commit 時就是這個形狀）。預設分支先看 origin/HEAD，
  * 再看 origin/main，都解不出才退回 HEAD。
  */
 function stagedBase(root: string): string {
