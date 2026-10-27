@@ -10,7 +10,7 @@
  *   ok      ≥ warn
  *   warn    < CLADE_DISK_WARN_GB（預設 25）     入口放行、stderr 一行警告
  *   block   < CLADE_DISK_BLOCK_GB（預設 15）    新樹／新 pane／publish／security-scan exit 75
- *   reclaim < CLADE_DISK_RECLAIM_GB（預設 14）   同 block，另由 disk-hygiene 跑緊急 worktree 回收
+ *   reclaim < CLADE_DISK_RECLAIM_GB（預設 14）   同 block，另由 disk-hygiene 跑緊急 worktree 回收（回收到 warn 級才停）
  *
  * 門檻是絕對 GiB：要保護的是一次 publish gate／一棵新樹要寫的 bytes，那由工作量決定，
  * 不隨磁碟大小縮放。量 `/` 與 `$HOME` 所在檔案系統，取較緊者；`/tmp` 不算——它是固定大小
@@ -24,6 +24,8 @@
  * 用法（CLI）：
  *   node vendor/scripts/lib/disk-low-water.ts --brief    # "<tier> <availGiB> <warn> <block> <reclaim>"
  *   node vendor/scripts/lib/disk-low-water.ts --json
+ *   node vendor/scripts/lib/disk-low-water.ts --defaults  # "<warn> <block> <reclaim>"（內建預設，不看 env；disk-hygiene.sh 取預設的唯一來源）
+ *   node vendor/scripts/lib/disk-low-water.ts --warn-gb    # 生效的 warn 門檻（吃 env；SessionStart hook 用）
  *   node vendor/scripts/lib/disk-low-water.ts admit <op>  # block／reclaim → exit 75
  *
  * 測試注入：`CLADE_DISK_STATFS`（JSON `{"bavail","bsize","blocks"}`，套用到每個量測點）。
@@ -163,8 +165,21 @@ export interface AdmissionVerdict {
   message: string
 }
 
+export interface AdmissionOptions {
+  /**
+   * 呼叫端自己的硬底線（GiB）：block／reclaim 級但可用量仍 ≥ 此值時降為 warn 放行（stderr 一行），
+   * 低於才擋。給「本身只寫少量檔」的入口用——派新 pane 只寫 transcript，開樹由 `wt-helper add`
+   * 在自己的 15G 線擋，不該被同一條線雙重擋住而癱瘓唯讀派工。不給＝照三級擋。
+   */
+  hardFloorGiB?: number
+}
+
 /** 純判定，不寫 stderr、不 exit；`enforceDiskAdmission` 是它的副作用版。 */
-export function diskAdmission(op: string, env: NodeJS.ProcessEnv = process.env): AdmissionVerdict {
+export function diskAdmission(
+  op: string,
+  env: NodeJS.ProcessEnv = process.env,
+  options: AdmissionOptions = {},
+): AdmissionVerdict {
   // `node --test` 底下（NODE_TEST_CONTEXT 會傳到測試 spawn 的子行程）沒注入 fixture 就不量真實磁碟：
   // 數百支測試會實跑 wt-helper add／派 pane，主機或 runner 一低水位就整片假紅——與 #203
   // （runner 剩 834 MB，81 支 capture 測試紅）同一型。要測准入本身，注入 CLADE_DISK_STATFS。
@@ -194,6 +209,13 @@ export function diskAdmission(op: string, env: NodeJS.ProcessEnv = process.env):
     tier === 'reclaim'
       ? `${thresholds.reclaimGiB}G（L3 reclaim）`
       : `${thresholds.blockGiB}G（L2 block）`
+  const floor = options.hardFloorGiB
+  if (floor !== undefined && tightest.availableBytes >= floor * GIB)
+    return {
+      allowed: true,
+      tier: 'warn',
+      message: `${prefix}⚠️ 磁碟低水位：${where} < ${level}；${op} 只在 < ${floor}G 擋，放行（開工作樹由 wt-helper 在 ${thresholds.blockGiB}G 擋）。回收：${RECLAIM_HINT}`,
+    }
   const override = env.CLADE_DISK_ADMISSION_OVERRIDE?.trim()
   if (override)
     return {
@@ -235,6 +257,16 @@ export function enforceDiskAdmission(op: string, env: NodeJS.ProcessEnv = proces
 }
 
 function main(argv: string[]): number {
+  // 不量磁碟的兩個子命令：給 shell 端（disk-hygiene.sh、SessionStart hook）取同一份門檻。
+  if (argv.includes('--defaults')) {
+    const d = DEFAULT_THRESHOLDS
+    process.stdout.write(`${d.warnGiB} ${d.blockGiB} ${d.reclaimGiB}\n`)
+    return 0
+  }
+  if (argv.includes('--warn-gb')) {
+    process.stdout.write(`${diskThresholds().thresholds.warnGiB}\n`)
+    return 0
+  }
   if (argv[0] === 'admit') {
     enforceDiskAdmission(argv[1] || 'unnamed-op')
     return 0
@@ -251,7 +283,9 @@ function main(argv: string[]): number {
     )
     return 0
   }
-  process.stderr.write('Usage: disk-low-water.ts --brief | --json | admit <op>\n')
+  process.stderr.write(
+    'Usage: disk-low-water.ts --brief | --json | --defaults | --warn-gb | admit <op>\n',
+  )
   return 2
 }
 

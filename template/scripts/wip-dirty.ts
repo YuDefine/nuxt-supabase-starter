@@ -211,7 +211,7 @@ export function isIgnorableWorktreeDrift(repoRoot, path, kind) {
  * 已落地樹的交付噪音（W-2026-10-01-worktree-accumulation-root-cause §3 C3／C4）：產生端寫進樹、
  * 卻不屬於該樹工作的 bytes——主持者 brief 與 session 清單（consumer 的 `tasks/`；clade home 的
  * `specs/coordinator/`、`specs/sessions/`）、ledger 追加（`vendor/ledger/signals.jsonl`）、
- * review GUI 舊建置產物（`vendor/review-gui-web/`）。
+ * review GUI 舊建置產物（`vendor/review-gui-web/`）、ai-quota 舊 HEAD 殘留的建置產物（`vendor/ai-quota/`）。
  *
  * **只給已落地的樹用**，而且 NEVER 讓它們被靜默丟掉：回收端（disk-hygiene）把這份清單原樣交給
  * `wt-helper cleanup --discard-pathspec`，由 cleanup 先把命中的殘留存成 `refs/clade-residue/<slug>`
@@ -224,6 +224,16 @@ export const LANDED_DELIVERY_NOISE_PATHSPECS = Object.freeze([
   'specs/sessions',
   'vendor/ledger/signals.jsonl',
   'vendor/review-gui-web',
+  'vendor/ai-quota',
+  // consumer 樹裡的產生端寫入：`.pi/settings.json` 是 clade package 的 `@vX.Y.Z` 版本釘，
+  // 每次 publish 後 bootstrap 改寫（樹落後 main 時是 ` M`，HEAD 沒有時整個 `.pi/` 收合成一行 `?? .pi/`）。
+  // 寫成目錄 `.pi`：clade 的 gitignore 治理只放行 `.pi/settings.json`（`.pi/*` 其餘都 ignored），所以
+  // 這個目錄裡 git 看得到的檔只有它；cleanup 的 uncommitted gate 用收合模式，`.pi/settings.json` 點不中 `?? .pi/`。
+  // `.impeccable/hook.cache.json` 是 impeccable hook 的快取（untracked）；`.impeccable/` 常有 tracked 的使用者內容，
+  // NEVER 寫成目錄。整個 `.impeccable/` 都 untracked 時收合成 `?? .impeccable/`，點不中、cleanup 照擋（保留，安全）。
+  // 兩者內容隨樹消失都不損失工作，且 cleanup 會先存成 refs/clade-residue。
+  '.pi',
+  '.impeccable/hook.cache.json',
 ])
 
 /**

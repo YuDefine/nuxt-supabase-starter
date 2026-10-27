@@ -442,7 +442,8 @@ git rev-list --count origin/main..HEAD    # 必須回 0（沒有還沒推上去�
 該 tag 那棵樹不含 main 後續改動。**NEVER** 用它讓一個「不知道為什麼被擋」的 push 過關——
 那個「不知道為什麼」就是這條 gate 唯一要抓的東西。
 
-**它只准用在落後那一邊，NEVER 拿它放行超前那一邊**——兩者語義相反（一個是「我知道這是舊樹」，
+**它只准用在落後那一邊，NEVER 拿它放行超前那一邊**（唯一例外：下方「從舊 tag 開 hotfix branch」
+那段三條 MUST 全部成立時）——兩者語義相反（一個是「我知道這是舊樹」，
 另一個是「這棵樹還不存在於 origin」），共用等於把逃生口變成雙向萬能鑰匙。超前被擋時的正解是
 `git push origin main` 之後再推 tag。gate 另認得一條同批放行路徑（2026-09-21 TD-911）：
 本批帶 `refs/heads/<default branch>` 且 tag commit **即該 branch head 本身**時放行
@@ -454,8 +455,27 @@ tag 仍會單獨落地成 origin 上不在 default branch 的物件，正是本�
 發版序列改成 atomic batch 是另一個決策（TD-911 只放寬 gate），本節的 main 先、tag 後
 順序不變；若日後真改，本格 MUST 重新評估——例如由 `/commit` 的推送指令本身固定帶
 `--atomic`，而非依賴操作者記得。
-合法的 hotfix 不會命中超前那一邊——
-舊 commit 是 `origin/main` 的祖先，反方向 count 恆為 0。
+只在既有的舊 commit 上打 tag 的 hotfix 不會命中超前那一邊——舊 commit 是 `origin/main` 的
+祖先，反方向 count 恆為 0。
+
+**從舊 tag 開 hotfix branch、放進新修正再發版**（例如 `v1.284.0` 上 cherry-pick 一個修正，打
+`v1.284.1`）時，兩個方向**同時**命中：tag 落後 main，又含 main 沒有的 commit。這是本條唯一允許
+在超前那一邊用 `CLADE_ALLOW_STALE_TAG=1` 的情形，三條 MUST 全部成立才可以：
+
+1. tag 指向的 commit **就是** `hotfix/v<版本>` branch 的 head，且該 branch 已推上 origin
+   （`git ls-remote origin refs/heads/hotfix/v<版本>` 印出同一個 SHA）——超前那一邊要防的「這棵樹
+   還不存在於 origin」因此不成立。
+2. 推這個 tag 前已取得使用者對**這一次** hotfix tag 的明確授權；授權只涵蓋那一個 tag。
+   因為逃生口一設就對整次 push 的所有 tag 放行，env 只准設在那一條指令上，且只推那一個具名
+   tag：`CLADE_ALLOW_STALE_TAG=1 git push origin v<版本>`（**NEVER** `--tags`、**NEVER** export）。
+3. 修正本身另走正常落地流程進 main，發下一個 main 版本前 MUST 確認已合入；否則下一版會把
+   prod 上的修正倒回去。cherry-pick 過的 commit 在 main 上 SHA 不同，`merge-base --is-ancestor`
+   恆為假，要用 patch-id 比對：`git cherry -v origin/main v<版本> v<舊版本>` 列出 hotfix 帶進的
+   每個 commit，修正 commit 前綴 MUST 是 `-`（main 已有同 patch）；只有 deploy commit
+   （版本號 bump）可以是 `+`。
+
+三條任一不成立就照超前的正解處理，**NEVER** 為了趕時間先設這個 env 再補條件。
+（2026-10-27 某 consumer 的 patch 版 hotfix：main 上的下一版部署失敗、不能發版時，以 hotfix branch 交付單一修正。）
 
 **這條是政策，NEVER 讀成 script 會替你擋。** `tag-position.sh` 的逃生口判斷排在方向計算
 **之前**（`CLADE_ALLOW_STALE_TAG` 一設就直接 exit 0），所以它機械上對兩個方向一視同仁——

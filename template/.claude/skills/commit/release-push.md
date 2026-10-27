@@ -17,7 +17,9 @@
 再決定順序**——沒接的 repo 只是少了兜底，規約本身沒有變。
 
 **被 `tag-position` 以「超前」擋下的 push，NEVER 用 `--no-verify` 或 `CLADE_ALLOW_STALE_TAG`
-過關**：tag 指向 origin 上還不存在的樹，是推出去就收不回的對外物件。
+過關**：tag 指向 origin 上還不存在的樹，是推出去就收不回的對外物件。（唯一例外是從舊 tag 開、
+已推上 origin 的 hotfix branch，條件見 `rules/core/commit.detail.md` § 機械 gate 與它的邊界；
+Step 6-A 的一般發版序列不會走到它。）
 
 它是**政策，不是機械保證**——所以「反正 script 會攔」不成立：`CLADE_ALLOW_STALE_TAG` 在
 `tag-position.sh` 裡的判斷排在方向計算**之前**，設了就兩個方向一起放行（2026-09-04 實測：tag
@@ -31,7 +33,8 @@ branch 不算數，細節見 `rules/core/commit.detail.md` § Tag 位置。這�
 
 （`tag-position` 也擋「落後」方向，那一邊**有**合法用途——刻意在舊 commit 上打 hotfix release
 tag——判準見 `rules/core/commit.detail.md` § 機械 gate 與它的邊界，**NEVER** 把本條讀成連那一邊
-也一起禁掉。）
+也一起禁掉。從舊 tag 開 hotfix branch、帶新修正發版時會兩邊同時命中，唯一的超前例外與它的三條
+MUST 也在同一節。）
 
 **main 先不牴觸 deploy-gate 的「發版窗口內不 push main」**：那條防的是**別的**工作在窗口內 push，取消掉發版 SHA 的 staging run。發版序列自己的那一次 main push 是窗口的**起點**，不是窗口內的干擾。窗口的完整定義見 `~/offline/clade/vendor/snippets/deploy-gate/README.md` § 操作規約，race 與 gate 的 recovery 見同檔的 § 這道 gate 有一個消不掉的 race 與 § Recovery。
 
@@ -94,7 +97,7 @@ script 會先 fetch `origin/main`，查 package.json 版本、最近的 `🚀 de
 
 [^RC1]: `pnpm version` 跑在 `&&` 串之前，進到任何一列時版本號都已經 bump 過了。
 [^RC2]: 已公開的 tag 是對外物件。唯一例外是 § 推 tag 後的觸發確認 開頭那段 2026-06-03 的情形：刪並重推的是同一個 SHA 上的同名 tag，內容不變。
-[^RC4]: 那個逃生口只留給「刻意在舊 commit 上打 hotfix release tag」。
+[^RC4]: 那個逃生口只留給 hotfix release tag：刻意打在舊 commit 上，或打在已推上 origin 的 hotfix branch head 上（後者的三條 MUST 見 `rules/core/commit.detail.md` § 機械 gate 與它的邊界）。本表各列都是 Step 6-A 的一般發版序列，兩者都不適用。
 [^RC6]: 在新 deploy commit 訊息或 HANDOFF 寫「v<舊版本> 未發版，內容併入 v<新版本>」；否則下一個接手的人會照 Step 6-B 的理由，把 main 上那個 `🚀 deploy: … v<舊版本>` 誤判成已發版。
 [^RC8]: 裸 `pnpm version` 會順手建 commit 與 tag，正好又撞上同名 tag。
 [^RC9]: 走到 6-A 的一般路徑是 `confirmed-push-main`，剛才那次 main push 就是部署（見 Step 6-Gate 的判定表），tag 在這裡是紀錄，不是觸發器。

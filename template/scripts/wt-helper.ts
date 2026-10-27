@@ -30,8 +30,8 @@
  *                    combo needed. --dry-run reports the verdict read-only.
  *                    Squash-landed branches (refs/wt-landed/<slug> matching
  *                    the branch tip) skip both ancestry gates; a GitHub PR
- *                    merged at the exact branch tip (headRefOid == tip,
- *                    base == landing base) counts as equivalent server-side
+ *                    merged at the exact branch tip (headRefOid == tip, or
+ *                    tip an ancestor of headRefOid; base == landing base) counts as equivalent server-side
  *                    landing evidence — the local branch ref is then deleted
  *                    outright (its head stays reachable via refs/pull/N/head;
  *                    TD-1103; gh errors stay fail-closed);
@@ -5403,8 +5403,10 @@ function isSquashLanded(consumerRoot, slug, branchName) {
 // 命中條件（全中才算）：
 //   1. `gh pr list --head <branch> --state merged` 回傳至少一筆 record
 //   2. `baseRefName` 等於 landing base（resolveLandingBase，本 repo 即 main）
-//   3. `headRefOid` **逐字**等於 branch 現在的 tip —— merge 後 tip 前移（D 桶）
-//      自動不相等，不需要另寫規則擋。
+//   3. `headRefOid` **逐字**等於 branch 現在的 tip，或 tip 是 `headRefOid` 的祖先（PR 在
+//      別處又收了 commit 才 merge、本樹落後——本樹每個 commit 都在 PR 裡）；head 物件不在
+//      本機就依 oid 單筆 fetch（只寫物件、不動 ref），fetch 失敗＝不命中。merge 後 tip 前移
+//      （D 桶：head 是 tip 的祖先、反方向）兩條都不成立，不需要另寫規則擋。
 //   record 帶 `mergeCommit.oid` 且該 commit 與 `origin/<base>` 在本地都可解析時，
 //   加驗它是 origin/<base> 祖先（擋 base 被重寫的 case）；本地看不到就只靠
 //   server 端欄位採信 —— TD-1103 已把那組欄位本身列為 airtight。
@@ -5495,8 +5497,31 @@ function mergedPrCommitOnBase(consumerRoot, record, landingBase) {
   }
 }
 
+/** tip 是 head 的祖先（head 不在本機先依 oid fetch）。任何失敗＝false，fail closed。 */
+function mergedPrHeadContainsTip(consumerRoot, head, tip) {
+  if (!/^[0-9a-f]{40,64}$/.test(head)) return false
+  try {
+    git(['cat-file', '-e', `${head}^{commit}`], { cwd: consumerRoot })
+  } catch {
+    try {
+      git(['fetch', '--no-tags', '--no-write-fetch-head', '--quiet', 'origin', head], {
+        cwd: consumerRoot,
+        timeout: MERGED_PR_PROBE_TIMEOUT_MS,
+      })
+    } catch {
+      return false
+    }
+  }
+  try {
+    git(['merge-base', '--is-ancestor', tip, head], { cwd: consumerRoot })
+    return true
+  } catch {
+    return false
+  }
+}
+
 /**
- * 「branch tip 是某個已 merge PR 的 head」的判定（TD-1103 第四條憑證）。
+ * 「branch tip 是某個已 merge PR 的 head（或其祖先）」的判定（TD-1103 第四條憑證）。
  * 回 `Observed<{landed, pr?}>`；probe 可注入以便測試（比照 wt-batch 的
  * `RemotePrProbe` 慣例）。只放行、NEVER 擋：任何讀不到都是 `unknown`。
  */
@@ -5504,7 +5529,7 @@ function detectMergedPrLanding(
   consumerRoot,
   branchName,
   probe = defaultMergedPrProbe,
-): Observed<{ landed: boolean; pr?: number }> {
+): Observed<{ landed: boolean; pr?: number; contained?: boolean }> {
   let tip
   try {
     tip = git(['rev-parse', '--verify', `${branchName}^{commit}`], { cwd: consumerRoot })
@@ -5521,12 +5546,17 @@ function detectMergedPrLanding(
     return toUnknown(`merged-PR probe threw: ${errorMessage(e)}`)
   }
   if (obs.status !== 'known') return toUnknown(`merged-PR probe: ${obs.reason}`)
-  for (const r of obs.value) {
-    if (r.baseRefName !== landingBase) continue
-    if (typeof r.headRefOid !== 'string' || r.headRefOid.trim().toLowerCase() !== tip) continue
-    if (!mergedPrCommitOnBase(consumerRoot, r, landingBase)) continue
-    return known({ landed: true, pr: r.number })
-  }
+  const onBase = obs.value.filter(
+    (r) =>
+      r.baseRefName === landingBase &&
+      typeof r.headRefOid === 'string' &&
+      mergedPrCommitOnBase(consumerRoot, r, landingBase),
+  )
+  for (const r of onBase)
+    if (r.headRefOid.trim().toLowerCase() === tip) return known({ landed: true, pr: r.number })
+  for (const r of onBase)
+    if (mergedPrHeadContainsTip(consumerRoot, r.headRefOid.trim().toLowerCase(), tip))
+      return known({ landed: true, pr: r.number, contained: true })
   return known({ landed: false })
 }
 
@@ -7206,7 +7236,9 @@ async function cmdCleanup(
   }
   if (prLanded) {
     console.log(
-      `cleanup: ${branchLabel} 的 tip 與 GitHub merged PR #${mergedPr.value.pr} 的 headRefOid 逐字相符（內容已落地到 origin/${landingBase}）—— 略過兩道 ancestry gate`,
+      mergedPr.value.contained
+        ? `cleanup: ${branchLabel} 的 tip 是 GitHub merged PR #${mergedPr.value.pr} headRefOid 的祖先（本樹 commit 全在該 PR 內、已落地到 origin/${landingBase}）—— 略過兩道 ancestry gate`
+        : `cleanup: ${branchLabel} 的 tip 與 GitHub merged PR #${mergedPr.value.pr} 的 headRefOid 逐字相符（內容已落地到 origin/${landingBase}）—— 略過兩道 ancestry gate`,
     )
   }
   if (squashLanded) {

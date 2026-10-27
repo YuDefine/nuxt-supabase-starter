@@ -116,7 +116,7 @@ repo 有 `scripts.tag` → 仍用 `git tag "v1.8.0"` 建 local tag。
 
 **推送順序：無條件 main 先、tag 後**
 
-推的是**具名 tag**（`git push origin "v<版本>"`），**NEVER `git push origin --tags`**。順序**無條件**是 main 先、tag 後（`rules/core/commit.detail.md` § Tag 位置），不看這個 repo 有沒有接 `tag-position`；被它以「超前」擋下 **NEVER** 用 `--no-verify` 或 `CLADE_ALLOW_STALE_TAG` 過關。
+推的是**具名 tag**（`git push origin "v<版本>"`），**NEVER `git push origin --tags`**。順序**無條件**是 main 先、tag 後（`rules/core/commit.detail.md` § Tag 位置），不看這個 repo 有沒有接 `tag-position`；被它以「超前」擋下 **NEVER** 用 `--no-verify` 或 `CLADE_ALLOW_STALE_TAG` 過關（從舊 tag 開 hotfix branch 不走本序列，它的例外條件見 `rules/core/commit.detail.md` § 機械 gate 與它的邊界）。
 
 - 上面串接命令**任一步失敗** → **MUST** 先完整讀 [release-push.md](../release-push.md) § 序列中途失敗的復原，從失敗的那一步接著做；**NEVER** 因為「重跑一次比較乾淨」而再 bump 一次版本號。
 - Step 6-Gate 的 `derived=` 是 `tag-v`／`ambiguous`（含 6-B 選 `[1]` 後回頭跑本步驟）→ 推 tag 之後 **MUST** 照 [release-push.md](../release-push.md) § 推 tag 後的觸發確認 確認 run 已建立；其餘 `derived=` 值標「不適用」。

@@ -29,7 +29,7 @@
 # preflight 的 15G，告警先於擋路），VM 整顆只有約 30G 可用，裝完依賴就可能越線，而提示的回收手段
 # （disk-hygiene、cleanup-stale-tmp、user timer）VM 裡都沒有。證據在 clade specs/plans/W-2026-10-07-clade-cloud-hook-remote-guard/evidence/。
 #
-# 可覆寫：CLADE_DISK_WARN_ROOT_GB（預設 25）、CLADE_DISK_WARN_TMP_GB（預設 8）、
+# 可覆寫：CLADE_DISK_WARN_ROOT_GB／CLADE_DISK_WARN_GB（預設取 disk-low-water.ts，25）、CLADE_DISK_WARN_TMP_GB（預設 8）、
 #         CLADE_DISK_SYSTEMCTL（預設 systemctl，測試換 stub；設成空字串就不查回收服務）、
 #         CLADE_DISK_DF（預設 df，測試換 stub）、CLADE_DISK_TMP_CAPACITY（預設
 #         $CLAUDE_PROJECT_DIR/vendor/scripts/tmp-capacity.ts，不在則
@@ -39,7 +39,18 @@ set -uo pipefail
 cat > /dev/null
 case "${CLAUDE_CODE_REMOTE:-}" in '' | 0 | false) ;; *) exit 0 ;; esac
 
-ROOT_GB=${CLADE_DISK_WARN_ROOT_GB:-25}
+# / 的告警線與入口准入、disk-hygiene.sh 共用同一份（vendor/scripts/lib/disk-low-water.ts 的 warn 級，
+# CLADE_DISK_WARN_GB／舊名 CLADE_DISK_WARN_ROOT_GB 可覆寫）。lib 不在、node 不在或 3s 內沒回就退回 25。
+# consumer 沒有投影 lib 時用 clade home 那份（同 tmp-capacity 的找法）。
+ROOT_GB=${CLADE_DISK_WARN_ROOT_GB:-}
+if [ -z "$ROOT_GB" ]; then
+  DISK_LIB="${CLAUDE_PROJECT_DIR:-.}/vendor/scripts/lib/disk-low-water.ts"
+  [ -f "$DISK_LIB" ] || DISK_LIB="$HOME/offline/clade/vendor/scripts/lib/disk-low-water.ts"
+  if [ -f "$DISK_LIB" ] && command -v node >/dev/null 2>&1; then
+    ROOT_GB=$(timeout 3 node "$DISK_LIB" --warn-gb 2>/dev/null) || ROOT_GB=""
+  fi
+  [[ "$ROOT_GB" =~ ^[0-9]+$ ]] || ROOT_GB=25
+fi
 TMP_GB=${CLADE_DISK_WARN_TMP_GB:-8}
 DF=${CLADE_DISK_DF:-df}
 if [ -n "${CLADE_DISK_TMP_CAPACITY+set}" ]; then

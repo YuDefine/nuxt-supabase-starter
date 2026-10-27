@@ -110,8 +110,9 @@ for i in "${!tag_shas[@]}"; do
   # 反方向：tag 指向的 commit 含 origin/<default> 沒有的東西 = 這棵樹還沒推上去。
   # 與 behind 是獨立的失敗模式，規約上不准共用 CLADE_ALLOW_STALE_TAG —— 那個逃生口的語義是
   # 「我知道這是舊 commit，我就是要在它上面打 hotfix tag」，對「tag 比 origin 新」不成立。
-  # 合法的 hotfix（打在舊 commit 上）不會命中這裡：舊 commit 是 origin/<default> 的祖先，
-  # 反方向 count 恆為 0。
+  # 打在舊 commit 上的 hotfix 不會命中這裡：舊 commit 是 origin/<default> 的祖先，反方向
+  # count 恆為 0。從舊 tag 開 hotfix branch 帶新修正則兩邊都命中，唯一例外的條件在
+  # rules/core/commit.detail.md § 機械 gate 與它的邊界。
   ahead_n="$(git rev-list --count "origin/$default_branch..$commit" 2>/dev/null || echo 0)"
   if [[ "$ahead_n" != "0" ]]; then
     # 同一批 push 也帶著 default branch ref（git push --atomic origin main v<版本>）時，
@@ -166,6 +167,9 @@ if [[ "$ahead" != "0" ]]; then
   （那個逃生口的判斷排在方向計算之前，機械上兩個方向一起放行；擋住這一邊的是規約，不是這支
   script，所以 NEVER 設它來過關。）
 
+  唯一例外：tag 打在從舊 tag 開、已推上 origin 的 hotfix/v<版本> branch head 上，且使用者
+  已授權這一次 tag——三條 MUST 見 rules/core/commit.detail.md § 機械 gate 與它的邊界。
+
   修法（先把 commit 推上去，再推 tag）：
 
     git push origin main
@@ -201,6 +205,7 @@ cat >&2 <<'MSG'
     見 commit skill § Step 6-A 復原段裡「被 tag-position 以落後擋下」那一格。
 
   真的要在舊 commit 上打 tag（hotfix release）才用：CLADE_ALLOW_STALE_TAG=1 git push origin <tag>
+  （同時超前的 hotfix branch tag 另有三條 MUST，見下方規約 § 機械 gate 與它的邊界）
 
   規約：rules/core/commit.detail.md § Tag 位置（release hard gate）
   Pitfall：[[pitfall-tag-cut-from-stale-commit]]
