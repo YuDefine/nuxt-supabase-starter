@@ -24,7 +24,7 @@
 # | 生效視窗 | profile | 提示 |
 # | --- | --- | --- |
 # | `300000` | compact（非主持席：互動主線、派工 child、Fable） | 一級：壓縮觸發點前 32k（300k 時 235k） |
-# | `600000` | handoff（主持席） | cc／ccw：soft 300k、hard 500k、hard 後每 +100k |
+# | `600000` | handoff（主持席） | cc／ccN：soft 300k、hard 500k、hard 後每 +100k |
 # | 其他值或未設 | handoff，訊息附一行「不在已核准 profile 表」 | 同上 |
 #
 # compact profile 的數字由視窗推出，不另寫一份：Claude Code 的觸發點是 `視窗 − 20k − 13k`
@@ -103,10 +103,9 @@ detect_origin_launcher() {
     '' | https://api.anthropic.com | https://api.anthropic.com/* | https://api.anthropic.com:443 | https://api.anthropic.com:443/*) ;;
     *) echo gateway; return ;;
   esac
-  if [ "${CLAUDE_CONFIG_DIR:-}" = "$HOME/.claude-work" ]; then
-    echo ccw
-    return
-  fi
+  case "${CLAUDE_CONFIG_DIR:-}" in
+    "$HOME"/.claude-[0-9]*) echo "cc${CLAUDE_CONFIG_DIR##*/.claude-}"; return ;;
+  esac
   echo cc
 }
 

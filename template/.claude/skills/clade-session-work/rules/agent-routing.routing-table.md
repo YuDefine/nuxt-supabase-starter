@@ -127,8 +127,8 @@ Claude Haiku 5.5（`claude-haiku-5-5`）只坐 `code-locate` 一列：in-process
 SoT 是 `vendor/scripts/lib/claude-account-registry.ts`——帳號清單只寫在那，下游一律問 registry，NEVER 各自寫死。
 
 - `cc` 是**池入口**：admission 依 `sortPoolCandidates` 挑帳號——各帳號 weekly 讀值齊時按重置配速（快過期且有剩的先、floor 低於下限的沉底），缺一退回 5h／weekly 額度最寬裕者（Pro 帳號也參與一般派工）。一般派工與 routing 表列的 Herdr carrier 一律寫 `cc`，不指定帳號。
-- `cc1`／`cc2`／`cc3`／`cc4` **釘選**單一帳號：`cc1` → `~/.claude`、`cc2` → `~/.claude-work`、`cc3` → `~/.claude-3`、`cc4` → `~/.claude-4`（清單 SoT：`vendor/scripts/lib/claude-account-registry.ts`）。只有需要「就這個帳號」時才用（查特定帳號額度、隔離測試、除錯）。**方案（Pro／Max）NEVER 寫在規約裡**：訂閱會升降級，程式讀即時值；要知道某帳號現在是什麼方案就看 watch【額度】段或 `claude-account-preflight.ts` 的輸出，**NEVER** 憑本檔或記憶判斷。
-- `ccw` 保留為 `cc2` 的舊名別名：舊 dispatch record、舊 brief、舊 preset 名（`ccw-*` 組已刪，改用 `cc2-*`）與 `account: cc|ccw` 值仍可解析，新寫入一律用 `cc`／`ccN`。
+- `cc1`…`cc5` **釘選**單一帳號：`cc1` → `~/.claude`、`cc2` → `~/.claude-2`、`ccN` → `~/.claude-N`（清單 SoT：`vendor/scripts/lib/claude-account-registry.ts`）。只有需要「就這個帳號」時才用（查特定帳號額度、隔離測試、除錯）。**方案（Pro／Max）NEVER 寫在規約裡**：訂閱會升降級，程式讀即時值；要知道某帳號現在是什麼方案就看 watch【額度】段或 `claude-account-preflight.ts` 的輸出，**NEVER** 憑本檔或記憶判斷。
+- `ccw`（`cc2` 舊名）2026-10-25 退役：`--launcher ccw`、`ccw` shell function 一律拒收並指向 `cc2`；只剩舊 dispatch record 的 `account: ccw`／`launcher: ccw` 仍解析成 claude-2。新寫入一律用 `cc`／`ccN`。
 
 ## 工作類別對照
 

@@ -28,6 +28,8 @@
  *
  * 逃生門：`CLADE_ALLOW_NO_WORK=1` 放行（非 clade 工作、上游 repo 的 PR）。
  *
+ * `Work:` 行通過後接著判 PR 去重與大小上限（`gh-pr-create-hygiene.ts`）。
+ *
  *   | REQUIRED 欄位 | 內容 |
  *   | --- | --- |
  *   | 觸發條件 | Bash 的 `gh pr create` 判得出 body 且沒有 `Work:` 行 → exit 2 擋下該次 tool call |
@@ -40,6 +42,7 @@ import { appendFileSync, lstatSync, readdirSync, readFileSync, realpathSync } fr
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { ghPrCreateHygiene, type HygieneDeps, type PrCreateTarget } from './gh-pr-create-hygiene.ts'
 
 export const WORK_LINE_RE = /^[ \t]*Work(?:[ \t]*id)?[ \t]*[:：][ \t]*\S/mu
 
@@ -309,6 +312,66 @@ export function ghPrCreateWorkProblem(
   return null
 }
 
+/** `gh pr create` 看得到的 body 全文（去重／大小判定用）；判不出（動態展開、`-`、讀不到、沒有 gh pr create）回 null。 */
+export function prCreateBodyText(
+  cmd: string,
+  cwd: string,
+  readFile: (path: string) => string = (p) => readFileSync(p, 'utf8'),
+): string | null {
+  for (const seg of segments(cmd)) {
+    const body = prCreateBody(seg)
+    if (!body) continue
+    if (body.kind === 'text') return body.dynamic ? literalHeredocBody(body.text) : body.text
+    if (body.kind !== 'file' || body.dynamic || body.path === '-' || !body.path) return null
+    try {
+      return readFile(isAbsolute(body.path) ? body.path : resolve(cwd, body.path))
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+const TARGET_FLAGS: Record<string, keyof Omit<PrCreateTarget, 'opaque'>> = {
+  '--base': 'base',
+  '-B': 'base',
+  '--head': 'head',
+  '-H': 'head',
+  '--repo': 'repo',
+  '-R': 'repo',
+}
+
+/** 指令裡 `gh pr create` 的 `--base`／`--head`／`--repo`（去重與大小判定要量的那一組）；值是動態展開或缺值 → `opaque`。 */
+export function prCreateTarget(cmd: string): PrCreateTarget {
+  const target: PrCreateTarget = {}
+  for (const seg of segments(cmd)) {
+    if (!prCreateBody(seg)) continue
+    const w = words(seg)
+    const pr = w.findIndex((x, i) => x.text === 'pr' && w[i + 1]?.text === 'create')
+    const args = w.slice(pr + 2)
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i].text
+      const eq = a.indexOf('=')
+      let flag = a
+      let val: { text: string; dynamic: boolean } | undefined
+      if (a.startsWith('--') && eq > 0) {
+        flag = a.slice(0, eq)
+        val = { text: a.slice(eq + 1), dynamic: args[i].dynamic }
+      } else if (/^-[BHR]./u.test(a)) {
+        // 短旗標黏值：`-Rowner/repo`、`-Bmain`
+        flag = a.slice(0, 2)
+        val = { text: a.slice(2), dynamic: args[i].dynamic }
+      }
+      const key = TARGET_FLAGS[flag]
+      if (!key) continue
+      val ??= args[++i]
+      if (!val || val.dynamic || !val.text) target.opaque = true
+      else target[key] = val.text
+    }
+  }
+  return target
+}
+
 /** 違規時回傳原因字串（給 deny 訊息用），否則 null。 */
 export function ghPrCreateWorkViolation(
   cmd: string,
@@ -412,17 +475,34 @@ export function ghPrCreateWorkGate(
   cmd: string,
   cwd: string,
   env: NodeJS.ProcessEnv = process.env,
-  deps: DeriveDeps & { append?: (path: string, text: string) => void } = {},
+  /** `hygiene: false` 關掉去重／大小判定（只判 Work 行）；預設跑真的 git／gh。 */
+  deps: DeriveDeps & {
+    append?: (path: string, text: string) => void
+    hygiene?: HygieneDeps | false
+  } = {},
 ): { deny?: string; note?: string } {
+  // Work 行通過（或剛補上）之後才判去重與大小（gh-pr-create-hygiene.ts）
+  const hygiene = (verdict: { note?: string }): { deny?: string; note?: string } => {
+    if (deps.hygiene === false || !/\bgh\b[\s\S]*\bpr\b[\s\S]*\bcreate\b/u.test(cmd)) return verdict
+    const body = prCreateBodyText(cmd, cwd, deps.readFile)
+    if (body === null) return verdict
+    let deny: string | null = null
+    try {
+      deny = ghPrCreateHygiene(body, cwd, deps.hygiene, prCreateTarget(cmd))
+    } catch {
+      /* 判不出就放行 */
+    }
+    return deny ? { ...verdict, deny } : verdict
+  }
   const problem = ghPrCreateWorkProblem(cmd, cwd, deps.readFile)
-  if (!problem) return {}
+  if (!problem) return hygiene({})
   const derived = deriveWorkId(cwd, env, deps)
   if (derived && problem.file && appendableBodyFile(cmd, cwd, problem.file, derived.id)) {
     try {
       ;(deps.append ?? appendFileSync)(problem.file, `\nWork: ${derived.id}\n`)
-      return {
+      return hygiene({
         note: `ℹ gh pr create：${problem.why}，已依 ${derived.basis} 補上 \`Work: ${derived.id}\``,
-      }
+      })
     } catch {
       /* 寫不進去：照擋，訊息帶推出的那一行 */
     }
@@ -471,7 +551,7 @@ export function denyMessage(
     (derived
       ? `Work id 依 ${derived.basis} 推得；把上面兩行加進 body 末尾後重跑。`
       : `推不出 work id（沒有 CLADE_WORK_ID、本樹沒有 claim、branch 沒改到唯一一份 plan.md）。`) +
-    `沒有 work id → 先 node vendor/scripts/flow/flow.ts open <slug> 取得。非 clade 工作的 PR → CLADE_ALLOW_NO_WORK=1 前綴放行。`
+    `沒有 work id → 先 node vendor/scripts/flow/flow.ts work open <slug> 取得。非 clade 工作的 PR → CLADE_ALLOW_NO_WORK=1 前綴放行。`
   )
 }
 

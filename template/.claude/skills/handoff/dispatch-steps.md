@@ -100,13 +100,15 @@ User 透過詢問操作選定下一步 outstanding（含明確的 next-skill 與
 
 **人工驗收 dispatch scope rule**：把球交給 user 之前 **MUST** 引用 §2B.1.7 的 `flow gates` 結果。依卡片 family 走不同入口：
 
-| 狀態 | 真實下一步 | 入口 |
-| --- | --- | --- |
-| `ui-judgement` 卡 | user 看 evidence／截圖判通過／有問題／跳過 | 在對話端逐張展示；依原話 `flow receipt <scenario_id> --verdict pass\|fail\|skip` |
-| `acceptance` 卡 | user 判收或 drop | 在對話端出 Qn；依原話 `flow answer <span> --answer '<原話>'`（驗收合成題）。**NEVER** 由 agent 自跑 `flow accept`／`flow drop`（代按，[[flow-work-tracking]]） |
-| `ruling` 卡 | user 回答判斷題 | 在對話端出 Qn；回答後 `flow answer` |
-| `external-action` / `exception` 卡 | 先走 SKILL §2B.2.5 抽原因、辨識 startable 子集 | 依 triage 結果 |
-| 沒有卡片，tasks.md 的 `[review:ui]` 或已有 `(verified-ui:)` 的 `[verify:ui]` leaf evidence 已齊 | user 判通過／有問題／跳過 | 在對話端逐項展示；依原話寫回 checkbox（[[proactive-skills.manual-review-entry]] 第 4 步） |
-| 沒有卡片，但 evidence 缺 / issue 未 triage | agent 補 evidence 或 triage | 主線跑 verify channel（[[manual-review.backend]] § `[verify:*]` flow） |
-| 沒有卡片，實作未完 | 依 carrier 繼續實作 | `planInventory` 可做桶的 `next`（claim → plan show → `/implement`）；必要時交 `wt` 建立隔離環境並在樹內續跑 `/implement`（依 §2B.5 隔離 worktree） |
-| 沒有卡片，只剩 `[discuss]` | 收尾 walkthrough | [[manual-review]] § `[discuss]` walkthrough |
+評估：first-match；以上皆非 → V*
+| id | 狀態 | 真實下一步 | 入口 |
+| --- | --- | --- | --- |
+| V1 | `ui-judgement` 卡 | user 看 evidence／截圖判通過／有問題／跳過 | 在對話端逐張展示；依原話 `flow receipt <scenario_id> --verdict pass\|fail\|skip` |
+| V2 | `acceptance` 卡 | user 判收或 drop | 在對話端出 Qn；依原話 `flow answer <span> --answer '<原話>' --apply`（驗收合成題）。**NEVER** 由 agent 自跑 `flow work accept`／`flow work drop`（代按，[[flow-work-tracking]]） |
+| V3 | `ruling` 卡 | user 回答判斷題 | 在對話端出 Qn；回答後 `flow answer` |
+| V4 | `external-action` / `exception` 卡 | 先走 SKILL §2B.2.5 抽原因、辨識 startable 子集 | 依 triage 結果 |
+| V5 | 沒有卡片，tasks.md 的 `[review:ui]` 或已有 `(verified-ui:)` 的 `[verify:ui]` leaf evidence 已齊 | user 判通過／有問題／跳過 | 在對話端逐項展示；依原話寫回 checkbox（[[proactive-skills.manual-review-entry]] 第 4 步） |
+| V6 | 沒有卡片，但 evidence 缺 / issue 未 triage | agent 補 evidence 或 triage | 主線跑 verify channel（[[manual-review.backend]] § `[verify:*]` flow） |
+| V7 | 沒有卡片，實作未完 | 依 carrier 繼續實作 | `planInventory` 可做桶的 `next`（claim → plan show → `/implement`）；必要時交 `wt` 建立隔離環境並在樹內續跑 `/implement`（依 §2B.5 隔離 worktree） |
+| V8 | 沒有卡片，只剩 `[discuss]` | 收尾 walkthrough | [[manual-review]] § `[discuss]` walkthrough |
+| V* | 以上皆非 | STOP，把卡片 family 與 tasks 狀態原文回報 user |

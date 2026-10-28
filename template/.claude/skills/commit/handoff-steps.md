@@ -94,6 +94,8 @@ git branch --show-current
 
 **觸發條件**：當前**不在 main / master 分支**，且當前 runtime 實際載入的 consumer 能力提供 `ship` skill（會 push branch 並開 PR）。其他 runtime 的 skill 樹（例如 `.claude/skills/ship`）存在不能證明本入口已提供。
 
+push session branch 與開 **draft** PR 不在本問題內：照 [[github-flow]] § 事件與成本「切片可見性 draft」由 owner 直接做，**NEVER** 為此停下來問 Charles 或開 `flow ask`（Charles 2026-10-28 /my Q11=A）。
+
 本任務已有對應 branch push／PR 的明確授權時直接依該 scope 執行；缺授權才用當前可用詢問工具或對話提出下列問題，沒有回答不執行。
 
 ```text

@@ -69,13 +69,15 @@ done
 
 判斷流程：
 
-| 情境 | 做法 |
-| --- | --- |
-| profile 對 `localhost:<port>` 已登入 | 直接 `open <URL>`，不需 dev-login |
-| profile 沒登入過、且專案有 `server/routes/auth/_dev-login.get.ts` 或 `packages/*/server/routes/auth/_dev-login.get.ts` | 走 `GET /auth/_dev-login`，用 canonical `as=<role>` + `redirect=<target>` |
-| profile 沒登入過、且專案有 `server/routes/auth/__test-login.get.ts` | 走 legacy `GET /auth/__test-login`，用 `role=<role>` + `email=e2e-<role>@test.local` + `redirect=<target>` |
-| profile 沒登入過、且專案有 `server/api/_dev/login.post.ts` | 先用 `eval` POST `/api/_dev/login` 建立 cookie，再 `open <target>` |
-| 撞到登入頁（`get url` 顯示 redirect 到 `/auth/login` 等） | **MUST** 停下來告訴主 session「需要使用者先在該 profile 完成登入」，**NEVER** 從截圖讀帳密填寫 |
+評估：first-match；以上皆非 → D*
+| id | 情境 | 做法 |
+| --- | --- | --- |
+| D1 | 撞到登入頁（`get url` 顯示 redirect 到 `/auth/login` 等） | **MUST** 停下來告訴主 session「需要使用者先在該 profile 完成登入」，**NEVER** 從截圖讀帳密填寫 |
+| D2 | profile 對 `localhost:<port>` 已登入 | 直接 `open <URL>`，不需 dev-login |
+| D3 | profile 沒登入過、且專案有 `server/routes/auth/_dev-login.get.ts` 或 `packages/*/server/routes/auth/_dev-login.get.ts` | 走 `GET /auth/_dev-login`，用 canonical `as=<role>` + `redirect=<target>` |
+| D4 | profile 沒登入過、且專案有 `server/routes/auth/__test-login.get.ts` | 走 legacy `GET /auth/__test-login`，用 `role=<role>` + `email=e2e-<role>@test.local` + `redirect=<target>` |
+| D5 | profile 沒登入過、且專案有 `server/api/_dev/login.post.ts` | 先用 `eval` POST `/api/_dev/login` 建立 cookie，再 `open <target>` |
+| D* | 以上皆非 | STOP，告訴主 session 缺可用的登入方式，NEVER 猜帳密 |
 
 #### Dev-login route 偵測
 
@@ -533,12 +535,14 @@ Verify Mode **MUST NOT** 執行 mutation、form fill、click sequence、multi-ro
 
 ### 失敗條件 → PASS / FAIL / UNCERTAIN
 
-| 結果 | 條件 | 主 session 處置 |
-| --- | --- | --- |
-| **PASS** | known URL 載入成功 + readiness gate 命中（有 `ready_signal` 則 signal present + post-capture cross-check 截圖 DOM 仍含）+ final-state screenshot 已截 + DOM observation 可描述 | 主 session 跑 `evidence-store.mjs --write --kind verified-ui --screenshot <path> [--dom <obs>]`，把它印出的短 marker 貼進行內；checkbox 保持 `[ ]` 等 user 確認 |
-| **FAIL** | URL 載入成功但 final state 明確不符合 item description；或 post-capture cross-check 發現 `ready_signal` 不在截圖當下 DOM 內 | 主 session 寫 `（issue: <details>）` 並回報 user |
-| **UNCERTAIN** | 撞登入頁、缺 seed、known URL 不足、需要 mutation / form fill / 多角色切換才能驗 | 主 session 不寫 annotation，改補 baseline 或改派 `verify:e2e` / `verify:api` |
-| **UNCERTAIN(content-not-rendered)** | readiness gate 逾時 15s 仍未見 `ready_signal`（async 資料未到 / query error 被 UI fallback 成合法外觀 / seed 缺局部資料）| 主 session 不寫 `(verified-ui:)`；讀 `_exploration/#<N>-content-not-rendered.png` diagnostic + progress samples 判斷 seed / query / auth / UI-fallback 哪一類，補對應 baseline 後重派 |
+評估：first-match；以上皆非 → V*
+| id | 結果 | 條件 | 主 session 處置 |
+| --- | --- | --- | --- |
+| V1 | **UNCERTAIN(content-not-rendered)** | readiness gate 逾時 15s 仍未見 `ready_signal`（async 資料未到 / query error 被 UI fallback 成合法外觀 / seed 缺局部資料） | 主 session 不寫 `(verified-ui:)`；讀 `_exploration/#<N>-content-not-rendered.png` diagnostic + progress samples 判斷 seed / query / auth / UI-fallback 哪一類，補對應 baseline 後重派 |
+| V2 | **UNCERTAIN** | 撞登入頁、缺 seed、known URL 不足、需要 mutation / form fill / 多角色切換才能驗 | 主 session 不寫 annotation，改補 baseline 或改派 `verify:e2e` / `verify:api` |
+| V3 | **FAIL** | URL 載入成功但 final state 明確不符合 item description；或 post-capture cross-check 發現 `ready_signal` 不在截圖當下 DOM 內 | 主 session 寫 `（issue: <details>）` 並回報 user |
+| V4 | **PASS** | known URL 載入成功 + readiness gate 命中（有 `ready_signal` 則 signal present + post-capture cross-check 截圖 DOM 仍含）+ final-state screenshot 已截 + DOM observation 可描述 | 主 session 跑 `evidence-store.mjs --write --kind verified-ui --screenshot <path> [--dom <obs>]`，把它印出的短 marker 貼進行內；checkbox 保持 `[ ]` 等 user 確認 |
+| V* | **UNCERTAIN** | 以上皆非 | 主 session 不寫 annotation，回報原始狀態並補 baseline |
 
 ### 完成後 MUST
 

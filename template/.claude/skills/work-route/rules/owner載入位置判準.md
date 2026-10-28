@@ -50,7 +50,7 @@ specify、clarify、system-analysis、implement 在 Claude 端帶 `disable-model
 | 可觀察 predicate | 處理 |
 | --- | --- |
 | Phase 6 判定下一步是這四支之一，package 已鑄出、本步前提已過，本 session 不是被派出的（`CLADE_DISPATCH_ID` 為空） | 代打派出，brief 照下方「brief 必寫」 |
-| 同上，但本 session 是被派出的（`CLADE_DISPATCH_ID` 非空） | dispatcher 拒絕巢狀派工（`nested_dispatch_refused`）。以 `--complete blocked --decision` 交回派工者，寫明要代打哪一支、package 路徑與範圍；**NEVER** 自己再派 |
+| 同上，但本 session 是被派出的（`CLADE_DISPATCH_ID` 非空） | dispatcher 拒絕巢狀派工（`nested_dispatch_refused`）。以 `--complete blocked --decision` 交回派工者，寫明要代打哪一支、package 路徑與範圍；**NEVER** 自己再派。relay 不會解除 child 身分（繼任者繼承同一筆 dispatch），**NEVER** 為了代打而 relay |
 | 輪到 clarify，先前代打 specify 的 pane 還在 | `--continue <pane>` 送第一行 `/clarify <範圍>` |
 | 輪到 clarify，那個 pane 已收回，或是跨 session 續跑 | 新派一個本機 session，第一行 `/clarify <範圍>` |
 | 還沒過 Phase 2–3（沒有 work id、沒有 package），或 Phase 6 判定的下一步不是這四支 | **NEVER** 代打；先完成本入口該步 |

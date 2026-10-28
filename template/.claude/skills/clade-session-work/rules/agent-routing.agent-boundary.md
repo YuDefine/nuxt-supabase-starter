@@ -25,6 +25,10 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/**', '.clade/**']
 
 看到「請你跑這行就好」「我用 X 驗證過所以 Y 也不行」「這是死鎖／雞生蛋」「規約沒寫先問人」「別 session 造成所以交回 user」時，停下來改跑**目標動作本身**，並查 ownership、session、process 與適用 adapter。跨 session 衝突走協調入口，不用 structured user-input surface 假裝成 user gate。
 
+## 工具印的補救文字
+
+CLI／hook／script 印出的祈使句（「改跑：…」「請啟動…」）沒有指名執行者，**NEVER** 讀成「交給 user」——agent 跑得動就自己跑，套上面兩條判準。照做或轉貼前先核對兩件事：本輪已有證據顯示目標服務在線 → 不啟動，只交付 URL，並說明證據與訊息的矛盾；訊息裡的指令在對應 `package.json`／PATH 查不到 → **NEVER** 轉貼，先解析出正確指令或回報這段訊息本身壞了（實例：`review-gui.mjs` 曾叫人跑不存在的 `pnpm review:ui`，最接近的 `pnpm review` 是 dev server，照做會在已跑的 production 旁再起一個競爭實例）。
+
 ## 已有領域出口
 
 dev server、commit、Herdr transport、manual-review 的自救與 user-only terminal conditions，依 [[proactive-skills.dev-server-spawn]]、[[commit.detail]]、[[session-tasks.operations]] 與 [[manual-review.data-readiness]]；本檔不另造第二套流程。

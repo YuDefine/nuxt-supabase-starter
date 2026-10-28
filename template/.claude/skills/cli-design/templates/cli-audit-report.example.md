@@ -46,8 +46,8 @@
 
 - 判定：FAIL
 - 證據：`root_subcommands` 同時有 `open`、`drop`、`close`（動詞在前），以及 `plan open`、`plan drop`、`handoff render`（名詞在前）。
-- 對 agent 的影響：agent 學會 `flow drop <id>` 之後，會猜 `flow drop plan`，或拿 `flow open` 去開 plan。
-- 修法：工作項目的生命週期命令收進 `flow work <動詞>`，與 `flow plan <動詞>` 對齊；舊的 `flow open` 依 H4 保留成別名。
+- 對 agent 的影響：agent 學會頂層動詞（`drop <id>`）之後，會猜 `drop plan`，或拿頂層 `open` 去開 plan。
+- 修法：工作項目的生命週期命令收進 `flow work <動詞>`，與 `flow plan <動詞>` 對齊；舊的頂層寫法依 H4 保留成別名。
 - 改後行為：`flow work open <slug>`、`flow plan open <slug>`
 
 ### P1｜A3：預演有兩種寫法

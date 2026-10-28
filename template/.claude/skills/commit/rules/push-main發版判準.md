@@ -1,3 +1,49 @@
+# Rule 0 - 先查 consumer 的 project override，有就以它為準
+
+- Level: `MUST`
+
+本檔 Rule 1–4 是 clade 的預設。consumer 可在 `.clade/rules/*.md`（或 legacy 的 `.claude/rules/local/*.md`）用 `rules/core/local-rule-override.md` 的檔頭宣告覆蓋 Step 6-A：前 10 行內的 `> Overrides:` blockquote 點名本檔 `push-main發版判準.md`。進 Rule 1 之前 **MUST** 先跑：
+
+<!-- step-6a-override-probe:start -->
+```bash
+(
+  cd "${COMMIT_REPO:?COMMIT_REPO is not set}" || exit 1
+  roots='.clade/rules .claude/rules/local' # legacy 路徑 .claude/rules/local 仍認
+  hits="$(find $roots -type f -name '*.md' 2>/dev/null | sort |
+    while IFS= read -r f; do
+      head -n 10 "$f" | awk '
+        /^> *Overrides:/ { block = 1 }
+        block && !/^>/ { block = 0 }
+        block && /push-main發版判準/ { hit = 1 }
+        END { exit hit ? 0 : 1 }' && printf 'step6a=override file=%s\n' "$f"
+    done)"
+  if [ -n "$hits" ]; then printf '%s\n' "$hits"; else echo 'step6a=default'; fi
+)
+```
+<!-- step-6a-override-probe:end -->
+
+- 印 `step6a=override file=<path>` → **MUST** 讀完該檔，Step 6-A 照它做；它沒規定的部分才回到本檔 Rule 1–4。它禁止的步驟（例：只 push main、不 `pnpm version`、不建 deploy commit、不 `git tag`）**NEVER** 因為本檔樣板寫了就照跑。只剩 push main 時仍走 Rule 1 的 ahead 範圍列舉，推送用帶 `CLADE_PUSH_MAIN_AHEAD` 宣告的 `git push origin main`。
+- 印 `step6a=default` → 照 Rule 1–4。
+- 印出多個 `file=` → 全部讀完；彼此衝突時停在 Step 6-B 回報，**NEVER** 自己挑一份。
+
+override 只改 6-A 的**做法**，不改授權：要不要推 main 仍由 Step 6-Gate 的 `verdict` 決定。
+
+## Good Example
+
+- 這個例子是好的，因為先查到 override，照它只推 main。
+
+```md
+`step6a=override file=.clade/rules/commit-step-6a-push-main-only.md` → 讀檔：僅 push main → `git log --oneline origin/main..HEAD` 逐筆認得 → `CLADE_PUSH_MAIN_AHEAD="$(…)" git push origin main`，不跑 `pnpm version`、不打 tag。
+```
+
+## Bad Example
+
+- 這個例子是壞的，因為沒查 override 就照預設樣板 bump，撞上沒有 `version` 欄位的 repo。
+
+```md
+`verdict=confirmed-push-main` → 直接 `pnpm version patch --no-git-tag-version` → `ERR_PNPM_NO_PACKAGES_TO_VERSION`。
+```
+
 # Rule 1 - 版本號升級與 deploy commit：`--only` 與 `&&` 都不可省（Step 6-A，`push-main` 專用）
 
 - Level: `MUST`

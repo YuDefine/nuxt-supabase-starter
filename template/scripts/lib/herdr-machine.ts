@@ -278,6 +278,8 @@ export type MachineLoad = {
   cpu_busy_pct?: number
   /** Memory PSI `some avg60` (time spent waiting on reclaim / swap). */
   mem_some_avg60?: number
+  /** `/proc/meminfo` MemAvailable, GiB. Absent = not ranked on it. */
+  mem_available_gb?: number
   error?: string
 }
 
@@ -294,7 +296,7 @@ export function loadProbeScript(sample: boolean = true): string {
     `echo ${PROBE_MARK}`,
     'nproc; cut -d" " -f1 /proc/loadavg',
     `echo ${PROBE_MARK}`,
-    'cat /proc/pressure/memory 2>/dev/null',
+    'cat /proc/pressure/memory 2>/dev/null; grep MemAvailable /proc/meminfo 2>/dev/null',
     `echo ${PROBE_MARK}`,
     sample ? 'sleep 2; head -1 /proc/stat' : 'true',
   ].join('; ')
@@ -313,11 +315,21 @@ export function parseLoadProbe(machine: string, local: boolean, stdout: string):
   if (busy !== null) out.cpu_busy_pct = busy
   const memSome = parseCpuPsi(memPsi, 'avg60')
   if (memSome !== null) out.mem_some_avg60 = memSome
+  const available = /^MemAvailable:\s+(\d+)\s+kB/mu.exec(memPsi)
+  if (available) out.mem_available_gb = Number(available[1]) / 1024 ** 2
   return out
 }
 
 /**
- * Why a candidate is over a pressure line (`SATURATED_LOAD_PER_CORE` ranking-only / `MEM_PRESSURE_AVG60` memory hard
+ * MemAvailable below this ranks a candidate behind those above it (ranking only, like `SATURATED_LOAD_PER_CORE`).
+ * 16 GiB = a coordinator seat's MemoryMax (`COORDINATOR_SEAT_SCOPE_LIMITS`, herdr-session-handoff.ts): a machine
+ * with less free cannot give a seat its ceiling without reclaiming from every other pane; PSI only sees that once
+ * the reclaim has started.
+ */
+export const MEM_AVAILABLE_FLOOR_GB = 16
+
+/**
+ * Why a candidate is over a pressure line (`SATURATED_LOAD_PER_CORE` / `MEM_AVAILABLE_FLOOR_GB` ranking-only / `MEM_PRESSURE_AVG60` memory hard
  * limit); empty = under both. Ranks it behind every candidate under both.
  */
 export function pressureReasons(load: MachineLoad): string[] {
@@ -326,6 +338,8 @@ export function pressureReasons(load: MachineLoad): string[] {
     why.push(`load1/core ${load.per_core!.toFixed(1)}`)
   if ((load.mem_some_avg60 ?? 0) >= MEM_PRESSURE_AVG60)
     why.push(`memory PSI some avg60 ${load.mem_some_avg60!.toFixed(0)}`)
+  if (load.mem_available_gb !== undefined && load.mem_available_gb < MEM_AVAILABLE_FLOOR_GB)
+    why.push(`MemAvailable ${load.mem_available_gb.toFixed(1)}G`)
   return why
 }
 

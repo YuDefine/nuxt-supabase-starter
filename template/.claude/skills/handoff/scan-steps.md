@@ -22,11 +22,12 @@ node ~/offline/clade/vendor/scripts/rotate-handoff-done.ts --repo "$MAIN_WT_PATH
 
 **可 rotate（100%，一次搬完）**：
 
-| 判準 | 動作 |
-| --- | --- |
-| heading 標了結案（`✅` / `已完成` / `已落地` / `已發版` / `已處置` / `dismissed` / `已 supersede` / …）且 body **沒有** `- [ ]` | 從主檔刪除。未遷移 consumer 才搬進 `docs/archives/<YYYY-MM>-handoff-narrative.md` |
-| `##` dated section、無 active `- [ ]`（kind=`narrative`） | 同上；未遷移 consumer 才按 `YYYY-MM` 分桶 |
-| 剩餘混合段裡的 `- [x]` 項（含其縮進延續行） | 只搬走已勾項，留下 `- [ ]` |
+評估：all-match（逐條檢查，命中就套用）
+| id | 判準 | 動作 |
+| --- | --- | --- |
+| T1 | heading 標了結案（`✅` / `已完成` / `已落地` / `已發版` / `已處置` / `dismissed` / `已 supersede` / …）且 body **沒有** `- [ ]` | 從主檔刪除。未遷移 consumer 才搬進 `docs/archives/<YYYY-MM>-handoff-narrative.md` |
+| T2 | `##` dated section、無 active `- [ ]`（kind=`narrative`） | 同上；未遷移 consumer 才按 `YYYY-MM` 分桶 |
+| T3 | 剩餘混合段裡的 `- [x]` 項（含其縮進延續行） | 只搬走已勾項，留下 `- [ ]` |
 
 **永不 rotate**：
 
@@ -148,12 +149,14 @@ JSON 範例（節錄）：
 目的地，所以**不**走 §2B.1b 那種一次搬進單一 archive 的模式。
 逐段判、逐段處置，這一輪處置不完的就留著下一輪再報。
 
-| 處置 | 判準（可觀察） | 動作 |
-| --- | --- | --- |
-| **拆條** | 段裡其實是多件事，且還有沒收的（heading 說完成但正文提到待驗 / 待散播 / 待決策） | 把未完那幾件拆到 `## In Progress` / plan（有 `specs/truth/work-lifecycle.md` → `flow plan open` 或續跑既有 plan；未遷移 consumer 才 `docs/tech-debt.md`）/ 新的 `tasks/<date>-<slug>.md`，剩下的走「關條」 |
-| **關條** | 已 done，且 `git log --grep '<TD-NNN 或 slug>'` 查得到 | **直接刪整段**。NEVER 寫 archive narrative —— git history 是免費且完整的知識層（同 [[tech-debt-hygiene]] Invariant 7 § 處置是三選一） |
-| **知識語態重寫** | 段裡有真教訓**且**未被任何機械 gate 承載 | 走 `/oops` 寫 clade `specs/truth/`（換語態，不是剪貼；`docs/pitfalls/` 已退役，呼叫端遷移與否都不寫），原段同時刪掉 |
-| **不動（防重做 marker）** | heading 除了結案還明講「不要重做 / 不必重做 / 勿重做 / NEVER 重做 / 不必接續」 | **什麼都不做**。偵測器已自動豁免這一格，見下 |
+評估：first-match；以上皆非 → D*
+| id | 處置 | 判準（可觀察） | 動作 |
+| --- | --- | --- | --- |
+| D1 | **不動（防重做 marker）** | heading 除了結案還明講「不要重做 / 不必重做 / 勿重做 / NEVER 重做 / 不必接續」 | **什麼都不做**。偵測器已自動豁免這一格，見下 |
+| D2 | **拆條** | 段裡其實是多件事，且還有沒收的（heading 說完成但正文提到待驗 / 待散播 / 待決策） | 把未完那幾件拆到 `## In Progress` / plan（有 `specs/truth/work-lifecycle.md` → `flow plan open` 或續跑既有 plan；未遷移 consumer 才 `docs/tech-debt.md`）/ 新的 `tasks/<date>-<slug>.md`，剩下的走「關條」 |
+| D3 | **關條** | 已 done，且 `git log --grep '<TD-NNN 或 slug>'` 查得到 | **直接刪整段**。NEVER 寫 archive narrative —— git history 是免費且完整的知識層（同 [[tech-debt-hygiene]] Invariant 7 § 處置是三選一） |
+| D4 | **知識語態重寫** | 段裡有真教訓**且**未被任何機械 gate 承載 | 走 `/oops` 寫 clade `specs/truth/`（換語態，不是剪貼；`docs/pitfalls/` 已退役，呼叫端遷移與否都不寫），原段同時刪掉 |
+| D* | 以上皆非 | — | 留著，下一輪再報（本 sub-step 不寫檔） |
 
 **防重做 marker 不算死段。** 這類段的存在目的就是擋住 fresh-context agent 重跑已完成的工作，
 刪掉或搬走等於把那道擋牆拆了。`handoff-scan.ts` 的 `ANTI_REDO_HEADING_RE` 會把它們歸到
@@ -224,14 +227,15 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff next — flow gates_
 
 六條訊號 **MUST** 各自處置，**NEVER** 只看其中一條：
 
-| 訊號 | check | 意義 | 處置 |
-| --- | --- | --- | --- |
-| **staleOpen** | `tech-debt-stale:<TD-NNN>`（warn） | open/pending TD 的 `Discovered` > 60d 且無 `### Resolution` / 近期 `Last reviewed` — 「開了就忘」候選 | 列進 §2B.2 outstanding **並標記為最高優先**（age 越大越前）。推薦 user 三選一：做掉 + 補 `### Resolution` / 改 `Status: wontfix` + 理由 / 加 `**Last reviewed**: <today>` 重置 SLA。**NEVER** 默默放回清單尾巴 |
-| **aging** | `tech-debt-aging:<TD-NNN>`（warn） | open/pending TD 的 `Discovered` > 14d，含被 `Last reviewed` snooze 的 — 「正在老化」候選 | 列進 §2B.2 outstanding（排在 stale 之後、一般項目之前）。**MUST 主動追問 user 卡關原因**（見 § anti-snooze）。對 `snoozed: true` 的項目**明確指出** `Last reviewed` 不等於解決 — 「已 stamp Last reviewed 但仍無 Resolution，應推進或 wontfix」 |
-| **evidenceStale** | `tech-debt-evidence-stale:<TD-NNN>`（warn） | open TD 的 `Location` 路徑在 `Discovered` 之後被 commit 過 — 「敘述可能已不成立」候選。與 staleOpen 正交：staleOpen 問「放多久了」，本條問「還成不成立」 | **MUST 逐條讀該 entry 對照現況後才列 outstanding**，NEVER 直接把它當成待辦推給 user。三種結果：① 事情已做完 → 補 `### Resolution` + 改 `Status`，**不**列 outstanding；② 敘述過期但問題還在 → 更正敘述（保留原文供追溯），再列 outstanding；③ 確認仍成立 → 加 `**Last reviewed**: <today>`，照常列。**這是啟發式不是判決** — 路徑被動過也可能與該 TD 主題無關 |
-| **archivedRetained** | `tech-debt-archived-retained`（fail） | `docs/archives/tech-debt-closed-*.md` 內出現帶 re-activation 契約的 TD；trigger 留在 archive 裡，後續盤點看不見 | 依 §2B.1a 的 fail 契約停止；按 detail 的 TD id／archive path 搬回 `docs/tech-debt.md`。判準與 rotation 共用：`*-until-*`、`### 重訪條件` / `### Defer 條件`、`**Signal**:` 任一命中 |
-| **closedBloat** | `tech-debt-closed-bloat`（warn，closed TD ≥ 門檻時觸發） | done/resolved/wontfix 的 closed TD 仍躺 `docs/tech-debt.md` 主檔 | **MUST** 跑 `node "$HOME/offline/clade/vendor/scripts/rotate-closed-bloat.ts"`。stdout `retired` = clade home／已遷移 repo，**停**，不要寫 archive 或改 register。未遷移 consumer：搬全部 rotatable（noop 時 stdout 是 `noop`）。**NEVER** 詢問操作。Park 不執行 |
-| **entryOversize** | `tech-debt-entry-oversize`（warn，任一 open TD > `raw.oversizeThreshold` 行時觸發） | **open** TD 單條正文過長。rotate 只吃 closed，對 open 零覆蓋 — 某 consumer 實測 4986 行主檔裡 4807 行是 open，主檔體積的長期成長全在這裡 | （未遷移 consumer 才適用）三選一：**拆條**（其實是 2 條以上的命題）/ **關條**（已 done / 已被機械 gate 承載 / wontfix）/ **知識語態重寫**（真教訓且未機械化 → `/oops`，主檔那條同時關掉）。目標每條 ≤10 行。逐條見 `raw.oversize[]`（含 `lines` / `overBy` / `lineNo`）。**依詢問操作讓 user 拍板**，user 選定才動檔。**NEVER 把正文下推到 `docs/archives/tech-debt-bodies.md`**（TD-495 改判撤銷，與 scan detail 一致）。**MUST 保留 metadata block 原封不動** — `audit-tech-debt-hygiene.ts` 的 Invariant 2 / 3 / 6 全靠它 |
+評估：all-match（逐條檢查，命中就套用）
+| id | 訊號 | check | 意義 | 處置 |
+| --- | --- | --- | --- | --- |
+| Z1 | **staleOpen** | `tech-debt-stale:<TD-NNN>`（warn） | open/pending TD 的 `Discovered` > 60d 且無 `### Resolution` / 近期 `Last reviewed` — 「開了就忘」候選 | 列進 §2B.2 outstanding **並標記為最高優先**（age 越大越前）。推薦 user 三選一：做掉 + 補 `### Resolution` / 改 `Status: wontfix` + 理由 / 加 `**Last reviewed**: <today>` 重置 SLA。**NEVER** 默默放回清單尾巴 |
+| Z2 | **aging** | `tech-debt-aging:<TD-NNN>`（warn） | open/pending TD 的 `Discovered` > 14d，含被 `Last reviewed` snooze 的 — 「正在老化」候選 | 列進 §2B.2 outstanding（排在 stale 之後、一般項目之前）。**MUST 主動追問 user 卡關原因**（見 § anti-snooze）。對 `snoozed: true` 的項目**明確指出** `Last reviewed` 不等於解決 — 「已 stamp Last reviewed 但仍無 Resolution，應推進或 wontfix」 |
+| Z3 | **evidenceStale** | `tech-debt-evidence-stale:<TD-NNN>`（warn） | open TD 的 `Location` 路徑在 `Discovered` 之後被 commit 過 — 「敘述可能已不成立」候選。與 staleOpen 正交：staleOpen 問「放多久了」，本條問「還成不成立」 | **MUST 逐條讀該 entry 對照現況後才列 outstanding**，NEVER 直接把它當成待辦推給 user。三種結果：① 事情已做完 → 補 `### Resolution` + 改 `Status`，**不**列 outstanding；② 敘述過期但問題還在 → 更正敘述（保留原文供追溯），再列 outstanding；③ 確認仍成立 → 加 `**Last reviewed**: <today>`，照常列。**這是啟發式不是判決** — 路徑被動過也可能與該 TD 主題無關 |
+| Z4 | **archivedRetained** | `tech-debt-archived-retained`（fail） | `docs/archives/tech-debt-closed-*.md` 內出現帶 re-activation 契約的 TD；trigger 留在 archive 裡，後續盤點看不見 | 依 §2B.1a 的 fail 契約停止；按 detail 的 TD id／archive path 搬回 `docs/tech-debt.md`。判準與 rotation 共用：`*-until-*`、`### 重訪條件` / `### Defer 條件`、`**Signal**:` 任一命中 |
+| Z5 | **closedBloat** | `tech-debt-closed-bloat`（warn，closed TD ≥ 門檻時觸發） | done/resolved/wontfix 的 closed TD 仍躺 `docs/tech-debt.md` 主檔 | **MUST** 跑 `node "$HOME/offline/clade/vendor/scripts/rotate-closed-bloat.ts"`。stdout `retired` = clade home／已遷移 repo，**停**，不要寫 archive 或改 register。未遷移 consumer：搬全部 rotatable（noop 時 stdout 是 `noop`）。**NEVER** 詢問操作。Park 不執行 |
+| Z6 | **entryOversize** | `tech-debt-entry-oversize`（warn，任一 open TD > `raw.oversizeThreshold` 行時觸發） | **open** TD 單條正文過長。rotate 只吃 closed，對 open 零覆蓋 — 某 consumer 實測 4986 行主檔裡 4807 行是 open，主檔體積的長期成長全在這裡 | （未遷移 consumer 才適用）三選一：**拆條**（其實是 2 條以上的命題）/ **關條**（已 done / 已被機械 gate 承載 / wontfix）/ **知識語態重寫**（真教訓且未機械化 → `/oops`，主檔那條同時關掉）。目標每條 ≤10 行。逐條見 `raw.oversize[]`（含 `lines` / `overBy` / `lineNo`）。**依詢問操作讓 user 拍板**，user 選定才動檔。**NEVER 把正文下推到 `docs/archives/tech-debt-bodies.md`**（TD-495 改判撤銷，與 scan detail 一致）。**MUST 保留 metadata block 原封不動** — `audit-tech-debt-hygiene.ts` 的 Invariant 2 / 3 / 6 全靠它 |
 
 **closedBloat 的幅度由 script 一次搬完全部 rotatable 承載**，不再走 (A) 選項。
 
@@ -245,11 +249,11 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff next — flow gates_
 - stale TD（> 60d）— 已超過 SLA，**NEVER** 推薦「加 Last reviewed 重置」作為預設選項（只作為三選一的最後項，前兩項是做掉 / wontfix）
 - 同一條 TD 如果在 `docs/tech-debt.md` body 明確寫了 blocker（如「需人工確認」「等外部 API」「需客戶拍板」），**MUST** 在 outstanding 盤點時引用該 blocker 並問 user：「blocker 解了嗎？能推進嗎？」
 
-### retained stub 化與正文外移（`docs/archives/tech-debt-bodies.md`）
+### retained stub 化與正文外移（僅未遷移 consumer：`docs/archives/tech-debt-bodies.md`）
 
 **只適用未遷移 consumer。** repo 有 `specs/truth/work-lifecycle.md` 時 **NEVER** append `tech-debt-bodies.md`、NEVER 產 stub —— re-activation 條件寫進承載它的 plan（或 truth 的 re-evaluation condition），per `specs/truth/work-lifecycle.md` § Close。
 
-closedBloat 的 retained 例外的正文落 `$MAIN_WT_PATH/docs/archives/tech-debt-bodies.md`（append-only；entryOversize 已不下推，見上表）。
+未遷移 consumer 的 closedBloat retained 例外，正文落 `$MAIN_WT_PATH/docs/archives/tech-debt-bodies.md`（append-only；entryOversize 已不下推，見上表）。
 
 - **檔名 NEVER 用 `tech-debt-closed-*.md`**：`audit-tech-debt-hygiene.ts` 的 `loadArchiveEntries()` 用 glob `/^tech-debt-closed-.*\.md$/` 撿 archive 進 Invariant 1 的重號偵測。正文檔若落進那個 glob，會與主檔留下的 stub 同號互撞，**每一條**外移項都變成 duplicates 假陽性
 - **主檔 stub 的最小內容**：heading（`## TD-NNN — <title>`，編號與標題不變）+ metadata block（`Status` / `Discovered` / `Class` / `Location`，**原封不動**）+ trigger 條件或摘要一行 + pointer（`> 正文：docs/archives/tech-debt-bodies.md#td-nnn`）
@@ -292,11 +296,12 @@ VPN／Tailscale 內網），CI 沒有那些東西。這類 script 因此進不�
 
 ### exit code 契約（宣告進本表的 script MUST 遵守）
 
-| exit | 語義 | 本 sub-step 動作 |
-| --- | --- | --- |
-| `0` | 乾淨 | 摘要一行 pass，不進 outstanding |
-| `1` | **有 finding** | 逐條列進 §2B.2 outstanding |
-| `≥2` | **環境缺件**（token 讀不到、CLI 未登入、內網連不上） | **skip 一行 `<指令>: skipped（<原因>）`，NEVER 當成失敗** |
+評估：first-match；以上皆非 → X*
+| id | exit | 語義 | 本 sub-step 動作 |
+| --- | --- | --- | --- |
+| X1 | `0` | 乾淨 | 摘要一行 pass，不進 outstanding |
+| X2 | `1` | **有 finding** | 逐條列進 §2B.2 outstanding |
+| X* | `≥2` | **環境缺件**（token 讀不到、CLI 未登入、內網連不上） | **skip 一行 `<指令>: skipped（<原因>）`，NEVER 當成失敗** |
 
 exit 1 與 exit ≥2 分不開的 script **不合格**，不要宣告進表 —— 兩者混在一起時，
 「今天沒登入」會長得跟「台帳破了」一模一樣，而人會學會忽略它。

@@ -29,9 +29,9 @@ consumer 屬於某個 Notion hub 時，ticket 狀態與客戶時程頁（`交付
 ## 觸發條件（兩者皆成立才生效）
 
 1. **Consumer 屬於某 hub**：consumer metadata 宣告 `notion.hub` + `notion.projectCode`（schema 見 `registry/consumer-meta.schema.json`；hub 與 projectCode 必須在 `registry/notion-hubs.json` 存在）。未宣告 → 本規則**完全不生效**，`notion-sync.ts` 自己 exit 0 什麼都不做。
-2. **有 work item**：`flow open` 拿到 work id。沒有 work item 的動作（讀 board、回 comment、問客戶）不在本規則，走 runtime 的 `notion-hub` skill。
+2. **有 work item**：`flow work open` 拿到 work id。沒有 work item 的動作（讀 board、回 comment、問客戶）不在本規則，走 runtime 的 `notion-hub` skill。
 
-ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --origin notion:<page-id>` 或 `notion-sync.ts open --ticket <page-id>` 把它釘住；來自 ROADMAP / 技術債的工作沒有 ticket，**照樣**在 `交付項目` 出現一列（交付項目 不綁死 ticket；不要為了出現在時程頁造假票）。
+ticket 連結是**選填**：work item 若來自客戶 ticket，`flow work open --origin notion:<page-id>` 或 `notion-sync.ts open --ticket <page-id>` 把它釘住；來自 ROADMAP / 技術債的工作沒有 ticket，**照樣**在 `交付項目` 出現一列（交付項目 不綁死 ticket；不要為了出現在時程頁造假票）。
 
 ## 欄位契約（property key 一字不差）
 
@@ -50,11 +50,11 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --ori
 
 | work item 事件 | 指令 | ticket（有連結時） | 交付項目 |
 | --- | --- | --- | --- |
-| **工程師發現**（bug / 要做的功能） | `notion-sync.ts file --title "<客戶看得懂>" --kind bug\|feature --slug <slug> [--prod-url <url>] [--screenshot <png>]…` | 建票 → in-progress + `Work ID`（script 自己 `flow open --origin notion:<page>`）；`備註`=prod URL、內文問題截圖 | 只有 feature 建列；工程師發現的 bug **不建** |
-| **真的開工**（`flow open` 成功） | `notion-sync.ts open --work <id> [--ticket <page>] [--title "<客戶看得懂的一句話>"]` | → in-progress + `Work ID` | upsert：`狀態` 進行中、`進度%` 25、`專案` relation、`Work ID` |
-| 階段推進（`flow plan open`、`flow done` 自動觸發；中途勾 tasks **不自動**觸發——要人跑一次 `follow` 或 `status` 才反映） | `notion-sync.ts follow --work <id>` | 由 flow／plan 狀態推導，只往前（requirements → needs-engineer、PM 已確認 → in-progress） | 只更新既有列：requirements 階段 10、有 tasks.md 後 `進度%` = 25 + 65 × tasks 完成比（上限 90）、done 為 待驗收 90 |
+| **工程師發現**（bug / 要做的功能） | `notion-sync.ts file --title "<客戶看得懂>" --kind bug\|feature --slug <slug> [--prod-url <url>] [--screenshot <png>]…` | 建票 → in-progress + `Work ID`（script 自己 `flow work open --origin notion:<page>`）；`備註`=prod URL、內文問題截圖 | 只有 feature 建列；工程師發現的 bug **不建** |
+| **真的開工**（`flow work open` 成功） | `notion-sync.ts open --work <id> [--ticket <page>] [--title "<客戶看得懂的一句話>"]` | → in-progress + `Work ID` | upsert：`狀態` 進行中、`進度%` 25、`專案` relation、`Work ID` |
+| 階段推進（`flow plan open`、`flow work done` 自動觸發；中途勾 tasks **不自動**觸發——要人跑一次 `follow` 或 `status` 才反映） | `notion-sync.ts follow --work <id>` | 由 flow／plan 狀態推導，只往前（requirements → needs-engineer、PM 已確認 → in-progress） | 只更新既有列：requirements 階段 10、有 tasks.md 後 `進度%` = 25 + 65 × tasks 完成比（上限 90）、done 為 待驗收 90 |
 | 中途進度（人給的絕對值） | `notion-sync.ts progress --work <id> --progress <n>` | — | `進度%` 絕對值 |
-| **標 done**（`flow done`） | `notion-sync.ts done --work <id>` | 確保已是 in-progress | `狀態` 待驗收、`進度%` 90 |
+| **標 done**（`flow work done`） | `notion-sync.ts done --work <id>` | 確保已是 in-progress | `狀態` 待驗收、`進度%` 90 |
 | **發版**（`/commit` 出 tag 並 push） | `notion-sync.ts release --work <id> --tag "$(git describe --tags --abbrev=0)" [--prod-url <url>] [--screenshot <png>]…` | → acceptance + 版本 + `上線日期` + `PR`；`備註`=prod URL、內文驗收截圖 | `進度%` 100（狀態留 待驗收） |
 | 給客戶承諾日期 | `notion-sync.ts eta --work <id> [--target YYYY-MM-DD]` → 回建議；**人確認後** `--confirmed` 重跑 | — | `預估完成日` |
 | 客戶驗收後對帳 | `notion-sync.ts reconcile --work <id>` | 只讀 | 跟隨 ticket：done/archived → 完成、acceptance → 待驗收 |
@@ -63,12 +63,12 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow open --ori
 ### 掛載點（MUST）
 
 - **發現即建票**：工程師在 prod／資料裡發現問題、或決定做一個功能時，**先** `file` 再動手——它同時鑄 work id，之後的推進全部自動。從 work-route 進來的新需求／新 bug 由 work-route Phase 3（`rules/鑄workid前Notion詢問判準.md`）在鑄 work id 前問一次要不要建票（board-only hub 點明不建票客戶看不到），不另加步驟。
-- **flow 事件自動跟隨**：`flow plan open` 與 `flow done` 成功後，flow 以 detached 子行程觸發 `follow`（fail-open，未宣告 hub 的 repo 零成本；`CLADE_NOTION_FOLLOW=0` 關閉）。**NEVER** 在 work-route 或任何 skill 裡加「記得同步 Notion」步驟——Notion 跟隨 flow，不是 flow 呼叫 Notion。
+- **flow 事件自動跟隨**：`flow plan open` 與 `flow work done` 成功後，flow 以 detached 子行程觸發 `follow`（fail-open，未宣告 hub 的 repo 零成本；`CLADE_NOTION_FOLLOW=0` 關閉）。**NEVER** 在 work-route 或任何 skill 裡加「記得同步 Notion」步驟——Notion 跟隨 flow，不是 flow 呼叫 Notion。
 
-- **`flow open` 之後、動第一個檔之前**：跑 `open`。
-- **`flow done` 的收尾**：`follow` 已自動把 交付項目 推到 待驗收 90；收尾訊息明列「待 `/commit` 發版後跑 `release`」——標 done 的當下**還沒有**本次 tag（tag 是 `/commit` Step 5 才打），所以 `release` 一定在發版後。
+- **`flow work open` 之後、動第一個檔之前**：跑 `open`。
+- **`flow work done` 的收尾**：`follow` 已自動把 交付項目 推到 待驗收 90；收尾訊息明列「待 `/commit` 發版後跑 `release`」——標 done 的當下**還沒有**本次 tag（tag 是 `/commit` Step 5 才打），所以 `release` 一定在發版後。
 - **`/commit` Step 6b**（tag 已 push、deploy 已觸發）：同一主線**立即**跑 `release`。consumer 有 post-push CI watcher 時 SHOULD 等綠燈再跑。**NEVER** 留給「下次想起來」。
-- **`預估完成日`**：任何要寫它的時機（開工、客戶問、里程碑排程）**MUST** 先跑不帶 `--confirmed` 的 `eta` 拿建議（來源優先序：`flow eta` 宣告 → Notion 現值 → 無），用 runtime 的詢問介面讓使用者確認**那個日期**，確認後才帶 `--confirmed` 寫。NEVER 用模板數字，NEVER 沒問就寫。
+- **`預估完成日`**：任何要寫它的時機（開工、客戶問、里程碑排程）**MUST** 先跑不帶 `--confirmed` 的 `eta` 拿建議（來源優先序：`flow work eta` 宣告 → Notion 現值 → 無），用 runtime 的詢問介面讓使用者確認**那個日期**，確認後才帶 `--confirmed` 寫。NEVER 用模板數字，NEVER 沒問就寫。
 
 ### 客戶面證據契約
 

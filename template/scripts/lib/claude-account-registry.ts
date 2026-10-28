@@ -3,9 +3,9 @@
  * Claude 帳號池的單一 SoT（W-2026-10-04-claude-account-pool）。
  *
  * 帳號清單寫死在這裡，不要讀任何 config：`cc` 是池入口（依額度挑帳號），
- * `ccN` 釘選第 N 個帳號，`ccw` 是 cc2 的舊名別名。舊 dispatch record 的
- * `account: cc|ccw`、舊 launcher 名、ai-quota 帳號 id 全部由這裡對映到池 id——
- * 任何消費端要「哪個帳號」都只能問 registry，NEVER 各自寫死 'cc'|'ccw'。
+ * `ccN` 釘選第 N 個帳號。舊 dispatch record 的 `account: cc|ccw`、ai-quota 帳號 id
+ * 全部由這裡對映到池 id——任何消費端要「哪個帳號」都只能問 registry，NEVER 各自寫死帳號名。
+ * `ccw`（cc2 舊名）已退役：只剩舊 record 的帳號值還解析得到 claude-2，NEVER 當 launcher 名。
  *
  * 帳號加入／退出只改 `CLAUDE_POOL_ACCOUNTS`；下游型別全部由這份陣列推導。
  * 方案（Pro／Max 5x／Max 20x）NEVER 寫在這裡：訂閱會升降級，現行方案讀 profile `.claude.json` 的
@@ -36,7 +36,9 @@ export const CLAUDE_POOL_ACCOUNTS: readonly ClaudePoolAccount[] = [
   {
     id: 'claude-2',
     command: 'cc2',
-    configDir: '.claude-work',
+    configDir: '.claude-2',
+    // quotaId／statusline 是資料 key（ai-quota 帳號 id 與歷史、~/.cache/claude-quota/<name>.json），
+    // 不隨 config dir 改名；要改得連同 collector 設定與額度快取一起遷移。
     quotaId: 'claude-work',
     statusline: 'ccw',
   },
@@ -69,11 +71,19 @@ export type ClaudePinCommand = ClaudePoolAccount['command']
 /** `cc` 是池入口指令：`--launcher cc`、`zsh function cc`、PATH wrapper 的 `auto` 都解析成它。 */
 export const CLAUDE_POOL_ENTRY = 'cc'
 
+/** `cc`（池入口）也算 launcher 名，但不是帳號本身：它沒有固定帳號。 */
+export type ClaudeLauncherName = 'cc' | ClaudePinCommand
+
+/** 已退役的 launcher 名 → 取代它的指令；用來在拒收時指出該改用什麼。 */
+export const RETIRED_CLAUDE_LAUNCHERS: Readonly<Record<string, ClaudePinCommand>> = { ccw: 'cc2' }
+
 /**
- * `cc`（池入口）與 `ccw`（cc2 舊名）也算 launcher 名，但都不是帳號本身——
- * `cc` 沒有固定帳號、`ccw` 永遠是 cc2。
+ * 已退役的 config dir basename → 現行 basename。改名前就開著的 session 環境仍帶舊路徑
+ * （`~/.claude-work` 現為指向 `.claude-2` 的相容 symlink），帳號歸屬照新目錄算。
  */
-export type ClaudeLauncherName = 'cc' | 'ccw' | ClaudePinCommand
+export const RETIRED_CLAUDE_CONFIG_DIRS: Readonly<Record<string, string>> = {
+  '.claude-work': '.claude-2',
+}
 
 /** 舊 record／env／CLI 可能出現的帳號值 → 池 id。`cc` 在帳號欄位語境下仍是 claude-1。 */
 const ACCOUNT_ALIASES: Record<string, ClaudeAccountId> = {
@@ -126,7 +136,7 @@ export function claudeAccountByConfigDir(
 ): ClaudePoolAccount | undefined {
   if (!configDir) return undefined
   const base = configDir.replace(/\/+$/, '').split('/').pop() ?? configDir
-  return ACCOUNT_BY_CONFIG_DIR.get(base)
+  return ACCOUNT_BY_CONFIG_DIR.get(RETIRED_CLAUDE_CONFIG_DIRS[base] ?? base)
 }
 
 /**
@@ -146,11 +156,11 @@ export function claudeFloorUsable(floor: number | null | undefined): boolean {
   return typeof floor === 'number' && floor > 0
 }
 
-/** launcher 名解析：`cc` = 池入口；`ccw`／`ccN`／`claude-N` = 釘選某帳號。 */
+/** launcher 名解析：`cc` = 池入口；`ccN`／`claude-N` = 釘選某帳號；退役名（`ccw`）回 null。 */
 export function resolveClaudeLauncher(
   name: string | undefined | null,
 ): { kind: 'pool' } | { kind: 'pin'; account: ClaudePoolAccount } | null {
-  if (!name) return null
+  if (!name || Object.hasOwn(RETIRED_CLAUDE_LAUNCHERS, name)) return null
   if (name === CLAUDE_POOL_ENTRY) return { kind: 'pool' }
   const account =
     ACCOUNT_BY_COMMAND.get(name as ClaudePinCommand) ?? claudeAccountOf(resolveClaudeAccount(name))
@@ -159,24 +169,40 @@ export function resolveClaudeLauncher(
 }
 
 /**
- * Claude 系 launcher 名（池入口＋釘選＋舊名）。workspace-trust gate、STRICT 環境判斷、
- * `agentKindForLauncher === 'claude'` 的帳號族判定都用這個，不要各自列 'cc'|'ccw'。
+ * 舊 record 的 launcher 欄位解析：退役名（`ccw`）先換成取代它的指令再解析。只給讀歷史 record 的
+ * 消費端用（cost backfill、舊 account_slot）；新輸入（CLI／env）走 `resolveClaudeLauncher` 拒收退役名。
  */
-export function isClaudeLauncherName(name: string | undefined | null): name is ClaudeLauncherName {
-  return (
-    name === CLAUDE_POOL_ENTRY || name === 'ccw' || ACCOUNT_BY_COMMAND.has(name as ClaudePinCommand)
-  )
+export function resolveRecordLauncher(
+  name: string | undefined | null,
+): ReturnType<typeof resolveClaudeLauncher> {
+  return resolveClaudeLauncher(name ? (RETIRED_CLAUDE_LAUNCHERS[name] ?? name) : name)
 }
 
 /**
- * 釘選單一帳號的 launcher 名（`ccw`／`ccN`／`claude-N`／舊 quota id）；池入口 `cc` 不算。
+ * Claude 系 launcher 名（池入口＋釘選）。workspace-trust gate、STRICT 環境判斷、
+ * `agentKindForLauncher === 'claude'` 的帳號族判定都用這個，不要各自列帳號名。
+ */
+export function isClaudeLauncherName(name: string | undefined | null): name is ClaudeLauncherName {
+  return name === CLAUDE_POOL_ENTRY || ACCOUNT_BY_COMMAND.has(name as ClaudePinCommand)
+}
+
+/** 退役 launcher 名的拒收訊息（`ccw` → 改用 `cc2`）；不是退役名回 undefined。 */
+export function retiredClaudeLauncherMessage(name: string | undefined | null): string | undefined {
+  const replacement = name ? RETIRED_CLAUDE_LAUNCHERS[name] : undefined
+  return replacement
+    ? `launcher ${name} is retired; use ${replacement} (~/${claudeAccountOf(resolveClaudeAccount(replacement))!.configDir})`
+    : undefined
+}
+
+/**
+ * 釘選單一帳號的 launcher 名（`ccN`／`claude-N`／舊 quota id）；池入口 `cc` 不算。
  * 回傳 boolean 不是 type guard：像 `claude-main` 這種值會 pin 但不是 `ClaudePinCommand`。
  */
 export function isClaudePinLauncherName(name: string | undefined | null): boolean {
   return resolveClaudeLauncher(name)?.kind === 'pin'
 }
 
-/** 釘選帳號的 launcher 名正規形：`ccw`→`cc2`、`claude-N`→`ccN`；`cc` 保持 `cc`（池入口）。 */
+/** 釘選帳號的 launcher 名正規形：`claude-N`→`ccN`；`cc` 保持 `cc`（池入口）。 */
 export function canonicalClaudeLauncher(name: string): 'cc' | ClaudePinCommand | undefined {
   const resolved = resolveClaudeLauncher(name)
   if (!resolved) return undefined

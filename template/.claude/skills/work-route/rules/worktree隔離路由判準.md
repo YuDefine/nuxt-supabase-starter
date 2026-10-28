@@ -58,8 +58,8 @@ main 已有 3 個 clade-managed dirty files → 「只是補 package 骨架」�
 | 情境 | 做法 |
 | --- | --- |
 | 被主持者派出（`CLADE_DISPATCH_ID` 非空） | 沿用 dispatch 帶來的 `CLADE_WORK_ID`；本 pane 範圍外的**新** work 不自己鑄，回報主持者由它開 plan 並派 |
-| 已有本工作的 work id，要拆子工作 | 子工作 `flow open <slug>`：ambient `CLADE_WORK_ID` 有 dispatch record 或本 worktree claim 佐證時自動 `work.link` 到 ambient；確定不是子工作才加 `--no-parent` |
-| `flow open` 印「未自動掛到 ambient」 | ambient 沒佐證（多半是別張卡殘留的 shell）。確認真是子工作才照它印的 `flow link … --parent …` 手動掛；**NEVER** 為了掛上去改 export 別的 id |
+| 已有本工作的 work id，要拆子工作 | 子工作 `flow work open <slug>`：ambient `CLADE_WORK_ID` 有 dispatch record 或本 worktree claim 佐證時自動 `work.link` 到 ambient；確定不是子工作才加 `--no-parent` |
+| `flow work open` 印「未自動掛到 ambient」 | ambient 沒佐證（多半是別張卡殘留的 shell）。確認真是子工作才照它印的 `flow work link … --parent …` 手動掛；**NEVER** 為了掛上去改 export 別的 id |
 
 ## Good Example
 
@@ -74,7 +74,7 @@ CLADE_DISPATCH_ID 非空 → 沿用 CLADE_WORK_ID；發現範圍外新工作 →
 - 這個例子是壞的，因為為了把子工作掛上去改 export 別張卡的 id，或把 slug 當 work_id。
 
 ```text
-flow open 印「未自動掛到 ambient」→ export CLADE_WORK_ID=<別張卡的 id> 再重跑
+flow work open 印「未自動掛到 ambient」→ export CLADE_WORK_ID=<別張卡的 id> 再重跑
 ```
 
 # Rule 3 - 隔離交 wt 建立並攜帶續跑資訊；NEVER 藏掉未知 WIP

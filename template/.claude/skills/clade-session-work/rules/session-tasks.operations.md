@@ -50,7 +50,7 @@ tasks/
 建完 tasks 檔的同一步 **MUST** 讓這件事在 flow spine 上有名字：
 
 ```bash
-node ~/offline/clade/vendor/scripts/flow/flow.ts open <slug> \
+node ~/offline/clade/vendor/scripts/flow/flow.ts work open <slug> \
   --actor '<本 session 的 runtime actor>' --origin 'tasks:tasks/<檔名>' --title '<一句話：這件事是什麼>'
 # stderr 印出 export CLADE_WORK_ID=W-<date>-<slug>；本 session 後續的 dispatch 沿用它，
 # relay / fanout 的 successor 也會繼承，整條接力鏈算同一件事。
@@ -133,16 +133,16 @@ slug 的重述，那正是這條規約要修的東西（一個不指涉任何東
 
 - **檔頭 `work_id:` 是選填，NEVER 變成強制**：宣告了就讓 `audit-stale-tasks.ts` 改用**收尾證據**
   判該檔可否歸檔（上表「有收尾證據」列）；沒宣告就照舊走年齡判定，行為與加這個欄位之前逐字相同。
-  值來自 `node vendor/scripts/flow/flow.ts open <slug>`。
+  值來自 `node vendor/scripts/flow/flow.ts work open <slug>`。
 
   **NEVER 對缺 `work_id:` 的檔報違例、NEVER 讓任何 gate 因此擋人**——2026-08 全 fleet 實測
   malformed 170 檔，那個數字是「登記成本高過收益」的結構信號，不是紀律問題；加強制只會把
   成本再抬高一級，然後收穫一批為了過 gate 而填的假 id。
 
-  宣告了 work_id 但 spine 上查無該 work（沒跑過 `flow open`、或該 consumer 還沒收到 flow CLI
+  宣告了 work_id 但 spine 上查無該 work（沒跑過 `flow work open`、或該 consumer 還沒收到 flow CLI
   的散播）→ **NEVER** 當成已收尾。事件缺席不是完成證據，退回年齡判定。
 
-  同理，**`flow open` 本身 NEVER 構成收尾證據**：它發的是 point 事件，start 與 end 同一刻，
+  同理，**`flow work open` 本身 NEVER 構成收尾證據**：它發的是 point 事件，start 與 end 同一刻，
   「剛開工」與「全做完」在 span 上長相逐字相同。判定要求至少一個**真正跑完的 interval span**
   （有 start 有 end、且 outcome 不是 fail）。
 
@@ -157,7 +157,7 @@ slug 的重述，那正是這條規約要修的東西（一個不指涉任何東
 
 > Session: <YYYY-MM-DD HH:MM>
 > 狀態: in-progress | blocked | done
-> work_id: <選填，`node vendor/scripts/flow/flow.ts open <slug>` 印出的 W-… id>
+> work_id: <選填，`node vendor/scripts/flow/flow.ts work open <slug>` 印出的 W-… id>
 
 ## Plan
 
@@ -508,9 +508,9 @@ user 看得到那個 pane，接手 agent 可以用 structured user-input surface
 | **Herdr coordinated child／worker**（`CLADE_DISPATCH_ID` 非空） | `nested_dispatch_refused`（責任樹不擴張）。**STOP**，改 `--relay`；NEVER 取 `--recovery-token` 繞 | 同左（含 `--coordinate`）；唯一缺口是 `--bounded-leaf` | 可（nested 缺口）。欠 outcome 時照 `handoff` skill `dispatch-common.md` § `CLADE_DISPATCH_ID` 分流先回報；relay-request 只在 [[session-tasks.context-budget]] 允許的三種交棒理由（交棒 profile 越過 hard tier、品質退化、同一問題糾正 ≥2 次）才用：`--complete relay-request --plan`，主持者收割並另開下一棒；NEVER 因 context 大小 relay-request | `successor_refused`（欠 outcome，只能 `--relay`） | 可，一層。leaf 再派含 `--relay` 皆 `nested_dispatch_refused`；做不完 `--complete blocked`，其 `next_step` 是 `standby` | 可。`--complete success\|failed\|unknown\|blocked\|relay-request`；`blocked` 必帶一個 `--decision`（`--decision-for` 預設 coordinator）；NEVER 二次 `--complete` |
 | **外部 create-only**（`HERDR_ENV` 空的一般 shell，含無 pane 的 main line） | 可。拓樸永遠 Tab／workspace，**忽略** inherited `HERDR_PANE_ID`；`dispatched`，沒有 predecessor record，caller 派完自關 | 可（harvest 的是 durable record 指的 child，不是 focused pane） | `not_in_herdr` | 可。`successor_dispatched`（`predecessor: outside-herdr`）；不注入 correlation env、不留待收割 record，欠收割的 `dispatch_id` 寫進 successor brief | 可，條件同上 | `not_in_herdr`（唯一例外：peer 經 ssh relay 回 home 的 `--complete`）。處置：NEVER 偽造 `HERDR_ENV`，能在本 session 合法完成就完成，否則回具體 blocker |
 | **publish bridge**（`herdr-clade-publish.ts`，無參數） | 固定一種：裸 dispatch ＋ `--new-tab`，account／model／effort／route 由 `SESSION_TRANSPORT_POLICY` 決定；caller **保留**自己的 pane，只搬 intent（Step 1–9 屬 `clade-publish` skill） | 不帶：沒有人持 foreground handshake；publish session 把 outcome 寫進 durable record，由日後 session 或 `herdr-patrol.ts --stalled` 收割 | 不帶：送 publish 不得同時交出 caller 的位置 | 不帶 | 不帶 | 不暴露。caller-controlled `--cwd`／`--prompt` 或 raw `herdr agent prompt` 一律 NEVER 替代 |
-| **Cursor**（已退役 2026-10-03） | `usage_error`（exit 2）：`--launcher cursor`、`--launcher pi` 選 Cursor 池 model（`*-cursor`、`cursor/*`、裸 `grok`）皆拒，沒建任何東西 | 同左 | 同左（relay successor 也拒） | 同左 | 同左 | 不適用。launcher 只剩 Claude Code（`cc`／`cc1`／`cc2`／`cc3`／`ccw`）與 `cx`（`cx` 2026-10-18、`grok`／Pi `grok-xai` 2026-10-21 也已退場）；舊文件的「Cursor coordinate」流程不再存在，**NEVER** 照舊流程復活 |
+| **Cursor**（已退役 2026-10-03） | `usage_error`（exit 2）：`--launcher cursor`、`--launcher pi` 選 Cursor 池 model（`*-cursor`、`cursor/*`、裸 `grok`）皆拒，沒建任何東西 | 同左 | 同左（relay successor 也拒） | 同左 | 同左 | 不適用。launcher 只剩 Claude Code（`cc`／`cc1`…`cc5`）與 `cx`（`cx` 2026-10-18、`grok`／Pi `grok-xai` 2026-10-21 也已退場）；舊文件的「Cursor coordinate」流程不再存在，**NEVER** 照舊流程復活 |
 
-動作互斥（helper `actionCount`）：`--reclaim`／`--complete`／`--continue`／`--unstick-prompt`／`--coordinate-resume`／`--recover-orphan`／`--coordinate-claim`／`--adjudicate`／`--status`／`--harvest`／`--redeliver` 一次只能一個；`--relay`、`--successor`、`--bounded-leaf` 各自不得與任何動作或彼此並用，`--relay`／`--successor` 不得帶 `--coordinate`。`--machine` 只適用新 dispatch、`--reclaim`、`--continue`、`--unstick-prompt`；`--successor`／`--bounded-leaf` 不跨機。
+動作互斥（helper `actionCount`）：`--reclaim`／`--complete`／`--continue`／`--unstick-prompt`／`--coordinate-resume`／`--recover-orphan`／`--coordinate-claim`／`--adjudicate`／`--status`／`--harvest`／`--redeliver` 一次只能一個；`--relay`、`--successor`、`--bounded-leaf` 各自不得與任何動作或彼此並用，`--relay`／`--successor` 不得帶 `--coordinate`。`--machine` 只適用新 dispatch、`--reclaim`、`--continue`、`--unstick-prompt`；`--bounded-leaf` 不跨機。`--relay`／`--successor` 不帶 `--machine` 時，主持席依每核負載挑機器（peer 要有同路徑、consumer doctor 綠；cwd 是 main checkout 且 brief 是 `coordinator_brief: successor` 才免查 HEAD 一致），它協調的 dispatch record 隨席位搬到新機器（receipt `record_move`，舊機器留轉址 stub）；席位在 peer 時看門狗以 peer 上的 pane 是否還在判斷有無人主持。席位 scope 與 worker 不同（12G/16G，`CLADE_AGENT_SCOPE=seat`）。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
@@ -635,9 +635,9 @@ claimant 活著而要直接收攤時才走 close pane＋
 | 本 pane 以 `--main-line` 派的另一條主線 idle／done（patrol `main-line-idle`） | exit 0 warn——它 idle 多半是在等 user 回話，擋下只會叫本 pane 去關一條 user 正在對話的主線；pane 寫明做完或交棒後才 `--adjudicate` |
 | 別人持有的 dispatch、abandoned record、orphan process、stale routing gate | exit 0 warn——它們的 action 不是本 session 一個 turn 做得完的 |
 | 本 session 不在 Herdr pane 內（`HERDR_ENV != 1`） | exit 0 warn（走 spine，grace 0）——`--coordinate-resume` 在那裡一律 `not_in_herdr`，擋下來是死路 |
-| 本 session 是被派出的 child（`CLADE_DISPATCH_ID` 非空），這一段還沒送 `--complete` | **exit 2 擋下 stop**，把三個回報時點射回去：告一段落（交出去後不歸它，含 PR 待主持者 0-A）／收工 → `--complete success\|failed`；等 CI／PR 合入／別的 session 且結果回來後仍由它接著做 → **預設保留 pane、自己掛 Monitor 盯**，事件到了自己續做（infra 失敗 rerun、真紅修），終態才 `--complete success`；「保留還是提早關閉」**NEVER** 當 decision 送 blocked（helper 拒收）；需要交棒（僅限 [[session-tasks.context-budget]] 的三種理由，NEVER 因 context 大小）→ 照 `handoff` skill `relay-steps.md` § 0 回報主持（寫回 plan.md、commit＋push、`--complete relay-request --plan <plan.md>`，主持另開下一棒；可自 relay 的例外見該表）；要拍板 → `--complete blocked --summary --decision`。已掛會叫醒它的 Monitor 時可不回報再停 |
+| 本 session 是被派出的 child（`CLADE_DISPATCH_ID` 非空），這一段還沒送 `--complete` | **exit 2 擋下 stop**，把三個回報時點射回去：告一段落（交出去後不歸它，含 PR 待主持者 0-A）／收工 → `--complete success\|failed`；等 CI／PR 合入／別的 dispatch／某個時刻且結果回來後仍由它接著做 → **預設 `--complete blocked --wait-until <條件>` 交回、不掛 shell 等**（先 commit＋push、續接筆記寫「事件到了第一步做什麼」；watch 停放本 pane、事件成立或到期自動冷續接），只有預期 15 分鐘內會到的事件才留 pane 掛 Monitor 盯（終態才 `--complete success`）；「保留還是提早關閉」**NEVER** 當 decision 送 blocked（helper 拒收）；需要交棒（僅限 [[session-tasks.context-budget]] 的三種理由，NEVER 因 context 大小）→ 照 `handoff` skill `relay-steps.md` § 0 回報主持（寫回 plan.md、commit＋push、`--complete relay-request --plan <plan.md>`，主持另開下一棒；可自 relay 的例外見該表）；要拍板 → `--complete blocked --summary --decision`。已掛會叫醒它的 Monitor 時可不回報再停 |
 
-**child 分支防的是 `silent-idle`**：child 停下卻不回報，主持者分不出它在做事還是在空等，只能等它過了快取 TTL 再冷續接——brief 寫「`--complete` 一定要送」擋不住（2026-09-28 同時兩個 silent-idle）。等待外部事件（CI、PR 合入、別的 session）預設保留 pane、自己掛 Monitor 盯，事件到了自己續做，終態才 `--complete success`——不走 `success --followup-brief`（success 收割時一定關 pane），也不把「保留還是提早關閉」當 `blocked` decision 送（helper 拒收）；只有盯不到的等待（等人回覆、等別人拍板）才送 `blocked`，`decision_for` 預設 coordinator，不進 Charles 的佇列。只有 Claude pane 有 Stop hook；其他 harness 靠 child prompt 注入的「要等外部事件（MUST）」節。已知限制：只有 `--continue` 會清掉上一段的回報狀態與上次擋的時間，所以回覆 blocked child **MUST** 走 `--continue`（對它直接 `herdr agent prompt` 的那一段 gate 不擋）；同一 dispatch 每 10 分鐘最多擋一次（上次擋的時間記在 `~/.cache/clade/child-stop-gate/<id>`），擋完 10 分鐘內再停只 warn；peer 上 `--continue` 撞上戳記剛要寫入的窄窗時，那一段不擋；child 的 session id 變了（例如 `/clear`）就不再比對得上，gate 靜默放行；peer 戳記只在 `--continue` 時刪，reclaim／adjudicate 結束的 dispatch 會各留一個空檔。
+**child 分支防的是 `silent-idle`**：child 停下卻不回報，主持者分不出它在做事還是在空等，只能等它過了快取 TTL 再冷續接——brief 寫「`--complete` 一定要送」擋不住（2026-09-28 同時兩個 silent-idle）。等待外部事件（CI、PR 合入、別的 dispatch）預設以 `--complete blocked --wait-until <條件>` 交回（不掛 shell 佔席位；只有預期 15 分鐘內會到的才留 pane 盯）——不走 `success --followup-brief`（success 收割時一定關 pane），也不把「保留還是提早關閉」當 `blocked` decision 送（helper 拒收）；只有盯不到的等待（等人回覆、等別人拍板）才送 `blocked`，`decision_for` 預設 coordinator，不進 Charles 的佇列。只有 Claude pane 有 Stop hook；其他 harness 靠 child prompt 注入的「要等外部事件（MUST）」節。已知限制：只有 `--continue` 會清掉上一段的回報狀態與上次擋的時間，所以回覆 blocked child **MUST** 走 `--continue`（對它直接 `herdr agent prompt` 的那一段 gate 不擋）；同一 dispatch 每 10 分鐘最多擋一次（上次擋的時間記在 `~/.cache/clade/child-stop-gate/<id>`），擋完 10 分鐘內再停只 warn；peer 上 `--continue` 撞上戳記剛要寫入的窄窗時，那一段不擋；child 的 session id 變了（例如 `/clear`）就不再比對得上，gate 靜默放行；peer 戳記只在 `--continue` 時刪，reclaim／adjudicate 結束的 dispatch 會各留一個空檔。
 
 **擋得到「剛做完」是這道 gate 存在的理由**：patrol 的 `owes-resume` 沒有 grace，worker 一回報
 就成立；而 `flow status --stalled` 的 `unharvested` 套 60 分鐘 grace，那一批對 SessionStart 那條
@@ -668,7 +668,7 @@ claimant 活著而要直接收攤時才走 close pane＋
 機器 receipt 仍保留獨立 pane_id 欄位。resume 沿用任務名稱，前綴只留一次並對齊當前 pane ID。
 `herdr-visible-identity.ts` 在 launcher 執行前回讀兩層身分與名稱；helper 在 prompt 送達前再驗一次。
 任何一層失敗就停止該次啟動／送題，既有 runtime 不被終止。caller socket 不屬於 default 時先拒絕，
-避免把相同的 pane ID 送到另一個 server。日常 `cc/ccw` new/resume 也經同一 admission。
+避免把相同的 pane ID 送到另一個 server。日常 `cc`／`ccN` new/resume 也經同一 admission。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |

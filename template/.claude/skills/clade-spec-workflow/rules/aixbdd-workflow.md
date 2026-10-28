@@ -62,7 +62,7 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 
 1. **每一次**需要持久接續的工作都 MUST 有且僅有一個 work id 與一份 package。lifecycle repo（clade home 與已遷移 consumer）：`flow plan open` 鑄 id 並建立 `specs/plans/<work-id>/plan.md`，`/specify` 在**同一個目錄**填 `spec.md`，同一工作續跑同一份，結案刪除。尚未遷移的 consumer 才由 `/specify` 建 `NNN-<slug>/`。**NEVER** 為同一工作開第二份 plan，**NEVER** 在 lifecycle repo 建 `NNN-` 目錄。
 2. `specs/truth/**` 底下**每一個**檔案 MUST 只由它的 truth owner skill 寫：`techstack.md` 歸 `/technical-research`，`features/**` 與 `dsl.md` 歸 `/dsl-refine`。**每一個**其他入口（含 `/specify`、`/tasks`、`/implement`）都 MUST 把 truth 當唯讀。
-3. **每一個** plan package 的 `tasks.md` 在開始動工之前，MUST 已綁定 work id 並 `export CLADE_WORK_ID=<id>`：lifecycle repo 的 id 在 `flow plan open` 那一刻就鑄好（`plan.md` frontmatter 的 `work_id`）；未遷移 consumer 跑 `node vendor/scripts/flow/flow.ts open <slug> --origin tasks:specs/plans/NNN-<slug>/tasks.md`。plan package 就是 clade `flow` 的 work carrier——**NEVER** 為同一個 plan package 開第二張卡，也 **NEVER** 因為「只是先跑個測試」跳過（那正是 `unattributed` 的來源）。
+3. **每一個** plan package 的 `tasks.md` 在開始動工之前，MUST 已綁定 work id 並 `export CLADE_WORK_ID=<id>`：lifecycle repo 的 id 在 `flow plan open` 那一刻就鑄好（`plan.md` frontmatter 的 `work_id`）；未遷移 consumer 跑 `node vendor/scripts/flow/flow.ts work open <slug> --origin tasks:specs/plans/NNN-<slug>/tasks.md`。plan package 就是 clade `flow` 的 work carrier——**NEVER** 為同一個 plan package 開第二張卡，也 **NEVER** 因為「只是先跑個測試」跳過（那正是 `unattributed` 的來源）。
 4. `/technical-research` 的三題必問（各端的 BDD techstack、測試策略、系統有哪些端）MUST 全部拍板才可寫 `research.md` 或 `techstack.md`。**「`spec.md` 的假設」與「範例檔的堆疊」都不算已回答**，只有使用者本輪原話、本輪 `/clarify` 的答案、或既有 `techstack.md` 已寫明且本輪沒改判才算。
 5. 每一個 Gherkin 句型 MUST 在 DSL 有**恰好一個**權威 row。句型上提到介面根或下放到模組時，MUST 刪掉舊位置，**NEVER** 讓根與模組同時存在同一 row。
 

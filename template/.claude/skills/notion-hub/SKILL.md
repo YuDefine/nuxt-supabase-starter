@@ -26,7 +26,7 @@ description: "所有 Notion 讀寫的唯一入口（ntn api；NEVER WebFetch／N
 
 1. DELEGATE 經〔`notion-ops`〕讀票（raw＋客戶 comment），再以 codebase-memory 定位 root cause 與修法草案。
 2. THINK 先讀取 `rules/認領分流判準.md`，判可直接做／要客戶先拍板（轉 Phase 5）／前提不成立，並區分是否為 coordinator 派來的票。
-3. DELEGATE 可直接做時，先讀取 `rules/客戶面證據判準.md` 定稿 `--title`，再執行 `flow open <slug> --origin notion:<page-id>`（coordinator 派來的票跳過）與 `node ~/offline/clade/vendor/scripts/notion-sync.ts open --work <id> --ticket <page-id> --title "<客戶看得懂的一句話>"`，交棒 work-route。
+3. DELEGATE 可直接做時，先讀取 `rules/客戶面證據判準.md` 定稿 `--title`，再執行 `flow work open <slug> --origin notion:<page-id>`（coordinator 派來的票跳過）與 `node ~/offline/clade/vendor/scripts/notion-sync.ts open --work <id> --ticket <page-id> --title "<客戶看得懂的一句話>"`，交棒 work-route。
 
 ## Phase 4 -- 工程師建票
 
@@ -42,7 +42,7 @@ description: "所有 Notion 讀寫的唯一入口（ntn api；NEVER WebFetch／N
 
 ## Phase 6 -- 對帳驗收
 
-1. DELEGATE 對本 projectCode 驗收中的票逐張讀 `Work ID`，執行 `node ~/offline/clade/vendor/scripts/notion-sync.ts reconcile --work <id>`；客戶側已完成者對該 work item 執行 `flow accept`（`accepted_by: customer`，per [[flow-work-tracking]]）。
+1. DELEGATE 對本 projectCode 驗收中的票逐張讀 `Work ID`，執行 `node ~/offline/clade/vendor/scripts/notion-sync.ts reconcile --work <id>`；客戶側已完成者對該 work item 執行 `flow work accept`（`accepted_by: customer`，per [[flow-work-tracking]]）。
 2. THINK 發版但票仍進行中時，回報 `/commit` Step 6b 的 `release` 沒跑並補跑 `notion-sync.ts release --tag <tag>`。
 
 ## Phase 7 -- 開 hub／加專案

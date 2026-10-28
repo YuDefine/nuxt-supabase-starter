@@ -50,7 +50,7 @@ Session 交接管理。四個 arg 依下方契約收工。
 
 ### 可觀察 predicate（用訊號，NEVER 憑感覺估）
 
-門檻取 [[session-tasks]] § Session context 預算的 launcher profile（數字的 SoT 是 `session-context-budget-warn.sh` 的 profile 表）。`ccg`／`ccx` 已拆除、不是可用 launcher：gateway session 的 handoff fail closed，不自行改派其他 runtime；只有 user 明確點名時才可改交仍支援的 launcher。會進入共用 Herdr 流程的 runtime 原生繼承當前 session（`cc → cc`、`ccw → ccw`），工作 routing 不得覆蓋。判定材料只認下列三種**在 transcript 裡看得到**的訊號：
+門檻取 [[session-tasks]] § Session context 預算的 launcher profile（數字的 SoT 是 `session-context-budget-warn.sh` 的 profile 表）。`ccg`／`ccx` 已拆除、不是可用 launcher：gateway session 的 handoff fail closed，不自行改派其他 runtime；只有 user 明確點名時才可改交仍支援的 launcher。會進入共用 Herdr 流程的 runtime 原生繼承當前 session（`cc → cc`、`ccN → ccN`），工作 routing 不得覆蓋。判定材料只認下列三種**在 transcript 裡看得到**的訊號：
 
 1. `session-context-budget-warn` hook 已在本 session 響過（它逐字報「session context 已達 Nk」）
 2. user 在訊息裡明講了 context 用量（「目前已經 43%」「快滿了」）
@@ -63,11 +63,12 @@ Session 交接管理。四個 arg 依下方契約收工。
 
 ### 分流
 
-| 可觀察 predicate | 動作 |
-| --- | --- |
-| 已過**該 launcher 的 hard tier** | **跳過** 2B.0–2B.1.9 全部 scan（盤點本身有價值，但要由乾淨 session 做），改依**當前已知**的殘工件數直接落 `relay`／`fanout`；**每一項**都講得出具體外部條件時才 `park`（仍受 § park gate 管）。**NEVER** 因為「已經滿了、沒餘裕再派」就直接 `park`——那一級是**最該派**的時刻 |
-| 已過**該 launcher 的 soft tier** | **NEVER 落 `next`**。改依 Step 1 第二層的件數判：≥1 件派得出去 → `relay`（1 件或多件 serial）／`fanout`（N 件可平行）；0 件 → `park` |
-| 未過門檻 | 不改道，照 Step 1 兩層判定 |
+評估：first-match；以上皆非 → G*
+| id | 可觀察 predicate | 動作 |
+| --- | --- | --- |
+| G1 | 已過**該 launcher 的 hard tier** | **跳過** 2B.0–2B.1.9 全部 scan（盤點本身有價值，但要由乾淨 session 做），改依**當前已知**的殘工件數直接落 `relay`／`fanout`；**每一項**都講得出具體外部條件時才 `park`（仍受 § park gate 管）。**NEVER** 因為「已經滿了、沒餘裕再派」就直接 `park`——那一級是**最該派**的時刻 |
+| G2 | 已過**該 launcher 的 soft tier** | **NEVER 落 `next`**。改依 Step 1 第二層的件數判：≥1 件派得出去 → `relay`（1 件或多件 serial）／`fanout`（N 件可平行）；0 件 → `park` |
+| G* | 未過門檻 | 不改道，照 Step 1 兩層判定 |
 
 被本 gate 改道時 **MUST** 在宣布偵測結果那句話裡寫出來（例：「偵測到 `relay`（Step 0.5：context
 已達 43%，過第一級門檻故不落 `next`；第二層：1 件派得出去）」），**NEVER** 靜默改道。
@@ -78,7 +79,7 @@ Session 交接管理。四個 arg 依下方契約收工。
 - ❌「先跑 scan 看看有什麼，再決定要不要收工」——順序反了，過門檻就是收工，scan 交給下一個 session
 - ❌「user 是打 `next`，我照做就好」——顯式 arg 不豁免本 gate（見上）
 - ❌「只差 2B.5 dispatch 沒做，其他都跑完了」——2B.5 正是把新工作塞進這個 session 的那一步
-- ❌「context 已經過第二級了，沒餘裕再派，先登記就好」——跳過的是 scan，不是派工（見上表第一列）
+- ❌「context 已經過第二級了，沒餘裕再派，先登記就好」——跳過的是 scan，不是派工（見 G1）
 
 ## Step 1 — 偵測模式（只有裸 `/handoff` 才跑）
 
@@ -196,6 +197,7 @@ fi
    | --- | --- |
    | 下一 session 要立刻接手的 in-progress 工作 | `HANDOFF.md` `## In Progress` section |
    | 被 blocker 卡住（缺權限 / 缺決策 / 等外部） | `HANDOFF.md` `## Blocked` |
+   | 這個 session 開著的 work 停在外部依賴（PR 合入 / release / CI） | 先 release commit lock，再 `flow work wait <work> --on pr:…\|release:…\|ci:… --resume '<條件成立後那一步>'`；waker 在條件成立時讓 `flow status --stalled` 出 `wake-ready`。**NEVER** 握著 lock 停著等，也 **NEVER** 只靠 Monitor（session 一斷線它就消失）；沒登記就停，attended Stop gate 會擋一次 |
    | 等待外部 signal（合約 / ramp 日期 / 第三方 API ready） | 有 `specs/truth/work-lifecycle.md` → `flow plan open`；未遷移 consumer 才建 `TD-NNN` |
    | 未來才做、可排優先序 | repo 根目錄 `ROADMAP.md` `## Next Moves` |
    | 規模膨脹（要動 spec / design review / 跨多檔） | 走 `/specify` 開 plan package（新增範圍先拍板） |
@@ -212,11 +214,11 @@ fi
 
    ```bash
    # (a) 無殘工要交接（步驟 2 分類後沒有任何項進 HANDOFF/TD/ROADMAP）→ 宣告完成
-   node ~/offline/clade/vendor/scripts/flow/flow.ts done "$CLADE_WORK_ID" \
+   node ~/offline/clade/vendor/scripts/flow/flow.ts work done "$CLADE_WORK_ID" \
      --verification '<跑了什麼、輸出是什麼——一句可查證的實跑摘要>'
 
    # (b) 有殘工要交接 → 這件事停在某個 prose 段等人接手，不是完成
-   node ~/offline/clade/vendor/scripts/flow/flow.ts park "$CLADE_WORK_ID" \
+   node ~/offline/clade/vendor/scripts/flow/flow.ts work park "$CLADE_WORK_ID" \
      --carrier '<handoff:<段名> | td:TD-NNN | tasks:<路徑>>' --note '<一句話：停在哪、等什麼>'
    ```
 
@@ -312,7 +314,7 @@ heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消�
 
 ### 2B.0 Session-end pitfall sweep（呼叫 /oops Mode C；`/oops` 屬 maintenance/full capability，repo 沒有它時跳過整段並繼續 2B.1）
 
-在動 HANDOFF.md 前，呼叫 `/oops` Mode C 回顧當前 chat session transcript 掃 missed lessons。觸發訊號與每個 candidate 的分流都以 `/oops` 為準（Mode C 的 Phase 4 step 1 列訊號、oops 的 `rules/新增條目准入判準.md` Rule 3 落點判定表列落點），本節不另列。**NEVER** 新 pitfall 檔（`docs/pitfalls/` 已退役，呼叫端遷移與否都一樣）。
+在動 HANDOFF.md 前，呼叫 `/oops` Mode C 回顧當前 chat session transcript 掃 missed lessons。觸發訊號與每個 candidate 的分流都以 `/oops` 為準（Mode C 的 Phase 4 step 1 列訊號、oops 的 `rules/新增條目准入判準.md` Rule 3 落點判定表列落點），本節不另列。使用者的糾正不在本步回顧：由糾正帳本每日歸類、達門檻時在 session 啟動提醒（`correction-ledger.ts`），**NEVER** 為了找糾正訊號重讀對話。**NEVER** 新 pitfall 檔（`docs/pitfalls/` 已退役，呼叫端遷移與否都一樣）。
 
 若 sweep 為空（無 candidate）→ 一句話宣告「無 missed lesson」繼續 2B.1。
 
@@ -328,7 +330,7 @@ heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消�
 
 摘要：先跑 `rotate-handoff-done.ts`（每次 `next` 的第一個寫入：100% 清掉可 rotate 的紀錄，不詢問、不看 KB 門檻）。JSON `retired: true` = clade home／已遷移 repo：完成段從主檔刪除、**不**寫月份 archive。未遷移 consumer 才搬進 archive。接著 `handoff-scan.ts --json` 讀 `healthGate` → fail 回報 user → 2B.1c reorganize。三 sub-step 完才進 2B.1.5。
 
-`tier-a-dead-section` warn 的處置在 [scan-steps.md](scan-steps.md) § 2B.1d dead-section 處置（Tier A）—— 拆條 / 關條 / 知識語態重寫三選一，第四格「防重做 marker」偵測器已自動豁免、**NEVER 刪**。該 sub-step 不寫任何檔，逐段判即可，處置不完不擋 2B.1.5。
+`tier-a-dead-section` warn 的處置在 [scan-steps.md](scan-steps.md) § 2B.1d dead-section 處置（Tier A）—— 依該處 D 表 first-match 判（D2 拆條 / D3 關條 / D4 知識語態重寫），D1「防重做 marker」偵測器已自動豁免、**NEVER 刪**。該 sub-step 不寫任何檔，逐段判即可，處置不完不擋 2B.1.5。
 
 ### 2B.1.5 Worktree & Stash 稽核
 

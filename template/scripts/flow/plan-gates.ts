@@ -349,6 +349,45 @@ export function unresolvedClarifications(text: string): { line: number; detail: 
   return out
 }
 
+const OPEN_WORK_HEADING = /^##\s+(?:Open work|未完成|待辦)\b/iu
+const OPEN_WORK_ITEM = /^(?:\d+[.)]|[-*])\s+(?!\[[ xX]\]\s)(\S.*)$/u
+const OPEN_WORK_EMPTY = /^[(（]?\s*(?:none|n\/a|無|无|—|-)\s*[)）]?$/iu
+
+/**
+ * `## Open work` 整段沒有任何 `- [ ]` / `- [x]` 勾選條目、卻寫了編號清單或 bullet 條目：
+ * `planOpenWorkCandidates` 只認勾選條目，這份 plan 的工作 coordinator 一條都讀不到，看板判 stalled-unclassified。
+ * 只擋「整段讀不到」，不擋勾選條目旁的說明、進度敘述與引言（既有 plan 常有，全勾後留的說明 bullet 也在內）；
+ * 程式碼圍欄略過，HTML 註解不特別處理（與 parser 一致）；
+ * `(none)`／`無` 這類空段落放行。回傳每個讀不到的條目的行號與文字，空陣列＝沒問題。
+ */
+export function nonCheckboxOpenWork(text: string): { line: number; detail: string }[] {
+  const unread: { line: number; detail: string }[] = []
+  let checkboxes = 0
+  let inOpen = false
+  let fence = false
+  text.split(/\r?\n/u).forEach((raw, index) => {
+    if (/^\s*(?:```|~~~)/u.test(raw)) {
+      fence = !fence
+      return
+    }
+    if (fence) return
+    if (/^##\s/u.test(raw)) {
+      inOpen = OPEN_WORK_HEADING.test(raw)
+      return
+    }
+    const line = raw.trim()
+    if (!inOpen || !line) return
+    if (/^[-*]\s+\[[ xX]\]\s/u.test(line)) {
+      checkboxes += 1
+      return
+    }
+    const item = OPEN_WORK_ITEM.exec(line)?.[1]
+    if (item && !OPEN_WORK_EMPTY.test(item))
+      unread.push({ line: index + 1, detail: line.slice(0, 80) })
+  })
+  return checkboxes === 0 ? unread : []
+}
+
 interface DryRunStep {
   status: string
   keyword: string
@@ -692,6 +731,17 @@ export function checkReadiness(
         detail: `unresolved ${CLARIFICATION_MARKER}: ${hit.detail}`,
       })
     }
+  }
+
+  // 1b. Open work 只認 `- [ ]` 勾選條目：其他寫法 coordinator 讀不到（看板判 stalled-unclassified）
+  const planOpenWork = nonCheckboxOpenWork(planText)
+  if (planOpenWork.length > 0) {
+    const first = planOpenWork[0]
+    findings.push({
+      code: 'open-work-not-checkbox',
+      path: `${planRel}:${first.line}`,
+      detail: `\`## Open work\` has ${planOpenWork.length} list item(s) and no \`- [ ]\` / \`- [x]\` item at all (first: "${first.detail}"); the coordinator only reads checkbox items, so rewrite each as \`- [ ] <work>\``,
+    })
   }
 
   // 2. full：features/acceptance/**；regression：迴歸錨點代替 plan acceptance 定義「要驗什麼」

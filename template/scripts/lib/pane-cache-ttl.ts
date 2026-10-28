@@ -162,8 +162,9 @@ export function sideAgentExchangeLines(lines: readonly string[]): Set<number> {
 }
 
 /**
- * 視窗內有沒有看到任何一則真的提示（user 文字，非 tool_result／meta／compact summary）。沒有的話
- * 視窗被一整輪工具呼叫填滿，提醒本身已捲出去，sideAgentExchangeLines 無從判斷。
+ * 視窗內有沒有看到任何一則真的提示（user 文字，非 tool_result／meta／compact summary／side agent 提醒）。沒有的話
+ * 視窗被一整輪工具呼叫填滿，提醒本身已捲出去，sideAgentExchangeLines 無從判斷；只看得到 side agent 提醒也一樣——
+ * 視窗起點落在提醒回合裡，整窗都被跳過，讀不到對話時戳就退回會被 metadata 改寫刷新的 mtime（D-CDB698-2）。
  */
 export function windowHasPromptBoundary(lines: readonly string[]): boolean {
   for (const line of lines) {
@@ -178,7 +179,8 @@ export function windowHasPromptBoundary(lines: readonly string[]): boolean {
     const entry = rec as Record<string, unknown>
     if (entry.type !== 'user' || entry.isSidechain === true) continue
     if (entry.isMeta === true || entry.isCompactSummary === true) continue
-    if (userPromptText(entry) !== null) return true
+    const prompt = userPromptText(entry)
+    if (prompt !== null && !SIDE_AGENT_NOTE_RE.test(prompt)) return true
   }
   return false
 }

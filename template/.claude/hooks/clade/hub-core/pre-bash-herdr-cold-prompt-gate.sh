@@ -110,8 +110,8 @@ for (const line of targets.split("\n")) {
   // cwd 缺時退用 foreground_cwd（同 herdr-patrol／handoff 的讀法）；兩者都缺仍可靠 session UUID 掃 transcript。
   const cwd = typeof agent.cwd === "string" ? agent.cwd : typeof agent.foreground_cwd === "string" ? agent.foreground_cwd : ""
   if (typeof sessionId !== "string") continue
-  // herdr 只說得出 "claude"，說不出是 cc（~/.claude）還是 ccw（~/.claude-work）：兩個都量，取最暖。
-  const touches = ["cc", "ccw"]
+  // herdr 只說得出 "claude"，說不出是哪個帳號：池入口 cc 會掃每個帳號的 config dir，取最暖。
+  const touches = ["cc"]
     .map((launcher) => lastCacheTouchMs({ launcher, cwd, claude_session_id: sessionId }, machine || undefined))
     .filter((ms) => typeof ms === "number")
   if (touches.length === 0) continue

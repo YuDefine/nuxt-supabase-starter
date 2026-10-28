@@ -18,7 +18,7 @@
 #     --coordinate --bounded-leaf
 #   --table-row 讓 helper 對照 NATIVE_TABLE_ROW_POLICIES 機械拒絕任何非
 #   opus/medium/readonly 的偏離；family ceiling（opus ≤ medium）是第二層。
-#   launcher 每次顯式傳（CLAUDE_REVIEW_LAUNCHER=cc|ccw，不給預設；缺值或非 cc|ccw 在派工前
+#   launcher 每次顯式傳（CLAUDE_REVIEW_LAUNCHER=cc|cc2，不給預設；缺值或非 cc|cc2 在派工前
 #   exit 2、helper 零呼叫），account_unavailable 由 helper 內建的帳號 fallback 承接。
 #   --bounded-leaf（TD-1105）讓 dispatched worker（帶 CLADE_DISPATCH_ID）也能開這一格：
 #   helper 只對 readonly gate-review row＋--coordinate 放行巢狀一層，leaf 自己再派仍拒。
@@ -105,7 +105,7 @@
 #  [--part-files <sha256>]（該批檔案清單 hash：同 head 沿用某批 verdict 前比對，批界位移就重審該批）
 #  [--pr-independent yes]（本 head 已通過時另開獨立輪：新 reviewer、不帶前輪 findings、審完整 diff），
 #  coordinator 的 oa-batches.ts 帶；不帶＝working-tree 模式）:
-#   CLAUDE_REVIEW_LAUNCHER=<cc|ccw> .claude/scripts/claude-review-safe.sh [medium] [--findings <prior verdict file>] [PR 旗標]
+#   CLAUDE_REVIEW_LAUNCHER=<cc|cc2> .claude/scripts/claude-review-safe.sh [medium] [--findings <prior verdict file>] [PR 旗標]
 #       Herdr carrier——只給叫不出 Claude subagent 的 runtime（Codex、Pi…）；launcher 必填（缺值 exit 2）；
 #       Claude Code（含 Herdr 派出的 worker）誤用時 exit 12
 #   .claude/scripts/claude-review-safe.sh prepare [medium] [--findings <prior verdict file>] [PR 旗標]
@@ -224,16 +224,17 @@ fi
 REVIEW_SEAT="${CLAUDE_REVIEW_SEAT:-opus}"
 # 派 reviewer 用的 Claude 帳號：每次顯式傳，不給預設（Charles 2026-09-24「launcher 每次傳參、
 # 不給預設」；CDB-490 2026-10-16 裁決改實作）。預設 cc 會讓 launcher 選擇在呼叫端看不見——
-# zenbook 沒有 ~/.claude-work 憑證時寫死 ccw 以 missing-oauth 回 account_unavailable，反過來
+# zenbook 沒有 cc2（~/.claude-2）憑證時寫死 cc2 以 missing-oauth 回 account_unavailable，反過來
 # 寫死 cc 同樣會在只登入工作帳號的機器上踩到。缺值在派工前 exit 2。
 # 只約束 Herdr carrier：subagent carrier（prepare／finalize）跑在派它的 session 的帳號上，
 # 不派 launcher，行為不變（缺值沿用 cc 當 receipt 標記）。
 REVIEW_LAUNCHER="${CLAUDE_REVIEW_LAUNCHER:-}"
 if [ -z "$REVIEW_LAUNCHER" ] && [ "$CARRIER_MODE" != "herdr" ]; then REVIEW_LAUNCHER=cc; fi
 case "$REVIEW_LAUNCHER" in
-  cc|ccw) ;;
-  '') echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_LAUNCHER 必填（cc|ccw，不給預設）；例：CLAUDE_REVIEW_LAUNCHER=cc bash <claude-review-safe.sh> medium" >&2; exit 2 ;;
-  *) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_LAUNCHER 只接受 cc|ccw；收到 $REVIEW_LAUNCHER" >&2; exit 2 ;;
+  cc|cc2) ;;
+  ccw) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_LAUNCHER=ccw 已退役，改用 cc2（~/.claude-2，同一個帳號）" >&2; exit 2 ;;
+  '') echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_LAUNCHER 必填（cc|cc2，不給預設）；例：CLAUDE_REVIEW_LAUNCHER=cc bash <claude-review-safe.sh> medium" >&2; exit 2 ;;
+  *) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_LAUNCHER 只接受 cc|cc2；收到 $REVIEW_LAUNCHER" >&2; exit 2 ;;
 esac
 case "$REVIEW_SEAT" in
   opus) ;;
@@ -669,7 +670,7 @@ if [ "$rc" -eq 15 ] || [ "$STATUS" = "account_unavailable" ]; then
   ACCOUNT_REASONS="${ACCOUNT_REASONS#*$'\t'}"
   ACCOUNT_MEASURED="${ACCOUNT_REASONS%%$'\t'*}"
   ACCOUNT_REASON_TEXT="${ACCOUNT_REASONS#*$'\t'}"
-  if [ "$REVIEW_LAUNCHER" = "cc" ]; then OTHER_LAUNCHER=ccw; else OTHER_LAUNCHER=cc; fi
+  if [ "$REVIEW_LAUNCHER" = "cc" ]; then OTHER_LAUNCHER=cc2; else OTHER_LAUNCHER=cc; fi
   ACCOUNT_REASON_SUFFIX="${ACCOUNT_REASON_TEXT:+（${ACCOUNT_REASON_TEXT}）}"
   REVIEW_FORBID="0-A 沒有備援席，NEVER 改派其他模型、另一個 fresh agent 或主線自審補位"
   case "$ACCOUNT_REASON_KIND" in
@@ -679,8 +680,8 @@ if [ "$rc" -eq 15 ] || [ "$STATUS" = "account_unavailable" ]; then
       # 另一個帳號沒量過，改用它重跑是可行路。
       case " $ACCOUNT_MEASURED " in
         *" $OTHER_LAUNCHER "*)
-          ACCOUNT_NEXT="本 0-A 席（${REVIEW_SEAT}）不可用（cc、ccw 兩帳號實測額度皆耗盡）— 0-A 沒有備援席，NEVER 改派其他模型；gate 維持 pending，記錄本席逐字失敗證據；NEVER 用其他模型、另一個 fresh agent 或主線自審補位。"
-          ACCOUNT_INSTRUCTION="0-A reviewer 席（${REVIEW_SEAT}）cc、ccw 兩帳號實測額度皆耗盡，review 沒跑：gate 停在 pending，push 分支並回報「待 Opus seat 0-A」，等 Opus 額度恢復再跑；本 next_step 不適用「雙帳號耗盡 → 回原 routing 表」——0-A 沒有備援席，NEVER 改派其他模型，NEVER 主線自審補位" ;;
+          ACCOUNT_NEXT="本 0-A 席（${REVIEW_SEAT}）不可用（cc、cc2 兩帳號實測額度皆耗盡）— 0-A 沒有備援席，NEVER 改派其他模型；gate 維持 pending，記錄本席逐字失敗證據；NEVER 用其他模型、另一個 fresh agent 或主線自審補位。"
+          ACCOUNT_INSTRUCTION="0-A reviewer 席（${REVIEW_SEAT}）cc、cc2 兩帳號實測額度皆耗盡，review 沒跑：gate 停在 pending，push 分支並回報「待 Opus seat 0-A」，等 Opus 額度恢復再跑；本 next_step 不適用「雙帳號耗盡 → 回原 routing 表」——0-A 沒有備援席，NEVER 改派其他模型，NEVER 主線自審補位" ;;
         *)
           ACCOUNT_NEXT="只量了 launcher ${REVIEW_LAUNCHER}（helper 帳號 fallback 未授權，${OTHER_LAUNCHER} 沒量過）——以 CLAUDE_REVIEW_LAUNCHER=${OTHER_LAUNCHER} 重跑同一派工，或等 Opus 額度恢復再跑；gate 維持 pending，${REVIEW_FORBID}。"
           ACCOUNT_INSTRUCTION="0-A reviewer 席（${REVIEW_SEAT}）launcher ${REVIEW_LAUNCHER} 額度耗盡、${OTHER_LAUNCHER} 沒量過（helper 帳號 fallback 未授權），review 沒跑：gate 停在 pending，以 CLAUDE_REVIEW_LAUNCHER=${OTHER_LAUNCHER} 重跑，或等 Opus 額度恢復再跑；0-A 沒有備援席，NEVER 改派其他模型，NEVER 主線自審補位" ;;
@@ -690,8 +691,8 @@ if [ "$rc" -eq 15 ] || [ "$STATUS" = "account_unavailable" ]; then
       # 另一個帳號也量過且同樣憑證不可用時，換 launcher 不是可行路，只剩登入。
       case " $ACCOUNT_MEASURED " in
         *" $OTHER_LAUNCHER "*)
-          ACCOUNT_NEXT="這不是額度問題——cc、ccw 兩帳號實測皆憑證／訂閱不可用，換 launcher 不能解：登入後重跑同一派工；gate 維持 pending，${REVIEW_FORBID}。"
-          ACCOUNT_INSTRUCTION="0-A reviewer 席（${REVIEW_SEAT}）cc、ccw 兩帳號實測皆憑證／訂閱不可用${ACCOUNT_REASON_SUFFIX}，不是額度耗盡，review 沒跑：gate 停在 pending，登入後重跑；NEVER 改派其他模型，NEVER 主線自審補位" ;;
+          ACCOUNT_NEXT="這不是額度問題——cc、cc2 兩帳號實測皆憑證／訂閱不可用，換 launcher 不能解：登入後重跑同一派工；gate 維持 pending，${REVIEW_FORBID}。"
+          ACCOUNT_INSTRUCTION="0-A reviewer 席（${REVIEW_SEAT}）cc、cc2 兩帳號實測皆憑證／訂閱不可用${ACCOUNT_REASON_SUFFIX}，不是額度耗盡，review 沒跑：gate 停在 pending，登入後重跑；NEVER 改派其他模型，NEVER 主線自審補位" ;;
         *)
           ACCOUNT_NEXT="這不是額度問題——登入 launcher ${REVIEW_LAUNCHER}，或以 CLAUDE_REVIEW_LAUNCHER=${OTHER_LAUNCHER} 改用有憑證的帳號後重跑同一派工；gate 維持 pending，${REVIEW_FORBID}。"
           ACCOUNT_INSTRUCTION="0-A reviewer 席（${REVIEW_SEAT}）launcher ${REVIEW_LAUNCHER} 憑證／訂閱不可用${ACCOUNT_REASON_SUFFIX}，不是額度耗盡，review 沒跑：gate 停在 pending，登入該 launcher 或以 CLAUDE_REVIEW_LAUNCHER=${OTHER_LAUNCHER} 改用有憑證的帳號後重跑；NEVER 改派其他模型，NEVER 主線自審補位" ;;
@@ -914,6 +915,20 @@ write_review_receipt() {
     const fs = require("fs")
     const dir = process.argv[1] + "/review"
     fs.mkdirSync(dir, { recursive: true })
+    const receiptPrNumber = (explicit, branch, root) => {
+      if (/^[1-9][0-9]*$/.test(explicit || "")) return Number(explicit)
+      if (!branch) return null
+      try {
+        const out = require("child_process").execFileSync(
+          "gh",
+          ["pr", "list", "--head", branch, "--state", "open", "--json", "number", "--jq", "[.[].number]|join(\",\")"],
+          { cwd: root, encoding: "utf8", timeout: 3000, env: { ...process.env, GH_PROMPT_DISABLED: "1" }, stdio: ["ignore", "pipe", "ignore"] },
+        ).trim()
+        return /^[1-9][0-9]*$/.test(out) ? Number(out) : null
+      } catch {
+        return null
+      }
+    }
     const receipt = {
       version: 1,
       kind: "commit-0a-review-receipt/v1",
@@ -936,11 +951,17 @@ write_review_receipt() {
       verdict_sha256: process.argv[12] || undefined,
       brief_delivery: process.argv[13],
       brief_bytes: Number(process.argv[14]),
+      // 歸屬欄位（audit-throughput A3 用）：worktree 直跑沒有 --pr-number 時 PR 號只能查得到才填，查不到留 null 不猜。
+      branch: process.argv[15] || null,
+      head_sha: process.argv[16] || null,
+      pr_number: receiptPrNumber(process.argv[17], process.argv[15], process.argv[11]),
       exit_code: Number(process.argv[2]),
       created_at: new Date().toISOString(),
     }
     fs.writeFileSync(dir + "/" + process.argv[3] + ".json", JSON.stringify(receipt, null, 2) + "\n")
-  ' "$STATE_DIR" "$exit_code" "$DISPATCH_ID" "$OBSERVED" "$VERIFICATION" "$REASON" "$REREADS" "$LAUNCHER" "$SESSION_ID" "$PANE_ID" "$REPO_ROOT" "${VERDICT_SHA:-}" "$DELIVERY" "$BRIEF_BYTES"
+  ' "$STATE_DIR" "$exit_code" "$DISPATCH_ID" "$OBSERVED" "$VERIFICATION" "$REASON" "$REREADS" "$LAUNCHER" "$SESSION_ID" "$PANE_ID" "$REPO_ROOT" "${VERDICT_SHA:-}" "$DELIVERY" "$BRIEF_BYTES" \
+    "${PR_BRANCH:-$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || true)}" \
+    "${PR_HEAD:-$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)}" "$PR_NUMBER"
   echo "[claude-review-safe] review receipt: $STATE_DIR/review/$DISPATCH_ID.json" >&2
 }
 

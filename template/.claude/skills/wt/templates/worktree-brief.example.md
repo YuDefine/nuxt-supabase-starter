@@ -19,7 +19,7 @@ herdr-session-handoff.ts 的 usage 字串補上 `--table-row <row>`：parser 已
 - 允許路徑：`vendor/scripts/herdr-session-handoff.ts`、`test/herdr-session-handoff.test.ts`
 - 要讀的規則與文件：`vendor/snippets/herdr-session-handoff/README.md` § Relay succession recipe（旗標語義）；`rules/core/agent-routing.routing-table.md`（`--table-row` 只接 Claude-native 列）
 - 要動的檔案與現況：`vendor/scripts/herdr-session-handoff.ts` 約第 1017 行的 usage 字串缺 `[--table-row <row>]`；第 2763–2784 行的驗證已要求 `table-row` 搭 `--table-row`
-- 驗收標準：`node vendor/scripts/herdr-session-handoff.ts --help` 輸出含 `--table-row <row>`；新增或更新一條測試斷言 usage 含該旗標；`pnpm exec vp check` 與 `node node_modules/typescript-native/bin/tsc -p tsconfig.vendor.json --noEmit` 綠燈
+- 驗收標準：`node vendor/scripts/herdr-session-handoff.ts --help` 輸出含 `--table-row <row>`；新增或更新一條測試斷言 usage 含該旗標；`pnpm exec vp check` 與 `node node_modules/tsrs/bin/tsrs -p tsconfig.vendor.json --noEmit` 綠燈
 - backing service：無
 
 # Progress

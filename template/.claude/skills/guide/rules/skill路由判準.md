@@ -43,7 +43,7 @@
 | 驗收 Gherkin | 內部 `spec-by-example` | 產 `features/acceptance/**` |
 | 設計 | 內部 `technical-research`、`/system-analysis`（委派內部 `api-plan`、`data-plan`、`ui-plan`） | 定 techstack 與系統設計；UI 需求在此產靜態雛形 |
 | 規格落地 | 內部 `dsl-refine` | 把句型寫進 `specs/truth/features/**` 與 `dsl.md` |
-| 拆任務 | 內部 `tasks` | 產 plan package 的 `tasks.md`；開工前 `flow open <slug> --origin tasks:<path>` |
+| 拆任務 | 內部 `tasks` | 產 plan package 的 `tasks.md`；開工前 `flow work open <slug> --origin tasks:<path>` |
 | 實作 | `/implement`（`[BDD-GREEN]` 委派內部 `bdd`） | 依 `tasks.md` 逐 phase 落 code 與測試 |
 | 人工檢查 | `/review scan`（＝`flow gates --repo-only`） | 看哪些卡等人判（UI / 資料類 manual review）；hub-core |
 | 提交 | `/commit` | 依功能分組走品質閘門提交；hub-core |

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SessionStart hook — Herdr pane 內的 session 沒有 bypassPermissions 就出聲。
 #
-# 防的失敗類別：bypass 是**啟動路徑**的性質（`cc` / `ccw` wrapper 帶
+# 防的失敗類別：bypass 是**啟動路徑**的性質（`cc` / `ccN` wrapper 帶
 # `--permission-mode bypassPermissions` 與帳號路由 env），而裸 `claude` 是一條永遠存在、
 # 零摩擦、零回饋的錯誤路徑。打錯的那次若沒有任何東西出聲，這個類別就會重演。
 # 2026-08-19 實測：某 consumer 的 pane w6:p5 被手打 `claude` 起來，跑了 16 分鐘
@@ -71,13 +71,13 @@ esac
 cat <<WARN
 ⚠️ 本 session 不在 bypassPermissions：Herdr pane ${HERDR_PANE_ID} 的 claude 行程沒有帶
    \`--permission-mode bypassPermissions\`，多半是有人在 pane 裡直接打了裸 \`claude\`
-   而不是 \`cc\` / \`ccw\`。
+   而不是 \`cc\` / \`ccN\`。
 
    裸 \`claude\` 缺的不只 permission mode，還有 wrapper 帶的帳號路由
    （\`CLAUDE_CONFIG_DIR\`、\`env -u ANTHROPIC_*\`）—— 這個 session 可能連帳號都是錯的。
 
    permission mode 是啟動 flag，本 session 改不了。MUST 主動告知 user：
-   要 bypass 就結束本 session、在該 pane 改用 \`cc\`（個人）/ \`ccw\`（工作）重開。
+   要 bypass 就結束本 session、在該 pane 改用 \`cc\`（池入口）/ \`ccN\`（釘選帳號）重開。
    \`ccg\`／\`ccx\` 已從 clade 拆除，不是可重開入口。
    刻意要非 bypass session 則忽略本則。
 WARN

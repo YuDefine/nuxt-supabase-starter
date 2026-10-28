@@ -208,12 +208,28 @@ export function isIgnorableWorktreeDrift(repoRoot, path, kind) {
 }
 
 /**
+ * 工具快取噪音：產生端寫進任何樹（含從未 commit 的 empty 樹）的 bytes，內容隨樹消失都不損失工作，
+ * 且 cleanup 會先存成 refs/clade-residue。empty 樹的未提交改動可能是派工 session 唯一的產出，
+ * 所以 empty 樹只認這份，不認 LANDED_DELIVERY_NOISE_PATHSPECS 其餘的 brief／session 清單／ledger。
+ * 比對規則同 `matchesDiscardPathspec`。
+ *
+ * consumer 樹裡的產生端寫入：`.pi/settings.json` 是 clade package 的 `@vX.Y.Z` 版本釘，
+ * 每次 publish 後 bootstrap 改寫（樹落後 main 時是 ` M`，HEAD 沒有時整個 `.pi/` 收合成一行 `?? .pi/`）。
+ * 寫成目錄 `.pi`：clade 的 gitignore 治理只放行 `.pi/settings.json`（`.pi/*` 其餘都 ignored），所以
+ * 這個目錄裡 git 看得到的檔只有它；cleanup 的 uncommitted gate 用收合模式，`.pi/settings.json` 點不中 `?? .pi/`。
+ * `.impeccable/hook.cache.json` 是 impeccable hook 的快取（untracked）；`.impeccable/` 常有 tracked 的使用者內容，
+ * NEVER 寫成目錄。整個 `.impeccable/` 都 untracked 時收合成 `?? .impeccable/`，點不中、cleanup 照擋（保留，安全）。
+ */
+export const TOOL_CACHE_NOISE_PATHSPECS = Object.freeze(['.pi', '.impeccable/hook.cache.json'])
+
+/**
  * 已落地樹的交付噪音（W-2026-10-01-worktree-accumulation-root-cause §3 C3／C4）：產生端寫進樹、
  * 卻不屬於該樹工作的 bytes——主持者 brief 與 session 清單（consumer 的 `tasks/`；clade home 的
  * `specs/coordinator/`、`specs/sessions/`）、ledger 追加（`vendor/ledger/signals.jsonl`）、
  * review GUI 舊建置產物（`vendor/review-gui-web/`）、ai-quota 舊 HEAD 殘留的建置產物（`vendor/ai-quota/`）。
  *
- * **只給已落地的樹用**，而且 NEVER 讓它們被靜默丟掉：回收端（disk-hygiene）把這份清單原樣交給
+ * **只給已落地的樹用**（從未 commit 的 empty 樹只用 TOOL_CACHE_NOISE_PATHSPECS），而且 NEVER 讓它們
+ * 被靜默丟掉：回收端（disk-hygiene）把這份清單原樣交給
  * `wt-helper cleanup --discard-pathspec`，由 cleanup 先把命中的殘留存成 `refs/clade-residue/<slug>`
  * 再移除。它**不**進 `isIgnorableWorktreeDrift`——merge-back／stop-wip-guard 對未落地的樹仍要擋。
  * 比對規則同 `matchesDiscardPathspec`：逐字等於，或以 `<pathspec>/` 為前綴。
@@ -225,15 +241,7 @@ export const LANDED_DELIVERY_NOISE_PATHSPECS = Object.freeze([
   'vendor/ledger/signals.jsonl',
   'vendor/review-gui-web',
   'vendor/ai-quota',
-  // consumer 樹裡的產生端寫入：`.pi/settings.json` 是 clade package 的 `@vX.Y.Z` 版本釘，
-  // 每次 publish 後 bootstrap 改寫（樹落後 main 時是 ` M`，HEAD 沒有時整個 `.pi/` 收合成一行 `?? .pi/`）。
-  // 寫成目錄 `.pi`：clade 的 gitignore 治理只放行 `.pi/settings.json`（`.pi/*` 其餘都 ignored），所以
-  // 這個目錄裡 git 看得到的檔只有它；cleanup 的 uncommitted gate 用收合模式，`.pi/settings.json` 點不中 `?? .pi/`。
-  // `.impeccable/hook.cache.json` 是 impeccable hook 的快取（untracked）；`.impeccable/` 常有 tracked 的使用者內容，
-  // NEVER 寫成目錄。整個 `.impeccable/` 都 untracked 時收合成 `?? .impeccable/`，點不中、cleanup 照擋（保留，安全）。
-  // 兩者內容隨樹消失都不損失工作，且 cleanup 會先存成 refs/clade-residue。
-  '.pi',
-  '.impeccable/hook.cache.json',
+  ...TOOL_CACHE_NOISE_PATHSPECS,
 ])
 
 /**
@@ -584,18 +592,19 @@ function invokedAsCli() {
 
 /**
  * `--landed-noise-only <repoRoot>`：給 disk-hygiene 用的 fail-closed 判定。剔除可忽略漂移後，
- * 剩下的 dirty 是否**全部**落在 LANDED_DELIVERY_NOISE_PATHSPECS 內。
+ * 剩下的 dirty 是否**全部**落在 LANDED_DELIVERY_NOISE_PATHSPECS 內。`--tool-noise-only` 同形，
+ * 只認 TOOL_CACHE_NOISE_PATHSPECS（給 empty 樹）。
  * exit 0：是（含完全乾淨）；exit 1：有其他 dirty（stdout 列出）；exit 2：git 失敗（呼叫端保留）。
  * rename 行兩端都要在清單內。
  */
-function landedNoiseOnlyCli(repoRoot: string): number {
+function noiseOnlyCli(repoRoot: string, pathspecs: readonly string[]): number {
   let entries
   try {
     entries = readGitStatus(repoRoot, { env: readOnlyGitEnv })
   } catch {
     return 2
   }
-  const rest = blockingStatusPaths(repoRoot, entries, LANDED_DELIVERY_NOISE_PATHSPECS)
+  const rest = blockingStatusPaths(repoRoot, entries, pathspecs)
   if (rest.length > 0) process.stdout.write(`${rest.join('\n')}\n`)
   return rest.length > 0 ? 1 : 0
 }
@@ -605,7 +614,14 @@ if (invokedAsCli() && process.argv[2] === '--landed-noise-pathspecs') {
   process.exit(0)
 }
 if (invokedAsCli() && process.argv[2] === '--landed-noise-only') {
-  process.exit(landedNoiseOnlyCli(process.argv[3] || process.cwd()))
+  process.exit(noiseOnlyCli(process.argv[3] || process.cwd(), LANDED_DELIVERY_NOISE_PATHSPECS))
+}
+if (invokedAsCli() && process.argv[2] === '--tool-noise-pathspecs') {
+  process.stdout.write(`${TOOL_CACHE_NOISE_PATHSPECS.join(',')}\n`)
+  process.exit(0)
+}
+if (invokedAsCli() && process.argv[2] === '--tool-noise-only') {
+  process.exit(noiseOnlyCli(process.argv[3] || process.cwd(), TOOL_CACHE_NOISE_PATHSPECS))
 }
 // `--tool-managed-only <repoRoot>`：stdin 收 `git status --porcelain` 輸出（呼叫端可先自行
 // 過濾，例如排除 append-only ledger），每一行髒項都是 tool-managed drift 時 stdout 印

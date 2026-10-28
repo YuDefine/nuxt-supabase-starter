@@ -212,3 +212,35 @@ T012 的 doctor receipt 貼給 T013 共用；[BDD-RED] 的紅燈測試被排除�
 ```text
 Hint 寫「T008–T063 併成一個 subagent」→ 派一支背景 subagent 包 56 個 task，2.5 小時以上沒回來，主線閒置超過 TTL（2026-10-19 某 consumer）
 ```
+
+# Rule 6 - plan 期 owner 載入前先取預計改動路徑命中的 clade rule
+
+- Level: `MUST`
+
+owner ∈ {ui-plan、api-plan、data-plan、tasks} 的**每一次**載入，在該 owner 動筆（ui-plan／api-plan／data-plan 寫 artifact，tasks 填 `Shared Must Read`）之前，先照下列步驟取得命中的 clade rule 並讀完。本條是加法：上游原文不動，故沒有 anchor 列；與 L／D／P 判準無關，不看 `plan.md` frontmatter。
+
+成因：consumer 只收 `clade-*` rule-skill，`paths:` 不會自動載入（`adapters/README.md`：不裝 scoped-rule hook）；plan 期不讀它們，列表 envelope、篩選契約、權限分層在 plan 期就被定掉，implement 才讀到已經晚了（`W-2026-10-22-dashboardstack-adoption` 實驗：中性 prompt 跑到 plan 期，clade rule 讀取 0）。
+
+1. 列出本次該 owner 預計改動的**具體**檔案路徑（專案相對）：由 `spec.md`、既有 `specs/truth/**`、既有程式碼推得。路徑還沒定時 **NEVER** 傳 glob（`globMatches` 的輸入必須是具體路徑），改用該層的固定代表路徑：UI 用 `app/pages/index.vue`、`app/components/Index.vue`，API 用 `server/api/index.get.ts`，資料層用 `supabase/migrations/0000_x.sql`；repo 的目錄慣例不同（例如 `src/`）就換成實際的根目錄。每個 owner 只傳**自己那一層**的路徑（ui-plan 傳 UI 路徑、api-plan 傳 API 路徑、data-plan 傳資料層路徑），避免跨層整批命中（實測三層一起傳命中 48 份）灌滿 context；tasks 逐 Feature phase 各跑一次，傳該 phase 要改的路徑。
+2. 執行 `node ~/offline/clade/scripts/bp-scan.ts --rules-for <路徑…> --repo <repo 絕對路徑>`（`--json` 給機器讀）。輸出每一行是一份命中 rule 的 repo 相對路徑與命中的輸入路徑。
+3. `~/offline/clade` 不存在（cloud 或無 clade checkout）時降級：直接讀 `.claude/skills/clade-*/rules/_index.md`（JSONL，每行 `{file, source, paths}`），自己把步驟 1 的具體路徑對 `paths` 比對；仍判不準就把該 skill 的 `SKILL.md` 讀一次，照它的 `READ 若要讀或改 <glob>` 行比對。**NEVER** 因為腳本跑不了就略過本條。輸出「沒有 clade-* rule index」代表該 repo 沒有可比對的 rule，記一行在 `plan.md` § Decisions 後照常進行。
+4. 逐份讀取命中的 rule，artifact 內容 MUST 反映其判準（例：命中 `data-table` 就按它定列表頁的篩選／分頁／匯出，命中 `api-patterns` 就按它定回應 envelope）。
+5. owner 是 tasks 時，把命中的 rule 路徑寫進**命中檔案所屬 Feature phase** 的 `Shared Must Read`（implement 以 phase-level `Shared Must Read` 為必讀面）；Setup／Foundational 這類一般 phase 寫進該 task 的 `Read`。**NEVER** 把全部命中 rule 灌進每個 phase。
+
+本條產出沒有 blocking：腳本 exit 0 是 advisory，命中數為 0 就是 0，照常進行。
+
+## Good Example
+
+- 這個例子是好的，因為在 api-plan 動筆前就用具體路徑取得命中 rule，並在 tasks 寫進對應 phase。
+
+```text
+使用者管理頁（列表、篩選、CSV）：ui-plan 前跑 bp-scan --rules-for app/pages/index.vue、api-plan 前跑 bp-scan --rules-for server/api/index.get.ts → 命中 clade-frontend/rules/data-table.md、clade-operations/rules/api-patterns.md；先讀，OpenAPI 列表回應照 api-patterns 定 envelope；tasks 把 data-table.md 寫進前端 phase 的 Shared Must Read、api-patterns.md 寫進後端 phase 的 Shared Must Read
+```
+
+## Bad Example
+
+- 這個例子是壞的，因為 plan 期完全沒查，或傳 glob、把全部 rule 灌進每個 phase。
+
+```text
+api-plan 直接動筆，implement 階段才「想到」叫 clade-operations；或 bp-scan --rules-for 'server/api/**'；或 tasks 把 12 份命中 rule 全貼進每個 phase 的 Shared Must Read
+```

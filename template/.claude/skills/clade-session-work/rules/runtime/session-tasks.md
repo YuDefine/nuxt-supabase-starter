@@ -59,7 +59,7 @@ ccg profile 由 2026-08-31 的 auto-compact 實測收斂；ccx 同日退役，�
 
 | launcher profile | soft tier | hard tier | hard repeat |
 | --- | ---: | ---: | ---: |
-| `cc` / `ccw` | 300k | 500k | +100k |
+| `cc` / `ccN` | 300k | 500k | +100k |
 | `ccg` | 400k | 450k | +50k |
 
 `ccx` 已退役：新入口與新 successor 都 fail-closed；既有 process 只做 drain，不再套 numeric
@@ -111,7 +111,7 @@ The shared ownership probe runs first. When the available evidence identifies a 
 ```bash
 # 0) 誰寫的（零訊息、跨 cwd）：<project-dir> 就是對方 cwd。MUST 再篩「寫入型 tool_use ＋
 #    落在爭用檔 mtime 時間窗」，再用 agent_session.value 對回 pane
-cd ~/.claude-work/projects && grep -l '<檔名或獨特字串>' */*.jsonl
+cd ~/.claude-2/projects && grep -l '<檔名或獨特字串>' */*.jsonl
 # 1) 誰在這個 repo 家族上工作（linked worktree 的 cwd 是 <repo>-wt/*，MUST 用前綴比對而非等值）
 herdr agent list | python3 -c '
 import json,sys

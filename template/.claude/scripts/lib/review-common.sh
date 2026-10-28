@@ -151,6 +151,10 @@ REVIEW_GENERATED_RE='^(coverage|dist|build|\\.output|\\.nuxt|\\.void|\\.wrangler
 # 可能是手寫原始碼（clade 自己的 `.claude/skills/coordinator/scripts/*.ts` 就是），它們超出
 # budget 照舊進 OMITTED＝漏審，NEVER 被「依政策」當成審過。
 REVIEW_SUMMARY_ONLY_RE='(^|/)(pnpm-lock\\.yaml|package-lock\\.json|yarn\\.lock)$|^scripts/test-lanes/(deps|timings)\\.json$'
+# summary-only 檔的單檔位元組上限：行數放得進 budget、位元組卻超過它（#2473 的 pnpm-lock：5168 行／336281 bytes）
+# 也只列摘要——逐行嵌入會把 brief 推過 CLAUDE_REVIEW_BRIEF_MAX_BYTES（358400）而 exit 9。
+# 與 oa-batches.ts 的 WRAPPER_SUMMARY_ONLY_MAX_BYTES 逐字同步（test/oa-batches-summary-only.test.ts 守住漂移）。
+REVIEW_SUMMARY_ONLY_MAX_BYTES=300000
 
 # Two passes over the same file: measure every `diff --git` block, then re-emit
 # only the blocks that fit the budget. `used == 0 ||` keeps the first block whole
@@ -160,7 +164,8 @@ REVIEW_SUMMARY_ONLY_RE='(^|/)(pnpm-lock\\.yaml|package-lock\\.json|yarn\\.lock)$
 # sel=1 → 只收 **不** 符合 GENERATED_RE 的 block（原始碼優先）
 # sel=0 → 只收符合的（拿原始碼填完後剩下的 budget）
 review_select_blocks() {
-  awk -v maxl="$1" -v omit="$2" -v genre="$3" -v sel="$4" -v usedfile="$5" -v summ="${6:-}" -v sumre="${7:-}" -v taintfile="${8:-}" '
+  # LC_ALL=C：length() 量位元組（與 oa-batches 的 Buffer.byteLength 同單位），不是 UTF-8 字元數。
+  LC_ALL=C awk -v maxl="$1" -v maxb="$REVIEW_SUMMARY_ONLY_MAX_BYTES" -v omit="$2" -v genre="$3" -v sel="$4" -v usedfile="$5" -v summ="${6:-}" -v sumre="${7:-}" -v taintfile="${8:-}" '
     BEGIN {
       # 產生器不一致的檔（review_check_generated_data 寫出的路徑清單）不享有 summary-only 豁免。
       if (taintfile != "") while ((getline line < taintfile) > 0) if (line != "") taint[line] = 1
@@ -173,6 +178,7 @@ review_select_blocks() {
         bpath[blk] = p
       }
       size[blk]++
+      bytes[blk] += length($0) + 1
       next
     }
     /^diff --git / {
@@ -183,7 +189,9 @@ review_select_blocks() {
       # 「第一塊整塊保留」只給原始碼 pass：一個過大的原始碼檔要降級成「只 review 這一個檔」，
       # 而不是降級成空 changeset。generated pass 沒有這個讓步 —— 它一旦超出剩餘 budget，
       # 就是回到「產物把 review 擠掉」的原狀。
-      keep = (sel == 1 && used == 0 && maxl > 0) || (used + size[cur] <= maxl)
+      # summary-only 檔單檔位元組超上限：行數放得進也不嵌入，直接走摘要（產生器不一致的檔不享有）。
+      sumbig = (sel == 0 && summ != "" && sumre != "" && bpath[cur] ~ sumre && !(bpath[cur] in taint) && bytes[cur] > maxb)
+      keep = !sumbig && ((sel == 1 && used == 0 && maxl > 0) || (used + size[cur] <= maxl))
       if (keep) {
         used += size[cur]
       } else if (sel == 0 && summ != "" && sumre != "" && bpath[cur] ~ sumre && !(bpath[cur] in taint)) {
@@ -730,6 +738,12 @@ location matches no prior finding is counted as a new finding). A finding you ca
 confirm fixed is NOT resolved — say so rather than dropping it. Also review
 the whole changeset for issues the earlier round missed; the prior list does
 not bound your verdict.
+
+Findings under `## Prior Findings Held` cite files this round's diff does not
+touch (unchanged since the round that reported them, or never part of this
+change). They stay counted as blocking without your review, so leave them out
+of your verdict unless you open the file and confirm one is fixed or no longer
+applies — then write the resolved line above for it.
 FINDINGS_BODY
   fi
   if [ "${REVIEW_ROUND_KIND:-}" = verify ]; then
@@ -899,6 +913,11 @@ review_register_staging_baseline() {
 #   帶 --include／--exclude 的輪（round.filter 非空）只審了子集：收齊也不算通過（passed 為假、
 #     不能 covered 後續 head、不當增量基準）。同 head 換篩選（含改成不篩選）→ 同輪號重開，不耗輪數；
 #     同 head 同篩選已收齊且 Critical＋Major＝0 → partial（不帶篩選補一次完整輪才可 merge）
+#   續帶分流（fail-closed）：新一輪帶上一輪 findings 時，引用的檔在本輪 diff（increment_base 或 base → head）內、或位置判不出
+#     （無行號又非路徑形、萬用字樣、只對得上路徑尾段）、或 git diff 失敗 → 照帶重審；增量輪且檔不在 diff → 列進 findings 檔的
+#     `## Prior Findings Held` 段（不需重審該檔）並記在該輪 findings_held，照樣計入 Critical＋Major，reviewer 明寫 resolved 或重報
+#     才清掉（批的 held_cleared），否則一輪輪續帶；完整輪檔不在 diff 同樣列 held（檔可能改回原狀，也可能是從未在 PR 內的呼叫端／依賴，
+#     判不出是哪種就不能丟）。
 #   同 head 部分批已有 verdict、不帶 --part 的 plan   → review＋done_parts：oa-batches 只 prepare 其餘批
 #   每批開審時帶 --part-files（該批檔案清單 hash，oa-batches 算）記在 parts[n/N].files：done_parts 帶回去給
 #     oa-batches 比對，批界位移（批數相同但檔案換了批）就不沿用；帶 --part 開某批時 hash 不同（或舊紀錄沒 hash）
@@ -1096,10 +1115,13 @@ function roundState(round) {
   const verdicts = parts.filter((p) => p.status === 'verdict')
   const rawBlocking = verdicts.reduce((n, p) => n + p.critical + p.major, 0)
   const adjudicated = verdicts.reduce((n, p) => n + adjudicatedMajors(round, p), 0)
-  const blocking = rawBlocking - adjudicated
+  // 續帶 held（上輪未解、檔未改）的 Critical／Major 照計：沒有 reviewer 清掉就不能靠「沒再審那檔」放行。
+  const held = verdicts.length ? heldOpen(round).filter((h) => h.severity !== 'minor').length : 0
+  const blocking = rawBlocking - adjudicated + held
   const complete = verdicts.length > 0 && verdicts.length >= (round.part_total ?? 1)
   const partial = Boolean(round.filter)
-  return { hasVerdict: verdicts.length > 0, complete, blocking, raw_blocking: rawBlocking, adjudicated, partial, passed: complete && blocking === 0 && !partial }
+  return { hasVerdict: verdicts.length > 0, complete, blocking, raw_blocking: rawBlocking, adjudicated, held_blocking: held, partial,
+    passed: complete && blocking === 0 && !partial }
 }
 // 這一輪算不算已用：收齊 verdict，或已記的批有 Critical／Major（部分輪的阻擋 finding 不能靠換 head 重開抹掉）。
 function consumed(state) {
@@ -1221,14 +1243,89 @@ function nextBasis(prev, base, pr) {
   const increment_base = (pr && prev.base !== base) || prev.filter ? null : prev.head
   return { increment_base, findings_from: prev.n, prev_head: prev.head }
 }
-function findingsFor(ledger, path, n) {
+// 本輪 reviewer 會看到的 diff 動到哪些檔：驗證輪是 increment_base→head，其餘是 base→head（PR 模式 base＝merge-base，
+// working-tree 模式 base＝HEAD、head＝tree hash；numstat 同理 name-only 對 commit 與 tree 都成立）。
+// git 失敗（unborn、物件被 gc）回 null＝不篩：多帶 finding 不會少審，與 increment() 的 fail-closed 同方向。
+function roundDiffFiles(from, to) {
+  if (!from || !to) return null
+  try {
+    return new Set(git(['-c', 'core.quotepath=off', 'diff', '--name-only', '-z', '--no-renames', from, to]).split('\0').filter(Boolean))
+  } catch {
+    return null
+  }
+}
+// 續帶分流：上一輪 finding 依「引用的檔在不在本輪 diff」分三路；NEVER 只因檔不在 diff 就讓未解的 finding 消失（0-A fail-closed）。
+// - 在 diff 內、或判不出（無可解析位置、萬用字樣、只對得上路徑尾段）→ 照帶，reviewer 對著新內容重審。
+// - 檔不在 diff：增量輪（increment_base→head）表示該檔自上輪被指出後沒動過，問題幾乎確定還在：改列 held（上輪未解、不需重審該檔），
+//   照樣計入本輪 Critical＋Major（roundState），reviewer 明寫 resolved 或重報才清掉，否則一輪輪續帶。不混進要重審的段落：
+//   reviewer 看不到該檔的新內容，只會原樣重報成新 Major，形成收斂不了的 hold（某 consumer 的 r3 輪）。
+// - 完整輪（base→head）且檔不在 diff → 同樣列 held：檔可能改回原狀，也可能是 finding 引用的呼叫端／依賴從未在 PR 內（「caller 沒跟著改」），
+//   光看 diff 分不出這兩種，丟了就把未解的 Major 從阻擋計數裡拿掉；改由 reviewer 開檔確認後寫 resolved 清掉。
+const diffMatch = (diff, cite) => {
+  const file = cite.replace(/:[≈~]?\d+$/, '').replace(/^\.\//, '')
+  if (/[*{}?\[]/.test(file)) return 'unknown'
+  if (diff.has(file)) return 'in'
+  // 只對得上路徑尾段（`index.ts` 對 `a/index.ts`）不算命中，但也不能據此判「不在 diff」：當判不出、照帶。
+  for (const f of diff) if (f.endsWith(`/${file}`) || file.endsWith(`/${f}`)) return 'unknown'
+  return 'out'
+}
+// finding 區塊＝severity 列＋它底下的縮排續行；held 存整段原文，下一輪照樣能再分流。
+function splitCarried(text, diff) {
+  const held = []
+  const kept = []
+  let cur = null
+  for (const raw of text.split('\n')) {
+    if (cur && raw.trim() && !SEVERITY.test(raw) && NESTED_LINE.test(raw) && indentOf(raw) > cur.indent) {
+      cur.lines.push(raw)
+      continue
+    }
+    cur = null
+    const sev = SEVERITY.exec(raw)
+    const cite = sev && diff ? citeOf(raw) : null
+    if (cite && diffMatch(diff, cite) === 'out') {
+      cur = { severity: sev[1].toLowerCase(), cite, indent: indentOf(raw), lines: [raw] }
+      held.push(cur)
+      continue
+    }
+    kept.push(raw)
+  }
+  return { text: kept.join('\n'), held: held.map(({ severity, cite, lines }) => ({ severity, cite, text: lines.join('\n') })) }
+}
+// 該輪 held 中還沒被 reviewer 清掉（record 時記在批的 held_cleared：明寫 resolved 或重報）的條目。
+function heldOpen(round) {
+  const cleared = new Set(Object.values(round.parts ?? {}).filter((p) => p.status === 'verdict').flatMap((p) => p.held_cleared ?? []))
+  return (round.findings_held ?? []).filter((h) => !cleared.has(h.cite))
+}
+function heldCleared(round, found, resolved) {
+  const reported = new Set(found.map((f) => citeOf(f.text)).filter(Boolean))
+  return (round.findings_held ?? []).map((h) => h.cite).filter((c) => resolved.has(c) || reported.has(c))
+}
+function findingsFor(ledger, path, n, diff = null, sink = null) {
   const round = scoped(ledger).findLast((r) => r.n === n)
   if (!round) return null
   const files = Object.entries(round.parts ?? {}).filter(([, p]) => p.status === 'verdict')
     .sort(([a], [b]) => a.localeCompare(b, 'en', { numeric: true }))
   if (!files.length) return null
   const out = roundFile(path, n, 'findings.md')
-  writeFileSync(out, files.map(([part, p]) => `<!-- round ${n} part ${part} -->\n${readFileSync(p.verdict_file, 'utf8').trim()}\n`).join('\n'))
+  const held = []
+  const back = []
+  const sections = files.map(([part, p]) => {
+    const r = splitCarried(readFileSync(p.verdict_file, 'utf8').trim(), diff)
+    held.push(...r.held)
+    return `<!-- round ${n} part ${part} -->\n${r.text}\n`
+  })
+  // 上一輪自己也是續帶來的 held：同一把尺再分流（檔這輪動了就回到要重審的段落）。
+  for (const h of heldOpen(round)) {
+    const where = diff ? diffMatch(diff, h.cite) : 'unknown'
+    if (where !== 'out') back.push(h)
+    else held.push(h)
+  }
+  if (back.length)
+    sections.push(`## Prior Findings Carried（更早輪次未解、檔案本輪有改動：對照新內容重審）\n${back.map((h) => h.text).join('\n')}\n`)
+  if (held.length)
+    sections.push(`## Prior Findings Held（上輪未解：檔案不在本輪 diff（自上輪起未改，或從未在本 PR 內），不需重審該檔 diff；仍計入本輪 Critical＋Major。開檔確認已解決或已不適用，請在 Prior Findings Status 寫 \`<位置> — resolved.\`）\n${held.map((h) => h.text).join('\n')}\n`)
+  writeFileSync(out, sections.join('\n'))
+  if (sink && held.length) sink.findings_held = held
   return out
 }
 
@@ -1297,7 +1394,8 @@ function priorCites(findingsFile) {
   if (!findingsFile || !existsSync(findingsFile)) return new Set()
   return new Set(readFileSync(findingsFile, 'utf8').split('\n').map(citeOf).filter(Boolean))
 }
-function countVerdict(text, prior = new Set(), round = 1, found = null) {
+// resolved（選填 Set）：收 reviewer 明寫 resolved 的上一輪位置（Review Verdict 段的狀態列與 Prior Findings Status 段），供 held 清除用。
+function countVerdict(text, prior = new Set(), round = 1, found = null, resolved = null) {
   // 狀態詞中英同一份：`— resolved.`／`: resolved`、中文 `— 已解決。`／`：已解決`／`已解決（…）`（#616 r3 中文狀態列曾整列計入）。
   // 與 coordinator oa-batches.ts 的 RESOLVED_STATUS／RESOLVED_NEGATED／STATUS_NEGATION／statusHead 同一份形狀；改一邊 MUST 改另一邊
   // （test/oa-batches-count-verdict.test.ts 拿同一組案例對拍兩邊）。
@@ -1326,8 +1424,18 @@ function countVerdict(text, prior = new Set(), round = 1, found = null) {
   const citesPrior = (line) => (line.match(LOCATION) ?? []).some((loc) => prior.has(normLoc(loc)))
   const statusLine = (line) =>
     citesPrior(line) && (resolvedStatus(line) || (TRAILING_RESOLVED.test(line) && !RESOLVED_NEGATED.test(line) && !NEGATION.test(line)))
+  const markCites = (line) => {
+    if (!resolved) return
+    for (const loc of line.match(LOCATION) ?? []) if (prior.has(normLoc(loc))) resolved.add(normLoc(loc))
+    const own = citeOf(line)
+    if (own && prior.has(own)) resolved.add(own)
+    // 沒行號的位置（CITE_BARE 形）只認路徑邊界上的逐字出現。
+    for (const c of prior)
+      if (!/:\d+$/.test(c) && new RegExp(`(?<![\\w./-])${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w/-])`).test(line)) resolved.add(c)
+  }
   const out = { critical: 0, major: 0, minor: 0 }
   let inVerdict = false
+  let inStatus = false
   let sawVerdict = false
   let sawParsedLine = false
   let verdictLevel = 0
@@ -1336,6 +1444,7 @@ function countVerdict(text, prior = new Set(), round = 1, found = null) {
     const h = HEADING.exec(raw)
     if (h) {
       parentIndent = -1
+      inStatus = /^(?:\*{1,2})?Prior\s+Findings\s+Status\b/i.test(h[2])
       if (VERDICT_HEADING.test(h[2])) {
         inVerdict = true
         sawVerdict = true
@@ -1347,14 +1456,20 @@ function countVerdict(text, prior = new Set(), round = 1, found = null) {
       }
       continue
     }
-    if (!inVerdict || !raw.trim()) continue
+    if (!inVerdict) {
+      if (inStatus && raw.trim() && (statusLine(raw) || resolvedStatus(raw))) markCites(raw)
+      continue
+    }
+    if (!raw.trim()) continue
     const sev = SEVERITY.exec(raw)
     if (!sev && parentIndent >= 0 && NESTED_LINE.test(raw) && indentOf(raw) > parentIndent) continue
     parentIndent = -1
     if (sev) {
       sawParsedLine = true
-      if (trailingResolvedStatus(raw, round)) continue
-      if (resolvedStatus(raw) && prior.has(citeOf(raw))) continue
+      if (trailingResolvedStatus(raw, round) || (resolvedStatus(raw) && prior.has(citeOf(raw)))) {
+        markCites(raw)
+        continue
+      }
       out[sev[1].toLowerCase()] += 1
       found?.push({ severity: sev[1].toLowerCase(), text: raw.trim() })
       parentIndent = indentOf(raw)
@@ -1367,6 +1482,7 @@ function countVerdict(text, prior = new Set(), round = 1, found = null) {
     if (PRIOR_LABEL.test(raw)) continue
     if (statusLine(raw)) {
       sawParsedLine = true
+      markCites(raw)
       continue
     }
     // 此段契約只允許 finding 或明示無 finding；任何其他非空列都不能當成 0/0/0。
@@ -1407,7 +1523,8 @@ if (cmd === 'counts') {
   const ledger = load(path)
   const d = decide(ledger)
   d.ledger = path
-  if (d.action === 'review' && !d.reuse && d.findings_from) d.findings_file = findingsFor(ledger, path, d.findings_from)
+  if (d.action === 'review' && !d.reuse && d.findings_from)
+    d.findings_file = findingsFor(ledger, path, d.findings_from, roundDiffFiles(d.increment_base || opt.base, d.head), d)
   process.stdout.write(`${JSON.stringify(d)}\n`)
 } else if (cmd === 'open' || cmd === 'cover') {
   // cover：只在判定為 covered 時落 covered_heads（oa-batches 走這條，不開審）；其他判定原樣回傳、不寫。
@@ -1426,7 +1543,8 @@ if (cmd === 'counts') {
         ledger.rounds.push(round)
       }
       round.part_total = Math.max(round.part_total ?? 1, total)
-      if (!round.findings_file && round.findings_from) round.findings_file = findingsFor(ledger, path, round.findings_from)
+      if (!round.findings_file && round.findings_from)
+        round.findings_file = findingsFor(ledger, path, round.findings_from, roundDiffFiles(round.increment_base || round.base, round.head), round)
       round.parts[d.part] = { status: 'prepared', at: now, ...(PART_FILES ? { files: PART_FILES } : {}) }
       d.findings_file = round.findings_file ?? null
       d.increment_base = round.increment_base
@@ -1466,12 +1584,16 @@ if (cmd === 'counts') {
     if (!slot) fail(`ledger round ${n} 沒有開過第 ${part} 批${redo}`)
     if ((slot.files ?? '') !== PART_FILES)
       fail(`verdict 的第 ${part} 批檔案清單 hash ${PART_FILES || '無'} 與 ledger 記的 ${slot.files ?? '無'} 不符（批界位移後重開）${redo}`)
-    const counts = countVerdict(text, priorCites(round.findings_file), round.n)
+    const found = []
+    const resolved = new Set()
+    const counts = countVerdict(text, priorCites(round.findings_file), round.n, found, resolved)
+    const cleared = heldCleared(round, found, resolved)
     const verdictFile = roundFile(path, n, `p${part.replace('/', 'of')}.md`, round.pr ?? PR_NO)
     copyFileSync(need('verdict'), verdictFile)
     // files（開審時的檔案清單 hash）跟著 verdict 留下：之後沿用這一批前要拿它比對。
     const files = slot.files
-    round.parts[part] = { status: 'verdict', ...counts, verdict_file: verdictFile, at: now, ...(files ? { files } : {}) }
+    round.parts[part] = { status: 'verdict', ...counts, verdict_file: verdictFile, at: now, ...(files ? { files } : {}),
+      ...(cleared.length ? { held_cleared: cleared } : {}) }
     return { round: n, kind: round.kind ?? null, part, ...counts, ...roundState(round), ledger: path }
   })
   process.stdout.write(`${JSON.stringify(out)}\n`)
@@ -1530,12 +1652,17 @@ if (cmd === 'counts') {
     const slot = round.parts?.[part]
     if (slot?.status !== 'verdict') fail(`ledger round ${n} 第 ${part} 批沒有已記的 verdict`)
     if (opt.head && round.head !== opt.head) fail(`ledger round ${n} 開在 head ${round.head}，不是 --head ${opt.head}`)
-    const counts = countVerdict(readFileSync(slot.verdict_file, 'utf8'), priorCites(round.findings_file), round.n)
+    const found = []
+    const resolved = new Set()
+    const counts = countVerdict(readFileSync(slot.verdict_file, 'utf8'), priorCites(round.findings_file), round.n, found, resolved)
+    const cleared = heldCleared(round, found, resolved)
     const before = { critical: slot.critical, major: slot.major, minor: slot.minor }
-    const changed = ['critical', 'major', 'minor'].some((k) => before[k] !== counts[k])
+    const changed = ['critical', 'major', 'minor'].some((k) => before[k] !== counts[k]) || String(slot.held_cleared ?? []) !== String(cleared)
     if (apply && changed) {
       slot.recounts = [...(slot.recounts ?? []), { at: now, before, after: counts, reason }]
       Object.assign(slot, counts)
+      if (cleared.length) slot.held_cleared = cleared
+      else delete slot.held_cleared
     }
     return { round: n, part, head: round.head, verdict_file: slot.verdict_file, before, after: counts, changed,
       applied: apply && changed, ...roundState(round), ledger: path }

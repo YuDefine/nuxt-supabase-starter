@@ -1,6 +1,6 @@
 ---
 name: dashboardstack
-description: Nuxt admin／CRUD 後台、資源列表與表單、server-side 資料表格、CSV 匯入匯出、組織／成員權限：先讀已購 DashboardStack 參考實作再自組。
+description: Nuxt admin／CRUD 後台、資源列表與表單、server-side 資料表格、CSV 匯入匯出、組織／成員權限：先讀已購 DashboardStack 參考實作再自組。NOT for 圖表／KPI 卡（用 nuxt-charts）、NOT for 單純 Pinia 狀態（用 pinia-store）、NOT for 新增 server API route（用 server-api）。
 ---
 
 

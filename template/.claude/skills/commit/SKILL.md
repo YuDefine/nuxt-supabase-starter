@@ -29,7 +29,7 @@ $ARGUMENTS
 6. Step 2–4｜READ 若要分組提交，讀取 `rules/分組與提交判準.md`。
 7. Step 5｜READ 若分組 commit 完成，讀取 `rules/交接判準.md`。
 8. Step 6-Gate｜READ 若已 land 要進發版，讀取 `rules/發版授權判準.md`，跑 `deploy-trigger-check.ts`。
-9. Step 6-A｜READ 若 `verdict=confirmed-push-main`，讀取 `rules/push-main發版判準.md`。
+9. Step 6-A｜READ 若 `verdict=confirmed-push-main`，讀取 `rules/push-main發版判準.md`，先照 Rule 0 查 consumer `.clade/rules` 的 `> Overrides:`，有就以該檔為準。
 10. Step 6-B｜READ 若 `verdict=needs-approval` 或腳本不存在，讀取 `rules/停在push-main判準.md`。
 11. Step 6b｜READ 若 tag 已推出，讀取 `rules/Notion同步判準.md`。
 12. Step 7–8｜READ 若要出完成報告，讀取 `rules/完成報告判準.md`。

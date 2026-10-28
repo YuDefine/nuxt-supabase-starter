@@ -2330,8 +2330,13 @@ function startQuarantineObserver(
       ['-e', options.watcherSource ?? QUARANTINE_WATCHER, quarantine, out, ...extraRoots],
       { stdio: ['ignore', 'ignore', errFd] },
     )
-    child.once('error', (error) => {
-      spawnError = errorMessage(error)
+    // Persistent `on`, not `once`: a failed spawn defers its 'error' to the
+    // next tick, and the ChildProcess may emit 'error' again (e.g. kill()
+    // while the handle is still half-torn-down). A listener that unhooks
+    // after the first emit turns the second into an uncaughtException that
+    // lands after the caller (and its test) already returned.
+    child.on('error', (error) => {
+      spawnError ??= errorMessage(error)
     })
   } catch (error) {
     spawnError = errorMessage(error)
@@ -2348,8 +2353,11 @@ function startQuarantineObserver(
     }
   }
   const kill = () => {
+    // No pid → the spawn was refused and the handle is still pending its
+    // deferred 'error'/teardown; there is no process to signal.
+    if (child?.pid === undefined) return
     try {
-      child?.kill()
+      child.kill()
     } catch {
       // Best-effort teardown of the watcher.
     }

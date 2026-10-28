@@ -61,7 +61,7 @@ registry repo（`registry/consumers.json` 的 `repo_id`）的 GitHub issue 只�
 | `BLOCKED: <類別> <原因>` 回報 | cloud session 照上方格式開；解掉的人關（回報者自解見上方第 5 步，其餘由主持者處置後關） |
 | `🌙 nightly validate 紅燈`（只限 clade） | `validate.yml` nightly-alert 以 github-actions bot 身分自動開、轉綠自動關 |
 
-其餘一律不開 issue，各有落點：TD → `docs/tech-debt.md`；待辦 → plan／HANDOFF；要 Charles 答 → `flow ask`；討論與修補 → PR。上游套件的 bug 開在上游 repo，不受本節限制；registry 裡 `visibility: public` 的 repo 本身就是外部使用者的上游，只判 BLOCKED 回報（格式與逾期），外部開的 issue 不判用途。
+其餘一律不開 issue，各有落點：TD、待辦 → plan § Open work（lifecycle repo）；未遷移 consumer 的 TD 才登記到既有 `docs/tech-debt.md`、待辦走 HANDOFF；要 Charles 答 → `flow ask`；討論與修補 → PR。上游套件的 bug 開在上游 repo，不受本節限制；registry 裡 `visibility: public` 的 repo 本身就是外部使用者的上游，只判 BLOCKED 回報（格式與逾期），外部開的 issue 不判用途。
 
 - **機械層**：clade 的 `.github/workflows/issue-gate.yml` 在開立、重開、改標題時判定，不合規就留言指路並以 `not_planned` 關閉；格式壞掉的 BLOCKED 只留言、保持 open（見下一條）。標題與內文第一行任一是合法 `BLOCKED:` 行都算回報，與 watch 的孤兒判定同一套。consumer repo 沒有這支 workflow；watch 每輪用同一次 `gh search issues`（只搜 registry repo）跨 registry 判同一套，列進 `主持者必做`（帶處置指令）。手動盤點：`node vendor/scripts/issue-usage.ts check`。
 - **格式壞掉的 BLOCKED**（以 `BLOCKED` 開頭卻缺合法類別，例如 `BLOCKED: TD-1004 …`）：watch 讀不到題目，等於沒回報。主持者讀內文，仍卡就把標題改成合法格式，過時就留言後關。

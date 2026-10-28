@@ -2,7 +2,8 @@
 name: version-upgrade
 description: >-
   依「為何升 × 升哪裡」升版：補落後、追上游、toolchain、deprecated、安全通報、壞版回退、第三方
-  skill；範圍：consumer／fleet／clade／本機／跨環境。
+  skill；範圍：consumer／fleet／clade／本機／跨環境。NOT for 升版後行為壞掉找原因（用 diagnose）、NOT for
+  記錄升版踩坑（用 oops）、NOT for 把 clade 改動散播給 consumer（用 clade-publish）。
 metadata:
   clade:
     invocation: explicit

@@ -193,9 +193,9 @@ const isRepoPath = (t: string) => REPO_REL.test(t) && !t.startsWith('-') && !zon
 const CLOUD_BRANCH = /^(cloud|claude)\/[\w.-][\w./-]*$/u
 const SCRIPT_NAME =
   /^(test|lint|typecheck|type-check|check|fmt|format|build|bdd|truth|verify)([:-][\w:.-]+)?$/u
-const JS_TOOL = new Set(['vp', 'tsc', 'vue-tsc', 'vitest', 'oxlint', 'eslint', 'prettier'])
+const JS_TOOL = new Set(['vp', 'tsc', 'tsrs', 'vue-tsc', 'vitest', 'oxlint', 'eslint', 'prettier'])
 const SCRIPT_PATH =
-  /^((scripts|vendor\/scripts|bin|tools|\.clade\/bin)\/[\w./-]+\.(ts|mts|mjs|js|cjs)|node_modules\/(typescript|typescript-native|vitest|oxlint)\/bin\/[\w.-]+)$/u
+  /^((scripts|vendor\/scripts|bin|tools|\.clade\/bin)\/[\w./-]+\.(ts|mts|mjs|js|cjs)|node_modules\/(typescript|typescript-native|tsrs|vitest|oxlint)\/bin\/[\w.-]+)$/u
 // 只收「任何旗標都不寫檔、不執行別的程式」的指令：rg（--pre）、sort（-o）、uniq（第二個檔名）、
 // tree（-o）、file（-C）、find（-exec／-fprint*）不收
 const GATE_WRAPPER = /^(bin|\.clade\/bin)\/clade-gate$/u

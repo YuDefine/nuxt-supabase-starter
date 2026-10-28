@@ -22,6 +22,8 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 
 **摘要值（hash / 行數 / 檔案數 / diff 大小）同屬未分岔訊號**：`sha256sum` / `md5sum` / `wc -l` 這類全域函式對空輸入不報錯、照樣回一個外觀正常的值，於是「上游命令死掉」與「內容真的是空的」在它的輸出裡完全相同。**每一次**拿 hash 或 count 當證據，要先驗產生它的那條 pipeline 的 exit code 與非空性；不要從摘要值反推成因（`[ -n "$(printf '' | sha256sum)" ]` 恆真）。實證見 [[pitfall-hash-of-empty-stdout-collapses-distinct-causes]]。
 
+**「最後一次 X 的時間」是活躍度的代理，不是活躍度**：單一 straggler（舊版程式、過期 worktree、重放佇列）就能把時戳推到現在，於是「入口死了沒」「修法生效沒」MUST 改量**率**——取已知分界點（fix commit、設定變更的時刻），數兩側各自的發生數；48 : 1 與 24 : 25 的「最後一次」可以完全一樣。同理，在會被 runtime 動態 import 原始碼的 dirty working tree 上跑出的測試結果不對應任何可命名的版本，不能歸因到任何 commit。量代理最危險的不是量錯，是量過之後產生「已經查證過」的錯覺：寫結論前問「這條指令的輸出改變時，結論會不會往正確方向跟著改」。
+
 ## 否定命題 MUST 先做陽性對照（先於下方每一條具名處方）
 
 **結論形式是「沒有 X」時，要先對量測工具做一次陽性對照**——用一個**已知存在**的目標跑**同一條指令**，確認它回得出非空。**回空就是工具壞了，不是「沒有 X」。** 對照沒跑，那個「沒有」不是證據，不要拿它當任何動作的前提（起 publish、判 lane 空、判沒人在跑、判無違規）。
@@ -29,6 +31,8 @@ The obligations, predicates, evidence schema, failure handling, and review timin
 這條排在所有具名處方（`find -L`、比對 `exe` 不比對 `comm` 等）之前：它不要求事先知道那個坑。「指令跑完、沒報錯、回空」與工具壞掉在 stdout 上完全同形。結論裡 MUST 寫出「此 pattern 對 `<已知樣本>` 命中」，寫不出來零命中就不是證據；不要把「我 grep 過了」當成 absence 的證明（pattern 寫錯、資料形狀誤判、假設偷偷收窄範圍，輸出都是零命中）。有 structured output（`--json` / `--format json`）時優先用它取代文字 grep；更前一步先問「有沒有不需要數的判準」。（per [[pitfall-narrow-grep-absence-treated-as-proof]]）
 
 **誠實邊界**：陽性對照證的是**工具活著**，不是 **pattern 寫對**——它擋不住「工具對目標 A 有效、對目標 B 無效」。不要把對照通過讀成「這次的查詢是對的」。
+
+**列舉來源的邊界不會出現在它的輸出裡**：「X 存在嗎？」靠一份清單、一個 glob 或一個 registry view 回答時，那個來源是母體的子集，0 筆與「這一類從不在範圍內」同形。寫「查過了，沒有」之前 MUST 先寫出「列舉來源是什麼、它排除哪一類」，答不出排除哪一類就還沒查。已知排除面：`~/.claude/projects/*/*.jsonl` 不含 `*/subagents/agent-*.jsonl`（2026-08-28 實測 29% transcript 在外，要 `find ~/.claude/projects -name '*.jsonl'`）；「有 pane 的 agent」不含 in-process subagent；「cwd 在本 repo 的 session」不含以絕對路徑跨 repo 寫入的 session。歸屬某次寫入 MUST 用 write-time evidence（`Write`／`Edit` 或 `cat >`／`sed -i`／heredoc 的 `tool_use` input 同時含目標字串與檔名），**NEVER** 拿 `grep -rl <編號>` 的命中當歸屬——轉述過的 transcript 也會命中。
 
 **判「某個程式在不在跑」時要貼 [[process-probe]] 的 `is-running.sh`，不要現場自組 `pgrep` / `ps | grep`**：`pgrep -f` 比對整條 cmdline，量的是「有沒有人提到這個字」；該腳本內建兩段對照並把「沒有在跑」（exit 1）與「量不出來」（exit 2）分成不同 exit code。裸 `pgrep` 把這兩個結論折成同一個空輸出。
 

@@ -1,6 +1,6 @@
 ---
 name: nuxt-charts
-description: Nuxt 圖表、dashboard、KPI／狀態卡類 UI：先查已購 nuxtcharts.com block／template 再自組。
+description: Nuxt 圖表、dashboard、KPI／狀態卡類 UI：先查已購 nuxtcharts.com block／template 再自組。NOT for admin CRUD、資源列表與表單（用 dashboardstack）、NOT for 資料抓取與分頁效能稽核（用 nuxt-data-audit）。
 ---
 
 

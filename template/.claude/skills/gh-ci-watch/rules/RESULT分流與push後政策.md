@@ -3,14 +3,16 @@
 - Level: `MUST`
 - 輸出尾段（`=== CI WATCH RESULT ===` 起）保證含 `RESULT: <state>` 行，涵蓋所有 terminal state。
 
-| exit | RESULT | 主線處置 |
-| --- | --- | --- |
-| 0 | `success` | 一行回報綠燈＋run URL，依 Rule 3／Rule 4 的情境處置後結束話題。報告有 `FOLLOWED_FROM:` 行時，綠燈屬於 `SHA:` 那一行的 commit、不是最初盯的那個——回報時寫出驗到的 SHA |
-| 1 | `cancelled` 且報告有 `SUPERSEDED_BY: run <id> @ <sha>` | 目標 commit 的 run 被別個 SHA 的 run 取代，**目標沒被驗到**。要那個較新 commit 的結果就 `run <id>` 重派；**NEVER** 把它的結果記成原 commit 的證據 |
-| 1 | `failure`／`cancelled`（無 successor）／`timed_out`／`startup_failure`／… | 先讀 `LAST_GREEN:` 與 `RANGE:` 兩行（紅燈先比最後綠燈），再讀 `--log-failed` 節錄進失敗處置流程 |
-| 2 | `UNAVAILABLE (workflow '<X>' 不存在；可用：…)` | 名稱傳錯，不是環境問題。照訊息列出的清單挑**檔名**重派一次，**NEVER** 當成「watcher 起不來」略過——那會讓這次 push 完全沒有 CI 驗證 |
-| 2 | `UNAVAILABLE (<其他原因>)` | gh 不存在／未登入／API 連續失敗——監看可一行回報略過，**NEVER** 追問使用者；但 merge／staging gate **NEVER** 把 `UNAVAILABLE` 算成功或略過成功 |
-| 3 | `WATCH_TIMEOUT` | run 可能仍在跑（輸出含最後已知狀態＋run id）。再派一輪 `run <run-id>` 續盯，或依情境處置 |
+評估：first-match；以上皆非 → Y*
+| id | exit | RESULT | 主線處置 |
+| --- | --- | --- | --- |
+| Y1 | 0 | `success` | 一行回報綠燈＋run URL，依 Rule 3／Rule 4 的情境處置後結束話題。報告有 `FOLLOWED_FROM:` 行時，綠燈屬於 `SHA:` 那一行的 commit、不是最初盯的那個——回報時寫出驗到的 SHA |
+| Y2 | 1 | `cancelled` 且報告有 `SUPERSEDED_BY: run <id> @ <sha>` | 目標 commit 的 run 被別個 SHA 的 run 取代，**目標沒被驗到**。要那個較新 commit 的結果就 `run <id>` 重派；**NEVER** 把它的結果記成原 commit 的證據 |
+| Y3 | 1 | `failure`／`cancelled`（無 successor）／`timed_out`／`startup_failure`／… | 先讀 `LAST_GREEN:` 與 `RANGE:` 兩行（紅燈先比最後綠燈），再讀 `--log-failed` 節錄進失敗處置流程 |
+| Y4 | 2 | `UNAVAILABLE (workflow '<X>' 不存在；可用：…)` | 名稱傳錯，不是環境問題。照訊息列出的清單挑**檔名**重派一次，**NEVER** 當成「watcher 起不來」略過——那會讓這次 push 完全沒有 CI 驗證 |
+| Y5 | 2 | `UNAVAILABLE (<其他原因>)` | gh 不存在／未登入／API 連續失敗——監看可一行回報略過，**NEVER** 追問使用者；但 merge／staging gate **NEVER** 把 `UNAVAILABLE` 算成功或略過成功 |
+| Y6 | 3 | `WATCH_TIMEOUT` | run 可能仍在跑（輸出含最後已知狀態＋run id）。再派一輪 `run <run-id>` 續盯，或依情境處置 |
+| Y* | 其他 | 其他 | STOP，回報原始輸出，NEVER 當成功 |
 
 ## Good Example
 

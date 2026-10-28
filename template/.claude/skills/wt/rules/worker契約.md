@@ -155,7 +155,7 @@ git commit --no-verify -m "✨ feat(auth): 新增 token 續期 API"
   - **Integration 模式**（同一 work id 有 2 個以上切片時的預設，見 [[github-flow]] § Integration branch）：
     - `gh pr create --base integration/<work-id>`，做到一半先開 draft；該 PR 的 CI 只有機械檢查、不跑 test-lane。
     - 切片 PR **不**登記 `batch draft` receipt（整件工作的 receipt 綁在 `integration/<work-id>` 對 `main` 那一張）。
-    - 在來源 worktree 跑完本機門檻：canonical check ＋ repo 在 CI 機械檢查裡跑的 typecheck。clade 是 `pnpm exec vp check` ＋ `node node_modules/typescript-native/bin/tsc -p tsconfig.clade.json --noEmit`，動到 `vendor/scripts` 再加 `node node_modules/typescript-native/bin/tsc -p tsconfig.vendor.json --noEmit`（TS 7，**NEVER** 寫 `npx tsc`，見 `scripts/lib/tsc-native.ts`）。兩條 tsc 以秒計，不必排 heavy gate slot。
+    - 在來源 worktree 跑完本機門檻：canonical check ＋ repo 在 CI 機械檢查裡跑的 typecheck。clade 是 `pnpm exec vp check` ＋ `node node_modules/tsrs/bin/tsrs -p tsconfig.clade.json --noEmit`，動到 `vendor/scripts` 再加 `node node_modules/tsrs/bin/tsrs -p tsconfig.vendor.json --noEmit`（tsrs；CI 另以官方 TS 7 交叉核對。**NEVER** 寫 `npx tsc`，見 `scripts/lib/tsc-native.ts`）。兩條 typecheck 以秒計，不必排 heavy gate slot。
     - 本機門檻通過且該 PR 的 CI 全綠後，自己 `gh pr ready` 這張切片 PR，completion 回 coordinator；由 coordinator 以 `integration-merge.ts --pr <n>` 落地。`test:affected` 由 coordinator 在 integration 轉 ready 前跑一次，不是你的責任。
     - **NEVER** 對 `main` 開 PR。
 - draft 維持 draft 直到 review；**NEVER** 為了讓成果被看見而 merge-back 或直推 `main`。

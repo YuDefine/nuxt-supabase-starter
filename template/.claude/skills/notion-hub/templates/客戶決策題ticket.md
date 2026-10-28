@@ -41,7 +41,7 @@
 1. {{QUESTION_1_RESTATED}} → 影響 {{QUESTION_1_IMPACT}}
 
 【分流】
-- 客戶都回了 → flow open {{WORK_SLUG}} --origin notion:{{PAGE_ID}}，接著 node ~/offline/clade/vendor/scripts/notion-sync.ts open --work <id> --ticket {{PAGE_ID}}，把 {{QUESTION_COUNT}} 題答案 inline 進 plan，交給 work-route
+- 客戶都回了 → flow work open {{WORK_SLUG}} --origin notion:{{PAGE_ID}}，接著 node ~/offline/clade/vendor/scripts/notion-sync.ts open --work <id> --ticket {{PAGE_ID}}，把 {{QUESTION_COUNT}} 題答案 inline 進 plan，交給 work-route
 - 客戶還沒回 → 別重發提醒，直接告訴我「Notion 還沒打勾」並結束
 
 【{{WORKFLOW_STAGE}}必填區塊】

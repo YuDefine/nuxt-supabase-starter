@@ -551,19 +551,48 @@ function isAncestorOfLandingBase(cwd, rev, baseBranch = resolveLandingBase(cwd))
   }
 }
 
-function mergedBranches(cwd, baseBranch = resolveLandingBase(cwd)) {
+function mergedBranches(cwd, baseBranch = resolveLandingBase(cwd)): Set<string> {
   let raw = ''
   try {
     raw = git(['branch', '--merged', baseBranch], { cwd })
   } catch {
-    return new Set()
+    return new Set<string>()
   }
-  const set = new Set()
+  const set = new Set<string>()
   for (const line of raw.split('\n')) {
     const b = line.replace(/^[*+]?\s*/, '').trim()
     if (b) set.add(b)
   }
   return set
+}
+
+/**
+ * enrichWorktree 的迴圈共用事實：merged 集合（一次 `branch --merged`）與各 session branch 的
+ * committer 時間（一次 `for-each-ref`）。逐棵 enrich 時每棵各付兩次 git fork 是 N+1；
+ * 迴圈外算一次、用 `ctx` 傳進去。任何一邊讀不到就不填，enrichWorktree 退回逐棵查（語意不變）。
+ */
+export type EnrichContext = { merged?: Set<string>; commitSec?: Map<string, number> }
+
+export function enrichContext(cwd): EnrichContext {
+  const ctx: EnrichContext = {}
+  try {
+    ctx.merged = mergedBranches(cwd)
+  } catch {}
+  try {
+    const raw = git(
+      ['for-each-ref', '--format=%(refname:short) %(committerdate:unix)', 'refs/heads/'],
+      { cwd },
+    )
+    const map = new Map<string, number>()
+    for (const line of raw.split('\n')) {
+      const i = line.lastIndexOf(' ')
+      if (i <= 0) continue
+      const sec = parseInt(line.slice(i + 1), 10)
+      if (Number.isFinite(sec)) map.set(line.slice(0, i), sec)
+    }
+    ctx.commitSec = map
+  } catch {}
+  return ctx
 }
 
 function sessionWorktrees(cwd) {
@@ -3535,7 +3564,7 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   const runtimeGap = consumerRuntimeSubstrateGap(consumerRoot)
   if (runtimeGap) throw new Error(`placement_refused: ${runtimeGap}`)
   requireConsumerProjection(consumerRoot)
-  // Pre-clean stale .git/index.lock if any — see docs/tech-debt.md TD-145.
+  // Pre-clean stale .git/index.lock if any — see TD-145.
   const lockStatus = ensureNoStaleIndexLock(consumerRoot)
   if (lockStatus.cleaned) {
     console.error(`⚠ rm'd stale .git/index.lock — proceeding`)
@@ -4150,7 +4179,7 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
        * `wt:` records the transport, which is exactly the semantics this TD exists to remove.
        */
       /*
-       * The scheme is checked against the SAME list `flow open --origin` checks (`REF_SCHEMES`),
+       * The scheme is checked against the SAME list `flow work open --origin` checks (`REF_SCHEMES`),
        * imported rather than restated: a second copy of the whitelist drifts, and a typo'd scheme
        * folds into a work item whose origin can never be joined against anything.
        *
@@ -4199,7 +4228,7 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
       if (unattributed) {
         console.error(
           `note: 這個 worktree 不屬於任何已知工作（沒有 CLADE_WORK_ID、也沒有 --origin），卡片標為「未歸屬」。\n` +
-            `      正路：node vendor/scripts/flow/flow.ts open <slug> --origin td:TD-NNN，export CLADE_WORK_ID 之後再 wt add；\n` +
+            `      正路：node vendor/scripts/flow/flow.ts work open <slug> --origin td:TD-NNN，export CLADE_WORK_ID 之後再 wt add；\n` +
             `      或這次就帶 wt-helper.ts add <slug> --task-summary '<一句話>' --origin td:TD-NNN`,
         )
       }
@@ -4495,19 +4524,25 @@ async function cmdDetectMainDirty(opts) {
 function enrichWorktree(
   consumerRoot,
   w,
-  { landed: withLanded = false, now = Date.now() }: { landed?: boolean; now?: number } = {},
+  {
+    landed: withLanded = false,
+    now = Date.now(),
+    ctx,
+  }: { landed?: boolean; now?: number; ctx?: EnrichContext } = {},
 ) {
   const branchName = w.branch.replace('refs/heads/', '')
-  let lastCommitSec = 0
-  try {
-    lastCommitSec = parseInt(
-      git(['log', '-1', '--format=%ct', branchName], { cwd: consumerRoot }),
-      10,
-    )
-  } catch {}
+  let lastCommitSec = ctx?.commitSec?.get(branchName) ?? 0
+  if (!lastCommitSec) {
+    try {
+      lastCommitSec = parseInt(
+        git(['log', '-1', '--format=%ct', branchName], { cwd: consumerRoot }),
+        10,
+      )
+    } catch {}
+  }
   const lastCommitMs = Number.isFinite(lastCommitSec) ? lastCommitSec * 1000 : 0
   const daysOld = lastCommitMs ? Math.floor((now - lastCommitMs) / 86_400_000) : null
-  const merged = mergedBranches(consumerRoot).has(branchName)
+  const merged = (ctx?.merged ?? mergedBranches(consumerRoot)).has(branchName)
   let briefStatus = null
   let taskSummary = null
   try {
@@ -4617,8 +4652,9 @@ function countWorktreeDirty(wtPath): number | null {
 async function cmdList(opts) {
   const consumerRoot = findConsumerRoot()
   const wts = sessionWorktrees(consumerRoot)
+  const ctx = enrichContext(consumerRoot)
   const enriched = wts.map((w) =>
-    enrichWorktree(consumerRoot, w, { landed: !opts.noLandedState }),
+    enrichWorktree(consumerRoot, w, { landed: !opts.noLandedState, ctx }),
   ) as any[]
   const now = Date.now()
   for (const w of detachedSessionWorktrees(consumerRoot))
@@ -4694,10 +4730,15 @@ export function collectWorktreeBacklog(
     existsSync(join(consumerRoot, path)),
   )
   const helper = `node ${shellQuote(localHelper ?? join(WT_HELPER_DIR, 'wt-helper.ts'))}`
+  const enrichCtx = enrichContext(consumerRoot)
   for (const worktree of sessionWorktrees(consumerRoot)) {
     if (claims.value.some((claim) => claim.worktree_path === worktree.path)) continue
     try {
-      const row = enrichWorktree(consumerRoot, worktree, { landed: withLanded, now })
+      const row = enrichWorktree(consumerRoot, worktree, {
+        landed: withLanded,
+        now,
+        ctx: enrichCtx,
+      })
       const landedState = withLanded
         ? row.landedState
         : row.mergedToMain
@@ -4832,6 +4873,7 @@ async function cmdReclaimStale({ dryRun = false, removeLanded = false } = {}) {
       console.error(`  retain ${h.slug}: dev-port release failed: ${e?.message ?? e}`)
     }
   }
+  const enrichCtx = enrichContext(consumerRoot)
   for (const h of holders) {
     const w = wtBySlug.get(h.slug)
     if (!w) {
@@ -4840,7 +4882,7 @@ async function cmdReclaimStale({ dryRun = false, removeLanded = false } = {}) {
       continue
     }
 
-    const enriched = enrichWorktree(consumerRoot, w)
+    const enriched = enrichWorktree(consumerRoot, w, { ctx: enrichCtx })
     if (enriched.staleness === 'stale' && !removeLanded) {
       release(h, enriched.mergedToMain ? 'merged' : `status: ${enriched.briefStatus}`)
     } else if (enriched.staleness === 'stale') {
@@ -5972,7 +6014,7 @@ export function mainIndexNotEmptyMessage(slug: string, entries: string[], when: 
  * `CLADE_WORK_ID` 是活不過單次 Bash 呼叫的環境變數——merge-back 常在另一個 shell 跑，
  * 撿到的 ambient 可能是別張卡。所以 claim 綁定優先；ambient 只在沒有綁定時當 fallback。
  * 兩者都有而不同、或兩者都沒有、或 claim 讀不到，一律回 `error`：記錯卡的 `work.done` 只能事後
- * `flow reopen` 追加撤回（TD-1115），舊行留在 stream 上、撤回前已被讀成完成——判不出就不記。
+ * `flow work reopen` 追加撤回（TD-1115），舊行留在 stream 上、撤回前已被讀成完成——判不出就不記。
  */
 export function resolveMergeBackWorkId(
   consumerRoot: string,
@@ -5991,7 +6033,7 @@ export function resolveMergeBackWorkId(
     return {
       error:
         `讀不到 .clade/claims/（${claims.reason}），判不出這棵 worktree 綁的是哪張卡。\n` +
-        `  修好 claim 檔後重跑；或這次不帶 --work-done，land 完再手動：node vendor/scripts/flow/flow.ts done <work-id> --verification '<…>'`,
+        `  修好 claim 檔後重跑；或這次不帶 --work-done，land 完再手動：node vendor/scripts/flow/flow.ts work done <work-id> --verification '<…>'`,
     }
   }
   const stripHeads = (b: string) => b.replace(/^refs\/heads\//, '')
@@ -6017,7 +6059,7 @@ export function resolveMergeBackWorkId(
     return {
       error:
         `這棵 worktree 有 ${bound.length} 個 claim 各綁不同的卡（${bound.join(', ')}），判不出 done 該記給誰。\n` +
-        `  這次不帶 --work-done，land 完對正確那張手動：node vendor/scripts/flow/flow.ts done <work-id> --verification '<…>'`,
+        `  這次不帶 --work-done，land 完對正確那張手動：node vendor/scripts/flow/flow.ts work done <work-id> --verification '<…>'`,
     }
   }
   if (bound.length === 1) {
@@ -6027,7 +6069,7 @@ export function resolveMergeBackWorkId(
           `worktree 的 claim 綁的是 ${bound[0]}，這個 shell 的 CLADE_WORK_ID 卻是 ${ambient}。\n` +
           `  ambient 活不過單次 Bash 呼叫，常是別張卡留下的（TD-915）；判不出 done 該記給誰，所以不記。\n` +
           `  若這次確實是在收 ${bound[0]}：CLADE_WORK_ID=${bound[0]} 或 env -u CLADE_WORK_ID 重跑同一條指令\n` +
-          `  若這棵樹其實在做 ${ambient}：這次不帶 --work-done，land 完手動 flow done ${ambient}`,
+          `  若這棵樹其實在做 ${ambient}：這次不帶 --work-done，land 完手動 flow work done ${ambient}`,
       }
     }
     return { workId: bound[0], source: 'claim' }
@@ -7721,7 +7763,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   // discovers it cannot file the claim leaves the caller with no way to re-run it — the worktree
   // and branch are gone by the end of this function. Same fail-closed shape as
   // `herdr-session-handoff.ts --work-done` (a completion claim with no evidence is worse than
-  // none) and as `flow done`'s own refusal; three doors into `work.done`, one gate.
+  // none) and as `flow work done`'s own refusal; three doors into `work.done`, one gate.
   if (opts.workDone && !opts.verification?.trim()) {
     throw new Error(
       "merge-back --work-done requires --verification '<how it was verified>': a completion claim " +
@@ -8966,14 +9008,14 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
       if (res?.written) {
         console.log(`merge-back: flow work.done filed for ${doneWorkId}`)
         console.log(
-          `  Acceptance is a human's: node vendor/scripts/flow/flow.ts accept ${doneWorkId} --reason '<why>'`,
+          `  Acceptance is a human's: node vendor/scripts/flow/flow.ts work accept ${doneWorkId} --reason '<why>'`,
         )
       } else {
         console.error(
           `merge-back: flow work.done REFUSED for ${doneWorkId} — ` +
             `${(res?.errors ?? []).map((e) => e.code ?? String(e)).join(',') || 'unknown'}.\n` +
             `             The landing itself is unaffected; the claim was not filed. File it by hand:\n` +
-            `             node vendor/scripts/flow/flow.ts done ${doneWorkId} --verification '<...>'`,
+            `             node vendor/scripts/flow/flow.ts work done ${doneWorkId} --verification '<...>'`,
         )
       }
     } catch (e) {

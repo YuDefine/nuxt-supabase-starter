@@ -60,7 +60,7 @@
 3. 修改紀錄保留多久 → 影響是否新增修改紀錄資料表與清理排程
 
 【分流】
-- 客戶都回了 → flow open shipment-expand-fields --origin notion:00000000-0000-0000-0000-000000000000，接著 node ~/offline/clade/vendor/scripts/notion-sync.ts open --work <id> --ticket 00000000-0000-0000-0000-000000000000，把 3 題答案 inline 進 plan，交給 work-route
+- 客戶都回了 → flow work open shipment-expand-fields --origin notion:00000000-0000-0000-0000-000000000000，接著 node ~/offline/clade/vendor/scripts/notion-sync.ts open --work <id> --ticket 00000000-0000-0000-0000-000000000000，把 3 題答案 inline 進 plan，交給 work-route
 - 客戶還沒回 → 別重發提醒，直接告訴我「Notion 還沒打勾」並結束
 
 【spec 必填區塊】

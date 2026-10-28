@@ -3,7 +3,7 @@
 # must have a named work item.
 #
 # WHY THIS EXISTS. `rules/core/session-tasks.operations.md` § 建檔的同一步順路鑄 work id already
-# says MUST, and says it precisely (`flow open <slug> --origin tasks:<path> --title '<一句話>'`).
+# says MUST, and says it precisely (`flow work open <slug> --origin tasks:<path> --title '<一句話>'`).
 # It was not being followed: measured 2026-08-29 across 12 consumer repos, 350 work items carried
 # 0 titles and 0 origins. A MUST with no mechanical backstop is a MUST that fires only when
 # somebody happens to have read it — and the moment it must fire (creating the file) is exactly
@@ -83,7 +83,7 @@ checkpoint_pointer() {
 }
 
 # Ambient id means this session already opened its work; the file joins that work rather than
-# starting a new one. NEVER prompt for `flow open` here — a second open would split one piece of
+# starting a new one. NEVER prompt for `flow work open` here — a second open would split one piece of
 # work in two. The only thing left to say is the checkpoint pointer (second half, see header).
 if [ -n "${CLADE_WORK_ID:-}" ]; then
   checkpoint_pointer || true
@@ -110,7 +110,7 @@ fi
 cat <<MSG
 [work-open] $REL 還沒有具名的 work item —— 它會在 /board 上顯示為 orphan、在 /overview 上完全不出現。
 
-  node "\${CLADE_HOME:-\$HOME/offline/clade}"/vendor/scripts/flow/flow.ts open $BASE \\
+  node "\${CLADE_HOME:-\$HOME/offline/clade}"/vendor/scripts/flow/flow.ts work open $BASE \\
     --actor claude-code --origin 'tasks:$REL' --title '<一句話：這件事是什麼>'
 
 --title 要寫「要解決什麼問題」，NEVER 把 slug 重寫一遍——一個只是把檔名再說一次的 title，

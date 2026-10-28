@@ -29,6 +29,8 @@ paths:
 | 回收 | `batch cleanup` | 已合併、HEAD 未變、無未保存工作／活寫入者／保留契約 | 把 checkpoint、draft 或 PR 開啟當可刪來源 |
 | 發版 | `/commit` Step 6 | 獨立授權與獨立證據 | 由 checkpoint、draft、PR ready 或 merge 自動觸發 |
 
+**切片可見性 draft 不需要 Charles 授權**（Charles 2026-10-28 /my Q11=A）：session branch 有非空 committed diff、pre-push 已過，owner 就直接 `git push` ＋ `gh pr create --draft`；**NEVER** 為此停下來問 Charles、開 `flow ask` 或回 `--complete blocked`。本表要 Charles 授權的只有「發版」列（與 production 資料寫入）。
+
 同一獨立可接受目的對應一個**進 `main` 的** PR。緊密相依工作可明確合批；不要為湊數拆碎單一需求。`pr-merge-based` 的 auto 門檻是 1 件；`trunk-based` 仍是 4 件。
 
 **上限數的是進 `main` 的 PR，不是切片。** 預設最多 3 張 base 為 `main` 的 active implementation；ready backlog 達 3 張時優先交付。一條 `integration/<work-id>` 連同它底下**每一個**切片合計只算 1 張。
@@ -46,7 +48,7 @@ paths:
 
 | 層 | 事件 | 門檻 | test-lane |
 | --- | --- | --- | --- |
-| 切片 → `integration/<work-id>` | slice owner 開 PR（`--base integration/<work-id>`），完成後轉 ready；coordinator 以 `node scripts/integration-merge.ts --integration <worktree> --slice <branch> --pr <n>` 由 GitHub squash 落地，一個切片一個 commit | 來源 worktree 內跑 canonical check ＋ repo 在 CI 機械檢查裡跑的 typecheck（clade：`pnpm exec vp check` ＋ `node node_modules/typescript-native/bin/tsc -p tsconfig.clade.json --noEmit`，動到 `vendor/scripts` 再加 `node node_modules/typescript-native/bin/tsc -p tsconfig.vendor.json --noEmit`）；該 PR 的 CI 機械檢查全綠（工具會驗） | 不跑 |
+| 切片 → `integration/<work-id>` | slice owner 開 PR（`--base integration/<work-id>`），完成後轉 ready；coordinator 以 `node scripts/integration-merge.ts --integration <worktree> --slice <branch> --pr <n>` 由 GitHub squash 落地，一個切片一個 commit | 來源 worktree 內跑 canonical check ＋ repo 在 CI 機械檢查裡跑的 typecheck（clade：`pnpm exec vp check` ＋ `node node_modules/tsrs/bin/tsrs -p tsconfig.clade.json --noEmit`，動到 `vendor/scripts` 再加 `node node_modules/tsrs/bin/tsrs -p tsconfig.vendor.json --noEmit`）；該 PR 的 CI 機械檢查全綠（工具會驗） | 不跑 |
 | `integration/<work-id>` 每次 push | 每個切片 PR 落地就是一次 push；同 ref 的舊 run 由 workflow `concurrency` 取消。它那張對 `main` 的 PR 此時是 draft，不跑 test-lane | 無——非阻塞的滾動訊號 | `affected`（base＝這條 branch 上一次綠燈的 push——被 `concurrency` 取消的那幾趟因此一併涵蓋；shard 依選檔比例 1–6）；紅燈的嫌疑範圍＝上一次綠燈之後併入的切片 |
 | `integration/<work-id>` → `main` | 同一張 PR 轉 ready，走 `batch ready`／seal／`confirm-merged` | 轉 ready **之前** coordinator 在 integration worktree 跑一次 `test:affected`（base＝`origin/main`，經 heavy gate slot），綠了才 `gh pr ready`；之後是完整品質鏈 | 本 PR 的 `affected`（升全量時 full lane 六 shard），在這張 PR 上跑；整件工作只付這一次 |
 
@@ -97,8 +99,8 @@ PR 只付 affected，`main` 上的紅會比以前多一種來源：affected 沒�
 
 | 可觀察 predicate | MUST |
 | --- | --- |
-| `main` 最新一趟非取消的 validate push run 紅，或 nightly issue 開著 | coordinator **當輪**處置，二擇一：派修（brief 帶紅檔與嫌疑 PR，修補 PR body 帶 `Fixes-Main: true`）或 `git revert` 嫌疑 PR 的 squash commit。嫌疑範圍＝上一次綠燈的 push（nightly 則是上一趟綠燈 nightly）之後落地的 PR |
-| `main` 紅期間 | merge-queue 的 main 紅凍結生效：只合 `Fixes-Main: true` 的 PR。凍結以「main tip 那個 commit 的 run 紅」判，不看 run 多老——紅 run 留在 tip 上就一直凍，不會過了 24 小時自己解凍讓一般 PR 疊上紅 `main`；tip 的新 push run 還沒跑完時，沿用最近一個 settled run 的結論——最後已知紅就照凍，不會趁空檔放行；但只採信 7 天內、而且 head 還在 main 近 50 commit 鏈上的 run（API 偶爾回舊頁），撿不到這種 run 才判不出、不擋（24 小時截止只是讀不到 tip 時的退路）。所以凍結不會替你收尾，**NEVER** 讓 `main` 紅著過夜等下一輪 |
+| `main` 最新一趟非取消的 validate push run 紅，或 nightly issue 開著 | coordinator **當輪**處置，二擇一：派修（brief 帶紅檔與嫌疑 PR，修補 PR body 帶 `Fixes-Main: true` 或嫌疑 commit sha）或 `git revert` 嫌疑 PR 的 squash commit。嫌疑範圍＝上一次綠燈的 push（nightly 則是上一趟綠燈 nightly）之後落地的 PR |
+| `main` 紅期間 | merge-queue 的 main 紅凍結生效：只合 `Fixes-Main: true`（或嫌疑 commit sha）的 PR。凍結以「main tip 那個 commit 的 run 紅」判，不看 run 多老——紅 run 留在 tip 上就一直凍，不會過了 24 小時自己解凍讓一般 PR 疊上紅 `main`；tip 的新 push run 還沒跑完時，沿用最近一個 settled run 的結論——最後已知紅就照凍，不會趁空檔放行；但只採信 7 天內、而且 head 還在 main 近 50 commit 鏈上的 run（API 偶爾回舊頁），撿不到這種 run 才判不出、不擋（24 小時截止只是讀不到 tip 時的退路）。所以凍結不會替你收尾，**NEVER** 讓 `main` 紅著過夜等下一輪 |
 
 ### Ready 之後的 push 紀律
 
@@ -123,7 +125,7 @@ ready PR 上的 CI 不是試錯環境（「push 上去讓 CI 跑一下看看」�
 1. 來源 `git status` 乾淨（相對於要推的 commits）。
 2. `gh pr view <session-branch> --json number,isDraft,headRefName`（branch 是位置參數；查無 PR 時非 0 退出）：已有 PR 就沿用該號，不要再開一張。
 3. 沒有遠端物件時**只** `git push -u origin <session-branch>`。不得 `git push origin main`——slice owner、worker、coordinator 皆同；唯一具名例外見 § 遠端強制與本機契約 的「登記簿同步」。
-4. 沒有 PR 時 `gh pr create --draft --base main --head <session-branch>`，body **MUST** 帶 `Work: <work-id>` 與 `Owner: <dispatch_id | session:<claude_session_id> | bot:<job>>` 兩行（沒有 `Work:` 行會被 PreToolUse hook 擋下；coordinator 分診靠它派修補）。（integration 模式下的切片 base 是 `integration/<work-id>`、不登記 receipt、由 coordinator 以 `--pr` 落地，見 § Integration branch MUST 6。）
+4. 沒有 PR 時 `gh pr create --draft --base main --head <session-branch>`，body **MUST** 帶 `Work: <work-id>` 與 `Owner: <dispatch_id | session:<claude_session_id> | bot:<job>>` 兩行（沒有 `Work:` 行會被 PreToolUse hook 擋下；coordinator 分診靠它派修補）。同一 hook 接著判：同 `Work:` 已有別條 branch 的 open PR → 擋，改推那張分支（主持者刻意平行拆的加 `Parallel-to: #<N>`；base 或 head 是 `integration/<work-id>` 的 PR 不參與去重）；大小量的是 `--head` 相對 `--base`；clade 扣投影後 >1000 行或 >50 檔 → 擋，拆分或加 `Mechanical: <產生方式>`。（integration 模式下的切片 base 是 `integration/<work-id>`、不登記 receipt、由 coordinator 以 `--pr` 落地，見 § Integration branch MUST 6。）
 5. `gh pr view <session-branch> --json number,isDraft,headRefName`：`isDraft` 為 true、head 就是該 session branch。不要省略 branch。
 6. 立刻盯**該 PR head SHA** 的 CI（`/gh-ci-watch`）。
 7. CI 紅燈：同一 owner、同一張 PR 上修再 push；不要為同一切片開第二張 PR。
@@ -186,7 +188,7 @@ Draft 維持 draft 直到 review。slice **worker NEVER merge**、**NEVER** `gh 
 | `部署窗口：例行（<consumer 宣告的時段>）` | 在例行窗口內部署 |
 | `部署窗口：緊急例外（<Urgent 標記原文>）` | 該工作帶有效緊急標記，要在例行窗口外部署 |
 
-**緊急例外（Charles 2026-09-28 Q6=A）。** 帶有效緊急標記（`<YYYY-MM-DD> <charles|coordinator>【<語義名稱>】：「<出處逐字>」`，即 `flow open --urgent`、TD `**Urgent**:`、PR `Urgent:` 的同一格式）的工作，production 部署可以在例行窗口外進行。例外只免「等窗口」這一段等待，下面三件對緊急件逐字照舊：
+**緊急例外（Charles 2026-09-28 Q6=A）。** 帶有效緊急標記（`<YYYY-MM-DD> <charles|coordinator>【<語義名稱>】：「<出處逐字>」`，即 `flow work open --urgent`、TD `**Urgent**:`、PR `Urgent:` 的同一格式）的工作，production 部署可以在例行窗口外進行。例外只免「等窗口」這一段等待，下面三件對緊急件逐字照舊：
 
 1. 發版仍是獨立授權（上方事件表「發版」列）；**每一次** production 資料寫入仍逐次取得 Charles 明確授權，並照授權附帶的條件（維護時段、備份）執行。
 2. tag push 或任何觸發 production 的動作之前，列出 `<上一個 tag>..main` 的**每一支** migration，逐支對到 0-A finalize 證據；缺的先補審，**NEVER** 以「PR 已合入」代替。
@@ -229,7 +231,7 @@ timer 的處置表：
 | consumer 的 origin 是 public repo（或 visibility 判不出） | rescue ref 留在本機、不 push 不 reset——未審 commit 一推上公開 origin 就是對外發佈，且 `refs/rescue/*` 沒有清理機制。回報到 SessionStart 需人工：先審內容，該進 PR 的走 PR |
 | rescue ref 推不上 origin | 不 reset（也不丟內容），回報到 SessionStart；下一輪重試 |
 | 本機有 origin 沒有的 commit但 working tree dirty／已 stage（`refused`） | 不動——reset 會吃掉未 commit 的內容（純 clade 投影殘留例外，見下一列）。回報到 SessionStart |
-| 本機 main dirty（`refused`），且**同時**成立：每個 dirty／untracked 路徑都是該 consumer 的 clade-managed 投影檔（`isLockedProjectionPathFor`，非路徑前綴推論）、沒有活程序的 cwd 在該 checkout 內、這些檔最新 mtime 超過 6 小時 | **wip rescue＋對齊**（`wip-rescued`）：把改動存成本機 ref `refs/rescue/dirty-<YYYY-MM-DD>-<短sha>`（暫存 index＋`commit-tree`＋`update-ref`，不動 HEAD／index；撞名加後綴、NEVER 覆寫；**NEVER push**——untracked 檔可能含機密，且它不是 branch，`git push --all` 碰不到，也 NEVER 對 `refs/rescue/dirty-*` 下 glob push），逐檔比對一致才還原這些路徑，再走上面「只落後」（或 rescue＋reset）那格。部分暫存、unmerged、任何一條不成立 → 照舊 `refused`。通知留在 `last.json` 的 `attention`（ref 還在、3 天內）供 SessionStart 顯示；確認沒要留的內容後 `git update-ref -d <ref>` |
+| 本機 main dirty（`refused`），且**同時**成立：每個 dirty／untracked 路徑都是該 consumer 的 clade-managed 投影檔（`isLockedProjectionPathFor`，非路徑前綴推論）、沒有活程序的 cwd 在該 checkout 內、這些檔最新 mtime 超過 6 小時（已刪除的路徑沒有 mtime，子目錄內的改以落檔的首次觀察時間起算、根層的（如 `CLAUDE.md`）不計入年齡：`~/.local/state/clade/main-align/wip-first-seen.json`，`CLADE_MAIN_ALIGN_STATE_DIR` 可改；fetch 失敗或 `skipped` 的輪次不重置，其餘輪次依當下仍刪除的路徑修剪） | **wip rescue＋對齊**（`wip-rescued`）：把改動存成本機 ref `refs/rescue/dirty-<YYYY-MM-DD>-<短sha>`（暫存 index＋`commit-tree`＋`update-ref`，不動 HEAD／index；撞名加後綴、NEVER 覆寫；**NEVER push**——untracked 檔可能含機密，且它不是 branch，`git push --all` 碰不到，也 NEVER 對 `refs/rescue/dirty-*` 下 glob push），逐檔比對一致才還原這些路徑，再走上面「只落後」（或 rescue＋reset）那格。部分暫存、unmerged、任何一條不成立 → 照舊 `refused`。通知留在 `last.json` 的 `attention`（ref 還在、3 天內）供 SessionStart 顯示；確認沒要留的內容後 `git update-ref -d <ref>` |
 | clade home | `main-sync --apply`（登記簿同步，見上方 § 遠端強制與本機契約） |
 | merge／rebase 進行中、`main` 在別棵 worktree checkout、publish／propagate 在跑（`skipped`） | 不動，下一輪再試；只記在 `last.json`，不回報 |
 
@@ -244,8 +246,16 @@ timer 的處置表：
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | timer 判定 `unpushed`／`diverged`（rescue 未成；propagate 升版 commit 過 3 天才算）／`refused`／`error` → 寫入 `~/.local/state/clade/main-align/last.json` 的 `attention`，SessionStart 印出（consumer 內只印自己，clade home 印全部）。**不 block** |
-| 消費端 | SessionStart 的 `vendor/scripts/worktree-freshness.ts session-start`；timer 本身的健康由 `node scripts/dev-node.ts doctor --all` 的 `main-align timer`／`main-align last run` 兩步驗 |
+| 消費端 | SessionStart 的 `vendor/scripts/worktree-freshness.ts session-start`；主持者巡檢（`coordinator-snapshot` 的【main-align】段與 `main-align` 待處置列）；timer 本身的健康由 `node scripts/dev-node.ts doctor --all` 的 `main-align timer`／`main-align last run` 兩步驗 |
 | 觸發點 | 本節（consumer 端投影為 `.claude/rules/github-flow.md`） |
+
+**有人接（超時升級）。** timer 每輪把未解 repo 的連續起點與 dirty 清單寫進 `last.json` 的 `attention_tracking`（一次成功對齊就清；整輪跳過沿用上一輪）。同一 consumer 持續 ≥2 小時進主持者巡檢（依 consumer 去重，附 dirty 清單、落後數、處置指令），≥24 小時再於 Charles 待拍板佇列鑄一題（`flow ask`，同一次卡住只一題）；常數與判定在 `vendor/scripts/lib/main-align-attention.ts`。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | `attention_tracking` 的項目持續 ≥2 小時（巡檢）、≥24 小時（Charles 佇列）；`last.json` 超過 2 小時沒更新不信 |
+| 消費端 | 主持者 `coordinator-snapshot.ts` 的【main-align】摘要段、`pending_actions` 的 `main-align` 列；watch 輪鑄的 Charles 題 |
+| 觸發點 | ③ script 輸出：巡檢摘要與待處置列直接印處置指令（對應上方處置表） |
 
 ## 合併後分支回收
 

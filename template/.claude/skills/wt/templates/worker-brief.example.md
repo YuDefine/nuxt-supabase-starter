@@ -44,4 +44,4 @@ herdr-session-handoff.ts 的 usage 字串補上 `--table-row <row>`：parser 已
 
 - `node vendor/scripts/herdr-session-handoff.ts --help` 的輸出含 `[--table-row <row>]`，位置緊接在 `--tier-basis` 之後
 - `test/herdr-session-handoff.test.ts` 有一條斷言 usage 含 `--table-row <row>`，且該測試先紅後綠
-- 驗證指令：`pnpm exec vp check && node node_modules/typescript-native/bin/tsc -p tsconfig.vendor.json --noEmit`
+- 驗證指令：`pnpm exec vp check && node node_modules/tsrs/bin/tsrs -p tsconfig.vendor.json --noEmit`

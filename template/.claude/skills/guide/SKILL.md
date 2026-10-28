@@ -2,7 +2,8 @@
 name: guide
 description: >-
   Hub skill 地圖：本 repo 實際裝到的 skill 的使用場景、邊界與銜接流程（router，零 context 成本；依 consumer
-  manifest 的 modules 分層）。
+  manifest 的 modules 分層）。NOT for 單一 skill 的操作細節（直接叫用該 skill）、NOT for
+  判斷一件專案工作該怎麼開（用 work-route）。
 metadata:
   author: clade
   version: '1.0'

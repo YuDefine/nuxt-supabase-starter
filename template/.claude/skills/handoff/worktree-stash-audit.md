@@ -17,30 +17,33 @@ stash audit 的寫入欄位。**`park` / `next` 都會走到 Step 3**，本檔�
 
 並由 3 條 signal 推導 `mergeBackSafety`（判讀與處置仍照下表）：
 
-| 條件 | mergeBackSafety | 對應動作 |
-| --- | --- | --- |
-| `blockers == 0` + `uncommitted == 0` | `landable` | 檢查驗收證據、授權與寫入權，再登記就緒 |
-| `blockers > 0` 或 `uncommitted > 0`，且 `baselineRef` 存在 | `ptb-recoverable` | 先保存／處理 WIP，再判就緒；pinned ref 僅提供救援 |
-| `blockers > 0` 或 `uncommitted ≥ 100`，且 `baselineRef` 不存在 | `ptb-unsafe` | **禁止 dispatch merge-back／收尾**；走 Step 2B.4.5 PTB-unsafe 快速分流 |
-| 表未覆蓋區（`blockers == 0`、`uncommitted` 1–99、無 `baselineRef`） | `unclassified`（check 標 `n/a` needs-judgment） | LLM 看 `raw.worktrees[]` 的 signal 自行判讀（小量 WIP 先驗收並 scoped checkpoint，再判就緒） |
+評估：first-match；以上皆非 → M*
+| id | 條件 | mergeBackSafety | 對應動作 |
+| --- | --- | --- | --- |
+| M1 | `blockers == 0` + `uncommitted == 0` | `landable` | 檢查驗收證據、授權與寫入權，再登記就緒 |
+| M2 | `blockers > 0` 或 `uncommitted > 0`，且 `baselineRef` 存在 | `ptb-recoverable` | 先保存／處理 WIP，再判就緒；pinned ref 僅提供救援 |
+| M3 | `blockers > 0` 或 `uncommitted ≥ 100`，且 `baselineRef` 不存在 | `ptb-unsafe` | **禁止 dispatch merge-back／收尾**；走 Step 2B.4.5 PTB-unsafe 快速分流 |
+| M* | 表未覆蓋區（`blockers == 0`、`uncommitted` 1–99、無 `baselineRef`） | `unclassified`（check 標 `n/a` needs-judgment） | LLM 看 `raw.worktrees[]` 的 signal 自行判讀（小量 WIP 先驗收並 scoped checkpoint，再判就緒） |
 
 #### 3.1b Kind 判定表（與 mergeBackSafety 正交）
 
 **`mergedToMain` 為真不足以推出可 cleanup。** branch 已 land 但 working tree 還留著後續 WIP 是常見形狀（land 完一批後在同一個 worktree 繼續做下一批），而 `wt-helper cleanup` 對未 commit 內容**無 pinned ref 保護**——照 `cleanup` 建議做就是永久遺失。script 因此對每條 wt 都算 `userWip`（`git status --porcelain` 扣掉 clade-managed 投影層，filter 走 `locked-projection.ts` 共用 SoT），`userWip > 0` 時 kind 降級。
 
-| 條件 | kind | 下一步建議 |
-| --- | --- | --- |
-| `mergedToMain: true` + `userWip: 0` | `merged` | `cleanup` — `node vendor/scripts/wt-helper.ts cleanup <slug>` |
-| `mergedToMain: true` + `userWip > 0` | `merged-with-wip` | `verify-then-cleanup` — **NEVER 直接 cleanup**。先走 [[wip-orphan-recovery]] 的 SOP（git status 攤平 → 半成品痕跡掃描 → 完成度硬驗 → git log 脈絡 → 危險項識別 → 收尾分流），確認 WIP 去留後才 cleanup |
-| `mergedToMain: false` + 該 work 的 flow 卡已 `done` | `done-work` | `verify-then-cleanup` — 工作已收尾但 branch 未 merged-into-main，先 `git log -1 <branch>` 檢視 commits 是否已含在 squash；若是 → `wt-helper cleanup <slug>` |
-| `mergedToMain: false` + `aheadCount > 0` + `contentLanded: 'no' \| 'unknown'` | `unlanded` | `merge-back-or-resume` — branch 有未進 main 的 commit，`git log --oneline main..<branch>` 檢視後決定 merge-back 或續做 |
-| 同上 + `contentLanded: 'yes'` | `unlanded-content-landed` | `verify-then-cleanup` — ancestry 說未 land，但候選 commit 的**內容已 100% 在 main**（squash-merge 的常態）。**NEVER 對它跑 merge-back** |
-| 同上 + `contentLanded: 'partial'` | `unlanded-partial` | `merge-back-or-resume` — 一部分內容已在 main。**MUST 逐檔人工比對，NEVER 整包 merge-back** —— 已落地那半在 main 上可能更新，整包套會覆蓋掉它 |
-| `mergedToMain: false` + `aheadCount === 0` + `userWip > 0` | `orphan-with-wip` | `verify-then-cleanup` — 沒有 commit 會遺失，但未 commit 檔會。**MUST** 先走 [[wip-orphan-recovery]] SOP |
-| `mergedToMain: false` + `aheadCount === 0` + `userWip === 0` | `orphan` | `cleanup` — 0 ahead + 0 WIP，無 commit 可遺失（可證，非啟發式） |
-| `mergedToMain: false` + `aheadCount` 取不到 | `unlanded-unknown` | `verify-then-cleanup` — 取值失敗，**NEVER** 當成空 branch；先手動 `git log --oneline main..<branch>` 確認 |
-| 任一條件 + `hasActiveClaim: true` + `userWip > 0` | `active-session-wip` | `keep` — 有活著的 session claim，未 commit 內容屬該 session。**NEVER** 當 orphan 接手，per [[wip-orphan-recovery]] 禁止事項第一條；原判定留在 `underlyingKind` |
-| 任一條件 + `hasActiveClaim: true` + `userWip === 0` | `active-session-claimed` | `keep` — 有活著的 session claim，此刻剛好 0 檔未 commit。**`userWip` 是瞬時值，NEVER 讀成「這條 worktree 沒有主人」**；原判定留在 `underlyingKind` |
+評估：first-match；以上皆非 → K*（`kind` 由 script 印出，這裡只做 kind → 動作對照）
+| id | 條件 | kind | 下一步建議 |
+| --- | --- | --- | --- |
+| K1 | 任一條件 + `hasActiveClaim: true` + `userWip > 0` | `active-session-wip` | `keep` — 有活著的 session claim，未 commit 內容屬該 session。**NEVER** 當 orphan 接手，per [[wip-orphan-recovery]] § 禁止事項「NEVER 對 active-claim 的 dirty worktree 當 orphan 處理」；原判定留在 `underlyingKind` |
+| K2 | 任一條件 + `hasActiveClaim: true` + `userWip === 0` | `active-session-claimed` | `keep` — 有活著的 session claim，此刻剛好 0 檔未 commit。**`userWip` 是瞬時值，NEVER 讀成「這條 worktree 沒有主人」**；原判定留在 `underlyingKind` |
+| K3 | `mergedToMain: true` + `userWip: 0` | `merged` | `cleanup` — `node vendor/scripts/wt-helper.ts cleanup <slug>` |
+| K4 | `mergedToMain: true` + `userWip > 0` | `merged-with-wip` | `verify-then-cleanup` — **NEVER 直接 cleanup**。先走 [[wip-orphan-recovery]] 的 SOP（git status 攤平 → 半成品痕跡掃描 → 完成度硬驗 → git log 脈絡 → 危險項識別 → 收尾分流），確認 WIP 去留後才 cleanup |
+| K5 | `mergedToMain: false` + 該 work 的 flow 卡已 `done` | `done-work` | `verify-then-cleanup` — 工作已收尾但 branch 未 merged-into-main，先 `git log -1 <branch>` 檢視 commits 是否已含在 squash；若是 → `wt-helper cleanup <slug>` |
+| K6 | `mergedToMain: false` + `aheadCount > 0` + `contentLanded: 'yes'` | `unlanded-content-landed` | `verify-then-cleanup` — ancestry 說未 land，但候選 commit 的**內容已 100% 在 main**（squash-merge 的常態）。**NEVER 對它跑 merge-back** |
+| K7 | `mergedToMain: false` + `aheadCount > 0` + `contentLanded: 'partial'` | `unlanded-partial` | `merge-back-or-resume` — 一部分內容已在 main。**MUST 逐檔人工比對，NEVER 整包 merge-back** —— 已落地那半在 main 上可能更新，整包套會覆蓋掉它 |
+| K8 | `mergedToMain: false` + `aheadCount > 0` + `contentLanded: 'no' \| 'unknown'` | `unlanded` | `merge-back-or-resume` — branch 有未進 main 的 commit，`git log --oneline main..<branch>` 檢視後決定 merge-back 或續做 |
+| K9 | `mergedToMain: false` + `aheadCount === 0` + `userWip > 0` | `orphan-with-wip` | `verify-then-cleanup` — 沒有 commit 會遺失，但未 commit 檔會。**MUST** 先走 [[wip-orphan-recovery]] SOP |
+| K10 | `mergedToMain: false` + `aheadCount === 0` + `userWip === 0` | `orphan` | `cleanup` — 0 ahead + 0 WIP，無 commit 可遺失（可證，非啟發式） |
+| K11 | `mergedToMain: false` + `aheadCount` 取不到 | `unlanded-unknown` | `verify-then-cleanup` — 取值失敗，**NEVER** 當成空 branch；先手動 `git log --oneline main..<branch>` 確認 |
+| K* | 以上皆非 | — | STOP，回報 script 原始輸出，NEVER 猜 kind |
 
 **`aheadCount` 是 ancestry，NEVER 單獨拿它當「這條 wt 有沒有工作」的答案。** fleet 大半是
 squash-merge repo，那裡的 branch 在內容進 main 之後 `main..<branch>` 仍恆 > 0 —— 只憑 ancestry
@@ -63,9 +66,9 @@ branch 的舊版覆蓋 main 上已經更新過的內容。`unknown`（取不到 
 用一個雜訊換走一個人的十分鐘。高端是 0.98：門檻不對稱地貼近兩端，寧可把「幾乎全落地」丟進
 `partial`，**NEVER** 反過來把 `partial` 讀成 `yes`。
 
-**沒有 flow 卡的 worktree（早於 spine 上線、或開樹時未帶 `--origin`）：上表 `active-*` 與 `done-work` 三列不適用** —— 那三列的判準是該 slug 在 flow spine 上的卡片狀態，查不到卡時恆為 false。這不是判定漏了，是 `aheadCount` 那四列接手。**NEVER** 把這四種狀態塌縮成 `orphan`：`orphan` 讀起來是「沒人要的殘骸」，實際可能是別 session 正在做的活躍工作。
+**沒有 flow 卡的 worktree（早於 spine 上線、或開樹時未帶 `--origin`）：K 表的 K1／K2（`active-*`）與 K5（`done-work`）不適用** —— 這三列的判準是該 slug 在 flow spine 上的卡片狀態，查不到卡時恆為 false。這不是判定漏了，是 `aheadCount` 的 K6／K7／K8／K11 接手。**NEVER** 把這四種狀態塌縮成 `orphan`：`orphan` 讀起來是「沒人要的殘骸」，實際可能是別 session 正在做的活躍工作。
 
-**claim 覆寫優先於上表全部 9 列，且不與 `userWip` 合取（TD-629）。** 兩個量測的時間語意不同：claim 有 TTL、描述一**段區間**；`userWip` 是 scan 那一刻的**瞬時**值。用瞬間去 gate 區間，live session 剛好在兩次寫入之間被掃到就落進 `mergedToMain: true` + `userWip: 0` 那列，拿到 `merged` / `cleanup` —— 對一個正被使用的 worktree 建議**永久刪除**。**audit 段的文字本身零保護 —— 人會照它拍板。**
+**claim 覆寫（K1／K2）排在 K 表最前、優先於其餘各列，且不與 `userWip` 合取（TD-629）。** 兩個量測的時間語意不同：claim 有 TTL、描述一**段區間**；`userWip` 是 scan 那一刻的**瞬時**值。用瞬間去 gate 區間，live session 剛好在兩次寫入之間被掃到就落進 `mergedToMain: true` + `userWip: 0` 那列，拿到 `merged` / `cleanup` —— 對一個正被使用的 worktree 建議**永久刪除**。**audit 段的文字本身零保護 —— 人會照它拍板。**
 
 `underlyingKind` 照 TD-412 的約定不丟：claim 說的是「現在別碰」，不是「這條 branch 沒有未 land 的工作」，兩件事都要留給讀者。**NEVER** 把修法寫成「多量一次 `userWip` 取聯集」—— 那只把窗口縮小，區間內任一安靜點一樣漏。
 
@@ -101,14 +104,15 @@ git worktree list | grep "<slug>"      # 放行②：對應 worktree 已消失�
 
 分流：
 
-| 判定 | 動作 |
-| --- | --- |
-| 兩條機械放行全中、否決零命中 | **MUST drop**：`git stash drop "<ref>"`。**NEVER** 再 append `docs/archives/stash-dropped.md`（該檔已停寫，不發明新的墓碑格式）；drop 當下 git 物件仍可從 reflog 取回直到過期 |
-| 任一否決命中 | 不 drop，寫進 audit 段並註明**踩到哪一條否決判準** |
-| 判準跑不出明確結論 | 不 drop，寫進 audit 段標 `needs-judgment` + 寫出卡在哪 |
+評估：first-match；以上皆非 → S*
+| id | 判定 | 動作 |
+| --- | --- | --- |
+| S1 | 兩條機械放行全中、否決零命中 | **MUST drop**：`git stash drop "<ref>"`。**NEVER** 再 append `docs/archives/stash-dropped.md`（該檔已停寫，不發明新的墓碑格式）；drop 當下 git 物件仍可從 reflog 取回直到過期 |
+| S2 | 任一否決命中 | 不 drop，寫進 audit 段並註明**踩到哪一條否決判準** |
+| S* | 判準跑不出明確結論 | 不 drop，寫進 audit 段標 `needs-judgment` + 寫出卡在哪 |
 
 ⚠️ **drop 會使後面的 `stash@{N}` index 位移**。**MUST 由高到低 drop**（先 `stash@{5}` 再 `stash@{3}`），
 或每次 drop 後重新解析 ref，**NEVER** 拿一份跑之前算好的 index 清單依序刪 —— 那會刪錯條目。
 
-audit 段的 stash 子節 **MUST** 記本輪 drop 了幾條。**NEVER** 把停寫 `stash-dropped.md` 讀成授權對共享 stash 做 `git stash drop` 或 `reset --hard` 以外的處置——drop 仍只走上面三條機械放行。
+audit 段的 stash 子節 **MUST** 記本輪 drop 了幾條。**NEVER** 把停寫 `stash-dropped.md` 讀成授權對共享 stash 做 `git stash drop` 或 `reset --hard` 以外的處置——drop 仍只走 S1 的機械放行。
 

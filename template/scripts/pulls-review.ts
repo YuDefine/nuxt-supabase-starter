@@ -21,7 +21,7 @@
  *   provider（AI Gateway／Anthropic／OpenAI-compatible）時，分析不經過 shim，用哪個 model、算誰的
  *   額度或帳單都不受本 script 控制；啟動時只印一行提醒。
  * - 清掉 gateway／計費 env：gateway 會把 `opus` 映射成別家 model，`ANTHROPIC_API_KEY` 會把分析
- *   改成按量計費。清的是 `cc`／`ccw` launcher 清的同一組。
+ *   改成按量計費。清的是 `cc`／`ccN` launcher 清的同一組。
  *
  * 本 script 只啟動 server；AI 分析要人在頁面上按才會跑。NEVER 從 hook、gate、batch 呼叫它。
  *
@@ -155,7 +155,7 @@ export function rewriteClaudeArgs(argv: string[], model: string): string[] {
   return rest.includes('-p') || rest.includes('--print') ? ['--model', model, ...rest] : rest
 }
 
-/** `cc`／`ccw` launcher 清的同一組：gateway 路由、gateway 的 model 映射、按量計費的 key。 */
+/** `cc`／`ccN` launcher 清的同一組：gateway 路由、gateway 的 model 映射、按量計費的 key。 */
 export const STRIPPED_ENV = [
   'ANTHROPIC_BASE_URL',
   'ANTHROPIC_AUTH_TOKEN',
