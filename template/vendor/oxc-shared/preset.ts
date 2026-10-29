@@ -322,7 +322,7 @@ export function isProjectionPath(file: string): boolean {
 export const STAGED_ONLY_EXCLUDES = ['scripts/**', 'AGENTS.md']
 
 /**
- * consumer `scripts/` 底下由 clade 投影的 LOCKED 檔，給 `fmtBase.ignorePatterns` 用。
+ * consumer `scripts/` 底下由 clade 投影的 LOCKED 檔，給 `fmtBase.ignorePatterns` 與 `lintBase.ignorePatterns` 用。
  *
  * 投影落在 consumer 自家的 `scripts/`，被 consumer **自己那一版** oxfmt 檢查。oxfmt 跨版本
  * 對同一段源碼的要求互斥（空 `for` 條件：vite-plus 0.2 要 `; ; )`、1.0 rc 要 `; ;)`），
@@ -559,6 +559,10 @@ export const lintBase = {
     '*.d.ts',
     // `.claude/` `.clade/` `.agents/` `.codex/` `.cursor/` 全部由 PROJECTION_EXCLUDES 帶入。
     ...PROJECTION_EXCLUDES,
+    // consumer `scripts/` 底下的 LOCKED 投影（如 `scripts/prod-sql.ts`）：lint 規則由 clade 負責，
+    // consumer 的 oxlint 版本／規則與 clade 不同時 `vp lint` 會對投影報紅，consumer 端沒人能修。
+    // 與 fmtBase 同一份判定，見 `lockedScriptProjections` 的註解。
+    ...lockedScriptProjections(),
   ],
   // 上方 JSDoc @type 對 .ts 不生效、oxlint 又不是直接 dep（無法 import type），
   // 所以 overrides 在這裡顯式宣告型別，consumer 才能 `...(lintBase.overrides ?? [])` 往後接。

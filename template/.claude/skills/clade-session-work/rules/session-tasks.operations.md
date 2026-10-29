@@ -187,14 +187,14 @@ slug 的重述，那正是這條規約要修的東西（一個不指涉任何東
 
 對自己 tasks 檔的每個未完項做選擇。
 
-**lifecycle repo**：每個未完項依 [[follow-up-register]] § 直接登記 落進 plan——下一 session 要接手、等待外部條件、未來才做，都寫進所屬 work 的 `## Open work`；不屬於任何進行中 work 的新工作才 `flow plan open`。下一 session 要立刻接手的，`HANDOFF.md` 另留一行 W- 指標（[[handoff]] § Lifecycle repo）。純放棄就刪檔。**NEVER** 新增 `docs/tech-debt.md` 條目、`ROADMAP.md` 條目或 `HANDOFF.md` 的 `- [ ]`。
+**lifecycle repo**：每個未完項依 [[follow-up-register]] § 直接登記 落進 plan——所屬 work 不做完就不能結案的寫進它的 `## Open work`；它不做也能結案的後續項（含等待外部條件、未來才做），以及不屬於任何進行中 work 的新工作，開獨立 plan、標級、交派工。下一 session 要立刻接手的，`HANDOFF.md` 另留一行 W- 指標（[[handoff]] § Lifecycle repo）。純放棄就刪檔。**NEVER** 新增 `docs/tech-debt.md` 條目、`ROADMAP.md` 條目或 `HANDOFF.md` 的 `- [ ]`。
 
 **未遷移 consumer** 照下表：
 
 | 未完項類型 | 升級到 | 動作 |
 | --- | --- | --- |
 | 下一 session 要立刻接手 | `HANDOFF.md` 的 `## In Progress` | 寫進去（含 work slug、檔案路徑、卡點），符合 `handoff.md` 規約 |
-| 等待外部條件（合約、ramp 日期、第三方 API ready） | plan § Open work（未遷移 consumer：`docs/tech-debt.md` TD-NNN） | 建 register entry，符合 `follow-up-register.md` 規約 |
+| 等待外部條件（合約、ramp 日期、第三方 API ready） | plan，條目帶 `**Blocked-by**: <訊號>`（[[follow-up-register]] § 開獨立 plan；未遷移 consumer：`docs/tech-debt.md` TD-NNN） | 建 register entry，符合 `follow-up-register.md` 規約 |
 | 未來才做、可排優先序 | repo 根目錄 `ROADMAP.md` `## Next Moves` | 加 `- [priority] 描述 — 依賴：xxx` 條目 |
 | 規模膨脹了（要動 spec、design review、跨多檔）或下一 session 仍要接 | 同一 work id 的 plan | `flow plan open`；已有 plan 則續跑，不另開 |
 | 純放棄 | 直接刪檔 | git history 留證 |
@@ -224,7 +224,7 @@ slug 的重述，那正是這條規約要修的東西（一個不指涉任何東
 
 - **`handoff.md`**：未遷移 consumer 的「升級路徑」會把 tasks 檔內未完項升到 `HANDOFF.md`；handoff 規約後續處理跨 session 接手。lifecycle repo 的未完項進 plan，`HANDOFF.md` 只留 W- 指標
 - **`session-claims.md`**：tasks 檔不替代 claim。接手別人留下的工作仍 **MUST** 先 `claim-helper.ts add`（per [[session-claims]] § 3.5）；tasks 檔只是個人工作記憶
-- **`follow-up-register.md`**：tasks 檔內若出現「等待中」「之後再說」性質的項目，升級時要落進 plan Open work（未遷移 consumer：建 TD-NNN entry），不能只留註記在 tasks 檔
+- **`follow-up-register.md`**：tasks 檔內若出現「等待中」「之後再說」性質的項目，升級時依它的 § 直接登記 落進 plan（未遷移 consumer：建 TD-NNN entry），不能只留註記在 tasks 檔
 - **`scope-discipline.md`**：tasks 檔執行中發現範圍外問題，照樣走「不擴散、必登記、不擅改」三原則，登記到對應位置（不是繼續往自己的 tasks 檔塞）
 
 ---

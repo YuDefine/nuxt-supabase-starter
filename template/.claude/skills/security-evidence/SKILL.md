@@ -53,7 +53,7 @@ effort: high
 
 ## Phase 6 -- 依 verdict 登記
 
-1. WRITE 若 finding verdict 為 `accept` 或 `needs more validation`，或 map 有 P0／P1 項目，先讀取 `templates/security-finding-TD.md` 與 `templates/security-finding-TD.example.md`，每項登一條：repo 有 `specs/truth/work-lifecycle.md` 的寫進承載它的 plan Open work，未遷移 consumer 才登 TD（自家 `docs/tech-debt.md`）；`### 自驗` 寫 Proof Gap 的取得方式與修完後對修正檔重跑的 `security-scan.ts path --path <file>` 指令。
+1. WRITE 若 finding verdict 為 `accept` 或 `needs more validation`，或 map 有 P0／P1 項目，先讀取 `templates/security-finding-TD.md` 與 `templates/security-finding-TD.example.md`，每項登一條：repo 有 `specs/truth/work-lifecycle.md` 的照 `rules/core/follow-up-register.md` § 開獨立 plan 開 plan、標級、交派工（map 的 P0／P1 是嚴重度，不是看板等級；agent 至多標 P2，建議拉 P1 的寫進回報），未遷移 consumer 才登 TD（自家 `docs/tech-debt.md`）；`### 自驗` 寫 Proof Gap 的取得方式與修完後對修正檔重跑的 `security-scan.ts path --path <file>` 指令。
 2. WRITE 若 finding verdict 為 `unsupported`，只把結論寫進本次 review 報告，不開 TD、不改 code。
 
 

@@ -56,9 +56,19 @@ ci.yml 綠燈 — https://github.com/YuDefine/clade/actions/runs/36963721337
 - Level: `MUST`
 - `git push` 成功且 repo 含 `.github/workflows/*.yml` 時 MUST 立刻派 watcher；切片 PR 盯該 PR 的 head SHA／branch。
 - `failure` → **同一 owner、同一張 PR** 修，再 push 同一個 head；**NEVER** 另開 PR。
-- `success` → 一行報綠燈＋run URL，然後依 base 分：
-  - base `main`（單切片工作）→ draft 維持 draft，completion 交 coordinator；綠燈 completion 喚醒同一 coordinator 收件並跑 `/commit`，不是請 Charles 代觸發，也 **NEVER** 由 worker 自己 ready／merge。
-  - base `integration/<work-id>` → 本機門檻也已通過時，slice owner 自己 `gh pr ready` 該切片 PR 再交 completion（`integration-merge.ts --pr` 拒收 draft）。
+- `success` → 一行報綠燈＋run URL，然後依 PR base 分流：
+
+評估：first-match；以上皆非 → G*
+| id | PR base | 動作 |
+| --- | --- | --- |
+| G1 | `main`（單切片工作） | draft 維持 draft，completion 交 coordinator [^G1] |
+| G2 | `integration/<work-id>`，且本機門檻已通過 | slice owner 自己 `gh pr ready` 該切片 PR 再交 completion [^G2] |
+| G3 | `integration/<work-id>`，本機門檻未通過 | 不 ready；先補完本機門檻 |
+| G* | 其他 base | STOP，回報 base 值 |
+
+[^G1]: 綠燈 completion 喚醒同一 coordinator 收件並跑 `/commit`，不是請 Charles 代觸發，也 **NEVER** 由 worker 自己 ready／merge。
+[^G2]: `integration-merge.ts --pr` 拒收 draft。
+
 - 兩種 base 的這條 run 都只含機械檢查，綠燈 **NEVER** 讀成測試通過（[[github-flow]] § Draft 不是 ready）。
 - 背景派工的回報格式照 `rules/core/agent-routing.dispatch-execution.md` § Subagent 回報契約。
 

@@ -23,7 +23,7 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 
 | 發現類型 | 登記位置 | 做法 |
 | --- | --- | --- |
-| 技術債 / bug / 邊界情況 | lifecycle repo：所屬 plan 的 § Open work（沒有 plan 就 `flow plan open`）；未遷移 consumer：`docs/tech-debt.md` | lifecycle repo 在 code 裡回指 `plan:<work-id>`；未遷移 consumer 建 `TD-NNN` entry，並在當前 change `tasks.md` 加 `@followup[TD-NNN]`（[[follow-up-register]]） |
+| 技術債 / bug / 邊界情況 | lifecycle repo：依 [[follow-up-register]] § 直接登記（當前 work 不做它也能結案的，開獨立 plan 並標級）；未遷移 consumer：`docs/tech-debt.md` | lifecycle repo 在 code 裡回指 `plan:<work-id>`；未遷移 consumer 建 `TD-NNN` entry，並在當前 change `tasks.md` 加 `@followup[TD-NNN]`（[[follow-up-register]]） |
 | session 尚未完成的 WIP / blocker | lifecycle repo：plan § Open work＋`HANDOFF.md` 一行 W- 指標（[[handoff]] § Lifecycle repo）；未遷移 consumer：`HANDOFF.md` | 留下目前狀態、阻擋原因、下一步 |
 | 未來要做但尚未開工的工作 | lifecycle repo：所屬 plan 的 § Open work，或 `flow plan open`；未遷移 consumer：repo 根目錄 `ROADMAP.md` `## Next Moves` | 以 `high/mid/low` + 依賴關係記錄 |
 | 當前工作本身的 scope 漏項 | 當前 tasks 檔加一條；動到規格時回交 truth owner skill | **NEVER** 就地改 `specs/truth/**` |
@@ -104,7 +104,7 @@ paths: ['tasks/**', 'specs/**', 'ROADMAP.md', 'docs/tech-debt.md', 'docs/decisio
 
 - **A0. 先跟持有者對話**（持有者是**前景 agent session**，且已取得協調授權並有可用通道時 MUST 先走）— 以當前通道送達精確 session：對方是 Claude session 用 `SendMessage`（`ListAgents` 取名稱）；非 Claude runtime 且 Herdr 通道已驗證可用時才用 `herdr agent prompt <對方 pane_id> "<四項>"`，不把它當所有 runtime 都有的 API。四項內容與逐字範本見 [[concurrent-session-probe]] § 探測之後：協商（negotiate）。依對方回覆分流：對方說它正要 land → 先過 [[concurrent-session-probe]] `[0]` 冗餘檢查（`[0]` 在該節，判準表在其後 § 送訊息 MUST 用單引號 heredoc）：這趟輸出會被對方覆蓋就省略這趟，當前 flow 視為中止、剩餘步驟交給對方（`[0]` 逐條列出）並收工，不再進 A／B、不另登記；不會被覆蓋才等它落地再重跑當前 flow；對方說那批無主 → 進 A；對方說它要接手 → 進 B，且登記內文 MUST 寫明接手者是誰。送出後 MUST 指名等到哪一個可觀察事件（對方回覆、或那幾個檔不再 dirty），上限 5 分鐘，逾時升級路徑同該 cookbook。持有者是 **unattended runner**、判不出持有者、缺通道或缺本次協調授權時，A0 不執行，保留具體原因再看 A / B
 - **A. 馬上修，回 flow 繼續** — 在當前 session 直接編輯該 WIP 檔，原 flow（`/commit` / `/handoff` / 等）繼續走完。前提：A0 已送出且對方不反對（或 A0 不適用），且 user 確認該編輯不會跟別 session 的修改互踩（或別 session 已結束）
-- **B. 登 TD，放棄當前 flow** — 把問題依 [[follow-up-register]] 登記（lifecycle repo：所屬 plan 的 § Open work；未遷移 consumer：`docs/tech-debt.md` 的 TD-NNN），當前 flow **立即中止**（commit 不繼續、archive 不繼續），等別 session 結束後由 user 決定何時處理；已成功 commit 的 group 保留不動
+- **B. 登 TD，放棄當前 flow** — 把問題依 [[follow-up-register]] § 直接登記登記（lifecycle repo：開獨立 plan 並標級；未遷移 consumer：`docs/tech-debt.md` 的 TD-NNN），當前 flow **立即中止**（commit 不繼續、archive 不繼續），等別 session 結束後由 user 決定何時處理；已成功 commit 的 group 保留不動
 
 **A0 的等待終點是單一布林：對方 land 了沒有。** 回覆或詢問持有者時 **NEVER** 帶 commit 顆粒（拆幾筆、哪一筆先 land、哪一批先解誰的阻塞）——下游 publish 帶全部 commit、`/commit` Step 3 自理分組，對顆粒零依賴。判準：對方拿這句話會做出不同的動作嗎？不會就刪。
 

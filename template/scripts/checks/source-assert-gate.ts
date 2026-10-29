@@ -22,7 +22,8 @@
 // 空 → block（不是靜默放行）。marker 數由 scripts/audit-source-assert-markers.ts 計數。
 //
 // `--report [--root <dir>]`：唯讀，列出整個 repo 現況（tracked 測試檔）的 P／混合型分布，
-// 用來對帳或估存量，不做 gate 判定，永遠 exit 0。
+// 用來對帳或估存量，不做 gate 判定，永遠 exit 0。stdout 只有 P／混合型的列；掃描檔數在 stderr
+// 一行 `scanned N test files`（讀不到的 tracked 檔另有 `skipped M …` 一行）。
 //
 // 由 ~/clade vendor/scripts/checks/ 散播，請勿直接編輯 consumer 副本。
 
@@ -252,17 +253,29 @@ interface ReportRow {
   marker: string | null
 }
 
-export function report(root: string): ReportRow[] {
+export interface ReportResult {
+  rows: ReportRow[]
+  /** 讀得到並跑完判定的測試檔數（含判定為非 P 的） */
+  scanned: number
+  /** tracked 但讀不到（工作樹已刪等）而略過的測試檔數 */
+  unreadable: number
+}
+
+export function reportScan(root: string): ReportResult {
   const isIgnored = makeIsIgnored(root)
   const rows: ReportRow[] = []
+  let scanned = 0
+  let unreadable = 0
   for (const path of zList(git(root, ['ls-files', '-z']))) {
     if (!isTestPath(path)) continue
     let src: string
     try {
       src = readFileSync(join(root, path), 'utf8')
     } catch {
+      unreadable++
       continue
     }
+    scanned++
     const c = classify(src, path, { isIgnored })
     if (c.kind === 'none') continue
     const m = parseMarker(src)
@@ -274,7 +287,11 @@ export function report(root: string): ReportRow[] {
       marker: m.status === 'valid' ? m.code : m.status === 'invalid' ? `invalid:${m.detail}` : null,
     })
   }
-  return rows
+  return { rows, scanned, unreadable }
+}
+
+export function report(root: string): ReportRow[] {
+  return reportScan(root).rows
 }
 
 const USAGE = 'usage: source-assert-gate (--staged | --against <ref> | --report) [--root <dir>]'
@@ -304,11 +321,15 @@ export function main(args: string[], io: CliIo): number {
     return 2
   }
   if (args.includes('--report')) {
-    for (const r of report(root)) {
+    const { rows, scanned, unreadable } = reportScan(root)
+    for (const r of rows) {
       io.stdout(
         `${r.kind}\t${r.assertions}\t${r.path}\t${r.targets.join(',')}\t${r.marker ?? ''}\n`,
       )
     }
+    // 掃描檔數走 stderr：stdout 的列格式不變，既有消費端照舊解析（FR-023／SC-006：涵蓋全部測試檔要看得出來）
+    io.stderr(`scanned ${scanned} test files\n`)
+    if (unreadable > 0) io.stderr(`skipped ${unreadable} unreadable tracked test files\n`)
     return 0
   }
   const mode: Mode | null = args.includes('--staged')

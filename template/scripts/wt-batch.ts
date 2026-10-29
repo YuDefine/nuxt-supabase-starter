@@ -2069,6 +2069,12 @@ const QUARANTINE_WATCHER = String.raw`
 const { watch, readdirSync, statSync, lstatSync, appendFileSync, writeFileSync } = require('node:fs')
 const { join } = require('node:path')
 const [root, out, ...extra] = process.argv.slice(1)
+// The profile's rebuildable names (e.g. node_modules) are left out of the
+// archive and every verify walk, so the root subtree skips them too: a pnpm
+// store tree costs tens of thousands of inotify watches and exhausted the
+// per-uid budget, retaining every worktree. Coverage still equals what
+// preservation compares; the entry itself stays visible on its parent's watch.
+const excluded = new Set(JSON.parse(process.env.CLADE_WT_WATCH_EXCLUDE_NAMES || '[]'))
 // stderr is redirected to a file the caller reads: the exit status alone
 // cannot tell a refused inotify/fd quota from any other startup failure.
 const die = (status, why, e) => {
@@ -2126,7 +2132,9 @@ try {
     })
     watched.add(key)
   }
-  const attach = (dir) => {
+  // scoped: inside the worktree root, where excluded names apply. Extra
+  // (Git metadata) roots are never scoped — there such a name is Git content.
+  const attach = (dir, scoped) => {
     let st
     try {
       st = lstatSync(dir)
@@ -2156,7 +2164,9 @@ try {
         // A link() gaining an external alias arrives as 'change' — this
         // re-check is what attaches a file watch to it mid-window.
         try {
-          if (cst.isDirectory()) attach(p)
+          if (scoped && excluded.has(String(name ?? ''))) {
+            // rebuildable entry: report it below, never descend into it
+          } else if (cst.isDirectory()) attach(p, scoped)
           else if (cst.isFile() && cst.nlink > 1) attachFile(p, cst)
         } catch (e) {
           die(2, 'attach-in-event', e)
@@ -2172,8 +2182,9 @@ try {
     // still fires a rename event on the attached watch.
     for (const e of readdirSync(dir, { withFileTypes: true })) {
       const p = join(dir, e.name)
+      if (scoped && excluded.has(e.name)) continue
       if (e.isDirectory()) {
-        attach(p)
+        attach(p, scoped)
         continue
       }
       let fst
@@ -2187,10 +2198,10 @@ try {
       if (fst.isFile() && fst.nlink > 1) attachFile(p, fst)
     }
   }
-  attach(root)
+  attach(root, true)
   // Extra roots (e.g. the linked-worktree git metadata dir outside the
   // quarantine) get the same recursive coverage.
-  for (const r of extra) attach(r)
+  for (const r of extra) attach(r, false)
   // No watch attached at all (e.g. a symlinked root skipped above) means
   // the observation boundary never formed — refuse rather than emit READY
   // and let the caller remove blind.
@@ -2232,6 +2243,10 @@ type WriteObserver = {
 export interface ObserverStartOptions {
   readyTimeoutMs?: number
   maxAttempts?: number
+  // The preservation profile's rebuildable names (inventoryOptionsFromProfile
+  // excludeNames): not watched under the worktree root, exactly as the
+  // archive and verify walks skip them.
+  excludeNames?: string[]
   retryDelayMs?: number
   // Test seams: an alternative watcher program and node binary.
   watcherSource?: string
@@ -2328,7 +2343,13 @@ function startQuarantineObserver(
     child = spawn(
       options.execPath ?? process.execPath,
       ['-e', options.watcherSource ?? QUARANTINE_WATCHER, quarantine, out, ...extraRoots],
-      { stdio: ['ignore', 'ignore', errFd] },
+      {
+        stdio: ['ignore', 'ignore', errFd],
+        env: {
+          ...process.env,
+          CLADE_WT_WATCH_EXCLUDE_NAMES: JSON.stringify(options.excludeNames ?? []),
+        },
+      },
     )
     // Persistent `on`, not `once`: a failed spawn defers its 'error' to the
     // next tick, and the ChildProcess may emit 'error' again (e.g. kill()
@@ -2524,7 +2545,11 @@ function removeWorktreeAfterVerification(
   // watch attach is recorded, and one that lands before the verify walk read
   // the file is caught by the inventory comparison — together they leave no
   // unobserved write interval inside the handoff.
-  const obs = observer ?? observeQuarantineWrites(observedRoot, metadataRoots)
+  const obs =
+    observer ??
+    observeQuarantineWrites(observedRoot, metadataRoots, {
+      excludeNames: inventoryOptionsFromProfile(profile).excludeNames,
+    })
   const inventoryNames = new Set(expectedInventory.entries.map((entry) => entry.path))
   inventoryNames.add('.git')
   // A `<name>.lock` directly under a worktree's private Git metadata root is
@@ -5469,6 +5494,7 @@ export function cleanupBatches(
                   handoffObserver = observeQuarantineWrites(
                     m.path,
                     gitWorktreeMetadataRoots(m.path, common),
+                    { excludeNames: inventoryOptionsFromProfile(profile).excludeNames },
                   )
                 } catch (error) {
                   throw new Error(
@@ -5901,6 +5927,7 @@ export function cleanupBatches(
                       handoffObserver = observeQuarantineWrites(
                         removal.quarantine,
                         gitWorktreeMetadataRoots(removal.quarantine, common),
+                        { excludeNames: inventoryOptionsFromProfile(profile).excludeNames },
                       )
                     } catch (error) {
                       throw new Error(
@@ -5941,6 +5968,7 @@ export function cleanupBatches(
                       handoffObserver = observeQuarantineWrites(
                         m.path,
                         gitWorktreeMetadataRoots(m.path, common),
+                        { excludeNames: inventoryOptionsFromProfile(profile).excludeNames },
                       )
                     } catch (error) {
                       throw new Error(
@@ -6250,6 +6278,7 @@ export function cleanupBatches(
                   handoffObserver = observeQuarantineWrites(
                     b.path,
                     gitWorktreeMetadataRoots(b.path, common),
+                    { excludeNames: inventoryOptionsFromProfile(profile).excludeNames },
                   )
                 } catch (error) {
                   throw new Error(
@@ -6669,6 +6698,7 @@ export function cleanupBatches(
                       handoffObserver = observeQuarantineWrites(
                         removal.quarantine,
                         gitWorktreeMetadataRoots(removal.quarantine, common),
+                        { excludeNames: inventoryOptionsFromProfile(profile).excludeNames },
                       )
                     } catch (error) {
                       throw new Error(
@@ -6705,6 +6735,7 @@ export function cleanupBatches(
                       handoffObserver = observeQuarantineWrites(
                         b.path,
                         gitWorktreeMetadataRoots(b.path, common),
+                        { excludeNames: inventoryOptionsFromProfile(profile).excludeNames },
                       )
                     } catch (error) {
                       throw new Error(

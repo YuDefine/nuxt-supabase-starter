@@ -32,7 +32,18 @@ cd ~/offline/clade && FLOW_CLI_CONTRACT=2 node vendor/scripts/flow/flow.ts pendi
 - 跨機：預設也併入 peer（`~/.config/clade/herdr-peers` 列的機器）的佇列，每台 ssh 並行、逾時 8 秒；`span_id` 去重、本機優先；`--json` 多帶 `peers: [{ machine, ok, error?, count }]`，每列帶 `machine`。**讀不到的 peer 會在輸出最上面印 `⚠ 讀不到 peer <機器>：<原因>`**——那代表那台的題這次看不到，不是那台沒有題；整體為空但有 peer 讀不到時 exit 6（不是 4）。
 - 帶 `⏳ 疑似過時：<證據>` 子行的題排在同一區段最後：watch 的過時掃描判它前提可能已消失、但信心不到代寫掉（問 Charles 的題、題目內文才提到的 PR、有來源檔等）。多半不用答；查證屬實就照子行給的 `flow dismiss` 寫掉——子行那行指令沒帶 `--apply`，照抄時 MUST 補上（見 § dismiss）。被機器自動下架的題 `dismissed_by` 是 `stale-sweep`，reason 以「前提已不存在（<規則>）」起頭。
 - 閒置 ≥72h 又沒有近期重驗紀錄的題**不會出現在這份清單**，只在結尾印一行 `⏸ 另有 N 題閒置 …，未列出`（`--json` 在 `recheck_due`）。那是主持者的工作：`flow recheck` 列清單、逐題查現況後 `flow recheck <span> --conclusion still-needed|obsolete|premise-changed --source … --evidence … --actor …`；仍需拍板才放行，過時就寫掉附證據，前提改變就改題。判準見 coordinator skill 的 `rules/向Charles提問判準.md` Rule 5。/my 的 agent NEVER 為了讓題目出現而自己記一筆 `still-needed`——重驗要查過現況才算。
-- 退出碼照 `FLOW_CLI_CONTRACT=2`（每次呼叫前綴，NEVER export）：exit 0 = 佇列有東西；**exit 4 = 佇列空**（印 `佇列是空的。`），不是錯誤；exit 6 = 讀得到的部分是空、但有 peer 讀不到（不能報空）；exit 2 = 指令打錯。沒帶前綴時回舊碼（空＝2、peer 讀不到＝3）並在 stderr 多印一行 `flow: deprecated-exit`。
+- 退出碼照 `FLOW_CLI_CONTRACT=2`（每次呼叫前綴，NEVER export）；依 `pending` 的 exit code 分流：
+
+評估：first-match；以上皆非 → X*
+| id | exit code | 動作 |
+| --- | --- | --- |
+| X1 | 0 | 佇列有東西，照區段順序處理 |
+| X2 | 4 | 佇列空（印 `佇列是空的。`），不是錯誤，回報空 |
+| X3 | 6 | 讀得到的部分是空、但有 peer 讀不到；**NEVER** 報空，回報讀不到的 peer |
+| X4 | 2 | 指令打錯，修指令重跑 |
+| X* | 其他值 | STOP，回報原始輸出 [^X*] |
+
+[^X*]: 沒帶 `FLOW_CLI_CONTRACT=2` 前綴時回舊碼（空＝2、peer 讀不到＝3），stderr 多印一行 `flow: deprecated-exit`；那時 X2 與舊碼的「空」撞號，所以 MUST 帶前綴。
 
 ## ask
 
@@ -92,7 +103,7 @@ cd ~/offline/<consumer-id> && node ~/offline/clade/vendor/scripts/flow/flow.ts a
 | `--audience charles\|coordinator` | 選填，預設 `charles` | `coordinator` 不進人的預設佇列，也不受 admission 表限制 |
 | `--deadline D --deadline-basis B` | 選填，成對 | 有期限的題排最前（72 小時內到期）；basis 必填 |
 | `--dedupe-key K` | 選填 | 同一件事的第二次發問併進同一張卡；key 不放寬不重問閘門：同題（含同 key）已答過就回既有答案，不鑄新卡 |
-| `--ref pr:<N>｜pr:<repo>#<N>｜td:TD-<N>` | 選填，可重複 | 這題的前提依附在哪個 PR／TD 上。它在**題目問出之後**終局（合入、關閉、結案），watch 的過時掃描就自動把這題下架；問出之前就已終局的算前提，不算證據。涉 production／花費／政策的題只標不寫。沒有任何可核對參照（`--ref`、dispatch、題目裡的 PR／TD）時 stderr 會提醒，不擋 |
+| `--ref pr:<N>｜pr:<repo>#<N>｜pr:<owner>/<repo>#<N>｜td:TD-<N>` | 選填，可重複 | 這題的前提依附在哪個 PR／TD 上。它在**題目問出之後**終局（合入、關閉、結案），watch 的過時掃描就自動把這題下架；問出之前就已終局的算前提，不算證據。涉 production／花費／政策的題只標不寫。`owner/` 會被忽略，repo 只認 registry 短名。沒有任何可核對參照（`--ref`、dispatch、題目裡的 PR／TD）時 stderr 會提醒，不擋 |
 | `--not-same-as <span>` | 問句與已答題相近、但確定是另一件事時帶，可重複 | 身分鍵對不上、問句 bigram 相似度過門檻的已答題會被拒收；明說不是同一件事才放行（`decision-subject.ts`） |
 | `--dispatch <id>` | 補鑄題掛回 blocked dispatch 時帶 | 同一題的身分鍵之一：同 dispatch 且問句相近的已答題算同一題 |
 | `--supersede <span>` | 被「已有答案」拒收且現況變了才帶 | 「已有答案」包括同一 carrier，以及沒帶 carrier 時引用舊題 span id 或與舊題共用識別字（見 `rules/待拍板條目寫法.md` Rule 23）。指到拒收句列出的那一題才放行；記在 `payload.supersedes` |

@@ -35,7 +35,17 @@ metadata:
 ## Phase 4 -- record：落地與散播
 
 1. READ 若要動 rule、SKILL 或 snippet 措辭，讀取 clade `rules/core/rule-authoring.md` § 先分類失敗型態，再選形式。
-2. DELEGATE 若落點是新 skill，先寫 `evals/skills/<name>/cases.json`，再呼叫 `/skill-engineering` 走 create lane；若落點是既有 skill 的流程、判準或 `rules/`，呼叫 `/skill-engineering` 走 optimize lane，把確認版回報交給它當根因閘門的預期結果與落差輸入，不自己改 SKILL.md；本次 record 若是 `/skill-engineering` 逐 step 決策時交過來的，改把確認版回報交回那個 caller 的 optimize lane 落地，不另開一輪 `/skill-engineering`。
+2. DELEGATE 依落點分流：
+
+評估：first-match；以上皆非 → R*
+| id | predicate | 動作 |
+| --- | --- | --- |
+| R1 | 本次 record 是 `/skill-engineering` 逐 step 決策時交過來的 | 確認版回報交回那個 caller 的 optimize lane 落地，不另開一輪 `/skill-engineering` |
+| R2 | 落點是新 skill | 先寫 `evals/skills/<name>/cases.json`，再呼叫 `/skill-engineering` 走 create lane |
+| R3 | 落點是既有 skill 的流程、判準或 `rules/` | 呼叫 `/skill-engineering` 走 optimize lane [^R3] |
+| R* | 其他落點 | 進 step 3 |
+
+[^R3]: 確認版回報交給它當根因閘門的預期結果與落差輸入，不自己改 SKILL.md。
 3. WRITE 其餘落點依確認版寫入；新 audit script 先過 `propagate-maintenance-mode` 三問並補 `registry/audits.json` entry。
 4. DELEGATE 呼叫 `/clade-publish` 散播。
 

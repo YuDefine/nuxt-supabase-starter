@@ -1113,14 +1113,23 @@ export function validateProfile(profile: ConsumerProfile): void {
  * (W-2026-10-01-disk-low-water-guard). Now: never let an archive push the disk below the
  * low-water block tier (`CLADE_DISK_BLOCK_GB`, the line where new work is refused) or below twice
  * its own peak, whichever is larger; the old 10% stays as the ceiling.
+ *
+ * Once the archive itself would take the disk to or below the block tier (`available - peak <
+ * blockTier`), that floor refused every cleanup — it cannot push the disk past a line it is already
+ * past, and the removal it precedes is the only thing that climbs back. There the reserve only
+ * keeps the archive from filling the disk: twice its peak, at least 1 GiB. Keying on
+ * `available - peak` (not `available`) keeps the capacity gate monotonic: more free space never
+ * turns an allowed cleanup into a refused one.
  */
 export function relativeByteReserve(
   totalBytes: number,
   archivePeakBytes: number,
   env: NodeJS.ProcessEnv = process.env,
+  availableBytes = Number.POSITIVE_INFINITY,
 ): number {
   const blockTier = diskThresholds(env).thresholds.blockGiB * GIB
-  return Math.min(Math.ceil(totalBytes * 0.1), Math.max(blockTier, 2 * archivePeakBytes))
+  const floor = availableBytes - archivePeakBytes < blockTier ? GIB : blockTier
+  return Math.min(Math.ceil(totalBytes * 0.1), Math.max(floor, 2 * archivePeakBytes))
 }
 
 export function relativeInodeReserve(totalInodes: number, archivePeakInodes: number): number {
@@ -1197,7 +1206,9 @@ export function capacityRequirement(
     gitInodes,
     // Fixture profiles pass `byteReserve` (and `growthFloor`) so capture tests do not depend
     // on host headroom; production uses the relative reserve below.
-    byteReserve: options.byteReserve ?? relativeByteReserve(totalBytes, archivePeakBytes),
+    byteReserve:
+      options.byteReserve ??
+      relativeByteReserve(totalBytes, archivePeakBytes, process.env, availableBytes),
     inodeReserve: options.inodeReserve ?? relativeInodeReserve(totalInodes, archivePeakInodes),
   }
 }

@@ -134,7 +134,7 @@ Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工�
 
 | 載體 | 省什麼 | 負載落在哪 |
 | --- | --- | --- |
-| cloud session | 開發機 CPU（唯一真正卸掉本機負載的載體） | Anthropic VM；先扣派出帳號（cc1／cc2／cc3／cc4）的 cloud credit，扣完改扣該帳號的訂閱 `seven_day`／`five_hour` 窗（Charles 2026-10-06） |
+| cloud session | 開發機 CPU（唯一真正卸掉本機負載的載體） | Anthropic VM；先扣派出帳號（cc1…ccN）的 cloud credit，扣完改扣該帳號的訂閱 `seven_day`／`five_hour` 窗（Charles 2026-10-06） |
 | Devin `swe-2-max` | Claude 額度（免費） | 派出的那台開發機：工具指令在本機跑 |
 | Pi（2026-10-21 起無可派 model） | 不省 | 派出的那台開發機 |
 
@@ -178,17 +178,17 @@ Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工�
 - **不適合**：上面「全程不需人類授權」任一列成立的件、跨 repo、要本機狀態（dev server、DB lease、未 push 的 commit、secret、Herdr／pi seat、systemd、實體硬體；TD／HANDOFF 來源文字明示要 live 主機、prod、ssh、本機 worktree 的件，planner 以 `liveSourceSignal` 機械判，TD 條目全文、HANDOFF／plan 條目文字都看）、單一 writer 不成立的 PR 修補（`--on-branch` 派前門回 `pr-branch-has-live-writer` 或 `writer-undeterminable`；原 cloud session 自己開的 PR 走上表 `followup` 列，不新開 session）、commit 0-A、要來回問答（cloud 回不了訊）。命中任一 → 本機 pane（或主線自己做）。clade 標準層（`rules/**`、`vendor/**` 等會散播的源檔）**不再整層排除**：散播只走 `clade-publish`，cloud 只產 draft PR，落地前照樣過 0-A 與 publish gate（Charles 2026-10-06）；clade 端「要本機狀態」的具體例子是要 live Herdr／coordinator 快取（`~/.cache/clade/**`）驗證的、要 ssh peer 的、要動 consumer 投影或跑 propagate 的、要 systemd／timer 的。
 - 自動派工（`coordinator-ready.ts` `cloudShapeProblem`）只看得到件的標題與寫入路徑，以字樣比對判「要本機狀態」：命中留本機，沒命中才排 cloud；誤判由上面的硬條件、pane 退路與 PR 驗收兜底。PR 修補不走字樣比對，由前提檢查判（`prFixCloudProblem` 讀巡檢快照的逐節點觀測，交給與派前門同一個 `singleWriterVerdict`）：過 → on-branch cloud；不過 → 本機 pane，理由碼由 fanout 透傳。
 
-**cloud 先扣派出帳號的 cloud credit，扣完改扣該帳號的訂閱 weekly 窗**（Charles 2026-10-06，取代 09-28「與訂閱窗口無關」）。不設併發上限、不設總量預算、不設 weekly 保留百分比（Charles：「R7 不應該設上限」「用光沒關係 用光我 upgrade」）。admission 只擋兩件：帳號不可判定（要 cc1|cc2|cc3|cc4），以及下面的 0-A reviewer 席位守門。
+**cloud 先扣派出帳號的 cloud credit，扣完改扣該帳號的訂閱 weekly 窗**（Charles 2026-10-06，取代 09-28「與訂閱窗口無關」）。不設併發上限、不設總量預算、不設 weekly 保留百分比（Charles：「R7 不應該設上限」「用光沒關係 用光我 upgrade」）。admission 只擋兩件：帳號不可判定（要 ccN），以及下面的 0-A reviewer 席位守門。
 
 **0-A reviewer 席位守門（唯一的硬門）**：commit 0-A reviewer 固定是 Claude Opus 5.5（effort: medium）、只能跑在本機 Claude 帳號上，cloud **NEVER** 讓它沒有任何可用帳號。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | 池內（cc1／cc2／cc3／cc4）沒有任何帳號讀得到且 `five_hour`、`seven_day` 皆 > 0 → 拒派該件。全數用盡與「有帳號讀不到或額度快照過期」都算：讀不到視為未知，保守停派。只要有一個帳號確認有額度就放行，不留百分比 |
+| 觸發條件 | 池內（cc1…ccN）沒有任何帳號讀得到且 `five_hour`、`seven_day` 皆 > 0 → 拒派該件。全數用盡與「有帳號讀不到或額度快照過期」都算：讀不到視為未知，保守停派。只要有一個帳號確認有額度就放行，不留百分比 |
 | 消費端 | `cloud-dispatch.ts dispatch` 的 admission（`reviewerSeatGuard`，讀值來自 `readDispatchQuota`，新鮮度門檻同 `claude-account-preflight.ts` `MAX_QUOTA_AGE_MS`）；`coordinator-ready.ts` 選 cloud 載體前以快照的池讀值判同一條，停派後照載體偏好往 Devin／本機 pane 退 |
 | 觸發點 | 失敗輸出：`dispatch` 拒派訊息，以及 `cloud-dispatch.ts patrol`／`herdr-patrol.ts --stalled` 的 `reviewer-seat-hold` 待處置列（列出各帳號窗口與被停派的件）。處置：請 Charles upgrade 或等窗口重置，額度恢復後重派即自動解除；**NEVER** 繞過守門派出 |
 
-機械閘在 `vendor/scripts/cloud-dispatch.ts dispatch`：在飛數（該帳號尚未 `harvest` 的 record；未帶帳號的 adopted record 計入每個帳號）與 credit 用盡標記只回報、不拒派（標記是啟動失敗訊息顯示 credit／billing 耗盡時留下的通知，`credit-reset --account <帳號>` 清除）。launch 因帳號 `five_hour`／`seven_day`（或 credit）用盡而失敗時，自動輪替池內下一個帳號（有額度者先）；每個帳號都失敗才停派並列 `reviewer-seat-hold` 待處置。`--ref` 被拒也輪替（Claude GitHub App 逐帳號安裝）：記住該帳號 × repo 6 小時、期間不再排它，池內帳號全部被拒才失敗，之後的 dry-run 直接拒派、改走本機 pane。**NEVER** 用任何方式繞過它拒派的結果。派出帳號在 cc1／cc2／cc3／cc4 之間選有額度且在飛較少的那個，以 `dispatch --account cc1|cc2|cc3|cc4` 明確指定；`adopt` 也帶 `--account` 讓 record 歸屬到帳號。不指定時只接受能從 `CLAUDE_CONFIG_DIR` 辨認出的池帳號。
+機械閘在 `vendor/scripts/cloud-dispatch.ts dispatch`：在飛數（該帳號尚未 `harvest` 的 record；未帶帳號的 adopted record 計入每個帳號）與 credit 用盡標記只回報、不拒派（標記是啟動失敗訊息顯示 credit／billing 耗盡時留下的通知，`credit-reset --account <帳號>` 清除）。launch 因帳號 `five_hour`／`seven_day`（或 credit）用盡而失敗時，自動輪替池內下一個帳號（有額度者先）；每個帳號都失敗才停派並列 `reviewer-seat-hold` 待處置。`--ref` 被拒也輪替（Claude GitHub App 逐帳號安裝）：記住該帳號 × repo 6 小時、期間不再排它，池內帳號全部被拒才失敗，之後的 dry-run 直接拒派、改走本機 pane。**NEVER** 用任何方式繞過它拒派的結果。派出帳號在 cc1…ccN 之間選有額度且在飛較少的那個，以 `dispatch --account ccN` 明確指定；`adopt` 也帶 `--account` 讓 record 歸屬到帳號。不指定時只接受能從 `CLAUDE_CONFIG_DIR` 辨認出的池帳號。
 
 每輪有 handoff 級的 Claude 原生列就緒件時，主持者先跑 cloud dry-run admission 選帳號。
 

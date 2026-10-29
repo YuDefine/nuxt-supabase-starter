@@ -1,5 +1,5 @@
 ---
-description: Follow-up Register 規則——deferred 併回同一 work 的 Open work，新工作才 flow plan open；舊 TD 結構僅給未遷移 consumer；主動消化節奏
+description: Follow-up Register 規則——work 不做完就不能結案的殘工併回同一份 plan，能先結案的後續項各開獨立 plan、標級、交 watch 派工；舊 TD 結構僅給未遷移 consumer；主動消化節奏
 paths: ['tasks/**', 'specs/plans/**', 'docs/tech-debt.md']
 ---
 <!-- Clade native rule; source: rules/core/follow-up-register.md; edit canonical source -->
@@ -17,18 +17,27 @@ tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local
 
 | 可觀察 predicate | MUST |
 | --- | --- |
-| 這一項源自某個進行中的 work（它的殘工、它發現的缺口、它延後的一步） | 在**同一份** `specs/plans/<work-id>/plan.md` 的 `## Open work` 加一條，寫明下一步與可觀察的完成條件。**NEVER** 為它另開 plan |
-| 它不屬於任何進行中的 work，而且確實要做 | `node vendor/scripts/flow/flow.ts plan open <slug> --title '<一句話>'`，這是開新 plan 唯一的入口 |
+| 這一項是進行中 work 的殘工：這份 work 的驗收缺它，不做完就不能結案 | 在**同一份** `specs/plans/<work-id>/plan.md` 的 `## Open work` 加一條，寫明下一步與可觀察的完成條件。**NEVER** 為它另開 plan |
+| 這一項源自進行中的 work，但這份 work 不做它也能結案（follow-up、prevention、順手發現的範圍外缺口） | 照 § 開獨立 plan 開一份；原 plan 的 § 進度留一行 `→ <新 work id>` 指過去，**NEVER** 只記進原 plan 的 Open work |
+| 它不屬於任何進行中的 work，而且確實要做 | 照 § 開獨立 plan 開一份 |
 | 判斷後它不值得做 | 不登記。在當下的 commit message 或 plan § Decisions 寫一句放棄理由 |
 
 回指 `specs/plans/<work-id>/plan.md`（或 `plan:<work-id>`）。舊 `TD-NNN` 只經 `specs/truth/legacy-ids.json` 解析，**NEVER** 往 `docs/tech-debt.md` 或 `HANDOFF.md` 登記新條目（`HANDOFF.md` 只留 W- 指標行，[[handoff]] § Lifecycle repo）。
 
 未遷移 consumer（沒有 `specs/truth/work-lifecycle.md`）仍用既有 `TD-NNN` register，直到 consumer 遷移完成。
 
+### 開獨立 plan（lifecycle repo）
+
+1. `node vendor/scripts/flow/flow.ts plan open <slug> --title '<一句話>'`（開新 plan 唯一的入口）。Open work 每條未勾項寫成可派：一句下一步加 `驗收：<可觀察的完成條件>`；在等外部訊號的條目加 `**Blocked-by**: <訊號>`，就緒池會擋到訊號成立，**NEVER** 只寫「之後再做」。
+2. 標級：`node vendor/scripts/lib/priority-level.ts set-level <work-id> <P2|P3> --source '<出處>' --name '<語義名>'`。agent 只標 P3（預設）或 P2（已發生損害有證據：事故、資料錯誤、使用者被擋、實測的工時浪費）；判斷該拉到 P1 的寫進回報當建議，由 Charles 點；P0 只收 Charles 原話。
+3. 派工：單檔、當場改得完的由主線直接做，在同一個 PR 勾掉。其餘不另開 pane——plan 是 `status: active`、owners 為 `-`、條目帶驗收，coordinator watch 每輪就把它放進就緒池、依等級派出；plan owners 非空時，條目要另標「就緒、可派」。
+4. 回報每份新 plan 的 work id、等級、派工去向（主線做／交 watch／Blocked-by 哪個訊號）。
+
 **禁止事項**：
 
 - **NEVER** 只寫自由文字（「LOCAL BLOCKED: ...」「DEFERRED: ...」「待後續處理」）而不落進 plan Open work 或（未遷移 consumer）TD entry
-- **NEVER** 用「開一份新 plan 比較乾淨」繞過併回同一 work——同一件事拆成兩份 plan，close 時兩份都結不了
+- **NEVER** 把殘工另開 plan——原 work 的驗收還要它，拆成兩份 plan，close 時兩份都結不了
+- **NEVER** 把能先結案的後續項塞進原 plan 的 Open work——它拿不到自己的等級，原 plan 也被它掛著結不了
 - **NEVER** 把登記推到「收尾時一起補」，**NEVER** 因為「沒有 hook 擋我」就往後推
 - tasks 檔裡既有的 `@followup[TD-NNN]` marker **不必**改寫，讀到時當成舊 id 引用即可
 
@@ -63,7 +72,7 @@ tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local
 
 ### 等級只看 fleet 看板
 
-TD 條目與 Index 表都**不帶**等級欄位。優先級（P0–P3）唯一的寫入與讀取處是 fleet 看板上該條目的列 `td:<repo>:TD-n`：預設 P3，要往上拉由 Charles 點名、在看板設定或開 P1 群組。**NEVER** 在 TD 加回 `**Priority**:` 行——`vendor/scripts/checks/td-priority-gate.ts` 在 pre-commit 與 CI 擋下 `docs/tech-debt.md` 新增或改寫的這種行，刪除放行。
+TD 條目與 Index 表都**不帶**等級欄位。優先級（P0–P3）唯一的寫入與讀取處是 fleet 看板上該條目的列 `td:<repo>:TD-n`：預設 P3；agent 照 § 開獨立 plan 第 2 步的條件可標 P2（`set-level td:<repo>:TD-n P2`），再往上拉由 Charles 點名、在看板設定或開 P1 群組。**NEVER** 在 TD 加回 `**Priority**:` 行——`vendor/scripts/checks/td-priority-gate.ts` 在 pre-commit 與 CI 擋下 `docs/tech-debt.md` 新增或改寫的這種行，刪除放行。
 
 合約條文 ID 與優先級分開寫：行首 `Milestone` 那種 `P1-M2-A2` 是客戶簽署的條文 ID，原樣保留；文中要講優先級時寫「P1 級」或 P1 群組編號 `P1-x`，**NEVER** 寫成等級欄位或把條文 ID 當等級。
 

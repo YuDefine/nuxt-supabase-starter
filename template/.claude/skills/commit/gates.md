@@ -292,7 +292,7 @@ node --experimental-strip-types "$CLADE_ROOT/vendor/scripts/security-precommit.t
 
 High / Critical finding → 停止本次 commit。每一條 **MUST** 先走 `security-evidence finding`
 （Severity / Confidence / Coverage / Proof Gap 判讀），verdict 是 `accept` 或
-`needs more validation` 才登記 follow-up（有 `specs/truth/work-lifecycle.md` 的 repo 寫 plan Open work，未遷移 consumer 才登 TD）並修；`unsupported` 記進 report 不修。
+`needs more validation` 才登記 follow-up（有 `specs/truth/work-lifecycle.md` 的 repo 照 `follow-up-register` § 開獨立 plan 開 plan、標級，未遷移 consumer 才登 TD）並修；`unsupported` 記進 report 不修。
 **NEVER** 看到 High 標籤就直接改 code。
 
 ### 0-S.3 Claude 安全掃描：**NEVER** 在 pre-commit
@@ -472,7 +472,7 @@ PRE-EXISTING — 未觸碰：<file>:<line>（舉證本次 diff 不含此檔／�
 
 兩條舉證缺一不可：只證「沒碰到」不夠——本次變更可能讓一條原本走不到的舊路徑變成熱路徑；只證「無因果」也不夠——那是純舊碼判定的結論，不是它的前提。
 
-登記走承載它的 plan 的 Open work（跨 session 要追；沒有 `specs/truth/work-lifecycle.md` 的 consumer 才在 `docs/tech-debt.md` 開 TD）或 `HANDOFF.md`（下一 session 就會碰），**NEVER** 只在 chat 講一句。「已經跟 user 說了」不算登記——chat 不是 session 之間的傳遞介面。
+登記照 `follow-up-register` § 直接登記（跨 session 要追；本次 commit 不修也能落地的，開獨立 plan、標級、交派工；沒有 `specs/truth/work-lifecycle.md` 的 consumer 才在 `docs/tech-debt.md` 開 TD）或 `HANDOFF.md`（下一 session 就會碰），**NEVER** 只在 chat 講一句。「已經跟 user 說了」不算登記——chat 不是 session 之間的傳遞介面。
 
 ### 0-A.2 — 深度 review（條件觸發）
 

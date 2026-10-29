@@ -378,6 +378,27 @@ function identifierSpans(expr: string): { id: string; at: number }[] {
 interface ResolveCtx {
   src: string
   viaFns: Set<string>
+  /**
+   * 單一讀取點內 `(expr, depth)` → 解出的字面值。同一個識別字（`path`、`file` 這類通用名）會從
+   * 多條 const／forEach／函式呼叫路徑反覆回到同一段運算式，不記下來就是每條路徑各重掃一遍整份原文。
+   * 只能掛在單一讀取點的 ctx 上：`viaFns` 是該讀取點的副產物，跨讀取點共用會漏記。
+   */
+  memo?: Map<string, string[]>
+  /**
+   * `(識別字)` → 在原文裡的定義位置查詢（const 初值、for-of 清單、forEach 接收者、each 表格、
+   * 含該參數的函式與其呼叫點）。這些只取決於 src 與識別字，與讀取點無關，一次 classify 內共用，
+   * 全檔最多對每個不同識別字各掃一次原文。
+   */
+  lookups?: Map<string, unknown>
+}
+
+/** `ctx.lookups` 的記憶化包裝；key 必須含查詢種類與識別字 */
+function lookup<T>(ctx: ResolveCtx, key: string, compute: () => T): T {
+  const cache = (ctx.lookups ??= new Map<string, unknown>())
+  if (cache.has(key)) return cache.get(key) as T
+  const value = compute()
+  cache.set(key, value)
+  return value
 }
 
 /** `const ID = <expr>` 的 expr 文字；找不到回 null */
@@ -450,46 +471,72 @@ function fnsWithParam(src: string, id: string): string[] {
 
 /** 運算式能解出的路徑字面值（追 const、函式參數的呼叫點、for-of／forEach 的清單） */
 export function resolveLiterals(expr: string, ctx: ResolveCtx, depth = 4): string[] {
+  const memo = (ctx.memo ??= new Map<string, string[]>())
+  const key = `${depth}\0${expr}`
+  const hit = memo.get(key)
+  if (hit) return [...hit]
+  // 去重（保留首見順序）：下游只把字面值當集合用（filter 後進 Set／some），不去重的話
+  // 同一字面值隨呼叫路徑數成倍堆疊，連 push(...spread) 都會成為熱點
+  const out = [...new Set(resolveLiteralsUncached(expr, ctx, depth))]
+  memo.set(key, out)
+  return [...out]
+}
+
+function resolveLiteralsUncached(expr: string, ctx: ResolveCtx, depth: number): string[] {
   const out = literalsIn(expr)
   if (depth <= 0) return out
   for (const id of new Set(identifiersIn(expr))) {
-    const init = constInit(ctx.src, id)
+    const init = lookup(ctx, `const\0${id}`, () => constInit(ctx.src, id))
     if (init !== null && init !== expr) {
       out.push(...resolveLiterals(init, ctx, depth - 1))
       continue
     }
-    const forOf = new RegExp(
-      `for\\s*\\(\\s*(?:const|let)\\s+\\[?\\s*${escapeRe(id)}\\b[^)]*?\\bof\\s+([^)]+)\\)`,
-    ).exec(ctx.src)
+    const forOf = lookup(ctx, `forOf\0${id}`, () =>
+      new RegExp(
+        `for\\s*\\(\\s*(?:const|let)\\s+\\[?\\s*${escapeRe(id)}\\b[^)]*?\\bof\\s+([^)]+)\\)`,
+      ).exec(ctx.src),
+    )
     if (forOf) {
       out.push(...resolveLiterals(forOf[1], ctx, depth - 1))
       continue
     }
-    const each = new RegExp(
-      `([A-Za-z_$][\\w$]*|\\[[^\\]]*\\])\\s*\\.(?:forEach|map|flatMap)\\(\\s*(?:async\\s*)?\\(?\\s*${escapeRe(id)}\\b`,
-    ).exec(ctx.src)
+    const each = lookup(ctx, `each\0${id}`, () =>
+      new RegExp(
+        `([A-Za-z_$][\\w$]*|\\[[^\\]]*\\])\\s*\\.(?:forEach|map|flatMap)\\(\\s*(?:async\\s*)?\\(?\\s*${escapeRe(id)}\\b`,
+      ).exec(ctx.src),
+    )
     if (each) {
       out.push(...resolveLiterals(each[1], ctx, depth - 1))
       continue
     }
-    const itEach = new RegExp(
-      `\\.each\\(((?:[^()]|\\([^()]*\\))*)\\)\\s*\\(\\s*(?:'[^']*'|"[^"]*"|\`[^\`]*\`)\\s*,\\s*(?:async\\s*)?\\(?\\s*${escapeRe(id)}\\b`,
-    ).exec(ctx.src)
+    const itEach = lookup(ctx, `itEach\0${id}`, () =>
+      new RegExp(
+        `\\.each\\(((?:[^()]|\\([^()]*\\))*)\\)\\s*\\(\\s*(?:'[^']*'|"[^"]*"|\`[^\`]*\`)\\s*,\\s*(?:async\\s*)?\\(?\\s*${escapeRe(id)}\\b`,
+      ).exec(ctx.src),
+    )
     if (itEach) {
       out.push(...resolveLiterals(itEach[1], ctx, depth - 1))
       continue
     }
-    for (const fn of fnsWithParam(ctx.src, id)) {
+    for (const fn of lookup(ctx, `fns\0${id}`, () => fnsWithParam(ctx.src, id))) {
       ctx.viaFns.add(fn)
-      for (const call of ctx.src.matchAll(new RegExp(`(?<![\\w$.])${escapeRe(fn)}\\s*\\(`, 'g'))) {
-        const open = call.index + call[0].length - 1
-        const close = matchBracket(ctx.src, open)
-        if (close > open)
-          out.push(...resolveLiterals(ctx.src.slice(open + 1, close), ctx, depth - 1))
-      }
+      for (const args of callArgsOf(ctx, fn)) out.push(...resolveLiterals(args, ctx, depth - 1))
     }
   }
   return out
+}
+
+/** 函式 fn 每個呼叫點的引數文字（`fn(` 後到配對括號前） */
+function callArgsOf(ctx: ResolveCtx, fn: string): string[] {
+  return lookup(ctx, `calls\0${fn}`, () => {
+    const all: string[] = []
+    for (const call of ctx.src.matchAll(new RegExp(`(?<![\\w$.])${escapeRe(fn)}\\s*\\(`, 'g'))) {
+      const open = call.index + call[0].length - 1
+      const close = matchBracket(ctx.src, open)
+      if (close > open) all.push(ctx.src.slice(open + 1, close))
+    }
+    return all
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -506,6 +553,7 @@ const READ_RE =
 
 function findReadSites(src: string, code: string): ReadSite[] {
   const sites: ReadSite[] = []
+  const lookups = new Map<string, unknown>() // 全檔共用：只取決於 src 與識別字
   for (const m of code.matchAll(READ_RE)) {
     const open = m.index + m[0].length - 1
     const close = matchBracket(src, open)
@@ -513,7 +561,7 @@ function findReadSites(src: string, code: string): ReadSite[] {
     const args = src.slice(open + 1, close)
     // 第一個頂層引數 = 路徑
     const first = firstArg(args)
-    const ctx: ResolveCtx = { src, viaFns: new Set() }
+    const ctx: ResolveCtx = { src, viaFns: new Set(), lookups }
     // 路徑根在 tmpdir／mkdtemp 底下＝讀的是這次測試自己產出的檔，不是 repo 內的原始碼（D 類／執行輸出）
     const literals = derivesFromTmp(first, src, 4) ? [] : resolveLiterals(first, ctx)
     const vars = new Set<string>()

@@ -168,7 +168,7 @@ gh api repos/<owner>/<repo>/actions/runs/<run-id>/jobs \
 一台 runner 命中下列任一，就是 **production-access runner**：docker socket 能 `docker exec` 進 production 容器、持有 deploy key、能直連 production 網段、`~/.ssh` / `~/.kube` 內有 production 憑證。
 
 - **MUST** untrusted-execution job 的 `runs-on` 只落在 GitHub-hosted（`ubuntu-latest`），或**不具 production 存取**的 self-hosted runner（能力標籤，例如 `supabase-ci`）
-- **MUST** production-access runner 只接同時滿足兩條的 job：觸發受限（tag，或 `workflow_dispatch` 加 ref guard；**NEVER** 是 `pull_request` / `pull_request_target` / push branch）、只執行 repo 內的腳本而不安裝依賴（migrate、deploy）。本條只管 workflow 檔寫了什麼；GitHub 端誰能把 job 排上那台、production secret 對誰可見，見 § 13
+- **MUST** production-access runner 只接同時滿足兩條的 job：觸發受限（tag，或 `workflow_dispatch` 加 ref guard；**NEVER** 是 `pull_request` / `pull_request_target` / push branch）、只執行 repo 內的腳本而不安裝依賴（migrate、deploy）。`workflow_dispatch` 的 ref guard 指 prod job 的 `if:` 含 `github.ref` 比對（`audit-runner-trust-boundary.ts` 的 `dispatch-no-ref-guard` 機械查）。本條只管 workflow 檔寫了什麼；GitHub 端誰能把 job 排上那台、production secret 對誰可見，見 § 13
 - **MUST** 在 untrusted-execution job 的 `runs-on` 上方留註解，指明它**為什麼不能**用 prod 主機的標籤——沒有這行註解的 `ubuntu-latest` 會被後人改成 self-hosted
 - **NEVER** 讓位置標籤兼作能力標籤（per § 3）：`supabase` 在 <client-1> fleet 的意思是「production supabase-db 所在主機」，不是「有 docker、可起拋棄式 stack」。沒有不具 production 存取的能力標籤時，job 先用 `ubuntu-latest`，**NEVER** 借 prod 主機的標籤
 - **NEVER** 拿 `paths:` 過濾、private repo、org 成員限定當作緩解——下表逐條說明

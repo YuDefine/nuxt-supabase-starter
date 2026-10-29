@@ -345,7 +345,7 @@ function getBindingIcon(cardType: NfcCardType): string {
 | UI 檔編輯期間 | `capabilities/core/hooks/post-edit-ui-qa.sh`（PostToolUse） | 中途提醒 design / screenshot review，不要等到收尾才檢查 |
 | 交付人工檢查之前 | Design Gate（[[proactive-skills.design-checkpoint]] § Design Gate） | 缺設計審查證據的 UI 工作不得交付 |
 | 交付人工檢查之前 | `node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --require-empty`（cwd = consumer repo） | exit 3 才可把卡片交給 user，逐張列 family；exit 2 = 判不出來 |
-| 寫下任何 follow-up 註記的當下 | 依 [[follow-up-register]] 登記（lifecycle repo：所屬 plan 的 § Open work；未遷移 consumer：`docs/tech-debt.md` 的 `TD-NNN` entry） | 同一次編輯內完成 |
+| 寫下任何 follow-up 註記的當下 | 依 [[follow-up-register]] § 直接登記登記（lifecycle repo：殘工併回所屬 plan，能先結案的開獨立 plan 並標級；未遷移 consumer：`docs/tech-debt.md` 的 `TD-NNN` entry） | 同一次編輯內完成 |
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |

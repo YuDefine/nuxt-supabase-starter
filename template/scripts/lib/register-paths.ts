@@ -32,7 +32,18 @@ export const REGISTER_PREFIXES: readonly string[] = [
   'specs/sessions/',
 ]
 
-export const LEDGER_APPEND_PATHS: ReadonlySet<string> = new Set(['vendor/ledger/signals.jsonl'])
+// 每一檔都已逐檔證明：寫入端只走 vendor/signals/ledger-writer.ts 的 appendRecord(s)（同一把
+// `<ledger>.lock`），讀取端只有 improvement-digest／propagate cadence 提示／audit-pitfall-detector-decay
+// 這類資料消費者，不是任何 CI／gate／check 的輸入（證據在 PR body，W-2026-10-28-main-sync-candidates-digest-runs-pitfall-detecto）。
+// 加成員前 MUST 重做同一組證明；同時抬 main-sync.ts 的 LEDGER_LOCK_STALE_MS 與
+// ledger-writer.ts 的 CLADE_HOME_STALE_LOCK_MS（每檔最壞 +20s 持鎖）。
+export const LEDGER_APPEND_PATHS: ReadonlySet<string> = new Set([
+  'vendor/ledger/signals.jsonl',
+  'vendor/ledger/candidates.jsonl',
+  'vendor/ledger/outcomes.jsonl',
+  'vendor/ledger/digest-runs.jsonl',
+  'vendor/ledger/pitfall-detector-runs.jsonl',
+])
 
 /**
  * 「可在 sealed batch 期間前移 origin/main」的路徑——每一項都必須已證明**不是**任何 gate

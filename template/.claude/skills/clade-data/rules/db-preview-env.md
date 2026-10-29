@@ -92,7 +92,7 @@ channel 名字 **MUST 從該 sidecar 的 `PGRST_DB_CHANNEL` 讀，NEVER 猜**—
 - **NEVER** 讓 main push 直接觸發 staging migrate 而**跳過** schema-gate
 - **MUST** PR / push validation 用 disposable PG（schema-migration-gate 即可滿足）
 
-如果 consumer 目前 staging migrate 沒擋 schema-gate（即 main push 直接到 staging migrate 不經 throwaway diff），**MUST** 依 [[follow-up-register]] 登記追蹤（lifecycle repo：plan § Open work；未遷移 consumer：`docs/tech-debt.md` 的 TD）；不能無限延期。
+如果 consumer 目前 staging migrate 沒擋 schema-gate（即 main push 直接到 staging migrate 不經 throwaway diff），**MUST** 依 [[follow-up-register]] § 直接登記登記追蹤（lifecycle repo：開獨立 plan 並標級；未遷移 consumer：`docs/tech-debt.md` 的 TD）；不能無限延期。
 
 ### 3. Production data sanitization（必備條件）
 
@@ -163,7 +163,7 @@ Managed platform（Cloudflare Workers 等）自帶 per-version preview URL，缺
 - ❌ **兩條 change 同時改 schema 仍然互踩** —— 它們共用同一個 preview DB
 - ❌ **NEVER** 拿它當 § MUST 1 schema-migration-gate 的替代品
 
-**MUST** 宣告 `shared-preview-db` 的 consumer 另外具備 `diff-only` 等級的 schema migration gate；尚未具備時 **MUST** 依 [[follow-up-register]] 登記追蹤（lifecycle repo：plan § Open work；未遷移 consumer：`docs/tech-debt.md` 的 TD），不能無限延期。
+**MUST** 宣告 `shared-preview-db` 的 consumer 另外具備 `diff-only` 等級的 schema migration gate；尚未具備時 **MUST** 依 [[follow-up-register]] § 直接登記登記追蹤（lifecycle repo：開獨立 plan 並標級；未遷移 consumer：`docs/tech-debt.md` 的 TD），不能無限延期。
 
 ### 適用前提（任一不滿足就不是這個變體）
 

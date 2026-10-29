@@ -121,3 +121,7 @@ yarn-error.log*
 /screenshots/**/*.json
 
 .vitest/
+
+!.clade/test-trust-baseline.json
+!.clade/break-receipts/
+!.clade/mutation-summary.json

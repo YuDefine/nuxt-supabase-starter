@@ -9,7 +9,7 @@ paths: ['docs/tech-debt.md', '**/docs/tech-debt.md']
 
 先問「修法落在哪一層」，再決定登在哪個 repo。此規則優先於個別 skill 說明。
 
-**載體依目標 repo 分**（[[follow-up-register]]）：lifecycle repo（repo root 有 `specs/truth/work-lifecycle.md`，clade home 是其中之一）登進所屬 plan 的 § Open work，沒有所屬 plan 就 `flow plan open`，**NEVER** 新增 `docs/tech-debt.md` 條目；未遷移 consumer 登進自家 `docs/tech-debt.md` 的 `TD-NNN`。下表的「登在」指 repo，不指載體。TD 編號與 entry 格式見 [[follow-up-register]]，entry 的 `**自驗**` gate 寫法見 [[agent-self-verification]] § 驗收 gate MUST 收窄到本次觸及的範圍。
+**載體依目標 repo 分**（[[follow-up-register]]）：lifecycle repo（repo root 有 `specs/truth/work-lifecycle.md`，clade home 是其中之一）照 [[follow-up-register]] § 直接登記 分流：當前 work 的殘工併回所屬 plan 的 § Open work，當前 work 不做它也能結案的開獨立 plan、標級、交派工，**NEVER** 新增 `docs/tech-debt.md` 條目；未遷移 consumer 登進自家 `docs/tech-debt.md` 的 `TD-NNN`。下表的「登在」指 repo，不指載體。TD 編號與 entry 格式見 [[follow-up-register]]，entry 的 `**自驗**` gate 寫法見 [[agent-self-verification]] § 驗收 gate MUST 收窄到本次觸及的範圍。
 
 ---
 
@@ -47,7 +47,7 @@ paths: ['docs/tech-debt.md', '**/docs/tech-debt.md']
 - **NEVER 用裸 `TODO` / `FIXME` / `XXX` 承載這個角色**（fleet 掃描假陽性遠多於真陽性，獨特前綴才可收割）
 - **標記不取代登記**：跨 session 或會影響他人的缺口仍 MUST 走本檔的決策流程登記（載體見檔頭）。marker 承接的是「當下判斷還不值得開一條 TD entry，但忘了就再也找不回來」那一層
 
-**收割**：`node scripts/harvest-td-markers.ts [--repo <path>]` 掃出所有 marker 輸出候選清單。它**只出清單、不寫任何登記簿**；升級成正式登記（lifecycle repo：plan Open work；未遷移 consumer：TD entry，過 `scripts/audit-tech-debt-hygiene.ts`）是人的判斷。
+**收割**：`node scripts/harvest-td-markers.ts [--repo <path>]` 掃出所有 marker 輸出候選清單。它**只出清單、不寫任何登記簿**；升級成正式登記（lifecycle repo：依 [[follow-up-register]] § 直接登記；未遷移 consumer：TD entry，過 `scripts/audit-tech-debt-hygiene.ts`）是人的判斷。
 
 ## 為什麼一律先問 clade
 

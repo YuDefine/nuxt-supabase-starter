@@ -110,9 +110,9 @@ node vendor/scripts/checks/mutation-loading-detect.ts $(git diff --name-only <ba
 
 | 禁止使用 / 必查項 | 位置 | 說明 |
 | --- | --- | --- |
-| 針對 `import/no-cycle` 的 disable comment | 全部原始碼 | cycle 只有兩條合法路徑：當場修，或登記修法（有 `specs/truth/work-lifecycle.md` 的 repo 寫 plan Open work，未遷移 consumer 才登 TD）。`// oxlint-disable-next-line import/no-cycle` 出現在 diff 裡一律擋——它把 error 級 gate 降成無聲。 |
+| 針對 `import/no-cycle` 的 disable comment | 全部原始碼 | cycle 只有兩條合法路徑：當場修，或登記修法（有 `specs/truth/work-lifecycle.md` 的 repo 照 `follow-up-register` § 開獨立 plan 開 plan，未遷移 consumer 才登 TD）。`// oxlint-disable-next-line import/no-cycle` 出現在 diff 裡一律擋——它把 error 級 gate 降成無聲。 |
 | 同一 discriminant 在 **≥3 個不同檔**各有一條 switch | `app/**`、`server/**`、`shared/**`、`packages/**` | 加一個 variant 要改 N 處，OCP 意義下的真違規，收斂成單一 map / strategy 表。discriminant 指 `type` / `kind` / `status` / `variant` / `mode` / `state`。**單檔內的 exhaustive switch 是慣用法，NEVER 當違規報**；判定前先確認那幾條 switch 吃的是不是同一個 union（不同 union 撞 prop 名是已知 false positive）。 |
-| 既有 cycle 在 20 檔以下卻把規則降 `warn` | `vite.config.ts` | 降級只有一個合法情境：既有 cycle 涉及 **> 20 檔**的結構性 cycle，且同時登記涉及檔數與收斂計畫（lifecycle repo 寫 plan Open work，未遷移 consumer 登 TD）。20 檔以下降級 = 用 config 繞過 gate。 |
+| 既有 cycle 在 20 檔以下卻把規則降 `warn` | `vite.config.ts` | 降級只有一個合法情境：既有 cycle 涉及 **> 20 檔**的結構性 cycle，且同時登記涉及檔數與收斂計畫（lifecycle repo 照 `follow-up-register` § 開獨立 plan 開 plan，未遷移 consumer 登 TD）。20 檔以下降級 = 用 config 繞過 gate。 |
 
 **Reviewer 檢查方式**：
 

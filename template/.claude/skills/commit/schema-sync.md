@@ -144,8 +144,8 @@ supabase db advisors --local 2>/dev/null || echo "SKIP: CLI < v2.81.3，改用 M
 **但輸出 MUST 讀，且義務是逐條的**：
 
 - **每一條** security 類 finding（RLS disabled、policy exists but RLS disabled、security definer
-  view、auth.users 暴露、function search_path 未設等）**MUST** 在本次 commit 當場修掉，或在
-  承載本次工作的 plan 的 Open work 登一列（沒有 `specs/truth/work-lifecycle.md` 的 consumer 才在
+  view、auth.users 暴露、function search_path 未設等）**MUST** 在本次 commit 當場修掉，或照
+  `follow-up-register` § 開獨立 plan 開 plan 並標級（沒有 `specs/truth/work-lifecycle.md` 的 consumer 才在
   `docs/tech-debt.md` 登一條 entry）並在完成報告寫明位置或編號。**兩者都沒有就不准進 Step 2。**
 - **performance 類 finding**（unindexed FK、unused index、auth_rls_initplan、multiple permissive
   policies）純參考，不強制處置。

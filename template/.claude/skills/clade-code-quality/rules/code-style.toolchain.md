@@ -477,6 +477,20 @@ suite 後面，agent 於是繞過閘門直跑——那才是沒有上限的路�
 
 `CLADE_OXC_THREADS` / `CLADE_VITEST_MAX_WORKERS` 由 `bin/vp` shim 注入，條件：env 是正整數、子命令是 `lint`/`fmt`/`test`、使用者沒自己帶該旗標。
 
+#### `bin/vp` 結果快取（TD-687 S3）
+
+同一份輸入（工作樹內容＋指令＋工具指紋＋相關 env）的 `vp check`／`vp test run` 重跑時，shim **不 spawn 真 vp**：印 `[clade vp-cache] HIT key=…`、只回放原輸出最後 8 KiB、以舊 exit code 結束。預設只存成功結果；`vp test` 只快取明確 `run`（或 `CI` 已設），`watch`／`dev`／`--watch`／`-u`／`--coverage` 一律不快取；執行期間樹變了不存。
+
+| env | 預設 | 作用 |
+| --- | --- | --- |
+| `CLADE_VP_CACHE` | 開 | `off`／`0`／`false` 全關（要確定「真的跑過」時用） |
+| `CLADE_VP_CACHE_GATES` | `typecheck,test` | 逗號清單；`build` 有產物副作用，命中不會重產 dist，要明確加 |
+| `CLADE_VP_CACHE_FAILURES` | 不設 | `1` 才連一般失敗也快取 |
+| `CLADE_VP_CACHE_ENV` | 不設 | 額外進鍵的 env 名（逗號）；預設進鍵的是 `VITE*`／`NUXT_*`／`DATABASE_*`／`SUPABASE_*`／`*_URL`／`*_KEY` 等，漏列時用它補，否則「A 環境綠、B 環境紅卻回放綠」 |
+| `CLADE_VP_CACHE_DIR` | `~/.cache/clade/vp-result-cache` | 快取目錄（NEVER 放 repo） |
+
+已知邊界：gitignored 檔（含 `.env`）不進工作樹 hash；依賴它們的結果用 `CLADE_VP_CACHE=off` 重跑。
+
 ### `vp check` 收不到 threads 上限（已知殘餘）
 
 `vp check --threads=N` 回 `Unexpected argument '--threads'`（驗於 vp v0.3.0）。

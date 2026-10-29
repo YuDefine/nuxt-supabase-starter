@@ -40,7 +40,7 @@ paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'packages/*/server/**/
 advisors 沒有文件化的 exit code 與輸出契約，所以**不做 hard gate**，但輸出 **MUST** 讀，處置義務逐條：
 
 - **每一條** security 類 finding（RLS disabled、policy exists but RLS disabled、security definer
-  view、`auth.users` 暴露、function `search_path` 未設等）**MUST** 當場修掉，或依 [[follow-up-register]] 登記（lifecycle repo：plan § Open work；
+  view、`auth.users` 暴露、function `search_path` 未設等）**MUST** 當場修掉，或依 [[follow-up-register]] § 直接登記登記（lifecycle repo：開獨立 plan 並標級；
   未遷移 consumer：`docs/tech-debt.md` entry）並在完成報告寫明 work id 或編號
 - **「每一條」是字面意思**：advisors 回 5 條就要 5 條都有著落，**NEVER** 修最嚴重的那條就往下走，
   **NEVER** 只處理「跟本次 diff 相關」的那幾條

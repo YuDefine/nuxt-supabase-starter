@@ -246,7 +246,7 @@ export const LANDED_DELIVERY_NOISE_PATHSPECS = Object.freeze([
 
 /**
  * 已落地樹的 append-only ledger（同為落地專屬噪音，**不**進 `isIgnorableWorktreeDrift`）：
- * 樹裡的 `vendor/ledger/{signals,candidates,outcomes}.jsonl` 只比 HEAD 多了追加行，而那些行
+ * 樹裡的 `vendor/ledger/{signals,candidates,outcomes,digest-runs,pitfall-detector-runs}.jsonl` 只比 HEAD 多了追加行，而那些行
  * 已逐字存在於 landing base（`origin/main`）上的同一份檔——內容沒有任何會隨樹消失的 bytes，
  * 於是不算待救的 user WIP。只有 `blockingStatusPaths`／`countUserDirty` 在呼叫端**明確帶
  * `landedBaseRef`**（呼叫端已證明該樹 merged／squash-merged）時才放行；merge-back／stop-wip-guard
@@ -256,6 +256,8 @@ export const LANDED_LEDGER_APPEND_PATHS = Object.freeze([
   'vendor/ledger/signals.jsonl',
   'vendor/ledger/candidates.jsonl',
   'vendor/ledger/outcomes.jsonl',
+  'vendor/ledger/digest-runs.jsonl',
+  'vendor/ledger/pitfall-detector-runs.jsonl',
 ])
 
 /** porcelain XY 碼是否為純修改（` M`／`M `／`MM`）；刪除、新增、rename、衝突都不是。 */
