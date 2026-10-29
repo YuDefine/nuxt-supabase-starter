@@ -15,6 +15,7 @@ import { isRecord, parseJson } from './json-unknown.ts'
 import {
   cpuBusyBetween,
   cpuUsePerCore,
+  LOAD_CAP_PER_CORE,
   MEM_PRESSURE_AVG60,
   parseCpuPsi,
   parseCpuStatLine,
@@ -381,9 +382,10 @@ export function peerLoad(
  * `--machine auto`: candidates under both pressure lines first, then those over a ranking-only line, then those
  * at memory thrash; within a tier the lowest CPU use (`cpuUsePerCore`, the watch's fill measure), then this
  * machine. An unreachable peer is skipped rather than failing the dispatch.
- * `overloaded` (the caller refuses an explicit `--machine auto`) is only memory thrash (`MEM_PRESSURE_AVG60`, a hard
- * limit: one more pane on a swapping machine can take it down). Load1 per core, however high, only ranks — CPU
- * busyness never stops a dispatch.
+ * `overloaded` (the caller refuses an explicit `--machine auto`; the default placement keeps it here) is memory
+ * thrash (`MEM_PRESSURE_AVG60`, one more pane on a swapping machine can take it down) or load1 per core at
+ * `LOAD_CAP_PER_CORE` (D-CDB702-1: a machine that far over stops taking work while another is under it). Below the
+ * cap, load1 per core only ranks.
  */
 export function chooseLeastLoaded(candidates: MachineLoad[]): {
   chosen: MachineLoad | undefined
@@ -394,8 +396,8 @@ export function chooseLeastLoaded(candidates: MachineLoad[]): {
       typeof candidate.per_core === 'number',
   )
   const refused = (load: MachineLoad & { per_core: number }) =>
-    (load.mem_some_avg60 ?? 0) >= MEM_PRESSURE_AVG60
-  // 0 = under both pressure lines, 1 = over a ranking-only line, 2 = over the memory hard limit
+    (load.mem_some_avg60 ?? 0) >= MEM_PRESSURE_AVG60 || load.per_core >= LOAD_CAP_PER_CORE
+  // 0 = under both pressure lines, 1 = over a ranking-only line, 2 = over the memory hard limit or the load cap
   const tier = (load: MachineLoad & { per_core: number }) =>
     refused(load) ? 2 : pressureReasons(load).length > 0 ? 1 : 0
   const chosen = measured.toSorted(

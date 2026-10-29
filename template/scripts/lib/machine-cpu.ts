@@ -28,6 +28,20 @@ export function parseCpuStatLine(line: string): CpuCounters | null {
 export const SATURATED_LOAD_PER_CORE = 2
 
 /**
+ * 每核負載上限（D-CDB702-1「可以加上限」，2026-10-27）：達此值的機器不再收新件——另一台低於上限就放那台，
+ * 每台都到上限才排隊（自動加派記 `resource-pressure`、`--machine auto` 拒派、預設 auto 留本機）。
+ * 每核負載高到 brief 送達逾時的程度才擋；開樹的 pnpm／tsc 尖峰只到 1.2 左右，
+ * 所以線畫在 4（每核一個在跑、三個在等），尖峰不會誤擋。CPU 使用率封頂在 1.0，表達不出超載，上限只能看 load1／核。
+ */
+export const LOAD_CAP_PER_CORE = 4
+
+/** 這台是否到了每核負載上限（`LOAD_CAP_PER_CORE`）；讀不到 load1／核數不判。 */
+export function overLoadCap(m: { load1?: number | null; cores?: number | null }): boolean {
+  const v = loadPerCore(m)
+  return v !== null && v >= LOAD_CAP_PER_CORE
+}
+
+/**
  * 記憶體 PSI `some avg60` 達此值即算記憶體壓力（硬上限，比填充線 `fill.memPressureMaxAvg60` 寬）：三成時間有 task
  * 在等換頁就是 swap 抖動，再派可能把機器拖到當機。
  */
