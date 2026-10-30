@@ -47,10 +47,7 @@ Session 內對 user 透明揭露錯誤是必要的（誠實 ≠ 隱瞞），但�
 
 ## 送出前自查
 
-搜下列關鍵字，每條問「讀者知道嗎？讀者在乎嗎？」否則刪：
-
-- 中：不選 / 排除 / 跳過 / 也不選 / 不該 / 一開始 / 後來發現 / 改成 / 修正前
-- En: `not X` / `instead of` / `earlier` / `was wrong` / `used to` / `originally` / `previously`
+逐句問：這句講的是你排除過的選項、先前的錯、或修正前的狀態嗎？是的話再問「讀者知道嗎？讀者在乎嗎？」否則刪。
 
 ## 例外
 
@@ -83,10 +80,7 @@ Session 內對 user 透明揭露錯誤是必要的（誠實 ≠ 隱瞞），但�
 
 ### Hard rule
 
-寫含下列措辭的句子前，**MUST** 自查能否找到 verbatim MCP / docs / API 引文：
-
-- 中：`官方 / 規範 / 文件規定 / 官方建議 / canonical / 推薦做法 / 標準寫法 / 規範路徑 / 規範 pattern`
-- En: `canonical` / `the canonical way` / `officially / official approach` / `documented as` / `recommended` / `prescribed` / `the way to do X` / `the right way`
+句子把某個寫法說成來源背書的（「官方」「規範」「canonical」「recommended」「the right way」這類），寫之前 **MUST** 自查能否找到 verbatim MCP / docs / API 引文：
 
 找得到 → **MUST** 標出處（`[per <tool> <command> §<section>]` 或直接貼引文 ≤2 行）
 找不到 → **MUST** 改用以下任一非 prescriptive 措辭：

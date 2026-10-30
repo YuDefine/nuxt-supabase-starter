@@ -6,7 +6,7 @@
 # session-census.ts digest → 把要交代的事寫進 brief → 同 cwd 開新 pane 冷續接。
 # `herdr-session-handoff.ts --continue` 已有同一判定（`cache_ttl_expired`）；本 gate 補的是
 # agent 在 Bash 直接打 `herdr agent prompt`（含 `herdr --machine <peer> agent prompt`）這個入口。
-# plan：specs/plans/W-2026-09-26-ttl-wake-paths/plan.md（Scope B）。
+# 來源 work：W-2026-09-26-ttl-wake-paths（Scope B，已結案）。
 #
 # 判定只 import `vendor/scripts/lib/pane-cache-ttl.ts`（lastCacheTouchMs／CONTINUATION_CACHE_TTL_MS），
 # NEVER 在這裡另寫門檻、NEVER import herdr-session-handoff.ts。

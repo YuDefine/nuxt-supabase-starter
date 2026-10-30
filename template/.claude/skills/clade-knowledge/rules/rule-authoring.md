@@ -1,5 +1,5 @@
 ---
-description: 撰寫或修改 rule / SKILL.md / subagent brief / snippet / 落盤文件（pitfall、HANDOFF、TD、digest）的措辭工程——先分類失敗型態再選形式、觸發條件不寫流程、高違規規約配反開脫三件套、長度配讀者要做的決定、發佈前驗證
+description: 撰寫或修改 rule / SKILL.md / subagent brief / snippet / 落盤文件（pitfall、HANDOFF、TD、digest）的措辭工程——先分類失敗型態再選形式、觸發條件不寫流程、高違規規約預設一行平述、量到失敗才加反開脫三件套、長度配讀者要做的決定、發佈前驗證
 paths: ['.clade/rules/**/*.md', '.claude/rules/**/*.md', '.claude/skills/**/*.md', 'tasks/lessons.md', 'rules/**/*.md', 'capabilities/core/skills/**/*.md', 'claude-md/**/*.md', 'vendor/snippets/**/*.md', 'docs/pitfalls/**/*.md', 'docs/digests/**/*.md', 'docs/tech-debt.md', 'HANDOFF.md']
 ---
 <!-- Clade native rule; source: rules/core/rule-authoring.md; edit canonical source -->
@@ -85,17 +85,21 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 
 「執行者是 <人名>」「X 為 user-only」這類句子要附**成立前提**，並寫明前提消失後本條失效——否則當時的事實限制會被照字面當成永久權責劃分續用。範本在 [[secret-custody]] 的前提失效條款段。
 
-## 紀律型規約三件套（高違規規約 MUST 全配）
+## 紀律型規約三件套（預設一行平述，量到失敗才加）
 
-判定「高違規」：已有對應 pitfall、或 oops / audit 訊號顯示同型違規 ≥2 次。三件套：
+判定「高違規」：已有對應 pitfall、或 oops / audit 訊號顯示同型違規 ≥2 次。
+
+**預設寫法**：一行平述的規則加一句理由，綁可觀察 predicate（見 § 措辭三禁）。不預設 Iron Law、開脫話術表、Red Flags——這三件是對某一代模型量出來的修正，不是高違規規約的標配，預設就加等於把壓力語氣寫成方法論，還會散播到全 fleet。
+
+**什麼時候才加三件套**：該規約的「無規約對照組」在**當前主力 model** 上實測仍失敗，**且**平述版 with-rule 臂也沒壓住（流程見 § 發佈前驗證）。加的時候在規約裡寫下量測用的 model 與日期。三件的寫法：
 
 1. **Iron Law**：一行絕對句（如 `NO ROOT-CAUSE GUESS BEFORE A RELIABLE RED`），前置「**違反字面就是違反精神**」——砍掉整類「我有遵守精神」開脫。
 2. **Rationalization table**：一列一組「藉口 → 現實」。藉口**必須是逐字實錄**（從 pitfall 檔、session transcript、baseline 測試抽），不虛構假想藉口——虛構的堵不到真的洞。
 3. **Red Flags**：「發現自己在想 X = 停」清單，收錄違規**前兆**句式（「就這一次」「這個情況不一樣」「先做了再補」）。
 
-三件套的既有範本：[[testing-anti-patterns]]、`~/.claude/skills/receiving-code-review`。
+既有範本：[[testing-anti-patterns]]、`~/.claude/skills/receiving-code-review`。
 
-**三件套是對某一代模型量出來的修正，換模型就要重量。** 對照實測的紀錄要寫下跑的 model 與日期；fleet 的主力 model 換代時，對每一條帶三件套的規約重跑一次無規約對照組——對照組已經不失敗，就照 § 發佈前驗證 (a) 拿掉三件套，改回一行平鋪直述的規則。強調只在它量得出差別的地方才有資訊量，全篇都強調時，每一處都不再有資訊量。
+**既有三件套沒有「model＋日期」量測紀錄的，下次改動該規約時先重跑一次無規約對照組**；fleet 主力 model 換代時，對每一條有紀錄的三件套同樣重跑。對照組不失敗，就照 § 發佈前驗證 (a) 拿掉，改回一行平述。強調只在它量得出差別的地方才有資訊量，全篇都強調時，每一處都不再有資訊量。
 
 **可選第四件——completion checkbox＋證據 gate**：兩條**同時**成立才加——(1) 完成宣告本身是高違規點的流程型 skill（apply / verify / commit 類），且 (2) 該步驟的完成**有外部可取事實可查**（實跑輸出 / 截圖 / API 回應 / exit code）。做法：completion criterion 寫成 checkbox，每格綁「貼出實跑 invocation 與 output」。實例：commit Step 6、[[proactive-skills.design-checkpoint]] § Design Gate。
 

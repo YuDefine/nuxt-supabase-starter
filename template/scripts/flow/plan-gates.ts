@@ -28,11 +28,14 @@ import {
 } from './acceptance-verdicts.ts'
 import {
   ANCHOR_REQUIRED_KINDS,
+  SCOPE_PLACEMENTS,
   TRUTH_FEATURES_PREFIX,
+  parseScopeInventory,
   parseWorkKind,
   readPlanDeltas,
   regressionAnchors,
   requirementSet,
+  scopeScenario,
   splitDeltaUnit,
   type RegressionAnchor,
   type RequirementSet,
@@ -710,6 +713,8 @@ export function checkReadiness(
   const anchors = regressionAnchors(deltas)
   const set = requirementSet(kind, anchors)
   findings.push(...kindDeltaMismatches(root, planRel, kind, deltas))
+  if (kind === 'acceptance-gap')
+    findings.push(...scopeInventoryFindings(planRel, planText).findings)
 
   // 1. spec.md（regression 不要求，但有就照查待釐清標記）
   const specRel = `${PLAN_ROOT}/${workId}/spec.md`
@@ -894,7 +899,7 @@ const DSL_FILE_RE = /(^|\/)dsl\.(md|yml)$/u
  *
  * - `bug-covered`：沒有 MODIFY／DELETE；ADD 只落在已存在的 truth `.feature`；不碰 DSL（要新句型＝原本沒有 scenario）
  * - `refactor`：truth features／contracts／data 沒有 MODIFY／DELETE（行為要變就是 behavior）
- * - `bug-uncovered`：至少一列 ADD 到 truth features（正確行為要寫進 truth）
+ * - `bug-uncovered`、`acceptance-gap`：至少一列 ADD 到 truth features（正確行為要寫進 truth）
  * - `behavior`、未宣告：不限制
  */
 function kindDeltaMismatches(
@@ -906,11 +911,15 @@ function kindDeltaMismatches(
   if (kind === null || kind === 'behavior') return []
   const live = deltas.filter((d) => d.state !== 'withdrawn')
   const out: GateFinding[] = []
-  const mismatch = (detail: string, suggest: WorkKind) =>
+  // suggest 為 null＝不提示改判：acceptance-gap 的出路是補 ADD 列，NEVER 改判 bug-covered 過閘（Rule 6）。
+  const mismatch = (detail: string, suggest: WorkKind | null) =>
     out.push({
       code: 'kind-delta-mismatch',
       path: `${planRel}#Truth delta`,
-      detail: `${detail}; re-judge with \`flow plan set-kind ${planRel.split('/').at(-2)} --to ${suggest} --reason <why>\``,
+      detail:
+        suggest === null
+          ? detail
+          : `${detail}; re-judge with \`flow plan set-kind ${planRel.split('/').at(-2)} --to ${suggest} --reason <why>\``,
     })
   if (kind === 'bug-covered') {
     for (const d of live) {
@@ -952,7 +961,7 @@ function kindDeltaMismatches(
         )
       }
     }
-  } else if (kind === 'bug-uncovered') {
+  } else if (kind === 'bug-uncovered' || kind === 'acceptance-gap') {
     // 只認 `.feature`：只加 dsl.md／dsl.yml 的句型不算把正確行為寫進 truth。
     const adds = live.some((d) => {
       const path = splitDeltaUnit(d.unit)[0]
@@ -962,8 +971,10 @@ function kindDeltaMismatches(
     })
     if (!adds) {
       mismatch(
-        'no ADD row to a specs/truth/features/**/*.feature; a bug without a scenario MUST write the correct behavior into truth',
-        'bug-covered',
+        kind === 'acceptance-gap'
+          ? 'no ADD row to a specs/truth/features/**/*.feature; an acceptance gap is a scope without truth coverage, so it MUST write that scope into truth — add the missing ADD rows (re-judging the kind does not satisfy this gate)'
+          : 'no ADD row to a specs/truth/features/**/*.feature; a bug without a scenario MUST write the correct behavior into truth',
+        kind === 'acceptance-gap' ? null : 'bug-covered',
       )
     }
   }
@@ -1142,7 +1153,8 @@ export function checkAcceptanceClose(
  * 有 passed 判決，晚於 plan 最後修訂與該 truth feature 最後一次修改兩者較晚者；而且同一條 scenario
  * 先有 failed、後有 passed——沒紅過的綠燈證明不了它擋得住這個 bug。修 bug 與重構至少要有一個錨點。
  *
- * 先紅後綠不適用 `refactor`：重構的錨點釘住的是**不變**的行為，按定義不會紅。
+ * 先紅後綠不適用 `refactor`：重構的錨點釘住的是**不變**的行為，按定義不會紅。`acceptance-gap` 也不逐錨點
+ * 要求：盤點表裡本來就正確的行為不會紅，它的先紅後綠由 `checkAcceptanceGapClose` 對 bug 列與 e2e 錨點要求。
  * 判決以 report 的 repo-relative uri ＋ 標題為鍵（FR-017），同檔名不同目錄的 feature 不互相冒用。
  */
 export function checkRegressionAnchorsClose(
@@ -1206,6 +1218,7 @@ export function checkRegressionAnchorsClose(
     }
     if (
       kind !== 'refactor' &&
+      kind !== 'acceptance-gap' &&
       !history.some((v) => v.verdict === 'failed' && v.atMs < latest.atMs)
     ) {
       findings.push({
@@ -1214,6 +1227,158 @@ export function checkRegressionAnchorsClose(
         detail: `${label} has no failed verdict before its pass; keep the red run's cucumber JSON under ${planRel}/evidence/${PLAYWRIGHT_BDD_EVIDENCE_HINT} — a scenario that never failed has not shown it catches the bug`,
       })
     }
+  }
+  return findings
+}
+
+// ── Acceptance gap：範圍盤點表 ─────────────────────────────────────────────
+
+/**
+ * `acceptance-gap` 的盤點表結構檢查（readiness 與 close 共用）：表要在、每列有落點、
+ * scenario 列對得上一列 Truth delta 錨點、至少一列 bug 與一列 e2e。回傳 bug／e2e 列對應的錨點給
+ * close 判先紅後綠。
+ *
+ * 判準與格式：work-route `rules/工作種類與必要產物.md` Rule 6。
+ */
+export function scopeInventoryFindings(
+  planRel: string,
+  planText: string,
+): {
+  findings: GateFinding[]
+  bug: { feature: string; title: string }[]
+  e2e: { feature: string; title: string }[]
+} {
+  const path = `${planRel}#Scope inventory`
+  const rule = 'work-route rules/工作種類與必要產物.md Rule 6'
+  const rows = parseScopeInventory(planText)
+  if (rows.length === 0) {
+    return {
+      findings: [
+        {
+          code: 'scope-inventory-missing',
+          path,
+          detail: `acceptance-gap work has no \`## Scope inventory\` table; list every behavior of the affected feature as \`| id | 行為 | 落點 | scenario／理由 |\` (${rule})`,
+        },
+      ],
+      bug: [],
+      e2e: [],
+    }
+  }
+  const findings: GateFinding[] = []
+  const anchors = regressionAnchors(readPlanDeltas(planText))
+  const bug: { feature: string; title: string }[] = []
+  const e2e: { feature: string; title: string }[] = []
+  const wanted: Record<string, readonly string[]> = {
+    existing: ['NOOP'],
+    add: ['ADD'],
+    bug: ['ADD', 'NOOP'],
+    e2e: ['ADD', 'NOOP'],
+  }
+  for (const row of rows) {
+    const label = `${row.id} (${row.behavior || 'unnamed behavior'})`
+    if (!(SCOPE_PLACEMENTS as readonly string[]).includes(row.placement)) {
+      findings.push({
+        code: 'scope-inventory-row-unplaced',
+        path,
+        detail: `${label} 落點 is \`${row.placement || '(empty)'}\`; expected one of ${SCOPE_PLACEMENTS.join(', ')} (${rule})`,
+      })
+      continue
+    }
+    if (row.placement === 'out') {
+      if (!row.target || row.target === '—' || row.target === '-') {
+        findings.push({
+          code: 'scope-inventory-row-unplaced',
+          path,
+          detail: `${label} is out of scope without a reason; write why it is not done in the fourth column`,
+        })
+      }
+      continue
+    }
+    const scenario = scopeScenario(row.target)
+    if (!scenario) {
+      findings.push({
+        code: 'scope-inventory-row-unplaced',
+        path,
+        detail: `${label} is ${row.placement} but names no scenario; write \`specs/truth/features/<path>.feature -> Scenario: <title>\` in the fourth column`,
+      })
+      continue
+    }
+    const actions = wanted[row.placement]!
+    const anchored = anchors.some(
+      (a) =>
+        a.feature === scenario.feature && a.title === scenario.title && actions.includes(a.action),
+    )
+    if (!anchored) {
+      findings.push({
+        code: 'scope-inventory-row-unanchored',
+        path,
+        detail: `${label} names ${scenario.feature} -> ${scenario.title}, but § Truth delta has no live ${actions.join(' or ')} row for it`,
+      })
+      continue
+    }
+    if (row.placement === 'bug') bug.push(scenario)
+    if (row.placement === 'e2e') e2e.push(scenario)
+  }
+  if (!rows.some((r) => r.placement === 'bug')) {
+    findings.push({
+      code: 'acceptance-gap-bug-missing',
+      path,
+      detail: `no \`bug\` row; the bug found in acceptance keeps its own red-then-green anchor as one row of the inventory (${rule})`,
+    })
+  }
+  if (!rows.some((r) => r.placement === 'e2e')) {
+    findings.push({
+      code: 'acceptance-gap-e2e-missing',
+      path,
+      detail: `no \`e2e\` row; acceptance-gap work closes only with an end-to-end scenario covering the whole user flow (${rule})`,
+    })
+  }
+  return { findings, bug, e2e }
+}
+
+/**
+ * `acceptance-gap` 的結案條件：盤點表結構齊全；每一列 `bug` 錨點先紅後綠（它要證明擋得住這個 bug），
+ * 且至少一支 `e2e` 錨點先紅後綠（整條流程確實走過出錯的地方）。先紅後綠＝最新判決 passed，之前有過
+ * failed；每一錨點的新鮮度已由 `checkRegressionAnchorsClose` 檢查。
+ */
+export function checkAcceptanceGapClose(
+  root: string,
+  workId: string,
+  kind: WorkKind | null,
+): GateFinding[] {
+  if (kind !== 'acceptance-gap') return []
+  const planRel = `${PLAN_ROOT}/${workId}`
+  const planFile = join(root, planRel, 'plan.md')
+  if (!existsSync(planFile)) return []
+  const { findings, bug, e2e } = scopeInventoryFindings(
+    `${planRel}/plan.md`,
+    readFileSync(planFile, 'utf8'),
+  )
+  const { verdicts } = readEvidenceVerdicts(root, planRel)
+  const redThenGreen = (s: { feature: string; title: string }) => {
+    const history = verdicts
+      .filter((v) => v.uri === s.feature && v.title === s.title)
+      .toSorted((a, b) => a.atMs - b.atMs)
+    const latest = history.at(-1)
+    return (
+      latest?.verdict === 'passed' &&
+      history.some((v) => v.verdict === 'failed' && v.atMs < latest.atMs)
+    )
+  }
+  const hint = `keep the red run's cucumber JSON under ${planRel}/evidence/${PLAYWRIGHT_BDD_EVIDENCE_HINT}`
+  for (const s of bug.filter((b) => !redThenGreen(b))) {
+    findings.push({
+      code: 'acceptance-gap-bug-never-red',
+      path: s.feature,
+      detail: `bug row scenario "${s.title}" has no failed verdict before its latest pass; ${hint}`,
+    })
+  }
+  if (e2e.length > 0 && !e2e.some(redThenGreen)) {
+    findings.push({
+      code: 'acceptance-gap-e2e-never-red',
+      path: `${planRel}/plan.md#Scope inventory`,
+      detail: `no e2e row (${e2e.map((s) => `${s.feature} -> ${s.title}`).join('; ')}) has a failed verdict before its latest pass; ${hint}`,
+    })
   }
   return findings
 }

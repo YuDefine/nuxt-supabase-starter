@@ -162,6 +162,18 @@ grep -En "'import/no-cycle':\s*'warn'" vite.config.ts
 
 若本次變更包含 `🐛 fix` 類型的 commit，檢查是否已更新 `PRODUCTION_BUG_PATTERNS.md`（lifecycle repo 在 `specs/truth/docs/verify/`，未遷移 consumer 在 `docs/verify/`；見 `/doc-sync`）。
 
+## 驗收發現的 bug 要有範圍盤點與 e2e（acceptance-gap）
+
+> enforcement: semantic(acceptance-gap-scope)
+
+PR 修的是驗收階段（客戶／HR 驗收、發版驗證、staging 實走、主管抽驗）發現的 bug——PR body、commit、`Work:` 行指向的 plan、或 worker brief 的「是否為驗收發現的 bug」段標為是、或 plan 的工作種類是 `acceptance-gap`——時，檢查：
+
+- 該 work 的 plan 有 `## Scope inventory` 盤點表（格式見 work-route `rules/工作種類與必要產物.md` Rule 6）：受影響功能的每個行為一列；原 bug 的紅→綠錨點只是其中一列（`bug`）
+- 落點 `add` 的列，本次 diff 有對應的 truth scenario
+- 有覆蓋整條使用流程、先紅後綠的 `e2e` 列（不是只鎖原 bug 那一步）
+
+缺盤點表或缺 e2e → 🟠 Major，指名缺哪一項；只修原 bug 單點、以 `bug-covered`／`bug-uncovered` 結案也算缺。不是驗收階段發現的 bug（開發中自測、CI 紅）不適用本條。
+
 ## Nuxt a11y 採用一致性
 
 > enforcement: semantic(a11y-adoption) + audit(audit-review-rules.ts)

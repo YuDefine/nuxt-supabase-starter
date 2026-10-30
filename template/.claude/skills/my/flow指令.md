@@ -107,6 +107,7 @@ cd ~/offline/<consumer-id> && node ~/offline/clade/vendor/scripts/flow/flow.ts a
 | `--not-same-as <span>` | 問句與已答題相近、但確定是另一件事時帶，可重複 | 身分鍵對不上、問句 bigram 相似度過門檻的已答題會被拒收；明說不是同一件事才放行（`decision-subject.ts`） |
 | `--dispatch <id>` | 補鑄題掛回 blocked dispatch 時帶 | 同一題的身分鍵之一：同 dispatch 且問句相近的已答題算同一題 |
 | `--supersede <span>` | 被「已有答案」拒收且現況變了才帶 | 「已有答案」包括同一 carrier，以及沒帶 carrier 時引用舊題 span id 或與舊題共用識別字（見 `rules/待拍板條目寫法.md` Rule 23）。指到拒收句列出的那一題才放行；記在 `payload.supersedes` |
+| `--distinct-from <span 或 plan-decision:W:n>` ＋ `--distinct-reason '<差在哪>'` | 被拒收句列出的那一筆判成同題、但確定是另一件事時帶；兩個旗標成對，可重複 `--distinct-from` | 原答案不動、不標 superseded（與 `--supersede` 不同），理由進 `payload.distinct_from`／`distinct_reason` 並印在題卡 items。缺 `--distinct-reason` 拒發，`--distinct-reason` 不搭 `--distinct-from` 也拒發；拒收句列出的每一筆都要點名才放行。指到同 carrier 同一句話的已答題（身分鍵命中）或還開著的同題卡不放行，那是同一題：照既有答案做，現況變了才用 `--supersede` |
 | `--options 'A,B'` | 舊寫法 | 以逗號切選項，選項本文含逗號時會切壞；用可重複的 `--option` |
 | `--question-page`／`--question-page-label` | 已退役 | 帶了直接被拒 |
 

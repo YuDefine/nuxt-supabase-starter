@@ -1,5 +1,5 @@
 {"file":"api-patterns.md","source":"rules/modules/runtime/cf-workers/api-patterns.md","paths":["server/api/**/*.ts","packages/*/server/api/**/*.ts"]}
-{"file":"cloudflare-workers.md","source":"rules/core/cloudflare-workers.md","paths":["wrangler.{toml,jsonc}","void.json","nuxt.config.*","package.json",".github/workflows/**/*.yml"]}
+{"file":"cloudflare-workers.md","source":"rules/core/cloudflare-workers.md","paths":["void.config.ts","void.lock.json","wrangler.{toml,jsonc}","nuxt.config.*","package.json",".github/workflows/**/*.yml"]}
 {"file":"deploy-env-identity.md","source":"rules/core/deploy-env-identity.md","paths":["sentry*.config.*","**/sentry*.ts","nuxt.config.*","Dockerfile","**/Dockerfile","wrangler.toml","wrangler.jsonc",".github/workflows/**","server/plugins/**","packages/*/server/plugins/**","packages/**/server/plugins/**"]}
 {"file":"dev-port-allocation.md","source":"rules/core/dev-port-allocation.md","paths":["package.json","nuxt.config.ts","registry/consumers.json","registry/consumers.schema.json"]}
 {"file":"dev-tunnel-convention.md","source":"rules/core/dev-tunnel-convention.md","paths":["nuxt.config.*",".env",".env.local","package.json"]}

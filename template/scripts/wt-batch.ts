@@ -26,7 +26,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isRecord, parseJsonRecord, parseJsonWith } from './lib/json-unknown.ts'
-import { isRegisterPath, PROVEN_NON_GATE } from './lib/register-paths.ts'
+import { isRegisterPath } from './lib/register-paths.ts'
 import {
   evaluateUnattendedAdmission,
   parseUnattendedMergeAuthorization,
@@ -481,7 +481,8 @@ export interface WorktreeBatch {
   mergeReceipt?: MergeReceipt
   /** Set when `confirm-merged --reconcile-merged` recorded the landing: `unsealed` — the record
    *  stopped at review and never sealed; `advancedBase` — main moved past the reviewed base on
-   *  non-register paths, so the reseal gate was lifted. Absent on a normal sealed landing. */
+   *  paths batchBaseAdvanceAllowed rejects (overlapping the reviewed set where a post-merge lane
+   *  re-verifies, non-register elsewhere), so the reseal gate was lifted. Absent on a normal sealed landing. */
   reconciledMerged?: { unsealed: boolean; advancedBase: boolean }
   unattendedAuthorization?: UnattendedMergeAuthorization
   mergeAttempt?: MergeAttemptJournal
@@ -1140,21 +1141,23 @@ function batchBase(c: Context, b: Pick<WorktreeBatch, 'workflow'>): string {
 function recordOriginAdvance(b: WorktreeBatch): void {
   b.origin_advanced_during_review = (b.origin_advanced_during_review ?? 0) + 1
 }
+/** 合入後 push 到 main 會補驗前移與候選交互的 repo（clade 的 push lane）。 */
+export const POST_MERGE_VERIFIER = 'scripts/test-lanes/push-lane.ts'
 /**
- * origin/main 前移是否仍可放行：`proven` 為空一律拒收；否則前移路徑每一項都必須在 `proven`
- * 內，且與候選路徑不相交（目錄前綴也算相交）。前移沒有任何變更路徑（空 commit）時，
- * 在非空 `proven` 下視為放行——它沒有動到任何 gate 輸入。
+ * origin/main 前移是否仍可放行（決策見 W-2026-09-25-batch-merge-main-churn § Decisions）：
+ * - 有 POST_MERGE_VERIFIER 的 repo：前移路徑每一項都與候選路徑不相交（目錄前綴也算相交）即放行。
+ *   不相交時 0-A 審的 diff 不變；交互由 PR CI（merge ref）與合入後的 push lane 驗。空 commit 視為放行。
+ * - 其他 repo（consumer 沒有合入後補驗）：只放行全在登記簿的前移。
  */
 export function batchBaseAdvanceAllowed(
   advanced: readonly string[],
   candidate: readonly string[],
-  proven: ReadonlySet<string>,
+  postMergeVerified: boolean,
 ): boolean {
-  if (proven.size === 0) return false
-  return advanced.every(
-    (path) => proven.has(path) && candidate.some((mine) => pathsOverlap(path, mine)) === false,
-  )
+  if (!postMergeVerified) return advanced.every(isRegisterPath)
+  return advanced.every((path) => candidate.some((mine) => pathsOverlap(path, mine)) === false)
 }
+const postMergeVerified = (c: Context) => existsSync(join(c.main, POST_MERGE_VERIFIER))
 function candidatePaths(c: Context, b: WorktreeBatch): string[] {
   const nameOnly = (cwd: string, args: string[]) =>
     execFileSync('git', ['diff', '--name-only', '--no-renames', '-z', ...args], {
@@ -1170,27 +1173,38 @@ function candidatePaths(c: Context, b: WorktreeBatch): string[] {
     ...new Set([...diffPaths(c, b.base, head(b.path)), ...nameOnly(b.path, ['--cached', b.base])]),
   ]
 }
-function originAdvanceProven(
-  c: Context,
-  b: WorktreeBatch,
-  current: string,
-  proven: ReadonlySet<string>,
-): boolean {
-  if (b.workflow !== 'pr-merge-based' || proven.size === 0) return false
+function originAdvanceAllowed(c: Context, b: WorktreeBatch, current: string): boolean {
+  if (b.workflow !== 'pr-merge-based') return false
   try {
     git(c.main, ['merge-base', '--is-ancestor', b.base, current])
   } catch {
     return false
   }
-  return batchBaseAdvanceAllowed(diffPaths(c, b.base, current), candidatePaths(c, b), proven)
+  // 沒有合入後補驗的 repo，seal 當下遇前移一律要求 refresh：登記簿路徑也是 gate 輸入
+  if (!postMergeVerified(c)) return false
+  return batchBaseAdvanceAllowed(diffPaths(c, b.base, current), candidatePaths(c, b), true)
 }
-export function assertBatchBase(
+/** 無人值守合併：前移判準同 seal，但只在有合入後補驗的 repo 放行；git 失敗一律不放行。 */
+function unattendedAdvanceAllowed(
   c: Context,
-  b: WorktreeBatch,
-  proven: ReadonlySet<string> = PROVEN_NON_GATE,
-): string {
+  auth: UnattendedMergeAuthorization,
+  remoteMain: string,
+): boolean {
+  if (remoteMain === auth.reviewed_base || !postMergeVerified(c)) return false
+  try {
+    git(c.main, ['merge-base', '--is-ancestor', auth.reviewed_base, remoteMain])
+    return batchBaseAdvanceAllowed(
+      diffPaths(c, auth.reviewed_base, remoteMain),
+      diffPaths(c, auth.reviewed_base, auth.source_head),
+      true,
+    )
+  } catch {
+    return false
+  }
+}
+export function assertBatchBase(c: Context, b: WorktreeBatch): string {
   const current = batchBase(c, b)
-  if (current !== b.base && originAdvanceProven(c, b, current, proven) === false) {
+  if (current !== b.base && originAdvanceAllowed(c, b, current) === false) {
     if (b.workflow === 'pr-merge-based') recordOriginAdvance(b)
     throw new Error('Main advanced: refresh the batch before restarting review')
   }
@@ -4681,14 +4695,17 @@ function verifyMergeReceipt(
         'Merge parent does not descend from the reviewed base; refresh and re-review the candidate',
       )
     }
-    // Only the register allowlist (main-sync's own pushes) may move between review and merge;
-    // any other advance — code included — needs a refresh and re-review. `--reconcile-merged`
-    // lifts exactly this gate for a PR GitHub already merged (the landing cannot be undone):
-    // the path-set, content-drift, replay-tree and patch-id proofs below still have to hold.
-    const advanced = diffPaths(c, b.base, mergeParent)
-    if (!options.advancedBase && advanced.some((p) => isRegisterPath(p) === false))
-      throw new Error('Merge parent is not the reviewed base; refresh and re-review the candidate')
+    // Main may move between review and merge only as batchBaseAdvanceAllowed permits (disjoint
+    // from the reviewed set where a post-merge lane re-verifies, register paths elsewhere); any
+    // other advance needs a refresh and re-review. `--reconcile-merged` lifts exactly this gate for a PR GitHub already merged (the
+    // landing cannot be undone): the path-set, content-drift, replay-tree and patch-id proofs
+    // below still have to hold.
     const reviewed = diffPaths(c, b.base, tip).toSorted()
+    if (
+      !options.advancedBase &&
+      !batchBaseAdvanceAllowed(diffPaths(c, b.base, mergeParent), reviewed, postMergeVerified(c))
+    )
+      throw new Error('Merge parent is not the reviewed base; refresh and re-review the candidate')
     const introduced = diffPaths(c, mergeParent, receipt.merge_sha).toSorted()
     if (reviewed.length !== introduced.length || reviewed.some((p, i) => p !== introduced[i]))
       throw new Error(
@@ -4868,7 +4885,11 @@ function landSealedBatch(
           unsealed,
           advancedBase:
             mergeParent !== b.base &&
-            diffPaths(c, b.base, mergeParent).some((p) => isRegisterPath(p) === false),
+            !batchBaseAdvanceAllowed(
+              diffPaths(c, b.base, mergeParent),
+              diffPaths(c, b.base, tip),
+              postMergeVerified(c),
+            ),
         }
       }
     } else {
@@ -7170,7 +7191,12 @@ export function mergeUnattendedBatch(
   assertEvidenceHash(auth.authority.evidence, auth.authority.hash, 'authority')
   assertEvidenceHash(auth.human.evidence, auth.human.hash, 'human')
   assertEvidenceHash(auth.deployment_evidence.evidence, auth.deployment_evidence.hash, 'deployment')
-  const decision = evaluateUnattendedAdmission(auth, options.probes.world)
+  const world = options.probes.world
+  const decision = evaluateUnattendedAdmission(
+    auth,
+    world,
+    unattendedAdvanceAllowed(c, auth, world.remoteMainSha),
+  )
   return mutate(c, (state) => {
     const batch = state.batches.find((item) => item.id === auth.batchId)
     if (!batch) throw new Error(`Batch ${auth.batchId} is not in the journal`)

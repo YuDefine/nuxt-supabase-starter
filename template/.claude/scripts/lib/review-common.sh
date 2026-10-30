@@ -147,6 +147,9 @@ review_collect_changeset() {
 REVIEW_GENERATED_RE='^(coverage|dist|build|\\.output|\\.nuxt|\\.void|\\.wrangler|node_modules)/|^[^ ]*/(coverage|dist|\\.output|\\.nuxt)/|^\\.claude/(rules|skills|agents|commands)/|\\.min\\.(js|css)$|\\.map$|(^|/)(pnpm-lock\\.yaml|package-lock\\.json|yarn\\.lock)$|^scripts/test-lanes/(deps|timings)\\.json$'
 
 # 產生檔裡「超出 budget 只列摘要、不算漏審」的子集：只有 lockfile 與 clade 量測資料。
+# 超出＝行數放不進剩餘 budget，單檔 bytes 超過 REVIEW_SUMMARY_ONLY_MAX_BYTES，或 bytes 放不進 brief 剩餘空間
+# （BRIEF_MAX_BYTES − 已嵌入 − REVIEW_DEP_SUMMARY_PROMPT_RESERVE；長行 lockfile 行數未超、嵌入卻撐爆 brief）。
+# oa-batches.ts summaryOnlyPaths 只預估前兩者（第三項取決於同批原始碼大小）：oa 預估成摘要的檔，wrapper 必定摘要化。
 # REVIEW_GENERATED_RE 其餘成員（`.claude/skills/**` 等投影層、`build/`、`dist/`、`coverage/`）
 # 可能是手寫原始碼（clade 自己的 `.claude/skills/coordinator/scripts/*.ts` 就是），它們超出
 # budget 照舊進 OMITTED＝漏審，NEVER 被「依政策」當成審過。
@@ -165,7 +168,8 @@ REVIEW_SUMMARY_ONLY_MAX_BYTES=300000
 # sel=0 → 只收符合的（拿原始碼填完後剩下的 budget）
 review_select_blocks() {
   # LC_ALL=C：length() 量位元組（與 oa-batches 的 Buffer.byteLength 同單位），不是 UTF-8 字元數。
-  LC_ALL=C awk -v maxl="$1" -v maxb="$REVIEW_SUMMARY_ONLY_MAX_BYTES" -v omit="$2" -v genre="$3" -v sel="$4" -v usedfile="$5" -v summ="${6:-}" -v sumre="${7:-}" -v taintfile="${8:-}" '
+  # 第 9 參數 sumbytes＝本 pass 可嵌入的 bytes（空＝不限）。
+  LC_ALL=C awk -v maxl="$1" -v maxb="$REVIEW_SUMMARY_ONLY_MAX_BYTES" -v omit="$2" -v genre="$3" -v sel="$4" -v usedfile="$5" -v summ="${6:-}" -v sumre="${7:-}" -v taintfile="${8:-}" -v sumbytes="${9:-}" '
     BEGIN {
       # 產生器不一致的檔（review_check_generated_data 寫出的路徑清單）不享有 summary-only 豁免。
       if (taintfile != "") while ((getline line < taintfile) > 0) if (line != "") taint[line] = 1
@@ -189,12 +193,15 @@ review_select_blocks() {
       # 「第一塊整塊保留」只給原始碼 pass：一個過大的原始碼檔要降級成「只 review 這一個檔」，
       # 而不是降級成空 changeset。generated pass 沒有這個讓步 —— 它一旦超出剩餘 budget，
       # 就是回到「產物把 review 擠掉」的原狀。
-      # summary-only 檔單檔位元組超上限：行數放得進也不嵌入，直接走摘要（產生器不一致的檔不享有）。
-      sumbig = (sel == 0 && summ != "" && sumre != "" && bpath[cur] ~ sumre && !(bpath[cur] in taint) && bytes[cur] > maxb)
-      keep = !sumbig && ((sel == 1 && used == 0 && maxl > 0) || (used + size[cur] <= maxl))
+      # summary-only 檔單檔位元組超上限，或放不進剩餘 bytes（長行 lockfile：行數放得進、嵌入卻撐爆 brief）→ 與超行數同樣只列摘要
+      # （產生器不一致的檔不享有）。
+      sumonly = (sel == 0 && summ != "" && sumre != "" && bpath[cur] ~ sumre && !(bpath[cur] in taint))
+      keep = !(sumonly && bytes[cur] > maxb) && ((sel == 1 && used == 0 && maxl > 0) || (used + size[cur] <= maxl))
+      if (sumonly && sumbytes != "" && ubytes + bytes[cur] > sumbytes + 0) keep = 0
       if (keep) {
         used += size[cur]
-      } else if (sel == 0 && summ != "" && sumre != "" && bpath[cur] ~ sumre && !(bpath[cur] in taint)) {
+        ubytes += bytes[cur]
+      } else if (sumonly) {
         printf("  - %s (%d lines)\n", bpath[cur], size[cur]) >>summ
       } else {
         printf("  - %s (%d lines)\n", bpath[cur], size[cur]) >>omit
@@ -467,13 +474,21 @@ review_build_snapshot() {
 
   review_check_generated_data
   review_select_blocks "$MAX_DIFF_LINES" "$OMITTED" "$REVIEW_GENERATED_RE" 1 "$used_src_file" >"$snap_src"
-  local src_used src_files gen_budget
+  local src_used src_files gen_budget gen_bytes
   src_used="$(cat "$used_src_file" 2>/dev/null || echo 0)"
   src_files="$(grep -c '^diff --git ' "$snap_src" 2>/dev/null || echo 0)"
   gen_budget=$((MAX_DIFF_LINES - src_used))
   [ "$gen_budget" -lt 0 ] && gen_budget=0
+  gen_bytes=
+  case "${BRIEF_MAX_BYTES:-}" in
+    '' | *[!0-9]*) ;;
+    *)
+      gen_bytes=$((BRIEF_MAX_BYTES - $(wc -c <"$snap_src" | tr -d ' ') - REVIEW_DEP_SUMMARY_PROMPT_RESERVE))
+      [ "$gen_bytes" -lt 0 ] && gen_bytes=0
+      ;;
+  esac
   review_select_blocks "$gen_budget" "$OMITTED" "$REVIEW_GENERATED_RE" 0 "$used_gen_file" \
-    "$GENERATED_SUMMARY" "$REVIEW_SUMMARY_ONLY_RE" "$GENERATED_TAINTED" >"$snap_gen"
+    "$GENERATED_SUMMARY" "$REVIEW_SUMMARY_ONLY_RE" "$GENERATED_TAINTED" "$gen_bytes" >"$snap_gen"
   cat "$snap_src" "$snap_gen" >"$SNAPSHOT"
   review_build_dep_summary
 
@@ -1405,7 +1420,7 @@ function countVerdict(text, prior = new Set(), round = 1, found = null, resolved
   // 裸字 unresolved 只認述語／狀態詞形式（remains／is／still／left … unresolved、`: unresolved`、句尾或標點前）；
   // 當形容詞修飾名詞（`the unresolved wording`）不算未解決。
   const RESOLVED_NEGATED =
-    /\b(?:not|partially|mostly|still)[\s-]*resolved\b|\bun[\s-]+resolved\b|\b(?:remains?|remained|is|are|was|were|still|left|stays?)\s+(?:still\s+)?unresolved\b|(?:[:：—–]|\s-)\s*unresolved\b|\bunresolved\s*(?:[.,;:!?。，；：！？)）—–]|\s-\s|$)|(?:未|尚未|並未|沒有?|部分(?:已)?)解決/i
+    /\b(?:not|partially|mostly|still)[\s-]*resolved\b|\bun[\s-]+resolved\b|\b(?:remains?|remained|is|are|was|were|still|left|stays?)\s+(?:still\s+)?unresolved\b|(?:[:：—–]|\s-)\s*unresolved\b|(?<!\b(?:as|marked|flagged)\s+)\bunresolved\s*(?:[.,;:!?。，；：！？)）—–]|\s-\s|$)|(?:未|尚未|並未|沒有?|部分(?:已)?)解決/i
   // 寬否定／仍未修字樣只看狀態句（第一句）：狀態詞之後的說明常順帶寫到「still record」「新增回歸測試鎖住」「仍會被 guard 擋下」。
   // oa-batches.ts 的 STATUS_NEGATION 逐字同一份（test/oa-batches-count-verdict.test.ts 抽兩檔原文比對並逐詞對拍）。
   const STATUS_NEGATION =

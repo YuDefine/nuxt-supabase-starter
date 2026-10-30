@@ -32,13 +32,6 @@ lint warning 數、bundle size…）報超標時，處置的驗收標準是**清
    記得還欠多少。要分批 MUST 當輪就把剩餘量寫進承載這件事的 plan § Open work（lifecycle repo，見 [[follow-up-register]] § 直接登記）或 `docs/tech-debt.md`／`HANDOFF.md`（未遷移 consumer），帶具體數字。
 - **NEVER 把「warn 不見了」當驗收**：warn 的消失只證明跨過那一格，本規約要的是餘裕。
 
-## Red Flags（發現自己在想這些 = 停下來重算）
-
-- 「壓到 38.8 KB，門檻 35 KB，已經好很多了」
-- 「先套 A，之後有需要再處理」
-- 「三個選項都不夠但 A 最接近，就推薦 A」
-- 「這次成長是特例，不用檢討結構」——同一個檔第三次長回門檻時，特例是最不可能的解釋
-
 ## 手法紀律在別處
 
 「處置是**下推**不是**砍字**」由 [[tech-debt-hygiene]] Invariant 7 管。兩者獨立：手法對了但幅度不夠

@@ -236,13 +236,22 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
 
 ### Routing threshold 與 native delegation dispatch gate
 
-Main-thread 同一 prompt segment 的第 3 個高信心 readonly Bash、第 5 個 distinct textual Read，或第一次 Read 501+ 行文字檔會在執行前 block，訊息帶 `decision_id`。Gate 只計高信心事件；compound Bash 一次只計一筆，mutation／build／test／unknown command 不計，含 `agent_id` 的 child hook event 本輪全部 skip。
+Main-thread 同一 prompt segment 的第 3 個高信心 readonly Bash、第 5 個 distinct textual Read，或第一次 Read 501+ 行文字檔是 threshold。Gate 只計高信心事件；compound Bash 一次只計一筆，mutation／build／test／unknown command 不計，含 `agent_id` 的 child hook event 本輪全部 skip。
+
+越線時怎麼做由該 trigger 的 Pi 鏈決定（`pi-routing-gate.ts` `thresholdObserveOnly`）：
+
+| 該列 `ROW_CHAINS` | gate 動作 | 主線怎麼做 |
+| --- | --- | --- |
+| 空鏈（2026-10-21 起兩列皆是） | 每 segment 每 trigger 寫一筆 `observed` receipt（`decisionId` 為 `rgo_…`），不 block、不 arm | 照常做；派不派依 [[agent-routing]] § 派不派，沒有 decision 要結案 |
+| 有 Pi 席位 | 執行前 block、arm decision，訊息帶 `decision_id` | 照下方 resolution 結案 |
+
+block 的成立前提是「有比主線便宜的外部載體可推」。readonly Bash 門檻的放寬只靠這個成本前提失效，品質沒有實測（讀檔門檻有，理由與重評觸發見 `docs/rule-rationale/agent-routing.md` § Routing threshold gate）。`CLADE_ROUTING_THRESHOLD_ENFORCE=block` 只能把空鏈收緊回 block（測試用），沒有放寬非空鏈的值。
 
 同一 helper 也攔**每一個** native delegation（TD-513 起 default-deny，不看 `subagent_type` 也不看 model 是否顯式）：第一次呼叫即建立 `claude-agent-dispatch` decision，不等 Read／Bash threshold。直接放行、不 arm 的只有三種：`dispatch-fallback`（model 省略或 `opus`，鏈尾載體）、`haiku-locator`（model 省略或 Haiku 5.5，brief 帶 `routing-row: code-locate`）、review gate 型別（`commit-0a-reviewer`／`code-review`）顯式帶 `model: opus`——後者帶其他 model 直接拒絕、不 arm。`Explore` 不論 model 與 permission mode 一律拒絕、不 arm（2026-10-08 起）：block 訊息指向 `Agent({ subagent_type: 'haiku-locator' })`（brief 帶 `routing-row: code-locate`）與 `verify-code-locate.ts` 複驗；2026-10-08 前 arm 的 `code-locate` decision 以 `fallback --reason quota-exhausted` 解開。block 訊息對 `Plan`（非 plan mode）點名 `detailed-planning`／`ui-detailed-planning`，對 `general-purpose` 點名最可能的列。subagent 內部的 WebSearch／WebFetch 由 `agent_id` 早退放行。
 
 Code-locate brief 明訂 JSON envelope：`{"locations": [{"location": "file:line", "token": "literal symbol on that line", "conclusion": "one-line conclusion"}]}`；沒找到時回 `{"locations": []}`。Dispatcher 仍逐筆核對 location 與 token；只有 `{"status": "pass"}` 不代表明確的空結果。
 
-Pending decision 只接受下列 standalone resolution；一般 Bash／Read／同型 native delegation retry 會持續 block。**Pi 沒有可派 model 時（現況）**，`[dispatch]` 兩條換成 gate 印的 `[carrier]`：派 `Agent({ subagent_type: 'dispatch-fallback' })`（委派的 mutation 工作改派 `sonnet-implementer` 並帶 `routing-row: delegate-sub`），那次 Agent 呼叫本身就解掉 decision；`waive` 照舊：
+Pending decision 只接受下列 standalone resolution；一般 Bash／Read／同型 native delegation retry 會持續 block。**Pi 沒有可派 model 時（現況；threshold 兩列此時不會 pending，會 pending 的只有 `claude-agent-dispatch` 與 `web-search`）**，`[dispatch]` 兩條換成 gate 印的 `[carrier]`：派 `Agent({ subagent_type: 'dispatch-fallback' })`（委派的 mutation 工作改派 `sonnet-implementer` 並帶 `routing-row: delegate-sub`），那次 Agent 呼叫本身就解掉 decision；`waive` 照舊：
 
 ```bash
 # 工作仍是 threshold trigger 本身：照 trigger 填 mechanical-fanout 或 read-heavy-scan

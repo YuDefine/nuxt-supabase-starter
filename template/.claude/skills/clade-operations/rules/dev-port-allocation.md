@@ -102,6 +102,7 @@ band 存在是為了讓「分不到號碼就退回 base port」永遠不必發�
 - **NEVER** 手動挑 worktree port。`pickDevPortOffset`（base 池）與 `pickBandPortOffset`（band）同時排除：超出 `[base, base+9]`、撞到本 consumer 另一個宣告 port、已被 sibling worktree 佔用。宣告多個 port 的 consumer 帶寬較窄
 - Offset 記錄在 `~/.cache/clade/dev-port/<consumer>/<basename>--<sha256(resolve(wtPath))>.json`（equal-basename 姊妹樹各持一筆；舊 `<basename>.json` 共享檔名仍認得、只讀不覆寫——讀不出或屬於別人的內容略過並留 note，本樹的 pre-schema `{wtPath, offset}` claim 在下次分配時升格保留原 offset、兌現不了就隔離），**不**寫進 repo；worktree 目錄消失即釋放，`releaseWorktreeDevPorts` 做明確刪除
 - 分配／釋放由同目錄 `.allocation.lock` 序列化：鎖記持有人 pid，holder 已死的殘鎖自動接手，讀不出持有人的 NEVER 搶——busy 錯誤會附移除指引；紀錄寫入走 staging→link 的 atomic publish
+- **主機額度（記憶體）**：port 池只管不撞號，不管記憶體。`wt-helper dev` 起 server 一律有 lease：偵測得到 agent runtime → 交給 `dev-session.ts wait`（herdr Tab＋TTL 60m，續租用 `dev-session.ts heartbeat`），人類在自己終端前景起 → 維持前景並登記無界 `human` lease（離開時釋放）。同一 consumer 的 agent resident server 預設最多 2 支（1 開發＋1 review），第 3 支排隊等格子；上限由 consumer-meta 的 `dev.maxResident` 覆寫。**NEVER** 人類前景起 server 時被擋——撞滿額只印警告與可手動停的候選。計數與主機 `hostCap` 看 `node vendor/scripts/dev-session.ts slots`
 - 兩池都用盡時 `wt-helper dev` **fail-loud 拒絕啟動**，**NEVER** fallback 到 base port — 那正是本節要防的撞車
 - **NEVER** 用 `pnpm <script> -- --port <N>` 起 worktree 的 dev server（多出來的 `--` 會讓 Nuxt
   丟掉 port，落回 script 寫死的 base port，見 §1）；正確寫法是 `pnpm <script> --port <N>`

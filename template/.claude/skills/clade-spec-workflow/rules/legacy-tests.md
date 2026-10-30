@@ -47,6 +47,15 @@ paths: ['**/*.test.*', '**/*.spec.*', 'vitest.config.*', 'playwright.config.*', 
 
 4. 舊測試變紅時依 truth 分岔：truth 已明確改寫該行為 → 照上表吸收；truth 沒涵蓋該行為 → 停下，經 work-route 判定它是 bug 還是沒寫下的行為（後者以 ADD delta 補進 truth）。
 
+## 驗收發現的 bug＝整塊吸收的入口
+
+導入 aixbdd 之前就做到一半的功能，不要求一次補齊規格；規格覆蓋隨驗收逐塊長出來，入口就是驗收發現的 bug。
+
+- **驗收階段**：客戶／HR 驗收、發版後驗證（smoke）、staging 實走、主管抽驗、對方在待確認頁回「不通過」。
+- **判準**：bug 在驗收階段發現，且它所在的功能範圍沒有 truth 覆蓋 → 經 work-route 開 `acceptance-gap`，**NEVER** 開 `bug-covered`／`bug-uncovered`，也 **NEVER** 在 work-route 之外直接修。
+- **修補範圍是整塊功能，不是那一行**：該功能每個行為列進盤點表，缺的補 truth scenario，加上覆蓋整條使用流程的 e2e；原 bug 的紅→綠錨點只是其中一列。只修單點不准結案。
+- 盤點表格式、必要產物與結案條件以 work-route skill 的 `rules/工作種類與必要產物.md` Rule 6 為準（段名 `## Scope inventory`）；範圍內的舊測試照上方 MUST 3 一併吸收。
+
 ## NEVER
 
 1. **NEVER** 為了讓舊測試變綠，把產品碼改回 truth 已改寫的行為。

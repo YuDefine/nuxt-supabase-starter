@@ -8,7 +8,7 @@ description: "Runtime, deployment, local service, and infrastructure rules. Use 
 逐條對照你接下來要做的事；條件成立才讀那一份，NEVER 先把整批讀進來。
 
 - READ 若要讀或改 `server/api/**/*.ts`、`packages/*/server/api/**/*.ts`，讀取 `rules/api-patterns.md`
-- READ 若要讀或改 `wrangler.{toml,jsonc}`、`void.json`、`nuxt.config.*`、`package.json`、`.github/workflows/**/*.yml`，讀取 `rules/cloudflare-workers.md`
+- READ 若要讀或改 `void.config.ts`、`void.lock.json`、`wrangler.{toml,jsonc}`、`nuxt.config.*`、`package.json`、`.github/workflows/**/*.yml`，讀取 `rules/cloudflare-workers.md`
 - READ 若要讀或改 `sentry*.config.*`、`**/sentry*.ts`、`nuxt.config.*`、`Dockerfile`、`**/Dockerfile`、`wrangler.toml` 等 11 處（全表見 rules/_index.md），讀取 `rules/deploy-env-identity.md`
 - READ 若要讀或改 `package.json`、`nuxt.config.ts`、`registry/consumers.json`、`registry/consumers.schema.json`，讀取 `rules/dev-port-allocation.md`
 - READ 若要讀或改 `nuxt.config.*`、`.env`、`.env.local`、`package.json`，讀取 `rules/dev-tunnel-convention.md`

@@ -161,9 +161,11 @@ else
 fi
 ```
 
+**consumer 的 `$MAIN_WT_PATH` 不是 Edit／Write 的落點**：fleet consumer 的主 checkout 由 `pre-edit-consumer-main-checkout-gate.sh` 擋 `HANDOFF.md` / `ROADMAP.md` / `docs/tech-debt.md` 的寫入（寫了沒 commit 就走，`clade-main-align` 會從此 `refused`）。在 consumer 一律走下方「當前 session 被隔離、寫不進 main 時」的 worktree + merge-back 流程；clade home 與其他不受該 hook 管的 repo 才直接寫 `$MAIN_WT_PATH/<rel>`。
+
 實際操作：所有 `HANDOFF.md` / `ROADMAP.md` 寫入路徑都用 `$MAIN_WT_PATH/<rel>` 絕對路徑（Edit / Write tool 的 `file_path` 參數）。未遷移 consumer 才寫 `docs/tech-debt.md` / `docs/archives/<yyyy-mm>-<topic>.md`。**禁止**用 cwd-相對路徑寫這幾個檔。其餘檔案（`.claude/rules/local/*.md` 讀取、`tasks/<date>-*.md` 清理）保持 cwd 相對行為。有 `specs/truth/work-lifecycle.md` 時 **NEVER** append 月份 handoff archive、**NEVER** 開新 TD、**NEVER** `mv` 進 `tasks/archive/`（刪完成檔，歷史由 git 追溯）。
 
-### 當前 session 被隔離、寫不進 main 時（background job / cwd 已在 worktree）
+### 當前 session 被隔離、寫不進 main 時（background job / cwd 已在 worktree；consumer 一律走這裡）
 
 `$MAIN_WT_PATH` 解析出來是 main worktree 的絕對路徑，但**有些 session 根本不准寫進去**：background job 的隔離 guard 會擋掉 shared checkout 的所有編輯，cwd 已在 linked worktree 的 session 同樣不該直接動 main。這時 **NEVER** 改寫成 cwd-相對路徑繞過（那正是本節要防的分裂），改走 worktree + merge-back：
 
@@ -294,6 +296,10 @@ heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消�
 <!-- ❌ 自由文字斷言：事後無法分辨「我以為做完」與「我驗過做完」 -->
 三條 item 的 evidence 都已備妥，只需看圖點 OK。
 ```
+
+### 5. 驗收失敗項 MUST 寫成 `acceptance-gap` 待辦，NEVER 寫成單點修補
+
+交接要列驗收階段發現的 bug（客戶／HR 驗收、發版後 smoke、staging 實走、主管抽驗）時（宣告 aixbdd 的 consumer 與 clade home），所在功能範圍沒有 truth 覆蓋的，待辦寫「經 work-route 開 `acceptance-gap`」並附它的 work id 指針，**NEVER** 寫成「修 X 那一處」交給接手者直接修；照 work-route skill 的 `rules/工作種類與必要產物.md` Rule 6 在 plan.md `## Scope inventory` 建盤點表；已有 truth 覆蓋的照 work-route 開 `bug-covered`。
 
 ### 一段能留在 HANDOFF 的充要條件
 

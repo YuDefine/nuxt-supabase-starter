@@ -1,73 +1,58 @@
 ---
-description: Cloudflare Workers / NuxtHub gating + wrangler.jsonc 格式統一 + deploy 命令規約（dual-track：wrangler-action / void.cloud）。依 DB 選擇分派（D1 → NuxtHub mandatory；Supabase / 外部 DB → 禁帶 @nuxthub/core dep），杜絕 unused NuxtHub dep 污染、wrangler 檔格式 drift、以及 void.cloud track 的 compat_flags 致命誤配；帳號資源操作一律走 `cf` CLI（§ 8）
-paths: ['wrangler.{toml,jsonc}', 'void.json', 'nuxt.config.*', 'package.json', '.github/workflows/**/*.yml']
+description: Cloudflare Workers 單軌規約（void 優先、cf CLI 補位、禁用 wrangler）。Workers 部署 / 本機 dev / 型別 / secret / D1 migration 一律走 `void`（自有 CF 帳號），void 做不到的帳號資源操作才走 `cf` CLI；依 DB 選擇分派 NuxtHub gating（D1 + 舊派 → `@nuxthub/core`；void 自帶 `void/db` → 禁帶），並定義遷移期對 wrangler 殘留的處置
+paths: ['void.config.ts', 'void.lock.json', 'wrangler.{toml,jsonc}', 'nuxt.config.*', 'package.json', '.github/workflows/**/*.yml']
 ---
 <!-- Clade native rule; source: rules/core/cloudflare-workers.md; edit canonical source -->
 <!-- clade-targets: claude,agents -->
 
-# Cloudflare Workers / NuxtHub Configuration
+# Cloudflare Workers Configuration
 
-> 兩條 deploy track：**Track A**（Nitro `cloudflare_module` preset + `cloudflare/wrangler-action@v3`，default）與 **Track B**（void.cloud，建在 Workers 上）。Cookbook：`~/offline/clade/vendor/snippets/cloudflare-workers/`。D1 + Drizzle runtime 細節見 [[data-layer-d1]]；YuDefine 部署 SOP 見 `/yudefine-deploy` skill。
+> 單軌：Workers 一律 `void deploy`（自有 CF 帳號，`--platform cloudflare`）；設定持有者是 `void.config.ts` ＋ `void.lock.json`。**徹底刪除 wrangler**——部署、dev、型別、secret、D1、log 優先只用 `void`，void 做不到的才用 `cf`（§ 8）。標準由 `W-2026-10-26-fleet-wrangler-void-void-cf-cli-plan-clade-propa` 推動；尚未遷移的 consumer 見 § 6（遷移期）。Cookbook：`~/offline/clade/vendor/snippets/cloudflare-workers/`。D1 + Drizzle runtime 細節見 [[data-layer-d1]]；YuDefine 部署 SOP 見 `/yudefine-deploy` skill。
 
-## § 1 — DB × deploy track NuxtHub gating（hard rule）
+## § 1 — DB × NuxtHub gating（hard rule）
 
-NuxtHub (`@nuxthub/core`) 唯一的作用是 Track A 上 Cloudflare 原生 binding（D1 / KV / R2 / AI / DO）的 runtime 抽象；外部 DB consumer 與 void.cloud track（自帶 `void/db`）帶它都是冗餘 dep（會污染 auto-import 與 type space）。
+`@nuxthub/core` 是 Cloudflare 原生 binding（D1 / KV / R2 / AI / DO）的 runtime 抽象，只屬**遷移期**仍保留 NuxtHub 的 consumer；走 void 的 consumer 自帶 `void/db`，帶它是冗餘 dep（污染 auto-import 與 type space）。
 
-### MUST（採二維 matrix 判定）
-
-| Deploy track | DB | 規約 |
+| 部署方式 | DB | 規約 |
 |---|---|---|
-| **Track A (wrangler-action)** | Cloudflare D1 / KV / R2 / AI | **MUST** 在 `package.json` 帶 `@nuxthub/core` + 在 `nuxt.config.ts` `modules` 登記 + 設 `hub: { db: 'sqlite', ... }` + server code 用 `hubDatabase()` / `hubKV()` / `hubBlob()` |
-| **Track A (wrangler-action)** | Supabase / Postgres / 純外部 DB | **MUST NOT** 帶 `@nuxthub/core` |
-| **Track B (void.cloud)** | D1（void 自家 provision）| **MUST NOT** 帶 `@nuxthub/core`；自己寫 `server/utils/db.ts` 包 `createDb(env.DB)` + `server/utils/blob.ts` 包 R2 raw binding（範本見 `/yudefine-deploy` `rules/Track遷移判準.md` Rule 4）|
-| **Track B (void.cloud)** | 純外部 DB（罕見）| **MUST NOT** 帶 `@nuxthub/core`（同上） |
+| void（目標） | D1（void 自家 provision）| **MUST NOT** 帶 `@nuxthub/core`；自己寫 `server/utils/db.ts` 包 `createDb(env.DB)` + `server/utils/blob.ts` 包 R2 raw binding（範本見 `/yudefine-deploy` `rules/Track遷移判準.md` Rule 4）|
+| void（目標） | 純外部 DB（Supabase / Postgres）| **MUST NOT** 帶 `@nuxthub/core` |
+| 遷移期（尚未改 void，§ 6） | Cloudflare D1 / KV / R2 / AI | 沿用現狀：`package.json` 帶 `@nuxthub/core` + `nuxt.config.ts` `modules` 登記 + `hub: {...}`；是否與 `void/nitro` 並存或改 `void/db` 由該 repo 的遷移件驗證 |
+| 遷移期 | Supabase / 純外部 DB | **MUST NOT** 帶 `@nuxthub/core` |
 
 ### MUST NOT
 
-- **MUST NOT** 同時把 `@nuxthub/core` 列在 `package.json dependencies` 但**未**登記為 module（「冗餘 dep」反模式）
-- **MUST NOT** 把同一個 binding 同時宣告在兩處 — 例如 `hub.db.connection.databaseId` 已指定的 binding 又出現在 `wrangler.jsonc d1_databases`。**詳見 § 4 § 4.3 衝突偵測**
-- **MUST NOT** 在 void.cloud track consumer 保留 `@nuxthub/core` dep 不刪（即使 module 未登記）— migration 時典型 leftover，要清乾淨避免 type space 污染
+- **MUST NOT** 把 `@nuxthub/core` 列在 `package.json dependencies` 但**未**登記為 module（「冗餘 dep」反模式）
+- **MUST NOT** 把同一個 binding 同時宣告在兩處（`hub.db.connection.databaseId` 與 `void.config.ts` 的 binding 並列即屬此類）
+- **MUST NOT** 在已改 void 的 consumer 保留 `@nuxthub/core` dep 不刪——migration 時典型 leftover
 
 移除前先 ripgrep `hub*()` API 呼叫，確認為 0 再刪 dep。
 
-## § 2 — wrangler config format（hard rule）
+## § 2 — 設定檔歸屬（hard rule）
 
 ### MUST
 
-- **MUST** 使用 `wrangler.jsonc`（**禁** `wrangler.toml`）
-- **MUST** 在根目錄存在 `wrangler.jsonc`（即使 minimal；dev / IDE schema / deploy fallback 都用得到），至少含三個欄位：
-  ```jsonc
-  {
-    "$schema": "node_modules/wrangler/config-schema.json",
-    "name": "<worker-name>",
-    "compatibility_date": "<YYYY-MM-DD>"
-  }
-  ```
-- **MUST** 用 `nitro: { preset: 'cloudflare_module', cloudflare: { deployConfig: true, nodeCompat: true } }` 在 `nuxt.config.ts`（不是 legacy `cloudflare-pages`）
+- **MUST** Workers 設定（name、compatibility date／flags、bindings、routes、cron、vars）由 `void.config.ts` ＋ `void.lock.json` 持有；非 void 的純 Worker 由 `cloudflare.config.ts` 持有（走 `cf deploy`，§ 8）
+- **MUST** `nuxt.config.ts` 加 `voidPlugin()`；Nitro 開發用的 wrangler 設定指向 gitignored 的 `.void-wrangler.jsonc`（`nitro.cloudflare.dev.configPath`），該檔由 void 產生，**NEVER** tracked
 
 ### MUST NOT
 
-- **MUST NOT** 同時存在 `wrangler.toml` 與 `wrangler.jsonc`
-- **MUST NOT** 在 wrangler.jsonc 寫死 `main` entry path，除非不走 nitro 標準 build（會與 Nitro 產生的 entry 衝突）
+- **MUST NOT** tracked 任何 `wrangler.toml` / `wrangler.json` / `wrangler.jsonc` / `wrangler.*.jsonc`，也不得有檔名含 `wrangler` 的 tracked 腳本或產生器（例：`scripts/render-staging-wrangler.mjs`）
+- **MUST NOT** 在 `package.json` 的 `dependencies` / `devDependencies` / `optionalDependencies` 直接依賴 `wrangler`
+- **MUST NOT** 在 CI、腳本、`package.json` scripts、README 操作段呼叫 `wrangler <子指令>`（含 `npx` / `pnpm` / `pnpm exec` / `pnpm dlx` / `yarn` / `bunx` 前綴）或使用 `cloudflare/wrangler-action`
 
-## § 3 — Deploy command（hard rule，dual-track）
+允許的例外：void 的 transitive 依賴（lockfile 出現 wrangler 系套件不算）、gitignored 的 `.void-wrangler.jsonc` / `.void/**` / `.wrangler/` local state、偵測與排除 wrangler 用的字面、歷史紀錄。完整驗收與例外清單見上述 plan 的「驗收定義」。
 
-### § 3.1 Track A — wrangler-action（**default**，fleet 多數）
+## § 3 — Deploy command（hard rule，單軌 void）
 
-#### MUST
-
-- **MUST** CI workflow（`.github/workflows/deploy*.yml`）使用 `cloudflare/wrangler-action`（v3，依 [[ci-workflow]] SHA-pin）+ `command: deploy` + `workingDirectory: .output`
-
-#### MUST NOT
-
-- **MUST NOT** 在 CI 用 `npx nuxthub deploy`（需綁 NuxtHub 帳號、與 secrets 流程衝突）
-- **MUST NOT** 在 CI 直接 invoke `npx wrangler deploy`（失去 wrangler-action 的 retry / token 注入）
-
-### § 3.2 Track B — void.cloud
+### § 3.1 — current void（MUST／MUST NOT）
 
 #### MUST
 
-- **MUST** 跑 `npx void init --agents` 安裝與本地 `void` package 版本一致的 official skills；依下表確認每個啟用 target 的 skill 與 MCP 實際送達，完成該 target 必要的註冊步驟。
+- **MUST** 新建或升級中的 consumer 使用 current `void@1.x`（以專案 `package.json` 為準）；`void@0.8.x` 是 legacy migration 狀態，不當 baseline
+- **MUST** 部署走 `void deploy`（自有 CF 帳號，`--platform cloudflare`）；CI 以 `CLOUDFLARE_API_TOKEN`（必要）與 `CLOUDFLARE_ACCOUNT_ID`（token 可存取多帳號時）走 `env:` 注入。workflow 片段見 § 7.2；`/yudefine-deploy` 的 void 版 template 隨 plan T4 補上，在那之前該 skill 的雙軌 SOP 只適用 § 6 待遷移 consumer
+- **MUST** deploy script **不可命名** `deploy`（pnpm 保留字，`ERR_PNPM_NOTHING_TO_DEPLOY`），用 `void:deploy`，內部呼叫 **local** `void`（global void 的 drift-check 會解析到 global 的 drizzle-kit 而撞 `Please install latest version of drizzle-orm`；與 node-linker 無關，**NEVER** 為此改 `node-linker=hoisted`）
+- **MUST** 跑 `npx void init --agents` 安裝與本地 `void` package 版本一致的 official skills；依下表確認每個啟用 target 的 skill 與 MCP 實際送達，完成該 target 必要的註冊步驟
 - **MUST** 對本 consumer 實際啟用的每個 runtime target 驗證 official agent setup 的實際落點；`init --agents` 的 auto-detection 只處理它偵測到或使用者選定的 target，**NEVER** 當成所有 target 都已送達的證據：
 
   | runtime | official skill projection | MCP delivery |
@@ -75,155 +60,31 @@ NuxtHub (`@nuxthub/core`) 唯一的作用是 Track A 上 Cloudflare 原生 bindi
   | Claude | `.claude/skills/void/` + `.claude/skills/migrate-vite-cloudflare-to-void/` | `void init --agents` writes `.claude/settings.json` (or `settings.local.json`) |
 
   These paths and behaviors come from the official Void package's published coding-agent integration guide and agent implementation in the official package tarball (`void@0.10.13`, [npm registry package](https://registry.npmjs.org/void/-/void-0.10.13.tgz)); preserve the consumer's selected target set and do not claim runtime invocation from configuration presence alone.
-- **MUST** 後續 void CLI / config / runtime helper / `env.ts` / migration 等通用知識**走 official `void` skill 或 `void mcp`** (`search_docs` / `get_page docs/<path>.md`)；**NEVER** 從 consumer-side rule / project-specific note 複製 void CLI 命令當權威 — 那些 cache 容易跟 void 升版 drift
-- **MUST** 新建或升級中的 consumer 使用 current `void@0.10.x`；`void@0.8.x` 是 legacy migration 狀態，不當 current baseline
-- **MUST** 在根目錄存在 `void.json`，至少含 `target: "cloudflare"` 與 framework inference；保留 `wrangler.jsonc` 給 Nuxt dev、IDE schema 與 compatibility config
-- **MUST** `void@0.8.x` 的 `void.json.worker.compatibility_flags` 依 `inference.appType` 分流：
-  - **`appType: "framework"` (Nuxt / SvelteKit / Astro 等)**：**MUST** 走**配置 3**（`["nodejs_compat", "nodejs_als", "no_nodejs_compat_v2"]`）— 顯式停 workerd 原生 v2，unenv v1 polyfill 獨佔。配置 2（純 v2）對 Nitro `cloudflare-module` preset **不可用** — Nitro build 主動 warn「`Please consider replacing nodejs_compat_v2 with nodejs_compat ... or USE IT AT YOUR OWN RISK as it can cause issues with nitro`」+ deploy 撞 `Cannot read private member #t in get stdout`
-  - **`appType: "void"` (pure Vite+ void app，無 meta framework)**：**MUST** 走**配置 2**（`["nodejs_compat_v2", "nodejs_als"]`）— 直接吃 workerd 原生 v2，無 Nitro 中間層 polyfill 衝突
-- **MUST** `wrangler.jsonc` 的 `compatibility_flags` 與 `void.json` **對齊**，避免 dev / prod 行為漂移；current void 會從 wrangler config 讀取 compatibility settings，不能假設 deploy 忽略 wrangler config
-- **MUST** GitHub Actions 使用 void.cloud 的 GitHub OIDC：workflow 加 `permissions: { contents: read, id-token: write }`，以 `void github connect <project> --repo <owner/repo> --executor github_actions` 做一次性授權；**不使用**長效 `VOID_TOKEN`
-- **MUST** CI workflow 走 `pnpm run void:deploy`（內部使用 local `void deploy`），並以 `VOID_PROJECT` 明確指定 project slug
-- **MUST** package.json 帶 current `void@0.10.x`（**不是** legacy `@void-sdk/void@^0.6.x` 或 `void@0.8.x`）
+- **MUST** 後續 void CLI / config / runtime helper / `env.ts` / migration 等通用知識**走 official `void` skill 或 `void mcp`**（`search_docs` / `get_page docs/<path>.md`）；**NEVER** 從 consumer-side rule / project-specific note 複製 void CLI 命令當權威——那些 cache 容易跟 void 升版 drift
 - **MUST** 在 `pnpm-workspace.yaml` 把 `vite` / `vitest` override 成 VoidZero fork（voidPlugin 需要 `parseSync` export，純 vite 沒有）
-- **MUST** void deploy script **不可命名** `deploy`（pnpm 保留字，`ERR_PNPM_NOTHING_TO_DEPLOY`），用 `void:deploy`
-- **MUST** `void.json` + `wrangler.jsonc` 的 `compatibility_date` 對齊 official void Nuxt example（`<該 target 的 void skill root>/docs/integrations/frameworks/nuxt.md`（skill root 依上表））— 保持跟 official 已驗證範例同步，避免不必要的 baseline drift
-- **MUST** 只有仍停在 legacy `void@0.8.x` 且使用 `void/schema-d1` 的 consumer 暫時保留 `patch-void-deploy.ts`；上游 issue [void-sdk/void#52](https://github.com/void-sdk/void/issues/52) 已在上游修正，升到 current void 後**必須移除** patch、postinstall hook 與 `patchedDependencies`
-- **MUST** deploy 走 `pnpm run void:deploy`（用 **local** void；global void 的 drift-check 會解析到 global 的 drizzle-kit 而撞 `Please install latest version of drizzle-orm`）。與 node-linker 無關，**NEVER** 為此改 `node-linker=hoisted`
+- **MUST** `compatibility_date` 對齊 official void Nuxt example（`<該 target 的 void skill root>/docs/integrations/frameworks/nuxt.md`，skill root 依上表）——跟 official 已驗證範例同步，避免不必要的 baseline drift
+- **MUST** 既有 Worker 接管走 `void deploy` 連結（保留 bindings / secrets / routes，把根目錄 wrangler 檔遷入 `void.config.ts`，備份在 `.void/config-migration/`）或 `void migrate`
 
 #### MUST NOT
 
-- **MUST NOT** `void@^0.8.x` 用配置 1（`["nodejs_compat", "nodejs_als"]` 不含 `no_nodejs_compat_v2`）— legacy SDK 會撞 worker upload err 10021。這是 0.8 限定 workaround，**不得**套用成 current void 0.10 的通則。詳見 [[pitfall-void-cloud-voidjson-compat-flags-10021]]
-- **MUST NOT** legacy `void@0.8.x` 的 `appType: "framework"` consumer 用配置 2（純 v2）— 同樣撞 `#t` error。這條限制不得無版本區分地套到 current void
-- **MUST NOT** 在 void SDK ≥0.10 的 consumer 保留 `patch-void-deploy.ts` 或 unenv patch；這些 workaround 只屬 legacy void 0.8
-- **MUST NOT** 用 nitro `cloudflare.nodeCompat` 取代平台 compatibility config；legacy 0.8 以 void.json 為準，current void 依 official integration 的 wrangler / void config 契約
-- **MUST NOT** 在 GitHub Actions 保存 `VOID_TOKEN`；deploy 身分走 GitHub OIDC。runtime secrets 走 `void secret put`，不得混入 wrangler-action 的 Cloudflare secret 流程
+- **MUST NOT** 在 CI 用 `npx nuxthub deploy`（需綁 NuxtHub 帳號、與 secrets 流程衝突）
+- **MUST NOT** 在 void 1.x consumer 保留 `patch-void-deploy.ts` 或 unenv patch；這些 workaround 只屬 legacy `void@0.8.x`（上游 [void-sdk/void#52](https://github.com/void-sdk/void/issues/52) 已修）
+- **MUST NOT** 用 nitro `cloudflare.nodeCompat` 取代平台 compatibility config
+- **MUST NOT** 把 `void@0.8.x` 的 compat flag 對照（配置 1／2／3）套到 current void；legacy 對照見 [[pitfall-void-cloud-voidjson-compat-flags-10021]]
+- **MUST NOT** 用 Void Cloud 的 GitHub OIDC 或 `VOID_TOKEN` 部署（官方已叫停；見 `W-2026-10-21-charles-fleet-void-cloud-cloudflare` Decisions）。`/yudefine-deploy` 與其 `rules/Deploy-track選擇判準.md` 在 T4 改寫前仍列出 void.cloud 軌道，以本條為準：**NEVER** 新選
 
-## § 4 — Binding declaration（依 track + binding 複雜度分派）
+### § 3.2 — 遷移期：legacy `void@0.8.x` 與 wrangler 並存的 compat flags
 
-Track A 的 NuxtHub 派依 binding 複雜度有兩個合法 pattern（§ 4.1 / § 4.2），§ 4.4 是外部 DB，§ 4.5 是 void.cloud。
+只適用仍停在 `void@0.8.x`（`void.json`）的 consumer，升到 current void 後整段作廢：
 
-### § 4.1 Pattern A — hub.db 內含 connection（**default**）
+- **MUST** `void.json.worker.compatibility_flags` 依 `inference.appType` 分流：`appType: "framework"`（Nuxt / SvelteKit / Astro）走**配置 3** `["nodejs_compat", "nodejs_als", "no_nodejs_compat_v2"]`（配置 2 純 v2 對 Nitro `cloudflare-module` 不可用，撞 `Cannot read private member #t in get stdout`）；`appType: "void"` 走**配置 2** `["nodejs_compat_v2", "nodejs_als"]`
+- **MUST NOT** `void@^0.8.x` 用配置 1（不含 `no_nodejs_compat_v2`）——必撞 worker upload err 10021，詳見 [[pitfall-void-cloud-voidjson-compat-flags-10021]]；這是 0.8 限定 workaround，**不得**套用成 current void 的通則
+- **MUST** 此期間仍存在的 `wrangler.jsonc` `compatibility_flags` 與 `void.json` 對齊，避免 dev / prod 漂移
+- 仍使用 `void/schema-d1` 的 0.8 consumer 暫時保留 `patch-void-deploy.ts`，升級後**必須移除** patch、postinstall hook 與 `patchedDependencies`
 
-binding ID 寫進 `nuxt.config.ts` 的 `hub.db.connection`，**禁**寫進 wrangler.jsonc。適合 D1 only 或 D1 + 少量 binding 的 consumer。
+## § 4 — Binding declaration
 
-```ts
-// nuxt.config.ts
-hub: {
-  db: {
-    dialect: 'sqlite',
-    ...(process.env.NITRO_PRESET?.includes('cloudflare')
-      ? {
-          driver: 'd1' as const,
-          connection: { databaseId: '<d1-database-id>' },
-        }
-      : {}), // dev 走 local sqlite/libsql（dev binding fallback，見 d1-drizzle cookbook）
-  },
-}
-```
-
-```jsonc
-// wrangler.jsonc — 完全不寫 d1_databases
-{
-  "name": "<consumer>",
-  "compatibility_date": "...",
-  "routes": [...]
-}
-```
-
-Single SoT，且能用 `NITRO_PRESET` 條件做 dev binding fallback（`vendor/snippets/d1-drizzle/nuxthub-dev-binding-fallback.ts`）。
-
-### § 4.2 Pattern B — wrangler.jsonc 完整宣告 + hub: 啟用 helper（**例外**）
-
-binding ID 寫進 `wrangler.jsonc`（標準 Cloudflare 格式），`hub: {}` 只啟用 runtime helper。適合 binding 複雜（Durable Objects + AI Gateway 自訂 + multi-binding）的 consumer。
-
-```ts
-// nuxt.config.ts
-hub: {
-  db: 'sqlite',  // ← 簡形：只啟用 hubDatabase() helper，binding 細節走 wrangler
-  kv: true,
-  blob: true,
-}
-```
-
-```jsonc
-// wrangler.jsonc — 完整宣告所有 binding ID
-{
-  "d1_databases": [{ "binding": "DB", "database_id": "..." }],
-  "kv_namespaces": [{ "binding": "KV", "id": "..." }],
-  "r2_buckets": [{ "binding": "BLOB", "bucket_name": "..." }],
-  "ai": { "binding": "AI" },
-  "durable_objects": { "bindings": [...] }
-}
-```
-
-適用：有 Durable Objects（NuxtHub 無 abstraction）、AI Gateway 自訂設定、或多 binding。
-
-### § 4.3 衝突偵測（hard rule）
-
-**MUST NOT** 把同一 binding 同時宣告在兩處 — audit 偵測：
-
-| 反例 | 說明 |
-|---|---|
-| `hub.db.connection.databaseId` 已設 **且** wrangler.jsonc 有 `d1_databases` | Pattern A + B 混用，deploy 時 duplicate binding error |
-| `hub.kv` 為物件含 `id` **且** wrangler.jsonc 有 `kv_namespaces` | 同上 |
-| `hub.blob` 為物件含 `bucketName` **且** wrangler.jsonc 有 `r2_buckets` | 同上 |
-
-純 `hub.db: 'sqlite'`（簡形）配 wrangler.jsonc `d1_databases` 是 Pattern B 正常用法，**不**算衝突。
-
-### § 4.4 raw 派（Supabase / 外部 DB；Track A wrangler-action）
-
-- 若該 consumer 仍需要少量 Cloudflare binding（罕見），**直接**在 wrangler.jsonc 宣告：
-  ```jsonc
-  {
-    "kv_namespaces": [{ "binding": "RATE_LIMIT_KV", "id": "..." }]
-  }
-  ```
-- 否則 wrangler.jsonc 只含 `name` / `compatibility_date` / `compatibility_flags` / 可選 `routes` / `triggers` / `observability` / `vars` / `env.<name>` 多環境
-
-### § 4.5 void.cloud 派（Track B）
-
-void.cloud + D1 走第三種 binding pattern — D1 / R2 binding ID 由 void provision，**不**寫死在任何 config 檔。
-
-```jsonc
-// void.json — void.cloud deploy 真相層
-{
-  "$schema": "./node_modules/void/schema.json",
-  "target": "cloudflare",
-  "inference": {
-    "appType": "framework",
-    "build": "pnpm build",
-    "scanDirs": ["server", "db"],
-    "bindings": {
-      "db": true,           // ← 聲明要 D1，void deploy 自動 provision
-      "storage": "BLOB"     // ← 聲明要 R2，void deploy 自動 provision
-    }
-  },
-  "worker": {
-    "compatibility_date": "2026-02-24",
-    "compatibility_flags": ["nodejs_compat", "nodejs_als", "no_nodejs_compat_v2"]  // ← per § 3.2
-  }
-}
-```
-
-```jsonc
-// wrangler.jsonc — 給 IDE schema + dev binding（不寫死 prod ID）
-{
-  "name": "<consumer>",
-  "compatibility_date": "2026-02-24",
-  "compatibility_flags": ["nodejs_compat", "nodejs_als", "no_nodejs_compat_v2"],  // ← 對齊 void.json
-  "d1_databases": [{
-    "binding": "DB",
-    "database_name": "default",
-    "database_id": "local",                   // ← 占位，void 在 deploy 時 merge 真實 ID
-    "migrations_dir": "db/migrations"
-  }],
-  "r2_buckets": [{
-    "binding": "BLOB",
-    "bucket_name": "<consumer>-blob"
-  }]
-}
-```
+D1 / R2 / KV 的 binding 由 `void.config.ts` ＋ `void.lock.json` 宣告，prod ID 由 void provision 並寫入 lock，**不**寫死在任何手寫 config。
 
 ```ts
 // nuxt.config.ts — 不帶 @nuxthub/core，加 voidPlugin
@@ -231,7 +92,6 @@ import { voidPlugin } from 'void'
 export default defineNuxtConfig({
   modules: [/* NO '@nuxthub/core' */],
   vite: { plugins: [voidPlugin()] },
-  nitro: { preset: process.env.NITRO_PRESET?.includes('cloudflare') ? 'cloudflare-module' : undefined },
 })
 ```
 
@@ -248,38 +108,36 @@ export function getDb(event: H3Event) {
 }
 ```
 
-遷移 runbook 與 sharp edges 見 `/yudefine-deploy` skill。
+binding 的具體欄位以 official void 文件為準（`void mcp` / skill docs），本規約不複製。遷移 runbook 與 sharp edges 見 `/yudefine-deploy` skill。
+
+### § 4.1 — 遷移期：NuxtHub 派 binding（改 void 後作廢）
+
+尚未改 void 的 NuxtHub consumer 沿用兩個 pattern，改 void 時移入 `void.config.ts`：
+
+- **Pattern A（default）**：binding ID 寫進 `nuxt.config.ts` 的 `hub.db.connection`（`NITRO_PRESET` 條件做 dev fallback，見 `vendor/snippets/d1-drizzle/nuxthub-dev-binding-fallback.ts`），wrangler 檔不寫 `d1_databases`
+- **Pattern B（例外）**：binding 複雜（Durable Objects、AI Gateway 自訂、multi-binding）時宣告在 wrangler 檔，`hub: { db: 'sqlite', kv: true, blob: true }` 只啟用 helper
+- **MUST NOT** 同一 binding 兩處宣告（`hub.db.connection.databaseId` 與 wrangler 檔 `d1_databases`；`hub.kv` 含 `id` 與 `kv_namespaces`；`hub.blob` 含 `bucketName` 與 `r2_buckets`）——deploy 時 duplicate binding error；純 `hub.db: 'sqlite'` 配 `d1_databases` 是 Pattern B 正常用法，不算衝突
 
 ## § 5 — 違反偵測
 
-`scripts/audit-wrangler-config.ts` 偵測：
+`scripts/audit-wrangler-config.ts` 目前仍是遷移期的偵測器（T12 改寫為 `audit-cloudflare-config.ts`，先 warn 後 error）。其規則碼（`wrangler.format_drift`、`wrangler.missing`、`nuxthub.*`、`binding.duplicate_declaration`、`deploy.non_standard_command`、`void.*`、`pnpm.reserved_script_name`、`ci.self_hosted_pnpm_cache`）以腳本輸出為準；本節只定方向：
 
-1. 根目錄存在 `wrangler.toml`（應改 jsonc）→ `wrangler.format_drift`
-2. 根目錄完全缺 wrangler 檔 → `wrangler.missing`
-3. wrangler.jsonc 缺 `$schema` / `name` / `compatibility_date` → `wrangler.missing_required_field`
-4. Track A + Supabase consumer 帶 `@nuxthub/core` dep → `nuxthub.redundant_dep`
-5. Track A + D1 consumer 缺 `@nuxthub/core` module 登記 → `nuxthub.missing_required`
-6. NuxtHub 派 binding 同時宣告在 hub.* connection + wrangler.jsonc → `binding.duplicate_declaration`（per § 4.3）
-7. Track A consumer CI workflow 用 `nuxthub deploy` 或直接 `wrangler deploy` → `deploy.non_standard_command`
-8. Track B legacy 偵測 — 根目錄存在 `void.json` 且 `package.json` 含 `void@^0.8.x`（不是 `@void-sdk/void`）時，檢查 `void.json.worker.compatibility_flags`：
-   - 含 `nodejs_compat` 但**不含** `nodejs_compat_v2` 且**不含** `no_nodejs_compat_v2` → `void.compat_flags_unsafe`（配置 1 in void@^0.8 = 必撞 10021）
-   - `wrangler.jsonc` `compatibility_flags` ≠ `void.json` `worker.compatibility_flags` → `void.compat_flags_drift`（IDE / dev parity gap）
-   - `inference.appType: "framework"` + `compatibility_flags` 為配置 2（純 `["nodejs_compat_v2", "nodejs_als"]`，無 `no_nodejs_compat_v2`）→ `void.compat_flags_unsafe_framework`（framework type 用配置 2 撞 Nitro polyfill 衝突 + `#t` error）
-9. Track B + 帶 `@nuxthub/core` dep → `void.redundant_nuxthub_dep`（per § 1 矩陣第三/四列）
-10. Legacy `void@0.8.x` + `void.json inference.bindings.db: true`（或 `db/schema.ts` 含 `void/schema-d1` import）但 `package.json scripts.postinstall` 不含 `patch-void-deploy.ts` 呼叫 → `void.missing_handler_emit_patch`；current void 不檢查此已修正 workaround
-11. Track B npm scripts 使用 pnpm 保留字（例如 `deploy`）→ `pnpm.reserved_script_name`
-12. Current void workflow 仍使用 `VOID_TOKEN` 或缺 `permissions.id-token: write` → `void.legacy_token_auth` / `void.missing_oidc_permission`
-13. self-hosted runner 使用 `cache: pnpm` → `ci.self_hosted_pnpm_cache`
+1. 出現 tracked wrangler 設定檔、wrangler 直接依賴、`wrangler <子指令>`、`wrangler-action` → 一律報（遷移期 warn）
+2. 已改 void 的 consumer 帶 `@nuxthub/core` dep → `void.redundant_nuxthub_dep`
+3. void npm scripts 使用 pnpm 保留字（例如 `deploy`）→ `pnpm.reserved_script_name`
+4. self-hosted runner 使用 `cache: pnpm` → `ci.self_hosted_pnpm_cache`
 
-Track 判定：根目錄有 `void.json` 且 `package.json` 含 `void` dep → Track B；否則 Track A。
+## § 6 — 遷移期現況
 
-## § 6 — 派別現況與改派
+仍用 `wrangler-action` + 手寫 `wrangler.jsonc` 的 consumer 是**待遷移**，不是第二條合法軌道：
 
-各 consumer 現況以 `scripts/audit-wrangler-config.ts` 輸出為準。新 consumer 依 § 1 矩陣決定派別。改派必須同步：
-
-- 改 Track A → B：移除 `@nuxthub/core` + 建 void.json + 加 voidPlugin + 寫 `server/utils/db.ts` + `blob.ts` helper + 改 deploy.yml 走 `pnpm run void:deploy` + GitHub OIDC（詳見 `/yudefine-deploy` Phase 6 runbook）
-- 改 Supabase → D1（Track A）：補 `@nuxthub/core` + 改 `hub: {}` config + 跑 audit 重驗
-- 跑 audit script 重驗（`scripts/audit-wrangler-config.ts`）必須 0 violation 才算改派完成
+- **NEVER** 新增 wrangler 用法、新 consumer 一律 void
+- 既有 consumer 依 plan 的分波（W0 quotation-generator → W2 Nuxt on Workers → W3 純 Worker）逐個遷移；每個 repo 的遷移由該 repo 的 session 做，遷移前其 CI 的 wrangler 步驟維持原狀，不得為了「提早合規」自行拆掉部署
+- 遷移期仍合法的只有兩條，都**只限**既有、`registry/consumers.json` 的 `deploy-track` 仍為舊值的 consumer，**NEVER** 用於新 consumer 或新設定：
+  - `wrangler-action`：沿用現有 deploy workflow，runtime secret 照 [[secrets]] 的 `secrets:` 注入
+  - `void-cloud`：沿用現有部署不拆；**NEVER** 新設或重建 OIDC／`VOID_TOKEN`（§ 3.1 MUST NOT）
+- 退場：該 repo 的遷移件（plan T8–T10）改走 `void deploy` 並把 `deploy-track` 改成 `void` 時，該 repo 的舊軌道失效；fleet 層的退場點是收尾件 T11（audit 改 error、刪舊值）。在 T3／T4 改寫 [[secrets]] 與 `/yudefine-deploy` 前，這兩份的 wrangler-action／void.cloud 內容只適用本節的待遷移 consumer
+- 各 consumer 現況以 `scripts/audit-wrangler-config.ts` 輸出為準；`registry/consumers.json` 的 `deploy-track` 舊值（`wrangler-action`、`void-cloud`）到收尾件才刪
 
 ## § 7 — Self-hosted runner CI 反 pattern
 
@@ -309,44 +167,45 @@ Track 判定：根目錄有 `void.json` 且 `package.json` 含 `void` dep → Tr
 
 ### § 7.2 — CI 看不到 gitignored env / 本機 link state
 
-- **NEVER** 在 workflow 假設 `.env*` / 本機 link state（`.void/project.json`）存在——checkout 只含 tracked file
-- **MUST** Track B deploy 身分走 GitHub OIDC；workflow 明確設定 project slug，但不注入長效 token：
+- **NEVER** 在 workflow 假設 `.env*` / 本機 link state（`.void/`）存在——checkout 只含 tracked file
+- **MUST** deploy 身分走 `CLOUDFLARE_API_TOKEN` secret，經 `env:` 注入 `void deploy`：
 
   ```yaml
-  permissions:
-    contents: read
-    id-token: write
-
   - name: Deploy via void
     run: pnpm run void:deploy
     env:
-      # VOID_PROJECT 對應本機 .void/project.json 的 slug；CI 拿不到本機 link state，
-      # 必須 env 顯式給（slug 從 `void project list` 取）。
-      VOID_PROJECT: <consumer-slug>
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
   ```
 
-  - Track A（wrangler-action）：CF token 走 `cloudflare/wrangler-action@v3` 的 `apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}`
-  - Track B（void.cloud）：GitHub OIDC + `VOID_PROJECT`（link state 不在 CI，slug 必顯式給）
-- **MUST** runtime app secret（DB URL / session secret 等）依 deploy track 分流：
-  - **Track A**：SoT = GitHub repo secret，deploy 時經 `wrangler-action` `secrets:` 注入 worker——全流程照 [[secrets]]；**NEVER** 手動推（`wrangler secret put` / `cf workers secrets`），bootstrap／incident 唯一例外見該檔
-  - **Track B**：由 user 在平台端預設一次（`void secret put <NAME>`），**不**從 GH Actions 注入 runtime secret
+- **MUST** runtime app secret（DB URL / session secret 等）SoT = GitHub repo secret，deploy 前由 workflow 寫暫存 dotenv 後 `void secret sync <dotenv>` 同步；SoT、命名、rotation、Notion custody 與例外照 [[secrets]]（該檔的 `wrangler-action` `secrets:` 注入只適用 § 6 待遷移 consumer，T3 改寫為 void 版）；**NEVER** 手動推（`void secret put` 逐筆 / `cf workers secrets`），bootstrap／incident 唯一例外見該檔
 
-完整 workflow 範本見 `~/offline/clade/vendor/snippets/cloudflare-workers/self-hosted-runner-ci.workflow.yml.template`。
+完整 workflow 範本見 `~/offline/clade/vendor/snippets/cloudflare-workers/self-hosted-runner-ci.workflow.yml.template` 與 `/yudefine-deploy` 的 void workflow template（兩者隨 T4／T5 改為 void 版）。
 
 ### § 7.3 — Fleet 現況
 
-現況以 `scripts/audit-wrangler-config.ts`（`ci.self_hosted_pnpm_cache`、`void.legacy_token_auth`）輸出為準；某 consumer 的 `.github/workflows/deploy.yml` 是 current void.cloud + OIDC reference。
+現況以 `scripts/audit-wrangler-config.ts`（`ci.self_hosted_pnpm_cache` 等）輸出為準。
 
-## § 8 — Cloudflare 操作工具：`cf` CLI（hard rule）
+## § 8 — Cloudflare 操作工具：void 優先，`cf` 補位（hard rule）
 
-帳號資源的查詢與異動（D1 / KV / R2 / DNS / zone / tunnel 設定 / Worker secret / browser-run / cache 等）**MUST** 走官方 `cf` CLI，照 `cf-cli` skill 操作（指令探索、輸出格式、跟 wrangler 會出事的語意差都在那裡）。**NEVER** 用 Cloudflare Developer Platform MCP 做帳號操作。
+**MUST** 依序判斷：① `void` 能做 → 用 `void`（指令語法先看專案 `node_modules/void/skills/void/SKILL.md`）；② void 不涵蓋的帳號資源操作 → 官方 `cf` CLI，照 `cf-cli` skill（指令探索、輸出格式、void↔cf 語意差都在那裡）；③ 兩者都沒有 → HTTP API。**NEVER** 用 wrangler；**NEVER** 用 Cloudflare Developer Platform MCP 做帳號操作。
 
-| 操作 | 工具 |
-|---|---|
-| 帳號資源查詢與異動（人或 agent 手動執行、runbook、skill 指令範例） | **`cf`**（`cf-cli` skill） |
-| Track A deploy（CI） | `cloudflare/wrangler-action`（§ 3.1）— `cf deploy` 需要 `cloudflare.config.ts`（`cf migrate`），fleet 尚未採用 |
-| Track B deploy / runtime secret | `void`（§ 3.2） |
-| `wrangler dev` / `tail` / `types`、查 dev server 的本機 D1 / KV / R2 | wrangler — `cf` 沒有 Workers tail；`cf workers types` 只讀 `cloudflare.config.ts`；`cf --local` 看不到 dev server 的資料 |
-| CI workflow 內的步驟（deploy 前後的 D1 migration / bookmark 等） | 維持 wrangler / wrangler-action — 跟 Track A deploy 一起等 `cf` 脫離 beta 再評估 |
-| 程式碼內的 API 呼叫（`fetch` / script 內嵌 client） | HTTP API — 不為了本節改成 spawn CLI |
-| `cf cli search` 查無對應指令的端點（例如 zone 層級 ruleset rule） | HTTP API，並在該處註明「cf 未覆蓋」 |
+| 動作 | void（優先） | cf CLI（void 不涵蓋時） |
+|---|---|---|
+| 部署 | `void deploy`（自有帳號；CI 用 `CLOUDFLARE_API_TOKEN`） | 非 void Worker：`cf deploy`（需 `cloudflare.config.ts`） |
+| 本機 dev | `nuxt dev` / `vite dev` + `voidPlugin()`（內建 miniflare） | `cf dev` |
+| 型別 | `tsconfig` `types: ["void/env"]`；`void env types` | `cf workers types`（讀 `cloudflare.config.ts`） |
+| 即時 log | `void project logs`（自有帳號為 live tail） | 無（非 void 純 Worker 暫缺，plan 缺口 G1） |
+| secret | `void secret put\|sync\|list\|delete` | `cf workers secrets bulk` |
+| D1 查詢 | `void db execute <sql> [--remote]`（預設本機，可查 dev server 的資料） | `cf d1 query <uuid>`（預設 production） |
+| D1 migration | `void db status` / `void db migrate`；`void deploy` 自動套用 | `cf d1 migrations list\|apply --dir` |
+| D1 還原點 | `void deploy` 套 migration 前自動存 | `cf d1 time-travel get-bookmark\|restore` |
+| R2 物件 | — | `cf r2 objects put` |
+| KV | `void/kv`（程式內） | `cf kv` |
+| 自訂網域 | `void domain add\|list\|status` | 以 `cf cli search` 確認 |
+| rollback | `void project rollback` | `cf workers deployments` |
+| tunnel | — | `cf tunnels` |
+| 程式碼內的 API 呼叫（`fetch` / script 內嵌 client） | HTTP API — 不為了本節改成 spawn CLI | |
+| `cf cli search` 查無對應指令的端點（例如 zone 層級 ruleset rule） | HTTP API，並在該處註明「cf 未覆蓋」 | |
+
+`cf --local` 看不到 dev server 的資料——查 dev 資料用 `void db execute`。`cf` 仍是 beta；上表 cf 欄是方向，實際語法以 `cf-cli` skill 實測規則與 `cf cli search` 為準。

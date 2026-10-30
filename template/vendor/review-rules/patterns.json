@@ -398,6 +398,11 @@
       "guidance": "行為變更的 diff 要檢查對應文件（README / docs/ / rules / cookbook / CHANGELOG 慣例）是否同步更新；有行為變更但文件未動 → fail 並指名該補哪份"
     },
     {
+      "id": "acceptance-gap-scope",
+      "title": "驗收發現的 bug 要有範圍盤點與 e2e（acceptance-gap）",
+      "guidance": "PR 修的是驗收階段（客戶／HR 驗收、發版驗證、staging 實走、主管抽驗）發現的 bug 時（PR body／commit／Work: 行的 plan／worker brief 標為是，或工作種類是 acceptance-gap），檢查 plan 有 `## Scope inventory` 盤點表（格式見 work-route rules/工作種類與必要產物.md Rule 6）、add 列在 diff 有 truth scenario、且有覆蓋整條使用流程且先紅後綠的 e2e 列；缺盤點表或缺 e2e、或只修單點以 bug-covered／bug-uncovered 結案 → fail（Major），指名缺哪一項"
+    },
+    {
       "id": "comment-test-conditional",
       "title": "註解與測試的條件式判準",
       "guidance": "只審本次 diff 新增或改到的行。新增註解：命中 code-style.md § 該刪的註解（C0 轉述 SSoT、C1 歷史敘事、C2 工作編號當理由、C3 行內日期、C4 翻譯 code、C5 注解掉的程式碼、C6 測試檔頭重述檔名）→ fail 並指名類別與該怎麼改；C0 先問該事實是否該進 SSoT。@followup[<id>]、結案改寫「（<id> 結案：…）」與指令型註解（@ts-expect-error、oxlint-disable 等）不算。新增 unit test：一列都不中 testing-anti-patterns.md § unit test 何時寫 的 U1–U4，或斷言對象是只給人讀的 prose、load-bearing 規約句（U5，應登記 rule-invariants）→ fail。刪測試：刪的是閘門類（U3）或某段產品碼唯一的行為測試 → fail。讀原始碼比字串的 P 類測試不靠本規則攔：機械層是 `vendor/scripts/checks/source-assert-gate.ts`（delta，pre-commit＋CI）；本規則只審它的逃生口 marker `clade-source-assert:` 的理由是否成立。"

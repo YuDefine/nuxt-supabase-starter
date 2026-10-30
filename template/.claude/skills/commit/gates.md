@@ -263,7 +263,7 @@ SG 沒出聲 **≠** 0-S 通過，Tier 3 命中照樣跑 0-S.1 與 0-S.2。SG �
 `security-evidence finding` 判讀再決定修不修，**NEVER** 看到 High 就直接改 code。
 
 上線前或事件驅動的深度稽核（claude-security plugin 的 Scan codebase）不在 commit 路徑：誰能發起、從哪條主線發起，
-見 `agent-routing.routing-table.md`〔`deep-security-audit`〕；**NEVER** 在 `/commit` 內點火，也 **NEVER** 拿它代替 0-S 或 0-A。
+見 `agent-routing.routing-table.md`〔`deep-security-audit`〕；上線前（`business_activity` 改 `active`）與 `SECURITY.md` 不變量變更這兩個觸發點只登記不點火，判準在 `security-policy.md` 條件句；**NEVER** 在 `/commit` 內點火，也 **NEVER** 拿它代替 0-S 或 0-A。
 
 ### 0-S.1 確定性掃描（秒級，缺工具不擋）
 

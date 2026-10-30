@@ -81,6 +81,8 @@ n=1 取證去主張把 Grok 推進表上沒有它的列——要轉列先補 TD-
 - **只用 Scan codebase**：Scan changes 是 diff 層級的 security review，與 commit 0-S.2 的 `/security-review` 重複。
 - **routing gate 不必開 allowlist**（2026-10-25 實跑 `pi-routing-gate.ts`）：Scan codebase 以 saved workflow `claude-security:scan` 呼叫，gate 放行（exit 0），workflow 內的 `agent()` 不經 gate 的 subagent 派工分支；直接 `Agent(claude-security:*)` 一律被 latch（exit 2），只有 Suggest patches 會這樣派，所以它不在本席。
 - **不當 reviewer 替身**：commit 0-A 只認 `claude-review-safe.sh` FINALIZE；0-A 額度耗盡時 gate 保持未完成，不改用本席。
+- **觸發點只登記、不點火**（T5，2026-10-29）：事件到了（consumer `business_activity` 由 `pre-production` 改 `active`、已 `active` 的 consumer `SECURITY.md` 不變量變更），agent 該做的是唯讀的 `security-evidence map`、把「需要深度稽核」連同 scope 與額度需求寫進 plan Open work 並 `flow ask` 請 Charles 決定、再用 `audit-security-scan-freshness.ts` 確認有效掃描沒過期（`/clade-health full` 每輪跑到）。事件觸發的是「提醒與準備」，不是授權；授權仍是上列「不自動點火」那條。
+- **大 scope 前先排額度**（T3 回放成本，evidence `T3-replay-2026-10-25.md` §7）：同為 medium effort，13 檔約 15 USD（list）、46 檔約 16 USD，245 檔約 69 USD 且單支吃滿一個帳號 5 小時額度、panel 最後一段撞上限而沒 render 報告。所以 scope 超過約 100 檔，發起前二選一：按目錄切成多支（每支落在約 50 檔內，逐支發起）、或用 `claude-account-pool` 查各帳號剩餘額度後指定額度充足的帳號從 Opus 5.5 主線啟動。**NEVER** 在額度未知時對大 scope 點火：撞上限的代價是最後一段 panel 驗證沒跑完，已花的額度買不到結論。
 
 ## Opus 5.5 effort 量測（2026-10-12～15，結論：不改表）
 

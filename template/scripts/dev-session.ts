@@ -50,6 +50,7 @@
  *   node scripts/dev-session.ts list                 # 列所有 dev-* session + health
  *   node scripts/dev-session.ts sweep [--dry-run] [--leases-only]    # 回收 TTL 已過的 agent 租約（沒人爭用也收；心跳斷不收）＋清掉 dev 已退出的 dev-* tab
  *                     --leases-only：只回收租約、不清 dead-tab（dev node 的 clade-dev-lease-reaper.timer 每 5 分鐘跑這個）
+ *   node scripts/dev-session.ts register --kind human --port <N> --pid <pid> [opts]   # 人類前景起的 server 登記 human lease（`wt-helper dev` 用）；滿額照放行，只印警告與可手動停的候選
  *   node scripts/dev-session.ts slots [--json]       # 唯讀：本機 resident dev server 實況計數（hostCap、每格 owner／port／cwd／Pss），不起不停任何東西
  *
  * 常用 opts：
@@ -108,7 +109,15 @@ import {
   verifyVisibleIdentity,
 } from './herdr-visible-identity.ts'
 import { chooseDevWorkspace, labelBelongsToOtherRepo } from './lib/dev-workspace.ts'
-import { buildSlots, computeHostCap, parseLsofListeners, summarizeSlots } from './lib/dev-slots.ts'
+import {
+  buildSlots,
+  maxResidentVerdict,
+  parseLsofListeners,
+  readDevSlotsOverride,
+  resolveHostCap,
+  resolveMaxResident,
+  summarizeSlots,
+} from './lib/dev-slots.ts'
 import { readHostMem, sampleProcs } from './lib/dev-resource/tree-cost.ts'
 // 分配模型的 SoT。base 池寬度 NEVER 在本檔另外定義一次——第二份常數與分配器漂開時，
 // 回收會殺到合法的 dev server。
@@ -359,6 +368,7 @@ function parse(argv) {
     session: null,
     cwd: process.cwd(),
     port: null,
+    pid: null, // `register` 登記的前景 server 根進程
     label: null,
     task: null,
     ttl: null, // ms；null = 未指定（agent → DEFAULT_TTL_MS，人類 → 無界）
@@ -392,6 +402,9 @@ function parse(argv) {
         break
       case '--port':
         o.port = Number(next())
+        break
+      case '--pid':
+        o.pid = Number(next()) || null
         break
       case '--label':
         o.label = next()
@@ -1218,7 +1231,7 @@ function writeLease(o, consumerId, sessionName, port, id) {
         label: o.label || `dev-session ${sessionName}`,
       },
       devServer: {
-        pid: port ? Number(portPid(port)) || null : null,
+        pid: o.pid || (port ? Number(portPid(port)) || null : null),
         // MUST 存正規化的絕對路徑：canonicalLeaseCwd() 讀回時不做 resolve()，
         // 相對路徑會被判為「無法確認」→ 保守 mismatch。
         cwd: canonicalCwd(o.cwd),
@@ -1462,9 +1475,46 @@ export function preflightBackingService(o) {
   process.exit(1)
 }
 
+/**
+ * `dev.maxResident`（預設 2）：同一 consumer 的 agent resident server 上限（spec C5）。
+ * 只約束 agent claim；人類無界，`--no-lease` 的呼叫方自己放棄 lease 語意也不約束。
+ */
+function maxResidentGate(o, meta) {
+  if (o.noLease || !claimingAsAgent(o)) return null
+  const consumerId = resolveConsumerId(o, meta)
+  const verdict = maxResidentVerdict({
+    slots: liveSlots().slots,
+    consumerId,
+    selfPort: resolvePort(o, meta),
+    max: resolveMaxResident(meta),
+  })
+  return verdict.full ? { consumerId, ...verdict } : null
+}
+
+function reportMaxResident(gate) {
+  err(
+    `[maxResident:${gate.consumerId}] 已有 ${gate.holders.length} 支 agent resident dev server，達上限 ${gate.max}（consumer-meta dev.maxResident，預設 2）`,
+  )
+  for (const s of gate.holders) {
+    const left =
+      s.ttlRemainingMs === null
+        ? ''
+        : s.ttlRemainingMs < 0
+          ? '，TTL 已過（reaper 下一輪會收）'
+          : `，TTL 剩 ${fmtDuration(s.ttlRemainingMs)}`
+    err(`  :${s.port}  ${s.cwd ?? '-'}  task: ${s.task ?? '未註明'}${left}`)
+  }
+}
+
 async function cmdLaunch(o) {
   const meta = readConsumerMeta(o.consumerMeta)
   const port = resolvePort(o, meta)
+  const gate = maxResidentGate(o, meta)
+  if (gate) {
+    reportMaxResident(gate)
+    err(`  → 排隊等格子：dev-session.ts wait --task "<你要做什麼>" -- <cmd>（不需問 user）`)
+    process.exit(1)
+  }
   await runLaunch(o, meta, port)
 }
 
@@ -1819,7 +1869,9 @@ async function cmdWait(o) {
 
     const queue = enqueueSelf(o, lid)
     const head = queue[0]
-    if (!held && head?.sessionId === me) {
+    // consumer 的 agent 格子滿了也算「沒格子」：留在佇列裡等（它們的 TTL 到期、release 或被 reaper 收掉才會騰出）。
+    const full = !held ? maxResidentGate(o, meta) : null
+    if (!held && !full && head?.sessionId === me) {
       dequeueSelf(o, lid)
       return cmdLaunch(o) // 走既有 launch 路徑接手（含 lease gate 的自動回收分支）
     }
@@ -1831,6 +1883,7 @@ async function cmdWait(o) {
         err(
           `  持有者 ${lease.holder?.kind}:${lease.holder?.sessionId}，task: ${lease.task || '未註明'}`,
         )
+      if (full) reportMaxResident(full)
       err(`  佇列位置：${queue.findIndex((e) => e.sessionId === me) + 1}/${queue.length}`)
       process.exit(1)
     }
@@ -1903,10 +1956,11 @@ function fmtKiB(kib) {
  * 唯讀：本機 resident dev server 的實況計數（spec C1／C6）。
  * 計數以進程＋port 在聽為準，不是 lease 檔張數；lease 只用來標 owner class。
  */
-function cmdSlots(o) {
+function liveSlots() {
   const mem = readHostMem()
   const cores = cpus().length
-  const hostCap = computeHostCap({ memTotalKiB: mem?.totalKiB ?? 0, cores })
+  // 覆寫值來自 registry `dev_slots`（`dev-node.ts bootstrap` 寫出 ~/.config/clade/dev-slots.json）。
+  const hostCap = resolveHostCap({ memTotalKiB: mem?.totalKiB ?? 0, cores }, readDevSlotsOverride())
   const raw = sh('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-F', 'pn'])
   const slots = buildSlots({
     procs: sampleProcs(),
@@ -1915,6 +1969,11 @@ function cmdSlots(o) {
     now: Date.now(),
     reclaimReason: (lease, now) => leaseReclaimable(lease, now),
   })
+  return { mem, cores, hostCap, slots }
+}
+
+function cmdSlots(o) {
+  const { mem, cores, hostCap, slots } = liveSlots()
   const report = summarizeSlots(slots, hostCap)
   if (o.json) {
     out(JSON.stringify({ hostMemTotalKiB: mem?.totalKiB ?? null, cores, ...report }, null, 2))
@@ -1943,6 +2002,43 @@ function cmdSlots(o) {
         (report.enoughForCalibration ? '' : '（不足 3 格，不可拿來校準 perServerPss）'),
     )
   }
+}
+
+/**
+ * 人類在自己的終端前景起的 server（`wt-helper dev`）登記一份無界 human lease，讓它在 `slots` 歸 `human`、
+ * 計入主機額度。**不擋、不排隊**（spec C5：人類無界）：已滿額只印警告，並點名可手動停的候選。
+ * 只收 `human`——agent 的 server 走 `start`／`wait`（有 Tab、有 TTL），NEVER 在這裡登記 agent 租約。
+ */
+function cmdRegister(o) {
+  if (claimingAsAgent(o)) {
+    err('register 只給人類前景 server 用；agent 請走 start / wait（有 herdr Tab 與 TTL）')
+    process.exit(1)
+  }
+  const meta = readConsumerMeta(o.consumerMeta)
+  const consumerId = resolveConsumerId(o, meta)
+  const port = resolvePort(o, meta)
+  if (!port) {
+    err('register 需要 --port')
+    process.exit(1)
+  }
+  const lid = leaseId(consumerId, port, resolvePrimaryPort(meta))
+  const { hostCap, slots } = liveSlots()
+  if (slots.length >= hostCap) {
+    err(
+      `⚠ 主機 resident dev server 已 ${slots.length} / hostCap ${hostCap}：人類前景放行，計數會超額`,
+    )
+    err('  agent 的 start / wait 之後會排隊，直到有格子騰出。可手動停的候選（只列，不動）：')
+    for (const s of slots)
+      err(
+        `    :${s.port}  ${s.owner}  ${s.consumerId ?? '-'}  ${s.cwd ?? '-'}  ${fmtKiB(s.pssKiB)}`,
+      )
+  }
+  writeLease(o, consumerId, o.session || `wt-dev-${consumerId}-${port}`, port, lid)
+  if (!existsSync(leasePath(lid))) {
+    err(`[lease:${consumerId}] human lease 寫檔失敗（${leasePath(lid)}）`)
+    process.exit(1)
+  }
+  out(`✓ 已登記 human lease（${lid}，port ${port}${o.pid ? `，pid ${o.pid}` : ''}）`)
 }
 
 /** 兩次讀到的是不是同一份租約（中間 holder 續租 / 別人接手都會改掉其中一欄）。 */
@@ -2241,6 +2337,8 @@ async function main() {
       return cmdSweep(o)
     case 'slots':
       return cmdSlots(o)
+    case 'register':
+      return cmdRegister(o)
     default:
       return cmdLaunch(o) // 無 subcommand = launch
   }

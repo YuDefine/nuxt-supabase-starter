@@ -68,7 +68,13 @@ export function readPlanDeltas(markdown: string): TruthDelta[] {
  *
  * 缺欄位（`null`）＝沒判過，一律照最嚴的完整要求集——與「判成 behavior」分得開。
  */
-export const WORK_KINDS = ['behavior', 'bug-uncovered', 'refactor', 'bug-covered'] as const
+export const WORK_KINDS = [
+  'behavior',
+  'bug-uncovered',
+  'refactor',
+  'bug-covered',
+  'acceptance-gap',
+] as const
 export type WorkKind = (typeof WORK_KINDS)[number]
 
 export function isWorkKind(value: string): value is WorkKind {
@@ -143,7 +149,7 @@ export function regressionAnchors(deltas: readonly TruthDelta[]): RegressionAnch
  * - `bug-covered` → `regression`
  * - `refactor` → 每一列錨點都是 NOOP（行為已被既有 scenario 釘住）時 `regression`；有任何 ADD 錨點
  *   （要新寫 scenario）或沒有錨點時 `full`（Charles 2026-09-28 Q1=A）
- * - 其餘與未宣告 → `full`
+ * - 其餘（含 `acceptance-gap`）與未宣告 → `full`
  */
 export type RequirementSet = 'full' | 'regression'
 
@@ -163,4 +169,56 @@ export const ANCHOR_REQUIRED_KINDS: ReadonlySet<WorkKind> = new Set([
   'bug-covered',
   'bug-uncovered',
   'refactor',
+  'acceptance-gap',
 ])
+
+// ── 範圍盤點表（acceptance-gap）──────────────────────────────────────────────
+
+/**
+ * `acceptance-gap` 的範圍盤點表：plan.md `## Scope inventory`，該功能每個行為一列。
+ *
+ * `| id | 行為 | 落點 | scenario／理由 |`，落點值域：
+ * - `existing`：已有 scenario，第四欄寫 `<truth feature> -> Scenario: <標題>`，Truth delta 要有同 unit 的 NOOP 列
+ * - `add`：本次新寫，第四欄同上，Truth delta 要有同 unit 的 ADD 列
+ * - `bug`：驗收發現的原 bug 的紅→綠錨點，第四欄同上，Truth delta 要有同 unit 的 ADD 或 NOOP 列
+ * - `e2e`：覆蓋整條使用流程的端到端 scenario，第四欄同上，Truth delta 要有同 unit 的 ADD 或 NOOP 列
+ * - `out`：明列不做，第四欄寫理由
+ */
+export const SCOPE_PLACEMENTS = ['existing', 'add', 'bug', 'e2e', 'out'] as const
+export type ScopePlacement = (typeof SCOPE_PLACEMENTS)[number]
+
+export interface ScopeRow {
+  id: string
+  behavior: string
+  /** 原文；值域外照留，由 gate 報 `scope-inventory-row-unplaced`。 */
+  placement: string
+  /** 第四欄原文：scenario 參照或不做的理由。 */
+  target: string
+}
+
+export function parseScopeInventory(markdown: string): ScopeRow[] {
+  const rows: ScopeRow[] = []
+  for (const line of markdownSection(markdown, 'Scope inventory').split('\n')) {
+    if (!line.startsWith('|')) continue
+    const cells = line
+      .split('|')
+      .slice(1, -1)
+      .map((c) => c.trim())
+    if (cells.length < 4) continue
+    if (cells[0] === 'id' || /^:?-{3,}:?$/u.test(cells[0]!) || cells[0] === '—') continue
+    rows.push({ id: cells[0]!, behavior: cells[1]!, placement: cells[2]!, target: cells[3]! })
+  }
+  return rows
+}
+
+/** 第四欄 → truth feature 裡的一條 scenario（與錨點同一個判準）；不是 scenario 參照回 null。 */
+export function scopeScenario(target: string): { feature: string; title: string } | null {
+  const anchor = regressionAnchor({
+    id: '',
+    action: 'NOOP',
+    unit: target,
+    reason: '',
+    state: 'proposed',
+  })
+  return anchor ? { feature: anchor.feature, title: anchor.title } : null
+}

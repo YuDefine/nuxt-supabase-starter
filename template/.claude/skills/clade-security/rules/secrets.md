@@ -7,9 +7,13 @@ paths: [".github/workflows/**/*.yml", "wrangler.toml", "wrangler.jsonc"]
 
 # Cloudflare Workers Secrets
 
-**Single source of truth = GitHub repo secret**。所有 worker runtime 用的 secret 一律走 GitHub Actions + `cloudflare/wrangler-action@v3` 的 `secrets:` input 推進 worker。
+**Single source of truth = GitHub repo secret**。所有 worker runtime 用的 secret 一律由 GitHub Actions 推進 worker（void consumer 走 `void secret sync`；待遷移 consumer 走 `cloudflare/wrangler-action@v3` 的 `secrets:` input，見下方適用範圍）。
 
-適用範圍：**Track A**（wrangler-action deploy）。Track B（void.cloud）runtime secret 走 `void secret put` 平台端預設、**不**經 GH Actions，不適用本檔（分流規約見 cloudflare-workers § 7.2）。
+適用範圍（遷移期，plan `W-2026-10-26-fleet-wrangler-void-void-cf-cli-plan-clade-propa` T3 改寫前）：
+
+- **已改 void 的 consumer**：SoT 仍是 GitHub repo secret，但注入改由 deploy workflow 寫暫存 dotenv 後 `void secret sync <dotenv>`（cloudflare-workers § 7.2），**NEVER** 用 `wrangler-action`；本檔下列條文中 `wrangler-action` `secrets:` 專屬的部分不適用，其餘（命名、per-env、rotation 只動 GitHub Secret、Notion custody、`[vars]` 禁令、唯一例外）照舊，例外中的手動推改用 `void secret put`
+- **待遷移 consumer**（cloudflare-workers § 6，`deploy-track` 仍為 `wrangler-action`）：照本檔全文，到該 repo 遷移件改 void 為止
+- **新 consumer**：一律走第一種，**NEVER** 新建 `wrangler-action` deploy
 
 ## MUST
 

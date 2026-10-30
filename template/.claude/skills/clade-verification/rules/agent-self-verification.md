@@ -124,13 +124,6 @@ The obligations, predicates, evidence schema, failure handling, and review timin
     - **(c) 探針寫進 `### 自驗` 之前要先跑一次 control**（原則同 § 否定命題）。不要憑記憶推論某 flag
       會不會被 shell wrapper 吃掉——改寫是形狀相依的。
 
-    | 讀到自己在想 | 現實 |
-    | --- | --- |
-    | 「數字跑出來了，跟預期差不多」 | 差不多是對**你以為它在量什麼**而言；三條前提量的正是「它在量什麼」 |
-    | 「同一條指令我跑過兩次，結果一樣」 | (a) 的漂移可以連續兩次相同；穩定不是正確 |
-    | 「`rg -l` 比較快，先用它掃一遍」 | 當粗篩可以，寫進判準就是 (b)。粗篩結果不要直接當結論 |
-    | 「探針回 0，正好符合我的判斷」 | 那正是 (c) 要擋的一格——符合預期的空輸出最不會被複驗 |
-
 19. **拿 body 下結論前要先讀 final URL 與狀態碼（hard rule）**：curl 帶
     `-w '%{http_code} %{url_effective}'` 取回兩值先讀。`url_effective` 不是你請求的路徑時
     （被 auth 攔到登入頁即是），body 的 grep 與計數**零訊號**，不要當任何動作的前提，

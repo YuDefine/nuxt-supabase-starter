@@ -46,7 +46,7 @@ T1 判法：env `CLADE_DISPATCH_ID` 非空（coordinator 派出的 child），�
 2. THINK 先讀取 `rules/工作種類與必要產物.md`，決定續跑或以 `flow plan open --kind <值>` 鑄 `W-…`；manifest 宣告 aixbdd／specformula 卻缺 `work-lifecycle.md` 時，讀取 `clade-onboard` skill 的 `rules/交棒前truth-root處置判準.md` 處置，不降級改鑄 `NNN-<slug>`。
 3. THINK 鑄新 work id 之前先讀取 `rules/鑄workid前Notion詢問判準.md`，DELEGATE `notion-hub.ts resolve` 後依第一個成立的列決定問不問、怎麼開票。
 4. THINK 若 project constitution 缺失或本次要調整，先讀取 `rules/constitution觸發判準.md`，再載入 `rules/.constitution/SKILL.md` 做最小增量。
-5. WRITE 本次有確認版訪談交棒摘要時：免 package → 摘要不落檔，未決題回報使用者；只有「bug 且出錯的是沒有 I/O 的純邏輯」列把驗收例子逐條寫成迴歸 unit test 案例，其他免 package 列不另寫測試；續跑既有 package → 只把新決策追加進 § Decisions；新開 package → 依下表寫入 `plan.md`：
+5. WRITE 本次有確認版訪談交棒摘要時：免 package → 摘要不落檔，未決題回報使用者；只有「bug 且出錯的是沒有 I/O 的純邏輯」列把驗收例子逐條寫成迴歸 unit test 案例，其他免 package 列不另寫測試；續跑既有 package → 只把新決策追加進 § Decisions；新開 package → step 2 鑄 id 時就帶摘要：先把確認版摘要存成檔（repo 內已被 gitignore 的路徑，未決題已解的列先刪掉），跑 `flow plan open <slug> --from-summary <摘要檔> --kind <值>`，它在建 package 之前驗節名與佔位，並依下表寫入 `plan.md`（被拒就修摘要再跑，**NEVER** 退回手搬；已用不帶 `--from-summary` 的指令鑄了 id 才照下表手搬），T2 結論另追加進 § Decisions：
 
 | 摘要節 | 落點 |
 | --- | --- |
@@ -55,7 +55,7 @@ T1 判法：env `CLADE_DISPATCH_ID` 非空（coordinator 派出的 child），�
 | 已確認決策、我的推測、分流事實表、T2 結論 | § Decisions |
 | 未決題（扣掉已解的） | § Open work |
 
-驗收例子另交寫 scenario 的 owner：behavior／bug-uncovered 交 spec-by-example，bug-covered／refactor 交 dsl-refine 寫錨點。
+驗收例子另交寫 scenario 的 owner：behavior／bug-uncovered／acceptance-gap 交 spec-by-example（acceptance-gap 依範圍盤點表的 add／e2e 列），bug-covered／refactor 交 dsl-refine 寫錨點。
 
 ## Phase 4 -- 載入 owner
 

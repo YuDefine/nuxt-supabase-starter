@@ -262,9 +262,14 @@ export function mergeBoundLeftovers(
   )
 }
 
+/**
+ * `advanceAllowed`：呼叫端以 git 判定 `reviewed_base..remoteMainSha` 符合 wt-batch 的
+ * `batchBaseAdvanceAllowed`（只在有合入後補驗的 repo 為 true）；本函式只讀快照、不碰 git。
+ */
 export function evaluateUnattendedAdmission(
   auth: UnattendedMergeAuthorization,
   world: UnattendedWorld,
+  advanceAllowed = false,
 ): { action: 'merge' | 'confirm-only' | 'yield-blocked' } {
   if (world.callerRole !== 'coordinator')
     throw new Error('Unattended merge requires the named coordinator, not a slice worker')
@@ -284,7 +289,7 @@ export function evaluateUnattendedAdmission(
     throw new Error('GitHub PR head is not the formal HEAD')
   if (world.formalTree !== auth.candidate_tree || world.seal.tree !== auth.candidate_tree)
     throw new Error('Formal tree is not the candidate tree')
-  if (world.remoteMainSha !== auth.reviewed_base)
+  if (world.remoteMainSha !== auth.reviewed_base && !advanceAllowed)
     throw new Error('Remote main moved; refresh and reseal')
   if (world.members.some((member) => !member.authorized || !member.released))
     throw new Error(

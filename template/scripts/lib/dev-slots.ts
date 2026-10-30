@@ -14,6 +14,9 @@
  */
 
 import { isDevServerArgv, type ProcSample } from './dev-resource/tree-cost.ts'
+import { readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 
 const GIB_KIB = 1024 * 1024
 
@@ -21,6 +24,102 @@ export const DEFAULT_RESERVE_GIB = 4
 /** 暫定值（spec § 校準）：zenbook 基線當下沒有 dev server 在跑，尚無實測。 */
 export const DEFAULT_PER_SERVER_PSS_GIB = 1
 const HOST_MEM_FRACTION = 0.6
+
+/** 同一 (consumer, app) 的 agent resident dev server 預設上限（1 開發＋1 review slot；consumer-meta `dev.maxResident` 可覆寫）。 */
+export const DEFAULT_MAX_RESIDENT = 2
+
+/** consumer-meta 的 `dev.maxResident`；缺值或不是正整數就退回預設。 */
+export function resolveMaxResident(meta: unknown): number {
+  const value = (meta as { dev?: { maxResident?: unknown } } | null)?.dev?.maxResident
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1
+    ? value
+    : DEFAULT_MAX_RESIDENT
+}
+
+export interface MaxResidentVerdict {
+  full: boolean
+  max: number
+  /** 占格的同 consumer agent server（不含 `selfPort` 那一格：同一個 port 重起不算新增）。 */
+  holders: DevSlot[]
+}
+
+/**
+ * 同 consumer 的 agent resident server 數是否已達 `maxResident`。只數 `agent`：人類無界、`unleased` 沒有
+ * 所屬 consumer 可歸（spec C5）。`selfPort` 排除在外，否則 reuse／重起自己那格會被自己擋下。
+ */
+export function maxResidentVerdict(input: {
+  slots: readonly DevSlot[]
+  consumerId: string
+  selfPort: number | null
+  max: number
+}): MaxResidentVerdict {
+  const holders = input.slots.filter(
+    (s) => s.owner === 'agent' && s.consumerId === input.consumerId && s.port !== input.selfPort,
+  )
+  return { full: holders.length >= input.max, max: input.max, holders }
+}
+
+/**
+ * `~/.config/clade/dev-slots.json`：registry `nodes[].dev_slots` 由 `dev-node.ts bootstrap` 寫出的覆寫值。
+ * NEVER 手寫——檔與宣告漂移 `doctor` 會報。欄位全為選填，缺的用公式預設。
+ */
+export interface DevSlotsOverride {
+  hostCap?: number
+  reserveGiB?: number
+  perServerPssGiB?: number
+  idleWindowMin?: number
+}
+
+export function devSlotsOverridePath(home = homedir(), xdg = process.env.XDG_CONFIG_HOME): string {
+  return join(xdg || join(home, '.config'), 'clade', 'dev-slots.json')
+}
+
+/** 檔不存在、壞掉、欄位型別不對都退回空覆寫（fail-open：計數工具不因設定檔擋工作）。 */
+export function parseDevSlotsOverride(raw: string | null): DevSlotsOverride {
+  if (!raw) return {}
+  let value: unknown
+  try {
+    value = JSON.parse(raw)
+  } catch {
+    return {}
+  }
+  if (!value || typeof value !== 'object') return {}
+  const v = value as Record<string, unknown>
+  const positive = (x: unknown): number | undefined =>
+    typeof x === 'number' && Number.isFinite(x) && x > 0 ? x : undefined
+  const out: DevSlotsOverride = {}
+  const hostCap = positive(v.hostCap)
+  if (hostCap !== undefined && Number.isInteger(hostCap)) out.hostCap = hostCap
+  const reserve = v.reserveGiB
+  if (typeof reserve === 'number' && Number.isFinite(reserve) && reserve >= 0)
+    out.reserveGiB = reserve
+  const per = positive(v.perServerPssGiB)
+  if (per !== undefined) out.perServerPssGiB = per
+  const idle = positive(v.idleWindowMin)
+  if (idle !== undefined) out.idleWindowMin = idle
+  return out
+}
+
+export function readDevSlotsOverride(path = devSlotsOverridePath()): DevSlotsOverride {
+  try {
+    return parseDevSlotsOverride(readFileSync(path, 'utf8'))
+  } catch {
+    return {}
+  }
+}
+
+/** 宣告的 `hostCap` 直接蓋過公式；否則公式吃 `reserveGiB`／`perServerPssGiB` 覆寫。 */
+export function resolveHostCap(
+  input: { memTotalKiB: number; cores: number },
+  override: DevSlotsOverride,
+): number {
+  if (override.hostCap !== undefined) return override.hostCap
+  return computeHostCap({
+    ...input,
+    reserveGiB: override.reserveGiB,
+    perServerPssGiB: override.perServerPssGiB,
+  })
+}
 
 export interface HostCapInput {
   memTotalKiB: number

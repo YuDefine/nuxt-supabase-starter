@@ -59,7 +59,7 @@ paths:
 | --- | --- |
 | 登記本身 | **照樣寫入** |
 | 驗收佇列 | 那一列**不排** |
-| 24 小時後 | `flow status --stalled` 出 `done-unverified`，印出重跑的指令 |
+| 24 小時後 | `flow status --stalled` 出 `done-unverified`，印出重跑的指令；已 `accept`／`drop` 且裁決仍成立的 work 不出（reopen 撤回裁決後照出） |
 | push 之後 | 重跑一次 `flow work done <id> --verification '<同一句>'`，fold 是 last-write-wins，標記就清了 |
 
 **NEVER 把它改成拒寫**（未 push 只是還沒到；擋下會逼人先推空 commit）。**NEVER 用 `git ls-remote` 之類的網路呼叫來「驗得更準」**（離線時卡住，且失敗與「沒 push」同形）。沒有 commit artifact 時這條不適用，**NEVER** 把 `url:` 工作標成憑證未驗。
@@ -178,6 +178,7 @@ paths:
 | `suspect` | 看起來過時但不到代人寫掉：問 Charles 的題靠推論判出、只有題目內文提到的 PR、PR 沒合就關、有來源檔（carrier）的題 | 不寫掉；標記進各 repo `.clade/flow/decision-staleness.json`，`flow pending`／`/my` 把它排到同區段最後並印 `⏳ 疑似過時` |
 
 - 「問出之後才終局」是地基：題目寫「PR #12 已合入，要不要 revert」時，那個合入是前提不是過時證據。明確 `--ref` 同樣適用。
+- 例外：題目把參照 PR 的**合入**當觸發條件（「合入後」「merged 之後」「once … lands」）時，MERGED 的 PR 不算前提消失（那是該被答的時刻）；PR 沒合就關、TD 結案照舊判。
 - 量測（`gh`、`git`）只在 watch 側做；PR 的 MERGED 永久快取，OPEN 與 CLOSED（可能被 reopen）快取 15 分鐘。查不到一律當未終局。
 - 發問時用 `flow ask --ref` 宣告前提，過時才收得掉；沒有任何可核對參照的題 `flow ask` 會在 stderr 提醒。
 - 單跑：`node vendor/scripts/lib/decision-stale-sweep.ts [--apply] [--json]`（不加 `--apply` 只報告）。

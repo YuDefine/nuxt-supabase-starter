@@ -12,12 +12,13 @@
  *
  * 消費端：`main-sync.ts` 與 `register-land.ts`（放行哪些內容差）、`sync-rules.ts`（as-of 座標只把這兩類以外
  * 的未提交改動算成「影響比對結果」）、`wt-batch.ts` 的 merge receipt 檢查
- * （`verifyMergeReceipt`：審查期間 origin/main 前移時，`reviewed_base..merge^` 的每個路徑
- * 都必須通過 `isRegisterPath`，否則拒絕 confirm-merged）。各消費端 MUST 共用這份，NEVER 各自
+ * （`batchBaseAdvanceAllowed`：沒有合入後補驗的 repo，審查期間 origin/main 前移時
+ * `reviewed_base..merge^` 的每個路徑都必須通過 `isRegisterPath`，否則拒絕 confirm-merged；
+ * 有合入後補驗的 repo 改看前移是否與審查集不相交，不讀這份清單）。各消費端 MUST 共用這份，NEVER 各自
  * 再寫一份 matcher。
  *
  * 本檔經 sync-vendor 投影到每個 consumer（`wt-batch.ts` 隨 vendor/scripts 散播並 import 它），
- * 改登記簿 allowlist 等於同時改 main-sync 放行範圍、sync-rules 比對與 merge receipt 的前移放行，
+ * 改登記簿 allowlist 等於同時改 main-sync 放行範圍、sync-rules 比對與 consumer 的 merge receipt 前移放行，
  * 並影響整個 fleet。
  */
 
@@ -44,20 +45,6 @@ export const LEDGER_APPEND_PATHS: ReadonlySet<string> = new Set([
   'vendor/ledger/digest-runs.jsonl',
   'vendor/ledger/pitfall-detector-runs.jsonl',
 ])
-
-/**
- * 「可在 sealed batch 期間前移 origin/main」的路徑——每一項都必須已證明**不是**任何 gate
- * （CI、0-A、0-C、sync-rules）的輸入。消費端只有 `wt-batch.ts` 的 `assertBatchBase`：
- * pr-merge-based 的 review／seal 遇到 origin/main 前移時，只有 `b.base..origin/main` 的
- * 變更路徑全落在這個集合、且與候選路徑不相交才放行，其餘照舊拒收。
- *
- * 起手為空集合（Charles 2026-10-19 flow ee25daf7 答 A）：程式路徑就位，行為等同舊判準。
- * NEVER 沿用上面的登記簿 allowlist 當這個集合（`specs/plans/`、`docs/` 是 gate 輸入）；
- * 加成員前 MUST 先逐項證明讀它的 gate 與讀取點，寫進
- * `specs/plans/W-2026-09-25-batch-merge-main-churn/plan.md` § Evidence。
- * 只放精確檔名，不放目錄前綴。
- */
-export const PROVEN_NON_GATE: ReadonlySet<string> = new Set<string>()
 
 export function isRegisterPath(path: string): boolean {
   if (REGISTER_EXACT.has(path) === true) return true

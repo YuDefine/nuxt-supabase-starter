@@ -18,14 +18,19 @@ commit 0-A 的唯一合格 reviewer 是 fresh-context **Claude Opus 5.5（effort
 
 **先判角色，再判派工量。** **主線自己做是預設。違反字面就是違反精神**。講不出命中哪一條外派條件，就是主線自己做；不能以「派了比較快」替代判斷。
 
-**命中任一才派**：
+**依 context 怎麼切來判，不依問題類型**（first-match，由上往下）：
 
-- 角色不符：主線不是這個工作類別的合格 executor。
-- 寬掃：需讀 5 個以上檔案或整棵目錄才能回答，產出是事實表／統計。
-- 有份量的獨立平行軌：至少兩條互不依賴、且每條預估需 10+ tool calls。
-- 長時間 background job（預估 > 20 分鐘，載體見 § Dispatch data and transport boundary），或必須隔離 worktree／port／環境。
+| id | predicate | 動作 |
+| --- | --- | --- |
+| P1 | 角色不符：主線不是這個工作類別的合格 executor，或這是要 fresh context 的驗證席（commit 0-A、question-review 等） | 派該列載體 |
+| P2 | 長時間 background job（預估 > 20 分鐘），或必須隔離 worktree／port／環境 | 載體見 § Dispatch data and transport boundary |
+| P3 | 有份量的獨立平行軌：至少兩條互不依賴、每條預估需 10+ tool calls，且各條的中間產物主線事後用不到 | 派；軌本身是主線形狀時見下方「第二條主線」 |
+| P4 | 寬掃（5 個以上檔案或整棵目錄），產出是事實表／統計，**而且**主線之後不再需要那批原文 | 可派，回報契約見 [[agent-routing.dispatch-execution]] |
+| P* | 以上皆非 | 主線自己做 |
 
-**命中即主線自己做**：少量讀取、規約／契約／對外定稿、安全／不可逆動作、session gate，以及複驗自己剛做完的東西。定稿措辭，**措辭的語氣與抽象層級一致性外包不了**。具名 threshold（第 3 個 readonly Bash、第 5 個 textual Read、首次 Read 501+ 行）依 reference 結案；不要把 threshold 當 generic「少量」豁免。
+P4 的「之後還需不需要原文」：接著要改那些檔、要拿原文推理或定稿、後續可能被追問其中細節，都算需要 → 主線自己讀。subagent 只交回它當下判斷相關的摘要，後來才需要的細節不在摘要裡，要嘛主線重讀、要嘛再派一次（2026-10-25 分級實驗：主線自讀與外派的掃描品質持平，見 rationale § Routing threshold gate）。檔數與 tool call 數只是 P3／P4 的線索，單獨成立不構成外派理由。
+
+**命中即主線自己做**：少量讀取、規約／契約／對外定稿、安全／不可逆動作、session gate，以及複驗自己剛做完的東西。定稿措辭，**措辭的語氣與抽象層級一致性外包不了**。具名 threshold（第 3 個 readonly Bash、第 5 個 textual Read、首次 Read 501+ 行）在該列 Pi 鏈有席位時 block、依 reference 結案；鏈空時只記 `observed`、不 block（[[agent-routing.pi-watch-protocol]] § Routing threshold），派不派照上表，threshold 本身不是外派理由。
 
 **「第二條主線」（Charles 2026-10-08）**：命中「有份量的獨立平行軌」，而那條軌**本身就是主線形狀**——要主線席位才做得了（主線級判斷、看圖／實機驗證、跑 `work-route`／`presale` 這類多階段 skill、途中要問 user），任何 subagent 列都接不下——且它與當前主線的四條 parallel rubric（檔案不重疊、無 phase 依賴、無共享 mutex、可獨立驗證）全成立 → **MUST 當下**開 Herdr pane 當新主線平行開工，當前主線繼續自己那條；載體見 § Dispatch data and transport boundary。rubric 任一不中就是 serial，留在當前主線依序做。逐字反開脫：「要看圖驗證／要主線判斷，所以主線自己做」——那只證明它需要**一條**主線，不證明需要**這一條**，兩件都留在這條主線就是把平行工作串行化；「先 fork 試試」——fork／subagent 被 routing gate 落到 delegate 檔位，主線形狀的工作 **NEVER** 塞 subagent。已經撞到 gate 就 `[waive] --reason second-main-line --note "<pane label>"`，接著開 pane。
 

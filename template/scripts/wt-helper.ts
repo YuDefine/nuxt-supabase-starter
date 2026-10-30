@@ -143,6 +143,7 @@ import {
   formatClaimConflict,
 } from './claim-helper.ts'
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
+import { detectHolderKind } from './lib/detect-runtime.ts'
 import { isLockedProjectionPathFor } from './locked-projection.ts'
 import {
   allLandedLedgerAppend,
@@ -5710,13 +5711,77 @@ async function cmdDev(alias, opts: WtOptions = {}) {
   console.log(`  ${full}`)
   if (opts.dryRun) return
 
+  // 起 server 的路徑只有兩條，都要有 lease（spec C5，W-2026-10-18-parallel-worktree-runtime-cost）：
+  // agent 走 dev-session（herdr Tab＋TTL，會被 `dev.maxResident` 與主機額度管到）；
+  // 人類維持前景互動，但登記一份無界 human lease 讓它計入額度。
+  const route = wtDevRoute()
+  const metaPath = [repoTop, consumerRoot]
+    .map((root) => join(root, '.claude', 'consumer-meta.json'))
+    .find((file) => existsSync(file))
+  const leaseArgs = [
+    '--cwd',
+    repoTop,
+    '--port',
+    String(chosen.port),
+    ...(metaPath ? ['--consumer-meta', metaPath] : []),
+  ]
+  const task = `wt-helper dev ${chosen.alias} (${basename(repoTop)})`
+
+  if (route === 'agent') {
+    const r = spawnSync(
+      process.execPath,
+      [
+        DEV_SESSION_SCRIPT,
+        'wait',
+        ...leaseArgs,
+        '--task',
+        task,
+        '--ttl',
+        WT_DEV_AGENT_TTL,
+        '--',
+        'sh',
+        '-c',
+        full,
+      ],
+      { cwd: repoTop, stdio: 'inherit' },
+    )
+    process.exitCode = r.status ?? 1
+    return
+  }
+
   const child = spawn(full, { cwd: repoTop, shell: true, stdio: 'inherit' })
+  // Ctrl+C 已經送到前景行程群組裡的 dev server；wt-helper 自己不能先死，否則 release 跑不到。
+  process.on('SIGINT', () => {})
+  process.on('SIGTERM', () => child.kill('SIGTERM'))
+  const dev = (sub: string, ...extra: string[]) =>
+    spawnSync(
+      process.execPath,
+      [DEV_SESSION_SCRIPT, sub, '--kind', 'human', ...leaseArgs, ...extra],
+      {
+        cwd: repoTop,
+        stdio: 'inherit',
+      },
+    )
+  dev('register', '--pid', String(child.pid ?? ''), '--task', task)
   await new Promise((resolvePromise) => {
     child.on('exit', (code) => {
       process.exitCode = code ?? 0
       resolvePromise(undefined)
     })
   })
+  dev('release')
+}
+
+const DEV_SESSION_SCRIPT = fileURLToPath(new URL('./dev-session.ts', import.meta.url))
+/** agent 經 `wt-helper dev` 起的 server 租期；到期由 clade-dev-lease-reaper 回收，續租走 `dev-session.ts heartbeat`。 */
+const WT_DEV_AGENT_TTL = '60m'
+
+/**
+ * `wt-helper dev` 的起 server 路徑：偵測得到 agent runtime → `agent`（dev-session，有 Tab 有 TTL）；
+ * 偵測不到 → `human`（前景，登記無界 lease）。判不出來時 NEVER 當 agent：agent 租約會被自動回收。
+ */
+export function wtDevRoute(env: NodeJS.ProcessEnv = process.env): 'agent' | 'human' {
+  return detectHolderKind(env) === 'human' ? 'human' : 'agent'
 }
 
 // Auto-generated commit messages MUST clear the fleet commitlint config

@@ -34,7 +34,7 @@ clade_ensure_gate_shim_here() {
 
 # 本檔所有 pnpm 呼叫一律經這裡：關掉 verify-deps-before-run。clade 散播的 .npmrc 設了
 # `verify-deps-before-run=install`，裸 `pnpm exec`／`pnpm run` 會在 package.json 有變時先跑完整
-# install＋postinstall bootstrap（同 pre-commit vp-staged，W-2026-09-27-precommit-vp-staged-pnpm-exec-install）。
+# install＋postinstall bootstrap（同 pre-commit vp-staged）。
 pnpm_nodeps() {
   pnpm --config.verify-deps-before-run=false "$@"
 }

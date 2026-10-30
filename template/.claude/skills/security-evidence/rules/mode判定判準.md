@@ -57,3 +57,30 @@
 ```md
 三則看起來都是 scanner 誤報，整體 verdict：unsupported。
 ```
+
+# Rule 3 - 上線前兩個事件觸發 map，且 map 做完才談深度稽核
+
+- Level: `MUST`
+- 下列兩個事件發生時，**MUST** 先走 `map`，不等使用者開口問「能不能上線」：
+  - consumer 的 `business_activity` 要從 `pre-production` 改成 `active`（改 registry 之前）。
+  - 已 `active` 的 consumer，`SECURITY.md` 的不變量被改（`security_md_sha` 與最近一次有效掃描不符，`audit-security-policy.ts` 報 `freshness`）。
+- map 做完、verdict 帶範圍後，才判要不要登記深度稽核：map 有 P0／P1 的 `Unknown` 且靠 code 掃描才能補的，登記「需要深度稽核」進 plan Open work（附 scope 檔數），用 `flow ask` 請 Charles 決定發起；**NEVER** 由本 skill 或呼叫它的 agent 自行點火 Scan codebase（席位規則見 `agent-routing.routing-table.md`〔`deep-security-audit`〕）。
+- map 只靠 Third Party、Operations、Production 層才能補的缺口，不登深度稽核：那些不在 code 掃描範圍內。
+
+## Good Example
+
+- 這個例子是好的，因為事件一到就先做唯讀的 map，稽核只登記不點火。
+
+```md
+事件：某 consumer 要把 business_activity 改 active。
+動作：走 map → verdict「Repository 層 Confirmed，Production RLS 仍 Unknown（P0）」→ 在 plan Open work 登「該 consumer 需深度稽核（packages/trac/server 46 檔）」並 flow ask Charles。
+```
+
+## Bad Example
+
+- 這個例子是壞的，因為把事件當成授權，直接點火掃描。
+
+```md
+事件：SECURITY.md 不變量改了。
+動作：立刻對整個 repo 跑 claude-security Scan codebase。
+```

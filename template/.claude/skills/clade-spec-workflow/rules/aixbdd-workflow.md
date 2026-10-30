@@ -29,6 +29,7 @@ aixbdd 切的是**職責**：PM 定義驗收標準，RD 落地成可執行系統
 | 只宣告 `aixbdd`，沒有 `specformula` | 合法——aixbdd 對 BDD techstack 不預設答案（`/technical-research` 三題必問的第一題就是它）。此時本檔生效、`specformula.md` 不生效 |
 | clade home（沒有 manifest，不是自己的 consumer） | ✅ 本檔全部條款生效——依據是 truth `specs/truth/work-lifecycle.md`，不是 capability 宣告 |
 | hotfix（線上出事、要先修） | ✅ 用，允許先修：`flow plan open --hotfix` 會帶一條「補迴歸 scenario（hotfix 先修）」Open work，沒補完結不了案；補的時候依出錯的行為原本有沒有 scenario，以 `flow plan set-kind` 定為 `bug-covered` 或 `bug-uncovered` |
+| 驗收階段（客戶／HR 驗收、發版後 smoke、staging 實走、主管抽驗）發現 bug，且所在功能範圍沒有 truth 覆蓋 | ✅ 用，種類只能是 `acceptance-gap`，修補範圍是整塊功能（盤點表＋每列 truth scenario＋整條流程 e2e，只修單點不准結案）：判準、盤點表格式與結案閘門以 work-route skill 的 `rules/工作種類與必要產物.md` Rule 6 為準；aixbdd consumer 的舊測試吸收另見 [[legacy-tests]] § 驗收發現的 bug＝整塊吸收的入口 |
 | 純設定調整、無驗收標準可寫的工作；沒有 I/O 的純邏輯 bug（計算、解析、格式化、邊界值：迴歸落 unit test，與修正同一個 commit） | ❌ 不用。這是**逐件工作**的判定，NEVER 讀成某個 repo 整體豁免 |
 
 Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.clade/manifest.json` 優先，只有 canonical 缺席時才使用相容的 `.claude/hub.json`；兩份同時存在但內容衝突時 fail closed。判定一律使用 reader 的 `resolved` capabilities，NEVER 直接讀任一 runtime 的設定檔。
@@ -96,7 +97,7 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 | `spec.md`、`checklists/requirements.md`、`features/acceptance/**`、`research.md`、`tasks.md`、`ui/ui-plan.md`＋`ui/*.html` | 同名 | 同上游 |
 | — | `briefs/**`（派工 brief）、`evidence/**`（cucumber JSON report ＋ `receipts.jsonl`，供 `acceptance-verdicts.ts` 讀） | 主線／runner |
 
-`flow plan readiness` 依 `plan.md` frontmatter 的 `work_kind` 決定要求集，**不**讀 § Decisions 的省略理由：`behavior`、`bug-uncovered` 與未宣告的 plan 要求完整集（`spec.md`、acceptance feature、`acceptance_command` 等）；`bug-covered` 與全部錨點都是 NOOP 的 `refactor` 改要求迴歸錨點，不要求 `spec.md` 與 acceptance feature。delta 形狀與種類不符時回 `kind-delta-mismatch`，改判走 `flow plan set-kind`。值域與要求集全文見 `specs/truth/work-lifecycle.md` § Package。
+`flow plan readiness` 依 `plan.md` frontmatter 的 `work_kind` 決定要求集，**不**讀 § Decisions 的省略理由：`behavior`、`bug-uncovered` 與未宣告的 plan 要求完整集（`spec.md`、acceptance feature、`acceptance_command` 等）；`bug-covered` 與全部錨點都是 NOOP 的 `refactor` 改要求迴歸錨點，不要求 `spec.md` 與 acceptance feature；`acceptance-gap` 同樣走迴歸集，另要求 `## Scope inventory` 範圍盤點表（缺表、列未歸位或無錨點、缺 `bug`／`e2e` 列回 `scope-inventory-*`／`acceptance-gap-*`）。delta 形狀與種類不符時回 `kind-delta-mismatch`，改判走 `flow plan set-kind`（`acceptance-gap` 例外：缺 truth features 的 ADD 列就補列，NEVER 改判 `bug-covered` 過閘）。值域與要求集全文見 `specs/truth/work-lifecycle.md` § Package。
 
 ## clade 伴隨：truth feature 接到可執行測試
 

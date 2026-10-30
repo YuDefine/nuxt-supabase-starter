@@ -25,7 +25,7 @@ metadata:
 
 ## Phase 2 -- 分組並給 Charles 挑先談哪組
 
-1. THINK 讀取 `rules/分組討論判準.md`，以 Phase 1 最後一次 `flow pending` 的輸出為準，先查證各題前提（PR 是否已合入、同一件事是否兩題、是否已在別處答過、帶 `⏳ 疑似過時` 的題），再依該檔的分組軸與排序把 `flow pending` 每一桶的每一列分進恰好一組（含「要我動手」與其餘狀態桶），並記下 `Qn` ↔ span ↔ repo 的對照。
+1. THINK 讀取 `rules/分組討論判準.md`，以 Phase 1 最後一次 `flow pending` 的輸出為準，先查證各題與各條動手列的前提（PR 是否已合入、同一件事是否兩題、是否已在別處答過、帶 `⏳ 疑似過時` 的題、`要我動手` 的事是否早已做完），再依該檔的分組軸與排序把 `flow pending` 每一桶的每一列分進恰好一組（含「要我動手」與其餘狀態桶），並記下 `Qn` ↔ span ↔ repo 的對照。
 2. WRITE 先讀取 `rules/QnX渲染判準.md`、`templates/my-render.md` 與 `templates/my-render.example.md`，依骨架的〈分組總覽〉段複製結構、參考範例改寫填位，渲染分組總覽：每組一句話說在決定什麼與建議答法、每題一行附推薦、建議先談哪一組；Phase 1 第 4 步新推進的題加 `[本輪從對話撈出]`；佇列全空時只輸出一句話並結束本 skill。
 3. READ 讀取 Charles 挑的組；他直接作答就跳到 Phase 3，說他已在別處答了一部分就回 Phase 1 第 2 步重跑 `flow pending` 再重出總覽。
 

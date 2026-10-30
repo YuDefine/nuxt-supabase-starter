@@ -7,9 +7,9 @@ paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**']
 
 # Commit（全文）
 
-<!-- never-density-reviewed: 2026-07-25 — 38 條列舉式 NEVER 逐條覆核過（覆核當時本文與 [[commit]] 同檔）：人工檢查 gate 7 條各封一條具體繞道路徑、檔案系統等效動作 6 條是非顯然洞察、其餘多為逐字反開脫。本檔是紀律型規約（已有多條對應 pitfall），依 rule-authoring § 紀律型規約三件套，反開脫清單就是正確形式。已刪的 3 條純複述見 git history。 -->
+<!-- never-density-reviewed: 2026-07-25 — 38 條列舉式 NEVER 逐條覆核過（覆核當時本文與 [[commit]] 同檔）：人工檢查 gate 7 條各封一條具體繞道路徑、檔案系統等效動作 6 條是非顯然洞察、其餘多為逐字反開脫。本檔是紀律型規約（已有多條對應 pitfall）。這批反開脫清單沒有「model＋日期」對照組紀錄，依 rule-authoring § 紀律型規約三件套，下次改動這些 NEVER 條目時先重跑無規約對照組，對照組不失敗就改回一行平述（2026-10-28 只改了下行 pointer 的節名，未動清單）。已刪的 3 條純複述見 git history。 -->
 
-> 本檔是 [[commit]] 的下推全文。[[commit]] 常駐「強制入口 ＋ WIP 處置禁令 / 話術關鍵詞表」，其餘全部在這裡。
+> 本檔是 [[commit]] 的下推全文。[[commit]] 常駐「強制入口 ＋ WIP 處置禁令 / 話術關鍵詞動作表」，其餘全部在這裡。
 
 ## 理由
 

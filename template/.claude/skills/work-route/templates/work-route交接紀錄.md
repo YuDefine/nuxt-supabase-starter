@@ -10,7 +10,7 @@
 
 <!--
 欄位填法：
-- 需求類型：`work_kind` 的值（behavior／bug-uncovered／bug-covered／refactor，hotfix 另註）、續跑、research 或狀態查詢。
+- 需求類型：`work_kind` 的值（behavior／bug-uncovered／bug-covered／refactor／acceptance-gap，hotfix 另註）、續跑、research 或狀態查詢。
 - package 或免 package：唯一 work id 與路徑，或免 package 的具體理由。
 - 下一支 skill：具名 owner、實際公開／內部入口，以及已執行或待解除的動作。
 - 缺少的前提：runtime、路徑／決策、已嘗試的修復與結果；全部查驗通過才填「無」。
