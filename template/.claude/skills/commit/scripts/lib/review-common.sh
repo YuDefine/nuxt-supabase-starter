@@ -1330,7 +1330,7 @@ function findingsFor(ledger, path, n, diff = null, sink = null) {
   const held = []
   const back = []
   const sections = files.map(([part, p]) => {
-    const r = splitCarried(readFileSync(p.verdict_file, 'utf8').trim(), diff, priorCites(round.findings_file))
+    const r = splitCarried(readFileSync(p.verdict_file, 'utf8').trim(), diff, priorOf(round, p))
     held.push(...r.held)
     return `<!-- round ${n} part ${part} -->\n${r.text}\n`
   })
@@ -1436,6 +1436,30 @@ function priorCites(findingsFile) {
   if (!findingsFile || !existsSync(findingsFile)) return new Set()
   return new Set(readFileSync(findingsFile, 'utf8').split('\n').map(citeOf).filter(Boolean))
 }
+// 一批的「上一輪位置」來源有兩個：ledger 自己推出來的 findings_file（findings_from 那一輪，整輪共用），以及呼叫端用 --findings 帶進來、
+// open 時登記在該批 slot 的 supplied_findings 複本（該批 reviewer 在 brief 裡看到的那一份；多批 PR 每批各自一份，所以逐批存、逐批讀）。
+// 前一輪 finalize 沒進 ledger（受審檔被改而失敗）時只剩後者；兩者取聯集，resolved 狀態列才對得上。
+// 複本與 sha256 留在 ledger 可稽核；判定字串不放寬——位置不在任一份裡的 resolved 列照算新 finding。
+function priorOf(round, slot = null, extra = null) {
+  const out = new Set(priorCites(round.findings_file))
+  for (const c of priorCites(slot?.supplied_findings?.copy)) out.add(c)
+  for (const c of extra ?? []) out.add(c)
+  return out
+}
+// 把 --findings 檔存成該輪旁的複本（原檔之後被改或清掉，recount 仍重算得出同一份），回稽核用的 {source,copy,sha256}。
+// write=false 只算 sha256 與複本路徑、不落檔（recount 要等確定寫回 ledger 才落檔，免得留下 ledger 沒引用的複本）；落檔用 writeSnapshot。
+function snapshotFindings(ledgerPath_, round, source, write = true) {
+  if (!existsSync(source)) fail(`--findings-file 不存在：${source}`)
+  const body = readFileSync(source)
+  if (!/^## Review Verdict/m.test(body.toString('utf8'))) fail(`--findings-file 不含 \`## Review Verdict\` 區段：${source}`)
+  const sha256 = createHash('sha256').update(body).digest('hex')
+  const copy = roundFile(ledgerPath_, round.n, `supplied-${sha256.slice(0, 12)}.md`, round.pr ?? PR_NO)
+  if (write) writeFileSync(copy, body)
+  return { source, copy, sha256 }
+}
+function writeSnapshot(supplied) {
+  writeFileSync(supplied.copy, readFileSync(supplied.source))
+}
 // resolved（選填 Set）：收 reviewer 明寫 resolved 的上一輪位置（Review Verdict 段的狀態列與 Prior Findings Status 段），供 held 清除用。
 function countVerdict(text, prior = new Set(), round = 1, found = null, resolved = null) {
   // 驗證輪的另一種狀態列：說明後獨立收句 `Resolved.`（#603 r2）。
@@ -1523,7 +1547,7 @@ function findingsOfSlot(round, slot) {
   if (!slot.verdict_file || !existsSync(slot.verdict_file))
     fail(`verdict 檔不存在：${slot.verdict_file ?? '（ledger 沒記路徑）'}（cache 被清掉了？）——沒有檔就列不出 finding，也不能裁決`)
   const found = []
-  countVerdict(readFileSync(slot.verdict_file, 'utf8'), priorCites(round.findings_file), round.n, found)
+  countVerdict(readFileSync(slot.verdict_file, 'utf8'), priorOf(round, slot), round.n, found)
   const seen = new Map()
   return found.map((f) => {
     const base = fingerprintOf(f)
@@ -1563,9 +1587,12 @@ if (cmd === 'counts') {
         ledger.rounds.push(round)
       }
       round.part_total = Math.max(round.part_total ?? 1, total)
+      // 呼叫端 --findings 帶進來的 verdict：此刻該批 reviewer 在 brief 裡看到的上一輪位置來源，登記在該批 slot（多批各開各的，不互蓋）。
+      // 同批重開＝新 brief，以最新那份為準。
+      const supplied = opt['findings-file'] ? snapshotFindings(path, round, opt['findings-file']) : null
       if (!round.findings_file && round.findings_from)
         round.findings_file = findingsFor(ledger, path, round.findings_from, roundDiffFiles(round.increment_base || round.base, round.head), round)
-      round.parts[d.part] = { status: 'prepared', at: now, ...(PART_FILES ? { files: PART_FILES } : {}) }
+      round.parts[d.part] = { status: 'prepared', at: now, ...(PART_FILES ? { files: PART_FILES } : {}), ...(supplied ? { supplied_findings: supplied } : {}) }
       d.findings_file = round.findings_file ?? null
       d.increment_base = round.increment_base
       // record 用它認出「這份 verdict 是這一次開的輪」：同輪號重開會換 opened_at。
@@ -1606,13 +1633,14 @@ if (cmd === 'counts') {
       fail(`verdict 的第 ${part} 批檔案清單 hash ${PART_FILES || '無'} 與 ledger 記的 ${slot.files ?? '無'} 不符（批界位移後重開）${redo}`)
     const found = []
     const resolved = new Set()
-    const counts = countVerdict(text, priorCites(round.findings_file), round.n, found, resolved)
+    const counts = countVerdict(text, priorOf(round, slot), round.n, found, resolved)
     const cleared = heldCleared(round, found, resolved)
     const verdictFile = roundFile(path, n, `p${part.replace('/', 'of')}.md`, round.pr ?? PR_NO)
     copyFileSync(need('verdict'), verdictFile)
     // files（開審時的檔案清單 hash）跟著 verdict 留下：之後沿用這一批前要拿它比對。
     const files = slot.files
     round.parts[part] = { status: 'verdict', ...counts, verdict_file: verdictFile, at: now, ...(files ? { files } : {}),
+      ...(slot.supplied_findings ? { supplied_findings: slot.supplied_findings } : {}),
       ...(cleared.length ? { held_cleared: cleared } : {}) }
     return { round: n, kind: round.kind ?? null, part, ...counts, ...roundState(round), ledger: path }
   })
@@ -1628,7 +1656,7 @@ if (cmd === 'counts') {
     const round = scoped(ledger).findLast((r) => r.n === n)
     const slot = round?.parts?.[part]
     if (!slot || slot.status !== 'verdict') fail(`ledger ${path} round ${n} 第 ${part} 批沒有可回滾的 verdict`)
-    round.parts[part] = { status: 'prepared', at: now, ...(slot.files ? { files: slot.files } : {}) }
+    round.parts[part] = { status: 'prepared', at: now, ...(slot.files ? { files: slot.files } : {}), ...(slot.supplied_findings ? { supplied_findings: slot.supplied_findings } : {}) }
     return { round: n, part, ...roundState(round), ledger: path }
   })
   process.stdout.write(`${JSON.stringify(out)}\n`)
@@ -1674,12 +1702,19 @@ if (cmd === 'counts') {
     if (opt.head && round.head !== opt.head) fail(`ledger round ${n} 開在 head ${round.head}，不是 --head ${opt.head}`)
     const found = []
     const resolved = new Set()
-    const counts = countVerdict(readFileSync(slot.verdict_file, 'utf8'), priorCites(round.findings_file), round.n, found, resolved)
+    // --findings-file：補上這一輪當時沒登記進 ledger 的上一輪 verdict（前一輪 finalize 失敗的情況）。位置來源與 sha256 寫進稽核紀錄；
+    // 數字仍只來自 countVerdict，NEVER 接受外部給的計數。
+    const supplied = opt['findings-file'] ? snapshotFindings(path, round, opt['findings-file'], false) : null
+    const counts = countVerdict(readFileSync(slot.verdict_file, 'utf8'), priorOf(round, slot, supplied ? priorCites(supplied.source) : null), round.n, found, resolved)
     const cleared = heldCleared(round, found, resolved)
     const before = { critical: slot.critical, major: slot.major, minor: slot.minor }
     const changed = ['critical', 'major', 'minor'].some((k) => before[k] !== counts[k]) || String(slot.held_cleared ?? []) !== String(cleared)
     if (apply && changed) {
-      slot.recounts = [...(slot.recounts ?? []), { at: now, before, after: counts, reason }]
+      if (supplied) {
+        writeSnapshot(supplied)
+        slot.supplied_findings = supplied
+      }
+      slot.recounts = [...(slot.recounts ?? []), { at: now, before, after: counts, reason, ...(supplied ? { findings_sha256: supplied.sha256, findings_source: supplied.source } : {}) }]
       Object.assign(slot, counts)
       if (cleared.length) slot.held_cleared = cleared
       else delete slot.held_cleared
@@ -1824,7 +1859,7 @@ review_open_round() {
   fi
   if ! decision="$(review_rounds open --repo-root "$REPO_ROOT" --mode "$mode" --branch "$branch" \
     --base "$base" --head "$head" --part "${ROUND_PART:-1/1}" \
-    ${PR_NUMBER:+--pr-number "$PR_NUMBER"} ${PR_FILTER:+--filter "$PR_FILTER"} ${PART_FILES:+--part-files "$PART_FILES"} ${PR_INDEPENDENT:+--independent yes})"; then
+    ${PR_NUMBER:+--pr-number "$PR_NUMBER"} ${PR_FILTER:+--filter "$PR_FILTER"} ${PART_FILES:+--part-files "$PART_FILES"} ${PR_INDEPENDENT:+--independent yes} ${FINDINGS:+--findings-file "$FINDINGS"})"; then
     echo "[$REVIEW_SAFE_TAG] 錯誤：0-A 輪數 ledger 無法開輪（$(review_rounds_dir)）— 輪數上限要靠它執行，NEVER 繞過 ledger 開審（exit 2）" >&2
     exit 2
   fi
@@ -1840,6 +1875,7 @@ review_open_round() {
         echo "[$REVIEW_SAFE_TAG] RESULT: 此 head 的這一批已審過且有 Critical／Major $(_round_field blocking) 條，不重擲（exit 13）— $(_round_field reason)" >&2
         echo "[$REVIEW_SAFE_TAG]   verdict：$(_round_field verdict_file)" >&2
         echo "[$REVIEW_SAFE_TAG] NEXT: 修完 finding、push 新 head 再審（下一輪自動帶這一輪 findings）；0-A 未通過。" >&2
+        echo "[$REVIEW_SAFE_TAG]   若 verdict 裡的 Major 其實是 \`— resolved.\` 狀態列（上一輪 verdict 沒進 ledger 而被誤計）：review_rounds recount --ledger $REVIEW_ROUND_LEDGER --round ${REVIEW_ROUND_N} --part ${ROUND_PART:-1/1} --findings-file <上一輪 verdict 檔> 先 dry-run，確認 after 後加 --apply yes --reason '<原因>'（數字只來自重算，留稽核紀錄）。" >&2
         exit 13
       fi
       echo "[$REVIEW_SAFE_TAG] RESULT: 不需再審（exit 13）— $(_round_field reason)" >&2

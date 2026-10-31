@@ -71,12 +71,13 @@ SoT 是 `.github/workflows/validate.yml` 的 `lane-plan` job（consumer 以自�
 
 | 事件 | test-lane |
 | --- | --- |
-| PR，base＝`main`、非 draft | `affected`（base＝PR base；shard 數由選中測試檔的 timings 成本總和推導取 1–6——每片目標 ~240s，選中集越重開越多片，見 `scripts/test-lanes/sharding.ts` 的 `costBasedShardCount`）。選檔器升全量（`package.json`、lockfile、`tsconfig*`、執行期 harness，見 `scripts/test-lanes/affected.ts` 的 `FULL_ESCALATION_PATTERNS`）→ full lane 六 shard。PR 檔案清單取不到（compare 失敗或 ≥300 檔）→ full，不猜 |
+| PR，base＝`main`、非 draft，**本 head 尚未過 0-A**（P1 A，W-2026-10-30-ci-11-03） | 不跑重 job（test-lanes、truth-features、-headed）；只付 vp-check／doctor／validate-manifests。判定是 head SHA 上有沒有 commit status `clade/0-A`=success（`scripts/test-lanes/zero-a.ts`）。merge-queue 在輪數 ledger 認得本 head 通過 0-A 後貼它並 rerun `lane-plan`，重 job 才補跑；換 head 就要重過 0-A。急件（`Urgent:`／`Fixes-Main`）不等 0-A；status 讀不到 fail-safe 照跑。0-A 的 ciGate 把 test-lanes-summary=SKIPPED 當可審，所以順序變成 ready → 機械檢查綠 → 0-A → 重 job → merge |
+| PR，base＝`main`、非 draft，**本 head 已過 0-A**（或急件） | `affected`（base＝PR base；shard 數由選中測試檔的 timings 成本總和推導取 1–6——每片目標 ~240s，選中集越重開越多片，見 `scripts/test-lanes/sharding.ts` 的 `costBasedShardCount`）。選檔器升全量（`package.json`、lockfile、`tsconfig*`、執行期 harness，見 `scripts/test-lanes/affected.ts` 的 `FULL_ESCALATION_PATTERNS`）→ full lane 六 shard。PR 檔案清單取不到（compare 失敗或 ≥300 檔）→ full，不猜。**CI 分層（repo variable `CLADE_PR_TIER=on` 才開；未設＝本格前半的行為）**：只跑選中檔裡單檔估計成本 ≤ `lane-capacity.json` `prTier.heavyFileMs` 的輕檔，PR 自己改的測試檔不論輕重都跑；重檔延到 main push 與 nightly；升全量也同樣只跑全量裡的輕檔（`scripts/test-lanes/pr-tier.ts`）。開啟時 truth features 不在 PR 跑，移到 main push |
 | PR，base＝`main`、非 draft，**純文件** | 不跑。純文件＝每個變更路徑（改名的舊路徑也算）都在 `HANDOFF.md`、`ROADMAP.md`、`docs/`、`tasks/`、`specs/plans/` 底下、是 `.md`，且不是**契約文件**——被測試點名讀取的文件（`scripts/test-lanes/deps.json` 觀測值；讀文件區超過 100 份的全 repo 掃描器不算點名）。例：`docs/tech-debt.md` 被 td-register 測試讀，是契約，照跑 affected |
 | PR，base＝`integration/**`（不論 draft） | 不跑（只付 vp-check／doctor／validate-manifests） |
 | PR，base＝`main`、draft | 不跑；只付 vp-check／doctor，validate-manifests 與 truth features 等 `ready_for_review` 那一趟補跑（delivery-capacity P4） |
 | push，變更全在登記簿 allowlist（`HANDOFF.md`、`ROADMAP.md`、`docs/`、`tasks/`、`specs/plans/`、`vendor/ledger/`；改名的舊路徑也算，程式碼搬進 `docs/` 不算只動登記簿） | 不跑——登記簿同步是 push 的大宗，每筆各燒一趟 test-lane 買不到任何訊號 |
-| push 到 `main` 或 `integration/**` | `affected`，base＝該 branch 上一次綠燈的 push（它不是 HEAD 的祖先才退回 push 之前的 SHA；新建 branch 用 `origin/main`），shard 數依選到的測試檔數比例取 1–6（`scripts/test-lanes/push-lane.ts` 的 `proportionalShardCount`——push 仍是檔數比例，與 PR 的成本推導不同尺；升全量時六片）。只驗上次綠燈之後落地的那幾步——PR 上的 affected 是對 PR base 算的，squash 落在更新的 `main` 上，這一趟補驗兩者的交互 |
+| push 到 `main` 或 `integration/**` | `affected`（不分層：PR 延後的重檔在這裡跑；分層開啟時 `main` 另跑 truth features，選檔 base 同下），base＝該 branch 上一次綠燈的 push（它不是 HEAD 的祖先才退回 push 之前的 SHA；新建 branch 用 `origin/main`），shard 數依選到的測試檔數比例取 1–6（`scripts/test-lanes/push-lane.ts` 的 `proportionalShardCount`——push 仍是檔數比例，與 PR 的成本推導不同尺；升全量時六片）。只驗上次綠燈之後落地的那幾步——PR 上的 affected 是對 PR base 算的，squash 落在更新的 `main` 上，這一趟補驗兩者的交互 |
 | nightly | full lane 六 shard；`main` 自上一趟綠燈 nightly 後沒動就跳過。full 只留在這裡與升全量的 PR：affected 選檔漏掉的交互由它兜底 |
 
 ### 分片權重：CI 實測 ledger

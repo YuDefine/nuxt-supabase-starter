@@ -7,7 +7,7 @@ description: "Code quality, error handling, shell safety, language, and maintain
 
 逐條對照你接下來要做的事；條件成立才讀那一份，NEVER 先把整批讀進來。
 
-- READ 若要讀或改 `**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts}`，讀取 `rules/code-style.md`
+- READ 若要讀或改 `**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts,py,sh,rs}`，讀取 `rules/code-style.md`
 - READ 若要讀或改 `vite.config.*`、`nuxt.config.*`、`package.json`、`packages/*/package.json`、`pnpm-workspace.yaml`、`tsconfig*.json` 等 13 處（全表見 rules/_index.md），讀取 `rules/code-style.toolchain.md`
 - READ 若要讀或改 `**/*.{ts,tsx,mts,cts,vue}`，讀取 `rules/coupling-cohesion.md`
 - READ 若要讀或改 `app/**/*.{vue,ts}`、`packages/*/app/**/*.{vue,ts}`、`server/**/*.ts`、`packages/*/server/**/*.ts`，讀取 `rules/error-handling.md`

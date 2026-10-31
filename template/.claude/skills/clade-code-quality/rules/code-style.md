@@ -1,6 +1,6 @@
 ---
-description: 寫 code 當下的 TypeScript 語法限制（type stripping 擋不掉的三條）、副檔名與 import specifier 規則、命名與註解（SSoT 優先、該刪的註解 C0–C6；機器擋不住的那一半）、用 vp 命令驗證；工具鏈設定治理在 code-style.toolchain
-paths: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts}']
+description: 新增腳本選哪個語言（D1 決策表，Python 不再新增）、寫 code 當下的 TypeScript 語法限制（type stripping 擋不掉的三條）、副檔名與 import specifier 規則、命名與註解（SSoT 優先、該刪的註解 C0–C6；機器擋不住的那一半）、用 vp 命令驗證；工具鏈設定治理在 code-style.toolchain
+paths: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts,py,sh,rs}']
 ---
 <!-- Clade native rule; source: rules/core/code-style.md; edit canonical source -->
 <!-- clade-targets: claude,agents -->
@@ -14,6 +14,28 @@ paths: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts}']
 # Code Style — 寫 code 當下
 
 風格本身由 `vp fmt` 機械保證；本檔只收機器擋不住的部分。適用範圍含 `.vue` SFC 的 `<script setup lang="ts">` 區塊。
+
+## 新增腳本選語言（D1，MUST）
+
+決策出處：`specs/plans/W-2026-10-24-toolchain-rust-consolidation/plan.md` D1。開新檔之前依下表判，先命中先用：
+
+評估：first-match；以上皆非 → L*
+
+| id | 可觀察條件 | 語言 |
+| --- | --- | --- |
+| L1 | 上游 LOCKED mirror（`registry/upstream-submodules.json` 宣告的 mirror 落點） | 照上游 |
+| L2 | 被 JS runtime import 載入（不是 spawn）：Vite／Nuxt／Nitro config 與 plugin、Vitest／Cucumber step、Pi extension、dashboard 前端、consumer import 的 preset | TS |
+| L3 | 被 `source` 進呼叫者 shell | zsh／bash |
+| L4 | clade binary 還不存在的那一刻（下載／建置 binary 的 installer） | POSIX sh，邏輯壓到最少 |
+| L5 | 格式規定 shell 入口（husky／vp hooks、systemd `ExecStart`） | 一行 `exec clade <sub> "$@"` |
+| L6 | 一次性：沒有任何常態入口引用（hooks.json、package.json scripts、skill SOP、workflow、systemd unit、其他腳本），例如 plan evidence | TS |
+| L7 | 其餘（hook、CLI、audit、gate wrapper、ops controller、skill scripts） | Rust 子命令 `clade <sub>` |
+| L* | 判不出落在哪一列 | 照 L7 |
+
+- **Python、Go 不在任何一列**：新增 `.py` 一律不准，plan evidence、一次性探針也一樣（L6 用 TS）。**每一家** consumer 的 pre-commit 由 `scripts/pre-commit/checks/new-python.sh` 擋，clade home 由 `scripts/check-retired-carriers.ts`（pre-commit 與 CI）擋，判定式同一份（`new-python-gate.ts`）；檢查跑不起來時同樣擋。放行只有：修改既有 `.py`、純改名（不改內容）、clade home 投影計畫內的路徑重新投影既有 `.py`、L1 mirror；consumer 的投影由 propagate 送達，本地複本一律算新增。存量 `.py` 不回頭改寫，由 toolchain 刀 7 改。
+- **consumer 的 L7 寫 TS**：consumer 是 TS 專案，`clade` binary 提供對應子命令之前不另建 Rust；L1–L6 照表。
+- **Rust workspace（`crates/clade`）落地前的過渡寫法**：L7 先寫成 TS（照 § 新增腳本一律 TypeScript），等刀 2b 的 `clade audit script-language` 盤出被常態入口引用的 TS、由刀 5–7 改 Rust。過渡期**NEVER** 因為「之後反正要改 Rust」改寫 Python 或 sh 頂替。
+- 「擋新增且被常態入口引用的 TS」（L6 與 L7 的界線）由刀 2b 的 audit 接手，Rust workspace 就緒前不擋。
 
 ## 新增腳本一律 TypeScript
 

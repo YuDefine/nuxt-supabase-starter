@@ -16,6 +16,7 @@
 #   - consumer-carriers         已退役 docs/ 或 lifecycle repo 才啟用（否則 no-op）
 #   - source-assert-delta       有 staged 測試檔且 P 類（讀原始碼比字串）斷言數比 HEAD 增加才擋（否則 no-op）
 #   - td-priority               staged docs/tech-debt.md 新增或改寫 `**Priority**:` 行才擋（否則 no-op）
+#   - new-python                有新落腳的 staged *.py 才判（否則 no-op）；跑不起來時擋
 #
 # 重型檢查（nuxt typecheck、test tsconfig）放 pre-push runner，不在 pre-commit 跑。
 # 原因：vue-tsc / nuxi typecheck 不支援單檔 typecheck，只能整專案跑，所以放 pre-push 階段。
@@ -76,5 +77,8 @@ run_check source-assert-delta
 # 12) td-priority — 擋 docs/tech-debt.md 加回 TD 等級欄位（等級只看 fleet 看板）
 run_check td-priority
 
-# 13) review-integrity — 最後檢查，包含 vp-staged 可能改寫的 index
+# 13) new-python — 擋新增 .py（toolchain D1；修改既有、純改名、重新投影放行）
+run_check new-python
+
+# 14) review-integrity — 最後檢查，包含 vp-staged 可能改寫的 index
 run_check review-integrity
