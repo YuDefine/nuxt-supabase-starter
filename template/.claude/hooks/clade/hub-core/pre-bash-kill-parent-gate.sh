@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 # PreToolUse:Bash hook — 擋 kill 由 ps 算出的父程序、PID 1、user manager 與 kill -1（block，exit 2）
 #
-# 事故：2026-10-30 21:16:59 desk 上有 agent 跑了
-#   for p in …; do pp=$(ps -o ppid= -p $p); kill $p $pp; done
-# 目標是孤兒程序，被 user systemd（subreaper）收養，`$pp` 就是 user systemd 的 PID；
-# user manager 收到 SIGTERM 進 exit.target，herdr 裡所有 claude session 同時退出。
+# 約束：agent 不得 kill 由 ps 算出的父程序（孤兒的父程序是 user systemd，殺掉整個 user session 結束）、
+# PID 1、user manager 與 -1。
 #
 # 型別：安全型 gate。threat model：防漂移（絆索不是牆），誠實但健忘的 agent 順手寫出來的形狀。
 # 不承諾完整語意，只認常見入口：`node -e`、腳本檔、heredoc 餵給 shell、alias 與變數裡的指令都看不到。
@@ -19,11 +17,16 @@
 #      的 PID 再 kill 數字，文字比對看不出來；讀不到（程序不存在、非 Linux）照字面 pid 放行
 #   5. kill 的目標不是字面值，且同一條指令用 systemctl --user … MainPID、pgrep … systemd、
 #      pidof systemd 取 PID；pkill／killall 直接以 systemd 為目標
+#   6. pkill／killall 帶 -u／-U／--user／--uid／--euid 卻沒有程序名稱樣式：等於殺光該 user 的全部程序
+#      （含 user manager）；`pkill -u $USER node` 這種有名稱樣式的放行
 # 放行：字面 pid、字面 -pgid、%job、$$、$!、kill -0（探測不送訊號）、kill -l，不在命令位置的 kill 字樣，
-# heredoc 內文，註解，一般字串內文。`bash -c`／`sh -c`／`eval`／`ssh` 的字串引數會展開來判。
+# heredoc 內文，註解，一般字串內文。`bash -c`／`sh -c`／`eval`／`ssh` 的字串引數會展開來判；
+# `ssh-keygen`、`foo.sh -c` 這類只是名字長得像的指令不展開。`\kill`（跳過 alias 的寫法）照 kill 判。
 #
 # 繞行場景：
 #   | 繞法 | 預期攔截點 |
+#   | `pkill -u $USER`、`killall -u $USER` | 擋：判定 6 |
+#   | `\kill $pp`、`\pkill …` | 擋：命令位置容許一個前導反斜線 |
 #   | `… | xargs kill` 從 stdin 餵父程序 | 擋：xargs 的 kill 視為非字面目標 |
 #   | `bash -c 'kill $pp'`、`ssh host "kill \$pp"` | 擋：字串引數展開來判 |
 #   | 另開一條指令算 ppid 再回填字面 pid | 目標是 systemd 才擋（判定 4）；其他父程序放行，檔頭已寫不承諾 |
@@ -56,21 +59,20 @@ esac
 deny() {
   local why=$1
   printf '%s\n' "kill parent gate: 這條指令被擋下。原因：${why}
-
-事故來源：2026-10-30 desk 有 agent 跑 pp=\$(ps -o ppid= -p \$p); kill \$p \$pp，孤兒程序的父程序是
-user systemd，user manager 收到 SIGTERM 就退出，herdr 裡所有 claude session 同時結束。
+約束：NEVER kill 父程序、PID 1、user manager 或 -1（孤兒的父程序是 user systemd，殺掉會讓所有 session 結束）。
 
 替代做法：
   - 先看清楚目標：ps -o pid,ppid,args -p <pid>（查詢與 kill 拆成兩條指令，看完再用字面 pid）
   - 收一組程序：kill -- -<pgid>
   - 收 systemd 管的程序：systemctl --user stop <scope>
+  - 收某個 user 的特定程序：pkill -u \$USER <程序名稱樣式>（不帶樣式會殺光該 user 全部程序）
 本 gate 沒有繞過旗標。" >&2
   exit 2
 }
 
 # 保守樣式：判定用不了時只認最危險的形狀，不靜默放行。
 conservative() {
-  local t=$1 pre='(^|[;&|(`"[:space:]])' post='([;&|)`"[:space:]]|$)'
+  local t=$1 pre='(^|[;&|(`"\\[:space:]])' post='([;&|)`"[:space:]]|$)'
   t=${t//\\n/$'\n'}
   local any="${pre}(kill|pkill|killall)[[:space:]]"
   local ppid='[Pp][Pp][Ii][Dd]|/proc/[^[:space:]/]+/stat'
@@ -130,7 +132,7 @@ sub close_paren {
   return $n - 1;
 }
 
-my $exec_ctx = qr/(?:\beval|\b(?:ba|z|da|k)?sh(?:\s+-\w+)*\s+-\w*c|\bssh\b[^;&|\n]*)\s+$/;
+my $exec_ctx = qr/(?:(?<![\w.-])eval|(?<![\w.-])(?:ba|z|da|k)?sh(?![\w.-])(?:\s+-\w+)*\s+-\w*c|(?<![\w.-])ssh(?![\w.-])[^;&|\n]*)\s+$/;
 
 # 把字串內文換成不會被當指令的形狀：只留命令替換、變數與單一字面 token。
 # bash -c／eval／ssh 的字串引數則展開成子指令。
@@ -255,6 +257,28 @@ sub kill_targets {
   return @t;
 }
 
+# pkill／killall 帶 user 選項（-u -U --user --uid --euid，含 -9u、-uroot、--user=x）卻沒有名稱樣式。
+# 其他帶值選項（-P -g -t …，含 pkill 的 -s <sid>）的值會被當成樣式而放行：絆索不承諾完整語意。
+sub user_wide {
+  my ($word, @a) = @_;
+  my ($user, $pattern, $eoo) = (0, 0, 0);
+  while (@a) {
+    my $x = shift @a;
+    if (!$eoo && $x eq "--") { $eoo = 1; next }
+    if (!$eoo && $x =~ /^--(?:user|uid|euid)(=.*)?$/) { $user = 1; shift @a unless defined $1; next }
+    if (!$eoo && ($x eq "--signal" || ($word eq "killall" && $x eq "-s"))) { shift @a; next } # 帶值的訊號選項，值不是樣式；pkill 的 -s 是 session
+    next if !$eoo && $x =~ /^-(?:SIG)?[A-Z][A-Z0-9]+$/ && $x !~ /^-[A-Z]\d+$/; # 訊號名（-USR1、-KILL）；-U1000 是 -U 選項
+    if (!$eoo && $x =~ /^-[A-Za-z0-9]*[uU](.*)$/) {
+      $user = 1;
+      shift @a if $1 eq "";
+      next;
+    }
+    next if !$eoo && $x =~ /^-/;
+    $pattern = 1;
+  }
+  return $user && !$pattern;
+}
+
 local $/;
 my $raw = <STDIN> // "";
 my $text = strip_heredocs($raw);
@@ -280,7 +304,7 @@ my $position = qr{
           | ssh (?: \s+ -\S+ (?: \s+ [^-\s]\S* )?? )* \s+ \S+
           | xargs (?: \s+ -\S+ (?: \s+ (?!kill\b) [^-\s]\S* )?? )*
         ) (?: \s+ -\S+ )* \s+ )* )
-  (?: \S*/ )? (kill|pkill|killall) (?= \s | $ | [;&|)`] )
+  \\? (?: \S*/ )? (kill|pkill|killall) (?= \s | $ | [;&|)`] )
 }x;
 
 while ($code =~ /$position/g) {
@@ -289,6 +313,7 @@ while ($code =~ /$position/g) {
   if ($word ne "kill") {
     if ($parent) { print "$word 搭配取父程序的寫法（ppid／PPID／/proc/*/stat）。"; exit 42 }
     if ($manager || $manager_named || grep { /^(?:\S*\/)?systemd$/ } @args) { print "$word 的目標是 user manager（systemd）。"; exit 42 }
+    if (user_wide($word, @args)) { print "$word 以 -u／--user 指定 user 卻沒有程序名稱樣式（殺光該 user 的全部程序，含 user manager）。"; exit 42 }
     next;
   }
   my $from_stdin = $prefix =~ /\bxargs\b/;

@@ -1285,7 +1285,7 @@ const diffMatch = (diff, cite) => {
   return 'out'
 }
 // finding 區塊＝severity 列＋它底下的縮排續行；held 存整段原文，下一輪照樣能再分流。
-function splitCarried(text, diff) {
+function splitCarried(text, diff, prior = new Set()) {
   const held = []
   const kept = []
   let cur = null
@@ -1297,6 +1297,11 @@ function splitCarried(text, diff) {
     cur = null
     const sev = SEVERITY.exec(raw)
     const cite = sev && diff ? citeOf(raw) : null
+    // 上一輪 reviewer 寫的 `[sev] <位置> — resolved.` 狀態列（位置在更早一輪的 findings 檔裡）不是未解 finding：不續帶成 held。
+    if (cite && prior.has(cite) && resolvedStatus(raw)) {
+      kept.push(raw)
+      continue
+    }
     if (cite && diffMatch(diff, cite) === 'out') {
       cur = { severity: sev[1].toLowerCase(), cite, indent: indentOf(raw), lines: [raw] }
       held.push(cur)
@@ -1325,7 +1330,7 @@ function findingsFor(ledger, path, n, diff = null, sink = null) {
   const held = []
   const back = []
   const sections = files.map(([part, p]) => {
-    const r = splitCarried(readFileSync(p.verdict_file, 'utf8').trim(), diff)
+    const r = splitCarried(readFileSync(p.verdict_file, 'utf8').trim(), diff, priorCites(round.findings_file))
     held.push(...r.held)
     return `<!-- round ${n} part ${part} -->\n${r.text}\n`
   })
@@ -1390,6 +1395,28 @@ const VERDICT_HEADING = /^(?:\*{1,2})?Review\s+Verdict\b(?!.*\b(?:previous|prior
 const LOCATION = /[^\s`'"()\[\]]+:[≈~]?\d+/g
 const normLoc = (loc) => loc?.replace(/:[≈~](?=\d)/, ':')
 const PRIOR_LABEL = /^\s*(?:[-*+]\s+)?(?:\*{1,2})?Prior findings\b[^:：]*[:：](?:\*{1,2})?\s*$/i
+// 狀態詞中英同一份：`— resolved.`／`: resolved`、中文 `— 已解決。`／`：已解決`／`已解決（…）`（#616 r3 中文狀態列曾整列計入）。
+// 與 coordinator oa-batches.ts 的 RESOLVED_STATUS／RESOLVED_NEGATED／STATUS_NEGATION／statusHead 同一份形狀；改一邊 MUST 改另一邊
+// （test/oa-batches-count-verdict.test.ts 拿同一組案例對拍兩邊）。
+const RESOLVED =
+  /(?:^\s*[-*+]\s+(?:\*{1,2})?\[(?:Critical|Major|Minor)\](?:\*{1,2})?\s*|[:：—–]|\s-)\s*(?:resolved\b|已解決)(?:\s*[（(][^）)]*[）)])?(?:[.;。；,，!！]|\s*$)/i
+// 整行只擋明寫未解決的窄形狀（oa-batches.ts 的 RESOLVED_NEGATED 逐字同一份）。
+// 裸字 unresolved 只認述語／狀態詞形式（remains／is／still／left … unresolved、`: unresolved`、句尾或標點前）；
+// 當形容詞修飾名詞（`the unresolved wording`）不算未解決。
+const RESOLVED_NEGATED =
+  /\b(?:not|partially|mostly|still)[\s-]*resolved\b|\bun[\s-]+resolved\b|\b(?:remains?|remained|is|are|was|were|still|left|stays?)\s+(?:still\s+)?unresolved\b|(?:[:：—–]|\s-)\s*unresolved\b|(?<!\b(?:as|marked|flagged)\s+)\bunresolved\s*(?:[.,;:!?。，；：！？)）—–]|\s-\s|$)|(?:未|尚未|並未|沒有?|部分(?:已)?)解決/i
+// 寬否定／仍未修字樣只看狀態句（第一句）：狀態詞之後的說明常順帶寫到「still record」「新增回歸測試鎖住」「仍會被 guard 擋下」。
+// oa-batches.ts 的 STATUS_NEGATION 逐字同一份（test/oa-batches-count-verdict.test.ts 抽兩檔原文比對並逐詞對拍）。
+const STATUS_NEGATION =
+  /\b(?:not|un|partially|mostly|still)[\s-]*resolved\b|\bunresolved\b|\bnot\s+(?:yet\s+)?(?:fixed|addressed)\b|\b(?:not|still|partially|mostly|remains?|regress\w*|broken|reopen\w*|but|however)\b|n['’]t\b|\bnever\b(?!-declared\b)|尚未|並未|未(?:修|處理|改|補)|沒有?(?:修|處理|補|改)|遺漏|漏|仍(?:未|有|存在|在|然|舊|會|可|沒)|依然|還是|回歸(?!測試)|重開|復發|但/i
+const stripQuoted = (line) => line.replace(/`[^`]*`/g, ' ').replace(/"[^"]*"/g, ' ')
+// 狀態形狀只看第一句（到 `.`／`;` 後接空白或行尾、或 `。`／`；`），與 oa-batches.ts statusHead 同一份：
+// 第一句之後、inline code、引號內的 `: resolved.`／`：已解決` 都不是狀態列。
+const statusHead = (line) => /^.*?(?:[.;](?=\s|$)|[。；])/.exec(stripQuoted(line))?.[0] ?? stripQuoted(line)
+// 寬否定的判讀範圍：到第一個句號為止（分號不收句），與 oa-batches.ts statusSentence 同一份。
+const statusSentence = (line) => /^.*?(?:\.(?=\s|$)|。)/.exec(stripQuoted(line))?.[0] ?? stripQuoted(line)
+const resolvedStatus = (line) =>
+  RESOLVED.test(statusHead(line)) && !RESOLVED_NEGATED.test(line) && !STATUS_NEGATION.test(statusSentence(line))
 const SEVERITY = /^\s*[-*+]\s+(?:\*{1,2})?\[(Critical|Major|Minor)\](?:\*{1,2})?(?=\s|$)/i
 const CITE = /^\s*[-*+]\s+(?:\*{1,2})?\[(?:Critical|Major|Minor)\](?:\*{1,2})?\s+`?([^\s`]+:[≈~]?\d+)/i
 // 被計數的 finding 列底下縮排（≥2 格或一個 tab、且比該列更深）的 `- …` 子條列與續行段落都屬於它，不是新 finding（曾因此整輪 review 作廢；
@@ -1411,28 +1438,6 @@ function priorCites(findingsFile) {
 }
 // resolved（選填 Set）：收 reviewer 明寫 resolved 的上一輪位置（Review Verdict 段的狀態列與 Prior Findings Status 段），供 held 清除用。
 function countVerdict(text, prior = new Set(), round = 1, found = null, resolved = null) {
-  // 狀態詞中英同一份：`— resolved.`／`: resolved`、中文 `— 已解決。`／`：已解決`／`已解決（…）`（#616 r3 中文狀態列曾整列計入）。
-  // 與 coordinator oa-batches.ts 的 RESOLVED_STATUS／RESOLVED_NEGATED／STATUS_NEGATION／statusHead 同一份形狀；改一邊 MUST 改另一邊
-  // （test/oa-batches-count-verdict.test.ts 拿同一組案例對拍兩邊）。
-  const RESOLVED =
-    /(?:^\s*[-*+]\s+(?:\*{1,2})?\[(?:Critical|Major|Minor)\](?:\*{1,2})?\s*|[:：—–]|\s-)\s*(?:resolved\b|已解決)(?:\s*[（(][^）)]*[）)])?(?:[.;。；,，!！]|\s*$)/i
-  // 整行只擋明寫未解決的窄形狀（oa-batches.ts 的 RESOLVED_NEGATED 逐字同一份）。
-  // 裸字 unresolved 只認述語／狀態詞形式（remains／is／still／left … unresolved、`: unresolved`、句尾或標點前）；
-  // 當形容詞修飾名詞（`the unresolved wording`）不算未解決。
-  const RESOLVED_NEGATED =
-    /\b(?:not|partially|mostly|still)[\s-]*resolved\b|\bun[\s-]+resolved\b|\b(?:remains?|remained|is|are|was|were|still|left|stays?)\s+(?:still\s+)?unresolved\b|(?:[:：—–]|\s-)\s*unresolved\b|(?<!\b(?:as|marked|flagged)\s+)\bunresolved\s*(?:[.,;:!?。，；：！？)）—–]|\s-\s|$)|(?:未|尚未|並未|沒有?|部分(?:已)?)解決/i
-  // 寬否定／仍未修字樣只看狀態句（第一句）：狀態詞之後的說明常順帶寫到「still record」「新增回歸測試鎖住」「仍會被 guard 擋下」。
-  // oa-batches.ts 的 STATUS_NEGATION 逐字同一份（test/oa-batches-count-verdict.test.ts 抽兩檔原文比對並逐詞對拍）。
-  const STATUS_NEGATION =
-    /\b(?:not|un|partially|mostly|still)[\s-]*resolved\b|\bunresolved\b|\bnot\s+(?:yet\s+)?(?:fixed|addressed)\b|\b(?:not|still|partially|mostly|remains?|regress\w*|broken|reopen\w*|but|however)\b|n['’]t\b|\bnever\b(?!-declared\b)|尚未|並未|未(?:修|處理|改|補)|沒有?(?:修|處理|補|改)|遺漏|漏|仍(?:未|有|存在|在|然|舊|會|可|沒)|依然|還是|回歸(?!測試)|重開|復發|但/i
-  const stripQuoted = (line) => line.replace(/`[^`]*`/g, ' ').replace(/"[^"]*"/g, ' ')
-  // 狀態形狀只看第一句（到 `.`／`;` 後接空白或行尾、或 `。`／`；`），與 oa-batches.ts statusHead 同一份：
-  // 第一句之後、inline code、引號內的 `: resolved.`／`：已解決` 都不是狀態列。
-  const statusHead = (line) => /^.*?(?:[.;](?=\s|$)|[。；])/.exec(stripQuoted(line))?.[0] ?? stripQuoted(line)
-  // 寬否定的判讀範圍：到第一個句號為止（分號不收句），與 oa-batches.ts statusSentence 同一份。
-  const statusSentence = (line) => /^.*?(?:\.(?=\s|$)|。)/.exec(stripQuoted(line))?.[0] ?? stripQuoted(line)
-  const resolvedStatus = (line) =>
-    RESOLVED.test(statusHead(line)) && !RESOLVED_NEGATED.test(line) && !STATUS_NEGATION.test(statusSentence(line))
   // 驗證輪的另一種狀態列：說明後獨立收句 `Resolved.`（#603 r2）。
   const TRAILING_RESOLVED = /(?:^|[.;!?]\s+|[。；！？]\s*)resolved\.?\s*$/i
   const NEGATION = /\b(?:not|still|partially|remains?|regress\w*|broken|reopen\w*)\b/i

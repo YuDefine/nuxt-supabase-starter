@@ -7,11 +7,11 @@
  *   | 判定 | 擋下條件 | 放行方式 |
  *   | --- | --- | --- |
  *   | 去重 | 同 repo 另一條 branch 已有 open PR，body 的 `Work:` 是同一個 work id（work id ↔ plan 目錄一對一）。integration 模式不算：base 或 head 是 `integration/<work-id>` 的 PR（slice PR 與 integration→main 那張共用同一個 `Work:`）不參與去重 | 改推那張 PR 的分支；主持者刻意平行拆的 → body 加 `Parallel-to: #<N>` |
- *   | 記帳類 | clade home 的 diff 每一個路徑都在登記簿 allowlist（`vendor/scripts/lib/register-paths.ts` `isRegisterPath`；`rules/core/github-flow.md` § 紀錄型改動不開 PR）。先於去重判 | 不開 PR：本 worktree commit 後跑 `node scripts/register-land.ts`；混了 allowlist 外的檔就照常開 PR |
+ *   | 記帳類 | clade home 的 diff 每一個路徑都在登記簿 allowlist（`vendor/scripts/lib/register-paths.ts` `isRegisterPath`；`rules/core/github-flow.md` § 紀錄型改動不開 PR）。先於去重判；`--base` 不是 main（stacked PR）不判（register-land 只落 main）；**不看 body**（`--body-file -`、動態 body 也判）、跟著指令裡的 `cd <dir>` 量那棵 worktree、`--head`／`--base` 動態時量 HEAD 相對預設分支 | 不開 PR：本 worktree commit 後跑 `node scripts/register-land.ts`；混了 allowlist 外的檔就照常開 PR |
  *   | 大小 | 扣掉投影檔後 >1000 行（增＋刪）或 >50 檔；量的是 `--head` 相對 `--base`（省略時 HEAD 相對預設分支） | 拆成多張；或 body 宣告 `Mechanical: <產生方式>`（0-A 可走 `--independent` 範圍分級） |
  *
  * 只擋開 PR，**NEVER** 擋派工或限制 open PR 總數（入口不設上限）。
- * 判不出一律放行（fail-open）：不在 git repo、`gh` 失敗或逾時、diff 讀不到、body 判不出、`--repo` 指向別的 repo（本機 checkout 量不到）、`--base`／`--head`／`--repo` 值是動態展開。
+ * 判不出一律放行（fail-open）：不在 git repo、`gh` 失敗或逾時、diff 讀不到、工作目錄判不出（動態 `cd`）、`--repo` 指向別的 repo 或值是動態展開（本機 checkout 量不到）；body 判不出或 `--base`／`--head` 值是動態展開時，只放行去重與大小，記帳類照判。
  * 記帳類判定同樣只在 clade home 做（登記簿 allowlist 與 register-land 只存在那裡），只載入本 hook 自己那棵 checkout 的 allowlist。
  * 投影檔的判定只在 clade home 做得出（`scripts/audit-clade-home-projections.ts` 的投影計畫），且只載入本 hook
  * 自己那棵 checkout 的投影程式（NEVER 執行目標 repo 的程式碼）；其他 repo → 大小判定不跑（只做去重）。
@@ -59,8 +59,10 @@ export interface PrCreateTarget {
   base?: string
   head?: string
   repo?: string
-  /** 任一個值是動態展開（`$X`）或旗標缺值：判不出，整個判定放行。 */
+  /** 任一個值是動態展開（`$X`）或旗標缺值：去重與大小判定放行。 */
   opaque?: boolean
+  /** 其中 `--repo` 判不出：本機 checkout 量不到那個 repo，連記帳類判定也放行（`--base`／`--head` 判不出時記帳類改量 HEAD 相對預設分支）。 */
+  opaqueRepo?: boolean
 }
 
 export interface NumstatEntry {
@@ -82,6 +84,8 @@ export interface HygieneDeps {
   projections?: (top: string) => ReadonlySet<string> | null
   /** 登記簿 allowlist 的判定；null＝本 repo 不是 clade home（記帳類判定不跑）。 */
   registerPath?: (top: string) => ((path: string) => boolean) | null
+  /** checkout 的 origin（`git remote get-url origin`）；null＝沒有或讀不到。 */
+  originUrl?: (top: string) => string | null
 }
 
 const WORK_OF_BODY_RE = /^[ \t]*Work(?:[ \t]*id)?[ \t]*[:：][ \t]*(\S+)/mu
@@ -93,6 +97,14 @@ export function workIdOfBody(body: string): string | null {
 
 /** integration 模式的整合分支名：slice PR 的 base、integration→main 那張的 head。 */
 export const integrationBranch = (workId: string): string => `integration/${workId}`
+
+/** `--repo` 值或 remote URL → 小寫 `owner/repo`（`HOST/OWNER/REPO`、https、ssh 寫法同一個結果）。 */
+export const repoSlug = (repo: string): string =>
+  repo
+    .trim()
+    .replace(/\.git$/u, '')
+    .replace(/^(?:[a-z+]+:\/\/)?(?:[^@/]+@)?github\.com[:/]/iu, '')
+    .toLowerCase()
 
 /** 同 work id、別條 branch 的 open PR（去重判定，純函式）；integration 分支上的 PR（base 或 head）不算重複。 */
 export function duplicatePrs(
@@ -185,30 +197,37 @@ export function registerOnlyMessage(files: number): string {
   )
 }
 
-/** 判定（body 已確定帶 `Work:` 行）：違規回 deny 字串，否則 null。 */
+/** 判定（`Work:` 行已通過或判不出）：違規回 deny 字串，否則 null。 */
 export function ghPrCreateHygiene(
-  body: string,
+  /** null＝body 判不出（`--body-file -`、動態展開、讀不到）：只判記帳類（它不看 body），去重與大小放行。 */
+  body: string | null,
   cwd: string,
   deps: HygieneDeps = {},
   target: PrCreateTarget = {},
 ): string | null {
-  if (target.opaque) return null
+  if (target.opaqueRepo) return null
   deadline = Date.now() + HYGIENE_BUDGET_MS
   const d = { ...defaultHygieneDeps, ...deps }
   const top = d.top(cwd)
   if (!top) return null
-  const workId = workIdOfBody(body)
+  const workId = body === null ? null : workIdOfBody(body)
   // `--head owner:branch` 的 branch 名在 `:` 之後
   const head = target.head?.replace(/^[^:]*:/u, '')
-  // 本機 checkout 量不到別的 repo 的 branch：記帳類與大小判定都不跑
+  // 本機 checkout 量不到別的 repo 的 branch：記帳類與大小判定都不跑（`--repo` 指向本 checkout 的 origin 照量）
+  const origin = target.repo ? d.originUrl(top) : null
+  const measurable = !target.repo || (origin !== null && repoSlug(origin) === repoSlug(target.repo))
   let entries: NumstatEntry[] | null | undefined
   const diff = () =>
     entries === undefined ? (entries = d.numstat(top, { base: target.base, head })) : entries
-  const isRegister = target.repo ? null : d.registerPath(top)
+  // register-land 只落 main：疊在別的 branch 上的 PR（`--base` 不是 main）不是它能接的，照一般 PR 判
+  const stacked = Boolean(target.base) && target.base !== 'main'
+  const isRegister = measurable && !stacked ? d.registerPath(top) : null
   if (isRegister) {
     const got = diff()
     if (got?.length && got.every((e) => isRegister(e.path))) return registerOnlyMessage(got.length)
   }
+  // 以下的去重與大小判定要 body 與確定的 base／head
+  if (body === null || target.opaque) return null
   if (
     workId &&
     !PARALLEL_LINE_RE.test(body) &&
@@ -220,8 +239,7 @@ export function ghPrCreateHygiene(
     if (dups.length) return duplicateMessage(workId, dups)
   }
   if (MECHANICAL_LINE_RE.test(body)) return null
-  // 本機 checkout 量不到別的 repo 的 branch
-  if (target.repo) return null
+  if (!measurable) return null
   const got = diff()
   if (!got) return null
   // 投影計畫昂貴：連未扣投影的數字都沒超限就不必算
@@ -296,6 +314,7 @@ export const defaultHygieneDeps: Required<HygieneDeps> = {
   },
   projections: (top) => cladeHomeProjectionPaths(top),
   registerPath: (top) => cladeHomeRegisterMatcher(top),
+  originUrl: (top) => run('git', ['remote', 'get-url', 'origin'], top)?.trim() || null,
 }
 
 /** 本檔所在的 repo 根（`<root>/capabilities/core/hooks/`）：只有它的投影計畫可信。 */
@@ -310,16 +329,25 @@ function isHookRepo(top: string, hookRoot: string): boolean {
   }
 }
 
+/** `top` 與 hook 所在 checkout 是同一個 repo 的兩棵 worktree（git-common-dir 相同）：`cd <別棵 worktree> && gh pr create` 量的是它。 */
+function sharesGitCommonDir(top: string, hookRoot: string): boolean {
+  const common = (dir: string): string | null =>
+    run('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], dir)?.trim() || null
+  const a = common(top)
+  return a !== null && a === common(hookRoot)
+}
+
 /**
  * clade home 的登記簿 allowlist 判定（`vendor/scripts/lib/register-paths.ts`，main-sync／register-land 共用同一份）。
- * 只在 `top` 就是本 hook 所在的 clade checkout 時才載入；hook 散播到 consumer 時那邊沒有 register-land → 回 null。
+ * 只在 `top` 就是本 hook 所在的 clade checkout（或同 repo 的另一棵 worktree）時才載入；hook 散播到 consumer 時那邊沒有 register-land → 回 null。
  * 同步載入（require(esm)）：本判定在同步的 hook 路徑上，且檔案只有常數與一支純函式。
  */
 export function cladeHomeRegisterMatcher(
   top: string,
   hookRoot = HOOK_REPO_ROOT,
 ): ((path: string) => boolean) | null {
-  if (!isHookRepo(top, hookRoot)) return null
+  // allowlist 永遠從 hook 自己的 checkout 載入；被量的 diff 可以在同 repo 的任一棵 worktree
+  if (!isHookRepo(top, hookRoot) && !sharesGitCommonDir(top, hookRoot)) return null
   const file = join(hookRoot, 'vendor', 'scripts', 'lib', 'register-paths.ts')
   if (!existsSync(file)) return null
   try {

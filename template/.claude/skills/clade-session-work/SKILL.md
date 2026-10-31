@@ -18,7 +18,7 @@ description: "Session, delegation, handoff, work tracking, and follow-up rules. 
 - READ 若要讀或改 `vendor/scripts/flow/**`、`.clade/flow/**`，讀取 `rules/flow-work-tracking.md`
 - READ 若要讀或改 `tasks/**`、`specs/plans/**`、`docs/tech-debt.md`，讀取 `rules/follow-up-register.md`
 - READ 若要讀或改 `HANDOFF.md`、`tasks/**`、`specs/plans/**`，讀取 `rules/handoff.md`
-- READ 若要讀或改 `app/**/*.vue`、`packages/*/app/**/*.vue`、`app/**/*.ts`、`packages/*/app/**/*.ts`、`components/**`、`packages/*/components/**` 等 12 處（全表見 rules/_index.md），讀取 `rules/proactive-skills.design-checkpoint.md`
+- READ 若要讀或改 `app/**/*.vue`、`packages/*/app/**/*.vue`、`app/**/*.ts`、`packages/*/app/**/*.ts`、`components/**`、`packages/*/components/**` 等 16 處（全表見 rules/_index.md），讀取 `rules/proactive-skills.design-checkpoint.md`
 - READ 若要讀或改 `scripts/dev-session*`、`vendor/scripts/dev-session*`、`.claude/consumer-meta.json`、`nuxt.config.*`，讀取 `rules/proactive-skills.dev-server-spawn.md`
 - READ 若要讀或改 `rules/**`、`.claude/rules/**`、`capabilities/**/skills/**`、`.claude/skills/**`、`vendor/snippets/**`、`vendor/scripts/**` 等 7 處（全表見 rules/_index.md），讀取 `rules/proactive-skills.disabled-skill-guidance.md`
 - READ 若要讀或改 `tasks/**`、`specs/plans/**`、`screenshots/**`，讀取 `rules/proactive-skills.manual-review-entry.md`
@@ -29,7 +29,7 @@ description: "Session, delegation, handoff, work tracking, and follow-up rules. 
 - READ 若要讀或改 `.claude/rules/agent-routing.md`、`rules/core/agent-routing.md`、`vendor/scripts/pi-routing-policy.ts`、`vendor/scripts/pi-routing-gate.ts`、`vendor/scripts/pi-dispatch.ts`，讀取 `rules/runtime/agent-routing.routing-table.md`
 - READ 若要讀或改 `vendor/scripts/flow/**`、`.clade/flow/**`，讀取 `rules/runtime/flow-work-tracking.md`
 - READ 若要讀或改 `HANDOFF.md`、`tasks/**`、`specs/plans/**`，讀取 `rules/runtime/handoff.md`
-- READ 若要讀或改 `app/**/*.vue`、`packages/*/app/**/*.vue`、`app/**/*.ts`、`packages/*/app/**/*.ts`、`components/**`、`packages/*/components/**` 等 12 處（全表見 rules/_index.md），讀取 `rules/runtime/proactive-skills.design-checkpoint.md`
+- READ 若要讀或改 `app/**/*.vue`、`packages/*/app/**/*.vue`、`app/**/*.ts`、`packages/*/app/**/*.ts`、`components/**`、`packages/*/components/**` 等 16 處（全表見 rules/_index.md），讀取 `rules/runtime/proactive-skills.design-checkpoint.md`
 - READ 若要讀或改 `scripts/dev-session*`、`vendor/scripts/dev-session*`、`.claude/consumer-meta.json`、`nuxt.config.*`，讀取 `rules/runtime/proactive-skills.dev-server-spawn.md`
 - READ 若要讀或改 `tasks/**`、`specs/plans/**`、`screenshots/**`，讀取 `rules/runtime/proactive-skills.manual-review-entry.md`
 - READ 若要讀或改 `.clade/claims/**`、`HANDOFF.md`、`capabilities/core/hooks/pre-bash-ownership-stamp.sh`、`scripts/claim-helper.ts`、`vendor/scripts/claim-helper.ts`、`vendor/scripts/ownership-journal.ts` 等 10 處（全表見 rules/_index.md），讀取 `rules/runtime/session-claims.md`

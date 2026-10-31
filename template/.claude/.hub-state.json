@@ -8,7 +8,7 @@
     "scripts/gh-ci-watch.sh": "8377e964eb0dcb7e",
     "scripts/lib/lockfile-dep-summary.mjs": "e7a8cccb9b0a1e3d",
     "scripts/lib/projection-exemption.ts": "646bcaf3e198d966",
-    "scripts/lib/review-common.sh": "2ba4c142e8f4d1aa",
+    "scripts/lib/review-common.sh": "34ea506e99da3535",
     "scripts/lib/review-subagent-transcript.mjs": "e2d33af7940599ff",
     "scripts/lib/review-subagent.sh": "b29df26b4a41836b",
     "scripts/lib/review-verdict.ts": "02a404e720c39822",

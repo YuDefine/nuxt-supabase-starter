@@ -39,7 +39,7 @@
 
 import { spawnSync } from 'node:child_process'
 import { appendFileSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ghPrCreateHygiene, type HygieneDeps, type PrCreateTarget } from './gh-pr-create-hygiene.ts'
@@ -332,7 +332,78 @@ export function prCreateBodyText(
   return null
 }
 
-const TARGET_FLAGS: Record<string, keyof Omit<PrCreateTarget, 'opaque'>> = {
+export interface PrCreateSite {
+  /** `gh pr create` 所在的那一段（subshell 已拆開，尾端不帶 `)`）。 */
+  seg: string
+  /** 它實際執行時的工作目錄；判不出（動態 `cd "$X"`、`cd -`、`popd`、`env -C`）→ null。 */
+  cwd: string | null
+}
+
+/** `(a; b) 2>&1` → `a; b`；括號不成對回 null。 */
+function subshellBody(seg: string): string | null {
+  let depth = 0
+  let q: '"' | "'" | null = null
+  for (let i = 0; i < seg.length; i++) {
+    const c = seg[i]
+    if (q) {
+      if (c === '\\' && q === '"') i++
+      else if (c === q) q = null
+    } else if (c === '\\') i++
+    else if (c === "'" || c === '"') q = c
+    else if (c === '(') depth++
+    else if (c === ')' && --depth === 0) return seg.slice(1, i)
+  }
+  return null
+}
+
+/** `cd`／`pushd`／`popd` 之後的工作目錄；不是這三個指令 → 原值。 */
+function afterChdir(s: string, at: string | null): string | null {
+  const w = words(s)
+  const name = w[0]?.text
+  if (name === 'popd') return null
+  if (name !== 'cd' && name !== 'pushd') return at
+  const arg = w.slice(1).find((x) => x.text !== '--' && !/^-[LPe@]$/u.test(x.text))
+  if (!arg) return name === 'cd' ? homedir() : null
+  if (arg.dynamic || /^[-+]/u.test(arg.text)) return null
+  const dir = arg.text.replace(/^~(?=\/|$)/u, homedir())
+  if (dir.startsWith('~')) return null
+  if (isAbsolute(dir)) return resolve(dir)
+  return at === null ? null : resolve(at, dir)
+}
+
+/**
+ * 找出指令裡真正的 `gh pr create` 與它的工作目錄；沒有 → null（`git commit -m "gh pr create"`、`rg` 的參數都不算）。
+ * hook 收到的是 session cwd，不會跟著指令裡的 `cd` 走；subshell 內的 `cd` 不外漏。
+ */
+export function locatePrCreate(cmd: string, cwd: string | null): PrCreateSite | null {
+  let at = cwd
+  for (const seg of segments(cmd)) {
+    let s = seg
+    for (
+      let m = /^(\S+)\s+/u.exec(s);
+      m && m[1] !== '(' && WRAPPERS.has(m[1]!);
+      m = /^(\S+)\s+/u.exec(s)
+    ) {
+      s = s.slice(m[0].length)
+    }
+    if (s.startsWith('(')) {
+      const inner = subshellBody(s)
+      const hit = inner === null ? null : locatePrCreate(inner, at)
+      if (hit) return hit
+      continue
+    }
+    if (prCreateBody(seg)) {
+      const w = words(seg)
+      const gh = w.findIndex((x) => x.text === 'gh' || x.text.endsWith('/gh'))
+      const chdir = w.slice(0, gh).some((x) => /^(-C|--chdir(=|$))/u.test(x.text))
+      return { seg, cwd: chdir ? null : at }
+    }
+    at = afterChdir(s, at)
+  }
+  return null
+}
+
+const TARGET_FLAGS: Record<string, 'base' | 'head' | 'repo'> = {
   '--base': 'base',
   '-B': 'base',
   '--head': 'head',
@@ -365,8 +436,10 @@ export function prCreateTarget(cmd: string): PrCreateTarget {
       const key = TARGET_FLAGS[flag]
       if (!key) continue
       val ??= args[++i]
-      if (!val || val.dynamic || !val.text) target.opaque = true
-      else target[key] = val.text
+      if (!val || val.dynamic || !val.text) {
+        target.opaque = true
+        if (key === 'repo') target.opaqueRepo = true
+      } else target[key] = val.text
     }
   }
   return target
@@ -484,11 +557,14 @@ export function ghPrCreateWorkGate(
   // Work 行通過（或剛補上）之後才判去重與大小（gh-pr-create-hygiene.ts）
   const hygiene = (verdict: { note?: string }): { deny?: string; note?: string } => {
     if (deps.hygiene === false || !/\bgh\b[\s\S]*\bpr\b[\s\S]*\bcreate\b/u.test(cmd)) return verdict
-    const body = prCreateBodyText(cmd, cwd, deps.readFile)
-    if (body === null) return verdict
+    // 沒有真正的 `gh pr create`（只是字串提到）或工作目錄判不出：不量
+    const site = locatePrCreate(cmd, cwd)
+    if (!site?.cwd) return verdict
+    // `cd <dir> && gh pr create`：gh 在 <dir> 的 checkout 上量，不是 hook 收到的 session cwd
+    const body = prCreateBodyText(site.seg, site.cwd, deps.readFile)
     let deny: string | null = null
     try {
-      deny = ghPrCreateHygiene(body, cwd, deps.hygiene, prCreateTarget(cmd))
+      deny = ghPrCreateHygiene(body, site.cwd, deps.hygiene, prCreateTarget(site.seg))
     } catch {
       /* 判不出就放行 */
     }

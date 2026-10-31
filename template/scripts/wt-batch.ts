@@ -1144,7 +1144,7 @@ function recordOriginAdvance(b: WorktreeBatch): void {
 /** 合入後 push 到 main 會補驗前移與候選交互的 repo（clade 的 push lane）。 */
 export const POST_MERGE_VERIFIER = 'scripts/test-lanes/push-lane.ts'
 /**
- * origin/main 前移是否仍可放行（決策見 W-2026-09-25-batch-merge-main-churn § Decisions）：
+ * origin/main 前移是否仍可放行：
  * - 有 POST_MERGE_VERIFIER 的 repo：前移路徑每一項都與候選路徑不相交（目錄前綴也算相交）即放行。
  *   不相交時 0-A 審的 diff 不變；交互由 PR CI（merge ref）與合入後的 push lane 驗。空 commit 視為放行。
  * - 其他 repo（consumer 沒有合入後補驗）：只放行全在登記簿的前移。

@@ -3565,7 +3565,7 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   const runtimeGap = consumerRuntimeSubstrateGap(consumerRoot)
   if (runtimeGap) throw new Error(`placement_refused: ${runtimeGap}`)
   requireConsumerProjection(consumerRoot)
-  // Pre-clean stale .git/index.lock if any — see TD-145.
+  // Pre-clean stale .git/index.lock if any.
   const lockStatus = ensureNoStaleIndexLock(consumerRoot)
   if (lockStatus.cleaned) {
     console.error(`⚠ rm'd stale .git/index.lock — proceeding`)
@@ -5564,7 +5564,7 @@ function mergedPrHeadContainsTip(consumerRoot, head, tip) {
 }
 
 /**
- * 「branch tip 是某個已 merge PR 的 head（或其祖先）」的判定（TD-1103 第四條憑證）。
+ * 「branch tip 是某個已 merge PR 的 head（或其祖先）」的判定（第四條憑證）。
  * 回 `Observed<{landed, pr?}>`；probe 可注入以便測試（比照 wt-batch 的
  * `RemotePrProbe` 慣例）。只放行、NEVER 擋：任何讀不到都是 `unknown`。
  */
@@ -5711,7 +5711,7 @@ async function cmdDev(alias, opts: WtOptions = {}) {
   console.log(`  ${full}`)
   if (opts.dryRun) return
 
-  // 起 server 的路徑只有兩條，都要有 lease（spec C5，W-2026-10-18-parallel-worktree-runtime-cost）：
+  // 起 server 的路徑只有兩條，都要有 lease（spec C5）：
   // agent 走 dev-session（herdr Tab＋TTL，會被 `dev.maxResident` 與主機額度管到）；
   // 人類維持前景互動，但登記一份無界 human lease 讓它計入額度。
   const route = wtDevRoute()
@@ -6079,7 +6079,7 @@ export function mainIndexNotEmptyMessage(slug: string, entries: string[], when: 
  * `CLADE_WORK_ID` 是活不過單次 Bash 呼叫的環境變數——merge-back 常在另一個 shell 跑，
  * 撿到的 ambient 可能是別張卡。所以 claim 綁定優先；ambient 只在沒有綁定時當 fallback。
  * 兩者都有而不同、或兩者都沒有、或 claim 讀不到，一律回 `error`：記錯卡的 `work.done` 只能事後
- * `flow work reopen` 追加撤回（TD-1115），舊行留在 stream 上、撤回前已被讀成完成——判不出就不記。
+ * `flow work reopen` 追加撤回，舊行留在 stream 上、撤回前已被讀成完成——判不出就不記。
  */
 export function resolveMergeBackWorkId(
   consumerRoot: string,
@@ -7292,7 +7292,7 @@ async function cmdCleanup(
       ? detectAbsorbedByOtherPath(consumerRoot, branchName, 'main')
       : null
   const absorbedLanded = absorbed?.absorbed === true
-  // TD-1103 第四條憑證：GitHub 上 MERGED 的 PR 其 headRefOid 逐字等於 branch tip
+  // 第四條憑證：GitHub 上 MERGED 的 PR 其 headRefOid 逐字等於 branch tip
   // —— 伺服器端落地事實，commit 級證據嚴格強於檔案內容比對，命中時同
   // squashLanded 路徑連 detectUnlandedFiles 一起跳過。只在三條本地憑證全失手時
   // 才出門打 gh（網路依賴因此只出現在「現況本就 BLOCKED」的分支）；probe 回

@@ -28,7 +28,7 @@ export function parseCpuStatLine(line: string): CpuCounters | null {
 export const SATURATED_LOAD_PER_CORE = 2
 
 /**
- * 每核負載上限（D-CDB702-1「可以加上限」，2026-10-27）：達此值的機器不再收新件——另一台低於上限就放那台，
+ * 每核負載上限：達此值的機器不再收新件——另一台低於上限就放那台，
  * 每台都到上限才排隊（自動加派記 `resource-pressure`、`--machine auto` 拒派、預設 auto 留本機）。
  * 每核負載高到 brief 送達逾時的程度才擋；開樹的 pnpm／tsc 尖峰只到 1.2 左右，
  * 所以線畫在 4（每核一個在跑、三個在等），尖峰不會誤擋。CPU 使用率封頂在 1.0，表達不出超載，上限只能看 load1／核。

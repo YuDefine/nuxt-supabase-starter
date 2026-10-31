@@ -1,6 +1,6 @@
 ---
 description: UI 工作的 impeccable 修改閉環（找問題 → 專科修 → 沉澱）、P0–P3 問題族 × 專科指令對照、Design Review tasks 模板、design-review.md 證據與 Design Gate、非 UI exception；動 UI 檔或寫 design artifact 時 path-scoped 載入
-paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'app/**/*.ts', 'packages/*/app/**/*.ts', 'components/**', 'packages/*/components/**', 'pages/**', 'packages/*/pages/**', 'layouts/**', 'packages/*/layouts/**', 'specs/plans/**', 'docs/specs/**/spec.md']
+paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'app/**/*.ts', 'packages/*/app/**/*.ts', 'components/**', 'packages/*/components/**', 'pages/**', 'packages/*/pages/**', 'layouts/**', 'packages/*/layouts/**', 'specs/plans/**', 'docs/specs/**/spec.md', 'nuxt.config.ts', 'packages/*/nuxt.config.ts', 'server/middleware/**', 'packages/*/server/middleware/**']
 ---
 <!-- Clade native rule; source: rules/core/proactive-skills.design-checkpoint.md; edit canonical source -->
 <!-- clade-targets: claude,agents -->
@@ -155,6 +155,21 @@ Design 工作可能發現 spec 未涵蓋的問題。**每一次**發現都按下
 ## 跨工作的整體性
 
 同 layout 已上線的頁面（如共用 `desktop.vue`、`default.vue`）與本次頁面一起跑 `critique` 時，既有頁面的問題記在 `design-review.md` 的獨立段落（建議修，不阻擋本次交付）。整個 app 的健康度診斷就是對全站跑 `critique`／`audit`。
+
+## 條件式查詢：Modern Web Guidance
+
+不是關卡，也**不安裝成 skill 或 plugin**（它的描述要求所有前端工作先跑，小修也會觸發）。符合下列條件才用 CLI 查一次。
+
+| 查 | 不查 |
+| --- | --- |
+| Nuxt UI 沒有對應元件，要手寫互動、動畫或版面 | 元件選擇（先走 [[nuxt-ui-mcp]] 的 `nuxt-ui-remote`） |
+| 碰到 CSP、Passkey、表單細節這類平台 API | 畫面審查（impeccable） |
+| 已量到 INP 或 LCP 異常（改善前後用 chrome-devtools-mcp 量） | 合入關卡、全站掃描、小修、hotfix、純後端 |
+
+- 指令固定版本並關遙測：`DISABLE_TELEMETRY=1 npx modern-web-guidance@0.0.196 search "…"`，再用 `retrieve <id>` 取全文。查詢字串**NEVER**放客戶名稱。
+- plan 或 task 有查時寫 1～3 行：指南 id、選用的 API、fallback。這是紀錄，不是關卡；沒查也不擋任何東西。
+- Baseline 目標：專案開案或 onboard 時依客戶瀏覽器定一次，在該專案 AGENTS.md 寫 `This project's Baseline target is Baseline <年份>.`；沒寫就是 Widely available。既有 consumer 不用回頭補。
+- 本檔 `paths` 含 `specs/plans/**`、`nuxt.config.ts`、`server/middleware/**`（含 `packages/*/` 變體），plan 階段與 CSP 這類非 UI 路徑也會載到本節。
 
 ## 純後端工作的例外
 
