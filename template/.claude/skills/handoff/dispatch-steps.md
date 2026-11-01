@@ -25,7 +25,7 @@ SKILL.md § 2B.3 / 2B.4 / 2B.4.5 / 2B.5 的完整規約：outstanding 的 serial
 - 可獨立驗證（各自有 acceptance criteria）
 
 若 Parallel candidate，**MUST** 套用 thin-brief 長駐 subagent 模式（避免 fresh subagent fan-out 冷載 N 倍 repo context）：
-- 主線預先用 codebase-memory-mcp（`search_graph` / `trace_path` / `get_code_snippet`）定位每條 outstanding 的檔案路徑 + 符號 + 依賴，把結果寫進 brief
+- 主線預先用 `rg` 定位每條 outstanding 的檔案路徑 + 符號 + 依賴，把結果寫進 brief
 - 一條 outstanding 配一個長駐 named subagent；後續 phase 推進**MUST** 用 `SendMessage({to: name})` 續跑，**NEVER** 為同一條 outstanding 的下一個 phase 重開新 subagent
 - Thin brief（3–5K 具體指示：檔案路徑、規則條目、驗收標準），**禁止**冷載整份 repo / CLAUDE.md / rules
 - 不同 outstanding 的長駐 subagent 可同時跑（多個 `Agent` tool call 放同一訊息）

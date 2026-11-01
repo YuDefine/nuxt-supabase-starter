@@ -11,7 +11,7 @@ route 是 `toolchain.fleet` 時，Phase F 的 F.1–F.8 照跑、差異照下表
 | # | 主流程 | Phase T |
 | --- | --- | --- |
 | 1 | scan dep map，`found:false` = miss | scan top-level scalar；**`packageManager` 缺席是 finding（`gap: absent`），不是 miss** |
-| 2 | BC affected surface = code symbol，用 codebase-memory-mcp 掃 callsite | BC affected surface = **設定 key**，用 Step T.3 比對 scan 回的 config surface。**NEVER** 送 MCP |
+| 2 | BC affected surface = code symbol，用 `rg` 掃 callsite | BC affected surface = **設定 key**，用 Step T.3 比對 scan 回的 config surface。**NEVER** 送 callsite 掃描 |
 | 3 | 升版動作 = `<PM> add <pkg>@<ver>` | 升版動作 = **改 `packageManager` 欄位 + 重跑 install 重生 lockfile**（見 T.4） |
 | 4 | 驗證 = typecheck / build / test | **MUST 多一道 `install --frozen-lockfile`**：換 PM 大版可能改 lockfile / store format，只跑 typecheck 抓不到 |
 | 5 | 適用 `catalog:` 間接解析 | 不適用——`packageManager` 沒有 catalog 語意 |
@@ -36,9 +36,11 @@ route 是 `toolchain.fleet` 時，Phase F 的 F.1–F.8 照跑、差異照下表
 npm view <name> dist-tags --json
 ```
 
-**MUST** 確認 `--target` 就是 SoT（`registry/toolchain.json`）在本輪「目標刷新」後的 target——也就是共同可達最新版（`--refresh-targets` 的定義：穩定版、engines 接受 fleet node、發佈滿 minimumReleaseAge，所以可能比 `latest` 低一版）；pre-release tag（`next-*` / `beta` / `rc`）**NEVER** 進 fleet sweep——toolchain 壞掉是全 consumer 同時無法 build。
+**MUST** 確認 `--target` 就是 SoT（`registry/toolchain.json`）在本輪「目標刷新」後的 target——也就是共同可達最新版（`--refresh-targets` 的定義：穩定版、engines 接受 fleet node、發佈滿 minimumReleaseAge，所以可能比 `latest` 低一版）。
 
-User 指名 pre-release 版本時，先回報「該版本只掛在 `<tag>`、`latest` 是 `<X>`」並等拍板，**NEVER** 自行照做或自行改成 latest。
+pre-release tag（`next-*` / `beta` / `rc`）**NEVER** 進 Phase T 的 fleet sweep——toolchain 壞掉是全 consumer 同時無法 build；User 指名 pre-release 版本時，先回報「該版本只掛在 `<tag>`、`latest` 是 `<X>`」並等拍板，**NEVER** 自行照做或自行改成 latest。
+
+VoidZero／TypeScript 原生版／Vue／Nuxt 這類核心 toolchain 套件是 `dependencies`／`devDependencies`，不在 Phase T：它們走 Phase F，beta／rc 的追隨條件在 `rules/fleet准入與釘版判準.md` Rule 3。
 
 ## Step T.2 — Runtime 門檻自查
 

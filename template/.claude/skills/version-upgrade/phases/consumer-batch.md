@@ -97,7 +97,7 @@ rg -n "<symbol>" --type-add 'vue:*.vue' --type vue --type ts .
 
 - 記錄 `file:line` 組合，後續 C.1 填入 `<changelog-block>` 的 callsites 段
 - 過濾 docs-only 命中（`.md` / `README` / `docs/`）— 不是 runtime callsite
-- 比 Phase F 的 codebase-memory-mcp 輕量（單 consumer、不需 index）
+- 與 Phase F 同用 `rg`，範圍限單 consumer
 - **callsite = 0**：不刪該 BC（仍可能 transitive 影響），prompt 內提示 `callsites: 0（pi 自行 grep 確認）`
 
 **action items 不需 callsite scan** — action 的「callsite」就是 workflow YAML 裡的 `uses:` 行，`inventory.py` 的 `locations` 已收集完整。`adaptation` 標記的 action 的 BC 影響範圍是 workflow YAML 裡的 `with:` 參數或 `outputs`，C.6 prompt 會包含完整 workflow 段落。
@@ -151,7 +151,7 @@ npm items 依分類決定 prompt 填充：
 - Commit Authorization 段（per pi-watch-protocol § Commit Authorization；message format `🧹 chore: wt upgrade-<pkg>-<from>→<to>`，subagent 端需讀 commitlint config 調整）
 - 失敗時的回報格式
 
-**`<changelog-block>` 填充**（`adaptation` / `feature+adaptation` 才填，其他留空）：完全復用 `templates/first-pass.md` 的 `<changelog-block>` 填充格式，callsites 來源為 B.2.4 的 `rg` 結果（而非 Phase F 的 codebase-memory-mcp）。`adaptation` 的 pi 工作範圍擴大到 callsite 檔：Commit Authorization 加 `git add <callsite-files>`。
+**`<changelog-block>` 填充**（`adaptation` / `feature+adaptation` 才填，其他留空）：完全復用 `templates/first-pass.md` 的 `<changelog-block>` 填充格式，callsites 來源為 B.2.4 的 `rg` 結果（與 Phase F 同為 `rg`）。`adaptation` 的 pi 工作範圍擴大到 callsite 檔：Commit Authorization 加 `git add <callsite-files>`。
 
 **`feature`（無 BC）的 `<changelog-block>` 填充**：只含 feature 摘要段（informational），**不**含 callsites 或「動手範圍」段 — 告知 pi 這個版本有新功能但升版只需 bump，不必改 source code。
 

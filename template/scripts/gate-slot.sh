@@ -26,6 +26,13 @@
 #                            {key,mode,class,slots,slot_wait_ms}（opt-in，未設不寫；寫失敗不影響 gate）
 #   CLADE_GATE_CLASS         heavy（預設）| light。由 clade-gate 判定後設定，本層讀完即 unset（W-2026-09-24-gate-slot-light-lane）
 #   CLADE_LIGHT_GATE_SLOTS   light 類整台機器同時執行上限（預設 2，clamp 到 1..8）
+#   CLADE_GATE_WORKTREE      本趟所屬 worktree（預設 git toplevel，取不到用 pwd -P）；寫進 holder sidecar 第 2 行（診斷用）
+#   CLADE_GATE_HANG_WINDOW   卡死判定窗秒數（預設 300，0 關閉；見 § 卡死偵測）
+#   CLADE_GATE_HANG_INTERVAL 卡死取樣間隔秒數（預設 15）
+#   CLADE_GATE_HANG_GRACE    判定卡死後 SIGTERM 到 SIGKILL 的寬限秒數（預設 10）
+#   CLADE_GATE_HANG_WATCH    額外要看的輸出檔（`:` 分隔，例：不在行程樹裡的 dev server log）
+#   CLADE_GATE_OUTPUT_HEARTBEAT  clade-gate 每收到 inner 輸出就 touch 的檔；本層讀完即 unset
+#   CLADE_GATE_HANG_REPORT   卡死原因改寫到這個檔（clade-gate 結束時印出）；本層讀完即 unset
 #
 # 兩層鎖：
 #   1. repo lock  —— 同一個 repo 同時只跑一個 heavy gate（去重：pre-push 與 post-edit 撞在一起）
@@ -71,6 +78,9 @@ fi
 GATE_CLASS=heavy
 [ "${CLADE_GATE_CLASS:-}" = light ] && GATE_CLASS=light
 unset CLADE_GATE_CLASS
+OUTPUT_HEARTBEAT=${CLADE_GATE_OUTPUT_HEARTBEAT:-}
+HANG_REPORT=${CLADE_GATE_HANG_REPORT:-}
+unset CLADE_GATE_OUTPUT_HEARTBEAT CLADE_GATE_HANG_REPORT
 
 # 外層已持有 slot（例如 post-edit hook 已上鎖，內層 pnpm typecheck 又轉呼叫 clade-gate）。
 # 沒有這個 escape hatch，第二層會在同一個 repo lock 上等自己 → 死鎖。
@@ -253,11 +263,60 @@ REPO_LOCK="$LOCK_DIR/repo-$safe_key.lock"
 # lock dir 存在但不可寫（權限 / 唯讀 fs）→ 降級直接跑，不要在這裡失敗。
 : >>"$REPO_LOCK" 2>/dev/null || exec "$@"
 
+# ── 不能自己等自己 ─────────────────────────────────────────────────────────────
+# 持有鎖的 gate 是本行程的祖先時，等下去永遠等不到：祖先要等本行程（它的子孫）結束才會放鎖。
+# 典型是巢狀 gate 被剝掉 CLADE_GATE_SLOT_HELD 後又進 wait。這種情況立刻 exit 75 並說明，NEVER 排隊。
+# 同一棵 worktree 的其他 gate（平行的 light 重跑、post-edit 的短 `try` typecheck、pre-push）不是祖先，
+# 會自己跑完放鎖，照常排隊；卡住的持有者由下面 § 卡死偵測自己收掉，不靠這裡判。
+# 只認 sidecar（valid_holder_pid 驗過 pid 真的開著該鎖）；沒有 sidecar 的持有者判不出是誰，照舊排隊。
+# try 模式本來就立刻 75，不經這裡。
+GATE_WORKTREE=${CLADE_GATE_WORKTREE:-}
+if [ -z "$GATE_WORKTREE" ]; then
+  GATE_WORKTREE=$(git rev-parse --show-toplevel 2>/dev/null) || GATE_WORKTREE=
+  [ -n "$GATE_WORKTREE" ] || GATE_WORKTREE=$(pwd -P 2>/dev/null || pwd)
+fi
+
+# 本行程的祖先 pid（ppid 鏈，最多 64 層），一行一個。
+_ancestor_pids() {
+  local p=$$ i
+  for i in $(seq 1 64); do
+    p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d '[:space:]')
+    case "$p" in '' | *[!0-9]* | 0 | 1) return 0 ;; esac
+    printf '%s\n' "$p"
+  done
+}
+
+# 印第一個「持有者是本行程祖先」的 `<lock> <pid>`；沒有就回 1。
+ancestor_holder() {
+  local lock pid ancestors=
+  for lock in "$@"; do
+    pid=$(valid_holder_pid "$lock") || continue
+    [ -n "$ancestors" ] || ancestors=$(_ancestor_pids)
+    if printf '%s\n' "$ancestors" | grep -qx "$pid"; then
+      printf '%s %s' "$lock" "$pid"
+      return 0
+    fi
+  done
+  return 1
+}
+
+refuse_self_wait() {
+  local lock=$1 pid=$2 line
+  line=$(ps -o etime=,comm= -p "$pid" 2>/dev/null | awk '{$1=$1; print}')
+  printf '\ngate-slot: 拒絕排隊——持有這個鎖的 gate 是本行程的祖先，排下去是自己等自己（inner command 未執行）\n' >&2
+  printf '  worktree: %s\n' "$GATE_WORKTREE" >&2
+  printf '  lock: %s\n' "$lock" >&2
+  printf '  holder: pid=%s etime=%s comm=%s\n' "$pid" "${line%% *}" "${line#* }" >&2
+  printf '  處置：等那支 gate 跑完再重跑；它若已卡住，kill 它的行程樹（kill -- -<pgid> 或 kill %s）後重跑。\n' "$pid" >&2
+  exit "$BUSY"
+}
+
 # 取到鎖的那一刻由本行程寫下自己是持有者（status 的第 1 層證據，見 print_status 上方）。
 # 原子寫；寫失敗不影響 gate。stale 檔 NEVER 主動刪：會和剛取到鎖、正要覆寫的新持有者競態。
+# 第 2 行是本趟的 worktree（供診斷）；status 只讀第 1 行，舊版 sidecar 沒有第 2 行照樣有效。
 record_holder() {
   local tmp="$1.holder.$$"
-  if ! { printf '%s\n' "$$" >"$tmp" && mv -f "$tmp" "$1.holder"; } 2>/dev/null; then
+  if ! { printf '%s\n%s\n' "$$" "$GATE_WORKTREE" >"$tmp" && mv -f "$tmp" "$1.holder"; } 2>/dev/null; then
     rm -f "$tmp" 2>/dev/null
   fi
   return 0
@@ -265,7 +324,7 @@ record_holder() {
 
 # 印 lock holder 診斷到 stderr（逾時出口用）。
 # 用法: print_holder_diag <lock_file> <context_msg>
-# NEVER 自動 kill — 低 CPU 不蘊含卡死（I/O bound 同樣低 CPU）。
+# 本函式只印不殺——低 CPU 單獨不蘊含卡死（I/O bound 同樣低 CPU）。holder 自己帶的卡死偵測見 § 卡死偵測。
 print_holder_diag() {
   local lock_file=$1 context=$2
   printf '\n── gate-slot diagnostic ──\n' >&2
@@ -360,12 +419,15 @@ _wait_started_ms=$(_now_ms)
 if [ "$GATE_CLASS" = heavy ]; then
   exec 9>>"$REPO_LOCK"
   if [ "$mode" = wait ]; then
-    # Bash defers traps while a foreground flock blocks; its wait builtin is
-    # interruptible, so PID-only cancellation can abort a same-repo wait too.
-    flock -w "$WAIT_TIMEOUT" 9 &
-    if ! wait "$!"; then
-      print_holder_diag "$REPO_LOCK" "repo lock wait timed out after ${WAIT_TIMEOUT}s (key=$safe_key)"
-      exit "$BUSY"
+    if ! flock -n 9; then
+      _self=$(ancestor_holder "$REPO_LOCK") && refuse_self_wait "${_self% *}" "${_self##* }"
+      # Bash defers traps while a foreground flock blocks; its wait builtin is
+      # interruptible, so PID-only cancellation can abort a same-repo wait too.
+      flock -w "$WAIT_TIMEOUT" 9 &
+      if ! wait "$!"; then
+        print_holder_diag "$REPO_LOCK" "repo lock wait timed out after ${WAIT_TIMEOUT}s (key=$safe_key)"
+        exit "$BUSY"
+      fi
     fi
   else
     flock -n 9 || exit "$BUSY"
@@ -393,6 +455,14 @@ if ! acquire_slot; then
   if [ "$mode" = try ]; then
     exit "$BUSY"
   fi
+  # 只有「每個 slot 都是祖先持有」才是死局；其餘 slot 是別的 gate 持有，自己會放。
+  _slot_locks=()
+  for si in $(seq 1 "$ACTIVE_SLOTS"); do _slot_locks+=("$LOCK_DIR/$SLOT_PREFIX-$si.lock"); done
+  _self_held=0
+  for _slot_lock in "${_slot_locks[@]}"; do
+    _self=$(ancestor_holder "$_slot_lock") && _self_held=$((_self_held + 1)) && _self_last=$_self
+  done
+  if [ "$_self_held" -ge "$ACTIVE_SLOTS" ]; then refuse_self_wait "${_self_last% *}" "${_self_last##* }"; fi
   deadline=$(($(date +%s) + WAIT_TIMEOUT))
   until acquire_slot; do
     if [ "$(date +%s)" -ge "$deadline" ]; then
@@ -475,6 +545,189 @@ mem_scope_available() {
     *) return 1 ;;
   esac
 }
+
+# ── 卡死偵測 ──────────────────────────────────────────────────────────────────
+# 卡死的 gate（CPU 近 0、log 不再寫）若只靠 MAX_RUNTIME 收，slot 要被佔到上界滿。
+# 這裡讓 holder 自己帶一支 watchdog：整棵行程樹連續
+# CLADE_GATE_HANG_WINDOW 秒（預設 300）**同時**滿足下面全部，才判卡死——
+#   - 每個取樣間隔的 CPU（utime+stime+cutime+cstime 總和）都 < 1%
+#   - 行程集合沒變（沒有新起或結束的行程）
+#   - 輸出沒更新：樹內行程開著的一般檔／tty、CLADE_GATE_HANG_WATCH、clade-gate 的輸出 heartbeat
+#     的 mtime 都沒動；沒有 heartbeat 而 stdout／stderr 是 pipe 時（anonymous pipe 寫入不更新 mtime），改看整棵樹的 wchar 有沒有增加
+# 判定後先把原因寫到 holder 的 stderr（node 的 stdio 'pipe' 是 socketpair，/proc/<pid>/fd/2 開不起來，
+# 所以 clade-gate 給 CLADE_GATE_HANG_REPORT 檔、結束時自己印），SIGTERM 整棵樹，寬限 CLADE_GATE_HANG_GRACE 秒後 SIGKILL
+# 還活著的；鎖的 fd 隨行程結束釋放，slot 就放出來了。
+#
+# 與上面 print_holder_diag「只印不殺」、下面「已否決從外面 kill stale holder」不衝突：那兩條擋的是
+# 「別人只看 CPU 就殺」。這支是 holder 自己帶進來的，而且要 CPU、行程集合、輸出三者同時靜止整整一窗；
+# 任何一項有動靜就重新起算——仍在輸出的行程 NEVER 被殺。判不出（沒有 /proc）就不起 watchdog。
+#
+# watchdog 用 `( … & )` 脫離本行程樹，stdio 接 /dev/null 並關掉所有鎖 fd：它 NEVER 持有 slot，
+# 也不讓讀 pipe 的呼叫端等它結束才收到 EOF。holder 結束（pid 消失或 starttime 變了）它就自己退出。
+HANG_WINDOW=${CLADE_GATE_HANG_WINDOW:-300}
+case "$HANG_WINDOW" in '' | *[!0-9]*) HANG_WINDOW=300 ;; esac
+HANG_INTERVAL=${CLADE_GATE_HANG_INTERVAL:-15}
+case "$HANG_INTERVAL" in '' | *[!0-9]* | 0) HANG_INTERVAL=15 ;; esac
+HANG_GRACE=${CLADE_GATE_HANG_GRACE:-10}
+case "$HANG_GRACE" in '' | *[!0-9]*) HANG_GRACE=10 ;; esac
+
+_hang_starttime() {
+  local s
+  read -r s <"/proc/$1/stat" 2>/dev/null || return 1
+  s=${s##*) }
+  # shellcheck disable=SC2086
+  set -- $s
+  printf '%s' "${20}"
+}
+
+# root 與其所有後代（ppid 樹）；root 被 systemd-run 搬進自己的 scope 後，再併上該 cgroup 的全部行程
+# （reparent 到 pid 1 的孫行程也在裡面）。只在 root 的 cgroup 與 watchdog 不同時讀 cgroup.procs——
+# 相同表示沒有私有 scope，那個 cgroup 裡還有別人的行程。
+_hang_tree() {
+  local root=$1 my_cg=$2 root_cg
+  {
+    ps -e -o pid=,ppid= 2>/dev/null | awk -v r="$root" '
+      { kids[$2] = kids[$2] " " $1 }
+      END {
+        q[1] = r; n = 1; seen[r] = 1
+        for (i = 1; i <= n; i++) {
+          print q[i]
+          c = split(kids[q[i]], a, " ")
+          for (j = 1; j <= c; j++) if (!(a[j] in seen)) { seen[a[j]] = 1; q[++n] = a[j] }
+        }
+      }'
+    root_cg=$(awk -F: '$1 == "0" { print $3 }' "/proc/$root/cgroup" 2>/dev/null)
+    if [ -n "$root_cg" ] && [ "$root_cg" != "$my_cg" ] && [ -r "/sys/fs/cgroup$root_cg/cgroup.procs" ]; then
+      cat "/sys/fs/cgroup$root_cg/cgroup.procs" 2>/dev/null
+    fi
+  } | sort -un
+}
+
+# 一次取樣：印 `<pid 集合> <cpu ticks> <最大 mtime> <wchar 總和>`（集合以逗號串起）。
+# 每輪只 fork 固定幾支（ps、sort、stat）；/proc 檔一律用 read builtin，NEVER 逐 fd fork readlink——
+# 一棵 node 樹動輒上百個 fd。stat 掃全部 fd：pipe／socket 的 mtime 不隨寫入變，唯讀開著的原始碼
+# 被改過只會讓判定更保守（重新起算），不會誤殺。
+_hang_sample() {
+  local root=$1 my_cg=$2 use_wchar=$3 pids p s k v ticks=0 wchar=0 mt=0
+  local -a files=()
+  pids=$(_hang_tree "$root" "$my_cg")
+  for p in $pids; do
+    read -r s <"/proc/$p/stat" 2>/dev/null || continue
+    s=${s##*) }
+    # shellcheck disable=SC2086
+    set -- $s
+    ticks=$((ticks + ${12:-0} + ${13:-0} + ${14:-0} + ${15:-0}))
+    files+=(/proc/"$p"/fd/*)
+    if [ "$use_wchar" = 1 ]; then
+      while read -r k v; do
+        if [ "$k" = wchar: ]; then
+          case "$v" in '' | *[!0-9]*) ;; *) wchar=$((wchar + v)) ;; esac
+          break
+        fi
+      done <"/proc/$p/io" 2>/dev/null
+    fi
+  done
+  [ -n "$OUTPUT_HEARTBEAT" ] && files+=("$OUTPUT_HEARTBEAT")
+  if [ -n "${CLADE_GATE_HANG_WATCH:-}" ]; then
+    local IFS=:
+    # shellcheck disable=SC2206
+    files+=($CLADE_GATE_HANG_WATCH)
+    unset IFS
+  fi
+  if [ "${#files[@]}" -gt 0 ]; then
+    mt=$(stat -L -c '%Y' "${files[@]}" 2>/dev/null | sort -n | tail -n 1)
+    case "$mt" in '' | *[!0-9]*) mt=0 ;; esac
+  fi
+  printf '%s %s %s %s' "$(printf '%s' "$pids" | tr '\n' ',')" "$ticks" "$mt" "$wchar"
+}
+
+# root 在 <grace> 秒內結束（pid 消失或 starttime 變了）回 0。
+_hang_wait_gone() {
+  local i
+  for i in $(seq 1 $(($3 * 5))); do
+    [ "$(_hang_starttime "$1")" = "$2" ] || return 0
+    sleep 0.2
+  done
+  [ "$(_hang_starttime "$1")" = "$2" ] || return 0
+  return 1
+}
+
+_hang_watchdog() {
+  local root=$1 window=$2 interval=$3 grace=$4 my_cg start clk use_wchar=0 fd
+  local prev cur p_set p_ticks p_mt p_wc c_set c_ticks c_mt c_wc quiet_since now dt last pids p alive
+  for fd in 9 $(seq 11 30); do eval "exec $fd>&-" 2>/dev/null; done
+  start=$(_hang_starttime "$root") || return 0
+  my_cg=$(awk -F: '$1 == "0" { print $3 }' "/proc/$BASHPID/cgroup" 2>/dev/null)
+  clk=$(getconf CLK_TCK 2>/dev/null)
+  case "$clk" in '' | *[!0-9]* | 0) clk=100 ;; esac
+  if [ -z "$OUTPUT_HEARTBEAT" ]; then
+    case "$(readlink "/proc/$root/fd/1" 2>/dev/null)$(readlink "/proc/$root/fd/2" 2>/dev/null)" in
+      *pipe:* | *socket:*) use_wchar=1 ;;
+    esac
+  fi
+  prev=$(_hang_sample "$root" "$my_cg" "$use_wchar")
+  last=$(date +%s)
+  quiet_since=$last
+  while sleep "$interval"; do
+    [ "$(_hang_starttime "$root")" = "$start" ] || return 0
+    cur=$(_hang_sample "$root" "$my_cg" "$use_wchar")
+    now=$(date +%s)
+    dt=$((now - last))
+    [ "$dt" -lt 1 ] && dt=1
+    # 取樣間隔遠大於 interval（VM 暫停、時鐘跳變、watchdog 被餓死）：這一段沒人看著，
+    # 不能算進安靜窗，也會把 1% CPU 門檻墊高；視為重新起算。
+    [ "$dt" -gt $((interval * 3)) ] && quiet_since=$now
+    read -r p_set p_ticks p_mt p_wc <<<"$prev"
+    read -r c_set c_ticks c_mt c_wc <<<"$cur"
+    # 1% 門檻：ticks / clk / dt >= 0.01  ⇔  ticks*100 >= clk*dt
+    if [ "$c_set" != "$p_set" ] || [ "$c_mt" != "$p_mt" ] || [ "$c_wc" != "$p_wc" ] ||
+      [ $(((c_ticks - p_ticks) * 100)) -ge $((clk * dt)) ]; then
+      quiet_since=$now
+    fi
+    prev=$cur
+    last=$now
+    if [ $((now - quiet_since)) -ge "$window" ]; then
+      pids=${c_set//,/ }
+      local -A born=()
+      for p in $pids; do born[$p]=$(_hang_starttime "$p"); done
+      {
+        printf '\ngate-slot: 判定卡死，收掉行程樹並放出 slot（key=%s）\n' "$safe_key"
+        printf '  原因：連續 %ss 內 CPU < 1%%、行程集合沒變、輸出（樹內開著的檔／tty、heartbeat、CLADE_GATE_HANG_WATCH%s）沒有更新\n' \
+          "$window" "$([ "$use_wchar" = 1 ] && printf '、pipe 輸出 wchar')"
+        printf '  行程：%s\n' "$pids"
+        printf '  門檻可調：CLADE_GATE_HANG_WINDOW（0 關閉）／CLADE_GATE_HANG_WATCH（要看的 log）\n'
+      } >>"${HANG_REPORT:-/proc/$root/fd/2}" 2>/dev/null
+      # 先 TERM root 以外的後代，root（通常是 timeout(1)）見子行程結束就自己退出。NEVER 先打 root：
+      # uutils timeout 收到 TERM 會轉送給整個 process group，連呼叫端 pipeline
+      # 裡讀輸出的 cat 都一起殺掉，原因訊息也就沒人收。root 寬限內沒退（root 就是 inner command
+      # 本身、或 timeout 沒反應）才 TERM root；再寬限後 SIGKILL 仍活著且 starttime 沒變的。
+      for p in $pids; do [ "$p" = "$root" ] || kill -TERM "$p" 2>/dev/null; done
+      _hang_wait_gone "$root" "$start" "$grace" || {
+        kill -TERM "$root" 2>/dev/null
+        _hang_wait_gone "$root" "$start" "$grace"
+      }
+      for p in $pids; do
+        alive=$(_hang_starttime "$p") || continue
+        [ -n "$alive" ] && [ "$alive" = "${born[$p]}" ] && kill -KILL "$p" 2>/dev/null
+      done
+      return 0
+    fi
+  done
+}
+
+if [ "$HANG_WINDOW" -gt 0 ] && [ -r "/proc/$$/stat" ]; then
+  _hang_root=$$
+  # NEVER 直接 `( _hang_watchdog … & )`：fork 出來的 subshell argv 仍是 `bash gate-slot.sh wait …`，
+  # push 逾時分類器（scripts/lib/push-timeout-phase.ts GATE_SLOT_WAITER）會把它當成「還在排 slot」，
+  # 把 gate 正在跑誤判成 gate-slot-wait。改 exec 一支 argv 不同的 bash。
+  # shellcheck disable=SC2016
+  (
+    safe_key=$safe_key OUTPUT_HEARTBEAT=$OUTPUT_HEARTBEAT HANG_REPORT=$HANG_REPORT \
+      exec -a gate-slot-hang-watchdog bash -c \
+      "$(declare -f _hang_starttime _hang_tree _hang_sample _hang_wait_gone _hang_watchdog)"'
+_hang_watchdog "$@"' gate-slot-hang-watchdog "$_hang_root" "$HANG_WINDOW" "$HANG_INTERVAL" "$HANG_GRACE" &
+  ) </dev/null >/dev/null 2>&1
+fi
 
 if [ "$MAX_RUNTIME" -gt 0 ] && command -v timeout >/dev/null 2>&1; then
   set -- timeout --signal=TERM --kill-after=30 "$MAX_RUNTIME" "$@"

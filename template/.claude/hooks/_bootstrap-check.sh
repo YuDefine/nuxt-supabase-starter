@@ -4,7 +4,6 @@
 # clade — bootstrap-check.sh
 #
 # 由 SessionStart hook 觸發。職責：
-#   0. codebase-memory-mcp auto-index（fire-and-forget，不阻擋）
 #   1. 確認 clade repo 找得到
 #   2. 確認 .clade/manifest.json（或 legacy .claude/hub.json）存在
 #   3. 跑 sync-rules --check 偵測 drift / orphan
@@ -23,56 +22,19 @@ set -u
 
 # 專案根目錄。下面這個變數只有 Claude 端會帶進來；Codex 端沒有對應的 env，會落到
 # fallback。fallback 取 git toplevel 而非 pwd：session cwd 可能是 repo 的子目錄，
-# 用 pwd 會讓 manifest 找不到，也會讓 auto-index 把子目錄當成獨立 project 建 index。
+# 用 pwd 會讓 manifest 找不到。
 PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 STATE_JSON="$PROJECT_ROOT/.claude/.hub-state.json"
 
 # cloud VM（Claude Code cloud session 帶 CLAUDE_CODE_REMOTE，值為 `true`）：repo 是 shallow clone、
 # 沒有 tag、HOME=/root、沒有 ~/offline/clade、沒有其他 worktree。逐段判定（證據在 clade
 # specs/plans/W-2026-10-07-clade-cloud-hook-remote-guard/evidence/）：
-#   保留：0 cbm auto-index（binary 不在就靜默）、0.5 temp 壓力（df 量的是 VM 自己的磁碟）
+#   保留：0.5 temp 壓力（df 量的是 VM 自己的磁碟）
 #   跳過：1.5 publish-status（沒有 tag → 誤報「publish bump 未完成」）、orphan WIP 掃描（掃本機 worktree）
 #   改一行：3 找不到 clade repo——VM 本來就沒有中央倉，原本 exit 1 叫人 clone；投影以 repo 已 commit 的為準
 #   只回報：4 找得到 clade（setup script 自己 clone 的）時照查 drift，但不自動修復——修復會把投影改動夾進 session 的 PR
 IS_CLOUD=0
 case "${CLAUDE_CODE_REMOTE:-}" in '' | 0 | false) ;; *) IS_CLOUD=1 ;; esac
-
-# ─────────────────────────────────────────────────────────
-# 0. codebase-memory-mcp auto-index（fire-and-forget）
-# ─────────────────────────────────────────────────────────
-# 若 binary 存在且當前 repo 尚未 index，背景跑 fast index。
-# Silent skip on any error — 不阻擋 session 啟動。
-#
-# Identity/readiness is shared with explicit indexing and post-commit refresh.
-# Main aliases are reused only when their stored root matches this checkout;
-# worktrees use path-derived IDs. A populated graph does not prove freshness.
-
-maybe_auto_index() {
-  local wrapper="" candidate script_dir
-  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-  for candidate in "$script_dir/scripts/cbm-index.sh" \
-    "$PROJECT_ROOT/vendor/scripts/cbm-index.sh" "$PROJECT_ROOT/scripts/cbm-index.sh" \
-    "$PROJECT_ROOT/.clade/scripts/cbm-index.sh" "$HOME/offline/clade/vendor/scripts/cbm-index.sh"; do
-    if [[ -x "$candidate" && -f "$(dirname "$candidate")/cbm-project.sh" ]]; then
-      wrapper=$candidate
-      break
-    fi
-  done
-  [[ -n "$wrapper" ]] || return 0
-  source "$(dirname "$wrapper")/cbm-project.sh"
-  cbm_resolve_project "$PROJECT_ROOT" || return 0
-  cbm_is_temporary && return 0
-  if [[ "$CBM_NODES" -gt 0 ]]; then
-    printf 'codebase-memory-mcp: project="%s" status=ready nodes=%s (coverage/freshness unverified)\n' "$CBM_PROJECT" "$CBM_NODES"
-    return 0
-  fi
-  command -v codebase-memory-mcp >/dev/null 2>&1 || [[ -x "$HOME/.local/bin/codebase-memory-mcp" ]] || return 0
-  printf 'codebase-memory-mcp: project="%s" status=indexing (fast, background; results not ready yet)\n' "$CBM_PROJECT"
-  nohup "$wrapper" "$CBM_REPO" fast >/dev/null 2>&1 &
-  disown 2>/dev/null || true
-}
-
-maybe_auto_index
 
 # ─────────────────────────────────────────────────────────
 # 0.5 temp 分割區壓力預警（fire-and-forget，不阻擋）

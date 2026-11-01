@@ -31,6 +31,7 @@ import {
   SCOPE_PLACEMENTS,
   TRUTH_FEATURES_PREFIX,
   parseScopeInventory,
+  parseTruthDeltaFile,
   parseWorkKind,
   readPlanDeltas,
   regressionAnchors,
@@ -42,7 +43,16 @@ import {
   type TruthDelta,
   type WorkKind,
 } from './plan-delta.ts'
-import { PLAN_ROOT, TRUTH_ROOT, hashTruth } from './plan-paths.ts'
+import {
+  LEGACY_LIFECYCLE_FILE,
+  LIFECYCLE_FILE,
+  PLAN_ROOT,
+  TRUTH_DELTA_FILE,
+  TRUTH_ROOT,
+  hashTruth,
+  hasLifecycleFrontmatter,
+  resolveLifecycleFile,
+} from './plan-paths.ts'
 import { readGitStatus } from '../lib/git-status-z.ts'
 
 /** 每一條拒絕理由。`code` 穩定、被測試與入口比對；`path` 指到看得見的東西；`detail` 給人。 */
@@ -151,31 +161,37 @@ function planDirOf(root: string, workId: string): string {
 }
 
 function planPathOf(root: string, workId: string): string {
-  return join(planDirOf(root, workId), 'plan.md')
+  return resolveLifecycleFile(root, workId).path
+}
+
+/** lifecycle 檔的 repo-relative 路徑（新格式 `work.md`、legacy `plan.md`）。 */
+function planRelOf(root: string, workId: string): string {
+  return resolveLifecycleFile(root, workId).rel
+}
+
+/**
+ * package 的 truth delta 列：新格式讀 `truth-delta.md`（上游格式，列存在即已套用），
+ * legacy 讀 lifecycle 檔的 `## Truth delta`。gate 端讀 delta 的唯一入口。
+ */
+export function readPackageDeltas(root: string, workId: string): TruthDelta[] {
+  const f = resolveLifecycleFile(root, workId)
+  if (f.shape === 'work') {
+    const p = join(planDirOf(root, workId), TRUTH_DELTA_FILE)
+    return existsSync(p) ? parseTruthDeltaFile(readFileSync(p, 'utf8')) : []
+  }
+  return existsSync(f.path) ? readPlanDeltas(readFileSync(f.path, 'utf8')) : []
 }
 
 /** package 是不是 lifecycle plan：frontmatter 同時有 `work_id:` 與 `truth_baseline:`。 */
 export function isLifecyclePlan(root: string, workId: string): boolean {
-  const p = planPathOf(root, workId)
-  if (!existsSync(p)) return false
-  const text = readFileSync(p, 'utf8')
-  return (
-    readFrontmatterField(text, 'work_id') !== null &&
-    readFrontmatterField(text, 'truth_baseline') !== null
-  )
+  const shape = resolveLifecycleFile(root, workId).shape
+  return shape === 'work' || shape === 'legacy' || shape === 'ambiguous'
 }
 
 // ── Lifecycle layout guard ─────────────────────────────────────────────────
 
 const NNN_PACKAGE_RE = /^\d{3,}-/u
 const LIFECYCLE_CONTRACT = `${TRUTH_ROOT}/work-lifecycle.md`
-
-function hasLifecycleKeys(text: string): boolean {
-  return (
-    readFrontmatterField(text, 'work_id') !== null &&
-    readFrontmatterField(text, 'truth_baseline') !== null
-  )
-}
 
 /**
  * 上游 aixbdd owner 照原文會建 `truth-delta.md`、遞增 `NNN-*` package、覆寫 `plan.md`；clade 只做加法
@@ -194,42 +210,66 @@ function hasLifecycleKeys(text: string): boolean {
  */
 export function checkLifecycleLayout(root: string, workId: string): GateFinding[] {
   const findings: GateFinding[] = []
-  const planRel = `${PLAN_ROOT}/${workId}/plan.md`
-  const planFile = planPathOf(root, workId)
-  if (!existsSync(planFile)) return findings
-  const text = readFileSync(planFile, 'utf8')
-  const lifecycle = hasLifecycleKeys(text)
+  const dirRel = `${PLAN_ROOT}/${workId}`
+  const file = resolveLifecycleFile(root, workId)
+  const workRel = `${dirRel}/${LIFECYCLE_FILE}`
+  const legacyRel = `${dirRel}/${LEGACY_LIFECYCLE_FILE}`
+  const present = existsSync(join(root, workRel)) || existsSync(join(root, legacyRel))
+  if (!present) return findings
 
-  if (lifecycle) {
-    for (const file of walkFiles(planDirOf(root, workId), (n) => n === 'truth-delta.md')) {
+  if (file.shape === 'ambiguous') {
+    findings.push({
+      code: 'ambiguous-lifecycle-file',
+      path: dirRel,
+      detail: `both ${LIFECYCLE_FILE} and ${LEGACY_LIFECYCLE_FILE} carry \`work_id:\` and \`truth_baseline:\`; run \`flow plan migrate ${workId}\` (or delete the stale one) so exactly one is the lifecycle file`,
+    })
+  }
+  if (file.shape === 'legacy') {
+    for (const f of walkFiles(planDirOf(root, workId), (n) => n === TRUTH_DELTA_FILE)) {
       findings.push({
         code: 'lifecycle-truth-delta-file',
-        path: toPosix(relative(root, file)),
-        detail:
-          'a lifecycle package carries its truth delta in plan.md `## Truth delta`, never a truth-delta.md; move the rows there (state `proposed`) and delete the file',
+        path: toPosix(relative(root, f)),
+        detail: `a legacy lifecycle package (${LEGACY_LIFECYCLE_FILE}) carries its truth delta in \`## Truth delta\`, not ${TRUTH_DELTA_FILE}; run \`flow plan migrate ${workId}\` to move to ${LIFECYCLE_FILE} + ${TRUTH_DELTA_FILE}`,
       })
     }
   }
-
-  const firstAdd = gitLines(root, ['log', '--diff-filter=A', '--format=%H', '--', planRel]).at(-1)
-  if (!lifecycle) {
-    const committed = [firstAdd, 'HEAD'].filter(Boolean).map((rev) => {
-      try {
-        return execFileSync('git', ['show', `${rev}:${planRel}`], {
-          cwd: root,
-          encoding: 'utf8',
-          stdio: ['ignore', 'pipe', 'ignore'],
-        })
-      } catch {
-        return ''
-      }
+  if (file.shape === 'work' && !existsSync(join(planDirOf(root, workId), TRUTH_DELTA_FILE))) {
+    findings.push({
+      code: 'truth-delta-file-missing',
+      path: `${dirRel}/${TRUTH_DELTA_FILE}`,
+      detail: `${LIFECYCLE_FILE} packages carry the round's truth delta in ${TRUTH_DELTA_FILE} (every package); \`flow plan migrate\` creates it, \`/specify\` initialises it`,
     })
-    if (committed.some(hasLifecycleKeys)) {
+  }
+
+  const firstAdd = gitLines(root, [
+    'log',
+    '--diff-filter=A',
+    '--format=%H',
+    '--',
+    workRel,
+    legacyRel,
+  ]).at(-1)
+  if (file.shape === 'none') {
+    // 沒有帶兩鍵的 lifecycle 檔：曾經有過＝被上游 owner 覆寫（`work.md` 被改、或 legacy `plan.md` 被 /system-analysis 蓋掉）。
+    const committed = [firstAdd, 'HEAD']
+      .filter(Boolean)
+      .flatMap((rev) => [workRel, legacyRel].map((rel) => [rev, rel]))
+      .map(([rev, rel]) => {
+        try {
+          return execFileSync('git', ['show', `${rev}:${rel}`], {
+            cwd: root,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+          })
+        } catch {
+          return ''
+        }
+      })
+    if (committed.some(hasLifecycleFrontmatter)) {
       findings.push({
         code: 'lifecycle-frontmatter-removed',
-        path: `${planRel}:frontmatter`,
-        detail:
-          'the committed plan.md had `work_id:` and `truth_baseline:` but the working copy lost them; plan.md is a lifecycle file owned by flow — restore its frontmatter, write analysis to system-analysis.md',
+        path: `${file.rel}:frontmatter`,
+        detail: `a committed lifecycle file had \`work_id:\` and \`truth_baseline:\` but the working copy lost them; ${LIFECYCLE_FILE} is owned by flow — restore its frontmatter (upstream /system-analysis writes plan.md, never ${LIFECYCLE_FILE})`,
       })
     }
   }
@@ -262,7 +302,7 @@ export function listPlans(root: string): PlanRef[] {
   if (!existsSync(dir)) return []
   const out: PlanRef[] = []
   for (const name of readdirSync(dir).toSorted()) {
-    const p = join(dir, name, 'plan.md')
+    const p = resolveLifecycleFile(root, name).path
     if (!existsSync(p)) continue
     const text = readFileSync(p, 'utf8')
     const workId = readFrontmatterField(text, 'work_id') ?? name
@@ -677,7 +717,7 @@ export function checkReadiness(
   opts: { runAcceptance?: boolean; timeoutMs?: number } = {},
 ): ReadinessResult {
   const findings: GateFinding[] = []
-  const planRel = `${PLAN_ROOT}/${workId}/plan.md`
+  const planRel = planRelOf(root, workId)
   const planFile = planPathOf(root, workId)
   if (!existsSync(planFile)) {
     return {
@@ -709,12 +749,12 @@ export function checkReadiness(
       detail: `${(error as Error).message}; \`flow plan set-kind\` rewrites it`,
     })
   }
-  const deltas = readPlanDeltas(planText)
+  const deltas = readPackageDeltas(root, workId)
   const anchors = regressionAnchors(deltas)
   const set = requirementSet(kind, anchors)
   findings.push(...kindDeltaMismatches(root, planRel, kind, deltas))
   if (kind === 'acceptance-gap')
-    findings.push(...scopeInventoryFindings(planRel, planText).findings)
+    findings.push(...scopeInventoryFindings(planRel, planText, deltas).findings)
 
   // 1. spec.md（regression 不要求，但有就照查待釐清標記）
   const specRel = `${PLAN_ROOT}/${workId}/spec.md`
@@ -779,7 +819,7 @@ export function checkReadiness(
   } else if (usableAnchors.length === 0) {
     findings.push({
       code: 'regression-anchor-missing',
-      path: `${planRel}#Truth delta`,
+      path: lifecycleDeltaRef(root, workId),
       detail: `${kind ?? 'this'} work needs at least one regression anchor: a delta row \`specs/truth/features/<path>.feature -> Scenario: <title>\` that is NOOP, or ADD and applied${
         anchors.length ? ` (${anchors.map((a) => a.deltaId).join(', ')} still proposed)` : ''
       }`,
@@ -823,7 +863,7 @@ export function checkReadiness(
       findings.push({
         code: 'truth-baseline-stale',
         path: `${planRel}:frontmatter.truth_baseline`,
-        detail: `truth moved (${baseline.slice(0, 8)} → ${current.slice(0, 8)}); re-check the plan against current truth, then \`flow plan apply-delta --recheck\` or rewrite the baseline`,
+        detail: `truth moved (${baseline.slice(0, 8)} → ${current.slice(0, 8)}); re-check the plan against current truth, then ${truthBaselineRemedy(root, workId)}`,
       })
     }
   }
@@ -1157,6 +1197,19 @@ export function checkAcceptanceClose(
  * 要求：盤點表裡本來就正確的行為不會紅，它的先紅後綠由 `checkAcceptanceGapClose` 對 bug 列與 e2e 錨點要求。
  * 判決以 report 的 repo-relative uri ＋ 標題為鍵（FR-017），同檔名不同目錄的 feature 不互相冒用。
  */
+/** truth baseline 過期時的處置指令：新格式用 `rebaseline`，legacy 沿用 `apply-delta --recheck`。 */
+function truthBaselineRemedy(root: string, workId: string): string {
+  return resolveLifecycleFile(root, workId).shape === 'work'
+    ? `\`flow plan rebaseline ${workId}\``
+    : '`flow plan apply-delta --recheck` or rewrite the baseline'
+}
+
+/** 迴歸錨點訊息指向的 delta 載體：新格式 `truth-delta.md`、legacy lifecycle 檔的 `## Truth delta`。 */
+function lifecycleDeltaRef(root: string, workId: string): string {
+  const f = resolveLifecycleFile(root, workId)
+  return f.shape === 'work' ? `${PLAN_ROOT}/${workId}/${TRUTH_DELTA_FILE}` : `${f.rel}#Truth delta`
+}
+
 export function checkRegressionAnchorsClose(
   root: string,
   workId: string,
@@ -1169,7 +1222,7 @@ export function checkRegressionAnchorsClose(
     if (kind !== null && ANCHOR_REQUIRED_KINDS.has(kind)) {
       findings.push({
         code: 'regression-anchor-missing',
-        path: `${planRel}/plan.md#Truth delta`,
+        path: lifecycleDeltaRef(root, workId),
         detail: `${kind} work closes only with a regression anchor: a delta row \`specs/truth/features/<path>.feature -> Scenario: <title>\` (ADD or NOOP)`,
       })
     }
@@ -1243,6 +1296,8 @@ export function checkRegressionAnchorsClose(
 export function scopeInventoryFindings(
   planRel: string,
   planText: string,
+  /** delta 列的來源：`work.md` 沒有 `## Truth delta`，錨點要從 `truth-delta.md` 讀，由呼叫端經 `readPackageDeltas` 帶進來；省略＝從 `planText` 讀（legacy）。 */
+  deltas: TruthDelta[] = readPlanDeltas(planText),
 ): {
   findings: GateFinding[]
   bug: { feature: string; title: string }[]
@@ -1265,7 +1320,7 @@ export function scopeInventoryFindings(
     }
   }
   const findings: GateFinding[] = []
-  const anchors = regressionAnchors(readPlanDeltas(planText))
+  const anchors = regressionAnchors(deltas)
   const bug: { feature: string; title: string }[] = []
   const e2e: { feature: string; title: string }[] = []
   const wanted: Record<string, readonly string[]> = {
@@ -1348,11 +1403,12 @@ export function checkAcceptanceGapClose(
 ): GateFinding[] {
   if (kind !== 'acceptance-gap') return []
   const planRel = `${PLAN_ROOT}/${workId}`
-  const planFile = join(root, planRel, 'plan.md')
-  if (!existsSync(planFile)) return []
+  const lifecycle = resolveLifecycleFile(root, workId)
+  if (!existsSync(lifecycle.path)) return []
   const { findings, bug, e2e } = scopeInventoryFindings(
-    `${planRel}/plan.md`,
-    readFileSync(planFile, 'utf8'),
+    lifecycle.rel,
+    readFileSync(lifecycle.path, 'utf8'),
+    readPackageDeltas(root, workId),
   )
   const { verdicts } = readEvidenceVerdicts(root, planRel)
   const redThenGreen = (s: { feature: string; title: string }) => {
@@ -1376,7 +1432,7 @@ export function checkAcceptanceGapClose(
   if (e2e.length > 0 && !e2e.some(redThenGreen)) {
     findings.push({
       code: 'acceptance-gap-e2e-never-red',
-      path: `${planRel}/plan.md#Scope inventory`,
+      path: `${lifecycle.rel}#Scope inventory`,
       detail: `no e2e row (${e2e.map((s) => `${s.feature} -> ${s.title}`).join('; ')}) has a failed verdict before its latest pass; ${hint}`,
     })
   }
@@ -1392,8 +1448,12 @@ interface IntegritySurface {
 }
 
 function seededContractPath(root: string, workId: string, since: string): string | null {
-  const planRel = `${PLAN_ROOT}/${workId}/plan.md`
-  const baseline = gitLines(root, ['show', `${since}:${planRel}`]).join('\n')
+  const planRel = planRelOf(root, workId)
+  // `--since` 早於 `flow plan migrate` 時，那一刻的 lifecycle 檔還叫 plan.md。
+  const legacyRel = `${planRel.slice(0, planRel.lastIndexOf('/'))}/${LEGACY_LIFECYCLE_FILE}`
+  const baseline =
+    gitLines(root, ['show', `${since}:${planRel}`]).join('\n') ||
+    gitLines(root, ['show', `${since}:${legacyRel}`]).join('\n')
   const current = existsSync(join(root, planRel)) ? readFileSync(join(root, planRel), 'utf8') : ''
   const contractLine =
     /^- Contract: 範圍與驗收以 `(?<path>docs\/contract\/r[1-9]\d*\/presale\.json)`/mu

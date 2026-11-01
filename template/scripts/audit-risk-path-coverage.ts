@@ -41,6 +41,7 @@ import { dirname, join } from 'node:path'
 import { realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { listPlans } from './flow/plan-gates.ts'
+import { LEGACY_LIFECYCLE_FILE, LIFECYCLE_FILE } from './flow/plan-paths.ts'
 
 /**
  * 五類觸發條件，逐條對應規約 § 規約最小要求 的五個 bullet。
@@ -185,7 +186,13 @@ export function auditRepo(cwd: string, baseRef?: string): AuditResult {
 
   const findings: Array<{ change: string; kind: string; detail: string }> = []
   for (const dir of dirs) {
-    const docs = ['system-analysis.md', 'design.md', 'proposal.md', 'plan.md']
+    const docs = [
+      'system-analysis.md',
+      'design.md',
+      'proposal.md',
+      LEGACY_LIFECYCLE_FILE,
+      LIFECYCLE_FILE,
+    ]
       .map((name) => join(dir, name))
       .filter((path) => existsSync(path))
     if (docs.length === 0) {

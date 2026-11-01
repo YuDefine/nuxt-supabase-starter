@@ -167,7 +167,7 @@ export function handoffOpenItems(text: string, activePlanIds: Set<string>): Hand
   return out
 }
 
-/** `specs/plans/<W-id>/plan.md` frontmatter `status:` 非終態者為現役 */
+/** `specs/plans/<W-id>/work.md`（legacy `plan.md`）frontmatter `status:` 非終態者為現役 */
 export const TERMINAL_PLAN_STATUS = new Set(['closed', 'dropped', 'cancelled', 'superseded'])
 
 export function planIsActive(planMd: string): boolean {
@@ -243,7 +243,8 @@ export function collect(root: string, mode: { staged: true } | { against: string
     base = git(root, ['rev-parse', '-q', '--verify', 'HEAD'])?.trim() ?? ''
     changedPaths = zList(git(root, ['diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR']))
     read = (p) => git(root, ['show', `:${p}`])
-    listPlans = () => zList(git(root, ['ls-files', '-z', '--', 'specs/plans/*/plan.md']))
+    listPlans = () =>
+      zList(git(root, ['ls-files', '-z', '--', 'specs/plans/*/work.md', 'specs/plans/*/plan.md']))
   } else {
     base = git(root, ['merge-base', 'HEAD', mode.against])?.trim() ?? ''
     if (!base) throw new Error(`cannot resolve merge-base(HEAD, ${mode.against})`)
@@ -272,7 +273,7 @@ export function collect(root: string, mode: { staged: true } | { against: string
   if (handoffAfter !== null) {
     const activePlanIds = new Set<string>()
     for (const p of listPlans()) {
-      const m = /^specs\/plans\/(W-[^/]+)\/plan\.md$/.exec(p)
+      const m = /^specs\/plans\/(W-[^/]+)\/(?:work|plan)\.md$/.exec(p)
       const body = m ? read(p) : null
       if (m && body !== null && planIsActive(body)) activePlanIds.add(m[1])
     }
@@ -299,7 +300,7 @@ export function formatViolations(violations: Violation[]): string {
     '',
     '  改寫到現行載體（specs/truth/work-lifecycle.md）：',
     '    現行、持續維護的說明 → specs/truth/docs/** 或其他有 owner 的 truth 路徑',
-    '    延續中的工作／待辦   → specs/plans/<work-id>/plan.md § Open work',
+    '    延續中的工作／待辦   → specs/plans/<work-id>/work.md（legacy plan.md）§ Open work',
     '    接受不修的限制       → specs/truth/accepted-limits.md',
     '    舊 TD 的去向         → specs/truth/legacy-ids.json',
     '    HANDOFF.md           → 每個頂層項指向現役 W- plan、沒有未勾項（FR-028）',

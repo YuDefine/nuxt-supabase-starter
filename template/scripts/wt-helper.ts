@@ -991,25 +991,6 @@ function isFormatOnlyDrift(wtPath, filePath) {
 
 const stripTrailingNewlines = (s) => s.replace(/\n+$/, '')
 
-// Fire-and-forget trigger for codebase-memory-mcp `index_repository` (fast mode)
-// against a freshly-created worktree. Per pitfall-consumer-mcp-codebase-memory-missing
-// (2026-05-18, severity high): without auto-index, every new worktree starts
-// as "project not indexed" → search_graph / trace_path / get_code_snippet all
-// fail, downstream implement / debug flows degrade to grep fallback.
-//
-// Design constraints:
-//   - **Silent skip on any error**: mcp binary may be missing (consumer hasn't
-//     run `codebase-memory-mcp install`), CLI may be incompatible, indexing may
-//     fail mid-run. None of these should block worktree creation success.
-//   - **Non-blocking**: spawn detached + unref so the index job runs in the
-//     background and `cmdAdd` returns immediately. A 160 MB binary loading
-//     8 GB mem budget for a fresh repo can take 30 s+; awaiting would defeat
-//     the purpose of a fast worktree fork.
-//   - **Test hook**: WT_HELPER_SKIP_INDEX=1 (set in fixtures.test) disables the
-//     spawn entirely. WT_HELPER_INDEX_BIN overrides the binary path used for the
-//     "is codebase-memory-mcp installed" skip check; the index itself runs through
-//     cbm-index.sh (TD-677, see test/cbm-index-orphan-reclaim.test.ts).
-//
 // Set up git exclude for WORKTREE-BRIEF.md so it never shows as untracked.
 //
 // TD-347: MUST write to the **common** dir (`.git/info/exclude`), not the
@@ -1048,48 +1029,7 @@ function setupBriefExclude(wtPath) {
   }
 }
 
-// Returns a Promise that resolves with `{ skipped, reason? }` once the child
-// is launched (or skip decision is made) — never rejects. Caller can `.catch`
-// defensively but no error path is actually reachable.
-export function maybeIndexRepository(worktreePath) {
-  return new Promise((resolveOuter) => {
-    try {
-      if (process.env.WT_HELPER_SKIP_INDEX === '1') {
-        resolveOuter({ skipped: true, reason: 'WT_HELPER_SKIP_INDEX=1' })
-        return
-      }
-      const binPath =
-        process.env.WT_HELPER_INDEX_BIN ||
-        join(process.env.HOME || '', '.local/bin/codebase-memory-mcp')
-      if (!existsSync(binPath)) {
-        resolveOuter({ skipped: true, reason: `binary missing: ${binPath}` })
-        return
-      }
-      // TD-677: go through the single index entry point (flock + MemoryMax cgroup,
-      // temporary-path skip, orphan-DB reclaim), never the bare CLI — per
-      // pitfall-cbm-auto-index-concurrent-oom. The wrapper indexes a missing DB on
-      // explicit calls, which is exactly what a fresh worktree needs.
-      const [command, args] = worktreeIndexCommand(worktreePath)
-      const child = spawn(command, args, {
-        detached: true,
-        stdio: 'ignore',
-      })
-      child.on('error', () => {
-        /* silent — pitfall says graceful degrade */
-      })
-      child.unref()
-      resolveOuter({ skipped: false })
-    } catch {
-      // Defensive: spawn throw on EACCES / ENOENT race — silent skip.
-      resolveOuter({ skipped: true, reason: 'spawn threw' })
-    }
-  })
-}
-
-export function worktreeIndexCommand(worktreePath: string): [string, string[]] {
-  return ['bash', [join(WT_HELPER_DIR, 'cbm-index.sh'), worktreePath, 'fast']]
-}
-
+// 退場後遺留的舊索引仍在 worktree 移除時順手清掉（best-effort）；新建 worktree 不再自動索引。
 function cleanupCodebaseMemoryIndex(worktreePath) {
   try {
     const dbName = worktreePath.replace(/^\//, '').replace(/\//g, '-')
@@ -4421,14 +4361,6 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   // indistinguishable from a broken task.
   const typeArtifactNote = nuxtTypeArtifactRemediation(wtPath)
   if (typeArtifactNote) console.error(`  deps: ${typeArtifactNote}`)
-
-  // Auto-trigger codebase-memory index_repository (fast mode, detached) so
-  // search_graph / trace_path / get_code_snippet work immediately in the new
-  // worktree. Failures (missing binary, mcp unreachable) are silently swallowed
-  // per pitfall-consumer-mcp-codebase-memory-missing.
-  await maybeIndexRepository(wtPath).catch(() => {
-    // Unreachable — helper never rejects — but defend against future contract drift.
-  })
 }
 
 /** `--baseline-scope-paths` 的逗號清單。 */

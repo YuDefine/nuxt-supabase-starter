@@ -451,15 +451,16 @@ name filter 就判 heavy）、沒有 `--lane`、且沒有一支宣告
 suite 後面，agent 於是繞過閘門直跑——那才是沒有上限的路徑。**NEVER** 為了「定點重跑」直呼
 `node --test` / `vitest` 繞過 `clade-gate`：light lane 就是那條路，而且仍受全機上限。
 
-### 三個 exit code 說的是不同層的話
+### 這幾個 exit code 說的是不同層的話
 
 | code | 誰說的 | 意思 |
 | --- | --- | --- |
-| 75 | `gate-slot.sh`（`BUSY`） | 等不到 slot / `try` 模式取不到。**inner command 從未執行**，不是 gate 失敗 |
-| 124 | `timeout`（holder 端自願上界） | inner command 跑超過 `CLADE_HEAVY_GATE_MAX_RUNTIME`（預設 3600s）被結束 |
+| 75 | `gate-slot.sh`（`BUSY`） | 等不到 slot / `try` 模式取不到，或 `wait` 發現持有鎖的 gate 是自己的祖先（排下去是自己等自己，立刻 75 並印持有者）。**inner command 從未執行**，不是 gate 失敗 |
+| 124 | `timeout`（holder 端自願上界） | inner command 跑超過 `CLADE_HEAVY_GATE_MAX_RUNTIME`（預設 3600s；BDD 另有 lane 分級上界，見下表）被結束 |
 | 130 / 143 | `gate-slot.sh` 的等待期 trap | waiter 在**排隊期間**收到 SIGINT / SIGTERM，inner command 未執行 |
+| 143 / 137（附「判定卡死」原因） | `gate-slot.sh` 卡死偵測 | inner command **已經跑過**，整棵行程樹連續 `CLADE_GATE_HANG_WINDOW` 秒 CPU < 1%、行程集合沒變、輸出沒更新而被收掉。`clade-gate` 會印原因，且不記改善迴圈訊號 |
 
-**不要把這四個讀成品質 gate 失敗**，也不要用調大 timeout、加 `--skip`、改 `--max-old-space-size` 回應（[[pitfall-heavy-gate-exit-75-reads-as-typecheck-failure]]）。
+**不要把這幾個讀成品質 gate 失敗**，也不要用調大 timeout、加 `--skip`、改 `--max-old-space-size` 回應（[[pitfall-heavy-gate-exit-75-reads-as-typecheck-failure]]）。
 
 ### 機器層調參 NEVER 寫死進 script 預設
 
@@ -474,6 +475,9 @@ suite 後面，agent 於是繞過閘門直跑——那才是沒有上限的路�
 | `CLADE_VITEST_MAX_WORKERS` | `2` | **不注入** —— vitest 用滿全部核心 |
 | `CLADE_GATE_WAIT_TIMEOUT` | 預設 | 3600s |
 | `CLADE_HEAVY_GATE_MAX_RUNTIME` | 預設 | 3600s（`0` 關閉） |
+| `CLADE_GATE_HANG_WINDOW` | 預設 | 300s；卡死判定窗（`0` 關閉）。`CLADE_GATE_HANG_INTERVAL`（15s）、`CLADE_GATE_HANG_GRACE`（10s）、`CLADE_GATE_HANG_WATCH`（額外要看的 log，`:` 分隔）同屬這組 |
+| `CLADE_GATE_LANE` | 不設 | `bdd-example`／`bdd-feature`：argv 看不出 BDD 範圍的 script 自己宣告 lane；沒設時 `clade-gate` 依 argv 判定（恰好一個 `x.feature:行` 或單一 feature 搭 `--name` ＝ example，其餘明列 feature ＝ feature） |
+| `CLADE_GATE_BDD_EXAMPLE_MAX_RUNTIME` / `CLADE_GATE_BDD_FEATURE_MAX_RUNTIME` | 預設 | 600s / 1800s；只在沒顯式設 `CLADE_HEAVY_GATE_MAX_RUNTIME` 時生效 |
 
 `CLADE_OXC_THREADS` / `CLADE_VITEST_MAX_WORKERS` 由 `bin/vp` shim 注入，條件：env 是正整數、子命令是 `lint`/`fmt`/`test`、使用者沒自己帶該旗標。
 

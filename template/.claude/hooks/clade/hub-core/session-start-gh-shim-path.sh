@@ -10,6 +10,7 @@
 # 不在（cloud VM、還沒 clone）、CLADE_GH_SHIM=off、或沒有 CLAUDE_ENV_FILE 時靜默跳過（fail-open）。
 set -u
 [ "${CLADE_GH_SHIM:-on}" = off ] && exit 0
+[ -n "${CLADE_GH_SHIM_OFF:-}" ] && exit 0
 [ -n "${CLAUDE_ENV_FILE:-}" ] || exit 0
 shim_dir="${CLADE_GH_SHIM_DIR:-$HOME/offline/clade/vendor/scripts/gh-shim}"
 [ -x "$shim_dir/gh" ] || exit 0

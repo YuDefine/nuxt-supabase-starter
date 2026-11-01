@@ -18,7 +18,12 @@ export interface TruthDelta {
   unit: string
   reason: string
   state: DeltaState
+  /** `flow plan migrate` 從 legacy `applied` 列轉入：當時 owner 已核對過，close gate 不再以字面比對 truth。 */
+  migrated?: boolean
 }
+
+/** migrate 寫進『原因』欄的固定開頭；parser 靠它辨識轉入列。 */
+export const MIGRATED_REASON_PREFIX = 'flow plan migrate 自 legacy'
 
 export const DELTA_ACTIONS: ReadonlySet<DeltaAction> = new Set(['ADD', 'MODIFY', 'DELETE', 'NOOP'])
 export const DELTA_STATES: ReadonlySet<DeltaState> = new Set(['proposed', 'applied', 'withdrawn'])
@@ -59,6 +64,36 @@ export function parseDeltaTable(text: string): TruthDelta[] {
 /** plan.md 全文 → delta 列。gate 端讀 delta 的唯一入口。 */
 export function readPlanDeltas(markdown: string): TruthDelta[] {
   return parseDeltaTable(markdownSection(markdown, 'Truth delta'))
+}
+
+/**
+ * 上游格式 `truth-delta.md`（每個 owner 一節、`動作／Truth 規格／改動摘要／原因` 四欄）→ delta 列。
+ * 沒有 `id`／`state` 欄：列存在即已套用（state 一律 `applied`），id 以出現順序合成 `T<n>`；
+ * 改動摘要若以 `[<id>]` 起頭（migrate 保留的舊 id）就沿用該 id。
+ */
+export function parseTruthDeltaFile(markdown: string): TruthDelta[] {
+  const rows: TruthDelta[] = []
+  for (const line of markdown.split('\n')) {
+    if (!line.startsWith('|')) continue
+    const cells = line
+      .split(/(?<!\\)\|/u)
+      .slice(1, -1)
+      .map((c) => c.trim().replaceAll('\\|', '|'))
+    if (cells.length < 4) continue
+    if (!DELTA_ACTIONS.has(cells[0] as DeltaAction)) continue
+    // 骨架佔位列（`{{…}}`）不是紀錄。
+    if (cells[1].includes('{{')) continue
+    const kept = /^\[(?<id>[^\]]+)\]\s*(?<rest>.*)$/u.exec(cells[2])
+    rows.push({
+      id: kept?.groups?.id ?? `T${rows.length + 1}`,
+      action: cells[0] as DeltaAction,
+      unit: cells[1],
+      reason: kept?.groups?.rest || cells[2] || cells[3],
+      state: 'applied',
+      ...(cells[3].startsWith(MIGRATED_REASON_PREFIX) ? { migrated: true } : {}),
+    })
+  }
+  return rows
 }
 
 // ── 工作種類 ────────────────────────────────────────────────────────────────

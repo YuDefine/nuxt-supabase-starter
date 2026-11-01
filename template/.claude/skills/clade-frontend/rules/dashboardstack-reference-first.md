@@ -13,3 +13,4 @@ fleet 持有 DashboardStack Commercial License：整套 Nuxt admin／CRUD scaffo
 - 同一個畫面也有圖表、KPI 卡、狀態區塊時，那部分照 [[nuxt-charts-paid-first]] 交 `nuxt-charts` skill。
 - **NEVER** 在 PUBLIC repo 寫入參考實作的原始碼或改寫後的程式碼；PUBLIC repo 只照 clade rule 的判準自己寫。
 - 專案沒有 `dashboardstack` skill 投影（`.claude/skills/dashboardstack/` 不存在）時，停下回報「缺 dashboardstack 投影」，不要改用其他 skill 繞過。
+- 授權範圍、價格與 fleet 其他已購資產見付費資產清單 `~/offline/clade/registry/paid-assets.json`（`node ~/offline/clade/vendor/scripts/paid-assets.ts list --stage implementation`）；presale 與 work-route 開 plan 時已先對照過，本 rule 是寫程式當下的最後一道。

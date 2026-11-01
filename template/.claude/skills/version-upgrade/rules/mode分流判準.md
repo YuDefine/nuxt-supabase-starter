@@ -52,7 +52,7 @@ script 的 `PHASES` 與本表同義；改一邊 MUST 同改另一邊與 `test/ve
 | J1 | 「Node 版本」這類同時命中 toolchain／本機／各環境的字眼 | 先照 Rule 2 分辨 | 先照 Rule 2 分辨 |
 | J2 | submodule-tracked 上游（「SpecFormula／aixbdd 上游動了」「specformula pin 落後」「audit-upstream-submodules 報落後」「fork 的 patch」「vendor/specformula」） | `skills` | `clade`（Phase S 的 submodule 段 → `docs/dev-guide.md` § 6.5） |
 | J3 | **skill** 上游／落後／新增（「supabase skill 上游更新了我們有跟嗎」「掃一下 skill 有沒有落後」「starter 的 install-skills.sh」） | `skills` | 原話有 starter／範本 → `clade`；其餘 `fleet` |
-| J4 | **本機裝的東西**落後（「supabase cli 該升了嗎」「codebase-memory-mcp 有新版嗎」「mise 那堆工具掃一下」「全域 npm／claude-code 自己的版本」） | `routine` | `machine` |
+| J4 | **本機裝的東西**落後（「supabase cli 該升了嗎」「gh 有新版嗎」「mise 那堆工具掃一下」「全域 npm／claude-code 自己的版本」） | `routine` | `machine` |
 | J5 | 同一工具在各環境是否同版（「dev／staging／prod 的 supabase CLI 一樣嗎」「fleet 版本對齊了沒」），或 runner／staging／prod 上的版本落後（「runner 上的 supabase cli 幾版」「prod 跑的 node 幾版」） | `toolchain` | `remote` |
 | J6 | package manager／runtime 本身（「升 pnpm」「fleet packageManager 統一」） | `toolchain` | cwd 是 clade home → `fleet`；consumer → `consumer` |
 | J7 | CVE／GHSA／`pnpm audit`／「有安全通報」「漏洞」 | `security` | cwd 是 consumer → `consumer`；clade home 且說「全 fleet」→ `fleet`；說「clade 自己」→ `clade` |

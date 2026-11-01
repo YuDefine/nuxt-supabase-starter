@@ -528,12 +528,13 @@ export function fileRevisedAtMs(repoRoot: string, rel: string): number | null {
 }
 
 /**
- * plan 最後修訂時間：plan.md、spec.md 與 features/ 的最後 commit 時間，工作樹有未提交的改動時
+ * plan 最後修訂時間：lifecycle 檔（plan.md／work.md）、truth-delta.md、spec.md 與 features/ 的最後 commit 時間，工作樹有未提交的改動時
  * 取那些檔的 mtime（取大者）。**刻意排除 `evidence/`**——把 report 提交進 plan 目錄不能讓 plan
  * 自己看起來剛被改過，否則每一份證據一落檔就把自己判成過期。
  */
 export function planRevisedAt(repoRoot: string, planRel: string): string | null {
-  const paths = ['plan.md', 'spec.md', 'features'].map((p) => `${planRel}/${p}`)
+  const files = ['plan.md', 'work.md', 'truth-delta.md', 'spec.md']
+  const paths = [...files, 'features'].map((p) => `${planRel}/${p}`)
   let best = 0
   try {
     const ct = execFileSync('git', ['log', '-1', '--format=%ct', '--', ...paths], {
@@ -548,7 +549,7 @@ export function planRevisedAt(repoRoot: string, planRel: string): string | null 
     }
   } catch {
     for (const file of [
-      ...paths.slice(0, 2).map((p) => join(repoRoot, p)),
+      ...paths.slice(0, files.length).map((p) => join(repoRoot, p)),
       ...walk(join(repoRoot, planRel, 'features'), () => true),
     ]) {
       if (existsSync(file)) best = Math.max(best, statSync(file).mtimeMs)

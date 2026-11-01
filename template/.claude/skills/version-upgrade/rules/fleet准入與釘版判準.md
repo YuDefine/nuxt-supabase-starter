@@ -1,6 +1,6 @@
 # Fleet 准入與釘版判準
 
-觸發點：SKILL.md Step 0.5（進 Phase F；phases/fleet.md Step F.2.3 逐條自查）與動到 consumer `.mcp.json` 的 chrome-devtools-mcp entry 時。
+觸發點：SKILL.md Step 0.5（進 Phase F；phases/fleet.md Step F.2.3 逐條自查；Rule 3 另由 Step F.1.3 在 target 要取 beta／rc 時讀）與動到 consumer `.mcp.json` 的 chrome-devtools-mcp entry 時。
 
 # Rule 1 - Fleet carve-out 准入（SoT）
 
@@ -14,7 +14,7 @@
 - ✅ 每個 consumer 各自開 worktree（per [[wt]] 的 `rules/改tracked檔前先隔離判準.md` Rule 1），不在 main 直接動
 - ✅ 每個 consumer 一個 atomic commit，依該 consumer `registry/consumers.json` 的 `workflow_model` 走（trunk-based 直接 push、pr-merge-based 開 PR）
 - ✅ 一次 sweep 只處理「**一個套件 × 一個 target version**」，不跨多套件 / 多 release 混在同一 sweep
-- ✅ Phase T（pnpm / Node 自身）額外一條：target **MUST 是 SoT 本輪刷新後的共同可達最新版**（`audit-ci-toolchain-parity.ts --refresh-targets`；`latest` dist-tag 以下的穩定版），pre-release tag 一律不進 fleet（toolchain 壞掉是全 consumer 同時無法 build，不像單一套件只影響用到它的地方）
+- ✅ Phase T（pnpm / Node 自身）額外一條：target **MUST 是 SoT 本輪刷新後的共同可達最新版**（`audit-ci-toolchain-parity.ts --refresh-targets`；`latest` dist-tag 以下的穩定版），pre-release tag 一律不進 fleet（toolchain 壞掉是全 consumer 同時無法 build，不像單一套件只影響用到它的地方）；本條只管 Phase T 的 pnpm／Node，`dependencies` 裡的核心 toolchain 套件照 Rule 3
 - ✅ 命中該套件的 consumer 才動；沒命中的 consumer **NEVER** 順便動其他東西
 - ✅ 回退（`rollback.fleet`）以上游 issue／advisory 取代 BC clause：改動只限把該套件釘回指定的好版（與 lockfile），准入依據是那份 issue／advisory 的 URL；其餘條件照上
 
@@ -76,4 +76,35 @@ clade 沒有 fleet MCP entry 的共同來源：`chrome-devtools-mcp` entry 是�
 
 ```text
 "args": ["-y", "chrome-devtools-mcp@latest"]
+```
+
+# Rule 3 - 核心 toolchain 套件追隨 beta／rc（D3）
+
+- Level: `MUST`
+- Charles 拍板（W-2026-10-24-toolchain-rust-consolidation D3，Q3 A）：範圍內的套件，beta／rc 版本不必等 user 指名，依下表自行評估採用。範圍**以外**的套件照舊：target 取 F.1.3 discovery 的穩定版，user 指名 pre-release 時先回報「該版本只掛在 `<tag>`、`latest` 是 `<X>`」並等拍板。
+- 本條只管 Phase F 的 `dependencies`／`devDependencies`；Phase T 的 pnpm／Node 與 `registry/toolchain.json` 的 SoT 工具不在範圍內，仍照 `跨環境版本對齊判準.md` Rule 7 只取穩定版。
+
+| 項目 | 規則 |
+| --- | --- |
+| 範圍 | VoidZero（vite、vite-plus、vitest、rolldown、oxlint、oxfmt、oxc-\*、tsdown、tsrs）、TypeScript 原生版、Vue（vue、@vitejs/plugin-vue、vue-tsc）、Nuxt（nuxt、@nuxt/kit、nitro） |
+| 候選 | `npm view <name> dist-tags --json` 的 `beta`／`rc` tag 且 semver > `latest`（過期 tag 不算），**且**發佈已滿 `minimumReleaseAge`（`npm view <name> time --json` 對 `pnpm config get minimumReleaseAge`，缺省 1440 分鐘）；未滿就等它滿齡，**NEVER** 為了提前採用把它寫進 `minimumReleaseAgeExclude`；`alpha`／`nightly` 不追，除非該套件只有 dev 通道（tsrs）；未發版的 main 不算 |
+| 採用 | 對應量測（typecheck／test／build／dev 冷啟動）A/B 變快或記憶體變少，**且**同一組 gate 綠；沒量或量不出差別就留在穩定版 |
+| 落地順序 | devDependencies 直接 clade → fleet；runtime 套件（vue／nuxt／nitro）先 staging 再 production |
+
+- 採用 pre-release 時 F.1.3 帶 `--version <beta 版號>`；帶 `--version` 時 `dep-fleet-discover.ts` 不套 cutoff，所以發佈滿齡由上表「候選」列在帶之前自己核對。plan 寫明量測數字與 gate 結果；Rule 1 其餘准入條件照舊（一個套件 × 一個 target version、每 consumer 一個 atomic commit）。
+
+## Good Example
+
+- 這個例子是好的，因為套件在範圍內、量測變快且 gate 綠才採用 beta。
+
+```text
+typescript-native 7.1.0-beta：clade typecheck 中位數 9.68 s → 8.14 s、峰值 2.0 GB → 1.5 GB，診斷 0 → 採用，先 clade 再 fleet
+```
+
+## Bad Example
+
+- 這個例子是壞的，因為範圍外的套件沒經拍板就追 rc，或範圍內但沒量測、沒滿發佈冷卻期就採用。
+
+```text
+「@nuxt/ui 有 rc 了比較新」→ 直接當 target；或 vite 8.1.0-beta 沒跑 A/B 就整批 sweep；或昨天才發的 rc 帶 `--version` 繞過 cutoff、再塞進 `minimumReleaseAgeExclude`
 ```

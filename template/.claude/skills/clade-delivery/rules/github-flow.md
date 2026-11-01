@@ -49,7 +49,7 @@ paths:
 | 層 | 事件 | 門檻 | test-lane |
 | --- | --- | --- | --- |
 | 切片 → `integration/<work-id>` | slice owner 開 PR（`--base integration/<work-id>`），完成後轉 ready；coordinator 以 `node scripts/integration-merge.ts --integration <worktree> --slice <branch> --pr <n>` 由 GitHub squash 落地，一個切片一個 commit | 來源 worktree 內跑 canonical check ＋ repo 在 CI 機械檢查裡跑的 typecheck（clade：`pnpm exec vp check` ＋ `node node_modules/tsrs/bin/tsrs -p tsconfig.clade.json --noEmit`，動到 `vendor/scripts` 再加 `node node_modules/tsrs/bin/tsrs -p tsconfig.vendor.json --noEmit`）；該 PR 的 CI 機械檢查全綠（工具會驗） | 不跑 |
-| `integration/<work-id>` 每次 push | 每個切片 PR 落地就是一次 push；同 ref 的舊 run 由 workflow `concurrency` 取消。它那張對 `main` 的 PR 此時是 draft，不跑 test-lane | 無——非阻塞的滾動訊號 | `affected`（base＝這條 branch 上一次綠燈的 push——被 `concurrency` 取消的那幾趟因此一併涵蓋；shard 依選檔比例 1–6）；紅燈的嫌疑範圍＝上一次綠燈之後併入的切片 |
+| `integration/<work-id>` 每次 push | 每個切片 PR 落地就是一次 push；同 ref 的舊 run 由 workflow `concurrency` 取消。它那張對 `main` 的 PR 此時是 draft，不跑 test-lane | 無——非阻塞的滾動訊號 | `affected`（base＝這條 branch 上一次綠燈的 push——被 `concurrency` 取消的那幾趟因此一併涵蓋；shard 依選檔 timings 成本推導 1–6）；紅燈的嫌疑範圍＝上一次綠燈之後併入的切片 |
 | `integration/<work-id>` → `main` | 同一張 PR 轉 ready，走 `batch ready`／seal／`confirm-merged` | 轉 ready **之前** coordinator 在 integration worktree 跑一次 `test:affected`（base＝`origin/main`，經 heavy gate slot），綠了才 `gh pr ready`；之後是完整品質鏈 | 本 PR 的 `affected`（升全量時 full lane 六 shard），在這張 PR 上跑；整件工作只付這一次 |
 
 ### MUST
@@ -102,7 +102,7 @@ PR 只付 affected，`main` 上的紅會比以前多一種來源：affected 沒�
 | 可觀察 predicate | MUST |
 | --- | --- |
 | `main` 最新一趟非取消的 validate push run 紅，或 nightly issue 開著 | coordinator **當輪**處置，二擇一：派修（brief 帶紅檔與嫌疑 PR，修補 PR body 帶 `Fixes-Main: true` 或嫌疑 commit sha）或 `git revert` 嫌疑 PR 的 squash commit。嫌疑範圍＝上一次綠燈的 push（nightly 則是上一趟綠燈 nightly）之後落地的 PR |
-| `main` 紅期間 | merge-queue 的 main 紅凍結生效：只合 `Fixes-Main: true`（或嫌疑 commit sha）的 PR。凍結以「main tip 那個 commit 的 run 紅」判，不看 run 多老——紅 run 留在 tip 上就一直凍，不會過了 24 小時自己解凍讓一般 PR 疊上紅 `main`；tip 的新 push run 還沒跑完時，沿用最近一個 settled run 的結論——最後已知紅就照凍，不會趁空檔放行；但只採信 7 天內、而且 head 還在 main 近 50 commit 鏈上的 run（API 偶爾回舊頁），撿不到這種 run 才判不出、不擋（24 小時截止只是讀不到 tip 時的退路）。所以凍結不會替你收尾，**NEVER** 讓 `main` 紅著過夜等下一輪 |
+| `main` 紅期間（clade：`registry/pr-landing-policy.json` 的 `mainRedAutoRevert` 開時不凍結，改由 watch 開的修復 pane 先跑 `main-red-bisect.ts --apply` 二分元兇並自動 revert，佇列照合；二分放棄（判不出元兇或 revert 失敗）才退回下文的凍結） | merge-queue 的 main 紅凍結生效：只合 `Fixes-Main: true`（或嫌疑 commit sha）的 PR。凍結以「main tip 那個 commit 的 run 紅」判，不看 run 多老——紅 run 留在 tip 上就一直凍，不會過了 24 小時自己解凍讓一般 PR 疊上紅 `main`；tip 的新 push run 還沒跑完時，沿用最近一個 settled run 的結論——最後已知紅就照凍，不會趁空檔放行；但只採信 7 天內、而且 head 還在 main 近 50 commit 鏈上的 run（API 偶爾回舊頁），撿不到這種 run 才判不出、不擋（24 小時截止只是讀不到 tip 時的退路）。所以凍結不會替你收尾，**NEVER** 讓 `main` 紅著過夜等下一輪 |
 
 ### Ready 之後的 push 紀律
 

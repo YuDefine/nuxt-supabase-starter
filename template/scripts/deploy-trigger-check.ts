@@ -998,10 +998,13 @@ function environmentsOf(text: string): (string | null)[] {
 /**
  * GitHub-hosted runner images: fresh VMs with no standing credentials. An explicit list, not a
  * `ubuntu-*` prefix: a self-hosted runner registered as `ubuntu-prod` would match the prefix and
- * still be a persistent host.
+ * still be a persistent host. Also InstaBox's own sized labels (`instabox-small|medium|large`,
+ * docs/golden-paths/ci-job-right-sizing.md): one fresh machine per job, deleted when it ends
+ * (docs/ops/2026-10-30-instabox-capacity-misread.md, lane-capacity.json `instaboxPool`). The
+ * persistent legacy slots carry a bare `instabox` label next to `self-hosted`, which does not match.
  */
 const HOSTED_RUNNER_RE =
-  /^(?:ubuntu-(?:latest|slim|\d{2}\.\d{2})(?:-arm)?|windows-(?:latest|11-arm|\d{4}(?:-vs\d{4})?)|macos-(?:latest|\d{2})(?:-(?:intel|large|xlarge))?)$/
+  /^(?:ubuntu-(?:latest|slim|\d{2}\.\d{2})(?:-arm)?|windows-(?:latest|11-arm|\d{4}(?:-vs\d{4})?)|macos-(?:latest|\d{2})(?:-(?:intel|large|xlarge))?|instabox-(?:small|medium|large))$/
 /** Labels of the ephemeral CI runner pool (docs/golden-paths/self-hosted-ci-runners.md): JIT runners, no standing prod credentials. */
 const CI_POOL_LABELS = new Set(['ci-build', 'gh-runner-lxc'])
 /** Persistent hosts that run the real database/service (`docker exec supabase-db`, `pm2`, `systemctl`). */

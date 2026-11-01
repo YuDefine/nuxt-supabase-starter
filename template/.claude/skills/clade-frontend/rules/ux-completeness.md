@@ -329,7 +329,7 @@ function getBindingIcon(cardType: NfcCardType): string {
 1. **「DB allow ≠ feature ready」**——migration 通過 != 功能可用
 2. **「Tests pass ≠ UX done」**——API test 綠 != 使用者能做事
 3. **「Reuse 反咬」**——「既有頁面有了」不代表「不用改」，branching logic 反而需要更多改動
-4. **「列舉比記憶可靠」**——用 grep / codebase-memory-mcp 找 surface，不要靠記憶
+4. **「列舉比記憶可靠」**——用 `rg` 找 surface，不要靠記憶
 5. **「Journey 比檔案清單強」**——「admin 在 X 做 Y」比「更新 X.vue」更能暴露遺漏
 6. **「Admin 路徑同等重要」**——Kiosk 流程是秀場、admin 管理是舞台，兩者都不能少
 7. **「Completion momentum is a liar」**——感覺完成時離真正完成還差一哩，那一哩通常是 UI

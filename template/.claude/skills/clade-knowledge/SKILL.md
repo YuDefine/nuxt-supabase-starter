@@ -7,7 +7,6 @@ description: "Use for durable documentation, shared knowledge, decisions, onboar
 
 逐條對照你接下來要做的事；條件成立才讀那一份，NEVER 先把整批讀進來。
 
-- READ 若要讀或改 `.mcp.json`、`**/cbm-index.sh`、`**/cbm-health.ts`、`capabilities/core/hooks/session-start-cbm-index-check.sh`、`capabilities/core/hooks/post-bash-cbm-index-refresh.sh`，讀取 `rules/codebase-memory-index.freshness.md`
 - READ 若要讀或改 `docs/**`、`**/docs/**`、`specs/truth/**`，讀取 `rules/consumer-docs-retirement.md`
 - READ 若要讀或改 `.clade/manifest.json`、`.claude/hub.json`、`.claude/consumer-meta.json`、`package.json`、`README.md`、`CLAUDE.md` 等 9 處（全表見 rules/_index.md），讀取 `rules/golden-path-onboarding.md`
 - READ 若要讀或改 `docs/solutions/**`、`docs/decisions/**`、`specs/**`、`tasks/**`，讀取 `rules/knowledge-and-decisions.md`
@@ -21,7 +20,6 @@ description: "Use for durable documentation, shared knowledge, decisions, onboar
 - READ 若要讀或改 `**/*.sql`、`supabase/**`、`server/**`、`app/**`、`packages/**/server/**`、`packages/**/app/**` 等 8 處（全表見 rules/_index.md），讀取 `rules/timezone.md`
 
 ## 本 skill 啟用即讀（尚未宣告觸發點）
-- READ `rules/codebase-memory-index.md`
 - READ `rules/output-hygiene.md`
 
 rule 內文只經本 skill 載入；清單不能代替內文。

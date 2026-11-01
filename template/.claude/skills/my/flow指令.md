@@ -28,7 +28,7 @@ cd ~/offline/clade && FLOW_CLI_CONTRACT=2 node vendor/scripts/flow/flow.ts pendi
 
 - 區段順序：`要我拍板` → `要我驗收` → `要我動手` → `不在本 repo` → `loop 結構性推不動` → `未分類` → `卡住、等人動手` → 最後一行現況量測（當下實跑，例：`clade: dirty 7 / worktree 21　<consumer-id>: stash 3`；全乾淨時是 `全 roster 乾淨：無 dirty、無 worktree、無 stash、無 lock`）。
 - `Qn` 只出現在 `要我拍板` 與 `要我驗收`，編號連續；其餘為 bullet。題目子行可能有 `A./B.` 選項（推薦那條帶「（推薦）」）、`⚠` 警示、`✎` 寫法評語、`→` 動作／步驟、`答案落到：<carrier>`、`可回：X／Y`（僅動手桶）、`span <span_id>`。
-- 每題行首的 `[<repo>]` 就是 `flow answer --repo` 要逐字照抄的值。題來自別台機器時寫成 `[<repo>@<機器>]`：`--repo` 只填 `@` 前面的 repo 名，`flow answer` 會自己對那台落答。
+- 每題行首的 `[<repo>]` 就是 `flow answer --repo` 要逐字照抄的值。題來自別台機器時寫成 `[<repo>@<機器>]`：`--repo` 可以逐字抄 `<repo>@<機器>`（`flow` 去掉 `@<機器>`，並直接對那台機器落答；只填 `@` 前面的 repo 名也行，會先查本機再問 peer）；機器不是 peer 也不是本機、帶 `--local-only`，或和 `--repo-root` 並用時拒絕不寫。只有 `flow answer` 認 `@<機器>`，其他子命令一律當 roster 上找不到。peer 拒絕時 stderr 印 `但該機拒絕（exit N），未落答` 並以非 0 退出——只有 exit 0 且印 `已對該機落答` 才算答完，題仍在 `flow pending` 就是沒落地。
 - 跨機：預設也併入 peer（`~/.config/clade/herdr-peers` 列的機器）的佇列，每台 ssh 並行、逾時 8 秒；`span_id` 去重、本機優先；`--json` 多帶 `peers: [{ machine, ok, error?, count }]`，每列帶 `machine`。**讀不到的 peer 會在輸出最上面印 `⚠ 讀不到 peer <機器>：<原因>`**——那代表那台的題這次看不到，不是那台沒有題；整體為空但有 peer 讀不到時 exit 6（不是 4）。
 - 帶 `⏳ 疑似過時：<證據>` 子行的題排在同一區段最後：watch 的過時掃描判它前提可能已消失、但信心不到代寫掉（問 Charles 的題、題目內文才提到的 PR、有來源檔等）。多半不用答；查證屬實就照子行給的 `flow dismiss` 寫掉——子行那行指令沒帶 `--apply`，照抄時 MUST 補上（見 § dismiss）。被機器自動下架的題 `dismissed_by` 是 `stale-sweep`，reason 以「前提已不存在（<規則>）」起頭。
 - 閒置 ≥72h 又沒有近期重驗紀錄的題**不會出現在這份清單**，只在結尾印一行 `⏸ 另有 N 題閒置 …，未列出`（`--json` 在 `recheck_due`）。那是主持者的工作：`flow recheck` 列清單、逐題查現況後 `flow recheck <span> --conclusion still-needed|obsolete|premise-changed --source … --evidence … --actor …`；仍需拍板才放行，過時就寫掉附證據，前提改變就改題。判準見 coordinator skill 的 `rules/向Charles提問判準.md` Rule 5。/my 的 agent NEVER 為了讓題目出現而自己記一筆 `still-needed`——重驗要查過現況才算。
@@ -138,7 +138,7 @@ cd ~/offline/clade && node vendor/scripts/flow/flow.ts answer '<span_id>' \
 | --- | --- | --- |
 | `<span_id>` | 必填（positional） | `flow pending` 該題的 `span` 行 |
 | `--answer '<text>'` | 必填 | 選項題寫 `<字母>. <短標籤>`；驗收寫 `通過` 或 `退回：<理由>`；給值或自由回覆照原文 |
-| `--repo <name>` | 題目有 `[<repo>]` 前綴時必填 | 佇列上的 repo **名稱**，由 `resolveRepoRootByName` 解析；NEVER 填路徑。名稱不在 roster 上時印 `roster 上找不到 repo「<name>」——不寫入…` 並 exit 1 |
+| `--repo <name>` | 題目有 `[<repo>]` 前綴時必填 | 佇列上的 repo **名稱**（可帶 `@<機器>`，如 `clade@zenbook`），由 `resolveRepoRootByName` 解析；NEVER 填路徑。名稱不在 roster 上時印 `roster 上找不到 repo「<name>」——不寫入…` 並 exit 1 |
 | `--repo-root <path>` | 只有 repo 不在 registry 上時 | 直接指那個 checkout；span 必須在它的 spine 上（判準見 `rules/回答落檔判準.md` Rule 2） |
 | `--close-td` | 選項沒標「TD 結案」、但 Charles 明說要關那條 TD 時 | 補上關 TD 的來源；答案文字仍要過終局檢查才關（判準見 `rules/回答落檔判準.md` Rule 10） |
 | `--via <text>` | 選填 | 決策紀錄的來源說明，預設 `Charles 在 chat 回答，由主線代填` |

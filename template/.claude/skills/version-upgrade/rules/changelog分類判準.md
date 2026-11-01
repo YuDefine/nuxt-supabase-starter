@@ -53,7 +53,7 @@
 
 **解析守則**：
 
-- `category` 必填，五選一，不確定用 `signature`；Phase T 另有 `toolchain-config`（`affected_apis` 填設定 key 名，如 `onlyBuiltDependencies`，交給 Step T.3 比對，**NEVER** 送 codebase-memory-mcp）
+- `category` 必填，五選一，不確定用 `signature`；Phase T 另有 `toolchain-config`（`affected_apis` 填設定 key 名，如 `onlyBuiltDependencies`，交給 Step T.3 比對，**NEVER** 送 callsite 掃描）
 - `affected_apis` 必須是可搜尋符號；`before` / `after` **MUST** 是可貼上的 code snippet
 - 沒有 BC → `breaking_changes: []`，走 Step F.4.5 無 BC fast path
 

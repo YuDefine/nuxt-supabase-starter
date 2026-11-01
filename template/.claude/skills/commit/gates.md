@@ -545,7 +545,7 @@ Fast-path 不填未執行的 reviewer；`escalated` 的 `--reviewer` 記實際�
 
 **未完成的 gate 不產生通過匯合行，也不進 commit。** Reviewer 不可用、配額不足、缺隔離／身份／完整輸出都不能以主線自審或其他模型補位。發現自己正用「另一個 fresh agent」代替合格 reviewer、或用啟動成功代替完成，就是回上表補證據的時刻。
 
-Heavy gate 的 `exit 75` 代表 `gate-slot.sh` 拿不到 slot、inner command 沒跑：`try` 模式（post-edit hook）取不到 repo lock 或 slot 就**立刻** 75；`wait` 模式（pre-push、手動 typecheck）等滿 `CLADE_GATE_WAIT_TIMEOUT`（預設 3600s，值非數字時退回 1800s；以 `gate-slot.sh` 的 `WAIT_TIMEOUT=` 那行為準，檔頭註解的 1800 已過時）才 75。兩者都不是 typecheck／OOM 的證據，不能用增大 heap 或等待參數修錯層。依序查：
+Heavy gate 的 `exit 75` 代表 `gate-slot.sh` 拿不到 slot、inner command 沒跑：`try` 模式（post-edit hook）取不到 repo lock 或 slot 就**立刻** 75；`wait` 模式（pre-push、手動 typecheck）等滿 `CLADE_GATE_WAIT_TIMEOUT`（預設 3600s，值非數字時退回 1800s；以 `gate-slot.sh` 的 `WAIT_TIMEOUT=` 那行為準，檔頭註解的 1800 已過時）才 75——唯一例外：持有鎖的 gate 是本行程的祖先（巢狀 gate 等自己的外層），排下去等不到，立刻 75 並印持有者。同一棵 worktree 的兄弟 gate 不算，照常排隊。卡死的 holder 由 `gate-slot.sh` 的卡死偵測（`CLADE_GATE_HANG_WINDOW`，預設 300s）自己收掉、放出 slot，不必等滿上界。兩者都不是 typecheck／OOM 的證據，不能用增大 heap 或等待參數修錯層。依序查：
 
 1. `pnpm typecheck 2>&1 | grep -c "error TS"` 非 0 才是真型別錯
 2. `bash scripts/gate-slot.sh status`（clade home 是 `vendor/scripts/gate-slot.sh`）找 holder——它用持鎖時同一套 lock 目錄解析（`CLADE_GATE_LOCK_DIR` → `$XDG_RUNTIME_DIR` → `/run/user/<uid>` → `/tmp`），逐行印 `pid`／`etime`。**NEVER** 自己拼 `${XDG_RUNTIME_DIR:-/tmp}` 去 `fuser`：service／daemon 情境沒有 XDG，那個路徑會落在 slot 實際不在的 `/tmp`，被讀成「沒有 holder」

@@ -44,11 +44,7 @@ npm outdated -g --depth=0
 
 ### M.1.3 手裝 binary（`~/.local/bin`）
 
-沒有 registry，只能逐支列。現行清單與上游：
-
-| binary | 現版查法 | 上游 | 升級路徑 |
-| --- | --- | --- | --- |
-| `codebase-memory-mcp` | `codebase-memory-mcp --version` | — | **有 self-update**：`codebase-memory-mcp update` |
+沒有 registry，只能逐支列。現行清單與上游：目前沒有需要追蹤的手裝 binary。
 
 加一支進表 **MUST** 先查證上游（`strings <binary> | grep github.com`、`--help` footer），**NEVER** 憑套件名猜 GitHub org。
 
@@ -102,7 +98,6 @@ mise 升 node 建新的 install 目錄，全域 npm 套件（掛在 `~/.local/sh
 | mise 浮動 pin | `mise upgrade <tool>` |
 | mise exact-pinned | 改 `~/.config/mise/config.toml` 的版號 → `mise install <tool>` → `mise use <tool>@<ver>` |
 | 全域 npm | `npm i -g <pkg>@<ver>` |
-| `codebase-memory-mcp` | `codebase-memory-mcp update` |
 
 `~/.config/mise/config.toml` 不在 git 裡，改之前 **MUST** 備份到帶隨機段的路徑：
 
@@ -120,7 +115,6 @@ cp ~/.config/mise/config.toml "$(mktemp -t mise-config-before.XXXXXX)"
 | --- | --- |
 | `vp` | `cd ~/offline/clade && vp check`（要看到它真的跑完，不是印 usage） |
 | `supabase` | `supabase --version && supabase projects list`（或任一需要 CLI 邏輯的子指令） |
-| `codebase-memory-mcp` | `codebase-memory-mcp cli list_projects`（走一次真的 tool 呼叫）。**NEVER 用 `index_status`**——它 MUST 帶 `project` 參數，不帶會回 `missing required argument`，那個錯誤與「升壞了」同形 |
 | `gh` | `gh auth status` |
 | `node` | `node -e 'console.log(1+1)'` ＋ **M.1.2 全域清單對帳** |
 | agent runtime（claude-code / pi） | 起一次最小 session 並看到它回應 |

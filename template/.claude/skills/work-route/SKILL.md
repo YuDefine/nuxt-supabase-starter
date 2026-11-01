@@ -46,7 +46,8 @@ T1 判法：env `CLADE_DISPATCH_ID` 非空（coordinator 派出的 child），�
 2. THINK 先讀取 `rules/工作種類與必要產物.md`，決定續跑或以 `flow plan open --kind <值>` 鑄 `W-…`；manifest 宣告 aixbdd／specformula 卻缺 `work-lifecycle.md` 時，讀取 `clade-onboard` skill 的 `rules/交棒前truth-root處置判準.md` 處置，不降級改鑄 `NNN-<slug>`。
 3. THINK 鑄新 work id 之前先讀取 `rules/鑄workid前Notion詢問判準.md`，DELEGATE `notion-hub.ts resolve` 後依第一個成立的列決定問不問、怎麼開票。
 4. THINK 若 project constitution 缺失或本次要調整，先讀取 `rules/constitution觸發判準.md`，再載入 `rules/.constitution/SKILL.md` 做最小增量。
-5. WRITE 本次有確認版訪談交棒摘要時：免 package → 摘要不落檔，未決題回報使用者；只有「bug 且出錯的是沒有 I/O 的純邏輯」列把驗收例子逐條寫成迴歸 unit test 案例，其他免 package 列不另寫測試；續跑既有 package → 只把新決策追加進 § Decisions；新開 package → step 2 鑄 id 時就帶摘要：先把確認版摘要存成檔（repo 內已被 gitignore 的路徑，未決題已解的列先刪掉），跑 `flow plan open <slug> --from-summary <摘要檔> --kind <值>`，它在建 package 之前驗節名與佔位，並依下表寫入 `plan.md`（被拒就修摘要再跑，**NEVER** 退回手搬；已用不帶 `--from-summary` 的指令鑄了 id 才照下表手搬），T2 結論另追加進 § Decisions：
+5. THINK 新開 package 或續跑的 package 範圍有變時，跑 `node ~/offline/clade/vendor/scripts/paid-assets.ts list --stage implementation`（fleet 付費資產清單，`~/offline/clade/registry/paid-assets.json`），逐筆對照本次範圍的 `use_when`：命中就在 `plan.md` § Decisions 寫「以 <id> 為底，實作時照 skill <名>」，命中卻不套用就寫理由；**NEVER** 只等寫程式時 `paths:` rule 才想起已購資產。指令不存在（本機沒有 clade checkout）時在 § Decisions 記一句「付費資產清單讀不到」再續行。
+6. WRITE 本次有確認版訪談交棒摘要時：免 package → 摘要不落檔，未決題回報使用者；只有「bug 且出錯的是沒有 I/O 的純邏輯」列把驗收例子逐條寫成迴歸 unit test 案例，其他免 package 列不另寫測試；續跑既有 package → 只把新決策追加進 § Decisions；新開 package → step 2 鑄 id 時就帶摘要：先把確認版摘要存成檔（repo 內已被 gitignore 的路徑，未決題已解的列先刪掉），跑 `flow plan open <slug> --from-summary <摘要檔> --kind <值>`，它在建 package 之前驗節名與佔位，並依下表寫入 `plan.md`（被拒就修摘要再跑，**NEVER** 退回手搬；已用不帶 `--from-summary` 的指令鑄了 id 才照下表手搬），T2 結論另追加進 § Decisions：
 
 | 摘要節 | 落點 |
 | --- | --- |

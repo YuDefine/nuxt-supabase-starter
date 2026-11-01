@@ -18,9 +18,9 @@ paths:
 
 evlog 採用治理（**寫入側**）見 [[evlog-adoption]] / [[logging]] / [[evlog-stream-extend]]；canonical audit 模型見 `docs/d-pattern-master-plan.md`。本 rule 是**消費側**對應：prod / staging runtime 出問題時，怎麼用已寫入的 evlog wide event 查 root cause。
 
-**觸發**：訊息描述的是 prod / staging 的 **runtime 症狀**（壞了、5xx、Toast error、變慢、間歇、特定 user 異常）而不是「改 code / 加 feature」時，第一個證據動作 **MUST** 是查 evlog wide event，先於 grep code / codebase-memory-mcp / 派 Explore。本 rule 是它的完整協定。
+**觸發**：訊息描述的是 prod / staging 的 **runtime 症狀**（壞了、5xx、Toast error、變慢、間歇、特定 user 異常）而不是「改 code / 加 feature」時，第一個證據動作 **MUST** 是查 evlog wide event，先於 grep code / 派 Explore。本 rule 是它的完整協定。
 
-agent 的預設反射是 code-first（grep / codebase-memory-mcp），對 runtime 症狀方向是反的；evlog wide event 是實際發生了什麼的 ground truth，常直接推翻 code 推測。
+agent 的預設反射是 code-first（grep），對 runtime 症狀方向是反的；evlog wide event 是實際發生了什麼的 ground truth，常直接推翻 code 推測。
 
 ## Step 0：先問這是不是自己人做的（症狀是「環境變了」時 MUST 先跑）
 
@@ -39,7 +39,7 @@ agent 的預設反射是 code-first（grep / codebase-memory-mcp），對 runtim
 1. **界定查詢軸**：把症狀對應到可查詢的維度 —— `request.id` / `trace.id` / `user.id` / `path` / `status` / 時間窗 / `error.code` / `duration_ms`。
 2. **撈 evlog wide event**：用對應 backend 的 query（見 cookbook）拿**實際執行事實** —— 哪些 request、status 分布、慢在哪、`error_json` 內容、是否真的「全部失敗」還是局部。
 3. **用事實 narrow 假設**：拿 evlog 證據縮小可能原因，**主動準備推翻初始直覺**（「全部失敗」常常 evlog 一查就破）。
-4. **才回 code 對因**：帶著「實際發生什麼」回 code 找「為什麼會這樣」，這時 codebase-memory-mcp / grep 才用對地方。
+4. **才回 code 對因**：帶著「實際發生什麼」回 code 找「為什麼會這樣」，這時 grep 才用對地方。
 
 **NEVER**：
 

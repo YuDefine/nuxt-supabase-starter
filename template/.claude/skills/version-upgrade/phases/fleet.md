@@ -33,6 +33,8 @@ node vendor/scripts/dep-fleet-discover.ts --pkg "<pkg>" [--version <ver>]
 
 沒帶版號就是要 latest，直接 discovery，**NEVER** 反問 target 版本。
 
+套件在 `rules/fleet准入與釘版判準.md` Rule 3 的範圍內、而 `beta`／`rc` tag 比 `latest` 新時，READ 讀取該 Rule 3，照它的採用條件決定 target 要不要取 pre-release（取就帶 `--version`）。
+
 **MUST** 在進入 Step F.2 之前把以下五個值都拍板：`<pkg>` / `<target_version>` / `<release_url>` / `<pkg-slug>`（檔名安全字串，例：`@nuxt/ui` → `nuxt-ui`） / 觸發語境（user 原話）。
 
 ## Step F.2 — Fetch + 解析 changelog
@@ -74,7 +76,7 @@ READ 若要寫解析守則以外的欄位或判 BC category，讀取 `rules/chan
 
 ### F.2.3 Carve-out 條件自查
 
-**MUST** 逐條自查 `rules/fleet准入與釘版判準.md` Rule 1（Fleet carve-out 准入 SoT），另加一條：
+**MUST** 逐條自查 `rules/fleet准入與釘版判準.md` Rule 1（Fleet carve-out 准入 SoT）；target 是 pre-release 時另查 Rule 3。另加一條：
 
 - ✅ 若 sweep 會重寫 hit consumer `package.json` 的 `test` / `lint` / `typecheck` script（換工具 / 改命令）：原本有 `.clade/bin/clade-gate run <gate> --` 前綴的，**MUST** 只換 `--` 後面的內層命令、保留前綴（per [[test-scripts]] § MUST：重寫已包 clade-gate 的 script 時保留前綴）。主線在 land 前 `git -C <consumer-path> show <commit_sha> -- package.json` 抽查前綴沒被整行覆蓋
 
@@ -124,24 +126,23 @@ Phase T 的 `version_gap: "absent"`（沒寫 `packageManager`）是要修的 fin
 
 - **≥ 1** → Step F.4。
 
-## Step F.4 — Callsite 預掃（codebase-memory-mcp）
+## Step F.4 — Callsite 預掃（rg）
 
 > Phase T 跳過本步，改跑 Step T.3。
 
-### F.4.1 確認 consumer 已 indexed
+### F.4.1 確認 consumer 路徑
 
-`<project>` 是 codebase-memory-mcp 的 project name（絕對路徑去開頭 `/`、其餘 `/` 換 `-`，前綴隨平台而異）。**MUST** 用 `list_projects()` 依 `root_path` 實查，**NEVER** 憑前綴猜。`index_status(project="<project>")` 未 index 就 `index_repository(repo_path=<consumer_path>, mode="fast")`。
+`<consumer_path>` 取自 F.2 的 consumer 清單，確認目錄存在即可，不需任何索引。
 
 ### F.4.2 搜 callsite
 
-對每個 `<symbol>` 跑（**project 用 normalize 後形式**）：
+對每個 `<symbol>` 跑：
 
 ```
-mcp__codebase-memory-mcp__search_graph(name_pattern=<symbol>, project="<project>", path_filter="^(app|server|components|composables|utils|pages|layouts)/")
-mcp__codebase-memory-mcp__search_code(pattern=<symbol>, project="<project>", path_filter="\\.(vue|ts|tsx|js)$")
+rg -n "<symbol>" --glob '*.{vue,ts,tsx,js}' <consumer_path>/{app,server,components,composables,utils,pages,layouts}
 ```
 
-docs-only 命中（`.agents/skills/**`、`docs/`、`README.md`）不進 code mod 範圍。MCP 沒找到就 `rg -n "<symbol>" --type vue --type ts <consumer_path>` 一次。callsite 0 的 BC 不刪，prompt 標「callsites: 0（請 pi 自行 grep 確認）」。
+docs-only 命中（`.agents/skills/**`、`docs/`、`README.md`）不進 code mod 範圍。callsite 0 的 BC 不刪，prompt 標「callsites: 0（請 pi 自行 grep 確認）」。
 
 ### F.4.3 寫 per-consumer brief 到 `/tmp/dep-fleet-brief-<pkg-slug>-<consumer-id>.json`
 

@@ -20,7 +20,7 @@ paths: ['scripts/audit-reference-query-oracle.ts', 'test/fixtures/reference-orac
 
 ## MUST 11 · 分頁
 
-**分頁是本條的另一種形態，而它不長得像 negative search**：工具回的是一份看起來完整的清單。例：`list_projects` 預設 `limit: 50` 而 `has_more: true`，拿第一頁判定「CBM 沒有索引這個 project」是假陰性，與「從未索引」輸出完全同形。每一個回 `has_more` / `nextCursor` / `truncated` 的工具，**MUST** 翻完分頁、或改用針對單一對象的查詢入口（該例的正解是 `index_status --project <name>`，不是掃清單）。**NEVER** 把第一頁當全集。（機制與實錄見 [[pitfall-nuxt-autoimport-callers-have-zero-in-degree]]）
+**分頁是本條的另一種形態，而它不長得像 negative search**：工具回的是一份看起來完整的清單。例：某個 list 工具預設 `limit: 50` 而 `has_more: true`，拿第一頁判定「清單裡沒有這個 project」是假陰性，與「從未存在」輸出完全同形。每一個回 `has_more` / `nextCursor` / `truncated` 的工具，**MUST** 翻完分頁、或改用針對單一對象的查詢入口（該例的正解是用 project 名直接查單一對象，不是掃清單）。**NEVER** 把第一頁當全集。（機制與實錄見 [[pitfall-nuxt-autoimport-callers-have-zero-in-degree]]）
 
 ## exit code／fatal 的原始 receipt
 

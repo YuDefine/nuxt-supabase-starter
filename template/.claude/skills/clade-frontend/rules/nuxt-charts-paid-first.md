@@ -13,3 +13,4 @@ fleet 持有 Nuxt Charts Commercial License（All Access）：nuxtcharts.com 的
 - 例外：畫面裡**不畫圖**（定價表、帳號頁、onboarding、檔案上傳、純 KPI 卡片等）且專案還沒裝 `nuxt-charts` 時，只照 Phase 2 從鏡像查 block 與 template 當版面底稿，**NEVER** 為此安裝 `nuxt-charts` 套件；要畫圖才照 Phase 1 裝 v3。
 - **NEVER** 只讀 nuxtcharts.com 的公開 docs 就手刻這類 UI；自組只在 `nuxt-charts` skill 判定「沒有合用的」之後，並照該 skill 寫來源註記。
 - 專案沒有 `nuxt-charts` skill 投影（`.claude/skills/nuxt-charts/` 不存在）時，停下回報「缺 nuxt-charts 投影」，不要改用其他 skill 繞過。
+- 授權範圍、價格與 fleet 其他已購資產見付費資產清單 `~/offline/clade/registry/paid-assets.json`（`node ~/offline/clade/vendor/scripts/paid-assets.ts list --stage implementation`）；presale 與 work-route 開 plan 時已先對照過，本 rule 是寫程式當下的最後一道。
