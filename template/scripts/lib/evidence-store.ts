@@ -3,8 +3,12 @@
 /**
  * evidence-store — sidecar-first evidence resolver for manual-review annotations.
  *
- * Evidence lives in `docs/evidence/<change>.jsonl` (append-only, one JSON
- * object per line). Same-itemId records: last-write-wins on read.
+ * Evidence lives in `specs/evidence/<change>.jsonl` in a lifecycle repo (root has
+ * `specs/truth/work-lifecycle.md`; consumers may not keep `docs/`) and in
+ * `docs/evidence/<change>.jsonl` in an unmigrated consumer or the clade home —
+ * same split as the security-scan ledger (`scripts/lib/security-ledger-path.ts`).
+ * Append-only, one JSON object per line. Same-itemId records: last-write-wins on read.
+ * A lifecycle repo still reads its pre-migration `docs/evidence/` sidecar, never writes it.
  * Reads also merge the retired `.spectra/evidence/<change>.jsonl` so receipts
  * written before the 2026-10 openspec purge stay visible; writes never go
  * back there (`.spectra/` is not gitignored in repos onboarded after the
@@ -115,13 +119,40 @@ interface EvidenceCliValues {
 //   raw?:        string  — original inline annotation text (for migration)
 // }
 
+const LIFECYCLE_MARKER = join('specs', 'truth', 'work-lifecycle.md')
+const CLADE_MARKER = join('registry', 'consumers.json')
+
 /**
- * Resolve the sidecar file path for a change (write target and primary read).
+ * Lifecycle repo = root has `specs/truth/work-lifecycle.md` and is not the clade home
+ * (`registry/consumers.json`, which keeps its own `docs/`). Judged by the target repo's own
+ * markers, never by where this file lives.
+ * @param {string} repoRoot
+ * @returns {boolean}
+ */
+export function isLifecycleRepo(repoRoot) {
+  return !existsSync(join(repoRoot, CLADE_MARKER)) && existsSync(join(repoRoot, LIFECYCLE_MARKER))
+}
+
+/**
+ * Resolve the sidecar file path for a change (write target and primary read):
+ * lifecycle repo → `specs/evidence/`, otherwise `docs/evidence/`.
  * @param {string} repoRoot
  * @param {string} changeName
  * @returns {string}
  */
 export function sidecarPath(repoRoot, changeName) {
+  const dir = isLifecycleRepo(repoRoot) ? 'specs' : 'docs'
+  return join(repoRoot, dir, 'evidence', `${assertSafeChangeName(changeName)}.jsonl`)
+}
+
+/**
+ * Unmigrated-consumer location. In a lifecycle repo it is read-only: receipts written
+ * before the repo migrated stay visible until `git mv` moves them.
+ * @param {string} repoRoot
+ * @param {string} changeName
+ * @returns {string}
+ */
+export function unmigratedSidecarPath(repoRoot, changeName) {
   return join(repoRoot, 'docs', 'evidence', `${assertSafeChangeName(changeName)}.jsonl`)
 }
 
@@ -138,7 +169,7 @@ export function legacySidecarPath(repoRoot, changeName) {
 
 /**
  * Change names are slugs. Reject anything that could escape
- * `docs/evidence/` — `--write` appends to whatever path this resolves to,
+ * the evidence directory — `--write` appends to whatever path this resolves to,
  * so an unvalidated `../` would create or grow JSONL files outside the
  * intended directory.
  * @param {string} changeName
@@ -157,9 +188,10 @@ export function assertSafeChangeName(changeName) {
 }
 
 /**
- * Read all evidence records for a change: legacy `.spectra/evidence/` sidecar
- * merged with the current `docs/evidence/` sidecar (new-path records appended
- * last, so they win downstream last-write-wins dedup). Returns [] if neither
+ * Read all evidence records for a change: legacy `.spectra/evidence/` sidecar,
+ * then (lifecycle repo only) the pre-migration `docs/evidence/` sidecar, then the
+ * current sidecar (`sidecarPath`) — newest location last, so it wins downstream
+ * last-write-wins dedup. Returns [] if neither
  * file exists.
  * @param {string} repoRoot
  * @param {string} changeName
@@ -191,9 +223,12 @@ export function readSidecar(repoRoot, changeName) {
   }
   // Legacy first so same-key records from the new path win on downstream
   // last-write-wins dedup.
+  const current = sidecarPath(repoRoot, changeName)
+  const unmigrated = unmigratedSidecarPath(repoRoot, changeName)
   return [
     ...readOne(legacySidecarPath(repoRoot, changeName)),
-    ...readOne(sidecarPath(repoRoot, changeName)),
+    ...(unmigrated === current ? [] : readOne(unmigrated)),
+    ...readOne(current),
   ]
 }
 

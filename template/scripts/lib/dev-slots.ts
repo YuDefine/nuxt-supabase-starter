@@ -54,7 +54,10 @@ export function maxResidentVerdict(input: {
   max: number
 }): MaxResidentVerdict {
   const holders = input.slots.filter(
-    (s) => s.owner === 'agent' && s.consumerId === input.consumerId && s.port !== input.selfPort,
+    (s) =>
+      s.owner === 'agent' &&
+      s.consumerId === input.consumerId &&
+      (input.selfPort === null || !s.ports.includes(input.selfPort)),
   )
   return { full: holders.length >= input.max, max: input.max, holders }
 }
@@ -172,6 +175,10 @@ export interface SlotLease {
 export interface DevSlot {
   /** dev server 根進程。 */
   pid: number
+  /** 根進程＋後代的所有 pid（閒置判定取樣 CPU 時間用）。 */
+  pids: readonly number[]
+  /** 這支 server 在聽的所有 port（閒置判定數 ESTABLISHED 連線用）。 */
+  ports: readonly number[]
   port: number
   cwd: string | null
   /** 根進程＋後代的 Pss 合計（KiB）。 */
@@ -185,7 +192,7 @@ export interface DevSlot {
   leaseState: string | null
   /** agent 租約剩餘 ms（可為負＝已過期）；人類／unleased 為 null。 */
   ttlRemainingMs: number | null
-  /** lease 的 `lastActiveAt`（I3 才會寫入）；沒有就 null。 */
+  /** 最近一次觀察到活動的時刻（ISO8601）；`applyIdleStates` 由 sweep 寫的狀態檔補上，沒有就 null（＝不可判閒置）。 */
   lastActiveAt: string | null
 }
 
@@ -243,6 +250,8 @@ export function buildSlots(input: BuildSlotsInput): DevSlot[] {
     const expiresAt = lease?.expiresAt ? Date.parse(lease.expiresAt) : null
     slots.push({
       pid: root.pid,
+      pids: [...seen],
+      ports: [...ports].toSorted((a, b) => a - b),
       port,
       cwd: root.cwd,
       pssKiB,
@@ -297,4 +306,188 @@ export function summarizeSlots(slots: readonly DevSlot[], hostCap: number): Slot
     enoughForCalibration: slots.length >= 3,
     slots: [...slots],
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// C2 主機額度（hostCap）判定：滿額時 start／wait 要做什麼
+// ─────────────────────────────────────────────────────────────────────────
+
+/** 閒置觀察窗預設值（spec C3）；`dev-slots.json` 的 `idleWindowMin` 可覆寫。 */
+export const DEFAULT_IDLE_WINDOW_MIN = 30
+/** 窗內 CPU 時間合計低於這個秒數才算沒在做事（spec C3 第 2 點）。 */
+export const DEFAULT_IDLE_CPU_SECONDS = 30
+
+export function resolveIdleWindowMs(override: DevSlotsOverride): number {
+  return (override.idleWindowMin ?? DEFAULT_IDLE_WINDOW_MIN) * 60_000
+}
+
+/** 這格閒置多久（ms）；沒有 `lastActiveAt`（舊格式、尚未被 sweep 觀察過）回 null＝不可判閒置。 */
+export function idleForMs(slot: Pick<DevSlot, 'lastActiveAt'>, now: number): number | null {
+  if (!slot.lastActiveAt) return null
+  const t = Date.parse(slot.lastActiveAt)
+  return Number.isFinite(t) ? Math.max(0, now - t) : null
+}
+
+export function isIdle(
+  slot: Pick<DevSlot, 'lastActiveAt'>,
+  now: number,
+  idleWindowMs: number,
+): boolean {
+  const idle = idleForMs(slot, now)
+  return idle !== null && idle >= idleWindowMs
+}
+
+export interface HostCapVerdict {
+  /** 扣掉自己那一格（同 port 重起不算新增）之後，是否已達 hostCap。 */
+  full: boolean
+  hostCap: number
+  /** 占格者（不含 selfPort）。 */
+  holders: DevSlot[]
+  /** C2 第 1 列：TTL 已過的 agent 租約——sweep 的 `reapExpiredLeases` 會收，滿額時 caller 先收再 claim。 */
+  reclaimable: DevSlot[]
+  /** 心跳斷但 TTL 未過的 agent：只在訊息點名，不自動收（reaper 的既有判準：heartbeat-dead 證據弱）。 */
+  heartbeatDead: DevSlot[]
+  /** 閒置超過窗的 `human`／`unleased`：只點名為「可手動停的候選」，NEVER 自動停（C4）。 */
+  manualCandidates: DevSlot[]
+  /** `reclaim`＝有 expired agent 可收（收完再判一次）；`wait`＝進佇列；`proceed`＝未滿。 */
+  action: 'proceed' | 'reclaim' | 'wait'
+}
+
+/**
+ * 滿額判定（spec C1／C2）。順序：未滿 → proceed；有 expired agent 租約 → reclaim；其餘（存活 agent，
+ * 含判閒置的、human、unleased）→ wait。**存活但閒置的 agent 不搶**（C2 第 2 列：租約所有權語意是 TTL 內是我的）。
+ * 超額（人類前景放行造成的 count > hostCap）同樣算 full。
+ */
+export function hostCapVerdict(input: {
+  slots: readonly DevSlot[]
+  hostCap: number
+  selfPort: number | null
+  now: number
+  idleWindowMs: number
+}): HostCapVerdict {
+  // 自己那格以 ports 判（s.port 只是最低的聽埠；agent 自己的 port 可能是較高那個）。
+  const holders = input.slots.filter(
+    (s) => input.selfPort === null || !s.ports.includes(input.selfPort),
+  )
+  const full = holders.length >= input.hostCap
+  const reclaimable = holders.filter((s) => s.owner === 'agent' && s.leaseState === 'expired')
+  const heartbeatDead = holders.filter(
+    (s) => s.owner === 'agent' && s.leaseState === 'heartbeat-dead',
+  )
+  const manualCandidates = holders.filter(
+    (s) => s.owner !== 'agent' && isIdle(s, input.now, input.idleWindowMs),
+  )
+  return {
+    full,
+    hostCap: input.hostCap,
+    holders,
+    reclaimable,
+    heartbeatDead,
+    manualCandidates,
+    action: !full ? 'proceed' : reclaimable.length > 0 ? 'reclaim' : 'wait',
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// C3 閒置判定（純函式；取樣由 dev-session.ts 做）
+// ─────────────────────────────────────────────────────────────────────────
+
+/** sweep 每輪對每個 resident server 留下的狀態（`~/.cache/clade/dev-slots/<port>.json`）。 */
+export interface IdleState {
+  /** 最近一次觀察到連線或 CPU 超過門檻的時刻（ISO8601）。 */
+  lastActiveAt: string
+  /** 上次觀察時根進程樹的累計 CPU 秒數。 */
+  cpuSeconds: number
+  observedAt: string
+  /** 狀態屬於哪支 server：pid 換了＝port 被別的 server 接手，舊狀態作廢。 */
+  pid: number
+}
+
+export interface IdleSample {
+  now: number
+  pid: number
+  /** 對該 server 的 port 的 ESTABLISHED TCP 連線數。 */
+  established: number
+  /** 根進程樹累計 CPU 秒數（utime＋stime）。 */
+  cpuSeconds: number
+}
+
+/**
+ * 一次觀察 → 新狀態（spec C3）。活動 ＝ 有 ESTABLISHED 連線（瀏覽器分頁開著，刻意接受的假陰性），
+ * 或相對上次觀察的 CPU 增量超過門檻（`idleCpuSeconds` 按「窗」計，觀察間隔短於窗時等比例縮放）。
+ * 沒有前一份狀態（舊格式、第一次 sweep、pid 換了）→ `lastActiveAt = now`，**不判閒置**（A8）。
+ */
+export function observeIdle(
+  prev: IdleState | null,
+  sample: IdleSample,
+  opts: { idleWindowMs: number; idleCpuSeconds?: number },
+): IdleState {
+  const nowIso = new Date(sample.now).toISOString()
+  const fresh: IdleState = {
+    lastActiveAt: nowIso,
+    cpuSeconds: sample.cpuSeconds,
+    observedAt: nowIso,
+    pid: sample.pid,
+  }
+  if (!prev || prev.pid !== sample.pid) return fresh
+  const prevAt = Date.parse(prev.observedAt)
+  if (!Number.isFinite(prevAt) || !Number.isFinite(Date.parse(prev.lastActiveAt))) return fresh
+  const elapsed = Math.max(0, sample.now - prevAt)
+  const windowCpu = opts.idleCpuSeconds ?? DEFAULT_IDLE_CPU_SECONDS
+  const threshold = windowCpu * Math.min(1, elapsed / opts.idleWindowMs)
+  const cpuDelta = sample.cpuSeconds - prev.cpuSeconds
+  // cpuDelta < 0＝計數倒退（worker 換掉）：保守當有活動，NEVER 因取樣瑕疵誤判閒置。
+  const active = sample.established > 0 || cpuDelta < 0 || cpuDelta >= threshold
+  return {
+    lastActiveAt: active ? nowIso : prev.lastActiveAt,
+    cpuSeconds: sample.cpuSeconds,
+    observedAt: nowIso,
+    pid: sample.pid,
+  }
+}
+
+/** 把狀態檔的 `lastActiveAt` 併進 slots（lease 內既有值為後備）；pid 不符的狀態不採用。 */
+export function applyIdleStates(
+  slots: readonly DevSlot[],
+  states: ReadonlyMap<number, IdleState>,
+): DevSlot[] {
+  return slots.map((s) => {
+    const st = states.get(s.port)
+    return st && st.pid === s.pid ? { ...s, lastActiveAt: st.lastActiveAt } : s
+  })
+}
+
+export interface IdleReportEntry {
+  port: number
+  owner: OwnerClass
+  consumerId: string | null
+  cwd: string | null
+  pid: number
+  pssKiB: number
+  idleMs: number
+}
+
+/**
+ * 閒置清單（spec C4）：只列 `human` 與 `unleased`，只報告、不停。agent 不列——它的 TTL 就是有界性，
+ * `sweep` 照舊只收 `expired`。
+ */
+export function buildIdleReport(
+  slots: readonly DevSlot[],
+  now: number,
+  idleWindowMs: number,
+): { human: IdleReportEntry[]; unleased: IdleReportEntry[] } {
+  const rows = (owner: OwnerClass): IdleReportEntry[] =>
+    slots
+      .filter((s) => s.owner === owner && isIdle(s, now, idleWindowMs))
+      .map((s) => ({
+        port: s.port,
+        owner: s.owner,
+        consumerId: s.consumerId,
+        cwd: s.cwd,
+        pid: s.pid,
+        pssKiB: s.pssKiB,
+        idleMs: idleForMs(s, now) as number,
+      }))
+      .toSorted((a, b) => b.idleMs - a.idleMs)
+  return { human: rows('human'), unleased: rows('unleased') }
 }

@@ -1,5 +1,6 @@
 ---
 description: 交期日期規約——對客戶或 Charles 給完成日、Milestone 日期、「趕得上嗎」、複核自報 ETA、寫 flow work eta 一律先走 /estimate-hours；日期分樂觀／可能／承諾三值，只有承諾值可以對外，對外前過四條 gate
+when: "要對 Charles 或客戶給日期、寫 `flow work eta`，或複核自報 ETA 時"
 ---
 <!-- Clade native rule; source: rules/core/flow-work-dates.md; edit canonical source -->
 <!-- clade-targets: claude,agents -->

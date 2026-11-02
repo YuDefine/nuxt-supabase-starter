@@ -82,7 +82,7 @@ node scripts/claim-helper.ts add --change-id main-session-wip \
 | `otherSession` | 命中別 session active claim | **NEVER** 掃進 bulk stash / commit。fail-loud 指名 session_id |
 | `other` | **無 claim 覆蓋 = 擁有者未知** | **NEVER** 讀成「是我的、可以掃」。主線 session 不寫 claim（§2 刻意如此），user WIP 全部落在這裡 |
 
-第三列是最容易誤讀的一列 —— `other` 為空不代表安全，只代表沒有人宣告過。
+`other` 是最容易誤讀的一列 —— `other` 為空不代表安全，只代表沒有人宣告過。
 
 ### 3.1 `other` 的三分類（寫入時證據）
 

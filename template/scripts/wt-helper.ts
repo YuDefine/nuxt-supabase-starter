@@ -6709,7 +6709,7 @@ function preserveWorktreeScreenshots(wtPath, mainPath, slug = 'worktree') {
  * Belt-and-braces: carry verify-evidence receipts that only exist in the worktree
  * back to main before cleanup destroys the directory.
  *
- * `docs/evidence/*.jsonl` is git-tracked (TD-394; pre-purge receipts live under
+ * `specs/evidence/*.jsonl` (lifecycle repo) / `docs/evidence/*.jsonl` is git-tracked (TD-394; pre-purge receipts live under
  * `.spectra/evidence/` and are carried too), so the phase-tick commit
  * is the primary transport and `merge-back --squash` normally carries receipts on its
  * own. This function covers the paths that never reach a commit at all: manual merges,
@@ -6722,9 +6722,10 @@ function preserveWorktreeScreenshots(wtPath, mainPath, slug = 'worktree') {
  * key, or main's record is older.
  */
 function preserveWorktreeEvidence(wtPath, mainPath, slug = 'worktree') {
-  // `docs/evidence/` 是 2026-10 openspec purge 後的落點；`.spectra/evidence/` 留給
-  // 遷移前 fork 的 worktree——那裡的 in-flight receipt 照樣要帶回 main。
-  const dirs = ['docs/evidence', '.spectra/evidence']
+  // `specs/evidence/` 是 lifecycle repo 的落點、`docs/evidence/` 是未遷移 consumer 的落點
+  // （evidence-store `sidecarPath`）；`.spectra/evidence/` 留給 openspec purge 前 fork 的
+  // worktree——那裡的 in-flight receipt 照樣要帶回 main。
+  const dirs = ['specs/evidence', 'docs/evidence', '.spectra/evidence']
   const files = []
   let ok = true
   for (const relDir of dirs) {
@@ -7383,7 +7384,7 @@ async function cmdCleanup(
   // 未過期 claim＝有人宣告這棵樹還在用，內容面全綠（merged＋clean）不是所有權證據。
   // 持有者有正面在世證據（非本 session 的行程 cwd 在樹內，或 journal 寫者仍活）就擋，
   // 沒有 flag 可繞——確認持有者已不在後由人 `claim-helper.ts drop <id>`，那是可稽核的一步。
-  // unknown 放行但留警告：claim 不帶持有者身分，正常收尾（Bash-only 寫入、Codex、Herdr 外）
+  // unknown 放行但留警告：claim 不帶持有者身分，正常收尾（Bash-only 寫入、Herdr 外）
   // 本來就判不出，擋下去等於每次收尾都要手動 drop。
   const claimObs = findClaimByWorktreeObserved(consumerRoot, target.path)
   const claimHolder =

@@ -1,6 +1,6 @@
 ---
 name: gh-ci-watch
-description: "Use immediately after a successful git push when the repo has GitHub Actions and CI / deploy completion must be watched — including slice draft PRs; also use when 查詢某 run 或某 SHA、撈 run log 證據、查 runner 佇列、查 PR 狀態（能不能合、draft、checks、head 對不對、與 main 衝突）、撞 GitHub API 限流。CI 紅燈修回同一張 PR。NOT for 修 CI 紅燈本身的實作步驟（那是拿到結果後的除錯流程）。"
+description: "Use immediately after a successful git push when the repo has GitHub Actions and CI / deploy completion must be watched — including slice draft PRs; also use when 查某 run 或 SHA、撈 run log、查 runner 佇列、查 PR 狀態（能不能合、draft、checks、head、與 main 衝突）、撞 GitHub API 限流。CI 紅燈修回同一張 PR。NOT for 修 CI 紅燈的實作步驟。"
 metadata:
   author: clade
   version: "1.0"

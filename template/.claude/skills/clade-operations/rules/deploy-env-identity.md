@@ -6,8 +6,7 @@ paths:
   - 'nuxt.config.*'
   - 'Dockerfile'
   - '**/Dockerfile'
-  - 'wrangler.toml'
-  - 'wrangler.jsonc'
+  - 'void.config.ts'
   - '.github/workflows/**'
   - 'server/plugins/**'
   - 'packages/*/server/plugins/**'
@@ -23,7 +22,7 @@ paths:
 本檔的不變量在**同時滿足**下列兩條時生效：
 
 1. repo 有 **≥2 個部署目標**（staging / preview / production 任兩者）
-2. 那些目標**跑同一份 production build**——同一個 image tag、同一份 `nuxt build` 產物、同一次 `wrangler deploy` 的 bundle
+2. 那些目標**跑同一份 production build**——同一個 image tag、同一份 `nuxt build` 產物、同一次 `void deploy` 的 bundle
 
 只有單一部署目標的 repo 現在不受約束；**但加第二個環境的那一刻就受約束**。
 

@@ -26,7 +26,7 @@ paths: ['.github/workflows/**', 'registry/consumers.json']
 
 | 條件 | 例子 |
 | --- | --- |
-| 需要特定 CLI | `rsync` / `docker` / `psql` / `wrangler` |
+| 需要特定 CLI | `rsync` / `docker` / `psql` / `void` |
 | 需要金鑰或憑證檔 | `$RUNNER_TEMP/<deploy-key>`（由 secret 於 job 內寫入，見 § 11）/ kubeconfig |
 | 需要特定 CPU 架構 | 原生模組（`better-sqlite3` / `sharp`）的 build 產物要在 X64 目標主機起得來；`docker exec` 進只在 X64 主機的容器 → 釘 `X64`。同一個 `gh-runner-lxc` / `ci-build` / `supabase` 標籤同時掛在 ARM64 容器池上 |
 | 需要特定網段可達 | 內網 LAN IP、Tailscale、VPN-only 主機 |

@@ -294,6 +294,8 @@ helper receipt 中的 `retained: false` 只描述 child pane，**NEVER** 拿它�
 
 ### 兩者共通
 
+**對人指 pane／tab 的位置**（例如 `claude_trust_pending`／`devin_trust_pending` 要人去按 Trust）：一律引 receipt 的 `human_locator` 或畫面上看得到的 label（`[<pane>] <任務>`），**NEVER** 引 `tab_id`、`workspace_id`——它們在 Herdr 畫面任何地方都看不到，人搜不到。
+
 完成訊息送出後，本 session 的下一個動作**只能是結束回合**。**NEVER** 追加建議、再跑 tool、續推 brief 裡的工作、輪詢任何接手 pane、或等它回應。逐字反開脫：「反正還沒關掉，順手做完」「等它讀完 brief 我再確認一下」。
 
 `relay_refused`／`transport_error`／任何 preflight failure **NEVER** 輸出「目前這裡收工」。

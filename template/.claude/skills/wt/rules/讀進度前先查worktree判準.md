@@ -99,7 +99,7 @@ worktree 的檔案修改時間比較新 → 用 worktree 那份蓋過 main。
 # Rule 4 - 需求與證據要持久留在實作 checkout，只勾 checkbox 不算完成證據
 
 - Level: `MUST`
-- 需求的載體是 plan package 或 `tasks/` 檔；證據的載體是 verify evidence sidecar（`docs/evidence/<work-slug>.jsonl`）。兩者都保留在實作 checkout。
+- 需求的載體是 plan package 或 `tasks/` 檔；證據的載體是 verify evidence sidecar（lifecycle repo：`specs/evidence/<work-slug>.jsonl`；未遷移 consumer：`docs/evidence/<work-slug>.jsonl`；路徑由 `evidence-store.ts` `sidecarPath` 解析）。兩者都保留在實作 checkout。
 - 讀進度時，checkbox 必須有對應 receipt 才算完成：只勾 checkbox、沒有 sidecar receipt，**不算**完成證據。
 - 每個 phase 完成後，應先回讀該 phase 的證據與 gate，再把 checkbox 與 sidecar 限定路徑 commit（artifact-tick，type 用 `📝 docs`，限定路徑白名單見 [[commit.detail]] § `--only` 適用範圍 = 路徑白名單 的 phase-tick 列：tasks 檔與 sidecar 兩條一起）；未 commit 的檔案不會隨落地帶回 main。
 - 派工前確認實際 cwd；GC 前確認證據可從正式 checkout 回讀，持久證據 **NEVER** 只留在會被回收的 ephemeral worktree。
@@ -109,7 +109,7 @@ worktree 的檔案修改時間比較新 → 用 worktree 那份蓋過 main。
 - 這個例子是好的，因為它以 receipt 核對 checkbox，而不是只數勾。
 
 ```md
-tasks.md phase 2 全勾 → 查 docs/evidence/auth-refresh.jsonl：phase 2 有 3 筆 receipt 對上 → 承認 phase 2 完成。
+tasks.md phase 2 全勾 → 查 specs/evidence/auth-refresh.jsonl（未遷移 consumer 為 docs/evidence/auth-refresh.jsonl）：phase 2 有 3 筆 receipt 對上 → 承認 phase 2 完成。
 ```
 
 ## Bad Example

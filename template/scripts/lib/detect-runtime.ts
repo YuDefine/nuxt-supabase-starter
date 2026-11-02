@@ -4,18 +4,21 @@
 // 為什麼要抽出來：辨識邏輯原本散在五處各寫一份（`residency-classify.ts` 的
 // `VALID_EXECUTORS`、`dev-session.ts` / `dev-singleton.ts` / `db-lease.ts` 的
 // `holderKind` / `detectKind`、`claims-lib.ts` 的 `detectRuntime`），其中三處是
-// `CLAUDE_SESSION_ID` / `CODEX_SESSION_ID` 二分。引入第三個 runtime 時，它跑掉的工作
+// `CLAUDE_SESSION_ID` / 另一個 runtime 的 id 二分。引入第二個 runtime 時，它跑掉的工作
 // 會被歸成 unknown 或誤判成 claude —— 也就是**無從驗證分攤有沒有發生**（TD-377）。
 //
 // 這個失效形狀有先例：`rules/core/agent-routing.md` 記著「147 條 `(verified-ui:)`
-// annotation 0 次走 codex、92 個 session 全部走 bypass 形狀」—— 規則在、實際 0 次，
+// annotation 0 次走第二個 runtime、92 個 session 全部走 bypass 形狀」—— 規則在、實際 0 次，
 // 靠事後 audit 才發現。沒有 executor 維度就是把同一個坑重挖一次。
+//
+// Codex runtime 已於 2026-10-18 退場（W-2026-10-18-codex-runtime-removal）：詞彙表不再含 `codex`，
+// `CODEX_*` env 不再當身分訊號；`CLADE_RUNTIME=codex` 現在是 invalid runtime（fail-closed）。
 
 /**
  * 已知 runtime 詞彙表。新增 runtime **MUST** 只改這裡 —— 消費端（`VALID_EXECUTORS`
  * 等）一律從本表推導，NEVER 各自維護一份字串集合。
  */
-export const KNOWN_RUNTIMES = ['claude', 'codex', 'opencode', 'copilot'] as const
+export const KNOWN_RUNTIMES = ['claude', 'opencode', 'copilot'] as const
 
 export type KnownRuntime = (typeof KNOWN_RUNTIMES)[number]
 export type Runtime = KnownRuntime | 'unknown'
@@ -34,14 +37,12 @@ type EnvKey = keyof NodeJS.ProcessEnv
 /** 強訊號是 session/agent identity；弱訊號只能用來保留 runtime 分類相容性。 */
 const SESSION_PROBES: ReadonlyArray<readonly [KnownRuntime, readonly EnvKey[]]> = [
   ['claude', ['CLAUDE_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CONVERSATION_ID']],
-  ['codex', ['CODEX_SESSION_ID', 'CODEX_THREAD_ID']],
   ['opencode', ['OPENCODE_SESSION_ID', 'OPENCODE_AGENT_ID']],
   ['copilot', ['COPILOT_AGENT_ID']],
 ]
 
 const WEAK_PROBES: ReadonlyArray<readonly [KnownRuntime, readonly EnvKey[]]> = [
   ['claude', ['CLAUDE_PROJECT_DIR']],
-  ['codex', ['CODEX_AGENT_NAME', 'CODEX_HOME']],
   ['opencode', ['OPENCODE_HOME']],
   ['copilot', ['GITHUB_COPILOT_CHAT']],
 ]
@@ -49,7 +50,6 @@ const WEAK_PROBES: ReadonlyArray<readonly [KnownRuntime, readonly EnvKey[]]> = [
 /** Session id 優先序只在已選定 runtime 內生效；禁止跨 runtime fallback。 */
 const SESSION_ID_KEYS: Readonly<Record<KnownRuntime, readonly EnvKey[]>> = {
   claude: ['CLAUDE_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CONVERSATION_ID'],
-  codex: ['CODEX_SESSION_ID', 'CODEX_THREAD_ID'],
   opencode: ['OPENCODE_SESSION_ID', 'OPENCODE_AGENT_ID'],
   copilot: ['COPILOT_AGENT_ID'],
 }

@@ -118,7 +118,7 @@ A 與 B 並存皆合法。**反方向（A → B）在 build > 60s 時是必要�
 3. spec 從 `@nuxt/test-utils/playwright` 的 `{ page, goto }` fixture 改回 `@playwright/test`
    的 `page` + `baseURL`（B 不提供 `goto` fixture 與 `waitUntil: 'hydration'`）
 
-Workers runtime（`wrangler dev --local`）不適用本 pattern 表，但 webServer CI 路徑不可依賴本地 `.env` / creds 仍成立。
+Workers runtime（`nuxt dev`／`vite dev` 內建 miniflare 的本機 runtime）不適用本 pattern 表，但 webServer CI 路徑不可依賴本地 `.env` / creds 仍成立。
 
 ## 自我檢查（寫 / 改 playwright config 時）
 

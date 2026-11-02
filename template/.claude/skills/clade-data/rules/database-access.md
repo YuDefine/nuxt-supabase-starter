@@ -104,7 +104,7 @@ WHERE state = 'idle' AND state_change < now() - interval '5 minutes';
 - **NEVER** 嘗試直接 Postgres TCP 連線（`pg` / `postgres` node driver）— Edge runtime 不支援持久 socket
 - **30 秒 CPU 限制**（付費 plan）— 任何 query 超過數百 ms 都會嚴重佔用 budget
 - **request 範圍外取 DB MUST 從 `env` 建 client**：queue consumer、`scheduled`（cron）、`waitUntil` 延後工作沒有可用的 `event`，**NEVER** 在這些入口呼叫 request-scoped helper（`getSupabaseWithContext(event)`、`useEvent()`）。D1 用一支接 `env` 的 helper（例如 `dbFromEnv(env)` 回 `drizzle(env.DB, { schema })`）；Supabase 走上方 Privileged system tasks 的 server client。
-- **binding 缺失 MUST 在 helper 入口就丟出可行動的錯誤**：helper 先 duck-type 檢查 binding（D1：物件存在且有 `prepare` 與 `batch` 函式），不符時 throw 一個點名 binding 名稱與 `wrangler.{toml,jsonc}` 對應段的錯誤；**NEVER** 讓 `undefined` 傳到第一次查詢才炸成 `Cannot read properties of undefined`。
+- **binding 缺失 MUST 在 helper 入口就丟出可行動的錯誤**：helper 先 duck-type 檢查 binding（D1：物件存在且有 `prepare` 與 `batch` 函式），不符時 throw 一個點名 binding 名稱與 `void.config.ts` `cloudflare` 對應 binding 段的錯誤；**NEVER** 讓 `undefined` 傳到第一次查詢才炸成 `Cannot read properties of undefined`。
 
 ### Node.js runtime（Vercel / Nuxt Hub）
 

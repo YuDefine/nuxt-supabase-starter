@@ -16,7 +16,7 @@
 _SKILL_RULE_REMINDER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 
 # skill_rule_path <repo_root> <skill> <rule_rel>
-#   依序找 `.claude/skills/<skill>`（consumer 投影）、`.agents/skills/<skill>`（Codex 投影）、
+#   依序找 `.claude/skills/<skill>`（consumer 投影）、`.agents/skills/<skill>`（agents 投影，Pi 讀）、
 #   `capabilities/core/skills/<skill>`（clade 源檔），取第一個**含該規則檔**的位置，印出相對
 #   repo root 的路徑；都沒有就什麼都不印。
 #   以「規則檔存在」而非「skill 目錄存在」為準：舊投影的 skill 目錄可能還沒有 rules/，

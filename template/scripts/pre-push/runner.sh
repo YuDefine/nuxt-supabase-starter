@@ -186,118 +186,71 @@ CONFIG_CLOSURE_STATE=''  # '' = 未算；ok；fail
 GIT_TOPLEVEL=''          # is_ignorable_managed_ts 首次需要時才算
 PUSH_TIP=''              # 本次 push 唯一的 branch tip；'-' = 多個或算不出（不跳過）
 
-# 路徑正規化（處理 . / ..，不碰檔案系統；不依賴 GNU realpath -m，macOS bash 3.2 也能跑）。
-# 超出 repo root 回 1。
-normalize_rel_path() {
-  local in="$1" part out=''
-  local -a parts=() stack=()
-  IFS='/' read -ra parts <<< "$in"
-  for part in "${parts[@]}"; do
-    case "$part" in
-      '' | .) ;;
-      ..)
-        [[ ${#stack[@]} -gt 0 ]] || return 1
-        unset "stack[$((${#stack[@]} - 1))]"
-        stack=("${stack[@]+"${stack[@]}"}")
-        ;;
-      *) stack+=("$part") ;;
-    esac
-  done
-  for part in "${stack[@]+"${stack[@]}"}"; do
-    out="${out:+$out/}$part"
-  done
-  printf '%s\n' "$out"
-}
-
-# 相對 specifier → 實際存在的檔（相對 PROJECT_ROOT）。回 1 = 解析不到；回 2 = 在 repo 外。
-resolve_import() {
-  local from_dir="$1" spec="$2" base cand
-  if [[ -n "$from_dir" ]]; then
-    base="$(normalize_rel_path "$from_dir/$spec")" || return 2
-  else
-    base="$(normalize_rel_path "$spec")" || return 2
-  fi
-  [[ -n "$base" ]] || return 1
-  for cand in "$base" "$base.ts" "$base.mts" "$base.cts" "$base.tsx" "$base.js" "$base.mjs" \
-    "$base.cjs" "$base/index.ts" "$base/index.mts" "$base/index.js" "$base/index.mjs"; do
-    if [[ -f "$cand" ]]; then
-      printf '%s\n' "$cand"
-      return 0
-    fi
-  done
-  # TS ESM 慣例：`import './x.js'` 指向 x.ts
-  case "$base" in
-    *.js) cand="${base%.js}.ts" ;;
-    *.mjs) cand="${base%.mjs}.mts" ;;
-    *.cjs) cand="${base%.cjs}.cts" ;;
-    *) return 1 ;;
-  esac
-  [[ -f "$cand" ]] || return 1
-  printf '%s\n' "$cand"
-}
-
 # 從 nuxt.config.* / vitest.config.* 出發，沿相對 import 走完閉包，結果寫進 CONFIG_CLOSURE。
-# 回 1 = 判不出來（呼叫端 MUST 當 relevant 照跑）。
+# 回 1 = 判不出來（呼叫端 MUST 當 relevant 照跑）；node 不在也是判不出來 → 照跑。
+# 解析交給下面的小 node 腳本（原本 ~110 行 bash resolver）：stdout 每行一個以 git toplevel 為基準的路徑，
+# exit 1 = 判不出來。兩種 import 來源的取捨：
+#   ① 靜態 import／re-export 陳述句：只認**行首**是 `import` / `export` / `}` 的行。config 常在字串／
+#      template literal 裡**產生**程式碼（`` `import { baseURL } from '#internal/nuxt/paths'` ``），
+#      那些行首是引號，不是 import；註解行（preset 的 usage 範例）同樣不在行首規則內。
+#   ② 任意位置的 `import('...')` / `require('...')`：只追**相對** specifier。
+# 靜態 import 的 alias（~ @/ #）與絕對路徑不重做 bundler 解析 → 判不出來；裸 package specifier
+# （含 node:）不在 repo 內；解析到 repo 外的檔不可能出現在本次 diff；閉包超過 500 檔 → 判不出來。
 compute_config_closure() {
-  local prefix f content spec dir resolved rc n=0
-  local -a queue=() specs=()
+  local prefix out closure_js
   prefix="$(git rev-parse --show-prefix 2>/dev/null)" || return 1
+  IFS= read -r -d '' closure_js <<'JS' || true
+const fs = require('node:fs')
+const path = require('node:path')
+const prefix = process.argv[1] || ''
+const seen = new Set()
+const order = []
+const add = (f) => { if (seen.has(f)) return false; seen.add(f); order.push(prefix + f); return true }
+const queue = fs.readdirSync('.').filter((f) => /^(nuxt|vitest)\.config\..+/.test(f) && fs.existsSync(f))
+queue.forEach(add)
+const codeExt = /\.(ts|mts|cts|tsx|js|mjs|cjs)$/
+const exts = ['', '.ts', '.mts', '.cts', '.tsx', '.js', '.mjs', '.cjs', '/index.ts', '/index.mts', '/index.js', '/index.mjs']
+const isFile = (f) => { try { return fs.statSync(f).isFile() } catch { return false } }
+const fail = () => process.exit(1)
+function resolveImport(dir, spec) {
+  const base = path.posix.normalize(dir ? dir + '/' + spec : spec)
+  if (base === '..' || base.startsWith('../')) return null // 在 repo 外
+  if (base === '.' || base === '') fail()
+  for (const e of exts) if (isFile(base + e)) return base + e
+  const m = { '.js': '.ts', '.mjs': '.mts', '.cjs': '.cts' }[path.posix.extname(base)]
+  if (m && isFile(base.slice(0, -path.posix.extname(base).length) + m)) return base.slice(0, -path.posix.extname(base).length) + m
+  return fail()
+}
+let n = 0
+while (queue.length) {
+  const f = queue.shift()
+  if (++n > 500) fail()
+  let content
+  try { content = fs.readFileSync(f, 'utf8') } catch { fail() }
+  const dir = path.posix.dirname(f) === '.' ? '' : path.posix.dirname(f)
+  const specs = []
+  for (const line of content.split('\n')) {
+    if (/^\s*(import|export|\})[^'"]*['"][^'"]+['"]/.test(line) && /^\s*import\s*['"]|from\s*['"]/.test(line)) {
+      const m = /^.*(?:from\s*|import\s*)['"]([^'"]+)['"].*$/.exec(line)
+      if (m) specs.push(m[1])
+    }
+    if (!/^\s*(\/\/|\/\*|\*)/.test(line))
+      for (const m of line.matchAll(/(?:import|require)\s*\(\s*['"](\.{1,2}\/[^'"]+)['"]/g)) specs.push(m[1])
+  }
+  for (const spec of specs) {
+    if (/^\.\.?\//.test(spec)) {
+      /* relative: resolve below */
+    } else if (/^(~|@\/|#|\/)/.test(spec)) fail()
+    else continue
+    const r = resolveImport(dir, spec)
+    if (r && add(r) && codeExt.test(r)) queue.push(r)
+  }
+}
+process.stdout.write(order.join('\n'))
+JS
+  out="$(node -e "$closure_js" "$prefix" 2>/dev/null)" || return 1
   CONFIG_CLOSURE=$'\n'
-  for f in nuxt.config.* vitest.config.*; do
-    [[ -e "$f" ]] || continue
-    queue+=("$f")
-    CONFIG_CLOSURE+="${prefix}${f}"$'\n'
-  done
-  while [[ ${#queue[@]} -gt 0 ]]; do
-    f="${queue[0]}"
-    queue=("${queue[@]:1}")
-    n=$((n + 1))
-    # 閉包爆量（config import 進整個 app）就不再是「少數例外」，判不出來 → 照跑
-    [[ "$n" -le 500 ]] || return 1
-    content="$(cat -- "$f")" || return 1
-    dir="$(dirname -- "$f")"
-    [[ "$dir" == '.' ]] && dir=''
-    # 兩種來源，各自的誤判面不同：
-    #   ① 靜態 import／re-export 陳述句：只認**行首**是 `import` / `export` / `}` 的行。
-    #       config 常在字串／template literal 裡**產生**程式碼（<consumer-a> 的
-    #       `` `import { baseURL } from '#internal/nuxt/paths'` ``、<consumer-d> 說明字串裡的
-    #       `import logo from '@/assets/...'`），那些行首是引號，不是 import。註解行
-    #       （preset 的 usage 範例 `//   import ... from './vendor/...'`）同樣不在行首規則內。
-    #   ② 任意位置的 `import('...')` / `require('...')`：只追**相對** specifier。
-    specs=()
-    while IFS= read -r spec; do
-      [[ -n "$spec" ]] && specs+=("$spec")
-    done < <(
-      printf '%s\n' "$content" \
-        | grep -E "^[[:space:]]*(import|export|\})[^'\"]*['\"][^'\"]+['\"]" \
-        | grep -E "^[[:space:]]*import[[:space:]]*['\"]|from[[:space:]]*['\"]" \
-        | sed -E "s/^.*(from[[:space:]]*|import[[:space:]]*)['\"]([^'\"]+)['\"].*$/\2/" || true
-      printf '%s\n' "$content" \
-        | grep -vE '^[[:space:]]*(//|/\*|\*)' \
-        | grep -oE "(import|require)[[:space:]]*\([[:space:]]*['\"]\.{1,2}/[^'\"]+['\"]" \
-        | sed -E "s/^[^'\"]*['\"]([^'\"]+)['\"].*$/\1/" || true
-    )
-    for spec in "${specs[@]+"${specs[@]}"}"; do
-      case "$spec" in
-        ./* | ../*) ;;
-        # 靜態 import 的 alias / 絕對路徑 / subpath import：本段不重做 bundler 的解析 → 判不出來
-        '~'* | @/* | '#'* | /*) return 1 ;;
-        # 裸 package specifier（含 node:）不在 repo 內
-        *) continue ;;
-      esac
-      rc=0
-      resolved="$(resolve_import "$dir" "$spec")" || rc=$?
-      [[ "$rc" == 2 ]] && continue  # repo 外的檔不可能出現在本次 diff
-      [[ "$rc" == 0 ]] || return 1
-      case "$CONFIG_CLOSURE" in
-        *$'\n'"${prefix}${resolved}"$'\n'*) continue ;;
-      esac
-      CONFIG_CLOSURE+="${prefix}${resolved}"$'\n'
-      case "$resolved" in
-        *.ts | *.mts | *.cts | *.tsx | *.js | *.mjs | *.cjs) queue+=("$resolved") ;;
-      esac
-    done
-  done
+  [[ -z "$out" ]] || CONFIG_CLOSURE+="${out}"$'\n'
   return 0
 }
 

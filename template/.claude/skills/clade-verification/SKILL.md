@@ -7,7 +7,10 @@ description: "Verification, testing, review, screenshots, and evidence rules. Us
 
 逐條對照你接下來要做的事；條件成立才讀那一份，NEVER 先把整批讀進來。
 
-- READ 若要讀或改 `.claude/agents/**`、`.github/workflows/**`、`wrangler.{toml,jsonc}`、`Dockerfile`、`.mcp.json`、`vendor/scripts/**` 等 11 處（全表見 rules/_index.md），讀取 `rules/agent-self-verification.claim-cross-check.md`
+- READ 若要宣稱完成、下結論，或跑診斷指令之前，先讀取 `rules/agent-self-verification.md`
+- READ 若要起 dev server、跑 e2e 或佔用 port 之前，先讀取 `rules/verification-lease.md`
+
+- READ 若要讀或改 `.claude/agents/**`、`.github/workflows/**`、`void.config.ts`、`Dockerfile`、`.mcp.json`、`vendor/scripts/**` 等 11 處（全表見 rules/_index.md），讀取 `rules/agent-self-verification.claim-cross-check.md`
 - READ 若要讀或改 `screenshots/**`、`specs/plans/**/tasks.md`、`app/**/*.vue`、`components/**/*.vue`、`packages/*/components/**/*.vue`、`pages/**/*.vue` 等 13 處（全表見 rules/_index.md），讀取 `rules/agent-self-verification.screenshot-evidence.md`
 - READ 若要讀或改 `scripts/audit-reference-query-oracle.ts`、`test/fixtures/reference-oracle/**`、`packages/*/test/fixtures/reference-oracle/**`、`test/audit-reference-query-oracle.test.ts`、`packages/*/test/audit-reference-query-oracle.test.ts`、`vendor/scripts/run-evidence.ts` 等 7 處（全表見 rules/_index.md），讀取 `rules/agent-self-verification.structural-and-exit-evidence.md`
 - READ 若要讀或改 `server/api/**/*.ts`、`packages/*/server/api/**/*.ts`、`server/utils/audit.ts`、`packages/*/server/utils/audit.ts`、`supabase/migrations/**/*.sql`，讀取 `rules/audit-pattern.md`
@@ -36,8 +39,6 @@ description: "Verification, testing, review, screenshots, and evidence rules. Us
 - READ 若要讀或改 `**/*.ts`、`**/*.vue`、`**/*.tsx`、`tasks/**`、`specs/**`、`package.json` 等 9 處（全表見 rules/_index.md），讀取 `rules/verify-gate-chain.md`
 
 ## 本 skill 啟用即讀（尚未宣告觸發點）
-- READ `rules/agent-self-verification.md`
 - READ `rules/runtime/agent-self-verification.md`
-- READ `rules/verification-lease.md`
 
 rule 內文只經本 skill 載入；清單不能代替內文。

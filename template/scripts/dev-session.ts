@@ -4,7 +4,7 @@
  * dev-session.ts — durable dev-server 單一入口（herdr tab + lease + 反累積）.
  *
  * 為什麼存在（root cause）：
- *   agent（Claude Code / Codex）的 harness 會在 tool-call 生命週期結束時回收
+ *   agent（Claude Code）的 harness 會在 tool-call 生命週期結束時回收
  *   Bash 衍生的整個 process tree —— **連 `spawn(detached:true)+unref()` / setsid /
  *   nohup 都逃不掉**（實測 2026-06-01 <consumer-a>：run_in_background 與 setsid 起的 nuxt
  *   dev 都被 reap，唯獨掛在 multiplexer server daemon 下的存活）。dev-singleton.ts
@@ -51,7 +51,8 @@
  *   node scripts/dev-session.ts sweep [--dry-run] [--leases-only]    # 回收 TTL 已過的 agent 租約（沒人爭用也收；心跳斷不收）＋清掉 dev 已退出的 dev-* tab
  *                     --leases-only：只回收租約、不清 dead-tab（dev node 的 clade-dev-lease-reaper.timer 每 5 分鐘跑這個）
  *   node scripts/dev-session.ts register --kind human --port <N> --pid <pid> [opts]   # 人類前景起的 server 登記 human lease（`wt-helper dev` 用）；滿額照放行，只印警告與可手動停的候選
- *   node scripts/dev-session.ts slots [--json]       # 唯讀：本機 resident dev server 實況計數（hostCap、每格 owner／port／cwd／Pss），不起不停任何東西
+ *   node scripts/dev-session.ts slots [--json]       # 唯讀：本機 resident dev server 實況計數（hostCap、每格 owner／port／cwd／Pss／閒置時間），不起不停任何東西
+ *   （agent 的 start／wait 受主機 hostCap 約束：滿額先收 TTL 已過的租約，仍滿 start exit 1、wait 進主機佇列；sweep 每輪寫 lastActiveAt 並列出閒置 human／unleased server，只報告不停）
  *
  * 常用 opts：
  *   --consumer-meta <path>   讀 consumer_id / dev.ports / auth.portPinned / dev.leaseMode
@@ -64,7 +65,7 @@
  *   --ttl <10m|30m|90s|1h>   租期；agent 未給則預設 10m，人類 holder 一律無界
  *   --wait-timeout <15m>     `wait` 排隊上限（預設 15m），逾時 exit 1
  *   --agent                  強制視為 agent 租約（有界），即使偵測不到 agent runtime
- *   --kind <claude|codex|human|subagent>   覆寫自動偵測的 holder kind
+ *   --kind <claude|human|subagent>   覆寫自動偵測的 holder kind
  *   --takeover               搶佔別人的 lease（strict 模式衝突時；會 log 前 holder）
  *   --no-lease               跳過 lease（純 durability + 反累積）
  *
@@ -84,6 +85,7 @@
 import { execFileSync, spawnSync } from 'node:child_process'
 import {
   existsSync,
+  mkdirSync,
   readdirSync,
   readFileSync,
   writeFileSync,
@@ -96,7 +98,7 @@ import {
 import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 import { basename, join, resolve, isAbsolute } from 'node:path'
-import { cpus, tmpdir } from 'node:os'
+import { cpus, homedir, tmpdir } from 'node:os'
 import { detectHolderKind, detectSessionId } from './lib/detect-runtime.ts'
 import {
   probeBackingService,
@@ -110,13 +112,20 @@ import {
 } from './herdr-visible-identity.ts'
 import { chooseDevWorkspace, labelBelongsToOtherRepo } from './lib/dev-workspace.ts'
 import {
+  applyIdleStates,
+  buildIdleReport,
   buildSlots,
+  hostCapVerdict,
+  idleForMs,
   maxResidentVerdict,
+  observeIdle,
   parseLsofListeners,
   readDevSlotsOverride,
   resolveHostCap,
+  resolveIdleWindowMs,
   resolveMaxResident,
   summarizeSlots,
+  type IdleState,
 } from './lib/dev-slots.ts'
 import { readHostMem, sampleProcs } from './lib/dev-resource/tree-cost.ts'
 // 分配模型的 SoT。base 池寬度 NEVER 在本檔另外定義一次——第二份常數與分配器漂開時，
@@ -246,7 +255,7 @@ function fmtDuration(ms) {
 /**
  * 這份 lease 是 agent 租約還是人類租約。
  *
- * 判準是 holder.kind：`human` 以外的都是 agent（claude / codex / subagent / …）。
+ * 判準是 holder.kind：`human` 以外的都是 agent（claude / subagent / …）。
  * **NEVER 把判不出來的 holder 當成 agent** —— detectHolderKind() 在偵測不到任何 agent
  * runtime 時回的就是 `human`，那正是「user 自己在 terminal 跑 pnpm dev」的情形。
  * 誤判成 agent 會讓 user 的 dev server 被自動回收，也就是本設計唯一的安全閥失效。
@@ -289,7 +298,11 @@ function leaseReclaimable(lease, now = Date.now()) {
 // 佇列（FIFO；檔案化，放在 lease 檔旁）
 // ─────────────────────────────────────────────────────────────────────────
 
+/** 主機並行額度的佇列 id（spec C2）：與各 consumer 的 lease 佇列同格式，檔名固定在 LEASE_DIR。 */
+const HOST_QUEUE_ID = 'clade-host-dev-slots'
+
 function queuePath(id) {
+  if (id === HOST_QUEUE_ID) return join(LEASE_DIR, 'clade-host-dev-slots.queue.json')
   return join(LEASE_DIR, `${id}-verification-lease.queue.json`)
 }
 
@@ -326,7 +339,7 @@ function pruneQueue(entries, now = Date.now()) {
 }
 
 /** 把自己排進佇列（已在其中則只更新 polledAt），回傳 pruned 後的整條佇列。 */
-function enqueueSelf(o, id) {
+function enqueueSelf(o, id, extra = {}) {
   const me = holderSessionId(o)
   const now = new Date().toISOString()
   const entries = pruneQueue(readQueue(id))
@@ -341,6 +354,7 @@ function enqueueSelf(o, id) {
       task: o.task || null,
       enqueuedAt: now,
       polledAt: now,
+      ...extra,
     })
   }
   writeQueue(id, entries)
@@ -1317,7 +1331,7 @@ function leaseConflict(o, id) {
 // 這裡問「正在跑的 dev server 服務的是不是我要的那份 code」（served code）。同一個 holder
 // 在別的 worktree 起的 dev server，服務的仍然是別的 code —— 一樣危險。
 //
-// 必須拆開的實證原因：holderSessionId() 在沒有 CLAUDE_SESSION_ID / CODEX_SESSION_ID 時
+// 必須拆開的實證原因：holderSessionId() 在沒有 CLAUDE_SESSION_ID 時
 // 一律回 'human'，於是所有這類 caller 的身分**塌縮成同一個**，leaseConflict() 開頭的
 // `if (mine) return null` 會先短路，cwd 比對永遠走不到。
 function servedCwdMismatch(o, id) {
@@ -1506,12 +1520,80 @@ function reportMaxResident(gate) {
   }
 }
 
+/**
+ * 主機並行上限（spec C1／C2）：滿額 → 先收 TTL 已過的 agent 租約（沿用 sweep 的 `reapExpiredLeases`），
+ * 收完重數；仍滿回傳 verdict，caller 排隊或 exit 1。只約束 agent claim：人類無界（放行可超額）、`--no-lease` 自負。
+ * **NEVER** 在這裡停 `human`／`unleased`／存活中的 agent。
+ */
+async function hostCapGate(o, meta) {
+  if (o.noLease || !claimingAsAgent(o)) return null
+  const selfPort = resolvePort(o, meta)
+  const judge = () => {
+    const live = liveSlots()
+    return hostCapVerdict({
+      slots: live.slots,
+      hostCap: live.hostCap,
+      selfPort,
+      now: Date.now(),
+      idleWindowMs: live.idleWindowMs,
+    })
+  }
+  let verdict = judge()
+  if (verdict.action === 'reclaim') {
+    const reaped = reapExpiredLeases().filter((r) => r.reason === 'expired')
+    if (reaped.length) {
+      out(`[hostCap] 已回收 ${reaped.length} 份 TTL 已過的 agent 租約，騰出格子`)
+      // 等被收的 dev 真的放掉 port 再數（kill 是非同步的）
+      for (let i = 0; i < 10; i++) {
+        await sleep(300)
+        verdict = judge()
+        if (verdict.action !== 'reclaim') break
+      }
+    }
+  }
+  return verdict.full ? verdict : null
+}
+
+function reportHostCap(v) {
+  err(
+    `[hostCap] 主機 resident dev server ${v.holders.length} / hostCap ${v.hostCap}${v.holders.length > v.hostCap ? '（超額）' : ''}，沒有空格`,
+  )
+  for (const s of v.holders) {
+    const left =
+      s.ttlRemainingMs === null
+        ? ''
+        : s.ttlRemainingMs < 0
+          ? '，TTL 已過'
+          : `，TTL 剩 ${fmtDuration(s.ttlRemainingMs)}`
+    err(
+      `  :${s.port}  ${s.owner}  ${s.consumerId ?? '-'}  ${s.cwd ?? '-'}  task: ${s.task ?? '未註明'}${left}`,
+    )
+  }
+  if (v.heartbeatDead.length) {
+    err(`  心跳斷但 TTL 未過（不自動收）：${v.heartbeatDead.map((s) => `:${s.port}`).join(', ')}`)
+  }
+  if (v.manualCandidates.length) {
+    err('  可手動停的候選（閒置的 human／unleased；只點名，NEVER 自動停）：')
+    for (const s of v.manualCandidates) {
+      err(
+        `    :${s.port}  ${s.owner}  ${s.cwd ?? '-'}  pid ${s.pid}  閒置 ${fmtDuration(idleForMs(s, Date.now()) ?? 0)}  ${fmtKiB(s.pssKiB)}`,
+      )
+    }
+  }
+}
+
 async function cmdLaunch(o) {
   const meta = readConsumerMeta(o.consumerMeta)
   const port = resolvePort(o, meta)
   const gate = maxResidentGate(o, meta)
   if (gate) {
     reportMaxResident(gate)
+    err(`  → 排隊等格子：dev-session.ts wait --task "<你要做什麼>" -- <cmd>（不需問 user）`)
+    process.exit(1)
+  }
+  const host = await hostCapGate(o, meta)
+  if (host) {
+    reportHostCap(host)
     err(`  → 排隊等格子：dev-session.ts wait --task "<你要做什麼>" -- <cmd>（不需問 user）`)
     process.exit(1)
   }
@@ -1871,19 +1953,35 @@ async function cmdWait(o) {
     const head = queue[0]
     // consumer 的 agent 格子滿了也算「沒格子」：留在佇列裡等（它們的 TTL 到期、release 或被 reaper 收掉才會騰出）。
     const full = !held ? maxResidentGate(o, meta) : null
+    // 主機額度（spec C2）：先取主機格再取 consumer lease——被 consumer 的 lease 擋住（held）時不佔主機佇列，
+    // 免得持有 lease 卻起不了 server、或佔著主機隊首卻不能動。滿額時 hostCapGate 內會先收 TTL 已過的租約。
+    let hostFull = null
+    let hostQueue = []
+    // 只有 consumer 佇列隊首才進主機佇列：否則非隊首者可能佔住主機隊首，與 consumer 隊首互卡到逾時。
     if (!held && !full && head?.sessionId === me) {
+      hostFull = await hostCapGate(o, meta)
+      hostQueue = enqueueSelf(o, HOST_QUEUE_ID, { consumerId })
+    } else {
+      // 已在主機佇列卻轉為 held／full／非隊首：立刻讓出，別讓停止續期的舊條目擋住整台機器到 prune。
+      if (readQueue(HOST_QUEUE_ID).some((e) => e.sessionId === me)) dequeueSelf(o, HOST_QUEUE_ID)
+    }
+    const hostTurn = hostQueue.length === 0 || hostQueue[0]?.sessionId === me
+    if (!held && !full && !hostFull && head?.sessionId === me && hostTurn) {
       dequeueSelf(o, lid)
+      dequeueSelf(o, HOST_QUEUE_ID)
       return cmdLaunch(o) // 走既有 launch 路徑接手（含 lease gate 的自動回收分支）
     }
 
     if (Date.now() >= deadline) {
       dequeueSelf(o, lid)
+      dequeueSelf(o, HOST_QUEUE_ID)
       err(`[lease:${consumerId}] 排隊逾時（${fmtDuration(o.waitTimeout)}）仍未取得 slot`)
       if (held)
         err(
           `  持有者 ${lease.holder?.kind}:${lease.holder?.sessionId}，task: ${lease.task || '未註明'}`,
         )
       if (full) reportMaxResident(full)
+      if (hostFull) reportHostCap(hostFull)
       err(`  佇列位置：${queue.findIndex((e) => e.sessionId === me) + 1}/${queue.length}`)
       process.exit(1)
     }
@@ -1962,14 +2060,148 @@ function liveSlots() {
   // 覆寫值來自 registry `dev_slots`（`dev-node.ts bootstrap` 寫出 ~/.config/clade/dev-slots.json）。
   const hostCap = resolveHostCap({ memTotalKiB: mem?.totalKiB ?? 0, cores }, readDevSlotsOverride())
   const raw = sh('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-F', 'pn'])
-  const slots = buildSlots({
+  const built = buildSlots({
     procs: sampleProcs(),
     listeners: parseLsofListeners(raw ?? ''),
     leases: readAllLeases(),
     now: Date.now(),
     reclaimReason: (lease, now) => leaseReclaimable(lease, now),
   })
-  return { mem, cores, hostCap, slots }
+  const override = readDevSlotsOverride()
+  const idleWindowMs = resolveIdleWindowMs(override)
+  const slots = applyIdleStates(built, readIdleStates())
+  return { mem, cores, hostCap, slots, idleWindowMs }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// 閒置狀態（spec C3）。放在 ~/.cache/clade/dev-slots/<port>.json 而不是 lease 檔：sweep 要對每個
+// resident server（含 human／unleased）持續寫，而 lease 檔的 heartbeat 是原位 read→write，
+// 回收又有 rename claim 協議，額外寫入只會製造競態；狀態檔獨立，lease 格式與往後相容不動。
+// ─────────────────────────────────────────────────────────────────────────
+
+function idleStateDir() {
+  const base = process.env.XDG_CACHE_HOME || join(homedir(), '.cache')
+  return join(base, 'clade', 'dev-slots')
+}
+
+function readIdleStates() {
+  const states = new Map<number, IdleState>()
+  let files: string[]
+  try {
+    files = readdirSync(idleStateDir())
+  } catch {
+    return states
+  }
+  for (const f of files) {
+    const m = /^(\d+)\.json$/u.exec(f)
+    if (!m) continue
+    try {
+      const v = JSON.parse(readFileSync(join(idleStateDir(), f), 'utf8'))
+      if (typeof v?.lastActiveAt === 'string' && Number.isFinite(Number(v?.pid)))
+        states.set(Number(m[1]), v)
+    } catch {
+      /* 壞檔略過：下一輪 sweep 重寫 */
+    }
+  }
+  return states
+}
+
+function writeIdleState(port, state) {
+  try {
+    mkdirSync(idleStateDir(), { recursive: true })
+    writeFileSync(join(idleStateDir(), `${port}.json`), JSON.stringify(state) + '\n')
+  } catch {
+    /* fail-open：閒置報告壞了不該擋 sweep */
+  }
+}
+
+/** 狀態檔只留仍在 resident 的 port；server 已停就清掉，下次同 port 重起從頭算。 */
+function pruneIdleStates(livePorts) {
+  for (const port of readIdleStates().keys()) {
+    if (livePorts.has(port)) continue
+    try {
+      unlinkSync(join(idleStateDir(), `${port}.json`))
+    } catch {
+      /* 已不在 */
+    }
+  }
+}
+
+/** 對該 port 的 ESTABLISHED TCP 連線數（`ss`）；ss 不可用回 null（caller 保守當有連線）。 */
+function establishedCount(ports) {
+  let total = 0
+  for (const port of ports) {
+    const raw = sh('ss', ['-Htn', 'state', 'established', `( sport = :${port} )`])
+    if (raw === null) return null
+    total += raw.split('\n').filter((l) => l.trim()).length
+  }
+  return total
+}
+
+/** 根進程樹累計 CPU 秒數（/proc/<pid>/stat 的 utime＋stime；CLK_TCK 取 100，Linux 預設）。讀不到回 null。 */
+function treeCpuSeconds(pids) {
+  let ticks = 0
+  let any = false
+  for (const pid of pids) {
+    try {
+      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+      // comm 可含空白與括號：從最後一個 ')' 之後切欄位，utime／stime 是其後第 12、13 欄（0 起算 11、12）
+      const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ')
+      ticks += Number(fields[11]) + Number(fields[12])
+      any = true
+    } catch {
+      /* 剛結束的子行程 */
+    }
+  }
+  return any && Number.isFinite(ticks) ? ticks / 100 : null
+}
+
+/**
+ * sweep 每輪對每個 resident server 取樣並寫狀態檔；回傳併入 `lastActiveAt` 的 slots。取樣失敗（ss 不可用、
+ * /proc 讀不到）一律當有活動——寧可多留，NEVER 因取樣瑕疵產出「閒置」。--dry-run 不寫。
+ */
+function observeAndStoreIdle(live, { dryRun }) {
+  const now = Date.now()
+  const prev = readIdleStates()
+  const next = new Map<number, IdleState>()
+  for (const s of live.slots) {
+    const established = establishedCount(s.ports)
+    const cpu = treeCpuSeconds(s.pids)
+    const state = observeIdle(
+      prev.get(s.port) ?? null,
+      {
+        now,
+        pid: s.pid,
+        established: established ?? 1,
+        cpuSeconds: cpu ?? prev.get(s.port)?.cpuSeconds ?? 0,
+      },
+      { idleWindowMs: live.idleWindowMs },
+    )
+    next.set(s.port, state)
+    if (!dryRun) writeIdleState(s.port, state)
+  }
+  if (!dryRun) pruneIdleStates(new Set(next.keys()))
+  return applyIdleStates(live.slots, next)
+}
+
+function reportIdleServers(slots, idleWindowMs) {
+  const now = Date.now()
+  const report = buildIdleReport(slots, now, idleWindowMs)
+  const windowText = fmtDuration(idleWindowMs)
+  const section = (title, rows) => {
+    out(`閒置 ${title}（> ${windowText} 無連線、無 CPU 活動；只報告，NEVER 自動停）：`)
+    for (const r of rows) {
+      out(
+        `  :${r.port}  ${r.consumerId ?? '-'}  ${r.cwd ?? '-'}  pid ${r.pid}  閒置 ${fmtDuration(r.idleMs)}  ${fmtKiB(r.pssKiB)}`,
+      )
+    }
+  }
+  if (report.human.length) section('人類 server', report.human)
+  if (report.unleased.length) section('unleased server', report.unleased)
+  if (!report.human.length && !report.unleased.length) {
+    out(`sweep：沒有閒置超過 ${windowText} 的 human／unleased dev server`)
+  }
+  return report
 }
 
 function cmdSlots(o) {
@@ -1991,9 +2223,11 @@ function cmdSlots(o) {
           ? '  TTL 已過'
           : `  TTL 剩 ${fmtDuration(s.ttlRemainingMs)}`
     const state = s.leaseState ? `  [${s.leaseState}]` : ''
+    const idle = idleForMs(s, Date.now())
+    const idleText = idle === null ? '' : `  閒置 ${fmtDuration(idle)}`
     out(
       `  :${s.port}  ${s.owner.padEnd(8)} ${fmtKiB(s.pssKiB).padStart(9)}  pid ${s.pid}` +
-        `  ${s.consumerId ?? '-'}  ${s.cwd ?? '-'}${ttl}${state}`,
+        `  ${s.consumerId ?? '-'}  ${s.cwd ?? '-'}${ttl}${state}${idleText}`,
     )
   }
   if (report.perServerPssP90KiB !== null) {
@@ -2269,6 +2503,12 @@ function cmdSweep(o) {
       out(`  [${r.action}] ${r.id}（${r.reason}）— ${what}`)
     }
   }
+
+  // (1.5) 閒置觀察（spec C3／C4）：寫各 resident server 的 lastActiveAt，列出閒置的 human／unleased。
+  //       只報告，NEVER 停——`unleased` 沒有 herdr Tab，`human` 無界；兩者的收斂靠人手動停。
+  const live = liveSlots()
+  const observed = observeAndStoreIdle(live, { dryRun: o.dryRun })
+  reportIdleServers(observed, live.idleWindowMs)
 
   // dev node timer 只收租約：dead-tab 可能正被人讀 crash log，不在無人值守的排程裡關
   if (o.leasesOnly) return

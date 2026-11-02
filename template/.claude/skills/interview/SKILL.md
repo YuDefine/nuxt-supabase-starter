@@ -10,7 +10,7 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"read-onl
 
 和使用者一起把需求談清楚，談到 work-route 能直接分流、開 package、交 owner 而不必重問。本 skill 全程唯讀：**NEVER** 寫 repo 檔、開 package、鑄 work id、開 worktree；落地一律交棒後由 work-route 做。
 
-路徑相對本 skill 根：Claude `.claude/skills/interview/`、Codex `.agents/skills/interview/`；work-route 在同層 `../work-route/`。
+路徑相對本 skill 根：Claude `.claude/skills/interview/`、agents `.agents/skills/interview/`；work-route 在同層 `../work-route/`。
 
 # SOP
 

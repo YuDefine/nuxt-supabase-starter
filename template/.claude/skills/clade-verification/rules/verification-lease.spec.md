@@ -20,7 +20,7 @@ paths: ['.claude/consumer-meta.json', 'scripts/dev-session*', 'scripts/dev-singl
 | **browser profile** | `{ sessionName, userDataDir }` | persistent browser profile（session name + profile directory）含登入 cookie，profile 切換 = session 切換 |
 | **cookie namespace** | `string` | localhost cookie 不看 port，跨 port worktree 互相污染 session。三種隔離手法，由弱到強：(1) **用不同 host 名** —— `localhost` 與 `127.0.0.1` 對瀏覽器是不同 host、不同 cookie jar，開發那台走一個、review slot 走另一個，零改 code；(2) cookie name suffix（要改 consumer 的 session 設定）；(3) per-worktree browser profile |
 | **env file** | `{ path, sha256 }` | dev server 啟動時讀取的 `.env.local` 內容指紋；變動 = 應該重啟才生效 |
-| **holder** | `{ kind, sessionId, label }` | 誰拿到這個 lease（claude / codex / human / subagent） |
+| **holder** | `{ kind, sessionId, label }` | 誰拿到這個 lease（claude / human / subagent） |
 
 ## Lease 檔位置
 
@@ -76,6 +76,14 @@ process discovery + kill。具體 launcher 與命令由 adapter fragment 宣告�
 排隊者自己 poll（lease-aware wait operation，預設 5s 一次、等待上限 15m）；超過 **180s**
 沒 poll 的項自動剔除——**與 lease liveness 同一套判準，不要另發明一套**。撞上**人類租約**時
 `wait` 立刻 refuse 而不排隊：它無界，排了也永遠等不到。
+
+### 主機並行上限（hostCap）
+
+lease 的 identity 是 (consumer, port)，管不到記憶體；主機層另有 `hostCap`（`node vendor/scripts/dev-session.ts slots` 看計數與上限，公式與覆寫見 `dev_slots`）。計數以實況（dev server 根進程＋port 在聽）為準，不是 lease 檔張數。
+
+- **agent** 的 `start`／`wait` 在起 server 前先數：未滿照舊；已滿先收 **TTL 已過** 的 agent 租約（同 `sweep` 的 `reapExpiredLeases`）再重數，仍滿 → `start` exit 1 並指向 `wait`，`wait` 進主機佇列（`/tmp/clade-host-dev-slots.queue.json`，格式同上、多一欄 `consumerId`，同一套 180s 剔除）。同一 consumer 兩個佇列都排時，先取主機格再取 consumer lease。逾時 exit 1，訊息列出每個占格者。
+- **不搶**：存活的 agent 租約（含判閒置的）、`human`、`unleased` 一律不停；心跳斷但 TTL 未過的只點名（與 `sweep` 同判準：`heartbeat-dead` 證據弱）。人類前景 `register` 撞滿額放行，可超額。
+- **閒置**只用來點名，不觸發停止：`sweep`（含 reaper timer 用的 `--leases-only`）每輪對每個 resident server 取樣——對該 port 有 ESTABLISHED 連線、或根進程樹 CPU 增量超過門檻（`idleCpuSeconds` 預設 30s／窗，按觀察間隔等比縮放）即算活動——寫 `~/.cache/clade/dev-slots/<port>.json` 的 `lastActiveAt`（舊格式／pid 換了／取樣失敗＝當有活動，從 now 起算）。`lastActiveAt` 距今超過 `idleWindow`（預設 30m，`idle_window_min` 覆寫）的 `human`／`unleased` 列入 sweep 輸出的閒置清單，並在滿額訊息點名為「可手動停的候選」。**NEVER** 自動停這兩類：`unleased` 沒有 herdr Tab 可 `stop`、`human` 無界。
 
 共享 development DB 另有獨立 lease；需要 reset 或 sync 時使用 portable `node vendor/scripts/db-lease.ts claim|release|status`，不把 DB ownership 混入本 verification lease。
 
@@ -138,7 +146,6 @@ dev server，服務的仍然是別的 code，一樣會讓 evidence 拍到錯的�
 | holder kind | sessionId 來源 |
 | --- | --- |
 | `claude` | `CLAUDE_SESSION_ID` → `CLAUDE_CODE_SESSION_ID` → `CLAUDE_CONVERSATION_ID` |
-| `codex` | `CODEX_SESSION_ID` → `CODEX_THREAD_ID` |
 | `opencode` / `copilot` | 依 `vendor/scripts/lib/detect-runtime.ts` 的該 runtime session keys；自動探測仍需對應 runtime 實測 |
 | `human` | verification lease 沿用 `human`；獨立 DB lease 使用 `human:<worktree hash>` |
 

@@ -1,3 +1,6 @@
+---
+when: "要宣稱完成、下結論，或跑診斷指令之前"
+---
 <!-- Clade native rule; source: rules/core/agent-self-verification.md; edit canonical source -->
 <!-- clade-targets: claude,agents -->
 <!-- clade-adapters: claude -->

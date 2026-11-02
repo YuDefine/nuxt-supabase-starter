@@ -1,3 +1,6 @@
+---
+when: "audit 報門檻超標、要處置超標量之前"
+---
 <!-- Clade native rule; source: rules/core/threshold-remediation.md; edit canonical source -->
 <!-- clade-targets: claude,agents -->
 <!-- clade-adapters: claude -->

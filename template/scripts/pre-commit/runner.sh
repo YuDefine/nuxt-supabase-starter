@@ -15,6 +15,8 @@
 #   - data-perf-check           偵測 staged *.vue 才跑（setup context raw $fetch anti-pattern）
 #   - consumer-carriers         已退役 docs/ 或 lifecycle repo 才啟用（否則 no-op）
 #   - source-assert-delta       有 staged 測試檔且 P 類（讀原始碼比字串）斷言數比 HEAD 增加才擋（否則 no-op）
+#   - test-removal-receipt      刪除／合併測試（整檔刪、檔內 case 減少、改名）沒附有效收據或合法豁免才擋（否則 no-op）
+#   - skip-expiry               新增 skip 缺 `clade-skip:` 到期日／理由、或碰到過期 skip 所在檔才擋；無 baseline（尚未採用）不擋；復活驗證只在 CI
 #   - td-priority               staged docs/tech-debt.md 新增或改寫 `**Priority**:` 行才擋（否則 no-op）
 #   - new-python                有新落腳的 staged *.py 才判（否則 no-op）；跑不起來時擋
 #
@@ -73,6 +75,12 @@ run_check consumer-carriers
 
 # 11) source-assert-delta — 擋新增「讀原始碼比字串」的測試斷言（P 類，對 HEAD 比斷言數 delta）
 run_check source-assert-delta
+
+# 11c) test-removal-receipt — 擋刪除／合併測試卻沒附有效收據（有效性 1–5；第 6 條 CI 驗；不讀 baseline）
+run_check test-removal-receipt
+
+# 11d) skip-expiry — 擋新增 skip 缺到期日／理由、碰到過期 skip 所在檔的改動（對 .clade/test-trust-baseline.json 的 skips 凍結存量；復活驗證在 CI）
+run_check skip-expiry
 
 # 12) td-priority — 擋 docs/tech-debt.md 加回 TD 等級欄位（等級只看 fleet 看板）
 run_check td-priority

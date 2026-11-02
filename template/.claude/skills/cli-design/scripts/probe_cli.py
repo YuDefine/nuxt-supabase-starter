@@ -30,6 +30,8 @@ from pathlib import Path
 
 UNKNOWN_COMMAND = "__cli_design_probe_unknown__"
 UNKNOWN_FLAG = "--cli-design-probe-unknown-flag"
+# A subcommand that may send data when it does not intercept `--help`; never probed, only listed.
+SKIP_COMMANDS = frozenset({"feedback"})
 HEAD_CHARS = 3000
 MAX_CONSECUTIVE_TIMEOUTS = 3
 OPTIONAL_PROBES = ("short_help", "help_subcommand", "version", "unknown_command", "unknown_flag")
@@ -41,6 +43,11 @@ SUGGESTION_RE = re.compile(
 )
 EXAMPLES_RE = re.compile(r"^\s*examples?\s*:?\s*$", re.IGNORECASE | re.MULTILINE)
 USAGE_RE = re.compile(r"^\s*usage\b", re.IGNORECASE | re.MULTILINE)
+# A command entry (`  feedback  Send...`, `  mycli feedback  Send...`) or a usage line; not a `Feedback: <url>` footer.
+FEEDBACK_RE = re.compile(
+    r"^\s+(?:[\w.-]+\s+)?feedback(?:\s{2,}\S|\s*$|\s+(?:--|<|\[))|^\s*usage\s*:?\s+\S+(?:\s+\S+)*?\s+feedback\b",
+    re.IGNORECASE | re.MULTILINE,
+)
 LONG_FLAG_RE = re.compile(r"(?<![\w-])--[a-z][a-z0-9-]*")
 SECTION_RE = re.compile(
     r"^([A-Za-z][A-Za-z ]*?(commands|subcommands|resources)|commands|subcommands)\s*:?\s*$",
@@ -115,6 +122,8 @@ def help_signals(text: str) -> dict:
     return {
         "has_usage": bool(USAGE_RE.search(text)),
         "has_examples": bool(EXAMPLES_RE.search(text)),
+        # Read from help text only: a feedback command sends data, so subcommand probing skips it (SKIP_COMMANDS).
+        "has_feedback": bool(FEEDBACK_RE.search(text)),
         "flags": sorted(set(LONG_FLAG_RE.findall(text))),
     }
 
@@ -205,6 +214,8 @@ def main() -> int:
                 next_frontier = []
                 for path, subs in frontier:
                     for sub in subs:
+                        if sub in SKIP_COMMANDS:
+                            continue
                         if len(commands) >= args.max_commands or consecutive_timeouts >= MAX_CONSECUTIVE_TIMEOUTS:
                             truncated = True
                             break

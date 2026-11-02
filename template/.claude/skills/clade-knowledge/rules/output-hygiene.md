@@ -1,3 +1,6 @@
+---
+when: "要寫 PR／commit message／code comment／文件／對外訊息之前"
+---
 <!-- Clade native rule; source: rules/core/output-hygiene.md; edit canonical source -->
 # Output Hygiene — 別把內部過程變成讀者的負擔
 

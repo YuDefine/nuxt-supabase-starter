@@ -24,6 +24,7 @@ shortlink
 │   ├── create
 │   └── delete
 ├── commands      輸出機器可讀的命令樹（JSON）
+├── feedback      送出 bug 或建議回饋
 └── login         以瀏覽器登入（只給人用；agent 用 SHORTLINK_TOKEN）
 ```
 
@@ -33,8 +34,9 @@ shortlink
 | --- | --- | --- | --- |
 | `--json` | 結果以 JSON 輸出到 stdout | 全部命令 | A3、B2 |
 | `--force` | 跳過確認 | `link delete`、`domain delete` | A3、E1 |
-| `--dry-run` | 印出將送出的 HTTP 請求（JSON），不送出，不需憑證 | `create`、`update`、`delete` | A3、E2 |
+| `--dry-run` | 印出將送出的 HTTP 請求（JSON），不送出，不需憑證 | `create`、`update`、`delete`、`feedback` | A3、E2 |
 | `--limit`、`--cursor` | 分頁 | `list` | A3、B5 |
+| `--fields` | 收窄回傳欄位 | `list` | B9 |
 | `--workspace-id` | 指定工作區；也可用 `SHORTLINK_WORKSPACE_ID` | 全部遠端命令 | A4、G2、G3 |
 | `--no-color`、`--no-input` | 關閉色碼；強制非互動 | 全部命令 | B4、D5 |
 
@@ -51,6 +53,8 @@ shortlink
 - 分頁與截斷：`list` 預設 50 筆，`next_cursor` 不為 null 即表示還有下一頁；`--all` 自動翻完
 - 排版：stdout 是 TTY 時縮排，不是 TTY 時一行一個 JSON（寫進 `--help` 與 README）
 - 色碼：只在 stderr 是 TTY、且沒有 `NO_COLOR` 時上色
+- 大量輸出：`list` 預設只回上表欄位，`--fields` 可再收窄
+- 外部內容：目標網址與 slug 是使用者輸入，只放在資料欄位；`hint` 欄位只由 CLI 自己產生
 
 ## 錯誤與退出碼
 
@@ -100,7 +104,7 @@ next: choose another --slug, or run `shortlink link update lnk_8f2 --target-url 
 ## 可發現性
 
 - help 結構：每一層都有 `-h`／`--help`，內容依序為用途、用法、旗標與預設值、範例、相關命令；不需憑證與網路
-- 根 help 第一屏：第一行是 `Agents: run \`shortlink commands --json\` for the full command tree; every command supports --json.`
+- 根 help 第一屏：第一行是 `Agents: run \`shortlink commands --json\` for the full command tree; every command supports --json.`；第二行是 `Problems? run \`shortlink feedback --type bug --message <text>\`.`
 - 命令搜尋：`shortlink commands --json` 輸出全部命令、旗標與說明（規模 M，不另做搜尋）
 - 版本：`shortlink --version` → `shortlink 0.1.0`
 - AGENTS.md 建議句：「要建立或查詢短網址時用 `shortlink` CLI，並一律帶 `--json`；認證用 `SHORTLINK_TOKEN`。」
@@ -116,6 +120,13 @@ next: choose another --slug, or run `shortlink link update lnk_8f2 --target-url 
 
 - 機械檢查：`test/cli-surface.test.ts` 遍歷 `shortlink commands --json`，斷言動詞屬於 `list|get|create|update|delete`、所有命令都有 `--json`、會改變遠端狀態的命令都有 `--dry-run`、沒有 `--format` 與 `--yes`；每次 PR 由 CI 執行
 - 棄用政策：改名的命令與旗標保留兩個 minor 版本，期間照常可用，並在 stderr 印 `deprecated: use <新名稱>`
+
+## 上線後回饋
+
+- 失敗訊號的路徑：`shortlink feedback` 由 agent 送出；伺服器端 API 錯誤記錄按 `user-agent` 分出 CLI 版本
+- feedback 命令：`shortlink feedback --type bug|idea --message <text> [--json]`，自帶版本與上一個失敗的命令；送出失敗（網路或伺服器錯誤）exit 1 並在 stderr 說明原因與重試方式；呼叫端的其他流程不依賴它，不會被它擋住
+- 送出前遮蔽與預覽：token 與網址 query 一律遮蔽；`--dry-run` 印出將送出的 JSON；`DO_NOT_TRACK=1` 時不送；不接受附檔
+- 去向、負責人、處理週期：送進 `#shortlink-cli` 頻道，CLI 維護人負責，每週一分流一次
 
 ## 判準對照
 
@@ -135,6 +146,8 @@ next: choose another --slug, or run `shortlink link update lnk_8f2 --target-url 
 | B6 | N/A：只有遠端，沒有本機模式 |
 | B7 | TTY 縮排、非 TTY 單行，已寫進 help |
 | B8 | 每個 `process.exit` 出口改用 `writeThenExit` |
+| B9 | `list` 預設精簡欄位，`--fields` 收窄 |
+| B10 | 見〈輸出契約〉外部內容 |
 | C1 | 見退出碼表 |
 | C2 | 見退出碼表，每碼一個意思 |
 | C3 | 每個錯誤都有 `next:` 行 |
@@ -172,6 +185,11 @@ next: choose another --slug, or run `shortlink link update lnk_8f2 --target-url 
 | H2 | `test/cli-surface.test.ts` |
 | H3 | N/A：規模 M |
 | H4 | 見棄用政策 |
+| I1 | 見〈上線後回饋〉失敗訊號的路徑 |
+| I2 | `shortlink feedback` |
+| I3 | 根 help 在 `Agents:` 句後多一行 `Problems? run \`shortlink feedback --type bug --message <text>\``；5xx 錯誤的 `next:` 行指向它 |
+| I4 | 見〈上線後回饋〉送出前遮蔽與預覽 |
+| I5 | 見〈上線後回饋〉去向、負責人、處理週期 |
 
 ## 未決事項
 

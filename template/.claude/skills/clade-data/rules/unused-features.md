@@ -29,7 +29,7 @@ Template 預設**不啟用**以下 Supabase feature。引入任一項前 **MUST*
 
 ## Cron（`pg_cron`）+ pg_net
 
-現況：未使用。**優先使用應用層 cron**（Workers `wrangler.toml` `[triggers] crons`、Vercel Cron、Nuxt Hub Scheduled Tasks），只有排程以 DB state 為中心或需存取應用層碰不到的內網資源時才考慮 `pg_cron + pg_net`。引入時 schedule 寫 UTC 並註解當地時間、job 名建立後不改（`cron.schedule` 以名稱 upsert）、pg_net 是 fire-and-forget 不 retry（另查 `net._http_response`）、**NEVER** 在 RLS policy 內呼叫 `net.http_*`、每週掃 `cron.job_run_details`。
+現況：未使用。**優先使用應用層 cron**（Workers Cron Triggers、Vercel Cron、Nuxt Hub Scheduled Tasks），只有排程以 DB state 為中心或需存取應用層碰不到的內網資源時才考慮 `pg_cron + pg_net`。引入時 schedule 寫 UTC 並註解當地時間、job 名建立後不改（`cron.schedule` 以名稱 upsert）、pg_net 是 fire-and-forget 不 retry（另查 `net._http_response`）、**NEVER** 在 RLS policy 內呼叫 `net.http_*`、每週掃 `cron.job_run_details`。
 
 ## Vector / pgvector
 

@@ -31,7 +31,7 @@ paths:
    - `ci-notify-job` 缺 → 在 deploy / CI workflow 尾端加 `notify` job（`if: always()`，`uses: ./.github/actions/discord-deploy-notify`）
    - `webhook-secret` 未引用 → notify job 傳入 `webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}`，並提醒 user 在 GitHub repo Actions secrets 設定該值（值本身 audit 查不到，標 `set=?`）
 
-3. **`self-hosted-runner` 是 informational**：wrangler / Cloudflare 型 consumer 用 `ubuntu-latest` 合理，不因此判 drift。只有走 Docker self-hosted deploy 型的 consumer 才 MUST 用 `[self-hosted, ...]` runner。
+3. **`self-hosted-runner` 是 informational**：void / Cloudflare 型 consumer 用 `ubuntu-latest` 合理，不因此判 drift。只有走 Docker self-hosted deploy 型的 consumer 才 MUST 用 `[self-hosted, ...]` runner。
 
 4. **同一時機 MUST 一併跑 CI gate 接線稽核**（clade 散播的 blocking gate 只跑在 `.husky/pre-push`，`--no-verify` 與 web 編輯介面都能繞過）：
 

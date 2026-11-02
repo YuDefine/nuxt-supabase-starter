@@ -1,6 +1,6 @@
 ---
 description: 新專案（scaffold / init / 從 starter 灌進既有 repo）期間撞到的每一個報錯、阻礙、體驗不佳處，要修在 clade / starter 源頭並長出機械檢查，不要只修當前 repo。放行 gate 是 scripts/audit-new-project-readiness.ts。
-paths: ['.claude/consumer-meta.json', '.clade/manifest.json', '.claude/hub.json', 'wrangler.{toml,jsonc}', '.gitignore', 'package.json', 'nuxt.config.*']
+paths: ['.claude/consumer-meta.json', '.clade/manifest.json', '.claude/hub.json', 'void.config.ts', '.gitignore', 'package.json', 'nuxt.config.*']
 ---
 <!-- Clade native rule; source: rules/core/new-project-readiness.md; edit canonical source -->
 <!-- clade-targets: claude,agents -->
@@ -46,9 +46,9 @@ paths: ['.claude/consumer-meta.json', '.clade/manifest.json', '.claude/hub.json'
 | `consumer-meta.identity` | 2026-08-24 co-purchase：`.claude/consumer-meta.json` 整份從 nuxt-supabase-starter 複製來，consumerId 冒名、auth/database/deploy 全 none。release-gate 判 undeclared，verification-lease／db-reset-coordination／dev-server-spawn 全部讀到與事實相反的宣告 |
 | `artifacts.not-tracked` | 同上：`coverage/` 進版控，`vitest --coverage` 每跑一次重寫整棵目錄，44 檔 5999 行填滿 code review 的 6000 行 budget——該次 review 一行產品程式碼都沒讀到，卻輸出了外觀正常的 verdict |
 | `cloudflare.compat-flags` | 同上：Nuxt(framework) 的 `compatibility_flags` 缺 `no_nodejs_compat_v2`。[[cloudflare-workers]] §3.2 早就是 hard rule，缺的是有人擋 |
-| `cloudflare.local-dev-binding-declared` | 同上 TD-003：wrangler ↔ workerd handshake 永久 hang，Nitro 的 cloudflare-dev plugin 把失敗 `.catch()` 成空 stub env——失敗與「這個專案沒有 binding」外觀相同，所有碰 D1／R2 的 route 回 500，22 條人工檢查一格都驗不了 |
+| `cloudflare.local-dev-binding-declared` | 同上 TD-003：本機 dev 與 workerd 的 handshake 永久 hang，Nitro 的 cloudflare-dev plugin 把失敗 `.catch()` 成空 stub env——失敗與「這個專案沒有 binding」外觀相同，所有碰 D1／R2 的 route 回 500，22 條人工檢查一格都驗不了 |
 | `hub-vs-meta.database` | 同上：`.claude/hub.json` 宣告 `db-schema: cf-d1`，`consumer-meta` 宣告 `database.kind: none`。同一件事的兩份宣告矛盾時，下游規約讀到哪一份是碰運氣 |
-| `config.parse` | 本 gate 自身第一版：`wrangler.jsonc` 的 trailing comma 讓 `JSON.parse` 失敗回 null，依賴它的兩個 check 直接從輸出消失——長相與「這兩條通過了」完全一樣 |
+| `config.parse` | 本 gate 自身第一版：Workers 設定檔的 trailing comma 讓 `JSON.parse` 失敗回 null，依賴它的兩個 check 直接從輸出消失——長相與「這兩條通過了」完全一樣 |
 | `package.heavy-gate.*` | 2026-09-06 某 consumer：typecheck／test／build 有 script，卻沒有對應重型准入；與 `audit-gate-coverage.ts` 共用 label、轉呼與 arg-safe 判定（`test:e2e` 暫不納入：starter 範本受閘前納入會擋下每個新專案，重開條件寫在 check 7 註解） |
 | `capability.truth-root` | 2026-10-03 某 consumer：onboarding 時 manifest 宣告了 `aixbdd`／`specformula`（`init-consumer.ts` 只推斷 `evlog`，這兩項照 starter 自身的 `template/.clade/manifest.json` 加上），建案流程卻沒有任何一步放 lifecycle 兩檔或提示產物，登記後 `audit-registry-reality` R8 報 4 項 error、擋 clade publish。源頭修：`bootstrap-project.ts` 的 `capability-products` step 直接帶 lifecycle 兩檔、在 registry 自動設 `capability_bootstrap_pending`（techstack／isa／features 降 warn，產物落地自動解除）、自動 `flow ask` 送 specify 進待決佇列。本 check 只擋 lifecycle／truth-root；三項產物列在 JSON `pending`，NEVER 捏造 |
 | `package.doctor.dependency`／`package.doctor.installed`／`package.doctor.adapter` | 同日另一 consumer：doctor script 存在，但 vite-doctor binary 缺席；檢查依賴宣告、本地可執行檔與 script 引用的投影入口 |

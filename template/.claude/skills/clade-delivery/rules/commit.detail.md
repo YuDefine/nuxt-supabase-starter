@@ -38,17 +38,18 @@ paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**']
 
 **預設所有 `git status` 顯示的 uncommitted 變更都納入本次 `/commit` 的候選清單**，照常查歸屬、跑 0-A，並在 Step 3 依功能分組。不同主題不構成排除理由；候選清單不授權覆寫另一個仍在寫入的 session，也不替代使用者已指定的範圍。實際提交前每組均須完成下方歸屬探測與品質 gate。
 
-```text
-uncommitted 變更
-├─ 預設 → 全列候選並查歸屬；「主題不同 / 不認得來源 / 想讓 commit 乾淨 / 跟我無關」
-│    不構成排除理由 → 已授權且可安全操作的內容分組；仍在寫入或歸屬不明先協調
-├─ WIP 阻礙處理（stash，極少數例外）— 僅三條件之一（使用者明確要求視為涵蓋）：
-│    1. 品質閘門卡死且短時間修不好  2. 明確不該入庫的殘留（debug print / 假資料 / 敏感資訊）
-│    3. 使用者主動在 $ARGUMENTS 指名要 stash
-│    → 優先 stash 該檔本身（git stash push -u -- <檔>）而非整批 + MUST 在 HANDOFF.md 登記
-│      （stash 訊息對應、對齊哪條觸發條件、接手指引），寫完才繼續
-└─ worktree → main commit handoff → stash 是合法規約中介（見下節），不受上列三條件限制
-```
+評估：first-match；以上皆非 → W*
+
+| id | 這批 uncommitted 變更 | 處置 |
+| --- | --- | --- |
+| W1 | 正在做 worktree → main 的 commit handoff | 可用 stash 當規約中介，不受 W2～W4 限制（§ Commit 預設位置：main worktree） |
+| W2 | 品質閘門卡死且短時間修不好 | stash 該檔本身（`git stash push -u -- <檔>`），不整批 [^W2] |
+| W3 | 明確不該入庫的殘留（debug print／假資料／敏感資訊） | 同 W2 |
+| W4 | 使用者在 `$ARGUMENTS` 指名要 stash，或明確要求視為涵蓋 | 同 W2 |
+| W* | 以上皆非 | 全列候選並查歸屬；可安全操作的分組，仍在寫入或歸屬不明先協調 [^W*] |
+
+[^W2]: stash 前 MUST 在 HANDOFF.md 登記 stash 訊息對應、對齊哪個 id、接手指引，寫完才繼續。
+[^W*]: 「主題不同／不認得來源／想讓 commit 乾淨／跟我無關」都不構成排除理由。
 
 - **排除條件（唯一）**：使用者在本任務訊息或 `$ARGUMENTS` 中**明確**指名排除（例如「排除 .env.local」「只 commit app/」）。既有同範圍授權持續有效；未解所有權衝突是尚未通過前置條件，不是默默移出候選清單
 - **NEVER** 以「這個不在我 scope」「看起來是別的 session 做的」「不確定是否該 commit」自行排除、啟動 stash、或徵詢使用者意見 — 分組是 Step 3 的工作，不是 Step 0 的判斷題
@@ -98,21 +99,20 @@ uncommitted 變更
 
 ### Artifact-tick（hard rule）
 
-只保存 work item carrier 進度的 artifact-tick，路徑限定**兩條**——該工作的 tasks 檔與它的 verify evidence sidecar `docs/evidence/<work-slug>.jsonl`：
+只保存 work item carrier 進度的 artifact-tick，路徑限定**兩條**——該工作的 tasks 檔與它的 verify evidence sidecar（lifecycle repo `specs/evidence/<work-slug>.jsonl`；未遷移 consumer `docs/evidence/<work-slug>.jsonl`；由 `evidence-store.ts` `sidecarPath` 解析）：
 
 ```bash
+# lifecycle repo（plan package）：
 git commit --only -m "📝 docs(tasks): phase N done (<work-slug>)" -- \
-  tasks/<date>-<work-slug>.md docs/evidence/<work-slug>.jsonl
-# plan package 版本：
-# git commit --only -m "📝 docs(tasks): phase N done (<work-slug>)" -- \
-#   specs/plans/NNN-<work-slug>/tasks.md docs/evidence/<work-slug>.jsonl
+  specs/plans/<W-id>/tasks.md specs/evidence/<work-slug>.jsonl
+# 未遷移 consumer：tasks 檔 tasks/<date>-<work-slug>.md，sidecar docs/evidence/<work-slug>.jsonl
 ```
 
 **每一個** phase-tick commit 都 **MUST** 同時帶 tasks 檔與該工作的 evidence sidecar，不是只帶其中一個、也不是只有「有跑 verify 的那一次」才帶——sidecar 檔不存在時（該工作尚未產生任何 receipt）才可以省略那條路徑。
 
 `merge-back --squash` 只帶 committed changes 回 main，未 commit 的 checkbox 留在 worktree working tree → main 的 tasks 檔永遠是 `[ ]` → impl-gate 誤判；sidecar 沒一起 commit 則 checkbox 回到 main、receipt 留在 worktree 被 GC，兩者走不同運輸機制就是 [[TD-394]] 的成因。操作細節與時機見 [[wt]] 的 `rules/讀進度前先查worktree判準.md` Rule 4（該規則是執行面 SoT，本節是「worktree 內能不能 commit」的契約 SoT）。
 
-**NEVER** 把上述兩條路徑以外的檔搭這條例外的便車：同一個 commit 混進 tasks 檔與 `docs/evidence/<work-slug>.jsonl` 以外的路徑，就不再是 artifact-tick，回到上一條禁令。2026-10 openspec purge 前寫進 `.spectra/evidence/` 的 in-flight receipt 在過渡期仍可一起帶進 tick；`.spectra/` 其餘子目錄（`snapshots/` / `touched/` / `stash-meta-*.json`）**NEVER** 在白名單內。
+**NEVER** 把上述兩條路徑以外的檔搭這條例外的便車：同一個 commit 混進 tasks 檔與 sidecar（lifecycle repo `specs/evidence/`、未遷移 consumer `docs/evidence/` 下的 `<work-slug>.jsonl`）以外的路徑，就不再是 artifact-tick，回到上一條禁令。2026-10 openspec purge 前寫進 `.spectra/evidence/` 的 in-flight receipt 在過渡期仍可一起帶進 tick；`.spectra/` 其餘子目錄（`snapshots/` / `touched/` / `stash-meta-*.json`）**NEVER** 在白名單內。
 - **NEVER** 用 `git stash push` 不加 `-u` — 漏掉 untracked 新檔
 - **NEVER** stash pop 撞 conflict 時用 `git checkout --` / `git restore` 「清理」 — 會永久毀掉 main 既有 WIP
 
@@ -233,7 +233,7 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 | `tasks/**`、`docs/discussions/**`、`docs/digests/**` | session-scoped 與討論紀錄 |
 | `docs/pitfalls/**`、`docs/archives/**`（未遷移 consumer） | 事後紀錄與 rotate 產物。lifecycle repo 兩者都停寫（`specs/truth/work-lifecycle.md` § Old carriers），白名單只為存量的修改與刪除保留 |
 | `vendor/snippets/**/*.md` | cookbook / pressure scenario 散文 |
-| `tasks/**/*.md`、`specs/plans/**/tasks.md`<br>`docs/evidence/<work-slug>.jsonl` | worktree phase-tick 專用，**兩條一起**（見 § Artifact-tick（hard rule）） |
+| `tasks/**/*.md`、`specs/plans/**/tasks.md`<br>`specs/evidence/<work-slug>.jsonl`（lifecycle repo）／`docs/evidence/<work-slug>.jsonl`（未遷移 consumer） | worktree phase-tick 專用，**兩條一起**（見 § Artifact-tick（hard rule）） |
 
 **白名單外的一切改動 MUST 走 `/commit`**，包含但不限於：`rules/**`、`scripts/**`、`vendor/scripts/**`、`capabilities/**`、`claude-md/**`、`registry/**`、任何 source code。改動落在白名單內外**混合**時，整批走 `/commit`——**NEVER** 拆成「白名單那半用 `--only` 先送」。
 

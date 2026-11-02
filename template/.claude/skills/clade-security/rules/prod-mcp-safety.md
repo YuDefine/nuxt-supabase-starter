@@ -1,5 +1,6 @@
 ---
 description: 跨 consumer prod MCP 安全 hard rule（prod Supabase MCP 的 client 端封鎖＋server 端 read_only）
+when: "要呼叫 prod MCP，或改 MCP 設定之前"
 ---
 <!-- Clade native rule; source: rules/core/prod-mcp-safety.md; edit canonical source -->
 <!-- clade-targets: claude,agents -->

@@ -335,7 +335,7 @@ gate 自己的可用度跑 `node scripts/audit-security-gate-readiness.ts`（war
 只有完整 scope、無 Critical／Major 且輪數 ledger 通過時，才把有效 24 小時的 active
 基線登記在本 worktree 的 git dir，綁定審查 session；有該 session 的 commit lock 時另綁其 owner token。
 審查 session 的身分依序取自 `COMMIT_RUNTIME`+`COMMIT_SESSION_ID`、`CLAUDE_CODE_SESSION_ID`、
-`CODEX_THREAD_ID`、`CLADE_DEVIN_SESSION_ID`、`CLADE_DISPATCH_SESSION_ID`；全部缺席時基線
+`CLADE_DEVIN_SESSION_ID`、`CLADE_DISPATCH_SESSION_ID`；全部缺席時基線
 綁不到 owner，wrapper 不安裝 active guard（未綁定的基線會對所有 commit 生效 24h），
 verdict 與 immutable receipt 不受影響。
 其他 session 與無 session 的自動化 commit 不受此 guard 影響，也不消耗 owner 的基線。
@@ -715,6 +715,8 @@ node bin/clade-gate run test -- <runner> <測試檔>  # 沒有合適 script 時�
 
 **NEVER** 為了過 0-C 把 `CLADE_ALLOW_FULL_SUITE=1` 當常態通路——它是逐案例外放行，用了要在回報寫明理由。改動面大到定點測試蓋不住時，回報寫明「廣範圍回歸交 PR CI」，push 後看 CI 結果。
 
+**test harness 自改時，本機不跑全量**（Charles 2026-10-26 拍板，W-2026-10-25-verify-harness-self-edit-scope）：`test:affected` 遇到 `FULL_ESCALATION_PATTERNS`（`scripts/test-lanes/affected.ts`）裡的 harness 檔——`scripts/run-node-tests.ts`、`scripts/test-lanes/**`（清單排除的資料檔與離線工具除外）、`bin/clade-gate`、`vendor/scripts/with-scoped-tmp.ts`、`vendor/scripts/tmp-capacity.ts`、`vendor/signals/**`——會升成全量（印 `Core configuration or shared runner changed: <檔>`）。本機 0-C 不跑這趟全量，改跑 harness 相關測試：改到的 harness 檔對應的測試（如 `test/test-lanes*.test.ts`、`test/run-node-tests.test.ts`、`test/scoped-tmp*.test.ts`）＋明確 import 改到的檔的測試，經 `node bin/clade-gate run test -- node --test <測試檔…>` 跑；全量回歸交 PR CI，回報寫明「harness 自改，全量交 PR CI」並在 push 後看 CI 結果。要先知道會不會升全量，用 `node scripts/run-node-tests.ts --lane=affected --base=<merge-base> --dry-run` 預覽。**判 harness 自改不能只看印出的那個路徑**：runner 碰到第一個符合的檔就停，只印那一檔，同一份 diff 另有 `package.json`、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`tsconfig*.json` 時原因欄仍可能只顯示 harness 檔。MUST 另跑 `git diff --name-only <merge-base>`（含 staged／working tree 的改動），確認升級觸發檔全落在上述 harness 清單、沒有任何非 harness 的觸發檔，才算 harness 自改；有任何一個就照舊在本機跑全量。確認是 harness 自改時， `pnpm verify` 改成分開跑 `pnpm check`、上述 harness 測試、`pnpm run doctor`。只放寬 harness 自改：`package.json`、lockfile、`pnpm-workspace.yaml`、`tsconfig*.json` 觸發的升級照舊在本機跑全量（主線）或依上方派工規則處理。
+
 `test:affected` 是 repo 在 `package.json` **明文宣告**的 lane 入口：它從 diff（staged ＋ working tree ＋ base 以來的 range）反查
 「哪些測試引用了改到的檔」，改到共用設定（runner／lockfile／tsconfig）時自動升 full。clade 的 runner 對 `package.json`
 做欄位判定：依賴、`test*`／生命週期 script、其他非描述欄位有變才升 full；只改其他 script 時改選引用到它（含遞移呼叫者與
@@ -899,15 +901,15 @@ grep -rnoE '`[a-zA-Z][a-zA-Z0-9._/-]+\.(md|mjs|ts|mts|sh|json|yml|yaml)`' docs/ 
 
 **三方受眾檢查清單**（主線自行 review，不開 subagent）：
 
-| 受眾 | docs 位置（典型） | 檢查項 |
+| 受眾 | 文件位置（典型；lifecycle repo 的現行 SSoT 在 `specs/truth/docs/` 下同名子目錄，文件站手冊與設定在站台聚合根（例如 `site/`）；未遷移 consumer 在 `docs/`） | 檢查項 |
 | --- | --- | --- |
-| **非技術人員**（客戶 / PM） | `docs/user-guide/`、`docs/business/`、VitePress 首頁 hero | 新功能是否有使用說明？既有說明是否因 UI/流程變更過時？截圖是否對齊當前版本？ |
-| **開發者** | `docs/solutions/`、`docs/decisions/`、`docs/guides/`、`docs/modules/`、`docs/dev-guide.md` | API 改動 → 對應 solution/guide 是否更新？新模組 → 有沒有 module doc？架構決策 → decision record 是否需更新？ |
-| **維運者** | `docs/operations/`、`docs/ops/`、`docs/runbooks/` | config/env 變更 → runbook 是否更新？deploy 流程變更 → ops doc 是否對齊？新 migration → rollback SOP 是否存在？ |
+| **非技術人員**（客戶 / PM） | lifecycle repo：站台手冊（例如 `site/manuals/`）；未遷移 consumer：`docs/user-guide/`、`docs/business/`；VitePress 首頁 hero | 新功能是否有使用說明？既有說明是否因 UI/流程變更過時？截圖是否對齊當前版本？ |
+| **開發者** | lifecycle repo：`specs/truth/docs/{guides,modules}/`、plan package；未遷移 consumer：`docs/solutions/`、`docs/decisions/`、`docs/guides/`、`docs/modules/`、`docs/dev-guide.md` | API 改動 → 對應 solution/guide 是否更新？新模組 → 有沒有 module doc？架構決策 → decision record 是否需更新？ |
+| **維運者** | lifecycle repo：`specs/truth/docs/{operations,runbooks}/`；未遷移 consumer：`docs/operations/`、`docs/ops/`、`docs/runbooks/` | config/env 變更 → runbook 是否更新？deploy 流程變更 → ops doc 是否對齊？新 migration → rollback SOP 是否存在？ |
 
-**VitePress 場景額外檢查**：若專案有 `docs/.vitepress/config.{ts,mts}`，新增的 docs/*.md MUST 已加入 sidebar config；被刪/搬移的 page MUST 已從 sidebar/nav 移除。
+**VitePress 場景額外檢查**：若專案有 VitePress 設定（lifecycle repo 在站台聚合根，例如 `site/.vitepress/config.{ts,mts}`；未遷移 consumer `docs/.vitepress/config.{ts,mts}`），新增的頁面 MUST 已加入 sidebar config；被刪/搬移的 page MUST 已從 sidebar/nav 移除。
 
-**執行方式**：主線列出 diff 涉及的受眾面向 → 逐條對 docs/ 檢查 → 有缺失就當場補、修路徑、更新內容。
+**執行方式**：主線列出 diff 涉及的受眾面向 → 逐條對上表該 repo 形態的文件位置檢查 → 有缺失就當場補、修路徑、更新內容。
 
 ### 修復 loop
 

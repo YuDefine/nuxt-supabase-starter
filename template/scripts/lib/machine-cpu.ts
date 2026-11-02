@@ -28,8 +28,8 @@ export function parseCpuStatLine(line: string): CpuCounters | null {
 export const SATURATED_LOAD_PER_CORE = 2
 
 /**
- * 每核負載上限：達此值的機器不再收新件——另一台低於上限就放那台，
- * 每台都到上限才排隊（自動加派記 `resource-pressure`、`--machine auto` 拒派、預設 auto 留本機）。
+ * 每核負載上限：達此值的機器不再收新件——另一台低於上限就放那台，每台都到上限才排隊（自動加派記
+ * `resource-pressure`、`--machine auto` 拒派、預設 auto 留本機，本機到線而 peer 探不到時拒派）。
  * 每核負載高到 brief 送達逾時的程度才擋；開樹的 pnpm／tsc 尖峰只到 1.2 左右，
  * 所以線畫在 4（每核一個在跑、三個在等），尖峰不會誤擋。CPU 使用率封頂在 1.0，表達不出超載，上限只能看 load1／核。
  */
@@ -46,6 +46,25 @@ export function overLoadCap(m: { load1?: number | null; cores?: number | null })
  * 在等換頁就是 swap 抖動，再派可能把機器拖到當機。
  */
 export const MEM_PRESSURE_AVG60 = 30
+
+/**
+ * 根目錄磁碟用量達此百分比的機器不當派工目標（常態要留在 80% 以下）。placement 把它當第三條
+ * 排除線（與 `MEM_PRESSURE_AVG60`、`LOAD_CAP_PER_CORE` 並列），理由寫進 `placement.loads`；兩台都到線時退回本機，不拒派。
+ */
+export const DISK_FULL_PCT = 80
+
+/** `df -P /` 的輸出（含或不含標題列）→ 用量百分比；解析不出 null（呼叫端當「沒量到」，不排除）。 */
+export function parseDfUsedPct(text: string): number | null {
+  const lines = text.trim().split('\n')
+  const last = lines.at(-1)?.trim() ?? ''
+  const m = /\s(\d{1,3})%\s+\//u.exec(last) ?? /\s(\d{1,3})%(?:\s|$)/u.exec(last)
+  return m ? Number(m[1]) : null
+}
+
+/** 這台磁碟是否到了 `DISK_FULL_PCT`；沒量到不判。 */
+export function diskFull(m: { disk_used_pct?: number | null }): boolean {
+  return typeof m.disk_used_pct === 'number' && m.disk_used_pct >= DISK_FULL_PCT
+}
 
 /** PSI 檔（`/proc/pressure/{cpu,memory}`）`some` 列的 `avg60`／`avg300`；讀不到 null。 */
 export function parseCpuPsi(text: string, window: 'avg60' | 'avg300' = 'avg300'): number | null {

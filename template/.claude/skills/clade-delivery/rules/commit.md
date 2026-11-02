@@ -1,3 +1,6 @@
+---
+when: "要 commit，或要處置 WIP／stash 之前"
+---
 <!-- Clade native rule; source: rules/core/commit.md; edit canonical source -->
 <!-- clade-targets: claude,agents -->
 

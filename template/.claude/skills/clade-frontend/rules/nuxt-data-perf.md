@@ -367,7 +367,7 @@ async function handleSubmit() {
 
 | 主題 | 走哪個 |
 |------|--------|
-| D1 / Drizzle / wrangler / NuxtHub binding | `data-layer-d1.md` |
+| D1 / Drizzle / void binding / NuxtHub binding | `data-layer-d1.md` |
 | useFetch / useQuery / $fetch 選用 / dedupe / cache / payload | 本 rule |
 | Nuxt UI component props / theming | nuxt-ui-remote MCP 與專案的 Nuxt UI 查詢規約 |
 | CSS / Web Platform API（dialog / popover / anchor） | 專案的瀏覽器支援政策與 Web Platform 官方文件 |

@@ -4,8 +4,8 @@
 
 - 對象：`node vendor/scripts/flow/flow.ts`（clade `vendor/scripts/flow/flow.ts`，2026-10-18 版本）
 - 規模：M（39 個子命令，`plan`、`handoff` 下有第二層）；使用者：agent 為主，人偶爾直接下
-- 判定統計：PASS 12、PARTIAL 4、FAIL 8、N/A 15、未驗 12（共 51 項）
-- 待修：P0 0 項、P1 9 項、P2 3 項（合併成 10 筆發現）
+- 判定統計：PASS 13、PARTIAL 6、FAIL 8、N/A 18、未驗 13（共 58 項）
+- 待修：P0 0 項、P1 10 項、P2 3 項（合併成 11 筆發現）
 - 最先修：退出碼 2 一碼多義，加上未知旗標被靜默吞掉；agent 會把「拒絕執行」「結果為空」「打錯旗標」混為一談
 
 ## 探測範圍
@@ -86,6 +86,14 @@
 - 修法：新增 `test/flow-cli-surface.test.ts`，遍歷 USAGE 的子命令表，斷言：會寫入的命令都用 `--apply`、沒有 `--dry-run`；命令順序符合 A1 修法後的形狀；USAGE 的退出碼表與 `fail()` 的實際退出碼一致。
 - 改後行為：新增一個帶 `--dry-run` 的子命令時，CI 會失敗並指出 A3
 
+### P1｜I5：失敗訊號沒有寫明處理週期
+
+- 判定：PARTIAL
+- 證據：`node scripts/measure-cli-friction.ts --json`（zenbook，14 天）算得出 `flow` 的用法錯誤，但當時沒有負責人與週期。
+- 對 agent 的影響：同一個打錯的命令每週重複，沒有人會收到訊號。
+- 修法：在量測腳本開頭註解寫明接收者與週期，日期登記進 plan 的 Open work。
+- 改後行為：主持者每 30 天跑一次，判定要修的開 plan
+
 ### P2｜F4：根 help 第一屏沒有 agent 入口
 
 - 判定：FAIL
@@ -108,6 +116,11 @@
 - 修法：等 F2 改成每個子命令各自的 help 後，用同一份子命令表產生 completion。
 - 改後行為：`flow completion zsh` 輸出 zsh 補完腳本
 
+## 上線後回饋
+
+- 失敗訊號的數字：`node scripts/measure-cli-friction.ts --json`（zenbook，14 天）
+- 去向、負責人、處理週期：負責人 clade 主線；週期未定（見發現 I5）
+
 ## 全項對照
 
 | ID | 判定 | 嚴重度 | 證據 |
@@ -121,6 +134,8 @@
 | B4 | PASS | — | 所有 probe 的 `ansi_in_stdout`／`ansi_in_stderr` 都是 false；原始碼沒有色碼字元 |
 | B5 | N/A | — | list 類命令沒有上限或分頁（USAGE 未提及） |
 | B6 | N/A | — | 只操作本機 spine，沒有遠端對象 |
+| B9 | PARTIAL | P1 | 根 help 一次輸出整份 USAGE（246 行）；`plan list` 無法收窄欄位（`probes.help.stdout_head`、USAGE） |
+| B10 | 未驗 | — | `pending --json` 會帶入題目文字與外部來源內容，尚未確認欄位能否區分（見未驗項） |
 | C1 | PASS | — | 未知命令與用法錯誤皆 exit 非 0（`probes.unknown_command.exit_code=1`） |
 | C2 | FAIL | P1 | 見發現 C2 |
 | C3 | PARTIAL | P1 | 錯誤走 stderr 並說明原因，但下一步是整份 USAGE（見發現 C5） |
@@ -151,6 +166,11 @@
 | H1 | N/A | — | 規模 M |
 | H2 | PARTIAL | P1 | 見發現 H2 |
 | H3 | N/A | — | 規模 M |
+| I1 | PASS | — | transcript 被動取訊號：`scripts/measure-cli-friction.ts` |
+| I2 | N/A | — | 內部 CLI，不對外發佈 |
+| I3 | N/A | — | 沒有 I2 |
+| I4 | N/A | — | 沒有 I2 |
+| I5 | PARTIAL | P1 | 見發現 I5 |
 
 ## 未驗項
 
@@ -159,6 +179,7 @@
 | B1 | 只觀察到 help 與錯誤路徑，資料命令未實跑 | 經同意後實跑 `flow status --json 2>/dev/null \| jq .` |
 | B2 | help 列出 7 個命令有 `--json`；`sources`、`plan stale` 等命令的輸出形式要實跑才知道 | 逐一讀這些命令的輸出程式碼，或實跑唯讀命令 |
 | B3 | JSON 欄位的穩定性要比對歷史版本 | 比對 `status --json` 在兩個 tag 間的欄位差異 |
+| B10 | `pending --json` 帶入題目文字與 notion 來源，欄位是否區分外部內容未確認 | 讀 `pending --json` 的輸出程式碼，確認外部內容有獨立欄位 |
 | B7 | JSON 排版需要實跑才看得到 | 實跑一個 `--json` 命令 |
 | B8 | 84 個 `process.exit()` 出口只看到部分改用 `writeThenExit`（`flow.ts:1799`） | 逐一核對每個 `--json` 命令的出口 |
 | D6 | `ingest`、`sources --apply` 可能執行很久，逾時與中斷行為要讀程式碼 | 讀 `sources` 的實作 |

@@ -12,7 +12,7 @@
  *
  * 只擋開 PR，**NEVER** 擋派工或限制 open PR 總數（入口不設上限）。
  * 判不出一律放行（fail-open）：不在 git repo、`gh` 失敗或逾時、diff 讀不到、工作目錄判不出（動態 `cd`）、`--repo` 指向別的 repo 或值是動態展開（本機 checkout 量不到）；body 判不出或 `--base`／`--head` 值是動態展開時，只放行去重與大小，記帳類照判。
- * 記帳類判定同樣只在 clade home 做（登記簿 allowlist 與 register-land 只存在那裡），只載入本 hook 自己那棵 checkout 的 allowlist。
+ * 記帳類判定同樣只在 clade home 做（登記簿 allowlist 與 register-land 只存在那裡），allowlist 只從本 hook 自己的 checkout 或本機 canonical clade home（`CLADE_HOME`、`~/offline/clade`）載入——consumer 的 session `cd` 到 clade worktree 開 PR 時靠後者（#3481–#3489 以此漏過）。
  * 投影檔的判定只在 clade home 做得出（`scripts/audit-clade-home-projections.ts` 的投影計畫），且只載入本 hook
  * 自己那棵 checkout 的投影程式（NEVER 執行目標 repo 的程式碼）；其他 repo → 大小判定不跑（只做去重）。
  * 投影計畫要起 node 子行程並建完整規則計畫，遠慢於 git／gh：只在未扣投影前就超限時才算，且吃整體預算的剩餘時間而非單次上限。
@@ -27,6 +27,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -345,19 +346,31 @@ function sharesGitCommonDir(top: string, hookRoot: string): boolean {
 export function cladeHomeRegisterMatcher(
   top: string,
   hookRoot = HOOK_REPO_ROOT,
+  /** hook 不在 clade home 時（consumer 投影的 hook）改從這些 clade home checkout 載入；預設 `CLADE_HOME`、`~/offline/clade`。 */
+  homeRoots: readonly string[] = canonicalCladeHomes(),
 ): ((path: string) => boolean) | null {
-  // allowlist 永遠從 hook 自己的 checkout 載入；被量的 diff 可以在同 repo 的任一棵 worktree
-  if (!isHookRepo(top, hookRoot) && !sharesGitCommonDir(top, hookRoot)) return null
-  const file = join(hookRoot, 'vendor', 'scripts', 'lib', 'register-paths.ts')
-  if (!existsSync(file)) return null
-  try {
-    const m = createRequire(import.meta.url)(file) as { isRegisterPath?: unknown }
-    return typeof m.isRegisterPath === 'function'
-      ? (m.isRegisterPath as (path: string) => boolean)
-      : null
-  } catch {
-    return null
+  // allowlist 只從「hook 自己的 checkout」或「本機 canonical clade home」載入（NEVER 執行被量那棵 repo 的程式碼）；
+  // 被量的 diff 可以在同 repo 的任一棵 worktree。consumer 的 session `cd` 到 clade worktree 開 PR 時
+  // （2026-10-31 #3481–#3489），hook 是 consumer 那份、沒有 register-paths.ts，要靠 canonical home 補上。
+  for (const root of [hookRoot, ...homeRoots]) {
+    const file = join(root, 'vendor', 'scripts', 'lib', 'register-paths.ts')
+    if (!existsSync(file)) continue
+    if (!isHookRepo(top, root) && !sharesGitCommonDir(top, root)) continue
+    try {
+      const m = createRequire(import.meta.url)(file) as { isRegisterPath?: unknown }
+      if (typeof m.isRegisterPath === 'function')
+        return m.isRegisterPath as (path: string) => boolean
+    } catch {
+      // 這個 root 載入失敗 → 試下一個
+    }
   }
+  return null
+}
+
+/** 本機 canonical clade home checkout（`CLADE_HOME`、`~/offline/clade`）。 */
+function canonicalCladeHomes(): string[] {
+  const roots = [process.env.CLADE_HOME, join(process.env.HOME || homedir(), 'offline', 'clade')]
+  return [...new Set(roots.filter((r): r is string => Boolean(r)))]
 }
 
 /**

@@ -20,7 +20,7 @@ Claude Code 與 Pi 共用本表的工作角色（Codex runtime 已於 2026-10-18
 > 本檔是 [[agent-routing]] § Routing Table 的下推對照表。**判準留在該節**（合法 model 值、
 > workspace mutation 的 admission、`--route`／`--tier-basis`／
 > `--table-row` 的記帳義務、以及每一條硬禁令）；本檔只回答「這類工作查出來是哪個 model、哪個
-> effort、為什麼」。取證與跑分在 [[agent-routing.routing-table-rationale]]。
+> effort、為什麼」。取證與跑分在 `docs/rule-rationale/agent-routing.md` § Routing Table 的取證層。
 > 機械 SoT 是 `vendor/scripts/pi-routing-policy.ts` 的 `TABLE_ROW_POLICIES`／`ROW_CHAINS`／
 > `DELEGATE_SUB_CHAIN`／`NATIVE_TABLE_ROW_POLICIES`／`chainTerminal()`——本表與它 MUST 同一個 commit 一起改。
 
@@ -47,9 +47,9 @@ Claude Code 與 Pi 共用本表的工作角色（Codex runtime 已於 2026-10-18
 
 **effort 跟著 model 走，不跟著列走**（`TIER_EFFORT`／`CLAUDE_MODEL_EFFORT`）：Claude Opus 5.5 預設 `medium`；**Claude Sonnet 5.5 一律 `high`**；**Claude Haiku 5.5 一律 `low`**。任何一跳的 effort 與此不符，dispatcher exit 1。
 
-**Sonnet 5.5 為什麼是 `high`（Charles 2026-09-29）**：`high` 是它自己的 API 預設（對稱於 Opus 5.5 用它自己的預設 `medium`）。官方「agentic coding 從 `medium` 起跳」的依據是 aggregate eval，本規約禁止拿 aggregate 跑分推導檔位（[[agent-routing.routing-table-rationale]]）；它接手的是原 Sol xhigh 的列，model 與 effort 同時降會疊加；官方也寫明低 effort 較常沒跑檢查就回報完成，正衝突於實作列的交付要求。`xhigh`／`max` 不開。**要降 `medium` 先補量測**：同一份真實 brief 各跑 ≥5 次，比「回報前有沒有跑真的檢查」與 commit 0-A findings 數。
+**Sonnet 5.5 為什麼是 `high`（Charles 2026-09-29）**：`high` 是它自己的 API 預設（對稱於 Opus 5.5 用它自己的預設 `medium`）。官方「agentic coding 從 `medium` 起跳」的依據是 aggregate eval，本規約禁止拿 aggregate 跑分推導檔位（`docs/rule-rationale/agent-routing.md` § Routing Table 的取證層）；它接手的是原 Sol xhigh 的列，model 與 effort 同時降會疊加；官方也寫明低 effort 較常沒跑檢查就回報完成，正衝突於實作列的交付要求。`xhigh`／`max` 不開。**要降 `medium` 先補量測**：同一份真實 brief 各跑 ≥5 次，比「回報前有沒有跑真的檢查」與 commit 0-A findings 數。
 
-**量測專用的 Sonnet `medium` 例外（Charles 2026-10-26 答 A「開限定例外、量完即撤」）**：dispatcher 另認 `--tier-basis effort-measurement`，只放行 Claude Sonnet 5.5 `--effort medium`，且只在環境 `CLADE_WORK_ID=W-2026-10-07-opus55-effort-measurement` 時、2026-11-30 前有效；其餘 basis 的 Sonnet 仍一律 `high`。量完把 reps 寫進該 plan 的 `evidence/d-sonnet/` 後撤掉（`pi-routing-policy.ts` 的 `EFFORT_MEASUREMENT_*` 與 `dispatchAttributionProblem` 的對應分支）。Workflow gate 的 `WORKFLOW_SONNET_EFFORTS` 不動：reps 走 Herdr `cc` pane，不走 Workflow。
+**量測專用的 Sonnet `medium` 例外（Charles 2026-10-26 答 A「開限定例外、量完即撤」）**：dispatcher 另認 `--tier-basis effort-measurement`，只放行 Claude Sonnet 5.5 `--effort medium`，且只在環境 `CLADE_WORK_ID=W-2026-10-07-opus55-effort-measurement` 時、2026-11-30 前有效；其餘 basis 的 Sonnet 仍一律 `high`。量完把 reps 寫進該 plan 的 `evidence/d-sonnet/` 後撤掉（`pi-routing-policy.ts` 的 `EFFORT_MEASUREMENT_*` 、`dispatchAttributionProblem` 的對應分支與 `refuseRetiredClaudeTier` 的 `measurementSeat` 放行）。Workflow gate 的 `WORKFLOW_SONNET_EFFORTS` 不動：reps 走 Herdr `cc` pane，不走 Workflow。
 
 **Sonnet 5.5 的載體**：in-process 用 `sonnet-implementer` subagent（frontmatter 釘 model 與 effort；brief MUST 含 `routing-row: <列名>` 一行，routing gate 依它放行）——`general-purpose` 加 `model: sonnet` 會繼承 session effort，不是合格載體；Herdr 用 `cc`（池入口，見下方 § Claude 帳號池）child `--model claude-sonnet-5-5 --effort high`（`sonnet` 別名會被釘到 5.5）。cloud session 也是合格載體：`cloud-dispatch.ts` 依列逐件帶 `--model claude-sonnet-5-5 --effort high`（旗標蓋過 repo 釘選，2026-10-06 實測），走不走 cloud 看內容適不適合，判準見 [[agent-routing.dispatch-execution]] § Cloud session 載體。Sonnet 以安全分類器拒答（`stop_reason: refusal`、Claude Code 的 Usage Policy 拒答訊息、空產出）**不算品質失敗**，直接交主線。
 
@@ -69,7 +69,7 @@ Claude Code 與 Pi 共用本表的工作角色（Codex runtime 已於 2026-10-18
 
 | 主線在做什麼 | 主線 model |
 | --- | --- |
-| 主持（coordinator，含繼任 relay） | Claude Opus 5.5（effort: medium），固定；不開 Sonnet、不升 high（`coordinator` skill § 主持者的 model，helper 機械擋） |
+| 主持（coordinator，含繼任 relay、看門狗開席、暫代） | Claude Opus 5.5（effort: low），固定；不開 Sonnet、不升 medium／high（Charles 2026-11-02：「主持改 Opus、effort low；主管一樣 Opus、effort medium」；主持中的方案分歧派 `opus-advisor` 顧問，判斷品質不跟著席位降；`coordinator` skill § 主持者的 model，helper 機械擋） |
 | clade 標準層、規約撰寫（`dotclaude-authoring`）、跨 repo 裁決、commit 0-A 相關 | Claude Opus 5.5（effort: medium） |
 | 範圍已定稿的實作 session（plan／brief 已定案，工作落在 Sonnet 四列） | 可以 Claude Sonnet 5.5（effort: high）起手；**NEVER** 降 medium |
 
@@ -222,4 +222,4 @@ consumer 端的 `.claude/rules/local/**` 同樣命中「寫入路徑含 `.claude
 >
 > **Routing Table 類別的檔位選擇中，NEVER** 拿「輸出會被下游機械消費」當降檔理由：下游若只驗 JSON schema 而不驗語意，降檔引入的錯誤會被自動放大。
 >
-> **跑分、配額權重、擴權取證這三類「拿數字當理由」的陷阱，全文在 [[agent-routing.routing-table-rationale]]**。要拿任何數字支持一次降檔 / 轉列之前 MUST 先讀它，**NEVER** 憑印象引用比例。
+> **跑分、配額權重、擴權取證這三類「拿數字當理由」的陷阱，全文在 `docs/rule-rationale/agent-routing.md` § Routing Table 的取證層**。要拿任何數字支持一次降檔 / 轉列之前 MUST 先讀它，**NEVER** 憑印象引用比例。

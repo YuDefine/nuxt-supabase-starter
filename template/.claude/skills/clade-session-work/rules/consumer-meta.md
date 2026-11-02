@@ -17,7 +17,7 @@ consumer 的 runtime 事實（dev port、auth provider、DB、deploy platform、
 
 | 原則 | 內容 |
 |---|---|
-| **Declarative > Derivable** | manifest **只放**不能穩定推導的事實（auth provider、leaseMode、OAuth pin 與否）。框架版本、依賴清單、wrangler project name 等**可推導**欄位由 aggregator 從 source file 讀取並驗證，不寫進 manifest |
+| **Declarative > Derivable** | manifest **只放**不能穩定推導的事實（auth provider、leaseMode、OAuth pin 與否）。框架版本、依賴清單、Worker name 等**可推導**欄位由 aggregator 從 source file 讀取並驗證，不寫進 manifest |
 | **Cross-validation** | aggregator 對每個欄位驗一致性：consumer-meta 宣告 `dev.ports[0].port=3000` → aggregator 讀 `package.json scripts.dev` 確認真有 `--port 3000`；不一致 → 寫 `validation.errors` 進 snapshot |
 | **Source provenance** | snapshot 內每個 derived 欄位附 `source: <relative-path>:<line-or-key>`，讓後續讀者知道事實從哪來 |
 | **No secrets** | manifest **NEVER** 含 password / token / API key。只記 env var **名稱**，值由各 consumer 自家 `.env.local` 解析 |
@@ -98,7 +98,7 @@ fleet 的部署形態收斂成**三型**。新專案 **MUST** 貼齊其中一型
 | --- | --- | --- | --- |
 | Runtime | nitro `node-server` preset | NuxtHub 或 `cloudflare-module` | 同左（由平台代管） |
 | DB | Supabase（Postgres） | D1 | D1（由平台 provision） |
-| 部署動作 | rsync/SSH + systemd 或 `docker compose` | `cloudflare/wrangler-action` | `pnpm void:deploy` |
+| 部署動作 | rsync/SSH + systemd 或 `docker compose` | `void deploy`（CI 以 `CLOUDFLARE_API_TOKEN`） | `pnpm void:deploy` |
 | Migration | **獨立 job + 風險分類 gate** | `deploy` job 內的一個 step | **不存在** |
 | Deploy pipeline | 4-job（`ci → migrate → deploy → notify`） | 4-job | **3-job**（`ci → deploy → notify`） |
 | Preview 途徑 | per-PR compose / LXC（見 [[db-preview-env]]） | Cloudflare 原生 per-version preview URL + D1 preview binding | 依平台能力，**不可假設等同 Cloudflare 原生** |

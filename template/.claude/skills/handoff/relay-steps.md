@@ -14,7 +14,7 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 | 1 | `relay` |
 | N ≥ 2 | `fanout`（見 [fanout-steps.md](fanout-steps.md)） |
 
-**被派出的 pane 先判這一題**（`CLADE_DISPATCH_ID` 非空、要交棒）。交棒理由只有三種：交棒 profile 越過 hard tier、品質退化、同一問題糾正 ≥2 次；壓縮 profile 下 context 大小**不是**理由，寫回 plan.md 並 commit 後續做（席位→profile 表在 `session-tasks.context-budget`）：
+**被派出的 pane 先判這一題**（`CLADE_DISPATCH_ID` 非空、要交棒）。交棒理由只有三種：交棒 profile 越過 hard tier、品質退化、同一問題糾正 ≥2 次；壓縮 profile 下 context 大小**不是**理由，寫回 plan.md 並 commit 後續做（席位→profile 表在 `session-tasks` § 席位 → profile）：
 
 評估：first-match；以上皆非 → R*
 | id | 可觀察 predicate | 動作 |
@@ -38,7 +38,7 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 
 - brief **MUST** 寫明「你是繼任者，不是被派出去做一件子工作的 worker」，以及本 session 交棒的理由（交棒 profile 越過 hard tier／品質退化／同一問題糾正 ≥2 次／工作已全部移交）。
 - 本 session 若手上還有 in-flight dispatch，brief **MUST** 逐個列出它們的 dispatch id（指針即可）。在做什麼、預期什麼 outcome 已在 dispatch record（`label`、brief 路徑）與 flow，successor 依 id 自取；**NEVER** 在 brief 重述它們的脈絡或進度。
-- brief 交代 PR 收尾時 **MUST** 寫成「ready → 本 head CI 綠 → 0-A finalize → `merge-queue.ts <pr>:<head>`」（coordinator skill `rules/0A與merge佇列判準.md` Rule 1），有主持者就寫「PR 開好交主持者 0-A／merge」。consumer 的 `workflow_model: trunk-based` 只決定自動批次門檻與 base，**NEVER** 讀成「開了 PR 綠了就合」。brief **NEVER** 寫出 `gh pr merge` 指令——helper 以 `self_merge_brief` 拒收（主持者繼任 brief 除外）；要禁止就寫「NEVER 自己 merge」。2026-10-20 #2160 的手寫 relay 寫了「trunk-based 的綠了用 `gh pr merge --rebase`」，三張 consumer PR 因此沒過 0-A 就合入。
+- brief 交代 PR 收尾時 **MUST** 寫成「ready → 0-A finalize（與本 head CI 平行）→ 本 head CI 綠 → `merge-queue.ts <pr>:<head>`」（coordinator skill `rules/0A與merge佇列判準.md` Rule 1），有主持者就寫「PR 開好交主持者 0-A／merge」。consumer 的 `workflow_model: trunk-based` 只決定自動批次門檻與 base，**NEVER** 讀成「開了 PR 綠了就合」。brief **NEVER** 寫出 `gh pr merge` 指令——helper 以 `self_merge_brief` 拒收（主持者繼任 brief 除外）；要禁止就寫「NEVER 自己 merge」。2026-10-20 #2160 的手寫 relay 寫了「trunk-based 的綠了用 `gh pr merge --rebase`」，三張 consumer PR 因此沒過 0-A 就合入。
 
 ## 1.5 spine 收尾（ambient `CLADE_WORK_ID` 非空時 MUST，空則整步跳過）
 
@@ -78,7 +78,7 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts work done "$CLADE_WORK_ID" \
 
 ⛔ **`<routing-model>` NEVER 是 `sonnet`**（依 [dispatch-common.md](dispatch-common.md) § 3.2）：successor 判「還是主線複雜度」就 `opus`；判「只值 sonnet 等級」則兩條都行——`--launcher grok --model grok-4.7 --effort xhigh` 把位置交給 Grok successor，或本 session 留著、把那件事用 Grok worker 派掉。`relay-continuity` 那道限制只綁 Pi，**NEVER** 讀成 grok 不能當 successor。
 
-⛔ **主持者交棒（brief 的 frontmatter 是 `coordinator_brief: successor`）只能 `--launcher cc|cc2|cc3 --model opus --effort medium`**（`cc3`＝`~/.claude-3` 帳號，只限本機、不走額度 admission）：Grok successor 與上一條的其他選項都不適用，helper 以 `usage_error` 拒（`coordinator` skill § 主持者的 model）。
+⛔ **主持者交棒（brief 的 frontmatter 是 `coordinator_brief: successor`）只能 `--launcher cc|cc2|cc3 --model opus --effort low`**（Charles 2026-11-02）（`cc3`＝`~/.claude-3` 帳號，只限本機、不走額度 admission）：Grok successor 與上一條的其他選項都不適用，helper 以 `usage_error` 拒（`coordinator` skill § 主持者的 model）。
 
 ```bash
 node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \

@@ -4,9 +4,9 @@
 {"file":"dev-login.md","source":"rules/modules/auth/better-auth/dev-login.md","paths":["server/routes/auth/**/*dev-login*.ts","server/routes/auth/**/*test-login*.ts","server/api/_dev/**/*.ts","packages/*/server/routes/auth/**/*dev-login*.ts","packages/*/server/routes/auth/**/*test-login*.ts","packages/*/server/api/_dev/**/*.ts","e2e/**/*.ts","packages/*/e2e/**/*.ts","test/e2e/**/*.ts","packages/*/test/e2e/**/*.ts","tests/e2e/**/*.ts","packages/*/tests/e2e/**/*.ts"]}
 {"file":"prod-access.md","source":"rules/core/prod-access.md","paths":["scripts/prod-sql.ts","vendor/scripts/prod-sql.ts",".claude/prod-access.json","supabase/migrations/**",".mcp.json"]}
 {"file":"prod-mcp-safety.enforcement.md","source":"rules/core/prod-mcp-safety.enforcement.md","paths":[".mcp.json",".claude/settings.json",".claude/settings.local.json"]}
-{"file":"prod-mcp-safety.md","source":"rules/core/prod-mcp-safety.md","paths":null}
+{"file":"prod-mcp-safety.md","source":"rules/core/prod-mcp-safety.md","paths":null,"when":"要呼叫 prod MCP，或改 MCP 設定之前"}
 {"file":"public-repo-hygiene.md","source":"rules/core/public-repo-hygiene.md","paths":[".github/workflows/**",".husky/**","HANDOFF.md","tasks/**","scripts/audit-public-tree-hygiene.ts","scripts/public-tree-hygiene-tokens.json"]}
-{"file":"secret-custody.md","source":"rules/core/secret-custody.md","paths":null}
-{"file":"secrets.md","source":"rules/modules/runtime/cf-workers/secrets.md","paths":[".github/workflows/**/*.yml","wrangler.toml","wrangler.jsonc"]}
+{"file":"secret-custody.md","source":"rules/core/secret-custody.md","paths":null,"when":"有 secret、token、credential 的值到你手上時"}
+{"file":"secrets.md","source":"rules/modules/runtime/cf-workers/secrets.md","paths":[".github/workflows/**/*.yml","void.config.ts"]}
 {"file":"security-policy.md","source":"rules/core/security-policy.md","paths":["SECURITY.md","packages/*/SECURITY.md","server/middleware/**","packages/*/server/middleware/**","supabase/migrations/**/*.sql","server/database/migrations/**/*.sql","packages/*/supabase/migrations/**/*.sql","packages/*/server/database/migrations/**/*.sql"]}
 {"file":"user-lifecycle.md","source":"rules/core/user-lifecycle.md","paths":["server/api/**/user*","packages/*/server/api/**/user*","server/api/**/member*","server/api/**/member*/**","packages/*/server/api/**/member*","packages/*/server/api/**/member*/**","server/api/**/admin/user*","packages/*/server/api/**/admin/user*","supabase/migrations/**/*.sql","server/database/migrations/**/*.sql","packages/*/server/database/migrations/**/*.sql"]}

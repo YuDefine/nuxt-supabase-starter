@@ -43,14 +43,15 @@ Charles 交代完任務會離開一陣子；這件工作中途可能換好幾個
 - 換棒（冷續接、harvest-relay、停放後續接派出新 dispatch、停放的自開 pane 以同一個 session 在新 tab 續接）→ 記一棒、落 `<追蹤id>.hopN.md`、改綁到接班（自開 pane 冷續接新鑄的 work id 也接上），不推播。
 - 停放等 Charles 回答（park-ask，或 park 確實把題目送進 `/my` 佇列；停放理由文字提到 Charles 不算）→ 記一棒、標「等你」並推播；接班活過來就自動解除。停放等事件（park-wait 等）只記一棒。停放列被答案直接結案（沒開接班）→ 關列，不推播。
 - 收工（收割、close 類）→ session 追蹤關列並推播「完成」；work 追蹤只記一棒，整件完成由 flow spine 判（終態且沒有 session 在跑），完成時推播結論。結論來源依序：completion summary → session digest 的最後一則 assistant 文字 → 前幾棒留下的結論。
-- 被收掉卻沒有完成證據（不論誰關：主持手動關、auto-dispose close-landed、cloud 自動收割、撞額度後 pane 被收、session 自行結束）→ 消失兜底：上一輪點名看得到、本輪該載體來源完整卻看不到時判 `vanished`。有完成證據（completion summary 或收割）才結案推「完成」；沒有就**同一輪收斂成四種之一，NEVER 停在中間**：
+- 被收掉卻沒有完成證據（不論誰關：主持手動關、auto-dispose close-landed、cloud 自動收割、撞額度後 pane 被收、session 自行結束）→ 消失兜底：上一輪點名看得到、本輪該載體來源完整卻看不到時判 `vanished`；有 pane 的列登記超過 30 分鐘、點名從沒看過它也沒有任何處置紀錄、Herdr 來源完整時同樣判 `vanished`。有完成證據（completion summary 或收割）才結案推「完成」；沒有就**同一輪收斂成四種之一，NEVER 停在中間**：
   - **另開**（狀態「接續中」，算進行中）：本機的 session 追蹤、6 小時內、工作沒被冷續接接走也沒判落地，watch 讀 transcript 最後一則回覆是做到一半（含停在工具呼叫中途）→ 寫 `tracked-lost` 等待列，下一輪接回（prompt cache 還熱且原帳號有額度就同 session `--resume`，否則 digest 冷續接），接班改綁到本列。**目前停用**（`TRACKED_LOST_AUTO_RESUME=false`：「做到一半」還是排除法，閒置消失的 session 也會被叫回；改成要正面證據才重開，plan W-2026-10-25-session-vanished FU-1）：停用期間做到一半改判**待接回**。
   - **等你回答** 🙋：最後一則回覆在問你或交回（題目不進 `/my`，接回 session 再答）。
   - **待接回** 🙋：無法自動另開——pane 在別台、超過 6 小時、主持以 close-landed 收掉卻判不出完工回報、工作已被冷續接接走卻解析不出接班、已自動另開過一次又被收掉、transcript 讀不到、最後是 Esc 中斷、暫緩或在等自己掛的事件。原因寫在列上與推播裡；你決定接回（`tracked-session.ts open <id>`）或結案（`done <id>`）。
   - **結案** ✅：完工回報（誤判 `reopen`），或最後一筆是你親手 `/exit`（disposition `charles-exit`）。
 - work 追蹤沒人扛：工作未結、點名看不到任何屬於它的 session、最後一棒不是停放、閒置超過 60 分鐘 → 待接回 🙋；有 session 接上就解除。
 - **你要刻意結束的委託：在那個 pane 打 `/exit`**，或關之前跑 `tracked-session.ts done`／`unmark`。只按 Esc 再關會落到待接回（意思不明，交你決定）；什麼都沒做就關會被當成當掉、自動另開並沿用原權限模式（判不出手動關閉，2026-10-25 定）。
-- 狀態列 `tracked-session.ts count`：`委託 N｜等你 M｜待接回 R｜新完成 K`。cloud 來源平常常是 partial，兜底可能很晚或不發；Remote Control 載體沒有消失兜底。
+- 狀態列 `tracked-session.ts count`：`委託 N｜等你 M｜待接回 R｜新完成 K`；帳本超過 2 小時沒有任何點名更新時尾端加 `⚠帳本 N 小時沒點名（數字過期）`，數字不代表現況。cloud 來源平常常是 partial，兜底可能很晚或不發；Remote Control 載體沒有消失兜底。
+- watch 跑在非權威機：拉權威機登記檔成鏡像跑一輪，差異與接續檔經 `apply-round` 套回權威機；當輪拉或推失敗就跳過，收列事實留到下一輪重試。watch 連續 2 小時點名不成功時推播一則，之後每小時最多一則。
 - 已知缺口：自開 pane 自己跑 `/handoff relay` 交棒時，接班 session 不經 watch，委託帳跟不到接班（舊 session 消失後照上一條收斂）；要繼續追就在接班 session 送 `/track`。
 - 推播沒進佇列時，該推播的那一刻不動帳，下一輪兜底重判。
 

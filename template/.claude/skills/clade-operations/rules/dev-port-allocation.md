@@ -124,7 +124,7 @@ Tunnel hostname 是 per-consumer 單一資源（§2.5）；N 個 worktree 共用
 ## 自治區（規約不強制）
 
 - `.env.example` 是否寫 `NUXT_DEV_PORT=<value>` 由 consumer 自定 — dev script 的 `--port` flag 是 SoT，env 不需重複
-- 子 service port（Storybook / Vitest UI / Vite preview / Wrangler）— schema 預留欄位，尚未分配，consumer 用到時再進 registry
+- 子 service port（Storybook / Vitest UI / Vite preview）— schema 預留欄位，尚未分配，consumer 用到時再進 registry
 
 ## How to apply
 

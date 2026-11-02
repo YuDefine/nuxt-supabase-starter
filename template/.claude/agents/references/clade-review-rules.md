@@ -294,5 +294,6 @@ Reviewer 補判斷機械層看不到的：
 
 - 新增註解命中 C0–C6 → fail，指名類別；C0 先判該事實該不該進 SSoT（code 讀 SSoT＋刪註解，或把事實搬進 SSoT）
 - 新增 unit test 一列都不中 U1–U4，或斷言只給人讀的 prose／load-bearing 規約句 → fail
+- 新增 U1／U3 測試，標題列出的某個條件沒有自己的斷言（[[testing-anti-patterns]] § 新增 U1／U3 測試）→ 列 finding，嚴重度依現有分級判。破壞證據寫在 commit message 或 PR body，commit 0-A 審的是 commit 前的 working-tree 快照、brief 只有 changeset，看不到這兩處——0-A **NEVER** 因「找不到破壞證據」列 finding；brief 另附 commit message 或 PR body 時才審它有沒有三項（改壞哪個檔的哪個判斷、轉紅的測試名、還原後的指令與結果），U2、U4 不審證據
 - 刪掉閘門類（U3）測試，或某段產品碼唯一的行為測試 → fail
 - diff 新增或改到 `clade-source-assert: <code> — <reason>` marker（檔首 10 行；`source-assert-gate` 放行時會印 notice）→ 審理由是否成立：`no-behavior-channel` 要真的沒有可 mount／呼叫／執行的入口，`declarative` 要被讀的檔是純宣告式資產；測試對象明明能 mount 或 import 執行卻掛 marker → fail。P 類斷言數增加但沒有 marker 會被機械閘門擋下，不必在此重審

@@ -94,18 +94,15 @@ export function defineNode({ name, usage, options, run }: NodeSpec): void {
   const { values: args, positionals } = parsed
 
   if (args.help) {
-    process.stdout.write(usage)
-    process.exit(0)
+    writeThenExit(usage)
+    return
   }
 
   try {
     const result = run(args as Record<string, unknown>, positionals)
-    if (args.json) {
-      process.stdout.write(`${JSON.stringify({ node: name, ...result }, null, 2)}\n`)
-    } else {
-      process.stdout.write(`${result.summary}\n`)
-    }
-    process.exit(0)
+    writeThenExit(
+      args.json ? `${JSON.stringify({ node: name, ...result }, null, 2)}\n` : `${result.summary}\n`,
+    )
   } catch (err) {
     if (err instanceof NothingToShow) {
       process.stderr.write(`${name}: ${err.message}\n`)
@@ -122,6 +119,14 @@ export function defineNode({ name, usage, options, run }: NodeSpec): void {
     process.stderr.write(`${name}: FATAL: ${(err as Error).stack ?? String(err)}\n`)
     process.exit(1)
   }
+}
+
+/**
+ * stdout 是 pipe 時 `write` 是非同步的：寫完立刻 `process.exit` 會丟掉超過 pipe 容量（131072 bytes）
+ * 還沒送出的部分（JSON 斷在字串中間）。等 write callback 再退出。
+ */
+function writeThenExit(text: string): void {
+  process.stdout.write(text, () => process.exit(0))
 }
 
 /** Required string flag. Absent or empty is a usage FATAL, never a silent default. */

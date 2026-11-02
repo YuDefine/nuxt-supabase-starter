@@ -284,7 +284,7 @@ if [ "$PROFILE" = compact ]; then
    在下一個自然斷點把進度寫回 plan.md § 進度（沒有 plan 就寫該工作的 tasks 檔）並 commit，然後續做。
    NEVER 因 context 大小交棒或停下等 user：壓縮會原地發生，PreCompact hook 會先落盤工作狀態。
    壓縮前這段區間 NEVER 開始 publish、0-A 鏈或 relay 這類原子程序；已在跑的照做到可切點。
-   判定層全文在 rules/core/session-tasks.context-budget.md（本提示是它的觸發錨）。本提示只響這一次。
+   判定層全文在 rules/core/session-tasks.md § Session context 預算（本提示是它的觸發錨）。本提示只響這一次。
 EOF
   exit 2
 fi
@@ -342,7 +342,7 @@ else
   cat >&2 <<EOF
 ⚠️ session context 已達 ${ctx_k}k（launcher=${LAUNCHER}；soft tier $((WARN_AT / 1000))k）。此刻起不再開大工作段。
 ${cost_warn}
-   判定層全文在 rules/core/session-tasks.context-budget.md（本提示是它的觸發錨）。
+   判定層全文在 rules/core/session-tasks.md § Session context 預算（本提示是它的觸發錨）。
    per rules/core/session-tasks.md § Session context 預算：**NEVER 開新的大工作段**
    （新的 change / 新的多檔重構 / 新的 plan phase）。
    **小 item 照做** —— 單檔文字修正、補一條 TD、勾一個 checkbox 不受本級限制。

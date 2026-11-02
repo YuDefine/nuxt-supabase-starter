@@ -96,7 +96,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // 自家檔——與 `scripts/lib/` 那種混住的目錄不同，可以整目錄匹配。
       String.raw`\.clade/(bin|signals|vendor|scripts|registry)/`,
       // Vendored script entry points (scripts/)
-      String.raw`scripts/(wt-helper|wt-batch|wt-unattended-merge|preservation-policy|preservation-profiles|preservation-inventory|preservation-resource-adapters|retired-ledger|pulls-review|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|legacy-tests|audit-risk-path-coverage|audit-clade-leak|audit-public-tree-hygiene|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|dev-singleton|dev-router|dev-session|herdr-visible-identity|db-lease|db-reset-peer-coordination|prod-sql|ownership-journal|shell-safety-check|run-evidence|cbm-health|evidence-hook|install-tool-evidence|control-plane-projection-validate|specformula-ddl-check)\.(mjs|mts|ts)$`,
+      String.raw`scripts/(wt-helper|wt-batch|wt-unattended-merge|preservation-policy|preservation-profiles|preservation-inventory|preservation-resource-adapters|retired-ledger|pulls-review|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|legacy-tests|audit-risk-path-coverage|audit-clade-leak|audit-public-tree-hygiene|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|dev-singleton|dev-router|dev-session|herdr-visible-identity|db-lease|db-reset-peer-coordination|prod-sql|ownership-journal|shell-safety-check|run-evidence|cbm-health|evidence-hook|install-tool-evidence|control-plane-projection-validate|specformula-ddl-check|mutation-probe)\.(mjs|mts|ts)$`,
       // pulls-review.ts 鎖相依用的 manifest 與 lockfile（非 .mjs/.ts 家族，故單列一條）
       String.raw`scripts/pulls-review\.(package\.json|pnpm-lock)$`,
       // PUBLIC consumer 的 salted hash 清單（propagate 的 consumer-sanitize 階段生成，非 vendor 源檔）
@@ -119,7 +119,9 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // NEVER widen to `scripts/lib/`: consumers author their own files there
       // (<consumer-a> `common.sh` / `read-infra-manifest.mjs`, <consumer-d> `vue-component-resolution.ts`),
       // and matching the whole dir would mark those clade-managed → auto-reset clobbers them.
-      String.raw`scripts/lib/(argv-unsplit|evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|workspace-choice|workspace-repo-profile|json-unknown|safety-observation|worktree-dev-port|worktree-backlog|wt-patch-landing|publish-in-flight|projection-ledger-reconcile|herdr-machine|machine-cpu|host-config-refs|pane-cache-ttl|disk-low-water|claude-account-registry|register-paths|git-status-z|dev-slots)\.(mjs|mts|ts)$`,
+      String.raw`scripts/lib/(argv-unsplit|evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|workspace-choice|workspace-repo-profile|json-unknown|safety-observation|worktree-dev-port|worktree-backlog|wt-patch-landing|publish-in-flight|projection-ledger-reconcile|herdr-machine|machine-cpu|host-config-refs|pane-cache-ttl|disk-low-water|claude-account-registry|register-paths|git-status-z|dev-slots|atomic-file|test-trust-baseline)\.(mjs|mts|ts)$`,
+      // skip-gate／test-removal-gate 的復活驗證子目錄：整目錄都是 vendor-targets 投影，consumer 不在這放自家檔。
+      String.raw`scripts/lib/mutation-probe/`,
       // dev-session.ts 的 `slots` 命令引用的 dev server 判定（散到 consumer 的 scripts/lib/dev-resource/）。
       // 同上：NEVER 放寬成整個 `scripts/lib/dev-resource/` 目錄，只收明列的檔名。
       String.raw`scripts/lib/dev-resource/tree-cost\.ts$`,

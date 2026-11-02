@@ -1,9 +1,12 @@
+---
+when: "有 secret、token、credential 的值到你手上時"
+---
 <!-- Clade native rule; source: rules/core/secret-custody.md; edit canonical source -->
 <!-- clade-targets: claude,agents -->
 
 # Secret Custody（secret 值到手時的既定動作）
 
-> 無 frontmatter 是刻意的：觸發事件「secret 值到你手上」沒有對應的檔案路徑，加 `paths:` 會讓本規約永遠不載入；實際由 `clade-security` skill 的 READ 載入（碰 secret、token、credential 時）。
+> 不帶 `paths:` 是刻意的：觸發事件「secret 值到你手上」沒有對應的檔案路徑，加 `paths:` 會讓本規約永遠不載入；改用 frontmatter `when:` 宣告時刻，`clade-security` skill 本文逐條列「READ 若…」（碰 secret、token、credential 時）。
 
 ## 觸發
 

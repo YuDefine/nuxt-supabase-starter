@@ -124,7 +124,7 @@ routeRules: {
 Consumer `runtime: cf-workers` 時：
 
 - **MUST** `rateLimiter: false`（Workers 沒 in-memory state，nuxt-security 的 in-process rate limiter 沒用）
-- **改用 Cloudflare Rate Limiting**（透過 wrangler `[[unsafe.bindings]]` 或 zone-level rule）做 rate limit
+- **改用 Cloudflare Rate Limiting**（在 `void.config.ts` 的 `cloudflare` 區塊宣告 rate limit binding，或 zone-level rule）做 rate limit
 - `csrf` 在 Workers 上正常工作（cookie-based double-submit token）
 
 ## 升級與 drift 檢查

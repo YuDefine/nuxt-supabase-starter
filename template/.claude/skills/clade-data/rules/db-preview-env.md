@@ -177,7 +177,7 @@ Managed platform（Cloudflare Workers 等）自帶 per-version preview URL，缺
 | 事實 | 後果 |
 | --- | --- |
 | Preview URL **不會**為含 Durable Object 的 Worker 產生（官方明文） | 有 DO binding 的 consumer **不能**用這個變體，要先把 DO 拆成獨立 Worker |
-| `preview_database_id` 只在 `wrangler dev --remote` 生效；`deploy` 與 `versions upload` 一律用 `database_id` | **NEVER** 靠它讓 preview 接不同 D1 —— 施力點是 `[env.*]` 區塊或 build-time env var |
+| `preview_database_id` 只在本機 dev 連 remote 資源時生效；`void deploy` 與 `versions upload` 一律用 `database_id` | **NEVER** 靠它讓 preview 接不同 D1 —— 施力點是 build-time env var；void 沒有 wrangler `[env.*]` 那種具名環境（`void.config.ts` 的 `cloudflare` 區塊只有一份、`void deploy` 無 env 旗標） |
 | `preview_urls` 是 **non-versioned setting** | `versions upload` 不會套用它。首次啟用需要一次 `deploy`／`versions deploy`，或直接打 account API |
 | `versions upload` 不支援 per-version env vars／secrets | secret 是 Worker 層級、由 production deploy 設定，preview version 直接繼承 —— 這也代表**preview 流程 NEVER 重設 secret**，那會動到 production 狀態 |
 

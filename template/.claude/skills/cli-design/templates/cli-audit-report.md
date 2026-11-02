@@ -30,6 +30,11 @@
 
 <!-- 嚴重度與判準檔預設不同時，在該筆加一行「嚴重度調整：<原值> → <新值>：<理由>」。 -->
 
+## 上線後回饋
+
+- 失敗訊號的數字：{{FAILURE_SIGNAL_NUMBERS}}（寫明時間窗與機器）
+- 去向、負責人、處理週期：{{FEEDBACK_OWNERSHIP}}
+
 ## 全項對照
 
 <!-- 判準檔每個 ID 一列；N/A 的理由寫在證據欄，未驗的列在下一節，不放在本表。 -->
@@ -37,6 +42,13 @@
 | ID | 判定 | 嚴重度 | 證據 |
 | --- | --- | --- | --- |
 | {{CRITERION_ID}} | {{CRITERION_VERDICT}} | {{CRITERION_SEVERITY}} | {{CRITERION_EVIDENCE}} |
+| B9 | {{B9_VERDICT}} | {{B9_SEVERITY}} | {{B9_EVIDENCE}} |
+| B10 | {{B10_VERDICT}} | {{B10_SEVERITY}} | {{B10_EVIDENCE}} |
+| I1 | {{I1_VERDICT}} | {{I1_SEVERITY}} | {{I1_EVIDENCE}} |
+| I2 | {{I2_VERDICT}} | {{I2_SEVERITY}} | {{I2_EVIDENCE}} |
+| I3 | {{I3_VERDICT}} | {{I3_SEVERITY}} | {{I3_EVIDENCE}} |
+| I4 | {{I4_VERDICT}} | {{I4_SEVERITY}} | {{I4_EVIDENCE}} |
+| I5 | {{I5_VERDICT}} | {{I5_SEVERITY}} | {{I5_EVIDENCE}} |
 
 ## 未驗項
 

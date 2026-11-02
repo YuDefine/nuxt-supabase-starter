@@ -7,8 +7,7 @@ paths:
   - 'packages/**/server/**/*.ts'
   - '.github/workflows/**'
   - '**/*.env.example'
-  - 'wrangler.toml'
-  - 'wrangler.jsonc'
+  - 'void.config.ts'
 ---
 <!-- Clade native rule; source: rules/core/service-url-locality.md; edit canonical source -->
 <!-- clade-targets: claude,agents -->

@@ -126,7 +126,7 @@ routing 列：non-ui-implementation → 改完 API 後順便把 app/components/L
   - 部分 repo（含 clade）要求 subject 含中文，先看該 repo 的 `commitlint.config.ts`。
 - **Pi phase checkpoint 例外**：依 `agent-routing.pi-watch-protocol` 逐 phase 派出的 Pi，每個 phase 結束只留一筆 checkpoint commit，header 固定為 `🧹 chore: wt <change>-phase-<N> — <說明>`（主線靠它在 `git log main..HEAD` 對齊 phase 邊界）；說明在要求中文 subject 的 repo（含 clade）必須含中文，否則 commitlint 擋下。其餘 worker 一律照上一條挑對應的 emoji＋type。
 - **NEVER**：`git push origin main`、`git stash`、`git commit --amend`、`--no-verify`、`HUSKY=0`。hook 擋下時修正內容或訊息，不繞過。
-- 計畫型工作每完成一個 phase：先回讀該 phase 的證據與 gate，再把 carrier 的 checkbox 與 verify evidence sidecar（`docs/evidence/<work-slug>.jsonl`）一起限定路徑 commit（artifact-tick，type 用 `📝 docs`）。只勾 checkbox、沒有對應 receipt 不算完成證據；未 commit 的檔案不會隨落地帶回 main。
+- 計畫型工作每完成一個 phase：先回讀該 phase 的證據與 gate，再把 carrier 的 checkbox 與 verify evidence sidecar（lifecycle repo：`specs/evidence/<work-slug>.jsonl`；未遷移 consumer：`docs/evidence/<work-slug>.jsonl`；路徑由 `evidence-store.ts` `sidecarPath` 解析）一起限定路徑 commit（artifact-tick，type 用 `📝 docs`）。只勾 checkbox、沒有對應 receipt 不算完成證據；未 commit 的檔案不會隨落地帶回 main。
 
 ## Good Example
 
@@ -251,7 +251,7 @@ Progress 全勾 → `gh pr merge --squash` → `wt-helper cleanup auth-refresh`
 done — workId W-2026-10-01-auth / repo YuDefine/clade / PR #742 / branch session/2026-10-03-1420-auth-refresh
 checkpoint 3f2a91c（commits: 8b1d0e2, 3f2a91c）/ 4 files
 scope: server/api/auth/refresh.post.ts, server/auth/token.ts, test/auth/refresh.test.ts, test/auth/token.test.ts
-evidence: docs/evidence/auth-refresh.jsonl sha256 9c41…
+evidence: specs/evidence/auth-refresh.jsonl sha256 9c41…
 writer-release: 已停止寫入此來源
 摘要：新增 token 續期 API 與過期拒絕
 ```

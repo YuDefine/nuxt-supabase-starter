@@ -1,3 +1,6 @@
+---
+when: "收到新任務、判斷要不要主動叫 skill 或進 SDD 入口，或要寫會引導人去跑某支 skill 的文字時"
+---
 <!-- Clade native rule; source: rules/core/proactive-skills.md; edit canonical source -->
 <!-- clade-targets: claude,agents -->
 <!-- clade-adapters: claude -->
@@ -5,7 +8,7 @@
 
 所有 SDD（SpecFormula / aixbdd）入口與 Design skill 應在適當情境下**主動調用**，不需使用者手動指定。此規則優先於個別 SKILL.md 的指示。
 
-> 本檔是 trigger 主規則（無 frontmatter），由 `clade-session-work` skill 的 READ 載入（規劃、派工、開 worktree、收工時）。詳細場景規約拆到 path-scoped reference：
+> 本檔是 trigger 主規則（不帶 `paths:`，以 frontmatter `when:` 宣告時刻），由 `clade-session-work` skill 的 READ 載入（規劃、派工、開 worktree、收工時）。詳細場景規約拆到 path-scoped reference：
 >
 > - 動 UI 檔（`app/**/*.vue` / `components/**` / `pages/**` / `layouts/**`）或寫 design artifact：[`proactive-skills.design-checkpoint.md`](./proactive-skills.design-checkpoint.md)
 > - 走到 `## 人工檢查` 階段、要把卡片交給人：[`proactive-skills.manual-review-entry.md`](./proactive-skills.manual-review-entry.md)

@@ -76,7 +76,7 @@ f      # → <UNSET>
 
 - ✅ 釘「`release` / `previous` 不得出現在 `local` 宣告行」，或實跑最小 fixture 驗
   stderr 無 `unbound variable` **且** 清理目標確實被刪
-- ❌ 釘「trap body 必須用 `${var:-}`」——那會把上表第二列（靜默 no-op）鎖成唯一合法寫法，
+- ❌ 釘「trap body 必須用 `${var:-}`」——那會把上方表格的 `${release:-}` 寫法（靜默 no-op）鎖成唯一合法寫法，
   正確修法反而被自己的測試擋掉
 
 | REQUIRED 欄位 | 內容 |
@@ -118,7 +118,7 @@ kill -TERM <逐一確認過的 pid>                       # 確認 cwd 屬於自
 
 要指認一個行程，用結構識別，NEVER 用它的表面形狀。
 
-### 3.1 同根因的第二條路徑：`kill -- -$pgid` 帶走呼叫端
+### 3.1 同根因的另一條路徑：`kill -- -$pgid` 帶走呼叫端
 
 `kill -TERM -- "-$pgid"` 殺整個 process group 時，**呼叫端多半就在那個 group 裡**。危險的是 `set +m`，也就是非互動腳本的預設：
 

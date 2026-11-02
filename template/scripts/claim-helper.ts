@@ -397,8 +397,6 @@ const SESSION_MARKER_KEYS: readonly string[] = [
   'CLAUDE_SESSION_ID',
   'CLAUDE_CODE_SESSION_ID',
   'CLAUDE_CONVERSATION_ID',
-  'CODEX_SESSION_ID',
-  'CODEX_THREAD_ID',
   'OPENCODE_SESSION_ID',
   'OPENCODE_AGENT_ID',
   'COPILOT_AGENT_ID',
@@ -530,7 +528,7 @@ function canonicalPath(path: string): string {
 
 /**
  * 非本 session、cwd 落在 `treePath` 底下的行程（pid＋cmdline）。這個訊號不看 harness：
- * Codex、只用 Bash 寫的 session、開著沒動的 pane 都不進 ownership journal，但它們的
+ * 只用 Bash 寫的 session、開著沒動的 pane 都不進 ownership journal，但它們的
  * shell 一定還站在樹裡。/proc 讀不到的行程跳過——別人的行程本來就讀不到，那個盲區由
  * journal 訊號補。
  *
@@ -1113,8 +1111,7 @@ export function matchClaimGlob(path, pattern) {
  * not from any declared field — declared fields are what this whole TD exists to route around.
  *
  * **`unknown` inherits every prohibition `other` carries today — NEVER sweep it.**
- * It is where Bash-written files, Codex-written files (no PostToolUse hook exists there),
- * hand edits, and everything predating the journal land. The one failure mode that actually
+ * It is where Bash-written files, hand edits, and everything predating the journal land. The one failure mode that actually
  * destroys work is `unknown` being read as `orphan`; nothing in this function may narrow
  * that gap by guessing.
  */

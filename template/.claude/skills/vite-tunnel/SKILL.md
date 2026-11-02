@@ -2,7 +2,8 @@
 name: vite-tunnel
 description: >-
   建 Cloudflare Named Tunnel 給本機 dev server（跨裝置 OAuth / webhook 測試用）。NOT for
-  正式環境部署（用 yudefine-deploy）、NOT for Workers 設定與 wrangler 操作（用 wrangler）。
+  正式環境部署（用 yudefine-deploy）、NOT for Workers 設定與部署（照 cloudflare-workers 規約走
+  void）。
 metadata:
   clade:
     invocation: explicit

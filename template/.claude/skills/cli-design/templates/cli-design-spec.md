@@ -35,6 +35,8 @@
 - 分頁與截斷：{{PAGINATION_POLICY}}
 - 排版：{{JSON_LAYOUT_POLICY}}
 - 色碼：{{COLOR_POLICY}}
+- 大量輸出：{{LARGE_OUTPUT_POLICY}}
+- 外部內容：{{EXTERNAL_CONTENT_POLICY}}
 
 ## 錯誤與退出碼
 
@@ -88,6 +90,13 @@
 - 機械檢查：{{CONSISTENCY_CHECK}}
 - 棄用政策：{{DEPRECATION_POLICY}}
 
+## 上線後回饋
+
+- 失敗訊號的路徑：{{FAILURE_SIGNAL_PATH}}
+- feedback 命令：{{FEEDBACK_COMMAND}}
+- 送出前遮蔽與預覽：{{FEEDBACK_REDACTION}}
+- 去向、負責人、處理週期：{{FEEDBACK_OWNERSHIP}}
+
 ## 判準對照
 
 <!-- 判準檔每個 ID 一列；適用的寫怎麼滿足，不適用的寫 N/A 與對應 Rule 1 的理由。 -->
@@ -95,6 +104,13 @@
 | ID | 如何滿足／N/A 理由 |
 | --- | --- |
 | {{CRITERION_ID}} | {{CRITERION_RESOLUTION}} |
+| B9 | {{B9_RESOLUTION}} |
+| B10 | {{B10_RESOLUTION}} |
+| I1 | {{I1_RESOLUTION}} |
+| I2 | {{I2_RESOLUTION}} |
+| I3 | {{I3_RESOLUTION}} |
+| I4 | {{I4_RESOLUTION}} |
+| I5 | {{I5_RESOLUTION}} |
 
 ## 未決事項
 

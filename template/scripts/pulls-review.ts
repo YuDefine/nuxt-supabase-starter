@@ -17,9 +17,10 @@
  *   `claude` shim（就是本 script 的 `--claude-shim` 模式）：丟掉頁面帶來的 `--model`，改帶這一次啟動
  *   指定的 model——不帶 `--model` 旗標就是 Sonnet，要用 Opus 就那一次加 `--model opus`。頁面的
  *   model 選單因此不生效。`ANTHROPIC_MODEL` 也設成同一個 model，蓋過 user／專案層 settings 的 pin。
- *   這層**只管 Local agent 選 Claude Code 的那條路**：Settings 改選 OpenCode、或改用自填 API key 的
- *   provider（AI Gateway／Anthropic／OpenAI-compatible）時，分析不經過 shim，用哪個 model、算誰的
- *   額度或帳單都不受本 script 控制；啟動時只印一行提醒。
+ *   這層**只管 Local agent 選 Claude Code 的那條路**：Settings 改選 OpenCode、Pi、Codex（0.3.4 起
+ *   選單有 Pi 與 Codex，Codex 在本 fleet 禁用）、或改用自填 API key 的 provider（AI Gateway／
+ *   Anthropic／OpenAI-compatible）時，分析不經過 shim，用哪個 model、算誰的額度或帳單都不受本
+ *   script 控制；啟動時只印一行提醒。
  * - 清掉 gateway／計費 env：gateway 會把 `opus` 映射成別家 model，`ANTHROPIC_API_KEY` 會把分析
  *   改成按量計費。清的是 `cc`／`ccN` launcher 清的同一組。
  *
@@ -454,7 +455,7 @@ function main(): void {
       'pulls-review：頁面 Settings 的 model 選單在這裡不生效；要換 model，這一次啟動加 --model opus\n',
     )
     process.stderr.write(
-      'pulls-review：以上只管 Local agent 的 Claude Code。Settings 改選 OpenCode 或自填 API key 的分析不經過這裡，model 與計費都不受控\n',
+      'pulls-review：以上只管 Local agent 的 Claude Code。Settings 改選 OpenCode／Pi／Codex（Codex 在本 fleet 禁用）或自填 API key 的分析不經過這裡，model 與計費都不受控\n',
     )
   } else
     process.stderr.write(

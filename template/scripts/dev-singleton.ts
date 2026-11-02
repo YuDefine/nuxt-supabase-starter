@@ -22,7 +22,7 @@
  *   --consumer-meta <path>   Read dev.ports[0].port + dev.leaseMode + consumerId
  *   --port <N>               Override port (skips consumer-meta lookup)
  *   --label <text>           Lease holder label (default: "<cmd> at <cwd>")
- *   --kind <claude|codex|human|subagent>   Override auto-detected holder kind
+ *   --kind <claude|human|subagent>   Override auto-detected holder kind
  *   --takeover               Force takeover of existing lease (logs prev holder)
  *   --no-lease               Skip lease write (legacy compat; emits warning)
  *   --status                 Print current lease + dev server state
@@ -136,7 +136,7 @@ function usage() {
   --consumer-meta <path>  Read port + leaseMode from .claude/consumer-meta.json
   --port <N>              Override port
   --label <text>          Lease holder label
-  --kind <k>              claude | codex | human | subagent
+  --kind <k>              claude | human | subagent
   --takeover              Force takeover existing lease
   --no-lease              Skip lease write
   --status                Print state

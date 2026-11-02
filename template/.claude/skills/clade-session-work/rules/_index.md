@@ -1,13 +1,12 @@
 {"file":"agent-routing.agent-boundary.md","source":"rules/core/agent-routing.agent-boundary.md","paths":["HANDOFF.md","tasks/**","specs/**",".clade/**"]}
 {"file":"agent-routing.dispatch-execution.md","source":"rules/core/agent-routing.dispatch-execution.md","paths":["rules/core/agent-routing.md",".claude/rules/agent-routing.md","vendor/scripts/pi-dispatch.ts","vendor/scripts/pi-routing-policy.ts","vendor/scripts/pi-routing-gate.ts",".claude/agents/**"]}
 {"file":"agent-routing.keepalive-wake.md","source":"rules/core/agent-routing.keepalive-wake.md","paths":[".clade/keepalive/**"]}
-{"file":"agent-routing.md","source":"rules/core/agent-routing.md","paths":null}
+{"file":"agent-routing.md","source":"rules/core/agent-routing.md","paths":null,"when":"選 executor／model／effort、派工，或跑 commit 0-A 之前"}
 {"file":"agent-routing.pi-input-intercept.md","source":"rules/core/agent-routing.pi-input-intercept.md","paths":["specs/plans/**/tasks.md","specs/plans/**/design.md",".claude/agents/**","screenshots/**/progress.json"]}
 {"file":"agent-routing.pi-watch-protocol.md","source":"rules/core/agent-routing.pi-watch-protocol.md","paths":["specs/plans/**/tasks.md","specs/plans/**/design.md",".claude/agents/**","screenshots/**/progress.json"]}
-{"file":"agent-routing.routing-table-rationale.md","source":"rules/core/agent-routing.routing-table-rationale.md","paths":[".claude/rules/agent-routing.md","rules/core/agent-routing.md","vendor/scripts/pi-routing-policy.ts","vendor/scripts/pi-routing-gate.ts","vendor/scripts/pi-dispatch.ts"]}
 {"file":"agent-routing.routing-table.md","source":"rules/core/agent-routing.routing-table.md","paths":[".claude/rules/agent-routing.md","rules/core/agent-routing.md","vendor/scripts/pi-routing-policy.ts","vendor/scripts/pi-routing-gate.ts","vendor/scripts/pi-dispatch.ts"]}
 {"file":"consumer-meta.md","source":"rules/core/consumer-meta.md","paths":[".claude/consumer-meta.json","registry/consumers-meta.json","registry/consumer-meta.schema.json",".github/workflows/**"]}
-{"file":"flow-work-dates.md","source":"rules/core/flow-work-dates.md","paths":null}
+{"file":"flow-work-dates.md","source":"rules/core/flow-work-dates.md","paths":null,"when":"要對 Charles 或客戶給日期、寫 `flow work eta`，或複核自報 ETA 時"}
 {"file":"flow-work-tracking.md","source":"rules/core/flow-work-tracking.md","paths":["vendor/scripts/flow/**",".clade/flow/**"]}
 {"file":"follow-up-register.md","source":"rules/core/follow-up-register.md","paths":["tasks/**","specs/plans/**","docs/tech-debt.md"]}
 {"file":"handoff.md","source":"rules/core/handoff.md","paths":["HANDOFF.md","tasks/**","specs/plans/**"]}
@@ -15,12 +14,11 @@
 {"file":"proactive-skills.dev-server-spawn.md","source":"rules/core/proactive-skills.dev-server-spawn.md","paths":["scripts/dev-session*","vendor/scripts/dev-session*",".claude/consumer-meta.json","nuxt.config.*"]}
 {"file":"proactive-skills.disabled-skill-guidance.md","source":"rules/core/proactive-skills.disabled-skill-guidance.md","paths":["rules/**",".claude/rules/**","capabilities/**/skills/**",".claude/skills/**","vendor/snippets/**","vendor/scripts/**","scripts/**"]}
 {"file":"proactive-skills.manual-review-entry.md","source":"rules/core/proactive-skills.manual-review-entry.md","paths":["tasks/**","specs/plans/**","screenshots/**"]}
-{"file":"proactive-skills.md","source":"rules/core/proactive-skills.md","paths":null}
+{"file":"proactive-skills.md","source":"rules/core/proactive-skills.md","paths":null,"when":"收到新任務、判斷要不要主動叫 skill 或進 SDD 入口，或要寫會引導人去跑某支 skill 的文字時"}
 {"file":"runtime/agent-routing.keepalive-wake.md","source":"adapters/claude/instructions/rules/core/agent-routing.keepalive-wake.md","paths":[".clade/keepalive/**"]}
 {"file":"runtime/agent-routing.md","source":"adapters/claude/instructions/rules/core/agent-routing.md","paths":null}
 {"file":"runtime/agent-routing.pi-input-intercept.md","source":"adapters/claude/instructions/rules/core/agent-routing.pi-input-intercept.md","paths":["specs/plans/**/tasks.md","specs/plans/**/design.md",".claude/agents/**","screenshots/**/progress.json"]}
 {"file":"runtime/agent-routing.pi-watch-protocol.md","source":"adapters/claude/instructions/rules/core/agent-routing.pi-watch-protocol.md","paths":["specs/plans/**/tasks.md","specs/plans/**/design.md",".claude/agents/**","screenshots/**/progress.json"]}
-{"file":"runtime/agent-routing.routing-table-rationale.md","source":"adapters/claude/instructions/rules/core/agent-routing.routing-table-rationale.md","paths":[".claude/rules/agent-routing.md","rules/core/agent-routing.md","vendor/scripts/pi-routing-policy.ts","vendor/scripts/pi-routing-gate.ts","vendor/scripts/pi-dispatch.ts"]}
 {"file":"runtime/agent-routing.routing-table.md","source":"adapters/claude/instructions/rules/core/agent-routing.routing-table.md","paths":[".claude/rules/agent-routing.md","rules/core/agent-routing.md","vendor/scripts/pi-routing-policy.ts","vendor/scripts/pi-routing-gate.ts","vendor/scripts/pi-dispatch.ts"]}
 {"file":"runtime/flow-work-tracking.md","source":"adapters/claude/instructions/rules/core/flow-work-tracking.md","paths":["vendor/scripts/flow/**",".clade/flow/**"]}
 {"file":"runtime/handoff.md","source":"adapters/claude/instructions/rules/core/handoff.md","paths":["HANDOFF.md","tasks/**","specs/plans/**"]}
@@ -35,10 +33,8 @@
 {"file":"scope-discipline.md","source":"rules/core/scope-discipline.md","paths":["tasks/**","specs/**","ROADMAP.md","docs/tech-debt.md","docs/decisions/**","HANDOFF.md"]}
 {"file":"session-claims.md","source":"rules/core/session-claims.md","paths":[".clade/claims/**","HANDOFF.md","capabilities/core/hooks/pre-bash-ownership-stamp.sh","scripts/claim-helper.ts","vendor/scripts/claim-helper.ts","vendor/scripts/ownership-journal.ts","vendor/scripts/flow/who.ts",".clade/ownership/**","capabilities/core/hooks/post-tool-ownership-journal.sh","capabilities/core/hooks/pre-edit-claim-conflict.sh"]}
 {"file":"session-cloud-unattended.md","source":"rules/core/session-cloud-unattended.md","paths":["capabilities/core/hooks/pre-tool-cloud-question-gate.sh","vendor/scripts/lib/cloud-orphan-blocked.ts","vendor/scripts/lib/issue-usage.ts","vendor/scripts/issue-usage.ts",".github/workflows/issue-gate.yml"]}
-{"file":"session-tasks.concurrent-writers.md","source":"rules/core/session-tasks.concurrent-writers.md","paths":["tasks/**","HANDOFF.md","ROADMAP.md","docs/tech-debt.md",".clade/claims/**",".clade/flow/**"]}
-{"file":"session-tasks.context-budget.md","source":"rules/core/session-tasks.context-budget.md","paths":["tasks/**","HANDOFF.md"]}
-{"file":"session-tasks.md","source":"rules/core/session-tasks.md","paths":null}
+{"file":"session-tasks.concurrent-writers.md","source":"rules/core/session-tasks.concurrent-writers.md","paths":["tasks/**","HANDOFF.md","ROADMAP.md","docs/tech-debt.md","packages/*/HANDOFF.md","packages/*/ROADMAP.md","packages/*/docs/tech-debt.md",".clade/claims/**",".clade/flow/**"]}
+{"file":"session-tasks.md","source":"rules/core/session-tasks.md","paths":null,"when":"開始非瑣碎的 ad-hoc 工作（第一個 tool call 前）、交棒、收工，或 context 預算提示出現時"}
 {"file":"session-tasks.operations.md","source":"rules/core/session-tasks.operations.md","paths":["tasks/**","HANDOFF.md"]}
-{"file":"shared-file-concurrent-write.md","source":"rules/core/shared-file-concurrent-write.md","paths":["HANDOFF.md","ROADMAP.md","docs/tech-debt.md","packages/*/HANDOFF.md","packages/*/ROADMAP.md","packages/*/docs/tech-debt.md"]}
 {"file":"skill-management.md","source":"rules/core/skill-management.md","paths":[".gitignore",".clade/skills/**",".claude/skills/**",".agents/skills/**","capabilities/**/skills/**","scripts/install-skills.sh","skills-lock.json"]}
 {"file":"wip-orphan-recovery.md","source":"rules/core/wip-orphan-recovery.md","paths":["HANDOFF.md","tasks/**"]}

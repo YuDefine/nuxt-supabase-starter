@@ -376,6 +376,7 @@ review_snapshot_or_die "$WORK_DIR/worktree-before.txt" before
 review_open_round
 review_collect_changeset
 review_embed_round_increment
+review_filter_carried_findings
 review_build_snapshot
 
 BRIEF="$WORK_DIR/brief.md"
@@ -499,6 +500,7 @@ fold_rc=$?
 if [ "$fold_rc" -ne 0 ]; then
   if [ "$fold_rc" -eq 9 ]; then
     echo "[claude-review-safe] RESULT: 本地拒絕（exit 9）— CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS=${BRIEF_MAX_LINE_CHARS} 太小，無法容納 changeset 折行標記與內容" >&2
+    review_abandon_round
     exit 9
   fi
   echo "[claude-review-safe] 錯誤：無法折行 changeset（exit ${fold_rc}）" >&2
@@ -513,6 +515,7 @@ BRIEF_BYTES="$(wc -c <"$BRIEF" | tr -d ' ')"
 # 部分 verdict。
 if [ "$BRIEF_BYTES" -gt "$BRIEF_MAX_BYTES" ]; then
   echo "[claude-review-safe] RESULT: 本地拒絕（exit 9）— brief ${BRIEF_BYTES} bytes 超過 CLAUDE_REVIEW_BRIEF_MAX_BYTES=${BRIEF_MAX_BYTES}；child context 撐不住時前文會被壓縮，繼續交付只會產出看過部分內容卻與完整 review 同形的 verdict，NEVER 當作 review 跑成。拆 commit 後重跑；上限確需調整時先拿 child context 實測證據再調 CLAUDE_REVIEW_BRIEF_MAX_BYTES。縮小 CODEX_REVIEW_MAX_DIFF_LINES 只會把超出的檔擠進 OMITTED 漏審清單——缺檔 verdict 同樣不能記 PASS，除非被剔除的檔另行送審，否則不是出路。" >&2
+  review_abandon_round
   exit 9
 fi
 
@@ -540,6 +543,7 @@ if [ "$CARRIER_MODE" = "prepare" ] || [ "$BRIEF_BYTES" -gt "$INLINE_MAX_BYTES" ]
   }
   if [ -n "$LONG_LINES" ]; then
     echo "[claude-review-safe] RESULT: 本地拒絕（exit 9）— brief 有單行超過 CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS=${BRIEF_MAX_LINE_CHARS}：${LONG_LINES}（格式 行號(區塊:長度)，最多列 10 筆）；pointer 模式下 child 以 Read 讀 brief 時這些行尾端被靜默截斷，child 看到的內容不完整，NEVER 交付成部分 verdict。changeset 已自動折行；prior-findings → 折 --findings 檔內的長行；brief 固定內容 → 修 semantic 規則文等來源後重跑。" >&2
+    review_abandon_round
     exit 9
   fi
   PROMPT_FILE="$WORK_DIR/brief-pointer.md"

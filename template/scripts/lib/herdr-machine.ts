@@ -15,10 +15,13 @@ import { isRecord, parseJson } from './json-unknown.ts'
 import {
   cpuBusyBetween,
   cpuUsePerCore,
+  DISK_FULL_PCT,
+  diskFull,
   LOAD_CAP_PER_CORE,
   MEM_PRESSURE_AVG60,
   parseCpuPsi,
   parseCpuStatLine,
+  parseDfUsedPct,
   SATURATED_LOAD_PER_CORE,
 } from './machine-cpu.ts'
 
@@ -281,7 +284,14 @@ export type MachineLoad = {
   mem_some_avg60?: number
   /** `/proc/meminfo` MemAvailable, GiB. Absent = not ranked on it. */
   mem_available_gb?: number
+  /** `df -P /` used %. Absent = not measured (never excludes). At `DISK_FULL_PCT` or above `withoutFullDisk` drops the candidate. */
+  disk_used_pct?: number
   error?: string
+  /**
+   * The `error` is a probe that could not run (ssh failed or timed out), not a finding: the machine may well be free.
+   * The default placement refuses rather than keep a dispatch on a machine at the load cap because of it.
+   */
+  unreachable?: true
 }
 
 const PROBE_MARK = '@@clade-load@@'
@@ -300,12 +310,14 @@ export function loadProbeScript(sample: boolean = true): string {
     'cat /proc/pressure/memory 2>/dev/null; grep MemAvailable /proc/meminfo 2>/dev/null',
     `echo ${PROBE_MARK}`,
     sample ? 'sleep 2; head -1 /proc/stat' : 'true',
+    `echo ${PROBE_MARK}`,
+    'df -P / 2>/dev/null | tail -1',
   ].join('; ')
 }
 
 /** `loadProbeScript` output → a candidate; unparsable cores / load1 → `error`. */
 export function parseLoadProbe(machine: string, local: boolean, stdout: string): MachineLoad {
-  const [head = '', load = '', memPsi = '', tail = ''] = stdout.split(PROBE_MARK)
+  const [head = '', load = '', memPsi = '', tail = '', disk = ''] = stdout.split(PROBE_MARK)
   const [cores, load1] = load.trim().split(/\s+/u).map(Number)
   if (!Number.isFinite(cores) || !Number.isFinite(load1) || !(cores! > 0))
     return { machine, local, error: `unparsable load probe output: ${JSON.stringify(load.trim())}` }
@@ -318,6 +330,8 @@ export function parseLoadProbe(machine: string, local: boolean, stdout: string):
   if (memSome !== null) out.mem_some_avg60 = memSome
   const available = /^MemAvailable:\s+(\d+)\s+kB/mu.exec(memPsi)
   if (available) out.mem_available_gb = Number(available[1]) / 1024 ** 2
+  const diskPct = parseDfUsedPct(disk)
+  if (diskPct !== null) out.disk_used_pct = diskPct
   return out
 }
 
@@ -374,8 +388,33 @@ export function peerLoad(
       machine,
       local: false,
       error: probe.spawnError ?? (probe.stderr.trim() || `ssh exit ${probe.status}`),
+      unreachable: true,
     }
   return parseLoadProbe(machine, false, probe.stdout)
+}
+
+/**
+ * 磁碟用量達 `DISK_FULL_PCT` 的候選不當派工目標：它拿掉 `per_core`（`chooseLeastLoaded` 不會選），`error` 寫理由，
+ * 進 `placement.loads`，與 CPU、記憶體的排除線同一個出口。每台量得到的候選都到線時照現行退回本機：本機留著，
+ * 其餘出局；本機已不在量得到的候選裡時全數保留，不因磁碟拒派（磁碟滿的處置是回收，不是讓派工停擺）。沒量到磁碟的候選不判。
+ */
+export function withoutFullDisk(loads: MachineLoad[]): MachineLoad[] {
+  const measured = loads.filter((load) => typeof load.per_core === 'number')
+  const full = measured.filter((load) => diskFull(load))
+  if (full.length === 0) return loads
+  const allFull = full.length === measured.length
+  // 本機已沒有 per_core（探測失敗、cwd 不在、consumer 未就緒）而剩下的 peer 全滿：留著 peer，不因磁碟把候選清空而拒派
+  if (allFull && !measured.some((load) => load.local)) return loads
+  return loads.map((load) => {
+    if (typeof load.per_core !== 'number' || !diskFull(load)) return load
+    if (allFull && load.local) return load
+    return {
+      machine: load.machine,
+      local: load.local,
+      disk_used_pct: load.disk_used_pct,
+      error: `disk ${load.disk_used_pct}% used on ${load.machine} (>= ${DISK_FULL_PCT}%); not a dispatch target${allFull ? ', every measured machine is full so the dispatch stays on the local one' : ''}`,
+    }
+  })
 }
 
 /**
@@ -384,7 +423,7 @@ export function peerLoad(
  * machine. An unreachable peer is skipped rather than failing the dispatch.
  * `overloaded` (the caller refuses an explicit `--machine auto`; the default placement keeps it here) is memory
  * thrash (`MEM_PRESSURE_AVG60`, one more pane on a swapping machine can take it down) or load1 per core at
- * `LOAD_CAP_PER_CORE` (D-CDB702-1: a machine that far over stops taking work while another is under it). Below the
+ * `LOAD_CAP_PER_CORE` (a machine that far over stops taking work while another is under it). Below the
  * cap, load1 per core only ranks.
  */
 export function chooseLeastLoaded(candidates: MachineLoad[]): {
@@ -448,6 +487,13 @@ export function localTreeState(cwd: string): TreeState {
       gitIn(cwd, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${name}`]).ok,
     mainCheckout: common.out.replace(/\/\.git$/u, ''),
   }
+}
+
+/** `cwd` 本身就是 repo 的主 checkout（不是 linked worktree）；不是 git 樹或讀不到回 false。 */
+export function localIsMainCheckout(cwd: string): boolean {
+  const common = gitIn(cwd, ['rev-parse', '--path-format=absolute', '--git-common-dir'])
+  const top = gitIn(cwd, ['rev-parse', '--show-toplevel'])
+  return common.ok && top.ok && common.out.replace(/\/\.git$/u, '') === top.out
 }
 
 export function treeHeadOn(

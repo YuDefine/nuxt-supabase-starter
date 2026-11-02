@@ -1,6 +1,6 @@
 ---
 name: sonnet-implementer
-description: 'Routing Table 的 native Claude Sonnet 5.5（effort: high）實作載體——承接 `non-ui-implementation`／`nuxt-core-implementation`／`commit-0c-fix-verify`／`version-upgrade-first-pass` 四列的 bounded 工作，以及 delegate-sub 的 Grok 品質升級與 mutation 鏈尾。**brief MUST 含一行 `routing-row: <列名>`**（四列之一或 `delegate-sub`），routing gate 依它放行；省略 `model`（frontmatter 釘死）。NOT for decision／planning（Opus）、UI／design、`.claude/` 撰寫、review。'
+description: 'Routing Table 的 Claude Sonnet 5.5（effort: high）實作載體——承接 `non-ui-implementation`／`nuxt-core-implementation`／`commit-0c-fix-verify`／`version-upgrade-first-pass` 四列的 bounded 工作，以及 delegate-sub 的品質升級與 mutation 鏈尾。**brief MUST 含一行 `routing-row: <列名>`**（四列之一或 `delegate-sub`），routing gate 依它放行；省略 `model`。NOT for decision／planning、UI／design、`.claude/` 撰寫、review。'
 tools: Bash, Read, Edit, Write, Grep, Glob
 model: sonnet
 effort: high

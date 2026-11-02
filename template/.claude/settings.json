@@ -102,7 +102,10 @@
       "Bash(git add -N*)",
       "Bash(git add * -N*)",
       "Bash(git add -A*)",
-      "Bash(git add * -A*)"
+      "Bash(git add * -A*)",
+      "Workflow",
+      "SendFeedback",
+      "ReportFindings"
     ]
   },
   "enabledMcpjsonServers": [

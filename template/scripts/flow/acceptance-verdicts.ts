@@ -527,29 +527,131 @@ export function fileRevisedAtMs(repoRoot: string, rel: string): number | null {
   return best > 0 ? best : null
 }
 
+/** `## Truth delta` 整段拿掉；與 `plan-lifecycle.ts` 的 `dropSection(text, 'Truth delta')` 同義（那邊 import 本檔，不能反向 import）。 */
+function withoutTruthDelta(markdown: string): string {
+  const lines = markdown.split('\n')
+  const start = lines.findIndex((l) => /^## Truth delta\s*$/u.test(l))
+  if (start < 0) return markdown
+  const rel = lines.slice(start + 1).findIndex((l) => l.startsWith('## '))
+  const end = rel < 0 ? lines.length : start + 1 + rel
+  return [...lines.slice(0, start), ...lines.slice(end)].join('\n')
+}
+
+function blobAt(repoRoot: string, rev: string, path: string): string | null {
+  try {
+    return execFileSync('git', ['show', `${rev}:${path}`], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 這個 commit 是不是 `flow plan migrate` 的結果，以**內容**判定（不看 file-status 形狀）：
+ * PR 以 squash 落地時，遷移與同 PR 的其他編輯（spec.md／features/ 的 plan.md→work.md 指標）同在一個 commit，
+ * 形狀判定一遇共改就失效。這裡逐檔比對：
+ * - `work.md` 新增，且等於 parent 的 `plan.md` 去掉 `## Truth delta`（`plan.md` 之後是刪除，或有 `system-analysis.md`
+ *   時等於 parent 的 `system-analysis.md`）；`truth-delta.md` 是遷移的衍生檔，新增或覆寫都放行。
+ * - `spec.md`／`features/` 的修改，把 lifecycle 檔名指標正規化後與 parent 相同才放行；新增、刪除、實質編輯都算修訂。
+ * 任何一檔對不上就整個 commit 算修訂（保守：寧可多判過期，不放過真修訂）。
+ */
+function isMigrationCommit(
+  repoRoot: string,
+  sha: string,
+  planRel: string,
+  status: Map<string, string>,
+): boolean {
+  const at = (name: string) => `${planRel}/${name}`
+  const planStatus = status.get(at('plan.md'))
+  const analysisMoved = planStatus === 'M' && status.get(at('system-analysis.md')) === 'D'
+  if (!((planStatus === 'D' || analysisMoved) && status.get(at('work.md')) === 'A')) return false
+  const parent = `${sha}^`
+  const oldPlan = blobAt(repoRoot, parent, at('plan.md'))
+  const newWork = blobAt(repoRoot, sha, at('work.md'))
+  if (oldPlan === null || newWork === null || withoutTruthDelta(oldPlan) !== newWork) return false
+  if (analysisMoved) {
+    const oldAnalysis = blobAt(repoRoot, parent, at('system-analysis.md'))
+    if (oldAnalysis === null || oldAnalysis !== blobAt(repoRoot, sha, at('plan.md'))) return false
+  }
+  // 遷移前後的 lifecycle 檔名指標：舊 plan.md＝新 work.md；有 analysis 時舊 system-analysis.md＝新 plan.md。
+  const L = '\u0000L'
+  const A = '\u0000A'
+  const normOld = (t: string) =>
+    analysisMoved
+      ? t.replaceAll('plan.md', L).replaceAll('system-analysis.md', A)
+      : t.replaceAll('plan.md', L)
+  const normNew = (t: string) =>
+    analysisMoved ? t.replaceAll('plan.md', A).replaceAll('work.md', L) : t.replaceAll('work.md', L)
+  for (const [file, st] of status) {
+    if (
+      [at('plan.md'), at('system-analysis.md'), at('work.md')].includes(file) ||
+      (file === at('truth-delta.md') && (st === 'A' || st === 'M'))
+    )
+      continue
+    if (st !== 'M' || !(file === at('spec.md') || file.startsWith(`${planRel}/features/`)))
+      return false
+    const before = blobAt(repoRoot, parent, file)
+    const after = blobAt(repoRoot, sha, file)
+    if (before === null || after === null || normOld(before) !== normNew(after)) return false
+  }
+  return true
+}
+
+/**
+ * paths 的最後一筆「不是 lifecycle 遷移」的 commit 時間（ms）；全是遷移或沒有 commit 回 0。
+ *
+ * `flow plan migrate` 的 commit 刪 `plan.md`、新增 `work.md`（＋`truth-delta.md`），內容只是換格式，
+ * 不是 plan 被修訂。若把它算成最後修訂，遷移前記下的每一份 verdict 都會被 close 判成過期。
+ * 判定見 `isMigrationCommit`（內容比對，squash 共改也成立）。
+ */
+function lastRevisionCommitMs(repoRoot: string, planRel: string, paths: string[]): number {
+  // `-z`：非 ASCII 路徑不被跳脫，狀態與路徑以 NUL 交錯（`<status>\0<path>\0…`）。
+  const out = execFileSync(
+    'git',
+    ['log', '--no-renames', '-z', '--format=%x01%H %ct%x02', '--name-status', '--', ...paths],
+    { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+  )
+  for (const chunk of out.split('\x01').slice(1)) {
+    const [head = '', rest = ''] = chunk.split('\x02')
+    const [sha = '', ct = ''] = head.split(' ')
+    const tokens = rest
+      .split('\0')
+      .map((t) => t.trim())
+      .filter(Boolean)
+    const status = new Map<string, string>()
+    for (let i = 0; i + 1 < tokens.length; i += 2) status.set(tokens[i + 1]!, tokens[i]!)
+    if (!isMigrationCommit(repoRoot, sha, planRel, status) && ct) return Number(ct) * 1000
+  }
+  return 0
+}
+
 /**
  * plan 最後修訂時間：lifecycle 檔（plan.md／work.md）、truth-delta.md、spec.md 與 features/ 的最後 commit 時間，工作樹有未提交的改動時
  * 取那些檔的 mtime（取大者）。**刻意排除 `evidence/`**——把 report 提交進 plan 目錄不能讓 plan
  * 自己看起來剛被改過，否則每一份證據一落檔就把自己判成過期。
  */
 export function planRevisedAt(repoRoot: string, planRel: string): string | null {
-  const files = ['plan.md', 'work.md', 'truth-delta.md', 'spec.md']
-  const paths = [...files, 'features'].map((p) => `${planRel}/${p}`)
+  const paths = [
+    'work.md',
+    'plan.md',
+    'truth-delta.md',
+    'spec.md',
+    'features',
+    'system-analysis.md',
+  ].map((p) => `${planRel}/${p}`)
   let best = 0
   try {
-    const ct = execFileSync('git', ['log', '-1', '--format=%ct', '--', ...paths], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim()
-    if (ct) best = Number(ct) * 1000
+    best = lastRevisionCommitMs(repoRoot, planRel, paths)
     for (const { path } of readGitStatus(repoRoot, { pathspec: paths })) {
       const file = join(repoRoot, path)
       if (existsSync(file)) best = Math.max(best, statSync(file).mtimeMs)
     }
   } catch {
     for (const file of [
-      ...paths.slice(0, files.length).map((p) => join(repoRoot, p)),
+      ...[...paths.slice(0, 4), paths[5]!].map((p) => join(repoRoot, p)),
       ...walk(join(repoRoot, planRel, 'features'), () => true),
     ]) {
       if (existsSync(file)) best = Math.max(best, statSync(file).mtimeMs)

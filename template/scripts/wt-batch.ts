@@ -3,6 +3,7 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import {
+  appendFileSync,
   chmodSync,
   closeSync,
   existsSync,
@@ -498,6 +499,9 @@ export interface WorktreeBatch {
     at: string
   }[]
   preserved?: { path: string; archive: string }[]
+  /** Written when a removal finishes clean: which trash dir holds `path`'s bytes and which
+   *  preservation archive covers them. `batch prune-trash` trusts this record over name matching. */
+  trashed?: { path: string; trash: string; archive?: string; at: string }[]
   removing?: {
     path: string
     quarantine: string
@@ -1005,22 +1009,6 @@ function save(c: Context, s: State) {
 }
 function isLiveBatch(b: WorktreeBatch): boolean {
   return !['landed', 'cleaned', 'cancelled'].includes(b.phase)
-}
-// 同一 work id 的前一張 PR 已由某批正式落地（landed／cleaned，PR 制另需 merge receipt）時，
-// 它的 draft receipt 已被該批 journal 的 draftBindings 取代，不再擋同 work id 的下一張 PR。
-function draftReceiptLanded(s: State, receipt: DraftPrReceipt): boolean {
-  const headBranch = receipt.branch.replace(/^refs\/heads\//, '')
-  return s.batches.some(
-    (b) =>
-      (b.phase === 'landed' || b.phase === 'cleaned') &&
-      (b.workflow !== 'pr-merge-based' || b.mergeReceipt?.merged === true) &&
-      (b.draftBindings ?? []).some(
-        (binding) =>
-          binding.workId === receipt.workId &&
-          binding.pr === receipt.pr &&
-          binding.headBranch === headBranch,
-      ),
-  )
 }
 function processStart(pid: number): string | null {
   try {
@@ -3145,8 +3133,22 @@ function eligible(c: Context, s: State) {
     reason: reserved.has(source.path) ? 'already in a batch' : sourceProblem(c, source),
   }))
 }
-function stamp(b: WorktreeBatch, key: keyof BatchTimeline): void {
+/** The timeline stamp each phase entry records; `integrating` has none (`preparedAt` is set at prepare). */
+const PHASE_STAMP: Partial<Record<WorktreeBatch['phase'], keyof BatchTimeline>> = {
+  review: 'reviewAt',
+  sealed: 'sealedAt',
+  landed: 'landedAt',
+  cleaned: 'closedAt',
+  cancelled: 'closedAt',
+}
+/** Single entry for a phase change: sets the phase and stamps its timeline key together. */
+function transition(b: WorktreeBatch, phase: WorktreeBatch['phase']): void {
+  b.phase = phase
+  const key = PHASE_STAMP[phase]
+  if (!key) return
   b.timeline = { ...b.timeline, [key]: new Date().toISOString() }
+  // A re-review voids the seal, so a stale sealedAt would make the seal wait negative.
+  if (key === 'reviewAt') delete b.timeline.sealedAt
 }
 /** Durations derived from the timeline; a missing stamp yields no duration. */
 export function batchTimings(b: Pick<WorktreeBatch, 'timeline'>) {
@@ -3198,7 +3200,13 @@ function diffPaths(c: Context, base: string, tip: string): string[] {
     .split('\0')
     .filter(Boolean)
 }
-function pathsOverlap(a: string, b: string): boolean {
+/** Same path, or one is a directory prefix of the other. `ignoreCase` follows `core.ignorecase`
+ *  of the checkout the paths will be applied to. */
+function pathsOverlap(a: string, b: string, ignoreCase = false): boolean {
+  if (ignoreCase) {
+    a = a.toLowerCase()
+    b = b.toLowerCase()
+  }
   return a === b || a.startsWith(b + '/') || b.startsWith(a + '/')
 }
 /** Parallel batches must not touch a common path: squash integration of one
@@ -3672,6 +3680,37 @@ export function retireDraftPr(
     return writeDraftRetirement(c, file, retired)
   })
 }
+/**
+ * A PR batch that lands (merge receipt verified) retires the draft receipts it bound: the
+ * receipt is superseded by the batch journal's draftBindings, so it must not keep blocking the
+ * next PR of the same work id. Only a receipt still matching the binding (work id, PR, head
+ * branch) is retired; a superseded or already-retired one is left alone.
+ */
+function retireLandedDrafts(c: Context, b: WorktreeBatch): void {
+  const merged = b.mergeReceipt
+  if (b.workflow !== 'pr-merge-based' || merged?.merged !== true) return
+  for (const binding of b.draftBindings ?? []) {
+    const file = join(c.dir, 'drafts', workIdFile(binding.workId))
+    if (!existsSync(file)) continue
+    const receipt = readDraft(file)
+    if (
+      receipt.retirement ||
+      receipt.workId !== binding.workId ||
+      receipt.pr !== binding.pr ||
+      receipt.branch.replace(/^refs\/heads\//, '') !== binding.headBranch
+    )
+      continue
+    writeDraftRetirement(c, file, {
+      ...receipt,
+      retirement: {
+        status: 'retired',
+        repository: merged.repository,
+        mergeSha: merged.merge_sha.toLowerCase(),
+        at: new Date().toISOString(),
+      },
+    })
+  }
+}
 function writeDraftRetirement(c: Context, file: string, retired: DraftPrReceipt): DraftPrReceipt {
   const auditDir = join(c.dir, 'draft-retirements')
   mkdirSync(auditDir, { recursive: true })
@@ -3951,20 +3990,14 @@ export function recordDraftPr(
     if (activeBatch)
       throw new Error(`Draft work id ${workId} already belongs to active batch ${activeBatch.id}`)
     const existing = draftReceiptFor(c, workId)
-    if (
-      existing &&
-      (existing.pr !== receipt.pr || existing.branch !== receipt.branch) &&
-      !draftReceiptLanded(s, existing)
-    )
+    if (existing && (existing.pr !== receipt.pr || existing.branch !== receipt.branch))
       throw new Error(
         `Draft PR #${existing.pr} on ${existing.branch} is already recorded for ${workId}; reuse it instead of rebinding to #${receipt.pr} on ${receipt.branch}`,
       )
     // 同一 branch／PR 已綁在另一個 work id 的有效 receipt 上 → 綁錯（#228），NEVER 靜默多一份
     const clash = listDrafts(c).find(
       (other) =>
-        other.workId !== workId &&
-        (other.branch === receipt.branch || other.pr === receipt.pr) &&
-        !draftReceiptLanded(s, other),
+        other.workId !== workId && (other.branch === receipt.branch || other.pr === receipt.pr),
     )
     if (clash)
       throw new Error(
@@ -4106,8 +4139,7 @@ function integrate(
     lifecycle.bootstrap(c.main, b.path, { needsDevServer: b.needsDevServer === true })
     b.bootstrapped = true
   }
-  b.phase = 'review'
-  stamp(b, 'reviewAt')
+  transition(b, 'review')
   save(c, s)
   return b
 }
@@ -4291,8 +4323,7 @@ export function refreshBatch(cwd: string, resume = false, batchId?: string) {
       )
       b.refresh = { base, before }
       delete b.seal
-      b.phase = 'review'
-      stamp(b, 'reviewAt')
+      transition(b, 'review')
       save(c, s)
       git(b.path, ['reset', '--soft', before])
       try {
@@ -4360,8 +4391,7 @@ export function reviewBatch(cwd: string, batchId?: string) {
     if (tip !== b.base) git(c.main, ['update-ref', `refs/clade/batches/${b.id}/review-${tip}`, tip])
     // Invalidate first: a failed/interrupted reset must never leave the old seal usable.
     delete b.seal
-    b.phase = 'review'
-    stamp(b, 'reviewAt')
+    transition(b, 'review')
     save(c, s)
     if (tip !== b.base) git(b.path, ['reset', '--soft', b.base])
     return b
@@ -4456,8 +4486,7 @@ export function sealBatch(cwd: string, evidencePath: string, batchId?: string) {
       hash: evidenceHash,
       artifacts,
     }
-    b.phase = 'sealed'
-    stamp(b, 'sealedAt')
+    transition(b, 'sealed')
     save(c, s)
     return b
   })
@@ -4490,15 +4519,8 @@ function assertLandingPreservesMain(c: Context, base: string, tip: string) {
   } catch {
     /* Git defaults to case-sensitive paths. */
   }
-  const normalize = (path: string) => (ignoreCase ? path.toLowerCase() : path)
-  const changedPaths = changed.map(normalize)
-  const overlaps = (file: string) => {
-    const path = normalize(file)
-    return changedPaths.some(
-      (candidate) =>
-        path === candidate || path.startsWith(candidate + '/') || candidate.startsWith(path + '/'),
-    )
-  }
+  const overlaps = (file: string) =>
+    changed.some((candidate) => pathsOverlap(file, candidate, ignoreCase))
   // Both sides of the index matter: a staged rename also protects its old path.
   const dirty = [
     ...git(c.main, ['diff', '--no-renames', '--name-only', '-z']).split('\0'),
@@ -4905,8 +4927,8 @@ function landSealedBatch(
       }
     }
     b.landedHead = tip
-    b.phase = 'landed'
-    stamp(b, 'landedAt')
+    transition(b, 'landed')
+    retireLandedDrafts(c, b)
     if (reconcile) {
       // A yield-blocked batch carries a waiting record and a blockedSources row; landing
       // ends the wait, so the member work ids must not stay resumable on a landed batch.
@@ -6103,6 +6125,7 @@ export function cleanupBatches(
                       b.removing?.detachedPointers ?? [],
                     ),
                 )
+                noteTrashed(b, m.path, b.removing?.trash)
                 delete b.removing
               } finally {
                 // Stopping an already-stopped observer is a no-op.
@@ -6118,6 +6141,7 @@ export function cleanupBatches(
               cleanupLifecycle.afterRemove?.(c.main, m.path, removalScanRoots(c, removal.trash))
               if (removal.removalConcern)
                 throw removalReconciliationError(removal.removalConcern, removal.trash)
+              noteTrashed(b, m.path, removal.trash)
               delete b.removing
             }
             git(c.main, ['update-ref', `refs/clade/batches/${b.id}/${index}`, m.head])
@@ -6192,8 +6216,7 @@ export function cleanupBatches(
             b.preserved = [...(b.preserved ?? []), { path: b.path, archive: retiredArchive }]
             if (cancelled) b.removed.push(b.path)
             else {
-              b.phase = 'cleaned'
-              stamp(b, 'closedAt')
+              transition(b, 'cleaned')
               s.ready = s.ready.filter((m) => !claimsMember(b, m.path))
             }
             save(c, s)
@@ -6863,6 +6886,7 @@ export function cleanupBatches(
                       b.removing?.detachedPointers ?? [],
                     ),
                 )
+                noteTrashed(b, b.path, b.removing?.trash)
                 delete b.removing
               } finally {
                 handoffObserver?.stop()
@@ -6874,6 +6898,7 @@ export function cleanupBatches(
               cleanupLifecycle.afterRemove?.(c.main, b.path, removalScanRoots(c, removal.trash))
               if (removal.removalConcern)
                 throw removalReconciliationError(removal.removalConcern, removal.trash)
+              noteTrashed(b, b.path, removal.trash)
               delete b.removing
             }
             cleanupLifecycle.removed(c.main, b.path)
@@ -6888,8 +6913,7 @@ export function cleanupBatches(
             }
             if (cancelled) b.removed.push(b.path)
             else {
-              b.phase = 'cleaned'
-              stamp(b, 'closedAt')
+              transition(b, 'cleaned')
               s.ready = s.ready.filter((m) => !claimsMember(b, m.path))
             }
             save(c, s)
@@ -7080,8 +7104,7 @@ export function cancelBatch(cwd: string, reason: string, batchId?: string) {
   const c = context(cwd)
   return mutate(c, (s) => {
     const b = active(c, s, batchId)
-    b.phase = 'cancelled'
-    stamp(b, 'closedAt')
+    transition(b, 'cancelled')
     b.cancellationReason = reason
     b.cancelledHead = integrationHeadIfPresent(b.path)
     // The seal record survives cancellation: it is the only seal-time proof
@@ -7114,8 +7137,7 @@ export function yieldBlockedBatch(
       carrier: waiting.carrier,
       resumeEvent: waiting.resumeEvent,
     }
-    b.phase = 'cancelled'
-    stamp(b, 'closedAt')
+    transition(b, 'cancelled')
     b.cancellationReason = waiting.reason
     b.cancelledHead = integrationHeadIfPresent(b.path)
     // The seal record survives cancellation — see cancelBatch.
@@ -7215,8 +7237,7 @@ export function mergeUnattendedBatch(
         carrier: waiting.carrier,
         resumeEvent: waiting.resumeEvent,
       }
-      batch.phase = 'cancelled'
-      stamp(batch, 'closedAt')
+      transition(batch, 'cancelled')
       batch.cancellationReason = waiting.reason
       batch.cancelledHead = integrationHeadIfPresent(batch.path)
       // The seal record survives cancellation — see cancelBatch.
@@ -7281,8 +7302,229 @@ function rejectUnknownFlags(rest: string[], allowed: Set<string>) {
   }
 }
 
+const TRASH_UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+const TRASH_TREE_NAME = new RegExp(`^\\.clade-trashed-(.+)-(${TRASH_UUID})$`)
+const TRASH_META_NAME = new RegExp(`^\\.clade-trashed-meta-.+-(${TRASH_UUID})$`)
+const TRASH_MIN_AGE_DAYS = 14
+
+/** Journal a clean removal's trash next to the archive that covers it (see `WorktreeBatch.trashed`). */
+function noteTrashed(b: WorktreeBatch, path: string, trash: string | undefined): void {
+  if (!trash) return
+  ;(b.trashed ??= []).push({
+    path,
+    trash,
+    archive: preservedArchive(b, path),
+    at: new Date().toISOString(),
+  })
+}
+
+export interface TrashPruneRow {
+  path: string
+  /** Batch ids whose journal names this tree; empty when no batch claims it. */
+  batches: string[]
+  verdict: 'deletable' | 'retained'
+  reason: string
+  /** Trashed Git metadata dirs (`<common>/.clade-trashed-meta-*`) that go with the tree. */
+  meta: string[]
+  removed?: boolean
+}
+
+/** Restore owner write on directories only (never through a symlink) so the unlink can proceed. */
+function makeTreeWritable(path: string): void {
+  let info: ReturnType<typeof lstatSync>
+  try {
+    info = lstatSync(path)
+  } catch {
+    return
+  }
+  if (!info.isDirectory()) return
+  chmodSync(path, info.mode | 0o700)
+  for (const entry of safeReaddir(path)) makeTreeWritable(join(path, entry))
+}
+
+/**
+ * `.clade-trashed-*` is what a completed batch removal leaves behind: the verified tree (and its
+ * linked-worktree Git metadata) renamed aside, never unlinked. This is the only deletion path.
+ *
+ * A trash tree is deletable only when every claim below holds, because the delete is irreversible:
+ *  - it is a real directory (never a symlink) named `.clade-trashed-<basename>-<uuid>`, and exactly
+ *    one batch owns it — by its `trashed[]` record (written when the removal finished clean), or,
+ *    for trash made before that record existed, because exactly one batch journaled a preserved
+ *    copy of `<dir>/<basename>` and finished removing it (`removed[]`). Two batches that reused the
+ *    path, or none, leave it in place: the name alone cannot say which archive covers which bytes;
+ *  - no batch has a `removing` journal (an interrupted removal that needs reconciliation stays);
+ *  - the owning batch's preservation archive still verifies against its receipt digests and the
+ *    receipt names this very path as its source;
+ *  - the trash has not been touched for `minAgeDays` (ctime moves on rename and on any later write).
+ * The archive excludes what the profile marks regenerable, so "recoverable" means what the profile
+ * promised to keep. Trashed metadata goes only with its tree (same uuid tail). A legacy trash whose
+ * state was hand-edited cannot be told apart from a clean one. Anything else is reported retained,
+ * never deleted. Dry-run unless `apply`; apply holds the batch operation lock.
+ */
+export function pruneBatchTrash(
+  cwd: string,
+  options: {
+    apply?: boolean
+    minAgeDays?: number
+    now?: number
+    /** Test seam; production re-hashes the archive against its receipt and checks its source path. */
+    verifyArchive?: (archive: string, sourcePath: string) => boolean
+  } = {},
+): TrashPruneRow[] {
+  const c = context(cwd)
+  const minAgeMs = (options.minAgeDays ?? TRASH_MIN_AGE_DAYS) * 86_400_000
+  const now = options.now ?? Date.now()
+  const verified = new Map<string, boolean>()
+  const verifyArchive = (archive: string, sourcePath: string): boolean => {
+    const key = `${archive}\0${sourcePath}`
+    let ok = verified.get(key)
+    if (ok === undefined) {
+      ok = (
+        options.verifyArchive ??
+        ((a, source) => {
+          try {
+            return (
+              readPreservationReceipt(a).source.path === source &&
+              verifyPreservationArchiveIntegrity(a)
+            )
+          } catch {
+            return false
+          }
+        })
+      )(archive, sourcePath)
+      verified.set(key, ok)
+    }
+    return ok
+  }
+  const scan = (s: State): TrashPruneRow[] => {
+    const journaledTrash = new Set(
+      s.batches.flatMap((b) => (b.removing?.trash ? [b.removing.trash] : [])),
+    )
+    const dirs = new Set<string>()
+    for (const b of s.batches) {
+      dirs.add(dirname(b.path))
+      for (const p of b.preserved ?? []) dirs.add(dirname(p.path))
+      for (const t of b.trashed ?? []) dirs.add(dirname(t.trash))
+    }
+    const metaByTail = new Map<string, string[]>()
+    for (const entry of safeReaddir(c.common)) {
+      const tail = TRASH_META_NAME.exec(entry)?.[1]
+      if (tail) metaByTail.set(tail, [...(metaByTail.get(tail) ?? []), join(c.common, entry)])
+    }
+    const claimedTails = new Set<string>()
+    const rows: TrashPruneRow[] = []
+    for (const dir of [...dirs].toSorted()) {
+      for (const entry of safeReaddir(dir).toSorted()) {
+        if (entry.startsWith('.clade-trashed-meta-')) continue
+        const match = TRASH_TREE_NAME.exec(entry)
+        if (!match) continue
+        const path = join(dir, entry)
+        const source = join(dir, match[1]!)
+        const tail = match[2]!
+        const meta = metaByTail.get(tail) ?? []
+        claimedTails.add(tail)
+        let info: ReturnType<typeof lstatSync>
+        try {
+          info = lstatSync(path)
+        } catch {
+          continue
+        }
+        const recorded = s.batches.flatMap((b) =>
+          (b.trashed ?? []).filter((t) => t.trash === path).map(() => b),
+        )
+        const legacy = s.batches.filter((b) => (b.preserved ?? []).some((p) => p.path === source))
+        const owners = recorded.length ? recorded : legacy
+        const ids = owners.map((b) => b.id)
+        const row = (verdict: TrashPruneRow['verdict'], reason: string): TrashPruneRow => ({
+          path,
+          batches: ids,
+          verdict,
+          reason,
+          meta,
+        })
+        const owner = owners[0]
+        const finished =
+          owner !== undefined &&
+          (recorded.length > 0 ||
+            owner.removed.includes(source) ||
+            (owner.path === source && owner.phase === 'cleaned'))
+        const archive = owner ? preservedArchive(owner, source) : undefined
+        if (!info.isDirectory()) {
+          rows.push(row('retained', 'not a real directory (symlink or file); left alone'))
+        } else if (journaledTrash.has(path) || s.batches.some((b) => b.removing?.path === source)) {
+          rows.push(row('retained', 'a batch removal journal still names this tree or trash'))
+        } else if (owners.length === 0) {
+          rows.push(row('retained', 'no batch journaled this path; not ours to delete'))
+        } else if (owners.length > 1) {
+          rows.push(
+            row('retained', 'several batches claim this path; cannot tell which archive covers it'),
+          )
+        } else if (!finished) {
+          rows.push(row('retained', 'removal not recorded as finished for the batch that owns it'))
+        } else if (!archive || !verifyArchive(archive, source)) {
+          rows.push(
+            row('retained', 'preservation archive missing, wrong source, or fails its digest'),
+          )
+        } else if (now - info.ctimeMs < minAgeMs) {
+          rows.push(row('retained', `touched within the last ${minAgeMs / 86_400_000} days`))
+        } else if (
+          meta.some((m) => {
+            try {
+              return !lstatSync(m).isDirectory() || dirname(m) !== c.common
+            } catch {
+              return true
+            }
+          })
+        ) {
+          rows.push(row('retained', 'trashed Git metadata is not a plain directory'))
+        } else {
+          rows.push(row('deletable', 'finished removal, archive verified, past retention'))
+        }
+      }
+    }
+    for (const [tail, metas] of metaByTail)
+      if (!claimedTails.has(tail))
+        for (const m of metas)
+          rows.push({
+            path: m,
+            batches: [],
+            verdict: 'retained',
+            reason: 'trashed Git metadata with no matching trash tree; left alone',
+            meta: [],
+          })
+    return rows
+  }
+  if (!options.apply) return scan(readState(c))
+  return mutate(c, (s) => {
+    const rows = scan(s)
+    const log = join(c.dir, 'trash-prune-log.jsonl')
+    for (const r of rows) {
+      if (r.verdict !== 'deletable') continue
+      for (const target of [r.path, ...r.meta]) {
+        // Trash keeps the source's modes; a sealed directory would stop the unlink half-way.
+        makeTreeWritable(target)
+        rmSync(target, { recursive: true, force: true })
+        appendFileSync(
+          log,
+          JSON.stringify({ at: new Date(now).toISOString(), path: target, batches: r.batches }) +
+            '\n',
+        )
+      }
+      r.removed = true
+    }
+    return rows
+  })
+}
+function safeReaddir(dir: string): string[] {
+  try {
+    return readdirSync(dir)
+  } catch {
+    return []
+  }
+}
+
 export const BATCH_USAGE =
-  'batch: checkpoint | draft | retire-draft [--superseded-by <pr> | --abandoned] | retire-merged [--work-id <id>[,<id>…]] | ready | unready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | merge-receipt --pr <n> [--batch <id>] [--out <path>] | confirm-merged --receipt <file> [--batch <id>] [--reconcile-merged] [--no-cleanup] | cleanup [--dry-run] [--cancelled] [--batch <id>] [--discard-pathspec <path>[,…]] | release-source | cancel | recover-lock'
+  'batch: checkpoint | draft | retire-draft [--superseded-by <pr> | --abandoned] | retire-merged [--work-id <id>[,<id>…]] | ready | unready | status | prepare | resume | scope | refresh | review | seal | land | yield-blocked | unlock-blocked | merge-unattended | merge-receipt --pr <n> [--batch <id>] [--out <path>] | confirm-merged --receipt <file> [--batch <id>] [--reconcile-merged] [--no-cleanup] | cleanup [--dry-run] [--cancelled] [--batch <id>] [--discard-pathspec <path>[,…]] | prune-trash [--apply] [--min-age-days <n>] | release-source | cancel | recover-lock'
 
 /** Landing closes with cleanup of that batch (方案 6). Cleanup is fail-closed
  *  and never undoes the landing: a refusal (publish in flight, lock, anything
@@ -7587,6 +7829,17 @@ export function runBatchCommand(
             saveResidue: cleanupDeps.saveResidue,
             resourceAdapters,
           })
+    }
+    case 'prune-trash': {
+      rejectUnknownFlags(rest, new Set(['--apply', '--min-age-days']))
+      const usage = 'Usage: wt-helper batch prune-trash [--apply] [--min-age-days <n>]'
+      if (positionals(new Set(['--min-age-days'])).length) throw new BatchUsageError(usage)
+      let minAgeDays: number | undefined
+      if (rest.includes('--min-age-days')) {
+        minAgeDays = Number(required('--min-age-days'))
+        if (!Number.isFinite(minAgeDays) || minAgeDays < 0) throw new BatchUsageError(usage)
+      }
+      return pruneBatchTrash(cwd, { apply: rest.includes('--apply'), minAgeDays })
     }
     case 'release-source': {
       rejectUnknownFlags(

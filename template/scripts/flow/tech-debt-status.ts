@@ -23,7 +23,7 @@ export const CLOSED_TD_STATUSES = new Set(['done', 'resolved', 'closed', 'wontfi
 //
 // **這不是 closed class**：它仍要計 Invariant 4 的 60d SLA（驗收本身會拖，那正是需要
 // SLA 的形狀），只是免除 Invariant 5 的「open 不該有 Resolution」與 Invariant 6 的
-// done-hint 誤判。判準見 `.claude/rules/local/tech-debt-hygiene.md § Invariant 5`。
+// done-hint 誤判。判準見 `.claude/skills/clade-home/rules/tech-debt-hygiene.md § Invariant 5`。
 export const LANDED_PENDING_TD_STATUSES = new Set(['landed'])
 
 // @deprecated (TD-490) — `blocked-attended-only` 作為 Status token 已停用。

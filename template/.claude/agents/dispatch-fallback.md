@@ -1,6 +1,6 @@
 ---
 name: dispatch-fallback
-description: 原 Pi 列的載體（Claude Opus 5.5 low）—— 接手 mechanical-fanout／read-heavy-scan／notion-ops／screenshot-review-verify／copywriting-draft／web-search／readonly delegate-sub 工作。這些列的 Pi 執行鏈目前是空鏈，**主線直接派本 agent 當首跳**，不必先跑 pi-dispatch；鏈上若重新有 Pi 席位，則只在 pi-dispatch exit 4 payload 的 `next_tier` 為 null、`next_step` 指向本 agent 時使用。原 Sol 六列（native Sonnet／Opus）、mutation delegate-sub（交 sonnet-implementer）、version-upgrade-research、code-locate、review 席與 Claude-only 各列（執行鏈是 Opus 5.5 的列，含 dotclaude-authoring）都不經本 agent。
+description: 原 Pi 列的載體（Opus 5.5 low）——接手 mechanical-fanout／read-heavy-scan／notion-ops／screenshot-review-verify／copywriting-draft／web-search／readonly delegate-sub。Pi 執行鏈目前是空鏈，**主線直接派本 agent 當首跳**；鏈上重新有 Pi 席位時，只在 pi-dispatch exit 4 的 `next_tier` 為 null 且 `next_step` 指向本 agent 時用。原 Sol 六列、mutation delegate-sub、version-upgrade-research、code-locate、review 席與 Claude-only 各列都不經本 agent。
 tools: Bash, Read, Grep, Glob, WebSearch, WebFetch
 model: opus
 effort: low

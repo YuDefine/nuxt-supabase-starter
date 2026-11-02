@@ -159,7 +159,7 @@ node 是 vp 兩層共同的第三層。適用於 repo root 有 `package.json` �
 | `.nvmrc`（或 `.node-version`） | `24` | 開發者本機 `nvm use` / `fnm use` 切到別的 major |
 | **每一個** workflow 的**每一處** `node-version` | `'24'` | **CI 當場紅**，且 matrix 只有一格紅時很像 flaky |
 
-第三列是全稱：**每一個** `.github/workflows/*.yml` 的**每一處** `node-version:`，不是只改 `ci.yml` 或每檔第一處。
+workflow 那一列是全稱：**每一個** `.github/workflows/*.yml` 的**每一處** `node-version:`，不是只改 `ci.yml` 或每檔第一處。
 
 #### NEVER
 
@@ -509,7 +509,7 @@ suite 後面，agent 於是繞過閘門直跑——那才是沒有上限的路�
 
 ### 長駐 dev server 不是 gate —— 閘門結構上攔不到它
 
-`nuxt dev` / `wrangler dev` / `vite` 不經過任何 gate；起它的 session 死後它被 init 收養繼續跑（orphan workerd 可吃數 GB）。處置走 `vendor/snippets/scoped-dev-server/`，貼進 **`~/.zshenv`**。
+`nuxt dev` / `vite dev` 不經過任何 gate；起它的 session 死後它被 init 收養繼續跑（orphan workerd 可吃數 GB）。處置走 `vendor/snippets/scoped-dev-server/`，貼進 **`~/.zshenv`**。
 
 **一定要貼 `.zshenv`，不要貼 `.zshrc`**（`.zshrc` 不被 `zsh -c` 載入）。**不要用「設定檔裡有這一行」推論它生效**，要實跑 `zsh -c 'printenv <VAR>'` 驗；`~/.config/environment.d/` 要 manager 重載。scope 換到的是**有界且具名**（吃得到 slice 上限、`systemctl --user list-units --type=scope` 叫得動），不要讀成「從此不會有 orphan」。
 

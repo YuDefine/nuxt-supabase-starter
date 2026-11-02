@@ -1,3 +1,6 @@
+---
+when: "要起 dev server、跑 e2e 或佔用 port 之前"
+---
 <!-- Clade native rule; source: rules/core/verification-lease.md; edit canonical source -->
 <!-- clade-targets: claude,agents -->
 

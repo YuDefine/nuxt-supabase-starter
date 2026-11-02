@@ -498,6 +498,21 @@ aixbdd 與非 aixbdd repo 都適用。**每一支**新增的 unit test MUST 命�
 - 只斷言 mock 自己的回傳，或只驗 type 已保證的形狀
 - 呼叫端的整合測試已驗到同一行為，再替內部 helper 補一支
 
+### 新增 U1／U3 測試：附一次破壞證據，標題的每個條件都要有斷言
+
+命中 U1／U3 只證明「該寫」，不證明「寫對」。測試只走作者想到的那一條路徑時，判斷被改窄、改反，測試照綠（HQ `merge-approve.ts` 的 Stryker 抽樣：403 個突變體活 162 個，其中 19 個改壞後會錯放行；mutation 抽樣紀錄在 yudefine-hq `journal/2026-10.md` 2026-10-31）。
+
+**破壞證據**：每一支新增的 U1、U3 測試 MUST 附一次，做法與載體沿用 § 刪除或合併既有測試 的三步與三項：改壞測試宣稱保護的那個判斷（`<` 改 `<=`、regex 收窄一個變體、拿掉一個分支）→ 該測試轉紅 → 還原後同一條指令全綠。寫進新增該測試的 commit message 或 PR body：改壞了哪個檔的哪個判斷、轉紅的測試名稱、還原後跑的指令與結果。沒轉紅 = 這支測試沒保護到那個判斷，先補斷言再重做。**NEVER** 把沒實跑的推演寫成已轉紅、已全綠；填不出實測結果就不 commit。U2 已有先紅再綠、U4 對解析結果斷言，不套本條。
+
+**標題條件**：`test()`／`it()` 名稱列出的每個條件，MUST 各有自己的斷言。標題說「BLOCKED／UNSTABLE 都不放行」，就要有一條斷言 BLOCKED、一條斷言 UNSTABLE；只斷言其中一個，刪掉另一個條件測試照綠。標題寫不下的條件拆成多支測試，**NEVER** 縮減斷言去配標題。
+
+**比較運算子密集的閘門模組**（金流、額度、期限、權限門檻）：測試補完後跑一次 mutation，判準與指令見 `vendor/snippets/mutation-testing/README.md` § 先過這個 gate 的「比較運算子密集」那一列，不在此另寫一份。
+
+| | 寫法 |
+| --- | --- |
+| Bad | `it('BLOCKED／UNSTABLE 都不放行', () => { expect(decide('BLOCKED')).toBe('deny') })`；commit message 只寫「補 decide 測試」。標題兩個條件只斷言一個，也沒證據證明測試咬得到 |
+| Good | 拆成 `it('BLOCKED 不放行')` 與 `it('UNSTABLE 不放行')` 各一條斷言；commit message 附：`破壞證據：lib/decide.ts 的 \`state !== 'UNSTABLE'\` 刪掉 → 轉紅「UNSTABLE 不放行」；還原後 \`node bin/clade-gate run test -- node --test test/decide.test.ts\` 全綠` |
+
 ### 刪除或合併既有測試：先取得刪除證據
 
 刪既有測試時反過來用同一張表：一列都不中、又不是該行為唯一的測試，才刪。**NEVER** 刪閘門類（U3）測試，**NEVER** 刪某段產品碼唯一的行為測試（aixbdd consumer 的對應條款見 [[legacy-tests]] NEVER 2）。
@@ -514,9 +529,15 @@ aixbdd 與非 aixbdd repo 都適用。**每一支**新增的 unit test MUST 命�
 
 **一次要清很多組**：逐組做。拿到刪除證據的那幾組照常刪或合併，沒拿到的留著，在 PR body 列出沒處理的組與原因。**NEVER** 因為時限內做不完全部就整批不刪，也 **NEVER** 為了趕完跳過證據先刪。
 
-**刪除證據**寫進刪除該測試的 commit message 或 PR body（與 § 測試逾時紅 第 2 條同一種載體），最少三項：改壞了哪個檔的哪個判斷、轉紅的接手測試名稱、還原後跑的指令與結果。
+**刪除證據**寫進刪除該測試的 commit message 或 PR body（與 § 測試逾時紅 的「main 也紅＝負載假紅」同一種載體），最少三項：改壞了哪個檔的哪個判斷、轉紅的接手測試名稱、還原後跑的指令與結果。
 
-被保護的產品碼在受保護路徑（`.github/workflows/` 等）時，照 § 對設定檔原文的斷言 第 2 條在 repo 外的複本上做三步。
+被保護的產品碼在受保護路徑（`.github/workflows/` 等）時，照 § 對設定檔原文的斷言 的「每條新斷言附一次 mutation 證明」，在 repo 外的複本上做三步。
+
+**機械閘門與收據**（pre-commit `test-removal-receipt`、CI `--against`）：被刪的每個 test case，都要有一張本次改動新增的有效收據作證，閘門才放行。
+
+- 收據由 `mutation-probe.ts run … --vouch '<被刪檔>::<測試名>' --write-receipts` 產生，落在 `.clade/break-receipts/<receipt_id>.json`，隨改動一起 commit；**NEVER** 手改（CI 會重跑收據，對不上就擋）。契約見 `specs/truth/data/break-receipt.md`
+- 合法豁免只有兩種：`feature-removed`（產品功能同一個改動移除）與 `bdd-remove`（aixbdd 吸收路徑）。豁免也是 `.clade/break-receipts/` 下的宣告檔，理由會列給 0-A 複核；**NEVER** 有第三種
+- 判不出名稱的動態 case（`.each` 表來自函式呼叫、別名、被其他程式碼改過等）一律要整檔 `(file,"*")` 的收據或豁免——閘門不因「判不出」而放行
 
 不需要破壞驗證的只有兩種：
 
@@ -526,6 +547,15 @@ aixbdd 與非 aixbdd repo 都適用。**每一支**新增的 unit test MUST 命�
 | 藉口（逐字實錄） | 現實 |
 | --- | --- |
 | 「比對：案例數不得少於基準，覆蓋率不得低於基準」 | 覆蓋率只說那行被執行過，不說有斷言會因它改錯而轉紅；案例數更只是計數。答案要改壞那個判斷才拿得到 |
+
+## skip 誠實度
+
+新增的 skip 要寫理由與到期日，碰到過期 skip 的改動要先處理。機械閘門是 pre-commit `skip-expiry`（`--staged`）與 CI `skip-gate.ts --against`。
+
+- 標記格式：skip 所在行或正上方一行註解 `clade-skip: until=<YYYY-MM-DD> reason=<非空文字>`，可加 ` revive=auto`（CI 會把該 skip 復活跑一次，轉紅就擋）
+- 新增的 skip 沒有合法標記 → 擋；`until` 早於今天（UTC）且該檔在本次改動中 → 擋
+- `.clade/test-trust-baseline.json` 的 skips 段凍結存量：baseline 內沒有標記的存量 skip 放行，但數量只能縮、不能增；用 `skip-gate.ts --shrink-baseline` 縮
+- **NEVER** 為了讓閘門過而把 `until` 順延而不處理 skip 原因，也 **NEVER** 手改 baseline 的 `count` 往上加
 
 ## 測試結構契約
 
@@ -620,7 +650,7 @@ seedConversation({ updatedAt: daysAgo(60) })  // 更早
 
 ## 對設定檔原文的斷言，標的是行為本身
 
-本節對**每一份被 runtime 讀進去執行的宣告式原始碼**生效（workflow、compose、Dockerfile、SQL migration / function body、RLS policy、Terraform / wrangler）。斷言的標的要是可執行的那幾行，不是含註解的整段原文——註解常逐字引用實作，刪掉實作斷言仍被註解滿足（恆綠）。
+本節對**每一份被 runtime 讀進去執行的宣告式原始碼**生效（workflow、compose、Dockerfile、SQL migration / function body、RLS policy、Terraform / `void.config.ts`）。斷言的標的要是可執行的那幾行，不是含註解的整段原文——註解常逐字引用實作，刪掉實作斷言仍被註解滿足（恆綠）。
 
 原文斷言即使剝掉註解仍是弱形式（等價改寫就紅、語意改壞字串留著照綠）。有行為通道（能跑 migration、能查回結果）時一律斷言行為；沒有才退回原文斷言，並在測試檔寫明理由。
 
@@ -677,8 +707,8 @@ seedConversation({ updatedAt: daysAgo(60) })  // 更早
 
 | 藉口（逐字實錄） | 現實 |
 | --- | --- |
-| 「滿載 CI 下過緊的 spawnSync／dispatch 時間預算放寬」 | 只在滿載下過緊＝負載問題，不是門檻問題——第 1 條的 main 比對會給同一個答案。spawn／dispatch 要伸縮就走 helper，寫死的大數字在負載降下後照樣留著，蓋掉日後真的變慢 |
-| 「subtest timeout 15s／nested spawnSync 3s 在 CI 滿載下過緊，放寬」 | subtest 的 15s 包住的是整支測試，不是子行程；放寬它就是吸收所有變慢。只有內層 `spawnSync` 那個 3s 屬第 4 條 |
+| 「滿載 CI 下過緊的 spawnSync／dispatch 時間預算放寬」 | 只在滿載下過緊＝負載問題，不是門檻問題——「同一台、同負載下跑 main」的比對會給同一個答案。spawn／dispatch 要伸縮就走 helper，寫死的大數字在負載降下後照樣留著，蓋掉日後真的變慢 |
+| 「subtest timeout 15s／nested spawnSync 3s 在 CI 滿載下過緊，放寬」 | subtest 的 15s 包住的是整支測試，不是子行程；放寬它就是吸收所有變慢。只有內層 `spawnSync` 那個 3s 屬「等另一個行程的時間預算」，走 `loadScaledTimeout` |
 | 「stabilize unit-test timeouts」 | 15s→20s 移走的是門檻，不是不穩定；下一次滿載要 30s，數字只會往上走 |
 
-**Red Flags**——發現自己在想這些就停，回第 1 條：「先放寬讓 gate 綠，之後再收回」「只是多給幾秒」「CI 那台本來就慢」「這支本來就 flaky」。
+**Red Flags**——發現自己在想這些就停，回去先跑 main 比對：「先放寬讓 gate 綠，之後再收回」「只是多給幾秒」「CI 那台本來就慢」「這支本來就 flaky」。

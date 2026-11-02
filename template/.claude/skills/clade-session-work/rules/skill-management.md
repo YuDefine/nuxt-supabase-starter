@@ -59,6 +59,8 @@ paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/*
 
 clade 只投影到 consumer repo（與 clade home 自己）。`~/.claude/skills/`、`~/.agents/skills/` 等 user-level 目錄由使用者自行維護，clade **NEVER** 產生、覆寫或稽核其中內容。
 
+唯一例外是開發機節點層：`registry/dev-nodes.json` 的 `toolchain.vp_globals.<pkg>.skills` 列名的 skill，由 `scripts/dev-node.ts` 建成指向 vp 全域安裝目錄的 symlink（目前只有官方 `void`，它要從真實目錄讀套件內 docs，複製會斷）。它不是 clade skill 的投影；同名的非 symlink 項目一律報 needs-human、不覆寫。登記理由見 `registry/skill-sources.json`。
+
 user-level 與 repo 內投影同名是合法遮蔽：pi 採 project 版、略過 user 版。`scripts/runtime-health.ts` 的撞名分級據此分 managed（兩邊皆 clade 投影 → 摘要）／mixed（單邊 → fail）／unmanaged（雙邊手寫 → warn）；「clade 投影」的證據是 LOCKED banner 或 `.clade/projections/agents.{capabilities,rules}.json`（未經 agents 投影的 consumer 仍是舊名 `codex.*`）的 files 清單。user-level 殘留的舊 clade 投影（退役前寫進 `~/.agents/skills/` 的那批）由使用者刪除，**NEVER** 為它恢復 user-level 投影。
 
 ## Skill 撰寫形式

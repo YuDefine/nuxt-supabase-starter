@@ -1456,7 +1456,7 @@ function seededContractPath(root: string, workId: string, since: string): string
     gitLines(root, ['show', `${since}:${legacyRel}`]).join('\n')
   const current = existsSync(join(root, planRel)) ? readFileSync(join(root, planRel), 'utf8') : ''
   const contractLine =
-    /^- Contract: 範圍與驗收以 `(?<path>docs\/contract\/r[1-9]\d*\/presale\.json)`/mu
+    /^- Contract: 範圍與驗收以 `(?<path>(?:specs|docs)\/contract\/r[1-9]\d*\/presale\.json)`/mu
   return (
     contractLine.exec(baseline)?.groups?.path ?? contractLine.exec(current)?.groups?.path ?? null
   )
@@ -1521,18 +1521,43 @@ function gitLines(root: string, args: string[], nul = false): string[] {
 export function checkSpecIntegrity(root: string, workId: string, since: string): IntegrityResult {
   const contractPath = seededContractPath(root, workId, since)
   const surfaces = integritySurfaces(workId, contractPath)
-  const committed = gitLines(
+  // 只算本分支自己的改動，不算 main 帶進來的別件 truth／spec：兩點 diff（`since..HEAD`）是「淨結果」，
+  // 但 branch 合過 main 後 main 的改動也在裡面。做法：淨結果路徑 ∩ 「不在落地基準（origin/main、
+  // main）上的 commit 動過的路徑」。排除的是基準已有的 commit，不是第二親——從工作分支切出去再
+  // `--no-ff` 併回的側枝 commit 不在基準上，照算（不能用 `--first-parent`：merge 取側枝版本時
+  // 它看不到）。merge commit 用 `--diff-merges=cc`，衝突解法／evil merge 照樣看得到。取交集保留
+  // 「後續 commit 完全還原」仍算通過的淨結果語意。找不到基準 ref 時不排除任何 commit（等同兩點 diff，
+  // fail-closed）。
+  const noRenames = contractPath ? ['--no-renames'] : []
+  // 基準 ref 必須存在、且尚未包含 HEAD（HEAD 就在 main 上時 `^main` 會把整段都排掉）。
+  const landingBase = ['origin/main', 'main'].find(
+    (ref) =>
+      gitLines(root, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]).length > 0 &&
+      gitLines(root, ['rev-list', '-n1', 'HEAD', `^${ref}`]).length > 0,
+  )
+  const netChanged = gitLines(
     root,
-    [
-      'diff',
-      '--name-only',
-      '-z',
-      ...(contractPath ? ['--no-renames'] : []),
-      `${since}..HEAD`,
-      '--',
-    ],
+    ['diff', '--name-only', '-z', ...noRenames, `${since}..HEAD`, '--'],
     true,
   )
+  const ownTouched = new Set(
+    gitLines(
+      root,
+      [
+        'log',
+        '--diff-merges=cc',
+        '--name-only',
+        '-z',
+        '--format=',
+        ...noRenames,
+        `${since}..HEAD`,
+        ...(landingBase ? [`^${landingBase}`] : []),
+        '--',
+      ],
+      true,
+    ).map((rel) => rel.replace(/^\n+/u, '')),
+  )
+  const committed = netChanged.filter((rel) => ownTouched.has(rel))
   // `readGitStatus`（`-z`）：路徑不被 `core.quotePath` 跳脫，rename 的 `path` 是新路徑。
   // 讀不到就當沒有未提交改動（與 `gitLines` 同一條 fail-open；committed 那側照樣檢查）。
   let worktree: string[] = []

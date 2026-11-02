@@ -72,7 +72,7 @@ paths:
 
 ### dispatch 還沒回報時，驗收列同樣不排
 
-`work.done` 與 dispatch 完成握手是兩個獨立寫入。判準是**有沒有沒 end 的 `session_transport`**（**NEVER** 放寬成「有沒有沒 end 的 span」——掛著一題沒回的 `decision.request` 會讓驗收列永久消失）。**NEVER** 讀成「工作沒做完」，只是還不能問。被擋下的工作 **MUST 在佇列上列名**（合併卡或第一列驗收列，共用 `decisions.ts` 的 `transportHeldLines`），**NEVER** 讓其中一條路徑靜默。
+`work.done` 與 dispatch 完成握手是兩個獨立寫入。判準是**有沒有沒 end 的 `session_transport`**（**NEVER** 放寬成「有沒有沒 end 的 span」——掛著一題沒回的 `decision.request` 會讓驗收列永久消失）。**NEVER** 讀成「工作沒做完」，只是還不能問。被擋下的工作 **MUST 在佇列上列名**（合併卡或排最前的驗收列，共用 `decisions.ts` 的 `transportHeldLines`），**NEVER** 讓其中一條路徑靜默。
 
 ## R2 入口鑄名索引（informational — 不觸發任何東西）
 
@@ -119,7 +119,7 @@ paths:
 | `/handoff park` 落的 HANDOFF / TD 段文字帶 work_id | 接手的下一個 session | park 是四個 arg 裡唯一純 prose 落檔、park 後**沒有任何結構化載體存活**的，所以這一筆 **MUST** 帶。寫入者是 skill 步驟 |
 | `tasks/<date>-<slug>.md` 檔頭的 `work_id:` | `scripts/audit-stale-tasks.ts`（拿它把 archivable 從年齡推定升級成收尾證據） | **選填，NEVER 變強制**——缺欄位 **NEVER** 報違例、**NEVER** 讓任何 gate 因此擋人（[[session-tasks.operations]] § 寫入規約補充） |
 
-**NEVER** 在這兩格之外新增回指；要新增第三格，先講得出誰在讀。
+**NEVER** 在這兩個例外之外新增回指；要再加一個例外，先講得出誰在讀。
 
 ## 可重驗的驗收：`flow work done --verify-cmd`
 

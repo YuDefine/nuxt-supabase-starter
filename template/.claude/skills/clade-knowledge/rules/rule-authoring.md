@@ -11,7 +11,7 @@ paths: ['.clade/rules/**/*.md', '.claude/rules/**/*.md', '.claude/skills/**/*.md
 
 ## Canonical source and native delivery boundary
 
-Central rules are authored in `rules/**/*.md`; consumer-local rules are authored in `.clade/rules/**/*.md`. Each selected rule is packaged into one semantically named native skill under `.claude/skills/clade-*`, or `.agents/skills/clade-*`: `SKILL.md` carries discovery metadata, `rules/_index.md` carries scope metadata, and `rules/**/*.md` carries complete bodies. These are generated delivery surfaces, so editing them never changes the canonical source. Rule delivery must not install an automatic injection hook or a single catch-all rule skill; a shared rule keeps its obligation in the common source and records target-specific mechanics in the matching adapter fragment.
+Central rules are authored in `rules/**/*.md`; consumer-local rules are authored in `.clade/rules/**/*.md`. Each selected rule is packaged into one semantically named native skill under `.claude/skills/clade-*`, or `.agents/skills/clade-*`: `SKILL.md` carries discovery metadata plus one conditional READ line per rule (from its `paths:` or `moment:`), `rules/_index.md` carries the full scope table, and `rules/**/*.md` carries complete bodies. These are generated delivery surfaces, so editing them never changes the canonical source. Rule delivery must not install an automatic injection hook or a single catch-all rule skill; a shared rule keeps its obligation in the common source and records target-specific mechanics in the matching adapter fragment.
 
 **核心命題**：規約文字是塑形 agent 行為的 code，不是散文。形式選錯的規約看起來嚴謹、實測反效果——對「輸出形狀」問題用禁止句，違規率比不寫指引還高。本規則對**每一次** rule / SKILL.md / brief / snippet 的撰寫與修改生效，不是只有大改版才適用。
 
@@ -55,7 +55,7 @@ Central rules are authored in `rules/**/*.md`; consumer-local rules are authored
 
 ### 新增判準 MUST 宣告觸發點
 
-**每一條**新增判準在同一次改動內寫出哪一刻把它帶進 context；全匹配與空值 `paths:` 由 `node scripts/audit-rule-paths.ts` 的 hard flag（`catch-all-paths`／`null-scope`）攔下，無 `paths:` 的常駐只留給 `UNCONDITIONAL_WHITELIST` 的 bootstrap 類。合法觸發點：① skill SOP `READ 若〈條件〉，讀取 rules/〈判準〉.md`；② 工具事件 hook 印 pointer 級一行；③ script／gate 失敗輸出印判準位置；④ 有明確 scope 的 `paths:`——散播層 `rules/**`、consumer-local `.clade/rules/**`（兩者同經 rules planner 交付成 native skill 的 scope metadata）與 clade home `.claude/rules/local/` 都適用。
+**每一條**新增判準在同一次改動內寫出哪一刻把它帶進 context；全匹配與空值 `paths:` 由 `node scripts/audit-rule-paths.ts` 的 hard flag（`catch-all-paths`／`null-scope`）攔下，無 `paths:` 的「常駐」宣稱只留給 `registry/always-load-delivery.json` 登記的 bootstrap／invariant 類——native 投影沒有自動注入通道，登記必須指到已註冊、且提到該規約檔名的 hook；自稱 always-load 卻沒有可驗交付面，audit 報 `always-load-claim-without-delivery`（hard flag）。合法觸發點：① skill SOP `READ 若〈條件〉，讀取 rules/〈判準〉.md`（rule 以 frontmatter `when:` 宣告條件，由投影渲染進 `clade-*` SKILL.md 本文，不進 description、不加常駐面；時刻在 family description 涵蓋不到時改用 `moment:`，會併進 description 計常駐）；② 工具事件 hook 印 pointer 級一行；③ script／gate 失敗輸出印判準位置；④ 有明確 scope 的 `paths:`——散播層 `rules/**`、consumer-local `.clade/rules/**`（兩者同經 rules planner 交付成 native skill 的 scope metadata）與 clade home `.claude/rules/local/` 都適用。
 
 **Good Example**：`clade-home` SKILL.md Phase 4 寫「READ 若要在 clade repo 下 commit，讀取 `rules/clade-role-and-todo-discipline.commit.md`」，同時 `clade-home-guard.ts` 在偵測到 `git commit` 時印同一個檔的 pointer——兩個觸發點都指得出時刻。
 
@@ -108,7 +108,7 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 ## 發佈前驗證
 
 - **新規約 / 改措辭前先跑 baseline（SHOULD）**：無規約下用誘發情境跑一次，確認失敗真的存在。對照組沒失敗 → 不要寫這條規約（沒有要修的東西，寫了只燒 token）。
-- **情境只能觸發你要測的那一條規約**：同時命中第二條規約而兩者指向不同動作，正解就變歧義、pass 率變雜訊。寫完情境自問「還有哪條規約會被這段描述叫醒？」
+- **情境只能觸發你要測的那一條規約**：同時命中另一條規約而兩者指向不同動作，正解就變歧義、pass 率變雜訊。寫完情境自問「還有哪條規約會被這段描述叫醒？」
 - **對照組沒失敗有三種成因，別混為一談**：(a) 規約沒有要修的東西 → 不要寫；(b) 規約教的是**模型原本沒有的選項**（如「有 pi 這個 dispatcher 可以派」），無規約時模型根本無從違反 → 對照組**必然**通過，此類規約要改測反方向才有鑑別力；(c) **情境餵了真實場景不自帶的判定素材**（predicate 的答案自報在題目裡、gate 的存在被逐字聲明）→ 量到的是「答案給了會不會用」，不是「會不會自己去判」，對照組通過是**量測失真**不是失敗不存在。誤判成 (a) 會刪掉有效規約。
 - **(c) 的判定與處置**：手上有同型失敗的**真實 telemetry**（ledger / transcript / audit 訊號）而對照組通過時，**先懷疑 (c)**——真實 telemetry > 合成情境。判別法：把題目裡的自報聲明刪掉還原真實資訊條件，刪了正解就變灰 = 在 harness 量測邊界外（見 `vendor/snippets/rule-authoring/README.md` § 兩支 harness 分工）。此時規約仍可寫，但要做到：(i) 理由**引 telemetry、不引 scenario**；(ii) scenario 檔頭明寫「本情境量不到 X」；(iii) 形式偏向**把推導變查表**。
 - **(c) 不是 Iron Law 的豁免口**：沒有真實 telemetry 與對照組**矛盾**時，「情境可能餵了答案」不能單獨當保留規約的理由。見 `docs/rule-rationale/rule-authoring.md` § 對照組成因 (c)。

@@ -175,7 +175,7 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 
 ### Evidence payload 走 sidecar（hard rule）
 
-寫**任何一條**新 evidence annotation 時：payload **MUST** 進 sidecar（`docs/evidence/<work-slug>.jsonl`），行內 **MUST** 只留 `(<kind>: <ISO>)` 短 marker。適用 **每一個** annotation kind，不是只有 `verified-ui`。
+寫**任何一條**新 evidence annotation 時：payload **MUST** 進 sidecar（lifecycle repo `specs/evidence/<work-slug>.jsonl`，未遷移 consumer `docs/evidence/<work-slug>.jsonl`；`evidence-store.ts` 自動分流），行內 **MUST** 只留 `(<kind>: <ISO>)` 短 marker。適用 **每一個** annotation kind，不是只有 `verified-ui`。
 
 寫入一律用 `vendor/scripts/lib/evidence-store.ts --write`——它寫完 sidecar 會把該貼進行內的短 marker 印到 stdout，**原樣**貼上即可。**NEVER** 自己另編時間戳，**NEVER** 先貼 marker 再補 sidecar（順序顛倒時 parser 計 `malformed`）。
 

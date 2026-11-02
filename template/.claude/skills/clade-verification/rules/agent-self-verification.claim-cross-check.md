@@ -4,7 +4,7 @@ paths:
   [
     '.claude/agents/**',
     '.github/workflows/**',
-    'wrangler.{toml,jsonc}',
+    'void.config.ts',
     'Dockerfile',
     '.mcp.json',
     'vendor/scripts/**',
@@ -29,7 +29,7 @@ paths:
 4. **工具呼叫前 verify CLI contract**：對 vendor script / external CLI，呼叫前 grep `Usage:` / `--help` / source 確認 flag / stdin / env var。`Usage:` 出現在 stderr = argv 錯，root cause 在 dispatcher source，**不**是 user 端設定。
 
    **`--help` 不是天生安全的探測手段**：對不解析 `--help` 也不擋 unknown flag 的 script，它等同無參數執行。**MUST 先讀 source 確認它對 unknown flag 的處置**（shim 要追到實作端）再探測；**NEVER** 對這類 script 用 `| head -N` 限制輸出量（per [[checker-contract]] § 上游具副作用時，提前退出命令會把它腰斬）。
-10. **部署宣稱需交叉核對**：宣稱部署平台 / runtime 時，**MUST** 核對 `.github/workflows/` deploy job + deploy config（`wrangler.toml` / `Dockerfile`）+ `package.json` scripts。**NEVER** 只引單一 `docs/` 文件。
+10. **部署宣稱需交叉核對**：宣稱部署平台 / runtime 時，**MUST** 核對 `.github/workflows/` deploy job + deploy config（`void.config.ts` / `Dockerfile`）+ `package.json` scripts。**NEVER** 只引單一 `docs/` 文件。
 
     **開始調查 production 之前先釘 canonical tuple**：讀任何設定 / 查任何 log / 提任何修正**之前**，**MUST** 先確認四項並寫出來——repo、framework、hosting platform、domain。**NEVER** 從當前工作目錄推斷是哪個 production 專案。四項有任一項答不出來就還不能動手。
 

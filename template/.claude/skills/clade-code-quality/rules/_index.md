@@ -4,4 +4,4 @@
 {"file":"error-handling.md","source":"rules/core/error-handling.md","paths":["app/**/*.{vue,ts}","packages/*/app/**/*.{vue,ts}","server/**/*.ts","packages/*/server/**/*.ts"]}
 {"file":"runtime/threshold-remediation.md","source":"adapters/claude/instructions/rules/core/threshold-remediation.md","paths":null}
 {"file":"shell-script-safety.md","source":"rules/core/shell-script-safety.md","paths":["**/*.sh","ops/**","deploy/**","scripts/**"]}
-{"file":"threshold-remediation.md","source":"rules/core/threshold-remediation.md","paths":null}
+{"file":"threshold-remediation.md","source":"rules/core/threshold-remediation.md","paths":null,"when":"audit 報門檻超標、要處置超標量之前"}

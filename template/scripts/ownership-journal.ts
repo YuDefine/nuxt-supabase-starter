@@ -173,13 +173,13 @@ export function lastWriterByPath(
  * 呼叫，所以 hooked 的呼叫端自己的 stamp 此刻一定新鮮。
  *
  * **NEVER** 只憑 stamp 推身分（0-A #241 Major）。stamp 目錄是整個 consumer root 共用的（所有
- * worktree 同一個目錄），任何 hooked Claude Bash 都會寫；非 hooked 的呼叫端（Codex／pi、人的
+ * worktree 同一個目錄），任何 hooked Claude Bash 都會寫；非 hooked 的呼叫端（pi、人的
  * terminal、腳本）或自己那次 Bash 已跑超過 `freshMs` 的呼叫端，只要剛好有一個別 session 的
  * Bash 在飛，「恰好一個新鮮 stamp」指到的就是**別人**——對方的檔被判 `mine`、action 是
  * `git commit --only`，正是 TD-743 與 rules/core/session-claims.md § 3.2 逐字禁止的方向。
  *
  * 所以：env 說了是誰，且那個 id 自己的 stamp 此刻新鮮，才回它。env 沒有、runtime 判不出唯一
- * （例如 Codex child 繼承了 parent 的 `CLAUDE_*`）、或那個 id 沒有新鮮 stamp，一律 null——
+ * （例如非 Claude 的 child 繼承了 parent 的 `CLAUDE_*`）、或那個 id 沒有新鮮 stamp，一律 null——
  * `mine` 維持不可達是安全方向。別 session 的 stamp 存不存在**不影響**結果。
  */
 export function bashStampSession(

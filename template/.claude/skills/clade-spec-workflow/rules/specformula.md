@@ -26,7 +26,7 @@ SpecFormula 的 step definition 由 `isa.yml` 的 regex 動態生成：OpenAPI `
 | Nuxt 4 + PostgreSQL（Supabase）且有 HTTP API 要驗收 | ✅ 適用對象；資料源用 `postgresql`，連線指向每個 repo 核准的隔離測試 DB |
 | D1 或無資料庫服務（純 proxy、純靜態、純 CLI）且需要 API acceptance | ✅ 採用 `embedded`；以 API-only scenario 與 runtime 所需最小 fixture 驗證，不強造業務 entity |
 | 未知或未確認的 DB 類型 | ⚠️ 保持 unresolved；不得默認成 `embedded` 或「無 DB」 |
-| 需要對 **hosted** Supabase（`*.supabase.co`）跑 BDD | ❌ **目前不可行**，見下方 NEVER 第 2 條 |
+| 需要對 **hosted** Supabase（`*.supabase.co`）跑 BDD | ❌ **目前不可行**，見下方 § NEVER 的「hosted Supabase」一條 |
 | 既有 consumer 仍有 spectra／openspec 殘留（legacy SDD，2026-10-04 clade 源已移除） | 不新增 legacy 載體，新增的 API operation 走 SpecFormula；殘留清理各走該 consumer 自己的 PR（盤點見 `tasks/2026-10-04-openspec-purge/inventory.md`） |
 | clade home 自身的行為（CLI／檔案系統／read model 折疊） | ✅ 走 § clade 驗收執行——同一個框架、clade 自己的 instruction adapter；沒有 HTTP API 與業務 DB 可捏造 |
 | consumer 同時宣告 `aixbdd` | 上游流程層也生效：`.feature` 與 DSL 由 [`aixbdd-workflow.md`](./aixbdd-workflow.md) 的九步產出，本檔管它們怎麼跑。**兩個 capability 各自獨立**——只宣告 `specformula`、自己手寫 `isa.yml` 與 `.feature` 是合法路徑 |
