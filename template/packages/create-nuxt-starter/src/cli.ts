@@ -28,6 +28,11 @@ import {
   type CatalogArgValues,
 } from './answers-file'
 import {
+  checkTechstackRecord,
+  installTechstackRecord,
+  techstackRecordConflict,
+} from './techstack-gate'
+import {
   PRESET_IDS,
   applyPreset,
   getPresetById,
@@ -837,6 +842,20 @@ const main = defineCommand({
       description: '禁止外部查詢與下載；必要的本機輸入缺失時明確失敗',
       default: false,
     },
+    'techstack-record': {
+      type: 'string',
+      description:
+        'tech stack 確認紀錄（docs/techstack-confirmation.md 格式）；--yes／managed 流程必填，' +
+        '先經 clade 的 techstack-confirmation check 才會 scaffold，通過後複製進 target',
+      required: false,
+    },
+    'techstack-playground-exempt': {
+      type: 'boolean',
+      description:
+        '具名豁免：starter 自測／playground 重建（不是真專案）免 tech stack 確認紀錄。' +
+        '只能搭配 --no-register-consumer，輸出標示 playground-exempt；NEVER 用於真專案',
+      default: false,
+    },
   },
   async run({ args }) {
     // --json：stdout 只留下最後一個 JSON object，所有進度／診斷一律走 stderr。
@@ -1099,6 +1118,51 @@ const main = defineCommand({
     const resolvedDevPort = selections.devPort ?? (devPortAutoArg ? 'auto' : devPortArg)
     const registerConsumer =
       selections.registerFleet === false ? false : catalogArgs.register !== false
+
+    // tech stack 確認閘門（S4-b）：--yes／managed 流程在寫第一個檔之前，確認紀錄
+    // 必須通過 clade 的 check（判準 SSoT 在 clade，starter 不另寫 parser）。
+    // 互動且 scaffold-only 時人在現場，不強制；但有給紀錄就照樣驗並放進 target。
+    const techstackRecordArg = args['techstack-record'] as string | undefined
+    const techstackExempt = args['techstack-playground-exempt'] === true
+    const techstackRequired = effectiveYes || registerConsumer || managedAdopt
+    let techstackStatus: 'confirmed' | 'playground-exempt' | undefined
+    let techstackRecordPath: string | undefined
+    if (techstackExempt) {
+      if (registerConsumer || managedAdopt) {
+        failRun(
+          'TECHSTACK_EXEMPT_INVALID',
+          '--techstack-playground-exempt 只能用於不登記的 playground／自測 scaffold；' +
+            '登記 fleet 或採用既有專案（managed）一律要 tech stack 確認紀錄。',
+        )
+      }
+      if (techstackRecordArg !== undefined) {
+        failRun(
+          'TECHSTACK_EXEMPT_INVALID',
+          '--techstack-playground-exempt 與 --techstack-record 互斥：有紀錄就驗紀錄，不需要豁免。',
+        )
+      }
+      consola.warn('tech stack 確認已豁免（playground-exempt）：這不是真專案，不得登記進 fleet。')
+      techstackStatus = 'playground-exempt'
+    } else if (techstackRequired || techstackRecordArg !== undefined) {
+      const gate = checkTechstackRecord(
+        findCladeRoot(),
+        techstackRecordArg ? resolve(invocationCwd, techstackRecordArg) : undefined,
+      )
+      if (gate.status === 'rejected') failRun(gate.code, gate.reason)
+      else {
+        techstackRecordPath = gate.recordPath
+        techstackStatus = 'confirmed'
+        const conflict = techstackRecordConflict(gate.recordPath, targetDir)
+        if (conflict) failRun('TECHSTACK_RECORD_CONFLICT', conflict)
+      }
+    }
+    // 通過 check 的紀錄放進 target（bootstrap-project 的閘門讀 docs/techstack-confirmation.md）。
+    const installRecord = (target: string): void => {
+      if (!techstackRecordPath) return
+      installTechstackRecord(techstackRecordPath, target)
+    }
+    const withTechstack = <T extends object>(report: T): T & { techstack?: string } =>
+      techstackStatus ? { ...report, techstack: techstackStatus } : report
     // 政策只存在於 managed 流程；default 一律讀 catalog 宣告，不在這裡寫死。
     const updatePolicy = registerConsumer
       ? ((selections.updatePolicy ??
@@ -1177,6 +1241,7 @@ const main = defineCommand({
       consola.info(
         `偵測到既有業務專案「${pkgName}」，只交付 Clade managed bootstrap（不 scaffold）。`,
       )
+      installRecord(targetDir)
       let adoptOutcome: PostScaffoldOutcome
       try {
         adoptOutcome = await adoptExistingProject(targetDir, {
@@ -1211,7 +1276,7 @@ const main = defineCommand({
         return failRun('BOOTSTRAP_FAILED', `採用既有專案失敗：${(error as Error).message}`)
       }
       const adoptReport = buildCompletionReport(targetDir, true, adoptOutcome)
-      emitJson?.(adoptReport)
+      emitJson?.(withTechstack(adoptReport))
       if (adoptReport.status === 'failed') process.exit(1)
       return
     }
@@ -1232,6 +1297,7 @@ const main = defineCommand({
     } catch (error) {
       return failRun('SCAFFOLD_FAILED', `建立專案失敗：${(error as Error).message}`)
     }
+    installRecord(targetDir)
 
     // Post-scaffold
     let outcome: PostScaffoldOutcome
@@ -1273,7 +1339,7 @@ const main = defineCommand({
     // --json 完成報告：stdout 唯一一個 JSON object（機讀契約）。
     // bootstrap 回報成功但未提供可驗證身分時降回 scaffolded，不宣稱 ready。
     const report = buildCompletionReport(targetDir, registerConsumer, outcome)
-    emitJson?.(report)
+    emitJson?.(withTechstack(report))
     if (report.status === 'failed') process.exit(1)
   },
 })

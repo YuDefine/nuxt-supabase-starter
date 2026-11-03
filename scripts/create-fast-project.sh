@@ -102,6 +102,7 @@ if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
     --yes \
     --db-host this-machine \
     --no-register-consumer \
+    --techstack-playground-exempt \
     --without testing-full,testing-vitest \
     --auth "$AUTH_MODE" \
     "${EXTRA_ARGS[@]}"
@@ -111,6 +112,7 @@ else
     --yes \
     --db-host this-machine \
     --no-register-consumer \
+    --techstack-playground-exempt \
     --without testing-full,testing-vitest \
     --auth "$AUTH_MODE"
 fi
