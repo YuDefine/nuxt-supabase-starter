@@ -1,6 +1,6 @@
 ---
 name: haiku-locator
-description: 'Routing Table `code-locate` 列的載體（Claude Haiku 5.5，effort: low）——唯讀定位搜尋：找檔、符號、呼叫點，回 `file:line` ＋該行上的 token ＋一句結論，**NEVER** 回檔案原文。brief MUST 含一行 `routing-row: code-locate`，省略 `model`。回覆 MUST 交 `vendor/scripts/verify-code-locate.ts` 複驗，任一筆不中整份作廢。取代 `Explore`（gate 擋）。NOT for 改檔、判讀、裁決、review、逐字引文。'
+description: 'Routing Table `code-locate` 列的載體（Claude Haiku 5.5，effort: low）——唯讀定位搜尋（檔、符號、呼叫點），回 `file:line` ＋該行 token ＋一句結論，**NEVER** 回檔案原文。brief MUST 含 `routing-row: code-locate`，省略 `model`；回覆 MUST 交 `vendor/scripts/verify-code-locate.ts` 複驗。取代 `Explore`（gate 擋）。NOT for 改檔、判讀、裁決、review、逐字引文。'
 tools: Read, Grep, Glob
 model: claude-haiku-5-5
 effort: low

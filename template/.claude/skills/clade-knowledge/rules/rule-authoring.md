@@ -83,7 +83,11 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 - ❌「值要同步寫進 Notion 保管頁，不得寫進任何檔案、commit 或對話」
 - ✅ 兩個 bullet：「**agent** 收到值後要寫進 Notion 保管頁的對應列」／「**agent** 不得把值寫進 repo 檔案、commit message、對話輸出——保管頁不在此射程」
 
-「執行者是 <人名>」「X 為 user-only」這類句子要附**成立前提**，並寫明前提消失後本條失效——否則當時的事實限制會被照字面當成永久權責劃分續用。範本在 [[secret-custody]] 的前提失效條款段。
+規約或 rationale 的理由依賴**可變外部事實**（model 可用性、價格、額度池、provider、訂閱、executor 存在與否）時，要附**成立前提**與**前提失效後的重評觸發**——否則當時的事實限制會被照字面當成永久規則續用，事實變了只把鏈或清單改空、沒人回頭問這條還該不該存在。典型句型：「執行者是 <人名>」「X 為 user-only」「強制外派給 <載體>」。範本在 [[secret-custody]] 的前提失效條款段。
+
+- rationale 在「本證據決定／本證據不決定」兩行後加第三行「成立前提／前提失效時：」，寫前提、失效後的處置、重評觸發。
+- 能機械算出的 enforcement 不靠散文：前提寫成資料，由程式推導（範本：`vendor/scripts/pi-routing-policy.ts` 的 `ROW_PREMISES`＋`rowEnforcement()`，前提失效時 block 自動降為 observe）。
+- 純安全不變式（credential 拒絕、default-deny）不依賴可變事實，不需要前提。
 
 ## 紀律型規約三件套（預設一行平述，量到失敗才加）
 
@@ -112,7 +116,7 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 - **對照組沒失敗有三種成因，別混為一談**：(a) 規約沒有要修的東西 → 不要寫；(b) 規約教的是**模型原本沒有的選項**（如「有 pi 這個 dispatcher 可以派」），無規約時模型根本無從違反 → 對照組**必然**通過，此類規約要改測反方向才有鑑別力；(c) **情境餵了真實場景不自帶的判定素材**（predicate 的答案自報在題目裡、gate 的存在被逐字聲明）→ 量到的是「答案給了會不會用」，不是「會不會自己去判」，對照組通過是**量測失真**不是失敗不存在。誤判成 (a) 會刪掉有效規約。
 - **(c) 的判定與處置**：手上有同型失敗的**真實 telemetry**（ledger / transcript / audit 訊號）而對照組通過時，**先懷疑 (c)**——真實 telemetry > 合成情境。判別法：把題目裡的自報聲明刪掉還原真實資訊條件，刪了正解就變灰 = 在 harness 量測邊界外（見 `vendor/snippets/rule-authoring/README.md` § 兩支 harness 分工）。此時規約仍可寫，但要做到：(i) 理由**引 telemetry、不引 scenario**；(ii) scenario 檔頭明寫「本情境量不到 X」；(iii) 形式偏向**把推導變查表**。
 - **(c) 不是 Iron Law 的豁免口**：沒有真實 telemetry 與對照組**矛盾**時，「情境可能餵了答案」不能單獨當保留規約的理由。見 `docs/rule-rationale/rule-authoring.md` § 對照組成因 (c)。
-- **高風險措辭一律 micro-test**：≥5 reps 新鮮 context + 無指引對照組，逐個人工讀 flagged match（template 回聲與引用反例會偽裝成命中）。**Variance 本身是指標**：5 reps 出 5 種解讀 = 措辭沒綁住，先收斂形式再加字。
+- **高風險措辭一律 micro-test**：≥5 reps 新鮮 context + 無指引對照組，逐個人工讀 flagged match（template 回聲與引用反例會偽裝成命中）。**情境 MUST 走盲測形狀**：候選者看得到的地方不出現 eval／judge／rubric，prompt 是真實請求的形狀（不列 A/B/C、不要 `CHOICE:` 首行），judge 只看去名的標籤（細則見 cookbook `pressure-scenario-template.md` § 盲測的不可妥協項）。**Variance 本身是指標**：5 reps 出 5 種解讀 = 措辭沒綁住，先收斂形式再加字。
 - 「高風險」判定：紀律型三件套規約、會散播到全 fleet 的 NEVER/MUST 行、歷史上重犯 ≥2 次的主題、**反轉或收窄既有 NEVER/MUST 行的觸發條件**——改方向的規約最容易讓模型兩邊都不遵守：舊的 default 已經拆掉、新的 default 還沒綁住，中間那段真空比原本沒規約更糟。
 - **判讀一律以人工複讀為準，assertion regex 只當初篩**：regex 嚴重低估命中率（行首措辭稍變就不匹配）。
 - **廢樣本要跟失敗樣本分開計**：耗在幻覺工具呼叫上、沒有決策可讀的 rep 是廢樣本，混算會讓 pass 率虛低。

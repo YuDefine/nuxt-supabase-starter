@@ -42,7 +42,7 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 
 ## 1.5 spine 收尾（ambient `CLADE_WORK_ID` 非空時 MUST，空則整步跳過）
 
-relay 是收工的四個 arg 之一，本 session 走到這裡同樣是「一段工作結束了」（對應 `park` 的 SKILL.md Step 3b）。
+relay 是收工的四個 arg 之一，本 session 走到這裡同樣是「一段工作結束了」（對應 `park` 的 [rules/park登記與HANDOFF寫回判準.md](rules/park登記與HANDOFF寫回判準.md) Step 3b）。
 缺這一步的後果不是少一筆紀錄，是**漏斗上游餓死**：沒有任何必經收尾點會去按 spine 的終態。
 
 **MUST 先判這一題再往下**，二擇一，判準是**你正在交出去的 brief 裡寫的是不是同一件事**：

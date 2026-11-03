@@ -66,6 +66,7 @@
   - 已 `active` 的 consumer，`SECURITY.md` 的不變量被改（`security_md_sha` 與最近一次有效掃描不符，`audit-security-policy.ts` 報 `freshness`）。
 - map 做完、verdict 帶範圍後，才判要不要登記深度稽核：map 有 P0／P1 的 `Unknown` 且靠 code 掃描才能補的，登記「需要深度稽核」進 plan Open work（附 scope 檔數），用 `flow ask` 請 Charles 決定發起；**NEVER** 由本 skill 或呼叫它的 agent 自行點火 Scan codebase（席位規則見 `agent-routing.routing-table.md`〔`deep-security-audit`〕）。
 - map 只靠 Third Party、Operations、Production 層才能補的缺口，不登深度稽核：那些不在 code 掃描範圍內。
+- 深度稽核報告顯示某元件被 Claude safeguard 降級（`modelUsage` 出現 Opus 5.5 以外的 model），而該元件在 map 上是 P0／P1：在登記裡註明，請 Charles 決定是否交 Daybreak 補掃（`agent-routing.routing-table.md` § 禁用〔Daybreak Blue 例外〕，限 Charles 當下指名且有人值守的主線）；補掃的 finding 原文照樣走 `security-evidence finding`，**NEVER** 自行跑 `codex exec`。
 
 ## Good Example
 

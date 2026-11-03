@@ -137,7 +137,7 @@ export function chooseRepoWorkspace(input: {
   excludePane?: (pane: PaneInfo) => boolean
   excludeWorkspace?: (workspace: WorkspaceInfo, panes: PaneInfo[]) => boolean
   /**
-   * host 資格（spec W-2026-10-13-herdr-workspace-repo-classification § C1）：cwd 退路只收
+   * host 資格：cwd 退路只收
    * 回 true 的 workspace——目標 repo 要是它 pane 的**嚴格最多數**，只躺著一個目標 repo pane
    * （caller 自己的、relay 繼任者的）不算家。判定本身（git／慣例解析）由 caller 注入。
    * 只套在 cwd 退路：label 命中身分的 workspace 是顯式主張，不受它限；顯式 pin 同樣不受限。

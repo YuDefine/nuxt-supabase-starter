@@ -166,7 +166,7 @@ npm items 依分類決定 prompt 填充：
 - `adaptation`（任何版號差距）：typecheck + build + 相關 test
 - major（任何分類）：typecheck + build + 全 test + pi 自己決定要不要 smoke test
 
-### C.2 Dispatch background（first-pass，Claude Sonnet 5.5 high）
+### C.2 Dispatch background（first-pass，Claude Sonnet 5.5（effort: high））
 
 `version-upgrade-first-pass` 列：載體偏好（cloud ＞ Devin ＞ 本機 pane）照 [[agent-routing.routing-table]] § Devin SWE-2 Max 的「四列的 Devin 預設」；本 turn 收得回就走 in-process `sonnet-implementer`（brief 首行下加 `routing-row: version-upgrade-first-pass`），要背景或隔離走 Herdr：
 
@@ -180,7 +180,7 @@ node ~/offline/clade/vendor/scripts/herdr-session-handoff.ts \
   --table-row version-upgrade-first-pass
 ```
 
-席位不可用時的處置依 [[agent-routing.routing-table]]：`version-upgrade-first-pass` 只有 **Claude Sonnet 5.5 high** 一格，`version-upgrade-research` 自 2026-10-21（Pi Grok 退場）起是空鏈、首跳即**主線**；兩列鏈走完都由**主線**接手，不是 blocker，也 **NEVER** 改派禁用 model。適用 Phase B–D 與 Fleet 的每一個 package dispatch。
+席位不可用時的處置依 [[agent-routing.routing-table]]：`version-upgrade-first-pass` 只有 **Claude Sonnet 5.5（effort: high）** 一格，`version-upgrade-research` 自 2026-10-21（Pi Grok 退場）起是空鏈、首跳即**主線**；兩列鏈走完都由**主線**接手，不是 blocker，也 **NEVER** 改派禁用 model。適用 Phase B–D 與 Fleet 的每一個 package dispatch。
 
 這是workspace mutation dispatch。`version-upgrade-research` 經 Pi 時，Runtime quota／provider failure後，**每一個**retry都MUST逐字採用dispatcher payload的`next_step`（含`--retry-of`與`--workspace-access mutation`）；NEVER自行改派任何 GPT seat。
 

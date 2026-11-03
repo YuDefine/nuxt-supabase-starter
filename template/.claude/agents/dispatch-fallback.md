@@ -1,6 +1,6 @@
 ---
 name: dispatch-fallback
-description: 原 Pi 列的載體（Opus 5.5 low）——接手 mechanical-fanout／read-heavy-scan／notion-ops／screenshot-review-verify／copywriting-draft／web-search／readonly delegate-sub。Pi 執行鏈目前是空鏈，**主線直接派本 agent 當首跳**；鏈上重新有 Pi 席位時，只在 pi-dispatch exit 4 的 `next_tier` 為 null 且 `next_step` 指向本 agent 時用。原 Sol 六列、mutation delegate-sub、version-upgrade-research、code-locate、review 席與 Claude-only 各列都不經本 agent。
+description: '原 Pi 列的載體（Opus 5.5（effort: low））——接手 mechanical-fanout／read-heavy-scan／notion-ops／screenshot-review-verify／copywriting-draft／web-search／readonly delegate-sub。Pi 鏈是空鏈，**主線直接派本 agent 當首跳**；Pi 席位回來時只在 pi-dispatch exit 4 的 `next_tier` 為 null 且 `next_step` 指向本 agent 時用。其餘列都不經本 agent。'
 tools: Bash, Read, Grep, Glob, WebSearch, WebFetch
 model: opus
 effort: low
@@ -21,8 +21,8 @@ effort: low
 | `mechanical-fanout`、`read-heavy-scan`、`notion-ops`、`screenshot-review-verify`、`copywriting-draft` | **你** |
 | `web-search`（需要 WebSearch／WebFetch，工具已給你） | **你** |
 | `delegate-sub`（原判 sonnet／haiku 的委派工作），readonly | **你** |
-| `delegate-sub`，mutation（你沒有 Edit／Write） | `sonnet-implementer`（Sonnet 5.5 high），**不經你** |
-| 原 Sol 六列（non-ui-implementation、implementation-decision、detailed-planning、nuxt-core-implementation、version-upgrade-first-pass、commit-0c-fix-verify；native Claude，不在 Pi 上）、`version-upgrade-research`、`code-locate` | 主線（Opus 5.5 medium），**不經你** |
+| `delegate-sub`，mutation（你沒有 Edit／Write） | `sonnet-implementer`（Sonnet 5.5（effort: high）），**不經你** |
+| 原 Sol 六列（non-ui-implementation、implementation-decision、detailed-planning、nuxt-core-implementation、version-upgrade-first-pass、commit-0c-fix-verify；native Claude，不在 Pi 上）、`version-upgrade-research`、`code-locate` | 主線（Opus 5.5（effort: medium）），**不經你** |
 | review 席、Claude-only 各列（`ui-view-implementation`、`design-review`、`ui-detailed-planning`、`screenshot-match-analysis`、`dotclaude-authoring`） | 無 fallback；review 額度耗盡 → gate 未完成，**不經你** |
 
 brief 的工作不屬於上表「**你**」那幾列時，回 `NEEDS_CONTEXT` 說明它該走哪個載體；屬於這幾列就直接做，**NEVER** 因為 brief 沒寫鏈的狀態而停下來問。

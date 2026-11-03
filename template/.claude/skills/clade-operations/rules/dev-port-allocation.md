@@ -143,3 +143,16 @@ Tunnel hostname 是 per-consumer 單一資源（§2.5）；N 個 worktree 共用
 
 - consumer 不跑 Nuxt（例如純 static site、Workers-only） — `dev_ports.nuxt` 可省略，schema 不強制必填
 - consumer `business_activity = paused` 仍受規約約束（avoid silent drift），但 audit DRIFT 不視為 hot follow-up
+
+## dev server runtime 帳本與對帳
+
+- **帳本**：`dev-session.ts` 起好 server 與 `wt-helper dev` 人類前景會寫 `$XDG_CACHE_HOME/clade/dev-runtime/<consumer>/…json`（key＝worktree），記 pid／startTicks／port／owner／restart；停止、釋放與 reaper 刪除。port 號碼的 SoT 仍是上面的配置，帳本記「此刻跑著什麼」。
+- **HMR port**：入口指定 `CLADE_DEV_HMR_PORT=<port>+10000`，不共用 vite 預設 24678。consumer 的 `nuxt.config.ts`／`vite.config.ts` 讀這個 env 即可；沒讀的照舊，帳本仍記此值、audit 會對帳。
+- **綁定 host**：預設只聽 127.0.0.1；consumer 已宣告 host（env／`.env*`／`--host`／`scripts.dev`）或 `CLADE_DEV_BIND_ALL=1` 時不蓋，見 [[dev-tunnel-convention]] § 6。
+- **對帳**：每台 dev node 跑 `node scripts/dev-port-audit.ts --runtime [--json]`，比對 `ss`＋`/proc` 與帳本，報 `unregistered`／`dead-registered`／`orphan`／`leftover-child`／`foreign-band`。exit 1＝有 finding，exit 2＝`ss` 讀不到（非 Linux 或缺 iproute2）。帳本 pid 以 startTicks 防 pid 回收誤判。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | `--runtime` 有任一 finding → exit 1；`ss` 失敗 → exit 2。不接 publish gate |
+| 消費端 | 主持者與各 dev node 的巡檢（看 finding 決定停孤兒或補登記） |
+| 觸發點 | 失敗輸出：`dev-port-audit --runtime` 的 finding 行直接列 kind／port／worktree |

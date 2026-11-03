@@ -297,7 +297,7 @@ High / Critical finding → 停止本次 commit。每一條 **MUST** 先走 `sec
 
 ### 0-S.3 Claude 安全掃描：**NEVER** 在 pre-commit
 
-`scripts/security-scan.ts`（headless Claude Code，預設 Claude Opus 5.5 medium）對**呼叫端給定的檔案清單**
+`scripts/security-scan.ts`（headless Claude Code，預設 Claude Opus 5.5（effort: medium））對**呼叫端給定的檔案清單**
 做較深的安全掃描：`path --path …`、`working-tree --paths-file …`、`diff --base <parent> --head <commit>`。
 它是 operator 明確執行的補掃與歷史補掃工具，不在 commit 路徑上：0-S.1／0-S.2 已是本 gate 的 hard 層，
 多一趟分鐘級、要花帳號額度的掃描不換來 commit 當下需要的判定。
@@ -323,11 +323,11 @@ gate 自己的可用度跑 `node scripts/audit-security-gate-readiness.ts`（war
 
 ## § 0-A: 程式碼審查（simplify → 0-A.1 → 條件式 0-A.2）
 
-**每次 dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，分開驗證 scope、fresh context、模型資格、品質與唯讀載體。commit 0-A 的合格 reviewer **只有一席**：fresh-context Claude Opus 5.5 medium（`code-review-opus` 列）。Claude Code 主線走下方 § 0-A.1 的 subagent carrier（prepare → AGENT_CALL → FINALIZE，**NEVER** 開 Herdr pane），叫不出 Claude subagent 的 runtime 才跑無子命令的 `claude-review-safe.sh medium`（Herdr child）。**沒有備援席**：Opus 不可用 → gate 保持未完成；receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。review 角色不固定由哪個 runtime 主線執行，原生呼叫方式見本檔末尾投影的 runtime 操作段。
+**每次 dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，分開驗證 scope、fresh context、模型資格、品質與唯讀載體。commit 0-A 的合格 reviewer **只有一席**：fresh-context Claude Opus 5.5（effort: medium）（`code-review-opus` 列）。Claude Code 主線走下方 § 0-A.1 的 subagent carrier（prepare → AGENT_CALL → FINALIZE，**NEVER** 開 Herdr pane），叫不出 Claude subagent 的 runtime 才跑無子命令的 `claude-review-safe.sh medium`（Herdr child）。**沒有備援席**：Opus 不可用 → gate 保持未完成；receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。review 角色不固定由哪個 runtime 主線執行，原生呼叫方式見本檔末尾投影的 runtime 操作段。
 
 1. 主線先完成 0-A.0；修完的 snapshot 才交給 reviewer。
 2. Fast-path 不成立時啟動 0-A.1 獨立 review，並行 0-B 與 0-C。每個背景工作綁 owner、實際 handle、deadline 與收回方法；不把另一個 runtime 的參數交給本端工具。
-3. 0-A.1 出 Critical／Major 時，修正後進 0-A.2 深度 review——同一席（Opus 5.5 medium）以新的 fresh context 對修復後 snapshot 再審一輪。
+3. 0-A.1 出 Critical／Major 時，修正後進 0-A.2 深度 review——同一席（Opus 5.5（effort: medium））以新的 fresh context 對修復後 snapshot 再審一輪。
 4. Findings 由主線匯合、查證與修正；各軸的背景 reviewer 不同時寫受審檔。
 
 0-A 等待期間 NEVER 編輯受審 changeset 內的檔；可觀察後果是逐檔內容／HEAD／mode 不符 → exit 6 重跑。
@@ -478,7 +478,7 @@ PRE-EXISTING — 未觸碰：<file>:<line>（舉證本次 diff 不含此檔／�
 
 只在 0-A.1 出 Critical／Major 時執行；修復後的完整 snapshot 是輸入。
 
-合格深度 reviewer 與 0-A.1 同一席（Claude Opus 5.5 medium）——新的 fresh context、不繼承 0-A.1 的對話，兩份 receipt 各自記 requested／observed。複審 MUST 由合格席執行，NEVER 降級成主線自審、worker、cloud CI 或其他模型。它取得修復後 snapshot、原始 0-A.1 findings 與修法內容，逐條確認 real issue 已修、附反證 dismiss 或重標 severity，另查修法帶來的漏項與 regression。reviewer 唯讀，主線負責修復。修補後重跑同一個 `prepare medium`（Herdr carrier 同理）：wrapper 由輪數 ledger 自動帶上一輪 verdict、只嵌增量並限定驗證範圍；`--findings` 只給 ledger 之外的 verdict 來源。
+合格深度 reviewer 與 0-A.1 同一席（Claude Opus 5.5（effort: medium））——新的 fresh context、不繼承 0-A.1 的對話，兩份 receipt 各自記 requested／observed。複審 MUST 由合格席執行，NEVER 降級成主線自審、worker、cloud CI 或其他模型。它取得修復後 snapshot、原始 0-A.1 findings 與修法內容，逐條確認 real issue 已修、附反證 dismiss 或重標 severity，另查修法帶來的漏項與 regression。reviewer 唯讀，主線負責修復。修補後重跑同一個 `prepare medium`（Herdr carrier 同理）：wrapper 由輪數 ledger 自動帶上一輪 verdict、只嵌增量並限定驗證範圍；`--findings` 只給 ledger 之外的 verdict 來源。
 
 深度輸出缺 `## Review Verdict`（含截斷／context exhaustion）時，明示深度階段未完整；不盲重跑相同耗盡命令。查明耗盡或截斷原因後對同一 snapshot 重跑（diff 過大先縮小受審範圍），補齊完整 verdict 才可收口；Opus 席不可用時 0-A.2 保持未完成，不以其他模型或主線自審補位。
 
@@ -519,7 +519,7 @@ node "$COMMIT_RESOURCE_DIR/scripts/0a-metrics.mjs" record \
   --screenshot <pass|skip> --doc <aligned|skip>
 ```
 
-Fast-path 不填未執行的 reviewer；`escalated` 的 `--reviewer` 記實際跑 0-A.2 深度 review 者（Opus 5.5 medium）。`--dismissed-unsubstantiated` 是反證不足被保留為 real issue 的條數。`blocked` 記「gate 觸發但因外部原因沒跑完」（如 Opus reviewer 配額耗盡）：MUST 提供非空 `--blocked-reason`，`--reviewer` 可省，findings 記已觀察到的部分——pending review 要留遙測記錄，不能整筆消失。Recorder 的參數檢查不證明 review 真有執行，須同時保留各軸原始 receipt；參數矛盾時修正流程或記錄，不能填假值讓它通過。舊 `--codex` CLI／歷史記錄是相容資料，不要求新入口冒充該模型組合；含 `+fable` 的舊 mode 與 `--adjudicator`／`--a2-deferral-*` 參數已退役，CLI 會拒收。
+Fast-path 不填未執行的 reviewer；`escalated` 的 `--reviewer` 記實際跑 0-A.2 深度 review 者（Opus 5.5（effort: medium））。`--dismissed-unsubstantiated` 是反證不足被保留為 real issue 的條數。`blocked` 記「gate 觸發但因外部原因沒跑完」（如 Opus reviewer 配額耗盡）：MUST 提供非空 `--blocked-reason`，`--reviewer` 可省，findings 記已觀察到的部分——pending review 要留遙測記錄，不能整筆消失。Recorder 的參數檢查不證明 review 真有執行，須同時保留各軸原始 receipt；參數矛盾時修正流程或記錄，不能填假值讓它通過。舊 `--codex` CLI／歷史記錄是相容資料，不要求新入口冒充該模型組合；含 `+fable` 的舊 mode 與 `--adjudicator`／`--a2-deferral-*` 參數已退役，CLI 會拒收。
 
 **作者回應四分類**（`--fixed`／`--wrong`／`--intentional`／`--didnt-matter`）：findings 非 0 時 **MUST** 帶，在本匯合點記——此時修復、0-A.2 dismissal 與裁決都已定案。值是 `<severity>=N` 以逗號串接（省略的 severity 為 0）；每個 severity 的四類加總必須等於該 severity 的 finding 數，recorder 不符就拒收。分類記的是**作者對該則 finding 的判斷**，不是處置：本表不改上方結果表的處置，照修的 finding 仍照修。**每一則** finding 依下表判定：
 
@@ -715,7 +715,7 @@ node bin/clade-gate run test -- <runner> <測試檔>  # 沒有合適 script 時�
 
 **NEVER** 為了過 0-C 把 `CLADE_ALLOW_FULL_SUITE=1` 當常態通路——它是逐案例外放行，用了要在回報寫明理由。改動面大到定點測試蓋不住時，回報寫明「廣範圍回歸交 PR CI」，push 後看 CI 結果。
 
-**test harness 自改時，本機不跑全量**（Charles 2026-10-26 拍板，W-2026-10-25-verify-harness-self-edit-scope）：`test:affected` 遇到 `FULL_ESCALATION_PATTERNS`（`scripts/test-lanes/affected.ts`）裡的 harness 檔——`scripts/run-node-tests.ts`、`scripts/test-lanes/**`（清單排除的資料檔與離線工具除外）、`bin/clade-gate`、`vendor/scripts/with-scoped-tmp.ts`、`vendor/scripts/tmp-capacity.ts`、`vendor/signals/**`——會升成全量（印 `Core configuration or shared runner changed: <檔>`）。本機 0-C 不跑這趟全量，改跑 harness 相關測試：改到的 harness 檔對應的測試（如 `test/test-lanes*.test.ts`、`test/run-node-tests.test.ts`、`test/scoped-tmp*.test.ts`）＋明確 import 改到的檔的測試，經 `node bin/clade-gate run test -- node --test <測試檔…>` 跑；全量回歸交 PR CI，回報寫明「harness 自改，全量交 PR CI」並在 push 後看 CI 結果。要先知道會不會升全量，用 `node scripts/run-node-tests.ts --lane=affected --base=<merge-base> --dry-run` 預覽。**判 harness 自改不能只看印出的那個路徑**：runner 碰到第一個符合的檔就停，只印那一檔，同一份 diff 另有 `package.json`、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`tsconfig*.json` 時原因欄仍可能只顯示 harness 檔。MUST 另跑 `git diff --name-only <merge-base>`（含 staged／working tree 的改動），確認升級觸發檔全落在上述 harness 清單、沒有任何非 harness 的觸發檔，才算 harness 自改；有任何一個就照舊在本機跑全量。確認是 harness 自改時， `pnpm verify` 改成分開跑 `pnpm check`、上述 harness 測試、`pnpm run doctor`。只放寬 harness 自改：`package.json`、lockfile、`pnpm-workspace.yaml`、`tsconfig*.json` 觸發的升級照舊在本機跑全量（主線）或依上方派工規則處理。
+**test harness 自改時，本機不跑全量**（Charles 2026-10-26 拍板，W-2026-10-25-verify-harness-self-edit-scope）：`test:affected` 遇到 `FULL_ESCALATION_PATTERNS`（`scripts/test-lanes/affected.ts`）裡的 harness 檔——`scripts/run-node-tests.ts`、`scripts/test-lanes/**`（清單排除的資料檔與離線工具除外）、`bin/clade-gate`、`vendor/scripts/with-scoped-tmp.ts`、`vendor/scripts/tmp-capacity.ts`、`vendor/signals/**`——會升成全量（輸出 `Escalation kind: harness-self-edit`，原因欄 `Test harness self-edit (...): <檔>`）。本機 0-C 不跑這趟全量，改跑 harness 相關測試：改到的 harness 檔對應的測試（如 `test/test-lanes*.test.ts`、`test/run-node-tests.test.ts`、`test/scoped-tmp*.test.ts`）＋明確 import 改到的檔的測試，經 `node bin/clade-gate run test -- node --test <測試檔…>` 跑；全量回歸交 PR CI，回報寫明「harness 自改，全量交 PR CI」並在 push 後看 CI 結果。要先知道會不會升全量，用 `node scripts/run-node-tests.ts --lane=affected --base=<merge-base> --dry-run` 預覽。**判 harness 自改看 runner 印的 `Escalation kind`**：runner 掃完整份 diff，只有升級觸發檔全是 harness 檔才印 `harness-self-edit`；同一份 diff 另有 `package.json`、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`tsconfig*.json` 時印 `config`（原因欄 `Core configuration or shared runner changed: <檔>`），照舊在本機跑全量。`degraded`（deps 快照不可用）同樣不算 harness 自改。確認是 harness 自改時， `pnpm verify` 改成分開跑 `pnpm check`、上述 harness 測試、`pnpm run doctor`。只放寬 harness 自改：`package.json`、lockfile、`pnpm-workspace.yaml`、`tsconfig*.json` 觸發的升級照舊在本機跑全量（主線）或依上方派工規則處理。
 
 `test:affected` 是 repo 在 `package.json` **明文宣告**的 lane 入口：它從 diff（staged ＋ working tree ＋ base 以來的 range）反查
 「哪些測試引用了改到的檔」，改到共用設定（runner／lockfile／tsconfig）時自動升 full。clade 的 runner 對 `package.json`
@@ -723,7 +723,7 @@ node bin/clade-gate run test -- <runner> <測試檔>  # 沒有合適 script 時�
 `pre`／`post` hook 所掛的 script）的測試，判不出來一律升 full。這與下一段禁止的事**不同型**——
 下一段禁的是「用字串啟發式猜 `check` 有沒有含 test」，本段靠的是宣告，沒有宣告就照原樣跑 `pnpm test`。
 
-判讀 affected 輸出時看兩行：`Affected analysis: N changed files -> M tests selected` 與逐檔的 `:: <reason>`。
+判讀 affected 輸出時，先看有沒有 `# [test-lanes] WARNING: 未帶 --base，HEAD 領先 origin/main N 個 commit`：有就代表這次選檔只看 working tree，已提交的改動沒被選進來，`0 tests selected` 不代表沒問題，改跑 `pnpm test:affected -- --base=origin/main`。`pnpm verify` 的 test:affected 通過時 log 不上終端，只把這一行以 `[verify] test:affected # [test-lanes] WARNING: …` 浮上來。再看兩行：`Affected analysis: N changed files -> M tests selected` 與逐檔的 `:: <reason>`。
 出現 `unmapped-fallback` 代表有改動對不到任何測試而退回保守選檔——沒有觀測紀錄時是整個 fast lane；clade 的 observed
 選檔在 v2 trace 下只補跑讀取範圍未知的測試（未 trace、過期、trace 時紅掉），新增檔落在該筆紀錄量測時還不存在的頂層目錄時，
 那筆紀錄也不能用來排除。那不是錯，但通常是新檔還沒有測試在引用它。另有兩條不經 fallback 的選法：經 git 列檔的測試

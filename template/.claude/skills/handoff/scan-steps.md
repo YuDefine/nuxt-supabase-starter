@@ -1,6 +1,6 @@
 # `next` 掃描步驟詳細規約
 
-三個 scan 步驟共用同一次 `handoff-scan.ts --json` 輸出（**落檔到 `$SCAN` 後各自 `jq` 取段**，見 §2B.1a）。本檔為 SKILL.md § 2B.1 / 2B.1.7 / 2B.1.8 的完整規約，SKILL.md 主流程含 pointer 指向此處。
+三個 scan 步驟共用同一次 `handoff-scan.ts --json` 輸出（**落檔到 `$SCAN` 後各自 `jq` 取段**，見 §2B.1a）。本檔為 [rules/next盤點與推薦判準.md](rules/next盤點與推薦判準.md) § 2B.1 / 2B.1.7 / 2B.1.8 的完整規約，該檔主流程含 pointer 指向此處。
 
 ## 2B.1 HANDOFF.md Health Gate（hard step）
 
@@ -170,7 +170,7 @@ JSON 範例（節錄）：
   未處置段自然老化單調上升，與任何一次處置動作無關
 
 heading 標了結案但 body **還有** `- [ ]` 的段不在本表：那是 `tier-a-done-section-stalled`，
-唯一正確處置是把未完項勾掉或搬走，見 [SKILL.md](SKILL.md) § 2 結案段的 checkbox MUST 全部是 `- [x]`。
+唯一正確處置是把未完項勾掉或搬走，見 [rules/park登記與HANDOFF寫回判準.md](rules/park登記與HANDOFF寫回判準.md) § 2 結案段的 checkbox MUST 全部是 `- [x]`。
 
 ---
 
@@ -223,7 +223,7 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff next — flow gates_
 
 讀 §2B.1a 那次 `handoff-scan.ts --json` 輸出的 `techDebtHygiene` 段（掃當前 consumer 自家 `docs/tech-debt.md`，與 clade SoT 無關）。本 sub-step 前未跑過 scan 時補跑同一指令。
 
-**遷移狀態分流（先判這一題）**：repo 有 `specs/truth/work-lifecycle.md` 時 scan 只回一條 `tech-debt-hygiene-retired`（n/a）且 `raw.retired: true` —— `docs/tech-debt.md` 與 `docs/archives/tech-debt-*` 是凍結舊載體，**本節以下全部處置（含 retained stub 化、正文外移、anti-snooze 追問）都不適用**，outstanding 走 SKILL.md §2B.2 的 `planInventory` 三桶（**NEVER** 把 `techDebtHygiene.raw.plans[]` 平鋪成接著做）。**NEVER** 因為手動讀到舊檔裡的 open TD 就照下表補 Resolution／stamp Last reviewed／下推 bodies。下表只給未遷移 consumer。
+**遷移狀態分流（先判這一題）**：repo 有 `specs/truth/work-lifecycle.md` 時 scan 只回一條 `tech-debt-hygiene-retired`（n/a）且 `raw.retired: true` —— `docs/tech-debt.md` 與 `docs/archives/tech-debt-*` 是凍結舊載體，**本節以下全部處置（含 retained stub 化、正文外移、anti-snooze 追問）都不適用**，outstanding 走 [rules/next盤點與推薦判準.md](rules/next盤點與推薦判準.md) §2B.2 的 `planInventory` 三桶（**NEVER** 把 `techDebtHygiene.raw.plans[]` 平鋪成接著做）。**NEVER** 因為手動讀到舊檔裡的 open TD 就照下表補 Resolution／stamp Last reviewed／下推 bodies。下表只給未遷移 consumer。
 
 六條訊號 **MUST** 各自處置，**NEVER** 只看其中一條：
 

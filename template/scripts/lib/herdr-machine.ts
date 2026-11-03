@@ -8,9 +8,9 @@
 // helper. See vendor/snippets/herdr-session-handoff/README.md § Cross-machine dispatch.
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { availableParallelism, homedir, loadavg } from 'node:os'
-import { resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { isRecord, parseJson } from './json-unknown.ts'
 import {
   cpuBusyBetween,
@@ -118,13 +118,65 @@ export function sshBin(env: NodeJS.ProcessEnv = process.env): string {
 /** Non-interactive, never prompts: a hung password prompt would hang the whole dispatch. */
 export const SSH_OPTIONS = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10']
 
+/** ControlPersist：最後一條 session 結束後 master 再撐多久（跟 herdr 的共用連線同量級）。 */
+export const SSH_CONTROL_PERSIST = '10m'
+/** `%C` 展開成 40 個十六進位字元；ssh 綁 socket 時還會多一段 17 字元的暫存尾巴，unix socket 路徑上限 104。 */
+const SSH_CONTROL_PATH_MAX = 104 - 17
+
+/** peer ssh 共用 master 連線的 socket 目錄：`<XDG_CACHE_HOME|~/.cache>/clade/ssh`（0700，NEVER /tmp）。 */
+export function sshControlDir(env: NodeJS.ProcessEnv = process.env): string {
+  return join(env.XDG_CACHE_HOME?.trim() || join(homedir(), '.cache'), 'clade', 'ssh')
+}
+
+/**
+ * peer ssh 的完整選項：`SSH_OPTIONS` ＋ ControlMaster=auto／ControlPath／ControlPersist／ServerAlive*，讓同一對機器的
+ * 輪詢共用一條 TCP（flow／whois 每分鐘新開十幾條連線會把對方 sshd＋logind 打到 40% CPU）。
+ * 每組選項寫成**一個**元素（`-oKey=value`），不會被呼叫端重排拆散成「`-o` 後面接主機名」。
+ * 目錄建不起來、路徑太長（socket 上限）或 `CLADE_SSH_CONTROL=0` 時退回不共用的 `SSH_OPTIONS`——
+ * 共用連線是優化，NEVER 因它失敗讓 peer 查詢整個讀不到。不碰 `~/.ssh/config`。
+ */
+export function peerSshOptions(env: NodeJS.ProcessEnv = process.env): string[] {
+  if (env.CLADE_SSH_CONTROL?.trim() === '0') return [...SSH_OPTIONS]
+  const dir = sshControlDir(env)
+  const controlPath = `${dir}/cm-%C`
+  if (Buffer.byteLength(controlPath) - 2 + 40 > SSH_CONTROL_PATH_MAX) return [...SSH_OPTIONS]
+  try {
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    chmodSync(dir, 0o700)
+  } catch {
+    return [...SSH_OPTIONS]
+  }
+  return [
+    ...SSH_OPTIONS,
+    '-oControlMaster=auto',
+    `-oControlPath=${controlPath}`,
+    `-oControlPersist=${SSH_CONTROL_PERSIST}`,
+    // 對方睡眠／路徑改變而沒關 TCP 時 master 會變殭屍：多工 client 不吃 ConnectTimeout，每次查詢卡滿 caller timeout，
+    // 又因輪詢不斷 persist 計時永遠不到期。keepalive 讓 ~30s 內偵測到並自行拆掉（TD-433 同一組值）。
+    '-oServerAliveInterval=15',
+    '-oServerAliveCountMax=2',
+  ]
+}
+
+/** peer 呼叫端在遠端 flow 指令前綴的環境變數：帶了就是「被 peer 叫起的一次性查詢」，只查本機。 */
+export const PEER_CALL_ENV = 'CLADE_PEER_CALL'
+
+/**
+ * 這支 flow 是不是被 peer 的查詢叫起來的（`peerFlowCommand` 蓋的 `CLADE_PEER_CALL=1`）。是的話跨機查詢
+ * MUST 只查本機——對發起方再發一輪 ssh 只會換來一來一回（兩台互相輪詢時每分鐘多十幾條連線）。
+ * 明確標記，NEVER 用 `SSH_CONNECTION`／tty 猜：經 ssh 進來的 agent session 與人的 shell 一樣合法地要看 peer。
+ */
+export function isPeerCall(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[PEER_CALL_ENV]?.trim() === '1'
+}
+
 /** POSIX single-quote, for the one command string ssh hands to the remote shell. */
 export function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`
 }
 
 /**
- * Non-interactive ssh on the peers measured 2026-09-23 does not put `~/.local/bin` on PATH, which
+ * Non-interactive ssh on the peers does not put `~/.local/bin` on PATH, which
  * is where Herdr installs. Every remote command gets it prepended so the far side finds `herdr`
  * (and a mise/local node) without depending on shell rc files.
  */
@@ -245,14 +297,25 @@ export function peerSshRefusal(
 export function sshRun(
   machine: string,
   remoteCommand: string,
-  options: { input?: string; timeout?: number; env?: NodeJS.ProcessEnv; now?: number } = {},
+  options: {
+    input?: string
+    timeout?: number
+    env?: NodeJS.ProcessEnv
+    now?: number
+    /** 輪詢用的 peer 查詢帶 true：共用 master 連線（`peerSshOptions`）。 */
+    control?: boolean
+  } = {},
 ): SshResult {
   const env = options.env ?? process.env
   const down = knownUnreachableMachine(machine, options.now)
   if (down) return skippedSshResult(machine, down)
   const result = spawnSync(
     sshBin(env),
-    [...SSH_OPTIONS, machine, `${REMOTE_PATH_PREFIX}; ${remoteCommand}`],
+    [
+      ...(options.control ? peerSshOptions(env) : SSH_OPTIONS),
+      machine,
+      `${REMOTE_PATH_PREFIX}; ${remoteCommand}`,
+    ],
     {
       encoding: 'utf8',
       input: options.input ?? '',
@@ -534,7 +597,7 @@ export function readMachinePanesAndAgents(
       if (!isRecord(parsed)) return null
       // Herdr reports some failures (e.g. `protocol_mismatch`) as an `error` envelope with exit 0.
       // Reading that as an empty list is "no other sessions" — the one wrong answer that looks
-      // right (TD-1026). NEVER trust the exit code alone.
+      // right. NEVER trust the exit code alone.
       if (parsed.error !== undefined) return null
       const body = parsed.result
       const items = isRecord(body) ? body[`${what}s`] : undefined

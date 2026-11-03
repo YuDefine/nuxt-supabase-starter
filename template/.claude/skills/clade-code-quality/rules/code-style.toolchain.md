@@ -156,10 +156,18 @@ node 是 vp 兩層共同的第三層。適用於 repo root 有 `package.json` �
 | 來源 | 寫什麼 | 沒釘的後果 |
 | --- | --- | --- |
 | `package.json` 的 `engines.node` | `"^24"` | 本機仍裝得起來，但宣告變成謊話；`pnpm install` 不會擋 |
-| `.nvmrc`（或 `.node-version`） | `24` | 開發者本機 `nvm use` / `fnm use` 切到別的 major |
+| `.nvmrc`（或 `.node-version`） | `24`，或與正式機一致的完整版號（見下） | 開發者本機 `nvm use` / `fnm use` 切到別的 major |
 | **每一個** workflow 的**每一處** `node-version` | `'24'` | **CI 當場紅**，且 matrix 只有一格紅時很像 flaky |
 
 workflow 那一列是全稱：**每一個** `.github/workflows/*.yml` 的**每一處** `node-version:`，不是只改 `ci.yml` 或每檔第一處。
+
+#### 版本檔：單一檔、可寫完整版號
+
+- 同一個 repo 只能有一個版本檔：`.nvmrc` 與 `.node-version` 兩檔並存視為違規。
+- 版本檔寫完整 patch 版號時，必須跟正式機一致，正式機升級時要同一件一起改（走 `version-upgrade` skill 的 security 快速道）。pin 了 patch 卻不跟著正式機升，也算沒釘。
+- `engines.node` 維持 major 範圍（`"^24"`）。
+- CI 可用 `node-version-file` 讀版本檔（見下方 NEVER 段例外）。
+- 大版本例外不在本規則放寬範圍：正式機的 major 不是 24 的 repo（例：某 consumer 正式機是 22）另走升 major，不能靠版本檔寫完整版號繞過。
 
 #### NEVER
 

@@ -198,8 +198,8 @@ const LIFECYCLE_CONTRACT = `${TRUTH_ROOT}/work-lifecycle.md`
  * （W-2026-10-01-aixbdd-additive-only），伴隨覆寫檔要模型改走 lifecycle 落點，這裡是不靠模型自律
  * 的那一道：
  *
- * - lifecycle package（frontmatter 有 `work_id`＋`truth_baseline`）內不得有 `truth-delta.md`——delta
- *   的載體是 `plan.md` 的 `## Truth delta`
+ * - legacy lifecycle package（只有 `plan.md` 帶 `work_id`＋`truth_baseline`）內不得有 `truth-delta.md`——
+ *   delta 的載體是 `plan.md` 的 `## Truth delta`；`work.md` package 則 MUST 有 `truth-delta.md`
  * - repo 有 `specs/truth/work-lifecycle.md` 時，本工作期間 `specs/plans/` 不得新增 `NNN-*` package。
  *   「本工作期間」＝本 plan.md 第一次被 commit 之後（還沒 commit 就以 HEAD 為準）；在那之前就在的
  *   舊 `NNN-*` 是遷移前的歷史，不擋
@@ -737,6 +737,26 @@ export function checkReadiness(
     }
   }
   const planText = readFileSync(planFile, 'utf8')
+
+  // dormant 是「等外部訊號、還沒動工」：不在就緒池，readiness 不能把它當成可開工的 plan 報 ready。
+  // 先過 `plan wake`（走 WIP gate）才算回到 active。
+  if (readFrontmatterField(planText, 'status') === 'dormant') {
+    return {
+      workId,
+      plan: planRel,
+      ready: false,
+      acceptanceCommand: null,
+      work_kind: null,
+      requirement_set: 'full',
+      findings: [
+        {
+          code: 'plan-dormant',
+          path: `${planRel}:frontmatter.status`,
+          detail: `plan is dormant (wake_signal: ${readFrontmatterField(planText, 'wake_signal') ?? '?'}); it is not in the ready pool until \`flow plan wake ${workId}\` moves it to active`,
+        },
+      ],
+    }
+  }
 
   // 0. 工作種類與 delta 形狀。讀不懂的種類照完整要求集，並說出合法值。
   let kind: WorkKind | null = null

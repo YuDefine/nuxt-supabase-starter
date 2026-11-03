@@ -1,10 +1,10 @@
 // 🔒 LOCKED — managed by clade · Source: vendor/scripts/lib/host-config-refs.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/lib/host-config-refs.ts
 /**
- * 宿主常駐設定（systemd unit／drop-in、crontab）對某個路徑的引用 —— worktree 移除前的 gate（TD-1148）。
+ * 宿主常駐設定（systemd unit／drop-in、crontab）對某個路徑的引用 —— worktree 移除前的 gate。
  *
  * 防的失敗類別：把 ExecStart／WorkingDirectory 指進 linked worktree 的 unit 或 drop-in，
  * 在那棵樹被 cleanup 的瞬間**靜默**失效——timer 照跑、service 每次 MODULE_NOT_FOUND／
- * No such file，沒有任何東西出聲。2026-09-22～24 同時有三個實例：
+ * No such file，沒有任何東西出聲。曾同時有三個實例：
  *   - `clade-disk-hygiene.service.d/pre-landing-worktree.conf` → `clade-wt/disk-availability-automation`
  *   - `clade-cleanup-stale-tmp.service`（installer 以自身路徑渲染，從 worktree 跑 install）
  *     → `clade-wt/tmp-edquot-sweep-schedule`

@@ -78,6 +78,102 @@ interface ChildResult {
   unhandled: number
 }
 
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+
+function isStringArray(v: unknown): v is string[] {
+  return Array.isArray(v) && v.every((x) => typeof x === 'string')
+}
+
+/** 子行程 spec 的邊界解析：形狀不對就丟（子行程非零退出，探針端讀不到結果）。 */
+export function parseChildSpec(raw: unknown): ChildSpec {
+  if (!isRecord(raw)) throw new Error('子行程 spec 不是 JSON 物件')
+  const { root, files, config, vitestEntry, cacheDir, reportPath, resultPath, mutation } = raw
+  if (
+    typeof root !== 'string' ||
+    !isStringArray(files) ||
+    typeof vitestEntry !== 'string' ||
+    typeof cacheDir !== 'string' ||
+    typeof reportPath !== 'string' ||
+    typeof resultPath !== 'string'
+  ) {
+    throw new Error('子行程 spec 欄位形狀不對')
+  }
+  let parsedConfig: string | undefined
+  if (config !== undefined) {
+    if (typeof config !== 'string') throw new Error('子行程 spec 的 config 欄位形狀不對')
+    parsedConfig = config
+  }
+  let parsedMutation: ChildSpec['mutation'] = null
+  if (mutation !== null && mutation !== undefined) {
+    if (
+      !isRecord(mutation) ||
+      typeof mutation.target !== 'string' ||
+      typeof mutation.from !== 'string' ||
+      typeof mutation.to !== 'string' ||
+      typeof mutation.occurrence !== 'number'
+    ) {
+      throw new Error('子行程 spec 的 mutation 欄位形狀不對')
+    }
+    parsedMutation = {
+      target: mutation.target,
+      from: mutation.from,
+      to: mutation.to,
+      occurrence: mutation.occurrence,
+    }
+  }
+  return {
+    root,
+    files,
+    config: parsedConfig,
+    vitestEntry,
+    cacheDir,
+    reportPath,
+    resultPath,
+    mutation: parsedMutation,
+  }
+}
+
+/** 子行程結果的邊界解析：讀不懂回 null（呼叫端當「子行程沒寫出結果」處理）。 */
+export function parseChildResult(raw: unknown): ChildResult | null {
+  if (!isRecord(raw)) return null
+  const { ok, error, files, tests, passed, failed, failing, passedNames, unhandled } = raw
+  if (
+    typeof ok !== 'boolean' ||
+    typeof files !== 'number' ||
+    typeof tests !== 'number' ||
+    typeof passed !== 'number' ||
+    typeof failed !== 'number' ||
+    typeof unhandled !== 'number' ||
+    !isStringArray(passedNames) ||
+    !Array.isArray(failing)
+  ) {
+    return null
+  }
+  let parsedError: string | undefined
+  if (error !== undefined) {
+    if (typeof error !== 'string') return null
+    parsedError = error
+  }
+  const parsedFailing: FailingTest[] = []
+  for (const f of failing) {
+    if (!isRecord(f) || typeof f.file !== 'string' || typeof f.name !== 'string') return null
+    parsedFailing.push({ file: f.file, name: f.name })
+  }
+  return {
+    ok,
+    error: parsedError,
+    files,
+    tests,
+    passed,
+    failed,
+    failing: parsedFailing,
+    passedNames,
+    unhandled,
+  }
+}
+
 // ───────────────────────── 探針端 ─────────────────────────
 
 /** 從被測 repo 自己的依賴樹解析 vitest；找不到丟 ProbeToolError（exit 2）。 */
@@ -109,7 +205,7 @@ function readReport(path: string): {
 function readResult(path: string): ChildResult | null {
   if (!existsSync(path)) return null
   try {
-    return JSON.parse(readFileSync(path, 'utf8')) as ChildResult
+    return parseChildResult(JSON.parse(readFileSync(path, 'utf8')))
   } catch {
     return null
   }
@@ -385,7 +481,7 @@ function injectIntoServer(server: ViteServerLike, plugin: object, projectName: s
 }
 
 async function childMain(specPath: string): Promise<void> {
-  const spec = JSON.parse(readFileSync(specPath, 'utf8')) as ChildSpec
+  const spec = parseChildSpec(JSON.parse(readFileSync(specPath, 'utf8')))
   const writeResult = (r: ChildResult) => writeFileSync(spec.resultPath, JSON.stringify(r))
   const fail = (error: string): ChildResult => ({
     ok: false,

@@ -3,8 +3,7 @@
 //
 // mutation-probe/revive — skip 復活驗證（`revive` 子指令）與 skip 標記解析
 //
-// 契約：specs/truth/contracts/mutation-probe-cli.md § 4（復活驗證）、§ 突變的套用機制；
-//       skip 標記格式見 specs/plans/W-2026-10-24-test-trust-enforcement/system-analysis.md § 介面 4（FR-015、FR-016）。
+// 契約：specs/truth/contracts/mutation-probe-cli.md § 4（復活驗證）、§ 突變的套用機制。
 //
 // 分工：
 //   - `parseSkipMarker`、`findSkipSites`：skip 標記與 skip 形狀的辨認（`typescript` AST，不用 regex 認 skip）。
@@ -23,7 +22,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { extname, join } from 'node:path'
 
-import { findOccurrence, loadTypescript } from './mutation.ts'
+import { findOccurrence, hasParseDiagnostics, loadTypescript } from './mutation.ts'
 import type { MutationInput } from './mutation.ts'
 import { ProbeToolError, decideRanResult } from './receipt.ts'
 import type { RunnerKind } from './receipt.ts'
@@ -170,8 +169,7 @@ export function findSkipSites(source: string, file: string): FindSkipSitesResult
   const kind = scriptKindOf(ts, file)
   if (kind === null) return { sites: [], error: `不支援的副檔名：${file}` }
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind)
-  const diagnostics = (sf as unknown as { parseDiagnostics?: unknown[] }).parseDiagnostics ?? []
-  if (diagnostics.length > 0) return { sites: [], error: `語法解析失敗：${file}` }
+  if (hasParseDiagnostics(sf)) return { sites: [], error: `語法解析失敗：${file}` }
 
   const aliases = new Map<string, string>()
   for (const r of ROOT_NAMES) aliases.set(r, r)

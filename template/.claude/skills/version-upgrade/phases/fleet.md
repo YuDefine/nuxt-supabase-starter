@@ -29,7 +29,7 @@ test -f registry/consumers.json -a -f consumers.local
 node vendor/scripts/dep-fleet-discover.ts --pkg "<pkg>" [--version <ver>]
 ```
 
-輸出 `{pkg, latest_version, target_version, release_url, repo_url, homepage, source, held_back_by_release_age, release_age_cutoff_minutes, release_age_checked}`。沒帶 `--version` 時 `target_version` 是「發佈已滿 `minimumReleaseAge`（`pnpm config get minimumReleaseAge`，缺省 1440 分鐘）的最高穩定版」，不是 `dist-tags.latest`——否則 consumer 端 `pnpm add` 會被 release-age 擋下（G8）。沒有任何版本滿 cutoff → `target_version: null`＋`note`、exit 3：STOP，回報 user 等版本滿齡或明確帶 `--version`。找不到 changelog（release tag 與 `CHANGELOG.md` 都失敗）→ STOP，請 user 手動貼 release URL。
+輸出 `{pkg, latest_version, target_version, release_url, repo_url, homepage, source, held_back_by_release_age, release_age_cutoff_minutes, release_age_checked}`。沒帶 `--version` 時 `target_version` 是「發佈已滿 `minimumReleaseAge`（`pnpm config get minimumReleaseAge`，fleet 標準 4320 分鐘（`CLADE_PNPM_SETTINGS`；未設時 pnpm 預設 1440））的最高穩定版」，不是 `dist-tags.latest`——否則 consumer 端 `pnpm add` 會被 release-age 擋下（G8）。沒有任何版本滿 cutoff → `target_version: null`＋`note`、exit 3：STOP，回報 user 等版本滿齡或明確帶 `--version`。找不到 changelog（release tag 與 `CHANGELOG.md` 都失敗）→ STOP，請 user 手動貼 release URL。
 
 沒帶版號就是要 latest，直接 discovery，**NEVER** 反問 target 版本。
 

@@ -1,6 +1,6 @@
 ---
 name: opus-advisor
-description: '唯讀 Claude Opus 5.5（effort: medium）顧問——Sonnet 主線要判讀、計畫、方案分歧／根因裁決、判讀驗收回報、session gate 時派它（routing table § 主線 residency）。只回建議與理由，NEVER 改檔；省略 `model`。NOT for 改檔實作（交 Opus child 或 sonnet-implementer）、review 席（commit-0a-reviewer）、定位搜尋（code-locate）。'
+description: '唯讀 Claude Opus 5.5（effort: medium）顧問——Sonnet 主線要判讀、計畫、方案分歧／根因裁決、驗收回報判讀、session gate 時派它（routing table § 主線 residency）。只回建議與理由，NEVER 改檔；省略 `model`。NOT for 改檔實作、review 席（commit-0a-reviewer）、定位搜尋（code-locate）。'
 tools: Read, Grep, Glob
 model: opus
 effort: medium

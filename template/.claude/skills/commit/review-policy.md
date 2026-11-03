@@ -17,11 +17,11 @@
 | Access | 真正的唯讀工具／OS 限制或已核准的隔離方案；僅在 prompt 寫「不要修改」不算技術隔離。材料來源與外送服務在本次授權範圍 |
 | Result | 對應同一 snapshot 的完整 verdict、全部適用 Semantic Verdict id、逐項 finding 與查證位置；exit、身份、覆蓋或 snapshot 驗證失敗均保持未完成 |
 
-**Fresh context 與模型資格分開驗證。** reviewer 是 Opus 5.5 medium，但 fresh context 仍是獨立條件：reviewer 不能是寫出這批 diff 的那個 session，身分與 coordinator 分離——主線同為 Opus 不構成自審的理由。使用者授權某模型實作，也不等於豁免其後的品質條件。
+**Fresh context 與模型資格分開驗證。** reviewer 是 Opus 5.5（effort: medium），但 fresh context 仍是獨立條件：reviewer 不能是寫出這批 diff 的那個 session，身分與 coordinator 分離——主線同為 Opus 不構成自審的理由。使用者授權某模型實作，也不等於豁免其後的品質條件。
 
 ## 既有資格與新組合
 
-0-A.1 一般 review 與 0-A.2 深度 review 都由 Opus 5.5 medium 執行，每一輪都是新的 fresh-context reviewer，兩份 receipt 各自記 requested／observed。複審 MUST 由合格席執行，NEVER 降級成主線自審、worker、cloud CI 或其他模型。
+0-A.1 一般 review 與 0-A.2 深度 review 都由 Opus 5.5（effort: medium） 執行，每一輪都是新的 fresh-context reviewer，兩份 receipt 各自記 requested／observed。複審 MUST 由合格席執行，NEVER 降級成主線自審、worker、cloud CI 或其他模型。
 
 **Opus 不可用時 gate 保持未達成**並記錄 pending review；**NEVER** 用其他模型、另一個 fresh agent 或主線自審補位；**NEVER** worker 或 Charles 代簽；**NEVER** 拿 cloud CI success 代替。哪些 exit code 算「不可用」、哪些是本地或完整性問題要修正重跑，判定見 `gates.md` § 0-A.1 的 exit 表（A0–A*）。
 

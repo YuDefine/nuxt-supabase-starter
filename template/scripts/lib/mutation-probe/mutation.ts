@@ -162,6 +162,15 @@ export function loadTypescript(): TsApi | null {
   return tsCache
 }
 
+/**
+ * SourceFile 帶語法錯誤嗎？`parseDiagnostics` 是 TypeScript 的內部欄位（沒進公開型別），
+ * 所以從 unknown 起手用守衛讀，不靠斷言鏈宣稱形狀。
+ */
+export function hasParseDiagnostics(sf: object): boolean {
+  const diagnostics: unknown = Reflect.get(sf, 'parseDiagnostics')
+  return Array.isArray(diagnostics) && diagnostics.length > 0
+}
+
 function scriptKindFor(ts: TsApi, file: string) {
   switch (extname(file)) {
     case '.ts':
@@ -198,8 +207,7 @@ export function siteScope(source: string, m: MutationInput): SiteScope {
   const end = start + m.from.length
 
   const sf = ts.createSourceFile(m.file, source, ts.ScriptTarget.Latest, true, kind)
-  const diagnostics = (sf as unknown as { parseDiagnostics?: unknown[] }).parseDiagnostics ?? []
-  if (diagnostics.length > 0) return 'unknown'
+  if (hasParseDiagnostics(sf)) return 'unknown'
 
   const within = (n: import('typescript').Node) => n.getStart(sf) <= start && end <= n.end
   let found: SiteScope = 'module-level'

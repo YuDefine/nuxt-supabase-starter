@@ -4,7 +4,8 @@
 // test-removal-gate — 刪除／合併測試必須附有效收據才放行
 //
 // 一份判定式兩個消費端共用：
-//   - pre-commit：`pre-commit/checks/test-removal-receipt.sh` → `--staged`（base＝HEAD，head＝index），驗有效性 1–5
+//   - pre-commit：`pre-commit/checks/test-removal-receipt.sh` → `--staged`（base＝HEAD，head＝index），驗有效性 1–5；
+//     merge 進行中（MERGE_HEAD 存在）時，上游帶入的刪除不算（見判定 1 的 merge 例外）
 //   - CI：`vendor/actions/test-removal-receipt` → `--against <ref>`（base＝merge-base(HEAD, ref)，head＝HEAD），
 //     1–5 之外對每張用到的收據再呼叫 `mutation-probe.ts replay`（有效性 6）
 //
@@ -15,6 +16,11 @@
 // 判定：
 //   1. 列出 diff 中的測試檔（`isTestPath`）；整檔刪除、或 base 與 head 各自列出 test case 名稱（`test-cases.ts`）
 //      後 base 有 head 沒有者，就是被刪除的 test case（rename 不算刪除；rename 後檔內減少照一般規則算）。
+//      merge 例外（僅 `--staged` 且 MERGE_HEAD 存在）：base（HEAD）有、index 沒有的 case 裡，扣掉「merge-base 有、
+//      MERGE_HEAD 沒有」的那幾個（上游刪掉或改名的，以名稱多重集合計）；剩下的——本分支獨有、或兩邊都還在卻在解衝突時
+//      被刪——照常要收據。整檔刪除只在 MERGE_HEAD 也沒有該檔、且 HEAD 版每個 case 在 merge-base 都有時才不算。
+//      任一版本列不出名稱（indeterminate）就不扣——唯一例外：本分支沒動該檔（HEAD 版＝merge-base 版）且 index 版
+//      與 MERGE_HEAD 版逐字相同，差異全是上游帶入，整檔放行（含動態名稱檔）。CI（`--against`）比 merge-base 與 HEAD，本來就不含上游的刪除。
 //   2. 讀本次 diff 新增或修改的 `.clade/break-receipts/*.json`，以 `receipt.ts::validateReceipt` 逐一判有效性
 //      （判定式唯一住在那裡，**NEVER** 在這裡另寫一份）。
 //   3. 名稱判不出的檔（indeterminate）：default-deny。base 中每個判不出名稱的 case 呼叫（含 `.each` 參數表）必須
@@ -83,6 +89,11 @@ export interface Snapshot {
   readHead: (path: string) => string | null
   /** head 版檔案的 git blob sha；不存在回 null。 */
   headBlobSha: (path: string) => string | null
+  /** 僅 `--staged` 且 merge 進行中（MERGE_HEAD 存在）才有：merge-base 與 MERGE_HEAD 版的檔案內容（不存在回 null）。 */
+  merge?: {
+    readMergeBase: (path: string) => string | null
+    readMergeHead: (path: string) => string | null
+  }
 }
 
 export type ReplayResult =
@@ -157,6 +168,11 @@ function collectTargets(snap: Snapshot): Collected {
       const l = listTestCases(text, file)
       // 讀得出名稱且一個 case 都沒有 → 沒有東西被刪
       if (!l.indeterminate && l.names.length === 0) return
+      // merge 帶入上游整檔刪除：MERGE_HEAD 也沒有該檔，且 HEAD 版每個 case 在 merge-base 都有（本分支沒加過）
+      if (!l.indeterminate && snap.merge && snap.merge.readMergeHead(file) === null) {
+        const mb = namesOf(snap.merge.readMergeBase(file), file)
+        if (mb !== null && deletedCaseNames(l.names, mb).length === 0) return
+      }
       if (!l.indeterminate) for (const name of l.names) out.deletedCases.push({ file, test: name })
     }
     out.deletedFiles.add(file)
@@ -187,6 +203,7 @@ function compareFile(snap: Snapshot, out: Collected, basePath: string, headPath:
   const baseText = snap.readBase(basePath)
   const headText = snap.readHead(headPath)
   if (baseText === null || headText === null) return
+  if (isPureUpstreamCarryOver(snap, basePath, headPath, baseText, headText)) return
   const base = listTestCases(baseText, basePath)
   const head = listTestCases(headText, headPath)
 
@@ -203,7 +220,12 @@ function compareFile(snap: Snapshot, out: Collected, basePath: string, headPath:
     return
   }
 
-  const deleted = deletedCaseNames(base.names, head.names)
+  const deleted = withoutUpstreamRemovals(
+    snap,
+    basePath,
+    headPath,
+    deletedCaseNames(base.names, head.names),
+  )
   for (const name of deleted) out.deletedCases.push({ file: headPath, test: name })
 
   // base 中判不出名稱的 case 呼叫若有任何一段在 head 消失或改動（或參數表引用變數），該檔列 indeterminate，
@@ -214,6 +236,57 @@ function compareFile(snap: Snapshot, out: Collected, basePath: string, headPath:
     return
   }
   for (const name of deleted) out.targets.push({ file: headPath, name })
+}
+
+/**
+ * merge 例外（含 indeterminate 檔）：本分支沒動這個檔（HEAD 版與 merge-base 版逐字相同），而 index 版與 MERGE_HEAD 版
+ * 逐字相同——HEAD→index 的差異全是上游帶入，沒有任何一行是本分支自己的決定，不必列名稱、不必證明 indeterminate 仍在。
+ * 本分支動過該檔（HEAD≠merge-base）、或解衝突時另寫內容（index≠MERGE_HEAD）都不適用，照常判定。非 merge 情境不適用。
+ */
+function isPureUpstreamCarryOver(
+  snap: Snapshot,
+  basePath: string,
+  headPath: string,
+  baseText: string,
+  headText: string,
+): boolean {
+  if (!snap.merge) return false
+  const mb = snap.merge.readMergeBase(basePath)
+  if (mb === null || mb !== baseText) return false
+  const mh =
+    snap.merge.readMergeHead(headPath) ??
+    (basePath === headPath ? null : snap.merge.readMergeHead(basePath))
+  return mh !== null && mh === headText
+}
+
+/** 讀得出名稱才回名稱表；檔案不存在或 indeterminate 回 null。 */
+function namesOf(text: string | null, file: string): string[] | null {
+  if (text === null) return null
+  const l = listTestCases(text, file)
+  return l.indeterminate ? null : l.names
+}
+
+/**
+ * merge 例外：從 HEAD→index 的被刪名稱扣掉上游（merge-base→MERGE_HEAD）刪掉的名稱（多重集合）。
+ * merge-base 版查 basePath（HEAD 側路徑），MERGE_HEAD 版先查 headPath（上游改檔名時落在新路徑）、沒有再查 basePath（本分支改名、上游仍留舊路徑）；
+ * merge-base 讀不出名稱就一個都不扣，MERGE_HEAD 沒有該檔視為上游刪掉整檔。
+ */
+function withoutUpstreamRemovals(
+  snap: Snapshot,
+  basePath: string,
+  headPath: string,
+  deleted: string[],
+): string[] {
+  if (!snap.merge || deleted.length === 0) return deleted
+  const mb = namesOf(snap.merge.readMergeBase(basePath), basePath)
+  if (mb === null) return deleted
+  // 本分支在解衝突時改檔名（basePath→headPath）而上游仍留舊路徑：兩個路徑都查，都沒有才視為上游刪掉整檔
+  const mhText =
+    snap.merge.readMergeHead(headPath) ??
+    (basePath === headPath ? null : snap.merge.readMergeHead(basePath))
+  const mh = mhText === null ? [] : namesOf(mhText, headPath)
+  if (mh === null) return deleted
+  return deletedCaseNames(deleted, deletedCaseNames(mb, mh))
 }
 
 // ───────────────────────── indeterminate 判準 ─────────────────────────
@@ -852,13 +925,26 @@ export function collect(root: string, mode: Mode): Snapshot | { error: string } 
     const hasHead = git(root, ['rev-parse', '-q', '--verify', 'HEAD']) !== null
     const raw = git(root, ['diff', '--cached', '--name-status', '-M', '-z'])
     if (raw === null) return { error: 'git diff --cached 失敗' }
-    return {
+    const snap: Snapshot = {
       // 首次 commit（沒有 HEAD）沒有 base，不可能有東西被刪
       entries: hasHead ? parseNameStatus(raw) : [],
       readBase: (p) => git(root, ['show', `HEAD:${p}`]),
       readHead: (p) => git(root, ['show', `:${p}`]),
       headBlobSha: (p) => git(root, ['rev-parse', '-q', '--verify', `:${p}`])?.trim() || null,
     }
+    // merge 進行中：staged diff（vs HEAD）含上游帶入的刪除，交給判定 1 的 merge 例外扣掉。
+    // octopus merge 只看第一個 head；其餘 head 帶入的刪除照常要收據（偏擋不偏放）。
+    const mergeHead = hasHead
+      ? git(root, ['rev-parse', '-q', '--verify', 'MERGE_HEAD'])?.trim()
+      : ''
+    const mergeBase = mergeHead ? git(root, ['merge-base', 'HEAD', mergeHead])?.trim() : ''
+    if (mergeHead && mergeBase) {
+      snap.merge = {
+        readMergeBase: (p) => git(root, ['show', `${mergeBase}:${p}`]),
+        readMergeHead: (p) => git(root, ['show', `${mergeHead}:${p}`]),
+      }
+    }
+    return snap
   }
   const base = git(root, ['merge-base', 'HEAD', mode.against])?.trim() ?? ''
   if (!base) return { error: `cannot resolve merge-base(HEAD, ${mode.against})` }

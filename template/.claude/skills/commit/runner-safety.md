@@ -1,7 +1,7 @@
 # Commit CLI review runner safety
 
 
-本檔描述 commit 0-A 的 review wrapper `claude-review-safe.sh`（Claude Opus 5.5 medium，唯一合格席）及其載體的能力與限制——changeset 凍結、snapshot 完整性與 exit 語義由 `lib/review-common.sh` 提供。任何能合法執行 CLI 的 runtime 均可使用；它不宣稱呼叫者的原生工具或模型資格已達成。先依 [review-policy.md](review-policy.md) 判資格，再讀以下完整限制。
+本檔描述 commit 0-A 的 review wrapper `claude-review-safe.sh`（Claude Opus 5.5（effort: medium），唯一合格席）及其載體的能力與限制——changeset 凍結、snapshot 完整性與 exit 語義由 `lib/review-common.sh` 提供。任何能合法執行 CLI 的 runtime 均可使用；它不宣稱呼叫者的原生工具或模型資格已達成。先依 [review-policy.md](review-policy.md) 判資格，再讀以下完整限制。
 
 > 0-A.1 跨模型 wrapper `codex-review-safe.sh`（原 GPT-6 Astra via Pi 格）已於 2026-10-18 移除；它專屬的 Pi runner 與 exit 5（workspace 綁定）段落一併刪除。
 

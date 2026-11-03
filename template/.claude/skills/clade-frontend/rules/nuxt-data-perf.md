@@ -316,7 +316,7 @@ Cookbook 範本：`~/offline/clade/vendor/snippets/nuxt-data-perf/query-file-exa
 | `fontsource-bare-import` | SR-7 | error | 命中量極低，直接 blocking |
 | `lazy-atomic-component` | SR-2 | warning + `layer: ratchet` | 既有違規量大，只擋新增；豁免標記 `lazy-atomic-ok` |
 
-偵測 heuristic（file-level）：`.vue` 含 `$fetch` 但**不含** `use(Lazy)?(Fetch|AsyncData)` / `useQuery`。改 regex 時 `use(Lazy)?` 前綴不可省（否則誤判逼人掛全檔豁免，gate 被掏空）。
+偵測 heuristic（file-level）：`.vue` 含 `$fetch` 或 `apiFetch`（consumer 常見封裝；可用環境變數 `CLADE_DATA_PERF_FETCH_PATTERN` 覆寫 grep -E token）但**不含** `use(Lazy)?(Fetch|AsyncData)` / `useQuery`。改 regex 時 `use(Lazy)?` 前綴不可省（否則誤判逼人掛全檔豁免，gate 被掏空）。
 
 ### 合法例外（file-level ignore）
 

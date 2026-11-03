@@ -18,7 +18,7 @@
 - **主線列**（`mainline-*`）：一律由主線自己做，不外派。首跳欄寫的是 Claude Code 主線的 model 與 effort（routing table 的主線定義）；其他 runtime 的主線同樣自己做這些步驟。
 - **Claude Opus 5.5・medium 的列**：Claude Code 主線自己就是合格 executor，照 § 派不派 預設自己做；review 類 gate（`code-review-opus`）例外，產出 changeset 的那條線不審自己，一律交 fresh-context reviewer。非 Claude 主線依 adapter 交 Claude carrier。
 - **Claude Sonnet 5.5・high 的列**：Claude Code 主線派 in-process `sonnet-implementer`（brief 含 `routing-row: <列>`），要隔離走 Herdr `--model claude-sonnet-5-5 --effort high --route routing-table --tier-basis table-row --table-row <列>`。載體偏好與 Devin 預設照 [[agent-routing.routing-table]] § Devin SWE-2 Max 的「四列的 Devin 預設」。外派實作綁 lifecycle package 時先過 `flow plan readiness`。
-- **原 Pi 列（Gemini 2026-10-08、Grok 2026-10-21 退場，Pi 已無可派 model）**：首跳是該列鏈尾載體——`web-search`／`read-heavy-scan`／`screenshot-review-verify` 等交 in-process `dispatch-fallback` subagent（Claude Opus 5.5・low，frontmatter 釘死），主線不自己做；routing gate 武裝的 decision 由這次 Agent 呼叫解掉。
+- **原 Pi 列（Gemini 2026-10-08、Grok 2026-10-21 退場，Pi 已無可派 model）**：首跳是該列鏈尾載體——`web-search`／`read-heavy-scan`／`screenshot-review-verify` 等交 in-process `dispatch-fallback` subagent（Claude Opus 5.5・low，frontmatter 釘死），主線不自己做（`web-search` 例外：單一來源抓取主線直接做）；routing gate 武裝的 decision 由這次 Agent 呼叫解掉。
 - **唯讀列**（`detailed-planning`、`implementation-decision`、`web-search`、`read-heavy-scan`）：executor 只回內容，artifact 由主線寫入。
 
 `wt`、`clade-onboard`、`project-bootstrap`、`clade-publish` 是 session gate 或不可逆動作，一律主線（Claude Opus 5.5・medium），不外派。
@@ -31,7 +31,7 @@
 | `clarify`、`clarify-over-specs` | `mainline-contract` | Claude Opus 5.5・medium | 與使用者問答；Claude 端 `clarify` 由主線代打（specify 的 pane 還在就 `--continue`，否則新派） |
 | `spec-by-example` | `mainline-contract` | Claude Opus 5.5・medium | |
 | `technical-research`：決策與 techstack 定稿（含選定 SpecFormula 時的 `specformula-config`） | `mainline-contract` | Claude Opus 5.5・medium | |
-| `technical-research`：外部網路查證 | `web-search` | Claude Opus 5.5・low（`dispatch-fallback`） | 主線不直接呼叫內建 WebSearch／WebFetch |
+| `technical-research`：外部網路查證 | `web-search` | Claude Opus 5.5・low（`dispatch-fallback`） | 多條獨立研究路徑才派這個首跳；單一來源抓取主線直接呼叫內建 WebSearch／WebFetch；credential／signed／private URL 照拒 |
 | `technical-research`：大量讀既有 codebase 抽固定欄位 | `read-heavy-scan` | Claude Opus 5.5・low（`dispatch-fallback`） | |
 | UI 需求確認用的設計雛形與實作後修改閉環（impeccable） | `ui-view-implementation` | Claude Opus 5.5・medium | UI 檔位實測中；改檔位先改 routing table |
 | 設計品質判讀 | `design-review` | Claude Opus 5.5・medium | UI 檔位實測中；改檔位先改 routing table |

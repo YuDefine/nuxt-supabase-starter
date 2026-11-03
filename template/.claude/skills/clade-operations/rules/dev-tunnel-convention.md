@@ -83,6 +83,8 @@ p.on('response', r => {
 
 **執行期兜底（Nuxt DevTools v4）**：`TUNNEL_HOSTNAME` 有值、tunnel 真的要開時，`nuxt.config.ts` 在啟動前探一次（≤ 3s，NEVER throw）；不是 `access` 就 `vite.devtools: false` 並印原因與兩個處置（補 Access／撤 tunnel）。這是**唯一**的關閉條件：**每一個** consumer 的範本 **NEVER** 以「綁非 loopback host（`--host`／`NUXT_HOST`）」關 DevTools——沒有 tunnel 的區網由 token 授權與 MCP bearer 承擔（[[agent-devtools]]）。resilient wrapper fallback 純 localhost 時視為沒有 tunnel，不探測。範本：`vendor/snippets/agent-devtools/`。
 
+**綁定 host 與 opt-out**：`dev-session.ts start` 起 server 時預設補 `HOST=127.0.0.1 NUXT_HOST=127.0.0.1`（不聽 `*`）。consumer 已宣告綁定就**不蓋**，下列任一成立即略過：process env 已有 `HOST`／`NUXT_HOST`、`CLADE_DEV_BIND_ALL=1`、dev 命令帶 `--host`／`-H`、cwd 的 `.env`／`.env.local`／`.env.development(.local)` 設了 `HOST`／`NUXT_HOST`、`package.json` 的 `scripts.dev` 含 `--host`。靠 LAN／tailnet 綁定的 consumer 在 `.env` 宣告 `NUXT_HOST` 即可，不必每次帶旗標。判定在 `vendor/scripts/lib/dev-runtime.ts` 的 `shouldForceLoopback`。
+
 **稽核**：`node scripts/dev-port-audit.ts --markdown`（clade 端）的「Agent devtools」段逐 consumer 報 tunnel hostname 的探測結果；有 tunnel 而不是 `access` 即 FAIL。
 
 | REQUIRED 欄位 | 內容 |

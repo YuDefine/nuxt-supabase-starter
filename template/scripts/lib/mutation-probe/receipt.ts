@@ -156,7 +156,7 @@ function compactStamp(d: Date): string {
     .replace(/[-:]/g, '')
 }
 
-/** ISO 8601 UTC，沒有毫秒（`2026-10-25T08:18:06Z`）。 */
+/** ISO 8601 UTC，沒有毫秒（`YYYY-MM-DDTHH:MM:SSZ`）。 */
 export function isoSeconds(d: Date): string {
   return d.toISOString().replace(/\.\d{3}Z$/, 'Z')
 }
@@ -428,6 +428,11 @@ function shapeProblem(o: Record<string, unknown>): string | null {
   return vouchesProblem(o.vouches_for, false)
 }
 
+/** shapeProblem 通過即視為 Receipt（形狀已逐欄檢過，守衛取代斷言）。 */
+function passesShape(o: Record<string, unknown>): o is Record<string, unknown> & Receipt {
+  return shapeProblem(o) === null
+}
+
 /** 解析收據 JSON 文字：讀不懂與版本不支援各自回報（呼叫端 exit 2 或判無效）。 */
 export function parseReceipt(
   text: string,
@@ -448,9 +453,8 @@ export function parseReceipt(
       error: `format_version ${raw.format_version} 不受支援（支援 ${supportedVersions.join(',')}）`,
     }
   }
-  const problem = shapeProblem(raw)
-  if (problem) return { ok: false, error: problem }
-  return { ok: true, receipt: raw as unknown as Receipt }
+  if (!passesShape(raw)) return { ok: false, error: shapeProblem(raw) ?? '收據欄位形狀不合' }
+  return { ok: true, receipt: raw }
 }
 
 /** 讀收據檔；讀不到或讀不懂 → ok:false。 */

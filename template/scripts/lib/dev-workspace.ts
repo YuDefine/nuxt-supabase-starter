@@ -11,7 +11,7 @@
  *
  * 為什麼需要這層：`herdr tab create` 不帶 `--workspace` 時，Tab 建在**當下 focused
  * workspace**。agent 幾乎都從 clade session 起 consumer 的 dev server，於是每一台
- * dev server 的 Tab 都堆在 clade 的 workspace 裡（2026-08-12 實測：`dev-<consumer-b>` 的
+ * dev server 的 Tab 都堆在 clade 的 workspace 裡（實測：`dev-<consumer-b>` 的
  * pane cwd 是 <home>/offline/<consumer-b>，workspace 卻是 w2 = clade）。`--cwd` 只
  * 決定 shell 的工作目錄，對 Tab 歸屬零影響。
  *

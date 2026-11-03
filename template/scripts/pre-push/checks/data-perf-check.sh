@@ -10,7 +10,7 @@
 #                                             既有 codebase 違規量大，暫不阻擋）
 #
 # 偵測 heuristic（file-level）：
-#   .vue 檔含 `$fetch` 但不含 `useFetch` / `useLazyFetch` / `useAsyncData` /
+#   .vue 檔含 `$fetch` 或 `apiFetch` 但不含 `useFetch` / `useLazyFetch` / `useAsyncData` /
 #   `useLazyAsyncData` / `useQuery`
 #   → 代表所有 data-fetching 都走 raw $fetch，違反 HR-1。
 #   含 composable 的 .vue 檔可以安全有 $fetch（event handler mutation），不被標記。
@@ -54,27 +54,33 @@ done < <(git ls-files -z -- '*.vue')
 
 ((${#vue_files[@]} == 0)) && exit 0
 
+# raw fetch 偵測 token（grep -E）。預設含 `$fetch` 與 consumer 常見封裝 `apiFetch`
+# （內部包 $fetch，不含字面 `$fetch`，原本整支漏偵測）。其他封裝名由 consumer 以環境變數
+# CLADE_DATA_PERF_FETCH_PATTERN 覆寫，fleet 檔不硬編單一 consumer 專名。
+DEFAULT_FETCH_PATTERN='\$fetch|\bapiFetch\b'
+FETCH_PATTERN="${CLADE_DATA_PERF_FETCH_PATTERN:-$DEFAULT_FETCH_PATTERN}"
+
 VIOLATIONS=()
 
 for file in "${vue_files[@]}"; do
   # file-level escape hatch
   grep -q 'data-perf-ignore-file' "$file" 2>/dev/null && continue
 
-  # 檢查：有 $fetch 但沒有任何 data-fetching composable
+  # 檢查：有 $fetch／apiFetch 但沒有任何 data-fetching composable
   #
   # regex 放寬的兩個理由（都來自實證誤判）：
   #   use(Lazy)?  — useLazyFetch / useLazyAsyncData 是 Nuxt 官方 composable
   #   use*Query   — Pinia Colada 的 domain wrapper 慣例是 use<Entity>Query
   #
   # 寧可放寬也不收窄：假陽性會逼出全檔豁免，掏空該檔的整體監控。
-  if grep -q '\$fetch' "$file" 2>/dev/null && \
+  if grep -qE "$FETCH_PATTERN" "$file" 2>/dev/null && \
      ! grep -qE 'use(Lazy)?(Fetch|AsyncData)|use[A-Za-z]*Query' "$file" 2>/dev/null; then
     VIOLATIONS+=("$file")
   fi
 done
 
 if ((${#VIOLATIONS[@]} > 0)); then
-  echo "⚠️  [warn] ${#VIOLATIONS[@]} 個 .vue 檔使用 raw \$fetch 但無 useFetch / useLazyFetch / useAsyncData / useLazyAsyncData / useQuery（HR-1）：" >&2
+  echo "⚠️  [warn] ${#VIOLATIONS[@]} 個 .vue 檔使用 raw \$fetch / apiFetch 但無 useFetch / useLazyFetch / useAsyncData / useLazyAsyncData / useQuery（HR-1）：" >&2
   for v in "${VIOLATIONS[@]}"; do
     echo "  $v" >&2
   done

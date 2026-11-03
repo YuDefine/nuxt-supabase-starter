@@ -101,6 +101,12 @@ import { basename, join, resolve, isAbsolute } from 'node:path'
 import { cpus, homedir, tmpdir } from 'node:os'
 import { detectHolderKind, detectSessionId } from './lib/detect-runtime.ts'
 import {
+  hmrPortFor,
+  recordRuntime,
+  removeRuntimeForWorktree,
+  shouldForceLoopback,
+} from './lib/dev-runtime.ts'
+import {
   probeBackingService,
   runWtEnvBootstrap,
   describeBackingServiceGap,
@@ -1224,6 +1230,39 @@ function pidAlive(pid) {
   }
 }
 
+function devRuntimeEnv(port, cwd, cmd) {
+  const env = [`CLADE_DEV_HMR_PORT=${hmrPortFor(port)}`]
+  if (shouldForceLoopback({ cwd, cmd })) env.push('HOST=127.0.0.1', 'NUXT_HOST=127.0.0.1')
+  return env
+}
+
+/** runtime 帳本（port 紀錄與 lease 合一本，lib/dev-runtime.ts）；寫失敗不影響 lease。 */
+function recordRuntimeEntry(o, consumerId, sessionName, port, lease) {
+  try {
+    if (!port) return
+    recordRuntime({
+      consumer: consumerId,
+      worktree: canonicalCwd(o.cwd),
+      ports: [
+        { port: Number(port), role: 'main' },
+        { port: hmrPortFor(Number(port)), role: 'hmr' },
+      ],
+      pid: lease.devServer.pid,
+      owner: {
+        session: sessionName,
+        sessionId: lease.holder.sessionId ?? null,
+        paneId: lease.devSession.paneId,
+        tabId: lease.devSession.tabId,
+        kind: lease.holder.kind === 'human' ? 'human' : 'agent',
+      },
+      lease: { expiresAt: lease.expiresAt, heartbeatAt: lease.heartbeatAt },
+      restart: `node scripts/dev-session.ts start --session ${sessionName} --port ${port} --cwd ${canonicalCwd(o.cwd)}`,
+    })
+  } catch {
+    /* fail-open */
+  }
+}
+
 function writeLease(o, consumerId, sessionName, port, id) {
   try {
     const tab = findSession(sessionName)
@@ -1262,6 +1301,7 @@ function writeLease(o, consumerId, sessionName, port, id) {
       },
     }
     writeFileSync(leasePath(id), JSON.stringify(lease, null, 2) + '\n')
+    recordRuntimeEntry(o, consumerId, sessionName, port, lease)
   } catch {
     /* fail-open */
   }
@@ -1273,8 +1313,11 @@ function releaseLease(o, id) {
     const lease = readLease(id)
     if (!lease) return
     const mine = lease.holder?.sessionId === holderSessionId(o)
-    if (mine || !pidAlive(lease.devServer?.pid) || leaseReclaimable(lease))
+    if (mine || !pidAlive(lease.devServer?.pid) || leaseReclaimable(lease)) {
       unlinkSync(leasePath(id))
+      if (lease.devServer?.cwd && lease.consumerId)
+        removeRuntimeForWorktree(lease.devServer.cwd, lease.consumerId, lease.devServer.port)
+    }
   } catch {
     /* fail-open */
   }
@@ -1758,7 +1801,9 @@ async function runLaunch(o, meta, port) {
     err(`  先確認 \`herdr status\`，再重跑。**NEVER** 退回 run_in_background。`)
     process.exit(1)
   }
-  runInTab(tab.paneId, o.cmd)
+  // HMR port 由入口指定（port+10000，不共用 24678）；預設只聽 127.0.0.1（不聽 *），consumer 已宣告 host 則不蓋；
+  // consumer 的 nuxt.config／vite.config 讀 CLADE_DEV_HMR_PORT 即可，沒讀的照舊（帳本仍記此值，audit 會對帳）。
+  runInTab(tab.paneId, port ? ['env', ...devRuntimeEnv(port, o.cwd, o.cmd), ...o.cmd] : o.cmd)
 
   // 4) 等 port ready（若 port 已知）
   if (!port) {
@@ -2005,6 +2050,7 @@ function cmdStop(o) {
     out(`✓ 已關閉 herdr Tab ${s.tabId}（session ${sessionName}）`)
   }
   if (!o.noLease) releaseLease(o, lid)
+  removeRuntimeForWorktree(canonicalCwd(o.cwd), consumerId, port)
 }
 
 function urlOf(port) {

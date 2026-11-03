@@ -9,7 +9,7 @@
  *
  * 為什麼要有「host」而不是「有一個 pane 落在 repo 下」：後者讓任何躺著一個 B repo pane 的
  * workspace 對 B 永遠是候選（呼叫者自己的 pane 也算），relay／--coordinate 的決勝再全往它倒，
- * 於是 clade 的 workspace 越塞越多別的專案（事件經過見 git history：clade #1768）。
+ * 於是 clade 的 workspace 越塞越多別的專案。
  * host 要求目標 repo 是該 workspace 的**嚴格最多數**。
  *
  * repo key＝pane cwd 所屬 git repo 的主 checkout（linked worktree 歸主 checkout）。解析不出來的

@@ -84,7 +84,7 @@ const PATHSPEC_CHUNK = 500
 /**
  * 一次驗完整批路徑：status／ls-files／cat-file 各跑一輪，而不是每個檔三次 git。
  * 逐檔版本在 batch cleanup 對數百個投影檔 × 多棵 worktree 時，每秒生 6 次 git status、
- * 一跑二十分鐘（2026-09-29 desk 實測）。判定與 reason 與逐檔版本一致。
+ * 一跑二十分鐘（desk 實測）。判定與 reason 與逐檔版本一致。
  */
 function committedDiskHashes(root: string, rels: string[]): Map<string, CommittedHash> {
   const result = committedDiskHashesAtHead(root, rels)

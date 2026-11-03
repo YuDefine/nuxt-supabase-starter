@@ -31,4 +31,11 @@ CLADE_ROOT=$(find_clade_root) || exit 0
 SCRIPT="$CLADE_ROOT/vendor/scripts/ui-qa-reminder.sh"
 [ -x "$SCRIPT" ] || exit 0
 
+# 計數器去重鍵：session_id＋agent_id（ui-qa-reminder.sh 檔內說明為何不能用 PPID）
+SESSION=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || echo "")
+AGENT=$(echo "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null || echo "")
+if [ -n "$SESSION" ]; then
+  export CLADE_UI_QA_KEY="${SESSION}${AGENT:+-$AGENT}"
+fi
+
 exec "$SCRIPT" "$FILE_PATH"

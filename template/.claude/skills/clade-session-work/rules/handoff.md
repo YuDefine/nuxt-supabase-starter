@@ -116,7 +116,7 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 
 > **14 天是 escalation threshold，不是 grace period**：`next` 盤點時所有 active item 一律列入 outstanding 並推薦處理，不因 age < 14d 降低優先序。
 
-審計只 warn 不阻擋；實際 rotate 由 `/handoff next` Health Gate 執行（per `capabilities/core/skills/handoff/SKILL.md § 2B.1`）。
+審計只 warn 不阻擋；實際 rotate 由 `/handoff next` Health Gate 執行（per `capabilities/core/skills/handoff/rules/next盤點與推薦判準.md § 2B.1`）。
 
 ### rotate 是每次 `/handoff next` 的第一個寫入，100%，無門檻
 

@@ -34,7 +34,8 @@
 //   - exit 1：有 user WIP；exit 0：乾淨 / 全 projection/tool-managed / 非 git repo（fail-open）
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readGitStatus, type GitStatusEntry } from './lib/git-status-z.ts'
@@ -496,39 +497,187 @@ function restoreToolManagedDrift(repoRoot: string, porcelainOut: string): number
 }
 
 /**
+ * 只認 projector 寫的四份 canonical 所有權清單（`.clade/projections/<target>.<namespace>.json`），
+ * 每份各自的路徑根與 `scripts/lib/runtime-rule-apply.ts`（assertRuntimeRuleStatePath）、
+ * `scripts/lib/runtime-capability-ownership.ts`（assertCapabilityOwnedPath）一致。本檔是零依賴的
+ * vendor 模組、不能 import `scripts/` 的 validated reader，所以路徑根在這裡重列一份，
+ * 由 test/wip-dirty-tool-managed.test.ts 對照兩邊的判定防漂移。
+ */
+const OWNERSHIP_LEDGER_ROOTS: Record<string, (rel: string) => boolean> = {
+  'claude.rules.json': (rel) =>
+    rel.startsWith('.claude/skills/clade-') ||
+    (rel.startsWith('.claude/rules/') &&
+      !rel.startsWith('.claude/rules/local/') &&
+      /\.(?:md|mdc)$/u.test(rel)),
+  'agents.rules.json': (rel) =>
+    rel.startsWith('.agents/skills/clade-') ||
+    rel === 'AGENTS.md' ||
+    rel === '.codex/AGENTS.md' ||
+    ((rel.startsWith('.codex/skills/rules/') || rel.startsWith('.codex/rules/')) &&
+      /\.(?:md|mdc)$/u.test(rel)),
+  'claude.capabilities.json': (rel) =>
+    ['.claude/skills/', '.claude/commands/', '.claude/agents/', '.claude/hooks/clade/'].some(
+      (root) => rel.startsWith(root),
+    ),
+  'agents.capabilities.json': (rel) => rel.startsWith('.agents/skills/'),
+}
+
+export function isSafeLedgerRel(rel: string): boolean {
+  if (!rel || rel.startsWith('/') || rel.includes('\\')) return false
+  return !rel.split('/').some((seg) => seg === '' || seg === '.' || seg === '..')
+}
+
+/** canonical 清單檔的 `files`（path → sha256）：schemaVersion 1、路徑落在該清單的根內才收。 */
+function readOwnershipLedger(
+  repoRoot: string,
+  name: string,
+): { path: string; state: any; files: Record<string, string> } | null {
+  const accepts = OWNERSHIP_LEDGER_ROOTS[name]
+  if (!accepts) return null
+  const path = join(repoRoot, '.clade', 'projections', name)
+  try {
+    const state = JSON.parse(readFileSync(path, 'utf8'))
+    if (state?.schemaVersion !== 1 || !state.files || typeof state.files !== 'object') return null
+    const files: Record<string, string> = {}
+    for (const [rel, hash] of Object.entries(state.files)) {
+      if (
+        isSafeLedgerRel(rel) &&
+        accepts(rel) &&
+        typeof hash === 'string' &&
+        /^[0-9a-f]{64}$/u.test(hash)
+      )
+        files[rel] = hash
+    }
+    return { path, state, files }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * consumer 的投影所有權清單：canonical `.clade/projections/*.json` 的 `files`（path → sha256）。
+ * 這份清單由 projector 寫（`.clade/*` 被 gitignore，所以不進版控、也不出現在 porcelain），記的是
+ * 「clade 實際寫到這棵樹的檔與其內容雜湊」。linked worktree 被 postinstall 投影了 clade main 當下
+ * （未發版）的內容時，新檔是 untracked、舊檔是 modified，路徑不一定落在 `LOCKED_PROJECTION_RE`；
+ * 以這份清單比對，才分得出「純投影殘檔」與使用者的工作。
+ * 讀不到／格式不對 → 空 Map（fail closed：沒有證據就不當投影）。
+ */
+export function ownedProjectionHashes(repoRoot: string): Map<string, string> {
+  const owned = new Map<string, string>()
+  for (const name of Object.keys(OWNERSHIP_LEDGER_ROOTS)) {
+    const ledger = readOwnershipLedger(repoRoot, name)
+    if (!ledger) continue
+    for (const [rel, hash] of Object.entries(ledger.files)) owned.set(rel, hash)
+  }
+  return owned
+}
+
+/**
+ * 還原／移除殘檔之後，把清單與磁碟對齊（同 `reconcileCopiedProjectionState`）：路徑還在（還原回 HEAD）
+ * 就把雜湊改成磁碟現在的 bytes，不在了（untracked 殘檔被移除）就從 `files` 與 `sourceInputs` 拿掉。
+ * 不對齊的話磁碟與清單不一致，下一次 sync-rules／bootstrap-hub 會把這些檔全報成
+ * `local or modified file conflict`。清單的 `delivery` 是 files 的導出值，改過就丟（下次 apply 重算）。
+ */
+export function reconcileOwnershipLedgers(repoRoot: string, paths: readonly string[]): void {
+  for (const name of Object.keys(OWNERSHIP_LEDGER_ROOTS)) {
+    const ledger = readOwnershipLedger(repoRoot, name)
+    if (!ledger) continue
+    let dirty = false
+    for (const rel of paths) {
+      if (!(rel in ledger.files)) continue
+      let hash: string | null = null
+      try {
+        const abs = join(repoRoot, rel)
+        if (lstatSync(abs).isFile())
+          hash = createHash('sha256').update(readFileSync(abs)).digest('hex')
+      } catch {
+        hash = null
+      }
+      if (hash === null) {
+        delete ledger.state.files[rel]
+        if (ledger.state.sourceInputs && typeof ledger.state.sourceInputs === 'object')
+          delete ledger.state.sourceInputs[rel]
+      } else ledger.state.files[rel] = hash
+      dirty = true
+    }
+    if (!dirty) continue
+    if (typeof ledger.state.delivery === 'string') delete ledger.state.delivery
+    writeFileSync(ledger.path, `${JSON.stringify(ledger.state, null, 2)}\n`)
+  }
+}
+
+/**
+ * 這個路徑現在的內容，是不是 projector 當初寫的那一份（所有權清單有這條，且檔案雜湊相同）。
+ * 內容被使用者改過 → false（那是工作，不是殘檔）。只認一般檔；symlink、目錄、不存在一律 false。
+ */
+export function isOwnedProjectionResidue(
+  repoRoot: string,
+  path: string,
+  owned: Map<string, string> = ownedProjectionHashes(repoRoot),
+): boolean {
+  const expected = owned.get(path)
+  if (!expected || path.startsWith('/') || path.split('/').includes('..')) return false
+  try {
+    const abs = join(repoRoot, path)
+    if (!lstatSync(abs).isFile()) return false
+    return createHash('sha256').update(readFileSync(abs)).digest('hex') === expected
+  } catch {
+    return false
+  }
+}
+
+/**
  * `--restore-projection-drift` 的分類：porcelain（不帶 `-z` 的換行格式，同 `onlyToolManagedDrift`）每一行
- * 拆成「可還原」與「擋住」兩堆。可還原＝已追蹤、只有修改／刪除的狀態碼，且路徑是 clade-managed 投影
- * （`isLockedProjectionPathFor`，與 merge-back／wip-dirty 同一份判準）或 tool-managed flip。
- * untracked／rename／staged-add／衝突一律擋住（沒有 HEAD 版本可還原，或還原會丟東西）。
+ * 拆成「可還原」「可移除」與「擋住」三堆。可還原＝已追蹤、只有修改／刪除的狀態碼，且路徑是 clade-managed 投影
+ * （`isLockedProjectionPathFor`，與 merge-back／wip-dirty 同一份判準）、tool-managed flip，或內容仍是
+ * 所有權清單（`.clade/projections/*.json`）記的那一份（`isOwnedProjectionResidue`；已刪除的清單內路徑也算）。
+ * 可移除＝untracked 的單一檔案、內容仍是所有權清單記的那一份（HEAD 沒有它，不丟任何東西）。
+ * rename／staged-add／衝突、被收合的 untracked 目錄、內容被改過的清單內檔案一律擋住。
  * 被 quotePath 跳脫的非 ASCII 路徑對不上投影清單 → 落在擋住那堆，方向是 fail closed。
  */
 export function classifyRestorableDrift(
   repoRoot: string,
   porcelainOut: string,
-): { restorable: string[]; blocking: string[] } {
+): { restorable: string[]; removable: string[]; blocking: string[] } {
   const restorable: string[] = []
+  const removable: string[] = []
   const blocking: string[] = []
+  const owned = ownedProjectionHashes(repoRoot)
   for (const line of porcelainOut.split('\n').filter((l) => l.length >= 4)) {
     const path = porcelainPath(line)
-    const tracked = /^[ MDT]{2}$/u.test(line.slice(0, 2))
+    const code = line.slice(0, 2)
+    const tracked = /^[ MDT]{2}$/u.test(code)
+    if (code === '??') {
+      if (isOwnedProjectionResidue(repoRoot, path, owned)) removable.push(path)
+      else blocking.push(path)
+      continue
+    }
+    // 清單內檔案只認 worktree 側的改動（index 欄為空）：`git checkout HEAD --` 連 index 一起覆寫，
+    // 使用者 stage 過的內容（`M `／`MM`／`MD`）不是殘檔、不能被靜默丟掉。
+    const worktreeOnly = tracked && code[0] === ' '
+    const deletedOwned = worktreeOnly && code === ' D' && owned.has(path)
     if (
       tracked &&
-      (isLockedProjectionPathFor(repoRoot, path) || isToolManagedDrift(repoRoot, path))
+      (isLockedProjectionPathFor(repoRoot, path) ||
+        isToolManagedDrift(repoRoot, path) ||
+        deletedOwned ||
+        (worktreeOnly && isOwnedProjectionResidue(repoRoot, path, owned)))
     )
       restorable.push(path)
     else blocking.push(path)
   }
-  return { restorable, blocking }
+  return { restorable, removable, blocking }
 }
 
 /**
- * `--restore-projection-drift` 的本體：髒項**全部**是投影漂移（clade-managed 投影或 tool-managed flip）時，
- * 逐檔 `git checkout HEAD --` 還原（index＋worktree 都回 HEAD），exit 0。
+ * `--restore-projection-drift` 的本體：髒項**全部**是投影漂移（clade-managed 投影、所有權清單內的殘檔
+ * 或 tool-managed flip）時，逐檔 `git checkout HEAD --` 還原（index＋worktree 都回 HEAD），untracked 的
+ * 清單內殘檔直接移除，並把 `.clade/projections` 清單與磁碟對齊（`reconcileOwnershipLedgers`），exit 0。
  * 夾帶任何其它髒項 → 不動任何檔（全有或全無）、stdout 逐行印出擋住的路徑、exit 1；git／還原失敗 exit 2。
  * 還原只是回到 HEAD：投影本來就由 propagate 重生，NEVER 因此丟掉非投影改動。
  */
 function restoreProjectionDrift(repoRoot: string, porcelainOut: string): number {
-  const { restorable, blocking } = classifyRestorableDrift(repoRoot, porcelainOut)
+  const { restorable, removable, blocking } = classifyRestorableDrift(repoRoot, porcelainOut)
   if (blocking.length > 0) {
     process.stdout.write(`${blocking.join('\n')}\n`)
     return 1
@@ -543,6 +692,18 @@ function restoreProjectionDrift(repoRoot: string, porcelainOut: string): number 
     } catch {
       return 2
     }
+  }
+  for (const path of removable) {
+    try {
+      rmSync(join(repoRoot, path), { force: true })
+    } catch {
+      return 2
+    }
+  }
+  try {
+    reconcileOwnershipLedgers(repoRoot, [...restorable, ...removable])
+  } catch {
+    return 2
   }
   return 0
 }
@@ -643,8 +804,9 @@ if (invokedAsCli() && process.argv[2] === '--tool-managed-only') {
 if (invokedAsCli() && process.argv[2] === '--restore-tool-managed') {
   process.exit(restoreToolManagedDrift(process.argv[3] || process.cwd(), readFileSync(0, 'utf8')))
 }
-// `--restore-projection-drift <repoRoot>`：stdin 同上；髒項全為 clade-managed 投影或 tool-managed flip 才
-// 還原（見 `restoreProjectionDrift`），否則不動任何檔並在 stdout 列出擋住的路徑（exit 1）。
+// `--restore-projection-drift <repoRoot>`：stdin 同上；髒項全為 clade-managed 投影、tool-managed flip，
+// 或內容仍是 `.clade/projections` 所有權清單所記的殘檔才處理（見 `restoreProjectionDrift`）：已追蹤的
+// 還原回 HEAD、untracked 的清單內檔案刪除，並同步改寫清單；否則不動任何檔並在 stdout 列出擋住的路徑（exit 1）。
 // 舊版對端不認得 flag 時落進預設 CLI、fail-open exit 0 不還原——呼叫端的第二次 porcelain 複核仍會擋下。
 if (invokedAsCli() && process.argv[2] === '--restore-projection-drift') {
   process.exit(restoreProjectionDrift(process.argv[3] || process.cwd(), readFileSync(0, 'utf8')))

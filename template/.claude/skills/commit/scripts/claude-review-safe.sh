@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# claude-review-safe.sh — commit 0-A 唯一合格 reviewer：Claude Opus 5.5 medium
+# claude-review-safe.sh — commit 0-A 唯一合格 reviewer：Claude Opus 5.5（effort: medium）
 # fresh-context child（`code-review-opus` 列；2026-09-24 Charles 拍板撤掉 Astra 與
 # Fable 兩席——「通常一定是 Astra 先耗盡」，Fable 所有用途禁用）。
 #
@@ -193,12 +193,13 @@ case "${1:-}" in
   rounds)
     # 輪數 ledger 的查詢（oa-batches 切批前、merge-queue 合併前用）；寫入只發生在開審、收 verdict，
     # 以及 cover（判定為 covered 時把 head 記成通過輪的 covered_heads，merge-queue 只認記錄）。
+    # carry-over：PR 只併主線、自身 patch 不變時把本 head 記成通過輪的 covered_heads（嚴格零容忍，見 review-common.sh）。
     # grant 是唯一的人類授權寫入：Charles 授權的例外輪留紀錄在 ledger.grants。
     # adjudicate 把主線裁決為假的 Major 記進該輪該批（只疊在原始計數上，不改計數）；findings 唯讀列出可裁決的指紋。
     shift
     case "${1:-}" in
-      plan|cover|passed|show|grant|findings|adjudicate) ;;
-      *) echo "[claude-review-safe] 錯誤：rounds 只接受 plan|cover|passed|show|grant|findings|adjudicate；收到 ${1:-<空>}" >&2; exit 2 ;;
+      plan|cover|passed|carry-over|show|grant|findings|adjudicate) ;;
+      *) echo "[claude-review-safe] 錯誤：rounds 只接受 plan|cover|passed|carry-over|show|grant|findings|adjudicate；收到 ${1:-<空>}" >&2; exit 2 ;;
     esac
     # shellcheck source=lib/review-common.sh
     . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/review-common.sh"
@@ -238,7 +239,7 @@ case "$REVIEW_LAUNCHER" in
 esac
 case "$REVIEW_SEAT" in
   opus) ;;
-  fable) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_SEAT=fable 已禁用（2026-09-24，Fable 所有用途禁用）；0-A 只有 Opus 5.5 medium 一席，Opus 不可用時 gate 保持未完成" >&2; exit 2 ;;
+  fable) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_SEAT=fable 已禁用（2026-09-24，Fable 所有用途禁用）；0-A 只有 Opus 5.5（effort: medium） 一席，Opus 不可用時 gate 保持未完成" >&2; exit 2 ;;
   *) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_SEAT 只接受 opus；收到 $REVIEW_SEAT" >&2; exit 2 ;;
 esac
 REVIEW_ROW="code-review-opus"

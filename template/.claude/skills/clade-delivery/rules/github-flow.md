@@ -71,7 +71,7 @@ SoT 是 `.github/workflows/validate.yml` 的 `lane-plan` job（consumer 以自�
 
 | 事件 | test-lane |
 | --- | --- |
-| PR，base＝`main`、非 draft，**本 head 尚未過 0-A**（P1 A，W-2026-10-30-ci-11-03） | 不跑重 job（test-lanes、truth-features、-headed）；只付 vp-check／doctor／validate-manifests。判定是 head SHA 上有沒有 commit status `clade/0-A`=success（`scripts/test-lanes/zero-a.ts`）。merge-queue 在輪數 ledger 認得本 head 通過 0-A 後貼它並 rerun `lane-plan`，重 job 才補跑；換 head 就要重過 0-A。急件（`Urgent:`／`Fixes-Main`）不等 0-A；status 讀不到 fail-safe 照跑。0-A 的 ciGate 把 test-lanes-summary=SKIPPED 當可審，所以順序變成 ready → 機械檢查綠 → 0-A → 重 job → merge |
+| PR，base＝`main`、非 draft，**本 head 尚未過 0-A**（P1 A，W-2026-10-30-ci-11-03） | 不跑重 job（test-lanes、truth-features、-headed）；只付 vp-check／doctor／validate-manifests。判定是 head SHA 上有沒有 commit status `clade/0-A`=success（`scripts/test-lanes/zero-a.ts`）。merge-queue 在輪數 ledger 認得本 head 通過 0-A 後貼它並 rerun `lane-plan`，重 job 才補跑；換 head 就要重過 0-A，唯一例外是 carry-over：PR 只併主線、自身改動（對 `merge-base(origin/main, head)` 取 diff）的 `git patch-id --stable` 與逐位元組內容都跟舊通過 head 相同時，`rounds carry-over`（merge-queue 與 merge-resident 呼叫）把新 head 記成舊通過輪的 covered_heads，status description 寫 `carry-over from <舊 sha> patch-id <id>`；衝突解決、多改一行、改到沒碰的檔、舊輪 adjudicated、最後一輪有未清 Critical／Major 一律照常重審。沿用的只有 0-A，rerun 後 test-lanes 仍在新 head 實跑。急件（`Urgent:`／`Fixes-Main`）不等 0-A；status 讀不到 fail-safe 照跑。0-A 的 ciGate 把 test-lanes-summary=SKIPPED 當可審，所以順序變成 ready → 機械檢查綠 → 0-A → 重 job → merge |
 | PR，base＝`main`、非 draft，**本 head 已過 0-A**（或急件） | `affected`（base＝PR base；shard 數由選中測試檔的 timings 成本總和推導取 1–6——每片目標 ~240s，選中集越重開越多片，見 `scripts/test-lanes/sharding.ts` 的 `costBasedShardCount`）。選檔器升全量（`package.json`、lockfile、`tsconfig*`、執行期 harness，見 `scripts/test-lanes/affected.ts` 的 `FULL_ESCALATION_PATTERNS`）→ full lane 六 shard。PR 檔案清單取不到（compare 失敗或 ≥300 檔）→ full，不猜。**CI 分層（repo variable `CLADE_PR_TIER=on` 才開；未設＝本格前半的行為）**：只跑選中檔裡單檔估計成本 ≤ `lane-capacity.json` `prTier.heavyFileMs` 的輕檔，PR 自己改的測試檔不論輕重都跑；重檔延到 main push 與 nightly；升全量也同樣只跑全量裡的輕檔（`scripts/test-lanes/pr-tier.ts`）。開啟時 truth features 不在 PR 跑，移到 main push |
 | PR，base＝`main`、非 draft，**純文件** | 不跑。純文件＝每個變更路徑（改名的舊路徑也算）都在 `HANDOFF.md`、`ROADMAP.md`、`docs/`、`tasks/`、`specs/plans/` 底下、是 `.md`，且不是**契約文件**——被測試點名讀取的文件（`scripts/test-lanes/deps.pin.json` 釘住的 deps 快照〔存在 orphan branch `clade-deps-snapshots`〕的觀測值；快照讀不到時判不出契約，保守當非純文件；讀文件區超過 100 份的全 repo 掃描器不算點名）。例：`docs/tech-debt.md` 被 td-register 測試讀，是契約，照跑 affected |
 | PR，base＝`integration/**`（不論 draft） | 不跑（只付 vp-check／doctor／validate-manifests） |
@@ -237,7 +237,7 @@ timer 的處置表：
 | clade home | `main-sync --apply`（登記簿同步，見上方 § 遠端強制與本機契約） |
 | merge／rebase 進行中、`main` 在別棵 worktree checkout、publish／propagate 在跑（`skipped`） | 不動，下一輪再試；只記在 `last.json`，不回報 |
 
-回報出現在 SessionStart：`🔀 本機 main 有 N 處無法自動對齊 origin`。
+回報出現在 SessionStart（pointer 級一行）：`🔀 本機 main 無法自動對齊 origin N 處：repo(state)、…`（clade home 另可能出現 `clade(main-sync:<state>)`、`self-heal(failed)`；細節在 `last.json`）。
 
 | 回報 | 意思 | 處置 |
 | --- | --- | --- |

@@ -4,8 +4,8 @@
 #
 # clade — pre-commit runner
 #
-# 由 consumer 的 .husky/pre-commit 統一呼叫：
-#   bash scripts/pre-commit/runner.sh
+# 由 consumer pre-commit hook 的 clade drift-guard 區塊統一呼叫（scripts/lib/pre-commit-governance.ts）；
+# hook 後段自己再寫一行 `bash scripts/pre-commit/runner.sh` 也行，同一支 hook 只跑一次。
 #
 # Auto-detect 啟用哪些 check（不需 hub.json 額外設定）：
 #   - vp-staged                 永遠跑（vite-plus 官方推薦的 staged-file 工作流）
@@ -26,6 +26,13 @@
 # 由 ~/clade vendor/scripts/pre-commit/ 散播，請勿直接編輯 consumer 副本。
 
 set -euo pipefail
+
+# hook 的 clade drift-guard 區塊已在同一支 hook 裡跑過 runner（記下 hook shell 的 $$）→
+# hook 後段既有的 `bash scripts/pre-commit/runner.sh` 是同一個 parent 再呼叫一次，直接略過。
+# 比 PPID 而非只看變數有沒有值：外部 export 的值對不上 parent，照跑全部 check。
+if [[ -n "${CLADE_PRE_COMMIT_RUNNER_RAN:-}" && "${CLADE_PRE_COMMIT_RUNNER_RAN}" == "$PPID" ]]; then
+  exit 0
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECKS_DIR="$SCRIPT_DIR/checks"

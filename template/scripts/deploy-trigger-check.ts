@@ -1468,6 +1468,18 @@ export function mergedTreeScopeDetail(merged: MergedTreeWorkflows): {
   }
 }
 
+/**
+ * 判 production 的 workflow 與判據，寫成一行給擋下理由用（merge-queue skipped 行）。
+ * 只描述 `mergedTreeScopeDetail` 已算出的結果，不改判定；沒有任何 production 明細時回 null
+ * （合併樹走 unknown／workflow-changed，或判定來自宣告下限）。
+ */
+export function formatProductionDetail(detail: {
+  production: { file: string; basis: string }[]
+}): string | null {
+  if (detail.production.length === 0) return null
+  return `判 production 的 workflow：${detail.production.map((w) => `${w.file}（${w.basis}）`).join('；')}`
+}
+
 /** 單張 PR 合進 main 之後的 main push deploy 範圍（讀合併樹＋`scopeOfMergedTree`）。 */
 export function mergedTreeMainPushScope(
   repoDir: string,

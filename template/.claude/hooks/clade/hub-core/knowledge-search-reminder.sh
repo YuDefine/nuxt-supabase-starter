@@ -3,7 +3,13 @@
 # 觸發條件: PreToolUse Edit/Write（.ts, .vue 檔案）
 #
 # 行為：
-# - 只在 session 首次觸發時輸出提醒（透過 flag file）
+# - 只在 session 首次觸發時輸出提醒（flag file，去重鍵 session_id＋agent_id；hook-authoring
+#   `rules/提醒注入型的送達去重與噪音.md` Rule 2。NEVER 用 ${PPID}：主線與 subagent 同一個
+#   harness 行程，subagent 的第一次提醒會被主線的 marker 吃掉，行程 ID 回收後新 session 也被靜音）
+# - subagent：收（內容是編輯 .ts/.vue 前的前置知識，不是主線流程責任），所以鍵含 agent_id。
+#   payload 缺 session_id（舊 harness、手動測試）才退回 ppid-${PPID}
+# - 效果指標：收到後同一 agent 去搜 specs/truth／docs/solutions；
+#   hook_followthrough.py --hook knowledge-search 量（主線／subagent 分列）
 # - 提醒去既有知識載體找相關經驗：lifecycle repo（有 specs/truth/work-lifecycle.md）是
 #   specs/truth/**；未遷移 consumer 是既有的 docs/solutions/、docs/decisions/
 # - 新教訓的落點同 knowledge-and-decisions 規約：NEVER 叫 agent 在 docs/ 開新檔
@@ -39,12 +45,17 @@ case "$FILE_PATH" in
   *) exit 0 ;;
 esac
 
-# Session-scoped: 只觸發一次
-FLAG_FILE="/tmp/claude-knowledge-reminder-${PPID:-$$}"
+# Session-scoped（subagent 各自一次）: 只觸發一次
+SESSION=$(echo "$INPUT" | jq -r '.session_id // empty')
+AGENT=$(echo "$INPUT" | jq -r '.agent_id // empty')
+KEY="${SESSION:-ppid-${PPID:-$$}}${AGENT:+-$AGENT}"
+case "$KEY" in */* | *..*) KEY=$(printf '%s' "$KEY" | tr '/.' '__') ;; esac
+STATE_DIR="${TMPDIR:-/tmp}/clade-knowledge-reminder"
+FLAG_FILE="$STATE_DIR/$KEY.seen"
 if [ -f "$FLAG_FILE" ]; then
   exit 0
 fi
-touch "$FLAG_FILE"
+mkdir -p "$STATE_DIR" 2>/dev/null && : >"$FLAG_FILE" 2>/dev/null || true
 
 # 知識載體依 repo 是否已採用 lifecycle 分支（判準同 consumer-docs-retirement 規約）
 if [ -f "${_PROJECT}/specs/truth/work-lifecycle.md" ]; then

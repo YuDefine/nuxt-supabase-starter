@@ -15,6 +15,9 @@
 - Level: `MUST`
 - CLI Access Token（前綴 `nct_`）與 UI Editor Token 的唯一保管處是 Notion「Scrects」頁的「Nuxt Charts」段，取用流程照 `secret-custody` 規約，Notion 讀取照 `notion-ops` 派工。
 - 本機只存在 CLI 自己的設定裡，每台機器設一次。
+- 兩種 token 的產生處是同一頁：登入 nuxtcharts.com（GitHub 登入）→ `https://nuxtcharts.com/payments?tab=tokens`（也可從 `/theme-editor` 的「Get API Token」／「Manage Tokens」進入）→「API Tokens」分頁的 `UI EDITOR TOKEN`（給 `ui.nuxtcharts.com` Theme Editor 儲存與 Export Theme 用）或 `CLI ACCESS TOKEN`（給 `nuxt-charts` CLI 用）區塊，填 Token Name 按 Generate；「Active Tokens」列出現有 token 的名稱與類型（UI EDITOR／CLI），可 Revoke。2026-10-31 於 desk `Main` profile 實查，clade 現有名稱是 `clade-fleet-ui`（UI EDITOR）與 `clade-fleet`（CLI）。
+- 帳號沒存 GitHub username 時，這頁會顯示「Add your GitHub username to access repositories」且不出現 Tokens 區塊：先用「Add Username」填帳號再重進（上游 `dennisadriaans/vue-chrts#161` 已回報並於 2026-10-28 關閉）。
+- 產生後的值立刻存進 Notion「Scrects」頁「Nuxt Charts」段（Notion 讀寫照 `notion-ops` 派工），NEVER 貼進對話或 repo。
 - **NEVER** 把 token 寫進 repo 任何檔（`.env*`、`nuxt.config.*`、腳本、文件）、commit message、對話輸出；**NEVER** 把 token 字面值打進任何指令（`add -t <token>`、`config set-token <token>` 都會留在 shell 歷史與 session transcript）。
 
 # Rule 3 - token 只經指令替換交接，輸出一律遮罩

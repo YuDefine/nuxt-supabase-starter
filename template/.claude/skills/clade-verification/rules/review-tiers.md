@@ -36,6 +36,7 @@ paths: ['specs/plans/**', 'specs/truth/**', '.claude/agents/**', 'supabase/migra
 ## 額外規則
 
 - Tier 2 / 3 **不應** 只有作者自行口頭確認
+- 下列 PR 合入前要兩個 0-A 通過輪，merge-queue 機械擋（`vendor/scripts/lib/second-pass-pr.ts`）：動正式資料（migration 路徑、`.sql` 新增刪資料語句、`prod-sql` 寫入、或 body 宣告 `Data-Risk:`）、超過 1000 行、ops／infra、人工蓋掉 deny。其餘 Tier 3 路徑維持一輪
 - Tier 3 若同時改 schema 與權限 / policy，應在同一批 review 中一起看，避免半套上線
 - 若變更雖然很短，但碰到敏感路徑，仍以高 tier 處理
 
@@ -66,7 +67,14 @@ paths: ['specs/plans/**', 'specs/truth/**', '.claude/agents/**', 'supabase/migra
 
 本節不常駐：`code-review` agent 報告的 § 結論段指向這裡，`proactive-skills` 的 Review Tiers 行也指向這裡；其餘入口（`/code-review`、規格審查、顧問回覆）由主線收到回覆時自己讀本節。
 
-主線收到 review 回覆後，把每則 finding 放進下列四桶之一，每則附 reviewer 與一行理由：
+主線收到 review 回覆後，先過第 0 步，再把每則 finding 放進下列四桶之一，每則附 reviewer 與一行理由：
+
+**第 0 步：正確性 finding 先分 proven／unproven**（只管正確性 finding；風格、設計取捨的 finding 直接落桶）。
+
+- **proven**：reviewer 附了實跑的指令與輸出（或可重跑的測試），證明問題存在。視為成立，依下表按範圍落桶（在本次改動範圍內 → Act on；超出或牽涉取捨 → Consider）。
+- **unproven**：只有推論、沒有實跑證據。主線自己試**一次**便宜的 repro（一條指令或一個測試）：重現了就視為成立、同樣按範圍落桶；重現不了就降到 Consider，並記「試過 X」（X＝跑了什麼、看到什麼）。
+- **NEVER** 因為 unproven 就直接 Dismissed，也不憑 reviewer 的語氣或嚴重度標籤省掉這一步；repro 超出一條指令的成本，就落 Consider 並寫明「未試：原因」。
+
 
 | 桶 | 放什麼 | 主線接著做 |
 | --- | --- | --- |

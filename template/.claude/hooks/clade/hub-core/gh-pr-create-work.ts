@@ -21,7 +21,7 @@
  *   | stdin 不是 JSON、解析丟例外 | 放行 |
  *
  * 缺 `Work:` 行時先推導 work id（`deriveWorkId`：`CLADE_WORK_ID` → 本樹的 claim → branch 改到的唯一一份
- * plan.md frontmatter）。推得出且 body 來自看得到的 `--body-file` 檔（一般檔、realpath 在 cwd 或系統 tmpdir 底下、
+ * lifecycle 檔 frontmatter）。推得出且 body 來自看得到的 `--body-file` 檔（一般檔、realpath 在 cwd 或系統 tmpdir 底下、
  * 指令沒有 `cd`／`pushd`／`env -C`／`--chdir`、id 是單純 token）→ 直接把 `Work:` 行補進檔案、放行；
  * 其餘（`--body` 字面、heredoc）擋下並把推出的那一行印成可貼的改法；推不出就擋並印取得 work id 的指令
  * heredoc 照字面判，缺行就擋，NEVER 當成判不出放行（放行出去的 PR 沒有主人、修補件派不出去）。
@@ -474,11 +474,11 @@ const defaultGit = (args: string[], cwd: string): string | null => {
   return r.status === 0 ? r.stdout : null
 }
 
-const PLAN_PATH_RE = /^specs\/plans\/[^/]+\/plan\.md$/u
+const PLAN_PATH_RE = /^specs\/plans\/[^/]+\/(?:work|plan)\.md$/u
 
 /**
  * 缺 `Work:` 行時推 work id：`CLADE_WORK_ID` → 本樹的 claim（`<repo>/.clade/claims/*.json` 的 worktree_path）→
- * branch 相對預設分支改到的 plan.md，frontmatter `work_id` 只有一個時採用。推不出（或 plan 有多個）回 null，
+ * branch 相對預設分支改到的 lifecycle 檔（work.md；legacy plan.md），frontmatter `work_id` 只有一個時採用。推不出（或 plan 有多個）回 null，
  * NEVER 另鑄——鑄出來的 id 對不到任何 plan，等於沒有主人。
  */
 export function deriveWorkId(
@@ -626,7 +626,7 @@ export function denyMessage(
     `  Owner: ${owner}\n` +
     (derived
       ? `Work id 依 ${derived.basis} 推得；把上面兩行加進 body 末尾後重跑。`
-      : `推不出 work id（沒有 CLADE_WORK_ID、本樹沒有 claim、branch 沒改到唯一一份 plan.md）。`) +
+      : `推不出 work id（沒有 CLADE_WORK_ID、本樹沒有 claim、branch 沒改到唯一一份 work.md／legacy plan.md）。`) +
     `沒有 work id → 先 node vendor/scripts/flow/flow.ts work open <slug> 取得。非 clade 工作的 PR → CLADE_ALLOW_NO_WORK=1 前綴放行。`
   )
 }

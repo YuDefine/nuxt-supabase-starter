@@ -5,13 +5,13 @@
 // `VALID_EXECUTORS`、`dev-session.ts` / `dev-singleton.ts` / `db-lease.ts` 的
 // `holderKind` / `detectKind`、`claims-lib.ts` 的 `detectRuntime`），其中三處是
 // `CLAUDE_SESSION_ID` / 另一個 runtime 的 id 二分。引入第二個 runtime 時，它跑掉的工作
-// 會被歸成 unknown 或誤判成 claude —— 也就是**無從驗證分攤有沒有發生**（TD-377）。
+// 會被歸成 unknown 或誤判成 claude —— 也就是**無從驗證分攤有沒有發生**。
 //
 // 這個失效形狀有先例：`rules/core/agent-routing.md` 記著「147 條 `(verified-ui:)`
 // annotation 0 次走第二個 runtime、92 個 session 全部走 bypass 形狀」—— 規則在、實際 0 次，
 // 靠事後 audit 才發現。沒有 executor 維度就是把同一個坑重挖一次。
 //
-// Codex runtime 已於 2026-10-18 退場（W-2026-10-18-codex-runtime-removal）：詞彙表不再含 `codex`，
+// Codex runtime 已於 2026-10-18 退場：詞彙表不再含 `codex`，
 // `CODEX_*` env 不再當身分訊號；`CLADE_RUNTIME=codex` 現在是 invalid runtime（fail-closed）。
 
 /**

@@ -40,7 +40,7 @@ export interface WtEnvBootstrapOptions {
    * is not the worktree being acted on. Teardown MUST set this to the main
    * checkout: a worktree carries the shim as it stood on its own branch, so an
    * old tree runs an old implementation of its own removal. Observed cost
-   * (<consumer-a> 2026-09-09): `batch cleanup` on an integration worktree forked before
+   * (<consumer-a>): `batch cleanup` on an integration worktree forked before
    * `codex/batch-<UUID>` slugs were recognised died with `E_BRANCH_SLUG`, while
    * the identical command run from main succeeded — the tree could not be
    * deleted because it only knew the vocabulary of the day it was created.
@@ -112,7 +112,7 @@ export interface BackingServiceProbe {
  * **Any other extension is a hard error, never a skip.** A consumer that ships
  * `wt-env-bootstrap.<something-else>` clearly intends the hook to run; treating
  * that as "consumer doesn't have one" makes both `ensure` and `destroy` no-op
- * with zero signal. Observed cost (<consumer-b> 2026-08-02, TD-315): every new worktree
+ * with zero signal. Observed cost (<consumer-b>): every new worktree
  * came up with `.env.local` still pointing at the *main* worktree's database,
  * and every `cleanup` left its PostgREST sidecar running — each orphan
  * permanently consuming a connection-admission slot until the ceiling was hit
@@ -150,7 +150,7 @@ export function resolveWtEnvBootstrapScript(worktreePath: string): string | null
  * Callers that need the opposite policy (dev-server preflight) use
  * `probeBackingService()` instead.
  *
- * TD-348: the required CLI is exactly
+ * The required CLI is exactly
  *
  *     node scripts/wt-env-bootstrap.ts <ensure|destroy|status> --worktree <path> --json
  *
@@ -219,7 +219,7 @@ function runWtEnvBootstrapOnce(worktreePath: string, command: string, opts: WtEn
     const stderr = result.stderr?.trim() || 'unknown error'
     // exit 2 is the usage-error convention; combined with an "unknown arg"
     // complaint it means the script does not implement this CLI at all, which
-    // is a different repair than a genuine provisioning failure (TD-348).
+    // is a different repair than a genuine provisioning failure.
     const contractMismatch = result.status === 2 || /unknown (arg|option|command)/i.test(stderr)
     throw Object.assign(
       new Error(
@@ -384,7 +384,7 @@ function toProbe(raw: unknown): BackingServiceProbe {
   // 回 `{status: 'absent'|'created'|'ready', dbName, containerName, port, …}`）。
   // `state` 只是相容別名 —— **NEVER** 只讀 `state`：讀錯 key 的失敗形狀是「永遠 applicable:false」，
   // 也就是 preflight 對每一個 consumer 靜默跳過，而外觀與「此 consumer 無 per-worktree 拓樸」
-  // 完全相同（2026-08-06 對 <consumer-b> 實測時抓到）。
+  // 完全相同（對 <consumer-b> 實測時抓到）。
   const state = (o.status ?? o.state) as BackingServiceState
   if (!VALID_STATES.has(state)) {
     return { applicable: false, skipReason: `unrecognized state: ${JSON.stringify(o.state)}` }
@@ -452,7 +452,7 @@ export function probeBackingService(
   if (!script) {
     // shim 缺席有兩個成因，`applicable:false` 對兩者完全同形：此 consumer 沒有 per-worktree
     // 拓樸（正常，絕大多數），或**本 worktree 的 branch 過時**（拓樸已進 default branch，
-    // 這棵還沒 merge）。後者實測 2026-09-02 在 <consumer-a> 佔 30 棵中的 27 棵，全部零訊號。
+    // 這棵還沒 merge）。後者實測在 <consumer-a> 佔 30 棵中的 27 棵，全部零訊號。
     //
     // 判準刻意**不**讀 `.claude/hub.json` 的 capability —— 那個檔本身是 tracked、
     // 一樣 branch-dependent，過時的 branch 上它也還沒宣告 `worktree-db`，於是最該出聲的

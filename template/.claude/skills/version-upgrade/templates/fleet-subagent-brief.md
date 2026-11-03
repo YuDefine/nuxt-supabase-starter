@@ -19,7 +19,7 @@ Brief JSON：`/tmp/dep-fleet-brief-<pkg-slug>-<consumer-id>.json`
    - 讀 `~/offline/clade/capabilities/modules/ecosystem/node/skills/version-upgrade/phases/consumer-batch.md`（Phase B–D 步驟）+ 同目錄 `templates/first-pass.md`、`templates/research.md`（派工 prompt 樣板）
    - 跳過 Phase B（target / version 由 brief 取）；計畫檔只有本 consumer × 本套件一列，寫在 brief 的 `plan_path`
    - 跑 Step C.1：用 `templates/first-pass.md` + brief 內 BC 渲染 `<changelog-block>` + brief 內 callsites
-   - 跑 Step C.2：dispatch（`version-upgrade-first-pass`，Claude Sonnet 5.5 high；載體與處方照 phases/consumer-batch.md C.2），繼承 Phase C 唯一的 workspace mutation contract；研究重試經 Pi 時每一個fallback照dispatcher payload
+   - 跑 Step C.2：dispatch（`version-upgrade-first-pass`，Claude Sonnet 5.5（effort: high）；載體與處方照 phases/consumer-batch.md C.2），繼承 Phase C 唯一的 workspace mutation contract；研究重試經 Pi 時每一個fallback照dispatcher payload
    - 等 first-pass 回報（in-process `sonnet-implementer` 當回合收；Herdr child 照 `herdr-session-handoff` completion 收割）
    - 失敗 → 照 Step C.4 升 `version-upgrade-research`（2026-10-21 Grok 退場後空鏈，由主線做，用 `templates/research.md`；靠研究不靠抬 effort）
    - research 也失敗 → 不要 runtime-native question interface，直接 STOP + 回報 orchestrator

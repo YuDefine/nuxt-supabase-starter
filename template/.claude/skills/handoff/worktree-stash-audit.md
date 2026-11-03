@@ -1,9 +1,9 @@
 # Step 3 判讀細則 — worktree signal 與 stash 欄位
 
-SKILL.md § Step 3 的查表材料：`mergeBackSafety` 三 signal 推導、9 列 kind 判定表、
+[rules/worktree與stash收斂判準.md](rules/worktree與stash收斂判準.md) § Step 3 的查表材料：`mergeBackSafety` 三 signal 推導、9 列 kind 判定表、
 stash audit 的寫入欄位。**`park` / `next` 都會走到 Step 3**，本檔不分 mode。
 
-主流程（怎麼跑 scan、輸出寫進哪一段）留在 SKILL.md § 3.1 / § 3.3；查表時讀本檔。
+主流程（怎麼跑 scan、輸出寫進哪一段）留在 rules/worktree與stash收斂判準.md § 3.1 / § 3.3；查表時讀本檔。
 
 下表保留 scanner 的 legacy action token；`merge-back-or-resume` 現行路由是驗收／scoped checkpoint／登記 batch ready，再依 commit skill `batch.md` 收件。`landable` 只表示 Git 前置訊號通過，不是品質、授權或寫入權交接憑證。已登記 batch 的來源與 integration 由 `/commit` 收尾的 `batch cleanup` 統一處理。
 
@@ -38,6 +38,7 @@ stash audit 的寫入欄位。**`park` / `next` 都會走到 Step 3**，本檔�
 | K4 | `mergedToMain: true` + `userWip > 0` | `merged-with-wip` | `verify-then-cleanup` — **NEVER 直接 cleanup**。先走 [[wip-orphan-recovery]] 的 SOP（git status 攤平 → 半成品痕跡掃描 → 完成度硬驗 → git log 脈絡 → 危險項識別 → 收尾分流），確認 WIP 去留後才 cleanup |
 | K5 | `mergedToMain: false` + 該 work 的 flow 卡已 `done` | `done-work` | `verify-then-cleanup` — 工作已收尾但 branch 未 merged-into-main，先 `git log -1 <branch>` 檢視 commits 是否已含在 squash；若是 → `wt-helper cleanup <slug>` |
 | K6 | `mergedToMain: false` + `aheadCount > 0` + `contentLanded: 'yes'` | `unlanded-content-landed` | `verify-then-cleanup` — ancestry 說未 land，但候選 commit 的**內容已 100% 在 main**（squash-merge 的常態）。**NEVER 對它跑 merge-back** |
+| K6a | `mergedToMain: false` + `aheadCount > 0` + `contentLanded` 非 `'yes'` + `integrationLanded` 非 null | `integration-landed` | `verify-then-cleanup` — 切片已併進 `integration/<work-id>`（ancestry 或內容 100% 命中；本機或 origin），integration 尚未進 main，所以對 main 問都答未落地。落地走 integration → main 的 PR，**NEVER 對 main 跑 merge-back**；驗 integration 含本切片後 cleanup |
 | K7 | `mergedToMain: false` + `aheadCount > 0` + `contentLanded: 'partial'` | `unlanded-partial` | `merge-back-or-resume` — 一部分內容已在 main。**MUST 逐檔人工比對，NEVER 整包 merge-back** —— 已落地那半在 main 上可能更新，整包套會覆蓋掉它 |
 | K8 | `mergedToMain: false` + `aheadCount > 0` + `contentLanded: 'no' \| 'unknown'` | `unlanded` | `merge-back-or-resume` — branch 有未進 main 的 commit，`git log --oneline main..<branch>` 檢視後決定 merge-back 或續做 |
 | K9 | `mergedToMain: false` + `aheadCount === 0` + `userWip > 0` | `orphan-with-wip` | `verify-then-cleanup` — 沒有 commit 會遺失，但未 commit 檔會。**MUST** 先走 [[wip-orphan-recovery]] SOP |
@@ -66,7 +67,7 @@ branch 的舊版覆蓋 main 上已經更新過的內容。`unknown`（取不到 
 用一個雜訊換走一個人的十分鐘。高端是 0.98：門檻不對稱地貼近兩端，寧可把「幾乎全落地」丟進
 `partial`，**NEVER** 反過來把 `partial` 讀成 `yes`。
 
-**沒有 flow 卡的 worktree（早於 spine 上線、或開樹時未帶 `--origin`）：K 表的 K1／K2（`active-*`）與 K5（`done-work`）不適用** —— 這三列的判準是該 slug 在 flow spine 上的卡片狀態，查不到卡時恆為 false。這不是判定漏了，是 `aheadCount` 的 K6／K7／K8／K11 接手。**NEVER** 把這四種狀態塌縮成 `orphan`：`orphan` 讀起來是「沒人要的殘骸」，實際可能是別 session 正在做的活躍工作。
+**沒有 flow 卡的 worktree（早於 spine 上線、或開樹時未帶 `--origin`）：K 表的 K1／K2（`active-*`）與 K5（`done-work`）不適用** —— 這三列的判準是該 slug 在 flow spine 上的卡片狀態，查不到卡時恆為 false。這不是判定漏了，是 `aheadCount` 的 K6／K6a／K7／K8／K11 接手。**NEVER** 把這四種狀態塌縮成 `orphan`：`orphan` 讀起來是「沒人要的殘骸」，實際可能是別 session 正在做的活躍工作。
 
 **claim 覆寫（K1／K2）排在 K 表最前、優先於其餘各列，且不與 `userWip` 合取（TD-629）。** 兩個量測的時間語意不同：claim 有 TTL、描述一**段區間**；`userWip` 是 scan 那一刻的**瞬時**值。用瞬間去 gate 區間，live session 剛好在兩次寫入之間被掃到就落進 `mergedToMain: true` + `userWip: 0` 那列，拿到 `merged` / `cleanup` —— 對一個正被使用的 worktree 建議**永久刪除**。**audit 段的文字本身零保護 —— 人會照它拍板。**
 

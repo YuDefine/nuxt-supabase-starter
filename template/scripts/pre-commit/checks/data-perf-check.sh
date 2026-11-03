@@ -9,7 +9,7 @@
 #   - pre-push  checks/data-perf-check.sh  : 掃全 repo *.vue（warn-only 回溯型，不阻擋）
 #
 # 偵測 heuristic（file-level）：
-#   staged .vue 檔含 `$fetch` 但不含 `useFetch` / `useLazyFetch` / `useAsyncData` /
+#   staged .vue 檔含 `$fetch` 或 `apiFetch` 但不含 `useFetch` / `useLazyFetch` / `useAsyncData` /
 #   `useLazyAsyncData` / `useQuery`
 #   → 代表所有 data-fetching 都走 raw $fetch，違反 HR-1（setup context 應用 composable）。
 #   含 composable 的 .vue 檔可以安全有 $fetch（event handler mutation），不被標記。
@@ -40,6 +40,12 @@ done < <(git diff --cached --name-only --diff-filter=ACM -z -- '*.vue')
 # 無 staged .vue → 跳過
 ((${#staged_vue[@]} == 0)) && exit 0
 
+# raw fetch 偵測 token（grep -E）。預設含 `$fetch` 與 consumer 常見封裝 `apiFetch`
+# （內部包 $fetch，不含字面 `$fetch`，原本整支漏偵測）。其他封裝名由 consumer 以環境變數
+# CLADE_DATA_PERF_FETCH_PATTERN 覆寫，fleet 檔不硬編單一 consumer 專名。
+DEFAULT_FETCH_PATTERN='\$fetch|\bapiFetch\b'
+FETCH_PATTERN="${CLADE_DATA_PERF_FETCH_PATTERN:-$DEFAULT_FETCH_PATTERN}"
+
 VIOLATIONS=()
 
 for file in "${staged_vue[@]}"; do
@@ -54,7 +60,7 @@ for file in "${staged_vue[@]}"; do
   # pre-push 版讀檔案路徑不經 pipe，本來就沒這個問題；這裡因為要讀 index 版而必須用變數。
   grep -q 'data-perf-ignore-file' <<< "$content" && continue
 
-  # 檢查：有 $fetch 但沒有任何 data-fetching composable
+  # 檢查：有 $fetch／apiFetch 但沒有任何 data-fetching composable
   #
   # regex 放寬的兩個理由（都來自實證誤判）：
   #   use(Lazy)?  — useLazyFetch / useLazyAsyncData 是 Nuxt 官方 composable，
@@ -67,14 +73,14 @@ for file in "${staged_vue[@]}"; do
   # review 層仍會看到。
   # herestring 同上——這兩條走 pipe 的話，大檔會讓 gate 靜默失效（$fetch 命中卻回非零 →
   # if 條件 false → 整個違規檢查被跳過，該擋沒擋）。
-  if grep -q '\$fetch' <<< "$content" && \
+  if grep -qE "$FETCH_PATTERN" <<< "$content" && \
      ! grep -qE 'use(Lazy)?(Fetch|AsyncData)|use[A-Za-z]*Query' <<< "$content"; then
     VIOLATIONS+=("$file")
   fi
 done
 
 if ((${#VIOLATIONS[@]} > 0)); then
-  echo "❌ .vue 檔使用 raw \$fetch 但無 useFetch / useQuery / useAsyncData（HR-1）：" >&2
+  echo "❌ .vue 檔使用 raw \$fetch / apiFetch 但無 useFetch / useQuery / useAsyncData（HR-1）：" >&2
   for v in "${VIOLATIONS[@]}"; do
     echo "  $v" >&2
   done

@@ -1,5 +1,5 @@
 ---
-description: agent 讀寫 production DB 的標準——讀走 `prod-sql read`（專用唯讀角色 agent_ro，免提示）；寫只有 update，走 `prod-sql plan --expect --source` → 沒有警訊的例行 plan 由 agent 自己 `apply`（DB 只授白名單表 UPDATE，人不逐筆核准；有警訊、新增或刪除改走 migration）；prod 寫入前要有經 PR 合入的異地備份宣告，以及回退三層、接入步驟與已知限制。觸發：要查 prod 資料當證據、要修 prod 資料、要讓 consumer 接入、判斷某個 prod 動作要不要人授權（§ 誰要同意）、或 prod-sql 回報拒絕
+description: agent 讀寫 production DB 的標準——讀走 `prod-sql read`（專用唯讀角色 agent_ro，免提示）；寫只有 update，走 `prod-sql plan --expect --source` → 沒有警訊的例行 plan 由 agent 自己 `apply`（DB 只授白名單表 UPDATE，人不逐筆核准；有警訊、新增或刪除改走 migration）；prod 寫入前要有經 PR 合入的異地備份宣告，以及回退三層、接入步驟與已知限制。觸發：要查 prod 資料當證據、要修 prod 資料、要讓 consumer 接入、判斷某個 prod 動作要不要人授權（§ 誰要同意）、要以 supabase_admin 連線或 SET ROLE（先 flow ask 當次授權）、或 prod-sql 回報拒絕
 paths:
   [
     'scripts/prod-sql.ts',
@@ -35,7 +35,17 @@ Charles 2026-10-19：「我希望絕大多數都不用我介入授權，如果�
 
 - 「你應該可以自己查」「你處理」這類話**不擴大也不縮小**上表：表上「無」的直接做、不必再問；表上「真人驗證」的，口語怎麼說都不算授權
 - **真人驗證只有 Passkey 一條路**（放行頁：`specs/plans/W-2026-10-12-prod-access-standard/evidence/2026-10-14-prod-admin-passkey-gate.md` 方案 B）。放行頁上線前的過渡：送 Charles 一張 flow 決策卡（`herdr-session-handoff.ts --complete blocked --decision-for charles`，主線用 `flow ask`），題目寫明主機、指令、寫入類別與筆數，以卡上的回答為準。**NEVER** 用對話裡的回覆代替那張卡
+- **要用 `supabase_admin`（或其他平台最高權限帳號：`postgres` 以外的 superuser、`service_role` 金鑰、Studio／platform admin）碰 prod，一律先送 Charles 那張 flow 決策卡**，卡上寫明帳號、主機、要執行的 SQL 與影響範圍。被擋、被拒或權限不足（例如對 reserved role 做 `ALTER ROLE` 回 `only superusers can modify it`）時，**停下並回報（`--complete blocked --decision-for charles`），NEVER 自行換更高權限的帳號重試**，也 NEVER 事後補報當作授權。例外只有一條：`prod-sql bootstrap` 讀已合入設定檔的 `admin_psql`，授權來源是上表的設定檔 PR。違規不能機械判（同一條 `psql -U supabase_admin` 在演練、dev、bootstrap 都是合法的，分界在「有沒有那張卡」，不是命令字面），所以只能是文字規約。出處：某 consumer 的 `ALTER ROLE supabase_read_only_user`，worker 用 `postgres` 被拒後自行換 `supabase_admin` 執行，Charles 事後追認（flow `9145ee83ef805f0e`，2026-11-02 答 A）
 - **未接入的 consumer 要讀 prod：沒有一次性查詢路**。照 § 接入 開設定檔 PR → 合入後 `bootstrap --role agent_ro` → `read`。**NEVER** 用 ssh、`admin_psql`、MCP 或 `.env` 的連線字串「先查一次」頂著
+
+### supabase_admin：先 flow ask，當次授權才用
+
+`supabase_admin` 是 Supabase 自架 DB 的最高權限 superuser，用它做的事（`ALTER ROLE`、`GRANT`、擁有者變更、`SET ROLE`）全繞過 `prod-sql` 的白名單與 plan／apply。Charles 2026-11-01 追認某 consumer 先前那一次用 `supabase_admin` 改唯讀角色密碼（flow `9145ee83` 答 A），並定下往後的做法：
+
+- agent 要**以 `supabase_admin` 連線、`SET ROLE supabase_admin`、或以它執行 SQL**（不論對 prod、共用 dev 或遠端 DB，不論是 `psql -U`、連線字串、`ssh … docker exec … psql`），**開跑前 MUST 先 `flow ask`**（`--complete blocked --decision-for charles` 同義），題目寫明主機、DB、要跑的指令、寫入類別與筆數、為什麼 `postgres`／`agent_rw` 做不到。授權**只管那一次**，下一次再問；**NEVER** 用對話裡的回覆代替那張卡
+- 被權限擋下時（例如 `postgres` 對 reserved role `ALTER ROLE` 回 `only superusers can modify it`）：**停下回報**，不換更高權限帳號重試，也不繞去 ssh 或 MCP
+- 例外只有兩個：`prod-sql bootstrap` 經設定檔 `admin_psql` 用到它（授權來源見上表，設定檔經 PR 合入）；隔離的雲端 VM（`CLAUDE_CODE_REMOTE=true` 或 `CLADE_EPHEMERAL_DB=1`，與 `supabase-local-gate` 同一個例外）
+- 機械檢查：PreToolUse hook `pre-bash-supabase-admin-gate.sh` 擋命令位置是 `psql`／`pg_dump`／`docker`／`ssh`／`bash -c` 等用戶端、且帶 `-U supabase_admin`、`user=`、`PGUSER=`、`supabase_admin@` 或 `SET ROLE supabase_admin` 的 Bash 指令。Charles 答應後，把那題的 span id 放在指令前綴 `CLADE_SUPABASE_ADMIN_GRANT=<span id>` 放行那一條指令。hook 是絆索：看不到腳本檔內、變數展開後的用法，也不驗 span 是否存在——偽造前綴就是違規
 
 ## 讀 prod：`prod-sql read`
 
@@ -160,3 +170,4 @@ prod 的資料異動在 `apply` 時要有一份**沒過期的異地備份宣告*
 | 觸發條件 | `scripts/audit-tooling-drift.ts` 的 `prodAccess`：manifest `db-runtime` 是 `supabase-self-hosted`、有 prod Supabase MCP 連線或有設定檔的 consumer 缺憑證、憑證檔權限或角色不對、角色檢查 receipt 缺席／過期／不符、`allow` 放行了寫入子命令，或偏離 README § consumer 設定基準（`prod-mcp-present`、`broad-allow`、`dev-apply-migration-allowed`）→ drift（各 status 見該 script 檔頭） |
 | 消費端 | 跑 `clade-health` 的 session 與該 consumer 的主線：照 § 接入 補齊，或把 `allow` 裡的寫入子命令拿掉 |
 | 觸發點 | 本檔由 `paths:` 與 work-route `rules/production證據判準.md`載入；`prod-sql` 的每一種拒絕輸出都指回本檔對應段 |
+| supabase_admin 的機械檢查 | `capabilities/core/hooks/pre-bash-supabase-admin-gate.sh`（測試 `test/pre-bash-supabase-admin-gate.test.ts`）：違反是 predicate 可判的（指令字串），所以不靠文字規約；要不要用 superuser 是需判斷的事，所以授權仍走 flow ask |

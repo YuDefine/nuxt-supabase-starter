@@ -53,7 +53,7 @@ function runsPublishScript(pid: number): boolean {
  * 被濾掉的只有「路徑嵌在更大 argv 元素的字串裡」：`zsh -c '…; git status -- scripts/propagate.ts'`、
  * heredoc `cat`、`herdr agent prompt '<訊息提到 node scripts/publish.ts>'`。它們若真的在跑
  * publish，publish 本體是另一個有 argv 元素的行程，照樣被看到。
- * 實測兩次：2026-09-16 merge-back 被自己的三層 shell 祖先擋下（實際在飛 = 0）；2026-09-17 真
+ * 實測兩次：merge-back 被自己的三層 shell 祖先擋下（實際在飛 = 0）；真
  * publish 期間，一個 cwd=$HOME、只在訊息字串裡提到路徑的 herdr prompt 讓 `~/.tmp`／`~/.cache`
  * 底下所有 wt-helper／wt-batch fixture 被判在飛（重現：該形狀常駐時 3 檔紅、70 次拒跑）。
  *
@@ -84,10 +84,10 @@ const sameObject = (a: { dev: number; ino: number }, b: { dev: number; ino: numb
  * cwd 物件在不在 target 樹內：它若在樹內的 `<rel>`，它視角路徑字串的尾段就是 `<rel>`（d_path 由 dentry
  * 名稱組成，與掛載無關），而我方的 `<target>/<rel>` 會是同一個 dev/ino。逐個尾段比對即可。
  * NEVER 改成沿 `/proc/<pid>/cwd/..` 往上走：`..` 之後核心會跨進對方的掛載點，被 overmount 的祖先
- * 看不到（2026-09-17 unshare 實測：落到 tmpfs 根 ino=1）。
+ * 看不到（unshare 實測：落到 tmpfs 根 ino=1）。
  *
  * 已知差集：對方 cwd 經 bind 別名進入樹內（`/repo/scripts` 掛在 `/alias`、cwd=`/alias`）時尾段對不上。
- * 同一命名空間的 realpath 判定對同一形狀一樣回 free（射程本來就以路徑界定，2026-09-17 unshare 實測）。
+ * 同一命名空間的 realpath 判定對同一形狀一樣回 free（射程本來就以路徑界定，unshare 實測）。
  */
 function cwdObjectInside(cwdPath: string, cwd: { dev: number; ino: number }, target: string) {
   const parts = cwdPath.split('/').filter(Boolean)
@@ -114,7 +114,7 @@ function cwdObjectInside(cwdPath: string, cwd: { dev: number; ino: number }, tar
  * 回 `undefined` = 同一命名空間或判不出命名空間，走原本的 realpath 判定；`'unreadable'` = 確定跨
  * 命名空間但讀不到，交給下方二次探測 fail closed。
  *
- * TD-1085（2026-09-17 CT 102）：runner slot 同 user、共用 PID namespace、各自 `PrivateTmp=yes`，
+ * runner slot 同 user、共用 PID namespace、各自 `PrivateTmp=yes`，
  * shard 2 的 cleanup 被 shard 4 存活中的 `publish.ts --wait 2` 擋下（cwd 在 shard 4 私有 /tmp）。
  */
 function crossNamespaceHold(
@@ -195,18 +195,15 @@ export function inFlightHoldersFor(
   // 判準仍是 detector 本身，NEVER 改讀 /proc 狀態自行宣告「行程已死」—— 那會讓注入的 probe
   // 與真實 pgrep 走兩套語義。
   //
-  // 2026-09-16 CI（run 35145389949, test-lanes 2/4）：同 shard `publish-lock-exit-code.test.ts`
-  // 的 `publish.ts --wait 2` 在 pgrep 與讀 cwd 之間退出，`wt-batch.test.ts` 的 cleanup 因此被擋。
-  // 本機探測：讀 cwd 失敗的每一筆都是 state Z／R 且 cmdline 長度 0。
+  // 同 shard 的 `publish.ts --wait` 會在 pgrep 與讀 cwd 之間退出，讀 cwd 失敗的每一筆都是
+  // state Z／R 且 cmdline 長度 0；不重探就 fail closed 會讓別的 cleanup 被擋。
   //
-  // 2026-09-18 CI（run 35394786384, leftover #82 lane 2）：同一 runner 上另一趟
-  // `clade-ci-home-r35394162751a1-lane1` 的 `clade-deleted-cwd-publish` fixture 仍在跑，
-  // cwd 已刪所以 realpath 失敗。舊判準 fail closed 把**另一個 run 的私有樹**當成 holder，
-  // 擋掉本 job fixture 的 `batch cleanup`。腳本絕對路徑若與 target 不相交，那不是這棵樹。
+  // 同一 runner 上另一趟 CI 的 fixture 仍在跑、cwd 已刪所以 realpath 失敗：fail closed 會把**另一個
+  // run 的私有樹**當成 holder，擋掉本 job 的 `batch cleanup`。腳本絕對路徑若與 target 不相交，那不是這棵樹。
   //
-  // 2026-09-21 CI（run 35549872744, lanes 2–5 全紅）：別的 runner service（PrivateTmp，跨掛
-  // 載命名空間）殘留的 `node scripts/publish.ts` **相對 argv** 孤兒活了 6+ 分鐘，cwd 已刪。
-  // 相對 argv 抽不出絕對腳本樹 → 走不到 isForeignScriptTree → 無限期 fail closed。cwd 已刪
+  // 別的 runner service（PrivateTmp，跨掛載命名空間）可能殘留 `node scripts/publish.ts`
+  // **相對 argv** 的孤兒，cwd 已刪。相對 argv 抽不出絕對腳本樹 → 走不到 isForeignScriptTree →
+  // 無限期 fail closed。cwd 已刪
   // 的行程其工作目錄物件已不存在：它不可能是 target、也裝不下還活著的 target。readlink 仍給
   // 得出它最後的路徑字串——字面上在 target 內（曾是我方樹的一部分）→ 照樣擋；在外 → free。
   // 已知差集（與 cwdObjectInside 註解同型、實害低——已刪的樹無法再對活 target publish）：

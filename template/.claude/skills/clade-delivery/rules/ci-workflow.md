@@ -55,7 +55,7 @@ concurrency:
 
 `gh-ci-watch` 在 run 被取消時會改追 superseding run（同 workflow + 同 branch、較新 `createdAt`）。那是監看側的補救，**不能**代替 workflow 自己取消過期 run。
 
-`audit-ci-toolchain-parity.ts`（[[ci-toolchain-parity]]）只檢查三個 toolchain 入口 action 的 SHA-pin，是本檔的子集；全部外部 action 的權威來源是本檔與 `audit-ci-workflow-safety.ts`。
+`audit-ci-toolchain-parity.ts`（判準在該 script 檔頭）只檢查三個 toolchain 入口 action 的 SHA-pin，是本檔的子集；全部外部 action 的權威來源是本檔與 `audit-ci-workflow-safety.ts`。
 
 ## CI 三層分工
 

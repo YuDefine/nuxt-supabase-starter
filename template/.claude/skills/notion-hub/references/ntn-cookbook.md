@@ -30,6 +30,21 @@ DDS=$(jq -r '.hub.delivery.dataSourceId // empty' /tmp/hub.json)
 [ -n "$DDS" ] && timeout 60 ntn api -X POST "/v1/data_sources/$DDS/query" -d "{\"page_size\":100,\"filter\":{\"property\":\"專案\",\"relation\":{\"contains\":\"$ROW\"}}}" < /dev/null
 ```
 
+### 讀 Secret
+
+Secret 頁（org 層 hub `secretsPageId`、project 層 consumer-meta `notion.secretPageId`，連結經 `notion-hub.ts resolve` 的 `secrets.orgUrl`／`secrets.repoUrl`）只准「**指定 block id → jq 取值 → 寫進環境變數**」：值從 API 回應直接進變數，不經過螢幕。
+
+```bash
+# <block-id>：存值的那個區塊（Notion UI 區塊選單「Copy link to block」，URL `#` 後 32 碼）
+export CLOUDFLARE_API_TOKEN="$(timeout 30 ntn api "/v1/blocks/<block-id>" < /dev/null \
+  | jq -r '.[.type].rich_text | map(.plain_text) | join("")')"
+[ -n "$CLOUDFLARE_API_TOKEN" ] && echo "len=${#CLOUDFLARE_API_TOKEN}"   # 驗證只印長度，NEVER 印值
+```
+
+- **NEVER** 列 Secret 頁的 children（`/v1/blocks/<Secret 頁 id>/children`）、**NEVER** `ntn pages get <Secret 頁 id>` 整頁轉 Markdown、**NEVER** 把區塊 JSON 印到 context 再遮罩：遮罩規則一漏，值就整顆進 transcript（2026-10-30 Unifi Access API Key 外露的根因）。前兩種形狀由 hub-core `pre-bash-notion-secret-read-gate.sh` 擋下。
+- block id 不知道時 **NEVER** 為了找 id 去列 children；向 Charles 要該區塊的「Copy link to block」連結，拿到後登記進引用它的規則（例：cf-cli `rules/安裝與認證判準.md` Rule 2），下次直接用。
+- 值只活在當次 shell 的環境變數；**NEVER** 寫進檔案、commit、argv 或回報（`secret-custody.md`）。
+
 ## 寫入
 
 狀態 / 版本 / 上線日 / Work ID / PR / 備註 / 交付項目 經 `notion-sync.ts`（file / open / follow / progress / done / release / eta / reconcile）。直接 PATCH 只剩 script 沒有入口的一處：

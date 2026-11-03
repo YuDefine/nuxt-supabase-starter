@@ -119,7 +119,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // NEVER widen to `scripts/lib/`: consumers author their own files there
       // (<consumer-a> `common.sh` / `read-infra-manifest.mjs`, <consumer-d> `vue-component-resolution.ts`),
       // and matching the whole dir would mark those clade-managed → auto-reset clobbers them.
-      String.raw`scripts/lib/(argv-unsplit|evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|workspace-choice|workspace-repo-profile|json-unknown|safety-observation|worktree-dev-port|worktree-backlog|wt-patch-landing|publish-in-flight|projection-ledger-reconcile|herdr-machine|machine-cpu|host-config-refs|pane-cache-ttl|disk-low-water|claude-account-registry|register-paths|git-status-z|dev-slots|atomic-file|test-trust-baseline)\.(mjs|mts|ts)$`,
+      String.raw`scripts/lib/(argv-unsplit|dev-runtime|evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|workspace-choice|workspace-repo-profile|json-unknown|safety-observation|worktree-dev-port|worktree-backlog|wt-patch-landing|publish-in-flight|projection-ledger-reconcile|herdr-machine|machine-cpu|host-config-refs|pane-cache-ttl|disk-low-water|claude-account-registry|register-paths|git-status-z|dev-slots|atomic-file|test-trust-baseline)\.(mjs|mts|ts)$`,
       // skip-gate／test-removal-gate 的復活驗證子目錄：整目錄都是 vendor-targets 投影，consumer 不在這放自家檔。
       String.raw`scripts/lib/mutation-probe/`,
       // dev-session.ts 的 `slots` 命令引用的 dev server 判定（散到 consumer 的 scripts/lib/dev-resource/）。
@@ -211,7 +211,7 @@ function isCursorGeneratedProjection(repoRoot, p) {
  */
 /** 本體搬到 `.agents/skills/<name>/` 的 clade home local skill（`.claude/skills/<name>` 是指過去的 symlink）。新增時 guard 的 `LOCAL_SKILL_SOURCE_RE` 一起補。 */
 const AGENTS_LOCAL_SKILLS =
-  'clade-publish|clade-health|coordinator|hook-authoring|claude-credit-manager|tailscale-admin|claude-account-pool'
+  'clade-publish|clade-health|coordinator|hook-authoring|flow-maintainer|claude-credit-manager|tailscale-admin|claude-account-pool'
 
 const CLADE_OWN_SOURCE_RE = new RegExp(
   '^(' +

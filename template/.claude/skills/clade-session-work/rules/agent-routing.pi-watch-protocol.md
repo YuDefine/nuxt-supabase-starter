@@ -55,7 +55,7 @@ paths: ['specs/plans/**/tasks.md', 'specs/plans/**/design.md', '.claude/agents/*
 
 | Routing | `<topic>` | `<cwd>` | reasoning effort | 預期動作 | Plan-first | Commit Prohibition |
 | --- | --- | --- | --- | --- | --- | --- |
-| External web retrieval（WebSearch／WebFetch） | `external-web` | `/tmp` | 依首跳 model 的 `TIER_EFFORT`（現況空鏈，直接由 `dispatch-fallback` subagent 承接） | 純讀（搜尋網頁／抓公開 URL／查外部文件）；鏈走完交 `dispatch-fallback` subagent | 否 | N/A（不寫檔） |
+| External web retrieval（WebSearch／WebFetch） | `external-web` | `/tmp` | 依首跳 model 的 `TIER_EFFORT`（現況空鏈：單一來源主線直接做，多條獨立路徑可自願派 `dispatch-fallback` subagent） | 純讀（搜尋網頁／抓公開 URL／查外部文件）；鏈走完交 `dispatch-fallback` subagent | 否 | N/A（不寫檔） |
 
 ### 版本化結果契約的受控執行
 
@@ -654,7 +654,7 @@ Claude Code effective-model 邊界見 [[agent-routing]] § Runtime residency and
 
 ## GPT worker transport
 
-**GPT worker 已退場（2026-09-29）**：任何主線都 **NEVER** 為 Routing Table 的列派 GPT worker——Pi 的 GPT tier exit 1、Herdr `--launcher cx` 隨 Codex 訂閱到期（2026-10-08）一律拒派（手動派工與 relay 交棒也不在例外）、Claude Code 不承載 GPT。原 GPT-6 Sol 承接的實作列改由 native Claude Sonnet 5.5（effort: high） 承接。
+**GPT worker 已退場（2026-09-29）**：任何主線都 **NEVER** 為 Routing Table 的列派 GPT worker——Pi 的 GPT tier exit 1、Herdr `--launcher cx` 隨 Codex 訂閱到期（2026-10-08）一律拒派（手動派工與 relay 交棒也不在例外）、Claude Code 不承載 GPT。原 GPT-6 Sol 承接的實作列改由 native Claude Sonnet 5.5（effort: high） 承接。唯一例外是 [[agent-routing.routing-table]] § 禁用〔Daybreak Blue 例外〕：有人值守主線以 `codex exec -s read-only` 取 finding 或意見，不經任何 transport、不為 Routing Table 的列派工。
 
 **指令範例**（非 UI 修復走 `non-ui-implementation` 列；Claude Code 主線優先 in-process `sonnet-implementer`，要隔離的長工作才開 Herdr）：
 

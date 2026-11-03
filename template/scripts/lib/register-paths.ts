@@ -8,7 +8,7 @@
  *
  * append-only ledger：gate telemetry，本機 main 每跑一次 gate 就 append，永遠 dirty。
  * 逐檔列名，NEVER 泛化成「所有 .jsonl」——main-sync 的收斂判定只看 byte 前綴，
- * 對一個不是 append-only 的檔這個判定是錯的（TD-1109）。
+ * 對一個不是 append-only 的檔這個判定是錯的。
  *
  * 消費端：`main-sync.ts` 與 `register-land.ts`（放行哪些內容差）、`sync-rules.ts`（as-of 座標只把這兩類以外
  * 的未提交改動算成「影響比對結果」）、`wt-batch.ts` 的 merge receipt 檢查
@@ -29,13 +29,15 @@ export const REGISTER_PREFIXES: readonly string[] = [
   'docs/',
   'tasks/',
   'specs/plans/',
+  // lifecycle repo 的 evidence sidecar（舊 `docs/evidence/` 同屬 `docs/` 前綴；C6 組 1 雙模化後的新落點）。
+  'specs/evidence/',
   'specs/coordinator/',
   'specs/sessions/',
 ]
 
 // 每一檔都已逐檔證明：寫入端只走 vendor/signals/ledger-writer.ts 的 appendRecord(s)（同一把
 // `<ledger>.lock`），讀取端只有 improvement-digest／propagate cadence 提示／audit-pitfall-detector-decay
-// 這類資料消費者，不是任何 CI／gate／check 的輸入（證據在 PR body，W-2026-10-28-main-sync-candidates-digest-runs-pitfall-detecto）。
+// 這類資料消費者，不是任何 CI／gate／check 的輸入（證據在 PR body）。
 // 加成員前 MUST 重做同一組證明；同時抬 main-sync.ts 的 LEDGER_LOCK_STALE_MS 與
 // ledger-writer.ts 的 CLADE_HOME_STALE_LOCK_MS（每檔最壞 +20s 持鎖）。
 export const LEDGER_APPEND_PATHS: ReadonlySet<string> = new Set([

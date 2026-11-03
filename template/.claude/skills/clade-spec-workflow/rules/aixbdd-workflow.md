@@ -41,7 +41,7 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 | # | 入口 | 誰執行 | 產出落點 |
 | --- | --- | --- | --- |
 | 1 | `/constitution` | 共同 | `.agents/constitution/**`（需要新增或調整規則時；此 gate 在 package 判定前執行） |
-| 2 | `/specify` | PM | lifecycle repo：`specs/plans/<work-id>/{spec.md,checklists/requirements.md}`，truth delta 意圖列寫進 `plan.md` § Truth delta（state=proposed）；未遷移 consumer：`specs/plans/NNN-<slug>/{spec.md,checklists/requirements.md,truth-delta.md}`。新需求永遠開新 work id，同一工作續跑同一份 |
+| 2 | `/specify` | PM | lifecycle repo：`specs/plans/<work-id>/{spec.md,checklists/requirements.md}`，truth delta 意圖列寫進 package 的 delta 載體：`flow plan open` 現行鑄的 legacy package 是 `plan.md` § Truth delta（state=proposed），`flow plan migrate` 後的 `work.md` package 是 `truth-delta.md`；未遷移 consumer：`specs/plans/NNN-<slug>/{spec.md,checklists/requirements.md,truth-delta.md}`。新需求永遠開新 work id，同一工作續跑同一份 |
 | 3 | `/clarify-over-specs` | PM | 更新 `spec.md`（選用） |
 | 4a | `/spec-by-example` | PM | plan package 的 `features/acceptance/**`；UI 需求另備可供 PM 確認的設計證據（design／review owner，**不是** `/ui-plan`） |
 | 4b | `/technical-research` | RD | plan `research.md` ＋ truth `specs/truth/techstack.md` |
@@ -79,21 +79,21 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 | 反模式 | 為何錯 | 正解 |
 | --- | --- | --- |
 | 小改動直接改一份**已結案**工作的 `spec.md` | 舊 plan 是歷史，改掉之後沒有任何地方看得出這次改了什麼 | 開新 work id（lifecycle repo：`flow plan open`；未遷移 consumer：`/specify` 開 `004-<slug>`） |
-| `/specify` 順手改 `specs/truth/contracts/openapi.yaml` | truth 有 owner；非 owner 的寫入下一輪會被覆蓋 | 記 ADD / MODIFY / DELETE 意圖列（lifecycle repo：`plan.md` § Truth delta；未遷移 consumer：`truth-delta.md`），交給 owner skill |
+| `/specify` 順手改 `specs/truth/contracts/openapi.yaml` | truth 有 owner；非 owner 的寫入下一輪會被覆蓋 | 記 ADD / MODIFY / DELETE 意圖列（lifecycle repo：legacy package 為 `plan.md` § Truth delta，`work.md` package 為 `truth-delta.md`；未遷移 consumer：`truth-delta.md`），交給 owner skill |
 
 ## clade lifecycle 適配與入口
 
 上游 skill 以 `NNN-<slug>`、`plan.md`（系統分析）、`truth-delta.md` 為檔名假設。lifecycle repo 用同一套職責、不同的載體；skill 判「這是不是 lifecycle package」的**唯一**判準（目前由 fork `clade/main` 上的 patch 承載，屬 § 上游最新為準 的待撤回存量，不是先例）：
 
-> package 內 `plan.md` 的 frontmatter **同時**含 `work_id:` 與 `truth_baseline:`。
+> package 內 `work.md` 的 frontmatter **同時**含 `work_id:` 與 `truth_baseline:`（相容期內，沒有 `work.md` 時看 legacy `plan.md`，細節見 `specs/truth/work-lifecycle.md` § Package）。
 
 **NEVER** 用 repo 名或 manifest 欄位代替這條。`specs/truth/work-lifecycle.md` 是否存在只決定下一件**新工作**走 `flow plan open` 還是 `NNN-<slug>`（該檔 § Carriers）。
 
 | 上游名 | lifecycle repo | owner |
 | --- | --- | --- |
 | `specs/plans/NNN-<slug>/` | `specs/plans/<work-id>/`（`flow plan open` 鑄） | work-lifecycle |
-| `truth-delta.md` | `plan.md` § Truth delta 表（`id／action／unit／reason／state`，`flow plan apply-delta` 機讀） | work-lifecycle |
-| `plan.md`（系統分析） | `system-analysis.md` | RD（`/system-analysis`） |
+| `truth-delta.md` | 同名 `truth-delta.md`（上游格式，列存在即已套用）；legacy package 仍是 `plan.md` § Truth delta 表（`id／action／unit／reason／state`，`flow plan apply-delta` 機讀），`flow plan migrate` 轉入 | truth owners（legacy：work-lifecycle） |
+| `plan.md`（系統分析） | 同名 `plan.md`；legacy package 的 `plan.md` 是 lifecycle 檔，系統分析暫寫 `system-analysis.md` | RD（`/system-analysis`） |
 | `spec.md`、`checklists/requirements.md`、`features/acceptance/**`、`research.md`、`tasks.md`、`ui/ui-plan.md`＋`ui/*.html` | 同名 | 同上游 |
 | — | `briefs/**`（派工 brief）、`evidence/**`（cucumber JSON report ＋ `receipts.jsonl`，供 `acceptance-verdicts.ts` 讀） | 主線／runner |
 
@@ -120,7 +120,7 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 
 上游沒有而 clade 需要的行為，只走兩條 clade-owned 路徑，不改上游檔：
 
-- **同目錄 overlay**（registry `mirror.cladeOwnedFiles`，sync 不覆寫）：`specformula.md`。上游 `SKILL.md` 不會提到它們，入口是 `work-route` 的 `rules/owner載入位置判準.md`（Rule 3 clade overlay）；直接叫公開入口時由本表指路。執行下列 owner 時 MUST 一併讀該 overlay：
+- **同目錄 overlay**（registry `mirror.cladeOwnedFiles`，sync 不覆寫，逐檔登記路徑）：`specformula.md`。上游 `SKILL.md` 不會提到它們，入口是 `work-route` 的 `rules/owner載入位置判準.md`（Rule 3 clade overlay）；直接叫公開入口時由本表指路。執行下列 owner 時 MUST 一併讀該 overlay：
 
 | Owner | overlay | 何時套用 |
 | --- | --- | --- |

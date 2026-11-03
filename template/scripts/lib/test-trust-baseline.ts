@@ -2,7 +2,6 @@
 /**
  * 凍結 baseline：`.clade/test-trust-baseline.json` 的唯一讀寫與比對入口。
  *
- * 形狀與語意見 work W-2026-10-24-test-trust-enforcement `system-analysis.md` § 介面 5。
  * 孤兒 delta 閘門與 skip 閘門（以及兩支稽核的 `--init-baseline`）都只經這支讀寫，
  * 不各自 parse，否則「身分鍵」與「只縮不增」的判定會在兩處漂開。
  *

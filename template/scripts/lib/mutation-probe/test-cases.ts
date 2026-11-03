@@ -19,7 +19,7 @@
 
 import { extname } from 'node:path'
 
-import { loadTypescript } from './mutation.ts'
+import { hasParseDiagnostics, loadTypescript } from './mutation.ts'
 
 export interface IndeterminateSite {
   /** 1 起算；整檔判不出（解析失敗等）為 0。 */
@@ -71,8 +71,7 @@ export function listTestCases(source: string, fileName: string): TestCaseListing
   if (kind === null) return fail('unsupported-extension')
 
   const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, kind)
-  const diagnostics = (sf as unknown as { parseDiagnostics?: unknown[] }).parseDiagnostics ?? []
-  if (diagnostics.length > 0) return fail('parse-error')
+  if (hasParseDiagnostics(sf)) return fail('parse-error')
 
   // import 別名：`import { it as spec } from 'vitest'`、`import test from 'node:test'`
   const aliases = new Map<string, string>()

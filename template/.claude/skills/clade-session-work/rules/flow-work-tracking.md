@@ -133,7 +133,7 @@ paths:
 | `notion:` origin | 照舊 | 客戶（見下一節） |
 | 只有散文 | 只有 `--verification` | 沒有人：歸 agent，`flow pending --audience all` 看得到；補上前兩列之一重新 `flow work done` |
 
-內建檢查（`vendor/scripts/flow/verify-check.ts`；`flow check` 列出用法）：`pr-merged <N|owner/repo#N>`、`ci-green <N|owner/repo#N>`、`commit-landed <sha> [<ref>]`、`file-exists <path> [<ref>]`、`work-done <work_id>`（本 repo spine 上 done／accepted，或 origin 預設分支上有它的 `plan close` commit 且 package 已不在；drop 與查無都歸量不到），可用 ` && ` 串接。它們是 clade 的程式碼、行程內執行、不經 shell，spine 上的字串只提供參數——所以例行對帳可以跑。squash merge 的 PR 用 `pr-merged`，**NEVER** 用 worktree 的 sha 寫 `commit-landed`（那個 sha 永遠不會進 main）。
+內建檢查（`vendor/scripts/flow/verify-check.ts`；`flow check` 列出用法）：`pr-merged <N|owner/repo#N>`、`ci-green <N|owner/repo#N>`、`commit-landed <sha> [<ref>]`、`file-exists <path> [<ref>]`、`work-done <work_id>`（本 repo spine 上 done／accepted，或 origin 預設分支上有它的 `plan close` commit 且 package 已不在；drop 與查無都歸量不到）、`release-contains <tag> <sha>`（<sha> 是 origin 上 <tag> 的祖先：合入後發版真的帶到）、`consumer-synced <consumer_id> <path>`（`~/offline/<consumer_id>` 的 origin 預設分支上 <path> 與本 repo 逐 byte 相同：投影已散播，只適用逐 byte 投影的檔）、`endpoint-ok <url> [<status>]`（http(s) URL 回 2xx，或指定的 status）；這三條是「生效」驗收用的，量不到（網路、tag 未推出、連不上）一律歸量不到、**不算通過**，可用 ` && ` 串接。它們是 clade 的程式碼、行程內執行、不經 shell，spine 上的字串只提供參數——所以例行對帳可以跑。squash merge 的 PR 用 `pr-merged`，**NEVER** 用 worktree 的 sha 寫 `commit-landed`（那個 sha 永遠不會進 main）。
 
 重驗結果：
 

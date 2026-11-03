@@ -1,6 +1,6 @@
 # Dispatch 共用規約（`relay` / `fanout` / `next` 派工時共用）
 
-`park` 不開任何 pane，**不走本檔的 dispatch mechanics**；它仍 MUST 先通過 [SKILL.md](SKILL.md) § Step 0.1 的 value-first gate，只做交接寫入，收工訊息用 § 5 的 **B**。
+`park` 不開任何 pane，**不走本檔的 dispatch mechanics**；它仍 MUST 先通過 [rules/模式偵測與park閘判準.md](rules/模式偵測與park閘判準.md) § Step 0.1 的 value-first gate，只做交接寫入，收工訊息用 § 5 的 **B**。
 
 本檔是 [relay-steps.md](relay-steps.md) 與 [fanout-steps.md](fanout-steps.md) 的共用底座：preflight、durable thin brief 紀律、runtime cleanup、parent worktree lifecycle、收工訊息契約。兩支只寫各自差異，**NEVER** 在自己的檔內重述本檔內容。
 

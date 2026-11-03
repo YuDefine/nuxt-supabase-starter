@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // 🔒 LOCKED — managed by clade · Source: vendor/scripts/lib/disk-low-water.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/lib/disk-low-water.ts
 /**
- * disk-low-water.ts — 磁碟低水位三級判定與入口准入（W-2026-10-01-disk-low-water-guard）
+ * disk-low-water.ts — 磁碟低水位三級判定與入口准入
  *
- * 2026-10-01 desk / 寫滿：routing gate 空 lock 卡死 5 個 session、<consumer-a> 安全掃描 ENOSPC、
+ * desk 寫滿的事故：routing gate 空 lock 卡死 5 個 session、<consumer-a> 安全掃描 ENOSPC、
  * transcript 寫入失敗。回收 timer 在跑，但新樹、新 pane、publish gate 照開，寫入速度贏過回收。
  * 本檔是所有入口與 timer 共用的同一份門檻：
  *
@@ -181,8 +181,8 @@ export function diskAdmission(
   options: AdmissionOptions = {},
 ): AdmissionVerdict {
   // `node --test` 底下（NODE_TEST_CONTEXT 會傳到測試 spawn 的子行程）沒注入 fixture 就不量真實磁碟：
-  // 數百支測試會實跑 wt-helper add／派 pane，主機或 runner 一低水位就整片假紅——與 #203
-  // （runner 剩 834 MB，81 支 capture 測試紅）同一型。要測准入本身，注入 CLADE_DISK_STATFS。
+  // 數百支測試會實跑 wt-helper add／派 pane，主機或 runner 一低水位就整片假紅——runner 剩 834 MB 時 81 支 capture 測試紅就是同一型。
+  // 要測准入本身，注入 CLADE_DISK_STATFS。
   if (env.NODE_TEST_CONTEXT && !env.CLADE_DISK_STATFS)
     return { allowed: true, tier: 'ok', message: '' }
   let status: DiskStatus

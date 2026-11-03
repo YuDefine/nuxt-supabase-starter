@@ -12,6 +12,12 @@
 # 節流：並行 batch 完成會連環觸發，10 分鐘 bucket 內只響一次（一次提醒涵蓋整個 batch）。
 # read-only agent（Explore / Plan / commit-0a-reviewer）不改檔 → 跳過。commit-0a-reviewer 的 tools 只有
 # Read, Grep, Glob（capabilities/core/agents/commit-0a-reviewer.md）；主持者每輪 0-A 派多批，提醒全是雜訊。
+# 去重鍵 session_id＋10 分鐘 bucket（hook-authoring `rules/提醒注入型的送達去重與噪音.md` Rule 2；
+# NEVER 用 ${PPID}：主線與 subagent 共用 harness 行程、行程 ID 會被回收）。payload 缺 session_id
+# （舊 harness、手動測試）才退回 ppid-${PPID}。
+# subagent：不收——scope-verify 是主線驗收流程，subagent 無此責任（agent_id 非空即靜默，Rule 3）。
+# 效果指標：收到後主線在接下來的 tool call 內跑 scripts/scope-verify.ts；
+#   hook_followthrough.py --match 'scope-verify' 量。
 # scope-verify.ts 不存在（非 clade home）/ jq 缺 → silent exit 0（fail-open）。
 
 set -uo pipefail
@@ -26,10 +32,17 @@ case "$SUBAGENT_TYPE" in
   Explore | Plan | commit-0a-reviewer | hub-core:commit-0a-reviewer) exit 0 ;;
 esac
 
+AGENT=$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null) || exit 0
+[ -n "$AGENT" ] && exit 0
+
+SESSION=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 BUCKET=$(($(date +%s) / 600))
-MARKER="${TMPDIR:-/tmp}/claude-scope-verify-reminder-${PPID:-$$}-${BUCKET}"
+KEY="${SESSION:-ppid-${PPID:-$$}}-${BUCKET}"
+case "$KEY" in */* | *..*) KEY=$(printf '%s' "$KEY" | tr '/.' '__') ;; esac
+STATE_DIR="${TMPDIR:-/tmp}/claude-scope-verify-reminder"
+MARKER="$STATE_DIR/$KEY.seen"
 [ -f "$MARKER" ] && exit 0
-touch "$MARKER" 2>/dev/null || true
+mkdir -p "$STATE_DIR" 2>/dev/null && : >"$MARKER" 2>/dev/null || true
 
 cat >&2 <<'MSG'
 📋 subagent 完成 → 主線 verify SOP：READ .claude/skills/clade-home/rules/subagent-scope-discipline.detail.md § 主線 verify SOP

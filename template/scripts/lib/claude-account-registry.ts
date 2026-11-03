@@ -1,6 +1,6 @@
 // 🔒 LOCKED — managed by clade · Source: vendor/scripts/lib/claude-account-registry.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/lib/claude-account-registry.ts
 /**
- * Claude 帳號池的單一 SoT（W-2026-10-04-claude-account-pool）。
+ * Claude 帳號池的單一 SoT。
  *
  * 帳號清單寫死在這裡，不要讀任何 config：`cc` 是池入口（依額度挑帳號），
  * `ccN` 釘選第 N 個帳號。舊 dispatch record 的 `account: cc|ccw`、ai-quota 帳號 id

@@ -460,10 +460,10 @@ export function devPortCapacity(
  * 這個 consumer 的 worktree band。**讀 clade home 的 registry**（唯一 SoT），投影到
  * consumer 的 `.clade/registry/consumers.json` 只當 clade home 不在這台機器時的退路。
  *
- * 為什麼不能只讀投影複本：① public repo 與 TD-274 之後的 consumer 根本沒有那份複本，
+ * 為什麼不能只讀投影複本：① public repo 與不再投影名冊的 consumer 根本沒有那份複本，
  * band 讀成 null、容量掉回 base 池 4–9 格（<consumer-a> 在 batch prepare 因此提前耗盡）；
  * ② 有複本的 consumer，複本停在上次 propagate——band 搬家後舊複本會把新 worktree 配進
- * 已經屬於別人的號段。投影整份名冊給 consumer 補不了 ①（TD-274 洩漏面），所以反向處理：
+ * 已經屬於別人的號段。投影整份名冊給 consumer 補不了 ①（洩漏面），所以反向處理：
  * 讀的一方去找 SoT。
  *
  * clade home 的 registry 有這個 consumer 的 entry 就以它為準（含「沒宣告 band」＝ null，

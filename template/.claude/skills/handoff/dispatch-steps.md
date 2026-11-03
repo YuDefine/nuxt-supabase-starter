@@ -1,8 +1,8 @@
 # `next` 推薦與 dispatch 步驟詳細規約
 
-SKILL.md § 2B.3 / 2B.4 / 2B.4.5 / 2B.5 的完整規約：outstanding 的 serial/parallel rubric、推薦訊息格式與 詢問操作 禁止行為、PTB-unsafe wt 的三選一分流、user 選定後的 dispatch 表。**四節都只在 `next` 走到，`park` 不執行。**
+[rules/next盤點與推薦判準.md](rules/next盤點與推薦判準.md) § 2B.3 / 2B.4 / 2B.4.5 / 2B.5 的完整規約：outstanding 的 serial/parallel rubric、推薦訊息格式與 詢問操作 禁止行為、PTB-unsafe wt 的三選一分流、user 選定後的 dispatch 表。**四節都只在 `next` 走到，`park` 不執行。**
 
-主流程順序（2B.2.5 → 2B.3 → 2B.4 → 2B.4.5 → 2B.5 → 2B.1.8）與各節的 pointer 留在 SKILL.md；執行到該節時讀本檔對應 §。
+主流程順序（2B.2.5 → 2B.3 → 2B.4 → 2B.4.5 → 2B.5 → 2B.1.8）與各節的 pointer 留在 rules/next盤點與推薦判準.md；執行到該節時讀本檔對應 §。
 
 **`next` 也收工。** 本檔的表格決定的是「下一步該用哪一支 skill、要不要 worktree」，**不是**「在本 session 內把它跑完」——盤點完、user 選定後，選中的工作寫進 durable brief 交給 pane 執行，本 session 隨即收工（1 件走 [relay-steps.md](relay-steps.md)、N 件可平行走 [fanout-steps.md](fanout-steps.md)）。
 

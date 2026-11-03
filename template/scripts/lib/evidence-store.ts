@@ -12,7 +12,7 @@
  * Reads also merge the retired `.spectra/evidence/<change>.jsonl` so receipts
  * written before the 2026-10 openspec purge stay visible; writes never go
  * back there (`.spectra/` is not gitignored in repos onboarded after the
- * purge — writing there would leave un-ignored runtime state, starter#32).
+ * purge — writing there would leave un-ignored runtime state).
  *
  * Dual-track: sidecar takes precedence; inline annotations in tasks.md are
  * the fallback for in-flight changes that haven't migrated yet.
@@ -198,8 +198,8 @@ export function assertSafeChangeName(changeName) {
  * @returns {Array<object>}
  */
 /**
- * 已退役、讀端略過的 kind。`awaiting-user-decision` 的唯一寫入者（Spectra annotation CLI）已隨 Spectra 層退役
- * （W-2026-09-16-control-panel-redesign Phase 5）；「等人拍板」改走 `flow ask`。
+ * 已退役、讀端略過的 kind。`awaiting-user-decision` 的唯一寫入者（Spectra annotation CLI）已隨 Spectra 層退役。
+ * 「等人拍板」改走 `flow ask`。
  */
 export const RETIRED_KINDS: ReadonlySet<string> = new Set(['awaiting-user-decision'])
 

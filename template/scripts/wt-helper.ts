@@ -6374,6 +6374,44 @@ export function classifyLandedState(
     : { landedState: 'conflict', supersededBy: [] }
 }
 
+/**
+ * 刪掉 worktree 內「untracked ＋ LOCKED 投影 ＋ target ref 端同路徑為 tracked」的檔，
+ * 讓 pre-sync `git merge` 不被 untracked 覆寫保護擋下。回傳被刪的路徑。
+ */
+function removeCollidingUntrackedProjections(wtPath, targetRef) {
+  let untracked
+  try {
+    untracked = git(['ls-files', '--others', '--exclude-standard', '-z'], { cwd: wtPath })
+      .split('\0')
+      .filter(Boolean)
+  } catch {
+    return []
+  }
+  const removed = []
+  for (const p of untracked) {
+    if (!isLockedProjectionPathFor(wtPath, p)) continue
+    try {
+      git(['cat-file', '-e', `${targetRef}:${p}`], { cwd: wtPath, stdio: 'pipe' })
+    } catch {
+      continue // target 端沒有這條路徑 → 不會相撞，不碰
+    }
+    try {
+      rmSync(join(wtPath, p), { force: true })
+      removed.push(p)
+    } catch (e) {
+      console.error(
+        `warn: pre-sync could not remove untracked projection '${p}': ${e?.message ?? e}`,
+      )
+    }
+  }
+  if (removed.length > 0) {
+    console.log(
+      `merge-back: removed ${removed.length} untracked LOCKED projection file(s) colliding with ${targetRef} before pre-sync merge`,
+    )
+  }
+  return removed
+}
+
 export function syncWorktreeWithMain(wtPath, branchName, slug) {
   const targetRef = resolveSyncTargetRef(wtPath, { fetch: true })
 
@@ -6388,6 +6426,13 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
   if (behind === 0) {
     return { synced: false, behind: 0 }
   }
+
+  // merge 前自清「與 target 端 tracked 路徑相撞的 untracked LOCKED 投影檔」：
+  // 那是 consumer propagate 產生、尚未 commit 的殘留，git merge 會以
+  // `untracked working tree files would be overwritten` 直接中止（merge 根本沒啟動，
+  // 後面的 unmerged 自動解衝突看不到）。target 是投影檔的 SoT，刪掉由 merge 帶回。
+  // 非投影的 untracked 一律不碰，維持 git 原本的報錯。
+  removeCollidingUntrackedProjections(wtPath, targetRef)
 
   const commitMsg = preSyncCommitMessage(branchName)
   let mergeError = null
@@ -6738,12 +6783,19 @@ function preserveWorktreeEvidence(wtPath, mainPath, slug = 'worktree') {
   return { files, ok }
 }
 
+// 與 per-change receipt 同目錄、但不是 `(itemId, kind)` 形狀的 ledger。照 receipt 合併會把
+// 所有行折成同一個 `undefined::undefined` key，帶回的內容是錯的，所以整檔排除
+// （它的帶回由 git 管，不歸這支 belt-and-braces 管）。
+const NON_RECEIPT_EVIDENCE_FILES = new Set(['security-scan-ledger.jsonl'])
+
 function carryEvidenceDir(src, dstRoot, relDir, slug) {
   const files = []
 
   let entries
   try {
-    entries = readdirSync(src).filter((f) => f.endsWith('.jsonl'))
+    entries = readdirSync(src).filter(
+      (f) => f.endsWith('.jsonl') && !NON_RECEIPT_EVIDENCE_FILES.has(f),
+    )
   } catch (e) {
     return {
       files: [
