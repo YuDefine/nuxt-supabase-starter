@@ -35,25 +35,36 @@ bash scripts/create-fast-project.sh temp/my-app
 pnpm --dir template/packages/create-nuxt-starter dev temp/my-app
 
 # 非互動模式（使用預設配置）—— Supabase 軌仍必須回答資料庫跑在哪
-pnpm --dir template/packages/create-nuxt-starter dev temp/my-app --yes --db-host this-machine --no-register-consumer
+pnpm --dir template/packages/create-nuxt-starter dev temp/my-app --yes --db-host this-machine --no-register-consumer --techstack-playground-exempt
 
 # 非互動模式（用 stack preset 一行直達）
 pnpm --dir template/packages/create-nuxt-starter dev temp/my-app \
     --yes \
     --preset cloudflare-nuxthub-ai \
-    --no-register-consumer
+    --no-register-consumer \
+    --techstack-playground-exempt
 
 # 非互動模式（自訂微調）
 pnpm --dir template/packages/create-nuxt-starter dev temp/my-app \
     --yes \
     --db-host this-machine \
     --no-register-consumer \
+    --techstack-playground-exempt \
     --auth better-auth \
     --with charts,monitoring \
     --without testing-full,testing-vitest
 ```
 
 此 CLI 走 workspace root `template/package.json` 的 `packageManager`。主機 `pnpm --version` 必須與該欄位相同（現為 `pnpm@11.24.0`）。對不上時升那個欄位與 CI `corepack prepare` pin，再重跑 install；**不要**改走 `tsx src/cli.ts` 繞過。
+
+### tech stack 確認閘門（`--techstack-record`）
+
+`--yes`、`--answers-file`、登記 fleet（managed）與採用既有專案，**必須**帶 `--techstack-record <path>`：Charles 逐項確認過的 `docs/techstack-confirmation.md`（格式與清單由 clade 的 `node vendor/scripts/techstack-confirmation.ts print --recommend --skeleton` 產生）。CLI 在寫第一個檔、跑任何 clade 寫入腳本之前，用 clade 的 `techstack-confirmation.ts check --record` 驗它；判準只在 clade，starter 沒有第二份 parser。
+
+- 沒帶紀錄、紀錄有缺項、找不到 clade（或 clade 太舊沒有 check CLI）→ 拒絕，exit 1，未建立任何檔案；`--json` 失敗報告帶 `TECHSTACK_RECORD_MISSING`／`TECHSTACK_RECORD_INCOMPLETE`／`TECHSTACK_CLADE_UNAVAILABLE`／`TECHSTACK_CHECK_FAILED`。
+- 通過 → 紀錄複製進 target 的 `docs/techstack-confirmation.md`（`bootstrap-project.ts` 的閘門讀這個位置）。target 已有內容不同的紀錄時拒絕覆蓋（紀錄是追加式）。
+- 互動且不登記（scaffold-only）時人在現場，不強制；有給紀錄仍照驗。
+- 唯一例外：`--techstack-playground-exempt`，給 starter 自測與 playground 重建（不是真專案）。只能搭配 `--no-register-consumer`，與 `--techstack-record` 互斥，輸出與 `--json` 報告標示 `playground-exempt`。**NEVER** 用於真專案。
 
 ### 非互動參數
 

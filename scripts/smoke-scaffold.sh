@@ -106,7 +106,7 @@ fi
 
 run_step \
   "scaffold project (non-interactive defaults)" \
-  node "$CLI_DIST" "$TARGET_DIR" --yes --db-host this-machine --no-register-consumer
+  node "$CLI_DIST" "$TARGET_DIR" --yes --db-host this-machine --no-register-consumer --techstack-playground-exempt
 
 if [[ ! -f "$TARGET_DIR/package.json" ]]; then
   fail "missing package.json in scaffolded project"
