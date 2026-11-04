@@ -23,6 +23,8 @@ on:
       - 'template/tsconfig*.json'
       - 'template/.claude/hub.json'
       - '.github/workflows/template-ci.yml'
+      # td-priority-gate 的唯一對象；不列的話「只把 **Priority**: 加回去」的 PR 不會觸發本 workflow，gate 被靜默跳過。
+      - 'docs/tech-debt.md'
   push:
     branches: [main]
     paths:
@@ -43,6 +45,8 @@ on:
       - 'template/tsconfig*.json'
       - 'template/.claude/hub.json'
       - '.github/workflows/template-ci.yml'
+      # td-priority-gate 的唯一對象；不列的話「只把 **Priority**: 加回去」的 PR 不會觸發本 workflow，gate 被靜默跳過。
+      - 'docs/tech-debt.md'
   workflow_dispatch:
 
 permissions:
@@ -63,6 +67,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          # td-priority-gate 要跟 base ref 取 merge-base，shallow clone 會讓它退化成 skip。
+          fetch-depth: 0
 
       - name: Setup Vite+ (vp)
         # composite action 不吃 job 的 defaults.working-directory，它跑在 workspace 根，
@@ -88,6 +95,18 @@ jobs:
 
       - name: Typecheck
         run: vp run typecheck
+
+      - name: TD priority field gate
+        # 擋 docs/tech-debt.md 加回 `**Priority**:` 欄位行（TD 等級只放 fleet board）。
+        # 只在 pull_request 跑：push 到 main 時 github.base_ref 為空，merge-base(HEAD, origin/main)
+        # 就是 HEAD，diff 恆空、step 會假綠。PR 階段才是有意義的 diff 基準。
+        # meta monorepo 的 tech-debt.md 在根、gate 腳本在 template/scripts，所以顯式帶 --root。
+        # 範圍限制：gate 的 REGISTER 寫死 docs/tech-debt.md（clade vendor script，consumer 不可改），
+        # 只覆蓋根的 register；template/docs/tech-debt.md（scaffold seed）由 template 自帶的
+        # pre-commit（scripts/pre-commit/checks/td-priority.sh）把關，meta CI 不重寫第二份判準。
+        if: github.event_name == 'pull_request'
+        # 不用 composite action：它假設腳本在 workspace 根的 scripts/checks/。
+        run: node scripts/checks/td-priority-gate.ts --against "origin/${{ github.base_ref || 'main' }}" --root "$GITHUB_WORKSPACE"
 
   test:
     # PR 只有「base=main 且非 draft」才跑完整測試。draft 只付上方機械檢查；

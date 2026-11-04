@@ -13,8 +13,8 @@ applies-to: post-scaffold
 
 ## Index
 
-| ID  | Title | Priority | Status | Discovered | Owner |
-| --- | ----- | -------- | ------ | ---------- | ----- |
+| ID  | Title | Status | Discovered | Owner |
+| --- | ----- | ------ | ---------- | ----- |
 
 ---
 
@@ -24,7 +24,6 @@ Entry template — 複製下列區塊到 Index 之下，依 TD-NNN 順序新增�
 ## TD-NNN — {一行標題}
 
 **Status**: open | in-progress | done | wontfix
-**Priority**: critical | high | mid | low
 **Discovered**: YYYY-MM-DD — {change name / 人工檢查 #N / ADR / ...}
 **Location**: {file path(s) with optional line ranges}
 **Related markers**: search `@followup[TD-NNN]` in repo

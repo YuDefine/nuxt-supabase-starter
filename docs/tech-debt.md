@@ -9,26 +9,26 @@
 
 ## Index
 
-| ID     | Title                                                                                                    | Priority | Status      | Discovered |
-| ------ | -------------------------------------------------------------------------------------------------------- | -------- | ----------- | ---------- |
-| TD-004 | Spectra roadmap drift check 在 CI 的 structural diff                                                     | mid      | done        | 2026-05-10 |
-| TD-005 | meta-monorepo 下 pre-push checks 靜默 no-op                                                              | high     | done        | 2026-08-19 |
-| TD-008 | `validate-starter` 維護工具會被 scaffold 帶走                                                            | mid      | done        | 2026-08-19 |
-| TD-010 | 參考 app email 登入被 nuxt-security CSRF 擋下                                                            | mid      | in-progress | 2026-08-24 |
-| TD-011 | clade 投影 auth 文件仍寫舊套件名                                                                         | low      | open        | 2026-08-24 |
-| TD-012 | `lint` script guard 吃不掉 pnpm 附加參數                                                                 | mid      | done        | 2026-08-29 |
-| TD-014 | clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約                              | low      | open        | 2026-09-09 |
-| TD-016 | Cloudflare 上 `useRuntimeConfig()` 的 module-eval snapshot 是否讀得到注入的 `NUXT_APP_ENV`               | mid      | done        | 2026-09-11 |
-| TD-017 | `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅                                     | low      | done        | 2026-09-11 |
-| TD-018 | auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict                 | high     | done        | 2026-09-11 |
-| TD-019 | `scaffold-smoke` 自 2026-08-24 起持續紅，剩餘 blocker 是 clade 投影未去識別化                            | mid      | done        | 2026-09-11 |
-| TD-020 | 選了 codex 的 scaffold 輸出靜默少掉 `.codex/` 與 `.agents/`                                              | high     | done        | 2026-09-11 |
-| TD-021 | Template CI `UX drift audit` 既有紅燈：`shared/types` 沒有 enum-like 定義就 fail                         | mid      | done        | 2026-09-28 |
-| TD-022 | repo root 的 Claude session 載不到 `commit-0a-reviewer` seat                                             | mid      | open        | 2026-09-28 |
-| TD-023 | Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback                                         | low      | done        | 2026-09-28 |
-| TD-024 | Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict`                                               | mid      | done        | 2026-09-30 |
-| TD-025 | scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅 | mid      | done        | 2026-09-29 |
-| TD-026 | aixbdd B3 逆向基準線只展開 profiles，其餘模組與 Gherkin runner 接線未做                                  | mid      | done        | 2026-10-03 |
+| ID     | Title                                                                                                    | Status      | Discovered |
+| ------ | -------------------------------------------------------------------------------------------------------- | ----------- | ---------- |
+| TD-004 | Spectra roadmap drift check 在 CI 的 structural diff                                                     | done        | 2026-05-10 |
+| TD-005 | meta-monorepo 下 pre-push checks 靜默 no-op                                                              | done        | 2026-08-19 |
+| TD-008 | `validate-starter` 維護工具會被 scaffold 帶走                                                            | done        | 2026-08-19 |
+| TD-010 | 參考 app email 登入被 nuxt-security CSRF 擋下                                                            | in-progress | 2026-08-24 |
+| TD-011 | clade 投影 auth 文件仍寫舊套件名                                                                         | open        | 2026-08-24 |
+| TD-012 | `lint` script guard 吃不掉 pnpm 附加參數                                                                 | done        | 2026-08-29 |
+| TD-014 | clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約                              | open        | 2026-09-09 |
+| TD-016 | Cloudflare 上 `useRuntimeConfig()` 的 module-eval snapshot 是否讀得到注入的 `NUXT_APP_ENV`               | done        | 2026-09-11 |
+| TD-017 | `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅                                     | done        | 2026-09-11 |
+| TD-018 | auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict                 | done        | 2026-09-11 |
+| TD-019 | `scaffold-smoke` 自 2026-08-24 起持續紅，剩餘 blocker 是 clade 投影未去識別化                            | done        | 2026-09-11 |
+| TD-020 | 選了 codex 的 scaffold 輸出靜默少掉 `.codex/` 與 `.agents/`                                              | done        | 2026-09-11 |
+| TD-021 | Template CI `UX drift audit` 既有紅燈：`shared/types` 沒有 enum-like 定義就 fail                         | done        | 2026-09-28 |
+| TD-022 | repo root 的 Claude session 載不到 `commit-0a-reviewer` seat                                             | open        | 2026-09-28 |
+| TD-023 | Codex deferred 指令寫死 `init-consumer.ts`，沒走 `.mjs` fallback                                         | done        | 2026-09-28 |
+| TD-024 | Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict`                                               | done        | 2026-09-30 |
+| TD-025 | scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅 | done        | 2026-09-29 |
+| TD-026 | aixbdd B3 逆向基準線只展開 profiles，其餘模組與 Gherkin runner 接線未做                                  | done        | 2026-10-03 |
 
 ### 2026-10-04 origin/main 對帳（基準 `a245b8abd`，M4 handoff-TD burn）
 
@@ -57,7 +57,6 @@
 ## TD-004 — Spectra roadmap drift check 在 CI 的 structural diff
 
 **Status**: done（2026-10-04 對帳：PR #10 已於 `df0dbb908` 合入，`template-ci.yml` 無 spectra／roadmap／continue-on-error 殘留；main `a245b8abd` 的 Template CI run `37134789858` success）
-**Priority**: mid
 **Discovered**: 2026-05-10 — v0.31.0 release 後 Template CI 反覆報 stale
 **Location**: `.github/workflows/template-ci.yml`（原 `template/scripts/spectra-advanced/roadmap-sync.ts` 已退役）
 
@@ -116,7 +115,6 @@ diff 指令；前置測試失敗使步驟跳過，即使走到該步驟，roadma
 耐久 brief（含完整重現與判準）：`~/.cache/clade/briefs/td-005-prepush-project-root.md`。
 
 **Status**: done（2026-10-04：`template/review-rules-baseline.json` 已依 ratchet 存量程序建立（6 條規則、44 筆存量收斂）；受控違規實測阻擋成立，見下方 2026-10-04 驗收）
-**Priority**: high
 **Discovered**: 2026-08-19 — clade convention 對齊掃描
 **Location**: clade 的 `vendor/scripts/pre-push/runner.sh` 與各 `checks/*.sh`；consumer 端 `template/.vite-hooks/pre-push` 與 `template/scripts/templates/vite-hooks/pre-push`
 
@@ -162,7 +160,6 @@ exit 0 且無輸出。實測 `bash template/scripts/pre-push/runner.sh` 為 exit
 ## TD-008 — `validate-starter` 維護工具會被 scaffold 帶走
 
 **Status**: done（2026-10-04 對帳：PR #28 已於 `a245b8abd` 合入並依 Acceptance 驗收——`template/` 無 `validate-starter.mjs` 與 `validate:starter` command、workflow 改指 root 新腳本、Validate Starter run `37134789894` success；本機 `audit-template-hygiene.test.sh` 10/10、`strip-manifest.test.ts` 7/7）
-**Priority**: mid
 **Discovered**: 2026-08-19 — starter public hygiene L3 commands 審查
 **Location**: `scripts/validate-starter-scaffold.mjs`、`.github/workflows/validate-starter.yml`、`template/package.json`、`scripts/audit-template-hygiene.sh`
 
@@ -235,7 +232,6 @@ exit 0 且無輸出。實測 `bash template/scripts/pre-push/runner.sh` 為 exit
 ## TD-010 — 參考 app email 登入被 nuxt-security CSRF 擋下
 
 **Status**: in-progress（參考 app／scaffolder 修復與本機回歸已完成；有效帳號登入與部署 host 驗收待補）
-**Priority**: mid
 **Discovered**: 2026-08-24 — TD-009 遷移後實測發現；根因與遷移無關
 **Location**: `template/nuxt.config.ts` 的 `security.csrf`、`template/app/pages/auth/login.vue`
 
@@ -289,7 +285,6 @@ HTTP 證據如上；正式驗收仍需具 `E2E_USER_EMAIL`／`E2E_USER_PASSWORD`
 ## TD-011 — clade 投影 auth 文件仍寫舊套件名
 
 **Status**: open（clade scope）
-**Priority**: low
 **Discovered**: 2026-08-24 — TD-009 收尾掃殘留
 **Location**: clade-managed `template/.claude/rules/auth.md`、`template/.claude/skills/document-writer/SKILL.md`、對應 `template/.cursor/` 投影
 
@@ -313,7 +308,6 @@ starter 端只驗收到貨的投影，不直接修改 managed files。
 與 `dd2b122e`（heavy gate guard 改 `sh -c` 形式）同型；修法照那筆。
 
 **Status**: done（2026-09-26 驗證；script 已於 `c86c3bad7` 修正）
-**Priority**: mid
 **Discovered**: 2026-08-29 — TD-685 heavy gate guard 回歸修正時發現
 **Location**: `template/package.json` 的 `lint` script
 
@@ -351,7 +345,6 @@ lint 因原工作 scope 刻意留下。`c86c3bad7` 已將 lint 改為下方形�
 ## TD-014 — clade capability plugin 尚未通過 PUBLIC consumer 的 runtime projection 契約
 
 **Status**: open — **範圍已收斂到只剩 `<maintainer-domain>` 佔位符無解析說明**（2026-09-11）
-**Priority**: low — 原本的 24 條 blocked error 已全數清除，剩下的是文件可讀性，不擋任何 gate
 **Discovered**: 2026-09-09 — P7 宣告 `specformula` + `aixbdd` capability 後
 **Location**: clade `plugins/hub-capabilities-{aixbdd,specformula}/skills/**`、`plugins/hub-core/scripts/{codex-review-safe,gh-ci-watch}.sh`、`plugins/hub-core/skills/subagent-dev/SKILL.md`
 
@@ -437,7 +430,6 @@ secrets 存放處、新增 skill 級 `<!-- clade-visibility: private -->` 讓投
 ## TD-016 — Cloudflare 上 `useRuntimeConfig()` 的 module-eval snapshot 是否讀得到注入的 `NUXT_APP_ENV`
 
 **Status**: done — Q164 獨立 Cloudflare Workers 實測否證「零參數 snapshot 讀不到部署時的 `NUXT_APP_ENV`」；證據在下方，隨 draft PR #14 待合入
-**Priority**: mid — 若成立，Sentry 與 evlog 的 `environment` 在所有 Cloudflare 部署上恆為 `'unknown'`
 **Discovered**: 2026-09-11 — TD-015 的 delta review 順出來的
 **Location**: `template/server/plugins/sentry-cloudflare.ts`、`template/server/plugins/evlog-drain.ts`、`template/server/plugins/evlog-sentry-drain.ts`（後兩者為 clade-LOCKED 投影）
 
@@ -591,7 +583,6 @@ build 期的值 → 落到 `'unknown'`。
 ## TD-017 — `validate-starter` 留下的 `temp/` scaffold 產物會讓 doctor gate 轉紅
 
 **Status**: done（2026-10-04 對帳：PR #22 `7542ea20c` 已合入 `finally` 清理與 `--keep`，PR #28 搬移後保留於 `scripts/validate-starter-scaffold.mjs`；本機實跑四 preset 全過、預設清掉 fixture 目錄、`pnpm run doctor` clean exit 0）
-**Priority**: low — 有明確的手動解法（刪掉 `template/temp/`），但會浪費下一個人一輪除錯
 **Discovered**: 2026-09-11 — TD-015 收尾時實際踩到
 **Location**: `template/scripts/validate-starter.mjs`、`template/vendor/doctor-shared/run.mjs`（clade-LOCKED）
 
@@ -637,7 +628,6 @@ TD-008 的工具搬移是獨立工作，搬移時須保留本條的清理行為�
 ## TD-018 — auto-commit 失敗會把 clade projection state 卡在半套用，後續 propagate 一律誤報 conflict
 
 **Status**: done（2026-09-27 核對 origin/main；clade PR #233 修正、starter 連續升版落地）
-**Priority**: high — 一次 pre-commit 失敗就讓這台**永久**掉出 fleet，且錯誤訊息指向錯的方向
 **Discovered**: 2026-09-11 — v1.12.47 propagate 對本 consumer failed 時追出來
 **Location**: clade `scripts/lib/runtime-artifact-apply.ts`（conflict 判定）、clade auto-commit flow 的 rescue/revert 路徑
 
@@ -757,7 +747,6 @@ clade-managed dirty → `dumpRescuePatch` → `resetPathsToHead`）：
 ## TD-019 — `scaffold-smoke` 自 2026-08-24 起持續紅，剩餘 blocker 是 clade 投影未去識別化
 
 **Status**: done（2026-10-04 對帳：clade 投影去識別化已落地，main `a245b8abd` 的 scaffold-smoke run `37134789867` success——越過 placeholder scan 並跑完後續 typecheck／unit／full／check 關卡）
-**Priority**: mid — gate 紅了三週，實質上沒有人在讀它的結果
 **Discovered**: 2026-09-11 — 修 setup-vp 那兩支時順帶查出來
 **Location**: `scripts/smoke-scaffold.sh`（`scan_placeholders()`）、`template/vendor/**`、`template/scripts/**`
 
@@ -821,7 +810,6 @@ scaffold 輸出要有 `.claude/commands/validate-starter.md`，但 `17f080cf` �
 ## TD-020 — 選了 codex 的 scaffold 輸出靜默少掉 `.codex/` 與 `.agents/`
 
 **Status**: done（2026-10-04 對帳：PR #14 `77020bac4` 已合入 Q160=A 最小三件檔；`scaffold.test.ts` 斷言 `.codex/config.toml`／`.agents/skills/commit/SKILL.md` 存在，main `a245b8abd` Template CI Unit tests success）
-**Priority**: high — 使用者選了 codex 卻拿到不完整的專案，而且沒有任何錯誤訊息
 **Discovered**: 2026-09-11 — 修好 setup-vp 之後 Template CI 第一次跑到 Unit tests 才露出來
 **Location**: `template/packages/create-nuxt-starter/src/assemble.ts`、
 `template/packages/create-nuxt-starter/test/scaffold.test.ts`、`template/.gitignore`
@@ -1121,7 +1109,6 @@ receipt（`src/scaffold-receipt.ts`）把磁碟上存在、但被 gitignore 擋�
 ## TD-026 — aixbdd B3 逆向基準線只展開 profiles，其餘模組與 Gherkin runner 接線未做
 
 **Status**: done（2026-10-05 D1–D5 落地：uuid id、search 跳脫、DB 角色、dev-login 維持不擴 id、SpecFormula+Cucumber runner 全綠 22 scenarios；其餘模組展開依 `expansion-guide.md` 為機械 follow-up）
-**Priority**: mid
 **Discovered**: 2026-10-03 — clade `W-2026-10-02-aixbdd-benchmark-standard` B3；work `W-2026-10-02-nuxt-supabase-starter-aixbdd-b3`
 **Location**: `template/specs/truth/**`、`template/specs/plans/001-baseline-reverse/`
 
