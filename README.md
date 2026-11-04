@@ -107,7 +107,6 @@ Nuxt 4 + Vue 3 + TypeScript + Supabase + Nuxt UI + Tailwind CSS + Pinia + Better
 ├── docs/                             # Starter 展示文件
 ├── scripts/                          # Meta 維護腳本
 ├── README.md
-├── CLAUDE.md
 └── LICENSE
 ```
 
