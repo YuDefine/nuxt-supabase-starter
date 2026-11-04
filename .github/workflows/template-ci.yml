@@ -63,6 +63,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          # td-priority-gate 要跟 base ref 取 merge-base，shallow clone 會讓它退化成 skip。
+          fetch-depth: 0
 
       - name: Setup Vite+ (vp)
         # composite action 不吃 job 的 defaults.working-directory，它跑在 workspace 根，
@@ -88,6 +91,12 @@ jobs:
 
       - name: Typecheck
         run: vp run typecheck
+
+      - name: TD priority field gate
+        # 擋 docs/tech-debt.md 加回 `**Priority**:` 欄位行（TD 等級只放 fleet board）。
+        # meta monorepo 的 tech-debt.md 在根、gate 腳本在 template/scripts，所以顯式帶 --root。
+        # 不用 composite action：它假設腳本在 workspace 根的 scripts/checks/。
+        run: node scripts/checks/td-priority-gate.ts --against "origin/${{ github.base_ref || 'main' }}" --root "$GITHUB_WORKSPACE"
 
   test:
     # PR 只有「base=main 且非 draft」才跑完整測試。draft 只付上方機械檢查；
