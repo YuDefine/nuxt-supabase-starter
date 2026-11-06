@@ -91,17 +91,17 @@ Visual verifier 撞 baseline 缺屬 Fail-Fast UNCERTAIN，agent **NEVER** 補 se
 
 - `db-runtime` 非 `supabase-local` 時 dev DB 是遠端實例，`seed.sql` 有 fixture **不代表** dev DB 已載入。
 - **MUST**：dispatch verify 前用 **API / MCP 實際查** fixture（`?search=<sample>` 回 ≥1 筆、或 MCP `execute_sql` count），**NEVER** 只 grep `seed.sql`。
-- 檔有但 dev DB 沒 → 走該 consumer 的 sanctioned fixture-apply 路徑（self-hosted：`pnpm supabase:sync` + `pnpm db:reset`，⚠️ 共享 dev DB **先協調**），**NEVER** 起 local supabase 繞過（per [[db-topology-invariant]]）。
+- 檔有但 dev DB 沒 → 走該 consumer 的 sanctioned fixture-apply 路徑（self-hosted：`pnpm db:fixtures`，冪等 upsert、不 reset，見 [[db-topology-invariant]] § Forward-only；`pnpm db:fixtures` 尚未導入的 consumer（第一段過渡期）：per-worktree 拓樸用 `pnpm supabase:sync` + `pnpm db:reset`（只重建自己的 clone）；shared 拓樸 **NEVER** reset，停下回報主 session（判定見 [[db-topology-invariant]]），**NEVER** 改用 ephemeral API data 湊），**NEVER** 起 local supabase 繞過（per [[db-topology-invariant]]）。
 - `supabase-local` consumer 不受此限：seed.sql + 本地 `supabase db reset` 即 dev DB 真實狀態。
 
 #### 禁止用 ephemeral API data 拍 verify 截圖（hard rule）
 
 Step 8a evidence collection 發現 seed 缺 fixture 時，**MUST** 先補 seed 再拍，**NEVER** 用 API 臨時建 ephemeral data：
 
-- **MUST**：把 fixture INSERT 寫進 `seed.sql` → `pnpm supabase:sync` → `pnpm db:reset` → 確認 dev DB 有 → 拍截圖
+- **MUST**：把 fixture 寫進開發假資料的 upsert 腳本（或 `seed.sql`）→ `pnpm db:fixtures` → 確認 dev DB 有 → 拍截圖（`pnpm db:fixtures` 尚未導入的 consumer（第一段過渡期）：per-worktree 拓樸用 `pnpm supabase:sync` + `pnpm db:reset`（只重建自己的 clone）；shared 拓樸 **NEVER** reset，停下回報主 session（判定見 [[db-topology-invariant]]），**NEVER** 改用 ephemeral API data 湊）
 - **NEVER**：`curl POST /api/v1/<entity>` / `$fetch` / browser form submit 建 ephemeral data → 拍截圖
 
-ephemeral data 在下一次 db:reset 就消失，截圖跟著 stale（[[pitfall-verify-evidence-ephemeral-fixture-washed-by-db-reset]]）。
+ephemeral data 在下一次臨時副本重建或 fixture 重灌就消失，截圖跟著 stale（[[pitfall-verify-evidence-ephemeral-fixture-washed-by-db-reset]]）。
 
 #### Dev-login route missing → scaffold-first hard rule
 

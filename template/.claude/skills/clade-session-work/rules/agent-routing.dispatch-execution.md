@@ -178,6 +178,30 @@ Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工�
 - **不適合**：上面「全程不需人類授權」任一列成立的件、跨 repo、要本機狀態（dev server、DB lease、未 push 的 commit、secret、Herdr／pi seat、systemd、實體硬體；TD／HANDOFF 來源文字明示要 live 主機、prod、ssh、本機 worktree 的件，planner 以 `liveSourceSignal` 機械判，TD 條目全文、HANDOFF／plan 條目文字都看）、單一 writer 不成立的 PR 修補（`--on-branch` 派前門回 `pr-branch-has-live-writer` 或 `writer-undeterminable`；原 cloud session 自己開的 PR 走上表 `followup` 列，不新開 session）、commit 0-A、要來回問答（cloud 回不了訊）。命中任一 → 本機 pane（或主線自己做）。clade 標準層（`rules/**`、`vendor/**` 等會散播的源檔）**不再整層排除**：散播只走 `clade-publish`，cloud 只產 draft PR，落地前照樣過 0-A 與 publish gate（Charles 2026-10-06）；clade 端「要本機狀態」的具體例子是要 live Herdr／coordinator 快取（`~/.cache/clade/**`）驗證的、要 ssh peer 的、要動 consumer 投影或跑 propagate 的、要 systemd／timer 的。
 - 自動派工（`coordinator-ready.ts` `cloudShapeProblem`）只看得到件的標題與寫入路徑，以字樣比對判「要本機狀態」：命中留本機，沒命中才排 cloud；誤判由上面的硬條件、pane 退路與 PR 驗收兜底。PR 修補不走字樣比對，由前提檢查判（`prFixCloudProblem` 讀巡檢快照的逐節點觀測，交給與派前門同一個 `singleWriterVerdict`）：過 → on-branch cloud；不過 → 本機 pane，理由碼由 fanout 透傳。
 
+**「額度用光沒關係」只適用派出去的 worker 與 0-A 以外的一次性工作；長駐席位餘裕優先**（Charles 2026-11-03：「盡可能用掉 100% 額度的規則應該用在派工，不是主持，主持應該盡量派給充裕的席位，不要自己撞到 usage limit」）。起因是 HQ 主管席 wDZ:p1N、wDZ:p1P 在週額度重置前 4 天先後撞限停擺。長駐席位＝主持者、HQ 主管常駐席與對話席：一坐數天，撞週額度整條主線就停，用光不是便宜而是停擺。
+
+| 對象 | 選帳規則 | 位置 |
+| --- | --- | --- |
+| 派出去的 worker、cloud、一次性工作 | 一般池：依 weekly 配速，壓力高（剩得多、快重置）的先挑，用光為止 | `claude-account-pacing.ts` `sortPoolCandidates` |
+| 長駐席位 | 餘裕優先、**不參與 drain 配速**：週用量 ≥80% 的帳號不可選（讀不到也不選）；5h 見底線以下沉底；其餘依加權 5h 可用量，平手比週剩餘量（NEVER 比配速壓力）；全池都 ≥80% 就開不出席（fail closed，不退回 drain 排序） | `claude-account-pacing.ts` `sortByFiveHourHeadroom`、`coordinator-seat.ts` `LONG_LIVED_SEAT_SELECTION`（主持者席位再加方案權重門檻 `COORDINATOR_SEAT_SELECTION`） |
+| 在職的主持者 | 自身帳號週用量 ≥90% 就主動交棒：watch 置頂必做列＋派新工作被拒（只放行 relay／successor），不等撞限；開席線 80 與交棒線 90 之間留 10 點，避免剛開席就踩線 | `coordinator-self-quota.ts` `selfWeeklyRelayDue`／`coordinatorSelfQuotaDispatchRefusal`、`coordinator-snapshot.ts` `coordinatorSelfQuotaMustDo` |
+
+長駐席位入口：`ccseat`（或 `cc --seat`；host 的 rc 在 source 後重定義 `cc` 時——desk 的 `~/.zshrc` 包成 `_cc_image_view_launch`——`cc --seat` 到不了席位函式，只有 `ccseat` 可靠；`ops/dev-node/claude-launchers.sh`）＝池入口加 `CLADE_SEAT_ROLE=long-lived`，由 `claude-workspace-admission.ts` 套同一份 `LONG_LIVED_SEAT_SELECTION`；啟動 claude 前 `CLADE_SEAT_ROLE` 即被移除，席位派出的 worker 不繼承。HQ `scripts/resident.sh` 開主管席與對話席 MUST 走這個入口（用 `ccseat`），**NEVER** 在 HQ 另寫門檻或排序。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 開長駐席位時全池週用量都 ≥80% 或讀不到 → 入口 exit 1 並印各帳號原因；在職主持者週用量 ≥90% → 置頂必做列與派工拒絕 |
+| 消費端 | 開席者（主持者繼任 relay、看門狗 `pickSeatAccount`、HQ `resident.sh`）；在職主持者的 watch 摘要與 `herdr-session-handoff.ts`／`cloud-dispatch.ts` 派工關卡 |
+| 觸發點 | 失敗輸出：admission 的 `Workspace trust admission failed: {…plan_excluded: weekly-at-limit…}`；`coordinator_must_relay` 拒派訊息（週用量版）；HQ pane-quota-watch 與 coordinator 看門狗紀錄追「因週額度撞限停擺」次數 |
+
+**派工選帳把長駐席位所在帳號排在其他可用帳號之後**（Charles／主管 wDZ:p1W 2026-11-03：「有長駐席位坐著的帳號，要排在其他可用帳號之後，沒有別的帳號可用時才可以用；不然席位開在有餘裕的帳號上，也會被 worker 燒光」）：Herdr 池入口（`claude-account-preflight.ts` `selectClaudeAccount`）、巡檢預測與配速（`coordinator-ready.ts` `poolLanding`／`paceOrder`）、flow 帳號路由（`flow/claude-account-routing.ts`）、cloud 輪替（`cloud-dispatch.ts` `rotationOrder`）都吃同一份席位集合（`lib/seat-accounts.ts` `liveSeatAccounts`），`sortPoolCandidates` 在 5 小時級距與池優先之後、weekly 配速之前多一級 `seat`。降級不是排除：席位帳號餘裕再高也排其他可用帳號之後，其他帳號全部見底或 5h 裝不下時才輪到它。席位證據不靠 pane label 猜：主持者 watch 登記的 `account`（`holders/*.json`）＋ `cc --seat`／`ccseat` 開席時 admission 寫的 `seat-claims/<account>__<pid>.json`（pid＝啟動它的 shell，活著判準同 holders；launcher 在 claude 結束後刪掉該 shell 寫的登記，互動 shell 不會讓帳號一直看起來有席位）；只讀本機登記，peer 機器上的席位不在內，沒有 `/proc` 驗不了存活時視為沒有席位（降級偏好，NEVER 因此擋派工）。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 派工選帳時池內有帳號坐著活的長駐席位（主持者 watch 或 `cc --seat` 開的席）且還有別的沒見底、5h 裝得下的帳號 |
+| 消費端 | worker 派工（Herdr 池入口 admission、auto-dispatch 的 pane／cloud 帳號重選、cloud 輪替） |
+| 觸發點 | `auto-dispatch.jsonl` 與 admission 的 `Claude account pool: using ccN`：有替代帳號時不應落在主持者／主管席所在帳號；驗收看合入後一輪 watch，量不到寫「無法判定」 |
+
 **cloud 先扣派出帳號的 cloud credit，扣完改扣該帳號的訂閱 weekly 窗**（Charles 2026-10-06，取代 09-28「與訂閱窗口無關」）。不設併發上限、不設總量預算、不設 weekly 保留百分比（Charles：「R7 不應該設上限」「用光沒關係 用光我 upgrade」）。admission 只擋兩件：帳號不可判定（要 ccN），以及下面的 0-A reviewer 席位守門。
 
 **0-A reviewer 席位守門（唯一的硬門）**：commit 0-A reviewer 固定是 Claude Opus 5.5（effort: medium）、只能跑在本機 Claude 帳號上，cloud **NEVER** 讓它沒有任何可用帳號。

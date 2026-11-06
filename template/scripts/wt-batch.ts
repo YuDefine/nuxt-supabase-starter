@@ -1718,12 +1718,15 @@ const isFlowSpinePath = (path: string) =>
   path === '.clade' || path === FLOW_SPINE_DIR || path === `${FLOW_SPINE_DIR}/events.jsonl`
 
 // Tool-regenerated residue a post-interruption `prepare` hook rewrites into the
-// tree: husky's `.husky/_/**` (self-ignored shims, never tracked, rebuilt by
-// `husky` on demand). Named allowlist — the `.husky` parent entry rides along
-// when `_` creates the subtree; any other path still retains. Used only by the
-// interrupted-removal resume; fresh capture keeps the strict spine check.
+// tree: husky's `.husky/_/**` and vp config's `.vite-hooks/_/**` (self-ignored shims,
+// never tracked, rebuilt by `husky` / `vp config` on demand). Named allowlist — the
+// hook-dir parent entry rides along when `_` creates the subtree; any other path still
+// retains. Used only by the interrupted-removal resume; fresh capture keeps the strict
+// spine check.
 const isToolRegeneratedPath = (path: string) =>
-  path === '.husky' || path === '.husky/_' || path.startsWith('.husky/_/')
+  ['.husky', '.vite-hooks'].some(
+    (dir) => path === dir || path === `${dir}/_` || path.startsWith(`${dir}/_/`),
+  )
 const isAdoptableResumeDrift = (path: string) =>
   isFlowSpinePath(path) || isToolRegeneratedPath(path)
 // Package-manager and commit-lock residue a post-interruption command (pnpm install, a
@@ -5069,6 +5072,17 @@ export function previewCleanupBatches(
     const members: CleanupPreviewRow[] = []
     const cancelled = b.phase === 'cancelled'
     const integrationHead = integrationHeadFor(b)
+    const recordOnly = integrationHead
+      ? undefined
+      : cancelledRecordOnly(c, b, profileResolver, resourceAdapters)
+    if (recordOnly)
+      return {
+        batch: b.id,
+        members,
+        integration: recordOnly.problem
+          ? { path: b.path, action: 'preserved', reason: recordOnly.problem }
+          : { path: b.path, action: 'removed', reason: CANCELLED_RECORD_ONLY_REASON },
+      }
     let landedProblem: string | undefined = integrationHead
       ? undefined
       : 'batch recorded no integration head and the tree is gone; retained'
@@ -5312,6 +5326,19 @@ export function cleanupBatches(
       // tree is reclaimed, and its head is pinned before the branch goes.
       const cancelled = b.phase === 'cancelled'
       const integrationHead = integrationHeadFor(b)
+      const recordOnly = integrationHead
+        ? undefined
+        : cancelledRecordOnly(c, b, profileResolver, resourceAdapters)
+      if (recordOnly) {
+        if (recordOnly.problem) result.retained.push({ path: b.path, reason: recordOnly.problem })
+        else {
+          b.removed.push(b.path)
+          result.removed.push(b.path)
+          save(c, s)
+        }
+        results.push(result)
+        continue
+      }
       if (!integrationHead) {
         result.retained.push({
           path: b.path,
@@ -7087,6 +7114,48 @@ function integrationHeadIfPresent(path: string): string | undefined {
     return undefined
   }
 }
+/**
+ * A cancelled batch whose integration tree, worktree registration, branch and removal journal
+ * are all gone and that never pinned a head: nothing is left to reclaim or pin, only the
+ * journal row. Returns undefined when the row is not of that shape; otherwise `{}` when cleanup
+ * may settle it, or `{ problem }` when it must stay. Out-of-tree resources keyed on the
+ * integration path (worktree-db clone, local-supabase) outlive the tree, so the same
+ * profile and `assertResourcesReleased` check as the tree-gone path runs before settling.
+ */
+function cancelledRecordOnly(
+  c: ReturnType<typeof context>,
+  b: WorktreeBatch,
+  profileResolver: PreservationProfileResolver,
+  resourceAdapters: ResourceAdapterSet,
+): { problem?: string } | undefined {
+  if (b.phase !== 'cancelled' || b.cancelledHead || existsSync(b.path) || b.removing)
+    return undefined
+  if (worktrees(c.main).some((row) => row.path === b.path)) return undefined
+  // A positive absence check: a git failure throws instead of reading as "branch absent".
+  if (git(c.main, ['for-each-ref', '--format=%(refname)', `refs/heads/${b.branch}`]))
+    return undefined
+  const profile = profileResolver(b.path, join(c.dir, 'preservation'))
+  if (!profile) return { problem: 'preservation profile missing; source retained' }
+  try {
+    validateProfile(profile)
+    assertResourcesReleased(
+      profile,
+      {
+        sourcePath: b.path,
+        branch: b.branch,
+        archive: preservedArchive(b, b.path),
+        treeExists: false,
+      },
+      resourceAdapters,
+      { only: OUT_OF_TREE_ADAPTERS },
+    )
+  } catch (error) {
+    return { problem: errorMessage(error) }
+  }
+  return {}
+}
+const CANCELLED_RECORD_ONLY_REASON =
+  'nothing left to reclaim: integration tree and branch are gone; only the cancelled record remained'
 /**
  * The head a cleanup may remove the integration tree at: the landed head, or for a cancelled
  * batch the head recorded at cancellation (legacy journals: the tree's current head — the

@@ -23,9 +23,15 @@
 #                            只有 heavy 路徑會 export 它——light 沒持有 heavy 資源，NEVER 替巢狀 gate 宣稱已持有
 #   CLADE_GATE_LIGHT_HELD    外層已持有 light slot；只讓巢狀的 light 直接 exec，巢狀 heavy 照常取鎖
 #   CLADE_GATE_SLOT_METRICS  設為檔案路徑時，取到 slot 後 append 一行 JSON
-#                            {key,mode,class,slots,slot_wait_ms}（opt-in，未設不寫；寫失敗不影響 gate）
+#                            {key,mode,class,lane,slots,slot_wait_ms}（lane＝general|expedite）（opt-in，未設不寫；寫失敗不影響 gate）
 #   CLADE_GATE_CLASS         heavy（預設）| light。由 clade-gate 判定後設定，本層讀完即 unset（W-2026-09-24-gate-slot-light-lane）
 #   CLADE_LIGHT_GATE_SLOTS   light 類整台機器同時執行上限（預設 2，clamp 到 1..8）
+#   CLADE_GATE_URGENT        1＝這趟 heavy 指令屬 flow 判定的急件（由 clade-gate 設定，本層讀完即 unset；
+#                            light 類忽略）。急件可取 expedite 保留名額、CPU 權重高於一般重指令（§ expedite lane）
+#   CLADE_HEAVY_GATE_EXPEDITE_SLOTS  保留名額數（機器層設定；預設 0＝不啟用，行為與沒有保留名額時完全相同；clamp 0..4）
+#   CLADE_HEAVY_GATE_STARVE_S        一般重指令的等待上限秒數（預設 900）；等滿後急件不得再插隊
+#   CLADE_HEAVY_GATE_URGENT_CPU_WEIGHT  急件 scope 的 CPUWeight（預設 50，clamp 1..10000）
+#   CLADE_HEAVY_GATE_SLICE   重指令 scope 優先掛的 slice（預設 cladeheavy.slice；unit 沒載入就退回 agent-workloads.slice）
 #   CLADE_GATE_WORKTREE      本趟所屬 worktree（預設 git toplevel，取不到用 pwd -P）；寫進 holder sidecar 第 2 行（診斷用）
 #   CLADE_GATE_HANG_WINDOW   卡死判定窗秒數（預設 300，0 關閉；見 § 卡死偵測）
 #   CLADE_GATE_HANG_INTERVAL 卡死取樣間隔秒數（預設 15）
@@ -78,6 +84,10 @@ fi
 GATE_CLASS=heavy
 [ "${CLADE_GATE_CLASS:-}" = light ] && GATE_CLASS=light
 unset CLADE_GATE_CLASS
+# 急件旗標同 CLADE_GATE_CLASS：只作用於這一層，讀完就 unset（巢狀 gate 不繼承身分）。
+GATE_URGENT=0
+[ "${CLADE_GATE_URGENT:-}" = 1 ] && GATE_URGENT=1
+unset CLADE_GATE_URGENT
 OUTPUT_HEARTBEAT=${CLADE_GATE_OUTPUT_HEARTBEAT:-}
 HANG_REPORT=${CLADE_GATE_HANG_REPORT:-}
 unset CLADE_GATE_OUTPUT_HEARTBEAT CLADE_GATE_HANG_REPORT
@@ -131,6 +141,33 @@ esac
 [ "$LIGHT_SLOTS" -lt 1 ] && LIGHT_SLOTS=1
 [ "$LIGHT_SLOTS" -gt 8 ] && LIGHT_SLOTS=8
 
+# ── expedite lane（W-2026-10-23-canary-psi-heavy-gate-urgent-expedite-lane 決策 7）──────────────────
+# 保留名額是另一組 expedite-<i>.lock，只有 flow 判定的急件（CLADE_GATE_URGENT=1）能取，不借給一般重指令（FR-021）。
+# 數量走機器層設定（預設 0＝關閉，FR-017 不把初值寫死在 script）；關閉時 GATE_URGENT 一律當一般工作。
+EXPEDITE_SLOTS=${CLADE_HEAVY_GATE_EXPEDITE_SLOTS:-0}
+case "$EXPEDITE_SLOTS" in
+  '' | *[!0-9]*) EXPEDITE_SLOTS=0 ;;
+esac
+[ "$EXPEDITE_SLOTS" -gt 4 ] && EXPEDITE_SLOTS=4
+STARVE_S=${CLADE_HEAVY_GATE_STARVE_S:-900}
+case "$STARVE_S" in
+  '' | *[!0-9]*) STARVE_S=900 ;;
+esac
+URGENT_CPU_WEIGHT=${CLADE_HEAVY_GATE_URGENT_CPU_WEIGHT:-50}
+case "$URGENT_CPU_WEIGHT" in
+  '' | *[!0-9]*) URGENT_CPU_WEIGHT=50 ;;
+esac
+[ "$URGENT_CPU_WEIGHT" -lt 1 ] && URGENT_CPU_WEIGHT=1
+[ "$URGENT_CPU_WEIGHT" -gt 10000 ] && URGENT_CPU_WEIGHT=10000
+LANE_URGENT=0
+if [ "$GATE_CLASS" = heavy ] && [ "$GATE_URGENT" = 1 ] && [ "$EXPEDITE_SLOTS" -gt 0 ]; then
+  LANE_URGENT=1
+fi
+# 保留名額啟用時，一般重指令與急件才需要登記等候、互相讓位；關閉時整段不產生任何檔案。
+EXPEDITE_ON=0
+[ "$GATE_CLASS" = heavy ] && [ "$EXPEDITE_SLOTS" -gt 0 ] && EXPEDITE_ON=1
+WAIT_DIR="$LOCK_DIR/waiting"
+
 if [ "$GATE_CLASS" = light ]; then
   SLOT_PREFIX=light
   ACTIVE_SLOTS=$LIGHT_SLOTS
@@ -162,6 +199,11 @@ print_status() {
   printf 'lock_dir=%s\tslots=%s\n' "$LOCK_DIR" "$SLOTS"
   for i in $(seq 1 "$SLOTS"); do
     print_lock_status "$LOCK_DIR/heavy-$i.lock" "slot=$i/$SLOTS"
+  done
+  # 保留名額只印有持有者的（同 light；heavy 行的 free/held 語義不變）。
+  for i in $(seq 1 "$EXPEDITE_SLOTS"); do
+    [ -f "$LOCK_DIR/expedite-$i.lock" ] &&
+      print_lock_status "$LOCK_DIR/expedite-$i.lock" "slot=expedite-$i/$EXPEDITE_SLOTS" held-only
   done
   # light 類只印有持有者的：呼叫端（push-timeout-phase）讀 heavy 行判「誰佔著 slot」，
   # free 的 light 行對它是雜訊。
@@ -435,15 +477,16 @@ if [ "$GATE_CLASS" = heavy ]; then
   record_holder "$REPO_LOCK"
 fi
 
-# 掃描 slot 1..N，取到第一個空的就持有。fd 11..30 對應 slot 1..20。
-acquire_slot() {
-  local i fd
-  for i in $(seq 1 "$ACTIVE_SLOTS"); do
+# 掃描 <prefix>-1..<n>，取到第一個空的就持有。fd 11..30 對應 slot 1..20。
+# 失敗時 fd 已全部關閉，所以同一次嘗試接著掃另一組名額池（expedite → heavy）時 fd 編號不會撞。
+_scan_pool() {
+  local prefix=$1 n=$2 i fd
+  for i in $(seq 1 "$n"); do
     fd=$((10 + i))
-    : >>"$LOCK_DIR/$SLOT_PREFIX-$i.lock" 2>/dev/null || continue
-    eval "exec $fd>>\"\$LOCK_DIR/\$SLOT_PREFIX-\$i.lock\"" 2>/dev/null || continue
+    : >>"$LOCK_DIR/$prefix-$i.lock" 2>/dev/null || continue
+    eval "exec $fd>>\"\$LOCK_DIR/\$prefix-\$i.lock\"" 2>/dev/null || continue
     if flock -n "$fd"; then
-      record_holder "$LOCK_DIR/$SLOT_PREFIX-$i.lock"
+      record_holder "$LOCK_DIR/$prefix-$i.lock"
       return 0
     fi
     eval "exec $fd>&-" 2>/dev/null || true
@@ -451,6 +494,140 @@ acquire_slot() {
   return 1
 }
 
+# ── expedite lane：等候登記與雙向讓位（決策 7）──────────────────────────────────
+# 登記檔 $WAIT_DIR/{urgent,general}-<pid>：第 1 行是開始等候的 epoch 秒，第 2 行是 pid 的啟動時間戳（身分）。
+# 活著＝pid 存活、身分（啟動時間戳）相符、且登記沒老過 WAIT_TIMEOUT：waiter 被 SIGKILL（agent timeout、OOM）時
+# EXIT trap 不會跑，登記檔會殘留；pid 之後被不相干的行程重用時，單看 kill -0 會把它當成還在等，
+# 所以身分不符或超齡的登記一律視為死登記並順手刪掉（waiting/ 不會無限長大）。
+# 沒有常駐仲裁者：排隊順序全靠輪詢者自律，控制器或 flow 掛掉時所有重指令仍照常執行（NFR-007／NFR-008）。
+# 登記與讀取失敗一律當「沒有人在等」，NEVER 因此卡住或擋住任何重指令。
+
+# pid 的啟動時間戳：Linux 讀 /proc/<pid>/stat 第 22 欄（starttime），沒有 /proc 就用 ps lstart。
+# 取不到印空字串；兩端都空則退回只看 kill -0 + 超齡判定。
+_pid_ident() {
+  local pid=$1 stat rest
+  if [ -r "/proc/$pid/stat" ]; then
+    stat=$(cat "/proc/$pid/stat" 2>/dev/null) || stat=
+    # comm 欄可含空白與括號：從最後一個 ")" 之後數，starttime 是之後的第 20 個欄位。
+    rest=${stat##*) }
+    # shellcheck disable=SC2086
+    set -- $rest
+    if [ "$#" -ge 20 ]; then
+      printf '%s' "${20}"
+      return 0
+    fi
+  fi
+  ps -o lstart= -p "$pid" 2>/dev/null | tr -s ' ' | sed 's/^ //'
+  return 0
+}
+_wait_register() {
+  [ "$EXPEDITE_ON" = 1 ] || return 0
+  [ -n "${_wait_reg:-}" ] && return 0
+  local kind=general
+  [ "$LANE_URGENT" = 1 ] && kind=urgent
+  mkdir -p "$WAIT_DIR" 2>/dev/null || return 0
+  _wait_reg="$WAIT_DIR/$kind-$$"
+  { printf '%s\n' "$(date +%s)"; _pid_ident "$$"; printf '\n'; } >"$_wait_reg" 2>/dev/null || _wait_reg=
+  return 0
+}
+_wait_unregister() {
+  [ -n "${_wait_reg:-}" ] && rm -f "$_wait_reg" 2>/dev/null
+  _wait_reg=
+  return 0
+}
+# 自己的登記是否已等滿上限：和急件一側讀的是同一個檔（單一來源，兩邊判定不會分歧）。try 模式沒有登記＝永遠沒等滿。
+_self_starved() {
+  local started
+  [ -n "${_wait_reg:-}" ] || return 1
+  started=$(head -n 1 "$_wait_reg" 2>/dev/null)
+  case "$started" in '' | *[!0-9]*) return 1 ;; esac
+  [ $(($(date +%s) - started)) -ge "$STARVE_S" ]
+}
+# 登記檔是否仍代表一個活著的 waiter；死登記（pid 不在、身分不符、超齡）順手刪掉。
+# 回 0＝活著；$_reg_started 帶出開始等候的 epoch 秒。
+_reg_alive() {
+  local f=$1 pid=${1##*-} started ident now_ident stat rest
+  case "$pid" in '' | *[!0-9]*) return 1 ;; esac
+  started=$(sed -n 1p "$f" 2>/dev/null)
+  ident=$(sed -n 2p "$f" 2>/dev/null)
+  case "$started" in
+    '' | *[!0-9]*) rm -f "$f" 2>/dev/null; return 1 ;;
+  esac
+  if ! kill -0 "$pid" 2>/dev/null; then
+    rm -f "$f" 2>/dev/null
+    return 1
+  fi
+  # 殭屍（已死、尚未被收屍；pid 1 不收屍的容器裡會一直留著）kill -0 仍成功，但已不可能是在輪詢的 waiter。
+  if [ -r "/proc/$pid/stat" ]; then
+    stat=$(cat "/proc/$pid/stat" 2>/dev/null) || stat=
+    rest=${stat##*) }
+    case "${rest%% *}" in
+      Z | X)
+        rm -f "$f" 2>/dev/null
+        return 1
+        ;;
+    esac
+  fi
+  # waiter 最久只會等 WAIT_TIMEOUT（之後 exit BUSY）；比這更老的登記不可能是活的 waiter。
+  if [ $(($(date +%s) - started)) -gt $((WAIT_TIMEOUT + 60)) ]; then
+    rm -f "$f" 2>/dev/null
+    return 1
+  fi
+  if [ -n "$ident" ]; then
+    now_ident=$(_pid_ident "$pid")
+    if [ -n "$now_ident" ] && [ "$now_ident" != "$ident" ]; then
+      rm -f "$f" 2>/dev/null
+      return 1
+    fi
+  fi
+  _reg_started=$started
+  return 0
+}
+# 有沒有活著的 <kind> 登記（不含自己）；kind=general 時可要求「已等滿 STARVE_S」。
+_live_waiter() {
+  local kind=$1 only_starved=${2:-0} f pid now
+  [ -d "$WAIT_DIR" ] || return 1
+  now=$(date +%s)
+  for f in "$WAIT_DIR/$kind"-*; do
+    [ -e "$f" ] || continue
+    pid=${f##*-}
+    case "$pid" in '' | *[!0-9]*) continue ;; esac
+    [ "$pid" = "$$" ] && continue
+    _reg_alive "$f" || continue
+    if [ "$only_starved" = 1 ]; then
+      [ $((now - _reg_started)) -ge "$STARVE_S" ] || continue
+    fi
+    return 0
+  done
+  return 1
+}
+
+# 一次取名額的嘗試；成功回 0（GOT_LANE=expedite|general）。
+acquire_slot() {
+  GOT_LANE=general
+  if [ "$EXPEDITE_ON" = 1 ] && [ "$LANE_URGENT" = 1 ]; then
+    # 急件先看保留名額；滿了才看一般名額，而且有等滿上限的一般登記時不取一般名額（FR-019，雙向讓位的急件一側）。
+    if _scan_pool expedite "$EXPEDITE_SLOTS"; then
+      GOT_LANE=expedite
+      return 0
+    fi
+    _live_waiter general 1 && return 1
+    _scan_pool "$SLOT_PREFIX" "$ACTIVE_SLOTS"
+    return
+  fi
+  if [ "$EXPEDITE_ON" = 1 ]; then
+    # 一般重指令：有活著的急件在等、而且自己還沒等滿上限就讓出這一輪（雙向讓位的一般一側）。
+    # try 模式沒有登記、永遠沒等滿，所以也會讓位（BUSY）；急件不會被 post-edit 的短 try 搶走名額。
+    if _live_waiter urgent && ! _self_starved; then
+      return 1
+    fi
+  fi
+  _scan_pool "$SLOT_PREFIX" "$ACTIVE_SLOTS"
+}
+
+if [ "$EXPEDITE_ON" = 1 ]; then
+  trap '_wait_unregister' EXIT
+fi
 if ! acquire_slot; then
   if [ "$mode" = try ]; then
     exit "$BUSY"
@@ -463,6 +640,7 @@ if ! acquire_slot; then
     _self=$(ancestor_holder "$_slot_lock") && _self_held=$((_self_held + 1)) && _self_last=$_self
   done
   if [ "$_self_held" -ge "$ACTIVE_SLOTS" ]; then refuse_self_wait "${_self_last% *}" "${_self_last##* }"; fi
+  _wait_register
   deadline=$(($(date +%s) + WAIT_TIMEOUT))
   until acquire_slot; do
     if [ "$(date +%s)" -ge "$deadline" ]; then
@@ -473,9 +651,12 @@ if ! acquire_slot; then
       done
       exit "$BUSY"
     fi
-    sleep 2
+    sleep "${CLADE_GATE_POLL_S:-2}"
   done
 fi
+# 取到名額：登記先刪（exec 之後 EXIT trap 不會跑）。
+_wait_unregister
+if [ "$EXPEDITE_ON" = 1 ]; then trap - EXIT; fi
 
 # 只替巢狀 gate 宣稱「本層真的持有的資源」：heavy 持有 repo lock＋heavy slot，巢狀任何 gate 直接 exec；
 # light 只持有 light slot，巢狀 heavy MUST 照常取 repo lock 與 heavy slot（檔頭「NEVER 讓它完全免閘」）。
@@ -490,8 +671,8 @@ fi
 # 本行程已不存在，NEVER 為了量 run time 改成背景執行（會丟掉 TTY 與 process group）。
 if [ -n "${CLADE_GATE_SLOT_METRICS:-}" ] && [ -n "$_wait_started_ms" ]; then
   _waited_ms=$(($(_now_ms) - _wait_started_ms))
-  printf '{"key":"%s","mode":"%s","class":"%s","slots":%s,"slot_wait_ms":%s}\n' \
-    "$safe_key" "$mode" "$GATE_CLASS" "$ACTIVE_SLOTS" "$_waited_ms" >>"$CLADE_GATE_SLOT_METRICS" 2>/dev/null || true
+  printf '{"key":"%s","mode":"%s","class":"%s","lane":"%s","slots":%s,"slot_wait_ms":%s}\n' \
+    "$safe_key" "$mode" "$GATE_CLASS" "${GOT_LANE:-general}" "$ACTIVE_SLOTS" "$_waited_ms" >>"$CLADE_GATE_SLOT_METRICS" 2>/dev/null || true
 fi
 
 # ── holder 端自願上界 ──────────────────────────────────────────────────────
@@ -738,15 +919,29 @@ if mem_scope_available; then
   # 這正是 2026-09-03 那隻 reparent 到 pid 1 的 vue-tsc 逃掉的那一格。
   # flock 的 fd 在此之前就取得，scope 下照常繼承，鎖隨行程結束釋放的性質不變。
   # Only hosts with an installed agent slice opt in. macOS/non-systemd keeps the old scope.
+  # slice：重指令專用的 cladeheavy.slice 已載入就掛它（research 決策 11；slice unit 由主機端安裝，本 repo 尚無產生器，
+  # 沒裝就不會載入），否則退回 agent-workloads.slice。兩者都沒載入就不指定（macOS／非 agent 主機維持舊行為）。
   gate_slice_args=()
-  if [ "$GATE_CLASS" = heavy ] && [ "$(systemctl --user show -p LoadState --value agent-workloads.slice 2>/dev/null)" = loaded ]; then
-    gate_slice_args=(--slice=agent-workloads.slice)
+  if [ "$GATE_CLASS" = heavy ]; then
+    for _gate_slice in "${CLADE_HEAVY_GATE_SLICE:-cladeheavy.slice}" agent-workloads.slice; do
+      if [ "$(systemctl --user show -p LoadState --value "$_gate_slice" 2>/dev/null)" = loaded ]; then
+        gate_slice_args=(--slice="$_gate_slice")
+        break
+      fi
+    done
   fi
   # gate 底下全是批次工作。與互動 session 同權重時，滿載下 claude TUI 主執行緒喚醒延遲實測達
   # 300ms、herdr 56ms；scope 設 idle 權重（cgroup cpu.idle）後 herdr 降到 5ms，批次仍吃得到所有閒置 CPU。
   # systemd < 252 不認得 idle，會讓 systemd-run 整個失敗，所以先驗版本。
+  # 急件（保留名額池啟用且 flow 判為急件）在重指令專用 slice 內改用數字權重：同 slice 的一般重指令是 idle，
+  # 任何非 idle 值都讓急件先跑（決策 7）；對互動 session 的份額由 slice 權重決定、不因此改變（FR-020）。
+  # 數字權重所有 systemd 版本都認得，所以急件不受 <252 的限制。
+  # 沒有任何重指令 slice 載入時（gate_slice_args 為空）scope 會落在預設 slice、與互動 session 平起平坐，
+  # 數字權重會把 300ms 的 TUI 喚醒延遲帶回來——此時急件不升權，維持 idle（急件仍享有保留名額，只是 CPU 不加權）。
   gate_cpu_args=()
-  if [ "$(systemctl --version 2>/dev/null | awk 'NR == 1 { print $2 + 0 }')" -ge 252 ] 2>/dev/null; then
+  if [ "$LANE_URGENT" = 1 ] && [ "${#gate_slice_args[@]}" -gt 0 ]; then
+    gate_cpu_args=(-p "CPUWeight=$URGENT_CPU_WEIGHT")
+  elif [ "$(systemctl --version 2>/dev/null | awk 'NR == 1 { print $2 + 0 }')" -ge 252 ] 2>/dev/null; then
     gate_cpu_args=(-p CPUWeight=idle)
   fi
   exec systemd-run --user --scope -q "${gate_slice_args[@]}" "${gate_cpu_args[@]}" \

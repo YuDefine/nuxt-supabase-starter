@@ -31,9 +31,11 @@ export const SATURATED_LOAD_PER_CORE = 2
  * 每核負載上限：達此值的機器不再收新件——另一台低於上限就放那台，每台都到上限才排隊（自動加派記
  * `resource-pressure`、`--machine auto` 拒派、預設 auto 留本機，本機到線而 peer 探不到時拒派）。
  * 每核負載高到 brief 送達逾時的程度才擋；開樹的 pnpm／tsc 尖峰只到 1.2 左右，
- * 所以線畫在 4（每核一個在跑、三個在等），尖峰不會誤擋。CPU 使用率封頂在 1.0，表達不出超載，上限只能看 load1／核。
+ * 所以線畫在 3（每核一個在跑、兩個在等），尖峰不會誤擋。CPU 使用率封頂在 1.0，表達不出超載，上限只能看 load1／核。
+ * 每核 5 個以上在排隊時，新啟動的 session 會因 identity 偵測逾時而 launch_timeout，所以畫在 3；
+ * launch_timeout 比例的節流見 `dispatch-launch-throttle.ts`。
  */
-export const LOAD_CAP_PER_CORE = 4
+export const LOAD_CAP_PER_CORE = 3
 
 /** 這台是否到了每核負載上限（`LOAD_CAP_PER_CORE`）；讀不到 load1／核數不判。 */
 export function overLoadCap(m: { load1?: number | null; cores?: number | null }): boolean {

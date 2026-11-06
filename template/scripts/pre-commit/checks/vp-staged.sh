@@ -11,7 +11,10 @@
 
 set -euo pipefail
 
-PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+# consumer root（≠ git toplevel 的子目錄 consumer 也對）：解析規則與 staged 路徑規約見 ../consumer-root.sh
+# shellcheck source=../consumer-root.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../consumer-root.sh"
+PROJECT_ROOT="$(clade_consumer_root)"
 cd "$PROJECT_ROOT"
 
 # 本檔所有 pnpm exec 一律經這裡：關掉 verify-deps-before-run。clade 散播的 .npmrc 設了
@@ -53,7 +56,7 @@ VP_STAGED_ALL="$(mktemp)"
 VP_STAGED_KEPT="$(mktemp)"
 trap 'rm -f "$VP_STAGED_ALL" "$VP_STAGED_KEPT"' EXIT
 
-git diff --cached --name-only --diff-filter=ACM -z >"$VP_STAGED_ALL"
+git diff --cached --relative --name-only --diff-filter=ACM -z >"$VP_STAGED_ALL"
 if ! node "$STAGED_TARGETS_TS" <"$VP_STAGED_ALL" >"$VP_STAGED_KEPT"; then
   echo "[clade pre-commit] vp-staged：staged-targets 橋接失敗，拒絕在沒有過濾清單的情況下跑 lint/fmt" >&2
   exit 2

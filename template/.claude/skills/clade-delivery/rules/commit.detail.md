@@ -85,7 +85,7 @@ paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**']
 
 ### 批次使用 checkpoint 保存來源
 
-所有 worker 與主線自走的實作 wt，完成必要驗收後可用 scoped `git commit --only -- <paths>` 保存 substantive change 與 evidence；新檔先逐檔 `git add -- <paths>`。Hooks 照跑，**NEVER** `git commit --no-verify`、**NEVER** `HUSKY=0`。不各自啟動完整 `/commit`，**NEVER** push `origin main`。相對 `main` 有非空 committed diff 後，slice owner **MUST** push **該** session branch 並開 draft PR（[[github-flow]]），不是把 checkpoint 當成已落地。Checkpoint 只保存來源成果，**NEVER** 當作正式品質流程已通過。
+所有 worker 與主線自走的實作 wt，完成必要驗收後可用 scoped `git commit --only -- <paths>` 保存 substantive change 與 evidence；新檔先逐檔 `git add -- <paths>`。Hooks 照跑，**NEVER** `git commit --no-verify`、**NEVER** `HUSKY=0`／`VP_GIT_HOOKS=0`。不各自啟動完整 `/commit`，**NEVER** push `origin main`。相對 `main` 有非空 committed diff 後，slice owner **MUST** push **該** session branch 並開 draft PR（[[github-flow]]），不是把 checkpoint 當成已落地。Checkpoint 只保存來源成果，**NEVER** 當作正式品質流程已通過。
 
 | 情境 | 保存方式 | 正式品質鏈 |
 | --- | --- | --- |
@@ -430,7 +430,7 @@ git rev-list --count origin/main..HEAD    # 必須回 0（沒有還沒推上去�
 ### 機械 gate 與它的邊界
 
 `vendor/scripts/pre-push/checks/tag-position.sh` 在 pre-push 階段擋下**兩個方向**的錯位
-（push 不含 tag 時零成本 no-op）。它**只在 consumer 的 `.husky/pre-push` 已接線時生效**，
+（push 不含 tag 時零成本 no-op）。它**只在 consumer 的 `.vite-hooks/pre-push`（舊 husky 型為 `.husky/pre-push`）已接線時生效**，
 且 `--no-verify` 可繞過——所以上面那三步是規約，gate 是兜底，**NEVER 反過來**。
 
 發版的推送順序 **無條件 MUST 是 main 先、tag 後**（tag 指向的 commit 得先存在於

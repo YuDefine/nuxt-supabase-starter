@@ -106,7 +106,7 @@ Gate、checker、composite action 的檔案存在，不代表有東西會呼叫�
 
 | 被檢查的東西 | 載體 predicate（一併驗） |
 | --- | --- |
-| pre-commit / pre-push check script | `git rev-parse --git-path hooks/<name>` 指到的檔存在**且**（走 husky 時）`.husky/<name>` 存在**且**內容真的呼叫該 runner |
+| pre-commit / pre-push check script | `git rev-parse --git-path hooks/<name>` 指到的檔存在**且**（走 husky／vp config 時）`.husky/<name>` 或 `.vite-hooks/<name>` 存在**且**內容真的呼叫該 runner |
 | composite action（`.github/actions/<name>/`） | 有 workflow 檔含 `uses: ./.github/actions/<name>` |
 | CLI script（`scripts/*.mjs`） | `package.json` script、hook、或 CI step 內有呼叫它的字串 |
 | 被 gate 以 `[[ -f "$X" ]] \|\| exit 0` 守衛的依賴 | 該路徑在散播清單內（否則 gate 在**每一個** consumer 都靜默 exit 0） |

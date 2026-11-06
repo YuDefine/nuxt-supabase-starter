@@ -52,7 +52,7 @@ Cookbook（naming / ownership / template refresh / path adapter / pool / cleanup
 #### Schema cache 側：套用 migration 後 MUST 通知 PostgREST 重載
 
 PostgREST 的 schema cache 只在收到 `NOTIFY <PGRST_DB_CHANNEL>` 時重建。因此**每一個**會套用
-DDL 的入口——CI 的 migrate job、本機 `db:reset`、手動補 migration、integration test 的 setup——
+DDL 的入口——CI 的 migrate job、本機往前 apply（`db:migrate`）、手動補 migration、integration test 的 setup——
 在套用完成後 **MUST** 發一次 NOTIFY：
 
 ```bash

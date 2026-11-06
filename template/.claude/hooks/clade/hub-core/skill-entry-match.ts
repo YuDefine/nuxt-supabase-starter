@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * skill-entry-match.ts —— 入口指標的比對邏輯單一來源（skill-entry-pointer.sh 與稽核共用，W-2026-10-19 Scope 3）。
+ * skill-entry-match.ts —— 入口指標的比對邏輯單一來源（skill-entry-pointer.sh 與稽核共用）。
  *
  *   node skill-entry-match.ts --file <path> [--cwd <dir>] [--registry <skill-sources.json>] --json
  *     → {"repo":"<toplevel>","rel":"<repo 相對路徑>","families":["clade-frontend",…]}；不在 git tree → repo 為 null

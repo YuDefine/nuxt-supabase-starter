@@ -1,6 +1,6 @@
 ---
-description: Manual Review data-readiness 規約——規劃階段（寫 plan package／tasks 時）準備驗收資料的 hard rule、[review:ui] 純功能驗證 step actionability、`@no-manual-review-check` marker schema、截圖檔名配對；寫 proposal.md / tasks.md 時 path-scoped 載入
-paths: ['tasks/**', 'specs/plans/**', 'screenshots/**']
+description: Manual Review data-readiness 規約——規劃階段（寫 plan package／tasks 時）準備驗收資料的 hard rule、[review:ui] 純功能驗證 step actionability、fixtures 檔契約（自獨立 fixtures 規約併入）、`@no-manual-review-check` marker schema、截圖檔名配對；寫 proposal.md / tasks.md 時 path-scoped 載入
+paths: ['tasks/**', 'specs/plans/**', 'screenshots/**', 'specs/truth/fixtures.md', 'docs/FIXTURES.md', 'docs/fixtures.md']
 ---
 <!-- Clade native rule; source: rules/core/manual-review.data-readiness.md; edit canonical source -->
 <!-- clade-targets: claude,agents -->
@@ -76,6 +76,23 @@ assertion-bearing `[verify:ui]` item **MUST** 能對應到一個**機械可判�
 ### 適用範圍
 
 適用所有 `[review:ui]` / `[verify:ui]` items；不適用 `[discuss]`（walkthrough 時準備）、`[verify:e2e]`（spec 自帶 fixture）、`[verify:api]`（request 自帶 body）。
+
+## Fixtures 檔（hard rule；自獨立 fixtures 規約併入）
+
+「必填三件事」第 3 點的配套契約：consumer **MUST** 維護 fixtures 檔作為「測試身分／樣本 UID／business key」速查表，item inline 引用 sample 時 **MUST** 從這份檔抓 stable identifier。位置看 repo root 有沒有 `specs/truth/work-lifecycle.md`：
+
+| repo | fixtures 檔 |
+| --- | --- |
+| lifecycle repo（有 `specs/truth/work-lifecycle.md`） | `specs/truth/fixtures.md`，`specs/truth/owners.md` 有一列 owner。**NEVER** 放 `specs/truth/docs/`——那裡的頁面可能被文件站發佈 |
+| 未遷移 consumer | `docs/FIXTURES.md`（或 `docs/fixtures.md` lowercase fallback），原地更新 |
+
+- **MUST** 至少含「測試身分」section（標題如 `## Test Identities`／`## 測試身分`），列出 dev／staging review 會用到的 NFC／員工卡 UID（holder name＋role）、staff email（role＋organization）、business key samples（對應 status／預期狀態）
+- **MUST** 寫 `[review:ui]`／`[verify:ui]` item 前先 Read fixtures 檔抓 sample identifier；每個 sample 在 `supabase/seed.sql`（或專案等價 seed）有對應 INSERT row，fixtures 檔與 seed 的 key field、identifier、stable PK 一字不差，條目旁建議標 seed 行號或 anchor
+- `## N. Fixtures / Seed Plan` task 新增 sample 時，**MUST** 同時更新 fixtures 檔與 seed，否則規劃階段 hygiene check 會撞「sample referenced but missing from seed」
+- schema per-consumer 自治：clade 只規定該檔存在、含「測試身分」section、與 seed cross-link。seed 是機器權威，fixtures 檔只列 review 會引用的穩定 key 與 seed 錨點，**NEVER** 把 seed 的其他欄位整列抄過來
+- **NEVER** 在 item inline sample 但 seed 沒對應 row；**NEVER** 用 dev DB ad-hoc INSERT 的 sample 作 inline 引用（reset 就消失）；**NEVER** 寫「請使用測試員工 X」要求 user 自找；**NEVER** 在 fixtures 檔寫 production 真實員工／客戶資料（限合成／anonymized）；**NEVER** 為了 review 方便動 production 資料庫
+- lifecycle 遷移時把 `docs/FIXTURES.md` `git mv` 到 `specs/truth/fixtures.md` 並在 `owners.md` 補一列；**NEVER** 兩份並存
+- `scripts/propagate.ts` 對缺 fixtures 檔的 consumer emit **warning**（不 block），訊息指名該 repo 應有的路徑；consumer owner 在自家 plan 排補檔，clade 端不替 consumer 創建該檔
 
 ## `[review:ui]` 純功能驗證 step actionability（hard rule）
 

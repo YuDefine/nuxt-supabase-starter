@@ -1,0 +1,2 @@
+id	hypothesis	change	before	after	delta	tests	verdict	note
+{{ATTEMPT_ID}}	{{HYPOTHESIS_WITH_MECHANISM}}	{{CHANGE_SUMMARY}}	{{BEFORE_MEDIAN}}	{{AFTER_MEDIAN}}	{{DELTA}}	{{GATE_RESULT}}	{{KEPT_OR_REVERTED}}	{{NOTE}}

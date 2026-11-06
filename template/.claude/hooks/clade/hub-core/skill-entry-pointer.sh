@@ -69,7 +69,11 @@ trusted_top() {
   real=$(cd -P -- "$1" 2>/dev/null && pwd -P) || return 1
   # 換行會讓 grep 拆成多個 pattern，空 pattern 配 -x 又吃 porcelain 的空行分隔。
   case "$real" in *$'\n'*) return 1 ;; esac
-  git -C "$1" worktree list --porcelain 2>/dev/null | grep -qxF -e "worktree $real"
+  # 先收進變數再比對：pipefail 下 `git … | grep -q` 在 grep 命中就退出時，git 還在寫剩下的
+  # worktree（clade home 有數百棵、輸出超過 pipe buffer）會吃 SIGPIPE，整條回 141 → 永遠靜默。
+  local list
+  list=$(git -C "$1" worktree list --porcelain 2>/dev/null) || return 1
+  grep -qxF -e "worktree $real" <<<"$list"
 }
 
 # entry_ref <top> <entry> —— cwd 正好是 repo 根才印相對路徑，其餘絕對。

@@ -702,20 +702,29 @@ function collect(root: string, mode: Mode): Collected | { error: string } {
   let baseline: { base: TestTrustBaseline | null; head: TestTrustBaseline | null }
   if ('staged' in mode) {
     const hasHead = git(root, ['rev-parse', '-q', '--verify', 'HEAD']) !== null
-    const raw = git(root, ['diff', '--cached', '--name-status', '-M', '-z', '--diff-filter=ACMRT'])
+    const raw = git(root, [
+      'diff',
+      '--cached',
+      '--relative',
+      '--name-status',
+      '-M',
+      '-z',
+      '--diff-filter=ACMRT',
+    ])
     if (raw === null) return { error: 'git diff --cached 失敗' }
     entries = parseNameStatus(raw)
-    showBase = (p) => (hasHead ? git(root, ['show', `HEAD:${p}`]) : null)
-    showHead = (p) => git(root, ['show', `:${p}`])
+    showBase = (p) => (hasHead ? git(root, ['show', `HEAD:./${p}`]) : null)
+    showHead = (p) => git(root, ['show', `:./${p}`])
     baseline = {
-      base: hasHead ? readBaselineAt(root, `HEAD:${BASELINE_REL_PATH}`) : null,
-      head: readBaselineAt(root, `:${BASELINE_REL_PATH}`),
+      base: hasHead ? readBaselineAt(root, `HEAD:./${BASELINE_REL_PATH}`) : null,
+      head: readBaselineAt(root, `:./${BASELINE_REL_PATH}`),
     }
   } else {
     const base = git(root, ['merge-base', 'HEAD', mode.against])?.trim() ?? ''
     if (!base) return { error: `cannot resolve merge-base(HEAD, ${mode.against})` }
     const raw = git(root, [
       'diff',
+      '--relative',
       '--name-status',
       '-M',
       '-z',
@@ -725,11 +734,11 @@ function collect(root: string, mode: Mode): Collected | { error: string } {
     ])
     if (raw === null) return { error: `git diff ${base} HEAD 失敗` }
     entries = parseNameStatus(raw)
-    showBase = (p) => git(root, ['show', `${base}:${p}`])
-    showHead = (p) => git(root, ['show', `HEAD:${p}`])
+    showBase = (p) => git(root, ['show', `${base}:./${p}`])
+    showHead = (p) => git(root, ['show', `HEAD:./${p}`])
     baseline = {
-      base: readBaselineAt(root, `${base}:${BASELINE_REL_PATH}`),
-      head: readBaselineAt(root, `HEAD:${BASELINE_REL_PATH}`),
+      base: readBaselineAt(root, `${base}:./${BASELINE_REL_PATH}`),
+      head: readBaselineAt(root, `HEAD:./${BASELINE_REL_PATH}`),
     }
   }
   const files: FileChange[] = []

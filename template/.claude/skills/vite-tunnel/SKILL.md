@@ -20,7 +20,7 @@ effort: medium
 
 ## Phase 1 -- 判定是否適用與路線
 
-1. READ 讀取情境、`package.json`、lockfile、`wrangler.*` 與實際載入的 Vite／Nuxt config。
+1. READ 讀取情境、`package.json`、lockfile、`void.config.ts` 與實際載入的 Vite／Nuxt config。
 2. THINK 讀取 `rules/路線選擇判準.md`，判定改道或選定官方 Vite／第三方／獨立 cloudflared 路線；改道就依該規則轉去對應做法並結束本 skill。
 
 ## Phase 2 -- 前置與憑證

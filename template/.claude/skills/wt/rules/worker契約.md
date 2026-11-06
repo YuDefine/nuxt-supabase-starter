@@ -125,7 +125,7 @@ routing 列：non-ui-implementation → 改完 API 後順便把 app/components/L
   - emoji 缺漏或配錯對時整個 header 無法解析，錯誤會顯示成 `subject-empty`，而不是指出 emoji 錯了。
   - 部分 repo（含 clade）要求 subject 含中文，先看該 repo 的 `commitlint.config.ts`。
 - **Pi phase checkpoint 例外**：依 `agent-routing.pi-watch-protocol` 逐 phase 派出的 Pi，每個 phase 結束只留一筆 checkpoint commit，header 固定為 `🧹 chore: wt <change>-phase-<N> — <說明>`（主線靠它在 `git log main..HEAD` 對齊 phase 邊界）；說明在要求中文 subject 的 repo（含 clade）必須含中文，否則 commitlint 擋下。其餘 worker 一律照上一條挑對應的 emoji＋type。
-- **NEVER**：`git push origin main`、`git stash`、`git commit --amend`、`--no-verify`、`HUSKY=0`。hook 擋下時修正內容或訊息，不繞過。
+- **NEVER**：`git push origin main`、`git stash`、`git commit --amend`、`--no-verify`、`HUSKY=0`、`VP_GIT_HOOKS=0`。hook 擋下時修正內容或訊息，不繞過。
 - 計畫型工作每完成一個 phase：先回讀該 phase 的證據與 gate，再把 carrier 的 checkbox 與 verify evidence sidecar（lifecycle repo：`specs/evidence/<work-slug>.jsonl`；未遷移 consumer：`docs/evidence/<work-slug>.jsonl`；路徑由 `evidence-store.ts` `sidecarPath` 解析）一起限定路徑 commit（artifact-tick，type 用 `📝 docs`）。只勾 checkbox、沒有對應 receipt 不算完成證據；未 commit 的檔案不會隨落地帶回 main。
 
 ## Good Example

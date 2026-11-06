@@ -85,7 +85,7 @@ if (dbError) {
 
 **NEVER** 先寫 DB 再 upload — DB insert 成功後若 upload 失敗，會留下無檔案的 row。
 
-一次上傳多個檔時，把每個成功上傳的 path 收進 cleanup 清單，DB 寫入丟錯**或回傳空結果**（`data` 為 `null`、0 rows）都要整批 `remove()`；刪除本身失敗只 log，不蓋掉原錯誤（通則見 `runtime/*/api-patterns.md` § Idempotency 與 Retry）。
+一次上傳多個檔時，把每個成功上傳的 path 收進 cleanup 清單，DB 寫入丟錯**或回傳空結果**（`data` 為 `null`、0 rows）都要整批 `remove()`；刪除本身失敗只 log，不蓋掉原錯誤（通則見 `framework/nuxt/api-handler-semantics.md` § Idempotency 與 Retry）。
 
 ## 檔案清理（避免孤兒檔案）
 

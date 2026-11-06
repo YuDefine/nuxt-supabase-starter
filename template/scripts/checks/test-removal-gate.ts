@@ -923,14 +923,14 @@ export function parseNameStatus(raw: string | null): DiffEntry[] {
 export function collect(root: string, mode: Mode): Snapshot | { error: string } {
   if ('staged' in mode) {
     const hasHead = git(root, ['rev-parse', '-q', '--verify', 'HEAD']) !== null
-    const raw = git(root, ['diff', '--cached', '--name-status', '-M', '-z'])
+    const raw = git(root, ['diff', '--cached', '--relative', '--name-status', '-M', '-z'])
     if (raw === null) return { error: 'git diff --cached 失敗' }
     const snap: Snapshot = {
       // 首次 commit（沒有 HEAD）沒有 base，不可能有東西被刪
       entries: hasHead ? parseNameStatus(raw) : [],
-      readBase: (p) => git(root, ['show', `HEAD:${p}`]),
-      readHead: (p) => git(root, ['show', `:${p}`]),
-      headBlobSha: (p) => git(root, ['rev-parse', '-q', '--verify', `:${p}`])?.trim() || null,
+      readBase: (p) => git(root, ['show', `HEAD:./${p}`]),
+      readHead: (p) => git(root, ['show', `:./${p}`]),
+      headBlobSha: (p) => git(root, ['rev-parse', '-q', '--verify', `:./${p}`])?.trim() || null,
     }
     // merge 進行中：staged diff（vs HEAD）含上游帶入的刪除，交給判定 1 的 merge 例外扣掉。
     // octopus merge 只看第一個 head；其餘 head 帶入的刪除照常要收據（偏擋不偏放）。
@@ -940,21 +940,21 @@ export function collect(root: string, mode: Mode): Snapshot | { error: string } 
     const mergeBase = mergeHead ? git(root, ['merge-base', 'HEAD', mergeHead])?.trim() : ''
     if (mergeHead && mergeBase) {
       snap.merge = {
-        readMergeBase: (p) => git(root, ['show', `${mergeBase}:${p}`]),
-        readMergeHead: (p) => git(root, ['show', `${mergeHead}:${p}`]),
+        readMergeBase: (p) => git(root, ['show', `${mergeBase}:./${p}`]),
+        readMergeHead: (p) => git(root, ['show', `${mergeHead}:./${p}`]),
       }
     }
     return snap
   }
   const base = git(root, ['merge-base', 'HEAD', mode.against])?.trim() ?? ''
   if (!base) return { error: `cannot resolve merge-base(HEAD, ${mode.against})` }
-  const raw = git(root, ['diff', '--name-status', '-M', '-z', base, 'HEAD'])
+  const raw = git(root, ['diff', '--relative', '--name-status', '-M', '-z', base, 'HEAD'])
   if (raw === null) return { error: `git diff ${base} HEAD 失敗` }
   return {
     entries: parseNameStatus(raw),
-    readBase: (p) => git(root, ['show', `${base}:${p}`]),
-    readHead: (p) => git(root, ['show', `HEAD:${p}`]),
-    headBlobSha: (p) => git(root, ['rev-parse', '-q', '--verify', `HEAD:${p}`])?.trim() || null,
+    readBase: (p) => git(root, ['show', `${base}:./${p}`]),
+    readHead: (p) => git(root, ['show', `HEAD:./${p}`]),
+    headBlobSha: (p) => git(root, ['rev-parse', '-q', '--verify', `HEAD:./${p}`])?.trim() || null,
   }
 }
 

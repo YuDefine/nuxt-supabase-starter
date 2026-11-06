@@ -1,3 +1,4 @@
+{"file":"api-handler-semantics.md","source":"rules/modules/framework/nuxt/api-handler-semantics.md","paths":["server/**/*.ts","packages/*/server/**/*.ts"]}
 {"file":"auth-data-path-consistency.md","source":"rules/core/auth-data-path-consistency.md","paths":["drizzle.config.ts","packages/*/drizzle.config.ts","app/**/*.ts","packages/*/app/**/*.ts","app/**/*.vue","packages/*/app/**/*.vue","supabase/migrations/**/*.sql","server/api/**/*.ts","server/utils/**/*.ts","packages/*/server/api/**/*.ts","packages/*/server/utils/**/*.ts"]}
 {"file":"auth-roles.md","source":"rules/core/auth-roles.md","paths":["server/api/**/*.ts","server/routes/**/*.ts","server/utils/**/*.ts","server/middleware/**/*.ts","server/db/**/*.ts","server/database/**/*.ts","packages/*/server/api/**/*.ts","packages/*/server/routes/**/*.ts","packages/*/server/utils/**/*.ts","packages/*/server/middleware/**/*.ts","packages/*/server/db/**/*.ts","packages/*/server/database/**/*.ts"]}
 {"file":"auth.md","source":"rules/modules/auth/better-auth/auth.md","paths":["app/**/*.{vue,ts}","packages/*/app/**/*.{vue,ts}","server/**/*.ts","packages/*/server/**/*.ts"]}
@@ -5,7 +6,7 @@
 {"file":"prod-access.md","source":"rules/core/prod-access.md","paths":["scripts/prod-sql.ts","vendor/scripts/prod-sql.ts",".claude/prod-access.json","supabase/migrations/**",".mcp.json"]}
 {"file":"prod-mcp-safety.enforcement.md","source":"rules/core/prod-mcp-safety.enforcement.md","paths":[".mcp.json",".claude/settings.json",".claude/settings.local.json"]}
 {"file":"prod-mcp-safety.md","source":"rules/core/prod-mcp-safety.md","paths":null,"when":"要呼叫 prod MCP，或改 MCP 設定之前"}
-{"file":"public-repo-hygiene.md","source":"rules/core/public-repo-hygiene.md","paths":[".github/workflows/**",".husky/**","HANDOFF.md","tasks/**","scripts/audit-public-tree-hygiene.ts","scripts/public-tree-hygiene-tokens.json"]}
+{"file":"public-repo-hygiene.md","source":"rules/core/public-repo-hygiene.md","paths":[".github/workflows/**",".husky/**",".vite-hooks/**","HANDOFF.md","tasks/**","scripts/audit-public-tree-hygiene.ts","scripts/public-tree-hygiene-tokens.json"]}
 {"file":"secret-custody.md","source":"rules/core/secret-custody.md","paths":null,"when":"有 secret、token、credential 的值到你手上時"}
 {"file":"secrets.md","source":"rules/modules/runtime/cf-workers/secrets.md","paths":[".github/workflows/**/*.yml","void.config.ts"]}
 {"file":"security-policy.md","source":"rules/core/security-policy.md","paths":["SECURITY.md","packages/*/SECURITY.md","server/middleware/**","packages/*/server/middleware/**","supabase/migrations/**/*.sql","server/database/migrations/**/*.sql","packages/*/supabase/migrations/**/*.sql","packages/*/server/database/migrations/**/*.sql"]}

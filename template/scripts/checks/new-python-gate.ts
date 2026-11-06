@@ -125,7 +125,7 @@ export function dropLandedArrivals<T extends { path: string }>(
 ): T[] {
   if (mergeHead === null) return arrivals
   const blob = (rev: string) => git(root, ['rev-parse', '-q', '--verify', rev])?.trim() || null
-  return arrivals.filter(({ path }) => blob(`${mergeHead}:${path}`) !== blob(`:${path}`))
+  return arrivals.filter(({ path }) => blob(`${mergeHead}:./${path}`) !== blob(`:./${path}`))
 }
 
 /** 解析 `git diff --name-status -z -M`：A 與 R（帶相似度）；C 視同新增。 */
@@ -162,7 +162,7 @@ export function pythonBlobs(
   const py = arrivals.filter((a) => isPython(a.path))
   if (py.length === 0) return new Set()
   for (const a of py) {
-    const id = git(root, ['rev-parse', '-q', '--verify', `${rev}:${a.path}`])?.trim()
+    const id = git(root, ['rev-parse', '-q', '--verify', `${rev}:./${a.path}`])?.trim()
     if (!id) throw new Error(`cannot resolve blob of ${a.path}`)
     a.blob = id
   }
@@ -181,7 +181,7 @@ export function collectConsumer(
   mode: { staged: true } | { against: string },
 ): { arrivals: PyArrival[]; baseBlobs: Set<string> } {
   if ('staged' in mode) {
-    const diff = git(root, ['diff', '--cached', '--name-status', '-z', '-M'])
+    const diff = git(root, ['diff', '--cached', '--relative', '--name-status', '-z', '-M'])
     if (diff === null) throw new Error('cannot read staged changes')
     const arrivals = dropLandedArrivals(root, parsePyArrivals(diff), landedMergeHead(root))
     // 沒有 HEAD（repo 第一個 commit）時基準是空樹
@@ -190,7 +190,7 @@ export function collectConsumer(
   }
   const base = git(root, ['merge-base', 'HEAD', mode.against])?.trim()
   if (!base) throw new Error(`cannot resolve merge-base(HEAD, ${mode.against})`)
-  const diff = git(root, ['diff', '--name-status', '-z', '-M', base, 'HEAD'])
+  const diff = git(root, ['diff', '--relative', '--name-status', '-z', '-M', base, 'HEAD'])
   if (diff === null) throw new Error(`cannot diff ${base}..HEAD`)
   const arrivals = parsePyArrivals(diff)
   return { arrivals, baseBlobs: pythonBlobs(root, arrivals, base, 'HEAD') }

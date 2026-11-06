@@ -26,7 +26,10 @@
 
 set -euo pipefail
 
-PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+# consumer root（≠ git toplevel 的子目錄 consumer 也對）：解析規則與 staged 路徑規約見 ../consumer-root.sh
+# shellcheck source=../consumer-root.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../consumer-root.sh"
+PROJECT_ROOT="$(clade_consumer_root)"
 cd "$PROJECT_ROOT"
 
 DETECTOR="scripts/checks/mutation-loading-detect.ts"
@@ -37,7 +40,7 @@ DETECTOR="scripts/checks/mutation-loading-detect.ts"
 staged_vue=()
 while IFS= read -r -d '' file; do
   staged_vue+=("$file")
-done < <(git diff --cached --name-only --diff-filter=ACM -z -- '*.vue')
+done < <(git diff --cached --relative --name-only --diff-filter=ACM -z -- '*.vue')
 
 ((${#staged_vue[@]} == 0)) && exit 0
 

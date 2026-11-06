@@ -209,7 +209,7 @@ node scripts/wt-helper.ts batch release-source <source-path> --reason "<為什�
 node scripts/wt-helper.ts batch cleanup --cancelled [--dry-run]
 ```
 
-只收 integration tree，member 來源一律留著等重新登記。integration 必須仍停在取消當下的 head（舊 journal 沒記的以現 head 為準）、乾淨、沒有 lock／claim，保存流程與 landed 批相同；移除前把 head 釘在 `refs/clade/batches/<id>/integration`，批次維持 `cancelled`，integration path 記進 `removed`。取消後又有新 commit 的照舊保留。
+只收 integration tree，member 來源一律留著等重新登記。integration 必須仍停在取消當下的 head（舊 journal 沒記的以現 head 為準）、乾淨、沒有 lock／claim，保存流程與 landed 批相同；移除前把 head 釘在 `refs/clade/batches/<id>/integration`，批次維持 `cancelled`，integration path 記進 `removed`。取消後又有新 commit 的照舊保留。integration tree、worktree 註冊、branch 與 removal journal 都已不在、又沒釘過 head 的 cancelled 批（只剩 journal 紀錄）沒有東西可回收或釘住：先跑與 tree 已不在時相同的 profile 與樹外資源（`worktree-db`、`local-supabase`）釋放檢查，通過才把 integration path 記進 `removed` 結案、不釘 ref；profile 缺失、資源未釋放、branch 還在或 removal journal 還在時照舊 retain。
 
 **中斷後的 integration 樹殘留**：cleanup 移除 integration 前比對保存當下的 inventory，飄移只有 flow spine 與 `.husky/_` 這類工具重生路徑時照收。`landed`（不含 `cancelled`）批的 integration 樹若 `git status` 乾淨、HEAD 仍是落地 head，另收 `node_modules`（任一層）與 `.claude/.commit.lock`／`.commit.lock.history` 殘留——中斷後跑過 `pnpm install` 或 commit 嘗試留下的可重生內容。這以外的 ignored 飄移、或 HEAD 已前進的樹照舊 retain。
 

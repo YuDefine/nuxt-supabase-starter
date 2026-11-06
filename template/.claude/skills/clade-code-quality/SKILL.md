@@ -10,7 +10,7 @@ description: "Code quality, error handling, shell safety, language, and maintain
 - READ 若audit 報門檻超標、要處置超標量之前，先讀取 `rules/threshold-remediation.md`
 
 - READ 若要讀或改 `**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts,py,sh,rs}`，讀取 `rules/code-style.md`
-- READ 若要讀或改 `vite.config.*`、`nuxt.config.*`、`package.json`、`packages/*/package.json`、`pnpm-workspace.yaml`、`tsconfig*.json` 等 13 處（全表見 rules/_index.md），讀取 `rules/code-style.toolchain.md`
+- READ 若要讀或改 `vite.config.*`、`nuxt.config.*`、`package.json`、`packages/*/package.json`、`pnpm-workspace.yaml`、`tsconfig*.json` 等 14 處（全表見 rules/_index.md），讀取 `rules/code-style.toolchain.md`
 - READ 若要讀或改 `**/*.{ts,tsx,mts,cts,vue}`，讀取 `rules/coupling-cohesion.md`
 - READ 若要讀或改 `app/**/*.{vue,ts}`、`packages/*/app/**/*.{vue,ts}`、`server/**/*.ts`、`packages/*/server/**/*.ts`，讀取 `rules/error-handling.md`
 - READ 若要讀或改 `**/*.sh`、`ops/**`、`deploy/**`、`scripts/**`，讀取 `rules/shell-script-safety.md`

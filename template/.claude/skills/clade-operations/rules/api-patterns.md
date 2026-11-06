@@ -23,38 +23,9 @@ Reference: `docs/api/API_DESIGN_GUIDE.md` — 完整 API 設計指南含進階�
 
 > 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.claude/rules/local/`；要改本檔請回 clade 源檔並 propagate。
 
-## OWASP API Authorization
+## 授權、Mutation 語意、冪等與 Retry
 
-`requireAuth()` / `requireRole()`（垂直權限）**不足以**擋 OWASP API Top 10 的授權類風險。每個 **state-changing / 敏感讀取** endpoint **MUST** 同時具備 authz + input-shape + abuse-control 三層：
-
-### Authz 層
-
-- **Object-level authorization（BOLA / IDOR）**：**MUST** 對 request 帶的每個 resource id（`:id`、body 內 `targetId` 等）驗證當前使用者有權存取**該筆** row（ownership / tenant / role scope），**NEVER** 只因為 id 存在就回傳 / 修改。做法：scope 條件放進 WHERE（`.eq('tenant_id', user.tenantId)` / `.eq('owner_id', user.id)`），或先 fetch 再比對。
-- **Property-level authorization（BOPLA / mass assignment）**：**MUST** 用明確的欄位 allowlist 決定可讀 / 可寫欄位，**NEVER** 把 `readBody()` 整包 spread 進 `.update()` / `.insert()`。做法：Zod `.pick()` 或手動列欄位，防止偷塞 `role` / `is_admin` / `tenant_id` / `price` / `status`，也防止 response over-exposure。
-  - **讀取方向同樣要 allowlist**：**每一個**回傳 resource row 的 endpoint（列表與單筆都算）**MUST** 在回應前依該 resource（必要時依角色）的可讀欄位 allowlist 剝除其餘欄位；response schema `parse()` 管形狀，allowlist 管「這個呼叫者能看哪些欄」，兩者並存，**NEVER** 以其中一個代替另一個。只在單筆 endpoint 剝、列表 endpoint 整包回傳，等於 allowlist 不存在。
-- **「公開」只放行讀取方法**：resource 或 route 的 public／anonymous 旗標 **MUST** 只讓 `GET`／`HEAD` 跳過認證；`POST`／`PUT`／`PATCH`／`DELETE` 不論旗標為何都 **MUST** 要求 session 或 API token。共用的 auth helper 若先檢查 public 旗標就 `return`，**MUST** 同時判斷 HTTP method——「這個 resource 是公開的」只代表任何人能讀，**NEVER** 代表任何人能改或刪。
-
-### Input-shape 層
-
-- **Request body size limit**：**MUST** 設上限（Nitro `routeRules` maxBodySize 或檢查 `content-length`）；大檔走 Storage signed upload（見 `db-runtime/*/database.md`）。
-- **Zod 驗證所有輸入** — schema 同時是 input-shape gate 與 BOPLA allowlist。
-- **列表筆數 MUST 由 server 夾住**：**每一個**列表 endpoint 的 `limit`／`pageSize` **MUST** 在 server 端有預設值與上限（Zod `.default(50).max(200)` 這一級；數字依資源訂，但兩個都要有），內部查詢（event store、log 查詢）同樣夾。**NEVER** 讓「沒帶參數」等於不設上限。
-
-### Abuse-control 層
-
-- **Rate limit**：**MUST** 對敏感 / 昂貴 / 可濫用端點（登入、OTP、密碼重設、匯出、寫入類）設 per-user + per-IP rate limit（`nuxt-security` rateLimiter 或自管 counter）。
-- **Quota 分母 MUST 可回落**：**每一個**以「目前有幾個 X」當上限的配額（storage 物件數、row count、KV key 數），設定前 **MUST** 回答「X 在正常流程結束後會不會消失或被排除？」——不會（被業務 row 引用、audit 永久保留、已完成訂單）就 **MUST** 改用時間窗、狀態排除，或在流程結束時回收，否則正常使用者用到第 N 次就永久 429。**MUST** 補 regression test 釘住「正常流程結束後仍可繼續操作」。修法細節見 [[pitfall-quota-counts-unreclaimed-resource]]。
-- **CSRF protection**：cookie/session 認證的 browser-origin POST/PATCH/DELETE **MUST** 有 CSRF 防護（`nuxt-csurf` double-submit、或 SameSite + origin 檢查）；純 Authorization header 認證不受影響。
-
-### 未認證入口層（webhook、log／telemetry ingestion）
-
-沒有 session 的入口，身分與來源完整性只能來自 server 端持有的 secret 或 session，**NEVER** 來自 request 內容。
-
-- **Webhook 驗簽 MUST fail-closed**：驗簽 secret（`*_WEBHOOK_SECRET` 等）未設定時 **MUST** 拒絕請求（503，並 log 設定缺失），**NEVER** 跳過驗證放行。「沒設 secret 就不驗」等於任何人都能偽造來源事件；CI、`.env.example`、deploy template 只要漏設一處，fail-open 就在那個環境生效。
-- **驗簽前先限 body 大小**：HMAC 需要 raw body，**MUST** 先檢查 `content-length`（缺少或超過上限即 413）再讀 raw body，**NEVER** 先整包讀進記憶體再驗——未認證者能用大 body 耗盡記憶體。簽章比對 **MUST** constant-time（Node `crypto.timingSafeEqual`；Workers `crypto.subtle.verify`）。
-- **未認證的 log／telemetry ingestion NEVER 接受 client 宣稱的身分**：`user_id`、`email`、`actor`、`role` 等身分欄位 **MUST** 只取自 server 端 session（`getUserSession()` 或等價 helper）；沒有 session 就記成匿名，Zod schema **NEVER** 讓這些欄位從 body 傳入——否則任何人都能替任意使用者偽造登入／稽核事件。這類端點同樣 **MUST** 有 body 上限與 per-IP rate limit，錯誤回應 **NEVER** 帶 raw DB error。
-
-**判斷準則**：寫 state-changing endpoint 時逐條問 — 這個 id 是**這個** user 的嗎（BOLA）？body 有沒有不該讓 client 設的欄位（BOPLA）？會不會太大？會不會被刷？配額分母會不會回落？是 cookie 認證的 browser mutation 嗎（CSRF）？沒有 session 的入口，缺 secret 時會不會放行、身分是不是只取自 session？
+授權（BOLA／BOPLA／rate limit／CSRF／webhook 驗簽）、Mutation 語意完整性、Idempotency 與 Retry 三段在共用規則 `framework/nuxt/api-handler-semantics.md`（兩種 runtime 同一份，本檔不再內嵌）。
 
 ## OpenAPI Metadata Convention
 
@@ -91,65 +62,6 @@ Template 預設部署到 **Cloudflare Workers**（`nitro.preset: 'cloudflare_mod
 
 Workers 專屬：CPU 30 秒上限（長任務改 Queue / Cron Trigger）、記憶體 128MB（大檔 / 圖片轉換改 R2 + Image Resizing）、無 `fs` / `net` / persistent socket；**NEVER** 用 Node.js-only API（`Buffer`、`fs`）；env 透過 `useRuntimeConfig()` 或 `event.context.cloudflare.env`，**NEVER** 用 `process.env`。
 
-## Mutation 語意完整性
-
-本節管「**請求成功了，但沒做到使用者以為的事**」——四條都不 throw、前端收到 2xx 顯示已儲存，實際狀態與畫面分歧。
-
-### Partial update NEVER 用 truthy 判斷欄位有沒有提供
-
-**每一個** partial update handler（PATCH / 局部 PUT）都 **MUST** 用「該 key 是否存在於 payload」決定要不要寫，**NEVER** 用 truthiness（`if (body.note)` 會吞掉 `''`、`0`、`false`）。
-
-```ts
-// ❌ 清空欄位靜默失效
-if (body.note) updates.note = body.note
-// ✅ 存在性判斷，或讓 Zod .partial() 承擔
-if ('note' in body) updates.note = body.note
-const updates = UpdateSchema.partial().parse(body)
-```
-
-**NEVER** 用「前端一定會帶完整物件」當理由跳過。**每一個**含可清空欄位的 handler 都 **MUST** 有 regression test 斷言「送 `''` 之後讀回來是 `''`」。
-
-### 未知 query 參數 MUST 回 400，NEVER 靜默忽略
-
-**每一個**接受 query string 的 handler 的 Zod schema 都 **MUST** 加 `.strict()`（否則 `?state=active` 錯字會回未過濾的完整清單，而 filter UI 顯示已套用）。
-
-```ts
-const q = await getValidatedQuery(event, z.object({ status: z.string().optional() }).strict().parse)
-```
-
-要接受的附加參數（分頁、追蹤參數）**MUST** 逐個寫進 schema，**NEVER** 為了放行它們拿掉 `.strict()`。
-
-### 業務期限 / 數量上限 MUST 在 server 擋
-
-前端的 `max` / `min` / `disabled` / 日期範圍 **NEVER** 構成 gate。**每一條**寫進產品規格的業務上限（試用天數、方案額度、單筆數量上限、有效期限、可選日期範圍）都 **MUST** 在 server handler 內驗證，最短落點是 Zod（`z.number().int().max(N)`、`z.coerce.date().refine(...)`）。**NEVER** 只寫在前端 composable。字串長度見 `framework/nuxt/nuxt-form-validation.md` § maxlength。
-
-### 批次匯入 MUST 逐列回報結果
-
-**每一個**批次匯入 endpoint 都 **MUST**：
-
-- 用 Zod 限定筆數下限與上限（`z.array(row).min(1).max(1000)` 這一級；上限依資源訂）
-- 逐列驗證、逐列寫入或逐列判定，一列失敗不讓整批靜默消失
-- 回應帶 `{ imported, skipped, errors: [{ row, message }] }`，`imported + skipped` **MUST** 等於送入筆數，每一個被跳過的列都在 `errors` 裡有一筆
-- `message` **MUST** 是使用者看得懂的句子（「第 12 列：email 已存在」），**NEVER** 回原始 `err.message`——那會洩漏 constraint 名、欄位名與 SQL 片段
-
-```ts
-// ❌ 回 200 + { ok: true }，跳過幾列、為什麼跳過都看不到
-// ✅
-return { data: { imported: 98, skipped: 2, errors: [{ row: 12, message: '第 12 列：email 已存在' }, { row: 40, message: '第 40 列：缺少名稱' }] } }
-```
-
-### 稽核
-
-```bash
-node scripts/audit-mutation-semantics.ts    # warn-only
-```
-
-**觸發條件**：informational — 不觸發任何東西。命中 **NOT** 等於違規（NOT NULL 且不可清空的欄位兩種寫法等價）。
-
-**消費端**：clade 主線 fleet 稽核（`pnpm audit:manual`）、consumer 主線由本檔 `paths` gate 載入後自行對照。
-
-它只量得到前兩條的形狀，**第三、四條本 script 零訊號**，**NEVER** 把回 0 讀成四條都遵守了。
-
 ## Audit Logs
 
 Audit table 命名、欄位、hash chain、RLS、helper 統一規約見：
@@ -160,19 +72,3 @@ Audit table 命名、欄位、hash chain、RLS、helper 統一規約見：
 Runtime module 不重複定義 schema；session agent 從 `db-schema/<variant>/audit-schema.md` 找完整規約。
 
 <!-- requires-module: db-schema -->
-
-## Idempotency 與 Retry
-
-需要冪等保證：金額 / 扣庫存 / 送通知等副作用不可重複的操作、外部系統整合（付款、email、webhook）、批次匯入（按兩下）。實作：(1) unique constraint + `ON CONFLICT`（最簡單）；(2) client 傳 `idempotency_key`（UUID），server 驗證去重；(3) 同 user + 同 action 短時間去重。
-
-**檔案上傳＋DB 寫入沒有共同 transaction**：handler 要先上傳物件、再寫 DB 時，**MUST** 把本次每一個已上傳的物件 key 收進 cleanup 清單；DB 寫入丟錯**或回傳空結果**（0 rows、`null`、沒有 `RETURNING` 列）都 **MUST** 刪掉清單內的物件再回錯誤，刪除本身失敗只 log、不蓋掉原錯誤。**NEVER** 只在 throw 路徑清、漏掉「沒丟錯但沒寫進去」的路徑。Supabase Storage 的順序與範例見 `db-runtime/cf-workers/storage.md` § 上傳失敗的 Rollback。
-
-| 錯誤類型 | 可 retry？ | 做法 |
-| --- | --- | --- |
-| `40001`（serialization_failure）、`40P01`（deadlock） | ✅ | 最多 3 次，backoff 100/200/400ms |
-| `PGRST003`（pool timeout） | ⚠️ | Pool 問題，retry 只會加重負擔 |
-| Network timeout | ✅ | 必須有 idempotency 保證 |
-| 4xx user error | ❌ | 修輸入 |
-| 5xx server error | ⚠️ | 只 retry 明確無副作用的 GET |
-
-**NEVER** 對 POST/PATCH/DELETE 做 blind retry — 必須有 unique constraint、idempotency_key、或整個 handler 可在 transaction 內安全重跑；無法保證就讓使用者手動重試並顯示明確錯誤。對 `@supabase/supabase-js` 的 network error，不預設 SDK 會重試，也不預設需要自訂重試；先查使用中的版本、transport 與現有 fetch wrapper，再依請求的冪等性和總重試預算決定。已有安全 GET 的重試層時，不得只憑 SDK 名稱刪除。

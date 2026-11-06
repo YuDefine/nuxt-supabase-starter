@@ -31,7 +31,7 @@ uv run <skill 根目錄>/scripts/inventory.py --cwd <worktree> [--audit] [--fixt
 - `release.consumer` 只留該套件（與它的家族，見 Step B.3）
 - `deprecated.consumer` 以 `isDeprecated: true` 的列為主，其餘照列但不排進本輪
 - `mode_route.py` 印了 `focus=actions`（使用者只說 `actions`）：只留 action 與 `manual` 列，npm 列不進計畫檔
-- 後續 prompt builder 依 `dependencyType` 決定 `pnpm add <pkg>` 還是 `pnpm add -D <pkg>`——**NEVER** 預設 `-D`，否則會把 dependencies 套件靜默搬到 devDependencies（實證踩坑：某 consumer 第一次 run wrangler 被誤搬，commit 後才發現）
+- 後續 prompt builder 依 `dependencyType` 決定 `pnpm add <pkg>` 還是 `pnpm add -D <pkg>`——**NEVER** 預設 `-D`，否則會把 dependencies 套件靜默搬到 devDependencies（實證踩坑：某 consumer 的 deploy 工具套件第一次 run 被誤搬，commit 後才發現）
 - 版號差距分類（從低風險到高風險升）：**patch** 通常安全；**minor** should be safe 但偶爾有 regression；**major** 高機率 breaking change。action 以 tag 的 major 判
 
 ## Step B.2 — Changelog pre-scan（主線直接做）

@@ -2439,10 +2439,13 @@ export function ensureWorktreeGitHooks(wtPath: string): {
   hooksPath?: string
   detail?: string
 } {
-  const cfg = spawnSync('git', ['-C', wtPath, 'config', '--get', 'core.hooksPath'], {
-    encoding: 'utf8',
-  })
-  const hooksPath = cfg.status === 0 ? cfg.stdout.trim() : ''
+  const readHooksPath = () => {
+    const cfg = spawnSync('git', ['-C', wtPath, 'config', '--get', 'core.hooksPath'], {
+      encoding: 'utf8',
+    })
+    return cfg.status === 0 ? cfg.stdout.trim() : ''
+  }
+  const hooksPath = readHooksPath()
   if (!hooksPath || hooksPath.startsWith('/') || hooksPath.startsWith('~')) {
     return { state: 'not-applicable' }
   }
@@ -2462,7 +2465,11 @@ export function ensureWorktreeGitHooks(wtPath: string): {
     stdio: ['ignore', 'pipe', 'pipe'],
     timeout: 60_000,
   })
-  if (existsSync(dir)) return { state: 'installed', hooksPath }
+  // prepare 可能把本樹改指別的目錄（clade 的 prepare-hooks 寫 per-worktree `.vite-hooks/_`、
+  // 共用值留 `.husky/_`），所以要用跑完後的有效值重判。
+  const after = readHooksPath()
+  if (after && existsSync(after.startsWith('/') ? after : join(wtPath, after)))
+    return { state: 'installed', hooksPath: after }
   // pnpm 不存在（ENOENT）或 timeout 被 SIGTERM 時 status 是 null，真因只在 error／signal。
   const why = run.error
     ? run.error.message
@@ -2471,7 +2478,7 @@ export function ensureWorktreeGitHooks(wtPath: string): {
       : ((run.stderr || run.stdout || '').trim().split('\n').slice(-1)[0] ?? '')
   return {
     state: 'missing',
-    hooksPath,
+    hooksPath: after || hooksPath,
     detail: `pnpm run prepare exited ${run.status}${why ? ` — ${why}` : ''}`,
   }
 }
@@ -9312,7 +9319,6 @@ async function dispatchTreePlacementRefusal(
   const pane = env.HERDR_PANE_ID?.trim()
   if (!pane) return null
   try {
-    // propagate-completeness: optional-in-consumer -- 主持者守門只在 clade home 生效；consumer 沒投影 holder lib，缺檔即放行
     const { readHolders } = await import('./lib/coordinator-holder.ts')
     const stateDir =
       env.COORDINATOR_STATE_DIR ||

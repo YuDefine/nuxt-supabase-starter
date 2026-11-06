@@ -39,7 +39,7 @@ Reference: `docs/evlog-master-plan.md` § 3.2 + § 7（Cloudflare Workers 限制
    ```
 4. `.env` / `.env.example` 加 `NUXT_SENTRY_DSN=<sentry dsn>`。
 5. `pnpm dev` 起 server，觸發任一 endpoint，看 Sentry Logs（Explore → Logs）有沒有收到。
-6. **Production smoke test 必跑**：`pnpm build && wrangler dev --remote`，再打 endpoint 確認 `event.waitUntil` 真的把 batch flush 出去。`pnpm dev` 跑 `node-server` preset 時 `waitUntil` 是 noop，**不能**作為 production 驗證。
+6. **Production smoke test 必跑**：`nuxt dev`（void 的 Cloudflare dev runtime，非 `node-server` preset）或 deployed Worker，再打 endpoint 確認 `event.waitUntil` 真的把 batch flush 出去。`pnpm dev` 跑 `node-server` preset 時 `waitUntil` 是 noop，**不能**作為 production 驗證。
 
 ## Pipeline 預設值（與 Workers 限制對齊）
 
@@ -92,7 +92,7 @@ nitroApp.hooks.hook('afterResponse', (event) => {
 
 **禁止**改回 `request` hook：早於該次 request 的 wide event 被 evlog emit 進 buffer（evlog 在 `afterResponse` 才 emit），低流量 Workers 環境下會永久遺失當前 event。
 
-**警告**：本地 `pnpm dev`（node-server preset）`waitUntil` 是 noop，dev 看起來都 OK。**只有** production `wrangler dev --remote` 或 deployed Worker 才能真的驗證 batch flush。adoption checklist 必跑這條 smoke test。
+**警告**：本地 `pnpm dev`（node-server preset）`waitUntil` 是 noop，dev 看起來都 OK。**只有** Cloudflare dev runtime（`nuxt dev` 搭 `voidPlugin()`）或 deployed Worker 才能真的驗證 batch flush。adoption checklist 必跑這條 smoke test。
 
 ## 與其他 snippet 的關係
 
@@ -148,7 +148,7 @@ drain pipeline 內 sampling **不需要也不能**包覆——sampling 在 emit 
 - [ ] `onDropped` callback 至少 console.error + Sentry meta（不可 silent）
 - [ ] `nitroApp.hooks.hook('close', () => drain.flush())` 已 wire
 - [ ] Cloudflare Workers consumer 已 wire `event.waitUntil(drain.flush())`
-- [ ] Production smoke test：`wrangler dev --remote` 跑過 / deployed Worker 觸發 endpoint，Sentry Logs 真的有收到
+- [ ] Production smoke test：Cloudflare dev runtime（`nuxt dev`）跑過 / deployed Worker 觸發 endpoint，Sentry Logs 真的有收到
 - [ ] sampling / redact 在 nuxt module config 而非 drain pipeline 內
 - [ ] audit drain 用獨立 pipeline，不共用 main pipeline 的 batch 配額
 

@@ -27,7 +27,7 @@ Supabase REST API 錯誤分兩層：**Postgres error code**（`23503` 等）與 
 | `42P01` | 404       | Undefined table         | schema / 名稱錯誤或 schema cache 過期         |
 | `42883` | 404       | Undefined function      | RPC 函數簽名變更後未 reload schema            |
 | `P0001` | 400       | `RAISE EXCEPTION`       | 業務邏輯錯誤，從 detail/hint 取訊息           |
-| `40001` | 500       | Serialization failure   | Retry transaction（見 `api-patterns.md`）     |
+| `40001` | 500       | Serialization failure   | Retry transaction（見 `api-handler-semantics.md`）     |
 
 ### 常見 PostgREST API codes
 

@@ -108,7 +108,7 @@ gh secret set STAGING_EVLOG_AUDIT_SECRET_V2
 gh secret set PRODUCTION_EVLOG_AUDIT_SECRET
 gh secret set PRODUCTION_EVLOG_AUDIT_SECRET_V1
 gh secret set PRODUCTION_EVLOG_AUDIT_SECRET_V2
-# 確認 deploy-{staging,production}.yml 的 wrangler-action `secrets:` 已列這三顆，再觸發 deploy workflow
+# 確認 deploy-{staging,production}.yml 寫暫存 dotenv 給 `void secret sync` 的步驟已列這三顆，再觸發 deploy workflow
 ```
 
 沒裝 O1 的 consumer 跳過。
@@ -150,14 +150,14 @@ psql -c "SELECT count(*) FROM audit_signed_chain WHERE signed_secret_version = 1
 # count = 0 才能進下一步
 
 # 移除 V1 secret（走 secrets.md 正規路徑，順序不可顛倒）：
-# 1. 從 deploy-{staging,production}.yml 的 wrangler-action `secrets:` 與 env: 拿掉 EVLOG_AUDIT_SECRET_V1
+# 1. 從 deploy-{staging,production}.yml 的 dotenv 寫入步驟（`void secret sync` 前的 printf）與 env: 拿掉 EVLOG_AUDIT_SECRET_V1
 # 2. 刪 GitHub Secret（每個 env）
 gh secret delete STAGING_EVLOG_AUDIT_SECRET_V1
 gh secret delete PRODUCTION_EVLOG_AUDIT_SECRET_V1
 # 3. 觸發 deploy workflow
-# 4. wrangler-action 的 secrets: 只 upsert、不會移除 Worker 上既有的 binding，
-#    所以殘留的 binding 要在 1–3 完成後刪一次（每個 env 的 worker；secrets.md § 唯一例外「移除殘留 binding」，指令見 cf-cli skill）：
-cf workers secrets delete EVLOG_AUDIT_SECRET_V1 --worker <worker-name>
+# 4. `void secret sync` 只 upsert、不會移除 Worker 上既有的 binding，
+#    所以殘留的 binding 要在 1–3 完成後刪一次（每個 env 的 worker；secrets.md § 唯一例外「移除殘留 binding」）：
+void secret delete EVLOG_AUDIT_SECRET_V1   # 非 void Worker：cf workers secrets delete EVLOG_AUDIT_SECRET_V1 --worker <worker-name>
 
 # diff-cron.ts 的 SECRETS map 移除 [1]
 ```

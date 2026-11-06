@@ -403,6 +403,28 @@ export function locatePrCreate(cmd: string, cwd: string | null): PrCreateSite | 
   return null
 }
 
+/** `git [-C dir|-c k=v|--no-pager …] commit|cherry-pick|merge|am|revert`：會在 hook 看不到的當下新增 commit 的子命令。 */
+const COMMIT_SEG_RE =
+  /^git(?:\s+(?:-[Cc]\s+\S+|--[\w-]+(?:=\S+)?|-\w))*\s+(?:commit|cherry-pick|merge|am|revert)(?=\s|$)/u
+
+/**
+ * `gh pr create` 之前，同一個指令串裡有沒有會新增 commit 的 git 子命令。
+ * PreToolUse 在整串指令執行前觸發：串在一起的 `git commit … && gh pr create` 量 `HEAD` 時 commit 還不存在，
+ * diff 看起來是空的（第六個洞：#3741、#3777 等只動 allowlist 的 PR 以此漏過）。
+ */
+export function commitsBeforePrCreate(cmd: string, prSeg: string): boolean {
+  const at = cmd.indexOf(prSeg)
+  if (at <= 0) return false
+  for (const seg of segments(cmd.slice(0, at))) {
+    let s = seg.replace(/^[({\s]+/u, '')
+    for (let m = /^(\S+)\s+/u.exec(s); m && WRAPPERS.has(m[1]!); m = /^(\S+)\s+/u.exec(s)) {
+      s = s.slice(m[0].length)
+    }
+    if (COMMIT_SEG_RE.test(s)) return true
+  }
+  return false
+}
+
 const TARGET_FLAGS: Record<string, 'base' | 'head' | 'repo'> = {
   '--base': 'base',
   '-B': 'base',
@@ -564,7 +586,9 @@ export function ghPrCreateWorkGate(
     const body = prCreateBodyText(site.seg, site.cwd, deps.readFile)
     let deny: string | null = null
     try {
-      deny = ghPrCreateHygiene(body, site.cwd, deps.hygiene, prCreateTarget(site.seg))
+      const target = prCreateTarget(site.seg)
+      if (commitsBeforePrCreate(cmd, site.seg)) target.commitsBefore = true
+      deny = ghPrCreateHygiene(body, site.cwd, deps.hygiene, target)
     } catch {
       /* 判不出就放行 */
     }

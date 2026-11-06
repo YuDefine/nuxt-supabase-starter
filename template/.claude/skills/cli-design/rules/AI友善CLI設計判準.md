@@ -278,7 +278,7 @@ Deleted 3 databases.
 - **F3** `[P1][L]` 提供離線、不需憑證、以 JSON 回傳的命令搜尋入口，或機器可讀的命令樹輸出（例如 `<tool> commands --json`）。cf 的 `cf cli search "<task>"` 在本機執行，回傳最多五筆、最佳者在前的 JSON 陣列。（cf）
 - **F4** `[P1][M+]` 根層與群組層 help 的第一屏，告訴 agent 怎麼找命令。cf 的根層與群組層 `--help` 開頭就提醒 agent 先用 `cf cli search`。（cf）
 - **F5** `[P2][S+]` `--version` exit 0，輸出單行且可解析（例如 `mycli 1.2.3`），不需要網路。
-- **F6** `[P2][M+]` 提供一句可放進 AGENTS.md／CLAUDE.md 的使用建議，寫明何時用這支 CLI、何時不用。cf 的建議句是「When interacting with Cloudflare, use the `cf` CLI unless the project has a Wrangler configuration file.」。（cf）
+- **F6** `[P2][M+]` 提供一句可放進 AGENTS.md／CLAUDE.md 的使用建議，寫明何時用這支 CLI、何時不用。cf 的建議句寫明何時用 `cf`、何時退回專案既有設定（原句見 `references/來源摘錄.md`）。（cf）
 - **F7** `[P2][M+]` 提供 shell completion。（clig）
 
 ## Good Example

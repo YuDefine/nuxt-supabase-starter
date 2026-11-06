@@ -1,6 +1,6 @@
 ---
 description: 在 PUBLIC repo 的 consumer 寫或改自家 tracked 檔（HANDOFF、tasks、docs、decisions）、接 pre-commit 或 CI hygiene gate 時套用——其他 consumer／客戶代號與個人路徑只准以 placeholder 出現，gate 必須掃整棵 tracked tree
-paths: ['.github/workflows/**', '.husky/**', 'HANDOFF.md', 'tasks/**', 'scripts/audit-public-tree-hygiene.ts', 'scripts/public-tree-hygiene-tokens.json']
+paths: ['.github/workflows/**', '.husky/**', '.vite-hooks/**', 'HANDOFF.md', 'tasks/**', 'scripts/audit-public-tree-hygiene.ts', 'scripts/public-tree-hygiene-tokens.json']
 ---
 <!-- Clade native rule; source: rules/core/public-repo-hygiene.md; edit canonical source -->
 
@@ -38,7 +38,7 @@ paths: ['.github/workflows/**', '.husky/**', 'HANDOFF.md', 'tasks/**', 'scripts/
 | --- | --- |
 | 觸發條件 | 每一次 commit（pre-commit `--staged`）與每一次 push／PR（CI `--tree`，無 `paths:` filter）；僅 PUBLIC consumer——visibility 以 `gh repo view` 為準 |
 | 消費端 | consumer 的 git pre-commit hook 與 CI workflow；寫 HANDOFF／tasks／docs 的 agent 與人。clade 端：`scripts/propagate.ts` consumer-sanitize 階段（產生清單）、`scripts/lib/vendor-targets.ts`（投影 audit 本體） |
-| 載入路徑 | consumer：本檔 paths-gated 於 `.github/workflows/**`、`.husky/**`、`HANDOFF.md`、`tasks/**`、audit 與清單檔；gate 失敗時案發點是 audit 輸出本身（它指出 file:line:col 與修法）。clade home 不自動載入 `rules/core/`，clade 端改動入口是 `scripts/lib/public-tree-hygiene-hashes.ts` |
+| 載入路徑 | consumer：本檔 paths-gated 於 `.github/workflows/**`、`.husky/**`、`.vite-hooks/**`、`HANDOFF.md`、`tasks/**`、audit 與清單檔；gate 失敗時案發點是 audit 輸出本身（它指出 file:line:col 與修法）。clade home 不自動載入 `rules/core/`，clade 端改動入口是 `scripts/lib/public-tree-hygiene-hashes.ts` |
 
 ## 已知邊界
 

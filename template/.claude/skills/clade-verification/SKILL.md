@@ -16,9 +16,8 @@ description: "Verification, testing, review, screenshots, and evidence rules. Us
 - READ 若要讀或改 `server/api/**/*.ts`、`packages/*/server/api/**/*.ts`、`server/utils/audit.ts`、`packages/*/server/utils/audit.ts`、`supabase/migrations/**/*.sql`，讀取 `rules/audit-pattern.md`
 - READ 若要讀或改 `scripts/**/*`、`vendor/scripts/**/*`、`.github/workflows/**/*`、`package.json`、`pnpm-workspace.yaml`、`capabilities/core/hooks/**/*`，讀取 `rules/checker-contract.md`
 - READ 若要讀或改 `rules/core/**`、`vendor/scripts/**`、`capabilities/core/**`、`claude-md/**`、`.claude/rules/**`、`.claude/skills/**` 等 11 處（全表見 rules/_index.md），讀取 `rules/checker-subagent.md`
-- READ 若要讀或改 `specs/truth/fixtures.md`、`docs/FIXTURES.md`、`docs/fixtures.md`，讀取 `rules/fixtures-reference.md`
 - READ 若要讀或改 `server/**/*.ts`、`packages/*/server/**/*.ts`、`test/**/*.ts`、`packages/*/test/**/*.ts`、`e2e/**/*.ts`、`packages/*/e2e/**/*.ts` 等 7 處（全表見 rules/_index.md），讀取 `rules/manual-review.backend.md`
-- READ 若要讀或改 `tasks/**`、`specs/plans/**`、`screenshots/**`，讀取 `rules/manual-review.data-readiness.md`
+- READ 若要讀或改 `tasks/**`、`specs/plans/**`、`screenshots/**`、`specs/truth/fixtures.md`、`docs/FIXTURES.md`、`docs/fixtures.md`，讀取 `rules/manual-review.data-readiness.md`
 - READ 若要讀或改 `tasks/**`、`specs/plans/**`，讀取 `rules/manual-review.evidence.md`
 - READ 若要讀或改 `tasks/**`、`specs/plans/**`、`screenshots/**`，讀取 `rules/manual-review.md`
 - READ 若要讀或改 `playwright.config.ts`、`playwright.config.js`、`**/playwright.config.ts`，讀取 `rules/playwright-webserver.md`
@@ -26,7 +25,7 @@ description: "Verification, testing, review, screenshots, and evidence rules. Us
 - READ 若要讀或改 `screenshots/**`、`specs/plans/**/tasks.md`、`app/**/*.vue`、`components/**/*.vue`、`packages/*/components/**/*.vue`、`pages/**/*.vue` 等 13 處（全表見 rules/_index.md），讀取 `rules/runtime/agent-self-verification.screenshot-evidence.md`
 - READ 若要讀或改 `rules/core/**`、`vendor/scripts/**`、`capabilities/core/**`、`claude-md/**`、`.claude/rules/**`、`.claude/skills/**` 等 11 處（全表見 rules/_index.md），讀取 `rules/runtime/checker-subagent.md`
 - READ 若要讀或改 `server/**/*.ts`、`packages/*/server/**/*.ts`、`test/**/*.ts`、`packages/*/test/**/*.ts`、`e2e/**/*.ts`、`packages/*/e2e/**/*.ts` 等 7 處（全表見 rules/_index.md），讀取 `rules/runtime/manual-review.backend.md`
-- READ 若要讀或改 `tasks/**`、`specs/plans/**`、`screenshots/**`，讀取 `rules/runtime/manual-review.data-readiness.md`
+- READ 若要讀或改 `tasks/**`、`specs/plans/**`、`screenshots/**`、`specs/truth/fixtures.md`、`docs/FIXTURES.md`、`docs/fixtures.md`，讀取 `rules/runtime/manual-review.data-readiness.md`
 - READ 若要讀或改 `tasks/**`、`specs/plans/**`，讀取 `rules/runtime/manual-review.evidence.md`
 - READ 若要讀或改 `tasks/**`、`specs/plans/**`、`screenshots/**`，讀取 `rules/runtime/manual-review.md`
 - READ 若要讀或改 `screenshots/**`、`tests/e2e/**`、`packages/*/tests/e2e/**`、`specs/plans/**/design-review.md`，讀取 `rules/runtime/screenshot-strategy.md`

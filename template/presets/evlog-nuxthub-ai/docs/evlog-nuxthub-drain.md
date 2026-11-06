@@ -40,19 +40,18 @@ Schema 與寫入邏輯固定（不可自訂 column），與 `evlog-postgres-drai
 
 ## 安裝 SOP
 
-1. 確認 consumer 已是 NuxtHub stack（`@nuxthub/core` 已裝、`hub.database = true`、`wrangler.jsonc` 有 D1 binding）。
+1. 確認 consumer 已是 NuxtHub stack（`@nuxthub/core` 已裝、`hub.database = true`、`void.config.ts` 或 NuxtHub 設定有 D1 binding）。本 snippet 屬待遷移的 NuxtHub stack；改 void 的 consumer 以 `void/db` 的 D1 與 `void.config.ts` cron 為準。
 2. ```bash
    pnpm add @evlog/nuxthub
    ```
-   安裝過程會跳「Do you want to create a vercel.json with a cron schedule?」— Cloudflare Workers consumer 選 N（用 wrangler.toml）。
+   安裝過程會跳「Do you want to create a vercel.json with a cron schedule?」— Cloudflare Workers consumer 選 N（用 `void.config.ts` 的 cron）。
 3. 把 `nuxt.config-snippet.ts` merge 進 consumer 的 `nuxt.config.ts`。
-4. **Cloudflare Workers**：在 `wrangler.toml` 加 cron trigger：
-   ```toml
-   [triggers]
-   crons = ["0 */4 * * *"]   # 每 4 小時跑一次 retention
+4. **Cloudflare Workers**：在 `void.config.ts` 的 `cloudflare` 區塊加 cron trigger：
+   ```ts
+   cloudflare: { triggers: { crons: ['0 */4 * * *'] } }   // 每 4 小時跑一次 retention
    ```
 5. **Vercel**：`@evlog/nuxthub` 安裝時自動建 `vercel.json`（如果你沒拒絕）。
-6. `pnpm dev` 起 server，觸發 endpoint，到 NuxtHub admin / `wrangler d1 execute <db> --local --persist-to <dev server 的本機 state 目錄>` 查 `_evlog` table 看 row（目錄見下方 checklist 的 dev 項；少了 `--persist-to` 會查到 wrangler 預設目錄，恆為 0 row）。
+6. `pnpm dev` 起 server，觸發 endpoint，查 `_evlog` table 看 row：NuxtHub stack 用 NuxtHub admin（Nuxt DevTools 的 Hub 分頁，打的就是 dev server 那份本機 DB）；已改 void 的 consumer 用 `void db execute "SELECT count(*) FROM _evlog;"`（預設打本機 dev DB）。
 7. Production smoke：deployed worker，cron 觸發後 retention 真的 drop 過期 row。
 
 ## D1 寫入限制
@@ -68,12 +67,12 @@ Schema 與寫入邏輯固定（不可自訂 column），與 `evlog-postgres-drai
 - attributes 大 row：超過 100KB 的事件改走 `evlog-postgres-drain` 或 R2 cold storage
 - Cross-region：讀取永遠 eventual；不用 D1 做 hot path query
 
-## Retention 與 vercel.json / wrangler.toml
+## Retention 與 vercel.json / void.config.ts
 
 | Stack | retention 觸發 |
 | --- | --- |
 | Vercel | `vercel.json#crons[]` 觸發 `/api/_cron/evlog-cleanup` |
-| Cloudflare Workers | `wrangler.toml#triggers.crons` 觸發 `/api/_cron/evlog-cleanup` |
+| Cloudflare Workers | `void.config.ts` 的 `cloudflare.triggers.crons` 觸發 `/api/_cron/evlog-cleanup` |
 
 `@evlog/nuxthub` 自動加 cron handler；consumer 不用自己寫。
 
@@ -103,12 +102,12 @@ production 不開 redact = PII 進 D1（`event.user.email` / `client.ua` 等）�
 ## Consumer onboarding checklist（T3 baseline）
 
 - [ ] `@nuxthub/core` + `@evlog/nuxthub` 都已裝，`hub.database = true`
-- [ ] `wrangler.jsonc` 或 `wrangler.toml` 有 D1 binding `DB`
-- [ ] cron schedule 已設（vercel.json 或 wrangler.toml triggers）
+- [ ] D1 binding `DB` 已宣告（void：`void/db` 偵測 + `void.lock.json`；NuxtHub 待遷移：`hub.db`）
+- [ ] cron schedule 已設（vercel.json 或 `void.config.ts` 的 `cloudflare.triggers.crons`）
 - [ ] `evlog.retention` 配置好（預設 `7d`；高合規 consumer 改 `30d`/`90d`）
 - [ ] `evlog.sampling.rates.info` 10（D1 100 writes/s 上限）
 - [ ] `evlog.redact: true`（production）
-- [ ] dev：觸發 endpoint 後 `wrangler d1 execute <db> --local --persist-to <dev server 的本機 state 目錄> --command 'SELECT count(*) FROM _evlog;'` 有 row（目錄以該專案 NuxtHub dev 設定為準；對錯目錄會恆為 0 row，看起來像 drain 沒寫入）
+- [ ] dev：觸發 endpoint 後 `_evlog` 有 row——NuxtHub stack 看 NuxtHub admin（Nuxt DevTools 的 Hub 分頁）；已改 void 的 consumer 跑 `void db execute "SELECT count(*) FROM _evlog;"`（打本機 dev DB）
 - [ ] production：cron 真的跑（檢查 `_evlog` 最舊 row 的 timestamp 不超過 retention）
 
 ## 何時不該用此 drain

@@ -23,7 +23,7 @@
 # 合法例外 escape hatch：在檔案內任何位置加 `data-perf-ignore-file` 標記即跳過該檔。
 #
 # 正解：useFetch（SSR hydration）或 useQuery（Pinia Colada cache + dedup）。
-# 規約來源：rules/core/nuxt-data-perf.md § HR-1
+# 規約來源：rules/modules/framework/nuxt/nuxt-data-perf.md § HR-1
 #
 # 由 ~/clade vendor/scripts/pre-push/ 散播，請勿直接編輯 consumer 副本。
 
@@ -86,7 +86,7 @@ if ((${#VIOLATIONS[@]} > 0)); then
   done
   echo "" >&2
   echo "   正解：useFetch（SSR）或 useQuery（Colada cache）。純 mutation 檔加 data-perf-ignore-file。" >&2
-  echo "   詳細：rules/core/nuxt-data-perf.md § HR-1" >&2
+  echo "   詳細：rules/modules/framework/nuxt/nuxt-data-perf.md § HR-1" >&2
   echo "" >&2
   # warn-only：不阻擋 push
 fi

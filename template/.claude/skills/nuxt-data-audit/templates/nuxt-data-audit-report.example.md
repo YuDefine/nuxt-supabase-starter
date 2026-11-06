@@ -6,7 +6,7 @@
 
 Grade: C
 Stack: Pinia Colada 1.3.1 + useFetch (mixed), ssr: false
-Reference rule: rules/core/nuxt-data-perf.md 已讀
+Reference rule: rules/modules/framework/nuxt/nuxt-data-perf.md 已讀
 
 | # | Check | Score | Detail |
 |---|-------|-------|--------|

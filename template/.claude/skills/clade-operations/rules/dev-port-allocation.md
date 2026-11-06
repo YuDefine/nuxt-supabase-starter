@@ -7,7 +7,7 @@ paths: ['package.json', 'nuxt.config.ts', 'registry/consumers.json', 'registry/c
 
 # Dev Port 中央分配
 
-Dev port 由 clade 集中分配：registry 分配、規約強制宣告、audit 偵測漂移與衝突。本檔 §2.5–2.7 是 dev tunnel 規約的 SoT，[[dev-tunnel-convention]] 是其索引與補充。
+Dev port 由 clade 集中分配：registry 分配、規約強制宣告、audit 偵測漂移與衝突。dev tunnel 規約的 SoT 是 [[dev-tunnel-convention]]。
 
 > SoT：`registry/consumers.json` 每個 consumer entry 的 `dev_ports` object。
 >
@@ -30,50 +30,7 @@ Dev port 由 clade 集中分配：registry 分配、規約強制宣告、audit �
 - **MUST** consumer `nuxt.config.ts` 若使用 `vite-plugin-cloudflare-tunnel`，plugin 的 `port:` 必須等於 registry `dev_ports.nuxt`
 - 寫法可為 hard-code number 或 `Number(process.env.NUXT_DEV_PORT ?? <registry-value>)`，audit 兩種都接受
 
-### 2.5. Dev tunnel zone & token convention（vite-plugin-cloudflare-tunnel）
-
-凡 consumer 用 `vite-plugin-cloudflare-tunnel` 開 dev tunnel：
-
-- **MUST** Hostname 走 `<consumer-id>-dev.<maintainer-domain>`（org convention）
-- **NEVER** 自由發揮挑其他 zone（如 `bigbyteedu.com` / 個人域名）— 即使 DNS / tunnel 建得起來，plugin 仍會因 token-zone account 不匹配 403 crash Nuxt
-- **MUST** `.env.local` 設三件套：
-
-  ```env
-  TUNNEL_HOSTNAME=<consumer-id>-dev.<maintainer-domain>
-  TUNNEL_NAME=<consumer-id>-dev
-  CLOUDFLARE_API_KEY=<cfat_*-token>
-  ```
-
-- **MUST** Token 用 `cfat_*` account API token，**絕非** `cfut_*`（Worker token）或 `r_*`（cert.pem 簽發的 tunnel-scoped token）
-  - 來源：某 consumer `.env.local` 的 `CLOUDFLARE_API_KEY`
-  - 必備權限：`Cloudflare Tunnel:Edit`（account）+ `SSL and Certificates:Edit`（zone）+ `DNS:Edit`（zone）
-  - **必要**：`SSL and Certificates:Edit` — plugin 必跑 `/zones/<id>/ssl/certificate_packs` GET 確認 edge cert，403 會 re-throw crash Nuxt（即使 Cloudflare Universal SSL 已涵蓋）
-
-錯誤來源：`cert.pem` 的 `r_*`（無 SSL scope、綁錯 account）、`cfut_*` Worker token（無 SSL:Edit）、dashboard 自建的 limited-scope token（常漏 SSL 或 Tunnel）。
-
-### 2.6. Dev tunnel resilient pattern（防 Nuxt restart loop → CF 10502 lockout）
-
-凡 consumer 用 `vite-plugin-cloudflare-tunnel` 開 dev tunnel：
-
-- **MUST** 透過 **pre-flight token probe + try-catch wrapper** 呼叫 `viteCloudflareTunnel`，probe 失敗 / network 失敗 / hostname 缺漏時 fallback 純 localhost、**NEVER** 讓 plugin throw 進 Nuxt
-- **NEVER** 在 `nuxt.config.ts` 內**裸呼叫** `viteCloudflareTunnel({...})`（即 plugin call 不在 try-catch / async fn / pre-flight probe 之內）— 此寫法視為 anti-pattern
-- **MUST** pre-flight probe 用 `AbortController` 設 ≤ 3s timeout，避免 Cloudflare 10502 lockout 期 API 阻塞拉長 dev startup time
-- **MUST** probe endpoint 用 `GET /accounts`（plugin 真正會跑的第一支 call），**NEVER** 用 `/user/tokens/verify`（後者需 token 含 `User Details:Read` permission，多數 Tunnel-only token 沒給 → 會把好 token 誤判 invalid，wrapper 永遠 fallback localhost、tunnel 永遠起不來）
-
-範本 + verify helper：`vendor/snippets/dev-tunnel-resilient/`。
-
-成因：plugin（1.0.12）的 `GET /accounts` 無 retry，token invalid → throw → Nuxt auto-restart spin loop → 觸發 CF `10502` lockout（15–60 分鐘），期間連有效新 token 都回 `code 1000 Invalid API Token`。見 [[pitfall-vite-plugin-cloudflare-tunnel-restart-loop-lockout]]。
-
-### 2.7. Dev-over-tunnel 冷/熱載入量測（防誤判 hang）
-
-凡量測透過 `vite-plugin-cloudflare-tunnel` 開的 dev tunnel 頁面載入效能（人工或 agent CDP）：
-
-- **NEVER** 量測前 `clearBrowserCache` / `setCacheDisabled(true)`——一個 Nuxt + @nuxt/ui v4 dev 頁面有 ~300–950 個 ES module，cold 經 tunnel 要 30–60s，看似 hang
-- **MUST** 量「warm」：第一次載入 populate 快取（不計時）→ 第二次不清快取量 hydrate（約 6s 為正常）
-- **NEVER** 把 cold 載入慢判成 tunnel 壞掉而去試 CF cache rule / `--protocol http2` / `keepAliveConnections` / 移 plugin / 降版（實證全無效）
-- **MAY** 減少 cold-load 模組數：`import { x } from '@nuxt/ui/locale'` barrel import 會拉進整包語言檔；改公開 subpath deep-import（`import x from '@nuxt/ui/runtime/locale/<lang>.js'`）只載需要的 locale
-
-範本：`vendor/snippets/dev-tunnel-perf/`；見 [[pitfall-vite-dev-over-tunnel-cold-load-misdiagnosis]]。
+Dev tunnel 的 hostname／token／resilient wrapper／冷熱載入量測規約（原 §2.5–2.7）見 [[dev-tunnel-convention]] § 1–§ 4。
 
 ### 3. Registry 唯一性
 
@@ -115,7 +72,7 @@ band 存在是為了讓「分不到號碼就退回 base port」永遠不必發�
 
 #### Tunnel 在 worktree 內
 
-Tunnel hostname 是 per-consumer 單一資源（§2.5）；N 個 worktree 共用時流量被後啟動的那個靜默劫持。
+Tunnel hostname 是 per-consumer 單一資源（[[dev-tunnel-convention]] § 1）；N 個 worktree 共用時流量被後啟動的那個靜默劫持。
 
 - **MUST** worktree 要開 tunnel 就走 `dev.perWorktreeTunnel` opt-in（`consumer-meta.json`），由 `vendor/scripts/wt-env-sync.ts` 改寫成 `<slug>.<host>` / `<name>-<slug>`。前提是 consumer 有涵蓋 `*.<host>` 的 DNS record 與憑證，沒有就起不來
 - **NEVER** 沒開 opt-in 就在 worktree 內啟 tunnel——`wt-helper add` 複製來的 `.env.local` 含 token，**存在不代表可以用**

@@ -73,11 +73,15 @@ export function formatViolations(found: AddedLine[]): string {
 }
 
 function gitDiff(root: string, args: string[]): string {
-  return execFileSync('git', ['-C', root, 'diff', '-U0', '--no-color', ...args, '--', REGISTER], {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    maxBuffer: 256 * 1024 * 1024,
-  })
+  return execFileSync(
+    'git',
+    ['-C', root, 'diff', '-U0', '--no-color', '--relative', ...args, '--', REGISTER],
+    {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      maxBuffer: 256 * 1024 * 1024,
+    },
+  )
 }
 
 function mergeBase(root: string, ref: string): string {

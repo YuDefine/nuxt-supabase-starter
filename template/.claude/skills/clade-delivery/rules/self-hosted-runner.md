@@ -9,7 +9,7 @@ paths: ['.github/workflows/**', 'registry/consumers.json']
 
 **核心命題**：`runs-on` 是**標籤集合的交集查詢**，不是指定機器——任何具備該組標籤的 runner 都可能接手。標籤設計錯了，job 落在哪台是擲骰子，以「偶發 CI 紅燈」形式出現（例：`ci-build` 同時掛在有 rsync 的 deploy 機與 Supabase 專用機，deploy job 抽中後者就 `rsync: command not found`）。根因是 runner **宣告了自己不具備的能力**。
 
-> CI step 寫法（cache / secrets）見 [[cloudflare-workers]] § 7。
+> CI step 寫法（pnpm store、gitignored env、secret 注入）見 § 14。
 
 ## MUST
 
@@ -345,6 +345,36 @@ node $CLADE_HOME/scripts/audit-runner-trust-boundary.ts --live --repo <path>    
 
 本證據決定：production-access runner 在 GitHub 端要設哪幾道准入，以及 Free plan 上哪幾道能算數。
 本證據不決定：deploy / build job（持有 deploy key 或 Sentry token）要不要也搬到 migrate 專用 runner——那牽涉主機容量與停機窗口，由各 consumer 依 § 10 拍板。
+
+### 14. CI step 寫法：pnpm store 走本機、env 只靠 secret 注入
+
+#### 14.1 NEVER `cache: pnpm`（用 runner 本機 persistent store）
+
+`cache: pnpm`（與 `actions/cache`）走 GHA cache backend；persistent 的 self-hosted runner 本機已有 store，改走它是每次跨洋下載整包 tarball。
+
+- **NEVER** 在 self-hosted runner 的 `actions/setup-node` 加 `cache: pnpm`（或任何 `actions/cache` step 快取 pnpm store）
+- **MUST** 改用 runner 本機 persistent store：
+
+  ```yaml
+  - name: Install node
+    uses: actions/setup-node@<40-char-sha> # v6（SHA-pin per ci-workflow）
+    with:
+      node-version: 24
+      # 不用 cache: pnpm — GHA cache backend 對 self-hosted runner 反 pattern
+      # 改用 runner 本機 persistent store。
+
+  - name: Configure pnpm store
+    run: pnpm config set store-dir "$HOME/.pnpm-store"
+
+  - name: Install dependencies
+    run: pnpm install --frozen-lockfile
+  ```
+
+#### 14.2 CI 看不到 gitignored env／本機 link state
+
+- **NEVER** 在 workflow 假設 `.env*`／本機 link state（例：`.void/`）存在——checkout 只含 tracked file
+- **MUST** deploy 身分與 runtime app secret 的 SoT 是 GitHub repo secret，經 job 的 `env:` 注入；落盤的憑證照 § 11 寫進 `$RUNNER_TEMP` 並在 `always()` 收尾刪除
+- Cloudflare Workers 的 `void deploy`／`void secret sync` 寫法在 `runtime:cf-workers` 模組的 `rules/modules/runtime/cf-workers/cloudflare-workers.md` § 7.2；fleet 現況跑 `scripts/audit-wrangler-config.ts`（`ci.self_hosted_pnpm_cache` 等）
 
 ## NEVER
 

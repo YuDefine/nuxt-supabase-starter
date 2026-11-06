@@ -21,7 +21,10 @@
 
 set -euo pipefail
 
-PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+# consumer root（≠ git toplevel 的子目錄 consumer 也對）：解析規則與 staged 路徑規約見 ../consumer-root.sh
+# shellcheck source=../consumer-root.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../consumer-root.sh"
+PROJECT_ROOT="$(clade_consumer_root)"
 cd "$PROJECT_ROOT"
 
 # Auto-detect：沒有 supabase/migrations/ 直接跳
@@ -31,7 +34,7 @@ cd "$PROJECT_ROOT"
 migration_files=()
 while IFS= read -r -d '' file; do
   migration_files+=("$file")
-done < <(git diff --cached --name-only --diff-filter=ACM -z -- 'supabase/migrations/*.sql')
+done < <(git diff --cached --relative --name-only --diff-filter=ACM -z -- 'supabase/migrations/*.sql')
 
 ((${#migration_files[@]} == 0)) && exit 0
 
@@ -90,7 +93,7 @@ fi
 out_of_order=()
 while IFS= read -r -d '' file; do
   out_of_order+=("$file")
-done < <(git diff --cached --name-only --diff-filter=AR -z -- 'supabase/migrations/*.sql')
+done < <(git diff --cached --relative --name-only --diff-filter=AR -z -- 'supabase/migrations/*.sql')
 
 # Merge commit false-positive 防護：merge in progress（MERGE_HEAD 存在）
 # 時，staged diff（vs HEAD）含 merge 帶進來的 origin/main 既有 migration，
@@ -212,7 +215,7 @@ fi
 added_migrations=()
 while IFS= read -r -d '' file; do
   added_migrations+=("$file")
-done < <(git diff --cached --name-only --diff-filter=A -z -- 'supabase/migrations/*.sql')
+done < <(git diff --cached --relative --name-only --diff-filter=A -z -- 'supabase/migrations/*.sql')
 
 if ((${#added_migrations[@]} > 0)) && command -v node >/dev/null 2>&1; then
   clade_root="${CLADE_HOME:-}"

@@ -18,10 +18,10 @@ when: "要 commit，或要處置 WIP／stash 之前"
 
 ## pre-commit hook 三條紀律（hook 是 fleet 預設形態）
 
-三條各綁一個**下指令當下看得到**的 predicate，**每一個**有 `.husky/pre-commit` 的 repo 都適用——
+三條各綁一個**下指令當下看得到**的 predicate，**每一個**有 `.vite-hooks/pre-commit`（舊 husky 型為 `.husky/pre-commit`）的 repo 都適用——
 不是只有「hook 看起來很慢」的那些，也不是只對最後一次 commit。
 
-1. **repo 存在 `.husky/pre-commit` → `git commit` MUST 使用可持續執行並取回終態的 command handle。**
+1. **repo 存在 `.vite-hooks/pre-commit`（或 `.husky/pre-commit`）→ `git commit` MUST 使用可持續執行並取回終態的 command handle。**
    在當前 runtime 的工具 catalog 確認啟動、等待與取消介面；取得 handle 後沿用它收回結果。
    Claude 的 `run_in_background` 是該端參數。
    缺少持續執行能力時回報缺口；timeout 或沒有結果時先查原 invocation 的狀態，不另起一次 commit。

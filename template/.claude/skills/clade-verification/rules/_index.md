@@ -5,9 +5,8 @@
 {"file":"audit-pattern.md","source":"rules/core/audit-pattern.md","paths":["server/api/**/*.ts","packages/*/server/api/**/*.ts","server/utils/audit.ts","packages/*/server/utils/audit.ts","supabase/migrations/**/*.sql"]}
 {"file":"checker-contract.md","source":"rules/core/checker-contract.md","paths":["scripts/**/*","vendor/scripts/**/*",".github/workflows/**/*","package.json","pnpm-workspace.yaml","capabilities/core/hooks/**/*"]}
 {"file":"checker-subagent.md","source":"rules/core/checker-subagent.md","paths":["rules/core/**","vendor/scripts/**","capabilities/core/**","claude-md/**",".claude/rules/**",".claude/skills/**","**/migrations/**","shared/**","packages/*/shared/**","server/utils/**","packages/*/server/utils/**"]}
-{"file":"fixtures-reference.md","source":"rules/core/fixtures-reference.md","paths":["specs/truth/fixtures.md","docs/FIXTURES.md","docs/fixtures.md"]}
 {"file":"manual-review.backend.md","source":"rules/core/manual-review.backend.md","paths":["server/**/*.ts","packages/*/server/**/*.ts","test/**/*.ts","packages/*/test/**/*.ts","e2e/**/*.ts","packages/*/e2e/**/*.ts","supabase/**"]}
-{"file":"manual-review.data-readiness.md","source":"rules/core/manual-review.data-readiness.md","paths":["tasks/**","specs/plans/**","screenshots/**"]}
+{"file":"manual-review.data-readiness.md","source":"rules/core/manual-review.data-readiness.md","paths":["tasks/**","specs/plans/**","screenshots/**","specs/truth/fixtures.md","docs/FIXTURES.md","docs/fixtures.md"]}
 {"file":"manual-review.evidence.md","source":"rules/core/manual-review.evidence.md","paths":["tasks/**","specs/plans/**"]}
 {"file":"manual-review.md","source":"rules/core/manual-review.md","paths":["tasks/**","specs/plans/**","screenshots/**"]}
 {"file":"playwright-webserver.md","source":"rules/core/playwright-webserver.md","paths":["playwright.config.ts","playwright.config.js","**/playwright.config.ts"]}
@@ -16,7 +15,7 @@
 {"file":"runtime/agent-self-verification.screenshot-evidence.md","source":"adapters/claude/instructions/rules/core/agent-self-verification.screenshot-evidence.md","paths":["screenshots/**","specs/plans/**/tasks.md","app/**/*.vue","components/**/*.vue","packages/*/components/**/*.vue","pages/**/*.vue","packages/*/pages/**/*.vue","layouts/**/*.vue","packages/*/layouts/**/*.vue","e2e/**","packages/*/e2e/**","playwright.config.*","packages/**/app/**/*.vue"]}
 {"file":"runtime/checker-subagent.md","source":"adapters/claude/instructions/rules/core/checker-subagent.md","paths":["rules/core/**","vendor/scripts/**","capabilities/core/**","claude-md/**",".claude/rules/**",".claude/skills/**","**/migrations/**","shared/**","packages/*/shared/**","server/utils/**","packages/*/server/utils/**"]}
 {"file":"runtime/manual-review.backend.md","source":"adapters/claude/instructions/rules/core/manual-review.backend.md","paths":["server/**/*.ts","packages/*/server/**/*.ts","test/**/*.ts","packages/*/test/**/*.ts","e2e/**/*.ts","packages/*/e2e/**/*.ts","supabase/**"]}
-{"file":"runtime/manual-review.data-readiness.md","source":"adapters/claude/instructions/rules/core/manual-review.data-readiness.md","paths":["tasks/**","specs/plans/**","screenshots/**"]}
+{"file":"runtime/manual-review.data-readiness.md","source":"adapters/claude/instructions/rules/core/manual-review.data-readiness.md","paths":["tasks/**","specs/plans/**","screenshots/**","specs/truth/fixtures.md","docs/FIXTURES.md","docs/fixtures.md"]}
 {"file":"runtime/manual-review.evidence.md","source":"adapters/claude/instructions/rules/core/manual-review.evidence.md","paths":["tasks/**","specs/plans/**"]}
 {"file":"runtime/manual-review.md","source":"adapters/claude/instructions/rules/core/manual-review.md","paths":["tasks/**","specs/plans/**","screenshots/**"]}
 {"file":"runtime/screenshot-strategy.md","source":"adapters/claude/instructions/rules/core/screenshot-strategy.md","paths":["screenshots/**","tests/e2e/**","packages/*/tests/e2e/**","specs/plans/**/design-review.md"]}

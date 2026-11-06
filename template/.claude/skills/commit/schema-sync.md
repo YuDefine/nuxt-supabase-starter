@@ -65,7 +65,9 @@ cp "$TYPES" "$TYPES_BEFORE"
 
 # 2. 重置 DB + 從 migrations 重新生成 types
 #    依執行環境選命令，不只看 package.json 有沒有 scripts['db:reset']
-#    Desk shared/canonical live DB → pnpm db:reset（先過 [[db-reset-coordination]]）
+#    Desk per-worktree 拓樸 → 過渡期：consumer 自己的 per-worktree clone reset（先過 [[db-reset-coordination]]）
+#    Desk shared 拓樸 → forward-only 下共用 DB NEVER reset：交 CI supabase-check（沒接就停）；
+#    導入 `pnpm db:copy` 後改在臨時副本跑本步（待辦見 W-2026-11-02-coordinator-watch-dev-staging-db-db-reset-cluste design.md § 6）
 #    隔離雲端 VM ephemeral → 該 VM 的 supabase db reset --local
 #    無 DB 切片 → 不跑本步；缺 docker／supabase CLI 就停，不回連 desk
 if [ "${CLADE_CLOUD_EPHEMERAL_DB:-}" = 1 ]; then
@@ -74,7 +76,20 @@ if [ "${CLADE_CLOUD_EPHEMERAL_DB:-}" = 1 ]; then
   supabase gen types typescript --local > "$TYPES"
 elif node -e "process.exit(require('./package.json').scripts?.['db:reset'] ? 0 : 1)" 2>/dev/null; then
   # LXC / 遠端 Supabase 模式：consumer 提供 pnpm db:reset wrapper（會 reset DB + 跑 db:types 寫到 $TYPES）
-  pnpm db:reset
+  # 只有 per-worktree 拓樸（wrapper 是 target mode，只重建自己的 clone）才准跑；
+  # shared 拓樸的 db:reset 會洗掉共用 DB（別的 worktree 還在用）→ 停下回報（判定見 [[db-topology-invariant]]）
+  f=$(ls scripts/supabase/db-reset.sh scripts/db-reset.sh 2>/dev/null | head -1)
+  if [ -n "$f" ] && grep -qE "reset_target|Target mode never claims" "$f"; then
+    pnpm db:reset
+  elif [ -f .github/workflows/supabase-check.yml ]; then
+    # shared 拓樸：共用 DB NEVER reset。第一段（pnpm db:copy 導入前）把 migration 冷啟重放、types drift、
+    # db lint 交 PR 的 CI supabase-check（runner 上拋棄式 stack，NEVER 碰 dev DB）；本步與 Step 1.4 跳過
+    echo 'DEFERRED_TO_CI: shared 拓樸不 reset 共用 DB；migration 重放、types drift、db lint 交 PR 的 supabase-check'
+    exit 0
+  else
+    echo 'shared 拓樸且缺 .github/workflows/supabase-check.yml：無處驗 migration 重放，停下；先依 vendor/snippets/supabase-ci/README.md 接上 supabase-check' >&2
+    exit 1
+  fi
 else
   # 本機 Docker Supabase 模式
   supabase db reset
@@ -85,6 +100,8 @@ fi
 diff "$TYPES_BEFORE" "$TYPES"
 ```
 
+印 `DEFERRED_TO_CI` → 本步的比對與 Step 1.4 都跳過，直接進 Step 1.5；完成報告寫一行「schema 驗證交 CI `supabase-check`（shared 拓樸，forward-only 第一段）」，該 PR 的 `supabase-check` 綠之前 **NEVER** merge。types 仍要隨 migration 改：本機無 DB 可重生時照 migration 手改，CI 的 types drift 會指出差異。
+
 有差異 → **停止 commit**，提示使用者依差異建立對應 migration 或還原 `$TYPES`（migration 為準、
 types 只是落後未重生時，「還原」就是保留重生後的版本，讓它進下一輪 `/commit` 的分組）。
 
@@ -92,7 +109,7 @@ types 只是落後未重生時，「還原」就是保留重生後的版本，�
 
 ## Step 1.4 — SQL lint（hard block）
 
-**無條件跑**。Step 1.3 的 reset 剛把 DB 刷到「migrations 全部重放一次」的狀態，這是 lint 唯一
+**Step 1.3 沒有印 `DEFERRED_TO_CI` 就跑**（shared 拓樸的共用 DB 沒套本次 migration，lint 量不到它；CI `supabase-check` 在冷啟重放後以同一 `--level warning` 門檻跑）。Step 1.3 的 reset 剛把 DB 刷到「migrations 全部重放一次」的狀態，這是 lint 唯一
 量得準的時刻——觸發判定、SSH 連線、reset 三樣成本都已經付掉，這一步的邊際成本接近零。
 
 ```bash

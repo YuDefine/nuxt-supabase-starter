@@ -33,7 +33,7 @@ paths:
 
 3. **`self-hosted-runner` 是 informational**：void / Cloudflare 型 consumer 用 `ubuntu-latest` 合理，不因此判 drift。只有走 Docker self-hosted deploy 型的 consumer 才 MUST 用 `[self-hosted, ...]` runner。
 
-4. **同一時機 MUST 一併跑 CI gate 接線稽核**（clade 散播的 blocking gate 只跑在 `.husky/pre-push`，`--no-verify` 與 web 編輯介面都能繞過）：
+4. **同一時機 MUST 一併跑 CI gate 接線稽核**（clade 散播的 blocking gate 只跑在 `.vite-hooks/pre-push`（舊 husky 型為 `.husky/pre-push`），`--no-verify` 與 web 編輯介面都能繞過）：
 
    ```bash
    node ~/offline/clade/scripts/audit-gate-coverage.ts

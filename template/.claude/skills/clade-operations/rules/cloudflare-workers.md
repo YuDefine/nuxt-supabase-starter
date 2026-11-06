@@ -2,7 +2,7 @@
 description: Cloudflare Workers 單軌規約（void 優先、cf CLI 補位、禁用 wrangler）。Workers 部署 / 本機 dev / 型別 / secret / D1 migration 一律走 `void`（自有 CF 帳號），void 做不到的帳號資源操作才走 `cf` CLI；依 DB 選擇分派 NuxtHub gating（D1 + 舊派 → `@nuxthub/core`；void 自帶 `void/db` → 禁帶），並定義遷移期對 wrangler 殘留的處置
 paths: ['void.config.ts', 'void.lock.json', 'wrangler.{toml,jsonc}', 'nuxt.config.*', 'package.json', '.github/workflows/**/*.yml']
 ---
-<!-- Clade native rule; source: rules/core/cloudflare-workers.md; edit canonical source -->
+<!-- Clade native rule; source: rules/modules/runtime/cf-workers/cloudflare-workers.md; edit canonical source -->
 <!-- clade-targets: claude,agents -->
 
 # Cloudflare Workers Configuration
@@ -128,33 +128,15 @@ binding 的具體欄位以 official void skill docs 為準，本規約不複製�
 
 ## § 7 — Self-hosted runner CI 反 pattern
 
-> Runner 標籤設計與 job 路由見 [[self-hosted-runner]]；本節只講 CI **step 寫法**。
+> Runner 標籤設計、job 路由與通用 CI step 寫法見 [[self-hosted-runner]]（§ 14）；本節只講 Cloudflare Workers 專屬的 step 寫法。
 
 ### § 7.1 — NEVER `cache: pnpm`（用 LXC 本地 persistent store）
 
-`cache: pnpm`（與 `actions/cache`）走 GHA cache backend；persistent 的 self-hosted runner 本地已有 store，改走它是每次跨洋下載整包 tarball。
-
-- **NEVER** 在 self-hosted runner 的 `actions/setup-node` 加 `cache: pnpm`（或任何 `actions/cache` step 快取 pnpm store）
-- **MUST** 改用 LXC 本地 persistent store：
-
-  ```yaml
-  - name: Install node
-    uses: actions/setup-node@<40-char-sha> # v6（SHA-pin per ci-workflow）
-    with:
-      node-version: 24
-      # 不用 cache: pnpm — GHA cache backend 對 self-hosted runner 反 pattern
-      # 改用 LXC 本地 persistent store。
-
-  - name: Configure pnpm store
-    run: pnpm config set store-dir "$HOME/.pnpm-store"
-
-  - name: Install dependencies
-    run: pnpm install --frozen-lockfile
-  ```
+規則與 workflow 片段在 [[self-hosted-runner]] § 14.1（core，所有 self-hosted runner consumer 都載入）。
 
 ### § 7.2 — CI 看不到 gitignored env / 本機 link state
 
-- **NEVER** 在 workflow 假設 `.env*` / 本機 link state（`.void/`）存在——checkout 只含 tracked file
+- 通用規則（checkout 只含 tracked file、secret 走 `env:` 注入）見 [[self-hosted-runner]] § 14.2；以下是 void 專屬寫法
 - **MUST** deploy 身分走 `CLOUDFLARE_API_TOKEN` secret，經 `env:` 注入 `void deploy`：
 
   ```yaml

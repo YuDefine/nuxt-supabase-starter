@@ -3,7 +3,7 @@
  * pre-bash-dev-server-gate.ts — 擋 Bash 裸起長駐 dev server，導向單一入口。
  *
  * 為什麼存在：`rules/core/proactive-skills.dev-server-spawn.md` 寫「harness 會 reap Bash 衍生的 process」，
- * 實況不是——`run_in_background` 起的 `nuxt dev` 被 init 收養後長活（2026-10-31 實查：zenbook 一個 clade pane
+ * 實況不是——`run_in_background` 起的 `nuxt dev` 被 init 收養後長活（實查：zenbook 一個 clade pane
  * 掛 7 個 port、孤兒最久 40h）。文字規約沒擋住，所以掛在動作上：命令位置出現長駐 dev 命令就擋，
  * 不論前景或背景（前景也會卡住 Bash tool 直到 timeout，留下孤兒）。
  *

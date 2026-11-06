@@ -8,11 +8,12 @@
  *   | --- | --- | --- |
  *   | 去重 | 同 repo 另一條 branch 已有 open PR，body 的 `Work:` 是同一個 work id（work id ↔ plan 目錄一對一）。integration 模式不算：base 或 head 是 `integration/<work-id>` 的 PR（slice PR 與 integration→main 那張共用同一個 `Work:`）不參與去重 | 改推那張 PR 的分支；主持者刻意平行拆的 → body 加 `Parallel-to: #<N>` |
  *   | 記帳類 | clade home 的 diff 每一個路徑都在登記簿 allowlist（`vendor/scripts/lib/register-paths.ts` `isRegisterPath`；`rules/core/github-flow.md` § 紀錄型改動不開 PR）。先於去重判；`--base` 不是 main（stacked PR）不判（register-land 只落 main）；**不看 body**（`--body-file -`、動態 body 也判）、跟著指令裡的 `cd <dir>` 量那棵 worktree、`--head`／`--base` 動態時量 HEAD 相對預設分支 | 不開 PR：本 worktree commit 後跑 `node scripts/register-land.ts`；混了 allowlist 外的檔就照常開 PR |
+ *   | 記帳類（同串 commit） | 同一個指令串裡 `gh pr create` 之前有 `git commit`／`cherry-pick`／`merge`／`am`／`revert`（PreToolUse 在整串執行前觸發，量到的 HEAD 還沒有那些 commit），且現在量到的 diff 為空（全 allowlist 照原本的記帳類擋；clade home、非 stacked） | 拆成兩個 Bash 呼叫：先 commit，下一個呼叫再開 PR（那時量得到：全 allowlist → register-land，混了外面的檔 → 放行）；現有 diff 已有 allowlist 外的檔時不受影響 |
  *   | 大小 | 扣掉投影檔後 >1000 行（增＋刪）或 >50 檔；量的是 `--head` 相對 `--base`（省略時 HEAD 相對預設分支） | 拆成多張；或 body 宣告 `Mechanical: <產生方式>`（0-A 可走 `--independent` 範圍分級） |
  *
  * 只擋開 PR，**NEVER** 擋派工或限制 open PR 總數（入口不設上限）。
  * 判不出一律放行（fail-open）：不在 git repo、`gh` 失敗或逾時、diff 讀不到、工作目錄判不出（動態 `cd`）、`--repo` 指向別的 repo 或值是動態展開（本機 checkout 量不到）；body 判不出或 `--base`／`--head` 值是動態展開時，只放行去重與大小，記帳類照判。
- * 記帳類判定同樣只在 clade home 做（登記簿 allowlist 與 register-land 只存在那裡），allowlist 只從本 hook 自己的 checkout 或本機 canonical clade home（`CLADE_HOME`、`~/offline/clade`）載入——consumer 的 session `cd` 到 clade worktree 開 PR 時靠後者（#3481–#3489 以此漏過）。
+ * 記帳類判定同樣只在 clade home 做（登記簿 allowlist 與 register-land 只存在那裡），allowlist 只從本 hook 自己的 checkout 或本機 canonical clade home（`CLADE_HOME`、`~/offline/clade`）載入——consumer 的 session `cd` 到 clade worktree 開 PR 時靠後者。
  * 投影檔的判定只在 clade home 做得出（`scripts/audit-clade-home-projections.ts` 的投影計畫），且只載入本 hook
  * 自己那棵 checkout 的投影程式（NEVER 執行目標 repo 的程式碼）；其他 repo → 大小判定不跑（只做去重）。
  * 投影計畫要起 node 子行程並建完整規則計畫，遠慢於 git／gh：只在未扣投影前就超限時才算，且吃整體預算的剩餘時間而非單次上限。
@@ -64,6 +65,8 @@ export interface PrCreateTarget {
   opaque?: boolean
   /** 其中 `--repo` 判不出：本機 checkout 量不到那個 repo，連記帳類判定也放行（`--base`／`--head` 判不出時記帳類改量 HEAD 相對預設分支）。 */
   opaqueRepo?: boolean
+  /** 同一個指令串裡 `gh pr create` 之前有 `git commit` 等：hook 量 HEAD 時那些 commit 還不存在，diff 空或全 allowlist 都不能當成「不是記帳類」。 */
+  commitsBefore?: boolean
 }
 
 export interface NumstatEntry {
@@ -190,6 +193,15 @@ export function sizeMessage(v: SizeVerdict, limits = PR_SIZE_LIMITS): string {
   )
 }
 
+export function commitChainMessage(): string {
+  return (
+    `⛔ gh pr create：同一個指令串先 commit 再開 PR，hook 量不到這次 commit 的內容` +
+    `（目前 HEAD 相對 main 沒有差異，無法排除記帳類）。` +
+    `拆成兩個 Bash 呼叫：先 commit（與 push），下一個呼叫再 \`gh pr create\`；` +
+    `內容全是登記簿 allowlist 的就改跑 \`node scripts/register-land.ts\`、不開 PR。判準：rules/core/github-flow.md § 紀錄型改動不開 PR。`
+  )
+}
+
 export function registerOnlyMessage(files: number): string {
   return (
     `⛔ gh pr create：改動的 ${files} 個檔全在登記簿 allowlist 內（紀錄型改動不開 PR、不在 0-A 範圍）。` +
@@ -226,6 +238,8 @@ export function ghPrCreateHygiene(
   if (isRegister) {
     const got = diff()
     if (got?.length && got.every((e) => isRegister(e.path))) return registerOnlyMessage(got.length)
+    // 同串 commit 在後：現在量到空（全 allowlist 的上一行已擋），commit 之後才是真正的內容 → 要求拆開，下一次 PreToolUse 才量得到
+    if (target.commitsBefore && got?.length === 0) return commitChainMessage()
   }
   // 以下的去重與大小判定要 body 與確定的 base／head
   if (body === null || target.opaque) return null
@@ -350,8 +364,8 @@ export function cladeHomeRegisterMatcher(
   homeRoots: readonly string[] = canonicalCladeHomes(),
 ): ((path: string) => boolean) | null {
   // allowlist 只從「hook 自己的 checkout」或「本機 canonical clade home」載入（NEVER 執行被量那棵 repo 的程式碼）；
-  // 被量的 diff 可以在同 repo 的任一棵 worktree。consumer 的 session `cd` 到 clade worktree 開 PR 時
-  // （2026-10-31 #3481–#3489），hook 是 consumer 那份、沒有 register-paths.ts，要靠 canonical home 補上。
+  // 被量的 diff 可以在同 repo 的任一棵 worktree。consumer 的 session `cd` 到 clade worktree 開 PR 時，
+  // hook 是 consumer 那份、沒有 register-paths.ts，要靠 canonical home 補上。
   for (const root of [hookRoot, ...homeRoots]) {
     const file = join(root, 'vendor', 'scripts', 'lib', 'register-paths.ts')
     if (!existsSync(file)) continue

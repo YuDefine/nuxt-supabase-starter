@@ -393,6 +393,7 @@ console.log("clients:", clientScripts.map(k=>k.replace(/^dev:/,"")).join(","));
 **Step 4 — 補 mock + 跑 reset**（通過 Step 3.5 gate 後）：
 
 - 偵測到 seed 檔 + reset 命令 → 主動補必要 mock 進 seed 檔（依目前頁面所需 entity，最少 happy path 3 筆 + edge case 1 筆），跑 reset 命令，retry 截圖
+- reset 命令只准在 **per-worktree** 拓樸（只重建自己的 clone）跑；**shared** 拓樸共用 DB **NEVER** reset，停下回報主 session（判定見 [[db-topology-invariant]]）。consumer 已有 `pnpm db:fixtures` 時改跑它（冪等 upsert，不 reset）
 - review.md **MUST** 加 section「Seed 變動」列：
   - 新增了哪幾行（檔案 + line range）
   - 跑了哪個命令

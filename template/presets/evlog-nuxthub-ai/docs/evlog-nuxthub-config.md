@@ -78,10 +78,9 @@ export default defineNuxtConfig({
  *     ]
  *   }
  *
- * Cloudflare Workers 不用 vercel.json — 改用 wrangler.toml `[triggers] crons`：
+ * Cloudflare Workers 不用 vercel.json — 改用 void.config.ts 的 `cloudflare.triggers.crons`：
  *
- *   [triggers]
- *   crons = ["0 *​/4 * * *"]
+ *   cloudflare: { triggers: { crons: ["0 *​/4 * * *"] } }
  *
  * 然後在 server/api/_cron/evlog-cleanup.ts 確認 cron handler 還在
  * （@evlog/nuxthub 自動加，不用自己寫）。

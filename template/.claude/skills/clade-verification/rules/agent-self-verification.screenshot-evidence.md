@@ -63,9 +63,9 @@ Reviewer 的 model 選擇依 [[agent-routing]] 當前 Routing Table 與對應 ad
 
 ## MUST 5 — verify:ui / verify:e2e evidence 的 fixture MUST 在 seed.sql
 
-Step 8a evidence collection 發現 seed 缺 fixture（verify item 引用的 entity ID 在 `seed.sql` 不存在）時，**MUST** 先把 fixture INSERT 寫進 `seed.sql` → `pnpm supabase:sync` → `pnpm db:reset` → 再拍截圖。
+Step 8a evidence collection 發現 seed 缺 fixture（verify item 引用的 entity ID 在 `seed.sql` 不存在）時，**MUST** 先把 fixture 寫進開發假資料的 upsert 腳本（或 `seed.sql`）→ `pnpm db:fixtures`（冪等，不 reset）→ 再拍截圖。`pnpm db:fixtures` 尚未導入的 consumer（第一段過渡期）：per-worktree 拓樸用 `pnpm supabase:sync` + `pnpm db:reset`（只重建自己的 clone）；shared 拓樸 **NEVER** reset，停下回報主 session（判定見 [[db-topology-invariant]]），**NEVER** 改用 ephemeral API data 湊。
 
-**NEVER** 用 `curl POST` / `$fetch` / browser form submit 臨時建 ephemeral data 拍截圖（db:reset 後消失；[[pitfall-verify-evidence-ephemeral-fixture-washed-by-db-reset]]）。
+**NEVER** 用 `curl POST` / `$fetch` / browser form submit 臨時建 ephemeral data 拍截圖（臨時副本重建或 fixture 重灌後消失；[[pitfall-verify-evidence-ephemeral-fixture-washed-by-db-reset]]）。
 
 ## MUST 6 — Worktree .env 驗證
 

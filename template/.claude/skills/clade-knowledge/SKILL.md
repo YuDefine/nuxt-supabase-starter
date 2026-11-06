@@ -1,6 +1,6 @@
 ---
 name: "clade-knowledge"
-description: "Use for durable documentation, shared knowledge, decisions, onboarding, rule authoring, or technical debt."
+description: "Use for durable docs, decisions, onboarding, rule authoring, tech debt, or writing a decision table/tree or standard judgment flow (分流、決策表、決策樹)."
 ---
 
 # clade-knowledge

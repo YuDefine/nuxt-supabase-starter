@@ -145,10 +145,10 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       String.raw`specs/errors/`,
       // Snippets / shared presets
       String.raw`vendor/(snippets|oxc-shared|doctor-shared|review-rules|husky)/`,
-      // vendor hook 掛載點 —— 逐檔列出，**NEVER** 放寬成 `\.husky/`：
+      // vendor hook 掛載點 —— 逐檔列出，**NEVER** 放寬成 `\.husky/`／`\.vite-hooks/`：
       // consumer 的 commit-msg / pre-commit / pre-push 是 init-consumer 寫的自家檔，
       // 整個目錄標成 clade-managed 會讓 auto-reset 把它們清掉。
-      String.raw`\.husky/(prepare-commit-msg|post-commit)$`,
+      String.raw`\.(husky|vite-hooks)/(prepare-commit-msg|post-commit)$`,
       // GitHub vendored actions
       String.raw`\.github/actions/`,
       // Utility files —— dest 是 `join(consumerRoot, manifest.paths.utils ?? 'utils',

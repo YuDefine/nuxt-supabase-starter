@@ -135,8 +135,10 @@ printf '%s' "$cmd" | perl -e '
   printf '   The dev and prod databases live on remote LXC hosts; this machine has no Supabase containers,\n'
   printf '   and the dev LXC is shared with other sessions. Do NOT retry, and do NOT ask the user to start it.\n'
   printf '   Instead:\n'
-  printf '   - Every DB operation goes through the repo scripts: pnpm db:* (db:reset rebuilds only this worktree'"'"'s clone\n'
-  printf '     when the repo is per-worktree; check the topology predicate first).\n'
+  printf '   - Every DB operation goes through the repo scripts: pnpm db:*. Shared DBs (dev main, staging) are forward-only:\n'
+  printf '     apply migrations (pnpm db:migrate), upsert fixtures (pnpm db:fixtures), NEVER reset. Testing a schema change\n'
+  printf '     needs a temporary copy of the main DB (pnpm db:copy), not a reseed. Until this repo adopts those scripts, its\n'
+  printf '     per-worktree clone reset (target mode) is the only reset allowed; check the topology predicate first.\n'
   printf '   - Full contract: .claude/skills/clade-data/rules/db-topology-invariant.md\n'
   hint="$project_dir/.claude/db-runtime-hint.md"
   if [ -f "$hint" ]; then

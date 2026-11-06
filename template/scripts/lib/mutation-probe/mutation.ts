@@ -166,7 +166,8 @@ export function loadTypescript(): TsApi | null {
  * SourceFile 帶語法錯誤嗎？`parseDiagnostics` 是 TypeScript 的內部欄位（沒進公開型別），
  * 所以從 unknown 起手用守衛讀，不靠斷言鏈宣稱形狀。
  */
-export function hasParseDiagnostics(sf: object): boolean {
+export function hasParseDiagnostics(sf: unknown): boolean {
+  if (typeof sf !== 'object' || sf === null) return false
   const diagnostics: unknown = Reflect.get(sf, 'parseDiagnostics')
   return Array.isArray(diagnostics) && diagnostics.length > 0
 }

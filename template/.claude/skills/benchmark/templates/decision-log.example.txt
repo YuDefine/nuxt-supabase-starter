@@ -1,0 +1,4 @@
+id	hypothesis	change	before	after	delta	tests	verdict	note
+0	baseline	無	90.4s	90.4s	0%	pass	kept	5 次交錯 median，凍結 harness 第一次
+1	平行 typecheck 的獨立 project 可縮短關鍵路徑	改成並行跑三個 project	90.4s	71.2s	-21%	pass	kept	gate 綠，越過 noise（range 重疊度 0）
+2	快取 declaration 輸出可跳過重複編譯	開 incremental	71.2s	70.8s	-0.6%	pass	reverted	在 noise 之內，回退

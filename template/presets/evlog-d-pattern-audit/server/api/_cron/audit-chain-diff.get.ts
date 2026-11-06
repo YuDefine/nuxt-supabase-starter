@@ -14,7 +14,7 @@
  *   cp vendor/snippets/evlog-audit-signed/diff-cron.ts \
  *      packages/core/server/api/_cron/audit-chain-diff.get.ts
  *
- * cron schedule（wrangler.toml 或 vercel.json）：
+ * cron schedule（void.config.ts 的 cloudflare.triggers.crons 或 vercel.json）：
  *   "0 *​/6 * * *"   # 每 6 小時跑
  *
  * 5 種 drift 種類（migration.sql 的 audit_chain_drift.drift_type CHECK）：
@@ -63,7 +63,7 @@ export default defineEventHandler(async (event) => {
       status: 403,
       message: 'cron only',
       why: 'audit chain diff cron 只接受 Cloudflare / Vercel cron header',
-      fix: '設定 wrangler.toml triggers.crons 或 vercel.json crons',
+      fix: '設定 void.config.ts cloudflare.triggers.crons 或 vercel.json crons',
       code: 'AUDIT_DIFF_NOT_CRON',
     })
   }

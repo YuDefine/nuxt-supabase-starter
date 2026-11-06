@@ -1,6 +1,6 @@
 ---
-description: Manual Review data-readiness 規約——規劃階段（寫 plan package／tasks 時）準備驗收資料的 hard rule、[review:ui] 純功能驗證 step actionability、`@no-manual-review-check` marker schema、截圖檔名配對；寫 proposal.md / tasks.md 時 path-scoped 載入
-paths: ['tasks/**', 'specs/plans/**', 'screenshots/**']
+description: Manual Review data-readiness 規約——規劃階段（寫 plan package／tasks 時）準備驗收資料的 hard rule、[review:ui] 純功能驗證 step actionability、fixtures 檔契約、`@no-manual-review-check` marker schema、截圖檔名配對；寫 proposal.md / tasks.md 時 path-scoped 載入
+paths: ['tasks/**', 'specs/plans/**', 'screenshots/**', 'specs/truth/fixtures.md', 'docs/FIXTURES.md', 'docs/fixtures.md']
 ---
 <!-- Clade native rule; source: adapters/claude/instructions/rules/core/manual-review.data-readiness.md; edit canonical source -->
 <!-- clade-targets: claude -->

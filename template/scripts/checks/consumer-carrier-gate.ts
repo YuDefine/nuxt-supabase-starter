@@ -241,17 +241,19 @@ export function collect(root: string, mode: { staged: true } | { against: string
   let listPlans: () => string[]
   if ('staged' in mode) {
     base = git(root, ['rev-parse', '-q', '--verify', 'HEAD'])?.trim() ?? ''
-    changedPaths = zList(git(root, ['diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR']))
-    read = (p) => git(root, ['show', `:${p}`])
+    changedPaths = zList(
+      git(root, ['diff', '--cached', '--relative', '--name-only', '-z', '--diff-filter=ACMR']),
+    )
+    read = (p) => git(root, ['show', `:./${p}`])
     listPlans = () =>
       zList(git(root, ['ls-files', '-z', '--', 'specs/plans/*/work.md', 'specs/plans/*/plan.md']))
   } else {
     base = git(root, ['merge-base', 'HEAD', mode.against])?.trim() ?? ''
     if (!base) throw new Error(`cannot resolve merge-base(HEAD, ${mode.against})`)
     changedPaths = zList(
-      git(root, ['diff', '--name-only', '-z', '--diff-filter=ACMR', base, 'HEAD']),
+      git(root, ['diff', '--relative', '--name-only', '-z', '--diff-filter=ACMR', base, 'HEAD']),
     )
-    read = (p) => git(root, ['show', `HEAD:${p}`])
+    read = (p) => git(root, ['show', `HEAD:./${p}`])
     listPlans = () =>
       zList(git(root, ['ls-tree', '-r', '--name-only', '-z', 'HEAD', '--', 'specs/plans']))
   }
@@ -277,7 +279,7 @@ export function collect(root: string, mode: { staged: true } | { against: string
       const body = m ? read(p) : null
       if (m && body !== null && planIsActive(body)) activePlanIds.add(m[1])
     }
-    const baseHandoff = base ? git(root, ['show', `${base}:${HANDOFF}`]) : null
+    const baseHandoff = base ? git(root, ['show', `${base}:./${HANDOFF}`]) : null
     handoff = { base: baseHandoff, after: handoffAfter, activePlanIds }
   }
   return { changedPaths, changed, baseDocsCount, knownTdAtBase, lifecycleRepo, handoff }

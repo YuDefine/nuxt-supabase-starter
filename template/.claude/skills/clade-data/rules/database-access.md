@@ -86,7 +86,7 @@ WHERE state = 'idle' AND state_change < now() - interval '5 minutes';
 
 - **批次寫入 ≤500 筆/transaction** — 超過會造成 WAL bloat 與 replica lag
 - **避免 long-running transaction** — `idle in transaction` > 5 分鐘會卡 vacuum、blocking lock
-- **Server 端遇到 `40001`（serialization_failure）** — retry transaction，但需有 idempotency 保證（見 `api-patterns.md`）
+- **Server 端遇到 `40001`（serialization_failure）** — retry transaction，但需有 idempotency 保證（見 `api-handler-semantics.md`）
 - **NEVER** 在 RLS policy 中放重型 JOIN 或外部函式 — 會被 per-row 執行
 
 ## Drizzle 使用邊界

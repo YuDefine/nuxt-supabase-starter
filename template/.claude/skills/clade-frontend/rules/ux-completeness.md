@@ -152,7 +152,7 @@ Server-only 例外（**MUST** 在 action 列旁標 `server-only: <reason>`）：
 4. `drizzle/seed.ts`
 5. 專案自訂（在 task 內註明絕對路徑）
 
-`<reset-or-seed-command>` 同樣依專案 `package.json` `scripts` 偵測，如 `pnpm db:reset` / `pnpm db:seed` / `supabase db reset` / `pnpm prisma db seed`。
+`<reset-or-seed-command>` 同樣依專案 `package.json` `scripts` 偵測，如 `pnpm db:fixtures`（冪等 upsert）/ `pnpm db:seed` / `pnpm prisma db seed`；`supabase-local` 單人實例才用 `supabase db reset`。共用 dev／staging DB **NEVER** reset。
 
 ### 例外宣告
 

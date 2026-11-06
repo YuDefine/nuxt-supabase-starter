@@ -28,7 +28,7 @@ tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local
 
 ### 開獨立 plan（lifecycle repo）
 
-1. `node vendor/scripts/flow/flow.ts plan open <slug> --title '<一句話>'`（開新 plan 唯一的入口）。Open work 每條未勾項寫成可派：一句下一步加 `驗收：<可觀察的完成條件>`；在等外部訊號的條目加 `**Blocked-by**: <訊號>`，就緒池會擋到訊號成立，**NEVER** 只寫「之後再做」。
+1. `node vendor/scripts/flow/flow.ts plan open <slug> --title '<一句話>'`（開新 plan 唯一的入口）。Open work 每條未勾項寫成可派：一句下一步加 `驗收：<可觀察的完成條件>`；在等外部訊號的條目加 `**Blocked-by**: <訊號>`，就緒池會擋到訊號成立，**NEVER** 只寫「之後再做」。整份 plan 都在等外部訊號、且尚未動工（沒有勾過的 Open work、沒有 worktree／PR／派工）的，不要佔 live 名額：用 `plan open <slug> --dormant --wake-signal '<S>'`（既有 plan 用 `plan dormant <work_id> --wake-signal '<S>'`）開成 `dormant`。`wake_signal` 只收 `signal: <gate>:<fingerprint> >= <N>`、`after: YYYY-MM-DD`、`work: <work-id> closed`、`command: <唯讀探針>`，自由文字拒收；dormant 不計 `PLAN_WIP_LIMIT`、不進就緒池。已開工或只是被人擋住的用 `active`／`blocked`，**NEVER** 為了躲 WIP gate 把進行中的 plan 轉 dormant。
 2. 標級：`node vendor/scripts/lib/priority-level.ts set-level <work-id> <P2|P3> --source '<出處>' --name '<語義名>'`。agent 只標 P3（預設）或 P2（已發生損害有證據：事故、資料錯誤、使用者被擋、實測的工時浪費）；判斷該拉到 P1 的寫進回報當建議，由 Charles 點；P0 只收 Charles 原話。
 3. 派工：單檔、當場改得完的由主線直接做，在同一個 PR 勾掉。其餘不另開 pane——plan 是 `status: active`、owners 為 `-`、條目帶驗收，coordinator watch 每輪就把它放進就緒池、依等級派出；plan owners 非空時，條目要另標「就緒、可派」。
 4. 回報每份新 plan 的 work id、等級、派工去向（主線做／交 watch／Blocked-by 哪個訊號）。
@@ -72,7 +72,7 @@ tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local
 
 ### 等級只看 fleet 看板
 
-TD 條目與 Index 表都**不帶**等級欄位。優先級（P0–P3）唯一的寫入與讀取處是 fleet 看板上該條目的列 `td:<repo>:TD-n`：預設 P3；agent 照 § 開獨立 plan 第 2 步的條件可標 P2（`set-level td:<repo>:TD-n P2`），再往上拉由 Charles 點名、在看板設定或開 P1 群組。**NEVER** 在 TD 加回 `**Priority**:` 行——`vendor/scripts/checks/td-priority-gate.ts` 在 pre-commit 與 CI 擋下 `docs/tech-debt.md` 新增或改寫的這種行，刪除放行。
+TD 條目與 Index 表都**不帶**等級欄位。優先級（P0–P3）只標在 work（`W-…`）一層：TD、PR、Open work 都繼承所屬 work 的級別，`set-level` 對 `td:`／`pr:`／`plan:` 參照一律拒寫。預設 P3；agent 照 § 開獨立 plan 第 2 步的條件可標 P2（`set-level <work-id> P2`），再往上拉由 Charles 點名、在看板設定或開 P1 群組。TD 所屬的 work 是該 repo spine 上 `origin_ref: td:TD-n` 的 work 卡（`flow sources --apply` 替每條 actionable-open 的 TD 鑄一張，不改登記簿）；parked 或只有 Index 列、沒有 `## TD-` heading 的 TD 沒有卡，要先解凍或補 heading 再跑 `flow sources --apply`，才能標級；快照列出的舊 `td:`／`pr:` 覆寫用 `priority-level.ts migrate-override <舊參照> <W-id>` 搬到所屬 work。**NEVER** 在 TD 加回 `**Priority**:` 行——`vendor/scripts/checks/td-priority-gate.ts` 在 pre-commit 與 CI 擋下 `docs/tech-debt.md` 新增或改寫的這種行，刪除放行。
 
 合約條文 ID 與優先級分開寫：行首 `Milestone` 那種 `P1-M2-A2` 是客戶簽署的條文 ID，原樣保留；文中要講優先級時寫「P1 級」或 P1 群組編號 `P1-x`，**NEVER** 寫成等級欄位或把條文 ID 當等級。
 

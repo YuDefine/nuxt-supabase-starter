@@ -24,7 +24,7 @@
  * - `onDropped` callback 是唯一的失敗訊號（buffer overflow + retry exhausted 共用）；
  *   分辨來源用 `error` 參數：有 error = retry exhausted；無 error = buffer overflow
  * - dev `node-server` preset 跑 nitro 時 `waitUntil` 是 noop；只能用 production
- *   `wrangler dev` 驗證 drain flush 真的發生
+ *   Cloudflare dev runtime（`nuxt dev` 搭 voidPlugin）或 deployed Worker 驗證 drain flush 真的發生
  */
 
 import { consola } from 'consola'

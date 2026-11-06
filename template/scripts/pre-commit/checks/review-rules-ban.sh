@@ -19,7 +19,10 @@
 
 set -euo pipefail
 
-PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+# consumer root（≠ git toplevel 的子目錄 consumer 也對）：解析規則與 staged 路徑規約見 ../consumer-root.sh
+# shellcheck source=../consumer-root.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../consumer-root.sh"
+PROJECT_ROOT="$(clade_consumer_root)"
 cd "$PROJECT_ROOT"
 
 PATTERNS_FILE="$PROJECT_ROOT/vendor/review-rules/patterns.json"
@@ -30,7 +33,7 @@ SCAN_ENGINE="$PROJECT_ROOT/vendor/review-rules/scan.ts"
 [[ -f "$SCAN_ENGINE" ]] || exit 0
 
 # 只判空／非空；`-z | tr` 讓 `$(…)` 不吃 NUL，且 quotePath 不影響結果。
-STAGED=$(git diff --cached -z --name-only --diff-filter=ACM 2>/dev/null | tr '\0' '\n' | sed '/^$/d' || true)
+STAGED=$(git diff --cached --relative -z --name-only --diff-filter=ACM 2>/dev/null | tr '\0' '\n' | sed '/^$/d' || true)
 [[ -z "$STAGED" ]] && exit 0
 
 rc=0

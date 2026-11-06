@@ -21,7 +21,7 @@ effort: medium
 ## Phase 1 -- 收斂稽核範圍與資料堆疊
 
 1. READ 讀取呼叫引數（無參數＝當前 cwd、consumer 路徑、`--fleet`、`schema <files>`）；`--fleet` 時從 clade home 讀 `registry/consumers.json` 與 `consumers.local` 列出 Nuxt consumer。
-2. READ 讀取 reference rule `nuxt-data-perf`（clade `rules/core/nuxt-data-perf.md`，或 runtime 已交付的同名規約；cookbook 在 `<clade-vendor>/snippets/nuxt-data-perf/`）；取不到則報告標 `incomplete`。
+2. READ 讀取 reference rule `nuxt-data-perf`（clade `rules/modules/framework/nuxt/nuxt-data-perf.md`，或 runtime 已交付的同名規約；cookbook 在 `<clade-vendor>/snippets/nuxt-data-perf/`）；取不到則報告標 `incomplete`。
 3. THINK 引數為 `schema` 時跳到 Phase 5；其餘繼續。
 4. DELEGATE `node <clade-vendor>/scripts/audit-data-sanity.ts --candidates --consumer-path <path> --json`，取得 `stack`（Colada／non-Colada、`notApplicable`）與 E1–E19 候選命中 `file:line`。
 

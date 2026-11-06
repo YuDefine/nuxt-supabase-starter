@@ -6,7 +6,7 @@
 // 契約：specs/truth/contracts/mutation-probe-cli.md（行為、exit code）、
 //       specs/truth/data/break-receipt.md（收據欄位與值域）。
 //
-// 本檔現況（W-2026-10-24-test-trust-enforcement T001＋T030＋T040）：子指令分派（run／replay／exempt／revive）、
+// 本檔現況：子指令分派（run／replay／exempt／revive）、
 // 旗標解析、收據與彙總型別、人讀與 JSON 輸出格式，以及四個子指令。探測流程在 lib/mutation-probe/runner.ts
 // （執行器依 `--runner` 動態載入 lib/mutation-probe/<kind>-runner.ts）；`replay` 逐張收據走同一個 `runProbe`；
 // `revive` 在 lib/mutation-probe/revive.ts。

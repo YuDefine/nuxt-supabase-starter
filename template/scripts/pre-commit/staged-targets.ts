@@ -3,7 +3,8 @@
 //
 // staged-targets — `checks/vp-staged.sh` 與 `vendor/oxc-shared/preset.ts` 之間的橋
 //
-// stdin：NUL 分隔的 staged 路徑（`git diff --cached --name-only -z`）
+// stdin：NUL 分隔的 staged 路徑（`git diff --cached --relative --name-only -z`，consumer-relative；
+//   consumer root ≠ git toplevel 時路徑已剝掉 monorepo 前綴，preset 的 glob 是 consumer 相對）
 // stdout：NUL 分隔、**沒有**被 preset `isStagedExcluded` 排除的路徑
 // exit 0：成功（輸出可能是空的——那代表全部被排除，是合法結果）
 // exit 2：橋接失敗（找不到 preset / import 失敗 / 匯出形狀不對 / 排除清單是空的）

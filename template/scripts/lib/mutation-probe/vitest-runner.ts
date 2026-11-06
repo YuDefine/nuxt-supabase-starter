@@ -378,6 +378,13 @@ interface PluginContainerLike {
   getSortedPlugins?: (hook: string) => unknown[]
 }
 
+/** 探針注入的 transform plugin（`enforce:'pre'`，只改目標檔）。 */
+interface MutationPluginLike {
+  name: string
+  enforce: 'pre'
+  transform: (code: string, id: string) => { code: string; map: null } | null
+}
+
 interface ViteServerLike {
   environments?: Record<string, { pluginContainer?: PluginContainerLike }>
   config: { plugins: readonly { name: string }[] }
@@ -460,7 +467,11 @@ const PLUGIN_NAME = 'mutation-probe'
  * plugin container 的 `getSortedPlugins('transform')`（Vite 6+ 的公開 container 方法），讓我們的 plugin 排在最前，
  * 與 `enforce:'pre'` 同樣先於型別剝除。掛不上就丟錯（探針回 exit 2），不留 survived 的假象。
  */
-function injectIntoServer(server: ViteServerLike, plugin: object, projectName: string): void {
+function injectIntoServer(
+  server: ViteServerLike,
+  plugin: MutationPluginLike,
+  projectName: string,
+): void {
   const envs = Object.values(server.environments ?? {})
   let patched = 0
   for (const env of envs) {
@@ -528,7 +539,7 @@ async function childMain(specPath: string): Promise<void> {
         return p
       }
     }
-    const plugin = m
+    const plugin: MutationPluginLike | null = m
       ? {
           name: PLUGIN_NAME,
           enforce: 'pre' as const,

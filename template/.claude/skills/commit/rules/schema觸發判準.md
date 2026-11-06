@@ -87,7 +87,7 @@ version-upgrade fleet-mode worker 的 scoped checkpoint 都沒跑過 Step 1。�
 - 這個例子是好的，因為照 reference 的順序先備份再重置。
 
 ```md
-讀 `schema-sync.md` Step 1.3 → 依其分支選 `pnpm db:reset` → 先 `cp` 備份 types 再重置。
+讀 `schema-sync.md` Step 1.3 → 依其分支選（per-worktree 才是 `pnpm db:reset`，shared 停下）→ 先 `cp` 備份 types 再重置。
 ```
 
 ## Bad Example

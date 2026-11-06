@@ -22,20 +22,23 @@
 #
 # 正解：useFetch（SSR hydration）或 useQuery（Pinia Colada cache + dedup）。
 # 規約來源：
-#   - impl-time rule : rules/core/nuxt-data-perf.md § HR-1
+#   - impl-time rule : rules/modules/framework/nuxt/nuxt-data-perf.md § HR-1
 #   - review-layer   : capabilities/core/agents/references/clade-review-rules.md
 #
 # 由 ~/clade vendor/scripts/pre-commit/ 散播，請勿直接編輯 consumer 副本。
 
 set -euo pipefail
 
-PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+# consumer root（≠ git toplevel 的子目錄 consumer 也對）：解析規則與 staged 路徑規約見 ../consumer-root.sh
+# shellcheck source=../consumer-root.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../consumer-root.sh"
+PROJECT_ROOT="$(clade_consumer_root)"
 cd "$PROJECT_ROOT"
 
 staged_vue=()
 while IFS= read -r -d '' file; do
   staged_vue+=("$file")
-done < <(git diff --cached --name-only --diff-filter=ACM -z -- '*.vue')
+done < <(git diff --cached --relative --name-only --diff-filter=ACM -z -- '*.vue')
 
 # 無 staged .vue → 跳過
 ((${#staged_vue[@]} == 0)) && exit 0
@@ -50,7 +53,7 @@ VIOLATIONS=()
 
 for file in "${staged_vue[@]}"; do
   # staged content（讀 index 版，不是 working tree）
-  content=$(git show :"$file" 2>/dev/null) || continue
+  content=$(git show :./"$file" 2>/dev/null) || continue
 
   # file-level escape hatch
   #
@@ -97,7 +100,7 @@ if ((${#VIOLATIONS[@]} > 0)); then
    若此檔確實只有 mutation 而無 data-fetching 需求，加標記跳過：
    <!-- data-perf-ignore-file: pure mutation component -->
 
-詳細規約：rules/core/nuxt-data-perf.md § HR-1
+詳細規約：rules/modules/framework/nuxt/nuxt-data-perf.md § HR-1
 EOF
   exit 1
 fi

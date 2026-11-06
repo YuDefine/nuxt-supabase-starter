@@ -10,6 +10,7 @@ paths:
     'tsconfig*.json',
     '.github/workflows/**',
     '.husky/**',
+    '.vite-hooks/**',
     '.*rc*',
     '.*.config.*',
     '.oxfmtignore',
@@ -397,7 +398,7 @@ runner 的 `checks/vp-staged.sh` 經 `scripts/pre-commit/staged-targets.ts` 讀 
 （consumer 投影 `scripts/gate-slot.sh`），入口是 `bin/clade-gate`。
 
 **heavy job 一律經 `clade-gate run <label> -- <cmd>` 才受閘。** 光把 label 加進 `CLADE_HEAVY_GATES` 不會讓任何東西受閘。
-systemd user manager 可用、job 是 heavy 且 `agent-workloads.slice` 為 loaded 時，`gate-slot.sh` 透過 `systemd-run --user --scope --slice=agent-workloads.slice` 把 job 放進 agent slice；desk 的 `registry/dev-nodes.json` 宣告 `CPUWeight=10`、`IOWeight=10`、不設 `CPUQuota`，由 `dev-node.ts bootstrap` 產生 unit，`doctor` 同時比對 unit 檔與 live 值。zenbook 未宣告 CPU budget；`--slice=` 可隱式建立已 loaded 的 slice，因此 loaded 不代表 unit 檔存在或符合 SoT。
+systemd user manager 可用、job 是 heavy 且重指令 slice 為 loaded 時，`gate-slot.sh` 透過 `systemd-run --user --scope --slice=<slice>` 把 job 放進該 slice——優先 `cladeheavy.slice`（`CLADE_HEAVY_GATE_SLICE` 可改名；slice unit 由主機端安裝，尚無產生器），沒載入就退回 `agent-workloads.slice`，兩者都沒有就不指定；desk 的 `registry/dev-nodes.json` 宣告 `CPUWeight=10`、`IOWeight=10`、不設 `CPUQuota`，由 `dev-node.ts bootstrap` 產生 unit，`doctor` 同時比對 unit 檔與 live 值。zenbook 未宣告 CPU budget；`--slice=` 可隱式建立已 loaded 的 slice，因此 loaded 不代表 unit 檔存在或符合 SoT。
 
 systemd 252 以上時，每個 gate scope（heavy 與 light）都另帶 `-p CPUWeight=idle`（cgroup `cpu.idle`）：gate 只拿互動 session 沒在用的 CPU，機器滿載時 herdr、agent TUI 的喚醒延遲不再被測試／typecheck 拖長，閒置時批次照樣吃滿全部核心。nice 只在同一個 cgroup 內比較，對兄弟 scope 無效，所以降權**必須**落在 scope 層。systemd 低於 252 不認得 `idle`，此時不帶這個屬性、scope 維持預設權重。`ops/` 下的背景批次 unit（deps-retrace、timings-reseed、disk-hygiene、main-align、dev-lease-reaper、agent-placement）同理設 `CPUWeight=idle`，既有的 `Nice=10` 擋不住它們跟 herdr-server 等兄弟 unit 搶 CPU。
 
@@ -482,10 +483,17 @@ suite 後面，agent 於是繞過閘門直跑——那才是沒有上限的路�
 | `CLADE_OXC_THREADS` | `2` | **不注入** —— oxlint / oxfmt 用滿全部核心 |
 | `CLADE_VITEST_MAX_WORKERS` | `2` | **不注入** —— vitest 用滿全部核心 |
 | `CLADE_GATE_WAIT_TIMEOUT` | 預設 | 3600s |
+| `CLADE_HEAVY_GATE_EXPEDITE_SLOTS` | 不設 | 0＝關閉（clamp 0..4）；>0 時多一組 `expedite-<i>.lock` 保留名額，只有 flow 判定的急件能取，一般重指令不能借 |
+| `CLADE_HEAVY_GATE_STARVE_S` | 預設 | 900s；一般重指令等滿此秒數後，急件不得再插隊（雙向讓位的防餓死一側） |
+| `CLADE_HEAVY_GATE_URGENT_CPU_WEIGHT` | 預設 | 50（clamp 1..10000）；急件 scope 的數字 `CPUWeight`，只在重指令 slice 內生效（沒有 slice 時維持 idle，不把數字權重帶進與互動 session 同 slice） |
+| `CLADE_HEAVY_GATE_SLICE` | 預設 | `cladeheavy.slice`；重指令 scope 優先掛的 slice，沒載入退回 `agent-workloads.slice` |
+| `CLADE_GATE_POLL_S` | 預設 | 2s；wait 模式輪詢取名額的間隔 |
 | `CLADE_HEAVY_GATE_MAX_RUNTIME` | 預設 | 3600s（`0` 關閉） |
 | `CLADE_GATE_HANG_WINDOW` | 預設 | 300s；卡死判定窗（`0` 關閉）。`CLADE_GATE_HANG_INTERVAL`（15s）、`CLADE_GATE_HANG_GRACE`（10s）、`CLADE_GATE_HANG_WATCH`（額外要看的 log，`:` 分隔）同屬這組 |
 | `CLADE_GATE_LANE` | 不設 | `bdd-example`／`bdd-feature`：argv 看不出 BDD 範圍的 script 自己宣告 lane；沒設時 `clade-gate` 依 argv 判定（恰好一個 `x.feature:行` 或單一 feature 搭 `--name` ＝ example，其餘明列 feature ＝ feature） |
 | `CLADE_GATE_BDD_EXAMPLE_MAX_RUNTIME` / `CLADE_GATE_BDD_FEATURE_MAX_RUNTIME` | 預設 | 600s / 1800s；只在沒顯式設 `CLADE_HEAVY_GATE_MAX_RUNTIME` 時生效 |
+
+**急件身分只認 flow**：`bin/clade-gate` 讀 heavy-admission 控制器寫的 `admission.json`（目錄與控制器一致：`CLADE_HEAVY_ADMISSION_RUNTIME_DIR` ?? `$XDG_RUNTIME_DIR/clade-gates`，**不**看 `CLADE_GATE_LOCK_DIR`）的 `urgent_index`，以 work id 或 cwd 所在 worktree 比對；索引缺、壞、過期（`CLADE_HEAVY_ADMISSION_STALE_S`，90s）一律當一般工作。session 自報的 `CLADE_GATE_URGENT` 入口先刪、不算數。等候登記（`waiting/{urgent,general}-<pid>`）以 pid 存活＋啟動時間戳＋不超過 `CLADE_GATE_WAIT_TIMEOUT` 判活，被 SIGKILL 殘留的死登記會被讀到時刪除，NEVER 因此擋住任何重指令。
 
 `CLADE_OXC_THREADS` / `CLADE_VITEST_MAX_WORKERS` 由 `bin/vp` shim 注入，條件：env 是正整數、子命令是 `lint`/`fmt`/`test`、使用者沒自己帶該旗標。
 

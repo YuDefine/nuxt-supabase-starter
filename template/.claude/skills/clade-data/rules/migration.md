@@ -15,7 +15,7 @@ paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'packages/*/server/**/
 - **NEVER** use MCP `execute_sql` for DDL — `supabase_admin` owner breaks CI/CD。唯一例外：修 `must be owner of table` 時，由同一條 MCP 連線 `ALTER ... OWNER TO postgres` 並補 `schema_migrations` 記錄（步驟見 `supabase-migration` skill 的 `rules/疑難排解與Owner修復判準.md`）
 - **MUST** use `bigint GENERATED ALWAYS AS IDENTITY` for new table primary keys — **NEVER** `bigserial`（SQL 標準，避免 sequence ownership 問題）
 - Existing tables using `bigserial` **SHALL NOT** be migrated（風險高、收益低）
-- **每一個** migration 檔新增或修改後都 **MUST** 依 runtime variant 跑 reset → lint → gen types → typecheck，**不是只處理最後一個**（具體命令見對應 `db-runtime/<variant>` rule，例如 self-hosted 走 `pnpm db:reset` / `pnpm db:lint` / `pnpm db:types`；local docker 走 `supabase db reset` / `supabase db lint` / `supabase gen types typescript --local`）
+- **每一個** migration 檔新增或修改後都 **MUST** 依 runtime variant 跑「往前套用 → lint → gen types → typecheck」，**不是只處理最後一個**。共用 DB（dev 主線、staging、prod）只往前 apply，**NEVER** reset、**NEVER** 洗回 seed（治理全文見 [[db-topology-invariant]] § Forward-only）；要驗「從零重建能不能過」，在**臨時副本**或 CI 的 throwaway DB 上跑。具體命令見對應 `db-runtime/<variant>` rule（self-hosted 走 `pnpm db:migrate`／`pnpm db:lint`／`pnpm db:types`；`supabase-local` 是單人本機 Docker，沿用該 variant 自己的 reset 例外）
 - **生成型別檔（`supabase gen types` 的輸出）NEVER 手改**：型別不對就改 migration 再重生；手改會在下一次重生時被蓋掉，且期間 typecheck 驗的是假的 schema
 - **API 驗證 schema MUST 綁在生成型別上**：寫入用的 Zod schema 以 `z.ZodType<TablesInsert<'x'>>`／`TablesUpdate<'x'>`（或等價的型別斷言）與生成型別連結，讓上一條的 gen types → typecheck 能抓到欄位漂移；**NEVER** 寫一份與生成型別毫無編譯期連結的平行 Zod
 - 寫入後要觸發非同步副作用（寄信、通知、索引、webhook）時，事件與業務資料 **MUST** 在同一個 transaction（RPC 或 pgmq）寫入，派送與冪等判準見 [[audit-pattern]] § Domain events（非同步副作用）
@@ -79,7 +79,7 @@ Migration 檔名的 timestamp prefix 是 `supabase_migrations.version` 的 ident
 - 已 commit 進 main **且** remote DB 已 apply 的 migration **NEVER** rename、delete 或 regenerate timestamp——即使 SQL 內容完全相同
 - Worktree 內跑 `supabase db reset`／`supabase migration new` 後 **MUST** 比對既有 migration 檔名與 main 相同；不同就 STOP、還原成 main 的檔名，不 commit 新 timestamp
 - **NEVER** 在 worktree 重新 `supabase migration new <已存在的 migration 名>`——會產生新 timestamp 取代舊的
-- **NEVER** 假設「local `db:reset` 過了 = remote 也會過」：local 從 scratch apply，不知道 remote 的 `supabase_migrations` 記錄；timestamp 一變，`db push` 就報 `Remote migration versions not found in local migrations directory`（[[pitfall-migration-rename-breaks-remote-db-push]]）
+- **NEVER** 假設「臨時副本或 throwaway DB 從 scratch apply 過了 = remote 也會過」：scratch apply，不知道 remote 的 `supabase_migrations` 記錄；timestamp 一變，`db push` 就報 `Remote migration versions not found in local migrations directory`（[[pitfall-migration-rename-breaks-remote-db-push]]）
 - commit 前偵測：`git diff --cached --diff-filter=R -- 'supabase/migrations/' | grep -q . && echo "BLOCK: migration renamed" || echo "OK"`
 
 ### 例外：catalog-alignment stub（多 repo 共用一台 Postgres）
@@ -177,7 +177,7 @@ grant execute on function public.fn_helper_wrapper to authenticated;
 
 ## DML Data Fix Checklist
 
-寫 DML `UPDATE` / `DELETE` migration 修 prod 髒資料時 **MUST** 同一 commit 內更新 `seed.sql` 對應 row（否則 `db:reset` 重新引入髒資料）；無法立即 commit 就 **MUST** 在 `HANDOFF.md` 登記「seed.sql 待同步 — migration `<name>` 修了 `<table>.<column>`」。**NEVER** 只寫 migration 就當作完成。
+寫 DML `UPDATE` / `DELETE` migration 修 prod 髒資料時 **MUST** 同一 commit 內更新開發假資料的 upsert 腳本（或 `seed.sql`）對應 row，讓新建的臨時副本與 CI throwaway DB 不會把髒資料再帶回來；無法立即 commit 就 **MUST** 在 `HANDOFF.md` 登記「fixture 待同步 — migration `<name>` 修了 `<table>.<column>`」。**NEVER** 只寫 migration 就當作完成。dev 主線 DB 不 reset，所以它不靠 fixture 重灌修髒資料——修正由這支 migration 本身往前 apply。
 
 ## Zero-Downtime Migration Checklist（production）
 
@@ -208,6 +208,15 @@ grant execute on function public.fn_helper_wrapper to authenticated;
 
 資料轉換 migration = 含 `UPDATE <table> SET`、`INSERT INTO <table> SELECT`、`ALTER COLUMN ... USING`、或 `ADD COLUMN ... DEFAULT <依賴既有欄位的 expression>`；純 DDL 不算。**NEVER** 漏列可預見的資料狀態（尤其 NULL / 空字串 / 外鍵孤兒），**NEVER** 假設全部 row 都符合 valid 條件而不寫 fallback。
 
-## Staging Rehearsal
+## Staging Rehearsal（在自然歷史上跑）
 
-資料轉換 migration 在 merge 前 **SHOULD** 在 staging-like 資料（不是乾淨 seed）上跑一次：`supabase migration up` → 看 error / warning → 每個 disposition class 抽查一筆 → 確認未被涵蓋的 row 數為 0（`SELECT count(*) WHERE <negation of all predicates>`）。目標表 > 10,000 row、含 `ALTER COLUMN ... USING`、或含 `DELETE` / `TRUNCATE` 時升級為 **MUST**。
+資料轉換 migration 在 merge 前 **MUST** 在**帶自然歷史的資料**上跑一次——來源是 staging 的臨時副本、dev 主線 DB 的臨時副本，或 prod 去識別化快照；**NEVER** 只在乾淨 seed 上跑就當 rehearsal（乾淨 seed 沒有髒資料，disposition 的 `unexpected_format`／`orphan_fk` 那幾類永遠是 0）。步驟：`supabase migration up` → 看 error / warning → 每個 disposition class 抽查一筆 → 確認未被涵蓋的 row 數為 0（`SELECT count(*) WHERE <negation of all predicates>`）。純 DDL 且目標表 ≤ 10,000 row、又不含 `DELETE`／`TRUNCATE` 的 migration 維持 **SHOULD**；以下一律 **MUST**：資料轉換 migration、含 `DELETE`／`TRUNCATE` 的 migration（不論是否算資料轉換）、目標表 > 10,000 row 的 migration（含純 DDL）、含 `ALTER COLUMN ... USING` 的 migration。backfill 是 expand → backfill → contract 的中段，**MUST** 附可重跑的驗證查詢（跑完回 0 才算過），見上節 Zero-Downtime 第 5、6 點。
+
+## Migration 衛生（防膨脹與誤用共用 DB）
+
+- **一個功能一組 migration，NEVER 每次開工或重跑就產一個新的**。同一張表被連續多個 migration `ALTER`（修上一個的遺漏）時，若前面的尚未 merge，**MUST** 改寫同一 PR 內尚未 apply 到共用 DB 的那一支，而不是疊新檔；已 apply 到共用 DB 的才適用 § 上方「已 commit 進 main **且** remote DB 已 apply 的 migration **NEVER** rename、delete 或 regenerate timestamp」那條，改走新 migration 往前修。
+- **MUST** 加一個 diff-only guard（建議放 schema-migration-gate）：同一 PR 新增 migration 數 > 3、或對同一張表新增 ≥ 3 個 `ALTER TABLE`，guard 印警告要求 PR 描述說明為何不能合併；單日同一 consumer 新增 > 10 支時回報給 coordinator。（2026-11-02 實查：最大的 consumer 共 709 支、近 30 天新增 63 支，單日最高 10 支；另兩個為 97／53（單日最高 14）與 232／25；成因見 `specs/plans/W-2026-11-02-coordinator-watch-dev-staging-db-db-reset-cluste/design.md` § 4）
+- **`supabase migration squash` 只留 schema、會丟資料**：**NEVER** 對已有 prod／staging 資料的 repo 直接 squash；要壓縮歷史只能在新建的 baseline 上做，且 **MUST** 先確認所有環境已 apply 到壓縮點、`schema_migrations` 對得上。guard：偵測到 `squash` 子命令或單檔 > 5000 行的 baseline 就擋。
+- **Drizzle 專案 NEVER 對共用 DB 跑 `drizzle-kit push`**（它直接比對並改 schema、不留 migration 紀錄，等於繞過本檔所有 gate）；共用 DB 只收 `drizzle-kit migrate` 套用 `generate` 產出的檔案。`push` 只准打臨時副本。
+- 共用 DB 的 migration 只由 main 套用（單一主人）；worktree 要驗 schema 改動時打自己的臨時副本，見 [[db-topology-invariant]] § Forward-only。
+

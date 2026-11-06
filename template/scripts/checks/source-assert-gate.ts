@@ -201,23 +201,40 @@ export function collect(root: string, mode: Mode): Change[] {
   if ('staged' in mode) {
     base = git(root, ['rev-parse', '-q', '--verify', 'HEAD'])?.trim() ?? ''
     pairs = parseNameStatus(
-      git(root, ['diff', '--cached', '--name-status', '-M', '-z', '--diff-filter=ACMR']),
+      git(root, [
+        'diff',
+        '--cached',
+        '--relative',
+        '--name-status',
+        '-M',
+        '-z',
+        '--diff-filter=ACMR',
+      ]),
     )
-    readAfter = (p) => git(root, ['show', `:${p}`])
+    readAfter = (p) => git(root, ['show', `:./${p}`])
   } else {
     base = git(root, ['merge-base', 'HEAD', mode.against])?.trim() ?? ''
     if (!base) throw new Error(`cannot resolve merge-base(HEAD, ${mode.against})`)
     pairs = parseNameStatus(
-      git(root, ['diff', '--name-status', '-M', '-z', '--diff-filter=ACMR', base, 'HEAD']),
+      git(root, [
+        'diff',
+        '--relative',
+        '--name-status',
+        '-M',
+        '-z',
+        '--diff-filter=ACMR',
+        base,
+        'HEAD',
+      ]),
     )
-    readAfter = (p) => git(root, ['show', `HEAD:${p}`])
+    readAfter = (p) => git(root, ['show', `HEAD:./${p}`])
   }
   const out: Change[] = []
   for (const { basePath, path } of pairs) {
     if (!isTestPath(path)) continue
     const after = readAfter(path)
     if (after === null) continue
-    const before = base ? git(root, ['show', `${base}:${basePath}`]) : null
+    const before = base ? git(root, ['show', `${base}:./${basePath}`]) : null
     out.push({ path, basePath, after, before })
   }
   return out

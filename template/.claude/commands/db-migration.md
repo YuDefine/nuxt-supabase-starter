@@ -87,6 +87,19 @@ USE_DB_WRAPPER=$(node -e "process.exit(require('./package.json').scripts?.['db:r
 
 if [ "$USE_DB_WRAPPER" = yes ]; then
   # 遠端 / existing-server：走 pnpm db:*（wrapper 會擋本機 Docker；db:reset 內部跑 db:types 寫到 $TYPES）
+  # 只有 per-worktree 拓樸（target mode，只重建自己的 clone）才准 reset；
+  # shared 拓樸共用 DB NEVER reset（判定見 [[db-topology-invariant]] § Forward-only）→ 交 CI supabase-check，沒接就停
+  f=$(ls scripts/supabase/db-reset.sh scripts/db-reset.sh 2>/dev/null | head -1)
+  if [ -z "$f" ] || ! grep -qE "reset_target|Target mode never claims" "$f"; then
+    if [ ! -f .github/workflows/supabase-check.yml ]; then
+      echo 'shared 拓樸且缺 .github/workflows/supabase-check.yml：無處驗 migration 重放，停下；先依 vendor/snippets/supabase-ci/README.md 接上 supabase-check' >&2
+      exit 1
+    fi
+    # 第一段（pnpm db:copy 導入前）：reset 重放、lint、types drift 交 PR 的 CI supabase-check
+    echo 'DEFERRED_TO_CI: shared 拓樸不 reset 共用 DB；migration 重放、db lint、types drift 交 PR 的 supabase-check'
+    pnpm typecheck
+    exit $?
+  fi
   pnpm db:reset
   pnpm db:lint        # 安全檢查（必須零警告）
   pnpm typecheck
@@ -99,6 +112,8 @@ else
   pnpm typecheck
 fi
 ```
+
+**shared 拓樸（印 `DEFERRED_TO_CI`）**：本機不 reset、不 lint、不重生 types；types 照 migration 手改，PR 的 `supabase-check`（冷啟重放＋types drift＋`db lint --level warning`）綠之前 **NEVER** merge，Step 6 報告的 db reset／db lint 兩行寫「交 CI supabase-check」。
 
 **自動產生類型**：遠端 wrapper 由 `pnpm db:reset` 內部呼叫 `db:types`；本機 Docker 由 `supabase gen types` 寫入 `$TYPES`（自動偵測自 `package.json.config.dbTypesPath` 或 conventional locations）。Consumer 自訂 types 路徑時應設於 `package.json` `config.dbTypesPath`，**MUST** 同步在 `db:types` script 內引用同一路徑（避免兩種模式寫到不同檔）。
 

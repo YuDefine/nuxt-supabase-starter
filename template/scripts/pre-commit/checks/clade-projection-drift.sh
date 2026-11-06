@@ -29,7 +29,10 @@ set -euo pipefail
 
 command -v node >/dev/null 2>&1 || exit 0
 
-PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+# consumer root（≠ git toplevel 的子目錄 consumer 也對）：解析規則與 staged 路徑規約見 ../consumer-root.sh
+# shellcheck source=../consumer-root.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../consumer-root.sh"
+PROJECT_ROOT="$(clade_consumer_root)"
 cd "$PROJECT_ROOT"
 
 [[ -f .clade/manifest.json || -f .claude/hub.json ]] || exit 0

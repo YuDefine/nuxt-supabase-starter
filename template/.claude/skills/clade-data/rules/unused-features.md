@@ -25,7 +25,7 @@ Template 預設**不啟用**以下 Supabase feature。引入任一項前 **MUST*
 
 ## Queues（`pgmq` extension）
 
-現況：未使用。先回答為何不用 Cloudflare Queues 或 Workers Cron Trigger、工作是否真的需要 async（> 5 秒 + 可重試）。真要用：`create extension pgmq with schema extensions;`、queue 命名 `<entity>_<action>`、依任務調 visibility timeout、**MUST** 設最大 retry、consumer 必須冪等（見 `api-patterns.md`）。
+現況：未使用。先回答為何不用 Cloudflare Queues 或 Workers Cron Trigger、工作是否真的需要 async（> 5 秒 + 可重試）。真要用：`create extension pgmq with schema extensions;`、queue 命名 `<entity>_<action>`、依任務調 visibility timeout、**MUST** 設最大 retry、consumer 必須冪等（見 `api-handler-semantics.md`）。
 
 ## Cron（`pg_cron`）+ pg_net
 
