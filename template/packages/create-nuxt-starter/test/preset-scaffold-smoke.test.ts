@@ -127,10 +127,9 @@ describe('preset smoke: 5 個 stack preset 各跑 assembleProject', () => {
     ).toBe(true)
     expect(existsSync(join(targetDir, 'app', 'types', 'database.types.ts'))).toBe(true)
     const mcp = JSON.parse(readFileSync(join(targetDir, '.mcp.json'), 'utf-8'))
-    expect(mcp.mcpServers['codebase-memory-mcp']).toMatchObject({
-      type: 'stdio',
-      command: 'codebase-memory-mcp',
-    })
+    // codebase-memory-mcp 已自 starter 退場（clade #4466）：scaffold 不得再帶回
+    expect(mcp.mcpServers['codebase-memory-mcp']).toBeUndefined()
+    expect(mcp.mcpServers['code-review-graph']).toBeUndefined()
   })
 
   it('minimal scaffolds project without auth / database / monitoring / ui', () => {
