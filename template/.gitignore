@@ -105,7 +105,6 @@ yarn-error.log*
 .agents/*
 !.agents/constitution/
 
-.codebase-memory/
 
 /screenshots/**/*.png
 /screenshots/**/*.jpg
