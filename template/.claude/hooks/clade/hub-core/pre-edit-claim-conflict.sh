@@ -80,7 +80,13 @@ case "$REL" in /*) exit 0 ;; esac
 HELPER=$(trusted_fleet_helper "$CONSUMER_ROOT" claim-helper.ts) || exit 0
 command -v node >/dev/null 2>&1 || exit 0
 
-OUT=$(cd "$CONSUMER_ROOT" && node "$HELPER" conflicts "$REL" --worktree "$TOPLEVEL" 2>/dev/null)
+# 呼叫者的 harness session：同一個 session 跨樹寫入時，它在別棵樹留下的 `hook` 列不是「別人」
+# （session-claims.md § 3.4 跨樹自我誤報）。缺值就不帶，helper 照舊只靠 worktree 排除自己。
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=''
+SESSION_ARGS=()
+[ -n "$SESSION_ID" ] && SESSION_ARGS=(--session "$SESSION_ID")
+
+OUT=$(cd "$CONSUMER_ROOT" && node "$HELPER" conflicts "$REL" --worktree "$TOPLEVEL" "${SESSION_ARGS[@]}" 2>/dev/null)
 RC=$?
 # 3 = 有衝突（見 claim-helper CLI）。其餘一律靜默，含查詢自己失敗的 1。
 [ "$RC" = 3 ] || exit 0

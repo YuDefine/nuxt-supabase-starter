@@ -101,5 +101,6 @@ routing-row: {{ROUTING_ROW}}
 - {{ACCEPTANCE_CRITERION_1}}
 - {{ACCEPTANCE_CRITERION_N}}
 - 驗證指令：`{{VERIFY_COMMAND}}`
+- 生效：{{EFFECT_CRITERION}}
 
 <!-- 驗收標準由主線寫定，NEVER 留給 worker 自己決定什麼叫完成。 -->

@@ -35,11 +35,11 @@ gh pr view <session-branch> --json number,isDraft,headRefName
 git push -u origin <session-branch>
 : "${CLADE_WORK_ID:?先 export CLADE_WORK_ID=<work-id>}" && \
 gh pr create --draft --base main --head <session-branch> --title '<切片摘要>' \
-  --body "$(printf '%s\n\nWork: %s\nOwner: %s\nReview: node scripts/pulls-review.ts %s\n' '<scope；CI 紅燈回這張 PR>' "$CLADE_WORK_ID" "${CLADE_DISPATCH_ID:-session:<claude_session_id>}" '<session-branch>')"
+  --body "$(printf '%s\n\nWork: %s\nOwner: %s\n' '<scope；CI 紅燈回這張 PR>' "$CLADE_WORK_ID" "${CLADE_DISPATCH_ID:-session:<claude_session_id>}")"
 gh pr view <session-branch> --json number,isDraft,headRefName
 ```
 
-body 的 `Work:`／`Owner:` 兩行必填（`Owner:` 填 `<dispatch_id>`、`session:<claude_session_id>` 或 `bot:<job>`）：PR 主人消失後，coordinator 分診靠它才派得了修補。`Review:` 行是給讀這張 PR 的人貼進 terminal 的閱讀指令（[[my]] 的 `rules/待拍板條目寫法.md` Rule 22；target 是 branch，所以讀的是本機 diff），只印在 body 裡，**NEVER** 代跑。沒有 `Work:` 行的 `gh pr create` 會被 PreToolUse hook 擋下（`CLADE_ALLOW_NO_WORK=1` 前綴只給非 clade 工作）。PR 合入後跑 `node scripts/wt-helper.ts batch retire-merged` retire 指向已合 PR 的 draft receipt（加 `--work-id <id>[,<id>…]` 只收點名的 receipt；點名的 id 沒有 receipt 時整個拒絕、一張都不 retire，旗標缺值或值是另一個旗標算 usage 錯誤）。**NEVER** 把該來源放進 ready 池、**NEVER** 當 `prepare` 成員、**NEVER** 啟動完整品質鏈、**NEVER** merge、**NEVER** push `origin main`。空 branch、只有 WIP → 不開 PR。改動的每一個路徑都在登記簿 allowlist 內（clade home：決策紀錄、handoff、plan 量測、docs）→ 不開 PR，在 worktree commit 後跑 `node scripts/register-land.ts`（[[github-flow]] 的「紀錄型改動不開 PR」段）；混了 allowlist 外的檔才整批走 draft PR。CI 紅燈修回同一張 PR（處置見下方 § CI 紅燈處置）。討論 draft 另加具名討論者與具體問題時才跑（舊命令無 `--kind` 仍是 discussion，兩欄都必填）：
+body 的 `Work:`／`Owner:` 兩行必填（`Owner:` 填 `<dispatch_id>`、`session:<claude_session_id>` 或 `bot:<job>`）：PR 主人消失後，coordinator 分診靠它才派得了修補。body 不放 diff 閱讀指令；這張 PR 若要送 Charles 拍板，題目照 [[my]] 的 `rules/待拍板條目寫法.md` Rule 22 附行為說明＋截圖或 preview。沒有 `Work:` 行的 `gh pr create` 會被 PreToolUse hook 擋下（`CLADE_ALLOW_NO_WORK=1` 前綴只給非 clade 工作）。PR 合入後跑 `node scripts/wt-helper.ts batch retire-merged` retire 指向已合 PR 的 draft receipt（加 `--work-id <id>[,<id>…]` 只收點名的 receipt；點名的 id 沒有 receipt 時整個拒絕、一張都不 retire，旗標缺值或值是另一個旗標算 usage 錯誤）。**NEVER** 把該來源放進 ready 池、**NEVER** 當 `prepare` 成員、**NEVER** 啟動完整品質鏈、**NEVER** merge、**NEVER** push `origin main`。空 branch、只有 WIP → 不開 PR。改動的每一個路徑都在登記簿 allowlist 內（clade home：決策紀錄、handoff、plan 量測、docs）→ 不開 PR，在 worktree commit 後跑 `node scripts/register-land.ts`（[[github-flow]] 的「紀錄型改動不開 PR」段）；混了 allowlist 外的檔才整批走 draft PR。CI 紅燈修回同一張 PR（處置見下方 § CI 紅燈處置）。討論 draft 另加具名討論者與具體問題時才跑（舊命令無 `--kind` 仍是 discussion，兩欄都必填）：
 
 ```bash
 node scripts/wt-helper.ts batch draft <source-path> \
@@ -57,7 +57,7 @@ seal 之後同一 `workId` MUST 把受審 formal HEAD 交到**既有** draft 的
 | 已授權開發皆完成或受阻 | `drained` | 有就緒成員即結批 |
 | 使用者結束本輪開發 | `stop` | 有就緒成員即結批；換 session 不屬於 stop |
 
-進入哪條路（續跑、prepare、返回開發、普通 `/commit`）判定見 `rules/批次入口判準.md` Rule 3。所有輸出中的 stale／invalid 來源列名保留，不假裝進池。新就緒工作進下一批。單成員 PR 預設；Charles-only leftover 卡該來源時跑 `batch yield-blocked` 讓出 active slot，blocked source 不可自動重回 ready，須具名 `batch unlock-blocked --event` 後重驗再 ready。回報這個 leftover 時，要讀 diff 才能判的照 [[my]] 的 `rules/待拍板條目寫法.md` Rule 22 附閱讀指令。無關獨立 workId 繼續。合批內一成員 blocked 則整批不落地。
+進入哪條路（續跑、prepare、返回開發、普通 `/commit`）判定見 `rules/批次入口判準.md` Rule 3。所有輸出中的 stale／invalid 來源列名保留，不假裝進池。新就緒工作進下一批。單成員 PR 預設；Charles-only leftover 卡該來源時跑 `batch yield-blocked` 讓出 active slot，blocked source 不可自動重回 ready，須具名 `batch unlock-blocked --event` 後重驗再 ready。回報這個 leftover 時，要送 Charles 拍板的照 [[my]] 的 `rules/待拍板條目寫法.md` Rule 22 附行為說明＋截圖或 preview，不附 diff 閱讀指令。無關獨立 workId 繼續。合批內一成員 blocked 則整批不落地。
 
 ### CI 紅燈處置
 
@@ -195,7 +195,7 @@ node scripts/wt-helper.ts batch cleanup
 
 每個來源都需正式落地、HEAD 未變、無未保存工作／活 claim／lock／保留契約才移除；有不能安全刪的 ignored 內容也保留。**NEVER** 用 `--force` 補掉不成立的 predicate。來源只因點名得出的檔案 dirty 而保留時，用 `batch cleanup --discard-pathspec <path>[,…]`（語意同 `wt-helper cleanup`：只收 repo 內字面路徑、rename 兩端都要命中；移除前先存 `refs/clade-residue/<slug>`，存失敗就整棵保留；其他 dirty 照擋）。報告逐來源列 `path`、`branch`、`dirty`、`merged_to_main`、`locked` 與 removed／retained 原因，integration 最後回收。
 
-**來源在落地後合法繼續工作**（retained 原因是 `source HEAD changed` 或 `source branch advanced`，而新 commit 疊在登記 head 之上、或來源已 rebase 到含落地內容的 main 上）時，這棵樹不該被移除，也永遠不會回到登記 head。改走保留來源關閉：
+**來源在落地後合法繼續工作**（`source HEAD changed`：新 commit 疊在登記 head 之上、或來源已 rebase 到含落地內容的 main 上）時，這棵樹不該被移除，也永遠不會回到登記 head。`batch cleanup` 會自己用下述同一組驗證把它關閉：結果列在該批的 `released` 欄（`--dry-run` 預覽同列 `released`），不再列入 retained，integration 同一輪照收。驗證不過（來源改寫過已落地的 history）才維持 retained。`source branch advanced` 或要在 cleanup 之外手動關閉時，改走保留來源關閉：
 
 ```bash
 node scripts/wt-helper.ts batch release-source <source-path> --reason "<為什麼這棵樹要留著>"

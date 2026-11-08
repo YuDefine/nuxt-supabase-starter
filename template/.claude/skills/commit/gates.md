@@ -193,7 +193,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
       node ~/offline/clade/vendor/scripts/flow/flow.ts gates --repo-only --require-empty
       ```
 
-      - **exit 3** → 改跑 `--json`，輸出 `✅ 0-MR auto-triage 完成，等人 <N> 張`，逐張列 family ＋ 判斷題，釋放 lock。要讀 diff 才能判的那幾張，照 [[my]] 的 `rules/待拍板條目寫法.md` Rule 22 各附一行閱讀指令
+      - **exit 3** → 改跑 `--json`，輸出 `✅ 0-MR auto-triage 完成，等人 <N> 張`，逐張列 family ＋ 判斷題，釋放 lock。要送 Charles 拍板的那幾張，照 [[my]] 的 `rules/待拍板條目寫法.md` Rule 22 各附行為說明＋截圖或 preview，不附 diff 閱讀指令
       - **exit 0** → 沒有任何卡片，但 blocker 仍在 → 剩下的若是 evidence 已齊的 `[review:ui]` 或已有 `(verified-ui:)` 的 `[verify:ui]` leaf，釋放 lock 並在 chat 逐項交給 user（[[proactive-skills.manual-review-entry]] 第 4 步）；其餘是主線的球：繼續 auto-triage，或釋放 lock ＋ 如實報告卡在哪幾個 leaf
       - **exit 2** → 釋放 lock，回報判不出來的原因
 

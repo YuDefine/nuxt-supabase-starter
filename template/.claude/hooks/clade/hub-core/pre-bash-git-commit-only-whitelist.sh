@@ -32,17 +32,36 @@
 #            | [rtk] git [-C DIR | --no-pager]* commit OPT* --only OPT* -- PATH+
 #            | [rtk] git [-C DIR | --no-pager]* SUB ARG*
 #                SUB = add|diff|log|push|restore|rev-parse|show|status
-#            | echo|printf|true ARG*
+#            | echo|printf|true|mkdir|cat ARG*     (cat: no redirect, no heredoc)
+#            | NAME=VALUE+                  (bare assignment, #4210)
+#            | export NAME=VALUE+           (#4210)
+#   Any seg may start with `NAME=VALUE` env-prefix words; NAME must be
+#   unquoted (`"A=x" cmd` runs a command named `A=x`, so it is not a prefix).
+#   NAME is never GIT_* / HOME / PWD / OLDPWD / CDPATH (they move the commit
+#   or the cd chain) nor PATH / IFS / ENV / BASH_* / LD_* / DYLD_* / SHELL* /
+#   XDG_CONFIG_HOME / GLOBIGNORE / PS4 / PROMPT_COMMAND / EDITOR / VISUAL /
+#   PAGER / LESS* / BROWSER, nor an interpreter's injection hook (NODE_* /
+#   NPM_CONFIG_* / PERL* / PYTHON* / RUBY* / BUN_* / DENO_* / SSH_* /
+#   JAVA_TOOL_OPTIONS): they change which program or code runs. Such a NAME,
+#   a non-literal VALUE, `export` of a bare name or a flag, and everything
+#   not listed (python, sed, bash, ...) stay unchecked. This list is a
+#   best-effort denylist of the known ones, in line with "Known boundary"
+#   below; a variable's value is otherwise only read through `$`, which is
+#   already unchecked.
 #   OPT     := -m|-F|-C|-c|-t V, --message|--file|--author|--date|--cleanup|
 #              --trailer|--fixup|--squash|--reuse-message|--reedit-message|
 #              --template [=]V, -q -v -s -e --amend --no-edit --signoff
 #              --allow-empty --allow-empty-message --no-gpg-sign
 #              --reset-author --status --no-status (and their long forms)
 #   Redirects (`>`, `>>`, `2>&1`, `<`, `>|`, `&>`) may appear anywhere in a
-#   seg with a literal target. A heredoc (`<<[-]DELIM`) is allowed on a git
+#   seg with a literal target; an output redirect's target must not have a
+#   `.git` path component, because writing a gitfile, .git/HEAD or
+#   .git/config moves where a later commit lands — on every seg, git, echo,
+#   printf, mkdir and filters included. A heredoc (`<<[-]DELIM`) is allowed on a git
 #   seg; so is the message idiom `"$(cat <<'EOF' … EOF\n)"` inside double
 #   quotes on a git seg (on any other command its body counts as code). A
-#   "git seg" here is one whose global options are only -C / --no-pager and
+#   `cat` is accepted without any redirect or heredoc (#4210).
+#   A "git seg" here is one whose global options are only -C / --no-pager and
 #   whose SUB is a builtin above: `-c alias.x='!sh'`, `--config-env` or an
 #   alias subcommand can run an argument or stdin as code (TD-1128). An
 #   unquoted DELIM's body must have no `$`, backtick or `\`.
@@ -123,7 +142,7 @@ fi
 scan=$(awk '
   BEGIN {
     RS = "\001"; OFS = "\037"; home = ENVIRON["HOME"]; cdpath = ENVIRON["CDPATH"]
-    nb = 1; base[1] = ""
+    nb = 1; base[1] = ""; wqf = -1
   }
   function no(why) { if (nr == "") nr = why }
   function out(   k, b, p, seen) {
@@ -196,6 +215,7 @@ scan=$(awk '
   # Index of the word that runs, past reserved words and `rtk`.
   function effidx(   j) {
     j = 1
+    while (j < nw && isassign(j)) j++
     while (j < nw && wl[j] && words[j] ~ /^(if|then|elif|else|while|until|do|!|time)$/) j++
     if (j < nw && words[j] == "rtk" && words[j + 1] == "git") j++
     return j
@@ -236,6 +256,19 @@ scan=$(awk '
       else if (a ~ /^--(message|trailer)=/) v = substr(a, index(a, "=") + 1)
       if (v ~ /Via: \/commit/) V = 1
     }
+  }
+  # Variables whose value changes where a commit lands or what code runs
+  # (TD-4210): never accepted in an assignment / `export` prefix.
+  # Also the code-injection hooks of interpreters (NODE_OPTIONS,
+  # PERL5OPT, PYTHONPATH, SSH_ASKPASS, ...): a pre-commit hook would run them.
+  function badvar(name,   u) {
+    u = toupper(name)
+    return u ~ /^(GIT_|LD_|DYLD_|BASH_|XDG_CONFIG_|NODE_|NPM_CONFIG_|PERL|PYTHON|RUBY|SSH_|BUN_|DENO_|LESS)/ || u ~ /^(JAVA_TOOL_OPTIONS|_JAVA_OPTIONS|BROWSER)$/ || u ~ /^(HOME|PWD|OLDPWD|CDPATH|PATH|IFS|ENV|SHELL|SHELLOPTS|BASHOPTS|GLOBIGNORE|PS4|PROMPT_COMMAND|EDITOR|VISUAL|PAGER)$/
+  }
+  # Word k is a shell assignment: `NAME=` with NAME unquoted (`"A=x"` and
+  # `A\=x` are command names to bash, not assignments).
+  function isassign(k) {
+    return words[k] ~ /^[A-Za-z_][A-Za-z0-9_]*=/ && (wqa[k] < 0 || wqa[k] >= index(words[k], "="))
   }
   function join(base, dir) {
     if (dir ~ /^\// || base == "") return dir
@@ -309,12 +342,15 @@ scan=$(awk '
     } else if (redir) {
       redir = 0
       if (!wlit) no("a non-literal redirect target")
+      # A write into `.git` (a gitfile, .git/HEAD, .git/config) moves where
+      # a later commit lands; other file targets (logs) stay accepted.
+      if (redout && wc ~ /(^|\/)\.git(\/|$)/) rdw = 1
       cands(wc)
     } else {
-      nw++; words[nw] = w; wl[nw] = wlit
+      nw++; words[nw] = w; wl[nw] = wlit; wqa[nw] = wqf
       cands(wc)
     }
-    w = ""; wc = ""; inword = 0; wlit = 1; wq = 0
+    w = ""; wc = ""; inword = 0; wlit = 1; wq = 0; wqf = -1
   }
   function bodies(   k, e, line, body) {
     for (k = hdone + 1; k <= hn; k++) {
@@ -362,7 +398,7 @@ scan=$(awk '
     nrec++; rec[nrec] = "C" OFS (gd != "" ? gd : cur)
     for (m = 1; m <= np; m++) { nrec++; rec[nrec] = "P" OFS pth[m] }
   }
-  function segment(op,   j, k, cmd, lit, d, filt) {
+  function segment(op,   j, k, cmd, lit, d, filt, sk, an, plit) {
     endword()
     cdend()
     # `a &&` newline `b`: the newline continues the list.
@@ -374,14 +410,30 @@ scan=$(awk '
         if (words[k] == "pushd" || words[k] == "popd") S = 1
         if (words[k] == "cd" && (cdpath != "" || (k < nw && words[k + 1] == "-"))) S = 1
       }
+      # Leading `NAME=value` words (a bare assignment, or an env prefix of the
+      # command) are stripped; GIT_* / HOME / PWD / OLDPWD / CDPATH / PATH / ...
+      # are not accepted (badvar). A value with `$` / backtick / glob is not
+      # literal and fails the literal check below.
+      plit = 1; sk = 0
+      while (sk < nw && isassign(sk + 1)) {
+        sk++
+        if (!wl[sk]) plit = 0
+        an = substr(words[sk], 1, index(words[sk], "=") - 1)
+        if (badvar(an)) no("an assignment to `" an "`")
+      }
+      if (sk > 0) {
+        for (k = 1; k + sk <= nw; k++) { words[k] = words[k + sk]; wl[k] = wl[k + sk]; wqa[k] = wqa[k + sk] }
+        nw -= sk
+      }
       j = 1
-      if (words[1] == "rtk" && nw > 1 && words[2] == "git") j = 2
-      cmd = words[j]
-      lit = 1
+      if (nw > 1 && words[1] == "rtk" && words[2] == "git") j = 2
+      cmd = (nw > 0 ? words[j] : "")
+      lit = plit
       for (k = 1; k <= nw; k++) if (!wl[k]) lit = 0
       seggit[segid] = gitdata()
       commitvia()
       if (!lit) no("a word with an expansion or glob")
+      else if (nw == 0) { }
       else if (filt) {
         if (cmd !~ /^(tail|head|cat|wc|grep)$/) no("`" cmd "` after a pipe")
       } else if (cmd == "cd") {
@@ -407,14 +459,27 @@ scan=$(awk '
         if (k > nw) no("git without a subcommand")
         else if (words[k] == "commit") commitseg(k)
         else if (words[k] !~ /^(add|diff|log|push|restore|rev-parse|show|status)$/) no("`git " words[k] "`")
+      } else if (cmd == "export") {
+        if (nw < 2) no("`export` without an assignment")
+        for (k = j + 1; k <= nw; k++) {
+          if (words[k] !~ /^[A-Za-z_][A-Za-z0-9_]*=/) { no("`export " words[k] "`"); break }
+          an = substr(words[k], 1, index(words[k], "=") - 1)
+          if (badvar(an)) { no("an export of `" an "`"); break }
+        }
+      } else if (cmd == "mkdir") {
+      } else if (cmd == "cat") {
+        # Read-only only: a redirect or heredoc makes cat a file writer
+        # (.git/HEAD, a gitfile, .git/config move where a commit lands).
+        if (rd) no("`cat` with a redirect or heredoc")
       } else if (cmd !~ /^(echo|printf|true)$/) no("`" cmd "`")
+      if (rdw) no("a redirect that writes into `.git`")
       if (!filt) listpos++
     }
     if (op == ";" || op == "\n" || op == "") {
       if (condcd) condpending = 1
       condcd = 0; listpos = 0
     } else if (op != "&&" && op != "|") no("`" op "`")
-    prevop = op; nw = 0; segid++
+    prevop = op; nw = 0; rd = 0; rdw = 0; segid++
   }
   {
     s = $0; n = length(s); i = 1; segid = 1; wlit = 1
@@ -432,12 +497,12 @@ scan=$(awk '
         }
         w = w c; wc = wc c; i++; continue
       }
-      if (c == "\047" || c == "\"") { q = c; inword = 1; wq = 1; i++; continue }
+      if (c == "\047" || c == "\"") { if (wqf < 0) wqf = length(w); q = c; inword = 1; wq = 1; i++; continue }
       if (c == "`") { subst("`"); continue }
       if (c == "$") { dollar(); continue }
       if (c == "#" && !inword) { while (i <= n && substr(s, i, 1) != "\n") i++; continue }
       if (c == "\\") {
-        if (i < n && substr(s, i + 1, 1) != "\n") { add(substr(s, i + 1, 1)); wq = 1 }
+        if (i < n && substr(s, i + 1, 1) != "\n") { if (wqf < 0) wqf = length(w); add(substr(s, i + 1, 1)); wq = 1 }
         i += 2; continue
       }
       if (c == " " || c == "\t") { endword(); i++; continue }
@@ -448,6 +513,7 @@ scan=$(awk '
       }
       two = substr(s, i, 2)
       if (c == "<" || c == ">" || two == "&>") {
+        rd = 1; redout = 0
         # An all-digit word right before the operator is its fd number.
         if (inword && !wq && w ~ /^[0-9]+$/) { w = ""; wc = ""; inword = 0 } else endword()
         if (c == "&") i++
@@ -460,6 +526,7 @@ scan=$(awk '
           hdnext = 1; continue
         }
         if (nc == "(") giveup("process substitution")
+        redout = (c != "<" || nc == ">")
         if (nc == ">" || nc == "|" || nc == "&") i++
         else if (c == "<" && nc == ">") i++
         redir = 1; continue
@@ -488,8 +555,12 @@ main. Rewrite as one of:
   cd <worktree> && git commit --only -- <paths>
   git -C <worktree> commit --only -- <paths>
 
-Put heredocs / scripts / pushd / subshell work in a separate Bash call
-before the commit. Product landings on main: invoke \`/commit\`.
+Accepted before the commit: literal \`export VAR=x\` / \`VAR=x\` (not GIT_*,
+HOME, PWD, OLDPWD, CDPATH, PATH, ...), \`mkdir\`, \`cat\` without a redirect
+or heredoc. Anything else (python, sed, scripts, \`\$VAR\`,
+\`\$(...)\`, pushd, subshell) goes in a separate Bash call before the
+commit, and the commit call spells its paths and message literally.
+Product landings on main: invoke \`/commit\`.
 EOF
   exit 2
 }

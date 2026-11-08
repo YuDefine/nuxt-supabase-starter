@@ -1239,6 +1239,26 @@ function preserveWorktree(
   }
   return receipt
 }
+/**
+ * The archive already journaled for `path`, when it still matches the live source byte for
+ * byte (worktree inventory, HEAD, source-private Git state — `verifyPreservationArchive`).
+ * A source that changed since the last capture fails verification and gets a fresh capture.
+ */
+function reusablePreservation(
+  b: WorktreeBatch,
+  path: string,
+  profile: ConsumerProfile,
+): PreservationReceipt | undefined {
+  const archive = preservedArchive(b, path)
+  if (!archive) return undefined
+  try {
+    if (!verifyPreservationArchive(archive, path, inventoryOptionsFromProfile(profile)))
+      return undefined
+    return readPreservationReceipt(archive)
+  } catch {
+    return undefined
+  }
+}
 // An unreadable or non-file archive entry fails verification instead of aborting cleanup.
 const hashMatches = (path: string, digest: string) => {
   try {
@@ -5028,7 +5048,11 @@ function defaultMergeReceiptPath(receipt: MergeReceipt): string {
   )
 }
 
-type CleanupPreviewRow = { path: string; action: 'removed' | 'preserved'; reason: string }
+type CleanupPreviewRow = {
+  path: string
+  action: 'removed' | 'preserved' | 'released'
+  reason: string
+}
 
 /** A named `--batch <id>` that matches no cleanup candidate is an error, not an empty result:
  *  an empty list reads as "nothing to reclaim" and hides a mistyped id or a batch that is not
@@ -5146,6 +5170,19 @@ export function previewCleanupBatches(
         )
       )
         reason = 'source has an active claim'
+      if (reason?.startsWith('source HEAD changed') && wt && !removal && !landedProblem) {
+        try {
+          checkLandedMemberRelease(c, b, m.path)
+          members.push({
+            path: m.path,
+            action: 'released',
+            reason: 'source advanced past the landed head; released with the source kept',
+          })
+          continue
+        } catch {
+          // Release preconditions not met: the member stays retained with the HEAD-changed reason.
+        }
+      }
       const retiredArchive =
         !reason && !wt && !removal && !existsSync(m.path)
           ? retiredByHandoff(c, m.path, m.branch, m.head)
@@ -5304,6 +5341,8 @@ export function cleanupBatches(
       retained: { path: string; reason: string }[]
       preserved: { path: string; archive: string }[]
       parked?: { path: string; status: string; detail?: string }[]
+      /** Members closed with their advanced source kept (same terminal as release-source). */
+      released?: { path: string; sourceHead: string }[]
     }[] = []
     // Batches whose landed commit was verified on main this pass — the only
     // ones whose retained trees are safe to park below.
@@ -5316,7 +5355,7 @@ export function cleanupBatches(
     )
     assertNamedBatchesFound(scope.batchIds, cleanupCandidates)
     for (const b of cleanupCandidates) {
-      const result = {
+      const result: (typeof results)[number] = {
         batch: b.id,
         removed: [] as string[],
         retained: [] as { path: string; reason: string }[],
@@ -5451,6 +5490,24 @@ export function cleanupBatches(
           )
         )
           reason ||= 'source has an active claim'
+        // A landed member whose live source moved past its registered head can never satisfy
+        // removal; give it the `release-source` terminal state when its preconditions hold,
+        // otherwise it stays retained with the original reason.
+        if (reason?.startsWith('source HEAD changed') && wt && !removal && !cancelled) {
+          try {
+            const row = releaseLandedMember(
+              c,
+              s,
+              b,
+              m.path,
+              'batch cleanup: source HEAD advanced past the landed registered head',
+            )
+            ;(result.released ??= []).push({ path: m.path, sourceHead: row.sourceHead })
+            continue
+          } catch {
+            /* preconditions not met: stay retained with the HEAD-changed reason */
+          }
+        }
         if (reason) {
           result.retained.push({ path: m.path, reason })
           continue
@@ -5586,7 +5643,9 @@ export function cleanupBatches(
                     inventoryOptionsFromProfile(profile),
                   )
                 } else {
-                  receipt = preserveWorktree(c, b, m.path, profile)
+                  receipt =
+                    reusablePreservation(b, m.path, profile) ??
+                    preserveWorktree(c, b, m.path, profile)
                   expectedInventory = inventoryTree(m.path, inventoryOptionsFromProfile(profile))
                 }
                 // The archive was just verified (or journaled): the in-tree secret verdict
@@ -7063,48 +7122,60 @@ export function releaseBatchSource(cwd: string, source: string, reason: string) 
     if (!b) throw new Error('Source is not an unsettled member of any batch')
     if (b.phase !== 'landed')
       throw new Error(`release-source needs a landed batch; ${b.id} is ${b.phase}`)
-    if (b.removing?.path === path)
-      throw new Error('A removal is journaled for this source; finish it with batch cleanup')
-    const index = b.members.findIndex((m) => m.path === path)
-    const m = b.members[index]!
-    const landedCommit = b.mergeReceipt?.merge_sha ?? b.landedHead!
-    const ancestor = (a: string, d: string) => {
-      try {
-        git(c.main, ['merge-base', '--is-ancestor', a, d])
-        return true
-      } catch {
-        return false
-      }
-    }
-    if (!ancestor(landedCommit, 'refs/heads/main'))
-      throw new Error(`landed commit ${landedCommit} is not an ancestor of refs/heads/main`)
-    const wt = worktrees(c.main).find((w) => w.path === path)
-    if (!wt) throw new Error('source worktree missing; release-source keeps a live source only')
-    if (wt.branch !== m.branch)
-      throw new Error(
-        `source is on ${wt.branch ?? '(detached)'}, not the member branch ${m.branch}`,
-      )
-    const sourceHead = head(path)
-    if (sourceHead === m.head)
-      throw new Error('source is still at its registered head; batch cleanup removes it normally')
-    // A source rebased onto main after landing no longer descends from its registered head, yet it
-    // builds on the landed commit (or adds nothing beyond main) — it did not rewrite what landed.
-    // The registered head is pinned below either way, and the tree is kept.
-    if (
-      !ancestor(m.head, sourceHead) &&
-      !ancestor(landedCommit, sourceHead) &&
-      !ancestor(sourceHead, 'refs/heads/main')
-    )
-      throw new Error(
-        `registered head ${m.head} is not an ancestor of the source head ${sourceHead}, which neither builds on landed commit ${landedCommit} nor is on main; the source rewrote landed history`,
-      )
-    git(c.main, ['update-ref', `refs/clade/batches/${b.id}/${index}`, m.head])
-    const row = { path, head: m.head, sourceHead, reason, at: new Date().toISOString() }
-    b.released = [...(b.released ?? []), row]
-    s.ready = s.ready.filter((ready) => ready.path !== path)
-    save(c, s)
+    const row = releaseLandedMember(c, s, b, path, reason)
     return { batch: b.id, released: row }
   })
+}
+/**
+ * The verified half of release-source, shared with `batch cleanup` and its dry-run: a landed
+ * member whose source kept working past its registered head can never satisfy removal, so
+ * cleanup closes the member the way an operator's `release-source` would.
+ * Read-only; throws when any precondition fails, with the reason the member stays retained.
+ */
+function checkLandedMemberRelease(c: Context, b: WorktreeBatch, path: string) {
+  if (b.removing?.path === path)
+    throw new Error('A removal is journaled for this source; finish it with batch cleanup')
+  const index = b.members.findIndex((m) => m.path === path)
+  const m = b.members[index]!
+  const landedCommit = b.mergeReceipt?.merge_sha ?? b.landedHead!
+  const ancestor = (a: string, d: string) => {
+    try {
+      git(c.main, ['merge-base', '--is-ancestor', a, d])
+      return true
+    } catch {
+      return false
+    }
+  }
+  if (!ancestor(landedCommit, 'refs/heads/main'))
+    throw new Error(`landed commit ${landedCommit} is not an ancestor of refs/heads/main`)
+  const wt = worktrees(c.main).find((w) => w.path === path)
+  if (!wt) throw new Error('source worktree missing; release-source keeps a live source only')
+  if (wt.branch !== m.branch)
+    throw new Error(`source is on ${wt.branch ?? '(detached)'}, not the member branch ${m.branch}`)
+  const sourceHead = head(path)
+  if (sourceHead === m.head)
+    throw new Error('source is still at its registered head; batch cleanup removes it normally')
+  // A source rebased onto main after landing no longer descends from its registered head, yet it
+  // builds on the landed commit (or adds nothing beyond main) — it did not rewrite what landed.
+  if (
+    !ancestor(m.head, sourceHead) &&
+    !ancestor(landedCommit, sourceHead) &&
+    !ancestor(sourceHead, 'refs/heads/main')
+  )
+    throw new Error(
+      `registered head ${m.head} is not an ancestor of the source head ${sourceHead}, which neither builds on landed commit ${landedCommit} nor is on main; the source rewrote landed history`,
+    )
+  return { index, m, sourceHead }
+}
+/** Closes the member with its source kept: pins the registered head and records the release. */
+function releaseLandedMember(c: Context, s: State, b: WorktreeBatch, path: string, reason: string) {
+  const { index, m, sourceHead } = checkLandedMemberRelease(c, b, path)
+  git(c.main, ['update-ref', `refs/clade/batches/${b.id}/${index}`, m.head])
+  const row = { path, head: m.head, sourceHead, reason, at: new Date().toISOString() }
+  b.released = [...(b.released ?? []), row]
+  s.ready = s.ready.filter((ready) => ready.path !== path)
+  save(c, s)
+  return row
 }
 /** Cancellation releases the queue, retaining every source and the integration for inspection. */
 function integrationHeadIfPresent(path: string): string | undefined {

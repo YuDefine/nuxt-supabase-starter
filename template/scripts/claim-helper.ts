@@ -867,7 +867,10 @@ export function pathsClaimedByOthers(consumerPath, mySessionId) {
 export function derivedClaimPaths(
   claim: Claim,
   journal: ReturnType<typeof readJournal>,
-  { sessions }: { sessions?: Set<string> | null } = {},
+  {
+    sessions,
+    ignoreWriterSession = null,
+  }: { sessions?: Set<string> | null; ignoreWriterSession?: string | null } = {},
 ): { paths: string[]; live: boolean; evidence: Map<string, DerivedPathEvidence> } {
   const empty = { paths: [], live: false, evidence: new Map<string, DerivedPathEvidence>() }
   if (!claim.worktree_path) return empty
@@ -887,8 +890,14 @@ export function derivedClaimPaths(
   //
   // A path written by BOTH mechanisms resolves to `hook`: a hook row is the harness naming the
   // file, so it settles the question that the mtime window only guesses at.
+  //
+  // `ignoreWriterSession` drops rows written by one harness session from the EVIDENCE only —
+  // liveness above still reads every row. A single session that writes into two worktrees leaves
+  // `hook` rows under both, so without this its own earlier write in tree A comes back as
+  // "someone else's" conflict when it edits the same path in tree B (cross-tree self-report).
   const evidence = new Map<string, DerivedPathEvidence>()
   for (const e of mine) {
+    if (ignoreWriterSession && e.session_id === ignoreWriterSession) continue
     const prior = evidence.get(e.path)
     if (prior && prior.attribution === 'hook' && e.attribution !== 'hook') continue
     if (prior && prior.attribution === e.attribution && prior.ts >= e.ts) continue
@@ -952,12 +961,19 @@ export function claimConflictsForPath(
   {
     myWorktree = null,
     mySessionId = null,
+    myHarnessSessionId = null,
     sessions,
     journal,
     claims,
   }: {
     myWorktree?: string | null
     mySessionId?: string | null
+    /**
+     * The caller's harness session id (hook payload `session_id`) — the namespace journal rows
+     * carry, NOT the claim's `genSessionId()` one. `derived-hook` evidence written by this
+     * session is skipped, so the same session writing in two worktrees never warns itself.
+     */
+    myHarnessSessionId?: string | null
     sessions?: Set<string> | null
     journal?: ReturnType<typeof readJournal>
     claims?: Claim[]
@@ -1011,7 +1027,10 @@ export function claimConflictsForPath(
       })
       continue
     }
-    const derived = derivedClaimPaths(claim, entries, { sessions: live })
+    const derived = derivedClaimPaths(claim, entries, {
+      sessions: live,
+      ignoreWriterSession: myHarnessSessionId,
+    })
     const ev = derived.evidence.get(relPath)
     if (!ev || ev.attribution !== 'hook') continue
     out.push({
@@ -1349,17 +1368,22 @@ if (invokedAsCli()) {
       // Read side for the PreToolUse hook. `--json` so the hook never parses prose;
       // exit 3 (not 1) on a hit so "someone else holds this" is distinguishable from
       // "the query itself failed" — a hook that cannot tell those apart fails the wrong way.
-      const flags = parseFlags(rest.filter((a) => a.startsWith('--')))
-      const target = rest.find((a) => !a.startsWith('--'))
+      // The path is the first positional; flag values (`--worktree <abs>`, `--session <id>`)
+      // MUST reach parseFlags intact — filtering to `--*` tokens first turned every valued flag
+      // into `true`, so the hook's `--worktree` silently fell back to the cwd's toplevel.
+      const target = rest[0] !== undefined && !rest[0].startsWith('--') ? rest[0] : undefined
+      const flags = parseFlags(target === undefined ? rest : rest.slice(1))
       if (!target) {
         console.error(
-          'usage: claim-helper conflicts <repo-relative-path> [--worktree <abs>] [--json]',
+          'usage: claim-helper conflicts <repo-relative-path> [--worktree <abs>] [--session <harness-session-id>] [--json]',
         )
         process.exit(1)
       }
       const rows = claimConflictsForPath(consumerPath, target, {
         myWorktree:
           typeof flags.worktree === 'string' ? flags.worktree : gitToplevel(process.cwd()),
+        myHarnessSessionId:
+          typeof flags.session === 'string' && flags.session !== '' ? flags.session : null,
       })
       if (flags.json === true) {
         console.log(JSON.stringify(rows))

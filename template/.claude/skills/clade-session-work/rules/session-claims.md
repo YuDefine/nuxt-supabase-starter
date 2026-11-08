@@ -167,7 +167,7 @@ node scripts/claim-helper.ts add --change-id main-session-wip \
 
 **那一行是衝突當下唯一進 context 的規約**（clade home 不自動載入 `rules/core/`），所以它 MUST 自帶三件事：當活的處理並先告知使用者；Claude session 先 `SendMessage`、非 Claude 才 `herdr agent prompt`；判停用交 `claim-helper.ts reap`（它自己跑 § 3.1 兩訊號判死、預設只列），**NEVER** 在文案印 `drop <session-id>`——claim 的 id 是 `genSessionId()` 生的，與 `herdr agent list` 的 harness session id 不同 namespace，照它手查一定查不到、會把 session 訊號誤讀成缺席。**NEVER** 把 `drop` 寫成與協商並列的選項——2026-10-19 有 session 照舊文案只憑「pane 不在 `herdr pane list`」單一訊號判死並 drop 別人的 claim，也沒先告知使用者。文案裡的 pane 取自 journal 寫入當下的 `HERDR_PANE_ID`，session 換過 pane 後會過期，只能當 fallback 地址。
 
-已知誤報：自我排除只認 worktree（claim 與 harness 的 session id 不同 namespace），同一個 session 先後在兩棵樹寫入時，自己在 A 樹的 `derived-hook` 會在 B 樹被當成別人的 claim 警告。偵測：`jq -r 'select(.attribution=="hook")|[.session_id,.worktree]|@tsv' .clade/ownership/journal.jsonl | sort -u | cut -f1 | uniq -d`（同一 session id 出現在 ≥2 棵樹）。修法候選見 plan `W-2026-10-19-claim-conflict-hint-two-signal` Open work。
+跨樹自我誤報（已修）：自我排除先認 worktree（claim 與 harness 的 session id 不同 namespace），同一個 session 先後在兩棵樹寫入時，自己在 A 樹的 `derived-hook` 會在 B 樹被當成別人的 claim 警告。hook 因此把 payload 的 `session_id` 以 `conflicts --session <id>` 傳給 helper，`derived-hook` 證據略過 writer 等於呼叫者的 journal 列（liveness 照讀全部列；`declared` 不受影響）。偵測殘留：`jq -r 'select(.attribution=="hook")|[.session_id,.worktree]|@tsv' .clade/ownership/journal.jsonl | sort -u | cut -f1 | uniq -d`（同一 session id 出現在 ≥2 棵樹）。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
@@ -224,7 +224,7 @@ node scripts/claim-helper.ts drop <session-id>
 node scripts/claim-helper.ts prune              # 清過期
 node scripts/claim-helper.ts reap [--apply] [--json] [--herdr-bin <path>]
                                                 # 存量盤點（預設 dry-run）；判準見 § 2 drop 時機表
-node scripts/claim-helper.ts conflicts <repo-relative-path> [--worktree <abs>] [--json]
+node scripts/claim-helper.ts conflicts <repo-relative-path> [--worktree <abs>] [--session <harness-id>] [--json]
                                                 # 動筆前的一路徑查詢（§ 3.4）。exit 3 = 有衝突，
                                                 # 0 = 沒有。3 而不是 1：查詢失敗與查到衝突
                                                 # NEVER 共用一個 exit code

@@ -167,8 +167,35 @@ const profileEntries: Array<[string, ProfileDefinition]> = [
   [
     '<consumer-l>',
     {
-      topology: unknownTopology,
-      resources: { ...unknownResources, databases: 'verified-absent' },
+      // Evidence 2026-11-06 (main + 25 linked worktrees + 1 review-snap clone, 2,281,744
+      // entries on ext4; plan W-2026-09-29-preservation-resource-adapters
+      // evidence/2026-11-06-<consumer-l>-inventory.md): the only nested repositories are
+      // gitignored Pi clones `.pi/git/github.com/YuDefine/clade/.git` (main + 1 batch tree); no
+      // gitlink or .gitmodules, no objects/info/alternates, no `filter=lfs` attribute or
+      // .git/lfs (only the host-wide git config filter); 0 special files, no xattr and so no
+      // posix ACL. 7,257 of 7,259 out-of-tree-looking symlinks resolve inside their tree
+      // (dangling `.bdd-sites/*/dist`, `.claude/rules/*` links); exactly two leave it: main's
+      // `dist -> ~/...` (macOS path, dangling) and bdd-build-once's
+      // `node_modules -> ../../<consumer-l>/node_modules` — no allowlist: both are rebuildable
+      // build output that churns per worktree (<consumer-b>/<consumer-j> precedent). No docker container,
+      // volume or mount names or references <consumer-l>; registry preview_db is `none`; no
+      // `.claude/worktree-db.json`; the only database state is miniflare `.wrangler/state` in
+      // main (in-tree, 124K). No real `.env*`/`.dev.vars*` in any tree (only `.example` and
+      // `.template` copies under vendor/snippets, `.pi/git`, `.clade/rescue|releases`); the
+      // tracked `.npmrc` carries no auth token.
+      topology: {
+        nestedRepositories: 'declared-present',
+        submodules: 'verified-absent',
+        sharedGitObjects: 'verified-absent',
+        lfs: 'verified-absent',
+      },
+      resources: absentResources,
+      filesystem: {
+        externalSymlinks: 'declared-present',
+        specialFiles: 'verified-absent',
+        acl: 'verified-absent',
+        xattr: 'verified-absent',
+      },
     },
   ],
   [

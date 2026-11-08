@@ -183,14 +183,14 @@ Claude Code 的 cloud session（`claude --cloud`）是**載體**，不是派工�
 | 對象 | 選帳規則 | 位置 |
 | --- | --- | --- |
 | 派出去的 worker、cloud、一次性工作 | 一般池：依 weekly 配速，壓力高（剩得多、快重置）的先挑，用光為止 | `claude-account-pacing.ts` `sortPoolCandidates` |
-| 長駐席位 | 餘裕優先、**不參與 drain 配速**：週用量 ≥80% 的帳號不可選（讀不到也不選）；5h 見底線以下沉底；其餘依加權 5h 可用量，平手比週剩餘量（NEVER 比配速壓力）；全池都 ≥80% 就開不出席（fail closed，不退回 drain 排序） | `claude-account-pacing.ts` `sortByFiveHourHeadroom`、`coordinator-seat.ts` `LONG_LIVED_SEAT_SELECTION`（主持者席位再加方案權重門檻 `COORDINATOR_SEAT_SELECTION`） |
-| 在職的主持者 | 自身帳號週用量 ≥90% 就主動交棒：watch 置頂必做列＋派新工作被拒（只放行 relay／successor），不等撞限；開席線 80 與交棒線 90 之間留 10 點，避免剛開席就踩線 | `coordinator-self-quota.ts` `selfWeeklyRelayDue`／`coordinatorSelfQuotaDispatchRefusal`、`coordinator-snapshot.ts` `coordinatorSelfQuotaMustDo` |
+| 長駐席位 | 餘裕優先、**不參與 drain 配速**：週用量 ≥80% 的帳號不可選（讀不到也不選）；5h 見底線以下沉底；其餘依加權 5h 可用量，平手比週剩餘量（NEVER 比配速壓力）；全池都 ≥80% 時 HQ 常駐席開不出席（fail closed，不退回 drain 排序）；主持者席位改坐加權週剩餘最多的帳號（`weeklyFallback`，見 coordinator skill `rules/交棒判準.md` Rule 1） | `claude-account-pacing.ts` `sortByFiveHourHeadroom`／`sortByWeeklyRemaining`、`coordinator-seat.ts` `LONG_LIVED_SEAT_SELECTION`（主持者席位再加方案權重門檻與 `weeklyFallback`：`COORDINATOR_SEAT_SELECTION`） |
+| 在職的主持者 | 自身帳號週用量 ≥90% 且主持席選帳此刻挑別的帳號、值得換時才主動交棒：watch 置頂必做列＋派新工作被拒（只放行 relay／successor），不等撞限；挑回本帳號、全池過開席線時 fallback 挑到的帳號也 ≥90%（全池都 ≥90% 時交棒線等於拿掉），或挑不出 → 留任、派工照常；選帳失敗另列錯誤、NEVER 當正常留任；開席線 80 與交棒線 90 之間留 10 點，避免剛開席就踩線 | `coordinator-self-quota.ts` `selfWeeklyRelayDue`／`seatSelectionPicksOther`／`relayTargetFromSelection`／`coordinatorSelfQuotaDispatchRefusal`、`coordinator-snapshot.ts` `coordinatorSelfQuotaMustDo` |
 
 長駐席位入口：`ccseat`（或 `cc --seat`；host 的 rc 在 source 後重定義 `cc` 時——desk 的 `~/.zshrc` 包成 `_cc_image_view_launch`——`cc --seat` 到不了席位函式，只有 `ccseat` 可靠；`ops/dev-node/claude-launchers.sh`）＝池入口加 `CLADE_SEAT_ROLE=long-lived`，由 `claude-workspace-admission.ts` 套同一份 `LONG_LIVED_SEAT_SELECTION`；啟動 claude 前 `CLADE_SEAT_ROLE` 即被移除，席位派出的 worker 不繼承。HQ `scripts/resident.sh` 開主管席與對話席 MUST 走這個入口（用 `ccseat`），**NEVER** 在 HQ 另寫門檻或排序。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | 開長駐席位時全池週用量都 ≥80% 或讀不到 → 入口 exit 1 並印各帳號原因；在職主持者週用量 ≥90% → 置頂必做列與派工拒絕 |
+| 觸發條件 | 開長駐席位時全池週用量都 ≥80% 或讀不到 → 入口 exit 1 並印各帳號原因；在職主持者週用量 ≥90% 且選帳挑別的帳號、值得換 → 置頂必做列與派工拒絕 |
 | 消費端 | 開席者（主持者繼任 relay、看門狗 `pickSeatAccount`、HQ `resident.sh`）；在職主持者的 watch 摘要與 `herdr-session-handoff.ts`／`cloud-dispatch.ts` 派工關卡 |
 | 觸發點 | 失敗輸出：admission 的 `Workspace trust admission failed: {…plan_excluded: weekly-at-limit…}`；`coordinator_must_relay` 拒派訊息（週用量版）；HQ pane-quota-watch 與 coordinator 看門狗紀錄追「因週額度撞限停擺」次數 |
 

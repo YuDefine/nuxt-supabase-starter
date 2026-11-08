@@ -1,6 +1,6 @@
 ---
 description: Consumer dev server port 中央分配 + audit（避免跨 consumer 撞號）
-paths: ['package.json', 'nuxt.config.ts', 'registry/consumers.json', 'registry/consumers.schema.json']
+paths: ['package.json', 'nuxt.config.ts', 'supabase/config.toml', 'registry/consumers.json', 'registry/consumers.schema.json']
 ---
 <!-- Clade native rule; source: rules/core/dev-port-allocation.md; edit canonical source -->
 <!-- clade-targets: claude,agents -->
@@ -78,6 +78,33 @@ Tunnel hostname 是 per-consumer 單一資源（[[dev-tunnel-convention]] § 1�
 - **NEVER** 沒開 opt-in 就在 worktree 內啟 tunnel——`wt-helper add` 複製來的 `.env.local` 含 token，**存在不代表可以用**
 - 沒 opt-in 時手動跑 `wt-env-sync` 複製進 worktree 的 `.env*` 會移除 `TUNNEL_HOSTNAME`／`TUNNEL_NAME`，resilient wrapper 在 linked worktree 讀到共用 hostname 也會自關 tunnel（[[dev-tunnel-convention]] § 7）。**尚未涵蓋** `wt-helper add`：它用自己的 `copyEnvSyncFiles()` 逐字複製，新開的樹仍帶共用 `TUNNEL_*`；`wt-helper add` / `dev` 偵測到「有 tunnel key 但沒 opt-in」只 warn——worktree owner 要嘛 opt-in，要嘛刪掉那幾個 key
 
+### 5. 本機 Supabase 埠區塊
+
+Supabase CLI 的預設埠（54321 api、54322 db、54323 studio…）對每個專案都一樣，兩個 consumer 同時 `supabase start` 就撞埠，或更糟：連線設定指到別專案正在跑的資料庫（實例：新專案樣板沿用預設 54322，與好幾個既有 consumer 的本機資料庫相撞，照 `.env.example` 跑 migration 會動到別專案的本機資料；另有 consumer 的 `shadow_port` 54330 與別處已跑著的本機容器相撞）。
+
+> SoT：registry `dev_ports.supabase_base`（本機有 Supabase 的 consumer 才宣告）。Audit：`scripts/dev-port-audit.ts` 對 `supabase-block` CONFLICT exit 1。
+
+每個 consumer 認領一個 10 埠區塊，區間 **54320–54999**、`supabase_base` 必為 10 的倍數。區塊內 offset 沿用 Supabase 預設的相對位置：
+
+| offset | config.toml 欄位 |
+| --- | --- |
+| +0 | `[db] shadow_port` |
+| +1 | `[api] port` |
+| +2 | `[db] port` |
+| +3 | `[studio] port` |
+| +4 | `[inbucket] port` |
+| +7 | `[analytics] port` |
+| +9 | `[db.pooler] port` |
+
++5、+6、+8 保留（Supabase 新增服務時取用）。
+
+- **MUST** consumer 的 `supabase/config.toml` 所有埠欄位 = `supabase_base` + 上表 offset；`.env.example`／`.env*` 的 `DATABASE_URL`、`SUPABASE_URL` 等本機位址同步用這組埠
+- **MUST** 新 consumer 要有本機 Supabase，先在 clade `registry/consumers.json` 認領下一個未用的 +10 區塊（現算：最大 `supabase_base` +10；SoT 是 registry，本檔不維護快照），commit＋publish＋propagate 後再改 consumer 端 config
+- **NEVER** 沿用 Supabase 預設 54321–54329（除非該 consumer 的 `supabase_base` 就是 54320）；**NEVER** 兩個 consumer 取同一 `supabase_base`
+- **NEVER** 在 `supabase/config.toml` 之外另挑埠覆寫（`supabase start` 的 flag、容器手動 publish）——要換就改 registry
+- 改既有 consumer 的 base：先改 registry → publish → propagate → 該 consumer 改 config／env／文件；已跑著的舊 stack 要 `supabase stop` 後換埠重啟
+- 區塊與 §3 的 Nuxt 埠、worktree band（4200–4899）、dev-router（3300–3510）互不重疊；Supabase 是 per-consumer 單一本機資源，**不**跟 worktree 分 offset——linked worktree 共用 main 那一組 stack，或在 worktree 內不啟 `supabase start`
+
 ## 自治區（規約不強制）
 
 - `.env.example` 是否寫 `NUXT_DEV_PORT=<value>` 由 consumer 自定 — dev script 的 `--port` flag 是 SoT，env 不需重複
@@ -90,7 +117,7 @@ Tunnel hostname 是 per-consumer 單一資源（[[dev-tunnel-convention]] § 1�
 | 新 consumer 進 registry | 現算：最大 base +10、最大 band 上界 +1 起算 50 個（SoT 是 registry，本檔不維護快照） |
 | 既有 consumer 改 port | 先改 clade registry → publish patch → propagate → 改 consumer 自家 dev script + tunnel port |
 | Audit 報 DRIFT | **relay DRIFT 明細給該 consumer 的 session** 改 dev script / tunnel port 對齊 registry（per [[clade-role-and-todo-discipline]] § Consumer 工作命中時 MUST relay）；clade 主線不代改，但 **NEVER** 只出表就結束 |
-| Audit 報 CONFLICT（兩 consumer 同 port） | clade 主線立即解：選一個 consumer 改用未用 +10 號，registry commit + publish + propagate |
+| Audit 報 CONFLICT（兩 consumer 同 port 或同 `supabase_base`） | clade 主線立即解：選一個 consumer 改用未用 +10 號，registry commit + publish + propagate |
 
 ## Anti-pattern
 
