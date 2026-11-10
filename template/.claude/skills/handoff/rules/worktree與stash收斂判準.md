@@ -13,7 +13,7 @@
 jq '.worktreeStash.raw' "$SCAN"
 # park：沒經過 2B.1，在此落檔後同樣 jq 取段
 # MUST mktemp 唯一路徑 + 驗 consumerId —— 固定路徑是全機器共用，會拿別 repo 的 stash 清單
-# 做本 repo 的 3.2a drop 判定。完整規約見 scan-steps.md §2B.1a「$SCAN 路徑與歸屬」
+# 做本 repo 的 3.2a drop 判定。完整規約見 next掃描步驟判準.md §2B.1a「$SCAN 路徑與歸屬」
 SCAN="$(mktemp -t handoff-scan.XXXXXXXXXX)"
 node ~/offline/clade/vendor/scripts/handoff-scan.ts --json > "$SCAN" 2>/dev/null
 EXPECT="$(basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")")"
@@ -25,13 +25,13 @@ GOT="$(jq -r '.consumerId // "MISSING"' "$SCAN")"
 
 `worktreeStash.raw.worktrees[]` 每條已含 wt-helper list 欄位（`slug` / `branch` / `path` / `daysOld` / `mergedToMain`）+ kind 判定（`kind` / `nextStep`）。script 以 `wt-helper list --json --no-landed-state` 取資料，**不含** `landedState` / `landedReason` / `supersededBy` / `dirty`——要逐棵判「清樹會不會丟內容」直接跑 `node vendor/scripts/wt-helper.ts list --json`，可清 = `landedState ∈ {in-history, in-base}` **且** `dirty === 0`（`in-worktree` 的唯一副本是 main 未 commit 的改動，**NEVER** 讀成可清）；script 另掃 `git worktree list --porcelain`，非 `session/*` branch 的 worktree 列進 `raw.unmanagedWorktrees`。
 
-**Gate（可觀察，先判再讀）**：`worktreeStash.raw` 的 `worktrees` / `unmanagedWorktrees` / `stashes` / `orphanSidecars` **四個陣列全空** → 本段無可判之物，**跳過 worktree-stash-audit.md 不讀**，直接照 § 3.3 寫 `No linked worktrees.` + `No stashes.` 的空 audit 段（該指令在本檔 § 3.4 末條，不依賴那份檔）。**任一非空** → 下面這條 MUST Read 生效，**NEVER** 憑 raw 摘要自行判 kind。
+**Gate（可觀察，先判再讀）**：`worktreeStash.raw` 的 `worktrees` / `unmanagedWorktrees` / `stashes` / `orphanSidecars` **四個陣列全空** → 本段無可判之物，**跳過 worktree與stash稽核判準.md 不讀**，直接照 § 3.3 寫 `No linked worktrees.` + `No stashes.` 的空 audit 段（該指令在本檔 § 3.4 末條，不依賴那份檔）。**任一非空** → 下面這條 MUST Read 生效，**NEVER** 憑 raw 摘要自行判 kind。
 
 ```bash
 jq '[.worktreeStash.raw | .worktrees, .unmanagedWorktrees, .stashes, .orphanSidecars | length] | add' "$SCAN"   # 0 → 跳過；>0 → MUST Read
 ```
 
-**MUST Read [worktree-stash-audit.md](../worktree-stash-audit.md) before proceeding**（`mergeBackSafety` 推導、kind 判定表、stash audit 欄位）。**NEVER** 憑 `mergedToMain` 單一欄位推斷可
+**MUST Read [worktree與stash稽核判準.md](worktree與stash稽核判準.md) before proceeding**（`mergeBackSafety` 推導、kind 判定表、stash audit 欄位）。**NEVER** 憑 `mergedToMain` 單一欄位推斷可
 cleanup —— `userWip > 0` 時 kind 要降級，而 `cleanup` 對未 commit 內容無 pinned ref 保護。`ptb-unsafe` 禁止 dispatch 收尾工作，走 § 2B.4.5 分流。
 
 ### 3.3 寫入 HANDOFF.md

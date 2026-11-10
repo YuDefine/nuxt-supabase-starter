@@ -1,8 +1,8 @@
-# Rule 1 - 每一次 `/commit` 都跑 schema 觸發判定（Step 1）
+# Rule 1 - 每一次 `/commit` 都跑 schema 觸發判定（D2-Schema）
 
 - Level: `MUST`
 
-**每一次** `/commit` 都 MUST 跑這一步的觸發判定 —— 判定本身無條件，判定**結果**才決定要不要做事：
+**每一次** `/commit` 讀到本檔時都 MUST 跑這一步的觸發判定 —— 判定本身無條件，判定**結果**才決定要不要做事：
 
 ```bash
 # 範圍＝本次落地的變更。普通 /commit：git status（staged／unstaged／untracked 逐檔列），branch 上已 commit 的不算。
@@ -23,8 +23,8 @@ case "$(git symbolic-ref --short -q HEAD)" in codex/batch-*) IN_BATCH=1 ;; *) IN
 } | grep -Eq "$PAT" && echo HAS || echo NO
 ```
 
-- `NO` → 本 repo 這次沒動到 migrations 或 types，**直接進 Step 2**，不需要讀任何東西。
-- `HAS` → **MUST** 先完整讀 [schema-sync.md](../schema-sync.md) 並照其中 Step 1.1–1.5 **每一步**走完，再進 Step 2。
+- `NO` → 本 repo 這次沒動到 migrations 或 types，**直接進 D3**，不需要讀任何東西。
+- `HAS` → **MUST** 先完整讀 [schema-sync.md](../schema-sync.md) 並照其中 Step 1.1–1.5 **每一步**走完，再進 D3。
   Step 1.4（SQL lint）與 1.5（advisors）在 1.3 的 reset 之後跑，**NEVER** 做完 types 比對就當 Step 1 結束。
 
 上面這條判定刻意寬鬆（寧可誤送進 reference 也不漏），精確判定與完整流程都在 reference 檔裡。
@@ -34,7 +34,7 @@ case "$(git symbolic-ref --short -q HEAD)" in codex/batch-*) IN_BATCH=1 ;; *) IN
 - 這個例子是好的，因為 `HAS` 之後把 Step 1.1–1.5 全部走完。
 
 ```md
-判定印 `HAS` → 讀 `schema-sync.md` → 1.1 → 1.2 → 1.3 reset → 1.4 SQL lint → 1.5 advisors → 進 Step 2。
+判定印 `HAS` → 讀 `schema-sync.md` → 1.1 → 1.2 → 1.3 reset → 1.4 SQL lint → 1.5 advisors → 進 D3。
 ```
 
 ## Bad Example
@@ -42,7 +42,7 @@ case "$(git symbolic-ref --short -q HEAD)" in codex/batch-*) IN_BATCH=1 ;; *) IN
 - 這個例子是壞的，因為做完 types 比對就當 Step 1 結束。
 
 ```md
-判定印 `HAS` → types 比對一致 →「schema 沒問題」→ 進 Step 2（沒跑 1.4、1.5）。
+判定印 `HAS` → types 比對一致 →「schema 沒問題」→ 進 D3（沒跑 1.4、1.5）。
 ```
 
 # Rule 2 - 判定範圍只到本次落地，批次不可省略 `BATCH_SCOPE`

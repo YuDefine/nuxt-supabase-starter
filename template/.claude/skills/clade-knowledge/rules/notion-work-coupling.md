@@ -67,7 +67,8 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow work open 
 
 - **`flow work open` 之後、動第一個檔之前**：跑 `open`。
 - **`flow work done` 的收尾**：`follow` 已自動把 交付項目 推到 待驗收 90；收尾訊息明列「待 `/commit` 發版後跑 `release`」——標 done 的當下**還沒有**本次 tag（tag 是 `/commit` Step 5 才打），所以 `release` 一定在發版後。
-- **`/commit` Step 6b**（tag 已 push、deploy 已觸發）：同一主線**立即**跑 `release`。consumer 有 post-push CI watcher 時 SHOULD 等綠燈再跑。**NEVER** 留給「下次想起來」。
+- **`/commit` D9-Notion（原 Step 6b）**（tag 已 push、deploy 已觸發）：同一主線**立即**跑 `release`。consumer 有 post-push CI watcher 時 SHOULD 等綠燈再跑。**NEVER** 留給「下次想起來」。
+  - **綁不到要點名**：本次發版含的 commit 對不到任何 work item、或 work item 沒有連結 ticket 時，**MUST** 在發版回報逐條點名（commit／work id ＋「無 ticket」或「無 work item」），**NEVER** 靜默跳過；客戶提的問題卻沒有 ticket → 回 `notion-hub` 的工程師建票意圖補建。`release` 輸出的 `pending` 非空（寫入未確認落地）同樣列進發版回報。
 - **`預估完成日`**：任何要寫它的時機（開工、客戶問、里程碑排程）**MUST** 先跑不帶 `--confirmed` 的 `eta` 拿建議（來源優先序：`flow work eta` 宣告 → Notion 現值 → 無），用 runtime 的詢問介面讓使用者確認**那個日期**，確認後才帶 `--confirmed` 寫。NEVER 用模板數字，NEVER 沒問就寫。
 
 ### 客戶面證據契約
@@ -158,4 +159,4 @@ consumer 宣告 `notion.hub` 即等同授權流程在**machine 欄位 + 授權�
 - 授權轉移與欄位所有權：`vendor/scripts/lib/notion-hub.ts`（`COLUMN_OWNERSHIP` `MACHINE_TICKET_TRANSITIONS`）
 - 客戶側轉移守門：`capabilities/core/hooks/notion-ticket-status-guard.ts`（判定、已知缺口）＋ `pre-bash-notion-ticket-status-gate.sh`
 - 階段推導：`vendor/scripts/lib/notion-stage.ts`；hook 在 `vendor/scripts/flow/notion-follow.ts`
-- work item 開卡 / origin：[[flow-work-tracking]]；發版 / tag：[[commit]] Step 5、Step 6b
+- work item 開卡 / origin：[[flow-work-tracking]]；發版 / tag：[[commit]] D9（HANDOFF 走 `/handoff`、Notion 走 D9-Notion）

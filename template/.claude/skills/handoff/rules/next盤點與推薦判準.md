@@ -16,11 +16,11 @@
 
 ### 2B.1 HANDOFF.md Health Gate（hard step）
 
-**MUST Read [scan-steps.md](../scan-steps.md) § 2B.1 before proceeding** — 含 2B.1b 100% rotate 指令、audit、JSON schema、reorganize 表、dead-section 處置表、寫入規約。
+**MUST Read [next掃描步驟判準.md](next掃描步驟判準.md) § 2B.1 before proceeding** — 含 2B.1b 100% rotate 指令、audit、JSON schema、reorganize 表、dead-section 處置表、寫入規約。
 
 摘要：先跑 `rotate-handoff-done.ts`（每次 `next` 的第一個寫入：100% 清掉可 rotate 的紀錄，不詢問、不看 KB 門檻）。JSON `retired: true` = clade home／已遷移 repo：完成段從主檔刪除、**不**寫月份 archive。未遷移 consumer 才搬進 archive。接著 `handoff-scan.ts --json` 讀 `healthGate` → fail 回報 user → 2B.1c reorganize。三 sub-step 完才進 2B.1.5。
 
-`tier-a-dead-section` warn 的處置在 [scan-steps.md](../scan-steps.md) § 2B.1d dead-section 處置（Tier A）—— 依該處 D 表 first-match 判（D2 拆條 / D3 關條 / D4 知識語態重寫），D1「防重做 marker」偵測器已自動豁免、**NEVER 刪**。該 sub-step 不寫任何檔，逐段判即可，處置不完不擋 2B.1.5。
+`tier-a-dead-section` warn 的處置在 [next掃描步驟判準.md](next掃描步驟判準.md) § 2B.1d dead-section 處置（Tier A）—— 依該處 D 表 first-match 判（D2 拆條 / D3 關條 / D4 知識語態重寫），D1「防重做 marker」偵測器已自動豁免、**NEVER 刪**。該 sub-step 不寫任何檔，逐段判即可，處置不完不擋 2B.1.5。
 
 ### 2B.1.5 Worktree & Stash 稽核
 
@@ -28,7 +28,7 @@
 
 ### 2B.1.7 Human gates scan（hard rule）
 
-**MUST Read [scan-steps.md](../scan-steps.md) § 2B.1.7 before proceeding** — 含 raw 形狀、family 分組寫法、SoT 判定、scan 失敗 fallback。
+**MUST Read [next掃描步驟判準.md](next掃描步驟判準.md) § 2B.1.7 before proceeding** — 含 raw 形狀、family 分組寫法、SoT 判定、scan 失敗 fallback。
 
 摘要：從 §2B.1a 同一次 handoff-scan 輸出讀 `reviewGuiReadiness` 段（`flow gates`）→ 依 family 寫入 `$MAIN_WT_PATH/HANDOFF.md` `## Review-gui Readiness` 段（整段覆寫）。Outstanding 推薦 **MUST** 引用 scan 結果。park 不執行。
 
@@ -76,36 +76,36 @@ triage 結果併入 §2B.2 outstanding 清單（與 HANDOFF / plan（未遷移 c
 
 ### 2B.3 Serial vs Parallel 評估
 
-**MUST Read [dispatch-steps.md](../dispatch-steps.md) § 2B.3 before proceeding** — 含 serial / parallel 兩份訊號清單、parallel candidate 的 thin-brief 長駐 subagent 四條。
+**MUST Read [next派工與推薦訊息判準.md](next派工與推薦訊息判準.md) § 2B.3 before proceeding** — 含 serial / parallel 兩份訊號清單、parallel candidate 的 thin-brief 長駐 subagent 四條。
 
 摘要：serial 訊號任一成立即 serial；parallel 訊號全成立才算 candidate → 判 parallel 時 **MUST** 走 thin brief + 具名長駐 subagent，**NEVER** fresh fan-out。
 
 ### 2B.4 推薦 + 詢問操作
 
-**MUST Read [dispatch-steps.md](../dispatch-steps.md) § 2B.4 before proceeding** — 含推薦訊息格式、Option 1–4 配置、7 條禁止行為（ptb-unsafe 不得標 Recommended、wt 推薦必附 safety signal、等人狀態推測禁令）。
+**MUST Read [next派工與推薦訊息判準.md](next派工與推薦訊息判準.md) § 2B.4 before proceeding** — 含推薦訊息格式、Option 1–4 配置、7 條禁止行為（ptb-unsafe 不得標 Recommended、wt 推薦必附 safety signal、等人狀態推測禁令）。
 
 摘要：先輸出「outstanding 盤點 + serial/parallel 推薦」訊息，再用 詢問操作 讓 user 選；人工驗收相關 next move **MUST** 引用 §2B.1.7 的 `flow gates` 結果，**NEVER** 自行推測有沒有等人的事。
 
 ### 2B.4.5 PTB-unsafe wt 的快速分流
 
-Step 3.1 audit **有任一條** wt 判為 `mergeBackSafety: ptb-unsafe` → **MUST Read [dispatch-steps.md](../dispatch-steps.md) § 2B.4.5 before proceeding** — 含 3 個 terminal 選項的動作 / 風險對照表、inspect 路徑只能作 Option 4 的規約。零條 ptb-unsafe → 本節不適用，直接進 2B.5。
+Step 3.1 audit **有任一條** wt 判為 `mergeBackSafety: ptb-unsafe` → **MUST Read [next派工與推薦訊息判準.md](next派工與推薦訊息判準.md) § 2B.4.5 before proceeding** — 含 3 個 terminal 選項的動作 / 風險對照表、inspect 路徑只能作 Option 4 的規約。零條 ptb-unsafe → 本節不適用，直接進 2B.5。
 
 摘要：commit baseline 全收 → merge-back / abandon wt / defer 三選一，**禁止** inspect 子選項作為主推薦。
 
 ### 2B.5 接續 dispatch（user 選定 outstanding 後）
 
-**MUST Read [dispatch-steps.md](../dispatch-steps.md) § 2B.5 before proceeding**（user 在 詢問操作 選定下一步的當下就要讀）— 含 5 列 next-skill dispatch 表、判定條件三條、slug 解析、parent cwd 不動 invariant、人工驗收 dispatch 的 family 入口表。
+**MUST Read [next派工與推薦訊息判準.md](next派工與推薦訊息判準.md) § 2B.5 before proceeding**（user 在 詢問操作 選定下一步的當下就要讀）— 含 5 列 next-skill dispatch 表、判定條件三條、slug 解析、parent cwd 不動 invariant、人工驗收 dispatch 的 family 入口表。
 
 摘要：一律透過 Skill tool 內呼對應入口，**不要**輸出「請執行 cd ... && claude ...」oneliner；會寫 tracked file 的實作入口（`/implement`）交 `wt` 建立隔離環境並在樹內續跑 `<next-skill>`，read-only 與規格類（`/specify`、`/system-analysis`）直接內呼。`bdd` 與 `clarify-over-specs` 沒有 Skill tool 入口：`bdd` 由 `/implement` 委派，`clarify-over-specs` 由 `work-route` 載入。
 
 ### 2B.1.8 Tech-debt hygiene scan（hard rule — 防 tech-debt.md 堆積）
 
-**MUST Read [scan-steps.md](../scan-steps.md) § 2B.1.8 before proceeding** — 含 staleOpen / aging / closedBloat 三訊號處置表、anti-snooze 規約、SoT 判定。
+**MUST Read [next掃描步驟判準.md](next掃描步驟判準.md) § 2B.1.8 before proceeding** — 含 staleOpen / aging / closedBloat 三訊號處置表、anti-snooze 規約、SoT 判定。
 
 摘要：從 §2B.1a 同一次 handoff-scan 輸出讀 `techDebtHygiene` 段。`raw.retired: true`（check `tech-debt-hygiene-retired` n/a）= 已遷移 plan/truth repo：本 sub-step **整段跳過**，outstanding 改走 §2B.2 的 plan 來源，**NEVER** 寫 `docs/tech-debt.md` 或 `docs/archives/tech-debt-*`。未遷移 consumer：stale 列 outstanding 最高優先 → aging 列第二優先並追問 blocker → closedBloat warn 時跑 `rotate-closed-bloat.ts`（**NEVER** 詢問操作）。stdout `retired` = clade home／已遷移 repo，**不要**寫 closed archive 或改 `docs/tech-debt.md`。park 不執行。
 
 ### 2B.1.9 Consumer-local audit scan（hard rule）
 
-**MUST Read [scan-steps.md](../scan-steps.md) § 2B.1.9 before proceeding** — 含宣告檔形狀、exit code 契約、NEVER 清單。
+**MUST Read [next掃描步驟判準.md](next掃描步驟判準.md) § 2B.1.9 before proceeding** — 含宣告檔形狀、exit code 契約、NEVER 清單。
 
 摘要：讀當前 consumer 的 `.claude/rules/local/handoff-audits.md`（**不存在 → 整段跳過，不報錯**）→ 逐條跑表內指令 → exit 1 的 finding 逐條列進 §2B.2 outstanding、exit ≥2 一行 skip（缺憑證不是待辦）。**NEVER** 把這些指令搬進 `pnpm check` / CI，**NEVER** 把 script 原始輸出整段貼進 `HANDOFF.md`。park 不執行。

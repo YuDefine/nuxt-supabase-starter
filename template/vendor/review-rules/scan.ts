@@ -31,6 +31,9 @@
  *   --ratchet         讀 <root>/review-rules-baseline.json（{ruleId: {file: count}}），
  *                     實際命中數 > baseline（缺 entry 視為 0）才算違規；只回報「新增」的部分
  *   --write-baseline  把當前命中數寫成新 baseline；命中數為 0 時寫入空 {}（檔案存在=武裝）
+ *                     --ratchet／--write-baseline 不計 clade 投影（managed）檔：檔頭有 `🔒 LOCKED — managed
+ *                     by clade` banner，或在 `.claude/skills/`／`.agents/skills/` 投影根目錄下；判定只看 checkout 後就有的
+ *                     東西（檔頭、路徑），不讀 gitignored 的 projection ledger——本機與 CI 才判得一致；baseline 只管 consumer 自家檔
  *   --json            機器可讀 JSON 輸出到 stdout；未給則人讀 markdown 輸出到 stderr
  *
  * fileGlob 支援：
@@ -84,6 +87,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isRecord } from '../scripts/lib/json-unknown.ts'
+import { isLockedProjectionPathFor } from '../scripts/locked-projection.ts'
 
 class UsageError extends Error {}
 
@@ -404,6 +408,52 @@ function scan(rules: Rule[], files: string[], readFile: ReadFile): Violation[] {
   return violations
 }
 
+// ---------- managed（clade 投影）檔 ----------
+
+// ratchet baseline 只管 consumer 自家檔。clade 投影進來的檔（`🔒 LOCKED — managed by clade`）
+// 在 consumer 端改不了（下次 propagate 覆寫），clade 升版後它們的命中數會變動，
+// 計進 baseline 就等於每次升版都擋死 consumer 的 push。
+// 判定來源只取 checkout 後就有的東西，本機與 CI（fresh checkout）才會判出同一個結果：
+//   1. 檔頭 banner：前 3 行內有註解行含 signature（sync-vendor／sync-rules 注入；與
+//      `scripts/lib/vendor-banner.ts` 的 BANNER_HEADER_LINES 同值，改一邊 MUST 同改另一邊）
+//   2. 投影根目錄：`.claude/skills/`、`.agents/skills/`（skill 投影檔不注 banner；consumer 端這兩個
+//      目錄是工具鏈檔，不是業務碼，整個目錄排除）
+// **NEVER 讀 `.clade/projections/*.json` ledger 當第三個來源**：它在 consumer 端 gitignored
+// （scripts/sync-rules.ts），CI 的 fresh checkout 沒有，加進來會讓 baseline（本機寫、不含這些檔）
+// 與 CI 實測不一致 → 本機綠、CI 紅。
+const MANAGED_SIGNATURE = '🔒 LOCKED — managed by clade'
+const MANAGED_PROJECTION_ROOT_RE = /^\.(claude|agents)\/skills\//
+const MANAGED_HEADER_LINES = 3
+const MANAGED_COMMENT_LINE_RE = /^\s*(\/\/|#|<!--|\/\*|\*)/
+
+function hasManagedBanner(text: string) {
+  return text
+    .split('\n', MANAGED_HEADER_LINES)
+    .some((line) => MANAGED_COMMENT_LINE_RE.test(line) && line.includes(MANAGED_SIGNATURE))
+}
+
+/** 把違規裡屬於 managed 檔的剔掉，回傳剩下的與被剔掉的檔數。只在 ratchet／write-baseline 用。 */
+function dropManagedViolations(violations: Violation[], readFile: ReadFile) {
+  if (violations.length === 0) return { kept: violations, managedFiles: 0 }
+  const verdict = new Map<string, boolean>()
+  const isManaged = (file: string) => {
+    const cached = verdict.get(file)
+    if (cached !== undefined) return cached
+    let managed = MANAGED_PROJECTION_ROOT_RE.test(file)
+    if (!managed) {
+      try {
+        managed = hasManagedBanner(readFile(file))
+      } catch {
+        managed = false
+      }
+    }
+    verdict.set(file, managed)
+    return managed
+  }
+  const kept = violations.filter((v) => !isManaged(v.file))
+  return { kept, managedFiles: [...verdict.values()].filter(Boolean).length }
+}
+
 // ---------- ratchet baseline ----------
 
 function loadBaseline(baselinePath: string): Baseline {
@@ -581,6 +631,18 @@ const DEFAULT_EXCLUDE_RE = /^(vendor|node_modules)\//
 function excluded(file: string, include: string[]): boolean {
   if (!DEFAULT_EXCLUDE_RE.test(file)) return false
   return include.length === 0 || !matchAnyGlob(file, include)
+}
+
+/**
+ * clade 投影（scripts/、.claude/hooks/clade/、.claude/skills/ 等 LOCKED 檔）是上游產物，consumer
+ * 改不動也不該為它的存量負責：ratchet 對它報「新增違規」只會讓 consumer pre-push 卡在上游檔。
+ * 只套在 ratchet／write-baseline 的檔案集——ban 與 pre-commit 照掃，因為 LOCKED 路徑類別裡也有
+ * consumer 自寫的檔（例如 manifest 白名單的 `.claude/hooks/*.sh`），它們的 secret／安全規則不能被略過。
+ * 判定走 locked-projection.ts 的 `isLockedProjectionPathFor`（registry／propagate 實際寫入的路徑類別；
+ * clade 自己的源檔、consumer 的 `.claude/rules/local/` 它會放行），NEVER 在這裡複製一份路徑清單或寫死 repo 名。
+ */
+function dropCladeProjections(consumerRoot: string, files: string[]): string[] {
+  return files.filter((f) => !isLockedProjectionPathFor(consumerRoot, f))
 }
 
 // 兩支都回 **consumerRoot 相對**路徑（readFile 直接 join consumerRoot 就能讀）。
@@ -770,12 +832,27 @@ function main() {
     return
   }
 
-  const files =
+  const candidateFiles =
     fileset === 'staged'
       ? gitStagedFiles(consumerRoot, include)
       : gitAllFiles(consumerRoot, include)
+  const files =
+    wantRatchet || wantWriteBaseline
+      ? dropCladeProjections(consumerRoot, candidateFiles)
+      : candidateFiles
   const readFile: ReadFile = (f) => readFileSync(join(consumerRoot, f), 'utf8')
-  const violations = files.length > 0 ? scan(rules, files, readFile) : []
+  const allViolations = files.length > 0 ? scan(rules, files, readFile) : []
+  // ratchet／write-baseline 只管 consumer 自家檔：clade 投影進來的 managed 檔不計入 baseline。
+  // 一般掃描（無 --ratchet／--write-baseline）照舊回報全部命中。
+  const { kept: violations, managedFiles } =
+    wantRatchet || wantWriteBaseline
+      ? dropManagedViolations(allViolations, readFile)
+      : { kept: allViolations, managedFiles: 0 }
+  if (managedFiles > 0) {
+    process.stderr.write(
+      `ℹ️  ratchet 排除 ${managedFiles} 個 clade 投影（managed）檔的命中——baseline 只管 consumer 自家檔。\n`,
+    )
+  }
 
   const baselinePath = join(consumerRoot, 'review-rules-baseline.json')
   const baselineExists = existsSync(baselinePath)

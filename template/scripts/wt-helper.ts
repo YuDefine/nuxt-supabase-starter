@@ -252,7 +252,7 @@ interface WtOptions {
 }
 
 /** `planCheckoutBranch`／`checkedOutWorktree` 注入的 git runner 只帶 cwd；具名型別避開 consumer doctor TS0002。 */
-type GitRunOptions = { cwd?: string }
+type GitRunOptions = { cwd?: string; timeout?: number }
 
 function git(args, opts = {}) {
   const out = execFileSync('git', args, {
@@ -476,8 +476,13 @@ function makeSlugSafe(s) {
  * 兩邊都小寫後比；`suffix` 帶前導的 `/` 或 `-`。
  */
 function endsWithSlug(value, suffix, cleanSlug) {
+  // 尾段也照 `makeSlugSafe` 正規化（`[^a-z0-9-]` → `-`、連續 `-` 收合）：開樹端保留原字元的目錄
+  // （`r6-clade-upgrade-1.13.71`）在找樹端是 `r6-clade-upgrade-1-13-71`，逐字比永遠不中。
+  // 只正規化尾段字元，分隔用的 `/` 保留；正規化後撞名的多棵由呼叫端的唯一性判定拒絕。
   return String(value ?? '')
     .toLowerCase()
+    .replace(/[^a-z0-9/-]/g, '-')
+    .replace(/-+/g, '-')
     .endsWith(`${suffix}${cleanSlug}`)
 }
 
@@ -630,13 +635,16 @@ function detachedSessionWorktrees(cwd) {
  * 已被 merge-back 清掉）——那時 main 就是正解，呼叫端照 main 走即可。
  */
 export function findSessionWorktreeForSlug(consumerRoot, cleanSlug) {
-  const wts = sessionWorktrees(consumerRoot)
-  return (
-    wts.find(
-      (w) =>
-        endsWithSlug(w.path, '/', cleanSlug) && w.branch && endsWithSlug(w.branch, '-', cleanSlug),
-    ) ?? null
+  const hits = sessionWorktrees(consumerRoot).filter(
+    (w) =>
+      endsWithSlug(w.path, '/', cleanSlug) && w.branch && endsWithSlug(w.branch, '-', cleanSlug),
   )
+  // 尾段正規化後（`a.b` 與 `a-b` 同為 `a-b`）可能多棵同中：猜一棵等於可能對錯的樹動手，一律拒絕。
+  if (hits.length >= 2)
+    throw new Error(
+      `slug ${cleanSlug} 對到多棵 session worktree，無法判定是哪一棵：\n${hits.map((w) => w.path).join('\n')}`,
+    )
+  return hits[0] ?? null
 }
 
 /**
@@ -3487,6 +3495,78 @@ function requireConsumerProjection(consumerRoot: string) {
   )
 }
 
+/**
+ * G10 — `add` 的 fork base 判定。consumer 的本機 main 常落後 origin（<consumer-b> 曾落後 112 commit），
+ * 直接從本機 main 開樹會讓 PR 一開就與 origin/main 大量分歧；而下游的 `merge --ff-only origin/...`
+ * 只在 origin ref 夠新、且本機是它的祖先時才救得回來（沒 fetch、已分岔都只印 warn）。
+ * 這裡先 best-effort fetch `origin/<base>`，再依落差決定：
+ *   - 沒有 origin ref、或本機沒落後（持平／只領先）→ 沿用本機 base（行為不變）
+ *   - 只落後 → 回 `origin/<base>`（呼叫端以 `--no-track` 開樹，不讓 session branch 追 origin/<base>）
+ *   - 已分岔（本機有 origin 沒有的 commit，且落後）→ throw，NEVER 靜默挑邊
+ *   - `commitStrategy` 為 true（pre-fork baseline 要在本機 main 上 commit）且落後 → throw：
+ *     baseline commit 會落在過期 main 上，從 origin 開樹會把它丟掉
+ * 只讀＋fetch：NEVER 動本機 main、工作樹或 index，使用者未 commit 的改動一律原樣。
+ * fetch 失敗只 warn，用現有 `refs/remotes/origin/<base>`（可能過期）判定。
+ */
+export function resolveAddForkBase(
+  consumerRoot: string,
+  baseRef: string,
+  opts: { commitStrategy?: boolean; fetch?: boolean } = {},
+  run: (args: string[], opts?: GitRunOptions) => string = git,
+): { baseRef: string; fromOrigin: boolean } {
+  const unchanged = { baseRef, fromOrigin: false }
+  if (baseRef.startsWith('origin/')) return unchanged
+  const remoteRef = `origin/${baseRef}`
+  const remoteFull = `refs/remotes/origin/${baseRef}`
+  if (opts.fetch !== false) {
+    try {
+      run(['fetch', '--quiet', 'origin', `+refs/heads/${baseRef}:${remoteFull}`], {
+        cwd: consumerRoot,
+        timeout: 30_000,
+      })
+    } catch (e) {
+      console.error(
+        `warn: fetch origin ${baseRef} failed (${String((e as Error).message ?? e).split('\n')[0]}); ` +
+          `judging fork base with the existing ${remoteRef} (may be stale)`,
+      )
+    }
+  }
+  const count = (range: string): number | null => {
+    try {
+      return parseInt(run(['rev-list', '--count', range], { cwd: consumerRoot }), 10)
+    } catch {
+      return null
+    }
+  }
+  try {
+    run(['rev-parse', '--verify', '--quiet', `${remoteFull}^{commit}`], { cwd: consumerRoot })
+  } catch {
+    return unchanged
+  }
+  const behind = count(`${baseRef}..${remoteFull}`)
+  const ahead = count(`${remoteFull}..${baseRef}`)
+  if (behind === null || ahead === null || behind === 0) return unchanged
+  if (ahead > 0) {
+    throw new Error(
+      `Fork base guard: 本機 ${baseRef} 與 ${remoteRef} 已分岔（本機領先 ${ahead}、落後 ${behind} commit）。\n` +
+        `  從本機 ${baseRef} 開樹，PR 一開就與 ${remoteRef} 大量分歧；從 ${remoteRef} 開樹則會丟掉本機獨有的 ${ahead} 個 commit。\n` +
+        `  未 commit 的改動沒有被動到。先在 consumer 根目錄處理分岔（push 或 rebase 本機獨有 commit、\n` +
+        `  或確認它們可丟後對齊 origin），再重跑 wt-helper add。`,
+    )
+  }
+  if (opts.commitStrategy) {
+    throw new Error(
+      `Fork base guard: 本機 ${baseRef} 落後 ${remoteRef} ${behind} commit，且 --baseline-strategy commit 會把 baseline commit 落在過期的本機 ${baseRef} 上。\n` +
+        `  未 commit 的改動沒有被動到。先把本機 ${baseRef} 對齊 origin（git merge --ff-only ${remoteRef}，\n` +
+        `  或等 clade-main-align），再重跑 wt-helper add。`,
+    )
+  }
+  console.log(
+    `Fork base: 本機 ${baseRef} 落後 ${remoteRef} ${behind} commit → 從 ${remoteRef} 開樹（本機 ${baseRef} 不動）`,
+  )
+  return { baseRef: remoteRef, fromOrigin: true }
+}
+
 async function cmdAdd(slug, opts: WtOptions = {}) {
   if (!slug) {
     throw new Error(ADD_USAGE)
@@ -3552,6 +3632,16 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
     git(['rev-parse', '--verify', baseRef], { cwd: consumerRoot })
   } catch {
     throw new Error(`Base branch "${baseRef}" not found in ${consumerRoot}`)
+  }
+  // G10：本機 base 落後 origin → 從 fetch 後的 origin/<base> 開樹；分岔／commit 策略落後 → 拒絕。
+  // 放在 pre-fork baseline guard 之前：拒絕時還沒動到 main。--checkout 的起點本來就是 origin。
+  let forkFromOrigin = false
+  if (!checkoutBranch) {
+    const resolved = resolveAddForkBase(consumerRoot, baseRef, {
+      commitStrategy: opts.precheckBaseline !== undefined && opts.baselineStrategy === 'commit',
+    })
+    baseRef = resolved.baseRef
+    forkFromOrigin = resolved.fromOrigin
   }
 
   // Pre-fork baseline guard (only when --precheck-baseline given).
@@ -3835,7 +3925,9 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
       ? ['worktree', 'add', wtPath, branch]
       : checkoutBranch
         ? ['worktree', 'add', '--track', '-b', branch, wtPath, baseRef]
-        : ['worktree', 'add', '-b', branch, wtPath, baseRef],
+        : forkFromOrigin
+          ? ['worktree', 'add', '--no-track', '-b', branch, wtPath, baseRef]
+          : ['worktree', 'add', '-b', branch, wtPath, baseRef],
     {
       cwd: consumerRoot,
       stdio: 'inherit',
@@ -5063,10 +5155,13 @@ function detectMergeBlockers(consumerRoot, branchName) {
 // added after <consumer-b> 2026-05-17 incident where 47 baseline files lived only in
 // the worktree's working tree (applied from stash, never committed) and
 // vanished on cleanup.
-function detectUncommittedWorktreeFiles(wtPath): Observed<UncommittedFiles> {
+function detectUncommittedWorktreeFiles(
+  wtPath,
+  opts: { untracked?: 'normal' | 'all' } = {},
+): Observed<UncommittedFiles> {
   let entries
   try {
-    entries = readGitStatus(wtPath)
+    entries = readGitStatus(wtPath, opts.untracked ? { untracked: opts.untracked } : {})
   } catch (error) {
     return toUnknown(`uncommitted status unreadable at ${wtPath}: ${errorMessage(error)}`)
   }
@@ -6888,11 +6983,7 @@ function carryEvidenceDir(src, dstRoot, relDir, slug) {
 }
 
 function findCleanupWorktree(consumerRoot, cleanSlug) {
-  const wts = sessionWorktrees(consumerRoot)
-  const sessionHit = wts.find(
-    (w) =>
-      endsWithSlug(w.path, '/', cleanSlug) && w.branch && endsWithSlug(w.branch, '-', cleanSlug),
-  )
+  const sessionHit = findSessionWorktreeForSlug(consumerRoot, cleanSlug)
   if (sessionHit) return sessionHit
 
   const all = parseWorktreeList(git(['worktree', 'list', '--porcelain'], { cwd: consumerRoot }))
@@ -7370,7 +7461,10 @@ async function cmdCleanup(
   // 豁免範圍嚴格等於 merge-back 的判準，**NEVER** 放寬成「髒檔一律豁免」：真 user WIP
   // （未 commit 的規格提案、`.env*.example`、scratch script）照舊擋 —— 另外 12 個
   // worktree 就是靠這條繼續被擋住的。
-  const uncommittedObs = detectUncommittedWorktreeFiles(target.path)
+  // cleanup 逐檔列 untracked（`all`）：呼叫端（disk-hygiene 擱置樹）以 `--untracked-files=all` 逐檔點名
+  // --discard-pathspec，收合的 `?? dir/` 會讓「目錄內每個檔都點名了」仍判不中而整棵擋下；逐檔列也讓
+  // gate 不被收合目錄藏住真檔（git-status-z.ts 對 gate 的建議）。
+  const uncommittedObs = detectUncommittedWorktreeFiles(target.path, { untracked: 'all' })
   if (uncommittedObs.status === 'unknown') {
     if (opts.dryRun) {
       console.log(`cleanup --dry-run: ${cleanSlug}`)

@@ -16,8 +16,8 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"read-onl
 
 ## Phase 1 -- 定位訪談脈絡
 
-1. READ 判入口：work-route `SKILL.md` T 表的 T1 成立（不能向使用者詢問）時不訪談，照 T1 處置後停止；帶著 work id 從 work-route 進來 → 讀該 package `plan.md` 的 Scope、Decisions、Open work，只談要停下來討論的那一塊；否則為全新訪談。
-2. READ 唯讀查脈絡：與主題相關的 `specs/truth/**`；lifecycle repo 跑 `flow plan list`，讀 Scope 與主題重疊的每一份 `plan.md` 的 Scope 與 Decisions。既有 artifact 已回答的事實記成已知，不再問。
+1. READ 判入口：work-route `SKILL.md` T 表的 T1 成立（不能向使用者詢問）時不訪談，照 T1 處置後停止；帶著 work id 從 work-route 進來 → 讀該 package `work.md`（舊 package：`plan.md`）的 Scope、Decisions、Open work，只談要停下來討論的那一塊；否則為全新訪談。
+2. READ 唯讀查脈絡：與主題相關的 `specs/truth/**`；lifecycle repo 跑 `flow plan list`，讀 Scope 與主題重疊的每一份 `work.md`（舊 package：`plan.md`）的 Scope 與 Decisions。既有 artifact 已回答的事實記成已知，不再問。
 3. READ 讀取 `../work-route/rules/需求分流判準.md` Rule 2 與 `../work-route/rules/工作種類與必要產物.md` Rule 1，列出要判出分流列與 `work_kind` 必須答得出的分流事實。
 
 ## Phase 2 -- 逐題訪談
@@ -40,7 +40,7 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"read-onl
 | id | predicate | 出口 |
 | --- | --- | --- |
 | I1 | 使用者明說不落地（只想聊聊、評估看看）；「先討論一下」不算 | 結束；摘要留在對話 |
-| I2 | 本次帶著 work id 從 work-route 進來 | 回 work-route 同一 work id 的原續跑位置；摘要的新決策交它寫進該 `plan.md` § Decisions |
+| I2 | 本次帶著 work id 從 work-route 進來 | 回 work-route 同一 work id 的原續跑位置；摘要的新決策交它寫進該 `work.md`（舊 package：`plan.md`）§ Decisions |
 | I3 | 新客戶、尚未簽約，要規格書、Milestone 或報價 | 交 presale；摘要當 `intake/` 素材 |
 | I4 | cwd 是已 onboard 的 repo | 交 work-route；摘要當它 Phase 1 的已確認範圍 |
 | I* | 以上皆非 | 問使用者這份需求要落在哪個 repo，或要不要走 presale |

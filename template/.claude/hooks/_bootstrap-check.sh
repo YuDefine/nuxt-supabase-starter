@@ -280,6 +280,46 @@ if [[ -n "$PROJECT_GIT_DIR" && -n "$PROJECT_COMMON_DIR" && "$PROJECT_GIT_DIR" !=
   exit 0
 fi
 
+# consumer 預設分支的主 checkout NEVER 自動修復 tracked 檔：bootstrap-hub／`sync-rules --prune` 以現在的 clade HEAD
+# 改寫或刪除 tracked 檔（`.prettierignore`、退役投影 `RTK.md`），沒有 commit 也沒有 PR，主 checkout 變 dirty 後
+# clade-main-align 一律 refused。tracked 投影只由 propagate 帶進；gitignored 的機器層（agents 投影、ledger）
+# 寫了不會 dirty，照舊在此重投（與 bootstrap-hub 的 flow=pr main-guard 同一條界線）。
+# `.clade/projections` 不存在（fresh clone）時條件不成立，首次投影照舊。flow=main 與 flow=pr 都適用。
+# 確要在主 checkout 全修，設 CLADE_BOOTSTRAP_FORCE_MAIN_CHECKOUT=1。
+if [[ -n "$PROJECT_GIT_DIR" && "$PROJECT_GIT_DIR" == "$PROJECT_COMMON_DIR" \
+  && "${CLADE_BOOTSTRAP_FORCE_MAIN_CHECKOUT:-}" != "1" \
+  && -d "$PROJECT_ROOT/.clade/projections" ]]; then
+  PROJECT_BRANCH=$(git -C "$PROJECT_ROOT" symbolic-ref --quiet --short HEAD 2>/dev/null || true)
+  # 預設分支與 scripts/bootstrap-hub.ts 的 postinstall hold 同源（origin/HEAD）；沒有 origin/HEAD 才認 main／master。
+  DEFAULT_BRANCH=$(git -C "$PROJECT_ROOT" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
+  DEFAULT_BRANCH="${DEFAULT_BRANCH#origin/}"
+  if [[ -n "$PROJECT_BRANCH" ]] && {
+    [[ -n "$DEFAULT_BRANCH" && "$PROJECT_BRANCH" == "$DEFAULT_BRANCH" ]] \
+      || [[ -z "$DEFAULT_BRANCH" && ( "$PROJECT_BRANCH" == "main" || "$PROJECT_BRANCH" == "master" ) ]]
+  }; then
+    IGNORED_OUTPUT=$(cd "$PROJECT_ROOT" && CLADE_SYNC_LIB="$CLADE_ROOT/scripts/lib/consumer-runtime-sync.ts" \
+      CLADE_GUARD_LIB="$CLADE_ROOT/scripts/lib/bootstrap-main-guard.ts" CLADE_ROOT_DIR="$CLADE_ROOT" \
+      node --input-type=module -e '
+        const { syncConsumerRuntime } = await import(process.env.CLADE_SYNC_LIB)
+        const { isUntrackedIgnoredPath } = await import(process.env.CLADE_GUARD_LIB)
+        const { join } = await import("node:path")
+        const root = process.cwd()
+        const result = await syncConsumerRuntime({
+          root,
+          cladeRoot: process.env.CLADE_ROOT_DIR,
+          targets: ["agents"],
+          prune: false,
+          keepPath: (rel) => isUntrackedIgnoredPath(root, join(root, rel)),
+        })
+        if (result.status === "blocked") console.log("agents 投影被擋")' 2>&1) \
+      || IGNORED_OUTPUT="gitignored 機器層重投失敗：${IGNORED_OUTPUT}"
+    [[ -n "$IGNORED_OUTPUT" ]] && echo "[clade] $IGNORED_OUTPUT" >&2
+    FIRST_ERROR=$(printf '%s\n' "$CHECK_OUTPUT" | grep -m1 '\[clade error\]' || true)
+    echo "[clade] 偵測到 drift / orphan，主 checkout（$PROJECT_BRANCH）只重投 gitignored 機器層、不改 tracked 檔（tracked 投影等 propagate 帶進，或設 CLADE_BOOTSTRAP_FORCE_MAIN_CHECKOUT=1 強制）${FIRST_ERROR:+: $FIRST_ERROR}" >&2
+    exit 0
+  fi
+fi
+
 # drift / orphan 偵測到 → 嘗試自動修復
 # 第一行 MUST 帶上實際錯誤：Grok / 部分 harness 只展示 SessionStart stderr 的首行，
 # 只寫「自動修復中」會讓人以為 hook 卡死，真正的 conflict path 被截掉。

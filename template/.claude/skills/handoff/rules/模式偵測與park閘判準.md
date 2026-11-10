@@ -2,7 +2,7 @@
 
 ## Step 0.1 — Value-first continuation gate（四種模式共用）
 
-`park`、`relay`、`fanout`、`next` 都 MUST 先判斷是否仍值得保留 continuation。只有目前可驗證的 customer／product demand、current incident／data-security risk，或直接阻擋交付且可 bounded fix 的 blocker 至少一項成立，才可列為 continuation candidate；age、unknown、未落地、commit 數與「可能有價值」都不算。三者皆無時標記 `retired`／`cancelled`、保存 evidence、continuation candidates 固定為 0；歷史 worktree／branch 依下方 § 3.5.1 入口處理。`relay`／`fanout` 的 dispatch details 見 [dispatch-common.md](../dispatch-common.md) § 0.1；`park` 也受本 gate 約束，即使不開 pane。
+`park`、`relay`、`fanout`、`next` 都 MUST 先判斷是否仍值得保留 continuation。只有目前可驗證的 customer／product demand、current incident／data-security risk，或直接阻擋交付且可 bounded fix 的 blocker 至少一項成立，才可列為 continuation candidate；age、unknown、未落地、commit 數與「可能有價值」都不算。三者皆無時標記 `retired`／`cancelled`、保存 evidence、continuation candidates 固定為 0；歷史 worktree／branch 依下方 § 3.5.1 入口處理。`relay`／`fanout` 的 dispatch details 見 [派工共用底座判準.md](派工共用底座判準.md) § 0.1；`park` 也受本 gate 約束，即使不開 pane。
 
 ## Step 0 — 解析參數
 
@@ -12,17 +12,17 @@
 | --- | --- | --- |
 | 無參數 | 依判定結果 | **先過 Step 0.5 context 預算 gate**，未被 gate 改道才進 Step 1 兩層自動判定，落到 `park`／`relay`／`fanout`／`next` 其一 |
 | `park` / `park <一句工作描述>` | 0 | 進 § park：只把未完項登記進 HANDOFF／TD／ROADMAP，收工。**user 顯式打 `park` 本身就是允許**，不必再問 |
-| `relay` / `relay <一句工作描述>` | 1 successor | **MUST Read [relay-steps.md](../relay-steps.md) 全文並照順序執行** |
-| `fanout` / `fanout <一句工作描述>` | N worker + 1 successor | **MUST Read [fanout-steps.md](../fanout-steps.md) 全文並照順序執行** |
+| `relay` / `relay <一句工作描述>` | 1 successor | **MUST Read [relay接力判準.md](relay接力判準.md) 全文並照順序執行** |
+| `fanout` / `fanout <一句工作描述>` | N worker + 1 successor | **MUST Read [fanout派工判準.md](fanout派工判準.md) 全文並照順序執行** |
 | `next` | 依盤點結果 | **先過 Step 0.5 context 預算 gate**；未被改道才進 § next：先跑 health gate／worktree／TD hygiene 盤點，再決定派什麼，收工 |
 
 **判準是「手上有幾件可平行的工作」，而預設方向是「派出去」**：1 件（含多件但彼此 serial）→ `relay`；N ≥ 2 件可平行 → `fanout`；還不知道有幾件 → `next`（盤點完會落到前三者之一）；**0 件才輪到 `park`，而裸 `/handoff` 自動判定落到 `park` 時 MUST 先取得 user 允許**（見 Step 1 § park gate）。
 
 `relay` 與 `fanout` 是**優先選項**，判定成立就直接派，**NEVER** 再回頭問 user「要不要派」（接手的 pane 是互動式的，可以直接問 user）。
 
-「可平行」走 [dispatch-steps.md](../dispatch-steps.md) § Serial vs Parallel 評估的四條 rubric，**四條全成立**才算。任一條不成立就是 serial，合併成一份 brief 走 `relay`。
+「可平行」走 [next派工與推薦訊息判準.md](next派工與推薦訊息判準.md) § Serial vs Parallel 評估的四條 rubric，**四條全成立**才算。任一條不成立就是 serial，合併成一份 brief 走 `relay`。
 
-**`relay` 與 `fanout` 的共用底座是 [dispatch-common.md](../dispatch-common.md)**：preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、parent worktree lifecycle、收工訊息契約。兩支 steps 檔只寫各自差異。
+**`relay` 與 `fanout` 的共用底座是 [派工共用底座判準.md](派工共用底座判準.md)**：preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、parent worktree lifecycle、收工訊息契約。兩支 steps 檔只寫各自差異。
 
 > `now` 已於本版**廢除**：舊 `/handoff now <task pointer>` 一律改走 `relay`（單件）或 `fanout`（多件可平行）。
 

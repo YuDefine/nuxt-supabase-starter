@@ -68,8 +68,11 @@ export function diskFull(m: { disk_used_pct?: number | null }): boolean {
   return typeof m.disk_used_pct === 'number' && m.disk_used_pct >= DISK_FULL_PCT
 }
 
-/** PSI 檔（`/proc/pressure/{cpu,memory}`）`some` 列的 `avg60`／`avg300`；讀不到 null。 */
-export function parseCpuPsi(text: string, window: 'avg60' | 'avg300' = 'avg300'): number | null {
+/** PSI 檔（`/proc/pressure/{cpu,memory}`）`some` 列的 `avg10`／`avg60`／`avg300`；讀不到 null。 */
+export function parseCpuPsi(
+  text: string,
+  window: 'avg10' | 'avg60' | 'avg300' = 'avg300',
+): number | null {
   const m = new RegExp(`^some\\b.*\\b${window}=([\\d.]+)`, 'mu').exec(text)
   return m ? Number(m[1]) : null
 }

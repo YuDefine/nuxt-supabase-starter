@@ -5,7 +5,7 @@
 # 實測 threshold 壓縮後 SessionStart 以 `source:"compact"` fire（plan
 # W-2026-10-20-autocompact-300k-600k-plan-package-hook-helper-d evidence/2026-10-21-探測P1-P5.md § P4）。
 # 落盤內容住在 `pre-compact-snapshot.sh` 寫的檔；本 hook 是觸發點，NEVER 把落盤全文印進 context。
-# 判不出來的方向：source 不是 compact → 靜默；落盤檔不存在 → 只指 plan.md § 進度。
+# 判不出來的方向：source 不是 compact → 靜默；落盤檔不存在 → 只指 lifecycle 檔 § 進度。
 
 set -u
 trap 'exit 0' EXIT
@@ -22,7 +22,7 @@ session=$(extract session_id | tr -c 'A-Za-z0-9._\n-' '_')
 snapshot="${XDG_STATE_HOME:-$HOME/.local/state}/clade/precompact/${session:-unknown}.md"
 
 if [ -f "$snapshot" ]; then
-  printf '⤷ 剛壓縮：續做前先讀 %s 與 plan.md § 進度，在飛的 0-A／Workflow 照那裡接續\n' "$snapshot"
+  printf '⤷ 剛壓縮：續做前先讀 %s 與 work.md（舊 package：plan.md） § 進度，在飛的 0-A／Workflow 照那裡接續\n' "$snapshot"
 else
-  printf '⤷ 剛壓縮（沒有 PreCompact 落盤檔）：續做前先讀 plan.md § 進度\n'
+  printf '⤷ 剛壓縮（沒有 PreCompact 落盤檔）：續做前先讀 work.md § 進度\n'
 fi

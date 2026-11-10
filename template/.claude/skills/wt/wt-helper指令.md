@@ -107,7 +107,7 @@ node scripts/wt-helper.ts batch status --trigger auto --workflow <workflow_model
 | 動作 | 指令 | 說明 |
 | --- | --- | --- |
 | 列出 session worktree | `node scripts/wt-helper.ts list [--json] [--no-landed-state]` | 含 staleness 與 landedState；有 brief 的樹會顯示任務摘要與狀態。detached HEAD 的樹也會列出：`--json` 列 `branch: null`、`detached: true`、`head`、`dirty`（無 `staleness`／`landedState`），消費端 MUST 先判 `detached` 再讀 `branch` |
-| 找 slug 對應的樹 | `node scripts/wt-helper.ts resolve <slug> [--json]` | 印出持有該 slug 的樹路徑；exit 3 代表沒有，main 為權威 |
+| 找 slug 對應的樹 | `node scripts/wt-helper.ts resolve <slug> [--json]` | 印出持有該 slug 的樹路徑；exit 3 代表沒有，main 為權威；slug 尾段正規化後（`a.b` 與 `a-b` 同為 `a-b`）對到多棵時 exit 1 並列出各棵路徑，不猜 |
 | 累積報告 | `node scripts/wt-helper.ts backlog --json` | 唯讀處置佇列；超過 3 棵會警告 |
 | 就緒池現況 | `node scripts/wt-helper.ts batch status --trigger manual --workflow <workflow_model>` | 使用者要求 merge back 時的入口；落地由 `/commit` 依 `batch.md` 執行 |
 | 釋放 stale dev-port | `node scripts/wt-helper.ts reclaim-stale [--dry-run]` | 只釋放 port 槽，不動樹。三層機械判定：stale（持有行程已不在）自動釋放 record → live 不動 → unknown 才問使用者（attended）或 packaging（unattended） |

@@ -15,7 +15,7 @@ when: "開始非瑣碎的 ad-hoc 工作（第一個 tool call 前）、交棒、
 | 明示唯讀、禁止寫檔，或只要求對話交付盤點／計畫 | 直接在對話交付，不建立 task 檔或修改 repository／spine |
 | 只允許寫指定計畫／報告文件 | 只在該文件追蹤，不另建 tasks 檔、不擴成實作或提交 |
 | 已授權本機修改、當次可完成的 ad-hoc 工作 | 提交說明保存意圖與驗證即可；需要同 session 清單時才建 `tasks/<YYYY-MM-DD-HHMM>-<slug>.md` |
-| 需要跨 session 接續、決策或遷移 | **MUST** `node vendor/scripts/flow/flow.ts plan open <slug> --title '…'`，載體是 `specs/plans/<work-id>/plan.md` |
+| 需要跨 session 接續、決策或遷移 | **MUST** `node vendor/scripts/flow/flow.ts plan open <slug> --title '…'`，載體是 `specs/plans/<work-id>/work.md`（舊 package：`plan.md`，寫入端切換前 `flow plan open` 仍鑄這種） |
 
 任務後續取得實作授權時重新套用上表；唯讀交付不代替實作追蹤。拆得開的工作 **NEVER** 用共享單檔（例如 `tasks/todo.md`／`tasks/notes.md`）；一 session 一檔，只編輯自己的 task 檔。`HANDOFF.md`、`ROADMAP.md`，以及未遷移 consumer 的 `docs/tech-debt.md` 是本質共享登記簿，改它們前依 [[session-tasks.concurrent-writers]] § 共享單檔的寫入紀律（lifecycle repo 的 `docs/tech-debt.md` 與 clade `docs/pitfalls/**` 已停寫）。
 
@@ -33,7 +33,7 @@ when: "開始非瑣碎的 ad-hoc 工作（第一個 tool call 前）、交棒、
 
 | 生效視窗 | profile | 席位 | 重置方式與義務 |
 | --- | --- | --- | --- |
-| `300000` | 壓縮 | 互動主線、交棒接手、派工 child、runner child、Fable 主線 | 約 267k 原地自動壓縮；約 235k 提示一次，在下一個自然斷點落盤（plan.md § 進度或 task 檔、WIP commit）然後續做。**NEVER** 因 context 大小交棒或送 relay-request。runner child 另有每輪新 process 這一層重置 |
+| `300000` | 壓縮 | 互動主線、交棒接手、派工 child、runner child、Fable 主線 | 約 267k 原地自動壓縮；約 235k 提示一次，在下一個自然斷點落盤（`work.md`（舊 package：`plan.md`） § 進度或 task 檔、WIP commit）然後續做。**NEVER** 因 context 大小交棒或送 relay-request。runner child 另有每輪新 process 這一層重置 |
 | `600000` | 交棒 | 主持席（另設 `idleCompaction:false`） | 約 300k 交棒（coordinator 判準 Rule 1）；soft 300k、hard 500k、之後每 +100k 收工提示；壓縮只是保險 |
 | 其他值或未設 | 交棒，hook 附警告 | — | 同交棒 profile |
 
@@ -61,9 +61,9 @@ when: "開始非瑣碎的 ad-hoc 工作（第一個 tool call 前）、交棒、
 
 | profile／身分 | 動作 |
 | --- | --- |
-| 壓縮 profile（任何身分） | 寫回 plan.md § 進度（沒有 plan 就寫 task 檔）並 commit，然後續做；壓縮原地發生。只有上表「換主題／糾正 ≥2 次／品質退化」才走下兩列的開新 session |
+| 壓縮 profile（任何身分） | 寫回 `work.md`（舊 package：`plan.md`） § 進度（沒有 plan 就寫 task 檔）並 commit，然後續做；壓縮原地發生。只有上表「換主題／糾正 ≥2 次／品質退化」才走下兩列的開新 session |
 | 交棒 profile：主線（`CLADE_DISPATCH_ID` 空） | 自己交棒：1 件或彼此 serial 走 `/handoff relay`，N 件可平行走 `/handoff fanout`；沒有殘工就直接收工 |
-| 交棒 profile：被派出的 child（`CLADE_DISPATCH_ID` 非空） | 回報主持、由主持指揮：判定表在 `handoff` skill `relay-steps.md` § 0（寫回 plan.md、commit＋push、`--complete relay-request --plan <plan.md>`；可自 relay 的例外見該表） |
+| 交棒 profile：被派出的 child（`CLADE_DISPATCH_ID` 非空） | 回報主持、由主持指揮：判定表在 `handoff` skill `relay接力判準.md` § 0（寫回 lifecycle 檔、commit＋push、`--complete relay-request --plan <lifecycle 檔路徑>`；可自 relay 的例外見該表） |
 
 **MUST 用該 profile 定義的量測口徑判門檻**：累計用量、當前 context 佔用與壓縮後剩餘量不是同一個值。缺少 profile 或量測能力時，明列該缺口，使用上述可觀察 predicate 與 harness 的實際限制；**NEVER** 借另一個 runtime 的門檻、hook payload 或 model 名稱宣稱已適用、未超標或取得豁免。
 

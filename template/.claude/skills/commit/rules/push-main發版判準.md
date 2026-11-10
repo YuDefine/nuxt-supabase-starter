@@ -57,7 +57,7 @@ override 只改 6-A 的**做法**，不改授權：要不要推 main 仍由 Step
 
 ```bash
 git fetch origin main
-git log --oneline origin/main..HEAD     # MUST 逐筆認得：Step 4 的分組 commit、Step 5 的 HANDOFF/ROADMAP commit
+git log --oneline origin/main..HEAD     # MUST 逐筆認得：D3 的分組 commit、D9-Gate 的 HANDOFF/ROADMAP commit（`handoff-steps.md` § 5-E）
 ```
 
 清單裡有**不是本 session 產生的** commit → 停在這裡照該節查歸屬，**NEVER** 代推。每一筆都認得才建立 deploy commit 並推出去（串裡的宣告值在 deploy commit 建好之後才算，所以涵蓋它）：
@@ -107,7 +107,7 @@ EOF
 
 **tag 打在 main push 之後不是順手排的**：`rules/core/commit.detail.md` § Tag 位置 要求打 tag 當下
 `git rev-list --count origin/main..HEAD` 必須是 0。先打再推 main 的話，打 tag 的那一刻這個數字
-非 0（Step 4 的分組 commit、Step 5 的 HANDOFF/ROADMAP commit、本步驟的 deploy commit 都還沒推）——順序倒過來就同時滿足了那三步，而且競態時本機根本還沒有 tag 要刪。
+非 0（D3 的分組 commit、D9-Gate 的 HANDOFF/ROADMAP commit（`handoff-steps.md` § 5-E）、本步驟的 deploy commit 都還沒推）——順序倒過來就同時滿足了那三步，而且競態時本機根本還沒有 tag 要刪。
 
 **不照上面整條 `&&` 串一次貼、而是分步驟手打時，打 tag 之前 MUST 確認 tip 就是這次的 deploy
 commit**（串成一條時由 `&&` 保證，不必另外跑）：
@@ -116,7 +116,7 @@ commit**（串成一條時由 `&&` 保證，不必另外跑）：
 git log -1 --format=%s     # MUST 是 🚀 deploy: 發布新版本 v{新版本號}
 ```
 
-`git tag` 在目前 tip（Step 5 的 HANDOFF/ROADMAP commit 與本步驟的 deploy commit 都已在同一條線上）建立 `v{版本號}` **local** tag。
+`git tag` 在目前 tip（D9-Gate 的 HANDOFF/ROADMAP commit 與本步驟的 deploy commit 都已在同一條線上）建立 `v{版本號}` **local** tag。
 
 ## Good Example
 

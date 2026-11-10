@@ -3330,7 +3330,7 @@ function claimsMember(b: WorktreeBatch, path: string): boolean {
 export function listBatches(cwd: string): WorktreeBatch[] {
   return readState(context(cwd)).batches
 }
-/** `/commit` Step 0-Batch 的主分流；代碼對動作表在 commit skill 的 `rules/批次入口判準.md` Rule 3。
+/** `/commit` Step 0-Batch 的主分流；代碼對動作表在 commit skill 的 `rules/批次入口判準.md` Rule 2。
  *  first-match：接續在途批 → 準備新批 → 有就緒但未達門檻 → 普通 /commit。只欠 cleanup 的批可與任何
  *  route 疊加，另列在 `cleanupPending`，不進 first-match（否則一個保留不清的批會永遠遮住 prepare）。 */
 export type BatchEntryRoute = 'resume-active' | 'prepare' | 'return-to-dev' | 'plain-commit'

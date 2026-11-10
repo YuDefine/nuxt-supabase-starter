@@ -133,6 +133,22 @@ SoT 是 `vendor/scripts/lib/claude-account-registry.ts`——帳號清單只寫�
 - `cc1`…`cc5` **釘選**單一帳號：`cc1` → `~/.claude`、`cc2` → `~/.claude-2`、`ccN` → `~/.claude-N`（清單 SoT：`vendor/scripts/lib/claude-account-registry.ts`）。只有需要「就這個帳號」時才用（查特定帳號額度、隔離測試、除錯）。**方案（Pro／Max）NEVER 寫在規約裡**：訂閱會升降級，程式讀即時值；要知道某帳號現在是什麼方案就看 watch【額度】段或 `claude-account-preflight.ts` 的輸出，**NEVER** 憑本檔或記憶判斷。
 - `ccw`（`cc2` 舊名）2026-10-25 退役：`--launcher ccw`、`ccw` shell function 一律拒收並指向 `cc2`；只剩舊 dispatch record 的 `account: ccw`／`launcher: ccw` 仍解析成 claude-2。新寫入一律用 `cc`／`ccN`。
 
+## 槓桿優先序與規約可實驗（Charles 2026-11-08）
+
+出處：HQ charter § 量得準、持續壓縮（N1～N7）；北極星條目在 `specs/truth/decisions/north-star.md` § 量得準、持續壓縮。下表各列的載體照舊，本節只定**新工作怎麼往下壓**與**改本表的路徑**。
+
+**槓桿優先序**——一件工作由前往後找第一個做得到的層，前一層做得到就 **NEVER** 往後放：
+
+1. **腳本／閘門機械化**：能用確定性腳本、lint、hook、gate 判對錯或產出的，寫成腳本，不派模型。
+2. **最便宜能過同一份驗收的模型大量平行**：同一組可自動跑的驗收（測試、型別、lint、`verify-*` 複驗）下，挑本表已開席位中最便宜的載體平行派；「便宜」只在本表與 § 禁用 允許的範圍內比，**NEVER** 為了便宜派禁用 model 或越過某列的席位限制。
+3. **高階模型只做四件事**：規約定稿、設計分歧（[[agent-routing]] 的分歧仲裁）、0-A、對外承諾（報價、交期、對客戶文字）。
+
+**規約可實驗**：本表的列、席位與模型白名單可以開實驗挑戰，實驗 **MUST** 寫明四項——假設（哪一列改派哪個載體、預期改善哪個量尺）、量尺（north-star § 量得準、持續壓縮 的兩個量尺＋品質護欄）、對照（同一份真實 brief 新舊載體各 ≥5 reps，題目涵蓋該列真實工作型態，同 § Haiku 5.5 的席位 的量法）、回退條件（哪個護欄變差多少就撤）。
+
+- 實驗期間本表與 `pi-routing-policy.ts` **不改**；證據足夠時由 Charles 拍板，拍板後才同一個 commit 改本表與機械 SoT。
+- 品質判準以 HQ 的 AI×BDD E2E＋Bridge 為準：驗收能自動跑才算「同一份驗收」，人眼判讀的工作不進第 2 層。
+- 便宜模型實驗的範圍與供應商待 Charles 答（HQ 量得準持續壓縮 Q2）；答前 **NEVER** 改 § 禁用 清單，也 **NEVER** 在本表預列「可改派」的類別清單——新席位只經實驗證據加列。
+
 ## 工作類別對照
 
 列名是每列開頭 〔`如此標示`〕 的 slug，`--tier-basis table-row` 時逐字填進 `--table-row`。執行鏈的第一跳就是 `--table-row` 要求的 `--model`；後面各跳是配額降級，帶 `--route fallback-chain --retry-of <label>`，由 dispatcher 的 `next_step` 給出。執行鏈寫「空鏈」的列沒有 Pi 跳，鏈尾欄的載體就是首跳。

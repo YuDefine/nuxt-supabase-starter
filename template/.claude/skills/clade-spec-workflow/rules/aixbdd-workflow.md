@@ -18,7 +18,7 @@ paths: ['specs/plans/**', 'specs/truth/**', '.agents/constitution/**']
 
 aixbdd 切的是**職責**：PM 定義驗收標準，RD 落地成可執行系統。plan 是一次迭代的封裝（這次要改什麼），`specs/truth/**` 是系統當下的真相。aixbdd 產出可執行規格（`.feature` ＋ DSL），SpecFormula 執行它。
 
-**同一份 lifecycle 對 clade home 與每一個 consumer 生效。** package 是 `specs/plans/<work-id>/`，work id 由 `flow plan open` 鑄，`plan.md` 是 lifecycle 檔（結案後刪除，歷史走 git；這是 clade 適配）。差別只在 artifact 的**適用性**（CLI 工作沒有 UI 雛形、沒有 OpenAPI）：工作種類（`work_kind`）決定的省略由 gate 依種類判定，其餘每一個省略都要在 `plan.md` § Decisions 寫一行工作特定理由。「clade 是標準層不是產品」**不是**省略理由。`NNN-<slug>` 只剩未遷移 consumer 的過渡用途。契約全文見 `specs/truth/work-lifecycle.md`。
+**同一份 lifecycle 對 clade home 與每一個 consumer 生效。** package 是 `specs/plans/<work-id>/`，work id 由 `flow plan open` 鑄，`work.md` 是 lifecycle 檔（舊 package 相容期仍是 `plan.md`；結案後刪除，歷史走 git；這是 clade 適配）。差別只在 artifact 的**適用性**（CLI 工作沒有 UI 雛形、沒有 OpenAPI）：工作種類（`work_kind`）決定的省略由 gate 依種類判定，其餘每一個省略都要在 `work.md` § Decisions 寫一行工作特定理由。「clade 是標準層不是產品」**不是**省略理由。`NNN-<slug>` 只剩未遷移 consumer 的過渡用途。契約全文見 `specs/truth/work-lifecycle.md`。
 
 ## 何時用 / 不用
 
@@ -41,12 +41,12 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 | # | 入口 | 誰執行 | 產出落點 |
 | --- | --- | --- | --- |
 | 1 | `/constitution` | 共同 | `.agents/constitution/**`（需要新增或調整規則時；此 gate 在 package 判定前執行） |
-| 2 | `/specify` | PM | lifecycle repo：`specs/plans/<work-id>/{spec.md,checklists/requirements.md}`，truth delta 意圖列寫進 package 的 delta 載體：`flow plan open` 現行鑄的 legacy package 是 `plan.md` § Truth delta（state=proposed），`flow plan migrate` 後的 `work.md` package 是 `truth-delta.md`；未遷移 consumer：`specs/plans/NNN-<slug>/{spec.md,checklists/requirements.md,truth-delta.md}`。新需求永遠開新 work id，同一工作續跑同一份 |
+| 2 | `/specify` | PM | lifecycle repo：`specs/plans/<work-id>/{spec.md,checklists/requirements.md}`，truth delta 列：`work.md` package 寫進同目錄的 `truth-delta.md`（上游格式，列存在即已套用）；舊 package（`flow plan open` 在寫入端切換前鑄的就是這種）寫進 `plan.md` § Truth delta（state=proposed）；未遷移 consumer：`specs/plans/NNN-<slug>/{spec.md,checklists/requirements.md,truth-delta.md}`。新需求永遠開新 work id，同一工作續跑同一份 |
 | 3 | `/clarify-over-specs` | PM | 更新 `spec.md`（選用） |
 | 4a | `/spec-by-example` | PM | plan package 的 `features/acceptance/**`；UI 需求另備可供 PM 確認的設計證據（design／review owner，**不是** `/ui-plan`） |
 | 4b | `/technical-research` | RD | plan `research.md` ＋ truth `specs/truth/techstack.md` |
 | 5 | PM 確認 Gherkin 與適用的 UI 設計證據後 handoff | PM → RD | —；UI 需求缺設計證據或 review 才停在 PM confirmation gate，API-only 不建立 UI gate |
-| 6 | `/system-analysis`（委派 `/api-plan`、`/data-plan`、`/ui-plan`） | RD | lifecycle repo：plan `system-analysis.md`（`plan.md` 是 lifecycle 檔，NEVER 覆寫）；未遷移 consumer：plan `plan.md`。`/ui-plan` 讀分析 handoff 與本輪 truth delta 產 `ui/ui-plan.md`＋`ui/*.html`，改到使用者可見行為時回第 5 步。只有 PM gate 通過後可進入 |
+| 6 | `/system-analysis`（委派 `/api-plan`、`/data-plan`、`/ui-plan`） | RD | lifecycle repo：plan `plan.md`（`work.md` 是 lifecycle 檔，NEVER 覆寫；舊 package 的 `plan.md` 才是 lifecycle 檔，分析暫寫 `system-analysis.md`）；未遷移 consumer：plan `plan.md`。`/ui-plan` 讀分析 handoff 與本輪 truth delta 產 `ui/ui-plan.md`＋`ui/*.html`，改到使用者可見行為時回第 5 步。只有 PM gate 通過後可進入 |
 | 7 | `/dsl-refine` | RD | truth `specs/truth/features/{backend,frontend}/**` 的 feature 與 `dsl.md` |
 | 8 | `/tasks` | RD | plan `tasks.md` |
 | 9 | `/implement`（`[BDD-GREEN]` / `[BDD-REFACTOR]` 委派 `/bdd`） | RD | 產品碼與測試 |
@@ -61,9 +61,9 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 
 ## MUST
 
-1. **每一次**需要持久接續的工作都 MUST 有且僅有一個 work id 與一份 package。lifecycle repo（clade home 與已遷移 consumer）：`flow plan open` 鑄 id 並建立 `specs/plans/<work-id>/plan.md`，`/specify` 在**同一個目錄**填 `spec.md`，同一工作續跑同一份，結案刪除。尚未遷移的 consumer 才由 `/specify` 建 `NNN-<slug>/`。**NEVER** 為同一工作開第二份 plan，**NEVER** 在 lifecycle repo 建 `NNN-` 目錄。
+1. **每一次**需要持久接續的工作都 MUST 有且僅有一個 work id 與一份 package。lifecycle repo（clade home 與已遷移 consumer）：`flow plan open` 鑄 id 並建立 `specs/plans/<work-id>/` package（lifecycle 檔 `work.md`＋`truth-delta.md`；舊 package：`plan.md`，寫入端切換前 `flow plan open` 仍鑄這種，兩種形狀都照現況判），`/specify` 在**同一個目錄**填 `spec.md`，同一工作續跑同一份，結案刪除。尚未遷移的 consumer 才由 `/specify` 建 `NNN-<slug>/`。**NEVER** 為同一工作開第二份 plan，**NEVER** 在 lifecycle repo 建 `NNN-` 目錄。
 2. `specs/truth/**` 底下**每一個**檔案 MUST 只由它的 truth owner skill 寫：`techstack.md` 歸 `/technical-research`，`features/**` 與 `dsl.md` 歸 `/dsl-refine`。**每一個**其他入口（含 `/specify`、`/tasks`、`/implement`）都 MUST 把 truth 當唯讀。
-3. **每一個** plan package 的 `tasks.md` 在開始動工之前，MUST 已綁定 work id 並 `export CLADE_WORK_ID=<id>`：lifecycle repo 的 id 在 `flow plan open` 那一刻就鑄好（`plan.md` frontmatter 的 `work_id`）；未遷移 consumer 跑 `node vendor/scripts/flow/flow.ts work open <slug> --origin tasks:specs/plans/NNN-<slug>/tasks.md`。plan package 就是 clade `flow` 的 work carrier——**NEVER** 為同一個 plan package 開第二張卡，也 **NEVER** 因為「只是先跑個測試」跳過（那正是 `unattributed` 的來源）。
+3. **每一個** plan package 的 `tasks.md` 在開始動工之前，MUST 已綁定 work id 並 `export CLADE_WORK_ID=<id>`：lifecycle repo 的 id 在 `flow plan open` 那一刻就鑄好（lifecycle 檔 frontmatter 的 `work_id`：`work.md`；舊 package：`plan.md`）；未遷移 consumer 跑 `node vendor/scripts/flow/flow.ts work open <slug> --origin tasks:specs/plans/NNN-<slug>/tasks.md`。plan package 就是 clade `flow` 的 work carrier——**NEVER** 為同一個 plan package 開第二張卡，也 **NEVER** 因為「只是先跑個測試」跳過（那正是 `unattributed` 的來源）。
 4. `/technical-research` 的三題必問（各端的 BDD techstack、測試策略、系統有哪些端）MUST 全部拍板才可寫 `research.md` 或 `techstack.md`。**「`spec.md` 的假設」與「範例檔的堆疊」都不算已回答**，只有使用者本輪原話、本輪 `/clarify` 的答案、或既有 `techstack.md` 已寫明且本輪沒改判才算。
 5. 每一個 Gherkin 句型 MUST 在 DSL 有**恰好一個**權威 row。句型上提到介面根或下放到模組時，MUST 刪掉舊位置，**NEVER** 讓根與模組同時存在同一 row。
 
@@ -79,7 +79,7 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 | 反模式 | 為何錯 | 正解 |
 | --- | --- | --- |
 | 小改動直接改一份**已結案**工作的 `spec.md` | 舊 plan 是歷史，改掉之後沒有任何地方看得出這次改了什麼 | 開新 work id（lifecycle repo：`flow plan open`；未遷移 consumer：`/specify` 開 `004-<slug>`） |
-| `/specify` 順手改 `specs/truth/contracts/openapi.yaml` | truth 有 owner；非 owner 的寫入下一輪會被覆蓋 | 記 ADD / MODIFY / DELETE 意圖列（lifecycle repo：legacy package 為 `plan.md` § Truth delta，`work.md` package 為 `truth-delta.md`；未遷移 consumer：`truth-delta.md`），交給 owner skill |
+| `/specify` 順手改 `specs/truth/contracts/openapi.yaml` | truth 有 owner；非 owner 的寫入下一輪會被覆蓋 | 記 ADD / MODIFY / DELETE 意圖列（lifecycle repo：`work.md` package 為 `truth-delta.md`，舊 package 為 `plan.md` § Truth delta；未遷移 consumer：`truth-delta.md`），交給 owner skill |
 
 ## clade lifecycle 適配與入口
 
@@ -92,12 +92,12 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 | 上游名 | lifecycle repo | owner |
 | --- | --- | --- |
 | `specs/plans/NNN-<slug>/` | `specs/plans/<work-id>/`（`flow plan open` 鑄） | work-lifecycle |
-| `truth-delta.md` | 同名 `truth-delta.md`（上游格式，列存在即已套用）；legacy package 仍是 `plan.md` § Truth delta 表（`id／action／unit／reason／state`，`flow plan apply-delta` 機讀），`flow plan migrate` 轉入 | truth owners（legacy：work-lifecycle） |
+| `truth-delta.md` | `work.md` package 同名（上游格式，每列一個 ADD／MODIFY／DELETE／NOOP，列存在即已套用）；舊 package（`flow plan open` 在寫入端切換前仍鑄這種）是 `plan.md` § Truth delta 表，`flow plan apply-delta` 機讀 | work-lifecycle |
 | `plan.md`（系統分析） | 同名 `plan.md`；legacy package 的 `plan.md` 是 lifecycle 檔，系統分析暫寫 `system-analysis.md` | RD（`/system-analysis`） |
 | `spec.md`、`checklists/requirements.md`、`features/acceptance/**`、`research.md`、`tasks.md`、`ui/ui-plan.md`＋`ui/*.html` | 同名 | 同上游 |
 | — | `briefs/**`（派工 brief）、`evidence/**`（cucumber JSON report ＋ `receipts.jsonl`，供 `acceptance-verdicts.ts` 讀） | 主線／runner |
 
-`flow plan readiness` 依 `plan.md` frontmatter 的 `work_kind` 決定要求集，**不**讀 § Decisions 的省略理由：`behavior`、`bug-uncovered` 與未宣告的 plan 要求完整集（`spec.md`、acceptance feature、`acceptance_command` 等）；`bug-covered` 與全部錨點都是 NOOP 的 `refactor` 改要求迴歸錨點，不要求 `spec.md` 與 acceptance feature；`acceptance-gap` 同樣走迴歸集，另要求 `## Scope inventory` 範圍盤點表（缺表、列未歸位或無錨點、缺 `bug`／`e2e` 列回 `scope-inventory-*`／`acceptance-gap-*`）。delta 形狀與種類不符時回 `kind-delta-mismatch`，改判走 `flow plan set-kind`（`acceptance-gap` 例外：缺 truth features 的 ADD 列就補列，NEVER 改判 `bug-covered` 過閘）。值域與要求集全文見 `specs/truth/work-lifecycle.md` § Package。
+`flow plan readiness` 依 `work.md` frontmatter 的 `work_kind` 決定要求集，**不**讀 § Decisions 的省略理由：`behavior`、`bug-uncovered` 與未宣告的 plan 要求完整集（`spec.md`、acceptance feature、`acceptance_command` 等）；`bug-covered` 與全部錨點都是 NOOP 的 `refactor` 改要求迴歸錨點，不要求 `spec.md` 與 acceptance feature；`acceptance-gap` 同樣走迴歸集，另要求 `## Scope inventory` 範圍盤點表（缺表、列未歸位或無錨點、缺 `bug`／`e2e` 列回 `scope-inventory-*`／`acceptance-gap-*`）。delta 形狀與種類不符時回 `kind-delta-mismatch`，改判走 `flow plan set-kind`（`acceptance-gap` 例外：缺 truth features 的 ADD 列就補列，NEVER 改判 `bug-covered` 過閘）。值域與要求集全文見 `specs/truth/work-lifecycle.md` § Package。
 
 ## clade 伴隨：truth feature 接到可執行測試
 

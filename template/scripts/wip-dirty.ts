@@ -36,7 +36,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, lstatSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { basename, join } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readGitStatus, type GitStatusEntry } from './lib/git-status-z.ts'
 import { isLockedProjectionPathFor } from './locked-projection.ts'
@@ -194,6 +194,206 @@ export function isCladeHookBlockDrift(wtPath, filePath) {
   )
 }
 
+// --- bootstrap／propagate 對 consumer 樹的第三類寫入 -------------------------------------------------
+// 三個檔都是 clade 的 bootstrap／postinstall 在每棵 consumer 樹改寫的 tracked 檔，不在 LOCKED_PROJECTION_RE、
+// 也不在 `.clade/projections` 所有權清單內：
+//   - `pnpm-workspace.yaml`：`ensureCladePnpmSettings`（scripts/lib/pnpm-settings-governance.ts）對缺的
+//     `minimumReleaseAge`／`blockExoticSubdeps`／`verifyDepsBeforeRun` 追加一行，cmdAdd 再把 warn 翻成 install。
+//   - `.pi/settings.json`：`mergePiSettings`（scripts/lib/pi-package-binding.ts）把 clade package 的
+//     `@vX.Y.Z` 版本釘改成當下版本。
+//   - `.husky/pre-commit`：clade drift-guard marker 區塊（`isCladeHookBlockDrift`，上面已有）。
+// 還原成 HEAD 不丟任何工作：下一次 bootstrap／install 會重新寫回。判準與寫入端逐字對齊（本檔零依賴、不能
+// import scripts/lib，字面值由 test/wip-dirty-bootstrap-drift.test.ts 對照寫入端防漂移），其餘任何差異一律擋。
+
+/** pnpm-workspace.yaml 裡 bootstrap 會代補的 top-level key → 它可接受的值（值非 clade 預設＝使用者自己的設定）。 */
+export const PNPM_BOOTSTRAP_APPENDED = Object.freeze({
+  verifyDepsBeforeRun: /^(?:warn|install)$/u,
+  minimumReleaseAge: /^4320$/u,
+  blockExoticSubdeps: /^true$/u,
+})
+
+function gitShowHead(wtPath: string, filePath: string): string | null {
+  try {
+    return execFileSync('git', ['show', `HEAD:${filePath}`], {
+      cwd: wtPath,
+      env: cwdScopedGitEnv,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch {
+    return null
+  }
+}
+
+function topLevelYamlLine(text: string, key: string): RegExpMatchArray | null {
+  return text.match(new RegExp(`^${key}:[ \\t]*(.*?)[ \\t]*$`, 'm'))
+}
+
+/**
+ * `pnpm-workspace.yaml` 與 HEAD 的差異是否只有 bootstrap 代補的設定行：HEAD 沒有的 key 被追加成 clade 預設值，
+ * 或 HEAD 的 `verifyDepsBeforeRun: warn` 被翻成 install。其餘（改既有值、動別行、刪行）一律 false。
+ */
+export function isCladePnpmSettingsDrift(wtPath: string, filePath: string): boolean {
+  if (filePath !== 'pnpm-workspace.yaml') return false
+  const head = gitShowHead(wtPath, filePath)
+  let cur: string
+  try {
+    cur = readFileSync(join(wtPath, filePath), 'utf8')
+  } catch {
+    return false
+  }
+  if (head === null || head === cur) return false
+  const headText = head.replace(/\r\n/gu, '\n')
+  let normalized = cur.replace(/\r\n/gu, '\n')
+  let changes = 0
+  for (const [key, valueOk] of Object.entries(PNPM_BOOTSTRAP_APPENDED)) {
+    const headLine = topLevelYamlLine(headText, key)
+    const curLine = topLevelYamlLine(normalized, key)
+    if (!curLine || curLine.index === undefined || !valueOk.test(curLine[1])) continue
+    if (headLine === null) {
+      // 寫入端在追加行前補一個分隔空行，所以只還原「該行＋緊鄰它前面的一個空行」。
+      let start = curLine.index
+      if (normalized.slice(0, start).endsWith('\n\n')) start -= 1
+      const end =
+        curLine.index +
+        curLine[0].length +
+        (normalized[curLine.index + curLine[0].length] === '\n' ? 1 : 0)
+      normalized = normalized.slice(0, start) + normalized.slice(end)
+      changes++
+    } else if (
+      key === 'verifyDepsBeforeRun' &&
+      headLine[1] === 'warn' &&
+      curLine[1] === 'install'
+    ) {
+      normalized =
+        normalized.slice(0, curLine.index) +
+        headLine[0] +
+        normalized.slice(curLine.index + curLine[0].length)
+      changes++
+    }
+  }
+  // 沒有任何 bootstrap 代補／翻轉＝純空白或換行風格差異，是使用者的編輯。
+  if (changes === 0) return false
+  // 寫入端會補檔尾換行與一個分隔空行，其餘位元組必須與 HEAD 逐字相同。
+  const headNl = headText.length > 0 && !headText.endsWith('\n') ? `${headText}\n` : headText
+  return normalized === headNl
+}
+
+// 與 pi-package-binding.ts 的 CLADE_GIT_SOURCE_RE 同一份字面值。
+const CLADE_PI_GIT_SOURCE_RE =
+  /^(?:(?:https?|git|ssh):\/\/(?:git@)?|git@)?github\.com[/:]YuDefine\/clade(?:\.git)?(?:@.+)?$/iu
+
+// 未發版時 source 是 clade home 的絕對路徑；只認「就是本檔所在的 clade home」的那一個，
+// 其他 checkout（例 fork）寫入端視為外部條目、保持原樣，這裡也必須當使用者資料擋下。
+const CLADE_HOME = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
+
+function samePath(a: string, b: string): boolean {
+  if (resolve(a) === resolve(b)) return true
+  try {
+    return realpathSync(a) === realpathSync(b)
+  } catch {
+    return false
+  }
+}
+
+function isCladePiPackage(entry: unknown, cladeRoot: string = CLADE_HOME): boolean {
+  const source =
+    typeof entry === 'string'
+      ? entry
+      : entry && typeof entry === 'object'
+        ? (entry as { source?: unknown }).source
+        : undefined
+  if (typeof source !== 'string' || !source.trim()) return false
+  const s = source.trim()
+  if (isAbsolute(s)) return samePath(s, cladeRoot)
+  return CLADE_PI_GIT_SOURCE_RE.test(s.startsWith('git:') ? s.slice(4) : s)
+}
+
+function parsePiSettings(text: string): Record<string, unknown> | null {
+  try {
+    const v = JSON.parse(text)
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : null
+  } catch {
+    return null
+  }
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    const o = value as Record<string, unknown>
+    return `{${Object.keys(o)
+      .toSorted()
+      .map((k) => `${JSON.stringify(k)}:${canonicalJson(o[k])}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'null'
+}
+
+function piSettingsWithoutClade(
+  settings: Record<string, unknown>,
+  cladeRoot: string,
+): Record<string, unknown> {
+  if (!Array.isArray(settings.packages)) return settings
+  const foreign = settings.packages.filter((entry) => !isCladePiPackage(entry, cladeRoot))
+  const next = { ...settings }
+  if (foreign.length > 0) next.packages = foreign
+  else delete next.packages
+  return next
+}
+
+/** `.pi/settings.json` 與 HEAD 只差 clade package 條目（版本釘／來源）。 */
+export function isCladePiSettingsDrift(
+  wtPath: string,
+  filePath: string,
+  cladeRoot: string = CLADE_HOME,
+): boolean {
+  if (filePath !== '.pi/settings.json') return false
+  const headText = gitShowHead(wtPath, filePath)
+  let curText: string
+  try {
+    curText = readFileSync(join(wtPath, filePath), 'utf8')
+  } catch {
+    return false
+  }
+  if (headText === null || headText === curText) return false
+  const head = parsePiSettings(headText)
+  const cur = parsePiSettings(curText)
+  if (!head || !cur) return false
+  return (
+    canonicalJson(piSettingsWithoutClade(head, cladeRoot)) ===
+    canonicalJson(piSettingsWithoutClade(cur, cladeRoot))
+  )
+}
+
+/** untracked 的 `.pi/settings.json`（HEAD 沒有）內容只有 clade package 條目＝bootstrap 首次建立。 */
+export function isCladePiSettingsCreation(
+  wtPath: string,
+  filePath: string,
+  cladeRoot: string = CLADE_HOME,
+): boolean {
+  if (filePath !== '.pi/settings.json') return false
+  let cur: Record<string, unknown> | null
+  try {
+    if (!lstatSync(join(wtPath, filePath)).isFile()) return false
+    cur = parsePiSettings(readFileSync(join(wtPath, filePath), 'utf8'))
+  } catch {
+    return false
+  }
+  if (!cur || !Array.isArray(cur.packages) || cur.packages.length === 0) return false
+  if (!cur.packages.every((entry) => isCladePiPackage(entry, cladeRoot))) return false
+  return Object.keys(piSettingsWithoutClade(cur, cladeRoot)).length === 0
+}
+
+/** bootstrap 對 consumer 樹的 tracked 檔改寫（只認 worktree 側的 modified；還原回 HEAD 後下次 bootstrap 重寫）。 */
+export function isCladeBootstrapDrift(wtPath: string, filePath: string): boolean {
+  return (
+    isCladePnpmSettingsDrift(wtPath, filePath) ||
+    isCladePiSettingsDrift(wtPath, filePath) ||
+    isCladeHookBlockDrift(wtPath, filePath)
+  )
+}
+
 /**
  * 可忽略漂移的單一判準。`kind` 是呼叫端對該 dirty entry 的分類：
  * 'modified'（porcelain 非 `??` 的全部狀態）或 'untracked'（`??`）。
@@ -217,9 +417,9 @@ export function isIgnorableWorktreeDrift(repoRoot, path, kind) {
  * consumer 樹裡的產生端寫入：`.pi/settings.json` 是 clade package 的 `@vX.Y.Z` 版本釘，
  * 每次 publish 後 bootstrap 改寫（樹落後 main 時是 ` M`，HEAD 沒有時整個 `.pi/` 收合成一行 `?? .pi/`）。
  * 寫成目錄 `.pi`：clade 的 gitignore 治理只放行 `.pi/settings.json`（`.pi/*` 其餘都 ignored），所以
- * 這個目錄裡 git 看得到的檔只有它；cleanup 的 uncommitted gate 用收合模式，`.pi/settings.json` 點不中 `?? .pi/`。
+ * 這個目錄裡 git 看得到的檔只有它；cleanup 的 uncommitted gate 用 `--untracked-files=all` 逐檔列出，`?? .pi/settings.json` 由 `.pi` 前綴點中。
  * `.impeccable/hook.cache.json` 是 impeccable hook 的快取（untracked）；`.impeccable/` 常有 tracked 的使用者內容，
- * NEVER 寫成目錄。整個 `.impeccable/` 都 untracked 時收合成 `?? .impeccable/`，點不中、cleanup 照擋（保留，安全）。
+ * NEVER 寫成目錄。整個 `.impeccable/` 都 untracked 時逐檔列出 `?? .impeccable/<檔>`，只有 `hook.cache.json` 點得中，其餘使用者內容照擋（保留，安全）。
  */
 export const TOOL_CACHE_NOISE_PATHSPECS = Object.freeze(['.pi', '.impeccable/hook.cache.json'])
 
@@ -339,14 +539,18 @@ export function allLandedLedgerAppend(
   )
 }
 
-/** `--discard-pathspec a,b` → ['a','b']；拒絕絕對路徑、`..`、glob 字元與空值（只收 repo 內的字面路徑）。 */
+/**
+ * `--discard-pathspec a,b` → ['a','b']；拒絕絕對路徑、`..`、glob 字元與空值（只收 repo 內的字面路徑）。
+ * `[` `]` 照收：Nuxt 動態路由檔（`server/api/[id].put.ts`）是字面檔名，比對一律逐字
+ * （`matchesDiscardPathspec`），呼叫端若誤當 glob 傳 `[ab].ts` 只會比不中而擋下（fail closed）。
+ */
 export function parseDiscardPathspecs(raw: unknown): string[] {
   if (raw === undefined || raw === null) return []
   const specs = String(raw)
     .split(',')
     .map((s) => s.trim().replace(/\/+$/, ''))
   for (const spec of specs) {
-    if (!spec || spec.startsWith('/') || spec.split('/').includes('..') || /[*?[\]:!]/.test(spec))
+    if (!spec || spec.startsWith('/') || spec.split('/').includes('..') || /[*?:!]/.test(spec))
       throw new Error(
         `cleanup --discard-pathspec 只收 repo 內的字面路徑（逗號分隔，不收 glob／絕對路徑／..）：'${spec}'`,
       )
@@ -629,9 +833,11 @@ export function isOwnedProjectionResidue(
 /**
  * `--restore-projection-drift` 的分類：porcelain（不帶 `-z` 的換行格式，同 `onlyToolManagedDrift`）每一行
  * 拆成「可還原」「可移除」與「擋住」三堆。可還原＝已追蹤、只有修改／刪除的狀態碼，且路徑是 clade-managed 投影
- * （`isLockedProjectionPathFor`，與 merge-back／wip-dirty 同一份判準）、tool-managed flip，或內容仍是
+ * （`isLockedProjectionPathFor`，與 merge-back／wip-dirty 同一份判準）、tool-managed flip、bootstrap 改寫
+ * （`isCladeBootstrapDrift`：pnpm-workspace 代補行、`.pi/settings.json` 的 clade 條目、hook 區塊），或內容仍是
  * 所有權清單（`.clade/projections/*.json`）記的那一份（`isOwnedProjectionResidue`；已刪除的清單內路徑也算）。
- * 可移除＝untracked 的單一檔案、內容仍是所有權清單記的那一份（HEAD 沒有它，不丟任何東西）。
+ * 可移除＝untracked 的單一檔案、內容仍是所有權清單記的那一份，或只含 clade 條目的 `.pi/settings.json`
+ * （HEAD 沒有它，不丟任何東西）。
  * rename／staged-add／衝突、被收合的 untracked 目錄、內容被改過的清單內檔案一律擋住。
  * 被 quotePath 跳脫的非 ASCII 路徑對不上投影清單 → 落在擋住那堆，方向是 fail closed。
  */
@@ -648,7 +854,11 @@ export function classifyRestorableDrift(
     const code = line.slice(0, 2)
     const tracked = /^[ MDT]{2}$/u.test(code)
     if (code === '??') {
-      if (isOwnedProjectionResidue(repoRoot, path, owned)) removable.push(path)
+      if (
+        isOwnedProjectionResidue(repoRoot, path, owned) ||
+        isCladePiSettingsCreation(repoRoot, path)
+      )
+        removable.push(path)
       else blocking.push(path)
       continue
     }
@@ -661,7 +871,9 @@ export function classifyRestorableDrift(
       (isLockedProjectionPathFor(repoRoot, path) ||
         isToolManagedDrift(repoRoot, path) ||
         deletedOwned ||
-        (worktreeOnly && isOwnedProjectionResidue(repoRoot, path, owned)))
+        (worktreeOnly &&
+          (isOwnedProjectionResidue(repoRoot, path, owned) ||
+            isCladeBootstrapDrift(repoRoot, path))))
     )
       restorable.push(path)
     else blocking.push(path)
@@ -670,9 +882,9 @@ export function classifyRestorableDrift(
 }
 
 /**
- * `--restore-projection-drift` 的本體：髒項**全部**是投影漂移（clade-managed 投影、所有權清單內的殘檔
- * 或 tool-managed flip）時，逐檔 `git checkout HEAD --` 還原（index＋worktree 都回 HEAD），untracked 的
- * 清單內殘檔直接移除，並把 `.clade/projections` 清單與磁碟對齊（`reconcileOwnershipLedgers`），exit 0。
+ * `--restore-projection-drift` 的本體：髒項**全部**是投影漂移（clade-managed 投影、所有權清單內的殘檔、
+ * tool-managed flip 或 bootstrap 改寫）時，逐檔 `git checkout HEAD --` 還原（index＋worktree 都回 HEAD），
+ * untracked 的清單內殘檔與只含 clade 條目的 `.pi/settings.json` 直接移除，並把 `.clade/projections` 清單與磁碟對齊（`reconcileOwnershipLedgers`），exit 0。
  * 夾帶任何其它髒項 → 不動任何檔（全有或全無）、stdout 逐行印出擋住的路徑、exit 1；git／還原失敗 exit 2。
  * 還原只是回到 HEAD：投影本來就由 propagate 重生，NEVER 因此丟掉非投影改動。
  */
@@ -804,9 +1016,9 @@ if (invokedAsCli() && process.argv[2] === '--tool-managed-only') {
 if (invokedAsCli() && process.argv[2] === '--restore-tool-managed') {
   process.exit(restoreToolManagedDrift(process.argv[3] || process.cwd(), readFileSync(0, 'utf8')))
 }
-// `--restore-projection-drift <repoRoot>`：stdin 同上；髒項全為 clade-managed 投影、tool-managed flip，
-// 或內容仍是 `.clade/projections` 所有權清單所記的殘檔才處理（見 `restoreProjectionDrift`）：已追蹤的
-// 還原回 HEAD、untracked 的清單內檔案刪除，並同步改寫清單；否則不動任何檔並在 stdout 列出擋住的路徑（exit 1）。
+// `--restore-projection-drift <repoRoot>`：stdin 同上；髒項全為 clade-managed 投影、tool-managed flip、
+// bootstrap 改寫，或內容仍是 `.clade/projections` 所有權清單所記的殘檔才處理（見 `restoreProjectionDrift`）：
+// 已追蹤的還原回 HEAD、untracked 的清單內檔案與只含 clade 條目的 `.pi/settings.json` 刪除，並同步改寫清單；否則不動任何檔並在 stdout 列出擋住的路徑（exit 1）。
 // 舊版對端不認得 flag 時落進預設 CLI、fail-open exit 0 不還原——呼叫端的第二次 porcelain 複核仍會擋下。
 if (invokedAsCli() && process.argv[2] === '--restore-projection-drift') {
   process.exit(restoreProjectionDrift(process.argv[3] || process.cwd(), readFileSync(0, 'utf8')))

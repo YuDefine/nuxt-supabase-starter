@@ -79,7 +79,7 @@ export const RETIRED_CLAUDE_LAUNCHERS: Readonly<Record<string, ClaudePinCommand>
 
 /**
  * 已退役的 config dir basename → 現行 basename。改名前就開著的 session 環境仍帶舊路徑
- * （`~/.claude-work` 現為指向 `.claude-2` 的相容 symlink），帳號歸屬照新目錄算。
+ * （`~/.claude-work` 相容 symlink 已於 2026-11-09 從 desk、zenbook 移除，舊紀錄仍可能帶這個路徑），帳號歸屬照新目錄算。
  */
 export const RETIRED_CLAUDE_CONFIG_DIRS: Readonly<Record<string, string>> = {
   '.claude-work': '.claude-2',

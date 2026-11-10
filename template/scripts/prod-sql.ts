@@ -2152,6 +2152,66 @@ export function readBootstrapConfig(
 }
 
 /**
+ * 健檢用的統計可見度：`agent_ro` 沒有 `pg_read_all_stats`，`pg_stat_activity` 的 state／backend_type 與
+ * `pg_stat_statements` 都看不到。不 GRANT `pg_read_all_stats`（那會讓 `agent_ro` 讀到 `read_schemas`
+ * 外的 query 常值，並要放寬「不得是其他角色成員」不變量），改在 clade 自管的 schema 放 SECURITY
+ * DEFINER 函式，只回 pid／角色／state／時長／等待事件與 queryid／計數／時長，**不回 query 文字**。
+ * schema NEVER 放 `public`（PostgREST 會曝成 RPC）；只授權 `agent_ro`。
+ */
+export const STATS_SCHEMA = 'clade_stats'
+
+function statsSql() {
+  const cols = `SET search_path = pg_catalog, pg_temp`
+  return `DO $stats$
+DECLARE ext_schema text;
+BEGIN
+  IF NOT (SELECT rolsuper FROM pg_roles WHERE rolname = current_user)
+     AND NOT pg_has_role(current_user, 'pg_read_all_stats', 'USAGE') THEN
+    RAISE EXCEPTION '${STATS_SCHEMA}: bootstrap 的 admin 角色 % 不是 superuser 也不是 pg_read_all_stats 成員，函式會讀到 null；授予後重跑', current_user;
+  END IF;
+  CREATE SCHEMA IF NOT EXISTS ${STATS_SCHEMA};
+  CREATE OR REPLACE FUNCTION ${STATS_SCHEMA}.activity()
+    RETURNS TABLE (pid integer, usename name, backend_type text, state text, xact_age interval,
+                   query_age interval, state_age interval, wait_event_type text, wait_event text)
+    LANGUAGE sql STABLE SECURITY DEFINER ${cols}
+    AS $fn$
+      SELECT a.pid, a.usename, a.backend_type, a.state, pg_catalog.now() - a.xact_start,
+             pg_catalog.now() - a.query_start, pg_catalog.now() - a.state_change,
+             a.wait_event_type, a.wait_event
+        FROM pg_catalog.pg_stat_activity a
+    $fn$;
+  SELECT n.nspname INTO ext_schema FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace
+   WHERE e.extname = 'pg_stat_statements';
+  IF ext_schema IS NULL THEN
+    DROP FUNCTION IF EXISTS ${STATS_SCHEMA}.statements();
+    RAISE NOTICE '${STATS_SCHEMA}: 沒有 pg_stat_statements 擴充，不建 statements()';
+  ELSE
+    EXECUTE format($def$
+      CREATE OR REPLACE FUNCTION ${STATS_SCHEMA}.statements()
+        RETURNS TABLE (userid oid, queryid bigint, calls bigint, total_exec_time double precision,
+                       mean_exec_time double precision, rows bigint)
+        LANGUAGE sql STABLE SECURITY DEFINER ${cols}
+        AS $body$
+          SELECT s.userid, s.queryid, s.calls, s.total_exec_time, s.mean_exec_time, s.rows
+            FROM %I.pg_stat_statements s
+           WHERE s.dbid = (SELECT d.oid FROM pg_catalog.pg_database d WHERE d.datname = pg_catalog.current_database())
+        $body$$def$, ext_schema);
+  END IF;
+END $stats$;
+REVOKE ALL ON SCHEMA ${STATS_SCHEMA} FROM PUBLIC;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA ${STATS_SCHEMA} FROM PUBLIC;
+-- 平台角色可能有 default privileges（Supabase 的 anon／authenticated／service_role）
+DO $stats_acl$ DECLARE r text; BEGIN
+  FOR r IN SELECT rolname FROM pg_roles WHERE rolname IN ('anon', 'authenticated', 'service_role') LOOP
+    EXECUTE format('REVOKE ALL ON SCHEMA ${STATS_SCHEMA} FROM %I', r);
+    EXECUTE format('REVOKE ALL ON ALL FUNCTIONS IN SCHEMA ${STATS_SCHEMA} FROM %I', r);
+  END LOOP;
+END $stats_acl$;
+GRANT USAGE ON SCHEMA ${STATS_SCHEMA} TO ${READ_ROLE};
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA ${STATS_SCHEMA} TO ${READ_ROLE};`
+}
+
+/**
  * 建角色的 SQL。整段在一個交易裡，結尾以該角色身分實際嘗試越權（建表、改白名單外的表、對白名單
  * 表新增或刪除），任何一個成功就 RAISE，連同建角色一起回滾。可重跑：角色已存在時重設屬性、授權與密碼。
  * BYPASSRLS：業務表開了 RLS，沒有它角色一列都看不到；它不給寫入權。
@@ -2216,6 +2276,7 @@ DO $connect$ BEGIN
   EXECUTE format('GRANT CONNECT ON DATABASE %I TO ${role}', current_database());
 END $connect$;
 ${grants}
+${role === READ_ROLE ? statsSql() : ''}
 DO $probe$
 DECLARE s text; t regclass; col name; allowed oid[] := ${allowed};
 BEGIN

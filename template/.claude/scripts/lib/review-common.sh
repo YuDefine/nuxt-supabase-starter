@@ -809,7 +809,10 @@ the content in full, including executable code, as a first review. Do not
 report Minor findings.
 PROMPT_BASE_CHECK
     if [ -n "${REVIEW_ROUND_BASE_DRIFT_FILES:-}" ]; then
-      printf 'Group (c) files for this round: %s\n' "$REVIEW_ROUND_BASE_DRIFT_FILES"
+      # 一檔一行：drift／own 檔多時（specs/plans、投影一整批）空白串接會成一條數千字單行，
+      # 超過 CLAUDE_REVIEW_BRIEF_MAX_LINE_CHARS 讓 prepare exit 9。
+      printf 'Group (c) files for this round (one per line):\n'
+      while IFS= read -r _drift_file; do printf -- '- %s\n' "$_drift_file"; done <<<"$REVIEW_ROUND_BASE_DRIFT_FILES"
     fi
   fi
   if [ "${REVIEW_ROUND_KIND:-}" = verify ]; then
@@ -1014,9 +1017,12 @@ review_register_staging_baseline() {
 #   只靠輪號對應會把它的 verdict 記成新 head／新篩選的通過證據——不一致就拒記（exit 2）。
 #   獨立輪（--independent yes，PR 模式）：本 head 已有通過輪（reviewed／covered）時，另開新一輪 kind=independent——
 #     新 reviewer、不帶前輪 findings（findings_from＝null）、審完整 diff（increment_base＝null），受同一輪數上限；
-#     本 head 已有兩個通過輪（含 covered）時照一般判定回 reviewed／covered；本 head 的輪還在審或被擋時照一般判定續跑／回 blocked；
+#     本 head 已有兩個完整審查通過輪（discovery／independent，含 covered 延伸；verify、base-check、無可審檔的輪不算完整審查；
+#     延伸跨過非 merge 程式 commit 的也不算，只動 docs/、plans/、specs/plans/ 底下 .md 的 commit 例外——HQ charter § 放行）時照一般判定回 reviewed／covered；本 head 的輪還在審或被擋時照一般判定續跑／回 blocked；
 #     本 head 還沒通過時不開（回一般判定並帶 independent: 'deferred'）。covered 會把與上一輪同 head 的通過輪都延伸到新 head。
-#   passed --required-passes <N>：本 head 要有 N 個通過輪（含 covered）才算 passed；預設 1＝現行行為。
+#   passed --required-passes <N>：本 head 要有 N 個通過輪（含 covered）才算 passed；預設 1＝現行行為（任何通過輪，含 verify）。
+#     N≥2 時只數完整審查輪（discovery／independent，同 decide 的「兩輪已滿」定義）：verify、base-check、無可審檔、延伸跨過非 merge 程式 commit 的輪不算；carry-over 同。
+#     HQ merge-approve 的輪數門檻讀的就是這條（vendor/scripts/lib/review-rounds-passed.ts），不另寫判定。
 #     通過輪之後同 head 的輪（獨立輪）記了 Critical／Major → passed 為假（vetoed_by），不論 N。
 #     預設不變；高風險 PR 由呼叫端帶 2（範圍見 vendor/scripts/lib/second-pass-pr.ts）。
 # `rounds cover`：判定為 covered 時把 head 記進通過輪的 covered_heads（merge-queue 的 passed 只認記錄）。
@@ -1027,6 +1033,132 @@ REVIEW_MAX_GRANTS_PER_PR=2
 
 review_rounds_dir() {
   printf '%s\n' "${CLADE_REVIEW_ROUNDS_DIR:-${CLADE_DISPATCH_STATE_DIR:-$HOME/.cache/clade/dispatch}/review-rounds}"
+}
+
+# ── rounds 重度子命令的並行上限與孫程序收尾 ──
+# 約束：plan／carry-over 逐檔 patch 比對＋ git grep 很吃 CPU，同時多支會把機器吃滿；呼叫端逾時只殺得到 bash，底下 node／git 會變孤兒。
+#   並行：plan／cover／carry-over 先拿 flock 槽（CLADE_ROUNDS_MAX_PARALLEL，預設 2；排隊最久 CLADE_ROUNDS_SLOT_WAIT_S，預設 20，
+#         須小於呼叫端的 spawn timeout 30s，exit 75 才到得了呼叫端）；
+#         排不到槽 exit 75（EX_TEMPFAIL，stdout 無 JSON）——prepare／merge-queue 這類閘門呼叫端照「判不出」fail-closed；
+#         coordinator-oa-round-cap 的 auto-dispatch 預檢是建議性質（讀不到一律放行，輪數上限由其後的 prepare 判），exit 75 在那裡放行並在 reason 註明。槽是 fd 上的 flock：持有者（含它的子孫）
+#         全死就自動釋放，不留殘鎖。open／passed／show／count 等輕量子命令不排隊。注意互動 0-A prepare 也會先跑 plan／cover（oa-batches 的 roundPlan），
+#         背景 watch 佔滿兩槽超過 SLOT_WAIT_S 時它同樣吃 exit 75（稍後重跑即可）；只有 open 之後的步驟不受背景負載影響。
+#   收尾：node 子程序留在呼叫者的 process group 裡（NEVER setsid），另起一個 watchdog 盯著 (a) 本 shell (b) CLADE_ROUNDS_OWNER_PID
+#         （呼叫者自報的 pid，watch 帶自己的）：任一死亡就把 node 的整棵子孫樹收掉；本 shell 收到 TERM／INT／HUP（呼叫端 timeout）也收樹。
+REVIEW_ROUNDS_HEAVY_CMDS=" plan cover carry-over "
+
+review_rounds_is_heavy() {
+  case "$REVIEW_ROUNDS_HEAVY_CMDS" in *" $1 "*) return 0 ;; esac
+  return 1
+}
+
+# 印出 $1 的所有子孫 pid（深的在前）。
+review_rounds_descendants() {
+  local child
+  for child in $(pgrep -P "$1" 2>/dev/null); do
+    review_rounds_descendants "$child"
+    printf '%s\n' "$child"
+  done
+}
+
+# 收掉 $1 與它的整棵子孫：先 TERM，等一下仍活著的 KILL。
+review_rounds_kill_tree() {
+  local pids pid alive=""
+  pids="$(review_rounds_descendants "$1") $1"
+  for pid in $pids; do kill -TERM "$pid" 2>/dev/null || true; done
+  sleep 1
+  for pid in $pids; do kill -0 "$pid" 2>/dev/null && alive="$alive $pid"; done
+  for pid in $alive; do kill -KILL "$pid" 2>/dev/null || true; done
+  return 0
+}
+
+# 印出一個目前沒開的 fd 編號（100 起）。bash 3.2（macOS 預設）沒有 `exec {var}>` 的自動配 fd 語法，只能自己挑編號。
+review_rounds_free_fd() {
+  local n=100
+  while [ "$n" -lt 256 ]; do
+    if ! { true <&"$n"; } 2>/dev/null; then printf '%s\n' "$n"; return 0; fi
+    n=$((n + 1))
+  done
+  return 1
+}
+
+# 取並行槽。成功時槽 fd 存在 REVIEW_ROUNDS_SLOT_FD，只由本 shell 握著（review_rounds_guarded 對被跑的命令與 watchdog 關掉它：
+# 不被 daemon 化的孫程序繼承，槽隨本 shell 結束釋放）；
+# 沒有 flock 指令或槽目錄建不起來 → 不設上限（可用性優先，只失去限流）；排隊逾時回 1。
+# 不用 `exec {fd}>` 與 `$BASHPID`（bash 4+ 語法）：macOS 預設 bash 3.2 要能跑。
+review_rounds_acquire_slot() {
+  REVIEW_ROUNDS_SLOT_FD=""
+  command -v flock >/dev/null 2>&1 || return 0
+  local max="${CLADE_ROUNDS_MAX_PARALLEL:-2}" wait_s="${CLADE_ROUNDS_SLOT_WAIT_S:-20}" dir i fd deadline
+  case "$max" in ''|*[!0-9]*|0) max=2 ;; esac
+  case "$wait_s" in ''|*[!0-9]*) wait_s=20 ;; esac
+  dir="$(review_rounds_dir)/.slots"
+  mkdir -p "$dir" 2>/dev/null || return 0
+  deadline=$((SECONDS + wait_s))
+  while :; do
+    i=0
+    while [ "$i" -lt "$max" ]; do
+      # 2>/dev/null 要包在群組上：直接寫在無命令的 exec 後面會讓 shell 的 stderr 永久被導掉
+      fd="$(review_rounds_free_fd)" || return 0
+      if eval "exec $fd"'>"$dir/slot-$i.lock"' 2>/dev/null; then
+        if flock -n "$fd" 2>/dev/null; then
+          REVIEW_ROUNDS_SLOT_FD="$fd"
+          return 0
+        fi
+        eval "exec $fd>&-"
+      fi
+      i=$((i + 1))
+    done
+    [ "$SECONDS" -ge "$deadline" ] && return 1
+    sleep 0.5
+  done
+}
+
+# review_rounds_guarded <heavy 0|1> <command...> — 重度的先排隊取槽，再於 watchdog＋信號收尾下跑命令；回傳命令的 exit code。
+review_rounds_guarded() {
+  local heavy="$1"
+  shift
+  if [ "$heavy" = 1 ]; then
+    if ! review_rounds_acquire_slot; then
+      echo "[${REVIEW_SAFE_TAG:-claude-review-safe}] rounds 並行上限 ${CLADE_ROUNDS_MAX_PARALLEL:-2} 排隊逾 ${CLADE_ROUNDS_SLOT_WAIT_S:-20}s 仍沒有空槽（exit 75）：稍後重跑；呼叫端 MUST 當成判不出（fail-closed）" >&2
+      return 75
+    fi
+  fi
+  local me owner="${CLADE_ROUNDS_OWNER_PID:-}" npid wd rc=0 saved
+  # 本 shell（含 `$(...)` 子 shell）自己的 pid。`$BASHPID` 是 bash 4+ 才有，macOS 的 bash 3.2 取不到：
+  # `$(exec sh -c ...)` 的子 shell 直接換成 sh，sh 的 PPID 就是本 shell。
+  me="$(exec sh -c 'echo $PPID' 2>/dev/null)"
+  me="${me:-$$}"
+  saved="$(trap -p TERM INT HUP)"
+  if [ -n "${REVIEW_ROUNDS_SLOT_FD:-}" ]; then
+    # 被跑的命令不繼承槽 fd：它（或它 daemon 化的孫程序）不該把槽握到自己結束
+    eval '"$@" '"${REVIEW_ROUNDS_SLOT_FD}"'>&- &'
+  else
+    "$@" &
+  fi
+  npid=$!
+  (
+    # 不繼承並行槽的 fd：否則 kill 掉 watchdog 後它的 sleep 會再佔著槽最多 1 秒
+    [ -n "${REVIEW_ROUNDS_SLOT_FD:-}" ] && eval "exec ${REVIEW_ROUNDS_SLOT_FD}>&-"
+    while kill -0 "$npid" 2>/dev/null; do
+      if ! kill -0 "$me" 2>/dev/null || { [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; }; then
+        review_rounds_kill_tree "$npid"
+        exit 0
+      fi
+      sleep 1
+    done
+  ) </dev/null >/dev/null 2>&1 &
+  wd=$!
+  trap 'review_rounds_kill_tree "$npid"; kill "$wd" 2>/dev/null; trap - TERM INT HUP; eval "$saved"; kill -TERM "$me"; exit 143' TERM INT HUP
+  wait "$npid" || rc=$?
+  { kill "$wd" && wait "$wd"; } 2>/dev/null || true
+  trap - TERM INT HUP
+  [ -n "$saved" ] && eval "$saved"
+  if [ -n "${REVIEW_ROUNDS_SLOT_FD:-}" ]; then
+    eval "exec ${REVIEW_ROUNDS_SLOT_FD}>&-"
+    REVIEW_ROUNDS_SLOT_FD=""
+  fi
+  return "$rc"
 }
 
 # review_rounds <plan|open|cover|record|passed|carry-over|show|count|recount|grant|findings|adjudicate> [--flag value ...] → stdout JSON（exit 0），用法錯誤 exit 2
@@ -1045,7 +1177,9 @@ review_rounds() {
     echo "  → cd 到要審的 repo（或其 worktree）後重跑；或在子命令後加 --repo-root <repo 路徑>" >&2
     return 2
   fi
-  "$node_bin" --input-type=module -e "$REVIEW_ROUNDS_JS" "$(review_rounds_dir)" "$REVIEW_MAX_ROUNDS" "$(dirname -- "${BASH_SOURCE[0]}")/review-verdict.ts" "$REVIEW_MAX_GRANTS_PER_PR" "$@"
+  local heavy=0
+  review_rounds_is_heavy "${1:-}" && heavy=1
+  review_rounds_guarded "$heavy" "$node_bin" --input-type=module -e "$REVIEW_ROUNDS_JS" "$(review_rounds_dir)" "$REVIEW_MAX_ROUNDS" "$(dirname -- "${BASH_SOURCE[0]}")/review-verdict.ts" "$REVIEW_MAX_GRANTS_PER_PR" "$@"
 }
 
 # review_rounds_node：印出能直接 import .ts 的 node 路徑（type stripping：v22.18+／v23.6+／v24）。
@@ -1065,10 +1199,12 @@ review_rounds_node() {
   return 2
 }
 
-REVIEW_ROUNDS_JS="$(cat <<'JS'
+# 不用 `X="$(cat <<'JS' …)"`：macOS bash 3.2 解析 $() 內的 heredoc 時會被本文裡不成對的反引號／引號弄壞（整份檔 syntax error），
+# 改成 `read -d ''` 直接讀 heredoc（read 在 EOF 回 1，`|| true` 吃掉）。
+IFS= read -r -d '' REVIEW_ROUNDS_JS <<'JS' || true
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
-import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -1155,7 +1291,21 @@ function ledgerPath() {
 }
 function load(path) {
   if (!existsSync(path)) return { version: 1, rounds: [] }
-  return JSON.parse(readFileSync(path, 'utf8'))
+  const ledger = JSON.parse(readFileSync(path, 'utf8'))
+  deriveHeldAdjudications(ledger)
+  return ledger
+}
+// 讀取時補標：裁決早於這個版本寫入、或 held 複本先於裁決建立（adjudicate 當下傳遞不到的舊 ledger）時，
+// 每次 load 都沿 held 複本自己的來源鏈（heldRuling）回頭找裁決，找到的標 adjudicated（derived: true 記是讀取時推導）。
+// 只改記憶體：唯讀指令（passed／findings／show）直接得到重算結果，之後任何寫入指令 save 時一併落盤。按 round.pr 嚴格分組，
+// 沒帶 pr 的輪只與同樣沒帶 pr 的輪互認，NEVER 跨 PR。
+function deriveHeldAdjudications(ledger) {
+  const groups = new Map()
+  for (const r of ledger.rounds ?? []) groups.set(String(r.pr ?? ''), [...(groups.get(String(r.pr ?? '')) ?? []), r])
+  for (const pool of groups.values()) {
+    pool.sort((x, y) => x.n - y.n)
+    for (const r of pool) markHeldAdjudicated(pool, r, r.findings_held ?? [], { derived: true })
+  }
 }
 function save(path, ledger) {
   writeFileSync(`${path}.tmp`, `${JSON.stringify(ledger, null, 2)}\n`)
@@ -1230,10 +1380,12 @@ function roundState(round) {
   const adjudicated = verdicts.reduce((n, p) => n + adjudicatedMajors(round, p), 0)
   // 續帶 held（上輪未解、檔未改）的 Critical／Major 照計：沒有 reviewer 清掉就不能靠「沒再審那檔」放行。
   const held = verdicts.length ? heldOpen(round).filter((h) => h.severity !== 'minor').length : 0
+  // 從更早輪的裁決傳遞來解除的 held（h.adjudicated 記來源）：不計入 blocking，但「這輪是靠裁決才過」要看得見（carry-over 拒絕沿用）。
+  const heldAdjudicated = verdicts.length ? (round.findings_held ?? []).filter((h) => h.adjudicated && h.severity !== 'minor').length : 0
   const blocking = rawBlocking - adjudicated + held
   const complete = verdicts.length > 0 && verdicts.length >= (round.part_total ?? 1)
   const partial = Boolean(round.filter)
-  return { hasVerdict: verdicts.length > 0, complete, blocking, raw_blocking: rawBlocking, adjudicated, held_blocking: held, partial,
+  return { hasVerdict: verdicts.length > 0, complete, blocking, raw_blocking: rawBlocking, adjudicated, held_blocking: held, held_adjudicated: heldAdjudicated, partial,
     passed: complete && blocking === 0 && !partial }
 }
 // 這一輪算不算已用：收齊 verdict，或已記的批有 Critical／Major（部分輪的阻擋 finding 不能靠換 head 重開抹掉）。
@@ -1434,6 +1586,8 @@ function moduleStems(path) {
 // 沿 `export … from` 鏈往上追（每一層的 stem 再去找轉出它的檔），有深度與檔數上限，到上限就停——多收只會多審。
 const BARREL_DEPTH = 6
 const BARREL_CODE = /\.[cm]?[jt]sx?$/
+// 通用字以呼叫形狀算引用時只看程式檔（文件、JSON 裡的 `main(argv, io)` 是散文）。
+const REF_CODE = /\.(?:[cm]?[jt]sx?|vue|svelte|astro)$/
 function barrelStems(base, file, cache) {
   if (cache.has(file)) return cache.get(file)
   const out = new Set(moduleStems(file))
@@ -1463,8 +1617,63 @@ function barrelStems(base, file, cache) {
   cache.set(file, out)
   return out
 }
+// 結果快取：patch-id／審查範圍是 (commit, merge-base) 的純函數，watch 每輪、每張 PR 都重算會把 git grep 疊到 CPU 見頂。
+// 檔案放 ledger 目錄旁的 `.cache/`（只新增、不動既有 ledger；讀 ledger 的人只認 24 hex .json）。key 一律含 head 與 merge-base（或 base），
+// 內容再自證一次——base 前移（merge-base 變）key 就變，NEVER 只用 head 當鍵沿用到舊 base 的結果。壞檔／寫不進去一律當沒有快取。
+const CACHE_DIR = join(dir, '.cache')
+const CACHE_SHA = /^[0-9a-f]{7,64}$/
+function cacheRead(name, shas) {
+  if (!shas.every((x) => CACHE_SHA.test(x))) return undefined
+  try {
+    const c = JSON.parse(readFileSync(join(CACHE_DIR, `${name}-v1-${shas.join('-')}.json`), 'utf8'))
+    return c && JSON.stringify(c.key) === JSON.stringify(shas) ? c.value : undefined
+  } catch { return undefined }
+}
+// 快取只加不減會在使用者全域的 rounds 目錄無限長大：寫入時順手清掉超過 14 天沒更新的檔（key 含 head，舊 head 的結果不會再被讀；清不掉只是留著）。
+const CACHE_TTL_MS = 14 * 24 * 3600 * 1000
+function cachePrune() {
+  try {
+    const now = Date.now()
+    for (const f of readdirSync(CACHE_DIR)) {
+      if (!f.endsWith('.json') && !f.endsWith('.tmp')) continue
+      try { if (now - statSync(join(CACHE_DIR, f)).mtimeMs > CACHE_TTL_MS) rmSync(join(CACHE_DIR, f), { force: true }) } catch {}
+    }
+  } catch {}
+}
+function cacheWrite(name, shas, value) {
+  if (!shas.every((x) => CACHE_SHA.test(x))) return
+  try {
+    mkdirSync(CACHE_DIR, { recursive: true })
+    cachePrune()
+    const file = join(CACHE_DIR, `${name}-v1-${shas.join('-')}.json`)
+    writeFileSync(`${file}.${process.pid}.tmp`, JSON.stringify({ key: shas, value }))
+    renameSync(`${file}.${process.pid}.tmp`, file)
+  } catch {}
+}
+// base-check 範圍的算法版本：開輪時記進 round（base_scope_rev）。舊版算的、還沒有任何 verdict 的 base-check 輪在下次判定時重開，
+// 不沿用舊範圍與合成基準（#3339 round 5：舊算法 refs 1020 檔、94 批全 prepared、0 verdict）。改 baseCheckScope 的判定就遞增。
+const BASE_SCOPE_REV = 2
 // base-check 的審查範圍：{ pr: PR 改過且 main 也動過的檔, refs: main 動過、不在 PR 內、新增行引用 PR export 的檔 }。
+// 快取鍵＝(上一輪 base, 本輪 base, head, 演算法與投影清單的內容雜湊)：投影判定來源（locked-projection.ts 的位元組）或本段演算法
+// （下列函式的原始碼、REF_GENERIC_FILES）一變，key 就變，舊範圍不會被沿用（沿用會把該重審的檔漏掉）。
+function scopeAlgoDigest() {
+  const h = createHash('sha256')
+  // 範圍判定走到的每個函式與常數都要進雜湊（漏一個＝改了它舊範圍照樣命中快取，把該重審的檔漏掉）；BASE_SCOPE_REV 也在內：遞增它就是要讓舊 key 失效。
+  for (const f of [baseCheckScopeUncached, fileBlocks, prExports, exportNames, moduleStems, barrelStems, patchExcluded, escapeRe, gitRaw]) h.update(String(f)).update('\0')
+  for (const v of [REF_GENERIC_FILES, BARREL_DEPTH, BASE_SCOPE_REV, REF_CODE, BARREL_CODE, EXPORT_DECL, EXPORT_LIST, IDENT]) h.update(String(v)).update('\0')
+  try { h.update(readFileSync(join(process.env.CLADE_HOME ?? '', 'vendor', 'scripts', 'locked-projection.ts'))) } catch { h.update('no-projection') }
+  return h.digest('hex').slice(0, 12)
+}
 function baseCheckScope(lastBase, base, head) {
+  const keys = [lastBase, base, head]
+  const tagged = [...keys, scopeAlgoDigest()]
+  const hit = cacheRead('scope', tagged)
+  if (hit) return hit
+  const out = baseCheckScopeUncached(lastBase, base, head)
+  cacheWrite('scope', tagged, out)
+  return out
+}
+function baseCheckScopeUncached(lastBase, base, head) {
   const prBlocks = fileBlocks(base, head)
   const prFiles = new Set([...prBlocks.keys()].filter((p) => !patchExcluded(p)))
   const mainBlocks = fileBlocks(lastBase, base)
@@ -1487,13 +1696,29 @@ function baseCheckScope(lastBase, base, head) {
   const references = (p, n, added) => {
     const files = exporters.get(n)
     const id = escapeRe(n)
-    // 以呼叫形狀（`名稱(`、`名稱<`，含 `ns.名稱(`）用到；`function 名稱(` 是宣告不算。不看路徑，barrel 怎麼轉出都不影響。
-    if (new RegExp(`(?<!function\\s*\\*?\\s*)(?<![\\w$])${id}\\s*[(<]`).test(added)) return true
     try {
       const text = gitRaw(['show', `${base}:${p}`])
-      // 名稱被 import 子句綁定（`import { n }`、`import n`、`import { x as n }`，任何路徑，含多行）。
-      if (new RegExp(`\\bimport\\b[^;'"\`]*(?<![\\w$])${id}(?![\\w$])[^;'"\`]*\\bfrom\\b`).test(text)) return true
-      return [...files].some((f) => [...barrelStems(base, f, barrelCache)].some((stem) => text.includes(stem)))
+      const stems = new Set([...files].flatMap((f) => [...barrelStems(base, f, barrelCache)]))
+      // (1) 模組指定位置（`from '…/stem'`、`import('…/stem.ts')`、`require('…/stem/index')`）提到匯出檔的模組名／資料夾名（含 barrel 鏈）。
+      // 只看字面會被資料夾名撞滿：PR 改 scripts/dev-node.ts，`scripts` 幾乎每個檔都提到（文件裡的 `vendor/scripts` 也算），#3339 refs 因此膨脹到 1020 檔。
+      const spec = (stem) => new RegExp(`(?:\\bfrom|\\bimport|\\brequire)\\s*\\(?\\s*['"\`]([^'"\`\\n]*/)?${escapeRe(stem)}(\\.[cm]?[jt]sx?)?(/index(\\.[cm]?[jt]sx?)?)?['"\`]`)
+      if ([...stems].some((stem) => spec(stem).test(text))) return true
+      // (2) import 子句綁定該名稱（`import { n }`、`import n`、`import { n as x }`、`import * as n`，含多行）：任何路徑都算（barrel 可能寫根路徑 `'~'`），
+      // 只有明確從另一個檔匯入（路徑帶副檔名、檔名不是匯出檔的模組名）才不算，例如 `import { main } from '../vendor/scripts/mq-lockd.ts'`。
+      // 只認子句結構：先前用 `import[^;'"]*n[^;'"]*from` 會跨行，無分號的程式與文件散文裡任一段 import…n…from 都中。
+      let foreign = false
+      for (const m of text.matchAll(/\bimport\s+(?:type\s+)?([\w$\s,{}*]+?)\s*\bfrom\s*['"`]([^'"`\n]*)['"`]/g)) {
+        if (!new RegExp(`(?<![\\w$])${id}(?![\\w$])`).test(m[1])) continue
+        const stem = m[2].split('/').pop().replace(/\.[cm]?[jt]sx?$/, '')
+        if (!/\.[cm]?[jt]sx?$/.test(m[2]) || stems.has(stem)) return true
+        foreign = true
+      }
+      // (3) 以呼叫形狀（`名稱(`、`名稱<T>(`，含 `ns.名稱(`）用到：auto-import 匯出沒有 import，只能看用法。只看程式檔；
+      // 該檔自己宣告了同名（`function main`、`const main`、`const { main } = await import(…)`、`def main`、`fn main`、shell 的 `main() {`）或從別的檔匯入同名時，呼叫指向那個定義：
+      // 每支腳本結尾的 `main()` 不是引用 PR 的 `main`（#3339：PR 改 scripts/ci-job-hours.ts，main 命中 1070 檔，219 檔靠這條進 refs）。
+      if (foreign || !REF_CODE.test(p)) return false
+      const local = new RegExp(`(?:\\b(?:function\\s*\\*?|const|let|var|class|def|fn|func)\\s+${id}(?![\\w$]))|(?:\\b(?:const|let|var)\\s*\\{[^}]*(?<![\\w$])${id}(?![\\w$])[^}]*\\}\\s*=)|(?:^|\\n)[ \\t]*${id}[ \\t]*\\([ \\t]*\\)[ \\t]*\\{`)
+      return !local.test(text) && new RegExp(`(?<!function\\s*\\*?\\s*)(?<![\\w$])${id}(?:<[^<>\\n]*>)?\\(`).test(added)
     } catch {
       return true // 讀不到該檔：fail-closed，留在 refs
     }
@@ -1537,7 +1762,7 @@ function rebasedBasis(prev, base, head) {
     return null
   }
 }
-const scopeList = (s) => [...s.pr, ...s.refs, ...(s.drift ?? []), ...(s.own ?? [])]
+const scopeList = (s) => [...new Set([...s.pr, ...s.refs, ...(s.drift ?? []), ...(s.own ?? [])])]
 // 上限比的是「計數輪」數：base-check 輪有輪號、留在 ledger，但不吃上限。
 function countedRounds(rounds) {
   return rounds.filter((r) => r.kind !== 'base-check').length
@@ -1549,8 +1774,90 @@ function withCounted(d, ledger) {
   return { ...d, counted_round: countedRounds(scoped(ledger).filter((r) => r.n < d.round)) + 1 }
 }
 
+// 完整 diff 審查輪（discovery／independent、審 base→head、非無可審檔）：verify（只審增量）、base-check（只審 main 交會檔）、
+// 無可審檔的輪都不是對本 head 的完整審查。decide 的「兩輪已滿」、rounds passed／carry-over 的 --required-passes 共用這一個定義，NEVER 各寫一份。
+function isFullReviewRound(r) {
+  return Boolean(r) && (r.kind === 'discovery' || r.kind === 'independent') && !r.increment_base && !r.no_reviewable
+}
+// --required-passes 的計數：要求 ≥2 輪時只數完整審查輪（否則高風險 PR 靠 verify＋base-check 湊數就放行，只經一次完整審查）；
+// 預設 1 維持「任何通過輪都放行」——fix commit 本來就靠 verify 輪過關。
+function countsForRequired(r, required, head) {
+  return required < 2 || countsAsFullAt(r, head)
+}
+// HQ charter § 放行：最後一個非 merge commit 之後要有完整審查，只靠 covered 把完整輪延伸過 PR 自身小修補不算。
+// 例外：增量只動 docs/、plans/、specs/plans/ 底下的 .md。路徑只認 repo 根起算：skill 目錄裡的 docs/*.md 是給 agent 的指令，不是筆記。
+// 要 N 個完整輪「全部」在最後一個程式 commit 之後（不是 charter 的最低限度「至少一輪」）：--required-passes N 買的是 N 份獨立意見都審過最終程式，舊版上的輪不能頂替。
+const REVIEW_EXEMPT_PATH = /^(?:docs|plans|specs\/plans)\/.*\.md$/
+const FETCH_TIMEOUT_MS = Number(process.env.CLADE_REVIEW_FETCH_TIMEOUT_MS || 20_000)
+const BASE_REF = opt['base-ref'] || 'origin/main'
+const crossMemo = new Map()
+function baseRefTip() {
+  try { return gitRaw(['rev-parse', '--verify', '-q', `${BASE_REF}^{commit}`]).trim() || null } catch { return null }
+}
+// 完整審查輪 r 能否算成 head 上的完整審查：decide 的「兩輪已滿」、rounds passed、carry-over 共用這一個判定，NEVER 各寫一份。
+function countsAsFullAt(r, head) {
+  return isFullReviewRound(r) && !crossesCodeCommit(r, head)
+}
+function crossesCodeCommit(r, head) {
+  if (r.head === head) return false
+  const key = `${r.base}:${r.head}:${head}`
+  if (!crossMemo.has(key)) crossMemo.set(key, computeCrossesCode(r, head))
+  return crossMemo.get(key)
+}
+// r.head→head 之間有沒有 PR 自己的非 merge 程式 commit。判不出（物件缺、git 失敗）一律當有（fail-closed：多審一輪，不少審）。
+function computeCrossesCode(r, head) {
+  if (!opt['repo-root']) return true
+  try {
+    let ancestor = false
+    try {
+      gitRaw(['merge-base', '--is-ancestor', r.head, head])
+      ancestor = true
+    } catch {}
+    if (ancestor) {
+      // 第一 parent 鏈上的非 merge commit 一律是 PR 自己的；merge 帶進來的第二 parent 以後的 commit，只有 base 可到達（merge main）才不算，
+      // 其餘（merge 別的分支、peer 推的修補被 pull --no-rebase 併進來）照算。base 解不出來就當跨過。
+      const range = [head, `^${r.head}`]
+      const names = (a) => gitRaw(['-c', 'core.quotepath=off', 'log', '--no-merges', '--no-renames', '--format=', '--name-only', ...a]).split('\n').filter(Boolean)
+      const paths = names(['--first-parent', ...range])
+      const merges = gitRaw(['log', '--first-parent', '--merges', '--format=%H', ...range]).split('\n').filter(Boolean)
+      if (merges.length) {
+        const ref = baseRefTip()
+        if (!ref) return true
+        for (const m of merges) paths.push(...names([m, `^${m}^1`, `^${ref}`]))
+      }
+      return paths.some((p) => !REVIEW_EXEMPT_PATH.test(p))
+    }
+    // rebase／amend：commit 都重寫過，走不到 r.head，改比 PR 自身 patch（投影與 specs/plans 的 drift 也要過例外）
+    const base = opt.base || git(['merge-base', BASE_REF, head])
+    if (!r.base || !base) return true
+    const cmp = patchCompare(r.base, r.head, base, head)
+    return !cmp || [...cmp.own, ...cmp.drift].some((p) => !REVIEW_EXEMPT_PATH.test(p))
+  } catch {
+    return true
+  }
+}
+// 物件不在本機就試著 fetch；有 timeout，NEVER 在 ledger 鎖內跑（鎖逾 LOCK_STALE_MS 會被別的寫入者視為殘留而搶走）。
+function fetchIfMissing(sha) {
+  if (!opt['repo-root'] || commitExists(sha)) return
+  try { execFileSync('git', ['fetch', '--quiet', 'origin', sha], { cwd: need('repo-root'), stdio: 'ignore', timeout: FETCH_TIMEOUT_MS }) } catch {}
+}
+// 唯讀入口（鎖外）先補物件：HQ 從 main checkout 問 PR head 時，別的機器推的 commit 不一定在本機，算不出會誤判成跨過程式 commit。
+const refreshed = new Set()
+function fetchExtensionCommits(rounds, head, required) {
+  if (required < 2) return
+  const shas = new Set(rounds.filter((r) => r.head !== head && isFullReviewRound(r) && roundState(r).passed).flatMap((r) => [r.head, head]))
+  if (!shas.size) return
+  for (const sha of shas) fetchIfMissing(sha)
+  // peer 的 origin/main 可能舊：merge main 的 commit 與 rebase 路徑的 merge-base 都靠它，舊了會把 main 的改動誤算成 PR 自己的
+  const m = /^origin\/(.+)$/.exec(BASE_REF)
+  if (m && opt['repo-root'] && !refreshed.has(BASE_REF)) {
+    refreshed.add(BASE_REF)
+    try { execFileSync('git', ['fetch', '--quiet', 'origin', m[1]], { cwd: need('repo-root'), stdio: 'ignore', timeout: FETCH_TIMEOUT_MS }) } catch {}
+  }
+}
 // decide：plan 與 open 共用；open 另外把決定寫回 ledger。
-// --independent：本 head 已有通過輪（含 covered）但不足兩輪時改開獨立輪；已有兩個通過輪、或本 head 的輪還沒通過時照一般判定。
+// --independent：本 head 已有通過輪（含 covered）但完整審查輪不足兩輪時改開獨立輪；
+// 已有兩個完整審查通過輪（verify、base-check、無可審檔的輪不算）、或本 head 的輪還沒通過時照一般判定。
 function passingRounds(rounds, head) {
   return rounds.filter((r) => roundState(r).passed && (r.head === head || (r.covered_heads ?? []).includes(head)))
 }
@@ -1563,18 +1870,72 @@ function decide(ledger) {
   if (last?.head === d.head && !roundState(last).passed) return last.kind === 'independent' ? d : { ...d, independent: 'deferred' }
   // 本 head 的通過輪：已記錄的，加上這次 covered 會延伸過來的（d.covers）
   const passes = new Set([...passingRounds(rounds, d.head).map((r) => r.n), ...(d.action === 'covered' ? d.covers ?? [] : [])])
-  if (passes.size >= 2) return d
   if (!passes.size) return { ...d, independent: 'deferred' }
+  // 「兩輪已滿」只數算得上本 head 完整審查的輪（countsAsFullAt），湊滿 verify／base-check、或跨過程式 commit 延伸來的輪都不能擋掉明確要求的獨立輪。
+  // 已有兩個完整審查通過輪：--independent 明示也不另開（第三輪沒有證據價值），但要說出是哪兩輪，免得被當成靜默短路
+  const fullPasses = [...passes].filter((n) => countsAsFullAt(rounds.find((x) => x.n === n), d.head)).toSorted((a, b) => a - b)
+  if (fullPasses.length >= 2) return { ...d, independent: 'satisfied', independent_passes: fullPasses }
   const n = last.n + 1
   const max = maxRounds(ledger)
   if (countedRounds(rounds) + 1 > max)
     return { ...d, action: 'refuse', round: n, last_round: last.n, last_blocking: 0, grant_command: grantCommand(),
-      reason: `獨立輪 round ${n} 超過上限 ${max}（本 head 已由 round ${[...passes].join('、')} 通過）` }
+      reason: `獨立輪 round ${n} 超過上限 ${max}（本 head 通過輪 ${[...passes].join('、')}，其中算完整審查的 ${fullPasses.length ? fullPasses.map((x) => `round ${x}`).join('、') : '0 輪'}；verify／base-check／無可審檔／跨過程式 commit 的延伸不算）` }
   // covered 判定延伸過來的通過輪在開獨立輪時一併記進 covered_heads：不記的話獨立輪通過後本 head 仍只有一個通過輪
   return { max_rounds: max, part: d.part, head: d.head, filter: d.filter, action: 'review', round: n, kind: 'independent',
     counted_round: countedRounds(rounds) + 1,
     reuse: false, increment_base: null, findings_from: null, independent_of: d.round,
     ...(d.action === 'covered' ? { covers: d.covers } : {}) }
+}
+const commitExists = (sha) => {
+  try {
+    gitRaw(['cat-file', '-e', `${sha}^{commit}`])
+    return true
+  } catch {
+    return false
+  }
+}
+// 續跑同 head 的輪時，紀錄的 increment_base 可能用不了：合成 commit 只在開輪那台有物件（ledger 拉到 peer 就是 bad object），
+// 或 base-check 範圍是舊算法算的。合成是確定性的（固定身分／時間），所以在本機照同一份輸入重算：
+//   - 重算得到同一個 sha → 物件補齊在本機，照原輪續跑；
+//   - 沒有任何 verdict 的輪 → 以重算結果同輪號重開（restart）；
+//   - 已有 verdict 卻重算不出同一個 sha → blocked（verdict 是對另一個基準審的，不能混）。
+// 基準缺物件又重算不出來 → blocked（說清楚缺什麼，不讓後面撞 bad object）；只是範圍版本舊而重算不出來 → 照紀錄走。
+function staleBasis(ledger, last, base_, decideAgain) {
+  const missing = Boolean(last.increment_base) && !commitExists(last.increment_base)
+  const staleRev = last.kind === 'base-check' && last.base_scope_rev !== BASE_SCOPE_REV
+  if (!missing && !staleRev) return null
+  const hasVerdict = Object.values(last.parts ?? {}).some((p) => p.status === 'verdict')
+  if (staleRev && !missing && hasVerdict) return null
+  let fresh
+  try {
+    fresh = decideAgain({ ...ledger, rounds: ledger.rounds.filter((r) => r !== last) })
+  } catch {
+    fresh = null
+  }
+  const same = fresh && fresh.action === 'review' && fresh.round === last.n && fresh.kind === last.kind && fresh.increment_base
+  if (!same)
+    // 基準缺物件又重算不出來（上一輪的 head／base 物件也不在本機）：往下開審只會在建快照時撞 bad object，這裡先說清楚
+    return missing
+      ? { ...base_, action: 'blocked', round: last.n, blocking: 0,
+        reason: `round ${last.n} 的合成基準 ${String(last.increment_base).slice(0, 9)} 在本機沒有物件，也無法在本機重算（缺上一輪的 head／base 物件）：先 git fetch 這張 PR 各輪的 head 與 base 再重跑` }
+      // 只是範圍版本舊、還沒 verdict，新算法下這輪已不需要審（範圍收窄到空而 covered 等）：照新判定走，不續跑舊的膨脹範圍
+      : fresh && fresh.action !== 'review' && fresh.action !== 'blocked' ? fresh : null
+  if (fresh.increment_base === last.increment_base && !(staleRev && !hasVerdict)) return null
+  if (hasVerdict)
+    return { ...base_, action: 'blocked', round: last.n, blocking: 0,
+      reason: `round ${last.n} 的合成基準 ${String(last.increment_base).slice(0, 9)} 在本機沒有物件，重算得到 ${fresh.increment_base.slice(0, 9)}（範圍或 git 版本不同）；該輪已有 verdict 是對舊基準審的，不混用——回開輪那台續審，或 push 新 head 重開` }
+  return { ...fresh, restart: true }
+}
+// 「不需再審」類判定（reviewed／covered）的提示：印出本 head 的完整通過輪數 N（discovery／independent，含 covered 延伸；
+// verify、base-check、無可審檔的輪不算，同 decide 的「兩輪已滿」定義）。N<2 時 queue 對高風險 PR 要的 2 個 counted 輪還沒湊滿，
+// 但這兩種判定都不會自己再開輪——提示下一步 --independent yes（只在 N<2 才開得出來）；N≥2 不提示。只改提示，NEVER 在這裡改 action。
+// target：covered 判定時是要延伸到的新 head（anchor 是通過輪所在的舊 head），輪數要照新 head 算才與 --independent 的判定一致。
+function independentHint(rounds, head, target = head) {
+  if (opt.mode !== 'pr') return ''
+  const full = passingRounds(rounds, head).filter((r) => countsAsFullAt(r, target)).length
+  const count = `；本 head 完整通過輪 ${full}（含 covered 延伸）`
+  if (full >= 2) return count
+  return `${count}，不到 2 輪：若 queue 對本 PR 要 2 輪（高風險），另開獨立輪＝oa-batches.ts prepare ${PR_NO ?? '<pr>'} --independent（rounds／wrapper 層 --independent yes）`
 }
 function decideRound(ledger) {
   const head = need('head')
@@ -1598,6 +1959,7 @@ function decideRound(ledger) {
     const reopen = ((headChanged || filterChanged) && !consumed(st))
       || (headChanged && st.passed && last.no_reviewable)
       || (!headChanged && filterChanged && st.blocking === 0)
+      || (!headChanged && !filterChanged && !st.hasVerdict && (last.base_scope_rev ?? 1) !== BASE_SCOPE_REV)
     if (reopen) {
       const d = decideRound({ ...ledger, rounds: ledger.rounds.filter((r) => r !== last) })
       return d.action === 'review' && d.round === last.n ? { ...d, restart: true } : d
@@ -1619,7 +1981,7 @@ function decideRound(ledger) {
           reason: `round ${last.n} 在此 head 只審了篩選子集（${last.filter}），Critical＋Major＝0 但不是整輪證據——不帶 --include／--exclude 重跑 prepare 補完整輪，merge-queue 才認` }
       if (state.passed)
         return { ...base_, action: 'reviewed', round: last.n,
-          reason: `round ${last.n} 已對此 head 收齊 verdict 且 Critical＋Major＝0${state.adjudicated ? `（原始 ${state.raw_blocking} 條，其中 ${state.adjudicated} 條 Major 已裁決為 false-positive）` : ''}` }
+          reason: `round ${last.n} 已對此 head 收齊 verdict 且 Critical＋Major＝0${state.adjudicated ? `（原始 ${state.raw_blocking} 條，其中 ${state.adjudicated} 條 Major 已裁決為 false-positive）` : ''}${state.held_adjudicated ? `（${state.held_adjudicated} 條續帶 held 已由更早輪的裁決解除）` : ''}${independentHint(rounds, head)}` }
       return { ...base_, action: 'blocked', round: last.n, blocking: state.blocking,
         reason: `round ${last.n} 已對此 head 收齊 verdict，Critical＋Major ${state.blocking} 條；同內容重擲不產生新證據——修完 push 新 head 再 prepare` }
     }
@@ -1642,6 +2004,9 @@ function decideRound(ledger) {
         .map(([k, p]) => [k, { critical: p.critical, major: p.major, minor: p.minor, verdict_file: p.verdict_file, files: p.files ?? null,
           ...(adjudicatedMajors(last, p) ? { adjudicated: adjudicatedMajors(last, p) } : {}) }]))
       : undefined
+    // 紀錄的合成基準在本機不存在（ledger 從別台拉來，物件只在開輪那台），或 base-check 範圍是舊算法算的：重算。
+    const rebuilt = staleBasis(ledger, last, base_, decideRound)
+    if (rebuilt) return rebuilt
     return { ...base_, action: 'review', round: last.n, kind: last.kind, reuse: true, part_total: last.part_total ?? 1,
       ...(done_parts ? { done_parts } : {}),
       increment_base: last.increment_base ?? null, findings_file: last.findings_file ?? null,
@@ -1683,7 +2048,7 @@ function decideRound(ledger) {
       try {
         const basis = synthBasis(head, base, last.base, scope, `clade 0-A: base-check of round ${last.n} on ${base}`)
         return { ...base_, action: 'review', round: last.n + 1, kind: 'base-check', reuse: false, counted: false, increment: own,
-          increment_base: basis, findings_from: null, base_check_of: last.n, base_scope: scope, prev_head: last.head,
+          increment_base: basis, findings_from: null, base_check_of: last.n, base_scope: scope, base_scope_rev: BASE_SCOPE_REV, prev_head: last.head,
           // base-check 輪通過時，先前的通過輪一併延伸到新 head（record 時才寫 covered_heads：這輪沒通過就不算數）
           covers: passingRounds(rounds, last.head).map((r) => r.n),
           scope: `base-check：${scopeList(scope).length} 檔（PR 改過且 main 也動過 ${scope.pr.length}、main 新引用 PR export ${scope.refs.length}、投影／specs/plans 有變 ${scope.drift.length}、PR 自身小修補 ${scope.own.length}）` }
@@ -1697,7 +2062,7 @@ function decideRound(ledger) {
       // 本 head 的所有通過輪（自己的 head 或先前 covered 延伸過來的）都延伸到新 head：漏掉延伸來的輪，兩輪通過的 PR 每次小修都被判只剩一輪
       return { ...base_, action: 'covered', round: last.n, covered_by: last.head, increment: inc,
         covers: passingRounds(rounds, last.head).map((r) => r.n),
-        reason: `round ${last.n} 已通過（Critical＋Major＝0），自該 head 起累計 ${inc.lines} 行／${inc.files} 檔，未達重驗門檻（>${COVER_MAX_LINES} 行或 ≥${COVER_MAX_FILES + 1} 檔）` }
+        reason: `round ${last.n} 已通過（Critical＋Major＝0），自該 head 起累計 ${inc.lines} 行／${inc.files} 檔，未達重驗門檻（>${COVER_MAX_LINES} 行或 ≥${COVER_MAX_FILES + 1} 檔）${independentHint(rounds, last.head, head)}` }
   }
   const n = last.n + 1
   if (countedRounds(rounds) + 1 > max)
@@ -1787,7 +2152,53 @@ function splitCarried(text, diff, prior = new Set()) {
 // 該輪 held 中還沒被 reviewer 清掉（record 時記在批的 held_cleared：明寫 resolved 或重報）的條目。
 function heldOpen(round) {
   const cleared = new Set(Object.values(round.parts ?? {}).filter((p) => p.status === 'verdict').flatMap((p) => p.held_cleared ?? []))
-  return (round.findings_held ?? []).filter((h) => !cleared.has(h.cite))
+  return (round.findings_held ?? []).filter((h) => !cleared.has(h.cite) && !h.adjudicated)
+}
+// 裁決傳遞：某條 Major 被裁決為 false-positive 後，由它續帶出來的 held 複本（後續輪 findings_held 裡的副本）一併解除。
+// 只沿 held 複本自己的來源鏈：每個 held 條目記 origin＝{round, part}（它是從哪一輪哪一批的 verdict 續帶出來的，再往後輪續帶時原樣保留），
+// 只有 origin 那一批的裁決才算數。更早輪對同指紋的裁決不能放掉後來在別輪被重報、沒人裁決過的 Major
+// （該檔改過後 reviewer 對著新內容重報同一列，那是新的 finding）。解除不刪條目：h.adjudicated 記傳遞來源（原裁決的輪／批／指紋／by／evidence），
+// heldOpen 與 roundState 據此不再計數；ledger 仍讀得出「哪一條是靠哪一筆裁決放掉的」。
+// 指紋＝severity＋該 held 第一列（原 finding 那一列）正規化後的雜湊，與 findingsOfSlot 同一把尺；只認指紋、不認位置（cite）——
+// 同一位置可以有不同的 Major，只裁決其中一條不能連帶放掉另一條。
+function heldFingerprint(h) {
+  return fingerprintOf({ severity: h.severity, text: String(h.text ?? '').split('\n')[0].trim() })
+}
+function baseFingerprint(fp) {
+  return String(fp).replace(/#\d+$/, '')
+}
+// pool＝同一張 PR 的輪（依 n 排序）；round＝持有 held 的輪。沒記 origin 的舊條目（本版之前寫入）：它只可能是上一輪續帶來的，
+// 來源取 pool 裡排在 round 前一輪、批不限；round 為 null（尚未入帳的新條目）時 origin 必須已帶。
+function heldOrigin(pool, round, h) {
+  if (h.origin) return h.origin
+  const prev = round ? pool.filter((r) => r.n < round.n).at(-1) : null
+  return prev ? { round: prev.n, part: null } : null
+}
+// held 複本 h 的來源批上、同指紋的 major＋false-positive 裁決；沒有回 null。
+function heldRuling(pool, round, h) {
+  if (h.severity !== 'major') return null
+  const o = heldOrigin(pool, round, h)
+  const src = o ? pool.findLast((r) => r.n === o.round) : null
+  if (!src) return null
+  const fp = heldFingerprint(h)
+  for (const [part, slot] of Object.entries(src.parts ?? {})) {
+    if (o.part != null && part !== o.part) continue
+    const a = (slot.adjudications ?? []).find((x) => x.severity === 'major' && x.verdict === 'false-positive' && baseFingerprint(x.fingerprint) === fp)
+    if (a) return { fingerprint: a.fingerprint, from_round: src.n, from_part: part, by: a.by, evidence: a.evidence, at: a.at }
+  }
+  return null
+}
+// 把 held 裡有來源裁決、還沒標的 Major 標 adjudicated；回標到的條目。
+function markHeldAdjudicated(pool, round, held, extra = { propagated_at: now }) {
+  const marked = []
+  for (const h of held) {
+    if (h.adjudicated) continue
+    const src = heldRuling(pool, round, h)
+    if (!src) continue
+    h.adjudicated = { ...src, ...extra }
+    marked.push(h)
+  }
+  return marked
 }
 function heldCleared(round, found, resolved) {
   const reported = new Set(found.map((f) => citeOf(f.text)).filter(Boolean))
@@ -1800,23 +2211,28 @@ function findingsFor(ledger, path, n, diff = null, sink = null) {
     .sort(([a], [b]) => a.localeCompare(b, 'en', { numeric: true }))
   if (!files.length) return null
   const out = roundFile(path, n, 'findings.md')
+  const pool = [...scoped(ledger)].sort((x, y) => x.n - y.n)
   const held = []
   const back = []
   const sections = files.map(([part, p]) => {
     const r = splitCarried(readFileSync(p.verdict_file, 'utf8').trim(), diff, priorOf(round, p))
-    held.push(...r.held)
+    held.push(...r.held.map((h) => ({ ...h, origin: { round: n, part } })))
     return `<!-- round ${n} part ${part} -->\n${r.text}\n`
   })
   // 上一輪自己也是續帶來的 held：同一把尺再分流（檔這輪動了就回到要重審的段落）。
   for (const h of heldOpen(round)) {
     const where = diff ? diffMatch(diff, h.cite) : 'unknown'
     if (where !== 'out') back.push(h)
-    else held.push(h)
+    else held.push({ ...h, ...(heldOrigin(pool, round, h) ? { origin: heldOrigin(pool, round, h) } : {}) })
   }
+  // 開輪時不再抄已裁決的 finding：標 adjudicated 的留在 findings_held（稽核），但不進 Prior Findings Held 段、不計 blocking。
+  // 每條 held 都已帶 origin（上面兩路補齊），不依賴新輪的輪號。
+  markHeldAdjudicated(pool, null, held)
+  const shown = held.filter((h) => !h.adjudicated)
   if (back.length)
     sections.push(`## Prior Findings Carried（更早輪次未解、檔案本輪有改動：對照新內容重審）\n${back.map((h) => h.text).join('\n')}\n`)
-  if (held.length)
-    sections.push(`## Prior Findings Held（上輪未解：檔案不在本輪 diff（自上輪起未改，或從未在本 PR 內），不需重審該檔 diff；仍計入本輪 Critical＋Major。開檔確認已解決或已不適用，請在 Prior Findings Status 寫 \`<位置> — resolved.\`）\n${held.map((h) => h.text).join('\n')}\n`)
+  if (shown.length)
+    sections.push(`## Prior Findings Held（上輪未解：檔案不在本輪 diff（自上輪起未改，或從未在本 PR 內），不需重審該檔 diff；仍計入本輪 Critical＋Major。開檔確認已解決或已不適用，請在 Prior Findings Status 寫 \`<位置> — resolved.\`）\n${shown.map((h) => h.text).join('\n')}\n`)
   writeFileSync(out, sections.join('\n'))
   if (sink && held.length) sink.findings_held = held
   return out
@@ -2025,7 +2441,7 @@ function countVerdict(text, prior = new Set(), round = 1, found = null, resolved
 }
 
 // finding 指紋：severity＋去掉項目符號與粗體記號、空白收斂後的整列文字取 sha256 前 12 碼。相同的兩列加 `#2`、`#3`
-// 序號，逐條可裁決。只在同一份 verdict 檔內有意義（不跨輪、不跨批），行號變動或措辭變動就是另一條 finding。
+// 序號，逐條可裁決。只在同一份 verdict 檔內有意義（不跨輪、不跨批；唯一的跨輪使用是 held 複本沿自己的 origin 鏈認來源批的裁決，見 heldRuling），行號變動或措辭變動就是另一條 finding。
 // countVerdict 已把整列相同的重複列印去重，同指紋的 `#2` 只在防禦路徑出現（findings 清單不經 countVerdict 時）。
 function fingerprintOf(f) {
   const body = f.text.replace(/^[-*+]\s+/, '').replace(/\*{1,2}/g, '').replace(/\s+/g, ' ').trim().toLowerCase()
@@ -2073,6 +2489,7 @@ if (cmd === 'counts') {
           findings_from: d.findings_from ?? null, opened_at: now, part_total: total, parts: {},
           ...(PR_NO ? { pr: Number(PR_NO) } : {}), ...(FILTER ? { filter: FILTER } : {}),
           ...(d.base_scope ? { base_scope: d.base_scope } : {}), ...(d.base_check_of ? { base_check_of: d.base_check_of } : {}),
+          ...(d.base_scope_rev ? { base_scope_rev: d.base_scope_rev } : {}),
           ...(d.kind === 'base-check' && d.covers?.length ? { covers_on_pass: d.covers } : {}),
           ...(d.scope ? { scope: d.scope } : {}) }
         ledger.rounds.push(round)
@@ -2223,7 +2640,13 @@ if (cmd === 'counts') {
   let keptFindings = 0
   let inV = false
   let skipIndent = -1
+  // held 的 origin＝這條 finding 實際來自的 verdict（--findings 是 findings_from 那一輪的 findings.md，批界在 `<!-- round n part p -->` 標記），
+  // 不是正在開的這一輪：登成本輪會讓來源輪的裁決對不上、放不掉它。標記外（例如更早輪續帶的 Held 段）只知輪、不知批 → part 留 null。
+  const originRound = opt.ledger ? scoped(load(need('ledger'))).findLast((r) => r.n === Number(need('round')))?.findings_from ?? null : null
+  let markerPart = null
   for (const raw of text.split('\n')) {
+    const mk = /^<!-- round (\d+) part (\S+) -->$/.exec(raw.trim())
+    if (mk) markerPart = mk[2]
     const h = HEADING.exec(raw)
     if (h) {
       inV = VERDICT_HEADING.test(h[2])
@@ -2241,7 +2664,7 @@ if (cmd === 'counts') {
       if (cite && prior.has(cite) && resolvedStatus(raw)) { kept.push(raw); continue }
       const files = pathsOf(raw)
       if (diffPaths.size && files.length && !files.some(inDiff)) {
-        dropped.push({ line: raw.trim(), files, severity: SEVERITY.exec(raw)[1].toLowerCase(), cite: citeOf(raw) ?? files[0], block: [raw] })
+        dropped.push({ line: raw.trim(), files, severity: SEVERITY.exec(raw)[1].toLowerCase(), cite: citeOf(raw) ?? files[0], block: [raw], origin: { round: originRound, part: markerPart } })
         skipIndent = indentOf(raw)
         continue
       }
@@ -2263,7 +2686,8 @@ if (cmd === 'counts') {
       if (Object.keys(next).length) round.carry_dropped = next
       else delete round.carry_dropped
       const held = (round.findings_held ?? []).filter((h) => h.carry_part !== part)
-      for (const d of dropped) held.push({ severity: d.severity, cite: d.cite, text: d.block.join('\n'), carry_part: part })
+      const fresh = dropped.map((d) => ({ severity: d.severity, cite: d.cite, text: d.block.join('\n'), carry_part: part, origin: d.origin }))
+      held.push(...fresh)
       if (held.length) round.findings_held = held
       else delete round.findings_held
     })
@@ -2317,15 +2741,18 @@ if (cmd === 'counts') {
   const rounds = scoped(ledger)
   const required = Number(opt['required-passes'] ?? 1)
   if (!Number.isInteger(required) || required < 1) fail(`--required-passes 要是正整數，收到 ${opt['required-passes']}`)
-  const hits = rounds.filter((r) => roundState(r).passed && (r.head === head || (r.covered_heads ?? []).includes(head)))
+  fetchExtensionCommits(rounds, head, required)
+  const hits = passingRounds(rounds, head)
+  // 否決與 round 欄位看全部通過輪（hits）；放行門檻只數 countsForRequired 的輪，與 decide 的「兩輪已滿」同一定義
+  const counted = hits.filter((r) => countsForRequired(r, required, head))
   const hit = hits[0]
   // 否決：通過輪之後、同一 head 上的輪（典型是獨立輪）記了 Critical／Major——後審出的阻擋 finding NEVER 被先前的通過蓋掉
   const vetoed = hit ? rounds.filter((r) => r.head === head && r.n > hit.n && roundState(r).blocking > 0).map((r) => r.n) : []
   const last = rounds.at(-1)
-  process.stdout.write(`${JSON.stringify({ passed: hits.length >= required && !vetoed.length, round: hit?.n ?? null, covered: Boolean(hit && hit.head !== head),
+  process.stdout.write(`${JSON.stringify({ passed: counted.length >= required && !vetoed.length, round: hit?.n ?? null, covered: Boolean(hit && hit.head !== head),
     ...(vetoed.length ? { vetoed_by: vetoed } : {}),
     ...(hit?.carried_over?.find((c) => c.head === head) ? { carry_over: hit.carried_over.find((c) => c.head === head) } : {}),
-    passing_rounds: hits.map((r) => ({ n: r.n, kind: r.kind ?? null, covered: r.head !== head })), required_passes: required,
+    passing_rounds: hits.map((r) => ({ n: r.n, kind: r.kind ?? null, covered: r.head !== head, counted: countsForRequired(r, required, head), ...(required >= 2 && isFullReviewRound(r) && crossesCodeCommit(r, head) ? { crossed_code_commit: true } : {}) })), required_passes: required,
     last_round: last ? { n: last.n, head: last.head, ...roundState(last) } : null, ledger: path })}\n`)
 } else if (cmd === 'carry-over') {
   // 0-A carry-over：PR 只併主線、自身改動（對 merge-base(origin/main, head) 取 diff）不變時，把本 head 記成既有通過輪的 covered_heads。
@@ -2337,7 +2764,7 @@ if (cmd === 'counts') {
   opt.mode = 'pr'
   if (!PR_NO) fail('carry-over 需要 --pr-number（ledger 以 branch 為 key，不帶 PR 號會跨到別張 PR 的輪）')
   const head = need('head')
-  const baseRef = opt['base-ref'] || 'origin/main'
+  const baseRef = BASE_REF
   const required = Number(opt['required-passes'] ?? 1)
   if (!Number.isInteger(required) || required < 1) fail(`--required-passes 要是正整數，收到 ${opt['required-passes']}`)
   const path = ledgerPath()
@@ -2346,12 +2773,9 @@ if (cmd === 'counts') {
     try { git(['cat-file', '-e', `${sha}^{commit}`]); return true } catch { return false }
   }
   // 物件不在本機就試著 fetch（舊 head 被 force-push 取代後不一定還在）；fetch 不到＝算不出＝不沿用。
-  // fetch 有 timeout 且 NEVER 在 ledger 鎖內跑：鎖逾 LOCK_STALE_MS 會被別的寫入者視為殘留而搶走，持鎖慢 fetch 還會讓並行寫入等鎖逾時。
-  const FETCH_TIMEOUT_MS = Number(process.env.CLADE_REVIEW_FETCH_TIMEOUT_MS || 20_000)
+  // fetch 有 timeout 且 NEVER 在 ledger 鎖內跑（fetchIfMissing）：持鎖慢 fetch 還會讓並行寫入等鎖逾時。
   const ensureCommit = (sha, mayFetch) => {
-    if (commitOk(sha)) return true
-    if (!mayFetch) return false
-    try { execFileSync('git', ['fetch', '--quiet', 'origin', sha], { cwd: need('repo-root'), stdio: 'ignore', timeout: FETCH_TIMEOUT_MS }) } catch {}
+    if (mayFetch) fetchIfMissing(sha)
     return commitOk(sha)
   }
   const patchMemo = new Map()
@@ -2361,6 +2785,14 @@ if (cmd === 'counts') {
   }
   const ownPatchUncached = (commit) => {
     const mb = git(['merge-base', baseRef, commit])
+    // 快取鍵＝(head, merge-base)：merge-base 動了（base 前移）key 就變、會重算；null（空 diff）也快取。
+    const cached = cacheRead('patch-id', [commit, mb])
+    if (cached !== undefined) return cached
+    const computed = ownPatchCompute(commit, mb)
+    cacheWrite('patch-id', [commit, mb], computed)
+    return computed
+  }
+  const ownPatchCompute = (commit, mb) => {
     const diff = execFileSync('git', ['diff', '--no-color', '--no-ext-diff', '--no-renames', '--binary', mb, commit],
       { cwd: need('repo-root'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 256 << 20 })
     if (!diff.trim()) return null
@@ -2377,8 +2809,10 @@ if (cmd === 'counts') {
     // 鎖內用最新 ledger 重判，只讀本機物件與 memo，不再碰網路。
     const decide = (ledger, mayFetch) => {
       const rounds = scoped(ledger)
+      if (mayFetch) fetchExtensionCommits(rounds, head, required)
       const covers = (r) => r.head === head || (r.covered_heads ?? []).includes(head)
-      const passing = rounds.filter((r) => roundState(r).passed)
+      // 通過輪的計數與 rounds passed 同一定義（countsForRequired）：要 ≥2 輪時 verify／base-check、跨過程式 commit 的延伸不能湊數，也不能被沿用成完整審查
+      const passing = rounds.filter((r) => roundState(r).passed && countsForRequired(r, required, head))
       if (passing.filter(covers).length >= required) return { carried: false, already: true, reason: '本 head 已有足夠的通過輪，不需沿用', ledger: path }
       const last = rounds.at(-1)
       if (!last) return no('ledger 對本 PR 沒有任何一輪')
@@ -2390,7 +2824,7 @@ if (cmd === 'counts') {
       const plan = []
       const why = []
       for (const r of passing.filter((x) => !covers(x))) {
-        if (roundState(r).adjudicated > 0) { why.push(`round ${r.n} 是靠裁決（adjudicated）才過的`); continue }
+        if (roundState(r).adjudicated + roundState(r).held_adjudicated > 0) { why.push(`round ${r.n} 是靠裁決（adjudicated）才過的`); continue }
         if (r.no_reviewable) { why.push(`round ${r.n} 無可審檔（沒有 reviewer 看過程式）`); continue }
         let hit = null
         const family = [...new Set([r.head, ...(r.covered_heads ?? [])])]
@@ -2542,7 +2976,15 @@ if (cmd === 'counts') {
       fail(`指紋 ${fingerprint} 已有裁決紀錄：裁決 append-only，NEVER 覆寫或重複記`)
     const rec = { fingerprint, severity: 'major', verdict: 'false-positive', by, evidence, at: now, finding: hit.text.slice(0, 300) }
     slot.adjudications = [...(slot.adjudications ?? []), rec]
-    return { action: 'adjudicated', round: n, part, head: round.head, ...rec, ...roundState(round), ledger: path }
+    // 傳遞到後續輪的 held 複本：只認 origin 就是這一輪這一批的（先裁決、後開輪的情形由 findingsFor 的 markHeldAdjudicated 接手）。
+    const pool = [...scoped(ledger)].sort((x, y) => x.n - y.n)
+    const propagated = []
+    for (const later of pool) {
+      if (!(later.n > n)) continue
+      for (const h of markHeldAdjudicated(pool, later, later.findings_held ?? []))
+        propagated.push({ round: later.n, cite: h.cite, ...(h.carry_part ? { carry_part: h.carry_part } : {}) })
+    }
+    return { action: 'adjudicated', round: n, part, head: round.head, ...rec, ...(propagated.length ? { propagated_held: propagated } : {}), ...roundState(round), ledger: path }
   })
   process.stdout.write(`${JSON.stringify(out)}\n`)
 } else if (cmd === 'show') {
@@ -2552,7 +2994,19 @@ if (cmd === 'counts') {
   fail(`unknown command ${cmd ?? ''}`)
 }
 JS
-)"
+
+# review_detached_worktree_key — 沒有 stamp 的 detached worktree（手開的 `git worktree add --detach <path> origin/main`）的 branch 欄：
+# `detached@<git-dir 雜湊前 12 碼>`。兩棵 detached、同 base 的樹 key 只剩 (repo, base) 時會撞進同一份 ledger：
+# 後一棵 prepare 被判 round 2、拿別棵那輪的 tree 當增量基準，changeset 混進別席的檔。把 `git rev-parse --absolute-git-dir`
+# 納入：linked worktree 的 git-dir（<common>/worktrees/<name>）一棵一個、同一棵跨輪穩定，輪數照算。
+# 只用在「沒有 stamp」：有 stamp 的快照 worktree 每輪重建（git-dir 每次都新），納進來會每輪歸 1、繞過 MAX_ROUNDS；
+# 快照走 stamp 的 branch，stamp 沒 branch 時仍共用 `detached`（既有行為與測試）。
+# 舊 ledger：舊的共用 `detached` ledger 無法判斷哪些輪屬於哪一棵（正是這個 bug），NEVER 相容讀入；非 detached 的 key 完全不變。
+review_detached_worktree_key() {
+  local gitdir
+  gitdir="$(git rev-parse --absolute-git-dir 2>/dev/null)" || { echo detached; return 0; }
+  node -e 'process.stdout.write("detached@" + require("node:crypto").createHash("sha256").update(process.argv[1]).digest("hex").slice(0, 12) + "\n")' "$gitdir" 2>/dev/null || echo detached
+}
 
 # review_detached_branch_key — detached HEAD（review-snapshot.ts 的快照）時 worktree 模式 ledger key 的 branch 欄。
 # 快照 HEAD 固定是 merge-base：key 只剩 (repo, base) 時，同 base 的不同改動會共用一份 ledger（輪數、增量基準、
@@ -2560,7 +3014,7 @@ JS
 # （舊行為）。NEVER 用 changeRoot 之類「隨 stage commit 重建而變」的值當 key：write-tree＋commit-tree 的
 # dangling commit、amend、rebase 之後每輪都是新 key，會把輪數歸 1、繞過 MAX_ROUNDS 上限。
 # 解不出 branch（stamp 的 branch 為 null）時 stderr 印一行提示：那一輪與其他無 branch 的改動共用 ledger，
-# 要分開就在 `review-snapshot.ts create` 帶 `--branch <name>`。沒有 stamp（手開的 detached worktree）靜默 `detached`。
+# 要分開就在 `review-snapshot.ts create` 帶 `--branch <name>`。沒有 stamp（手開的 detached worktree）用 `detached@<git-dir 雜湊>`（review_detached_worktree_key）。
 # stamp 位置：`git rev-parse --show-toplevel` 回的是 symlink 解開後的路徑，createSnapshot 寫 stamp 時用的
 # 可能是未解開的路徑，兩個候選都找。
 review_detached_branch_key() {
@@ -2570,7 +3024,7 @@ review_detached_branch_key() {
     if [ -f "$cand" ]; then stamp="$cand"; break; fi
   done
   if [ -z "$stamp" ]; then
-    echo detached
+    review_detached_worktree_key
     return 0
   fi
   key="$(node -e '
@@ -2649,7 +3103,7 @@ review_open_round() {
   REVIEW_ROUND_SCOPE="$(_round_field scope)"
   REVIEW_ROUND_BASE_CHECK_OF="$(_round_field base_check_of)"
   REVIEW_ROUND_COUNTED="$(_round_field counted_round)"
-  REVIEW_ROUND_BASE_DRIFT_FILES="$(node -e 'const s=JSON.parse(process.argv[1]).base_scope;process.stdout.write(s?[...(s.drift??[]),...(s.own??[])].join(" "):"")' "$decision")"
+  REVIEW_ROUND_BASE_DRIFT_FILES="$(node -e 'const s=JSON.parse(process.argv[1]).base_scope;process.stdout.write(s?[...(s.drift??[]),...(s.own??[])].join("\n"):"")' "$decision")"
   REVIEW_ROUND_BASE_SCOPE_FILES="$(node -e 'const s=JSON.parse(process.argv[1]).base_scope;process.stdout.write(s?[...s.pr,...s.refs,...(s.drift??[]),...(s.own??[])].join(" "):"")' "$decision")"
   # record 的身分核對要用開輪那一刻的值（subagent carrier 經 state 檔帶到 finalize）。
   REVIEW_ROUND_HEAD="$head"

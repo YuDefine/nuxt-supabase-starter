@@ -65,7 +65,8 @@
       "Bash(pnpm run test:*)",
       "Bash(pnpm run lint:*)",
       "Bash(pnpm run typecheck:*)",
-      "Bash(pnpm run check:*)"
+      "Bash(pnpm run check:*)",
+      "Bash(git switch -c cloud/*)"
     ],
     "deny": [
       "Bash(git commit --no-v*)",
@@ -105,7 +106,19 @@
       "Bash(git add * -A*)",
       "Workflow",
       "SendFeedback",
-      "ReportFindings"
+      "ReportFindings",
+      "Bash(git switch -c cloud/* *)"
+    ],
+    "ask": [
+      "Bash(git switch -c *$*)",
+      "Bash(git switch -c *`*)",
+      "Bash(git switch -c *\\\\*)",
+      "Bash(git switch -c *'*)",
+      "Bash(git switch -c *\"*)",
+      "Bash(git switch -c *{*)",
+      "Bash(git switch -c *[*)",
+      "Bash(git switch -c *?*)",
+      "Bash(git switch -c *\\**)"
     ]
   },
   "enabledMcpjsonServers": [

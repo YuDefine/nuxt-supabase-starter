@@ -137,7 +137,7 @@ for sha in $new_commits; do
   # `git show "$sha:$path"` 都落空），每行一個已解碼路徑。
   has_code=$(git diff-tree --no-commit-id --name-only -r -z "$sha" 2>/dev/null \
     | tr '\0' '\n' \
-    | grep -vE '^(\.claude|\.agents|\.codex|\.clade|\.spectra|vendor)/' \
+    | grep -vE '^(\.claude|\.agents|\.codex|\.clade|vendor)/' \
     | while IFS= read -r path; do
         # Drop `scripts/<name>` when clade projects a `vendor/scripts/<name>` of the same name.
         # Only the first path segment under scripts/ is compared, so `scripts/lib/foo.ts` is

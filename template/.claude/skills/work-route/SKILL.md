@@ -46,8 +46,8 @@ T1 判法：env `CLADE_DISPATCH_ID` 非空（coordinator 派出的 child），�
 2. THINK 先讀取 `rules/工作種類與必要產物.md`，決定續跑或以 `flow plan open --kind <值>` 鑄 `W-…`；manifest 宣告 aixbdd／specformula 卻缺 `work-lifecycle.md` 時，讀取 `clade-onboard` skill 的 `rules/交棒前truth-root處置判準.md` 處置，不降級改鑄 `NNN-<slug>`。
 3. THINK 鑄新 work id 之前先讀取 `rules/鑄workid前Notion詢問判準.md`，DELEGATE `notion-hub.ts resolve` 後依第一個成立的列決定問不問、怎麼開票。
 4. THINK 若 project constitution 缺失或本次要調整，先讀取 `rules/constitution觸發判準.md`，再載入 `rules/.constitution/SKILL.md` 做最小增量。
-5. THINK 新開 package 或續跑的 package 範圍有變時，跑 `node ~/offline/clade/vendor/scripts/paid-assets.ts list --stage implementation`（fleet 付費資產清單，`~/offline/clade/registry/paid-assets.json`），逐筆對照本次範圍的 `use_when`：命中就在 `plan.md` § Decisions 寫「以 <id> 為底，實作時照 skill <名>」，命中卻不套用就寫理由；**NEVER** 只等寫程式時 `paths:` rule 才想起已購資產。指令不存在（本機沒有 clade checkout）時在 § Decisions 記一句「付費資產清單讀不到」再續行。
-6. WRITE 本次有確認版訪談交棒摘要時：免 package → 摘要不落檔，未決題回報使用者；只有「bug 且出錯的是沒有 I/O 的純邏輯」列把驗收例子逐條寫成迴歸 unit test 案例，其他免 package 列不另寫測試；續跑既有 package → 只把新決策追加進 § Decisions；新開 package → step 2 鑄 id 時就帶摘要：先把確認版摘要存成檔（repo 內已被 gitignore 的路徑，未決題已解的列先刪掉），跑 `flow plan open <slug> --from-summary <摘要檔> --kind <值>`，它在建 package 之前驗節名與佔位，並依下表寫入 `plan.md`（被拒就修摘要再跑，**NEVER** 退回手搬；已用不帶 `--from-summary` 的指令鑄了 id 才照下表手搬），T2 結論另追加進 § Decisions：
+5. THINK 新開 package 或續跑的 package 範圍有變時，跑 `node ~/offline/clade/vendor/scripts/paid-assets.ts list --stage implementation`（fleet 付費資產清單，`~/offline/clade/registry/paid-assets.json`），逐筆對照本次範圍的 `use_when`：命中就在 `work.md` § Decisions 寫「以 <id> 為底，實作時照 skill <名>」，命中卻不套用就寫理由；**NEVER** 只等寫程式時 `paths:` rule 才想起已購資產。指令不存在（本機沒有 clade checkout）時在 § Decisions 記一句「付費資產清單讀不到」再續行。
+6. WRITE 本次有確認版訪談交棒摘要時：免 package → 摘要不落檔，未決題回報使用者；只有「bug 且出錯的是沒有 I/O 的純邏輯」列把驗收例子逐條寫成迴歸 unit test 案例，其他免 package 列不另寫測試；續跑既有 package → 只把新決策追加進 § Decisions；新開 package → step 2 鑄 id 時就帶摘要：先把確認版摘要存成檔（repo 內已被 gitignore 的路徑，未決題已解的列先刪掉），跑 `flow plan open <slug> --from-summary <摘要檔> --kind <值>`，它在建 package 之前驗節名與佔位，並依下表寫入 lifecycle 檔（`work.md`；舊 package：`plan.md`）（被拒就修摘要再跑，**NEVER** 退回手搬；已用不帶 `--from-summary` 的指令鑄了 id 才照下表手搬），T2 結論另追加進 § Decisions：
 
 | 摘要節 | 落點 |
 | --- | --- |
@@ -73,12 +73,12 @@ T1 判法：env `CLADE_DISPATCH_ID` 非空（coordinator 派出的 child），�
 4. THINK 品質 gate（`vp check`、typecheck、lint、測試）失敗時先讀取 `rules/品質gate失敗分流判準.md`，可修復就修並從 L0 重跑；不可修復或同一修法沒有新證據時，保留已做工作與原始錯誤，回報具體缺口與解除條件。
 5. THINK 調查、驗收需要 production 資料當證據（含要修 production 資料）時，先讀取 `rules/production證據判準.md`，只走 `prod-sql`。
 6. WRITE 必須問使用者時，只問需求取捨、必要環境資訊、權限邊界或具體驗收確認；不問「要不要載入下一支 skill／修入口／繼續查」，也不宣稱未通過的 gate 已完成。
-7. DELEGATE 使用者在 package 進行中要停下來討論需求或範圍時，讀取同層 `../interview/SKILL.md`，帶本 package 的 work id 執行；回來後把確認版摘要的新決策追加進該 `plan.md` § Decisions，受影響的 artifact 交回原 owner 修訂，再從原續跑位置繼續。
+7. DELEGATE 使用者在 package 進行中要停下來討論需求或範圍時，讀取同層 `../interview/SKILL.md`，帶本 package 的 work id 執行；回來後把確認版摘要的新決策追加進該 `work.md`（舊 package：`plan.md`）§ Decisions，受影響的 artifact 交回原 owner 修訂，再從原續跑位置繼續。
 
 ## Phase 6 -- 依產物推進 aixbdd
 
 1. THINK 先讀取 `rules/依產物推進判準.md`，取第一個尚未完成的 package 狀態列，交對應 owner（每一次回 Phase 4–5，不跳過 constitution、PM confirmation 或 task 解鎖）。
-2. WRITE 省略非 `work_kind` 決定的 artifact（UI／research／OpenAPI 等）時，在 `plan.md` 的 `## Decisions` 寫工作特定理由；尚未完成不叫省略。
+2. WRITE 省略非 `work_kind` 決定的 artifact（UI／research／OpenAPI 等）時，在 `work.md`（舊 package：`plan.md`）的 `## Decisions` 寫工作特定理由；尚未完成不叫省略。
 
 ## Phase 7 -- 驗收與交付
 

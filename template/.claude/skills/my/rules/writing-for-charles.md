@@ -3,7 +3,7 @@
 
 - Level: `MUST`
 - 觸發：**要寫給 Charles 看的回覆、`Qn`、`flow ask` 題面、收尾短報之前**讀這份；`flow ask` 與 `--complete blocked --decision-for charles` 被內容把關退回（`content-answerable-by-run`／`content-self-decidable`／`content-jargon`）時，退回訊息也指向本檔。不做 always-load。
-- 判準來源：`specs/plans/W-2026-10-28-manager-agent/plan.md` § Open work 的 `ask-admission-classify` 條目與 `flow ask` 內容把關的三類新退回碼；主管研究第 4.8 節末段的原始清單不在本 repo，**逐字對照由主管補**（見該 PR 待決）。
+- 判準來源：`specs/plans/W-2026-10-28-manager-agent/plan.md`（舊 package 的 lifecycle 檔）§ Open work 的 `ask-admission-classify` 條目與 `flow ask` 內容把關的三類新退回碼；主管研究第 4.8 節末段的原始清單不在本 repo，**逐字對照由主管補**（見該 PR 待決）。
 
 ## 送出前逐條問
 

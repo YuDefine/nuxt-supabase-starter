@@ -58,19 +58,7 @@ when: "收到新任務、判斷要不要主動叫 skill 或進 SDD 入口，或�
 
 ### Sub-skill 禁用清單（永不觸發）
 
-下列 skill **NEVER** 主動觸發。本表由 `scripts/audit-disabled-skill-guidance.ts` 與其 test 現場解析（首欄每列以 `` `name` `` 開頭），列名格式勿動；`/design` 以 slash 形列名，audit 只認呼叫形。clade 的 SDD 層是 SpecFormula ＋ aixbdd（[[specformula]] / [[aixbdd-workflow]]），本表給由上游 `spectra init` 帶入這些 skill 的 consumer 用。
-
-| Sub-skill | 替代方式 |
-|---|---|
-| `spectra-commit` | `rules/core/commit.md` 的標準 commit 工序 |
-| `spectra-propose` | `/specify` 建 plan package；純技術工作走 `tasks/<date>-<slug>.md` |
-| `spectra-apply` | `/implement` 按 plan package 的 `tasks.md` 執行 |
-| `spectra-archive` | `flow` 卡標 done ＋ `/commit`；plan package 本身就是歷史，不搬動 |
-| `spectra-discuss` | `/clarify-over-specs`（規格模糊）或依 [[knowledge-and-decisions]] 記 ADR（架構取捨） |
-| `spectra-ingest` | 停下回交 truth owner skill（`/dsl-refine` 等），**NEVER** 就地補寫規格 |
-| `spectra-analyze` / `spectra-clarify` / `spectra-ask` / `spectra-debug` | `/clarify-over-specs`、`/system-analysis`、直接讀 `specs/truth/**` |
-| `opsx` | 上列各條的替代入口 |
-| `/design` | 2026-09-27 退役（hub-core 已刪）；無參數 `impeccable` 推下一支指令，閉環見 [[proactive-skills.design-checkpoint]] |
+**NEVER** 主動觸發：`spectra-*` 全家（commit／propose／apply／archive／discuss／ingest／analyze／clarify／ask／debug）、`opsx`、`/design`。clade 的 SDD 層是 SpecFormula ＋ aixbdd（[[specformula]] / [[aixbdd-workflow]]）；commit 走 `/commit`、建 plan 走 `/specify`、實作走 `/implement`、規格模糊走 `/clarify-over-specs`。逐支替代方式與 audit 解析的名單表在 [[proactive-skills.disabled-skill-guidance]]。
 
 **禁用不只管「不觸發」，也管「不引導」**——任何 skill / rule / snippet / script 輸出 NEVER 出現叫人去跑清單上那支 skill 的句子。合法與違規的語境分界表、audit 訊號與 REQUIRED 欄位在 [[proactive-skills.disabled-skill-guidance]]（path-scoped：碰 `rules/**` / `capabilities/**/skills/**` / `vendor/snippets/**` / `scripts/**` 時載入）。
 

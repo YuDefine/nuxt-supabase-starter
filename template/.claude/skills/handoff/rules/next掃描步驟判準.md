@@ -1,0 +1,320 @@
+# `next` 掃描步驟詳細規約
+
+三個 scan 步驟共用同一次 `handoff-scan.ts --json` 輸出（**落檔到 `$SCAN` 後各自 `jq` 取段**，見 §2B.1a）。本檔為 [rules/next盤點與推薦判準.md](next盤點與推薦判準.md) § 2B.1 / 2B.1.7 / 2B.1.8 的完整規約，該檔主流程含 pointer 指向此處。
+
+## 2B.1 HANDOFF.md Health Gate（hard step）
+
+**順序固定**：先 100% rotate 可 rotate 的紀錄 → 再 audit → 再 reorganize。
+三 sub-step 都跑完才能進 2B.1.5。整檔 KB／行數**不再是觸發條件**（已廢）。
+編號 2B.1b 是歷史名（rotate），**執行順序以本段為準，不是字母序**。
+
+### 2B.1b Full rotate（每次 `next` 的**第一個**寫入，MUST，不詢問）
+
+**在 2B.1a scan 之前跑。** 可 rotate 的紀錄每次全搬，不是啃到某個 KB 門檻下。
+同 `rotate-closed-bloat.ts`：搬全部 rotatable，NEVER nibble，NEVER 詢問操作。
+
+```bash
+node ~/offline/clade/vendor/scripts/rotate-handoff-done.ts --repo "$MAIN_WT_PATH" --json
+# noop → stdout `{"ok":true,"noop":true,...}`，繼續 2B.1a
+# retired → `{"ok":true,"retired":true,...}`：完成段已從主檔刪除、**沒有**月份 archive。繼續 2B.1a
+# 有搬且未 retired → 繼續 2B.1a（scan 讀的是搬完後的 HANDOFF.md）
+```
+
+**可 rotate（100%，一次搬完）**：
+
+評估：all-match（逐條檢查，命中就套用）
+| id | 判準 | 動作 |
+| --- | --- | --- |
+| T1 | heading 標了結案（`✅` / `已完成` / `已落地` / `已發版` / `已處置` / `dismissed` / `已 supersede` / …）且 body **沒有** `- [ ]` | 從主檔刪除。未遷移 consumer 才搬進 `docs/archives/<YYYY-MM>-handoff-narrative.md` |
+| T2 | `##` dated section、無 active `- [ ]`（kind=`narrative`） | 同上；未遷移 consumer 才按 `YYYY-MM` 分桶 |
+| T3 | 剩餘混合段裡的 `- [x]` 項（含其縮進延續行） | 只搬走已勾項，留下 `- [ ]` |
+
+**永不 rotate**：
+
+- heading 帶防重做 marker（`NEVER 重做` / `不必接續` / …）
+- `<!-- deferred-begin:... -->` … `<!-- deferred-end:... -->`
+- 覆寫式 snapshot：`## Review-gui Readiness`、`## Worktree & Stash Audit`（本輪稍後整段覆寫）
+
+**NEVER**：
+
+- ❌ 因為「還沒破 35 KB」就跳過
+- ❌ 只搬剛好夠過門檻的一部分
+- ❌ 詢問操作 A／B／C（rotate 不是拍板題）
+- ❌ 搬完再壓一次、或派顧問為了 KB 數字
+
+`park` 不跑本 sub-step。
+
+**寫入規約**：
+
+- Archive 檔開頭：
+  ```markdown
+  # <YYYY-MM> Handoff Narrative
+
+  > 來源：`HANDOFF.md`（rotate by /handoff next 2B.1）
+  > 本檔保留已完成 dated session narrative 與結案條目，月 bucket append-only
+  ```
+- 同月 archive 已存在 → append（不重建檔頭）
+
+### 2B.1a Audit
+
+**MUST 落檔再 jq 取段，NEVER 讓 JSON 全文進 context**（某 consumer 實測 96 KB ≈ 27k tokens，其中 status=pass 的項目佔大半而它們本來就不需要判讀）：
+
+```bash
+# MUST mktemp 唯一路徑 + 落檔後驗 consumerId（成因見下方「$SCAN 路徑與歸屬」）
+SCAN="$(mktemp -t handoff-scan.XXXXXXXXXX)"
+node ~/offline/clade/vendor/scripts/handoff-scan.ts --json > "$SCAN" 2>/dev/null
+
+EXPECT="$(basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")")"
+GOT="$(jq -r '.consumerId // "MISSING"' "$SCAN")"
+[ "$GOT" = "$EXPECT" ] && echo "scan ok: $GOT" || echo "SCAN-MISMATCH: got=$GOT expect=$EXPECT"
+
+# 只讀需要判讀的項目（status != pass）——這是本 sub-step 唯一該進 context 的全域輸出
+jq -r '.. | objects | select(.status? and .name? and .status != "pass")
+       | "\(.name)\t\(.status)\t\(.detail)"' "$SCAN"
+```
+
+#### $SCAN 路徑與歸屬（hard rule，park / next 共用）
+
+- **NEVER 用固定路徑**（`${TMPDIR:-/tmp}/handoff-scan.json` 或任何不含隨機段的名字）。`TMPDIR` 在本機未設 → 固定路徑等於**全機器所有 consumer 的所有 session 共用同一個檔**。2026-08-05 實證：某 consumer 的 session 寫入後 48 秒被別 session 覆寫成 `clade`，第一次讀到的又是另一個 consumer 的產物，同時段 `/tmp/handoff-scan*.json` 還有第三個 consumer 的產物。
+- **MUST 在讀任何一段之前先驗 `.consumerId`**，`SCAN-MISMATCH` 或 `MISSING` → **STOP**：整份 `$SCAN` 作廢，重跑上面的 block（**NEVER** 把它當「大致對」繼續判讀，也 NEVER 只重跑受影響的那一段）。
+- 危害不是「讀到舊資料」而是**拿別 repo 的事實對本 repo 下判斷**：health gate、human gates、tech-debt hygiene、worktree & stash audit 四段全部受影響，然後寫進本 repo 的 `HANDOFF.md`。最危險的是 **Step 3.2a 的 stash drop gate 是 MUST 主動 drop** —— 拿別 repo 的 stash 清單做本 repo 的刪除判定。
+- `handoff-scan.ts` 自身的 consumer 解析（`basename(dirname(git-common-dir))`，worktree 內也回主 repo）**無誤**，上面的 `EXPECT` 就是同一個算式 —— 壞的只有暫存檔路徑。
+
+一次涵蓋五段機械掃描：Health Gate（本 sub-step）+ human gates（§2B.1.7，`flow gates`）+ worktree/stash audit（Step 3）+ tech-debt hygiene（§2B.1.8）+ **做到一半的 specs/plans 三桶**（`planInventory`）。輸出 `healthGate` / `reviewGuiReadiness` / `worktreeStash` / `techDebtHygiene` / `planInventory`，每 section 含 `checks`（`{name, status: pass|warn|fail|n/a, detail}`）與 `raw`（原始事實）。
+
+**落檔一次、各 sub-step 各自 `jq` 取自己的 section，不必重跑 script**（`$SCAN` 在整個 `next` 期間有效）。**NEVER 為了看某一段而重跑 `handoff-scan.ts`** —— 各段都是子行程（`flow gates` 讀整條 spine），重跑一次就多付一次。**也 NEVER 因為上面的摘要沒列到某段，就判定 scan 沒跑過或該段不存在** —— 摘要只列 status != pass，pass 的段照樣在 `$SCAN` 裡，用 `jq` 取。
+
+各 sub-step 的取法：`jq '.healthGate.raw' "$SCAN"`（本 sub-step）、`jq '.reviewGuiReadiness.raw' "$SCAN"`（§2B.1.7）、`jq '.worktreeStash.raw' "$SCAN"`（Step 3）、`jq '.techDebtHygiene.raw' "$SCAN"`（§2B.1.8）、`jq '.planInventory.raw' "$SCAN"`（§2B.2 plan/truth outstanding 三桶；`raw.startable` / `raw.blockedHuman` / `raw.retire`）。
+
+本 sub-step 讀 `healthGate` 段（**在 2B.1b 已跑完 rotate 之後**）：
+
+- `checks` 全部 status=pass → HANDOFF 健康，進 2B.1c
+- `rotate-plan` warn → script 漏搬（leftover 以 `applyHandoffRotate` 為 SoT，不是 drift-scan `kind=narrative`），**MUST** 重跑 `rotate-handoff-done.ts` 或停下來報卡點，**NEVER** 問 user 要不要 rotate。段內含防重做 marker 或 deferred block 時 rotate **依法不搬**，那種段不會把 `rotate-plan` 打成 warn
+- 有 fail（scanner 自身炸掉，detail 含原因）→ 對 user 回報卡點，不假裝 audit 已過
+- `handoff-section-budget` / `handoff-entry-budget` warn → 活段太肥，換載體（pointer），不是 rotate 觸發
+
+JSON 範例（節錄）：
+
+```json
+{
+  "healthGate": {
+    "checks": [
+      { "name": "handoff-section-budget", "status": "warn", "detail": "1 section over 6 KB" },
+      { "name": "rotate-plan", "status": "pass", "detail": "nothing rotatable leftover" }
+    ],
+    "raw": {
+      "sizeKb": 17.9,
+      "lines": 232,
+      "rotatableLeftover": 0,
+      "thresholds": { "narrative_age_days": 3, "active_age_days": 14, "section_max_kb": 6, "entry_max_lines": 15 },
+      "sectionStats": [
+        { "title": "...", "kind": "active|baseline|narrative", "date": "2026-05-22", "ageDays": 4, "startLine": 8 }
+      ],
+      "warnings": [
+        { "drift": "handoff-section-oversize", "message": "\"## Worktree & Stash Audit\" is 9.03 KB ..." }
+      ]
+    }
+  },
+  "reviewGuiReadiness": { "checks": ["..."], "raw": { "repo": "<name>", "generatedAt": "<ISO>", "counts": {}, "gates": ["..."] } },
+  "worktreeStash": { "checks": ["..."], "raw": { "worktrees": ["..."], "stashes": ["..."], "orphanSidecars": ["..."] } },
+  "techDebtHygiene": { "checks": ["..."], "raw": { "total": 0, "openCount": 0, "closedCount": 0, "closedLines": 0, "stale": ["..."], "aging": ["..."], "closed": ["..."] } }
+}
+```
+
+### 2B.1c Reorganize（既有 2B.1 行為，保留）
+
+讀整理過的 HANDOFF.md，逐段再判一輪：
+
+| 內容類型 | 動作 |
+| --- | --- |
+| 與當前 SoT 矛盾（版本過時、檔案已不存在） | 修正或刪除 |
+| 重複條目（同一事在 HANDOFF / plan（未遷移 consumer 為 tech-debt）/ ROADMAP 都有） | 留最該的位置，其他刪；已遷移 repo **NEVER** 刪改 `docs/tech-debt.md` 那份（凍結），只刪 HANDOFF／ROADMAP 端 |
+| 寫法違反當前專案規則（如 clade 自治區內 `consumer 自治區工作` violation） | 依規則重寫或刪除 |
+| 仍 valid 的稽核 baseline 表 / outstanding follow-up | 保留 |
+| `## Deferred discuss items` 段（含 `<!-- deferred-begin:...:... -->` markers） | **保留、禁動**：由 [[manual-review]] § `[discuss]` walkthrough 的 resume 路徑處置，`/handoff` 不可改寫、reorder、合併或刪除任何 entry |
+
+**MUST** 載入 `.claude/rules/local/*.md` 內所有自治區規則。若有 `clade-role-and-todo-discipline.md` 之類 local rule 限定 HANDOFF 寫法，整理時必須遵守。
+
+寫入 `HANDOFF.md` 的路徑 **MUST** 用 Step 1.5 解析出的 `$MAIN_WT_PATH/HANDOFF.md`，不用 cwd 相對。未遷移 consumer 才寫 `$MAIN_WT_PATH/docs/archives/<YYYY-MM>-handoff-narrative.md`。有 `specs/truth/work-lifecycle.md` 時 **NEVER** append 月份 archive。
+
+---
+
+### 2B.1d dead-section 處置（Tier A）
+
+`handoff-scan.ts` 的 `tier-a-dead-section` warn 指到這裡。它列的是 `HANDOFF.md` 與
+`tasks/*.md`（`tasks/archive/` 已排除 —— 那是未遷移 consumer 搬走的**去處**，掃它等於掃自己的 sink）裡
+**heading 標了結案、body 無未勾 todo、且 heading 未標防重做**的段，`>7d` 未動即 violation。
+
+**本 sub-step 不寫任何檔。** 它是 warn-only + 具名清單：死段散在 40+ 個檔、沒有單一 rotate
+目的地，所以**不**走 §2B.1b 那種一次搬進單一 archive 的模式。
+逐段判、逐段處置，這一輪處置不完的就留著下一輪再報。
+
+評估：first-match；以上皆非 → D*
+| id | 處置 | 判準（可觀察） | 動作 |
+| --- | --- | --- | --- |
+| D1 | **不動（防重做 marker）** | heading 除了結案還明講「不要重做 / 不必重做 / 勿重做 / NEVER 重做 / 不必接續」 | **什麼都不做**。偵測器已自動豁免這一格，見下 |
+| D2 | **拆條** | 段裡其實是多件事，且還有沒收的（heading 說完成但正文提到待驗 / 待散播 / 待決策） | 把未完那幾件拆到 `## In Progress` / plan（有 `specs/truth/work-lifecycle.md` → `flow plan open` 或續跑既有 plan；未遷移 consumer 才 `docs/tech-debt.md`）/ 新的 `tasks/<date>-<slug>.md`，剩下的走「關條」 |
+| D3 | **關條** | 已 done，且 `git log --grep '<TD-NNN 或 slug>'` 查得到 | **直接刪整段**。NEVER 寫 archive narrative —— git history 是免費且完整的知識層（同 [[tech-debt-hygiene]] Invariant 7 § 處置是三選一） |
+| D4 | **知識語態重寫** | 段裡有真教訓**且**未被任何機械 gate 承載 | 走 `/oops` 寫 clade `specs/truth/`（換語態，不是剪貼；`docs/pitfalls/` 已退役，呼叫端遷移與否都不寫），原段同時刪掉 |
+| D* | 以上皆非 | — | 留著，下一輪再報（本 sub-step 不寫檔） |
+
+**防重做 marker 不算死段。** 這類段的存在目的就是擋住 fresh-context agent 重跑已完成的工作，
+刪掉或搬走等於把那道擋牆拆了。`handoff-scan.ts` 的 `ANTI_REDO_HEADING_RE` 會把它們歸到
+`tier-a-anti-redo-marker`（**informational — 不觸發任何東西**）而非 `tier-a-dead-section`，
+逐段清單在 `raw.antiRedoSections`。
+
+- **NEVER** 把 `tier-a-anti-redo-marker` 列出的段當死段刪除、搬到 `tasks/archive/` 或改寫
+- **NEVER** 為了讓 `tier-a-dead-section` 讀數歸零，去拿掉某段 heading 的防重做措辭 —— 那讓段
+  從豁免堆掉回死段堆，訊號沒有變好，擋牆卻真的沒了
+- **NEVER** 拿 `tier-a-dead-section-violations` 的絕對讀數當「這裡清乾淨了沒」的判準 —— 它會隨
+  未處置段自然老化單調上升，與任何一次處置動作無關
+
+heading 標了結案但 body **還有** `- [ ]` 的段不在本表：那是 `tier-a-done-section-stalled`，
+唯一正確處置是把未完項勾掉或搬走，見 [rules/park登記與HANDOFF寫回判準.md](park登記與HANDOFF寫回判準.md) § 2 結案段的 checkbox MUST 全部是 `- [x]`。
+
+---
+
+## 2B.1.7 Human gates scan（hard rule）
+
+讀 §2B.1a 那次 `handoff-scan.ts --json` 輸出的 `reviewGuiReadiness` 段（section key 沿用舊名；script 內部在當前 consumer 根目錄跑 `flow gates --json --repo-only`，且不帶 `CLADE_HOME`，所以讀到的是本 repo 的 spine）。本 sub-step 前尚未跑過 scan 時補跑：
+
+```bash
+node ~/offline/clade/vendor/scripts/handoff-scan.ts --json 2>/dev/null
+```
+
+`raw` 形狀：`{repo, generatedAt, counts, gates: [{id, family, anchor, work_id, question, why_now, age_minutes, command}]}`，`counts` 以 family 為 key（`ruling` / `acceptance` / `ui-judgement` / `external-action` / `exception`）。取法：`jq '.reviewGuiReadiness.raw' "$SCAN"`。
+
+Outstanding 推薦（§2B.2 / §2B.3 / §2B.4 / §2B.5）**MUST** 引用 `raw.gates`，**NEVER** 從 `HANDOFF.md` 既有 narrative 或 `tasks.md` leaf count 推測有沒有等人的事。
+
+把 `raw.gates` 依 family 寫入 `$MAIN_WT_PATH/HANDOFF.md`（標題沿用舊名，下游 `rotate-handoff-done.ts` 依它定位）：
+
+```markdown
+## Review-gui Readiness
+
+_Updated: <YYYY-MM-DD> /hub-core:handoff next — flow gates_
+
+<repo> gates N：ruling a · acceptance b · ui-judgement c · external-action d · exception e
+
+### <family> (N)
+
+- `<anchor>` | <question> | <why_now> | → `<command 第一個指令>`
+- (該 family 空時整段省略；五個 family 全空寫 `_(no human gates)_`)
+```
+
+每跑一次 **整段覆寫**（不是 append）— gates 是 snapshot，stale 內容應該被新 snapshot 替換。
+
+**每一張卡都 MUST 走 §2B.2.5 主動處置**：`external-action` / `exception` 卡不是「等人就好」——先抽 blocker 原因、辨識 startable 子集，**NEVER** 因為它是卡片就從 outstanding 省略。卡片以外的 pending（缺 evidence、未 triage 的 issue）是 agent 的球，走 §2B.2 的一般推薦，**NEVER** 寫成「等 user」。
+
+**判定有沒有等人的事的 SoT**：`reviewGuiReadiness.raw.gates`。tasks 檔的 leaf count / HANDOFF.md 既有 narrative 都**不是** SoT。
+
+**`park` 跑時不執行本 sub-step** — `park` 是「靜默寫入交接」，scan 為 outstanding 推薦服務，`park` 沒推薦階段。
+
+**scan 失敗 fallback**（`reviewGuiReadiness.checks` 的 `flow-gates` check status=fail 時，detail 已含失敗原因）：
+
+| 失敗情境 | 處理 |
+| --- | --- |
+| `flow gates` 跑不起來（clade home 不可達、exit 非 0） | 寫 `## Review-gui Readiness` 段含 `_(flow gates unavailable: <reason>)_`，並警告主線「outstanding 推薦沒有人工 gate 即時資訊，NEVER 推薦「等 user 判」」 |
+| 輸出缺 `counts` / `gates` | 同上。**NEVER** 讀成 0 張——判不出來與空長得一樣正是這格要擋的 |
+| 跑成功且 0 張 | 寫 `_(no human gates)_` |
+
+---
+
+## 2B.1.8 Tech-debt hygiene scan（hard rule — 防 tech-debt.md 堆積）
+
+讀 §2B.1a 那次 `handoff-scan.ts --json` 輸出的 `techDebtHygiene` 段（掃當前 consumer 自家 `docs/tech-debt.md`，與 clade SoT 無關）。本 sub-step 前未跑過 scan 時補跑同一指令。
+
+**遷移狀態分流（先判這一題）**：repo 有 `specs/truth/work-lifecycle.md` 時 scan 只回一條 `tech-debt-hygiene-retired`（n/a）且 `raw.retired: true` —— `docs/tech-debt.md` 與 `docs/archives/tech-debt-*` 是凍結舊載體，**本節以下全部處置（含 retained stub 化、正文外移、anti-snooze 追問）都不適用**，outstanding 走 [rules/next盤點與推薦判準.md](next盤點與推薦判準.md) §2B.2 的 `planInventory` 三桶（**NEVER** 把 `techDebtHygiene.raw.plans[]` 平鋪成接著做）。**NEVER** 因為手動讀到舊檔裡的 open TD 就照下表補 Resolution／stamp Last reviewed／下推 bodies。下表只給未遷移 consumer。
+
+六條訊號 **MUST** 各自處置，**NEVER** 只看其中一條：
+
+評估：all-match（逐條檢查，命中就套用）
+| id | 訊號 | check | 意義 | 處置 |
+| --- | --- | --- | --- | --- |
+| Z1 | **staleOpen** | `tech-debt-stale:<TD-NNN>`（warn） | open/pending TD 的 `Discovered` > 60d 且無 `### Resolution` / 近期 `Last reviewed` — 「開了就忘」候選 | 列進 §2B.2 outstanding **並標記為最高優先**（age 越大越前）。推薦 user 三選一：做掉 + 補 `### Resolution` / 改 `Status: wontfix` + 理由 / 加 `**Last reviewed**: <today>` 重置 SLA。**NEVER** 默默放回清單尾巴 |
+| Z2 | **aging** | `tech-debt-aging:<TD-NNN>`（warn） | open/pending TD 的 `Discovered` > 14d，含被 `Last reviewed` snooze 的 — 「正在老化」候選 | 列進 §2B.2 outstanding（排在 stale 之後、一般項目之前）。**MUST 主動追問 user 卡關原因**（見 § anti-snooze）。對 `snoozed: true` 的項目**明確指出** `Last reviewed` 不等於解決 — 「已 stamp Last reviewed 但仍無 Resolution，應推進或 wontfix」 |
+| Z3 | **evidenceStale** | `tech-debt-evidence-stale:<TD-NNN>`（warn） | open TD 的 `Location` 路徑在 `Discovered` 之後被 commit 過 — 「敘述可能已不成立」候選。與 staleOpen 正交：staleOpen 問「放多久了」，本條問「還成不成立」 | **MUST 逐條讀該 entry 對照現況後才列 outstanding**，NEVER 直接把它當成待辦推給 user。三種結果：① 事情已做完 → 補 `### Resolution` + 改 `Status`，**不**列 outstanding；② 敘述過期但問題還在 → 更正敘述（保留原文供追溯），再列 outstanding；③ 確認仍成立 → 加 `**Last reviewed**: <today>`，照常列。**這是啟發式不是判決** — 路徑被動過也可能與該 TD 主題無關 |
+| Z4 | **archivedRetained** | `tech-debt-archived-retained`（fail） | `docs/archives/tech-debt-closed-*.md` 內出現帶 re-activation 契約的 TD；trigger 留在 archive 裡，後續盤點看不見 | 依 §2B.1a 的 fail 契約停止；按 detail 的 TD id／archive path 搬回 `docs/tech-debt.md`。判準與 rotation 共用：`*-until-*`、`### 重訪條件` / `### Defer 條件`、`**Signal**:` 任一命中 |
+| Z5 | **closedBloat** | `tech-debt-closed-bloat`（warn，closed TD ≥ 門檻時觸發） | done/resolved/wontfix 的 closed TD 仍躺 `docs/tech-debt.md` 主檔 | **MUST** 跑 `node "$HOME/offline/clade/vendor/scripts/rotate-closed-bloat.ts"`。stdout `retired` = clade home／已遷移 repo，**停**，不要寫 archive 或改 register。未遷移 consumer：搬全部 rotatable（noop 時 stdout 是 `noop`）。**NEVER** 詢問操作。Park 不執行 |
+| Z6 | **entryOversize** | `tech-debt-entry-oversize`（warn，任一 open TD > `raw.oversizeThreshold` 行時觸發） | **open** TD 單條正文過長。rotate 只吃 closed，對 open 零覆蓋 — 某 consumer 實測 4986 行主檔裡 4807 行是 open，主檔體積的長期成長全在這裡 | （未遷移 consumer 才適用）三選一：**拆條**（其實是 2 條以上的命題）/ **關條**（已 done / 已被機械 gate 承載 / wontfix）/ **知識語態重寫**（真教訓且未機械化 → `/oops`，主檔那條同時關掉）。目標每條 ≤10 行。逐條見 `raw.oversize[]`（含 `lines` / `overBy` / `lineNo`）。**依詢問操作讓 user 拍板**，user 選定才動檔。**NEVER 把正文下推到 `docs/archives/tech-debt-bodies.md`**（TD-495 改判撤銷，與 scan detail 一致）。**MUST 保留 metadata block 原封不動** — `audit-tech-debt-hygiene.ts` 的 Invariant 2 / 3 / 6 全靠它 |
+
+**closedBloat 的幅度由 script 一次搬完全部 rotatable 承載**，不再走 (A) 選項。
+
+**entryOversize 的處置受 [[threshold-remediation]] 的幅度紀律管**：MUST 標出預期降幅（拆／關幾條 / 幾行），**降幅 < 超標量的 (A) NEVER 呈給 user**——要擴大搬遷範圍到
+降幅 ≥ 超標量再問。user 選 A 執行完 MUST 用同一支 audit 複量，仍 > 門檻的 90% → 派 Opus 顧問
+檢討成長結構，NEVER 自行再壓一次。
+
+**Anti-snooze（防無限延期）**：`Last reviewed` 只是「我知道這條存在」的確認，**不等於**已在推進。以下情境 **MUST** 主動追問 user 而非默許延期：
+
+- aging TD 帶 `snoozed: true`（有 Last reviewed 但無 Resolution）— 「這條 TD 已 N 天，上次 review 是 M 天前但仍未解決。什麼卡關？能現在做掉嗎？還是應該 wontfix？」
+- stale TD（> 60d）— 已超過 SLA，**NEVER** 推薦「加 Last reviewed 重置」作為預設選項（只作為三選一的最後項，前兩項是做掉 / wontfix）
+- 同一條 TD 如果在 `docs/tech-debt.md` body 明確寫了 blocker（如「需人工確認」「等外部 API」「需客戶拍板」），**MUST** 在 outstanding 盤點時引用該 blocker 並問 user：「blocker 解了嗎？能推進嗎？」
+
+### retained stub 化與正文外移（僅未遷移 consumer：`docs/archives/tech-debt-bodies.md`）
+
+**只適用未遷移 consumer。** repo 有 `specs/truth/work-lifecycle.md` 時 **NEVER** append `tech-debt-bodies.md`、NEVER 產 stub —— re-activation 條件寫進承載它的 plan（或 truth 的 re-evaluation condition），per `specs/truth/work-lifecycle.md` § Close。
+
+未遷移 consumer 的 closedBloat retained 例外，正文落 `$MAIN_WT_PATH/docs/archives/tech-debt-bodies.md`（append-only；entryOversize 已不下推，見上表）。
+
+- **檔名 NEVER 用 `tech-debt-closed-*.md`**：`audit-tech-debt-hygiene.ts` 的 `loadArchiveEntries()` 用 glob `/^tech-debt-closed-.*\.md$/` 撿 archive 進 Invariant 1 的重號偵測。正文檔若落進那個 glob，會與主檔留下的 stub 同號互撞，**每一條**外移項都變成 duplicates 假陽性
+- **主檔 stub 的最小內容**：heading（`## TD-NNN — <title>`，編號與標題不變）+ metadata block（`Status` / `Discovered` / `Class` / `Location`，**原封不動**）+ trigger 條件或摘要一行 + pointer（`> 正文：docs/archives/tech-debt-bodies.md#td-nnn`）
+- **re-activation SOP**：`tech-debt-bodies.md` 是 append-only。trigger 命中時 **NEVER 把正文搬回主檔** — 就地把 stub 的 `Status` 改回 open 並補上新 context，archive 內的正文留作歷史紀錄。搬回去會同時破壞 append-only 與 Invariant 1 的編號帳
+- **NEVER 對 consumer 代做**：本 skill 只產出建議 + 詢問操作取得回答；實際搬檔在哪個 repo 就由那個 repo 的 session 自己執行
+
+**判定 SoT**：`techDebtHygiene.raw`（`archivedRetained[]` 含 `id` / `archivePath` / `lineNo` / `reasons`；`stale[]` 含 `discAge` / `lineNo`；`aging[]` 含 `discAge` / `reviewAge` / `snoozed`；`open[]` 含**全部** open entry 的 `id` / `title` / `lineNo` / `lines` / `discovered` / `location`；`oversize[]` 含 `lines` / `overBy`；`closed[]` 含 `status` / `lines`；`closedCount` / `closedLines`）。**NEVER** 從 `docs/tech-debt.md` 既有 narrative 或目測推測 — scan output 才是 SoT。
+
+**`park` 跑時不執行本 sub-step** — `park` 是「靜默寫入交接」，本 scan 為 §2B.2 outstanding 盤點與 rotate 推薦服務，`park` 無推薦階段。
+
+**scan 失敗 / 無檔 fallback**：`techDebtHygiene.checks` 出現 `tech-debt` check status=pass detail=「docs/tech-debt.md 不存在」→ 該 consumer 無 tech-debt 追蹤，跳過本段不報錯。
+
+---
+
+## 2B.1.9 Consumer-local audit scan（hard rule — 讓「只有本機跑得動」的稽核有觸發點）
+
+有一類稽核**只有 attended 本機 session 跑得動**：它要人的憑證（Notion token、`gh` 登入、
+VPN／Tailscale 內網），CI 沒有那些東西。這類 script 因此進不了 `pnpm check`、進不了 workflow ——
+於是它們**寫好了、判定準確、卻沒有任何時刻會去跑它**。
+
+> 2026-08-28 實證（某 consumer）：`scripts/audit-notion-secrets.mjs` 已能抓出兩條 secret 明文只剩截斷值、
+> exit 1、檔頭註解逐字寫過這個情境；`grep -rn "audit:notion-secrets"` 卻只命中 `package.json` 的
+> script entry —— 不在任何 gate、任何 workflow、任何 skill。規則有、偵測有、判定準，
+> 唯獨沒有觸發點，於是兩條 secret 的明文在世界上消失了一整天沒有人知道。
+
+`/handoff` 的收工盤點是這類稽核**唯一**同時滿足「保證會跑」＋「憑證在手」的時刻，所以它們掛在這裡。
+
+### 消費的宣告檔
+
+讀當前 consumer 的 **`.claude/rules/local/handoff-audits.md`**（consumer 自治區，clade 不散播內容）。
+**檔案不存在 → 整段跳過，不報錯**（fleet 多數 consumer 沒有這類稽核，本 sub-step 對它們是 no-op）。
+
+該檔用一張表宣告要跑哪些指令，形狀與 `.claude/rules/local/verify-commands.md`（consumer 宣告 gate chain、clade 規約消費）同源：
+
+```markdown
+| 指令 | 判什麼 | 失敗時 |
+| --- | --- | --- |
+| `pnpm audit:notion-secrets` | Notion secret 台帳的值欄完整性 | 列進 outstanding，逐條處置 |
+```
+
+### exit code 契約（宣告進本表的 script MUST 遵守）
+
+評估：first-match；以上皆非 → X*
+| id | exit | 語義 | 本 sub-step 動作 |
+| --- | --- | --- | --- |
+| X1 | `0` | 乾淨 | 摘要一行 pass，不進 outstanding |
+| X2 | `1` | **有 finding** | 逐條列進 §2B.2 outstanding |
+| X* | `≥2` | **環境缺件**（token 讀不到、CLI 未登入、內網連不上） | **skip 一行 `<指令>: skipped（<原因>）`，NEVER 當成失敗** |
+
+exit 1 與 exit ≥2 分不開的 script **不合格**，不要宣告進表 —— 兩者混在一起時，
+「今天沒登入」會長得跟「台帳破了」一模一樣，而人會學會忽略它。
+
+### NEVER
+
+- **NEVER** 把這些指令搬進 `pnpm check` / CI workflow。CI 沒有那些憑證，紅的會是環境不是問題，
+  而下一步必定是有人加 `|| true` 把它消音 —— 那比現在的「沒有觸發點」更糟：訊號還在，判定已死
+- **NEVER** 對 exit ≥2 追加重試、追問 user、或擋住收工。缺憑證是**這台機器此刻**的事實，不是待辦
+- **NEVER** 把 script 的原始輸出整段貼進 `HANDOFF.md`。這類稽核常在處理憑證／台帳，
+  輸出裡可能帶得出**值**。只寫「哪一條指令、幾條 finding、finding 的名字與判定」，
+  值本身 **NEVER** 落任何檔（同 [[secret-custody]]）
+- **NEVER** 因為某條 finding 上次盤點也在、這次還在，就從 outstanding 拿掉。重複出現是**老化訊號**，
+  處置方式同 §2B.1.8 的 aging：主動追問 blocker，不是靜音
+
+**`park` 跑時不執行本 sub-step** —— 同 §2B.1.8，`park` 無推薦階段。

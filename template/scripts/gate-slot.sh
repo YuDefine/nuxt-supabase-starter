@@ -527,7 +527,18 @@ _wait_register() {
   [ "$LANE_URGENT" = 1 ] && kind=urgent
   mkdir -p "$WAIT_DIR" 2>/dev/null || return 0
   _wait_reg="$WAIT_DIR/$kind-$$"
-  { printf '%s\n' "$(date +%s)"; _pid_ident "$$"; printf '\n'; } >"$_wait_reg" 2>/dev/null || _wait_reg=
+  # 原子寫入：先在變數組好內容、寫到暫存檔再 mv。直接 `>` 會先截斷成空檔、等 _pid_ident 子行程跑完才有內容，
+  # 這段空檔裡別的 waiter 的 _reg_alive 讀到空的第 1 行會把登記當死登記刪掉（雙向讓位就漏掉這個 waiter）。
+  local _wait_content _wait_tmp="$WAIT_DIR/.tmp-$kind-$$"
+  _wait_content="$(date +%s)
+$(_pid_ident "$$")
+"
+  if printf '%s' "$_wait_content" >"$_wait_tmp" 2>/dev/null && mv -f "$_wait_tmp" "$_wait_reg" 2>/dev/null; then
+    :
+  else
+    rm -f "$_wait_tmp" 2>/dev/null
+    _wait_reg=
+  fi
   return 0
 }
 _wait_unregister() {
@@ -735,6 +746,7 @@ mem_scope_available() {
 #   - 行程集合沒變（沒有新起或結束的行程）
 #   - 輸出沒更新：樹內行程開著的一般檔／tty、CLADE_GATE_HANG_WATCH、clade-gate 的輸出 heartbeat
 #     的 mtime 都沒動；沒有 heartbeat 而 stdout／stderr 是 pipe 時（anonymous pipe 寫入不更新 mtime），改看整棵樹的 wchar 有沒有增加
+#     沒有 /proc/<pid>/io（WSL2 核心）就看不到 pipe 輸出，此時不判卡死、watchdog 直接退出
 # 判定後先把原因寫到 holder 的 stderr（node 的 stdio 'pipe' 是 socketpair，/proc/<pid>/fd/2 開不起來，
 # 所以 clade-gate 給 CLADE_GATE_HANG_REPORT 檔、結束時自己印），SIGTERM 整棵樹，寬限 CLADE_GATE_HANG_GRACE 秒後 SIGKILL
 # 還活著的；鎖的 fd 隨行程結束釋放，slot 就放出來了。
@@ -845,6 +857,13 @@ _hang_watchdog() {
     case "$(readlink "/proc/$root/fd/1" 2>/dev/null)$(readlink "/proc/$root/fd/2" 2>/dev/null)" in
       *pipe:* | *socket:*) use_wchar=1 ;;
     esac
+  fi
+  # pipe 輸出只能靠 /proc/<pid>/io 的 wchar 觀察；核心沒編 task io accounting（WSL2 的 microsoft 核心就沒有）時
+  # wchar 永遠是 0，持續輸出的 holder 會被當成「輸出沒動靜」誤殺。看不到就不判卡死（MAX_RUNTIME 仍是上界）。
+  # CLADE_GATE_HANG_NO_PROC_IO=1 是測試接縫：在有 io accounting 的主機上模擬這個情境。
+  if [ "$use_wchar" = 1 ]; then
+    [ "${CLADE_GATE_HANG_NO_PROC_IO:-}" = 1 ] && return 0
+    read -r _ <"/proc/$root/io" 2>/dev/null || return 0
   fi
   prev=$(_hang_sample "$root" "$my_cg" "$use_wchar")
   last=$(date +%s)

@@ -1,5 +1,5 @@
 ---
-description: 'CI workflow 撰寫規約——外部 GitHub Action 的 uses: MUST SHA-pin、CI 三層分工（PR 只跑必要、e2e 在合併後、commit 前 0-A）；動 .github/workflows 或 .github/actions 時載入'
+description: 'CI workflow 撰寫規約——外部 GitHub Action 的 uses: MUST SHA-pin、CI 三層分工（PR 只跑必要、e2e 在合併後、0-A 在 PR 開出後）；動 .github/workflows 或 .github/actions 時載入'
 paths: ['.github/workflows/**', '.github/actions/**']
 ---
 <!-- Clade native rule; source: rules/core/ci-workflow.md; edit canonical source -->
@@ -63,7 +63,7 @@ concurrency:
 
 | 層 | 時刻 | 跑什麼 |
 | --- | --- | --- |
-| commit 前 | agent 下 `git commit` 之前 | commit 0-A：fresh-context reviewer，見 [[commit]]（`commit.detail.md`）與 `.claude/scripts/claude-review-safe.sh` |
+| commit 前 | agent 下 `git commit` 之前 | `/commit` D2 作者自驗（typecheck、affected 測試、doctor）；0-A 不在這層——PR 開出後由 coordinator 以 `.claude/scripts/claude-review-safe.sh` 派 fresh-context reviewer，trunk-based 無 PR 則 push main 前補（見 [[commit]]、`commit.detail.md`） |
 | 合併前 | `pull_request`，或不限 branch 的 `push` | lint、typecheck、unit test。consumer 跑**全量** unit（實測 1–8 分）；clade 的範圍見 [[github-flow]] § 各事件的 test-lane |
 | 合併後 | `push` 到 `main`（含由它接出的 `workflow_run`，`branches: [main]`） | 全量 unit 與 e2e。tag／deploy、`schedule` 可以**再**跑一次，但不能是唯一一次 |
 

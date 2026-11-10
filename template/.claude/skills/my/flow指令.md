@@ -98,6 +98,7 @@ cd ~/offline/<consumer-id> && node ~/offline/clade/vendor/scripts/flow/flow.ts a
 | `--agent-note N` | 選填 | 給 agent 的資訊（絕對路徑、session／dispatch id、續接方式、原文）。寫進 `payload.agent_note`，`flow pending`、`/my` 與 fleet 卡片都不顯示 |
 | `--category C` | 選填，預設 `ruling` | 只收 `ruling`／`review`／`other-repo`／`human-action`／`loop-structural` |
 | `--carrier PATH` | 選填 | 答案落點（`TD-NNN`、`HANDOFF.md`、`docs/tech-debt.md`、`tasks/xxx.md`）；`TD-NNN` 落到 `docs/tech-debt.md` 該 entry 尾；不給則答案只存在 spine |
+| `--carrier-repo R` | 選填 | 答案落點在 `vendor/scripts/flow/carrier-repo.ts` 名單上的非 consumer repo（目前只有 `yudefine-hq`）；`--carrier` 寫那個 repo 內的相對路徑（檔案要先存在），`flow answer` 依它落檔並送進 origin。`--carrier ~/…` 一律拒收；絕對路徑落在名單 repo 內時自動歸給它 |
 | `--actor A` | 選填，預設 `unknown` | 發問者（pane id） |
 | `--work-id W` | 選填 | 掛到既有 work item |
 | `--audience charles\|coordinator` | 選填，預設 `charles` | `coordinator` 不進人的預設佇列，也不受 admission 表限制 |
@@ -141,7 +142,7 @@ cd ~/offline/clade && node vendor/scripts/flow/flow.ts answer '<span_id>' \
 | `--repo <name>` | 題目有 `[<repo>]` 前綴時必填 | 佇列上的 repo **名稱**（可帶 `@<機器>`，如 `clade@zenbook`），由 `resolveRepoRootByName` 解析；NEVER 填路徑。名稱不在 roster 上時印 `roster 上找不到 repo「<name>」——不寫入…` 並 exit 1 |
 | `--repo-root <path>` | 只有 repo 不在 registry 上時 | 直接指那個 checkout；span 必須在它的 spine 上（判準見 `rules/回答落檔判準.md` Rule 2） |
 | `--close-td` | 選項沒標「TD 結案」、但 Charles 明說要關那條 TD 時 | 補上關 TD 的來源；答案文字仍要過終局檢查才關（判準見 `rules/回答落檔判準.md` Rule 10） |
-| `--via <text>` | 選填 | 決策紀錄的來源說明，預設 `Charles 在 chat 回答，由主線代填` |
+| `--via <text>` | 選填（被派出的 session 必填） | 決策紀錄的來源說明，預設 `Charles 在 chat 回答，由主線代填`（只對 Charles 在 chat 主線的呼叫成立）。audience coordinator 的題沒帶 `--via` 也沒帶 `--surface`、或被派出的 session（`CLADE_DISPATCH_ID` 非空）沒帶 `--via`（只有 `--surface fleet-web` 免）時**拒絕**、不落答、不套預設：依既有證據代答要自述（如 `--via "主持者依 <證據> 代答"`），NEVER 把代答記成 Charles 本人；Charles 親口答才寫 `Charles 在 <處> 回答，由 <誰> 代填` |
 | `--surface fleet-web\|cli-proxy\|cli` | 選填 | 作答介面，連同 `via` 寫進 `decision.request` end 事件。沒帶：有 `--via`＝`cli-proxy`、沒有＝`cli`（代填）。`fleet-web` 只有 /fleet 網頁的 server 路徑會帶，agent **NEVER** 帶；它是 server 自述不是防偽證明。三值以外當場拒絕、不落答 |
 | `--apply` | 寫入時必帶 | 真的關 span、寫檔、散播。不帶就只預演：不關 span、不寫檔、不散播，輸出的 `block` 逐字就是等一下會寫進去的那段（`FLOW_CLI_CONTRACT=2` 下的預設；過渡期沒帶前綴時不帶 `--apply` 仍會寫入並印 `flow: deprecated-default`）。`--dry-run` 是舊名別名 |
 | `--local-only` | 選填 | 本機沒有這題時不問 peer。預設：本機判 `no-such-decision` 才問 peer 的佇列、對題所在那台跑同一條 `answer --local-only`；peer 讀不到就拒絕並印原因（exit 1），NEVER 在本機另寫一份 |

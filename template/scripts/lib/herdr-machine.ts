@@ -76,6 +76,14 @@ export function localMachineLabel(env: NodeJS.ProcessEnv = process.env): string 
 }
 
 /**
+ * 擁有 handoff owner 鏈的那一台（`CLADE_OWNER_HOME` 或 `~/.config/clade/owner-home`）。鏈存在各 clone
+ * 自己的 `<git-common-dir>`，不同機器的鏈互不相見，所以只有這一台可以寫；沒設＝沒有任何機器可寫（fail closed）。
+ */
+export function ownerHomeLabel(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.CLADE_OWNER_HOME?.trim() || readConfigLine('owner-home', env)
+}
+
+/**
  * `CLADE_HERDR_PEERS`（或 `~/.config/clade/herdr-peers`）列的機器，原樣、不濾本機。空陣列＝沒設清單。
  * 這份清單有兩個用途，改它就是同時改兩處：① `--machine auto` 的候選 peer（`peerMachineLabels`）；
  * ② auto-dispatch 的 ssh 白名單（`peerSshRefusal`）：有設清單而這台不在其中，所有 auto-dispatch 探測

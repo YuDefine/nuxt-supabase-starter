@@ -57,7 +57,7 @@ if [ -n "$today_tasks" ]; then
   # tasks/archive/ 這兩個落點：未完項併進 plan Open work，做完的檔直接刪。
   # 未遷移的 consumer 維持舊指示，fleet 遷移完才一起拿掉（W-2026-09-20-consumer-lifecycle-migration）。
   if [ -f specs/truth/work-lifecycle.md ]; then
-    disposition='對每個未完項併進所屬 plan 的 Open work（specs/plans/<work-id>/plan.md）或直接刪；全部勾完的檔直接 git rm，不搬到 tasks/archive/。'
+    disposition='對每個未完項併進所屬 plan 的 Open work（specs/plans/<work-id>/work.md；舊 package：plan.md）或直接刪；全部勾完的檔直接 git rm，不搬到 tasks/archive/。'
   else
     disposition='對每個未完項升級（HANDOFF / tech-debt / ROADMAP）或直接刪，再 mv 到 tasks/archive/。'
   fi

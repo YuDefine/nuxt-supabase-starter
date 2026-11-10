@@ -15,26 +15,26 @@ anchor 由 `scripts/audit-upstream-overrides.ts` 對 pin 的 `vendor/aixbdd/.age
 
 判準：
 
-- **L｜lifecycle 落點**：本次 plan package 的 `plan.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:` 兩個鍵。判準只看這兩個鍵；**NEVER** 用 repo 名、manifest、`specs/truth/**` 是否存在或任何其他檔案推斷。
+- **L｜lifecycle 落點**：本次 plan package 的 `work.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:` 兩個鍵（相容期內，沒有 `work.md` 時看 legacy `plan.md`，下稱舊 package）。判準只看這兩個鍵；**NEVER** 用 repo 名、manifest、`specs/truth/**` 是否存在或任何其他檔案推斷。
 - **D｜canonical doctor**：repo 的 `.claude/hub.json` `modules.capabilities` 含 `aixbdd`，也就是適用 fleet canonical doctor 契約的 clade consumer。doctor 命令依 repo 已確認的 package manager、workspace root、技術棧與既有 canonical project check 決定；**NEVER** 把 `pnpm run doctor` 當跨 repo 預設，也 **NEVER** 用固定 exit 0 的包裝器或 no-op 代替。
 - **P｜派工時長**：範圍與 D 相同（repo 的 `.claude/hub.json` `modules.capabilities` 含 `aixbdd`）；這些 consumer 都投影了 clade 的 `agent-routing` 規約，派工載體以它的 § 派多少 估時為準。
 
 命中 L 時，下表的「L 落點」指這五點：
 
 1. package 路徑是 `flow plan open` 鑄出的 `specs/plans/<work-id>/`（`W-<YYYY-MM-DD>-<slug>`）。owner **NEVER** 自行建立 package 目錄、**NEVER** 遞增 `NNN` 編號；同一件工作續跑同一個 package，**NEVER** 開第二份。
-2. `plan.md` 是 lifecycle 檔、由 `flow` 持有：owner **NEVER** 建立、覆寫或刪除它。
-3. 系統分析寫在、也從同 package 的 `system-analysis.md` 讀。
-4. 本輪 truth delta 的載體是 `plan.md` 的 `## Truth delta` 表，欄位固定 `id`、`action`、`unit`、`reason`、`state`（`proposed`／`applied`／`withdrawn`），owner 新寫入的列 `state` 一律 `proposed`。該 package 沒有 `truth-delta.md`，owner **NEVER** 建立一份。
-5. 被省略的 artifact 在 `plan.md` 的 `## Decisions` 留一行工作特定理由（例：CLI-only 需求沒有 `ui-plan.md`）；`work_kind` 決定的省略不寫 Decisions，見同目錄 `工作種類與必要產物.md`。
+2. `work.md`（舊 package：`plan.md`）是 lifecycle 檔、由 `flow` 持有：owner **NEVER** 建立、覆寫或刪除它。
+3. 系統分析：`work.md` package 照上游寫、讀同 package 的 `plan.md`（它不帶那兩個鍵，不是 lifecycle 檔）；舊 package 的 `plan.md` 被 lifecycle 占用，寫、讀 `system-analysis.md`。
+4. 本輪 truth delta：`work.md` package 的載體是同目錄已有的 `truth-delta.md`（上游格式；`flow plan open` 若鑄出的是舊 package 則沒有這份檔，走下一句的舊載體），truth owner 寫完 truth 後經 `/truth-delta` 加列，列存在即已套用，沒有 `state`；owner **NEVER** 重建或覆寫這份檔。舊 package 的載體是 `plan.md` 的 `## Truth delta` 表，欄位固定 `id`、`action`、`unit`、`reason`、`state`（`proposed`／`applied`／`withdrawn`），owner 新寫入的列 `state` 一律 `proposed`。該 package 沒有 `truth-delta.md`，owner **NEVER** 建立一份。
+5. 被省略的 artifact 在 `work.md`（舊 package：`plan.md`）的 `## Decisions` 留一行工作特定理由（例：CLI-only 需求沒有 `ui-plan.md`）；`work_kind` 決定的省略不寫 Decisions，見同目錄 `工作種類與必要產物.md`。
 
-`flow` 的 specification-readiness 與 close gate 會機械擋下：package 內出現 `truth-delta.md`、lifecycle repo 在本工作期間新增 `specs/plans/NNN-*` 目錄、`plan.md` 原有的 `work_id`／`truth_baseline` frontmatter 消失。被擋就照上面五點修，**NEVER** 為了過 gate 改 frontmatter。
+`flow` 的 specification-readiness 與 close gate 會機械擋下：舊 package 內出現 `truth-delta.md`、`work.md` package 少了 `truth-delta.md`、lifecycle repo 在本工作期間新增 `specs/plans/NNN-*` 目錄、lifecycle 檔原有的 `work_id`／`truth_baseline` frontmatter 消失。被擋就照上面五點修，**NEVER** 為了過 gate 改 frontmatter。
 
 ## Good Example
 
-- 這個例子是好的，因為只看 `plan.md` frontmatter 的兩個鍵判 L，命中就把 package 落在 `flow plan open` 鑄出的目錄、delta 寫進 `plan.md`。
+- 這個例子是好的，因為只看 `work.md` frontmatter 的兩個鍵判 L，命中就把 package 落在 `flow plan open` 鑄出的目錄、delta 列寫進該 package 的載體（`work.md` package：`truth-delta.md`；舊 package：`plan.md` § Truth delta）。
 
 ```text
-plan.md frontmatter 有 work_id 與 truth_baseline → 命中 L → owner 用 specs/plans/<work-id>/，truth delta 寫 plan.md 的 ## Truth delta，不建 truth-delta.md
+work.md frontmatter 有 work_id 與 truth_baseline → 命中 L → owner 用 specs/plans/<work-id>/，truth delta 經 /truth-delta 加列到既有的 truth-delta.md
 ```
 
 ## Bad Example
@@ -42,7 +42,7 @@ plan.md frontmatter 有 work_id 與 truth_baseline → 命中 L → owner 用 sp
 - 這個例子是壞的，因為用 repo 名或 `specs/truth/**` 是否存在推斷 L，或為了過 gate 改 frontmatter。
 
 ```text
-repo 有 specs/truth/ 就當命中 L；gate 擋下 truth-delta.md 後改刪 plan.md 的 truth_baseline 讓它過
+repo 有 specs/truth/ 就當命中 L；gate 擋下 truth-delta.md 後改刪舊 package plan.md 的 truth_baseline 讓它過
 ```
 
 # Rule 2 - L 族覆寫：命中 L 的 owner 照右欄做，不照上游 anchor
@@ -52,13 +52,13 @@ repo 有 specs/truth/ 就當命中 L；gate 擋下 truth-delta.md 後改刪 plan
 | owner skill | 上游 anchor（檔＋原句逐字） | 判準 | 覆寫後怎麼做 |
 | --- | --- | --- | --- |
 | specify | `specify/rules/Feature目錄命名與輸出定位判準.md`：「`/specify` 每次執行都必須在 `specs/plans/` 下建立新的 `NNN-<slug>` plan package。」 | L | package 就是 L 落點 1 的 `specs/plans/<work-id>/`，已由 `flow plan open` 鑄出；Rule 1 的編號遞增與目錄建立不適用 |
-| specify | `specify/rules/Feature目錄命名與輸出定位判準.md`：「`/specify` 只能寫入 `spec.md`、`checklists/requirements.md` 與初始化 `truth-delta.md`。」 | L | 可寫檔只有 `spec.md` 與 `checklists/requirements.md`；本輪 truth 變更意圖寫進 `plan.md` 的 `## Truth delta`（L 落點 4），`state` 一律 `proposed` |
-| specify | `specify/SKILL.md`：「並初始化 `truth-delta.md` 骨架；本 phase 不建立或修改 `specs/truth/**`。」 | L | Phase 1 不建目錄、不建 `truth-delta.md`、不碰 `plan.md`（L 落點 1、2、4） |
-| specify | `specify/SKILL.md`：「本次是否進入 `/clarify`、仍保留的 `NEEDS CLARIFICATION` 或假設，以及此 plan 是否可進入 `/spec-by-example` 或 `/technical-research`。」 | L | Phase 5 回報的 truth delta 落點是 `plan.md` 的 `## Truth delta` 表，**NEVER** 回報 `truth-delta.md` 路徑；同時回報被省略的 artifact 已在 `## Decisions` 留理由（L 落點 5） |
-| system-analysis | `system-analysis/SKILL.md`：「READ 讀取使用者需求、呼叫者要求、目標 plan package 的 `spec.md`、`research.md`、`truth-delta.md`、既有 `plan.md`、`specs/truth/techstack.md` 與相關 `specs/truth/**`。」 | L | 既有系統分析讀 `system-analysis.md`，truth delta 讀 `plan.md` 的 `## Truth delta`（L 落點 3、4） |
-| system-analysis | `system-analysis/SKILL.md`：「將系統介面盤點、Wave、分析重點與委派理由寫入」 | L | 輸出檔改為同 package 的 `system-analysis.md`；**NEVER** 建立、覆寫或刪除 `plan.md`，package 目錄已存在不另建（L 落點 1–3）。Phase 4 回報的輸出檔路徑同樣是 `system-analysis.md` |
-| system-analysis | `system-analysis/SKILL.md`：「每次 handoff 都必須包含 plan package path、truth root、truth-delta path、介面名稱與分析重點。」 | L | handoff 的 truth-delta path 換成「`plan.md` 的 `## Truth delta` 表」 |
-| api-plan | `api-plan/SKILL.md`：「READ 讀取使用者需求、呼叫者 handoff、plan package 的 `spec.md`、`research.md`、`plan.md`、`truth-delta.md`、`specs/truth/techstack.md`、既有 `specs/truth/contracts/**` 與指定後端 / API 介面名稱。」 | L | 系統分析內容讀 `system-analysis.md`，truth delta 讀 `plan.md` 的 `## Truth delta`（L 落點 3、4）；`plan.md` 只讀不寫 |
+| specify | `specify/rules/Feature目錄命名與輸出定位判準.md`：「`/specify` 只能寫入 `spec.md`、`checklists/requirements.md` 與初始化 `truth-delta.md`。」 | L | 可寫檔只有 `spec.md` 與 `checklists/requirements.md`；`work.md` package 的 `truth-delta.md` 已存在，列由 truth owner 經 `/truth-delta` 加。舊 package（`flow plan open` 在寫入端切換前鑄的就是這種）：本輪 truth 變更意圖寫進 `plan.md` 的 `## Truth delta`，`state` 一律 `proposed`（L 落點 4） |
+| specify | `specify/SKILL.md`：「並初始化 `truth-delta.md` 骨架；本 phase 不建立或修改 `specs/truth/**`。」 | L | Phase 1 不建目錄、不重建 `truth-delta.md`（舊 package **NEVER** 建）、不碰 lifecycle 檔（L 落點 1、2、4） |
+| specify | `specify/SKILL.md`：「本次是否進入 `/clarify`、仍保留的 `NEEDS CLARIFICATION` 或假設，以及此 plan 是否可進入 `/spec-by-example` 或 `/technical-research`。」 | L | Phase 5 回報的 truth delta 落點照 L 落點 4（`truth-delta.md`；舊 package 是 `plan.md` 的 `## Truth delta` 表，**NEVER** 回報 `truth-delta.md` 路徑）；同時回報被省略的 artifact 已在 `## Decisions` 留理由（L 落點 5） |
+| system-analysis | `system-analysis/SKILL.md`：「READ 讀取使用者需求、呼叫者要求、目標 plan package 的 `spec.md`、`research.md`、`truth-delta.md`、既有 `plan.md`、`specs/truth/techstack.md` 與相關 `specs/truth/**`。」 | L | `work.md` package 照上游讀；舊 package 的既有系統分析讀 `system-analysis.md`，truth delta 讀 `plan.md` 的 `## Truth delta`（L 落點 3、4） |
+| system-analysis | `system-analysis/SKILL.md`：「將系統介面盤點、Wave、分析重點與委派理由寫入」 | L | `work.md` package 照上游寫同 package 的 `plan.md`，**NEVER** 動 `work.md`；舊 package 輸出檔改為 `system-analysis.md`，**NEVER** 建立、覆寫或刪除 `plan.md`，Phase 4 回報的輸出檔路徑同樣是它。package 目錄已存在不另建（L 落點 1–3） |
+| system-analysis | `system-analysis/SKILL.md`：「每次 handoff 都必須包含 plan package path、truth root、truth-delta path、介面名稱與分析重點。」 | L | `work.md` package 照上游帶 `truth-delta.md` 路徑；舊 package 的 truth-delta path 換成「`plan.md` 的 `## Truth delta` 表」 |
+| api-plan | `api-plan/SKILL.md`：「READ 讀取使用者需求、呼叫者 handoff、plan package 的 `spec.md`、`research.md`、`plan.md`、`truth-delta.md`、`specs/truth/techstack.md`、既有 `specs/truth/contracts/**` 與指定後端 / API 介面名稱。」 | L | `work.md` package 照上游讀（`plan.md` 是系統分析）；舊 package 的系統分析內容讀 `system-analysis.md`，truth delta 讀 `plan.md` 的 `## Truth delta`，`plan.md` 只讀不寫（L 落點 3、4） |
 | data-plan | `data-plan/SKILL.md`：「READ 讀取使用者需求、呼叫者 handoff、plan package 的 `spec.md`、`research.md`、`plan.md`、`truth-delta.md`、`specs/truth/techstack.md`、既有 `specs/truth/data/**` 與指定資料介面名稱。」 | L | 同 api-plan |
 | ui-plan | `ui-plan/SKILL.md`：「READ 讀取使用者需求、呼叫者 handoff、plan package 的 `spec.md`、`research.md`、`plan.md`、`truth-delta.md`、既有 `ui/**`」 | L | 同 api-plan |
 | ui-plan | `ui-plan/SKILL.md`：「WRITE 將 UI 規劃寫入 `specs/plans/NNN-<slug>/ui/ui-plan.md`。」 | L | `specs/plans/NNN-<slug>/` 換成 L 落點 1 的 `specs/plans/<work-id>/`；同 Phase 的 `ui/*.html` 也一樣 |
@@ -67,17 +67,17 @@ repo 有 specs/truth/ 就當命中 L；gate 擋下 truth-delta.md 後改刪 plan
 | spec-by-example | `spec-by-example/rules/輸出位置與acceptance切檔判準.md`：「`/spec-by-example` 的輸出位置固定為 `specs/plans/NNN-<slug>/features/acceptance/*.feature`。」 | L | 輸出位置改為 `specs/plans/<work-id>/features/acceptance/*.feature` |
 | technical-research | `technical-research/SKILL.md`：「WRITE 將 decision-driven 研究內容寫入 `specs/plans/NNN-<slug>/research.md`。」 | L | 輸出路徑換成 `specs/plans/<work-id>/research.md`（L 落點 1） |
 | technical-research | `technical-research/rules/Research輸出定位與spec後接續判準.md`：「`/technical-research` 的 decision-driven 研究過程必須輸出到 `specs/plans/NNN-<slug>/research.md`。」 | L | 同上 |
-| truth-delta | `truth-delta/SKILL.md`：「WRITE 若 `truth-delta.md` 尚不存在，於當前 plan package 建立該檔案，並填入 plan package、truth root 與四個 truth owner section。」 | L | **NEVER** 建立 `truth-delta.md`；Phase 1 步驟 3、4 與 Phase 3 的 owner section 操作全部改對 `plan.md` 的 `## Truth delta` 表的列進行，新列 `state` 一律 `proposed`（L 落點 4） |
+| truth-delta | `truth-delta/SKILL.md`：「WRITE 若 `truth-delta.md` 尚不存在，於當前 plan package 建立該檔案，並填入 plan package、truth root 與四個 truth owner section。」 | L | `work.md` package：`truth-delta.md` 已存在不重建，照上游對 owner section 加列，列存在即已套用，不寫 `state`。舊 package：**NEVER** 建立 `truth-delta.md`，Phase 1 步驟 3、4 與 Phase 3 的 owner section 操作全部改對舊 package `plan.md` 的 `## Truth delta` 表的列進行，新列 `state` 一律 `proposed`（L 落點 4） |
 | tasks | `tasks/SKILL.md`：「READ 讀取使用者需求、目標 plan package 的 `spec.md`、`plan.md`、`research.md`、`ui/**`、`truth-delta.md`」 | L | 同 api-plan |
 | tasks | `tasks/SKILL.md`：「WRITE 依 template 骨架輸出 `specs/plans/NNN-<slug>/tasks.md`。」 | L | 輸出路徑換成 `specs/plans/<work-id>/tasks.md`（L 落點 1） |
-| implement | `implement/SKILL.md`：「READ 讀取使用者需求、目標 plan package、`tasks.md`、`truth-delta.md` 與目前 task 完成狀態」 | L | truth delta 讀 `plan.md` 的 `## Truth delta`，系統分析讀 `system-analysis.md`（L 落點 3、4） |
+| implement | `implement/SKILL.md`：「READ 讀取使用者需求、目標 plan package、`tasks.md`、`truth-delta.md` 與目前 task 完成狀態」 | L | `work.md` package 照上游讀 `truth-delta.md`，系統分析讀 `plan.md`；舊 package 的 truth delta 讀 `plan.md` 的 `## Truth delta`，系統分析讀 `system-analysis.md`（L 落點 3、4） |
 
 ## Good Example
 
 - 這個例子是好的，因為命中 L 的 tasks 把輸出路徑換成 work-id 目錄。
 
 ```text
-tasks 要輸出 tasks.md、plan.md 命中 L → 寫 specs/plans/<work-id>/tasks.md，不寫 specs/plans/NNN-<slug>/tasks.md
+tasks 要輸出 tasks.md、work.md 命中 L → 寫 specs/plans/<work-id>/tasks.md，不寫 specs/plans/NNN-<slug>/tasks.md
 ```
 
 ## Bad Example
@@ -217,13 +217,13 @@ Hint 寫「T008–T063 併成一個 subagent」→ 派一支背景 subagent 包 
 
 - Level: `MUST`
 
-owner ∈ {ui-plan、api-plan、data-plan、tasks} 的**每一次**載入，在該 owner 動筆（ui-plan／api-plan／data-plan 寫 artifact，tasks 填 `Shared Must Read`）之前，先照下列步驟取得命中的 clade rule 並讀完。本條是加法：上游原文不動，故沒有 anchor 列；與 L／D／P 判準無關，不看 `plan.md` frontmatter。
+owner ∈ {ui-plan、api-plan、data-plan、tasks} 的**每一次**載入，在該 owner 動筆（ui-plan／api-plan／data-plan 寫 artifact，tasks 填 `Shared Must Read`）之前，先照下列步驟取得命中的 clade rule 並讀完。本條是加法：上游原文不動，故沒有 anchor 列；與 L／D／P 判準無關，不看 lifecycle 檔 frontmatter。
 
 成因：consumer 只收 `clade-*` rule-skill，`paths:` 不會自動載入（`adapters/README.md`：不裝 scoped-rule hook）；plan 期不讀它們，列表 envelope、篩選契約、權限分層在 plan 期就被定掉，implement 才讀到已經晚了（`W-2026-10-22-dashboardstack-adoption` 實驗：中性 prompt 跑到 plan 期，clade rule 讀取 0）。
 
 1. 列出本次該 owner 預計改動的**具體**檔案路徑（專案相對）：由 `spec.md`、既有 `specs/truth/**`、既有程式碼推得。路徑還沒定時 **NEVER** 傳 glob（`globMatches` 的輸入必須是具體路徑），改用該層的固定代表路徑：UI 用 `app/pages/index.vue`、`app/components/Index.vue`，API 用 `server/api/index.get.ts`，資料層用 `supabase/migrations/0000_x.sql`；repo 的目錄慣例不同（例如 `src/`）就換成實際的根目錄。每個 owner 只傳**自己那一層**的路徑（ui-plan 傳 UI 路徑、api-plan 傳 API 路徑、data-plan 傳資料層路徑），避免跨層整批命中（實測三層一起傳命中 48 份）灌滿 context；tasks 逐 Feature phase 各跑一次，傳該 phase 要改的路徑。
 2. 執行 `node ~/offline/clade/scripts/bp-scan.ts --rules-for <路徑…> --repo <repo 絕對路徑>`（`--json` 給機器讀）。輸出每一行是一份命中 rule 的 repo 相對路徑與命中的輸入路徑。
-3. `~/offline/clade` 不存在（cloud 或無 clade checkout）時降級：直接讀 `.claude/skills/clade-*/rules/_index.md`（JSONL，每行 `{file, source, paths}`），自己把步驟 1 的具體路徑對 `paths` 比對；仍判不準就把該 skill 的 `SKILL.md` 讀一次，照它的 `READ 若要讀或改 <glob>` 行比對。**NEVER** 因為腳本跑不了就略過本條。輸出「沒有 clade-* rule index」代表該 repo 沒有可比對的 rule，記一行在 `plan.md` § Decisions 後照常進行。
+3. `~/offline/clade` 不存在（cloud 或無 clade checkout）時降級：直接讀 `.claude/skills/clade-*/rules/_index.md`（JSONL，每行 `{file, source, paths}`），自己把步驟 1 的具體路徑對 `paths` 比對；仍判不準就把該 skill 的 `SKILL.md` 讀一次，照它的 `READ 若要讀或改 <glob>` 行比對。**NEVER** 因為腳本跑不了就略過本條。輸出「沒有 clade-* rule index」代表該 repo 沒有可比對的 rule，記一行在 `work.md`（舊 package：`plan.md`）§ Decisions 後照常進行。
 4. 逐份讀取命中的 rule，artifact 內容 MUST 反映其判準（例：命中 `data-table` 就按它定列表頁的篩選／分頁／匯出，命中 `api-patterns` 就按它定回應 envelope）。
 5. owner 是 tasks 時，把命中的 rule 路徑寫進**命中檔案所屬 Feature phase** 的 `Shared Must Read`（implement 以 phase-level `Shared Must Read` 為必讀面）；Setup／Foundational 這類一般 phase 寫進該 task 的 `Read`。**NEVER** 把全部命中 rule 灌進每個 phase。
 

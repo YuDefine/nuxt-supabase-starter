@@ -8,7 +8,7 @@
 受控執行帶有 acceptance contract 時，每個本次適用的 gate receipt MUST 綁定 contract digest、
 受測 artifact digest、producer family、reviewer family／session 與 evidence ID。
 `verifyCommitGateBindings()` 的 requiredGates 與 independentReviewGates 取本 skill 本次實際判定，
-包含既有 fast-path 及重審條件。主線收割只驗 plan 結果；simplify、code／UI review、checks 與
+包含重審條件（fast-path 已刪除）。主線收割只驗 plan 結果；simplify、code／UI review、checks 與
 Critical／Major 深度複審仍逐步執行。換 pane／另開 session 只是同一個合格 reviewer 的另一次
 執行；啟動與 fresh context 本身不產生 verdict，不能充當獨立 review 的完成證據。
 內容或契約改變時，舊 receipt 不替新版本背書；依既有 gate 規則補驗後才接受整合。
@@ -203,7 +203,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 6. **批次模式** auto-triage 後仍有 blocker → 保留 integration 與全部來源，停止 seal／land；修復後重驗。單成員／獨立 workId 的 Charles-only leftover 只停該來源：`batch yield-blocked` 讓出 active slot，**NEVER** 凍結其他獨立切片。合批內一成員 blocked 則整批不落地；要讓其他成員先走必須 cancel 後重組，不能切掉幾個 artifacts 卻帶走該來源 code。需排除未就緒來源時 cancel 後重登記合格來源再 prepare。**普通 main 模式** auto-triage 跑完後 blocker list 仍非空 → 把每件 BLOCK 工作的 carrier 路徑（`tasks/<X>.md`，或整個 `specs/plans/<X>/**`／`docs/plans/<X>/**`）記為 **withheld scope**，輸出 `⏸️ 0-MR 保留 <X>（pending=<n>；withheld: <carrier 路徑>）`，**進入 Step 0**（不是停下）。withheld scope 由後面兩步消費：
 
-   - **Step 3 分組**：withheld scope 內的路徑不進任何 group（分組唯一的機械排除）。它們留在 working tree，Step 5-A 照「仍有 uncommitted 變更」登記進 HANDOFF，並寫明卡在哪件工作的哪幾個 leaf。
+   - **Step 3 分組**：withheld scope 內的路徑不進任何 group（分組唯一的機械排除）。它們留在 working tree，依 `rules/分組與提交判準.md`（D3）Rule 2 列進 PR body 的「剩餘事項」（trunk-based 無 PR 則列進回報並交 `/handoff` 登記），並寫明卡在哪件工作的哪幾個 leaf。
    - **Step 4 每個 group commit 前**：
 
      ```bash
@@ -230,7 +230,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | step 4 任一工作印 `BLOCK` 且 auto-triage 後仍 BLOCK → 該 carrier 路徑進 withheld scope；Step 4 任一 group 的 `intersect` exit 1 → 該 group 不 commit。**hard gate**，無 override |
-| 消費端 | 跑 `/commit` 的主線（Step 3 排除、Step 4 逐 group 判）；Step 5-A HANDOFF 登記 withheld 檔 |
+| 消費端 | 跑 `/commit` 的主線（Step 3 排除、Step 4 逐 group 判）；withheld 檔列進 PR body「剩餘事項」（trunk-based 交 `/handoff`） |
 | 觸發點 | 本節（`capabilities/core/skills/commit/gates.md` § 0-MR，觸發 0-MR 時 MUST 完整讀）；判定條件 SoT `rules/core/commit.trunk-gates.md` § 人工檢查 Gate |
 
 ### 禁止項
@@ -326,7 +326,7 @@ gate 自己的可用度跑 `node scripts/audit-security-gate-readiness.ts`（war
 **每次 dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，分開驗證 scope、fresh context、模型資格、品質與唯讀載體。commit 0-A 的合格 reviewer **只有一席**：fresh-context Claude Opus 5.5（effort: medium）（`code-review-opus` 列）。Claude Code 主線走下方 § 0-A.1 的 subagent carrier（prepare → AGENT_CALL → FINALIZE，**NEVER** 開 Herdr pane），叫不出 Claude subagent 的 runtime 才跑無子命令的 `claude-review-safe.sh medium`（Herdr child）。**沒有備援席**：Opus 不可用 → gate 保持未完成；receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。review 角色不固定由哪個 runtime 主線執行，原生呼叫方式見本檔末尾投影的 runtime 操作段。
 
 1. 主線先完成 0-A.0；修完的 snapshot 才交給 reviewer。
-2. Fast-path 不成立時啟動 0-A.1 獨立 review，並行 0-B 與 0-C。每個背景工作綁 owner、實際 handle、deadline 與收回方法；不把另一個 runtime 的參數交給本端工具。
+2. 啟動 0-A.1 獨立 review，並行 0-B 與 0-C。每個背景工作綁 owner、實際 handle、deadline 與收回方法；不把另一個 runtime 的參數交給本端工具。
 3. 0-A.1 出 Critical／Major 時，修正後進 0-A.2 深度 review——同一席（Opus 5.5（effort: medium））以新的 fresh context 對修復後 snapshot 再審一輪。
 4. Findings 由主線匯合、查證與修正；各軸的背景 reviewer 不同時寫受審檔。
 
@@ -343,8 +343,8 @@ pre-commit hook 對 owner 只驗 `staged ⊆ 受審集`，
 以及每個 staged entry 的內容與 mode 等於受審版本；不驗 worktree 或 HEAD 的逐路徑漂移。
 未 staged 的 baseline 路徑即使含外來 WIP 並再次改動，也不阻擋本組 commit。
 超集、內容不符、基線到期或讀不到即 abort。post-commit 只消耗已提交的受審路徑，支援逐組 commit；
-`STAGING_BASELINE:` 的 immutable receipt 不改寫。合法 fast-path 沒有新 review 基線。
-最後一組 commit 落地後，依 `rules/分組與提交判準.md`（Step 4）Rule 6 的 `complete --reason` 正常收尾，
+`STAGING_BASELINE:` 的 immutable receipt 不改寫。
+最後一組 commit 落地後，依 `rules/分組與提交判準.md`（D3）Rule 5 的 `complete --reason` 正常收尾，
 釋放未提交的外來 WIP 並保留 closure receipt；commit lock 釋放或換代也使該次 guard 自動失效。
 取消 changeset、要提交修訂後的受審內容、approval 到期或 post-commit 失敗時，用下列命令結束 active guard；
 它保留原基線與具名原因的 closure receipt，並使原 approval 失效。修訂後仍需重新 review，
@@ -364,9 +364,9 @@ Consumer 自家的 runtime settings、local rules、hooks、composite actions �
 
 對本次變更檢查 reuse、精簡、效率與抽象層次，完成必要修正後再凍結 review snapshot。當前入口提供已安裝 `simplify` skill 時由主線直接呼叫；缺少原生 invocation API 時讀取可用技能全文依其契約執行，沒有技能時由主線明確覆核上述四軸並記錄結果。不虛構 `Skill` 工具或宣稱呼叫過未執行的技能。
 
-技能內部的委派仍受當前 routing 與授權約束；主線不外包一層只為重新呼叫同一技能，也不手抄其 fan-out 結構。收到結果後只摘要修正與 deferred 項，deferred 依來源 repo 的 HANDOFF 契約登記，立即判 fast-path／啟動下一步，不等使用者重複授權。不轉貼整份中間報告。
+技能內部的委派仍受當前 routing 與授權約束；主線不外包一層只為重新呼叫同一技能，也不手抄其 fan-out 結構。收到結果後只摘要修正與 deferred 項，deferred 依來源 repo 的 HANDOFF 契約登記，立即啟動下一步，不等使用者重複授權。不轉貼整份中間報告。
 
-Fast-path 的三條件以 `rules/品質檢查判準.md` Rule 3 的同一份定義為準：diff <20 行、只含允許的 doc/config、無敏感路徑，三條全中才能跳過 0-A.1／0-A.2；0-A.0、0-B 的觸發判定與 0-C 仍執行。
+Fast-path 已刪除（見 `rules/品質檢查判準.md` Rule 4），不再有跳過 0-A.1／0-A.2 的三條件判定；純測試／文件免審由 D4 判斷。0-A.0、0-B 的觸發判定與 0-C 仍執行。
 
 ### 0-A.1 — 獨立 review（並行軸 A）
 
@@ -501,7 +501,7 @@ DISMISSED — 反證：<file>:<line> ／ <契約或規則條文的具體出處>
 
 ### 0-A/B/C/D 並行匯合（收口檢查）
 
-收回每個實際工作結果後核對：0-A 通過或合法 fast-path；0-B 通過或未觸發；0-C 全綠。接著條件執行 0-D，再做大改動回扣；0-E／0-F 依自己的觸發與阻擋契約處理。
+收回每個實際工作結果後核對：0-A 通過；0-B 通過或未觸發；0-C 全綠。接著條件執行 0-D，再做大改動回扣；0-E／0-F 依自己的觸發與阻擋契約處理。
 
 **大改動回扣**：匯合後有修正就重跑 `prepare medium`，要不要再審由 wrapper 依上一輪通過後的累計增量判（exit 13＝沿用）；未到門檻仍跑修法相應的驗證。
 
@@ -1087,7 +1087,7 @@ node "${CLADE_HOME:-$HOME/offline/clade}/scripts/bp-scan.ts" --changed-only
 | **A 類**（新資產沒接上管道） | 機械精確、無偽陽性 | commit 前補掉。三種缺口各有明確修法，script 輸出已寫在每條後面 |
 | **B 類**（主題詞命中的既有 convention） | **有偽陽性** | 人工看一眼「這條是不是已經涵蓋我要做的事」。是 → 改用既有的；不是 → 忽略 |
 
-A 類的三種缺口：snippet 無入向 pointer、新 audit 未登記 `registry/audits.json`、新 skill 缺 `evals/skills/<name>/cases.json`（EDD）。
+A 類的三種缺口：snippet 無入向 pointer、新 audit 未登記 `registry/audits.json`、新 skill 缺 `evals/skills/<name>/cases.json`（EDD）。新 skill 的 cases／receipt 要求與改觸發面的 receipt 要求以 § 0-G 為準（§ 0-G 生效後由它機械擋下，本節只是提示）。
 
 ### 反過來的情況：這次做的東西**該**被登記
 
@@ -1099,6 +1099,28 @@ script 抓不到「這是一條新的最佳實踐」——那是語意判斷。�
 0-F 是 **advisory**：`bp-scan.ts` 永遠 exit 0，不擋 commit。A 類有命中卻選擇不處理時，完成報告 MUST 寫明哪一條、為什麼。
 
 通過後輸出 `✅ 0-F 通過（A 類 N 條已處理／B 類 M 條已判讀）`。
+
+## § 0-G: skill eval receipt gate（機械 gate，改 skill 觸發面時）
+
+§ 0-F 只在**新增** SKILL.md 時提示，且 `bp-scan.ts` 永遠 exit 0。改既有 skill 的觸發面（`description`、觸發詞）或 `evals/skills/<skill>/cases.json` 時，由 `scripts/check-skill-eval-receipts.ts` 這支**確定性、不呼叫模型**的 CLI 機械檢查；資料形狀見 `specs/truth/data/skill-eval-receipt.md`，CLI 契約見 `specs/truth/contracts/skill-eval-gate-cli.md`，治理脈絡見 `specs/truth/agent-process-governance.md`。
+
+> **生效狀態**：本節描述的 CLI 與接線隨 agent 治理堆疊 PR 落地——`scripts/lib/skill-eval-inputs.ts`（#3593）、`scripts/check-skill-eval-receipts.ts` 與 harness `--receipt`（#3595）、`.husky/pre-commit`／`validate.yml` 接線（#3598）。#3598 合入前下表的指令都不存在、不擋任何 commit，改 skill 觸發面照 § 0-F 自行判讀；#3598 合入時一併刪掉本段。
+
+### 觸發與會擋的位置
+
+| 位置 | 指令 | 擋什麼 |
+| --- | --- | --- |
+| `.husky/pre-commit` | `node scripts/check-skill-eval-receipts.ts --staged` | eval 輸入有改動的 skill 缺 receipt、receipt 過期（`trigger_hash`／`cases_hash` 對不上）、無 cases：commit 被擋。`below-floor` 只警告 |
+| PR CI（`validate.yml`） | `node scripts/check-skill-eval-receipts.ts --against origin/<base>` | 同上，加 `below-floor` 也失敗；不呼叫模型 |
+| 稽核 | `node scripts/check-skill-eval-receipts.ts coverage` | 不擋；列每支 core skill 的 cases 有無與 receipt 狀態 |
+
+### 判讀與處置
+
+1. gate 失敗時輸出每支 skill 要跑的指令：`node evals/harness/skill-eval.mjs evals/skills/<skill>/cases.json --reps 5 --receipt evals/receipts/<skill>.json`（本機 Claude 登入、花額度；跑完把 `evals/receipts/<skill>.json` 一併 commit）。
+2. `below-floor`：先判是 skill 退步還是 case 不合理。退步 → 修 skill 再重跑；case 不合理 → 改 cases 的 `floor` 並附 `source`／`reason`，NEVER 為了過關直接降下限。
+3. 整支 skill 退場（SKILL.md 與 cases.json 一併刪除）不檢查。
+4. **NEVER** 手寫或手改 `evals/receipts/*.json`（receipt 只由 harness `--receipt` 寫）；**NEVER** 用 `--no-verify` 繞過後不補 receipt（PR CI 會補洞）。
+5. 本節只放入口與判讀；偵測規則與雜湊正規化的唯一定義在 `scripts/lib/skill-eval-inputs.ts`，不在此複製。
 
 
 ## Claude commit operations

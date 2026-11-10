@@ -13,30 +13,39 @@ paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**']
 
 ## 理由
 
-`/commit` 封裝了品質閘門，繞過等於讓壞 code / 壞版本號 / 壞 tag 進 repo。各 gate 一行定性如下，**MUST 全綠才能 commit**；執行細節一律讀當前 runtime 已投影的 commit skill 全文及其 `gates.md`。找不到技能或其必要能力時，該 gate 保持未完成，不改用裸 Git 略過 ceremony。
+`/commit` 是 **PR 前準備器**（D0 起手 → D1 hook → D2 作者自驗 → D3 開 PR）；品質閘門分成「commit 前本機自驗」與「PR 之後由 CI、coordinator、merge-queue 承接」兩段，繞過任一段等於讓壞 code／壞版本號／壞 tag 進 repo。D0–D9 的順序與每步讀哪條判準，一律以當前 runtime 已投影的 commit skill `SKILL.md` 為準，本檔只做一行定性。找不到技能或其必要能力時，該 gate 保持未完成，不改用裸 Git 略過 ceremony。
 
-- **0-A** 程式碼審查：simplify 序跑第一，再執行獨立 review；唯一合格 reviewer 是 fresh-context Claude Opus 5.5（effort: medium）（`code-review-opus` 列；Claude Code 主線跑 `claude-review-safe.sh prepare medium` → AGENT_CALL → FINALIZE），Critical／Major 條件觸發同一席的 fresh-context 深度複審（0-A.2）；修正由主線匯合後執行。Reviewer 品質、transport／隔離與配額處置依 commit skill `gates.md` § 0-A 的同一份政策；fresh context 與模型資格分開驗證。**沒有備援席**（Charles 2026-09-24：Astra、Fable 禁用）：Opus 額度耗盡或 reviewer／隔離能力不可用時，保留未達成及待補範圍，主線自審或其他模型補位都不算該 gate 通過。receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。
+**commit 前（D0–D3，本 skill 內，MUST 全綠才能 commit）**
+
+- **D0** 批次入口、Single Session Lock（下節）、範圍與歸屬（下方 WIP 處置決策樹）、0-MR branch gate
+- **D1** hook：fmt／lint／TD／commitlint／truth-delta／secret 掃描自動跑，**NEVER** `--no-verify`
+- **D2** 作者自驗：typecheck、affected 測試、`scripts.doctor`（**必裝**，缺裝 = block commit）、schema 同步（`database.types.ts` 與 migration 對齊）、PR body 意圖卡。條件觸發項（Tier 3 安全掃描 0-S、UI 0-B.1、Doc Alignment 0-D、evlog 0-E）依 skill `rules/品質檢查判準.md` Rule 4；0-E 的 strict 判定（整個 repo 每個 entry point 零失敗、零 suppression）由 CI `evlog-map-gate` 兜底，本機預檢可選
+- **D3** 分組 `git commit --only`、push、開 PR，然後停在 PR
+
+**PR 之後（D4–D8，不在本 skill 內重跑）**
+
+- **D4／D7** CI-fast 與 CI-full
+- **D5** 0-A 程式碼審查：唯一合格 reviewer 是 fresh-context Claude Opus 5.5（effort: medium）（`code-review-opus` 列；`claude-review-safe.sh prepare medium` → AGENT_CALL → FINALIZE），由 coordinator 在 PR 開出後派審，Critical／Major 條件觸發同一席的深度複審（0-A.2）。**沒有備援席**（Charles 2026-09-24：Astra、Fable 禁用）：Opus 額度耗盡或 reviewer／隔離能力不可用時 gate 保持未完成，主線自審或其他模型補位都不算通過；receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。被派出的 worker **NEVER** 自跑或另派 0-A。政策細節見 commit skill `review-policy.md` 與 `gates.md` § 0-A。
   **NEVER** 以「既有問題」「不在本次 scope」「建議性質」靜默跳過 review finding；依同一份 0-A 政策逐條處置、記錄裁決與未達 gate。
-- **0-B** UI Design Review（條件觸發）：`.vue` 模板 + 頁面/元件/佈局/互動/樣式變更時由 `screenshot-review-verify` 列的載體（`dispatch-fallback`，Claude Opus 5.5（effort: low）；Pi Grok 2026-10-21 退場）收截圖，再由 Opus 5.5 做 Design Review
-- **0-C** format / lint / typecheck / test / doctor 全綠：執行 check 後無條件跑明確的 test command，不由 script 名稱猜測覆蓋；`scripts.doctor` **必裝**（缺裝 = block commit）。命令與格式檢查的處置依 skill `gates.md` § 0-C。
-- **0-D** Doc Alignment（條件觸發）：diff 觸及 docs / rules / snippets / audit script / 業務碼 / bug fix 時，檢查 cross-ref / 路徑引用 / pitfall status / 三方受眾文件忠實度（含 VitePress sidebar）四面向
-- **0-E** evlog map 覆蓋率（條件觸發）：diff 觸及 entry point（`server/{api,routes,middleware,tasks}/` / pages / Next route handler）時跑 gate；`@evlog/cli` **必裝**（缺裝 = block commit，比照 doctor）。判定是 **strict：整個 repo 的每一個 entry point 零失敗 check、零 suppression**，**不是**只看本次 diff 觸及的那幾個 —— 既有 gap 一律要補
-- **並行**：simplify 序跑完後，已觸發的 0-A.1 / 0-B / 0-C 使用可收回結果的原生載體並行；沒有並行能力時依 skill 的已授權同步分支完成全部 gates。0-D / 0-E 在匯合後條件觸發。
-- **Step 1** Schema 同步檢查 — `database.types.ts` 與 migration 對齊
-- **Step 5** HANDOFF／ROADMAP bookkeeping 必須在 formal HEAD／seal 前完成，避免 merge 後再推一筆取消 staging
-- **Step 6** 發版是獨立授權：unattended 模式預先核准 `release=manual` 時停在 6-B（已 land、未發版）。真正 production APPLY／tag 仍要 Charles 授權。合併前先跑 `deploy-trigger-check.ts`，不能等 merge 後才發現 main 更新會發 production。
+- **D6／D8** finding 處置與放行合入（coordinator／merge-queue）
+
+**trunk-based 與發版（D9，條件步驟）**
+
+- trunk-based 沒有 PR，就沒有 D4／D5 兜底：**push main 前 MUST 先取得這些 commit 的 0-A `FINALIZE` verdict**（skill `rules/分組與提交判準.md` Rule 4），D2 也要完整跑完才 commit
+- 交接走 `/handoff`；trunk-based 發版時 HANDOFF 的 commit 照 commit skill `handoff-steps.md` § 5-E 以精確 paths `--only` 提交、不 push，跟發版 commit 同一次 push 送出
+- 發版是獨立授權：unattended 模式預先核准 `release=manual` 時停在 6-B（已 land、未發版）。真正 production APPLY／tag 仍要 Charles 授權。push main 前先跑 `deploy-trigger-check.ts`，不能等 merge 後才發現 main 更新會發 production
 
 這些檢查**無法事後補跑**：漏跑的 commit 已在 history、壞版本號已 push 出去。
 
 ## Single Session Lock
 
-**同時只能有一個 session 跑 `/commit`**。各 runtime 共用 `.claude/scripts/commit-lock.mjs` 與相容鎖路徑 `.claude/.commit.lock`；路徑不表示持有者必為 Claude。**Step 0-Lock MUST 先讀 commit skill 的 `runtime-lifecycle.md` 全文**，以明確 work／runtime／session 取得 owner token；各 gate 邊界與 Git mutation 前續持，退出時先收回會寫入的背景工作，再以原 tuple 與 token 釋放。
+**同時只能有一個 session 跑 `/commit`**。各 runtime 共用 `.claude/scripts/commit-lock.mjs` 與相容鎖路徑 `.claude/.commit.lock`；路徑不表示持有者必為 Claude。**D0-Lock MUST 先讀 commit skill 的 `runtime-lifecycle.md` 全文**，以明確 work／runtime／session 取得 owner token；各 gate 邊界與 Git mutation 前續持，退出時先收回會寫入的背景工作，再以原 tuple 與 token 釋放。
 
 鎖的年齡、失聯或 CLI PID 消失只供診斷，不自動授權接管。重入須匹配原 owner；恢復須確認原 ceremony 已結束、有恢復授權，並核對精確 lock snapshot。缺身分、token、能力或證據時保留現況與 blocker，**NEVER** 自行 `rm` 鎖檔。互斥不替代以下 WIP、品質或發版 gate。
 
 ## WIP 處置決策樹
 
-**預設所有 `git status` 顯示的 uncommitted 變更都納入本次 `/commit` 的候選清單**，照常查歸屬、跑 0-A，並在 Step 3 依功能分組。不同主題不構成排除理由；候選清單不授權覆寫另一個仍在寫入的 session，也不替代使用者已指定的範圍。實際提交前每組均須完成下方歸屬探測與品質 gate。
+**預設所有 `git status` 顯示的 uncommitted 變更都納入本次 `/commit` 的候選清單**，照常查歸屬、跑 D2 自驗，並在 D3 依功能分組。不同主題不構成排除理由；候選清單不授權覆寫另一個仍在寫入的 session，也不替代使用者已指定的範圍。實際提交前每組均須完成下方歸屬探測與品質 gate。
 
 評估：first-match；以上皆非 → W*
 
@@ -52,7 +61,7 @@ paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**']
 [^W*]: 「主題不同／不認得來源／想讓 commit 乾淨／跟我無關」都不構成排除理由。
 
 - **排除條件（唯一）**：使用者在本任務訊息或 `$ARGUMENTS` 中**明確**指名排除（例如「排除 .env.local」「只 commit app/」）。既有同範圍授權持續有效；未解所有權衝突是尚未通過前置條件，不是默默移出候選清單
-- **NEVER** 以「這個不在我 scope」「看起來是別的 session 做的」「不確定是否該 commit」自行排除、啟動 stash、或徵詢使用者意見 — 分組是 Step 3 的工作，不是 Step 0 的判斷題
+- **NEVER** 以「這個不在我 scope」「看起來是別的 session 做的」「不確定是否該 commit」自行排除、啟動 stash、或徵詢使用者意見 — 分組是 D3 的工作，不是 D0 的判斷題
 
 ### 並行 staged 的歸屬探測（MUST，先於交給使用者決定）
 
@@ -61,7 +70,7 @@ paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**']
 `vendor/snippets/git-recovery/` § 並行 staged 的歸屬探測，分流判準見 [[scope-discipline]]
 § 歸屬探測前置（**NEVER** 在本檔複製那些命令，會漂）。
 
-- 四條答案證明預定內容均屬本次授權、可與其他寫入者隔離 ⇒ 不算衝突：已由 user 觸發的 `/commit` 繼續 Step 3 分組；尚未觸發時保持待提交狀態，不因探測成功就自行啟動。**NEVER** 把這一格讀成 ad-hoc `--only` 只收「自己的檔」。`--only` 隔離仍須符合下節白名單或當前 ceremony；merge-back / archive 收割進 main 的檔不是 ad-hoc
+- 四條答案證明預定內容均屬本次授權、可與其他寫入者隔離 ⇒ 不算衝突：已由 user 觸發的 `/commit` 繼續 D3 分組；尚未觸發時保持待提交狀態，不因探測成功就自行啟動。**NEVER** 把這一格讀成 ad-hoc `--only` 只收「自己的檔」。`--only` 隔離仍須符合下節白名單或當前 ceremony；merge-back / archive 收割進 main 的檔不是 ad-hoc
 - 任一條答不出來、或探測顯示雙方改到**同一檔的同一段**（分組也拆不開）⇒ 才走
   [[scope-discipline]] § Rule 衝突解法
 
@@ -118,7 +127,7 @@ git commit --only -m "📝 docs(tasks): phase N done (<work-slug>)" -- \
 
 ## Ad-hoc commit 必走 `git commit --only -- <paths>`
 
-本 § 規範 **ad-hoc commit**：不走 `/commit` 的單檔 / 少數檔 commit（`HANDOFF.md` 補一行、修 typo 等小型 git ceremony；完整 `/commit` 已有 Step 0-Lock + selective per-group commit 保護）。
+本 § 規範 **ad-hoc commit**：不走 `/commit` 的單檔 / 少數檔 commit（`HANDOFF.md` 補一行、修 typo 等小型 git ceremony；完整 `/commit` 已有 D0-Lock + selective per-group commit 保護）。
 
 ### Hard rule
 
@@ -211,7 +220,7 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 
 ### 隔離 worktree ≠ 繞過 /commit（hard rule）
 
-普通 `/commit` 的 WIP 全包與登記批次的成員全包，各自以其工作區為範圍。批次流程須在隔離整合區跑完整 0-A/B/C，worker checkpoint 不能直接推上 main。
+普通 `/commit` 的 WIP 全包與登記批次的成員全包，各自以其工作區為範圍。批次流程須在隔離整合區跑完整 D2 自驗、再以整合 PR 走 0-A，worker checkpoint 不能直接推上 main。
 
 本節禁的是用隔離 worktree + raw `git commit` + `git push origin main` 把 substantive change 繞過 0-A。隔離本身不是 review 豁免；判準是有沒有跑完登記批次的正式品質流程。
 
@@ -379,7 +388,7 @@ user 不成立**，結果是 stash 單調遞增、owner 資訊隨時間流失，
 
 - **每個 commit 獨立且完整** — 不相關的變更**MUST**分到不同 commit
 - **Commit message 使用繁體中文**描述
-- **Header 的 emoji 與 type 是一對一綁定**，逐字只有這 12 組：`✨ feat` / `🐛 fix` / `🧹 chore` / `🔨 refactor` / `🧪 test` / `🎨 style` / `📝 docs` / `📦 build` / `👷 ci` / `⏪ revert` / `🚀 deploy` / `🎉 init`。**NEVER 憑語意挑 emoji** —— `🛡️ feat`（安全性改動）、`♻️ refactor`、`⚡ perf` 這種看起來對得上的組合全部不在清單裡。走 `/commit` 時對照表在 SKILL.md Step 3，走 ad-hoc `git commit --only` 時**沒有任何東西會在你打字的當下提醒你**，所以清單在這裡再寫一次
+- **Header 的 emoji 與 type 是一對一綁定**，逐字只有這 12 組：`✨ feat` / `🐛 fix` / `🧹 chore` / `🔨 refactor` / `🧪 test` / `🎨 style` / `📝 docs` / `📦 build` / `👷 ci` / `⏪ revert` / `🚀 deploy` / `🎉 init`。**NEVER 憑語意挑 emoji** —— `🛡️ feat`（安全性改動）、`♻️ refactor`、`⚡ perf` 這種看起來對得上的組合全部不在清單裡。走 `/commit` 時對照表在 skill `rules/分組與提交判準.md` Rule 2，走 ad-hoc `git commit --only` 時**沒有任何東西會在你打字的當下提醒你**，所以清單在這裡再寫一次
 - **不確定就先驗，NEVER 拿 commit 當測試**：`echo '<你要用的 header>' | npx commitlint`。理由不是「省一次重打」——header 解析失敗時 commitlint 報的是 **`subject may not be empty`**（per [[pitfall-commitlint-emoji-type-mismatch-reports-subject-empty]]），訊息指向 subject 而真因在 emoji，照著訊息改會愈改愈遠；而 `--only` 的路徑清單長時，重打整條指令本身就是漏掉某個 path 的入口
 - **所有 uncommitted 變更都納入候選盤點**，逐組依 § WIP 處置決策樹確認授權與所有權後提交。使用者指名範圍持續有效；他人的活躍 WIP 與未解歸屬先協調，不以「全包」取代交接證據，也不默默遺漏候選檔。
 - **純機械正名（識別字替換）MUST 獨立 commit，NEVER 與語意編輯混合**——正名 sweep 時看到措辭問題「順手修掉」會讓整個 commit 失去 evidence-inert 豁免資格：驗證器（`audit-tech-debt-hygiene.ts`）逐 token 比對，宣告的替換以外只要有一個 token 不同就不算 inert，該 commit 觸及的每一條 TD 都照常進覆核佇列。語意編輯另開一筆 commit 即可，兩筆可以在同一次 `/commit` 分組裡
@@ -436,7 +445,7 @@ git rev-list --count origin/main..HEAD    # 必須回 0（沒有還沒推上去�
 發版的推送順序 **無條件 MUST 是 main 先、tag 後**（tag 指向的 commit 得先存在於
 `origin/<default branch>`）——這是上面三步序列的直接推論，**與這個 repo 有沒有接這道 gate 無關**：
 沒接的 repo 只是少了兜底，規約本身沒有變。完整序列、失敗復原與推 tag 後的觸發確認在
-`capabilities/core/skills/commit/SKILL.md` § Step 6-A，**此處不複述**。
+`capabilities/core/skills/commit/rules/push-main發版判準.md`（SKILL.md D9 Step 6-A），**此處不複述**。
 
 `CLADE_ALLOW_STALE_TAG=1` 的唯一合法用途：**刻意**在舊 commit 上打 hotfix release tag，且已知
 該 tag 那棵樹不含 main 後續改動。**NEVER** 用它讓一個「不知道為什麼被擋」的 push 過關——

@@ -140,7 +140,7 @@ cat .claude/.hub-state.json | grep syncedAt     # 若新近時間戳 → 自動 
 
 主線操作產生：
 - `specs/plans/<work-id>/` (untracked) — 主線剛建的 plan package
-- `specs/plans/<other-work-id>/plan.md` (modify) — 主線剛在 § Open work 新增一項
+- `specs/plans/<other-work-id>/work.md` (modify) — 主線剛在 § Open work 新增一項
 
 hub:bootstrap 自動同步產生（請完全忽略，與本次工作無關）：
 - `.claude/` `.agents/` `AGENTS.md` `CLAUDE.md` `.claude/scripts/` — 投影層由 clade 中央倉自動同步，檔頭有 🔒 LOCKED banner
@@ -678,4 +678,4 @@ node vendor/scripts/herdr-session-handoff.ts --cwd /tmp/repair-repo --label repa
 
 ## 串行鏈的既有實例
 
-> 既有的三處特例是[[agent-routing.dispatch-execution]] § 派多少的實例，不取代[[agent-routing.dispatch-execution]] § 派多少：`handoff/relay-steps.md` §0 與 `session-tasks.operations.md` § 派幾個 pane（兩者都框在「serial 工作 NEVER 拆給 N 個 worker」），以及 `handoff/dispatch-common.md` § 2 的 brief 範圍檢查點。**它們防的是「拆給 N 個 worker」，[[agent-routing.dispatch-execution]] § 派多少多防一種形狀：切成「worker ＋ 主線自己」**——那種切法在既有條文的字面下不會 fire，因為沒有第二個 worker。
+> 既有的三處特例是[[agent-routing.dispatch-execution]] § 派多少的實例，不取代[[agent-routing.dispatch-execution]] § 派多少：`handoff/rules/relay接力判準.md` §0 與 `session-tasks.operations.md` § 派幾個 pane（兩者都框在「serial 工作 NEVER 拆給 N 個 worker」），以及 `handoff/rules/派工共用底座判準.md` § 2 的 brief 範圍檢查點。**它們防的是「拆給 N 個 worker」，[[agent-routing.dispatch-execution]] § 派多少多防一種形狀：切成「worker ＋ 主線自己」**——那種切法在既有條文的字面下不會 fire，因為沒有第二個 worker。

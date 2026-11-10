@@ -32,7 +32,7 @@
 # 觸發判定比的是「目前 context＋待送訊息」，一個大工具結果可以直接越過提示線；真正的保險是
 # PreCompact 落盤（`pre-compact-snapshot.sh`）。
 #
-# compact profile 不交棒：壓縮會原地發生，提示只叫 session 在下一個自然斷點把進度寫回 plan.md 並
+# compact profile 不交棒：壓縮會原地發生，提示只叫 session 在下一個自然斷點把進度寫回 work.md（舊 package：plan.md） 並
 # commit，然後續做。所以這個 profile 沒有 relay 文案——300k 視窗下 500k／600k 根本到不了。
 #
 # gateway launcher（`ccg`／`ccx`）已從 clade 拆除（2026-09-29）：`ANTHROPIC_BASE_URL` 指向非官方 gateway proxy 的
@@ -49,7 +49,7 @@
 # - 主線（`CLADE_DISPATCH_ID` 空）：仍有殘工就**自己** `/handoff relay`／`fanout`，NEVER 停下問
 #   user 要不要交棒。
 # - 被派出的 child（`CLADE_DISPATCH_ID` 非空）：回報主持（`--complete relay-request --plan`），
-#   由主持另開下一棒 —— 權威在 handoff skill `relay-steps.md` § 0，本檔只是觸發錨。
+#   由主持另開下一棒 —— 權威在 handoff skill `relay接力判準.md` § 0，本檔只是觸發錨。
 #   env 被剝掉時倒向主線文案：child 照做會自 relay，那條路 helper 仍會接（relay 對 child 開了缺口），
 #   方向是「多一棒沒經主持」而不是「停著沒人管」。
 #
@@ -281,7 +281,7 @@ ctx_k=$((ctx / 1000))
 if [ "$PROFILE" = compact ]; then
   cat >&2 <<EOF
 ⚠️ session context 已達 ${ctx_k}k（profile=compact：視窗 $((WINDOW / 1000))k，約 $((COMPACT_AT / 1000))k 原地自動壓縮）。
-   在下一個自然斷點把進度寫回 plan.md § 進度（沒有 plan 就寫該工作的 tasks 檔）並 commit，然後續做。
+   在下一個自然斷點把進度寫回 work.md（舊 package：plan.md） § 進度（沒有 plan 就寫該工作的 tasks 檔）並 commit，然後續做。
    NEVER 因 context 大小交棒或停下等 user：壓縮會原地發生，PreCompact hook 會先落盤工作狀態。
    壓縮前這段區間 NEVER 開始 publish、0-A 鏈或 relay 這類原子程序；已在跑的照做到可切點。
    判定層全文在 rules/core/session-tasks.md § Session context 預算（本提示是它的觸發錨）。本提示只響這一次。
@@ -293,10 +293,10 @@ fi
 soft_exit=""
 if [ -n "${CLADE_DISPATCH_ID:-}" ]; then
   relay_exit="   你是被派出的 child（dispatch ${CLADE_DISPATCH_ID}）：仍有殘工 → 回報主持，NEVER 自 relay、NEVER 停著等 user。
-   進度寫回 plan.md § 進度、commit＋push，再
-   node ~/offline/clade/vendor/scripts/herdr-session-handoff.ts --complete relay-request --plan <plan.md>
-   由主持另開下一棒。沒有 plan.md、repo 有 push_hold、或 helper 拒收時印 self_relay／
-   指示改走 /handoff relay，才自己 /handoff relay（判定表：handoff skill relay-steps.md § 0）。"
+   進度寫回 work.md（舊 package：plan.md） § 進度、commit＋push，再
+   node ~/offline/clade/vendor/scripts/herdr-session-handoff.ts --complete relay-request --plan <lifecycle 檔路徑>
+   由主持另開下一棒。沒有 lifecycle 檔、repo 有 push_hold、或 helper 拒收時印 self_relay／
+   指示改走 /handoff relay，才自己 /handoff relay（判定表：handoff skill relay接力判準.md § 0）。"
 else
   relay_exit="   仍有殘工 → MUST 自己交棒：1 件（或彼此 serial）走 /handoff relay，N 件可平行走 /handoff fanout。
    NEVER 停下來等 user 處理、NEVER 把「要不要 relay」當題目問 user —— 交棒就是這一級的預設出口。

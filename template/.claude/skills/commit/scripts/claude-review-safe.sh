@@ -115,6 +115,8 @@
 #       lib/review-subagent.sh 檔頭。
 #   .claude/scripts/claude-review-safe.sh rounds plan|cover|passed|show --mode pr|worktree --branch <b> ...
 #       輪數 ledger 查詢（JSON）：oa-batches 切批前 plan（covered 時 cover 落記錄）、merge-queue 合併前 passed
+#       plan／cover／carry-over 是重度子命令，先排 flock 並行槽：CLADE_ROUNDS_MAX_PARALLEL（預設 2）、排隊上限 CLADE_ROUNDS_SLOT_WAIT_S（預設 20，須小於呼叫端 30s timeout）；
+#       排不到槽 exit 75（EX_TEMPFAIL，stdout 無 JSON），呼叫端 MUST 當成判不出。CLADE_ROUNDS_OWNER_PID＝呼叫者自報的 pid：它死了 wrapper 的 watchdog 收掉 node 子樹
 #   .claude/scripts/claude-review-safe.sh rounds grant --mode pr --branch <b> --pr-number <n> --by charles --evidence <出處>
 #       Charles 授權的單 PR 例外輪：append 一筆 grant 進 ledger，該 PR 段上限＋1（只在已撞上限時收；
 #       evidence 缺、by 不是 charles、PR 號對不上一律 exit 2）。這是放寬上限的唯一入口，沒有 env／旗標替代
