@@ -105,7 +105,8 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       String.raw`scripts/maintainer-only-skills\.json$`,
       // Heavy-gate 併發閘門（bash helper，非 .mjs/.ts 家族，故單列一條）
       String.raw`scripts/gate-slot\.sh$`,
-      // codebase-memory index 的 lock + MemoryMax wrapper（同上，bash helper 單列一條）
+      // codebase-memory 退場（#3558）：cbm-index／cbm-project 已列 RETIRED_VENDOR_DESTS，但 consumer 在
+      // tombstone 生效前仍握有 LOCKED 殘檔，須維持辨識以便解鎖；全 fleet 清完後可拿掉（TD-1000 同形）。
       String.raw`scripts/cbm-(index|project)\.sh$`,
       // Recursive vendored script trees. `spectra-advanced` retired in TD-976 Wave 1 but
       // MUST stay listed — consumers still hold locked leftovers to unlock (TD-1000).

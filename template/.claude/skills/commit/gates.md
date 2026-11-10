@@ -323,11 +323,11 @@ gate 自己的可用度跑 `node scripts/audit-security-gate-readiness.ts`（war
 
 ## § 0-A: 程式碼審查（simplify → 0-A.1 → 條件式 0-A.2）
 
-**每次 dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，分開驗證 scope、fresh context、模型資格、品質與唯讀載體。commit 0-A 的合格 reviewer **只有一席**：fresh-context Claude Opus 5.5（effort: medium）（`code-review-opus` 列）。Claude Code 主線走下方 § 0-A.1 的 subagent carrier（prepare → AGENT_CALL → FINALIZE，**NEVER** 開 Herdr pane），叫不出 Claude subagent 的 runtime 才跑無子命令的 `claude-review-safe.sh medium`（Herdr child）。**沒有備援席**：Opus 不可用 → gate 保持未完成；receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。review 角色不固定由哪個 runtime 主線執行，原生呼叫方式見本檔末尾投影的 runtime 操作段。
+**每次 dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，分開驗證 scope、fresh context、模型資格、品質與唯讀載體。commit 0-A 的合格 reviewer **只有一席**：fresh-context Claude Opus 5.5（effort: xhigh）（`code-review-opus` 列）。Claude Code 主線走下方 § 0-A.1 的 subagent carrier（prepare → AGENT_CALL → FINALIZE，**NEVER** 開 Herdr pane），叫不出 Claude subagent 的 runtime 才跑無子命令的 `claude-review-safe.sh xhigh`（Herdr child）。**沒有備援席**：Opus 不可用 → gate 保持未完成；receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。review 角色不固定由哪個 runtime 主線執行，原生呼叫方式見本檔末尾投影的 runtime 操作段。
 
 1. 主線先完成 0-A.0；修完的 snapshot 才交給 reviewer。
 2. 啟動 0-A.1 獨立 review，並行 0-B 與 0-C。每個背景工作綁 owner、實際 handle、deadline 與收回方法；不把另一個 runtime 的參數交給本端工具。
-3. 0-A.1 出 Critical／Major 時，修正後進 0-A.2 深度 review——同一席（Opus 5.5（effort: medium））以新的 fresh context 對修復後 snapshot 再審一輪。
+3. 0-A.1 出 Critical／Major 時，修正後進 0-A.2 深度 review——同一席（Opus 5.5（effort: xhigh））以新的 fresh context 對修復後 snapshot 再審一輪。
 4. Findings 由主線匯合、查證與修正；各軸的背景 reviewer 不同時寫受審檔。
 
 0-A 等待期間 NEVER 編輯受審 changeset 內的檔；可觀察後果是逐檔內容／HEAD／mode 不符 → exit 6 重跑。
@@ -373,19 +373,19 @@ Fast-path 已刪除（見 `rules/品質檢查判準.md` Rule 4），不再有跳
 Reviewer 看完整 frozen changeset 與驗收契約，以一般 review 的已核准推理深度查邏輯、安全、跨檔影響及適用 semantic patterns。共用 CLI 載體可使用：
 
 ```bash
-bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" medium       # Herdr carrier（叫不出 Claude subagent 的 runtime）
+bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" xhigh        # Herdr carrier（叫不出 Claude subagent 的 runtime）
 ```
 
 **Subagent carrier（Claude Code 主線 MUST 用這條）**：三步，全部在同一個 session、同一個 turn 內做完。
 
 ```bash
-bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" prepare medium
-# stdout：AGENT_CALL: {...}（subagent_type／fallback_subagent_type／model／prompt；agent 定義固定 effort: medium）與 FINALIZE: bash … finalize <work-dir>
+bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" prepare xhigh
+# stdout：AGENT_CALL: {...}（subagent_type／fallback_subagent_type／model／prompt；agent 定義固定 effort: xhigh）與 FINALIZE: bash … finalize <work-dir>
 ```
 
-1. 跑 `prepare`，照 `AGENT_CALL` 的欄位**逐字**呼叫 `Agent` tool（`subagent_type`、`model`、`prompt` 原樣照抄，前景）。該 agent 的 frontmatter 固定 `effort: medium`；不可改用會繼承主線 effort 的其他 agent。
+1. 跑 `prepare`，照 `AGENT_CALL` 的欄位**逐字**呼叫 `Agent` tool（`subagent_type`、`model`、`prompt` 原樣照抄，前景）。該 agent 的 frontmatter 固定 `effort: xhigh`；不可改用會繼承主線 effort 的其他 agent。
    - `subagent_type` 是 session 看得到的名字：session project 或使用者層級的 agents 目錄有投影 `commit-0a-reviewer` 定義時是裸名，否則是 plugin 命名空間名 `hub-core:commit-0a-reviewer`（例如 `update_policy` pinned 在 agent 出現之前的 consumer）。`fallback_subagent_type` 是另一個名字，**不是** `Agent` 參數：只有 `Agent` tool 明確回報找不到 `subagent_type` 時，才把 `subagent_type` 換成它、其餘欄位不動重派**一次**；其他錯誤 **NEVER** 換名重試。finalize 只收這兩個固定名字。
-2. subagent 回來後跑 `FINALIZE` 那一行。它從本 session 的 subagent transcript 核對 nonce 歸屬、agent type、每則 assistant 的 observed model 與 effort、唯讀工具面、brief 是否逐行讀完；effort 缺席或非 medium 時 exit 8、扣住 verdict。
+2. subagent 回來後跑 `FINALIZE` 那一行。它從本 session 的 subagent transcript 核對 nonce 歸屬、agent type、每則 assistant 的 observed model 與 effort、唯讀工具面、brief 是否逐行讀完；effort 缺席或非 xhigh 時 exit 8、扣住 verdict。
 3. **verdict 只來自 finalize 的 stdout。** subagent 的回覆是它交給 finalize 的原料，**NEVER** 由主線轉述、摘錄或拼接成 verdict——主線是受審改動的 producer。
 
 
@@ -478,7 +478,7 @@ PRE-EXISTING — 未觸碰：<file>:<line>（舉證本次 diff 不含此檔／�
 
 只在 0-A.1 出 Critical／Major 時執行；修復後的完整 snapshot 是輸入。
 
-合格深度 reviewer 與 0-A.1 同一席（Claude Opus 5.5（effort: medium））——新的 fresh context、不繼承 0-A.1 的對話，兩份 receipt 各自記 requested／observed。複審 MUST 由合格席執行，NEVER 降級成主線自審、worker、cloud CI 或其他模型。它取得修復後 snapshot、原始 0-A.1 findings 與修法內容，逐條確認 real issue 已修、附反證 dismiss 或重標 severity，另查修法帶來的漏項與 regression。reviewer 唯讀，主線負責修復。修補後重跑同一個 `prepare medium`（Herdr carrier 同理）：wrapper 由輪數 ledger 自動帶上一輪 verdict、只嵌增量並限定驗證範圍；`--findings` 只給 ledger 之外的 verdict 來源。
+合格深度 reviewer 與 0-A.1 同一席（Claude Opus 5.5（effort: xhigh））——新的 fresh context、不繼承 0-A.1 的對話，兩份 receipt 各自記 requested／observed。複審 MUST 由合格席執行，NEVER 降級成主線自審、worker、cloud CI 或其他模型。它取得修復後 snapshot、原始 0-A.1 findings 與修法內容，逐條確認 real issue 已修、附反證 dismiss 或重標 severity，另查修法帶來的漏項與 regression。reviewer 唯讀，主線負責修復。修補後重跑同一個 `prepare xhigh`（Herdr carrier 同理）：wrapper 由輪數 ledger 自動帶上一輪 verdict、只嵌增量並限定驗證範圍；`--findings` 只給 ledger 之外的 verdict 來源。
 
 深度輸出缺 `## Review Verdict`（含截斷／context exhaustion）時，明示深度階段未完整；不盲重跑相同耗盡命令。查明耗盡或截斷原因後對同一 snapshot 重跑（diff 過大先縮小受審範圍），補齊完整 verdict 才可收口；Opus 席不可用時 0-A.2 保持未完成，不以其他模型或主線自審補位。
 
@@ -503,7 +503,7 @@ DISMISSED — 反證：<file>:<line> ／ <契約或規則條文的具體出處>
 
 收回每個實際工作結果後核對：0-A 通過；0-B 通過或未觸發；0-C 全綠。接著條件執行 0-D，再做大改動回扣；0-E／0-F 依自己的觸發與阻擋契約處理。
 
-**大改動回扣**：匯合後有修正就重跑 `prepare medium`，要不要再審由 wrapper 依上一輪通過後的累計增量判（exit 13＝沿用）；未到門檻仍跑修法相應的驗證。
+**大改動回扣**：匯合後有修正就重跑 `prepare xhigh`，要不要再審由 wrapper 依上一輪通過後的累計增量判（exit 13＝沿用）；未到門檻仍跑修法相應的驗證。
 
 實際匯合完成後使用 metrics recorder，記錄真實結果與身份：
 
@@ -519,7 +519,7 @@ node "$COMMIT_RESOURCE_DIR/scripts/0a-metrics.mjs" record \
   --screenshot <pass|skip> --doc <aligned|skip>
 ```
 
-Fast-path 不填未執行的 reviewer；`escalated` 的 `--reviewer` 記實際跑 0-A.2 深度 review 者（Opus 5.5（effort: medium））。`--dismissed-unsubstantiated` 是反證不足被保留為 real issue 的條數。`blocked` 記「gate 觸發但因外部原因沒跑完」（如 Opus reviewer 配額耗盡）：MUST 提供非空 `--blocked-reason`，`--reviewer` 可省，findings 記已觀察到的部分——pending review 要留遙測記錄，不能整筆消失。Recorder 的參數檢查不證明 review 真有執行，須同時保留各軸原始 receipt；參數矛盾時修正流程或記錄，不能填假值讓它通過。舊 `--codex` CLI／歷史記錄是相容資料，不要求新入口冒充該模型組合；含 `+fable` 的舊 mode 與 `--adjudicator`／`--a2-deferral-*` 參數已退役，CLI 會拒收。
+Fast-path 不填未執行的 reviewer；`escalated` 的 `--reviewer` 記實際跑 0-A.2 深度 review 者（Opus 5.5（effort: xhigh））。`--dismissed-unsubstantiated` 是反證不足被保留為 real issue 的條數。`blocked` 記「gate 觸發但因外部原因沒跑完」（如 Opus reviewer 配額耗盡）：MUST 提供非空 `--blocked-reason`，`--reviewer` 可省，findings 記已觀察到的部分——pending review 要留遙測記錄，不能整筆消失。Recorder 的參數檢查不證明 review 真有執行，須同時保留各軸原始 receipt；參數矛盾時修正流程或記錄，不能填假值讓它通過。舊 `--codex` CLI／歷史記錄是相容資料，不要求新入口冒充該模型組合；含 `+fable` 的舊 mode 與 `--adjudicator`／`--a2-deferral-*` 參數已退役，CLI 會拒收。
 
 **作者回應四分類**（`--fixed`／`--wrong`／`--intentional`／`--didnt-matter`）：findings 非 0 時 **MUST** 帶，在本匯合點記——此時修復、0-A.2 dismissal 與裁決都已定案。值是 `<severity>=N` 以逗號串接（省略的 severity 為 0）；每個 severity 的四類加總必須等於該 severity 的 finding 數，recorder 不符就拒收。分類記的是**作者對該則 finding 的判斷**，不是處置：本表不改上方結果表的處置，照修的 finding 仍照修。**每一則** finding 依下表判定：
 
@@ -1128,10 +1128,10 @@ script 抓不到「這是一條新的最佳實踐」——那是語意判斷。�
 每次先核對本入口實際 catalog，以下是 Claude Code 的操作映射，不外推 Claude Web／Desktop 已有相同工具。
 
 - Simplify：有 `Skill` 且技能已安裝時直接呼叫 `simplify`；其內部委派照當前 routing。結果回來後立即繼續 ceremony。
-- Review：Claude Code 主線跑 `claude-review-safe.sh prepare medium`，照輸出的 `AGENT_CALL` 前景派 `commit-0a-reviewer`（Opus 5.5、effort medium），再跑 `FINALIZE`；只採 finalize stdout 的 verdict。叫不出 Claude subagent 的 runtime 才走無子命令的 `claude-review-safe.sh medium` Herdr carrier，保存並收回真實 handle。
+- Review：Claude Code 主線跑 `claude-review-safe.sh prepare xhigh`，照輸出的 `AGENT_CALL` 前景派 `commit-0a-reviewer`（Opus 5.5、effort xhigh），再跑 `FINALIZE`；只採 finalize stdout 的 verdict。叫不出 Claude subagent 的 runtime 才走無子命令的 `claude-review-safe.sh xhigh` Herdr carrier，保存並收回真實 handle。
 - Watch：有 ScheduleWakeup 才使用目前已安裝 keepalive 契約；喚醒只處理該 id 的控制面，不重播 review 命令。沒有喚醒 API 時用已有背景 handle 的 bounded wait。Timeout 不取消工作、不代表 PASS。
 - UI：`screenshot-review` 只有在實際可用且符合 review-policy 的視覺資格時派遣，附完整 item、截圖及互動證據；不是有同名檔就算能看圖。
 - 協調／詢問：有已授權的具名 agent 通道時先協調；需要使用者資訊時用本入口實際可用的詢問工具或直接對話。AskUserQuestion 不是授權的唯一載體，既有同範圍回答不重問。
 - Exit：先收回或安全停止本次會寫入的背景工作，再依 runtime-lifecycle 以原 work/runtime/session/token 釋放鎖。完成事件缺席時保留 gate 未完成與具體 handle，不宣稱已退出。
 
-每次 receipt 記 requested／observed model 與 effort、實際 runtime 和隔離方式；0-A 只認 fresh-context Claude Opus 5.5 medium。模型或 effort 量不到、不符時 verdict 扣住，gate 保持未完成。
+每次 receipt 記 requested／observed model 與 effort、實際 runtime 和隔離方式；0-A 只認 fresh-context Claude Opus 5.5 xhigh。模型或 effort 量不到、不符時 verdict 扣住，gate 保持未完成。

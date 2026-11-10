@@ -297,9 +297,47 @@ export function peerSshRefusal(
   if (down) return `${machine} 本行程已判不可達（${down}），不再重試 ssh`
   if (machine === localMachineLabel(env)) return null
   const listed = configuredPeerLabels(env)
-  if (listed.length && !listed.includes(machine))
-    return `${machine} 不在 CLADE_HERDR_PEERS（${listed.join(',')}），判不可達、不發 ssh`
+  if (listed.length && !listed.includes(machine)) {
+    const drift = peerConfigDriftNote(machine, env)
+    return `${machine} 不在 CLADE_HERDR_PEERS（${listed.join(',')}），判不可達、不發 ssh${drift ? `；${drift}` : ''}`
+  }
   return null
+}
+
+/**
+ * registry（`registry/dev-nodes.json`，唯一的節點清單）有、而這台的 `~/.config/clade/herdr-peers` 檔沒列的機器
+ * ＝ peers 設定漂移（registry 新增節點後各節點沒重推；2026-11-09 dev-1 上線那次，所有指向 dev-1 的探測
+ * 全被 `peerSshRefusal` 判不可達，整片 `peer-placement`）。回帶修法的說明；不是漂移回 null。
+ * 只認設定檔：`CLADE_HERDR_PEERS` 環境變數是刻意的 drain／測試隔離，不當漂移。registry 讀不到（consumer
+ * 沒有 clade 的 registry）＝判不出，回 null。
+ */
+export function peerConfigDriftNote(
+  machine: string,
+  env: NodeJS.ProcessEnv = process.env,
+  registryPath: string = defaultDevNodesRegistryPath(),
+): string | null {
+  if (env.CLADE_HERDR_PEERS !== undefined) return null
+  const labels = registryNodeLabels(registryPath)
+  if (!labels?.includes(machine)) return null
+  const self = localMachineLabel(env) ?? '<本機 label>'
+  return `peers 設定漂移：registry 有 ${machine}、本機 herdr-peers 沒列（不是 ${machine} 掛了）→ node scripts/dev-node.ts bootstrap ${self} 重推 herdr-peers`
+}
+
+function defaultDevNodesRegistryPath(): string {
+  return resolve(import.meta.dirname, '../../../registry/dev-nodes.json')
+}
+
+function registryNodeLabels(path: string): string[] | null {
+  try {
+    const doc = parseJson(readFileSync(path, 'utf8'))
+    if (!isRecord(doc) || !Array.isArray(doc.nodes)) return null
+    const labels = doc.nodes.flatMap((n) =>
+      isRecord(n) && typeof n.label === 'string' ? [n.label] : [],
+    )
+    return labels.length ? labels : null
+  } catch {
+    return null
+  }
 }
 
 export function sshRun(

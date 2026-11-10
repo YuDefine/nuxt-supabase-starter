@@ -106,7 +106,7 @@ node scripts/wt-helper.ts batch status --trigger auto --workflow <workflow_model
 
 | 動作 | 指令 | 說明 |
 | --- | --- | --- |
-| 列出 session worktree | `node scripts/wt-helper.ts list [--json] [--no-landed-state]` | 含 staleness 與 landedState；有 brief 的樹會顯示任務摘要與狀態。detached HEAD 的樹也會列出：`--json` 列 `branch: null`、`detached: true`、`head`、`dirty`（無 `staleness`／`landedState`），消費端 MUST 先判 `detached` 再讀 `branch` |
+| 列出 session worktree | `node scripts/wt-helper.ts list [--json] [--no-landed-state]` | 含 staleness 與 landedState；有 brief 的樹會顯示任務摘要與狀態。detached HEAD 的樹也會列出：`--json` 列 `branch: null`、`detached: true`、`head`、`dirty`（無 `staleness`／`landedState`），消費端 MUST 先判 `detached` 再讀 `branch`。判「已合入」會先 fetch `origin/<base>`（每 process 一次、best-effort、逾時 15 秒），本機 base 或 `origin/<base>` 任一含該 tip 即 merged；`--no-landed-state` 與 `cleanup --dry-run` 不 fetch（唯讀，只比已有的 ref）；`CLADE_WT_NO_LANDING_FETCH=1` 全域關掉 fetch |
 | 找 slug 對應的樹 | `node scripts/wt-helper.ts resolve <slug> [--json]` | 印出持有該 slug 的樹路徑；exit 3 代表沒有，main 為權威；slug 尾段正規化後（`a.b` 與 `a-b` 同為 `a-b`）對到多棵時 exit 1 並列出各棵路徑，不猜 |
 | 累積報告 | `node scripts/wt-helper.ts backlog --json` | 唯讀處置佇列；超過 3 棵會警告 |
 | 就緒池現況 | `node scripts/wt-helper.ts batch status --trigger manual --workflow <workflow_model>` | 使用者要求 merge back 時的入口；落地由 `/commit` 依 `batch.md` 執行 |
@@ -173,6 +173,8 @@ node scripts/wt-helper.ts cleanup <slug> --discard-pathspec <path>[,…]
 # 丟棄整棵樹（永久刪除 branch commits 與未 commit 檔）
 node scripts/wt-helper.ts cleanup <slug> --force --force-discard-unland [--force-discard-uncommitted]
 ```
+
+本機 base 落後、但 tip 已是 `origin/<base>` 祖先時，cleanup 零 flag 放行（略過 unland gate、用 `-D` 刪 branch），dry-run 報表以 `ancestryOrigin(origin/<base>)=Y` 標示，`merged=` 仍只反映本機證據。
 
 正常落地後的回收由 `/commit` 的 batch cleanup 執行；`--force` 系列只用在確定要丟棄的樹，NEVER 用來處理未落地的工作。
 

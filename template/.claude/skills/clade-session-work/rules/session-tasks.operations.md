@@ -550,7 +550,7 @@ coordinator 身分轉移，以及寫出讓 successor 回收本 pane 的 predeces
 
 `--route` 與 `--tier-basis` 的值域與語義**與 `pi-dispatch.ts` 逐字相同**（`--route` 記走哪條政策，`--tier-basis` 記那條政策對檔位的**結論**，兩者不可互相推導）——這條對稱是 2026-09-07 補上的：在那之前 Pi 派工必須講出理由、Claude Code 派工不必，於是一句手打的 `--model claude-opus-5 --effort max` 通過了每一道 gate，事後沒有任何欄位講得出是誰依什麼授權的。**NEVER 給這兩欄 default**：default 會讓「真的判過」與「呼叫者從沒判」事後不可區分。
 
-**Claude child 的 effort 值域是 `low` / `medium` / `high`**，天花板依 model family：Opus ≤ `medium`、其餘未知 slug ≤ `high`；Sonnet 只有 5.5、只坐 Routing Table 標它的列與 delegate-sub 接手點，effort 固定 `high`；Fable、Haiku 不是可派的 Claude child（Haiku 5.5 只坐 in-process `haiku-locator`，不開 pane）。其餘 helper 在建 pane 之前拒絕。helper 查上限時會把未帶 `--model` 解析成 Opus，但那只是防禦性預設——每次派工都必須明確帶 `--model`，缺了會先被拒。`max` **對 Claude child 完全不可達**，建 pane 之前就被拒，**沒有任何 `--tier-basis` 開得了它**。
+**Claude child 的 effort 值域是 `low` / `medium` / `high`**，天花板依 model family：Opus ≤ `medium`、其餘未知 slug ≤ `high`；Sonnet 只有 5.5、只坐 Routing Table 標它的列與 delegate-sub 接手點，effort 固定 `high`；Fable、Haiku 不是可派的 Claude child（Haiku 5.5 只坐 in-process 的 `haiku-locator`／`haiku-scanner`／`haiku-implementer` 席位，不開 pane）。其餘 helper 在建 pane 之前拒絕。helper 查上限時會把未帶 `--model` 解析成 Opus，但那只是防禦性預設——每次派工都必須明確帶 `--model`，缺了會先被拒。`max` **對 Claude child 完全不可達**，建 pane 之前就被拒，**沒有任何 `--tier-basis` 開得了它**。
 
 **NEVER** 把「這次是裁決／這次比較重要」讀成可以抬高檔位——顧問、reviewer、裁決者的 brief 讀起來都像 adjudication，自我宣告不構成准入。帳號設定、主線模型與 brief 正文不能代選。收據的 requested 欄位只證明傳入值，observed 才是實跑證據；Herdr 回 `model_verification: unverified` 時 **NEVER** 宣稱已核實模型。
 

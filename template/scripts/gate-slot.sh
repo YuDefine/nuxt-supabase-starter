@@ -722,7 +722,7 @@ esac
 # 模式** —— 那會 reparent 到 user manager，真的斬斷群組殺。
 #
 # systemd --user 不可用時（容器 / 非 systemd）無聲降級成裸 exec：少了天花板，
-# 併發閘門仍在。predicate 逐字沿用 cbm-index.sh 已驗證過的那一條，NEVER 另發明第二套。
+# 併發閘門仍在。predicate 沿用既有 systemd-run --user --scope 探測，NEVER 另發明第二套。
 GATE_MEM_HIGH=${CLADE_HEAVY_GATE_MEM_HIGH:-6G}
 GATE_MEM_MAX=${CLADE_HEAVY_GATE_MEM_MAX:-7G}
 

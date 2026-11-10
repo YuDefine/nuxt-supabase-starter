@@ -95,13 +95,13 @@ agent-routing.routing-table.md — Routing Table 的對照資料層——工作�
 63-65 判不進任一列時
 67-85 主線 residency（誰當主線；Charles 2026-09-29）
 87-100 Workflow 的 Sonnet `agent()`（2026-09-29）
-102-110 Haiku 5.5 的席位（Charles 2026-10-08）
-112-116 delegate-sub（原判 sonnet／haiku 等級的委派工作）
-118-126 Devin SWE-2 Max（任意 Pi 列可選）
-128-134 Claude 帳號池（2026-10-04）
-136-150 槓桿優先序與規約可實驗（Charles 2026-11-08）
-152-210 工作類別對照
-212-242 Pi 派工的 workspace capability
+102-115 Haiku 5.5 的席位（Charles 2026-10-08；2026-10-29 加 `haiku-scanner`、`haiku-implementer`）
+117-121 delegate-sub（原判 sonnet／haiku 等級的委派工作）
+123-131 Devin SWE-2 Max（任意 Pi 列可選）
+133-139 Claude 帳號池（2026-10-04）
+141-155 槓桿優先序與規約可實驗（Charles 2026-11-08）
+157-215 工作類別對照
+217-247 Pi 派工的 workspace capability
 
 consumer-meta.md — 每個 consumer 自宣告 .claude/consumer-meta.json，描述 dev port / auth / database / deploy / verification 等 runtime 事實；clade 聚合成 registry/consumers-meta.json snapshot 供規則 / skill / audit 使用
 5-14 前導 — Consumer Meta（per-consumer 自宣告 + clade 聚合 snapshot）

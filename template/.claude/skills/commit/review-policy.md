@@ -3,7 +3,7 @@
 
 本檔是每一個 runtime 的 commit review 共用政策。`gates.md` 定義觸發與完成條件；本檔決定 reviewer 是否合格。Runtime adapter 只選可執行載體，不降低資格。
 
-> **2026-09-24 起 0-A 只有一席**：fresh-context Claude Opus 5.5（effort: medium）（Routing Table row `code-review-opus`）。GPT-6 Astra 與 Claude Fable 兩格已撤（Charles 2026-09-24：「通常一定是 Astra 先耗盡」；Fable 所有用途禁用），**沒有備援席**——Opus 額度耗盡或量不到時 gate 保持未完成、等額度恢復，**NEVER** 改派其他模型、**NEVER** 主線自審補位。規約 SoT：`rules/core/agent-routing.md` § commit 0-A reviewer。
+> **2026-09-24 起 0-A 只有一席**：fresh-context Claude Opus 5.5（effort: xhigh）（Routing Table row `code-review-opus`）。GPT-6 Astra 與 Claude Fable 兩格已撤（Charles 2026-09-24：「通常一定是 Astra 先耗盡」；Fable 所有用途禁用），**沒有備援席**——Opus 額度耗盡或量不到時 gate 保持未完成、等額度恢復，**NEVER** 改派其他模型、**NEVER** 主線自審補位。規約 SoT：`rules/core/agent-routing.md` § commit 0-A reviewer。
 
 ## 每次派遣的判定表
 
@@ -12,20 +12,20 @@
 | Scope | 具名 checkout、base 與完整 changeset snapshot；每個受審檔都有內容及 hash，缺檔或截斷明示未覆蓋 |
 | Context | reviewer 沒參與實作、不繼承 maker 對話；只給 diff、驗收契約及必要來源 pointer，保有查證相關 code 的讀取權 |
 | Identity | 記錄 maker 與 reviewer 各自的實際 runtime、model、model family、effort、session／dispatch id；未知值不猜、不從 runtime 名推模型。reviewer receipt MUST 記 requested 與 observed model、`model_verification` 三值與原因；subagent carrier 另 MUST 記 requested／observed effort 與 `effort_verification`，缺值或不符都 exit 8、扣住 verdict。「沒核實」（如 transcript-timeout）與「核實了但不符」是兩個不同的結論，都要留逐字原因 |
-| Model | 合格的 code reviewer **只有一席**：Claude Opus 5.5（effort: medium），Claude Code 主線走 in-process `commit-0a-reviewer` subagent、叫不出 Claude subagent 的 runtime 走 Herdr Claude child；0-A.1 與 0-A.2 深度 review 同一席。其他模型、主線自審、或未經 `prepare`／`finalize` 的 agent 都不滿足本欄 |
+| Model | 合格的 code reviewer **只有一席**：Claude Opus 5.5（effort: xhigh），Claude Code 主線走 in-process `commit-0a-reviewer` subagent、叫不出 Claude subagent 的 runtime 走 Herdr Claude child；0-A.1 與 0-A.2 深度 review 同一席。其他模型、主線自審、或未經 `prepare`／`finalize` 的 agent 都不滿足本欄 |
 | Quality | 該組合已有對應任務的核准與品質證據；達到階段需要的推理深度，不能僅以名稱含 high 或模型較新推定等價 |
 | Access | 真正的唯讀工具／OS 限制或已核准的隔離方案；僅在 prompt 寫「不要修改」不算技術隔離。材料來源與外送服務在本次授權範圍 |
 | Result | 對應同一 snapshot 的完整 verdict、全部適用 Semantic Verdict id、逐項 finding 與查證位置；exit、身份、覆蓋或 snapshot 驗證失敗均保持未完成 |
 
-**Fresh context 與模型資格分開驗證。** reviewer 是 Opus 5.5（effort: medium），但 fresh context 仍是獨立條件：reviewer 不能是寫出這批 diff 的那個 session，身分與 coordinator 分離——主線同為 Opus 不構成自審的理由。使用者授權某模型實作，也不等於豁免其後的品質條件。
+**Fresh context 與模型資格分開驗證。** reviewer 是 Opus 5.5（effort: xhigh），但 fresh context 仍是獨立條件：reviewer 不能是寫出這批 diff 的那個 session，身分與 coordinator 分離——主線同為 Opus 不構成自審的理由。使用者授權某模型實作，也不等於豁免其後的品質條件。
 
 ## 既有資格與新組合
 
-0-A.1 一般 review 與 0-A.2 深度 review 都由 Opus 5.5（effort: medium） 執行，每一輪都是新的 fresh-context reviewer，兩份 receipt 各自記 requested／observed。複審 MUST 由合格席執行，NEVER 降級成主線自審、worker、cloud CI 或其他模型。
+0-A.1 一般 review 與 0-A.2 深度 review 都由 Opus 5.5（effort: xhigh） 執行，每一輪都是新的 fresh-context reviewer，兩份 receipt 各自記 requested／observed。複審 MUST 由合格席執行，NEVER 降級成主線自審、worker、cloud CI 或其他模型。
 
 **Opus 不可用時 gate 保持未達成**並記錄 pending review；**NEVER** 用其他模型、另一個 fresh agent 或主線自審補位；**NEVER** worker 或 Charles 代簽；**NEVER** 拿 cloud CI success 代替。哪些 exit code 算「不可用」、哪些是本地或完整性問題要修正重跑，判定見 `gates.md` § 0-A.1 的 exit 表（A0–A*）。
 
-effort 恆 `medium`（Opus family cap）。**NEVER** 嘗試抬高——沒有 high／max 路徑，裁決需求也不升檔。`CLAUDE_REVIEW_SEAT=fable` exit 2 拒跑，不靜默改 opus。0-A.1 跨模型 wrapper `codex-review-safe.sh`（原 Astra carrier）已於 2026-10-18 移除。
+effort 恆 `xhigh`（Charles 2026-10-23：review 席是 Opus 5.5（effort: xhigh）；Routing Table `code-review-opus` 列的列層級例外，其餘 Opus 列與 `CLAUDE_MODEL_EFFORT` 仍 medium）。**NEVER** 嘗試改檔位——沒有 medium／high／max 路徑；舊呼叫端的 `prepare medium` 只是過渡別名，wrapper 印通知後以 xhigh 執行。`CLAUDE_REVIEW_SEAT=fable` exit 2 拒跑，不靜默改 opus。0-A.1 跨模型 wrapper `codex-review-safe.sh`（原 Astra carrier）已於 2026-10-18 移除。
 
 這是現行唯一的合格組合，不指定哪個 runtime 必須當主線，也不保證當前 catalog 可用。實際派遣仍逐欄通過上表；同一 runtime 再開一個 fresh-context agent，只是再跑一次同一個 reviewer，不產生額外的獨立判定。
 

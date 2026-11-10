@@ -25,7 +25,7 @@ paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**']
 **PR 之後（D4–D8，不在本 skill 內重跑）**
 
 - **D4／D7** CI-fast 與 CI-full
-- **D5** 0-A 程式碼審查：唯一合格 reviewer 是 fresh-context Claude Opus 5.5（effort: medium）（`code-review-opus` 列；`claude-review-safe.sh prepare medium` → AGENT_CALL → FINALIZE），由 coordinator 在 PR 開出後派審，Critical／Major 條件觸發同一席的深度複審（0-A.2）。**沒有備援席**（Charles 2026-09-24：Astra、Fable 禁用）：Opus 額度耗盡或 reviewer／隔離能力不可用時 gate 保持未完成，主線自審或其他模型補位都不算通過；receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。被派出的 worker **NEVER** 自跑或另派 0-A。政策細節見 commit skill `review-policy.md` 與 `gates.md` § 0-A。
+- **D5** 0-A 程式碼審查：唯一合格 reviewer 是 fresh-context Claude Opus 5.5（effort: xhigh）（`code-review-opus` 列；`claude-review-safe.sh prepare xhigh` → AGENT_CALL → FINALIZE），由 coordinator 在 PR 開出後派審，Critical／Major 條件觸發同一席的深度複審（0-A.2）。**沒有備援席**（Charles 2026-09-24：Astra、Fable 禁用）：Opus 額度耗盡或 reviewer／隔離能力不可用時 gate 保持未完成，主線自審或其他模型補位都不算通過；receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。被派出的 worker **NEVER** 自跑或另派 0-A。政策細節見 commit skill `review-policy.md` 與 `gates.md` § 0-A。
   **NEVER** 以「既有問題」「不在本次 scope」「建議性質」靜默跳過 review finding；依同一份 0-A 政策逐條處置、記錄裁決與未達 gate。
 - **D6／D8** finding 處置與放行合入（coordinator／merge-queue）
 

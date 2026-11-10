@@ -1,26 +1,31 @@
 #!/usr/bin/env bash
-# PreToolUse:Bash hook — 本機電源指令（關機、重開、休眠、停 VM／CT）執行前，先確認本機沒有別的 agent 在工作（block，exit 2）
+# PreToolUse:Bash hook — 電源指令（關機、重開、休眠、停 VM／CT）執行前，先確認受害機器上沒有別的 agent 在工作（block，exit 2）
 #
-# 約束（允許 agent 關機，不是只有人能按）：本機電源指令只在「本機除了呼叫者自己，沒有 herdr pane 的
-# agent_status=working」時放行；有就擋並列出；herdr 查不到也擋。延遲關機一律擋。
-# 目標不是本機（ssh 底下、systemctl -H、curl／wget 打 PVE API、qm／pct 停 guest、pvesh 打 guest 或別的 node）：
-# 本版不判受害機器，一律擋，NEVER 當本機查——本機 herdr 看不到 guest 或別的 node 裡的 pane。
+# 約束（允許 agent 關機，不是只有人能按）：電源指令只在「會被這條指令關掉的機器上，除了呼叫者自己，沒有 herdr pane 的
+# agent_status=working」時放行；有就擋並列出；herdr 查不到（含目標機器連不上）也擋。延遲關機一律擋。
+# 受害機器（每個電源子指令各算各的）：不在 ssh 底下＝本機；`ssh <host>`（前綴或字串引數）＝該 host；systemctl -H、
+# curl／wget 的 URL 主機也算目標。對應：本機標籤／本機 hostname／localhost／127.*／::1 → 本機；yudefine-proxmox／desk → desk
+# （只有 yudefine-proxmox 是 desk 的母機）；zenbook → zenbook；herdr machine list 有的 label → 該 label；認不得的 host
+# （含帶引號的變數 `ssh "$H" reboot`）→ 本機＋所有啟用的 peer 都查。本機算進去、但整條另有 ssh 時，ssh 的目標也一併查（超集）。
+# 本機標籤順序：$POWER_GATE_LOCAL_HOST（測試用）→ $CLADE_HERDR_MACHINE → ~/.config/clade/herdr-machine → hostname -s。
+# pvesh 寫入 /nodes/<node>/status：受害機器是 <node>（cluster 會轉送過去），照上面的對應查。
+# 受害者是 guest VM／CT（qm／pct 的 stop 類、pvesh 打 …/qemu|lxc/<id>/status…）：herdr 看不到 guest 裡的 pane，一律擋。
 #
 # 型別：安全型 gate。threat model：防漂移（絆索不是牆），誠實但健忘的 agent 順手寫出來的形狀。
 # 不承諾完整語意：`node -e`、腳本檔、heredoc 餵給 shell、alias 與變數、`pct exec` 容器內的 reboot、沒掛 herdr 的程序都看不到。
 #
 # 判定（命令位置的指令，`bash -c`／`sh -c`／`eval`／`ssh` 的字串引數展開來判；sudo／doas／nice／timeout／env／nohup／xargs 前綴剝掉）：
 #   立即：shutdown（-c 放行）、poweroff、reboot、halt、init／telinit 0|6、kexec -e、pm-*、systemctl／loginctl 電源子命令與 target、
-#   pvesh 寫入 /nodes/<本機 hostname|localhost>/status。
-#   遠端（直接擋）：qm／pct 的 stop 類（受害者是 guest）、pvesh 寫入 …/qemu|lxc/<id>/status…（guest）或 /nodes/<別的 node>/status
-#   （cluster 會轉送到該 node；node 是變數也算）、curl／wget 帶寫入旗標打 /api2/json/nodes/*/status（GET 放行）。
+#   pvesh 寫入 /nodes/<node>/status（受害機器是 <node>）；curl／wget 帶寫入旗標打 /api2/json/nodes/<node>/status（受害機器是 URL 主機＋路徑 <node>，改道旗標或抽不出主機就全查；GET 放行）。
+#   guest（直接擋）：qm／pct 的 stop 類、pvesh 寫入 …/qemu|lxc/<id>/status…。
 #   延遲（不看 herdr，到點時誰在工作現在判不了）：shutdown 時間不是 now／+0、--when 非 now、之前有 sleep／at／batch／systemd-run、排程輸入裡有電源指令。
 #
 # 繞行場景：
 #   | 繞法 | 預期攔截點 |
-#   | `ssh "$H" reboot`、`ssh pve 'poweroff'`、`bash -c 'ssh pve reboot'` | 擋：目標不是本機 |
-#   | `qm stop 100`、`pvesh create /nodes/pve/qemu/100/status/stop`、`pvesh create /nodes/<別台>/status` | 擋：受害者是 guest／別的 node |
-#   | `sudo reboot`、`pvesh create /nodes/<本機>/status`、`/sbin/halt` | 進 herdr 檢查 |
+#   | `ssh "$H" reboot`、`ssh pve 'poweroff'`、`bash -c 'ssh pve reboot'` | 進 herdr 檢查：認不得的 host 查全部機器 |
+#   | `ssh yudefine-proxmox reboot`、`pvesh create /nodes/yudefine-proxmox/status` | 進 herdr 檢查：只查 desk，zenbook 的 pane 不算 |
+#   | `qm stop 100`、`bash -c 'qm stop 100'`、`pvesh create /nodes/pve/qemu/100/status/stop` | 擋：受害者是 guest |
+#   | `sudo reboot`、`/sbin/halt` | 進 herdr 檢查 |
 #   | `sleep 60 && reboot`、`echo reboot | at now+1min`、`shutdown -h +60` | 擋：判定 7 |
 #   | `grep reboot log`、`echo poweroff`、註解、heredoc 內文、`./reboot.sh` | 放行：不在命令位置 |
 #   | 弄壞 perl／jq 讓判定掛掉 | 走保守樣式，不靜默放行 |
@@ -29,7 +34,7 @@
 #   | 分支 | 處置 |
 #   | E1 jq／perl 不在、E3 stdin 非 JSON 或無 command、E4／E5 判定丟例外或非預期退出 | 保守樣式：命令位置＋前綴的危險形狀 exit 2，其餘 exit 0＋additionalContext |
 #   | E2 判定檔缺失 | 不適用：判定內嵌在本檔 |
-#   | E7 herdr 不在／逾時／輸出為空或不是預期 JSON | 擋（exit 2） |
+#   | E7 herdr 不在／逾時／輸出為空或不是預期 JSON（machine list、pane list 皆同）；目標是 machine list 裡已停用（enabled=false）的 label | 擋（exit 2） |
 #   | E6 整支 hook 逾時 | harness 砍掉屬 non-blocking：所有 herdr 查詢共用 10 秒時限（單次 3 秒，SIGTERM 不理再 1 秒 SIGKILL，輸出落暫存檔不等 pipe），時限到了算查不到、擋 |
 #
 # 判定以 exit 42（直接擋）／43（立即電源指令，進 herdr 檢查）表示命中：perl 載入失敗會以 2 結束，NEVER 拿 2 當命中碼。
@@ -59,10 +64,28 @@ deny() {
   exit 2
 }
 
-local_check() {
-  local what=$1 herdr="${HERDR_BIN_PATH:-}" self="${HERDR_PANE_ID:-}" json out
+# 立即電源指令：受害機器上除了呼叫者自己，有 herdr pane 的 agent_status=working 就擋；查不到也擋。
+# 受害機器：ssh 的目標 host（沒有 ssh 就是本機），母機 yudefine-proxmox 對應 desk。
+peers_check() {
+  local what=$1 targets=${2:-} herdr="${HERDR_BIN_PATH:-}" self="${HERDR_PANE_ID:-}"
+  # 本機的 herdr 機器標籤（peer 的 machine list 認得的名字）：desk 的 hostname 不是 desk，NEVER 只靠 hostname。
+  # 順序同 vendor/scripts/lib/herdr-machine.ts 的 localMachineLabel：CLADE_HERDR_MACHINE → ~/.config/clade/herdr-machine，
+  # 都沒有才退回 hostname -s。hostname -s 本身也一律算本機（`ssh <本機 hostname> reboot`）。
+  local me myhost cfg
+  cfg="${XDG_CONFIG_HOME:-${HOME:-}/.config}/clade/herdr-machine"
+  me=${POWER_GATE_LOCAL_HOST:-${CLADE_HERDR_MACHINE:-}}
+  me=${me//[[:space:]]/}
+  if [ -z "$me" ] && [ -r "$cfg" ]; then
+    me=$(tr -d '[:space:]' <"$cfg" 2>/dev/null || true)
+  fi
+  # POWER_GATE_LOCAL_HOST（測試用）同時頂替 hostname，模擬別台機器時不被跑測試那台的真 hostname 干擾
+  myhost=${POWER_GATE_LOCAL_HOST:-$(hostname -s 2>/dev/null || true)}
+  [ -n "$me" ] || me=$myhost
+  me=${me,,}
+  myhost=${myhost,,}
   [ -n "$herdr" ] && [ -x "$herdr" ] || herdr=$(command -v herdr 2>/dev/null || true)
   [ -n "$herdr" ] || deny "${what}。herdr 查不到（找不到 herdr 執行檔），無法確認有沒有別的 agent 在工作，一律擋。"
+  command -v jq >/dev/null 2>&1 || deny "${what}。herdr 查不到（jq 不在）。"
   # 輸出落暫存檔不用 $()：herdr 的孫程序（ssh）若撐過 kill 還握著 stdout，$() 會等 pipe 關閉而撐到 hook timeout。
   herdr_query() {
     local sec=$1 f rc=0
@@ -73,29 +96,118 @@ local_check() {
     rm -f "$f"
     return "$rc"
   }
-  # 所有 herdr 查詢共用一個時限，留在 hook timeout（15s）之內：超時被 harness 殺掉＝non-blocking＝放行，
-  # 所以時限到了還沒查完就算查不到、一律擋。
-  local left budget=${POWER_GATE_HERDR_BUDGET:-10}
-  left=$((budget - SECONDS))
-  if ((left < 1)); then deny "${what}。herdr 查不到（查詢逾時），一律擋。"; fi
-  ((left > 3)) && left=3
-  json=$(herdr_query "$left" pane list) || deny "${what}。herdr 查不到（pane list 失敗或逾時），一律擋。"
-  # exit 0 但 stdout 為空：jq 也 exit 0 無輸出，會被當成「沒有 working pane」而放行（E7）
-  [ -n "${json//[[:space:]]/}" ] || deny "${what}。herdr 查不到（pane list 輸出為空），一律擋。"
-  out=$(printf '%s' "$json" | jq -r --arg self "$self" '
-    if (.result.panes | type) != "array" then "ERR"
-    else .result.panes[]
-      | select(.agent_status == "working")
-      | select(.pane_id != $self)
-      | "  - " + .pane_id + " " + (.label // .terminal_title_stripped // "")
-    end' 2>/dev/null) || deny "${what}。herdr 查不到（回傳不是預期 JSON），一律擋。"
-  [ "$out" != "ERR" ] || deny "${what}。herdr 查不到（回傳不是預期 JSON），一律擋。"
-  [ -z "$out" ] || deny "${what}。本機除了這個 session 自己，還有 agent 正在 working，電源動作會砍掉它們的工作：
-${out}
+  local machines label
+  local ml_fail=0
+  machines=$(herdr_query 3 machine list --json) || ml_fail=1
+  # exit 0 但 stdout 為空：jq 也 exit 0 無輸出，會被當成「沒有 peer」而 fail-open（E7）
+  [ -n "${machines//[[:space:]]/}" ] || ml_fail=1
+  local -a enabled=() disabled=()
+  if ((!ml_fail)); then
+    local labels dlabels
+    labels=$(printf '%s' "$machines" | jq -r 'if type == "array" then .[] | select(.enabled == true) | .label else error("not an array") end' 2>/dev/null) || ml_fail=1
+    dlabels=$(printf '%s' "$machines" | jq -r 'if type == "array" then .[] | select(.enabled != true) | .label else error("not an array") end' 2>/dev/null) || ml_fail=1
+    while IFS= read -r label; do
+      if [ -n "$label" ]; then enabled+=("$label"); fi
+    done <<<"$labels"
+    while IFS= read -r label; do
+      if [ -n "$label" ]; then disabled+=("$label"); fi
+    done <<<"$dlabels"
+  fi
+
+  # 目標機器 → scope（"@local" 或 peer label）；"@all" = 本機＋所有啟用的 peer
+  local -a scopes=()
+  local h m found y x
+  add_scope() {
+    x=$1
+    if [ "$x" = "$me" ] || { [ -n "$myhost" ] && [ "$x" = "$myhost" ]; }; then x="@local"; fi
+    for y in "${scopes[@]:-}"; do [ "$y" = "$x" ] && return 0; done
+    scopes+=("$x")
+  }
+  if [ -z "$targets" ]; then
+    add_scope "@local"
+  else
+    local -a hosts
+    IFS=',' read -r -a hosts <<<"$targets"
+    for h in "${hosts[@]}"; do
+      if [ "$h" = "$me" ] || { [ -n "$myhost" ] && [ "$h" = "$myhost" ]; }; then
+        add_scope "@local"
+        continue
+      fi
+      case "$h" in
+        "@local" | localhost | 127.* | ::1) add_scope "@local" ;;
+        yudefine-proxmox | desk) add_scope desk ;;
+        zenbook) add_scope zenbook ;;
+        *)
+          found=""
+          for m in "${enabled[@]:-}"; do if [ "${m,,}" = "$h" ]; then found=$m; fi; done
+          for m in "${disabled[@]:-}"; do
+            if [ -n "$m" ] && [ "${m,,}" = "$h" ]; then
+              deny "${what}。目標主機 ${h} 在 herdr machine list 裡但已停用（enabled=false），查不到它有沒有 agent 在工作，一律擋。"
+            fi
+          done
+          if [ -n "$found" ]; then
+            add_scope "$found"
+          elif ((ml_fail)); then
+            deny "${what}。herdr 查不到（machine list 失敗），目標主機 ${h} 認不得又列不出 peer 機器，無法確認有沒有別的 agent 在工作，一律擋。"
+          else
+            add_scope "@all"
+          fi
+          ;;
+      esac
+    done
+  fi
+  local s2
+  local -a final=()
+  for s2 in "${scopes[@]}"; do
+    if [ "$s2" = "@all" ]; then
+      final+=("@local")
+      for m in "${enabled[@]:-}"; do if [ -n "$m" ]; then final+=("$m"); fi; done
+    else
+      final+=("$s2")
+    fi
+  done
+
+  # 所有 herdr 查詢共用一個時限（含上面的 machine list），留在 hook timeout（15s）之內：
+  # 超時被 harness 殺掉＝non-blocking＝放行，所以時限到了還沒查完的機器算查不到、一律擋。
+  local scope json out working="" failed="" name left seen=" " budget=${POWER_GATE_HERDR_BUDGET:-10}
+  for scope in "${final[@]}"; do
+    case "$seen" in *" $scope "*) continue ;; esac
+    seen="${seen}${scope} "
+    if [ "$scope" = "@local" ]; then name="本機(${me:-?})"; else name=$scope; fi
+    left=$((budget - SECONDS))
+    if ((left < 1)); then failed="${failed} ${name}(逾時)"; continue; fi
+    ((left > 3)) && left=3
+    if [ "$scope" = "@local" ]; then
+      json=$(herdr_query "$left" pane list) || { failed="${failed} ${name}"; continue; }
+    else
+      json=$(herdr_query "$left" --machine "$scope" pane list) || { failed="${failed} ${name}"; continue; }
+    fi
+    # exit 0 但 stdout 為空：jq 也 exit 0 無輸出，會被當成「沒有 working pane」而放行（E7）
+    if [ -z "${json//[[:space:]]/}" ]; then failed="${failed} ${name}"; continue; fi
+    out=$(printf '%s' "$json" | jq -r --arg scope "$scope" --arg self "$self" --arg name "$name" '
+      if (.result.panes | type) != "array" then "ERR"
+      else .result.panes[]
+        | select(.agent_status == "working")
+        | select(($scope != "@local") or (.pane_id != $self))
+        | "  - [" + $name + "] " + .pane_id + " " + (.label // .terminal_title_stripped // "")
+      end' 2>/dev/null) || { failed="${failed} ${name}"; continue; }
+    if [ "$out" = "ERR" ]; then failed="${failed} ${name}"; continue; fi
+    if [ -n "$out" ]; then working="${working}${out}"$'\n'; fi
+  done
+  if [ -n "$failed" ]; then
+    deny "${what}。herdr 查不到：${failed# }（pane list 失敗或回傳不是預期 JSON），無法確認有沒有別的 agent 在工作，一律擋。${working:+
+另外這些 pane 正在 working：
+${working%$'\n'}}"
+  fi
+  if [ -n "$working" ]; then
+    deny "${what}。受影響的機器上除了這個 session 自己，還有 agent 正在 working，電源動作會砍掉它們的工作：
+${working%$'\n'}
 等它們收工（或請主持者讓它們停手）後再重試。"
+  fi
   exit 0
 }
 
+# 保守樣式的單字判定：$1＝指令名（已去路徑與引號）、$2＝後面的引數。
 conservative_match() {
   local word=$1 rest=${2//[\"\']/} sub="" r
   local -a rw
@@ -188,7 +300,6 @@ cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // ""' 2>/dev/null) || c
 judge='
 use strict;
 use warnings;
-use Sys::Hostname ();
 
 sub strip_heredocs {
   my @out; my @pending;
@@ -342,6 +453,23 @@ sub first_nonopt {
   return undef;
 }
 
+# systemctl／loginctl 的 -H／--host 目標（user@host 去掉 user@）。
+sub host_opts {
+  my @a = @_;
+  my @out;
+  while (@a) {
+    my $x = shift @a;
+    my $v;
+    if ($x =~ /^(?:-H|--host)$/) { $v = shift @a }
+    elsif ($x =~ /^--host=(.+)$/) { $v = $1 }
+    elsif ($x =~ /^-H(.+)$/) { $v = $1 }
+    next unless defined $v;
+    $v =~ s/^.*@//;
+    push @out, lc $v;
+  }
+  return @out;
+}
+
 my $power_verb = qr/(?:poweroff|reboot|halt|kexec|suspend|sleep|hibernate|hybrid-sleep|suspend-then-hibernate|soft-reboot)/;
 my $guest_verb = qr/(?:stop|shutdown|reboot|restart|suspend|reset|hibernate)/;
 my $sysctl_val = qr/^(?:-[HMtpsnoT]|--(?:host|machine|type|property|signal|lines|output|root|kill-whom|kill-who|kill-value|state|preset-mode|job-mode|message|when|timeout|reboot-argument|boot-loader-entry|boot-loader-menu|check-inhibitors))$/;
@@ -390,21 +518,52 @@ sub delayed_before {
   return substr($code, 0, $pos) =~ m{$lead$prefix_chain\\?(?:\S*/)?(?:sleep|usleep|at|batch|systemd-run)(?=\s|$)} ? 1 : 0;
 }
 
-# 整條指令有 ssh 就不當本機（超集）：`ssh "$H" reboot`、`ssh pve ls \; reboot` 都不能退成只查本機。
-my $has_ssh = $code =~ /(?<![\w.-])ssh(?![\w.-])/ ? 1 : 0;
-my $imm_reason;
+# ssh 目標主機：文字裡（沒有 $ 錨點）最後一個 `ssh [opts] host`；user@ 與 :port 去掉。
+my $ssh_host_re = qr{(?<![\w.-])ssh(?:\s+(?:-[pilFJoLRDbcemOQSWwBEI]\s+\S+|-\S+))*\s+([^\s\-()][^\s()]*)};
+sub norm_host { my ($h) = @_; $h =~ s/^.*@//; $h =~ s/:\d+$//; return lc $h }
+sub ssh_host_in { my ($t) = @_; my $h; while ($t =~ /$ssh_host_re/g) { $h = norm_host($1) } return $h }
 
-# hit：延遲或目標不是本機的直接擋（42）；立即的本機指令記下來，整條跑完再交給 herdr 檢查（43）。
+# $pos 這個位置被哪個 ssh 的字串引數包住（sanitize 把 ssh 字串展開成 `( … )`）；沒有就 undef。
+sub enclosing_ssh {
+  my ($pos) = @_;
+  my $pre = substr($code, 0, $pos);
+  my @stack;
+  for (my $i = 0; $i < length $pre; $i++) {
+    my $c = substr($pre, $i, 1);
+    if ($c eq "(") { my $t = substr($pre, 0, $i); push @stack, ($t =~ /$ssh_host_re\s*$/ ? norm_host($1) : undef) }
+    elsif ($c eq ")") { pop @stack }
+  }
+  my @h = grep { defined } @stack;
+  return @h ? $h[-1] : undef;
+}
+
+# hit：延遲的直接擋（42）；立即的先記下受害機器，跑完整條指令再一起交給 herdr 檢查（43）。
+my ($imm_reason, @imm_targets, $cur_default);
+my @cmd_ssh_hosts; { my $t = $code; while ($t =~ /$ssh_host_re/g) { push @cmd_ssh_hosts, norm_host($1) } }
 sub hit {
-  my ($reason, $delayed, $remote) = @_;
+  my ($reason, $delayed, @t) = @_;
   if ($delayed) { print "延遲執行的電源指令（$reason）。延遲關機一律不放行。"; exit 42 }
-  if ($remote || $has_ssh) { print "$reason 的目標不是本機（ssh／遠端 API／-H／guest VM・CT／別的 PVE node）。本機 herdr 看不到那台的 pane，本版不判遠端受害機器，一律擋。"; exit 42 }
+  # ssh 底下的明示主機（-H localhost、URL localhost）以 ssh 的主機為準之一，一併查（超集，不縮小範圍）。
+  # localhost／127.*／::1 與本機同義：先併成 @local，下面「本機就補查 ssh 主機」才吃得到。
+  @t = map { /^(?:localhost|127\.\d+\.\d+\.\d+|\[?::1\]?)$/ ? "\@local" : $_ } @t;
+  push @t, $cur_default if !@t || $cur_default ne "\@local";
+  # 這個子指令算本機、但整條指令另有 ssh：ssh 的目標也一併查（`ssh pve ls \; reboot` 這類解析不準的寫法不 fail-open）。
+  push @t, @cmd_ssh_hosts if grep { $_ eq "\@local" } @t;
   $imm_reason //= $reason;
+  push @imm_targets, @t;
+}
+# 受害者是 guest VM／CT：herdr 看不到 guest 裡的 pane，不論在哪台下指令都直接擋（42）。
+sub guest_hit {
+  my ($reason, $delayed) = @_;
+  if ($delayed) { print "延遲執行的電源指令（$reason）。延遲關機一律不放行。"; exit 42 }
+  print "$reason 的受害者是 guest VM／CT。herdr 看不到 guest 裡的 pane，一律擋。";
+  exit 42;
 }
 
 while ($code =~ /$position/g) {
   my ($prefix, $word, $end, $wpos) = ($1, $2, pos $code, $-[2]);
   my $dctx = delayed_before($wpos);
+  $cur_default = ssh_host_in($prefix) // enclosing_ssh($wpos) // "\@local";
   next if $prefix =~ /\bcommand\s+-\w*[vV]/; # command -v reboot 只是查路徑
   my @args = args_from($code, $end);
   if ($word eq "shutdown") {
@@ -429,19 +588,24 @@ while ($code =~ /$position/g) {
   if ($word eq "systemctl" || $word eq "loginctl") {
     my $sub = first_nonopt($sysctl_val, @args);
     next unless defined $sub;
-    my $remote = grep { /^(?:-[HM].*|--(?:host|machine)(?:=.*)?)$/ } @args;
+    my @hh = host_opts(@args); # systemctl -H root@pve reboot：受害機器是 -H 的主機
+    my $machine = grep { /^(?:-M.*|--machine(?:=.*)?)$/ } @args; # -M：目標是 container，herdr 看不到 container 裡的 pane
     my $delayed = $dctx || join(" ", @args) =~ /(?:^|\s)--when[=\s](?!now(?:\s|$))/; # systemd 的排程重開／關機
-    if ($sub =~ /^$power_verb$/) { hit("$word $sub", $delayed, $remote) }
+    if ($sub =~ /^$power_verb$/) {
+      guest_hit("$word -M／--machine $sub", $delayed) if $machine;
+      hit("$word $sub", $delayed, @hh);
+    }
     if ($word eq "systemctl" && $sub =~ /^(?:start|isolate|restart|try-restart)$/
         && grep { /^(?:systemd-)?$power_verb\.(?:target|service)$/ || /^(?:shutdown|sleep|exit|runlevel[06])\.target$/ } @args) {
-      hit("systemctl $sub 電源 target／service", $delayed, $remote);
+      guest_hit("systemctl -M／--machine $sub 電源 target／service", $delayed) if $machine;
+      hit("systemctl $sub 電源 target／service", $delayed, @hh);
     }
     next;
   }
   if ($word eq "qm" || $word eq "pct") {
     my $sub = first_nonopt(qr/(?!)/, @args);
     # 關掉的是 guest VM／CT，不是本機；本機 herdr 看不到 guest 裡的 pane
-    if (defined $sub && $sub =~ /^$guest_verb$/) { hit("$word $sub（停 guest）", $dctx, 1) }
+    if (defined $sub && $sub =~ /^$guest_verb$/) { guest_hit("$word $sub", $dctx) }
     next;
   }
   if ($word eq "pvesh") {
@@ -449,31 +613,55 @@ while ($code =~ /$position/g) {
     while ($scan =~ m{\bpvesh\s+(?:-\S+\s+)*(?:create|set|post|put)\s+[^;&|\n]*?($status_path)}g) {
       my $path = $1;
       my ($node, $guest) = $path =~ m{^nodes/([^/]+)/((?:qemu|lxc)/)?};
-      (my $me = lc(Sys::Hostname::hostname() // "")) =~ s/\..*//;
-      # guest 路徑停的是 guest；別的 node（含變數）cluster 會轉送過去：都不是本機
-      my $stopall = $path =~ m{/(?:stopall|suspendall)$}; # 停的是該 node 全部 guest，node 是本機也一樣
-      my $remote = $guest || $stopall || !(lc($node) eq "localhost" || (length $me && lc($node) eq $me));
-      hit("pvesh 對 …/status 寫入", $dctx, $remote);
+      guest_hit("pvesh 對 …/qemu|lxc/<id>/status 寫入", $dctx) if $guest;
+      guest_hit("pvesh 對 …/stopall|suspendall 寫入（停該 node 全部 guest）", $dctx) if $path =~ m{/(?:stopall|suspendall)$};
+      # 受害機器是 <node>（cluster 會轉送過去）；變數或認不得的 node 由 peers_check 查全部機器
+      hit("pvesh 對 /nodes/$node/status 寫入", $dctx, lc $node);
     }
     next;
   }
   if ($word eq "pvenode") {
     # pvenode stopall 一次停掉該 node 全部 guest：目標是 guest，本機 herdr 看不到
     my $sub = first_nonopt(qr/(?!)/, @args);
-    if (defined $sub && $sub =~ /^(?:stopall|suspendall)$/) { hit("pvenode $sub（停全部 guest）", $dctx, 1) }
+    if (defined $sub && $sub =~ /^(?:stopall|suspendall)$/) { guest_hit("pvenode $sub（停全部 guest）", $dctx) }
     next;
   }
-  # curl／wget／http：帶寫入旗標打 PVE API 的 status 路徑；URL 目標算遠端
+  # curl／wget／http：帶寫入旗標打 PVE API 的 status 路徑
   if ($scan =~ m{\b(?:curl|wget|https?)\s[^;&|\n]*?/api2/json/$status_path}
       && $scan =~ m{\b(?:curl|wget|https?)\s[^;&|\n]*?(?:(?<=\s)-[A-Za-z]*X\s*(?i:POST|PUT)|(?<=\s)-[A-Za-z]*[dFT](?=\s|$|\S)|--request[=\s]+(?i:POST|PUT)|--method[=\s]+(?i:POST|PUT)|--(?:data|form|json|upload-file|post-data|post-file)\S*|(?<=\s)(?i:POST|PUT)(?=\s))}) {
-    hit("$word 對 /api2/json/nodes/*/status 寫入", $dctx, 1);
+    # 受害機器是 URL 的主機（認不得的主機＝全查）；沒有 URL 主機、或帶連線改道旗標（--resolve／--connect-to／
+    # -x／--proxy／--unix-socket／--proto-default）時 URL 主機不可信，一併查全部。
+    guest_hit("$word 對 /api2/json/nodes/*/stopall|suspendall 寫入（停該 node 全部 guest）", $dctx)
+      if $scan =~ m{\b(?:curl|wget|https?)\s[^;&|\n]*?/api2/json/nodes/[^\s/\x27"]+/(?:stopall|suspendall)(?=[\s\x27"?;&|)<>\x60]|$)};
+    guest_hit("$word 對 /api2/json/nodes/*/qemu|lxc/<id>/status 寫入", $dctx)
+      if $scan =~ m{\b(?:curl|wget|https?)\s[^;&|\n]*?/api2/json/nodes/[^\s/\x27"]+/(?:qemu|lxc)/[^\s/\x27"]+/status(?:/(?:stop|shutdown|reboot|suspend|reset|hibernate))?(?=[\s\x27"?;&|)<>\x60]|$)};
+    my @uh;
+    my $unresolved = 0;
+    # 無關的字面 URL 也算（保守多查），但它不能替 status 路徑背書
+    while ($scan =~ m{\bhttps?://(?:[^/@\s\x27"]*@)?([^/:\s\x27"?]+)}g) { push @uh, lc $1 }
+    # PVE API 會把 POST 轉送給路徑上的 <node>：URL 主機不是唯一受害者，路徑 node 也算目標。
+    # 每條 status 路徑都要緊接在字面 http(s)://host(:port) 之後才算解析出 URL 主機；
+    # 前面是變數（$PVE/api2/…）、$(…)、或另一個無關 URL 時，該路徑的 URL 主機不可信。
+    while ($scan =~ m{(\bhttps?://(?:[^/@\s\x27"]*@)?[^/:\s\x27"?]+(?::\d+)?)?/api2/json/nodes/([^\s/\x27"]+)/(?:(?:qemu|lxc)/[^\s/\x27"]+/)?status}g) {
+      push @uh, lc $2;
+      $unresolved = 1 if !defined $1;
+    }
+    push @uh, "?unresolved" if $unresolved || !@uh
+      || $scan =~ m{(?<=\s)(?:--resolve|--connect-to|--proxy\S*|--preproxy|--socks\S*|--noproxy|--unix-socket|--abstract-unix-socket|--proto-default|--config|--doh-url|--dns-\S+|--interface)(?=[\s=]|$)}
+      || $scan =~ m{(?<=\s)-[A-Za-z]*[xK]}
+      || $scan =~ m{\b(?:https?_proxy|all_proxy|HTTPS?_PROXY|ALL_PROXY)=};
+    hit("$word 對 /api2/json/nodes/*/status 寫入", $dctx, @uh);
   }
 }
 if ($code =~ m{$lead$prefix_chain\\?(?:\S*/)?(?:at|batch|systemd-run)(?=\s|$)(?!\s+-[lrdcV]\b)} && $raw =~ $power_text) {
   print "at／batch／systemd-run 排程電源指令。延遲關機一律不放行。";
   exit 42;
 }
-if (defined $imm_reason) { print $imm_reason; exit 43 }
+if (@imm_targets) {
+  my %seen;
+  print "$imm_reason\nTARGET:" . join(",", grep { !$seen{$_}++ } @imm_targets);
+  exit 43;
+}
 exit 0;
 '
 
@@ -482,6 +670,6 @@ rc=$?
 case "$rc" in
   0) exit 0 ;;
   42) deny "$reason" ;;
-  43) local_check "$reason" ;;
+  43) peers_check "${reason%%$'\n'*}" "${reason#*$'\n'TARGET:}" ;;
   *) conservative "$cmd" command ;;
 esac

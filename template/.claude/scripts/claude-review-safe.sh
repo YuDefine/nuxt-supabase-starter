@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# claude-review-safe.sh — commit 0-A 唯一合格 reviewer：Claude Opus 5.5（effort: medium）
+# claude-review-safe.sh — commit 0-A 唯一合格 reviewer：Claude Opus 5.5（effort: xhigh）
 # fresh-context child（`code-review-opus` 列；2026-09-24 Charles 拍板撤掉 Astra 與
 # Fable 兩席——「通常一定是 Astra 先耗盡」，Fable 所有用途禁用）。
 #
@@ -13,11 +13,11 @@
 #
 # 派工形狀（每一項都由機制鎖死，不靠約定）：
 #   node herdr-session-handoff.ts --cwd <repo> --label commit-0a-opus-review \
-#     --prompt-file <prompt> --launcher cc --model claude-opus-5-5 --effort medium \
+#     --prompt-file <prompt> --launcher cc --model claude-opus-5-5 --effort xhigh \
 #     --route routing-table --tier-basis table-row --table-row code-review-opus \
 #     --coordinate --bounded-leaf
 #   --table-row 讓 helper 對照 NATIVE_TABLE_ROW_POLICIES 機械拒絕任何非
-#   opus/medium/readonly 的偏離；family ceiling（opus ≤ medium）是第二層。
+#   opus/xhigh/readonly 的偏離；family ceiling（opus ≤ medium）對本列有明文例外（列層級 xhigh，出處見 routing table）。
 #   launcher 每次顯式傳（CLAUDE_REVIEW_LAUNCHER=cc|cc2，不給預設；缺值或非 cc|cc2 在派工前
 #   exit 2、helper 零呼叫），account_unavailable 由 helper 內建的帳號 fallback 承接。
 #   --bounded-leaf（TD-1105）讓 dispatched worker（帶 CLADE_DISPATCH_ID）也能開這一格：
@@ -70,7 +70,7 @@
 #
 # Exit code 與 codex-review-safe.sh 同一套判讀：
 #   0  verdict 上 stdout（完整性＋身分皆過）
-#   2  本地用法／依賴錯誤（非 medium effort、--findings 壞檔、helper 不存在、CLADE_HOME review runtime 有未 commit 改動）
+#   2  本地用法／依賴錯誤（非 xhigh effort、--findings 壞檔、helper 不存在、CLADE_HOME review runtime 有未 commit 改動）
 #   3  Opus 席 review 未跑成（transport、completion_failed、無 verdict 檔、
 #      coordination 逾時）——reviewer 不可用，gate 維持 pending
 #   4  account_unavailable——本 0-A 席不可用的逐字證據，gate 維持 pending；stderr 另印
@@ -105,10 +105,10 @@
 #  [--part-files <sha256>]（該批檔案清單 hash：同 head 沿用某批 verdict 前比對，批界位移就重審該批）
 #  [--pr-independent yes]（本 head 已通過時另開獨立輪：新 reviewer、不帶前輪 findings、審完整 diff），
 #  coordinator 的 oa-batches.ts 帶；不帶＝working-tree 模式）:
-#   CLAUDE_REVIEW_LAUNCHER=<cc|cc2> .claude/scripts/claude-review-safe.sh [medium] [--findings <prior verdict file>] [PR 旗標]
+#   CLAUDE_REVIEW_LAUNCHER=<cc|cc2> .claude/scripts/claude-review-safe.sh [xhigh] [--findings <prior verdict file>] [PR 旗標]
 #       Herdr carrier——只給叫不出 Claude subagent 的 runtime（Codex、Pi…）；launcher 必填（缺值 exit 2）；
 #       Claude Code（含 Herdr 派出的 worker）誤用時 exit 12
-#   .claude/scripts/claude-review-safe.sh prepare [medium] [--findings <prior verdict file>] [PR 旗標]
+#   .claude/scripts/claude-review-safe.sh prepare [xhigh] [--findings <prior verdict file>] [PR 旗標]
 #   .claude/scripts/claude-review-safe.sh finalize <work-dir>
 #       subagent carrier——Claude Code 主線 MUST 用這條：prepare 印 AGENT_CALL，主線照它派
 #       commit-0a-reviewer subagent，再跑 finalize 取 verdict。流程與核對全文在
@@ -117,17 +117,19 @@
 #       輪數 ledger 查詢（JSON）：oa-batches 切批前 plan（covered 時 cover 落記錄）、merge-queue 合併前 passed
 #       plan／cover／carry-over 是重度子命令，先排 flock 並行槽：CLADE_ROUNDS_MAX_PARALLEL（預設 2）、排隊上限 CLADE_ROUNDS_SLOT_WAIT_S（預設 20，須小於呼叫端 30s timeout）；
 #       排不到槽 exit 75（EX_TEMPFAIL，stdout 無 JSON），呼叫端 MUST 當成判不出。CLADE_ROUNDS_OWNER_PID＝呼叫者自報的 pid：它死了 wrapper 的 watchdog 收掉 node 子樹
-#   .claude/scripts/claude-review-safe.sh rounds grant --mode pr --branch <b> --pr-number <n> --by charles --evidence <出處>
-#       Charles 授權的單 PR 例外輪：append 一筆 grant 進 ledger，該 PR 段上限＋1（只在已撞上限時收；
-#       evidence 缺、by 不是 charles、PR 號對不上一律 exit 2）。這是放寬上限的唯一入口，沒有 env／旗標替代
+#   .claude/scripts/claude-review-safe.sh rounds grant --mode pr --branch <b> --pr-number <n> --by supervisor|charles --evidence <出處> [--scope increment|full]
+#       主管（--by supervisor）或 Charles 授權的單 PR 例外輪：append 一筆 grant 進 ledger，該 PR 段上限＋1（只在已撞上限時收；
+#       --scope increment（預設，只審增量）｜full（整份重審）寫進 grant 紀錄；evidence 缺、by 不是 supervisor／charles、scope 不合法、PR 號對不上一律 exit 2）。這是放寬上限的唯一入口，沒有 env／旗標替代
+#   .claude/scripts/claude-review-safe.sh rounds reopen --mode pr --branch <b> --pr-number <n> --head <sha> --by supervisor|charles --evidence <出處>
+#       主管或 Charles 要求在該 head 開一輪完整審查（covered／已通過／沒有通過輪都可）：append 請求進 ledger，下一次 prepare 開 kind=independent 的輪，受輪數上限管
 #   .claude/scripts/claude-review-safe.sh rounds findings --mode pr --branch <b> [--pr-number <n>] [--round <n>] [--part <i/N>]
 #       唯讀：列出該輪各批 verdict 實際被計數的 finding、指紋與裁決狀態
 #   .claude/scripts/claude-review-safe.sh rounds adjudicate --mode pr --branch <b> --pr-number <n> --round <n> [--part <i/N>] --finding <指紋> --verdict false-positive --by <裁決者> --evidence <證據>
 #       主線把某條 reviewer Major 裁決為假：append 進該輪該批 adjudications，gate 以「原始 Critical＋Major 減已裁決 Major」判定
 #       （只剩假 Major 的輪＝通過，不再逼出下一輪）；沒有裁決紀錄的 Major 照舊計入。Critical 不收；指紋對不上、缺 by／evidence、
 #       by 是 reviewer 自己、重複裁決一律 exit 2 且不寫 ledger。原始計數與 verdict 檔不動
-# effort 只接受 medium——Opus family ceiling 就是 medium，沒有低檔需求、
-# high/max 由 wrapper 直接拒絕（exit 2），NEVER 靜默降檔或抬檔。
+# effort 只接受 xhigh——0-A review 席是 Opus 5.5（effort: xhigh）（Routing Table `code-review-opus` 列的列層級例外，出處見該列）；
+# 舊呼叫端的 `medium` 當過渡別名：stderr 印出改名通知後以 xhigh 執行（不是靜默抬檔）；high/max/其他值由 wrapper 直接拒絕（exit 2）。
 
 set -uo pipefail
 
@@ -200,8 +202,8 @@ case "${1:-}" in
     # adjudicate 把主線裁決為假的 Major 記進該輪該批（只疊在原始計數上，不改計數）；findings 唯讀列出可裁決的指紋。
     shift
     case "${1:-}" in
-      plan|cover|passed|carry-over|show|grant|findings|adjudicate) ;;
-      *) echo "[claude-review-safe] 錯誤：rounds 只接受 plan|cover|passed|carry-over|show|grant|findings|adjudicate；收到 ${1:-<空>}" >&2; exit 2 ;;
+      plan|cover|passed|carry-over|show|grant|reopen|findings|adjudicate) ;;
+      *) echo "[claude-review-safe] 錯誤：rounds 只接受 plan|cover|passed|carry-over|show|grant|reopen|findings|adjudicate；收到 ${1:-<空>}" >&2; exit 2 ;;
     esac
     # shellcheck source=lib/review-common.sh
     . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/review-common.sh"
@@ -212,7 +214,7 @@ esac
 if [ "$CARRIER_MODE" = "herdr" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
   {
     echo "[claude-review-safe] 錯誤：Claude Code runtime 不得使用無子命令的 Herdr carrier（exit 12）；CLADE_DISPATCH_ID／--bounded-leaf 不豁免。"
-    echo "  → bash <claude-review-safe.sh> prepare medium [--findings <上一輪 verdict 檔>]"
+    echo "  → bash <claude-review-safe.sh> prepare xhigh [--findings <上一輪 verdict 檔>]"
     echo "  → 逐字照 prepare 輸出的 AGENT_CALL 呼叫 Agent commit-0a-reviewer"
     echo "  → 跑 prepare 輸出的 FINALIZE（finalize <work-dir>）取得 verdict"
     echo "  呼叫端其實不是 Claude Code（例如從 Claude Bash 起的 codex exec，繼承了 CLAUDE_CODE_SESSION_ID）："
@@ -236,12 +238,12 @@ if [ -z "$REVIEW_LAUNCHER" ] && [ "$CARRIER_MODE" != "herdr" ]; then REVIEW_LAUN
 case "$REVIEW_LAUNCHER" in
   cc|cc2) ;;
   ccw) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_LAUNCHER=ccw 已退役，改用 cc2（~/.claude-2，同一個帳號）" >&2; exit 2 ;;
-  '') echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_LAUNCHER 必填（cc|cc2，不給預設）；例：CLAUDE_REVIEW_LAUNCHER=cc bash <claude-review-safe.sh> medium" >&2; exit 2 ;;
+  '') echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_LAUNCHER 必填（cc|cc2，不給預設）；例：CLAUDE_REVIEW_LAUNCHER=cc bash <claude-review-safe.sh> xhigh" >&2; exit 2 ;;
   *) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_LAUNCHER 只接受 cc|cc2；收到 $REVIEW_LAUNCHER" >&2; exit 2 ;;
 esac
 case "$REVIEW_SEAT" in
   opus) ;;
-  fable) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_SEAT=fable 已禁用（2026-09-24，Fable 所有用途禁用）；0-A 只有 Opus 5.5（effort: medium） 一席，Opus 不可用時 gate 保持未完成" >&2; exit 2 ;;
+  fable) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_SEAT=fable 已禁用（2026-09-24，Fable 所有用途禁用）；0-A 只有 Opus 5.5（effort: xhigh） 一席，Opus 不可用時 gate 保持未完成" >&2; exit 2 ;;
   *) echo "[claude-review-safe] 錯誤：CLAUDE_REVIEW_SEAT 只接受 opus；收到 $REVIEW_SEAT" >&2; exit 2 ;;
 esac
 REVIEW_ROW="code-review-opus"
@@ -256,9 +258,13 @@ if [ "$CARRIER_MODE" = "finalize" ]; then
   exit $?
 fi
 
-REASONING="${1:-medium}"
-if [ "$REASONING" != "medium" ]; then
-  echo "[claude-review-safe] 錯誤：effort 只接受 medium（0-A reviewer 席固定 medium，Claude child 上限內）；收到 $REASONING" >&2
+REASONING="${1:-xhigh}"
+if [ "$REASONING" = "medium" ]; then
+  echo "[claude-review-safe] 注意：0-A reviewer 席已改 Opus 5.5（effort: xhigh）（Charles 2026-10-23）；舊呼叫端的 medium 當過渡別名，本次以 xhigh 執行——請把呼叫改成 prepare xhigh" >&2
+  REASONING="xhigh"
+fi
+if [ "$REASONING" != "xhigh" ]; then
+  echo "[claude-review-safe] 錯誤：effort 只接受 xhigh（0-A reviewer 席固定 xhigh，Routing Table code-review-opus 列的列層級例外）；收到 $REASONING" >&2
   exit 2
 fi
 shift || true
@@ -338,7 +344,7 @@ if [ "$CARRIER_MODE" = "prepare" ]; then
       echo "[claude-review-safe] 錯誤：prepare 跑在 review-snapshot.ts run 的快照裡——run 會在 prepare 返回時刪掉這棵樹，finalize 無樹可驗"
       echo "  → 改用 create／remove 包住 prepare 與 finalize："
       echo "    SNAP=\$(node \$CLADE_HOME/vendor/scripts/review-snapshot.ts create --repo <repo> --base <merge-base> --stage <head>)"
-      echo "    cd \"\$SNAP\" && bash <claude-review-safe.sh> prepare medium  → 照 AGENT_CALL 派 reviewer → 跑 FINALIZE"
+      echo "    cd \"\$SNAP\" && bash <claude-review-safe.sh> prepare xhigh  → 照 AGENT_CALL 派 reviewer → 跑 FINALIZE"
       echo "    node \$CLADE_HOME/vendor/scripts/review-snapshot.ts remove \"\$SNAP\"（finalize 之後）"
     } >&2
     exit 2
@@ -621,7 +627,7 @@ herdr_call \
   --prompt-file "$PROMPT_FILE" \
   --launcher "$REVIEW_LAUNCHER" \
   --model "$REVIEW_MODEL" \
-  --effort medium \
+  --effort xhigh \
   --route routing-table \
   --tier-basis table-row \
   --table-row "$REVIEW_ROW" \
@@ -942,7 +948,7 @@ write_review_receipt() {
       reviewer_family: "claude",
       requested_model: process.env.REVIEW_MODEL,
       observed_model: process.argv[4] || undefined,
-      requested_effort: "medium",
+      requested_effort: "xhigh",
       model_verification: process.argv[5],
       model_verification_reason: process.argv[6] || undefined,
       model_verification_rereads: Number(process.argv[7]),

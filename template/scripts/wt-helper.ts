@@ -547,27 +547,104 @@ function resolveLandingBase(cwd) {
   return 'main'
 }
 
-/** detached 樹的 ancestry gate：HEAD commit 是 landing base 的祖先才算 merged；判不出一律 false。 */
-function isAncestorOfLandingBase(cwd, rev, baseBranch = resolveLandingBase(cwd)) {
+/**
+ * 每個 process 對同一 (repo, base) 只 fetch 一次 `origin/<base>`（best-effort）。
+ *
+ * 為什麼判斷前要 fetch：clade home 與 consumer 的**本機** main 常落後 origin（對齊被 refused、
+ * 並行 session 剛合入時尤甚）。只比本機 main，已經在 origin/main 上的分支會被判「未合入」，
+ * cleanup 被擋、`list` 顯示未 merged。
+ * fetch 失敗（沒有 origin、離線、權限）不是錯：照樣用已有的 remote-tracking ref，沒有就只剩本機 ref。
+ *
+ * **opt-in**：fetch 會寫 `refs/remotes/origin/<base>` 與 FETCH_HEAD 並碰網路，唯讀路徑
+ * （`cleanup --dry-run`、`list`／`backlog --no-landed-state`、hook／board 的預算模式）NEVER 啟用，
+ * 只比已有的 ref。只有使用者要完整落地狀態、或判了就動手的入口呼叫 enableLandingFetch()。
+ * 另可用 `CLADE_WT_NO_LANDING_FETCH=1` 全域關掉（離線機、受限網路）。
+ */
+const landingBaseFetched = new Set<string>()
+let landingFetchEnabled = false
+
+function enableLandingFetch(): void {
+  landingFetchEnabled = true
+}
+
+function fetchLandingBase(cwd, base): void {
+  if (!landingFetchEnabled) return
+  const key = `${cwd}\0${base}`
+  if (landingBaseFetched.has(key)) return
+  landingBaseFetched.add(key)
+  if (process.env.CLADE_WT_NO_LANDING_FETCH === '1') return
   try {
-    git(['merge-base', '--is-ancestor', rev, baseBranch], { cwd })
-    return true
-  } catch {
-    return false
+    git(['remote', 'get-url', 'origin'], { cwd })
+    git(
+      [
+        'fetch',
+        '--quiet',
+        '--no-tags',
+        'origin',
+        `+refs/heads/${base}:refs/remotes/origin/${base}`,
+      ],
+      {
+        cwd,
+        timeout: 15_000,
+        // 判 merged 不值得停在 credential／ssh 提示上：沒有互動就直接失敗。
+        env: {
+          ...process.env,
+          GIT_TERMINAL_PROMPT: '0',
+          GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND ?? 'ssh -o BatchMode=yes',
+        },
+      },
+    )
+  } catch {}
+}
+
+/**
+ * 判「已合入」的證據 ref，依序：本機 landing base、已 fetch 的 `origin/<base>`。
+ * `origin/<base>` 只在能解析時才納入；呼叫端先 fetch（見 fetchLandingBase）。
+ */
+function landingEvidenceRefs(cwd, baseBranch): string[] {
+  const refs = [baseBranch]
+  const remote = `origin/${baseBranch}`
+  try {
+    git(['rev-parse', '--verify', '--quiet', `${remote}^{commit}`], { cwd })
+    refs.push(remote)
+  } catch {}
+  return refs
+}
+
+/**
+ * rev 是哪一個證據 ref 的祖先（先 fetch；本機 base 優先，其次 origin/<base>）。
+ * 都不是／判不出 → null（fail closed）。回傳值給訊息寫出「比對的 ref」。
+ */
+export function landingAncestorRef(cwd, rev, baseBranch = resolveLandingBase(cwd)): string | null {
+  fetchLandingBase(cwd, baseBranch)
+  for (const ref of landingEvidenceRefs(cwd, baseBranch)) {
+    try {
+      git(['merge-base', '--is-ancestor', rev, ref], { cwd })
+      return ref
+    } catch {}
   }
+  return null
+}
+
+/** detached 樹的 ancestry gate：HEAD commit 是 landing base（本機或 origin/<base>）的祖先才算 merged；判不出一律 false。 */
+function isAncestorOfLandingBase(cwd, rev, baseBranch = resolveLandingBase(cwd)) {
+  return landingAncestorRef(cwd, rev, baseBranch) !== null
 }
 
 function mergedBranches(cwd, baseBranch = resolveLandingBase(cwd)): Set<string> {
-  let raw = ''
-  try {
-    raw = git(['branch', '--merged', baseBranch], { cwd })
-  } catch {
-    return new Set<string>()
-  }
+  fetchLandingBase(cwd, baseBranch)
   const set = new Set<string>()
-  for (const line of raw.split('\n')) {
-    const b = line.replace(/^[*+]?\s*/, '').trim()
-    if (b) set.add(b)
+  for (const ref of landingEvidenceRefs(cwd, baseBranch)) {
+    let raw = ''
+    try {
+      raw = git(['branch', '--merged', ref], { cwd })
+    } catch {
+      continue
+    }
+    for (const line of raw.split('\n')) {
+      const b = line.replace(/^[*+]?\s*/, '').trim()
+      if (b) set.add(b)
+    }
   }
   return set
 }
@@ -1034,25 +1111,6 @@ function setupBriefExclude(wtPath) {
     }
   } catch (e) {
     console.error(`note: brief exclude setup skipped: ${e?.message ?? e}`)
-  }
-}
-
-// 退場後遺留的舊索引仍在 worktree 移除時順手清掉（best-effort）；新建 worktree 不再自動索引。
-function cleanupCodebaseMemoryIndex(worktreePath) {
-  try {
-    const dbName = worktreePath.replace(/^\//, '').replace(/\//g, '-')
-    const cacheDir = join(process.env.HOME || '', '.cache/codebase-memory-mcp')
-    let cleaned = false
-    for (const ext of ['.db', '.db-wal', '.db-shm']) {
-      const f = join(cacheDir, dbName + ext)
-      if (existsSync(f)) {
-        rmSync(f)
-        cleaned = true
-      }
-    }
-    if (cleaned) console.log(`Cleaned codebase-memory-mcp index for ${dbName}`)
-  } catch {
-    // best-effort; never block worktree removal
   }
 }
 
@@ -3322,7 +3380,6 @@ export function releaseWorktreeRuntime(
 export function cleanupRemovedWorktreeRuntime(consumerRoot: string, wtPath: string) {
   // 新舊檔名都走 lib 的定位＋ownership 驗證；同 basename 的姊妹樹紀錄在裡面 retain。
   releaseWorktreeDevPorts(consumerRoot, wtPath)
-  cleanupCodebaseMemoryIndex(wtPath)
 }
 
 // TD-793: `.nuxt/types` is a `nuxt prepare` product reached through pnpm's
@@ -4682,6 +4739,7 @@ function countWorktreeDirty(wtPath): number | null {
 }
 
 async function cmdList(opts) {
+  if (!opts.noLandedState) enableLandingFetch()
   const consumerRoot = findConsumerRoot()
   const wts = sessionWorktrees(consumerRoot)
   const ctx = enrichContext(consumerRoot)
@@ -4816,6 +4874,7 @@ export function collectWorktreeBacklog(
 }
 
 export async function cmdBacklog(opts: { json?: boolean; noLandedState?: boolean } = {}) {
+  if (!opts.noLandedState) enableLandingFetch()
   const report = collectWorktreeBacklog(findConsumerRoot(), { landed: !opts.noLandedState })
   for (const diagnostic of report.diagnostics) console.error(diagnostic)
   if (opts.json) console.log(JSON.stringify(report, null, 2))
@@ -7291,6 +7350,8 @@ async function cmdCleanup(
   const declaring = opts.supersededBy !== undefined
   if (declaring && !String(opts.reason ?? '').trim())
     throw new Error('cleanup --superseded-by 需要 --reason <為什麼判定已被取代>')
+  // --dry-run 的契約是不寫任何 ref：不 fetch，只比已有的 origin/<base>（見 fetchLandingBase）。
+  if (!opts.dryRun) enableLandingFetch()
   const cleanSlug = makeSlugSafe(slug)
   const consumerRoot = findConsumerRoot()
   const target = findCleanupWorktree(consumerRoot, cleanSlug)
@@ -7310,9 +7371,18 @@ async function cmdCleanup(
   // (applied from stash, never committed) and vanished on cleanup.
   // squash-merge 不建立 merge 邊，ancestry 因此對每一條正常 land 完的 branch 都誤報。
   // marker 相符時兩道 ancestry gate 一起放行（見 isSquashLanded 上方的推導與實測）。
-  const ancestryMerged = detachedHead
-    ? isAncestorOfLandingBase(consumerRoot, branchName)
-    : mergedBranches(consumerRoot).has(branchName)
+  // 證據 ref 寫進訊息：本機 main 落後 origin 時，是 origin/<base> 放行的，使用者要看得到比對的是哪一個。
+  const landingBase = resolveLandingBase(consumerRoot)
+  const ancestryRef = landingAncestorRef(consumerRoot, branchName, landingBase)
+  const ancestryMerged = ancestryRef !== null
+  // 只有 origin/<base> 放行（本機 base 落後、不含這條 branch）：證據性質同 prLanded——「已落在 origin」，
+  // 不是「已在本機 main」，報表與 mergedLocal 要分開（TD-1103），但同樣沒有任何 commit 會因移除而丟失。
+  const originAncestryOnly = ancestryMerged && ancestryRef !== landingBase
+  if (originAncestryOnly) {
+    console.log(
+      `cleanup: ${branchLabel} 的 tip 是 ${ancestryRef} 的祖先（本機 ${landingBase} 落後，已合入 origin）—— ancestry gate 放行`,
+    )
+  }
   const squashLanded = isSquashLanded(consumerRoot, cleanSlug, branchName)
   if (squashLanded && !ancestryMerged) {
     const base = git(['merge-base', 'main', branchName], { cwd: consumerRoot }).trim()
@@ -7395,13 +7465,18 @@ async function cmdCleanup(
       : null
   const prLanded = mergedPr?.status === 'known' && mergedPr.value.landed === true
   const branchMerged = squashLanded || ancestryMerged || absorbedLanded || prLanded
+  // originAncestryOnly 同 squash／absorbed／prLanded 跳過 unland gate：detectUnlandedFiles 數的是
+  // 本機 main 之外的 commit 並對本機 main 的 working tree 比內容，本機 main 落後時必然誤報，
+  // 還會把人推去 --force-discard-unland（TD-302 警告的反射）。tip 已是 origin/<base> 的祖先
+  // ⟹ 每個 commit 都可從 origin 到達，沒有東西會丟。
   const unlanded =
-    squashLanded || absorbedLanded || prLanded ? [] : detectUnlandedFiles(consumerRoot, branchName)
-  // 第四條憑證證明的是「已落在 origin/<base>」，前三條證明的是「已在本機 main」
-  // —— clade home 的本機 main 與 origin 常態分岔，兩者在報表上 MUST 分開標，
-  // 不讓 merged=Y 的語意被悄悄放寬（TD-1103 複審）。
-  const landingBase = resolveLandingBase(consumerRoot)
-  const mergedLocal = squashLanded || ancestryMerged || absorbedLanded
+    squashLanded || absorbedLanded || prLanded || originAncestryOnly
+      ? []
+      : detectUnlandedFiles(consumerRoot, branchName)
+  // 第四條憑證（merged PR）與 origin-only ancestry 證明的是「已落在 origin/<base>」，
+  // 其餘證明的是「已在本機 main」—— clade home 的本機 main 與 origin 常態分岔，兩者在報表上
+  // MUST 分開標，不讓 merged=Y 的語意被悄悄放寬（TD-1103 複審；fixtures.test 釘住）。
+  const mergedLocal = squashLanded || (ancestryMerged && !originAncestryOnly) || absorbedLanded
   // TD-1082：只在四條落地憑證全失手時才驗宣告；已落地的 branch 不需要它。
   const superseded =
     declaring && !branchMerged
@@ -7564,7 +7639,7 @@ async function cmdCleanup(
     console.log(`  worktree           ${target.path}`)
     console.log(`  branch             ${branchLabel}`)
     console.log(
-      `  ancestry           merged=${mergedLocal ? 'Y' : 'N'} squashLandedMarker=${squashLanded ? 'Y' : 'N'} absorbedByOtherPath=${absorbedLanded ? 'Y' : 'N'} mergedPr(origin/${landingBase})=${mergedPr === null ? '-' : prLanded ? 'Y' : mergedPr.status === 'unknown' ? 'unknown' : 'N'} unlandedFiles=${unlanded.length}`,
+      `  ancestry           merged=${mergedLocal ? 'Y' : 'N'} ancestryOrigin(origin/${landingBase})=${originAncestryOnly ? 'Y' : 'N'} squashLandedMarker=${squashLanded ? 'Y' : 'N'} absorbedByOtherPath=${absorbedLanded ? 'Y' : 'N'} mergedPr(origin/${landingBase})=${mergedPr === null ? '-' : prLanded ? 'Y' : mergedPr.status === 'unknown' ? 'unknown' : 'N'} unlandedFiles=${unlanded.length}`,
     )
     if (superseded) {
       console.log(
@@ -7646,7 +7721,9 @@ async function cmdCleanup(
   if (needsForce || needsDiscardUnland || needsDiscardUncommitted) {
     const issues = []
     if (needsForce) {
-      issues.push(`- Branch ${branchLabel} is not merged into main (gated by --force)`)
+      issues.push(
+        `- Branch ${branchLabel} is not merged into main (gated by --force；比對 ref：${landingEvidenceRefs(consumerRoot, landingBase).join('、')})`,
+      )
     }
     if (needsDiscardUnland) {
       // 列**未進 main 的 commit**，不是檔名清單 —— 使用者要判的是「這些 commit 我還要
@@ -7794,7 +7871,6 @@ async function cmdCleanup(
       console.error(`warn: could not remove residual dir ${target.path}: ${e.message ?? e}`)
     }
   }
-  cleanupCodebaseMemoryIndex(target.path)
   // `-D` only where the caller is knowingly discarding unlanded work. A squash-landed branch is
   // never that case: it is not an ancestor of main, so `-d` refuses and the ref survives — and
   // that surviving ref is the last reachable copy of the checkpoint once the worktree is gone.
@@ -7809,9 +7885,17 @@ async function cmdCleanup(
   // `git branch -d` 在 branch 設有 upstream 時是對 upstream 判 merged，同一憑證會依
   // tracking ref 在不在產生「刪／留」兩種結果，`-D` 讓兩格一致。`opts.force` 同理 ——
   // 使用者明示的 `--force` 拿到的是 `-D`，NEVER 被 probe 命中降級回 `-d`。
+  // originAncestryOnly 同理：tip 已是 origin/<base> 的祖先，`-d` 對（落後的）本機 main 判 merged 會失敗，
+  // 留下 worktree 已移除卻清不掉的 branch；`-D` 不丟任何 commit。
   // supersededOk 同理：tip 已釘在 refs/wt-superseded/，`-D` 不讓任何 commit 變成不可達。
   const deleteFlag =
-    (opts.force && !squashLanded) || absorbedLanded || prLanded || supersededOk ? '-D' : '-d'
+    (opts.force && !squashLanded) ||
+    absorbedLanded ||
+    prLanded ||
+    originAncestryOnly ||
+    supersededOk
+      ? '-D'
+      : '-d'
   try {
     if (!detachedHead) git(['branch', deleteFlag, branchName], { cwd: consumerRoot })
   } catch {

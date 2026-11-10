@@ -57,9 +57,9 @@ github-flow.md — GitHub Flow 事件責任與成本邊界 — checkpoint、revi
 178-201 發版的部署窗口（production）
 203-207 證據綁定
 209-217 遠端強制與本機契約
-219-264 本機 main 與 origin 的對齊
-266-276 合併後分支回收
-278-280 失敗路徑
+219-265 本機 main 與 origin 的對齊
+267-277 合併後分支回收
+279-281 失敗路徑
 
 self-hosted-runner.md — Self-hosted GitHub Actions runner 的標籤設計、job 路由契約與職責分工
 5-12 前導 — Self-Hosted Runner 標籤設計與職責分工

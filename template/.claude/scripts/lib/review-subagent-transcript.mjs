@@ -32,7 +32,7 @@
 // 讓它經手 verdict 文字就等於讓 maker 替 reviewer 交卷。
 //
 // 用法：node review-subagent-transcript.mjs --subagents-dir <dir> --nonce <n>
-//         --prompt <prepare 寫的 prompt 檔> --brief <path> --model <requested> --effort medium --agent-type <type> --verdict-out <path>
+//         --prompt <prepare 寫的 prompt 檔> --brief <path> --model <requested> --effort xhigh --agent-type <type> --verdict-out <path>
 // stdout 印一份 JSON 結論；exit 0 verified／3 沒跑成或不完整／6 prompt 被改或用了寫入型工具／
 // 8 身分不成立／2 用法錯誤。
 
@@ -338,9 +338,9 @@ function main() {
     )
     process.exit(2)
   }
-  if (values.effort !== 'medium') {
+  if (values.effort !== 'xhigh') {
     process.stdout.write(
-      `${JSON.stringify({ exit: 2, reason: 'commit 0-A 只接受 medium effort' })}\n`,
+      `${JSON.stringify({ exit: 2, reason: 'commit 0-A 只接受 xhigh effort' })}\n`,
     )
     process.exit(2)
   }
