@@ -9,6 +9,7 @@ on:
       - docs/CLI_SCAFFOLD.md
       - template/packages/create-nuxt-starter/**
       - template/scripts/templates/github/.github/workflows/**
+      - template/.node-version
   push:
     branches:
       - main
@@ -21,6 +22,7 @@ on:
       - docs/CLAUDE_CODE_GUIDE.md
       - docs/CLI_SCAFFOLD.md
       - .github/workflows/scaffold-smoke.yml
+      - template/.node-version
   workflow_dispatch:
 
 jobs:
@@ -32,9 +34,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24
+          node-version-file: template/.node-version
+      - name: Verify node -v matches template/.node-version
+        run: test "$(node -v)" = "v$(cat "$GITHUB_WORKSPACE/template/.node-version")"
 
       - name: Enable corepack and pin pnpm
         run: |
