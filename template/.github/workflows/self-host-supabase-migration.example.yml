@@ -22,7 +22,7 @@ jobs:
           cache: pnpm
       - name: Verify node -v matches .node-version
         run: |
-          raw="$(tr -d \'[:space:]\' < .node-version)"; want="v${raw#v}"
+          raw="$(tr -d '[:space:]' < .node-version)"; want="v${raw#v}"
           got="$(node -v)"
           echo "node -v=$got, .node-version=$want"
           test "$got" = "$want"
@@ -50,7 +50,7 @@ jobs:
           cache: pnpm
       - name: Verify node -v matches .node-version
         run: |
-          raw="$(tr -d \'[:space:]\' < .node-version)"; want="v${raw#v}"
+          raw="$(tr -d '[:space:]' < .node-version)"; want="v${raw#v}"
           got="$(node -v)"
           echo "node -v=$got, .node-version=$want"
           test "$got" = "$want"
