@@ -77,13 +77,16 @@ jobs:
         # cache key 的自動偵測；install 維持由下面那個顯式步驟負責，只留一個安裝點。
         uses: voidzero-dev/setup-vp@3754dd7dbdb32bd8f6d28b6043de13ad3a75f21f # v1.21.1
         with:
-          node-version-file: template/.node-version
+          node-version-file: .node-version
           cache: true
           working-directory: template
           run-install: false
       - name: Verify node -v matches template/.node-version
-        run: test "$(node -v)" = "v$(cat "$GITHUB_WORKSPACE/template/.node-version")"
-
+        run: |
+          raw="$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/template/.node-version")"; want="v${raw#v}"
+          got="$(node -v)"
+          echo "node -v=$got, template/.node-version=$want"
+          test "$got" = "$want"
       - name: Install dependencies
         run: vp install
 

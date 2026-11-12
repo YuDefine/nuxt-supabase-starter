@@ -38,8 +38,11 @@ jobs:
         with:
           node-version-file: template/.node-version
       - name: Verify node -v matches template/.node-version
-        run: test "$(node -v)" = "v$(cat "$GITHUB_WORKSPACE/template/.node-version")"
-
+        run: |
+          raw="$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/template/.node-version")"; want="v${raw#v}"
+          got="$(node -v)"
+          echo "node -v=$got, template/.node-version=$want"
+          test "$got" = "$want"
       - name: Enable corepack and pin pnpm
         run: |
           corepack enable

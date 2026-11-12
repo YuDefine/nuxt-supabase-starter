@@ -21,7 +21,11 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - name: Verify node -v matches .node-version
-        run: test "$(node -v)" = "v$(cat .node-version)"
+        run: |
+          raw="$(tr -d \'[:space:]\' < .node-version)"; want="v${raw#v}"
+          got="$(node -v)"
+          echo "node -v=$got, .node-version=$want"
+          test "$got" = "$want"
       - run: pnpm install --frozen-lockfile
       - id: risk
         run: |
@@ -45,7 +49,11 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - name: Verify node -v matches .node-version
-        run: test "$(node -v)" = "v$(cat .node-version)"
+        run: |
+          raw="$(tr -d \'[:space:]\' < .node-version)"; want="v${raw#v}"
+          got="$(node -v)"
+          echo "node -v=$got, .node-version=$want"
+          test "$got" = "$want"
       - run: pnpm install --frozen-lockfile
       - name: Wait for PostgREST readiness
         run: pnpm postgrest:ready --url="${POSTGREST_READY_URLS}"
