@@ -124,3 +124,5 @@ yarn-error.log*
 !.clade/test-trust-baseline.json
 !.clade/break-receipts/
 !.clade/mutation-summary.json
+
+!.clade/generated-files.json
