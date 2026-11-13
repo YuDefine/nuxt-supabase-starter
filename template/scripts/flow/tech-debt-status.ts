@@ -26,12 +26,12 @@ export const CLOSED_TD_STATUSES = new Set(['done', 'resolved', 'closed', 'wontfi
 // done-hint 誤判。判準見 `.claude/skills/clade-home/rules/tech-debt-hygiene.md § Invariant 5`。
 export const LANDED_PENDING_TD_STATUSES = new Set(['landed'])
 
-// @deprecated (TD-490) — `blocked-attended-only` 作為 Status token 已停用。
+// @deprecated — `blocked-attended-only` 作為 Status token 已停用。
 // 出口可達性現在由 `**Blocker**:` 欄位的存在與否獨立承載，與 Status 正交。
 // 任何 open/pending/landed entry 只要有 `**Blocker**:` 欄且指向已知 gate，
 // 就不計入 actionableOpen。不再需要獨立的 status token。
 //
-// 保留常數與 isBlockedAttendedOnly() 供 handoff-scan.ts backward compat（TD-504
+// 保留常數與 isBlockedAttendedOnly() 供 handoff-scan.ts backward compat（後續
 // scope 內會遷移到 blocker-field-based 判準）。遷移完成後可移除。
 //
 // 防濫用在 Invariant 12（`**Blocker**:` MUST 指得出擋在哪一行）：這一格是 actionableOpen
@@ -42,10 +42,10 @@ export const BLOCKED_ATTENDED_ONLY_TD_STATUSES = new Set(['blocked'])
 // TD metadata 欄位的共用行首前綴：部分 entry 把整個 metadata 區塊寫成 bullet list
 // （`- **Status**: done`）。少了它，`^` 錨點只吃裸欄位行。
 //
-// 集中在這裡而不是各自寫一份：同型 bug 已發生四次（Status 2026-05、Class 與
-// Discovered/Location 2026-08-02，值前面的粗體 2026-08-23）。前三次漏的是**欄位名
+// 集中在這裡而不是各自寫一份：同型 bug 已發生四次（Status、Class 與
+// Discovered/Location，值前面的粗體）。前三次漏的是**欄位名
 // 前面**的修飾，失敗形態是「一個欄位認得 bullet、另一個不認，同一條 TD 半邊解析
-// 成功」；第四次（[[TD-597]]）漏的是**值前面**的修飾（`**Status**: **resolved**`），
+// 成功」；第四次漏的是**值前面**的修飾（`**Status**: **resolved**`），
 // 失敗形態是整條 regex 不匹配 → 回 null → 已結案 TD 被三條鏈一致當成 open。
 //
 // **修飾可以出現在兩個位置，各自需要一個共用常數**：欄位名前面走 TD_FIELD_PREFIX，
@@ -65,7 +65,7 @@ export const TD_VALUE_WRAPPER = '(?:[*`~]+\\s*)?'
 // Parse the `**Status**:` field value (first token) from a TD body. Returns
 // lowercased status word (e.g. 'done', 'resolved', 'open', 'wontfix') or null.
 // The `[\w-]*` capture stops at the trailing CJK parenthetical annotation
-// (`done（2026-05-10）`) because `（` is non-word.
+// (`done`) because `（` is non-word.
 //
 // The optional `[-*+]\s+` prefix accepts the bullet-list metadata style some
 // TD entries use (`- **Status**: done`) — without it the `^` anchor only
@@ -102,7 +102,7 @@ export function isLandedPendingVerification(status) {
   return LANDED_PENDING_TD_STATUSES.has(status.split('-')[0])
 }
 
-// @deprecated (TD-490) — 出口可達性現在由 `**Blocker**:` 欄位獨立承載。
+// @deprecated — 出口可達性現在由 `**Blocker**:` 欄位獨立承載。
 // 新 code path 用 `hasBlockerGate(entry.blocker)` 判斷是否被 gate 擋住，
 // 不再依賴 status token。保留供 handoff-scan.ts backward compat。
 export function isBlockedAttendedOnly(status) {
@@ -110,7 +110,7 @@ export function isBlockedAttendedOnly(status) {
   return BLOCKED_ATTENDED_ONLY_TD_STATUSES.has(status.split('-')[0])
 }
 
-// (TD-490) 判斷 `**Blocker**:` 欄位是否指向已知 gate。
+// 判斷 `**Blocker**:` 欄位是否指向已知 gate。
 // 與 status token 正交——任何 open/pending/landed entry 只要 blocker 指向已知 gate，
 // 就從 actionableOpen 扣除。gate 名冊與 audit-tech-debt-hygiene.ts 的 KNOWN_GATE_RE
 // 同源；呼叫端傳入的 gateRe 應是那個 regex。
@@ -147,7 +147,7 @@ export function getTechDebtStatus(fileContent, tdId) {
 // 與 `isClosedStatus` 的分歧是刻意的，NEVER 收斂成一個判定：
 // `isClosedStatus` 只看 leading token，所以 `wontfix-until-signal` 為 true —— 它對 digest /
 // SLA 而言確實已離開 open pool。`isTerminalStatus` 是 archive / rotate 的判準，對它為 false
-// —— parked 的 entry 等訊號回來，搬進 archive 就是把還會動的工作關掉。2026-09-06 實測
+// —— parked 的 entry 等訊號回來，搬進 archive 就是把還會動的工作關掉。實測
 // docs/tech-debt.md：292 筆裡 46 筆是這個 token，收斂成一個判定會一次搬走那 46 筆。
 // 斷言在 test/rotate-closed-bloat.test.ts。
 export function isTerminalStatus(status: string | null | undefined): boolean {

@@ -76,6 +76,10 @@
 #   4  account_unavailable——本 0-A 席不可用的逐字證據，gate 維持 pending；stderr 另印
 #      `NEXT_STEP_JSON:` 一行（可機讀，轉出 helper receipt 的 next_step）
 #   6  review 期間受審樹被改動（snapshot drift），verdict 扣住
+#   7  reviewer 自身 auto-compact（subagent transcript 出現 compact_boundary／isCompactSummary）——
+#      這一批 brief 太大，前文被摘要取代，verdict 沒看完整個 changeset；與 6 分開（6 是夾帶／
+#      續派／受審樹被改）。批作廢、NEVER 當作通過，也 NEVER 當作續派；處置是切小重跑
+#      （oa-batches.ts clean 後以更小的 --max-bytes／--max-lines 重跑 prepare）
 #   8  model verification 失敗（mismatch，或重讀後仍 unverified）——身分歸屬
 #      不成立，verdict 扣住；NEVER 當作通過，也 NEVER 當作 mismatch 以外的东西
 #   9  brief 無法安全交付——總量超過 CLAUDE_REVIEW_BRIEF_MAX_BYTES，或 pointer
@@ -117,9 +121,13 @@
 #       輪數 ledger 查詢（JSON）：oa-batches 切批前 plan（covered 時 cover 落記錄）、merge-queue 合併前 passed
 #       plan／cover／carry-over 是重度子命令，先排 flock 並行槽：CLADE_ROUNDS_MAX_PARALLEL（預設 2）、排隊上限 CLADE_ROUNDS_SLOT_WAIT_S（預設 20，須小於呼叫端 30s timeout）；
 #       排不到槽 exit 75（EX_TEMPFAIL，stdout 無 JSON），呼叫端 MUST 當成判不出。CLADE_ROUNDS_OWNER_PID＝呼叫者自報的 pid：它死了 wrapper 的 watchdog 收掉 node 子樹
-#   .claude/scripts/claude-review-safe.sh rounds grant --mode pr --branch <b> --pr-number <n> --by supervisor|charles --evidence <出處> [--scope increment|full]
-#       主管（--by supervisor）或 Charles 授權的單 PR 例外輪：append 一筆 grant 進 ledger，該 PR 段上限＋1（只在已撞上限時收；
-#       --scope increment（預設，只審增量）｜full（整份重審）寫進 grant 紀錄；evidence 缺、by 不是 supervisor／charles、scope 不合法、PR 號對不上一律 exit 2）。這是放寬上限的唯一入口，沒有 env／旗標替代
+#   .claude/scripts/claude-review-safe.sh rounds grant --mode pr --branch <b> --pr-number <n> --by manager|charles --evidence <出處> [--scope increment|full] [--kind independent|verify]
+#       主管（--by manager；supervisor／主管 是舊名）或 Charles 授權的單 PR 例外輪：append 一筆 grant 進 ledger，該 PR 段上限＋1（只在已撞上限時收；
+#       --scope increment（預設，只審增量）｜full（整份重審）寫進 grant 紀錄；evidence 缺、by 不是 manager／charles、scope 不合法、PR 號對不上一律 exit 2）。這是放寬上限的唯一入口，沒有 env／旗標替代
+#       --kind（可省）：例外輪輪種由 scope 決定，full→independent（prepare 必開獨立輪；開不出 exit 15 且 grant 不消耗）、increment→verify；與 scope 不一致 exit 2
+#       每張 PR 最多 2 張；第 3 張只收 --scope full、只給高風險 PR（簽發者確認），且例外輪已用完、現 head 已有 1 輪不帶篩選的完整審查、最近兩輪皆 0 Critical／0 Major 三條件同時成立；第 4 張一律拒
+#   .claude/scripts/claude-review-safe.sh rounds revoke-grant --mode pr --branch <b> --pr-number <n> --by supervisor|charles --reason <原因> [--granted-at <ISO>]
+#       主管或 Charles 撤銷一張還沒開出例外輪的 grant（append 進 ledger.grant_revocations，可稽核）：舊 scope=full grant 因前輪有未解 Critical／Major 開不出獨立輪的死結用它解，撤銷後可再簽 --scope increment 開 verify 輪；已被消耗的 grant 撤不掉（exit 2）
 #   .claude/scripts/claude-review-safe.sh rounds reopen --mode pr --branch <b> --pr-number <n> --head <sha> --by supervisor|charles --evidence <出處>
 #       主管或 Charles 要求在該 head 開一輪完整審查（covered／已通過／沒有通過輪都可）：append 請求進 ledger，下一次 prepare 開 kind=independent 的輪，受輪數上限管
 #   .claude/scripts/claude-review-safe.sh rounds findings --mode pr --branch <b> [--pr-number <n>] [--round <n>] [--part <i/N>]
@@ -198,12 +206,12 @@ case "${1:-}" in
     # 輪數 ledger 的查詢（oa-batches 切批前、merge-queue 合併前用）；寫入只發生在開審、收 verdict，
     # 以及 cover（判定為 covered 時把 head 記成通過輪的 covered_heads，merge-queue 只認記錄）。
     # carry-over：PR 只併主線、自身 patch 不變時把本 head 記成通過輪的 covered_heads（嚴格零容忍，見 review-common.sh）。
-    # grant 是唯一的人類授權寫入：Charles 授權的例外輪留紀錄在 ledger.grants。
+    # grant 是唯一的人類授權寫入：Charles 授權的例外輪留紀錄在 ledger.grants；revoke-grant 撤銷未消耗的 grant（append ledger.grant_revocations）。
     # adjudicate 把主線裁決為假的 Major 記進該輪該批（只疊在原始計數上，不改計數）；findings 唯讀列出可裁決的指紋。
     shift
     case "${1:-}" in
-      plan|cover|passed|carry-over|show|grant|reopen|findings|adjudicate) ;;
-      *) echo "[claude-review-safe] 錯誤：rounds 只接受 plan|cover|passed|carry-over|show|grant|reopen|findings|adjudicate；收到 ${1:-<空>}" >&2; exit 2 ;;
+      plan|cover|passed|carry-over|show|grant|revoke-grant|reopen|findings|adjudicate) ;;
+      *) echo "[claude-review-safe] 錯誤：rounds 只接受 plan|cover|passed|carry-over|show|grant|revoke-grant|reopen|findings|adjudicate；收到 ${1:-<空>}" >&2; exit 2 ;;
     esac
     # shellcheck source=lib/review-common.sh
     . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/review-common.sh"

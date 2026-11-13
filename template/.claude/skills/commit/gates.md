@@ -416,6 +416,7 @@ bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" prepare xhigh
 | A17 | 完整結果，無 issue | 0-A.1 通過，0-A.2 不觸發 |
 | A18 | 只有 Minor／Info | 逐項修復並驗證，0-A.2 不觸發 |
 | A19 | 含 Critical／Major | 逐項修復後進 0-A.2 [^A19] |
+| A20 | exit 15（`grant-unopenable`：scope=full 的例外輪 grant 開不出獨立輪） | review 沒跑、grant 沒消耗；保留 grant，NEVER 重新授權 [^A20] |
 | A* | 其他 exit、RESULT 讀不出 | gate 未完成，STOP 回報 RESULT 行與 exit code |
 
 [^A0]: 並行推進其他軸，不能重播命令代替等待。
@@ -431,6 +432,7 @@ bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" prepare xhigh
 [^A14]: review 沒跑、gate 未完成。NEVER 刪改 ledger、換 branch 或 rebase 重置輪數。
 [^A16]: 已確認為合法並行工作可移至隔離 fixture 後重跑；不明或非預期 mutation 保留現場並處理授權，不自動覆寫。
 [^A19]: 修法本身是新的受審範圍。
+[^A20]: RESULT 的理由是帶 `--include`／`--exclude` 篩選，或前輪（grant 的 at_round）／本 head 還有未解 Critical／Major（獨立輪不帶前輪 findings、不靠 grant 抹掉）。篩選：不帶篩選重跑 `prepare`；Critical／Major：對假 Major 跑 `rounds adjudicate` 後重跑，真 Major 的修補無法靠獨立輪驗證（full grant 不能改簽也不能再簽），這張 PR 該拆。NEVER 刪改 ledger。
 
 不論命中哪一列，下表每條都要遵守：
 
@@ -729,6 +731,7 @@ node bin/clade-gate run test -- <runner> <測試檔>  # 沒有合適 script 時�
 那筆紀錄也不能用來排除。那不是錯，但通常是新檔還沒有測試在引用它。另有兩條不經 fallback 的選法：經 git 列檔的測試
 （trace 看得到它讀 `.git`、看不到它列了哪些檔）在任何新增或刪除時都會被選；`run-p`／`run-s`／`npm-run-all` 的 glob
 （`check:*`）算進 `package.json` 的 script 呼叫閉包。
+自帶測試的平台（`vendor/web-article/**`、`vendor/dashboard/**`）零命中、且往上整條 import 鏈沒有 root 程式或測試載到它時不 fallback：`0 tests selected` 代表交給該平台自己的 workflow（`web-article.yml`、`dashboard.yml`）。
 **純文件 diff（只改 `.md`）也照跑**：clade 有百餘支測試讀真實 `rules/ docs/ capabilities/` 內容，lane 會把它們選出來；
 選出 0 支時 runner 印 `No affected tests found`，那才是「這次沒有測試該跑」的合法結論。
 
@@ -779,7 +782,7 @@ Doctor health score < 100 或 exit code ≠ 0 → **MUST block commit**，修復
 
 0-C 檢查發現失敗需要修補時，**預設**派背景 worker 跑 fix-verify loop，主線同回合繼續既有並行收尾（poll 軸 A、回收軸 B）— 三軸並行結構不變，軸 C 只是從「主線 foreground 修」換成「worker 背景修」。0-C 是 Routing Table 〔`commit-0c-fix-verify`〕列（2026-09-24 併入原 `-escalate` 列；2026-09-29 GPT 退場後改 Claude Sonnet 5.5（effort: high）），鏈尾是主線。brief 以 `~/offline/clade/vendor/snippets/pi-offload/templates/fix-verify-loop.template.md` 為素材填好（check 命令、失敗摘要／log、`max_iterations=2`）寫成檔；載體照 [[agent-routing.routing-table]] § Devin 與 [[agent-routing.dispatch-execution]] § Cloud session 載體：
 
-- 本 turn 收得回 → Claude Code 主線派 in-process `sonnet-implementer`（brief 含一行 `routing-row: commit-0c-fix-verify`）
+- 本 turn 收得回 → Claude Code 主線派 in-process `haiku-implementer`：dispatch prompt 本體帶一行 `routing-row: commit-0c-fix-verify` 與每條 check 命令各一行 `test-command: <指令>`（只收測試 runner 前綴＋位置參數，例如 `pnpm test`、`node --test <檔>`、`vitest`；`pnpm check`、`pnpm run doctor`、`pnpm format:check` 這類 lint／typecheck／doctor／format check 不是測試 runner，帶旗標或引號的 check 命令也一樣，會被判 failed——這種 check 不派 Haiku、直接派 `sonnet-implementer`），brief 檔只放其餘內容（只寫在檔裡的 `test-command:` 不算，收尾 hook 只解析 prompt）；check 命令紅或 Haiku 不可用 → 轉 `sonnet-implementer`（同一 `routing-row`；有註冊收尾 hook 時照它印的 AGENT_CALL，沒註冊時主線自己重跑 check 命令判定）
 - 需隔離／長時間 → Herdr Claude child：
 
 ```bash
@@ -803,7 +806,7 @@ node ~/offline/clade/vendor/scripts/herdr-session-handoff.ts \
 
 **每一輪需要修復時先判執行者**：單檔 ≤5 行的 typo／import 級修正、或根因涉及本次設計判斷時由主線處理；其他可獨立驗證的機械修復依目前已核准 routing／使用者模型指定選 worker。可用本 runtime 的原生載體，不要求所有主線先換到 Pi。沒有可用 worker 或機械 transport 故障時主線接手，品質標準不變；這不構成 0-A 獨立 reviewer 的替代。
 
-Worker brief 帶具體 failures、命令、允許檔案、禁止修改的主線範圍與回報格式。第一位 worker 最多兩輪 check→fix；仍 fail／uncertain，或主線複跑仍紅時，主線接手處理剩餘根因，不重派同一 brief。相同 error 連續三輪無收斂時停止盲修、回到根因與 scope 決策。
+Worker brief 帶具體 failures、命令、允許檔案、禁止修改的主線範圍與回報格式。第一位 worker 最多兩輪 check→fix；仍 fail／uncertain，或主線複跑仍紅時，主線接手處理剩餘根因，不重派同一 brief。例外：第一位是 `haiku-implementer` 時它只有一次收尾，check 命令紅就先轉 `sonnet-implementer`（同一 `routing-row`；有註冊收尾 hook 時照它印的 AGENT_CALL），兩輪上限從 Sonnet 那一跳算起，Sonnet 也沒收斂才由主線接手。相同 error 連續三輪無收斂時停止盲修、回到根因與 scope 決策。
 
 使用 Pi CLI 的既有載體時，沿當前 `commit-0c-fix-verify` row（原 `-escalate` 列已退場，dispatcher 拒收）、`--route`／`--tier-basis`／`--table-row` 與 `--retry-of` 契約。Exit 2 是業務未收斂、3 是機械故障、4 是 quota；按實際結果判定，不能拿 quota 當故障來繞過 candidate admission。其他 native adapter 回報等價的 pass／finding／infrastructure-error／quota 狀態，不捏造 Pi exit code。
 

@@ -370,6 +370,11 @@ review_subagent_finalize() {
     6)
       echo "[claude-review-safe] RESULT: review 完整性不成立（exit 6）— ${reason}，NEVER 當作 0-A.1 通過" >&2
       return 6 ;;
+    7)
+      # reviewer 自身 auto-compact＝本批太大。與 6 分開：6 是夾帶／續派／受審樹被改（完整性不成立），
+      # 7 是「批太大、切小重跑」；兩者都不是通過，也都不寫 ledger。
+      echo "[claude-review-safe] RESULT: reviewer 自身壓縮（exit 7）— ${reason}；本批作廢（NEVER 當作 0-A.1 通過、NEVER 當作續派處理），切小重跑" >&2
+      return 7 ;;
     8)
       echo "[claude-review-safe] RESULT: reviewer model／effort verification 失敗（exit 8）— ${reason}；verdict 扣住不輸出，NEVER 當作 0-A.1 通過" >&2
       echo "[claude-review-safe] NEXT: 「沒核實」與「核實但不符」是兩個結論（receipt 的 failed_check 指出失敗的是 agent_type／model／effort 哪一關，reason 欄逐字記錄原因；model 與 effort 關另記在 model_verification_reason／effort_verification_reason）；兩者都讓 gate 維持 pending，NEVER 主線自審補位。" >&2

@@ -3,8 +3,6 @@
 
 本檔描述 commit 0-A 的 review wrapper `claude-review-safe.sh`（Claude Opus 5.5（effort: xhigh），唯一合格席）及其載體的能力與限制——changeset 凍結、snapshot 完整性與 exit 語義由 `lib/review-common.sh` 提供。任何能合法執行 CLI 的 runtime 均可使用；它不宣稱呼叫者的原生工具或模型資格已達成。先依 [review-policy.md](review-policy.md) 判資格，再讀以下完整限制。
 
-> 0-A.1 跨模型 wrapper `codex-review-safe.sh`（原 GPT-6 Astra via Pi 格）已於 2026-10-18 移除；它專屬的 Pi runner 與 exit 5（workspace 綁定）段落一併刪除。
-
 > **changeset 由 wrapper 自己收集後嵌進 prompt**（TD-320），reviewer 不自行跑 `git diff`。兩個要判讀的 stderr 訊號：超出 `CODEX_REVIEW_MAX_DIFF_LINES`（預設 6000 行）的檔案會被整塊剔除並具名，**MUST** 當成該檔未被 review、NEVER 當作它通過；changeset 為空時 wrapper exit 3、不送審，照 collection bug 處理，NEVER 當作 0-A.1 通過。
 
 #### exit 6（review 期間 working tree 被改動）→ verdict 不可信 + 人工檢視

@@ -7,7 +7,7 @@
 // control travels through `herdr --machine <peer>`; completion travels back over ssh to the home
 // helper. See vendor/snippets/herdr-session-handoff/README.md § Cross-machine dispatch.
 
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { availableParallelism, homedir, loadavg } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -19,6 +19,8 @@ import {
   diskFull,
   LOAD_CAP_PER_CORE,
   MEM_PRESSURE_AVG60,
+  memPsiShortage,
+  WORKLOAD_MEM_PRESSURE_CMD,
   parseCpuPsi,
   parseCpuStatLine,
   parseDfUsedPct,
@@ -380,6 +382,60 @@ export function sshRun(
   return out
 }
 
+/**
+ * `sshRun` 的非同步版：多台／多筆互不相依的 peer 查詢並行跑，牆鐘不疊加（同步版一筆 1–4 秒，串行幾十筆就是分鐘級）。
+ * 不可達略過與結果登記（`noteSshOutcome`）與同步版一致。
+ */
+export function sshRunAsync(
+  machine: string,
+  remoteCommand: string,
+  options: { input?: string; timeout?: number; env?: NodeJS.ProcessEnv; now?: number } = {},
+): Promise<SshResult> {
+  const env = options.env ?? process.env
+  const down = knownUnreachableMachine(machine, options.now)
+  if (down) return Promise.resolve(skippedSshResult(machine, down))
+  return new Promise((resolveResult) => {
+    let stdout = ''
+    let stderr = ''
+    let spawnError: string | undefined
+    let settled = false
+    const finish = (status: number): void => {
+      if (settled) return
+      settled = true
+      const out: SshResult = {
+        status,
+        stdout,
+        stderr,
+        ...(spawnError ? { spawnError } : {}),
+      }
+      noteSshOutcome(machine, out, options.now)
+      resolveResult(out)
+    }
+    const child = spawn(
+      sshBin(env),
+      [...SSH_OPTIONS, machine, `${REMOTE_PATH_PREFIX}; ${remoteCommand}`],
+      { env, stdio: ['pipe', 'pipe', 'pipe'] },
+    )
+    const timer = setTimeout(() => {
+      spawnError = `ETIMEDOUT: ssh ${machine} 逾時`
+      child.kill('SIGKILL')
+    }, options.timeout ?? 30_000)
+    child.stdout.setEncoding('utf8').on('data', (c: string) => (stdout += c))
+    child.stderr.setEncoding('utf8').on('data', (c: string) => (stderr += c))
+    child.on('error', (e) => {
+      spawnError = e.message
+      clearTimeout(timer)
+      finish(255)
+    })
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      finish(code ?? 255)
+    })
+    child.stdin.on('error', () => undefined)
+    child.stdin.end(options.input ?? '')
+  })
+}
+
 export type MachineLoad = {
   machine: string
   local: boolean
@@ -391,8 +447,12 @@ export type MachineLoad = {
   cpu_busy_pct?: number
   /** Memory PSI `some avg60` (time spent waiting on reclaim / swap). */
   mem_some_avg60?: number
+  /** `agent-workloads.slice` memory PSI `some avg10`. Absent = no such slice / unreadable: the swap-in spike exemption then does not apply. */
+  workload_mem_some_avg10?: number
   /** `/proc/meminfo` MemAvailable, GiB. Absent = not ranked on it. */
   mem_available_gb?: number
+  /** MemAvailable / MemTotal, %. Absent = probe had no MemTotal; the PSI gates then keep their old (conservative) reading. */
+  mem_available_pct?: number
   /** `df -P /` used %. Absent = not measured (never excludes). At `DISK_FULL_PCT` or above `withoutFullDisk` drops the candidate. */
   disk_used_pct?: number
   error?: string
@@ -416,17 +476,20 @@ export function loadProbeScript(sample: boolean = true): string {
     `echo ${PROBE_MARK}`,
     'nproc; cut -d" " -f1 /proc/loadavg',
     `echo ${PROBE_MARK}`,
-    'cat /proc/pressure/memory 2>/dev/null; grep MemAvailable /proc/meminfo 2>/dev/null',
+    'cat /proc/pressure/memory 2>/dev/null; grep -E "^(MemTotal|MemAvailable):" /proc/meminfo 2>/dev/null',
     `echo ${PROBE_MARK}`,
     sample ? 'sleep 2; head -1 /proc/stat' : 'true',
     `echo ${PROBE_MARK}`,
     'df -P / 2>/dev/null | tail -1',
+    `echo ${PROBE_MARK}`,
+    WORKLOAD_MEM_PRESSURE_CMD,
   ].join('; ')
 }
 
 /** `loadProbeScript` output → a candidate; unparsable cores / load1 → `error`. */
 export function parseLoadProbe(machine: string, local: boolean, stdout: string): MachineLoad {
-  const [head = '', load = '', memPsi = '', tail = '', disk = ''] = stdout.split(PROBE_MARK)
+  const [head = '', load = '', memPsi = '', tail = '', disk = '', slicePsi = ''] =
+    stdout.split(PROBE_MARK)
   const [cores, load1] = load.trim().split(/\s+/u).map(Number)
   if (!Number.isFinite(cores) || !Number.isFinite(load1) || !(cores! > 0))
     return { machine, local, error: `unparsable load probe output: ${JSON.stringify(load.trim())}` }
@@ -437,8 +500,13 @@ export function parseLoadProbe(machine: string, local: boolean, stdout: string):
   if (busy !== null) out.cpu_busy_pct = busy
   const memSome = parseCpuPsi(memPsi, 'avg60')
   if (memSome !== null) out.mem_some_avg60 = memSome
+  const sliceSome = parseCpuPsi(slicePsi, 'avg10')
+  if (sliceSome !== null) out.workload_mem_some_avg10 = sliceSome
   const available = /^MemAvailable:\s+(\d+)\s+kB/mu.exec(memPsi)
   if (available) out.mem_available_gb = Number(available[1]) / 1024 ** 2
+  const total = /^MemTotal:\s+(\d+)\s+kB/mu.exec(memPsi)
+  if (available && total && Number(total[1]) > 0)
+    out.mem_available_pct = (Number(available[1]) / Number(total[1])) * 100
   const diskPct = parseDfUsedPct(disk)
   if (diskPct !== null) out.disk_used_pct = diskPct
   return out
@@ -460,7 +528,14 @@ export function pressureReasons(load: MachineLoad): string[] {
   const why: string[] = []
   if ((load.per_core ?? 0) >= SATURATED_LOAD_PER_CORE)
     why.push(`load1/core ${load.per_core!.toFixed(1)}`)
-  if ((load.mem_some_avg60 ?? 0) >= MEM_PRESSURE_AVG60)
+  if (
+    memPsiShortage(
+      load.mem_some_avg60,
+      MEM_PRESSURE_AVG60,
+      load.mem_available_pct,
+      load.workload_mem_some_avg10,
+    )
+  )
     why.push(`memory PSI some avg60 ${load.mem_some_avg60!.toFixed(0)}`)
   if (load.mem_available_gb !== undefined && load.mem_available_gb < MEM_AVAILABLE_FLOOR_GB)
     why.push(`MemAvailable ${load.mem_available_gb.toFixed(1)}G`)
@@ -544,7 +619,12 @@ export function chooseLeastLoaded(candidates: MachineLoad[]): {
       typeof candidate.per_core === 'number',
   )
   const refused = (load: MachineLoad & { per_core: number }) =>
-    (load.mem_some_avg60 ?? 0) >= MEM_PRESSURE_AVG60 || load.per_core >= LOAD_CAP_PER_CORE
+    memPsiShortage(
+      load.mem_some_avg60,
+      MEM_PRESSURE_AVG60,
+      load.mem_available_pct,
+      load.workload_mem_some_avg10,
+    ) || load.per_core >= LOAD_CAP_PER_CORE
   // 0 = under both pressure lines, 1 = over a ranking-only line, 2 = over the memory hard limit or the load cap
   const tier = (load: MachineLoad & { per_core: number }) =>
     refused(load) ? 2 : pressureReasons(load).length > 0 ? 1 : 0

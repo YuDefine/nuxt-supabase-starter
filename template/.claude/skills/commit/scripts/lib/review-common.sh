@@ -988,13 +988,24 @@ review_register_staging_baseline() {
 #                                                         的新輪號，不計入上限，只審交集（合成基準 commit 讓 diff 只剩交集檔）
 #   其餘                                                 → 新一輪；第 2 輪起自動帶上一輪 verdict 進驗證模式
 #   計數輪（kind≠base-check 的輪數）＋1 > REVIEW_MAX_ROUNDS（5）＋該 PR 段的 grant 數 → exit 14 拒跑（拆 PR，或送主管代答、裁決後 rounds grant）
-#   grant（rounds grant）：主管（--by supervisor）或 Charles（--by charles）授權的單 PR 例外輪，append 進
-#     ledger.grants（by／evidence／granted_at／at_round／scope）。輪數上限是程序題：送主管代答，NEVER 鑄題給 Charles，
+#   grant（rounds grant）：主管（--by manager；supervisor／主管 是舊名，正規化成 manager）或 Charles（--by charles）授權的單 PR 例外輪，append 進
+#     ledger.grants（by／evidence／granted_at／at_round／scope／kind）。輪數上限是程序題：送主管代答，NEVER 鑄題給 Charles，
 #     --scope increment|full（預設 increment，寫進 grant 紀錄）：例外輪審什麼。increment＝照一般驗證輪只審增量（base 動了就上一輪 patch
 #     套新 base 的合成基準，increment_base 不是 null）；full＝明示要整份重審（increment_base＝null）。舊 grant 沒有 scope 欄位視同 increment。
+#     撤銷（rounds revoke-grant --mode pr --branch <b> --pr-number <n> --by supervisor|charles --reason <原因> [--granted-at <ISO>]）：主管或 Charles 撤銷一張**還沒開出例外輪**
+#       （grant 的 at_round＝本 PR 最後一輪）的 grant，append 進 ledger.grant_revocations（pr／granted_at／by／reason／revoked_at／at_round／scope／kind）；grants 與 rounds 原封不動、可稽核。
+#       撤銷後該 grant 不放寬上限、不決定例外輪 scope／kind，PR 回到撞上限狀態，可再簽 grant（--scope increment 開 verify 輪驗修補）；每張 PR 的 grant 上限只數生效中的。
+#       用途＝scope=full 的舊 grant（簽在 grantIndependentBlock 檢查上線前）因前輪有未解 Critical／Major 永遠開不出 independent（exit 15）、又擋住改簽的死結。
+#       已開出例外輪（被消耗）、沒有生效中的 grant、--by／--reason 缺或不合法一律 exit 2；NEVER 手改 ledger。
+#     --kind independent|verify（可省，記進 grant.kind）：例外輪的輪種由 scope 決定——scope=full 必開 kind=independent（新 reviewer、不帶前輪 findings、
+#     審完整 diff，算完整審查輪），scope=increment 開 verify；--kind 與 --scope 不一致（例如 full 配 verify）rounds grant exit 2。
+#     scope=full 的 grant 開不出 independent（前輪［grant 的 at_round］或本 head 已有未解 Critical／Major 紀錄［同 rounds reopen 的 fail-closed］、
+#     帶 --include／--exclude 篩選；新一輪與同輪號重開［restart］兩條路都檢）時 prepare 回 action=grant-unopenable、exit 15、不開輪，
+#     grant 仍在 ledger.grants（沒開出輪就沒消耗）；排除原因（去掉篩選，或 rounds adjudicate 裁決假 Major）後重跑 prepare。
 #     prepare 開頭印出這輪是例外輪與它的 scope。
 #     只認同 PR 號（--pr-number 必帶）、一張只放寬一輪、只在已到上限時可開；不歸零、不改舊輪。
-#     每張 PR 最多 REVIEW_MAX_GRANTS_PER_PR（2）張：再往上不是授權問題，是這張 PR 該拆。
+#     每張 PR 最多 REVIEW_MAX_GRANTS_PER_PR（2）張：再往上不是授權問題，是這張 PR 該拆。唯一例外＝第 3 張 full grant（絕對上限 3，第 4 張一律拒）：
+#       只給高風險 PR（簽發者確認；wrapper 不判風險），例外輪已用完、現 head 已有 1 輪完整審查（不帶 --include／--exclude 篩選）、最近兩輪皆 0 Critical／0 Major 三條件同時成立才收，任一不成立照舊拒；第 3 張審出 Critical／Major 照舊不放行。
 #     NEVER 加任何 env 或旗標能不留紀錄地提高上限——上限只能經 ledger 裡的 grant 紀錄放寬。
 #   明示完整輪（rounds reopen，oa-batches prepare --reopen-by／--reopen-evidence）：主管或 Charles 要求時，在 covered／已通過或沒有通過輪的 head 開新的完整審查輪。
 #     請求 append 進 ledger.full_reopens（pr／head／by／evidence／requested_at／at_round），只對那張 PR 的那個 head 有效；開出的輪 kind=independent（新 reviewer、不帶前輪 findings、審完整 diff），
@@ -1168,7 +1179,7 @@ review_rounds_guarded() {
   return "$rc"
 }
 
-# review_rounds <plan|open|cover|record|passed|carry-over|show|count|recount|grant|reopen|findings|adjudicate> [--flag value ...] → stdout JSON（exit 0），用法錯誤 exit 2
+# review_rounds <plan|open|cover|record|passed|carry-over|show|count|recount|grant|revoke-grant|reopen|findings|adjudicate> [--flag value ...] → stdout JSON（exit 0），用法錯誤 exit 2
 review_rounds() {
   local node_bin
   node_bin="$(review_rounds_node)" || return 2
@@ -1296,19 +1307,27 @@ function scoped(ledger) {
 }
 // 人類授權的例外輪只屬於明寫的那一張 PR：沒帶 --pr-number 的呼叫端一張都不認。
 function grantsFor(ledger) {
-  return PR_NO ? (ledger.grants ?? []).filter((g) => String(g.pr) === String(PR_NO)) : []
+  if (!PR_NO) return []
+  // 已撤銷的 grant（ledger.grant_revocations，rounds revoke-grant append）不放寬上限、不決定例外輪的 scope／kind；紀錄仍留在 ledger.grants 供稽核。
+  const revoked = new Set((ledger.grant_revocations ?? []).filter((q) => String(q.pr) === String(PR_NO)).map((q) => q.granted_at))
+  return (ledger.grants ?? []).filter((g) => String(g.pr) === String(PR_NO) && !revoked.has(g.granted_at))
 }
 function maxRounds(ledger) {
   return MAX_ROUNDS + grantsFor(ledger).length
 }
 function grantCommand() {
   if (opt.mode !== 'pr' || !PR_NO) return null
-  return `.claude/scripts/claude-review-safe.sh rounds grant --mode pr --branch ${opt.branch} --pr-number ${PR_NO} --by supervisor --evidence '<主管裁決出處：主管 pane＋訊息原文>' --scope increment`
+  return `.claude/scripts/claude-review-safe.sh rounds grant --mode pr --branch ${opt.branch} --pr-number ${PR_NO} --by manager --evidence '<主管裁決出處：主管 pane＋訊息原文>' --scope increment`
 }
 // 例外輪（紀錄在 at_round＝上一輪號的 grant）審什麼：increment（預設，含舊 grant 沒有 scope 欄位）或 full。
 const GRANT_SCOPES = ['increment', 'full']
 function grantScopeOf(g) {
   return GRANT_SCOPES.includes(g?.scope) ? g.scope : 'increment'
+}
+// 例外輪的輪種（grant.kind）：full→independent、increment→verify，由 scope 決定；grant --kind 只是明寫並驗證一致。舊 grant 沒有 kind 欄位照 scope 推。
+const GRANT_KINDS = ['independent', 'verify']
+function grantKindOf(g) {
+  return grantScopeOf(g) === 'full' ? 'independent' : 'verify'
 }
 // 新一輪（輪號 > 上一輪）若正是某張 grant 放寬出來的例外輪：scope=full 時把 nextBasis 換成完整 diff；increment 保持一般驗證輪的基準。
 // 回傳會併進決策的欄位（grant_scope 讓 prepare 開頭印出這輪審什麼）。
@@ -1316,14 +1335,48 @@ function withGrantScope(ledger, lastN, basis) {
   const g = grantsFor(ledger).find((x) => Number(x.at_round) === lastN)
   if (!g) return basis
   const scope = grantScopeOf(g)
+  // scope=full 的 grant 必開 independent 輪（新 reviewer、不帶前輪 findings、審完整 diff）：開成 verify 會讓這張 full grant 的輪
+  // 不算完整審查（countsAsFullAt 不數 verify），高風險 PR 的 2 輪要求照舊缺一輪（#4894 r7 與另一 consumer 的 r6 事故）。
   if (scope === 'full')
-    return { ...basis, increment_base: null, scope: `完整 diff（例外輪 grant 指定 scope=full；${g.granted_at}）`, grant_scope: scope, grant_at: g.granted_at }
+    return { ...basis, kind: 'independent', increment_base: null, findings_from: null, findings_also_rounds: undefined, findings_peers: undefined,
+      independent_of: lastN, scope: `完整 diff（例外輪 grant 指定 scope=full、獨立輪；${g.granted_at}）`, grant_scope: scope, grant_at: g.granted_at }
   return { ...basis, grant_scope: scope, grant_at: g.granted_at }
 }
+// scope=full 的 grant 要開的 independent 輪開不出來的理由（null＝開得出來）：回非 null 時 prepare exit 15、不開輪，
+// grant 留在 ledger.grants 原封不動（grant 只靠「輪號超過 MAX_ROUNDS」被消耗，沒開出輪就沒消耗）。
+// 獨立輪不帶前輪 findings，所以不能在「前輪（grant 的 at_round）或本 head 已有 Critical／Major 紀錄」上開——
+// 與 rounds reopen 同一把尺（reopenBlocking＋headBlocking，fail-closed）：開了就是靠 grant 把那些 finding 抹掉，
+// 乾淨的獨立輪還會讓 passed 只看新 head 而放行沒人驗過的修補。lastN＝grant 的 at_round（新一輪傳 last.n、同輪號重開傳 last.n−1）。
+// 帶 --include／--exclude 的篩選只是部分審查，也不是完整審查輪。
+function grantIndependentBlock(ledger, lastN, head) {
+  const g = grantsFor(ledger).find((x) => Number(x.at_round) === lastN)
+  if (!g || grantKindOf(g) !== 'independent') return null
+  const out = `出路只有：對這些 finding 跑 rounds adjudicate 裁決假 Major 後重跑 prepare；真 Major 的修補無法靠獨立輪驗證（grant 已簽成 full、不能改簽）：主管／Charles 裁決後可 rounds revoke-grant 撤銷這張還沒開出輪的 grant、再簽 --scope increment 開 verify 輪（帶前輪 findings 驗修補），否則這張 PR 該拆`
+  if (FILTER) return `例外輪 grant（${g.granted_at}）指定 scope=full、必開獨立輪，帶 --include／--exclude 只是部分審查：不帶篩選重跑 prepare`
+  const upto = scoped(ledger).filter((r) => r.n <= lastN)
+  const hold = upto.length ? reopenBlocking(upto) : null
+  if (hold && hold.blocking > 0)
+    return `例外輪 grant（${g.granted_at}）指定 scope=full、必開獨立輪，但 round ${hold.round.n} 還有 Critical＋Major ${hold.blocking} 條：獨立輪不帶前輪 findings、不靠 grant 抹掉，這些 finding 沒有 reviewer 驗過修補。${out}`
+  const prevHead = upto.at(-1)?.head
+  const hp = prevHead ? headBlocking(ledger, prevHead, upto.at(-1)) : null
+  const hb = headBlocking(ledger, head, null)
+  for (const [h, where] of [[hp, `前輪 head ${prevHead?.slice(0, 10)}`], [hb, `head ${head.slice(0, 10)}`]]) {
+    if (h && h.blocking > 0)
+      return `例外輪 grant（${g.granted_at}）指定 scope=full、必開獨立輪，但${where} 上還有 Critical＋Major ${h.blocking} 條（${[...h.rounds.map((n) => `round ${n}`), ...h.peers.map((b) => `peer ${b.machine} round ${b.n}`)].join('、')}）：獨立輪不帶前輪 findings、不靠重開抹掉。${out}`
+  }
+  return null
+}
 // 同輪號重開（restart）：這輪若正是某張 grant 放寬出來的例外輪（at_round＝本輪號−1），重開也要套 grant 的 scope，
-// 否則 reviewer 沒跑成／換篩選／無可審檔後的重開會把 --scope full 悄悄降成增量。
+// 否則 reviewer 沒跑成／換篩選／無可審檔後的重開會把 --scope full 悄悄降成增量；重開同樣要過 grantIndependentBlock
+// （帶篩選、前輪或本 head 有 Critical／Major 都不能重開成獨立輪），不然 --include／--exclude 能把 grant 輪重開成篩選輪。
 function restartBasis(ledger, last, prev, base, pr, head) {
   return withGrantScope(ledger, last.n - 1, basisFrom(ledger, prev, base, pr, head))
+}
+function restartDecision(ledger, last, prev, base, pr, head, base_, extra) {
+  const grantBlock = grantIndependentBlock(ledger, last.n - 1, head)
+  if (grantBlock) return { ...base_, action: 'grant-unopenable', round: last.n, last_round: last.n - 1, last_blocking: 0, reason: grantBlock }
+  return { ...base_, action: 'review', round: last.n, kind: last.kind, reuse: false, restart: true, ...extra,
+    ...restartBasis(ledger, last, prev, base, pr, head) }
 }
 function roundFile(path, n, suffix, pr = PR_NO) {
   return `${path.replace(/\.json$/, '')}${pr ? `-pr${pr}` : ''}-r${n}-${suffix}`
@@ -1390,6 +1443,56 @@ function pushPeerBlocking(ledger, round, part, src) {
     ledger.peer_blocking.push(entry)
   return entry.vid
 }
+// syncPeers：PR 模式判輪（plan／open／cover）與 merge 前的 passed，先把每台 peer 對本 PR 的輪合進本機 ledger。
+// 兩台各審同一 head、各記各的 ledger 時，只讀本機會把另一台的阻擋輪當不存在——在讀的那一刻合併，不靠審的那台記得推送（手動審、主持者換機都推不到）。合併規則在 oa-batches.ts
+// mergeLedger（同輪取 Critical＋Major 較多的一份）。peer 清單照 herdr-peers（CLADE_HERDR_PEERS）；拉不到就
+// exit 69（PEER_UNREACHABLE，與一般用法錯誤 exit 2 分開），stderr 點名哪台、哪個 ledger 讀不到——NEVER 把「另一台
+// 看不到」讀成「另一台沒有阻擋輪」，也沒有略過旗標。只在預設 rounds 目錄跑（測試與隔離環境自己指目錄，不發 ssh）；
+// CLADE_REVIEW_PEER_SYNC=1 讓指了目錄的測試也跑。
+const PEER_UNREACHABLE = 69
+// PEER_SYNC_FAILED：連得上那台、但它的輪收不進來（對端拒絕、回無法解析、envelope 被拒）——與連不上分開，修法不同（要修對端／資料，不是等連線）。
+const PEER_SYNC_FAILED = 70
+function syncPeers(path) {
+  if (!PR_NO) return
+  const flag = process.env.CLADE_REVIEW_PEER_SYNC
+  // 比「解析後的 rounds 目錄是不是預設目錄」，NEVER 看 env 有沒有設：herdr-session-handoff 對每個派工子行程都設
+  // CLADE_DISPATCH_STATE_DIR=<預設目錄>，只看有沒有設會讓主持者／carrier 的 prepare／passed 靜默不拉 peer（fail-open）。
+  const defaultDir = join(process.env.HOME || '', '.cache', 'clade', 'dispatch', 'review-rounds')
+  if (flag !== '1' && resolve(dirname(path)) !== resolve(defaultDir)) return
+  const home = process.env.CLADE_HOME || join(process.env.HOME || '', 'offline', 'clade')
+  const script = join(home, '.claude', 'skills', 'coordinator', 'scripts', 'oa-batches.ts')
+  if (!existsSync(script)) {
+    if (flag === '1') fail(`CLADE_REVIEW_PEER_SYNC=1 但找不到 ${script}：拉不到 peer 的輪就不判`)
+    // 設了 peer 清單卻沒有 sync 腳本＝拉不到 peer：fail closed（exit 69，同 PEER_UNREACHABLE），NEVER 退回只看本機 ledger 的 fail-open。
+    // 沒設 peer（單機、隔離環境）才只 WARN。
+    const rawPeers = process.env.CLADE_HERDR_PEERS !== undefined ? process.env.CLADE_HERDR_PEERS : (() => {
+      try { return readFileSync(join(process.env.XDG_CONFIG_HOME || join(process.env.HOME || '', '.config'), 'clade', 'herdr-peers'), 'utf8') } catch { return '' }
+    })()
+    const me = localMachine()
+    const peers = rawPeers.split(/[\s,]+/).map((x) => x.trim()).filter((x) => x && x !== me)
+    if (peers.length) {
+      process.stderr.write(`review_rounds: PEER_UNREACHABLE ${peers.join('、')}：找不到 ${script}，拉不到 peer 對 PR #${PR_NO} 的 0-A 輪；那邊可能有阻擋輪，本機不判——補上 clade checkout（或設 CLADE_HOME）後重跑同一條\n`)
+      process.exit(PEER_UNREACHABLE)
+    }
+    process.stderr.write(`review_rounds: WARN 找不到 ${script}，沒有拉 peer 的輪（沒設 peer 清單）：只依本機 ledger 判\n`)
+    return
+  }
+  try {
+    execFileSync(process.execPath, [script, 'sync-peers', String(PR_NO), '--ledger-name', path.split('/').pop()],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 180_000 })
+  } catch (e) {
+    let reply = null
+    try { reply = JSON.parse(String(e.stdout || '').trim().split('\n').pop()) } catch {}
+    const where = reply?.machine ? `${reply.machine}:${reply.ledger ?? path.split('/').pop()}` : `peer（${path.split('/').pop()}）`
+    const why = reply?.error || String(e.stderr || e.message).trim().split('\n').pop()
+    if (reply?.kind === 'rejected') {
+      process.stderr.write(`review_rounds: PEER_SYNC_FAILED ${where}：連得上，但這台對 PR #${PR_NO} 的 0-A 輪收不進來（${why}）。那台可能有阻擋輪，本機不判——修好對端的 ledger／oa-batches 後重跑同一條\n`)
+      process.exit(PEER_SYNC_FAILED)
+    }
+    process.stderr.write(`review_rounds: PEER_UNREACHABLE ${where}：讀不到這台對 PR #${PR_NO} 的 0-A 輪（${why}）。那台可能有阻擋輪，本機不判——連線恢復後重跑同一條\n`)
+    process.exit(PEER_UNREACHABLE)
+  }
+}
 // ── 批槽位（slot）：entries 只追加，槽位欄位是推導視圖（0-A #4710 r3 的設計）──────────────────────────────
 // 舊設計是每批一個可變的 verdict 槽位，record／staging 登記／rollback 是各自上鎖的步驟，多位 reviewer 並行時
 // 「回滾」會洗掉別人寫進同一格的 verdict（r1 是回滾別人的、r2 的 flag 補丁仍讓 unrecord 重設任何人寫的）。
@@ -1454,50 +1557,6 @@ function settleSlot(ledger, round, part) {
   }
   round.parts[part] = next
   return win
-}
-// syncPeers：PR 模式判輪（plan／open／cover）與 merge 前的 passed，先把每台 peer 對本 PR 的輪合進本機 ledger。
-// 兩台各審同一 head、各記各的 ledger 時，只讀本機會把另一台的阻擋輪當不存在——在讀的那一刻合併，不靠審的那台記得推送（手動審、主持者換機都推不到）。合併規則在 oa-batches.ts
-// mergeLedger（同輪取 Critical＋Major 較多的一份）。peer 清單照 herdr-peers（CLADE_HERDR_PEERS）；拉不到就
-// exit 69（PEER_UNREACHABLE，與一般用法錯誤 exit 2 分開），stderr 點名哪台、哪個 ledger 讀不到——NEVER 把「另一台
-// 看不到」讀成「另一台沒有阻擋輪」，也沒有略過旗標。只在預設 rounds 目錄跑（測試與隔離環境自己指目錄，不發 ssh）；
-// CLADE_REVIEW_PEER_SYNC=1 讓指了目錄的測試也跑。
-const PEER_UNREACHABLE = 69
-function syncPeers(path) {
-  if (!PR_NO) return
-  const flag = process.env.CLADE_REVIEW_PEER_SYNC
-  // 比「解析後的 rounds 目錄是不是預設目錄」，NEVER 看 env 有沒有設：herdr-session-handoff 對每個派工子行程都設
-  // CLADE_DISPATCH_STATE_DIR=<預設目錄>，只看有沒有設會讓主持者／carrier 的 prepare／passed 靜默不拉 peer（fail-open）。
-  const defaultDir = join(process.env.HOME || '', '.cache', 'clade', 'dispatch', 'review-rounds')
-  if (flag !== '1' && resolve(dirname(path)) !== resolve(defaultDir)) return
-  const home = process.env.CLADE_HOME || join(process.env.HOME || '', 'offline', 'clade')
-  const script = join(home, '.claude', 'skills', 'coordinator', 'scripts', 'oa-batches.ts')
-  if (!existsSync(script)) {
-    if (flag === '1') fail(`CLADE_REVIEW_PEER_SYNC=1 但找不到 ${script}：拉不到 peer 的輪就不判`)
-    // 設了 peer 清單卻沒有 sync 腳本＝拉不到 peer：fail closed（exit 69，同 PEER_UNREACHABLE），NEVER 退回只看本機 ledger 的 fail-open。
-    // 沒設 peer（單機、隔離環境）才只 WARN。
-    const rawPeers = process.env.CLADE_HERDR_PEERS !== undefined ? process.env.CLADE_HERDR_PEERS : (() => {
-      try { return readFileSync(join(process.env.XDG_CONFIG_HOME || join(process.env.HOME || '', '.config'), 'clade', 'herdr-peers'), 'utf8') } catch { return '' }
-    })()
-    const me = localMachine()
-    const peers = rawPeers.split(/[\s,]+/).map((x) => x.trim()).filter((x) => x && x !== me)
-    if (peers.length) {
-      process.stderr.write(`review_rounds: PEER_UNREACHABLE ${peers.join('、')}：找不到 ${script}，拉不到 peer 對 PR #${PR_NO} 的 0-A 輪；那邊可能有阻擋輪，本機不判——補上 clade checkout（或設 CLADE_HOME）後重跑同一條\n`)
-      process.exit(PEER_UNREACHABLE)
-    }
-    process.stderr.write(`review_rounds: WARN 找不到 ${script}，沒有拉 peer 的輪（沒設 peer 清單）：只依本機 ledger 判\n`)
-    return
-  }
-  try {
-    execFileSync(process.execPath, [script, 'sync-peers', String(PR_NO), '--ledger-name', path.split('/').pop()],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 180_000 })
-  } catch (e) {
-    let reply = null
-    try { reply = JSON.parse(String(e.stdout || '').trim().split('\n').pop()) } catch {}
-    const where = reply?.machine ? `${reply.machine}:${reply.ledger ?? path.split('/').pop()}` : `peer（${path.split('/').pop()}）`
-    const why = reply?.error || String(e.stderr || e.message).trim().split('\n').pop()
-    process.stderr.write(`review_rounds: PEER_UNREACHABLE ${where}：讀不到這台對 PR #${PR_NO} 的 0-A 輪（${why}）。那台可能有阻擋輪，本機不判——連線恢復後重跑同一條\n`)
-    process.exit(PEER_UNREACHABLE)
-  }
 }
 // withLock：load-modify-save 的互斥（O_EXCL 鎖檔）。save 的 rename 只保證單次寫入原子，
 // 兩批同時 record 時後寫的會蓋掉先寫的那批 verdict。持鎖者死掉留下的鎖檔逾 LOCK_STALE_MS 視為殘留。
@@ -1870,7 +1929,10 @@ function cacheWrite(name, shas, value) {
 }
 // base-check 範圍的算法版本：開輪時記進 round（base_scope_rev）。舊版算的、還沒有任何 verdict 的 base-check 輪在下次判定時重開，
 // 不沿用舊範圍與合成基準（#3339 round 5：舊算法 refs 1020 檔、94 批全 prepared、0 verdict）。改 baseCheckScope 的判定就遞增。
-const BASE_SCOPE_REV = 2
+// rev 3：資料檔（.jsonl 等）不當 refs 引用來源（#4529：specs/coordinator/manager-archive.jsonl 494 行／411KB 的資料列提到 export 名稱就進 refs，撐爆批預算）。
+const BASE_SCOPE_REV = 3
+// 資料檔不是程式：它們的新增行出現 export 名稱是資料內容（紀錄列、log），不是引用。refs 判定跳過；不含 .json（設定檔可能逐字列出 export／腳本名）。
+const REF_DATA = /\.(?:jsonl|ndjson|csv|tsv|log|lock)$/i
 // base-check 的審查範圍：{ pr: PR 改過且 main 也動過的檔, refs: main 動過、不在 PR 內、新增行引用 PR export 的檔 }。
 // 快取鍵＝(上一輪 base, 本輪 base, head, 演算法與投影清單的內容雜湊)：投影判定來源（locked-projection.ts 的位元組）或本段演算法
 // （下列函式的原始碼、REF_GENERIC_FILES）一變，key 就變，舊範圍不會被沿用（沿用會把該重審的檔漏掉）。
@@ -1878,7 +1940,7 @@ function scopeAlgoDigest() {
   const h = createHash('sha256')
   // 範圍判定走到的每個函式與常數都要進雜湊（漏一個＝改了它舊範圍照樣命中快取，把該重審的檔漏掉）；BASE_SCOPE_REV 也在內：遞增它就是要讓舊 key 失效。
   for (const f of [baseCheckScopeUncached, fileBlocks, prExports, exportNames, moduleStems, barrelStems, patchExcluded, escapeRe, gitRaw]) h.update(String(f)).update('\0')
-  for (const v of [REF_GENERIC_FILES, BARREL_DEPTH, BASE_SCOPE_REV, REF_CODE, BARREL_CODE, EXPORT_DECL, EXPORT_LIST, IDENT]) h.update(String(v)).update('\0')
+  for (const v of [REF_GENERIC_FILES, BARREL_DEPTH, BASE_SCOPE_REV, REF_CODE, REF_DATA, BARREL_CODE, EXPORT_DECL, EXPORT_LIST, IDENT]) h.update(String(v)).update('\0')
   try { h.update(readFileSync(join(process.env.CLADE_HOME ?? '', 'vendor', 'scripts', 'locked-projection.ts'))) } catch { h.update('no-projection') }
   return h.digest('hex').slice(0, 12)
 }
@@ -1901,7 +1963,7 @@ function baseCheckScopeUncached(lastBase, base, head) {
   const hits = new Map()
   if (word)
     for (const [p, blk] of mainBlocks) {
-      if (prBlocks.has(p) || patchExcluded(p)) continue
+      if (prBlocks.has(p) || patchExcluded(p) || REF_DATA.test(p)) continue
       const added = blk.split('\n').filter((l) => l.startsWith('+') && !l.startsWith('+++')).join('\n')
       const found = new Set([...added.matchAll(word)].map((m) => m[1]))
       if (found.size) hits.set(p, { found, added })
@@ -2137,7 +2199,12 @@ function decide(ledger) {
   if (last?.head === d.head && !roundState(last).passed) return last.kind === 'independent' ? d : { ...d, independent: 'deferred' }
   // 本 head 的通過輪：已記錄的，加上這次 covered 會延伸過來的（d.covers）
   const passes = new Set([...passingRounds(rounds, d.head).map((r) => r.n), ...(d.action === 'covered' ? d.covers ?? [] : [])])
-  if (!passes.size) return { ...d, independent: 'deferred' }
+  // 上一輪（舊 head）乾淨通過、本 head 增量超過 covered 門檻：一般判定是 verify，但 verify 不算完整審查（高風險 PR 通過後 finalize 判 0 算數輪、
+  // 白吃一輪）。沒有任何未解 Critical／Major 要由 verify 帶進去驗證時，--independent 直接開獨立輪（審完整 diff，涵蓋增量）。
+  // 有阻擋紀錄（last 或同 head 的別輪／peer）、restart、無可審檔的輪一律照一般判定，NEVER 靠獨立輪抹掉 findings。
+  const cleanVerify = d.action === 'review' && d.kind === 'verify' && !d.restart && last && last.head !== d.head
+    && roundState(last).passed && !last.no_reviewable && !headBlocking(ledger, last.head, last).any
+  if (!passes.size && !cleanVerify) return { ...d, independent: 'deferred' }
   // 「兩輪已滿」只數算得上本 head 完整審查的輪（countsAsFullAt），湊滿 verify／base-check、或跨過程式 commit 延伸來的輪都不能擋掉明確要求的獨立輪。
   // 已有兩個完整審查通過輪：--independent 明示也不另開（第三輪沒有證據價值），但要說出是哪兩輪，免得被當成靜默短路
   const fullPasses = [...passes].filter((n) => countsAsFullAt(rounds.find((x) => x.n === n), d.head)).toSorted((a, b) => a - b)
@@ -2150,7 +2217,7 @@ function decide(ledger) {
   // covered 判定延伸過來的通過輪在開獨立輪時一併記進 covered_heads：不記的話獨立輪通過後本 head 仍只有一個通過輪
   return { max_rounds: max, part: d.part, head: d.head, filter: d.filter, action: 'review', round: n, kind: 'independent',
     counted_round: countedRounds(rounds) + 1,
-    reuse: false, increment_base: null, findings_from: null, independent_of: d.round,
+    reuse: false, increment_base: null, findings_from: null, independent_of: cleanVerify ? last.n : d.round,
     ...(d.action === 'covered' ? { covers: d.covers } : {}) }
 }
 const commitExists = (sha) => {
@@ -2160,6 +2227,14 @@ const commitExists = (sha) => {
   } catch {
     return false
   }
+}
+// 這一輪開輪時的真上一輪 head：新紀錄直接存 prev_head；舊紀錄（沒存）從來源輪回推——base-check 的 base_check_of、
+// 驗證輪的 findings_from 指到的輪，其 head 就是開輪當時的 prev.head。只有帶 increment_base 的輪才有意義。
+function recordedPrevHead(rounds, r) {
+  if (!r.increment_base) return null
+  if (r.prev_head) return r.prev_head
+  const src = r.base_check_of ?? r.findings_from
+  return (src != null && rounds.findLast((x) => x.n === src)?.head) || null
 }
 // 續跑同 head 的輪時，紀錄的 increment_base 可能用不了：合成 commit 只在開輪那台有物件（ledger 拉到 peer 就是 bad object），
 // 或 base-check 範圍是舊算法算的。合成是確定性的（固定身分／時間），所以在本機照同一份輸入重算：
@@ -2239,8 +2314,7 @@ function decideRound(ledger) {
       if (state.blocking > 0)
         return { ...base_, action: 'blocked', round: last.n, blocking: state.blocking,
           reason: `round ${last.n} 在此 head 已有 Critical＋Major ${state.blocking} 條（篩選 ${last.filter || '無'}）；換篩選重審不會讓它消失——修完 push 新 head 再 prepare` }
-      return { ...base_, action: 'review', round: last.n, kind: last.kind, reuse: false, restart: true,
-        ...restartBasis(ledger, last, rounds.at(-2), base, pr, head) }
+      return restartDecision(ledger, last, rounds.at(-2), base, pr, head, base_)
     }
     if (wholeRound && state.complete) {
       if (state.partial && !state.blocking)
@@ -2281,6 +2355,8 @@ function decideRound(ledger) {
     return { ...base_, action: 'review', round: last.n, kind: last.kind, reuse: true, part_total: last.part_total ?? 1,
       ...(done_parts ? { done_parts } : {}),
       increment_base: last.increment_base ?? null, findings_file: last.findings_file ?? null,
+      // 續跑同 head 的輪也要帶出真上一輪 head（oa-batches 的增量 cap 靠它；plan 沒給就丟錯，不再從祖先關係猜）
+      ...(recordedPrevHead(rounds, last) ? { prev_head: recordedPrevHead(rounds, last) } : {}),
       ...(last.base_scope ? { base_scope: last.base_scope } : {}), ...(last.base_check_of ? { base_check_of: last.base_check_of } : {}),
       ...(last.scope ? { scope: last.scope } : {}),
       ...(last.grant_scope ? { grant_scope: last.grant_scope, grant_at: last.grant_at } : {}) }
@@ -2290,16 +2366,14 @@ function decideRound(ledger) {
     // 同一輪號換新 head 重開，基準退回前一個收齊的輪——沒拿到 verdict 的批若改審增量就永遠沒人審。
     // 已記 Critical／Major 的部分輪是「reviewer 跑過且擋下」：同輪號重開會丟掉那些 finding、輪數永遠不前進
     // （留一批不 finalize 就能無限重擲撞上限的那一輪），所以落到下面照新一輪算、受上限約束。
-    return { ...base_, action: 'review', round: last.n, kind: last.kind, reuse: false, restart: true,
-      ...restartBasis(ledger, last, rounds.at(-2), base, pr, head) }
+    return restartDecision(ledger, last, rounds.at(-2), base, pr, head, base_)
   // 任一輪（含從 peer 合進來的）在 last.head 記了 Critical／Major：那個 head 不是通過的 head，NEVER covered 沿用。
   const hbLast = headBlocking(ledger, last.head, last)
   const headBlocked = hbLast.any
   // 無可審檔的輪（投影／依風險分級免審）沒有 reviewer 看過任何程式：NEVER 當 covered 錨點，新 head 一律重判。
   // 它也沒耗任何審查：同輪號換新 head 重開（基準退回前一個收齊的輪），否則常更新的文件 PR 每推一次就吃一輪、第 6 次撞上限。
   if (state.passed && last.no_reviewable)
-    return { ...base_, action: 'review', round: last.n, kind: last.kind, reuse: false, restart: true,
-      ...restartBasis(ledger, last, rounds.at(-2), base, pr, head) }
+    return restartDecision(ledger, last, rounds.at(-2), base, pr, head, base_)
   // 舊輪沒記 base（null）也算移動：判不出就不能當增量（與改版前同一條件）。
   const moved = Boolean(pr && last.base !== base)
   // base 移動且上一輪已通過：逐檔比 PR 自身 patch；沒變或只差門檻內的小修補 → base-check（不計輪數，只審交會＋小修補）。
@@ -2343,6 +2417,8 @@ function decideRound(ledger) {
   if (countedRounds(rounds) + 1 > max)
     return { ...base_, action: 'refuse', round: n, last_round: last.n, last_blocking: state.blocking, grant_command: grantCommand(),
       reason: `第 ${n} 輪超過上限 ${max}${max > MAX_ROUNDS ? `（${MAX_ROUNDS}＋例外輪授權 ${max - MAX_ROUNDS} 輪）` : ''}（round ${last.n}：${state.passed ? '已通過但之後增量超過重驗門檻' : `Critical＋Major ${state.blocking} 條`}）` }
+  const grantBlock = grantIndependentBlock(ledger, last.n, head)
+  if (grantBlock) return { ...base_, action: 'grant-unopenable', round: n, last_round: last.n, last_blocking: state.blocking, reason: grantBlock }
   return { ...base_, action: 'review', round: n, kind: 'verify', reuse: false,
     ...(cmp ? { patch_differ: cmp.differ } : {}), ...(own ? { increment: own } : {}),
     // 最後一輪的 head 另有阻擋紀錄時 basisFrom 改審完整 diff 並帶阻擋 findings；其餘照 nextBasis。例外輪 grant 的 scope 疊在最外層。
@@ -2909,6 +2985,7 @@ if (cmd === 'counts') {
           ...(PR_NO ? { pr: Number(PR_NO) } : {}), ...(FILTER ? { filter: FILTER } : {}),
           ...(d.base_scope ? { base_scope: d.base_scope } : {}), ...(d.base_check_of ? { base_check_of: d.base_check_of } : {}),
           ...(d.base_scope_rev ? { base_scope_rev: d.base_scope_rev } : {}),
+          ...(d.increment_base && d.prev_head ? { prev_head: d.prev_head } : {}),
           ...(d.kind === 'base-check' && d.covers?.length ? { covers_on_pass: d.covers } : {}),
           ...(d.scope ? { scope: d.scope } : {}),
           ...(d.full_reopen && typeof d.full_reopen === 'object' ? { full_reopen: d.full_reopen } : {}),
@@ -2925,6 +3002,9 @@ if (cmd === 'counts') {
       round.parts[d.part] = { status: 'prepared', at: now, ...(PART_FILES ? { files: PART_FILES } : {}), ...(supplied ? { supplied_findings: supplied } : {}) }
       d.findings_file = round.findings_file ?? null
       d.increment_base = round.increment_base
+      // 同輪號重開（restart 以外的 re-prepare）回傳的 plan 沒有 prev_head：以紀錄為準，舊紀錄回推
+      const ph = recordedPrevHead(scoped(ledger), round)
+      if (ph) d.prev_head = ph
       // record 用它認出「這份 verdict 是這一次開的輪」：同輪號重開會換 opened_at。
       d.opened_at = round.opened_at
     } else if (d.action === 'covered') {
@@ -3223,10 +3303,17 @@ if (cmd === 'counts') {
   const vetoed = [...new Set(blockedAt.flatMap((b) => b.rounds))]
   const peerVetoed = blockedAt.flatMap((b) => b.peers.map((p) => ({ machine: p.machine, n: p.n, part: p.part ?? '1/1', head: p.head, critical: p.critical, major: p.major, blocking: peerBlockingCount(p) })))
   const last = rounds.at(-1)
+  // 預設 --required-passes 1 把 verify／base-check 也算通過；高風險 PR（oa-batches finalize／merge-queue 要 2 個完整輪）看同一份 ledger 會判 0 算數輪。
+  // 兩個判定不矛盾，只是門檻不同：這裡把「完整審查輪數」與提示一併印出，免得只看 passed:true 就放行。
+  const fullPasses = hits.filter((r) => countsAsFullAt(r, head))
+  const requiredNote = required < 2 && hits.length && fullPasses.length < 2
+    ? `passed 只依 --required-passes ${required} 計：本 head 完整審查輪 ${fullPasses.length} 個（verify／base-check／無可審檔／跨過程式 commit 的延伸不算）；高風險 PR 要 2 輪時改帶 --required-passes 2（merge-queue、oa-batches finalize 即用 2 判定）`
+    : null
   process.stdout.write(`${JSON.stringify({ passed: counted.length >= required && !vetoed.length && !peerVetoed.length, round: hit?.n ?? null, covered: Boolean(hit && hit.head !== head),
     ...(vetoed.length ? { vetoed_by: vetoed } : {}), ...(peerVetoed.length ? { vetoed_by_peer: peerVetoed } : {}),
     ...(hit?.carried_over?.find((c) => c.head === head) ? { carry_over: hit.carried_over.find((c) => c.head === head) } : {}),
     passing_rounds: hits.map((r) => ({ n: r.n, kind: r.kind ?? null, covered: r.head !== head, counted: countsForRequired(r, required, head), ...(required >= 2 && isFullReviewRound(r) && crossesCodeCommit(r, head) ? { crossed_code_commit: true } : {}) })), required_passes: required,
+    full_review_passes: fullPasses.length, ...(requiredNote ? { required_passes_note: requiredNote } : {}),
     last_round: last ? { n: last.n, head: last.head, ...roundState(last) } : null, ledger: path })}\n`)
 } else if (cmd === 'carry-over') {
   // 0-A carry-over：PR 只併主線、自身改動（對 merge-base(origin/main, head) 取 diff）不變時，把本 head 記成既有通過輪的 covered_heads。
@@ -3415,30 +3502,99 @@ if (cmd === 'counts') {
   // --by 是自述標籤（同 adjudicate），只擋誤用、不是身分驗證：主持者、worker、reviewer 都不能自授例外輪。
   if (opt.mode !== 'pr') fail('grant 只限 PR 模式（--mode pr）')
   if (!PR_NO) fail('grant 必帶 --pr-number（例外輪只屬於那一張 PR）')
-  const by = need('by') === '主管' ? 'supervisor' : opt.by
-  if (by !== 'supervisor' && by !== 'charles')
-    fail(`grant 只收 --by supervisor（主管代答）或 --by charles（收到 ${opt.by}）：例外輪只有主管或 Charles 能授權`)
+  // --by manager＝主管裁決。supervisor／主管 是舊名，照收並正規化成 manager；
+  // charles＝Charles 本人明確授權。ledger 照實記 by（manager 或 charles）。
+  const rawBy = need('by')
+  const by = rawBy === '主管' || rawBy === 'supervisor' ? 'manager' : rawBy
+  if (by !== 'manager' && by !== 'charles')
+    fail(`grant 只收 --by manager（主管裁決；supervisor、主管 是舊名）或 --by charles（收到 ${opt.by}）：例外輪只有主管或 Charles 能授權`)
   const evidence = need('evidence').trim()
   if (!evidence) fail('--evidence is required')
   // 例外輪審什麼：預設 increment（只審增量），要整份重審必須明寫 full 並留在 ledger。
-  const scope = opt.scope ?? 'increment'
+  // 只寫 --kind independent 沒寫 --scope：獨立輪就是整份重審，scope 推成 full。
+  const scope = opt.scope ?? (opt.kind === 'independent' ? 'full' : 'increment')
   if (!GRANT_SCOPES.includes(scope)) fail(`--scope 只收 increment（例外輪只審增量，預設）或 full（整份重審）（收到 ${scope}）`)
+  // 輪種：scope=full 必開 independent、increment 開 verify；--kind 可省（由 scope 推），明寫了就必須與 scope 一致（full 配 verify 就是事故形狀）。
+  const wantKind = scope === 'full' ? 'independent' : 'verify'
+  const kind = opt.kind ?? wantKind
+  if (!GRANT_KINDS.includes(kind)) fail(`--kind 只收 independent 或 verify（收到 ${kind}）`)
+  if (kind !== wantKind)
+    fail(`--kind ${kind} 與 --scope ${scope} 不一致：scope=full 的例外輪必開 independent（開成 verify 不算完整審查），scope=increment 的例外輪是 verify`)
   const path = ledgerPath()
   const out = withLock(path, (ledger) => {
     const rounds = ledger.rounds.filter((r) => r.pr != null && String(r.pr) === String(PR_NO))
     if (!rounds.length)
       fail(`ledger ${path} 沒有 PR #${PR_NO} 的輪：PR 號對不上（branch ${opt.branch}），grant 不寫`)
-    if (grantsFor(ledger).length >= MAX_GRANTS_PER_PR)
-      fail(`PR #${PR_NO} 已有 ${grantsFor(ledger).length} 張 grant，達上限 ${MAX_GRANTS_PER_PR}：不再授權，這張 PR 該拆`)
     const last = scoped(ledger).at(-1)
     const max = maxRounds(ledger)
+    if (grantsFor(ledger).length >= MAX_GRANTS_PER_PR) {
+      // 第 3 張 full grant（Charles 凍結例外，flow 72009bf978ae869c／118d29b1678e81e8 定三條件）：只給高風險 PR（要 2 輪完整審查的那類；
+      // wrapper 判不出風險等級，由簽發的主管／Charles 確認），上限 MAX_GRANTS_PER_PR 之外三條件同時成立才收；任一不成立照舊拒。絕對上限 MAX_GRANTS_PER_PR＋1，第 4 張一律拒。
+      const n = grantsFor(ledger).length
+      const refuse = (why) => fail(`PR #${PR_NO} 已有 ${n} 張 grant，達上限 ${MAX_GRANTS_PER_PR}：不再授權，這張 PR 該拆（第 ${MAX_GRANTS_PER_PR + 1} 張 full grant 只給高風險 PR，且三條件同時成立才收：${why}）`)
+      if (n >= MAX_GRANTS_PER_PR + 1) fail(`PR #${PR_NO} 已有 ${n} 張 grant，達絕對上限 ${MAX_GRANTS_PER_PR + 1}（第 ${MAX_GRANTS_PER_PR + 1} 張之後一律拒）：不再授權，這張 PR 該拆`)
+      if (scope !== 'full') refuse(`第 ${MAX_GRANTS_PER_PR + 1} 張只收 --scope full（收到 ${scope}）`)
+      // 條件 1：例外輪已用完——既有每張 grant 放寬出來的例外輪都已開出（輪號 > grant 的 at_round）。
+      const unused = grantsFor(ledger).filter((g) => !(last && Number(last.n) > Number(g.at_round)))
+      if (unused.length) refuse(`條件 1 不成立：例外輪還沒用完（${unused.map((g) => g.granted_at).join('、')} 的例外輪未開出）`)
+      // 條件 2：現 head（最後一輪的 head）已有 1 輪完整審查（discovery／independent、審完整 diff、verdict 收齊）。
+      const full = scoped(ledger).filter((r) => r.head === last?.head && isFullReviewRound(r) && !r.filter && roundState(r).complete)
+      if (!full.length) refuse(`條件 2 不成立：現 head ${String(last?.head ?? '').slice(0, 10)} 還沒有收齊 verdict 的完整審查輪`)
+      // 條件 3：最近兩個計數輪皆 0 Critical／0 Major（收齊 verdict 且 blocking＝0；base-check 不計）。
+      const recent = scoped(ledger).filter((r) => r.kind !== 'base-check').slice(-2)
+      if (recent.length < 2 || recent.some((r) => !roundState(r).complete || roundState(r).blocking > 0))
+        refuse(`條件 3 不成立：最近兩輪（${recent.map((r) => `round ${r.n}`).join('、') || '無'}）須皆收齊 verdict 且 0 Critical／0 Major`)
+    }
     if (countedRounds(scoped(ledger)) < max)
       fail(`PR #${PR_NO} 目前 round ${last.n}（計數輪 ${countedRounds(scoped(ledger))}），上限 ${max} 還沒到：grant 只在撞上限時開（一張放寬一輪，NEVER 預先疊加）`)
     if (!consumed(roundState(last)))
       fail(`PR #${PR_NO} round ${last.n} 還沒收齊 verdict：沒收齊又沒有 Critical／Major 的輪換 head 重開不耗輪數，不需要 grant（一張放寬一輪，NEVER 預先疊加）`)
-    const grant = { pr: Number(PR_NO), by, evidence, granted_at: now, at_round: last.n, max_before: max, scope }
+    // scope=full 的 grant 必開獨立輪，而獨立輪在這些 finding 沒解時開不出來（grantIndependentBlock，同一把尺：
+    // reopenBlocking＋最後一輪 head 的 headBlocking）：簽了也只是一張永遠用不掉、又擋住再簽的空 grant（上限已 +1、沒有撤銷）。
+    // 簽發當下就擋：先 rounds adjudicate 裁決假 Major，或這張 PR 該拆（真 Major 的修補無法靠獨立輪驗證）。
+    if (kind === 'independent') {
+      const scopedRounds = scoped(ledger)
+      const hold = reopenBlocking(scopedRounds)
+      const hb = headBlocking(ledger, last.head, last)
+      const why = hold.blocking > 0
+        ? `round ${hold.round.n} 還有 Critical＋Major ${hold.blocking} 條`
+        : hb.blocking > 0
+          ? `head ${last.head.slice(0, 10)} 上還有 Critical＋Major ${hb.blocking} 條（${[...hb.rounds.map((n) => `round ${n}`), ...hb.peers.map((b) => `peer ${b.machine} round ${b.n}`)].join('、')}）`
+          : null
+      if (why)
+        fail(`PR #${PR_NO} 簽不出 --scope full：${why}，獨立輪不帶前輪 findings、不靠 grant 抹掉，簽了也開不出輪（grant 簽出去後只能由主管／Charles 以 rounds revoke-grant 撤銷、還會把上限 +1 擋住再簽）。出路只有：對這些 finding 跑 rounds adjudicate 裁決假 Major 後再簽；真 Major 的修補無法靠獨立輪驗證，這張 PR 該拆`)
+    }
+    const grant = { pr: Number(PR_NO), by, evidence, granted_at: now, at_round: last.n, max_before: max, scope, kind }
     ledger.grants = [...(ledger.grants ?? []), grant]
     return { action: 'granted', ...grant, max_rounds: max + 1, ledger: path }
+  })
+  process.stdout.write(`${JSON.stringify(out)}\n`)
+} else if (cmd === 'revoke-grant') {
+  // 主管或 Charles 撤銷一張「還沒開出輪」的 grant：只 append 撤銷紀錄進 ledger.grant_revocations，grants／rounds 原封不動（可稽核）。
+  // 用途：舊 grant（例如 scope=full，簽在 grantIndependentBlock 檢查上線前）因前輪還有未解 Critical／Major 而永遠開不出 independent（exit 15），
+  // 又因「一張放寬一輪、每張 PR 最多 2 張」擋住改簽——撤銷後上限回到撞線狀態，可再簽 --scope increment 開 verify 輪（帶前輪 findings 驗修補）。
+  // --by 是自述標籤（同 grant），只擋誤用、不是身分驗證：主持者、worker、reviewer 都不能自己撤銷。
+  if (opt.mode !== 'pr') fail('revoke-grant 只限 PR 模式（--mode pr）')
+  if (!PR_NO) fail('revoke-grant 必帶 --pr-number（grant 只屬於那一張 PR）')
+  const by = need('by') === '主管' ? 'supervisor' : opt.by
+  if (by !== 'supervisor' && by !== 'charles')
+    fail(`revoke-grant 只收 --by supervisor 或 --by charles（收到 ${opt.by}）：撤銷例外輪只有主管或 Charles 能裁決`)
+  const reason = need('reason').trim()
+  if (!reason) fail('--reason is required')
+  const path = ledgerPath()
+  const out = withLock(path, (ledger) => {
+    const active = grantsFor(ledger)
+    if (!active.length) fail(`PR #${PR_NO} 沒有生效中的 grant：沒有可撤銷的（已撤銷的不重複撤銷）`)
+    // --granted-at 可省：預設撤最新一張生效中的 grant；明寫時必須是生效中的那張。
+    const target = opt['granted-at'] ? active.find((g) => g.granted_at === opt['granted-at']) : active.at(-1)
+    if (!target) fail(`PR #${PR_NO} 找不到生效中的 grant（granted_at=${opt['granted-at']}）；生效中：${active.map((g) => g.granted_at).join('、')}`)
+    const last = scoped(ledger).at(-1)
+    // 消耗＝grant 放寬出來的例外輪已開（輪號 > grant 的 at_round）：已開出的輪是 ledger 事實，撤銷不得改寫上限而讓它變成超限輪。
+    if (!last || Number(last.n) !== Number(target.at_round))
+      fail(`PR #${PR_NO} 的 grant（${target.granted_at}，at_round ${target.at_round}）已被消耗：例外輪 round ${target.at_round + 1} 已開出（目前最後一輪 ${last?.n ?? '無'}），不能撤銷`)
+    const revocation = { pr: Number(PR_NO), granted_at: target.granted_at, by, reason, revoked_at: now, at_round: last.n, scope: target.scope ?? 'increment', kind: target.kind ?? null }
+    ledger.grant_revocations = [...(ledger.grant_revocations ?? []), revocation]
+    return { action: 'grant-revoked', ...revocation, max_rounds: maxRounds(ledger), ledger: path }
   })
   process.stdout.write(`${JSON.stringify(out)}\n`)
 } else if (cmd === 'findings') {
@@ -3583,7 +3739,7 @@ review_detached_branch_key() {
 # 呼叫端契約：PR_BRANCH／PR_HEAD／PR_BASE（PR 模式三者皆非空，否則 working-tree 模式）、ROUND_PART；
 # PR 模式可帶 PR_NUMBER／PR_FILTER／PART_FILES（該批檔案清單 hash）。
 # 產出：REVIEW_ROUND_LEDGER／REVIEW_ROUND_N／REVIEW_ROUND_KIND／REVIEW_ROUND_INCREMENT_BASE；
-# FINDINGS 為空且本輪是驗證輪時自動帶上一輪 verdict。exit 13（不需再審）／14（輪數上限）在這裡結束。
+# FINDINGS 為空且本輪是驗證輪時自動帶上一輪 verdict。exit 13（不需再審）／14（輪數上限）／15（例外輪 grant 開不出獨立輪）在這裡結束。
 review_open_round() {
   local mode branch base head decision action
   if [ -n "${PR_BRANCH:-}" ]; then
@@ -3630,6 +3786,10 @@ review_open_round() {
       fi
       [ -n "$(_round_field grant_command)" ] && echo "[$REVIEW_SAFE_TAG] 主管裁決放行例外輪時：$(_round_field grant_command)（一張只放寬一輪、只限本 PR，紀錄留在 ledger）" >&2
       exit 14 ;;
+    grant-unopenable)
+      echo "[$REVIEW_SAFE_TAG] RESULT: 例外輪的獨立輪開不出來（exit 15）— $(_round_field reason)；review 沒跑，grant 沒消耗（仍在 ledger.grants）" >&2
+      echo "[$REVIEW_SAFE_TAG] NEXT: 排除上述原因（篩選就去掉；Critical／Major 就對假 Major 跑 rounds adjudicate）後重跑 prepare（grant 仍有效且已是 full，不能改簽；前輪 Critical／Major 是真的要靠 verify 輪驗修補時，由主管／Charles 跑 rounds revoke-grant 撤銷再簽 --scope increment，NEVER 為此直接再簽）；NEVER 刪改 ledger（$REVIEW_ROUND_LEDGER）。" >&2
+      exit 15 ;;
     review) ;;
     *)
       echo "[$REVIEW_SAFE_TAG] 錯誤：輪數 ledger 回了未知判定 '$action'（exit 2）" >&2

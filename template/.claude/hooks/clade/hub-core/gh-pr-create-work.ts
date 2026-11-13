@@ -26,6 +26,11 @@
  * 其餘（`--body` 字面、heredoc）擋下並把推出的那一行印成可貼的改法；推不出就擋並印取得 work id 的指令
  * heredoc 照字面判，缺行就擋，NEVER 當成判不出放行（放行出去的 PR 沒有主人、修補件派不出去）。
  *
+ * `--body-file $HOME/…`／`~/…` 展開成字面路徑照檔判；相對路徑照 `gh pr create` 實際執行的目錄解析（跟著同指令串的
+ * `cd`／`pushd` 走；判不出目錄時以 session cwd 讀，讀不到不擋）。同指令串先 `cat > <path> <<'EOF'` 寫檔的，照 heredoc 本文判——hook 執行時檔案
+ * 還不存在，不判就等於放行；`cat >>` 追加、或分隔字沒加引號且本文含 `$` 的寫入判不出全文，當判不出處理。
+ * 派工環境（`CLADE_DISPATCH_ID` 非空）例外：body 檔讀不到又沒有同指令寫入也擋；`--fill*`／`--template`／`--web` 的 body 不可能有 `Work:` 行，無人補行，直接擋（`prCreateFillsBody`）。
+ *
  * 逃生門：`CLADE_ALLOW_NO_WORK=1` 放行（非 clade 工作、上游 repo 的 PR）。
  *
  * `Work:` 行通過後接著判 PR 去重與大小上限（`gh-pr-create-hygiene.ts`）。
@@ -277,6 +282,37 @@ export function literalHeredocBody(text: string): string | null {
   return m[1] || !m[3]!.includes('$') ? m[3]! : null
 }
 
+/** `$HOME`／`${HOME}`／`~` 開頭的路徑展開成字面路徑；展開後仍含 `$`（其他變數、命令替換）→ null（判不出）。 */
+export function expandHomePath(path: string): string | null {
+  const home = homedir()
+  const out = path
+    .replace(/^(\$HOME|\$\{HOME\}|~)(?=\/|$)/u, home)
+    .replace(/^"?(\$HOME|\$\{HOME\})"?(?=\/|$)/u, home)
+  return out.includes('$') || out.includes('`') ? null : out
+}
+
+/**
+ * 指令串裡 `cat > <path> <<'EOF' … EOF` 寫進該 body 檔的本文（同一個 Bash 呼叫先寫檔再開 PR，hook 讀不到檔）。
+ * 同一路徑寫了多次取最後一次；沒有 → null。最後一次是 `cat >>` 追加（檔案全文 = 既有內容 + 本文），
+ * 或分隔字沒加引號且本文含 `$`（展開後才是真值）→ `opaque`（判不出全文）。
+ */
+export function heredocWrittenBody(
+  cmd: string,
+  rawPath: string,
+  expandedPath: string,
+): string | 'opaque' | null {
+  const re =
+    /\bcat[ \t]*(>>?)[ \t]*(["']?)([^\s"'<>|;&]+)\2[ \t]*<<-?[ \t]*(['"]?)([A-Za-z_]\w*)\4[ \t]*\n([\s\S]*?)\n[ \t]*\5[ \t]*(?=\n|$)/gu
+  let hit: string | 'opaque' | null = null
+  for (const m of cmd.matchAll(re)) {
+    const target = m[3]!
+    if (target !== rawPath && expandHomePath(target) !== expandedPath) continue
+    const text = m[6]!
+    hit = m[1] === '>>' || (!m[4] && text.includes('$')) ? 'opaque' : text
+  }
+  return hit
+}
+
 export interface WorkProblem {
   why: string
   /** body 來自這個看得到的檔（絕對路徑）：推得出 work id 時可以直接補行。 */
@@ -288,8 +324,14 @@ export function ghPrCreateWorkProblem(
   cmd: string,
   cwd: string,
   readFile: (path: string) => string = (p) => readFileSync(p, 'utf8'),
+  /** 派工環境：body 檔讀不到又沒有同指令的寫入 → 擋（預設放行，維持 fail-open）。 */
+  strict = false,
 ): WorkProblem | null {
   if (!/\bgh\b[\s\S]*\bpr\b[\s\S]*\bcreate\b/u.test(cmd)) return null
+  // 相對的 --body-file 照 gh pr create 實際執行的目錄解析：hook 收到的是 session cwd，不跟著指令裡的 cd 走。
+  // 目錄判不出（動態 cd、popd、env -C）→ null：照舊以 session cwd 讀，但讀不到時不走派工環境的 strict 擋
+  const site = locatePrCreate(cmd, cwd)
+  const runCwd = site ? site.cwd : cwd
   for (const seg of segments(cmd)) {
     const body = prCreateBody(seg)
     if (!body || body.kind === 'unknown') continue
@@ -299,17 +341,48 @@ export function ghPrCreateWorkProblem(
       if (body.dynamic && literalHeredocBody(body.text) === null) continue
       return { why: body.dynamic ? '--body 的 heredoc 沒有 Work: 行' : '--body 沒有 Work: 行' }
     }
-    if (body.dynamic || body.path === '-' || !body.path) continue
-    const file = isAbsolute(body.path) ? body.path : resolve(cwd, body.path)
+    if (body.path === '-' || !body.path) continue
+    // `$HOME/…`、`~/…` 是 agent 最常寫的 body 檔路徑：展開後是字面路徑就照檔判，其餘變數展開才判不出（放行）
+    const expanded = expandHomePath(body.path)
+    if (expanded === null) continue
+    // 同一個指令串先 `cat > <path> <<'EOF'` 再開 PR：檔案在 hook 執行時還不存在，照指令裡的 heredoc 本文判
+    const written = heredocWrittenBody(cmd, body.path, expanded)
+    if (written === 'opaque') continue
+    if (written !== null) {
+      if (!WORK_LINE_RE.test(written))
+        return { why: `--body-file ${body.path}（同指令 heredoc 寫入）沒有 Work: 行` }
+      continue
+    }
+    const file = isAbsolute(expanded) ? expanded : resolve(runCwd ?? cwd, expanded)
     let text: string
     try {
       text = readFile(file)
     } catch {
+      // 派工環境沒有人補行：讀不到又看不到寫入就擋（寫檔與 gh pr create 拆成兩個 Bash 呼叫）
+      if (strict && (isAbsolute(expanded) || runCwd !== null))
+        return {
+          why: `--body-file ${body.path} 讀不到，也沒有同指令的 heredoc 寫入，判不出 Work: 行（先寫檔，下一個 Bash 呼叫再 gh pr create）`,
+        }
       continue
     }
     if (!WORK_LINE_RE.test(text)) return { why: `--body-file ${body.path} 沒有 Work: 行`, file }
   }
   return null
+}
+
+/**
+ * 指令裡的 `gh pr create` 用 `--fill*`／`--template`／`--web`：body 來自 commit／模板／瀏覽器，字面上不可能有 `Work:` 行。
+ * 互動 session 照舊放行（人在場、body 可能在別處補）；派工環境（`CLADE_DISPATCH_ID` 非空）沒有人補，
+ * `ghPrCreateWorkGate` 把它當缺行擋下。
+ */
+export function prCreateFillsBody(cmd: string): boolean {
+  if (!/\bgh\b[\s\S]*\bpr\b[\s\S]*\bcreate\b/u.test(cmd)) return false
+  return segments(cmd).some((seg) => {
+    const body = prCreateBody(seg)
+    return (
+      body?.kind === 'unknown' && words(seg).some((w) => FAIL_OPEN_FLAGS.has(w.text.split('=')[0]!))
+    )
+  })
 }
 
 /** `gh pr create` 看得到的 body 全文（去重／大小判定用）；判不出（動態展開、`-`、讀不到、沒有 gh pr create）回 null。 */
@@ -410,7 +483,7 @@ const COMMIT_SEG_RE =
 /**
  * `gh pr create` 之前，同一個指令串裡有沒有會新增 commit 的 git 子命令。
  * PreToolUse 在整串指令執行前觸發：串在一起的 `git commit … && gh pr create` 量 `HEAD` 時 commit 還不存在，
- * diff 看起來是空的（第六個洞：#3741、#3777 等只動 allowlist 的 PR 以此漏過）。
+ * diff 看起來是空的，只動 allowlist 的 PR 會因此漏過記帳類閘門。
  */
 export function commitsBeforePrCreate(cmd: string, prSeg: string): boolean {
   const at = cmd.indexOf(prSeg)
@@ -594,8 +667,19 @@ export function ghPrCreateWorkGate(
     }
     return deny ? { ...verdict, deny } : verdict
   }
-  const problem = ghPrCreateWorkProblem(cmd, cwd, deps.readFile)
-  if (!problem) return hygiene({})
+  const problem = ghPrCreateWorkProblem(cmd, cwd, deps.readFile, !!env.CLADE_DISPATCH_ID?.trim())
+  if (!problem) {
+    if (env.CLADE_DISPATCH_ID?.trim() && prCreateFillsBody(cmd)) {
+      return {
+        deny: denyMessage(
+          '派工環境的 --fill／--template／--web body 來自 commit／模板／瀏覽器，沒有 Work: 行（改用 --body-file 或 --body 並寫上 Work:）',
+          env,
+          deriveWorkId(cwd, env, deps),
+        ),
+      }
+    }
+    return hygiene({})
+  }
   const derived = deriveWorkId(cwd, env, deps)
   if (derived && problem.file && appendableBodyFile(cmd, cwd, problem.file, derived.id)) {
     try {

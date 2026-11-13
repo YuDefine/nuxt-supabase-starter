@@ -21,7 +21,7 @@
 #   - new-python                有新落腳的 staged *.py 才判（否則 no-op）；跑不起來時擋
 #
 # 重型檢查（nuxt typecheck、test tsconfig）放 pre-push runner，不在 pre-commit 跑。
-# 原因：vue-tsc / nuxi typecheck 不支援單檔 typecheck，只能整專案跑，所以放 pre-push 階段。
+# 原因：vue-tsc / nuxt typecheck 不支援單檔 typecheck，只能整專案跑，所以放 pre-push 階段。
 #
 # 由 ~/clade vendor/scripts/pre-commit/ 散播，請勿直接編輯 consumer 副本。
 

@@ -265,9 +265,9 @@ verification-lease.spec.md — verification lease 的機制規格——五元組
 176-178 Claim 衝突的標準訊息
 180-192 與 Consumer Manifest 的關係
 194-196 Audit log retention
-198-222 Agent 行為契約
+198-224 Agent 行為契約
 
 verify-gate-chain.md — 自主迴圈的驗證閘門鏈與停止條件——每個 iterate-until-green 迴圈要跑 gate chain、宣告 max_iterations、定義 escalation action
 5-10 前導 — Verify Gate Chain（自主迴圈驗證標準）
-12-48 Gate chain 定義
-50-92 Iterate-until-green 迴圈語義
+12-50 Gate chain 定義
+52-94 Iterate-until-green 迴圈語義
