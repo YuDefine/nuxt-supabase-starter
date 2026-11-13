@@ -1,10 +1,11 @@
+---
+name: starter-meta-boundary
+description: '改 nuxt-supabase-starter 任何檔之前，判斷變更落點是 root meta 維護層還是 template/ starter seed（會被 scaffold 帶走）、要不要開跨層 plan package、path 層級怎麼標。Use when 在 starter root 動手改檔、新建 plan package、新增或移除 starter-owned slash command、登記 tech debt。NOT for starter hygiene 的 check name 與回報格式（讀 .claude/rules/starter-hygiene.md）。'
+---
+
 # Meta repo 入口規約
 
-這份是 `nuxt-supabase-starter` root（meta 維護層）的常駐規約，原本寫在 root `CLAUDE.md`；root 入口依 2026-09-26 指示收成空殼，正文搬到這裡。只服務 root，不會被 scaffold 帶走。
-
-## Language
-
-**YOU MUST** respond in 繁體中文 (zh-TW). **NEVER** use 簡體中文 (zh-CN).
+`nuxt-supabase-starter` root 是 meta 維護層，正文原寫在 `.claude/rules/meta-repo.md`（常駐），依 where-to-put W4 搬成本 skill；只服務 root，不會被 scaffold 帶走。
 
 ## Project Structure
 
