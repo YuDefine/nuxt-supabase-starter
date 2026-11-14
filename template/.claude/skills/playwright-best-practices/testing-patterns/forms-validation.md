@@ -154,7 +154,7 @@ test("complete a multi-step booking wizard", async ({ page }) => {
     ).toBeVisible();
 
     await page.getByLabel("Full name").fill("Alice Smith");
-    await page.getByLabel("Email").fill("alice@example.com");
+    await page.getByLabel("Email").fill("alice@test.com");
     await page.getByLabel("Phone").fill("555-1234");
 
     await page.getByRole("button", { name: "Next" }).click();
@@ -201,14 +201,14 @@ test("wizard supports going back without losing data", async ({ page }) => {
   await page.goto("/booking");
 
   await page.getByLabel("Full name").fill("Alice Smith");
-  await page.getByLabel("Email").fill("alice@example.com");
+  await page.getByLabel("Email").fill("alice@test.com");
   await page.getByLabel("Phone").fill("555-1234");
   await page.getByRole("button", { name: "Next" }).click();
 
   await page.getByRole("button", { name: "Previous" }).click();
 
   await expect(page.getByLabel("Full name")).toHaveValue("Alice Smith");
-  await expect(page.getByLabel("Email")).toHaveValue("alice@example.com");
+  await expect(page.getByLabel("Email")).toHaveValue("alice@test.com");
 });
 ```
 
@@ -221,7 +221,7 @@ test("successful form submission shows confirmation", async ({ page }) => {
   await page.goto("/feedback");
 
   await page.getByLabel("Subject").fill("Feature request");
-  await page.getByLabel("Email").fill("user@example.com");
+  await page.getByLabel("Email").fill("user@test.com");
   await page.getByLabel("Details").fill("Please add dark mode");
 
   const responsePromise = page.waitForResponse("**/api/feedback");
@@ -237,7 +237,7 @@ test("form submission shows server-side validation errors", async ({
 }) => {
   await page.goto("/signup");
 
-  await page.getByLabel("Email").fill("existing@example.com");
+  await page.getByLabel("Email").fill("existing@test.com");
   await page.getByLabel("Password", { exact: true }).fill("Secure1@pass");
   await page.getByRole("button", { name: "Sign up" }).click();
 
@@ -250,7 +250,7 @@ test("form shows loading state during submission", async ({ page }) => {
   await page.goto("/feedback");
 
   await page.getByLabel("Subject").fill("Bug report");
-  await page.getByLabel("Email").fill("user@example.com");
+  await page.getByLabel("Email").fill("user@test.com");
   await page.getByLabel("Details").fill("Found an issue");
 
   const submit = page.getByRole("button", {
@@ -268,7 +268,7 @@ test("form shows loading state during submission", async ({ page }) => {
 test("form redirects after successful submission", async ({ page }) => {
   await page.goto("/auth/login");
 
-  await page.getByLabel("Email").fill("admin@example.com");
+  await page.getByLabel("Email").fill("admin@test.com");
   await page.getByLabel("Password").fill("admin123");
   await page.getByRole("button", { name: "Log in" }).click();
 
@@ -287,7 +287,7 @@ test("fill and submit a signup form", async ({ page }) => {
 
   await page.getByLabel("First name").fill("Bob");
   await page.getByLabel("Last name").fill("Wilson");
-  await page.getByLabel("Email").fill("bob@example.com");
+  await page.getByLabel("Email").fill("bob@test.com");
   await page.getByLabel("Password", { exact: true }).fill("P@ssw0rd!");
   await page.getByLabel("Confirm password").fill("P@ssw0rd!");
 
@@ -393,7 +393,7 @@ test("validates email format", async ({ page }) => {
     "invalid",
     "missing@",
     "@nodomain.com",
-    "has spaces@example.com",
+    "has spaces@mail.com",
   ];
 
   for (const email of invalidEmails) {
@@ -402,7 +402,7 @@ test("validates email format", async ({ page }) => {
     await expect(page.getByText("Enter a valid email address")).toBeVisible();
   }
 
-  await emailField.fill("correct@example.com");
+  await emailField.fill("correct@domain.com");
   await emailField.blur();
   await expect(page.getByText("Enter a valid email address")).not.toBeVisible();
 });
@@ -498,7 +498,7 @@ test("confirmation dialog before resetting a dirty form", async ({ page }) => {
 | ------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------ |
 | `await page.getByLabel('Field').type('value')`          | `type()` appends to existing content; does not clear first | `await page.getByLabel('Field').fill('value')`         |
 | `await page.getByLabel('Option').click()`               | `click()` toggles — if already checked, it unchecks        | `await page.getByLabel('Option').check()`              |
-| `await page.fill('#email', 'test@example.com')`         | CSS selector is fragile                                    | `await page.getByLabel('Email').fill('test@example.com')` |
+| `await page.fill('#email', 'test@test.com')`            | CSS selector is fragile                                    | `await page.getByLabel('Email').fill('test@test.com')` |
 | `await page.selectOption('select', 'US')` without label | Targets first `<select>` on page; ambiguous                | `await page.getByLabel('Country').selectOption('US')`  |
 | Testing every invalid input in one test                 | Test becomes huge, slow, and hard to debug                 | One test per validation rule or group related rules    |
 | `expect(await input.inputValue()).toBe('value')`        | Resolves once — no retry. Race condition.                  | `await expect(input).toHaveValue('value')`             |
@@ -511,22 +511,18 @@ test("confirmation dialog before resetting a dirty form", async ({ page }) => {
 
 ### `fill()` does nothing or clears but doesn't type
 
-**Cause**: The input field uses a contenteditable div (rich text editors), not a real `<input>` or `<textarea>`.
+**Cause**: The editor listens for individual key events. `fill()` works on `<input>`, `<textarea>`, and `[contenteditable]` elements, but it sets the whole value at once and sends no `keydown`/`keypress` events. Type the text with `pressSequentially()` instead.
 
 ```typescript
-const isContentEditable = await page
-  .getByTestId("editor")
-  .evaluate((el) => el.getAttribute("contenteditable"));
-
-if (isContentEditable) {
-  await page.getByTestId("editor").click();
-  await page.getByTestId("editor").pressSequentially("Hello world");
-}
+const editor = page.getByTestId("editor");
+await editor.click();
+await editor.pressSequentially("Hello world");
+await expect(editor).toHaveText("Hello world");
 ```
 
 ### Date picker does not accept `fill()` value
 
-**Cause**: Third-party date pickers often render custom UI over a hidden input. `fill()` sets the hidden input but the UI does not update.
+**Cause**: Third-party date pickers may render custom UI over a hidden or read-only input. `fill()` waits for a visible, enabled, editable element; it does not normally fill a hidden input. Interact with the picker UI, or fill a visible editable input if the library supports it.
 
 ```typescript
 await page.getByLabel("Date").click();

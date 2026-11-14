@@ -147,7 +147,7 @@ test("Google OAuth login", async ({ page }) => {
   await popup.waitForLoadState();
 
   // Handle Google's OAuth flow
-  await popup.getByLabel("Email or phone").fill("user@example.com");
+  await popup.getByLabel("Email or phone").fill("test@gmail.com");
   await popup.getByRole("button", { name: "Next" }).click();
 
   await popup.getByLabel("Enter your password").fill("password");

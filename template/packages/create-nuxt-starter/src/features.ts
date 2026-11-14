@@ -257,7 +257,7 @@ export const featureModules: FeatureModule[] = [
     group: 'monitoring',
     packages: {
       '@sentry/nuxt': '^10.43.0',
-      evlog: '^2.5.0',
+      evlog: '^2.27.1',
     },
     nuxtModules: ['@sentry/nuxt/module', 'evlog/nuxt'],
     envVars: {
