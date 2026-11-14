@@ -159,11 +159,7 @@ pnpm skills:install
 
 ### 更新單一 Skill
 
-```bash
-npx skills add antfu/skills@nuxt --agent claude-code --copy -y
-```
-
-替換 `antfu/skills@nuxt` 為目標 Skill 的 registry 和名稱。
+改 `scripts/install-skills.sh` 裡該 source 的 `REF_*`（40 碼 SHA 或 tag），再跑 `pnpm skills:install`。NEVER 用 `npx skills add <owner>/<repo>@<skill>` 直接裝：不帶 ref 會拉上游最新版，lock 條目也不會有 `ref`。
 
 ### 查看目前狀態
 

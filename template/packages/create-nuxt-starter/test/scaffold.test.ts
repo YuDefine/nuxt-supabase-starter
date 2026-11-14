@@ -632,7 +632,9 @@ describe('scaffold: install-skills.sh 釘版（clade skill-management § 第三�
       // 用到的 REF_ 變數都得在釘版區塊裡有定義
       const block = pinnedBlock(script)
       const used = new Set(
-        [...installs.join('\n').matchAll(/\$(REF_[A-Z0-9_]+)/g)].map((m) => m[1]),
+        [...script.slice(script.indexOf(block) + block.length).matchAll(/\$(REF_[A-Z0-9_]+)/g)].map(
+          (m) => m[1],
+        ),
       )
       for (const v of used)
         expect(block, v).toMatch(new RegExp(`^${v}=[0-9a-f]{40}$|^${v}=\\S+$`, 'm'))

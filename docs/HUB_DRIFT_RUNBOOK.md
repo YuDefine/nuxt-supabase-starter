@@ -178,7 +178,7 @@ cat .claude/hub.json
 
 ```bash
 # 看 install-skills.sh 列了哪些第三方 skills
-cat scripts/install-skills.sh | grep "skills add"
+grep -o 'skill_add_pinned "[^"]*"' scripts/install-skills.sh
 
 # 對應 drift 的 skill 是不是在這份清單
 ```

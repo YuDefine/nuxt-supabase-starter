@@ -3,10 +3,10 @@
   "skills": {
     "analyze-logs": {
       "source": "evloghq/evlog",
-      "ref": "9798f4ee3a9b9a7513291c1d67e63af7dff96be0",
+      "ref": "45db116a955f722f186105dd6047a42e511c349f",
       "sourceType": "github",
       "skillPath": "apps/docs/skills/analyze-logs/SKILL.md",
-      "computedHash": "ff1eef0fd70d7861ae0a609dcbb5e07503ec34b4857517a992477d6e58a0da12",
+      "computedHash": "66bae12da3600ecc21cee9575405cbf409fec5bef5642d137d1ca6e560762ab1",
       "installMode": "copy"
     },
     "better-auth-best-practices": {
@@ -27,10 +27,10 @@
     },
     "build-audit-logs": {
       "source": "evloghq/evlog",
-      "ref": "9798f4ee3a9b9a7513291c1d67e63af7dff96be0",
+      "ref": "45db116a955f722f186105dd6047a42e511c349f",
       "sourceType": "github",
       "skillPath": "apps/docs/skills/build-audit-logs/SKILL.md",
-      "computedHash": "689505c01f5e7f47070f0916f9409a9dc6c1f1e7967a09b21848a6c24b57c0e0",
+      "computedHash": "285a537d90ec20048efb53d02800289798517077048ef0085de8b74e7536a56f",
       "installMode": "copy"
     },
     "document-writer": {
@@ -123,10 +123,10 @@
     },
     "review-logging-patterns": {
       "source": "evloghq/evlog",
-      "ref": "9798f4ee3a9b9a7513291c1d67e63af7dff96be0",
+      "ref": "45db116a955f722f186105dd6047a42e511c349f",
       "sourceType": "github",
       "skillPath": "apps/docs/skills/review-logging-patterns/SKILL.md",
-      "computedHash": "f544555a235e6ad66b7e7891d34362297f67010527da8c09e743cd0b15f938a1",
+      "computedHash": "e9f6f4b793074e767624248478b8b43c3a1fcff5bbe6457ac097f4850923f10c",
       "installMode": "copy"
     },
     "supabase": {
