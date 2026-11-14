@@ -1,10 +1,20 @@
+---
+description: nuxt-supabase-starter root（meta 維護層）入口規約：專案結構與 meta／template 邊界判斷
+paths:
+  - CLAUDE.md
+  - AGENTS.md
+  - template/**
+  - scripts/**
+  - .husky/**
+  - .claude/**
+  - docs/**
+  - specs/**
+  - tasks/**
+---
+
 # Meta repo 入口規約
 
 這份是 `nuxt-supabase-starter` root（meta 維護層）的常駐規約，原本寫在 root `CLAUDE.md`；root 入口依 2026-09-26 指示收成空殼，正文搬到這裡。只服務 root，不會被 scaffold 帶走。
-
-## Language
-
-**YOU MUST** respond in 繁體中文 (zh-TW). **NEVER** use 簡體中文 (zh-CN).
 
 ## Project Structure
 
