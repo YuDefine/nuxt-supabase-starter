@@ -136,6 +136,147 @@
             "timeout": 30
           }
         ]
+      },
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-haiku-implementer-handoff-gate-post-tool-c0a282 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/haiku-implementer-handoff-gate.sh post-tool",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-impeccable-detector-hook-886a9f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/impeccable-detector-hook.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-post-edit-always-load-budget-886a9f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/post-edit-always-load-budget.sh",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-post-edit-decision-options-886a9f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/post-edit-decision-options.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-post-edit-shell-safety-886a9f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/post-edit-shell-safety.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-post-edit-task-file-work-open-886a9f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/post-edit-task-file-work-open.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-post-edit-typecheck-format-886a9f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/post-edit-typecheck.sh format",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-post-edit-typecheck-typecheck-886a9f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/post-edit-typecheck.sh typecheck",
+            "timeout": 300,
+            "asyncRewake": true
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-post-edit-ui-floor-check-886a9f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/post-edit-ui-floor-check.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-post-edit-ui-qa-886a9f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/post-edit-ui-qa.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-post-tool-ownership-journal-90bff7 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/post-tool-ownership-journal.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-post-tool-ownership-journal-ef2bd2 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/post-tool-ownership-journal.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-session-context-budget-warn-058f59 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/session-context-budget-warn.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-skill-entry-pointer-abd7fc ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/skill-entry-pointer.sh",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -147,19 +288,713 @@
             "timeout": 30
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-session-start-claim-heartbeat-90b117 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/session-start-claim-heartbeat.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-session-start-compact-pointer-819732 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/session-start-compact-pointer.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-session-start-correction-ledger-90b117 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/session-start-correction-ledger.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-session-start-disk-low-watermark-90b117 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/session-start-disk-low-watermark.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-session-start-gh-shim-path-90b117 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/session-start-gh-shim-path.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-session-start-improvement-loop-path-check-90b117 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/session-start-improvement-loop-path-check.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-session-start-permission-mode-check-90b117 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/session-start-permission-mode-check.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-session-start-session-tasks-reminder-90b117 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/session-start-session-tasks-reminder.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-session-start-supabase-mcp-counter-90b117 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/session-start-supabase-mcp-counter.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-session-start-worktree-brief-90b117 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/session-start-worktree-brief.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-session-start-worktree-freshness-90b117 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/session-start-worktree-freshness.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-haiku-implementer-boundary-gate-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/haiku-implementer-boundary-gate.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-haiku-implementer-handoff-gate-pre-tool-371fa7 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/haiku-implementer-handoff-gate.sh pre-tool",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-knowledge-search-reminder-fc749c ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/knowledge-search-reminder.sh",
+            "timeout": 5,
+            "statusMessage": "Checking knowledge base..."
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-post-edit-decision-options-pre-edit-fc749c ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/post-edit-decision-options.sh pre-edit",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-agent-brief-size-warn-d4b01f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-agent-brief-size-warn.sh",
+            "timeout": 5,
+            "statusMessage": "Checking brief size..."
+          }
+        ]
+      },
+      {
+        "matcher": "Artifact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-artifact-reply-page-gate-2c429c ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-artifact-reply-page-gate.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-agent-browser-profile-gate-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-agent-browser-profile-gate.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-cloud-allow-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-cloud-allow.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-dev-server-gate-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-dev-server-gate.sh",
+            "timeout": 5,
+            "statusMessage": "Checking dev server entry..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-gh-pr-create-work-gate-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-gh-pr-create-work-gate.sh",
+            "timeout": 10,
+            "statusMessage": "Checking gh pr create Work: line..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-git-commit-gate-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-git-commit-gate.sh",
+            "timeout": 30,
+            "statusMessage": "Running review checklist gate..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-git-commit-only-whitelist-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-git-commit-only-whitelist.sh",
+            "timeout": 5,
+            "statusMessage": "Checking --only whitelist..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-git-push-provenance-gate-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-git-push-provenance-gate.sh",
+            "timeout": 15,
+            "statusMessage": "Checking /commit provenance..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-heavy-job-gate-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-heavy-job-gate.sh",
+            "timeout": 5,
+            "statusMessage": "Checking machine load..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-herdr-cold-prompt-gate-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-herdr-cold-prompt-gate.sh",
+            "timeout": 90,
+            "statusMessage": "Checking herdr prompt target cache age..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-impeccable-question-headless-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-impeccable-question-headless.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-kill-parent-gate-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-kill-parent-gate.sh",
+            "timeout": 5,
+            "statusMessage": "Checking kill targets..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-notion-secret-read-gate-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-notion-secret-read-gate.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-notion-ticket-status-gate-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-notion-ticket-status-gate.sh",
+            "timeout": 10,
+            "statusMessage": "Checking Notion ticket status write..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-ownership-stamp-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-ownership-stamp.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-power-command-gate-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-power-command-gate.sh",
+            "timeout": 15,
+            "statusMessage": "Checking power commands..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-prettier-invocation-gate-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-prettier-invocation-gate.sh",
+            "timeout": 5,
+            "statusMessage": "Checking formatter toolchain..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-prod-stream-guard-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-prod-stream-guard.sh",
+            "timeout": 5,
+            "statusMessage": "Checking production stream safety..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-supabase-admin-gate-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-supabase-admin-gate.sh",
+            "timeout": 5,
+            "statusMessage": "Checking supabase_admin authorization..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-supabase-local-gate-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-supabase-local-gate.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Monitor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-wait-loop-guard-399dc9 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-wait-loop-guard.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-wait-loop-guard-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-wait-loop-guard.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-wip-destructive-git-gate-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-wip-destructive-git-gate.sh",
+            "timeout": 10,
+            "statusMessage": "Checking WIP-destructive git commands..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-wo-ref-push-gate-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-wo-ref-push-gate.sh",
+            "timeout": 5,
+            "statusMessage": "Checking work-order ref pushes..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-bash-worktree-ops-reminder-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-bash-worktree-ops-reminder.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-edit-claim-conflict-fc749c ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-edit-claim-conflict.sh",
+            "timeout": 10,
+            "statusMessage": "Checking session claims..."
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-edit-claude-md-reminder-07f625 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-edit-claude-md-reminder.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-edit-consumer-main-checkout-gate-dcf16e ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-edit-consumer-main-checkout-gate.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-edit-main-worktree-reminder-dcf16e ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-edit-main-worktree-reminder.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-edit-skill-path-reminder-07f625 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-edit-skill-path-reminder.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "ProposeGoal",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-propose-goal-vet-0430c6 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-propose-goal-vet.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-read-image-cost-warn-686781 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-read-image-cost-warn.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-read-progress-worktree-reminder-686781 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-read-progress-worktree-reminder.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "AskUserQuestion|EnterPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-tool-cloud-question-gate-46bfbb ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-tool-cloud-question-gate.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-tool-cloud-workdir-gate-673eb9 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-tool-cloud-workdir-gate.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-tool-keep-instruction-files-empty-9dbe9d ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-tool-keep-instruction-files-empty.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-tool-routing-gate-pre-tool-3f01c5 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-tool-routing-gate.sh pre-tool",
+            "timeout": 10,
+            "statusMessage": "Recording edits and checking workflow agent() routing..."
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-tool-routing-gate-pre-tool-686781 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-tool-routing-gate.sh pre-tool",
+            "timeout": 10,
+            "statusMessage": "Checking Pi routing threshold..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-tool-routing-gate-pre-tool-d1605f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-tool-routing-gate.sh pre-tool",
+            "timeout": 10,
+            "statusMessage": "Checking Pi routing threshold..."
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-tool-routing-gate-pre-tool-d4b01f ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-tool-routing-gate.sh pre-tool",
+            "timeout": 10,
+            "statusMessage": "Checking Claude-to-Pi routing..."
+          }
+        ]
+      },
+      {
+        "matcher": "WebSearch|WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-tool-routing-gate-pre-tool-e28377 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-tool-routing-gate.sh pre-tool",
+            "timeout": 10,
+            "statusMessage": "Checking external web routing..."
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-skill-entry-pointer-e3ccd9 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/skill-entry-pointer.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "TaskCreate",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-task-tool-file-reminder-d081e5 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/task-tool-file-reminder.sh",
+            "timeout": 5,
+            "statusMessage": "Checking session task file..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-haiku-implementer-handoff-gate-stop-ddc2dc ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/haiku-implementer-handoff-gate.sh stop",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-impeccable-detector-hook-ddc2dc ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/impeccable-detector-hook.sh",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-stop-async-keepalive-gate-ddc2dc ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/stop-async-keepalive-gate.sh",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-stop-herdr-stalled-warn-ddc2dc ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/stop-herdr-stalled-warn.sh",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-stop-wip-guard-ddc2dc ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/stop-wip-guard.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-compact-snapshot-0d92b9 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-compact-snapshot.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-pre-tool-routing-gate-user-prompt-26851a ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/pre-tool-routing-gate.sh user-prompt",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-user-prompt-errand-register-26851a ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/user-prompt-errand-register.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-user-prompt-goal-vet-26851a ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/user-prompt-goal-vet.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": ".*haiku-implementer",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-subagent-stop-haiku-implementer-test-gate-77b59a ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/subagent-stop-haiku-implementer-test-gate.sh",
+            "timeout": 900
+          }
+        ]
       }
     ]
   },
-  "enabledPlugins": {
-    "hub-core@clade": true,
-    "hub-auth-better-auth@clade": true,
-    "hub-db-schema-supabase@clade": true,
-    "hub-db-runtime-cf-workers@clade": true,
-    "hub-runtime-cf-workers@clade": true,
-    "hub-framework-nuxt@clade": true,
-    "hub-ecosystem-node@clade": true,
-    "hub-capabilities-aixbdd@clade": true,
-    "hub-capabilities-specformula@clade": true,
-    "hub-capabilities-evlog@clade": true
-  }
+  "enabledPlugins": {}
 }
