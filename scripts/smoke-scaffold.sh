@@ -48,6 +48,22 @@ run_step() {
   pass "$label"
 }
 
+# TD-027 過渡：clade 投影 scripts/pre-commit/{consumer-root,runner}.sh 的兩行註解寫了字面 repo 名。
+# 根治 clade#5359 已合入 clade main，但還沒進任何 release；下一次 propagate 帶進來後兩行就不存在，
+# 屆時刪掉本函式與它的呼叫點。只放行「路徑＋整行內容」逐字相符的這兩行：同檔出現任何新命中、
+# 或這兩行內容變了，照樣報。NEVER 擴成整檔或整目錄排除（TD-019 Fix approach）。
+drop_known_projection_hits() {
+  local target="$1"
+  local line
+  while IFS= read -r line; do
+    case "$line" in
+      "$target/scripts/pre-commit/consumer-root.sh:7:# consumer root ≠ git toplevel 的 consumer（monorepo 子目錄，如 nuxt-supabase-starter 的 \`template/\`）：") ;;
+      "$target/scripts/pre-commit/runner.sh:41:# consumer root ≠ toplevel（nuxt-supabase-starter 的 template/）時，toplevel 是 monorepo 根，") ;;
+      *) printf '%s\n' "$line" ;;
+    esac
+  done
+}
+
 scan_placeholders() {
   local target="$1"
   # demo MUST 帶詞界：沒有詞界時 demonstrate / demonstrably 也會中，實測誤判
@@ -164,7 +180,7 @@ if [[ -f "$TARGET_DIR/wrangler.jsonc" ]]; then
   fi
 fi
 
-PLACEHOLDER_HITS="$(scan_placeholders "$TARGET_DIR")"
+PLACEHOLDER_HITS="$(scan_placeholders "$TARGET_DIR" | drop_known_projection_hits "$TARGET_DIR")"
 
 if [[ -n "$PLACEHOLDER_HITS" ]]; then
   echo "$PLACEHOLDER_HITS"
