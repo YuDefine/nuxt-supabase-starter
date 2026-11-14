@@ -75,7 +75,9 @@ scan_placeholders() {
       --glob '!**/scripts/pre-commit/runner.sh' \
       || true
   else
-    grep -RInE "$pattern" "$target" \
+    # grep 的 --exclude 只比 basename，會連 scripts/pre-push/runner.sh 等同名檔一起略過；
+    # 改成掃完後以完整路徑濾掉那兩個投影檔，與 rg 分支的範圍一致。
+    { grep -RInE "$pattern" "$target" \
       --exclude-dir=node_modules \
       --exclude-dir=.git \
       --exclude-dir=.nuxt \
@@ -86,8 +88,7 @@ scan_placeholders() {
       --exclude=.scaffold-cleanup \
       --exclude=verify-starter.mjs \
       --exclude=audit-clade-leak.mjs \
-      --exclude=consumer-root.sh \
-      --exclude=runner.sh \
+      || true; } | grep -vE '/scripts/pre-commit/(consumer-root|runner)\.sh:' \
       || true
   fi
 }
