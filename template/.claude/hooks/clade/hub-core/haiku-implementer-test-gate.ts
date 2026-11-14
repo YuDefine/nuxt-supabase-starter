@@ -13,6 +13,7 @@
  * 流程：
  *   SubagentStop（`subagent-stop`）：從 agent transcript 第一則 user 訊息（brief）取 `test-command:` 行，
  *     逐條在 subagent 起跑的 cwd 重跑。
+ *     - 越界 gate 記過越權（haiku-implementer-boundary.ts）→ 不論測試綠不綠都判 failed（boundary-violation）。
  *     - 全綠 → exit 0 放行。
  *     - 任一紅／逾時／起不來、brief 沒 `test-command:`（routing table：沒有可跑測試定義完成就不該派 Haiku）、
  *       transcript 讀不到 → 寫 handoff 與 latch，exit 2 要 Haiku 把最終輸出第一行改成 FAILED。
@@ -69,7 +70,7 @@ type Latch = {
   id: string
   session_id: string
   agent_id: string
-  verdict: 'test-red' | 'no-test-command' | 'unverifiable' | 'gate-broken'
+  verdict: 'test-red' | 'no-test-command' | 'unverifiable' | 'gate-broken' | 'boundary-violation'
   handoff_path: string
   routing_row: string
 }
@@ -350,6 +351,27 @@ function formatResults(results: CommandResult[]): string {
     .join('\n\n')
 }
 
+/**
+ * 越界 gate（haiku-implementer-boundary.ts）記下的越權紀錄。不 import 它：判定檔要能單檔複製執行，
+ * 少一個檔就整支起不來。路徑與格式兩邊一致：<state>/violations/<session>__<agent>.json 的 reasons 陣列。
+ */
+function readViolation(sessionId: string, agentId: string): string | null {
+  const path = join(
+    stateRoot(),
+    'violations',
+    `${safeSegment(sessionId)}__${safeSegment(agentId)}.json`,
+  )
+  if (!existsSync(path)) return null
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as { reasons?: unknown }
+    return Array.isArray(parsed.reasons) && parsed.reasons.length > 0
+      ? parsed.reasons.map(String).join('；')
+      : '越權（紀錄不完整）'
+  } catch {
+    return '越權（紀錄讀不到）'
+  }
+}
+
 function subagentStop(payload: Payload): number {
   if (!isHaikuImplementer(payload.agent_type)) return 0
   const sessionId = String(payload.session_id ?? '')
@@ -363,6 +385,15 @@ function subagentStop(payload: Payload): number {
   if (!parsed) {
     const detail = `讀不到 agent transcript 的 brief（${String(payload.agent_transcript_path)}），無法複驗。`
     const latch = writeLatch(payload, 'unverifiable', detail, '')
+    process.stderr.write(`${failedMessageForHaiku(latch, detail)}\n`)
+    return 2
+  }
+
+  // 越權（commit／push 等）由 PreToolUse 越界 gate 擋下並記錄：不論測試綠不綠都轉交，越權的那棵樹不可信
+  const violation = readViolation(sessionId, agentId)
+  if (violation) {
+    const detail = `Haiku 嘗試越權（已被擋下）：${violation}。依現行升級鏈轉交 sonnet-implementer。`
+    const latch = writeLatch(payload, 'boundary-violation', detail, parsed.brief, parsed.cwd)
     process.stderr.write(`${failedMessageForHaiku(latch, detail)}\n`)
     return 2
   }

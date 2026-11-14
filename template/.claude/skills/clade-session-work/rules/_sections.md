@@ -93,17 +93,17 @@ agent-routing.routing-table.md — Routing Table 的對照資料層——工作�
 27-45 禁用（Charles 2026-09-24；GPT 全面退場 2026-09-29；Gemini 退場、Haiku 5.5 開放 2026-10-08；xAI 退場 2026-10-21）
 47-65 effort 與執行載體
 67-69 判不進任一列時
-71-89 主線 residency（誰當主線；Charles 2026-09-29）
-91-104 Workflow 的 Sonnet `agent()`（2026-09-29）
-106-119 Haiku 5.5 的席位（Charles 2026-10-08；2026-10-29 加 `haiku-scanner`、`haiku-implementer`）
-121-137 E2E 綠準入（便宜／快席位承接的前提；Charles 2026-11-08）
-139-143 delegate-sub（原判 sonnet／haiku 等級的委派工作）
-145-153 Devin SWE-2 Max（任意 Pi 列可選）
-155-161 Claude 帳號池（2026-10-04）
-163-165 變更後的規約對照組重跑
-167-181 槓桿優先序與規約可實驗（Charles 2026-11-08）
-183-242 工作類別對照
-244-275 Pi 派工的 workspace capability
+71-91 主線 residency（誰當主線；Charles 2026-09-29）
+93-106 Workflow 的 Sonnet `agent()`（2026-09-29）
+108-121 Haiku 5.5 的席位（Charles 2026-10-08；2026-10-29 加 `haiku-scanner`、`haiku-implementer`）
+123-139 E2E 綠準入（便宜／快席位承接的前提；Charles 2026-11-08）
+141-145 delegate-sub（原判 sonnet／haiku 等級的委派工作）
+147-155 Devin SWE-2 Max（任意 Pi 列可選）
+157-163 Claude 帳號池（2026-10-04）
+165-167 變更後的規約對照組重跑
+169-183 槓桿優先序與規約可實驗（Charles 2026-11-08）
+185-244 工作類別對照
+246-277 Pi 派工的 workspace capability
 
 consumer-meta.md — 每個 consumer 自宣告 .claude/consumer-meta.json，描述 dev port / auth / database / deploy / verification 等 runtime 事實；clade 聚合成 registry/consumers-meta.json snapshot 供規則 / skill / audit 使用
 5-14 前導 — Consumer Meta（per-consumer 自宣告 + clade 聚合 snapshot）

@@ -288,6 +288,18 @@ review_subagent_write_receipt() {
   ' "$state_dir" "$1" "$2" "${3:-}"
 }
 
+# 0-A 逐條驗收項影子（plans/40 T4）：verdict 已記進輪數 ledger 之後，把 `## Acceptance Verdict` 表記進影子帳。
+# shadow：不進通過條件、不改 exit code；工具缺席或失敗只 warn。
+review_subagent_record_acceptance() {
+  local tool
+  [ -f "$WORK_DIR/acceptance.json" ] || return 0
+  tool="$(clade_runtime vendor/scripts/oa-acceptance-shadow.ts 2>/dev/null)"
+  [ -n "$tool" ] && [ -f "$tool" ] || return 0
+  node "$tool" record --work-dir "$WORK_DIR" --verdict "$1" \
+    --round-json "${REVIEW_ROUND_RECORD_JSON:-}" ${REVIEW_ROUND_HEAD:+--head "$REVIEW_ROUND_HEAD"} || true
+  return 0
+}
+
 review_subagent_finalize() {
   local base dir
   if [ "$#" -ne 1 ]; then
@@ -388,6 +400,7 @@ review_subagent_finalize() {
   review_verify_integrity
   verdict_sha="$(sha256sum "$verdict_out" | cut -d' ' -f1)"
   review_record_round_and_register "$verdict_out" || return $?
+  review_subagent_record_acceptance "$verdict_out"
   review_subagent_write_receipt 0 "$result" "$verdict_sha"
   cat "$verdict_out"
   return 0

@@ -806,7 +806,7 @@ node ~/offline/clade/vendor/scripts/herdr-session-handoff.ts \
 
 **每一輪需要修復時先判執行者**：單檔 ≤5 行的 typo／import 級修正、或根因涉及本次設計判斷時由主線處理；其他可獨立驗證的機械修復依目前已核准 routing／使用者模型指定選 worker。可用本 runtime 的原生載體，不要求所有主線先換到 Pi。沒有可用 worker 或機械 transport 故障時主線接手，品質標準不變；這不構成 0-A 獨立 reviewer 的替代。
 
-Worker brief 帶具體 failures、命令、允許檔案、禁止修改的主線範圍與回報格式。第一位 worker 最多兩輪 check→fix；仍 fail／uncertain，或主線複跑仍紅時，主線接手處理剩餘根因，不重派同一 brief。例外：第一位是 `haiku-implementer` 時它只有一次收尾，check 命令紅就先轉 `sonnet-implementer`（同一 `routing-row`；有註冊收尾 hook 時照它印的 AGENT_CALL），兩輪上限從 Sonnet 那一跳算起，Sonnet 也沒收斂才由主線接手。相同 error 連續三輪無收斂時停止盲修、回到根因與 scope 決策。
+Worker brief 帶具體 failures、命令、允許檔案、禁止修改的主線範圍與回報格式。第一位 worker 最多兩輪 check→fix；仍 fail／uncertain，或主線複跑仍紅時，主線接手處理剩餘根因，不重派同一 brief。例外：第一位是 `haiku-implementer` 時它只有一次收尾，check 命令紅就先轉 `sonnet-implementer`（同一 `routing-row`；有註冊收尾 hook 時照它印的 AGENT_CALL，沒註冊時主線派的 brief 加一行 `haiku-skip: haiku-red`，否則 routing gate 會要求改派 Haiku），兩輪上限從 Sonnet 那一跳算起，Sonnet 也沒收斂才由主線接手。相同 error 連續三輪無收斂時停止盲修、回到根因與 scope 決策。
 
 使用 Pi CLI 的既有載體時，沿當前 `commit-0c-fix-verify` row（原 `-escalate` 列已退場，dispatcher 拒收）、`--route`／`--tier-basis`／`--table-row` 與 `--retry-of` 契約。Exit 2 是業務未收斂、3 是機械故障、4 是 quota；按實際結果判定，不能拿 quota 當故障來繞過 candidate admission。其他 native adapter 回報等價的 pass／finding／infrastructure-error／quota 狀態，不捏造 Pi exit code。
 

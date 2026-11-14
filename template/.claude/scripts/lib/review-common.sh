@@ -547,6 +547,47 @@ review_load_semantic_list() {
   fi
 }
 
+# 0-A 逐條驗收項影子（plans/40 T4）：prepare 抓驗收項、編號、截斷後寫進 WORK_DIR 的兩段，
+# 由 review_append_acceptance 接在 brief 最後；判定、kill switch、截斷上限與轉正／撤掉條件全在
+# oa-acceptance-shadow.ts 檔頭。
+# shadow：任何失敗只 warn、brief 回到原樣，NEVER 讓 prepare 失敗、NEVER 改通過條件。
+# 只有 subagent carrier（prepare）嵌入：影子帳由 review_subagent_finalize 記，Herdr carrier 沒有記帳點。
+review_load_acceptance() {
+  ACCEPTANCE_BLOCK_FILE="" ACCEPTANCE_INSTRUCTION_FILE=""
+  [ "${CARRIER_MODE:-}" = prepare ] || return 0
+  # 只在看得到整份改動的一輪嵌（一輪記一列）：base-check 只看交會處、verify 只看增量、多批每批只看一部分、
+  # 篩選輪只看子集——驗收項在這些輪必然大量 cannot_verify，會把比例灌高，多批還會一輪記成好幾輪。
+  case "${REVIEW_ROUND_KIND:-}" in ''|discovery|independent) ;; *) return 0 ;; esac
+  [ "${ROUND_PART:-1/1}" = 1/1 ] || return 0
+  [ -z "${PR_FILTER:-}${REVIEW_ROUND_FILTER:-}" ] || return 0
+  local tool
+  tool="$(clade_runtime vendor/scripts/oa-acceptance-shadow.ts 2>/dev/null)"
+  [ -n "$tool" ] && [ -f "$tool" ] || return 0
+  node "$tool" extract --work-dir "$WORK_DIR" --repo "$REPO_ROOT" \
+    ${PR_NUMBER:+--pr-number "$PR_NUMBER"} ${PR_BRANCH:+--pr-branch "$PR_BRANCH"} \
+    ${REVIEW_ROUND_KIND:+--round-kind "$REVIEW_ROUND_KIND"} || return 0
+  [ -s "$WORK_DIR/acceptance-block.md" ] && ACCEPTANCE_BLOCK_FILE="$WORK_DIR/acceptance-block.md"
+  [ -s "$WORK_DIR/acceptance-instruction.md" ] && ACCEPTANCE_INSTRUCTION_FILE="$WORK_DIR/acceptance-instruction.md"
+  return 0
+}
+
+# 驗收項兩段接在 brief 最後（changeset 折行之後、總量上限判定之前）：放得下才接，放不下整段不接、
+# 刪掉 acceptance.json（finalize 就不記帳），所以影子 NEVER 讓本來交付得了的 brief 撞上 exit 9。
+review_append_acceptance() {
+  local brief="$1" max="$2" max_line="${3:-}" size add
+  [ -n "${ACCEPTANCE_BLOCK_FILE:-}" ] || return 0
+  size="$(wc -c <"$brief" | tr -d ' ')"
+  add="$(cat "$ACCEPTANCE_BLOCK_FILE" ${ACCEPTANCE_INSTRUCTION_FILE:+"$ACCEPTANCE_INSTRUCTION_FILE"} | wc -c | tr -d ' ')"
+  if [ $((size + add + 1)) -gt "$max" ] || { [ -n "$max_line" ] && cat "$ACCEPTANCE_BLOCK_FILE" ${ACCEPTANCE_INSTRUCTION_FILE:+"$ACCEPTANCE_INSTRUCTION_FILE"} \
+    | LC_ALL=C.UTF-8 awk -v m="$max_line" 'length($0) > m { bad = 1 } END { exit !bad }'; }; then
+    echo "[$REVIEW_SAFE_TAG] 驗收項影子：接上後 brief ${size}+${add} bytes 會超過上限 ${max}（或有單行超過 ${max_line:-?} 字元），本輪不嵌驗收項、不記影子帳" >&2
+    rm -f "$WORK_DIR/acceptance.json"
+    ACCEPTANCE_BLOCK_FILE="" ACCEPTANCE_INSTRUCTION_FILE=""
+    return 0
+  fi
+  { echo; cat "$ACCEPTANCE_BLOCK_FILE"; [ -z "${ACCEPTANCE_INSTRUCTION_FILE:-}" ] || cat "$ACCEPTANCE_INSTRUCTION_FILE"; } >>"$brief"
+}
+
 # 完整 review prompt 印上 stdout（caller 接 pipe 或落檔餵 --prompt-file）。
 # heredoc 三明治：literal（單引號）區塊夾著 runtime 生成內容——changeset 與
 # semantic list 不能用 `<<'EOF'` 寫，那種 heredoc 永遠不展開變數。
@@ -1023,12 +1064,14 @@ review_register_staging_baseline() {
 #   每批開審時帶 --part-files（該批檔案清單 hash，oa-batches 算）記在 parts[n/N].files：done_parts 帶回去給
 #     oa-batches 比對，批界位移（批數相同但檔案換了批）就不沿用；帶 --part 開某批時 hash 不同（或舊紀錄沒 hash）
 #     也不回 reviewed，而是重開該批——舊 verdict 審的是另一組檔，NEVER 拿來當這一批的證據
-#   adjudication（rounds adjudicate）：主線把某條 reviewer Major 裁決為假（false-positive）時，append 進該輪該批
+#   adjudication（rounds adjudicate）：主線對某條 reviewer Critical／Major 落處置（Act 成立／Dismiss 不成立；Major 的 Dismiss 即舊 false-positive）時，append 進該輪該批
 #     slot.adjudications（finding 指紋／severity／verdict／by／evidence／at）。gate 的 blocking＝原始 Critical＋Major
 #     減去「有裁決紀錄、且指紋現在仍是該批 verdict 檔被計數的 Major」（recount 後對不上的裁決不扣，其餘 Major 照舊擋）：只剩被裁決為假的 Major 時該輪視為通過，不再逼出下一輪；沒有裁決紀錄的 Major 照舊計入
 #     （fail-closed 不變）。原始計數（slot.critical／major／minor）NEVER 被改寫——裁決只疊在上面，recount／jev ledger 讀的還是原始數字。
-#     指紋取自該批 verdict 檔實際被計數的 finding 列（`rounds findings` 列出），指紋對不上、Critical、已裁決過、
-#     缺 by／evidence、by 名稱含 reviewer、verdict 檔不存在一律 exit 2 且不寫 ledger；裁決只認 false-positive（沒有「下調」或「刪除」）。
+#     指紋取自該批 verdict 檔實際被計數的 finding 列（`rounds findings` 列出），指紋對不上、Minor、已裁決過、
+#     缺 by／evidence、by 名稱含 reviewer、verdict 檔不存在、--all-undisposed 與 --finding 並用一律 exit 2 且不寫 ledger；處置為 act｜dismiss（舊紀錄的 false-positive 視為 dismiss）：
+#     Critical 與 Major 都收 act 與 dismiss，但只有 Major 的 dismiss 扣 gate 計數，Critical 的處置只留紀錄（一律要修，誤報靠下一輪 reviewer 的 resolved 清掉）；沒有「下調」或「刪除」；同一指紋 append-only，已有 act 紀錄就不能再 dismiss。
+#     rounds coverage 唯讀算處置覆蓋率（有紀錄的 Critical／Major ÷ 被計數的 Critical／Major）；verdict 檔讀不到的批退回 slot 原始計數並標 unverifiable。
 # 寫入（open／cover／record／adjudicate）持 ledger 旁的鎖檔做 load-modify-save：同一輪的多批可平行 finalize。
 # record 核對 verdict 身分：--head／--filter／--opened-at／--part-files 要等於 open 那一刻寫進該輪該批的值。
 #   prepare 之後同輪號被重開（新 head、換篩選、批界位移）時，舊 prepare 的 finalize 仍過得了自己的快照完整性，
@@ -1179,7 +1222,7 @@ review_rounds_guarded() {
   return "$rc"
 }
 
-# review_rounds <plan|open|cover|record|passed|carry-over|show|count|recount|grant|revoke-grant|reopen|findings|adjudicate> [--flag value ...] → stdout JSON（exit 0），用法錯誤 exit 2
+# review_rounds <plan|open|cover|record|passed|carry-over|show|count|recount|grant|revoke-grant|reopen|findings|adjudicate|coverage> [--flag value ...] → stdout JSON（exit 0），用法錯誤 exit 2
 review_rounds() {
   local node_bin
   node_bin="$(review_rounds_node)" || return 2
@@ -1606,7 +1649,7 @@ function partTotal(part) {
 }
 // 該批被裁決為假的 Major 條數：只認 major＋false-positive，**且指紋現在仍是該批 verdict 檔被計數的 Major**，不超過原始 Major 數
 // （只比條數會被 recount 騙過：A、B 兩條、只裁決 A，recount 掉 A 後 min(1,1) 會把沒裁決的 B 一起扣掉）。
-// verdict 檔讀不到／算不出一律回 0（fail-closed）。Critical 沒有裁決入口。
+// verdict 檔讀不到／算不出一律回 0（fail-closed）。Critical 的處置紀錄只供 coverage，不扣計數。
 function adjudicatedMajors(round, slot) {
   const recs = (slot.adjudications ?? []).filter((a) => a.severity === 'major' && a.verdict === 'false-positive')
   if (!recs.length || !slot.verdict_file || !existsSync(slot.verdict_file)) return 0
@@ -1929,11 +1972,15 @@ function cacheWrite(name, shas, value) {
 }
 // base-check 範圍的算法版本：開輪時記進 round（base_scope_rev）。舊版算的、還沒有任何 verdict 的 base-check 輪在下次判定時重開，
 // 不沿用舊範圍與合成基準（#3339 round 5：舊算法 refs 1020 檔、94 批全 prepared、0 verdict）。改 baseCheckScope 的判定就遞增。
+// rev 4：refs（只有 main 動過、新增行引用 PR export 的檔）不再進審查批，改記 `refs_skipped`（只供 plan 輸出點名）。refs 檔是 main 自己的改動，PR 作者無從瘦身：
+// #4324／#4752 只改 gh-throttle／gh-shim，main 的 coordinator-snapshot.ts（195888B）、coordinator-auto-dispatch.ts（201432B）因引用 PR export 進 refs，
+// 單檔 main-diff 就超單批預算、0-A prepare 被擋。批次只含 PR 自己 merge-base..head 改動的檔（＋投影漂移）；main 新呼叫端對 PR export 的相容性由 PR CI（型別／測試）擋。
 // rev 3：資料檔（.jsonl 等）不當 refs 引用來源（#4529：specs/coordinator/manager-archive.jsonl 494 行／411KB 的資料列提到 export 名稱就進 refs，撐爆批預算）。
-const BASE_SCOPE_REV = 3
+const BASE_SCOPE_REV = 4
 // 資料檔不是程式：它們的新增行出現 export 名稱是資料內容（紀錄列、log），不是引用。refs 判定跳過；不含 .json（設定檔可能逐字列出 export／腳本名）。
 const REF_DATA = /\.(?:jsonl|ndjson|csv|tsv|log|lock)$/i
-// base-check 的審查範圍：{ pr: PR 改過且 main 也動過的檔, refs: main 動過、不在 PR 內、新增行引用 PR export 的檔 }。
+// base-check 的審查範圍：{ pr: PR 改過且 main 也動過的檔, refs: 恆為 []（相容欄位，舊 ledger 的輪還帶 refs）,
+// refs_skipped: main 動過、不在 PR 內、新增行引用 PR export 的檔——只點名、NEVER 進審查批 }。
 // 快取鍵＝(上一輪 base, 本輪 base, head, 演算法與投影清單的內容雜湊)：投影判定來源（locked-projection.ts 的位元組）或本段演算法
 // （下列函式的原始碼、REF_GENERIC_FILES）一變，key 就變，舊範圍不會被沿用（沿用會把該重審的檔漏掉）。
 function scopeAlgoDigest() {
@@ -2005,7 +2052,8 @@ function baseCheckScopeUncached(lastBase, base, head) {
   }
   const refs = [...hits.entries()].filter(([p, { found, added }]) =>
     [...found].some((n) => fileCount.get(n) <= REF_GENERIC_FILES || references(p, n, added))).map(([p]) => p).sort()
-  return { pr, refs }
+  // refs 檔是 main 自己的改動、不是 PR 的改動：不進批、不進合成基準（見 BASE_SCOPE_REV rev 4），只留 refs_skipped 供 plan 輸出點名
+  return { pr, refs: [], refs_skipped: refs }
 }
 // 合成基準 commit：從 tree 出發，PR 範圍檔換回新 base 的版本、refs 檔換回上一輪 base 的版本（檔不存在就移除），
 // 所以「基準 → head」的 diff 正好是：PR 範圍檔對新 base 的完整 patch、refs 檔 main 這段期間的改動，其餘檔不出現。
@@ -2042,6 +2090,7 @@ function rebasedBasis(prev, base, head) {
     return null
   }
 }
+const skippedNote = (s) => (s.refs_skipped?.length ? `；main 新引用 PR export 的 ${s.refs_skipped.length} 檔不進批（main 自己的改動，交 PR CI 型別／測試把關）` : '')
 const scopeList = (s) => [...new Set([...s.pr, ...s.refs, ...(s.drift ?? []), ...(s.own ?? [])])]
 // 上限比的是「計數輪」數：base-check 輪有輪號、留在 ledger，但不吃上限。
 function countedRounds(rounds) {
@@ -2308,6 +2357,10 @@ function decideRound(ledger) {
     }
   }
   const state = roundState(last)
+  // rev 4 之前開的 verify 輪：refs 檔（只有 main 動過的檔）夾在合成基準裡，單檔 main-diff 就能超批預算（#4752）。同 head、還沒有任何 verdict
+  // → 同輪號以新算法重開（基準不含 refs）；已有 verdict 的輪是對舊基準審的，不混用、照舊續跑。
+  if (last.kind === 'verify' && last.head === head && (last.filter || '') === FILTER && last.increment_base && last.base_scope?.refs?.length && !state.hasVerdict)
+    return restartDecision(ledger, last, rounds.at(-2), base, pr, head, base_)
   if (last.head === head) {
     if ((last.filter || '') !== FILTER) {
       // 同 head 換篩選：舊輪的批號對應的是另一組檔，不能混。已有 Critical／Major 就先修，否則同輪號重開。
@@ -2392,7 +2445,7 @@ function decideRound(ledger) {
       // covers：本 head 的所有通過輪都延伸到新 head（與下方未移動 base 的 covered 同一把尺）；漏掉延伸來的輪，兩輪通過的 PR 每次 rebase 都只剩一輪
       return { ...base_, action: 'covered', round: last.n, covered_by: last.head, kind: 'base-check', base_scope: scope, increment: own,
         covers: passingRounds(rounds, last.head).map((r) => r.n),
-        reason: `round ${last.n} 已通過；merge-base ${last.base.slice(0, 9)}→${base.slice(0, 9)}，PR 自身 patch ${own.patch_unchanged ? '逐檔相同' : `只差 ${own.lines} 行／${own.files} 檔（未達重驗門檻）`}，main 這段期間沒動到 PR 改過的檔、沒有檔新引用 PR 的 export、投影與 specs/plans 也沒變：base-check 範圍為空，沿用 round ${last.n}（不計輪數）` }
+        reason: `round ${last.n} 已通過；merge-base ${last.base.slice(0, 9)}→${base.slice(0, 9)}，PR 自身 patch ${own.patch_unchanged ? '逐檔相同' : `只差 ${own.lines} 行／${own.files} 檔（未達重驗門檻）`}，main 這段期間沒動到 PR 改過的檔、投影與 specs/plans 也沒變：base-check 範圍為空，沿用 round ${last.n}（不計輪數）${skippedNote(scope)}` }
     if (scope) {
       try {
         const basis = synthBasis(head, base, last.base, scope, `clade 0-A: base-check of round ${last.n} on ${base}`)
@@ -2400,7 +2453,7 @@ function decideRound(ledger) {
           increment_base: basis, findings_from: null, base_check_of: last.n, base_scope: scope, base_scope_rev: BASE_SCOPE_REV, prev_head: last.head,
           // base-check 輪通過時，先前的通過輪一併延伸到新 head（record 時才寫 covered_heads：這輪沒通過就不算數）
           covers: passingRounds(rounds, last.head).map((r) => r.n),
-          scope: `base-check：${scopeList(scope).length} 檔（PR 改過且 main 也動過 ${scope.pr.length}、main 新引用 PR export ${scope.refs.length}、投影／specs/plans 有變 ${scope.drift.length}、PR 自身小修補 ${scope.own.length}）` }
+          scope: `base-check：${scopeList(scope).length} 檔（PR 改過且 main 也動過 ${scope.pr.length}、投影／specs/plans 有變 ${scope.drift.length}、PR 自身小修補 ${scope.own.length}）${skippedNote(scope)}` }
       } catch {}
     }
     // 範圍算不出來或合成基準建不起來：落到下面照一般驗證輪（fail-closed）。
@@ -3626,24 +3679,40 @@ if (cmd === 'counts') {
     })
   process.stdout.write(`${JSON.stringify({ round: round.n, head: round.head, ...roundState(round), findings: out, ...(peers.length ? { peer_blocking: peers } : {}), ledger: path })}\n`)
 } else if (cmd === 'adjudicate') {
-  // 主線裁決某條 reviewer Major 為假（false-positive），記進該輪該批 slot.adjudications。
-  // 只疊在原始計數上，NEVER 改 slot.critical／major／minor 或 verdict 檔。fail-closed：指紋須是該批實際被計數的 Major；
-  // Critical 不收；缺 by／evidence、by 是 reviewer、重複裁決、verdict 非 false-positive 一律 exit 2 且不寫 ledger。
+  // 主線／主管對 reviewer 的每則 Critical／Major 落處置（disposition）：Act（成立，要修或已修）或 Dismiss（不成立）。
+  //   --verdict act            Critical 或 Major 都收；只留紀錄，不改 gate 計數（Act 的 finding 靠修補後的下一輪清掉）。
+  //   --verdict dismiss        Major：等同舊的 false-positive，疊在原始計數上扣掉（見 adjudicatedMajors）。
+  //                            Critical：只留紀錄（誤報的 Critical 才有真實處置可記），**不扣 gate 計數**（adjudicatedMajors 只認 major）；
+  //                            誤報的 Critical 仍靠下一輪 reviewer 的 resolved 清掉，不靠裁決放行。
+  //   --verdict false-positive 舊名，同 dismiss（紀錄的 verdict 仍寫 false-positive，gate 讀的欄位不變）。
+  //   --all-undisposed yes     只配 --verdict act：把該批（沒帶 --part 時 1/1）所有尚無紀錄的 Critical／Major 一次記成 Act；與 --finding 互斥（帶了 exit 2）。
+  // 每筆紀錄帶 disposition（act｜dismiss）供處置覆蓋率（rounds coverage）計算。
+  // 只疊在原始計數上（roundState 的 blocking 扣掉 dismiss），NEVER 改 slot.critical／major／minor 或 verdict 檔。
+  // fail-closed：指紋必須是該批 verdict 檔實際被計數的 finding；Minor 不收；缺 by／evidence、by 是 reviewer 自己、
+  // 重複處置、verdict 不在上列清單一律 exit 2 且不寫 ledger。
   if (opt.mode !== 'pr') fail('adjudicate 只限 PR 模式（--mode pr）')
   if (!PR_NO) fail('adjudicate 必帶 --pr-number（裁決只屬於那一張 PR 的那一輪）')
   const n = Number(need('round'))
   const part = opt.part || '1/1'
-  const fingerprint = need('finding').trim()
-  if (opt.verdict !== 'false-positive') fail(`adjudicate 只收 --verdict false-positive（收到 ${opt.verdict ?? '無'}）：裁決只能把假 Major 排除，沒有下調或刪除`)
+  const rawVerdict = opt.verdict
+  if (rawVerdict !== 'false-positive' && rawVerdict !== 'dismiss' && rawVerdict !== 'act')
+    fail(`adjudicate 只收 --verdict act｜dismiss｜false-positive（dismiss 與 false-positive 同義）（收到 ${rawVerdict ?? '無'}）：沒有「下調」或「刪除」`)
+  const disposition = rawVerdict === 'act' ? 'act' : 'dismiss'
+  const verdict = disposition === 'act' ? 'act' : 'false-positive'
+  const all = opt['all-undisposed'] === 'yes'
+  if (opt['all-undisposed'] !== undefined && opt['all-undisposed'] !== 'yes') fail(`--all-undisposed 只接受 yes，收到 ${opt['all-undisposed']}`)
+  if (all && disposition !== 'act') fail('--all-undisposed 只配 --verdict act（Dismiss 要逐條指紋、逐條附證據）')
+  if (all && opt.finding !== undefined) fail('--all-undisposed yes 與 --finding 互斥：--all-undisposed 會把同一份 evidence 記到該批所有尚無處置的 Critical／Major（append-only，記錯無法改成 Dismiss）；要處置單條就只帶 --finding')
+  const fingerprint = all ? null : need('finding').trim()
   const by = need('by').trim()
   if (!by) fail('--by is required')
   if (/reviewer/i.test(by))
-    fail(`--by ${by}：裁決者不能是出 finding 的 reviewer 自己（名稱含 reviewer 一律拒收；--by 是自述標籤，這是 best-effort 擋誤用，不是身分驗證），要主線（coordinator／主持者）或 Charles`)
+    fail(`--by ${by}：裁決者不能是出 finding 的 reviewer 自己（名稱含 reviewer 一律拒收；--by 是自述標籤，這是 best-effort 擋誤用，不是身分驗證），要主線（coordinator／主持者）、主管或 Charles`)
   const evidence = need('evidence').trim()
   if (!evidence) fail('--evidence is required')
   const path = ledgerPath()
   const out = withLock(path, (ledger) => {
-    // --machine：裁決對象是 peer_blocking 一筆，head＋機器＋輪＋批（＋vid）指唯一一筆；多筆同鍵要帶 --vid。
+    // --machine：裁決對象是 peer_blocking 一筆，head＋機器＋輪＋批（＋vid）指唯一一筆；多筆同鍵要帶 --vid。判準與一般輪同一套。
     const peerMode = Boolean(opt.machine)
     let round
     let slot
@@ -3659,18 +3728,25 @@ if (cmd === 'counts') {
       slot = round.parts?.[part]
       if (slot?.status !== 'verdict') fail(`ledger round ${n} 第 ${part} 批沒有已記的 verdict：沒有 finding 可裁決`)
     }
-    const hit = findingsOfSlot(round, slot).find((f) => f.fingerprint === fingerprint)
-    if (!hit) fail(`round ${n} 第 ${part} 批的 verdict 沒有指紋 ${fingerprint} 的 finding（用 rounds findings 列出）：不寫`)
-    if (hit.severity !== 'major')
-      fail(`指紋 ${fingerprint} 是 ${hit.severity} 不是 Major：只有 Major 能裁決為假，Critical 一律要修、Minor 本來就不擋 gate`)
-    if ((slot.adjudications ?? []).some((a) => a.fingerprint === fingerprint))
-      fail(`指紋 ${fingerprint} 已有裁決紀錄：裁決 append-only，NEVER 覆寫或重複記`)
-    const rec = { fingerprint, severity: 'major', verdict: 'false-positive', by, evidence, at: now, finding: hit.text.slice(0, 300) }
-    slot.adjudications = [...(slot.adjudications ?? []), rec]
+    const live = findingsOfSlot(round, slot)
+    const has = (fp) => (slot.adjudications ?? []).some((a) => a.fingerprint === fp)
+    const targets = all ? live.filter((f) => f.severity !== 'minor' && !has(f.fingerprint)) : [live.find((f) => f.fingerprint === fingerprint)]
+    if (all && !targets.length) fail(`round ${n} 第 ${part} 批沒有尚無處置紀錄的 Critical／Major：不寫`)
+    const recs = []
+    for (const hit of targets) {
+      if (!hit) fail(`round ${n} 第 ${part} 批的 verdict 沒有指紋 ${fingerprint} 的 finding（用 rounds findings 列出）：不寫`)
+      if (hit.severity === 'minor') fail(`指紋 ${hit.fingerprint} 是 Minor：Minor 本來就不擋 gate，不需處置紀錄`)
+      if (has(hit.fingerprint)) fail(`指紋 ${hit.fingerprint} 已有處置紀錄：append-only，NEVER 覆寫或重複記`)
+      recs.push({ fingerprint: hit.fingerprint, severity: hit.severity, verdict, disposition, by, evidence, at: now, finding: hit.text.slice(0, 300) })
+    }
+    slot.adjudications = [...(slot.adjudications ?? []), ...recs]
+    const rec = recs[0]
+    const extra = all ? { recorded: recs.length, records: recs } : {}
     if (peerMode) {
-      return { action: 'adjudicated', peer: true, machine: slot.machine, round: n, part, head: slot.head, vid: pbVid(slot), ...rec, blocking: peerBlockingCount(slot), ledger: path }
+      return { action: 'adjudicated', peer: true, machine: slot.machine, round: n, part, head: slot.head, vid: pbVid(slot), ...rec, ...extra, blocking: peerBlockingCount(slot), ledger: path }
     }
     // 傳遞到後續輪的 held 複本：只認 origin 就是這一輪這一批的（先裁決、後開輪的情形由 findingsFor 的 markHeldAdjudicated 接手）。
+    // Act 紀錄不解除任何 held（markHeldAdjudicated 只認 Major＋false-positive），這裡照跑無害。
     const pool = [...scoped(ledger)].sort((x, y) => x.n - y.n)
     const propagated = []
     for (const later of pool) {
@@ -3678,9 +3754,43 @@ if (cmd === 'counts') {
       for (const h of markHeldAdjudicated(pool, later, later.findings_held ?? [], undefined, ledger.peer_blocking))
         propagated.push({ round: later.n, cite: h.cite, ...(h.carry_part ? { carry_part: h.carry_part } : {}) })
     }
-    return { action: 'adjudicated', round: n, part, head: round.head, ...rec, ...(propagated.length ? { propagated_held: propagated } : {}), ...roundState(round), ledger: path }
+    return { action: 'adjudicated', round: n, part, head: round.head, ...rec, ...extra, ...(propagated.length ? { propagated_held: propagated } : {}), ...roundState(round), ledger: path }
   })
   process.stdout.write(`${JSON.stringify(out)}\n`)
+} else if (cmd === 'coverage') {
+  // 唯讀：處置覆蓋率＝有 Act／Dismiss 紀錄的 Critical／Major ÷ 被計數的 Critical／Major。
+  // 逐輪逐批算（含 peer_blocking 各筆）；verdict 檔讀不到的批用 slot 原始 critical＋major 當分母、紀錄條數當分子（上限分母），標 unverifiable。
+  // 分母只算本 ledger 的 PR 範圍（帶 --pr-number）或整份 ledger（不帶）。舊紀錄的 false-positive 視為 Dismiss。
+  const path = ledgerPath()
+  const ledger = load(path)
+  const dispositionOf = (a) => a.disposition ?? (a.verdict === 'false-positive' ? 'dismiss' : a.verdict)
+  const rows = []
+  const tally = (label, round, slot) => {
+    let cm = null
+    let recs = slot.adjudications ?? []
+    let unverifiable = false
+    // findingsOfSlot 在 verdict 檔不存在時走 fail()→process.exit，try/catch 接不住：先查檔，不在就直接標 unverifiable。
+    if (!slot.verdict_file || !existsSync(slot.verdict_file)) {
+      unverifiable = true
+    } else {
+      const live = findingsOfSlot(round, slot).filter((f) => f.severity !== 'minor')
+      cm = live.length
+      const fps = new Set(live.map((f) => f.fingerprint))
+      recs = recs.filter((a) => fps.has(a.fingerprint))
+    }
+    if (cm === null) cm = (slot.critical ?? 0) + (slot.major ?? 0)
+    const act = recs.filter((a) => dispositionOf(a) === 'act').length
+    const dismiss = recs.filter((a) => dispositionOf(a) === 'dismiss').length
+    rows.push({ ...label, cm, act, dismiss, disposed: Math.min(cm, act + dismiss), ...(unverifiable ? { unverifiable: true } : {}) })
+  }
+  for (const r of scoped(ledger))
+    for (const [part, slot] of Object.entries(r.parts ?? {})) if (slot.status === 'verdict') tally({ round: r.n, part, head: r.head }, r, slot)
+  for (const b of (ledger.peer_blocking ?? []).filter((x) => mine(x) && (!PR_NO || String(x.pr) === String(PR_NO))))
+    tally({ round: b.n, part: b.part ?? '1/1', head: b.head, peer_machine: b.machine }, peerRound(b), b)
+  const sum = (k) => rows.reduce((a, r) => a + r[k], 0)
+  const cmTotal = sum('cm')
+  process.stdout.write(`${JSON.stringify({ cm: cmTotal, disposed: sum('disposed'), act: sum('act'), dismiss: sum('dismiss'),
+    coverage: cmTotal ? Number((sum('disposed') / cmTotal).toFixed(4)) : null, undisposed: cmTotal - sum('disposed'), rows, ledger: path })}\n`)
 } else if (cmd === 'show') {
   const path = ledgerPath()
   process.stdout.write(`${JSON.stringify({ ledger: path, ...load(path) }, null, 2)}\n`)
@@ -3780,7 +3890,7 @@ review_open_round() {
       # PR 號分段與「改走 oa-batches.ts prepare」只對 PR 模式成立；working-tree 模式（/commit）的 ledger key 是 HEAD，沒有 PR 號可分。
       local split=""
       [ "$mode" = pr ] && split="（輪數依 PR 號分段，新 PR＝新的一段）"
-      echo "[$REVIEW_SAFE_TAG] NEXT: 同一份改動審了 ${REVIEW_ROUND_MAX:-$REVIEW_MAX_ROUNDS} 輪仍未收斂——拆成可獨立驗收的新 PR${split}，或送主管代答要不要開例外輪（程序題，NEVER 鑄題給 Charles）。NEVER 刪改 ledger（$REVIEW_ROUND_LEDGER）、關 PR 把同一份改動重開、或 rebase 來重置輪數。" >&2
+      echo "[$REVIEW_SAFE_TAG] NEXT: 同一份改動審了 ${REVIEW_ROUND_MAX:-$REVIEW_MAX_ROUNDS} 輪仍未收斂——預設拆小重開：拆成可獨立驗收的新 PR${split}，子 PR body 寫 Split-From: #<本 PR>（HQ charter § 例外輪；第 3 代以上不再拆、送主管裁決），要多審一輪才送主管代答要不要開例外輪（程序題，NEVER 鑄題給 Charles）。NEVER 刪改 ledger（$REVIEW_ROUND_LEDGER）、關 PR 把同一份改動重開、或 rebase 來重置輪數。" >&2
       if [ "$mode" = pr ] && [ -z "${PR_NUMBER:-}" ]; then
         echo "[$REVIEW_SAFE_TAG] 若這是重用舊 branch 名的另一張 PR 卻繼承了舊 PR 的輪數：呼叫端沒帶 --pr-number，改走 oa-batches.ts prepare（它會帶）。" >&2
       fi
@@ -3913,6 +4023,7 @@ review_abandon_round() {
 # 記錄失敗不改 exit code：ledger 缺這筆只會讓 merge 前的 0-A 判定 fail closed（沒有通過記錄）。
 review_record_round() {
   REVIEW_ROUND_PASSED=0
+  REVIEW_ROUND_RECORD_JSON=""
   # 這次 record 的 writer token：槽位上每個 writer 各一筆 entry，登記失敗時只撤這個 token 的 entry，NEVER 動別位 reviewer 的 verdict（0-A #4710 r3）
   REVIEW_ROUND_WRITER="w$$-${RANDOM}${RANDOM}-$(date +%s%N 2>/dev/null || date +%s)"
   [ -n "${REVIEW_ROUND_LEDGER:-}" ] || return 0
@@ -3923,6 +4034,8 @@ review_record_round() {
     ${REVIEW_ROUND_OPENED_AT:+--opened-at "$REVIEW_ROUND_OPENED_AT"} \
     ${REVIEW_ROUND_PART_FILES:+--part-files "$REVIEW_ROUND_PART_FILES"} --writer "$REVIEW_ROUND_WRITER")"; then
     REVIEW_ROUND_PASSED=$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).passed ? "1" : "0")' "$out")
+    # 驗收項影子（oa-acceptance-shadow.ts record）讀本批 Critical／Major，與 ledger 同一個數。
+    REVIEW_ROUND_RECORD_JSON="$out"
     echo "[$REVIEW_SAFE_TAG] ROUND: $(node -e '
       const d = JSON.parse(process.argv[1])
       const state = d.passed ? "本輪通過（Critical＋Major＝0）" : d.complete && d.partial && !d.blocking ? "本輪只審了篩選子集（Critical＋Major＝0）：不帶篩選補完整輪才可 merge" : d.blocking ? `本輪 Critical＋Major ${d.blocking} 條：修補後再跑同一指令，wrapper 自動開驗證輪` : "本輪其他批尚未收齊"

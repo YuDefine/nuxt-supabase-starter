@@ -117,6 +117,9 @@
 #       subagent carrier——Claude Code 主線 MUST 用這條：prepare 印 AGENT_CALL，主線照它派
 #       commit-0a-reviewer subagent，再跑 finalize 取 verdict。流程與核對全文在
 #       lib/review-subagent.sh 檔頭。
+#   逐條驗收項影子（plans/40 T4，只記帳、不進通過條件）：prepare 從 CLAUDE_REVIEW_ACCEPTANCE_FILE（工單）或
+#   CLADE_DISPATCH_ID 的派工單抓驗收項接在 brief 最後，reviewer 多交 `## Acceptance Verdict` 表，finalize 記影子帳；
+#   CLADE_0A_ACCEPTANCE_SHADOW=off 關閉。全文見 vendor/scripts/oa-acceptance-shadow.ts 檔頭。
 #   .claude/scripts/claude-review-safe.sh rounds plan|cover|passed|show --mode pr|worktree --branch <b> ...
 #       輪數 ledger 查詢（JSON）：oa-batches 切批前 plan（covered 時 cover 落記錄）、merge-queue 合併前 passed
 #       plan／cover／carry-over 是重度子命令，先排 flock 並行槽：CLADE_ROUNDS_MAX_PARALLEL（預設 2）、排隊上限 CLADE_ROUNDS_SLOT_WAIT_S（預設 20，須小於呼叫端 30s timeout）；
@@ -132,10 +135,11 @@
 #       主管或 Charles 要求在該 head 開一輪完整審查（covered／已通過／沒有通過輪都可）：append 請求進 ledger，下一次 prepare 開 kind=independent 的輪，受輪數上限管
 #   .claude/scripts/claude-review-safe.sh rounds findings --mode pr --branch <b> [--pr-number <n>] [--round <n>] [--part <i/N>]
 #       唯讀：列出該輪各批 verdict 實際被計數的 finding、指紋與裁決狀態
-#   .claude/scripts/claude-review-safe.sh rounds adjudicate --mode pr --branch <b> --pr-number <n> --round <n> [--part <i/N>] --finding <指紋> --verdict false-positive --by <裁決者> --evidence <證據>
-#       主線把某條 reviewer Major 裁決為假：append 進該輪該批 adjudications，gate 以「原始 Critical＋Major 減已裁決 Major」判定
-#       （只剩假 Major 的輪＝通過，不再逼出下一輪）；沒有裁決紀錄的 Major 照舊計入。Critical 不收；指紋對不上、缺 by／evidence、
+#   .claude/scripts/claude-review-safe.sh rounds adjudicate --mode pr --branch <b> --pr-number <n> --round <n> [--part <i/N>] --finding <指紋> --verdict act|dismiss|false-positive --by <裁決者> --evidence <證據>   # 每則 Critical／Major 落 Act／Dismiss；--all-undisposed yes 配 act 一次記完（與 --finding 互斥）
+#       主線／主管對某條 reviewer Critical／Major 落處置：append 進該輪該批 adjudications（act＝成立，不改計數；dismiss＝假 Major，扣 blocking），gate 以「原始 Critical＋Major 減已裁決 Major」判定
+#       （只剩假 Major 的輪＝通過，不再逼出下一輪）；沒有裁決紀錄的 Major 照舊計入。Critical 的 dismiss 只留紀錄、不扣計數；指紋對不上、缺 by／evidence、
 #       by 是 reviewer 自己、重複裁決一律 exit 2 且不寫 ledger。原始計數與 verdict 檔不動
+#   .claude/scripts/claude-review-safe.sh rounds coverage --mode pr --branch <b> --pr-number <n>   # 唯讀：處置覆蓋率
 # effort 只接受 xhigh——0-A review 席是 Opus 5.5（effort: xhigh）（Routing Table `code-review-opus` 列的列層級例外，出處見該列）；
 # 舊呼叫端的 `medium` 當過渡別名：stderr 印出改名通知後以 xhigh 執行（不是靜默抬檔）；high/max/其他值由 wrapper 直接拒絕（exit 2）。
 
@@ -207,11 +211,11 @@ case "${1:-}" in
     # 以及 cover（判定為 covered 時把 head 記成通過輪的 covered_heads，merge-queue 只認記錄）。
     # carry-over：PR 只併主線、自身 patch 不變時把本 head 記成通過輪的 covered_heads（嚴格零容忍，見 review-common.sh）。
     # grant 是唯一的人類授權寫入：Charles 授權的例外輪留紀錄在 ledger.grants；revoke-grant 撤銷未消耗的 grant（append ledger.grant_revocations）。
-    # adjudicate 把主線裁決為假的 Major 記進該輪該批（只疊在原始計數上，不改計數）；findings 唯讀列出可裁決的指紋。
+    # adjudicate 把主線／主管對 Critical／Major 的處置（Act 或 Dismiss）記進該輪該批（只疊在原始計數上，不改計數；只有 Major 的 Dismiss 扣 blocking）；findings 唯讀列出可處置的指紋；coverage 唯讀算處置覆蓋率。
     shift
     case "${1:-}" in
-      plan|cover|passed|carry-over|show|grant|revoke-grant|reopen|findings|adjudicate) ;;
-      *) echo "[claude-review-safe] 錯誤：rounds 只接受 plan|cover|passed|carry-over|show|grant|revoke-grant|reopen|findings|adjudicate；收到 ${1:-<空>}" >&2; exit 2 ;;
+      plan|cover|passed|carry-over|show|grant|revoke-grant|reopen|findings|adjudicate|coverage) ;;
+      *) echo "[claude-review-safe] 錯誤：rounds 只接受 plan|cover|passed|carry-over|show|grant|revoke-grant|reopen|findings|adjudicate|coverage；收到 ${1:-<空>}" >&2; exit 2 ;;
     esac
     # shellcheck source=lib/review-common.sh
     . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/review-common.sh"
@@ -395,6 +399,7 @@ review_collect_changeset
 review_embed_round_increment
 review_filter_carried_findings
 review_build_snapshot
+review_load_acceptance
 
 BRIEF="$WORK_DIR/brief.md"
 review_emit_prompt >"$BRIEF"
@@ -526,6 +531,7 @@ fi
 if [ "$FOLDED_LINES" -gt 0 ]; then
   echo "[claude-review-safe] changeset 已折行 ${FOLDED_LINES} 個超長 diff 行" >&2
 fi
+review_append_acceptance "$BRIEF" "$BRIEF_MAX_BYTES" "$BRIEF_MAX_LINE_CHARS"
 BRIEF_BYTES="$(wc -c <"$BRIEF" | tr -d ' ')"
 
 # 總量上限對兩種交付都成立：inline 的 prompt 同樣進 child context，超過一樣是
