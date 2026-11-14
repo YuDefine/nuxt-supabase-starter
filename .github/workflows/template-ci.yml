@@ -25,6 +25,7 @@ on:
       - '.github/workflows/template-ci.yml'
       # td-priority-gate 的唯一對象；不列的話「只把 **Priority**: 加回去」的 PR 不會觸發本 workflow，gate 被靜默跳過。
       - 'docs/tech-debt.md'
+      - 'template/.node-version'
   push:
     branches: [main]
     paths:
@@ -47,6 +48,7 @@ on:
       - '.github/workflows/template-ci.yml'
       # td-priority-gate 的唯一對象；不列的話「只把 **Priority**: 加回去」的 PR 不會觸發本 workflow，gate 被靜默跳過。
       - 'docs/tech-debt.md'
+      - 'template/.node-version'
   workflow_dispatch:
 
 permissions:
@@ -77,13 +79,18 @@ jobs:
         # true，於是它會在根跑 `vp install` 並以 ENOENT / code 254 掛掉（浮動 v1 tag
         # 在 2026-09-08 前後移動後開始發生）。working-directory 同時修好 lockfile 與
         # cache key 的自動偵測；install 維持由下面那個顯式步驟負責，只留一個安裝點。
-        uses: voidzero-dev/setup-vp@v1
+        uses: voidzero-dev/setup-vp@3754dd7dbdb32bd8f6d28b6043de13ad3a75f21f # v1.21.1
         with:
-          node-version: '24'
+          node-version-file: .node-version
           cache: true
           working-directory: template
           run-install: false
-
+      - name: Verify node -v matches template/.node-version
+        run: |
+          raw="$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/template/.node-version")"; want="v${raw#v}"
+          got="$(node -v)"
+          echo "node -v=$got, template/.node-version=$want"
+          test "$got" = "$want"
       - name: Install dependencies
         run: vp install
 
@@ -136,13 +143,18 @@ jobs:
         # true，於是它會在根跑 `vp install` 並以 ENOENT / code 254 掛掉（浮動 v1 tag
         # 在 2026-09-08 前後移動後開始發生）。working-directory 同時修好 lockfile 與
         # cache key 的自動偵測；install 維持由下面那個顯式步驟負責，只留一個安裝點。
-        uses: voidzero-dev/setup-vp@v1
+        uses: voidzero-dev/setup-vp@3754dd7dbdb32bd8f6d28b6043de13ad3a75f21f # v1.21.1
         with:
-          node-version: '24'
+          node-version-file: .node-version
           cache: true
           working-directory: template
           run-install: false
-
+      - name: Verify node -v matches template/.node-version
+        run: |
+          raw="$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/template/.node-version")"; want="v${raw#v}"
+          got="$(node -v)"
+          echo "node -v=$got, template/.node-version=$want"
+          test "$got" = "$want"
       - name: Install dependencies
         run: vp install
 
