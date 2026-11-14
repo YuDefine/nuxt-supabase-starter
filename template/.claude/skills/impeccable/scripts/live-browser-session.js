@@ -71,38 +71,17 @@
       return checkpointRevision;
     }
 
-    function readHandledIds() {
-      const raw = safeRead(handledKey);
-      if (!raw) return [];
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          return parsed.filter(id => typeof id === 'string' && id);
-        }
-        if (typeof parsed === 'string' && parsed) return [parsed];
-      } catch { /* legacy values were stored as a plain session id */ }
-      return [raw];
-    }
-
     function markHandled(id) {
       if (!id) return;
-      const ids = readHandledIds().filter(existing => existing !== id);
-      ids.push(id);
-      safeWrite(handledKey, JSON.stringify(ids.slice(-8)));
+      safeWrite(handledKey, id);
     }
 
     function isHandled(id) {
-      return !!id && readHandledIds().includes(id);
+      return !!id && safeRead(handledKey) === id;
     }
 
-    function clearHandled(id) {
-      if (!id) {
-        safeRemove(handledKey);
-        return;
-      }
-      const remaining = readHandledIds().filter(existing => existing !== id);
-      if (remaining.length > 0) safeWrite(handledKey, JSON.stringify(remaining));
-      else safeRemove(handledKey);
+    function clearHandled() {
+      safeRemove(handledKey);
     }
 
     function writeScrollY(y) {

@@ -186,11 +186,9 @@ cat scripts/install-skills.sh | grep "skills add"
 **處理**：
 
 ```bash
-# 重新安裝（會拿最新版）
+# 換版：改 scripts/install-skills.sh 的 REF_*（40 碼 SHA 或 tag），再重跑
 pnpm skills:install
-
-# 或鎖定版本
-# 修改 install-skills.sh，把 `skills add @author/skill` 改 `skills add @author/skill@<version>`
+# 沒改 ref 重跑只會裝回同一版，不會追上游
 ```
 
 `pnpm hub:check` 不該對第三方 skills 報 drift（因為不在 clade checksum 清單）。如果報了 → checksum 清單有 bug。

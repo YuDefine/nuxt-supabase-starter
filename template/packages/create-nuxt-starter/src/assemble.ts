@@ -1198,13 +1198,37 @@ function copyScripts(targetDir: string, feats: string[], agentTargets: AgentRunt
   }
 }
 
+/**
+ * 從 starter 自己的 scripts/install-skills.sh 原樣取出「釘版 ref 常數＋skill_add_pinned」區塊。
+ * ref 與核對函式只有 starter 那份一個來源，產生器不另抄；抽不到就 throw，不退回不釘版的形式。
+ */
+function extractPinnedBlock(): string {
+  const scriptPath = join(STARTER_ROOT, 'scripts', 'install-skills.sh')
+  const lines = readFileSync(scriptPath, 'utf-8').split('\n')
+  const start = lines.findIndex((l) => l.startsWith('# 第三方 skill 釘版的 ref'))
+  const fnStart = lines.findIndex((l, i) => i > start && l.startsWith('skill_add_pinned() {'))
+  const fnEnd = lines.findIndex((l, i) => i > fnStart && l === '}')
+  if (start === -1 || fnStart === -1 || fnEnd === -1) {
+    throw new Error(
+      `無法從 ${scriptPath} 取出釘版 ref 區塊（找不到「# 第三方 skill 釘版的 ref」到 skill_add_pinned 結尾的 }）`,
+    )
+  }
+  return lines.slice(start, fnEnd + 1).join('\n')
+}
+
 function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
+  const pinnedBlock = extractPinnedBlock()
+
+  // 釘版安裝一行：refVar 是 shell 變數名（定義在 pinnedBlock），dir 是 repo 內的 skill 目錄
+  const pinned = (repo: string, refVar: string, dir: string): string =>
+    `skill_add_pinned "https://github.com/${repo}/tree/$${refVar}/${dir}" $COPY_FLAGS`
+
   const lines: string[] = [
     '#!/bin/bash',
     '',
     '# Skills 安裝／更新腳本（由 scaffold 依選擇的功能自動產生）',
     '# 統一使用 --agent claude-code --copy：直接寫入 .claude/skills/，不建立 symlink',
-    '# 重複執行會覆寫為最新版（等同 update）',
+    '# 重複執行會照下方釘的 ref 重裝（換版改 ref，不追上游）',
     `# 產生日期：${new Date().toISOString().slice(0, 10)}`,
     '',
     'set -e',
@@ -1212,6 +1236,8 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
     'cd "$(dirname "$0")/.."',
     '',
     'COPY_FLAGS="--agent claude-code --copy -y"',
+    '',
+    pinnedBlock,
     '',
     'echo "🚀 開始安裝 skills（--copy 模式，直接寫入 .claude/skills/）..."',
     'echo ""',
@@ -1229,7 +1255,9 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
   lines.push('# Antfu Skills')
   lines.push('echo "📦 Antfu Skills..."')
   lines.push(`for skill in ${antfuSkills.join(' ')}; do`)
-  lines.push('  npx skills add antfu/skills@$skill $COPY_FLAGS')
+  lines.push('  ref=$REF_ANTFU_SKILLS')
+  lines.push('  case $skill in nuxt|vitepress) ref=$REF_ANTFU_SKILLS_PRE_NUXT5 ;; esac')
+  lines.push('  ' + pinned('antfu/skills', 'ref', 'skills/$skill'))
   lines.push('done')
   lines.push('echo "  ✓ Antfu Skills 完成"')
   lines.push('echo ""')
@@ -1238,7 +1266,7 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
   // VueUse 官方 Skill — always（即使沒選 vueuse feature 也是有用的參考）
   lines.push('# VueUse 官方 Skill（vueuse/skills；antfu/skills #39 已移除 vendored 版）')
   lines.push('echo "📦 VueUse Skill..."')
-  lines.push('npx skills add vueuse/skills@vueuse-functions $COPY_FLAGS')
+  lines.push(pinned('vueuse/skills', 'REF_VUEUSE_SKILLS', 'skills/vueuse-functions'))
   lines.push('echo "  ✓ VueUse Skill 完成"')
   lines.push('echo ""')
   lines.push('')
@@ -1247,19 +1275,17 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
   lines.push('# Vue 官方 Skills（vuejs-ai/skills；antfu/skills #39 已移除 vendored 版）')
   lines.push('echo "📦 Vue Skills（vuejs-ai）..."')
   lines.push('for skill in vue-best-practices vue-testing-best-practices; do')
-  lines.push('  npx skills add vuejs-ai/skills@$skill $COPY_FLAGS')
+  lines.push('  ' + pinned('vuejs-ai/skills', 'REF_VUEJS_AI_SKILLS', 'skills/$skill'))
   lines.push('done')
   lines.push('echo "  ✓ Vue Skills 完成"')
   lines.push('echo ""')
   lines.push('')
 
   // Onmax Nuxt Skills — conditional
-  // 每一項都必須是 `onmax/nuxt-skills` 現存的 skill 目錄。上游會刪 skill，而
-  // `npx skills add` 對不存在的名字只會噴一行錯誤就往下跑（迴圈不中斷），
-  // 於是 setup script 看起來成功、skill 卻沒裝。2026-08-24 逐一以
-  // GitHub contents API 驗過：nuxthub / reka-ui / motion 存在；
-  // `vueuse` 與 `nuxt-better-auth` 已被上游移除（404），故不再列入。
-  // vueuse 的替代覆蓋是 vueuse/skills@vueuse-functions（上面無條件安裝）。
+  // 每一項都必須是 `onmax/nuxt-skills` 在釘的 ref 上存在的 skill 目錄。上游會刪 skill
+  // （motion 已在 9b069d6 移除，所以走 REF_ONMAX_NUXT_SKILLS_LEGACY）；
+  // `vueuse` 與 `nuxt-better-auth` 同樣已被上游移除，故不再列入。
+  // vueuse 的替代覆蓋是 vueuse/skills 的 vueuse-functions（上面無條件安裝）。
   const onmaxSkills: string[] = []
   if (has(feats, 'deploy-cloudflare')) onmaxSkills.push('nuxthub')
   if (has(feats, 'ui')) onmaxSkills.push('reka-ui', 'motion')
@@ -1268,7 +1294,11 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
     lines.push('# Onmax Nuxt Skills')
     lines.push('echo "📦 Onmax Nuxt Skills..."')
     lines.push(`for skill in ${onmaxSkills.join(' ')}; do`)
-    lines.push('  npx skills add onmax/nuxt-skills@$skill $COPY_FLAGS')
+    lines.push('  ref=$REF_ONMAX_NUXT_SKILLS')
+    if (onmaxSkills.includes('motion')) {
+      lines.push('  case $skill in motion) ref=$REF_ONMAX_NUXT_SKILLS_LEGACY ;; esac')
+    }
+    lines.push('  ' + pinned('onmax/nuxt-skills', 'ref', 'skills/$skill'))
     lines.push('done')
     lines.push('echo "  ✓ Onmax Nuxt Skills 完成"')
     lines.push('echo ""')
@@ -1281,11 +1311,15 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
     lines.push('echo "📦 官方 Skills..."')
     if (has(feats, 'database')) {
       lines.push(
-        'npx skills add supabase/agent-skills@supabase-postgres-best-practices $COPY_FLAGS',
+        pinned(
+          'supabase/agent-skills',
+          'REF_SUPABASE_AGENT_SKILLS',
+          'skills/supabase-postgres-best-practices',
+        ),
       )
     }
     if (has(feats, 'ui')) {
-      lines.push('npx skills add nuxt/ui $COPY_FLAGS')
+      lines.push(pinned('nuxt/ui', 'REF_NUXT_UI', 'skills/nuxt-ui'))
     }
     lines.push('echo "  ✓ 官方 Skills 完成"')
     lines.push('echo ""')
@@ -1295,7 +1329,7 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
   // TDD — always
   lines.push('# TDD')
   lines.push('echo "📦 TDD Skill..."')
-  lines.push('npx skills add obra/superpowers@test-driven-development $COPY_FLAGS')
+  lines.push(pinned('obra/superpowers', 'REF_OBRA_SUPERPOWERS', 'skills/test-driven-development'))
   lines.push('echo "  ✓ TDD Skill 完成"')
   lines.push('echo ""')
   lines.push('')
@@ -1304,17 +1338,19 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
   if (has(feats, 'monitoring')) {
     lines.push('# Evlog')
     lines.push('echo "📦 Evlog Skills..."')
-    lines.push('npx skills add hugorcd/evlog@review-logging-patterns $COPY_FLAGS')
+    lines.push(
+      pinned('evloghq/evlog', 'REF_EVLOGHQ_EVLOG', 'apps/docs/skills/review-logging-patterns'),
+    )
     lines.push('echo "  ✓ Evlog Skills 完成"')
     lines.push('echo ""')
     lines.push('')
   }
 
-  // Impeccable — only if ui（v4.1.1 單行，禁止 pbakaus/impeccable@$skill 迴圈）
+  // Impeccable — only if ui（單一 skill，禁止 per-sub-skill 迴圈）
   if (has(feats, 'ui')) {
-    lines.push('# Impeccable Design Skill（pbakaus/impeccable v4.1.1 — 單一 skill）')
+    lines.push('# Impeccable Design Skill（pbakaus/impeccable — 單一 skill）')
     lines.push('echo "📦 Impeccable Design Skill..."')
-    lines.push('npx skills add pbakaus/impeccable $COPY_FLAGS')
+    lines.push(pinned('pbakaus/impeccable', 'REF_PBAKAUS_IMPECCABLE', '.agents/skills/impeccable'))
     lines.push('echo "  ✓ Impeccable Design Skill 完成"')
     lines.push('echo ""')
     lines.push('# 清理 v1.x / v2.x deprecated sub-skill 目錄（v4 已合併為單一 skill）')
@@ -1337,10 +1373,16 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
 
   // Modern Web Guidance — universal（所有 frontend project 都裝）
   // 對應 clade ~/.claude/rules/modern-web-mcp.md + vendor/snippets/modern-web-guidance/README.md
-  // @modern-web-guidance subskill 後綴必加：repo 含 chrome-extensions 子 skill（對 SaaS web 雜訊）
+  // 只裝 skills/modern-web-guidance：repo 另含 chrome-extensions 子 skill（對 SaaS web 雜訊）
   lines.push('# Modern Web Guidance（Chrome team / Baseline-aware）')
   lines.push('echo "📦 Modern Web Guidance Skill..."')
-  lines.push('npx skills add GoogleChrome/modern-web-guidance@modern-web-guidance $COPY_FLAGS')
+  lines.push(
+    pinned(
+      'GoogleChrome/modern-web-guidance',
+      'REF_GOOGLECHROME_MODERN_WEB_GUIDANCE',
+      'skills/modern-web-guidance',
+    ),
+  )
   lines.push('echo "  ✓ Modern Web Guidance 完成"')
   lines.push('echo ""')
   lines.push('')
@@ -1350,7 +1392,7 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
   lines.push('echo ""')
   lines.push('echo "💡 提示："')
   lines.push('echo "  - 查看已安裝：pnpm skills:list"')
-  lines.push('echo "  - 重新安裝/更新：pnpm skills:install（本腳本）"')
+  lines.push('echo "  - 重新安裝：pnpm skills:install（照本腳本釘的 ref）"')
   lines.push('echo "  - 重啟 Claude Code CLI 以載入變更"')
   lines.push('')
 

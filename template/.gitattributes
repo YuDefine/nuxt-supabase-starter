@@ -2,6 +2,3 @@
 .claude/hub.json merge=clade-regenerate
 .claude/.hub-state.json merge=clade-regenerate
 # end clade-managed merge drivers
-
-# 第三方 skill 的大型單行資料檔：diff 無可讀資訊，且會撐爆審查 brief
-.claude/skills/impeccable/scripts/data/font-index.json -diff

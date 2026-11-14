@@ -4,11 +4,11 @@ Use this checklist when reviewing code for logging best practices and evlog adop
 
 ## Prefer `evlog map` when you can
 
-On **Nuxt, Nitro, Next.js App Router, TanStack Start, Hono, Express, and Fastify**, start with the `evlog` CLI (it ships with the `evlog` package) if the user is open to it: one command finds dark entry points and names the fixes:
+On **Nuxt, Nitro, Next.js App Router, and TanStack Start**, start with `@evlog/cli` if the user is open to it — one command finds dark entry points and names the fixes:
 
 ```bash
-npx evlog map --no-write
-npx evlog map <file> --no-write   # suggested shape for one entry point
+npx @evlog/cli map --no-write
+npx @evlog/cli map <file> --no-write   # suggested shape for one entry point
 ```
 
 **Requirements** (move the score) map to the anti-patterns below:
@@ -22,7 +22,7 @@ npx evlog map <file> --no-write   # suggested shape for one entry point
 | `context` | 15 | `log.set(...)` | Flat / missing request context |
 | `error-handling` | 15 | log or rethrow in `catch` | `console.error(e); throw e` |
 
-**Opportunities** (never cost points; fire only when the project already uses the feature). Surface them as suggestions, not defects:
+**Opportunities** (never cost points; fire only when the project already uses the feature) — surface them as suggestions, not defects:
 
 | Map rule id | Fires when | Related skill section |
 |-------------|-----------|-----------------------|
@@ -33,7 +33,7 @@ npx evlog map <file> --no-write   # suggested shape for one entry point
 
 Full rule reference: https://www.evlog.dev/cli/rules
 
-Map tells you the **shape** is present, not that the context is useful at runtime. Keep the scans below for frameworks without adapters, for quality of context, drains, redaction, and AI SDK usage. If the user skips the CLI, use this checklist alone.
+Map tells you the **shape** is present — not that the context is useful at runtime. Keep the scans below for frameworks without adapters, for quality of context, drains, redaction, and AI SDK usage. If the user skips the CLI, use this checklist alone.
 
 ## Quick Scan
 

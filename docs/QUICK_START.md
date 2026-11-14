@@ -318,7 +318,7 @@ echo "$(pwd) flow=main" >> "${CLADE_HOME:-$HOME/offline/clade}/consumers.local"
 bash scripts/install-skills.sh
 ```
 
-安裝第三方 Skills 的最新版到 `.claude/skills/`；隨 starter 版控的本地 skills 會在 scaffold 時直接一併帶出。命令權限和 MCP Servers 已在 `.claude/settings.json` 中預先配置。
+照 `scripts/install-skills.sh` 釘的 ref 安裝第三方 Skills 到 `.claude/skills/`（換版改該腳本的 `REF_*` 再重跑）；隨 starter 版控的本地 skills 會在 scaffold 時直接一併帶出。命令權限和 MCP Servers 已在 `.claude/settings.json` 中預先配置。
 
 > 📖 關於 Supabase MCP：[SUPABASE_MCP.md](../template/docs/SUPABASE_MCP.md)
 

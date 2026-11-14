@@ -2,11 +2,12 @@
   "version": 2,
   "skills": {
     "analyze-logs": {
-      "source": "evlog.dev",
-      "sourceUrl": "https://www.evlog.dev",
-      "sourceType": "well-known",
-      "computedHash": "2d120e1da01db67d570a21232c09672216bd18a3cd924b386a72081aea06b66b",
-      "wellKnownDigest": "sha256:1ef8c2cf841b686ee0fad9f229f905778f59e11ad754d91d2dec9d6ca6393fb2"
+      "source": "evloghq/evlog",
+      "ref": "9798f4ee3a9b9a7513291c1d67e63af7dff96be0",
+      "sourceType": "github",
+      "skillPath": "apps/docs/skills/analyze-logs/SKILL.md",
+      "computedHash": "ff1eef0fd70d7861ae0a609dcbb5e07503ec34b4857517a992477d6e58a0da12",
+      "installMode": "copy"
     },
     "better-auth-best-practices": {
       "source": "better-auth/skills",
@@ -25,11 +26,12 @@
       "installMode": "copy"
     },
     "build-audit-logs": {
-      "source": "evlog.dev",
-      "sourceUrl": "https://www.evlog.dev",
-      "sourceType": "well-known",
-      "computedHash": "8bbbb575aa15977228e7246bb702537bc3d0304cf8b88bfd52909738fce636fa",
-      "wellKnownDigest": "sha256:b23d47912c43ca0ef77c001186fcefe57133d5872124c368881e1424ae4b9836"
+      "source": "evloghq/evlog",
+      "ref": "9798f4ee3a9b9a7513291c1d67e63af7dff96be0",
+      "sourceType": "github",
+      "skillPath": "apps/docs/skills/build-audit-logs/SKILL.md",
+      "computedHash": "689505c01f5e7f47070f0916f9409a9dc6c1f1e7967a09b21848a6c24b57c0e0",
+      "installMode": "copy"
     },
     "document-writer": {
       "source": "onmax/nuxt-skills",
@@ -41,10 +43,10 @@
     },
     "impeccable": {
       "source": "pbakaus/impeccable",
-      "ref": "skill-v4.3.1",
+      "ref": "c3ea1c79f53a6702db581e81c45c599aeb5e25e6",
       "sourceType": "github",
       "skillPath": ".agents/skills/impeccable/SKILL.md",
-      "computedHash": "3b1d753ad8e0bc4a1a358b256cc3765adac5f155f625c38342afe8019a32383a",
+      "computedHash": "9e2e5d95f3b0735797cb7711bb244e56a6ef678e80d25f1e68c0aa91be2b797a",
       "installMode": "copy"
     },
     "motion": {
@@ -120,11 +122,12 @@
       "installMode": "copy"
     },
     "review-logging-patterns": {
-      "source": "evlog.dev",
-      "sourceUrl": "https://www.evlog.dev",
-      "sourceType": "well-known",
-      "computedHash": "e3c0b8d3815110e7f94b1c172dc21d9e8a210d4daf4a0b1d2c1589ebd102dbd8",
-      "wellKnownDigest": "sha256:95123a084e72672d2c48f368e7846309b74dd79c4b9fe07d7efb894b68037b73"
+      "source": "evloghq/evlog",
+      "ref": "9798f4ee3a9b9a7513291c1d67e63af7dff96be0",
+      "sourceType": "github",
+      "skillPath": "apps/docs/skills/review-logging-patterns/SKILL.md",
+      "computedHash": "f544555a235e6ad66b7e7891d34362297f67010527da8c09e743cd0b15f938a1",
+      "installMode": "copy"
     },
     "supabase": {
       "source": "supabase/agent-skills",

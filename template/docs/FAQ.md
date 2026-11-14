@@ -51,14 +51,14 @@ pnpm docs:build  # 建置靜態網站
 
 | 類型        | 數量  | 更新方式                                  |
 | ----------- | ----- | ----------------------------------------- |
-| 通用 Skills | 26 個 | 全部第三方，`pnpm skills:update` 自動更新 |
+| 通用 Skills | 26 個 | 全部第三方，改 `scripts/install-skills.sh` 的 ref 後 `pnpm skills:install` |
 | 情境 Skills | 5 個  | 本地維護，手動更新                        |
 | 工作流程 Skills | — | `specify`、`implement`、`work-route`、`my` 等 |
 
 **第三方 Skills 更新流程**：
 
-1. 執行 `pnpm skills:update`（使用 [skills.sh](https://skills.sh) CLI）
-2. 從各 GitHub repo 拉取最新版本
+1. 改 `scripts/install-skills.sh` 的 `REF_*`（40 碼 SHA 或 tag），執行 `pnpm skills:install`（使用 [skills.sh](https://skills.sh) CLI；`pnpm skills:update` 是同一支腳本，只照釘的 ref 重裝）
+2. 從各 GitHub repo 拉取釘的 ref
 3. 更新到 `.claude/skills/` 目錄
 4. 重啟 Claude Code CLI
 

@@ -3,7 +3,6 @@
 # Skills 安裝／更新腳本
 # 統一使用 --agent claude-code --copy：直接寫入 .claude/skills/，不建立 symlink
 # 重複執行會照下方釘的 ref 重裝（換版改 ref，不追上游）
-# 更新日期：2026-08-25（impeccable v4.1.1 同步）
 
 set -e
 
@@ -16,11 +15,17 @@ REF_ANTFU_SKILLS=d524ed287eef22757297827ce42e3cad88abd20c
 REF_BETTER_AUTH_SKILLS=20c9e88a5c007461a703f1c213572b073196113e
 REF_CLOUDFLARE_SKILLS=cbf893b954222276bf1af57e5f23379231e0efb9
 REF_CURRENTS_DEV_PLAYWRIGHT_BEST_PRACTICES_SKILL=0b75b5835a87de1fdd202ba965f3bc5a27738fdf
+# evlog 對齊 template 裝的 2.26.x（tag evlog@2.26.0）：新版 skill 教的 evlog.config.ts、`evlog logs` 在 evlog 2.26／@evlog/cli 0.3 不存在。
+REF_EVLOGHQ_EVLOG=9798f4ee3a9b9a7513291c1d67e63af7dff96be0
+# scaffold 產生的腳本用（modern-web-guidance 子 skill，不含 chrome-extensions）。
+REF_GOOGLECHROME_MODERN_WEB_GUIDANCE=4dd968349e54ca45a05dd5c818fb035c9054b022
 REF_NUXT_UI=3879d262ebf5409465fb6a3e1d27b8fb532d4ed7
 REF_OBRA_SUPERPOWERS=22f0b463e7a5e579904dd6211a520321035526f7
 REF_ONMAX_NUXT_SKILLS=581dc72cb78acb439f00ed6a4b03aa2a60eb97fe
 # document-writer、motion、ts-library 上游在 9b069d6（#70）移除，留在它的前一個 commit。
 REF_ONMAX_NUXT_SKILLS_LEGACY=eadcacf61338914ff6f92f89352c88127d69e44a
+# impeccable 留在 c3ea1c79：之後的版本改成下載 binary 執行的 launcher，只靠同源 sha256 驗證。
+REF_PBAKAUS_IMPECCABLE=c3ea1c79f53a6702db581e81c45c599aeb5e25e6
 REF_PPROENCA_DOT_SKILLS=cf93c57cac89d6fc3e4194686000411567f5caf3
 REF_SUPABASE_AGENT_SKILLS=c9be0e931b7930f7d02126d04774d904c381e7d7
 REF_VUEJS_AI_SKILLS=198f0cd8f7f9c0a3d9b566ccc16de6677519ee78
@@ -131,15 +136,16 @@ echo ""
 
 # Evlog（Observability）
 echo "📦 Evlog Skills..."
-npx skills add https://www.evlog.dev $COPY_FLAGS
+for skill in analyze-logs build-audit-logs review-logging-patterns; do
+  skill_add_pinned "https://github.com/evloghq/evlog/tree/$REF_EVLOGHQ_EVLOG/apps/docs/skills/$skill" $COPY_FLAGS
+done
 echo "  ✓ Evlog Skills 完成"
 echo ""
 
-# Impeccable Design Skill（pbakaus/impeccable v4.1.1 — 單一 skill 含 23 sub-command）
-# v4 延續單一 skill 形態，sub-command 由 SKILL.md 統一定義
+# Impeccable Design Skill（pbakaus/impeccable v4.1.1 — 單一 skill，sub-command 由 SKILL.md 統一定義）
 # 本地 starter skills（不從 upstream 覆寫）：design / design-retro / review-archive / subagent-dev
 echo "📦 Impeccable Design Skill..."
-npx skills add "https://github.com/pbakaus/impeccable/tree/skill-v4.3.1" $COPY_FLAGS
+skill_add_pinned "https://github.com/pbakaus/impeccable/tree/$REF_PBAKAUS_IMPECCABLE/.agents/skills/impeccable" $COPY_FLAGS
 echo "  ✓ Impeccable Design Skill 完成"
 echo ""
 
