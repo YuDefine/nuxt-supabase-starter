@@ -9,7 +9,10 @@ Interactive CLI to scaffold a Nuxt + Supabase project from this starter template
 pnpm create nuxt-supabase-starter my-app
 
 # non-interactive (帶 flag)。Supabase 軌必須回答資料庫跑在哪
-pnpm create nuxt-supabase-starter my-app --yes --db-host this-machine --no-register-consumer
+# 真專案：--yes／managed 必須帶 Charles 逐項確認過的紀錄，先經 clade check 才會 scaffold（見 docs/CLI_SCAFFOLD.md § tech stack 確認閘門）
+pnpm create nuxt-supabase-starter my-app --yes --db-host this-machine --no-register-consumer --techstack-record ./techstack-confirmation.md
+# 自測／playground（不是真專案）才用具名豁免
+pnpm create nuxt-supabase-starter my-app --yes --db-host this-machine --no-register-consumer --techstack-playground-exempt
 pnpm create nuxt-supabase-starter my-app --auth nuxt-auth-utils --ci simple --db-host this-machine
 
 # 一次完成 Clade fleet identity（Clade checkout 必須可被找到）
