@@ -15,8 +15,8 @@ REF_ANTFU_SKILLS=d524ed287eef22757297827ce42e3cad88abd20c
 REF_BETTER_AUTH_SKILLS=20c9e88a5c007461a703f1c213572b073196113e
 REF_CLOUDFLARE_SKILLS=cbf893b954222276bf1af57e5f23379231e0efb9
 REF_CURRENTS_DEV_PLAYWRIGHT_BEST_PRACTICES_SKILL=0b75b5835a87de1fdd202ba965f3bc5a27738fdf
-# evlog 釘 evlog@2.27.0：template 裝 evlog ^2.24（目前解析 2.26）；2.26.0 tag 的 build-audit-logs 範例與它自己的 withAudit(options, fn) 簽名不符，
-# 再新的版本教 evlog.config.ts、`evlog logs`，evlog 2.26／@evlog/cli 0.3 沒有。
+# evlog skill 釘 evlog@2.27.0，對齊 template 裝的 evlog 2.27.x。
+# 更新的版本教 evlog.config.ts、`evlog logs`，template 鎖的 @evlog/cli 0.3 沒有這些指令。
 REF_EVLOGHQ_EVLOG=45db116a955f722f186105dd6047a42e511c349f
 # scaffold 產生的腳本用（modern-web-guidance 子 skill，不含 chrome-extensions）。
 REF_GOOGLECHROME_MODERN_WEB_GUIDANCE=4dd968349e54ca45a05dd5c818fb035c9054b022
