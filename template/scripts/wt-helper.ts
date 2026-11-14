@@ -159,6 +159,12 @@ import {
 } from './lib/projection-ledger-reconcile.ts'
 import { describeEnsureResult, runWtEnvBootstrap } from './lib/wt-env-bootstrap-runner.ts'
 import { landWorktreePatch } from './lib/wt-patch-landing.ts'
+import {
+  bridgeRequested,
+  findUnharvestedBridgeRuns,
+  formatUnharvestedBridgeRuns,
+  runBridgeInit,
+} from './lib/review-bridge-worktree.ts'
 import { readGitStatus, renderGitStatusLines } from './lib/git-status-z.ts'
 import {
   formatWorktreeBacklog,
@@ -229,6 +235,8 @@ interface WtOptions {
   baselineStashName?: string
   show?: string
   taskSummary?: string
+  /** add：這件工作要走 Review Bridge——開樹後在新樹跑 `review-bridge init`（見 lib/review-bridge-worktree.ts）。 */
+  bridge?: boolean
   /** 預期落地方式（worktree 根治 C1）：pr｜batch｜none；預設 pr。寫進 resource.registered。 */
   landing?: string
   /** `<scheme>:<id>` naming the work this worktree serves — `td:TD-787`, `notion:<uuid>`. */
@@ -1254,7 +1262,7 @@ export function linkGitignoredRuntimeFiles(
 }
 
 const ADD_USAGE =
-  'Usage: wt-helper add <slug> --task-summary <text> [--landing pr|batch|none] [--base <ref> | --checkout <branch>] [--expected-paths <comma>] [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>] [--skip-prefork-audit] [--include-unrelated-dirty]'
+  'Usage: wt-helper add <slug> --task-summary <text> [--landing pr|batch|none] [--base <ref> | --checkout <branch>] [--expected-paths <comma>] [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>] [--skip-prefork-audit] [--include-unrelated-dirty] [--bridge]'
 
 function hashUtf8(content: string) {
   return createHash('sha256').update(content).digest('hex')
@@ -4416,6 +4424,21 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   } catch (e) {
     console.error(`note: work-asset registration skipped (fail-open): ${e?.message ?? e}`)
   }
+  // Review Bridge 方案 A ①：只有標了 --bridge（或派工 env CLADE_WT_BRIDGE=1）的工作才 init，沒標完全不動。
+  // init 失敗不拆樹（樹已在磁碟上），但 exit code 非 0，讓派工端知道這棵樹還不能跑 Bridge。
+  if (bridgeRequested(opts.bridge)) {
+    const outDir = associatedWorkId
+      ? join(wtPath, 'specs', 'plans', associatedWorkId)
+      : join(wtPath, '.clade', 'bridge')
+    const init = runBridgeInit(wtPath, outDir)
+    if (init.ok) console.log(`  Bridge: init ok → ${init.outPath}`)
+    else {
+      console.error(
+        `error: Bridge init failed (${init.detail})${init.outPath ? `; see ${init.outPath}` : ''}`,
+      )
+      process.exitCode = 1
+    }
+  }
   console.log('')
   console.log(
     'The orchestrator continues directly or dispatches this cwd through the session handoff transport.',
@@ -7357,6 +7380,12 @@ async function cmdCleanup(
   const target = findCleanupWorktree(consumerRoot, cleanSlug)
 
   assertLegacyAllowed(consumerRoot, target.path)
+  // Review Bridge 結果檔住在樹內、樹刪就沒了（方案 A ③）：沒收割到 ~/handoff/bridge-results 就整棵保留。
+  // prune 與 reclaim-stale --remove-landed 都經這裡，所以一處擋住全部。沒有覆寫旗標：收割完再清。
+  // --dry-run 不在這裡丟：照常走完各 gate 判定，於回報裡多印一行 bridge。
+  const unharvested = findUnharvestedBridgeRuns(target.path)
+  if (unharvested.length > 0 && !opts.dryRun)
+    throw new Error(`cleanup retained: ${formatUnharvestedBridgeRuns(target.path, unharvested)}`)
   // detached 樹（review wt、rebase 中斷後留下的樹）沒有 branch：gate 改以 HEAD commit 當 rev 判，
   // 顯示用 label，結尾不刪任何 branch。
   const detachedHead = !target.branch
@@ -7681,6 +7710,11 @@ async function cmdCleanup(
       )
     if (hostRefsObs.status === 'unknown' || hostRefs.length > 0)
       blocked.push('宿主設定改指 main 或移除（無 flag 可繞過）')
+    console.log(`  bridge             unharvested=${unharvested.length}`)
+    if (unharvested.length > 0) {
+      console.log(formatUnharvestedBridgeRuns(target.path, unharvested))
+      blocked.push('先收割 Review Bridge results（無 flag 可繞過）')
+    }
     console.log(
       blocked.length === 0
         ? '  verdict            CLEAN — 零 flag 即可 cleanup'
@@ -9525,6 +9559,12 @@ function printUsage(log = console.error) {
   log('    [--dry-run] [--json]    (default: the worktree containing cwd)')
   log('')
   log('  add <slug>                Create worktree at ~/offline/<consumer>-wt/<slug>/')
+  log(
+    '    --bridge                Work runs on Review Bridge: run `review-bridge init` in the new tree',
+  )
+  log(
+    '                            (also env CLADE_WT_BRIDGE=1); output → specs/plans/<work_id>/bridge-init.json',
+  )
   log('    --base <ref>            Fork from integration/… (local or origin/integration/…)')
   log('    --checkout <branch>     Fetch, then open a tree on origin/<branch> as that same branch')
   log('                            (advance an existing PR). Refused if a local branch of the same')
@@ -9663,6 +9703,7 @@ const BOOLEAN_FLAGS = new Set([
   '--work-done',
   '--i-know-publish-is-running',
   '--no-landed-state',
+  '--bridge',
 ])
 const BATCH_VALUE_FLAGS = new Set([
   '--work-id',
@@ -9767,6 +9808,8 @@ async function main() {
       process.exit(2)
     }
   }
+  // 派工 env 的 Bridge 標記不會跟著 ssh 過去：轉發前改成明確的 --bridge，對端才會 init。
+  if (sub === 'add' && bridgeRequested(false) && !rest.includes('--bridge')) rest.push('--bridge')
   const peerExit = forwardToPeer(sub, rest)
   if (peerExit !== null) process.exit(peerExit)
   if (rest.some((arg) => arg === '--machine' || arg.startsWith('--machine='))) return main()
@@ -9853,6 +9896,10 @@ async function main() {
     console.error(`error: ${sub ?? ''} does not support --remove-landed（未執行任何動作）`)
     process.exit(2)
   }
+  if (flags.has('--bridge') && sub !== 'add') {
+    console.error(`error: ${sub ?? ''} does not support --bridge（未執行任何動作）`)
+    process.exit(2)
+  }
   if (flags.has('--patch') && !['merge-back', 'land-pending'].includes(sub)) {
     console.error(`error: ${sub ?? ''} does not support --patch（未執行任何動作）`)
     process.exit(2)
@@ -9861,6 +9908,7 @@ async function main() {
     patch: flags.has('--patch'),
     json: flags.has('--json'),
     noLandedState: flags.has('--no-landed-state'),
+    bridge: flags.has('--bridge'),
     removeLanded: flags.has('--remove-landed'),
     force: flags.has('--force'),
     forceDiscardUnland: flags.has('--force-discard-unland'),

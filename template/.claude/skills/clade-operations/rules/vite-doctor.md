@@ -24,7 +24,7 @@ vite-doctor 掃描 Nuxt/Vue/Vite/Nitro 專案，在 review 前偵測 hydration�
    })
    ```
 
-   import **NEVER 帶 `.ts` 副檔名** —— `nuxt.config.ts` 在 `nuxi typecheck` 的 program 內，
+   import **NEVER 帶 `.ts` 副檔名** —— `nuxt.config.ts` 在 `nuxt typecheck` 的 program 內，
    帶副檔名在 Nuxt 4.4.x 是 `TS5097`，會擋死**所有** push（見 `rules/core/code-style.md`
    § 三條語法限制；preset 檔頭同樣警告）。
 

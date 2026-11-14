@@ -1,9 +1,5 @@
 # durable thin brief 紀律（`relay`／`fanout`／`next` 派工共用）
 
-> 自 [派工共用底座判準.md](派工共用底座判準.md) 同批逐字搬出；章節編號 § 2 保留為穩定 ID。
->
-> **過渡期（拆分 1/2）**：本檔尚未接線，runtime 仍只讀 [派工共用底座判準.md](派工共用底座判準.md)，它是唯一 SoT。本檔內容由 `test/handoff-dispatch-common-split-sync.test.ts` 釘成與舊檔對應段逐字一致（只容許跨檔連結改寫）；改判準 MUST 先改舊檔再同步本檔。拆分 2/2 切換 SKILL.md／relay／fanout 引用、搬 `registry/rule-invariants.json` 並刪舊檔。
-
 ## 2. 建 durable thin brief
 
 1. 從當前對話與已載入 task carrier 盤點**本 session**的未完成工作、證據、失敗 gate 與下一個 bounded action，**先把它們寫回該 work 的 lifecycle 檔（`work.md`；舊 package 是 `plan.md`）§ 進度**（commit；能 push 就 push），再盤點 brief 要帶的指針。盤點結果的落點是 lifecycle 檔，不是 brief。

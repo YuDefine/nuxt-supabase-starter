@@ -38,6 +38,7 @@ work id 用 ambient `CLADE_WORK_ID=<work-id>` 帶進（`W-…` 不是 `--origin`
 | `--expected-paths <comma>` | 這棵樹預期會寫的路徑，寫進 claim 供重疊偵測；省略時沿用 `--baseline-scope-paths` |
 | `--origin <scheme>:<id>` | 指名這棵樹服務的工作，只收 `td:`／`notion:` 等 ref scheme（例：`td:TD-787`）；`W-…` work id 走 ambient `CLADE_WORK_ID`；兩者都沒有時卡片標為「未歸屬」 |
 | `--machine <peer>` | 在對等機器的 clade checkout 上建樹（同一 repo 路徑，經 GitHub 同步，NEVER rsync／scp 工作樹） |
+| `--bridge` | 這件工作要走 Review Bridge：建樹後在新樹跑 `review-bridge init --writer claude --reviewer claude --json`，輸出存 `specs/plans/<work-id>/bridge-init.json`（沒有 work id 時 `.clade/bridge/`），並寫進 git common dir 的 `info/exclude`（本樹專屬，不進歷史、不讓樹變 dirty）。派工端也可帶 env `CLADE_WT_BRIDGE=1`，帶 `--machine` 時會轉成明確的 `--bridge` 送到對端。沒標就完全不跑 |
 
 helper 的行為：
 
@@ -46,6 +47,7 @@ helper 的行為：
 - worktree 建在 `<consumer-parent>/<consumer-name>-wt/<slug>/`；能 fast-forward 到 `origin/main`（或 `origin/integration/<work-id>`）就前進，不能時只警告 `could not fast-forward merge …` 並停在 fork 點。
 - 成功時印出 `Path: <path>`、`Branch: <branch>` 與 `Handoff: {"cwd":…,"branch":…}`，由此取得樹的絕對路徑與 branch；並在 stderr 印出 `export CLADE_WORK_ID=<work-id>`。
 - 已有同名路徑但沒有 `WORKTREE-BRIEF.md` 時，`add` 以「already exists」失敗。
+- 帶 `--bridge` 時成功印 `Bridge: init ok → <path>`；init 失敗時樹照樣保留、失敗內容寫進同一個 `bridge-init.json`，但 `add` **exit 1**——這棵樹還不能跑 Bridge。
 
 ### backing service 狀態行
 
@@ -112,7 +114,7 @@ node scripts/wt-helper.ts batch status --trigger auto --workflow <workflow_model
 | 就緒池現況 | `node scripts/wt-helper.ts batch status --trigger manual --workflow <workflow_model>` | 使用者要求 merge back 時的入口；落地由 `/commit` 依 `batch.md` 執行 |
 | 釋放 stale dev-port | `node scripts/wt-helper.ts reclaim-stale [--dry-run]` | 只釋放 port 槽，不動樹。三層機械判定：stale（持有行程已不在）自動釋放 record → live 不動 → unknown 才問使用者（attended）或 packaging（unattended） |
 | 順便回收已落地的乾淨來源 | `node scripts/wt-helper.ts reclaim-stale --remove-landed` | 只回收已在 history、乾淨、無 claim 的來源（TD-863） |
-| 互動移除已合併的樹 | `node scripts/wt-helper.ts prune` | 處理落地後殘留 |
+| 互動移除已合併的樹 | `node scripts/wt-helper.ts prune` | 處理落地後殘留；樹內有未收割 Review Bridge 結果的會 skip（見 § 移除 worktree） |
 | 清掉孤兒目錄 | `node scripts/wt-helper.ts orphan-prune [--force]` | 移除 `<consumer>-wt/` 底下 worktree 已移除後殘留的 gitignored 內容；先不帶 `--force` 看清單 |
 | 修投影 receipt | `node scripts/wt-helper.ts reconcile <slug> [--json]` | rebase／merge main 後 `sync-rules` 報 `local or modified file conflict` 且樹已有 ownership receipt 時先跑，再重跑原同步指令；main 唯讀，protected skip 時 exit 1 |
 | 重新 seed 投影狀態 | `node scripts/wt-helper.ts refresh-substrate [<slug>] [--dry-run] [--json]` | rebase 到新 clade 版後 `sync-rules --check` 紅、缺整份 substrate 時用；先 `--dry-run`；不在 main 用 |
@@ -175,6 +177,8 @@ node scripts/wt-helper.ts cleanup <slug> --force --force-discard-unland [--force
 ```
 
 本機 base 落後、但 tip 已是 `origin/<base>` 祖先時，cleanup 零 flag 放行（略過 unland gate、用 `-D` 刪 branch），dry-run 報表以 `ancestryOrigin(origin/<base>)=Y` 標示，`merged=` 仍只反映本機證據。
+
+**Review Bridge 結果未收割就擋**：樹內 `.review-bridge/results/<工單>/` 的每個 `run_id`，在 `~/handoff/bridge-results/<任何 machine>/<run_id>/` 底下某一層找不到自己的結果檔（記了該 `run_id` 的 `.md`；工單夾只有一個 run 時是整夾）原樣的一份（相對路徑與大小都對上）時，`cleanup` 拒絕（`prune`、`reclaim-stale --remove-landed` 都經它），`batch cleanup` 把該成員列進 `retained`。工單夾有多個 run 時，沒記 `run_id` 的檔要整組原樣在其中任一 run 的收割夾某一層有一份；缺時收割落點是 `<run_id>/<工單>-shared`。`cleanup --dry-run` 不中斷，報表多印 `bridge unharvested=N`、有未收割就判 BLOCKED；`batch cleanup --dry-run` 把該成員預報為 `preserved`。訊息會印收割指令（先複製到 `.partial` 再 `mv -T` 進位，中斷不會被當成已收割）；收割器（HQ bridge-w7b）寫到同一路徑。結果夾讀不到 `run_id`（run 未完、中止）時沒有收割落點能解，確認不需要後把該夾移出樹再清。沒有覆寫旗標。機器名稱預設 short hostname，`CLADE_BRIDGE_MACHINE`／`CLADE_BRIDGE_HARVEST_ROOT` 可覆寫。
 
 正常落地後的回收由 `/commit` 的 batch cleanup 執行；`--force` 系列只用在確定要丟棄的樹，NEVER 用來處理未落地的工作。
 

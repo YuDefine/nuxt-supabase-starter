@@ -288,6 +288,18 @@ review_subagent_write_receipt() {
   ' "$state_dir" "$1" "$2" "${3:-}"
 }
 
+# 0-A 逐條驗收項影子（plans/40 T4）：verdict 已記進輪數 ledger 之後，把 `## Acceptance Verdict` 表記進影子帳。
+# shadow：不進通過條件、不改 exit code；工具缺席或失敗只 warn。
+review_subagent_record_acceptance() {
+  local tool
+  [ -f "$WORK_DIR/acceptance.json" ] || return 0
+  tool="$(clade_runtime vendor/scripts/oa-acceptance-shadow.ts 2>/dev/null)"
+  [ -n "$tool" ] && [ -f "$tool" ] || return 0
+  node "$tool" record --work-dir "$WORK_DIR" --verdict "$1" \
+    --round-json "${REVIEW_ROUND_RECORD_JSON:-}" ${REVIEW_ROUND_HEAD:+--head "$REVIEW_ROUND_HEAD"} || true
+  return 0
+}
+
 review_subagent_finalize() {
   local base dir
   if [ "$#" -ne 1 ]; then
@@ -370,6 +382,11 @@ review_subagent_finalize() {
     6)
       echo "[claude-review-safe] RESULT: review 完整性不成立（exit 6）— ${reason}，NEVER 當作 0-A.1 通過" >&2
       return 6 ;;
+    7)
+      # reviewer 自身 auto-compact＝本批太大。與 6 分開：6 是夾帶／續派／受審樹被改（完整性不成立），
+      # 7 是「批太大、切小重跑」；兩者都不是通過，也都不寫 ledger。
+      echo "[claude-review-safe] RESULT: reviewer 自身壓縮（exit 7）— ${reason}；本批作廢（NEVER 當作 0-A.1 通過、NEVER 當作續派處理），切小重跑" >&2
+      return 7 ;;
     8)
       echo "[claude-review-safe] RESULT: reviewer model／effort verification 失敗（exit 8）— ${reason}；verdict 扣住不輸出，NEVER 當作 0-A.1 通過" >&2
       echo "[claude-review-safe] NEXT: 「沒核實」與「核實但不符」是兩個結論（receipt 的 failed_check 指出失敗的是 agent_type／model／effort 哪一關，reason 欄逐字記錄原因；model 與 effort 關另記在 model_verification_reason／effort_verification_reason）；兩者都讓 gate 維持 pending，NEVER 主線自審補位。" >&2
@@ -383,6 +400,7 @@ review_subagent_finalize() {
   review_verify_integrity
   verdict_sha="$(sha256sum "$verdict_out" | cut -d' ' -f1)"
   review_record_round_and_register "$verdict_out" || return $?
+  review_subagent_record_acceptance "$verdict_out"
   review_subagent_write_receipt 0 "$result" "$verdict_sha"
   cat "$verdict_out"
   return 0

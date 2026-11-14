@@ -73,18 +73,19 @@ rule-authoring.md — 撰寫或修改 rule / SKILL.md / subagent brief / snippet
 79-90 保管 MUST 與洩漏 NEVER 拆開寫（MUST）
 92-110 紀律型規約三件套（預設一行平述，量到失敗才加）
 112-125 發佈前驗證
-127-134 load-bearing 句登記（改寫既有規約時 MUST 查）
-136-144 paths glob 的 anchor 是 project root（MUST）
-146-150 Runtime delivery coverage（MUST）
-153-166 可變事實指 SoT，不 inline（MUST）
-168-173 反開脫要精準嵌逐字，不散彈列舉
-175-192 成本論證要自帶邊界
-194-200 Leading word 與詞彙鎖定
-202-210 資訊架構與拆分（skill 結構層）
-212-234 Invocation 成本模型（skill frontmatter）
-236-261 Token 紀律
-263-282 稽核
-284-310 Taste Rubric（品質判定的分工與校準）
+127-145 routing table 變更後的對照組重跑（固定 SOP）
+147-154 load-bearing 句登記（改寫既有規約時 MUST 查）
+156-164 paths glob 的 anchor 是 project root（MUST）
+166-170 Runtime delivery coverage（MUST）
+173-186 可變事實指 SoT，不 inline（MUST）
+188-193 反開脫要精準嵌逐字，不散彈列舉
+195-212 成本論證要自帶邊界
+214-220 Leading word 與詞彙鎖定
+222-230 資訊架構與拆分（skill 結構層）
+232-254 Invocation 成本模型（skill frontmatter）
+256-281 Token 紀律
+283-302 稽核
+304-330 Taste Rubric（品質判定的分工與校準）
 
 runtime/notion-work-coupling.md — Runtime adapter fragment for notion-work-coupling.md
 5-12 全文 — Runtime adapter: Claude

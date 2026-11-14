@@ -359,7 +359,7 @@ node $CLADE_HOME/scripts/audit-runner-trust-boundary.ts --live --repo <path>    
   - name: Install node
     uses: actions/setup-node@<40-char-sha> # v6（SHA-pin per ci-workflow）
     with:
-      node-version: 24
+      node-version-file: .node-version
       # 不用 cache: pnpm — GHA cache backend 對 self-hosted runner 反 pattern
       # 改用 runner 本機 persistent store。
 

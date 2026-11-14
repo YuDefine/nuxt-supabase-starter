@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "generated": [
+    {
+      "id": "clade-projection.template-.claude-scripts-claude-review-safe.sh",
+      "paths": [
+        "template/.claude/scripts/claude-review-safe.sh"
+      ],
+      "evidence": {
+        "kind": "projection",
+        "source": ".agents/skills/commit/scripts/claude-review-safe.sh",
+        "clade_version": "1.13.105",
+        "sha256": "8f050fa92d2c12d41c1ac020c9a677796b2df1be645fadda5f8e1981f031471d"
+      }
+    },
+    {
+      "id": "clade-projection.template-.claude-scripts-lib-review-common.sh",
+      "paths": [
+        "template/.claude/scripts/lib/review-common.sh"
+      ],
+      "evidence": {
+        "kind": "projection",
+        "source": ".agents/skills/commit/scripts/lib/review-common.sh",
+        "clade_version": "1.13.105",
+        "sha256": "03677886c96219ae6572bc08d0e63d85f4db936c3de9274162157d5cff4e28b8"
+      }
+    },
+    {
+      "id": "clade-projection.template-.claude-skills-commit-gates.md",
+      "paths": [
+        "template/.claude/skills/commit/gates.md"
+      ],
+      "evidence": {
+        "kind": "projection",
+        "source": ".agents/skills/commit/gates.md",
+        "clade_version": "1.13.105",
+        "sha256": "7ae8745e4f56a25854394617b36df937e059c121cbc92715016c07025662c1bf"
+      }
+    },
+    {
+      "id": "clade-projection.template-.claude-skills-commit-scripts-claude-review-safe.sh",
+      "paths": [
+        "template/.claude/skills/commit/scripts/claude-review-safe.sh"
+      ],
+      "evidence": {
+        "kind": "projection",
+        "source": ".agents/skills/commit/scripts/claude-review-safe.sh",
+        "clade_version": "1.13.105",
+        "sha256": "8f050fa92d2c12d41c1ac020c9a677796b2df1be645fadda5f8e1981f031471d"
+      }
+    },
+    {
+      "id": "clade-projection.template-.claude-skills-commit-scripts-lib-review-common.sh",
+      "paths": [
+        "template/.claude/skills/commit/scripts/lib/review-common.sh"
+      ],
+      "evidence": {
+        "kind": "projection",
+        "source": ".agents/skills/commit/scripts/lib/review-common.sh",
+        "clade_version": "1.13.105",
+        "sha256": "03677886c96219ae6572bc08d0e63d85f4db936c3de9274162157d5cff4e28b8"
+      }
+    }
+  ]
+}

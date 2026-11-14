@@ -25,7 +25,7 @@
 
 **Opus 不可用時 gate 保持未達成**並記錄 pending review；**NEVER** 用其他模型、另一個 fresh agent 或主線自審補位；**NEVER** worker 或 Charles 代簽；**NEVER** 拿 cloud CI success 代替。哪些 exit code 算「不可用」、哪些是本地或完整性問題要修正重跑，判定見 `gates.md` § 0-A.1 的 exit 表（A0–A*）。
 
-effort 恆 `xhigh`（Charles 2026-10-23：review 席是 Opus 5.5（effort: xhigh）；Routing Table `code-review-opus` 列的列層級例外，其餘 Opus 列與 `CLAUDE_MODEL_EFFORT` 仍 medium）。**NEVER** 嘗試改檔位——沒有 medium／high／max 路徑；舊呼叫端的 `prepare medium` 只是過渡別名，wrapper 印通知後以 xhigh 執行。`CLAUDE_REVIEW_SEAT=fable` exit 2 拒跑，不靜默改 opus。0-A.1 跨模型 wrapper `codex-review-safe.sh`（原 Astra carrier）已於 2026-10-18 移除。
+effort 恆 `xhigh`（Charles 2026-10-23：review 席是 Opus 5.5（effort: xhigh）；Routing Table `code-review-opus` 列的列層級例外，其餘 Opus 列與 `CLAUDE_MODEL_EFFORT` 仍 medium）。**NEVER** 嘗試改檔位——沒有 medium／high／max 路徑；舊呼叫端的 `prepare medium` 只是過渡別名，wrapper 印通知後以 xhigh 執行。`CLAUDE_REVIEW_SEAT=fable` exit 2 拒跑，不靜默改 opus。
 
 這是現行唯一的合格組合，不指定哪個 runtime 必須當主線，也不保證當前 catalog 可用。實際派遣仍逐欄通過上表；同一 runtime 再開一個 fresh-context agent，只是再跑一次同一個 reviewer，不產生額外的獨立判定。
 

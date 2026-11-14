@@ -217,6 +217,8 @@ Lease 的「該不該強制走 singleton wrapper」由 consumer 自宣告：
 
 **LISTEN 不是活著。** 能服務的判準是 HTTP 有狀態碼，不是 `lsof` 看到 LISTEN、也不是 pid 還在。
 
+**判卡住 NEVER 用 `nuxt curl`。** 它沒有請求逾時，server 卡住時掛約 300 秒才 exit 1；判卡住看 `dev-session.ts status`（`curl -m 5` 兩次）。`nuxt curl` 用在 server 健康之後驗頁面／API：在專案根目錄跑 `timeout 30 pnpm exec nuxt curl <path>`（需 @nuxt/cli ≥4；macOS 用 `gtimeout`），它從本 worktree 的 `.nuxt/nuxt.lock` 找 server，不必猜 port。`dev-session` 剛回報 ready 時它可能回「No running Nuxt dev server found」：lock 要等 build 完才寫 url，先打一次頁面再重試，不是 server 掛了（`docs/research/2026-11-13-nuxt-curl-dev-server-probe.md`）。
+
 人類租約（`human:human`）也一樣：還在聽但 HTTP 000 的 server 已經不能服務持有人，關 Tab 重建不是 `--takeover`。人類租約無界、不會自己死，所以用 HTTP 判卡住，不要等它過期才重建。恢復入口是 `dev-session.ts`／`pnpm dev:agent`，請持有人在 herdr tab 重起 nuxi 是把 agent 做得到的動作推回去。卡住走關 Tab，不走 `--takeover`。
 
 正要寫「請在 `w*:t*` 重起 nuxi」、正要把 LISTEN + pid 活著當成健康、或正要用 `lsof + kill` 代替 `herdr tab close` 時，停下來改走上表「卡住」那一列。

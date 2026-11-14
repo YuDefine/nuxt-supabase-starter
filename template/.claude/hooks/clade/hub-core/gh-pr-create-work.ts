@@ -26,22 +26,40 @@
  * 其餘（`--body` 字面、heredoc）擋下並把推出的那一行印成可貼的改法；推不出就擋並印取得 work id 的指令
  * heredoc 照字面判，缺行就擋，NEVER 當成判不出放行（放行出去的 PR 沒有主人、修補件派不出去）。
  *
+ * `--body-file $HOME/…`／`~/…` 展開成字面路徑照檔判；相對路徑照 `gh pr create` 實際執行的目錄解析（跟著同指令串的
+ * `cd`／`pushd` 走；判不出目錄時以 session cwd 讀，讀不到不擋）。同指令串先 `cat > <path> <<'EOF'` 或 `cat <<'EOF' > <path>` 寫檔的，照 heredoc 本文判——hook 執行時檔案
+ * 還不存在，不判就等於放行；`cat >>` 追加、分隔字沒加引號且本文含 `$`、或以 `tee`／`printf`／`echo` 等任何其他 `>`／`>>`／`>|` 重導向寫進
+ * body 檔的，判不出全文：Work gate 放行（派工環境下 heredoc 追加／含 `$` 照舊放行，`tee`／`printf`／`echo` 等非 heredoc 寫入則擋）；Lineage 步驟不讀舊檔、不補行也不印建議。
+ * 派工環境（`CLADE_DISPATCH_ID` 非空）例外：body 檔讀不到又沒有同指令寫入也擋；`--fill*`／`--template`／`--web` 的 body 不可能有 `Work:` 行，無人補行，直接擋（`prCreateFillsBody`）。
+ *
  * 逃生門：`CLADE_ALLOW_NO_WORK=1` 放行（非 clade 工作、上游 repo 的 PR）。
  *
  * `Work:` 行通過後接著判 PR 去重與大小上限（`gh-pr-create-hygiene.ts`）。
  *
+ * plans/40 T2（shadow）：`Work:` 行就位後順手補 `Lineage: <root>/<generation>`（`vendor/scripts/lib/pr-lineage.ts`）：
+ * body 檔可補（與補 `Work:` 同一套範圍判定）就直接寫進檔；`--body` 字面、heredoc 只印建議那一行。
+ * 一律不擋（`lineageStep` 吞掉所有例外）；kill switch 見 pr-lineage.ts。由入口在 gate 放行後呼叫（見 `lineageStep`）。
+ *
  *   | REQUIRED 欄位 | 內容 |
  *   | --- | --- |
  *   | 觸發條件 | Bash 的 `gh pr create` 判得出 body 且沒有 `Work:` 行 → exit 2 擋下該次 tool call |
- *   | 消費端 | 正在開 PR 的 agent（stderr 印可貼的 `Work:`／`Owner:` 兩行）；下游是 coordinator-pr-triage 的 `pr-repair` 自動派修 |
+ *   | 消費端 | 正在開 PR 的 agent（擋下：exit 2 的 stderr 印可貼的 `Work:`／`Owner:` 兩行；補行放行：hook JSON `additionalContext` 印補上的兩行）；下游是 coordinator-pr-triage 的 `pr-repair` 自動派修 |
  *   | 觸發點 | 工具事件 hook：`pre-bash-gh-pr-create-work-gate.sh`（fleet）與 `.claude/hooks/clade-home-guard.ts`（clade home）在 `gh pr create` 那一刻判定；訊息由 test/gh-pr-create-work.test.ts 釘住 |
  */
 
 import { spawnSync } from 'node:child_process'
 import { appendFileSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
+import { dirname, isAbsolute, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  deriveLineage,
+  formatLineage,
+  cachedLineageLookup,
+  LINEAGE_LINE_RE,
+  lineageShadowOff,
+  type PrBodyLookup,
+} from './pr-lineage.ts'
 import { ghPrCreateHygiene, type HygieneDeps, type PrCreateTarget } from './gh-pr-create-hygiene.ts'
 
 export const WORK_LINE_RE = /^[ \t]*Work(?:[ \t]*id)?[ \t]*[:：][ \t]*\S/mu
@@ -277,6 +295,98 @@ export function literalHeredocBody(text: string): string | null {
   return m[1] || !m[3]!.includes('$') ? m[3]! : null
 }
 
+/** `$HOME`／`${HOME}`／`~` 開頭的路徑展開成字面路徑；展開後仍含 `$`（其他變數、命令替換）→ null（判不出）。 */
+export function expandHomePath(path: string): string | null {
+  const home = homedir()
+  const out = path
+    .replace(/^(\$HOME|\$\{HOME\}|~)(?=\/|$)/u, home)
+    .replace(/^"?(\$HOME|\$\{HOME\})"?(?=\/|$)/u, home)
+  return out.includes('$') || out.includes('`') ? null : out
+}
+
+/**
+ * 指令串裡寫進該 body 檔的 heredoc 本文（同一個 Bash 呼叫先寫檔再開 PR，hook 讀不到檔）。
+ * 認得 `cat > <path> <<'EOF'` 與 `cat <<'EOF' > <path>` 兩種寫法；同一路徑寫了多次取最後一次；沒有 → null。
+ * 最後一次是 `cat >>` 追加（檔案全文 = 既有內容 + 本文）、分隔字沒加引號且本文含 `$`（展開後才是真值），
+ * 或是其他寫法（`tee`、`printf … >`、`echo … >`）寫進該檔 → `opaque`（判不出全文，也不能讀磁碟上的舊檔）。
+ * 路徑比對先展開 `$HOME`／`~` 再 normalize（`./b.md` 與 `b.md` 同檔）。
+ */
+export function heredocWrittenBody(
+  cmd: string,
+  rawPath: string,
+  expandedPath: string,
+): string | 'opaque' | null {
+  return lastBodyWrite(cmd, rawPath, expandedPath)?.value ?? null
+}
+
+/** 最後一次寫進該 body 檔的事件；`heredoc` 為 false 表示是 `tee`／`printf … >`／`echo … >` 這類看不到本文的寫法。 */
+function lastBodyWrite(
+  cmd: string,
+  rawPath: string,
+  expandedPath: string,
+): { value: string | 'opaque'; heredoc: boolean } | null {
+  const want = normalize(expandedPath)
+  const same = (target: string): boolean => {
+    if (target === rawPath) return true
+    const t = expandHomePath(target)
+    return t !== null && normalize(t) === want
+  }
+  const P = String.raw`(["']?)([^\s"'<>|;&]+)`
+  const D = String.raw`<<-?[ \t]*(['"]?)([A-Za-z_]\w*)`
+  const forms: Array<{ re: RegExp; op: number; path: number; quote: number; delim: number }> = [
+    // cat > f <<'EOF'
+    {
+      re: new RegExp(String.raw`\bcat[ \t]*(>>?)[ \t]*${P}\2[ \t]*${D}\4[^\n]*\n`, 'gu'),
+      op: 1,
+      path: 3,
+      quote: 4,
+      delim: 5,
+    },
+    // cat <<'EOF' > f
+    {
+      re: new RegExp(String.raw`\bcat[ \t]*${D}\1[ \t]*(>>?)[ \t]*${P}\4[^\n]*\n`, 'gu'),
+      op: 3,
+      path: 5,
+      quote: 1,
+      delim: 2,
+    },
+  ]
+  type Ev = { at: number; end: number; value: string | 'opaque'; heredoc: boolean }
+  const events: Ev[] = []
+  const spans: Array<[number, number]> = []
+  for (const f of forms) {
+    for (const m of cmd.matchAll(f.re)) {
+      const at = m.index!
+      const bodyStart = at + m[0].length
+      const delim = m[f.delim]!
+      const close = new RegExp(String.raw`(^|\n)[ \t]*${delim}[ \t]*(?=\n|$)`, 'u')
+      const rest = cmd.slice(bodyStart)
+      const c = close.exec(rest)
+      const text = c ? rest.slice(0, c.index) : rest
+      const end = c ? bodyStart + c.index + c[0].length : cmd.length
+      spans.push([at, end])
+      if (!same(m[f.path]!)) continue
+      const opaque = m[f.op] === '>>' || (!m[f.quote] && text.includes('$')) || !c
+      events.push({ at, end, value: opaque ? 'opaque' : text, heredoc: true })
+    }
+  }
+  const inSpan = (i: number): boolean => spans.some(([a, b]) => i >= a && i < b)
+  // 其他寫法：重導向到該檔、tee 該檔 → 判不出全文
+  const others = [
+    new RegExp(String.raw`(?<![<0-9&])>>?\|?[ \t]*${P}\1`, 'gu'),
+    new RegExp(String.raw`\btee\b(?:[ \t]+-[a-z]+)*[ \t]+${P}\1`, 'gu'),
+  ]
+  for (const re of others)
+    for (const m of cmd.matchAll(re)) {
+      if (inSpan(m.index!) || !same(m[2]!)) continue
+      events.push({ at: m.index!, end: m.index! + m[0].length, value: 'opaque', heredoc: false })
+    }
+  if (events.length === 0) return null
+  events.sort((a, b) => a.at - b.at)
+  const last = events.at(-1)!
+  return { value: last.value, heredoc: last.heredoc }
+}
+
 export interface WorkProblem {
   why: string
   /** body 來自這個看得到的檔（絕對路徑）：推得出 work id 時可以直接補行。 */
@@ -288,8 +398,14 @@ export function ghPrCreateWorkProblem(
   cmd: string,
   cwd: string,
   readFile: (path: string) => string = (p) => readFileSync(p, 'utf8'),
+  /** 派工環境：body 檔讀不到又沒有同指令的寫入 → 擋（預設放行，維持 fail-open）。 */
+  strict = false,
 ): WorkProblem | null {
   if (!/\bgh\b[\s\S]*\bpr\b[\s\S]*\bcreate\b/u.test(cmd)) return null
+  // 相對的 --body-file 照 gh pr create 實際執行的目錄解析：hook 收到的是 session cwd，不跟著指令裡的 cd 走。
+  // 目錄判不出（動態 cd、popd、env -C）→ null：照舊以 session cwd 讀，但讀不到時不走派工環境的 strict 擋
+  const site = locatePrCreate(cmd, cwd)
+  const runCwd = site ? site.cwd : cwd
   for (const seg of segments(cmd)) {
     const body = prCreateBody(seg)
     if (!body || body.kind === 'unknown') continue
@@ -299,17 +415,56 @@ export function ghPrCreateWorkProblem(
       if (body.dynamic && literalHeredocBody(body.text) === null) continue
       return { why: body.dynamic ? '--body 的 heredoc 沒有 Work: 行' : '--body 沒有 Work: 行' }
     }
-    if (body.dynamic || body.path === '-' || !body.path) continue
-    const file = isAbsolute(body.path) ? body.path : resolve(cwd, body.path)
+    if (body.path === '-' || !body.path) continue
+    // `$HOME/…`、`~/…` 是 agent 最常寫的 body 檔路徑：展開後是字面路徑就照檔判，其餘變數展開才判不出（放行）
+    const expanded = expandHomePath(body.path)
+    if (expanded === null) continue
+    // 同一個指令串先 `cat > <path> <<'EOF'` 再開 PR：檔案在 hook 執行時還不存在，照指令裡的 heredoc 本文判
+    const event = lastBodyWrite(cmd, body.path, expanded)
+    const written = event?.value ?? null
+    // heredoc 判不出全文（追加、本文含 $）照舊放行；tee／printf／echo 寫入看不到本文、磁碟上又是舊檔，派工環境沒人補行 → 擋
+    if (written === 'opaque') {
+      if (strict && !event!.heredoc)
+        return {
+          why: `--body-file ${body.path} 由 tee／printf／echo 寫入，判不出 Work: 行（改用 cat <<'EOF' 寫檔，或先寫檔、下一個 Bash 呼叫再 gh pr create）`,
+        }
+      continue
+    }
+    if (written !== null) {
+      if (!WORK_LINE_RE.test(written))
+        return { why: `--body-file ${body.path}（同指令 heredoc 寫入）沒有 Work: 行` }
+      continue
+    }
+    const file = isAbsolute(expanded) ? expanded : resolve(runCwd ?? cwd, expanded)
     let text: string
     try {
       text = readFile(file)
     } catch {
+      // 派工環境沒有人補行：讀不到又看不到寫入就擋（寫檔與 gh pr create 拆成兩個 Bash 呼叫）
+      if (strict && (isAbsolute(expanded) || runCwd !== null))
+        return {
+          why: `--body-file ${body.path} 讀不到，也沒有同指令的 heredoc 寫入，判不出 Work: 行（先寫檔，下一個 Bash 呼叫再 gh pr create）`,
+        }
       continue
     }
     if (!WORK_LINE_RE.test(text)) return { why: `--body-file ${body.path} 沒有 Work: 行`, file }
   }
   return null
+}
+
+/**
+ * 指令裡的 `gh pr create` 用 `--fill*`／`--template`／`--web`：body 來自 commit／模板／瀏覽器，字面上不可能有 `Work:` 行。
+ * 互動 session 照舊放行（人在場、body 可能在別處補）；派工環境（`CLADE_DISPATCH_ID` 非空）沒有人補，
+ * `ghPrCreateWorkGate` 把它當缺行擋下。
+ */
+export function prCreateFillsBody(cmd: string): boolean {
+  if (!/\bgh\b[\s\S]*\bpr\b[\s\S]*\bcreate\b/u.test(cmd)) return false
+  return segments(cmd).some((seg) => {
+    const body = prCreateBody(seg)
+    return (
+      body?.kind === 'unknown' && words(seg).some((w) => FAIL_OPEN_FLAGS.has(w.text.split('=')[0]!))
+    )
+  })
 }
 
 /** `gh pr create` 看得到的 body 全文（去重／大小判定用）；判不出（動態展開、`-`、讀不到、沒有 gh pr create）回 null。 */
@@ -410,7 +565,7 @@ const COMMIT_SEG_RE =
 /**
  * `gh pr create` 之前，同一個指令串裡有沒有會新增 commit 的 git 子命令。
  * PreToolUse 在整串指令執行前觸發：串在一起的 `git commit … && gh pr create` 量 `HEAD` 時 commit 還不存在，
- * diff 看起來是空的（第六個洞：#3741、#3777 等只動 allowlist 的 PR 以此漏過）。
+ * diff 看起來是空的，只動 allowlist 的 PR 會因此漏過記帳類閘門。
  */
 export function commitsBeforePrCreate(cmd: string, prSeg: string): boolean {
   const at = cmd.indexOf(prSeg)
@@ -498,6 +653,13 @@ const defaultGit = (args: string[], cwd: string): string | null => {
 
 const PLAN_PATH_RE = /^specs\/plans\/[^/]+\/(?:work|plan)\.md$/u
 
+/** 只看檔首第一個 `---` frontmatter 區塊的 `work_id`；正文、code block 裡的 `work_id: X` 不算。 */
+export function frontmatterWorkId(text: string): string | undefined {
+  const fm = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/u.exec(text)?.[1]
+  if (fm === undefined) return undefined
+  return /^work_id:[ \t]*["']?([^\s"']+)/mu.exec(fm)?.[1]
+}
+
 /**
  * 缺 `Work:` 行時推 work id：`CLADE_WORK_ID` → 本樹的 claim（`<repo>/.clade/claims/*.json` 的 worktree_path）→
  * branch 相對預設分支改到的 lifecycle 檔（work.md；legacy plan.md），frontmatter `work_id` 只有一個時採用。推不出（或 plan 有多個）回 null，
@@ -548,7 +710,7 @@ export function deriveWorkId(
     const ids = new Set<string>()
     for (const f of changed) {
       try {
-        const id = /^work_id:[ \t]*["']?([^\s"']+)/mu.exec(readFile(join(top, f)))?.[1]
+        const id = frontmatterWorkId(readFile(join(top, f)))
         if (id && id !== '-') ids.add(id)
       } catch {
         /* 刪掉的 plan 不算 */
@@ -594,20 +756,125 @@ export function ghPrCreateWorkGate(
     }
     return deny ? { ...verdict, deny } : verdict
   }
-  const problem = ghPrCreateWorkProblem(cmd, cwd, deps.readFile)
-  if (!problem) return hygiene({})
+  const problem = ghPrCreateWorkProblem(cmd, cwd, deps.readFile, !!env.CLADE_DISPATCH_ID?.trim())
+  if (!problem) {
+    if (env.CLADE_DISPATCH_ID?.trim() && prCreateFillsBody(cmd)) {
+      return {
+        deny: denyMessage(
+          '派工環境的 --fill／--template／--web body 來自 commit／模板／瀏覽器，沒有 Work: 行（改用 --body-file 或 --body 並寫上 Work:）',
+          env,
+          deriveWorkId(cwd, env, deps),
+        ),
+      }
+    }
+    return hygiene({})
+  }
   const derived = deriveWorkId(cwd, env, deps)
   if (derived && problem.file && appendableBodyFile(cmd, cwd, problem.file, derived.id)) {
     try {
-      ;(deps.append ?? appendFileSync)(problem.file, `\nWork: ${derived.id}\n`)
+      const owner = ownerFor(env)
+      const body = (() => {
+        try {
+          return (deps.readFile ?? ((p: string) => readFileSync(p, 'utf8')))(problem.file!)
+        } catch {
+          return ''
+        }
+      })()
+      const lines = [`Work: ${derived.id}`]
+      if (owner && !OWNER_LINE_RE.test(body)) lines.push(`Owner: ${owner}`)
+      ;(deps.append ?? appendFileSync)(problem.file, `\n${lines.join('\n')}\n`)
       return hygiene({
-        note: `ℹ gh pr create：${problem.why}，已依 ${derived.basis} 補上 \`Work: ${derived.id}\``,
+        note:
+          `ℹ gh pr create：${problem.why}，已依 ${derived.basis} 在 ${problem.file} 末尾補上：\n` +
+          lines.map((l) => `  ${l}`).join('\n'),
       })
     } catch {
       /* 寫不進去：照擋，訊息帶推出的那一行 */
     }
   }
   return { deny: denyMessage(problem.why, env, derived) }
+}
+
+/** `--title`／`-t` 的值（`拆自 #N` 常寫在標題）；沒有回空字串。 */
+function prCreateTitle(seg: string): string {
+  const w = words(seg)
+  for (let i = 0; i < w.length; i++) {
+    const a = w[i]!.text
+    if (a === '--title' || a === '-t') return w[i + 1]?.text ?? ''
+    if (a.startsWith('--title=')) return a.slice('--title='.length)
+  }
+  return ''
+}
+
+/**
+ * plans/40 T2 shadow：body 看得到且沒有 `Lineage:` 行 → 可補的 body 檔直接補，其餘回建議那一行。
+ * 回 note 字串或 null；NEVER 丟例外、NEVER 擋。兩個入口（本檔 main、clade-home-guard）在 `ghPrCreateWorkGate`
+ * 沒擋之後各叫一次——不併進 gate，gate 的判定結果維持只有 Work 行與 hygiene。
+ */
+export function lineageStep(
+  cmd: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  deps: {
+    readFile?: (path: string) => string
+    append?: (path: string, text: string) => void
+    lineageLookup?: PrBodyLookup | false
+  } = {},
+): string | null {
+  try {
+    if (deps.lineageLookup === false || lineageShadowOff(env)) return null
+    const site = locatePrCreate(cmd, cwd)
+    if (!site?.cwd) return null
+    const body = prCreateBody(site.seg)
+    // body 檔與 Work 判定同一套解析：`$HOME/…`、`~/…` 展開；同指令先 `cat > f <<EOF` 寫檔 → 照 heredoc 本文判，
+    // 且不補檔（指令執行時 `cat >` 會截斷檔案，補的行會被蓋掉），改印建議
+    let file: string | null = null
+    let text: string | null
+    if (body?.kind === 'file' && body.path && body.path !== '-') {
+      const expanded = expandHomePath(body.path)
+      if (expanded === null) return null
+      const written = heredocWrittenBody(cmd, body.path, expanded)
+      if (written === 'opaque') return null
+      if (written !== null) text = written
+      else {
+        file = isAbsolute(expanded) ? expanded : resolve(site.cwd, expanded)
+        try {
+          text = (deps.readFile ?? ((p: string) => readFileSync(p, 'utf8')))(file)
+        } catch {
+          return null
+        }
+      }
+    } else text = prCreateBodyText(site.seg, site.cwd, deps.readFile)
+    if (text === null || LINEAGE_LINE_RE.test(text)) return null
+    const line = formatLineage(
+      deriveLineage(
+        `${prCreateTitle(site.seg)}\n${text}`,
+        deps.lineageLookup ?? cachedLineageLookup(env, originRepo(site.cwd)),
+      ),
+    )
+    if (file && appendableBodyFile(cmd, cwd, file, 'lineage')) {
+      ;(deps.append ?? appendFileSync)(file, `\n${line}\n`)
+      return `ℹ gh pr create：已補上 \`${line}\`（plans/40 T2 shadow，家族輪數帳用）`
+    }
+    return `ℹ gh pr create：body 沒有 Lineage: 行（plans/40 T2 shadow，不擋）——下次在 Work: 行下面加一行 \`${line}\``
+  } catch {
+    return null
+  }
+}
+
+/** checkout 的 origin → `owner/repo`（家族帳快取依 repo 取鍵，免得同號別 repo 的 Lineage 混進來）；讀不到回 undefined。 */
+function originRepo(cwd: string): string | undefined {
+  try {
+    const r = spawnSync('git', ['-C', cwd, 'remote', 'get-url', 'origin'], {
+      encoding: 'utf8',
+      timeout: 2000,
+    })
+    const url = r.status === 0 ? r.stdout.trim() : ''
+    const m = /github\.com[:/]([^/\s]+\/[^/\s]+?)(?:\.git)?$/iu.exec(url)
+    return m?.[1]
+  } catch {
+    return undefined
+  }
 }
 
 const WORK_ID_RE = /^[A-Za-z0-9._-]+$/u
@@ -633,17 +900,23 @@ function appendableBodyFile(cmd: string, cwd: string, file: string, id: string):
   }
 }
 
+const OWNER_LINE_RE = /^[ \t]*Owner[ \t]*[:：][ \t]*\S/mu
+
+/** PR 主人：dispatch id 優先，其次 `session:<id>`；都沒有回 null。 */
+function ownerFor(env: NodeJS.ProcessEnv): string | null {
+  const dispatch = env.CLADE_DISPATCH_ID?.trim()
+  if (dispatch) return dispatch
+  const session = env.CLAUDE_SESSION_ID?.trim()
+  return session ? `session:${session}` : null
+}
+
 export function denyMessage(
   why: string,
   env: NodeJS.ProcessEnv = process.env,
   derived: DerivedWork | null = null,
 ): string {
   const work = derived?.id || env.CLADE_WORK_ID?.trim() || '<work-id>'
-  const owner = env.CLADE_DISPATCH_ID?.trim()
-    ? env.CLADE_DISPATCH_ID.trim()
-    : env.CLAUDE_SESSION_ID?.trim()
-      ? `session:${env.CLAUDE_SESSION_ID.trim()}`
-      : '<dispatch_id | session:<id> | bot:<job>>'
+  const owner = ownerFor(env) ?? '<dispatch_id | session:<id> | bot:<job>>'
   return (
     `⛔ gh pr create：${why}。PR body MUST 帶兩行，讓 PR 從開立那一刻就有機器可讀的主人（主人消失時 triage 才派得了修補）：\n` +
     `  Work: ${work}\n` +
@@ -672,8 +945,18 @@ function main() {
   } catch {
     return
   }
-  if (verdict.note) process.stderr.write(`${verdict.note}\n`)
-  if (!verdict.deny) return
+  if (!verdict.deny) {
+    const lineage = lineageStep(cmd, input.cwd || process.cwd(), process.env)
+    // PreToolUse exit 0 的 stderr 不進 agent context：放行時的說明（Work 補行＋Lineage 補行）走 hook JSON additionalContext
+    const notes = [verdict.note, lineage].filter((n): n is string => !!n)
+    if (notes.length)
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: notes.join('\n') },
+        }),
+      )
+    return
+  }
   process.stderr.write(`${verdict.deny}\n`)
   process.exitCode = 2
 }
