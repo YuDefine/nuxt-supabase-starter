@@ -996,5 +996,16 @@
       }
     ]
   },
-  "enabledPlugins": {}
+  "enabledPlugins": {
+    "hub-core@clade": false,
+    "hub-auth-better-auth@clade": false,
+    "hub-db-schema-supabase@clade": false,
+    "hub-db-runtime-cf-workers@clade": false,
+    "hub-runtime-cf-workers@clade": false,
+    "hub-framework-nuxt@clade": false,
+    "hub-ecosystem-node@clade": false,
+    "hub-capabilities-aixbdd@clade": false,
+    "hub-capabilities-specformula@clade": false,
+    "hub-capabilities-evlog@clade": false
+  }
 }
