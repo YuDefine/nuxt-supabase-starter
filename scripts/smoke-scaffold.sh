@@ -54,6 +54,9 @@ scan_placeholders() {
   # scripts/claim-helper.ts:500 與 vendor/oxc-shared/preset.ts:107 兩處。誤判混在真訊號
   # 裡會讓人以為這條 gate 在亂報，進而整條略過——真訊號（clade 投影未去識別化，TD-019）
   # 就跟著被略過。
+  # scripts/pre-commit/{consumer-root,runner}.sh 是 clade 投影（LOCKED，改 consumer 副本會被
+  # clade-projection-drift 擋、下次 propagate 也會覆寫），註解舉例寫了字面 repo 名；
+  # 只排除這兩檔，其餘投影檔仍掃。根治在 clade 來源去掉註解裡的字面名。
   local pattern='nuxt[- ]supabase starter|nuxt-supabase-starter|\bdemo\b|\{\{projectName\}\}|TODO: 替換|my-project'
 
   if command -v rg >/dev/null 2>&1; then
@@ -68,6 +71,8 @@ scan_placeholders() {
       --glob '!.scaffold-cleanup' \
       --glob '!verify-starter.mjs' \
       --glob '!scripts/audit-clade-leak.mjs' \
+      --glob '!**/scripts/pre-commit/consumer-root.sh' \
+      --glob '!**/scripts/pre-commit/runner.sh' \
       || true
   else
     grep -RInE "$pattern" "$target" \
@@ -81,6 +86,8 @@ scan_placeholders() {
       --exclude=.scaffold-cleanup \
       --exclude=verify-starter.mjs \
       --exclude=audit-clade-leak.mjs \
+      --exclude=consumer-root.sh \
+      --exclude=runner.sh \
       || true
   fi
 }
