@@ -17,11 +17,11 @@ related:
 
 ## 快速指令
 
-| 指令                    | 說明                       |
-| ----------------------- | -------------------------- |
-| `pnpm skills:list`      | 查看已安裝的 Skills 及狀態 |
-| `pnpm skills:install`   | 安裝或更新所有 Skills      |
-| `pnpm skills:update`    | 同 `skills:install`        |
+| 指令                  | 說明                                               |
+| --------------------- | -------------------------------------------------- |
+| `pnpm skills:list`    | 查看已安裝的 Skills 及狀態                         |
+| `pnpm skills:install` | 照釘的 ref 安裝所有 Skills                         |
+| `pnpm skills:update`  | 同 `skills:install`（只照釘的 ref 重裝，不追上游） |
 
 三個指令對應 `scripts/install-skills.sh` 和 `scripts/check-skills.sh`。
 
@@ -32,14 +32,16 @@ related:
 第三方 Skills 使用 [skills.sh](https://skills.sh) 的 `npx skills add` 安裝，統一採用 `--agent claude-code --copy` 模式：
 
 ```bash
-npx skills add <registry>@<skill-name> --agent claude-code --copy -y
+skill_add_pinned "https://github.com/<owner>/<repo>/tree/<40 碼 SHA 或 tag>/<dir>" --agent claude-code --copy -y
 ```
+
+`skill_add_pinned` 定義在 `scripts/install-skills.sh`：裝完核對 `skills-lock.json` 有 source、ref、skillPath 相符的條目，且 `.claude/skills/<name>/SKILL.md` 存在（`npx skills add` 對失敗的 source 仍 exit 0）。
 
 - `--agent claude-code`：安裝到 `.claude/skills/` 目錄
 - `--copy`：直接複製檔案，不建立 symlink（避免跨環境問題）
 - `-y`：自動確認
 
-重複執行會覆寫為最新版，等同更新。
+重複執行會照 `scripts/install-skills.sh` 釘的 ref 重裝，不會追上游最新版。換版是改該腳本的 `REF_*` 常數，再跑 `pnpm skills:install`。
 
 > 部分 Skills（例如 `design`、`arrange`、`frontend-design`、`review-archive`、`subagent-dev`）是隨 starter 版控的本地 skills，會在 scaffold 時直接複製，不透過 registry 安裝。
 
@@ -148,20 +150,16 @@ supabase-arch, supabase-migration, supabase-rls
 ### 全部更新
 
 ```bash
-pnpm skills:update
-# 或等價的
+# 改 scripts/install-skills.sh 的 REF_* 後重跑
 pnpm skills:install
+# skills:update 是同一支腳本，同樣只照釘的 ref 重裝
 ```
 
-腳本會重新下載所有第三方 Skills，覆寫本地版本。
+腳本會照釘的 ref 重新安裝所有第三方 Skills，覆寫本地版本；沒改 ref 就裝回同一版。
 
 ### 更新單一 Skill
 
-```bash
-npx skills add antfu/skills@nuxt --agent claude-code --copy -y
-```
-
-替換 `antfu/skills@nuxt` 為目標 Skill 的 registry 和名稱。
+改 `scripts/install-skills.sh` 裡該 source 的 `REF_*`（40 碼 SHA 或 tag），再跑 `pnpm skills:install`。NEVER 用 `npx skills add <owner>/<repo>@<skill>` 直接裝：不帶 ref 會拉上游最新版，lock 條目也不會有 `ref`。
 
 ### 查看目前狀態
 
@@ -177,11 +175,7 @@ pnpm skills:list
 
 ### 從 Registry 安裝
 
-```bash
-npx skills add <registry>@<skill-name> --agent claude-code --copy -y
-```
-
-安裝後建議把指令加入 `scripts/install-skills.sh`，確保團隊成員能同步。
+在 `scripts/install-skills.sh` 的 `REF_*` 區塊加一個 ref（40 碼 SHA 或 tag），再加一行 `skill_add_pinned "https://github.com/<owner>/<repo>/tree/$REF_<NAME>/<dir>" $COPY_FLAGS`，跑 `pnpm skills:install`，確保團隊成員能同步到同一版。
 
 ### 自建 Skill
 

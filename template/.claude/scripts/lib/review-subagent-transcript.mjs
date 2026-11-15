@@ -27,6 +27,11 @@
 //   4. 它有沒有讀完 brief——從成功的 Read 結果還原實際回傳的行號，必須涵蓋 1..N。
 //      Herdr pointer 交付只能「要求」child 讀完，這裡是實際核對（缺行 exit 3）
 //   5. verdict——最後一則 assistant 文字就是 verdict，必須含 `## Review Verdict`
+//   6. 壓縮——reviewer 自己 auto-compact（transcript 出現 compact_boundary／isCompactSummary）＝
+//      這一批太大、前文被摘要取代，之後的 verdict 看過的不是完整 brief（exit 7）。
+//      compact summary 是 harness 寫進 transcript 的 user 訊息，不是主線續派：它 NEVER 計入
+//      「續派」（把它判成 exit 6 會讓主持者讀成「有人夾帶」而不是「批太大」）；
+//      但也 NEVER 因為「不算續派」就放行——壓縮過的 review 同樣不是 prepare 凍結的那份完整 review
 //
 // verdict 取自 transcript 本身，NEVER 由主線轉交：主線是受審改動的 producer，
 // 讓它經手 verdict 文字就等於讓 maker 替 reviewer 交卷。
@@ -34,7 +39,7 @@
 // 用法：node review-subagent-transcript.mjs --subagents-dir <dir> --nonce <n>
 //         --prompt <prepare 寫的 prompt 檔> --brief <path> --model <requested> --effort xhigh --agent-type <type> --verdict-out <path>
 // stdout 印一份 JSON 結論；exit 0 verified／3 沒跑成或不完整／6 prompt 被改或用了寫入型工具／
-// 8 身分不成立／2 用法錯誤。
+// 7 reviewer 自身壓縮（本批太大，切小重跑）／8 身分不成立／2 用法錯誤。
 
 import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -64,10 +69,33 @@ function firstUserText(entries) {
     .join('\n')
 }
 
-/** 第一則之後的非空 user 文字＝主線續派時補進去的指示（含包進 system-reminder 標籤的）。 */
+/** compact summary 是 harness 在 reviewer 自己 auto-compact 時寫的 user 訊息（isCompactSummary: true），不是主線送的。 */
+const isCompactSummary = (e) => e.type === 'user' && e.isCompactSummary === true
+
+/**
+ * reviewer 的 transcript 有沒有自己壓縮過。兩個訊號任一個都算：
+ * `{type:'system', subtype:'compact_boundary', compactMetadata:{trigger, preTokens}}` 與
+ * `{type:'user', isCompactSummary:true}`（#4478／#4494／#4130 的 reviewer transcript，
+ * preTokens 267,941–278,656）。只認 boundary 的話，harness 日後只寫 summary 就漏；反之亦然。
+ */
+export function compactionEvidence(entries) {
+  const boundaries = entries.filter((e) => e.type === 'system' && e.subtype === 'compact_boundary')
+  const summaries = entries.filter(isCompactSummary)
+  const preTokens = boundaries
+    .map((e) => e.compactMetadata?.preTokens)
+    .filter((n) => Number.isFinite(n))
+  return {
+    compacted: boundaries.length + summaries.length > 0,
+    count: Math.max(boundaries.length, summaries.length),
+    triggers: boundaries.map((e) => e.compactMetadata?.trigger).filter(Boolean),
+    preTokens,
+  }
+}
+
+/** 第一則之後的非空 user 文字＝主線續派時補進去的指示（含包進 system-reminder 標籤的）；harness 自己寫的 compact summary 不算。 */
 export function laterUserTexts(entries) {
   return entries
-    .filter((e) => e.type === 'user' && e.message)
+    .filter((e) => e.type === 'user' && e.message && !isCompactSummary(e))
     .slice(1)
     .flatMap((e) => contentBlocks(e.message))
     .filter((c) => c.type === 'text')
@@ -287,6 +315,23 @@ export function verifySubagentReview({
       exit: 6,
       reason: `reviewer 用了唯讀集合以外的工具：${writeTools.join(', ')}——verdict 扣住`,
     }
+
+  // 順序：續派（exit 6）→ 身分／effort／工具面（exit 8／6）→ 壓縮（exit 7）→ 讀完 brief。
+  // 壓縮只說「這批太大、切小重跑」；seat 或 agent type 不對、用了寫入工具是更要緊的結論，
+  // 不能被「切小重跑」蓋掉（也要留下身分稽核的 receipt）。壓縮過的 transcript 讀取範圍必然不完整，
+  // 所以壓縮判定在 brief 覆蓋核對之前。
+  const compaction = compactionEvidence(entries)
+  if (compaction.compacted) {
+    const peak = compaction.preTokens.length > 0 ? Math.max(...compaction.preTokens) : undefined
+    return {
+      ...result,
+      exit: 7,
+      failed_check: 'reviewer_compacted',
+      compaction_count: compaction.count,
+      compaction_pre_tokens: compaction.preTokens,
+      reason: `reviewer 自己 auto-compact 了 ${compaction.count} 次${peak ? `（preTokens ${peak}）` : ''}——這批 brief 太大，前文被摘要取代，後面的 verdict 沒看完整個 changeset；不是主線續派、也不是通過。切小重跑：oa-batches.ts clean <pr> 後重跑 prepare（單批上限固定為 REVIEWER_BATCH_MAX_BYTES，--max-bytes 只能往下調）；commit skill 路徑則拆 commit，NEVER 沿用這份 verdict`,
+    }
+  }
 
   const total = readFileSync(brief, 'utf8').replace(/\n$/, '').split('\n').length
   const missing = missingRanges(briefLinesRead(entries, brief), total)

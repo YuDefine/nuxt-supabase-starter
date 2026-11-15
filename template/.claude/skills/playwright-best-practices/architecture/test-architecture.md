@@ -60,7 +60,7 @@ test.describe("Products API", () => {
 
   test.beforeAll(async ({ request }) => {
     const res = await request.post("/api/auth/token", {
-      data: { email: "manager@example.com", password: "mgr-secret" },
+      data: { email: "manager@shop.io", password: "mgr-secret" },
     });
     token = (await res.json()).accessToken;
   });
@@ -102,7 +102,7 @@ test.describe("Products API", () => {
 
   test("staff role cannot delete products", async ({ request }) => {
     const staffLogin = await request.post("/api/auth/token", {
-      data: { email: "staff@example.com", password: "staff-pass" },
+      data: { email: "staff@shop.io", password: "staff-pass" },
     });
     const staffToken = (await staffLogin.json()).accessToken;
 
@@ -180,14 +180,14 @@ test.describe("ContactForm component", () => {
     );
 
     await component.getByLabel("Name").fill("Alex");
-    await component.getByLabel("Email").fill("alex@example.com");
+    await component.getByLabel("Email").fill("alex@company.org");
     await component.getByLabel("Message").fill("Inquiry about pricing");
     await component.getByRole("button", { name: "Send message" }).click();
 
     expect(submissions).toHaveLength(1);
     expect(submissions[0]).toEqual({
       name: "Alex",
-      email: "alex@example.com",
+      email: "alex@company.org",
       message: "Inquiry about pricing",
     });
   });
@@ -241,7 +241,7 @@ import { test, expect } from "@playwright/test";
 test.describe("subscription flow", () => {
   test.beforeEach(async ({ page }) => {
     await page.request.post("/api/test/seed-account", {
-      data: { plan: "free", email: "subscriber@example.com" },
+      data: { plan: "free", email: "subscriber@demo.io" },
     });
     await page.goto("/account/upgrade");
   });

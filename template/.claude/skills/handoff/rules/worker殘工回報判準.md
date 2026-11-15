@@ -1,9 +1,5 @@
 # worker 回報 success 時還有殘工（派工共用）
 
-> 自 [派工共用底座判準.md](派工共用底座判準.md) 同批逐字搬出；章節編號 § 6 保留為穩定 ID。
->
-> **過渡期（拆分 1/2）**：本檔尚未接線，runtime 仍只讀 [派工共用底座判準.md](派工共用底座判準.md)，它是唯一 SoT。本檔內容由 `test/handoff-dispatch-common-split-sync.test.ts` 釘成與舊檔對應段逐字一致（只容許跨檔連結改寫）；改判準 MUST 先改舊檔再同步本檔。拆分 2/2 切換 SKILL.md／relay／fanout 引用、搬 `registry/rule-invariants.json` 並刪舊檔。
-
 ## 6. worker 回報 success 時還有殘工
 
 `success` 是唯一會**關掉** worker pane 的 outcome。因此只寫在 summary 散文或 pane scrollback 裡的殘工，

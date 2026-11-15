@@ -22,9 +22,11 @@ Gate chain 是一組**有序、確定性、機器可判定**的驗證指令。�
 | L0 — 格式 | lint + fmt | `vp check` | 每次修改後；具名 hook 的執行與成功證據可承載該次檢查 |
 | L1 — 型別 | typecheck | `pnpm typecheck` | 每個 phase 完成後 |
 | L2 — 單元 | test suite | `pnpm test --run` | 每個 phase 完成後 |
-| L3 — 整合 | smoke / health | `curl -sf http://localhost:<port>/api/health` | change 全部 phase 完成後 |
+| L3 — 整合 | smoke / health | Nuxt：`timeout 30 pnpm exec nuxt curl /api/health`；其他：`curl -sf -m 10 http://localhost:<port>/api/health` | change 全部 phase 完成後 |
 
 **PASS = L0–L2 全 exit 0。** L3 為 SHOULD（dev server 未起時 skip，不算 FAIL）。
+
+Nuxt consumer 的 L3 用 `nuxt curl`：它從本 worktree 的 `.nuxt/nuxt.lock` 解出正在跑的 dev server，多 worktree、多 port、dev-router 下都打本 worktree 的 backend，不必猜 port；HTTP ≥400 exit 22。前提是 lock 解析到 @nuxt/cli ≥4（`audit-tooling-drift.ts` 的 `nuxtCli` 列 `current`）：3.x 沒有 `curl` 子命令、一樣 exit 1，這類 consumer 的 L3 改用 `curl -sf -m 10`。exit 1 同時代表找不到 server、連線失敗與 CLI 太舊，只有 stderr 是「No running Nuxt dev server found」才算 dev server 未起而 skip，其他 exit 1 算 FAIL。MUST 在專案根目錄跑並外包 `timeout`（macOS 用 coreutils 的 `gtimeout`）——它沒有自己的逾時，server 卡住時掛約 300 秒。實測與限制見 `docs/research/2026-11-13-nuxt-curl-dev-server-probe.md`。
 
 每個產品入口分別確認具名驗證 handler 是否安裝、啟用並實際執行。只有 generic hook adapter 或設定檔時，修改後顯式執行 consumer 定義的 L0；phase 結束仍執行完整 L0–L2。沒有命令執行能力或拿不到 exit/result 證據時，該 gate 保持未驗證。
 
@@ -40,7 +42,7 @@ Consumer 的 verify-commands source 要至少定義 L0–L2：
 - L0: `vp check`
 - L1: `pnpm typecheck`
 - L2: `pnpm test --run`
-- L3: `curl -sf http://localhost:3040/api/health` (optional, skip if dev server not running)
+- L3: `timeout 30 pnpm exec nuxt curl /api/health` (optional, skip if dev server not running)
 ```
 
 scaffold 模板：`vendor/snippets/verify-gate-chain/`。

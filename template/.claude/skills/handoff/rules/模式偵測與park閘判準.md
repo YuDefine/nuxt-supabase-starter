@@ -2,7 +2,7 @@
 
 ## Step 0.1 — Value-first continuation gate（四種模式共用）
 
-`park`、`relay`、`fanout`、`next` 都 MUST 先判斷是否仍值得保留 continuation。只有目前可驗證的 customer／product demand、current incident／data-security risk，或直接阻擋交付且可 bounded fix 的 blocker 至少一項成立，才可列為 continuation candidate；age、unknown、未落地、commit 數與「可能有價值」都不算。三者皆無時標記 `retired`／`cancelled`、保存 evidence、continuation candidates 固定為 0；歷史 worktree／branch 依下方 § 3.5.1 入口處理。`relay`／`fanout` 的 dispatch details 見 [派工共用底座判準.md](派工共用底座判準.md) § 0.1；`park` 也受本 gate 約束，即使不開 pane。
+`park`、`relay`、`fanout`、`next` 都 MUST 先判斷是否仍值得保留 continuation。只有目前可驗證的 customer／product demand、current incident／data-security risk，或直接阻擋交付且可 bounded fix 的 blocker 至少一項成立，才可列為 continuation candidate；age、unknown、未落地、commit 數與「可能有價值」都不算。三者皆無時標記 `retired`／`cancelled`、保存 evidence、continuation candidates 固定為 0；歷史 worktree／branch 依下方 § 3.5.1 入口處理。`relay`／`fanout` 的 dispatch details 見 [價值優先延續判準.md](價值優先延續判準.md) § 0.1；`park` 也受本 gate 約束，即使不開 pane。
 
 ## Step 0 — 解析參數
 
@@ -22,7 +22,7 @@
 
 「可平行」走 [next派工與推薦訊息判準.md](next派工與推薦訊息判準.md) § Serial vs Parallel 評估的四條 rubric，**四條全成立**才算。任一條不成立就是 serial，合併成一份 brief 走 `relay`。
 
-**`relay` 與 `fanout` 的共用底座是 [派工共用底座判準.md](派工共用底座判準.md)**：preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、parent worktree lifecycle、收工訊息契約。兩支 steps 檔只寫各自差異。
+**`relay` 與 `fanout` 的共用底座是 [派工前置與身分分流判準.md](派工前置與身分分流判準.md)（Preflight、`CLADE_DISPATCH_ID` 分流）、[durable-brief撰寫判準.md](durable-brief撰寫判準.md)、[派工helper與launcher判準.md](派工helper與launcher判準.md)、[runtime清理與parent-worktree判準.md](runtime清理與parent-worktree判準.md)、[派工收工訊息判準.md](派工收工訊息判準.md)**：preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、parent worktree lifecycle、收工訊息契約。兩支 steps 檔只寫各自差異。
 
 > `now` 已於本版**廢除**：舊 `/handoff now <task pointer>` 一律改走 `relay`（單件）或 `fanout`（多件可平行）。
 

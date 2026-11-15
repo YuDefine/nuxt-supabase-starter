@@ -1,10 +1,6 @@
-# Meta repo 入口規約
+# Meta repo 結構與 meta／template 邊界
 
-這份是 `nuxt-supabase-starter` root（meta 維護層）的常駐規約，原本寫在 root `CLAUDE.md`；root 入口依 2026-09-26 指示收成空殼，正文搬到這裡。只服務 root，不會被 scaffold 帶走。
-
-## Language
-
-**YOU MUST** respond in 繁體中文 (zh-TW). **NEVER** use 簡體中文 (zh-CN).
+`nuxt-supabase-starter` root 是 meta 維護層，原本寫在常駐 rule `.claude/rules/meta-repo.md`；依 2026-11-10 「CLAUDE.md／AGENTS.md 全專案淨空」把它搬到這裡（W6／W7），只在需要時讀。只服務 root，不會被 scaffold 帶走。Language 段屬 harness 設定（W2），已刪、不留副本。
 
 ## Project Structure
 
@@ -36,4 +32,4 @@ Starter hygiene 的 root source of truth 是 `.claude/rules/starter-hygiene.md`�
 - `template/` paths 以 `template/` cwd 為準，例如 `app/**`、`server/**`、`supabase/**`、`docs/**`。
 - spec / plan / tasks 不得混淆 path 層級；同一個 task 若跨 root meta 與 starter seed，必須說明為什麼需要跨層，並分開列出驗收。
 
-For all development work, `cd template/` and follow `template/CLAUDE.md`.
+開發 starter 本體時，`cd template/` 並遵守 `template/CLAUDE.md`。

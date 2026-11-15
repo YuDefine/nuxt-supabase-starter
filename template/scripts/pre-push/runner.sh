@@ -20,7 +20,7 @@
 #                        refs 算不出 fail-open 照跑；排在平行 checks 之後序列執行
 #
 # 為什麼 typecheck 放 pre-push 不放 pre-commit：
-#   vue-tsc / nuxi typecheck 不支援單檔 typecheck，
+#   vue-tsc / nuxt typecheck 不支援單檔 typecheck，
 #   每次 commit 跑 full project typecheck 太慢。pre-push 階段一次性擋住，
 #   兼顧 DX 與正確性。
 #
@@ -370,7 +370,7 @@ fi
 # 啟用時沿用上方 path filter 的結果：CHANGED_FILE 裡每個 changed path 都是
 # docs-only（*.md 或 docs/**）才跳過——.md 進不了 typecheck 圖；其餘情形
 # （含算不出 changed paths）一律 fail-open 照跑並印出原因。命中後仍是全量
-# typecheck，不對單檔做（vue-tsc / nuxi typecheck 不支援單檔）。
+# typecheck，不對單檔做（vue-tsc / nuxt typecheck 不支援單檔）。
 #
 # 刻意排在平行 checks **之後**序列跑、不進 CHECKS 陣列：typecheck:tests 單輪
 # peak RSS 約 2.6 GiB，與 nuxt-typecheck（old-space

@@ -50,6 +50,13 @@ dev-tunnel-convention.md — Dev tunnel（vite-plugin-cloudflare-tunnel / cloudf
 103-125 § 6 — 要掛 dev tunnel 就必須掛 Cloudflare Access，否則撤 tunnel
 127-147 § 7 — worktree：linked worktree 的 dev server 不得接上共用 named tunnel
 
+missing-dependency.md — 發現應有的工具、依賴、runner 套件或權限不在，正要改走替代路徑、降級或繞過時
+4-11 前導 — 應有而缺的依賴：回報並當場補上
+13-18 怎麼做
+20-22 例外
+24-26 為什麼
+28-30 為什麼是文字規約
+
 service-access.md — 要碰第三方服務（打它的 API、開它的 dashboard、要人登入或給 OTP）之前先讀存取卡，照卡上量過的最省路徑走；沒有卡就探索一次並寫卡
 5-21 前導 — 第三方服務存取（先讀卡）
 23-32 沒有卡，或卡已過期（`last_verified` 超過 90 天）

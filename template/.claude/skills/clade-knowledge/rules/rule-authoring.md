@@ -103,7 +103,7 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 
 既有範本：[[testing-anti-patterns]]、`~/.claude/skills/receiving-code-review`。
 
-**既有三件套沒有「model＋日期」量測紀錄的，下次改動該規約時先重跑一次無規約對照組**；fleet 主力 model 換代時，對每一條有紀錄的三件套同樣重跑。對照組不失敗，就照 § 發佈前驗證 (a) 拿掉，改回一行平述。強調只在它量得出差別的地方才有資訊量，全篇都強調時，每一處都不再有資訊量。
+**既有三件套沒有「model＋日期」量測紀錄的，下次改動該規約時先重跑一次無規約對照組**；fleet 主力 model 換代時，對每一條有紀錄的三件套同樣重跑（routing table 變更自動觸發，流程見 § routing table 變更後的對照組重跑）。對照組 n=5 全過，就照該節 § 5 解開（整條拿掉；被引用的錨點留標題、安全／授權類壓成一行），並附復發偵測（§ 7）。強調只在它量得出差別的地方才有資訊量，全篇都強調時，每一處都不再有資訊量。
 
 **可選第四件——completion checkbox＋證據 gate**：兩條**同時**成立才加——(1) 完成宣告本身是高違規點的流程型 skill（apply / verify / commit 類），且 (2) 該步驟的完成**有外部可取事實可查**（實跑輸出 / 截圖 / API 回應 / exit code）。做法：completion criterion 寫成 checkbox，每格綁「貼出實跑 invocation 與 output」。實例：commit Step 6、[[proactive-skills.design-checkpoint]] § Design Gate。
 
@@ -123,6 +123,26 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 - **兩臂都 0 = 先懷疑錨點，不要先懷疑規約**：模型沒用 prompt 要求的作答格式時兩臂會同時報 0。先讀 `rep-*.txt` 全文確認模型寫了什麼，再決定改斷言還是改措辭。
 - **斷言要有一條測「落到具體對象」，不能只測方向**：baseline 常判對方向卻說不出對誰做，而後者往往才是規約買到的東西。
 - 工具：`vendor/scripts/rule-pressure-test.ts`（baseline / with-rule 對照跑）；情境寫法見 cookbook。
+
+## routing table 變更後的對照組重跑（固定 SOP）
+
+規約的「對照組不失敗」是對**當時那一代 model** 量的；routing table 換 model 或檔位後，舊紀錄就過期了。重跑不靠人記得：
+
+1. **觸發（機械）**：routing table（`rules/core/agent-routing.routing-table.md` 表頭為執行鏈／鏈尾／主線 model／Sonnet effort 的欄，或 `vendor/scripts/pi-routing-policy.ts` 的 model id／effort 值）的 model 或檔位變更合入 main，本機 main fast-forward 時 `scripts/main-sync.ts` 呼叫 `vendor/scripts/rule-rerun-trigger.ts`，自動 `flow work open rule-control-rerun-<key7>`（key7＝引入 to 那份 routing 設定的 commit 前 7 碼；設定依列計 token，列間對調也算變更）；範圍清單落 `.clade/rule-rerun/<work_id>.manifest.json`（untracked）。只改列名、備註欄、禁用表、硬禁令、說明文字或 typo 不觸發（比的是載體欄裡的 model／effort token，不是行有沒有變）。同一個 tip 冪等。**失敗不掉**：ff 之前 main-sync 先記 `.clade/rule-rerun-pending`（最早未處理的起點；ff 失敗也不撤——逾時被砍時 HEAD 可能已動，留著頂多下次多掃一次空區間），所以 ff 後 submodule checkout 失敗等提前 return、或 trigger 失敗，都不會掉；之後每次 `--apply`（含已 in-sync 的 timer 跑，取得 integration lock 才重試）先重試，成功才清；失敗原因寫進 main-sync JSON 的 `rule_rerun_error`，fleet-main-align 列為要人處理。**跨機去重**：slug 的鍵是引入 to 那份 routing 設定（model／effort token 指紋）的 commit，各機在不同時刻 ff、一次跨幾次變更，都得到同一個 slug；只改理由欄不換鍵；A→B→A→B 的第二個 B 是另一個 commit 引入的，照開；manifest 標 `locked_clauses` 的條款（復發過、解開時的 model 還在表上）只量不解；開 work 前先 `flow where <slug>` 問 fleet，已有就不重開（標記寫 `deduped`）；peer 讀不到時照開並在結果標 `fleet_dedup: unverified`（寧可重複一件，也不整件掉）。同時刻兩台都還沒開的競態不在保證內。
+2. **範圍**：有三件套的規約 ∪ 有 pressure scenario 的規約（含 A 輪新補情境的模組規約）。三件套規約沒有 scenario 的，重跑 work 第一步先補情境才能量。
+3. **固定參數**（唯一來源 `vendor/scripts/lib/rule-control-params.ts`，執行者 **NEVER** 臨場改；n 是固定常數，不依帳號用量調整，重跑 work 照一般優先度派工、帳號走 launcher preflight）：
+
+| 參數 | 值 | 為什麼 |
+| --- | --- | --- |
+| 解開門檻 n | **5**，每條規約每輪失敗 **1 次就停、保留**，5 次**全過**才解開 | Charles 2026-11-08：抓一個合理量，傾向先解開、復發才關上（§ 7 兜底） |
+| 情境型態 | 多輪、塞滿專案上下文的長任務（`multi-turn-long-task-full-project-context`） | 單句短題 bare 容易過，量不到真實工作下的錯誤率；公開 repo `Charles5277/nuxt-agent-pitfalls` 的 n=3 短題只當挑候選依據 |
+| 評分 | 行為結果：實跑或 E2E（`behavior-outcome`） | 只比對字串會把「寫對字但行為錯」算過 |
+| 對照組讀 `~/offline`／`~/.agents` | 0 次 | 讀得到答案卷分數就虛高；該 rep 作廢不計入 n |
+
+4. **隔離**：對照組一律經 `vendor/scripts/agent-experiment-runner.ts run`（bwrap 把 `$HOME` 換成空 tmpfs，只 bind 回 claude 執行檔、憑證、這次專用的 config 與空工作目錄）。**NEVER** 用沒隔離的 `rule-pressure-test.ts` 跑刪除門檻——它靠 `--tools ''` 擋讀檔，量到的是純知識決策，不是長任務行為。`agent-experiment-runner.ts probe` 是隔離自檢（canary 在沙箱內讀不到、exit 0）；跑前、換機器後各跑一次。bwrap 不可用 exit 3，**NEVER** 退回無隔離。空的或沒跑完的 transcript 是廢樣本（exit 3），不是「讀了 0 次」，也不計入 n。
+5. **判定**：`judgeControlResult(n, passes)`——任何一次失敗 → `keep`（停、保留）；尚無失敗但 n < 5 → `continue`；n ≥ 5 全過 → `release`（解開）。解開的做法：整條拿掉；被 gate 或其他規約引用的錨點只留標題一行；安全／授權類（`nuxt-security` 對外 origin、SR-6 認證列）壓成一行、不整條刪。
+6. **寫回與送出**：結果寫回該規約的「model＋日期」量測紀錄（三件套規約寫在規約內；有 scenario 的寫在 scenario 的 `### YYYY-MM-DD 量測（…）` 段，`rule-rerun-trigger.ts` 的 `last_measured` 讀它）。解開候選以 PR 送出走 commit 0-A，**NEVER** 直接改 main。
+7. **復發就關上（每條解開的條款必附）**：解開時同 PR 附一支機械偵測（例：掃合入 diff 的 `globalThis.$fetch` 覆寫、無條件 `hub.db.driver` d1，或 0-A finding 對到該條錨點）；哨兵每天跑；fleet 一次復發就自動開 PR 還原該段規約（可走低風險放行）並記復發紀錄，**下一輪換 model 前不再解開**。偵測、還原與復發紀錄的實作在 `vendor/scripts/rule-recurrence-sentinel.ts`（登記簿 `registry/rule-recurrence/clauses.json`，日跑 `scan --apply --fleet`），本節只引用、不重做；誤報用 `rule-recurrence-sentinel.ts dismiss` 登記（關 PR 不算），要整條停看改登記簿。
 
 ## load-bearing 句登記（改寫既有規約時 MUST 查）
 

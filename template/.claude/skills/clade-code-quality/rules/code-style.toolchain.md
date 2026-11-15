@@ -157,17 +157,20 @@ node 是 vp 兩層共同的第三層。適用於 repo root 有 `package.json` �
 | 來源 | 寫什麼 | 沒釘的後果 |
 | --- | --- | --- |
 | `package.json` 的 `engines.node` | `"^24"` | 本機仍裝得起來，但宣告變成謊話；`pnpm install` 不會擋 |
-| `.nvmrc`（或 `.node-version`） | `24`，或與正式機一致的完整版號（見下） | 開發者本機 `nvm use` / `fnm use` 切到別的 major |
-| **每一個** workflow 的**每一處** `node-version` | `'24'` | **CI 當場紅**，且 matrix 只有一格紅時很像 flaky |
+| `.node-version`（單一版本檔） | 完整版號（`24.22.3`），≥ 該發行線最低修補版、與正式機一致（見下） | 開發者本機 `fnm use` 切到別的 major；只寫 `24` 證明不了已含安全修補 |
+| **每一個** workflow 的**每一處** setup-node／setup-vp | `node-version-file: .node-version` | 字面值 `node-version:` 不跟版本檔走：版本檔升了 CI 仍跑舊版，**CI 當場紅**或默默跑未修補版 |
 
-workflow 那一列是全稱：**每一個** `.github/workflows/*.yml` 的**每一處** `node-version:`，不是只改 `ci.yml` 或每檔第一處。
+workflow 那一列是全稱：**每一個** `.github/workflows/*.yml` 的**每一處** node setup，不是只改 `ci.yml` 或每檔第一處。
 
-#### 版本檔：單一檔、可寫完整版號
+過渡：仍寫 `24`／`.nvmrc`、或 CI 用 `node-version: '24'` 字面值的 repo 由 fleet 版本檔收斂逐家改；改完前 audit 照下方四種 finding 報出，不算已對齊。
+
+#### 版本檔：單一檔、寫完整版號
 
 - 同一個 repo 只能有一個版本檔：`.nvmrc` 與 `.node-version` 兩檔並存視為違規。
-- 版本檔寫完整 patch 版號時，必須跟正式機一致，正式機升級時要同一件一起改（走 `version-upgrade` skill 的 security 快速道）。pin 了 patch 卻不跟著正式機升，也算沒釘。
+- 版本檔的完整 patch 版號必須跟正式機一致，正式機升級時要同一件一起改：同發行線的安全修補走 clade 的資安快速道（clade 端跑 `node scripts/security-fastlane-batch.ts`，產各家的機械 brief）；要換發行線時快速道把該列標 R2 停、不產 brief，照 charter § 大版本升級。pin 了 patch 卻不跟著正式機升，也算沒釘。
+- 資安下限：clade `registry/toolchain.json` 的 `tools.node.minimumPatch` 登記每條發行線的最低修補版（該線最新 security release，由 `--refresh-targets` 算，NEVER 手填）。`audit-ci-toolchain-parity.ts` 報四種 finding：`below-minimum-patch`（版本檔低於下限）、`major-only-unprovable`（只寫 major）、`ci-not-reading-version-file`（CI 用字面值，或該 workflow 的 setup-node 沒帶 `node-version-file`）、`version-file-dual`（兩檔並存）。
 - `engines.node` 維持 major 範圍（`"^24"`）。
-- CI 可用 `node-version-file` 讀版本檔（見下方 NEVER 段例外）。
+- CI 一律用 `node-version-file` 讀版本檔。
 - 大版本例外不在本規則放寬範圍：正式機的 major 不是 24 的 repo（例：某 consumer 正式機是 22）另走升 major，不能靠版本檔寫完整版號繞過。
 
 #### NEVER
@@ -189,7 +192,7 @@ node scripts/audit-ci-toolchain-parity.ts          # 人讀表格；--json 給�
 node scripts/audit-ci-toolchain-parity.ts --target-node 24
 ```
 
-目標 major 的 SoT 是該 script 的 `TARGET_NODE_MAJOR`；換標準時常數與本節**同步改**，不要只改一邊。操作模板見 `vendor/snippets/ci-parity/`。
+目標 major 與各線最低修補版的 SoT 是 `registry/toolchain.json` 的 `tools.node`（`target`、`minimumPatch`）；換標準時 registry 與本節**同步改**，不要只改一邊。操作模板見 `vendor/snippets/ci-parity/`。
 
 ### 禁止在 lint-staged / pre-commit / CI 命令中呼叫 eslint / prettier
 

@@ -143,7 +143,11 @@ describe('scaffold receipt', { timeout: 300_000 }, () => {
       hashReceiptContent('generated during install\n'),
     )
     for (const [rel, hash] of Object.entries(committed.files)) {
-      const blob = execFileSync('git', ['show', `HEAD:${rel}`], { cwd: target }).toString('utf8')
+      // maxBuffer：第三方 skill 帶 >1MB 的資料檔（impeccable font-index.json），預設 1MB 會 ENOBUFS
+      const blob = execFileSync('git', ['show', `HEAD:${rel}`], {
+        cwd: target,
+        maxBuffer: 64 * 1024 * 1024,
+      }).toString('utf8')
       expect(hashReceiptContent(blob), rel).toBe(hash)
     }
     // TD-026 後 template 多了 vendored specformula 工作區與 BDD devDeps，
@@ -186,7 +190,11 @@ describe('scaffold receipt', { timeout: 300_000 }, () => {
     )
     for (const [rel, hash] of Object.entries(receipt.files)) {
       expect(hashReceiptContent(readFileSync(join(target, rel), 'utf8')), rel).toBe(hash)
-      const blob = execFileSync('git', ['show', `HEAD:${rel}`], { cwd: target }).toString('utf8')
+      // maxBuffer：第三方 skill 帶 >1MB 的資料檔（impeccable font-index.json），預設 1MB 會 ENOBUFS
+      const blob = execFileSync('git', ['show', `HEAD:${rel}`], {
+        cwd: target,
+        maxBuffer: 64 * 1024 * 1024,
+      }).toString('utf8')
       expect(hashReceiptContent(blob), rel).toBe(hash)
     }
     expect(existsSync(join(target, '.clade'))).toBe(false)

@@ -32,7 +32,7 @@ export const STATUS_LINE = /^(?:[-*+]\s+)?\*\*Status\*\*\s*[:：]\s*(.*)$/
  * `**Parent**: TD-NNN` — the ONLY machine-readable statement that one entry belongs under another.
  *
  * Explicit marker only, on the same basis `scanTechDebt` refuses a keyword heuristic. `[[TD-NNN]]`
- * prose links do NOT carry direction: TD-787's Class line names both TD-684 and TD-786 while being
+ * prose links do NOT carry direction: one entry's Class line names two other TDs while being
  * their DOWNSTREAM, and no reading of the link tells you which way it points. A field a person
  * typed on purpose is the only source that does.
  */
@@ -250,11 +250,11 @@ function sectionHasContent(lines: string[], from: number, level: number): boolea
 
 /** Highest TD number present, or 0. The `r*-tdmax` family existed only to answer this. */
 /**
- * Class B one-liners (`TD-NNN: …`) are a second ledger (TD-913). The live block sits inside the
+ * Class B one-liners (`TD-NNN: …`) are a second ledger. The live block sits inside the
  * register's own fence, so the fence-blanked heading scan never sees it. Same raw `^TD-(\d+):`
  * scan as `scripts/td-number.ts` `usedNumbers`. Number space only: a raw scan also matches a body
  * line that merely references an archived id, which is harmless for a maximum but wrong as an
- * entry — so this NEVER feeds `parseTdRegister` (0-A #254: `td-inject` / `planRotate` /
+ * entry — so this NEVER feeds `parseTdRegister` (`td-inject` / `planRotate` /
  * `register-scan --filter all` would otherwise act on ids that exist only as a one-liner).
  */
 export function classBTdNumbers(source: string): number[] {
@@ -266,7 +266,7 @@ export function classBTdNumbers(source: string): number[] {
   return numbers
 }
 
-/** Highest TD number in use. Pass the raw `source` to include Class B one-liners (TD-913). */
+/** Highest TD number in use. Pass the raw `source` to include Class B one-liners. */
 export function maxTdNumber(entries: TdEntry[], source?: string): number {
   const headings = entries.reduce((max, e) => Math.max(max, Number(e.id.slice(3))), 0)
   return source === undefined ? headings : Math.max(headings, ...classBTdNumbers(source))

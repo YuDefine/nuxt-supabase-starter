@@ -1,6 +1,6 @@
 ---
 name: "clade-operations"
-description: "Runtime, deployment, local service, and infrastructure rules. Use when changing Cloudflare, Nitro, APIs, tunnels, ports, service URLs, or operational configuration. Also use when: 要打第三方服務 API、開它的 dashboard、或要人登入／給 OTP 之前."
+description: "Runtime, deployment, local service, and infrastructure rules. Use when changing Cloudflare, Nitro, APIs, tunnels, ports, service URLs, or operational configuration, or when a required tool or dependency is missing and about to be worked around. Also use when: 要打第三方服務 API、開它的 dashboard、或要人登入／給 OTP 之前."
 ---
 
 # SOP
@@ -13,6 +13,7 @@ description: "Runtime, deployment, local service, and infrastructure rules. Use 
    - `rules/deploy-env-identity.md`：決定「這份執行中的程式跑在哪個部署目標」時——標 Sentry / evlog 的 environment、選告警路由、開關環境專屬 feature、擋 destructive endpoint——判斷該讀哪個值；症狀是 staging 的事件混進 production 的判讀；且碰 `sentry*.config.*`、`**/sentry*.ts`、`nuxt.config.*` 等 10 處
    - `rules/dev-port-allocation.md`：Consumer dev server port 中央分配 + audit（避免跨 consumer 撞號）；且碰 `package.json`、`nuxt.config.ts`、`supabase/config.toml` 等 5 處
    - `rules/dev-tunnel-convention.md`：Dev tunnel（vite-plugin-cloudflare-tunnel / cloudflared）跨 consumer convention — § 1–4 zone/hostname、token scope、restart-loop 防護、冷/熱載入量測規約本體（自 dev-port-allocation 搬入）；§ 6 要掛 dev tunnel 就必須掛 Cloudflare Access，否則撤 tunnel；§ 7 linked worktree 不得接上共用 named tunnel；且碰 `nuxt.config.*`、`.env`、`.env.local` 等 4 處
+   - `rules/missing-dependency.md`：發現應有的工具、依賴、runner 套件或權限不在，正要改走替代路徑、降級或繞過時
    - `rules/service-access.md`：要碰第三方服務（打它的 API、開它的 dashboard、要人登入或給 OTP）之前先讀存取卡，照卡上量過的最省路徑走；沒有卡就探索一次並寫卡；或要打第三方服務 API、開它的 dashboard、或要人登入／給 OTP 之前
    - `rules/service-url-locality.md`：app 與它的 backing service（Supabase / PostgREST / storage）跑在同一個內網、而該 service 另有對外域名時，決定 server 端與 client 端各該讀哪個 URL；症狀是每支碰 DB 的 API 都慢一點（全部 200、只是慢），或圖片只有外部使用者載不到；且碰 `nuxt.config.*`、`server/**/*.ts`、`packages/*/server/**/*.ts` 等 7 處
    - `rules/vite-doctor.md`：動到 nuxt.config / vite.config / package.json scripts / doctor preset 時的 vite-doctor 配置判準（devDependency 必裝、module 必啟用、`pnpm run doctor` 的 run 不可省）；且碰 `nuxt.config.*`、`vite.config.*`、`package.json` 等 6 處

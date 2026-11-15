@@ -43,7 +43,7 @@ paths:
 
 | 場景 | 既有動作 | 怎麼掛 |
 | --- | --- | --- |
-| dispatch 收尾 | `--complete success` | 加 `--work-done --verification '<摘要>'`。**opt-in 明示**：pane success **NEVER** 自動升級成 work done（`派工共用底座判準.md` 那條 NEVER 仍然有效）。同時帶 `--followup-brief` 時機械拒絕 `--work-done` |
+| dispatch 收尾 | `--complete success` | 加 `--work-done --verification '<摘要>'`。**opt-in 明示**：pane success **NEVER** 自動升級成 work done（`durable-brief撰寫判準.md` 那條 NEVER 仍然有效）。同時帶 `--followup-brief` 時機械拒絕 `--work-done` |
 | attended session 直接做完 | `/handoff park` \| `relay` | ambient work 存在且無殘工要交接 → 順路 `flow work done <id> --verification`；有殘工 → emit `work.park`。`relay` 走 Step 1.5：**同一件事的續集 NEVER emit**（successor 要接著做），ambient work 本身已完成才 emit |
 | 做的人沒宣告、收割者判定落地 | `--adjudicate --disposition landed` | landed 且該 work 無其他 in-flight span → 順路 emit done，`verification` 引 adjudication 的 `--reason` |
 | worktree land 收尾 | `wt-helper merge-back` | 加 `--work-done --verification '<摘要>'`。**opt-in 明示**；與 `--dry-run` 互斥；caller 的 verification 逐字保留，工具觀測到的落地事實（squash / cleanup / staged-pending）附加在後。記給**worktree claim 綁定的卡**（`wt-helper add` 當下寫進 claim），ambient `CLADE_WORK_ID` 只當 fallback；兩者不一致或兩者皆無 → 在動 main 之前拒絕（ambient 活不過單次 Bash 呼叫；記錯卡的 `work.done` 只能事後用 `flow work reopen` 追加撤回，撤回前每個讀者都已把那張卡讀成完成） |

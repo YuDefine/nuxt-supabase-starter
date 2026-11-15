@@ -140,6 +140,14 @@ printf '%s' "$cmd" | perl -e '
   printf '     needs a temporary copy of the main DB (pnpm db:copy), not a reseed. Until this repo adopts those scripts, its\n'
   printf '     per-worktree clone reset (target mode) is the only reset allowed; check the topology predicate first.\n'
   printf '   - Full contract: .claude/skills/clade-data/rules/db-topology-invariant.md\n'
+  # db:copy 已導入的 repo 才帶預設連主線＋三條開副本觸發（契約：worktree-db-isolation/README.md § 10）；
+  # 沒導入的 per-worktree consumer 維持上面那條「per-worktree clone reset」預設
+  if jq -e '.scripts["db:copy"] // empty' "$project_dir/package.json" >/dev/null 2>&1; then
+    printf '   - Default is to connect to the main DB. Take a temporary copy (pnpm db:copy --purpose schema|destructive, drop it\n'
+    printf '     when done) only when: (1) your diff adds or edits a migration; (2) you run destructive writes (TRUNCATE, DROP,\n'
+    printf '     DELETE/UPDATE without WHERE, ALTER COLUMN ... USING, backfills over 10k rows, simulations); (3) a test needs a\n'
+    printf '     clean starting state to pass (fix the test first; take the copy only if it cannot be fixed). When unsure, take the copy.\n'
+  fi
   hint="$project_dir/.claude/db-runtime-hint.md"
   if [ -f "$hint" ]; then
     printf '   This repo says:\n'

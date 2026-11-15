@@ -26,8 +26,8 @@ $ARGUMENTS
 
 ## Phase 1 -- 判定 runtime 邊界、延續價值與交接模式（Codex boundary／Step 0.1／Step 0／Step 0.5／Step 1）
 
-1. READ 每次進入 `/handoff`，讀取 `rules/模式偵測與park閘判準.md`：先過 Step 0.1 value-first gate，解析 `$ARGUMENTS`，裸 `/handoff` 再過 Step 0.5 context 預算 gate 與 Step 1 兩層判定，落到 `park`／`relay`／`fanout`／`next` 其一；落到 `park` 的裸呼叫 MUST 先過 park gate。
-2. READ 若模式是 `relay`，讀取 `rules/relay接力判準.md` 全文並照順序執行（共用底座 `rules/派工共用底座判準.md`）；若是 `fanout`，讀取 `rules/fanout派工判準.md` 全文照做（同樣先讀 `rules/派工共用底座判準.md`）。完成後跳到 Phase 5。
+1. READ 每次進入 `/handoff`，讀取 `rules/模式偵測與park閘判準.md`：先過 Step 0.1 value-first gate（判準在 `rules/價值優先延續判準.md`），解析 `$ARGUMENTS`，裸 `/handoff` 再過 Step 0.5 context 預算 gate 與 Step 1 兩層判定，落到 `park`／`relay`／`fanout`／`next` 其一；落到 `park` 的裸呼叫 MUST 先過 park gate。
+2. READ 若模式是 `relay`，讀取 `rules/relay接力判準.md` 全文並照順序執行（共用底座入口 `rules/派工前置與身分分流判準.md`，其餘共用段由 rules 內連結用到才讀）；若是 `fanout`，讀取 `rules/fanout派工判準.md` 全文照做（同樣先讀 `rules/派工前置與身分分流判準.md`）。共用底座依用到才讀：`rules/durable-brief撰寫判準.md`（寫 brief）、`rules/派工helper與launcher判準.md`（呼叫 helper、選 launcher）、`rules/runtime清理與parent-worktree判準.md`（寫 brief 前判 parent worktree 去留與誰接手、收尾清理）、`rules/派工收工訊息判準.md`（收工訊息）、`rules/worker殘工回報判準.md`（worker 回報殘工）。完成後跳到 Phase 5。
 
 ## Phase 2 -- 解析 main worktree 的全局寫入路徑（Step 1.5；park／next 共用）
 

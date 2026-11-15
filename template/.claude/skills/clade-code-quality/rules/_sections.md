@@ -25,23 +25,23 @@ code-style.toolchain.md — lint / fmt 工具鏈治理——preset 是唯一設�
 69-91 禁止事項（NEVER） › 禁止所有 prettier config 檔（含 `.prettierignore`）
 93-119 禁止事項（NEVER） › 禁止把 eslint / prettier 加進 dependencies
 121-149 禁止事項（NEVER） › 禁止依賴全域 vite-plus（hard rule）
-151-192 禁止事項（NEVER） › Node runtime 全 fleet 釘 major 24（hard rule）
-194-203 禁止事項（NEVER） › 禁止在 lint-staged / pre-commit / CI 命令中呼叫 eslint / prettier
-205-234 禁止事項（NEVER） › CI workflow 禁止跑 `vp check` / `vp run check`（hard rule）
-238-260 必須事項（MUST） › 改 `catalog:` / `overrides:` 之後，收尾 MUST 驗 lockfile 本身
-262-278 必須事項（MUST） › packageExtensions 條目契約
-280-317 必須事項（MUST） › `vite.config.ts` 必備欄位（跨 consumer 統一，避免 propagate drift）
-319-352 必須事項（MUST） › staged 配置：一行 re-export，NEVER 手寫排除陣列
-354-362 必須事項（MUST） › Nuxt app 不要照抄官方 `vp migrate` 全文
-364-378 必須事項（MUST） › Pre-commit hook 走 `runner.sh`
-380-392 違反偵測
-394-424 Heavy gate 准入控制（機器層並行上限）
-426-461 Heavy gate 准入控制（機器層並行上限） › Guard 要寫成 arg-safe 形狀，NEVER 裸 `if … fi`
-463-472 Heavy gate 准入控制（機器層並行上限） › 這幾個 exit code 說的是不同層的話
-474-512 Heavy gate 准入控制（機器層並行上限） › 機器層調參 NEVER 寫死進 script 預設
-514-524 Heavy gate 准入控制（機器層並行上限） › `vp check` 收不到 threads 上限（已知殘餘）
-526-530 Heavy gate 准入控制（機器層並行上限） › 長駐 dev server 不是 gate —— 閘門結構上攔不到它
-532-540 Heavy gate 准入控制（機器層並行上限） › NEVER 用 slots 數量近似記憶體
+151-195 禁止事項（NEVER） › Node runtime 全 fleet 釘 major 24（hard rule）
+197-206 禁止事項（NEVER） › 禁止在 lint-staged / pre-commit / CI 命令中呼叫 eslint / prettier
+208-237 禁止事項（NEVER） › CI workflow 禁止跑 `vp check` / `vp run check`（hard rule）
+241-263 必須事項（MUST） › 改 `catalog:` / `overrides:` 之後，收尾 MUST 驗 lockfile 本身
+265-281 必須事項（MUST） › packageExtensions 條目契約
+283-320 必須事項（MUST） › `vite.config.ts` 必備欄位（跨 consumer 統一，避免 propagate drift）
+322-355 必須事項（MUST） › staged 配置：一行 re-export，NEVER 手寫排除陣列
+357-365 必須事項（MUST） › Nuxt app 不要照抄官方 `vp migrate` 全文
+367-381 必須事項（MUST） › Pre-commit hook 走 `runner.sh`
+383-395 違反偵測
+397-427 Heavy gate 准入控制（機器層並行上限）
+429-464 Heavy gate 准入控制（機器層並行上限） › Guard 要寫成 arg-safe 形狀，NEVER 裸 `if … fi`
+466-475 Heavy gate 准入控制（機器層並行上限） › 這幾個 exit code 說的是不同層的話
+477-515 Heavy gate 准入控制（機器層並行上限） › 機器層調參 NEVER 寫死進 script 預設
+517-527 Heavy gate 准入控制（機器層並行上限） › `vp check` 收不到 threads 上限（已知殘餘）
+529-533 Heavy gate 准入控制（機器層並行上限） › 長駐 dev server 不是 gate —— 閘門結構上攔不到它
+535-543 Heavy gate 准入控制（機器層並行上限） › NEVER 用 slots 數量近似記憶體
 
 coupling-cohesion.md — 耦合與內聚的三層分工——import cycle / barrel 的 gate 判讀、server 碼跨界 import、跨檔重複 discriminant switch、audit 表的 NO-SCAN 語意、Review 層函式契約、第三方 SDK 邊界、以 agent 為前提的設計警訊
 5-10 前導 — Coupling & Cohesion

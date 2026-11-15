@@ -85,7 +85,7 @@ commit 0-A 的標準入口是 `capabilities/core/scripts/claude-review-safe.sh`�
 .claude/scripts/claude-review-safe.sh prepare xhigh
 ```
 
-叫不出 Claude subagent 的 runtime 才跑無子命令的 `claude-review-safe.sh xhigh`（Herdr Claude child）。0-A.1 跨模型 wrapper `codex-review-safe.sh`（原 Astra carrier）已於 2026-10-18 移除；Opus 額度耗盡 → gate 保持未完成，沒有備援席（[[agent-routing]] § commit 0-A reviewer）。
+叫不出 Claude subagent 的 runtime 才跑無子命令的 `claude-review-safe.sh xhigh`（Herdr Claude child）。Opus 額度耗盡 → gate 保持未完成，沒有備援席（[[agent-routing]] § commit 0-A reviewer）。
 
 ### Plan-first（寫 code 的派工必加）
 
@@ -678,4 +678,4 @@ node vendor/scripts/herdr-session-handoff.ts --cwd /tmp/repair-repo --label repa
 
 ## 串行鏈的既有實例
 
-> 既有的三處特例是[[agent-routing.dispatch-execution]] § 派多少的實例，不取代[[agent-routing.dispatch-execution]] § 派多少：`handoff/rules/relay接力判準.md` §0 與 `session-tasks.operations.md` § 派幾個 pane（兩者都框在「serial 工作 NEVER 拆給 N 個 worker」），以及 `handoff/rules/派工共用底座判準.md` § 2 的 brief 範圍檢查點。**它們防的是「拆給 N 個 worker」，[[agent-routing.dispatch-execution]] § 派多少多防一種形狀：切成「worker ＋ 主線自己」**——那種切法在既有條文的字面下不會 fire，因為沒有第二個 worker。
+> 既有的三處特例是[[agent-routing.dispatch-execution]] § 派多少的實例，不取代[[agent-routing.dispatch-execution]] § 派多少：`handoff/rules/relay接力判準.md` §0 與 `session-tasks.operations.md` § 派幾個 pane（兩者都框在「serial 工作 NEVER 拆給 N 個 worker」），以及 `handoff/rules/durable-brief撰寫判準.md` § 2 的 brief 範圍檢查點。**它們防的是「拆給 N 個 worker」，[[agent-routing.dispatch-execution]] § 派多少多防一種形狀：切成「worker ＋ 主線自己」**——那種切法在既有條文的字面下不會 fire，因為沒有第二個 worker。

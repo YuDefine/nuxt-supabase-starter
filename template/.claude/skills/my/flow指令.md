@@ -145,7 +145,7 @@ cd ~/offline/clade && node vendor/scripts/flow/flow.ts answer '<span_id>' \
 | `--via <text>` | 選填（被派出的 session 必填） | 決策紀錄的來源說明，預設 `Charles 在 chat 回答，由主線代填`（只對 Charles 在 chat 主線的呼叫成立）。audience coordinator 的題沒帶 `--via` 也沒帶 `--surface`、或被派出的 session（`CLADE_DISPATCH_ID` 非空）沒帶 `--via`（只有 `--surface fleet-web` 免）時**拒絕**、不落答、不套預設：依既有證據代答要自述（如 `--via "主持者依 <證據> 代答"`），NEVER 把代答記成 Charles 本人；Charles 親口答才寫 `Charles 在 <處> 回答，由 <誰> 代填` |
 | `--surface fleet-web\|cli-proxy\|cli` | 選填 | 作答介面，連同 `via` 寫進 `decision.request` end 事件。沒帶：有 `--via`＝`cli-proxy`、沒有＝`cli`（代填）。`fleet-web` 只有 /fleet 網頁的 server 路徑會帶，agent **NEVER** 帶；它是 server 自述不是防偽證明。三值以外當場拒絕、不落答 |
 | `--apply` | 寫入時必帶 | 真的關 span、寫檔、散播。不帶就只預演：不關 span、不寫檔、不散播，輸出的 `block` 逐字就是等一下會寫進去的那段（`FLOW_CLI_CONTRACT=2` 下的預設；過渡期沒帶前綴時不帶 `--apply` 仍會寫入並印 `flow: deprecated-default`）。`--dry-run` 是舊名別名 |
-| `--local-only` | 選填 | 本機沒有這題時不問 peer。預設：本機判 `no-such-decision` 才問 peer 的佇列、對題所在那台跑同一條 `answer --local-only`；peer 讀不到就拒絕並印原因（exit 1），NEVER 在本機另寫一份 |
+| `--local-only` | 選填 | 本機沒有這題時不問 peer。預設：本機判 `no-such-decision` 才問 peer 的佇列、對題所在那台跑同一條 `answer --local-only`；讀不到的 peer 拉長逾時重試一輪（8 秒→20 秒、中間退避 2 秒），仍讀不到就直接對那台跑 `answer --local-only`（不在那台會回沒有這題，不寫孤兒紀錄；整條轉送收在 75 秒內）；都不成就拒絕並印各台原因（exit 1），NEVER 在本機另寫一份。放行請求（`--review-action`）讀不到 peer 直接 exit 1，不重試、不直接落答 |
 
 輸出：一行 JSON `{ ok, resolved, landed, carrier, carrierPath, block, reason, detail, td_status?, published? }`。
 

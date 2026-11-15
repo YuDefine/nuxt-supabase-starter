@@ -178,7 +178,7 @@ cat .claude/hub.json
 
 ```bash
 # 看 install-skills.sh 列了哪些第三方 skills
-cat scripts/install-skills.sh | grep "skills add"
+grep -o 'skill_add_pinned "[^"]*"' scripts/install-skills.sh
 
 # 對應 drift 的 skill 是不是在這份清單
 ```
@@ -186,11 +186,9 @@ cat scripts/install-skills.sh | grep "skills add"
 **處理**：
 
 ```bash
-# 重新安裝（會拿最新版）
+# 換版：改 scripts/install-skills.sh 的 REF_*（40 碼 SHA 或 tag），再重跑
 pnpm skills:install
-
-# 或鎖定版本
-# 修改 install-skills.sh，把 `skills add @author/skill` 改 `skills add @author/skill@<version>`
+# 沒改 ref 重跑只會裝回同一版，不會追上游
 ```
 
 `pnpm hub:check` 不該對第三方 skills 報 drift（因為不在 clade checksum 清單）。如果報了 → checksum 清單有 bug。
@@ -307,7 +305,7 @@ diff -u .claude/rules/<file> ~/offline/clade/rules/<file>
 
 ## 與其他文件的關係
 
-- root [`.claude/rules/meta-repo.md`](../.claude/rules/meta-repo.md)（root `CLAUDE.md` 只是空殼入口）— clade 治理規則的高階說明（哪些去改 clade、哪些是 local）
+- root [`docs/META_REPO.md`](META_REPO.md)（root `CLAUDE.md` 只是空殼入口）— clade 治理規則的高階說明（哪些去改 clade、哪些是 local）
 - [QUICK_START.md](QUICK_START.md) — scaffold 流程，會 wire pre-commit 防呆
 - [`template/docs/NEW_PROJECT_CHECKLIST.md`](../template/docs/NEW_PROJECT_CHECKLIST.md) — 環境驗收，含 hub-drift 檢查項
 - [AGENTS.md](AGENTS.md) — meta layer AI 入口，drift 場景時跳到本檔

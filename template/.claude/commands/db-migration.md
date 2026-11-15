@@ -84,8 +84,19 @@ TYPES=$(node -e "
 ")
 
 USE_DB_WRAPPER=$(node -e "process.exit(require('./package.json').scripts?.['db:reset'] ? 0 : 1)" 2>/dev/null && echo yes || echo no)
+USE_DB_COPY=$(node -e "process.exit(require('./package.json').scripts?.['db:copy'] ? 0 : 1)" 2>/dev/null && echo yes || echo no)
 
-if [ "$USE_DB_WRAPPER" = yes ]; then
+if [ "$USE_DB_COPY" = yes ]; then
+  # forward-only 第二段：在臨時副本上重放 + lint + 重生 types，用完 drop；NEVER reset、NEVER 對主線 DB db:migrate
+  # （副本契約見 vendor/snippets/worktree-db-isolation/README.md § 10；失敗一律停下，NEVER 退回 db:reset／主線 db:migrate）
+  # `--drop` 在副本不存在時本來就 exit 0（契約 § 10）；drop 失敗不能吞——否則 `--purpose schema` 沿用殘留舊副本，驗到的是舊狀態
+  pnpm db:copy --drop || exit 1
+  pnpm db:copy --purpose schema || exit 1
+  pnpm db:migrate --target copy && pnpm db:types --target copy && pnpm db:lint --target copy; rc=$?   # lint 必須零警告
+  pnpm db:copy --drop || echo '⚠ 臨時副本沒 drop 乾淨：pnpm db:copy --list 查' >&2
+  [ "$rc" -eq 0 ] || exit "$rc"
+  pnpm typecheck
+elif [ "$USE_DB_WRAPPER" = yes ]; then
   # 遠端 / existing-server：走 pnpm db:*（wrapper 會擋本機 Docker；db:reset 內部跑 db:types 寫到 $TYPES）
   # 只有 per-worktree 拓樸（target mode，只重建自己的 clone）才准 reset；
   # shared 拓樸共用 DB NEVER reset（判定見 [[db-topology-invariant]] § Forward-only）→ 交 CI supabase-check，沒接就停

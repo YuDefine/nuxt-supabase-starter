@@ -6,7 +6,7 @@
 
 成功事件是 helper 回傳 **`relay_dispatched`**，且 `relayed_dispatch_ids` 逐筆對得上你派出去的 worker。**不是**「worker 完成了工作」——那不再是本 session 的事。
 
-Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、parent worktree lifecycle、收工訊息契約全部依 [派工共用底座判準.md](派工共用底座判準.md)，本檔不重述。§ 2 workers 與 § 4 successor 都受其中 § 3.1 runtime affinity 約束：預設全部與當前 session 同 runtime，只有 user 當次明確點名才可跨 runtime。
+Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、parent worktree lifecycle、收工訊息契約全部依 [派工前置與身分分流判準.md](派工前置與身分分流判準.md)（Preflight、`CLADE_DISPATCH_ID` 分流）、[durable-brief撰寫判準.md](durable-brief撰寫判準.md)、[派工helper與launcher判準.md](派工helper與launcher判準.md)、[runtime清理與parent-worktree判準.md](runtime清理與parent-worktree判準.md)、[派工收工訊息判準.md](派工收工訊息判準.md)（各檔用到才讀；入口是前置與身分分流），本檔不重述。§ 2 workers 與 § 4 successor 都受 [派工helper與launcher判準.md](派工helper與launcher判準.md) § 3.1 runtime affinity 約束：預設全部與當前 session 同 runtime，只有 user 當次明確點名才可跨 runtime。
 
 ## 0. 先判該不該用 fanout
 
@@ -20,11 +20,11 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 
 **NEVER** 因為「一件一個 pane 比較整齊」就把 serial 工作拆成 N 個 worker。它們會同時改同一批檔。
 
-`CLADE_DISPATCH_ID` 非空（本 session 自己是被派出來的 child）→ **STOP，改走 `relay`**。成因與逐字反開脫見 [派工共用底座判準.md](派工共用底座判準.md) § 1。
+`CLADE_DISPATCH_ID` 非空（本 session 自己是被派出來的 child）→ **STOP，改走 `relay`**。成因與逐字反開脫見 [派工前置與身分分流判準.md](派工前置與身分分流判準.md) § 1。
 
 ## 1. 為每個 worker 寫 durable thin brief
 
-依 [派工共用底座判準.md](派工共用底座判準.md) § 2，**每件工作各一份**。額外兩項 fanout 專屬要求：
+依 [durable-brief撰寫判準.md](durable-brief撰寫判準.md) § 2，**每件工作各一份**。額外兩項 fanout 專屬要求：
 
 - 每份 brief **MUST** 寫明**檔案所有權**：這個 worker 可以動哪些路徑、不可以動哪些。N 個 worker 同時在同一個 repo 跑，沒有所有權欄位就是併發寫入同一檔（per [[subagent-scope-discipline]]）。
 - 每份 brief **MUST** 寫明「你是被派來做這一件事的 worker，不是繼任者」，以及「做完回報 outcome；要交棒只能用 `/handoff relay`，**不能** fanout」。
@@ -32,9 +32,9 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 
 ## 2. 逐個裸 dispatch
 
-⛔ **`<routing-model>` 填 `sonnet`（或已禁用的 `fable`／`haiku`）的那一筆不派 pane**——依 [派工共用底座判準.md](派工共用底座判準.md) § 3.2 改走 `pi-dispatch.ts` 的 grok 座位（helper 自 2026-09-10 起直接回 `usage_error`）。
+⛔ **`<routing-model>` 填 `sonnet`（或已禁用的 `fable`／`haiku`）的那一筆不派 pane**——依 [派工helper與launcher判準.md](派工helper與launcher判準.md) § 3.2 改走 `pi-dispatch.ts` 的 grok 座位（helper 自 2026-09-10 起直接回 `usage_error`）。
 
-⛔ **先過 [派工共用底座判準.md](派工共用底座判準.md) § 1 的 `--cwd` 佔用探測**——`--cwd` 指向**非本 session 建立的**既存工作區（尤其 `-wt/` linked worktree）時，三步任一命中或 ownership 判不出來就 **NEVER 派**。worker 自己的 STOP 條款是事故後的損害控制，接不住已經發生的併發寫。
+⛔ **先過 [派工前置與身分分流判準.md](派工前置與身分分流判準.md) § 1 的 `--cwd` 佔用探測**——`--cwd` 指向**非本 session 建立的**既存工作區（尤其 `-wt/` linked worktree）時，三步任一命中或 ownership 判不出來就 **NEVER 派**。worker 自己的 STOP 條款是事故後的損害控制，接不住已經發生的併發寫。
 
 對每件工作跑一次；`--new-tab` 讓不同主題各自形成可辨識的 Tab，且**不帶** `--coordinate`、**不帶** `--relay`：
 
@@ -54,7 +54,7 @@ node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \
 
 ## 3. 為 successor 寫 brief
 
-依 [派工共用底座判準.md](派工共用底座判準.md) § 2，**外加**三項：
+依 [durable-brief撰寫判準.md](durable-brief撰寫判準.md) § 2，**外加**三項：
 
 - 寫明「你是繼任者，不是被派出去做一件子工作的 worker」，以及本 session 交棒的理由。
 - **逐個列出 § 2 派出去的 worker**：dispatch_id、label、在做什麼、預期什麼 outcome、動哪些檔。helper 會把 coordinator 身分轉過去，但**它轉的是權限，不是脈絡**——successor 收到的 `relayed_dispatch_ids` 只是一串 UUID。
@@ -99,4 +99,4 @@ receipt 回 `relay_dispatched` 後，**MUST** 把 `relayed_dispatch_ids` 與 § 
 | `relay_refused` | 本 session 的 exact runtime session（Claude 或 Pi）無法辨識，或沒有可交出的 pane。**已派出去的 N 個 worker 現在無人繼承**：保留 durable task 與所有 pane，回具體 blocker 並列出那 N 筆 dispatch_id，**NEVER** 改用 raw `herdr` 指令繞過、**NEVER** 收工 |
 | `transport_error`／其他 preflight failure | 同上 |
 
-`relay_dispatched` 之後 **NEVER** 再開任何新工作段。細則見 [派工共用底座判準.md](派工共用底座判準.md) § 5 兩者共通。
+`relay_dispatched` 之後 **NEVER** 再開任何新工作段。細則見 [派工收工訊息判準.md](派工收工訊息判準.md) § 5 兩者共通。
