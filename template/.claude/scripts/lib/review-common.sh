@@ -1083,6 +1083,8 @@ review_register_staging_baseline() {
 #     本 head 還沒通過時不開（回一般判定並帶 independent: 'deferred'）。covered 會把與上一輪同 head 的通過輪都延伸到新 head。
 #   passed --required-passes <N>：本 head 要有 N 個通過輪（含 covered）才算 passed；預設 1＝現行行為（任何通過輪，含 verify）。
 #     N≥2 時只數完整審查輪（discovery／independent，同 decide 的「兩輪已滿」定義）：verify、base-check、無可審檔、延伸跨過非 merge 程式 commit 的輪不算；carry-over 同。
+#       唯一例外：risk_exempt=docs 的免審輪，且該輪 base→head 的實際 diff 經 risk-exempt.ts 重判仍全是文件（exemptDocsAt）——一輪即過；
+#       標籤是呼叫端自報的，不核對 diff 就不認；重判不出（CLADE_HOME 載不到判準、base 缺、git 失敗）一律不算（fail-closed）。
 #     HQ merge-approve 的輪數門檻讀的就是這條（vendor/scripts/lib/review-rounds-passed.ts），不另寫判定。
 #     通過輪之後同 head 的輪（獨立輪）記了 Critical／Major → passed 為假（vetoed_by），不論 N。
 #     預設不變；高風險 PR 由呼叫端帶 2（範圍見 vendor/scripts/lib/second-pass-pr.ts）。
@@ -1754,6 +1756,17 @@ try {
     if (typeof mod.isLockedProjectionPath === 'function') projectionTest = mod.isLockedProjectionPath
   }
 } catch {}
+// 免審判準（risk-exempt.ts）只認 CLADE_HOME 的那一份（NEVER 受審 repo 內同名檔）；載不到 → exemptDocsAt 一律不認（fail-closed）。
+// CLADE_HOME 沒 export 時（merge-queue／pr-triage 的呼叫端不注入）退回 wrapper 的預設 ~/offline/clade：
+// 各呼叫端對同一份 ledger 的 passed／decide 判定不得隨環境分歧（同 :1518 的 home 解析）。
+let riskExemptClass = null
+try {
+  const home = process.env.CLADE_HOME || join(process.env.HOME || '', 'offline', 'clade')
+  if (home) {
+    const mod = await import(pathToFileURL(join(home, '.agents', 'skills', 'coordinator', 'scripts', 'lib', 'risk-exempt.ts')).href)
+    if (typeof mod.riskExemptClass === 'function') riskExemptClass = mod.riskExemptClass
+  }
+} catch {}
 const patchExcluded = (p) => p.startsWith('specs/plans/') || projectionTest(p)
 // from→to 的 diff（預設不帶 context）切成逐檔區塊：{ path → 區塊文字 }。
 // 檔名不從 `+++ b/<path>` 解析（含空白的路徑 git 會在後面補 TAB、含特殊字元會 C-quote）：另跑一趟 `--name-only -z`
@@ -2111,7 +2124,37 @@ function isFullReviewRound(r) {
 // --required-passes 的計數：要求 ≥2 輪時只數完整審查輪（否則高風險 PR 靠 verify＋base-check 湊數就放行，只經一次完整審查）；
 // 預設 1 維持「任何通過輪都放行」——fix commit 本來就靠 verify 輪過關。
 function countsForRequired(r, required, head) {
-  return required < 2 || countsAsFullAt(r, head)
+  return required < 2 || countsAsFullAt(r, head) || exemptDocsAt(r, head)
+}
+// 純文件免審輪：整張 PR 沒有程式或資料可審，「高風險要兩個完整審查輪」在它身上沒有東西可驗；
+// 不認就是 clade/0-A 永遠不貼、lane-plan 的 test-lanes 等 0-A 而 0-A 等不到第二輪（#4854／#4737 互等）。
+// 只認 docs 且只認「輪自己的 head」：tests 免審仍受兩輪約束、免審輪延伸到別的 head 也不算（NEVER 當 covered 錨點的判定不變）。
+// risk_exempt 是呼叫端自報的標籤，不能單憑它放行高風險閘門：拿該輪 base→head 的實際檔案清單交給 risk-exempt.ts 重判，
+// 必須仍是 'docs'；判準本身（哪些路徑算文件）只在 risk-exempt.ts，這裡 NEVER 另寫一份。判不出一律不算（fail-closed）。
+function exemptDocsAt(r, head) {
+  return Boolean(r) && r.head === head && r.no_reviewable?.risk_exempt === 'docs' && diffIsDocsOnly(r)
+}
+const docsOnlyMemo = new Map()
+function diffIsDocsOnly(r) {
+  if (!riskExemptClass || !opt['repo-root']) return false
+  const key = `${r.base}:${r.head}`
+  if (!docsOnlyMemo.has(key)) docsOnlyMemo.set(key, computeDocsOnly(r))
+  return docsOnlyMemo.get(key)
+}
+function computeDocsOnly(r) {
+  try {
+    // base 優先取 BASE_REF 與 head 的 merge-base（呼叫端傳的 --base 也是自報的）；BASE_REF 解不出來才用該輪記的 base
+    let base = null
+    try { base = gitRaw(['merge-base', BASE_REF, r.head]).trim() || null } catch {}
+    base ??= r.base || null
+    if (!base) return false
+    const parts = gitRaw(['-c', 'core.quotepath=off', 'diff', '--name-status', '--no-renames', '-z', base, r.head]).split('\0').filter(Boolean)
+    const files = []
+    for (let i = 0; i + 1 < parts.length; i += 2) files.push({ status: parts[i], path: parts[i + 1] })
+    return riskExemptClass(files) === 'docs'
+  } catch {
+    return false
+  }
 }
 // HQ charter § 放行：最後一個非 merge commit 之後要有完整審查，只靠 covered 把完整輪延伸過 PR 自身小修補不算。
 // 例外：增量只動 docs/、plans/、specs/plans/ 底下的 .md。路徑只認 repo 根起算：skill 目錄裡的 docs/*.md 是給 agent 的指令，不是筆記。
@@ -2172,17 +2215,30 @@ function fetchIfMissing(sha) {
 }
 // 唯讀入口（鎖外）先補物件：HQ 從 main checkout 問 PR head 時，別的機器推的 commit 不一定在本機，算不出會誤判成跨過程式 commit。
 const refreshed = new Set()
-function fetchExtensionCommits(rounds, head, required) {
-  if (required < 2) return
-  const shas = new Set(rounds.filter((r) => r.head !== head && isFullReviewRound(r) && roundState(r).passed).flatMap((r) => [r.head, head]))
-  if (!shas.size) return
-  for (const sha of shas) fetchIfMissing(sha)
+function refreshBaseRef() {
   // peer 的 origin/main 可能舊：merge main 的 commit 與 rebase 路徑的 merge-base 都靠它，舊了會把 main 的改動誤算成 PR 自己的
   const m = /^origin\/(.+)$/.exec(BASE_REF)
   if (m && opt['repo-root'] && !refreshed.has(BASE_REF)) {
     refreshed.add(BASE_REF)
     try { execFileSync('git', ['fetch', '--quiet', 'origin', m[1]], { cwd: need('repo-root'), stdio: 'ignore', timeout: FETCH_TIMEOUT_MS }) } catch {}
   }
+}
+// docs 免審輪（exemptDocsAt）要拿 merge-base(BASE_REF, r.head)→r.head 重判 diff：head 不在本機（別台推的）就補物件，
+// 否則 git 失敗 fail-closed 成「不算」，而別的呼叫端（本機有物件）判成算＝同一份 ledger 兩種判定。鎖外呼叫。
+function fetchDocsExemptHeads(rounds, required = 2) {
+  if (required < 2) return
+  const heads = new Set(rounds.filter((r) => r.no_reviewable?.risk_exempt === 'docs').map((r) => r.head))
+  if (!heads.size) return
+  for (const sha of heads) fetchIfMissing(sha)
+  refreshBaseRef()
+}
+function fetchExtensionCommits(rounds, head, required) {
+  if (required < 2) return
+  fetchDocsExemptHeads(rounds, required)
+  const shas = new Set(rounds.filter((r) => r.head !== head && isFullReviewRound(r) && roundState(r).passed).flatMap((r) => [r.head, head]))
+  if (!shas.size) return
+  for (const sha of shas) fetchIfMissing(sha)
+  refreshBaseRef()
 }
 // decide：plan 與 open 共用；open 另外把決定寫回 ledger。
 // --independent：本 head 已有通過輪（含 covered）但完整審查輪不足兩輪時改開獨立輪；
@@ -2258,6 +2314,9 @@ function decide(ledger) {
   // 已有兩個完整審查通過輪：--independent 明示也不另開（第三輪沒有證據價值），但要說出是哪兩輪，免得被當成靜默短路
   const fullPasses = [...passes].filter((n) => countsAsFullAt(rounds.find((x) => x.n === n), d.head)).toSorted((a, b) => a - b)
   if (fullPasses.length >= 2) return { ...d, independent: 'satisfied', independent_passes: fullPasses }
+  // 純文件免審輪（exemptDocsAt）在 --required-passes 2 下一輪即過：同 rounds passed 的定義，另開獨立輪只會白耗一個輪號
+  const docsExempt = [...passes].map((n) => rounds.find((x) => x.n === n)).find((x) => exemptDocsAt(x, d.head))
+  if (docsExempt) return { ...d, independent: 'satisfied', independent_passes: [docsExempt.n] }
   const n = last.n + 1
   const max = maxRounds(ledger)
   if (countedRounds(rounds) + 1 > max)
@@ -2323,7 +2382,10 @@ function staleBasis(ledger, last, base_, decideAgain) {
 // target：covered 判定時是要延伸到的新 head（anchor 是通過輪所在的舊 head），輪數要照新 head 算才與 --independent 的判定一致。
 function independentHint(rounds, head, target = head) {
   if (opt.mode !== 'pr') return ''
-  const full = passingRounds(rounds, head).filter((r) => countsAsFullAt(r, target)).length
+  const passing = passingRounds(rounds, head)
+  // 純文件免審輪（exemptDocsAt）在 --required-passes 2 下一輪即過（同 rounds passed）：不提示另開獨立輪
+  if (passing.some((r) => exemptDocsAt(r, target))) return '；本 head 是純文件免審輪（diff 經 risk-exempt.ts 重判全是文件）：高風險 --required-passes 2 一輪即過，不需另開獨立輪'
+  const full = passing.filter((r) => countsAsFullAt(r, target)).length
   const count = `；本 head 完整通過輪 ${full}（含 covered 延伸）`
   if (full >= 2) return count
   return `${count}，不到 2 輪：若 queue 對本 PR 要 2 輪（高風險），另開獨立輪＝oa-batches.ts prepare ${PR_NO ?? '<pr>'} --independent（rounds／wrapper 層 --independent yes）`
@@ -3012,6 +3074,7 @@ if (cmd === 'counts') {
   const path = ledgerPath()
   syncPeers(path)
   const ledger = load(path)
+  fetchDocsExemptHeads(scoped(ledger))
   const d = decide(ledger)
   d.ledger = path
   if (d.action === 'review' && !d.reuse && d.findings_from)
@@ -3022,6 +3085,7 @@ if (cmd === 'counts') {
   // cover：只在判定為 covered 時落 covered_heads（oa-batches 走這條，不開審）；其他判定原樣回傳、不寫。
   const path = ledgerPath()
   syncPeers(path)
+  fetchDocsExemptHeads(scoped(load(path)))
   const d = withLock(path, (ledger) => {
     const d = decide(ledger)
     d.ledger = path
@@ -3362,7 +3426,9 @@ if (cmd === 'counts') {
   const requiredNote = required < 2 && hits.length && fullPasses.length < 2
     ? `passed 只依 --required-passes ${required} 計：本 head 完整審查輪 ${fullPasses.length} 個（verify／base-check／無可審檔／跨過程式 commit 的延伸不算）；高風險 PR 要 2 輪時改帶 --required-passes 2（merge-queue、oa-batches finalize 即用 2 判定）`
     : null
-  process.stdout.write(`${JSON.stringify({ passed: counted.length >= required && !vetoed.length && !peerVetoed.length, round: hit?.n ?? null, covered: Boolean(hit && hit.head !== head),
+  // 純文件免審輪一輪就夠（exemptDocsAt）：沒有可審的程式，第二輪沒有證據價值；否決（Critical／Major 記錄）照舊優先。
+  const exemptDocs = counted.some((r) => exemptDocsAt(r, head))
+  process.stdout.write(`${JSON.stringify({ passed: (counted.length >= required || exemptDocs) && !vetoed.length && !peerVetoed.length, round: hit?.n ?? null, covered: Boolean(hit && hit.head !== head),
     ...(vetoed.length ? { vetoed_by: vetoed } : {}), ...(peerVetoed.length ? { vetoed_by_peer: peerVetoed } : {}),
     ...(hit?.carried_over?.find((c) => c.head === head) ? { carry_over: hit.carried_over.find((c) => c.head === head) } : {}),
     passing_rounds: hits.map((r) => ({ n: r.n, kind: r.kind ?? null, covered: r.head !== head, counted: countsForRequired(r, required, head), ...(required >= 2 && isFullReviewRound(r) && crossesCodeCommit(r, head) ? { crossed_code_commit: true } : {}) })), required_passes: required,

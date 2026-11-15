@@ -120,10 +120,10 @@ consumer-meta.md — 每個 consumer 自宣告 .claude/consumer-meta.json，描�
 173-191 Adoption gap detection
 
 flow-work-dates.md — 要對 Charles 或客戶給日期、寫 `flow work eta`，或複核自報 ETA 時
-5-22 前導 — 交期日期（Iron Law）
-24-35 對外前的 gate
-37-44 Rationalization table
-46-57 Red Flags
+5-24 前導 — 交期日期（Iron Law）
+26-37 對外前的 gate
+39-46 Rationalization table
+48-59 Red Flags
 
 flow-work-tracking.md — flow spine 的 work 生命週期契約——一件 work 何時誕生、誰鑄名、`work.done` 的憑證強度、驗收由誰按；動到 vendor/scripts/flow/** 或 .clade/flow/** 時 path-scoped 載入
 7-12 前導 — flow work 生命週期契約

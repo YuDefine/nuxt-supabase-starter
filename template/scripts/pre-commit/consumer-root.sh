@@ -4,7 +4,7 @@
 #
 # consumer-root — runner.sh 與 checks/*.sh 共用的 consumer root 解析（被 source，不單獨執行）
 #
-# consumer root ≠ git toplevel 的 consumer（monorepo 子目錄，如 nuxt-supabase-starter 的 `template/`）：
+# consumer root ≠ git toplevel 的 consumer（monorepo 子目錄，如 meta repo 的 temp scaffold `template/`）：
 # 本目錄恆在 `<consumerRoot>/scripts/pre-commit/`，所以「本目錄的上兩層」才是 consumer root；
 # `git rev-parse --show-toplevel` 會解到 monorepo 根，於是 check 在錯的目錄跑
 # （vp fmt 在根找不到 workspace package、new-python 找錯根、supabase/migrations 永遠不存在）。

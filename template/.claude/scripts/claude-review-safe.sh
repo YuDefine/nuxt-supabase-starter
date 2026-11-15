@@ -151,6 +151,9 @@ set -uo pipefail
 # 也從 CLADE_HOME 解析。正在開發這支 wrapper／helper 的樹設 CLADE_RUNTIME_FROM_REPO=1
 # 跑自己的版本。CLADE_HOME 沒有這份檔（非 clade 機器）時照原樣跑。
 CLADE_HOME="${CLADE_HOME:-$HOME/offline/clade}"
+# export：下游 node 子行程（review-common.sh 的 rounds helper 載 risk-exempt.ts／locked-projection.ts）讀 process.env.CLADE_HOME，
+# 沒 export 就載不到判準，同一份 ledger 在不同呼叫端判成不同結果。
+export CLADE_HOME
 _CLADE_SELF_MAIN="$CLADE_HOME/capabilities/core/scripts/claude-review-safe.sh"
 # CLADE_HOME main 是多 session 共寫的 working tree：Z2 要的是「main 已 commit 的版本」，
 # 不是別人改到一半的檔。所以借用 CLADE_HOME 的 runtime 之前先驗那幾個路徑與 HEAD 一致；
