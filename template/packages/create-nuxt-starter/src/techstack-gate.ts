@@ -11,6 +11,9 @@ import { dirname, join } from 'pathe'
  * 找不到 clade 一律拒絕（fail-loud）：沒有判準就不能放行。
  */
 
+/** clade `check` 判定未通過時 stdout 的第一行前綴（見 clade vendor/scripts/techstack-confirmation.ts）。 */
+const CHECK_FAIL_VERDICT_PREFIX = 'FAIL techstack-confirmation'
+
 export const TECHSTACK_RECORD_RELATIVE = 'docs/techstack-confirmation.md'
 
 export type TechstackGateOutcome =
@@ -82,7 +85,11 @@ export function checkTechstackRecord(
   } catch (error) {
     const failure = error as ExecFailure
     const detail = outputOf(failure) || failure.message || '（無輸出）'
-    if (failure.status === 1) {
+    // exit 1 同時是 clade check 的「紀錄未通過」與 node 未捕捉例外（腳本崩潰、.ts 跑不起來、
+    // 缺依賴）。只有 stdout 帶 check 自己的 FAIL 判定行才算紀錄問題；其餘一律當 check 無法執行，
+    // 才不會把壞掉的 clade 誤導成「去改紀錄」。
+    const verdict = failure.stdout ? failure.stdout.toString() : ''
+    if (failure.status === 1 && verdict.trimStart().startsWith(CHECK_FAIL_VERDICT_PREFIX)) {
       return {
         status: 'rejected',
         code: 'TECHSTACK_RECORD_INCOMPLETE',

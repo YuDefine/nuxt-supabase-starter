@@ -95,6 +95,7 @@ function freshRun(name: string, opts: { withCheckScript?: boolean } = {}): Run {
         'const record = process.argv[i + 1]',
         'fs.appendFileSync(process.env.CLADE_CHECK_LOG, JSON.stringify({ argv: process.argv.slice(2) }) + "\\n")',
         'const text = fs.readFileSync(record, "utf-8")',
+        'if (text.includes("CRASH")) throw new Error("boom: check script crashed")',
         'if (text.includes("REJECT")) { console.log("FAIL techstack-confirmation: 1 個缺項\\n  - framework: 缺 confirmed_by"); process.exit(1) }',
         'process.exit(0)',
         '',
@@ -378,6 +379,40 @@ describe('checkTechstackRecord（單元）', () => {
       code: 'TECHSTACK_CLADE_UNAVAILABLE',
     })
     expect(checkTechstackRecord(run.cladeRoot, record)).toMatchObject({ status: 'ok' })
+  })
+
+  it('clade check 腳本崩潰（exit 1 但無 FAIL 判定行）不當成紀錄未通過', () => {
+    const run = freshRun('unit-crash')
+    const record = join(run.dir, 'crash-record.md')
+    writeFileSync(record, 'CRASH\n')
+    process.env.CLADE_CHECK_LOG = run.checkLog
+    expect(checkTechstackRecord(run.cladeRoot, record)).toMatchObject({
+      status: 'rejected',
+      code: 'TECHSTACK_CHECK_FAILED',
+    })
+    const rejected = join(run.dir, 'reject-record.md')
+    writeFileSync(rejected, 'REJECT\n')
+    expect(checkTechstackRecord(run.cladeRoot, rejected)).toMatchObject({
+      code: 'TECHSTACK_RECORD_INCOMPLETE',
+    })
+  })
+})
+
+describe('create-fast-project.sh wrapper', () => {
+  const script = readFileSync(
+    resolve(PKG_ROOT, '..', '..', '..', 'scripts', 'create-fast-project.sh'),
+    'utf-8',
+  )
+
+  it('不得預設豁免 tech stack 閘門：豁免旗標只能經 --playground 條件式加入', () => {
+    const lines = script.split('\n').filter((l) => l.includes('--techstack-playground-exempt'))
+    // 唯一出現處是 GATE_ARGS 的條件賦值（與 usage 說明文字），不得是 node 呼叫的裸參數
+    for (const l of lines) expect(l.trim().startsWith('--techstack-playground-exempt')).toBe(false)
+    expect(script).toMatch(/PLAYGROUND.*-eq 1[\s\S]*GATE_ARGS=\(--techstack-playground-exempt\)/)
+  })
+
+  it('--techstack-record 透傳給 CLI', () => {
+    expect(script).toMatch(/--techstack-record\)[\s\S]*EXTRA_ARGS\+=/)
   })
 })
 

@@ -1070,6 +1070,14 @@ const main = defineCommand({
       }
     } else {
       // Interactive mode
+      // 登記 fleet／managed 要 tech stack 確認紀錄，但閘門要等 wizard 答完才知道有沒有登記；
+      // 沒帶 --techstack-record 的人先在這裡被告知，免得答完全部題目才被拒絕。
+      if (args['techstack-record'] === undefined && args['techstack-playground-exempt'] !== true) {
+        consola.info(
+          '提醒：若接下來選擇登記 fleet，必須先帶 --techstack-record <path>（Charles 逐項確認過的紀錄），' +
+            '否則答完所有題目後會被 tech stack 確認閘門拒絕；現在中止重跑最省事。',
+        )
+      }
       selections = await promptUser(projectName)
     }
 

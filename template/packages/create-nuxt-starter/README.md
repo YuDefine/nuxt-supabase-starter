@@ -18,6 +18,7 @@ pnpm create nuxt-supabase-starter my-app --auth nuxt-auth-utils --ci simple --db
 # 一次完成 Clade fleet identity（Clade checkout 必須可被找到）
 pnpm create nuxt-supabase-starter my-app --yes \
   --db-host this-machine \
+  --techstack-record ./techstack-confirmation.md \
   --repo-id YuDefine/my-app \
   --workflow-model trunk-based \
   --business-activity pre-production \

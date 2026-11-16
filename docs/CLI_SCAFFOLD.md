@@ -64,6 +64,9 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-app \
 - 沒帶紀錄、紀錄有缺項、找不到 clade（或 clade 太舊沒有 check CLI）→ 拒絕，exit 1，未建立任何檔案；`--json` 失敗報告帶 `TECHSTACK_RECORD_MISSING`／`TECHSTACK_RECORD_INCOMPLETE`／`TECHSTACK_CLADE_UNAVAILABLE`／`TECHSTACK_CHECK_FAILED`。
 - 通過 → 紀錄複製進 target 的 `docs/techstack-confirmation.md`（`bootstrap-project.ts` 的閘門讀這個位置）。target 已有內容不同的紀錄時拒絕覆蓋（紀錄是追加式）。
 - 互動且不登記（scaffold-only）時人在現場，不強制；有給紀錄仍照驗。
+- `scripts/create-fast-project.sh` 同樣遵守：真專案帶 `--techstack-record <path>`（透傳給 CLI）；只有明確加 `--playground` 才會傳 `--techstack-playground-exempt`，不預設豁免。
+- `TECHSTACK_CHECK_FAILED` 也涵蓋 clade check 腳本本身崩潰（exit 1 但沒有 `FAIL techstack-confirmation` 判定行），此時要修 clade，不是改紀錄。
+- 互動模式沒帶 `--techstack-record` 時，wizard 開始前會先提醒：選擇登記 fleet 必須帶紀錄。
 - 唯一例外：`--techstack-playground-exempt`，給 starter 自測與 playground 重建（不是真專案）。只能搭配 `--no-register-consumer`，與 `--techstack-record` 互斥，輸出與 `--json` 報告標示 `playground-exempt`。**NEVER** 用於真專案。
 
 ### 非互動參數

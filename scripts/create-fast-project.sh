@@ -9,6 +9,7 @@ CLI_SRC="$CLI_DIR/src/cli.ts"
 TARGET_PATH=""
 AUTH_MODE="nuxt-auth-utils"
 EXTRA_ARGS=()
+PLAYGROUND=0
 
 # Parse arguments: first positional = target path, rest are passed through to CLI
 while [[ $# -gt 0 ]]; do
@@ -24,6 +25,15 @@ while [[ $# -gt 0 ]]; do
         shift
       fi
       shift
+      ;;
+    --playground)
+      # 具名豁免：只給 starter 自測／playground 重建（不是真專案），否則一律走 --techstack-record
+      PLAYGROUND=1
+      shift
+      ;;
+    --techstack-record)
+      EXTRA_ARGS+=("$1" "${2:-}")
+      shift 2
       ;;
     --fast)
       # already included by default, accept silently
@@ -52,6 +62,8 @@ if [[ -z "$TARGET_PATH" ]]; then
   echo "  --with <features>       Add features (comma-separated)"
   echo "  --without <features>    Remove features (comma-separated)"
   echo "  --minimal               Start with empty feature set"
+  echo "  --techstack-record <p>  Charles 逐項確認過的 docs/techstack-confirmation.md（真專案必填）"
+  echo "  --playground            自測／playground 專用：豁免 tech stack 確認（NEVER 用於真專案）"
   echo ""
   echo "Examples:"
   echo "  bash scripts/create-fast-project.sh temp/my-app"
@@ -75,6 +87,13 @@ if [[ "$TARGET_PATH" = /* ]]; then
   TARGET_DIR="$TARGET_PATH"
 else
   TARGET_DIR="$ROOT_DIR/$TARGET_PATH"
+fi
+
+# tech stack 確認閘門：預設走 --techstack-record（缺了由 CLI 以 TECHSTACK_RECORD_MISSING 拒絕）；
+# 只有明確帶 --playground 才豁免，絕不預設豁免。
+GATE_ARGS=()
+if [[ "$PLAYGROUND" -eq 1 ]]; then
+  GATE_ARGS=(--techstack-playground-exempt)
 fi
 
 if [[ -e "$TARGET_DIR" ]]; then
@@ -102,7 +121,7 @@ if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
     --yes \
     --db-host this-machine \
     --no-register-consumer \
-    --techstack-playground-exempt \
+    ${GATE_ARGS[@]+"${GATE_ARGS[@]}"} \
     --without testing-full,testing-vitest \
     --auth "$AUTH_MODE" \
     "${EXTRA_ARGS[@]}"
@@ -112,7 +131,7 @@ else
     --yes \
     --db-host this-machine \
     --no-register-consumer \
-    --techstack-playground-exempt \
+    ${GATE_ARGS[@]+"${GATE_ARGS[@]}"} \
     --without testing-full,testing-vitest \
     --auth "$AUTH_MODE"
 fi
