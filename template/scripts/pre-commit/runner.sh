@@ -21,7 +21,7 @@
 #   - new-python                有新落腳的 staged *.py 才判（否則 no-op）；跑不起來時擋
 #
 # 重型檢查（nuxt typecheck、test tsconfig）放 pre-push runner，不在 pre-commit 跑。
-# 原因：vue-tsc / nuxi typecheck 不支援單檔 typecheck，只能整專案跑，所以放 pre-push 階段。
+# 原因：vue-tsc / nuxt typecheck 不支援單檔 typecheck，只能整專案跑，所以放 pre-push 階段。
 #
 # 由 ~/clade vendor/scripts/pre-commit/ 散播，請勿直接編輯 consumer 副本。
 
@@ -38,7 +38,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECKS_DIR="$SCRIPT_DIR/checks"
 
 # consumer root 取本目錄的上兩層（scripts/pre-commit/ → consumer root），不是 git toplevel：
-# consumer root ≠ toplevel（nuxt-supabase-starter 的 template/）時，toplevel 是 monorepo 根，
+# consumer root ≠ toplevel（meta repo 的 temp scaffold `template/`）時，toplevel 是 monorepo 根，
 # check 在那裡跑會找不到 workspace、supabase/、vendor/。解析規則與 staged 路徑規約見 consumer-root.sh。
 # export 讓 checks/*.sh 沿用同一個 root（check 單獨被呼叫時自己照同一條規則解）。
 # shellcheck source=consumer-root.sh

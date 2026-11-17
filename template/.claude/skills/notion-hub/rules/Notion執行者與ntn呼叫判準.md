@@ -99,16 +99,16 @@ S=$(jq -r '.hub.ticketStatus["needs-customer"]' /tmp/hub.json); K=$(jq -r '.hub.
 # Rule 5 - 生命週期由 flow 事件自動推進，NEVER 叫人「做完記得同步 Notion」
 
 - Level: `MUST`
-- `flow plan open`／`flow work done` 成功後 `follow` 自動推進 ticket 狀態與交付項目進度，`/commit` Step 6b 跑 `release`。
-- 沒推進代表 hook 或 Step 6b 沒跑，修那裡；不要在本 skill 補一句提醒。
+- `flow plan open`／`flow work done` 成功後 `follow` 自動推進 ticket 狀態與交付項目進度，`/commit` D9-Notion 跑 `release`。
+- 沒推進代表 hook 或 D9-Notion 沒跑，修那裡；不要在本 skill 補一句提醒。
 - 例外一個手動掛載點：非 `file` 建票的工作開工前要跑一次 `notion-sync.ts open`（見認領分流判準 Rule 3）。
 
 ## Good Example
 
-- 這個例子是好的，因為發版後票沒推進時去查 Step 6b。
+- 這個例子是好的，因為發版後票沒推進時去查 D9-Notion。
 
 ```text
-票仍進行中但 v1.42.0 已發 → /commit Step 6b 的 release 沒跑 → 補跑 notion-sync.ts release --tag v1.42.0
+票仍進行中但 v1.42.0 已發 → /commit D9-Notion 的 release 沒跑 → 補跑 notion-sync.ts release --tag v1.42.0
 ```
 
 ## Bad Example

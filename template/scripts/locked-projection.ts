@@ -30,9 +30,10 @@
  *     leftovers, and unlocking them requires still recognising the path (TD-1000).
  *   - Snippets / shared presets: `vendor/snippets/`, `vendor/oxc-shared/`
  *   - GitHub Composite Actions vendored at `.github/actions/`
- *   - Top-level projection paths: `AGENTS.md`, `CLAUDE.md` (CLAUDE.md is retired:
- *     sync-rules deletes a shell-only CLAUDE.md so Claude Code falls back to
- *     AGENTS.md; repo-aware classification also guards against unsynced manual edits)
+ *   - Top-level projection paths: `AGENTS.md`, `CLAUDE.md` (both hold only the
+ *     where-to-put pointer line: sync-rules seeds a missing CLAUDE.md and rewrites a
+ *     shell-only one to that line; repo-aware classification also guards against
+ *     unsynced manual edits)
  *   - utility: `utils/assert-never.ts`
  *
  * Symlink 模式決策（2026-06-11）：consumer `.claude/rules/*.md` 改為絕對路徑
@@ -52,13 +53,26 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 const LOCKED_BANNER_SIGNATURE = '🔒 LOCKED — managed by clade'
-// Keep in sync with scripts/sync-rules.ts CLAUDE_MD_SHELL.
+// 手抄自 adapters/agents/rules.ts 的 LEGACY_CLAUDE_MD_SHELL／INSTRUCTION_FILE_POINTER／AGENTS_ONLY_INSTRUCTION_FILE_POINTER
+// 與 isClaudeMdShellBody（本檔不能 import adapters）；改判定要同步改，test/claude-md-shell-predicate-parity.test.ts 對拍。
 const CLAUDE_MD_SHELL = '# CLAUDE.md\n'
+const INSTRUCTION_FILE_POINTER = '.claude/skills/where-to-put/SKILL.md\n'
+const AGENTS_ONLY_INSTRUCTION_FILE_POINTER = '.agents/skills/where-to-put/SKILL.md\n'
 const CLAUDE_SNIPPET_BLOCK_RE =
   /<!-- CLADE:SNIPPET:([A-Za-z0-9_.-]+):START -->[\s\S]*?<!-- CLADE:SNIPPET:\1:END -->/g
 
+function isGeneratedClaudeMdBody(content) {
+  return content === CLAUDE_MD_SHELL || content === INSTRUCTION_FILE_POINTER
+}
+
 function isShellOnlyClaudeMd(content) {
-  return content.replace(CLAUDE_SNIPPET_BLOCK_RE, '').trim() === CLAUDE_MD_SHELL.trim()
+  const body = content.replace(CLAUDE_SNIPPET_BLOCK_RE, '').trim()
+  return (
+    body === '' ||
+    body === CLAUDE_MD_SHELL.trim() ||
+    body === INSTRUCTION_FILE_POINTER.trim() ||
+    body === AGENTS_ONLY_INSTRUCTION_FILE_POINTER.trim()
+  )
 }
 
 const cwdScopedGitEnv = Object.fromEntries(
@@ -105,7 +119,8 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       String.raw`scripts/maintainer-only-skills\.json$`,
       // Heavy-gate 併發閘門（bash helper，非 .mjs/.ts 家族，故單列一條）
       String.raw`scripts/gate-slot\.sh$`,
-      // codebase-memory index 的 lock + MemoryMax wrapper（同上，bash helper 單列一條）
+      // codebase-memory 退場（#3558）：cbm-index／cbm-project 已列 RETIRED_VENDOR_DESTS，但 consumer 在
+      // tombstone 生效前仍握有 LOCKED 殘檔，須維持辨識以便解鎖；全 fleet 清完後可拿掉（TD-1000 同形）。
       String.raw`scripts/cbm-(index|project)\.sh$`,
       // Recursive vendored script trees. `spectra-advanced` retired in TD-976 Wave 1 but
       // MUST stay listed — consumers still hold locked leftovers to unlock (TD-1000).
@@ -119,7 +134,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // NEVER widen to `scripts/lib/`: consumers author their own files there
       // (<consumer-a> `common.sh` / `read-infra-manifest.mjs`, <consumer-d> `vue-component-resolution.ts`),
       // and matching the whole dir would mark those clade-managed → auto-reset clobbers them.
-      String.raw`scripts/lib/(argv-unsplit|dev-runtime|evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|workspace-choice|workspace-repo-profile|json-unknown|safety-observation|worktree-dev-port|worktree-backlog|wt-patch-landing|publish-in-flight|projection-ledger-reconcile|herdr-machine|machine-cpu|host-config-refs|pane-cache-ttl|disk-low-water|claude-account-registry|register-paths|git-status-z|dev-slots|atomic-file|test-trust-baseline)\.(mjs|mts|ts)$`,
+      String.raw`scripts/lib/(argv-unsplit|dev-runtime|evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|workspace-choice|workspace-repo-profile|json-unknown|safety-observation|worktree-dev-port|worktree-backlog|wt-patch-landing|review-bridge-worktree|publish-in-flight|projection-ledger-reconcile|herdr-machine|machine-cpu|host-config-refs|pane-cache-ttl|disk-low-water|claude-account-registry|register-paths|git-status-z|dev-slots|atomic-file|test-trust-baseline)\.(mjs|mts|ts)$`,
       // skip-gate／test-removal-gate 的復活驗證子目錄：整目錄都是 vendor-targets 投影，consumer 不在這放自家檔。
       String.raw`scripts/lib/mutation-probe/`,
       // dev-session.ts 的 `slots` 命令引用的 dev server 判定（散到 consumer 的 scripts/lib/dev-resource/）。
@@ -129,6 +144,9 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // `../scripts/lib/json-unknown.ts` 解析到 vendor/scripts/lib/。
       // NEVER 放寬成 `vendor/scripts/lib/`——那個目錄在 clade home 是源。
       String.raw`vendor/scripts/lib/json-unknown\.ts$`,
+      // locked-projection.ts 第二條 dest：vendor/review-rules/scan.ts 以
+      // `../scripts/locked-projection.ts` 解析到 vendor/scripts/。同樣 NEVER 放寬成 `vendor/scripts/`。
+      String.raw`vendor/scripts/locked-projection\.ts$`,
       // per-worktree dev DB 實作整目錄。只散給宣告 capability `worktree-db` 的 consumer，
       // 但 LOCKED 判定與 gate 無關 —— 覆蓋率交叉檢查看的是聯集（projection-universe）。
       String.raw`vendor/scripts/worktree-db/`,
@@ -225,6 +243,8 @@ const CLADE_OWN_SOURCE_RE = new RegExp(
       // json-unknown.ts 源檔在 vendor/scripts/lib/；LOCKED_PROJECTION_RE 為
       // consumer dest 加了同路徑之後，沒有這一列 clade home 會把自己的源當投影。
       String.raw`vendor/scripts/lib/json-unknown\.ts$`,
+      // 同上：locked-projection.ts 源檔在 vendor/scripts/，consumer dest 同路徑。
+      String.raw`vendor/scripts/locked-projection\.ts$`,
       // 同上：clade home 的 vendor/scripts/worktree-db/ 是源檔。只加 LOCKED 那列而漏掉
       // 這一列，clade home 會把自己這 8.7K 行的源當投影過濾掉，改動不再算 user WIP。
       String.raw`vendor/scripts/worktree-db/`,
@@ -323,8 +343,10 @@ function isClaudeMdBannerOnly(repoRoot) {
   try {
     current = readFileSync(join(repoRoot, 'CLAUDE.md'), 'utf8')
   } catch {
-    // sync-rules deletes a shell-only CLAUDE.md. That deletion is generated only
-    // when HEAD held nothing but the shell and the index has not staged other text.
+    // A missing CLAUDE.md counts as projection only when HEAD held nothing but the shell (or a
+    // pointer) and the index has not staged other text: the next sync-rules re-seeds the pointer.
+    // oa-batches isProjectionAtHead still sends a PR's deletion of CLAUDE.md to review; the two
+    // checks agree only when base has no CLAUDE.md.
     const head = gitClaudeMd(repoRoot, 'HEAD')
     const staged = gitClaudeMd(repoRoot, ':0')
     return head !== null && isShellOnlyClaudeMd(head) && (staged === null || staged === head)
@@ -349,10 +371,22 @@ function isClaudeMdBannerOnly(repoRoot) {
   const versions = unmerged
     ? [gitClaudeMd(repoRoot, ':1'), gitClaudeMd(repoRoot, ':2'), gitClaudeMd(repoRoot, ':3')]
     : [gitClaudeMd(repoRoot, 'HEAD'), gitClaudeMd(repoRoot, ':0'), current]
+  // HEAD 沒有 CLAUDE.md 的 consumer：sync-rules 缺檔就 seed 那一行 pointer（只 seed pointer，不產空殼），
+  // 工作樹是那一行、index 是不存在或同一行 ⇒ 投影，不是 user WIP。人手寫的其他內容（含 `# CLAUDE.md\n`）仍是 WIP。
+  // oa-batches.ts 的 isProjectionAtHead 在 base 缺檔時走同一條判定（兩邊對拍測試守著）。
+  if (!unmerged && versions[0] === null && current === INSTRUCTION_FILE_POINTER) {
+    return versions[1] === null || versions[1] === INSTRUCTION_FILE_POINTER
+  }
   if (versions.some((version) => version === null)) return false
   const [base, stagedOrOurs, currentOrTheirs] = versions
-  if (unmerged && (stagedOrOurs === CLAUDE_MD_SHELL || currentOrTheirs === CLAUDE_MD_SHELL)) {
-    const other = stagedOrOurs === CLAUDE_MD_SHELL ? currentOrTheirs : stagedOrOurs
+  // base 有 consumer 正文時，sync 不會把它改寫成空殼／那一行（與下方非 merge 分支同判）：
+  // 其中一側是 pointer／空殼代表 user 手剪（where-to-put 遷移），不能被 `--theirs` 靜默還原。
+  if (
+    unmerged &&
+    isShellOnlyClaudeMd(base) &&
+    (isGeneratedClaudeMdBody(stagedOrOurs) || isGeneratedClaudeMdBody(currentOrTheirs))
+  ) {
+    const other = isGeneratedClaudeMdBody(stagedOrOurs) ? currentOrTheirs : stagedOrOurs
     const baseOutside = claudeMdOutsideSnippets(base)
     return (
       other === base || (baseOutside !== null && claudeMdOutsideSnippets(other) === baseOutside)
@@ -361,8 +395,12 @@ function isClaudeMdBannerOnly(repoRoot) {
   // sync-rules rewrites an existing file from scratch. Its current output has
   // no markers, and may replace legacy text in HEAD. A staged manual edit is
   // still WIP unless the index matches HEAD or holds that same sync output.
-  if (!unmerged && current === CLAUDE_MD_SHELL) {
-    return stagedOrOurs === base || stagedOrOurs === CLAUDE_MD_SHELL
+  // base 有 consumer 正文時，sync 不會把它改寫成空殼／那一行（propagate 的 headClaudeMdAllowsProjection 同判），
+  // 工作樹被剪成那樣是 user 手剪的 WIP（where-to-put 要 consumer 做的遷移），不能當可丟的投影。
+  if (!unmerged && isGeneratedClaudeMdBody(current)) {
+    return (
+      isShellOnlyClaudeMd(base) && (stagedOrOurs === base || isGeneratedClaudeMdBody(stagedOrOurs))
+    )
   }
   const outside = versions.map(claudeMdOutsideSnippets)
   return outside[0] !== null && outside.every((text) => text === outside[0])

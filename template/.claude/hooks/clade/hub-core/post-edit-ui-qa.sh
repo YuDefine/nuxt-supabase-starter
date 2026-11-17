@@ -2,7 +2,7 @@
 # PostToolUse(Edit|Write) — UI 編輯期間的中途提醒（design / screenshot review）。
 #
 # 業務邏輯在 clade 的 vendor/scripts/ui-qa-reminder.sh。2026-09-07（TD-976 Wave 1）
-# 之前它住在 consumer 端的 `scripts/spectra-advanced/`，隨 spectra 退役後改成**直接跑
+# 之前它住在 consumer 端的 舊 vendor 目錄，該目錄退役後改成**直接跑
 # clade 中央倉那一份**（下方 `find_clade_root` 解析 clade home）。
 # **NEVER** 改回 consumer-relative 路徑：那個目錄正在被 propagate 清除。
 

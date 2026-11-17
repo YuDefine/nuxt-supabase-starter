@@ -67,13 +67,28 @@ cp "$TYPES" "$TYPES_BEFORE"
 #    依執行環境選命令，不只看 package.json 有沒有 scripts['db:reset']
 #    Desk per-worktree 拓樸 → 過渡期：consumer 自己的 per-worktree clone reset（先過 [[db-reset-coordination]]）
 #    Desk shared 拓樸 → forward-only 下共用 DB NEVER reset：交 CI supabase-check（沒接就停）；
-#    導入 `pnpm db:copy` 後改在臨時副本跑本步（待辦見 W-2026-11-02-coordinator-watch-dev-staging-db-db-reset-cluste design.md § 6）
+#    已導入 `pnpm db:copy` → 一律在臨時副本跑本步（不 reset 任何庫、不碰主線 DB；契約見 vendor/snippets/worktree-db-isolation/README.md § 10），優先於 db:reset 分支
 #    隔離雲端 VM ephemeral → 該 VM 的 supabase db reset --local
 #    無 DB 切片 → 不跑本步；缺 docker／supabase CLI 就停，不回連 desk
 if [ "${CLADE_CLOUD_EPHEMERAL_DB:-}" = 1 ]; then
   command -v supabase >/dev/null || { echo 'missing supabase CLI on cloud VM' >&2; exit 1; }
   supabase db reset --local
   supabase gen types typescript --local > "$TYPES"
+elif node -e "process.exit(require('./package.json').scripts?.['db:copy'] ? 0 : 1)" 2>/dev/null; then
+  # forward-only 第二段：從 template 快照庫複製臨時副本 → 在副本上 apply 全部 migration → 重生 types。
+  # 副本名預設 = 本 worktree slug；每次都先 drop 再建（副本若殘留舊版 migration，重放驗不到改寫過的檔）。
+  # `--drop` 在副本不存在時本來就 exit 0（契約 § 10），所以 drop 失敗是真失敗：NEVER `|| true` 吞掉——
+  # 否則 `--purpose schema` 會沿用殘留舊副本，db:migrate 只補沒套過的檔，types／lint 對舊 schema 亮綠燈。
+  # 副本在 Step 1.4 lint 完才 drop（Step 1.4 結尾，不論 lint 過不過 MUST drop）；
+  # 本段在 Step 1.4 之前失敗（migrate／types 失敗、types 有差異）時自己先 drop，不留副本佔 § 4 的 pool 預算。
+  pnpm db:copy --drop || exit 1
+  pnpm db:copy --purpose schema || exit 1
+  USED_DB_COPY=1
+  pnpm db:migrate --target copy && pnpm db:types --target copy; rc=$?
+  if [ "$rc" -ne 0 ]; then
+    pnpm db:copy --drop || echo '⚠ 臨時副本沒 drop 乾淨：pnpm db:copy --list 查，NEVER 留著當下次的起點' >&2
+    exit "$rc"
+  fi
 elif node -e "process.exit(require('./package.json').scripts?.['db:reset'] ? 0 : 1)" 2>/dev/null; then
   # LXC / 遠端 Supabase 模式：consumer 提供 pnpm db:reset wrapper（會 reset DB + 跑 db:types 寫到 $TYPES）
   # 只有 per-worktree 拓樸（wrapper 是 target mode，只重建自己的 clone）才准跑；
@@ -97,8 +112,15 @@ else
 fi
 
 # 3. 比對：working tree 版本 vs migrations 推導版本
-diff "$TYPES_BEFORE" "$TYPES"
+#    有差異 → 停止 commit，不會進 Step 1.4：db:copy 分支的副本在這裡先 drop
+diff "$TYPES_BEFORE" "$TYPES"; rc=$?
+if [ "$rc" -ne 0 ] && [ -n "${USED_DB_COPY:-}" ]; then
+  pnpm db:copy --drop || echo '⚠ 臨時副本沒 drop 乾淨：pnpm db:copy --list 查，NEVER 留著當下次的起點' >&2
+fi
+exit "$rc"
 ```
+
+走 `db:copy` 分支時：`--target copy` 是「本 worktree 那份副本」的簡寫（契約見 cookbook § 10），失敗（副本開不出來、pool 預算不夠、migration 在副本上重放失敗）一律停下回報，**NEVER** 退回對主線 DB `db:migrate` 或 `db:reset`。
 
 印 `DEFERRED_TO_CI` → 本步的比對與 Step 1.4 都跳過，直接進 Step 1.5；完成報告寫一行「schema 驗證交 CI `supabase-check`（shared 拓樸，forward-only 第一段）」，該 PR 的 `supabase-check` 綠之前 **NEVER** merge。types 仍要隨 migration 改：本機無 DB 可重生時照 migration 手改，CI 的 types drift 會指出差異。
 
@@ -109,11 +131,17 @@ types 只是落後未重生時，「還原」就是保留重生後的版本，�
 
 ## Step 1.4 — SQL lint（hard block）
 
-**Step 1.3 沒有印 `DEFERRED_TO_CI` 就跑**（shared 拓樸的共用 DB 沒套本次 migration，lint 量不到它；CI `supabase-check` 在冷啟重放後以同一 `--level warning` 門檻跑）。Step 1.3 的 reset 剛把 DB 刷到「migrations 全部重放一次」的狀態，這是 lint 唯一
+**Step 1.3 沒有印 `DEFERRED_TO_CI` 就跑**（shared 拓樸的共用 DB 沒套本次 migration，lint 量不到它；CI `supabase-check` 在冷啟重放後以同一 `--level warning` 門檻跑）。Step 1.3 的 reset（或 `db:copy` 副本上的重放）剛把 DB 刷到「migrations 全部重放一次」的狀態，這是 lint 唯一
 量得準的時刻——觸發判定、SSH 連線、reset 三樣成本都已經付掉，這一步的邊際成本接近零。
 
 ```bash
-if node -e "process.exit(require('./package.json').scripts?.['db:lint'] ? 0 : 1)" 2>/dev/null; then
+# 判準與 Step 1.3 同序：雲端 ephemeral（CLADE_CLOUD_EPHEMERAL_DB=1）優先於 db:copy，那條路徑沒建過副本
+if [ "${CLADE_CLOUD_EPHEMERAL_DB:-}" != 1 ] && node -e "process.exit(require('./package.json').scripts?.['db:copy'] ? 0 : 1)" 2>/dev/null; then
+  # Step 1.3 走了 db:copy 分支：lint 打臨時副本；不論 lint 過不過都 drop 副本（用完即丟）
+  pnpm db:lint --target copy; rc=$?
+  pnpm db:copy --drop || echo '⚠ 臨時副本沒 drop 乾淨：pnpm db:copy --list 查，NEVER 留著當下次的起點' >&2
+  [ "$rc" -eq 0 ] || exit "$rc"
+elif node -e "process.exit(require('./package.json').scripts?.['db:lint'] ? 0 : 1)" 2>/dev/null; then
   pnpm db:lint
 else
   supabase db lint --level warning --local

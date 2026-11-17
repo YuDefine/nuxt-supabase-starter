@@ -26,8 +26,8 @@ $ARGUMENTS
 
 ## Phase 1 -- 判定 runtime 邊界、延續價值與交接模式（Codex boundary／Step 0.1／Step 0／Step 0.5／Step 1）
 
-1. READ 每次進入 `/handoff`，讀取 `rules/模式偵測與park閘判準.md`：先過 Step 0.1 value-first gate，解析 `$ARGUMENTS`，裸 `/handoff` 再過 Step 0.5 context 預算 gate 與 Step 1 兩層判定，落到 `park`／`relay`／`fanout`／`next` 其一；落到 `park` 的裸呼叫 MUST 先過 park gate。
-2. READ 若模式是 `relay`，讀取 `relay-steps.md` 全文並照順序執行（共用底座 `dispatch-common.md`）；若是 `fanout`，讀取 `fanout-steps.md` 全文照做（同樣先讀 `dispatch-common.md`）。完成後跳到 Phase 5。
+1. READ 每次進入 `/handoff`，讀取 `rules/模式偵測與park閘判準.md`：先過 Step 0.1 value-first gate（判準在 `rules/價值優先延續判準.md`），解析 `$ARGUMENTS`，裸 `/handoff` 再過 Step 0.5 context 預算 gate 與 Step 1 兩層判定，落到 `park`／`relay`／`fanout`／`next` 其一；落到 `park` 的裸呼叫 MUST 先過 park gate。
+2. READ 若模式是 `relay`，讀取 `rules/relay接力判準.md` 全文並照順序執行（共用底座入口 `rules/派工前置與身分分流判準.md`，其餘共用段由 rules 內連結用到才讀）；若是 `fanout`，讀取 `rules/fanout派工判準.md` 全文照做（同樣先讀 `rules/派工前置與身分分流判準.md`）。共用底座依用到才讀：`rules/durable-brief撰寫判準.md`（寫 brief）、`rules/派工helper與launcher判準.md`（呼叫 helper、選 launcher）、`rules/runtime清理與parent-worktree判準.md`（寫 brief 前判 parent worktree 去留與誰接手、收尾清理）、`rules/派工收工訊息判準.md`（收工訊息）、`rules/worker殘工回報判準.md`（worker 回報殘工）。完成後跳到 Phase 5。
 
 ## Phase 2 -- 解析 main worktree 的全局寫入路徑（Step 1.5；park／next 共用）
 
@@ -39,8 +39,8 @@ $ARGUMENTS
 
 ## Phase 4 -- 完成 next 盤點、推薦並收斂 worktree 與 stash（2B.0–2B.5／Step 3）
 
-1. READ 若模式是 `next`，讀取 `rules/next盤點與推薦判準.md`，依 2B.0→2B.1 執行（盤點細節在 `scan-steps.md`）；走到 2B.1.5 時 MUST 先讀取 `rules/worktree與stash收斂判準.md`，在此跑完 Step 3（3.1→3.3→3.5；3.5.1 僅 maintenance 才進，查表細節在 `worktree-stash-audit.md`），再接 2B.1.7→2B.1.8→2B.1.9→2B.2→2B.2.5→2B.3→2B.4→2B.4.5→2B.5（2B.3–2B.5 在 `dispatch-steps.md`；2B.4.5 用的是 2B.1.5 那次 Step 3.1 的結果）。Step 3 跑過就不在 2B.5 之後重跑。
-2. READ 若模式是 `park`，Phase 3 完成後讀取 `rules/worktree與stash收斂判準.md` 跑 Step 3／3.5（細節在 `worktree-stash-audit.md`；3.5.1 僅 maintenance 才進）。
+1. READ 若模式是 `next`，讀取 `rules/next盤點與推薦判準.md`，依 2B.0→2B.1 執行（盤點細節在 `rules/next掃描步驟判準.md`）；走到 2B.1.5 時 MUST 先讀取 `rules/worktree與stash收斂判準.md`，在此跑完 Step 3（3.1→3.3→3.5；3.5.1 僅 maintenance 才進，查表細節在 `rules/worktree與stash稽核判準.md`），再接 2B.1.7→2B.1.8→2B.1.9→2B.2→2B.2.5→2B.3→2B.4→2B.4.5→2B.5（2B.3–2B.5 在 `rules/next派工與推薦訊息判準.md`；2B.4.5 用的是 2B.1.5 那次 Step 3.1 的結果）。Step 3 跑過就不在 2B.5 之後重跑。
+2. READ 若模式是 `park`，Phase 3 完成後讀取 `rules/worktree與stash收斂判準.md` 跑 Step 3／3.5（細節在 `rules/worktree與stash稽核判準.md`；3.5.1 僅 maintenance 才進）。
 
 ## Phase 5 -- 收工並輸出收工訊息（Output contract）
 

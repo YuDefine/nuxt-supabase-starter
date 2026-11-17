@@ -12,9 +12,11 @@ when: "要對 Charles 或客戶給日期、寫 `flow work eta`，或複核自報
 | 情境 | MUST |
 | --- | --- |
 | 要給或要寫任何日期 | 先跑 `/estimate-hours`，拿樂觀、可能、承諾三值與硬下限；**NEVER** 憑印象或照趕工線自報的日期回答 |
-| 寫 `flow work eta` | `--target` 寫可能值、`--basis estimate-hours`；只有自己估、沒跑 skill 的寫 `--basis agent-estimate`，**NEVER** 冒充 `estimate-hours` |
+| 寫 `flow work eta` | 內部 AI 工作不寫（見下段）；其餘 `--target` 寫可能值、`--basis estimate-hours`；只有自己估、沒跑 skill 的寫 `--basis agent-estimate`，**NEVER** 冒充 `estimate-hours` |
 | 對內（Charles、coordinator、內部頁） | 三值都可以給，每個值都帶數據狀態（校準週／回退預設／未校準） |
 | 對外（客戶、對外頁面、報價包、合約附件） | 只給承諾值，且先過「對外前的 gate」G1–G4 |
+
+**內部 AI 工作不走這條線的真人工時。** dispatch 派給 agent 做、日期只對 Charles 或主持者的工作（實作、修補、review、顧問），eta 以 dispatch 實測 p80 × 並行數推（`/estimate-hours` 的 `rules/內部AI工作估時判準.md`），不先算真人工時再乘 `eta_bias`。真人工時、三值與下面的 G1–G4 只管對客戶的報價與交期承諾；**不代表真人工時作廢**，對外日期仍照舊。範例：3 件獨立實作、3 條 lane → `ceil(3÷3) × impl p80`（數值當場跑 `dispatch-latency.ts` 取，**NEVER** 抄進規約）；寫到合入再加一次 PR 合入 p80。內部 eta 只寫在 brief、回報與 `--wait-until`，**NEVER** 寫 `flow work eta`（`eta_bias` 不看 basis，會混進對客戶的偏誤修正）；Charles 壓縮時在回報裡原估與壓縮值並列。**NEVER** 靠少跑 0-A、測試、CI 換時間。
 
 承諾值的定義（`/estimate-hours` 的 `rules/交期模型判準.md` 算）：P80 工期加 Milestone 層級緩衝，**NEVER** 攤到每個 task，且同時滿足兩個下限——
 

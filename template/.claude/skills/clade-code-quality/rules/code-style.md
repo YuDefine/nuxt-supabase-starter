@@ -52,7 +52,7 @@ Node 的 type stripping 只抹除型別，不做語法轉換：
 - **NEVER** 用 `enum`、`namespace`、constructor parameter properties、legacy decorators
 - type-only import **MUST** 寫成 `import type { X } from '...'`
 - import specifier **MUST** 帶**真實**副檔名（`import './foo.ts'`）。stripping 不做副檔名改寫，寫 `.mjs` 指向 `.ts` 檔會在 runtime 炸 `ERR_MODULE_NOT_FOUND`
-  - **例外：`nuxt.config.ts` 的相對 import 一律 extensionless**：它由 Nuxt loader 載且在 `nuxi typecheck` program 內，Nuxt 4.4.x 生成的 tsconfig 沒有 `allowImportingTsExtensions`，帶 `.ts` 會 `TS5097`
+  - **例外：`nuxt.config.ts` 的相對 import 一律 extensionless**：它由 Nuxt loader 載且在 `nuxt typecheck` program 內，Nuxt 4.4.x 生成的 tsconfig 沒有 `allowImportingTsExtensions`，帶 `.ts` 會 `TS5097`
   - **`vite.config.ts` 反過來，MUST 保留 `.ts`**：`vp` 走 Node 原生 ESM loader，extensionless 會 `ERR_MODULE_NOT_FOUND`
   - 判準是「誰載它、它在不在 typecheck program 內」，**NEVER** 為了看起來整齊把兩邊統一
 

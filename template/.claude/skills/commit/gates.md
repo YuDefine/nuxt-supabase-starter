@@ -8,7 +8,7 @@
 受控執行帶有 acceptance contract 時，每個本次適用的 gate receipt MUST 綁定 contract digest、
 受測 artifact digest、producer family、reviewer family／session 與 evidence ID。
 `verifyCommitGateBindings()` 的 requiredGates 與 independentReviewGates 取本 skill 本次實際判定，
-包含既有 fast-path 及重審條件。主線收割只驗 plan 結果；simplify、code／UI review、checks 與
+包含重審條件（fast-path 已刪除）。主線收割只驗 plan 結果；simplify、code／UI review、checks 與
 Critical／Major 深度複審仍逐步執行。換 pane／另開 session 只是同一個合格 reviewer 的另一次
 執行；啟動與 fresh context 本身不產生 verdict，不能充當獨立 review 的完成證據。
 內容或契約改變時，舊 receipt 不替新版本背書；依既有 gate 規則補驗後才接受整合。
@@ -203,7 +203,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 6. **批次模式** auto-triage 後仍有 blocker → 保留 integration 與全部來源，停止 seal／land；修復後重驗。單成員／獨立 workId 的 Charles-only leftover 只停該來源：`batch yield-blocked` 讓出 active slot，**NEVER** 凍結其他獨立切片。合批內一成員 blocked 則整批不落地；要讓其他成員先走必須 cancel 後重組，不能切掉幾個 artifacts 卻帶走該來源 code。需排除未就緒來源時 cancel 後重登記合格來源再 prepare。**普通 main 模式** auto-triage 跑完後 blocker list 仍非空 → 把每件 BLOCK 工作的 carrier 路徑（`tasks/<X>.md`，或整個 `specs/plans/<X>/**`／`docs/plans/<X>/**`）記為 **withheld scope**，輸出 `⏸️ 0-MR 保留 <X>（pending=<n>；withheld: <carrier 路徑>）`，**進入 Step 0**（不是停下）。withheld scope 由後面兩步消費：
 
-   - **Step 3 分組**：withheld scope 內的路徑不進任何 group（分組唯一的機械排除）。它們留在 working tree，Step 5-A 照「仍有 uncommitted 變更」登記進 HANDOFF，並寫明卡在哪件工作的哪幾個 leaf。
+   - **Step 3 分組**：withheld scope 內的路徑不進任何 group（分組唯一的機械排除）。它們留在 working tree，依 `rules/分組與提交判準.md`（D3）Rule 2 列進 PR body 的「剩餘事項」（trunk-based 無 PR 則列進回報並交 `/handoff` 登記），並寫明卡在哪件工作的哪幾個 leaf。
    - **Step 4 每個 group commit 前**：
 
      ```bash
@@ -230,7 +230,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | step 4 任一工作印 `BLOCK` 且 auto-triage 後仍 BLOCK → 該 carrier 路徑進 withheld scope；Step 4 任一 group 的 `intersect` exit 1 → 該 group 不 commit。**hard gate**，無 override |
-| 消費端 | 跑 `/commit` 的主線（Step 3 排除、Step 4 逐 group 判）；Step 5-A HANDOFF 登記 withheld 檔 |
+| 消費端 | 跑 `/commit` 的主線（Step 3 排除、Step 4 逐 group 判）；withheld 檔列進 PR body「剩餘事項」（trunk-based 交 `/handoff`） |
 | 觸發點 | 本節（`capabilities/core/skills/commit/gates.md` § 0-MR，觸發 0-MR 時 MUST 完整讀）；判定條件 SoT `rules/core/commit.trunk-gates.md` § 人工檢查 Gate |
 
 ### 禁止項
@@ -323,11 +323,11 @@ gate 自己的可用度跑 `node scripts/audit-security-gate-readiness.ts`（war
 
 ## § 0-A: 程式碼審查（simplify → 0-A.1 → 條件式 0-A.2）
 
-**每次 dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，分開驗證 scope、fresh context、模型資格、品質與唯讀載體。commit 0-A 的合格 reviewer **只有一席**：fresh-context Claude Opus 5.5（effort: medium）（`code-review-opus` 列）。Claude Code 主線走下方 § 0-A.1 的 subagent carrier（prepare → AGENT_CALL → FINALIZE，**NEVER** 開 Herdr pane），叫不出 Claude subagent 的 runtime 才跑無子命令的 `claude-review-safe.sh medium`（Herdr child）。**沒有備援席**：Opus 不可用 → gate 保持未完成；receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。review 角色不固定由哪個 runtime 主線執行，原生呼叫方式見本檔末尾投影的 runtime 操作段。
+**每次 dispatch 前 MUST 完整讀 [review-policy.md](review-policy.md)**，分開驗證 scope、fresh context、模型資格、品質與唯讀載體。commit 0-A 的合格 reviewer **只有一席**：fresh-context Claude Opus 5.5（effort: xhigh）（`code-review-opus` 列）。Claude Code 主線走下方 § 0-A.1 的 subagent carrier（prepare → AGENT_CALL → FINALIZE，**NEVER** 開 Herdr pane），叫不出 Claude subagent 的 runtime 才跑無子命令的 `claude-review-safe.sh xhigh`（Herdr child）。**沒有備援席**：Opus 不可用 → gate 保持未完成；receipt `requested_model` 不是 Opus 5.5 的 verdict 不得當 gate 證據。review 角色不固定由哪個 runtime 主線執行，原生呼叫方式見本檔末尾投影的 runtime 操作段。
 
 1. 主線先完成 0-A.0；修完的 snapshot 才交給 reviewer。
-2. Fast-path 不成立時啟動 0-A.1 獨立 review，並行 0-B 與 0-C。每個背景工作綁 owner、實際 handle、deadline 與收回方法；不把另一個 runtime 的參數交給本端工具。
-3. 0-A.1 出 Critical／Major 時，修正後進 0-A.2 深度 review——同一席（Opus 5.5（effort: medium））以新的 fresh context 對修復後 snapshot 再審一輪。
+2. 啟動 0-A.1 獨立 review，並行 0-B 與 0-C。每個背景工作綁 owner、實際 handle、deadline 與收回方法；不把另一個 runtime 的參數交給本端工具。
+3. 0-A.1 出 Critical／Major 時，修正後進 0-A.2 深度 review——同一席（Opus 5.5（effort: xhigh））以新的 fresh context 對修復後 snapshot 再審一輪。
 4. Findings 由主線匯合、查證與修正；各軸的背景 reviewer 不同時寫受審檔。
 
 0-A 等待期間 NEVER 編輯受審 changeset 內的檔；可觀察後果是逐檔內容／HEAD／mode 不符 → exit 6 重跑。
@@ -343,8 +343,8 @@ pre-commit hook 對 owner 只驗 `staged ⊆ 受審集`，
 以及每個 staged entry 的內容與 mode 等於受審版本；不驗 worktree 或 HEAD 的逐路徑漂移。
 未 staged 的 baseline 路徑即使含外來 WIP 並再次改動，也不阻擋本組 commit。
 超集、內容不符、基線到期或讀不到即 abort。post-commit 只消耗已提交的受審路徑，支援逐組 commit；
-`STAGING_BASELINE:` 的 immutable receipt 不改寫。合法 fast-path 沒有新 review 基線。
-最後一組 commit 落地後，依 `rules/分組與提交判準.md`（Step 4）Rule 6 的 `complete --reason` 正常收尾，
+`STAGING_BASELINE:` 的 immutable receipt 不改寫。
+最後一組 commit 落地後，依 `rules/分組與提交判準.md`（D3）Rule 5 的 `complete --reason` 正常收尾，
 釋放未提交的外來 WIP 並保留 closure receipt；commit lock 釋放或換代也使該次 guard 自動失效。
 取消 changeset、要提交修訂後的受審內容、approval 到期或 post-commit 失敗時，用下列命令結束 active guard；
 它保留原基線與具名原因的 closure receipt，並使原 approval 失效。修訂後仍需重新 review，
@@ -364,28 +364,28 @@ Consumer 自家的 runtime settings、local rules、hooks、composite actions �
 
 對本次變更檢查 reuse、精簡、效率與抽象層次，完成必要修正後再凍結 review snapshot。當前入口提供已安裝 `simplify` skill 時由主線直接呼叫；缺少原生 invocation API 時讀取可用技能全文依其契約執行，沒有技能時由主線明確覆核上述四軸並記錄結果。不虛構 `Skill` 工具或宣稱呼叫過未執行的技能。
 
-技能內部的委派仍受當前 routing 與授權約束；主線不外包一層只為重新呼叫同一技能，也不手抄其 fan-out 結構。收到結果後只摘要修正與 deferred 項，deferred 依來源 repo 的 HANDOFF 契約登記，立即判 fast-path／啟動下一步，不等使用者重複授權。不轉貼整份中間報告。
+技能內部的委派仍受當前 routing 與授權約束；主線不外包一層只為重新呼叫同一技能，也不手抄其 fan-out 結構。收到結果後只摘要修正與 deferred 項，deferred 依來源 repo 的 HANDOFF 契約登記，立即啟動下一步，不等使用者重複授權。不轉貼整份中間報告。
 
-Fast-path 的三條件以 `rules/品質檢查判準.md` Rule 3 的同一份定義為準：diff <20 行、只含允許的 doc/config、無敏感路徑，三條全中才能跳過 0-A.1／0-A.2；0-A.0、0-B 的觸發判定與 0-C 仍執行。
+Fast-path 已刪除（見 `rules/品質檢查判準.md` Rule 4），不再有跳過 0-A.1／0-A.2 的三條件判定；純測試／文件免審由 D4 判斷。0-A.0、0-B 的觸發判定與 0-C 仍執行。
 
 ### 0-A.1 — 獨立 review（並行軸 A）
 
 Reviewer 看完整 frozen changeset 與驗收契約，以一般 review 的已核准推理深度查邏輯、安全、跨檔影響及適用 semantic patterns。共用 CLI 載體可使用：
 
 ```bash
-bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" medium       # Herdr carrier（叫不出 Claude subagent 的 runtime）
+bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" xhigh        # Herdr carrier（叫不出 Claude subagent 的 runtime）
 ```
 
 **Subagent carrier（Claude Code 主線 MUST 用這條）**：三步，全部在同一個 session、同一個 turn 內做完。
 
 ```bash
-bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" prepare medium
-# stdout：AGENT_CALL: {...}（subagent_type／fallback_subagent_type／model／prompt；agent 定義固定 effort: medium）與 FINALIZE: bash … finalize <work-dir>
+bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" prepare xhigh
+# stdout：AGENT_CALL: {...}（subagent_type／fallback_subagent_type／model／prompt；agent 定義固定 effort: xhigh）與 FINALIZE: bash … finalize <work-dir>
 ```
 
-1. 跑 `prepare`，照 `AGENT_CALL` 的欄位**逐字**呼叫 `Agent` tool（`subagent_type`、`model`、`prompt` 原樣照抄，前景）。該 agent 的 frontmatter 固定 `effort: medium`；不可改用會繼承主線 effort 的其他 agent。
+1. 跑 `prepare`，照 `AGENT_CALL` 的欄位**逐字**呼叫 `Agent` tool（`subagent_type`、`model`、`prompt` 原樣照抄，前景）。該 agent 的 frontmatter 固定 `effort: xhigh`；不可改用會繼承主線 effort 的其他 agent。
    - `subagent_type` 是 session 看得到的名字：session project 或使用者層級的 agents 目錄有投影 `commit-0a-reviewer` 定義時是裸名，否則是 plugin 命名空間名 `hub-core:commit-0a-reviewer`（例如 `update_policy` pinned 在 agent 出現之前的 consumer）。`fallback_subagent_type` 是另一個名字，**不是** `Agent` 參數：只有 `Agent` tool 明確回報找不到 `subagent_type` 時，才把 `subagent_type` 換成它、其餘欄位不動重派**一次**；其他錯誤 **NEVER** 換名重試。finalize 只收這兩個固定名字。
-2. subagent 回來後跑 `FINALIZE` 那一行。它從本 session 的 subagent transcript 核對 nonce 歸屬、agent type、每則 assistant 的 observed model 與 effort、唯讀工具面、brief 是否逐行讀完；effort 缺席或非 medium 時 exit 8、扣住 verdict。
+2. subagent 回來後跑 `FINALIZE` 那一行。它從本 session 的 subagent transcript 核對 nonce 歸屬、agent type、每則 assistant 的 observed model 與 effort、唯讀工具面、brief 是否逐行讀完；effort 缺席或非 xhigh 時 exit 8、扣住 verdict。
 3. **verdict 只來自 finalize 的 stdout。** subagent 的回覆是它交給 finalize 的原料，**NEVER** 由主線轉述、摘錄或拼接成 verdict——主線是受審改動的 producer。
 
 
@@ -416,6 +416,7 @@ bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" prepare medium
 | A17 | 完整結果，無 issue | 0-A.1 通過，0-A.2 不觸發 |
 | A18 | 只有 Minor／Info | 逐項修復並驗證，0-A.2 不觸發 |
 | A19 | 含 Critical／Major | 逐項修復後進 0-A.2 [^A19] |
+| A20 | exit 15（`grant-unopenable`：scope=full 的例外輪 grant 開不出獨立輪） | review 沒跑、grant 沒消耗；保留 grant，NEVER 重新授權 [^A20] |
 | A* | 其他 exit、RESULT 讀不出 | gate 未完成，STOP 回報 RESULT 行與 exit code |
 
 [^A0]: 並行推進其他軸，不能重播命令代替等待。
@@ -431,6 +432,7 @@ bash "$COMMIT_RESOURCE_DIR/scripts/claude-review-safe.sh" prepare medium
 [^A14]: review 沒跑、gate 未完成。NEVER 刪改 ledger、換 branch 或 rebase 重置輪數。
 [^A16]: 已確認為合法並行工作可移至隔離 fixture 後重跑；不明或非預期 mutation 保留現場並處理授權，不自動覆寫。
 [^A19]: 修法本身是新的受審範圍。
+[^A20]: RESULT 的理由是帶 `--include`／`--exclude` 篩選，或前輪（grant 的 at_round）／本 head 還有未解 Critical／Major（獨立輪不帶前輪 findings、不靠 grant 抹掉）。篩選：不帶篩選重跑 `prepare`；Critical／Major：對假 Major 跑 `rounds adjudicate` 後重跑，真 Major 的修補無法靠獨立輪驗證（full grant 不能改簽也不能再簽），這張 PR 該拆。NEVER 刪改 ledger。
 
 不論命中哪一列，下表每條都要遵守：
 
@@ -478,7 +480,7 @@ PRE-EXISTING — 未觸碰：<file>:<line>（舉證本次 diff 不含此檔／�
 
 只在 0-A.1 出 Critical／Major 時執行；修復後的完整 snapshot 是輸入。
 
-合格深度 reviewer 與 0-A.1 同一席（Claude Opus 5.5（effort: medium））——新的 fresh context、不繼承 0-A.1 的對話，兩份 receipt 各自記 requested／observed。複審 MUST 由合格席執行，NEVER 降級成主線自審、worker、cloud CI 或其他模型。它取得修復後 snapshot、原始 0-A.1 findings 與修法內容，逐條確認 real issue 已修、附反證 dismiss 或重標 severity，另查修法帶來的漏項與 regression。reviewer 唯讀，主線負責修復。修補後重跑同一個 `prepare medium`（Herdr carrier 同理）：wrapper 由輪數 ledger 自動帶上一輪 verdict、只嵌增量並限定驗證範圍；`--findings` 只給 ledger 之外的 verdict 來源。
+合格深度 reviewer 與 0-A.1 同一席（Claude Opus 5.5（effort: xhigh））——新的 fresh context、不繼承 0-A.1 的對話，兩份 receipt 各自記 requested／observed。複審 MUST 由合格席執行，NEVER 降級成主線自審、worker、cloud CI 或其他模型。它取得修復後 snapshot、原始 0-A.1 findings 與修法內容，逐條確認 real issue 已修、附反證 dismiss 或重標 severity，另查修法帶來的漏項與 regression。reviewer 唯讀，主線負責修復。修補後重跑同一個 `prepare xhigh`（Herdr carrier 同理）：wrapper 由輪數 ledger 自動帶上一輪 verdict、只嵌增量並限定驗證範圍；`--findings` 只給 ledger 之外的 verdict 來源。
 
 深度輸出缺 `## Review Verdict`（含截斷／context exhaustion）時，明示深度階段未完整；不盲重跑相同耗盡命令。查明耗盡或截斷原因後對同一 snapshot 重跑（diff 過大先縮小受審範圍），補齊完整 verdict 才可收口；Opus 席不可用時 0-A.2 保持未完成，不以其他模型或主線自審補位。
 
@@ -501,9 +503,9 @@ DISMISSED — 反證：<file>:<line> ／ <契約或規則條文的具體出處>
 
 ### 0-A/B/C/D 並行匯合（收口檢查）
 
-收回每個實際工作結果後核對：0-A 通過或合法 fast-path；0-B 通過或未觸發；0-C 全綠。接著條件執行 0-D，再做大改動回扣；0-E／0-F 依自己的觸發與阻擋契約處理。
+收回每個實際工作結果後核對：0-A 通過；0-B 通過或未觸發；0-C 全綠。接著條件執行 0-D，再做大改動回扣；0-E／0-F 依自己的觸發與阻擋契約處理。
 
-**大改動回扣**：匯合後有修正就重跑 `prepare medium`，要不要再審由 wrapper 依上一輪通過後的累計增量判（exit 13＝沿用）；未到門檻仍跑修法相應的驗證。
+**大改動回扣**：匯合後有修正就重跑 `prepare xhigh`，要不要再審由 wrapper 依上一輪通過後的累計增量判（exit 13＝沿用）；未到門檻仍跑修法相應的驗證。
 
 實際匯合完成後使用 metrics recorder，記錄真實結果與身份：
 
@@ -519,7 +521,7 @@ node "$COMMIT_RESOURCE_DIR/scripts/0a-metrics.mjs" record \
   --screenshot <pass|skip> --doc <aligned|skip>
 ```
 
-Fast-path 不填未執行的 reviewer；`escalated` 的 `--reviewer` 記實際跑 0-A.2 深度 review 者（Opus 5.5（effort: medium））。`--dismissed-unsubstantiated` 是反證不足被保留為 real issue 的條數。`blocked` 記「gate 觸發但因外部原因沒跑完」（如 Opus reviewer 配額耗盡）：MUST 提供非空 `--blocked-reason`，`--reviewer` 可省，findings 記已觀察到的部分——pending review 要留遙測記錄，不能整筆消失。Recorder 的參數檢查不證明 review 真有執行，須同時保留各軸原始 receipt；參數矛盾時修正流程或記錄，不能填假值讓它通過。舊 `--codex` CLI／歷史記錄是相容資料，不要求新入口冒充該模型組合；含 `+fable` 的舊 mode 與 `--adjudicator`／`--a2-deferral-*` 參數已退役，CLI 會拒收。
+Fast-path 不填未執行的 reviewer；`escalated` 的 `--reviewer` 記實際跑 0-A.2 深度 review 者（Opus 5.5（effort: xhigh））。`--dismissed-unsubstantiated` 是反證不足被保留為 real issue 的條數。`blocked` 記「gate 觸發但因外部原因沒跑完」（如 Opus reviewer 配額耗盡）：MUST 提供非空 `--blocked-reason`，`--reviewer` 可省，findings 記已觀察到的部分——pending review 要留遙測記錄，不能整筆消失。Recorder 的參數檢查不證明 review 真有執行，須同時保留各軸原始 receipt；參數矛盾時修正流程或記錄，不能填假值讓它通過。舊 `--codex` CLI／歷史記錄是相容資料，不要求新入口冒充該模型組合；含 `+fable` 的舊 mode 與 `--adjudicator`／`--a2-deferral-*` 參數已退役，CLI 會拒收。
 
 **作者回應四分類**（`--fixed`／`--wrong`／`--intentional`／`--didnt-matter`）：findings 非 0 時 **MUST** 帶，在本匯合點記——此時修復、0-A.2 dismissal 與裁決都已定案。值是 `<severity>=N` 以逗號串接（省略的 severity 為 0）；每個 severity 的四類加總必須等於該 severity 的 finding 數，recorder 不符就拒收。分類記的是**作者對該則 finding 的判斷**，不是處置：本表不改上方結果表的處置，照修的 finding 仍照修。**每一則** finding 依下表判定：
 
@@ -729,6 +731,7 @@ node bin/clade-gate run test -- <runner> <測試檔>  # 沒有合適 script 時�
 那筆紀錄也不能用來排除。那不是錯，但通常是新檔還沒有測試在引用它。另有兩條不經 fallback 的選法：經 git 列檔的測試
 （trace 看得到它讀 `.git`、看不到它列了哪些檔）在任何新增或刪除時都會被選；`run-p`／`run-s`／`npm-run-all` 的 glob
 （`check:*`）算進 `package.json` 的 script 呼叫閉包。
+自帶測試的平台（`vendor/web-article/**`、`vendor/dashboard/**`）零命中、且往上整條 import 鏈沒有 root 程式或測試載到它時不 fallback：`0 tests selected` 代表交給該平台自己的 workflow（`web-article.yml`、`dashboard.yml`）。
 **純文件 diff（只改 `.md`）也照跑**：clade 有百餘支測試讀真實 `rules/ docs/ capabilities/` 內容，lane 會把它們選出來；
 選出 0 支時 runner 印 `No affected tests found`，那才是「這次沒有測試該跑」的合法結論。
 
@@ -779,7 +782,7 @@ Doctor health score < 100 或 exit code ≠ 0 → **MUST block commit**，修復
 
 0-C 檢查發現失敗需要修補時，**預設**派背景 worker 跑 fix-verify loop，主線同回合繼續既有並行收尾（poll 軸 A、回收軸 B）— 三軸並行結構不變，軸 C 只是從「主線 foreground 修」換成「worker 背景修」。0-C 是 Routing Table 〔`commit-0c-fix-verify`〕列（2026-09-24 併入原 `-escalate` 列；2026-09-29 GPT 退場後改 Claude Sonnet 5.5（effort: high）），鏈尾是主線。brief 以 `~/offline/clade/vendor/snippets/pi-offload/templates/fix-verify-loop.template.md` 為素材填好（check 命令、失敗摘要／log、`max_iterations=2`）寫成檔；載體照 [[agent-routing.routing-table]] § Devin 與 [[agent-routing.dispatch-execution]] § Cloud session 載體：
 
-- 本 turn 收得回 → Claude Code 主線派 in-process `sonnet-implementer`（brief 含一行 `routing-row: commit-0c-fix-verify`）
+- 本 turn 收得回 → Claude Code 主線派 in-process `haiku-implementer`：dispatch prompt 本體帶一行 `routing-row: commit-0c-fix-verify` 與每條 check 命令各一行 `test-command: <指令>`（只收測試 runner 前綴＋位置參數，例如 `pnpm test`、`node --test <檔>`、`vitest`；`pnpm check`、`pnpm run doctor`、`pnpm format:check` 這類 lint／typecheck／doctor／format check 不是測試 runner，帶旗標或引號的 check 命令也一樣，會被判 failed——這種 check 不派 Haiku、直接派 `sonnet-implementer`），brief 檔只放其餘內容（只寫在檔裡的 `test-command:` 不算，收尾 hook 只解析 prompt）；check 命令紅或 Haiku 不可用 → 轉 `sonnet-implementer`（同一 `routing-row`；有註冊收尾 hook 時照它印的 AGENT_CALL，沒註冊時主線自己重跑 check 命令判定）
 - 需隔離／長時間 → Herdr Claude child：
 
 ```bash
@@ -803,7 +806,7 @@ node ~/offline/clade/vendor/scripts/herdr-session-handoff.ts \
 
 **每一輪需要修復時先判執行者**：單檔 ≤5 行的 typo／import 級修正、或根因涉及本次設計判斷時由主線處理；其他可獨立驗證的機械修復依目前已核准 routing／使用者模型指定選 worker。可用本 runtime 的原生載體，不要求所有主線先換到 Pi。沒有可用 worker 或機械 transport 故障時主線接手，品質標準不變；這不構成 0-A 獨立 reviewer 的替代。
 
-Worker brief 帶具體 failures、命令、允許檔案、禁止修改的主線範圍與回報格式。第一位 worker 最多兩輪 check→fix；仍 fail／uncertain，或主線複跑仍紅時，主線接手處理剩餘根因，不重派同一 brief。相同 error 連續三輪無收斂時停止盲修、回到根因與 scope 決策。
+Worker brief 帶具體 failures、命令、允許檔案、禁止修改的主線範圍與回報格式。第一位 worker 最多兩輪 check→fix；仍 fail／uncertain，或主線複跑仍紅時，主線接手處理剩餘根因，不重派同一 brief。例外：第一位是 `haiku-implementer` 時它只有一次收尾，check 命令紅就先轉 `sonnet-implementer`（同一 `routing-row`；有註冊收尾 hook 時照它印的 AGENT_CALL，沒註冊時主線派的 brief 加一行 `haiku-skip: haiku-red`，否則 routing gate 會要求改派 Haiku），兩輪上限從 Sonnet 那一跳算起，Sonnet 也沒收斂才由主線接手。相同 error 連續三輪無收斂時停止盲修、回到根因與 scope 決策。
 
 使用 Pi CLI 的既有載體時，沿當前 `commit-0c-fix-verify` row（原 `-escalate` 列已退場，dispatcher 拒收）、`--route`／`--tier-basis`／`--table-row` 與 `--retry-of` 契約。Exit 2 是業務未收斂、3 是機械故障、4 是 quota；按實際結果判定，不能拿 quota 當故障來繞過 candidate admission。其他 native adapter 回報等價的 pass／finding／infrastructure-error／quota 狀態，不捏造 Pi exit code。
 
@@ -1087,7 +1090,7 @@ node "${CLADE_HOME:-$HOME/offline/clade}/scripts/bp-scan.ts" --changed-only
 | **A 類**（新資產沒接上管道） | 機械精確、無偽陽性 | commit 前補掉。三種缺口各有明確修法，script 輸出已寫在每條後面 |
 | **B 類**（主題詞命中的既有 convention） | **有偽陽性** | 人工看一眼「這條是不是已經涵蓋我要做的事」。是 → 改用既有的；不是 → 忽略 |
 
-A 類的三種缺口：snippet 無入向 pointer、新 audit 未登記 `registry/audits.json`、新 skill 缺 `evals/skills/<name>/cases.json`（EDD）。
+A 類的三種缺口：snippet 無入向 pointer、新 audit 未登記 `registry/audits.json`、新 skill 缺 `evals/skills/<name>/cases.json`（EDD）。新 skill 的 cases／receipt 要求與改觸發面的 receipt 要求以 § 0-G 為準（§ 0-G 生效後由它機械擋下，本節只是提示）。
 
 ### 反過來的情況：這次做的東西**該**被登記
 
@@ -1100,16 +1103,38 @@ script 抓不到「這是一條新的最佳實踐」——那是語意判斷。�
 
 通過後輸出 `✅ 0-F 通過（A 類 N 條已處理／B 類 M 條已判讀）`。
 
+## § 0-G: skill eval receipt gate（機械 gate，改 skill 觸發面時）
+
+§ 0-F 只在**新增** SKILL.md 時提示，且 `bp-scan.ts` 永遠 exit 0。改既有 skill 的觸發面（`description`、觸發詞）或 `evals/skills/<skill>/cases.json` 時，由 `scripts/check-skill-eval-receipts.ts` 這支**確定性、不呼叫模型**的 CLI 機械檢查；資料形狀見 `specs/truth/data/skill-eval-receipt.md`，CLI 契約見 `specs/truth/contracts/skill-eval-gate-cli.md`，治理脈絡見 `specs/truth/agent-process-governance.md`。
+
+> **生效狀態**：本節描述的 CLI 與接線隨 agent 治理堆疊 PR 落地——`scripts/lib/skill-eval-inputs.ts`（#3593）、`scripts/check-skill-eval-receipts.ts` 與 harness `--receipt`（#3595）、`.husky/pre-commit`／`validate.yml` 接線（#3598）。#3598 合入前下表的指令都不存在、不擋任何 commit，改 skill 觸發面照 § 0-F 自行判讀；#3598 合入時一併刪掉本段。
+
+### 觸發與會擋的位置
+
+| 位置 | 指令 | 擋什麼 |
+| --- | --- | --- |
+| `.husky/pre-commit` | `node scripts/check-skill-eval-receipts.ts --staged` | eval 輸入有改動的 skill 缺 receipt、receipt 過期（`trigger_hash`／`cases_hash` 對不上）、無 cases：commit 被擋。`below-floor` 只警告 |
+| PR CI（`validate.yml`） | `node scripts/check-skill-eval-receipts.ts --against origin/<base>` | 同上，加 `below-floor` 也失敗；不呼叫模型 |
+| 稽核 | `node scripts/check-skill-eval-receipts.ts coverage` | 不擋；列每支 core skill 的 cases 有無與 receipt 狀態 |
+
+### 判讀與處置
+
+1. gate 失敗時輸出每支 skill 要跑的指令：`node evals/harness/skill-eval.mjs evals/skills/<skill>/cases.json --reps 5 --receipt evals/receipts/<skill>.json`（本機 Claude 登入、花額度；跑完把 `evals/receipts/<skill>.json` 一併 commit）。
+2. `below-floor`：先判是 skill 退步還是 case 不合理。退步 → 修 skill 再重跑；case 不合理 → 改 cases 的 `floor` 並附 `source`／`reason`，NEVER 為了過關直接降下限。
+3. 整支 skill 退場（SKILL.md 與 cases.json 一併刪除）不檢查。
+4. **NEVER** 手寫或手改 `evals/receipts/*.json`（receipt 只由 harness `--receipt` 寫）；**NEVER** 用 `--no-verify` 繞過後不補 receipt（PR CI 會補洞）。
+5. 本節只放入口與判讀；偵測規則與雜湊正規化的唯一定義在 `scripts/lib/skill-eval-inputs.ts`，不在此複製。
+
 
 ## Claude commit operations
 
 每次先核對本入口實際 catalog，以下是 Claude Code 的操作映射，不外推 Claude Web／Desktop 已有相同工具。
 
 - Simplify：有 `Skill` 且技能已安裝時直接呼叫 `simplify`；其內部委派照當前 routing。結果回來後立即繼續 ceremony。
-- Review：Claude Code 主線跑 `claude-review-safe.sh prepare medium`，照輸出的 `AGENT_CALL` 前景派 `commit-0a-reviewer`（Opus 5.5、effort medium），再跑 `FINALIZE`；只採 finalize stdout 的 verdict。叫不出 Claude subagent 的 runtime 才走無子命令的 `claude-review-safe.sh medium` Herdr carrier，保存並收回真實 handle。
+- Review：Claude Code 主線跑 `claude-review-safe.sh prepare xhigh`，照輸出的 `AGENT_CALL` 前景派 `commit-0a-reviewer`（Opus 5.5、effort xhigh），再跑 `FINALIZE`；只採 finalize stdout 的 verdict。叫不出 Claude subagent 的 runtime 才走無子命令的 `claude-review-safe.sh xhigh` Herdr carrier，保存並收回真實 handle。
 - Watch：有 ScheduleWakeup 才使用目前已安裝 keepalive 契約；喚醒只處理該 id 的控制面，不重播 review 命令。沒有喚醒 API 時用已有背景 handle 的 bounded wait。Timeout 不取消工作、不代表 PASS。
 - UI：`screenshot-review` 只有在實際可用且符合 review-policy 的視覺資格時派遣，附完整 item、截圖及互動證據；不是有同名檔就算能看圖。
 - 協調／詢問：有已授權的具名 agent 通道時先協調；需要使用者資訊時用本入口實際可用的詢問工具或直接對話。AskUserQuestion 不是授權的唯一載體，既有同範圍回答不重問。
 - Exit：先收回或安全停止本次會寫入的背景工作，再依 runtime-lifecycle 以原 work/runtime/session/token 釋放鎖。完成事件缺席時保留 gate 未完成與具體 handle，不宣稱已退出。
 
-每次 receipt 記 requested／observed model 與 effort、實際 runtime 和隔離方式；0-A 只認 fresh-context Claude Opus 5.5 medium。模型或 effort 量不到、不符時 verdict 扣住，gate 保持未完成。
+每次 receipt 記 requested／observed model 與 effort、實際 runtime 和隔離方式；0-A 只認 fresh-context Claude Opus 5.5 xhigh。模型或 effort 量不到、不符時 verdict 扣住，gate 保持未完成。

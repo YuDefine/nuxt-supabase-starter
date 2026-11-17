@@ -1,6 +1,6 @@
 ---
 name: dispatch-fallback
-description: '原 Pi 列的載體（Opus 5.5（effort: low））——接手 mechanical-fanout／read-heavy-scan／notion-ops／screenshot-review-verify／copywriting-draft／web-search／readonly delegate-sub。Pi 鏈是空鏈，**主線直接派本 agent 當首跳**；Pi 席位回來時只在 pi-dispatch exit 4 的 `next_tier` 為 null 且 `next_step` 指向本 agent 時用。其餘列都不經本 agent。'
+description: '原 Pi 列的載體（Opus 5.5（effort: low））——接手 notion-ops／screenshot-review-verify／copywriting-draft／web-search／readonly delegate-sub，以及 Haiku 不可用時的 mechanical-fanout／read-heavy-scan（首跳是 haiku-scanner）。Pi 鏈是空鏈，**主線直接派本 agent 當首跳**；Pi 席位回來時只在 pi-dispatch exit 4 的 `next_tier` 為 null 且 `next_step` 指向本 agent 時用。其餘列都不經本 agent。'
 tools: Bash, Read, Grep, Glob, WebSearch, WebFetch
 model: opus
 effort: low
@@ -18,7 +18,8 @@ effort: low
 
 | 列 | 載體 |
 | --- | --- |
-| `mechanical-fanout`、`read-heavy-scan`、`notion-ops`、`screenshot-review-verify`、`copywriting-draft` | **你** |
+| `notion-ops`、`screenshot-review-verify`、`copywriting-draft` | **你** |
+| `mechanical-fanout`、`read-heavy-scan` | 首跳 `haiku-scanner`（Haiku 5.5（effort: medium））；**Haiku 不可用時才是你** |
 | `web-search`（需要 WebSearch／WebFetch，工具已給你） | **你** |
 | `delegate-sub`（原判 sonnet／haiku 的委派工作），readonly | **你** |
 | `delegate-sub`，mutation（你沒有 Edit／Write） | `sonnet-implementer`（Sonnet 5.5（effort: high）），**不經你** |

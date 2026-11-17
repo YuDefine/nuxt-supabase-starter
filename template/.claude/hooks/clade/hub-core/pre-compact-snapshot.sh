@@ -116,7 +116,7 @@ fi
 
 cat <<EOF
 壓縮摘要 MUST 逐字保留下列工作狀態（clade PreCompact 落盤檔：${snapshot}）：
-- 落盤檔路徑本身；壓縮後先讀它與 plan.md § 進度再續做
+- 落盤檔路徑本身；壓縮後先讀它與 work.md（舊 package：plan.md） § 進度再續做
 - CLADE_DISPATCH_ID=${CLADE_DISPATCH_ID:-無}、CLADE_WORK_ID=${CLADE_WORK_ID:-無}、branch ${branch:-無}
 - 在飛的 0-A：prepare 印的 work-dir 與 FINALIZE 指令（沒跑 FINALIZE 前 gate 未完成）
 - 在飛的 Workflow run id、背景 task／Monitor 與它們在等的事件

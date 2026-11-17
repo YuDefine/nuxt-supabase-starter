@@ -159,6 +159,12 @@ import {
 } from './lib/projection-ledger-reconcile.ts'
 import { describeEnsureResult, runWtEnvBootstrap } from './lib/wt-env-bootstrap-runner.ts'
 import { landWorktreePatch } from './lib/wt-patch-landing.ts'
+import {
+  bridgeRequested,
+  findUnharvestedBridgeRuns,
+  formatUnharvestedBridgeRuns,
+  runBridgeInit,
+} from './lib/review-bridge-worktree.ts'
 import { readGitStatus, renderGitStatusLines } from './lib/git-status-z.ts'
 import {
   formatWorktreeBacklog,
@@ -229,6 +235,8 @@ interface WtOptions {
   baselineStashName?: string
   show?: string
   taskSummary?: string
+  /** add：這件工作要走 Review Bridge——開樹後在新樹跑 `review-bridge init`（見 lib/review-bridge-worktree.ts）。 */
+  bridge?: boolean
   /** 預期落地方式（worktree 根治 C1）：pr｜batch｜none；預設 pr。寫進 resource.registered。 */
   landing?: string
   /** `<scheme>:<id>` naming the work this worktree serves — `td:TD-787`, `notion:<uuid>`. */
@@ -252,7 +260,7 @@ interface WtOptions {
 }
 
 /** `planCheckoutBranch`／`checkedOutWorktree` 注入的 git runner 只帶 cwd；具名型別避開 consumer doctor TS0002。 */
-type GitRunOptions = { cwd?: string }
+type GitRunOptions = { cwd?: string; timeout?: number }
 
 function git(args, opts = {}) {
   const out = execFileSync('git', args, {
@@ -476,8 +484,13 @@ function makeSlugSafe(s) {
  * 兩邊都小寫後比；`suffix` 帶前導的 `/` 或 `-`。
  */
 function endsWithSlug(value, suffix, cleanSlug) {
+  // 尾段也照 `makeSlugSafe` 正規化（`[^a-z0-9-]` → `-`、連續 `-` 收合）：開樹端保留原字元的目錄
+  // （`r6-clade-upgrade-1.13.71`）在找樹端是 `r6-clade-upgrade-1-13-71`，逐字比永遠不中。
+  // 只正規化尾段字元，分隔用的 `/` 保留；正規化後撞名的多棵由呼叫端的唯一性判定拒絕。
   return String(value ?? '')
     .toLowerCase()
+    .replace(/[^a-z0-9/-]/g, '-')
+    .replace(/-+/g, '-')
     .endsWith(`${suffix}${cleanSlug}`)
 }
 
@@ -542,27 +555,104 @@ function resolveLandingBase(cwd) {
   return 'main'
 }
 
-/** detached 樹的 ancestry gate：HEAD commit 是 landing base 的祖先才算 merged；判不出一律 false。 */
-function isAncestorOfLandingBase(cwd, rev, baseBranch = resolveLandingBase(cwd)) {
+/**
+ * 每個 process 對同一 (repo, base) 只 fetch 一次 `origin/<base>`（best-effort）。
+ *
+ * 為什麼判斷前要 fetch：clade home 與 consumer 的**本機** main 常落後 origin（對齊被 refused、
+ * 並行 session 剛合入時尤甚）。只比本機 main，已經在 origin/main 上的分支會被判「未合入」，
+ * cleanup 被擋、`list` 顯示未 merged。
+ * fetch 失敗（沒有 origin、離線、權限）不是錯：照樣用已有的 remote-tracking ref，沒有就只剩本機 ref。
+ *
+ * **opt-in**：fetch 會寫 `refs/remotes/origin/<base>` 與 FETCH_HEAD 並碰網路，唯讀路徑
+ * （`cleanup --dry-run`、`list`／`backlog --no-landed-state`、hook／board 的預算模式）NEVER 啟用，
+ * 只比已有的 ref。只有使用者要完整落地狀態、或判了就動手的入口呼叫 enableLandingFetch()。
+ * 另可用 `CLADE_WT_NO_LANDING_FETCH=1` 全域關掉（離線機、受限網路）。
+ */
+const landingBaseFetched = new Set<string>()
+let landingFetchEnabled = false
+
+function enableLandingFetch(): void {
+  landingFetchEnabled = true
+}
+
+function fetchLandingBase(cwd, base): void {
+  if (!landingFetchEnabled) return
+  const key = `${cwd}\0${base}`
+  if (landingBaseFetched.has(key)) return
+  landingBaseFetched.add(key)
+  if (process.env.CLADE_WT_NO_LANDING_FETCH === '1') return
   try {
-    git(['merge-base', '--is-ancestor', rev, baseBranch], { cwd })
-    return true
-  } catch {
-    return false
+    git(['remote', 'get-url', 'origin'], { cwd })
+    git(
+      [
+        'fetch',
+        '--quiet',
+        '--no-tags',
+        'origin',
+        `+refs/heads/${base}:refs/remotes/origin/${base}`,
+      ],
+      {
+        cwd,
+        timeout: 15_000,
+        // 判 merged 不值得停在 credential／ssh 提示上：沒有互動就直接失敗。
+        env: {
+          ...process.env,
+          GIT_TERMINAL_PROMPT: '0',
+          GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND ?? 'ssh -o BatchMode=yes',
+        },
+      },
+    )
+  } catch {}
+}
+
+/**
+ * 判「已合入」的證據 ref，依序：本機 landing base、已 fetch 的 `origin/<base>`。
+ * `origin/<base>` 只在能解析時才納入；呼叫端先 fetch（見 fetchLandingBase）。
+ */
+function landingEvidenceRefs(cwd, baseBranch): string[] {
+  const refs = [baseBranch]
+  const remote = `origin/${baseBranch}`
+  try {
+    git(['rev-parse', '--verify', '--quiet', `${remote}^{commit}`], { cwd })
+    refs.push(remote)
+  } catch {}
+  return refs
+}
+
+/**
+ * rev 是哪一個證據 ref 的祖先（先 fetch；本機 base 優先，其次 origin/<base>）。
+ * 都不是／判不出 → null（fail closed）。回傳值給訊息寫出「比對的 ref」。
+ */
+export function landingAncestorRef(cwd, rev, baseBranch = resolveLandingBase(cwd)): string | null {
+  fetchLandingBase(cwd, baseBranch)
+  for (const ref of landingEvidenceRefs(cwd, baseBranch)) {
+    try {
+      git(['merge-base', '--is-ancestor', rev, ref], { cwd })
+      return ref
+    } catch {}
   }
+  return null
+}
+
+/** detached 樹的 ancestry gate：HEAD commit 是 landing base（本機或 origin/<base>）的祖先才算 merged；判不出一律 false。 */
+function isAncestorOfLandingBase(cwd, rev, baseBranch = resolveLandingBase(cwd)) {
+  return landingAncestorRef(cwd, rev, baseBranch) !== null
 }
 
 function mergedBranches(cwd, baseBranch = resolveLandingBase(cwd)): Set<string> {
-  let raw = ''
-  try {
-    raw = git(['branch', '--merged', baseBranch], { cwd })
-  } catch {
-    return new Set<string>()
-  }
+  fetchLandingBase(cwd, baseBranch)
   const set = new Set<string>()
-  for (const line of raw.split('\n')) {
-    const b = line.replace(/^[*+]?\s*/, '').trim()
-    if (b) set.add(b)
+  for (const ref of landingEvidenceRefs(cwd, baseBranch)) {
+    let raw = ''
+    try {
+      raw = git(['branch', '--merged', ref], { cwd })
+    } catch {
+      continue
+    }
+    for (const line of raw.split('\n')) {
+      const b = line.replace(/^[*+]?\s*/, '').trim()
+      if (b) set.add(b)
+    }
   }
   return set
 }
@@ -630,13 +720,16 @@ function detachedSessionWorktrees(cwd) {
  * 已被 merge-back 清掉）——那時 main 就是正解，呼叫端照 main 走即可。
  */
 export function findSessionWorktreeForSlug(consumerRoot, cleanSlug) {
-  const wts = sessionWorktrees(consumerRoot)
-  return (
-    wts.find(
-      (w) =>
-        endsWithSlug(w.path, '/', cleanSlug) && w.branch && endsWithSlug(w.branch, '-', cleanSlug),
-    ) ?? null
+  const hits = sessionWorktrees(consumerRoot).filter(
+    (w) =>
+      endsWithSlug(w.path, '/', cleanSlug) && w.branch && endsWithSlug(w.branch, '-', cleanSlug),
   )
+  // 尾段正規化後（`a.b` 與 `a-b` 同為 `a-b`）可能多棵同中：猜一棵等於可能對錯的樹動手，一律拒絕。
+  if (hits.length >= 2)
+    throw new Error(
+      `slug ${cleanSlug} 對到多棵 session worktree，無法判定是哪一棵：\n${hits.map((w) => w.path).join('\n')}`,
+    )
+  return hits[0] ?? null
 }
 
 /**
@@ -1029,25 +1122,6 @@ function setupBriefExclude(wtPath) {
   }
 }
 
-// 退場後遺留的舊索引仍在 worktree 移除時順手清掉（best-effort）；新建 worktree 不再自動索引。
-function cleanupCodebaseMemoryIndex(worktreePath) {
-  try {
-    const dbName = worktreePath.replace(/^\//, '').replace(/\//g, '-')
-    const cacheDir = join(process.env.HOME || '', '.cache/codebase-memory-mcp')
-    let cleaned = false
-    for (const ext of ['.db', '.db-wal', '.db-shm']) {
-      const f = join(cacheDir, dbName + ext)
-      if (existsSync(f)) {
-        rmSync(f)
-        cleaned = true
-      }
-    }
-    if (cleaned) console.log(`Cleaned codebase-memory-mcp index for ${dbName}`)
-  } catch {
-    // best-effort; never block worktree removal
-  }
-}
-
 // Pin a pre-fork baseline snapshot under `refs/wt-baseline/<slug>/<iso>`.
 //
 // TD-144 fix: cmdAdd has three fork paths (main-clean, main-dirty + commit
@@ -1188,7 +1262,7 @@ export function linkGitignoredRuntimeFiles(
 }
 
 const ADD_USAGE =
-  'Usage: wt-helper add <slug> --task-summary <text> [--landing pr|batch|none] [--base <ref> | --checkout <branch>] [--expected-paths <comma>] [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>] [--skip-prefork-audit] [--include-unrelated-dirty]'
+  'Usage: wt-helper add <slug> --task-summary <text> [--landing pr|batch|none] [--base <ref> | --checkout <branch>] [--expected-paths <comma>] [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>] [--skip-prefork-audit] [--include-unrelated-dirty] [--bridge]'
 
 function hashUtf8(content: string) {
   return createHash('sha256').update(content).digest('hex')
@@ -3314,7 +3388,6 @@ export function releaseWorktreeRuntime(
 export function cleanupRemovedWorktreeRuntime(consumerRoot: string, wtPath: string) {
   // 新舊檔名都走 lib 的定位＋ownership 驗證；同 basename 的姊妹樹紀錄在裡面 retain。
   releaseWorktreeDevPorts(consumerRoot, wtPath)
-  cleanupCodebaseMemoryIndex(wtPath)
 }
 
 // TD-793: `.nuxt/types` is a `nuxt prepare` product reached through pnpm's
@@ -3487,6 +3560,78 @@ function requireConsumerProjection(consumerRoot: string) {
   )
 }
 
+/**
+ * G10 — `add` 的 fork base 判定。consumer 的本機 main 常落後 origin（<consumer-b> 曾落後 112 commit），
+ * 直接從本機 main 開樹會讓 PR 一開就與 origin/main 大量分歧；而下游的 `merge --ff-only origin/...`
+ * 只在 origin ref 夠新、且本機是它的祖先時才救得回來（沒 fetch、已分岔都只印 warn）。
+ * 這裡先 best-effort fetch `origin/<base>`，再依落差決定：
+ *   - 沒有 origin ref、或本機沒落後（持平／只領先）→ 沿用本機 base（行為不變）
+ *   - 只落後 → 回 `origin/<base>`（呼叫端以 `--no-track` 開樹，不讓 session branch 追 origin/<base>）
+ *   - 已分岔（本機有 origin 沒有的 commit，且落後）→ throw，NEVER 靜默挑邊
+ *   - `commitStrategy` 為 true（pre-fork baseline 要在本機 main 上 commit）且落後 → throw：
+ *     baseline commit 會落在過期 main 上，從 origin 開樹會把它丟掉
+ * 只讀＋fetch：NEVER 動本機 main、工作樹或 index，使用者未 commit 的改動一律原樣。
+ * fetch 失敗只 warn，用現有 `refs/remotes/origin/<base>`（可能過期）判定。
+ */
+export function resolveAddForkBase(
+  consumerRoot: string,
+  baseRef: string,
+  opts: { commitStrategy?: boolean; fetch?: boolean } = {},
+  run: (args: string[], opts?: GitRunOptions) => string = git,
+): { baseRef: string; fromOrigin: boolean } {
+  const unchanged = { baseRef, fromOrigin: false }
+  if (baseRef.startsWith('origin/')) return unchanged
+  const remoteRef = `origin/${baseRef}`
+  const remoteFull = `refs/remotes/origin/${baseRef}`
+  if (opts.fetch !== false) {
+    try {
+      run(['fetch', '--quiet', 'origin', `+refs/heads/${baseRef}:${remoteFull}`], {
+        cwd: consumerRoot,
+        timeout: 30_000,
+      })
+    } catch (e) {
+      console.error(
+        `warn: fetch origin ${baseRef} failed (${String((e as Error).message ?? e).split('\n')[0]}); ` +
+          `judging fork base with the existing ${remoteRef} (may be stale)`,
+      )
+    }
+  }
+  const count = (range: string): number | null => {
+    try {
+      return parseInt(run(['rev-list', '--count', range], { cwd: consumerRoot }), 10)
+    } catch {
+      return null
+    }
+  }
+  try {
+    run(['rev-parse', '--verify', '--quiet', `${remoteFull}^{commit}`], { cwd: consumerRoot })
+  } catch {
+    return unchanged
+  }
+  const behind = count(`${baseRef}..${remoteFull}`)
+  const ahead = count(`${remoteFull}..${baseRef}`)
+  if (behind === null || ahead === null || behind === 0) return unchanged
+  if (ahead > 0) {
+    throw new Error(
+      `Fork base guard: 本機 ${baseRef} 與 ${remoteRef} 已分岔（本機領先 ${ahead}、落後 ${behind} commit）。\n` +
+        `  從本機 ${baseRef} 開樹，PR 一開就與 ${remoteRef} 大量分歧；從 ${remoteRef} 開樹則會丟掉本機獨有的 ${ahead} 個 commit。\n` +
+        `  未 commit 的改動沒有被動到。先在 consumer 根目錄處理分岔（push 或 rebase 本機獨有 commit、\n` +
+        `  或確認它們可丟後對齊 origin），再重跑 wt-helper add。`,
+    )
+  }
+  if (opts.commitStrategy) {
+    throw new Error(
+      `Fork base guard: 本機 ${baseRef} 落後 ${remoteRef} ${behind} commit，且 --baseline-strategy commit 會把 baseline commit 落在過期的本機 ${baseRef} 上。\n` +
+        `  未 commit 的改動沒有被動到。先把本機 ${baseRef} 對齊 origin（git merge --ff-only ${remoteRef}，\n` +
+        `  或等 clade-main-align），再重跑 wt-helper add。`,
+    )
+  }
+  console.log(
+    `Fork base: 本機 ${baseRef} 落後 ${remoteRef} ${behind} commit → 從 ${remoteRef} 開樹（本機 ${baseRef} 不動）`,
+  )
+  return { baseRef: remoteRef, fromOrigin: true }
+}
+
 async function cmdAdd(slug, opts: WtOptions = {}) {
   if (!slug) {
     throw new Error(ADD_USAGE)
@@ -3552,6 +3697,16 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
     git(['rev-parse', '--verify', baseRef], { cwd: consumerRoot })
   } catch {
     throw new Error(`Base branch "${baseRef}" not found in ${consumerRoot}`)
+  }
+  // G10：本機 base 落後 origin → 從 fetch 後的 origin/<base> 開樹；分岔／commit 策略落後 → 拒絕。
+  // 放在 pre-fork baseline guard 之前：拒絕時還沒動到 main。--checkout 的起點本來就是 origin。
+  let forkFromOrigin = false
+  if (!checkoutBranch) {
+    const resolved = resolveAddForkBase(consumerRoot, baseRef, {
+      commitStrategy: opts.precheckBaseline !== undefined && opts.baselineStrategy === 'commit',
+    })
+    baseRef = resolved.baseRef
+    forkFromOrigin = resolved.fromOrigin
   }
 
   // Pre-fork baseline guard (only when --precheck-baseline given).
@@ -3835,7 +3990,9 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
       ? ['worktree', 'add', wtPath, branch]
       : checkoutBranch
         ? ['worktree', 'add', '--track', '-b', branch, wtPath, baseRef]
-        : ['worktree', 'add', '-b', branch, wtPath, baseRef],
+        : forkFromOrigin
+          ? ['worktree', 'add', '--no-track', '-b', branch, wtPath, baseRef]
+          : ['worktree', 'add', '-b', branch, wtPath, baseRef],
     {
       cwd: consumerRoot,
       stdio: 'inherit',
@@ -4267,6 +4424,21 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   } catch (e) {
     console.error(`note: work-asset registration skipped (fail-open): ${e?.message ?? e}`)
   }
+  // Review Bridge 方案 A ①：只有標了 --bridge（或派工 env CLADE_WT_BRIDGE=1）的工作才 init，沒標完全不動。
+  // init 失敗不拆樹（樹已在磁碟上），但 exit code 非 0，讓派工端知道這棵樹還不能跑 Bridge。
+  if (bridgeRequested(opts.bridge)) {
+    const outDir = associatedWorkId
+      ? join(wtPath, 'specs', 'plans', associatedWorkId)
+      : join(wtPath, '.clade', 'bridge')
+    const init = runBridgeInit(wtPath, outDir)
+    if (init.ok) console.log(`  Bridge: init ok → ${init.outPath}`)
+    else {
+      console.error(
+        `error: Bridge init failed (${init.detail})${init.outPath ? `; see ${init.outPath}` : ''}`,
+      )
+      process.exitCode = 1
+    }
+  }
   console.log('')
   console.log(
     'The orchestrator continues directly or dispatches this cwd through the session handoff transport.',
@@ -4590,6 +4762,7 @@ function countWorktreeDirty(wtPath): number | null {
 }
 
 async function cmdList(opts) {
+  if (!opts.noLandedState) enableLandingFetch()
   const consumerRoot = findConsumerRoot()
   const wts = sessionWorktrees(consumerRoot)
   const ctx = enrichContext(consumerRoot)
@@ -4724,6 +4897,7 @@ export function collectWorktreeBacklog(
 }
 
 export async function cmdBacklog(opts: { json?: boolean; noLandedState?: boolean } = {}) {
+  if (!opts.noLandedState) enableLandingFetch()
   const report = collectWorktreeBacklog(findConsumerRoot(), { landed: !opts.noLandedState })
   for (const diagnostic of report.diagnostics) console.error(diagnostic)
   if (opts.json) console.log(JSON.stringify(report, null, 2))
@@ -5063,10 +5237,13 @@ function detectMergeBlockers(consumerRoot, branchName) {
 // added after <consumer-b> 2026-05-17 incident where 47 baseline files lived only in
 // the worktree's working tree (applied from stash, never committed) and
 // vanished on cleanup.
-function detectUncommittedWorktreeFiles(wtPath): Observed<UncommittedFiles> {
+function detectUncommittedWorktreeFiles(
+  wtPath,
+  opts: { untracked?: 'normal' | 'all' } = {},
+): Observed<UncommittedFiles> {
   let entries
   try {
-    entries = readGitStatus(wtPath)
+    entries = readGitStatus(wtPath, opts.untracked ? { untracked: opts.untracked } : {})
   } catch (error) {
     return toUnknown(`uncommitted status unreadable at ${wtPath}: ${errorMessage(error)}`)
   }
@@ -6888,11 +7065,7 @@ function carryEvidenceDir(src, dstRoot, relDir, slug) {
 }
 
 function findCleanupWorktree(consumerRoot, cleanSlug) {
-  const wts = sessionWorktrees(consumerRoot)
-  const sessionHit = wts.find(
-    (w) =>
-      endsWithSlug(w.path, '/', cleanSlug) && w.branch && endsWithSlug(w.branch, '-', cleanSlug),
-  )
+  const sessionHit = findSessionWorktreeForSlug(consumerRoot, cleanSlug)
   if (sessionHit) return sessionHit
 
   const all = parseWorktreeList(git(['worktree', 'list', '--porcelain'], { cwd: consumerRoot }))
@@ -7200,11 +7373,19 @@ async function cmdCleanup(
   const declaring = opts.supersededBy !== undefined
   if (declaring && !String(opts.reason ?? '').trim())
     throw new Error('cleanup --superseded-by 需要 --reason <為什麼判定已被取代>')
+  // --dry-run 的契約是不寫任何 ref：不 fetch，只比已有的 origin/<base>（見 fetchLandingBase）。
+  if (!opts.dryRun) enableLandingFetch()
   const cleanSlug = makeSlugSafe(slug)
   const consumerRoot = findConsumerRoot()
   const target = findCleanupWorktree(consumerRoot, cleanSlug)
 
   assertLegacyAllowed(consumerRoot, target.path)
+  // Review Bridge 結果檔住在樹內、樹刪就沒了（方案 A ③）：沒收割到 ~/handoff/bridge-results 就整棵保留。
+  // prune 與 reclaim-stale --remove-landed 都經這裡，所以一處擋住全部。沒有覆寫旗標：收割完再清。
+  // --dry-run 不在這裡丟：照常走完各 gate 判定，於回報裡多印一行 bridge。
+  const unharvested = findUnharvestedBridgeRuns(target.path)
+  if (unharvested.length > 0 && !opts.dryRun)
+    throw new Error(`cleanup retained: ${formatUnharvestedBridgeRuns(target.path, unharvested)}`)
   // detached 樹（review wt、rebase 中斷後留下的樹）沒有 branch：gate 改以 HEAD commit 當 rev 判，
   // 顯示用 label，結尾不刪任何 branch。
   const detachedHead = !target.branch
@@ -7219,9 +7400,18 @@ async function cmdCleanup(
   // (applied from stash, never committed) and vanished on cleanup.
   // squash-merge 不建立 merge 邊，ancestry 因此對每一條正常 land 完的 branch 都誤報。
   // marker 相符時兩道 ancestry gate 一起放行（見 isSquashLanded 上方的推導與實測）。
-  const ancestryMerged = detachedHead
-    ? isAncestorOfLandingBase(consumerRoot, branchName)
-    : mergedBranches(consumerRoot).has(branchName)
+  // 證據 ref 寫進訊息：本機 main 落後 origin 時，是 origin/<base> 放行的，使用者要看得到比對的是哪一個。
+  const landingBase = resolveLandingBase(consumerRoot)
+  const ancestryRef = landingAncestorRef(consumerRoot, branchName, landingBase)
+  const ancestryMerged = ancestryRef !== null
+  // 只有 origin/<base> 放行（本機 base 落後、不含這條 branch）：證據性質同 prLanded——「已落在 origin」，
+  // 不是「已在本機 main」，報表與 mergedLocal 要分開（TD-1103），但同樣沒有任何 commit 會因移除而丟失。
+  const originAncestryOnly = ancestryMerged && ancestryRef !== landingBase
+  if (originAncestryOnly) {
+    console.log(
+      `cleanup: ${branchLabel} 的 tip 是 ${ancestryRef} 的祖先（本機 ${landingBase} 落後，已合入 origin）—— ancestry gate 放行`,
+    )
+  }
   const squashLanded = isSquashLanded(consumerRoot, cleanSlug, branchName)
   if (squashLanded && !ancestryMerged) {
     const base = git(['merge-base', 'main', branchName], { cwd: consumerRoot }).trim()
@@ -7304,13 +7494,18 @@ async function cmdCleanup(
       : null
   const prLanded = mergedPr?.status === 'known' && mergedPr.value.landed === true
   const branchMerged = squashLanded || ancestryMerged || absorbedLanded || prLanded
+  // originAncestryOnly 同 squash／absorbed／prLanded 跳過 unland gate：detectUnlandedFiles 數的是
+  // 本機 main 之外的 commit 並對本機 main 的 working tree 比內容，本機 main 落後時必然誤報，
+  // 還會把人推去 --force-discard-unland（TD-302 警告的反射）。tip 已是 origin/<base> 的祖先
+  // ⟹ 每個 commit 都可從 origin 到達，沒有東西會丟。
   const unlanded =
-    squashLanded || absorbedLanded || prLanded ? [] : detectUnlandedFiles(consumerRoot, branchName)
-  // 第四條憑證證明的是「已落在 origin/<base>」，前三條證明的是「已在本機 main」
-  // —— clade home 的本機 main 與 origin 常態分岔，兩者在報表上 MUST 分開標，
-  // 不讓 merged=Y 的語意被悄悄放寬（TD-1103 複審）。
-  const landingBase = resolveLandingBase(consumerRoot)
-  const mergedLocal = squashLanded || ancestryMerged || absorbedLanded
+    squashLanded || absorbedLanded || prLanded || originAncestryOnly
+      ? []
+      : detectUnlandedFiles(consumerRoot, branchName)
+  // 第四條憑證（merged PR）與 origin-only ancestry 證明的是「已落在 origin/<base>」，
+  // 其餘證明的是「已在本機 main」—— clade home 的本機 main 與 origin 常態分岔，兩者在報表上
+  // MUST 分開標，不讓 merged=Y 的語意被悄悄放寬（TD-1103 複審；fixtures.test 釘住）。
+  const mergedLocal = squashLanded || (ancestryMerged && !originAncestryOnly) || absorbedLanded
   // TD-1082：只在四條落地憑證全失手時才驗宣告；已落地的 branch 不需要它。
   const superseded =
     declaring && !branchMerged
@@ -7370,7 +7565,10 @@ async function cmdCleanup(
   // 豁免範圍嚴格等於 merge-back 的判準，**NEVER** 放寬成「髒檔一律豁免」：真 user WIP
   // （未 commit 的規格提案、`.env*.example`、scratch script）照舊擋 —— 另外 12 個
   // worktree 就是靠這條繼續被擋住的。
-  const uncommittedObs = detectUncommittedWorktreeFiles(target.path)
+  // cleanup 逐檔列 untracked（`all`）：呼叫端（disk-hygiene 擱置樹）以 `--untracked-files=all` 逐檔點名
+  // --discard-pathspec，收合的 `?? dir/` 會讓「目錄內每個檔都點名了」仍判不中而整棵擋下；逐檔列也讓
+  // gate 不被收合目錄藏住真檔（git-status-z.ts 對 gate 的建議）。
+  const uncommittedObs = detectUncommittedWorktreeFiles(target.path, { untracked: 'all' })
   if (uncommittedObs.status === 'unknown') {
     if (opts.dryRun) {
       console.log(`cleanup --dry-run: ${cleanSlug}`)
@@ -7470,7 +7668,7 @@ async function cmdCleanup(
     console.log(`  worktree           ${target.path}`)
     console.log(`  branch             ${branchLabel}`)
     console.log(
-      `  ancestry           merged=${mergedLocal ? 'Y' : 'N'} squashLandedMarker=${squashLanded ? 'Y' : 'N'} absorbedByOtherPath=${absorbedLanded ? 'Y' : 'N'} mergedPr(origin/${landingBase})=${mergedPr === null ? '-' : prLanded ? 'Y' : mergedPr.status === 'unknown' ? 'unknown' : 'N'} unlandedFiles=${unlanded.length}`,
+      `  ancestry           merged=${mergedLocal ? 'Y' : 'N'} ancestryOrigin(origin/${landingBase})=${originAncestryOnly ? 'Y' : 'N'} squashLandedMarker=${squashLanded ? 'Y' : 'N'} absorbedByOtherPath=${absorbedLanded ? 'Y' : 'N'} mergedPr(origin/${landingBase})=${mergedPr === null ? '-' : prLanded ? 'Y' : mergedPr.status === 'unknown' ? 'unknown' : 'N'} unlandedFiles=${unlanded.length}`,
     )
     if (superseded) {
       console.log(
@@ -7512,6 +7710,11 @@ async function cmdCleanup(
       )
     if (hostRefsObs.status === 'unknown' || hostRefs.length > 0)
       blocked.push('宿主設定改指 main 或移除（無 flag 可繞過）')
+    console.log(`  bridge             unharvested=${unharvested.length}`)
+    if (unharvested.length > 0) {
+      console.log(formatUnharvestedBridgeRuns(target.path, unharvested))
+      blocked.push('先收割 Review Bridge results（無 flag 可繞過）')
+    }
     console.log(
       blocked.length === 0
         ? '  verdict            CLEAN — 零 flag 即可 cleanup'
@@ -7552,7 +7755,9 @@ async function cmdCleanup(
   if (needsForce || needsDiscardUnland || needsDiscardUncommitted) {
     const issues = []
     if (needsForce) {
-      issues.push(`- Branch ${branchLabel} is not merged into main (gated by --force)`)
+      issues.push(
+        `- Branch ${branchLabel} is not merged into main (gated by --force；比對 ref：${landingEvidenceRefs(consumerRoot, landingBase).join('、')})`,
+      )
     }
     if (needsDiscardUnland) {
       // 列**未進 main 的 commit**，不是檔名清單 —— 使用者要判的是「這些 commit 我還要
@@ -7700,7 +7905,6 @@ async function cmdCleanup(
       console.error(`warn: could not remove residual dir ${target.path}: ${e.message ?? e}`)
     }
   }
-  cleanupCodebaseMemoryIndex(target.path)
   // `-D` only where the caller is knowingly discarding unlanded work. A squash-landed branch is
   // never that case: it is not an ancestor of main, so `-d` refuses and the ref survives — and
   // that surviving ref is the last reachable copy of the checkpoint once the worktree is gone.
@@ -7715,9 +7919,17 @@ async function cmdCleanup(
   // `git branch -d` 在 branch 設有 upstream 時是對 upstream 判 merged，同一憑證會依
   // tracking ref 在不在產生「刪／留」兩種結果，`-D` 讓兩格一致。`opts.force` 同理 ——
   // 使用者明示的 `--force` 拿到的是 `-D`，NEVER 被 probe 命中降級回 `-d`。
+  // originAncestryOnly 同理：tip 已是 origin/<base> 的祖先，`-d` 對（落後的）本機 main 判 merged 會失敗，
+  // 留下 worktree 已移除卻清不掉的 branch；`-D` 不丟任何 commit。
   // supersededOk 同理：tip 已釘在 refs/wt-superseded/，`-D` 不讓任何 commit 變成不可達。
   const deleteFlag =
-    (opts.force && !squashLanded) || absorbedLanded || prLanded || supersededOk ? '-D' : '-d'
+    (opts.force && !squashLanded) ||
+    absorbedLanded ||
+    prLanded ||
+    originAncestryOnly ||
+    supersededOk
+      ? '-D'
+      : '-d'
   try {
     if (!detachedHead) git(['branch', deleteFlag, branchName], { cwd: consumerRoot })
   } catch {
@@ -9347,6 +9559,12 @@ function printUsage(log = console.error) {
   log('    [--dry-run] [--json]    (default: the worktree containing cwd)')
   log('')
   log('  add <slug>                Create worktree at ~/offline/<consumer>-wt/<slug>/')
+  log(
+    '    --bridge                Work runs on Review Bridge: run `review-bridge init` in the new tree',
+  )
+  log(
+    '                            (also env CLADE_WT_BRIDGE=1); output → specs/plans/<work_id>/bridge-init.json',
+  )
   log('    --base <ref>            Fork from integration/… (local or origin/integration/…)')
   log('    --checkout <branch>     Fetch, then open a tree on origin/<branch> as that same branch')
   log('                            (advance an existing PR). Refused if a local branch of the same')
@@ -9485,6 +9703,7 @@ const BOOLEAN_FLAGS = new Set([
   '--work-done',
   '--i-know-publish-is-running',
   '--no-landed-state',
+  '--bridge',
 ])
 const BATCH_VALUE_FLAGS = new Set([
   '--work-id',
@@ -9589,6 +9808,8 @@ async function main() {
       process.exit(2)
     }
   }
+  // 派工 env 的 Bridge 標記不會跟著 ssh 過去：轉發前改成明確的 --bridge，對端才會 init。
+  if (sub === 'add' && bridgeRequested(false) && !rest.includes('--bridge')) rest.push('--bridge')
   const peerExit = forwardToPeer(sub, rest)
   if (peerExit !== null) process.exit(peerExit)
   if (rest.some((arg) => arg === '--machine' || arg.startsWith('--machine='))) return main()
@@ -9675,6 +9896,10 @@ async function main() {
     console.error(`error: ${sub ?? ''} does not support --remove-landed（未執行任何動作）`)
     process.exit(2)
   }
+  if (flags.has('--bridge') && sub !== 'add') {
+    console.error(`error: ${sub ?? ''} does not support --bridge（未執行任何動作）`)
+    process.exit(2)
+  }
   if (flags.has('--patch') && !['merge-back', 'land-pending'].includes(sub)) {
     console.error(`error: ${sub ?? ''} does not support --patch（未執行任何動作）`)
     process.exit(2)
@@ -9683,6 +9908,7 @@ async function main() {
     patch: flags.has('--patch'),
     json: flags.has('--json'),
     noLandedState: flags.has('--no-landed-state'),
+    bridge: flags.has('--bridge'),
     removeLanded: flags.has('--remove-landed'),
     force: flags.has('--force'),
     forceDiscardUnland: flags.has('--force-discard-unland'),

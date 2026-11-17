@@ -183,7 +183,7 @@ export function regressionAnchors(deltas: readonly TruthDelta[]): RegressionAnch
  *
  * - `bug-covered` → `regression`
  * - `refactor` → 每一列錨點都是 NOOP（行為已被既有 scenario 釘住）時 `regression`；有任何 ADD 錨點
- *   （要新寫 scenario）或沒有錨點時 `full`（Charles 2026-09-28 Q1=A）
+ *   （要新寫 scenario）或沒有錨點時 `full`（Charles 拍板）
  * - 其餘（含 `acceptance-gap`）與未宣告 → `full`
  */
 export type RequirementSet = 'full' | 'regression'

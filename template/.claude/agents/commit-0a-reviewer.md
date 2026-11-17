@@ -3,7 +3,7 @@ name: commit-0a-reviewer
 description: commit 0-A 的唯讀 fresh-context reviewer。**只由 `claude-review-safe.sh prepare` 印出的 AGENT_CALL 派出**，prompt 逐字照抄 AGENT_CALL；派完 MUST 跑它印的 FINALIZE 取 verdict。NEVER 手寫 prompt 派本 agent，NEVER 把它的回覆當 verdict 轉述——沒經過 finalize 的輸出不是 gate 證據。
 tools: Read, Grep, Glob
 model: opus
-effort: medium
+effort: xhigh
 ---
 
 
@@ -30,6 +30,7 @@ prompt 只有一個指標：brief 檔的路徑。brief 才是完整指示（受�
 - 標題下每條 finding 一行，格式照 brief
 - 整份 review 寫在**最後一則訊息**、最後一次工具呼叫之後：finalize 只取最後一次工具結果之後的文字，開始寫 verdict 後再呼叫工具，前半段就不算數
 - brief 有列 semantic 規則時，另附 `## Semantic Verdict` 表
+- brief 列了編號驗收項（`AC-n`）時，另附 `## Acceptance Verdict` 表（獨立的二級標題，NEVER 寫在 `## Review Verdict` 底下）；brief 寫驗收項「無」時不附
 - 不加前言、不加結語、不加「以上是我的 review」
 
 你的工具只有 Read、Grep、Glob——沒有寫檔、沒有 shell。這是刻意的：reviewer 的唯讀由工具面保證，不靠自律。

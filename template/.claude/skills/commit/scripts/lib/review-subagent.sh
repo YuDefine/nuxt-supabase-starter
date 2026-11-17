@@ -2,7 +2,7 @@
 #
 # Claude Code 主線跑 commit 0-A 時走這條，不開 Herdr pane：
 #
-#   1. claude-review-safe.sh prepare medium [--findings <f>]
+#   1. claude-review-safe.sh prepare xhigh [--findings <f>]
 #        凍結 changeset、產 brief（與 Herdr carrier 同一份 review_emit_prompt）、鑄 nonce，
 #        印出 AGENT_CALL（要交給 Agent tool 的參數）與 FINALIZE（下一步指令）。WORK_DIR 保留。
 #   2. 主線照 AGENT_CALL 呼叫 Agent tool（subagent_type commit-0a-reviewer，session 沒投影該 agent
@@ -89,6 +89,61 @@ review_subagent_plugin_visible() {
   ' "$project" "$config" "$REVIEW_SUBAGENT_TYPE" 2>/dev/null
 }
 
+# 派得出去之後還要確認定義釘的 effort 是 xhigh：subagent 的 effort 由 agent 定義 frontmatter 決定，
+# wrapper 的 xhigh 只是 requested。未 propagate 或 update_policy pinned 的 consumer 手上可能還是舊定義
+# （effort: medium），照跑會審完整輪才在 finalize 因 observed effort 不符 exit 8，pinned 的每一輪都重演。
+# 取 resolve_type 實際會選的那份定義（裸名：project 優先、其次使用者層級；都沒有才是 plugin 安裝目錄，
+# 取 installed_plugins 列出的 hub-core 安裝路徑，全部都要 xhigh）；缺 effort 欄位同樣視為不符。
+review_subagent_check_effort() {
+  local project="$1" config="$2" out rc WORK_TMP_EFFORT_ERR
+  WORK_TMP_EFFORT_ERR="$(mktemp)"
+  out="$(node -e '
+    const fs = require("fs")
+    const path = require("path")
+    const [project, config, agent] = process.argv.slice(1)
+    const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")) } catch { return null } }
+    const bare = [path.join(project, ".claude", "agents", agent + ".md"), path.join(config, "agents", agent + ".md")].find((f) => fs.existsSync(f))
+    const files = []
+    if (bare) files.push(bare)
+    else {
+      for (const [k, entries] of Object.entries(readJson(path.join(config, "plugins", "installed_plugins.json"))?.plugins || {})) {
+        if (!k.startsWith("hub-core@") || !Array.isArray(entries)) continue
+        for (const e of entries) {
+          if (typeof e?.installPath !== "string") continue
+          const f = path.join(e.installPath, "agents", agent + ".md")
+          if (fs.existsSync(f)) files.push(f)
+        }
+      }
+    }
+    let bad = false
+    for (const f of files) {
+      const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(fs.readFileSync(f, "utf8"))
+      const m = fm && /^effort:[ \t]*([^\s#]+)/m.exec(fm[1])
+      const effort = m ? m[1].replace(/^["\x27]|["\x27]$/g, "") : "(未釘)"
+      if (effort !== "xhigh") { bad = true; console.log(f + "\t" + effort) }
+    }
+    process.exit(bad ? 1 : 0)
+  ' "$project" "$config" "$REVIEW_SUBAGENT_TYPE" 2>"$WORK_TMP_EFFORT_ERR")"
+  rc=$?
+  [ "$rc" -eq 0 ] && return 0
+  if [ "$rc" -ne 1 ] || [ -z "$out" ]; then
+    # exit 1＋有清單才是「定義的 effort 不是 xhigh」；其他（node 拋例外、node 不在）是核對本身壞了
+    echo "[claude-review-safe] 錯誤：核對 ${REVIEW_SUBAGENT_TYPE} agent 定義的 effort 失敗（node exit ${rc}）；已在凍結 changeset 前停下" >&2
+    sed 's/^/  /' "$WORK_TMP_EFFORT_ERR" >&2
+    rm -f "$WORK_TMP_EFFORT_ERR"
+    return 2
+  fi
+  rm -f "$WORK_TMP_EFFORT_ERR"
+  {
+    echo "[claude-review-safe] 錯誤：${REVIEW_SUBAGENT_TYPE} agent 定義的 effort 不是 xhigh，subagent 會以該檔位跑，finalize 必定 exit 8（observed effort 不符）；已在凍結 changeset 前停下"
+    printf '%s\n' "$out" | while IFS=$'\t' read -r file effort; do
+      [ -n "$file" ] && echo "  $file：effort=$effort"
+    done
+    echo "  → 這份定義是舊版（consumer 尚未 propagate，或 update_policy pinned 在 xhigh 之前）：先 propagate／解除 pin 讓 commit-0a-reviewer.md 的 effort 變成 xhigh，重開 session 後再跑 prepare"
+  } >&2
+  return 2
+}
+
 # prepare 開工前（凍結 changeset 之前）確認 session 叫得出 reviewer：裸名投影與 hub-core plugin
 # 都不在時 Agent tool 兩個名字都回 not found，prepare 照跑只會留下派不出去的 AGENT_CALL。
 # 典型是 starter 這類只把 agent 投影到子目錄（template/.claude/agents/）的 repo，從 root 起 session。
@@ -97,9 +152,9 @@ review_subagent_check_loadable() {
   project="$(review_subagent_session_project)"
   [ -n "$project" ] || project="$REPO_ROOT"
   config="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-  [ -f "$project/.claude/agents/${REVIEW_SUBAGENT_TYPE}.md" ] && return 0
-  [ -f "$config/agents/${REVIEW_SUBAGENT_TYPE}.md" ] && return 0
-  review_subagent_plugin_visible "$project" "$config" && return 0
+  [ -f "$project/.claude/agents/${REVIEW_SUBAGENT_TYPE}.md" ] && { review_subagent_check_effort "$project" "$config"; return $?; }
+  [ -f "$config/agents/${REVIEW_SUBAGENT_TYPE}.md" ] && { review_subagent_check_effort "$project" "$config"; return $?; }
+  review_subagent_plugin_visible "$project" "$config" && { review_subagent_check_effort "$project" "$config"; return $?; }
   {
     echo "[claude-review-safe] 錯誤：本 session 載不到 ${REVIEW_SUBAGENT_TYPE} agent 定義，AGENT_CALL 派不出去"
     echo "  session project：$project"
@@ -233,6 +288,18 @@ review_subagent_write_receipt() {
   ' "$state_dir" "$1" "$2" "${3:-}"
 }
 
+# 0-A 逐條驗收項影子（plans/40 T4）：verdict 已記進輪數 ledger 之後，把 `## Acceptance Verdict` 表記進影子帳。
+# shadow：不進通過條件、不改 exit code；工具缺席或失敗只 warn。
+review_subagent_record_acceptance() {
+  local tool
+  [ -f "$WORK_DIR/acceptance.json" ] || return 0
+  tool="$(clade_runtime vendor/scripts/oa-acceptance-shadow.ts 2>/dev/null)"
+  [ -n "$tool" ] && [ -f "$tool" ] || return 0
+  node "$tool" record --work-dir "$WORK_DIR" --verdict "$1" \
+    --round-json "${REVIEW_ROUND_RECORD_JSON:-}" ${REVIEW_ROUND_HEAD:+--head "$REVIEW_ROUND_HEAD"} || true
+  return 0
+}
+
 review_subagent_finalize() {
   local base dir
   if [ "$#" -ne 1 ]; then
@@ -287,7 +354,7 @@ review_subagent_finalize() {
     --subagents-dir "$subagents_dir" --nonce "$REVIEW_SUBAGENT_NONCE" \
     --prompt "$WORK_DIR/subagent-prompt.md" \
     --brief "$REVIEW_SUBAGENT_BRIEF" --model "$REVIEW_MODEL" \
-    --agent-type "$REVIEW_SUBAGENT_TYPE" --agent-type "$REVIEW_SUBAGENT_PLUGIN_TYPE" --effort medium --verdict-out "$verdict_out")"
+    --agent-type "$REVIEW_SUBAGENT_TYPE" --agent-type "$REVIEW_SUBAGENT_PLUGIN_TYPE" --effort xhigh --verdict-out "$verdict_out")"
   rc=$?
   reason="$(node -e 'try{process.stdout.write(JSON.parse(process.argv[1]).reason||"")}catch{}' "$result")"
 
@@ -315,6 +382,11 @@ review_subagent_finalize() {
     6)
       echo "[claude-review-safe] RESULT: review 完整性不成立（exit 6）— ${reason}，NEVER 當作 0-A.1 通過" >&2
       return 6 ;;
+    7)
+      # reviewer 自身 auto-compact＝本批太大。與 6 分開：6 是夾帶／續派／受審樹被改（完整性不成立），
+      # 7 是「批太大、切小重跑」；兩者都不是通過，也都不寫 ledger。
+      echo "[claude-review-safe] RESULT: reviewer 自身壓縮（exit 7）— ${reason}；本批作廢（NEVER 當作 0-A.1 通過、NEVER 當作續派處理），切小重跑" >&2
+      return 7 ;;
     8)
       echo "[claude-review-safe] RESULT: reviewer model／effort verification 失敗（exit 8）— ${reason}；verdict 扣住不輸出，NEVER 當作 0-A.1 通過" >&2
       echo "[claude-review-safe] NEXT: 「沒核實」與「核實但不符」是兩個結論（receipt 的 failed_check 指出失敗的是 agent_type／model／effort 哪一關，reason 欄逐字記錄原因；model 與 effort 關另記在 model_verification_reason／effort_verification_reason）；兩者都讓 gate 維持 pending，NEVER 主線自審補位。" >&2
@@ -328,6 +400,7 @@ review_subagent_finalize() {
   review_verify_integrity
   verdict_sha="$(sha256sum "$verdict_out" | cut -d' ' -f1)"
   review_record_round_and_register "$verdict_out" || return $?
+  review_subagent_record_acceptance "$verdict_out"
   review_subagent_write_receipt 0 "$result" "$verdict_sha"
   cat "$verdict_out"
   return 0

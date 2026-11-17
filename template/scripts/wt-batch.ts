@@ -78,6 +78,10 @@ import {
   type ResourceAdapterSet,
 } from './preservation-resource-adapters.ts'
 import { reconcileLandedProjectionState } from './lib/projection-ledger-reconcile.ts'
+import {
+  findUnharvestedBridgeRuns,
+  formatUnharvestedBridgeRuns,
+} from './lib/review-bridge-worktree.ts'
 
 // clade keeps flow beside this file; consumers receive the same modules under
 // .clade/vendor/scripts/flow. Resolve that existing projection once at module load
@@ -3330,7 +3334,7 @@ function claimsMember(b: WorktreeBatch, path: string): boolean {
 export function listBatches(cwd: string): WorktreeBatch[] {
   return readState(context(cwd)).batches
 }
-/** `/commit` Step 0-Batch 的主分流；代碼對動作表在 commit skill 的 `rules/批次入口判準.md` Rule 3。
+/** `/commit` Step 0-Batch 的主分流；代碼對動作表在 commit skill 的 `rules/批次入口判準.md` Rule 2。
  *  first-match：接續在途批 → 準備新批 → 有就緒但未達門檻 → 普通 /commit。只欠 cleanup 的批可與任何
  *  route 疊加，另列在 `cleanupPending`，不進 first-match（否則一個保留不清的批會永遠遮住 prepare）。 */
 export type BatchEntryRoute = 'resume-active' | 'prepare' | 'return-to-dev' | 'plain-commit'
@@ -5143,6 +5147,16 @@ export function previewCleanupBatches(
         : undefined
       if (!reason && b.removing && !removal)
         reason = `another removal is still journaled for ${b.removing.path}`
+      // 與 cleanupBatches 同一道 Review Bridge 保留檢查，且同樣排在 sourceProblem 之前（實跑先擋 Bridge），
+      // dry-run 預報才對得上實跑。
+      if (!reason && !b.removing && existsSync(m.path)) {
+        try {
+          const unharvested = findUnharvestedBridgeRuns(m.path)
+          if (unharvested.length > 0) reason = formatUnharvestedBridgeRuns(m.path, unharvested)
+        } catch (error) {
+          reason = `could not check Review Bridge results: ${errorMessage(error)}`
+        }
+      }
       if (!reason && wt && !removal) {
         try {
           reason = sourceProblem(c, m, { requireEvidence: false, discard })
@@ -5439,6 +5453,21 @@ export function cleanupBatches(
             reason: `another removal is still journaled for ${b.removing.path}`,
           })
           continue
+        }
+        // Review Bridge 方案 A ③：樹內結果還沒收割到 ~/handoff/bridge-results 就保留（樹刪結果就沒了）。
+        if (!b.removing && existsSync(m.path)) {
+          let bridgeHold: string | undefined
+          try {
+            const unharvested = findUnharvestedBridgeRuns(m.path)
+            if (unharvested.length > 0)
+              bridgeHold = formatUnharvestedBridgeRuns(m.path, unharvested)
+          } catch (error) {
+            bridgeHold = `could not check Review Bridge results: ${errorMessage(error)}`
+          }
+          if (bridgeHold) {
+            result.retained.push({ path: m.path, reason: bridgeHold })
+            continue
+          }
         }
         let reason = m.retain
         let removal = b.removing?.path === m.path ? b.removing : undefined

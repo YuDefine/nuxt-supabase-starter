@@ -64,5 +64,5 @@ EOF
   exit 2
 fi
 
-# 走到這裡 = review-checklist audit 沒擋（TD-977 起 control-plane projection validator 已隨 OPSX 退役）
+# 走到這裡 = review-checklist audit 沒擋（TD-977 起 control-plane projection validator 已隨舊 change 工具鏈退役）
 exit 0

@@ -13,16 +13,16 @@ tasks 檔內的「DEFERRED / LOCAL BLOCKED / follow-up」註記活不過那個 s
 
 ## 直接登記（強制）
 
-tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local blocked、tech debt、operation note、跨工作 follow-up）時，**MUST 在寫下那行註記的同一次編輯內**依下表落進 plan。「進行中的 work」指當下 `CLADE_WORK_ID`、tasks 檔頭的 `work_id:`、或你正在推進的那份 `specs/plans/<work-id>/plan.md`：
+tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local blocked、tech debt、operation note、跨工作 follow-up）時，**MUST 在寫下那行註記的同一次編輯內**依下表落進 plan。「進行中的 work」指當下 `CLADE_WORK_ID`、tasks 檔頭的 `work_id:`、或你正在推進的那份 `specs/plans/<work-id>/work.md`：
 
 | 可觀察 predicate | MUST |
 | --- | --- |
-| 這一項是進行中 work 的殘工：這份 work 的驗收缺它，不做完就不能結案 | 在**同一份** `specs/plans/<work-id>/plan.md` 的 `## Open work` 加一條，寫明下一步與可觀察的完成條件。**NEVER** 為它另開 plan |
+| 這一項是進行中 work 的殘工：這份 work 的驗收缺它，不做完就不能結案 | 在**同一份** `specs/plans/<work-id>/work.md` 的 `## Open work` 加一條，寫明下一步與可觀察的完成條件。**NEVER** 為它另開 plan |
 | 這一項源自進行中的 work，但這份 work 不做它也能結案（follow-up、prevention、順手發現的範圍外缺口） | 照 § 開獨立 plan 開一份；原 plan 的 § 進度留一行 `→ <新 work id>` 指過去，**NEVER** 只記進原 plan 的 Open work |
 | 它不屬於任何進行中的 work，而且確實要做 | 照 § 開獨立 plan 開一份 |
 | 判斷後它不值得做 | 不登記。在當下的 commit message 或 plan § Decisions 寫一句放棄理由 |
 
-回指 `specs/plans/<work-id>/plan.md`（或 `plan:<work-id>`）。舊 `TD-NNN` 只經 `specs/truth/legacy-ids.json` 解析，**NEVER** 往 `docs/tech-debt.md` 或 `HANDOFF.md` 登記新條目（`HANDOFF.md` 只留 W- 指標行，[[handoff]] § Lifecycle repo）。
+回指 `specs/plans/<work-id>/work.md`（或 `plan:<work-id>`）。舊 `TD-NNN` 只經 `specs/truth/legacy-ids.json` 解析，**NEVER** 往 `docs/tech-debt.md` 或 `HANDOFF.md` 登記新條目（`HANDOFF.md` 只留 W- 指標行，[[handoff]] § Lifecycle repo）。
 
 未遷移 consumer（沒有 `specs/truth/work-lifecycle.md`）仍用既有 `TD-NNN` register，直到 consumer 遷移完成。
 
@@ -45,7 +45,7 @@ tasks 檔中出現**任何**未解決或延後處理的項目（deferred、local
 
 ## Register 結構（未遷移 consumer）
 
-每個有效欠帳在主 register 保留一條入口；已結案 ID 由既有 `docs/archives/tech-debt-closed-*.md` 的精簡憑證承載。Clade home 與已遷移 repo 的接續載體是 `specs/plans/<work-id>/plan.md`，本節只描述未遷移 consumer 仍在用的舊形狀。
+每個有效欠帳在主 register 保留一條入口；已結案 ID 由既有 `docs/archives/tech-debt-closed-*.md` 的精簡憑證承載。Clade home 與已遷移 repo 的接續載體是 `specs/plans/<work-id>/work.md`，本節只描述未遷移 consumer 仍在用的舊形狀。
 
 ```markdown
 ## TD-001 — <title>

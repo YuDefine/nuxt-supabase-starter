@@ -88,14 +88,15 @@ export function sharedTabLabelProblem(
   cwd: string,
   tabId: string,
 ): string | null {
+  const bare = typeof tabLabel === 'string' ? stripStatusPrefix(tabLabel) : tabLabel
   if (
-    typeof tabLabel === 'string' &&
-    !taskLabelProblem(tabLabel, cwd) &&
-    /^\[w[\da-z-]+:p[\da-z-]+\] /iu.test(tabLabel)
+    typeof bare === 'string' &&
+    !taskLabelProblem(bare, cwd) &&
+    /^\[w[\da-z-]+:p[\da-z-]+\] /iu.test(bare)
   )
     return null
   const owner =
-    typeof tabLabel === 'string' ? /^\[(w[\da-z-]+:p[\da-z-]+)\]/iu.exec(tabLabel)?.[1] : undefined
+    typeof bare === 'string' ? /^\[(w[\da-z-]+:p[\da-z-]+)\]/iu.exec(bare)?.[1] : undefined
   return (
     `共用 Tab 缺少 ID 與任務名稱（目前「${typeof tabLabel === 'string' ? tabLabel : '無'}」）；先命名主工作 Tab，再啟動 child：` +
     `herdr --session default tab rename ${tabId} '[${owner ?? '<主工作 pane>'}] <任務名稱>'`
@@ -103,6 +104,44 @@ export function sharedTabLabelProblem(
 }
 
 export type HerdrRequest = (args: string[]) => unknown
+
+/**
+ * Name-writer invariant (dispatch-identity-readback). Two writers touch a dispatched pane/Tab name:
+ *  - the launcher (this module) owns the TASK part, `[<pane-id>] <task name>`;
+ *  - the HQ label watcher (`pane-label-watch.ts` syncTabs) owns the leading STATUS SYMBOL
+ *    (`STATUS_PREFIXES`) and is the FINAL writer of the visible string.
+ * So a readback that differs from what the launcher wrote only by a status-symbol prefix is a
+ * pass, never a failure; a different task part is retried (re-rename + re-read) and, if it stays
+ * different, reported as `VisibleNameMismatchError`.
+ */
+export const STATUS_PREFIXES = ['❔', '⏳', '✅', '📌', '🙋', '⚠️', '⚠'] as const
+
+/** `label` without ONE leading status symbol (and the space after it). */
+export function stripStatusPrefix(label: string): string {
+  for (const prefix of STATUS_PREFIXES) {
+    if (label.startsWith(prefix)) return label.slice(prefix.length).replace(/^\s+/u, '')
+  }
+  return label
+}
+
+/** Exact match, or a match that differs only by a leading status symbol. */
+export function labelMatchesIgnoringStatus(observed: unknown, expected: string): boolean {
+  return (
+    typeof observed === 'string' &&
+    (observed === expected || stripStatusPrefix(observed) === expected)
+  )
+}
+
+/** Name readback still differs after the retries; structural identity (pane/Tab ids) was fine. */
+export class VisibleNameMismatchError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'VisibleNameMismatchError'
+  }
+}
+
+/** Re-rename + re-read attempts for a name readback, matching `verifyDispatchedPaneLabel`. */
+export const NAME_READBACK_ATTEMPTS = 4
 
 function entity(response: unknown, kind: 'pane' | 'tab'): Record<string, unknown> {
   if (!isRecord(response) || !isRecord(response.result) || !isRecord(response.result[kind])) {
@@ -128,6 +167,9 @@ export type VisibleIdentity = {
   session: 'default'
 }
 
+/** Sentinel step (compared by identity): the async driver sleeps instead of sending a herdr call. */
+const PAUSE_STEP: string[] = ['<pause>']
+
 /** Name only a newly owned Tab; an existing shared Tab keeps its verified main-task name. */
 function* identitySteps(options: {
   paneId: string
@@ -135,6 +177,10 @@ function* identitySteps(options: {
   cwd: string
   tabId?: string
   nameTab: boolean
+  /** Called between a mismatched readback and the next re-rename; sync callers sleep here. */
+  pause?: () => void
+  /** Async callers: yield PAUSE_STEP between attempts so the driver can await a timer. */
+  yieldPause?: boolean
 }): Generator<string[], VisibleIdentity, unknown> {
   const problem = taskLabelProblem(options.label, options.cwd)
   if (problem) throw new Error(problem)
@@ -147,22 +193,47 @@ function* identitySteps(options: {
   const tab = entity(yield ['tab', 'get', tabId], 'tab')
   if (tab.tab_id !== tabId) throw new Error('Herdr Tab 身分回讀不符')
   const paneLabel = paneTaskLabel(options.paneId, options.label)
-  const tabLabel = options.nameTab ? paneLabel : tab.label
+  // A shared Tab already carries HQ's status symbol (`❔ [w1:p-main] 主工作`): the symbol is not part
+  // of the task name, so strip it before the shape check and compare the readback against the rest.
+  const tabLabel = options.nameTab
+    ? paneLabel
+    : typeof tab.label === 'string'
+      ? stripStatusPrefix(tab.label)
+      : tab.label
   const tabProblem = sharedTabLabelProblem(tabLabel, options.cwd, tabId)
   if (tabProblem || typeof tabLabel !== 'string')
     throw new Error(tabProblem ?? '共用 Tab 缺少任務名稱')
-  if (options.nameTab) yield ['tab', 'rename', tabId, tabLabel]
-  yield ['pane', 'rename', options.paneId, paneLabel]
-  const observedPane = entity(yield ['pane', 'get', options.paneId], 'pane')
-  const observedTab = entity(yield ['tab', 'get', tabId], 'tab')
-  if (
-    observedPane.pane_id !== options.paneId ||
-    observedPane.tab_id !== tabId ||
-    observedPane.label !== paneLabel ||
-    observedTab.tab_id !== tabId ||
-    observedTab.label !== tabLabel
-  )
-    throw new Error('Herdr 任務名稱回讀不符；未啟動 agent')
+  let mismatch = ''
+  for (let attempt = 0; attempt < NAME_READBACK_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) {
+      options.pause?.()
+      if (options.yieldPause) yield PAUSE_STEP
+    }
+    if (options.nameTab) yield ['tab', 'rename', tabId, tabLabel]
+    yield ['pane', 'rename', options.paneId, paneLabel]
+    const observedPane = entity(yield ['pane', 'get', options.paneId], 'pane')
+    const observedTab = entity(yield ['tab', 'get', tabId], 'tab')
+    if (
+      observedPane.pane_id !== options.paneId ||
+      observedPane.tab_id !== tabId ||
+      observedTab.tab_id !== tabId
+    )
+      throw new Error('Herdr pane／Tab 身分回讀不符')
+    if (
+      labelMatchesIgnoringStatus(observedPane.label, paneLabel) &&
+      labelMatchesIgnoringStatus(observedTab.label, tabLabel)
+    ) {
+      mismatch = ''
+      break
+    }
+    mismatch =
+      `pane ${JSON.stringify(observedPane.label)} (expected ${JSON.stringify(paneLabel)}), ` +
+      `tab ${JSON.stringify(observedTab.label)} (expected ${JSON.stringify(tabLabel)})`
+  }
+  if (mismatch)
+    throw new VisibleNameMismatchError(
+      `Herdr 任務名稱回讀不符（重試 ${NAME_READBACK_ATTEMPTS} 次）：${mismatch}`,
+    )
   return {
     pane_id: options.paneId,
     tab_id: tabId,
@@ -173,11 +244,17 @@ function* identitySteps(options: {
   }
 }
 
+const NAME_READBACK_PAUSE_MS = 150
+
+function pauseSync(): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, NAME_READBACK_PAUSE_MS)
+}
+
 export function verifyVisibleIdentity(
   request: HerdrRequest,
   options: Parameters<typeof identitySteps>[0],
 ): VisibleIdentity {
-  const steps = identitySteps(options)
+  const steps = identitySteps({ pause: pauseSync, ...options })
   let step = steps.next()
   while (step.done === false) step = steps.next(request(step.value))
   return step.value
@@ -187,9 +264,16 @@ export async function verifyVisibleIdentityAsync(
   request: (args: string[]) => Promise<unknown>,
   options: Parameters<typeof identitySteps>[0],
 ): Promise<VisibleIdentity> {
-  const steps = identitySteps(options)
+  // Without a wait between attempts the retries run back to back and cannot outlast HQ's label
+  // watcher write, so the async driver sleeps between them like the sync one.
+  const steps = identitySteps({ ...options, yieldPause: true })
   let step = steps.next()
-  while (step.done === false) step = steps.next(await request(step.value))
+  while (step.done === false) {
+    if (step.value === PAUSE_STEP) {
+      await new Promise((done) => setTimeout(done, NAME_READBACK_PAUSE_MS))
+      step = steps.next(undefined)
+    } else step = steps.next(await request(step.value))
+  }
   return step.value
 }
 

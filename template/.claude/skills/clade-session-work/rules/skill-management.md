@@ -33,7 +33,7 @@ paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/*
 | 安裝形態 | `npx skills add … --agent <runtime-agent…> --copy -y`：每個 runtime 的 skills 目錄各寫一份實體目錄。同一 skill 要給多個 runtime 就把 `--agent` 全列（例：`--agent claude-code codex`），漏列的那份會停在舊版 |
 | 版控 | `<skills-root>/<name>/` 的第三方本體可完全由 lock＋install script 重現，照 consumer 既有慣例 gitignore；**MUST 進版控**的是 `scripts/install-skills.sh` 與 `skills-lock.json` |
 | 安裝清單 | `scripts/install-skills.sh` 是重建機器的依據：新增、改名、移除 skill 都**先改它**再跑安裝 |
-| 換版 | lock 條目有 `ref`（釘 tag／branch）→ `npx skills add https://github.com/<owner>/<repo>/tree/<新 ref>/<skill-dir> --agent … --copy -y`，原生覆寫、不必先 `rm -rf`，`ref` 更新為新值。無 `ref`（追 default branch）→ `npx skills add <owner>/<repo>@<name> --agent … --copy -y`；well-known 網域 source 用完整 URL（`https://www.<domain>`），不支援 `@skill` 選取 |
+| 換版 | lock 條目有 `ref`（釘 tag／branch）→ `npx skills add https://github.com/<owner>/<repo>/tree/<新 ref>/<skill-dir> --agent … --copy -y`，原生覆寫、不必先 `rm -rf`，`ref` 更新為新值。釘 commit 要用 40 碼完整 SHA；7 碼短 SHA 會 clone 失敗（skills CLI 1.8.1 實測：`Remote branch not found`）。無 `ref`（追 default branch）→ `npx skills add <owner>/<repo>@<name> --agent … --copy -y`；well-known 網域 source 用完整 URL（`https://www.<domain>`），不支援 `@skill` 選取 |
 | `ref` | 釘版的條目 lock **MUST 帶 `ref`**。沒有 `ref` 的條目，`experimental_install` 還原時追 HEAD 並改寫 lock hash，不可重現 |
 | CLI 版本 | 以下行為以 skills CLI **≥ 1.7.2** 實測；更舊版本的 `update` 在雙路徑下會 skipping，不在契約內 |
 

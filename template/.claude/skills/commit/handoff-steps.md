@@ -1,7 +1,7 @@
-# /commit Step 5-B~5-F 與 Step 8 執行細節
+# /commit Step 5-B~5-F 執行細節
 
 
-> 本檔是 `SKILL.md` 的 branch 分頁。**Step 5-A 判定「需要 handoff」時 MUST 讀 § 5-B~5-F 並逐步執行**；**Step 8 觸發條件成立（不在 main/master 且 consumer 有 `/ship`）時 MUST 讀 § Step 8**。兩個 branch 都沒命中就不需要讀本檔。
+> 本檔是 `SKILL.md` 的 branch 分頁。HANDOFF／ROADMAP 的內容改由 `/handoff` 寫（§ 5-B~5-D 留作格式參考）；**SKILL.md D9-Gate（trunk-based 發版）時 MUST 讀 § 5-E**，以精確 paths 提交 `/handoff` 動到的 carrier；沒命中就不需要讀本檔。原 Step 8（銜接 `/ship` 開 PR）已併入 D3：push 與開 PR 由 `rules/分組與提交判準.md` Rule 4 直接做。
 
 ## 5-B. 收集下一步資訊
 
@@ -55,12 +55,12 @@
 
 ## 5-E. 把 HANDOFF/ROADMAP 變更納入 commit（不 push）
 
-5-C/5-D 實際修改或建立的 carrier，**MUST** 在此處以已授權的精確 paths commit 進去，否則 Step 6-A 的 deploy commit 不含這次的交接狀態。沿 Step 0-Scope 核對歸屬；新建 carrier 先以具名 path 加入 index，再用 `--only`，不漏掉 untracked 文件。署名沿 `rules/分組與提交判準.md`（Step 4）Rule 5 的實際身份政策。
+`/handoff`（或 5-C/5-D）實際修改或建立的 carrier，**MUST** 在此處以已授權的精確 paths commit 進去，否則 Step 6-A 的 deploy commit 不含這次的交接狀態。沿 D0-Scope（`rules/前置探測判準.md` Rule 4）核對歸屬；新建 carrier 先以具名 path 加入 index，再用 `--only`，不漏掉 untracked 文件。署名沿 `rules/分組與提交判準.md`（D3）Rule 3 的實際身份政策。
 
 ```bash
-# 只收 5-C/5-D 動到的檔。git add ＋ 裸 git commit 會把 index 裡別的東西一起帶走（含別
+# 只收 /handoff（5-C/5-D）動到的檔。git add ＋ 裸 git commit 會把 index 裡別的東西一起帶走（含別
 # session 預 stage 的），所以這裡走 --only —— 同 rules/core/commit.detail.md § Ad-hoc commit。
-# paths 只填 5-C/5-D 本次確實修改、已核對授權與歸屬的 carrier。
+# paths 只填 /handoff（5-C/5-D）本次確實修改、已核對授權與歸屬的 carrier。
 # 新建檔先 git add -- <該新檔>；既有其他 session staged 維持原狀。
 paths=(<本次已確認的 carrier paths>)
 
@@ -85,24 +85,3 @@ fi
 ✅ ROADMAP 已同步（已入 commit / 無變更略過）
 （或：無可延續工作，HANDOFF.md 已清空 / 未建立）
 ```
-
-## Step 8: 自動銜接 /ship
-
-```bash
-git branch --show-current
-```
-
-**觸發條件**：當前**不在 main / master 分支**，且當前 runtime 實際載入的 consumer 能力提供 `ship` skill（會 push branch 並開 PR）。其他 runtime 的 skill 樹（例如 `.claude/skills/ship`）存在不能證明本入口已提供。
-
-push session branch 與開 **draft** PR 不在本問題內：照 [[github-flow]] § 事件與成本「切片可見性 draft」由 owner 直接做，**NEVER** 為此停下來問 Charles 或開 `flow ask`（Charles 2026-10-28 /my Q11=A）。
-
-本任務已有對應 branch push／PR 的明確授權時直接依該 scope 執行；缺授權才用當前可用詢問工具或對話提出下列問題，沒有回答不執行。
-
-```text
-Commit 完成！要繼續執行 /ship 推送並建立 PR 嗎？
-```
-
-- 同意 → 執行 `/ship` skill
-- 拒絕或已在 main / master → 跳過
-
-**不觸發**：在 main / master 分支，或 consumer 沒有 `/ship` skill。本步處理的是 **ready** PR。該 `workId` 已有 draft 時，MUST 重用那一張（把 formal HEAD 交到既有 head ref），**NEVER** 再開一張。討論用 draft 走 `batch.md` § Draft PR，三條 predicate 全中才開，且 **NEVER** 把 draft 當成本步已完成的 ship。

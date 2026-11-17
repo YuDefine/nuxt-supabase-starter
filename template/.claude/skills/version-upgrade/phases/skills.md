@@ -105,7 +105,19 @@ node scripts/audit-skill-freshness.ts --changelog antfu/skills      # 整個 rep
 
 輸出該目錄 `CHANGELOG.md`、近 10 個 release、近 20 筆 commit。
 
-第三方 skill 變動多是內容改善，預設**跟**。「不跟」要具體理由，且 **MUST** 登記刻意留舊版的原因：有 `specs/truth/work-lifecycle.md` 的 repo 寫進承載本次升版的 plan（Decisions 或 Open work）；未遷移 consumer 才登 `docs/tech-debt.md` TD。
+跟之前先看 audit 的「skill 目標版本 vs lockfile」段（`audit-skill-freshness.ts` 比 SKILL.md 宣告的目標版本與 consumer `pnpm-lock.yaml` 解析版本，skill→套件對應在 `registry/skill-sources.json` 的 `skillPackages`）。該段每列有兩欄：**「上游新版」**讀上游 default branch 的 SKILL.md，**「本地」**讀 repo 現已安裝的 SKILL.md。S.3 判跟不跟只看「上游新版」欄 —— 本地欄在上游剛改寫成新 major 時仍會報相符（本地還是舊內容），拿它判會永遠判不到「不符」；本地欄留給 S.5.5。照下表判：
+
+| 「上游新版」欄的判定（上游新版 SKILL.md 宣告 vs 該 repo lockfile 解析版本） | 處置 |
+| --- | --- |
+| 相符 | 照下一段預設跟 |
+| 不符（例：上游 nuxt skill 改成 Nuxt 5，repo 仍是 4.x） | **NEVER** 跟：該 repo 釘在最後一個相符的 commit（`/tree/<40 碼 SHA>/<dir>`，見安裝契約「換版」列），並照下一段登記刻意留舊版的理由；repo 真的升到那個 major 的那張 PR 再改回跟上游 |
+| 未宣告 | 不可當相符：讀上游 diff 判斷有沒有叫 agent 用該 repo 沒有的 API，判不出就當不符處理 |
+| 套件未安裝 | 該 repo 不需要這支 skill：走 S.5.3 移除，不跟也不釘 |
+| 該 repo 在 audit 的「未比對」行（沒有 `pnpm-lock.yaml`，或 lockfileVersion 不是 6／9），或該列判定帶「版本讀不懂（npm: alias 等）」 | 沒有任何一欄可判，照「未宣告」處理：讀上游 diff 判斷，判不出就釘版。NEVER 因為看不到「不符」就走預設跟 |
+
+只比 major，同 major 內的差異（例 `nuxt/server` 4.6.0 才有）抓不到，相符仍要讀 S.3 的變動日誌。
+
+目標版本相符的前提下，第三方 skill 變動多是內容改善，預設**跟**。「不跟」要具體理由，且 **MUST** 登記刻意留舊版的原因：有 `specs/truth/work-lifecycle.md` 的 repo 寫進承載本次升版的 plan（Decisions 或 Open work）；未遷移 consumer 才登 `docs/tech-debt.md` TD。
 
 ## Step S.4 — 整合評估（上游新 skill vs 自家資產）
 
@@ -185,6 +197,8 @@ test -f <skills-root>/<name>/SKILL.md
 ```
 
 處理過的項目要從 `stale` / `upstream-gone` / `missing` / `lock-only` / `projected` 消失（後兩類消失的判據是 `skills-lock.json` 已無該條目——CLI 報成功不算）。沒消失就是沒修好，回 Step S.2。
+
+audit 的「skill 目標版本 vs lockfile」段，本次處理過的 repo，「本地」欄「不符」MUST 為 0（裝回去的內容跟 lockfile 對得上），或每一筆「上游新版」欄不符都已照 S.3 釘在相符的 commit 並登記理由（釘住後本地欄變回相符）；未登記的不符＝沒做完。
 
 audit 尾段「lock 條目無 ref」列出的條目，本次處理過的 MUST 不在其中（釘版條目 lock 必帶 `ref`，見安裝契約 `ref` 列）；該段 fleet 總數為 0 是安裝形態翻轉（契約末段）的前置條件，非 0 就照契約的「換版」列用 `/tree/<ref>` 補上。
 

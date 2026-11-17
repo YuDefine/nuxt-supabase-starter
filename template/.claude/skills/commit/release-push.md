@@ -125,7 +125,7 @@ script 會先 fetch `origin/main`，查 package.json 版本、最近的 `🚀 de
 > | `derived=` | tag 會觸發嗎 | 這一段 |
 > | --- | --- | --- |
 > | `tag-v` / `ambiguous` | 會 | **MUST 確認** |
-> | `push-main` / `pr-merge` / `manual` / `none` | 不會 | **NEVER 進入確認與重推**，Step 7 標「不適用（`derived=<值>`）」 |
+> | `push-main` / `pr-merge` / `manual` / `none` | 不會 | **NEVER 進入確認與重推**，發版回報標「不適用（`derived=<值>`）」 |
 >
 > **NEVER 反過來背成一張「不適用」清單**：那張清單漏一個值，漏掉的那格就會把你送去對一個
 > **已公開**的 tag 執行刪除重推，去追一條本來就不存在的 run。`push-main` / `pr-merge` / `manual`

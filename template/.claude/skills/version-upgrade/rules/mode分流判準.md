@@ -30,6 +30,14 @@ script 的 `PHASES` 與本表同義；改一邊 MUST 同改另一邊與 `test/ve
 | `major` framework major migration（G12） | 不收：`out.work-route`，交該 consumer 的 `/work-route` 開專屬 plan | 不收：relay 各 consumer 自己開 | 不收：clade 自己 `/work-route` | — | — |
 | `non-node` 非 Node 生態（Go 等：某 Go consumer） | 不收：`out.non-node`，relay 該 consumer 自己處理；本 skill 屬 `ecosystem/node`，**NEVER** 假裝涵蓋 | 同左 | — | — | — |
 
+### 快速道：同發行線資安修補不經本 skill
+
+上表 `security` 列處理依賴通報的計畫式升版；runtime 或依賴的**同發行線**修補（Node 安全發行、單一套件 GHSA）走資安快速道，由腳本產 fleet 批次與機械 brief，主持者照 brief 派工，不啟動本 skill。要換發行線（charter R2）或版本判不出（R1）的列腳本標停、不產 brief：R2 照 charter § 大版本升級（不走本表的 Phase）、R1 先推 Discord 等 Charles，各列的停止理由就寫了去處。
+
+| 理由 | 範圍 | 入口 |
+| --- | --- | --- |
+| `security` 同發行線修補（快速道） | `fleet`（含 runner／正式機的 findings） | clade 端 `node scripts/security-fastlane-batch.ts --notice <通報 json>`（或 `--findings <偵測器 findings.json>`）`[--dry-run]`：輸出各家現版、同線目標版、R 列與 brief；stop 列照該列停止理由的去處 |
+
 ### route → 動作
 
 評估：first-match；以上皆非 → R*

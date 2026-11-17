@@ -59,9 +59,29 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
 ARGS=(auto "--title=$TITLE" --session "$SESSION" --marker "$MARKER")
 [ -n "$CWD" ] && ARGS+=(--cwd "$CWD")
 
+# 逾時 30 秒交給 node 內部（spawnSync timeout＋SIGKILL），不用 `setsid`／`timeout`：macOS 預設沒有，
+# 用了會 command not found 而被 >/dev/null 吞掉、errand 靜默不登記（比照 stop-wip-guard.sh 的 node 計時）。
+# 背景分支要脫離 hook 的 process group／session：pane 關閉或 group 收到 SIGHUP／SIGTERM 時，還在跑的
+# CLI（非權威機 ssh 轉送要數秒）不能跟著死。由 node `spawn({ detached: true })` 開 supervisor——libuv
+# 在 Linux 與 macOS 都會替它 setsid——supervisor 再以 spawnSync 計時跑 CLI，CLI 繼承 supervisor 的新 session。
+SUPERVISE='
+  const { spawnSync } = require("node:child_process")
+  const r = spawnSync(process.execPath, process.argv.slice(1), {
+    stdio: "ignore",
+    timeout: 30000,
+    killSignal: "SIGKILL",
+  })
+  process.exitCode = r.status ?? 1
+'
+DETACH='
+  const { spawn } = require("node:child_process")
+  const [supervise, ...rest] = process.argv.slice(1)
+  spawn(process.execPath, ["-e", supervise, "--", ...rest], { detached: true, stdio: "ignore" }).unref()
+'
 if [ "${CLADE_ERRAND_SYNC:-}" = 1 ]; then
-  timeout 30 node "$SCRIPT" "${ARGS[@]}" >/dev/null 2>&1
+  node -e "$SUPERVISE" -- "$SCRIPT" "${ARGS[@]}" >/dev/null 2>&1
 else
-  (setsid timeout 30 node "$SCRIPT" "${ARGS[@]}" >/dev/null 2>&1 &) >/dev/null 2>&1
+  node -e "$DETACH" -- "$SUPERVISE" "$SCRIPT" "${ARGS[@]}" </dev/null >/dev/null 2>&1 &
+  disown 2>/dev/null || true
 fi
 exit 0

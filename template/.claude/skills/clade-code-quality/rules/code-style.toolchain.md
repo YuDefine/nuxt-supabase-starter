@@ -157,17 +157,20 @@ node 是 vp 兩層共同的第三層。適用於 repo root 有 `package.json` �
 | 來源 | 寫什麼 | 沒釘的後果 |
 | --- | --- | --- |
 | `package.json` 的 `engines.node` | `"^24"` | 本機仍裝得起來，但宣告變成謊話；`pnpm install` 不會擋 |
-| `.nvmrc`（或 `.node-version`） | `24`，或與正式機一致的完整版號（見下） | 開發者本機 `nvm use` / `fnm use` 切到別的 major |
-| **每一個** workflow 的**每一處** `node-version` | `'24'` | **CI 當場紅**，且 matrix 只有一格紅時很像 flaky |
+| `.node-version`（單一版本檔） | 完整版號（`24.22.3`），≥ 該發行線最低修補版、與正式機一致（見下） | 開發者本機 `fnm use` 切到別的 major；只寫 `24` 證明不了已含安全修補 |
+| **每一個** workflow 的**每一處** setup-node／setup-vp | `node-version-file: .node-version` | 字面值 `node-version:` 不跟版本檔走：版本檔升了 CI 仍跑舊版，**CI 當場紅**或默默跑未修補版 |
 
-workflow 那一列是全稱：**每一個** `.github/workflows/*.yml` 的**每一處** `node-version:`，不是只改 `ci.yml` 或每檔第一處。
+workflow 那一列是全稱：**每一個** `.github/workflows/*.yml` 的**每一處** node setup，不是只改 `ci.yml` 或每檔第一處。
 
-#### 版本檔：單一檔、可寫完整版號
+過渡：仍寫 `24`／`.nvmrc`、或 CI 用 `node-version: '24'` 字面值的 repo 由 fleet 版本檔收斂逐家改；改完前 audit 照下方四種 finding 報出，不算已對齊。
+
+#### 版本檔：單一檔、寫完整版號
 
 - 同一個 repo 只能有一個版本檔：`.nvmrc` 與 `.node-version` 兩檔並存視為違規。
-- 版本檔寫完整 patch 版號時，必須跟正式機一致，正式機升級時要同一件一起改（走 `version-upgrade` skill 的 security 快速道）。pin 了 patch 卻不跟著正式機升，也算沒釘。
+- 版本檔的完整 patch 版號必須跟正式機一致，正式機升級時要同一件一起改：同發行線的安全修補走 clade 的資安快速道（clade 端跑 `node scripts/security-fastlane-batch.ts`，產各家的機械 brief）；要換發行線時快速道把該列標 R2 停、不產 brief，照 charter § 大版本升級。pin 了 patch 卻不跟著正式機升，也算沒釘。
+- 資安下限：clade `registry/toolchain.json` 的 `tools.node.minimumPatch` 登記每條發行線的最低修補版（該線最新 security release，由 `--refresh-targets` 算，NEVER 手填）。`audit-ci-toolchain-parity.ts` 報四種 finding：`below-minimum-patch`（版本檔低於下限）、`major-only-unprovable`（只寫 major）、`ci-not-reading-version-file`（CI 用字面值，或該 workflow 的 setup-node 沒帶 `node-version-file`）、`version-file-dual`（兩檔並存）。
 - `engines.node` 維持 major 範圍（`"^24"`）。
-- CI 可用 `node-version-file` 讀版本檔（見下方 NEVER 段例外）。
+- CI 一律用 `node-version-file` 讀版本檔。
 - 大版本例外不在本規則放寬範圍：正式機的 major 不是 24 的 repo（例：某 consumer 正式機是 22）另走升 major，不能靠版本檔寫完整版號繞過。
 
 #### NEVER
@@ -189,7 +192,7 @@ node scripts/audit-ci-toolchain-parity.ts          # 人讀表格；--json 給�
 node scripts/audit-ci-toolchain-parity.ts --target-node 24
 ```
 
-目標 major 的 SoT 是該 script 的 `TARGET_NODE_MAJOR`；換標準時常數與本節**同步改**，不要只改一邊。操作模板見 `vendor/snippets/ci-parity/`。
+目標 major 與各線最低修補版的 SoT 是 `registry/toolchain.json` 的 `tools.node`（`target`、`minimumPatch`）；換標準時 registry 與本節**同步改**，不要只改一邊。操作模板見 `vendor/snippets/ci-parity/`。
 
 ### 禁止在 lint-staged / pre-commit / CI 命令中呼叫 eslint / prettier
 
@@ -398,7 +401,7 @@ runner 的 `checks/vp-staged.sh` 經 `scripts/pre-commit/staged-targets.ts` 讀 
 （consumer 投影 `scripts/gate-slot.sh`），入口是 `bin/clade-gate`。
 
 **heavy job 一律經 `clade-gate run <label> -- <cmd>` 才受閘。** 光把 label 加進 `CLADE_HEAVY_GATES` 不會讓任何東西受閘。
-systemd user manager 可用、job 是 heavy 且重指令 slice 為 loaded 時，`gate-slot.sh` 透過 `systemd-run --user --scope --slice=<slice>` 把 job 放進該 slice——優先 `cladeheavy.slice`（`CLADE_HEAVY_GATE_SLICE` 可改名；desk 的 slice unit 由 `dev-node.ts bootstrap` 依 `registry/dev-nodes.json` 的 `cpu_budget.heavy_slice` 產生，`doctor` 比對 unit 檔與 live 權重；沒宣告的節點不檢查，`--slice=` 會隱式建出權重 100 的預設 slice，等於沒降權），沒載入就退回 `agent-workloads.slice`，兩者都沒有就不指定；desk 的 `registry/dev-nodes.json` 宣告 `CPUWeight=10`、`IOWeight=10`、不設 `CPUQuota`，由 `dev-node.ts bootstrap` 產生 unit，`doctor` 同時比對 unit 檔與 live 值。zenbook 未宣告 CPU budget；`--slice=` 可隱式建立已 loaded 的 slice，因此 loaded 不代表 unit 檔存在或符合 SoT。
+systemd user manager 可用、job 是 heavy 且重指令 slice 為 loaded 時，`gate-slot.sh` 透過 `systemd-run --user --scope --slice=<slice>` 把 job 放進該 slice——優先 `cladeheavy.slice`（`CLADE_HEAVY_GATE_SLICE` 可改名；desk 的 slice unit 由 `dev-node.ts bootstrap` 依 `registry/dev-nodes.json` 的 `cpu_budget.heavy_slice` 產生，`doctor` 比對 unit 檔與 live 權重；沒宣告的節點不檢查，`--slice=` 會隱式建出權重 100 的預設 slice，等於沒降權），沒載入就退回 `agent-workloads.slice`，兩者都沒有就不指定；desk 的 `registry/dev-nodes.json` 宣告 `CPUWeight=10`、`IOWeight=10`、不設 `CPUQuota`，由 `dev-node.ts bootstrap` 產生 unit，`doctor` 同時比對 unit 檔與 live 值。zenbook 未宣告 CPU budget；`--slice=` 可隱式建立已 loaded 的 slice，因此 loaded 不代表 unit 檔存在或符合 SoT。`agent-workloads.slice` 是 `agent.slice` 唯一的子層（名稱裡的 `-` 是 systemd 的階層分隔），它自己的 `CPUWeight`／`IOWeight` 沒有兄弟可比、對外不生效；跟 `app.slice`（Herdr）比 CPU 份額的是 `agent.slice`，所以 `doctor` 另有 `agent-slice effective cpu.weight` 比 `agent.slice` 與 `app.slice` 的 live 值是否平價（刻意不降 `agent.slice`：wrapper 啟動的 session 會一起降速，降權的是 `cladeheavy.slice`）。
 
 systemd 252 以上時，每個 gate scope（heavy 與 light）都另帶 `-p CPUWeight=idle`（cgroup `cpu.idle`）：gate 只拿互動 session 沒在用的 CPU，機器滿載時 herdr、agent TUI 的喚醒延遲不再被測試／typecheck 拖長，閒置時批次照樣吃滿全部核心。nice 只在同一個 cgroup 內比較，對兄弟 scope 無效，所以降權**必須**落在 scope 層。systemd 低於 252 不認得 `idle`，此時不帶這個屬性、scope 維持預設權重。`ops/` 下的背景批次 unit（deps-retrace、timings-reseed、disk-hygiene、main-align、dev-lease-reaper、agent-placement）同理設 `CPUWeight=idle`，既有的 `Nice=10` 擋不住它們跟 herdr-server 等兄弟 unit 搶 CPU。
 

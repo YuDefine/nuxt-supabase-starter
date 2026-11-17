@@ -2,8 +2,7 @@
 
 # Skills 安裝／更新腳本
 # 統一使用 --agent claude-code --copy：直接寫入 .claude/skills/，不建立 symlink
-# 重複執行會覆寫為最新版（等同 update）
-# 更新日期：2026-08-25（impeccable v4.1.1 同步）
+# 重複執行會照下方釘的 ref 重裝（換版改 ref，不追上游）
 
 set -e
 
@@ -11,27 +10,72 @@ cd "$(dirname "$0")/.."
 
 COPY_FLAGS="--agent claude-code --copy -y"
 
+# 第三方 skill 釘版的 ref：換版改這裡再重跑，規則見 clade rules/core/skill-management.md § 第三方 skill 安裝契約。
+REF_ANTFU_SKILLS=d524ed287eef22757297827ce42e3cad88abd20c
+REF_BETTER_AUTH_SKILLS=20c9e88a5c007461a703f1c213572b073196113e
+REF_CLOUDFLARE_SKILLS=cbf893b954222276bf1af57e5f23379231e0efb9
+REF_CURRENTS_DEV_PLAYWRIGHT_BEST_PRACTICES_SKILL=0b75b5835a87de1fdd202ba965f3bc5a27738fdf
+# evlog skill 釘 evlog@2.27.0，對齊 template 裝的 evlog 2.27.x。
+# 更新的版本教 evlog.config.ts、`evlog logs`，template 鎖的 @evlog/cli 0.3 沒有這些指令。
+REF_EVLOGHQ_EVLOG=45db116a955f722f186105dd6047a42e511c349f
+# scaffold 產生的腳本用（modern-web-guidance 子 skill，不含 chrome-extensions）。
+REF_GOOGLECHROME_MODERN_WEB_GUIDANCE=4dd968349e54ca45a05dd5c818fb035c9054b022
+REF_NUXT_UI=3879d262ebf5409465fb6a3e1d27b8fb532d4ed7
+REF_OBRA_SUPERPOWERS=22f0b463e7a5e579904dd6211a520321035526f7
+REF_ONMAX_NUXT_SKILLS=581dc72cb78acb439f00ed6a4b03aa2a60eb97fe
+# document-writer、motion、ts-library 上游在 9b069d6（#70）移除，留在它的前一個 commit。
+REF_ONMAX_NUXT_SKILLS_LEGACY=eadcacf61338914ff6f92f89352c88127d69e44a
+# impeccable 留在 c3ea1c79：之後的版本改成下載 binary 執行的 launcher，只靠同源 sha256 驗證。
+REF_PBAKAUS_IMPECCABLE=c3ea1c79f53a6702db581e81c45c599aeb5e25e6
+REF_PPROENCA_DOT_SKILLS=cf93c57cac89d6fc3e4194686000411567f5caf3
+REF_SUPABASE_AGENT_SKILLS=c9be0e931b7930f7d02126d04774d904c381e7d7
+REF_VUEJS_AI_SKILLS=198f0cd8f7f9c0a3d9b566ccc16de6677519ee78
+REF_VUEUSE_SKILLS=004812b4aa0815f5745ac30a6a7dc4927aec7b3d
+# antfu nuxt、vitepress 留在 e98e476：上游 d02c484 起改寫成 Nuxt 5／VitePress 2 alpha。
+# 程式碼真的遷到 Nuxt 5 的那張 PR，再把 nuxt 改回 REF_ANTFU_SKILLS。
+REF_ANTFU_SKILLS_PRE_NUXT5=e98e476e315f068f72d53bd3afb34fdd4d5851c3
+
+# 釘版安裝＋核對：npx skills add 對失敗的 source 仍 exit 0，裝完核對 lock 的 ref 與 SKILL.md 真的到位
+skill_add_pinned() {
+  local url=$1
+  shift
+  npx skills add "$url" "$@"
+  node -e '
+    const fs = require("fs")
+    const [url] = process.argv.slice(1)
+    const m = url.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/tree\/([^/]+)\/(.+)$/)
+    const lock = JSON.parse(fs.readFileSync("skills-lock.json", "utf8"))
+    const hit = m && Object.entries(lock.skills).find(([, v]) => v.source === m[1] && v.ref === m[2] && v.skillPath === `${m[3]}/SKILL.md`)
+    if (!hit || !fs.existsSync(`.claude/skills/${hit[0]}/SKILL.md`)) {
+      console.error(`❌ ${url} 沒有裝成：skills-lock.json 沒有對應 ref 的條目，或 .claude/skills 缺 SKILL.md`)
+      process.exit(1)
+    }
+  ' "$url"
+}
+
 echo "🚀 開始安裝 skills（--copy 模式，直接寫入 .claude/skills/）..."
 echo ""
 
 # Antfu Skills
 echo "📦 Antfu Skills..."
 for skill in nuxt vue vitest vitepress pinia; do
-  npx skills add antfu/skills@$skill $COPY_FLAGS
+  ref=$REF_ANTFU_SKILLS
+  case $skill in nuxt|vitepress) ref=$REF_ANTFU_SKILLS_PRE_NUXT5 ;; esac
+  skill_add_pinned "https://github.com/antfu/skills/tree/$ref/skills/$skill" $COPY_FLAGS
 done
 echo "  ✓ Antfu Skills 完成"
 echo ""
 
 # VueUse 官方 Skill（vueuse/skills；antfu/skills #39 已移除 vendored 版，2026-10-20 改追真上游）
 echo "📦 VueUse Skill..."
-npx skills add vueuse/skills@vueuse-functions $COPY_FLAGS
+skill_add_pinned "https://github.com/vueuse/skills/tree/$REF_VUEUSE_SKILLS/skills/vueuse-functions" $COPY_FLAGS
 echo "  ✓ VueUse Skill 完成"
 echo ""
 
 # Vue 官方 Skills（vuejs-ai/skills；antfu/skills #39 已移除 vendored 版，2026-10-20 改追真上游）
 echo "📦 Vue Skills（vuejs-ai）..."
 for skill in vue-best-practices vue-testing-best-practices; do
-  npx skills add vuejs-ai/skills@$skill $COPY_FLAGS
+  skill_add_pinned "https://github.com/vuejs-ai/skills/tree/$REF_VUEJS_AI_SKILLS/skills/$skill" $COPY_FLAGS
 done
 echo "  ✓ Vue Skills 完成"
 echo ""
@@ -44,62 +88,65 @@ echo ""
 # 本 repo 的 .claude/skills/nuxt-better-auth 已就地更新成新套件名，不再由上游覆寫。
 echo "📦 Onmax Nuxt Skills..."
 for skill in document-writer motion nuxt-content nuxt-modules nuxthub reka-ui ts-library; do
-  npx skills add onmax/nuxt-skills@$skill $COPY_FLAGS
+  ref=$REF_ONMAX_NUXT_SKILLS
+  case $skill in document-writer|motion|ts-library) ref=$REF_ONMAX_NUXT_SKILLS_LEGACY ;; esac
+  skill_add_pinned "https://github.com/onmax/nuxt-skills/tree/$ref/skills/$skill" $COPY_FLAGS
 done
 echo "  ✓ Onmax Nuxt Skills 完成"
 echo ""
 
 # 官方 Skills
 echo "📦 官方 Skills..."
-npx skills add supabase/agent-skills@supabase-postgres-best-practices $COPY_FLAGS
-npx skills add supabase/agent-skills@supabase $COPY_FLAGS
-npx skills add nuxt/ui $COPY_FLAGS
+skill_add_pinned "https://github.com/supabase/agent-skills/tree/$REF_SUPABASE_AGENT_SKILLS/skills/supabase-postgres-best-practices" $COPY_FLAGS
+skill_add_pinned "https://github.com/supabase/agent-skills/tree/$REF_SUPABASE_AGENT_SKILLS/skills/supabase" $COPY_FLAGS
+skill_add_pinned "https://github.com/nuxt/ui/tree/$REF_NUXT_UI/skills/nuxt-ui" $COPY_FLAGS
 echo "  ✓ 官方 Skills 完成"
 echo ""
 
 # Better Auth 官方 Skills
 echo "📦 Better Auth 官方 Skills..."
-npx skills add better-auth/skills@better-auth-best-practices $COPY_FLAGS
-npx skills add better-auth/skills@better-auth-security-best-practices $COPY_FLAGS
+skill_add_pinned "https://github.com/better-auth/skills/tree/$REF_BETTER_AUTH_SKILLS/better-auth/best-practices" $COPY_FLAGS
+skill_add_pinned "https://github.com/better-auth/skills/tree/$REF_BETTER_AUTH_SKILLS/security" $COPY_FLAGS
 echo "  ✓ Better Auth 官方 Skills 完成"
 echo ""
 
 # Cloudflare Skills
 echo "📦 Cloudflare Skills..."
-npx skills add cloudflare/skills@wrangler $COPY_FLAGS
-npx skills add cloudflare/skills@workers-best-practices $COPY_FLAGS
+skill_add_pinned "https://github.com/cloudflare/skills/tree/$REF_CLOUDFLARE_SKILLS/skills/wrangler" $COPY_FLAGS
+skill_add_pinned "https://github.com/cloudflare/skills/tree/$REF_CLOUDFLARE_SKILLS/skills/workers-best-practices" $COPY_FLAGS
 echo "  ✓ Cloudflare Skills 完成"
 echo ""
 
 # TDD
 echo "📦 TDD Skill..."
-npx skills add obra/superpowers@test-driven-development $COPY_FLAGS
+skill_add_pinned "https://github.com/obra/superpowers/tree/$REF_OBRA_SUPERPOWERS/skills/test-driven-development" $COPY_FLAGS
 echo "  ✓ TDD Skill 完成"
 echo ""
 
 # Playwright
 echo "📦 Playwright 最佳實踐 Skill..."
-npx skills add currents-dev/playwright-best-practices-skill $COPY_FLAGS
+skill_add_pinned "https://github.com/currents-dev/playwright-best-practices-skill/tree/$REF_CURRENTS_DEV_PLAYWRIGHT_BEST_PRACTICES_SKILL/playwright-best-practices" $COPY_FLAGS
 echo "  ✓ Playwright 最佳實踐 Skill 完成"
 echo ""
 
 # Zod
 echo "📦 Zod Skill..."
-npx skills add pproenca/dot-skills@zod $COPY_FLAGS
+skill_add_pinned "https://github.com/pproenca/dot-skills/tree/$REF_PPROENCA_DOT_SKILLS/skills/.curated/zod" $COPY_FLAGS
 echo "  ✓ Zod Skill 完成"
 echo ""
 
 # Evlog（Observability）
 echo "📦 Evlog Skills..."
-npx skills add https://www.evlog.dev $COPY_FLAGS
+for skill in analyze-logs build-audit-logs review-logging-patterns; do
+  skill_add_pinned "https://github.com/evloghq/evlog/tree/$REF_EVLOGHQ_EVLOG/apps/docs/skills/$skill" $COPY_FLAGS
+done
 echo "  ✓ Evlog Skills 完成"
 echo ""
 
-# Impeccable Design Skill（pbakaus/impeccable v4.1.1 — 單一 skill 含 23 sub-command）
-# v4 延續單一 skill 形態，sub-command 由 SKILL.md 統一定義
+# Impeccable Design Skill（pbakaus/impeccable v4.1.1 — 單一 skill，sub-command 由 SKILL.md 統一定義）
 # 本地 starter skills（不從 upstream 覆寫）：design / design-retro / review-archive / subagent-dev
 echo "📦 Impeccable Design Skill..."
-npx skills add pbakaus/impeccable $COPY_FLAGS
+skill_add_pinned "https://github.com/pbakaus/impeccable/tree/$REF_PBAKAUS_IMPECCABLE/.agents/skills/impeccable" $COPY_FLAGS
 echo "  ✓ Impeccable Design Skill 完成"
 echo ""
 
@@ -127,5 +174,5 @@ echo ""
 
 echo "💡 提示："
 echo "  - 查看已安裝：pnpm skills:list"
-echo "  - 重新安裝/更新：pnpm skills:install（本腳本）"
+echo "  - 重新安裝（照本腳本釘的 ref）：pnpm skills:install"
 echo "  - 重啟 Claude Code CLI 以載入變更"

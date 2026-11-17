@@ -78,7 +78,7 @@
 
 ## HANDOFF 寫回契約（park / next 共用）
 
-依 `follow-up-register.md` § 主動消化，同步驗證並關閉本次完成的工作，回讀 flow 關卡後移出主清單：有 `specs/truth/work-lifecycle.md` → 在承載它的 plan 標 Open work／`flow plan apply-delta`，**NEVER** 改 `docs/tech-debt.md` 的 Status；未遷移 consumer 才關 TD。HANDOFF 移除完成流水帳，已有 plan／TD 的未完項只保留指針。等待訊號、部分完成及未驗收工作保留具體接手入口。
+依 `follow-up-register.md` § 主動消化，同步驗證並關閉本次完成的工作，回讀 flow 關卡後移出主清單：有 `specs/truth/work-lifecycle.md` → 在承載它的 `work.md` 標 Open work、truth 變動在 `truth-delta.md` 加列（`/truth-delta`；舊 `plan.md` package 才 `flow plan apply-delta`），**NEVER** 改 `docs/tech-debt.md` 的 Status；未遷移 consumer 才關 TD。HANDOFF 移除完成流水帳，已有 plan／TD 的未完項只保留指針。等待訊號、部分完成及未驗收工作保留具體接手入口。
 
 **每一次**往 `HANDOFF.md` 寫待辦之前先過下列各條。
 
@@ -98,7 +98,7 @@ heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消�
 
 ### 3. 已有 plan／TD 編號的內容只留一行 pointer
 
-有 `specs/truth/work-lifecycle.md`：`- [ ] <work-id> — <一句話> → specs/plans/<work-id>/plan.md`（舊 TD id 經 `specs/truth/legacy-ids.json` 解析到現行承載者再指過去）。未遷移 consumer：`- [ ] TD-NNN — <一句話> → docs/tech-debt.md`。
+有 `specs/truth/work-lifecycle.md`：`- [ ] <work-id> — <一句話> → specs/plans/<work-id>/work.md`（舊 TD id 經 `specs/truth/legacy-ids.json` 解析到現行承載者再指過去）。未遷移 consumer：`- [ ] TD-NNN — <一句話> → docs/tech-debt.md`。
 
 正文（重現步驟、已排除方案、驗收 predicate）只留在 plan／TD entry。
 
@@ -123,7 +123,7 @@ heading 標了結案（`✅` / `~~刪除線~~` / 已完成 / 已解除 / 已消�
 
 ### 5. 驗收失敗項 MUST 寫成 `acceptance-gap` 待辦，NEVER 寫成單點修補
 
-交接要列驗收階段發現的 bug（客戶／HR 驗收、發版後 smoke、staging 實走、主管抽驗）時（宣告 aixbdd 的 consumer 與 clade home），所在功能範圍沒有 truth 覆蓋的，待辦寫「經 work-route 開 `acceptance-gap`」並附它的 work id 指針，**NEVER** 寫成「修 X 那一處」交給接手者直接修；照 work-route skill 的 `rules/工作種類與必要產物.md` Rule 6 在 plan.md `## Scope inventory` 建盤點表；已有 truth 覆蓋的照 work-route 開 `bug-covered`。
+交接要列驗收階段發現的 bug（客戶／HR 驗收、發版後 smoke、staging 實走、主管抽驗）時（宣告 aixbdd 的 consumer 與 clade home），所在功能範圍沒有 truth 覆蓋的，待辦寫「經 work-route 開 `acceptance-gap`」並附它的 work id 指針，**NEVER** 寫成「修 X 那一處」交給接手者直接修；照 work-route skill 的 `rules/工作種類與必要產物.md` Rule 6 在 `work.md`（舊 package：`plan.md`）`## Scope inventory` 建盤點表；已有 truth 覆蓋的照 work-route 開 `bug-covered`。
 
 ### 一段能留在 HANDOFF 的充要條件
 

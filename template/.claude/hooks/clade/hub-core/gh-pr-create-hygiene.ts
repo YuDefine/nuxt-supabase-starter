@@ -9,7 +9,7 @@
  *   | 去重 | 同 repo 另一條 branch 已有 open PR，body 的 `Work:` 是同一個 work id（work id ↔ plan 目錄一對一）。integration 模式不算：base 或 head 是 `integration/<work-id>` 的 PR（slice PR 與 integration→main 那張共用同一個 `Work:`）不參與去重 | 改推那張 PR 的分支；主持者刻意平行拆的 → body 加 `Parallel-to: #<N>` |
  *   | 記帳類 | clade home 的 diff 每一個路徑都在登記簿 allowlist（`vendor/scripts/lib/register-paths.ts` `isRegisterPath`；`rules/core/github-flow.md` § 紀錄型改動不開 PR）。先於去重判；`--base` 不是 main（stacked PR）不判（register-land 只落 main）；**不看 body**（`--body-file -`、動態 body 也判）、跟著指令裡的 `cd <dir>` 量那棵 worktree、`--head`／`--base` 動態時量 HEAD 相對預設分支 | 不開 PR：本 worktree commit 後跑 `node scripts/register-land.ts`；混了 allowlist 外的檔就照常開 PR |
  *   | 記帳類（同串 commit） | 同一個指令串裡 `gh pr create` 之前有 `git commit`／`cherry-pick`／`merge`／`am`／`revert`（PreToolUse 在整串執行前觸發，量到的 HEAD 還沒有那些 commit），且現在量到的 diff 為空（全 allowlist 照原本的記帳類擋；clade home、非 stacked） | 拆成兩個 Bash 呼叫：先 commit，下一個呼叫再開 PR（那時量得到：全 allowlist → register-land，混了外面的檔 → 放行）；現有 diff 已有 allowlist 外的檔時不受影響 |
- *   | 大小 | 扣掉投影檔後 >1000 行（增＋刪）或 >50 檔；量的是 `--head` 相對 `--base`（省略時 HEAD 相對預設分支） | 拆成多張；或 body 宣告 `Mechanical: <產生方式>`（0-A 可走 `--independent` 範圍分級） |
+ *   | 大小 | 扣掉投影檔後 >1000 行（增＋刪）或 >50 檔；量的是 `--head` 相對 `--base`（省略時 HEAD 相對預設分支） | 拆成多張；或 body 宣告 `Mechanical: <產生方式> <路徑或 glob>`——只扣掉符合的檔，其餘照上限檢查（`Mechanical:` 沒寫路徑／glob 的舊寫法：`MECHANICAL_PATHS_ENFORCE_FROM` 前只警告照放行，之後不再豁免；0-A 可走 `--independent` 範圍分級） |
  *
  * 只擋開 PR，**NEVER** 擋派工或限制 open PR 總數（入口不設上限）。
  * 判不出一律放行（fail-open）：不在 git repo、`gh` 失敗或逾時、diff 讀不到、工作目錄判不出（動態 `cd`）、`--repo` 指向別的 repo 或值是動態展開（本機 checkout 量不到）；body 判不出或 `--base`／`--head` 值是動態展開時，只放行去重與大小，記帳類照判。
@@ -29,12 +29,18 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, matchesGlob, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const PR_SIZE_LIMITS = { lines: 1000, files: 50 } as const
 
-export const MECHANICAL_LINE_RE = /^[ \t]*Mechanical[ \t]*[:：][ \t]*\S/mu
+const MECHANICAL_VALUE_RE = /^[ \t]*Mechanical[ \t]*[:：][ \t]*(\S.*)$/mu
+
+/**
+ * `Mechanical:` 一定要寫路徑或 glob 才有豁免的起算時刻（UTC；#3674 事件後給 3 天只警告的過渡期）：
+ * 之前，沒寫路徑的舊寫法照舊整張放行但印警告；之後它等於沒宣告。寫了路徑的新寫法沒有過渡期，馬上只扣符合的檔。
+ */
+export const MECHANICAL_PATHS_ENFORCE_FROM = Date.parse('2026-11-13T00:00:00Z')
 export const PARALLEL_LINE_RE = /^[ \t]*Parallel-to[ \t]*[:：][ \t]*#?\d+/mu
 
 /** hook 上限 10s、超時視為非阻擋（fail-open）。git／gh 單次上限；整體另受 HYGIENE_BUDGET_MS 約束。 */
@@ -71,6 +77,8 @@ export interface PrCreateTarget {
 
 export interface NumstatEntry {
   path: string
+  /** rename／copy 的舊路徑（只有 rename／copy 才有）。 */
+  oldPath?: string
   /** 二進位檔為 null。 */
   added: number | null
   deleted: number | null
@@ -90,6 +98,10 @@ export interface HygieneDeps {
   registerPath?: (top: string) => ((path: string) => boolean) | null
   /** checkout 的 origin（`git remote get-url origin`）；null＝沒有或讀不到。 */
   originUrl?: (top: string) => string | null
+  /** 現在時刻（epoch ms）：判 `Mechanical:` 舊寫法的過渡期。 */
+  now?: () => number
+  /** 放行但要讓作者看到的警告（預設寫 stderr）。 */
+  warn?: (message: string) => void
 }
 
 const WORK_OF_BODY_RE = /^[ \t]*Work(?:[ \t]*id)?[ \t]*[:：][ \t]*(\S+)/mu
@@ -134,7 +146,52 @@ export interface SizeVerdict {
   files: number
   /** 扣掉的投影檔數。 */
   projections: number
+  /** 扣掉的 `Mechanical:` 宣告檔數（不與投影檔重複計）。 */
+  mechanical?: number
   over: boolean
+}
+
+/**
+ * body `Mechanical:` 行宣告的豁免範圍（純函式）。
+ * - `none`：沒有 `Mechanical:` 行。
+ * - `paths`：行內有路徑或 glob（含 `/`、`*`、`?`，或形如 `name.ext` 的檔名）→ `matches` 只認符合的檔。
+ * - `legacy`：有 `Mechanical:` 行但一個路徑都沒寫（舊寫法）；`enforced`＝過了 `MECHANICAL_PATHS_ENFORCE_FROM`，不再豁免。
+ */
+export type MechanicalDecl =
+  | { kind: 'none' }
+  | { kind: 'paths'; patterns: string[]; matches: (path: string) => boolean }
+  | { kind: 'legacy'; enforced: boolean }
+
+const MECHANICAL_TOKEN_SPLIT_RE = /[\s,;，；、（）()「」『』[\]<>{}"'`]+/u
+const MECHANICAL_FILENAME_RE = /^[\w.-]+\.[A-Za-z0-9]+$/u
+
+export function parseMechanical(body: string, now: number = Date.now()): MechanicalDecl {
+  const m = MECHANICAL_VALUE_RE.exec(body)
+  if (!m) return { kind: 'none' }
+  const patterns = [
+    ...new Set(
+      m[1]!
+        .split(MECHANICAL_TOKEN_SPLIT_RE)
+        .map((t) => t.replace(/^\.\//u, '').replace(/[。:：.]+$/u, ''))
+        .filter(
+          (t) =>
+            t &&
+            !t.startsWith('-') &&
+            !t.includes('://') &&
+            !t.includes('=') &&
+            !t.startsWith('/') &&
+            !t.split('/').includes('..') &&
+            (/[/*?]/u.test(t) || MECHANICAL_FILENAME_RE.test(t)),
+        ),
+    ),
+  ]
+  if (!patterns.length) return { kind: 'legacy', enforced: now >= MECHANICAL_PATHS_ENFORCE_FROM }
+  const matches = (path: string): boolean =>
+    patterns.some((p) => {
+      const dir = p.replace(/\/+$/u, '')
+      return path === p || path.startsWith(`${dir}/`) || matchesGlob(path, p)
+    })
+  return { kind: 'paths', patterns, matches }
 }
 
 /** 扣投影後的行數與檔數（純函式）；二進位檔算檔數不算行數。 */
@@ -142,18 +199,56 @@ export function judgePrSize(
   entries: readonly NumstatEntry[],
   projections: ReadonlySet<string>,
   limits: { lines: number; files: number } = PR_SIZE_LIMITS,
+  /** `Mechanical:` 宣告命中的檔（`parseMechanical` 的 `matches`）；省略＝不豁免。 */
+  mechanical?: (path: string) => boolean,
 ): SizeVerdict {
-  const kept = entries.filter((e) => !projections.has(e.path))
+  const unprojected = entries.filter((e) => !projections.has(e.path))
+  const kept = mechanical ? unprojected.filter((e) => !mechanical(e.path)) : unprojected
   const lines = kept.reduce((n, e) => n + (e.added ?? 0) + (e.deleted ?? 0), 0)
   return {
     lines,
     files: kept.length,
-    projections: entries.length - kept.length,
+    projections: entries.length - unprojected.length,
+    ...(mechanical ? { mechanical: unprojected.length - kept.length } : {}),
     over: lines > limits.lines || kept.length > limits.files,
   }
 }
 
-/** `git diff --numstat -z` 輸出；rename 取新路徑。 */
+/**
+ * 大小判定的第一段（hook 與 merge-queue prSizeGate 共用，純函式）：讀 body 的 `Mechanical:` 宣告，
+ * 原始量（只扣宣告命中的檔）沒超限、或舊寫法還在過渡期 → `needProjections: false`（不必載昂貴的投影計畫）。
+ * 需要投影時，呼叫端以 `judgePrSize(entries, projections, PR_SIZE_LIMITS, exempt)` 取最終判定。
+ * `warning`＝過渡期內舊寫法照放行時要印的警告。
+ */
+export function sizeStage(
+  entries: readonly NumstatEntry[],
+  body: string,
+  now: number,
+): {
+  decl: MechanicalDecl
+  exempt?: (path: string) => boolean
+  needProjections: boolean
+  warning?: string
+} {
+  const decl = parseMechanical(body, now)
+  if (decl.kind === 'legacy' && !decl.enforced)
+    return { decl, needProjections: false, warning: legacyMechanicalWarning() }
+  const exempt = decl.kind === 'paths' ? decl.matches : undefined
+  return {
+    decl,
+    ...(exempt ? { exempt } : {}),
+    needProjections: judgePrSize(entries, new Set(), PR_SIZE_LIMITS, exempt).over,
+  }
+}
+
+export function legacyMechanicalWarning(): string {
+  return (
+    `⚠ \`Mechanical:\` 行沒寫路徑或 glob：${new Date(MECHANICAL_PATHS_ENFORCE_FROM).toISOString().slice(0, 10)} 起它不再豁免大小上限，` +
+    `現在改成 \`Mechanical: <產生方式> <路徑或 glob>\`（只扣掉符合的檔，其餘照 ${PR_SIZE_LIMITS.lines} 行／${PR_SIZE_LIMITS.files} 檔檢查）。`
+  )
+}
+
+/** `git diff --numstat -z` 輸出；rename 取新路徑，舊路徑留在 `oldPath`。 */
 export function parseNumstatZ(out: string): NumstatEntry[] {
   const parts = out.split('\0')
   const res: NumstatEntry[] = []
@@ -161,14 +256,17 @@ export function parseNumstatZ(out: string): NumstatEntry[] {
     const m = /^(-|\d+)\t(-|\d+)\t(.*)$/su.exec(parts[i]!)
     if (!m) continue
     let path = m[3]!
+    let oldPath: string | undefined
     // rename／copy：路徑欄為空，接著兩段是舊、新路徑
     if (!path) {
+      oldPath = parts[i + 1] || undefined
       i += 2
       path = parts[i] ?? ''
     }
     if (!path) continue
     res.push({
       path,
+      ...(oldPath ? { oldPath } : {}),
       added: m[1] === '-' ? null : Number(m[1]),
       deleted: m[2] === '-' ? null : Number(m[2]),
     })
@@ -186,10 +284,20 @@ export function duplicateMessage(workId: string, dups: readonly OpenPr[]): strin
   )
 }
 
-export function sizeMessage(v: SizeVerdict, limits = PR_SIZE_LIMITS): string {
+export function sizeMessage(
+  v: SizeVerdict,
+  limits = PR_SIZE_LIMITS,
+  decl: MechanicalDecl = { kind: 'none' },
+): string {
+  const exempted =
+    decl.kind === 'paths'
+      ? `；body 的 \`Mechanical:\` 路徑只扣掉符合的 ${v.mechanical ?? 0} 檔，其餘照上限算`
+      : decl.kind === 'legacy'
+        ? '；body 的 `Mechanical:` 沒寫路徑或 glob，不豁免任何檔'
+        : ''
   return (
-    `⛔ gh pr create：扣掉 ${v.projections} 個投影檔後仍有 ${v.lines} 行、${v.files} 檔（上限 ${limits.lines} 行或 ${limits.files} 檔）。` +
-    `拆成多張 PR；或改動是機械產生的 → body 加一行 \`Mechanical: <產生方式（指令或 codemod）>\` 後重跑（0-A 可走 --independent 範圍分級）。`
+    `⛔ gh pr create：扣掉 ${v.projections} 個投影檔後仍有 ${v.lines} 行、${v.files} 檔（上限 ${limits.lines} 行或 ${limits.files} 檔）${exempted}。` +
+    `拆成多張 PR；或這些檔是機械產生的 → body 加一行 \`Mechanical: <產生方式（指令或 codemod）> <路徑或 glob>\`（路徑寫出哪些檔是產生的，只扣掉符合的檔）後重跑（0-A 可走 --independent 範圍分級）。`
   )
 }
 
@@ -237,7 +345,10 @@ export function ghPrCreateHygiene(
   const isRegister = measurable && !stacked ? d.registerPath(top) : null
   if (isRegister) {
     const got = diff()
-    if (got?.length && got.every((e) => isRegister(e.path))) return registerOnlyMessage(got.length)
+    // rename 新、舊路徑都要在 allowlist：從登記簿外移出的檔不是 register-land 能落的（對齊它的 --no-renames）
+    const registerOnly = (e: NumstatEntry) =>
+      isRegister(e.path) && (e.oldPath === undefined || isRegister(e.oldPath))
+    if (got?.length && got.every(registerOnly)) return registerOnlyMessage(got.length)
     // 同串 commit 在後：現在量到空（全 allowlist 的上一行已擋），commit 之後才是真正的內容 → 要求拆開，下一次 PreToolUse 才量得到
     if (target.commitsBefore && got?.length === 0) return commitChainMessage()
   }
@@ -253,16 +364,17 @@ export function ghPrCreateHygiene(
     const dups = prs ? duplicatePrs(prs, workId, head ?? d.branch(top)) : []
     if (dups.length) return duplicateMessage(workId, dups)
   }
-  if (MECHANICAL_LINE_RE.test(body)) return null
   if (!measurable) return null
   const got = diff()
   if (!got) return null
+  const stage = sizeStage(got, body, d.now())
+  if (stage.warning) d.warn(stage.warning)
   // 投影計畫昂貴：連未扣投影的數字都沒超限就不必算
-  if (!judgePrSize(got, new Set()).over) return null
+  if (!stage.needProjections) return null
   const projections = d.projections(top)
   if (!projections) return null
-  const v = judgePrSize(got, projections)
-  return v.over ? sizeMessage(v) : null
+  const v = judgePrSize(got, projections, PR_SIZE_LIMITS, stage.exempt)
+  return v.over ? sizeMessage(v, PR_SIZE_LIMITS, stage.decl) : null
 }
 
 /** 本次判定的截止時刻（epoch ms）；`ghPrCreateHygiene` 進場時設。 */
@@ -330,6 +442,10 @@ export const defaultHygieneDeps: Required<HygieneDeps> = {
   projections: (top) => cladeHomeProjectionPaths(top),
   registerPath: (top) => cladeHomeRegisterMatcher(top),
   originUrl: (top) => run('git', ['remote', 'get-url', 'origin'], top)?.trim() || null,
+  now: () => Date.now(),
+  warn: (message) => {
+    process.stderr.write(`${message}\n`)
+  },
 }
 
 /** 本檔所在的 repo 根（`<root>/capabilities/core/hooks/`）：只有它的投影計畫可信。 */

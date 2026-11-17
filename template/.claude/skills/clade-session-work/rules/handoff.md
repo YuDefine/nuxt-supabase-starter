@@ -16,7 +16,7 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 
 本節優先於下方的建議格式、生命週期、歷史段路由與銜接段，也優先於 [[my]] 的 `rules/待拍板條目寫法.md` 要求寫進 `HANDOFF.md` 的 `- [ ]` 條目；下方沒被本節改到的（claim、接手順序、transport）照舊。
 
-- `HANDOFF.md` 是現役工作的 view，不是待辦簿。**每一個**頂層項（檔內任何 `##` 段底下、欄 0 的 `-`／`*`／`1.` bullet）**MUST** 指向本 repo 一份現役 plan（`W-YYYY-MM-DD-<slug>`，`specs/plans/<該 id>/plan.md` 未 close），**NEVER** 寫未勾的 `- [ ]`（FR-028）。**沒有段落豁免**：`## Ready for review`、`## Awaiting Charles`、baseline snapshot block 底下的 bullet 一樣算
+- `HANDOFF.md` 是現役工作的 view，不是待辦簿。**每一個**頂層項（檔內任何 `##` 段底下、欄 0 的 `-`／`*`／`1.` bullet）**MUST** 指向本 repo 一份現役 plan（`W-YYYY-MM-DD-<slug>`，`specs/plans/<該 id>/work.md` 未 close；舊 package 是 `plan.md`），**NEVER** 寫未勾的 `- [ ]`（FR-028）。**沒有段落豁免**：`## Ready for review`、`## Awaiting Charles`、baseline snapshot block 底下的 bullet 一樣算
 - `Ready for review` 條目與拍板題 **NEVER** 寫成 `HANDOFF.md` 的 `- [ ]`：用 `flow ask --category review --human-only <理由>`（agent 自己驗得了的不鑄題；三欄照 [[my]] 的 `rules/待拍板條目寫法.md` Rule 6 寫進題目）或 `flow ask --category ruling` 直接進待拍板佇列，所屬 plan 的 Open work 段記一行
 - baseline snapshot block（`## Worktree & Stash Audit` 之類）**不**留在 `HANDOFF.md`：snapshot 寫進所屬 plan 的 `evidence/`，或不存、要時實跑產生；`HANDOFF.md` 只留指向該 plan 的 W- 指標行
 - 進行中、被擋、下一步的細節寫進該 plan 的 § Open work，`HANDOFF.md` 只留一行指標：`- W-2026-10-01-checkout-retry — 等金流商回覆，見 plan Open work`
@@ -86,7 +86,7 @@ paths: ['HANDOFF.md', 'tasks/**', 'specs/plans/**']
 | --- | --- | --- |
 | `HANDOFF.md` | 從 flow + active plan 生成的入口 view | 短期、可重建 |
 | `tasks/<date>-<slug>.md` | 當次可完成的 ad-hoc 清單 | 短期，結案即刪 |
-| `specs/plans/<work-id>/plan.md` | 需要接續的工作 | 結案刪除；歷史在 git |
+| `specs/plans/<work-id>/work.md` | 需要接續的工作 | 結案刪除；歷史在 git |
 | `.clade/claims/**` | 即時 ownership / heartbeat | 短期、機器維護 |
 | `docs/archives/<YYYY-MM>-handoff-narrative.md` | 僅未遷移 consumer：從 HANDOFF rotate 過來的已完成 narrative | 長期、month-bucket append-only |
 | `docs/archives/<YYYY-MM>-<topic>.md` | 僅未遷移 consumer：一次性 wave / 主題盤點成果（既有用途） | 長期 |

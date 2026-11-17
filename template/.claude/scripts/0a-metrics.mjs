@@ -228,7 +228,7 @@ function modeConfig(args) {
   for (const key of RETIRED_ARGS) {
     if (args[key] !== undefined) {
       die(
-        `--${key} 已隨跨模型裁決退役——0-A.2 是合格 reviewer（Claude Opus 5.5（effort: medium））的 fresh-context 深度複審，沒有裁決者欄位`,
+        `--${key} 已隨跨模型裁決退役——0-A.2 是合格 reviewer（Claude Opus 5.5（effort: xhigh））的 fresh-context 深度複審，沒有裁決者欄位`,
       )
     }
   }

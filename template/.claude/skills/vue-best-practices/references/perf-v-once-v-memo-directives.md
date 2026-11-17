@@ -1,37 +1,37 @@
 ---
 title: Use v-once and v-memo to Skip Unnecessary Updates
 impact: MEDIUM
-impactDescription: v-once skips all future updates for static content; v-memo conditionally memoizes subtrees
+impactDescription: v-once skips all future updates for runtime-bound content that never changes; v-memo conditionally memoizes subtrees
 type: efficiency
 tags: [vue3, performance, v-once, v-memo, optimization, directives]
 ---
 
 # Use v-once and v-memo to Skip Unnecessary Updates
 
-**Impact: MEDIUM** - Vue re-evaluates templates on every reactive change. For content that never changes or changes infrequently, `v-once` and `v-memo` tell Vue to skip updates, reducing render work.
+**Impact: MEDIUM** - When a component re-renders, its render function re-creates VNodes for the dynamic parts of its template. For content that never changes or changes infrequently, `v-once` and `v-memo` let Vue reuse the previous VNodes, skipping VNode creation and diffing for that subtree.
 
-Use `v-once` for truly static content and `v-memo` for conditionally-static content in lists.
+Use `v-once` for content that uses runtime data but never needs updating, and `v-memo` only when profiling identifies costly list rendering. Incomplete memo dependencies can render stale data.
 
 ## Task List
 
 - Apply `v-once` to elements that use runtime data but never need updating
-- Apply `v-memo` to list items that should only update on specific condition changes
-- Verify memoized content doesn't need to respond to other state changes
-- Profile with Vue DevTools to confirm update skipping
+- Apply `v-memo` only when profiling identifies costly list rendering
+- Include dependencies whose values change whenever the memoized VNode output must change. Object entries are compared by identity: include `item` for replacements, and `item.name` when in-place edits must update text or props rendered by this subtree
+- Verify correct updates and use Vue DevTools to confirm a measurable gain before retaining the optimization
 
 ## v-once: Render Once, Never Update
 
 **BAD:**
 ```vue
 <template>
-  <!-- BAD: Re-evaluated on every parent re-render -->
+  <!-- BAD: VNodes are re-created on every re-render of this component -->
   <div class="terms-content">
     <h1>Terms of Service</h1>
     <p>Version: {{ termsVersion }}</p>
     <div v-html="termsContent"></div>
   </div>
 
-  <!-- This content NEVER changes, but Vue checks it every render -->
+  <!-- This content NEVER changes, but its VNodes are re-created every render -->
   <footer>
     <p>Copyright {{ copyrightYear }} {{ companyName }}</p>
   </footer>
@@ -65,10 +65,11 @@ const companyName = 'Acme Corp'
 
 ## v-memo: Conditional Memoization for Lists
 
+When list rendering is a measured bottleneck, memoization can skip row VNode creation and diffing. Without it, selection changes re-create every row's VNodes even though `ExpensiveComponent` skips parent-triggered updates with unchanged props.
+
 **BAD:**
 ```vue
 <template>
-  <!-- BAD: All items re-render when selectedId changes -->
   <div v-for="item in list" :key="item.id">
     <div :class="{ selected: item.id === selectedId }">
       <ExpensiveComponent :data="item" />
@@ -77,6 +78,12 @@ const companyName = 'Acme Corp'
 </template>
 ```
 
+With the dependencies below, selection changes re-create VNodes only for rows whose selection state changes; other rows reuse cached VNodes.
+
+Preserve references for unchanged items to improve cache reuse. Recreating every item when a computed list recomputes invalidates every row's memo.
+
+In-place mutations do not invalidate the `item` dependency, but `ExpensiveComponent` still updates if its render reads the mutated reactive field. For this example, selection-only dependencies are sufficient when items are never replaced.
+
 **GOOD:**
 ```vue
 <script setup>
@@ -84,19 +91,14 @@ import { ref } from 'vue'
 
 const list = ref([/* many items */])
 const selectedId = ref(null)
-
-// When selectedId changes:
-// - Only the previously-selected item re-renders (selected: true -> false)
-// - Only the newly-selected item re-renders (selected: false -> true)
-// - All other items are SKIPPED (v-memo values unchanged)
 </script>
 
 <template>
-  <!-- GOOD: Items only re-render when their selection state changes -->
+  <!-- Include item so replacements refresh the child prop even when selection is unchanged. -->
   <div
     v-for="item in list"
     :key="item.id"
-    v-memo="[item.id === selectedId]"
+    v-memo="[item, item.id === selectedId]"
   >
     <div :class="{ selected: item.id === selectedId }">
       <ExpensiveComponent :data="item" />
@@ -115,11 +117,11 @@ const items = ref([/* ... */])
 </script>
 
 <template>
-  <!-- Re-render only when item's selection OR editing state changes -->
+  <!-- Rows update only when the item, its selection, or its editing state changes -->
   <div
     v-for="item in items"
     :key="item.id"
-    v-memo="[item.id === selectedId, item.id === editingId]"
+    v-memo="[item, item.id === selectedId, item.id === editingId]"
   >
     <ItemCard
       :item="item"
@@ -150,13 +152,13 @@ const items = ref([/* ... */])
     <span>Count: {{ count }}</span>  <!-- count won't update! -->
   </div>
 
-  <!-- DON'T: When child components have their own reactive state -->
+  <!-- DON'T: Omit values the subtree passes to child components -->
   <div v-memo="[selected]">
-    <InputField v-model="item.name" />  <!-- v-model won't work properly -->
+    <InputField v-model="item.name" />  <!-- modelValue stays stale until selected changes -->
   </div>
 
   <!-- DON'T: When the memoization benefit is minimal -->
-  <span v-once>{{ simpleText }}</span>  <!-- Overhead not worth it -->
+  <span v-once>{{ simpleText }}</span>  <!-- Negligible gain -->
 </template>
 ```
 
@@ -164,9 +166,9 @@ const items = ref([/* ... */])
 
 | Scenario | Without Directive | With v-once/v-memo |
 |----------|-------------------|-------------------|
-| Static header, parent re-renders 100x | Re-evaluated 100x | Evaluated 1x |
-| 1000 items, selection changes | 1000 items re-render | 2 items re-render |
-| Complex child component | Full re-render | Skipped if memoized |
+| Runtime-bound content that never changes, component re-renders 100x | VNodes re-created 100x | VNodes created once |
+| 1000 items, selection changes | 1000 rows' VNodes re-created and diffed | At most 2 rows re-created; remaining rows reused, assuming unchanged items |
+| Parent re-render with stable child props and slots | Not re-rendered | Not re-rendered |
 
 ## Debugging Memoized Components
 
@@ -174,7 +176,10 @@ const items = ref([/* ... */])
 <script setup>
 import { onUpdated } from 'vue'
 
-// This won't fire if v-memo prevents update
+// Add this to the child inside the memoized subtree (e.g. ItemCard), not to the
+// component that owns v-memo: the owner's onUpdated fires on every owner re-render,
+// even when every memo hits. If the child shows stale data and this doesn't fire,
+// a dependency may be missing from the v-memo dependency array.
 onUpdated(() => {
   console.log('Component updated')
 })

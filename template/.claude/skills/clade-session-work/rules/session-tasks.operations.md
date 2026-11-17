@@ -20,11 +20,11 @@ paths: ['tasks/**', 'HANDOFF.md']
 | --- | --- | --- |
 | 明示唯讀／禁止寫檔，或只要對話中的盤點／計畫 | 對話中的進度與交付 | 寫 task 檔或 spine 不在任務範圍 |
 | 只允許指定計畫／報告文件 | 該指定文件 | 單一產物承載進度，不另外擴充寫入範圍 |
-| 大型結構化變更（涉及 spec、跨多檔、跨層、需要 design review）或跨 session 接續 | `specs/plans/<work-id>/plan.md` | clade home 走 `flow plan open`；產品 SDD consumer 在遷移前才走 [[aixbdd-workflow]] 九步 |
+| 大型結構化變更（涉及 spec、跨多檔、跨層、需要 design review）或跨 session 接續 | `specs/plans/<work-id>/work.md` | clade home 走 `flow plan open`；產品 SDD consumer 在遷移前才走 [[aixbdd-workflow]] 九步 |
 | **已授權本機修改的 ad-hoc 小工作**（單一 debug、配置調整、單檔 fix） | **`tasks/<id>.md`** | 比 plan package 輕一個量級 |
 | 跨 session WIP 交接 | `HANDOFF.md` | session 結束時的「信件」；lifecycle repo 只留指向現役 plan 的 W- 指標行（[[handoff]] § Lifecycle repo） |
 | 中長期未來工作（不在當前工作 scope） | lifecycle repo：所屬 plan 的 § Open work，沒有 plan 就 `flow plan open`；未遷移 consumer：repo 根目錄 `ROADMAP.md` `## Next Moves` | 排優先序的未來 backlog |
-| 範圍外技術債 / 未解決項長期追蹤 | `specs/plans/<work-id>/plan.md`（`flow plan open`） | 結案刪除；未遷移 consumer 才仍用 `docs/tech-debt.md` |
+| 範圍外技術債 / 未解決項長期追蹤 | `specs/plans/<work-id>/work.md`（`flow plan open`） | 結案刪除；未遷移 consumer 才仍用 `docs/tech-debt.md` |
 | 不需要追蹤的單一 prompt | 都不需要 | 直接做完即可 |
 
 **判斷準則**：先按當次授權套用 [[session-tasks]] 的載體表；已允許本機修改而不確定追蹤形式時，先用 `tasks/<id>.md`。發現規模膨脹（要動 spec、要 design review、要跨多檔）時，依專案既有 workflow 升級追蹤；追蹤形式不擴大實作或發布授權。
@@ -211,7 +211,7 @@ slug 的重述，那正是這條規約要修的東西（一個不指涉任何東
 | --- | --- | --- | --- |
 | `.clade/claims/*.json` | 即時 ownership | `claim-helper.ts` | per-session 一檔 |
 | **`tasks/<id>.md`** | **本 session 工作記憶** | **當前 session 自己** | **per-session 一檔** |
-| `specs/plans/<work-id>/plan.md` | 跨 session 接續（lifecycle repo） | 該 work 的 owner；Open work 由推進它的 session 增刪 | per-work 一檔 |
+| `specs/plans/<work-id>/work.md` | 跨 session 接續（lifecycle repo；舊 package 相容期仍是 `plan.md`） | 該 work 的 owner；Open work 由推進它的 session 增刪 | per-work 一檔 |
 | `HANDOFF.md` | 跨 session 交接 | lifecycle repo：只寫指向現役 plan 的 W- 指標行；未遷移 consumer：session 結束時自己寫、下一 session 接手後刪對應項 | 串行（接手者讀+刪） |
 | `specs/plans/NNN-<slug>/tasks.md` | plan package 任務追蹤 | 該 plan 的 owner | per-plan 一檔 |
 | `ROADMAP.md`（repo 根目錄） | 中長期 backlog | 使用者與收工的 session | 單檔但低頻寫 |
@@ -239,7 +239,7 @@ slug 的重述，那正是這條規約要修的東西（一個不指涉任何東
 
 ## 與 `tasks/lessons.md` 的關係
 
-**clade home 不寫 `tasks/lessons.md`**（2026-10-03 起退役：條目沒有 owner、證據、適用範圍，又與 rule／truth 重複成第二權威）。被糾正後要留下的東西在 clade home 照下表走 `/oops`、`/skill-engineering`、全域 `~/.claude/CLAUDE.md` 這三種出口，存量由退役處置清掉。
+**clade home 不寫 `tasks/lessons.md`**（2026-10-03 起退役：條目沒有 owner、證據、適用範圍，又與 rule／truth 重複成第二權威）。被糾正後要留下的東西在 clade home 照下表走 `/oops`、`/skill-engineering`、where-to-put 決策表（hook、settings 等載體；全域 `~/.claude/CLAUDE.md` 已淨空、NEVER 寫）這三種出口，存量由退役處置清掉。
 
 **consumer 的 `tasks/lessons.md` 是自家 opt-in 短期 working memory，NOT MUST**。跨 session 但只對當前 consumer 有意義的 lesson **MAY** 用此檔短期記錄；沒這個檔也合法（多數 consumer 不需要）。
 
@@ -247,13 +247,13 @@ slug 的重述，那正是這條規約要修的東西（一個不指涉任何東
 
 ### 跟其他 SoT 的邊界
 
-寫到 lessons.md 前，先問「換到另一 project 還適用嗎？」決定該寫哪（clade home 只走 `/oops`、`/skill-engineering`、全域 `~/.claude/CLAUDE.md` 這三種出口）：
+寫到 lessons.md 前，先問「換到另一 project 還適用嗎？」決定該寫哪（clade home 只走 `/oops`、`/skill-engineering`、where-to-put 決策表這三種出口）：
 
 | 條目性質 | 寫到哪 | 觸發 |
 | --- | --- | --- |
 | **跨 consumer** 的技術踩坑與流程修正（根因分析） | 走 `/oops`，落點由它判（clade truth 或吸收進對應的 rule／cookbook）。clade `docs/pitfalls/` 已停寫（clade `specs/truth/work-lifecycle.md` § Old carriers），舊 `pitfall-*` id 經 clade `specs/truth/legacy-ids.json` 解析 | root cause + detection + fix + prevention 四項齊備 |
 | **可重複的工作方法** | `/skill-engineering` 做成或改進 skill | 同一套做法下次還會用到 |
-| **跨 project** 個人偏好或行為更正 | 先試 `/skill-engineering`；skill 承接不了才寫全域 `~/.claude/CLAUDE.md`（Charles 確認後） | user 糾正且該 lesson 在任何 project 都適用 |
+| **跨 project** 個人偏好或行為更正 | 先試 `/skill-engineering`；skill 承接不了照 where-to-put 決策表改放 hook、settings 或 output style（全域 `~/.claude/CLAUDE.md` 已淨空、NEVER 寫） | user 糾正且該 lesson 在任何 project 都適用 |
 | **跨 session 但只對當前 consumer** 的 lesson | `tasks/lessons.md`（本檔） | 只對當前 repo 有效；不夠成熟走 `/oops`；換 project 不適用。clade home 不適用本列 |
 | **consumer 自家業務規約**（演進成穩定規約） | runtime local rules/<topic>.md | 從 lessons.md 升級；override clade core 須加 [[local-rule-override]] 宣告 |
 | **跨 consumer 適用的正向規約**（根因四項不齊備） | clade 標準層，落點走 `/bp` 判 | 同型 lesson 在 ≥2 個 consumer 出現；**或**該 lesson 描述的是 agent 行為模式（scope 誤判 / 交付格式錯 / 工具路由錯 — 不依賴業務邏輯就能描述），即使只在 1 個 consumer 觀察到也算命中 |
@@ -262,7 +262,7 @@ slug 的重述，那正是這條規約要修的東西（一個不指涉任何東
 
 - **熟了走 `/oops`**：四項齊備 → `/oops`（落點是 truth 或對應 rule，不再新建 `docs/pitfalls/` 檔）→ 從 lessons.md 移除
 - **熟了升 rules/local/**：演進成穩定 consumer 規約 → 寫 runtime local rules/<topic>.md → 從 lessons.md 移除
-- **發現跨 project 適用 → `/skill-engineering`**：做成或改進 skill；skill 承接不了才寫全域 `~/.claude/CLAUDE.md` → 從 lessons.md 移除
+- **發現跨 project 適用 → `/skill-engineering`**：做成或改進 skill；skill 承接不了照 where-to-put 決策表判載體（NEVER 寫全域 `~/.claude/CLAUDE.md`）→ 從 lessons.md 移除
 - **發現跨 consumer 適用的正向規約 → 走 `/bp`**：clade 標準層有 7 種落點，由 `/bp` record mode 判、回報、等確認 → rule 落地 + propagate 後才從 lessons.md 移除。**NEVER** 自己直接改 clade 源檔（落點判斷要可被當場推翻）；**NEVER** 因為「還沒到根因四項齊備」就把跨 consumer 的 lesson 留在 lessons.md 不處理 —— `/oops` 不是唯一出口，`/bp` 收的正是四項不齊備的那些
 - **過時**：直接刪行（git history 留證）
 
@@ -445,7 +445,7 @@ receipt 送出後，本 session **NEVER** 再開新工作段、輪詢接手 pane
 
 **Claude 對 Claude 的訊息一律優先走 `SendMessage`**。`herdr agent prompt` 是往對方輸入框打字＋Enter：對方有人在打字時，兩段字會併成同一則訊息（dispatch 9b0bbef7 的 wake 併進 Charles 正在打的字）。`SendMessage` 讓訊息以 `<cross-session-message>` 進對方佇列，不碰輸入框。判準看**發送方**：
 - 你（Claude session）要對另一個 Claude Code session 說話——協商、問進度、回報、告知 dispatch id——**MUST** `ListAgents` 取名稱後 `SendMessage`，Herdr 內外的 session 都一樣。**NEVER** 用手打的 `herdr agent prompt`。
-- 只有這三種情況用 `herdr agent prompt`：對方是非 Claude runtime（Devin、Grok、pi）；`SendMessage` 回 `Not sent` 或對方不在 `ListAgents`；剛開的 pane 的第一則 brief（helper 負責送）。
+- 只有這三種情況用 `herdr agent prompt`：對方是非 Claude runtime（Devin、pi）；`SendMessage` 回 `Not sent` 或對方不在 `ListAgents`；剛開的 pane 的第一則 brief（helper 負責送）。
 - 回覆自己派出、已 `blocked` 的 Claude pane：`herdr-session-handoff.ts --continue <pane> --prompt '<答案>' --via-sendmessage`，receipt `continuation_delegated` 時照 `continue_send_message` 逐字 `SendMessage`（helper 記帳並掛 120 秒 fallback；child 沒有收件匣時 helper 自動退回 herdr）。
 - helper 自己的 lifecycle 送達維持 herdr，由 helper 送：watch 自動呼叫的 `--continue`（腳本沒有 SendMessage 可用）、relay／fanout 的第一則指標。**NEVER** 改成主持者手打 `herdr agent prompt`。主持者要叫醒自己（例如額度重置後）用 session 內 `ScheduleWakeup`／`CronCreate`，不另起外部腳本往自己輸入框打字。
 - 腳本 **NEVER** 直寫對方的 inbox socket 代替 `SendMessage`：bypass 接收端會把沒宣告權限類別的訊息扣住等人核准，Charles 不在現場時等於送不到。腳本要通知 Claude 時，把「該送什麼」交回呼叫它的 Claude 去 `SendMessage`；child 完成時的主持者 wake 就是這樣做的（receipt `wake_send_message`，見 `vendor/snippets/herdr-session-handoff/README.md` § Coordinator wake transport）。
@@ -500,15 +500,14 @@ user 看得到那個 pane，接手 agent 可以用 structured user-input surface
 
 ### Runtime × mode matrix（canonical；helper 現況，TD-827）
 
-**列**是呼叫者所在的 runtime，**欄**是 `herdr-session-handoff.ts` 現行支援的 mode（以 `mainImpl` 的 `parseArgs` options 與互斥檢查為準，新增 mode 時本表同改）。格內第一個詞是 helper 的實際結果；空白的職責欄＝該 mode 在這個 runtime 沒有 parent／child 義務。其他段落（`dispatch-common.md`、`/nx`、`/my`、shorthand hook）只留 scoped summary＋指向本表，**NEVER** 另抄半套 runtime 流程。
+**列**是呼叫者所在的 runtime，**欄**是 `herdr-session-handoff.ts` 現行支援的 mode（以 `mainImpl` 的 `parseArgs` options 與互斥檢查為準，新增 mode 時本表同改）。格內第一個詞是 helper 的實際結果；空白的職責欄＝該 mode 在這個 runtime 沒有 parent／child 義務。其他段落（`handoff` skill 的派工共用規約（`派工前置與身分分流判準.md` 等）、`/nx`、`/my`、shorthand hook）只留 scoped summary＋指向本表，**NEVER** 另抄半套 runtime 流程。
 
 | runtime ＼ mode | 裸 dispatch（create-only） | `--coordinate`／`--coordinate-resume` | `--relay` | `--successor` | `--bounded-leaf` | identity-bound：`--complete`／`--continue`／`--reclaim`／`--adjudicate`／`--recover-orphan`／`--coordinate-claim`／`--parent-pane` |
 | --- | --- | --- | --- | --- | --- | --- |
 | **Herdr main line**（`HERDR_ENV=1`，`CLADE_DISPATCH_ID` 空） | 可，但**沒有 wake**。`dispatched`，record 標 `uncoordinated`；child 拿 `uncoordinatedProtocol`：**NEVER** `--complete`，收工走 durable brief＋`/handoff relay`（TD-748/808）。parent＝caller 仍是收割者：自己巡檢，child idle 且讀過 pane／git 後跑 `--adjudicate <id> --disposition landed\|obsolete\|dropped --reason …`（只限這筆 dispatch 的 owner——parent，或 relay／`--coordinate-claim` 之後的 successor——且 child idle／done；helper 存 scrollback 並關 pane）。`--non-blocking` 不帶 `--coordinate`（Devin 除外）是 `usage_error`。另一條主線（[[agent-routing]] § 派不派）加 `--main-line`（只限裸 dispatch，配其他 mode 是 `usage_error`）：record 標 `main_line`，idle 判 `main-line-idle`、不擋 parent 收工，pane 寫明做完或交棒後 owner 才 `--adjudicate`。要平行派又要被叫醒，用右格 | 可。parent 於同一呼叫等 correlated `--complete` 並 `--reclaim`；加 `--non-blocking`（任何 launcher）則送達即回 `coordination: deferred`，child 的 `--complete` 經一般 completion 路徑叫醒 parent，再 `--coordinate-resume` 收割並關 pane——平行派與 fanout 都走這格，**全部派完**才 relay。child 於收工前 `--complete`。`--coordinate-resume` 也是 relay 後 successor 收割繼承 worker 的入口 | 可。`relay_dispatched`：parent 結束回合，successor 繼承 in-flight dispatch；失敗 `relay_refused`／`relay_incomplete`，保留 pane 與 dispatch，NEVER 繞 raw `herdr` | `successor_refused`（本身有 pane，改 `--relay`） | 可，限 `--coordinate` ＋ readonly gate-review row；缺任一、或帶 `--non-blocking`，都是 `usage_error`。parent 同呼叫收割 | 可。`--complete` 是被派者的義務；其餘是 parent 對自己持有 dispatch 的動作 |
-| **Herdr coordinated child／worker**（`CLADE_DISPATCH_ID` 非空） | `nested_dispatch_refused`（責任樹不擴張）。**STOP**，改 `--relay`；NEVER 取 `--recovery-token` 繞 | 同左（含 `--coordinate`）；唯一缺口是 `--bounded-leaf` | 可（nested 缺口）。欠 outcome 時照 `handoff` skill `dispatch-common.md` § `CLADE_DISPATCH_ID` 分流先回報；relay-request 只在 [[session-tasks]] § 重置前與越過 soft tier 後的出口 允許的三種交棒理由（交棒 profile 越過 hard tier、品質退化、同一問題糾正 ≥2 次）才用：`--complete relay-request --plan`，主持者收割並另開下一棒；NEVER 因 context 大小 relay-request | `successor_refused`（欠 outcome，只能 `--relay`） | 可，一層。leaf 再派含 `--relay` 皆 `nested_dispatch_refused`；做不完 `--complete blocked`，其 `next_step` 是 `standby` | 可。`--complete success\|failed\|unknown\|blocked\|relay-request`；`blocked` 必帶一個 `--decision`（`--decision-for` 預設 coordinator）；NEVER 二次 `--complete` |
+| **Herdr coordinated child／worker**（`CLADE_DISPATCH_ID` 非空） | `nested_dispatch_refused`（責任樹不擴張）。**STOP**，改 `--relay`；NEVER 取 `--recovery-token` 繞 | 同左（含 `--coordinate`）；唯一缺口是 `--bounded-leaf` | 可（nested 缺口）。欠 outcome 時照 `handoff` skill `派工前置與身分分流判準.md` § `CLADE_DISPATCH_ID` 分流先回報；relay-request 只在 [[session-tasks]] § 重置前與越過 soft tier 後的出口 允許的三種交棒理由（交棒 profile 越過 hard tier、品質退化、同一問題糾正 ≥2 次）才用：`--complete relay-request --plan`，主持者收割並另開下一棒；NEVER 因 context 大小 relay-request | `successor_refused`（欠 outcome，只能 `--relay`） | 可，一層。leaf 再派含 `--relay` 皆 `nested_dispatch_refused`；做不完 `--complete blocked`，其 `next_step` 是 `standby` | 可。`--complete success\|failed\|unknown\|blocked\|relay-request`；`blocked` 必帶一個 `--decision`（`--decision-for` 預設 coordinator）；NEVER 二次 `--complete` |
 | **外部 create-only**（`HERDR_ENV` 空的一般 shell，含無 pane 的 main line） | 可。拓樸永遠 Tab／workspace，**忽略** inherited `HERDR_PANE_ID`；`dispatched`，沒有 predecessor record，caller 派完自關 | 可（harvest 的是 durable record 指的 child，不是 focused pane） | `not_in_herdr` | 可。`successor_dispatched`（`predecessor: outside-herdr`）；不注入 correlation env、不留待收割 record，欠收割的 `dispatch_id` 寫進 successor brief | 可，條件同上 | `not_in_herdr`（唯一例外：peer 經 ssh relay 回 home 的 `--complete`）。處置：NEVER 偽造 `HERDR_ENV`，能在本 session 合法完成就完成，否則回具體 blocker |
 | **publish bridge**（`herdr-clade-publish.ts`，無參數） | 固定一種：裸 dispatch ＋ `--new-tab`，account／model／effort／route 由 `SESSION_TRANSPORT_POLICY` 決定；caller **保留**自己的 pane，只搬 intent（Step 1–9 屬 `clade-publish` skill） | 不帶：沒有人持 foreground handshake；publish session 把 outcome 寫進 durable record，由日後 session 或 `herdr-patrol.ts --stalled` 收割 | 不帶：送 publish 不得同時交出 caller 的位置 | 不帶 | 不帶 | 不暴露。caller-controlled `--cwd`／`--prompt` 或 raw `herdr agent prompt` 一律 NEVER 替代 |
-| **Cursor**（已退役 2026-10-03） | `usage_error`（exit 2）：`--launcher cursor`、`--launcher pi` 選 Cursor 池 model（`*-cursor`、`cursor/*`、裸 `grok`）皆拒，沒建任何東西 | 同左 | 同左（relay successor 也拒） | 同左 | 同左 | 不適用。launcher 只剩 Claude Code（`cc`／`cc1`…`cc5`）與 `cx`（`cx` 2026-10-18、`grok`／Pi `grok-xai` 2026-10-21 也已退場）；舊文件的「Cursor coordinate」流程不再存在，**NEVER** 照舊流程復活 |
 
 動作互斥（helper `actionCount`）：`--reclaim`／`--complete`／`--continue`／`--unstick-prompt`／`--coordinate-resume`／`--recover-orphan`／`--coordinate-claim`／`--adjudicate`／`--status`／`--harvest`／`--redeliver` 一次只能一個；`--relay`、`--successor`、`--bounded-leaf` 各自不得與任何動作或彼此並用，`--relay`／`--successor` 不得帶 `--coordinate`。`--machine` 只適用新 dispatch、`--reclaim`、`--continue`、`--unstick-prompt`；`--bounded-leaf` 不跨機。`--relay`／`--successor` 不帶 `--machine` 時，帶 `coordinator_brief: successor` 的主持席一律開在本機（席位門檻——方案權重、週額度——只在本機池入口判；`--machine <peer>`／`auto` 是 `usage_error`，裸 dispatch 帶繼任 brief 也一樣），所以席位沒有 `record_move`，看門狗也只看本機 pane；一般主線交棒（brief 不是繼任 brief）照一般派工依每核負載挑機器。席位 scope 與 worker 不同（12G/16G，`CLADE_AGENT_SCOPE=seat`）。
 
@@ -550,7 +549,7 @@ coordinator 身分轉移，以及寫出讓 successor 回收本 pane 的 predeces
 
 `--route` 與 `--tier-basis` 的值域與語義**與 `pi-dispatch.ts` 逐字相同**（`--route` 記走哪條政策，`--tier-basis` 記那條政策對檔位的**結論**，兩者不可互相推導）——這條對稱是 2026-09-07 補上的：在那之前 Pi 派工必須講出理由、Claude Code 派工不必，於是一句手打的 `--model claude-opus-5 --effort max` 通過了每一道 gate，事後沒有任何欄位講得出是誰依什麼授權的。**NEVER 給這兩欄 default**：default 會讓「真的判過」與「呼叫者從沒判」事後不可區分。
 
-**Claude child 的 effort 值域是 `low` / `medium` / `high`**，天花板依 model family：Opus ≤ `medium`、其餘未知 slug ≤ `high`；Sonnet 只有 5.5、只坐 Routing Table 標它的列與 delegate-sub 接手點，effort 固定 `high`；Fable、Haiku 不是可派的 Claude child（Haiku 5.5 只坐 in-process `haiku-locator`，不開 pane）。其餘 helper 在建 pane 之前拒絕。helper 查上限時會把未帶 `--model` 解析成 Opus，但那只是防禦性預設——每次派工都必須明確帶 `--model`，缺了會先被拒。`max` **對 Claude child 完全不可達**，建 pane 之前就被拒，**沒有任何 `--tier-basis` 開得了它**。
+**Claude child 的 effort 值域是 `low` / `medium` / `high`**（Opus 另有 `code-review-opus` 列的 `xhigh` 與 stall-escalation 在 Fable 被池 admission 擋下時的 `xhigh` fallback；Fable 5.2 只開 `high`，升級鏈是 Opus（effort: medium）→ Fable 5.2（effort: high），沒有 Opus `high` 跳），天花板依 model family：Opus ≤ `medium`、其餘未知 slug ≤ `high`；Sonnet 只有 5.5、只坐 Routing Table 標它的列與 delegate-sub 接手點，effort 固定 `high`；Fable 只有 5.2 high 坐 `fable-heavy-work` 列與升級鏈末跳（載體 `cc`／`cc2`），Haiku 不是可派的 Claude child（Haiku 5.5 只坐 in-process 的 `haiku-locator`／`haiku-scanner`／`haiku-implementer` 席位，不開 pane）。其餘 helper 在建 pane 之前拒絕。helper 查上限時會把未帶 `--model` 解析成 Opus，但那只是防禦性預設——每次派工都必須明確帶 `--model`，缺了會先被拒。`max` **對 Claude child 完全不可達**，建 pane 之前就被拒，**沒有任何 `--tier-basis` 開得了它**。
 
 **NEVER** 把「這次是裁決／這次比較重要」讀成可以抬高檔位——顧問、reviewer、裁決者的 brief 讀起來都像 adjudication，自我宣告不構成准入。帳號設定、主線模型與 brief 正文不能代選。收據的 requested 欄位只證明傳入值，observed 才是實跑證據；Herdr 回 `model_verification: unverified` 時 **NEVER** 宣稱已核實模型。
 
@@ -579,7 +578,7 @@ guard 另外只有兩個具名缺口，都不擴張責任樹：**`--successor`**
 呼叫它一律 `successor_refused`。**`--bounded-leaf`**（TD-1105）讓 coordinated child 以 `--coordinate` 開一層
 readonly gate-review leaf（`claude-review-safe.sh` 的 Opus 席），leaf 再派仍拒——**含 `--relay`**：leaf 沒有位置可交棒，
 做不完就 `--complete blocked` 交還開它的 coordinator。判準與反開脫在
-`handoff` skill 的 `dispatch-common.md` § `CLADE_DISPATCH_ID` 分流。
+`handoff` skill 的 `派工前置與身分分流判準.md` § `CLADE_DISPATCH_ID` 分流。
 
 每一個被派出去的 **worker** 都 **MUST** 在正常 final response 前透過 helper 回報與 dispatch／pane／
 successor session identity 相關聯的 `success | blocked | failed | unknown` outcome；`blocked` 必須帶一個
@@ -605,7 +604,7 @@ agent 回完一個 turn 後照樣繼續工作。
 正常 success 或 successor closure 由收割者當下收斂，**NEVER** 等 user另輸入 `/nx`才 harvest或reclaim。
 
 收割到的 `completion_success` 若帶 **非空 `followup_brief`**，那是 worker 留下、**還沒有人接**的工作：
-收割者 MUST 自己派下一跳，分流與兩條 NEVER 見 `handoff` skill 的 `dispatch-common.md` § 6。
+收割者 MUST 自己派下一跳，分流與兩條 NEVER 見 `handoff` skill 的 `worker殘工回報判準.md` § 6。
 
 **worker 的 parent 死掉時**（successor 自己也消失了），該 worker 成為 orphan。接手它的單一入口是
 一個活著的 attended 主線跑 `--coordinate-claim <dispatch-id>`，認領後照常 `--coordinate-resume` 收割。
@@ -635,7 +634,7 @@ claimant 活著而要直接收攤時才走 close pane＋
 | 本 pane 以 `--main-line` 派的另一條主線 idle／done（patrol `main-line-idle`） | exit 0 warn——它 idle 多半是在等 user 回話，擋下只會叫本 pane 去關一條 user 正在對話的主線；pane 寫明做完或交棒後才 `--adjudicate` |
 | 別人持有的 dispatch、abandoned record、orphan process、stale routing gate | exit 0 warn——它們的 action 不是本 session 一個 turn 做得完的 |
 | 本 session 不在 Herdr pane 內（`HERDR_ENV != 1`） | exit 0 warn（走 spine，grace 0）——`--coordinate-resume` 在那裡一律 `not_in_herdr`，擋下來是死路 |
-| 本 session 是被派出的 child（`CLADE_DISPATCH_ID` 非空），這一段還沒送 `--complete` | **exit 2 擋下 stop**，把三個回報時點射回去：告一段落（交出去後不歸它，含 PR 待主持者 0-A）／收工 → `--complete success\|failed`；等 CI／PR 合入／別的 dispatch／某個時刻且結果回來後仍由它接著做 → **預設 `--complete blocked --wait-until <條件>` 交回、不掛 shell 等**（先 commit＋push 工作成果、續接筆記寫「事件到了第一步做什麼」到 untracked 的 `.clade/resume/<work_id>.md`，NEVER 推進 PR 分支；watch 停放本 pane、事件成立或到期自動冷續接），只有預期 15 分鐘內會到的事件才留 pane 掛 Monitor 盯（終態才 `--complete success`）；「保留還是提早關閉」**NEVER** 當 decision 送 blocked（helper 拒收）；需要交棒（僅限 [[session-tasks]] § Session context 預算 的三種理由，NEVER 因 context 大小）→ 照 `handoff` skill `relay-steps.md` § 0 回報主持（寫回 plan.md、commit＋push、`--complete relay-request --plan <plan.md>`，主持另開下一棒；可自 relay 的例外見該表）；要拍板 → `--complete blocked --summary --decision`。已掛會叫醒它的 Monitor 時可不回報再停 |
+| 本 session 是被派出的 child（`CLADE_DISPATCH_ID` 非空），這一段還沒送 `--complete` | **exit 2 擋下 stop**，把三個回報時點射回去：告一段落（交出去後不歸它，含 PR 待主持者 0-A）／收工 → `--complete success\|failed`；等 CI／PR 合入／別的 dispatch／某個時刻且結果回來後仍由它接著做 → **預設 `--complete blocked --wait-until <條件>` 交回、不掛 shell 等**（先 commit＋push 工作成果、續接筆記寫「事件到了第一步做什麼」到 untracked 的 `.clade/resume/<work_id>.md`，NEVER 推進 PR 分支；watch 停放本 pane、事件成立或到期自動冷續接），只有預期 15 分鐘內會到的事件才留 pane 掛 Monitor 盯（終態才 `--complete success`）；「保留還是提早關閉」**NEVER** 當 decision 送 blocked（helper 拒收）；需要交棒（僅限 [[session-tasks]] § Session context 預算 的三種理由，NEVER 因 context 大小）→ 照 `handoff` skill `relay接力判準.md` § 0 回報主持（寫回 lifecycle 檔、commit＋push、`--complete relay-request --plan <lifecycle 檔路徑>`，主持另開下一棒；可自 relay 的例外見該表）；要拍板 → `--complete blocked --summary --decision`。已掛會叫醒它的 Monitor 時可不回報再停 |
 
 **child 分支防的是 `silent-idle`**：child 停下卻不回報，主持者分不出它在做事還是在空等，只能等它過了快取 TTL 再冷續接——brief 寫「`--complete` 一定要送」擋不住（2026-09-28 同時兩個 silent-idle）。等待外部事件（CI、PR 合入、別的 dispatch）預設以 `--complete blocked --wait-until <條件>` 交回（不掛 shell 佔席位；只有預期 15 分鐘內會到的才留 pane 盯）——不走 `success --followup-brief`（success 收割時一定關 pane），也不把「保留還是提早關閉」當 `blocked` decision 送（helper 拒收）；只有盯不到的等待（等人回覆、等別人拍板）才送 `blocked`，`decision_for` 預設 coordinator，不進 Charles 的佇列。只有 Claude pane 有 Stop hook；其他 harness 靠 child prompt 注入的「要等外部事件（MUST）」節。已知限制：只有 `--continue` 會清掉上一段的回報狀態與上次擋的時間，所以回覆 blocked child **MUST** 走 `--continue`（對它直接 `herdr agent prompt` 的那一段 gate 不擋）；同一 dispatch 每 10 分鐘最多擋一次（上次擋的時間記在 `~/.cache/clade/child-stop-gate/<id>`），擋完 10 分鐘內再停只 warn；peer 上 `--continue` 撞上戳記剛要寫入的窄窗時，那一段不擋；child 的 session id 變了（例如 `/clear`）就不再比對得上，gate 靜默放行；peer 戳記只在 `--continue` 時刪，reclaim／adjudicate 結束的 dispatch 會各留一個空檔。
 

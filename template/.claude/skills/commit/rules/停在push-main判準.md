@@ -45,7 +45,7 @@
 未確認時 **MUST** 先透過本入口的使用者詢問介面取得下列選擇，**NEVER** 先推了再問。沒有專用工具時直接提問；同一範圍已有明確回答時沿用，不重問：
 
 - **`[1] 授權 push main`** → 明確告知「本 repo 推不出 main push 會不會觸發部署」後才照 Rule 3 的形狀 push main，接著往下走發版提問
-- **`[2] 先不 push`** → 停在 local commit。**MUST** 在 Step 5 的 HANDOFF 登記「已 commit 未 push」：哪幾個 commit、卡在哪一格（`status=` / `detail=` 原文照抄）、下一步要補的是宣告還是 workflow
+- **`[2] 先不 push`** → 停在 local commit。**MUST** 用 `/handoff` 在 HANDOFF 登記「已 commit 未 push」：哪幾個 commit、卡在哪一格（`status=` / `detail=` 原文照抄）、下一步要補的是宣告還是 workflow
 
 **NEVER 把「使用者沒有回應」讀成 `[1]`。** 這條沒有安全預設值 —— 未確認形狀的預設值是「可能對 production 跑 migration」。
 
@@ -88,11 +88,11 @@ CLADE_PUSH_MAIN_AHEAD="$(git rev-list origin/main..HEAD | git hash-object --stdi
 `git push origin main` 完成後（6-B.0 判定可直接推，或使用者選了 `[1]`），發版尚未取得明確授權時 **MUST** 透過本入口的使用者詢問介面取得下列選擇；沒有專用工具時直接提問。既有同範圍發版授權持續有效：
 
 - **`[1] 現在發版`** → **MUST 先讀該 repo 的 `HANDOFF.md` 發版段與 `.github/workflows/`**，確認有沒有固定發版路徑（例：先跑 precheck workflow 拿到 `SAFE` 才授權 deploy、staging-gate 要求同 SHA 的 staging 已綠）。**有固定路徑就照它走，NEVER 直接 `git push origin --tags` 蓋過去**；沒有固定路徑才回頭執行 6-A 的 bump / tag / push main 與 tag
-- **`[2] 先不發版`** → 本次到此為止。**MUST** 在 Step 5 的 HANDOFF 裡登記「已 land 未發版」：寫明哪幾個 commit、下次發版該升 major/minor/patch、以及不發版的理由（若使用者有給）
+- **`[2] 先不發版`** → 本次到此為止。**MUST** 用 `/handoff` 在 HANDOFF 裡登記「已 land 未發版」：寫明哪幾個 commit、下次發版該升 major/minor/patch、以及不發版的理由（若使用者有給）
 
 **NEVER 把「使用者沒有回應」讀成 `[1]`。** 這條問題沒有安全的預設值——`tag-v` 的預設值是「對 production 跑 migration」。
 
-> **Step 6b 的前提**：Step 6b 的 Notion 同步依賴 tag 已推出。走 6-B 且使用者選 `[2]` 時 **MUST 跳過 Step 6b**（沒有 tag 可同步）；選 `[1]` 並實際完成發版後才執行。
+> **D9-Notion（原 Step 6b）的前提**：Notion 同步依賴 tag 已推出。走 6-B 且使用者選 `[2]` 時 **MUST 跳過 D9-Notion**（沒有 tag 可同步）；選 `[1]` 並實際完成發版後才執行。
 
 ## Good Example
 

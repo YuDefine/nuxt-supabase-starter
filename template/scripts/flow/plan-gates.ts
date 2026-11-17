@@ -3,7 +3,7 @@
  * Plan lifecycle gates — entry / specification-readiness / dispatch / close-acceptance /
  * scope-spec-integrity.
  *
- * 父 plan `W-2026-09-14-plan-truth-refactor` § Notes「Enforcement and delivery boundary」要求把同
+ * 父 plan（plan-truth-refactor）§ Notes「Enforcement and delivery boundary」要求把同
  * 一份契約綁到真正的 planning／dispatch／closure 入口，並在缺漏、過期、矛盾時給出**可據以行動的
  * 理由**。所以本檔每一條 finding 都帶穩定 `code` ＋ `path` ＋ `detail`：`code` 是機器（測試、
  * dispatch 入口、稽核）唯一該比對的東西，散文只給人看。**NEVER** 讓拒絕訊息只寫「不符契約」——
@@ -195,7 +195,7 @@ const LIFECYCLE_CONTRACT = `${TRUTH_ROOT}/work-lifecycle.md`
 
 /**
  * 上游 aixbdd owner 照原文會建 `truth-delta.md`、遞增 `NNN-*` package、覆寫 `plan.md`；clade 只做加法
- * （W-2026-10-01-aixbdd-additive-only），伴隨覆寫檔要模型改走 lifecycle 落點，這裡是不靠模型自律
+ * ，伴隨覆寫檔要模型改走 lifecycle 落點，這裡是不靠模型自律
  * 的那一道：
  *
  * - legacy lifecycle package（只有 `plan.md` 帶 `work_id`＋`truth_baseline`）內不得有 `truth-delta.md`——
@@ -319,7 +319,7 @@ export function listPlans(root: string): PlanRef[] {
 /**
  * Entry gate 的查找：同一個 slug 已經有一個**進行中**的 plan 時，那就是這件工作的 canonical id。
  *
- * 日期不參與比對——`W-2026-09-14-foo` 與今天鑄的 `W-2026-09-17-foo` 是同一件事，而「今天的日期
+ * 日期不參與比對——`W-<日期甲>-foo` 與今天鑄的 `W-<日期乙>-foo` 是同一件事，而「今天的日期
  * 不一樣」正是重複開卡最常見的成因。
  *
  * 同 slug 有兩個以上進行中的 plan 是既存異常，**NEVER** 靜默挑一個：那會讓兩份工作各自以為自己

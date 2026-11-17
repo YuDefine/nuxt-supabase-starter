@@ -159,7 +159,7 @@ binding 的具體欄位以 official void skill docs 為準，本規約不複製�
 
 **MUST** 依序判斷：① `void` 能做 → 用 `void`（指令語法先看專案 `node_modules/void/skills/void/SKILL.md`）；② void 不涵蓋的帳號資源操作 → 官方 `cf` CLI，照 `cf-cli` skill（指令探索、輸出格式、void↔cf 語意差都在那裡）；③ 兩者都沒有 → HTTP API。**NEVER** 用 wrangler；**NEVER** 用 Cloudflare Developer Platform MCP 做帳號操作。
 
-**認證**：手動操作（人或 agent）用的 Cloudflare API token 存在 Notion「FC 公司層 Secret 頁 → Cloudflare → API Token」，自己去那裡取，**NEVER** 再問 Charles 要 token；取到後以 `CLOUDFLARE_API_TOKEN` 環境變數注入當次 shell，**NEVER** 把值寫進檔案、commit、argv 或回報。CI 照 § 7.2 走 GitHub secret。
+**認證**：手動操作（人或 agent）用的 Cloudflare API token 依帳號存在不同位置，帳號 → token 位置與取法以 `cf-cli` skill `rules/安裝與認證判準.md` Rule 2 的位置表為唯一出處（FC 公司帳號在 Notion FC 公司層 Secret 頁的指定 block，只准指定 block id 取值；YuDefine 等帳號在本機檔），自己照表去取，**NEVER** 再問 Charles 要 token；取到後以 `CLOUDFLARE_API_TOKEN` 環境變數注入當次 shell，**NEVER** 把值寫進檔案、commit、argv 或回報。CI 照 § 7.2 走 GitHub secret。
 
 | 動作 | void（優先） | cf CLI（void 不涵蓋時） |
 |---|---|---|

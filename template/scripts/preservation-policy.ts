@@ -1034,11 +1034,35 @@ function symlinkTarget(root: string, entry: InventoryEntry, options: InventoryOp
     return realpathSync(target)
   } catch (error) {
     if (options.allowMissingSymlinkTargets) return target
+    // A dangling link whose lexical target stays inside the tree is recorded by its `target`
+    // string without ever stat-ing the target (nothing outside the tree can be reached through
+    // it). Only ENOENT counts, and only when the deepest existing ancestor of the lexical target
+    // really resolves inside the tree; anything else (escape, ELOOP, EACCES, ...) still throws.
+    if (
+      (error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT' &&
+      isWithin(root, target) &&
+      danglingAncestorWithin(root, target)
+    )
+      return target
     const detail = error instanceof Error ? error.message : String(error)
     throw new Error(
       `Preservation inventory found missing symlink target: ${absolute} (${detail})`,
       { cause: error },
     )
+  }
+}
+
+function danglingAncestorWithin(root: string, target: string): boolean {
+  let current = target
+  for (;;) {
+    try {
+      return isWithin(root, realpathSync(current))
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException | undefined)?.code !== 'ENOENT') return false
+      const parent = dirname(current)
+      if (parent === current) return false
+      current = parent
+    }
   }
 }
 

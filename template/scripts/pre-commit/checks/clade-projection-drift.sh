@@ -9,7 +9,7 @@
 # 源檔版本 —— 沒有衝突、沒有警告，commit message 只寫「升級 clade 至 vX.Y.Z」，整輪修正（含回歸測試）靜默消失。
 #
 # 判定範圍是**本次 staged 的投影檔**，NEVER 整倉 vendor drift：
-#   - PUBLIC repo（starter / <consumer-c>）在 sync-vendor 之後還會跑 consumer-sanitize
+#   - PUBLIC consumer repo 在 sync-vendor 之後還會跑 consumer-sanitize
 #     改寫投影內容，整倉 drift 對它們是常態；拿它當 gate 等於天天紅燈
 #   - staged 視角只在「這次 commit 真的帶著一個被改過的投影檔」時才出聲
 #

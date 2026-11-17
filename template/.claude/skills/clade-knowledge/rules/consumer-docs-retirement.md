@@ -23,7 +23,7 @@ paths: ['docs/**', '**/docs/**', 'specs/truth/**']
 | 持續維護、沒有機器權威的說明文字 | `specs/truth/docs/**` |
 | 測試身分／樣本 UID 速查 | `specs/truth/fixtures.md`（[[manual-review.data-readiness]] § Fixtures 檔） |
 | 有後果的技術決策、會重現的教訓 | 它約束的那個 truth 單位（[[knowledge-and-decisions]]） |
-| 延續中的工作、待辦 | `specs/plans/<work-id>/plan.md` § Open work（[[follow-up-register]]） |
+| 延續中的工作、待辦 | `specs/plans/<work-id>/work.md` § Open work（[[follow-up-register]]） |
 | 刻意不修的限制 | `specs/truth/accepted-limits.md` |
 
 搬出舊 `docs/` 的檔、刪掉舊 `docs/` 的檔一律允許；退役存量要走得出去。

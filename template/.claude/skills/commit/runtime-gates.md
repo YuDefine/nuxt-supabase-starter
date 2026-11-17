@@ -26,8 +26,8 @@
 | 0-MR／Archive | 主線執行 branch／pathspec／人工檢查與 archive 判定 | 按 gates.md withheld 受阻 paths；不足的 archive 狀態不入庫 | 判定命令、change 名、交集與 readiness／coupling 輸出 |
 | 0-S | 主線對敏感 paths 跑 0-S.1 確定性掃描與 0-S.2 `/security-review`；0-S.3 scanner 是 operator 補掃，`/commit` 不呼叫 | 0-S.1／0-S.2 依 gates.md 擋；沒有放行路徑，不帶 `Security-Scan: unscanned` trailer 或 `0-S UNSCANNED` 條目 | 0-S.1 輸出、0-S.2 findings 處置；operator 補掃的 report、coverage、ledger 由 operator 另行 commit |
 | 0-A.0 | 主線先執行 simplify | 完成修正才凍結 review snapshot | simplify 結果、變更後 snapshot |
-| 0-A.1 | 唯一合格獨立 reviewer：fresh-context Claude Opus 5.5（effort: medium）；主線核對資格與結果 | 完整 verdict 與全部 finding；缺資格、缺覆蓋或 snapshot 漂移時未通過；Opus 不可用保持未完成 | review-policy 各欄、真實 dispatch／session、requested／observed model 與 model_verification(_reason)、完整輸出 |
-| 0-A.2 | Critical／Major 觸發時由同一席（Opus 5.5（effort: medium））以新的 fresh context 對修復後 snapshot 深度複審 | 深度 review 完成才通過；Opus reviewer 不可用或配額耗盡時保持未完成，不是合法 skip | 深度 reviewer 身份、snapshot／verdict、逐條 finding 處置與修正依據 |
+| 0-A.1 | 唯一合格獨立 reviewer：fresh-context Claude Opus 5.5（effort: xhigh）；主線核對資格與結果 | 完整 verdict 與全部 finding；缺資格、缺覆蓋或 snapshot 漂移時未通過；Opus 不可用保持未完成 | review-policy 各欄、真實 dispatch／session、requested／observed model 與 model_verification(_reason)、完整輸出 |
+| 0-A.2 | Critical／Major 觸發時由同一席（Opus 5.5（effort: xhigh））以新的 fresh context 對修復後 snapshot 深度複審 | 深度 review 完成才通過；Opus reviewer 不可用或配額耗盡時保持未完成，不是合法 skip | 深度 reviewer 身份、snapshot／verdict、逐條 finding 處置與修正依據 |
 | 0-B.1 | 已採用 impeccable 且有 UI 檔變更時，主線跑 `detect`、唯讀核對 critique 快照處置與 DESIGN.md 新鮮度檢查 | 三項依 gates.md 判準通過；P0／P1 缺處置證據就擋；已採用但 launcher 缺失則未完成，未採用跳過 | detector 輸出、唯讀快照與逐條處置、DESIGN.md 判定、ignore 的使用者確認紀錄 |
 | 0-B.2 | 已觸發視覺改動由符合 UI 政策的執行者取得真實畫面並判讀 | 依 UI gate 收斂；無 browser／截圖／合格判讀載體時保留缺口 | 頁面、viewport、截圖、判讀與修正後證據、0-B.1 輸出 |
 | 0-C | 可派 runner 執行；主線依 gates.md 複驗 check、明確 test 與 doctor | 全部完成且符合各自判準；worker PASS、doctor exit 0 或仍在跑均不足 | 每支命令的終態與原始輸出、doctor 分數／warnings |

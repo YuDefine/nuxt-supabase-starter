@@ -1,10 +1,10 @@
 # Relay Mode — `/handoff relay`
 
-把**本 session 的整個位置**交給另一個可獨立續跑的 Herdr interactive pane，然後收工；successor runtime 依 [dispatch-common.md](dispatch-common.md) § 3.1 **原樣繼承當前 session**（`cc → cc`、`ccN → ccN`、`grok → grok`）。只有 user 當次明確點名不同且受支援的 launcher 才可覆蓋；工作 routing 不構成授權。
+把**本 session 的整個位置**交給另一個可獨立續跑的 Herdr interactive pane，然後收工；successor runtime 依 [派工helper與launcher判準.md](派工helper與launcher判準.md) § 3.1 **原樣繼承當前 session**（`cc → cc`、`ccN → ccN`、`grok → grok`）。只有 user 當次明確點名不同且受支援的 launcher 才可覆蓋；工作 routing 不構成授權。
 
 成功事件是 helper 回傳 **`relay_dispatched`**，代表 successor 已 live、已收到 brief、durable 轉移已落盤。**不是**「successor 完成了工作」——那不再是本 session 的事。
 
-Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、parent worktree lifecycle、收工訊息契約全部依 [dispatch-common.md](dispatch-common.md)，本檔不重述。
+Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、parent worktree lifecycle、收工訊息契約全部依 [派工前置與身分分流判準.md](派工前置與身分分流判準.md)（Preflight、`CLADE_DISPATCH_ID` 分流）、[durable-brief撰寫判準.md](durable-brief撰寫判準.md)、[派工helper與launcher判準.md](派工helper與launcher判準.md)、[runtime清理與parent-worktree判準.md](runtime清理與parent-worktree判準.md)、[派工收工訊息判準.md](派工收工訊息判準.md)（各檔用到才讀；入口是前置與身分分流），本檔不重述。
 
 ## 0. 先判該不該用 relay
 
@@ -12,16 +12,16 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 | --- | --- |
 | 0（只登記，不派） | `park` |
 | 1 | `relay` |
-| N ≥ 2 | `fanout`（見 [fanout-steps.md](fanout-steps.md)） |
+| N ≥ 2 | `fanout`（見 [fanout派工判準.md](fanout派工判準.md)） |
 
-**被派出的 pane 先判這一題**（`CLADE_DISPATCH_ID` 非空、要交棒）。交棒理由只有三種：交棒 profile 越過 hard tier、品質退化、同一問題糾正 ≥2 次；壓縮 profile 下 context 大小**不是**理由，寫回 plan.md 並 commit 後續做（席位→profile 表在 `session-tasks` § 席位 → profile）：
+**被派出的 pane 先判這一題**（`CLADE_DISPATCH_ID` 非空、要交棒）。交棒理由只有三種：交棒 profile 越過 hard tier、品質退化、同一問題糾正 ≥2 次；壓縮 profile 下 context 大小**不是**理由，寫回 `work.md`（舊 package：`plan.md`） 並 commit 後續做（席位→profile 表在 `session-tasks` § 席位 → profile）：
 
 評估：first-match；以上皆非 → R*
 | id | 可觀察 predicate | 動作 |
 | --- | --- | --- |
-| R1 | 有 plan.md、主持者是活的（dispatch 有 parent pane、wake 能送達） | **NEVER** 自 relay。把進度寫回 plan.md § 進度、commit＋push，再 `--complete relay-request --plan <plan.md>`；主持者的 watch 收割本 pane（`harvest-relay`），以同 work id、同 worktree、plan 指針另開下一棒 |
-| R2 | helper 拒收並印 `self_relay`（沒有 parent pane、主持者冷或不在線）、沒有 plan.md、repo 有 push_hold、或本 session 是 Charles 自開 pane | 照本檔自 relay；brief 仍只寫 plan 指針與本棒差異 |
-| R3 | helper 拒收但沒印 `self_relay`（branch 沒 push、plan.md 沒變動） | 補齊材料（寫回 plan.md、commit＋push）再報一次，不改走自 relay |
+| R1 | 有 lifecycle 檔（`work.md`；舊 package 是 `plan.md`）、主持者是活的（dispatch 有 parent pane、wake 能送達） | **NEVER** 自 relay。把進度寫回 lifecycle 檔 § 進度、commit＋push，再 `--complete relay-request --plan <lifecycle 檔路徑>`；主持者的 watch 收割本 pane（`harvest-relay`），以同 work id、同 worktree、plan 指針另開下一棒 |
+| R2 | helper 拒收並印 `self_relay`（沒有 parent pane、主持者冷或不在線）、沒有 lifecycle 檔、repo 有 push_hold、或本 session 是 Charles 自開 pane | 照本檔自 relay；brief 仍只寫 plan 指針與本棒差異 |
+| R3 | helper 拒收但沒印 `self_relay`（branch 沒 push、lifecycle 檔沒變動） | 補齊材料（寫回 lifecycle 檔、commit＋push）再報一次，不改走自 relay |
 | R* | 以上皆非 | STOP：`--complete blocked` 回報 helper 原始輸出 |
 
 「1 件」包含**多件但彼此 serial** 的情況：動同一批檔、有 phase 依賴、共享 mutex 資源的工作 **MUST** 合併成一份 brief 走 relay，由 successor 依序推進，**NEVER** 拆成 N 個 worker 同時跑。
@@ -30,11 +30,11 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 
 `CLADE_DISPATCH_ID` 非空（本 session 自己是被派出來的 child）時 relay **照常適用**——helper 對 relay 開了 nested 缺口，因為 relay 做的是把位置橫向移交、自己站下來，與那道 guard 要防的責任樹擴張相反。**NEVER** 因為身在 coordinated child 就改走 `--recover-orphan`：那是「parent 已死、由 child 補救」的路徑，而 relay 的前提正好相反——parent（本 session）還活著，親自簽字交出位置。
 
-已用 `--tier-basis stall-escalation --retry-of <medium label>` 升到 high 的 child，可以沿用這組參數與 `--effort high` relay 同一位置。helper 只豁免與當前 pane **及 exact runtime session** 相符的 live high record；其他 high attempt 與 reclaim／controlled-stop 的紀錄仍會擋第二次升級。Relay 是交接，不新增一次 high attempt。
+已用 `--tier-basis stall-escalation --retry-of <Opus（effort: medium）label>` 升到 Fable 5.2（effort: high） 的 child **不能 relay**：helper 一律拒絕 Fable relay（Fable 席不可 relay）——進度寫回 lifecycle 檔 § 進度、commit＋push，再由主持者重派新的 Fable child（同一筆 Opus（effort: medium）證據只資助一次升級，要再升必須先有一次新的 medium 失敗）。Fable 被擋時的 Opus（effort: xhigh） fallback child **可以 relay**，但只限那個 live session 本身（同 effort、同 `--retry-of`）：relay 沿用原 effort、不算新升級；從別的 pane（例如卡住的 Opus（effort: medium）pane）發 `--relay --effort xhigh` 照新升級判，Fable 過得了 admission 就拒。
 
 ## 1. 建 durable thin brief
 
-依 [dispatch-common.md](dispatch-common.md) § 2，**外加**三項 relay 專屬內容：
+依 [durable-brief撰寫判準.md](durable-brief撰寫判準.md) § 2，**外加**三項 relay 專屬內容：
 
 - brief **MUST** 寫明「你是繼任者，不是被派出去做一件子工作的 worker」，以及本 session 交棒的理由（交棒 profile 越過 hard tier／品質退化／同一問題糾正 ≥2 次／工作已全部移交）。
 - 本 session 若手上還有 in-flight dispatch，brief **MUST** 逐個列出它們的 dispatch id（指針即可）。在做什麼、預期什麼 outcome 已在 dispatch record（`label`、brief 路徑）與 flow，successor 依 id 自取；**NEVER** 在 brief 重述它們的脈絡或進度。
@@ -42,7 +42,7 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 
 ## 1.5 spine 收尾（ambient `CLADE_WORK_ID` 非空時 MUST，空則整步跳過）
 
-relay 是收工的四個 arg 之一，本 session 走到這裡同樣是「一段工作結束了」（對應 `park` 的 [rules/park登記與HANDOFF寫回判準.md](rules/park登記與HANDOFF寫回判準.md) Step 3b）。
+relay 是收工的四個 arg 之一，本 session 走到這裡同樣是「一段工作結束了」（對應 `park` 的 [rules/park登記與HANDOFF寫回判準.md](park登記與HANDOFF寫回判準.md) Step 3b）。
 缺這一步的後果不是少一筆紀錄，是**漏斗上游餓死**：沒有任何必經收尾點會去按 spine 的終態。
 
 **MUST 先判這一題再往下**，二擇一，判準是**你正在交出去的 brief 裡寫的是不是同一件事**：
@@ -74,11 +74,11 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts work done "$CLADE_WORK_ID" \
 
 ## 2. 只走 canonical helper
 
-⛔ **先過 [dispatch-common.md](dispatch-common.md) § 1 的 `--cwd` 佔用探測**——successor 的 `--cwd` 指向既存工作區時，與 fanout worker 適用同一道 gate。
+⛔ **先過 [派工前置與身分分流判準.md](派工前置與身分分流判準.md) § 1 的 `--cwd` 佔用探測**——successor 的 `--cwd` 指向既存工作區時，與 fanout worker 適用同一道 gate。
 
-⛔ **`<routing-model>` NEVER 是 `sonnet`**（依 [dispatch-common.md](dispatch-common.md) § 3.2）：successor 判「還是主線複雜度」就 `opus`；判「只值 sonnet 等級」則兩條都行——`--launcher grok --model grok-4.7 --effort xhigh` 把位置交給 Grok successor，或本 session 留著、把那件事用 Grok worker 派掉。`relay-continuity` 那道限制只綁 Pi，**NEVER** 讀成 grok 不能當 successor。
+⛔ **`<routing-model>` NEVER 是 `sonnet`**（依 [派工helper與launcher判準.md](派工helper與launcher判準.md) § 3.2）：successor 判「還是主線複雜度」就 `opus`；判「只值 sonnet 等級」則不交出位置：本 session 留著，把那件事照該節表 in-process 派掉。
 
-⛔ **主持者交棒（brief 的 frontmatter 是 `coordinator_brief: successor`）只能 `--launcher cc|cc2|cc3 --model opus --effort low`**（Charles 2026-11-02）（`cc3`＝`~/.claude-3` 帳號，只限本機、不走額度 admission）：Grok successor 與上一條的其他選項都不適用，helper 以 `usage_error` 拒（`coordinator` skill § 主持者的 model）。
+⛔ **主持者交棒（brief 的 frontmatter 是 `coordinator_brief: successor`）只能 `--launcher cc|cc2|cc3 --model opus --effort low`**（Charles 2026-11-02）（`cc3`＝`~/.claude-3` 帳號，只限本機、不走額度 admission）：上一條的其他選項不適用，helper 以 `usage_error` 拒（`coordinator` skill § 主持者的 model）。
 
 ```bash
 node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \
@@ -102,4 +102,4 @@ helper 自行負責 topology、fresh runtime session identity、prompt delivery�
 | `transport_error` 且 receipt 帶 `relay_adopt_command`（brief 送出後、送達確認前失敗）| **轉移沒簽。** 先 `herdr pane read <pane_id>` 看 successor：已起跑（working／blocked／done）→ 在本 pane 跑 `herdr-session-handoff.ts --relay-adopt <dispatch_id>` 補簽（同一段轉移程式，receipt 回 `relay_dispatched` 且帶 `relay_adopted: true`，之後進收工訊息 **A**）；讀起來 idle → 確認 brief 真的被讀進去（不是還在輸入框）才加 `--verified`；沒起跑 → 回 blocker，**NEVER** 補簽。只有 relay 時的本 pane 與其 exact session 簽得了；**NEVER** 改用 successor 端 `--coordinate-claim` 繞（前任還活著會回 `coordinator_exact_identity_live`，那是刻意的） |
 | `transport_error`／其他 preflight failure | 同上：保留 durable task 與 pane，回具體 blocker，**NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt |
 
-**`relay_dispatched` 之後 NEVER 再開任何新工作段。** 細則見 [dispatch-common.md](dispatch-common.md) § 5 兩者共通。
+**`relay_dispatched` 之後 NEVER 再開任何新工作段。** 細則見 [派工收工訊息判準.md](派工收工訊息判準.md) § 5 兩者共通。

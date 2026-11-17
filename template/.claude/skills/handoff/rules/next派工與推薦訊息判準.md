@@ -1,10 +1,10 @@
 # `next` 推薦與 dispatch 步驟詳細規約
 
-[rules/next盤點與推薦判準.md](rules/next盤點與推薦判準.md) § 2B.3 / 2B.4 / 2B.4.5 / 2B.5 的完整規約：outstanding 的 serial/parallel rubric、推薦訊息格式與 詢問操作 禁止行為、PTB-unsafe wt 的三選一分流、user 選定後的 dispatch 表。**四節都只在 `next` 走到，`park` 不執行。**
+[rules/next盤點與推薦判準.md](next盤點與推薦判準.md) § 2B.3 / 2B.4 / 2B.4.5 / 2B.5 的完整規約：outstanding 的 serial/parallel rubric、推薦訊息格式與 詢問操作 禁止行為、PTB-unsafe wt 的三選一分流、user 選定後的 dispatch 表。**四節都只在 `next` 走到，`park` 不執行。**
 
 主流程順序（2B.2.5 → 2B.3 → 2B.4 → 2B.4.5 → 2B.5 → 2B.1.8）與各節的 pointer 留在 rules/next盤點與推薦判準.md；執行到該節時讀本檔對應 §。
 
-**`next` 也收工。** 本檔的表格決定的是「下一步該用哪一支 skill、要不要 worktree」，**不是**「在本 session 內把它跑完」——盤點完、user 選定後，選中的工作寫進 durable brief 交給 pane 執行，本 session 隨即收工（1 件走 [relay-steps.md](relay-steps.md)、N 件可平行走 [fanout-steps.md](fanout-steps.md)）。
+**`next` 也收工。** 本檔的表格決定的是「下一步該用哪一支 skill、要不要 worktree」，**不是**「在本 session 內把它跑完」——盤點完、user 選定後，選中的工作寫進 durable brief 交給 pane 執行，本 session 隨即收工（1 件走 [relay接力判準.md](relay接力判準.md)、N 件可平行走 [fanout派工判準.md](fanout派工判準.md)）。
 
 唯一的例外是**當場做得完的單一 bounded action**（改一行 typo、補一條 pointer、勾一個 checkbox）：直接做掉再收工，不值得為它開一個 pane。**NEVER** 拿這個例外去涵蓋「反正我順手跑完 `/implement` 比較快」——那是完整的一件工作，該派出去。
 

@@ -1,6 +1,6 @@
 ---
 description: 維護 nuxt-supabase-starter 時區分 root meta repo 與 template starter seed，防止私人資料、dogfood 業務碼、未標記 starter-only 內容污染 scaffold 輸出
-globs:
+paths:
   - CLAUDE.md
   - template/**
   - scripts/**

@@ -1,6 +1,6 @@
 # Step 3 判讀細則 — worktree signal 與 stash 欄位
 
-[rules/worktree與stash收斂判準.md](rules/worktree與stash收斂判準.md) § Step 3 的查表材料：`mergeBackSafety` 三 signal 推導、9 列 kind 判定表、
+[rules/worktree與stash收斂判準.md](worktree與stash收斂判準.md) § Step 3 的查表材料：`mergeBackSafety` 三 signal 推導、9 列 kind 判定表、
 stash audit 的寫入欄位。**`park` / `next` 都會走到 Step 3**，本檔不分 mode。
 
 主流程（怎麼跑 scan、輸出寫進哪一段）留在 rules/worktree與stash收斂判準.md § 3.1 / § 3.3；查表時讀本檔。
@@ -94,7 +94,7 @@ audit 寫進 HANDOFF.md 時每條 wt 後綴 `(mergeBackSafety: <landable|ptb-rec
 
 #### 3.2a 逐條套 drop gate（MUST，寫 audit 段之前先做）
 
-🔴 **前置 gate**：本 sub-step 是整個 /handoff 唯一「MUST 主動執行不可逆刪除」的地方，而它的輸入 `raw.stashes[*]` 來自 `$SCAN`。**動任何 `git stash drop` 之前 MUST 先確認 `$SCAN` 的 `.consumerId` 就是本 repo**（`jq -r '.consumerId' "$SCAN"`，判準見 scan-steps.md §2B.1a「$SCAN 路徑與歸屬」）。不符 → **STOP，重跑 scan**，NEVER 據此 drop —— `stash@{N}` 是**索引不是識別碼**，別 repo 的清單套到本 repo 會逐條解析到完全不同的 stash，而每一步的表面訊號都正常。
+🔴 **前置 gate**：本 sub-step 是整個 /handoff 唯一「MUST 主動執行不可逆刪除」的地方，而它的輸入 `raw.stashes[*]` 來自 `$SCAN`。**動任何 `git stash drop` 之前 MUST 先確認 `$SCAN` 的 `.consumerId` 就是本 repo**（`jq -r '.consumerId' "$SCAN"`，判準見 next掃描步驟判準.md §2B.1a「$SCAN 路徑與歸屬」）。不符 → **STOP，重跑 scan**，NEVER 據此 drop —— `stash@{N}` 是**索引不是識別碼**，別 repo 的清單套到本 repo 會逐條解析到完全不同的 stash，而每一步的表面訊號都正常。
 
 對 `raw.stashes[*]` **每一筆**套 [[commit.detail]] § Stash 自動處置 gate 的判準，**逐條**跑：
 
