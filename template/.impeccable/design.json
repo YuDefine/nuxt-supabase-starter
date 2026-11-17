@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-17T00:00:00Z",
+  "title": "Design System: Nuxt Supabase Starter",
+  "extensions": {},
+  "components": [
+    {
+      "name": "Empty State",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "AppEmptyState：置中圖示＋訊息＋可選 outline 按鈕。",
+      "html": "<div class=\"ds-empty\"><div class=\"ds-empty-icon\"></div><p class=\"ds-empty-msg\">目前沒有資料</p><button class=\"ds-btn-outline\">新增</button></div>",
+      "css": ".ds-empty{display:flex;flex-direction:column;align-items:center;gap:12px;padding:40px 0;text-align:center}.ds-empty-icon{width:48px;height:48px;border-radius:9999px;background:color-mix(in oklab,var(--ui-primary,#00c16a) 10%,transparent)}.ds-empty-msg{max-width:20rem;font-size:14px;color:var(--ui-text-muted,#64748b)}.ds-btn-outline{border:1px solid var(--ui-primary,#00c16a);color:var(--ui-primary,#00c16a);background:transparent;border-radius:6px;padding:4px 10px;font-size:12px}.ds-btn-outline:hover{background:color-mix(in oklab,var(--ui-primary,#00c16a) 10%,transparent)}.ds-btn-outline:focus-visible{outline:2px solid var(--ui-primary,#00c16a);outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Unbranded Workbench",
+    "keyCharacteristics": [
+      "零品牌：顏色、字型全數繼承 Nuxt UI 預設，支援 light／dark。",
+      "以語意 CSS 變數上色，不寫死色碼。",
+      "共用頁面骨架 AppPageShell 統一標題、操作區與工具列位置。"
+    ],
+    "rules": [
+      { "name": "The Semantic Token Rule", "body": "元件只用 Nuxt UI 語意 token 上色；首頁 demo 的 green／orange／purple 圖示底是展示用，衍生專案 MUST 改成品牌色或語意色。", "section": "colors" }
+    ],
+    "dos": [
+      "Do 衍生專案決定品牌後在 app.config.ts 設 ui.colors，並重跑 /impeccable document 改寫本檔。",
+      "Do 新頁面套 AppPageShell，空清單用 AppEmptyState。"
+    ],
+    "donts": [
+      "Don't 在樣板層寫死品牌色或字型；那是衍生專案的決策。",
+      "Don't 在元件裡寫十六進位色碼取代語意 token。"
+    ]
+  }
+}
