@@ -36,6 +36,24 @@
       "reason": "projection-metadata",
       "consumers": ["create-clean"],
       "required": false
+    },
+    {
+      "path": "PRODUCT.md",
+      "reason": "starter-identity-leak",
+      "consumers": ["create-clean"],
+      "required": false
+    },
+    {
+      "path": "DESIGN.md",
+      "reason": "starter-identity-leak",
+      "consumers": ["create-clean"],
+      "required": false
+    },
+    {
+      "path": ".impeccable",
+      "reason": "starter-identity-leak",
+      "consumers": ["create-clean"],
+      "required": false
     }
   ]
 }

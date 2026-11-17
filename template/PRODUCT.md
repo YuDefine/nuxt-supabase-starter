@@ -2,9 +2,10 @@
 
 <!-- impeccable:product-schema 1 -->
 
-> 本檔描述的是 **nuxt-supabase-starter 樣板本身**（`template/` 是新案的 seed）。
-> 從這份樣板 clone 出新專案後，MUST 用 `/impeccable init` 把本檔改寫成新產品的脈絡；
-> 用 `create-nuxt-starter` 產生的專案則從 `templates/base/PRODUCT.md` 的空白 seed 起步。
+> 本檔描述的是 **nuxt-supabase-starter 樣板本身**（`template/` 是新案的 seed），讓 commit 0-B.1 對樣板生效。
+> 新案 **不會** 繼承本檔：`scripts/create-clean.sh` 依 `presets/_base/strip-manifest.json` 剝掉 `PRODUCT.md`、`DESIGN.md`、`.impeccable/`；
+> `create-nuxt-starter` 的 `templates/base/` 也刻意不放 seed。新專案沒有 PRODUCT.md，impeccable context 回 `NO_PRODUCT_MD`，
+> 第一次做 UI 時走 `/impeccable init` 與使用者訪談後才建立（之後 0-B.1 生效）。
 
 ## Platform
 
