@@ -21,7 +21,11 @@
       "共用頁面骨架 AppPageShell 統一標題、操作區與工具列位置。"
     ],
     "rules": [
-      { "name": "The Semantic Token Rule", "body": "元件只用 Nuxt UI 語意 token 上色；首頁 demo 的 green／orange／purple 圖示底是展示用，衍生專案 MUST 改成品牌色或語意色。", "section": "colors" }
+      {
+        "name": "The Semantic Token Rule",
+        "body": "元件只用 Nuxt UI 語意 token 上色；首頁 demo 的 green／orange／purple 圖示底是展示用，衍生專案 MUST 改成品牌色或語意色。",
+        "section": "colors"
+      }
     ],
     "dos": [
       "Do 衍生專案決定品牌後在 app.config.ts 設 ui.colors，並重跑 /impeccable document 改寫本檔。",

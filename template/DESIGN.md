@@ -1,12 +1,17 @@
 ---
 name: Nuxt Supabase Starter
 description: 不帶品牌的 Nuxt UI 預設外觀，留給衍生專案決定視覺世界
+typography:
+  title:
+    fontSize: "1.25rem"
+    fontWeight: 600
+    letterSpacing: "-0.025em"
 rounded:
   lg: "0.5rem"
   full: "9999px"
 components:
   page-title:
-    typography: "text-xl font-semibold tracking-tight (sm: text-2xl)"
+    typography: "{typography.title}"
   card:
     rounded: "{rounded.lg}"
 ---
