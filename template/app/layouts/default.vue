@@ -62,13 +62,20 @@
               :icon="colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon'"
               variant="ghost"
               color="neutral"
-              :aria-label="colorMode.value === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
+              :aria-label="
+                colorMode.value === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'
+              "
               @click="toggleColorMode"
             />
 
             <template v-if="loggedIn">
               <UDropdownMenu :items="userMenuItems">
-                <UButton variant="ghost" color="neutral" icon="i-lucide-user" aria-label="Account menu" />
+                <UButton
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-user"
+                  aria-label="Account menu"
+                />
               </UDropdownMenu>
             </template>
             <template v-else>
