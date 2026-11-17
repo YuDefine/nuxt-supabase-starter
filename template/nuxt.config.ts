@@ -60,7 +60,7 @@ export default defineNuxtConfig({
         { duration: 1000 }, // 慢 endpoint (≥ 1s) 永遠 keep
       ],
     },
-    redact: true, // 啟用 builtins: jwt / bearer / email / ipv4 / phone / creditCard / iban
+    redact: true, // 啟用全部 builtins（含 2.31 起預設的 secrets）；不列 builtins，避免關掉預設遮罩
     transport: {
       enabled: true,
       endpoint: '/api/_evlog/ingest',

@@ -1,10 +1,82 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-30T04:18:20.743Z",
+  "generatedAt": "2026-11-17T03:10:52.417Z",
+  "cliVersion": "0.11.2",
+  "ruleSetVersion": 1,
   "framework": "nuxt",
   "projectName": "nuxt-supabase-starter",
   "score": 100,
   "routes": [
+    {
+      "framework": "nuxt",
+      "kind": "middleware",
+      "method": null,
+      "path": "*",
+      "file": "server/middleware/00.test-routes-guard.ts",
+      "handler": {
+        "line": 18,
+        "column": 0
+      },
+      "id": "3b83b97c095f",
+      "checks": {
+        "audit": {
+          "status": "n/a"
+        },
+        "error-handling": {
+          "status": "n/a"
+        },
+        "wide-event": {
+          "status": "pass"
+        },
+        "context": {
+          "status": "pass"
+        },
+        "structured-errors": {
+          "status": "pass"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 100
+    },
+    {
+      "framework": "nuxt",
+      "kind": "middleware",
+      "method": null,
+      "path": "*",
+      "file": "server/middleware/01.session.ts",
+      "handler": {
+        "line": 13,
+        "column": 0
+      },
+      "id": "3b83b97c095f",
+      "checks": {
+        "structured-errors": {
+          "status": "n/a"
+        },
+        "audit": {
+          "status": "n/a"
+        },
+        "error-handling": {
+          "status": "n/a"
+        },
+        "wide-event": {
+          "status": "pass"
+        },
+        "context": {
+          "status": "pass"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 100
+    },
     {
       "framework": "nuxt",
       "kind": "page",
@@ -52,7 +124,7 @@
       "path": "/api/_dev/login",
       "file": "server/api/_dev/login.post.ts",
       "handler": {
-        "line": 192,
+        "line": 196,
         "column": 0
       },
       "id": "7dbdefa0e7eb",
@@ -89,7 +161,7 @@
       "path": "/api/v1/profiles",
       "file": "server/api/v1/profiles/index.get.ts",
       "handler": {
-        "line": 21,
+        "line": 22,
         "column": 0
       },
       "id": "fbfac6897eab",
@@ -306,6 +378,76 @@
       "checks": {
         "page-error-handling": {
           "status": "n/a"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 100
+    },
+    {
+      "framework": "nuxt",
+      "kind": "api",
+      "method": "GET",
+      "path": "/test/db-log",
+      "file": "server/routes/test/db-log.get.ts",
+      "handler": {
+        "line": 8,
+        "column": 0
+      },
+      "id": "a085ecf4ff66",
+      "checks": {
+        "structured-errors": {
+          "status": "n/a"
+        },
+        "audit": {
+          "status": "n/a"
+        },
+        "error-handling": {
+          "status": "n/a"
+        },
+        "wide-event": {
+          "status": "pass"
+        },
+        "context": {
+          "status": "pass"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 100
+    },
+    {
+      "framework": "nuxt",
+      "kind": "api",
+      "method": "GET",
+      "path": "/test/health",
+      "file": "server/routes/test/health.get.ts",
+      "handler": {
+        "line": 7,
+        "column": 0
+      },
+      "id": "6a0be062cd3b",
+      "checks": {
+        "structured-errors": {
+          "status": "n/a"
+        },
+        "audit": {
+          "status": "n/a"
+        },
+        "error-handling": {
+          "status": "n/a"
+        },
+        "wide-event": {
+          "status": "pass"
+        },
+        "context": {
+          "status": "pass"
         }
       },
       "suggestions": {},
