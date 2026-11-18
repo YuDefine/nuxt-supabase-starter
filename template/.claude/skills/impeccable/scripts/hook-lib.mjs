@@ -1252,8 +1252,7 @@ export function resolveHarness(env = {}, event = null) {
   if (explicit === 'cursor') return 'cursor';
   if (explicit === 'github') return 'github';
   if (explicit === 'grok') return 'grok';
-  if (explicit === 'claude') return 'claude';
-  if (explicit === 'codex') return 'codex';
+  if (explicit === 'claude' || explicit === 'codex') return 'claude';
   // Grok Build sends camelCase `toolName`/`toolInput`/`hookEventName` and no
   // snake_case pair. GitHub Copilot sends camelCase `toolName`/`toolArgs`.
   // Check Grok first: the old GitHub heuristic (`toolName` and no
@@ -1266,11 +1265,6 @@ export function resolveHarness(env = {}, event = null) {
     return 'github';
   }
   if (typeof event?.conversation_id === 'string' && event.conversation_id) return 'cursor';
-  // Codex turn-scoped events carry `turn_id`. Claude Code does not. Detecting
-  // it here means an already-installed Codex hook emits the Codex Stop
-  // contract without rewriting the hook command to set IMPECCABLE_HOOK_HARNESS.
-  // https://developers.openai.com/codex/hooks#stop
-  if (typeof event?.turn_id === 'string' && event.turn_id) return 'codex';
   return 'claude';
 }
 
@@ -2230,11 +2224,8 @@ export const STOP_MAX_FILES = 20;
  *   { exitCode, stdout, audit, emission? }
  *
  * Never throws; exits silent (and fast) when the session touched no UI
- * files. Output goes out on the harness's Stop continuation channel: Claude
- * Code and Grok Build read hookSpecificOutput.additionalContext, Codex takes
- * a decision: "block" whose reason becomes the continuation prompt. Either
- * way the findings reach the model and the conversation continues so it
- * can act.
+ * files. Output uses the Stop hookSpecificOutput channel: additionalContext
+ * is delivered to the model and the conversation continues so it can act.
  */
 export async function runStopHook({ stdinJson, env = {}, cwd = process.cwd(), now = Date.now, detector } = {}) {
   const audit = { ts: new Date(now()).toISOString(), event: 'Stop' };
@@ -2265,21 +2256,17 @@ export async function runStopHook({ stdinJson, env = {}, cwd = process.cwd(), no
     audit.harness = harness;
     event = normalizeHookEvent(event, cwd, harness);
 
-    // Stop-hook re-entry guard: `stop_hook_active` is true when this hook is
-    // being re-invoked only because a prior invocation kept the turn alive
-    // (Claude Code via hookSpecificOutput.additionalContext, Codex via a
-    // decision: "block" continuation). Re-scanning and re-blocking now could
-    // loop (issue #400). The prior fire already surfaced the findings;
-    // whether to act on them is the agent's call. Exit fast with no output
-    // before any scan. Claude Code and Codex both send this field: Codex
-    // mirrors the Claude contract (StopCommandInput in
-    // codex-rs/hooks/src/schema.rs) and latches it true for the rest of the
-    // turn once a block is honored (codex-rs/core/src/session/turn.rs). Grok
-    // sends `stopHookActive`, copied onto the snake_case field above. Cursor
-    // and GitHub Copilot omit the field, so the strict `=== true` is a no-op
-    // for them. The guard makes the loop impossible regardless of the finding
-    // cache key's line-number sensitivity (out of scope here; see
-    // findingCacheKey).
+    // Claude Code's Stop-hook contract: `stop_hook_active` is true when this
+    // hook is being re-invoked only because a prior invocation kept the turn
+    // alive (here, via hookSpecificOutput.additionalContext). Re-scanning and
+    // re-blocking now would loop until Claude Code's consecutive-block cap
+    // force-ends the turn (issue #400). The prior fire already surfaced the
+    // findings; whether to act on them is the agent's call. Exit fast with no
+    // output before any scan. Claude sends `stop_hook_active`; Grok sends
+    // `stopHookActive`, copied onto the snake_case field above. The strict
+    // `=== true` is a no-op when the field is absent. This guard makes the
+    // loop impossible regardless of the finding cache key's line-number
+    // sensitivity (out of scope here; see findingCacheKey).
     if (event.stop_hook_active === true) {
       return result({ skipped: 'stop-hook-active', durationMs: Date.now() - started });
     }
@@ -2431,15 +2418,6 @@ export function payload(text, eventName = 'PostToolUse', harness = 'claude') {
   // `additionalContext` string (alongside an optional `modifiedResult`).
   if (harness === 'github') {
     return JSON.stringify({ additionalContext: text });
-  }
-  // Codex shares Claude Code's PostToolUse additional-context shape, but its
-  // Stop schema rejects unknown fields. Findings that should continue the
-  // turn must be a top-level blocking decision.
-  // https://developers.openai.com/codex/hooks#stop (schema of record:
-  // codex-rs/hooks/src/schema.rs, StopCommandOutputWire)
-  if (harness === 'codex' && eventName === 'Stop') {
-    if (!String(text ?? '').trim()) return '';
-    return JSON.stringify({ decision: 'block', reason: text });
   }
   return JSON.stringify({
     hookSpecificOutput: { hookEventName: eventName, additionalContext: text },

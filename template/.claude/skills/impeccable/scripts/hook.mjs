@@ -12,7 +12,7 @@
  *     discards that stdout; the scan still warms the session cache for Stop.
  *   - Stop: runs the FULL detector rule set over every UI file touched this
  *     session (the deep pass), deduped against what the per-edit pass already
- *     surfaced, and emits once via the harness-specific continuation channel.
+ *     surfaced, and emits once via the Stop additionalContext channel.
  *
  * Contract: never break a turn. Always exit 0. Clean files emit a small ack
  * unless quiet mode is enabled; a clean Stop pass is silent.

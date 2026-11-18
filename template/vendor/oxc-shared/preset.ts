@@ -68,6 +68,10 @@
 
 import { closeSync, existsSync, openSync, readdirSync, readSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+// type-only：執行期被抹掉，node type-stripping 跑本檔（staged-targets.ts 等）不需要解析 vite-plus。
+// consumer 的 vite.config.ts 一定裝了 vite-plus，`UserConfig` 經 vite-plus 的 module augmentation
+// 帶 `lint?: OxlintConfig`／`fmt?: OxfmtConfig`。
+import type { UserConfig } from 'vite-plus'
 
 /**
  * clade-projected paths. In a consumer these are LOCKED copies (chmod 444)
@@ -474,12 +478,17 @@ export const stagedBase = {
   },
 }
 
-// 同 oxlint 的 DummyRule：OxlintConfig rules map 的 index signature 收這個形狀，
-// overrides spread 進 defineConfig 才過型別（Record<string, unknown> 不行）。
-type LintLevel = 'allow' | 'off' | 'warn' | 'error' | 'deny' | number
-type LintRule = LintLevel | [LintLevel, ...unknown[]]
+// lintBase／fmtBase 用 `satisfies` 對 vite-plus 的 lint／fmt 型別收斂：
+// - `satisfies` 給物件字面值 contextual type，`plugins` 保持 plugin 名 union、`eqeqeq` 保持 tuple、
+//   `arrowParens` 保持 `'always'`，consumer `...lintBase` spread 進 `defineConfig` 不被推寬成
+//   `string[]`／`string`（nuxt ≥4.6.4 的 `nuxt typecheck` 會檢查 vite.config.ts，推寬就紅）。
+// - NEVER 改成型別註記（`: LintConfig`）：那會把 `rules`／`ignorePatterns` 變成 optional，
+//   consumer 的 `[...lintBase.ignorePatterns, …]` 就斷了。`satisfies` 保留推斷出的精確形狀。
+// - NEVER 改回 `as const`：readonly 陣列不能指派給 OxlintConfig 的可變陣列欄位。
+type LintConfig = NonNullable<UserConfig['lint']>
+type FmtConfig = NonNullable<UserConfig['fmt']>
+type LintOverride = NonNullable<LintConfig['overrides']>[number]
 
-/** @type {import('oxlint').OxlintConfig} */
 export const lintBase = {
   categories: {
     correctness: 'error',
@@ -564,12 +573,11 @@ export const lintBase = {
     // 與 fmtBase 同一份判定，見 `lockedScriptProjections` 的註解。
     ...lockedScriptProjections(),
   ],
-  // 上方 JSDoc @type 對 .ts 不生效、oxlint 又不是直接 dep（無法 import type），
-  // 所以 overrides 在這裡顯式宣告型別，consumer 才能 `...(lintBase.overrides ?? [])` 往後接。
-  overrides: [] as { files: string[]; rules: Record<string, LintRule> }[],
-}
+  // 空陣列字面值會被推成 `never[]`，這裡顯式標成 OxlintConfig 的 override 型別，
+  // consumer 才能 `...(lintBase.overrides ?? [])` 往後接。
+  overrides: [] as LintOverride[],
+} satisfies LintConfig
 
-/** @type {import('oxfmt').OxfmtConfig} */
 export const fmtBase = {
   semi: false,
   singleQuote: true,
@@ -603,7 +611,7 @@ export const fmtBase = {
     // 版本與 clade 不同時兩邊要求互斥。見 `lockedScriptProjections` 的註解。
     ...lockedScriptProjections(),
   ],
-}
+} satisfies FmtConfig
 
 /**
  * Vitest 的 `defaultExclude` 逐字複本（v4.1.11 實測）。

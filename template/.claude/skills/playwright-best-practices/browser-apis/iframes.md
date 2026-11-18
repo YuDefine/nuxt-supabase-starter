@@ -119,7 +119,7 @@ test("OAuth iframe flow", async ({ page }) => {
 
   // Wait for OAuth form
   await expect(oauthFrame.getByLabel("Email")).toBeVisible({ timeout: 10000 });
-  await oauthFrame.getByLabel("Email").fill("user@example.com");
+  await oauthFrame.getByLabel("Email").fill("test@gmail.com");
 });
 ```
 

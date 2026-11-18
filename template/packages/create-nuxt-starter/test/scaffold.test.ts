@@ -1,7 +1,8 @@
 // clade-legacy-test: frozen=2026-09-28 — 舊測試：沒有對應 truth，不是 BDD 的慣例來源；工作碰到就吸收（clade-spec-workflow/rules/legacy-tests.md）
+import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'pathe'
+import { join, resolve } from 'pathe'
 import { afterEach, beforeEach, describe, expect, it } from 'vite-plus/test'
 import { assembleProject } from '../src/assemble'
 import { getDefaultSelections } from '../src/prompts'
@@ -9,6 +10,23 @@ import { resolveFeatureDependencies } from '../src/features'
 import { buildSelectionsFromArgs } from '../src/cli'
 
 const TEST_DIR = mkdtempSync(join(tmpdir(), 'scaffold-test-'))
+const STARTER_INSTALL_SKILLS = resolve(
+  import.meta.dirname,
+  '..',
+  '..',
+  '..',
+  'scripts',
+  'install-skills.sh',
+)
+
+/** 「# 第三方 skill 釘版的 ref」那行起到 skill_add_pinned 函式結尾 `}` 的區塊 */
+function pinnedBlock(script: string): string {
+  const m = script.match(
+    /^# 第三方 skill 釘版的 ref[\s\S]*?^skill_add_pinned\(\) \{\n[\s\S]*?^\}$/m,
+  )
+  if (!m) throw new Error('找不到釘版 ref 區塊')
+  return m[0]
+}
 
 function cleanTestDir() {
   if (existsSync(TEST_DIR)) {
@@ -130,7 +148,9 @@ describe('scaffold: base-only (no features)', () => {
     const script = readFileSync(join(targetDir, 'scripts', 'install-skills.sh'), 'utf-8')
     expect(script).toContain('nuxt/ui')
     expect(script).toContain('pbakaus/impeccable')
-    expect(script).toContain('npx skills add pbakaus/impeccable $COPY_FLAGS')
+    expect(script).toContain(
+      'skill_add_pinned "https://github.com/pbakaus/impeccable/tree/$REF_PBAKAUS_IMPECCABLE/.agents/skills/impeccable" $COPY_FLAGS',
+    )
     expect(script).not.toContain('pbakaus/impeccable@$skill')
     expect(script).not.toMatch(/for skill in \S*adapt\b/)
     expect(script).not.toMatch(
@@ -418,9 +438,12 @@ describe('scaffold: Better Auth 模組身分', () => {
     )
 
     const installSkills = readFileSync(join(targetDir, 'scripts', 'install-skills.sh'), 'utf-8')
-    // onmax/nuxt-skills 已刪掉 nuxt-better-auth 與 vueuse 兩個 skill（2026-08-24 實測 404）
+    // onmax/nuxt-skills 已刪掉 nuxt-better-auth 與 vueuse 兩個 skill
     expect(installSkills).not.toContain('nuxt-better-auth')
-    expect(installSkills).not.toMatch(/onmax\/nuxt-skills@\$skill[\s\S]*?\bvueuse\b/)
+    const onmaxLoop = installSkills.match(
+      /for skill in ([^\n]+); do\n[^\n]*\n(?:[^\n]*\n)?\s+skill_add_pinned "https:\/\/github\.com\/onmax\/nuxt-skills\//,
+    )
+    if (onmaxLoop) expect(onmaxLoop[1].split(' ')).not.toContain('vueuse')
     expect(installSkills).toContain('vueuse-functions')
   })
 
@@ -429,15 +452,19 @@ describe('scaffold: Better Auth 模組身分', () => {
     assembleProject(targetDir, resolveFeatureDependencies(['pinia']), 'vue-skills-src')
 
     const installSkills = readFileSync(join(targetDir, 'scripts', 'install-skills.sh'), 'utf-8')
-    expect(installSkills).toContain('vuejs-ai/skills@$skill')
-    expect(installSkills).toContain('npx skills add vueuse/skills@vueuse-functions')
+    expect(installSkills).toContain(
+      'skill_add_pinned "https://github.com/vuejs-ai/skills/tree/$REF_VUEJS_AI_SKILLS/skills/$skill"',
+    )
+    expect(installSkills).toContain(
+      'skill_add_pinned "https://github.com/vueuse/skills/tree/$REF_VUEUSE_SKILLS/skills/vueuse-functions"',
+    )
     expect(installSkills).toMatch(
-      /for skill in vue-best-practices vue-testing-best-practices; do\n\s+npx skills add vuejs-ai\/skills@\$skill/,
+      /for skill in vue-best-practices vue-testing-best-practices; do\n\s+skill_add_pinned "https:\/\/github\.com\/vuejs-ai\/skills\/tree\/\$REF_VUEJS_AI_SKILLS\//,
     )
 
     // antfu 迴圈只剩 antfu/skills 實際提供的 skill
     const antfuLoop = installSkills.match(
-      /for skill in ([^\n]+); do\n\s+npx skills add antfu\/skills@\$skill/,
+      /for skill in ([^\n]+); do\n\s+ref=\$REF_ANTFU_SKILLS\n\s+case \$skill in nuxt\|vitepress\) ref=\$REF_ANTFU_SKILLS_PRE_NUXT5 ;; esac\n\s+skill_add_pinned "https:\/\/github\.com\/antfu\/skills\/tree\/\$ref\/skills\/\$skill"/,
     )
     expect(antfuLoop).not.toBeNull()
     const antfuNames = antfuLoop![1].split(' ')
@@ -569,5 +596,82 @@ describe('scaffold: 全新專案的 pnpm check 前置條件', () => {
     // 預設 10s 不夠：environment 'nuxt' 每個 test 檔都要 boot 一次完整 Nuxt build
     const declared = /hookTimeout:\s*([\d_]+)/.exec(config)?.[1]?.replace(/_/g, '')
     expect(Number(declared)).toBeGreaterThanOrEqual(30000)
+  })
+})
+
+describe('scaffold: install-skills.sh 釘版（clade skill-management § 第三方 skill 安裝契約）', () => {
+  const featureSets: Array<[string, string[]]> = [
+    ['base-only', []],
+    [
+      '全勾',
+      resolveFeatureDependencies(['ui', 'pinia', 'database', 'monitoring', 'deploy-cloudflare']),
+    ],
+  ]
+
+  for (const [name, feats] of featureSets) {
+    it(`${name}：沒有不釘版的 npx skills add <owner>/<repo>@ 形式，每個 github 安裝都走 skill_add_pinned`, () => {
+      const targetDir = join(TEST_DIR, `pinned-${name}`)
+      assembleProject(targetDir, feats, `pinned-${name}`)
+      const script = readFileSync(join(targetDir, 'scripts', 'install-skills.sh'), 'utf-8')
+
+      expect(script).not.toMatch(/npx skills add\s+["']?[\w.-]+\/[\w.-]+@/)
+      // 唯一允許的 npx skills add 是 skill_add_pinned 函式內那行
+      const npxLines = script
+        .split('\n')
+        .filter((l) => !l.trimStart().startsWith('#') && l.includes('npx skills add'))
+      expect(npxLines).toEqual(['  npx skills add "$url" "$@"'])
+
+      const installs = script.split('\n').filter((l) => /^\s*skill_add_pinned "/.test(l))
+      expect(installs.length).toBeGreaterThan(0)
+      for (const line of installs) {
+        expect(line).toMatch(
+          /^\s*skill_add_pinned "https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/tree\/\$(ref|REF_[A-Z0-9_]+)\/\S+" \$COPY_FLAGS$/,
+        )
+      }
+
+      // 用到的 REF_ 變數都得在釘版區塊裡有定義
+      const block = pinnedBlock(script)
+      const used = new Set(
+        [...script.slice(script.indexOf(block) + block.length).matchAll(/\$(REF_[A-Z0-9_]+)/g)].map(
+          (m) => m[1],
+        ),
+      )
+      for (const v of used)
+        expect(block, v).toMatch(new RegExp(`^${v}=[0-9a-f]{40}$|^${v}=\\S+$`, 'm'))
+    })
+
+    it(`${name}：REF 區塊與 starter 的 scripts/install-skills.sh 原樣一致`, () => {
+      const targetDir = join(TEST_DIR, `block-${name}`)
+      assembleProject(targetDir, feats, `block-${name}`)
+      const script = readFileSync(join(targetDir, 'scripts', 'install-skills.sh'), 'utf-8')
+      const starter = readFileSync(STARTER_INSTALL_SKILLS, 'utf-8')
+
+      expect(pinnedBlock(script)).toBe(pinnedBlock(starter))
+      // 產出的腳本語法要能被 bash 解析
+      execFileSync('bash', ['-n', join(targetDir, 'scripts', 'install-skills.sh')])
+      expect(script).toContain('重複執行會照下方釘的 ref 重裝')
+      expect(script).not.toContain('覆寫為最新版')
+    })
+  }
+
+  it('依 feature 選到的來源都帶對應的 ref 變數', () => {
+    const targetDir = join(TEST_DIR, 'pinned-sources')
+    assembleProject(
+      targetDir,
+      resolveFeatureDependencies(['ui', 'monitoring', 'deploy-cloudflare']),
+      'pinned-sources',
+    )
+    const script = readFileSync(join(targetDir, 'scripts', 'install-skills.sh'), 'utf-8')
+    expect(script).toContain(
+      'skill_add_pinned "https://github.com/evloghq/evlog/tree/$REF_EVLOGHQ_EVLOG/apps/docs/skills/review-logging-patterns"',
+    )
+    expect(script).toContain(
+      'skill_add_pinned "https://github.com/GoogleChrome/modern-web-guidance/tree/$REF_GOOGLECHROME_MODERN_WEB_GUIDANCE/skills/modern-web-guidance"',
+    )
+    // motion 在上游已移除，只能走 legacy ref
+    expect(script).toContain('case $skill in motion) ref=$REF_ONMAX_NUXT_SKILLS_LEGACY ;; esac')
+    expect(script).toContain(
+      'case $skill in nuxt|vitepress) ref=$REF_ANTFU_SKILLS_PRE_NUXT5 ;; esac',
+    )
   })
 })

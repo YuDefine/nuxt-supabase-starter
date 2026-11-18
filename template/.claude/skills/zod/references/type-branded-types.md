@@ -24,7 +24,7 @@ async function getOrder(orderId: OrderId) {
   return db.orders.findUnique({ where: { id: orderId } })
 }
 
-const userId: UserId = '00000000-0000-0000-0000-000000000000'
+const userId: UserId = '550e8400-e29b-41d4-a716-446655440000'
 getOrder(userId)  // No error! TypeScript allows this bug
 // Runtime: queries orders table with user ID, returns nothing or wrong data
 ```
@@ -47,10 +47,10 @@ async function getOrder(orderId: OrderId) {
   return db.orders.findUnique({ where: { id: orderId } })
 }
 
-const userId = userIdSchema.parse('00000000-0000-0000-0000-000000000000')
+const userId = userIdSchema.parse('550e8400-e29b-41d4-a716-446655440000')
 getOrder(userId)  // TypeScript error: Argument of type 'UserId' is not assignable to parameter of type 'OrderId'
 
-const orderId = orderIdSchema.parse('00000000-0000-0000-0000-000000000000')
+const orderId = orderIdSchema.parse('660e8400-e29b-41d4-a716-446655440001')
 getOrder(orderId)  // Works correctly
 ```
 

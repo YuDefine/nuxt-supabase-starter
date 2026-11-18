@@ -29,6 +29,7 @@
 | TD-024 | Template CI evlog map gate 暫掛 `ratchet`，須推到 `strict`                                               | done        | 2026-09-30 |
 | TD-025 | scaffold receipt 收錄未進 initial commit 的 `.claude/settings.local.json`，`scaffold-receipt.test.ts` 紅 | done        | 2026-09-29 |
 | TD-026 | aixbdd B3 逆向基準線只展開 profiles，其餘模組與 Gherkin runner 接線未做                                  | done        | 2026-10-03 |
+| TD-027 | `scaffold-smoke` placeholder scan 暫時放行兩行 clade 投影註解，等 clade#5359 進 release 後移除           | open        | 2026-11-14 |
 
 ### 2026-10-04 origin/main 對帳（基準 `a245b8abd`，M4 handoff-TD burn）
 
@@ -1105,6 +1106,28 @@ receipt（`src/scaffold-receipt.ts`）把磁碟上存在、但被 gitignore 擋�
 - 回歸涵蓋安裝時位元組、安裝產生的 tracked 檔、`--no-install`、ignored 目錄與 negation、既有 repo 的 tracked ignored 檔，並逐筆核對 committed blob 的 hash。排序改用工具鏈要求的 `toSorted()`，package tsconfig 補 `ES2023` lib，與 Node 24 runtime 對齊。
 - Scaffolder `pnpm test`：236 passed / 2 skipped（既有 skipped 未變更）；package `pnpm run typecheck`、改動路徑 `pnpm run lint`／`pnpm run format:check` 通過；template `pnpm run doctor` 為 clean、零診斷。
 - PR #20 轉 ready 後，CI run `36703862581` 的兩個 receipt 案例因 runner 缺少 Git 作者／提交者身分而沒有 initial commit，`git show HEAD:...` 失敗。以 `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1` 本機重現相同 2 failed；Template CI 的 Unit tests 步驟提供 fixture 的 `GIT_AUTHOR_*`／`GIT_COMMITTER_*` 後，同環境原測試 4 passed，未修改測試或斷言。合併 main 後的相關 scaffold／更新策略／receipt 測試另驗 62 passed。
+
+## TD-027 — `scaffold-smoke` placeholder scan 暫時放行兩行 clade 投影註解，等 clade#5359 進 release 後移除
+
+**Status**: open
+**Discovered**: 2026-11-14 — 每張 PR 的 `scaffold-smoke` 都紅在 `[FAIL] placeholder scan found unexpected hits`（例：#49 run `43247926340`）
+**Location**: `scripts/smoke-scaffold.sh` `drop_known_projection_hits()`
+
+### Problem
+
+clade 投影 `template/scripts/pre-commit/consumer-root.sh:7` 與 `runner.sh:41` 的註解寫了字面 repo 名，是 TD-019 同類的真訊號。
+根治在 clade 來源：clade#5359（merge `111412602007`）已把兩行改成去識別化寫法，但截至 2026-11-14 最新 release 是 v1.13.105、還不含它，
+starter 端改投影檔會被 clade-projection-drift 擋、下次 propagate 也會覆寫。
+
+### Fix approach
+
+過渡期只放行「路徑＋整行內容」逐字相符的這兩行（`drop_known_projection_hits()`），同兩檔的任何新命中照樣報；
+NEVER 擴成整檔或整目錄排除（TD-019 Fix approach）。
+
+### Acceptance
+
+- 含 clade#5359 的 release propagate 進 starter 後，`grep -n nuxt-supabase-starter template/scripts/pre-commit/{consumer-root,runner}.sh` 無輸出。
+- 刪掉 `drop_known_projection_hits()` 與呼叫點後，`scaffold-smoke` 在 main 仍綠，本條改 done。
 
 ## TD-026 — aixbdd B3 逆向基準線只展開 profiles，其餘模組與 Gherkin runner 接線未做
 

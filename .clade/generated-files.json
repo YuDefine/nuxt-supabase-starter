@@ -9,8 +9,8 @@
       "evidence": {
         "kind": "projection",
         "source": ".agents/skills/commit/scripts/claude-review-safe.sh",
-        "clade_version": "1.13.104",
-        "sha256": "efb7e20307c026567fca1c73e6be64face2500a944f0ae72df2a116a048d7533"
+        "clade_version": "1.13.106",
+        "sha256": "f0db3257180bcdb66480d3680cf16aa58904408cd0abe0e94d23a9fe0b45a21a"
       }
     },
     {
@@ -21,8 +21,8 @@
       "evidence": {
         "kind": "projection",
         "source": ".agents/skills/commit/scripts/lib/review-common.sh",
-        "clade_version": "1.13.104",
-        "sha256": "33edf183db9ee116bfe25b1498f0fcfec5f29b45c6907d9f05fd7ab5828c299e"
+        "clade_version": "1.13.106",
+        "sha256": "429b3caa72a1cf73d906bf10e136046ed1f12fc7b4ced8e8b22d9e9488d30c8c"
       }
     },
     {
@@ -33,8 +33,8 @@
       "evidence": {
         "kind": "projection",
         "source": ".agents/skills/commit/gates.md",
-        "clade_version": "1.13.104",
-        "sha256": "feafd4f6d7dceb02f83672a343b35cb6917468b047c405133909f997066d543a"
+        "clade_version": "1.13.106",
+        "sha256": "7ae8745e4f56a25854394617b36df937e059c121cbc92715016c07025662c1bf"
       }
     },
     {
@@ -45,8 +45,8 @@
       "evidence": {
         "kind": "projection",
         "source": ".agents/skills/commit/scripts/claude-review-safe.sh",
-        "clade_version": "1.13.104",
-        "sha256": "efb7e20307c026567fca1c73e6be64face2500a944f0ae72df2a116a048d7533"
+        "clade_version": "1.13.106",
+        "sha256": "f0db3257180bcdb66480d3680cf16aa58904408cd0abe0e94d23a9fe0b45a21a"
       }
     },
     {
@@ -57,8 +57,8 @@
       "evidence": {
         "kind": "projection",
         "source": ".agents/skills/commit/scripts/lib/review-common.sh",
-        "clade_version": "1.13.104",
-        "sha256": "33edf183db9ee116bfe25b1498f0fcfec5f29b45c6907d9f05fd7ab5828c299e"
+        "clade_version": "1.13.106",
+        "sha256": "429b3caa72a1cf73d906bf10e136046ed1f12fc7b4ced8e8b22d9e9488d30c8c"
       }
     }
   ]

@@ -33,7 +33,7 @@ test("Google OAuth login", async ({ page }) => {
         valid: true,
         user: {
           id: "123",
-          email: "user@example.com",
+          email: "test@gmail.com",
           name: "Test User",
         },
       },
@@ -92,7 +92,7 @@ export const test = base.extend<OAuthFixtures>({
 test("login with GitHub", async ({ page, mockOAuth }) => {
   await mockOAuth("github", {
     id: "gh-123",
-    email: "dev@example.com",
+    email: "dev@github.com",
     name: "GitHub User",
   });
 
@@ -122,7 +122,7 @@ test("SAML SSO login", async ({ page }) => {
   await page.route("**/api/session", (route) =>
     route.fulfill({
       json: {
-        user: { email: "user@example.com", name: "SSO User" },
+        user: { email: "user@company.com", name: "SSO User" },
         provider: "saml",
       },
     }),
