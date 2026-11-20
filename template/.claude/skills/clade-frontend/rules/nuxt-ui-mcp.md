@@ -45,7 +45,7 @@ path scope 含 `specs/plans/**/{spec,plan,design-review}.md`，**不是**只有�
 
 1. **Query**——用 `nuxt-ui-remote` MCP（`search-components` / `get-component` / `list-examples` / `search-composables`）取得該場景可用的元件與其真實 slot / variant / prop。**NEVER** 憑記憶列元件
 2. **列出 ≥2 個候選組合**——不是「找到一個能做的就寫進 plan」。單一元件能達成的需求，組合起來體驗常更好（例：`USelect` 可以，但 `UInput` + `UCommandPalette` 支援搜尋與鍵盤操作）
-3. **讓使用者挑**——agent **NEVER** 代選。在對話中列出候選與各自的取捨讓使用者選；難以用文字比較時用 impeccable `live`／`generate` 出變體讓使用者看了再挑。選擇理由與被淘汰的候選寫進 plan
+3. **讓使用者挑**——agent **NEVER** 代選。在對話中列出候選與各自的取捨讓使用者選；難以用文字比較時用 impeccable `live` 出變體讓使用者看了再挑。選擇理由與被淘汰的候選寫進 plan
 
 **Plan 寫入格式**：
 

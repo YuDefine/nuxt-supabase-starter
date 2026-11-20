@@ -50,7 +50,7 @@ paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'app/**/*.ts', 'packages/*/ap
 | 跨裝置、斷點 | `adapt` |
 | 動效與過場 | `animate` |
 | 效能（首屏、互動延遲） | `optimize` |
-| 語意說不清、要看到才能判斷 | `live`（瀏覽器內即時出變體）或 `generate`（對指定元素出一批變體）讓使用者挑 |
+| 語意說不清、要看到才能判斷 | `live`（瀏覽器內即時出變體）讓使用者挑 |
 | 全路徑收尾 | `polish`（最後，關閉快照） |
 
 互斥：`bolder` 與 `quieter` 選一個方向；`distill` 先於 `bolder`；減弱（`quieter`）時不加色（`colorize`）。
@@ -59,7 +59,7 @@ paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'app/**/*.ts', 'packages/*/ap
 
 ### 新畫面與方向未定
 
-PM 確認前要給可審查的設計證據時：`shape` 釐清需求，new-work 的方向回合（impeccable 用 `serve-question` 自己開本機決策頁，**NEVER** 轉接到其他決策頁；主機沒有 DISPLAY／WAYLAND_DISPLAY 或 impeccable 印 `no browser detected` 時改跑 `node ~/offline/clade/vendor/scripts/impeccable-tailnet-question.ts start --payload <file>`，把 `TAILNET URL` 給使用者，**NEVER** 退回結構化文字提問，用法見 impeccable cookbook § headless／遠端主機的決策頁）；方向說不清就 `live`／`generate` 出變體。Nuxt UI 專案的元件選擇照 [[nuxt-ui-mcp]] § Component Candidates。
+PM 確認前要給可審查的設計證據時：`shape` 釐清需求，new-work 的方向回合（impeccable 用 `serve-question` 自己開本機決策頁，**NEVER** 轉接到其他決策頁；主機沒有 DISPLAY／WAYLAND_DISPLAY 或 impeccable 印 `no browser detected` 時改跑 `node ~/offline/clade/vendor/scripts/impeccable-tailnet-question.ts start --payload <file>`，把 `TAILNET URL` 給使用者，**NEVER** 退回結構化文字提問，用法見 impeccable cookbook § headless／遠端主機的決策頁）；方向說不清就 `live` 出變體。Nuxt UI 專案的元件選擇照 [[nuxt-ui-mcp]] § Component Candidates。
 
 ## Design Review Task Template
 
@@ -72,7 +72,7 @@ PM 確認前要給可審查的設計證據時：`shape` 釐清需求，new-work 
 
 - [ ] N.1 `impeccable context`：缺 PRODUCT.md 跑 `init`；有 code 缺 DESIGN.md 跑 `document`
 - [ ] N.2 `critique` ＋ `audit` [affected surfaces]（critique 快照路徑記進 design-review.md）
-- [ ] N.3 依 P0 → P3 逐族跑專科指令（說不清的走 `live`／`generate`）
+- [ ] N.3 依 P0 → P3 逐族跑專科指令（說不清的走 `live`）
 - [ ] N.4 `polish` [affected surfaces]，清完 `critique-storage close` 關閉快照
 - [ ] N.5 `impeccable detect --json [changed UI files]` 乾淨、`audit` Critical = 0
 - [ ] N.6 沉澱：`document`／`extract`／`ignore.md`，或在 design-review.md 寫「本輪無 design system 變更」
@@ -142,7 +142,7 @@ Design 工作可能發現 spec 未涵蓋的問題。**每一次**發現都按下
 1. **`design-review.md` 存在且三階段都有紀錄**——Stage 1 有 critique 快照路徑與 P0–P3 計數；Stage 2 逐項記錄 P0／P1 修正、polish 與明確 close 的快照路徑，或使用者確認的 ignore；單有 `closed: true` 不算；Stage 3 有 DESIGN.md 更新或「本輪無 design system 變更」一行
 2. **Design Review tasks 全部完成**——tasks 檔的 `## Design Review` 區塊中所有 checkbox 為 `[x]`
 
-兩項都成立，且 `## 人工檢查` 不留白，才可交付。任一不成立 → **STOP**，補完再交付。commit 端的唯讀快照處置檢查在 commit skill `gates.md` § 0-B.1。
+兩項都成立，且 `## 人工檢查` 不留白，才可交付。任一不成立 → **STOP**，補完再交付。commit 端的唯讀快照處置檢查在 commit skill `gates.md` § 0-B.1。CI 層另有 PR 關卡 `.github/actions/impeccable-detect`（clade vendor 投影；只掃本 PR 改到的 UI 檔，primary finding 或改到 UI 卻缺採用標記都擋），與 0-B.1 互補：0-B.1 在 commit 前含 critique 快照人工核對，CI 關卡只做機械 detect。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |

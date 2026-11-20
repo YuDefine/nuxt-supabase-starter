@@ -2,7 +2,7 @@
 
 觸發點：`SKILL.md` Phase 4 step 1（每一次載入下游 owner 之前）；被派出的 executor 由 brief 帶本檔路徑。
 
-# Rule 1 - 載入 owner 前先判 L／D／P，命中就照覆寫列執行
+# Rule 1 - 載入 owner 前先判 L／D／P／T，命中就照覆寫列執行
 
 - Level: `MUST`
 
@@ -18,6 +18,7 @@ anchor 由 `scripts/audit-upstream-overrides.ts` 對 pin 的 `vendor/aixbdd/.age
 - **L｜lifecycle 落點**：本次 plan package 的 `work.md` frontmatter 同時含 `work_id:` 與 `truth_baseline:` 兩個鍵（相容期內，沒有 `work.md` 時看 legacy `plan.md`，下稱舊 package）。判準只看這兩個鍵；**NEVER** 用 repo 名、manifest、`specs/truth/**` 是否存在或任何其他檔案推斷。
 - **D｜canonical doctor**：repo 的 `.claude/hub.json` `modules.capabilities` 含 `aixbdd`，也就是適用 fleet canonical doctor 契約的 clade consumer。doctor 命令依 repo 已確認的 package manager、workspace root、技術棧與既有 canonical project check 決定；**NEVER** 把 `pnpm run doctor` 當跨 repo 預設，也 **NEVER** 用固定 exit 0 的包裝器或 no-op 代替。
 - **P｜派工時長**：範圍與 D 相同（repo 的 `.claude/hub.json` `modules.capabilities` 含 `aixbdd`）；這些 consumer 都投影了 clade 的 `agent-routing` 規約，派工載體以它的 § 派多少 估時為準。
+- **T｜techstack 確認紀錄**：範圍同 D 的 consumer（宣告 `aixbdd`）——判定讀 neutral manifest reader 的 `resolved` capabilities：canonical `.clade/manifest.json` 優先，只有 canonical 缺席才讀 legacy `.claude/hub.json`；**NEVER** 只讀 `.claude/hub.json`（新專案只有 canonical manifest，會永遠不命中）——且 `docs/techstack-confirmation.md` 存在、`node ~/offline/clade/vendor/scripts/techstack-confirmation.ts check --record docs/techstack-confirmation.md` exit 0（清單與紀錄格式的 SSoT 是該 CLI 與 `vendor/scripts/lib/techstack-checklist.ts`，本檔與任何 md **NEVER** 另列項目）。檔不存在或 check 非零 → 未命中 T，照上游原文；`~/offline/clade` 不存在而跑不了 check（cloud）時，紀錄檔在 repo 裡讀得到，檔存在就照命中 T 執行（「不偏離已記錄的決定」「改清單項先問 Charles」照樣有效），回報裡寫一行「check 未跑」。**NEVER** 自己肉眼判「齊全」，也 **NEVER** 為了命中 T 代寫紀錄（紀錄只由 Charles 確認後追加列）。檔存在但 check 非零時，回報裡寫一行紀錄未通過與缺項，不擋本次研究。
 
 命中 L 時，下表的「L 落點」指這五點：
 
@@ -243,4 +244,33 @@ owner ∈ {ui-plan、api-plan、data-plan、tasks} 的**每一次**載入，在�
 
 ```text
 api-plan 直接動筆，implement 階段才「想到」叫 clade-operations；或 bp-scan --rules-for 'server/api/**'；或 tasks 把 12 份命中 rule 全貼進每個 phase 的 Shared Must Read
+```
+
+# Rule 7 - T 族覆寫：確認紀錄通過時，technical-research 依紀錄寫 techstack，改清單項先問 Charles
+
+- Level: `MUST`
+
+成因：新專案的 tech stack 由 `/presale`、project-bootstrap 與 bootstrap 閘門逐項請 Charles 確認並留 `docs/techstack-confirmation.md`（`W-2026-10-30-tech-stack-presale-project-bootstrap-ssot`）；上游 `/technical-research` 只有三題必問，其餘 stack 由 agent 自行寫進 `specs/truth/techstack.md`，會把已確認的項目改掉或重問。本條對所有宣告 `aixbdd` 的 consumer 生效（載入條件＝本檔指標涵蓋的範圍＋判準 T）；`technical-research/specformula.md` 只在宣告 `specformula` 時載入，所以放這裡。上游鏡像（`SKILL.md`、`rules/`、`templates/`）不動。與 `specformula.md` 的關係：該檔提供三題的 fleet 預設並寫「三題仍 MUST 走 `/clarify`」，本條說明紀錄已涵蓋的題算已拍板、不重問（該檔 MUST 1 已註明讓位）；兩者並用時，確認紀錄的決定優先於 fleet 預設，紀錄沒涵蓋的題仍照該檔與上游走 `/clarify`。
+
+| owner skill | 上游 anchor（檔＋原句逐字） | 判準 | 覆寫後怎麼做 |
+| --- | --- | --- | --- |
+| technical-research | `technical-research/SKILL.md`：「`specs/truth/techstack.md` 與必要 codebase 邊界。」 | T | Phase 1 step 1 另讀 `docs/techstack-confirmation.md`，每項取同 `item` 最後一列（追加式紀錄）作為已確認的決定與版本 |
+| technical-research | `technical-research/rules/AIxBDD必問問題與起始專案介面澄清判準.md`：「下列才算該題已拍板，可以跳過重問：」 | T | 另加一條：確認紀錄有效列（`decision` 非 `N/A`）涵蓋的題算已拍板、不重問——`test-bdd` 對應 BDD techstack（只涵蓋 `decision` 寫明的端；其餘端的 runner 照上游 Rule 3 按端問，**NEVER** 由一個值推別端）、`test-e2e`（與 `test-unit`）對應測試策略。「系統有哪些端」**不**由 `framework` 推論，仍照上游 Rule 5 問端的存在。紀錄的決定優先於 `specformula.md` 的 fleet 預設。`N/A` 不算已拍板（尤其 `test-bdd` 為 `N/A` 與 AIxBDD workflow 相悖）：該題照上游走 `/clarify`。紀錄沒涵蓋的題照上游 |
+| technical-research | `technical-research/SKILL.md`：「依現有 truth 與本輪決策更新 `specs/truth/techstack.md`」 | T | `techstack.md` 中屬於確認清單的項目（項目以 CLI／`techstack-checklist.ts` 為準）依紀錄有效列的 `decision`／`version` 寫，**NEVER** 與紀錄不同；清單沒涵蓋的分層細節（套件用途、不引入的技術）照上游。上游「必須是完整現況」不變 |
+| technical-research | `technical-research/SKILL.md`：「高影響修改/刪除既有 techstack truth，呼叫 `/clarify`；未收斂前停止。」 | T | 新增、修改（含只改版本）、刪除確認清單內任何一項，一律視為高影響：呼叫 `/clarify` 問 Charles 並取得答案，由 Charles 在 `docs/techstack-confirmation.md` 追加一列（`confirmed_by: Charles`、ISO 日期；**NEVER** 覆寫舊列、**NEVER** 由 agent 代填），重跑 `check` exit 0 之後才改 `techstack.md`。沒取得回答就停止，**NEVER** 自行改寫。清單外的高影響 techstack truth 修改或刪除照上游 `/clarify` |
+
+## Good Example
+
+- 這個例子是好的，因為紀錄通過時直接沿用、改版本先問並追加列。
+
+```text
+check exit 0，紀錄 database＝Supabase PostgreSQL 17、test-bdd＝SpecFormula（寫明後端）→ 後端 BDD techstack 不重問，前端 runner 與有哪些端照上游問；techstack.md 寫 PostgreSQL 17。想改 PostgreSQL 16 → /clarify 問 Charles，追加一列，check 通過後才改
+```
+
+## Bad Example
+
+- 這個例子是壞的，因為 agent 自己改了清單項，或為了命中 T 代寫紀錄。
+
+```text
+techstack.md 把 runtime 從 Node 22 改成 Bun「比較快」，紀錄沒追加；或 check 非零時自己補 confirmed_by: Charles 讓它通過
 ```

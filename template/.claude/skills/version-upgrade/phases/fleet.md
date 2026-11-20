@@ -184,7 +184,7 @@ runtime-native question interface 提供四個選項：
 [4] 中止
 ```
 
-**MUST 等 user 選**，**NEVER** 主線自決定全部 sweep。
+**MUST 等 user 選**，**NEVER** 主線自決定全部 sweep。被派出的 pane（`CLADE_DISPATCH_ID` 非空）照 `rules/被派出時人類閘門判準.md` G3 以 `--complete blocked --decision-for charles` 送這四個選項。
 
 ## Step F.6 — 並行 fan-out 長駐 subagent
 
@@ -231,7 +231,7 @@ runtime-native question interface 提供四個選項：
 [4] 都先停下，我手動 review 後再決定（保留來源 checkpoint）
 ```
 
-**MUST 等 user 選**。**NEVER** 主線自決定全部 push。
+**MUST 等 user 選**。**NEVER** 主線自決定全部 push。被派出的 pane 同樣照 `rules/被派出時人類閘門判準.md` G3 送題，先 commit 計畫檔、保留各 consumer 的 checkpoint。
 
 ### F.8.3 按 user 選擇執行
 

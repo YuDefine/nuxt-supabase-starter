@@ -34,7 +34,7 @@ work id 用 ambient `CLADE_WORK_ID=<work-id>` 帶進（`W-…` 不是 `--origin`
 | `--include-unrelated-dirty` | 只限 `stash` 策略：把 main **全部** dirty bulk-capture 進新樹，main 端變乾淨（預設關閉） |
 | `--baseline-stash-name <name>` | 覆寫預設 stash 名 `wt-baseline/<slug>/<ISO>` |
 | `--skip-prefork-audit` | 關掉 in-flight feature audit 警告（預設門檻 50 個 tracked 變更，可用 `WT_PREFORK_AUDIT_THRESHOLD` 覆寫） |
-| `--base integration/<work-id>` | 從 integration branch fork（也接受 `origin/integration/<work-id>`）；其他 ref 一律拒絕 |
+| `--base integration/<work-id>` | 從 integration branch fork（也接受 `origin/integration/<work-id>`）；其他 ref 一律拒絕。**NEVER** 為了「從 origin/main 開」帶 `--base origin/main`：不帶 `--base` 就是 landing base，本機 main 落後 origin 時 `add` 自動從 fetch 後的 origin/main 開 |
 | `--expected-paths <comma>` | 這棵樹預期會寫的路徑，寫進 claim 供重疊偵測；省略時沿用 `--baseline-scope-paths` |
 | `--origin <scheme>:<id>` | 指名這棵樹服務的工作，只收 `td:`／`notion:` 等 ref scheme（例：`td:TD-787`）；`W-…` work id 走 ambient `CLADE_WORK_ID`；兩者都沒有時卡片標為「未歸屬」 |
 | `--machine <peer>` | 在對等機器的 clade checkout 上建樹（同一 repo 路徑，經 GitHub 同步，NEVER rsync／scp 工作樹） |

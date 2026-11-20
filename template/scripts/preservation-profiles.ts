@@ -75,19 +75,87 @@ const profileEntries: Array<[string, ProfileDefinition]> = [
   [
     '<consumer-a>',
     {
-      topology: unknownTopology,
+      // Evidence 2026-11-09 (desk main + 142 linked worktrees, 9,641,754 entries, and zenbook main
+      // + 129 linked worktrees, 12,493,620 entries, all ext4; plan
+      // W-2026-09-29-preservation-resource-adapters
+      // evidence/2026-11-09-<consumer-a>-<consumer-d>-<consumer-h>-inventory.md): nested
+      // repositories are gitignored Pi clones `.pi/git/github.com/YuDefine/clade/.git` (desk main +
+      // 10 trees, zenbook main); no gitlink or .gitmodules, no objects/info/alternates, no
+      // `filter=lfs` attribute or .git/lfs (only the host-wide git config filter); 0 special files
+      // and no posix ACL; exactly two Samba `user.DOSATTRIB` xattrs on desk main's
+      // `docs/archives/openspec/**/.openspec.yaml` (<consumer-j> precedent: xattr declared-present).
+      // 534 symlinks look external to the walker, 525 resolve lexically inside their tree; the 9
+      // that leave it (`.env.<client-a>`/`.env.shared` and `node_modules` links into main's tree,
+      // `.clade/bin/{clade-gate,vp}` in ci-stabilize) churn per worktree — no allowlist (<consumer-b>
+      // precedent). Resources follow the worktree-db topology (registry preview_db clone-sidecar,
+      // `.claude/worktree-db.json` tracked in all 273 trees): clone databases `<consumer-a>_wt_*` live in
+      // `supabase_db_<consumer-a>` and 105 `<consumer-a>-pgrst-wt-*` sidecar containers run on
+      // <client-a>-<consumer-a>-dev; the per-worktree storage volume is opt-in (`storage.default: false`,
+      // none exist today) but the same adapter probes it. Real secrets: `.env.<client-a>` and
+      // `.env.shared` in every tree.
+      topology: {
+        nestedRepositories: 'declared-present',
+        submodules: 'verified-absent',
+        sharedGitObjects: 'verified-absent',
+        lfs: 'verified-absent',
+      },
       resources: {
-        ...unknownResources,
         databases: 'declared-present',
+        volumes: 'declared-present',
         sidecars: 'declared-present',
+        secrets: 'declared-present',
+      },
+      resourceAdapters: {
+        secrets: 'in-tree-archive',
+        databases: 'worktree-db',
+        sidecars: 'worktree-db',
+        volumes: 'worktree-db',
+      },
+      filesystem: {
+        externalSymlinks: 'declared-present',
+        specialFiles: 'verified-absent',
+        acl: 'verified-absent',
+        xattr: 'declared-present',
       },
     },
   ],
   [
     '<consumer-d>',
     {
-      topology: unknownTopology,
-      resources: { ...unknownResources, databases: 'declared-present' },
+      // Evidence 2026-11-09 (desk 17 trees 637,620 entries + zenbook 17 trees 1,363,536 entries,
+      // all ext4; plan W-2026-09-29-preservation-resource-adapters
+      // evidence/2026-11-09-<consumer-a>-<consumer-d>-<consumer-h>-inventory.md): the only nested
+      // repositories are gitignored Pi clones `.pi/git/github.com/YuDefine/clade/.git` (desk main +
+      // 1 worktree); no gitlink or .gitmodules, no objects/info/alternates, no `filter=lfs`
+      // attribute or .git/lfs (only the host-wide git config filter); 0 special files, no xattr and
+      // so no posix ACL. 221 symlinks look external to the walker but every one resolves lexically
+      // inside its tree (dangling `.claude/rules/* -> ../../.clade/runtime/rules/*` in integration
+      // trees, `.pnpm-store` links in main); none leaves the tree. Database state is host-level:
+      // docs/self-hosted-supabase.md puts the only dev stack at `/opt/<consumer-d>/dev-supabase`
+      // on <consumer-d>-USR (compose project `dev-supabase`, started over ssh; local `supabase start` is
+      // blocked by a hook), registry preview_db is diff-only, no `.claude/worktree-db.json`, and no
+      // docker container, volume or mount on desk, zenbook or <consumer-d>-USR carries the
+      // `com.supabase.cli.project=<consumer-d>` label or references a <consumer-d> tree. Real
+      // secrets: `.env` in every tree (+ `.env.test` in main).
+      topology: {
+        nestedRepositories: 'declared-present',
+        submodules: 'verified-absent',
+        sharedGitObjects: 'verified-absent',
+        lfs: 'verified-absent',
+      },
+      resources: {
+        databases: 'verified-absent',
+        volumes: 'verified-absent',
+        sidecars: 'verified-absent',
+        secrets: 'declared-present',
+      },
+      resourceAdapters: { secrets: 'in-tree-archive' },
+      filesystem: {
+        externalSymlinks: 'verified-absent',
+        specialFiles: 'verified-absent',
+        acl: 'verified-absent',
+        xattr: 'verified-absent',
+      },
     },
   ],
   [
@@ -165,20 +233,20 @@ const profileEntries: Array<[string, ProfileDefinition]> = [
     },
   ],
   [
-    '<consumer-l>',
+    '<consumer-m>',
     {
       // Evidence 2026-11-06 (main + 25 linked worktrees + 1 review-snap clone, 2,281,744
       // entries on ext4; plan W-2026-09-29-preservation-resource-adapters
-      // evidence/2026-11-06-<consumer-l>-inventory.md): the only nested repositories are
+      // evidence/2026-11-06-<consumer-m>-inventory.md): the only nested repositories are
       // gitignored Pi clones `.pi/git/github.com/YuDefine/clade/.git` (main + 1 batch tree); no
       // gitlink or .gitmodules, no objects/info/alternates, no `filter=lfs` attribute or
       // .git/lfs (only the host-wide git config filter); 0 special files, no xattr and so no
       // posix ACL. 7,257 of 7,259 out-of-tree-looking symlinks resolve inside their tree
       // (dangling `.bdd-sites/*/dist`, `.claude/rules/*` links); exactly two leave it: main's
       // `dist -> ~/...` (macOS path, dangling) and bdd-build-once's
-      // `node_modules -> ../../<consumer-l>/node_modules` — no allowlist: both are rebuildable
+      // `node_modules -> ../../<consumer-m>/node_modules` — no allowlist: both are rebuildable
       // build output that churns per worktree (<consumer-b>/<consumer-j> precedent). No docker container,
-      // volume or mount names or references <consumer-l>; registry preview_db is `none`; no
+      // volume or mount names or references <consumer-m>; registry preview_db is `none`; no
       // `.claude/worktree-db.json`; the only database state is miniflare `.wrangler/state` in
       // main (in-tree, 124K). No real `.env*`/`.dev.vars*` in any tree (only `.example` and
       // `.template` copies under vendor/snippets, `.pi/git`, `.clade/rescue|releases`); the
@@ -246,8 +314,38 @@ const profileEntries: Array<[string, ProfileDefinition]> = [
   [
     '<consumer-h>',
     {
-      topology: unknownTopology,
-      resources: { ...unknownResources, databases: 'unknown' },
+      // Evidence 2026-11-09 (desk 11 trees 801,213 entries + zenbook 6 trees 317,277 entries, all
+      // ext4; plan W-2026-09-29-preservation-resource-adapters
+      // evidence/2026-11-09-<consumer-a>-<consumer-d>-<consumer-h>-inventory.md): the only nested
+      // repositories are gitignored Pi clones `.pi/git/github.com/YuDefine/clade/.git` (main + 1
+      // batch tree); no gitlink or .gitmodules, no objects/info/alternates, no `filter=lfs`
+      // attribute or .git/lfs (only the host-wide git config filter); 0 special files, no xattr and
+      // so no posix ACL. Only 3 symlinks leave their tree, all `vendor/platform-contracts ->
+      // ../../<consumer-i>/packages/contracts` (the sibling platform checkout, allowlisted).
+      // No docker container, volume or mount on desk, zenbook or fc-<consumer-i>-dev references the
+      // dashboard (that host only runs the platform compose project); registry preview_db is
+      // none, there is no Supabase, no `.claude/worktree-db.json` and no repo compose file.
+      // Real secrets: `.env` and `.env.local` in every worktree that has installed deps.
+      topology: {
+        nestedRepositories: 'declared-present',
+        submodules: 'verified-absent',
+        sharedGitObjects: 'verified-absent',
+        lfs: 'verified-absent',
+      },
+      resources: {
+        databases: 'verified-absent',
+        volumes: 'verified-absent',
+        sidecars: 'verified-absent',
+        secrets: 'declared-present',
+      },
+      resourceAdapters: { secrets: 'in-tree-archive' },
+      filesystem: {
+        externalSymlinks: 'declared-present',
+        externalSymlinkAllowlist: ['vendor/platform-contracts'],
+        specialFiles: 'verified-absent',
+        acl: 'verified-absent',
+        xattr: 'verified-absent',
+      },
     },
   ],
   [

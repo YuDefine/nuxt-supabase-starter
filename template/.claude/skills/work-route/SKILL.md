@@ -1,6 +1,6 @@
 ---
 name: work-route
-description: Use when the user wants to start or continue project work (new requirement, bug report, or refactor) without picking workflow skills. NOT for fleet readiness or registry drift queries (clade-onboard).
+description: "Use when the user starts or continues project work (new requirement, bug report, refactor) without picking skills. NOT for fleet readiness or registry drift (clade-onboard)."
 license: MIT
 metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"action"}}
 ---
@@ -42,7 +42,7 @@ T1 判法：env `CLADE_DISPATCH_ID` 非空（coordinator 派出的 child），�
 
 ## Phase 3 -- 定位同一工作並開 package
 
-1. READ 讀取本次需求、適用 `specs/truth/**`、既有 package 的 spec／plan／research／tasks 及證據；lifecycle repo 先 `flow plan list`，對**每一份** Scope 與本次需求重疊的 plan 讀完 `plan.md` 的 Scope、Decisions 與 Open work，提出方案或鑄新 work id 之前不可略過；重疊就續跑那一份，部分重疊時新 plan 的 Scope MUST 有分工表寫明哪一塊歸哪個 work id（`flow plan open` 的 entry gate 只擋同 slug）。
+1. READ 讀取本次需求、適用 `specs/truth/**`、既有 package 的 spec／plan／research／tasks 及證據；lifecycle repo 先 `flow plan list`，對**每一份** Scope 與本次需求重疊的 plan 讀完 lifecycle 檔（`work.md`；未遷移 package 為 `plan.md`）的 Scope、Decisions 與 Open work，提出方案或鑄新 work id 之前不可略過；重疊就續跑那一份，部分重疊時新 plan 的 Scope MUST 有分工表寫明哪一塊歸哪個 work id（`flow plan open` 的 entry gate 只擋同 slug）。
 2. THINK 先讀取 `rules/工作種類與必要產物.md`，決定續跑或以 `flow plan open --kind <值>` 鑄 `W-…`；manifest 宣告 aixbdd／specformula 卻缺 `work-lifecycle.md` 時，讀取 `clade-onboard` skill 的 `rules/交棒前truth-root處置判準.md` 處置，不降級改鑄 `NNN-<slug>`。
 3. THINK 鑄新 work id 之前先讀取 `rules/鑄workid前Notion詢問判準.md`，DELEGATE `notion-hub.ts resolve` 後依第一個成立的列決定問不問、怎麼開票。
 4. THINK 若 project constitution 缺失或本次要調整，先讀取 `rules/constitution觸發判準.md`，再載入 `rules/.constitution/SKILL.md` 做最小增量。
@@ -85,3 +85,9 @@ T1 判法：env `CLADE_DISPATCH_ID` 非空（coordinator 派出的 child），�
 1. THINK 先讀取 `rules/驗收與交付判準.md`，分別呈現「Gherkin 可解析」「步驟已綁定／readiness 通過」「實際案例通過」「人工驗收已確認」，交付給人校對或驗收的改版附 before／after 對照入口或前後截圖，做 UI 沉澱檢查與 evlog map gate。
 2. DELEGATE 走 PR 的 repo 在第一個 commit 後以 draft 開 PR，實作期間維持 draft；`tasks.md` 全部完成且本機驗證通過後才 `gh pr ready` **一次**。開發期的測試訊號來自來源 worktree（repo 宣告的 affected／targeted 測試），**NEVER** 為了看 CI 綠燈提前轉 ready，也 **NEVER** 用反覆 push 到 ready PR 當測試迴圈。
 3. WRITE 需要保留交接或阻塞診斷時，先讀取 `templates/work-route交接紀錄.md` 與 `templates/work-route交接紀錄.example.md`，寫入同 package；最終回覆交代產出、驗證與實際剩餘工作。
+
+## Description 原文（E1 搬入）
+
+> frontmatter description 上限 250 字元（白名單 300）；被縮掉的觸發詞、流程敘述與 NOT for 全文留在這裡，不刪內容。
+
+> Use when the user wants to start or continue project work (new requirement, bug report, or refactor) without picking workflow skills. NOT for fleet readiness or registry drift queries (clade-onboard).

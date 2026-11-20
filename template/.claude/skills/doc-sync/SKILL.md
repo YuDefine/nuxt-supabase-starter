@@ -1,4 +1,5 @@
 ---
+name: doc-sync
 description: 同步更新驗證文件目錄（lifecycle repo：specs/truth/docs/verify/；未遷移：docs/verify/），確保文件反映當前系統狀態
 ---
 

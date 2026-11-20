@@ -513,7 +513,7 @@ user 看得到那個 pane，接手 agent 可以用 structured user-input surface
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | informational — 不觸發任何東西（本表是判準對照；實際拒絕由 helper 的 `not_in_herdr`／`nested_dispatch_refused`／`successor_refused`／`usage_error` 機械執行） |
+| 觸發條件 | informational — 不觸發任何東西（本表是判準對照；實際拒絕由 helper 的 `not_in_herdr`／`nested_dispatch_refused`／`successor_refused`／`relay_stood_down`／`usage_error` 機械執行） |
 | 消費端 | 要決定「這一格能用哪個 mode、parent／child 各欠什麼」的 agent；`handoff` skill、`/nx`、`/my` 的 scoped summary 指回本表 |
 | 觸發點 | [[session-tasks]] 收工正文的具名時機指針與 session-context-budget-warn hook（本檔 description 所述）把本節帶進 context |
 
@@ -708,6 +708,7 @@ Step 1–9 屬 `clade-publish` skill。
 | `status: dispatched`（fanout 的 worker） | 記下 `dispatch_id` 與 `pane_id`，繼續派下一筆；**全部派完才跑 `--relay`** |
 | `status: relay_refused` | 保留 durable task 與**所有已派出的 pane**，回具體 blocker 並列出那些 dispatch_id。**NEVER** 改用 raw `herdr` 繞過、**NEVER** 收工 |
 | `status: nested_dispatch_refused` | 本 session 是 coordinated child，fanout 不適用。一般 child 改走 `relay`；**bounded leaf**（`CLADE_DISPATCH_BOUNDED_LEAF=1` 或 source record `bounded_leaf: true`）沒有位置可交棒，`--relay` 也回同一個 status——做不完就 `--complete blocked` 交還開它的 coordinator，NEVER relay |
+| `status: relay_stood_down`（exit 17，建 pane 前拒收） | 本 session 已簽過 relay、位置歸繼任者。新工作改由 error 指名的持位者發（連續 relay 時是 `effectiveCoordinatorOf` 的實際持位者，不是中間棒）；收割（`--coordinate-resume`／`--reclaim`）與唯讀照常。本狀態不指向任何恢復路徑；**NEVER** 為了繞過它再簽 `--relay` 或改用 raw `herdr` |
 | `status: successor_dispatched` | Herdr 外 `--successor` 交出位置成功。確認未收割的 dispatch_id 已寫進 successor brief，依收工訊息契約 **A** 結束回合 |
 | `status: successor_refused` | 本 session 是 coordinated child 或 Herdr pane。改走 `relay`，**NEVER** 退回一般 create-only 派 successor（它會是開不了 pane 的 coordinated child） |
 | transport / launcher / Herdr preflight 失敗 | 保留 durable task；能在本 session 合法完成就直接完成，否則回具體 blocker。**NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt |

@@ -1,6 +1,6 @@
 ---
 name: verification
-description: "Use for verification setup or maintenance. Not for product implementation or acceptance."
+description: "Use for verification infrastructure lifecycle: create a consumer verify skill, maintain a feature map, re-prove coverage. NOT for product implementation or acceptance."
 ---
 
 
@@ -46,3 +46,9 @@ description: "Use for verification setup or maintenance. Not for product impleme
 
 1. THINK 先讀取 `rules/維護outcome判準.md`，選 clean／changed／blocked 其一並照其 Git／PR 行為收尾。
 2. WRITE 先讀取 `templates/verification-maintenance-report.json` 與 `templates/verification-maintenance-report.example.json`，在 stdout 結尾輸出機讀報告。
+
+## Description 原文（E1 搬入）
+
+> frontmatter description 上限 250 字元（白名單 300）；被縮掉的觸發詞、流程敘述與 NOT for 全文留在這裡，不刪內容。
+
+> Use for verification infrastructure lifecycle: create a consumer verify skill, maintain an existing feature map, or re-prove verification coverage. NOT for product implementation or product acceptance.

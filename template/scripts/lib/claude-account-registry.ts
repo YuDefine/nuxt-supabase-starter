@@ -14,9 +14,9 @@
 
 export interface ClaudePoolAccount {
   /** 池內唯一 id，新 record 的 `account`／`slot` 欄位寫這個。 */
-  id: 'claude-1' | 'claude-2' | 'claude-3' | 'claude-4' | 'claude-5' | 'claude-6'
+  id: 'claude-1' | 'claude-2' | 'claude-3' | 'claude-4' | 'claude-5' | 'claude-6' | 'claude-7'
   /** 釘選這個帳號的指令名（zsh function／`--launcher`／`CLADE_CLAUDE_LAUNCHER`）。 */
-  command: 'cc1' | 'cc2' | 'cc3' | 'cc4' | 'cc5' | 'cc6'
+  command: 'cc1' | 'cc2' | 'cc3' | 'cc4' | 'cc5' | 'cc6' | 'cc7'
   /** `CLAUDE_CONFIG_DIR` 相對 `$HOME` 的 basename。 */
   configDir: string
   /** ai-quota collector config 裡的帳號 id。 */
@@ -70,6 +70,13 @@ export const CLAUDE_POOL_ACCOUNTS: readonly ClaudePoolAccount[] = [
     quotaId: 'claude-6',
     statusline: 'cc6',
   },
+  {
+    id: 'claude-7',
+    command: 'cc7',
+    configDir: '.claude-7',
+    quotaId: 'claude-7',
+    statusline: 'cc7',
+  },
 ]
 
 export type ClaudeAccountId = ClaudePoolAccount['id']
@@ -102,12 +109,14 @@ const ACCOUNT_ALIASES: Record<string, ClaudeAccountId> = {
   cc4: 'claude-4',
   cc5: 'claude-5',
   cc6: 'claude-6',
+  cc7: 'claude-7',
   'claude-1': 'claude-1',
   'claude-2': 'claude-2',
   'claude-3': 'claude-3',
   'claude-4': 'claude-4',
   'claude-5': 'claude-5',
   'claude-6': 'claude-6',
+  'claude-7': 'claude-7',
   'claude-main': 'claude-1',
   'claude-work': 'claude-2',
 }

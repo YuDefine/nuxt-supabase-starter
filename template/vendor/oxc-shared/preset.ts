@@ -682,7 +682,7 @@ export const AGENT_CACHE_TEST_EXCLUDES = [
  *
  * clade 自己**不消費本 base**：它的 `test.include` 收窄成 `vp-tests/**\/*.vp.ts`，
  * 掃描面本來就進不到 `.pi/`。**NEVER** 拿「clade 沒事」推論 consumer 也沒事 ——
- * fleet 現況不齊一：ai-quota／<consumer-j>／<consumer-l> 已收窄 `test.include`（同樣免疫，
+ * fleet 現況不齊一：ai-quota／<consumer-j>／<consumer-m> 已收窄 `test.include`（同樣免疫，
  * 但理由跟 clade 一樣是 include 收窄，不是本 base）；<consumer-b>／<consumer-c> 則是
  * consumer 自己手寫 `test.exclude`（如 `['e2e/**', 'node_modules/**', '.nuxt/**', '.output/**']`），
  * 這正是本檔開頭警告的覆蓋語義事故現場 —— 手寫版把 `**\/.git/**` 弄丟了、`node_modules/**`

@@ -1559,7 +1559,7 @@ export function seedWorktreeCladeSubstrate(
 ) {
   // TD-1037: `.clade/runtime/`、`.clade/projections/`、`.clade/rules/` 與 `.codex/` 全部在
   // consumer .gitignore 內，而 `git worktree` fork 只帶 tracked 檔案 —— 新 worktree 因此
-  // 結構上不可能有它們。三個獨立現場（<consumer-a> / <consumer-h> / <consumer-l>）證實後果
+  // 結構上不可能有它們。三個獨立現場（<consumer-a> / <consumer-h> / <consumer-m>）證實後果
   // 相同：`sync-rules` 在 `.clade/runtime/hooks.json` 以 ENOENT 失敗（訊息 "canonical runtime
   // projection unavailable" 指不到根因），繞過它之後 `.clade/projections/*.json` 缺席又讓
   // ownership 判定把每個既有檔判成本地竄改。
@@ -3634,7 +3634,10 @@ export function resolveAddForkBase(
 
 async function cmdAdd(slug, opts: WtOptions = {}) {
   if (!slug) {
-    throw new Error(ADD_USAGE)
+    // 實測（measure-cli-friction）：agent 常寫成 `add --task-summary "…"`，漏了第一個位置引數 <slug>。
+    throw new Error(
+      `${ADD_USAGE}\n  <slug> 是 add 後面的第一個位置引數（英文 kebab-case 2–4 字），--task-summary 之前就要給：wt-helper add <slug> --task-summary "<一句話>"`,
+    )
   }
   // TD-664 Phase 4 — `--task-summary` 從選配改必填。
   // 選配的宣告欄位就是永遠不會被填的欄位：實測 17 個 claim 裡 16 個 task_summary 是 null，
@@ -3688,7 +3691,9 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
     const localName = raw.startsWith('origin/') ? raw.slice('origin/'.length) : raw
     if (!localName.startsWith('integration/')) {
       throw new Error(
-        `--base only accepts integration/… (local or origin/integration/…). Other refs would bypass landing-base.\n${ADD_USAGE}`,
+        `--base only accepts integration/… (local or origin/integration/…). Other refs would bypass landing-base.\n` +
+          `  想從 origin/main 開樹：不用帶 --base。預設就是 landing base，本機 main 落後 origin 時 add 會自動從 fetch 後的 origin/main 開（本機 main 不動）；\n` +
+          `  --base 只給 integration 切片用：--base integration/<work-id>\n${ADD_USAGE}`,
       )
     }
     baseRef = raw
@@ -3915,7 +3920,7 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
               `(git stash -u ignores pathspec and would leak the full tracked tree — see ` +
               `pitfall-git-stash-pathspec-scope-leak; there is no safe scoped stash).\n` +
               `For scoped capture, re-run with the commit strategy (selectively commits only the scoped paths):\n` +
-              `  node scripts/wt-helper.ts add ${cleanSlug} --precheck-baseline${opts.precheckBaseline ? ` ${opts.precheckBaseline}` : ''} --baseline-strategy commit --baseline-scope-paths ${scopePaths.join(',')}\n` +
+              `  node scripts/wt-helper.ts add ${cleanSlug} --task-summary '<一句話>' --precheck-baseline${opts.precheckBaseline ? ` ${opts.precheckBaseline}` : ''} --baseline-strategy commit --baseline-scope-paths ${scopePaths.join(',')}\n` +
               `To carry ALL main dirty into the worktree instead, re-run stash with --include-unrelated-dirty.`,
           )
         }
@@ -9558,7 +9563,9 @@ function printUsage(log = console.error) {
   log('  refresh-substrate [<slug>] Re-seed gitignored projection state from main after a rebase')
   log('    [--dry-run] [--json]    (default: the worktree containing cwd)')
   log('')
-  log('  add <slug>                Create worktree at ~/offline/<consumer>-wt/<slug>/')
+  log('  add <slug> --task-summary <text>')
+  log('                            Create worktree at ~/offline/<consumer>-wt/<slug>/')
+  log('    --task-summary <text>   Required: one-line summary of the task')
   log(
     '    --bridge                Work runs on Review Bridge: run `review-bridge init` in the new tree',
   )

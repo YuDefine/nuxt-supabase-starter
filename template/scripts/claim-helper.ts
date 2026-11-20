@@ -28,6 +28,7 @@ import {
 import { hostname } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isFixtureForbiddenClaimsRoot } from './lib/claim-transfer.ts'
 import { isRecord } from './lib/json-unknown.ts'
 import {
   errorMessage,
@@ -243,6 +244,7 @@ export function bindClaimWorkId(
 }
 
 export function dropClaim(consumerPath, sessionId) {
+  if (isFixtureForbiddenClaimsRoot(consumerPath)) return false
   const file = join(claimsDir(consumerPath), `${sessionId}.json`)
   if (existsSync(file)) {
     rmSync(file, { force: true })
@@ -696,6 +698,8 @@ export function releaseTreeClaim(
   const top = gitToplevel(treePath) ?? treePath
   const root = findConsumerRoot(top)
   if (!root) return { status: 'none', why: `不在 git 樹內：${treePath}` }
+  if (isFixtureForbiddenClaimsRoot(root))
+    return { status: 'none', why: `測試 fixture 禁區，不動真 claims：${root}` }
   const want = canonicalPath(top)
   const claim = readActiveClaims(root, { includeExpired: true }).find(
     (c) => c.worktree_path && canonicalPath(c.worktree_path) === want,

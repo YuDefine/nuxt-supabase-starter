@@ -6,7 +6,7 @@
 
 - Level: `MUST`
 
-MUST 先讀 `rules/上游覆寫-lifecycle落點與doctor.md`，才載入下游 owner——**每一次**、下表每一列都一樣，含公開入口 specify、clarify、system-analysis、implement 與 bundle 內的內部流程。上游 owner 的原文是 pin 的上游版本，clade 的 lifecycle 落點（L）與 canonical doctor（D）調整只寫在那份檔：命中它寫明的判準就照覆寫列執行，沒命中照 owner 原文。**NEVER** 只讀 owner 的 `SKILL.md` 就開始寫 artifact——上游原文會建 `NNN-*` package、`truth-delta.md`、覆寫 legacy package 的 lifecycle `plan.md`，也不跑 doctor。
+MUST 先讀 `rules/上游覆寫-lifecycle落點與doctor.md`，才載入下游 owner——**每一次**、下表每一列都一樣，含公開入口 specify、clarify、system-analysis、implement 與 bundle 內的內部流程。上游 owner 的原文是 pin 的上游版本，clade 的 lifecycle 落點（L）、canonical doctor（D）與 techstack 確認紀錄（T）調整只寫在那份檔：命中它寫明的判準就照覆寫列執行，沒命中照 owner 原文。**NEVER** 只讀 owner 的 `SKILL.md` 就開始寫 artifact——上游原文會建 `NNN-*` package、`truth-delta.md`、覆寫 legacy package 的 lifecycle `plan.md`，也不跑 doctor。
 
 公開 skill 與內部流程是兩種合法交棒方式，先按下表定位，不能用頂層同名目錄缺席判內部流程不可用。
 
@@ -95,7 +95,7 @@ Skill 工具拒絕 specify → Read specify/SKILL.md 照著做
 
 - Level: `MUST`
 
-三個 owner 各有一份 clade-owned 的 `specformula.md`，上游 `SKILL.md` 不會提到：bundle 內的 `rules/.workflow/bdd/specformula.md`、`rules/.workflow/technical-research/specformula.md`，以及公開入口 implement 目錄的 `implement/specformula.md`（與 implement 的 `SKILL.md` 同目錄）。載入這三個 owner 時 MUST 一併讀它，依該檔的適用條件套用（bdd 那份在後端 BDD techstack 是 SpecFormula 時不手寫 step definition；technical-research 那份給三題必問的 fleet 預設；implement 那份把 Phase 3 的三個 marker 改落在規格檔）。**NEVER** 因上游入口沒列就略過。
+三個 owner 各有一份 clade-owned 的 `specformula.md`，上游 `SKILL.md` 不會提到：bundle 內的 `rules/.workflow/bdd/specformula.md`、`rules/.workflow/technical-research/specformula.md`，以及公開入口 implement 目錄的 `implement/specformula.md`（與 implement 的 `SKILL.md` 同目錄）。載入這三個 owner 時 MUST 一併讀它，依該檔的適用條件套用（bdd 那份在後端 BDD techstack 是 SpecFormula 時不手寫 step definition；technical-research 那份給三題必問的 fleet 預設（命中 T 時紀錄涵蓋的題以紀錄為準，見覆寫檔 Rule 7）；implement 那份把 Phase 3 的三個 marker 改落在規格檔）。**NEVER** 因上游入口沒列就略過。
 
 ## Good Example
 

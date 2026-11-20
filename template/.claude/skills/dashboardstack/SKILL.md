@@ -1,6 +1,6 @@
 ---
 name: dashboardstack
-description: Nuxt admin／CRUD 後台、資源列表與表單、server-side 資料表格、CSV 匯入匯出、組織／成員權限：先讀已購 DashboardStack 參考實作再自組。NOT for 圖表／KPI 卡（用 nuxt-charts）、NOT for 單純 Pinia 狀態（用 pinia-store）、NOT for 新增 server API route（用 server-api）。
+description: "Nuxt admin／CRUD 後台、資源列表與表單、server-side 資料表格、CSV、組織成員權限：先讀已購 DashboardStack 實作。NOT for 圖表（nuxt-charts）、Pinia（pinia-store）、API route（server-api）。"
 ---
 
 
@@ -45,3 +45,9 @@ clade 已從這份 scaffold 抽出判準寫成 rule（只寫判準、不貼原�
 1. DELEGATE 跑目的 repo 的 typecheck 與 build。
 2. DELEGATE 起 dev server 實際截圖，亮暗兩種主題都看，列表的分頁／排序／篩選、表單送出、匯入匯出、權限不足的畫面都要實際操作過。
 3. WRITE 在 PR 說明或回報裡列出參考了哪些檔、對照了哪些 clade rule、哪些地方刻意與參考實作不同及原因。
+
+## Description 原文（E1 搬入）
+
+> frontmatter description 上限 250 字元（白名單 300）；被縮掉的觸發詞、流程敘述與 NOT for 全文留在這裡，不刪內容。
+
+> Nuxt admin／CRUD 後台、資源列表與表單、server-side 資料表格、CSV 匯入匯出、組織／成員權限：先讀已購 DashboardStack 參考實作再自組。NOT for 圖表／KPI 卡（用 nuxt-charts）、NOT for 單純 Pinia 狀態（用 pinia-store）、NOT for 新增 server API route（用 server-api）。

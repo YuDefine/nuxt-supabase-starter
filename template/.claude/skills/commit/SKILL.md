@@ -1,10 +1,8 @@
 ---
 name: commit
 description: >-
-  Use when 使用者要求提交工作區變更、merge back 已完成 worktree，或 worktree
-  就緒佇列達到提交條件；需要拆成多筆時同樣適用。這是 PR 前準備器（D0 起手、D2 作者自驗、D3 開 PR），CI 與 0-A 審查在 PR
-  之後。NOT for 把 clade 改動散播到 consumer（走 /clade-publish），NOT for 新建實作 worktree（交 wt
-  建立），NOT for session 交接（走 /handoff）。
+  Use when 使用者要提交工作區變更、merge back 已完成 worktree，或拆多筆提交（PR 前準備器）。NOT for 散播
+  clade（/clade-publish）、開 worktree（wt）、session 交接（/handoff）。
 metadata:
   clade:
     permission_tier: action
@@ -52,5 +50,11 @@ D9 三份判準與 `release-push.md` 內的舊編號對照：Step 4→D3、Step 
 ```bash
 cd capabilities/core/skills/commit && wc -c SKILL.md rules/{批次入口,前置探測,品質檢查,分組與提交,schema觸發}判準.md | tail -1
 ```
+
+## Description 原文（E1 搬入）
+
+> frontmatter description 上限 250 字元（白名單 300）；被縮掉的觸發詞、流程敘述與 NOT for 全文留在這裡，不刪內容。
+
+> Use when 使用者要求提交工作區變更、merge back 已完成 worktree，或 worktree 就緒佇列達到提交條件；需要拆成多筆時同樣適用。這是 PR 前準備器（D0 起手、D2 作者自驗、D3 開 PR），CI 與 0-A 審查在 PR 之後。NOT for 把 clade 改動散播到 consumer（走 /clade-publish），NOT for 新建實作 worktree（交 wt 建立），NOT for session 交接（走 /handoff）。
 
 

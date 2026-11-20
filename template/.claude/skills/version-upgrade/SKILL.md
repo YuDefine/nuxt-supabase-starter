@@ -1,9 +1,8 @@
 ---
 name: version-upgrade
 description: >-
-  依「為何升 × 升哪裡」升版：補落後、追上游、toolchain、deprecated、安全通報、壞版回退、第三方
-  skill；範圍：consumer／fleet／clade／本機／跨環境。NOT for 升版後行為壞掉找原因（用 diagnose）、NOT for
-  記錄升版踩坑（用 oops）、NOT for 把 clade 改動散播給 consumer（用 clade-publish）。
+  依「為何升 × 升哪裡」升版：補落後、追上游、toolchain、deprecated、安全通報、壞版回退。NOT for
+  升版後壞掉（diagnose）、記錄踩坑（oops）、散播 clade（clade-publish）。
 metadata:
   clade:
     invocation: explicit
@@ -18,6 +17,7 @@ Step 0 算出 `route=<理由>.<範圍>` 再跳 Phase。每一步只讀該步命�
 
 ## Phase 0 — 入口
 
+- Step 0.0（被派出）. READ 若 `CLADE_DISPATCH_ID` 非空（派工者代打本 skill），讀取 `rules/被派出時人類閘門判準.md`：下文每一個「等 user」閘門都改走它的出口，**NEVER** 自行越過。
 - Step 0（Route）. READ 若啟動本 skill，讀取 `rules/mode分流判準.md`，執行 `uv run <skill 根目錄>/scripts/mode_route.py [--plan <計畫檔>] -- <參數>`，依 `route=`／`phase=` 分流。判不出 **MUST 等 user 拍板**；有上一輪計畫檔才帶 `--plan`，**NEVER** 因 cwd 是 worktree 就當續跑。
 - Step 0.1. READ 若範圍是 `consumer`，或 `cwd_kind=consumer`（含在 consumer 內觸發的 `machine`），進 Phase 之前**每一次**跑 `node ~/offline/clade/scripts/consumer-policy-upgrade-prompt.ts --json`，讀取 `rules/更新政策詢問判準.md`，依 `ask: true`／`ask: false`／exit 1／exit 2 處置。
 - Step 0.2（目標刷新）. READ 若 Phase 是 P、M 或 T，進 Phase 前**每一次**跑 `node ~/offline/clade/scripts/audit-ci-toolchain-parity.ts --refresh-targets`，讀取 `rules/跨環境版本對齊判準.md` Rule 7。
@@ -31,7 +31,7 @@ clade 不替 consumer 升版，只彙總。
 
 - Step FR.1. 讀 `registry/consumers.json`＋`consumers.local` 列出 consumer；`paused` 標 `skipped`、非 Node 標 `out.non-node`，都不派。
 - Step FR.2. 開計畫檔（fleet 段），每個 consumer 一列 `pending`。
-- Step FR.3. 逐一 relay 給該 consumer 的 session（[[clade-role-and-todo-discipline]] § Consumer 工作命中時 MUST relay），brief 只寫 `/version-upgrade --reason <理由> --scope consumer`（`mode_route.py` 吃這兩個旗標直接判 route，不落 `judge`）＋「計畫檔路徑回報 clade」。**NEVER** 在 clade 主線改 consumer。
+- Step FR.3. 逐一 relay 給該 consumer 的 session（[[clade-role-and-todo-discipline]] § Consumer 工作命中時 MUST relay）：派工者代打，brief **第一行**只寫 `/version-upgrade --reason <理由> --scope consumer`（`mode_route.py` 吃這兩個旗標直接判 route，不落 `judge`），第二行起寫「計畫檔路徑回報 clade」；argv 帶 `--table-row mainline-analysis`（Opus 5.5・medium）。clade 主持者與 HQ 都走同一支 `herdr-session-handoff.ts`。本步若在被派出的 pane 裡跑（`CLADE_DISPATCH_ID` 非空），它派不出 pane：照 `rules/被派出時人類閘門判準.md` G5 把各家 brief 寫進計畫檔、交回派工者派。**NEVER** 在 clade 主線改 consumer。
 - Step FR.4. 回報到就更新該列；全部結案才算完成。
 
 ## Phase K — clade 自身（`<理由>.clade`）
@@ -41,9 +41,15 @@ clade 不替 consumer 升版，只彙總。
 
 ## 參考
 
-- Phase 檔各步自己 READ 的判準、樣板與腳本（索引，不在入口讀）：`rules/依賴變更判準.md`、`rules/changelog分類判準.md`、`rules/批次分組判準.md`、`scripts/inventory.py`、`templates/first-pass.md`、`templates/research.md`、`templates/fleet-subagent-brief.md`、`templates/upgrade-plan.example.md`、`templates/version-parity-plan.md`、`templates/version-parity-plan.example.md`。
+- Phase 檔各步自己 READ 的判準、樣板與腳本（索引，不在入口讀）：`rules/被派出時人類閘門判準.md`（Step 0.0 與各閘門）、`rules/依賴變更判準.md`、`rules/changelog分類判準.md`、`rules/批次分組判準.md`、`scripts/inventory.py`、`templates/first-pass.md`、`templates/research.md`、`templates/fleet-subagent-brief.md`、`templates/upgrade-plan.example.md`、`templates/version-parity-plan.md`、`templates/version-parity-plan.example.md`。
 
 - 命名史與相關規約出處：`docs/rule-rationale/version-upgrade.md`（有人提議改名時才讀）。
+
+## Description 原文（E1 搬入）
+
+> frontmatter description 上限 250 字元（白名單 300）；被縮掉的觸發詞、流程敘述與 NOT for 全文留在這裡，不刪內容。
+
+> 依「為何升 × 升哪裡」升版：補落後、追上游、toolchain、deprecated、安全通報、壞版回退、第三方 skill；範圍：consumer／fleet／clade／本機／跨環境。NOT for 升版後行為壞掉找原因（用 diagnose）、NOT for 記錄升版踩坑（用 oops）、NOT for 把 clade 改動散播給 consumer（用 clade-publish）。
 
 
 ## Claude host contract

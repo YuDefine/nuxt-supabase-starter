@@ -240,7 +240,7 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | `node scripts/audit-skill-usage.ts`（預設近 30 天，回掃本機所有 Claude 設定目錄的 transcript）列出 model-invoked、`Skill` tool＋slash＋讀檔＝0 的 skill 為 undertrigger 候選（靠 hook 印 `READ` 載入的 skill 算有在用），並標出拿 glob 當觸發詞的 description；其餘 skill 只列次數：informational — 不觸發任何東西 |
-| 消費端 | 跑 `clade-health layers` 的 session：退役或刪減前 **MUST** 在每台機器（desk＋zenbook）各跑一次，全部為 0 才算沒人用；再對每支候選逐支判——改 description 走 `/skill-engineering` optimize lane、改 `disable-model-invocation: true`、或退役 |
+| 消費端 | 跑 `clade-health layers` 的 session：退役或刪減前 **MUST** 在每台 dev node（`registry/dev-nodes.json` 的 nodes[]）各跑一次，全部為 0 才算沒人用；再對每支候選逐支判——改 description 走 `/skill-engineering` optimize lane、改 `disable-model-invocation: true`、或退役 |
 | 觸發點 | script 輸出的候選段直接印本節位置（rule-authoring 合法觸發點 ③）；`clade-health` 的 `layers` 訊號表登記它 |
 
 subagent transcript 也算進去；讀檔欄排除兩種 transcript：同一份也改了該 skill 的，以及一份讀了很多支 skill 的掃描型（稽核、盤點；門檻見 script 的 `SWEEP_MIN_SKILLS`）。
@@ -251,7 +251,7 @@ subagent transcript 也算進去；讀檔欄排除兩種 transcript：同一份�
 
 **Callee 要保持 model-invoked**（僅限 clade 自撰的 skill）：被其他 skill 以 Skill tool 呼叫的 skill，`disable-model-invocation: true` 會連 orchestrator 的呼叫一起擋掉。設定前要先 grep 全 skill / rule 確認無跨檔 Skill-tool 呼叫。
 
-**上游鏡像 skill 不適用本條**：帶 `LOCKED: mirrored from` banner 的 skill（例如 aixbdd）以上游為準，不要為了符合本條改鏡像檔或它的 `metadata.clade.invocation`。上游 skill 交給一支 explicit skill（例如 `specify` 的「DELEGATE 呼叫 `/clarify`」）時，**NEVER** 由模型自己呼叫或讀檔照跑——那是繞過 `disable-model-invocation`。specify 鏈（`specify`／`clarify`／`system-analysis`／`implement`）由**派工者代打**（Charles 2026-10-06，TD-1043 修訂範圍 A）。派工者是主持者，或依 work-route Phase 6（`rules/依產物推進判準.md`）輪到該 owner 的主線 session；主線不在 work-route 流程內 **NEVER** 自行代打。做法：派工 brief 第一行寫 `/<skill> <一句範圍>`，helper 以使用者 slash 指令打進 pane；中途要 `/clarify` 時由派工者 `--continue` 送同形狀的第一行，問題先從 repo 查證後作答。其他 explicit skill（`version-upgrade`）仍停下來請使用者手動執行。
+**上游鏡像 skill 不適用本條**：帶 `LOCKED: mirrored from` banner 的 skill（例如 aixbdd）以上游為準，不要為了符合本條改鏡像檔或它的 `metadata.clade.invocation`。上游 skill 交給一支 explicit skill（例如 `specify` 的「DELEGATE 呼叫 `/clarify`」）時，**NEVER** 由模型自己呼叫或讀檔照跑——那是繞過 `disable-model-invocation`。specify 鏈（`specify`／`clarify`／`system-analysis`／`implement`）由**派工者代打**（Charles 2026-10-06，TD-1043 修訂範圍 A）。派工者是主持者，或依 work-route Phase 6（`rules/依產物推進判準.md`）輪到該 owner 的主線 session；主線不在 work-route 流程內 **NEVER** 自行代打。做法：派工 brief 第一行寫 `/<skill> <一句範圍>`，helper 以使用者 slash 指令打進 pane；中途要 `/clarify` 時由派工者 `--continue` 送同形狀的第一行，問題先從 repo 查證後作答。`version-upgrade` 自 2026-11-19 同樣由派工者代打（brief 第一行 `/version-upgrade --reason <理由> --scope <範圍>`，被派出的 pane 的人類閘門照該 skill `rules/被派出時人類閘門判準.md` 送題）。其他 explicit skill 仍停下來請使用者手動執行。
 
 ## Token 紀律
 

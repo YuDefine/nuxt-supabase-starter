@@ -1,6 +1,6 @@
 ---
 name: benchmark
-description: "Use when 要產出、查核或依據一個量測出來的效能數字：報 speedup／regression、挑 library 或設定、凍結 benchmark harness、對單一指標做 hillclimb。NOT for 找出變慢的原因（/diagnose）、估工時或交期（/estimate-hours）、CI runner 規格與排隊（/ci-runners、/delivery-capacity）。"
+description: "Use when 要產出、查核量測出來的效能數字：speedup／regression、挑 library、凍結 harness、hillclimb。NOT for 找變慢原因（/diagnose）、估工時（/estimate-hours）、CI runner（/ci-runners）。"
 ---
 
 
@@ -50,3 +50,9 @@ description: "Use when 要產出、查核或依據一個量測出來的效能數
 | 找出變慢或壞掉的原因 | `diagnose`（變慢的原因歸它；數字能不能信歸本 skill） |
 | 工作量、交期 | `estimate-hours` |
 | CI runner 規格、排隊、容量 | `ci-runners`、`delivery-capacity` |
+
+## Description 原文（E1 搬入）
+
+> frontmatter description 上限 250 字元（白名單 300）；被縮掉的觸發詞、流程敘述與 NOT for 全文留在這裡，不刪內容。
+
+> Use when 要產出、查核或依據一個量測出來的效能數字：報 speedup／regression、挑 library 或設定、凍結 benchmark harness、對單一指標做 hillclimb。NOT for 找出變慢的原因（/diagnose）、估工時或交期（/estimate-hours）、CI runner 規格與排隊（/ci-runners、/delivery-capacity）。

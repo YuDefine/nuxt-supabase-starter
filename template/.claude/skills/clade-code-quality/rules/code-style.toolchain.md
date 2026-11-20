@@ -43,6 +43,7 @@ paths:
 ## Governance — lint / fmt 設定改在哪
 
 - **每個 consumer 都該套**的 baseline（oxlint rules / oxfmt 風格 / 共用 ignore）一律改在 clade `vendor/oxc-shared/preset.ts`，再 `node scripts/publish.ts <bump> && node scripts/propagate.ts` 散播。不確定時預設放 baseline。不要改 consumer 端的 preset 投影副本——下次 propagate 會覆蓋。
+- **lint 設定只放 repo root**：workspace 子套件裡的 `.oxlintrc*` 或帶 `lint:` 的 `vite.config.*` 會被靜默忽略，NEVER 放在子套件。
 - **單一 consumer** 的業務 override 寫在該 consumer `vite.config.ts` 內、spread baseline 之後的 override block；**禁止**整段 inline 重寫 baseline（見 § `vite.config.ts` 必備欄位）。
 
 ### 投影層排除清單集中在 preset
@@ -148,6 +149,21 @@ oxfmt 不會自動讀 `.oxfmtignore`（fallback 只有 `.prettierignore` / `.git
 
 升 vite-plus 時要一起處理：oxlint 新 finding；`minimumReleaseAge` 需要的 `minimumReleaseAgeExclude`（`pnpm add` 會自動寫進 `pnpm-workspace.yaml`，commit 要帶上該檔）。實證見 [[pitfall-setup-vp-version-pins-cli-not-local-toolchain]]。
 
+### type-aware lint 走 tsrs（MUST）
+
+**生效條件與順序**：各 consumer 在**自己的 tsrs PR 合入後**才適用本節；尚未合入的 repo 不算違規（audit 不報）。本節是合入後的終態寫法，不是對全 fleet 的即時要求。**順序**：共用 preset（`vendor/oxc-shared/preset.ts`）要等**所有 consumer 的 tsrs PR 都合入後**才加 `typeAware: true`——preset 會投影到每個 consumer、經 `...lintBase` 一次全開，提早加會讓還沒備齊 vite-plus ≥ 1.7.0、CI install 步驟、tsconfig 產物的 consumer lint 轉紅。在那之前 `typeAware` 只開在 clade 自己的 `vite.config.ts`。
+
+**範圍**：tsrs 在這裡**只負責 oxlint 的 type-aware lint**——需要型別資訊的規則（`no-floating-promises`、`await-thenable` 等）由 `vp lint` 內建的 **tsrs**（oxc-project 的 TypeScript 7 Rust port，取代 tsgolint；[announcement](https://oxc.rs/blog/2026-11-17-faster-type-aware-linting-with-tsrs)）執行。**typecheck 照舊**：Nuxt／Vue consumer 走 `vue-tsc`／`nuxt typecheck`，其餘走各自既有的 typecheck gate；**NEVER** 把本節讀成「tsrs 取代 typecheck」。
+
+- **MUST** `vite-plus` ≥ 1.7.0（此版起 type-aware 走 tsrs）並釘確切版本；有直接跑 `tsrs -p <tsconfig> --noEmit` 的專案（例：clade 自己）另在 `devDependencies` 釘 `tsrs` 確切版本，兩者可為不同版本
+- **MUST** `lint.options.typeAware = true`（不靠 CLI `--type-aware`：本機、CI、pre-commit 才是同一個行為）。終態的設定來源是共用 preset（`vendor/oxc-shared/preset.ts`，交辦 lint-fmt-unify-fleet-20261118），consumer 吃 preset、**NEVER** 各自再寫一份；但 preset 要等所有 consumer 的 tsrs PR 都合入後才加 `typeAware: true`（見生效條件與順序）。**過渡期**：preset 還沒帶 `typeAware` 之前，已合入自己 tsrs PR 的 repo（目前只有 clade）才在自己的 `vite.config.ts` 自寫，並在該行註明「過渡期，preset 落地後刪」；preset 落地後自寫的那份要刪；尚未合入 tsrs PR 的 consumer **NEVER** 提前自寫
+- `vp lint --deny-warnings` 照舊，**NEVER** 為了讓 type-aware 綠而拿掉 `--deny-warnings`
+- **MUST** CI lint job 先 install 再 lint：type-aware 要 `node_modules` 裡的 tsrs，`run-install: false` 會讓它缺席；log 以 `vp --version` 的 `Tools:` 段證明 tsrs 版本
+- 規則要關必須逐條寫理由、命中數、移除條件與 follow-up（誤報附上游 issue；既存命中太多附 `@followup[<plan id>]`，該 plan 的 Open work 逐條收斂），**NEVER** 整批 `options.typeAware: false` 退場，**NEVER** 只寫「見 PR body」；**NEVER** 開 consumer 本地 opt-out（尚未合入 tsrs PR 的 consumer 靠上述順序保證 preset 不會提前開，不需要 opt-out）
+- `vp lint --type-check` 以單一預設 tsconfig 檢查全 repo，**不等於**分專案 typecheck，不能拿來取代 typecheck gate
+- type-aware 會讀每個子目錄的 tsconfig；`extends` 指向 gitignore 產物（`.void/`、plugin types）的專案在乾淨 checkout 會報 `tsconfig-error`，要先生成該產物（例：workspace 的 `postinstall` 跑 `void prepare`）；產物生成不了才把該專案排除出 lint 並寫理由
+- clade 側：`scripts/lib/tsc-native.ts` 的 tsrs 與上述 devDependency 同一份；實證見 clade#5653，被關規則的收斂在 `W-2026-11-19-tsrs-type-aware-rule-convergence`
+
 ### Node runtime 全 fleet 釘 major 24（hard rule）
 
 node 是 vp 兩層共同的第三層。適用於 repo root 有 `package.json` 的 repo；沒有的標 `n/a`，不要標成已對齊。
@@ -188,7 +204,7 @@ workflow 那一列是全稱：**每一個** `.github/workflows/*.yml` 的**每�
 #### 對應偵測
 
 ```bash
-node scripts/audit-ci-toolchain-parity.ts          # 人讀表格；--json 給機器；--strict 有 drift 回 1
+node scripts/audit-ci-toolchain-parity.ts          # 人讀表格；--json 給機器；--strict 有 drift 回 1；會 fetch 各 repo，稽核輸入檔（版本檔、package.json、Dockerfile、workflows、registry；clade 自身另含 scripts/）和 origin 預設分支不同，或無法確認（含 origin/HEAD 未設且問不到遠端預設分支）時回 2，其餘檔的改動不影響
 node scripts/audit-ci-toolchain-parity.ts --target-node 24
 ```
 
@@ -237,6 +253,35 @@ CI workflow 要拆 step 跑各別 npm script，每個 script 自帶必要 flag�
 `package.json` 的 `check` script（local / pre-push）可保留 `vp check`，但它同樣會撞 LOCKED projection。
 
 ## 必須事項（MUST）
+
+### Vite+ 三件組（meta-framework consumer 必備）
+
+用 Nuxt 這類 meta-framework 的 consumer，`pnpm-workspace.yaml` MUST 三項寫齊。少了 `overrides`，框架的傳遞依賴會解析到一般版 vite，實際打包用的是另一份 Vite，而且不報錯：
+
+```yaml
+catalog:
+  vite: npm:@voidzero-dev/vite-plus-core@<vite-plus 依賴的 vite-plus-core 版本>
+  vite-plus: <exact-version>
+
+overrides:
+  vite@*: 'catalog:'
+
+peerDependencyRules:
+  allowAny:
+    - vite
+  allowedVersions:
+    vite: '*'
+```
+
+`package.json` 的 `devDependencies` 也寫 `"vite": "catalog:"`，peer 依賴才會解析到同一份。
+
+`vite-plus-core` 的版本號不等於 `vite-plus` 的版本號：`vite-plus` 自己的 `package.json` 沒有 `vite-plus-core` 這個 key，它的 `dependencies.vite` 是 npm alias，版本取 `@` 之後那段（例：vite-plus 1.7.0 的 `"vite": "npm:@voidzero-dev/vite-plus-core@8.3.8000"`，版本是 `8.3.8000`，catalog 的 `vite` 寫整條 `npm:@voidzero-dev/vite-plus-core@8.3.8000`，不是 `1.7.0`）。兩者對不上時 `audit-single-vite` 會判成兩份 `vite-plus-core`。
+
+`nuxt build` 報 `Cannot find package 'rolldown'` 時，`@nuxt/vite-builder` 的 optional peer 沒裝到：在 `devDependencies` 釘 `rolldown`，版本取 `vite-plus-core` 的 `package.json` 內 `bundledVersions.rolldown`。
+
+偵測：`node scripts/audit-single-vite.ts` 沿 lockfile 依賴圖檢查，只准一份 `vite-plus-core`、不准有一般版 vite。同版本但 peer 組合不同的 `vite-plus-core` 會裝成多份副本，也算違規。只經由 `vitepress` 才到得了的 Vite 是刻意釘版，算例外。
+
+有 `vitepress` 的 consumer 要保留它自己的 Vite，`overrides` 另加 `'vitepress>vite': <釘的版本>`，否則 `vite@*` 會連它一起覆寫。
 
 ### 改 `catalog:` / `overrides:` 之後，收尾 MUST 驗 lockfile 本身
 

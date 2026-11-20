@@ -20,7 +20,7 @@ input=''
 IFS= read -r -d '' input || true
 
 degraded() {
-  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"reply-article 回覆頁發布 gate 故障未判定（%s）：回覆頁 MUST 發 web-article 平台（vendor/web-article/scripts/publish.ts）；只有平台不可用時才發 Artifact，description 寫「平台不可用：<原因>」。"}}\n' "$1"
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"reply-article 回覆頁發布 gate 故障未判定（%s）：回覆頁 MUST 用 /web-article 發 web-article 平台；只有平台不可用時才發 Artifact，description 寫「平台不可用：<原因>」。"}}\n' "$1"
   exit 0
 }
 
@@ -41,7 +41,7 @@ const m = String(t.description || "").match(/平台不可用[：:]\s*(\S.{5,})/)
 if (m && !/<[^>]*>/.test(m[1])) process.exit(0)
 process.stderr.write(
   "回覆頁（reply-article）預設發 web-article 平台：claude.ai Artifact 的作答只存在作答者瀏覽器，別的 cc 帳號讀不到。\n" +
-  "改用 WEB_ARTICLE_TOKEN=… node ~/offline/clade/vendor/web-article/scripts/publish.ts <客戶>/<專案>/<文件> " + t.file_path + " --title <頁名>（reply-article SKILL.md Phase 4 step 1）。\n" +
+  "改呼叫 /web-article 發布 " + t.file_path + "（代號、觀看範圍、金鑰都照它；reply-article SKILL.md Phase 4 step 1）。\n" +
   "平台真的不可用才發 Artifact：description 寫「平台不可用：<具體原因>」，回報也寫同一個原因（Phase 4 step 2）。\n")
 process.exit(2)
 ' <<<"$input" 2>&1 >/dev/null

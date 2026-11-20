@@ -11,7 +11,7 @@
 #   package.json 的 prettier 鍵 / .prettierignore）與**直接安裝**（dependencies / devDependencies）。
 #   兩條都沒有攔到 binary：prettier@3.9.6 經 @nuxt/hints@1.1.4 的 transitive dep + .npmrc 的
 #   shamefully-hoist 躺在 node_modules/.bin/prettier（2026-08-28 registry-driven 掃描：
-#   兩個既有 consumer 與 nuxt-supabase-starter 命中，其餘 11 個 consumer 無 —— starter 命中代表
+#   兩個既有 consumer 與 starter template 命中，其餘 11 個 consumer 無 —— starter 命中代表
 #   每個新 scaffold 出來的 consumer 都繼承它）。而 prettier **不需要 config 就能運作**，
 #   所以禁 config 檔對它殺傷力是零。
 #   2026-08-28 某 consumer 實例：跑 --write，exit 0、零警告、整檔從單引號無分號改成雙引號加分號，
