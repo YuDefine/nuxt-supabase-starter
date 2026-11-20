@@ -13,7 +13,7 @@ effort: high
 
 - 日常實作、顯而易見的小修、風格偏好、當場可 revert 的改動：**不派**。顧問一律觸發式，NEVER 常駐、NEVER 為了「保險」派。
 - Sonnet 主線的顧問是 `opus-advisor`，不是你。
-- 派你要過帳號池 admission（`node vendor/scripts/lib/claude-escalation-admission.ts`，同一條 `escalationAdmissionProblem`：ready 帳號 ≥ 2 且選中帳號兩窗最低剩餘 ≥ 20%，exit 0 放行、exit 3 擋下；量的是主線自己 `CLAUDE_CONFIG_DIR` 對到的帳號，因為你吃主線的額度）；池不足時呼叫端改派 `opus-advisor`，不是改升檔——exit 3 時 CLI 印的退路提示（Opus 5.5（effort: xhigh） fallback）是升級鏈用的，顧問席不照它走。
+- 派你要過帳號池 admission（`node vendor/scripts/lib/claude-escalation-admission.ts`，同一條 `escalationAdmissionProblem`：ready 帳號 ≥ 2 且選中帳號兩窗最低剩餘 ≥ 20%，exit 0 放行、exit 3 擋下；量的是主線自己 `CLAUDE_CONFIG_DIR` 對到的帳號，因為你吃主線的額度）；池不足、或你執行中出錯／被限流時，呼叫端改派 `opus-advisor-xhigh`（唯讀 Opus 5.5（effort: xhigh））；exit 3 時 CLI 印的 `--tier-basis stall-escalation` 提示是升級鏈用的，顧問席不照它走。
 
 ## 執行紀律
 

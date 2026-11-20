@@ -20,28 +20,30 @@ code-style.md — 新增腳本選哪個語言（D1 決策表，Python 不再新�
 code-style.toolchain.md — lint / fmt 工具鏈治理——preset 是唯一設定入口、eslint/prettier 全面禁令、vite.config.ts 必備欄位、CI 與 pre-commit 的命令邊界、投影層排除只在 preset（consumer 業務排除寫 `vite.config.ts` override）；format/lint check 紅了 agent 要立刻 write/fix 再驗到綠（不限 /commit）；動任何工具鏈設定檔時載入
 21-28 前導 — Code Style — 工具鏈治理
 30-41 Agent 義務：check 紅了立刻 fix（全 session）
-43-56 Governance — lint / fmt 設定改在哪
-60-67 禁止事項（NEVER） › 禁止建立 eslint 設定檔
-69-91 禁止事項（NEVER） › 禁止所有 prettier config 檔（含 `.prettierignore`）
-93-119 禁止事項（NEVER） › 禁止把 eslint / prettier 加進 dependencies
-121-149 禁止事項（NEVER） › 禁止依賴全域 vite-plus（hard rule）
-151-195 禁止事項（NEVER） › Node runtime 全 fleet 釘 major 24（hard rule）
-197-206 禁止事項（NEVER） › 禁止在 lint-staged / pre-commit / CI 命令中呼叫 eslint / prettier
-208-237 禁止事項（NEVER） › CI workflow 禁止跑 `vp check` / `vp run check`（hard rule）
-241-263 必須事項（MUST） › 改 `catalog:` / `overrides:` 之後，收尾 MUST 驗 lockfile 本身
-265-281 必須事項（MUST） › packageExtensions 條目契約
-283-320 必須事項（MUST） › `vite.config.ts` 必備欄位（跨 consumer 統一，避免 propagate drift）
-322-355 必須事項（MUST） › staged 配置：一行 re-export，NEVER 手寫排除陣列
-357-365 必須事項（MUST） › Nuxt app 不要照抄官方 `vp migrate` 全文
-367-381 必須事項（MUST） › Pre-commit hook 走 `runner.sh`
-383-395 違反偵測
-397-427 Heavy gate 准入控制（機器層並行上限）
-429-464 Heavy gate 准入控制（機器層並行上限） › Guard 要寫成 arg-safe 形狀，NEVER 裸 `if … fi`
-466-475 Heavy gate 准入控制（機器層並行上限） › 這幾個 exit code 說的是不同層的話
-477-515 Heavy gate 准入控制（機器層並行上限） › 機器層調參 NEVER 寫死進 script 預設
-517-527 Heavy gate 准入控制（機器層並行上限） › `vp check` 收不到 threads 上限（已知殘餘）
-529-533 Heavy gate 准入控制（機器層並行上限） › 長駐 dev server 不是 gate —— 閘門結構上攔不到它
-535-543 Heavy gate 准入控制（機器層並行上限） › NEVER 用 slots 數量近似記憶體
+43-57 Governance — lint / fmt 設定改在哪
+61-68 禁止事項（NEVER） › 禁止建立 eslint 設定檔
+70-92 禁止事項（NEVER） › 禁止所有 prettier config 檔（含 `.prettierignore`）
+94-120 禁止事項（NEVER） › 禁止把 eslint / prettier 加進 dependencies
+122-150 禁止事項（NEVER） › 禁止依賴全域 vite-plus（hard rule）
+152-165 禁止事項（NEVER） › type-aware lint 走 tsrs（MUST）
+167-211 禁止事項（NEVER） › Node runtime 全 fleet 釘 major 24（hard rule）
+213-222 禁止事項（NEVER） › 禁止在 lint-staged / pre-commit / CI 命令中呼叫 eslint / prettier
+224-253 禁止事項（NEVER） › CI workflow 禁止跑 `vp check` / `vp run check`（hard rule）
+257-284 必須事項（MUST） › Vite+ 三件組（meta-framework consumer 必備）
+286-308 必須事項（MUST） › 改 `catalog:` / `overrides:` 之後，收尾 MUST 驗 lockfile 本身
+310-326 必須事項（MUST） › packageExtensions 條目契約
+328-365 必須事項（MUST） › `vite.config.ts` 必備欄位（跨 consumer 統一，避免 propagate drift）
+367-400 必須事項（MUST） › staged 配置：一行 re-export，NEVER 手寫排除陣列
+402-410 必須事項（MUST） › Nuxt app 不要照抄官方 `vp migrate` 全文
+412-426 必須事項（MUST） › Pre-commit hook 走 `runner.sh`
+428-440 違反偵測
+442-472 Heavy gate 准入控制（機器層並行上限）
+474-509 Heavy gate 准入控制（機器層並行上限） › Guard 要寫成 arg-safe 形狀，NEVER 裸 `if … fi`
+511-520 Heavy gate 准入控制（機器層並行上限） › 這幾個 exit code 說的是不同層的話
+522-560 Heavy gate 准入控制（機器層並行上限） › 機器層調參 NEVER 寫死進 script 預設
+562-572 Heavy gate 准入控制（機器層並行上限） › `vp check` 收不到 threads 上限（已知殘餘）
+574-578 Heavy gate 准入控制（機器層並行上限） › 長駐 dev server 不是 gate —— 閘門結構上攔不到它
+580-588 Heavy gate 准入控制（機器層並行上限） › NEVER 用 slots 數量近似記憶體
 
 coupling-cohesion.md — 耦合與內聚的三層分工——import cycle / barrel 的 gate 判讀、server 碼跨界 import、跨檔重複 discriminant switch、audit 表的 NO-SCAN 語意、Review 層函式契約、第三方 SDK 邊界、以 agent 為前提的設計警訊
 5-10 前導 — Coupling & Cohesion

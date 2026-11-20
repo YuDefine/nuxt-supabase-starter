@@ -25,7 +25,7 @@ main 有 3 個 dirty 檔，皆不屬於本任務 carrier 的 scope。
 
 ```md
 main 有 3 個 dirty 檔，不確定是誰的。
-→ 先全部帶過去比較安全：`wt-helper add fix-auth ... --include-unrelated-dirty`
+→ 先全部帶過去比較安全：`wt-helper add fix-auth --task-summary "…" ... --include-unrelated-dirty`
 ```
 
 # Rule 2 - 送出 `wt-helper add` 前依 `recommended_strategy` 分流
@@ -38,12 +38,12 @@ main 有 3 個 dirty 檔，不確定是誰的。
 
 | id | predicate | 動作 |
 | --- | --- | --- |
-| F1 | 使用者原話說 main 上全部 dirty 都屬於這次 fork | bulk stash：`--precheck-baseline --baseline-strategy stash --include-unrelated-dirty` [^F1] |
+| F1 | 使用者原話說 main 上全部 dirty 都屬於這次 fork | bulk stash：`add <slug> --task-summary '<一句話>' --precheck-baseline --baseline-strategy stash --include-unrelated-dirty` [^F1] |
 | F2 | `recommended_strategy=stop-unsafe` | STOP，逐條列 helper 印的 `unsafe` path 與原因 [^F2] |
 | F7 | `recommended_strategy=stop-other-session` | STOP，逐條列 helper 印的 `other_session` path；等該 session 落地或協調後重跑。claim 確定 stale 才 `claim-helper.ts drop <session-id>` [^F7] |
-| F3 | `recommended_strategy=auto-resolve-fork` | `add` 帶 `--precheck-baseline --baseline-strategy <baseline_strategy>`（`commit` 時再帶同一組 `--baseline-scope-paths`），helper 自動標 resolved 後 fork [^F3] |
-| F4 | `recommended_strategy=fork-clean` | `wt-helper add`，不帶 baseline flag |
-| F5 | `recommended_strategy=commit-scope` | `--precheck-baseline <slug> --baseline-strategy commit --baseline-scope-paths <comma>` [^F5] |
+| F3 | `recommended_strategy=auto-resolve-fork` | `add <slug> --task-summary '<一句話>'` 帶 `--precheck-baseline --baseline-strategy <baseline_strategy>`（`commit` 時再帶同一組 `--baseline-scope-paths`），helper 自動標 resolved 後 fork [^F3] |
+| F4 | `recommended_strategy=fork-clean` | `wt-helper add <slug> --task-summary '<一句話>'`，不帶 baseline flag |
+| F5 | `recommended_strategy=commit-scope` | `add <slug> --task-summary '<一句話>' --precheck-baseline --baseline-strategy commit --baseline-scope-paths <comma>` [^F5] |
 | F6 | `recommended_strategy=ambiguous` | STOP，回使用者拍策略 |
 | F* | `unknown`、其他值、欄位缺、指令非 0 | STOP，回報 helper 原始輸出 |
 

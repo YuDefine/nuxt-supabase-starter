@@ -34,8 +34,8 @@ paths:
 評估：first-match；以上皆非 → B*
 | id | `recommended_strategy` | 動作 |
 | --- | --- | --- |
-| B1 | `fork-clean` | `wt-helper add`，不帶 baseline flag |
-| B2 | `commit-scope` | `--baseline-strategy commit --baseline-scope-paths <helper 印的路徑>` |
+| B1 | `fork-clean` | `wt-helper add <slug> --task-summary '<一句話>'`，不帶 baseline flag |
+| B2 | `commit-scope` | `wt-helper add <slug> --task-summary '<一句話>' --precheck-baseline --baseline-strategy commit --baseline-scope-paths <helper 印的路徑>`（少了 `--precheck-baseline` 時 baseline flag 整組不讀、靜默 fork 乾淨樹） |
 | B3 | `stop-unsafe` | STOP，列 helper 印的 unsafe path |
 | B* | 其他值、欄位缺、指令非 0 | STOP，回報原始輸出 |
 ```
@@ -226,7 +226,7 @@ publish 在飛時判持有者：判定見 `rules/core/session-tasks.concurrent-w
 評估：first-match；以上皆非 → B*
 | id | `recommended_strategy` | 動作 |
 | --- | --- | --- |
-| B1 | `fork-clean` | `wt-helper add` |
+| B1 | `fork-clean` | `wt-helper add <slug> --task-summary '<一句話>'` |
 | B* | 其他值、欄位缺、指令非 0 | STOP，回報原始輸出 |
 ```
 

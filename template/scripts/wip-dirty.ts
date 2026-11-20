@@ -34,7 +34,16 @@
 //   - exit 1：有 user WIP；exit 0：乾淨 / 全 projection/tool-managed / 非 git repo（fail-open）
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, lstatSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { createHash } from 'node:crypto'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -580,7 +589,21 @@ export function matchesDiscardPathspec(path: string, pathspecs: readonly string[
 function porcelainPath(line) {
   const body = line.slice(3) // 剝 2 char 狀態碼 + 1 space
   const arrow = body.indexOf(' -> ')
-  return arrow >= 0 ? body.slice(arrow + 4) : body
+  return unquoteSimplePorcelainPath(arrow >= 0 ? body.slice(arrow + 4) : body)
+}
+
+/**
+ * 路徑含空白時 porcelain 一律加雙引號（即使 `core.quotePath=false`）：`"<dir>/a b.md"`。
+ * 引號內沒有反斜線跳脫（沒有 `\"`、`\\`、八進位）才剝引號還原真實路徑；有跳脫的維持原樣
+ * （對不上任何清單 → 落在擋住那堆，fail closed），NEVER 在這裡實作半套 C-style unquote。
+ * skills 的 rule 檔名可含空白，帶著引號對不上所有權清單，整棵樹會被當成有非投影髒項。
+ */
+function unquoteSimplePorcelainPath(path: string): string {
+  if (path.length >= 2 && path.startsWith('"') && path.endsWith('"')) {
+    const inner = path.slice(1, -1)
+    if (!inner.includes('\\') && !inner.includes('"')) return inner
+  }
+  return path
 }
 
 /** 單筆 status entry 是否仍會擋 gate（剔除可忽略漂移與呼叫端點名可丟的路徑）。 */
@@ -776,6 +799,33 @@ export function ownedProjectionHashes(repoRoot: string): Map<string, string> {
   return owned
 }
 
+/** 拆掉的受管 symlink 從 `claude.skill-links.json` 拿掉（路徑已不在、或已被還原成真目錄才動；還是 symlink 的條目不碰）。 */
+function reconcileSkillLinkLedger(repoRoot: string, paths: readonly string[]): void {
+  const file = join(repoRoot, SKILL_LINKS_LEDGER)
+  let state: any
+  try {
+    state = JSON.parse(readFileSync(file, 'utf8'))
+  } catch {
+    return
+  }
+  if (state?.schemaVersion !== 1 || !state.links || typeof state.links !== 'object') return
+  let dirty = false
+  for (const rel of paths) {
+    if (!(rel in state.links)) continue
+    let stillLink = false
+    try {
+      stillLink = lstatSync(join(repoRoot, rel)).isSymbolicLink()
+    } catch {
+      stillLink = false
+    }
+    if (!stillLink) {
+      delete state.links[rel]
+      dirty = true
+    }
+  }
+  if (dirty) writeFileSync(file, `${JSON.stringify(state, null, 2)}\n`)
+}
+
 /**
  * 還原／移除殘檔之後，把清單與磁碟對齊（同 `reconcileCopiedProjectionState`）：路徑還在（還原回 HEAD）
  * 就把雜湊改成磁碟現在的 bytes，不在了（untracked 殘檔被移除）就從 `files` 與 `sourceInputs` 拿掉。
@@ -783,6 +833,7 @@ export function ownedProjectionHashes(repoRoot: string): Map<string, string> {
  * `local or modified file conflict`。清單的 `delivery` 是 files 的導出值，改過就丟（下次 apply 重算）。
  */
 export function reconcileOwnershipLedgers(repoRoot: string, paths: readonly string[]): void {
+  reconcileSkillLinkLedger(repoRoot, paths)
   for (const name of Object.keys(OWNERSHIP_LEDGER_ROOTS)) {
     const ledger = readOwnershipLedger(repoRoot, name)
     if (!ledger) continue
@@ -830,6 +881,47 @@ export function isOwnedProjectionResidue(
   }
 }
 
+/** 已退役的 skill link reconciler 寫進 consumer 的受管 symlink 清單；格式見 scripts/lib/claude-skill-links.ts。 */
+const SKILL_LINKS_LEDGER = '.clade/projections/claude.skill-links.json'
+const SKILL_LINK_PATH_RE = /^\.claude\/skills\/([A-Za-z0-9][A-Za-z0-9._-]*)$/u
+
+/**
+ * `.claude/skills/<n>` → `../../.agents/skills/<n>` 的受管 symlink 清單（path → target）。
+ * 這份清單由已退役的 skill link reconciler 寫：被它投影過的 linked worktree 會留下
+ * 「`.claude/skills/<n>` 變 symlink（untracked）、底下 tracked 實體檔變 ` D`」。
+ * 只收 key 與 target 都長得恰好是 `.claude/skills/<n>` 與 `../../.agents/skills/<n>` 的條目；讀不到／格式不對 → 空 Map（fail closed）。
+ */
+export function ownedSkillLinks(repoRoot: string): Map<string, string> {
+  const links = new Map<string, string>()
+  try {
+    const state = JSON.parse(readFileSync(join(repoRoot, SKILL_LINKS_LEDGER), 'utf8'))
+    if (state?.schemaVersion !== 1 || !state.links || typeof state.links !== 'object') return links
+    for (const [rel, target] of Object.entries(state.links)) {
+      const name = SKILL_LINK_PATH_RE.exec(rel)?.[1]
+      if (name && target === `../../.agents/skills/${name}`) links.set(rel, target as string)
+    }
+  } catch {
+    // 沒有清單＝沒有證據，不當投影
+  }
+  return links
+}
+
+/** 這個路徑現在是不是清單記的受管 symlink（readlink 恰好等於清單的 target；指向別處＝使用者的東西）。 */
+export function isOwnedSkillLink(
+  repoRoot: string,
+  path: string,
+  links: Map<string, string> = ownedSkillLinks(repoRoot),
+): boolean {
+  const expected = links.get(path)
+  if (!expected) return false
+  try {
+    const abs = join(repoRoot, path)
+    return lstatSync(abs).isSymbolicLink() && readlinkSync(abs) === expected
+  } catch {
+    return false
+  }
+}
+
 /**
  * `--restore-projection-drift` 的分類：porcelain（不帶 `-z` 的換行格式，同 `onlyToolManagedDrift`）每一行
  * 拆成「可還原」「可移除」與「擋住」三堆。可還原＝已追蹤、只有修改／刪除的狀態碼，且路徑是 clade-managed 投影
@@ -849,6 +941,7 @@ export function classifyRestorableDrift(
   const removable: string[] = []
   const blocking: string[] = []
   const owned = ownedProjectionHashes(repoRoot)
+  const skillLinks = ownedSkillLinks(repoRoot)
   for (const line of porcelainOut.split('\n').filter((l) => l.length >= 4)) {
     const path = porcelainPath(line)
     const code = line.slice(0, 2)
@@ -856,6 +949,7 @@ export function classifyRestorableDrift(
     if (code === '??') {
       if (
         isOwnedProjectionResidue(repoRoot, path, owned) ||
+        isOwnedSkillLink(repoRoot, path, skillLinks) ||
         isCladePiSettingsCreation(repoRoot, path)
       )
         removable.push(path)
@@ -894,6 +988,20 @@ function restoreProjectionDrift(repoRoot: string, porcelainOut: string): number 
     process.stdout.write(`${blocking.join('\n')}\n`)
     return 1
   }
+  // 受管 symlink 先拆：`.claude/skills/<n>` 還是 symlink 時，底下 tracked 實體檔的 `git checkout HEAD --`
+  // 會穿過 link 寫進 `.agents/skills/<n>/`（或被 git 拒絕），拆完才還原得回真正的目錄。
+  const unlinked = new Set<string>()
+  for (const path of removable) {
+    try {
+      // symlink 要 unlink：`rmSync` 對指向目錄的 symlink 會 EISDIR
+      if (lstatSync(join(repoRoot, path)).isSymbolicLink()) {
+        unlinkSync(join(repoRoot, path))
+        unlinked.add(path)
+      }
+    } catch {
+      return 2
+    }
+  }
   for (const path of restorable) {
     try {
       execFileSync('git', ['checkout', 'HEAD', '--', path], {
@@ -906,6 +1014,7 @@ function restoreProjectionDrift(repoRoot: string, porcelainOut: string): number 
     }
   }
   for (const path of removable) {
+    if (unlinked.has(path)) continue // 該路徑現在是還原出來的真目錄，不是殘檔
     try {
       rmSync(join(repoRoot, path), { force: true })
     } catch {

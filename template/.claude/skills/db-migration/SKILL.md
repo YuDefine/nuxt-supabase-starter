@@ -1,4 +1,5 @@
 ---
+name: db-migration
 description: 建立 Supabase migration，確保符合安全規範
 ---
 

@@ -320,3 +320,211 @@ export function lastCacheTouchMs(
 ): number | undefined {
   return lastCacheTouch(record, machine)?.ms
 }
+
+/**
+ * 背景工作證據：Claude pane 的 `idle`／`done` 不等於收尾——它可能正等著背景 subagent
+ * （`Agent` 的 async launch）、`run_in_background` 的 Bash 或 Monitor 回來。
+ * 這幾個都在 transcript 留痕：啟動回執（`Async agent launched … agentId: X`、`… task X`）、
+ * 完成通知（`<task-notification><task-id>X</task-id>…<status>completed</status>`），
+ * 以及每回合結尾的 `system/turn_duration`（harness 自己數的 `pendingBackgroundAgentCount`）。
+ */
+export interface BackgroundWork {
+  /** 還沒收到完成通知的背景 subagent 數。 */
+  agents: number
+  /** 還沒收到完成通知的背景 Bash／Monitor 數。 */
+  tasks: number
+  pending: boolean
+}
+
+/** `<task-notification>` 的完成通知；Monitor 到期（沒有 `<status>`）也算結束。 */
+const TASK_NOTIFY_RE =
+  /<task-id>([a-z0-9]{6,})<\/task-id>(?:(?!<task-id>)[\s\S])*?(?:<status>(\w+)<\/status>|<event>\[Monitor expired)/g
+/** 只認回執本體以 `Async agent launched` 開頭；前景 Agent 的報告引用這句話不算啟動回執。 */
+const ASYNC_AGENT_ID_RE = /^\s*Async agent launched[\s\S]*?agentId:\s*([a-z0-9]{6,})/
+const BACKGROUND_TASK_ID_RE = /\btask ([a-z0-9]{6,})\b|\bID: ([a-z0-9]{6,})\b/
+/** harness 的背景啟動回執；一般前景輸出剛好提到 background／task id 不算。 */
+const BACKGROUND_LAUNCH_RE =
+  /\b(?:running|moved|started|launched) (?:in|to) (?:the )?background\b|Monitor started/i
+const TERMINAL_STATUS_RE = /^(?:completed|failed|killed|stopped)$/
+const MOVED_TO_BACKGROUND_RE = /moved to (?:the )?background/i
+/**
+ * 啟動回執之後超過這麼久都沒有完成通知，就當它不會再來：harness 重啟／resume、TaskStop 殺掉的
+ * Bash、永遠不 expire 的 Monitor 都收不到 `<task-notification>`，沒有這個上限會永遠 pending
+ * （`async-keepalive-stop-gate.ts` 已承認這情形）。
+ */
+export const BACKGROUND_LAUNCH_MAX_AGE_MS = 6 * 60 * 60 * 1000
+
+function contentBlocks(parsed: unknown): unknown[] {
+  if (typeof parsed !== 'object' || parsed === null) return []
+  const message = (parsed as Record<string, unknown>).message
+  if (typeof message !== 'object' || message === null) return []
+  const content = (message as Record<string, unknown>).content
+  return Array.isArray(content) ? content : []
+}
+
+function toolResultText(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content))
+    return content
+      .map((part) =>
+        typeof part === 'object' &&
+        part !== null &&
+        typeof (part as { text?: unknown }).text === 'string'
+          ? (part as { text: string }).text
+          : '',
+      )
+      .join('\n')
+  return JSON.stringify(content ?? '')
+}
+
+/**
+ * transcript（jsonl 文字）→ 還在跑的背景工作。純函式；檔案尾端截斷時第一行可能殘缺，由呼叫端先丟掉。
+ *
+ * 收斂依據（沒有完成通知也不會永遠 pending）：
+ * 1. 啟動之後的 `turn_duration` 回報 `pendingBackgroundAgentCount: 0`＝harness 自己說沒有背景 subagent，
+ *    該回合之前啟動、仍沒通知的 subagent 一律結案。
+ * 2. 啟動回執的 `timestamp` 距 `nowMs` 超過 `BACKGROUND_LAUNCH_MAX_AGE_MS` 仍沒通知＝不再計入
+ *    （subagent、Bash、Monitor 都適用）。回執沒有 timestamp 時無從判斷年齡，照舊計入。
+ */
+export function backgroundWorkOfTranscript(
+  text: string,
+  nowMs: number = Date.now(),
+): BackgroundWork {
+  const uses = new Map<string, { kind: 'agent' | 'bash'; background: boolean }>()
+  const agents = new Map<string, number | undefined>()
+  const tasks = new Map<string, number | undefined>()
+  const ended = new Set<string>()
+  let turnPending = 0
+  let turnAt: number | undefined
+  let endedSinceTurn = new Set<string>()
+  for (const line of text.split('\n')) {
+    if (line.includes('<task-id>'))
+      for (const m of line.matchAll(TASK_NOTIFY_RE))
+        if (m[2] === undefined || TERMINAL_STATUS_RE.test(m[2])) {
+          ended.add(m[1]!)
+          endedSinceTurn.add(m[1]!)
+        }
+    const isTurn = line.includes('"subtype":"turn_duration"')
+    if (!isTurn && !line.includes('tool_use') && !line.includes('tool_result')) continue
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (isTurn) {
+      const count = (parsed as Record<string, unknown>).pendingBackgroundAgentCount
+      turnPending = typeof count === 'number' && count > 0 ? count : 0
+      const at = Date.parse(String((parsed as Record<string, unknown>).timestamp ?? ''))
+      turnAt = Number.isFinite(at) ? at : undefined
+      if (count === 0) for (const id of agents.keys()) ended.add(id)
+      endedSinceTurn = new Set()
+      continue
+    }
+    const stamp = Date.parse(String((parsed as Record<string, unknown>).timestamp ?? ''))
+    const launchedAt = Number.isFinite(stamp) ? stamp : undefined
+    for (const block of contentBlocks(parsed)) {
+      if (typeof block !== 'object' || block === null) continue
+      const b = block as Record<string, unknown>
+      if (b.type === 'tool_use' && typeof b.id === 'string') {
+        const input = typeof b.input === 'object' && b.input !== null ? b.input : {}
+        if (b.name === 'Agent' || b.name === 'Task')
+          uses.set(b.id, { kind: 'agent', background: true })
+        else if (b.name === 'Bash' || b.name === 'Monitor')
+          uses.set(b.id, {
+            kind: 'bash',
+            background:
+              b.name === 'Monitor' || (input as Record<string, unknown>).run_in_background === true,
+          })
+      } else if (b.type === 'tool_result' && typeof b.tool_use_id === 'string') {
+        const use = uses.get(b.tool_use_id)
+        if (!use) continue
+        const kind = use.kind
+        uses.delete(b.tool_use_id)
+        const body = toolResultText(b.content)
+        if (kind === 'agent') {
+          // 判斷以回執為準，NEVER 看 input.run_in_background：它可以是字串 "false" 卻照樣 async。
+          const id = ASYNC_AGENT_ID_RE.exec(body)?.[1]
+          if (id) agents.set(id, launchedAt)
+        } else if (
+          BACKGROUND_LAUNCH_RE.test(body) &&
+          (use.background || MOVED_TO_BACKGROUND_RE.test(body))
+        ) {
+          const hit = BACKGROUND_TASK_ID_RE.exec(body)
+          const id = hit?.[1] ?? hit?.[2]
+          if (id) tasks.set(id, launchedAt)
+        }
+      }
+    }
+  }
+  const open = (launches: Map<string, number | undefined>) =>
+    [...launches].filter(
+      ([id, at]) =>
+        !ended.has(id) && (at === undefined || nowMs - at <= BACKGROUND_LAUNCH_MAX_AGE_MS),
+    ).length
+  const openAgents = open(agents)
+  // harness 自己的計數當下限：啟動回執在視窗外時 agents 集合看不到它，turn_duration 還看得到。
+  // 下限本身也要有年限：最後一個 turn_duration 太舊、之後再沒有新回合，harness 的計數同樣不可信。
+  const floorStale = turnAt !== undefined && nowMs - turnAt > BACKGROUND_LAUNCH_MAX_AGE_MS
+  const agentCount = Math.max(
+    openAgents,
+    floorStale ? 0 : Math.max(0, turnPending - endedSinceTurn.size),
+  )
+  const taskCount = open(tasks)
+  return { agents: agentCount, tasks: taskCount, pending: agentCount + taskCount > 0 }
+}
+
+/** 讀 transcript 的尾端：背景工作的啟動、通知都在最近幾回合內，整檔讀進來只是浪費。 */
+export const BACKGROUND_WORK_TAIL_BYTES = 8 * 1024 * 1024
+/** peer 走 ssh：`sshRun` 的 maxBuffer 是 8 MiB，視窗必須明顯小於它，否則多一個位元組就整個 ENOBUFS。 */
+export const PEER_BACKGROUND_WORK_TAIL_BYTES = 4 * 1024 * 1024
+
+function tailText(path: string, bytes: number): string {
+  const size = statSync(path).size
+  const start = Math.max(0, size - bytes)
+  const fd = openSync(path, 'r')
+  try {
+    const buffer = Buffer.alloc(size - start)
+    readSync(fd, buffer, 0, buffer.length, start)
+    const text = buffer.toString('utf8')
+    // 從中間切下來的第一行是殘缺的 JSON
+    return start === 0 ? text : text.slice(text.indexOf('\n') + 1)
+  } finally {
+    closeSync(fd)
+  }
+}
+
+/**
+ * pane 當下 session 的背景工作；讀不到 transcript（沒有 session id、peer 連不上、檔不在）回 null
+ * ＝「分辨不了」，呼叫端 MUST 照 pending 處理，NEVER 當成「沒有背景工作」。
+ */
+export function backgroundWorkOfSession(
+  record: CacheTouchRecord,
+  machine: string | undefined,
+  sessionId: string | undefined = record.claude_session_id,
+): BackgroundWork | null {
+  if (!record.launcher || !sessionId || !/^[0-9a-f-]{36}$/i.test(sessionId)) return null
+  try {
+    if (!machine) {
+      const path = transcriptPathFor(record.launcher, record.cwd, sessionId)
+      return path ? backgroundWorkOfTranscript(tailText(path, BACKGROUND_WORK_TAIL_BYTES)) : null
+    }
+    if (!MACHINE_LABEL_PATTERN.test(machine) || !peerMachineLabels().includes(machine)) return null
+    // 每個 config dir 各自展開 glob（共用一個後綴只會展開最後一個帳號）
+    const globs = transcriptSearchDirs(record.launcher)
+      .map((dir) => `"$HOME/${dir}"/projects/*/${sessionId}.jsonl`)
+      .join(' ')
+    const probe = sshRun(
+      machine,
+      `f=$(ls ${globs} 2>/dev/null | head -1); [ -n "$f" ] && tail -c ${PEER_BACKGROUND_WORK_TAIL_BYTES} "$f"`,
+      { timeout: 30_000 },
+    )
+    if (probe.status !== 0 || !probe.stdout) return null
+    // 只有被截過的才丟第一行；整檔不到視窗大小時第一行是完整的紀錄
+    const first = probe.stdout.indexOf('\n')
+    const cut = Buffer.byteLength(probe.stdout) >= PEER_BACKGROUND_WORK_TAIL_BYTES && first >= 0
+    return backgroundWorkOfTranscript(cut ? probe.stdout.slice(first + 1) : probe.stdout)
+  } catch {
+    return null
+  }
+}

@@ -9,6 +9,7 @@
     "project-bootstrap",
     "reply-article",
     "routing-audit",
+    "web-article",
     "yudefine-deploy"
   ]
 }

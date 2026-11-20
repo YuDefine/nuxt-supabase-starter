@@ -45,14 +45,14 @@ new-project-readiness.md — 新專案（scaffold / init / 從 starter 灌進既
 
 notion-work-coupling.md — consumer 宣告 notion.hub 時適用。症狀：自己發現 prod 問題不知道要不要開票、工作做完或發版了但 Notion 狀態還停在舊值、想把 PR 或截圖當證據給客戶、客戶時程頁（交付項目）看不到這件工作、不知道某個 work item 對應哪張 ticket、Notion 現況與 git 實況對不上、拿不準該不該去碰 Notion、被告知「可以標完成／結案」想直接改票狀態、想在 skill 或文件裡寫 Notion 座標或狀態名。座標一律 registry/notion-hubs.json、欄位名一律 lib/notion-hub.ts FIELDS、寫入一律 notion-sync.ts
 5-11 前導 — Work Item ↔ Notion Hub 耦合
-13-27 Hub 模型（一個客戶一個 hub）
-29-34 觸發條件（兩者皆成立才生效）
-36-47 欄位契約（property key 一字不差）
-49-99 生命週期 → Notion 寫入
-101-106 執行機制
-108-115 Consumer 採用
-117-155 與「對外輸出需 user 授權」的關係
-157-162 Cross-ref
+13-28 Hub 模型（一個客戶一個 hub）
+30-35 觸發條件（兩者皆成立才生效）
+37-48 欄位契約（property key 一字不差）
+50-101 生命週期 → Notion 寫入
+103-108 執行機制
+110-117 Consumer 採用
+119-157 與「對外輸出需 user 授權」的關係
+159-164 Cross-ref
 
 output-hygiene.md — 要寫 PR／commit message／code comment／文件／對外訊息之前
 4-20 前導 — Output Hygiene — 別把內部過程變成讀者的負擔

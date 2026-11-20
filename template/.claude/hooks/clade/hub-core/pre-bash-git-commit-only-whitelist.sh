@@ -10,7 +10,7 @@
 #
 # Session branches (worktree deferred-landing) pass — not main.
 #
-# ── How a command is judged (TD-1051) ─────────────────────────────────────
+# ── How a command is judged ─────────────────────────────────────
 # Four 0-A rounds of "patch one syntax, find the next" showed that listing
 # dangerous shell (a denylist) never ends. This gate is an ALLOWLIST: it
 # evaluates only commands whose effect it can read exactly, and everything
@@ -19,7 +19,7 @@
 # Trigger: after deleting quotes and backslashes, the text has a `commit`
 # word and a `--only` word, and could run git: a `git` word anywhere, a `$`
 # or backtick anywhere (single quotes and heredoc bodies included), or a
-# function definition (TD-1128: `rg -e commit -e --only` is a search, not a
+# function definition (`rg -e commit -e --only` is a search, not a
 # commit). The whole text, not one seg: a function or `| xargs git` puts
 # `git` and the words in different segs. A commit without `--only` is not
 # this gate.
@@ -33,14 +33,16 @@
 #            | [rtk] git [-C DIR | --no-pager]* SUB ARG*
 #                SUB = add|diff|log|push|restore|rev-parse|show|status
 #            | echo|printf|true|mkdir|cat ARG*     (cat: no redirect, no heredoc)
-#            | NAME=VALUE+                  (bare assignment, #4210)
-#            | export NAME=VALUE+           (#4210)
+#            | NAME=VALUE+                  (bare assignment)
+#            | export NAME=VALUE+
 #   Any seg may start with `NAME=VALUE` env-prefix words; NAME must be
 #   unquoted (`"A=x" cmd` runs a command named `A=x`, so it is not a prefix).
 #   NAME is never GIT_* / HOME / PWD / OLDPWD / CDPATH (they move the commit
 #   or the cd chain) nor PATH / IFS / ENV / BASH_* / LD_* / DYLD_* / SHELL* /
 #   XDG_CONFIG_HOME / GLOBIGNORE / PS4 / PROMPT_COMMAND / EDITOR / VISUAL /
-#   PAGER / LESS* / BROWSER, nor an interpreter's injection hook (NODE_* /
+#   PAGER / LESS* / BROWSER, nor a hook/guard bypass (HUSKY* /
+#   VP_GIT_HOOKS / VITE_GIT_HOOKS / CLADE_ALLOW_MAIN_COMMIT / CLADE_HOME),
+#   nor an interpreter's injection hook (NODE_* /
 #   NPM_CONFIG_* / PERL* / PYTHON* / RUBY* / BUN_* / DENO_* / SSH_* /
 #   JAVA_TOOL_OPTIONS): they change which program or code runs. Such a NAME,
 #   a non-literal VALUE, `export` of a bare name or a flag, and everything
@@ -60,10 +62,10 @@
 #   printf, mkdir and filters included. A heredoc (`<<[-]DELIM`) is allowed on a git
 #   seg; so is the message idiom `"$(cat <<'EOF' … EOF\n)"` inside double
 #   quotes on a git seg (on any other command its body counts as code). A
-#   `cat` is accepted without any redirect or heredoc (#4210).
+#   `cat` is accepted without any redirect or heredoc.
 #   A "git seg" here is one whose global options are only -C / --no-pager and
 #   whose SUB is a builtin above: `-c alias.x='!sh'`, `--config-env` or an
-#   alias subcommand can run an argument or stdin as code (TD-1128). An
+#   alias subcommand can run an argument or stdin as code. An
 #   unquoted DELIM's body must have no `$`, backtick or `\`.
 #   Every word is LITERAL: no `$` expansion, no backtick / `$(` (except that
 #   idiom), no unquoted glob or brace (`* ? [ { }`); a leading `~` / `~/` is
@@ -95,7 +97,7 @@
 # `Via: /commit` (the /commit trailer) passes the command only when it sits
 # in a git commit's own message: a -m / --message / --trailer value, or the
 # heredoc a `-F -` commit reads — not in another git command's argument
-# (`git log --grep 'Via: /commit'`, TD-1128), a comment, an `echo`, or a
+# (`git log --grep 'Via: /commit'`), a comment, an `echo`, or a
 # script body.
 #
 # Known boundary: the trigger reads literal `commit` / `--only` words; a
@@ -232,14 +234,14 @@ scan=$(awk '
     }
     return j
   }
-  # A git seg whose arguments and stdin are data (TD-1128): `git -c
+  # A git seg whose arguments and stdin are data: `git -c
   # alias.x=!sh x`, `--config-env` or an alias subcommand run them as code.
   function gitdata(   j) {
     if (!gitseg()) return 0
     j = gitsub()
     return j <= nw && words[j] ~ /^(commit|add|diff|log|push|restore|rev-parse|show|status)$/
   }
-  # `Via: /commit` in the own message of this commit seg (TD-1128): a -m /
+  # `Via: /commit` in the own message of this commit seg: a -m /
   # --message / --trailer value; `-F -` makes the fed heredoc the message.
   function commitvia(   j, a, v) {
     if (!gitdata()) return
@@ -258,12 +260,12 @@ scan=$(awk '
     }
   }
   # Variables whose value changes where a commit lands or what code runs
-  # (TD-4210): never accepted in an assignment / `export` prefix.
+  # never accepted in an assignment / `export` prefix.
   # Also the code-injection hooks of interpreters (NODE_OPTIONS,
   # PERL5OPT, PYTHONPATH, SSH_ASKPASS, ...): a pre-commit hook would run them.
   function badvar(name,   u) {
     u = toupper(name)
-    return u ~ /^(GIT_|LD_|DYLD_|BASH_|XDG_CONFIG_|NODE_|NPM_CONFIG_|PERL|PYTHON|RUBY|SSH_|BUN_|DENO_|LESS)/ || u ~ /^(JAVA_TOOL_OPTIONS|_JAVA_OPTIONS|BROWSER)$/ || u ~ /^(HOME|PWD|OLDPWD|CDPATH|PATH|IFS|ENV|SHELL|SHELLOPTS|BASHOPTS|GLOBIGNORE|PS4|PROMPT_COMMAND|EDITOR|VISUAL|PAGER)$/
+    return u ~ /^(GIT_|LD_|DYLD_|BASH_|XDG_CONFIG_|NODE_|NPM_CONFIG_|PERL|PYTHON|RUBY|SSH_|BUN_|DENO_|LESS)/ || u ~ /^(JAVA_TOOL_OPTIONS|_JAVA_OPTIONS|BROWSER|CLADE_ALLOW_MAIN_COMMIT|CLADE_HOME)$/ || u ~ /^HUSKY/ || u ~ /^(VP|VITE)_GIT_HOOKS$/ || u ~ /^(HOME|PWD|OLDPWD|CDPATH|PATH|IFS|ENV|SHELL|SHELLOPTS|BASHOPTS|GLOBIGNORE|PS4|PROMPT_COMMAND|EDITOR|VISUAL|PAGER)$/
   }
   # Word k is a shell assignment: `NAME=` with NAME unquoted (`"A=x"` and
   # `A\=x` are command names to bash, not assignments).
@@ -472,9 +474,10 @@ scan=$(awk '
         # (.git/HEAD, a gitfile, .git/config move where a commit lands).
         if (rd) no("`cat` with a redirect or heredoc")
       } else if (cmd !~ /^(echo|printf|true)$/) no("`" cmd "`")
-      if (rdw) no("a redirect that writes into `.git`")
       if (!filt) listpos++
     }
+    # Outside `nw > 0`: a seg of redirects only (`> .git/HEAD`) has no words.
+    if (rdw) no("a redirect that writes into `.git`")
     if (op == ";" || op == "\n" || op == "") {
       if (condcd) condpending = 1
       condcd = 0; listpos = 0

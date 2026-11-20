@@ -1,6 +1,6 @@
 ---
 name: review
-description: "Use for review lifecycle work: human-gate checks or UI screenshot evidence. Not for archiving (retired), product code review, or Lighthouse analysis."
+description: "Use for review lifecycle: human-gate checks, UI screenshot evidence. NEVER write docs/manual-review-archive.md or screenshots/_archive/ (retired). NOT for code review/Lighthouse."
 ---
 
 
@@ -34,6 +34,12 @@ description: "Use for review lifecycle work: human-gate checks or UI screenshot 
 
 1. THINK 先讀取 `rules/歸檔停寫判準.md`。
 2. WRITE archive：確認完成項已在 work package 打 `[x]`，回報「不再寫入 `docs/manual-review-archive.md`；結論在 `<carrier>`」後停止；screenshots：回報已停 rotate，列 `screenshots/<env>/` 頂層 topic，不搬檔。
+
+## Description 原文（E1 搬入）
+
+> frontmatter description 上限 250 字元（白名單 300）；被縮掉的觸發詞、流程敘述與 NOT for 全文留在這裡，不刪內容。
+
+> Use for review lifecycle work: human-gate checks, UI screenshot evidence, or retired archive modes that must not write docs/manual-review-archive.md or screenshots/_archive/. NOT for executing a code review or Lighthouse performance analysis.
 
 
 ## 提問載體 — Claude Code

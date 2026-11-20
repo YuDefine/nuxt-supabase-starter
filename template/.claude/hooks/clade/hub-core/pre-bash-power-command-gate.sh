@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse:Bash hook — 電源指令（關機、重開、休眠、停 VM／CT）執行前，先確認受害機器上沒有別的 agent 在工作（block，exit 2）
+# PreToolUse:Bash hook（user scope 另掛 Monitor，見 machine-safety-gate.ts）— 電源指令（關機、重開、休眠、停 VM／CT）執行前，先確認受害機器上沒有別的 agent 在工作（block，exit 2）
 #
 # 約束（允許 agent 關機，不是只有人能按）：電源指令只在「會被這條指令關掉的機器上，除了呼叫者自己，沒有 herdr pane 的
 # agent_status=working」時放行；有就擋並列出；herdr 查不到（含目標機器連不上）也擋。延遲關機一律擋。
@@ -40,7 +40,7 @@
 # 判定以 exit 42（直接擋）／43（立即電源指令，進 herdr 檢查）表示命中：perl 載入失敗會以 2 結束，NEVER 拿 2 當命中碼。
 # 沒有繞過旗標；PreToolUse 只對 agent 的 tool call 觸發，user 自己 terminal 或 `!` 打的指令不受影響。
 # 自足：bash＋jq＋perl＋herdr。生效範圍：clade home 的 .claude/settings.json，以及 vendor/scripts/lib/machine-safety-gate.ts
-# （MACHINE_SAFETY_GATES，dev-node.ts self-heal 複製到 ~/.claude/hooks/clade-machine-safety/）的 user scope——受害者是整台機器，任何 repo 都要守。
+# （MACHINE_SAFETY_GATES，dev-node.ts self-heal 複製到 ~/.claude/hooks/clade-machine-safety/，matcher Bash|Monitor）的 user scope——受害者是整台機器，任何 repo 都要守。
 
 set -uo pipefail
 

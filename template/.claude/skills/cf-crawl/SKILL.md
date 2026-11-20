@@ -1,6 +1,6 @@
 ---
 name: cf-crawl
-description: "Use when crawling a website with Cloudflare Browser Rendering /crawl to ingest web content."
+description: "Use when 要爬整個網站、匯入文件站、批次擷取 web content；需 CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN。NOT for 單頁或需登入互動（agent-browser）、部署（void）、KV/R2/D1（cf-cli）。"
 ---
 
 
@@ -29,3 +29,9 @@ description: "Use when crawling a website with Cloudflare Browser Rendering /cra
 
 1. DELEGATE `uv run scripts/crawl.py fetch --job <JOB_ID> [--output <dir>] [--merge]`（`--output` 預設 `.crawl-output`；`--merge` 合併成 `<dir>/crawl.md`）。
 2. WRITE 依 script 印出的 JSON 回報 `saved`、`skipped`、`disallowed` 與 `output` 路徑。
+
+## Description 原文（E1 搬入）
+
+> frontmatter description 上限 250 字元（白名單 300）；被縮掉的觸發詞、流程敘述與 NOT for 全文留在這裡，不刪內容。
+
+> Use when 要爬整個網站、匯入文件站、抓 knowledge base、或批次擷取 web content。需 CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN。NOT for 單頁抓取或需要登入 / 點擊互動的頁面（走 agent-browser），NOT for 部署 Workers（照 cloudflare-workers 規約走 void）或管理 KV/R2/D1（走 cf-cli）。

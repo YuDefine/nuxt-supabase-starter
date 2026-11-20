@@ -44,9 +44,114 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parseArgs } from 'node:util'
+import { inspect, parseArgs } from 'node:util'
 
 const READONLY_TOOLS = new Set(['Read', 'Grep', 'Glob'])
+
+/**
+ * Code Mode（Claude Code 實驗功能；HQ research/2026-11-14-Code-Mode.md § W2 S7、S12）下 reviewer 子代理
+ * 跟著主 session 跑 REPL：頂層工具只剩 `REPL`（送 JS）與 `Poll`（取結果），真正的 Read／Grep／Glob 是 code 裡的
+ * `tools.X(...)`。子代理沒辦法自己關 Code Mode（env 跟主 session），所以這裡改成認得它：
+ *   - 主防線：每個內部呼叫都由 harness 各自落成一則 assistant tool_use（id `repl_*`、model `<synthetic>`），
+ *     工具名照樣進 `tools`、照樣過唯讀集合——REPL／Poll 只是外殼，NEVER 因為看到 REPL 就整包放行；
+ *   - 補一道靜態掃 REPL 的 `input.code`（去掉字串與註解後）：唯讀集合以外的 `tools.<Name>`、`tools[...]` 動態取名、
+ *     `tools` 整體轉手、`globalThis`／`this[`／`Function` 一律 fail closed。這只擋常見寫法，不是完整的 JS 分析：
+ *     內部呼叫有沒有被記下仍以第一道為準；
+ *   - brief 讀完核對（`briefLinesRead`）：內部 Read 的結果只到 vm，模型看到的是 `Poll`／poll_events 的回傳；
+ *     所以內部 Read 回的行，要在模型看得到的文字裡也出現才算讀到（code 只回行數或摘要就不算）。
+ * REPL 是封閉 vm（W2 S11：沒有 require／process／fetch／eval），不經 tool 碰不到檔案系統。
+ */
+const CODE_MODE_CARRIER_TOOLS = new Set(['REPL', 'Poll'])
+
+/** REPL code 裡唯讀集合以外的工具引用（含 `tools[...]` 動態取名，記成 `tools[…]`）。 */
+export function replCodeNonReadonlyTools(code) {
+  if (typeof code !== 'string') return ['REPL(input.code 缺席)']
+  const bad = new Set()
+  // 去掉註解與字串內容（`file_path: "src/tools.ts"`、`pattern: "tools\\."` 不是工具引用）；模板字串的 `${…}` 保留
+  const raw = code
+  code = stripStringsAndComments(code)
+  // 本 tokenizer 不認 regex literal：`/'/` 裡的引號會讓它把後面的程式當字串吞掉。去掉字串註解後還剩 `/`
+  // （regex 或除號）就判不準，改連原文一起掃（取聯集，寧可誤擋 fail closed）
+  if (code.includes('/')) code = `${code}\n${raw}`
+  if (/\bglobalThis\b|\bthis\s*\[|\bFunction\b/.test(code)) bad.add('動態取 global')
+  // 解構只取唯讀工具（`const { Read, Grep } = tools`）照常放行，其餘名字照算
+  code = code.replace(/\{([^{}]*)\}\s*=\s*tools\b/g, (_, names) => {
+    for (const part of names.split(',')) {
+      const name = part.split(':')[0].trim()
+      if (name && !READONLY_TOOLS.has(name)) bad.add(name)
+    }
+    return '{}'
+  })
+  for (const m of code.matchAll(/\btools\s*(?:\?\.\s*\[|\[|(?:\?\.|\.)\s*([A-Za-z_$][\w$]*)?)/g)) {
+    if (m[1] === undefined) bad.add('tools[…]')
+    else if (!READONLY_TOOLS.has(m[1])) bad.add(m[1])
+  }
+  // 解構（`const { Bash } = tools`）或把 tools 整個傳走都掃不出名字：只要 tools 不是緊接著 `.`／`?.`／`[` 就擋
+  if (/\btools\b(?!\s*(?:\?\.|\.|\[))/.test(code)) bad.add('tools(整體引用)')
+  return [...bad]
+}
+
+/** 註解換成空白、字串內容清空（保留引號與模板的 `${…}`），讓工具名掃描只看程式本體。 */
+export function stripStringsAndComments(code) {
+  let out = ''
+  let i = 0
+  const templateDepth = []
+  while (i < code.length) {
+    const c = code[i]
+    const next = code[i + 1]
+    if (c === '/' && next === '/') {
+      while (i < code.length && code[i] !== '\n') i += 1
+      continue
+    }
+    if (c === '/' && next === '*') {
+      const end = code.indexOf('*/', i + 2)
+      i = end < 0 ? code.length : end + 2
+      out += ' '
+      continue
+    }
+    if (c === '}' && templateDepth.length > 0 && templateDepth.at(-1) === 0) {
+      templateDepth.pop()
+      i += 1
+      i = skipTemplate(code, i, templateDepth)
+      out += '`'
+      continue
+    }
+    if (c === '{' && templateDepth.length > 0) templateDepth[templateDepth.length - 1] += 1
+    if (c === '}' && templateDepth.length > 0) templateDepth[templateDepth.length - 1] -= 1
+    if (c === "'" || c === '"') {
+      i += 1
+      while (i < code.length && code[i] !== c && code[i] !== '\n') i += code[i] === '\\' ? 2 : 1
+      i += 1
+      out += `${c}${c}`
+      continue
+    }
+    if (c === '`') {
+      out += '`'
+      i = skipTemplate(code, i + 1, templateDepth)
+      continue
+    }
+    out += c
+    i += 1
+  }
+  return out
+}
+
+/** 從模板字串內部掃到結尾的反引號（回傳其後位置）或 `${`（推入一層、回傳 `${` 之後位置）。 */
+function skipTemplate(code, i, templateDepth) {
+  while (i < code.length) {
+    if (code[i] === '\\') {
+      i += 2
+      continue
+    }
+    if (code[i] === '`') return i + 1
+    if (code[i] === '$' && code[i + 1] === '{') {
+      templateDepth.push(0)
+      return i + 2
+    }
+    i += 1
+  }
+  return i
+}
 
 /** requested 是完整 model id（claude-opus-5-5）或 family alias（opus）；alias 比前綴。 */
 export function modelMatches(requested, observed) {
@@ -92,11 +197,33 @@ export function compactionEvidence(entries) {
   }
 }
 
-/** 第一則之後的非空 user 文字＝主線續派時補進去的指示（含包進 system-reminder 標籤的）；harness 自己寫的 compact summary 不算。 */
+/**
+ * harness 在 reviewer Read 圖片（PNG 等）後自動插入的 user 條目：`isMeta: true`，內容只有圖片尺寸註記
+ * `[Image: original 2880x1800, displayed at 2420x1512. Multiply coordinates by 1.19 to map to original image.]`
+ * （或只含 image 區塊）。不是主線訊息，不可能夾帶指示（2026-11-16 presales#18 批 2 連 3 次誤判 exit 6）。
+ *
+ * 判準刻意嚴：必須同時 ① `isMeta === true`（harness 專屬旗標，SendMessage 續派寫不出來）、
+ * ② 每個內容區塊要嘛是 image 區塊、要嘛整段文字**逐字完整符合**上面的註記格式（錨定頭尾，
+ * 不用子字串）。多一個字、多一個區塊、少了 isMeta，都照舊算主線續派 fail closed。
+ */
+const IMAGE_META_NOTE =
+  /^\[Image: original \d+x\d+, displayed at \d+x\d+\. Multiply coordinates by \d+(?:\.\d+)? to map to original image\.\]$/
+
+export function isHarnessImageMeta(e) {
+  if (e.type !== 'user' || e.isMeta !== true) return false
+  const blocks = contentBlocks(e.message)
+  if (blocks.length === 0) return false
+  return blocks.every(
+    (c) => c.type === 'image' || (c.type === 'text' && IMAGE_META_NOTE.test(String(c.text).trim())),
+  )
+}
+
+/** 第一則之後的非空 user 文字＝主線續派時補進去的指示（含包進 system-reminder 標籤的）；harness 自己寫的 compact summary 與 image 註記不算。 */
 export function laterUserTexts(entries) {
   return entries
     .filter((e) => e.type === 'user' && e.message && !isCompactSummary(e))
     .slice(1)
+    .filter((e) => !isHarnessImageMeta(e))
     .flatMap((e) => contentBlocks(e.message))
     .filter((c) => c.type === 'text')
     .map((c) => c.text.trim())
@@ -128,12 +255,17 @@ export function findTranscripts(subagentsDir, nonce) {
 /** 成功的 Read(brief) 實際回傳了哪些行：結果是 `<行號>\t<內容>`，從 offset 起逐行連號。 */
 export function briefLinesRead(entries, briefPath) {
   const reads = new Map()
+  const synthetic = new Set()
   for (const e of entries) {
     if (e.type !== 'assistant') continue
     for (const c of contentBlocks(e.message))
-      if (c.type === 'tool_use' && c.name === 'Read' && c.input?.file_path === briefPath)
+      if (c.type === 'tool_use' && c.name === 'Read' && c.input?.file_path === briefPath) {
         reads.set(c.id, c.input)
+        if (e.message?.model === '<synthetic>' || String(c.id).startsWith('repl_'))
+          synthetic.add(c.id)
+      }
   }
+  const visible = synthetic.size > 0 ? modelVisibleText(entries, syntheticToolUseIds(entries)) : ''
   const seen = new Set()
   for (const e of entries) {
     if (e.type !== 'user') continue
@@ -149,12 +281,68 @@ export function briefLinesRead(entries, briefPath) {
         if (!m) continue
         // 只收從 offset 起連號的行：內容裡碰巧長得像「數字＋tab」的行不會被誤算成已讀。
         if (Number(m[1]) !== expected) continue
+        // Code Mode 的內部 Read：那一行的內容也要出現在模型看得到的回傳裡（code 只回行數／摘要不算讀到）
+        if (synthetic.has(c.tool_use_id) && !visibleContains(visible, line.slice(m[0].length)))
+          break
         seen.add(expected)
         expected += 1
       }
     }
   }
   return seen
+}
+
+/** 模型實際看得到的 Code Mode 回傳：非內部呼叫的 tool_result（`Poll`、REPL 的 dispatched）與 poll_events 附件。 */
+function syntheticToolUseIds(entries) {
+  const ids = new Set()
+  for (const e of entries) {
+    if (e.type !== 'assistant') continue
+    const internal = e.message?.model === '<synthetic>'
+    for (const c of contentBlocks(e.message))
+      if (c.type === 'tool_use' && (internal || String(c.id).startsWith('repl_'))) ids.add(c.id)
+  }
+  return ids
+}
+
+function modelVisibleText(entries, internalIds) {
+  const parts = []
+  for (const e of entries) {
+    if (e.type === 'attachment' && e.attachment?.type === 'poll_events')
+      parts.push(...(e.attachment.envelopes ?? []).filter((x) => typeof x === 'string'))
+    if (e.type !== 'user') continue
+    for (const c of contentBlocks(e.message)) {
+      if (
+        c.type !== 'tool_result' ||
+        internalIds.has(c.tool_use_id) ||
+        String(c.tool_use_id).startsWith('repl_')
+      )
+        continue
+      parts.push(
+        typeof c.content === 'string'
+          ? c.content
+          : (c.content ?? []).map((b) => (b.type === 'text' ? b.text : '')).join(''),
+      )
+    }
+  }
+  return parts.join('\n')
+}
+
+/**
+ * 行內容在回傳裡出現：原樣、JSON 跳脫，或 util.inspect 的字串形式（依該行自選引號、跳脫 `\\` 與控制字元；
+ * 不跳脫沒選上的引號）。另試「只多跳脫單引號」的舊式。空行一律算。
+ */
+export function visibleContains(visible, text) {
+  if (!text.trim()) return true
+  const forms = [
+    text,
+    JSON.stringify(text).slice(1, -1),
+    inspect(text).slice(1, -1),
+    inspect(text)
+      .slice(1, -1)
+      .replace(/(?<!\\)'/g, "\\'"),
+    text.replace(/\\/g, '\\\\').replace(/'/g, "\\'"),
+  ]
+  return forms.some((form) => visible.includes(form))
 }
 
 export function missingRanges(seen, total) {
@@ -267,7 +455,11 @@ export function verifySubagentReview({
       if (typeof e.effort === 'string' && e.effort.length > 0) observedEfforts.add(e.effort)
       else missingEffort = true
     }
-    for (const c of contentBlocks(e.message)) if (c.type === 'tool_use') tools.add(c.name)
+    for (const c of contentBlocks(e.message)) {
+      if (c.type !== 'tool_use') continue
+      tools.add(c.name)
+      if (c.name === 'REPL') for (const t of replCodeNonReadonlyTools(c.input?.code)) tools.add(t)
+    }
   }
   result.observed_models = [...observed]
   result.observed_model = observed.size === 1 ? [...observed][0] : undefined
@@ -307,7 +499,9 @@ export function verifySubagentReview({
     }
   result.effort_verification = 'verified'
 
-  const writeTools = [...tools].filter((t) => !READONLY_TOOLS.has(t))
+  const writeTools = [...tools].filter(
+    (t) => !READONLY_TOOLS.has(t) && !CODE_MODE_CARRIER_TOOLS.has(t),
+  )
   result.tools_used = [...tools]
   if (writeTools.length > 0)
     return {

@@ -14,7 +14,7 @@
 
 ## MUST
 
-1. 上表是**預設答案，不是已回答**。三題仍 MUST 走 `/clarify` 確認 —— 上游 Rule 2 逐字寫著只有「使用者本輪原話 / 本輪 clarify 的答案 / 既有 `techstack.md` 已寫明且本輪沒改判」才算已拍板，**agent 從別處推論出來的不算，本檔也不算**。本檔的作用是讓那三個問題附上具體選項，不是替使用者回答。
+1. 上表是**預設答案，不是已回答**。三題仍 MUST 走 `/clarify` 確認（唯一例外：consumer 命中 T 族、`docs/techstack-confirmation.md` 的有效列已涵蓋該題——那是 Charles 確認過的決定，算已拍板、不重問、以紀錄為準，見 `work-route/rules/上游覆寫-lifecycle落點與doctor.md` Rule 7）—— 上游 Rule 2 逐字寫著只有「使用者本輪原話 / 本輪 clarify 的答案 / 既有 `techstack.md` 已寫明且本輪沒改判」才算已拍板，**agent 從別處推論出來的不算，本檔也不算**。本檔的作用是讓那三個問題附上具體選項，不是替使用者回答。
 2. 寫進 `specs/truth/techstack.md` 的 `測試與驗證` 段 MUST **按端分列 runner**，不可寫成「全專案用同一套」。至少兩列：後端 SpecFormula、前端 Playwright。
 3. 選定 SpecFormula 時，`techstack.md` MUST 同時記下這兩個當前限制，否則下一個讀它的人會踩到：
    - packages 未發佈 npm，從原始碼消費（`vendor/specformula-ts/`，`tsx` runtime 轉譯，無 build 步驟）
@@ -23,7 +23,7 @@
 
 ## NEVER
 
-- **NEVER** 因為「fleet 已經有預設」就跳過 `/clarify`。那正是上游 Rule 2 Bad Example 的形狀（把範例堆疊當成已拍板）。
+- **NEVER** 因為「fleet 已經有預設」就跳過 `/clarify`（紀錄涵蓋者不是因預設而跳過，而是因 Charles 已確認）。那正是上游 Rule 2 Bad Example 的形狀（把範例堆疊當成已拍板）。
 - **NEVER** 把後端測試策略收成單元測。上游 Rule 4 的預設是 E2E，而 SpecFormula 的 `entity_validate` 本來就要求驗到 DB 權威狀態，收成單元測會讓那半邊契約整個消失。
 
 規約全文：`.claude/rules/specformula.md`、`.claude/rules/aixbdd-workflow.md`。

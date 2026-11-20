@@ -75,18 +75,18 @@ cd <該題所屬 repo 的 checkout> && node ~/offline/clade/vendor/scripts/flow/
 
 ```bash
 cd ~/offline/<consumer-id> && node ~/offline/clade/vendor/scripts/flow/flow.ts ask \
-  --headline '<consumer-id> 跑 dep batch：範圍？' \
+  --headline '<consumer-id> 跑 <explicit-skill>：範圍？' \
   --question '<一兩句陳述句前提與要選的範圍>' \
   --option '<範圍 A> :: <後果>' --option '這輪不跑 :: <後果>' \
   --recommended '<範圍 A>' --why '<一句為什麼>' \
-  --step 'Charles 在 <consumer-id> 親自打 /version-upgrade → Outdated mode' \
+  --step 'Charles 在 <consumer-id> 親自打 /<explicit-skill> <選定範圍>' \
   --carrier HANDOFF.md --actor '<你的 pane id>'
 ```
 
 | 旗標 | 必填性 | 作用 |
 | --- | --- | --- |
 | `--question Q` | 必填 | 一兩句背景（**不是** positional）。本文裡自己列了 `(A)`／`(B)` 卻沒有 `--option` 會被拒 |
-| `--option '<短標籤> :: <後果>'` | 選一個時 2–4 條 | 可重複，一條一個旗標；短標籤 ≤16 字。字母前綴與「（推薦）」由寫入端剝掉，NEVER 寫進文字 |
+| `--option '<短標籤> :: <後果>'` | 選一個時 2–4 條 | 可重複，一條一個旗標；短標籤 ≤16 字；**後果必填**（問 Charles 的題缺任一條被退回，`--audience coordinator` 不受限）。字母前綴與「（推薦）」由寫入端剝掉，NEVER 寫進文字 |
 | `--recommended '<短標籤>'` | 選一個時必填 | 推薦那條的短標籤 |
 | `--why '<理由>'` | 選一個時必填 | 一句為什麼推薦 |
 | `--needs-value` ＋ `--field F` | 要值時必填 | 取代 `--option`；每個要填的值一條 `--field` |
@@ -105,10 +105,10 @@ cd ~/offline/<consumer-id> && node ~/offline/clade/vendor/scripts/flow/flow.ts a
 | `--deadline D --deadline-basis B` | 選填，成對 | 有期限的題排最前（72 小時內到期）；basis 必填 |
 | `--dedupe-key K` | 選填 | 同一件事的第二次發問併進同一張卡；key 不放寬不重問閘門：同題（含同 key）已答過就回既有答案，不鑄新卡 |
 | `--ref pr:<N>｜pr:<repo>#<N>｜pr:<owner>/<repo>#<N>｜td:TD-<N>` | 選填，可重複 | 這題的前提依附在哪個 PR／TD 上。它在**題目問出之後**終局（合入、關閉、結案），watch 的過時掃描就自動把這題下架；問出之前就已終局的算前提，不算證據。涉 production／花費／政策的題只標不寫。`owner/` 會被忽略，repo 只認 registry 短名。沒有任何可核對參照（`--ref`、dispatch、題目裡的 PR／TD）時 stderr 會提醒，不擋 |
-| `--not-same-as <span>` | 問句與已答題相近、但確定是另一件事時帶，可重複 | 身分鍵對不上、問句 bigram 相似度過門檻的已答題會被拒收；明說不是同一件事才放行（`decision-subject.ts`） |
+| `--not-same-as <span>` | 問句與已答題、或 10 分鐘內還開著的卡相近、但確定是另一件事時帶，可重複 | 身分鍵對不上、問句 bigram 相似度過門檻的已答題會被拒收；10 分鐘內還開著的近似卡同樣拒發（不併卡也不鑄新卡，stderr 印 `--not-same-as <span>`）。明說不是同一件事才放行（`decision-subject.ts`） |
 | `--dispatch <id>` | 補鑄題掛回 blocked dispatch 時帶 | 同一題的身分鍵之一：同 dispatch 且問句相近的已答題算同一題 |
 | `--supersede <span>` | 被「已有答案」拒收且現況變了才帶 | 「已有答案」包括同一 carrier，以及沒帶 carrier 時引用舊題 span id 或與舊題共用識別字（見 `rules/待拍板條目寫法.md` Rule 23）。指到拒收句列出的那一題才放行；記在 `payload.supersedes` |
-| `--distinct-from <span 或 plan-decision:W:n>` ＋ `--distinct-reason '<差在哪>'` | 被拒收句列出的那一筆判成同題、但確定是另一件事時帶；兩個旗標成對，可重複 `--distinct-from` | 原答案不動、不標 superseded（與 `--supersede` 不同），理由進 `payload.distinct_from`／`distinct_reason` 並印在題卡 items。缺 `--distinct-reason` 拒發，`--distinct-reason` 不搭 `--distinct-from` 也拒發；拒收句列出的每一筆都要點名才放行。指到同 carrier 同一句話的已答題（身分鍵命中）或還開著的同題卡不放行，那是同一題：照既有答案做，現況變了才用 `--supersede` |
+| `--distinct-from <span 或 plan-decision:W:n>` ＋ `--distinct-reason '<差在哪>'` | 被拒收句列出的那一筆判成同題、但確定是另一件事時帶；兩個旗標成對，可重複 `--distinct-from` | 原答案不動、不標 superseded（與 `--supersede` 不同），理由進 `payload.distinct_from`／`distinct_reason` 並印在題卡 items。缺 `--distinct-reason` 拒發，`--distinct-reason` 不搭 `--distinct-from` 也拒發；拒收句列出的每一筆都要點名才放行。指到同 carrier 同一句話的已答題（身分鍵命中）或身分鍵命中、還開著的同題卡不放行，那是同一題；只因 10 分鐘內問法相近而命中的開著的卡，`--distinct-from` 與 `--not-same-as` 同樣放行：照既有答案做，現況變了才用 `--supersede` |
 | `--options 'A,B'` | 舊寫法 | 以逗號切選項，選項本文含逗號時會切壞；用可重複的 `--option` |
 | `--question-page`／`--question-page-label` | 已退役 | 帶了直接被拒 |
 

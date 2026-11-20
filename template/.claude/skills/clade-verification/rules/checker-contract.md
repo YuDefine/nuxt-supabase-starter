@@ -12,10 +12,10 @@ Mechanical checker 的綠燈是一項可重現的 contract claim：它只證明�
 
 ## REQUIRED output contract
 
-**每一支** mechanical checker 在 pass、finding、N/A 與 infrastructure error 四種結果下，都要輸出以下欄位；JSON 模式使用同名 keys，文字模式使用同順序 labels：
+**每一支** mechanical checker 在 pass、finding、unverified、N/A 與 infrastructure error 五種結果下，都要輸出以下欄位；JSON 模式使用同名 keys，文字模式使用同順序 labels：
 
 ```text
-<checker>: <pass|finding|N/A|infrastructure-error>
+<checker>: <pass|finding|unverified|N/A|infrastructure-error>
 scope: roots=<實際掃描目錄>; patterns=<實際納入 pattern>; mode=<tracked|staged|filesystem>
 skipped: <排除目錄/pattern/原因；沒有就寫 none>
 completeness: <complete|partial|unknown>
@@ -26,6 +26,8 @@ completeness: <complete|partial|unknown>
 ### completeness 與結果是正交的兩軸
 
 `pass|finding` 回答「掃到的合不合格」，`completeness` 回答「scope 掃完了沒」。兩軸分開輸出；`pass` + `partial` 是合法組合，不要塌縮成單一綠燈。
+
+`unverified`＝0 命中，但 scope 內有單元該檢查卻沒檢查（例：設定讀不懂，依賴設定的規則無從判定），一律配 `completeness: partial`、在 `skipped:` 列出原因。選它而不選 `pass`，是讓只讀狀態行的消費端也看得出「沒檢查完」；NEVER 把讀不懂的輸入當成「沒設定」而印 `pass`。
 
 | 值 | 何時用 |
 | --- | --- |
@@ -39,11 +41,13 @@ completeness: <complete|partial|unknown>
 
 | 結果 | exit code |
 | --- | --- |
-| `pass` / `N/A` | 0 |
+| `pass` / `unverified` / `N/A` | 0（`unverified` 不得當成通過，見 § Fail-closed Iron Law 末段） |
 | `finding` | 1 |
 | `infrastructure-error` | 2 |
 
 消費端（CI job、pre-commit hook、gate-runner）收到 2 時不得當成「檢查過了沒問題」，也不要當成一般違規去 retry——它代表這個 gate 這次根本沒有執行。
+
+`--warn-only` 這類降級旗標只能把 `finding` 的 1 降成 0；`infrastructure-error` 不論帶不帶旗標都回 2。
 
 **鎖的是語義軸，不是數字**（例：`pi-dispatch.ts` 用 2 業務 fail／3 mechanical failure／4 quota gate 也合法）。不要為了對齊數字去改既有 dispatcher 或 checker。
 

@@ -116,7 +116,7 @@ READ 若分類完、要寫計畫檔，讀取 `rules/批次分組判準.md`，把
 - 指定排除清單（如 `vue` lockstep with `nuxt`，先不動）
 - 調整分類（如「bar 不用 adaptation，降成 bugfix」）
 - 只跑 npm 不跑 actions（或反過來）
-- **MUST 等使用者確認**才進 Phase C；user 的排除與調整寫回計畫檔（排除的列改 `skipped`） — 不要自決定
+- **MUST 等使用者確認**才進 Phase C（被派出的 pane 照 `rules/被派出時人類閘門判準.md` 送題）；user 的排除與調整寫回計畫檔（排除的列改 `skipped`） — 不要自決定
 
 > Smoke test 建議：第一次在一個新 consumer 跑時，先挑 1 個最低風險 🟢 patch 跑 smoke，驗證 worktree fork + pi dispatch + commit boundary 都對，再批次推剩下的。
 
@@ -168,7 +168,7 @@ npm items 依分類決定 prompt 填充：
 
 ### C.2 Dispatch background（first-pass，Claude Sonnet 5.5（effort: high））
 
-`version-upgrade-first-pass` 列：載體偏好（cloud ＞ Devin ＞ 本機 pane）照 [[agent-routing.routing-table]] § Devin SWE-2 Max 的「四列的 Devin 預設」；本 turn 收得回就走 in-process `sonnet-implementer`（brief 首行下加 `routing-row: version-upgrade-first-pass`），要背景或隔離走 Herdr：
+`version-upgrade-first-pass` 列：載體偏好（cloud ＞ Devin ＞ 本機 pane）照 [[agent-routing.routing-table]] § Devin SWE-2 Max 的「四列的 Devin 預設」；本 turn 收得回就走 in-process `sonnet-implementer`（brief 首行下加 `routing-row: version-upgrade-first-pass`），要背景或隔離走 Herdr（被派出的 pane 派不出 Herdr，只走 in-process，見 `rules/被派出時人類閘門判準.md` G5）：
 
 ```bash
 node ~/offline/clade/vendor/scripts/herdr-session-handoff.ts \

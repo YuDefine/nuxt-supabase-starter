@@ -16,6 +16,7 @@ consumer 屬於某個 Notion hub 時，ticket 狀態與客戶時程頁（`交付
 | --- | --- | --- | --- |
 | **ticket board** `Issue & Feature Ticket` | 客戶提報、或工程師發現的 bug / 需求，該 hub 所有專案共用一張 | 客戶 + 開發 | 客戶建票與客戶欄；machine 寫狀態 / 版本 / Work ID / PR，工程師建票時給客戶欄初值 |
 | **主檔** `專案`、`里程碑` | 內部結構；`專案` 一列 = 一個 projectCode | 內部 | 人建列；進度% 是 rollup，沒有人手填的欄 |
+| **主檔不抄規格書** | 有 presale 規格書的專案（registry `projects.<code>.presaleSpec: true`），規格書（presales `web-article/spec.html`）是里程碑內容與日期的唯一來源 | 內部 | `里程碑` 列的 `說明`／`預估完成日` 與 `專案` 的 `預估交付日` 留空，`客戶可見摘要` 只放指向規格書的指標，不抄內容與日期；`scripts/audit-notion-hub-schema.ts` 的 `spec-copy-*` 探針非空就報 drift（machine 不寫這些欄，NEVER 為了「讓 Notion 好看」補值） |
 | **交付項目**（在 `開發時程追蹤` 頁） | 客戶看的工作清單：一列 = 一個 work item 或合約交付項 | 客戶 | machine（`狀態` / `進度%` / `Work ID` / relation）；`預估完成日` 是**人確認後**才寫 |
 
 **交付項目 是選填表**：hub 可以把進度併進 ticket board（board 的 `進度%` 欄 ＋ 時程頁上唯讀的 board view），這時 registry 省略該 hub 的 `delivery`。下文所有「交付項目 進度%」在這種 hub 一律改寫 ticket 的 board `進度%`（跟 ticket 轉移同一次 PATCH、只往前；`progress` 指令寫絕對值），`eta` / `reconcile` 不適用，承諾日期留在 board 的 `dueDate` 欄（registry `fields.board.dueDate`；fc 是 `預估完成日`）由人維護。主檔 `專案`／`里程碑` 的 `進度%` 是 Notion 端 rollup、machine 不寫；`FIELDS.project/milestone.deliveries` 只在有 交付項目 的 hub 有意義，這種 hub 的 rollup 來源由 hub 擁有者在 Notion 上改指 board 或移除。沒有 ticket 的工作在這種 hub 不會出現在客戶面——需要客戶看見就先 `file` 建票。
@@ -50,7 +51,7 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow work open 
 
 | work item 事件 | 指令 | ticket（有連結時） | 交付項目 |
 | --- | --- | --- | --- |
-| **工程師發現**（bug / 要做的功能） | `notion-sync.ts file --title "<客戶看得懂>" --kind bug\|feature --slug <slug> [--prod-url <url>] [--screenshot <png>]…` | 建票 → in-progress + `Work ID`（script 自己 `flow work open --origin notion:<page>`）；`備註`=prod URL、內文問題截圖 | 只有 feature 建列；工程師發現的 bug **不建** |
+| **工程師發現**（bug / 要做的功能） | `notion-sync.ts file --title "<客戶看得懂>" --kind bug\|feature --slug <slug> [--prod-url <url>] [--screenshot <png>]… [--parent <大單>\|--top-level "<理由>"]` | 建票 → in-progress + `Work ID`（script 自己 `flow work open --origin notion:<page>`）；`備註`=prod URL、內文問題截圖；`--parent` 寫 `上層項目` | 只有 feature 建列；工程師發現的 bug **不建** |
 | **真的開工**（`flow work open` 成功） | `notion-sync.ts open --work <id> [--ticket <page>] [--title "<客戶看得懂的一句話>"]` | → in-progress + `Work ID` | upsert：`狀態` 進行中、`進度%` 25、`專案` relation、`Work ID` |
 | 階段推進（`flow plan open`、`flow work done` 自動觸發；中途勾 tasks **不自動**觸發——要人跑一次 `follow` 或 `status` 才反映） | `notion-sync.ts follow --work <id>` | 由 flow／plan 狀態推導，只往前（requirements → needs-engineer、PM 已確認 → in-progress） | 只更新既有列：requirements 階段 10、有 tasks.md 後 `進度%` = 25 + 65 × tasks 完成比（上限 90）、done 為 待驗收 90 |
 | 中途進度（人給的絕對值） | `notion-sync.ts progress --work <id> --progress <n>` | — | `進度%` 絕對值 |
@@ -63,6 +64,7 @@ ticket 連結是**選填**：work item 若來自客戶 ticket，`flow work open 
 ### 掛載點（MUST）
 
 - **發現即建票**：工程師在 prod／資料裡發現問題、或決定做一個功能時，**先** `file` 再動手——它同時鑄 work id，之後的推進全部自動。從 work-route 進來的新需求／新 bug 由 work-route Phase 3（`rules/鑄workid前Notion詢問判準.md`）在鑄 work id 前問一次要不要建票（board-only hub 點明不建票客戶看不到），不另加步驟。
+- **大單／細單 hub 建票必帶上層項目**：registry 宣告 `requireParent: true` 的 hub（fc：采潔看大單、細單收成子項）`file` 必須二擇一——`--parent <大單 page id 或 URL>`（須是 board 上「上層項目」為空的頂層列），或找不到對應大單時 `--top-level "<留頂層理由>"`；兩者都缺就在任何寫入前擋下並列出大單候選（`--dry` 同樣擋）。理由只留在輸出，NEVER 寫進 Notion 單。建好後 `上層項目` 歸人維護，沒有任何 update 路徑碰它；既有單不由機器補掛。`audit-notion-hub-schema` 對這種 hub 驗 `上層項目` 存在且是 relation。
 - **flow 事件自動跟隨**：`flow plan open` 與 `flow work done` 成功後，flow 以 detached 子行程觸發 `follow`（fail-open，未宣告 hub 的 repo 零成本；`CLADE_NOTION_FOLLOW=0` 關閉）。**NEVER** 在 work-route 或任何 skill 裡加「記得同步 Notion」步驟——Notion 跟隨 flow，不是 flow 呼叫 Notion。
 
 - **`flow work open` 之後、動第一個檔之前**：跑 `open`。

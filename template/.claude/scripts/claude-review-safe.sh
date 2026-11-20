@@ -98,7 +98,9 @@
 #      finalize；本地拒絕，未呼叫 Herdr helper
 #   13 不需再審（輪數 ledger）：同內容同一批已有 verdict，或上一輪通過且之後累計增量未達
 #      重驗門檻（≤50 行且 <5 檔）——0-A 證據沿用那一輪，review 沒跑
-#   14 輪數上限：同一份改動第 6 輪，review 沒跑——拆 PR 或交人判，NEVER 刪 ledger 重置
+#   14 輪數上限：同一份改動第 6 輪，review 沒跑——同一張 PR 重想做法＋增量審（送主管代答 rounds grant --scope increment），NEVER 關單重開、預設拆單、刪 ledger 重置
+#   17 Code Mode session（CLAUDE_CODE_EXPERIMENTAL_CODE_MODE 為真）誤用 prepare——子代理跑 REPL、finalize 讀不懂；
+#      改走無子命令的 Herdr carrier（帶 CLAUDE_REVIEW_LAUNCHER），review 沒跑、不記輪
 #
 # 輪數 ledger（判定表在 lib/review-common.sh § 0-A 輪數 ledger）：每次開審前判輪，第 2 輪起
 # 自動帶上一輪 verdict 進驗證模式；verdict 通過完整性與身分核對後才記進 ledger。
@@ -111,15 +113,17 @@
 #  coordinator 的 oa-batches.ts 帶；不帶＝working-tree 模式）:
 #   CLAUDE_REVIEW_LAUNCHER=<cc|cc2> .claude/scripts/claude-review-safe.sh [xhigh] [--findings <prior verdict file>] [PR 旗標]
 #       Herdr carrier——只給叫不出 Claude subagent 的 runtime（Codex、Pi…）；launcher 必填（缺值 exit 2）；
-#       Claude Code（含 Herdr 派出的 worker）誤用時 exit 12
+#       Claude Code（含 Herdr 派出的 worker）誤用時 exit 12；Code Mode session 例外：MUST 走這條（prepare 回 exit 17）
 #   .claude/scripts/claude-review-safe.sh prepare [xhigh] [--findings <prior verdict file>] [PR 旗標]
 #   .claude/scripts/claude-review-safe.sh finalize <work-dir>
-#       subagent carrier——Claude Code 主線 MUST 用這條：prepare 印 AGENT_CALL，主線照它派
+#       subagent carrier——Claude Code 主線（Code Mode session 除外）MUST 用這條：prepare 印 AGENT_CALL，主線照它派
 #       commit-0a-reviewer subagent，再跑 finalize 取 verdict。流程與核對全文在
 #       lib/review-subagent.sh 檔頭。
 #   逐條驗收項影子（plans/40 T4，只記帳、不進通過條件）：prepare 從 CLAUDE_REVIEW_ACCEPTANCE_FILE（工單）或
 #   CLADE_DISPATCH_ID 的派工單抓驗收項接在 brief 最後，reviewer 多交 `## Acceptance Verdict` 表，finalize 記影子帳；
 #   CLADE_0A_ACCEPTANCE_SHADOW=off 關閉。全文見 vendor/scripts/oa-acceptance-shadow.ts 檔頭。
+#   finding 驗證者影子（plans/40 T41，只記帳、不改判定）：finalize 記完 ledger 後，抽樣的輪在背景另開新 context
+#   逐條反駁 Critical／Major；CLADE_0A_FINDING_VERIFIER=off 關閉。全文見 vendor/scripts/oa-finding-verifier.ts 檔頭。
 #   .claude/scripts/claude-review-safe.sh rounds plan|cover|passed|show --mode pr|worktree --branch <b> ...
 #       輪數 ledger 查詢（JSON）：oa-batches 切批前 plan（covered 時 cover 落記錄）、merge-queue 合併前 passed
 #       plan／cover／carry-over 是重度子命令，先排 flock 並行槽：CLADE_ROUNDS_MAX_PARALLEL（預設 2）、排隊上限 CLADE_ROUNDS_SLOT_WAIT_S（預設 20，須小於呼叫端 30s timeout）；
@@ -129,13 +133,16 @@
 #       --scope increment（預設，只審增量）｜full（整份重審）寫進 grant 紀錄；evidence 缺、by 不是 manager／charles、scope 不合法、PR 號對不上一律 exit 2）。這是放寬上限的唯一入口，沒有 env／旗標替代
 #       --kind（可省）：例外輪輪種由 scope 決定，full→independent（prepare 必開獨立輪；開不出 exit 15 且 grant 不消耗）、increment→verify；與 scope 不一致 exit 2
 #       每張 PR 最多 2 張；第 3 張只收 --scope full、只給高風險 PR（簽發者確認），且例外輪已用完、現 head 已有 1 輪不帶篩選的完整審查、最近兩輪皆 0 Critical／0 Major 三條件同時成立；第 4 張一律拒
+#   .claude/scripts/claude-review-safe.sh rounds grant --mode worktree --branch <b> --base <HEAD sha> --by manager|charles --evidence <出處> [--scope increment]
+#       working-tree 模式（/commit、HQ 直推 main，沒有 PR 號）的 exit 14 出口：key＝ledger 的 branch＋base（與 prepare 開輪同一把；exit 14 的 NEXT 印整條現成指令），grant 記 mode:'worktree'／branch／base（pr:null）；
+#       授權約束同 PR 模式（只在撞上限時收、一張放寬一輪、每份 ledger 最多 2 張、evidence 必填、by 只收 manager／charles）；只收 --scope increment（working-tree 沒有獨立輪，full／--kind independent exit 2）；revoke-grant 仍只限 PR 模式
 #   .claude/scripts/claude-review-safe.sh rounds revoke-grant --mode pr --branch <b> --pr-number <n> --by supervisor|charles --reason <原因> [--granted-at <ISO>]
 #       主管或 Charles 撤銷一張還沒開出例外輪的 grant（append 進 ledger.grant_revocations，可稽核）：舊 scope=full grant 因前輪有未解 Critical／Major 開不出獨立輪的死結用它解，撤銷後可再簽 --scope increment 開 verify 輪；已被消耗的 grant 撤不掉（exit 2）
 #   .claude/scripts/claude-review-safe.sh rounds reopen --mode pr --branch <b> --pr-number <n> --head <sha> --by supervisor|charles --evidence <出處>
 #       主管或 Charles 要求在該 head 開一輪完整審查（covered／已通過／沒有通過輪都可）：append 請求進 ledger，下一次 prepare 開 kind=independent 的輪，受輪數上限管
 #   .claude/scripts/claude-review-safe.sh rounds findings --mode pr --branch <b> [--pr-number <n>] [--round <n>] [--part <i/N>]
 #       唯讀：列出該輪各批 verdict 實際被計數的 finding、指紋與裁決狀態
-#   .claude/scripts/claude-review-safe.sh rounds adjudicate --mode pr --branch <b> --pr-number <n> --round <n> [--part <i/N>] --finding <指紋> --verdict act|dismiss|false-positive --by <裁決者> --evidence <證據>   # 每則 Critical／Major 落 Act／Dismiss；--all-undisposed yes 配 act 一次記完（與 --finding 互斥）
+#   .claude/scripts/claude-review-safe.sh rounds adjudicate --mode pr --branch <b> --pr-number <n> --round <n> [--part <i/N>] --finding <指紋> --verdict act|dismiss|false-positive|out-of-diff --by <裁決者> --evidence <證據> [--base <當下 merge-base> --head <PR head>]   # 每則 Critical／Major 落 Act／Dismiss；--all-undisposed yes 配 act 一次記完（與 --finding 互斥）；out-of-diff（只收 Major、人給的裁決）必帶 --base／--head：--head 要是該 PR 在 ledger 上的 head、--base 要是 BASE_REF 與 head 當下的 merge-base、finding 所有位置都不在 base→head 的 diff 才收
 #       主線／主管對某條 reviewer Critical／Major 落處置：append 進該輪該批 adjudications（act＝成立，不改計數；dismiss＝假 Major，扣 blocking），gate 以「原始 Critical＋Major 減已裁決 Major」判定
 #       （只剩假 Major 的輪＝通過，不再逼出下一輪）；沒有裁決紀錄的 Major 照舊計入。Critical 的 dismiss 只留紀錄、不扣計數；指紋對不上、缺 by／evidence、
 #       by 是 reviewer 自己、重複裁決一律 exit 2 且不寫 ledger。原始計數與 verdict 檔不動
@@ -226,7 +233,26 @@ case "${1:-}" in
     exit $?
     ;;
 esac
-if [ "$CARRIER_MODE" = "herdr" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+# Code Mode session（CLAUDE_CODE_EXPERIMENTAL_CODE_MODE 為真）派的 in-process 子代理也跑 REPL，finalize 讀不懂
+# 那份 transcript（brief 讀行數記成 0 → exit 3；REPL 碼命中防線 → exit 6），輪白耗。所以 Code Mode 下反過來：
+# prepare 拒收（exit 17，開審前、不記輪），改走 Herdr carrier：helper 對 0-A carrier 列不套 code-mode 組
+# （vendor/scripts/lib/code-mode.ts codeModeDispatchArgs 的 reviewSeat），審查員跑一般工具。
+CODE_MODE_SESSION=""
+# Claude Code 讀這個變數只去頭尾空白、不分大小寫；這裡照同一套判
+CODE_MODE_WORD="$(printf '%s' "${CLAUDE_CODE_EXPERIMENTAL_CODE_MODE:-}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')"
+case "$CODE_MODE_WORD" in
+  1|true|yes|on) CODE_MODE_SESSION=1 ;;
+esac
+if [ "$CARRIER_MODE" = "prepare" ] && [ -n "$CODE_MODE_SESSION" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+  {
+    echo "[claude-review-safe] 錯誤：Code Mode session 不得走 prepare（exit 17）：子代理在 REPL 下跑，finalize 讀不懂 transcript，這一輪會白耗。"
+    echo "  → CLAUDE_REVIEW_LAUNCHER=<cc|cc2> bash <claude-review-safe.sh> xhigh [--findings <上一輪 verdict 檔>] [PR 旗標]（無子命令＝Herdr carrier，carrier pane 不開 Code Mode；launcher 照本機帳號顯式帶）"
+    echo "  coordinator 派的 0-A carrier（oa-batches.ts）自己在 Code Mode：不要自己改跑，照 carrier執行 F4b 回報、由主持者重派"
+    echo "  review 沒跑、輪數沒記；同一組旗標改用上面那條重跑即可。"
+  } >&2
+  exit 17
+fi
+if [ "$CARRIER_MODE" = "herdr" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && [ -z "$CODE_MODE_SESSION" ]; then
   {
     echo "[claude-review-safe] 錯誤：Claude Code runtime 不得使用無子命令的 Herdr carrier（exit 12）；CLADE_DISPATCH_ID／--bounded-leaf 不豁免。"
     echo "  → bash <claude-review-safe.sh> prepare xhigh [--findings <上一輪 verdict 檔>]"
@@ -379,7 +405,6 @@ if [ "$CARRIER_MODE" = "prepare" ]; then
 else
   REVIEW_SANDBOX_NOTE='This review runs as a Herdr Claude child with read-only workspace access on the `'"$REVIEW_ROW"'` Routing Table row — the dispatch record carries your model, effort, and session identity, and a mismatch voids the verdict.'
 fi
-PATTERNS_JSON="$REPO_ROOT/vendor/review-rules/patterns.json"
 MAX_DIFF_LINES="${CODEX_REVIEW_MAX_DIFF_LINES:-6000}"
 # 依據見下方「brief 總量上限」註解；lib/review-common.sh 的 dep 摘要上限計入此預算，所以在 source 前先解出。
 BRIEF_MAX_BYTES="${CLAUDE_REVIEW_BRIEF_MAX_BYTES:-358400}"
@@ -395,10 +420,13 @@ VERDICT_OUT="$WORK_DIR/verdict.md"
 # reviewer 的工具面才能只有 Read／Grep／Glob。
 if [ "$CARRIER_MODE" = "prepare" ]; then REVIEW_OUTPUT_PATH=""; else REVIEW_OUTPUT_PATH="$VERDICT_OUT"; fi
 
+# 語意規則從比較基準讀（PR base／merge-base），NEVER 從受審樹：改動不能改到審它自己的規則。
+review_resolve_rules_ref
 review_load_semantic_list
 review_snapshot_or_die "$WORK_DIR/worktree-before.txt" before
 review_open_round
 review_collect_changeset
+review_log_semantic_triggers
 review_embed_round_increment
 review_filter_carried_findings
 review_build_snapshot
@@ -825,9 +853,18 @@ while child_still_running; do
     echo "[claude-review-safe] NEXT: 以更大的 CLAUDE_REVIEW_BUDGET_MINUTES 重跑本 wrapper（新 dispatch、照常產 receipt）。NEVER 手動 --coordinate-resume 收割 ${DISPATCH_ID:-這個 dispatch} 再「人工補驗」它的 verdict——沒有 wrapper receipt 的 verdict 不是 gate 證據（commit skill review-policy.md § 無 receipt 的 verdict）；那個 pane 要回收時收割結果一律丟棄。" >&2
     exit 3
   fi
-  # coordination_pending 的 resume 本身就在 helper 內等一個 slice；其餘續等狀態（含 transport_error）
-  # 都是 helper 立即回的——不 sleep 會在高 load 下不停重啟 node helper 直到預算用盡。
-  if [ "$STATUS" != "coordination_pending" ] && [ "$IDLE_POLL_SECONDS" -gt 0 ]; then
+  # coordination_pending 且 pane 仍 working：resume 在 helper 內等一個 slice，不用再 sleep。
+  # 其餘續等狀態（含 transport_error）都是 helper 立即回的；coordination_pending 但 pane 已 idle/done
+  # （helper 由 transcript 判定背景工作未收斂，pending_basis）時 `agent wait` 立刻返回，同樣是立即回——
+  # 不 sleep 會在高 load 下不停重啟 node helper、重讀 transcript 直到預算用盡。
+  RESUME_WAITS_IN_HELPER=0
+  if [ "$STATUS" = "coordination_pending" ]; then
+    case "$(herdr_field "$RECEIPT" agent_status)" in
+      idle|done) ;;
+      *) RESUME_WAITS_IN_HELPER=1 ;;
+    esac
+  fi
+  if [ "$RESUME_WAITS_IN_HELPER" -eq 0 ] && [ "$IDLE_POLL_SECONDS" -gt 0 ]; then
     sleep "$IDLE_POLL_SECONDS"
   fi
   herdr_call --coordinate-resume "$DISPATCH_ID" >"$RECEIPT" 2>>"$WORK_DIR/herdr-stderr.log"
