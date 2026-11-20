@@ -142,6 +142,8 @@ interface RunFixture {
   registryPath: string
   releaseStore: string
   cladeRoot: string
+  /** 通過 fake check 的 tech stack 確認紀錄；runCli 預設帶它。 */
+  techstackRecord: string
 }
 
 function recorderSource(name: string): string {
@@ -167,6 +169,20 @@ function makeFakeClade(runDir: string): { cladeRoot: string; spyLog: string } {
   for (const name of CLADE_SCRIPT_NAMES) {
     writeFileSync(join(scriptsDir, name), recorderSource(name))
   }
+  // tech stack 閘門呼叫的 clade check（vendor/scripts/techstack-confirmation.ts）：
+  // 判準由 clade 自己的測試驗，這裡只要「紀錄含 REJECT 就 exit 1」。刻意不寫進
+  // CLADE_SPY_LOG——scaffold-only 的「零 clade 呼叫」斷言管的是 init／register 等寫入面。
+  mkdirSync(join(cladeRoot, 'vendor', 'scripts'), { recursive: true })
+  writeFileSync(
+    join(cladeRoot, 'vendor', 'scripts', 'techstack-confirmation.ts'),
+    [
+      "const { readFileSync } = require('node:fs')",
+      'const i = process.argv.indexOf("--record")',
+      'const text = readFileSync(process.argv[i + 1], "utf-8")',
+      'process.exit(process.argv[2] === "check" && !text.includes("REJECT") ? 0 : 1)',
+      '',
+    ].join('\n'),
+  )
   // pre-commit wire 的素材：存在才能測「有東西可 copy 也不該 copy」。
   mkdirSync(join(cladeRoot, 'vendor'), { recursive: true })
   writeFileSync(
@@ -189,10 +205,13 @@ function freshRun(name: string): RunFixture {
   const { cladeRoot, spyLog } = makeFakeClade(runDir)
   const registryPath = join(runDir, 'registry.json')
   writeFileSync(registryPath, `${JSON.stringify({ consumers: [] }, null, 2)}\n`)
+  const techstackRecord = join(runDir, 'techstack-confirmation.md')
+  writeFileSync(techstackRecord, '| item | decision |\n| framework | Nuxt |\n')
   return {
     cwd,
     spyLog,
     cladeRoot,
+    techstackRecord,
     registryPath,
     releaseStore,
     env: {
@@ -212,7 +231,11 @@ function freshRun(name: string): RunFixture {
 }
 
 function runCli(args: string[], run: RunFixture) {
-  return spawnSync(process.execPath, [CLI, ...args], {
+  // --yes／managed 一律要 tech stack 確認紀錄（閘門本身的測試在 techstack-gate.test.ts）。
+  const withRecord = args.includes('--techstack-record')
+    ? args
+    : [...args, '--techstack-record', run.techstackRecord]
+  return spawnSync(process.execPath, [CLI, ...withRecord], {
     cwd: run.cwd,
     encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'pipe'],

@@ -9,7 +9,7 @@ purpose: 把常見產品形態打包成「可直接複製」的 scaffold 命令�
 
 # Scaffold Recipes — 自然語言 → 直接命令
 
-> 每個 recipe 都是 `--yes` 全自動模式的完整命令。沒帶 `--yes` 但帶了 `--preset` / `--auth` 等旗標、因而跳過互動時，同樣不能拿預設值略過 catalog 題。AI 必須先問完 `question-catalog.ts` 的適用題，再套 recipe；Supabase 軌一定要有 `--db-host`。要登記進 fleet 時 `--repo-id` / `--workflow-model` / `--business-activity` / `--dev-port` / `--deploy-track` 也必須是 flag。`create-fast-project.sh` 預設 `--db-host this-machine` 與 `--no-register-consumer`（本機試跑）。連到已在跑的伺服器時改傳 `--db-host existing-server`。
+> 每個 recipe 都是 `--yes` 全自動模式的完整命令。沒帶 `--yes` 但帶了 `--preset` / `--auth` 等旗標、因而跳過互動時，同樣不能拿預設值略過 catalog 題。AI 必須先問完 `question-catalog.ts` 的適用題，再套 recipe；Supabase 軌一定要有 `--db-host`。要登記進 fleet 時 `--repo-id` / `--workflow-model` / `--business-activity` / `--dev-port` / `--deploy-track` 也必須是 flag。**每個 recipe 都必須再加 `--techstack-record <path>`**（Charles 逐項確認過的 `docs/techstack-confirmation.md`）：`create-fast-project.sh` 不預設豁免 tech stack 確認閘門，沒帶就以 `TECHSTACK_RECORD_MISSING` 拒絕；只有 starter 自測／playground 才可加 `--playground`，**NEVER** 用於真專案。`create-fast-project.sh` 預設 `--db-host this-machine` 與 `--no-register-consumer`（本機試跑）。連到已在跑的伺服器時改傳 `--db-host existing-server`。
 
 ## 命令 prefix（共用）
 

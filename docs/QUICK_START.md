@@ -53,8 +53,10 @@ CLI 會先讓你選 **stack preset**（cloudflare-supabase / cloudflare-nuxthub-
 ```bash
 git clone https://github.com/YuDefine/nuxt-supabase-starter temp-starter
 cd temp-starter
-bash scripts/create-fast-project.sh temp/my-product
+bash scripts/create-fast-project.sh temp/my-product --techstack-record ./techstack-confirmation.md
 ```
+
+> 真專案必須帶 `--techstack-record`（Charles 逐項確認過的紀錄；wrapper 不再預設豁免）。starter 自測／playground 才加 `--playground`（等同 `--techstack-playground-exempt`）。
 
 可帶參數自選 Tech Stack（參考下方 [Tech Stack 選擇指引](#tech-stack-選擇指引)）：
 
@@ -84,6 +86,7 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 	--yes \
 	--preset cloudflare-nuxthub-ai \
 	--no-register-consumer \
+	--techstack-record ./techstack-confirmation.md \
 	--with charts,image
 
 # 或從預設 cloudflare-supabase preset 微調
@@ -91,6 +94,7 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 	--yes \
 	--db-host this-machine \
 	--no-register-consumer \
+	--techstack-record ./techstack-confirmation.md \
 	--auth better-auth \
 	--with charts,monitoring,image \
 	--without testing-full,testing-vitest

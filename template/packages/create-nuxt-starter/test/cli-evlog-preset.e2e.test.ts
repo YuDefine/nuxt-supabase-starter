@@ -52,6 +52,8 @@ const YES_LOCAL = [
   '--db-host',
   'this-machine',
   '--no-register-consumer',
+  // 自測 scaffold 不是真專案：具名豁免 tech stack 確認閘門（閘門本身見 techstack-gate.test.ts）
+  '--techstack-playground-exempt',
 ] as const
 
 /** src/ 遞迴最新 mtime：dist bundle 的完整 source 依賴圖都在此目錄內。 */
@@ -177,6 +179,7 @@ describe('dist/cli.mjs 的落點只看實際 cwd（TD-007 回歸）', () => {
           '--db-host',
           'this-machine',
           '--no-register-consumer',
+          '--techstack-playground-exempt',
         ],
         {
           cwd: isolated,

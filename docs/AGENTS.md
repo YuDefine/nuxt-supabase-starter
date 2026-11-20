@@ -97,7 +97,7 @@ test -d temp-starter || git clone https://github.com/YuDefine/nuxt-supabase-star
 cd temp-starter
 
 # 2. 從自然語言推導 flag，跑 fast script（含 --yes）
-bash scripts/create-fast-project.sh temp/<name> <flags>
+bash scripts/create-fast-project.sh temp/<name> --techstack-record <path> <flags>  # 紀錄 = Charles 逐項確認過的 techstack-confirmation.md；wrapper 不預設豁免
 
 # 3. scaffold 完成後切目錄並驗收
 cd temp/<name>

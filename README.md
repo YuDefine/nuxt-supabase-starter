@@ -162,8 +162,11 @@ pnpm --filter create-nuxt-starter dev -- /path/to/my-app
 
 # 非互動 — 一行直達指定 preset
 pnpm --filter create-nuxt-starter dev -- /path/to/my-app \
-  --yes --preset cloudflare-supabase --db-host this-machine --no-register-consumer
+  --yes --preset cloudflare-supabase --db-host this-machine --no-register-consumer \
+  --techstack-record ./techstack-confirmation.md
 ```
+
+> `--yes`／managed 必須帶 `--techstack-record`（tech stack 確認閘門）；自測才用 `--techstack-playground-exempt`，見 [CLI_SCAFFOLD.md](docs/CLI_SCAFFOLD.md)。
 
 Stack preset：`cloudflare-supabase`（預設）/ `cloudflare-nuxthub-ai` / `vercel-supabase` / `self-hosted-node` / `minimal`。
 
