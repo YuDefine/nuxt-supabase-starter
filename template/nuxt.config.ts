@@ -174,6 +174,8 @@ export default defineNuxtConfig({
 
   app: {
     head: {
+      // a11y：<html> 必須宣告語言（WCAG 3.1.1；axe html-has-lang）
+      htmlAttrs: { lang: 'zh-Hant-TW' },
       link: [
         // favicon (多種尺寸)
         { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
