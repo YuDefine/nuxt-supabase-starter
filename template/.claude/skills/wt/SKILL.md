@@ -1,6 +1,6 @@
 ---
 name: wt
-description: "開隔離 worktree 並在裡面派工的內部工具：建立或接續 `<consumer>-wt/<slug>/`、寫 WORKTREE-BRIEF、依 routing table 選執行者派工、驗收後交 commit 批次落地。Use when 呼叫端（work-route、handoff、coordinator child）已判定要隔離，或使用者明確要求開 worktree。NOT for 發布散播（clade-publish）、提交已完成工作（commit）、只是切 branch。"
+description: "Use when 呼叫端（work-route、handoff、coordinator child）已判定要隔離，或使用者要求開 worktree 並派工。NOT for 發布散播（clade-publish）、提交已完成工作（commit）、只切 branch。"
 license: MIT
 metadata:
   author: clade
@@ -46,6 +46,12 @@ brief 與回報照 `templates/` 骨架複製結構、參考同名 `.example.md` 
 - READ 若在 main 要改 tracked 檔，讀取 `rules/改tracked檔前先隔離判準.md`。
 - READ 若要讀工作進度檔，讀取 `rules/讀進度前先查worktree判準.md`。
 - 維護、復原讀 `wt-helper指令.md` 對應節。
+
+## Description 原文（E1 搬入）
+
+> frontmatter description 上限 250 字元（白名單 300）；被縮掉的觸發詞、流程敘述與 NOT for 全文留在這裡，不刪內容。
+
+> 開隔離 worktree 並在裡面派工的內部工具：建立或接續 `<consumer>-wt/<slug>/`、寫 WORKTREE-BRIEF、依 routing table 選執行者派工、驗收後交 commit 批次落地。Use when 呼叫端（work-route、handoff、coordinator child）已判定要隔離，或使用者明確要求開 worktree。NOT for 發布散播（clade-publish）、提交已完成工作（commit）、只是切 branch。
 
 # Runtime adapter: Claude
 Use Claude's qualified main line for UI implementation and visual judgement. Bind host question, Agent, completion notification, TaskStop and keepalive operations to the native Claude tools; these bindings do not authorize changing the shared worktree gates.

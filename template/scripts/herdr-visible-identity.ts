@@ -8,6 +8,7 @@ import { basename, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { herdrArgsToRequest, herdrSocketCallSync } from './lib/herdr-socket.ts'
 import { isRecord } from './lib/json-unknown.ts'
 
 /** Daily work uses one server. A caller's pane ID has meaning only on that server. */
@@ -277,7 +278,37 @@ export async function verifyVisibleIdentityAsync(
   return step.value
 }
 
+/**
+ * The verbs whose CLI output is the raw socket reply go straight to the default session's socket
+ * (no process spawn, and the request leaves right after `connect()` so Herdr's 100 ms read poll is
+ * mostly skipped — evidence/herdr-api-poll-100ms.md). Other verbs (`api snapshot`, `agent list`)
+ * have CLI-side shaping and still go through the CLI.
+ */
 export function requestDefaultHerdr(args: string[]): unknown {
+  const request = herdrArgsToRequest(args)
+  if (request) return requestHerdrSocket(request, args)
+  return requestHerdrCli(args)
+}
+
+function requestHerdrSocket(
+  request: NonNullable<ReturnType<typeof herdrArgsToRequest>>,
+  args: string[],
+): unknown {
+  const answer = herdrSocketCallSync(defaultHerdrSocket(), request, 10_000)
+  if ('transport' in answer)
+    throw new Error(
+      `Herdr socket ${args.join(' ')} 失敗：${answer.transport.code} ${answer.transport.message}`,
+    )
+  const reply = answer.reply
+  if (isRecord(reply) && isRecord(reply.error)) {
+    const code = typeof reply.error.code === 'string' ? reply.error.code : ''
+    const message = typeof reply.error.message === 'string' ? reply.error.message : ''
+    throw new Error([code, message].filter(Boolean).join(': ') || 'Herdr 命令失敗')
+  }
+  return reply
+}
+
+function requestHerdrCli(args: string[]): unknown {
   // Herdr runs plugins with a bare system PATH that lacks its own install dir and passes the binary
   // as HERDR_BIN_PATH instead.
   const result = spawnSync(

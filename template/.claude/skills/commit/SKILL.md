@@ -1,10 +1,8 @@
 ---
 name: commit
 description: >-
-  Use when 使用者要求提交工作區變更、merge back 已完成 worktree，或 worktree
-  就緒佇列達到提交條件；需要拆成多筆時同樣適用。這是 PR 前準備器（D0 起手、D2 作者自驗、D3 開 PR），CI 與 0-A 審查在 PR
-  之後。NOT for 把 clade 改動散播到 consumer（走 /clade-publish），NOT for 新建實作 worktree（交 wt
-  建立），NOT for session 交接（走 /handoff）。
+  Use when 使用者要提交工作區變更、merge back 已完成 worktree，或拆多筆提交（PR 前準備器）。NOT for 散播
+  clade（/clade-publish）、開 worktree（wt）、session 交接（/handoff）。
 metadata:
   clade:
     permission_tier: action
@@ -40,17 +38,24 @@ $ARGUMENTS
 7. D9-Gate｜READ 僅當 workflow 是 trunk-based、使用者要發版且已 land：先跑 `/handoff` 寫完 HANDOFF／ROADMAP（`/handoff` 不 commit），接著讀取 `handoff-steps.md` § 5-E，以精確 paths `git commit --only` 提交那幾個 carrier（不 push，讓它跟發版 commit 同一次 push；**NEVER** `git add` ＋裸 `git commit`，共用 main checkout 會吞掉別 session 的 staged），再讀取 `rules/發版授權判準.md`，跑 `deploy-trigger-check.ts`（PR 制 consumer 的發版走 publish，不在這裡）。trunk-based 沒有 PR，push main 前 MUST 先有 0-A 的 `FINALIZE` verdict（見 `rules/分組與提交判準.md` Rule 4）。
 8. D9 Step 6-A｜READ 若 `verdict=confirmed-push-main`，讀取 `rules/push-main發版判準.md`，先照 Rule 0 查 consumer `.clade/rules` 的 `> Overrides:`，有就以該檔為準。
 9. D9 Step 6-B｜READ 若 `verdict=needs-approval` 或腳本不存在，讀取 `rules/停在push-main判準.md`。
-10. D9-Notion｜READ 若 tag 已推出且 consumer 宣告 `notion.hub`，改走 `notion-hub` 的 `notion-sync.ts release`（原 Step 6b）；發版報告列證據即可。
+10. D9-Notion｜READ 若 tag 已推出且 consumer 宣告 `notion.hub`，每件 work 跑 `notion-sync.ts release --work <id> --tag <tag>`：記修復版本／上線日期／PR，還沒掛完成說明的票留在進行中、不寫驗收中。本步不等部署，**NEVER** 持鎖 park 或延後放鎖。實查正式機已是 tag 版本的票，可在本步直接走 `notion-hub` Phase 9 `ticket-article.ts ship --work <id> --tag <tag>`；其餘待補票交步驟 12。
 11. Final｜READ 若有取鎖且要退出（完成、gate 失敗、中止皆同），讀取 `rules/鎖與退出判準.md` Rule 2 釋放鎖。**鎖是最後一步才放**：trunk-based 的 HANDOFF commit、版本 bump、deploy commit、tag 與 `git push origin main`（步驟 7–10）都在持鎖期間做完，**NEVER** 在 D3 之後先放鎖再發版。
+12. D9-Notion 上線後｜READ 若步驟 10 留下待補完成說明的票：鎖放掉之後由本 session 接手，**NEVER** 留給下次想起來。實查正式機版本已是 tag → 照 `notion-hub` Phase 9 `ship --work <id> --released <tag>`；還沒上線 → 有 `CLADE_DISPATCH_ID` 的 session 以 `--complete blocked --wait-until in:<部署預估分鐘>m` 交回（續接筆記寫「實查正式機版本 → ship --released <tag>」），互動 session 留在本 session 等部署跑完再做；session 結束時仍沒上線就逐張寫進 HANDOFF 待辦（notion-hub Phase 6 step 2 與看板 `⚑ 已發版待完成說明` 兜底）。
 
 D9 三份判準與 `release-push.md` 內的舊編號對照：Step 4→D3、Step 5→`/handoff`、Step 6b→步驟 10、Step 7–8→PR body／回報。
 
 ## 必讀量（驗收 ≤40KB）
 
-預設執行 = `SKILL.md` ＋ 步驟 1、3、4、5、6 的判準；步驟 2、7–11 與 `gates.md`、`handoff-steps.md`、`batch.md`、`schema-sync.md`、`release-push.md` 命中才讀。量測：
+預設執行 = `SKILL.md` ＋ 步驟 1、3、4、5、6 的判準；步驟 2、7–12 與 `gates.md`、`handoff-steps.md`、`batch.md`、`schema-sync.md`、`release-push.md` 命中才讀。量測：
 
 ```bash
 cd capabilities/core/skills/commit && wc -c SKILL.md rules/{批次入口,前置探測,品質檢查,分組與提交,schema觸發}判準.md | tail -1
 ```
+
+## Description 原文（E1 搬入）
+
+> frontmatter description 上限 250 字元（白名單 300）；被縮掉的觸發詞、流程敘述與 NOT for 全文留在這裡，不刪內容。
+
+> Use when 使用者要求提交工作區變更、merge back 已完成 worktree，或 worktree 就緒佇列達到提交條件；需要拆成多筆時同樣適用。這是 PR 前準備器（D0 起手、D2 作者自驗、D3 開 PR），CI 與 0-A 審查在 PR 之後。NOT for 把 clade 改動散播到 consumer（走 /clade-publish），NOT for 新建實作 worktree（交 wt 建立），NOT for session 交接（走 /handoff）。
 
 

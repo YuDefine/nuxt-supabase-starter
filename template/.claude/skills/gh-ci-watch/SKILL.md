@@ -1,6 +1,6 @@
 ---
 name: gh-ci-watch
-description: "Use immediately after a successful git push when the repo has GitHub Actions and CI / deploy completion must be watched — including slice draft PRs; also use when 查某 run 或 SHA、撈 run log、查 runner 佇列、查 PR 狀態（能不能合、draft、checks、head、與 main 衝突）、撞 GitHub API 限流。CI 紅燈修回同一張 PR。NOT for 修 CI 紅燈的實作步驟。"
+description: "Use right after a successful git push when the repo has GitHub Actions: watch CI/deploy, query run/SHA/log, runner queue, PR status, API rate limit. NOT for fixing red CI."
 metadata:
   author: clade
   version: "1.0"
@@ -41,6 +41,12 @@ metadata:
 1. DELEGATE 先讀取 `references/gh-commands.md`，前景執行對應的 `gh run`／`gh pr view`／`gh api` 命令。
 2. THINK 查的是 PR 狀態或撞了 API 限流時，先讀取 `rules/PR狀態與限流判讀判準.md`，依 predicate 判讀並處置；要等這張 PR 的 CI 出結果就回到 Phase 2。
 3. THINK 一個問題要逐 run／逐 PR 打超過 100 次 gh 時，MUST 改用每頁 100 筆的列表 API（`gh api 'repos/<o>/<r>/actions/runs?per_page=100'`）、GraphQL 一次撈完，或 `node vendor/scripts/gh-throttle.ts --background --cache-ttl <秒> -- gh …`；NEVER 自寫併發迴圈或 `xargs -P`／python 併發逐筆打 gh——帳號 core 5000/hr 全 fleet 共用，2026-10-30 一支 16 併發腳本十分鐘打到 0。session 裡的 gh 經 shim 記帳，回 exit 75 且 stderr 印「非急件 gh 暫停」或「本 session 近一小時已直打」時就是撞到額度門檻：停下改走上述路徑，NEVER 重試或關掉 shim 繞過。
+
+## Description 原文（E1 搬入）
+
+> frontmatter description 上限 250 字元（白名單 300）；被縮掉的觸發詞、流程敘述與 NOT for 全文留在這裡，不刪內容。
+
+> Use immediately after a successful git push when the repo has GitHub Actions and CI / deploy completion must be watched — including slice draft PRs; also use when 查某 run 或 SHA、撈 run log、查 runner 佇列、查 PR 狀態（能不能合、draft、checks、head、與 main 衝突）、撞 GitHub API 限流。CI 紅燈修回同一張 PR。NOT for 修 CI 紅燈的實作步驟。
 
 
 ## Claude host contract

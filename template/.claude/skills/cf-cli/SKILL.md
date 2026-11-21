@@ -1,6 +1,6 @@
 ---
 name: cf-cli
-description: 'Use when void 做不到的 Cloudflare 帳號資源查詢或異動（D1/KV/R2/DNS/zone/tunnel/Worker secret/cache/browser-run），或把 curl 帳號操作改寫成 cf；從 wrangler 遷移時，void 能做的先換成 void，只有 void 不涵蓋的才換成 cf。NOT for void 能做的部署、本機 dev、型別、D1 migration、secret sync、網域（走 void）。'
+description: "Use when void 做不到的 Cloudflare 帳號資源查詢或異動（D1/KV/R2/DNS/zone/tunnel/Worker secret/cache），或把 curl 帳號操作改寫成 cf。NOT for void 能做的部署、dev、migration、secret、網域。"
 ---
 
 
@@ -38,3 +38,9 @@ fleet 邊界：部署、本機 dev、型別、D1 migration、secret sync、網�
   #   {"<NAME>": {"type": "secret_text", "text": "<值>"}, ...}   ← JSON merge patch，key 是 secret 名稱
   cf workers secrets bulk --worker <worker-name> --file "$f" )
 ```
+
+## Description 原文（E1 搬入）
+
+> frontmatter description 上限 250 字元（白名單 300）；被縮掉的觸發詞、流程敘述與 NOT for 全文留在這裡，不刪內容。
+
+> Use when void 做不到的 Cloudflare 帳號資源查詢或異動（D1/KV/R2/DNS/zone/tunnel/Worker secret/cache/browser-run），或把 curl 帳號操作改寫成 cf；從 wrangler 遷移時，void 能做的先換成 void，只有 void 不涵蓋的才換成 cf。NOT for void 能做的部署、本機 dev、型別、D1 migration、secret sync、網域（走 void）。

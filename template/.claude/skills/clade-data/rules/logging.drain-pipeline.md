@@ -79,6 +79,19 @@ drain pipeline emit 以下 meta-event，consumer **MUST** 接這三個並 ship �
 
 review 抓 `createSentryDrain\(` 同檔沒有 `createDrainPipeline` 包覆 → 🟠 Major。
 
+## dev／E2E fs drain（本機 agent 讀失敗事件）
+
+本機 `nuxt dev` 與 E2E 把 wide event 寫進 repo 內 `.evlog/`，讓 agent 失敗後讀得到 `why`／`fix`（讀端協定 [[evlog-investigate]] § dev／E2E 失敗）。樣板：`vendor/snippets/evlog-dev-fs-drain/`（`dev-fs-gate.ts` 開關＋`plugin.ts`）。
+
+- **MUST** 開關照樣板的 `shouldEnableDevFsDrain`：`NUXT_APP_ENV` 為 production／staging 一律不開（帶 `EVLOG_DEV_FS=1` 也不開）；否則 `import.meta.dev` 為 true 或 `EVLOG_DEV_FS === '1'` 才開。E2E 跑 `build && preview` 時 `import.meta.dev` 是 false，要在 playwright `webServer.env` 帶 `EVLOG_DEV_FS=1`
+- **MUST** 磁碟上限 `createFsDrain({ maxFiles: 3, maxSizePerFile: 10MB })`（每個目錄約 30MB 封頂，evlog 刪最舊的檔）
+- **MUST** E2E 與 dev 分目錄：E2E 帶 `EVLOG_FS_DIR=<rootDir 絕對路徑>/.evlog/e2e`（evlog 原生讀；playwright config 寫 `resolve(import.meta.dirname, '.evlog/e2e')`），plugin **NEVER** 傳 `dir` override——override 優先於 env，會把 E2E 事件寫進 `.evlog/logs/`
+- **MUST** `EVLOG_FS_DIR` 用絕對路徑：evlog 相對 server 行程的 cwd 解析，`nuxt preview` 在 `.output/` 下起 server，相對路徑會寫到 `.output/.evlog/e2e`，digest 讀不到、還會被當成「沒有 5xx」。`nuxt dev` 的 cwd 是 rootDir，預設 `.evlog/logs` 可用
+- **NEVER** 對 Cloudflare preset 的 preview（workerd）期待 fs drain：workerd 的檔案系統不是本機磁碟，事件寫不出來；這類 consumer 的 E2E 要讀事件就對 `nuxt dev` 跑
+- **MUST** `.evlog/`、`.nostics.log` 不進版控：由 `scripts/lib/gitignore-governance.ts` 的 `CLADE_GITIGNORE_ENTRIES` 統一給，consumer 不自己補
+- **MUST** CI 只在 E2E **失敗**時把 `.evlog/e2e` 上傳成 artifact（`if: failure()`、`retention-days: 7`、`if-no-files-found: ignore`）；成功不存。要上傳的 consumer **MUST** 顯式寫 `redact`（evlog 預設 `redact ?? !isDev()`，dev 不遮罩）
+- **例外**：fs drain 是本機檔案 append，不打外部 sink，不適用上面「所有 drain 走 `createDrainPipeline`」；**NEVER** 把它當 prod durable drain（[[evlog-stream-extend]] § 設計原則）
+
 ## Enricher stack 標準（5 件套）
 
 **每一個** consumer 必裝 enricher（順序重要）：

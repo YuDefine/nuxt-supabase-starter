@@ -1,0 +1,169 @@
+---
+name: db-migration
+description: 建立 Supabase migration，確保符合安全規範
+---
+
+
+## User Input
+
+```text
+$ARGUMENTS
+```
+
+## Outline
+
+建立新的 Supabase migration，確保符合 `rules/modules/db-schema/supabase/migration.md` 的所有規範（該規約帶 `paths:` gating，三端都投影）。
+
+### Step 1: 確認需求
+
+詢問使用者要建立什麼樣的 migration：
+
+- 新增表格？
+- 修改欄位？
+- 建立函式？
+- 新增 RLS 政策？
+
+### Step 2: 建立 Migration 檔案
+
+使用 Supabase CLI 建立 migration（**禁止手動建立 .sql 檔案**）：
+
+```bash
+supabase migration new <description_in_snake_case>
+```
+
+### Step 3: 撰寫 Migration 內容
+
+根據需求撰寫 SQL，**必須遵守以下規範**：
+
+#### 函式規範（防 search_path injection）
+
+```sql
+-- ✅ 正確：search_path 必須是空字串
+CREATE OR REPLACE FUNCTION schema_name.function_name()
+RETURNS return_type
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''  -- 必須是空字串
+AS $$
+BEGIN
+  -- 使用完整路徑：schema_name.table_name
+  SELECT * FROM core.users WHERE id = auth.uid();
+END;
+$$;
+```
+
+```sql
+-- ❌ 禁止：任何其他 search_path 值
+SET search_path = public, pg_temp  -- 禁止
+SET search_path = public           -- 禁止
+```
+
+#### Schema 規範
+
+- 使用正確的 schema 前綴（如 `public.`、`core.`，或專案自訂業務 schema）
+- 所有表格/函式引用使用完整路徑（避免裸表名觸發 `search_path` resolution）
+
+### Step 4: 本地測試與類型產生（自動）
+
+依序執行以下步驟，任何步驟失敗則停止並顯示錯誤。**MUST** 透過 package.json 偵測 consumer 是走遠端 wrapper（`pnpm db:*`，含 existing-server / self-hosted）還是本機 Docker。**NEVER** 看到遠端 wrapper 就改跑本機 `supabase start`。
+
+```bash
+set -e   # 多行指令任何一步失敗就整段停（下面用 `|| exit`／`rc=$?` 明列處理的步驟除外）
+# 從 package.json 讀 types 路徑（若有自訂）；fallback 到 conventional locations
+# 避開頂層 return（Node script 不允許）— 用 if/else 與 .find()
+TYPES=$(node -e "
+  const fs = require('fs');
+  const pkg = require('./package.json');
+  const custom = pkg.config && pkg.config.dbTypesPath;
+  const candidates = [
+    'packages/core/app/types/database.types.ts',
+    'app/types/database.types.ts',
+    'shared/types/database.types.ts',
+    'src/types/database.types.ts',
+  ];
+  const path = custom || candidates.find(function(p) { return fs.existsSync(p); }) || 'app/types/database.types.ts';
+  console.log(path);
+")
+
+USE_DB_WRAPPER=$(node -e "process.exit(require('./package.json').scripts?.['db:reset'] ? 0 : 1)" 2>/dev/null && echo yes || echo no)
+USE_DB_COPY=$(node -e "process.exit(require('./package.json').scripts?.['db:copy'] ? 0 : 1)" 2>/dev/null && echo yes || echo no)
+
+if [ "$USE_DB_COPY" = yes ]; then
+  # forward-only 第二段：在臨時副本上重放 + lint + 重生 types，用完 drop；NEVER reset、NEVER 對主線 DB db:migrate
+  # （副本契約見 vendor/snippets/worktree-db-isolation/README.md § 10；失敗一律停下，NEVER 退回 db:reset／主線 db:migrate）
+  # `--drop` 在副本不存在時本來就 exit 0（契約 § 10）；drop 失敗不能吞——否則 `--purpose schema` 沿用殘留舊副本，驗到的是舊狀態
+  pnpm db:copy --drop || exit 1
+  pnpm db:copy --purpose schema || exit 1
+  # set -e 下 `a && b; rc=$?` 會在 a／b 失敗時直接退出、跳過 drop：改 `|| rc=$?` 讓 drop 一定跑
+  rc=0
+  { pnpm db:migrate --target copy && pnpm db:types --target copy && pnpm db:lint --target copy; } || rc=$?   # lint 必須零警告
+  pnpm db:copy --drop || echo '⚠ 臨時副本沒 drop 乾淨：pnpm db:copy --list 查' >&2
+  [ "$rc" -eq 0 ] || exit "$rc"
+  pnpm typecheck
+elif [ "$USE_DB_WRAPPER" = yes ]; then
+  # 遠端 / existing-server：走 pnpm db:*（wrapper 會擋本機 Docker；db:reset 內部跑 db:types 寫到 $TYPES）
+  # 只有 per-worktree 拓樸（target mode，只重建自己的 clone）才准 reset；
+  # shared 拓樸共用 DB NEVER reset（判定見 [[db-topology-invariant]] § Forward-only）→ 交 CI supabase-check，沒接就停
+  f=$(ls scripts/supabase/db-reset.sh scripts/db-reset.sh 2>/dev/null | head -1)
+  if [ -z "$f" ] || ! grep -qE "reset_target|Target mode never claims" "$f"; then
+    if [ ! -f .github/workflows/supabase-check.yml ]; then
+      echo 'shared 拓樸且缺 .github/workflows/supabase-check.yml：無處驗 migration 重放，停下；先依 vendor/snippets/supabase-ci/README.md 接上 supabase-check' >&2
+      exit 1
+    fi
+    # 第一段（pnpm db:copy 導入前）：reset 重放、lint、types drift 交 PR 的 CI supabase-check
+    echo 'DEFERRED_TO_CI: shared 拓樸不 reset 共用 DB；migration 重放、db lint、types drift 交 PR 的 supabase-check'
+    pnpm typecheck
+    exit $?
+  fi
+  pnpm db:reset
+  pnpm db:lint        # 安全檢查（必須零警告：wrapper 契約沒有 --fail-on，exit code 不擋 warning，要讀輸出確認）
+  pnpm typecheck
+else
+  # 本機 Docker（this-machine；沒有 pnpm db:reset wrapper）
+  supabase db reset
+  supabase db lint --level warning --fail-on warning
+  # 直接重導向到 $TYPES — 不用 tee（pipeline 會吞 supabase gen types 失敗狀態）
+  supabase gen types typescript --local > "$TYPES"
+  pnpm typecheck
+fi
+```
+
+**shared 拓樸（印 `DEFERRED_TO_CI`）**：本機不 reset、不 lint、不重生 types；types 照 migration 手改，PR 的 `supabase-check`（冷啟重放＋types drift＋`db lint --level warning`）綠之前 **NEVER** merge，Step 6 報告的 db reset／db lint 兩行寫「交 CI supabase-check」。
+
+**自動產生類型**：遠端 wrapper 由 `pnpm db:reset` 內部呼叫 `db:types`；本機 Docker 由 `supabase gen types` 寫入 `$TYPES`（自動偵測自 `package.json.config.dbTypesPath` 或 conventional locations）。Consumer 自訂 types 路徑時應設於 `package.json` `config.dbTypesPath`，**MUST** 同步在 `db:types` script 內引用同一路徑（避免兩種模式寫到不同檔）。
+
+**錯誤處理**：
+
+- `db reset` 失敗 → 檢查 SQL 語法
+- `db lint` 有警告 → 檢查 search_path 和 RLS
+- `typecheck` 失敗 → 更新使用到舊型別的程式碼
+
+### Step 5: 驗證結果
+
+1. 確認 `db:lint` / `supabase db lint` 沒有警告
+2. 確認 `pnpm typecheck` 通過
+3. 顯示 migration 檔案內容供使用者確認
+
+### Step 6: 完成報告
+
+```text
+✅ Migration 建立完成！
+
+檔案: supabase/migrations/YYYYMMDDHHMMSS_description.sql
+狀態:
+- db reset: ✓
+- db lint: ✓
+- typecheck: ✓
+
+下一步：
+- 測試功能是否正常
+- 準備好後依 consumer 部署模式推送（遠端 wrapper: `pnpm supabase:sync`；本機 Docker: `supabase db push`）
+```
+
+## 安全檢查清單
+
+- [ ] 所有 `CREATE FUNCTION` 都有 `SET search_path = ''`
+- [ ] 沒有使用 `SET search_path = public` 或 `pg_temp`
+- [ ] 所有表格/函式引用使用 schema 前綴
+- [ ] `db:lint` / `supabase db lint` 零警告
+- [ ] RLS 政策已設定（如適用）

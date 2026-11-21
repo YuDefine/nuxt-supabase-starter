@@ -23,7 +23,7 @@ clade 對 evlog（https://www.evlog.dev/）的 cross-consumer 採用治理。Ref
 | --- | --- | --- |
 | 為 consumer 選 plan package template / starter preset / drain，或排 migration 順序之前 | [[evlog-adoption.decision]] | Stack decision matrix、5 個 template（T1–T4 + O1）、3 個 preset、Drain 選擇指引、Migration 順序建議 |
 | 評估某 consumer 的 adoption depth、看 `evlog map` 分數、或判 entry point gate 之前 | [[evlog-adoption.depth-gate]] | Depth 1-6 自評表、Coverage 維度（MUST / MUST NOT）、分數不是品質證明、Gate 兩道、Review 檢查 |
-| 新增 catalog、把 ad-hoc `createError` 遷進 catalog、或寫 catalog 測試之前 | [[evlog-adoption.catalogs]] | Catalogs 採用全部：命名規約、結構原則、internal 合併、sharding 路徑、audit signal（**evlog floor `^2.17.0` SoT 在這支**） |
+| 新增 catalog、把 ad-hoc `createError` 遷進 catalog、或寫 catalog 測試之前 | [[evlog-adoption.catalogs]] | Catalogs 採用全部：命名規約、結構原則、internal 合併、sharding 路徑、audit signal（**evlog floor `^2.34.0` SoT 在這支**） |
 
 ## 三層治理結構
 

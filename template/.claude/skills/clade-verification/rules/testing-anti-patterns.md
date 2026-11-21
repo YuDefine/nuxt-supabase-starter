@@ -1,5 +1,5 @@
 ---
-description: Testing anti-patterns to avoid — mock 濫用、test-only production methods、不完整 mock、unit test 何時寫（U1–U5）、E2E fixture 寫死絕對日期、測試碼品質低於生產碼、抄本測試（期望值在測試裡重算）、刪除或合併既有測試、孤兒測試（沒被 CI 收進去）、測試結構契約、測試逾時紅（負載假紅、放寬逾時數值）
+description: Testing anti-patterns to avoid — mock 濫用、test-only production methods、不完整 mock、unit test 何時寫（U1–U5）、E2E fixture 寫死絕對日期、測試碼品質低於生產碼、抄本測試（期望值在測試裡重算）、刪除或合併既有測試、孤兒測試（沒被 CI 收進去）、測試結構契約、測試逾時紅（負載假紅、放寬逾時數值）、flaky 測試（判定與現行隔離寫法）
 paths:
   [
     'test/**/*.ts',
@@ -711,4 +711,15 @@ seedConversation({ updatedAt: daysAgo(60) })  // 更早
 | 「subtest timeout 15s／nested spawnSync 3s 在 CI 滿載下過緊，放寬」 | subtest 的 15s 包住的是整支測試，不是子行程；放寬它就是吸收所有變慢。只有內層 `spawnSync` 那個 3s 屬「等另一個行程的時間預算」，走 `loadScaledTimeout` |
 | 「stabilize unit-test timeouts」 | 15s→20s 移走的是門檻，不是不穩定；下一次滿載要 30s，數字只會往上走 |
 
-**Red Flags**——發現自己在想這些就停，回去先跑 main 比對：「先放寬讓 gate 綠，之後再收回」「只是多給幾秒」「CI 那台本來就慢」「這支本來就 flaky」。
+**Red Flags**——發現自己在想這些就停，回去先跑 main 比對：「先放寬讓 gate 綠，之後再收回」「只是多給幾秒」「CI 那台本來就慢」。「這支本來就 flaky」不是藉口也不是結論，走下一節。
+
+## Flaky 測試：以判定機制為準，NEVER 憑印象說「本來就 flaky」
+
+「這支本來就 flaky」「重跑一次就綠」不算證據，也不算處置。下方「判定」「NEVER 自己反覆重跑」現在就適用；「隔離」「NEVER 用隔離代替修」以**現行**機制為準。完整設計在 `~/offline/clade/specs/plans/W-2026-10-18-agent-verify-loop-latency/spec.md` Part B（§ 9–15），其中 runner 自動 judge retry、`quarantine.ts add`、清單上限與期限長度屬 § 14.1–14.3，**尚未實作**：落地前 NEVER 照 spec 的數字或子命令操作，落地時本節同步改寫。
+
+1. **判定**：同一份程式碼（同 HEAD、同未提交 diff）、同一測試檔，出現 pass 與 fail 各一次才叫 flaky，不要求 N 次。紅 → 改檔 → 綠是修好，不是 flaky。**逾時類紅（`timed out`、`status: null`、`transport_error`）不構成證據**，照上一節先跑 main 比對。
+2. **NEVER 自己反覆重跑**去「確認」或「碰運氣轉綠」。runner 端的自動 judge retry 尚未實作，在那之前本機見非逾時類的紅一律照真紅處理；clade home 的 node:test／vitest，CI 端的重跑只有 coordinator 規則定的那一次。**範圍**：本節的重跑與 `skip`／`retry` 禁令管 node:test／vitest；Playwright E2E 在 CI 的 `retries`（`playwright.config.*` 的 runner 層設定）照 `playwright-webserver.md` 的 Canonical pattern A，不受本條影響，但 NEVER 在 spec 內加 `test.skip`／`test.retry` 代替修。
+3. **隔離（只在 clade home）**：唯一清單是 `~/offline/clade/scripts/test-lanes/quarantine.json`，欄位、登記條件、展期與放行規則以 coordinator 的 `merge紅燈與flaky.md` § flaky 隔離為準（目前手動編輯：每條 MUST 有 `file`／`owner`／`expires`／`source`，展期改日期並在 commit 寫理由，`quarantine.ts check` 驗）。**NEVER** 手開第二份清單、**NEVER** 在測試檔加 `skip`／`retry` 代替登記。**consumer repo 沒有隔離清單**（`scripts/test-lanes` 不散播）：node:test／vitest 的紅就修，同樣 NEVER 加 `skip`／`retry`；Playwright 的 CI `retries` 照 `playwright-webserver.md`。
+4. **NEVER 用隔離代替修**：登記時 owner 就是要修的人；環境依賴必現的紅修測試或快照，不進清單。到期只有修好移除、展期、刪測試（承載 truth 行為契約的測試走 plan truth delta）三種處置。
+
+**Red Flags**——發現自己在想這些就停，回到上面「判定」那條：「再跑一次應該就過了」「先 skip 掉之後再補」「這支不是我改的，先丟進隔離」「spec 寫了上限 10 條，照那個登記」（未實作前照「隔離」那條）。

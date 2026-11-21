@@ -10,7 +10,7 @@
 #   CLADE_HOME           clade 中央倉路徑（逐檔 integrity helper 只認這裡，NEVER 受審 repo 內同名檔）
 #   FINDINGS             0-A.2 的上一輪 verdict 檔（可空字串）
 #   MAX_DIFF_LINES       embed budget（預設由呼叫端帶 CODEX_REVIEW_MAX_DIFF_LINES 展開）
-#   PATTERNS_JSON        semantic 規則檔（缺席 → 空 SEMANTIC_LIST＋warn，不 fail）
+#   PR_BASE              PR 模式的比較基準（可空＝working-tree 模式）；review_resolve_rules_ref 據此設 PATTERNS_JSON
 #   WORK_DIR             由 review_make_workdir 建立（落磁碟、結束即移除，見下）
 #   REVIEW_SANDBOX_NOTE  prompt 中段、carrier 專屬的隔離說明行（codex 的 MCP 拒絕句
 #                        或 claude 的 readonly 說明）
@@ -32,8 +32,8 @@
 # 讓同一個 EXIT trap 必跑（bash 沒有 TERM trap 時是否跑 EXIT 依版本與前景子行程而異，不賭）。
 # trap body 只引用全域 WORK_DIR（不是 local），trap 觸發時一定拿得到值。SIGKILL／OOM 收不到——
 # 所以 WORK_DIR 旁邊寫一份 review-snapshot.ts 同格式的 `<WORK_DIR>.stamp.json`（pid＝本 script
-# 的 $$，活得跟 WORK_DIR 一樣久）：殘留由 `review-snapshot.ts reclaim`（pid 死 ∧ session 結束 ∧
-# 到齡）回收。沒有 stamp 的目錄 reclaim 一律判「not ours」，會永遠留著。
+# 的 $$，活得跟 WORK_DIR 一樣久）：殘留由 `review-snapshot.ts reclaim` 回收（判準見該檔 reclaimSnapshots）。
+# 沒有 stamp 的目錄 reclaim 一律判「not ours」，會永遠留著。
 review_make_workdir() {
   local base="${CLADE_REVIEW_SNAP_DIR:-$HOME/.cache/clade/review-snap}"
   mkdir -p "$base" || return 1
@@ -156,8 +156,10 @@ REVIEW_GENERATED_RE='^(coverage|dist|build|\\.output|\\.nuxt|\\.void|\\.wrangler
 REVIEW_SUMMARY_ONLY_RE='(^|/)(pnpm-lock\\.yaml|package-lock\\.json|yarn\\.lock)$|^scripts/test-lanes/(deps|timings)\\.json$'
 # summary-only 檔的單檔位元組上限：行數放得進 budget、位元組卻超過它（#2473 的 pnpm-lock：5168 行／336281 bytes）
 # 也只列摘要——逐行嵌入會把 brief 推過 CLAUDE_REVIEW_BRIEF_MAX_BYTES（358400）而 exit 9。
+# 值＝min(300000, oa-batches.ts REVIEWER_BATCH_MAX_BYTES＝178000)：不得高過單批預算，否則 178000～300000 bytes 的
+# lockfile 既不給摘要、也塞不進任何一批（clade#5653 卡死）。
 # 與 oa-batches.ts 的 WRAPPER_SUMMARY_ONLY_MAX_BYTES 逐字同步（test/oa-batches-summary-only.test.ts 守住漂移）。
-REVIEW_SUMMARY_ONLY_MAX_BYTES=300000
+REVIEW_SUMMARY_ONLY_MAX_BYTES=178000
 
 # Two passes over the same file: measure every `diff --git` block, then re-emit
 # only the blocks that fit the budget. `used == 0 ||` keeps the first block whole
@@ -382,7 +384,12 @@ review_apply_projection_exemption() {
   local helper="${SCRIPT_DIR:-}/lib/projection-exemption.ts"
   [ -f "$helper" ] || return 0
   # 便宜的前置判定：只有 manifest 宣告 pinned 的 consumer 才值得跑 projector（秒級～十餘秒）。
-  grep -q '"pinned"' "$REPO_ROOT/.clade/manifest.json" 2>/dev/null || return 0
+  # 子目錄 consumer（starter 的 template/）的 manifest 在 <dir>/.clade/；詳細的 root 判定交給 helper（與 oa-batches 同一判準）。
+  local manifest pinned=0
+  for manifest in "$REPO_ROOT/.clade/manifest.json" "$REPO_ROOT"/*/.clade/manifest.json; do
+    if [ -f "$manifest" ] && grep -q '"pinned"' "$manifest" 2>/dev/null; then pinned=1; break; fi
+  done
+  [ "$pinned" = 1 ] || return 0
   local cands="$WORK_DIR/projection-candidates.z"
   cp "$REVIEWED_PATHS" "$cands" 2>/dev/null || return 0
   if [ -n "${REVIEW_PROJECTION_EXEMPT_FILE:-}" ] && [ -s "$REVIEW_PROJECTION_EXEMPT_FILE" ]; then
@@ -522,6 +529,78 @@ review_build_snapshot() {
   fi
 }
 
+# review_resolve_rules_ref — 語意規則的來源 commit（WORK_DIR 建好後、review_load_semantic_list 前呼叫）。
+# 受審改動 NEVER 改得到審它自己的規則：PR 模式讀 PR_BASE，working-tree 模式讀 merge-base(HEAD, origin 預設分支)，
+# 取不到 merge-base 才讀 HEAD（已 commit 的版本，仍不含未 commit 的改動）。git show 到 WORK_DIR/rules/patterns.json，
+# PATTERNS_JSON 指它。基準沒有這個檔：照 review_load_semantic_list 的降級（warn、不出 Semantic 段），NEVER 退回讀受審樹。
+# 產出：PATTERNS_JSON、REVIEW_RULES_REF（commit sha，可空）、REVIEW_RULES_SOURCE（base｜merge-base｜head｜none）。
+review_resolve_rules_ref() {
+  local rel="vendor/review-rules/patterns.json" def="" cand ref=""
+  REVIEW_RULES_REF="" REVIEW_RULES_SOURCE="none"
+  mkdir -p "$WORK_DIR/rules" || return 0
+  PATTERNS_JSON="$WORK_DIR/rules/patterns.json"
+  rm -f "$PATTERNS_JSON"
+  if [ -n "${PR_BASE:-}" ]; then
+    ref="$(git rev-parse -q --verify "$PR_BASE^{commit}" 2>/dev/null || true)"
+    [ -n "$ref" ] && REVIEW_RULES_SOURCE=base
+  else
+    def="$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+    if [ -z "$def" ]; then
+      for cand in origin/main origin/master; do
+        if git rev-parse -q --verify "$cand^{commit}" >/dev/null 2>&1; then def="$cand"; break; fi
+      done
+    fi
+    [ -n "$def" ] && ref="$(git merge-base HEAD "$def" 2>/dev/null || true)"
+    if [ -n "$ref" ]; then
+      REVIEW_RULES_SOURCE=merge-base
+    else
+      ref="$(git rev-parse -q --verify 'HEAD^{commit}' 2>/dev/null || true)"
+      [ -n "$ref" ] && REVIEW_RULES_SOURCE=head
+    fi
+  fi
+  if [ -z "$ref" ]; then
+    echo "[$REVIEW_SAFE_TAG] warn: 解不出語意規則的比較基準（PR base／merge-base／HEAD 皆無）— 略過 Semantic Verdict 注入" >&2
+    return 0
+  fi
+  REVIEW_RULES_REF="$ref"
+  if ! git show "$ref:$rel" >"$PATTERNS_JSON" 2>/dev/null; then
+    rm -f "$PATTERNS_JSON"
+    echo "[$REVIEW_SAFE_TAG] warn: 比較基準 ${ref:0:10}（$REVIEW_RULES_SOURCE）沒有 $rel — 略過 Semantic Verdict 注入（不退回讀受審樹）" >&2
+  fi
+  return 0
+}
+
+# review_log_semantic_triggers — 影子：每條語意規則的 trigger.paths 對本輪 changeset 命中與否（review_collect_changeset 後呼叫）。
+# 寫 WORK_DIR/semantic-triggers.json，並 append 一列到 review-integrity/semantic-trigger-shadow.jsonl。
+# 影子期 brief 照列全部規則、計分不變；任何失敗只 warn，NEVER 讓 prepare 失敗。
+# path.matchesGlob 不帶 dot（`content/**` 不中 `content/x/.navigation.yml`）：路徑與 glob 的點開頭段都先換成同一個占位字元再比，等同 dot:true。
+# repo 欄先取 review_source_repo（PR 模式的 REPO_ROOT 是 review-snap 底下的拋棄式快照樹），非 linked worktree 時它回空，退回 REPO_ROOT。
+review_log_semantic_triggers() {
+  [ -f "${PATTERNS_JSON:-}" ] || return 0
+  local shadow_dir="${CLADE_DISPATCH_STATE_DIR:-$HOME/.cache/clade/dispatch}/review-integrity"
+  mkdir -p "$shadow_dir" 2>/dev/null || true
+  if ! node -e '
+    const fs = require("fs"), path = require("path")
+    const [patterns, reviewed, out, shadow, sourceRepo, repoRoot, pr, round, part, head, ref, source] = process.argv.slice(1)
+    const rules = JSON.parse(fs.readFileSync(patterns, "utf8")).semantic ?? []
+    const files = fs.existsSync(reviewed) ? fs.readFileSync(reviewed, "utf8").split("\0").filter(Boolean) : []
+    const undot = (s) => s.split("/").map((x) => (x.length > 1 && x !== ".." && x.startsWith(".") ? "\u2024" + x.slice(1) : x)).join("/")
+    const triggers = {}
+    for (const r of rules) {
+      const globs = Array.isArray(r.trigger?.paths) ? r.trigger.paths.map(undot) : null
+      triggers[r.id] = globs === null ? null : files.some((f) => globs.some((g) => path.matchesGlob(undot(f), g)))
+    }
+    const row = { ts: new Date().toISOString(), repo: sourceRepo || repoRoot, pr: pr || null, round: round || null, part, head: head || null, rules_ref: ref || null, rules_source: source, files: files.length, triggers }
+    fs.writeFileSync(out, JSON.stringify(row, null, 2) + "\n")
+    fs.appendFileSync(shadow, JSON.stringify(row) + "\n")
+  ' "$PATTERNS_JSON" "${REVIEWED_PATHS:-$WORK_DIR/reviewed-paths.z}" "$WORK_DIR/semantic-triggers.json" \
+    "$shadow_dir/semantic-trigger-shadow.jsonl" "$(review_source_repo || true)" "$REPO_ROOT" "${PR_NUMBER:-}" "${REVIEW_ROUND_N:-}" "${ROUND_PART:-1/1}" \
+    "${PR_HEAD:-${REVIEW_ROUND_HEAD:-}}" "${REVIEW_RULES_REF:-}" "${REVIEW_RULES_SOURCE:-none}" 2>/dev/null; then
+    echo "[$REVIEW_SAFE_TAG] warn: semantic trigger 影子紀錄寫入失敗（不影響本輪 review）" >&2
+  fi
+  return 0
+}
+
 # Semantic Verdict 注入（W5-6）：讀 vendor/review-rules/patterns.json 的 `semantic`
 # 規則。Missing/empty patterns.json 降級為空 block 加一條 stderr warning；NEVER 讓
 # script 失敗。
@@ -592,8 +671,8 @@ review_append_acceptance() {
 # heredoc 三明治：literal（單引號）區塊夾著 runtime 生成內容——changeset 與
 # semantic list 不能用 `<<'EOF'` 寫，那種 heredoc 永遠不展開變數。
 # review_emit_pr_file_map — 多批 0-A：把整張 PR 的變更檔與批次歸屬嵌進本批 brief。
-# REVIEW_PR_FILE_MAP（oa-batches.ts 寫的 tsv，每行 `<批號|exempt|projection|gitlink>\t<path>`）只在 --part 不是 1/1
-# 時生效；內容是不受信任的資料——只認 tab 分隔、批號欄位合法的行，路徑剝控制字元並以字元（不是 byte）截斷，
+# REVIEW_PR_FILE_MAP（oa-batches.ts 寫的 tsv，每行 `<批號|exempt|projection|gitlink|context>\t<path>`）在 --part 不是 1/1
+# 或有 context 列（PR 三點 diff 外的脈絡檔：不當審查單元，reviewer 對著它查相容性）時生效；內容是不受信任的資料——只認 tab 分隔、批號欄位合法的行，路徑剝控制字元並以字元（不是 byte）截斷，
 # 列數與列出的總 bytes 都有上限（超過只印每批計數）：bytes 上限要小於切批預算留給 brief 前後文的空間
 # （oa-batches 300000 對 wrapper 358400），清單才不會把本來放得下的批推過 exit 9。
 # 清單只讓 reviewer 知道「別批審什麼」，不改本批 changeset、不放寬任何判定。
@@ -602,7 +681,9 @@ REVIEW_PR_FILE_MAP_MAX_PATH_CHARS=300
 REVIEW_PR_FILE_MAP_MAX_BYTES=16384
 review_emit_pr_file_map() {
   local map="${REVIEW_PR_FILE_MAP:-}" part="${ROUND_PART:-1/1}"
-  [ "$part" != 1/1 ] && [ -n "$map" ] && [ -s "$map" ] || return 0
+  [ -n "$map" ] && [ -s "$map" ] || return 0
+  # 單批只在有 context 列（PR diff 外的脈絡檔）時嵌：別批的對照只對多批有意義
+  [ "$part" != 1/1 ] || grep -q $'^context\t' "$map" || return 0
   local mine="${part%/*}" total="${part#*/}"
   # LC_ALL=C：byte 語意在各 awk 實作一致；字元數改由「不是 UTF-8 續位元組（0x80–0xBF）的 byte」來數，截斷才不會切進多位元組字元。
   LC_ALL=C awk -F '\t' -v mine="$mine" -v total="$total" \
@@ -614,13 +695,14 @@ review_emit_pr_file_map() {
         if (substr(s, i, 1) !~ /[\200-\277]/ && ++c > max) return substr(s, 1, i - 1) "…"
       return s
     }
-    NF == 2 && ($1 ~ /^[0-9]+$/ || $1 == "exempt" || $1 == "projection" || $1 == "gitlink") {
+    NF == 2 && ($1 ~ /^[0-9]+$/ || $1 == "exempt" || $1 == "projection" || $1 == "gitlink" || $1 == "context") {
       p = $2
       gsub(/[[:cntrl:]]/, "", p)
       if (p == "") next
       p = cut(p, max_chars)
       cnt[$1]++
       rows++
+      if ($1 == "context") ctx++
       if (n < max_rows && bytes + length($1) + length(p) + 2 <= max_bytes) {
         n++; key[n] = $1; path[n] = p; bytes += length($1) + length(p) + 2
       }
@@ -628,11 +710,20 @@ review_emit_pr_file_map() {
     END {
       if (rows == 0) exit
       printf "\n===== BEGIN PR FILE MAP =====\n"
-      printf "This PR is split into %s review batches by diff size; you are reviewing batch %s. Every changed file of the\n", total, mine
-      printf "whole PR is listed below with the batch that reviews it (data, one `batch<TAB>path` row per file):\n"
+      if (total > 1) {
+        printf "This PR is split into %s review batches by diff size; you are reviewing batch %s. Every changed file of the\n", total, mine
+        printf "whole PR is listed below with the batch that reviews it (data, one `batch<TAB>path` row per file):\n"
+      } else printf "Files around this review (data, one `tag<TAB>path` row per file):\n"
       for (i = 1; i <= n; i++) printf "%s\t%s\n", key[i], path[i]
       if (rows > n) { printf "(%d more rows not listed; rows per batch: ", rows - n; for (k in cnt) printf "%s=%d ", k, cnt[k]; printf ")\n" }
       printf "===== END PR FILE MAP =====\n"
+      if (ctx > 0) {
+        printf "Rows tagged `context` are NOT changed by this PR (they are outside its merge-base..head diff) and are NOT\n"
+        printf "review units: they are code on the new base (e.g. main files that newly use this PR'"'"'s exports). Read them from\n"
+        printf "the tree and check that this PR'"'"'s changes stay compatible with them; report an incompatibility at the PR-side\n"
+        printf "file:line it breaks, never as a defect of the context file itself.\n"
+      }
+      if (total == 1) exit
       printf "Only batch %s is embedded in the CHANGESET above; every other batch is reviewed by another reviewer who\n", mine
       printf "cannot see yours either. So: NEVER use \"this PR did not change <file>\" (or \"X was not regenerated\", \"Y is\n"
       printf "missing\") as the basis of a finding when that file is in the map under another batch — the PR did change it.\n"
@@ -883,17 +974,32 @@ line, never the line's shape):
   severity — do not reword it, split it, or re-file it under a new location.
   Fixed ones keep the `— resolved.` line described above.
 PROMPT_VERIFY
-    if [ "${REVIEW_ROUND_N:-0}" -ge 3 ] 2>/dev/null; then
+    if [ "${REVIEW_ROUND_COUNTED:-${REVIEW_ROUND_N:-0}}" -ge "$REVIEW_RETHINK_FROM_ROUND" ] 2>/dev/null; then
       cat <<'PROMPT_RECONSIDER'
-Since this is round 3 or later, also judge whether the fixes for the prior
+Since this is round 3 or later, the author is required to rethink the approach
+before patching again, and your verdict is what they will act on. Judge whether
+the fixes for the prior
 findings are repeatedly patching one underlying approach (each round's fix
 exposes the next defect in the same design). If so, add ONE finding line
 whose sentence begins `Recommend reconsidering the approach:` and gives the
-reason, anchored at the primary file:line of the patched design.
+reason, anchored at the primary file:line of the patched design. The follow-up
+happens on this same pull request: do NOT recommend closing it, reopening it,
+or splitting it into smaller pull requests.
 PROMPT_RECONSIDER
+      # 「只審新 diff」只在本輪 CHANGESET 真的是增量時才說：increment_base＝null 的完整 diff 輪（上一輪只收齊部分批、帶篩選、
+      # rebase 後 patch 套不上、上一個 head 另有阻擋紀錄）審的是從沒人審過的批，叫 reviewer 略過「已審過」的部分會讓它們帶 Critical／Major 通過。
+      if [ "${REVIEW_ROUND_INCREMENT:-0}" = 1 ]; then
+        cat <<'PROMPT_RECONSIDER_INCREMENT'
+Review ONLY what the CHANGESET above contains (it is already scoped to this
+round's increment): code that earlier rounds already passed is not re-reviewed
+and must not be re-filed.
+PROMPT_RECONSIDER_INCREMENT
+      fi
     fi
   fi
   if [ -n "$SEMANTIC_LIST" ]; then
+    printf 'Review rules loaded from %s (%s); rule edits in this change take effect only after merge.\n\n' \
+      "${REVIEW_RULES_REF:0:10}" "${REVIEW_RULES_SOURCE:-none}"
     printf '%s\n\n' "$SEMANTIC_LIST"
   fi
   cat <<'PROMPT_SUFFIX'
@@ -1028,7 +1134,8 @@ review_register_staging_baseline() {
 #                                                         PR export 的檔）為空 → exit 13（covered）；否則開 kind=base-check
 #                                                         的新輪號，不計入上限，只審交集（合成基準 commit 讓 diff 只剩交集檔）
 #   其餘                                                 → 新一輪；第 2 輪起自動帶上一輪 verdict 進驗證模式
-#   計數輪（kind≠base-check 的輪數）＋1 > REVIEW_MAX_ROUNDS（5）＋該 PR 段的 grant 數 → exit 14 拒跑（拆 PR，或送主管代答、裁決後 rounds grant）
+#   計數輪（kind≠base-check 的輪數）＋1 > REVIEW_MAX_ROUNDS（5）＋該 PR 段的 grant 數 → exit 14 拒跑（同一張 PR 重想做法＋增量審：送主管代答、裁決後 rounds grant --scope increment；NEVER 關單重開或預設拆單）
+#                                                         working-tree 模式（直推、沒有 PR 號）的 grant 數＝該份 ledger（branch＋base）的 grant 數，出口是 rounds grant --mode worktree
 #   grant（rounds grant）：主管（--by manager；supervisor／主管 是舊名，正規化成 manager）或 Charles（--by charles）授權的單 PR 例外輪，append 進
 #     ledger.grants（by／evidence／granted_at／at_round／scope／kind）。輪數上限是程序題：送主管代答，NEVER 鑄題給 Charles，
 #     --scope increment|full（預設 increment，寫進 grant 紀錄）：例外輪審什麼。increment＝照一般驗證輪只審增量（base 動了就上一輪 patch
@@ -1044,8 +1151,10 @@ review_register_staging_baseline() {
 #     帶 --include／--exclude 篩選；新一輪與同輪號重開［restart］兩條路都檢）時 prepare 回 action=grant-unopenable、exit 15、不開輪，
 #     grant 仍在 ledger.grants（沒開出輪就沒消耗）；排除原因（去掉篩選，或 rounds adjudicate 裁決假 Major）後重跑 prepare。
 #     prepare 開頭印出這輪是例外輪與它的 scope。
-#     只認同 PR 號（--pr-number 必帶）、一張只放寬一輪、只在已到上限時可開；不歸零、不改舊輪。
-#     每張 PR 最多 REVIEW_MAX_GRANTS_PER_PR（2）張：再往上不是授權問題，是這張 PR 該拆。唯一例外＝第 3 張 full grant（絕對上限 3，第 4 張一律拒）：
+#     PR 模式只認同 PR 號（--pr-number 必帶）；working-tree 模式（--mode worktree --branch <b> --base <base>，不帶 --pr-number）只認同一份 ledger、
+#       只收 --scope increment（沒有獨立輪）、最多 REVIEW_MAX_GRANTS_PER_PR（2）張即絕對上限（沒有第 3 張 full 例外）、不能 revoke-grant；兩種模式的 grant 互不認。
+#     一張只放寬一輪、只在已到上限時可開；不歸零、不改舊輪。
+#     每張 PR 最多 REVIEW_MAX_GRANTS_PER_PR（2）張：再往上不是授權問題：沒有審查輪了，交主管裁決換修法或放棄（NEVER 預設拆單，拆單只在跨主題判準成立時允許）。唯一例外＝第 3 張 full grant（絕對上限 3，第 4 張一律拒）：
 #       只給高風險 PR（簽發者確認；wrapper 不判風險），例外輪已用完、現 head 已有 1 輪完整審查（不帶 --include／--exclude 篩選）、最近兩輪皆 0 Critical／0 Major 三條件同時成立才收，任一不成立照舊拒；第 3 張審出 Critical／Major 照舊不放行。
 #     NEVER 加任何 env 或旗標能不留紀錄地提高上限——上限只能經 ledger 裡的 grant 紀錄放寬。
 #   明示完整輪（rounds reopen，oa-batches prepare --reopen-by／--reopen-evidence）：主管或 Charles 要求時，在 covered／已通過或沒有通過輪的 head 開新的完整審查輪。
@@ -1071,6 +1180,13 @@ review_register_staging_baseline() {
 #     指紋取自該批 verdict 檔實際被計數的 finding 列（`rounds findings` 列出），指紋對不上、Minor、已裁決過、
 #     缺 by／evidence、by 名稱含 reviewer、verdict 檔不存在、--all-undisposed 與 --finding 並用一律 exit 2 且不寫 ledger；處置為 act｜dismiss（舊紀錄的 false-positive 視為 dismiss）：
 #     Critical 與 Major 都收 act 與 dismiss，但只有 Major 的 dismiss 扣 gate 計數，Critical 的處置只留紀錄（一律要修，誤報靠下一輪 reviewer 的 resolved 清掉）；沒有「下調」或「刪除」；同一指紋 append-only，已有 act 紀錄就不能再 dismiss。
+#     out-of-diff（held／finding 指向這張 PR 沒動過的檔，典型：merge main 帶進來、被舊 base 的輪審進來）是**人給的裁決**（--verdict out-of-diff，Major 的 Dismiss 之一），
+#     gate NEVER 自己推導「不是這張 PR 的」（自動推導是啟發式、必然 fail-open）：held／原始 Major 預設照擋，主線或 Charles 附證據
+#     `rounds adjudicate --verdict out-of-diff --base <當下 merge-base> --head <PR head>` 才解除。額外前提（事實檢查，不是推論）：--head 是該 PR 在 ledger 上的 head、--base 是 BASE_REF 與 head 當下的 merge-base（且不等於 head），finding 破折號前的所有位置都確定不在整張 PR 的 diff（base→head），否則 exit 2；紀錄存 diff_base／diff_head 供稽核；
+#     「改壞了 diff 外呼叫端」的 finding 也 cite 在 diff 外的檔，這個檢查分不出——證據要證明那檔沒引用這張 PR 改動的符號，NEVER 拿它放掉呼叫端 finding。
+#   同 head、merge-base 動了且上一輪帶 Critical／Major 擋下 → 不被「同 head 不重審」擋，開新一輪（計入輪數）審當下 base 的完整 diff（increment_base＝null：
+#     新 base 是 head 的祖先，合成基準會等於 head 的樹，增量是空的）。
+#     新輪收齊後接替舊輪的阻擋（supersededByNewBase：base 不同、findings_from 指到舊輪、收齊、不帶篩選）——舊輪的 Critical／Major 已交給新輪的 reviewer，不再單獨以 head 為鍵否決新輪。
 #     rounds coverage 唯讀算處置覆蓋率（有紀錄的 Critical／Major ÷ 被計數的 Critical／Major）；verdict 檔讀不到的批退回 slot 原始計數並標 unverifiable。
 # 寫入（open／cover／record／adjudicate）持 ledger 旁的鎖檔做 load-modify-save：同一輪的多批可平行 finalize。
 # record 核對 verdict 身分：--head／--filter／--opened-at／--part-files 要等於 open 那一刻寫進該輪該批的值。
@@ -1092,6 +1208,8 @@ review_register_staging_baseline() {
 # `rounds cover --no-reviewable <hash> --projections <N>`：切批後 0 批（比較範圍只有 clade 投影）時把該輪記成無可審檔的通過。
 #   另帶 `--risk-exempt docs|tests|docs+tests --exempt-files <N>`：整張 PR 只動文件／測試（依風險分級免審），ledger 標 risk_exempt。
 REVIEW_MAX_ROUNDS=5
+# 第 3 個計數輪起（base-check 不計）：reviewer brief 要求作者重想做法、只審新 diff；撞上限不關單重開（同一張 PR 重想做法＋增量審）。
+REVIEW_RETHINK_FROM_ROUND=3
 REVIEW_MAX_GRANTS_PER_PR=2
 
 review_rounds_dir() {
@@ -1283,7 +1401,7 @@ IFS= read -r -d '' REVIEW_ROUNDS_JS <<'JS' || true
 import { createHash, randomUUID } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { hostname } from 'node:os'
+import { homedir, hostname } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -1351,18 +1469,140 @@ function scoped(ledger) {
   return ledger.rounds.filter(mine)
 }
 // 人類授權的例外輪只屬於明寫的那一張 PR：沒帶 --pr-number 的呼叫端一張都不認。
+// working-tree 模式（直推 main、無 PR 號）：ledger 檔本身就以 worktree＋branch＋base 為 key，grant 記 mode:'worktree'＋branch＋base（pr:null），
+// 只屬於這一份 ledger；PR 模式的 grant 不帶 mode 欄位，兩邊互不認。
+const WORKTREE_MODE = opt.mode === 'worktree'
+function grantLabel() {
+  return WORKTREE_MODE ? `working-tree（branch ${opt.branch ?? '?'} @ base ${String(opt.base ?? '?').slice(0, 10)}）` : `PR #${PR_NO}`
+}
+function grantOwned(g) {
+  return WORKTREE_MODE ? g.mode === 'worktree' : g.mode !== 'worktree' && String(g.pr) === String(PR_NO)
+}
 function grantsFor(ledger) {
-  if (!PR_NO) return []
+  if (!PR_NO && !WORKTREE_MODE) return []
   // 已撤銷的 grant（ledger.grant_revocations，rounds revoke-grant append）不放寬上限、不決定例外輪的 scope／kind；紀錄仍留在 ledger.grants 供稽核。
-  const revoked = new Set((ledger.grant_revocations ?? []).filter((q) => String(q.pr) === String(PR_NO)).map((q) => q.granted_at))
-  return (ledger.grants ?? []).filter((g) => String(g.pr) === String(PR_NO) && !revoked.has(g.granted_at))
+  const revoked = new Set((ledger.grant_revocations ?? []).filter(grantOwned).map((q) => q.granted_at))
+  return (ledger.grants ?? []).filter((g) => grantOwned(g) && !revoked.has(g.granted_at))
 }
 function maxRounds(ledger) {
   return MAX_ROUNDS + grantsFor(ledger).length
 }
-function grantCommand() {
+// 這張 PR 的 grant 張數與上限（refuse 判定一律帶，給守門與 prepare 判「還能不能 grant」）：grants＝生效中的張數、
+// max_grants＝常規上限、grants_cap＝絕對上限（第 max_grants＋1 張只收 --scope full 且三條件成立；到 grants_cap 一律拒）。
+// grant_refusal＝此刻要簽的那張（未滿常規上限 increment、已滿 full）grant 子命令會怎麼拒（null＝會收）。
+function grantStatus(ledger) {
+  const n = grantsFor(ledger).length
+  return { grants: n, max_grants: MAX_GRANTS_PER_PR, grants_cap: MAX_GRANTS_PER_PR + 1,
+    grant_refusal: PR_NO ? grantCheck(ledger, n >= MAX_GRANTS_PER_PR ? 'full' : 'increment').why : null }
+}
+class GrantRefused extends Error {}
+// grant 子命令此刻收不收這張（scope／kind 是要簽的那種）：收回 { why: null }，否則回 { why: 拒收理由 }。
+// grant 子命令與撞上限時印的指令（grantCommand）共用這一支，印出來的指令一定是此刻會被收的那種。
+function grantCheck(ledger, scope, kind = scope === 'full' ? 'independent' : 'verify') {
+  const last = scoped(ledger).at(-1)
+  if (!last) return { why: `${grantLabel()} 沒有任何一輪：grant 只在撞上限時開` }
+  const max = maxRounds(ledger)
+  // 下面沿用 grant 子命令的判定寫法：這裡的 fail 只把拒收理由丟回 catch，不結束行程
+  const fail = (why) => { throw new GrantRefused(why) }
+  try {
+    if (grantsFor(ledger).length >= MAX_GRANTS_PER_PR) {
+      // 第 3 張 full grant（Charles 凍結例外，flow 72009bf978ae869c／118d29b1678e81e8 定三條件）：只給高風險 PR（要 2 輪完整審查的那類；
+      // wrapper 判不出風險等級，由簽發的主管／Charles 確認），上限 MAX_GRANTS_PER_PR 之外三條件同時成立才收；任一不成立照舊拒。絕對上限 MAX_GRANTS_PER_PR＋1，第 4 張一律拒。
+      // 第 3 張 full grant 例外只屬於 PR 模式（白名單）：working-tree 沒有獨立輪，MAX_GRANTS_PER_PR 張即絕對上限，不進下面的三條件判斷。
+      if (opt.mode !== 'pr')
+        fail(`${grantLabel()} 已有 ${grantsFor(ledger).length} 張 grant，達 working-tree 模式的絕對上限 ${MAX_GRANTS_PER_PR}（working-tree 沒有獨立輪，沒有第 ${MAX_GRANTS_PER_PR + 1} 張 full grant 例外）：不再授權，交主管裁決換修法或放棄（--complete blocked --decision-for coordinator；NEVER 預設拆單）`)
+      const n = grantsFor(ledger).length
+      const refuse = (why) => fail(`${grantLabel()} 已有 ${n} 張 grant，達上限 ${MAX_GRANTS_PER_PR}：不再授權，交主管裁決換修法或放棄（--complete blocked --decision-for coordinator；NEVER 預設拆單，拆單只在 oa-batches.ts prepare 印的跨主題判準成立時允許）（第 ${MAX_GRANTS_PER_PR + 1} 張 full grant 只給高風險 PR，且三條件同時成立才收：${why}）`)
+      if (n >= MAX_GRANTS_PER_PR + 1) fail(`${grantLabel()} 已有 ${n} 張 grant，達絕對上限 ${MAX_GRANTS_PER_PR + 1}（第 ${MAX_GRANTS_PER_PR + 1} 張之後一律拒）：不再授權，交主管裁決換修法或放棄（--complete blocked --decision-for coordinator；NEVER 預設拆單，拆單只在 oa-batches.ts prepare 印的跨主題判準成立時允許）`)
+      if (scope !== 'full') refuse(`第 ${MAX_GRANTS_PER_PR + 1} 張只收 --scope full（收到 ${scope}）`)
+      // 條件 1：例外輪已用完——既有每張 grant 放寬出來的例外輪都已開出（輪號 > grant 的 at_round）。
+      const unused = grantsFor(ledger).filter((g) => !(last && Number(last.n) > Number(g.at_round)))
+      if (unused.length) refuse(`條件 1 不成立：例外輪還沒用完（${unused.map((g) => g.granted_at).join('、')} 的例外輪未開出）`)
+      // 條件 2：現 head（最後一輪的 head）已有 1 輪完整審查（discovery／independent、審完整 diff、verdict 收齊）。
+      const full = scoped(ledger).filter((r) => r.head === last?.head && isFullReviewRound(r) && !r.filter && roundState(r).complete)
+      if (!full.length) refuse(`條件 2 不成立：現 head ${String(last?.head ?? '').slice(0, 10)} 還沒有收齊 verdict 的完整審查輪`)
+      // 條件 3：最近兩個計數輪皆 0 Critical／0 Major（收齊 verdict 且 blocking＝0；base-check 不計）。
+      const recent = scoped(ledger).filter((r) => r.kind !== 'base-check').slice(-2)
+      if (recent.length < 2 || recent.some((r) => !roundState(r).complete || roundState(r).blocking > 0))
+        refuse(`條件 3 不成立：最近兩輪（${recent.map((r) => `round ${r.n}`).join('、') || '無'}）須皆收齊 verdict 且 0 Critical／0 Major`)
+    }
+    if (countedRounds(scoped(ledger)) < max)
+      fail(`${grantLabel()} 目前 round ${last.n}（計數輪 ${countedRounds(scoped(ledger))}），上限 ${max} 還沒到：grant 只在撞上限時開（一張放寬一輪，NEVER 預先疊加）`)
+    if (!consumed(roundState(last)))
+      fail(`${grantLabel()} round ${last.n} 還沒收齊 verdict：沒收齊又沒有 Critical／Major 的輪換 head 重開不耗輪數，不需要 grant（一張放寬一輪，NEVER 預先疊加）`)
+    // scope=full 的 grant 必開獨立輪，而獨立輪在這些 finding 沒解時開不出來（grantIndependentBlock，同一把尺：
+    // reopenBlocking＋最後一輪 head 的 headBlocking）：簽了也只是一張永遠用不掉、又擋住再簽的空 grant（上限已 +1、沒有撤銷）。
+    // 簽發當下就擋：先 rounds adjudicate 裁決假 Major，或交主管裁決換修法（真 Major 的修補無法靠獨立輪驗證；NEVER 預設拆單）。
+    if (kind === 'independent') {
+      const scopedRounds = scoped(ledger)
+      const hold = reopenBlocking(scopedRounds)
+      const hb = headBlocking(ledger, last.head, last)
+      const why = hold.blocking > 0
+        ? `round ${hold.round.n} 還有 Critical＋Major ${hold.blocking} 條`
+        : hb.blocking > 0
+          ? `head ${last.head.slice(0, 10)} 上還有 Critical＋Major ${hb.blocking} 條（${[...hb.rounds.map((n) => `round ${n}`), ...hb.peers.map((b) => `peer ${b.machine} round ${b.n}`)].join('、')}）`
+          : null
+      if (why)
+        fail(`${grantLabel()} 簽不出 --scope full：${why}，獨立輪不帶前輪 findings、不靠 grant 抹掉，簽了也開不出輪（grant 簽出去後只能由主管／Charles 以 rounds revoke-grant 撤銷、還會把上限 +1 擋住再簽）。出路只有：對這些 finding 跑 rounds adjudicate 裁決假 Major 後再簽；真 Major 的修補無法靠獨立輪驗證，交主管裁決換修法或放棄（--complete blocked --decision-for coordinator；NEVER 預設拆單，拆單只在 oa-batches.ts prepare 印的跨主題判準成立時允許）`)
+    }
+    return { why: null }
+  } catch (e) {
+    if (e instanceof GrantRefused) return { why: e.message }
+    throw e
+  }
+}
+// shell 單引號引用：值含空白、引號、全形字或 shell 特殊字元時整個包起來，印出的指令整行貼上就是這些 argv。
+function shq(v) {
+  const s = String(v)
+  return /^[\w./:=@%+,-]+$/u.test(s) ? s : `'${s.replaceAll("'", `'\\''`)}'`
+}
+// 印出的 grant 指令裡 --evidence 的佔位字：讓主管知道要填什麼；grant 子命令拒收它（evidencePlaceholderWhy），照印執行不會寫進 ledger。
+const GRANT_EVIDENCE_PLACEHOLDER = '<主管裁決出處：主管 pane＋訊息原文>'
+// --evidence 還沒換成真實出處時回拒收理由，否則 null：<…> 形式、含「主管裁決出處」字樣、或少於 8 個字。
+function evidencePlaceholderWhy(evidence) {
+  const s = evidence.replace(/\s+/gu, '')
+  if (/^<.*>$/su.test(s) || s.includes('主管裁決出處') || [...s].length < 8)
+    return `--evidence 還是佔位字或太短（收到 ${JSON.stringify(evidence)}）：換成主管裁決出處（主管 pane＋訊息原文，至少 8 個字）再跑，grant 不寫`
+  return null
+}
+// 此刻該簽的那張 grant：{ mode, scope, refusal }（refusal 非 null＝grant 子命令會拒）；不在可簽的情境（非 PR 段等）回 null。
+// 印出的指令（grantCommand）與處置文字（grantHandling）都從這裡取 scope，兩邊一定一致。
+// working-tree 模式：key＝ledger 的 branch＋base，只收 --scope increment，MAX_GRANTS_PER_PR 張即絕對上限。
+function grantOffer(ledger) {
+  if (WORKTREE_MODE && opt.branch && opt.base) return { mode: 'worktree', scope: 'increment', refusal: grantCheck(ledger, 'increment').why }
   if (opt.mode !== 'pr' || !PR_NO) return null
-  return `.claude/scripts/claude-review-safe.sh rounds grant --mode pr --branch ${opt.branch} --pr-number ${PR_NO} --by manager --evidence '<主管裁決出處：主管 pane＋訊息原文>' --scope increment`
+  const { grants: n, grant_refusal: refusal } = grantStatus(ledger)
+  return { mode: 'pr', scope: n >= MAX_GRANTS_PER_PR ? 'full' : 'increment', refusal }
+}
+// 撞上限時印給主管的 grant 指令：未滿常規上限 --scope increment；已滿只印第 max_grants＋1 張 --scope full；
+// 到絕對上限、或 grant 子命令此刻會拒（理由在 grant_refusal）就不印。
+// grant_command 只含可執行的 argv（各值照 shell 規則加引號）；說明一律放 grant_note，NEVER 接在指令後面——接在後面會黏進 --scope 的值。
+function grantCommand(ledger) {
+  const o = grantOffer(ledger)
+  if (!o || o.refusal) return null
+  const key = o.mode === 'worktree' ? ['--branch', opt.branch, '--base', opt.base] : ['--branch', opt.branch, '--pr-number', PR_NO]
+  return ['.claude/scripts/claude-review-safe.sh', 'rounds', 'grant', '--mode', o.mode, ...key,
+    '--by', 'manager', '--evidence', GRANT_EVIDENCE_PLACEHOLDER, '--scope', o.scope].map(shq).join(' ')
+}
+// refuse 時的處置（grant 這一段）：簽得出就說送主管代答、放行用哪個 scope（與 grantCommand 同一個 scope）；簽不出就印拒收理由、交主管裁決。
+function grantHandling(ledger) {
+  const o = grantOffer(ledger)
+  const ask = '程序題：SendMessage 主管 session，NEVER 鑄題給 Charles'
+  if (!o) return `再送主管代答要不要開例外輪（${ask}）`
+  if (o.refusal)
+    return `grant 簽不出（${o.refusal}）：不送主管問例外輪，--complete blocked --decision-for coordinator 交主管裁決換修法或放棄`
+  if (o.scope === 'full')
+    return `再送主管代答要不要簽第 ${MAX_GRANTS_PER_PR + 1} 張例外輪（${ask}），放行時 rounds grant 用 --scope full、開獨立輪審完整 diff`
+  return `再送主管代答要不要開例外輪（${ask}），放行時 rounds grant 用 --scope increment、只審新 diff`
+}
+// grant_command 的說明（另一個欄位、另一行印）：有指令才有。
+function grantNote(ledger) {
+  if (!grantCommand(ledger)) return null
+  if (WORKTREE_MODE)
+    return '--evidence 換成主管裁決出處（pane＋訊息原文）；working-tree 模式 key＝本 ledger 的 branch＋base、只收 --scope increment；一張只放寬一輪、只限這份 working-tree ledger，紀錄留在 ledger；NEVER 為了重置輪數而 commit／rebase 換 base'
+  const { grants: n, grants_cap: cap } = grantStatus(ledger)
+  const fill = '--evidence 換成主管裁決出處（pane＋訊息原文）；一張只放寬一輪、只限本 PR，紀錄留在 ledger'
+  return n >= MAX_GRANTS_PER_PR ? `第 ${cap} 張：只給高風險 PR，三條件同時成立才收；${fill}` : fill
 }
 // 例外輪（紀錄在 at_round＝上一輪號的 grant）審什麼：increment（預設，含舊 grant 沒有 scope 欄位）或 full。
 const GRANT_SCOPES = ['increment', 'full']
@@ -1396,7 +1636,7 @@ function withGrantScope(ledger, lastN, basis) {
 function grantIndependentBlock(ledger, lastN, head) {
   const g = grantsFor(ledger).find((x) => Number(x.at_round) === lastN)
   if (!g || grantKindOf(g) !== 'independent') return null
-  const out = `出路只有：對這些 finding 跑 rounds adjudicate 裁決假 Major 後重跑 prepare；真 Major 的修補無法靠獨立輪驗證（grant 已簽成 full、不能改簽）：主管／Charles 裁決後可 rounds revoke-grant 撤銷這張還沒開出輪的 grant、再簽 --scope increment 開 verify 輪（帶前輪 findings 驗修補），否則這張 PR 該拆`
+  const out = `出路只有：對這些 finding 跑 rounds adjudicate 裁決假 Major 後重跑 prepare；真 Major 的修補無法靠獨立輪驗證（grant 已簽成 full、不能改簽）：主管／Charles 裁決後可 rounds revoke-grant 撤銷這張還沒開出輪的 grant、再簽 --scope increment 開 verify 輪（帶前輪 findings 驗修補），否則交主管裁決換修法或放棄（--complete blocked --decision-for coordinator；NEVER 預設拆單，拆單只在 oa-batches.ts prepare 印的跨主題判準成立時允許）`
   if (FILTER) return `例外輪 grant（${g.granted_at}）指定 scope=full、必開獨立輪，帶 --include／--exclude 只是部分審查：不帶篩選重跑 prepare`
   const upto = scoped(ledger).filter((r) => r.n <= lastN)
   const hold = upto.length ? reopenBlocking(upto) : null
@@ -1538,6 +1778,26 @@ function syncPeers(path) {
     process.exit(PEER_UNREACHABLE)
   }
 }
+// ── 席位（seat）：0-A 的第二個審查席（GPT 席）────────────────────────────────────────────────────────────
+// 開關：env CLADE_0A_GPT=on|off 最優先；沒有 env 時看主持機 state 目錄的 0a-gpt.off（優先）／0a-gpt.on（存在即生效，內容不看）；預設 off。
+// state 目錄與 vendor/scripts/lib/coordinator-holder.ts 的 coordinatorStateDir、review-seat.ts 的 0a-fable.on／off 同一套：
+// ${COORDINATOR_STATE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/clade/coordinator}。判法與 vendor/scripts/oa-gpt-seat.ts 的 gptSeatEnabled 同一份（test/claude-review-safe-gpt-seat.test.ts 的「開關判法」逐組合鎖 ledger 與 runner 兩邊一致）。
+// 開輪時為開 → round.seats_required=['gpt']；關 → 不寫，舊輪行為完全不變。
+function coordinatorStateDir() {
+  return process.env.COORDINATOR_STATE_DIR || join(process.env.XDG_CACHE_HOME?.trim() || join(homedir(), '.cache'), 'clade', 'coordinator')
+}
+function gptSeatEnabled() {
+  const env = (process.env.CLADE_0A_GPT ?? '').trim().toLowerCase()
+  if (env === 'on' || env === 'off') return env === 'on'
+  const stateDir = coordinatorStateDir()
+  if (existsSync(join(stateDir, '0a-gpt.off'))) return false
+  return existsSync(join(stateDir, '0a-gpt.on'))
+}
+const SEATS = ['claude', 'gpt']
+// entry 沒有 seat 欄＝舊 ledger 的 entry＝claude 席。
+function seatOf(entry) {
+  return entry.seat ?? 'claude'
+}
 // ── 批槽位（slot）：entries 只追加，槽位欄位是推導視圖（0-A #4710 r3 的設計）──────────────────────────────
 // 舊設計是每批一個可變的 verdict 槽位，record／staging 登記／rollback 是各自上鎖的步驟，多位 reviewer 並行時
 // 「回滾」會洗掉別人寫進同一格的 verdict（r1 是回滾別人的、r2 的 flag 補丁仍讓 unrecord 重設任何人寫的）。
@@ -1550,6 +1810,15 @@ function slotEntries(slot) {
   if (Array.isArray(slot.entries)) return slot.entries
   if (slot.status !== 'verdict') return []
   return [{ writer: 'legacy', verdict_file: slot.verdict_file, critical: slot.critical, major: slot.major, minor: slot.minor, at: slot.at }]
+}
+// 這一批有 Claude 席的 entry 才算「已審」：只有 GPT entry 的槽 status 也是 verdict（blocking 照計），但 Claude 席還沒審。
+// batch_shifted：批界位移（檔案清單 hash 不同）重開時留下的舊 Critical／Major entry——blocking 照計（finding 不能靠換批消失），
+// 但它審的是另一組檔，NEVER 算成新批的任何一席已審（hasClaudeEntry、seats.gpt 都不認它）。
+function currentEntry(e) {
+  return !e.batch_shifted
+}
+function hasClaudeEntry(slot) {
+  return slotEntries(slot).some((e) => seatOf(e) === 'claude' && currentEntry(e))
 }
 function appendEntry(slot, entry) {
   slot.entries = [...slotEntries(slot), entry]
@@ -1564,13 +1833,26 @@ function slotView(slot) {
 function settleSlot(ledger, round, part) {
   const slot = round.parts[part]
   const entries = slotEntries(slot).map((e) => ({ ...e }))
+  // 席位狀態（slot.seats）不是 entries 的推導視圖，重建 next 時 MUST 帶回；唯一例外：gpt 的 verdict entry 全被撤掉（unrecord）時，
+  // seats.gpt 的 verdict 狀態跟著清掉，NEVER 留著「GPT 已記」卻沒有 entry 的空狀態。
+  let seats = slot.seats
+  if (seats?.gpt?.status === 'verdict' && !entries.some((e) => seatOf(e) === 'gpt' && currentEntry(e))) {
+    const { gpt: _gone, ...others } = seats
+    seats = Object.keys(others).length ? others : undefined
+  }
   // 槽位上被 recount／adjudicate 就地改過的欄位先回寫到現任勝者的 entry，換人勝出再換回來時不丟。
   if (slot.status === 'verdict')
     for (const e of entries) if (e.verdict_file === slot.verdict_file)
       for (const k of ENTRY_SYNC) { if (slot[k] === undefined) delete e[k]; else e[k] = slot[k] }
+  // 兩筆 gpt entry 撤掉較嚴的那筆後，seats.gpt 要用剩下那筆重算（否則 seats.gpt 仍記被撤那筆的計數與 verdict 檔）；model／effort 沿用。
+  if (seats?.gpt?.status === 'verdict') {
+    const gv = slotView({ entries: entries.filter((e) => seatOf(e) === 'gpt' && currentEntry(e)) })
+    if (gv) seats = { ...seats, gpt: { ...seats.gpt, critical: gv.critical, major: gv.major, minor: gv.minor, verdict_file: gv.verdict_file, at: gv.at } }
+  }
   const win = slotView({ entries })
   const legacySuperseded = slot.superseded_base ?? (Array.isArray(slot.entries) ? [] : slot.superseded ?? [])
-  const next = { status: 'prepared', at: now, ...(slot.files ? { files: slot.files } : {}), ...(slot.supplied_findings ? { supplied_findings: slot.supplied_findings } : {}) }
+  const next = { status: 'prepared', at: now, ...(slot.files ? { files: slot.files } : {}), ...(slot.supplied_findings ? { supplied_findings: slot.supplied_findings } : {}),
+    ...(seats ? { seats } : {}) }
   if (win) {
     const winIdx = entries.indexOf(win)
     const seen = new Set([win.verdict_file])
@@ -1652,8 +1934,11 @@ function partTotal(part) {
 // 該批被裁決為假的 Major 條數：只認 major＋false-positive，**且指紋現在仍是該批 verdict 檔被計數的 Major**，不超過原始 Major 數
 // （只比條數會被 recount 騙過：A、B 兩條、只裁決 A，recount 掉 A 後 min(1,1) 會把沒裁決的 B 一起扣掉）。
 // verdict 檔讀不到／算不出一律回 0（fail-closed）。Critical 的處置紀錄只供 coverage，不扣計數。
+// 扣 gate 計數的 Dismiss 類裁決 verdict：false-positive（finding 不成立）或 out-of-diff（finding 指向這張 PR 沒動過的檔，須附證據，見 adjudicate）。
+// 兩者同樣只疊在原始計數上、同樣可傳遞到續帶的 held 複本；out-of-diff 是人給的裁決，gate NEVER 自己推導。
+const RULING_VERDICTS = ['false-positive', 'out-of-diff']
 function adjudicatedMajors(round, slot) {
-  const recs = (slot.adjudications ?? []).filter((a) => a.severity === 'major' && a.verdict === 'false-positive')
+  const recs = (slot.adjudications ?? []).filter((a) => a.severity === 'major' && RULING_VERDICTS.includes(a.verdict))
   if (!recs.length || !slot.verdict_file || !existsSync(slot.verdict_file)) return 0
   let live
   try {
@@ -1674,12 +1959,32 @@ function roundState(round) {
   // 從更早輪的裁決傳遞來解除的 held（h.adjudicated 記來源）：不計入 blocking，但「這輪是靠裁決才過」要看得見（carry-over 拒絕沿用）。
   const heldAdjudicated = verdicts.length ? (round.findings_held ?? []).filter((h) => h.adjudicated && h.severity !== 'minor').length : 0
   const blocking = rawBlocking - adjudicated + held
-  const complete = verdicts.length > 0 && verdicts.length >= (round.part_total ?? 1)
+  // 收齊＝每批的 Claude 席有 entry（無 seat 欄的舊 entry＝claude）。只有他席（GPT）verdict 的批算有 verdict（blocking 照計），但不算收齊。
+  const claudeVerdicts = verdicts.filter(hasClaudeEntry)
+  const complete = claudeVerdicts.length > 0 && claudeVerdicts.length >= (round.part_total ?? 1)
   const partial = Boolean(round.filter)
+  // 要求他席（round.seats_required，開輪時開關為開才寫）的批：每批要有 slot.seats.<seat>.status==='verdict'，或該席已被豁免（round.seat_waivers）。
+  // 只檢查有 Claude entry 的批（與 complete 同一個口徑）：沒有 Claude entry 的槽不是本輪有效批——還沒審的批、重切（--rebatch-max-bytes）
+  // 或換切法後留下的舊批號殘槽——殘槽永遠拿不到 seats.<seat>，算進來整輪就恆為缺席、永不通過。
+  // 沒有 seats_required 的舊輪不產這兩個欄位，輸出與改版前逐位元相同。
+  const required = Array.isArray(round.seats_required) ? round.seats_required : []
+  const seatsMissing = []
+  for (const seat of required) {
+    if ((round.seat_waivers ?? []).some((w) => w.seat === seat)) continue
+    for (const [part, p] of Object.entries(round.parts ?? {})) {
+      if (!hasClaudeEntry(p)) continue
+      const s = p.seats?.[seat]
+      if (s?.status === 'verdict') continue
+      seatsMissing.push({ part, seat, reason: s?.status === 'absent' ? (s.reason || 'absent') : 'pending：尚未記錄這一席的結果' })
+    }
+  }
   return { hasVerdict: verdicts.length > 0, complete, blocking, raw_blocking: rawBlocking, adjudicated, held_blocking: held, held_adjudicated: heldAdjudicated, partial,
-    passed: complete && blocking === 0 && !partial }
+    ...(required.length ? { seats_required: required, seats_missing: seatsMissing } : {}),
+    passed: complete && blocking === 0 && !partial && seatsMissing.length === 0 }
 }
 // 這一輪算不算已用：收齊 verdict，或已記的批有 Critical／Major（部分輪的阻擋 finding 不能靠換 head 重開抹掉）。
+// seat-missing 輪（Claude 席收齊、GPT 席沒記）照樣算已用：同輪號重開會走 restartBasis，漏帶被重開那輪 head 上的阻擋紀錄（fail-open）。
+// GPT 席沒審過的 diff 由 nextBasis 一處補：上一輪有 seats_missing 就審完整 diff，不當增量基準。
 function consumed(state) {
   return state.complete || state.blocking > 0
 }
@@ -1701,9 +2006,19 @@ function increment(from, to) {
 
 // headBlocking：head 上記過的 Critical／Major（不看輪號）：本機任一輪＋同輪號合併比輸而留在 peer_blocking 的。
 // 只看與 ref 同一張 PR 的紀錄（沒帶 --pr-number 時 scoped 會含重用 branch 名的舊 PR）；blocking＝Critical＋Major 條數合計。
+// 同 head 換 base 的接替輪：r 帶著 Critical／Major 擋下後，main 前進、同 head 開了新輪 r2（base 不同、findings_from 指到 r、收齊 verdict、不帶篩選）。
+// r 的 findings 已整批交給 r2 的 reviewer：還在 diff 內的被重審（重報或 resolved），不在當下 diff 內的列 held 照計入 r2 的 blocking
+// （roundState）——r2 的 blocking 承接了 r 的阻擋。所以 r 不再單獨以 head 為鍵否決 r2；沒有這條，r2 收齊 0 C／M 也永遠通不過
+// （r 的 blocking 留在帳上、headBlocking 以 head 為鍵），開新輪只會白耗一輪。r2 沒收齊／帶篩選／base 沒變／沒帶 r 的 findings 都不算接替（fail-closed）。
+function supersededByNewBase(ledger, r) {
+  if (!r.base) return false
+  return scoped(ledger).some((r2) => r2 !== r && r2.n > r.n && r2.head === r.head && String(r2.pr ?? '') === String(r.pr ?? '')
+    && r2.base && r2.base !== r.base && !r2.filter && roundState(r2).complete
+    && (r2.findings_from === r.n || (r2.findings_also_rounds ?? []).includes(r.n)))
+}
 function headBlocking(ledger, head, ref) {
   const samePr = (x) => String(x.pr ?? '') === String(ref?.pr ?? PR_NO ?? '')
-  const blockedRounds = scoped(ledger).filter((r) => r !== ref && samePr(r) && r.head === head && roundState(r).blocking > 0)
+  const blockedRounds = scoped(ledger).filter((r) => r !== ref && samePr(r) && r.head === head && roundState(r).blocking > 0 && !supersededByNewBase(ledger, r))
   const rounds = blockedRounds.map((r) => r.n)
   const peers = (ledger.peer_blocking ?? []).filter((b) => mine(b) && samePr(b) && b.head === head && peerBlockingCount(b) > 0)
   const blocking = blockedRounds.reduce((n, r) => n + roundState(r).blocking, 0) + peers.reduce((n, b) => n + peerBlockingCount(b), 0)
@@ -1749,11 +2064,16 @@ function gitRaw(args, { input, env } = {}) {
     env: env ? { ...process.env, ...env } : process.env, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'ignore'] })
 }
 // 投影檔的判定借 CLADE_HOME 的 locked-projection.ts；載不到就不扣（多算「patch 不同」只會多審，不會少審）。
+// 只看 from／to 兩個 commit 的 blob（isLockedProjectionPathAt）：plan 跑在主持者 checkout、open 跑在快照樹，
+// NEVER 讀 repo-root 的 HEAD／index／工作樹，否則同一組 base／head 兩邊判得不一樣。
+// 舊 CLADE_HOME 沒有它時只認路徑判得出的投影，CLAUDE.md 與 .cursor/** 一律當 PR 自身改動（照審）。
 let projectionTest = () => false
 try {
   if (process.env.CLADE_HOME) {
     const mod = await import(pathToFileURL(join(process.env.CLADE_HOME, 'vendor', 'scripts', 'locked-projection.ts')).href)
-    if (typeof mod.isLockedProjectionPath === 'function') projectionTest = mod.isLockedProjectionPath
+    if (typeof mod.isLockedProjectionPathAt === 'function') projectionTest = (p, from, to) => mod.isLockedProjectionPathAt(opt['repo-root'], from, to, p)
+    else if (typeof mod.isLockedProjectionPath === 'function')
+      projectionTest = (p) => p !== 'CLAUDE.md' && !p.startsWith('.cursor/') && mod.isLockedProjectionPath(p)
   }
 } catch {}
 // 免審判準（risk-exempt.ts）只認 CLADE_HOME 的那一份（NEVER 受審 repo 內同名檔）；載不到 → exemptDocsAt 一律不認（fail-closed）。
@@ -1767,7 +2087,8 @@ try {
     if (typeof mod.riskExemptClass === 'function') riskExemptClass = mod.riskExemptClass
   }
 } catch {}
-const patchExcluded = (p) => p.startsWith('specs/plans/') || projectionTest(p)
+// p 在 from→to 這段改動裡是不是投影或 specs/plans（不算 PR 自身的修補）。
+const patchExcluded = (p, from, to) => p.startsWith('specs/plans/') || projectionTest(p, from, to)
 // from→to 的 diff（預設不帶 context）切成逐檔區塊：{ path → 區塊文字 }。
 // 檔名不從 `+++ b/<path>` 解析（含空白的路徑 git 會在後面補 TAB、含特殊字元會 C-quote）：另跑一趟 `--name-only -z`
 // 取 NUL 分隔的原始路徑，與 diff 區塊同序一一對應；數量對不上就丟錯（呼叫端 fail-closed）。
@@ -1836,7 +2157,9 @@ function patchCompare(lastBase, lastHead, base, head) {
     const a = patchIds(before)
     const b = patchIds(after)
     const changed = [...new Set([...a.keys(), ...b.keys()])].filter((p) => a.get(p) !== b.get(p)).sort()
-    const differ = changed.filter((p) => !patchExcluded(p))
+    // 有改到它的每一份 patch 都判投影才扣：任一側是 PR 自身改動就照審（沒改到它的那側不算數）。
+    const excluded = (p) => (!before.has(p) || patchExcluded(p, lastBase, lastHead)) && (!after.has(p) || patchExcluded(p, base, head))
+    const differ = changed.filter((p) => !excluded(p))
     const opaque = differ.filter((p) => !changedLines(before.get(p)).length && !changedLines(after.get(p)).length)
     const delta = {}
     const own = []
@@ -1846,7 +2169,7 @@ function patchCompare(lastBase, lastHead, base, head) {
         patchLineDelta(changedPositions(before.get(p)), changedPositions(after.get(p)))
       if (delta[p]) own.push(p)
     }
-    return { same: own.length === 0, differ, own, opaque, delta, drift: changed.filter(patchExcluded) }
+    return { same: own.length === 0, differ, own, opaque, delta, drift: changed.filter(excluded) }
   } catch {
     return null
   }
@@ -1892,11 +2215,11 @@ function exportNames(lines, names, file) {
     }
   }
 }
-function prExports(blocks, head) {
+function prExports(blocks, base, head) {
   const names = new Map()
   for (const [p, blk] of blocks) {
     exportNames(blk.split('\n').filter((l) => l.startsWith('-') && !l.startsWith('---')).map((l) => l.slice(1)), names, p)
-    if (patchExcluded(p)) continue
+    if (patchExcluded(p, base, head)) continue
     try {
       exportNames(gitRaw(['show', `${head}:${p}`]).split('\n'), names, p)
     } catch {}
@@ -1989,7 +2312,9 @@ function cacheWrite(name, shas, value) {
 // #4324／#4752 只改 gh-throttle／gh-shim，main 的 coordinator-snapshot.ts（195888B）、coordinator-auto-dispatch.ts（201432B）因引用 PR export 進 refs，
 // 單檔 main-diff 就超單批預算、0-A prepare 被擋。批次只含 PR 自己 merge-base..head 改動的檔（＋投影漂移）；main 新呼叫端對 PR export 的相容性由 PR CI（型別／測試）擋。
 // rev 3：資料檔（.jsonl 等）不當 refs 引用來源（#4529：specs/coordinator/manager-archive.jsonl 494 行／411KB 的資料列提到 export 名稱就進 refs，撐爆批預算）。
-const BASE_SCOPE_REV = 4
+// rev 5：patchExcluded 只看兩個 commit 的 blob（isLockedProjectionPathAt：clade 本倉的 .agents/skills/** 是源檔、banner 目錄要 banner 或
+// clade 已合入同名 blob 當證據），與 repo-root 的工作樹無關；rev 4 以前的範圍是另一套判準算的，不得命中快取。
+const BASE_SCOPE_REV = 5
 // 資料檔不是程式：它們的新增行出現 export 名稱是資料內容（紀錄列、log），不是引用。refs 判定跳過；不含 .json（設定檔可能逐字列出 export／腳本名）。
 const REF_DATA = /\.(?:jsonl|ndjson|csv|tsv|log|lock)$/i
 // base-check 的審查範圍：{ pr: PR 改過且 main 也動過的檔, refs: 恆為 []（相容欄位，舊 ledger 的輪還帶 refs）,
@@ -2001,7 +2326,9 @@ function scopeAlgoDigest() {
   // 範圍判定走到的每個函式與常數都要進雜湊（漏一個＝改了它舊範圍照樣命中快取，把該重審的檔漏掉）；BASE_SCOPE_REV 也在內：遞增它就是要讓舊 key 失效。
   for (const f of [baseCheckScopeUncached, fileBlocks, prExports, exportNames, moduleStems, barrelStems, patchExcluded, escapeRe, gitRaw]) h.update(String(f)).update('\0')
   for (const v of [REF_GENERIC_FILES, BARREL_DEPTH, BASE_SCOPE_REV, REF_CODE, REF_DATA, BARREL_CODE, EXPORT_DECL, EXPORT_LIST, IDENT]) h.update(String(v)).update('\0')
-  try { h.update(readFileSync(join(process.env.CLADE_HOME ?? '', 'vendor', 'scripts', 'locked-projection.ts'))) } catch { h.update('no-projection') }
+  // projectionTest 走到的 CLADE_HOME 模組：locked-projection.ts 與它動態載入的 clade-shipped-blob.ts（BANNER_SCOPED、isCladeShippedBlob）
+  for (const rel of [['locked-projection.ts'], ['lib', 'clade-shipped-blob.ts']])
+    try { h.update(readFileSync(join(process.env.CLADE_HOME ?? '', 'vendor', 'scripts', ...rel))) } catch { h.update(`no-${rel.at(-1)}`) }
   return h.digest('hex').slice(0, 12)
 }
 function baseCheckScope(lastBase, base, head) {
@@ -2015,15 +2342,15 @@ function baseCheckScope(lastBase, base, head) {
 }
 function baseCheckScopeUncached(lastBase, base, head) {
   const prBlocks = fileBlocks(base, head)
-  const prFiles = new Set([...prBlocks.keys()].filter((p) => !patchExcluded(p)))
+  const prFiles = new Set([...prBlocks.keys()].filter((p) => !patchExcluded(p, base, head)))
   const mainBlocks = fileBlocks(lastBase, base)
   const pr = [...mainBlocks.keys()].filter((p) => prFiles.has(p)).sort()
-  const exporters = prExports(prBlocks, head)
+  const exporters = prExports(prBlocks, base, head)
   const word = exporters.size ? new RegExp(`(?<![\\w$])(${[...exporters.keys()].map(escapeRe).join('|')})(?![\\w$])`, 'g') : null
   const hits = new Map()
   if (word)
     for (const [p, blk] of mainBlocks) {
-      if (prBlocks.has(p) || patchExcluded(p) || REF_DATA.test(p)) continue
+      if (prBlocks.has(p) || patchExcluded(p, lastBase, base) || REF_DATA.test(p)) continue
       const added = blk.split('\n').filter((l) => l.startsWith('+') && !l.startsWith('+++')).join('\n')
       const found = new Set([...added.matchAll(word)].map((m) => m[1]))
       if (found.size) hits.set(p, { found, added })
@@ -2286,7 +2613,7 @@ function fullReopenDecision(ledger, d) {
   const counted = countedRounds(restart ? rounds.slice(0, -1) : rounds) + 1
   const max = maxRounds(ledger)
   if (counted > max)
-    return { ...d, action: 'refuse', round: n, last_round: last.n, last_blocking: 0, grant_command: grantCommand(),
+    return { ...d, action: 'refuse', round: n, last_round: last.n, last_blocking: 0, grant_command: grantCommand(ledger), grant_note: grantNote(ledger), grant_handling: grantHandling(ledger), ...grantStatus(ledger),
       reason: `明示完整輪 round ${n} 超過上限 ${max}（計數輪 ${counted}）：要開要先有 grant` }
   return { max_rounds: max, part: d.part, head: d.head, filter: d.filter, action: 'review', round: n, kind: 'independent',
     counted_round: counted, reuse: false, increment_base: null, findings_from: null, independent_of: last.n,
@@ -2301,7 +2628,13 @@ function decide(ledger) {
   const rounds = scoped(ledger)
   const last = rounds.at(-1)
   // 本 head 還在審或被擋：照一般判定續跑／回 blocked（獨立輪自己的續跑也走這條）
-  if (last?.head === d.head && !roundState(last).passed) return last.kind === 'independent' ? d : { ...d, independent: 'deferred' }
+  // deferred 帶 independent_reason：prepare 收到明示 --independent 時據此非 0 退出並印原因，NEVER 默默改審別種輪
+  if (last?.head === d.head && !roundState(last).passed) {
+    if (last.kind === 'independent') return d
+    const st = roundState(last)
+    return { ...d, independent: 'deferred',
+      independent_reason: `round ${last.n}（${last.kind ?? '?'}${last.filter ? `，篩選 ${last.filter}` : ''}）在本 head 還沒 settle（${st.complete ? `已收齊但未通過，Critical＋Major ${st.blocking} 條` : 'verdict 未收齊'}）：先不帶 --independent 把它收齊並通過（有 Critical／Major 就修完 push 新 head，再不帶 --independent 跑完驗證輪並通過），之後才重跑 prepare --independent` }
+  }
   // 本 head 的通過輪：已記錄的，加上這次 covered 會延伸過來的（d.covers）
   const passes = new Set([...passingRounds(rounds, d.head).map((r) => r.n), ...(d.action === 'covered' ? d.covers ?? [] : [])])
   // 上一輪（舊 head）乾淨通過、本 head 增量超過 covered 門檻：一般判定是 verify，但 verify 不算完整審查（高風險 PR 通過後 finalize 判 0 算數輪、
@@ -2309,7 +2642,9 @@ function decide(ledger) {
   // 有阻擋紀錄（last 或同 head 的別輪／peer）、restart、無可審檔的輪一律照一般判定，NEVER 靠獨立輪抹掉 findings。
   const cleanVerify = d.action === 'review' && d.kind === 'verify' && !d.restart && last && last.head !== d.head
     && roundState(last).passed && !last.no_reviewable && !headBlocking(ledger, last.head, last).any
-  if (!passes.size && !cleanVerify) return { ...d, independent: 'deferred' }
+  if (!passes.size && !cleanVerify)
+    return { ...d, independent: 'deferred',
+      independent_reason: `本 head ${d.head.slice(0, 9)} 還沒有通過輪（${last ? `最後一輪 round ${last.n} 在 head ${String(last.head).slice(0, 9)}` : '本 PR 還沒有任何輪'}）：獨立輪是同一 head 的第二個完整審查，要等本 head 先有一輪通過（ledger 判的是 round ${d.round} ${d.kind ?? d.action}）` }
   // 「兩輪已滿」只數算得上本 head 完整審查的輪（countsAsFullAt），湊滿 verify／base-check、或跨過程式 commit 延伸來的輪都不能擋掉明確要求的獨立輪。
   // 已有兩個完整審查通過輪：--independent 明示也不另開（第三輪沒有證據價值），但要說出是哪兩輪，免得被當成靜默短路
   const fullPasses = [...passes].filter((n) => countsAsFullAt(rounds.find((x) => x.n === n), d.head)).toSorted((a, b) => a - b)
@@ -2320,7 +2655,7 @@ function decide(ledger) {
   const n = last.n + 1
   const max = maxRounds(ledger)
   if (countedRounds(rounds) + 1 > max)
-    return { ...d, action: 'refuse', round: n, last_round: last.n, last_blocking: 0, grant_command: grantCommand(),
+    return { ...d, action: 'refuse', round: n, last_round: last.n, last_blocking: 0, grant_command: grantCommand(ledger), grant_note: grantNote(ledger), grant_handling: grantHandling(ledger), ...grantStatus(ledger),
       reason: `獨立輪 round ${n} 超過上限 ${max}（本 head 通過輪 ${[...passes].join('、')}，其中算完整審查的 ${fullPasses.length ? fullPasses.map((x) => `round ${x}`).join('、') : '0 輪'}；verify／base-check／無可審檔／跨過程式 commit 的延伸不算）` }
   // covered 判定延伸過來的通過輪在開獨立輪時一併記進 covered_heads：不記的話獨立輪通過後本 head 仍只有一個通過輪
   return { max_rounds: max, part: d.part, head: d.head, filter: d.filter, action: 'review', round: n, kind: 'independent',
@@ -2423,7 +2758,13 @@ function decideRound(ledger) {
   // → 同輪號以新算法重開（基準不含 refs）；已有 verdict 的輪是對舊基準審的，不混用、照舊續跑。
   if (last.kind === 'verify' && last.head === head && (last.filter || '') === FILTER && last.increment_base && last.base_scope?.refs?.length && !state.hasVerdict)
     return restartDecision(ledger, last, rounds.at(-2), base, pr, head, base_)
-  if (last.head === head) {
+  // 同 head、merge-base 動了（main 前進到包含 head 的祖先，head 沒變）而上一輪帶著 Critical／Major 擋下：那輪審的是舊 base 的 diff，
+  // 「同內容重擲不產生新證據」不成立——diff 變了。落到下面開新一輪（受輪數上限約束，審當下 base 的完整 diff），
+  // 不被同 head 的 blocked／reviewed 擋住。已通過的輪不在此列（走下面 base-check／covered 的既有判定；同 head 沿用 verdict）。
+  // blocking 已扣掉有裁決（false-positive／out-of-diff）的 Major 與 held，所以只有真的還擋著的輪才會重開。
+  const sameHeadMovedBase = Boolean(pr && last.head === head && last.base && base && last.base !== base
+    && state.complete && state.blocking > 0 && !last.filter && !FILTER)
+  if (last.head === head && !sameHeadMovedBase) {
     if ((last.filter || '') !== FILTER) {
       // 同 head 換篩選：舊輪的批號對應的是另一組檔，不能混。已有 Critical／Major 就先修，否則同輪號重開。
       if (state.blocking > 0)
@@ -2442,6 +2783,10 @@ function decideRound(ledger) {
       if (state.passed)
         return { ...base_, action: 'reviewed', round: last.n,
           reason: `round ${last.n} 已對此 head 收齊 verdict 且 Critical＋Major＝0${state.adjudicated ? `（原始 ${state.raw_blocking} 條，其中 ${state.adjudicated} 條 Major 已裁決為 false-positive）` : ''}${state.held_adjudicated ? `（${state.held_adjudicated} 條續帶 held 已由更早輪的裁決解除）` : ''}${independentHint(rounds, head)}` }
+      // Claude 席收齊且乾淨、只差他席（GPT）沒記：不是「Critical／Major 擋著」，理由要說缺哪一席，NEVER 套下面「同內容重擲」的話。
+      if (state.blocking === 0 && state.seats_missing?.length)
+        return { ...base_, action: 'blocked', round: last.n, blocking: 0, seats_missing: state.seats_missing,
+          reason: `round ${last.n} 已對此 head 收齊 Claude 席 verdict 且 Critical＋Major＝0，但要求的席位還沒收齊（${state.seats_missing.map((m) => `第 ${m.part} 批 ${m.seat} 席：${m.reason}`).join('；')}）——補記該席結果（rounds record --seat gpt），Claude 席不必重審；push 新 head 補不了這一席——會開下一輪、以完整 diff 重審（兩席都要）` }
       return { ...base_, action: 'blocked', round: last.n, blocking: state.blocking,
         reason: `round ${last.n} 已對此 head 收齊 verdict，Critical＋Major ${state.blocking} 條；同內容重擲不產生新證據——修完 push 新 head 再 prepare` }
     }
@@ -2450,17 +2795,19 @@ function decideRound(ledger) {
     // 開下去只會在已定稿的輪裡留一個永遠沒人 finalize 的 prepared 孤批（2026-11-02 PR 3645 round 1 的 1/1）。
     // 拒絕並指向已定稿的批，不改帳；真要重審走新 head 或 --independent。
     if (!wholeRound && !done && state.complete) {
-      const keys = Object.keys(last.parts ?? {}).filter((k) => last.parts[k].status === 'verdict').join('、')
-      return { ...base_, action: 'reviewed', round: last.n, blocking: state.blocking,
+      const keys = Object.keys(last.parts ?? {}).filter((k) => hasClaudeEntry(last.parts[k])).join('、')
+      return { ...base_, action: 'reviewed', round: last.n, blocking: state.blocking, next_counted_round: countedRounds(scoped(ledger).filter((r) => r.n <= last.n)) + 1,
         reason: `round ${last.n} 已對此 head 定稿（${keys} 批收齊 verdict，part_total=${last.part_total ?? 1}）；第 ${part} 批不在已定稿的批界裡，不另開批、不改帳——沿用 round ${last.n} 的 verdict，要重審請 push 新 head` }
     }
     // 帶 --part-files 時批號相同還不夠：檔案清單 hash 要與寫 verdict 那次一致，否則重開該批（批界位移）。
-    if (done?.status === 'verdict' && (!PART_FILES || done.files === PART_FILES))
+    // 「已審」看 Claude 席有沒有 entry（hasClaudeEntry），不看 status：只有 GPT entry 的槽 status 也是 verdict，但 Claude 席還沒審，不能回 reviewed。
+    if (done && hasClaudeEntry(done) && (!PART_FILES || done.files === PART_FILES))
       return { ...base_, action: 'reviewed', round: last.n, verdict_file: done.verdict_file, blocking: done.critical + done.major - adjudicatedMajors(last, done),
+        next_counted_round: countedRounds(scoped(ledger).filter((r) => r.n <= last.n)) + 1,
         reason: `round ${last.n} 已對此 head 的第 ${part} 批產出 verdict（${done.verdict_file}）；同內容重擲不產生新證據` }
     // 整輪判定：列出已有 verdict 的批（含計數），oa-batches 只 prepare 其餘批、沿用這些批的計數。
     const done_parts = wholeRound
-      ? Object.fromEntries(Object.entries(last.parts ?? {}).filter(([, p]) => p.status === 'verdict')
+      ? Object.fromEntries(Object.entries(last.parts ?? {}).filter(([, p]) => hasClaudeEntry(p))
         .map(([k, p]) => [k, { critical: p.critical, major: p.major, minor: p.minor, verdict_file: p.verdict_file, files: p.files ?? null,
           ...(adjudicatedMajors(last, p) ? { adjudicated: adjudicatedMajors(last, p) } : {}) }]))
       : undefined
@@ -2530,14 +2877,19 @@ function decideRound(ledger) {
   }
   const n = last.n + 1
   if (countedRounds(rounds) + 1 > max)
-    return { ...base_, action: 'refuse', round: n, last_round: last.n, last_blocking: state.blocking, grant_command: grantCommand(),
+    return { ...base_, action: 'refuse', round: n, last_round: last.n, last_blocking: state.blocking, grant_command: grantCommand(ledger), grant_note: grantNote(ledger), grant_handling: grantHandling(ledger), ...grantStatus(ledger),
       reason: `第 ${n} 輪超過上限 ${max}${max > MAX_ROUNDS ? `（${MAX_ROUNDS}＋例外輪授權 ${max - MAX_ROUNDS} 輪）` : ''}（round ${last.n}：${state.passed ? '已通過但之後增量超過重驗門檻' : `Critical＋Major ${state.blocking} 條`}）` }
   const grantBlock = grantIndependentBlock(ledger, last.n, head)
   if (grantBlock) return { ...base_, action: 'grant-unopenable', round: n, last_round: last.n, last_blocking: state.blocking, reason: grantBlock }
+  // 同 head 換 base 不走增量：新 base 是 head 的祖先，上一輪 patch 套上去就是 head 的樹，合成基準→head 是空 diff（0 批、prepare 拒開）。
+  // 其餘照 basisFrom：上一個 head 另有阻擋紀錄就審完整 diff 並帶阻擋 findings，否則照 nextBasis。
+  const basis = sameHeadMovedBase
+    ? { ...basisFrom(ledger, last, base, pr, head), increment_base: null, scope: `full（同 head、merge-base ${String(last.base).slice(0, 9)}→${base.slice(0, 9)}）` }
+    : basisFrom(ledger, last, base, pr, head)
   return { ...base_, action: 'review', round: n, kind: 'verify', reuse: false,
     ...(cmp ? { patch_differ: cmp.differ } : {}), ...(own ? { increment: own } : {}),
     // 最後一輪的 head 另有阻擋紀錄時 basisFrom 改審完整 diff 並帶阻擋 findings；其餘照 nextBasis。例外輪 grant 的 scope 疊在最外層。
-    ...withGrantScope(ledger, last.n, basisFrom(ledger, last, base, pr, head)) }
+    ...withGrantScope(ledger, last.n, basis) }
 }
 // 上一個 head 另有阻擋紀錄（別的輪或 peer 的 verdict）時的下一輪基準：那些 Critical／Major 沒有任何 reviewer 驗過修補，
 // 只審 last.head→新 head 的增量、又只帶乾淨輪的 findings，新 head 通過就會把它們丟掉（passed 只看新 head 的紀錄）。
@@ -2564,8 +2916,9 @@ function nextBasis(prev, base, pr, head) {
   // 只有收齊 verdict 的輪才能當增量基準。沒收齊但已記 Critical／Major 的輪：findings 照帶，比較基準退回完整 diff
   // （沒拿到 verdict 的批沒人審過）。
   if (!prev) return { increment_base: null, findings_from: null }
+  // seat-missing 輪（seats_missing 非空）同樣不能當增量基準：缺席那席沒審過 prev 的 diff，增量只會讓它永遠沒審原 diff——照完整 diff。
   const prevState = roundState(prev)
-  if (!prevState.complete)
+  if (!prevState.complete || prevState.seats_missing?.length)
     return prevState.blocking > 0
       ? { increment_base: null, findings_from: prev.n, prev_head: prev.head }
       : { increment_base: null, findings_from: null }
@@ -2606,6 +2959,26 @@ const diffMatch = (diff, cite) => {
   // 只對得上路徑尾段（`index.ts` 對 `a/index.ts`）不算命中，但也不能據此判「不在 diff」：當判不出、照帶。
   for (const f of diff) if (f.endsWith(`/${file}`) || file.endsWith(`/${f}`)) return 'unknown'
   return 'out'
+}
+// out-of-diff 裁決的事實前提：呼叫端給的 --base／--head 不能照單全收（`--base X --head X` 是空 diff、任何 cite 都判成 out）。
+// --head 必須是這張 PR 在 ledger 上的 head（該輪的 head 或最後一輪的 head）；--base 必須是 head 的祖先、不等於 head，
+// 且等於 BASE_REF 與 head 的當下 merge-base（BASE_REF 解不出來就拒收，先 fetch）。回 { files, base, head }（皆為解開的完整 sha）；任何一步判不出就 exit 2。
+function outOfDiffBasis(round, ledger) {
+  if (!opt.base || !opt.head) fail('out-of-diff 必帶 --base（當下 merge-base）與 --head（PR head）：不寫')
+  const sha = (ref) => { try { return gitRaw(['rev-parse', '--verify', '-q', `${ref}^{commit}`]).trim() || null } catch { return null } }
+  const head = sha(opt.head)
+  const base = sha(opt.base)
+  if (!head || !base) fail(`out-of-diff 的 --base／--head 在本機解不出 commit（base：${opt.base}、head：${opt.head}）：先 fetch，不寫`)
+  const prHeads = [round.head, scoped(ledger).at(-1)?.head].filter(Boolean).map(sha).filter(Boolean)
+  if (!prHeads.includes(head)) fail(`out-of-diff 的 --head ${opt.head} 不是這張 PR 在 ledger 上的 head（該輪 ${String(round.head).slice(0, 10)}、最後一輪 ${String(scoped(ledger).at(-1)?.head).slice(0, 10)}）：不寫`)
+  if (base === head) fail('out-of-diff 的 --base 等於 --head：空 diff 會把任何 cite 判成 diff 外，不寫')
+  let current = null
+  try { current = gitRaw(['merge-base', BASE_REF, head]).trim() || null } catch {}
+  if (!current) fail(`out-of-diff 算不出 ${BASE_REF} 與 head 的 merge-base（先 fetch ${BASE_REF}，或帶 --base-ref）：不寫`)
+  if (current !== base) fail(`out-of-diff 的 --base ${opt.base} 不是 ${BASE_REF} 與 head 當下的 merge-base（${current.slice(0, 10)}）：不寫`)
+  const files = roundDiffFiles(base, head)
+  if (!files) fail('out-of-diff 要 git 算得出 base→head 的 diff：不寫')
+  return { files, base, head }
 }
 // finding 區塊＝severity 列＋它底下的縮排續行；held 存整段原文，下一輪照樣能再分流。
 function splitCarried(text, diff, prior = new Set()) {
@@ -2669,7 +3042,7 @@ function heldRuling(pool, round, h, peers = null) {
   if (o?.machine) {
     const b = peerOfOrigin(peers, o)
     const a = b ? slotRuling(b, heldFingerprint(h)) : null
-    return a ? { fingerprint: a.fingerprint, from_round: b.n, from_part: b.part ?? '1/1', from_machine: b.machine, by: a.by, evidence: a.evidence, at: a.at } : null
+    return a ? { fingerprint: a.fingerprint, from_round: b.n, from_part: b.part ?? '1/1', from_machine: b.machine, verdict: a.verdict, by: a.by, evidence: a.evidence, at: a.at } : null
   }
   const src = o ? pool.findLast((r) => r.n === o.round) : null
   if (!src) return null
@@ -2677,7 +3050,7 @@ function heldRuling(pool, round, h, peers = null) {
   for (const [part, slot] of Object.entries(src.parts ?? {})) {
     if (o.part != null && part !== o.part) continue
     const a = slotRuling(slot, fp)
-    if (a) return { fingerprint: a.fingerprint, from_round: src.n, from_part: part, by: a.by, evidence: a.evidence, at: a.at }
+    if (a) return { fingerprint: a.fingerprint, from_round: src.n, from_part: part, verdict: a.verdict, by: a.by, evidence: a.evidence, at: a.at }
   }
   return null
 }
@@ -2713,7 +3086,7 @@ function clearPlaceholders(held, peers) {
 }
 // 一個 slot（本機輪的批，或 peer_blocking 的一筆）上、指紋相同的 major＋false-positive 裁決。
 function slotRuling(slot, fp) {
-  return (slot.adjudications ?? []).find((x) => x.severity === 'major' && x.verdict === 'false-positive' && baseFingerprint(x.fingerprint) === fp) ?? null
+  return (slot.adjudications ?? []).find((x) => x.severity === 'major' && RULING_VERDICTS.includes(x.verdict) && baseFingerprint(x.fingerprint) === fp) ?? null
 }
 // 把 held 裡有來源裁決、還沒標的 Major 標 adjudicated；回標到的條目。
 function markHeldAdjudicated(pool, round, held, extra = { propagated_at: now }, peers = null) {
@@ -2796,7 +3169,7 @@ function findingsFor(ledger, path, n, diff = null, sink = null, extra = null) {
     const origin = { round: b.n, part: b.part ?? '1/1', machine: b.machine, vid: pbVid(b) }
     held.push(...r.held.map((h) => {
       const a = h.severity === 'major' ? slotRuling(b, heldFingerprint(h)) : null
-      return { ...h, origin, ...(a ? { adjudicated: { fingerprint: a.fingerprint, from_round: b.n, from_part: origin.part, from_machine: b.machine, by: a.by, evidence: a.evidence, at: a.at, propagated_at: now } } : {}) }
+      return { ...h, origin, ...(a ? { adjudicated: { fingerprint: a.fingerprint, from_round: b.n, from_part: origin.part, from_machine: b.machine, verdict: a.verdict, by: a.by, evidence: a.evidence, at: a.at, propagated_at: now } } : {}) }
     }))
     sections.push(`<!-- ${b.machine} round ${b.n} part ${b.part ?? '1/1'}（同 head 的 peer 阻擋紀錄）-->\n${r.text}\n`)
   }
@@ -2932,6 +3305,29 @@ const indentOf = (line) => /^\s*/.exec(line)[0].replace(/\t/g, '    ').length
 // 批 2–8 每批都把這兩條 `— resolved.` 狀態列計成 Major 2）。
 const CITE_BARE = /^\s*[-*+]\s+(?:\*{1,2})?\[(?:Critical|Major|Minor)\](?:\*{1,2})?\s+`?([^\s`:]*[/.][^\s`:]*)`?\s+[—–]\s/i
 const citeOf = (line) => normLoc(CITE.exec(line)?.[1]) ?? CITE_BARE.exec(line)?.[1]
+// 只有長得像路徑的 token 才算位置：含 `/` 要有副檔名或 `:行號`；不含 `/` 要有 `:行號`（或是破折號前的第一個 token 且有副檔名）。
+// `behavior.`、`(e.g`、`and/or` 之類散文判成位置會讓整條 finding 被當 diff 外丟掉——判不出就不算位置，finding 照帶（fail-safe）。
+const looksPath = (t, allowBare) => {
+  if (/[()<>"'\s]/.test(t)) return false
+  const hasLine = /:[≈~]?\d/.test(t)
+  const p = t.replace(/:[≈~]?\d.*$/, '').replace(/[.,;:]+$/, '')
+  if (!p || /^\.+$/.test(p)) return false
+  const last = p.split('/').at(-1)
+  const ext = /\.[A-Za-z][A-Za-z0-9]{1,7}\}?$/.test(last)
+  if (p.includes('/')) return hasLine || ext
+  return hasLine || (allowBare && ext)
+}
+const pathsOf = (raw) => {
+  const head = raw.replace(/^\s*[-*+]\s+\S+\s+/, '').split(/\s[—–-]\s/)[0] ?? ''
+  const toks = head.split(/\s+/).map((t) => t.replace(/`/g, '').replace(/[,、;]+$/, '')).filter((t) => looksPath(t, false))
+  const firstRaw = CITE.exec(raw)?.[1] ?? CITE_BARE.exec(raw)?.[1]
+  const first = firstRaw && looksPath(firstRaw, true) ? firstRaw : undefined
+  return [...new Set([...(first ? [first] : []), ...toks].flatMap((c) => {
+    const path = c.replace(/:[≈~]?\d.*$/, '').replace(/[.,;:]+$/, '')
+    const brace = /^(.*)\{([^{}]+)\}(.*)$/.exec(path)
+    return brace ? brace[2].split(',').map((x) => `${brace[1]}${x}${brace[3]}`) : [path]
+  }))]
+}
 function priorCites(findingsFile) {
   if (!findingsFile || !existsSync(findingsFile)) return new Set()
   return new Set(readFileSync(findingsFile, 'utf8').split('\n').map(citeOf).filter(Boolean))
@@ -3106,7 +3502,8 @@ if (cmd === 'counts') {
           ...(d.kind === 'base-check' && d.covers?.length ? { covers_on_pass: d.covers } : {}),
           ...(d.scope ? { scope: d.scope } : {}),
           ...(d.full_reopen && typeof d.full_reopen === 'object' ? { full_reopen: d.full_reopen } : {}),
-          ...(d.grant_scope ? { grant_scope: d.grant_scope, grant_at: d.grant_at } : {}) }
+          ...(d.grant_scope ? { grant_scope: d.grant_scope, grant_at: d.grant_at } : {}),
+          ...(gptSeatEnabled() ? { seats_required: ['gpt'] } : {}) }
         ledger.rounds.push(round)
       }
       round.part_total = Math.max(round.part_total ?? 1, total)
@@ -3116,7 +3513,33 @@ if (cmd === 'counts') {
       if (!round.findings_file && round.findings_from)
         round.findings_file = findingsFor(ledger, path, round.findings_from, roundDiffFiles(round.increment_base || round.base, round.head), round,
           { rounds: d.findings_also_rounds, peers: d.findings_peers })
-      round.parts[d.part] = { status: 'prepared', at: now, ...(PART_FILES ? { files: PART_FILES } : {}), ...(supplied ? { supplied_findings: supplied } : {}) }
+      // 槽上已有 entries 的重開：
+      // - 只有他席（GPT）entry、檔案清單 hash 相同：原樣保留（GPT 先記、Claude 後記的正常路徑），NEVER 用 prepared 整格覆寫抹掉。
+      // - 其餘（hash 不同＝批界位移；或帶 Claude entry 的槽被重開）：舊 entries 審的是另一組檔／舊的一次審查，乾淨的不留；
+      //   Critical／Major（不分席）標 batch_shifted 留在槽上照計 blocking（finding 不能靠換批消失），但不算任何一席已審本批，
+      //   seats.gpt 退回 pending——否則 roundState 會把「已審／GPT 席已到齊」算給從沒審過新那組檔的 verdict（fail-open）。
+      // hash 比對兩邊都取原值（沒帶 --part-files＝''）：槽上記過 hash、這次沒帶時也算位移，新槽不沿用舊 hash——
+      // 否則之後不帶 --part-files 的 record 每次都以 hash 不符被拒、重 prepare 又留住同一個舊 hash（死循環）。
+      const prevSlot = round.parts[d.part]
+      let kept = {}
+      if (prevSlot && slotEntries(prevSlot).length) {
+        const sameFiles = (prevSlot.files ?? '') === (PART_FILES ?? '')
+        if (sameFiles && !hasClaudeEntry(prevSlot)) kept = prevSlot
+        else {
+          const blockingEntries = slotEntries(prevSlot).filter((e) => e.critical + e.major > 0).map((e) => ({ ...e, batch_shifted: true }))
+          if (blockingEntries.length) {
+            const { gpt: _stale, ...otherSeats } = prevSlot.seats ?? {}
+            const trimmed = { ...prevSlot, entries: blockingEntries }
+            delete trimmed.seats
+            if (Object.keys(otherSeats).length) trimmed.seats = otherSeats
+            round.parts[d.part] = trimmed
+            settleSlot(ledger, round, d.part)
+            kept = round.parts[d.part]
+          }
+        }
+      }
+      const { files: _keptFiles, ...keptRest } = kept
+      round.parts[d.part] = { ...keptRest, status: kept.status ?? 'prepared', at: now, ...(PART_FILES ? { files: PART_FILES } : {}), ...(supplied ? { supplied_findings: supplied } : {}) }
       d.findings_file = round.findings_file ?? null
       d.increment_base = round.increment_base
       // 同輪號重開（restart 以外的 re-prepare）回傳的 plan 沒有 prev_head：以紀錄為準，舊紀錄回推
@@ -3124,6 +3547,8 @@ if (cmd === 'counts') {
       if (ph) d.prev_head = ph
       // record 用它認出「這份 verdict 是這一次開的輪」：同輪號重開會換 opened_at。
       d.opened_at = round.opened_at
+      // 呼叫端據此得知本輪要求的席位（以紀錄為準：續跑沒帶 seats_required 的舊輪不會因開關後來打開而多一席）。
+      if (round.seats_required?.length) d.seats_required = round.seats_required
     } else if (d.action === 'covered') {
       const coveredNs = d.covers ?? [d.round]
       coverRounds(ledger, coveredNs, d.head)
@@ -3143,6 +3568,8 @@ if (cmd === 'counts') {
   const n = Number(need('round'))
   const part = opt.part || '1/1'
   const head = need('head')
+  const SEAT = opt.seat ?? 'claude'
+  if (!SEATS.includes(SEAT)) fail(`--seat 只收 ${SEATS.join('|')}，收到 ${opt.seat}`)
   const text = readFileSync(need('verdict'), 'utf8')
   if (!text.split('\n').some((line) => VERDICT_HEADING.test(HEADING.exec(line)?.[2] ?? '')))
     fail('verdict 沒有 Review Verdict 區段')
@@ -3177,14 +3604,29 @@ if (cmd === 'counts') {
     const entries = slotEntries(slot)
     const mine = entries.find((e) => e.writer === WRITER)
     if (mine && mine.verdict_file !== verdictFile) fail(`writer ${WRITER} 在 round ${n} 第 ${part} 批已記過另一份 verdict（${mine.verdict_file}）：同一個 writer token 只能記一份`)
-    const win = slotView(slot)
+    // 「不比它嚴就拒收」只對同席已有的 entry 套（兩份同席審查取較嚴者）；他席的 entry 一律追加（含 0 C/M）：
+    // GPT 先報 Major 之後 Claude 乾淨的 verdict 不能被拒收，否則 Claude 席永遠收不齊。slotView／peer_blocking 照舊取全席較嚴者。
+    // batch_shifted 的舊 entry 審的是另一組檔：不參與同席「不比它嚴就拒收」（否則新批乾淨的 verdict 會被舊批的 Major 拒收、永遠收不齊）。
+    const win = slotView({ entries: entries.filter((e) => seatOf(e) === SEAT && currentEntry(e)) })
+    const entrySeat = { seat: SEAT }
+    // GPT 席另記 slot.seats.gpt（狀態、模型、強度、計數、verdict 檔）：由該席 entries 重算，settleSlot 重建槽位時照帶。
+    const markSeat = () => {
+      if (SEAT !== 'gpt') return
+      const slotNow = round.parts[part]
+      const gv = slotView({ entries: slotEntries(slotNow).filter((e) => seatOf(e) === 'gpt' && currentEntry(e)) })
+      if (!gv) return
+      const prevSeat = slotNow.seats?.gpt?.status === 'verdict' ? slotNow.seats.gpt : {}
+      slotNow.seats = { ...(slotNow.seats ?? {}), gpt: { status: 'verdict', model: opt.model ?? prevSeat.model ?? null, effort: opt.effort ?? prevSeat.effort ?? null,
+        critical: gv.critical, major: gv.major, minor: gv.minor, verdict_file: gv.verdict_file, at: gv.at } }
+    }
     if (win) {
       // 同批已有 verdict（兩次 prepare 都在 record 前、或兩位審查並行）：取較嚴者，NEVER 讓後到的審查把
       // Critical＋Major 降下來。同一份 verdict 重記＝冪等（仍追加自己的 writer entry：回滾時它才不會被別人的回滾帶走）；
       // 不比原本嚴的第二份拒收（exit 2，原 verdict 不動）。
       if (win.verdict_file === verdictFile) {
-        if (!mine) appendEntry(slot, { writer: WRITER, verdict_file: verdictFile, ...counts, at: now })
+        if (!mine) appendEntry(slot, { writer: WRITER, ...entrySeat, verdict_file: verdictFile, ...counts, at: now })
         settleSlot(ledger, round, part)
+        markSeat()
         return { round: n, kind: round.kind ?? null, part, ...counts, ...roundState(round), ledger: path, unchanged: true, verdict_file: verdictFile, writer: WRITER }
       }
       const prev = win.critical + win.major
@@ -3197,8 +3639,9 @@ if (cmd === 'counts') {
           if (existsSync(verdictFile)) {
             if (readFileSync(verdictFile, 'utf8') !== text) fail(`${verdictFile} 已存在且內容不同：NEVER 覆寫既有 verdict 檔`)
           } else copyFileSync(need('verdict'), verdictFile)
-          if (!mine) appendEntry(slot, { writer: WRITER, verdict_file: verdictFile, ...counts, at: now })
+          if (!mine) appendEntry(slot, { writer: WRITER, ...entrySeat, verdict_file: verdictFile, ...counts, at: now })
           settleSlot(ledger, round, part)
+          markSeat()
           return { round: n, kind: round.kind ?? null, part, ...counts, ...roundState(round), ledger: path, unchanged: true, kept_blocking: basename(verdictFile), verdict_file: verdictFile, writer: WRITER }
         }
         fail(`ledger round ${n} 第 ${part} 批已有 verdict（${win.verdict_file}，Critical＋Major ${prev}）；這份 Critical＋Major ${next} 不比它嚴且沒有 Critical／Major，不記——同內容重擲不產生新證據，NEVER 蓋掉既有 verdict`)
@@ -3209,11 +3652,14 @@ if (cmd === 'counts') {
     } else copyFileSync(need('verdict'), verdictFile)
     // 新的較嚴者換成不同的 finding（A 的 Major X → B 的 Major Y、Z）時 X 不能無聲消失：settleSlot 把被取代的 Critical／Major 另記一筆
     // peer_blocking（machine＝本機標籤），blocking 與 findingsFor 的 extra.peers 照既有路徑繼續計數、帶給下一輪 reviewer。
-    if (!mine) appendEntry(slot, { writer: WRITER, verdict_file: verdictFile, ...counts, at: now, ...(cleared.length ? { held_cleared: cleared } : {}) })
+    if (!mine) appendEntry(slot, { writer: WRITER, ...entrySeat, verdict_file: verdictFile, ...counts, at: now, ...(cleared.length ? { held_cleared: cleared } : {}) })
     settleSlot(ledger, round, part)
+    markSeat()
     // base-check 輪收齊且通過：先前的通過輪延伸到這個 head（不通過就不寫，merge-queue 只認記錄）
     if (round.kind === 'base-check' && round.covers_on_pass?.length && roundState(round).passed) coverRounds(ledger, round.covers_on_pass, round.head)
-    return { round: n, kind: round.kind ?? null, part, ...counts, ...roundState(round), ledger: path, verdict_file: verdictFile, writer: WRITER }
+    // 下一個計數輪的輪號（base-check 不計）：RETHINK 提示用它，不靠 wrapper 行程裡的 REVIEW_ROUND_COUNTED（subagent finalize 是另一個行程、state 檔不帶）。
+    const nextCounted = countedRounds(ledger.rounds.filter((r) => String(r.pr ?? '') === String(round.pr ?? '') && r.n <= round.n)) + 1
+    return { round: n, kind: round.kind ?? null, part, ...counts, ...roundState(round), ledger: path, verdict_file: verdictFile, writer: WRITER, next_counted_round: nextCounted }
   })
   process.stdout.write(`${JSON.stringify(out)}\n`)
 } else if (cmd === 'carry') {
@@ -3254,29 +3700,6 @@ if (cmd === 'counts') {
   const inDiff = (raw) => {
     const w = raw.replace(/^\.\//, '')
     return [...diffPaths].some((f) => f === w || f.endsWith(`/${w}`))
-  }
-  // 只有長得像路徑的 token 才算位置：含 `/` 要有副檔名或 `:行號`；不含 `/` 要有 `:行號`（或是破折號前的第一個 token 且有副檔名）。
-  // `behavior.`、`(e.g`、`and/or` 之類散文判成位置會讓整條 finding 被當 diff 外丟掉——判不出就不算位置，finding 照帶（fail-safe）。
-  const looksPath = (t, allowBare) => {
-    if (/[()<>"'\s]/.test(t)) return false
-    const hasLine = /:[≈~]?\d/.test(t)
-    const p = t.replace(/:[≈~]?\d.*$/, '').replace(/[.,;:]+$/, '')
-    if (!p || /^\.+$/.test(p)) return false
-    const last = p.split('/').at(-1)
-    const ext = /\.[A-Za-z][A-Za-z0-9]{1,7}\}?$/.test(last)
-    if (p.includes('/')) return hasLine || ext
-    return hasLine || (allowBare && ext)
-  }
-  const pathsOf = (raw) => {
-    const head = raw.replace(/^\s*[-*+]\s+\S+\s+/, '').split(/\s[—–-]\s/)[0] ?? ''
-    const toks = head.split(/\s+/).map((t) => t.replace(/`/g, '').replace(/[,、;]+$/, '')).filter((t) => looksPath(t, false))
-    const firstRaw = CITE.exec(raw)?.[1] ?? CITE_BARE.exec(raw)?.[1]
-    const first = firstRaw && looksPath(firstRaw, true) ? firstRaw : undefined
-    return [...new Set([...(first ? [first] : []), ...toks].flatMap((c) => {
-      const path = c.replace(/:[≈~]?\d.*$/, '').replace(/[.,;:]+$/, '')
-      const brace = /^(.*)\{([^{}]+)\}(.*)$/.exec(path)
-      return brace ? brace[2].split(',').map((x) => `${brace[1]}${x}${brace[3]}`) : [path]
-    }))]
   }
   // 上一輪 reviewer 寫的 `[sev] <位置> — resolved.` 狀態列（位置在更早一輪的 findings 裡）不是未解 finding：與 splitCarried 同一把尺，
   // 位置在 findings_from 那一輪的上一輪位置集合內才略過；否則它檔不在本輪 diff 時會被當未解 Major 移進 Held，重建收斂不了的 hold（r3）。
@@ -3619,8 +4042,13 @@ if (cmd === 'counts') {
 } else if (cmd === 'grant') {
   // 主管或 Charles 授權的單 PR 例外輪：只 append 紀錄，不動任何一輪。上限＝MAX_ROUNDS＋該 PR 段的 grant 數。
   // --by 是自述標籤（同 adjudicate），只擋誤用、不是身分驗證：主持者、worker、reviewer 都不能自授例外輪。
-  if (opt.mode !== 'pr') fail('grant 只限 PR 模式（--mode pr）')
-  if (!PR_NO) fail('grant 必帶 --pr-number（例外輪只屬於那一張 PR）')
+  if (opt.mode !== 'pr' && !WORKTREE_MODE) fail('grant 只收 --mode pr 或 --mode worktree')
+  if (WORKTREE_MODE) {
+    // working-tree 模式沒有 PR 號：key＝ledger 的 branch＋base（與 open 同一把，--branch／--base 都必帶）；沒有獨立輪（--independent 只限 PR 模式），只收 increment。
+    need('branch'); need('base')
+    if (PR_NO) fail('--mode worktree 的 grant 不帶 --pr-number（key 是 --branch＋--base）')
+    if (opt.scope === 'full' || opt.kind === 'independent') fail('--mode worktree 的 grant 只收 --scope increment（working-tree 模式沒有獨立輪）')
+  } else if (!PR_NO) fail('grant 必帶 --pr-number（例外輪只屬於那一張 PR）')
   // --by manager＝主管裁決。supervisor／主管 是舊名，照收並正規化成 manager；
   // charles＝Charles 本人明確授權。ledger 照實記 by（manager 或 charles）。
   const rawBy = need('by')
@@ -3629,6 +4057,8 @@ if (cmd === 'counts') {
     fail(`grant 只收 --by manager（主管裁決；supervisor、主管 是舊名）或 --by charles（收到 ${opt.by}）：例外輪只有主管或 Charles 能授權`)
   const evidence = need('evidence').trim()
   if (!evidence) fail('--evidence is required')
+  const placeholder = evidencePlaceholderWhy(evidence)
+  if (placeholder) fail(placeholder)
   // 例外輪審什麼：預設 increment（只審增量），要整份重審必須明寫 full 並留在 ledger。
   // 只寫 --kind independent 沒寫 --scope：獨立輪就是整份重審，scope 推成 full。
   const scope = opt.scope ?? (opt.kind === 'independent' ? 'full' : 'increment')
@@ -3641,49 +4071,18 @@ if (cmd === 'counts') {
     fail(`--kind ${kind} 與 --scope ${scope} 不一致：scope=full 的例外輪必開 independent（開成 verify 不算完整審查），scope=increment 的例外輪是 verify`)
   const path = ledgerPath()
   const out = withLock(path, (ledger) => {
-    const rounds = ledger.rounds.filter((r) => r.pr != null && String(r.pr) === String(PR_NO))
+    const rounds = WORKTREE_MODE ? ledger.rounds : ledger.rounds.filter((r) => r.pr != null && String(r.pr) === String(PR_NO))
     if (!rounds.length)
-      fail(`ledger ${path} 沒有 PR #${PR_NO} 的輪：PR 號對不上（branch ${opt.branch}），grant 不寫`)
+      fail(WORKTREE_MODE
+        ? `ledger ${path} 沒有 working-tree 輪：branch／base 對不上（branch ${opt.branch}、base ${opt.base}），grant 不寫`
+        : `ledger ${path} 沒有 ${grantLabel()} 的輪：PR 號對不上（branch ${opt.branch}），grant 不寫`)
     const last = scoped(ledger).at(-1)
     const max = maxRounds(ledger)
-    if (grantsFor(ledger).length >= MAX_GRANTS_PER_PR) {
-      // 第 3 張 full grant（Charles 凍結例外，flow 72009bf978ae869c／118d29b1678e81e8 定三條件）：只給高風險 PR（要 2 輪完整審查的那類；
-      // wrapper 判不出風險等級，由簽發的主管／Charles 確認），上限 MAX_GRANTS_PER_PR 之外三條件同時成立才收；任一不成立照舊拒。絕對上限 MAX_GRANTS_PER_PR＋1，第 4 張一律拒。
-      const n = grantsFor(ledger).length
-      const refuse = (why) => fail(`PR #${PR_NO} 已有 ${n} 張 grant，達上限 ${MAX_GRANTS_PER_PR}：不再授權，這張 PR 該拆（第 ${MAX_GRANTS_PER_PR + 1} 張 full grant 只給高風險 PR，且三條件同時成立才收：${why}）`)
-      if (n >= MAX_GRANTS_PER_PR + 1) fail(`PR #${PR_NO} 已有 ${n} 張 grant，達絕對上限 ${MAX_GRANTS_PER_PR + 1}（第 ${MAX_GRANTS_PER_PR + 1} 張之後一律拒）：不再授權，這張 PR 該拆`)
-      if (scope !== 'full') refuse(`第 ${MAX_GRANTS_PER_PR + 1} 張只收 --scope full（收到 ${scope}）`)
-      // 條件 1：例外輪已用完——既有每張 grant 放寬出來的例外輪都已開出（輪號 > grant 的 at_round）。
-      const unused = grantsFor(ledger).filter((g) => !(last && Number(last.n) > Number(g.at_round)))
-      if (unused.length) refuse(`條件 1 不成立：例外輪還沒用完（${unused.map((g) => g.granted_at).join('、')} 的例外輪未開出）`)
-      // 條件 2：現 head（最後一輪的 head）已有 1 輪完整審查（discovery／independent、審完整 diff、verdict 收齊）。
-      const full = scoped(ledger).filter((r) => r.head === last?.head && isFullReviewRound(r) && !r.filter && roundState(r).complete)
-      if (!full.length) refuse(`條件 2 不成立：現 head ${String(last?.head ?? '').slice(0, 10)} 還沒有收齊 verdict 的完整審查輪`)
-      // 條件 3：最近兩個計數輪皆 0 Critical／0 Major（收齊 verdict 且 blocking＝0；base-check 不計）。
-      const recent = scoped(ledger).filter((r) => r.kind !== 'base-check').slice(-2)
-      if (recent.length < 2 || recent.some((r) => !roundState(r).complete || roundState(r).blocking > 0))
-        refuse(`條件 3 不成立：最近兩輪（${recent.map((r) => `round ${r.n}`).join('、') || '無'}）須皆收齊 verdict 且 0 Critical／0 Major`)
-    }
-    if (countedRounds(scoped(ledger)) < max)
-      fail(`PR #${PR_NO} 目前 round ${last.n}（計數輪 ${countedRounds(scoped(ledger))}），上限 ${max} 還沒到：grant 只在撞上限時開（一張放寬一輪，NEVER 預先疊加）`)
-    if (!consumed(roundState(last)))
-      fail(`PR #${PR_NO} round ${last.n} 還沒收齊 verdict：沒收齊又沒有 Critical／Major 的輪換 head 重開不耗輪數，不需要 grant（一張放寬一輪，NEVER 預先疊加）`)
-    // scope=full 的 grant 必開獨立輪，而獨立輪在這些 finding 沒解時開不出來（grantIndependentBlock，同一把尺：
-    // reopenBlocking＋最後一輪 head 的 headBlocking）：簽了也只是一張永遠用不掉、又擋住再簽的空 grant（上限已 +1、沒有撤銷）。
-    // 簽發當下就擋：先 rounds adjudicate 裁決假 Major，或這張 PR 該拆（真 Major 的修補無法靠獨立輪驗證）。
-    if (kind === 'independent') {
-      const scopedRounds = scoped(ledger)
-      const hold = reopenBlocking(scopedRounds)
-      const hb = headBlocking(ledger, last.head, last)
-      const why = hold.blocking > 0
-        ? `round ${hold.round.n} 還有 Critical＋Major ${hold.blocking} 條`
-        : hb.blocking > 0
-          ? `head ${last.head.slice(0, 10)} 上還有 Critical＋Major ${hb.blocking} 條（${[...hb.rounds.map((n) => `round ${n}`), ...hb.peers.map((b) => `peer ${b.machine} round ${b.n}`)].join('、')}）`
-          : null
-      if (why)
-        fail(`PR #${PR_NO} 簽不出 --scope full：${why}，獨立輪不帶前輪 findings、不靠 grant 抹掉，簽了也開不出輪（grant 簽出去後只能由主管／Charles 以 rounds revoke-grant 撤銷、還會把上限 +1 擋住再簽）。出路只有：對這些 finding 跑 rounds adjudicate 裁決假 Major 後再簽；真 Major 的修補無法靠獨立輪驗證，這張 PR 該拆`)
-    }
-    const grant = { pr: Number(PR_NO), by, evidence, granted_at: now, at_round: last.n, max_before: max, scope, kind }
+    const { why: refusal } = grantCheck(ledger, scope, kind)
+    if (refusal) fail(refusal)
+    const grant = WORKTREE_MODE
+      ? { pr: null, mode: 'worktree', branch: opt.branch, base: opt.base, by, evidence, granted_at: now, at_round: last.n, max_before: max, scope, kind }
+      : { pr: Number(PR_NO), by, evidence, granted_at: now, at_round: last.n, max_before: max, scope, kind }
     ledger.grants = [...(ledger.grants ?? []), grant]
     return { action: 'granted', ...grant, max_rounds: max + 1, ledger: path }
   })
@@ -3751,6 +4150,12 @@ if (cmd === 'counts') {
   //                            Critical：只留紀錄（誤報的 Critical 才有真實處置可記），**不扣 gate 計數**（adjudicatedMajors 只認 major）；
   //                            誤報的 Critical 仍靠下一輪 reviewer 的 resolved 清掉，不靠裁決放行。
   //   --verdict false-positive 舊名，同 dismiss（紀錄的 verdict 仍寫 false-positive，gate 讀的欄位不變）。
+  //   --verdict out-of-diff    Major 的 Dismiss 之一：finding 指向這張 PR 沒動過的檔（典型：merge main 帶進來、被舊 base 的輪審進來）。**人給的裁決**，
+  //                            gate NEVER 自己推導「不是這張 PR 的」（自動推導是啟發式、必然 fail-open）：held／原始 Major 預設照擋，主線或 Charles 附證據
+  //                            `--base <當下 merge-base> --head <PR head>` 才解除。額外前提是事實檢查（outOfDiffBasis）：--head 是該 PR 在 ledger 上的 head、--base 是 BASE_REF 與 head 當下的 merge-base，
+  //                            finding 的所有位置（cite＋破折號前的每個路徑）確定不在整張 PR 的 diff（base→head）；缺 --base／--head、base 不是當下 merge-base、head 不是 PR head、git 算不出、位置判不出或任一檔在 diff 內一律 exit 2。紀錄存 diff_base／diff_head。這個檢查分不出「改壞了 diff 外呼叫端」
+  //                            （該 finding 也 cite 在 diff 外）：evidence 要證明那檔沒引用這張 PR 改動的符號，NEVER 拿它放掉呼叫端 finding。
+  //                            紀錄 disposition＝dismiss、verdict＝out-of-diff；扣 gate 與傳遞 held 的機制與 false-positive 相同。
   //   --all-undisposed yes     只配 --verdict act：把該批（沒帶 --part 時 1/1）所有尚無紀錄的 Critical／Major 一次記成 Act；與 --finding 互斥（帶了 exit 2）。
   // 每筆紀錄帶 disposition（act｜dismiss）供處置覆蓋率（rounds coverage）計算。
   // 只疊在原始計數上（roundState 的 blocking 扣掉 dismiss），NEVER 改 slot.critical／major／minor 或 verdict 檔。
@@ -3761,10 +4166,10 @@ if (cmd === 'counts') {
   const n = Number(need('round'))
   const part = opt.part || '1/1'
   const rawVerdict = opt.verdict
-  if (rawVerdict !== 'false-positive' && rawVerdict !== 'dismiss' && rawVerdict !== 'act')
-    fail(`adjudicate 只收 --verdict act｜dismiss｜false-positive（dismiss 與 false-positive 同義）（收到 ${rawVerdict ?? '無'}）：沒有「下調」或「刪除」`)
+  if (rawVerdict !== 'false-positive' && rawVerdict !== 'dismiss' && rawVerdict !== 'act' && rawVerdict !== 'out-of-diff')
+    fail(`adjudicate 只收 --verdict act｜dismiss｜false-positive｜out-of-diff（dismiss 與 false-positive 同義）（收到 ${rawVerdict ?? '無'}）：沒有「下調」或「刪除」`)
   const disposition = rawVerdict === 'act' ? 'act' : 'dismiss'
-  const verdict = disposition === 'act' ? 'act' : 'false-positive'
+  const verdict = rawVerdict === 'act' ? 'act' : rawVerdict === 'out-of-diff' ? 'out-of-diff' : 'false-positive'
   const all = opt['all-undisposed'] === 'yes'
   if (opt['all-undisposed'] !== undefined && opt['all-undisposed'] !== 'yes') fail(`--all-undisposed 只接受 yes，收到 ${opt['all-undisposed']}`)
   if (all && disposition !== 'act') fail('--all-undisposed 只配 --verdict act（Dismiss 要逐條指紋、逐條附證據）')
@@ -3799,11 +4204,23 @@ if (cmd === 'counts') {
     const targets = all ? live.filter((f) => f.severity !== 'minor' && !has(f.fingerprint)) : [live.find((f) => f.fingerprint === fingerprint)]
     if (all && !targets.length) fail(`round ${n} 第 ${part} 批沒有尚無處置紀錄的 Critical／Major：不寫`)
     const recs = []
+    let pinned = null
     for (const hit of targets) {
       if (!hit) fail(`round ${n} 第 ${part} 批的 verdict 沒有指紋 ${fingerprint} 的 finding（用 rounds findings 列出）：不寫`)
       if (hit.severity === 'minor') fail(`指紋 ${hit.fingerprint} 是 Minor：Minor 本來就不擋 gate，不需處置紀錄`)
       if (has(hit.fingerprint)) fail(`指紋 ${hit.fingerprint} 已有處置紀錄：append-only，NEVER 覆寫或重複記`)
-      recs.push({ fingerprint: hit.fingerprint, severity: hit.severity, verdict, disposition, by, evidence, at: now, finding: hit.text.slice(0, 300) })
+      if (verdict === 'out-of-diff') {
+        if (hit.severity !== 'major') fail(`指紋 ${hit.fingerprint} 是 ${hit.severity}：out-of-diff 只收 Major（Critical 一律要修）`)
+        if (!pinned) pinned = outOfDiffBasis(round, ledger)
+        // 與 carry 過濾同一把尺：破折號前的每個位置（多位置 finding）＋ cite，任一個在 diff 內或判不出就拒收
+        const first = hit.text.split('\n')[0]
+        const locs = [...new Set([citeOf(first), ...pathsOf(first)].filter(Boolean))]
+        const bad = locs.filter((l) => diffMatch(pinned.files, l) !== 'out')
+        if (!locs.length || bad.length)
+          fail(`out-of-diff 只收所有位置都確定不在整張 PR 的 diff 的 finding（位置：${locs.join('、') || '無法解析'}；在 diff 內或判不出：${bad.join('、') || '—'}）：在 diff 內或判不出位置的 Major 要修，或用 dismiss 附證據裁決`)
+      }
+      recs.push({ fingerprint: hit.fingerprint, severity: hit.severity, verdict, disposition, by, evidence, at: now, finding: hit.text.slice(0, 300),
+        ...(verdict === 'out-of-diff' ? { diff_base: pinned.base, diff_head: pinned.head } : {}) })
     }
     slot.adjudications = [...(slot.adjudications ?? []), ...recs]
     const rec = recs[0]
@@ -3944,6 +4361,7 @@ review_open_round() {
         echo "[$REVIEW_SAFE_TAG] RESULT: 此 head 的這一批已審過且有 Critical／Major $(_round_field blocking) 條，不重擲（exit 13）— $(_round_field reason)" >&2
         echo "[$REVIEW_SAFE_TAG]   verdict：$(_round_field verdict_file)" >&2
         echo "[$REVIEW_SAFE_TAG] NEXT: 修完 finding、push 新 head 再審（下一輪自動帶這一輪 findings）；0-A 未通過。" >&2
+        [ "$(_round_field next_counted_round)" -ge "$REVIEW_RETHINK_FROM_ROUND" ] 2>/dev/null && echo "[$REVIEW_SAFE_TAG]   下一個計數輪是第 $(_round_field next_counted_round) 輪（>= ${REVIEW_RETHINK_FROM_ROUND}）：修補前先重想做法（別逐條補丁），在 PR body 寫 \`## 重想做法\`（一句話：為什麼之前的做法一直長出新 finding、這次換成什麼），再 push；增量輪只審新 diff。同一張 PR 繼續，NEVER 關單重開。" >&2
         echo "[$REVIEW_SAFE_TAG]   若 verdict 裡的 Major 其實是 \`— resolved.\` 狀態列（上一輪 verdict 沒進 ledger 而被誤計）：review_rounds recount --ledger $REVIEW_ROUND_LEDGER --round ${REVIEW_ROUND_N} --part ${ROUND_PART:-1/1} --findings-file <上一輪 verdict 檔> 先 dry-run，確認 after 後加 --apply yes --reason '<原因>'（數字只來自重算，留稽核紀錄）。" >&2
         exit 13
       fi
@@ -3956,11 +4374,15 @@ review_open_round() {
       # PR 號分段與「改走 oa-batches.ts prepare」只對 PR 模式成立；working-tree 模式（/commit）的 ledger key 是 HEAD，沒有 PR 號可分。
       local split=""
       [ "$mode" = pr ] && split="（輪數依 PR 號分段，新 PR＝新的一段）"
-      echo "[$REVIEW_SAFE_TAG] NEXT: 同一份改動審了 ${REVIEW_ROUND_MAX:-$REVIEW_MAX_ROUNDS} 輪仍未收斂——預設拆小重開：拆成可獨立驗收的新 PR${split}，子 PR body 寫 Split-From: #<本 PR>（HQ charter § 例外輪；第 3 代以上不再拆、送主管裁決），要多審一輪才送主管代答要不要開例外輪（程序題，NEVER 鑄題給 Charles）。NEVER 刪改 ledger（$REVIEW_ROUND_LEDGER）、關 PR 把同一份改動重開、或 rebase 來重置輪數。" >&2
+      echo "[$REVIEW_SAFE_TAG] NEXT: 同一份改動審了 ${REVIEW_ROUND_MAX:-$REVIEW_MAX_ROUNDS} 輪仍未收斂——在同一張 PR 上走「重想做法＋增量審」${split}：先照 reviewer 的 \`Recommend reconsidering the approach:\`（沒有就自己判）換掉做法，PR body 寫 \`## 重想做法\`，$(_round_field grant_handling)。NEVER 關 PR 重開、NEVER 預設拆單、NEVER 刪改 ledger（$REVIEW_ROUND_LEDGER）或 rebase 來重置輪數；例外輪也用完就交主管裁決換修法或放棄；拆單只在 PR 真的跨主題時才允許，判準由 coordinator 的 0-A 準備步驟依變更檔的引用關係算出，這裡不給拆單建議。" >&2
       if [ "$mode" = pr ] && [ -z "${PR_NUMBER:-}" ]; then
         echo "[$REVIEW_SAFE_TAG] 若這是重用舊 branch 名的另一張 PR 卻繼承了舊 PR 的輪數：呼叫端沒帶 --pr-number，改走 oa-batches.ts prepare（它會帶）。" >&2
       fi
-      [ -n "$(_round_field grant_command)" ] && echo "[$REVIEW_SAFE_TAG] 主管裁決放行例外輪時：$(_round_field grant_command)（一張只放寬一輪、只限本 PR，紀錄留在 ledger）" >&2
+      # 指令獨立一行、只含可執行的 argv（整行照貼）；說明在前一行，NEVER 接在指令後面
+      if [ -n "$(_round_field grant_command)" ]; then
+        echo "[$REVIEW_SAFE_TAG] 主管裁決放行例外輪時，跑下一行（$(_round_field grant_note)）：" >&2
+        printf '%s\n' "$(_round_field grant_command)" >&2
+      fi
       exit 14 ;;
     grant-unopenable)
       echo "[$REVIEW_SAFE_TAG] RESULT: 例外輪的獨立輪開不出來（exit 15）— $(_round_field reason)；review 沒跑，grant 沒消耗（仍在 ledger.grants）" >&2
@@ -4107,6 +4529,13 @@ review_record_round() {
       const state = d.passed ? "本輪通過（Critical＋Major＝0）" : d.complete && d.partial && !d.blocking ? "本輪只審了篩選子集（Critical＋Major＝0）：不帶篩選補完整輪才可 merge" : d.blocking ? `本輪 Critical＋Major ${d.blocking} 條：修補後再跑同一指令，wrapper 自動開驗證輪` : "本輪其他批尚未收齊"
       process.stdout.write(`round ${d.round} 第 ${d.part} 批 Critical ${d.critical}／Major ${d.major}／Minor ${d.minor} → ${state}`)
     ' "$out")" >&2
+    # 第 3 個計數輪起要作者重想做法（修補介面：PR body `## 重想做法`；下一個計數輪號由 record 回傳的 next_counted_round 給，base-check 輪不計）。
+    # 目前只有這條 RETHINK 行與 reviewer brief 的收斂指示、brief.ts 對 existing_pr 件附的落地句會提醒；沒有程式讀它來強制重想。
+    local rethink_next
+    rethink_next="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).next_counted_round||""))' "$out")"
+    if [ "$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).blocking||0))' "$out")" != 0 ] && [ -n "$rethink_next" ] && [ "$rethink_next" -ge "$REVIEW_RETHINK_FROM_ROUND" ] 2>/dev/null; then
+      echo "[$REVIEW_SAFE_TAG] RETHINK: 下一個計數輪是第 ${rethink_next} 輪（>= ${REVIEW_RETHINK_FROM_ROUND}）：修補前先重想做法，PR body 寫 \`## 重想做法\`；增量輪只審新 diff；同一張 PR 繼續，NEVER 關單重開或拆單（撞 ${REVIEW_MAX_ROUNDS} 輪上限走 rounds grant --scope increment）。" >&2
+    fi
     # 對外回報 0-A 數字的唯一引用形：數字 MUST 帶 ledger 輪號與 ledger 路徑，沒有 ledger 輪號的數字（例如口頭的 0/0/0）不是 0-A 證據，NEVER 當 0-A 結果轉述。
     echo "[$REVIEW_SAFE_TAG] REPORT: $(node -e '
       const d = JSON.parse(process.argv[1])

@@ -124,10 +124,10 @@ Capability predicate 讀取 consumer 的 neutral manifest reader：canonical `.c
 
 | Owner | overlay | 何時套用 |
 | --- | --- | --- |
-| `/technical-research` | `specformula.md` | manifest 宣告 `specformula` capability 時：提供三題必問的 fleet 預設，供 techstack 選型確認 |
+| `/technical-research` | `specformula.md` | manifest 宣告 `specformula` capability 時：提供三題必問的 fleet 預設，供 techstack 選型確認；命中 T 族（有通過的 `docs/techstack-confirmation.md`）時，紀錄涵蓋的題以紀錄為準、不重問 |
 | `/implement`、`/bdd` | `specformula.md` | 後端 BDD techstack 是 SpecFormula 時 |
 
-- **伴隨覆寫 rule**（registry `mirror.overridePointer`）：lifecycle 落點（L 族）與 canonical doctor（D 族）寫在 `work-route/rules/上游覆寫-lifecycle落點與doctor.md`，逐條列出被覆寫的上游原句（anchor）與判準，由 `scripts/audit-upstream-overrides.ts` 對 pin 的上游逐字核對。doctor 的「tasks 產出後跑一次、implement 每個 task 回寫 `[X]` 前各跑一次」只住在那份檔，這裡不另立 overlay 檔。
+- **伴隨覆寫 rule**（registry `mirror.overridePointer`）：lifecycle 落點（L 族）、canonical doctor（D 族）與 techstack 確認紀錄（T 族，Rule 7）寫在 `work-route/rules/上游覆寫-lifecycle落點與doctor.md`，逐條列出被覆寫的上游原句（anchor）與判準，由 `scripts/audit-upstream-overrides.ts` 對 pin 的上游逐字核對。doctor 的「tasks 產出後跑一次、implement 每個 task 回寫 `[X]` 前各跑一次」只住在那份檔，這裡不另立 overlay 檔。
 
 overlay 只**追加**步驟，**NEVER** 改寫上游已定義的語意（Setup 何時建立、task 完成條件的既有項目）；要改上游語意就回報上游，不是寫 overlay。
 

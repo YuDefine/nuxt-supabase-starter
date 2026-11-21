@@ -1,0 +1,9 @@
+# impeccable engine v0.1.5 release assets (github.com/pbakaus/impeccable, tag engine-v0.1.5).
+# run.sh pins these: a binary the bundled launcher would download is fetched by run.sh first and
+# must match this file, so a swapped release asset (with its same-origin .sha256 sidecar) cannot pass.
+# 升 VERSION 時重算：對每個 asset 下載後 sha256sum，與 release sidecar 交叉核對。
+cf5231a4b1ae66996c85b033800b1dad0797e590eae2f21ef2579430af187f19  impeccable-linux-x64
+bc4fa28bc8ccbb018795a99a4ece95ada898a6f1885f14281389d0e6ef2a2f98  impeccable-linux-arm64
+0d48b6e16aa97664fdbe607d5da9ae320e389a1843e0ff1328f8c2530530320d  impeccable-darwin-arm64
+153971b0c00719dff9ebac13370cb7dbbbe12838b696fbaf3f7ab0b1b3726b52  impeccable-darwin-x64
+477e544fc8880a5e82e427490cb9a5f5adab480c0e02966d33fd50772b531c71  impeccable-windows-x64.exe

@@ -1,5 +1,5 @@
 ---
-description: evlog catalogs 採用全文（defineErrorCatalog/defineAuditCatalog、命名規約、結構原則、動態訊息與 internal 合併、sharding 路徑、反模式、review grep；evlog floor ^2.17.0 SoT）；常駐 pointer 在 [[evlog-adoption]]，觸發時機是「新增 catalog、把 ad-hoc createError 遷進 catalog、或寫 catalog 測試之前」，由 [[evlog-adoption]] 的 MUST-Read 指針叫醒
+description: evlog catalogs 採用全文（defineErrorCatalog/defineAuditCatalog、命名規約、結構原則、動態訊息與 internal 合併、sharding 路徑、反模式、review grep；evlog floor ^2.34.0 SoT、nostics 分層）；常駐 pointer 在 [[evlog-adoption]]，觸發時機是「新增 catalog、把 ad-hoc createError 遷進 catalog、或寫 catalog 測試之前」，由 [[evlog-adoption]] 的 MUST-Read 指針叫醒
 paths:
   - 'server/**'
   - 'packages/**/server/**'
@@ -10,7 +10,7 @@ paths:
 
 # evlog Adoption — Catalogs（全文）
 
-> 本檔是 [[evlog-adoption]] 的下推全文之一。本檔管 catalog 採用（evlog 2.17+）與 evlog 版本 floor SoT。
+> 本檔是 [[evlog-adoption]] 的下推全文之一。本檔管 catalog 採用（evlog 2.17+）、evlog 版本 floor SoT，與 nostics 和 evlog catalog 的分層。
 
 ## Catalogs 採用（evlog 2.17+）
 
@@ -35,7 +35,7 @@ paths:
 
 ### MUST
 
-- **MUST** evlog floor 為 `^2.17.0`（catalogs API 在 2.17 才 export；2.16 沒有）
+- **MUST** evlog floor 為 `^2.34.0`（`@evlog/cli` 0.11 的 peer 要 ≥2.34.0，讀端 `evlog logs` 靠它；catalogs API 在 2.17 才 export。2026-11-17 plan 50 W1 由 `^2.17.0` 上調）
 - **MUST** 新增 `server/api/` endpoint 的錯誤若會重複出現、或 client 會依 `code` 分支處理（錯誤契約），走 catalog factory（`throw billingErrors.PAYMENT_DECLINED({ ... })`），查不到對應 catalog 就先補 KEY。一次性錯誤與帶 custom `data` 的錯誤留在 `createError`（判準同 [[evlog-adoption.depth-gate]] § MUST NOT）
 - **MUST** prefix 採 module-level（`auth` / `billing` / `machines` / `ai` / `mcp` 等），不加 consumer namespace
 - **MUST** 每個 catalog 檔案配對 `declare module 'evlog'` 區塊（同檔末尾或統一 `index.ts` 的 `interface RegisteredErrorCatalogs { <prefix>: typeof <catalog> }`），否則 `ErrorCode` / `AuditAction` 聯合漏掉這些 code
@@ -51,6 +51,16 @@ paths:
 - **MUST NOT** 在 enricher 內 `throw billingErrors.X()`（enricher 失敗會破整個 wide event；catalog error 限 endpoint handler 層）
 - **MUST NOT** 跨 npm 套件用同 prefix（兩份 catalog augment 互蓋 → TypeScript 拿後 import 的版本）
 - **MUST NOT** 在 call site override `code`（**禁止** `throw billingErrors.X({ code: 'billing.OTHER' })`）— catalog factory 才是 code 的身份來源；override 會讓 Sentry 聚合錯位、type augment 偏離真實；audit script `catalog.codeOverrideAtCallSite` 偵測
+
+### nostics 分層（與 evlog catalog 誰當單一來源）
+
+判斷句：**會變成 HTTP 回應 → evlog catalog；設定錯誤、建置期、工具期 → nostics。** 兩者是不同層，不是二選一。
+
+- **MUST** app 的 API 錯誤（會變成 HTTP 回應、client 依 `code` 分支、`parseError` 契約）以 evlog catalog 為**單一來源**，照本檔上面各節
+- **MUST** consumer 對 nostics 只當**接收端**：只裝 `@nostics/unplugin` collector 收上游（Nuxt、vue-router、pinia 等）的開發期診斷，**只在 dev 掛**，`logFile` 用 rootDir 的**絕對路徑**（`<rootDir>/.nostics.log`；collector 相對 Vite root 解析，Nuxt 4 的 srcDir 可能是 `app/`）。讀端是 `scripts/dev-failure-digest.ts`（clade 投影）（[[evlog-investigate]] § dev／E2E 失敗）
+- **MUST NOT** 在 consumer app 程式碼（`server/`、`app/`）定 nostics 錯誤碼（`defineDiagnostics`）；自訂 nostics 碼只限工具或函式庫層（clade vendor 腳本、以套件發佈的 Nuxt module／layer），NEVER 用在 HTTP handler
+- **MUST NOT** 裝 nostics 官方 Claude plugin：它的 UserPromptSubmit hook 每次 prompt 都叫 agent 改 `vite.config`、寫 `/tmp`，consume hook 還會改寫 `.nostics.log` 與 collector 搶寫
+- review grep：`grep -rn "defineDiagnostics" server app` 為 0
 
 ### Sharding 路徑（規模演化 4 階段）
 

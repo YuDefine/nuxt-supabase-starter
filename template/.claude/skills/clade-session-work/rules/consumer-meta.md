@@ -140,7 +140,7 @@ fleet 的部署形態收斂成**三型**。新專案 **MUST** 貼齊其中一型
 | `stack` | 主機上跑什麼；目前只有 `supabase-self-hosted`，新 stack 與它的 probe 同一次加 |
 | `composeDir` | 主機上 `docker-compose.yml` 所在目錄（例 `/opt/supabase`）；`supabase-self-hosted` 必填，缺了 audit 報 `unreadable` |
 
-讀者是 `scripts/audit-remote-env-version-drift.ts`：對每一列以唯讀 ssh（`cat <composeDir>/docker-compose.yml`）取 image tag，與官方 self-hosted compose 比對。ssh 不通報 `unreachable`、讀不到 compose 報 `unreadable`，兩者都 **NEVER** 讀成 aligned。audit 只出訊號；主機升版是 consumer 的 production 動作，relay 給該 consumer session。
+讀者是 `scripts/audit-remote-env-version-drift.ts`：對每一列以唯讀 ssh（`cat <composeDir>/docker-compose.yml`）取 image tag，與官方 self-hosted compose 比對。ssh 不通報 `unreachable`、讀不到 compose 報 `unreadable`，兩者都 **NEVER** 讀成 aligned。audit 只出訊號；主機升版是 consumer 的 production 動作，relay 給該 consumer session。唯一例外是 `role: dev` 主機的 CLI，由 version-upgrade Phase P 升級（`跨環境版本對齊判準.md` Rule 2 序位 3b）。
 
 ## Adoption 順序
 

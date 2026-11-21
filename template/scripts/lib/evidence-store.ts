@@ -198,7 +198,7 @@ export function assertSafeChangeName(changeName) {
  * @returns {Array<object>}
  */
 /**
- * 已退役、讀端略過的 kind。`awaiting-user-decision` 的唯一寫入者（Spectra annotation CLI）已隨 Spectra 層退役。
+ * 已退役、讀端略過的 kind。`awaiting-user-decision` 的唯一寫入者（annotation CLI）已退役。
  * 「等人拍板」改走 `flow ask`。
  */
 export const RETIRED_KINDS: ReadonlySet<string> = new Set(['awaiting-user-decision'])

@@ -15,27 +15,54 @@ paths: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts,py,sh,rs}']
 
 風格本身由 `vp fmt` 機械保證；本檔只收機器擋不住的部分。適用範圍含 `.vue` SFC 的 `<script setup lang="ts">` 區塊。
 
-## 新增腳本選語言（D1，MUST）
+## 新增腳本選語言（D11，MUST）
 
-決策出處：`specs/plans/W-2026-10-24-toolchain-rust-consolidation/plan.md` D1。開新檔之前依下表判，先命中先用：
+決策出處：`specs/plans/W-2026-10-24-toolchain-rust-consolidation/plan.md` D11（2026-11-21 取代 D1 的 L7／L*「其餘＝Rust」）。門檻與出處：同 plan `evidence/rust-adoption-criteria.md`；R 列與 sh 上限的數字是 clade 依本機實測自訂的，不是業界標準（業界一手來源只給「改 Rust 後快幾倍」，沒有給門檻）。開新檔之前依下表判，先命中先用：
 
-評估：first-match；以上皆非 → L*
+評估：first-match；以上皆非 → TS
 
 | id | 可觀察條件 | 語言 |
 | --- | --- | --- |
 | L1 | 上游 LOCKED mirror（`registry/upstream-submodules.json` 宣告的 mirror 落點） | 照上游 |
+| J1 | 載入它的 runtime 吃不了 TS，且中間沒有建置步驟：送進瀏覽器 `eval`／`page.evaluate`／`<script>` 的字串來源檔；上游格式只收 `.js`／`.mjs`／`.cjs` 的檔；會隨套件裝進別人的 `node_modules/` 後由 node 執行的檔（`prepare`／`postinstall`／`bin`；Node 不剝 `node_modules/` 內的型別） | JS（`.mjs`） |
 | L2 | 被 JS runtime import 載入（不是 spawn）：Vite／Nuxt／Nitro config 與 plugin、Vitest／Cucumber step、Pi extension、dashboard 前端、consumer import 的 preset | TS |
-| L3 | 被 `source` 進呼叫者 shell | zsh／bash |
-| L4 | clade binary 還不存在的那一刻（下載／建置 binary 的 installer） | POSIX sh，邏輯壓到最少 |
-| L5 | 格式規定 shell 入口（husky／vp hooks、systemd `ExecStart`） | 一行 `exec clade <sub> "$@"` |
-| L6 | 一次性：沒有任何常態入口引用（hooks.json、package.json scripts、skill SOP、workflow、systemd unit、其他腳本），例如 plan evidence | TS |
-| L7 | 其餘（hook、CLI、audit、gate wrapper、ops controller、skill scripts） | Rust 子命令 `clade <sub>` |
-| L* | 判不出落在哪一列 | 照 L7 |
+| L3 | 被 `source` 進呼叫者 shell，且在 § sh 上限內 | zsh／bash（要更多邏輯就在函式內 spawn `node <檔>.ts`） |
+| L4 | 執行環境還沒建好的那一刻：下載／建置 clade binary，或在新主機／容器裝 node 的 bootstrap，且在 § sh 上限內 | POSIX sh |
+| L5 | 格式規定的 shell 入口（husky／vp hooks、systemd `ExecStart`、hooks.json 指向的檔、settings.json `statusLine` 指向的檔）；由 stdin 送去遠端跑的（`bash -s < 檔`、`pct exec -- bash -s`）不算，直接往下判 S4／R2 | 一行 exec：掛在 R1 熱事件的只能 `exec clade hook <name> "$@"`（statusLine 用 `exec clade statusline "$@"`），其餘 `exec clade <sub> "$@"` 或 `exec node <檔>.ts "$@"`；執行位置沒有 node 時入口直接是那支 S4 sh；被 exec 的那一支從 L1 重判 |
+| R0 | 擴充既有的 Rust 子命令（改的是 `crates/clade/**`） | Rust |
+| R1 | 每個高頻 tool call、每則 prompt 或每次狀態列刷新都會執行：hooks.json／settings.json 的 `UserPromptSubmit`、`statusLine`，或 `PreToolUse`／`PostToolUse` 且 `matcher` 為空，或當 regex 看能匹配 `Bash`、`Read`、`Edit`、`Write`、`Grep`、`Glob` 任一（`*`、`.*` 全匹配也算）；含這些入口再 `node`／`exec` 的下一層，以及 TS 入口 `import`／`require` 進來的模組（入口改 Rust 時一起搬）；同一支檔任一掛載點命中就整支算。matcher 只匹配其他工具的走 R3 量 | Rust `clade hook <name>`（statusLine：`clade statusline`） |
+| C1 | 其他 hook 事件（`SessionStart`、`SessionEnd`、`Stop`、`SubagentStop`、`PreCompact`、`Notification` 等，每個 session 或 turn 才跑一次） | TS |
+| S4 | 執行位置沒有 node：由 `ssh`／`pct exec` 送去或部署到 Proxmox 宿主、LXC、遠端機上跑，且該機 `command -v node` 失敗（目標還沒建好就看它的 provisioning 裝不裝 node），並在 § sh 上限內 | POSIX sh，前 5 行內有 `# clade-lang: remote-no-node` |
+| R2 | 同 S4 的執行位置沒有 node、超出 § sh 上限，且不能改成把資料拉回有 node 的機器處理 | Rust（單一 binary） |
+| R3 | 高頻 CLI 或窄 matcher 的 hook：desk 上 7 天平均的每日呼叫次數 ×（TS 版 p50 牆鐘 − 2 ms）≥ 15 分鐘 | Rust |
+| R4 | CPU 密集：被常態入口引用，TS 版 3 次中位牆鐘 ≥ 10 s，且（user＋sys）／牆鐘 ≥ 0.8 | Rust |
+| R5 | 常駐程序（systemd service 且 `Type` 不是 `oneshot`，或預期連續跑 ≥ 1 h），且 TS 版穩態 RSS ≥ 200 MB 或 24 h 內 RSS 成長 ≥ 50% | Rust |
+| L* | 以上皆非（含判不出落在哪一列） | TS |
 
-- **Python、Go 不在任何一列**：新增 `.py` 一律不准，plan evidence、一次性探針也一樣（L6 用 TS）。**每一家** consumer 的 pre-commit 由 `scripts/pre-commit/checks/new-python.sh` 擋，clade home 由 `scripts/check-retired-carriers.ts`（pre-commit 與 CI）擋，判定式同一份（`new-python-gate.ts`）；檢查跑不起來時同樣擋。放行只有：修改既有 `.py`、純改名（不改內容）、clade home 投影計畫內的路徑重新投影既有 `.py`、L1 mirror；consumer 的投影由 propagate 送達，本地複本一律算新增。存量 `.py` 不回頭改寫，由 toolchain 刀 7 改。
-- **consumer 的 L7 寫 TS**：consumer 是 TS 專案，`clade` binary 提供對應子命令之前不另建 Rust；L1–L6 照表。
-- **Rust workspace（`crates/clade`）落地前的過渡寫法**：L7 先寫成 TS（照 § 新增腳本一律 TypeScript），等刀 2b 的 `clade audit script-language` 盤出被常態入口引用的 TS、由刀 5–7 改 Rust。過渡期**NEVER** 因為「之後反正要改 Rust」改寫 Python 或 sh 頂替。
-- 「擋新增且被常態入口引用的 TS」（L6 與 L7 的界線）由刀 2b 的 audit 接手，Rust workspace 就緒前不擋。
+- **量法與量不到時**：R1 看掛載點，`clade audit script-language` 會機械判（`R1-hot-path`）。R3–R5 要先有 TS 版可量；TS 版還不存在就先寫 TS，NEVER 用預估值判成 Rust。R3 的呼叫次數：hook 取 transcript 裡 tool_use 的 `name` 能被該 matcher 匹配的筆數；CLI 取 Bash tool_use 的開頭指令（同 `scripts/measure-rust-cli-usage.ts` 的掃法），p50 用 `/usr/bin/time` 量 10 次取中位；R4 用 `/usr/bin/time -v` 量 3 次；R5 用 `systemctl show -p MemoryCurrent` 或 `/proc/<pid>/status` 的 `VmRSS`，量 24 h。量不到（沒有 transcript、沒有 service）就判不命中，照 else 寫 TS。
+- **倉庫外的設定**（例：`~/.claude/settings.json` 的 `statusLine` 指向 `~/.claude/statusline.sh`）照同一張表判，`clade audit script-language` 只看 tracked 檔、看不到它們，由 machine-setup 列管。
+- **Rust 的成本已算進門檻**：多一套建置（cargo，本機 shell 預設不在 PATH）、binary 分發（刀 4）、維護者要讀得懂 Rust。所以門檻只放在 TS 換不掉的成本上（每次呼叫的 node 冷啟動、單核跑滿、常駐記憶體、目標機沒有 node），其餘一律 TS。
+- **hook 寫成什麼**：熱事件（R1）寫 Rust；冷事件（C1）寫 TS；窄 matcher 的 `PreToolUse`／`PostToolUse` 照 R3 量，不命中就 TS；sh 只當 L5 的一行入口。hook 從 stdin 讀 JSON，sh 解析 JSON 就超出 § sh 上限，所以 sh 不寫 hook 判定邏輯。
+- **Python、Go 不在任何一列**：新增 `.py` 一律不准，plan evidence、一次性探針也一樣（照 else 用 TS）。**每一家** consumer 的 pre-commit 由 `scripts/pre-commit/checks/new-python.sh` 擋，clade home 由 `scripts/check-retired-carriers.ts`（pre-commit 與 CI）擋，判定式同一份（`new-python-gate.ts`）；檢查跑不起來時同樣擋。放行只有：修改既有 `.py`、純改名（不改內容）、clade home 投影計畫內的路徑重新投影既有 `.py`、L1 mirror；consumer 的投影由 propagate 送達，本地複本一律算新增。存量 `.py` 不回頭改寫，由 toolchain 刀 7 改成 TS。只有 Python 生態才有的套件（例：WhisperX），用外部 CLI 呼叫（`uvx <tool>` 或已安裝的指令），repo 裡不新增 `.py`。
+- **consumer 一律照 else 寫 TS**：consumer 是 TS 專案，R 列命中也寫 TS，等 `clade` binary 提供對應子命令。L1–L5、J1 照表。
+- **R 列命中但 binary 還沒分發到執行目標**（刀 4 前，或目標機拿不到 `clade`）：寫 TS，`clade audit script-language` 會記成違規，交 toolchain 刀 4–5 改 Rust。熱 hook 能用 `matcher` 收窄到只含 R1 以外的工具，就照 R3 量。**NEVER** 因為「之後反正要改 Rust」改寫 Python 或 sh 頂替。
+
+### sh 上限
+
+L3、L4、S4 的 shell 必須同時滿足，超出就照表往下判（L3／L4 把邏輯搬進 TS，被 source 的檔只留變數與函式定義；S4 改 R2）。出處：Google Shell Style Guide（https://google.github.io/styleguide/shellguide.html § Which Shell to Use／When to use Shell：超過 100 行、控制流不直觀就換結構化語言；陣列用到 `${PIPESTATUS}` 以外就換語言），JSON 一條是 clade 自訂：
+
+- 非空、非註解行 ≤ 100（`clade audit script-language` 機械判，`sh-over-limit`）
+- 不解析 JSON（不用 `jq`；audit 機械判）
+- 陣列只用來接 `${PIPESTATUS}`
+- 沒有巢狀超過 2 層的 `if`／`for`／`while`／`case`
+
+### 內嵌腳本
+
+GitHub Actions 的 `run:`、package.json `scripts`、hooks.json `command`、systemd `ExecStart` 裡的 inline shell，符合任一條就抽成檔案，再照上表判語言（門檻是 clade 自訂：inline 程式碼逃過 lint、typecheck 與測試）：
+
+- `run:` 超過 5 行
+- 單行字串（package.json、hooks.json、`ExecStart`）串了 3 個以上指令（`&&`、`||`、`;`、`|` 合計 ≥ 2 個）
+- 出現 `if`／`for`／`while`／`case`，或把輸出管給 `jq`
 
 ## 新增腳本一律 TypeScript
 

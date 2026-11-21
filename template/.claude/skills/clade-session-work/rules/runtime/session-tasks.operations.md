@@ -14,12 +14,12 @@ Interactive Claude close-out may use `AskUserQuestion` for a genuinely user-owne
 **真正的成本殺手不是長 session，是 cache miss。** 單次 miss 在 300k context ≈ +0.9M effective——
 比整場 warm 讀取的一半還多。已知的 miss 觸發源（**MUST** 全部避免）：
 
-- session 中途切 `/model`、`/effort`、首次開 fast mode
+- session 中途切 `/model`、首次開 fast mode（中途改 `/effort` 的例外見 [[session-tasks]]，例外以外仍視為 miss）
 - MCP server 增減、連線斷掉
 - 休息超過 cache TTL（訂閱 1h；吃 usage credits 時降到 5m）後才續跑
 - Claude launcher 升級後 resume 舊 session
 
-**推論：session 開頭定好 model 與 effort，中途 NEVER 切。** 一次切換的代價比省下的多得多。
+**推論：session 開頭定好 model（與 effort），中途 NEVER 換 model；effort 只在 Opus 5.5、Fable 5.x 可中途改，其餘一律不切。** 一次切換的代價比省下的多得多。
 
 **讀取量 ≠ 成本**：**NEVER** 拿讀取量佔比論證「長 session 很貴」——它論證的是「長 session 讀很多」，
 兩者差一個數量級的權重。長 session 真正的代價在**品質**（context rot）與 **cache miss 風險敞口**。

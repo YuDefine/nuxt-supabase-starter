@@ -1,6 +1,6 @@
 ---
 name: haiku-scanner
-description: 'Routing Table `read-heavy-scan`／`mechanical-fanout` 兩列的首跳載體（Claude Haiku 5.5，effort: medium）——封閉來源固定欄位抽取、逐檔掃描與計數、驗證矩陣收集，回事實表（檔名／行號／現值）。brief MUST 含一行 `routing-row: read-heavy-scan` 或 `routing-row: mechanical-fanout`，省略 `model`（frontmatter 釘死）。Haiku 不可用（額度／provider）時改派 `dispatch-fallback`。NOT for web-search、notion-ops、screenshot-review-verify、copywriting-draft（仍走 dispatch-fallback）、改檔、判讀、裁決、review。'
+description: 'Routing Table `read-heavy-scan`／`mechanical-fanout` 兩列的首跳載體（Claude Haiku 5.5，effort: medium）——封閉來源固定欄位抽取、逐檔掃描計數、驗證矩陣收集，回事實表（檔名／行號／現值）。brief MUST 含一行 `routing-row: read-heavy-scan` 或 `routing-row: mechanical-fanout`，省略 `model`。Haiku 不可用時改派 `dispatch-fallback`。NOT for web-search／notion-ops／screenshot-review-verify／copywriting-draft（走 dispatch-fallback）、改檔、判讀、裁決、review。'
 tools: Bash, Read, Grep, Glob
 model: claude-haiku-5-5
 effort: medium

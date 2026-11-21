@@ -345,67 +345,165 @@
     {
       "id": "reader-facing-prose",
       "title": "對外文案的段落契約、標題與步驟結構（writing-for-humans 判斷層）",
-      "guidance": "只對 content/** 與 app/pages/** 的 diff 適用；其餘檔案判 n/a。逐字類（英文難度詞、錨文字、擬人化、訴諸權威）已由機械規則 prose-* 擋下，本 verdict 只判機器測不了的四件事：(1) 難度詞的上下文——中文「簡單 / 容易 / 只要 / 不難」機械層刻意不擋，因為「判準很簡單：X」這類收斂句是本 fleet blog-voice 要求的文體；要判的是它有沒有被用來描述『讀者該覺得容易』，是則 fail，描述判準本身簡短則 pass。(2) 段落契約——每一節第一段的第 1 句給讀者遇到的狀況（不是功能名稱）、第 2 句讓他當場決定要不要往下讀；用功能名開場（『本節介紹 X 模組的設計』）是 fail。(3) 標題描述讀者的問題或任務而非功能名稱：『為什麼百分比跟我算的不一樣』勝過『壽命百分比計算邏輯』。(4) 操作步驟四部件——引導句結尾冒號、順序步驟用編號不用 bullet、每步動詞開頭且條件寫在動作之前、選用步驟明標『選用：』，且流程結束給一句怎麼確認做對了。複合 verdict：任一適用的檢查不通過即 fail；全部不適用才 n/a。SoT 見 rules/modules/docs-audience/human-zh-tw/writing-for-humans.md。"
+      "guidance": "只對 content/** 與 app/pages/** 的 diff 適用；其餘檔案判 n/a。逐字類（英文難度詞、錨文字、擬人化、訴諸權威）已由機械規則 prose-* 擋下，本 verdict 只判機器測不了的四件事：(1) 難度詞的上下文——中文「簡單 / 容易 / 只要 / 不難」機械層刻意不擋，因為「判準很簡單：X」這類收斂句是本 fleet blog-voice 要求的文體；要判的是它有沒有被用來描述『讀者該覺得容易』，是則 fail，描述判準本身簡短則 pass。(2) 段落契約——每一節第一段的第 1 句給讀者遇到的狀況（不是功能名稱）、第 2 句讓他當場決定要不要往下讀；用功能名開場（『本節介紹 X 模組的設計』）是 fail。(3) 標題描述讀者的問題或任務而非功能名稱：『為什麼百分比跟我算的不一樣』勝過『壽命百分比計算邏輯』。(4) 操作步驟四部件——引導句結尾冒號、順序步驟用編號不用 bullet、每步動詞開頭且條件寫在動作之前、選用步驟明標『選用：』，且流程結束給一句怎麼確認做對了。複合 verdict：任一適用的檢查不通過即 fail；全部不適用才 n/a。SoT 見 rules/modules/docs-audience/human-zh-tw/writing-for-humans.md。",
+      "trigger": {
+        "paths": ["content/**", "app/pages/**"]
+      }
     },
     {
       "id": "lazy-hydration-strategy",
       "title": "Lazy 元件須搭 hydration strategy，且不得用於首屏",
-      "guidance": "每個新增的 <Lazy*> 元件都須判斷：(1) 它是否真的非首屏或條件渲染——首屏元件用 Lazy 只多切一個必定被下載的 chunk 卻無收益，應移除前綴（全部 consumer 適用）；(2) 僅當本專案 ssr: true 時才檢查有無 hydration strategy。ssr: false（SPA）沒有 hydration 階段——Vue 的 hydrateStrategy 只在 __asyncHydrate() 路徑被讀取，SPA 走一般 mount 完全不經過，要求補 hydrate-on-* 等於要求寫無效程式碼，須判 n/a 而非 fail。SSR 專案另注意三個讓 strategy 靜默失效的限制：任何 prop 變更會立即觸發 hydration 繞過 strategy；lazy hydration 僅在 SFC 有效；prop 必須寫在 template 上（不可用 v-bind 展開物件）。複合 verdict 規則：只要**有任一適用的檢查不通過**就判 fail；只有在**全部**檢查都不適用時才判 n/a。SPA 專案的 (2) 不適用不會讓整條規則變 n/a——(1) 對全部 consumer 都適用，diff 內有首屏原子元件加 Lazy 就是 fail，即使機械層 lazy-atomic-component 也會擋同一行。 機械層 lazy-atomic-component 只擋最明確的原子元件濫用，本 verdict 補判斷需讀 context 的部分（clade-review-rules.md § Nuxt 效能規約）。"
+      "guidance": "每個新增的 <Lazy*> 元件都須判斷：(1) 它是否真的非首屏或條件渲染——首屏元件用 Lazy 只多切一個必定被下載的 chunk 卻無收益，應移除前綴（全部 consumer 適用）；(2) 僅當本專案 ssr: true 時才檢查有無 hydration strategy。ssr: false（SPA）沒有 hydration 階段——Vue 的 hydrateStrategy 只在 __asyncHydrate() 路徑被讀取，SPA 走一般 mount 完全不經過，要求補 hydrate-on-* 等於要求寫無效程式碼，須判 n/a 而非 fail。SSR 專案另注意三個讓 strategy 靜默失效的限制：任何 prop 變更會立即觸發 hydration 繞過 strategy；lazy hydration 僅在 SFC 有效；prop 必須寫在 template 上（不可用 v-bind 展開物件）。複合 verdict 規則：只要**有任一適用的檢查不通過**就判 fail；只有在**全部**檢查都不適用時才判 n/a。SPA 專案的 (2) 不適用不會讓整條規則變 n/a——(1) 對全部 consumer 都適用，diff 內有首屏原子元件加 Lazy 就是 fail，即使機械層 lazy-atomic-component 也會擋同一行。 機械層 lazy-atomic-component 只擋最明確的原子元件濫用，本 verdict 補判斷需讀 context 的部分（clade-review-rules.md § Nuxt 效能規約）。",
+      "trigger": {
+        "paths": [
+          "app/**/*.vue",
+          "packages/*/app/**/*.vue",
+          "components/**/*.vue",
+          "packages/*/components/**/*.vue",
+          "layouts/**/*.vue",
+          "packages/*/layouts/**/*.vue",
+          "pages/**/*.vue",
+          "packages/*/pages/**/*.vue"
+        ]
+      }
     },
     {
       "id": "nitro-cache-auth-safety",
       "title": "Nitro 快取不得套用於帶認證的 endpoint",
-      "guidance": "defineCachedEventHandler / cachedEventHandler / defineCachedFunction 的 diff 須逐一檢查認證邊界。Nitro 官方明載 Request headers are dropped when handling cached responses——對帶 auth 的 endpoint 套用會把 A 使用者的回應快取後回給 B 使用者，屬跨使用者資料外洩。僅允許用於「回應內容與呼叫者身分完全無關」的 public endpoint；若 endpoint 確實依身分而變又需要快取，MUST 用 getKey() 把使用者識別納入快取鍵、並用 varies 保留必要 header。另檢查部署目標：Nitro production 預設 memory storage，在 Cloudflare Workers 上不跨 isolate 持久，等同快取未生效，須顯式設定 storage driver（如 cloudflare-kv-binding）（clade-review-rules.md § Nuxt 效能規約）。"
+      "guidance": "defineCachedEventHandler / cachedEventHandler / defineCachedFunction 的 diff 須逐一檢查認證邊界。Nitro 官方明載 Request headers are dropped when handling cached responses——對帶 auth 的 endpoint 套用會把 A 使用者的回應快取後回給 B 使用者，屬跨使用者資料外洩。僅允許用於「回應內容與呼叫者身分完全無關」的 public endpoint；若 endpoint 確實依身分而變又需要快取，MUST 用 getKey() 把使用者識別納入快取鍵、並用 varies 保留必要 header。另檢查部署目標：Nitro production 預設 memory storage，在 Cloudflare Workers 上不跨 isolate 持久，等同快取未生效，須顯式設定 storage driver（如 cloudflare-kv-binding）（clade-review-rules.md § Nuxt 效能規約）。",
+      "trigger": {
+        "paths": ["server/**", "packages/*/server/**"]
+      }
     },
     {
       "id": "overlay-body-slot",
       "title": "Overlay 內容須放 #body slot",
-      "guidance": "USlideover/UModal/UDrawer 用 :open 且無 trigger 時 default slot 應為空，內容須放 #body slot；#header 內手寫 close button 應優先改用 title prop（clade-review-rules.md § Overlay 元件語意補充）。"
+      "guidance": "USlideover/UModal/UDrawer 用 :open 且無 trigger 時 default slot 應為空，內容須放 #body slot；#header 內手寫 close button 應優先改用 title prop（clade-review-rules.md § Overlay 元件語意補充）。",
+      "trigger": {
+        "paths": [
+          "app/**/*.vue",
+          "packages/*/app/**/*.vue",
+          "components/**/*.vue",
+          "packages/*/components/**/*.vue",
+          "layouts/**/*.vue",
+          "packages/*/layouts/**/*.vue",
+          "pages/**/*.vue",
+          "packages/*/pages/**/*.vue"
+        ]
+      }
     },
     {
       "id": "layered-truth",
       "title": "分層真相／API 契約單一來源",
-      "guidance": "request/response contract 真相須在 shared/schemas/**，shared/types/** 只能相容轉發或做 UI view-model；handler 預設用 getSupabaseWithContext(event)（modules.auth 為 better-auth / nuxt-auth-utils 的 consumer 等價名為 getAuthedSupabase(event)，兩者皆不做授權，授權在 handler），回傳前須經 response schema parse() 做 drift guard（clade-review-rules.md § 分層真相 / API 契約）。"
+      "guidance": "request/response contract 真相須在 shared/schemas/**，shared/types/** 只能相容轉發或做 UI view-model；handler 預設用 getSupabaseWithContext(event)（modules.auth 為 better-auth / nuxt-auth-utils 的 consumer 等價名為 getAuthedSupabase(event)，兩者皆不做授權，授權在 handler），回傳前須經 response schema parse() 做 drift guard（clade-review-rules.md § 分層真相 / API 契約）。",
+      "trigger": {
+        "paths": [
+          "server/api/**",
+          "shared/schemas/**",
+          "shared/**",
+          "app/**",
+          "server/utils/drizzle.ts",
+          "server/db/schema/**",
+          "drizzle.config.ts",
+          "supabase/migrations/**",
+          "scripts/**",
+          "package.json",
+          "docs/**",
+          ".claude/**",
+          ".github/workflows/**"
+        ]
+      }
     },
     {
       "id": "error-localization",
       "title": "錯誤訊息本地化與 unknown-code 顯示",
-      "guidance": "UI 錯誤訊息須本地化且 unknown code 須有 fallback 顯示；機械可檢部分已收斂進 nuxt-error-localization.md path-scoped rule，clade-review-rules.md 本節僅留 hot-zone pointer。"
+      "guidance": "UI 錯誤訊息須本地化且 unknown code 須有 fallback 顯示；機械可檢部分已收斂進 nuxt-error-localization.md path-scoped rule，clade-review-rules.md 本節僅留 hot-zone pointer。",
+      "trigger": {
+        "paths": [
+          "app/**/*.vue",
+          "packages/*/app/**/*.vue",
+          "components/**/*.vue",
+          "packages/*/components/**/*.vue",
+          "layouts/**/*.vue",
+          "packages/*/layouts/**/*.vue",
+          "pages/**/*.vue",
+          "packages/*/pages/**/*.vue"
+        ]
+      }
     },
     {
       "id": "evlog-consistency",
       "title": "evlog 採用一致性（缺 logger 的檔）",
-      "guidance": "已採用 evlog 的專案，新寫/大改的 server 程式碼須套用 evlog pattern；機械層已擋 console.* / no-why createError，本 verdict 補判斷『handler 缺第一行 const log = useLogger(event)』這類需逐檔讀的缺 logger 情形（clade-review-rules.md § evlog 採用一致性）。"
+      "guidance": "已採用 evlog 的專案，新寫/大改的 server 程式碼須套用 evlog pattern；機械層已擋 console.* / no-why createError，本 verdict 補判斷『handler 缺第一行 const log = useLogger(event)』這類需逐檔讀的缺 logger 情形（clade-review-rules.md § evlog 採用一致性）。",
+      "trigger": {
+        "paths": ["server/**", "packages/*/server/**"]
+      }
     },
     {
       "id": "d-pattern-audit",
       "title": "D-pattern：mutation 缺 audit() 呼叫",
-      "guidance": "已採用 D-pattern 的專案，新寫/大改 mutation handler 須套用；機械層已擋 helper bypass / PII in migration，本 verdict 補判斷『該 audit 的 mutation 是否缺對應 audit() 呼叫』（clade-review-rules.md § D-pattern audit 一致性）。"
+      "guidance": "已採用 D-pattern 的專案，新寫/大改 mutation handler 須套用；機械層已擋 helper bypass / PII in migration，本 verdict 補判斷『該 audit 的 mutation 是否缺對應 audit() 呼叫』（clade-review-rules.md § D-pattern audit 一致性）。",
+      "trigger": {
+        "paths": ["server/**", "packages/*/server/**"]
+      }
     },
     {
       "id": "form-validation",
       "title": "UForm + Zod 驗證採用",
-      "guidance": "表單驗證應採用 UForm + Zod schema 一致模式；機械可檢的 maxlength 缺漏已收斂進 nuxt-form-validation.md path-scoped rule，clade-review-rules.md 本節僅留 hot-zone pointer，本 verdict 補判斷整體 UForm 採用是否到位。"
+      "guidance": "表單驗證應採用 UForm + Zod schema 一致模式；機械可檢的 maxlength 缺漏已收斂進 nuxt-form-validation.md path-scoped rule，clade-review-rules.md 本節僅留 hot-zone pointer，本 verdict 補判斷整體 UForm 採用是否到位。",
+      "trigger": {
+        "paths": [
+          "app/**/*.vue",
+          "packages/*/app/**/*.vue",
+          "components/**/*.vue",
+          "packages/*/components/**/*.vue",
+          "layouts/**/*.vue",
+          "packages/*/layouts/**/*.vue",
+          "pages/**/*.vue",
+          "packages/*/pages/**/*.vue"
+        ]
+      }
     },
     {
       "id": "a11y-adoption",
       "title": "a11y 採用一致性（focus trap／heading 層級）",
-      "guidance": "已採用 @nuxt/a11y 的專案，新寫/大改 UI 元件須套用 a11y 規則；機械層已擋 img 缺 alt / icon 缺 aria-label / 正數 tabindex 等 10 條 grep signal，本 verdict 補判斷『自製 modal 缺 focus trap』與『heading 跳級（h1 後直接 h3）』這類需語意判斷的項目（clade-review-rules.md § Nuxt a11y 採用一致性）。"
+      "guidance": "已採用 @nuxt/a11y 的專案，新寫/大改 UI 元件須套用 a11y 規則；機械層已擋 img 缺 alt / icon 缺 aria-label / 正數 tabindex 等 10 條 grep signal，本 verdict 補判斷『自製 modal 缺 focus trap』與『heading 跳級（h1 後直接 h3）』這類需語意判斷的項目（clade-review-rules.md § Nuxt a11y 採用一致性）。",
+      "trigger": {
+        "paths": [
+          "app/**/*.vue",
+          "packages/*/app/**/*.vue",
+          "components/**/*.vue",
+          "packages/*/components/**/*.vue",
+          "layouts/**/*.vue",
+          "packages/*/layouts/**/*.vue",
+          "pages/**/*.vue",
+          "packages/*/pages/**/*.vue"
+        ]
+      }
     },
     {
       "id": "doc-sync",
       "title": "Bug 修正／行為變更的文件同步",
-      "guidance": "行為變更的 diff 要檢查對應文件（README / docs/ / rules / cookbook / CHANGELOG 慣例）是否同步更新；有行為變更但文件未動 → fail 並指名該補哪份"
+      "guidance": "行為變更的 diff 要檢查對應文件（README / docs/ / rules / cookbook / CHANGELOG 慣例）是否同步更新；有行為變更但文件未動 → fail 並指名該補哪份",
+      "trigger": {
+        "paths": ["**"]
+      }
     },
     {
       "id": "acceptance-gap-scope",
       "title": "驗收發現的 bug 要有範圍盤點與 e2e（acceptance-gap）",
-      "guidance": "PR 修的是驗收階段（客戶／HR 驗收、發版驗證、staging 實走、主管抽驗）發現的 bug 時（PR body／commit／Work: 行的 plan／worker brief 標為是，或工作種類是 acceptance-gap），檢查 plan 有 `## Scope inventory` 盤點表（格式見 work-route rules/工作種類與必要產物.md Rule 6）、add 列在 diff 有 truth scenario、且有覆蓋整條使用流程且先紅後綠的 e2e 列；缺盤點表或缺 e2e、或只修單點以 bug-covered／bug-uncovered 結案 → fail（Major），指名缺哪一項"
+      "guidance": "PR 修的是驗收階段（客戶／HR 驗收、發版驗證、staging 實走、主管抽驗）發現的 bug 時（PR body／commit／Work: 行的 plan／worker brief 標為是，或工作種類是 acceptance-gap），檢查 plan 有 `## Scope inventory` 盤點表（格式見 work-route rules/工作種類與必要產物.md Rule 6）、add 列在 diff 有 truth scenario、且有覆蓋整條使用流程且先紅後綠的 e2e 列；缺盤點表或缺 e2e、或只修單點以 bug-covered／bug-uncovered 結案 → fail（Major），指名缺哪一項",
+      "trigger": {
+        "paths": ["**"]
+      }
     },
     {
       "id": "comment-test-conditional",
       "title": "註解與測試的條件式判準",
-      "guidance": "只審本次 diff 新增或改到的行。新增註解：命中 code-style.md § 該刪的註解（C0 轉述 SSoT、C1 歷史敘事、C2 工作編號當理由、C3 行內日期、C4 翻譯 code、C5 注解掉的程式碼、C6 測試檔頭重述檔名）→ fail 並指名類別與該怎麼改；C0 先問該事實是否該進 SSoT。@followup[<id>]、結案改寫「（<id> 結案：…）」與指令型註解（@ts-expect-error、oxlint-disable 等）不算。新增 unit test：一列都不中 testing-anti-patterns.md § unit test 何時寫 的 U1–U4，或斷言對象是只給人讀的 prose、load-bearing 規約句（U5，應登記 rule-invariants）→ fail。刪測試：刪的是閘門類（U3）或某段產品碼唯一的行為測試 → fail。讀原始碼比字串的 P 類測試不靠本規則攔：機械層是 `vendor/scripts/checks/source-assert-gate.ts`（delta，pre-commit＋CI）；本規則只審它的逃生口 marker `clade-source-assert:` 的理由是否成立。"
+      "guidance": "只審本次 diff 新增或改到的行。新增註解：命中 code-style.md § 該刪的註解（C0 轉述 SSoT、C1 歷史敘事、C2 工作編號當理由、C3 行內日期、C4 翻譯 code、C5 注解掉的程式碼、C6 測試檔頭重述檔名）→ fail 並指名類別與該怎麼改；C0 先問該事實是否該進 SSoT。@followup[<id>]、結案改寫「（<id> 結案：…）」與指令型註解（@ts-expect-error、oxlint-disable 等）不算。新增 unit test：一列都不中 testing-anti-patterns.md § unit test 何時寫 的 U1–U4，或斷言對象是只給人讀的 prose、load-bearing 規約句（U5，應登記 rule-invariants）→ fail。刪測試：刪的是閘門類（U3）或某段產品碼唯一的行為測試 → fail。讀原始碼比字串的 P 類測試不靠本規則攔：機械層是 `vendor/scripts/checks/source-assert-gate.ts`（delta，pre-commit＋CI）；本規則只審它的逃生口 marker `clade-source-assert:` 的理由是否成立。",
+      "trigger": {
+        "paths": ["**"]
+      }
     }
   ]
 }

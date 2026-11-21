@@ -204,6 +204,9 @@ PROMPT
     printf 'REVIEW_SUBAGENT_SEAT=%q\n' "$REVIEW_SEAT"
     printf 'REVIEW_ROUND_LEDGER=%q\n' "${REVIEW_ROUND_LEDGER:-}"
     printf 'REVIEW_ROUND_N=%q\n' "${REVIEW_ROUND_N:-}"
+    printf 'REVIEW_ROUND_KIND=%q\n' "${REVIEW_ROUND_KIND:-}"
+    printf 'REVIEW_ROUND_COUNTED=%q\n' "${REVIEW_ROUND_COUNTED:-}"
+    printf 'REVIEW_ROUND_INCREMENT_BASE=%q\n' "${REVIEW_ROUND_INCREMENT_BASE:-}"
     printf 'REVIEW_ROUND_HEAD=%q\n' "${REVIEW_ROUND_HEAD:-}"
     printf 'REVIEW_ROUND_FILTER=%q\n' "${REVIEW_ROUND_FILTER:-}"
     printf 'REVIEW_ROUND_OPENED_AT=%q\n' "${REVIEW_ROUND_OPENED_AT:-}"
@@ -300,6 +303,37 @@ review_subagent_record_acceptance() {
   return 0
 }
 
+# review_round_info_line — finalize 輸出第一行：本輪實際輪別（kind＋round＋算不算數）。carrier 回報 MUST 照抄這一行，
+# NEVER 憑 prepare 帶的旗標（--independent 等）自己寫輪別：base-check 會被當成通過的獨立輪拿去申請放行。
+review_round_info_line() {
+  [ -n "${REVIEW_ROUND_N:-}" ] || { echo "ROUND: 輪別不明（非 PR 模式或舊版 prepare 的 work-dir）：回報不得自稱 independent／discovery"; return 0; }
+  local kind="${REVIEW_ROUND_KIND:-?}" counted full
+  if [ "$kind" = base-check ]; then counted='不計輪數（base-check）'
+  else counted="計入輪數上限${REVIEW_ROUND_COUNTED:+（第 ${REVIEW_ROUND_COUNTED} 個計數輪）}"; fi
+  case "$kind" in
+    discovery|independent) [ -z "${REVIEW_ROUND_INCREMENT_BASE:-}" ] && [ -z "${REVIEW_ROUND_FILTER:-}" ] && full='算完整審查輪' ;;
+  esac
+  echo "ROUND: 0-A round ${REVIEW_ROUND_N} kind=${kind}；${counted}；${full:-不算完整審查輪（verify／base-check／增量／有篩選的輪不算高風險 PR 要的兩輪）}；第 ${ROUND_PART:-1/1} 批"
+}
+
+# 0-A finding 驗證者影子（plans/40 T41）：verdict 已記進輪數 ledger 之後，抽樣的輪在背景另開新 context 逐條試著反駁
+# Critical／Major，只記影子帳。shadow：只讀 verdict、不改 verdict／ledger／exit code；工具缺席時靜默略過、失敗不擋 finalize。
+# 抽樣率、kill switch、執行器與量測方式在 vendor/scripts/oa-finding-verifier.ts 檔頭。
+# 工具只從 finalize 後還在的路徑起：解析到 REPO_ROOT 底下時不排程——REPO_ROOT 通常是 finalize 後就刪的 0-A 快照，
+# 背景 run 排隊拿鎖後才載入的模組會跟著消失，記成錯誤理由的 skipped-quota。0-A 直接在 CLADE_HOME 本身跑時也落在這裡，
+# 這類輪不進抽樣母體、也不留 not-sampled 列（影子量測不涵蓋 clade 自審 clade 的直跑輪）。
+review_subagent_verify_findings() {
+  local tool
+  [ -n "${REVIEW_ROUND_RECORD_JSON:-}" ] || return 0
+  tool="$(clade_runtime vendor/scripts/oa-finding-verifier.ts 2>/dev/null)"
+  [ -n "$tool" ] && [ -f "$tool" ] || return 0
+  case "$tool" in "$REPO_ROOT"/*) return 0 ;; esac
+  node "$tool" schedule --work-dir "$WORK_DIR" --verdict "$1" --round-json "$REVIEW_ROUND_RECORD_JSON" \
+    ${REVIEW_SUBAGENT_BRIEF:+--brief "$REVIEW_SUBAGENT_BRIEF"} ${REVIEW_ROUND_HEAD:+--head "$REVIEW_ROUND_HEAD"} \
+    --repo "$REPO_ROOT" || true
+  return 0
+}
+
 review_subagent_finalize() {
   local base dir
   if [ "$#" -ne 1 ]; then
@@ -315,6 +349,8 @@ review_subagent_finalize() {
   fi
   # shellcheck disable=SC1090
   . "$dir/$REVIEW_SUBAGENT_STATE"
+  # stderr：stdout 只放 verdict（oa-batches countVerdict／呼叫端 cat 的是 stdout），這行仍是 finalize 印出的第一行
+  review_round_info_line >&2
   if [ "$REVIEW_SUBAGENT_SEAT" != "$REVIEW_SEAT" ]; then
     echo "[claude-review-safe] 錯誤：prepare 是 ${REVIEW_SUBAGENT_SEAT} 席，finalize 收到 CLAUDE_REVIEW_SEAT=${REVIEW_SEAT}——同一次 review 的兩段 MUST 用同一席" >&2
     return 2
@@ -401,6 +437,7 @@ review_subagent_finalize() {
   verdict_sha="$(sha256sum "$verdict_out" | cut -d' ' -f1)"
   review_record_round_and_register "$verdict_out" || return $?
   review_subagent_record_acceptance "$verdict_out"
+  review_subagent_verify_findings "$verdict_out"
   review_subagent_write_receipt 0 "$result" "$verdict_sha"
   cat "$verdict_out"
   return 0

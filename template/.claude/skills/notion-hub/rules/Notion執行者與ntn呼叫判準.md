@@ -4,7 +4,7 @@
 - 主線直接跑：`vendor/scripts/notion-sync.ts`、`vendor/scripts/lib/notion-hub.ts resolve`、`scripts/audit-notion-hub-schema.ts`。它們的寫入範圍、授權轉移表、schema 檢查、sidecar 都寫死在 script 裡。
 - 自由形式的 Notion 讀寫（查詢、讀頁／blocks、comment、建頁、PATCH）走 Routing Table〔`notion-ops`〕：空鏈（Pi Grok 2026-10-21 退場），首跳即鏈尾 `dispatch-fallback`（Claude Opus 5.5（effort: low））。
 - **NEVER** 主線第一手自己跑 `ntn`。
-- 狀態轉移一律經 `notion-sync.ts`（file／open／follow／progress／done／release／eta／reconcile），它帶授權表、客戶面證據守門、regression 偵測與 sidecar；**NEVER** 自己 PATCH 狀態繞過 script。唯一例外是問客戶時把票設成 needs-customer（`references/ntn-cookbook.md` § 寫入）。
+- 狀態轉移一律經 `notion-sync.ts`（file／open／follow／progress／done／release／article／eta／reconcile；發版與補掛完成說明由 `ticket-article.ts ship` 呼叫 release／article），它帶授權表、客戶面證據守門、regression 偵測與 sidecar；**NEVER** 自己 PATCH 狀態繞過 script。唯一例外是問客戶時把票設成 needs-customer（`references/ntn-cookbook.md` § 寫入）。
 - 機械層：`pre-bash-notion-ticket-status-gate.sh`（PreToolUse:Bash）擋下把票 PATCH 成 done／archived 的 `ntn api`／`curl`；needs-customer、驗收中與 `notion-sync.ts` 不受影響。被擋時照訊息走，授權條件見 `rules/客戶面證據判準.md` Rule 2；**NEVER** 改用 MCP、腳本檔或變數組 body 避開它。
 
 ## Good Example
@@ -99,7 +99,7 @@ S=$(jq -r '.hub.ticketStatus["needs-customer"]' /tmp/hub.json); K=$(jq -r '.hub.
 # Rule 5 - 生命週期由 flow 事件自動推進，NEVER 叫人「做完記得同步 Notion」
 
 - Level: `MUST`
-- `flow plan open`／`flow work done` 成功後 `follow` 自動推進 ticket 狀態與交付項目進度，`/commit` D9-Notion 跑 `release`。
+- `flow plan open`／`flow work done` 成功後 `follow` 自動推進 ticket 狀態與交付項目進度，`/commit` D9-Notion 跑 `release --tag` 記版本（沒掛完成說明的票不進驗收中），正式機上線後 Phase 9 `ticket-article.ts ship --released <tag>` 產頁並分流狀態。
 - 沒推進代表 hook 或 D9-Notion 沒跑，修那裡；不要在本 skill 補一句提醒。
 - 例外一個手動掛載點：非 `file` 建票的工作開工前要跑一次 `notion-sync.ts open`（見認領分流判準 Rule 3）。
 
@@ -108,7 +108,7 @@ S=$(jq -r '.hub.ticketStatus["needs-customer"]' /tmp/hub.json); K=$(jq -r '.hub.
 - 這個例子是好的，因為發版後票沒推進時去查 D9-Notion。
 
 ```text
-票仍進行中但 v1.42.0 已發 → /commit D9-Notion 的 release 沒跑 → 補跑 notion-sync.ts release --tag v1.42.0
+票仍進行中、修復版本 v1.42.0、正式機已是 v1.42.0 → 上線後的 Phase 9 沒跑 → 補產完成說明：ticket-article.ts ship <spec.json> --consumer-path <repo> --work <id> --released v1.42.0
 ```
 
 ## Bad Example

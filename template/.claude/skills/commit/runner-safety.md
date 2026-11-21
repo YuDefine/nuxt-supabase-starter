@@ -43,6 +43,12 @@ node ~/offline/clade/vendor/scripts/review-snapshot.ts remove "$SNAP"   # finali
 `create` 印完路徑就退出，它自己的 pid 不是持有者：沒有 `CLAUDE_CODE_SESSION_ID` 的呼叫端（Pi／
 cron／plain shell）要讓 `reclaim` 兜底 MUST 帶 `--owner-pid <長命的持有者 pid>`，否則 reclaim 永不回收那棵。
 
+**持有者死了不等於沒人在讀**：`reclaim` 回收的條件是「pid 死 ∧ session 結束 ∧ 沒有活著的讀者 ∧ 到齡」。讀者訊號有三種，任一成立就保留（判不出也保留）：
+(1) stamp 的 `readers`——`review-snapshot.ts register-reader <快照或 work.* 路徑> [--pid <reviewer pid>] [--session <id>]` 登記；
+(2) /proc 掃——任一行程的 cwd、開著的 fd、cmdline 參數落在該目錄底下（路徑以絕對與 realpath 兩種形式比對）；
+(3) 錨定（雙向）——PR 模式的 `work.*` 目錄 stamp.repo 指向快照樹：快照有讀者 → work.* 不刪；work.* 有讀者或未到齡 → 快照不刪。
+0-A reviewer 的 cwd 是派工方 checkout、只讀 `work.X/brief.md` 時，(2)＋(3) 已能保護受審樹；reviewer 行程不會在路徑底下露出任何痕跡（例如只在記憶體裡持有內容）時，才需要對 `work.*` 目錄手動 `register-reader`。
+
 要用未 commit 的 index 內容當 changeset：`git diff --cached -- <自己的路徑>` 出 patch、在 `create` 的
 快照裡 `git apply --cached`，**MUST** 用路徑限定 ——
 那同時解掉第二個問題：在 main 直接跑，changeset 會含**所有** session 的 dirty 檔，

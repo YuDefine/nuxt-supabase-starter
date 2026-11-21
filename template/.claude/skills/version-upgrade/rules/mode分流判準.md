@@ -128,7 +128,7 @@ script 的 `PHASES` 與本表同義；改一邊 MUST 同改另一邊與 `test/ve
 「Node 版本怪怪的」→ 直接跑 Phase M 升本機 node
 ```
 
-# Rule 3 - 四個軸決定誰動手：C 軸與 C′ 軸由 Parity 掃描與追蹤，NEVER 由 clade 執行升級
+# Rule 3 - 四個軸決定誰動手：C 軸與 C′ 軸由 Parity 掃描與追蹤，NEVER 由 clade 執行升級（唯一例外：序位 3b 的 dev 主機 CLI）
 
 - Level: `MUST`
 
@@ -138,13 +138,13 @@ script 的 `PHASES` 與本表同義；改一邊 MUST 同改另一邊與 `test/ve
 | --- | --- | --- | --- |
 | **A. Repo-declared** | `package.json` / lockfile / workflow yaml / `.nvmrc` | ✅ commit | Phase B–D／F／F-routine／K／T／S |
 | **B. Machine-installed** | mise config / 全域 npm / `~/.local/bin` / `.mcp.json` | ❌ | **Phase M** |
-| **C. Remote-deployed** | LXC / VM 上實際跑的版本 | ❌ | **Phase P**：掃描、rollout plan、收斂追蹤；升級 relay 給該 consumer（優先把版本寫回 repo） |
+| **C. Remote-deployed** | LXC / VM 上實際跑的版本 | ❌ | **Phase P**：掃描、rollout plan、收斂追蹤；升級 relay 給該 consumer（優先把版本寫回 repo）；唯一例外是 `role: dev` 主機的 CLI，由 Phase P 升級（`跨環境版本對齊判準.md` Rule 2 序位 3b） |
 | **C′. Runner-installed** | self-hosted runner 上被 workflow 裸呼叫的預裝 binary（`supabase` / `gh` / `docker` / `node`…） | ❌ | **Phase P**：同上；優先改 setup action 釘版，只能預裝的交 runner 主機 owner |
 
 C／C′ 軸的**執行**刻意留在外面：升遠端 staging / prod 的 runtime 是 consumer 的 production 動作，clade 主線
 替它動手正是 `.claude/skills/clade-home/rules/clade-role-and-todo-discipline.md` § 反模式 逐字禁止的那件事。
 clade 擁有的是 fleet 共同版本（`registry/toolchain.json`）、跨環境掃描與收斂追蹤（Phase P）。
-**NEVER** 因為「使用者問的是版本、本 skill 就叫 version-upgrade」由 clade 執行遠端升級；也 **NEVER** 因為執行不歸 clade 就只出訊號不追收斂。
+**NEVER** 因為「使用者問的是版本、本 skill 就叫 version-upgrade」由 clade 執行遠端升級（序位 3b 的 dev 主機 CLI 除外）；也 **NEVER** 因為執行不歸 clade 就只出訊號不追收斂。
 
 ## Good Example
 

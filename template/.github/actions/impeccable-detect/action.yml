@@ -1,0 +1,24 @@
+# 🔒 LOCKED — managed by clade · Source: vendor/actions/impeccable-detect/action.yml · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/actions/impeccable-detect/action.yml
+name: 'impeccable detect PR Gate'
+description: 'Run impeccable detect on the UI files (.vue/.css/.scss/.html/.tsx/.jsx) this PR changes. Fails on primary findings (detect exit 2) and on changed UI files that have no impeccable adoption marker (PRODUCT.md / DESIGN.md / .impeccable/config.json in the file dir or an ancestor). Only the PR diff is scanned, so pre-existing issues elsewhere never turn a PR red. Assumes the caller checked out the repo with fetch-depth 0.'
+author: 'YuDefine/clade'
+
+inputs:
+  base-ref:
+    description: 'PR base to diff against — pass github.event.pull_request.base.sha. Required: the gate refuses to guess a base. On pull_request events where HEAD is the GitHub synthetic merge ref (HEAD equals GITHUB_SHA and is a merge commit) the gate diffs against the first parent of that merge commit instead, so base moves after the PR opened never leak other people files into the scan; any other checkout (including a PR head that is itself a merge commit) uses the merge-base of this value and HEAD.'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Run impeccable detect gate
+      shell: bash
+      env:
+        INPUT_BASE_REF: ${{ inputs.base-ref }}
+      run: |
+        set -euo pipefail
+        if [ ! -f "$GITHUB_ACTION_PATH/run.sh" ]; then
+          echo "::error::infrastructure-error: run.sh not found next to action.yml — the vendored action is incomplete (re-run clade propagate); the gate did NOT run"
+          exit 2
+        fi
+        bash "$GITHUB_ACTION_PATH/run.sh"

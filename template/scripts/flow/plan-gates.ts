@@ -50,7 +50,7 @@ import {
   TRUTH_DELTA_FILE,
   TRUTH_ROOT,
   hashTruth,
-  hasLifecycleFrontmatter,
+  hadCommittedLifecycleFrontmatter,
   resolveLifecycleFile,
 } from './plan-paths.ts'
 import { readGitStatus } from '../lib/git-status-z.ts'
@@ -251,21 +251,7 @@ export function checkLifecycleLayout(root: string, workId: string): GateFinding[
   ]).at(-1)
   if (file.shape === 'none') {
     // 沒有帶兩鍵的 lifecycle 檔：曾經有過＝被上游 owner 覆寫（`work.md` 被改、或 legacy `plan.md` 被 /system-analysis 蓋掉）。
-    const committed = [firstAdd, 'HEAD']
-      .filter(Boolean)
-      .flatMap((rev) => [workRel, legacyRel].map((rel) => [rev, rel]))
-      .map(([rev, rel]) => {
-        try {
-          return execFileSync('git', ['show', `${rev}:${rel}`], {
-            cwd: root,
-            encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'ignore'],
-          })
-        } catch {
-          return ''
-        }
-      })
-    if (committed.some(hasLifecycleFrontmatter)) {
+    if (hadCommittedLifecycleFrontmatter(root, workId)) {
       findings.push({
         code: 'lifecycle-frontmatter-removed',
         path: `${file.rel}:frontmatter`,

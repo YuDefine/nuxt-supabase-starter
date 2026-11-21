@@ -47,9 +47,9 @@ declarative-schema.md — Supabase 宣告式 schema（supabase/schemas + pg-delt
 71-74 混用兩個引擎
 76-80 config.toml 的 experimental 段落
 
-evlog-adoption.catalogs.md — evlog catalogs 採用全文（defineErrorCatalog/defineAuditCatalog、命名規約、結構原則、動態訊息與 internal 合併、sharding 路徑、反模式、review grep；evlog floor ^2.17.0 SoT）；常駐 pointer 在 [[evlog-adoption]]，觸發時機是「新增 catalog、把 ad-hoc createError 遷進 catalog、或寫 catalog 測試之前」，由 [[evlog-adoption]] 的 MUST-Read 指針叫醒
+evlog-adoption.catalogs.md — evlog catalogs 採用全文（defineErrorCatalog/defineAuditCatalog、命名規約、結構原則、動態訊息與 internal 合併、sharding 路徑、反模式、review grep；evlog floor ^2.34.0 SoT、nostics 分層）；常駐 pointer 在 [[evlog-adoption]]，觸發時機是「新增 catalog、把 ad-hoc createError 遷進 catalog、或寫 catalog 測試之前」，由 [[evlog-adoption]] 的 MUST-Read 指針叫醒
 8-13 前導 — evlog Adoption — Catalogs（全文）
-15-61 Catalogs 採用（evlog 2.17+）
+15-71 Catalogs 採用（evlog 2.17+）
 
 evlog-adoption.decision.md — evlog 採用路徑選型全文（stack decision matrix、5 個 plan package template、3 個 starter preset、drain 選擇指引、migration 順序建議）；常駐 pointer 在 [[evlog-adoption]]，觸發時機是「為 consumer 選 evlog template / preset / drain，或排 migration 順序之前」，由 [[evlog-adoption]] 的 MUST-Read 指針叫醒
 10-15 前導 — evlog Adoption — 選型與 migration 順序（全文）
@@ -85,25 +85,26 @@ evlog-error-exposure.md — 寫 createError 的 why / fix / internal 時，判�
 43-54 完成證明
 56-60 相關
 
-evlog-investigate.md — prod runtime 問題用 evlog wide event 調查的協定（消費側；先查 evlog 再從 code 對因）
+evlog-investigate.md — prod runtime 問題用 evlog wide event 調查、dev／E2E 失敗先跑 dev-failure-digest 的協定（消費側；先查 evlog 再從 code 對因）
 14-23 前導 — evlog Investigate（prod 問題的調查反射）
 25-33 Step 0：先問這是不是自己人做的（症狀是「環境變了」時 MUST 先跑）
-35-48 Investigation-first 協定（每一個 prod runtime 症狀都適用）
-50-57 evlog = ground truth 的邊界（何時要回 DB canonical）
-59-69 Per-backend 查詢入口（recipe 在 cookbook）
-71-73 Prod 可查詢 drain 是這條協定的前提
-75-82 與寫入側 rule 的分工
+35-48 dev／E2E 失敗（本機測試、E2E、agent-browser、curl）
+50-63 Investigation-first 協定（每一個 prod runtime 症狀都適用）
+65-72 evlog = ground truth 的邊界（何時要回 DB canonical）
+74-84 Per-backend 查詢入口（recipe 在 cookbook）
+86-88 Prod 可查詢 drain 是這條協定的前提
+90-97 與寫入側 rule 的分工
 
 evlog-stream-extend.md — evlog 讀端 opt-in 擴充（stream/fs-reader/enricher/tail-sampling）適用時載入
 12-18 前導 — evlog Extend 標準（讀端 + 進階 hook）
 20-29 何時用
 31-35 API surface
-37-43 設計原則
-45-53 Anti-pattern
-55-70 Custom enrichers
-72-89 Tail sampling
-91-106 Adoption / Reference signal
-108-112 反採用條件（明確不採用）
+37-44 設計原則
+46-54 Anti-pattern
+56-71 Custom enrichers
+73-90 Tail sampling
+92-107 Adoption / Reference signal
+109-113 反採用條件（明確不採用）
 
 logging.client-fields.md — evlog client transport 規範與 typed fields 採用判斷全文（setIdentity／clearIdentity、_evlog/ingest 保護、minLevel、typed fields 五核心欄位）；常駐 pointer 在 [[logging]]，觸發時機是「寫 client-side logging、typed fields schema 或 _evlog/ingest endpoint 之前」，由 [[logging]] 的 MUST-Read 指針叫醒
 15-20 前導 — Logging — Client transport 與 typed fields（全文）
@@ -116,7 +117,8 @@ logging.drain-pipeline.md — evlog server plugin wiring 全文（drain pipeline
 41-45 Drain pipeline 規範 › 為什麼強制 pipeline
 47-68 Drain pipeline 規範 › Cloudflare Workers flush
 70-80 Drain pipeline 規範 › 三條 meta-event 必接
-82-118 Enricher stack 標準（5 件套）
+82-93 dev／E2E fs drain（本機 agent 讀失敗事件）
+95-131 Enricher stack 標準（5 件套）
 
 logging.error-contract.md — Server handler 錯誤契約全文（log.error 時機與單次呼叫、handleDbError、createError 必帶 why／internal／code 欄位契約 SoT、log.error 參數非 null、搜尋字串消毒）；常駐 pointer 在 [[logging]]，觸發時機是「在 server handler 寫 throw createError / log.error / handleDbError / .or() 搜尋之前」，由 [[logging]] 的 MUST-Read 指針叫醒
 13-18 前導 — Logging — Error contract（全文）

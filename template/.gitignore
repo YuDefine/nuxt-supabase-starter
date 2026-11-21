@@ -126,3 +126,6 @@ yarn-error.log*
 !.clade/mutation-summary.json
 
 !.clade/generated-files.json
+
+.evlog/
+.nostics.log

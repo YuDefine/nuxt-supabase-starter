@@ -2,7 +2,7 @@
 
 管的是**同一個工具在每一層是不是同一版**：repo 宣告、CI workflow、Dockerfile image、self-hosted runner 預裝、部署目標 runtime，外加本機。共同目標寫在 `~/offline/clade/registry/toolchain.json`（fleet 共同工具版本 SoT）。
 
-本 Phase 擁有 SoT、掃描與收斂追蹤；**不執行**任何遠端升級。它只產生 rollout plan、relay 與 clade 自有宣告面的修補，不動 consumer 的 lockfile，所以 `rules/A軸共用紀律判準.md` 的 Worktree gate 與 Pi 派工模板不適用；改 clade 自己的 SoT／registry 時照 clade-home 先開 worktree。
+本 Phase 擁有 SoT、掃描與收斂追蹤；遠端升級只做 `role: dev` 主機的 CLI（Rule 2 序位 3b），其他遠端**一律不執行**。它只產生 rollout plan、relay 與 clade 自有宣告面的修補，不動 consumer 的 lockfile，所以 `rules/A軸共用紀律判準.md` 的 Worktree gate 與 Pi 派工模板不適用；改 clade 自己的 SoT／registry 時照 clade-home 先開 worktree。
 
 ---
 
@@ -28,17 +28,17 @@ READ 讀取 `rules/跨環境版本對齊判準.md`，逐格判讀狀態、為每
 
 ## Step P.4 — 分派並送達
 
-依 rollout plan 的升級路徑分派：Phase F／T／M 在本 skill 內接手；relay 列照 `.claude/skills/clade-home/rules/clade-role-and-todo-discipline.md` § Consumer 工作命中時 MUST relay 當下送達，brief 只帶訊號＋SoT pointer＋該列驗收；`flow ask` 列進待拍板佇列。送達後把該列狀態改成 `relayed` 並附 pane／label。
+依 rollout plan 的升級路徑分派：Phase F／T／M 在本 skill 內接手；只要該 CLI 的輸出會被 CI 比對，**不論 CI 欄是落後還是已 `aligned`**（CI 已對齊時沒有 CI 列會帶你到這裡，照樣要查），在遠端探測已授權的前提下查 `role: dev` 主機的 CLI 版本（未授權或量不到就標 `unmeasurable`、開 `flow ask`；有 CI 釘版列時該 PR 可以先開、先跑 CI，只擋合入），落後就加序位 3b 列，經 user 明確授權後在 CI 釘版 PR 合入前由本 Phase 升級並驗版；relay 列照 `.claude/skills/clade-home/rules/clade-role-and-todo-discipline.md` § Consumer 工作命中時 MUST relay 當下送達，brief 只帶訊號＋SoT pointer＋該列驗收；`flow ask` 列進待拍板佇列。送達後把該列狀態改成 `relayed` 並附 pane／label。
 
 ## Step P.5 — 重跑收斂，必要時調整 SoT
 
 - consumer 回報完成、或再次進入 Phase P 時，重跑 Step P.2，依結果更新 rollout plan 的狀態與「收斂紀錄」；狀態規則在已載入的判準。
-- SoT target 的取值規則已定（每次取共同可達最新版，Rule 7）：`--refresh-targets --write` 在 clade worktree 寫回（supabase CI 範本副本一起改，`test/toolchain-registry.test.ts` 釘住），走 [[clade-publish]]，再回 Step P.2。只有 `manual`／`error` 列、或要偏離規則（釘在舊版、跳過某版）才問 user。
+- SoT target 的取值規則已定（每次取共同可達最新版，Rule 7）：`--refresh-targets --write` 在 clade worktree 寫回（exact 工具先跑 registry 宣告的 canary，證據檔以 `--canary <tool>=<檔>` 帶入，見 `rules/跨環境版本對齊判準.md` Rule 7；supabase CI 範本副本一起改，`test/toolchain-registry.test.ts` 釘住），走 [[clade-publish]]，再回 Step P.2。只有 `manual`／`error` 列、或要偏離規則（釘在舊版、跳過某版）才問 user。
 
 ---
 
 # 禁止事項（Phase P 限定）
 
-- **NEVER** 從 clade session ssh 進 runner／staging／prod 升版或改設定
+- **NEVER** 從 clade session ssh 進 runner／staging／prod 升版或改設定（`role: dev` 主機只照 Rule 2 序位 3b）
 - **NEVER** 只登記 rollout plan 就當已處置——登記是紀錄，relay 才是送達
 - **NEVER** 在 consumer 端改 `.clade/registry/toolchain.json` 投影副本；SoT 只在 clade 改

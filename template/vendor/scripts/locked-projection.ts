@@ -51,6 +51,16 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// 本檔也投影進 consumer（scripts/locked-projection.ts），那邊沒有 lib/clade-shipped-blob.ts：動態載入，載不到時
+// isLockedProjectionPathAt 只對 banner 目錄回 false（多審），其他投影路徑照路徑判。只有 0-A 的 wrapper 從 CLADE_HOME 用到它。
+const shippedBlob = await import(
+  new URL('./lib/clade-shipped-blob.ts', import.meta.url).href
+).catch(() => null)
+// 與 lib/clade-shipped-blob.ts 的 BANNER_SCOPED 同一條（本檔載不到它時仍要認得 banner 目錄）；test/locked-projection-at-commit.test.ts 對拍。
+export const BANNER_SCOPED =
+  /^(?:\.claude\/(?:hooks|rules|commands|agents|skills\/[^/]+\/scripts)\/|\.github\/actions\/|scripts\/(?:checks|pre-commit|pre-push|spectra-advanced)\/)/
 
 const LOCKED_BANNER_SIGNATURE = '🔒 LOCKED — managed by clade'
 // 手抄自 adapters/agents/rules.ts 的 LEGACY_CLAUDE_MD_SHELL／INSTRUCTION_FILE_POINTER／AGENTS_ONLY_INSTRUCTION_FILE_POINTER
@@ -110,7 +120,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // 自家檔——與 `scripts/lib/` 那種混住的目錄不同，可以整目錄匹配。
       String.raw`\.clade/(bin|signals|vendor|scripts|registry)/`,
       // Vendored script entry points (scripts/)
-      String.raw`scripts/(wt-helper|wt-batch|wt-unattended-merge|preservation-policy|preservation-profiles|preservation-inventory|preservation-resource-adapters|retired-ledger|pulls-review|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|legacy-tests|audit-risk-path-coverage|audit-clade-leak|audit-public-tree-hygiene|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|dev-singleton|dev-router|dev-session|herdr-visible-identity|db-lease|db-reset-peer-coordination|prod-sql|ownership-journal|shell-safety-check|run-evidence|cbm-health|evidence-hook|install-tool-evidence|control-plane-projection-validate|specformula-ddl-check|mutation-probe)\.(mjs|mts|ts)$`,
+      String.raw`scripts/(wt-helper|wt-batch|wt-unattended-merge|preservation-policy|preservation-profiles|preservation-inventory|preservation-resource-adapters|retired-ledger|pulls-review|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|audit-lint-exceptions|legacy-tests|audit-risk-path-coverage|audit-clade-leak|audit-public-tree-hygiene|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|dev-singleton|dev-router|dev-session|dev-failure-digest|herdr-visible-identity|db-lease|db-reset-peer-coordination|prod-sql|ownership-journal|shell-safety-check|run-evidence|cbm-health|evidence-hook|install-tool-evidence|control-plane-projection-validate|specformula-ddl-check|mutation-probe)\.(mjs|mts|ts)$`,
       // pulls-review.ts 鎖相依用的 manifest 與 lockfile（非 .mjs/.ts 家族，故單列一條）
       String.raw`scripts/pulls-review\.(package\.json|pnpm-lock)$`,
       // PUBLIC consumer 的 salted hash 清單（propagate 的 consumer-sanitize 階段生成，非 vendor 源檔）
@@ -134,7 +144,10 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // NEVER widen to `scripts/lib/`: consumers author their own files there
       // (<consumer-a> `common.sh` / `read-infra-manifest.mjs`, <consumer-d> `vue-component-resolution.ts`),
       // and matching the whole dir would mark those clade-managed → auto-reset clobbers them.
-      String.raw`scripts/lib/(argv-unsplit|dev-runtime|evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|workspace-choice|workspace-repo-profile|json-unknown|safety-observation|worktree-dev-port|worktree-backlog|wt-patch-landing|review-bridge-worktree|publish-in-flight|projection-ledger-reconcile|herdr-machine|machine-cpu|host-config-refs|pane-cache-ttl|disk-low-water|claude-account-registry|register-paths|git-status-z|dev-slots|atomic-file|test-trust-baseline)\.(mjs|mts|ts)$`,
+      String.raw`scripts/lib/(argv-unsplit|dev-runtime|evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|workspace-choice|workspace-repo-profile|json-unknown|safety-observation|claim-transfer|worktree-dev-port|worktree-backlog|wt-patch-landing|review-bridge-worktree|publish-in-flight|projection-ledger-reconcile|herdr-machine|machine-cpu|host-config-refs|pane-cache-ttl|disk-low-water|claude-account-registry|register-paths|git-status-z|dev-slots|atomic-file|test-trust-baseline|herdr-socket)\.(mjs|mts|ts)$`,
+      // claude-account-registry.ts 在 module 載入時讀同目錄的帳號清單 JSON（非 .mjs/.mts/.ts 家族，故單列；
+      // vendor-targets 的投影 dest，缺這條 _validate-manifests 會判 TD-018 drift）。flow 鏡像在 `.clade/vendor/`，已被上面涵蓋。
+      String.raw`scripts/lib/claude-accounts\.json$`,
       // skip-gate／test-removal-gate 的復活驗證子目錄：整目錄都是 vendor-targets 投影，consumer 不在這放自家檔。
       String.raw`scripts/lib/mutation-probe/`,
       // dev-session.ts 的 `slots` 命令引用的 dev server 判定（散到 consumer 的 scripts/lib/dev-resource/）。
@@ -229,7 +242,7 @@ function isCursorGeneratedProjection(repoRoot, p) {
  */
 /** 本體搬到 `.agents/skills/<name>/` 的 clade home local skill（`.claude/skills/<name>` 是指過去的 symlink）。新增時 guard 的 `LOCAL_SKILL_SOURCE_RE` 一起補。 */
 const AGENTS_LOCAL_SKILLS =
-  'clade-publish|clade-health|coordinator|hook-authoring|flow-maintainer|claude-credit-manager|tailscale-admin|claude-account-pool'
+  'clade-publish|clade-health|coordinator|hook-authoring|flow-maintainer|claude-credit-manager|tailscale-admin|claude-account-pool|promo-video'
 
 const CLADE_OWN_SOURCE_RE = new RegExp(
   '^(' +
@@ -423,4 +436,186 @@ export function isLockedProjectionPathFor(repoRoot, p) {
   if (p === 'CLAUDE.md') return isClaudeMdBannerOnly(repoRoot)
   if (p.startsWith('.cursor/')) return isCursorGeneratedProjection(repoRoot, p)
   return true
+}
+
+/**
+ * rev 樹上 path 的 ls-tree 項目（只讀 commit 物件）：git 失敗（物件不在、rev 判不出）回 undefined，
+ * 樹上沒有這個 path 回 null，否則回 { mode, type, hash }。
+ */
+function entryAtRev(repoRoot, rev, p) {
+  if (!rev) return undefined
+  const key = `${repoRoot}\0${rev}\0${p}`
+  if (FULL_SHA_RE.test(rev) && entryAtRevCache.has(key)) return entryAtRevCache.get(key)
+  const got = entryAtRevUncached(repoRoot, rev, p)
+  if (FULL_SHA_RE.test(rev) && got !== undefined) entryAtRevCache.set(key, got)
+  return got
+}
+
+function entryAtRevUncached(repoRoot, rev, p) {
+  try {
+    const entry = execFileSync('git', ['ls-tree', '-z', rev, '--', p], {
+      cwd: repoRoot,
+      env: { ...cwdScopedGitEnv, GIT_LITERAL_PATHSPECS: '1' },
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+    if (!entry) return null
+    const [mode, type, hash] = entry.split('\t')[0].split(' ')
+    return { mode, type, hash }
+  } catch {
+    return undefined
+  }
+}
+
+/** rev 樹上 path 的一般檔內容：git 失敗回 undefined；不存在、symlink、submodule、目錄回 null。 */
+function blobAtRev(repoRoot, rev, p) {
+  const e = entryAtRev(repoRoot, rev, p)
+  if (!e) return e
+  if (e.type !== 'blob' || e.mode === '120000') return null
+  try {
+    return execFileSync('git', ['cat-file', 'blob', e.hash], {
+      cwd: repoRoot,
+      env: cwdScopedGitEnv,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      maxBuffer: 64 << 20,
+    })
+  } catch {
+    return undefined
+  }
+}
+
+const cladeSourceCommitCache = new Map()
+
+/** rev 這個 commit 是不是 clade 中央倉的樹（isCladeSourceRepo 的三個 marker 在樹上）：只讀 commit 物件；git 失敗或沒給 rev 回 null（判不出）。 */
+function isCladeSourceCommit(repoRoot, rev) {
+  if (!rev) return null
+  const key = `${repoRoot}\0${rev}`
+  const cached = cladeSourceCommitCache.get(key)
+  if (cached !== undefined) return cached
+  let result = false
+  try {
+    const out = execFileSync(
+      'git',
+      [
+        'ls-tree',
+        '-z',
+        '--name-only',
+        rev,
+        '--',
+        'registry/consumers.json',
+        'scripts/publish.ts',
+        'vendor/scripts/locked-projection.ts',
+      ],
+      {
+        cwd: repoRoot,
+        env: { ...cwdScopedGitEnv, GIT_LITERAL_PATHSPECS: '1' },
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      },
+    )
+    result = out.split('\0').filter(Boolean).length === 3
+  } catch {
+    result = null
+  }
+  cladeSourceCommitCache.set(key, result)
+  return result
+}
+
+/**
+ * commit 版的 `isLockedProjectionPathFor`：path 在 base→head 這段改動裡是不是 clade 投影，**只讀 base 與 head 兩個 commit 的 blob**，
+ * NEVER 讀 repoRoot 的 HEAD、index 或工作樹（repoRoot 只用來找 git 物件）。同一組 (base, head, path) 在任何 checkout
+ * （主持者的 checkout、HEAD＝base 的快照樹）答案都一樣——0-A wrapper 的 patchExcluded（rounds plan／open）走這一支。
+ * repo 是不是 clade 本倉看 base 或 head 的樹（任一個帶 isCladeSourceRepo 的三個 marker）。
+ * 混住 consumer 自家檔的 banner 目錄（BANNER_SCOPED）比照 oa-batches 的 isProjectionAtHead：head（PR 刪掉的檔看 base）的 blob
+ * 要有 banner 或逐位元等於 clade 已合入的同名檔才算投影，路徑本身不是證據。
+ * 判不出（git 失敗、物件不在）一律回 false：多審，不少審。
+ */
+export function isLockedProjectionPathAt(repoRoot, base, head, p) {
+  // 同一組 (base, head, path) 答案固定（只讀 commit 物件）：patchCompare 的 differ／drift 與各呼叫端會對同一組重問，
+  // 不 memo 每個路徑要重 spawn 一輪 git（base 移動後投影檔多的 PR 會拖過 rounds 的逾時）。只 memo 完整 sha（ref 會動）。
+  const memo = FULL_SHA_RE.test(base ?? '') && FULL_SHA_RE.test(head ?? '')
+  const key = `${repoRoot}\0${base}\0${head}\0${p}`
+  if (memo && projectionAtCache.has(key)) return projectionAtCache.get(key)
+  const got = isLockedProjectionPathAtUncached(repoRoot, base, head, p)
+  if (memo) projectionAtCache.set(key, got)
+  return got
+}
+
+const FULL_SHA_RE = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/
+const projectionAtCache = new Map()
+const entryAtRevCache = new Map()
+
+function isLockedProjectionPathAtUncached(repoRoot, base, head, p) {
+  if (CURSOR_OWNED_USER_RE.test(p)) return false
+  if (p.startsWith('.claude/rules/local/')) return false
+  if (CLADE_OWN_SOURCE_RE.test(p)) {
+    const at = [isCladeSourceCommit(repoRoot, base), isCladeSourceCommit(repoRoot, head)]
+    // 判不出是不是 clade 本倉時不當投影（fail closed）。
+    if (at.some((v) => v !== false)) return false
+  }
+  if (!LOCKED_PROJECTION_RE.test(p)) return false
+  if (p === 'CLAUDE.md') {
+    const now = blobAtRev(repoRoot, head, p)
+    // 刪除證明不了「只動 snippet」：照審。git 失敗同樣照審。
+    if (now === null || now === undefined) return false
+    const was = blobAtRev(repoRoot, base, p)
+    if (was === undefined) return false
+    // base 沒有 CLAUDE.md：sync 缺檔 seed 的那一行 pointer 是投影，其他新增內容是 consumer 的。
+    if (was === null) return now === INSTRUCTION_FILE_POINTER
+    // sync 不會把有 consumer 正文的 CLAUDE.md 改寫成空殼／那一行：base 有正文時剪成那樣是 consumer 的改動。
+    if (isGeneratedClaudeMdBody(now)) return isShellOnlyClaudeMd(was)
+    const outside = claudeMdOutsideSnippets(was)
+    return outside !== null && claudeMdOutsideSnippets(now) === outside
+  }
+  if (p.startsWith('.cursor/')) {
+    if (CURSOR_PROJECTOR_JSON_RE.test(p)) return true
+    if (!CURSOR_PROJECTOR_DEST_RE.test(p)) return false
+    const banner = (text) =>
+      typeof text === 'string' && text.slice(0, 2048).includes(LOCKED_BANNER_SIGNATURE)
+    // skill 以 head 的 SKILL.md banner 代表整棵樹；其餘檔看 head 上自身的 banner，head 沒有這個檔（PR 刪掉）而 base 有才算投影。
+    const skill = /^\.cursor\/skills\/([^/]+)\//.exec(p)
+    if (skill) {
+      const skillMd = blobAtRev(repoRoot, head, `.cursor/skills/${skill[1]}/SKILL.md`)
+      if (skillMd === undefined) return false
+      if (skillMd !== null) return banner(skillMd)
+    }
+    const now = entryAtRev(repoRoot, head, p)
+    if (now === undefined) return false
+    if (now === null) return Boolean(entryAtRev(repoRoot, base, p))
+    return banner(blobAtRev(repoRoot, head, p))
+  }
+  if (BANNER_SCOPED.test(p)) {
+    if (!shippedBlob) return false
+    const atHead = entryAtRev(repoRoot, head, p)
+    if (atHead === undefined) return false
+    const rev = atHead === null ? base : head
+    const entry = atHead ?? entryAtRev(repoRoot, base, p)
+    if (!entry || entry.type !== 'blob') return false
+    const text = blobAtRev(repoRoot, rev, p)
+    if (
+      typeof text === 'string' &&
+      text
+        .split('\n')
+        .slice(0, 5)
+        .some((l) => l.includes('LOCKED — managed by clade'))
+    )
+      return true
+    // 放不進 banner 的格式：與 wrapper／oa-batches 同一份內容證明；版本取基準側（PR 自己改的 manifest 不能挑比對基準）。
+    const version = shippedBlob.manifestVersion(
+      blobAtRev(repoRoot, base, '.clade/manifest.json') ?? null,
+    )
+    return shippedBlob.isCladeShippedBlob(
+      cladeHomeRoot(),
+      p,
+      { mode: entry.mode, hash: entry.hash },
+      version,
+    )
+  }
+  return true
+}
+
+/** 比對 shipped blob 的 clade 倉：CLADE_HOME，否則本檔所在的 clade（vendor/scripts 的上兩層）。 */
+function cladeHomeRoot() {
+  return process.env.CLADE_HOME || join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 }

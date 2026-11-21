@@ -558,9 +558,9 @@ export function locatePrCreate(cmd: string, cwd: string | null): PrCreateSite | 
   return null
 }
 
-/** `git [-C dir|-c k=v|--no-pager …] commit|cherry-pick|merge|am|revert`：會在 hook 看不到的當下新增 commit 的子命令。 */
+/** `git [-C dir|-c k=v|--no-pager …] commit|cherry-pick|merge|am|revert|pull|rebase`：會在 hook 看不到的當下新增 commit 的子命令。 */
 const COMMIT_SEG_RE =
-  /^git(?:\s+(?:-[Cc]\s+\S+|--[\w-]+(?:=\S+)?|-\w))*\s+(?:commit|cherry-pick|merge|am|revert)(?=\s|$)/u
+  /^git(?:\s+(?:-[Cc]\s+\S+|--[\w-]+(?:=\S+)?|-\w))*\s+(?:commit|cherry-pick|merge|am|revert|pull|rebase)(?=\s|$)/u
 
 /**
  * `gh pr create` 之前，同一個指令串裡有沒有會新增 commit 的 git 子命令。
@@ -961,4 +961,18 @@ function main() {
   process.exitCode = 2
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main()
+/**
+ * 進入判定兩邊都 realpath：node 把 `import.meta.url` realpath 化、`process.argv[1]` 原樣保留。
+ * plugin 目錄經 symlink 叫進來（`~/.claude-N/plugins` → `~/.claude/plugins`，CLAUDE_PLUGIN_ROOT 是 symlink 路徑）時
+ * 兩者不相等，`main()` 靜默不跑、整個閘門 fail-open（2026-11-15 #5337／#5397 只動 plan 的 PR 就是這樣漏過）。
+ */
+function isEntrypoint(): boolean {
+  if (!process.argv[1]) return false
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return false
+  }
+}
+
+if (isEntrypoint()) main()

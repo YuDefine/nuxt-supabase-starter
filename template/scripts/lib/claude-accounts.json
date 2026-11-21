@@ -1,0 +1,29 @@
+{
+  "schema": "clade.slot-table/v1",
+  "pool": "claude-accounts",
+  "rows": [
+    {
+      "id": "claude-1",
+      "launcher": "cc1",
+      "configDir": ".claude",
+      "enabled": true,
+      "quotaId": "claude-main",
+      "statusline": "cc",
+      "aliases": ["cc"]
+    },
+    {
+      "id": "claude-2",
+      "launcher": "cc2",
+      "configDir": ".claude-2",
+      "enabled": true,
+      "quotaId": "claude-work",
+      "statusline": "ccw",
+      "aliases": ["ccw"]
+    },
+    { "id": "claude-3", "launcher": "cc3", "configDir": ".claude-3", "enabled": true },
+    { "id": "claude-4", "launcher": "cc4", "configDir": ".claude-4", "enabled": true },
+    { "id": "claude-5", "launcher": "cc5", "configDir": ".claude-5", "enabled": true },
+    { "id": "claude-6", "launcher": "cc6", "configDir": ".claude-6", "enabled": true },
+    { "id": "claude-7", "launcher": "cc7", "configDir": ".claude-7", "enabled": true }
+  ]
+}

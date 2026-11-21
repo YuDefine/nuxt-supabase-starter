@@ -43,7 +43,7 @@ import type { ConfigOptions } from '@nuxt/test-utils/playwright'
 export default defineConfig<ConfigOptions>({
   testDir: './e2e',
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  retries: process.env.CI ? 2 : 0, // runner 層 CI retry 是本規則的預設；不等於可在 spec 加 test.skip／retry（見 testing-anti-patterns § Flaky 測試）
   use: {
     nuxt: {
       rootDir: fileURLToPath(new URL('.', import.meta.url)),

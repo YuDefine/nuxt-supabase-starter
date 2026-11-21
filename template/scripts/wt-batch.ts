@@ -248,7 +248,7 @@ export const trustedRepositoriesByConsumerId: ReadonlyMap<string, string> = new 
   ['<consumer-d>', 'YuDefine/<consumer-d>'],
   ['<consumer-b>', '<client-b>/<consumer-b>'],
   ['<consumer-k>', 'YuDefine/<consumer-k>'],
-  ['<consumer-l>', 'YuDefine/<consumer-l>'],
+  ['<consumer-m>', 'YuDefine/<consumer-m>'],
   ['<consumer-i>', '<client-b>/<consumer-i>'],
   ['<consumer-h>', '<client-b>/<consumer-h>'],
   ['<consumer-j>', '<client-b>/<consumer-j>'],

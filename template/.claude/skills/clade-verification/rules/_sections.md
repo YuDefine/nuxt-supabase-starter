@@ -56,14 +56,14 @@ audit-pattern.md — D-pattern audit 規範（DB outbox canonical + evlog derive
 
 checker-contract.md — 新增或修改 mechanical checker、CI gate、contract checker、allowlist 時套用；防止 scope 不透明、依賴缺失誤判綠燈與 canonical check 漂移
 5-11 前導 — Checker Contract
-13-48 REQUIRED output contract
-50-98 Fail-closed Iron Law
-100-121 執行載體（檔案存在 ≠ 有東西會執行它）
-123-135 上線前看它紅一次（載體接上 ≠ 判定會觸發）
-137-150 判準綁事實，不綁命名或結構慣例
-152-156 Canonical check entry
-158-194 Allowlist ratchet
-196-207 違反回報格式
+13-52 REQUIRED output contract
+54-102 Fail-closed Iron Law
+104-125 執行載體（檔案存在 ≠ 有東西會執行它）
+127-139 上線前看它紅一次（載體接上 ≠ 判定會觸發）
+141-154 判準綁事實，不綁命名或結構慣例
+156-160 Canonical check entry
+162-198 Allowlist ratchet
+200-211 違反回報格式
 
 checker-subagent.md — 高擴散半徑改動（跨 consumer 共用 SoT / migration / auth 路徑 / 共用 util）在 publish 或 commit 前要派 fresh-context checker subagent 複核——只讀 diff + spec，產出 PASS/FAIL + finding；gate 全綠是派 checker 的前置條件不是複核項；其餘任務不派
 5-10 前導 — Checker Subagent（高擴散半徑改動複核）
@@ -210,7 +210,7 @@ test-scripts.md — Vitest multi-project test script 設計規範——禁止寫
 97-110 Advisory：包 clade-gate 收 signal（improvement-loop enabled consumer）
 112-128 MUST：重寫已包 clade-gate 的 script 時保留前綴
 
-testing-anti-patterns.md — Testing anti-patterns to avoid — mock 濫用、test-only production methods、不完整 mock、unit test 何時寫（U1–U5）、E2E fixture 寫死絕對日期、測試碼品質低於生產碼、抄本測試（期望值在測試裡重算）、刪除或合併既有測試、孤兒測試（沒被 CI 收進去）、測試結構契約、測試逾時紅（負載假紅、放寬逾時數值）
+testing-anti-patterns.md — Testing anti-patterns to avoid — mock 濫用、test-only production methods、不完整 mock、unit test 何時寫（U1–U5）、E2E fixture 寫死絕對日期、測試碼品質低於生產碼、抄本測試（期望值在測試裡重算）、刪除或合併既有測試、孤兒測試（沒被 CI 收進去）、測試結構契約、測試逾時紅（負載假紅、放寬逾時數值）、flaky 測試（判定與現行隔離寫法）
 14-17 前導 — Testing Anti-Patterns
 19-21 Overview
 23-29 The Iron Laws
@@ -242,6 +242,7 @@ testing-anti-patterns.md — Testing anti-patterns to avoid — mock 濫用、te
 651-680 對設定檔原文的斷言，標的是行為本身
 682-694 Bug 診斷紀律：重現先於推理
 696-714 測試逾時紅：先跑 main 比對，NEVER 放寬數字
+716-725 Flaky 測試：以判定機制為準，NEVER 憑印象說「本來就 flaky」
 
 truth-layers.md — Optional truth-layers 規則——適用於有明確 persistence / contract / API / UI 分層的專案，定義每一層的真相來源
 5-10 前導 — Truth Layers

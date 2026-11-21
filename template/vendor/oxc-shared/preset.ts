@@ -489,6 +489,8 @@ type LintConfig = NonNullable<UserConfig['lint']>
 type FmtConfig = NonNullable<UserConfig['fmt']>
 type LintOverride = NonNullable<LintConfig['overrides']>[number]
 
+// 本檔的每一條 `off` 與整類 `off` 都要在 `./lint-exceptions.ts` 有全 fleet 登記（repo: '*'），
+// consumer 的偏離同樣登記在那裡。
 export const lintBase = {
   categories: {
     correctness: 'error',
@@ -565,6 +567,7 @@ export const lintBase = {
     'coverage/',
     'supabase/',
     '.vite-doctor/',
+    '.wrangler/',
     '*.d.ts',
     // `.claude/` `.clade/` `.agents/` `.codex/` `.cursor/` 全部由 PROJECTION_EXCLUDES 帶入。
     ...PROJECTION_EXCLUDES,
@@ -595,9 +598,12 @@ export const fmtBase = {
   },
   ignorePatterns: [
     '**/*.md',
+    'node_modules/**',
+    'dist/**',
     'coverage/**',
     '.nuxt/**',
     '.output/**',
+    '.wrangler/**',
     'pnpm-lock.yaml',
     // evlog map 的產出（tracked 是為了當 ratchet baseline）。工具每次重生都會寫出
     // 非 canonical 形式，不排除的話每次更新 baseline 都要多跑一次 fmt，且 lint-staged
@@ -682,7 +688,7 @@ export const AGENT_CACHE_TEST_EXCLUDES = [
  *
  * clade 自己**不消費本 base**：它的 `test.include` 收窄成 `vp-tests/**\/*.vp.ts`，
  * 掃描面本來就進不到 `.pi/`。**NEVER** 拿「clade 沒事」推論 consumer 也沒事 ——
- * fleet 現況不齊一：ai-quota／<consumer-j>／<consumer-l> 已收窄 `test.include`（同樣免疫，
+ * fleet 現況不齊一：ai-quota／<consumer-j>／<consumer-m> 已收窄 `test.include`（同樣免疫，
  * 但理由跟 clade 一樣是 include 收窄，不是本 base）；<consumer-b>／<consumer-c> 則是
  * consumer 自己手寫 `test.exclude`（如 `['e2e/**', 'node_modules/**', '.nuxt/**', '.output/**']`），
  * 這正是本檔開頭警告的覆蓋語義事故現場 —— 手寫版把 `**\/.git/**` 弄丟了、`node_modules/**`

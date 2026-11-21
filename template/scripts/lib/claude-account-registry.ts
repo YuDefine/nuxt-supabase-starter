@@ -2,75 +2,136 @@
 /**
  * Claude 帳號池的單一 SoT。
  *
- * 帳號清單寫死在這裡，不要讀任何 config：`cc` 是池入口（依額度挑帳號），
- * `ccN` 釘選第 N 個帳號。舊 dispatch record 的 `account: cc|ccw`、ai-quota 帳號 id
- * 全部由這裡對映到池 id——任何消費端要「哪個帳號」都只能問 registry，NEVER 各自寫死帳號名。
+ * 帳號清單從資料檔 `claude-accounts.json`（同目錄）讀，不從型別讀（plans/40 T28、§ 設計定稿 六）：
+ * 加帳號＝在登記檔加一列 `{id, launcher, configDir, enabled}`，下游一律從這裡推導，NEVER 改程式。
+ * `CLADE_CLAUDE_ACCOUNTS_FILE` 指向另一份登記檔（測試、模擬加帳號用）。資料列執行期驗證，壞列直接丟錯。
+ * 登記檔形狀是通用的 slot table（`schema: clade.slot-table/v1`，`rows[]` 每列一個槽）：執行器路由表
+ * （plans/40 § 設計定稿 九）沿用同一形狀，加執行器＝加一列。
+ *
+ * `cc` 是池入口（依額度挑帳號），`ccN` 釘選第 N 個帳號。舊 dispatch record 的 `account: cc|ccw`、ai-quota 帳號 id
+ * 全部由這裡對映到池 id——任何消費端要「哪個帳號」都只能問 registry，NEVER 各自寫死帳號名或帳號清單
+ * （`test/claude-account-literal-list.test.ts` 擋）。
  * `ccw`（cc2 舊名）已退役：只剩舊 record 的帳號值還解析得到 claude-2，NEVER 當 launcher 名。
  *
- * 帳號加入／退出只改 `CLAUDE_POOL_ACCOUNTS`；下游型別全部由這份陣列推導。
+ * 列欄位：`quotaId`（ai-quota collector 的帳號 id）省略＝`id`；`statusline`（`~/.cache/claude-quota/<name>.json`）
+ * 省略＝`launcher`；`aliases` 是舊 record／env 會出現的別名；`enabled: false` 的列不進池（仍解析得到，讀舊 record 用）；
+ * `maxConcurrent` 是該帳號的併發鼓槽數（省略＝不設上限，見 `lib/claude-account-expiring-score.ts`）。
+ *
  * 方案（Pro／Max 5x／Max 20x）NEVER 寫在這裡：訂閱會升降級，現行方案讀 profile `.claude.json` 的
  * `organizationRateLimitTier`，顯示標籤與月費走價目（`claude-cost/prices.json`）。
  */
 
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
 export interface ClaudePoolAccount {
   /** 池內唯一 id，新 record 的 `account`／`slot` 欄位寫這個。 */
-  id: 'claude-1' | 'claude-2' | 'claude-3' | 'claude-4' | 'claude-5' | 'claude-6'
+  id: `claude-${number}`
   /** 釘選這個帳號的指令名（zsh function／`--launcher`／`CLADE_CLAUDE_LAUNCHER`）。 */
-  command: 'cc1' | 'cc2' | 'cc3' | 'cc4' | 'cc5' | 'cc6'
+  command: `cc${number}`
   /** `CLAUDE_CONFIG_DIR` 相對 `$HOME` 的 basename。 */
   configDir: string
   /** ai-quota collector config 裡的帳號 id。 */
   quotaId: string
   /** `~/.cache/claude-quota/<name>.json` 的檔名（claude-home statusline 寫入端與這裡對齊）。 */
   statusline: string
+  /** 登記檔 `enabled`：false 的帳號不進池。 */
+  enabled: boolean
+  /** 舊 record／env／CLI 可能出現的別名（`cc`、`ccw`）。 */
+  aliases: readonly string[]
+  /** 併發鼓槽數；省略＝不設上限。 */
+  maxConcurrent?: number
 }
 
-export const CLAUDE_POOL_ACCOUNTS: readonly ClaudePoolAccount[] = [
-  {
-    id: 'claude-1',
-    command: 'cc1',
-    configDir: '.claude',
-    quotaId: 'claude-main',
-    statusline: 'cc',
-  },
-  {
-    id: 'claude-2',
-    command: 'cc2',
-    configDir: '.claude-2',
-    // quotaId／statusline 是資料 key（ai-quota 帳號 id 與歷史、~/.cache/claude-quota/<name>.json），
-    // 不隨 config dir 改名；要改得連同 collector 設定與額度快取一起遷移。
-    quotaId: 'claude-work',
-    statusline: 'ccw',
-  },
-  {
-    id: 'claude-3',
-    command: 'cc3',
-    configDir: '.claude-3',
-    quotaId: 'claude-3',
-    statusline: 'cc3',
-  },
-  {
-    id: 'claude-4',
-    command: 'cc4',
-    configDir: '.claude-4',
-    quotaId: 'claude-4',
-    statusline: 'cc4',
-  },
-  {
-    id: 'claude-5',
-    command: 'cc5',
-    configDir: '.claude-5',
-    quotaId: 'claude-5',
-    statusline: 'cc5',
-  },
-  {
-    id: 'claude-6',
-    command: 'cc6',
-    configDir: '.claude-6',
-    quotaId: 'claude-6',
-    statusline: 'cc6',
-  },
-]
+/** 預設登記檔路徑（與本檔同目錄）。 */
+export const CLAUDE_ACCOUNTS_FILE = fileURLToPath(
+  new URL('./claude-accounts.json', import.meta.url),
+)
+
+const ID_RE = /^claude-[1-9][0-9]*$/
+const LAUNCHER_RE = /^cc[1-9][0-9]*$/
+
+function fail(path: string, message: string): never {
+  throw new Error(`claude account registry ${path}: ${message}`)
+}
+
+/** 驗證登記檔內容（執行期型別檢查）；壞列丟錯，NEVER 靜默略過。 */
+export function parseClaudeAccountRegistry(raw: unknown, path = '<inline>'): ClaudePoolAccount[] {
+  if (!raw || typeof raw !== 'object') fail(path, 'not an object')
+  const table = raw as { schema?: unknown; rows?: unknown }
+  if (table.schema !== 'clade.slot-table/v1') fail(path, 'schema must be clade.slot-table/v1')
+  if (!Array.isArray(table.rows) || table.rows.length === 0)
+    fail(path, 'rows must be a non-empty array')
+  const seen = new Set<string>()
+  return table.rows.map((row: unknown, i): ClaudePoolAccount => {
+    const r = (row ?? {}) as Record<string, unknown>
+    const at = `rows[${i}]`
+    if (typeof r.id !== 'string' || !ID_RE.test(r.id)) fail(path, `${at}.id must match claude-N`)
+    if (typeof r.launcher !== 'string' || !LAUNCHER_RE.test(r.launcher))
+      fail(path, `${at}.launcher must match ccN`)
+    if (typeof r.configDir !== 'string' || r.configDir === '' || r.configDir.includes('/'))
+      fail(path, `${at}.configDir must be a basename`)
+    if (typeof r.enabled !== 'boolean') fail(path, `${at}.enabled must be boolean`)
+    for (const key of ['quotaId', 'statusline'] as const)
+      if (r[key] !== undefined && (typeof r[key] !== 'string' || r[key] === ''))
+        fail(path, `${at}.${key} must be a non-empty string`)
+    if (
+      r.aliases !== undefined &&
+      (!Array.isArray(r.aliases) || r.aliases.some((a) => typeof a !== 'string' || a === ''))
+    )
+      fail(path, `${at}.aliases must be string[]`)
+    if (
+      r.maxConcurrent !== undefined &&
+      (typeof r.maxConcurrent !== 'number' ||
+        !Number.isInteger(r.maxConcurrent) ||
+        r.maxConcurrent < 1)
+    )
+      fail(path, `${at}.maxConcurrent must be a positive integer`)
+    const account: ClaudePoolAccount = {
+      id: r.id as ClaudePoolAccount['id'],
+      command: r.launcher as ClaudePoolAccount['command'],
+      configDir: r.configDir,
+      quotaId: (r.quotaId as string | undefined) ?? r.id,
+      statusline: (r.statusline as string | undefined) ?? r.launcher,
+      enabled: r.enabled,
+      aliases: (r.aliases as string[] | undefined) ?? [],
+      ...(r.maxConcurrent !== undefined ? { maxConcurrent: r.maxConcurrent as number } : {}),
+    }
+    // 同一列內重複（`quotaId` 省略＝`id`、`statusline` 省略＝`launcher`）不算撞；跨列才算。
+    const keys = new Set<string>([
+      account.id,
+      account.command,
+      account.configDir,
+      account.quotaId,
+      account.statusline,
+      ...account.aliases,
+    ])
+    for (const k of keys) {
+      if (seen.has(k)) fail(path, `${at} duplicates ${k}`)
+      seen.add(k)
+    }
+    return account
+  })
+}
+
+function loadRegistry(): ClaudePoolAccount[] {
+  const path = process.env.CLADE_CLAUDE_ACCOUNTS_FILE || CLAUDE_ACCOUNTS_FILE
+  let raw: unknown
+  try {
+    raw = JSON.parse(readFileSync(path, 'utf8'))
+  } catch (error) {
+    fail(path, `unreadable (${(error as Error).message})`)
+  }
+  return parseClaudeAccountRegistry(raw, path)
+}
+
+/** 登記檔的全部列（含 `enabled: false`）：只給解析舊 record 用。 */
+export const CLAUDE_REGISTERED_ACCOUNTS: readonly ClaudePoolAccount[] = loadRegistry()
+
+/** 池內帳號（登記檔 `enabled: true` 的列，依登記序）。 */
+export const CLAUDE_POOL_ACCOUNTS: readonly ClaudePoolAccount[] = CLAUDE_REGISTERED_ACCOUNTS.filter(
+  (account) => account.enabled,
+)
 
 export type ClaudeAccountId = ClaudePoolAccount['id']
 export type ClaudePinCommand = ClaudePoolAccount['command']
@@ -92,36 +153,37 @@ export const RETIRED_CLAUDE_CONFIG_DIRS: Readonly<Record<string, string>> = {
   '.claude-work': '.claude-2',
 }
 
-/** 舊 record／env／CLI 可能出現的帳號值 → 池 id。`cc` 在帳號欄位語境下仍是 claude-1。 */
-const ACCOUNT_ALIASES: Record<string, ClaudeAccountId> = {
-  cc: 'claude-1',
-  ccw: 'claude-2',
-  cc1: 'claude-1',
-  cc2: 'claude-2',
-  cc3: 'claude-3',
-  cc4: 'claude-4',
-  cc5: 'claude-5',
-  cc6: 'claude-6',
-  'claude-1': 'claude-1',
-  'claude-2': 'claude-2',
-  'claude-3': 'claude-3',
-  'claude-4': 'claude-4',
-  'claude-5': 'claude-5',
-  'claude-6': 'claude-6',
-  'claude-main': 'claude-1',
-  'claude-work': 'claude-2',
-}
+/** 舊 record／env／CLI 可能出現的帳號值 → 池 id。`cc` 在帳號欄位語境下仍是 claude-1（登記檔 aliases）。 */
+const ACCOUNT_ALIASES: Record<string, ClaudeAccountId> = Object.fromEntries(
+  CLAUDE_REGISTERED_ACCOUNTS.flatMap((account) =>
+    [account.command, account.id, account.quotaId, ...account.aliases].map((key) => [
+      key,
+      account.id,
+    ]),
+  ),
+)
 
-const ACCOUNT_BY_ID = new Map(CLAUDE_POOL_ACCOUNTS.map((account) => [account.id, account]))
+const ACCOUNT_BY_ID = new Map(CLAUDE_REGISTERED_ACCOUNTS.map((account) => [account.id, account]))
+// 新輸入（CLI／env 的 `ccN`）只認池內（enabled）帳號；disabled 的列只給 `resolveRecordLauncher` 讀舊 record。
 const ACCOUNT_BY_COMMAND = new Map(
   CLAUDE_POOL_ACCOUNTS.map((account) => [account.command, account]),
 )
-const ACCOUNT_BY_QUOTA_ID = new Map(CLAUDE_POOL_ACCOUNTS.map((a) => [a.quotaId, a]))
-const ACCOUNT_BY_STATUSLINE = new Map(CLAUDE_POOL_ACCOUNTS.map((a) => [a.statusline, a]))
-const ACCOUNT_BY_CONFIG_DIR = new Map(CLAUDE_POOL_ACCOUNTS.map((a) => [a.configDir, a]))
+const ACCOUNT_BY_QUOTA_ID = new Map(CLAUDE_REGISTERED_ACCOUNTS.map((a) => [a.quotaId, a]))
+const ACCOUNT_BY_STATUSLINE = new Map(CLAUDE_REGISTERED_ACCOUNTS.map((a) => [a.statusline, a]))
+const ACCOUNT_BY_CONFIG_DIR = new Map(CLAUDE_REGISTERED_ACCOUNTS.map((a) => [a.configDir, a]))
 
 export function claudePoolAccounts(): readonly ClaudePoolAccount[] {
   return CLAUDE_POOL_ACCOUNTS
+}
+
+/** 池內釘選指令名（登記序）：usage／錯誤訊息列帳號時用這個，NEVER 手寫 `cc1|cc2|…`。 */
+export function claudePinCommands(): readonly ClaudePinCommand[] {
+  return CLAUDE_POOL_ACCOUNTS.map((account) => account.command)
+}
+
+/** launcher 選項字串：`cc|cc1|cc2|…`（`sep` 換分隔符）。 */
+export function claudeLauncherChoices(sep = '|', withPoolEntry = true): string {
+  return [...(withPoolEntry ? [CLAUDE_POOL_ENTRY] : []), ...claudePinCommands()].join(sep)
 }
 
 export function claudeAccountOf(id: string | undefined | null): ClaudePoolAccount | undefined {
@@ -168,12 +230,13 @@ export function claudeFloorUsable(floor: number | null | undefined): boolean {
 /** launcher 名解析：`cc` = 池入口；`ccN`／`claude-N` = 釘選某帳號；退役名（`ccw`）回 null。 */
 export function resolveClaudeLauncher(
   name: string | undefined | null,
+  { allowDisabled = false }: { allowDisabled?: boolean } = {},
 ): { kind: 'pool' } | { kind: 'pin'; account: ClaudePoolAccount } | null {
   if (!name || Object.hasOwn(RETIRED_CLAUDE_LAUNCHERS, name)) return null
   if (name === CLAUDE_POOL_ENTRY) return { kind: 'pool' }
   const account =
     ACCOUNT_BY_COMMAND.get(name as ClaudePinCommand) ?? claudeAccountOf(resolveClaudeAccount(name))
-  if (!account) return null
+  if (!account || (!account.enabled && !allowDisabled)) return null
   return { kind: 'pin', account }
 }
 
@@ -184,7 +247,9 @@ export function resolveClaudeLauncher(
 export function resolveRecordLauncher(
   name: string | undefined | null,
 ): ReturnType<typeof resolveClaudeLauncher> {
-  return resolveClaudeLauncher(name ? (RETIRED_CLAUDE_LAUNCHERS[name] ?? name) : name)
+  return resolveClaudeLauncher(name ? (RETIRED_CLAUDE_LAUNCHERS[name] ?? name) : name, {
+    allowDisabled: true,
+  })
 }
 
 /**

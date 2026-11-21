@@ -1,6 +1,6 @@
 ---
-description: prod runtime 問題用 evlog wide event 調查的協定（消費側；先查 evlog 再從 code 對因）
-moment: 使用者描述 prod／staging 的 runtime 症狀（5xx、錯誤 toast、變慢、間歇、特定 user 異常）、要開始查原因時，在 grep code／查 codebase／派 Explore 之前
+description: prod runtime 問題用 evlog wide event 調查、dev／E2E 失敗先跑 dev-failure-digest 的協定（消費側；先查 evlog 再從 code 對因）
+moment: 使用者描述 prod／staging 的 runtime 症狀（5xx、錯誤 toast、變慢、間歇、特定 user 異常）、或本機測試／E2E／agent-browser／curl 打 dev server 失敗，要開始查原因時，在 grep code／查 codebase／派 Explore 之前
 paths:
   - 'server/**'
   - 'packages/**/server/**'
@@ -31,6 +31,21 @@ agent 的預設反射是 code-first（grep），對 runtime 症狀方向是反�
 3. **問 user**：「這台機器上剛才是不是你（或你的另一個 session）做了 X？」
 
 **NEVER** 把本節讀成「先問 user 再調查」（前兩步 agent 自己做完，第三步才問人，[[agent-self-verification]]）。**NEVER** 因為主機層答不出「誰做的」就繼續加深鑑識——`/var/log/auth.log` 可能不存在、Portainer CE 不記 audit log，該退回本節換更便宜的問題（[[pitfall-infra-change-attribution-skips-concurrent-session-check]]）。
+
+## dev／E2E 失敗（本機測試、E2E、agent-browser、curl）
+
+**觸發**：本機跑的單元／整合測試、E2E、agent-browser 操作、或 `curl` 打本機 dev server 失敗（server 回 5xx、request 掛掉、頁面出錯），要開始查原因時。
+
+1. **MUST 先跑** `node scripts/dev-failure-digest.ts`（clade 投影給 consumer 的路徑；clade 本身是 `vendor/scripts/dev-failure-digest.ts`），讀它印的 `code`／`path`／`status`／`why`／`fix`／`requestId`，**再**讀 code。它只印上次讀之後新增的 evlog 錯誤（level error／fatal，status ≥500 或沒有 status）與 nostics 診斷，最多 20 行；沒有輸出＝這段期間 server 沒記到 5xx 也沒有新診斷，失敗原因在 client／測試本身
+2. digest 讀 `.evlog/logs`（`nuxt dev`）、`.evlog/e2e`（E2E）、`.nostics.log`，並照 dev-session verification lease 讀**實際持有 dev server 的那棵 worktree**（多套件 repo 另讀 `packages|apps|clients|layers/<x>/` 下的同名檔）——pinned port 共用時寫檔的不一定是自己這棵。`--peek` 讀但不推進游標；`--json` 看全部
+3. 要比 digest 更寬的窗（含 4xx、info）：consumer 已裝 `@evlog/cli` ≥0.9.0 時用 `pnpm exec evlog logs errors --since <窗> --json`；否則直接讀 `.evlog/*/*.jsonl`
+4. `.evlog/` 不存在＝consumer 沒接 dev fs drain（`vendor/snippets/evlog-dev-fs-drain/`，規格 [[logging.drain-pipeline]] § dev／E2E fs drain），退回讀 dev server stderr，並把「沒接 fs drain」記成 consumer 待補
+
+**NEVER**：
+
+- ❌ 測試／E2E 失敗後跳過 digest 直接 grep code 推測 server 端原因
+- ❌ 把 digest 印出的舊錯誤當成這次失敗的原因而不比對 `path`／時間——游標只保證「上次讀之後」，不保證「這次測試造成」
+- ❌ 為了讀 log 去截斷、改寫或刪除 `.evlog/`、`.nostics.log`（drain 與 collector 同時在附加）
 
 ## Investigation-first 協定（每一個 prod runtime 症狀都適用）
 

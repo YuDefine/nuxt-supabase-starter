@@ -9,8 +9,8 @@
       "evidence": {
         "kind": "projection",
         "source": ".agents/skills/commit/scripts/claude-review-safe.sh",
-        "clade_version": "1.13.106",
-        "sha256": "f0db3257180bcdb66480d3680cf16aa58904408cd0abe0e94d23a9fe0b45a21a"
+        "clade_version": "1.13.110",
+        "sha256": "1eb40d5b5fe6b18a6d1d152e4551076f59556610d055e4f92822673f1eddc3c0"
       }
     },
     {
@@ -21,8 +21,20 @@
       "evidence": {
         "kind": "projection",
         "source": ".agents/skills/commit/scripts/lib/review-common.sh",
-        "clade_version": "1.13.106",
-        "sha256": "429b3caa72a1cf73d906bf10e136046ed1f12fc7b4ced8e8b22d9e9488d30c8c"
+        "clade_version": "1.13.110",
+        "sha256": "47d863f9fe0506c6550d3ff7c9828c6457c667ac09befd7c584af30cf1f671e5"
+      }
+    },
+    {
+      "id": "clade-projection.template-.claude-skills-clade-session-work-rules-agent-routing.routing-table.md",
+      "paths": [
+        "template/.claude/skills/clade-session-work/rules/agent-routing.routing-table.md"
+      ],
+      "evidence": {
+        "kind": "projection",
+        "source": ".agents/skills/clade-session-work/rules/agent-routing.routing-table.md",
+        "clade_version": "1.13.110",
+        "sha256": "55f6c372c15a141f5a597ead45f25d22b997d1254962aa8796d6efdbada80f14"
       }
     },
     {
@@ -33,8 +45,8 @@
       "evidence": {
         "kind": "projection",
         "source": ".agents/skills/commit/gates.md",
-        "clade_version": "1.13.106",
-        "sha256": "7ae8745e4f56a25854394617b36df937e059c121cbc92715016c07025662c1bf"
+        "clade_version": "1.13.110",
+        "sha256": "595cb425280f18a1668e90a3157e509931c8163017e13402102b378717c62e3c"
       }
     },
     {
@@ -45,8 +57,8 @@
       "evidence": {
         "kind": "projection",
         "source": ".agents/skills/commit/scripts/claude-review-safe.sh",
-        "clade_version": "1.13.106",
-        "sha256": "f0db3257180bcdb66480d3680cf16aa58904408cd0abe0e94d23a9fe0b45a21a"
+        "clade_version": "1.13.110",
+        "sha256": "1eb40d5b5fe6b18a6d1d152e4551076f59556610d055e4f92822673f1eddc3c0"
       }
     },
     {
@@ -57,8 +69,8 @@
       "evidence": {
         "kind": "projection",
         "source": ".agents/skills/commit/scripts/lib/review-common.sh",
-        "clade_version": "1.13.106",
-        "sha256": "429b3caa72a1cf73d906bf10e136046ed1f12fc7b4ced8e8b22d9e9488d30c8c"
+        "clade_version": "1.13.110",
+        "sha256": "47d863f9fe0506c6550d3ff7c9828c6457c667ac09befd7c584af30cf1f671e5"
       }
     }
   ]

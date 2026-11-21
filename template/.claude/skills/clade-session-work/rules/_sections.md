@@ -90,20 +90,23 @@ agent-routing.pi-watch-protocol.md — Pi dispatch、bounded phase、截圖取�
 
 agent-routing.routing-table.md — Routing Table 的對照資料層——工作類別 × 由誰執行（model・effort）× 為什麼的逐列表，以及 effort 檔位對照表。跨列的硬禁令與判準也在本檔（§ Pi 派工的 workspace capability、§ Routing 硬禁令）。**單純「要派工」不會自動載入本檔**：查表決定 model／effort 的那一刻，MUST 依 [[agent-routing]] 檔頭的強制指針主動 Read；改本表任一列或動 pi-routing-*.ts / pi-dispatch.ts 時 path-scoped 載入
 12-25 前導 — Agent Routing — Routing Table（對照資料層）
-27-45 禁用（Charles 2026-09-24；GPT 全面退場 2026-09-29；Gemini 退場、Haiku 5.5 開放 2026-10-08；xAI 退場 2026-10-21）
-47-65 effort 與執行載體
-67-69 判不進任一列時
-71-91 主線 residency（誰當主線；Charles 2026-09-29）
-93-106 Workflow 的 Sonnet `agent()`（2026-09-29）
-108-121 Haiku 5.5 的席位（Charles 2026-10-08；2026-10-29 加 `haiku-scanner`、`haiku-implementer`）
-123-139 E2E 綠準入（便宜／快席位承接的前提；Charles 2026-11-08）
-141-145 delegate-sub（原判 sonnet／haiku 等級的委派工作）
-147-155 Devin SWE-2 Max（任意 Pi 列可選）
-157-163 Claude 帳號池（2026-10-04）
-165-167 變更後的規約對照組重跑
-169-183 槓桿優先序與規約可實驗（Charles 2026-11-08）
-185-244 工作類別對照
-246-277 Pi 派工的 workspace capability
+27-45 禁用（Charles 2026-09-24；GPT 全面退場 2026-09-29；Gemini 退場、Haiku 5.5 開放 2026-10-08；xAI 退場 2026-10-21；GPT／Gemini／Codex runtime 改受控載體 2026-11-21）
+47-74 管道與風險層級（Charles 2026-11-20 答 A，flow span `a34b3cb04f149833`）
+76-102 非 Claude 受控載體（Charles 2026-11-21 22:08／22:41，交辦 routing-table-multivendor-20261121）
+104-112 額度感知載體選擇（2026-11-21）
+114-134 effort 與執行載體
+136-138 判不進任一列時
+140-162 主線 residency（誰當主線；Charles 2026-09-29）
+164-177 Workflow 的 Sonnet `agent()`（2026-09-29）
+179-192 Haiku 5.5 的席位（Charles 2026-10-08；2026-10-29 加 `haiku-scanner`、`haiku-implementer`）
+194-210 E2E 綠準入（便宜／快席位承接的前提；Charles 2026-11-08）
+212-216 delegate-sub（原判 sonnet／haiku 等級的委派工作）
+218-226 Devin SWE-2 Max（任意 Pi 列可選）
+228-234 Claude 帳號池（2026-10-04）
+236-238 變更後的規約對照組重跑
+240-254 槓桿優先序與規約可實驗（Charles 2026-11-08）
+256-315 工作類別對照
+317-348 Pi 派工的 workspace capability
 
 consumer-meta.md — 每個 consumer 自宣告 .claude/consumer-meta.json，描述 dev port / auth / database / deploy / verification 等 runtime 事實；clade 聚合成 registry/consumers-meta.json snapshot 供規則 / skill / audit 使用
 5-14 前導 — Consumer Meta（per-consumer 自宣告 + clade 聚合 snapshot）
@@ -243,9 +246,9 @@ runtime/session-claims.md — 多 session 並行下「哪些路徑屬於別 sess
 runtime/session-tasks.md — ad-hoc 工作開工前 MUST 先建 per-session task 檔——觸發條件、檔名格式、共享單檔禁令、session context 預算門檻
 4-9 前導 — Claude task UI and carrier adapter
 11-15 Claude launcher context 預算（MUST）
-17-74 Claude launcher context 預算（MUST） › 主判準是可觀察 predicate，token 數字是兜底（MUST）
-76-101 Claude launcher context 預算（MUST） › 身分豁免：三種身分不受本線約束（Charles 2026-09-02 拍板）
-103-126 Claude writer forensics
+17-76 Claude launcher context 預算（MUST） › 主判準是可觀察 predicate，token 數字是兜底（MUST）
+78-103 Claude launcher context 預算（MUST） › 身分豁免：三種身分不受本線約束（Charles 2026-09-02 拍板）
+105-128 Claude writer forensics
 
 runtime/session-tasks.operations.md — Session tasks 的操作細節——何時用 / 不用、模板、升級路徑、與其他真相層的分工、lessons.md 邊界；另含**收工正文**（收工三步 / 收工訊息契約 / Herdr session transport / 派幾個 pane / successor 收割），由 [[session-tasks]] 的具名時機指針與 session-context-budget-warn hook 叫醒
 5-37 全文 — Claude close-out and handoff carrier
@@ -325,7 +328,7 @@ session-tasks.operations.md — Session tasks 的操作細節——何時用 / �
 501-518 收工（session close-out） › Runtime × mode matrix（canonical；helper 現況，TD-827）
 520-594 收工（session close-out） › 派幾個 pane —— 先判這一題
 596-622 收工（session close-out） › successor 怎麼收割它繼承的 worker
-624-734 收工（session close-out） › 收割的機械兜底：Stop gate（不是提醒，是擋）
+624-735 收工（session close-out） › 收割的機械兜底：Stop gate（不是提醒，是擋）
 
 skill-management.md — 新增、安裝或同步 skill 時，辨認 canonical source、runtime projection、版控與 ownership 邊界
 5-9 前導 — Skill 管理

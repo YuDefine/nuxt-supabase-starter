@@ -16,7 +16,9 @@
 //
 // 用法：
 //   node projection-exemption.ts verify (--tree <dir> | --rev <sha> --repo <dir>) --paths-file <z-file>
-//        [--installed-from <dir>]... [--out <json>]
+//        [--root <subdir>] [--installed-from <dir>]... [--out <json>]
+//   （子目錄 consumer，例 starter 的 template/：manifest 與投影根在 <subdir>；沒給 --root 就從受審樹自動偵測。
+//     candidates 仍是整棵樹的相對路徑，只有 <subdir>/ 之下的檔可能被豁免。）
 //   node projection-exemption.ts hint <json>                 （印 exempt 路徑 NUL 分隔，當候選提示）
 //   node projection-exemption.ts render <json> [--paths-out <file>] [--summary-out <file>]
 // verify 一律 exit 0 並把結果寫進 --out（沒給就印 stdout）；用法錯才 exit 2。
@@ -59,6 +61,8 @@ export interface ExemptionResult {
   /** 候選檔數（diff 裡的路徑）。 */
   checked: number
   exempt: string[]
+  /** consumer root 相對受審樹的子目錄（starter 的 `template`）；沒有＝consumer 就在樹根。 */
+  root?: string
   /** 候選但沒被豁免的檔：照常進 diff 審查。 */
   residual: string[]
   /** exempt 排序後逐行 sha256，供摘要段對照。 */
@@ -113,8 +117,49 @@ function isSafeRel(p: string): boolean {
   return p !== '' && !p.startsWith('/') && !p.split('/').includes('..')
 }
 
-/** 受審樹的 `.clade/` 是 consumer 自己的狀態與 manifest：不是 projector 的輸出，NEVER 豁免。 */
-const NEVER_EXEMPT = /^\.clade\//
+/** 受審樹的 `.clade/` 是 consumer 自己的狀態與 manifest：不是 projector 的輸出，NEVER 豁免（子目錄 consumer 的 `<root>/.clade/` 同）。 */
+const NEVER_EXEMPT = /(^|\/)\.clade\//
+
+/** consumer root 的正規化：'' ＝樹根；其餘去頭尾 `/`，含 `..`／絕對路徑視為不安全（呼叫端 fail-closed）。 */
+function normalizeRoot(root: string | undefined): string | null {
+  const r = (root ?? '').replace(/^\.\/+/, '').replace(/\/+$/, '')
+  if (r === '' || r === '.') return ''
+  return isSafeRel(r) ? r : null
+}
+
+const MANIFEST_AT = /^([^/]+\/)?\.clade\/manifest\.json$/
+
+/**
+ * 受審樹裡的 consumer root（manifest 所在目錄）：樹根有 tracked 的 `.clade/manifest.json` → ''；
+ * 否則一層子目錄的（starter 的 `template/.clade/manifest.json`，字典序第一個）；都沒有 → null。
+ * 只認 tracked／樹內檔，gitignored 的狀態目錄（子目錄 consumer 的樹根常有一個 `.clade/`）不算。
+ */
+export function detectConsumerRoot(tree: string): string | null {
+  let manifests: string[]
+  if (existsSync(join(tree, '.git'))) {
+    const out = execFileSync(
+      'git',
+      ['-C', tree, 'ls-files', '-z', '--', '.clade/manifest.json', '*/.clade/manifest.json'],
+      { maxBuffer: 16 * 1024 * 1024 },
+    )
+    manifests = out
+      .toString('utf8')
+      .split('\0')
+      .filter((p) => MANIFEST_AT.test(p) && existsOnTree(tree, p))
+  } else {
+    manifests = [
+      '',
+      ...readdirSync(tree, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? [`${e.name}/`] : [],
+      ),
+    ]
+      .map((dir) => `${dir}.clade/manifest.json`)
+      .filter((p) => existsOnTree(tree, p))
+  }
+  if (manifests.includes('.clade/manifest.json')) return ''
+  const sub = manifests.toSorted()[0]
+  return sub === undefined ? null : sub.slice(0, sub.indexOf('/'))
+}
 
 function disabled(candidates: string[], reason: string): ExemptionResult {
   return {
@@ -208,6 +253,8 @@ function sameEntry(a: string, b: string): boolean {
 
 export async function verifyProjectionExemption(input: {
   tree: string
+  /** consumer root 相對 `tree` 的子目錄（starter＝`template`）；省略＝樹根。candidates 仍是相對 `tree` 的路徑。 */
+  root?: string
   candidates: string[]
   installedRoots?: string[]
   remoteUrl?: string | null
@@ -215,7 +262,10 @@ export async function verifyProjectionExemption(input: {
 }): Promise<ExemptionResult> {
   const { tree, deps } = input
   const candidates = [...new Set(input.candidates)].filter(isSafeRel).toSorted()
-  const pin = deps.readPin(tree)
+  const root = normalizeRoot(input.root)
+  if (root === null) return disabled(candidates, `consumer root 路徑不安全：${input.root}`)
+  const under = root === '' ? '' : `${root}/`
+  const pin = deps.readPin(join(tree, root))
   if ('reason' in pin) return disabled(candidates, pin.reason)
   let release: PinnedRelease
   try {
@@ -228,7 +278,11 @@ export async function verifyProjectionExemption(input: {
   }
 
   // 暫存樹：受審樹拿掉「候選且可被投影」的檔，其餘原樣。候選檔不在樹上（刪除）本來就不可能被豁免。
-  const removable = candidates.filter((p) => !NEVER_EXEMPT.test(p) && existsOnTree(tree, p))
+  // consumer root 之外的檔 projector 不會產出，NEVER 豁免（不把豁免擴大到非投影範圍）。
+  const removable = candidates.filter(
+    (p) =>
+      p.startsWith(under) && !NEVER_EXEMPT.test(p.slice(under.length)) && existsOnTree(tree, p),
+  )
   const removed = new Set(removable)
   const scratch = mkdtempSync(join(tmpdir(), 'projection-exempt-'))
   const links: string[] = []
@@ -248,7 +302,7 @@ export async function verifyProjectionExemption(input: {
         stdio: 'ignore',
       })
     }
-    const run = await deps.runProjector(scratch, release)
+    const run = await deps.runProjector(join(scratch, root), release)
     if (!run.ok) return disabled(candidates, `release projector 在暫存樹失敗：${run.detail}`)
     const corrupt = release.verifyIntact()
     if (corrupt !== null) return disabled(candidates, `release 資產在投影後不完整：${corrupt}`)
@@ -263,6 +317,7 @@ export async function verifyProjectionExemption(input: {
       enabled: true,
       basis: release.basis,
       steps: deps.steps,
+      ...(root === '' ? {} : { root }),
       checked: candidates.length,
       exempt,
       residual,
@@ -534,10 +589,14 @@ async function cliVerify(args: string[]): Promise<number> {
     }
     let result: ExemptionResult
     try {
+      // 子目錄 consumer（starter 的 template/）：manifest 與投影根都在子目錄，不是樹根。
+      const root = flag(args, '--root') ?? detectConsumerRoot(tree!) ?? ''
+      const withRoot = root === '' ? [] : installed.map((dir) => join(dir, root))
       result = await verifyProjectionExemption({
         tree: tree!,
+        root,
         candidates,
-        installedRoots: [...new Set(installed)],
+        installedRoots: [...new Set([...withRoot, ...installed])],
         remoteUrl,
         deps: await realDeps(),
       })
@@ -604,7 +663,7 @@ function cliHint(args: string[]): number {
 
 function usage(): number {
   process.stderr.write(
-    'usage: projection-exemption.ts verify (--tree <dir> | --rev <sha> --repo <dir>) --paths-file <z> [--installed-from <dir>]... [--out <json>]\n' +
+    'usage: projection-exemption.ts verify (--tree <dir> | --rev <sha> --repo <dir>) --paths-file <z> [--root <subdir>] [--installed-from <dir>]... [--out <json>]\n' +
       '       projection-exemption.ts render <json> [--paths-out <file>] [--summary-out <file>]\n',
   )
   return 2

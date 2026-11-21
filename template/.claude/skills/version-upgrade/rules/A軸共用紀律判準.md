@@ -99,3 +99,26 @@ first-pass FAILURE → 自動派 version-upgrade-research 列 → research 也�
 ```text
 first-pass FAILURE → 主線自己 pnpm add <pkg>@<to>
 ```
+
+# Rule 4 - 只改現行設定的版號，歷史紀錄裡的版號 NEVER 改寫
+
+- Level: `MUST`
+- 升版或對齊版號時，掃到的舊版號只在**現行設定**裡改：`package.json`／lockfile、`.node-version`／`.nvmrc`、workflow `version:`、Dockerfile、`registry/*.json`、compose 這類決定下一次安裝或部署用哪一版的檔。
+- 歷史紀錄——`HANDOFF.md`、journal、`CHANGELOG`／變更紀錄、決策紀錄、`docs/pitfalls/`、計畫檔的已完成列、commit message——記的是**當時**用哪一版，**NEVER** 為了「全 repo 一致」把裡面的版號改成新 target；改了等於竄改事件紀錄（出處：某 consumer `HANDOFF.md` 的歷史版號被升版批次改寫，交辦 vu-retro-clade-followups-20261119）。
+- 判不出一個檔是現行設定還是紀錄時，看它會不會被工具讀去決定版本：會讀就是設定，否則是紀錄、不動；仍判不出就在計畫檔該列標 `blocked` 並照該閘門問 user（被派出時照 `rules/被派出時人類閘門判準.md`）。
+
+## Good Example
+
+- 這個例子是好的，因為只改會被工具讀的版本檔，HANDOFF 的歷史敘述原樣保留。
+
+```text
+supabase 2.120.0 → 2.121.0：改 .github/workflows/ci.yml 的 version:、registry/toolchain.json；HANDOFF.md「Supabase Select 2026 relay（CLI 2.120.0…）」不動
+```
+
+## Bad Example
+
+- 這個例子是壞的，因為用全 repo 取代把歷史紀錄的版號一起改掉。
+
+```text
+rg -l 2.120.0 | xargs sed -i 's/2.120.0/2.121.0/g'  # 連 HANDOFF.md、CHANGELOG.md 一起改
+```

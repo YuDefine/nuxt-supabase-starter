@@ -1,0 +1,328 @@
+<!doctype html>
+<!--
+  單票完成說明（ticket article）樣板 —— 一張 Notion 票做完發一篇，給看 board 的客戶判「這張做完了沒、結果如何」。
+  由 vendor/scripts/ticket-article.ts 填 {{…}} 槽位產頁；NEVER 手工複製本檔改內容（段落順序、data-section 標記、
+  疑問區作答機制都是 E2E 驗證與 notion-sync acceptance 守門的依據）。
+  段落：標題 → 做了什麼 → 畫面 → 正式機 → 怎麼驗 → 疑問區（有題才出現）→ 技術附錄（收合）。
+  疑問區作答走 Web Article 平台外框代送：parent.postMessage({type:'web-article:submit', answers, name}, '*')，
+  重新整理後由外框推 {type:'web-article:prior'} 回灌；作答鍵＝題目代號，notion-sync 用同一組代號判有沒有未答題。
+-->
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{TICKET_TITLE}}</title>
+    <style>
+      :root {
+        --fg: #1f2328;
+        --muted: #59636e;
+        --line: #d1d9e0;
+        --bg: #ffffff;
+        --soft: #f6f8fa;
+        --accent: #0969da;
+        --ok: #1a7f37;
+        --warn: #9a6700;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fg: #e6edf3;
+          --muted: #9198a1;
+          --line: #3d444d;
+          --bg: #0d1117;
+          --soft: #151b23;
+          --accent: #4493f8;
+          --ok: #3fb950;
+          --warn: #d29922;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          16px/1.7 system-ui,
+          -apple-system,
+          'Noto Sans TC',
+          'PingFang TC',
+          'Microsoft JhengHei',
+          sans-serif;
+      }
+      main {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 32px 20px 64px;
+      }
+      header p.meta {
+        color: var(--muted);
+        margin: 4px 0 0;
+        font-size: 14px;
+      }
+      h1 {
+        font-size: 26px;
+        line-height: 1.35;
+        margin: 0;
+      }
+      h2 {
+        font-size: 19px;
+        margin: 36px 0 12px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--line);
+      }
+      .status {
+        display: inline-block;
+        margin-top: 12px;
+        padding: 4px 12px;
+        border-radius: 999px;
+        font-size: 14px;
+        font-weight: 600;
+        border: 1px solid currentColor;
+      }
+      .status.live {
+        color: var(--ok);
+      }
+      .status.pending {
+        color: var(--warn);
+      }
+      ul,
+      ol {
+        padding-left: 1.4em;
+      }
+      li {
+        margin: 4px 0;
+      }
+      figure {
+        margin: 0 0 24px;
+      }
+      figure img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+      figcaption {
+        color: var(--muted);
+        font-size: 14px;
+        margin-top: 6px;
+      }
+      .figure-tag {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 1px 8px;
+        border-radius: 4px;
+        background: var(--soft);
+        border: 1px solid var(--line);
+        margin-right: 6px;
+      }
+      .prod a {
+        color: var(--accent);
+        word-break: break-all;
+      }
+      .callout {
+        background: var(--soft);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px 16px;
+      }
+      fieldset {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px 16px;
+        margin: 0 0 16px;
+      }
+      legend {
+        font-weight: 600;
+        padding: 0 6px;
+      }
+      .q-context {
+        color: var(--muted);
+        margin: 0 0 8px;
+      }
+      label.opt {
+        display: block;
+        padding: 8px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      label.opt:hover {
+        background: var(--soft);
+      }
+      label.opt span.opt-text {
+        display: block;
+        color: var(--muted);
+        font-size: 14px;
+        margin-left: 1.6em;
+      }
+      textarea,
+      input[type='text'] {
+        width: 100%;
+        font: inherit;
+        color: inherit;
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 8px;
+      }
+      button {
+        font: inherit;
+        padding: 8px 20px;
+        border-radius: 6px;
+        border: 1px solid var(--accent);
+        background: var(--accent);
+        color: #fff;
+        cursor: pointer;
+      }
+      #reply-banner {
+        margin: 8px 0 16px;
+        font-size: 14px;
+        color: var(--ok);
+        min-height: 1.2em;
+      }
+      details {
+        margin-top: 36px;
+        border-top: 1px solid var(--line);
+        padding-top: 12px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      summary {
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header data-section="header">
+        <h1>{{TICKET_TITLE}}</h1>
+        <p class="meta">{{META_LINE}}</p>
+        {{PROD_STATUS_BADGE}}
+      </header>
+
+      <section data-section="summary">
+        <h2>做了什麼</h2>
+        {{SUMMARY_HTML}}
+      </section>
+
+      <section data-section="screens">
+        <h2>畫面</h2>
+        {{SCREENS_HTML}}
+      </section>
+
+      <section data-section="prod" class="prod">
+        <h2>正式機</h2>
+        {{PROD_HTML}}
+      </section>
+
+      <section data-section="verify">
+        <h2>怎麼驗</h2>
+        {{VERIFY_STEPS_HTML}}
+      </section>
+
+      {{QUESTIONS_SECTION_HTML}}
+
+      <details data-section="tech">
+        <summary>技術附錄（工程師用）</summary>
+        {{TECH_APPENDIX_HTML}}
+      </details>
+    </main>
+    <script>
+      // 疑問區作答：只在有題時存在。作答鍵＝題目代號（notion-sync 的守門用同一組代號）。
+      ;(function () {
+        var form = document.getElementById('reply-form')
+        if (!form) return
+        var banner = document.getElementById('reply-banner')
+        var questions = JSON.parse(document.getElementById('questions-data').textContent)
+        function collect() {
+          var answers = {}
+          questions.forEach(function (q) {
+            var picked = form.querySelector('input[name="' + q.id + '"]:checked')
+            var note = form.querySelector('[name="' + q.id + '__note"]')
+            var value = picked ? picked.value : ''
+            if (note && note.value.trim())
+              value = value ? value + '｜備註：' + note.value.trim() : note.value.trim()
+            if (value) answers[q.id] = value
+          })
+          return answers
+        }
+        function fill(answers) {
+          questions.forEach(function (q) {
+            var v = answers && answers[q.id]
+            if (typeof v !== 'string') return
+            var parts = v.split('｜備註：')
+            var radio = Array.prototype.find.call(
+              form.querySelectorAll('input[name="' + q.id + '"]'),
+              function (r) {
+                return r.value === parts[0]
+              },
+            )
+            if (radio) radio.checked = true
+            var note = form.querySelector('[name="' + q.id + '__note"]')
+            if (note) note.value = radio ? parts[1] || '' : v
+          })
+        }
+        window.addEventListener('message', function (e) {
+          // 只收平台外框送來的訊息（同 reply-article 樣板）：別的視窗冒充 prior／result 會改橫幅、回填作答
+          if (e.source !== window.parent) return
+          var d = e.data || {}
+          if (d.type === 'web-article:prior' && d.answer) {
+            var at = d.answer.createdAt
+              ? new Date(d.answer.createdAt).toLocaleString('zh-TW')
+              : '先前'
+            // current＝外框正在顯示的版本。舊版的作答不回填（新版可能改題、沿用同一題號），
+            // 也不當成已回答：notion-sync 只認票上記的那一版作答
+            if (d.current && d.answer.version && d.current !== d.answer.version) {
+              banner.textContent =
+                '您曾於 ' +
+                at +
+                ' 回答第 ' +
+                d.answer.version +
+                ' 版；這一版（第 ' +
+                d.current +
+                ' 版）內容有更新，請重新回答並送出'
+              return
+            }
+            if (!Object.keys(collect()).length) fill(d.answer.answers)
+            banner.textContent =
+              '已於 ' +
+              at +
+              ' 送出' +
+              (d.answer.version ? '（第 ' + d.answer.version + ' 版）' : '')
+          }
+          if (d.type === 'web-article:result') {
+            banner.textContent =
+              d.ok === false ? '送出失敗：' + (d.error || '請稍後再試') : '已送出，謝謝！'
+          }
+        })
+        form.addEventListener('submit', function (e) {
+          e.preventDefault()
+          var answers = collect()
+          var missing = questions
+            .filter(function (q) {
+              return !answers[q.id]
+            })
+            .map(function (q) {
+              return q.title
+            })
+          if (missing.length) {
+            banner.textContent = '還有題目沒回答：' + missing.join('、')
+            return
+          }
+          var name = form.querySelector('[name="__name"]').value.trim()
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage(
+              { type: 'web-article:submit', answers: answers, name: name || undefined },
+              '*',
+            )
+            banner.textContent = '送出中…請在頁面上方確認列按「送出」。'
+          } else {
+            banner.textContent = '這份頁面要在 Web Article 平台上開才能送出。'
+          }
+        })
+      })()
+    </script>
+  </body>
+</html>

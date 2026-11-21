@@ -41,6 +41,7 @@ evlog 預設只「寫」wide event 出去（FS / Sentry / Postgres / 自家 drai
 - **MUST NOT 部署到 serverless**：Cloudflare Workers / Vercel Edge / AWS Lambda 等 isolated process 不適用 `startStreamServer`（process 間不共享 ring buffer），fs reader 也不適用（無 durable fs）
 - **MUST NOT 把 stream 當 audit canonical**：stream / fs reader 是 derived view，audit truth 仍在 DB（見 `rules/core/audit-pattern.md`），D-pattern row 是源頭，stream 是衍生
 - **MUST NOT 用 `evlog/fs` 當 prod durable journal**：FS writer 是 dev / Nitro self-host only；Workers VFS 不 durable，FS reader 在 Workers 也讀不到（沒對應 writer）
+- **MUST dev／E2E FS writer 有開關與磁碟上限**：只在 `import.meta.dev` 或 `EVLOG_DEV_FS === '1'` 時掛，`NUXT_APP_ENV` 為 production／staging 一律不掛；`maxFiles: 3`、`maxSizePerFile: 10MB`；E2E 走絕對路徑的 `EVLOG_FS_DIR=<rootDir>/.evlog/e2e`。規格與樣板見 [[logging.drain-pipeline]] § dev／E2E fs drain、`vendor/snippets/evlog-dev-fs-drain/`。agent 讀這些檔用 `scripts/dev-failure-digest.ts`（clade 投影）（byte offset 游標、不改寫 log），不用 `readFsLogs` 自寫迴圈
 
 ## Anti-pattern
 

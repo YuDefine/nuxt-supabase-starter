@@ -47,6 +47,8 @@ new session`）。
 > 頁：terminal-only 命令在 `-p` 模式不可用），但**也不需要**——每次 `claude -p` 本身就是新
 > session，依上述等價性沒有多付任何成本。**NEVER** 把「runner 不能 `/clear`」當成 runner 的缺陷。
 
+**session 中途 NEVER 換 model（含 `/model`、首次開 fast mode）。** 上段的 cache key 含 model，中途換＝整段 context 以未快取價重 prefill，換回來再付一次。要別的 model 做事就在工作段邊界開新 session，或派給該 model 的 subagent／worker，交代寫進 durable brief。中途改 effort 在 Opus 5.5、Fable 5.x 不重置快取，不在此限。依據：官方 lessons-from-building-claude-code-prompt-caching-is-everything，彙整於 yudefine-hq `research/2026-11-19-Claude官方best-practices全庫.md` § 1 C1。
+
 **launcher profile 是兜底上限，不是切點建議**（native launcher profile 由 Charles 2026-08-06 round 27 拍板；
 ccg profile 由 2026-08-31 的 auto-compact 實測收斂；ccx 同日退役，不再接受新 session）。它們的正當性**不**來自「官方建議這個數字」——
 官方不建議任何數字——而來自「predicate 全沒觸發時仍需要一條 hard stop」。**NEVER** 把 profile 讀成「跑到這裡就該切」，

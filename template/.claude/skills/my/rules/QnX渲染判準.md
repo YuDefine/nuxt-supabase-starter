@@ -178,9 +178,9 @@ Q3  [<consumer-id>] NAS 的 USB 備份碟要換新的（要我動手）
 ```md
 要我動手（1）
 
-  - [<consumer-id>] <consumer-id> 跑 dep batch：範圍？  登記於 1.0h 前
-    → Charles 在 <consumer-id> 親自打 /version-upgrade → Outdated mode
-    可回：只跑 patch／patch＋minor／這輪不跑
+  - [<consumer-id>] <consumer-id> 跑 <explicit-skill>：範圍？  登記於 1.0h 前
+    → Charles 在 <consumer-id> 親自打 /<explicit-skill> <選定範圍>
+    可回：範圍 A／範圍 B／這輪不跑
 ```
 
 ## Bad Example
@@ -188,9 +188,9 @@ Q3  [<consumer-id>] NAS 的 USB 備份碟要換新的（要我動手）
 - 這個例子是壞的，因為動手列被加了字母與編號，讀起來像一題拍板題。
 
 ```md
-Q4  <consumer-id> 跑 dep batch：範圍？
-      A. 只跑 patch
-      B. patch＋minor
+Q4  <consumer-id> 跑 <explicit-skill>：範圍？
+      A. 範圍 A
+      B. 範圍 B
       C. 這輪不跑
 ```
 

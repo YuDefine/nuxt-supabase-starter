@@ -654,7 +654,7 @@ Claude Code effective-model 邊界見 [[agent-routing]] § Runtime residency and
 
 ## GPT worker transport
 
-**GPT worker 已退場（2026-09-29）**：任何主線都 **NEVER** 為 Routing Table 的列派 GPT worker——Pi 的 GPT tier exit 1、Herdr `--launcher cx` 隨 Codex 訂閱到期（2026-10-08）一律拒派（手動派工與 relay 交棒也不在例外）、Claude Code 不承載 GPT。原 GPT-6 Sol 承接的實作列改由 native Claude Sonnet 5.5（effort: high） 承接。唯一例外是 [[agent-routing.routing-table]] § 禁用〔Daybreak Blue 例外〕：有人值守主線以 `codex exec -s read-only` 取 finding 或意見，不經任何 transport、不為 Routing Table 的列派工。
+**GPT worker 只走受控載體（2026-09-29 全禁；2026-11-21 改）**：為 Routing Table 的列派 GPT（codex）、Gemini（agy（agy 只用專用帳號、NEVER 自動輪換帳號，flow `941c7850d4ea72c5`））worker 只走 [[agent-routing.routing-table]] § 非 Claude 受控載體 與 § 額度感知載體選擇（載體未就緒照拒）；其餘一律 **NEVER**——Pi 的 GPT tier exit 1、Herdr `--launcher cx` 在 codex 載體就緒前照舊拒派（手動派工與 relay 交棒也不在例外）、Claude Code 不承載 GPT。原 GPT-6 Sol 承接的實作列改由 native Claude Sonnet 5.5（effort: high） 承接。派工之外的例外是 [[agent-routing.routing-table]] § 禁用〔Daybreak Blue 例外〕：有人值守主線以 `codex exec -s read-only` 取 finding 或意見，不經任何 transport、不為 Routing Table 的列派工。
 
 **指令範例**（非 UI 修復走 `non-ui-implementation` 列；Claude Code 主線優先 in-process `sonnet-implementer`，要隔離的長工作才開 Herdr）：
 
@@ -664,7 +664,7 @@ node vendor/scripts/herdr-session-handoff.ts --cwd /tmp/repair-repo --label repa
 
 **NEVER 因 plan mode 這類唯讀模式寫不了檔，就判 in-process subagent 不能派**——native delegation tool 的 brief 是 prompt 字串、不落檔，只有 `pi-dispatch.ts` 與 Herdr transport 落檔。逐字反開脫：「plan mode 不允許寫 brief 檔，所以改由主線直接讀檔探索」。
 
-**每一個 Claude Code launcher 的 effective model 都必須符合 Claude 工作流。NEVER 以 cc／cc2／代理 launcher 的名稱包裝 GPT model（含 Sol、已禁用的 Luna／Astra 與已拆除的 ccx alias）。** 派工前同時核對 explicit model、inherit 的 settings 與有效環境 model；命中 GPT 就拒絕，不建立 pane。gateway launcher（ccg／ccx）已拆除，不能成為 fallback。
+**每一個 Claude Code launcher 的 effective model 都必須符合 Claude 工作流。NEVER 以 cc／cc2／代理 launcher 的名稱包裝 GPT model（含 Sol、已禁用的 Luna／Astra 與已拆除的 ccx alias）。** 派工前同時核對 explicit model、inherit 的 settings 與有效環境 model；命中 GPT 就拒絕，不建立 pane（GPT 只經受控載體的專用 launcher 派，見 [[agent-routing.routing-table]] § 非 Claude 受控載體）。gateway launcher（ccg／ccx）已拆除，不能成為 fallback。
 
 
 ## Herdr transport 邊界

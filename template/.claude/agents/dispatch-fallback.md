@@ -1,6 +1,6 @@
 ---
 name: dispatch-fallback
-description: '原 Pi 列的載體（Opus 5.5（effort: low））——接手 notion-ops／screenshot-review-verify／copywriting-draft／web-search／readonly delegate-sub，以及 Haiku 不可用時的 mechanical-fanout／read-heavy-scan（首跳是 haiku-scanner）。Pi 鏈是空鏈，**主線直接派本 agent 當首跳**；Pi 席位回來時只在 pi-dispatch exit 4 的 `next_tier` 為 null 且 `next_step` 指向本 agent 時用。其餘列都不經本 agent。'
+description: '原 Pi 列的載體（Opus 5.5（effort: low））——接手 notion-ops／screenshot-review-verify／copywriting-draft／web-search／readonly delegate-sub，以及 Haiku 不可用時的 mechanical-fanout／read-heavy-scan（首跳是 haiku-scanner）。Pi 鏈是空鏈，**主線直接派本 agent 當首跳**。'
 tools: Bash, Read, Grep, Glob, WebSearch, WebFetch
 model: opus
 effort: low

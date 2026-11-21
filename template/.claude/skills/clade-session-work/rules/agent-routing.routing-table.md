@@ -15,7 +15,7 @@ paths:
 
 # Agent Routing — Routing Table（對照資料層）
 
-Claude Code 與 Pi 共用本表的工作角色（Codex runtime 已於 2026-10-18 移除）。
+Claude Code 與 Pi 共用本表的工作角色。非 Claude 載體（codex〔GPT〕、agy〔Gemini〕、Devin）自 2026-11-21 起是受控載體，見 § 非 Claude 受控載體與 § 額度感知載體選擇。
 
 > 本檔是 [[agent-routing]] § Routing Table 的下推對照表。**判準留在該節**（合法 model 值、
 > workspace mutation 的 admission、`--route`／`--tier-basis`／
@@ -24,25 +24,92 @@ Claude Code 與 Pi 共用本表的工作角色（Codex runtime 已於 2026-10-18
 > 機械 SoT 是 `vendor/scripts/pi-routing-policy.ts` 的 `TABLE_ROW_POLICIES`／`ROW_CHAINS`／
 > `DELEGATE_SUB_CHAIN`／`NATIVE_TABLE_ROW_POLICIES`／`chainTerminal()`——本表與它 MUST 同一個 commit 一起改。
 
-## 禁用（Charles 2026-09-24；GPT 全面退場 2026-09-29；Gemini 退場、Haiku 5.5 開放 2026-10-08；xAI 退場 2026-10-21）
+## 禁用（Charles 2026-09-24；GPT 全面退場 2026-09-29；Gemini 退場、Haiku 5.5 開放 2026-10-08；xAI 退場 2026-10-21；GPT／Gemini／Codex runtime 改受控載體 2026-11-21）
 
-**NEVER** 派下列任一 model，任何列、任何 fallback、任何「額度耗盡備援」都一樣：
+**NEVER** 派下列任一 model，任何列、任何 fallback、任何「額度耗盡備援」都一樣。GPT、Gemini、Codex runtime 三列自 2026-11-21 起不再全禁，改照 § 非 Claude 受控載體 的條件派（lab＝訂閱額度，**NEVER** 按量 API；prod＝API，照 § 管道與風險層級）；條件外照禁：
 
 | 禁用 | 備註 |
 | --- | --- |
-| **所有 GPT model**（GPT-6 Sol、Astra、Luna、`luna-cursor`、`terra`） | Charles 2026-09-29「全面捨棄 GPT 系列」。Pi 的 `sol` 進 `RETIRED_MODEL_TIERS`；Herdr `--launcher cx` 已移除（見下方 Codex runtime 列）；`--tier-basis adjudication`（綁 sol）在 Pi 退場，改走 `implementation-decision`；`codex-review-safe.sh` 已刪除。**唯一例外**見下一列〔Daybreak Blue 例外〕 |
-| **Daybreak Blue 例外**（上一列 GPT 的唯一例外；限期至 **2027-01-25**） | Charles 2026-10-31 答 A（flow `ed5f6cb34676c9d2`；範圍由「安全稽核」擴成三種用途，原 3 個月期限 2026-10-25 Q1 A 沿用）。GPT 在本例外下**只當 finding 或意見**，不當 verdict。**用途只有三種**：① 安全稽核（含 Claude 被 safeguard 降級的元件補掃）、② 0-A 審查的對照實驗、③ 設計分歧的第二意見。**硬條件**：只限 Charles 本人或其當下指名、有人值守的主線（**NEVER** coordinator、dispatch child、背景 pane）；只限自有或已授權 repo 的固定 commit；唯一入口 `codex exec -s read-only`（Herdr `--launcher cx` 與 Pi 仍禁）；安全稽核的產出只以 finding 原文交 `security-evidence`，其餘用途的產出只寫進 evidence 或回報當意見；**NEVER** 當 verdict，**NEVER** 進 0-S／0-A 結論、CI、coordinator、fallback、實作；**NEVER** 存憑證於 repo。到期未經 Charles 依 2–3 次深度稽核實測延長，視為收回。理由見 rationale § Daybreak Blue 例外 |
-| Claude Fable 5.1、`fable` 別名 | **所有用途**，含原 0-A 額度耗盡備援格；別名跟 CLI 預設走，可能解到 5.1。**Fable 5.2 例外（2026-11-10，官方 model guide）**：只准精確 id `claude-fable-5-2`、只准 `--effort high`，只坐三個席位——`fable-heavy-work` 列、升級鏈最後一跳（見 § effort 與執行載體），以及 Opus 主線的唯讀分歧仲裁顧問 `fable-advisor`（見 § 主線 residency 顧問席，in-process subagent）；review 席與 Herdr 派工的 manual／adjudication 等其他 basis 仍拒 |
+| **所有 GPT model**（GPT-6 Sol、Astra、Luna、`luna-cursor`、`terra`）——**2026-11-21 起改受控載體** | Charles 2026-11-21 22:08「我現在就是要挑戰把 GPT 跟 Gemini 納入考量，不是照現有規則，因為我們現在就是為了要調整規則」、22:41「我希望盡快確保 agy, codex, devin 全面可以用 然後 routing table 全面改好 分攤 claude 壓力」：GPT 經 codex 載體（ChatGPT Pro 訂閱）照 § 非 Claude 受控載體 派；Pi 的 GPT tier（`sol` 等）仍在 `RETIRED_MODEL_TIERS`——新載體走 Herdr launcher，不走 Pi；`luna-cursor`、`terra` 與 Cursor 池照禁。以下為歷史：Charles 2026-09-29「全面捨棄 GPT 系列」。Pi 的 `sol` 進 `RETIRED_MODEL_TIERS`；Herdr `--launcher cx` 已移除（見下方 Codex runtime 列）；`--tier-basis adjudication`（綁 sol）在 Pi 退場，改走 `implementation-decision`；`codex-review-safe.sh` 已刪除。**用途例外**見下一列〔Daybreak Blue 例外〕；**管道例外**（正式區 API，flow span `a34b3cb04f149833`）：`lab` 管道照禁；`prod` 管道只准 0-A 修補複驗與 CI 修補兩類，實派前要先滿足前置，見 § 管道與風險層級 |
+| **Daybreak Blue 例外**（上一列 GPT 在**派工之外**的用途例外；限期至 **2027-01-25**；dispatch pane／child 上的 GPT 只歸 § 非 Claude 受控載體 管，本列的硬條件不約束那條路徑、那條路徑也不放寬本列） | Charles 2026-10-31 答 A（flow `ed5f6cb34676c9d2`；範圍由「安全稽核」擴成三種用途，原 3 個月期限 2026-10-25 Q1 A 沿用）。GPT 在本例外下**只當 finding 或意見**，不當 verdict。**用途只有三種**：① 安全稽核（含 Claude 被 safeguard 降級的元件補掃）、② 0-A 審查的對照實驗、③ 設計分歧的第二意見。**硬條件**：只限 Charles 本人或其當下指名、有人值守的主線（**NEVER** coordinator、dispatch child、背景 pane）；只限自有或已授權 repo 的固定 commit；唯一入口 `codex exec -s read-only`（Herdr `--launcher cx` 與 Pi 仍禁）；安全稽核的產出只以 finding 原文交 `security-evidence`，其餘用途的產出只寫進 evidence 或回報當意見；**NEVER** 當 verdict，**NEVER** 進 0-S／0-A 結論、CI、coordinator、fallback、實作；**NEVER** 存憑證於 repo。到期未經 Charles 依 2–3 次深度稽核實測延長，視為收回。理由見 rationale § Daybreak Blue 例外 |
+| Claude Fable 5.1、`fable` 別名 | **所有用途**，含原 0-A 額度耗盡備援格；別名跟 CLI 預設走，可能解到 5.1。**Fable 5.2 例外（2026-11-10，官方 model guide）**：只准精確 id `claude-fable-5-2`、只准 `--effort high`，只坐四個席位——`fable-heavy-work` 列、升級鏈最後一跳（見 § effort 與執行載體）、Opus 主線的唯讀分歧仲裁顧問 `fable-advisor`（見 § 主線 residency 顧問席，in-process subagent），以及 `question-review` 列的預設審查席 `question-reviewer-fable`（fallback `question-reviewer`，Opus 5.5（effort: xhigh））；其餘 review 席與 Herdr 派工的 manual／adjudication 等其他 basis 仍拒 |
 | Claude Haiku 4.5 以下、Sonnet 5 以下 | Sonnet **5.5** 只准坐下表標它的列與 § delegate-sub 的兩個接手點（2026-09-29），其餘 sonnet 等級委派仍走 § delegate-sub 鏈；Haiku **5.5** 只准坐 § Haiku 5.5 的席位（`code-locate` 2026-10-08；掃描兩列、`commit-0c-fix-verify`／範圍明確的 `non-ui-implementation` 的 in-process 首跳 2026-10-29） |
-| **Gemini 3.8 Flash**（Pi `gemini`、`google-gemini-cli`） | Charles 2026-10-08：訂閱到期、暫不續訂。`pi-dispatch.ts` 對 `gemini` 進 `RETIRED_MODEL_TIERS`；原 Gemini 首跳的列改 Grok 4.7 xhigh 首跳（Grok 也已於 2026-10-21 退場，見下方 xAI 列），`code-locate` 改 native Haiku 5.5；`--tier-basis five-conjunct`（綁 gemini）退場。續訂時改回 `pi-routing-policy.ts` 一處 |
-| **Codex runtime**（Herdr `--launcher cx`） | Charles 2026-10-08 訂閱到期；2026-10-18「Codex 相關東西本來都該移除」→ 已移除（W-2026-10-18-codex-runtime-removal）：`cx` launcher、`.codex/` 投影、`codex-review-safe.sh` 都刪了，`--launcher cx` 當已移除 launcher 拒收。`.agents/skills`、根目錄 `AGENTS.md` 因 Pi／Devin 在讀而保留。要復用從 git 歷史還原 |
+| **Gemini 3.8 Flash**（Pi `gemini`、`google-gemini-cli`）——**2026-11-21 起 Gemini 4 系改受控載體** | Gemini 4（Hydrogen、Neon）經 agy 載體（Google AI Ultra 訂閱，Herdr 互動模式，**NEVER** `agy -p` 包裝），只用 agy 專用帳號、**NEVER** 自動輪換帳號，照 § 非 Claude 受控載體 派；Pi 的 `gemini` tier 與 Gemini 3.8 Flash 照禁。以下為歷史：Charles 2026-10-08：訂閱到期、暫不續訂。`pi-dispatch.ts` 對 `gemini` 進 `RETIRED_MODEL_TIERS`；原 Gemini 首跳的列改 Grok 4.7 xhigh 首跳（Grok 也已於 2026-10-21 退場，見下方 xAI 列），`code-locate` 改 native Haiku 5.5；`--tier-basis five-conjunct`（綁 gemini）退場。續訂時改回 `pi-routing-policy.ts` 一處。**管道例外**（正式區 API，flow span `a34b3cb04f149833`）：`lab` 管道照禁；`prod` 管道只准 0-A 修補複驗與 CI 修補兩類，實派前要先滿足前置（Gemini 目前各類都沒過 R4-api 線），見 § 管道與風險層級 |
+| **Codex runtime**（Herdr `--launcher cx`）——**2026-11-21 起改受控載體（就緒後生效）** | 接回由交辦 codex-worker-runtime-mechanical-20261121 做（經 `codex-lane.ts`，lab 只吃方案額度）；就緒前 `--launcher cx` 照舊拒收。以下為歷史：Charles 2026-10-08 訂閱到期；2026-10-18「Codex 相關東西本來都該移除」→ 已移除（W-2026-10-18-codex-runtime-removal）：`cx` launcher、`.codex/` 投影、`codex-review-safe.sh` 都刪了，`--launcher cx` 當已移除 launcher 拒收。`.agents/skills`、根目錄 `AGENTS.md` 因 Pi／Devin 在讀而保留。要復用從 git 歷史還原 |
 | Cursor Composer 2.5 | 原 `ui-implementation` 列併入 `ui-view-implementation` |
 | **Cursor 池與 Cursor runtime**（`grok-cursor`、`grok`〔`grok-cursor` 的舊別名〕、`luna-cursor`、任何 `*-cursor`／`cursor/*` model） | Charles 2026-10-03 拍板 Cursor 全面退場（Codex 隨後於 2026-10-18 移除，runtime 只剩 Claude Code）。`pi-dispatch.ts` 對 `grok-cursor` 進 `RETIRED_MODEL_TIERS`、對其餘 `*-cursor`／`cursor/*` 依形狀拒收（exit 1）；Herdr `--launcher cursor`、`--model` 帶 Cursor 池 model 拒派；接手的 `grok-xai` 池也已退場（見下一列） |
 | **xAI Grok**（Pi `grok-xai`、`xai/grok-4.7`；Herdr `--launcher grok`） | Charles 2026-10-06 退訂（「codex, grok, cursor 我目前都退訂了」），2026-10-21 落實（W-2026-10-21-grok-xai-retired-model-tiers-claude）。`pi-dispatch.ts` 對 `grok-xai` 進 `RETIRED_MODEL_TIERS`、`MODEL_TARGETS` 清空；`--launcher grok` parse 時 usage_error。原 Grok 首跳的列與 delegate-sub 的鏈都清空，首跳＝原鏈尾（見 § effort 與執行載體）。續訂時改回 `pi-model-targets.ts` 的 alias 與 `pi-routing-policy.ts` 的 `ROW_CHAINS`／`DELEGATE_SUB_CHAIN` |
-| Devin Fusion | Devin 只剩 SWE-2 Max 一格，且是任意列的**可選**載體（見下） |
+| Devin Fusion | Devin 只剩 SWE-2 Max 一格，且是任意列的**可選**載體（見下）；2026-11-21 起也是 § 額度感知載體選擇 的候選（方案閘照 § Devin SWE-2 Max） |
 | `terra` | 2026-08-11 起禁用，不變 |
 
 **Pi 派工的 model 維合法值**：無（2026-10-21 xAI 退場後 Pi 沒有可派 model）。`pi-dispatch.ts` 對上表任一 tier 在解析 model 之前就 exit 1；Pi 列的工作一律由該列鏈尾載體直接承接。
+
+## 管道與風險層級（Charles 2026-11-20 答 A，flow span `a34b3cb04f149833`）
+
+正式區改走公司 API 後，每次派工多兩個維度：**管道**（`lane`）與**風險層級**（`risk_tier`）。設計與依據在 plan `specs/plans/W-2026-11-20-routing-table-lane-tier-20261120/work.md`；機械 SoT 是 `pi-routing-policy.ts` 的 `ROW_RISK_TIER`／`riskTierForRow()`／`laneForConsumer()`／`NON_CLAUDE_PROD_TIERS`／`NON_CLAUDE_PROD_ROWS`／`apiVendorSeatAllowed()`。兩個維度都**不改**上表各列的 Claude model／effort 基線。
+
+**管道**：`lab`＝實驗場訂閱（cc1～cc7 週額度；clade、yudefine-hq 固定 `lab`）；`prod`＝正式區公司 API（每客戶案一個 workspace，月硬上限＝該案報價 AI 列）。來源只有 registry consumer 的 `billing.lane`（交辦 billing-lane-truth-table-20261120），**NEVER** 另造欄位；判不到 → 當 `lab` 並記 `lane_unresolved`，**NEVER** 因判不到放寬到 `prod`。
+
+**風險層級**（每列恰一層；未登記的列當 J）：
+
+| 層 | 列 |
+| --- | --- |
+| **J 判定類**（產出是別的關卡要信的結論） | `code-review-opus`、`implementation-decision`、`detailed-planning`、`ui-detailed-planning`、`design-review`、`screenshot-match-analysis`、`question-review`、`deep-security-audit` |
+| **M 主實作類**（驗收要判讀） | `non-ui-implementation`（brief 無 `test-command:`）、`nuxt-core-implementation`、`ui-view-implementation`、`dotclaude-authoring`、`fable-heavy-work`、`version-upgrade-research` |
+| **G 機械可判綠類**（完成有機械判準） | `version-upgrade-first-pass`、`commit-0c-fix-verify`、`non-ui-implementation`（brief 帶 `test-command:`，與 `haiku-implementer` 首跳同判準）、`mechanical-fanout`、`read-heavy-scan`、`code-locate`、`web-search`、`notion-ops`、`screenshot-review-verify`、`copywriting-draft` |
+
+**各層處置**：
+
+| 處置 | J | M | G |
+| --- | --- | --- | --- |
+| 准坐非 Claude（GPT／Gemini API） | **NEVER**（GPT 只當 finding，同〔Daybreak Blue 例外〕；不進 0-A／0-S 結論） | 否（Charles 答 A，未開） | 只在 `lane=prod`，且只限題面點名的兩類：0-A 修補複驗（`commit-0c-fix-verify`）、CI 修補（`non-ui-implementation` 帶 `test-command:` 且派工標 `ci-fix`）；本層其餘列（升版首輪、掃描、定位、web、Notion、截圖取證、文案）未開 |
+| 失敗升級 | 照上表；額度耗盡 gate 保持未完成，**NEVER** 換家 | 照上表；額度耗盡照 § 額度感知載體選擇 改派過線的非 Claude 載體（2026-11-21） | 非 Claude 首跳**一次**品質失敗就交回該列的 Claude 基線載體（開放的兩類都是 `sonnet-implementer`，Claude Sonnet 5.5（effort: high））→ 主線；**NEVER** 原樣重派同一家、**NEVER** 在非 Claude 之間互換 |
+| 每件花費上限（`prod`，只約束非 Claude 席） | —（不開非 Claude） | —（未開；plan 的產品功能 US$1.66／件留待開放時用） | 0-A 修補複驗 US$1.04／件、CI 修補 US$0.78／件；超了停、交回 Claude 基線載體續做。Claude 席本身不設件上限，只受該案 workspace 月硬上限 |
+| 每件花費上限（`lab`） | 帳號池 admission（週額度） | 同左 | 同左 |
+
+本節只管 GPT／Gemini 的公司 API 席位；Devin SWE-2 Max 照 § Devin SWE-2 Max 的逐列准入，不受本節管。
+
+**准許不等於派工**：`apiVendorSeatAllowed()` 回 true 只表示政策准許。dispatcher 的 `NativeTableRowPolicy.provider` 仍只有 `anthropic`，實派前要全部成立：① OpenAI 公司 API 組織與每案 key、預算上限由 Charles 本人開（agent **NEVER** 開帳號或 key）；② API key 模式登入、依 cwd 注入 key、usage 記帳、SessionStart 驗 lane 與 key 相符、dispatcher 認 provider（plan § 五）；③ 實驗場同件對照（同 10 件、首跳通過率不低於現行 −0.10、連兩輪）。省錢數字（G 類兩列推估省約 72%）在 ③ 實測前只是推估。Gemini 在各類都沒過 R4-api 線，答 A 實際只會開 GPT。
+
+**改範圍**：把 G 層其餘列加進 `NON_CLAUDE_PROD_ROWS`、或把 M／J 加進 `NON_CLAUDE_PROD_TIERS` 屬方向類（誰能坐判定／實作席），**MUST** 先問 Charles。`lab` 管道的 GPT／Gemini 自 2026-11-21 起經訂閱載體進 routing（§ 非 Claude 受控載體），本節的 API 席位範圍不變。中國模型禁令、xAI、Cursor 退場照舊。
+
+## 非 Claude 受控載體（Charles 2026-11-21 22:08／22:41，交辦 routing-table-multivendor-20261121）
+
+機械 SoT：`pi-routing-policy.ts` 的 `NON_CLAUDE_CARRIERS`／`NON_CLAUDE_ROW_CARRIERS`／`quotaAwareCarrier()`，CLI `node vendor/scripts/carrier-select.ts`。三個載體都是 Herdr pane（不經 Pi）：
+
+| 載體 | model | lab 計費 | prod 計費 | 就緒判準（未就緒＝本表各列寫它的地方「就緒後生效」） | 交辦 |
+| --- | --- | --- | --- | --- | --- |
+| `codex` | GPT-6.1 Terra medium／high、GPT-6.2 Sol low／medium | ChatGPT Pro 訂閱（**NEVER** 按量 API） | 只限 § 管道與風險層級 開的兩類，計費由 `codex-lane.ts` 的 prod 模式決定 | lab（`ready`）：派工 helper 認 codex launcher 且經 `codex-lane.ts`、實派一件 0-A 修補複驗 CI 綠＋0-A 複驗過。prod（`prodReady`，獨立旗標）：另要 § 管道與風險層級「准許不等於派工」的 ①②③ 全成立；lab 就緒 **NEVER** 帶 prod 就緒 | codex-worker-runtime-mechanical-20261121 |
+| `agy` | Gemini 4 Hydrogen high、Gemini 4 Neon medium／xhigh | Google AI Ultra 訂閱（**NEVER** 按量 API） | 不開（Gemini 各類未過 R4-api 線） | **專用帳號（Charles 2026-11-21 23:08 答 flow `941c7850d4ea72c5`：「辦一個新帳號 我不認為這樣有違反 因為是用官方 agy cli 跑在 herdr 並沒有反向代理到任何 harness」）**：只用新辦的 agy 專用帳號，官方 agy CLI 以 Herdr 互動模式跑；**NEVER** `agy -p` 包裝、**NEVER** 反向代理進別的 harness、**NEVER** 自動輪換帳號（Google Antigravity FAQ 對消費者方案的限制，HQ `research/data/2026-11-21-agy-probe/src/faq.md:346-352`）。就緒＝launcher 可派、completion handshake 收得到，且核實 agy 登入的是新辦的專用帳號（非 Charles 主帳號；翻 `ready` 的交辦要在 evidence 記核對方式） | agy-herdr-launcher-20261121 |
+| `devin` | SWE-2 Max（effort `max`） | Devin 方案額度 | 不開 | 唯一開關 `THROUGHPUT_POLICY.carriers.devin.enabled=true`（`ready: 'throughput-policy'`：續費後只翻它，不另設第二個開關），且 § Devin SWE-2 Max 的方案閘過、`devin auth status` 已登入 | devin-dev1-enable-20261121 |
+
+**共同限制**：
+- **NEVER** 中國模型（HQ plans/31 § 1）。
+- 客戶 repo 與 secret **NEVER** 經本節的換家路徑（`quotaAwareCarrier()`）送非 Claude 載體，除非走 `lane=prod` 管道且該列在 `apiVendorSeatAllowed()` 內；`lab` 管道（clade、yudefine-hq 與 `billing.lane=lab` 的非客戶 repo）才走訂閱載體。既有 § Devin SWE-2 Max 的預設補派路徑（`sonnetRowCarrier`）照該節判準，本次不改（Devin 停用中；要不要對它加客戶 repo 閘屬方向類，續費前另問 Charles）。
+- 每件 completion 記省下的 Claude 量（交辦 codex-worker 的 expect）；品質以機械驗收＋0-A 為準，**NEVER** 看載體自報。
+- **J 判定類**（0-A、0-S verdict、`implementation-decision` 等）保留 Claude；codex／agy 只當第二意見（finding／意見，寫進 evidence，不進結論），`quotaAwareCarrier()` 對 J 類恆回 Claude。例外只有既有的 § Devin SWE-2 Max 可選席（`implementation-decision`／`detailed-planning` 的「Devin 可選」，Charles 2026-10-04 起、`DEVIN_ELIGIBLE_NATIVE_ROWS`），本次不擴不縮。要讓其他非 Claude 坐 J 類 verdict、或改 Devin 那兩列，屬方向類，**NEVER** 自定。
+- **G 機械可判綠類**中的 in-process 席位（`code-locate`、`web-search`、`notion-ops`、`screenshot-review-verify`、`copywriting-draft`）載體是 subagent、不開 pane，不改；`mechanical-fanout`／`read-heavy-scan` 只有整批開 pane 時才走非 Claude（`quotaAwareCarrier({ batchPane: true })`／`carrier-select.ts --batch-pane`；沒帶就回 Claude，in-process `haiku-scanner` 不受影響）。
+
+**各列的非 Claude 順序**（`NON_CLAUDE_ROW_CARRIERS`；排序依任務榜〔FrontierCode 實作、TerminalBench 修補〕與 HQ `reports/model-lab/` 重放，AA 綜合分只當參考；陰影 router〔HQ plans/31 新節〕輸出到了以它調列）：
+
+| 列 | 層 | 非 Claude 順序 | 何時用 |
+| --- | --- | --- | --- |
+| `commit-0c-fix-verify`、`non-ui-implementation`（帶 `test-command:`）、`version-upgrade-first-pass` | G | codex → agy → devin（devin 只收 `--non-blocking`） | **首跳**（就緒後生效）；一次品質失敗交回該列 Claude 基線（`sonnet-implementer`／Sonnet pane）→ 主線，**NEVER** 在非 Claude 之間互換 |
+| `mechanical-fanout`、`read-heavy-scan`（整批 pane） | G | agy → codex | 首跳（就緒後生效）；同上 |
+| `non-ui-implementation`（無 `test-command:`）、`nuxt-core-implementation` | M | codex → agy → devin | 只在 Claude 池 admission 不過或跑道不足時（§ 額度感知載體選擇） |
+| `ui-view-implementation`、`dotclaude-authoring`、`version-upgrade-research` | M | codex → agy | 同上；`dotclaude-authoring` 產出 MUST 由 Claude 0-A 把關 |
+| `fable-heavy-work` | M | 無 | Fable 席不換家（被擋照 § effort 與執行載體 退 Opus） |
+| J 類各列 | J | 無（只當第二意見） | — |
+
+## 額度感知載體選擇（2026-11-21）
+
+派 M／G 類件前依序判（`quotaAwareCarrier()`；HQ 陰影 router 同一邏輯，dispatch 3d98d84b）：
+
+1. **品質及格線**：只從該列 `NON_CLAUDE_ROW_CARRIERS` 裡已就緒（`NON_CLAUDE_CARRIERS[x].ready`；devin 看 `THROUGHPUT_POLICY.carriers.devin.enabled`，caller 經 `devinEnabled` 傳入）的載體挑；J 類恆 Claude。
+2. **此刻實際成本**：訂閱額度在重置前用不完 ≈ 0 ＞ 影子價格 ＞ API。G 類就緒載體首跳；M 類在 Claude 池 `admission=ok` 時維持 Claude 基線，**admission 不過（`account_unavailable`、exit 3）或跑道不足（`low-runway`：池選中帳號兩窗最低剩餘低於 floor，或配速判重置前不夠用）時改派過線的非 Claude 載體**。
+3. **可派性**：載體未就緒、客戶 repo 在 `lab`、`prod` 而該列不在 `apiVendorSeatAllowed()` → 回 Claude 基線並寫明原因。
+
+這一段取代「額度耗盡 gate 保持未完成、**NEVER** 換家」對 **M／G 類**的效力；J 類（含 `code-review-opus`）照舊保持未完成。派工紀錄 MUST 記 `carrier_basis`（`quotaAwareCarrier()` 回的 `reason`），供陰影 router 對照。
 
 ## effort 與執行載體
 
@@ -56,9 +123,11 @@ Claude Code 與 Pi 共用本表的工作角色（Codex runtime 已於 2026-10-18
 
 **Opus 卡住直升 Fable 5.2 `high`（Charles 2026-09-28 開 `high`；2026-11-12 Q5 e09bdf4a 改答 Opus 5.5（effort: medium）直接升 Fable 5.2（effort: high），拿掉 Opus `high`／`xhigh` 中間兩跳）**：同一問題已在 `medium` 失敗一次、或修法只修到一層，**且**有可跑的檢查（測試、指令、可重現步驟）時，下一次 Claude child 才可升——`herdr-session-handoff.ts --launcher cc|cc2 --model claude-fable-5-2 --effort high --tier-basis stall-escalation --retry-of <前一次 Opus（effort: medium） 的 label>`。升級路徑（`stall-escalation`）缺 `--retry-of` 一律拒絕，Fable 5.2（effort: high） 在 `stall-escalation` 之外只准 `table-row` 的 `fable-heavy-work` 列；Opus `high` 在 `stall-escalation` 下一律拒絕（Opus 天花板仍是 `medium`；`xhigh` 只作下一段的 Fable-被擋 fallback）；**一次 medium 只換一次升級**：同一個 `--retry-of` label 已經開過一次 Fable（effort: high） 或 Opus（effort: xhigh） fallback（不論那次被 reclaim 或 controlled-stop 收掉）就拒絕，要再升級必須先有一次新的 medium 失敗；`max` 任何 basis 都開不了。**NEVER** 用「這題很難」「這是裁決」代替前一次 medium 失敗的事實。
 
-**升級鏈全貌（2026-11-12，官方指南：先驗證、再換大一號的 model）**：Opus 5.5（effort: medium） → **Fable 5.2（effort: high）**，`max` 不可達，沒有 Opus `high`／`xhigh` 中間跳。Fable 被帳號池 admission 擋下時的 fallback 是 Opus 5.5 `xhigh`（Charles 2026-11-12 指定 fallback 給 Opus 5.5（effort: xhigh））：同一筆 Opus（effort: medium） 證據、同一個 `--tier-basis stall-escalation --retry-of <前一次 Opus（effort: medium） 的 label>`，`--model claude-opus-5-5 --effort xhigh`；helper 重跑 Fable 的池 admission，**Fable 過得了就拒**（要求直接派 Fable），所以它只在 Fable 被擋時放行，本身不過 admission；一筆 Opus（effort: medium） 證據只資助一次升級（Fable 或 xhigh）；Opus `high` 仍不可派。Fable 末跳由 Opus（effort: medium） 的失敗以 `--tier-basis stall-escalation --retry-of <前一次 Opus（effort: medium） 的 label>` 買單（同一筆證據只升一次；`--retry-of` 必須指向一筆 Opus（effort: medium））；Fable 只准 `high`（其餘 effort 都拒）。Fable 末跳花訂閱週額度，Herdr 派工先過帳號池 admission（`vendor/scripts/lib/claude-escalation-admission.ts`：池內 ready 帳號 ≥2 且選中帳號 floor ≥20%，否則 `account_unavailable`）。
+**升級鏈全貌（2026-11-12，官方指南：先驗證、再換大一號的 model）**：Opus 5.5（effort: medium） → **Fable 5.2（effort: high）**，`max` 不可達，沒有 Opus `high`／`xhigh` 中間跳。Fable 被帳號池 admission 擋下時的 fallback 是 Opus 5.5 `xhigh`（Charles 2026-11-12 指定 fallback 給 Opus 5.5（effort: xhigh））：同一筆 Opus（effort: medium） 證據、同一個 `--tier-basis stall-escalation --retry-of <前一次 Opus（effort: medium） 的 label>`，`--model claude-opus-5-5 --effort xhigh`；helper 重跑 Fable 的池 admission，**Fable 過得了就拒**（要求直接派 Fable），所以它只在 Fable 被擋時放行，本身不過 admission；一筆 Opus（effort: medium） 證據只資助一次升級（Fable 或 xhigh）；Opus `high` 仍不可派。Fable 末跳由 Opus（effort: medium） 的失敗以 `--tier-basis stall-escalation --retry-of <前一次 Opus（effort: medium） 的 label>` 買單（同一筆證據只升一次；`--retry-of` 必須指向一筆 Opus（effort: medium））；Fable 只准 `high`（其餘 effort 都拒）。Fable 末跳花訂閱週額度，Herdr 派工先過帳號池 admission（`vendor/scripts/lib/claude-escalation-admission.ts`：有 Fable 專用帳號時只看它可不可用，沒有時看池選中帳號 floor ≥20%，否則 `account_unavailable`；見下方 Fable 5.2 專用帳號段）。
 
 **`fable-heavy-work` 列（2026-11-10）**：Fable 5.2（effort: high） 的第二扇門——Opus 5.5（effort: medium） 扛不住的長時程高難度工作，從第一次就派 Fable，不必先走完升級鏈。載體只有 Herdr `cc`／`cc2` 池入口（`--model claude-fable-5-2 --effort high --route routing-table --tier-basis table-row --table-row fable-heavy-work`，fanout 預設組 `cc-fable`／`cc2-fable`），workspace 為 mutation；**NEVER** 上 cloud（cloud 的 model allowlist 只有 Opus／Sonnet）、**NEVER** 經 Pi、**NEVER** relay（Fable 席不可 relay，進度寫回 lifecycle 檔後重派）。同樣過上面的池 admission。
+
+**Fable 5.2 專用帳號（Charles 2026-11-21 00:36：「不要再用這種限制, 先改以集中一個帳號成為 Fable 專用 集中使用直到遇到週上限 這樣我就可以使用 Fable 專用重置券, 但如果 Fable 使用率真的太低, 2天內會來不及用完週額度, 那就回歸正常用沒關係」）**：舊的「池內 ≥2 個 ready 帳號」門檻已拿掉。本機設定 `~/.config/clade/claude-fable-account.json` 的 `schedule`（since 已到的最晚一列生效，兩台各放一份）指定一個 Fable 專用帳號：Herdr 的 Fable 席位（`fable-heavy-work` 列、升級鏈末跳）一律釘到它，一直用到它的週上限；它不可用就擋（Fable 缺席，升級鏈退回 Opus 5.5（effort: xhigh） fallback，覆蓋率帳記一列），週窗見底時在 HQ 的 Charles 行程記一件「用 Fable 專用重置券重置」（重置由 Charles 本人操作，**NEVER** 代按）。in-process Fable 席（`fable-advisor`、`question-reviewer-fable`）花的是主線自己的帳號，所以只有主線坐在專用帳號上 admission 才放行，否則退 Opus 5.5（effort: xhigh） 席。`exclusive: true` 時專用期間池入口的一般工作不選它（`plan_excluded: fable-dedicated`）；**釋放**：距該帳號週重置 ≤48 小時且剩餘％ > 近 72 小時消耗速率 × 剩餘時數（用不完）就不再排除一般工作，下一週期由 schedule 重新指定。沒有生效列時退回舊判準的 floor 部分（池選中帳號兩窗最低剩餘 ≥20%）。覆蓋率：`node vendor/scripts/lib/claude-escalation-admission.ts --coverage [--weeks N]`。實作與判準：`vendor/scripts/lib/claude-fable-account.ts`。
 
 **Pi 列的首跳＝鏈尾載體（2026-10-21 起）。** `grok-xai` 退場後 `ROW_CHAINS` 七列與 `DELEGATE_SUB_CHAIN` 都是空鏈，`chainTerminal()` 就是第一個載體：`mechanical-fanout`／`read-heavy-scan` → `haiku-scanner` subagent（Claude Haiku 5.5（effort: medium），2026-10-29；Haiku 不可用時 `dispatch-fallback`）；`web-search`／`notion-ops`／`screenshot-review-verify`／`copywriting-draft` → `dispatch-fallback` subagent（Claude Opus 5.5（effort: low））；`version-upgrade-research` → 主線。routing gate 仍對 WebSearch／WebFetch 與 Agent 委派武裝 decision；`read-heavy-scan`／`mechanical-fanout` 門檻空鏈時只寫 `observed` receipt、不武裝（2026-10-25，[[agent-routing.pi-watch-protocol]] § Routing threshold），這兩列的 `haiku-scanner` 是自願載體，派不派依 [[agent-routing]] § 派不派。武裝的 decision 由 block message 印 `[carrier]`：**直接派鏈尾載體的那次 Agent 呼叫本身就解掉該 decision**（receipt `fallback-authorized`、reason `pi-chain-retired`）；`pi-routing-gate.ts fallback --reason pi-chain-retired` 不收。web 的 `user-explicit-mainline` waiver 照舊。
 
@@ -74,11 +143,13 @@ Claude Code 與 Pi 共用本表的工作角色（Codex runtime 已於 2026-10-18
 
 | 主線在做什麼 | 主線 model |
 | --- | --- |
-| 主持（coordinator，含繼任 relay、看門狗開席、暫代） | Claude Opus 5.5（effort: low），固定；不開 Sonnet、不升 medium／high（Charles 2026-11-02：「主持改 Opus、effort low；主管一樣 Opus、effort medium」；主持中的方案分歧派 `fable-advisor` 顧問（池 admission 不過時改派 `opus-advisor`，見下方顧問席），判斷品質不跟著席位降；`coordinator` skill § 主持者的 model，helper 機械擋） |
+| 主持（coordinator，含繼任 relay、看門狗開席、暫代） | Claude Opus 5.5（effort: low），固定；不開 Sonnet、不升 medium／high（Charles 2026-11-02：「主持改 Opus、effort low；主管一樣 Opus、effort medium」；主持中的方案分歧派 `fable-advisor` 顧問（池 admission 不過〔exit 3〕，或派出後執行中出錯／被限流時改派 `opus-advisor-xhigh`，見下方顧問席），判斷品質不跟著席位降；`coordinator` skill § 主持者的 model，helper 機械擋） |
 | clade 標準層、規約撰寫（`dotclaude-authoring`）、跨 repo 裁決、commit 0-A 相關 | Claude Opus 5.5（effort: medium）；0-A reviewer 席本身是 `code-review-opus` 列（Claude Opus 5.5（effort: xhigh）） |
 | 範圍已定稿的實作 session（plan／brief 已定案，工作落在 Sonnet 四列） | 可以 Claude Sonnet 5.5（effort: high）起手；**NEVER** 降 medium |
 
-**顧問席（Charles 2026-11-10，官方：顧問要比執行者高一階才有用）**：Sonnet 執行者的顧問維持 `opus-advisor`（Opus 5.5（effort: medium））；**Opus 主線的分歧仲裁顧問改 `fable-advisor`**（唯讀 Fable 5.2（effort: high），frontmatter 釘死，省略 `model`），派前跑 `node vendor/scripts/lib/claude-escalation-admission.ts`（同一道帳號池 admission；exit 0 放行），**exit 3（池不足）時改派 `opus-advisor`**（不升檔；Opus 5.5（effort: xhigh） 只是升級鏈 Fable 被擋時的 fallback）；Fable 執行者不配顧問。顧問一律觸發式（全域 § 分歧仲裁三條全中才派），NEVER 常駐、NEVER 為了「保險」派。gate 只放行 Opus 主線派 `fable-advisor`（Sonnet 主線派它被擋並指向 `opus-advisor`）。
+**顧問席（Charles 2026-11-10，官方：顧問要比執行者高一階才有用）**：Sonnet 執行者的顧問維持 `opus-advisor`（Opus 5.5（effort: medium））；**Opus 主線的分歧仲裁顧問改 `fable-advisor`**（唯讀 Fable 5.2（effort: high），frontmatter 釘死，省略 `model`），派前跑 `node vendor/scripts/lib/claude-escalation-admission.ts`（同一道帳號池 admission；exit 0 放行），**exit 3（Fable 專用帳號不可用、主線不在專用帳號上，或池選中帳號低於 floor），或派出後執行中出錯／被限流時，改派 `opus-advisor-xhigh`**（唯讀 Opus 5.5（effort: xhigh），frontmatter 釘死，省略 `model`；Charles 2026-11-14：Fable 5.2（effort: high）的 fallback 是 Opus 5.5（effort: xhigh），admission 不過與執行中失敗都退回）；Fable 執行者不配顧問。顧問一律觸發式（全域 § 分歧仲裁三條全中才派），NEVER 常駐、NEVER 為了「保險」派。gate 只放行 Opus 主線派 `fable-advisor` 與 `opus-advisor-xhigh`（Sonnet 主線派它們被擋並指向 `opus-advisor`；Opus 主線派 `opus-advisor` 被擋並指向這兩席）。
+
+**唯讀結構審查席（依主線 model 決定）**：規則要求「read-only Opus 5.5 顧問」做結構檢討時（[[threshold-remediation]] § MUST 4 的 Claude transport 讀本行，NEVER 在規則裡寫死席名）：Sonnet 主線 → `opus-advisor`；Opus 主線 → `opus-advisor-xhigh`（Opus 5.5，gate 放行；`fable-advisor` 是 Fable 5.2、只做分歧仲裁，不是 Opus 5.5，那條規則禁用；Opus 主線派 `opus-advisor` 被 gate 擋）。主線 model 讀不到或不在這兩列時，維持該規則的 gate 未完成並回報缺口，**NEVER** 自己挑一席。
 
 Sonnet 主線的缺口，逐條補：
 
@@ -152,14 +223,14 @@ Claude Haiku 5.5（`claude-haiku-5-5`）坐三個席位，effort 跟席位走、
 
 **現況：Devin 載體停用（Charles 2026-10-15「devin 暫時不續費了 所以調整一下相關派工」）**：`THROUGHPUT_POLICY.carriers.devin.enabled=false`，planner 視同沒有 devin preset——Sonnet 列不補 Devin 席、急件額度例外不生效、plan 條目 `載體：Devin`（carrier_pin）與就緒清單指定的 devin 改走該列原本的 Claude 載體（Sonnet pane／cloud，basis「Devin 停用，改派 Claude」，不 hold）、watch 容量填充行不印「Devin 缺 N 席」；既有 Devin session 的 census／收尾照舊，`launcher-presets.json` 的 devin 組與程式路徑保留。**恢復條件**：Devin 續費後把 `enabled` 翻回 `true`，不需動其他檔。下面兩段描述的是 `enabled=true` 時的行為。
 
-派得出 Devin 的機器是 desk 與 zenbook，兩台都 **MUST** 先 `devin auth status` 判已登入，未登入的那台不派。Devin 省的是額度不是負載：工具指令在派出的那台跑，要卸本機負載就派到負載較低的那台（cloud 是所有 Claude 列的合法載體，用 Opus 還是 Sonnet、effort 多少都照該列，**NEVER** 以 cloud 為由限制 model；Pi 列不改派 cloud；例外：`fable-heavy-work` 與 0-A 不上 cloud，cloud 的 model allowlist 沒有 Fable）。Devin session 不能 `--continue`，續做一律開新 session 帶 durable brief。載體怎麼跟 cloud、Claude pane 混搭見 [[agent-routing.dispatch-execution]] § Cloud session 載體。
+派得出 Devin 的機器是 desk（zenbook 2026-11-16 退出 fleet），**MUST** 先 `devin auth status` 判已登入，未登入就不派。Devin 省的是額度不是負載：工具指令在派出的那台跑，要卸本機負載就派到負載較低的那台（cloud 是所有 Claude 列的合法載體，用 Opus 還是 Sonnet、effort 多少都照該列，**NEVER** 以 cloud 為由限制 model；Pi 列不改派 cloud；例外：`fable-heavy-work` 與 0-A 不上 cloud，cloud 的 model allowlist 沒有 Fable）。Devin session 不能 `--continue`，續做一律開新 session 帶 durable brief。載體怎麼跟 cloud、Claude pane 混搭見 [[agent-routing.dispatch-execution]] § Cloud session 載體。
 
 ## Claude 帳號池（2026-10-04）
 
 SoT 是 `vendor/scripts/lib/claude-account-registry.ts`——帳號清單只寫在那，下游一律問 registry，NEVER 各自寫死。
 
 - `cc` 是**池入口**：admission 依 `sortPoolCandidates` 挑帳號——各帳號 weekly 讀值齊時按重置配速（快過期且有剩的先、floor 低於下限的沉底），缺一退回 5h／weekly 額度最寬裕者（Pro 帳號也參與一般派工）。一般派工與 routing 表列的 Herdr carrier 一律寫 `cc`，不指定帳號。
-- `cc1`…`cc6` **釘選**單一帳號：`cc1` → `~/.claude`、`cc2` → `~/.claude-2`、`ccN` → `~/.claude-N`（清單 SoT：`vendor/scripts/lib/claude-account-registry.ts`）。只有需要「就這個帳號」時才用（查特定帳號額度、隔離測試、除錯）。**方案（Pro／Max）NEVER 寫在規約裡**：訂閱會升降級，程式讀即時值；要知道某帳號現在是什麼方案就看 watch【額度】段或 `claude-account-preflight.ts` 的輸出，**NEVER** 憑本檔或記憶判斷。
+- `cc1`…`cc7` **釘選**單一帳號：`cc1` → `~/.claude`、`cc2` → `~/.claude-2`、`ccN` → `~/.claude-N`（清單 SoT：`vendor/scripts/lib/claude-account-registry.ts`）。只有需要「就這個帳號」時才用（查特定帳號額度、隔離測試、除錯）。**方案（Pro／Max）NEVER 寫在規約裡**：訂閱會升降級，程式讀即時值；要知道某帳號現在是什麼方案就看 watch【額度】段或 `claude-account-preflight.ts` 的輸出，**NEVER** 憑本檔或記憶判斷。
 - `ccw`（`cc2` 舊名）2026-10-25 退役：`--launcher ccw`、`ccw` shell function 一律拒收並指向 `cc2`；只剩舊 dispatch record 的 `account: ccw`／`launcher: ccw` 仍解析成 claude-2。新寫入一律用 `cc`／`ccN`。
 
 ## 變更後的規約對照組重跑
@@ -180,7 +251,7 @@ SoT 是 `vendor/scripts/lib/claude-account-registry.ts`——帳號清單只寫�
 
 - 實驗期間本表與 `pi-routing-policy.ts` **不改**；證據足夠時由 Charles 拍板，拍板後才同一個 commit 改本表與機械 SoT。
 - 品質判準以 HQ 的 AI×BDD E2E＋Bridge 為準：驗收能自動跑才算「同一份驗收」，人眼判讀的工作不進第 2 層。
-- 便宜模型實驗的範圍與供應商待 Charles 答（HQ 量得準持續壓縮 Q2）；答前 **NEVER** 改 § 禁用 清單，也 **NEVER** 在本表預列「可改派」的類別清單——新席位只經實驗證據加列。
+- 便宜模型實驗的供應商 Charles 2026-11-21 已答（GPT Pro＋Google AI Ultra，§ 非 Claude 受控載體）；其餘供應商仍 **NEVER** 改 § 禁用 清單，也 **NEVER** 在本表預列「可改派」的類別清單——新席位只經實驗證據加列。§ 非 Claude 受控載體 的列順序之後只依陰影 router 與重放證據調。
 
 ## 工作類別對照
 
@@ -188,28 +259,28 @@ SoT 是 `vendor/scripts/lib/claude-account-registry.ts`——帳號清單只寫�
 
 | 工作類別 | 執行鏈（effort 依上節） | 鏈尾 | 備註 |
 | --- | --- | --- | --- |
-| 〔`non-ui-implementation`〕非 UI 實作（併入原 `-escalate`） | in-process 首跳 `haiku-implementer`（Claude Haiku 5.5（effort: medium），brief 指定的測試定義完成才派）→ 未 resolved 或不可用時 Claude Sonnet 5.5（effort: high）（`sonnet-implementer`）；Herdr／cloud／Devin 照舊 Claude Sonnet 5.5（effort: high） | 主線 | 修改、測試、修復與交付同一條鏈；沒有可跑測試定義完成的開放式實作直接派 `sonnet-implementer`（2026-10-29，rationale § M-IMPL） |
-| 〔`implementation-decision`〕實作中的根因／方案裁決（含 TD／backlog triage） | Claude Opus 5.5（effort: medium） | 主線 | 唯讀分析證據，交付根因、修法限制與驗收條件；TD／backlog 的分類、優先序與處置判定也走本列；in-process 載體 `Plan` subagent 顯式帶 `model: 'opus'`（Sonnet 主線改用 `opus-advisor`）；Devin 可選 |
-| 〔`detailed-planning`〕非 UI 詳細實作計畫 | Claude Opus 5.5（effort: medium） | 主線 | 唯讀產出範圍、介面、依賴、task→file 與驗收；載體同上；Devin 可選 |
-| 〔`nuxt-core-implementation`〕Nuxt 本體實作 | Claude Sonnet 5.5（effort: high） | 主線 | Nuxt 框架、模組與執行邏輯 |
-| 〔`version-upgrade-first-pass`〕version-upgrade 首輪升版 | Claude Sonnet 5.5（effort: high） | 主線 | — |
-| 〔`version-upgrade-research`〕version-upgrade 失敗後研究重試 | 空鏈（Grok 4.7 xhigh 2026-10-21 退場） | 主線 | 首跳即主線 |
-| 〔`commit-0c-fix-verify`〕commit 0-C fix-verify loop（併入原 `-escalate`） | in-process 首跳 `haiku-implementer`（Claude Haiku 5.5（effort: medium），brief 指定的測試定義完成才派）→ 未 resolved 或不可用時 Claude Sonnet 5.5（effort: high）（`sonnet-implementer`）；Herdr／cloud／Devin 照舊 Claude Sonnet 5.5（effort: high） | 主線 | 同一實作者最多兩輪 check→fix；`haiku-implementer` 只有一次收尾：複驗紅（有註冊 hook 時由 hook 鎖主線；沒註冊時主線自己跑）就轉交 `sonnet-implementer`，不重派 Haiku，也不算第三輪（2026-10-29，rationale § M-IMPL） |
+| 〔`non-ui-implementation`〕非 UI 實作（併入原 `-escalate`） | in-process 首跳 `haiku-implementer`（Claude Haiku 5.5（effort: medium），brief 指定的測試定義完成才派）→ 未 resolved 或不可用時 Claude Sonnet 5.5（effort: high）（`sonnet-implementer`）；Herdr／cloud／Devin 照舊 Claude Sonnet 5.5（effort: high）；非 Claude：帶 `test-command:` 時 G 首跳 codex → agy → devin、無則 M 額度感知（§ 非 Claude 受控載體，就緒後生效） | 主線 | 修改、測試、修復與交付同一條鏈；沒有可跑測試定義完成的開放式實作直接派 `sonnet-implementer`（2026-10-29，rationale § M-IMPL） |
+| 〔`implementation-decision`〕實作中的根因／方案裁決（含 TD／backlog triage） | Claude Opus 5.5（effort: medium）；codex／agy 只當第二意見，不進 verdict（J 類；Devin 可選席照 § Devin SWE-2 Max） | 主線 | 唯讀分析證據，交付根因、修法限制與驗收條件；TD／backlog 的分類、優先序與處置判定也走本列；in-process 載體 `Plan` subagent 顯式帶 `model: 'opus'`（Sonnet 主線改用 `opus-advisor`）；Devin 可選 |
+| 〔`detailed-planning`〕非 UI 詳細實作計畫 | Claude Opus 5.5（effort: medium）；codex／agy 只當第二意見，不進 verdict（J 類；Devin 可選席照 § Devin SWE-2 Max） | 主線 | 唯讀產出範圍、介面、依賴、task→file 與驗收；載體同上；Devin 可選 |
+| 〔`nuxt-core-implementation`〕Nuxt 本體實作 | Claude Sonnet 5.5（effort: high）；非 Claude：M 額度感知 codex → agy → devin（§ 額度感知載體選擇，就緒後生效） | 主線 | Nuxt 框架、模組與執行邏輯 |
+| 〔`version-upgrade-first-pass`〕version-upgrade 首輪升版 | Claude Sonnet 5.5（effort: high）；非 Claude：G 首跳 codex → agy → devin（§ 非 Claude 受控載體，就緒後生效） | 主線 | — |
+| 〔`version-upgrade-research`〕version-upgrade 失敗後研究重試 | 空鏈（Grok 4.7 xhigh 2026-10-21 退場）；非 Claude：M 額度感知 codex → agy（就緒後生效） | 主線 | 首跳即主線 |
+| 〔`commit-0c-fix-verify`〕commit 0-C fix-verify loop（併入原 `-escalate`） | in-process 首跳 `haiku-implementer`（Claude Haiku 5.5（effort: medium），brief 指定的測試定義完成才派）→ 未 resolved 或不可用時 Claude Sonnet 5.5（effort: high）（`sonnet-implementer`）；Herdr／cloud／Devin 照舊 Claude Sonnet 5.5（effort: high）；非 Claude：G 首跳 codex → agy → devin（§ 非 Claude 受控載體，就緒後生效） | 主線 | 同一實作者最多兩輪 check→fix；`haiku-implementer` 只有一次收尾：複驗紅（有註冊 hook 時由 hook 鎖主線；沒註冊時主線自己跑）就轉交 `sonnet-implementer`，不重派 Haiku，也不算第三輪（2026-10-29，rationale § M-IMPL） |
 | 〔`web-search`〕WebSearch／WebFetch | 空鏈（Grok 4.7 xhigh 2026-10-21 退場） | 主線（單一來源）／`dispatch-fallback`（多條獨立研究路徑，自願載體） | 單一來源抓取主線直接呼叫內建工具；credential／signed／private URL 照拒；見 [[agent-routing]] § External web retrieval |
-| 〔`mechanical-fanout`〕Mechanical fan-out／收集、掃描、驗證矩陣 | 空鏈（Grok 4.7 xhigh 2026-10-21 退場） | `haiku-scanner`（自願載體，Claude Haiku 5.5（effort: medium），brief 帶 `routing-row: mechanical-fanout`）→ Haiku 不可用時 `dispatch-fallback` | 派不派依 [[agent-routing]] § 派不派；threshold 空鏈只記 `observed` |
-| 〔`read-heavy-scan`〕封閉來源固定欄位抽取／read-heavy scan | 空鏈（Grok 4.7 xhigh 2026-10-21 退場） | `haiku-scanner`（自願載體，Claude Haiku 5.5（effort: medium），brief 帶 `routing-row: read-heavy-scan`）→ Haiku 不可用時 `dispatch-fallback` | 來源矛盾交主線整理為 `implementation-decision`；只收 location ＋可機械複驗欄位，逐字原文不走本列（見硬禁令） |
+| 〔`mechanical-fanout`〕Mechanical fan-out／收集、掃描、驗證矩陣 | 空鏈（Grok 4.7 xhigh 2026-10-21 退場）；非 Claude：整批 pane 時 G 首跳 agy → codex（就緒後生效） | `haiku-scanner`（自願載體，Claude Haiku 5.5（effort: medium），brief 帶 `routing-row: mechanical-fanout`）→ Haiku 不可用時 `dispatch-fallback` | 派不派依 [[agent-routing]] § 派不派；threshold 空鏈只記 `observed` |
+| 〔`read-heavy-scan`〕封閉來源固定欄位抽取／read-heavy scan | 空鏈（Grok 4.7 xhigh 2026-10-21 退場）；非 Claude：整批 pane 時 G 首跳 agy → codex（就緒後生效） | `haiku-scanner`（自願載體，Claude Haiku 5.5（effort: medium），brief 帶 `routing-row: read-heavy-scan`）→ Haiku 不可用時 `dispatch-fallback` | 來源矛盾交主線整理為 `implementation-decision`；只收 location ＋可機械複驗欄位，逐字原文不走本列（見硬禁令） |
 | 〔`code-locate`〕唯讀定位搜尋（找檔／符號／呼叫點；回 `file:line` ＋ token ＋結論，不回檔案原文；取代 in-process `Explore`） | Claude Haiku 5.5（effort: low）（`haiku-locator` subagent，2026-10-08） | 主線 | 鏈尾是主線自己 Read／Grep，**NEVER** `dispatch-fallback`；readonly；見 § Haiku 5.5 的席位 |
 | 〔`notion-ops`〕Notion 讀寫（自由形式 `ntn api`，NEVER Notion MCP；確定性 script 除外，見硬禁令） | 空鏈（Grok 4.7 xhigh 2026-10-21 退場） | `dispatch-fallback`（首跳） | — |
 | 〔`screenshot-review-verify`〕Screenshot review 全部四種模式（`[verify:ui]`、archive 前 QA、commit 0-B、ad-hoc） | 空鏈（Grok 4.7 xhigh 2026-10-21 退場） | `dispatch-fallback`（首跳） | browser、截圖與 evidence 收集；取證與 `screenshot-match-analysis` 判定仍分兩步 |
 | 〔`copywriting-draft`〕行銷／產品文案草稿與變體 | 空鏈（Grok 4.7 xhigh 2026-10-21 退場） | `dispatch-fallback`（首跳） | 最終文字由主線重寫 |
-| 〔`ui-view-implementation`〕UI view 實作（併入原 `ui-implementation`：Nuxt UI／Content） | Claude Opus 5.5（effort: medium） | 無 fallback | Claude Code 原生／Herdr carrier |
-| 〔`design-review`〕Design Review／視覺品質判讀 | Claude Opus 5.5（effort: medium） | 無 fallback | 實際讀圖與設計要求 |
-| 〔`ui-detailed-planning`〕UI 詳細實作計畫 | Claude Opus 5.5（effort: medium） | 無 fallback | 保留 UI 範圍、互動、狀態與驗收 |
-| 〔`screenshot-match-analysis`〕截圖 vs 驗收項目符合性判定 | Claude Opus 5.5（effort: medium） | 無 fallback | 逐張讀實際圖片與完整 item，回 PASS／FAIL／UNCERTAIN |
-| 〔`dotclaude-authoring`〕更新 `.claude/` 的檔案（skills、rules、agents、commands、hooks、settings；含投影到 consumer `.claude/` 的 clade 源檔） | Claude Opus 5.5（effort: medium） | 無 fallback | Claude Code 原生／Herdr carrier（`cc` 池入口，見 § Claude 帳號池）；範圍與對 `non-ui-implementation` 的優先序見下方 § `dotclaude-authoring` 的範圍 |
+| 〔`ui-view-implementation`〕UI view 實作（併入原 `ui-implementation`：Nuxt UI／Content） | Claude Opus 5.5（effort: medium）；非 Claude：M 額度感知 codex → agy（就緒後生效） | 無 fallback | Claude Code 原生／Herdr carrier |
+| 〔`design-review`〕Design Review／視覺品質判讀 | Claude Opus 5.5（effort: medium）；非 Claude 只當第二意見，不進 verdict（J 類） | 無 fallback | 實際讀圖與設計要求 |
+| 〔`ui-detailed-planning`〕UI 詳細實作計畫 | Claude Opus 5.5（effort: medium）；非 Claude 只當第二意見，不進 verdict（J 類） | 無 fallback | 保留 UI 範圍、互動、狀態與驗收 |
+| 〔`screenshot-match-analysis`〕截圖 vs 驗收項目符合性判定 | Claude Opus 5.5（effort: medium）；非 Claude 只當第二意見，不進 verdict（J 類） | 無 fallback | 逐張讀實際圖片與完整 item，回 PASS／FAIL／UNCERTAIN |
+| 〔`dotclaude-authoring`〕更新 `.claude/` 的檔案（skills、rules、agents、commands、hooks、settings；含投影到 consumer `.claude/` 的 clade 源檔） | Claude Opus 5.5（effort: medium）；非 Claude：M 額度感知 codex → agy（就緒後生效，Claude 0-A 把關） | 無 fallback | Claude Code 原生／Herdr carrier（`cc` 池入口，見 § Claude 帳號池）；範圍與對 `non-ui-implementation` 的優先序見下方 § `dotclaude-authoring` 的範圍 |
 | 〔`fable-heavy-work`〕Opus 5.5（effort: medium） 扛不住的長時程高難度實作（Fable 5.2 的第二扇門，與升級鏈末跳是同一個 model／effort） | Claude Fable 5.2（effort: high） | 無 fallback | Herdr `cc` 池入口 child，mutation；過帳號池 admission；NEVER cloud／Pi／relay；見 § effort 與執行載體 |
-| 〔`code-review-opus`〕Code review／commit 0-A（0-A.1／0-A.2／task reviewer／whole-branch／非 commit review 全部） | Claude Opus 5.5（effort: xhigh）（Claude Code 主線：in-process `commit-0a-reviewer` subagent；叫不出 Claude subagent 的 runtime：Herdr Claude child） | 無 fallback；**額度耗盡 → gate 保持未完成** | effort xhigh 是本列的列層級例外（Charles 2026-10-23：review 席用 Opus 5.5，effort 定 xhigh；其餘 Opus 列仍 medium，`CLAUDE_MODEL_EFFORT` 不動）。row id 保留 `-opus` 字尾以延續既有 receipt／ledger（原 `code-review`／`code-review-fable` 兩列已刪，歷史 ledger 裡的 `code-review` 是 Astra）。Claude Code 主線跑 `claude-review-safe.sh prepare xhigh` → AGENT_CALL → FINALIZE；NEVER 走 Pi；NEVER 主線自審補位 |
-| 〔`question-review`〕對外提問審查（reply-article 待確認頁發佈前、notion-hub 決策題建票前） | Claude Opus 5.5（effort: xhigh）（in-process `question-reviewer` subagent，frontmatter 釘死；Charles 2026-10-14 為本席開的 effort 例外，其餘 Opus 席除〔`code-review-opus`〕、〔`deep-security-audit`〕外仍是 medium） | 無 fallback；不可用時主線依同一份判準自審，回報寫明「未經審查席」 | 唯讀；判準是 `reply-article` skill 根下 `rules/對外提問完整性判準.md`；不經 Pi／Herdr，不進 `NATIVE_TABLE_ROW_POLICIES`；例外理由見 rationale |
+| 〔`code-review-opus`〕Code review／commit 0-A（0-A.1／0-A.2／task reviewer／whole-branch／非 commit review 全部） | Claude Opus 5.5（effort: xhigh）（Claude Code 主線：in-process `commit-0a-reviewer` subagent；叫不出 Claude subagent 的 runtime：Herdr Claude child）；非 Claude 只當第二意見，不進 verdict（J 類） | 無 fallback；**額度耗盡 → gate 保持未完成** | effort xhigh 是本列的列層級例外（Charles 2026-10-23：review 席用 Opus 5.5，effort 定 xhigh；其餘 Opus 列仍 medium，`CLAUDE_MODEL_EFFORT` 不動）。row id 保留 `-opus` 字尾以延續既有 receipt／ledger（原 `code-review`／`code-review-fable` 兩列已刪，歷史 ledger 裡的 `code-review` 是 Astra）。Claude Code 主線跑 `claude-review-safe.sh prepare xhigh` → AGENT_CALL → FINALIZE；NEVER 走 Pi；NEVER 主線自審補位 |
+| 〔`question-review`〕對外提問審查（reply-article 待確認頁發佈前、notion-hub 決策題建票前） | Claude Fable 5.2（effort: high）（in-process `question-reviewer-fable` subagent，frontmatter 釘死；派前跑 `node ~/offline/clade/vendor/scripts/lib/claude-escalation-admission.ts`，在 consumer 目錄也用此絕對路徑） | Claude Opus 5.5（effort: xhigh）（`question-reviewer`；admission exit 非 0（3＝池不過，其他＝跑不起來，一律當不過），或 Fable 執行中限流／額度／API 失敗時改派、重跑一次；本席 xhigh 的例外理由見 rationale）；兩席都不可用時主線依同一份判準自審，回報寫明「未經審查席」 | 唯讀；判準是 `reply-article` skill 根下 `rules/對外提問完整性判準.md`；不經 Pi／Herdr，不進 `NATIVE_TABLE_ROW_POLICIES`；例外理由見 rationale |
 | 〔`deep-security-audit`〕上線前／事件驅動的深度安全稽核（claude-security plugin 的 Scan codebase） | claude-security plugin 自帶的 model／effort（研究員／驗證員 `model: inherit`＋xhigh，Sonnet 子 agent low／medium／xhigh，偶發降到 Opus 4.8）；**MUST** 從 Claude Opus 5.5 主線啟動，`inherit` 才落在 Opus 5.5（Charles 2026-10-24 Q3 為本席開的 model／effort 例外，其餘席位不比照） | 無 fallback；主線不是 Opus 5.5 或 plugin 不可用 → 不跑，記為「未做深度稽核」。Claude 被 safeguard 降級的元件（掃描 `modelUsage` 出現 Opus 5.5 以外的 model，或 agent 轉錄顯示降級）→ 可由 Charles 當下指名的有人值守主線交 Daybreak 補掃（條件見 § 禁用〔Daybreak Blue 例外〕，產出走 `security-evidence finding`），補掃不取代、不覆寫 Claude 的結果 | 只由 Charles 本人或他授權的 attended 主線發起；**NEVER** 由 coordinator 自動加派、**NEVER** 由 agent 自行點火（push 後的掃描提示要在每台開發機的 `~/.claude/settings.json` env 設 `CLAUDE_SECURITY_SCAN_TIP=off` 關掉；該檔不歸 bootstrap 管，新機器要自己補）；只用 Scan codebase——Scan changes 與 commit 0-S.2 重複，不用；Suggest patches 要直接派 `Agent(claude-security:*)`，routing gate 會攔，不在本席；plugin 產出的 patch **NEVER** 直接套用；**NEVER** 當 commit 0-A 或 0-S 的替代 reviewer；finding 先走 `security-evidence finding`；觸發點是 consumer `business_activity` pre-production→active 與 `SECURITY.md` 不變量變更，兩者只登記不點火（判準在 `security-policy.md` 條件句）；scope 超過約 100 檔先切小或排額度充足帳號再問 Charles（額度規則見 rationale）；不經 Pi／Herdr，不進 `NATIVE_TABLE_ROW_POLICIES`；例外理由見 rationale |
 
 **原 GPT-6 Sol 的六列**（2026-09-29）改由 native Claude 席位承接，不再經 Pi：實作四列 Sonnet 5.5（effort: high）、判讀兩列 Claude Opus 5.5（effort: medium）——後兩者錯誤會被下游放大、量小（09-24〜09-29 約 8 次），且官方明言最難的推理選 Opus。

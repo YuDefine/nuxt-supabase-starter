@@ -6,7 +6,7 @@
  *
  *   | 判定 | 擋下條件 | 放行方式 |
  *   | --- | --- | --- |
- *   | 去重 | 同 repo 另一條 branch 已有 open PR，body 的 `Work:` 是同一個 work id（work id ↔ plan 目錄一對一）。integration 模式不算：base 或 head 是 `integration/<work-id>` 的 PR（slice PR 與 integration→main 那張共用同一個 `Work:`）不參與去重 | 改推那張 PR 的分支；主持者刻意平行拆的 → body 加 `Parallel-to: #<N>` |
+ *   | 去重 | 同 repo 另一條 branch 已有 open PR，body 的 `Work:` 是同一個 work id（work id ↔ plan 目錄一對一）。integration 模式不算：base 或 head 是 `integration/<work-id>` 的 PR（slice PR 與 integration→main 那張共用同一個 `Work:`）不參與去重 | 改推那張 PR 的分支；主持者刻意平行拆的 → body 加 `Parallel-to: #<N>`；E-cap 拆單（從超限 PR 拆出來的）→ body 加 `Split-From: #<N>` |
  *   | 記帳類 | clade home 的 diff 每一個路徑都在登記簿 allowlist（`vendor/scripts/lib/register-paths.ts` `isRegisterPath`；`rules/core/github-flow.md` § 紀錄型改動不開 PR）。先於去重判；`--base` 不是 main（stacked PR）不判（register-land 只落 main）；**不看 body**（`--body-file -`、動態 body 也判）、跟著指令裡的 `cd <dir>` 量那棵 worktree、`--head`／`--base` 動態時量 HEAD 相對預設分支 | 不開 PR：本 worktree commit 後跑 `node scripts/register-land.ts`；混了 allowlist 外的檔就照常開 PR |
  *   | 記帳類（同串 commit） | 同一個指令串裡 `gh pr create` 之前有 `git commit`／`cherry-pick`／`merge`／`am`／`revert`（PreToolUse 在整串執行前觸發，量到的 HEAD 還沒有那些 commit），且現在量到的 diff 為空（全 allowlist 照原本的記帳類擋；clade home、非 stacked） | 拆成兩個 Bash 呼叫：先 commit，下一個呼叫再開 PR（那時量得到：全 allowlist → register-land，混了外面的檔 → 放行）；現有 diff 已有 allowlist 外的檔時不受影響 |
  *   | 大小 | 扣掉投影檔後 >1000 行（增＋刪）或 >50 檔；量的是 `--head` 相對 `--base`（省略時 HEAD 相對預設分支） | 拆成多張；或 body 宣告 `Mechanical: <產生方式> <路徑或 glob>`——只扣掉符合的檔，其餘照上限檢查（`Mechanical:` 沒寫路徑／glob 的舊寫法：`MECHANICAL_PATHS_ENFORCE_FROM` 前只警告照放行，之後不再豁免；0-A 可走 `--independent` 範圍分級） |
@@ -41,7 +41,8 @@ const MECHANICAL_VALUE_RE = /^[ \t]*Mechanical[ \t]*[:：][ \t]*(\S.*)$/mu
  * 之前，沒寫路徑的舊寫法照舊整張放行但印警告；之後它等於沒宣告。寫了路徑的新寫法沒有過渡期，馬上只扣符合的檔。
  */
 export const MECHANICAL_PATHS_ENFORCE_FROM = Date.parse('2026-11-13T00:00:00Z')
-export const PARALLEL_LINE_RE = /^[ \t]*Parallel-to[ \t]*[:：][ \t]*#?\d+/mu
+/** 放行去重的標記行：`Parallel-to: #N`（刻意平行拆）或 `Split-From: #N`（E-cap 拆單，N＝同 plan 的 open PR 或拆單來源）；兩者解析方式相同。 */
+export const PARALLEL_LINE_RE = /^[ \t]*(?:Parallel-to|Split-From)[ \t]*[:：][ \t]*#?\d+/mu
 
 /** hook 上限 10s、超時視為非阻擋（fail-open）。git／gh 單次上限；整體另受 HYGIENE_BUDGET_MS 約束。 */
 export const HYGIENE_TIMEOUT_MS = 1_500
@@ -280,7 +281,7 @@ export function duplicateMessage(workId: string, dups: readonly OpenPr[]): strin
   return (
     `⛔ gh pr create：同一份 plan（Work: ${workId}）已有 open PR ${dups.map((p) => `#${p.number}`).join('、')}。` +
     `改推那張 PR 的分支，不另開：gh pr checkout ${first.number}，把本 branch 的 commit 合進去再 push。` +
-    `主持者刻意平行拆的工作 → body 加一行 \`Parallel-to: #${first.number}\` 後重跑。`
+    `主持者刻意平行拆的工作 → body 加一行 \`Parallel-to: #${first.number}\` 後重跑；E-cap 拆單（從超限 PR 拆出來的）→ 改加 \`Split-From: #${first.number}\`。`
   )
 }
 

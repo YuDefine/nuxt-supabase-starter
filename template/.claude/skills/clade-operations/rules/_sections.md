@@ -58,10 +58,10 @@ missing-dependency.md — 發現應有的工具、依賴、runner 套件或權�
 28-30 為什麼是文字規約
 
 service-access.md — 要碰第三方服務（打它的 API、開它的 dashboard、要人登入或給 OTP）之前先讀存取卡，照卡上量過的最省路徑走；沒有卡就探索一次並寫卡
-5-21 前導 — 第三方服務存取（先讀卡）
-23-32 沒有卡，或卡已過期（`last_verified` 超過 90 天）
-34-45 決策樹：同一個操作有多條路徑時
-47-55 量測與稽核
+5-22 前導 — 第三方服務存取（先讀卡）
+24-33 沒有卡，或卡已過期（`last_verified` 超過 90 天）
+35-46 決策樹：同一個操作有多條路徑時
+48-56 量測與稽核
 
 service-url-locality.md — app 與它的 backing service（Supabase / PostgREST / storage）跑在同一個內網、而該 service 另有對外域名時，決定 server 端與 client 端各該讀哪個 URL；症狀是每支碰 DB 的 API 都慢一點（全部 200、只是慢），或圖片只有外部使用者載不到
 12-18 前導 — Service URL Locality（server 端與 client 端讀的是兩個不同的值）

@@ -19,6 +19,7 @@ node ~/offline/clade/vendor/scripts/access-card.ts --list
 - 真的要人工 OTP 或人工登入時，**MUST** 在 `flow ask` 題面寫明「卡上已確認 key 與 CLI 都做不到」。題面點名有卡的服務又沒寫這句，`flow ask` 與 `--complete blocked --decision-for charles` 會拒收。
 - 卡、PR、log **NEVER** 寫 secret 值，只寫機器與路徑。驗證與量測只打唯讀 route，**NEVER** 改服務設定或額度。
 - 卡有 `skill` 時，操作細節以該 skill 為準，卡只指路。
+- 金鑰已搬進 vault（HQ 金鑰保管站）的卡有一列 `secret.ts call --key <vault_ref>`：用值 **MUST** 走那一列（broker 代打、值不進 session），**NEVER** 讀同卡標「明文檔」的位置。`audit-access-cards.ts` 擋兩件事：有 `vault_ref` 的 key 卡上缺那一列，以及有 vault 列的卡指令讀明文檔。
 
 ## 沒有卡，或卡已過期（`last_verified` 超過 90 天）
 

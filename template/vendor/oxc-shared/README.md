@@ -25,13 +25,13 @@ export default defineConfig({
     ...lintBase,
     rules: {
       ...lintBase.rules,
-      // business overrides only — anything that belongs in the baseline
-      // should be added to preset.ts instead.
-      'unicorn/no-thenable': 'off', // supabase PostgREST mock builder chain
+      // Deviations only, and each MUST be registered in lint-exceptions.ts
+      // (reason + removal condition).
+      'no-shadow': 'warn',
     },
     ignorePatterns: [
       ...lintBase.ignorePatterns,
-      '.wrangler/', // consumer-specific build artifact
+      'local/', // consumer-specific build artifact
     ],
   },
 
@@ -56,7 +56,7 @@ export default defineConfig({
 | --- | --- |
 | categories (correctness/suspicious/perf/etc.) | business `unicorn/*` exemptions |
 | 4 plugins (typescript / unicorn / import / promise) | per-consumer `experimentalTailwindcss.stylesheet` path |
-| common rules (no-console/no-debugger/no-alert/eqeqeq/no-underscore-dangle/etc.) | consumer build directories in `ignorePatterns` (`.wrangler/`, `local/`) |
+| common rules (no-console/no-debugger/no-alert/eqeqeq/no-underscore-dangle/etc.) | consumer build directories in `ignorePatterns` (e.g. `local/`) |
 | `env: { browser, node, es2024 }` | |
 | common ignore prefixes (`node_modules/`, `.nuxt/`, `.output/`, `.claude/skills/`, etc.) | |
 

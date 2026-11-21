@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse:Bash hook — 擋 kill 由 ps 算出的父程序、PID 1、user manager 與 kill -1（block，exit 2）
+# PreToolUse:Bash hook（user scope 另掛 Monitor，見 machine-safety-gate.ts）— 擋 kill 由 ps 算出的父程序、PID 1、user manager 與 kill -1（block，exit 2）
 #
 # 約束：agent 不得 kill 由 ps 算出的父程序（孤兒的父程序是 user systemd，殺掉整個 user session 結束）、
 # PID 1、user manager 與 -1。

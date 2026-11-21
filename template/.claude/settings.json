@@ -277,6 +277,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-post-bash-rust-cli-hint-ef2bd2 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/post-bash-rust-cli-hint.sh",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -385,6 +395,24 @@
           {
             "type": "command",
             "command": ": --hook-id cap-session-start-worktree-freshness-90b117 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/session-start-worktree-freshness.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-session-start-billing-lane-check-90b117 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/session-start-billing-lane-check.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ": --hook-id cap-session-start-rust-cli-table-90b117 ; exec bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clade/hub-core/session-start-rust-cli-table.sh",
             "timeout": 5
           }
         ]

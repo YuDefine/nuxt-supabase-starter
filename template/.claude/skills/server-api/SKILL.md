@@ -1,6 +1,8 @@
 ---
 name: server-api
-description: "Use when adding or changing Nitro API handlers, including request validation and server-side data access. Not for frontend global state."
+description: >-
+  Use when 新增或修改 Nitro API handler（含 request 驗證與 server 端資料存取）。NOT for client 端讀取查詢——僅
+  `modules.auth` 為 Supabase Auth 時；其餘 auth stack 讀取也走本 skill。NOT for 前端全域狀態（走 pinia-store）。
 ---
 
 

@@ -67,7 +67,7 @@ clade 沒有 fleet MCP entry 的共同來源：`chrome-devtools-mcp` entry 是�
 - 這個例子是好的，因為entry 一律釘同一個版本，升版先改本條再整批 sweep。
 
 ```text
-"command": "npx", "args": ["-y", "chrome-devtools-mcp@1.10.1"]
+"command": "npx", "args": ["-y", "chrome-devtools-mcp@1.12.0"]
 ```
 
 ## Bad Example

@@ -1,7 +1,7 @@
 # 跨環境版本對齊 rollout plan：supabase、chrome-devtools-mcp
 
 - 產出時間：2026-10-13 09:10
-- SoT：`registry/toolchain.json`（supabase `2.120.0` exact、chrome-devtools-mcp `1.10.1` exact）
+- SoT：`registry/toolchain.json`（supabase `2.120.0` exact、chrome-devtools-mcp `1.12.0` exact）
 - 矩陣指令：`node ~/offline/clade/scripts/audit-ci-toolchain-parity.ts --matrix --tool supabase`；`--tool chrome-devtools-mcp`
 - 承載工作：W-2026-10-12-version-parity
 
@@ -19,7 +19,7 @@
 | supabase | ci | <consumer-id> | 2.78.1 ×5（含 deploy-staging／deploy-production） | 2.120.0 | 2b relay（types 須重產：typegen 0.2.2） | `--matrix --tool supabase --consumer <consumer-id>`：ci aligned | relayed（<consumer-id>/version-parity-supabase） |
 | supabase | ci | <consumer-id> | `latest`（e2e.yml） | 2.120.0 | 1 宣告化 relay | 同上 `--consumer <consumer-id>`：ci aligned | pending |
 | supabase | runner | <consumer-id> | fc-supabase-prod 裸呼叫 ×3 | 2.120.0 | 1 宣告化：改 setup action 釘版 | 同上 `--consumer <consumer-id>`：runner covered | pending |
-| chrome-devtools-mcp | repo | <consumer-id> | `@latest` | 1.10.1 | 1 宣告化 relay（2026-09-30 rollout 未落地） | `--matrix --tool chrome-devtools-mcp --consumer <consumer-id>`：repo aligned | pending |
+| chrome-devtools-mcp | repo | <consumer-id> | `@latest` | 1.12.0 | 1 宣告化 relay（2026-09-30 rollout 未落地） | `--matrix --tool chrome-devtools-mcp --consumer <consumer-id>`：repo aligned | pending |
 
 ## 補宣告與補量測
 

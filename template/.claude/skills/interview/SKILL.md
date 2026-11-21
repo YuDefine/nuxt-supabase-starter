@@ -1,6 +1,6 @@
 ---
 name: interview
-description: Use when 使用者想先討論需求、做需求訪談、「先聊清楚再做」，或 work-route 判不出需求分流、進行中的 package 要停下來討論。只在對話問答，產出確認過的訪談交棒摘要，確認後交 work-route 或 presale。NOT for 實作前 owner 卡住的選擇題（clarify）、只要重述理解（rs）、新客戶規格書與報價本身（presale）。
+description: "Use when 使用者想先討論需求、做需求訪談、先聊清楚再做，或 work-route 判不出分流；只在對話問答，產出交棒摘要。NOT for owner 選擇題（clarify）、重述理解（rs）、規格書報價（presale）。"
 license: MIT
 metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"read-only"}}
 ---
@@ -46,3 +46,9 @@ metadata: {"author":"clade","version":"1.0","clade":{"permission_tier":"read-onl
 | I* | 以上皆非 | 問使用者這份需求要落在哪個 repo，或要不要走 presale |
 
 2. DELEGATE 依出口讀取目標 skill 的 `SKILL.md`，把確認版摘要原文帶入並由同一 agent 接續執行；不要求使用者另打 slash command。
+
+## Description 原文（E1 搬入）
+
+> frontmatter description 上限 250 字元（白名單 300）；被縮掉的觸發詞、流程敘述與 NOT for 全文留在這裡，不刪內容。
+
+> Use when 使用者想先討論需求、做需求訪談、「先聊清楚再做」，或 work-route 判不出需求分流、進行中的 package 要停下來討論。只在對話問答，產出確認過的訪談交棒摘要，確認後交 work-route 或 presale。NOT for 實作前 owner 卡住的選擇題（clarify）、只要重述理解（rs）、新客戶規格書與報價本身（presale）。

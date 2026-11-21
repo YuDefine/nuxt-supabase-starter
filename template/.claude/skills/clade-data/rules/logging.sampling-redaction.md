@@ -49,7 +49,7 @@ export default defineNuxtConfig({
 })
 ```
 
-evlog（floor ^2.17.0，見 [[evlog-adoption.catalogs]]）無內建 `kind === 'audit'` force keep。需要 audit forceKeep 的 consumer **MUST** 在 Nitro plugin 內 wire `evlog:emit:keep`：
+evlog（floor ^2.34.0，見 [[evlog-adoption.catalogs]]）無內建 `kind === 'audit'` force keep。需要 audit forceKeep 的 consumer **MUST** 在 Nitro plugin 內 wire `evlog:emit:keep`：
 
 ```ts
 nitroApp.hooks.hook('evlog:emit:keep', (ctx) => {
