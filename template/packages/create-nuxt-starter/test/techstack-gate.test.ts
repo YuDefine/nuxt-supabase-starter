@@ -7,6 +7,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -14,9 +15,11 @@ import { join, resolve } from 'pathe'
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test'
 import { findCladeRoot } from '../src/post-scaffold'
 import {
+  PLAYGROUND_EXEMPT_ENV,
   TECHSTACK_RECORD_RELATIVE,
   checkTechstackRecord,
   installTechstackRecord,
+  playgroundExemptEnvMatches,
   techstackCheckScript,
   techstackRecordConflict,
 } from '../src/techstack-gate'
@@ -347,6 +350,66 @@ describe('具名豁免 --techstack-playground-exempt', () => {
       run,
     )
     expectNothingHappened(r, run, 'exempt-and-record')
+  })
+})
+
+describe('S4-d：env 具名放行 CLADE_TECHSTACK_PLAYGROUND_EXEMPT（rescaffold-playground）', () => {
+  it(
+    '--yes 無紀錄、env 等於 target：放行並標 playground-exempt，不呼叫 check',
+    { timeout: 120_000 },
+    () => {
+      const run = freshRun('env-exempt')
+      const env = { ...run.env, [PLAYGROUND_EXEMPT_ENV]: join(run.cwd, 'env-exempt') }
+      const r = runCli(['env-exempt', ...SCAFFOLD_ONLY, '--json'], run, env)
+      expect(r.status, out(r)).toBe(0)
+      expect(JSON.parse(r.stdout)).toMatchObject({
+        status: 'scaffolded',
+        techstack: 'playground-exempt',
+      })
+      expect(out(r)).toContain(PLAYGROUND_EXEMPT_ENV)
+      expect(existsSync(join(run.cwd, 'env-exempt', TECHSTACK_RECORD_RELATIVE))).toBe(false)
+      expect(existsSync(run.checkLog)).toBe(false)
+    },
+  )
+
+  it('env 指向別的 target：照拒，零檔案', { timeout: 60_000 }, () => {
+    const run = freshRun('env-other')
+    const env = { ...run.env, [PLAYGROUND_EXEMPT_ENV]: join(run.cwd, 'someone-else') }
+    const r = runCli(['env-other', ...SCAFFOLD_ONLY], run, env)
+    expectNothingHappened(r, run, 'env-other')
+    expect(out(r)).toContain('--techstack-record')
+  })
+
+  it('有紀錄時 env 無效：照驗紀錄（REJECT 照拒）', { timeout: 60_000 }, () => {
+    const run = freshRun('env-with-record')
+    const record = writeRecord(run, 'REJECT\n')
+    const env = { ...run.env, [PLAYGROUND_EXEMPT_ENV]: join(run.cwd, 'env-with-record') }
+    const r = runCli(['env-with-record', ...SCAFFOLD_ONLY, '--techstack-record', record], run, env)
+    expectNothingHappened(r, run, 'env-with-record')
+    expect(out(r)).toContain('framework: 缺 confirmed_by')
+  })
+
+  it('playgroundExemptEnvMatches：空白／未設不放行；realpath 相等（含不存在的 target、symlink 父目錄）才放行', () => {
+    const run = freshRun('env-unit')
+    const real = join(run.dir, 'real-parent')
+    mkdirSync(real)
+    const link = join(run.dir, 'link-parent')
+    symlinkSync(real, link)
+    const target = join(real, 'pg')
+    expect(playgroundExemptEnvMatches(target, {})).toBe(false)
+    expect(playgroundExemptEnvMatches(target, { [PLAYGROUND_EXEMPT_ENV]: '  ' })).toBe(false)
+    expect(playgroundExemptEnvMatches(target, { [PLAYGROUND_EXEMPT_ENV]: target })).toBe(true)
+    // target 還不存在（rescaffold 已先刪）：父目錄經 symlink 也要相等
+    expect(playgroundExemptEnvMatches(target, { [PLAYGROUND_EXEMPT_ENV]: join(link, 'pg') })).toBe(
+      true,
+    )
+    mkdirSync(target)
+    expect(playgroundExemptEnvMatches(join(link, 'pg'), { [PLAYGROUND_EXEMPT_ENV]: target })).toBe(
+      true,
+    )
+    expect(
+      playgroundExemptEnvMatches(target, { [PLAYGROUND_EXEMPT_ENV]: join(real, 'other') }),
+    ).toBe(false)
   })
 })
 
