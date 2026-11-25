@@ -16,6 +16,7 @@
         :icon="colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon'"
         variant="ghost"
         color="neutral"
+        :aria-label="colorMode.value === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
         @click="toggleColorMode"
       />
     </div>

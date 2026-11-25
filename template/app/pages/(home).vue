@@ -52,7 +52,7 @@
             </div>
             <div>
               <h3 class="font-medium">{{ f.name }}</h3>
-              <p class="text-sm text-gray-500">{{ f.desc }}</p>
+              <p class="text-sm text-(--ui-text-muted)">{{ f.desc }}</p>
             </div>
           </div>
         </UCard>
