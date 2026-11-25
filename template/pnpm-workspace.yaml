@@ -10,6 +10,20 @@ packages:
 # Agent / CI 沒有 TTY 時，pnpm 11 遇到要清 node_modules 會 ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY 讓 husky 死掉。
 confirmModulesPurge: false
 
+# 供應鏈防護組（clade fleet-pnpm-hardening；audit：clade scripts/audit-pnpm-settings-drift.ts）。
+verifyDepsBeforeRun: warn
+minimumReleaseAge: 4320
+trustPolicy: no-downgrade
+blockExoticSubdeps: true
+strictDepBuilds: true
+# trustPolicy: no-downgrade 會讓既有 lockfile 的舊版本因缺 provenance 被判 trust downgrade
+# （ERR_PNPM_TRUST_DOWNGRADE）。以下皆為上游維護線的舊版（非接管；semver／undici 同 clade 例外）。
+# 移除條件：該套件升到有 provenance 的版本、或不再被依賴。新增條目 MUST 先確認不是真被接管。
+trustPolicyExclude:
+  - chokidar@4.0.3
+  - semver@6.3.1
+  - undici@5.29.0
+
 # pnpm v11 移除 ignoredBuiltDependencies；未表態的 build script 會讓 install 退出碼 1。
 # SoT 形狀見 packages/create-nuxt-starter/templates/base/pnpm-workspace.yaml。
 allowBuilds:
