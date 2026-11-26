@@ -72,9 +72,12 @@ const FMT_STYLE = {
 
 const FMT_ONLY_EXCLUDES = [
   '**/*.md',
+  'node_modules/**',
+  'dist/**',
   'coverage/**',
   '.nuxt/**',
   '.output/**',
+  '.wrangler/**',
   'pnpm-lock.yaml',
   '**/evlog.map.json',
   '.vite-doctor/**',
