@@ -28,8 +28,10 @@ import {
   type CatalogArgValues,
 } from './answers-file'
 import {
+  PLAYGROUND_EXEMPT_ENV,
   checkTechstackRecord,
   installTechstackRecord,
+  playgroundExemptEnvMatches,
   techstackRecordConflict,
 } from './techstack-gate'
 import {
@@ -1150,6 +1152,18 @@ const main = defineCommand({
         )
       }
       consola.warn('tech stack 確認已豁免（playground-exempt）：這不是真專案，不得登記進 fleet。')
+      techstackStatus = 'playground-exempt'
+    } else if (
+      // S4-d：clade rescaffold-playground 經 env 傳 target 絕對路徑；只在 --yes、沒帶紀錄、
+      // 不是採用既有專案時，且 realpath 相等才放行。有紀錄時 env 無效（走下方驗紀錄）。
+      effectiveYes &&
+      !managedAdopt &&
+      techstackRecordArg === undefined &&
+      playgroundExemptEnvMatches(targetDir)
+    ) {
+      consola.warn(
+        `tech stack 確認已豁免（playground-exempt；${PLAYGROUND_EXEMPT_ENV} 等於 target，只給 rescaffold-playground）。`,
+      )
       techstackStatus = 'playground-exempt'
     } else if (techstackRequired || techstackRecordArg !== undefined) {
       const gate = checkTechstackRecord(

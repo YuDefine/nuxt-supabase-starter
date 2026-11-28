@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
-import { dirname, join } from 'pathe'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
+import { basename, dirname, join, resolve } from 'pathe'
 
 /**
  * tech stack 確認閘門（S4-b）：`--yes`／managed 路徑在寫第一個檔之前，先確認
@@ -15,6 +15,38 @@ import { dirname, join } from 'pathe'
 const CHECK_FAIL_VERDICT_PREFIX = 'FAIL techstack-confirmation'
 
 export const TECHSTACK_RECORD_RELATIVE = 'docs/techstack-confirmation.md'
+
+/**
+ * S4-d：clade `rescaffold-playground` 對 starter 子行程傳的具名放行（env，不是 argv）。
+ * 值是**單一 target 的絕對路徑**（與 clade `scripts/lib/techstack-gate.ts` 的
+ * `PLAYGROUND_EXEMPT_ENV` 同名同義）：只豁免那個 target，shell 殘留的 env 不會放行別的專案。
+ * 只在 `--yes` 且沒帶 `--techstack-record` 時看；有紀錄時 env 無效（照驗紀錄）。
+ */
+export const PLAYGROUND_EXEMPT_ENV = 'CLADE_TECHSTACK_PLAYGROUND_EXEMPT'
+
+/** realpath；路徑還不存在（rescaffold 已先刪 target）時 realpath 父目錄再接 basename。 */
+function canonicalPath(path: string): string {
+  const abs = resolve(path)
+  try {
+    return realpathSync(abs)
+  } catch {
+    try {
+      return join(realpathSync(dirname(abs)), basename(abs))
+    } catch {
+      return abs
+    }
+  }
+}
+
+/** env 值（空白＝沒設）等於 targetDir（兩邊先 realpath）才算放行；不相等一律當沒設。 */
+export function playgroundExemptEnvMatches(
+  targetDir: string,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  const value = env[PLAYGROUND_EXEMPT_ENV]
+  if (value === undefined || value.trim() === '') return false
+  return canonicalPath(value) === canonicalPath(targetDir)
+}
 
 export type TechstackGateOutcome =
   | { status: 'ok'; recordPath: string }
