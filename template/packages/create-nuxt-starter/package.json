@@ -22,7 +22,7 @@
     "consola": "^3.4.2",
     "nypm": "^0.6.0",
     "pathe": "^2.0.3",
-    "zod": "^4.3.6"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/node": "^25.0.0",
