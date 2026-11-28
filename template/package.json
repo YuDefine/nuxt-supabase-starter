@@ -108,7 +108,7 @@
     "@vue/test-utils": "^2.4.6",
     "@vueuse/nuxt": "^14.2.1",
     "drizzle-kit": "^0.31.10",
-    "happy-dom": "^20.8.8",
+    "happy-dom": "^21.0.4",
     "pg": "^8.16.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
