@@ -63,7 +63,7 @@
         color="error"
         icon="i-lucide-alert-circle"
         :title="errorMessage"
-        :close-button="{ onClick: clearError }"
+        :close="{ onClick: clearError }"
       />
 
       <form class="space-y-4" @submit.prevent="handleSubmit">
