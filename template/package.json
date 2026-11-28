@@ -56,7 +56,7 @@
     "test": "sh -c 'if test -x .clade/bin/clade-gate; then exec .clade/bin/clade-gate run test -- vp test --coverage \"$@\"; else exec vp test --coverage \"$@\"; fi' --",
     "test:bdd": "NODE_OPTIONS='--import tsx' cucumber-js",
     "test:dev-login": "vp test run --project=dev-login",
-    "test:e2e": "playwright test",
+    "test:e2e": "sh -c 'if test -x .clade/bin/clade-gate; then exec .clade/bin/clade-gate run e2e -- playwright test \"$@\"; else exec playwright test \"$@\"; fi' --",
     "test:file": "vp test run",
     "test:nuxt": "vp test run --project=nuxt",
     "test:unit": "vp test run --project=unit",
